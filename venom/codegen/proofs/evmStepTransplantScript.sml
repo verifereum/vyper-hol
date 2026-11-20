@@ -689,9 +689,8 @@ Theorem transplant_handle_exception_memory_total[local]:
   d.msgParams.gasLimit - d.gasUsed <= p.gasUsed /\
   LENGTH p.stack < stack_limit ==>
   ?s'. handle_exception e s = (INL (), s') /\
-       frame_outcome s (INL ()) s' e
-         (if e = NONE \/ e = SOME Reverted then d.returnData else []) [] /\
-       (e = NONE ==> s'.rollback = s.rollback)
+       s'.txParams = s.txParams /\
+       s'.rollback = (if e = NONE then s.rollback else rb)
 Proof
   strip_tac >>
   Cases_on `e = NONE` >>
@@ -704,7 +703,7 @@ Proof
        inc_pc_def, push_stack_def, write_memory_def,
        pop_and_incorporate_context_def, pop_context_def,
        set_rollback_def, unuse_gas_def,
-       update_gas_refund_def, push_logs_def, frame_outcome_def]
+       update_gas_refund_def, push_logs_def]
 QED
 
 Theorem transplant_handle_exception_singleton[local]:
@@ -755,9 +754,10 @@ Theorem transplant_handle_step_boundary[local]:
   ?d' t s'.
     handle_step e (s with contexts := [(d, rb)]) = (INR e, t) /\
     t.contexts = [(d', rb)] /\ d'.logs = d.logs /\
+    d'.returnData = (if e = NONE \/ e = SOME Reverted then d.returnData else []) /\
     handle_step e s = (INL (), s') /\
-    frame_outcome s (INL ()) s' e d'.returnData [] /\
-    (e = NONE ==> s'.rollback = t.rollback)
+    handle_exception e s = (INL (), s') /\ s'.txParams = s.txParams /\
+    s'.rollback = (if e = NONE then t.rollback else rb)
 Proof
   strip_tac >>
   `handle_step e s = handle_exception e s` by
@@ -782,7 +782,8 @@ Theorem transplant_finalization_boundary:
   d.msgParams = c.msgParams /\ d.logs = c.logs ++ lgs /\
   wf_context d /\
   d.msgParams.gasLimit - d.gasUsed <= c.msgParams.gasLimit - c.gasUsed /\
-  (!a. c.msgParams.outputTo <> Code a) /\ ~vfm_abort e ==>
+  (!a. c.msgParams.outputTo <> Code a) /\ ~vfm_abort e /\
+  step_inner es = (INR e, u with contexts := (d,rb)::rest) ==>
   ?d' t es'.
     handle_step e u = (INR e,t) /\ t.contexts = [(d',rb)] /\
     d'.logs = c.logs ++ lgs /\
@@ -807,9 +808,13 @@ Proof
   rename1 `v.contexts = [(head,rb)]` >>
   rename1 `handle_step e (u with contexts := (d,rb)::(h0,h1)::t) = (INL (),w)` >>
   qexistsl_tac [`head`, `v`, `w`] >> simp[] >>
-  gvs[frame_outcome_def] >>
   `u with contexts := [(d,rb)] = u` by
-    (simp[vfmContextTheory.execution_state_component_equality]) >> metis_tac[]
+    simp[vfmContextTheory.execution_state_component_equality] >>
+  `run_frame es = SOME (INR e,u with contexts := (d,rb)::(h0,h1)::t)` by
+    (irule frameGasTheory.run_frame_terminal_call >> simp[]) >>
+  gvs[frame_outcome_def] >>
+  qexistsl_tac [`u with contexts := (d,rb)::(h0,h1)::t`,`d`,`(h0,h1)::t`,`m`] >>
+  simp[] >> Cases_on `e = NONE` >> gvs[]
 QED
 
 Theorem transplant_step_eq:
@@ -881,16 +886,14 @@ Proof
   `same_frame_rel (es with contexts := [(c,rb)]) u` by
     (drule_at (Pat `m s = _`) same_frame_or_grow_eq_length >> simp[]) >>
   `u.txParams = es.txParams` by fs[same_frame_rel_def] >>
-  drule_at (Pat `wf_state _`) transplant_finalization_boundary >>
-  simp[] >>
-  disch_then (qspecl_then [`u`, `lgs`, `err`, `d`] mp_tac) >>
-  simp[] >> strip_tac >>
   `es with contexts := (c,rb)::rest = es` by
     simp[vfmContextTheory.execution_state_component_equality] >>
-  gvs[] >>
-  qpat_x_assum `!rest'. step_inner _ = _`
-    (qspec_then `rest` mp_tac) >> simp[] >>
-  strip_tac >> simp[] >> metis_tac[]
+  `step_inner es = (INR err,u with contexts := (d,rb)::rest)` by
+    (qpat_x_assum `!rest'. step_inner _ = _` (qspec_then `rest` mp_tac) >> simp[]) >>
+  drule_at (Pat `wf_state _`) transplant_finalization_boundary >>
+  simp[] >>
+  disch_then (qspecl_then [`u`, `lgs`, `d`] mp_tac) >>
+  simp[] >> strip_tac >> simp[] >> metis_tac[]
 QED
 
 (* A single call frame's handler passes the step's exception on. *)

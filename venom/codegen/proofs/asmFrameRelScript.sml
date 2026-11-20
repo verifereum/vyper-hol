@@ -88,18 +88,18 @@ Definition asm_frame_step_ok_def:
     | AsmError _ => T
 End
 
-(* frame_outcome reads only the head's logs and message, the saved
-   rollback, the outer contexts and txParams of its start state. *)
+(* A continuing prefix adds its logs before the same frame endpoint. *)
 Theorem frame_outcome_mid:
   es0.contexts = (c0, rb) :: rest /\ es.contexts = (c, rb) :: rest /\
   c0.logs = [] /\ c.msgParams = c0.msgParams /\ es.txParams = es0.txParams /\
+  RTC (\a b. LENGTH a.contexts >= LENGTH es0.contexts /\
+             step a = (INL (), b)) es0 es /\
   frame_outcome es r es' exc out lgs ==>
   frame_outcome es0 r es' exc out (c.logs ++ lgs)
 Proof
-  rw[frame_outcome_def] >> gvs[] >>
-  Cases_on `rest` >> gvs[] >>
-  rename1 `(_, _) :: rest'` >> PairCases_on `h` >> gvs[] >>
-  metis_tac[]
+  strip_tac >>
+  `run_frame es0 = run_frame es` by (irule run_frame_prefix >> simp[]) >>
+  Cases_on `rest` >> gvs[frame_outcome_def] >> metis_tac[]
 QED
 
 Theorem frame_resource_starved_mid:
@@ -110,11 +110,10 @@ Theorem frame_resource_starved_mid:
   frame_resource_starved es r es' ==>
   frame_resource_starved es0 r es'
 Proof
-  simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises] >> strip_tac >>
+  simp[frame_resource_starved_def] >> strip_tac >>
   drule_all frame_outcome_mid >> strip_tac >>
-  qexistsl_tac [`exc`, `out`, `c.logs ++ lgs`] >> simp[] >>
-  qexists_tac `op` >> irule frame_inst_raises_mid >>
-  qexists_tac `es` >> gvs[]
+  `run_frame es0 = run_frame es` by (irule run_frame_prefix >> simp[]) >>
+  qexistsl_tac [`exc`, `out`, `c.logs ++ lgs`] >> fs[frame_raises_def]
 QED
 
 (* The frame's run reaches what es's run reaches at es's depth. *)

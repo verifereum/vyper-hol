@@ -13,11 +13,12 @@ Ancestors
   contextCodegenRel codegenRel unitTransformDefs memSafeRun
   vyperTypeSystem vyperTypeBuiltins list finite_map emitHelper compileEnv
   fragExec venomInst venomState
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem calldatalen_full_path:
   lower_value compile_expr cenv ty (Builtin (BaseT (UintT 256)) CalldataLen []) sa = (op,sb) /\
   fn_has_code sa sb func /\ ~s.vs_halted /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!out. step_inst_base (mk_inst sa.cs_next_id CALLDATASIZE [] [out]) s =
@@ -85,7 +86,6 @@ Theorem calldatalen_builtin_sim_full:
       cenv cx ty (Builtin a bt args) es
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `args = [] /\ a = BaseT (UintT 256)` by
     gvs[expr_body_pre_def, expr_sim_pre_def, cj 9 well_typed_expr_def,
         well_typed_builtin_app_def] >>

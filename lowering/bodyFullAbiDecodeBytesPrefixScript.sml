@@ -136,6 +136,7 @@ Proof
       drule_all bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_scalar_frame_joint >>
       disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
       qexistsl_tac [`u`, `Gf`, `tnf`] >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   disj2_tac >> drule_all abi_decode_scalar_guard_abort_joint >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`t with vs_inst_idx := j`, `Gf`, `tnf`] >> simp[]

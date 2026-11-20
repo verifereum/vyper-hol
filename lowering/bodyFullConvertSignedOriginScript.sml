@@ -130,7 +130,8 @@ Proof
   disch_then (qspec_then `s with vs_inst_idx := LENGTH sm.cs_current_insts` mp_tac) >>
   simp[Excl "state_frame_def"] >>
   disch_then (qspecl_then [`lo`,`ARB`,`ctx`,`PG`] mp_tac) >>
-  fs[instIdxIndepTheory.exec_result_map_def, allocas_from_def, Excl "state_frame_def"] >>
+  fs[instIdxIndepTheory.exec_result_map_def, allocas_from_def,
+     allocas_below_fmp_def, Excl "state_frame_def"] >>
   (impl_tac >- metis_tac[]) >>
   strip_tac >> qexistsl_tac [`Gf`,`tnf`] >>
   simp[Excl "state_frame_def"] >> metis_tac[]

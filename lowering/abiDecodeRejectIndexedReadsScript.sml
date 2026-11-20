@@ -28,7 +28,7 @@ Theorem reject_indexed_mload[local]:
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
   w2n a + 32 <= s.vs_alloca_next /\
   sb.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t H u. t = (s with <|vs_vars := t.vs_vars; vs_inst_idx := LENGTH sb.cs_current_insts|>) /\
@@ -78,7 +78,7 @@ Theorem reject_indexed_scalar[local]:
   op_taint tn lhs = {} /\ op_taint tn rhs = {} /\
   op_prov G lhs = NONE /\ op_prov G rhs = NONE /\
   sb.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t H u. t = (s with <|vs_vars := t.vs_vars; vs_inst_idx := LENGTH sb.cs_current_insts|>) /\
@@ -182,7 +182,7 @@ Theorem indexed_read_coordinates_joint[local]:
   abi_decoder_operand_live sa.cs_next_var src /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
   sb.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t H u. t = (s with <|vs_vars := t.vs_vars; vs_inst_idx := LENGTH sb.cs_current_insts|>) /\
@@ -226,6 +226,10 @@ Proof
   `eval_operand (Lit 32w) s1 = SOME 32w /\ op_taint tn1 (Lit 32w) = {} /\
    op_prov G1 (Lit 32w) = NONE` by simp[eval_operand_def,op_taint_def,op_prov_def] >>
   `~s1.vs_halted` by simp[] >>
+  `allocas_below_fmp s1 = allocas_below_fmp s` by
+    (qpat_assum `s1 = s with <|vs_vars := s1.vs_vars; vs_inst_idx := _|>` (fn th => once_rewrite_tac[th]) >>
+     simp[NoAsms,allocas_below_fmp_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by metis_tac[] >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `sa` |-> `c1`] reject_indexed_scalar)) >>
   disch_then (qspec_then `PG`
     (qx_choose_then `s2` (qx_choose_then `G2` (qx_choose_then `tn2` strip_assume_tac)))) >>
@@ -235,6 +239,10 @@ Proof
   `eval_operand (Lit (n2w stride)) s2 = SOME (n2w stride) /\
    op_taint tn2 (Lit (n2w stride)) = {} /\ op_prov G2 (Lit (n2w stride)) = NONE`
     by simp[eval_operand_def,op_taint_def,op_prov_def] >>
+  `allocas_below_fmp s2 = allocas_below_fmp s1` by
+    (qpat_assum `s2 = s1 with <|vs_vars := s2.vs_vars; vs_inst_idx := _|>` (fn th => once_rewrite_tac[th]) >>
+     simp[NoAsms,allocas_below_fmp_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by metis_tac[] >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `MUL`, `sa` |-> `c2`] reject_indexed_scalar)) >>
   disch_then (qspec_then `PG`
     (qx_choose_then `s3` (qx_choose_then `G3` (qx_choose_then `tn3` strip_assume_tac)))) >>
@@ -244,6 +252,10 @@ Proof
       op_prov G3 data = op_prov G2 data /\ op_taint tn3 data = op_taint tn2 data`
       by (irule indexed_live_values_frame >> simp[] >> qexists `c2` >> simp[]) >> simp[]) >>
   `~s3.vs_halted` by simp[] >>
+  `allocas_below_fmp s3 = allocas_below_fmp s2` by
+    (qpat_assum `s3 = s2 with <|vs_vars := s3.vs_vars; vs_inst_idx := _|>` (fn th => once_rewrite_tac[th]) >>
+     simp[NoAsms,allocas_below_fmp_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by metis_tac[] >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `sa` |-> `c3`] reject_indexed_scalar)) >>
   disch_then (qspec_then `PG`
     (qx_choose_then `s4` (qx_choose_then `G4` (qx_choose_then `tn4` strip_assume_tac)))) >>
@@ -288,7 +300,7 @@ Theorem reject_indexed_pointer_add[local]:
   eval_operand pos s = SOME (n2w h) /\ op_taint tn pos = {} /\
   op_prov G pos = NONE /\ h + 32 <= L /\ B + L < dimword(:256) /\
   sb.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
-  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?q t H u. t = (s with <|vs_vars := t.vs_vars; vs_inst_idx := LENGTH sb.cs_current_insts|>) /\
@@ -346,7 +358,7 @@ Theorem indexed_offset_read_joint[local]:
   B + L <= s.vs_alloca_next /\ mem_bytes_at B L s.vs_memory = xs /\
   sb.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
   fn_has_code sa sm func /\ fn_has_code sm sb func /\
-  allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t H u. t = (s with <|vs_vars := t.vs_vars; vs_inst_idx := LENGTH sb.cs_current_insts|>) /\
@@ -386,6 +398,11 @@ Proof
   qpat_x_assum `addr = Var q` SUBST_ALL_TAC >>
   `!i. w2n (n2w (B+h):bytes32) <= i /\ i < w2n (n2w (B+h):bytes32) + 32 ==>
       i NOTIN z.t_mem` by simp[w2n_n2w, LESS_MOD] >>
+  `allocas_below_fmp m = allocas_below_fmp s` by
+    (qpat_assum `m = s with <|vs_vars := m.vs_vars; vs_inst_idx := _|>`
+       (fn th => once_rewrite_tac[th]) >>
+     simp[NoAsms,allocas_below_fmp_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp m` by metis_tac[] >>
   drule_all (Q.INST [`sa` |-> `sm`] reject_indexed_mload) >>
   disch_then (qspec_then `PG`
     (qx_choose_then `t` (qx_choose_then `H` (qx_choose_then `u` strip_assume_tac)))) >>
@@ -514,7 +531,7 @@ Theorem malformed_indexed_reads_joint_frame:
   abi_decode_ptr_window G tn s bp (n2w B) L /\ not_fresh_at sa bp /\
   B+L < dimword(:256) /\ B+L <= s.vs_alloca_next /\ mem_bytes_at B L s.vs_memory = xs /\
   sb.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
-  allocas_from lower s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?data head cut t H u.
     t = (s with <|vs_vars := t.vs_vars; vs_inst_idx := LENGTH cut.cs_current_insts|>) /\
@@ -559,6 +576,11 @@ Proof
     (qx_choose_then `m` (qx_choose_then `M` (qx_choose_then `z` strip_assume_tac)))) >>
   `abi_decode_ptr_window M z m bp (n2w B) L` by
     (irule abi_decode_ptr_window_frame >> metis_tac[]) >>
+  `allocas_below_fmp m = allocas_below_fmp s` by
+    (qpat_assum `m = s with <|vs_vars := m.vs_vars; vs_inst_idx := _|>`
+       (fn th => once_rewrite_tac[th]) >>
+     simp[NoAsms,allocas_below_fmp_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp m` by metis_tac[] >>
   Cases_on `dec_info_needs_offset di` >> fs[]
   >- (`SUC j*stride <= n*stride` by (irule LESS_MONO_MULT2 >> decide_tac) >>
       `p+(j*stride+32)+32 <= L` by
@@ -645,7 +667,9 @@ Theorem malformed_indexed_reads_joint:
     !D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,func,PG) (s,G,tn) []
       (OK t,H,u)
 Proof
-  strip_tac >> drule_all malformed_indexed_reads_joint_frame >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all malformed_indexed_reads_joint_frame >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl [`data`,`head`,`cut`,`t`,`H`,`u`] >> simp[]
 QED

@@ -12,7 +12,7 @@ Ancestors
   venomExecSemantics venomState venomInst finite_map list
 
 Theorem cast_fixed_certificate[local]:
-  ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
+  ptr_covers G tn src s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var src s = SOME a /\ mload (w2n a) s = n2w L /\
   L < dimword(:256) /\ n < dimword(:256) /\
   (!j. w2n a <= j /\ j < w2n a+32 ==> j NOTIN tn.t_mem) ==>
@@ -28,7 +28,6 @@ Theorem cast_fixed_certificate[local]:
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
   strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all assign_base_bytes_mload_seq >>
   disch_then (qspecl_then [`D`,`fn`,`PG`,`id`,`len`] strip_assume_tac) >>
   `eval_operand (Var len) u = SOME (n2w L)` by
@@ -47,7 +46,10 @@ Proof
   `MEM GT [GT; SLT; SGT; AND; EQ; SIGNEXTEND; SAR; SHR; SHL; MUL; SDIV] /\
    op_prov G' (Lit (n2w n)) = NONE /\ op_taint tn' (Lit (n2w n)) = {}` by
     simp[op_prov_def, op_taint_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (fs[allocas_below_fmp_def, update_var_def] >> disch_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> _ /\ _` (drule_then strip_assume_tac) >>
+     first_assum ACCEPT_TAC) >>
   FIRST [
     drule_all (cj 1 (SRULE [LEFT_AND_OVER_OR, DISJ_IMP_THM, GSYM arithmeticTheory.ADD_ASSOC]
       (Q.INST [`opc` |-> `GT`, `id` |-> `id+1`] scalar_checked_pair_uniform_certificate))),
@@ -66,7 +68,7 @@ QED
 
 Theorem cast_compiled_certificate[local]:
   compile_type_convert (Var src) (ConvBytestringCast n i) sa = (out,sb) /\
-  ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
+  ptr_covers G tn src s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var src s = SOME a /\ mload (w2n a) s = n2w L /\
   L < dimword(:256) /\ n < dimword(:256) /\
   (!j. w2n a <= j /\ j < w2n a+32 ==> j NOTIN tn.t_mem) ==>
@@ -98,7 +100,7 @@ QED
 
 Theorem cast_uniform_certificate[local]:
   compile_type_convert (Var src) (ConvBytestringCast n i) sa = (out,sb) /\
-  ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
+  ptr_covers G tn src s 32 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var src s = SOME a /\ mload (w2n a) s = n2w L /\
   L < dimword(:256) /\ n < dimword(:256) /\
   (!j. w2n a <= j /\ j < w2n a+32 ==> j NOTIN tn.t_mem) ==>
@@ -124,7 +126,7 @@ Theorem convert_cast_origin_path:
   ptr_covers G tn src s capacity /\ 32 <= capacity /\
   (!j. w2n a <= j /\ j < w2n a+32 ==> j NOTIN tn.t_mem) /\
   w2n a+32 <= s.vs_alloca_next /\ fn_has_code sa sb fn /\
-  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   allocas_from lo s /\ lo <= s.vs_alloca_next ==>

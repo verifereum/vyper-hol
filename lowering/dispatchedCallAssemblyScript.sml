@@ -28,7 +28,7 @@ Theorem dispatched_call_correct_from_value_success:
 Proof
   rpt gen_tac >> strip_tac >> conj_asm2_tac
   >- (simp[source_unit_execution_correct_def,
-           source_unit_execution_correct_at_with] >>
+           source_unit_execution_correct_at_def] >>
       qpat_x_assum `?marks. _` (qx_choose_then `marks` assume_tac) >>
       qexistsl_tac [`marks`, `shadow_unit.cu_context`] >> simp[]) >>
   drule_all dispatched_vyper_call_bind >>
@@ -418,5 +418,5 @@ Theorem dispatched_call_correct:
 Proof
   metis_tac[dispatched_call_correct_with_readings,
             source_unit_execution_correct_def,
-            source_unit_execution_correct_at_with]
+            source_unit_execution_correct_at_def]
 QED

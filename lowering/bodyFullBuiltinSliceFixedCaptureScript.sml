@@ -6,6 +6,7 @@ Ancestors
   ptrDiscipline bodyPtrDefs allocaHistory freshWrites
   venomExecSemantics venomState venomInst compileEnv loweringStateRelDefs
   emitHelper context words list finite_map
+  bodyFullHashKeccakFixed[qualified,ignore_grammar] exprSimAlloc[qualified,ignore_grammar]
 
 Theorem slice_fixed_capture_full_run:
   compile_alloc_buffer 32 sa = (buf,sm) /\
@@ -16,7 +17,9 @@ Theorem slice_fixed_capture_full_run:
     ctx func cenv cx es s /\ alloca_history func s /\
   eval_operand src s = SOME w /\ op_taint tn src = {} /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+     s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?root p u t G' tn'.
@@ -60,11 +63,11 @@ Proof
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     metis_tac[fn_has_code_split] >>
   mp_tac (Q.INST [`n` |-> `32`,`sb` |-> `sm`]
-    (INST_TYPE [alpha |-> ``:256``, beta |-> alpha] alloc_buffer_origin_ptr_path)) >>
+    (INST_TYPE [alpha |-> ``:256``, beta |-> alpha] alloc_buffer_origin_ptr_path_with_raw_endpoint)) >>
   (impl_tac >- simp[dimword_def]) >>
   disch_then (qx_choose_then `root` (qx_choose_then `p`
     (qx_choose_then `u` (qx_choose_then `G1`
-      (qx_choose_then `tn1` strip_assume_tac))))) >>
+      (qx_choose_then `tn1` (qx_choose_then `raw` strip_assume_tac)))))) >>
   `u.vs_labels = s.vs_labels /\ ~u.vs_halted` by
     (qpat_assum `u with <|vs_vars := _;vs_allocas := _;
        vs_alloca_next := _;vs_inst_idx := _|> = s` mp_tac >>
@@ -85,6 +88,30 @@ Proof
        `s` |-> `u`,`a` |-> `p`,`tn` |-> `tn1`,
        `id` |-> `sm.cs_next_id`] ifexp_materialize_mstore_taint) >>
      simp[eval_operand_def,Abbr `i`,Abbr `tn2`]) >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+      [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
+    (irule exprSimAllocTheory.buffer_alloc_code >> qexistsl_tac [`buf`, `sm`] >> simp[]) >>
+  `stmt_state_rel (H:(bool # bytes32 # type_value) list # num list)
+     ctx func cenv cx es u` by
+    (qspecl_then [`H:(bool # bytes32 # type_value) list # num list`,
+        `func`, `cenv`, `cx`, `es`, `sa`, `sm`, `buf`, `32`, `s`, `ctx`]
+       mp_tac exprSimAllocTheory.literal_alloc_buffer_run >>
+     impl_tac >- simp[dimword_def] >>
+     disch_then (qx_choosel_then [`raw'`, `w'`] strip_assume_tac) >>
+     `raw' = raw` by
+       (qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK raw'` mp_tac >>
+        simp[NoAsms, ASSUME ``run_inst_seq (emitted_insts sa sm) s = OK raw``]) >>
+     qpat_assum `u = raw with vs_inst_idx := _` SUBST1_TAC >>
+     qpat_assum `raw' = raw` (SUBST1_TAC o SYM) >>
+     simp[stmt_state_rel_inst_idx]) >>
+  qpat_x_assum `u = raw with vs_inst_idx := _` kall_tac >>
+  qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK raw` kall_tac >>
+  qpat_x_assum `G1 = step_prov _ _ _ raw` kall_tac >>
+  qpat_x_assum `tn1 = step_taint _ _ raw _` kall_tac >>
+  qpat_x_assum `FLOOKUP G1 root = SOME _` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv cx es u`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `!D. gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (u,G1,tn1) []
       (OK t,G1,tn2)` by
     (mp_tac (Q.INST [`sa` |-> `sm`,`s` |-> `u`,`G` |-> `G1`,

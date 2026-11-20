@@ -2,6 +2,7 @@ Theory staticAbortOptPruneJumpsBypass
 Ancestors
   symInstPieces asmSymBridge asmSymSem asmWf stackOpAsmSim
   asmSem asmIR pred_set finite_map list rich_list arithmetic words
+  symInstPiecesFacts
 
 Theorem prune_jump_site_bypass:
   !Shape. Shape =
@@ -127,7 +128,7 @@ Proof
    EL (b+2) p = AsmLabel x`
     by (simp[Abbr `b`, EL_APPEND_EQN] >> EVAL_TAC) >>
   `INDEX_OF (AsmLabel x) p = SOME (b+2)` by
-    (irule asm_unique_label_index >> fs[asm_static_wf_def]) >>
+    (irule symInstPiecesFactsTheory.asm_unique_label_index >> fs[asm_static_wf_def]) >>
   drule_all asm_static_wf_code_label >> strip_tac >>
   `!i. i IN V /\ (pc i = b \/ pc i = b+1) ==> ?j. edge i j`
     by suspend "progress" >>

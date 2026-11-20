@@ -134,7 +134,7 @@ Proof
 QED
 
 Theorem prefix_loop_header_trace:
-  ~ctx_has_dalloca ctx /\ s.vs_inst_idx = 0 /\ ALL_DISTINCT [iv;cv;cmp;done] /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ s.vs_inst_idx = 0 /\ ALL_DISTINCT [iv;cv;cmp;done] /\
   ~MEM ip [iv;cv;cmp;done] /\
   (!x. MEM x [iv;cv;cmp;done] ==> src <> Var x) /\
   eval_operand (Var ip) s = SOME (n2w slot) /\
@@ -211,7 +211,7 @@ Resume prefix_loop_header_trace[data]:
   simp[step_inst_non_invoke] >>
   simp[step_inst_inst_idx_indep,mk_inst_def,is_terminator_def,exec_result_map_def] >>
   conj_tac >- (irule (REWRITE_RULE[mk_inst_def] prefix_dload_ptr_step) >>
-    gvs[Abbr `u1`,update_var_def,allocas_from_def,mk_inst_def] >> metis_tac[]) >>
+    gvs[Abbr `u1`,update_var_def,allocas_from_def,allocas_below_fmp_def,mk_inst_def] >> metis_tac[]) >>
   simp[ghost_step_def,step_inst_non_invoke,step_prov_def,set_prov_def,out_prov_def,mk_inst_def] >>
   gvs[step_inst_inst_idx_indep,mk_inst_def,is_terminator_def,exec_result_map_def,INTER_ASSOC]
 QED
@@ -227,7 +227,7 @@ Resume prefix_loop_header_trace[compare]:
   simp[step_inst_non_invoke,step_inst_inst_idx_indep,mk_inst_def,is_terminator_def,exec_result_map_def] >>
   conj_tac >-
     (irule (REWRITE_RULE[mk_inst_def] prefix_compare_ptr_step) >>
-     gvs[Abbr `u2`,Abbr `u1`,op_prov_def,FLOOKUP_DRESTRICT,allocas_from_def,
+     gvs[Abbr `u2`,Abbr `u1`,op_prov_def,FLOOKUP_DRESTRICT,allocas_from_def,allocas_below_fmp_def,
        update_var_def,mk_inst_def,op_taint_def,step_taint_def,set_var_taint_def,
        out_taint_def,FLOOKUP_UPDATE] >>
      Cases_on `eval_operand src (update_var iv (n2w j) s)` >> gvs[update_var_def] >> metis_tac[]) >>
@@ -244,7 +244,7 @@ Resume prefix_loop_header_trace[zero]:
   simp[step_inst_non_invoke,step_inst_inst_idx_indep,mk_inst_def,is_terminator_def,exec_result_map_def] >>
   conj_tac >-
     (irule (REWRITE_RULE[mk_inst_def] prefix_iszero_ptr_step) >>
-     gvs[Abbr `u3`,Abbr `u2`,Abbr `u1`,allocas_from_def,update_var_def,
+     gvs[Abbr `u3`,Abbr `u2`,Abbr `u1`,allocas_from_def,allocas_below_fmp_def,update_var_def,
        prefix_guard_output_taint,mk_inst_def,op_taint_def,step_taint_def,
        set_var_taint_def,out_taint_def,FLOOKUP_UPDATE,eval_operand_def,lookup_var_def] >> metis_tac[]) >>
   simp[ghost_step_def,step_inst_non_invoke,step_prov_def,set_prov_def,out_prov_def,mk_inst_def] >>
@@ -254,7 +254,7 @@ QED
 Finalise prefix_loop_header_trace
 
 Theorem prefix_loop_header_operand_path:
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\ s.vs_inst_idx = 0 /\
   s.vs_current_bb = hdr /\ ALL_DISTINCT [iv;cv;cmp;done] /\
   ~MEM ip [iv;cv;cmp;done] /\
   (!x. MEM x [iv;cv;cmp;done] ==> src <> Var x) /\
@@ -401,7 +401,7 @@ Resume prefix_loop_header_operand_path[branch]:
     source_memory_write_ranges_def,mk_inst_def,step_inst_base_opcode_eqs,
     Abbr `u4`,eval_operand_def,lookup_var_update_var,update_var_def,jump_to_def] >>
   conj_tac >- (Cases >> gvs[op_taint_def]) >>
-  gvs[Abbr `u3`,Abbr `u2`,Abbr `u1`,allocas_from_def,update_var_def,
+  gvs[Abbr `u3`,Abbr `u2`,Abbr `u1`,allocas_from_def,allocas_below_fmp_def,update_var_def,
     lookup_var_def,FLOOKUP_UPDATE] >>
   Cases_on `j<n` >> gvs[bool_to_word_def] >> metis_tac[]
 QED
@@ -427,6 +427,9 @@ Resume prefix_loop_header_operand_path[path]:
   `get_instruction <|bb_label := hdr; bb_instructions := ins|> 4 =
      SOME (mk_inst (hid+4) JNZ [Var done; Label exit_lbl; Label body_lbl] [])` by
     simp[get_instruction_def,Abbr `ins`,abi_decode_header_insts_def] >>
+  `allocas_below_fmp (u4 with vs_inst_idx := 4) = allocas_below_fmp s` by
+    simp[Abbr `u4`,Abbr `u3`,Abbr `u2`,Abbr `u1`,
+         allocas_below_fmp_def,update_var_def] >>
   `jump_to (if j<n then body_lbl else exit_lbl) u4 =
    jump_to (if bool_to_word (~(j<n)) <> 0w then exit_lbl else body_lbl)
      (u4 with vs_inst_idx := 4)` by
@@ -581,6 +584,7 @@ Resume prefix_loop_header_operand_pair[safety]:
 QED
 
 Resume prefix_loop_header_operand_pair[blocks]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   Cases >- simp[Once ptr_safe_blocks_def] >>
   irule (cj 2 (SRULE [LET_THM] prefix_decode_dload_header_entry_pair)) >>
   simp[] >>
