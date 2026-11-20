@@ -787,7 +787,6 @@ Proof
   metis_tac[DROP_LENGTH_APPEND]
 QED
 
-(* The runtime data segment moves with the finalized assembly's data suffix. *)
 Triviality deploy_final_label_bound:
   asm_encoding_wf prog /\
   FLOOKUP (SND (compute_label_offsets prog)) label = SOME n ==> n < 65536
@@ -801,6 +800,7 @@ Proof
   simp[EVAL ``256 ** 2 : num``]
 QED
 
+(* The runtime data segment moves with the finalized assembly's data suffix. *)
 Triviality deploy_relocated_data_offset:
   asm_static_wf prog /\ MEM (AsmDataHeader label) prog ==>
   FLOOKUP (lo_reloc prog prog') label =
