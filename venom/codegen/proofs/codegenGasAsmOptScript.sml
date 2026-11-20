@@ -17,12 +17,14 @@
 
 Theory codegenGasAsmOpt
 Ancestors
-  asmOptFinalizerWithin asmSymSemWithin
+  asmOptFinalizerWithin asmOptFinalizerWithinOwn asmSymSemWithin
   codegenAsmOpt codegenEntryBounded asmFrameSurplus asmSymWithin asmOptNoRdc
   asmDataEnv contextCodegenRel
   venomRunBounded venomRetProps codegenAsmStaticWf codegenLabelDisciplined codegenEntryRel
   codegenCorrectness asmFrameRel asmRunBounded asmSymSem passSimulationDefs
   vfmDecreasesGas frameGas frameStep
+  codegenSymOwnRel fnPlanPlaceRevertPostamble
+  asmOptFinalizerOwn asmRelocDataEnv asmSymOwnStep asmSymOwnCode codegenEntrySim venomInst
 
 (* The optimized program's run from the entry assembly state is bounded,
    uniformly in the entry state. *)
@@ -231,6 +233,179 @@ Proof
     metis_tac[add_frame_gas_wf_state, wf_state_frame_gas_left] >>
   `LENGTH s.contexts = LENGTH (add_frame_gas g' es).contexts` by
     fs[frame_inst_at_step] >>
+  first_x_assum (qspecl_then [`g'`, `Inv`, `vs`, `es`, `s`, `op`, `s'`]
+                   mp_tac) >>
+  metis_tac[]
+QED
+
+(* The unoptimized assembly runs with the installed bytes and relocated
+   data labels. The optimizer's symbolic bound then gives a concrete bound
+   for the optimized assembly from the same state. *)
+Theorem codegen_opt_run_bounded_own[local]:
+  !rpolicy unit cplan prog prog' fuel M.
+    generate_context_plan unit.cu_context = SOME cplan /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    asm_opt_finalizer rpolicy prog = SOME prog' /\
+    unit_shape_ok unit
+    ==>
+    ?N H. !Inv vs as.
+      codegen_context_obligations Inv unit.cu_context cplan /\
+      codegen_reachability_package Inv unit.cu_context vs /\
+      label_flow_own_ok unit.cu_context /\ code_end_offset_ok Inv unit.cu_context /\
+      sym_unit_static_ok unit /\
+      vs.vs_code = assemble prog' ++ vs.vs_data_section /\
+      as.as_code = vs.vs_code /\
+      codegen_asm_entry_rel_reloc (lo_reloc prog prog') cplan prog vs as /\
+      venom_run_bounded fuel M unit.cu_context vs /\
+      mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs
+      ==>
+      asm_frame_prog_ok prog' /\
+      asm_run_bounded (SND (compute_label_offsets prog'))
+        (build_offset_to_pc prog') prog' H N as
+Proof
+  rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `asm_static_wf prog`)
+  >- (qexistsl_tac [`0`, `0`] >> rpt strip_tac >>
+      metis_tac[codegen_context_obligations_def, codegen_asm_static_wf]) >>
+  `asm_static_wf prog' /\ FILTER is_data_inst prog' = FILTER is_data_inst prog` by
+    metis_tac[asm_opt_finalizer_refines_own, asm_refines_own_def] >>
+  drule asm_opt_finalizer_within_own >> BETA_TAC >> simp[] >>
+  disch_then assume_tac >>
+  qspecl_then [`prog`, `prog'`] mp_tac asm_refines_run_bounded_own >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `c` assume_tac) >>
+  qspecl_then [`rpolicy`, `unit`, `cplan`, `prog`, `fuel`, `M`] mp_tac
+    codegen_entry_asm_bounded_run_reloc >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choosel_then [`N`, `H`] assume_tac) >>
+  qexistsl_tac [`c * N`, `H`] >> rpt gen_tac >> strip_tac >>
+  conj_tac >- metis_tac[asm_static_wf_frame_prog_ok] >>
+  qabbrev_tac `lo = lo_reloc prog prog'` >>
+  qabbrev_tac `env = asm_data_env prog' as.as_code` >>
+  `code_labels_agree prog lo` by simp[Abbr `lo`, lo_reloc_code_labels_agree] >>
+  `(!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+   asm_data_env_lo_ok lo prog env as.as_code` by
+    (simp[Abbr `lo`, Abbr `env`] >> irule lo_reloc_data_env >> simp[]) >>
+  `asm_data_env_lo_ok (SND (compute_label_offsets prog')) prog' env as.as_code` by
+    simp[Abbr `env`, asm_data_env_lo_ok_canonical, asm_data_env_ok_asm_data_env] >>
+  `(?v. run_context fuel unit.cu_context vs = Halt v) \/
+   (?a v. run_context fuel unit.cu_context vs = Abort a v)` by
+    (drule_all codegen_entry_selection >> strip_tac >>
+     `lookup_function fe.fn_name unit.cu_context.ctx_functions = SOME fe` by
+       simp[lookup_function_def, listTheory.FIND_thm] >>
+     `EVERY (\inst. ~MEM inst.inst_opcode [RET; RETFMP; DRET]) (fn_insts fe)` by
+       metis_tac[codegen_entry_no_returns] >>
+     `!ret v. run_context fuel unit.cu_context vs <> IntRet ret v` by
+       (rpt gen_tac >> irule run_context_not_int_ret >> rpt strip_tac >> gvs[]) >>
+     fs[venom_run_bounded_def, terminates_def] >>
+     Cases_on `run_context fuel unit.cu_context vs` >> fs[run_context_not_ok]) >>
+  `label_disciplined_own env as.as_code prog as` by
+    (qspecl_then [`T`, `lo`, `as.as_code`, `fuel`, `rpolicy`, `unit`,
+      `cplan`, `prog`, `Inv`, `vs`, `as`, `env`] mp_tac
+        codegen_label_disciplined_mode >> simp[]) >>
+  `asm_run_bounded lo (build_offset_to_pc prog) prog H N as` by
+    (qpat_x_assum `!lo Inv vs as. _`
+      (qspecl_then [`lo`, `Inv`, `vs`, `as`] mp_tac) >> simp[]) >>
+  `as.as_pc = 0` by fs[codegen_asm_entry_rel_reloc_def] >>
+  qpat_x_assum `!H k s env lo lo'. _`
+    (qspecl_then [`H`, `N`, `as`, `env`, `lo`, `SND (compute_label_offsets prog')`]
+      mp_tac) >>
+  simp[code_labels_agree_refl]
+QED
+
+Theorem codegen_gas_surplus_asm_opt_own:
+  !rpolicy unit cplan prog prog' fuel M D.
+    generate_context_plan unit.cu_context = SOME cplan /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    asm_opt_finalizer rpolicy prog = SOME prog' /\
+    unit_shape_ok unit
+    ==>
+    ?g. !g' Inv vs es s op r s'.
+      g <= g' /\ wf_state (add_frame_gas g' es) /\
+      g' <= frame_gas_left (add_frame_gas g' es) /\
+      codegen_context_obligations Inv unit.cu_context cplan /\
+      codegen_reachability_package Inv unit.cu_context vs /\
+      label_flow_own_ok unit.cu_context /\ code_end_offset_ok Inv unit.cu_context /\
+      sym_unit_static_ok unit /\
+      vs.vs_code = assemble prog' ++ vs.vs_data_section /\
+      codegen_asm_entry_rel_reloc (lo_reloc prog prog') cplan prog vs
+        (entry_asm_state vs (add_frame_gas g' es)) /\
+      asm_frame_rel prog' vs.vs_data_section (add_frame_gas g' es)
+        (entry_asm_state vs (add_frame_gas g' es))
+        (add_frame_gas g' es) /\
+      venom_run_bounded fuel M unit.cu_context vs /\
+      mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs /\
+      frame_inst_at (add_frame_gas g' es) s op /\
+      (!t. frame_inst_at (add_frame_gas g' es) t ReturnDataCopy ==>
+           ~RTC (\a b. LENGTH a.contexts >= LENGTH s.contexts /\
+                       step a = (INL (), b)) t s) /\
+      step_inst op s = (r, s') /\ LENGTH s'.contexts = LENGTH s.contexts
+      ==>
+      r <> INR (SOME OutOfGas) /\ D <= frame_gas_left s'
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all codegen_opt_run_bounded_own >>
+  disch_then (qspecl_then [`fuel`, `M`]
+    (qx_choosel_then [`N`, `H`] assume_tac)) >>
+  qspecl_then [`H`, `N`, `D`] (qx_choose_then `g` assume_tac)
+    asm_frame_gas_surplus >>
+  qexists_tac `g` >> rpt gen_tac >> strip_tac >>
+  qabbrev_tac `s0 = entry_asm_state vs (add_frame_gas g' es)` >>
+  `s0.as_code = vs.vs_code` by simp[Abbr`s0`, entry_asm_state_def] >>
+  `asm_frame_prog_ok prog' /\
+   asm_run_bounded (SND (compute_label_offsets prog'))
+     (build_offset_to_pc prog') prog' H N s0` by
+    (qpat_x_assum `!Inv vs as. codegen_context_obligations _ _ _ /\ _ ==> _`
+       (qspecl_then [`Inv`, `vs`, `s0`] mp_tac) >>
+     simp[]) >>
+  qpat_x_assum `!prog data es0 a e s op r s'. asm_frame_prog_ok _ /\ _ ==> _`
+    (qspecl_then [`prog'`, `vs.vs_data_section`, `add_frame_gas g' es`,
+                  `s0`, `add_frame_gas g' es`, `s`, `op`, `r`, `s'`] mp_tac) >>
+  impl_tac >- simp[] >>
+  simp[]
+QED
+
+Theorem codegen_gas_sufficient_asm_opt_own:
+  !rpolicy unit cplan prog prog' fuel M.
+    generate_context_plan unit.cu_context = SOME cplan /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    asm_opt_finalizer rpolicy prog = SOME prog' /\
+    unit_shape_ok unit
+    ==>
+    ?g. !g' Inv vs es.
+      g <= g' /\ wf_state es /\
+      codegen_context_obligations Inv unit.cu_context cplan /\
+      codegen_reachability_package Inv unit.cu_context vs /\
+      label_flow_own_ok unit.cu_context /\ code_end_offset_ok Inv unit.cu_context /\
+      sym_unit_static_ok unit /\
+      vs.vs_code = assemble prog' ++ vs.vs_data_section /\
+      codegen_asm_entry_rel_reloc (lo_reloc prog prog') cplan prog vs
+        (entry_asm_state vs (add_frame_gas g' es)) /\
+      asm_frame_rel prog' vs.vs_data_section (add_frame_gas g' es)
+        (entry_asm_state vs (add_frame_gas g' es))
+        (add_frame_gas g' es) /\
+      venom_run_bounded fuel M unit.cu_context vs /\
+      mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs
+      ==>
+      ?r es'.
+        run_call (add_frame_gas g' es) = SOME (r, es') /\
+        ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
+         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+Proof
+  rpt strip_tac >>
+  drule_all codegen_gas_surplus_asm_opt_own >>
+  disch_then (qspecl_then [`fuel`, `M`, `0`] strip_assume_tac) >>
+  qexists_tac `g` >> rpt strip_tac >>
+  Cases_on `run_call (add_frame_gas g' es)` >- fs[run_call_eq_tr] >>
+  rename1 `run_call _ = SOME res` >> PairCases_on `res` >>
+  qexistsl_tac [`res0`, `res1`] >> simp[] >>
+  rpt strip_tac >> gvs[frame_inst_raises_def] >>
+  CCONTR_TAC >>
+  `wf_state (add_frame_gas g' es) /\
+   g' <= frame_gas_left (add_frame_gas g' es)` by
+    metis_tac[add_frame_gas_wf_state, wf_state_frame_gas_left] >>
+  `LENGTH s.contexts = LENGTH (add_frame_gas g' es).contexts` by
+    fs[frame_inst_at_def] >>
   first_x_assum (qspecl_then [`g'`, `Inv`, `vs`, `es`, `s`, `op`, `s'`]
                    mp_tac) >>
   metis_tac[]

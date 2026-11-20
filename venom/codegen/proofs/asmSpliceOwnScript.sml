@@ -44,6 +44,27 @@ Definition asm_window_refines_own_def:
            (sym_steps_own (pfx ++ repl ++ sfx) env own j' ss))
 End
 
+(* Exact local outcomes for a proposed pair of step counts. *)
+Overload own_window_results = ``\pre pat repl post env own ss j j'.
+  (!a. sym_steps_own (pre ++ pat ++ post) env own j ss = SymOK a ==>
+       (a.sym_base.as_pc <= LENGTH pre \/
+        LENGTH pre + LENGTH pat <= a.sym_base.as_pc) /\
+       sym_steps_own (pre ++ repl ++ post) env own j' ss =
+         SymOK (sym_with_pc (splice_pc (LENGTH pre) (LENGTH pat)
+           (LENGTH repl) a.sym_base.as_pc) a)) /\
+  (sym_terminal (sym_steps_own (pre ++ pat ++ post) env own j ss) ==>
+   sym_result_rel (sym_steps_own (pre ++ pat ++ post) env own j ss)
+     (sym_steps_own (pre ++ repl ++ post) env own j' ss))``
+
+Theorem own_window_results_refines:
+  0 < j /\
+  (!env own ss. ss.sym_base.as_pc = LENGTH pre /\ ss.sym_base.as_stack = [] ==>
+     own_window_results pre pat repl post env own ss j j') ==>
+  asm_window_refines_own pre pat repl post
+Proof
+  simp[asm_window_refines_own_def] >> metis_tac[]
+QED
+
 Theorem asm_splice_window_refines_own:
   asm_splice_ok pat repl ∧
   (∀l. MEM (AsmLabel l) pat ⇒ ¬MEM l (asm_label_refs (pfx ++ pat ++ sfx))) ∧
@@ -194,7 +215,7 @@ Proof
   rpt strip_tac >> metis_tac[]
 QED
 
-Theorem sym_steps_own_preserves_splice_invariant[local]:
+Theorem sym_steps_own_preserves_splice_invariant:
   !n u a. u.sym_base.as_stack = [] /\
     sym_state_labels_in (asm_label_refs p) u /\
     sym_steps_own p env own n u = SymOK a ==>

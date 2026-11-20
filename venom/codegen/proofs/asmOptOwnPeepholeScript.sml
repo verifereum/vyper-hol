@@ -34,12 +34,12 @@ Proof
   simp[sym_step_own_eq, sym_step_commutative_swap]
 QED
 
-Theorem dup1_swap2_swap1_window_own[local]:
-  asm_window_refines_own pfx [AsmOp "DUP1"; AsmOp "SWAP2"; AsmOp "SWAP1"]
-    [AsmOp "SWAP1"; AsmOp "DUP2"] sfx
+Theorem dup1_swap2_swap1_window_results:
+  ss.sym_base.as_pc = LENGTH pfx /\ ss.sym_base.as_stack = [] ==>
+  own_window_results pfx [AsmOp "DUP1"; AsmOp "SWAP2"; AsmOp "SWAP1"]
+    [AsmOp "SWAP1"; AsmOp "DUP2"] sfx env own ss 3 2
 Proof
-  simp_tac bool_ss [asm_window_refines_own_def, GSYM APPEND_ASSOC, APPEND] >>
-  rpt strip_tac >>
+  strip_tac >> BETA_TAC >> simp_tac bool_ss [GSYM APPEND_ASSOC, APPEND] >>
   qabbrev_tac `p = pfx ++ AsmOp "DUP1" :: AsmOp "SWAP2" :: AsmOp "SWAP1" ::
                    sfx` >>
   qabbrev_tac `q = pfx ++ AsmOp "SWAP1" :: AsmOp "DUP2" :: sfx` >>
@@ -49,7 +49,6 @@ Proof
    LENGTH pfx < LENGTH q ∧ EL (LENGTH pfx) q = AsmOp "SWAP1" ∧
    LENGTH pfx + 1 < LENGTH q ∧ EL (LENGTH pfx + 1) q = AsmOp "DUP2"`
     by simp[Abbr `p`, Abbr `q`, EL_APPEND_EQN] >>
-  qexistsl_tac [`3`, `2`] >>
   Cases_on `ss.sym_stack` >>
   simp[sym_steps_own_pos, sym_steps_own_def, sym_step_own_eq, sym_step_def, sym_step_op_def,
        dup_table_def, swap_table_def, sym_dup_def, sym_swap_def,
@@ -62,18 +61,26 @@ Proof
        asm_state_component_equality]
 QED
 
-Theorem dup1_swap1_pop_window_own[local]:
-  asm_window_refines_own pfx [AsmOp "DUP1"; AsmOp "SWAP1"; AsmOp "POP"] [] sfx
+Theorem dup1_swap2_swap1_window_own[local]:
+  asm_window_refines_own pfx [AsmOp "DUP1"; AsmOp "SWAP2"; AsmOp "SWAP1"]
+    [AsmOp "SWAP1"; AsmOp "DUP2"] sfx
 Proof
-  simp_tac bool_ss [asm_window_refines_own_def, GSYM APPEND_ASSOC, APPEND] >>
-  rpt strip_tac >>
+  irule own_window_results_refines >> qexistsl_tac [`3`, `2`] >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  mp_tac (BETA_RULE dup1_swap2_swap1_window_results) >> simp[]
+QED
+
+Theorem dup1_swap1_pop_window_results:
+  ss.sym_base.as_pc = LENGTH pfx /\ ss.sym_base.as_stack = [] ==>
+  own_window_results pfx [AsmOp "DUP1"; AsmOp "SWAP1"; AsmOp "POP"] [] sfx env own ss 3 0
+Proof
+  strip_tac >> BETA_TAC >> simp_tac bool_ss [GSYM APPEND_ASSOC, APPEND] >>
   qabbrev_tac `p = pfx ++ AsmOp "DUP1" :: AsmOp "SWAP1" :: AsmOp "POP" ::
                    sfx` >>
   `LENGTH pfx < LENGTH p ∧ EL (LENGTH pfx) p = AsmOp "DUP1" ∧
    LENGTH pfx + 1 < LENGTH p ∧ EL (LENGTH pfx + 1) p = AsmOp "SWAP1" ∧
    LENGTH pfx + 2 < LENGTH p ∧ EL (LENGTH pfx + 2) p = AsmOp "POP"`
     by simp[Abbr `p`, EL_APPEND_EQN] >>
-  qexistsl_tac [`3`, `0`] >>
   Cases_on `ss.sym_stack` >>
   simp[sym_steps_own_pos, sym_steps_own_def, sym_step_own_eq, sym_step_def, sym_step_op_def,
        dup_table_def, swap_table_def, sym_dup_def, sym_swap_def,
@@ -82,12 +89,20 @@ Proof
        asm_state_component_equality]
 QED
 
-Theorem swap1_pop_pop_window_own[local]:
-  asm_window_refines_own pfx [AsmOp "SWAP1"; AsmOp "POP"; AsmOp "POP"]
-    [AsmOp "POP"; AsmOp "POP"] sfx
+Theorem dup1_swap1_pop_window_own[local]:
+  asm_window_refines_own pfx [AsmOp "DUP1"; AsmOp "SWAP1"; AsmOp "POP"] [] sfx
 Proof
-  simp_tac bool_ss [asm_window_refines_own_def, GSYM APPEND_ASSOC, APPEND] >>
-  rpt strip_tac >>
+  irule own_window_results_refines >> qexistsl_tac [`3`, `0`] >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  mp_tac (BETA_RULE dup1_swap1_pop_window_results) >> simp[]
+QED
+
+Theorem swap1_pop_pop_window_results:
+  ss.sym_base.as_pc = LENGTH pfx /\ ss.sym_base.as_stack = [] ==>
+  own_window_results pfx [AsmOp "SWAP1"; AsmOp "POP"; AsmOp "POP"]
+    [AsmOp "POP"; AsmOp "POP"] sfx env own ss 3 2
+Proof
+  strip_tac >> BETA_TAC >> simp_tac bool_ss [GSYM APPEND_ASSOC, APPEND] >>
   qabbrev_tac `p = pfx ++ AsmOp "SWAP1" :: AsmOp "POP" :: AsmOp "POP" ::
                    sfx` >>
   qabbrev_tac `q = pfx ++ AsmOp "POP" :: AsmOp "POP" :: sfx` >>
@@ -97,7 +112,6 @@ Proof
    LENGTH pfx < LENGTH q ∧ EL (LENGTH pfx) q = AsmOp "POP" ∧
    LENGTH pfx + 1 < LENGTH q ∧ EL (LENGTH pfx + 1) q = AsmOp "POP"`
     by simp[Abbr `p`, Abbr `q`, EL_APPEND_EQN] >>
-  qexistsl_tac [`3`, `2`] >>
   Cases_on `ss.sym_stack` >>
   simp[sym_steps_own_pos, sym_steps_own_def, sym_step_own_eq, sym_step_def, sym_step_op_def,
        dup_table_def, swap_table_def, sym_swap_def, sym_set_stack_def,
@@ -110,18 +124,26 @@ Proof
        asm_state_component_equality]
 QED
 
-Theorem dup1_swap1_window_own[local]:
-  asm_window_refines_own pfx [AsmOp "DUP1"; AsmOp "SWAP1"] [AsmOp "DUP1"] sfx
+Theorem swap1_pop_pop_window_own[local]:
+  asm_window_refines_own pfx [AsmOp "SWAP1"; AsmOp "POP"; AsmOp "POP"]
+    [AsmOp "POP"; AsmOp "POP"] sfx
 Proof
-  simp_tac bool_ss [asm_window_refines_own_def, GSYM APPEND_ASSOC, APPEND] >>
-  rpt strip_tac >>
+  irule own_window_results_refines >> qexistsl_tac [`3`, `2`] >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  mp_tac (BETA_RULE swap1_pop_pop_window_results) >> simp[]
+QED
+
+Theorem dup1_swap1_window_results:
+  ss.sym_base.as_pc = LENGTH pfx /\ ss.sym_base.as_stack = [] ==>
+  own_window_results pfx [AsmOp "DUP1"; AsmOp "SWAP1"] [AsmOp "DUP1"] sfx env own ss 2 1
+Proof
+  strip_tac >> BETA_TAC >> simp_tac bool_ss [GSYM APPEND_ASSOC, APPEND] >>
   qabbrev_tac `p = pfx ++ AsmOp "DUP1" :: AsmOp "SWAP1" :: sfx` >>
   qabbrev_tac `q = pfx ++ AsmOp "DUP1" :: sfx` >>
   `LENGTH pfx < LENGTH p ∧ EL (LENGTH pfx) p = AsmOp "DUP1" ∧
    LENGTH pfx + 1 < LENGTH p ∧ EL (LENGTH pfx + 1) p = AsmOp "SWAP1" ∧
    LENGTH pfx < LENGTH q ∧ EL (LENGTH pfx) q = AsmOp "DUP1"`
     by simp[Abbr `p`, Abbr `q`, EL_APPEND_EQN] >>
-  qexistsl_tac [`2`, `1`] >>
   Cases_on `ss.sym_stack` >>
   simp[sym_steps_own_pos, sym_steps_own_def, sym_step_own_eq, sym_step_def, sym_step_op_def,
        dup_table_def, swap_table_def, sym_dup_def, sym_swap_def,
@@ -130,18 +152,24 @@ Proof
        asm_state_component_equality]
 QED
 
-Theorem swap_pair_window_own[local]:
-  isPREFIX "SWAP" name ⇒
-  asm_window_refines_own pfx [AsmOp name; AsmOp name] [] sfx
+Theorem dup1_swap1_window_own[local]:
+  asm_window_refines_own pfx [AsmOp "DUP1"; AsmOp "SWAP1"] [AsmOp "DUP1"] sfx
 Proof
-  strip_tac >>
-  simp_tac bool_ss [asm_window_refines_own_def, GSYM APPEND_ASSOC, APPEND] >>
-  rpt strip_tac >>
+  irule own_window_results_refines >> qexistsl_tac [`2`, `1`] >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  mp_tac (BETA_RULE dup1_swap1_window_results) >> simp[]
+QED
+
+Theorem swap_pair_window_results:
+  isPREFIX "SWAP" name /\
+  ss.sym_base.as_pc = LENGTH pfx /\ ss.sym_base.as_stack = [] ==>
+  own_window_results pfx [AsmOp name; AsmOp name] [] sfx env own ss 2 0
+Proof
+  strip_tac >> BETA_TAC >> simp_tac bool_ss [GSYM APPEND_ASSOC, APPEND] >>
   qabbrev_tac `p = pfx ++ AsmOp name :: AsmOp name :: sfx` >>
   `LENGTH pfx < LENGTH p ∧ EL (LENGTH pfx) p = AsmOp name ∧
    LENGTH pfx + 1 < LENGTH p ∧ EL (LENGTH pfx + 1) p = AsmOp name`
     by simp[Abbr `p`, EL_APPEND_EQN] >>
-  qexistsl_tac [`2`, `0`] >>
   Cases_on `ALOOKUP swap_table name`
   >- (drule_all swap_prefix_unknown >> strip_tac >>
       drule_all sym_step_unknown_op_own >>
@@ -157,13 +185,21 @@ Proof
        asm_state_component_equality]
 QED
 
-Theorem swap1_commutative_window_own[local]:
-  asm_commutative_op (AsmOp name) ⇒
-  asm_window_refines_own pfx [AsmOp "SWAP1"; AsmOp name] [AsmOp name] sfx
+Theorem swap_pair_window_own[local]:
+  isPREFIX "SWAP" name ⇒
+  asm_window_refines_own pfx [AsmOp name; AsmOp name] [] sfx
 Proof
-  strip_tac >>
-  simp_tac bool_ss [asm_window_refines_own_def, GSYM APPEND_ASSOC, APPEND] >>
-  rpt strip_tac >>
+  strip_tac >> irule own_window_results_refines >> qexistsl_tac [`2`, `0`] >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  mp_tac (BETA_RULE swap_pair_window_results) >> simp[]
+QED
+
+Theorem swap1_commutative_window_results:
+  asm_commutative_op (AsmOp name) /\
+  ss.sym_base.as_pc = LENGTH pfx /\ ss.sym_base.as_stack = [] ==>
+  own_window_results pfx [AsmOp "SWAP1"; AsmOp name] [AsmOp name] sfx env own ss 2 1
+Proof
+  strip_tac >> BETA_TAC >> simp_tac bool_ss [GSYM APPEND_ASSOC, APPEND] >>
   qabbrev_tac `p = pfx ++ AsmOp "SWAP1" :: AsmOp name :: sfx` >>
   qabbrev_tac `q = pfx ++ AsmOp name :: sfx` >>
   `LENGTH pfx < LENGTH p ∧ EL (LENGTH pfx) p = AsmOp "SWAP1" ∧
@@ -172,7 +208,6 @@ Proof
     by simp[Abbr `p`, Abbr `q`, EL_APPEND_EQN] >>
   `sym_step_own p env own (AsmOp "SWAP1") ss = sym_swap 1 ss`
     by (irule sym_step_swap_table_own >> simp[swap_table_def]) >>
-  qexistsl_tac [`2`, `1`] >>
   `(∃e. sym_swap 1 ss = SymError e) ∨ ∃a b stk. ss.sym_stack = a :: b :: stk`
     by (Cases_on `ss.sym_stack` >> simp[sym_swap_def] >>
         rename1 `_ = _ :: t` >> Cases_on `t` >> simp[]) >>
@@ -216,6 +251,15 @@ Proof
     by (drule_at (Pos last) sym_step_own_pc_next >> simp[]) >>
   simp[splice_pc_def, sym_state_component_equality,
        asm_state_component_equality]
+QED
+
+Theorem swap1_commutative_window_own[local]:
+  asm_commutative_op (AsmOp name) ⇒
+  asm_window_refines_own pfx [AsmOp "SWAP1"; AsmOp name] [AsmOp name] sfx
+Proof
+  strip_tac >> irule own_window_results_refines >> qexistsl_tac [`2`, `1`] >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  mp_tac (BETA_RULE swap1_commutative_window_results) >> simp[]
 QED
 
 (* ===== Splices ===== *)

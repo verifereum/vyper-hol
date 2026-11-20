@@ -160,14 +160,14 @@ QED
 
 (* ===== Windows ===== *)
 
-Theorem swap_prefix_plain[local]:
+Theorem swap_prefix_plain:
   isPREFIX "SWAP" name ⇒ asm_plain_inst (AsmOp name)
 Proof
   rw[asm_plain_inst_def, is_data_inst_def] >> strip_tac >> gvs[] >>
   rpt (pop_assum mp_tac) >> EVAL_TAC
 QED
 
-Theorem commutative_plain[local]:
+Theorem commutative_plain:
   asm_commutative_op (AsmOp name) ⇒ asm_plain_inst (AsmOp name)
 Proof
   rw[asm_plain_inst_def, asm_commutative_op_def, is_data_inst_def] >>
