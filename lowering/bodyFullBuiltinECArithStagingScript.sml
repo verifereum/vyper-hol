@@ -279,7 +279,9 @@ Resume ec_arith_staged_cut[join]:
     assume_tac layouts >>
     asm_x "stage_premises" (fn common =>
       DISJ_CASES_THEN2
-        (mp_tac o MATCH_MP ecadd_staging_full o C CONJ common)
+        (mp_tac o MATCH_MP ecadd_staging_full o C CONJ
+          (LIST_CONJ (List.filter
+            (fn th => not (aconv (concl th) ``~ctx_has_dalloca ctx``)) (CONJUNCTS common))))
         (mp_tac o MATCH_MP ecmul_staging_full_from_transfers o C CONJ common) layouts)) >>
   disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
   `res = Var dst` by

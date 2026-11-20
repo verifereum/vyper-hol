@@ -9,7 +9,7 @@ Ancestors
   bodySimFull bodyFullPreds exprSimECArith
   gasShadowCompile exprSimHypsDefs exprLowering loweringPosts compileEnv vyperAST list
   vyperStorageTrace vyperStorageFootprint exprSimHyps exprSimOperands exprSimSource
-  stateRelProj allocaSiteResource
+  stateRelProj allocaSiteResource bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem ecadd_staging_full_from_transfers:
   (!pp bp pd sa sb s pw bw G tn nd lo ctx func bb explicit PG.
@@ -28,7 +28,8 @@ Theorem ecadd_staging_full_from_transfers:
     w2n pw+64 <= s.vs_alloca_next /\ w2n bw+nd <= s.vs_alloca_next /\
     (!i. w2n pw <= i /\ i < w2n pw+64 ==> i NOTIN tn.t_mem) /\
     (w2n pw+64 <= w2n bw+pd \/ w2n bw+pd+64 <= w2n pw) /\
-    allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
     ?t G' tn'.
@@ -72,7 +73,7 @@ Theorem ecadd_staging_full_from_transfers:
   MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   gas_admissible (eval_expr cx (Builtin a bt [e1;e2])) expr_vv_res_ok es /\
@@ -166,7 +167,7 @@ Theorem ecadd_staging_full_from_transfers:
     (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
     (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
     (lo <> 0 ==> !z. cenv.ce_imm_alloca = SOME (Var z) ==> not_fresh_at sm z) /\
-    ~u.vs_halted /\ ~ctx_has_dalloca ctx /\
+    ~u.vs_halted /\
     lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX [gi;ci;ai] (DROP u.vs_inst_idx bb.bb_instructions) /\
     (func.fn_name,id) NOTIN gas_explicit_sites ctx shadow_ctx /\
@@ -348,7 +349,9 @@ Proof
         metis_tac[fragExecTheory.fn_has_code_split,
                   loweringHaltTheory.compile_alloc_buffer_extends] >>
       `128 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp t2` by simp[] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp t2` by
+        (qpat_assum `stmt_state_rel _ ctx func cenv cx es2 t2`
+           (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
       drule_all (Q.INST [`n` |-> `128`,`sa` |-> `s2`,`sb` |-> `ca`,
         `s` |-> `t2`,`buf` |-> `ib`]
         (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
@@ -437,6 +440,11 @@ Proof
         `w2n w+64 <= w2n wi \/ w2n wi+64 <= w2n w` assume_tac
       >- (qpat_x_assum `regions_disjoint (w2n wi) 128 (w2n w) 64` mp_tac >>
           pure_rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp ta` by
+        (qpat_assum `!H. stmt_state_rel H ctx func cenv cx es2 t2 ==> _`
+           (qspec_then `storage_trace_horizon es2.storage_trace`
+             (drule_then (ACCEPT_TAC o
+                MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)))) >>
       asm "copy_rule" (fn copy_rule =>
         drule_all (SRULE [] (Q.INST [`pd` |-> `0`, `nd` |-> `128`]
           (SPEC_ALL copy_rule)))) >>
@@ -570,6 +578,12 @@ Resume ecadd_staging_full_from_transfers[after_first_copy]:
     `w2n w2 <= w2n wi \/ w2n wi+128 <= w2n w2` assume_tac >-
     (qpat_assum `regions_disjoint (w2n wi) 128 (w2n w2) 64` mp_tac >>
      pure_rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp tm` by
+    (`allocas_below_fmp tm <=> allocas_below_fmp ta` by
+       (qpat_assum `tm with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|> = ta` mp_tac >>
+        simp[NoAsms, venomStateTheory.venom_state_component_equality] >> strip_tac >>
+        asm_rewrite_tac[ptrDisciplineTheory.allocas_below_fmp_def]) >>
+     asm_rewrite_tac[]) >>
   asm "copy_rule" (fn copy_rule =>
     drule_all (SRULE [GSYM arithmeticTheory.ADD_ASSOC]
       (Q.INST [`pd` |-> `64`, `nd` |-> `128`]
@@ -756,7 +770,9 @@ Resume ecadd_staging_full_from_transfers[after_copy_frame]:
     (MATCH_MP_TAC (cj 1 fragExecTheory.fn_has_code_split) >>
      qexists `sb` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `64 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp tp` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp tp` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv cx es2 tp`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all (Q.INST [`n` |-> `64`,`sa` |-> `sp`,
     `sb` |-> `sm`,`s` |-> `tp`,`buf` |-> `ob`]
     (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
