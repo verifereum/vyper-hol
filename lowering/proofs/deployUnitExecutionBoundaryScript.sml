@@ -12,11 +12,10 @@ Theorem deploy_certificate_raw_entry_boundary:
    vs_out fmp shadow_ctx func gs marks v.
     fin IN accepted_finalizers /\
     fin rpolicy prog = SOME prog' /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_state_rel tops (assemble prog') am tx es /\
-    vs_out = opt_deploy_entry_state prog prog' cplan tops es /\
+    vs_out = opt_deploy_entry_state_own prog prog' cplan tops es /\
     deploy_source_ok tops am (tx with code := vs_out.vs_code) /\
     w2n vs_out.vs_initial_fmp <= w2n fmp /\
     w2n fmp < 2 ** 254 /\
@@ -44,11 +43,14 @@ Proof
   drule_all deploy_raw_entry_context_facts >> strip_tac >>
   `v.vs_alloca_next = imm_len tops /\
    v.vs_gas_readings = gs /\ v.vs_initial_fmp = v.vs_fmp` by
-    simp[opt_deploy_entry_state_def, opt_entry_state_def, entry_venom_state_def] >>
+    simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def] >>
   `mem_inv dload_headroom_ok dunit.cu_context v` by
     (irule deploy_raw_entry_mem_inv >> metis_tac[]) >>
   `code_layout_valid v` by
-    (gvs[] >> irule deploy_raw_entry_code_layout >> metis_tac[]) >>
+    (`tx with code := vs_out.vs_code = tx` by
+       (qpat_assum `vs_out = _` (fn th => rewrite_tac [th]) >>
+        irule deploy_own_txp_identity >> metis_tac[]) >>
+     gvs[] >> irule deploy_raw_entry_code_layout >> metis_tac[]) >>
   qpat_x_assum `v = _` kall_tac >>
   qpat_x_assum `vs_out = _` kall_tac >>
   qpat_x_assum `deploy_unit_execution_correct_with _ _ _ _ _ _ _ _` mp_tac >>

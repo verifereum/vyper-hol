@@ -9,6 +9,7 @@
  *)
 Theory ctorDeployMemoryRunPtrEntry
 Ancestors
+  fnPlanPlaceRevertPostamble deployEntryLayout
   ctorDeployLoweringEntrySelection
   ctorDeployMemoryRunMemEntryTaskInitial
   ctorDeployLoweringEntryPrefix
@@ -47,11 +48,11 @@ val _ = Parse.hide "body";
 (* The concrete entry used by the ghost prefix is the compiler entry,
    not an independently chosen witness of semantic execution. *)
 Theorem deploy_ptr_entry_normalized:
-  deploy_phases policy tops (deploy_bc,runtime_bc)
+  deploy_phases policy tops (assemble prog,runtime_bc)
     (rp,unit,dout,prog,cplan) /\
   deploy_source_ok tops am tx /\
-  deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+  deploy_state_rel tops (assemble prog') am tx es /\
+  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
   deploy_ctor_code tops rp runtime_bc unit
     (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
   lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn /\
@@ -85,10 +86,45 @@ Proof
     (qpat_assum `gas_variant _ _` mp_tac >>
      rewrite_tac[gas_variant_def] >> strip_tac >>
      pop_assum (mp_tac o Q.AP_TERM `\s. (s.vs_vars,s.vs_halted)`) >>
-     simp[deploy_entry_state_def, entry_venom_state_fresh]) >>
+     simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def, init_venom_state_def]) >>
   drule deploy_prefix_normalized_allocations >> simp[] >> strip_tac >>
   simp[fresh_vars_wrt_def, initial_compile_state_def, lookup_var_def] >>
   rpt strip_tac >> drule_all deploy_ctor_raw_blocks_no_phi >> simp[]
+QED
+
+Theorem deploy_ptr_entry_normalized_canonical:
+  deploy_phases policy tops (deploy_bc,runtime_bc)
+    (rp,unit,dout,prog,cplan) /\
+  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
+  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+  deploy_ctor_code tops rp runtime_bc unit
+    (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
+  lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn /\
+  fn_entry_label fn = SOME lbl ==>
+  fn = func /\ lbl = "__deploy" /\
+     fresh_vars_wrt (initial_compile_state "__deploy")
+       (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) /\
+     ~(vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>).vs_halted /\
+     (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>).vs_current_bb =
+       (initial_compile_state "__deploy").cs_current_bb /\
+     (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>).vs_inst_idx =
+       LENGTH (initial_compile_state "__deploy").cs_current_insts /\
+     (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>).vs_allocas = FEMPTY /\
+     (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>).vs_alloca_next = imm_len tops /\
+     allocas_from (imm_len tops)
+       (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) /\
+     ~ctx_has_dalloca unit.cu_context /\
+     imm_len tops + unit_alloca_budget unit.cu_context < dimword (:256) /\
+     (!bb label. lookup_block label func.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0)
+Proof
+  strip_tac >>
+  `deploy_bc = assemble prog` by fs[deploy_phases_def] >>
+  qpat_x_assum `deploy_bc = _` SUBST_ALL_TAC >>
+  `gas_variant vs (opt_deploy_entry_state_own prog prog cplan tops es
+      with vs_outcomes := vs.vs_outcomes)` by simp[opt_deploy_entry_state_own_identity] >>
+  drule_all deploy_ptr_entry_normalized >> simp[]
 QED
 
 (* A successfully started deployment cannot enable the constructor lock.
@@ -189,9 +225,9 @@ QED
 
 (* Source-linked companion: retain the source selection before hiding args. *)
 val SourceEntryMode = ``\checked.
-  deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
-  deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+  deploy_phases policy tops (assemble prog,runtime_bc) (rp,unit,dout,prog,cplan) /\
+  deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
+  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
   deploy_ctor_code tops rp runtime_bc unit
     (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
@@ -264,12 +300,12 @@ Proof
   drule_all deploy_ptr_entry_package_accepts_value >> disch_tac >>
   Q.SUBGOAL_THEN `is_payable \/ initial.vs_call_ctx.cc_callvalue = 0w` assume_tac
   >- (Cases_on `is_payable` >> simp[] >>
-      `vs.vs_call_ctx = (deploy_entry_state prog cplan tops es).vs_call_ctx` by
+      `vs.vs_call_ctx = (opt_deploy_entry_state_own prog prog' cplan tops es).vs_call_ctx` by
         (qpat_x_assum `gas_variant _ _` (mp_tac o REWRITE_RULE [gas_variant_def]) >>
          disch_then (mp_tac o Q.AP_TERM `\s. s.vs_call_ctx`) >> simp[]) >>
       qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
       simp_tac std_ss [deploy_state_rel_def] >> strip_tac >>
-      simp[Abbr `initial`, deploy_entry_state_def, entry_venom_state_def] >> gvs[]) >>
+      simp[Abbr `initial`, opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def] >> gvs[]) >>
   `ctx_has_dalloca unit.cu_context ==> allocas_below_fmp initial` by simp[] >>
   drule_all prefix_entry_prepare_actual_checked >>
   disch_then (qspecl_then [`entry_taint`, `[]`, `FEMPTY`,
@@ -345,7 +381,7 @@ Proof
      POP_ASSUM_LIST (K all_tac) >>
      rewrite_tac[gas_variant_def] >> strip_tac >>
      pop_assum (mp_tac o Q.AP_TERM `\s. s.vs_memory`) >>
-     simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def,
+     simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def, init_venom_state_def,
        codegenRelTheory.read_byte_def]) >>
   `!id b sz. local_region (cenv1 with ce_ctor_exit_label := SOME exit)
        [scope'] end_state id b sz ==> imm_len tops <= b` by
@@ -422,9 +458,10 @@ QED
 
 
 Theorem deploy_ptr_entry_prefix_related_checked:
-  deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
-  deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+  deploy_phases policy tops (assemble prog,runtime_bc) (rp,unit,dout,prog,cplan) /\
+  deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
+  IS_SOME (FLOOKUP (lo_reloc prog prog') "runtime_begin") /\
+  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
   deploy_ctor_code tops rp runtime_bc unit
     (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
@@ -559,6 +596,48 @@ Proof
   simp[stmt_state_rel_def] >> first_assum ACCEPT_TAC
 QED
 
+Theorem deploy_ptr_entry_prefix_related_checked_canonical:
+  deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
+  deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
+  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+  deploy_ctor_code tops rp runtime_bc unit
+    (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
+  deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
+  lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn /\
+  fn_entry_label fn = SOME lbl ==>
+  ?actual H qt.
+    (!D explicit. gas_origin_ptr_path (D, (imm_len tops), explicit, unit.cu_context, func, []) ((vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>), FEMPTY, entry_taint) [] (OK actual, H, qt)) /\
+    gas_path_mem unit.cu_context func
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) 0 (OK actual) /\
+    alloca_history func actual /\
+    actual.vs_code = vs.vs_code /\ actual.vs_labels = vs.vs_labels /\
+    return_buf_frame NONE ce sa actual /\
+    ~actual.vs_halted /\ actual.vs_current_bb = sa.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    actual.vs_gas_readings = vs.vs_gas_readings /\
+    !HS.
+      ghost_inv_at (deploy_dead HS tops runtime_bc am tx) (imm_len tops) NONE ce
+        (deploy_evaluation_context tops am tx)
+        (es0 with outcomes := SOME vs.vs_outcomes) H qt actual /\
+      stmt_state_rel HS unit.cu_context func ce (deploy_evaluation_context tops am tx)
+        (es0 with outcomes := SOME vs.vs_outcomes) actual /\
+      deploy_ptr_inv HS tops runtime_bc am tx imm H qt actual /\
+      ((!fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
+          fuel unit.cu_context func [] H qt actual) ==>
+        !fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
+          fuel unit.cu_context func [] FEMPTY entry_taint
+          (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>))
+Proof
+  strip_tac >>
+  `deploy_bc = assemble prog` by fs[deploy_phases_def] >>
+  qpat_x_assum `deploy_bc = _` SUBST_ALL_TAC >>
+  `gas_variant vs (opt_deploy_entry_state_own prog prog cplan tops es
+      with vs_outcomes := vs.vs_outcomes)` by simp[opt_deploy_entry_state_own_identity] >>
+  `IS_SOME (FLOOKUP (lo_reloc prog prog) "runtime_begin")` by
+    (drule deploy_phases_runtime_label >> simp[]) >>
+  drule_all deploy_ptr_entry_prefix_related_checked >> simp[]
+QED
+
 Theorem deploy_ptr_entry_prefix_related:
   deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
   deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
@@ -584,7 +663,7 @@ Proof
   strip_tac >>
   `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
     fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
-  drule_all deploy_ptr_entry_prefix_related_checked >> strip_tac >>
+  drule_all deploy_ptr_entry_prefix_related_checked_canonical >> strip_tac >>
   qexistsl [`actual`,`H`,`qt`] >> simp[]
 QED
 
@@ -627,7 +706,7 @@ Proof
     fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
   drule_all deploy_ptr_entry_prefix_related >>
   disch_then (Q.ISPEC_THEN `HS` strip_assume_tac) >>
-  drule_all deploy_ptr_entry_normalized >> simp_tac bool_ss [LET_THM] >> strip_tac >> gvs[] >>
+  drule_all deploy_ptr_entry_normalized_canonical >> simp_tac bool_ss [LET_THM] >> strip_tac >> gvs[] >>
   qexistsl [`actual`,`H`,`qt`] >> simp[] >> strip_tac >>
   qpat_x_assum `(!fuel. ptr_safe_run _ _ _ _ _ _ H qt actual) ==> _` drule >>
   disch_tac >> Cases_on `fuel` >> simp[Once ptr_safe_blocks_def] >>

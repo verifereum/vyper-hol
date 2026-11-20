@@ -48,18 +48,18 @@ Proof
 QED
 
 Theorem deploy_ctor_entry_data_section:
- !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rpolicy,dunit,dout,prog,cplan) /\
- deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
+ deploy_state_rel tops (assemble prog') am tx es /\
+ gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es
+                   with vs_outcomes := vs.vs_outcomes) ==>
  constructor_args_encode tops tx vs.vs_data_section
 Proof
- rpt strip_tac >>
- `vs.vs_data_section = (deploy_entry_state prog cplan tops es).vs_data_section` by
-  (gvs[gas_variant_def] >>
-   pop_assum (mp_tac o Q.AP_TERM `\s. s.vs_data_section`) >> simp[]) >>
- gvs[deploy_phases_def, deploy_state_rel_def,
-     deploy_entry_state_def, entry_venom_state_def, DROP_LENGTH_APPEND]
+ strip_tac >>
+ qpat_x_assum `gas_variant _ _` (mp_tac o PURE_REWRITE_RULE [gas_variant_def]) >>
+ disch_then (mp_tac o Q.AP_TERM `\s. s.vs_data_section`) >>
+ simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
+      entry_venom_state_frame_fields] >>
+ fs[deploy_state_rel_def, DROP_LENGTH_APPEND] >>
+ strip_tac >> gvs[]
 QED
 
 Theorem deploy_ctor_prefix_data_bytes:
@@ -102,10 +102,10 @@ Proof
 QED
 
 Theorem deploy_ctor_entry_data_size:
- !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rpolicy,dunit,dout,prog,cplan) /\
- deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
+ !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs.
+ deploy_phases policy tops (assemble prog,runtime_bc) (rpolicy,dunit,dout,prog,cplan) /\
+ deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
+ gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
  LENGTH vs.vs_data_section < dimword(:256)
 Proof
  rpt strip_tac >> drule_all deploy_ctor_entry_data_section >> strip_tac >>

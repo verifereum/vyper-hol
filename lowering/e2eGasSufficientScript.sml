@@ -174,24 +174,14 @@ Definition deploy_gas_source_exempt_def:
     src = INR (Error (RuntimeError "create initcode too large"))
 End
 
+(* CREATE and CREATE2 are absent from the lowered unit, so the size
+   invariant holds for every entry state. *)
 Theorem deploy_entry_create_size_ok:
-  !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx txp es vs.
-    fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
-    fin rpolicy prog = SOME prog' /\
-    deploy_phases policy tops (assemble prog, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_source_ok tops am tx /\
-    deploy_state_rel tops (assemble prog') am tx es /\
-    gas_variant vs (opt_deploy_entry_state prog prog' cplan tops es) /\
-    txp = tx with code := vs.vs_code /\
-    (!gobs. deploy_storage_ok tops am txp vs.vs_outcomes gobs) /\
-    LENGTH vs.vs_outcomes < 2 ** 64 /\
-    (!gobs. ~deploy_gas_source_exempt tops
-       (load_contract (SOME vs.vs_outcomes) gobs am txp [(NONE, tops)] []))
-    ==>
-    mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
-      dout.po_unit.cu_context vs
+  deploy_phases policy tops (deploy_bc, runtime_bc)
+    (rpolicy, dunit, dout, prog, cplan) /\
+  deploy_source_ok tops am tx ==>
+  mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
+    dout.po_unit.cu_context vs
 Proof
   rpt strip_tac >>
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
@@ -659,7 +649,7 @@ Proof
   `gas_variant vi
       (deploy_entry_state prog cplan tops es with vs_outcomes := vi.vs_outcomes)` by
     fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
-  drule_all deploy_unit_run_entry >> strip_tac >>
+  drule_all deploy_unit_run_entry_canonical >> strip_tac >>
   qpat_x_assum
     `gas_variant vi (deploy_entry_state prog cplan tops es with vs_outcomes := vi.vs_outcomes)`
     kall_tac >>
@@ -797,11 +787,7 @@ Proof
        mp_tac deploy_txp_identity >> simp[]) >>
   `mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
       dout.po_unit.cu_context vs` by
-    (qspecl_then [`K SOME`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
-                 `dunit`, `dout`, `prog`, `prog`, `cplan`, `am`,
-                 `tx`, `tx`, `add_frame_gas g' es`, `vs`] mp_tac
-       deploy_entry_create_size_ok >>
-     impl_tac >- fs[gas_variant_refl] >> simp[]) >>
+    (drule_all deploy_entry_create_size_ok >> simp[]) >>
   qabbrev_tac `Du = <| d_stor := K (K UNIV); d_trans := K (K UNIV);
                        d_imm := K UNIV; d_ret := K UNIV |>` >>
   `dead_wf Du` by simp[Abbr`Du`, dead_wf_def] >>

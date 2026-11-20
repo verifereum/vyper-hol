@@ -2,6 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringNoCtor
 Ancestors
+  fnPlanPlaceRevertPostamble
   immSectionDead vfmProg
   structFieldsProps accountsRelProps ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract gasSummary
   compileVyper vyperInterpreter e2eDeployDefs moduleLowering
@@ -59,9 +60,10 @@ QED
 Theorem no_ctor_entry_code:
   deploy_state_rel tops deploy_bc am tx es /\
   classify_functions tops = (exts, ints, fb, NONE) /\
-  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
+  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es
+                    with vs_outcomes := vs.vs_outcomes) ==>
   vs.vs_code = deploy_bc /\
-  vs.vs_labels = n2w o_f SND (compute_label_offsets prog)
+  vs.vs_labels = n2w o_f lo_reloc prog prog'
 Proof
   strip_tac >>
   qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
@@ -69,7 +71,8 @@ Proof
   drule_all no_ctor_args >> strip_tac >>
   qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
   disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_code, s.vs_labels)`) >>
-  simp[deploy_entry_state_def, entry_venom_state_def]
+  simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
+       entry_venom_state_def]
 QED
 
 Theorem no_ctor_simple_data:
@@ -1993,45 +1996,6 @@ Proof
   fs[Abbr `t`, update_var_def, arithmeticTheory.ADD_ASSOC]
 QED
 
-Theorem no_ctor_entry_sequence:
-  deploy_phases policy tops (deploy_bc, runtime_bc)
-    (rpolicy, dunit, dout, prog, cplan) /\
-  deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es) /\
-  classify_functions tops = (exts, ints, fb, NONE) ==>
-  ?ss. run_inst_seq
-    [mk_inst 0 ALLOCA [Lit (n2w (LENGTH runtime_bc + imm_len tops))] ["%0"];
-     mk_inst 1 CODECOPY [Var "%0"; Label "runtime_begin";
-       Lit (n2w (LENGTH runtime_bc + imm_len tops))] [];
-     mk_inst 2 RETURN [Var "%0"; Lit (n2w (LENGTH runtime_bc + imm_len tops))] []] vs = Halt ss /\
-    ss.vs_returndata = runtime_bc ++ REPLICATE (imm_len tops) 0w /\ ss.vs_halted /\
-    ss.vs_accounts = vs.vs_accounts /\ ss.vs_transient = vs.vs_transient /\
-    ss.vs_logs = vs.vs_logs /\
-    ss.vs_pending_deletions = vs.vs_pending_deletions /\
-    ss.vs_requests = vs.vs_requests
-Proof
-  strip_tac >>
-  `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
-    fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
-  drule_all no_ctor_runtime_suffix >> strip_tac >>
-  drule_all no_ctor_entry_code >> strip_tac >>
-  drule deploy_imm_budget_ok >> strip_tac >>
-  `imm_len tops < dimword(:256) /\
-   LENGTH runtime_bc + imm_len tops < dimword(:256)` by decide_tac >>
-  `vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = imm_len tops` by
-    (qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
-     disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_allocas, s.vs_alloca_next)`) >>
-     simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def]) >>
-  irule (no_ctor_fresh_sequence |>
-    Q.INST [`bytes` |-> `runtime_bc ++ REPLICATE (imm_len tops) 0w`, `id` |-> `0`] |>
-    SRULE [listTheory.LENGTH_APPEND, rich_listTheory.LENGTH_REPLICATE]) >>
-  simp[] >> qexists_tac `off` >>
-  asm_rewrite_tac[finite_mapTheory.FLOOKUP_o_f] >>
-  simp[rich_listTheory.TAKE_APPEND, listTheory.TAKE_LENGTH_TOO_LONG,
-       rich_listTheory.REPLICATE_GENLIST, listTheory.TAKE_GENLIST,
-       arithmeticTheory.MIN_DEF]
-QED
-
 Theorem no_ctor_simple_context_execution:
   FLOOKUP s.vs_allocas 0 = NONE /\
   FLOOKUP s.vs_labels "runtime_begin" = SOME (n2w codepos) /\
@@ -2100,10 +2064,12 @@ Proof
 QED
 
 Theorem no_ctor_target_execution:
-  deploy_phases policy tops (deploy_bc, runtime_bc)
+  deploy_phases policy tops (assemble prog, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
-  deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+  deploy_state_rel tops (assemble prog') am tx es /\
+  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+  FLOOKUP (lo_reloc prog prog') "runtime_begin" = SOME off /\
+  off < dimword(:256) /\ DROP off (assemble prog') = runtime_bc /\
   classify_functions tops = (exts, ints, fb, NONE) ==>
   ?fuel ss. run_context fuel dunit.cu_context vs = Halt ss /\
     ss.vs_returndata = runtime_bc ++ REPLICATE (imm_len tops) 0w /\
@@ -2113,7 +2079,6 @@ Theorem no_ctor_target_execution:
     ss.vs_requests = vs.vs_requests
 Proof
   strip_tac >> drule_all no_ctor_deploy_context_shape >> disch_tac >>
-  drule_all no_ctor_runtime_suffix >> strip_tac >>
   drule_all no_ctor_entry_code >> strip_tac >>
   drule deploy_imm_budget_ok >> strip_tac >>
   `imm_len tops < dimword(:256) /\
@@ -2121,7 +2086,7 @@ Proof
   `vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = imm_len tops` by
     (qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
      disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_allocas, s.vs_alloca_next)`) >>
-     simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def]) >>
+     simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def, init_venom_state_def]) >>
   qexists_tac `1` >> asm_rewrite_tac[] >>
   mp_tac (no_ctor_simple_context_execution |>
     Q.INST [`bytes` |-> `runtime_bc ++ REPLICATE (imm_len tops) 0w`,
@@ -2591,7 +2556,7 @@ QED
 
 Theorem no_ctor_entry_frame:
   deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
+  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
   vs.vs_accounts = accounts_after_transfer tx am.accounts /\
   vs.vs_transient = am.tStorage /\ vs.vs_logs = [] /\
   vs.vs_pending_deletions = am.pending_deletions /\ vs.vs_requests = []
@@ -2602,14 +2567,14 @@ Proof
   qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
   disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_accounts, s.vs_transient, s.vs_logs,
     s.vs_pending_deletions, s.vs_requests)`) >>
-  simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def] >>
+  simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def, init_venom_state_def] >>
   metis_tac[]
 QED
 
 Theorem no_ctor_source_halt:
   deploy_source_ok tops am tx /\
   deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
   classify_functions tops = (exts,ints,fb,NONE) /\
   ss.vs_returndata = runtime_bc ++ REPLICATE (imm_len tops) 0w /\
   ss.vs_accounts = vs.vs_accounts /\
@@ -2645,30 +2610,3 @@ QED
 
 (* Without a constructor, load_contract runs the synthetic empty one, and the
    unit is compile_simple_deploy's. *)
-Theorem deploy_no_ctor_correct:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs exts ints fb.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es) /\
-    classify_functions tops = (exts, ints, fb, NONE)
-    ==>
-    ?marks.
-      deploy_source_exempt tops
-        (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
-           [(NONE, tops)] []) \/
-      ?fuel. deploy_venom_result_rel HS tops runtime_bc tx
-               (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
-                  [(NONE, tops)] [])
-               (run_context fuel dunit.cu_context vs)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
-    fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
-  drule_all no_ctor_target_execution >> strip_tac >>
-  drule_all no_ctor_source_halt >>
-  disch_then (qspec_then `HS` strip_assume_tac) >>
-  qexists_tac `marks` >> disj2_tac >> qexists_tac `fuel` >>
-  asm_rewrite_tac[]
-QED
