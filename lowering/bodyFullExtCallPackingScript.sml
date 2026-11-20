@@ -1,21 +1,18 @@
 Theory bodyFullExtCallPacking
 Ancestors
-  exprLowering compileEnv selectorDispatch byte rich_list words memoryReadProps venomMemProps calldataOverwritePtr typedCopyOriginPtrFields fragGasOriginPtrDead valueEncodingProps venomState ptrDiscipline bodyPtrDefs loweringShapeDefs fragExec ptrSafeRun
+  exprLowering exprLoweringProps compileEnv selectorDispatch byte rich_list words memoryReadProps venomMemProps calldataOverwritePtr typedCopyOriginPtrFields fragGasOriginPtrDead valueEncodingProps venomState ptrDiscipline bodyPtrDefs loweringShapeDefs fragExec ptrSafeRun
 
 (* The request packer ends immediately before the optional code check. *)
 Theorem extcall_request_buffer_layout:
-  compile_external_call_kwargs ce addr vals tys mem abi mid cap minsz
-    retbytes stat value gas skip hasdef def rt dt aenc adec sa = (ro,sb) ==>
+  compile_external_call_kwargs ce addr vals tys abi mid cap minsz
+    retbytes stat value gas skip hasdef def rt dt adec sa = (ro,sb) ==>
   ?ba s1 s2 len s3 off sp sr u.
     compile_alloc_buffer ((if abi > cap then abi else cap) + 32) sa = (ba,s1) /\
     emit_void MSTORE [ba.buf_operand; Lit (n2w mid)] s1 = ((),s2) /\
     (if vals = [] then comp_return (Lit 4w) else
-      comp_bind (compile_alloc_buffer mem) (\aa.
-      comp_ignore_bind (compile_extcall_store_values ce (ZIP (vals,tys))
-                         aa.buf_operand 0)
-      (comp_bind (emit_op ADD [ba.buf_operand; Lit 32w]) (\dst.
-       comp_bind (compile_abi_encode_to_buf dst aa.buf_operand aenc) (\alen.
-       emit_op ADD [alen; Lit 4w]))))) s2 = (len,s3) /\
+      comp_bind (emit_op ADD [ba.buf_operand; Lit 32w]) (\dst.
+       comp_bind (compile_abi_encode_values_to_buf ce dst (ZIP (vals,tys))) (\alen.
+       emit_op ADD [alen; Lit 4w]))) s2 = (len,s3) /\
     emit_op ADD [ba.buf_operand; Lit 28w] s3 = (off,sp) /\
     comp_ignore_bind
       (if rt = NoneT /\ ~skip then compile_extcodesize_check addr
@@ -52,6 +49,35 @@ Proof
   ntac 4 (pairarg_tac >> simp[]) >>
   ntac 4 (pairarg_tac >> simp[]) >>
   ntac 3 (pairarg_tac >> simp[]) >> strip_tac >> gvs[]
+QED
+
+(* The nonempty request writes its payload after the selector word.
+   The returned length comes from that encoder at its actual end cut. *)
+Theorem extcall_direct_request_trace:
+  comp_bind (emit_op ADD [ba.buf_operand;Lit 32w]) (\dst.
+    comp_bind (compile_abi_encode_values_to_buf ce dst rows) (\alen.
+      emit_op ADD [alen;Lit 4w])) st = (len,en) /\ fn_has_code st en func ==>
+  ?dst a alen b.
+    emit_op ADD [ba.buf_operand;Lit 32w] st = (dst,a) /\
+    compile_abi_encode_values_to_buf ce dst rows a = (alen,b) /\
+    emit_op ADD [alen;Lit 4w] b = (len,en) /\
+    ci_mono st a /\ ci_mono a b /\ ci_mono b en /\
+    fn_has_code st a func /\ fn_has_code a b func /\ fn_has_code b en func
+Proof
+  strip_tac >>
+  Cases_on `emit_op ADD [ba.buf_operand;Lit 32w] st` >>
+  rename1 `emit_op ADD [ba.buf_operand;Lit 32w] st = (dst,a)` >>
+  Cases_on `compile_abi_encode_values_to_buf ce dst rows a` >>
+  rename1 `compile_abi_encode_values_to_buf ce dst rows a = (alen,b)` >>
+  qpat_x_assum `comp_bind _ _ st = _` mp_tac >>
+  asm_simp_tac (srw_ss()) [comp_bind_def, LET_THM] >> strip_tac >>
+  `ci_mono st a /\ ci_mono a b /\ ci_mono b en` by
+    metis_tac[ci_mono_emit_op, ci_mono_compile_abi_encode_values_to_buf, pairTheory.SND] >>
+  `fn_has_code st a func /\ fn_has_code a en func` by
+    metis_tac[ci_mono_def, ci_mono_trans, fn_has_code_split] >>
+  `fn_has_code a b func /\ fn_has_code b en func` by
+    metis_tac[ci_mono_def, fn_has_code_split] >>
+  asm_rewrite_tac[]
 QED
 
 Theorem extcall_selector_bytes:

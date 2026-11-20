@@ -220,14 +220,22 @@ Proof
   strip_tac >> apply_symbolic_frame symbolic_frame_default_return_path >> simp[]
 QED
 
+Theorem deploy_blocks_frame_abi_encode_values_to_buf:
+  (!vv. deploy_blocks_frame (unwrap_value cenv vv)) /\
+  (!src dst ty. deploy_blocks_frame (compile_store_memory cenv src dst ty ty)) /\
+  (!dst src info. deploy_blocks_frame (compile_abi_encode_to_buf dst src info)) ==>
+  deploy_blocks_frame (compile_abi_encode_values_to_buf cenv dst rows)
+Proof
+  strip_tac >> apply_symbolic_frame symbolic_frame_abi_encode_values_to_buf >> simp[]
+QED
+
 Theorem deploy_blocks_frame_external_call_kwargs:
-  (!vs buf off. deploy_blocks_frame (compile_extcall_store_values cenv vs buf off)) /\
-  (!dst src info. deploy_blocks_frame (compile_abi_encode_to_buf dst src info)) /\
+  (!dst rows. deploy_blocks_frame (compile_abi_encode_values_to_buf cenv dst rows)) /\
   (!rt dt buf res dop addr skip lo hi info.
      deploy_blocks_frame (compile_default_return_path cenv rt dt buf res dop addr skip lo hi info)) /\
   (!lo hi. deploy_blocks_frame (compile_return_value_decode lo hi)) /\
   (!dst src opc lo hi info. deploy_blocks_frame (compile_abi_decode_to_buf dst src opc lo hi info)) ==>
-  deploy_blocks_frame (compile_external_call_kwargs cenv addr vals tys mem abi mid rabi lo rmem static value gas skip has_default dop rt dt einfo dinfo)
+  deploy_blocks_frame (compile_external_call_kwargs cenv addr vals tys abi mid rabi lo rmem static value gas skip has_default dop rt dt dinfo)
 Proof
   strip_tac >> apply_symbolic_frame symbolic_frame_external_call_kwargs >> simp[]
 QED
@@ -705,9 +713,9 @@ Theorem deploy_blocks_frame_call_external:
   (!copy vv. deploy_blocks_frame (compile_snapshot_vv cenv copy vv)) /\
   (!es rt ks. (!e ty. MEM e es ==> deploy_blocks_frame (cfn cenv ty e)) ==>
     deploy_blocks_frame (compile_ext_call_kwargs cfn cenv rt ks es)) /\
-  (!a vs ts ms az mid rz mn rb sc v g sk hd d rt dt ei di.
-    deploy_blocks_frame (compile_external_call_kwargs cenv a vs ts ms az mid rz mn rb
-      sc v g sk hd d rt dt ei di)) ==>
+  (!a vs ts az mid rz mn rb sc v g sk hd d rt dt di.
+    deploy_blocks_frame (compile_external_call_kwargs cenv a vs ts az mid rz mn rb
+      sc v g sk hd d rt dt di)) ==>
   deploy_blocks_frame (compile_call cfn cenv rt ty (ExtCall sc sk sig opts) args dr)
 Proof
   strip_tac >> apply_symbolic_frame symbolic_frame_call_external >> simp[]
@@ -819,9 +827,9 @@ Theorem deploy_blocks_frame_call:
     deploy_blocks_frame (compile_stage_intcall_args cfn
       (cenv_without_defaults cenv (nsid_to_string id))
       (omitted_defaults cenv (nsid_to_string id) (LENGTH args)) stack tys)) /\
-  (!a vs ts ms az mid rz mn rb sc v g sk hd d rt dt ei di.
-    deploy_blocks_frame (compile_external_call_kwargs cenv a vs ts ms az mid rz mn rb
-      sc v g sk hd d rt dt ei di)) /\
+  (!a vs ts az mid rz mn rb sc v g sk hd d rt dt di.
+    deploy_blocks_frame (compile_external_call_kwargs cenv a vs ts az mid rz mn rb
+      sc v g sk hd d rt dt di)) /\
   (!n. deploy_blocks_frame (compile_raw_call_outbuf n)) /\
   (!a p n g v ct sz rof ov op.
     deploy_blocks_frame (compile_raw_call_finish a p n g v ct sz rof ov op)) /\

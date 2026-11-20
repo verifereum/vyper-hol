@@ -2681,6 +2681,38 @@ Proof
   IF_CASES_TAC >> simp[emit_void_labels, compile_store_bytestring_labels]
 QED
 
+Theorem compile_abi_encode_value_rows_labels[local]:
+  !rows cenv dst cursor static_ofst s.
+    cs_extends s
+      (SND (compile_abi_encode_value_rows cenv dst cursor static_ofst rows s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_abi_encode_value_rows cenv dst cursor static_ofst rows s)))
+Proof
+  Induct >> rpt gen_tac
+  >- simp[compile_abi_encode_value_rows_def, comp_return_labels] >>
+  PairCases_on `h` >>
+  simp[compile_abi_encode_value_rows_def, LET_THM] >>
+  irule comp_bind_labels >> simp[emit_op_labels] >> rpt gen_tac >>
+  irule comp_ignore_bind_labels >> simp[] >> rpt gen_tac >> IF_CASES_TAC >>
+  rpt (FIRST [irule comp_bind_labels, irule comp_ignore_bind_labels] >>
+       conj_tac >> rpt gen_tac >> BETA_TAC >>
+       simp[emit_op_labels, emit_void_labels, unwrap_value_labels,
+            compile_abi_encode_labels, compile_store_memory_labels])
+QED
+
+Theorem compile_abi_encode_values_to_buf_labels:
+  !cenv dst rows s.
+    cs_extends s (SND (compile_abi_encode_values_to_buf cenv dst rows s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_abi_encode_values_to_buf cenv dst rows s)))
+Proof
+  simp[compile_abi_encode_values_to_buf_def, LET_THM] >> rpt gen_tac >>
+  irule comp_bind_labels >> simp[compile_alloc_buffer_labels] >> rpt gen_tac >>
+  rpt (irule comp_ignore_bind_labels >>
+       simp[emit_void_labels, compile_abi_encode_value_rows_labels] >> rpt gen_tac) >>
+  simp[emit_op_labels]
+QED
+
 Theorem compile_extcall_store_args_labels:
   !cfn cenv es tys buf off s.
     (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
@@ -2700,25 +2732,23 @@ Proof
 QED
 
 Theorem compile_external_call_kwargs_labels:
-  !cenv addr_op arg_vals arg_types args_mem_size args_abi_size method_id_val
+  !cenv addr_op arg_vals arg_types args_abi_size method_id_val
     return_abi_size min_return_size ret_mem_bytes use_staticcall call_value gas_op
-    skip_check has_default default_op return_type default_ty args_enc_info ret_dec_info s.
-    cs_extends s (SND (compile_external_call_kwargs cenv addr_op arg_vals arg_types
-      args_mem_size args_abi_size method_id_val return_abi_size min_return_size
+    skip_check has_default default_op return_type default_ty ret_dec_info s.
+    cs_extends s (SND (compile_external_call_kwargs cenv addr_op arg_vals arg_types args_abi_size method_id_val return_abi_size min_return_size
       ret_mem_bytes use_staticcall call_value gas_op skip_check has_default default_op
-      return_type default_ty args_enc_info ret_dec_info s)) /\
+      return_type default_ty ret_dec_info s)) /\
     EVERY (isPREFIX "@") (added_labels s
-      (SND (compile_external_call_kwargs cenv addr_op arg_vals arg_types
-        args_mem_size args_abi_size method_id_val return_abi_size min_return_size
+      (SND (compile_external_call_kwargs cenv addr_op arg_vals arg_types args_abi_size method_id_val return_abi_size min_return_size
         ret_mem_bytes use_staticcall call_value gas_op skip_check has_default default_op
-        return_type default_ty args_enc_info ret_dec_info s)))
+        return_type default_ty ret_dec_info s)))
 Proof
   rpt gen_tac >> simp[compile_external_call_kwargs_def, LET_THM] >>
   rpt (FIRST [irule fresh_label_bind_labels >> rpt gen_tac >> disch_tac,
               irule comp_bind_labels >> conj_tac >> rpt gen_tac,
               irule comp_ignore_bind_labels >> conj_tac >> rpt gen_tac] >>
        BETA_TAC >> simp[LET_THM, emit_op_labels, emit_inst_labels, emit_void_labels,
-         compile_alloc_buffer_labels, compile_extcall_store_values_labels,
+         compile_alloc_buffer_labels, compile_abi_encode_values_to_buf_labels,
          compile_abi_encode_labels, compile_abi_decode_labels,
          compile_return_value_decode_labels, comp_return_labels])
   >~ [`new_block`] >- (irule new_block_action_labels >> simp[])
@@ -2728,8 +2758,7 @@ Proof
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac] >>
        rpt gen_tac >> BETA_TAC >> simp[LET_THM, compile_alloc_buffer_labels,
-         compile_extcall_store_values_labels, emit_op_labels,
-         compile_abi_encode_labels, comp_return_labels]) >>
+         compile_abi_encode_values_to_buf_labels, emit_op_labels, comp_return_labels]) >>
   IF_CASES_TAC >>
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac] >>
