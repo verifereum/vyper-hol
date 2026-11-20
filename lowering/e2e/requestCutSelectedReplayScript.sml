@@ -208,9 +208,6 @@ val request_cut_symbolic_plan_own =
 
 fun own_steps th = PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES] th;
 
-val request_cut_entry_facts_own_tac =
-  drule_all_then strip_assume_tac request_cut_entry_facts_own;
-
 val request_cut_replay_own =
   BETA_RULE (Q.INST
     [`asm_lo` |-> `lo_reloc prog prog'`,
@@ -231,10 +228,7 @@ val request_cut_frame_projection_own =
     >- (rpt gen_tac >> strip_tac >> drule_all_then ACCEPT_TAC focus_own_frame_projection)
   end;
 
-fun replay_begin selector entry_facts =
-  mp_tac selector >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  PURE_REWRITE_TAC [LET_THM] >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
+val replay_select =
   disch_then (qx_choosel_then
     [`raw_slots`, `sites`, `unused`, `N`, `root_sf`, `root_tf`, `root_entry`, `lbl7`,
      `q80`, `q90`, `evs8`, `qs8`, `evs9`, `qs9`, `schedules`, `current`, `saved`,
@@ -259,19 +253,7 @@ fun replay_begin selector entry_facts =
      simp[]) >>
   `EVERY wf_function unit.cu_context.ctx_functions` by
     (drule o1_source_unit_ok_ctx_shape >> simp[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
-     metis_tac[]) >>
-  drule_all_then strip_assume_tac request_cut_stage_facts >>
-  entry_facts >>
-  `LENGTH vs0.vs_requests <= k` by
-    (`vs.vs_requests = vs0.vs_requests` by fs[] >>
-     drule_all raw_reachable_recorded_oracle_drop >> simp[]) >>
-  qabbrev_tac `v7 = vs0 with vs_gas_readings := raw ++ [0w]` >>
-  qabbrev_tac `short = TAKE (k - LENGTH vs0.vs_requests) vs0.vs_outcomes` >>
-  qabbrev_tac `clip = vs with vs_outcomes := short` >>
-  qabbrev_tac `clip7 = v7 with vs_outcomes := short` >>
-  qpat_assum `!gs. ?D f extra. _` (qspec_then `raw ++ [0w]` mp_tac) >>
-  disch_then (qx_choosel_then [`Ds`, `source_fuel`, `extra`] strip_assume_tac) >>
-  suspend "clipped";
+     metis_tac[]);
 
 val replay_clipped =
   `LENGTH o1_fn_passes = 9` by simp[o1_fn_passes_def] >>
@@ -1158,7 +1140,29 @@ Theorem focus_finalizer_selected_request_replay_own:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   request_cut_setup_own >>
-  replay_begin focus_walk_stopped_selection_own request_cut_entry_facts_own_tac
+  mp_tac focus_walk_stopped_selection_own >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  PURE_REWRITE_TAC [LET_THM] >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  replay_select >>
+  drule_all_then strip_assume_tac request_cut_stage_facts >>
+  mp_tac (Q.INST [`rp` |-> `rpolicy`, `v` |-> `vs0`, `es` |-> `es0`]
+    request_cut_entry_facts_own) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `LENGTH vs0.vs_requests <= k` by
+    (qpat_assum `!rq rqs. record_request rq rqs = rqs ++ [rq]` (fn record =>
+       qpat_assum `raw_reachable vs unit.cu_context fn inst s`
+         (mp_tac o CONJUNCT1 o MATCH_MP raw_reachable_recorded_oracle_drop o CONJ record)) >>
+     qpat_assum `vs = _` (fn eq => PURE_REWRITE_TAC [eq]) >>
+     qpat_assum `LENGTH s.vs_requests = k` (fn eq => PURE_REWRITE_TAC [eq]) >>
+     simp[NoAsms]) >>
+  qabbrev_tac `v7 = vs0 with vs_gas_readings := raw ++ [0w]` >>
+  qabbrev_tac `short = TAKE (k - LENGTH vs0.vs_requests) vs0.vs_outcomes` >>
+  qabbrev_tac `clip = vs with vs_outcomes := short` >>
+  qabbrev_tac `clip7 = v7 with vs_outcomes := short` >>
+  qpat_assum `!gs. ?D f extra. _` (qspec_then `raw ++ [0w]` mp_tac) >>
+  disch_then (qx_choosel_then [`Ds`, `source_fuel`, `extra`] strip_assume_tac) >>
+  suspend "clipped"
 QED
 
 Resume focus_finalizer_selected_request_replay_own[clipped]:
