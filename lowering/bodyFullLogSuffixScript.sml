@@ -46,7 +46,6 @@ Theorem compile_log_topic_ops_origin_ptr_path:
   encode_indexed_event_topics (REPLICATE (LENGTH xs) T) (MAP SND xs) vs =
     SOME topics /\
   LIST_REL (\arg v. ptr_val_ok cx (SND arg) v (FST arg) G tn s) xs vs /\
-  ~ctx_has_dalloca ctx /\
   run_inst_seq_mem_ok (emitted_insts sm sb) s /\
   fn_has_code sm sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
@@ -121,7 +120,7 @@ Theorem compile_log_emit_origin_ptr_path:
   (w2n len <> 0 ==> ?v. ptr_op = Var v /\ ptr_covers G tn v s (w2n len)) /\
   (!i. w2n off <= i /\ i < w2n off + w2n len ==> i NOTIN tn.t_mem) /\
   (w2n len = 0 \/ w2n off + w2n len <= s.vs_alloca_next) /\
-  ~s.vs_call_ctx.cc_static /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_call_ctx.cc_static /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   fn_has_code sa sb func /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   allocas_from lo s /\ lo <= s.vs_alloca_next ==>

@@ -2699,6 +2699,7 @@ Resume compile_log_frag_full[encoded_topics]:
   qpat_assum `op_taint tnenc len = {}` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >>
   simp_tac (srw_ss()) [EVERY_DEF,ptrDisciplineTheory.op_taint_def]) >>
+`ctx_has_dalloca ctx ==> allocas_below_fmp encoded` by simp[] >>
 Cases_on `encoded.vs_call_ctx.cc_static`
 >- suspend "encoded_static" >>
 mp_tac (Q.INST
@@ -4301,6 +4302,7 @@ qabbrev_tac `log_ev = <|logger := cx.txn.target;
   (impl_tac >- first_assum ACCEPT_TAC) >>
   simp_tac bool_ss [bodyPtrDefsTheory.ghost_inv_at_def] >>
   strip_tac >> asm_rewrite_tac[]) >>
+`ctx_has_dalloca ctx ==> allocas_below_fmp tp` by simp[] >>
 Cases_on `tp.vs_call_ctx.cc_static`
 >- suspend "empty_static" >>
 mp_tac (Q.INST

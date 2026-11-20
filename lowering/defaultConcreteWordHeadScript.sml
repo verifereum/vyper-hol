@@ -4,10 +4,13 @@ Ancestors defaultConcreteRegistrationDefs defaultConcreteRegistrationInit
   defaultConcreteRegistrationCompiler defaultConcreteRegistrationResources
   defaultConcreteRegistrationOwners defaultWordRegistration abiDecoderCoherence
   calldataSourceSize calldataSourceDecisions calldataRegistrationExec entryArgPtrs freshWrites
+  fragGasPathFrameMem[qualified,ignore_grammar]
+  ptrDiscipline[qualified,ignore_grammar]
+  venomExecSemantics[qualified,ignore_grammar] venomState[qualified,ignore_grammar]
   exprLowering exprLoweringProps compileEnv moduleLowering list rich_list finite_map words pred_set arithmetic
 
 Theorem default_registration_word_head:
-  fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct fn /\
   venomInst$lookup_function fn.fn_name ctx.ctx_functions = SOME fn ==>
   !ce st off name dyn sz info rest tv tvs s G tn owners ce1 st1 x.
     4 <= off /\ ~s.vs_halted /\
@@ -76,6 +79,20 @@ Proof
    s.vs_current_bb = st.cs_current_bb /\
    s.vs_inst_idx = LENGTH st.cs_current_insts` by
     fs[default_registration_invariant_def, default_registration_resources_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by
+    (strip_tac >>
+     `fmp_room ctx fn s` by
+       fs[default_registration_invariant_def, default_registration_resources_def] >>
+     `s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp /\
+       w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+       (qpat_assum `fmp_room ctx fn s` (mp_tac o REWRITE_RULE [fmp_room_def]) >>
+        (impl_tac >- (disj1_tac >> first_assum ACCEPT_TAC)) >>
+        strip_tac >> conj_tac >- decide_tac >> first_assum ACCEPT_TAC) >>
+     simp[ptrDisciplineTheory.allocas_below_fmp_def] >>
+     qpat_assum `alloca_inv s` (strip_assume_tac o REWRITE_RULE
+       [venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def]) >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all default_word_registration_step_footprint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
   `p'' = p` by
@@ -85,15 +102,16 @@ Proof
   fs[] >>
   `st.cs_next_var <= st1.cs_next_var /\ st.cs_next_id <= st1.cs_next_id` by
     metis_tac[registration_compile_counters] >>
-  `?ins. MEM ins (fn_insts fn) /\ ins.inst_opcode = ALLOCA /\
-    ins.inst_operands = [Lit 32w] /\ ins.inst_outputs = [p] /\
-    ins.inst_id = st.cs_next_id /\ st.cs_next_id < st1.cs_next_id` by
+  `MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w] [p]) (fn_insts fn) /\
+    st.cs_next_id < st1.cs_next_id` by
     suspend "allocation" >>
   `default_registration_resources ctx fn site k st1 out u` by
     suspend "resources" >>
   `default_registration_owner fn ce1 st1 out H u ((name,ty),tv)
     (x,Var p,s.vs_alloca_next,st.cs_next_id)` by
-    (irule default_registration_bytes_owner >> simp[] >> metis_tac[]) >>
+    (irule default_registration_bytes_owner >> simp[] >>
+     qexists_tac `mk_inst st.cs_next_id ALLOCA [Lit 32w] [p]` >>
+     simp[venomInstTheory.mk_inst_def]) >>
   qexistsl [`out`,`H`,`u`,`(x,Var p,s.vs_alloca_next,st.cs_next_id)`] >>
   simp[] >> suspend "invariant"
 QED
@@ -137,7 +155,6 @@ Resume default_registration_word_head[allocation]:
   `fn_has_code sx allocated fn` by
     metis_tac[fragExecTheory.fn_has_code_split] >>
   drule_all loweringHaltTheory.emit_inst_fn_member >> strip_tac >>
-  qexists `mk_inst st.cs_next_id ALLOCA [Lit 32w] [p]` >>
   `allocated.cs_next_id = st.cs_next_id + 1` by
     (qpat_x_assum `emit_inst ALLOCA _ _ _ = _` mp_tac >>
      simp[emitHelperTheory.emit_inst_def, compileEnvTheory.fresh_id_def,
@@ -157,11 +174,36 @@ QED
 
 Resume default_registration_word_head[resources]:
   markerLib.RESUME_TAC >>
+  `fmp_room ctx fn out` by
+    (irule fmp_room_static_charge >> qexists_tac `s` >>
+     `fmp_room ctx fn s` by
+       fs[default_registration_invariant_def, default_registration_resources_def] >>
+     `out.vs_allocas = s.vs_allocas |+ (st.cs_next_id,(s.vs_alloca_next,32))` by
+       (simp_tac bool_ss [fmap_eq_flookup] >> qx_gen_tac `key` >> Cases_on `key = st.cs_next_id` >>
+        simp[FLOOKUP_UPDATE]) >>
+     qabbrev_tac `fresh = update_var p (n2w s.vs_alloca_next)
+       (s with <|vs_allocas := out.vs_allocas; vs_alloca_next := out.vs_alloca_next|>)` >>
+     `exec_alloca (mk_inst st.cs_next_id ALLOCA [Lit 32w] [p]) s (32w:bytes32) = OK fresh` by
+       simp[Abbr `fresh`, venomExecSemanticsTheory.exec_alloca_def, venomInstTheory.mk_inst_def] >>
+     `fresh.vs_alloca_next + pending_alloca_size fn fresh <=
+       s.vs_alloca_next + pending_alloca_size fn s` by
+       (irule exec_alloca_static_charge >>
+        qexistsl_tac [`mk_inst st.cs_next_id ALLOCA [Lit 32w] [p]`,`32w:bytes32`] >>
+        simp[venomInstTheory.mk_inst_def]) >>
+     `out.vs_fmp = s.vs_fmp /\ out.vs_initial_fmp = s.vs_initial_fmp` by
+       (qpat_assum `out = _` (fn eq => once_rewrite_tac[eq]) >> simp[]) >>
+     `LENGTH s.vs_memory <= LENGTH out.vs_memory` by
+       metis_tac[fragGasPathFrameMemTheory.gas_path_mem_memory_length] >>
+     `fresh.vs_alloca_next = out.vs_alloca_next /\
+       pending_alloca_size fn fresh = pending_alloca_size fn out` by
+       simp[NoAsms, Abbr `fresh`, venomStateTheory.update_var_def, pending_alloca_size_def] >>
+     qpat_assum `fresh.vs_alloca_next + pending_alloca_size fn fresh <= _` mp_tac >>
+     simp[]) >>
   (irule default_registration_resources_transport >>
    simp[] >> qexistsl [`s`,`st`,`tn`] >> simp[] >>
    conj_tac
    >- (rpt strip_tac >> Cases_on `id = st.cs_next_id` >> gvs[] >>
-       qexistsl [`ins`,`32w`] >> simp[]) >>
+       qexistsl [`mk_inst st.cs_next_id ALLOCA [Lit 32w] [p]`,`32w`] >> simp[venomInstTheory.mk_inst_def]) >>
    conj_tac
    >- (rpt strip_tac >> Cases_on `id = st.cs_next_id` >> gvs[]) >>
    fs[default_registration_invariant_def])

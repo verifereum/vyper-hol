@@ -15,7 +15,9 @@ Ancestors o1LabelFlowCompose[qualified]
   o1LabelFlowSourceBoundary o1LabelFlowSourceSsaStep o1LabelFlowSourcePreWalk
   o1LabelFlowStaticContracts o1FnScheduleDecompHelpers o1PipelineCompose
   o1PartialSchedule venomFnScheduleRunnerProps fcgPruning venomPassSchedule
-  venomPipelineRunner
+  venomPipelineRunner codegenSymOwnRel o1LabelFlowOwnWalk
+  o1LabelFlowOwnPreWalk o1LabelFlowOwnFirstSsa o1LabelFlowOwnLowerDload
+  o1LabelFlowOwnConcretize o1LabelFlowOwnSecondSsa o1LabelFlowOwnLate
 
 (* These opcodes pass through the instruction rewrite exactly. *)
 Theorem fmp_label_flow_inst_keep[local]:
@@ -403,7 +405,7 @@ Proof
   res_tac >> fs[]
 QED
 
-Theorem fmp_label_flow_rewrite[local]:
+Theorem fmp_label_flow_rewrite_track_strict[local]:
   split_fmp_entry f = SOME (FmpEntryLayout users oldpc suffix) /\
   analyze_fmp_reclaims infos ctx f = SOME plan /\
   fmp_make_root_layout ctx f info runner s0 = SOME (FmpRootLayout n root pc s1) /\
@@ -412,8 +414,8 @@ Theorem fmp_label_flow_rewrite[local]:
   fmp_install_root ctx f (FmpRootLayout n root pc s2) blocks = SOME (out,s3) /\
   g.fn_blocks = out /\ wf_function f /\ ir_supply_inst_ok s1 /\
   (!x. code_end_var f x ==> MEM x s1.irs_used_vars /\ x <> runner) /\
-  middle_code_end_lifetime f /\ label_flow_ok (C with ctx_functions := [f]) ==>
-  middle_code_end_lifetime g /\ label_flow_ok (C with ctx_functions := [g])
+  middle_code_end_lifetime f /\ (check_plain_flow ==> label_flow_ok (C with ctx_functions := [f])) ==>
+  middle_code_end_lifetime g /\ (check_plain_flow ==> label_flow_ok (C with ctx_functions := [g]))
 Proof
   strip_tac >> drule_all fmp_label_flow_rewrite_blocks >> strip_tac >>
   `!j. MEM j (fn_insts g) /\
@@ -462,7 +464,9 @@ Proof
      >- (drule fmp_label_flow_reflect >> metis_tac[]) >>
      res_tac >> irule code_end_var_seed >> metis_tac[MEM]) >>
   conj_tac >- simp[middle_code_end_lifetime_def] >>
-  qpat_x_assum `label_flow_ok _` (assume_tac o SRULE [label_flow_ok_def]) >>
+  disch_tac >>
+  qpat_x_assum `check_plain_flow ==> label_flow_ok _` mp_tac >> simp[] >>
+  disch_tac >> qpat_x_assum `label_flow_ok _` (assume_tac o SRULE [label_flow_ok_def]) >>
   simp[label_flow_ok_def] >> qx_gen_tac `j` >> strip_tac >>
   rpt conj_tac
   >- (strip_tac >> `MEM j (fn_insts f)` by metis_tac[MEM] >>
@@ -476,6 +480,22 @@ Proof
     (qspec_then `j` mp_tac) >> simp[]
 QED
 
+Theorem fmp_label_flow_rewrite[local]:
+  split_fmp_entry f = SOME (FmpEntryLayout users oldpc suffix) /\
+  analyze_fmp_reclaims infos ctx f = SOME plan /\
+  fmp_make_root_layout ctx f info runner s0 = SOME (FmpRootLayout n root pc s1) /\
+  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist f plan) f.fn_blocks =
+    SOME (FmpBlocksResult blocks leftover s2) /\
+  fmp_install_root ctx f (FmpRootLayout n root pc s2) blocks = SOME (out,s3) /\
+  g.fn_blocks = out /\ wf_function f /\ ir_supply_inst_ok s1 /\
+  (!x. code_end_var f x ==> MEM x s1.irs_used_vars /\ x <> runner) /\
+  middle_code_end_lifetime f /\ label_flow_ok (C with ctx_functions := [f]) ==>
+  middle_code_end_lifetime g /\ label_flow_ok (C with ctx_functions := [g])
+Proof
+  MATCH_ACCEPT_TAC (SIMP_RULE bool_ss []
+    (Q.INST [`check_plain_flow` |-> `T`] fmp_label_flow_rewrite_track_strict))
+QED
+
 Theorem fmp_label_flow_seal[local]:
   fmp_checked_seal ctx f info blocks = SOME g ==>
   g.fn_blocks = blocks
@@ -483,11 +503,11 @@ Proof
   strip_tac >> drule fmp_checked_seal_some >> simp[fmp_seal_def]
 QED
 
-Theorem fmp_label_flow_function[local]:
+Theorem fmp_label_flow_function_track_strict[local]:
   fmp_lower_function ctx s f = SOME (g,t) /\
   wf_function f /\ ir_supply_covers_fn s f /\ ir_supply_inst_ok s /\
-  middle_code_end_lifetime f /\ label_flow_ok (C with ctx_functions := [f]) ==>
-  middle_code_end_lifetime g /\ label_flow_ok (C with ctx_functions := [g])
+  middle_code_end_lifetime f /\ (check_plain_flow ==> label_flow_ok (C with ctx_functions := [f])) ==>
+  middle_code_end_lifetime g /\ (check_plain_flow ==> label_flow_ok (C with ctx_functions := [g]))
 Proof
   strip_tac >> gvs[fmp_lower_function_def, AllCaseEqs()] >>
   qpat_x_assum `fmp_lower_function_with_info _ _ _ _ = _`
@@ -497,7 +517,7 @@ Proof
       `!x. code_end_var g x <=> code_end_var f x` by
         metis_tac[code_end_var_same_blocks] >>
       conj_tac >- fs[middle_code_end_lifetime_def, fn_insts_def] >>
-      metis_tac[label_flow_ok_same_blocks]) >>
+      strip_tac >> metis_tac[label_flow_ok_same_blocks]) >>
   Cases_on `root_layout` >> gvs[] >>
   drule fmp_label_flow_seal >> strip_tac >>
   drule fmp_make_root_layout_used_vars >> strip_tac >>
@@ -509,10 +529,19 @@ Proof
     (drule fresh_ir_var_contract >>
      fs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >>
      metis_tac[code_end_var_ir_var, MEM]) >>
-  drule fmp_label_flow_rewrite >> disch_then irule >>
+  drule fmp_label_flow_rewrite_track_strict >> disch_then irule >>
   fs[] >> goal_assum $ drule_at (Pat `fmp_make_root_layout _ _ _ _ _ = _`) >>
   goal_assum $ drule_at (Pat `fmp_lower_blocks _ _ _ _ _ _ = _`) >>
   goal_assum $ drule_at (Pat `fmp_install_root _ _ _ _ = _`) >> simp[]
+QED
+
+Theorem fmp_label_flow_function[local]:
+  fmp_lower_function ctx s f = SOME (g,t) /\
+  wf_function f /\ ir_supply_covers_fn s f /\ ir_supply_inst_ok s /\
+  middle_code_end_lifetime f /\ label_flow_ok (C with ctx_functions := [f]) ==>
+  middle_code_end_lifetime g /\ label_flow_ok (C with ctx_functions := [g])
+Proof
+  MATCH_ACCEPT_TAC (SIMP_RULE bool_ss [] (Q.INST [`check_plain_flow` |-> `T`] fmp_label_flow_function_track_strict))
 QED
 
 Theorem focus_label_flow_step_shape[local]:
@@ -668,4 +697,82 @@ Proof
   fs[run_callee_first_def] >>
   drule focus_label_flow_walk >> simp[o1_prune_every] >>
   metis_tac[MEM_prune_unit_fcg_unreachable_functions]
+QED
+
+
+Theorem focus_label_flow_fmp_step_own[local]:
+  !rp observed s f out ctx.
+    fn_pass_step rp (CFP_Simple VP_FmpLowering) observed s f out /\
+    o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
+    o1_fn_row 3 f /\ middle_code_end_lifetime f ==>
+    label_flow_own_ok (ctx with ctx_functions := [out.fpo_function]) /\
+    middle_code_end_lifetime out.fpo_function
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all focus_label_flow_step_shape >> strip_tac >>
+  drule fmp_fn_pass_step_result >> strip_tac >>
+  `wf_function f` by fs[o1_fn_shape_def] >>
+  drule_all (SIMP_RULE bool_ss []
+    (Q.INST [`check_plain_flow` |-> `F`] fmp_label_flow_function_track_strict)) >>
+  strip_tac >> simp[] >>
+  `o1_fn_shape observed.cu_context out.fpo_function` by
+    (mp_tac (Q.SPEC `rp` (GEN_ALL o1_fn_passes_steps)) >>
+     simp[o1_fn_passes_def, o1_step_contracts_from_def,
+          o1_step_contract_at_def] >> metis_tac[]) >>
+  irule label_flow_own_ok_from_code_end_use >>
+  reverse conj_tac >- fs[o1_fn_shape_def] >>
+  simp[] >> rpt strip_tac >> disj2_tac >>
+  fs[middle_code_end_lifetime_def, fn_insts_def,
+     MEM_fn_insts_blocks_iff] >> metis_tac[]
+QED
+
+Theorem focus_opt_label_flow_own:
+  o1PipelineCorrect$o1_pipeline rp unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+  label_flow_own_ok unit.cu_context /\
+  (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+    ~MEM (Label "code_end") inst.inst_operands) ==>
+  label_flow_own_ok out.po_unit.cu_context
+Proof
+  rewrite_tac[o1PipelineCorrectTheory.o1_pipeline_def] >>
+  strip_tac >> drule o1_driver_runs >> strip_tac >>
+  `o1_ctx_shape unit.cu_context` by metis_tac[o1_source_unit_ok_ctx_shape] >>
+  `ir_supply_inst_ok (init_ir_supply unit)` by simp[init_ir_supply_inst_ok] >>
+  drule_all o1_pre_walk_rows >> strip_tac >>
+  drule_all o1_pre_walk_seed_free_own_flow >> strip_tac >>
+  drule_all o1_pre_walk_sim >> strip_tac >>
+  mp_tac (Q.INST [`unit` |-> `pre`, `fcg` |-> `fcg_analyze pre.cu_context`]
+    o1_walk_callee_first) >> simp[] >> strip_tac >>
+  drule unit_labels_wf_namespace >> strip_tac >>
+  `o1_ctx_shape (prune_unit_fcg_unreachable pre
+     (fcg_analyze pre.cu_context)).cu_context /\
+   ALL_DISTINCT (unit_label_namespace
+     (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)))` by
+    metis_tac[o1_ctx_shape_prune] >>
+  mp_tac (PURE_REWRITE_RULE [boolTheory.AND_CLAUSES,boolTheory.IMP_CLAUSES] (Q.SPEC `F` o1_label_flow_own_walk_track_fmp)) >>
+  (impl_tac >- (rpt conj_tac >>
+    TRY (MATCH_ACCEPT_TAC (PURE_REWRITE_RULE [boolTheory.AND_CLAUSES,boolTheory.IMP_CLAUSES] (Q.SPEC `F` compose_first_ssa_own_track_fmp)) >> NO_TAC) >>
+    TRY (MATCH_ACCEPT_TAC (PURE_REWRITE_RULE [boolTheory.AND_CLAUSES,boolTheory.IMP_CLAUSES] (Q.SPEC `F` compose_lower_dload_own_track_fmp)) >> NO_TAC) >>
+    TRY (MATCH_ACCEPT_TAC (PURE_REWRITE_RULE [boolTheory.AND_CLAUSES,boolTheory.IMP_CLAUSES] (Q.SPEC `F` compose_concretize_own_track_fmp)) >> NO_TAC) >>
+    TRY (MATCH_ACCEPT_TAC (PURE_REWRITE_RULE [boolTheory.AND_CLAUSES,boolTheory.IMP_CLAUSES] (Q.SPEC `F` compose_second_ssa_own_track_fmp)) >> NO_TAC) >>
+    TRY (MATCH_ACCEPT_TAC (PURE_REWRITE_RULE [boolTheory.AND_CLAUSES,boolTheory.IMP_CLAUSES] (Q.SPEC `F` compose_late_own_track_fmp)) >> NO_TAC) >>
+    simp[] >> metis_tac[focus_label_flow_fmp_step_own])) >>
+  strip_tac >> fs[run_callee_first_def] >>
+  `label_flow_own_ok
+    (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context` by
+    (simp[label_flow_own_ok_def, MEM_prune_unit_fcg_unreachable_functions] >>
+     qpat_assum `label_flow_own_ok pre.cu_context`
+       (mp_tac o REWRITE_RULE [label_flow_own_ok_def]) >>
+     metis_tac[]) >>
+  `ALL_DISTINCT (fcg_postorder (fcg_analyze pre.cu_context) entry) /\
+    (!n. MEM n (fcg_postorder (fcg_analyze pre.cu_context) entry) <=>
+       MEM n (ctx_fn_names
+         (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context))` by
+    (qpat_assum `unit.cu_context.ctx_entry = SOME entry ==> _` drule >>
+     simp[]) >>
+  first_x_assum drule >>
+  simp[o1_prune_every, o1_fn_row_def, EVERY_MEM,
+       MEM_prune_unit_fcg_unreachable_functions] >>
+  metis_tac[]
 QED

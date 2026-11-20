@@ -9,9 +9,9 @@ Ancestors
   ptrDiscipline o1ContractSimplifyCfg contextRawReachable
   list arithmetic
 
-Theorem focus_source_stages_cut:
+Theorem focus_source_stages_cut_for:
   generate_context_plan out.po_unit.cu_context = SOME cpl /\
-  codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
+  n2w cpl.cp_initial_fmp = vs0.vs_initial_fmp /\
   root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
   o1_source_unit_ok unit /\ unit_entry_no_params unit /\
@@ -118,10 +118,12 @@ Proof
     (drule generate_context_plan_spill_gap >> simp[]) >>
   `max_live_eom (stage 3) = SOME cpl.cp_max_static_eom /\
    max_live_eom (stage 4) = SOME cpl.cp_max_static_eom` by metis_tac[] >>
-  `V4.vs_initial_fmp = n2w cpl.cp_initial_fmp` by fs[codegen_asm_entry_rel_def] >>
+  `V4.vs_initial_fmp = n2w cpl.cp_initial_fmp` by metis_tac[] >>
   `cpl.cp_max_static_eom <= w2n V4.vs_initial_fmp` by
     (qspecl_then [`out.po_unit.cu_context`, `cpl`, `V4`] mp_tac
-       generate_context_plan_eom_room >> simp[]) >>
+       generate_context_plan_eom_room >>
+     impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then (drule_then ACCEPT_TAC)) >>
   qpat_x_assum `V4.vs_initial_fmp = n2w _` kall_tac >>
   `w2n V4.vs_initial_fmp <= w2n fmp` by simp[] >>
   `fmp_variant_room (SOME fmp) (stage 4) V4` by
@@ -155,4 +157,57 @@ Proof
       simp[mem_inv_def, contextCodegenRelTheory.codegen_reachability_package_def,
            gas_cut_def, venom_state_component_equality]) >>
   qexistsl [`fn7`, `f7`] >> simp[]
+QED
+
+Theorem focus_source_stages_cut:
+  generate_context_plan out.po_unit.cu_context = SOME cpl /\
+  codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
+  root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+  o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
+  code_layout_valid vs0 /\
+  unit.cu_context.ctx_entry = SOME nm /\
+  lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
+  fn_entry_label entryfn = SOME lbl /\
+  w2n vs0.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+  unit_alloca_budget unit.cu_context +
+    32 * ctx_dload_count unit.cu_context <= w2n fmp /\
+  dead_wf D /\
+  o1_safe_upto D lo (MIN (LENGTH (markf (gs ++ tail))) (LENGTH (gs ++ tail))) unit.cu_context
+    (vs0 with <|vs_gas_readings := (gs ++ tail); vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
+  MAP project (gas_events_blocks f unit.cu_context entryfn ((vs0 with <|vs_gas_readings := (gs ++ tail);
+    vs_fmp := fmp; vs_initial_fmp := fmp|>) with <|vs_prev_bb := NONE; vs_current_bb := lbl;
+    vs_inst_idx := 0|>)) = markf (gs ++ tail) ++ extra /\
+  run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit
+    (init_ir_supply unit) = SOME (pre,t) /\
+  pre.cu_context.ctx_entry = SOME nm /\
+  run_callee_first rpolicy o1_fn_passes
+    (fcg_postorder (fcg_analyze pre.cu_context) nm)
+    (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)) t =
+    SOME (out.po_unit,t') /\
+  stage 0 = (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context /\
+  stage 9 = out.po_unit.cu_context /\
+  (!k. k < 9 ==> ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+    (stage k) (stage (SUC k))) /\
+  (!k. k <= 9 ==> o1_ctx_shape (stage k) /\
+    EVERY (o1_fn_row k) (stage k).ctx_functions) ==>
+  mem_inv (\ctx fn inst u. gas_cut (MIN (LENGTH (markf (gs ++ tail))) (LENGTH (gs ++ tail))) (root_entry
+    with vs_gas_readings := gs ++ tail) u ==> lowered_mem_fact cpl.cp_max_static_eom ctx fn inst u)
+    (stage 7) (root_entry with vs_gas_readings := gs ++ tail) /\
+  ?fn7 f7.
+    (stage 7).ctx_entry = SOME nm /\
+    lookup_function nm (stage 7).ctx_functions = SOME fn7 /\ fn_entry_label fn7 = SOME lbl /\
+    (MIN (LENGTH (markf (gs ++ tail))) (LENGTH (gs ++ tail))) <= LENGTH (gas_events_blocks f7 (stage 7)
+      fn7 (root_entry with vs_gas_readings := gs ++ tail)) /\
+    TAKE (MIN (LENGTH (markf (gs ++ tail))) (LENGTH (gs ++ tail))) (gas_events_blocks f7 (stage 7) fn7
+      (root_entry with vs_gas_readings := gs ++ tail)) =
+      TAKE (MIN (LENGTH (markf (gs ++ tail))) (LENGTH (gs ++ tail))) (gas_events_blocks f unit.cu_context
+        entryfn ((vs0 with <|vs_gas_readings := (gs ++ tail); vs_fmp := fmp; vs_initial_fmp := fmp|>) with
+        <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `n2w cpl.cp_initial_fmp = vs0.vs_initial_fmp` by fs[codegen_asm_entry_rel_def] >>
+  drule_all_then ACCEPT_TAC focus_source_stages_cut_for
 QED

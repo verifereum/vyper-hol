@@ -10,7 +10,11 @@ Ancestors
   venomPassSchedule venomPipelineRunner staticAbortDefs
   gasFocusWalkInventoryReplay[qualified,ignore_grammar]
   gasFocusReplayExit[qualified,ignore_grammar]
-  gasFocusPacketPipelineStages
+  gasFocusPacketPipelineStages gasFocusOwnSetup gasFocusJointProgress gasFocusUniformStop
+  codegenLabelDisciplined fnPlanPlaceRevertPostamble asmSymBridge
+  asmDataEnv asmSymSem asmSpliceOwn fnFrameSymbolicPrefix
+  asmToBytecodeProofs[qualified,ignore_grammar]
+  asmFinalizerPrefixOwnAssembly asmFinalizerPrefixFrame
 
 (* verifereum's calldata-bound frame_rel is in scope; the statements below
    use frame_rel as a variable. *)
@@ -475,6 +479,55 @@ Proof
   simp[joint_trace_def, joint_chain_def, asm_steps_def]
 QED
 
+fun prove_selected_replay select replay =
+  let
+    fun normalize th =
+      CONV_RULE (DEPTH_CONV BETA_CONV) (PURE_REWRITE_RULE [LET_THM] th)
+    fun match_fact facts tm =
+      case List.find (fn th => aconv (concl th) tm) facts of
+        SOME th => th
+      | NONE =>
+          if is_conj tm then
+            let val (left, right) = dest_conj tm in
+              CONJ (match_fact facts left) (match_fact facts right)
+            end
+          else raise mk_HOL_ERR "focus_finalizer_select_replay" "premise"
+            (term_to_string tm)
+    fun apply_rule facts rule =
+      MP rule (match_fact facts (lhand (concl rule)))
+    fun finish selected =
+      qx_gen_tac `raw` >> disch_tac >> conj_tac >-
+        (fn (asl, goal) =>
+          ACCEPT_TAC (apply_rule (map ASSUME asl @ selected)
+            (Q.SPEC `raw` (List.last selected))) (asl, goal)) >>
+      gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      (fn (asl, goal) =>
+        ACCEPT_TAC (apply_rule (map ASSUME asl @ selected)
+          (normalize replay))
+          (asl, goal))
+  in
+    fn (asl, goal) =>
+      let
+        val selected = apply_rule (map ASSUME asl)
+          (normalize select)
+        val witnesses = fst (strip_exists (concl selected))
+        fun use_selection th =
+          let
+            val facts = CONJUNCTS th
+            val prefix = List.take (witnesses, 3)
+          in
+            map_every EXISTS_TAC prefix >> conj_tac >- first_assum ACCEPT_TAC >>
+            conj_tac >- first_assum ACCEPT_TAC >> finish facts
+          end
+        fun project th (asl, goal) =
+          (assume_tac th >> map_every assume_tac (CONJUNCTS th) >>
+           use_selection th) (asl, goal)
+      in
+        foldr (fn (w, next) => X_CHOOSE_THEN w next) project
+          witnesses selected (asl, goal)
+      end
+  end;
+
 Theorem focus_finalizer_select_replay:
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
   o1_source_unit_ok unit /\ unit_entry_no_params unit /\
@@ -591,56 +644,304 @@ Theorem focus_finalizer_select_replay:
 Proof
   PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  (let
+  prove_selected_replay
+    gasFocusWalkInventoryReplayTheory.focus_walk_stopped_selection
+    gasFocusWalkInventoryReplayTheory.focus_stopped_filling_replay
+QED
+
+Theorem focus_own_prefix_budget[local]:
+  fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+  codegen_assembly rpolicy out.po_unit = SOME prog /\ unit_shape_ok out.po_unit /\
+  vs0.vs_code = assemble prog' ++ vs0.vs_data_section /\
+  asm_frame_rel_tail [] prog' vs0.vs_data_section es0 (entry_asm_state vs0 es0) es0 /\
+  run_call es0 = SOME (result,final) /\ ~frame_resource_starved es0 result final /\
+  (fin = asm_opt_finalizer ==> focus_s7_symbolic_context_own T out.po_unit prog) ==>
+  ?B. !n ast.
+    asm_steps (lo_reloc prog prog') (build_offset_to_pc prog)
+      prog n (entry_asm_state vs0 es0) = AsmOK ast /\
+    (fin = asm_opt_finalizer ==>
+      ?ss. sym_steps_own prog (asm_data_env prog' vs0.vs_code) vs0.vs_code n
+        (sym_init (entry_asm_state vs0 es0)) = SymOK ss) ==>
+    n <= B /\
+    (fin = asm_opt_finalizer /\ ast.as_pc < LENGTH prog /\
+      EL ast.as_pc prog = AsmOp "GAS" ==> ast.as_gas_readings <> [])
+Proof
+  strip_tac >>
+  `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+  pop_assum strip_assume_tac
+  >- (gvs[combinTheory.K_THM, lo_reloc_refl] >>
+      drule_all_then assume_tac codegen_assembly_frame_prog_ok >>
+      drule_all finalizer_frame_prefix_ready >>
+      disch_then (qx_choose_then `B` assume_tac) >>
+      qexists_tac `B` >> rpt gen_tac >> strip_tac >>
+      qpat_assum `!n b. asm_steps _ _ _ _ _ = _ ==> _`
+        (drule_all_then strip_assume_tac) >> simp[]) >>
+  qpat_x_assum `fin = asm_opt_finalizer ==> focus_s7_symbolic_context_own _ _ _`
+    (drule_then assume_tac) >>
+  fs[focus_s7_symbolic_context_own_def] >>
+  drule_all focus_finalizer_prefix_bridge_own >> simp[]
+QED
+
+Theorem focus_finalizer_select_replay_own:
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+  o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
+  code_layout_valid vs0 /\
+  unit_shape_ok out.po_unit /\
+  generate_context_plan out.po_unit.cu_context = SOME cpl /\
+  codegen_assembly rpolicy out.po_unit = SOME prog /\
+  fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+  (fin = asm_opt_finalizer ==>
+     label_flow_own_ok unit.cu_context /\
+     (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+                ~MEM (Label "code_end") inst.inst_operands) /\
+     EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
+                       ds.ds_items) unit.cu_data_segment /\
+     ((?fn inst. MEM fn unit.cu_context.ctx_functions /\
+                 MEM inst (fn_insts fn) /\
+                 MEM (Label "runtime_begin") inst.inst_operands) ==>
+      EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment) /\
+     LENGTH vs0.vs_data_section < dimword (:256) DIV 2) /\
+  (vs0.vs_call_ctx.cc_static ==>
+     !fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+               ~MEM (Label "runtime_begin") inst.inst_operands) /\
+  vs0.vs_code = assemble prog' ++ vs0.vs_data_section /\
+  codegen_asm_entry_rel_reloc (lo_reloc prog prog') cpl prog vs0
+    (entry_asm_state vs0 es0) /\
+  asm_frame_rel_tail [] prog' vs0.vs_data_section es0
+    (entry_asm_state vs0 es0) es0 /\
+  unit.cu_context.ctx_entry = SOME nm /\
+  lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
+  fn_entry_label entryfn = SOME lbl /\
+  w2n vs0.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+  unit_alloca_budget unit.cu_context +
+    32 * ctx_dload_count unit.cu_context <= w2n fmp /\
+  (!gs. ?D f extra.
+    dead_wf D /\
+    (fin = asm_opt_finalizer ==>
+       !fn inst s.
+         raw_reachable (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>)
+           unit.cu_context fn inst s /\
+         gas_cut (MIN (LENGTH (markf gs)) (LENGTH gs))
+           (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) s ==>
+         inst_dload_in_section inst s) /\
+    o1_safe_upto D lo (MIN (LENGTH (markf gs)) (LENGTH gs))
+      unit.cu_context (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
+    MAP project
+      (gas_events_blocks f unit.cu_context entryfn
+        (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp;
+                    vs_prev_bb := NONE;
+                    vs_current_bb := lbl; vs_inst_idx := 0|>)) =
+      markf gs ++ extra) /\
+  run_call es0 = SOME (result,final) /\
+  ~frame_resource_starved es0 result final /\
+  run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit
+    (init_ir_supply unit) = SOME (pre,t) /\
+  pre.cu_context.ctx_entry = SOME nm /\
+  run_callee_first rpolicy o1_fn_passes
+    (fcg_postorder (fcg_analyze pre.cu_context) nm)
+    (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)) t =
+    SOME (out.po_unit,t') /\
+  stage 0 = (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context /\
+  stage 9 = out.po_unit.cu_context /\
+  (!k. k < 9 ==> ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+    (stage k) (stage (SUC k))) /\
+  (!k. k <= 9 ==> o1_ctx_shape (stage k) /\
+    EVERY (o1_fn_row k) (stage k).ctx_functions) ==>
+  ?raw_slots sites unused.
+    LENGTH raw_slots = LENGTH sites /\
+    PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
+    !raw.
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
+      (?rest. MAP project sites = markf (raw ++ [0w]) ++ rest) /\
+      !D.
+        (?fr. terminates (run_context fr unit.cu_context
+           (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>))) /\
+        dead_wf D /\
+        o1_pre_walk_inv D unit.cu_context
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
+        (fin = asm_opt_finalizer ==>
+           mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+                     s.vs_code = vs0.vs_code /\ s.vs_data_section = vs0.vs_data_section)
+             unit.cu_context (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>)) ==>
+        (?orc.
+          (!fuel. gas_res_rel (run_context fuel (stage 7)
+            (vs0 with vs_gas_readings := raw ++ [0w]))
+            (ev_context orc fuel (stage 7) vs0)) /\
+          (!fuel. gas_res_rel (run_context fuel (stage 8) vs0)
+            (ev_context orc fuel (stage 8) vs0)) /\
+          (!p d fn inst s. ev_reachable orc vs0 (stage 7) p d fn inst s ==>
+            ?ws. raw_reachable (vs0 with vs_gas_readings := raw ++ [0w])
+                 (stage 7) fn inst (s with vs_gas_readings := ws)) /\
+          (!fn inst s. raw_reachable vs0 (stage 8) fn inst s ==>
+            ?p d. ev_reachable orc vs0 (stage 8) p d fn inst
+              (s with vs_gas_readings := vs0.vs_gas_readings))) \/
+        (vs0.vs_call_ctx.cc_static /\
+         ctx_sim D unit.cu_context out.po_unit.cu_context
+           (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
+         ctx_abort_rq D unit.cu_context out.po_unit.cu_context
+           (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
+         (fin = asm_opt_finalizer ==>
+            code_end_offset_ok
+              (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
+                ~in_static_abort_prefix fn s) out.po_unit.cu_context) /\
+         (?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+           mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
+                     lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
+             out.po_unit.cu_context vs0) /\
+         (!fuel. terminates (run_context fuel unit.cu_context
+                   (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>)) ==>
+                 ?u. run_context fuel unit.cu_context
+                       (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) =
+                     Abort ExHalt_abort u))
+Proof
+  PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac focus_own_finalizer_setup >>
+  (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+    disch_tac >> qpat_assum `fin = asm_opt_finalizer ==> label_flow_own_ok _ /\ _`
+      (drule_then (fn th =>
+        ACCEPT_TAC (LIST_CONJ (List.take (CONJUNCTS th, 4))))))) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `vs0.vs_initial_fmp = n2w cpl.cp_initial_fmp /\
+    (!l. FLOOKUP vs0.vs_labels l = OPTION_MAP n2w (FLOOKUP (lo_reloc prog prog') l))` by
+    fs[codegen_asm_entry_rel_reloc_def] >>
+  pop_assum (map_every assume_tac o CONJUNCTS) >>
+  `code_labels_agree prog (lo_reloc prog prog')` by simp[lo_reloc_code_labels_agree] >>
+  `!l. MEM (AsmDataHeader l) prog ==> IS_SOME (FLOOKUP (lo_reloc prog prog') l)` by
+    (`fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+     pop_assum strip_assume_tac
+     >- (`prog' = prog` by fs[combinTheory.K_THM] >>
+         qpat_assum `prog' = prog` SUBST1_TAC >> rpt strip_tac >>
+         simp[lo_reloc_refl, FLOOKUP_DEF, compute_label_offsets_def,
+              asmToBytecodeProofsTheory.clo_step_eq] >>
+         irule asmSymBridgeTheory.clo_FDOM >> simp[]) >>
+     rpt gen_tac >> strip_tac >>
+     qpat_assum `fin = asm_opt_finalizer ==> focus_s7_symbolic_context_own _ _ _ /\ _`
+       (drule_then (qspec_then `l` mp_tac o REWRITE_RULE [asm_data_env_lo_ok_def] o cj 3)) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> simp[]) >>
+  `fin = asm_opt_finalizer ==> focus_s7_symbolic_context_own T out.po_unit prog` by
+    (disch_tac >>
+     qpat_assum `fin = asm_opt_finalizer ==> focus_s7_symbolic_context_own _ _ _ /\ _`
+       (drule_then (ACCEPT_TAC o cj 1))) >>
+  mp_tac focus_own_prefix_budget >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (fn th => assume_tac th >> qx_choose_then `B` assume_tac th) >>
+  `fin = asm_opt_finalizer ==>
+    !j a. asm_steps (lo_reloc prog prog') (build_offset_to_pc prog)
+      prog j (entry_asm_state vs0 es0) = AsmOK a /\
+      (?sr. sym_steps_own prog (asm_data_env prog' vs0.vs_code) vs0.vs_code j
+        (sym_init (entry_asm_state vs0 es0)) = SymOK sr) ==>
+      j <= B /\
+      (a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "GAS" ==>
+        a.as_gas_readings <> [])` by
+    (disch_tac >> rpt gen_tac >> strip_tac >>
+     qpat_assum `!n ast. _ ==> n <= B /\ _` (qspecl_then [`j`,`a`] mp_tac) >> simp[]) >>
+  mp_tac (Q.INST [`max_cost` |-> `B`] focus_own_gas_callback) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then assume_tac >>
+  `fin = asm_opt_finalizer ==>
+     (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+                ~MEM (Label "code_end") inst.inst_operands) /\
+     EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
+                       ds.ds_items) unit.cu_data_segment /\
+     ((?fn inst. MEM fn unit.cu_context.ctx_functions /\
+                 MEM inst (fn_insts fn) /\
+                 MEM (Label "runtime_begin") inst.inst_operands) ==>
+      EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment) /\
+     LENGTH vs0.vs_data_section < dimword (:256) DIV 2` by
+    (disch_tac >>
+     qpat_assum `fin = asm_opt_finalizer ==> label_flow_own_ok _ /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT2))) >>
+  let
+    val replay = BETA_RULE (Q.INST
+      [`asm_lo` |-> `lo_reloc prog prog'`,
+       `symbolic` |-> `sym_steps_own prog (asm_data_env prog' vs0.vs_code) vs0.vs_code`,
+       `frame` |-> `normal_frame_symbolic_plan_own T (lo_reloc prog prog')
+         (asm_data_env prog' vs0.vs_code) vs0.vs_code rpolicy out.po_unit cpl prog vs0 es0`]
+      gasFocusWalkInventoryReplayTheory.focus_stopped_filling_replay_for)
+    val frame_projection = valOf (List.find (fn tm =>
+      let val (arguments, implication) = strip_forall tm in
+        length arguments = 13 andalso is_imp_only implication andalso
+        is_exists (rand implication)
+      end) (strip_conj (lhand (concl replay))))
+  in
+    SUBGOAL_THEN frame_projection assume_tac
+      >- (rpt gen_tac >> strip_tac >> drule_all_then ACCEPT_TAC focus_own_frame_projection) >>
+    prove_selected_replay gasFocusWalkInventoryReplayTheory.focus_walk_stopped_selection_own replay
+  end
+QED
+
+(* Generic finalizers and the unchanged identity boundary share one run. *)
+fun prove_focus_producer select exit =
+  let
     fun normalize th =
       CONV_RULE (DEPTH_CONV BETA_CONV) (PURE_REWRITE_RULE [LET_THM] th)
-    fun match_fact facts tm =
+    fun premise facts tm =
       case List.find (fn th => aconv (concl th) tm) facts of
         SOME th => th
       | NONE =>
           if is_conj tm then
             let val (left, right) = dest_conj tm in
-              CONJ (match_fact facts left) (match_fact facts right)
+              CONJ (premise facts left) (premise facts right)
             end
-          else raise mk_HOL_ERR "focus_finalizer_select_replay" "premise"
+          else if is_imp_only tm then
+            let
+              val (guard, body) = dest_imp tm
+              fun under_guard th =
+                if is_imp_only (concl th) andalso aconv (lhand (concl th)) guard
+                then CONJUNCTS (MP th (ASSUME guard))
+                else []
+            in
+              DISCH guard (premise (List.concat (map under_guard facts)) body)
+            end
+          else raise mk_HOL_ERR "focus_producer_finalizer" "premise"
             (term_to_string tm)
-    fun apply_rule facts rule =
-      MP rule (match_fact facts (lhand (concl rule)))
+    fun apply_rule facts rule = MP rule (premise facts (lhand (concl rule)))
     fun finish selected =
-      qx_gen_tac `raw` >> disch_tac >> conj_tac >-
+      let val for_fillings = CONJUNCT2 (CONJUNCT2 selected)
+      in
+        assume_tac (CONJUNCT1 selected) >>
+        assume_tac (CONJUNCT1 (CONJUNCT2 selected)) >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        qx_gen_tac `raw` >> disch_tac >>
         (fn (asl, goal) =>
-          ACCEPT_TAC (apply_rule (map ASSUME asl @ selected)
-            (Q.SPEC `raw` (List.last selected))) (asl, goal)) >>
-      gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-      (fn (asl, goal) =>
-        ACCEPT_TAC (apply_rule (map ASSUME asl @ selected)
-          (normalize gasFocusWalkInventoryReplayTheory.focus_stopped_filling_replay))
-          (asl, goal))
+          let val at_raw = apply_rule (map ASSUME asl) (Q.SPEC `raw` for_fillings)
+          in
+            (conj_tac >- ACCEPT_TAC (CONJUNCT1 at_raw) >>
+             qx_gen_tac `D` >> disch_then (map_every assume_tac o CONJUNCTS) >>
+             (fn (asl, goal) =>
+               let
+                 val facts = map ASSUME asl
+                 val replay = apply_rule facts (Q.SPEC `D` (CONJUNCT2 at_raw))
+                 fun exit_from_oracle th =
+                   ACCEPT_TAC (apply_rule (CONJUNCTS th @ facts)
+                     (normalize exit))
+                 fun exclude_static th =
+                   let val is_static = CONJUNCT1 th in
+                     CONTR_TAC (MP (NOT_ELIM (premise facts
+                       (mk_neg (concl is_static)))) is_static)
+                   end
+               in
+                 DISJ_CASES_THEN2 (CHOOSE_THEN exit_from_oracle) exclude_static
+                   replay (asl, goal)
+               end)) (asl, goal)
+          end)
+      end
   in
     fn (asl, goal) =>
       let
-        val selected = apply_rule (map ASSUME asl)
-          (normalize gasFocusWalkInventoryReplayTheory.focus_walk_stopped_selection)
+        val selected = apply_rule (map ASSUME asl) (normalize select)
         val witnesses = fst (strip_exists (concl selected))
-        fun use_selection th =
-          let
-            val facts = CONJUNCTS th
-            val prefix = List.take (witnesses, 3)
-          in
-            map_every EXISTS_TAC prefix >> conj_tac >- first_assum ACCEPT_TAC >>
-            conj_tac >- first_assum ACCEPT_TAC >> finish facts
-          end
-        fun project th (asl, goal) =
-          (assume_tac th >> map_every assume_tac (CONJUNCTS th) >>
-           use_selection th) (asl, goal)
       in
-        foldr (fn (w, next) => X_CHOOSE_THEN w next) project
+        foldr (fn (w, next) => X_CHOOSE_THEN w next)
+          (fn th => map_every EXISTS_TAC witnesses >> finish th)
           witnesses selected (asl, goal)
       end
-  end)
-QED
+  end;
 
-(* Generic finalizers and the unchanged identity boundary share one run. *)
 Theorem focus_producer_finalizer:
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
   o1_source_unit_ok unit /\ unit_entry_no_params unit /\
@@ -722,72 +1023,95 @@ Proof
   `vs0.vs_call_ctx.cc_static ==>
     !fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
       ~MEM (Label "runtime_begin") inst.inst_operands` by simp[] >>
-  (let
-    fun normalize th =
-      CONV_RULE (DEPTH_CONV BETA_CONV) (PURE_REWRITE_RULE [LET_THM] th)
-    fun premise facts tm =
-      case List.find (fn th => aconv (concl th) tm) facts of
-        SOME th => th
-      | NONE =>
-          if is_conj tm then
-            let val (left, right) = dest_conj tm in
-              CONJ (premise facts left) (premise facts right)
-            end
-          else if is_imp_only tm then
-            let
-              val (guard, body) = dest_imp tm
-              fun under_guard th =
-                if is_imp_only (concl th) andalso aconv (lhand (concl th)) guard
-                then CONJUNCTS (MP th (ASSUME guard))
-                else []
-            in
-              DISCH guard (premise (List.concat (map under_guard facts)) body)
-            end
-          else raise mk_HOL_ERR "focus_producer_finalizer" "premise"
-            (term_to_string tm)
-    fun apply_rule facts rule = MP rule (premise facts (lhand (concl rule)))
-    fun finish selected =
-      let val for_fillings = CONJUNCT2 (CONJUNCT2 selected)
-      in
-        assume_tac (CONJUNCT1 selected) >>
-        assume_tac (CONJUNCT1 (CONJUNCT2 selected)) >>
-        conj_tac >- first_assum ACCEPT_TAC >>
-        conj_tac >- first_assum ACCEPT_TAC >>
-        qx_gen_tac `raw` >> disch_tac >>
-        (fn (asl, goal) =>
-          let val at_raw = apply_rule (map ASSUME asl) (Q.SPEC `raw` for_fillings)
-          in
-            (conj_tac >- ACCEPT_TAC (CONJUNCT1 at_raw) >>
-             qx_gen_tac `D` >> disch_then (map_every assume_tac o CONJUNCTS) >>
-             (fn (asl, goal) =>
-               let
-                 val facts = map ASSUME asl
-                 val replay = apply_rule facts (Q.SPEC `D` (CONJUNCT2 at_raw))
-                 fun exit_from_oracle th =
-                   ACCEPT_TAC (apply_rule (CONJUNCTS th @ facts)
-                     (normalize gasFocusReplayExitTheory.focus_v3_exit_from_replay))
-                 fun exclude_static th =
-                   let val is_static = CONJUNCT1 th in
-                     CONTR_TAC (MP (NOT_ELIM (premise facts
-                       (mk_neg (concl is_static)))) is_static)
-                   end
-               in
-                 DISJ_CASES_THEN2 (CHOOSE_THEN exit_from_oracle) exclude_static
-                   replay (asl, goal)
-               end)) (asl, goal)
-          end)
-      end
-  in
-    fn (asl, goal) =>
-      let
-        val selected = apply_rule (map ASSUME asl) (normalize focus_finalizer_select_replay)
-        val witnesses = fst (strip_exists (concl selected))
-      in
-        foldr (fn (w, next) => X_CHOOSE_THEN w next)
-          (fn th => map_every EXISTS_TAC witnesses >> finish th)
-          witnesses selected (asl, goal)
-      end
-  end)
+  prove_focus_producer focus_finalizer_select_replay
+    gasFocusReplayExitTheory.focus_v3_exit_from_replay
+QED
+
+Theorem focus_producer_finalizer_own:
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+  o1_run_state_ok vs0 /\ unit_shape_ok out.po_unit /\
+  generate_context_plan out.po_unit.cu_context = SOME cpl /\
+  codegen_assembly rpolicy out.po_unit = SOME prog /\
+  fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+  (fin = asm_opt_finalizer ==>
+     label_flow_own_ok unit.cu_context /\
+     (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+                ~MEM (Label "code_end") inst.inst_operands) /\
+     EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
+                       ds.ds_items) unit.cu_data_segment /\
+     ((?fn inst. MEM fn unit.cu_context.ctx_functions /\
+                 MEM inst (fn_insts fn) /\
+                 MEM (Label "runtime_begin") inst.inst_operands) ==>
+      EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment) /\
+     LENGTH vs0.vs_data_section < dimword (:256) DIV 2) /\
+  vs0.vs_code = assemble prog' ++ vs0.vs_data_section /\
+  codegen_asm_entry_rel_reloc (lo_reloc prog prog') cpl prog vs0
+    (entry_asm_state vs0 es0) /\
+  asm_frame_rel_tail [] prog' vs0.vs_data_section es0
+    (entry_asm_state vs0 es0) es0 /\
+  unit.cu_context.ctx_entry = SOME nm /\
+  lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
+  fn_entry_label entryfn = SOME lbl /\
+  w2n vs0.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+  unit_alloca_budget unit.cu_context +
+    32 * ctx_dload_count unit.cu_context <= w2n fmp /\
+  (!gs. ?D f extra.
+    dead_wf D /\
+    (fin = asm_opt_finalizer ==>
+       !fn inst s.
+         raw_reachable (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>)
+           unit.cu_context fn inst s /\
+         gas_cut (MIN (LENGTH (markf gs)) (LENGTH gs))
+           (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) s ==>
+         inst_dload_in_section inst s) /\
+    o1_safe_upto D lo (MIN (LENGTH (markf gs)) (LENGTH gs))
+      unit.cu_context (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
+    MAP project
+      (gas_events_blocks f unit.cu_context entryfn
+        (vs0 with <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp;
+                    vs_prev_bb := NONE;
+                    vs_current_bb := lbl; vs_inst_idx := 0|>)) =
+      markf gs ++ extra) /\
+  run_call es0 = SOME (result,final) /\
+  ~frame_resource_starved es0 result final ==>
+  ?raw_slots sites unused.
+    LENGTH raw_slots = LENGTH sites /\
+    PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) (gas_readings es0) /\
+    !raw.
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw ==>
+      (?rest. MAP project sites = markf (raw ++ [0w]) ++ rest) /\
+      !D.
+        (?fr. terminates (run_context fr unit.cu_context
+           (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>))) /\
+        dead_wf D /\
+        o1_pre_walk_inv D unit.cu_context
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
+        (fin = asm_opt_finalizer ==>
+           mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+                     s.vs_code = vs0.vs_code /\ s.vs_data_section = vs0.vs_data_section)
+             unit.cu_context (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>)) ==>
+        ctx_sim D unit.cu_context out.po_unit.cu_context
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
+        ctx_abort_rq D unit.cu_context out.po_unit.cu_context
+          (vs0 with <|vs_gas_readings := raw ++ [0w]; vs_fmp := fmp; vs_initial_fmp := fmp|>) vs0 /\
+        (fin = asm_opt_finalizer ==>
+           code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context) /\
+        o1_lowered_inv out.po_unit.cu_context vs0
+Proof
+  PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all focus_packet_pipeline_stages >> strip_tac >>
+  `o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
+   code_layout_valid vs0 /\ ~vs0.vs_call_ctx.cc_static` by fs[o1_run_state_ok_def] >>
+  `vs0.vs_call_ctx.cc_static ==>
+    !fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+      ~MEM (Label "runtime_begin") inst.inst_operands` by simp[] >>
+  `vs0.vs_initial_fmp = n2w cpl.cp_initial_fmp` by
+    fs[codegen_asm_entry_rel_reloc_def] >>
+  prove_focus_producer focus_finalizer_select_replay_own
+    gasFocusReplayExitTheory.focus_v3_exit_from_replay_for
 QED
 
 Theorem focus_producer:

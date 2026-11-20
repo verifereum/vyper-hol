@@ -37,7 +37,7 @@ QED
 
 Theorem signed_loader_compiled_uniform_frame[local]:
   load_bytestring_as_word (Var z) SAR sa = ((word,bits),sm) /\
-  not_fresh_at sa z /\ ~ctx_has_dalloca ctx /\
+  not_fresh_at sa z /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var z s = SOME a /\ ptr_covers G tn z s capacity /\ 64 <= capacity /\
   w2n a+32 < dimword(:256) /\ mload (w2n a) s = n2w n /\ n <= 32 /\
   (!x. w2n a <= x /\ x < w2n a+32+n ==> x NOTIN tn.t_mem) /\
@@ -97,7 +97,7 @@ Theorem signed_optional_clamp_uniform[local]:
   (if take_clamp then compile_int_clamp T b word else comp_return word) sm = (out,sb) /\
   (!p. word = Var p ==> not_fresh_at sm p) /\
   op_prov G word = NONE /\ op_taint tn word = {} /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sm sb fn /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sm sb fn /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (run_inst_seq (emitted_insts sm sb) s = OK t \/
@@ -149,7 +149,7 @@ Theorem signed_convert_origin_path:
   w2n a+64 <= dimword(:256) /\
   mload (w2n a) s = n2w n /\ n <= 32 /\
   (!x. w2n a <= x /\ x < w2n a+32+n ==> x NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
@@ -224,6 +224,13 @@ Proof
     (qpat_assum `sl = s with vs_vars := _`
        (fn eq => once_rewrite_tac[eq]) >>
      fs[allocas_from_def, same_blocks_def, Excl "state_frame_def"] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sl` by
+    (`allocas_below_fmp sl <=> allocas_below_fmp s` by
+       (qpat_assum `sl = s with vs_vars := _` SUBST1_TAC >>
+        simp[allocas_below_fmp_def]) >>
+     qpat_assum `allocas_below_fmp sl <=> allocas_below_fmp s`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     (irule convert_dynamic_scalar_mem_ok >> simp[] >>
      goal_assum (drule_at (Pat `compile_type_convert _ _ _ = _`)) >>

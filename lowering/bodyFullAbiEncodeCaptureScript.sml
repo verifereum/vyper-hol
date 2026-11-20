@@ -474,6 +474,7 @@ Proof
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
        ghost_inv_at (DF H) lo d ce cx ee G' tn' z` by metis_tac[] >>
   `type_memory_size tv = 0 \/ w2n sw + type_memory_size tv <= z.vs_alloca_next` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by simp[] >>
   `?t Gt tt.
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
        (z,G',tn') [] (OK t,Gt,tt)) /\

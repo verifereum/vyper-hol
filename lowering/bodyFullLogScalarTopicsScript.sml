@@ -37,7 +37,6 @@ Theorem compile_log_event_topics_from_capture:
     (ops,sb) /\
   encode_indexed_event_topics (REPLICATE (LENGTH xs) T) (MAP SND xs) ivs =
     SOME topics /\
-  ~ctx_has_dalloca ctx /\
   fn_has_code sm sb func /\ ~s.vs_halted /\
   allocas_from lo s /\ lo <= s.vs_alloca_next ==>
   ?t Gf tnf.

@@ -170,6 +170,7 @@ QED
 Resume rest_word_membership_tail_dynamic_const_full[ctor_header]:
   qpat_x_assum `cenv.ce_is_ctor /\ loc = LocCode` strip_assume_tac >>
   qpat_x_assum `loc = LocCode` SUBST_ALL_TAC >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   irule rest_word_membership_ctor_header_const_full_joint >>
   reverse conj_tac >- (simp[] >> metis_tac[]) >>
   qexists_tac `w` >> gen_tac >> disch_tac >>

@@ -13,6 +13,7 @@ Ancestors
   bodyFullUnwrapSlotPost exprSimHash extcallReturnInterface
   annassignRelayoutPost[qualified,ignore_grammar]
   aggregateEvaluatedLayout[qualified,ignore_grammar]
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem extcall_default_copy_ghost_local[local]:
   typed_copy_state_frame ds off n u z /\
@@ -60,7 +61,7 @@ Theorem extcall_default_return_alloc_cut[local]:
   extcall_returned st0 ctx func cenv cx rt es sa s0 sr addr src cap target
     has_default dop dt dopt bs ee t /\
   compile_alloc_buffer n sr = (buf,ar) /\ fn_has_code sr ar func /\
-  fn_inst_ids_distinct func /\ n < dimword (:256) /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\ n < dimword (:256) /\
   alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
     ghost_inv_at (DF H) lo d cenv cx ee G tn t) /\
@@ -101,7 +102,9 @@ Proof
   rename1 `valid_horizon cx st0 H0 ee.storage_trace` >>
   `ghost_inv_at (DF H0) lo d cenv cx ee G tn t` by metis_tac[] >>
   `allocas_from lo t /\ lo <= t.vs_alloca_next` by fs[ghost_inv_at_def] >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv cx ee t`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all (INST_TYPE [``:'b`` |-> ``:256``]
     (SPEC_ALL alloc_buffer_origin_ptr_path_exact)) >>
   disch_then (qspecl_then [`tn`, `explicit`, `PG`, `G`]
