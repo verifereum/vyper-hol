@@ -29,9 +29,6 @@ d038b62541a95ddf bytes #556  # functional/codegen/features/test_short_circuiting
 2e670433c7f68d99 bytes #556  # functional/codegen/features/test_short_circuiting::test_complex_combination[ops5-False-False-False-False]
 96bb160272a6bb8c bytes #556  # functional/codegen/features/test_short_circuiting::test_complex_combination[ops6-False-False-False-False]
 f6ab44204e05bf3b bytes #556  # functional/codegen/features/test_short_circuiting::test_complex_combination[ops7-False-False-False-False]
-87c50574efa56494 bytes 5127-P4  # functional/codegen/types/test_dynamic_array::test_append_pop_complex[DynArray[uint256,3]-...]
-998f90ee731d2a3b bytes 5127-P4  # functional/codegen/types/test_dynamic_array::test_append_pop_complex[uint256[3]-...]
-a7fe7fccc8f6e312 bytes 5127-P4  # functional/codegen/types/test_dynamic_array::test_append_pop_complex[Foo-...]
 115630236db2fd66 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_default_override2
 25c5916733d463d5 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_default_return_value_reads_storage...
 0f3a4e33d22a550f bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_external_contract_calls

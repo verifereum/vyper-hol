@@ -51,15 +51,16 @@ effects and registered-allocation effects.
 ## Log consumer
 
 `compile_stmt` captures each Log argument with the shared positional snapshot
-routine. After all snapshots, it unwraps and hashes the indexed values. The
-non-indexed rows keep their physical types and encode directly at the base of
-the registered output buffer. An empty data list emits `LOG` with offset and
-length zero.
+routine. After all snapshots, it unwraps indexed values and hashes bytestring
+topics. The non-indexed rows keep their physical types and encode directly at
+the base of the registered output buffer. An empty data list emits `LOG` with
+offset and length zero.
 
-`compile_log_frag_full` proves the complete statement from argument evaluation
-through emission. Its indexed-only branch executes the empty-data suffix. Its
-nonempty branch uses `abi_encode_values_execute` to encode the saved rows and
-preserves the live topics across the encoder's cursor and payload writes.
+`compile_log_frag_full` covers argument evaluation through emission for
+supported Log statements with pure arguments. Its indexed-only branch executes
+the empty-data suffix. Its nonempty branch uses
+`abi_encode_saved_values_execute` to encode the saved rows and preserves the
+live topics across the encoder's cursor and payload writes.
 [Log statement proof](../lowering/bodyFullLogScript.sml) and
 [shared saved-row encoder](../lowering/bodyFullExtCallDirectEncodeScript.sml).
 
