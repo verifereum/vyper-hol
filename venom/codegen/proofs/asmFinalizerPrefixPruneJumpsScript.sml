@@ -63,23 +63,17 @@ Proof
   simp[]
 QED
 
-Theorem prune_jumps_prefix_transport_under[local]:
-  ^single_site /\ ^transitive ==>
-  !sfx pre. asm_static_wf (pre ++ sfx) ==>
-    ^transport (pre ++ sfx) (pre ++ FST (prune_inefficient_jumps sfx))
-Proof
-  qabbrev_tac `tr = ^transport` >> strip_tac >>
-  `!p. tr p p` by
-    (unabbrev_all_tac >> BETA_TAC >> gen_tac >> qexists_tac `1` >>
-     conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
-     conj_tac >- (qexistsl_tac [`n`, `a`] >> simp[]) >>
-     rpt strip_tac >> qexistsl_tac [`n`, `a`] >> simp[]) >>
-  `!pre x rest.
+Theorem prune_jumps_prefix_walk:
+  !tr. (!p. tr p p) /\
+  (!p q r. tr p q /\ tr q r ==> tr p r) /\
+  (!pre x rest.
     asm_static_wf (pre ++ [AsmPushLabel x; AsmOp "JUMP"] ++ AsmLabel x :: rest) ==>
     tr (pre ++ [AsmPushLabel x; AsmOp "JUMP"] ++ AsmLabel x :: rest)
-       (pre ++ AsmLabel x :: rest)` by
-    (unabbrev_all_tac >> match_mp_tac jump_to_next_prefix_transport_conditional >>
-     first_assum ACCEPT_TAC) >>
+       (pre ++ AsmLabel x :: rest)) ==>
+  !sfx pre. asm_static_wf (pre ++ sfx) ==>
+    tr (pre ++ sfx) (pre ++ FST (prune_inefficient_jumps sfx))
+Proof
+  gen_tac >> strip_tac >>
   ho_match_mp_tac prune_inefficient_jumps_ind >>
   reverse (rpt conj_tac)
   >- simp[prune_inefficient_jumps_def]
@@ -105,6 +99,28 @@ Proof
      pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
      disch_then drule >> simp[]) >>
   metis_tac[listTheory.APPEND, listTheory.APPEND_ASSOC]
+QED
+
+Theorem prune_jumps_prefix_transport_under[local]:
+  ^single_site /\ ^transitive ==>
+  !sfx pre. asm_static_wf (pre ++ sfx) ==>
+    ^transport (pre ++ sfx) (pre ++ FST (prune_inefficient_jumps sfx))
+Proof
+  qabbrev_tac `tr = ^transport` >> strip_tac >>
+  `!p. tr p p` by
+    (unabbrev_all_tac >> BETA_TAC >> gen_tac >> qexists_tac `1` >>
+     conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
+     conj_tac >- (qexistsl_tac [`n`, `a`] >> simp[]) >>
+     rpt strip_tac >> qexistsl_tac [`n`, `a`] >> simp[]) >>
+  `!pre x rest.
+    asm_static_wf (pre ++ [AsmPushLabel x; AsmOp "JUMP"] ++ AsmLabel x :: rest) ==>
+    tr (pre ++ [AsmPushLabel x; AsmOp "JUMP"] ++ AsmLabel x :: rest)
+       (pre ++ AsmLabel x :: rest)` by
+    (unabbrev_all_tac >> match_mp_tac jump_to_next_prefix_transport_conditional >>
+     first_assum ACCEPT_TAC) >>
+  mp_tac (Q.SPEC `tr` prune_jumps_prefix_walk) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  simp[]
 QED
 
 Theorem prune_jumps_prefix_transport_conditional:
