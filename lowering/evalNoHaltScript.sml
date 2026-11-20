@@ -473,6 +473,26 @@ Proof
   gvs[ignore_bind_halt, state_ops_nh] >> metis_tac[oneTheory.one]
 QED
 
+Theorem eval_self_addr_no_halt[local]:
+  eval_exprs cx [Builtin t (Env SelfAddr) []] st <>
+    (INR HaltException, st')
+Proof
+  simp[evaluate_def, evaluate_builtin_def, builtin_args_length_ok_def,
+       type_check_def, assert_def, get_accounts_def, lift_sum_def,
+       bind_def, ignore_bind_def, read_result_def, return_def, raise_def,
+       is_self_codesize_def]
+QED
+
+Theorem evaluate_self_codesize_no_halt[local]:
+  (case evaluate_self_codesize cx vs of
+     INL v => return v
+   | INR e => raise (Error e)) st <> (INR HaltException, st')
+Proof
+  Cases_on `vs` >> simp[evaluate_self_codesize_def, return_def, raise_def] >>
+  Cases_on `h` >> gvs[evaluate_self_codesize_def, return_def, raise_def] >>
+  Cases_on `t` >> gvs[evaluate_self_codesize_def, return_def, raise_def]
+QED
+
 Theorem eval_no_halt_every[local]:
   (!cx s. ~supported_stmt_expr_exists expr_halt_root s /\
      EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
@@ -596,14 +616,32 @@ QED
 
 Resume eval_no_halt_every[Builtin]:
   rpt strip_tac >> pop_assum mp_tac >>
-  Cases_on `bt = Len` >> Cases_on `bt = Env MsgGas` >>
+  Cases_on `is_self_codesize bt es`
+  >- (Cases_on `bt` >> gvs[is_self_codesize_def] >>
+      Cases_on `a` >> gvs[is_self_codesize_def] >>
+      Cases_on `es` >> gvs[is_self_codesize_def] >>
+      Cases_on `t` >> gvs[is_self_codesize_def] >>
+      Cases_on `h` >> gvs[is_self_addr_def] >>
+      Cases_on `b` >> gvs[is_self_addr_def] >>
+      Cases_on `l` >> gvs[is_self_addr_def] >>
+      Cases_on `e` >> gvs[is_self_addr_def] >>
+      Cases_on `bt = Len` >> Cases_on `bt = Env MsgGas` >>
+      simp([evaluate_def, evaluate_builtin_def,
+            type_check_def, assert_def, get_accounts_def, lift_sum_def,
+            bind_def, COND_RATOR] @ case_ss) >>
+      gvs(syn_ss @ case_ss) >> rpt strip_tac >>
+      gvs[is_self_codesize_def, is_self_addr_def,
+          builtin_args_length_ok_def, LENGTH_EQ_NUM_compute,
+          evaluate_self_codesize_def, lift_sum_def, return_def, raise_def] >>
+      metis_tac[eval_self_addr_no_halt, evaluate_self_codesize_no_halt])
+  >- (Cases_on `bt = Len` >> Cases_on `bt = Env MsgGas` >>
   simp([Once evaluate_def, COND_RATOR] @ case_ss) >>
   gvs(syn_ss @ case_ss) >> rpt strip_tac >>
   gvs[builtin_args_length_ok_def, LENGTH_EQ_NUM_compute] >>
   gvs(syn_ss @ case_ss) >>
   Cases_on `code_slice_source bt es` >- (gvs[] >> metis_tac[]) >>
   rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
-  gvs([code_slice_source_SOME] @ syn_ss @ case_ss) >> metis_tac[]
+  gvs([code_slice_source_SOME] @ syn_ss @ case_ss) >> metis_tac[])
 QED
 
 Resume eval_no_halt_every[ExtCall]:

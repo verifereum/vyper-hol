@@ -128,7 +128,8 @@ Proof
        lift_sum_def, type_check_def, assert_def,
        precompile_call_success_def, bop_result_def] >>
   BasicProvers.every_case_tac >>
-  gvs[bind_def, return_def, raise_def, read_result_def] >> rw[] >> gvs[]
+  gvs[bind_def, return_def, raise_def, read_result_def,
+      is_self_codesize_def] >> rw[] >> gvs[]
 QED
 
 Theorem eval_operand_frame:
@@ -447,7 +448,7 @@ Proof
        lift_sum_def, type_check_def, assert_def,
        precompile_call_success_def, bop_result_def] >>
   BasicProvers.every_case_tac >>
-  gvs[bind_def, return_def, raise_def, read_result_def]
+  gvs[bind_def, return_def, raise_def, read_result_def, is_self_codesize_def]
 QED
 
 Theorem bop_result_gas_obs[simp]:

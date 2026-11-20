@@ -1050,7 +1050,7 @@ Proof
        raise_def, bind_def, ignore_bind_def] >>
   rename1 `evaluate_concat n vs` >>
   Cases_on `evaluate_concat n vs` >>
-  simp[return_def, raise_def, bind_def, ignore_bind_def]
+  simp[return_def, raise_def, bind_def, ignore_bind_def, is_self_codesize_def]
 QED
 
 Theorem concat_map_ctor_11:

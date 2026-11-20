@@ -207,6 +207,19 @@ Proof
    simp[gas_shadow_compiles_emit_op, gas_shadow_compiles_return])
 QED
 
+Theorem gas_shadow_self_addr[local]:
+  !e. is_self_addr (gas_shadow_expr e) <=> is_self_addr e
+Proof
+  Cases_on `e` >> simp[gas_shadow_expr_def,
+                        vyperContextTheory.is_self_addr_def] >>
+  Cases_on `b` >> simp[gas_shadow_builtin_def,
+                        vyperContextTheory.is_self_addr_def] >>
+  Cases_on `l` >> simp[gas_shadow_expr_def,
+                        vyperContextTheory.is_self_addr_def] >>
+  Cases_on `e` >> simp[gas_shadow_builtin_def,
+                        vyperContextTheory.is_self_addr_def]
+QED
+
 Theorem gas_shadow_compiles_acc:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
     (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
@@ -214,6 +227,11 @@ Theorem gas_shadow_compiles_acc:
     (compile_acc g cenv (if sh then gas_shadow_expr addr_e else addr_e) item)
 Proof
   strip_tac >> Cases_on `item` >>
+  Cases_on `is_self_addr addr_e` >>
+  `is_self_addr (if sh then gas_shadow_expr addr_e else addr_e) =
+     is_self_addr addr_e` by
+    (Cases_on `sh` >> simp[gas_shadow_self_addr]) >>
+  simp[] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_acc_def, GSYM comp_bind_def, GSYM comp_return_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>

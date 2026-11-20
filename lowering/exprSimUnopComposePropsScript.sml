@@ -6,7 +6,8 @@ Ancestors
   loweringPosts exprLoweringProps compileEnv venomExecSemantics
 
 Theorem eval_expr_unop_action_general:
-  bi <> Len /\ ~precompile_builtin bi /\ builtin_args_length_ok bi 1 ==>
+  bi <> Len /\ ~precompile_builtin bi /\ builtin_args_length_ok bi 1 /\
+  ~is_self_codesize bi [e] ==>
   (bind (eval_expr cx (Builtin ann bi [e])) (read_result cx) =
    bind (bind (eval_expr cx e) (read_result cx))
      (\v es. (unop_result cx ann bi [expr_type e] v es, es)))
@@ -26,6 +27,7 @@ QED
 
 Theorem unop_operand_admissible:
   bi <> Len /\ ~precompile_builtin bi /\ builtin_args_length_ok bi 1 /\
+  ~is_self_codesize bi [e] /\
   gas_admissible (bind (eval_expr cx (Builtin ann bi [e])) (read_result cx))
     expr_res_ok es ==>
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
@@ -44,6 +46,7 @@ QED
 
 Theorem unop_exempt_cert:
   bi <> Len /\ ~precompile_builtin bi /\ builtin_args_length_ok bi 1 /\
+  ~is_self_codesize bi [e] /\
   gas_exempt_cert memory tops p
     (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
     start marks out endpoint ==>

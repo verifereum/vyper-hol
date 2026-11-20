@@ -40,7 +40,8 @@ End
 Theorem eval_expr_unop_cases:
   !cx ann bi e1 es res es'.
     (do r <- eval_expr cx (Builtin ann bi [e1]); read_result cx r od) es = (res, es') /\ bi <> Len /\
-    ~precompile_builtin bi /\ builtin_args_length_ok bi 1 ==>
+    ~precompile_builtin bi /\ builtin_args_length_ok bi 1 /\
+    ~is_self_codesize bi [e1] ==>
     (?exc. (do r <- eval_expr cx e1; read_result cx r od) es = (INR exc, es') /\ res = INR exc) \/
     ?v1. (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1, es') /\
          res = unop_result cx ann bi [expr_type e1] v1 es'
@@ -74,8 +75,10 @@ Theorem eval_expr_unop_action:
      (\v es. (unop_result cx ann bi [expr_type e] v es, es)))
 Proof
   strip_tac >>
-  `bi <> Len /\ ~precompile_builtin bi /\ builtin_args_length_ok bi 1` by
-    (gvs[builtin_args_length_ok_def, precompile_builtin_def]) >>
+  `bi <> Len /\ ~precompile_builtin bi /\ builtin_args_length_ok bi 1 /\
+   ~is_self_codesize bi [e]` by
+    (gvs[builtin_args_length_ok_def, precompile_builtin_def,
+         is_self_codesize_def]) >>
   pure_rewrite_tac[FUN_EQ_THM] >> gen_tac >>
   Cases_on `bind (eval_expr cx (Builtin ann bi [e])) (read_result cx) x` >>
   drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) eval_expr_unop_cases) >>
