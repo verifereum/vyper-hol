@@ -12,7 +12,7 @@ Ancestors
   bodyFullAllocaFresh bodyFullUnwrapRun wordArgsPtr
   context compileEnv exprReasonOperand exprSimHyps
   exprSimFieldLayout exprSimWordArgs exprBopSimProps freshWrites targetSubscriptStorage
-  vyperTypeValues[qualified,ignore_grammar]
+  vyperTypeValues[qualified,ignore_grammar] bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem subscript_slot_root_after_index[local]:
   well_typed_expr env obj /\ runtime_consistent env cx st /\
@@ -75,7 +75,7 @@ Theorem subscript_live_slot_select_full:
     (word_scale loc) (elem_size_in_location cenv loc et)
     (is_signed_type (expr_type idx))
     (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc) sn = (dst,sb) /\
-  fn_has_code sn sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sn sb func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id /\
@@ -294,15 +294,17 @@ Proof
       (is_signed_type (expr_type idx))
       (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca (slot_loc tr)) sn = (dst,sb)` by
     fs[] >>
+  `stmt_state_rel H0 ctx func cenv cx fin u` by
+    (qpat_assum `expr_post H0 _ _ _ _ idx _ _ _ _ _ _ _ _`
+       (mp_tac o MATCH_MP expr_post_state) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> simp[]) >>
   drule subscript_slot_array_execution >>
   disch_then (qspecl_then [`u`,`tni`,`slot`,`nw`,`lo`,`iw`,`func`,
       `gas_explicit_sites ctx shadow_ctx`,`ctx`,`PG`,`Gi`] mp_tac) >>
   impl_tac >- simp[Abbr `nw`] >>
   disch_then (qx_choose_then `q` (qx_choose_then `Gq` (qx_choose_then `tnq`
     (map_every assume_tac o CONJUNCTS)))) >>
-  `stmt_state_rel H0 ctx func cenv cx fin u` by
-    (qpat_assum `expr_post H0 _ _ _ _ idx _ _ _ _ _ _ _ _`
-       (mp_tac o MATCH_MP expr_post_state) >> simp[]) >>
   `bound_length bd < dimword (:256)` by
     metis_tac[target_storage_array_type_bound] >>
   `w2n slot + type_slot_size vt <= dimword (:256)` by
@@ -419,6 +421,9 @@ Proof
     `stmt_state_rel H ctx func cenv cx fin q` by
       (irule bodyPtrSignedConvertSourceFrameTheory.stmt_state_rel_readonly_vars_pc >>
        qexistsl [`u`,`sn`] >> simp[]) >>
+    `ctx_has_dalloca ctx ==> allocas_below_fmp q` by
+      (qpat_assum `stmt_state_rel H ctx func cenv cx fin q`
+         (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
     `eval_operand dst q = SOME (slot + n2w off)` by
       (qpat_assum `eval_operand dst q = SOME _` mp_tac >>
        Cases_on `bd` >>
