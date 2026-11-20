@@ -1170,7 +1170,6 @@ QED
 
 Finalise raw_call_success_run_aged
 
-(* Counted success suffix: no SETFMP is emitted by RawCallTarget. *)
 Theorem raw_call_kind_oracle_emit_run_aged:
   emit_op (case call_ty of RegularCall => CALL | StaticCall => STATICCALL | DelegateCall => DELEGATECALL)
     (if call_ty = RegularCall then [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]
