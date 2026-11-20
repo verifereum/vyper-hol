@@ -1,7 +1,7 @@
 (* Join the copied and uncopied array continuations at the index cut. *)
 Theory bodyFullSubscriptUnframedArray
 Ancestors vyperState[qualified,ignore_grammar] exprSimIfExpWidenedOwnedProvenance[qualified,ignore_grammar]
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyFullSubscriptCopiedBind bodyFullSubscriptNoCopyBind
   bodyFullSubscriptNoCopyMemorySelect[qualified,ignore_grammar]
   bodyFullSubscriptCopySnapshot bodyFullSubscriptLiveSlotSelect
@@ -264,6 +264,9 @@ Resume subscript_unframed_array_vv_full[value]:
   qpat_assum `expr_post _ _ _ _ _ e2 (mid with gas_obs := gs2) _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o
      REWRITE_RULE [exprSimSubscriptArrayComposeTheory.expr_post_initial_gas, expr_post_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp it` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv cx fin it`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `~expr_has_effect (Subscript et e1 e2) ==> pure_frame cenv func es sa s0 it` by
     (simp[] >> strip_tac >> irule exprSimPropsTheory.pure_frame_trans >> simp[] >>
      qexistsl [`mid`,`sm`,`s`] >> fs[wb_frame_def]) >>
@@ -275,10 +278,10 @@ Resume subscript_unframed_array_vv_full[value]:
          simp[vyperTypingTheory.value_has_type_inv]) >>
       qpat_x_assum `v = ArrayV _` SUBST_ALL_TAC >>
       simp[mk_ptr_def, vv_location_def, vv_operand_def, post_value_type_def] >>
-      qpat_assum `~ctx_has_dalloca ctx` (fn nd =>
-        irule (SIMP_RULE (srw_ss()) [nd, mk_ptr_def, vv_location_def, vv_operand_def,
-                                     post_value_type_def]
-                 subscript_fixed_memory_select_full)) >>
+      irule (SIMP_RULE (srw_ss()) [mk_ptr_def, vv_location_def, vv_operand_def,
+                                   post_value_type_def]
+               subscript_fixed_memory_select_full) >>
+      simp[] >>
       conj_tac
       >- (gen_tac >> strip_tac >>
           qpat_assum `!H. valid_horizon _ _ H _ ==> _`
@@ -358,10 +361,9 @@ Resume subscript_unframed_array_vv_full[value]:
   `type_memory_bytes cenv et = type_memory_size elem_tv` by
     metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
   simp[mk_ptr_def, vv_location_def, vv_operand_def, post_value_type_def] >>
-  qpat_assum `~ctx_has_dalloca ctx` (fn nd =>
-    irule (SIMP_RULE (srw_ss()) [nd, mk_ptr_def, vv_location_def, vv_operand_def,
-                                 post_value_type_def]
-             subscript_dynamic_value_select_full)) >>
+  irule (SIMP_RULE (srw_ss()) [mk_ptr_def, vv_location_def, vv_operand_def,
+                               post_value_type_def]
+           subscript_dynamic_value_select_full) >>
   simp[] >>
   conj_tac
   >- (gen_tac >> strip_tac >>
@@ -463,7 +465,11 @@ Resume subscript_unframed_array_vv_full[copied_select]:
   `op_taint tni iop = {} /\ op_prov Gi iop = NONE` by
     fs[bodyPtrDefsTheory.ptr_val_ok_def] >>
   `allocas_from lo z` by fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
-  drule_then assume_tac bodyInvNoDallocaTheory.body_inv_no_dalloca >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ fin z /\ _`
+       (qspec_then `storage_trace_horizon fin.storage_trace`
+         (drule_then (ACCEPT_TAC o
+            MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o CONJUNCT1)))) >>
   `exprLoweringProps$ci_mono sa sm /\ exprLoweringProps$ci_mono sm sc /\
    exprLoweringProps$ci_mono sc si` by
     (conj_tac
@@ -556,9 +562,8 @@ Resume subscript_unframed_array_vv_full[copied_fixed]:
      qpat_x_assum `evaluate_type _ (ArrayT et (Fixed 0)) = SOME _` mp_tac >>
      simp[Once vyperValueTheory.evaluate_type_def]) >>
   simp[mk_ptr_def, vv_location_def, vv_operand_def, post_value_type_def] >>
-  qpat_assum `~ctx_has_dalloca ctx` (fn nd =>
-    irule (SIMP_RULE (srw_ss()) [nd, mk_ptr_def, vv_location_def, vv_operand_def,
-                                 post_value_type_def] subscript_fixed_memory_select_full)) >>
+  irule (SIMP_RULE (srw_ss()) [mk_ptr_def, vv_location_def, vv_operand_def,
+                               post_value_type_def] subscript_fixed_memory_select_full) >>
   simp[] >>
   qexistsl [`Var q`,`iop`,
     `compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory`,`si`,
@@ -584,9 +589,8 @@ Resume subscript_unframed_array_vv_full[copied_dynamic]:
   `compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory =
      (\op. emit_op MLOAD [op])` by simp[FUN_EQ_THM,compile_ptr_load_def] >>
   simp[mk_ptr_def, vv_location_def, vv_operand_def, post_value_type_def] >>
-  qpat_assum `~ctx_has_dalloca ctx` (fn nd =>
-    irule (SIMP_RULE (srw_ss()) [nd, mk_ptr_def, vv_location_def, vv_operand_def,
-                                 post_value_type_def] subscript_dynamic_value_select_full)) >>
+  irule (SIMP_RULE (srw_ss()) [mk_ptr_def, vv_location_def, vv_operand_def,
+                               post_value_type_def] subscript_dynamic_value_select_full) >>
   simp[] >>
   qexistsl [`w`,`b`,`Var q`,`ArrayT et (Dynamic n)`,`0`,`iop`,`si`,`si`,`psz`] >>
   fs[GSYM mk_ptr_def, elem_size_in_location_def, is_slot_addressed_def, word_scale_def,

@@ -4,7 +4,7 @@ Theory bodyFullSubscriptNoCopyBind
 Ancestors option[qualified,ignore_grammar] vyperTypeValues[qualified,ignore_grammar] vyperTyping[qualified,ignore_grammar] vyperValueOperation[qualified,ignore_grammar]
   bodyFullShadowBodyInv
   bodyFullPreds bodySimFull gasOutcomeFullCompose bodyFullSubscriptCapturedPlace
-  bodyInvNoDalloca stateRelProj exprSimSubscriptArraySuffix
+  stateRelProj exprSimSubscriptArraySuffix
   gasShadowCompileStmtHelpers bodyFullBuiltinWordPowCompose
   exprSimSubscriptArrayFramed exprSimSubscriptArrayOrigin exprSimSubscriptArraySource exprSimHyps exprSimSource
   exprOperandVar exprLoweringProps exprSimUnwrap fragExec
@@ -35,7 +35,7 @@ Theorem subscript_nocopy_bind_full:
         (is_signed_type (expr_type e2))
         (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc) st2 = (dst,sb) /\
       fn_has_code sa sb func /\ fn_has_code st2 sb func /\
-      fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+      fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
       local_ptrs_reserved cenv st2 /\
       sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
@@ -118,7 +118,6 @@ Theorem subscript_nocopy_bind_full:
       cenv cx ty (Subscript ann e1 e2) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_then assume_tac body_inv_no_dalloca >>
   drule_all_then assume_tac expr_body_pre_array_subscript_base >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty e1 es` by
