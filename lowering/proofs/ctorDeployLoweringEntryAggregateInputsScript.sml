@@ -1,6 +1,6 @@
 Theory ctorDeployLoweringEntryAggregateInputs
 Ancestors
-  valueEncodingDefs
+  valueEncodingDefs ctorDeployMemoryRunMemEntryAggregate
  ctorDeployLoweringEntryScalarInputs ctorDeployLoweringEntryQuantitativeInputs supportedTypes vyperABI vyperValue
  vyperTyping vyperTypeValues valueEncoding contractABI list option finite_map
  vyperTypeABI vyperABIRoundtrip abiDecodeRanges ctorDeployLoweringEntrySparseInputs
@@ -283,21 +283,6 @@ Proof
  metis_tac[GSYM listTheory.UNZIP_MAP, listTheory.ZIP_UNZIP]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
- rpt gen_tac >> strip_tac >> Cases_on `supported_scalar_type ty`
- >- metis_tac[deploy_supported_scalar_abi_valid, deploy_supported_scalar_abi_reverse] >>
- Cases_on `ty` >> gvs[supported_value_type_def]
- >- (`supported_tuple_type (TupleT l)` by simp[supported_tuple_type_def] >>
-     drule_all (SRULE [] deploy_supported_tuple_conversion) >> simp[])
- >- (rename1 `ArrayT elem bd` >> Cases_on `bd` >> gvs[] >>
-     metis_tac[SRULE [] deploy_supported_fixed_array_conversion,
-               SRULE [] deploy_supported_dynamic_array_conversion])
- >> Cases_on `supported_struct_fields tops p` >> gvs[] >>
- drule deploy_supported_struct_lookup >> strip_tac >>
- drule_all (SRULE [] deploy_supported_struct_conversion) >> simp[]
-QED
-*)
 Theorem deploy_supported_value_conversion:
  !tops ty tv v av.
  supported_value_type tops ty /\
@@ -308,7 +293,8 @@ Theorem deploy_supported_value_conversion:
  has_type (vyper_to_abi_type (type_env tops) ty) av /\
  abi_to_vyper (type_env tops) ty av = SOME v
 Proof
-  cheat
+ rpt strip_tac >>
+ metis_tac[ctor_supported_value_abi_valid, ctor_supported_value_inverse]
 QED
 
 Theorem deploy_supported_value_list_conversion:

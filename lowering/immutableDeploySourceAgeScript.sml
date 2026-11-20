@@ -1,53 +1,20 @@
 Theory immutableDeploySourceAge
 Ancestors
+  annassignRelayoutPost
   supportedTypes placeMemoryTypeInterfaces vyperTypeValues valueEncodingProps
   vyperValue valueEncoding vyperTypeSystem immutableDeployAssignRanges
   bodyMemoryDefs stmtSimLogTrace exprSimOperands localPtrsProps stmtSimDefs
   compileEnv loweringStateRelDefs venomMemDefs emitHelperProps ASCIInumbers exprLoweringProps venomInst
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >>
-  `type_memory_size stv = 0 <=> type_memory_size dtv = 0` by
-    metis_tac[type_widens_to_zero_memory_size] >>
-  `0 < type_memory_size dtv` suffices_by decide_tac >>
-  Cases_on `dty` >>
-  gvs[supported_value_type_def, supported_scalar_type_def,
-      supported_word_type_def, supported_string_type_def]
-  >- (Cases_on `b` >> gvs[evaluate_type_def, type_memory_size_def] >>
-      rename1 `BytesT bd` >> Cases_on `bd` >>
-      gvs[evaluate_type_def, type_memory_size_def])
-  >- (Cases_on `b` >> gvs[supported_string_type_def, evaluate_type_def,
-                                    type_memory_size_def, AllCaseEqs()] >>
-      rename1 `BytesT bd` >> Cases_on `bd` >>
-      gvs[supported_string_type_def, evaluate_type_def, type_memory_size_def])
-  >- (drule evaluate_type_TupleT_cases >> strip_tac >>
-      Cases_on `l` >> gvs[] >>
-      rename1 `supported_scalar_type h` >> Cases_on `h` >>
-      gvs[supported_scalar_type_def, supported_word_type_def,
-          supported_string_type_def] >>
-      Cases_on `b` >>
-      gvs[evaluate_type_def, type_memory_size_def, AllCaseEqs()] >>
-      rename1 `BytesT bd` >> Cases_on `bd` >>
-      gvs[evaluate_type_def, type_memory_size_def, AllCaseEqs()])
-  >- (Cases_on `b` >> gvs[] >>
-      drule evaluate_type_ArrayT_cases >> strip_tac >> gvs[] >>
-      Cases_on `t` >> gvs[supported_word_type_def] >>
-      Cases_on `b` >>
-      gvs[evaluate_type_def, type_memory_size_def, AllCaseEqs()] >>
-      rename1 `BytesT bd` >> Cases_on `bd` >>
-      gvs[evaluate_type_def, type_memory_size_def, AllCaseEqs()])
-  >> gvs[type_widens_to_def] >> Cases_on `sty` >>
-  gvs[arg_type_fits_def]
-QED
-*)
 Theorem immutable_supported_normalization_positive:
   supported_value_type tops dty /\ type_widens_to tenv sty dty /\
   sty <> dty /\ evaluate_type tenv sty = SOME stv /\
   evaluate_type tenv dty = SOME dtv ==>
   0 < type_memory_size stv /\ 0 < type_memory_size dtv
 Proof
-  cheat
+  strip_tac >>
+  drule_all strict_widening_source_positive >> strip_tac >>
+  drule_all type_widens_to_zero_memory_size >> decide_tac
 QED
 
 Theorem immutable_rhs_normalization_source_range:

@@ -974,7 +974,16 @@ Proof
   irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >> simp[MAP_REVERSE]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem deploy_ctor_formal_var_types:
+  !tops rpolicy runtime_bc dunit stmts cenv nr nkey ut imm exit_lbl
+   sa sb sj st_exit st_epilogue st_final func mut args.
+    deploy_ctor_code tops rpolicy runtime_bc dunit
+      (stmts,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,
+       st_epilogue,st_final,func) /\ supported_program tops /\
+    supported_program_deploy tops /\
+    lookup_function NONE "__init__" Deploy tops =
+      SOME (mut,nr,args,[],NoneT,stmts) ==>
+    !id ty. MEM (id,ty) args ==> cenv.ce_var_type id = SOME ty
 Proof
   rpt gen_tac >> strip_tac >>
   drule deploy_ctor_static_tables >> strip_tac >>
@@ -988,22 +997,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[] >>
   drule_all supported_program_deploy_function >> strip_tac >>
-  irule deploy_frame_formal_type_lookup >> goal_assum (drule_at Any) >>
-  goal_assum (drule_at Any)
-QED
-*)
-Theorem deploy_ctor_formal_var_types:
-  !tops rpolicy runtime_bc dunit stmts cenv nr nkey ut imm exit_lbl
-   sa sb sj st_exit st_epilogue st_final func mut args.
-    deploy_ctor_code tops rpolicy runtime_bc dunit
-      (stmts,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,
-       st_epilogue,st_final,func) /\ supported_program tops /\
-    supported_program_deploy tops /\
-    lookup_function NONE "__init__" Deploy tops =
-      SOME (mut,nr,args,[],NoneT,stmts) ==>
-    !id ty. MEM (id,ty) args ==> cenv.ce_var_type id = SOME ty
-Proof
-  cheat
+  irule (INST_TYPE [alpha |-> ``:function_visibility``]
+    deploy_frame_formal_type_lookup) >> simp[] >>
+  qexistsl_tac [`tops`, `Deploy`] >> simp[]
 QED
 
 Theorem deploy_ctor_allocation_bounds:

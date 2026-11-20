@@ -5,7 +5,9 @@ Ancestors
 Libs
   wordsLib
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem ctor_supported_scalar_default_strict_type:
+  supported_scalar_type ty /\ evaluate_type env ty = SOME tv ==>
+  has_type (vyper_to_abi_type env ty) (default_to_abi tv)
 Proof
   Cases_on `ty`
   >~ [`supported_scalar_type (FlagT _)`]
@@ -24,15 +26,10 @@ Proof
       evaluate_type_def, default_to_abi_def, vyper_base_to_abi_type_def,
       has_type_def, AllCaseEqs(), wordsTheory.dimword_def]
 QED
-*)
-Theorem ctor_supported_scalar_default_strict_type:
-  supported_scalar_type ty /\ evaluate_type env ty = SOME tv ==>
-  has_type (vyper_to_abi_type env ty) (default_to_abi tv)
-Proof
-  cheat
-QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem ctor_supported_scalar_default_inverse:
+  supported_scalar_type ty /\ evaluate_type env ty = SOME tv ==>
+  abi_to_vyper env ty (default_to_abi tv) = SOME (default_value tv)
 Proof
   Cases_on `ty`
   >~ [`supported_scalar_type (FlagT _)`]
@@ -51,11 +48,4 @@ Proof
   gvs[supported_word_type_def, supported_string_type_def,
       evaluate_type_def, default_to_abi_def, default_value_def,
       abi_to_vyper_def, compatible_bound_def, AllCaseEqs()]
-QED
-*)
-Theorem ctor_supported_scalar_default_inverse:
-  supported_scalar_type ty /\ evaluate_type env ty = SOME tv ==>
-  abi_to_vyper env ty (default_to_abi tv) = SOME (default_value tv)
-Proof
-  cheat
 QED
