@@ -1,14 +1,15 @@
 Theory staticAbortOptUnusedLabels
 Ancestors
   staticAbortOptUnusedLabelsWalk staticAbortOptUnusedLabelsSelect
-  staticAbortOptUnusedLabelsRoot
+  staticAbortOptUnusedLabelsRoot staticAbortProtectedActualPrefix
+  asmOwnPruneWalk asmSpliceOwn asmSymOwnCode
   staticAbortOptUnusedLabelsFlow staticAbortOptUnusedLabelsCheck
   staticAbortOptMergeIszeroBranchPackage asmOptPruneUnused asmSplice
   asmSymSem asmSymBridge asmDataEnv codegenSymRel asmSem asmIR asmOptimizer
   asmWf staticAbortStraight symFrameControl stackOpSim finalizerContract
   finite_map pred_set rich_list list words arithmetic rat alist
 
-Theorem prune_unused_jumpdests_abort_certificate:
+Theorem prune_unused_jumpdests_abort_certificate_mode:
   !orig (s:asm_state) data req_bound.
   !Shape. Shape = (\p cc req pc height need tag boolean (i:num#num) (t:asm_state).
     t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
@@ -78,21 +79,22 @@ Theorem prune_unused_jumpdests_abort_certificate:
     else pc y=pc x+1) ==>
   !bytes. bytes = (\p. assemble p ++ data) ==>
   !env0. env0 = asm_data_env orig (bytes orig) ==>
-  !start. start = (\p. s with as_code := bytes p) ==>
-  !run_p. run_p = (\p. asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p) ==>
+  !start. start = (\p. if allow_own then s else (s with as_code := bytes p)) ==>
+  !run_p. run_p = (\p. asm_steps (if allow_own then lo_reloc p orig else SND (compute_label_offsets p)) (build_offset_to_pc p) p) ==>
   !M_R. M_R = (\p.
     s.as_pc = 0 /\ s.as_code = bytes orig /\
     asm_static_wf orig /\ asm_static_wf p /\
     FILTER is_data_inst p = FILTER is_data_inst orig /\
     ((?n out.
         (run_p p n (start p) = AsmRevert out \/ run_p p n (start p) = AsmFault out) /\
-        sym_terminal (sym_steps p env0 n (sym_init s)) /\
+        sym_terminal (sym_steps_mode allow_own p env0 s.as_code n (sym_init s)) /\
         out.as_requests <<= req_bound) \/
      (?j t u cc req (V:(num#num)->bool) e (rank:(num#num)->num)
          pc height need tag boolean edge.
         run_p p j (start p) = AsmOK t /\
-        sym_steps p env0 j (sym_init s) = SymOK u /\
-        asm_sym_rel p (asm_data_env p (bytes p)) t u /\
+        sym_steps_mode allow_own p env0 s.as_code j (sym_init s) = SymOK u /\
+        (if allow_own then asm_sym_rel_own (lo_reloc p orig) p env0 s.as_code
+         else asm_sym_rel p (asm_data_env p (bytes p))) t u /\
         t.as_pc = u.sym_base.as_pc /\ LENGTH t.as_stack = LENGTH u.sym_stack /\
         t.as_call_ctx = u.sym_base.as_call_ctx /\ t.as_requests = u.sym_base.as_requests /\
         t.as_call_ctx = cc /\ t.as_requests = req /\ req <<= req_bound /\
@@ -176,8 +178,9 @@ Proof
       ((?n out. Finished p n out) \/
        (?j t u cc req V e rank pc height need tag boolean edge.
         run_p p j (start p) = AsmOK t /\
-        sym_steps p env0 j (sym_init s) = SymOK u /\
-        asm_sym_rel p (asm_data_env p (bytes p)) t u /\
+        sym_steps_mode allow_own p env0 s.as_code j (sym_init s) = SymOK u /\
+        (if allow_own then asm_sym_rel_own (lo_reloc p orig) p env0 s.as_code
+         else asm_sym_rel p (asm_data_env p (bytes p))) t u /\
         t.as_pc = u.sym_base.as_pc /\ LENGTH t.as_stack = LENGTH u.sym_stack /\
         t.as_call_ctx = u.sym_base.as_call_ctx /\ t.as_requests = u.sym_base.as_requests /\
         t.as_call_ctx = cc /\ t.as_requests = req /\ req <<= req_bound /\
@@ -194,8 +197,9 @@ Proof
       ((?n out. Finished p n out) \/
        (?j t u cc req V e rank pc height need tag boolean edge.
         run_p p j (start p) = AsmOK t /\
-        sym_steps p env0 j (sym_init s) = SymOK u /\
-        asm_sym_rel p (asm_data_env p (bytes p)) t u /\
+        sym_steps_mode allow_own p env0 s.as_code j (sym_init s) = SymOK u /\
+        (if allow_own then asm_sym_rel_own (lo_reloc p orig) p env0 s.as_code
+         else asm_sym_rel p (asm_data_env p (bytes p))) t u /\
         t.as_pc = u.sym_base.as_pc /\ LENGTH t.as_stack = LENGTH u.sym_stack /\
         t.as_call_ctx = u.sym_base.as_call_ctx /\ t.as_requests = u.sym_base.as_requests /\
         t.as_call_ctx = cc /\ t.as_requests = req /\ req <<= req_bound /\
@@ -232,19 +236,40 @@ Proof
     (drule (iffLR asm_refines_def) >> disch_then drule >>
      strip_tac >> metis_tac[]) >>
   asm_rewrite_tac[] >>
-  `env0 = asm_data_env p (bytes p) /\ env0 = asm_data_env q (bytes q)` by
-    (simp[Abbr `env0`, Abbr `bytes`] >>
+  `~allow_own ==> env0 = asm_data_env p (bytes p) /\ env0 = asm_data_env q (bytes q)` by
+    (strip_tac >> simp[Abbr `env0`, Abbr `bytes`] >>
      conj_tac >> irule asm_data_env_agree >> simp[]) >>
   qpat_x_assum `(?n out. _) \/ (?j t u. _)` DISJ_CASES_TAC
   >- suspend "terminal"
   >> suspend "pending"
 QED
 
-Resume prune_unused_jumpdests_abort_certificate[terminal]:
+Resume prune_unused_jumpdests_abort_certificate_mode[terminal]:
   disj1_tac >>
   qpat_x_assum `?n out. _`
     (qx_choose_then `n` (qx_choose_then `out`
       (map_every assume_tac o CONJUNCTS))) >>
+  Cases_on `allow_own` >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [COND_CLAUSES, sym_steps_mode_def]) >>
+  PURE_REWRITE_TAC [COND_CLAUSES, sym_steps_mode_def]
+  >- (`asm_refines_own p q` by
+        (simp[Abbr `p`, Abbr `q`] >>
+         irule (SRULE [asm_splice_ok_def, is_data_inst_def,
+                       EVAL ``asm_label_refs []``, unused_label_window_refines_own]
+                 (Q.INST [`pat` |-> `[AsmLabel l]`, `repl` |-> `[]`]
+                    asm_splice_window_refines_own)) >>
+         first_assum ACCEPT_TAC) >>
+      `sym_terminal (sym_steps_own p (asm_data_env orig s.as_code) s.as_code n (sym_init s))` by
+        (qunabbrev_tac `env0` >>
+         qpat_assum `s.as_code = _` (fn eq =>
+           qpat_assum `sym_terminal _` (ACCEPT_TAC o PURE_REWRITE_RULE [GSYM eq]))) >>
+      mp_tac (Q.INST [`installed` |-> `orig`] installed_terminal_refinement) >>
+      (impl_tac >- (rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >> metis_tac[])) >>
+      disch_then (qx_choosel_then [`m`, `dst`] strip_assume_tac) >>
+      qexistsl [`m`, `dst`] >>
+      qunabbrev_tac `env0` >>
+      qpat_x_assum `s.as_code = _` (pure_rewrite_tac o single o GSYM) >> simp[]) >>
+  qpat_x_assum `~F ==> _` (strip_assume_tac o SIMP_RULE bool_ss []) >>
   qabbrev_tac `sp = s with as_code := bytes p` >>
   qabbrev_tac `sq = s with as_code := bytes q` >>
   `sp.as_pc = 0 /\ sq.as_pc = 0 /\
@@ -313,7 +338,7 @@ Resume prune_unused_jumpdests_abort_certificate[terminal]:
   qexistsl [`fuel' + k`,`outQ`] >> simp[sym_steps_terminal_extend]
 QED
 
-Resume prune_unused_jumpdests_abort_certificate[pending]:
+Resume prune_unused_jumpdests_abort_certificate_mode[pending]:
   disj2_tac >>
   qpat_x_assum `?j t u. _`
     (qx_choose_then `j` (qx_choose_then `t` (qx_choose_then `u`
@@ -391,17 +416,20 @@ Resume prune_unused_jumpdests_abort_certificate[pending]:
      disch_then (qspec_then `v` mp_tac o cj 1) >>
      (impl_tac >- first_assum ACCEPT_TAC) >> POP_ASSUM_LIST (K ALL_TAC) >>
      metis_tac[]) >>
+  `env0 = asm_data_env orig s.as_code` by
+    (qpat_assum `s.as_code = bytes orig` SUBST1_TAC >> simp[Abbr `env0`]) >>
   mp_tac (CONV_RULE (LAND_CONV (SIMP_CONV bool_ss [RIGHT_EXISTS_AND_THM]))
     (SIMP_RULE bool_ss [LET_THM, UNWIND_FORALL_THM2, RAT_OF_NUM_LES]
     (Q.SPECL [`orig`,`p`,`pre`,`l`,`tail`,`data`,`s`,`j`,`u`,`t`,`cc`,`req`,
              `req_bound`,`V`,`e`,`\x. rat_of_num (rankN x)`,`pc`,`height`,
-             `need`,`tag`,`boolean`,`edge`] unused_label_one_actual_root))) >>
+             `need`,`tag`,`boolean`,`edge`] unused_label_one_actual_root_mode))) >>
   (impl_tac >-
     (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
      TRY (simp[Abbr `bytes`, Abbr `env0`, Abbr `q`, IgnAsm `p = _`] >> NO_TAC) >>
-     TRY (qpat_assum `sym_steps p env0 j (sym_init s) = SymOK u` mp_tac >>
+     TRY (qpat_assum `sym_steps_mode allow_own p env0 s.as_code j (sym_init s) = SymOK u` mp_tac >>
           SIMP_TAC bool_ss [Abbr `bytes`, Abbr `env0`] >> NO_TAC) >>
-     TRY (qpat_assum `asm_sym_rel p _ t u` mp_tac >>
+     TRY (qpat_assum `(if allow_own then asm_sym_rel_own _ _ _ _ else asm_sym_rel p _) t u` mp_tac >>
+          qpat_assum `env0 = asm_data_env orig s.as_code` (pure_rewrite_tac o single) >>
           SIMP_TAC bool_ss [Abbr `bytes`] >> NO_TAC) >>
      TRY (qpat_assum `Shape p cc req pc height need tag boolean e t` mp_tac >>
           SIMP_TAC bool_ss [SimpLHS, Abbr `Shape`, RIGHT_EXISTS_AND_THM] >>
@@ -679,9 +707,20 @@ Resume prune_unused_jumpdests_abort_certificate[pending]:
   disch_then (mk_asm "live") >>
   qexistsl [`jQ`,`tQ`,`uQ`,`cc`,`req`,`liveSet`,`eQ`,`rankN`,
             `pcQ`,`height`,`need`,`TQ`,`boolean`,`liveEdge`] >>
-  ntac 10 (conj_tac >-
-    (first_assum ACCEPT_TAC ORELSE
-     simp[Abbr `bytes`, IgnAsm `p = _`, IgnAsm `q = _`])) >>
+  `(if allow_own then asm_data_env orig (assemble orig ++ data)
+     else asm_data_env q (assemble q ++ data)) = env0` by
+    (simp[Abbr `bytes`, Abbr `env0`, IgnAsm `p = _`, IgnAsm `q = _`] >>
+     Cases_on `allow_own` >> simp[] >>
+     irule asm_data_env_agree >> rpt conj_tac >>
+     (first_assum ACCEPT_TAC ORELSE (sym_tac >> first_assum ACCEPT_TAC))) >>
+  conj_tac >- (simp_tac bool_ss [Abbr `bytes`] >> first_assum ACCEPT_TAC) >>
+  conj_tac >- (qpat_assum `(if allow_own then _ else _) = env0` (SUBST1_TAC o SYM) >>
+     simp_tac bool_ss [Abbr `bytes`] >> first_assum ACCEPT_TAC) >>
+  conj_tac >- (Cases_on `allow_own` >> PURE_REWRITE_TAC [COND_CLAUSES] >>
+    qpat_assum `(if allow_own then asm_sym_rel_own (lo_reloc q orig) q _ _ else asm_sym_rel q _) tQ uQ`
+      (mp_tac o PURE_REWRITE_RULE [COND_CLAUSES]) >>
+    simp_tac bool_ss [Abbr `bytes`, Abbr `env0`]) >>
+  ntac 7 (conj_tac >- first_assum ACCEPT_TAC) >>
   asm "live" mp_tac >>
   map_every (fn pat => qpat_assum pat (fn th =>
     pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]))
@@ -705,4 +744,163 @@ Resume prune_unused_jumpdests_abort_certificate[pending]:
   strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Finalise prune_unused_jumpdests_abort_certificate
+Finalise prune_unused_jumpdests_abort_certificate_mode
+
+Theorem prune_unused_jumpdests_abort_certificate:
+  !orig (s:asm_state) data req_bound.
+  !Shape. Shape = (\p cc req pc height need tag boolean (i:num#num) (t:asm_state).
+    t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
+    t.as_call_ctx = cc /\ t.as_requests = req /\
+    (need i ==> t.as_call_ctx.cc_static) /\
+    (!k l origin. tag i k = SOME(l,origin) ==>
+       k < height i /\ origin < LENGTH p /\
+       (EL origin p = AsmPushLabel l \/
+        (?d. EL origin p = AsmPushOfst l d) \/ EL origin p = AsmDataLabel l) /\
+       ?off dest. FLOOKUP (SND (compute_label_offsets p)) l = SOME off /\
+         off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest /\
+         EL k t.as_stack = (n2w off:bytes32)) /\
+    (!k. boolean i k ==> k < height i /\
+       (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+  !Flow. Flow = (\p pc height tag boolean (x:num#num) (y:num#num).
+    !hi. hi = height x ==>
+    !hj. hj = height y ==>
+    !ins. ins = EL (pc x) p ==>
+    !inherit. inherit =
+      (\(src:num -> num option) (fresh:num -> (string#num) option) (bnew:num -> bool).
+        (!k l origin. tag y k = SOME(l,origin) ==>
+           k < hj /\ (fresh k = SOME(l,origin) \/
+             ?a. src k = SOME a /\ a < hi /\ tag x a = SOME(l,origin))) /\
+        (!k. boolean y k ==> k < hj /\
+           (bnew k \/ ?a. src k = SOME a /\ a < hi /\ boolean x a))) ==>
+    case ins of
+      AsmLabel l => hj = hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
+    | AsmPush bs => hj = hi+1 /\
+        inherit (\k. if k=0 then NONE else SOME(k-1)) (\k. NONE)
+          (\k. k=0 /\ !t u.
+            asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p)
+              (AsmPush bs) t = AsmOK u ==>
+            (EL 0 u.as_stack = 0w \/ EL 0 u.as_stack = 1w))
+    | AsmPushLabel l => hj = hi+1 /\
+        inherit (\k. if k=0 then NONE else SOME(k-1))
+          (\k. if k=0 then SOME(l,pc x) else NONE) (\k. F)
+    | AsmPushOfst l d => hj = hi+1 /\
+        inherit (\k. if k=0 then NONE else SOME(k-1))
+          (\k. if k=0 /\ d=0 then SOME(l,pc x) else NONE) (\k. F)
+    | AsmOp name =>
+        (case ALOOKUP dup_table name of
+           SOME n => n < hi /\ hj = hi+1 /\
+             inherit (\k. SOME(if k=0 then n else k-1)) (\k. NONE) (\k. F)
+         | NONE => case ALOOKUP swap_table name of
+             SOME n => 0 < n /\ n < hi /\ hj = hi /\
+               inherit (\k. SOME(if k=0 then n else if k=n then 0 else k))
+                 (\k. NONE) (\k. F)
+           | NONE =>
+               !a. a = asm_op_arity name ==>
+               !m. m = hj + a - hi ==>
+               a <= hi /\ hj = m+(hi-a) /\
+               ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
+               inherit (\k. if k<m then NONE else SOME(k-m+a)) (\k. NONE)
+                 (\k. k=0 /\ m=1 /\ asm_returns_zero_or_one ins /\
+                   !t u. LENGTH t.as_stack=hi /\
+                     asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p)
+                       ins t = AsmOK u ==>
+                     (EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w)))
+    | _ => F) ==>
+  !target. target = (\p pc tag (x:num#num) (y:num#num).
+    ?l origin off. tag x 0 = SOME(l,origin) /\
+      FLOOKUP (SND (compute_label_offsets p)) l = SOME off /\
+      off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME(pc y)) ==>
+  !Control. Control = (\p pc tag x y.
+    if EL (pc x) p = AsmOp "JUMP" then target p pc tag x y
+    else if EL (pc x) p = AsmOp "JUMPI" then pc y=pc x+1 \/ target p pc tag x y
+    else pc y=pc x+1) ==>
+  !bytes. bytes = (\p. assemble p ++ data) ==>
+  !env0. env0 = asm_data_env orig (bytes orig) ==>
+  !start. start = (\p. s with as_code := bytes p) ==>
+  !run_p. run_p = (\p. asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p) ==>
+  !M_R. M_R = (\p.
+    s.as_pc = 0 /\ s.as_code = bytes orig /\
+    asm_static_wf orig /\ asm_static_wf p /\
+    FILTER is_data_inst p = FILTER is_data_inst orig /\
+    ((?n out.
+        (run_p p n (start p) = AsmRevert out \/ run_p p n (start p) = AsmFault out) /\
+        sym_terminal (sym_steps p env0 n (sym_init s)) /\
+        out.as_requests <<= req_bound) \/
+     (?j t u cc req (V:(num#num)->bool) e (rank:(num#num)->num)
+         pc height need tag boolean edge.
+        run_p p j (start p) = AsmOK t /\
+        sym_steps p env0 j (sym_init s) = SymOK u /\
+        asm_sym_rel p (asm_data_env p (bytes p)) t u /\
+        t.as_pc = u.sym_base.as_pc /\ LENGTH t.as_stack = LENGTH u.sym_stack /\
+        t.as_call_ctx = u.sym_base.as_call_ctx /\ t.as_requests = u.sym_base.as_requests /\
+        t.as_call_ctx = cc /\ t.as_requests = req /\ req <<= req_bound /\
+        ((!x. x IN V ==>
+           (need x ==> cc.cc_static) /\
+           (!k. boolean x k ==> k < height x /\ tag x k=NONE) /\
+           (!k l origin. tag x k = SOME(l,origin) ==>
+              k < height x /\ origin < LENGTH p /\
+              (EL origin p = AsmPushLabel l \/ EL origin p = AsmPushOfst l 0) /\
+              ?off dest. FLOOKUP (SND (compute_label_offsets p)) l = SOME off /\
+                off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME dest)) /\
+         (!x y. edge x y ==> x IN V /\ y IN V /\ rank y < rank x /\
+            Flow p pc height tag boolean x y) /\
+         (!x. x IN V ==> pc x < LENGTH p /\
+           (!h. h = height x ==>
+            !fall. fall = (\y. pc y = pc x+1) ==>
+            !arm. arm = (\P n. ?y. edge x y /\ P y /\ height y=n) ==>
+            !legal. legal = (\P n. !y. edge x y ==> P y /\ height y=n) ==>
+            !next. next = (\n. arm fall n /\ legal fall n) ==>
+            !untagged. untagged = (\a. !k. k<a ==> tag x k=NONE) ==>
+            !stop. stop = (\a. a<=h /\ untagged a /\ !y. ~edge x y) ==>
+            case EL (pc x) p of
+              AsmLabel l => next h
+            | AsmPush bs => next (h+1)
+            | AsmPushLabel l => IS_SOME (FLOOKUP (SND (compute_label_offsets p)) l) /\ next (h+1)
+            | AsmPushOfst l d => IS_SOME (FLOOKUP (SND (compute_label_offsets p)) l) /\ next (h+1)
+            | AsmOp name =>
+                if name="INVALID" then stop 0
+                else if name="REVERT" then stop 2
+                else if MEM name ["SSTORE";"TSTORE";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]
+                     then cc.cc_static /\ stop (asm_op_arity name)
+                else
+                  (case ALOOKUP dup_table name of
+                     SOME n => n<h /\ next (h+1)
+                   | NONE => case ALOOKUP swap_table name of
+                       SOME n => 0<n /\ n<h /\ next h
+                     | NONE =>
+                         if name="JUMP" then
+                           1<=h /\ arm (target p pc tag x) (h-1) /\ legal (target p pc tag x) (h-1)
+                         else if name="JUMPI" then
+                           2<=h /\ tag x 1=NONE /\ arm fall (h-2) /\ arm (target p pc tag x) (h-2) /\
+                           legal (\y. fall y \/ target p pc tag x y) (h-2)
+                         else
+                           ?m. static_abort_straight name m /\ asm_op_arity name <= h /\
+                               untagged (asm_op_arity name) /\ next (h-asm_op_arity name+m))
+            | _ => F))) /\
+        (!Realizes. Realizes = Shape p cc req pc height need tag boolean ==>
+          FINITE V /\ {} SUBSET V /\
+          (!x. x IN V ==> ?t. Realizes x t) /\
+          (!x. x IN V DIFF {} ==> pc x < LENGTH p) /\
+          (!x y. edge x y ==>
+             x IN V DIFF {} /\ y IN V /\ rank y < rank x /\
+             Flow p pc height tag boolean x y /\ Control p pc tag x y) /\
+          (!x t. x IN V DIFF {} /\ Realizes x t ==>
+             (?u. (asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p)
+                               p 1 t = AsmRevert u \/
+                   asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p)
+                               p 1 t = AsmFault u) /\ u.as_requests=req) \/
+             (?y u. edge x y /\
+                asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p)
+                          p 1 t = AsmOK u /\ Realizes y u))) /\
+        e IN V /\ (!x. x IN V ==> ?n (path:num->num#num).
+          path 0=e /\ path n=x /\ !k. k<n ==> edge (path k) (path(SUC k))) /\
+        Shape p cc req pc height need tag boolean e t /\
+        (!k l origin. tag e k = SOME(l,origin) ==>
+           k < LENGTH u.sym_stack /\ EL k u.sym_stack = Lab l 0) /\
+        (!k. boolean e k ==>
+           k < LENGTH u.sym_stack /\ (EL k u.sym_stack = Val 0w \/ EL k u.sym_stack = Val 1w))))) ==>
+  !p. M_R p ==> M_R (FST (prune_unused_jumpdests p))
+Proof
+  MATCH_ACCEPT_TAC (Q.INST [`allow_own` |-> `F`] prune_unused_jumpdests_abort_certificate_mode
+    |> PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES])
+QED
