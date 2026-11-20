@@ -923,10 +923,43 @@ fun range_tuple_forall th =
    source integer literals. Array iteration remains a separate residual.
    body_for_ok supplies a body judgment only for a successfully checked,
    nonempty iterator; rejecting and empty ranges need no body judgment. *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem body_for_range:
+  !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
+   es res es'.
+    body_stmt_safe tops (For id typ it n body) /\
+    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
+       (INL x,t'') ==>
+       body_for_ok cx tyv id body vs) /\
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_iterator_ok cx it) /\
+    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (For id typ it n body) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (For id typ it n body) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (For id typ it n body) = SOME env' /\
+    stmt_exprs_ok cenv (For id typ it n body) /\
+    call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    (?e1 e2. it = Range e1 e2) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (For id typ it n body))
+      (eval_stmt cx (For id typ it n body)) es
 Proof
   rpt strip_tac >>
   imp_res_tac body_stmt_safe_for_body >> gvs[] >>
+  `~supported_expr_exists (const_name_root cx) e1 /\
+   ~supported_expr_exists (const_name_root cx) e2` by
+    (drule_all body_inv_stmt_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_iterator_exists_def]) >>
   Cases_on `?a1 n1 a2 n2. e1 = Literal a1 (IntL n1) /\ e2 = Literal a2 (IntL n2)`
   >- (gvs[] >> irule body_for_range_lit >> simp[] >> metis_tac[]) >>
   drule (range_tuple_forall body_range_typing) >>
@@ -985,18 +1018,16 @@ Proof
       alloc_limits_expr_def]) >>
   imp_res_tac alloc_limits_expr_not_extcode >>
   `expr_body_pre cenv cx env e1 es` by
-    (irule_body_pre stmt_expr_body_pre_alloc >>
+    (irule stmt_expr_body_pre_alloc >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def,
          allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_iterator_def] >>
-     imp_res_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >> simp[] >>
      qexists_tac `int_calls_expr e2 ++ int_calls_stmts body'` >> simp[]) >>
   `!ei. expr_sim_inv cenv cx env ei ==> expr_body_pre cenv cx env e2 ei` by
-    (rpt strip_tac >> irule_body_pre stmt_expr_body_pre_alloc >>
+    (rpt strip_tac >> irule stmt_expr_body_pre_alloc >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def,
          allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_iterator_def] >>
-     imp_res_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >> simp[] >>
      qexists_tac `int_calls_stmts body'` >>
      metis_tac[call_evaluation_safe_append_right, listTheory.APPEND_ASSOC]) >>
   `expr_sim ctx func cenv cx typ e1 es` by
@@ -1090,40 +1121,6 @@ Resume body_for_range[pop]:
 QED
 
 Finalise body_for_range
-*)
-Theorem body_for_range:
-  !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
-   es res es'.
-    body_stmt_safe tops (For id typ it n body) /\
-    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
-       (INL x,t'') ==>
-       body_for_ok cx tyv id body vs) /\
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_iterator_ok cx it) /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (For id typ it n body) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (For id typ it n body) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (For id typ it n body) = SOME env' /\
-    stmt_exprs_ok cenv (For id typ it n body) /\
-    call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    (?e1 e2. it = Range e1 e2) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (For id typ it n body))
-      (eval_stmt cx (For id typ it n body)) es
-Proof
-  cheat
-QED
 
 (* A loop over an array (#637 for, #559): the iterable is a variable
    holding a fixed array of the loop variable's type (supported_iterator),
