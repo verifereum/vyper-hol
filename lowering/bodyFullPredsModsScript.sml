@@ -1,7 +1,7 @@
 (* Full-body induction predicates for a linked contract and its active module. *)
 Theory bodyFullPredsMods
 Ancestors
-  bodyFullPreds bodyFullShadowBodyInv bodyInvSplit bodySimFull bodySim
+  bodyFullPreds bodyFullPostsMods bodyFullShadowBodyInv bodyInvSplit bodySim
   exprSimHypsDefs exprSimMapDefs supportedStmts supportedProgram
   supportedExprTraverse allocLimits placeTypingProps compileEnv exprLowering
   gasShadow gasContext vyperInterpreter vyperTypeSystem vyperTypeCallGraph
@@ -17,9 +17,9 @@ Definition body_expr_full_ok_mods_def[nocompute]:
       module_body_inv mods src tops cenv cx /\
       shadow_body_inv_mods mods exps ctx shadow_ctx /\
       expr_body_pre_mods mods cenv cx env e es ==>
-      expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      expr_sim_full_mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty e es /\
-      expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      expr_vv_sim_full_mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty e es) /\
     (!a t n elems.
       e = Builtin a (MakeArray t n) elems /\
@@ -31,7 +31,7 @@ Definition body_expr_full_ok_mods_def[nocompute]:
       module_body_inv mods src tops cenv cx /\
       shadow_body_inv_mods mods exps ctx shadow_ctx /\
       expr_map_pre_mods mods cenv cx env e es ==>
-      expr_map_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      expr_map_sim_full_mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty e es)) /\
   body_exprs_full_ok_mods mods exps cx [] = T /\
   body_exprs_full_ok_mods mods exps cx (e::es) =
@@ -61,9 +61,9 @@ Definition body_stmt_full_ok_mods_def[nocompute]:
       locals_alloc_ok cenv env /\
       type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\
       call_evaluation_safe cx (int_calls_stmt s) /\
-      frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cx RetQ cenv ret_ty ==>
-      stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      stmt_frag_full_mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cx lctx RetQ cenv
         (stmt_env cenv lctx ret_ty s)
         (stmt_env cenv lctx ret_ty (gas_shadow_stmt s))
@@ -86,9 +86,9 @@ Definition body_stmts_full_ok_mods_def[nocompute]:
       type_stmts env ret_ty ss = SOME env' /\
       stmts_exprs_ok cenv ss /\
       call_evaluation_safe cx (int_calls_stmts ss) /\
-      frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cx RetQ cenv ret_ty ==>
-      stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      stmt_frag_full_mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cx lctx RetQ cenv
         (stmts_env cenv lctx ret_ty ss)
         (stmts_env cenv lctx ret_ty (MAP gas_shadow_stmt ss))

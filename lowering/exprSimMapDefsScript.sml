@@ -73,6 +73,7 @@ Definition expr_map_pre_mods_def[nocompute]:
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
     ~supported_expr_exists (const_name_root_mods mods) e /\
+    ~supported_expr_exists (unallocated_bare_global_root cenv env) e /\
     EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
                       supported_program tops /\
                       IS_SOME (supported_function_decl tops (NONE,SND c) Internal))

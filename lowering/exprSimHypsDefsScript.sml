@@ -98,6 +98,13 @@ Definition const_name_root_mods_def[nocompute]:
   const_name_root_mods mods _ = F
 End
 
+Definition unallocated_bare_global_root_def[nocompute]:
+  unallocated_bare_global_root cenv env (TopLevelName ty nsid) =
+    (IS_SOME (FLOOKUP env.bare_globals nsid) /\
+     FLOOKUP cenv.ce_module_vars nsid = NONE) /\
+  unallocated_bare_global_root cenv env _ = F
+End
+
 Theorem const_name_root_mods_singleton:
   const_name_root_mods [(NONE,cx_tops cx)] = const_name_root cx
 Proof
@@ -156,7 +163,7 @@ Definition expr_sim_inv_mods_def[nocompute]:
        (~cx_const_name_mods mods (src,id) \/
         IS_SOME (FLOOKUP env.bare_global_assignable (src,id))) ==>
        (src = env.current_src ==> src = cenv.ce_module) /\
-       (src = cenv.ce_module \/ IS_SOME (FLOOKUP cenv.ce_module_vars (src,id)) ==>
+       (IS_SOME (FLOOKUP cenv.ce_module_vars (src,id)) ==>
         ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
               !tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
                    off + type_memory_size tv < dimword (:256))) /\
@@ -171,7 +178,8 @@ Definition expr_sim_inv_split_def[nocompute]:
     (!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\
        (~cx_const_name cx (src,id) \/
         IS_SOME (FLOOKUP env.bare_global_assignable (src,id))) ==>
-       src = cenv.ce_module)
+       src = cenv.ce_module /\
+       IS_SOME (FLOOKUP cenv.ce_module_vars (src,id)))
 End
 
 Theorem expr_sim_inv_def:
@@ -323,6 +331,7 @@ Definition expr_body_pre_mods_def[nocompute]:
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
     ~supported_expr_exists (const_name_root_mods mods) e /\
+    ~supported_expr_exists (unallocated_bare_global_root cenv env) e /\
     EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
                       supported_program tops /\
                       IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
