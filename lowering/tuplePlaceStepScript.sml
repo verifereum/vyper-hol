@@ -1,6 +1,7 @@
 (* Consume store frames at the single correctness endpoint. *)
 Theory tuplePlaceStep
 Ancestors
+  vyperEvalExprPreservesScopesDom
   tuplePlaceHeadAdvance vyperScopePreservation vyperPlaceFrames vyperPlaceTyping
   vyperStorageBackend
 Libs horizonTypeLib
@@ -50,11 +51,18 @@ Proof
   metis_tac[]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem tuple_place_pointer_store_alloca_frame:
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
+  valid_horizon cx st0 H ee.storage_trace /\
+  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
+  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
+  alloca_frame cenv ee sa s cenv ff t ==>
+  alloca_frame cenv es sp s0 cenv ff t
 Proof
   strip_tac >>
   `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
-    (drule_all tuplePlaceBorrowTheory.tuple_place_supported_target_scopes >> simp[]) >>
+    metis_tac[eval_base_place_preserves_scopes_dom] >>
   `valid_horizon cx st0 H es.storage_trace` by
     (irule (INST_TYPE [alpha |-> ``:eval_result``]
               vyperStorageFootprintTheory.valid_horizon_frame) >>
@@ -74,18 +82,6 @@ Proof
   qpat_assum `alloca_frame _ _ _ _ _ ff t` (irule_at Any) >>
   qpat_assum `alloca_frame _ _ _ _ _ ee s` (irule_at Any) >>
   fs[exprLoweringPropsTheory.ci_mono_def, loweringPostsTheory.target_post_def]
-QED
-*)
-Theorem tuple_place_pointer_store_alloca_frame:
-  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
-  valid_horizon cx st0 H ee.storage_trace /\
-  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
-  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
-  compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
-  alloca_frame cenv ee sa s cenv ff t ==>
-  alloca_frame cenv es sp s0 cenv ff t
-Proof
-  cheat
 QED
 
 Theorem tuple_place_head_advance_some:
@@ -215,36 +211,6 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `ci_mono sp sa` by
-    (qspec_then `bt` mp_tac stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr >>
-     disch_then (qspecl_then [`cenv`, `sp`] mp_tac) >> simp[]) >>
-  `sp.cs_next_var <= sa.cs_next_var /\ sp.cs_next_id <= sa.cs_next_id /\
-   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id` by
-    gvs[exprLoweringPropsTheory.ci_mono_def] >>
-  `MAP FDOM es.scopes = MAP FDOM ff.scopes` by
-    (drule_all tuplePlaceBorrowTheory.tuple_place_supported_target_scopes >> strip_tac >>
-     drule vyperScopePreservationTheory.write_place_scopes_dom >> simp[]) >>
-  `!x v. not_fresh_at sp x /\ lookup_var x s0 = SOME v ==>
-    lookup_var x t = SOME v` by
-    (rpt strip_tac >>
-     `not_fresh_at sa x` by metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-     fs[loweringPostsTheory.target_post_def]) >>
-  `!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
-    FLOOKUP t.vs_allocas aid = SOME entry` by
-    (fs[loweringPostsTheory.target_post_def] >> metis_tac[]) >>
-  `!n b sz. local_region cenv ff.scopes t n b sz <=>
-    local_region cenv es.scopes s0 n b sz` by
-    (drule tuplePlaceHeadTheory.tuple_place_head_witness >> strip_tac >>
-     fs[tuplePlaceHeadTheory.tuple_place_head_def] >>
-     drule_all tuple_place_endpoint_local_regions_some >> simp[]) >>
-  irule tuple_place_head_advance_some >>
-  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  simp[]
-QED
-*)
 Theorem tuple_place_pointer_head_advance:
   tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
@@ -266,7 +232,31 @@ Theorem tuple_place_pointer_head_advance:
       (w2n w + SUM (MAP type_memory_size (TAKE j ltvs))) t.vs_memory) ==>
   tuple_place_head ctx func cenv cx st0 ff lo sb tys ltys ltvs vs elems w (SUC i) t
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ci_mono sp sa` by
+    (qspec_then `bt` mp_tac stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr >>
+     disch_then (qspecl_then [`cenv`, `sp`] mp_tac) >> simp[]) >>
+  `sp.cs_next_var <= sa.cs_next_var /\ sp.cs_next_id <= sa.cs_next_id /\
+   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id` by
+    gvs[exprLoweringPropsTheory.ci_mono_def] >>
+  `MAP FDOM es.scopes = MAP FDOM ff.scopes` by
+    (metis_tac[eval_base_place_preserves_scopes_dom, write_place_scopes_dom]) >>
+  `!x v. not_fresh_at sp x /\ lookup_var x s0 = SOME v ==>
+    lookup_var x t = SOME v` by
+    (rpt strip_tac >>
+     `not_fresh_at sa x` by metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+     fs[loweringPostsTheory.target_post_def]) >>
+  `!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
+    FLOOKUP t.vs_allocas aid = SOME entry` by
+    (fs[loweringPostsTheory.target_post_def] >> metis_tac[]) >>
+  `!n b sz. local_region cenv ff.scopes t n b sz <=>
+    local_region cenv es.scopes s0 n b sz` by
+    (drule tuplePlaceHeadTheory.tuple_place_head_witness >> strip_tac >>
+     fs[tuplePlaceHeadTheory.tuple_place_head_def] >>
+     drule_all tuple_place_endpoint_local_regions_some >> simp[]) >>
+  irule tuple_place_head_advance_some >>
+  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[]
 QED
 
 Theorem tuple_place_equal_storage_head_step:

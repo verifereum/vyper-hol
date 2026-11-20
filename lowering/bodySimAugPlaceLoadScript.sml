@@ -1,5 +1,6 @@
 Theory bodySimAugPlaceLoad
 Ancestors
+  vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes vyperPlaceResultTyping
   bodySimAugPlaceLive bodySimAugPlaceScopes supportedTargets
   targetPlaceSim valueEncoding valueEncodingDefs valueEncodingProps
   vyperState vyperValue vyperMisc list pair finite_map words
@@ -108,13 +109,30 @@ Proof
   metis_tac[aug_place_lookup_typed]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem aug_place_entry_pop_step_typed[local]:
+  value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
+  entry_pop_step entry path final ==>
+  value_has_type final.type final.value /\ well_formed_type_value final.type
 Proof
-  rpt strip_tac >>
-  `s'.scopes = st.scopes` by metis_tac[aug_place_supported_expr_scopes] >>
-  gvs[] >> metis_tac[aug_place_target_entry_typed]
+  simp[entry_pop_step_def] >> rpt strip_tac >> gvs[] >>
+  fs[read_memory_path_def] >>
+  `?ptv. subscripts_type entry.type path = SOME ptv /\
+          value_has_type ptv live` by
+    metis_tac[evaluate_subscripts_declared_type_exists] >>
+  metis_tac[pop_element_preserves_type, assign_subscripts_replace_type_metadata]
 QED
-*)
+
+Theorem aug_place_entry_pop_trace_typed[local]:
+  !events entry final.
+    value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
+    entry_pop_trace entry events final ==>
+    value_has_type final.type final.value /\ well_formed_type_value final.type
+Proof
+  Induct >- simp[entry_pop_trace_def] >>
+  gen_tac >> PairCases_on `h` >> simp[entry_pop_trace_def] >>
+  metis_tac[aug_place_entry_pop_step_typed]
+QED
+
 Theorem aug_place_rhs_entry_typed:
   expr_sim_inv cenv cx env s /\
   supported_target_info tops bindings t = SOME info /\
@@ -123,7 +141,22 @@ Theorem aug_place_rhs_entry_typed:
   lookup_scopes id s'.scopes = SOME entry ==>
   value_has_type entry.type entry.value /\ well_formed_type_value entry.type
 Proof
-  cheat
+  disch_then strip_assume_tac >>
+  `?before. scope_pop_trace s.scopes before st.scopes` by
+    metis_tac[eval_mutual_scope_pop_effect, scope_pop_effect_def] >>
+  `?after. scope_pop_trace st.scopes after s'.scopes` by
+    metis_tac[eval_mutual_scope_pop_effect, scope_pop_effect_def] >>
+  `scope_pop_trace s.scopes (before ++ after) s'.scopes` by
+    metis_tac[scope_pop_trace_append] >>
+  `MAP FDOM s'.scopes = MAP FDOM s.scopes` by
+    metis_tac[scope_pop_trace_scopes_dom] >>
+  Cases_on `lookup_scopes id s.scopes`
+  >- metis_tac[lookup_scopes_none_map_fdom, optionTheory.NOT_SOME_NONE] >>
+  rename1 `lookup_scopes id s.scopes = SOME prior` >>
+  drule_all (Q.SPECL [`before ++ after`,`s.scopes`,`s'.scopes`,`id`,`prior`] scope_pop_trace_lookup) >>
+  strip_tac >> gvs[] >>
+  fs[expr_sim_inv_def, state_well_typed_def] >>
+  metis_tac[aug_place_lookup_typed, aug_place_entry_pop_trace_typed]
 QED
 
 Theorem aug_place_fields_project:
