@@ -293,10 +293,19 @@ Proof
   >- (qpat_x_assum `t = _` kall_tac >>
       qpat_x_assum `write_memory_with_expansion _ _ _ = _` kall_tac >>
       Cases_on `stat` >> Cases_on `cx.txn.is_static` >> gvs[] >>
-      pure_once_rewrite_tac[step_inst_base_def] >>
-      asm_rewrite_tac[] >> pure_rewrite_tac[opcode_case_def] >>
-      asm_simp_tac bool_ss
-        [list_case_def, pair_case_def, optionTheory.option_case_def]) >>
+      qpat_assum `inst.inst_opcode = _` (fn opcode =>
+        let
+          val rule = valOf (get_first (fn clause => total (MATCH_MP clause) opcode)
+            (CONJUNCTS step_inst_base_opcode_eqs))
+        in
+          PURE_ONCE_REWRITE_TAC [rule]
+        end) >>
+      qpat_assum `inst.inst_operands = _`
+        (fn th => PURE_ONCE_REWRITE_TAC [th]) >>
+      simp_tac bool_ss [list_case_def] >>
+      FILTER_ASM_REWRITE_TAC (can (match_term ``eval_operand _ _ = SOME _``)) [] >>
+      simp_tac bool_ss [pair_case_def, optionTheory.option_case_def] >>
+      asm_rewrite_tac[]) >>
   conj_tac >- (first_x_assum irule >> simp[NoAsms] >>
                conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -377,54 +386,7 @@ Proof
   gvs[ci_mono_def]
 QED
 
-Theorem raw_call_finish_static_abort:
-  compile_raw_call_finish aop dp dl gop vop RegularCall n rev ov op sa =
-    (result,sb) /\ s.vs_call_ctx.cc_static /\
-  eval_operand gop s = SOME gas /\ eval_operand aop s = SOME aw /\
-  eval_operand vop s = SOME vw /\ vw <> 0w /\
-  eval_operand dp s = SOME ip /\ eval_operand dl s = SOME iz /\
-  eval_operand op s = SOME rp ==>
-  frag_path ctx sa sb (\u. u = s) Q
-    (\r. ?t. r = Abort ExHalt_abort t)
-Proof
-  strip_tac >> drule raw_call_finish_prefix >> strip_tac >> gvs[] >>
-  `cs_extends sa sc` by
-    (drule emit_op_extends >> simp[same_blocks_def] >> strip_tac >>
-     irule cs_extends_same_block >> simp[rich_listTheory.IS_PREFIX_APPEND]) >>
-  irule frag_path_exit_prefix >> qexists_tac `sc` >> simp[] >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  drule emit_op_extends >> strip_tac >>
-  irule frag_path_run_inst_seq >>
-  fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
-  simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >> gvs[] >>
-  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]
-QED
 
-Theorem raw_call_finish_exhausted:
-  compile_raw_call_finish aop dp dl gop vop call_ty n rev ov op sa =
-    (result,sb) /\ s.vs_outcomes = [] /\
-  eval_operand gop s = SOME gas /\ eval_operand aop s = SOME aw /\
-  eval_operand vop s = SOME vw /\
-  eval_operand dp s = SOME ip /\ eval_operand dl s = SOME iz /\
-  eval_operand op s = SOME rp ==>
-  frag_path ctx sa sb (\u. u = s) Q
-    (\r. ?t. r = Abort ExHalt_abort t)
-Proof
-  strip_tac >> drule raw_call_finish_prefix >> strip_tac >>
-  Cases_on `call_ty` >> gvs[] >>
-  `cs_extends sa sc` by
-    (drule emit_op_extends >> simp[same_blocks_def] >> strip_tac >>
-     irule cs_extends_same_block >> simp[rich_listTheory.IS_PREFIX_APPEND]) >>
-  irule frag_path_exit_prefix >> qexists_tac `sc` >> simp[] >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  drule emit_op_extends >> strip_tac >>
-  irule frag_path_run_inst_seq >>
-  fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
-  simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >> gvs[] >>
-  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
-       eval_operand_def, exec_ext_call_def, exec_delegatecall_def] >>
-  Cases_on `s.vs_call_ctx.cc_static /\ vw <> 0w` >> simp[]
-QED
 
 Theorem raw_call_exhausted:
   (cx.txn.is_static ==> amount = 0) /\ ~flags.rcf_is_delegate /\
@@ -505,124 +467,6 @@ Proof
     (write_memory_with_expansion (w2n pw) s.vs_returndata a))` >>
   conj_tac >- (gvs[run_inst_seq_def]) >>
   simp[revert_state_def, set_returndata_def]
-QED
-
-Theorem raw_call_revert_frag:
-  !ctx sa sz sp sc sb zop rb P R.
-    emit_op RETURNDATASIZE [] sa = (zop,sz) /\
-    compile_alloc_buffer 0 sz = (rb,sp) /\
-    emit_void RETURNDATACOPY [rb.buf_operand;Lit 0w;zop] sp = ((),sc) /\
-    emit_inst REVERT [rb.buf_operand;zop] [] sc = ((),sb) /\
-    (!s. P s ==> LENGTH s.vs_returndata < dimword (:256) /\
-       !t. t.vs_returndata = s.vs_returndata ==> R (Abort Revert_abort t)) ==>
-    frag_path ctx sa sb P (\s. F) R
-Proof
-  rpt gen_tac >>
-  simp[compile_alloc_buffer_def, emit_op_def, emit_void_def, emit_inst_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_var_def, fresh_id_def, emit_def] >>
-  strip_tac >> gvs[] >>
-  irule frag_path_abort_suffix >> simp[] >>
-  reverse conj_tac
-  >- simp[rich_listTheory.IS_PREFIX_APPEND, GSYM APPEND_ASSOC] >>
-  qexistsl_tac
-    [`mk_inst (sa.cs_next_id + 3) REVERT
-        [Var (STRING #"%" (toString (sa.cs_next_var + 1)));
-         Var (STRING #"%" (toString sa.cs_next_var))] []`,
-     `[mk_inst sa.cs_next_id RETURNDATASIZE []
-         [STRING #"%" (toString sa.cs_next_var)];
-       mk_inst (sa.cs_next_id + 1) ALLOCA [Lit 0w]
-         [STRING #"%" (toString (sa.cs_next_var + 1))];
-       mk_inst (sa.cs_next_id + 2) RETURNDATACOPY
-         [Var (STRING #"%" (toString (sa.cs_next_var + 1)));Lit 0w;
-          Var (STRING #"%" (toString sa.cs_next_var))] []]`] >>
-  simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
-       mk_inst_def, is_terminator_def] >>
-  rpt strip_tac >> first_x_assum drule >> strip_tac >>
-  qspecl_then [`s`,`STRING #"%" (toString sa.cs_next_var)`,
-    `STRING #"%" (toString (sa.cs_next_var + 1))`,
-    `sa.cs_next_id`,`sa.cs_next_id + 1`,`sa.cs_next_id + 2`,`sa.cs_next_id + 3`]
-    mp_tac raw_call_revert_run >>
-  simp[ASCIInumbersTheory.toString_11] >> strip_tac >>
-  qexistsl_tac [`Revert_abort`,`t`] >> fs[mk_inst_def]
-QED
-
-(* A common branch-entry boundary for both call outcomes. *)
-Theorem raw_call_jnz_frag[local]:
-  !ctx sa sx sf sk sb cond ok fl x s Q R.
-    emit_inst JNZ [cond;Label ok;Label fl] [] sa = ((),sx) /\
-    new_block fl sx = (x,sf) /\
-    cs_extends sf sk /\ cs_extends sk sb /\
-    sk.cs_current_insts = [] /\
-    step_inst_base (mk_inst sa.cs_next_id JNZ [cond;Label ok;Label fl] []) s =
-      OK (jump_to sk.cs_current_bb s) /\
-    frag_path ctx sk sb (\u. u = jump_to sk.cs_current_bb s) Q R ==>
-    frag_path ctx sa sb (\u. u = s) Q R
-Proof
-  rpt gen_tac >> strip_tac >>
-  `cs_extends sa sx /\ cs_extends sx sf` by
-    metis_tac[cs_appends_emit_helpers, cs_appends_def, cs_extends_new_block] >>
-  imp_res_tac emit_inst_extends >>
-  PURE_REWRITE_TAC[frag_path_def] >> BETA_TAC >> rpt strip_tac >> gvs[] >>
-  `fn_has_code sx sf fn` by
-    (irule fn_has_code_mid >> simp[] >> qexistsl_tac [`sb`,`sa`] >>
-     simp[] >> metis_tac[cs_extends_trans]) >>
-  `fn_has_code sk sb fn` by
-    (irule fn_has_code_mid >> simp[] >> qexistsl_tac [`sb`,`sa`] >>
-     simp[cs_extends_refl] >>
-     irule cs_extends_trans >> qexists_tac `sx` >> simp[] >>
-     irule cs_extends_trans >> qexists_tac `sf` >> simp[]) >>
-  qabbrev_tac `j = mk_inst sa.cs_next_id JNZ [cond;Label ok;Label fl] []` >>
-  qabbrev_tac `bb = <|bb_label := sx.cs_current_bb;
-                       bb_instructions := sx.cs_current_insts|>` >>
-  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
-    (simp[Abbr `bb`] >> metis_tac[fn_has_code_new_block]) >>
-  `get_instruction bb s.vs_inst_idx = SOME j` by
-    simp[Abbr `bb`, Abbr `j`, get_instruction_def, rich_listTheory.EL_LENGTH_APPEND] >>
-  `is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
-   step_inst_base j s = OK (jump_to sk.cs_current_bb s)` by
-    simp[Abbr `j`, mk_inst_def, is_terminator_def] >>
-  drule_at (Pat `frag_path _ _ _ _ _ _`) frag_path_enter >>
-  disch_then (qspecl_then [`fn`,`s`,`bb`,`j`] mp_tac) >> simp[]
-QED
-
-Theorem raw_call_failed_jnz_frag:
-  !ctx sa sx sf se sb cond ok fl x s R.
-    emit_inst JNZ [cond;Label ok;Label fl] [] sa = ((),sx) /\
-    new_block fl sx = (x,sf) /\
-    cs_extends sf se /\ cs_extends se sb /\
-    eval_operand cond s = SOME 0w /\
-    frag_path ctx sf se (\u. u = jump_to fl s) (\u. F) R ==>
-    frag_path ctx sa sb (\u. u = s) (\u. F) R
-Proof
-  rpt strip_tac >>
-  `sf.cs_current_bb = fl /\ sf.cs_current_insts = []` by
-    gvs[new_block_def, comp_bind_def, comp_get_def, comp_set_def, comp_return_def] >>
-  `frag_path ctx sf sb (\u. u = jump_to fl s) (\u. F) R` by
-    (irule frag_path_exit_prefix >> goal_assum (drule_at Any) >> simp[]) >>
-  irule raw_call_jnz_frag >>
-  qexistsl_tac [`cond`, `fl`, `ok`, `sf`, `sf`, `sx`, `x`] >>
-  simp[cs_extends_refl, step_inst_base_def, mk_inst_def] >>
-  metis_tac[cs_extends_trans]
-QED
-
-Theorem raw_call_success_jnz_frag[local]:
-  !ctx sa sx sf se sk sb cond ok fl x y s Q R.
-    emit_inst JNZ [cond;Label ok;Label fl] [] sa = ((),sx) /\
-    new_block fl sx = (x,sf) /\ cs_extends sf se /\
-    new_block ok se = (y,sk) /\ cs_extends sk sb /\
-    eval_operand cond s = SOME 1w /\
-    frag_path ctx sk sb (\u. u = jump_to ok s) Q R ==>
-    frag_path ctx sa sb (\u. u = s) Q R
-Proof
-  rpt strip_tac >>
-  `sk.cs_current_bb = ok /\ sk.cs_current_insts = []` by
-    gvs[new_block_def, comp_bind_def, comp_get_def, comp_set_def, comp_return_def] >>
-  `cs_extends se sk` by metis_tac[cs_extends_new_block] >>
-  irule raw_call_jnz_frag >>
-  qexistsl_tac [`cond`, `fl`, `ok`, `sf`, `sk`, `sx`, `x`] >>
-  simp[step_inst_base_def, mk_inst_def] >>
-  irule cs_extends_trans >> qexists_tac `se` >> simp[]
 QED
 
 Theorem raw_call_size_run[local]:
@@ -882,22 +726,6 @@ Proof
   drule_all raw_call_outbuf_wb_frame >> simp[]
 QED
 
-Theorem calldata_outbuf_operands:
-  compile_raw_call_outbuf n sa = ((valop,ptrop),sb) ==>
-  exprSafeOperand$safe_operand sb valop /\
-  exprSafeOperand$safe_operand sb ptrop
-Proof
-  strip_tac >>
-  `exprSafeOperand$safe_operand sb valop` by
-    (simp[exprSafeOperandTheory.safe_operand_def] >> conj_tac
-     >- metis_tac[exprOperandVarTheory.compiler_raw_call_outbuf_var] >>
-     drule rawCallOutbufCompileTheory.calldata_outbuf_compile >> strip_tac >>
-     metis_tac[exprSafeOperandTheory.alloc_buffer_not_label]) >>
-  simp[] >> drule rawCallOutbufCompileTheory.calldata_outbuf_compile >>
-  strip_tac >> Cases_on `n = 0`
-  >- gvs[] >>
-  gvs[] >> metis_tac[exprSafeOperandTheory.emit_op_safe_operand]
-QED
 
 Theorem raw_call_eval_vars_ext[local]:
   vars_ext s t /\ eval_operand p s = SOME w ==> eval_operand p t = SOME w
@@ -1144,40 +972,6 @@ Proof
   simp[wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def, local_region_def]
 QED
 
-(* The branch boundary is independent of the origin of the input bytes and
-   of the success continuation's chosen value representation. *)
-Theorem raw_call_finish_branch_guarded_frag:
-  !ctx sa sx sf sz sp sc se sk sb cond ok fl x y z rb s success Q R.
-    emit_inst JNZ [cond;Label ok;Label fl] [] sa = ((),sx) /\
-    new_block fl sx = (x,sf) /\
-    emit_op RETURNDATASIZE [] sf = (z,sz) /\
-    compile_alloc_buffer 0 sz = (rb,sp) /\
-    emit_void RETURNDATACOPY [rb.buf_operand;Lit 0w;z] sp = ((),sc) /\
-    emit_inst REVERT [rb.buf_operand;z] [] sc = ((),se) /\
-    new_block ok se = (y,sk) /\
-    cs_extends sf se /\ cs_extends sk sb /\
-    eval_operand cond s = SOME (if success then 1w else 0w) /\
-    LENGTH s.vs_returndata < dimword (:256) /\
-    (~success ==> !t. t.vs_returndata = s.vs_returndata ==> R (Abort Revert_abort t)) /\
-    (success ==> frag_path ctx sk sb (\u. u = jump_to ok s) Q R) ==>
-    frag_path ctx sa sb (\u. u = s) Q R
-Proof
-  rpt gen_tac >> strip_tac >> Cases_on `success`
-  >- (gvs[] >> drule_all raw_call_success_jnz_frag >> simp[])
-  >> gvs[] >>
-  `cs_extends se sk` by metis_tac[cs_extends_new_block] >>
-  `cs_extends se sb` by metis_tac[cs_extends_trans] >>
-  `frag_path ctx sf se (\u. u = jump_to fl s) (\u. F) R` by
-    (irule raw_call_revert_frag >> conj_tac
-     >- (rpt strip_tac >> gvs[jump_to_def]) >>
-     goal_assum (drule_at (Pat `emit_op RETURNDATASIZE _ _ = _`)) >>
-     rpt (goal_assum (drule_at Any)) >> simp[]) >>
-  irule frag_path_conseq >>
-  qexistsl_tac [`\u. u = s`, `\u. F`, `R`] >> simp[] >>
-  drule_all raw_call_failed_jnz_frag >> simp[]
-QED
-
-
 (* The non-reverting result is an inline pair, not a pair of pointers.
    Padding in the bytes buffer is irrelevant to this representation. *)
 Theorem raw_call_tuple_memory[local]:
@@ -1231,14 +1025,6 @@ Proof
   irule raw_call_tuple_copy >> simp[]
 QED
 
-Theorem raw_call_bool_result:
-  ~flags.rcf_revert_on_failure /\ flags.rcf_max_outsize = 0 /\
-  eval_operand op s = SOME (if success then 1w else 0w) ==>
-  expr_val_rel cx (raw_call_return_type flags) (BoolV success) op s
-Proof
-  simp[raw_call_return_type_def, expr_val_rel_def, is_word_type_def,
-       evaluate_type_def, typed_val_to_w256_def, val_to_w256_def]
-QED
 
 Theorem raw_call_tuple_result:
   ~flags.rcf_revert_on_failure /\ 0 < flags.rcf_max_outsize /\

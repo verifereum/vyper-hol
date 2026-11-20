@@ -1,7 +1,7 @@
 (* Sequential ABI arguments retain the conditional frame at the same endpoint. *)
 Theory bodyFullAbiEncodePureFrame
 Ancestors
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv bodyFullIfExpReach bodyFullHashKeccakFixed
   bodyFullAbiEncodeArgStep bodyFullAbiEncodeArgsFrame bodyFullAbiEncodeReadResources
   bodyFullAbiEncodeOutcomeFrame bodyFullAbiEncodeArgsPost
   bodyFullPreds abiEncodeArgsSim abiEncodeArgsCase gasOutcomeFullCompose
@@ -32,7 +32,9 @@ Theorem abi_encode_args_full_pure_frame_from_step:
   MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo ce cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!H. dead_lo_ok H (DF H) lo ce cx) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
@@ -80,7 +82,8 @@ Theorem abi_encode_args_full_pure_frame_from_step:
           w2n w + type_memory_size tv <= t.vs_alloca_next /\
           (!name b sz. local_region ce es.scopes s0 name b sz ==>
             b+sz <= w2n w \/ w2n w+type_memory_size tv <= b)))
-    (\H rr ee gt r. expr_exit rr r /\ halt_exit H cx ee rr r)) ==>
+    (\H rr ee gt r. expr_exit rr r /\ halt_exit H cx ee rr r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))) ==>
   !args cx tops ctx ce Inv env es sa ops sb shadow_sa shadow_sb shadow_ctx
     func shadow_func DF lo PG d st0 s0 G0 tn0.
   body_exprs_full_ok cx args /\ body_inv tops ctx ce cx /\
@@ -99,7 +102,9 @@ Theorem abi_encode_args_full_pure_frame_from_step:
   MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo ce cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!H. dead_lo_ok H (DF H) lo ce cx) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d ce sa s0 /\ alloca_history func s0 /\
@@ -138,7 +143,8 @@ Theorem abi_encode_args_full_pure_frame_from_step:
       EVERY (\op. !x. op = Var x ==> not_fresh_at sb x) ops /\
       Inv ee /\ MAP FDOM ee.scopes = MAP FDOM es.scopes) /\
       (~EXISTS expr_has_effect args ==> pure_frame ce func es sa s0 t))
-    (\H rr ee gt r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
+    (\H rr ee gt r. wb_args_exit rr r /\ halt_exit H cx ee rr r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   disch_then (mk_asm "step") >>
   Induct_on `args` >- suspend "nil" >>
@@ -224,6 +230,24 @@ Resume abi_encode_args_full_pure_frame_from_step[cons]:
     (irule expr_body_pre_gas_admissible >> goal_assum (drule_at Any)) >>
   asm "step" drule_all >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ headQ headR` >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (qpat_assum `body_inv _ ctx _ cx` (fn inv =>
+       qpat_assum `MEM func ctx.ctx_functions` (fn member =>
+         ACCEPT_TAC (MATCH_MP body_inv_no_phi (CONJ inv member))))) >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (bind (eval_expr cx h) (read_result cx)) (es,s0,G0,tn0)
+     (\H rr ee G tn u. headQ H rr ee G tn u /\
+       (!fn inst s. frag_reachable ctx func u fn inst s ==> dalloca_no_wrap inst s)) headR` by
+    (irule gas_outcome_full_post_path >>
+     qpat_assum `!PG. gas_outcome_full _ _ _ _ _ _ headQ headR`
+       (qspec_then `PG` (irule_at Any)) >>
+     rpt gen_tac >> strip_tac >> BETA_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK _,_,_)` (fn path =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
+       qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _` (fn safe =>
+         ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+           (LIST_CONJ [path,no_phi,safe])))))) >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ pathQ headR` >>
   rewrite_tac[eval_exprs_cons_action] >>
   irule gas_outcome_full_bind_all >> BETA_TAC >> rpt conj_tac
   >~ [`storage_trace_frame (bind (eval_expr _ _) _)`]
@@ -240,19 +264,27 @@ Resume abi_encode_args_full_pure_frame_from_step[cons]:
   >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
   >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_value >>
       first_assum ACCEPT_TAC) >>
-  qexists `headQ` >> conj_tac
+  qexists `pathQ` >> conj_tac
   >- suspend "tail_bind" >>
   irule gas_outcome_full_post_source >> first_assum (irule_at Any) >>
-  simp[Abbr `headR`] >> rpt strip_tac >>
-  qpat_x_assum `expr_exit res r` mp_tac >>
-  qpat_x_assum `halt_exit H cx ee res r` mp_tac >>
-  rpt (pop_assum kall_tac) >>
-  Cases_on `res` >> simp[wb_args_exit_def, exprSimDefsTheory.expr_exit_def] >>
-  simp[exprSimDefsTheory.halt_exit_def]
+  simp[Abbr `headR`] >> rpt gen_tac >> strip_tac >>
+  Cases_on `res` >> fs[wb_args_exit_def, exprSimDefsTheory.expr_exit_def,
+                        exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume abi_encode_args_full_pure_frame_from_step[tail_bind]:
   asm_x "step" kall_tac >> rpt gen_tac >> strip_tac >>
+  qunabbrev_tac `pathQ` >> RULE_ASSUM_TAC BETA_RULE >>
+  `!H. valid_horizon cx st0 H mid'.storage_trace ==> headQ H res mid' G1 tn1 t` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ _ _ ==> headQ _ _ _ _ _ _ /\ _`
+       (qspec_then `H` mp_tac) >> simp[]) >>
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+    (qpat_x_assum
+       `!H. valid_horizon cx st0 H mid'.storage_trace ==> headQ _ _ _ _ _ _ /\ _`
+       (qspec_then `storage_trace_horizon mid'.storage_trace` mp_tac) >>
+     fs[storage_trace_domain_def]) >>
+  qpat_x_assum `!H. valid_horizon _ _ _ _ ==> headQ _ _ _ _ _ _ /\ _` kall_tac >>
   `?v tv. res = INL v /\
     evaluate_type (get_tenv cx) (lowered_value_type ce h) = SOME tv` by
     (qpat_assum `!H. valid_horizon _ _ _ _ ==> headQ _ _ _ _ _ _`
@@ -295,6 +327,13 @@ Resume abi_encode_args_full_pure_frame_from_step[tail_bind]:
     (rpt strip_tac >>
      qpat_x_assum `!H. valid_horizon _ _ _ _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
        (qspec_then `H` mp_tac) >> simp[expr_post_def]) >>
+  `stmt_state_rel (storage_trace_horizon mid'.storage_trace) ctx func ce cx mid' t` by
+    (qpat_assum `!H. valid_horizon _ _ _ _ ==> stmt_state_rel _ _ _ _ _ mid' _ /\ _`
+       (qspec_then `storage_trace_horizon mid'.storage_trace` mp_tac) >>
+     fs[storage_trace_domain_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ mid' t`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   qpat_x_assum `!cx' tops' ctx' ce' Inv' env' es' sa' ops' sb' shadow_sa' shadow_sb' shadow_ctx' func' shadow_func' DF' lo' PG d' st0' s0' G0' tn0'. _`
     (drule_at (Pat `compile_abi_encode_args _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `return_buf_frame _ _ _ _`)) >>
@@ -572,7 +611,9 @@ Theorem abi_encode_args_full_pure_frame:
   MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo ce cx) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!H. dead_lo_ok H (DF H) lo ce cx) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d ce sa s0 /\ alloca_history func s0 /\
@@ -612,11 +653,12 @@ Theorem abi_encode_args_full_pure_frame:
       Inv ee /\ MAP FDOM ee.scopes = MAP FDOM es.scopes) /\
       (~expr_has_effect (TypeBuiltin ann (AbiEncode ensure mid) ty args) ==>
         pure_frame ce func es sa s0 t))
-    (\H rr ee gt r. wb_args_exit rr r /\ halt_exit H cx ee rr r)
+    (\H rr ee gt r. wb_args_exit rr r /\ halt_exit H cx ee rr r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   pure_rewrite_tac [cj 10 expr_has_effect_thm] >>
   match_mp_tac abi_encode_args_full_pure_frame_from_step >>
-  rpt gen_tac >> MATCH_ACCEPT_TAC abi_encode_arg_step_full
+  rpt gen_tac >> strip_tac >> drule_all abi_encode_arg_step_full >> simp[]
 QED
 
 (* The tuple region and the row below refer to the selected staging endpoint. *)

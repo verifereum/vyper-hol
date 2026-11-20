@@ -210,6 +210,8 @@ Definition lowered_value_type_def:
     BaseT (StringT (LENGTH s)) ∧
   lowered_value_type cenv (Literal (BaseT (BytesT (Dynamic _))) (BytesL bs)) =
     BaseT (BytesT (Dynamic (LENGTH bs))) ∧
+  lowered_value_type cenv (Literal (BaseT (BytesT (Dynamic _))) (HexBytesL bs)) =
+    BaseT (BytesT (Dynamic (LENGTH bs))) ∧
   lowered_value_type cenv (Builtin ty (Concat _) args) =
     concat_buffer_type ty (SUM (MAP (concat_payload_capacity o expr_type) args)) ∧
   lowered_value_type cenv (TypeBuiltin _ (AbiEncode ensure method_id) _ args) =
@@ -711,8 +713,8 @@ End
 
 (* ===== Bytestring Hash ===== *)
 (* Get keccak256 hash for bytestring comparison.
-   For constant literals: hash is a compile-time literal.
-   For variables: runtime SHA3.
+   StringL and BytesL fold to a compile-time hash.
+   HexBytesL and variables use runtime SHA3.
    Mirrors Python: expr.py _get_bytestring_hash *)
 Definition bytestring_literal_hash_def:
   bytestring_literal_hash (Literal _ (StringL s)) =
@@ -1536,7 +1538,11 @@ Definition compile_literal_vv_def:
      | _ => (* fallback: use string length *)
          do buf <- compile_bytelike_literal (MAP (n2w o ORD) s) (LENGTH s);
             return (LocatedValue ty (base_ptr buf))
-         od)
+         od) ∧
+  compile_literal_vv ty (HexBytesL bs) =
+    do buf <- compile_bytelike_literal bs (LENGTH bs);
+       return (LocatedValue ty (base_ptr buf))
+    od
 End
 
 (* ===== Name (Variable Reference) ===== *)

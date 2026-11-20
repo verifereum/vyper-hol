@@ -33,6 +33,8 @@ Ancestors
    and the bound holds of it all the same. *)
 Definition literal_alloc_ok_def:
   literal_alloc_ok (BytesL bs) = (32 + 32 * word_size (LENGTH bs) < 2 ** 64) /\
+  literal_alloc_ok (HexBytesL bs) =
+    (32 + 32 * word_size (LENGTH bs) < 2 ** 64) /\
   literal_alloc_ok (StringL str) =
     (32 + 32 * word_size (LENGTH str) < 2 ** 64) /\
   literal_alloc_ok _ = T

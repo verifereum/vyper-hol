@@ -44,6 +44,7 @@ Proof
       disch_then (qspec_then `PG` ACCEPT_TAC))
   >- (rpt gen_tac >> disch_tac >> rpt gen_tac >> disch_tac >> rpt gen_tac >>
       disch_then (map_every assume_tac o CONJUNCTS) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
       drule_all abi_valid_allocated_bytes_joint_observations >>
       disch_then (qspec_then `PG` ACCEPT_TAC))
   >- MATCH_ACCEPT_TAC (GEN_ALL (BETA_RULE abi_valid_allocated_joint_tuple))

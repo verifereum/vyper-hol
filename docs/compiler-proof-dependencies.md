@@ -30,6 +30,11 @@ and exact bytecode equality are not semantic stage correctness.
 
 ## Exact O1 runtime dependency graph
 
+This is the Milestone 1 graph, for the identity finalizer `K SOME`. Today's
+`vyper_call_correct` has eight public premises (table below); its proof cases
+on calldata dispatch and then on the finalizer (`vyper_call_correct_guarded`,
+`vyper_call_correct_dispatched`).
+
 ```text
 compile_vyper (K SOME) succeeds
   -> L1 actual rpolicy/raw unit/O1 out/assembly prog/plan cp
@@ -46,13 +51,14 @@ non-exempt branch:
   S7, using SAME Inv -> frame-aware EVM correspondence/resource alternatives
 
 clean generic e2e_vyper_to_evm (explicit stage premises, zero admission leaves)
-  -> vyper_call_correct (seven public premises; inherits exactly S1-S7)
+  -> vyper_call_correct (seven public premises at Milestone 1; inherits exactly S1-S7)
 exempt branch: actual total run + exact decoder exemption, not invented safety
 ```
 
 The compiler is the actual `run_venom_pipeline ... o1_pipeline_spec`, not an
 arbitrary mandatory-pass surrogate, a legacy pass pipeline, or an O2/O3 claim.
-The finalizer is identity `K SOME`; no `finalizer_correct` assumption remains.
+The finalizer `fin` is in `accepted_finalizers`: identity `K SOME` or
+`asm_opt_finalizer`. No `finalizer_correct` assumption remains.
 Memory/shape/policy/labels/initial state are **not extra public hypotheses**.
 
 ## All public hypotheses and producers
@@ -63,34 +69,35 @@ preserves its historical schema.
 
 | Hypothesis | Class | Current producer / absence |
 |---|---|---|
-| compiler returns `(deploy_bc,runtime_bc)` | boundary | Caller supplies success; L1 extracts raw phases and exact assembled runtime bytes. No universal success producer. |
+| `fin IN accepted_finalizers`, `compile_vyper fin policy tops = SOME (deploy_bc,runtime_bc)` | boundary | Caller supplies success; L1 (`compile_vyper_runtime_phases`, `K SOME`) or `compile_vyper_runtime_phases_asm_opt` extracts raw phases and the exact assembled runtime bytes (`assemble prog'` of the optimized `prog'` for `asm_opt_finalizer`). No universal success producer. |
 | `supported_program tops` | computational boundary | Plain EVAL on concrete `tops`; exact whitelist on `tops` alone. No universal membership, typing or semantic correctness producer. |
 | `source_typing_ok tops am tx` | boundary + environmental | Checker artifact; partial `load_contract_establishes_checked_contract_runtime_ready`, `load_contract_establishes_machine_well_typed`, `checked_call_external_preserves_machine_well_typed`. No complete arbitrary-environment producer. |
-| `source_storage_ok tops am tx` | environmental/layout/hash guard | Conditional `eval_stmt_preserves_contract_storage_well_formed` family and `take_adopt_call_outcome_storage_suffix`. No complete deployment/transaction producer; Milestone 7. |
+| `storage_ok H am tx`, `call_within H tops am tx es` | environmental storage horizon | The caller fixes the regions `H`. When calldata dispatch selects a function and the frame is not resource-starved, `call_result_rel H` gives `storage_ok H` again after the call. No producer of `call_within`, and no deployment/transaction producer of `storage_ok`. |
 | `call_state_rel tops runtime_bc am tx es` | environmental | No general producer or satisfiability theorem. L6/L8 **consume**, not produce, it; transaction corollary deferred to Milestone 7. |
-| `valid_vyper_call tops tx calldata ret` | environmental ABI/function boundary | No general producer. Exact External lookup/no fallback/no defaults, count, binding and encoded calldata supplied by caller. |
-| `call_outcomes_ok am tx (MAP SND (call_trace es))` | outcome-payload guard | `call_state_rel_call_outcomes_ok` from `call_state_rel`, and `deploy_state_rel_call_outcomes_ok` from `deploy_state_rel`. |
+| `LENGTH (call_trace es) < 2 ** 64` | environmental call-count bound | No producer. The frame's observed calls, computed precompiles included, number fewer than `2 ** 64`. |
 
 The [partial-producer detail](compiler-proof-status-2026-10-09.md#what-partial-producers-actually-establish)
 is part of this inventory: runtime readiness requires installed exact sources
 and ready immutables; deployment assumes initial typing, both checks/context/
 constants setup; call machine preservation assumes `checked_external_call_inputs_ready`.
-Storage preservation consumes runtime-storage consistency, protected-call,
-call-evaluation and oracle-storage premises. These are not universal producers.
+Storage preservation consumes `contract_storage_well_formed`, protected-call
+(`protected_storage_calls_preserve`) and oracle-storage (`oracle_storage_ok`)
+premises, or, in its finite-horizon form (`call_external_storage_well_formed_on`,
+`load_contract_storage_well_formed_on`), a `valid_horizon` over the actual
+trace. These are not universal producers.
 
-`call_outcomes_ok` requires return-data length `< 2**256` and
+`call_outcomes_ok`, which `call_state_rel_call_outcomes_ok` derives from
+`call_state_rel`, requires return-data length `< 2**256` and
 `accounts_runtime_well_typed co_accounts` on every record, including failed and
 static outcomes. `call_storage_ok` for runtime calls and `deploy_storage_ok`
 for constructors supply the separate finite-trace storage obligations over
 the regions and backends observed for the chosen gas readings.
 
-## S1–S7: current admitted producers
+## S1–S7: stage producers
 
-Each row except S1 is **ADMITTED**, a final statement/memo with future
-proof owner. S1 is proved from the entry bridge, `body_stmts_sim` and the
-halt bridge, and rests on the named admissions listed in
-`lowering/loweringRuntimeCorrectScript.sml` and on `body_stmts_sim`'s case
-admissions. Generic composition and each L1–L13 have none. See [source owners and receipt](compiler-proof-status-2026-10-09.md#built-logical-admission-path).
+Every row is proved: `holbuild check` reports each export below clean, with
+no admission in its closure. S1 is proved from the entry bridge, the joint
+body simulation (`bodySimFullMain.body_stmts_sim_full`) and the halt bridge. Generic composition and each L1–L13 have none. See the [Milestone 1 source owners and receipt](compiler-proof-status-2026-10-09.md#built-logical-admission-path).
 
 | ID | Saved export | Consumes / produces | Future owner |
 |---|---|---|---|
@@ -107,8 +114,8 @@ Pipeline result transport is success-observable preserving, forward and
 terminating; failed-run return bytes/general abort kind/requests may differ.
 Generated plan layout does not prove spill safety. Empty entry memory does not
 prove raw memory validity. Return-address uses and labels are constrained by
-output shape. Source gas observations in the result relation
-remain existential and are not tied to EVM readings.
+output shape. The result relation `call_result_rel` ties source gas
+observations to the EVM's readings through `gas_readings_rel`.
 
 ## Clean producers and composition
 
@@ -124,7 +131,8 @@ They are separately saved Hyp0/no-axiom/no-admission objects. In particular:
 - L9 `frameOutcome.frame_outcome_single_frame_run` consumes `frame_outcome`;
   it is not a derivation of that relation for arbitrary EVM runs.
 - `e2eCorrectness.e2e_vyper_to_evm` is clean generic composition with explicit
-  stage contracts; `vyper_call_correct` closes them with admitted S1–S7.
+  stage contracts; at Milestone 1, `vyper_call_correct` closed them with
+  admitted S1–S7. All seven are proved now.
 
 TASK056 full saved logical closures: top378/generic30 recorded nodes, no legacy,
 deployment or function-simulation dependencies. Source admission count is
@@ -170,8 +178,9 @@ target account in `es.originalAccounts`; success
 compares returned/installed `runtime_bc ++ section` satisfying `immutables_section_rel`,
 accounts modulo target code and dead storage, transient storage modulo dead
 target storage, and logs.
-`venomToAsmProps.gen_fn_simulation` is separately **ADMITTED**, Milestone 4.2,
-with internal-return/frame relations. Both are **off the runtime call path**.
+`venomToAsmProps.gen_fn_simulation` (Milestone 4.2, with internal-return/frame
+relations) is proved, and S7's `codegen_correct` uses it. The deployment
+theorem is **off the runtime call path**.
 
 The [completed retirement ledger](../lowering/e2eLegacy.md) maps all21 obsolete
 definitions/all14 claims to the new API, preserves exact original proof
@@ -190,5 +199,5 @@ local/targeted, not full final integration. TASK065 strict101/exact-byte proof i
 **historical only**. The subsequent [TASK060 exit report](compiler-proof-milestone-1-exit-2026-10-09.md)
 certifies the final project/optional/module closure, all selected generated
 results, all101 membership/strict bytecode objects, independent bytes and final
-documentation/dependency/admission checks. Later milestones must still prove
-the admitted stages and environment producers. See [evidence provenance](compiler-proof-status-2026-10-09.md#evidence-provenance-and-remaining-checkpoint-debt).
+documentation/dependency/admission checks. Later milestones have since proved
+the stages; the environment producers in the hypothesis table remain partial. See [evidence provenance](compiler-proof-status-2026-10-09.md#evidence-provenance-and-remaining-checkpoint-debt).

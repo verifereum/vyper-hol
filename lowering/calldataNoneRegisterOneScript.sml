@@ -36,6 +36,8 @@ Proof
   qabbrev_tac `u0 = tn with <|t_var := tn.t_var |+ (p,{});
       t_mem := tn.t_mem UNION {j | s.vs_alloca_next <= j /\
                                     j < s.vs_alloca_next+cap}|>` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
       (s,G,tn) [] (OK a,G0,u0)` by
     (drule_all default_bytes_alloc_origin >>
@@ -53,6 +55,7 @@ Proof
     (simp[Abbr `a`, update_var_def, allocas_from_def, FLOOKUP_UPDATE] >>
      rpt strip_tac >> Cases_on `st.cs_next_id = aid` >>
      gvs[allocas_from_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by simp[] >>
   drule_all default_bytes_address_joint >>
   disch_then (qspecl_then [`u0`,`PG`,`G0`] strip_assume_tac) >>
   suspend "guard"

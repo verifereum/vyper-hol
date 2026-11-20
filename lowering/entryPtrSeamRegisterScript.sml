@@ -1,12 +1,10 @@
 (*
- * Seam of external_entry_reaches_body_ptr (loweringPtrCorrect): the
- * selected external function's argument registration
+ * Entry seam: the selected external function's argument registration
  * (compile_register_positional_args: per parameter an ALLOCA buffer and
  * compile_decode_args from calldata into it), run from the state the entry
  * checks leave, reaches the guarded body's start s0 with
- *   - the S1 relation there (stmt_state_rel, as loweringRuntimeCorrect's
- *     admitted external_entry_reaches_body states it, here at the state the
- *     run actually reaches), and
+ *   - the S1 relation there (stmt_state_rel, at the state the run
+ *     actually reaches), and
  *   - a ghost (G0, tn0) in ghost_inv H NONE: each parameter's pointer covered
  *     by its ALLOCA and its value robust to the tainted bytes,
  * with safety of the run from s0 giving safety from the registration's
@@ -20,7 +18,7 @@ Ancestors allocaFrontierRoom allocaSiteResource compileAllocaProvenance
   decoderOriginAllocationFrame fragGasPathFrameMem
   memSafeRun unitTransformDefs codegenRel venomInstProofs
   fragGasOriginPtr fragGasOrigin fragGasSeqPtr fragGasSeqMem instMemFrontier ptrSafetyTransport decoderNavigationPtr decoderMemberPrefixPtr
-  sourceOwnedCoherentPtr sourceOwnedComplexPtr sourceOwnedArrayConstructorPtr decoderArrayInitPtr abiDecoderValidArray[qualified] actualDecoderAllocationPtr actualAllocaReplayPtr
+  sourceOwnedCoherentPtr sourceOwnedComplexPtr sourceOwnedArrayConstructorPtr decoderArrayInitPtr abiDecoderValidArray[qualified] actualDecoderAllocationPtr
   acceptedContextPhi sourceWordDecoderPtr sourceBytesRepresentation
   sourceEncodingWindows sourceEncodingLayout sourcePrimitiveMemberPtr sourcePrimitiveReentryPtr canonicalMemberTraversalPtr sourceRecursiveComplexPtr
   entryStateRel entryArgPtrs entryLocals registrationGuardPtr
@@ -4232,15 +4230,17 @@ QED
    it owns the caller side of the decoder contract.
    Hints (not binding):
    - Per argument, the decode is the is_prim word path (ADD, CALLDATALOAD,
-     clamp, MSTORE), the dynamic path (head offset load, ADD 4, then
+     clamp, MSTORE), the dynamic path (head offset load, ADD 4, the
+     pointer guard's ASSERT (compile_abi_arg_ptr_guard), then
      compile_abi_decode_to_buf) or the static path (ADD, then
-     compile_abi_decode_to_buf); for the latter two, entryPtrSeamDecoder's
-     calldata_scratch_decoder_ptr is the contract, at lower = 0.
-   - Its inputs (abi_scratch_decoder_input, abi_decoder_budget) come from
-     valid_vyper_call's calldata_encodes and bind_arguments; the ordinary
+     compile_abi_decode_to_buf); for the latter two,
+     sourceOwnedCoherentPtr's source_owned_coherent_decoder_ptr is the
+     contract.
+   - Its value and calldata premises (value_has_type, vyper_to_abi, the
+     encoding in the calldata) come from valid_vyper_call's
+     calldata_encodes and bind_arguments; the ordinary
      static-only precedent is entryStateRel's external_body_entry_state_rel
-     with entryArgPtrs' register_positional_args_local_ptrs, and the
-     memory-sourced builtin precedent is abiBuiltinValidCaller.
+     with entryArgPtrs' register_positional_args_local_ptrs.
    - Earlier parameters stay robust: each later decode writes only its own
      buffer and its scratch slots and leaves taint and provenance of older
      variables alone (the contract's frame conjuncts).

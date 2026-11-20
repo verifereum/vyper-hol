@@ -8,7 +8,7 @@ Ancestors
 
 (* At or before the request cut, a stopped check either leads into the
    certified static suffix or leaves an executable primitive terminal. *)
-Theorem request_cut_frontier_guards:
+Theorem request_cut_frontier_guards_reloc:
   cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
     (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 h8)
     (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 h9) /\
@@ -25,7 +25,8 @@ Theorem request_cut_frontier_guards:
   mem_inv (\ctx fn i s. LENGTH s.vs_requests <= k ==> lowered_mem_fact eom ctx fn i s) C7 v7 /\
   (guarded ==> code_end_offset_ok
     (\ctx fn i s. raw_reachable v7 ctx fn i s /\ LENGTH s.vs_requests <= k) C7) /\
-  codegen_asm_entry_rel cpl prog initial a0 /\
+  (!off. FLOOKUP lo "code_end" = SOME off ==>
+    FLOOKUP initial.vs_labels "code_end" = SOME (n2w off)) /\
   (inv_memory_observation inst8.inst_opcode /\ ~in_revert_forward fn8 s8 ==>
     ((?fn7 u ws. raw_reachable v7 C7 fn7 inst8 (u with vs_gas_readings := ws) /\
       ~in_revert_forward fn7 u /\ fn8 = dft_fn fn7 /\
@@ -41,7 +42,7 @@ Theorem request_cut_frontier_guards:
    (guarded /\ ?dst x sz src off.
      inst9.inst_opcode = CODECOPY /\ inst9.inst_operands = [dst; Var x; sz] /\
      code_end_var fn9 x /\ eval_operand (Var x) s9 = SOME src /\
-     FLOOKUP (SND (compute_label_offsets prog)) "code_end" = SOME off /\
+     FLOOKUP lo "code_end" = SOME off /\
      ~(w2n (src - n2w off) < dimword (:256) DIV 2))) ==>
   (inv_memory_observation inst9.inst_opcode /\ in_static_abort_prefix fn8 s8 /\
    !p d fn i t. ev_reachable orc initial C7 p d fn i t ==>
@@ -65,7 +66,7 @@ Proof
   disj2_tac >> simp[] >> metis_tac[MEM]
 QED
 
-Resume request_cut_frontier_guards[paired]:
+Resume request_cut_frontier_guards_reloc[paired]:
   `source_memory_reads_disjoint cpl inst9 s9 /\
    context_source_memory_writes_disjoint cpl inst9 s9` by
     (mp_tac request_cut_retained_memory_guard >>
@@ -74,9 +75,10 @@ Resume request_cut_frontier_guards[paired]:
   disj2_tac >> simp[] >>
   qpat_x_assum `(inst9.inst_opcode <> INVOKE /\ _) \/ _` mp_tac >> simp[] >>
   disch_then (DISJ_CASES_THEN2 ACCEPT_TAC strip_assume_tac) >>
-  mp_tac request_cut_retained_code_end >>
+  `FLOOKUP initial.vs_labels "code_end" = SOME (n2w off)` by metis_tac[] >>
+  mp_tac request_cut_retained_code_end_at >>
   (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[])) >>
   simp[]
 QED
 
-Finalise request_cut_frontier_guards
+Finalise request_cut_frontier_guards_reloc

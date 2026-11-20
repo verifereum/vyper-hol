@@ -2,11 +2,7 @@
    finalized program issues the step's request at the same index of the
    frame's recorded calls, paired with the step's first outcome.
 
-   TOP-LEVEL: codegen_request_step_alignment_opt.
-   Helper: asm_step_oracle, asm_steps_single_request,
-   sym_step_call_request_cong, normal_frame_symbolic_plan_oracle,
-   asm_sym_call_window, codegen_request_source_window,
-   accepted_finalizer_call_window.
+   TOP-LEVEL: codegen_request_step_alignment_opt_own.
  *)
 Theory fnFrameRequestPrefixOpt
 Ancestors
@@ -18,6 +14,11 @@ Ancestors
   contextCodegenRel codegenEntrySim codegenEntryRel fnFramePrefixEntry
   stackPlanGen callTrace asmSymSem asmSem extCallOracle evmStepSim
   venomInst venomWf list rich_list arithmetic
+  asmSpliceOwn asmSymOwnCode asmSymModeOwn asmSymRelocLabelsOwn
+  asmFinalizerPrefixOwn asmRelocDataEnv codegenAsmOpt
+  asmOptFinalizerOwn finalizerContractOwn asmSymOwnStep
+  fnPlanPlaceRevertPostamble codegenLabelDisciplined asmOptimizer
+  asmSymPcOwn[qualified] asmOptOwnPruneUnreachable[qualified]
 
 (* ===== One asm step against the call oracle ===== *)
 
@@ -194,68 +195,48 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
-(* ===== Oracle fields of a symbolic plan ===== *)
-
-Theorem normal_frame_symbolic_plan_oracle:
-  normal_frame_symbolic_plan env rpolicy unit cpl prog vs0 es0
-    (JointConfig stk PG G tn fn inst s oms om hs h) ast ss ==>
-  ast.as_requests = s.vs_requests /\ ast.as_outcomes = s.vs_outcomes
+Theorem frame_request_window_oracle[local]:
+  asm_frame_rel_tail tail prog data es0 a es ==>
+  a.as_requests ++ call_requests es = call_requests es0 /\
+  a.as_outcomes = MAP SND (call_trace es)
 Proof
-  rw[normal_frame_symbolic_plan_def] >>
-  gvs[active_frame_symbolic_plan_def, entry_frame_symbolic_plan_def,
-      entry_frame_plan_def, body_plan_inv_def, fn_frame_inv_def,
-      context_venom_asm_rel_def, frame_view_def, fn_entry_state_rel_def,
-      shared_state_rel_def, venom_asm_terminal_rel_def,
+  simp[asm_frame_rel_tail_def, asm_frame_rel_def] >> metis_tac[]
+QED
+
+Theorem normal_frame_symbolic_plan_oracle_own[local]:
+  normal_frame_symbolic_plan_own allow_own lo env own rpolicy unit cpl prog vs0 es0
+    (JointConfig stk PG G tn fn inst s oms om hs h) ast ss ==>
+  ast.as_requests = s.vs_requests /\ ast.as_outcomes = s.vs_outcomes /\
+  asm_sym_rel_own lo prog env own ast ss
+Proof
+  rw[normal_frame_symbolic_plan_own_def] >>
+  gvs[active_frame_symbolic_plan_own_def, entry_frame_symbolic_plan_own_def,
+      sym_frame_inv_own_def, entry_frame_plan_reloc_def, body_plan_inv_reloc_def,
+      fn_frame_inv_def, context_venom_asm_rel_def, frame_view_def,
+      fn_entry_state_rel_def, shared_state_rel_def, venom_asm_terminal_rel_def,
       entry_bind_pairs_oracle]
 QED
 
-Theorem normal_frame_symbolic_plan_sym_rel[local]:
-  normal_frame_symbolic_plan env rpolicy unit cpl prog vs0 es0
-    (JointConfig stk PG G tn fn inst s oms om hs h) ast ss ==>
-  asm_sym_rel prog env ast ss
-Proof
-  rw[normal_frame_symbolic_plan_def] >>
-  gvs[active_frame_symbolic_plan_def, entry_frame_symbolic_plan_def,
-      sym_frame_inv_def]
-QED
-
-(* ===== The call step inside a symbolic run ===== *)
-
-Theorem asm_sym_rel_oracle[local]:
-  asm_sym_rel p env cs ss ==>
+Theorem asm_sym_rel_oracle_own[local]:
+  asm_sym_rel_own lo p env own cs ss ==>
   ss.sym_base.as_requests = cs.as_requests /\
   ss.sym_base.as_outcomes = cs.as_outcomes /\
   ss.sym_base.as_pc = cs.as_pc
 Proof
-  rw[asm_sym_rel_def] >> simp[]
+  rw[asm_sym_rel_own_def] >> simp[]
 QED
 
-Theorem sym_steps_split[local]:
-  !k m sa sb. sym_steps p env m sa = SymOK sb /\ k <= m ==>
-    ?sk. sym_steps p env k sa = SymOK sk /\
-         sym_steps p env (m - k) sk = SymOK sb
-Proof
-  rpt strip_tac >>
-  qspecl_then [`k`, `m - k`, `sa`] mp_tac sym_steps_add >>
-  `k + (m - k) = m` by decide_tac >>
-  pop_assum (fn th => rewrite_tac[th]) >>
-  Cases_on `sym_steps p env k sa` >> gvs[]
-QED
-
-(* A related run that records new requests while consuming one outcome
-   passes a call-family instruction whose symbolic step does exactly that. *)
-Theorem asm_sym_call_window:
+Theorem asm_sym_call_window_own[local]:
   !m a sa b sb.
-  asm_static_wf p /\ asm_sym_rel p env a sa /\
-  asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p m a =
-    AsmOK b /\
-  sym_steps p env m sa = SymOK sb /\
+  asm_static_wf p /\ code_labels_agree p lo /\ asm_sym_rel_own lo p env own a sa /\
+  asm_steps lo (build_offset_to_pc p) p m a = AsmOK b /\
+  sym_steps_own p env own m sa = SymOK sb /\
   b.as_requests <> a.as_requests /\ b.as_outcomes = TL a.as_outcomes ==>
   ?k sk sk' op.
-    sym_steps p env k sa = SymOK sk /\
+    sym_steps_own p env own k sa = SymOK sk /\
     sk.sym_base.as_pc < LENGTH p /\ EL sk.sym_base.as_pc p = AsmOp op /\
     MEM op ["CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE"; "CREATE2"] /\
-    sym_step p env (AsmOp op) sk = SymOK sk' /\
+    sym_step_own p env own (AsmOp op) sk = SymOK sk' /\
     sk.sym_base.as_requests = a.as_requests /\
     sk.sym_base.as_outcomes = a.as_outcomes /\
     sk'.sym_base.as_requests = b.as_requests /\
@@ -264,42 +245,53 @@ Proof
   rpt strip_tac >>
   drule_all asm_steps_single_request >>
   disch_then (qx_choosel_then [`k`, `c`, `c'`, `op`] strip_assume_tac) >>
-  qabbrev_tac `ops = ["CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE"; "CREATE2"]` >>
-  `k <= m /\ 0 < m - k` by decide_tac >>
-  qspecl_then [`k`, `m`, `sa`, `sb`] mp_tac sym_steps_split >>
-  (impl_tac >- simp[]) >>
-  disch_then (qx_choose_then `sk` strip_assume_tac) >>
-  `?c0. asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
-          k a = AsmOK c0 /\ asm_sym_rel p env c0 sk` by
-    metis_tac[asm_sym_steps_lockstep] >>
+  `k + (m - k) = m /\ 0 < m - k` by decide_tac >>
+  `?sk. sym_steps_own p env own k sa = SymOK sk /\
+    sym_steps_own p env own (m - k) sk = SymOK sb` by
+    (mp_tac (Q.SPECL [`k`, `m - k`, `sa`]
+       (SIMP_RULE bool_ss [sym_steps_mode_def]
+         (Q.INST [`allow_own` |-> `T`] sym_steps_mode_add))) >>
+     asm_rewrite_tac[] >>
+     Cases_on `sym_steps_own p env own k sa` >> gvs[]) >>
+  `?c0. asm_steps lo (build_offset_to_pc p) p k a = AsmOK c0 /\
+    asm_sym_rel_own lo p env own c0 sk` by
+    (irule (SIMP_RULE bool_ss [sym_steps_mode_def]
+       (Q.INST [`allow_own` |-> `T`] asm_sym_steps_mode_sim)) >>
+     asm_rewrite_tac[] >> qexists_tac `sa` >> asm_rewrite_tac[]) >>
   `c0 = c` by gvs[] >> pop_assum SUBST_ALL_TAC >>
-  drule asm_sym_rel_oracle >> strip_tac >>
-  `?sk'. sym_step p env (AsmOp op) sk = SymOK sk'` by
-    (qpat_x_assum `sym_steps p env (m - k) sk = _` mp_tac >>
-     gvs[sym_steps_pos] >> Cases_on `sym_step p env (AsmOp op) sk` >>
-     simp[]) >>
-  `sym_steps p env 1 sk = SymOK sk'` by
-    (rewrite_tac[ONE, sym_steps_def] >> gvs[]) >>
-  `?c1. asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
-          1 c = AsmOK c1 /\ asm_sym_rel p env c1 sk'` by
-    metis_tac[asm_sym_steps_lockstep] >>
+  qpat_assum `asm_sym_rel_own lo p env own c sk`
+    (strip_assume_tac o MATCH_MP asm_sym_rel_oracle_own) >>
+  `?sk'. sym_step_own p env own (AsmOp op) sk = SymOK sk'` by
+    (qpat_x_assum `sym_steps_own p env own (m - k) sk = _` mp_tac >>
+     asm_simp_tac bool_ss [sym_steps_own_pos] >>
+     Cases_on `sym_step_own p env own (AsmOp op) sk` >>
+     simp_tac (srw_ss()) [sym_result_case_def]) >>
+  `sym_steps_own p env own 1 sk = SymOK sk'` by
+    asm_simp_tac (srw_ss()) [asmOptOwnPruneUnreachableTheory.sym_steps_own_one,
+                            GREATER_EQ, GSYM NOT_LESS] >>
+  `?c1. asm_steps lo (build_offset_to_pc p) p 1 c = AsmOK c1 /\
+    asm_sym_rel_own lo p env own c1 sk'` by
+    metis_tac[SIMP_RULE bool_ss [sym_steps_mode_def]
+      (Q.INST [`allow_own` |-> `T`] asm_sym_steps_mode_sim)] >>
   `c1 = c'` by
     (qpat_x_assum `asm_steps _ _ p 1 c = _` mp_tac >>
      rewrite_tac[ONE, asm_steps_def] >> gvs[]) >>
   pop_assum SUBST_ALL_TAC >>
-  drule asm_sym_rel_oracle >> strip_tac >>
+  qpat_assum `asm_sym_rel_own lo p env own c' sk'`
+    (strip_assume_tac o MATCH_MP asm_sym_rel_oracle_own) >>
   qexistsl_tac [`k`, `sk`, `sk'`, `op`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]
 QED
 
-(* ===== The request step of the compiled frame, symbolically ===== *)
-
-Theorem codegen_request_step_runs[local]:
+Theorem codegen_request_step_runs_own[local]:
   generate_context_plan unit.cu_context = SOME cpl /\
   codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
   codegen_context_obligations (\_ _ _ _. F) unit.cu_context cpl /\
-  codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
-  focus_s7_symbolic_context unit prog /\
+  codegen_asm_entry_rel_reloc lo cpl prog vs0 (entry_asm_state vs0 es0) /\
+  code_labels_agree prog lo /\
+  (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+  asm_data_env_lo_ok lo prog env vs0.vs_code /\
+  focus_s7_symbolic_context_own T unit prog /\
   joint_trace vs0 unit.cu_context q0 es qs
     (JointConfig stk PG G tn fn inst s oms om hs h) /\
   active_inst fn inst s /\ inst.inst_opcode <> INVOKE /\
@@ -308,14 +300,14 @@ Theorem codegen_request_step_runs[local]:
   (!j stk1 PG1 G1 tn1 fn1 inst1 s1 oms1 om1 hs1 h1.
     j <= LENGTH es /\
     EL j (q0::qs) = JointConfig stk1 PG1 G1 tn1 fn1 inst1 s1 oms1 om1 hs1 h1 ==>
-    ~in_revert_forward fn1 s1 /\ focus_s7_symbolic_guard prog cpl fn1 inst1 s1) ==>
+    ~in_revert_forward fn1 s1 /\ focus_s7_symbolic_guard_own lo cpl fn1 inst1 s1) ==>
   ?n ast ss m ast1 ss1.
-    sym_steps prog (asm_data_env prog vs0.vs_code) n
+    sym_steps_own prog env vs0.vs_code n
       (sym_init (entry_asm_state vs0 es0)) = SymOK ss /\
-    asm_sym_rel prog (asm_data_env prog vs0.vs_code) ast ss /\
-    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    asm_sym_rel_own lo prog env vs0.vs_code ast ss /\
+    asm_steps lo (build_offset_to_pc prog)
       prog m ast = AsmOK ast1 /\
-    sym_steps prog (asm_data_env prog vs0.vs_code) m ss = SymOK ss1 /\
+    sym_steps_own prog env vs0.vs_code m ss = SymOK ss1 /\
     ast.as_requests = s.vs_requests /\ ast.as_outcomes = s.vs_outcomes /\
     ast1.as_requests = s'.vs_requests /\ ast1.as_outcomes = s'.vs_outcomes
 Proof
@@ -323,19 +315,19 @@ Proof
   `EL (LENGTH es) (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h` by
     metis_tac[joint_trace_endpoint] >>
   `?n ast ss.
-     asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     asm_steps lo (build_offset_to_pc prog)
        prog n (entry_asm_state vs0 es0) = AsmOK ast /\
-     sym_steps prog (asm_data_env prog vs0.vs_code) n
+     sym_steps_own prog env vs0.vs_code n
        (sym_init (entry_asm_state vs0 es0)) = SymOK ss /\
-     normal_frame_symbolic_plan (asm_data_env prog vs0.vs_code) rpolicy unit
+     normal_frame_symbolic_plan_own T lo env vs0.vs_code rpolicy unit
        cpl prog vs0 es0 (JointConfig stk PG G tn fn inst s oms om hs h) ast ss`
     by (qpat_x_assum `EL (LENGTH es) _ = _` (SUBST1_TAC o SYM) >>
-        irule normal_frame_symbolic_trace_prefix >>
+        irule (SIMP_RULE bool_ss [sym_steps_mode_def] (Q.SPECL [`T`,`lo`,`vs0.vs_code`,`LENGTH es`]
+          normal_frame_symbolic_trace_prefix_own)) >>
         first_assum (irule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
         rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[] >>
         rpt strip_tac >> metis_tac[LESS_IMP_LESS_OR_EQ]) >>
-  drule normal_frame_symbolic_plan_oracle >> strip_tac >>
-  drule normal_frame_symbolic_plan_sym_rel >> strip_tac >>
+  drule normal_frame_symbolic_plan_oracle_own >> strip_tac >>
   `EVERY wf_function unit.cu_context.ctx_functions` by
     (qpat_x_assum `codegen_context_obligations _ _ _` mp_tac >>
      rpt (pop_assum kall_tac) >>
@@ -350,7 +342,7 @@ Proof
     (qpat_x_assum `MEM inst.inst_opcode _` mp_tac >>
      rpt (pop_assum kall_tac) >> rw[] >> simp[is_terminator_def]) >>
   drule_all active_inst_next_nonterminator >> strip_tac >>
-  `~in_revert_forward fn s /\ focus_s7_symbolic_guard prog cpl fn inst s` by
+  `~in_revert_forward fn s /\ focus_s7_symbolic_guard_own lo cpl fn inst s` by
     (qpat_x_assum `!j stk1 PG1 G1 tn1 fn1 inst1 s1 oms1 om1 hs1 h1. _`
        (qspecl_then [`LENGTH es`, `stk`, `PG`, `G`, `tn`, `fn`, `inst`, `s`,
                      `oms`, `om`, `hs`, `h`] mp_tac) >> simp[]) >>
@@ -365,23 +357,26 @@ Proof
            (origin_step PG om inst s') inst'
            (s' with vs_inst_idx := SUC s.vs_inst_idx))]))` by
     (simp[joint_transition_ordinary] >> metis_tac[]) >>
-  `asm_data_env prog vs0.vs_code = asm_data_env prog vs0.vs_code` by simp[] >>
-  drule_all normal_frame_symbolic_joint_progress >>
+  drule_all (SIMP_RULE bool_ss [sym_steps_mode_def]
+    (Q.INST [`allow_own` |-> `T`] normal_frame_symbolic_joint_progress_own)) >>
   disch_then (qx_choosel_then [`m`, `ast1`, `ss1`] strip_assume_tac) >>
-  qpat_x_assum `normal_frame_symbolic_plan _ _ _ _ _ _ _ _ ast1 ss1`
-    (mp_tac o MATCH_MP normal_frame_symbolic_plan_oracle) >>
+  qpat_x_assum `normal_frame_symbolic_plan_own T lo env _ _ _ _ _ _ _ _ ast1 ss1`
+    (mp_tac o MATCH_MP normal_frame_symbolic_plan_oracle_own) >>
   strip_tac >>
   qpat_x_assum `!j stk1 PG1 G1 tn1 fn1 inst1 s1 oms1 om1 hs1 h1. _` kall_tac >>
   qpat_x_assum `MEM inst.inst_opcode _` kall_tac >>
   qexistsl_tac [`n`, `ast`, `ss`, `m`, `ast1`, `ss1`] >> gvs[]
 QED
 
-Theorem codegen_request_source_window:
+Theorem codegen_request_source_window_own:
   generate_context_plan unit.cu_context = SOME cpl /\
   codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
   codegen_context_obligations (\_ _ _ _. F) unit.cu_context cpl /\
-  codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
-  focus_s7_symbolic_context unit prog /\
+  codegen_asm_entry_rel_reloc lo cpl prog vs0 (entry_asm_state vs0 es0) /\
+  code_labels_agree prog lo /\
+  (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+  asm_data_env_lo_ok lo prog env vs0.vs_code /\
+  focus_s7_symbolic_context_own T unit prog /\
   joint_trace vs0 unit.cu_context q0 es qs
     (JointConfig stk PG G tn fn inst s oms om hs h) /\
   active_inst fn inst s /\ inst.inst_opcode <> INVOKE /\
@@ -390,78 +385,84 @@ Theorem codegen_request_source_window:
   (!j stk1 PG1 G1 tn1 fn1 inst1 s1 oms1 om1 hs1 h1.
     j <= LENGTH es /\
     EL j (q0::qs) = JointConfig stk1 PG1 G1 tn1 fn1 inst1 s1 oms1 om1 hs1 h1 ==>
-    ~in_revert_forward fn1 s1 /\ focus_s7_symbolic_guard prog cpl fn1 inst1 s1) ==>
+    ~in_revert_forward fn1 s1 /\ focus_s7_symbolic_guard_own lo cpl fn1 inst1 s1) ==>
   ?n sk sk' op.
-    sym_steps prog (asm_data_env prog vs0.vs_code) n
+    sym_steps_own prog env vs0.vs_code n
       (sym_init (entry_asm_state vs0 es0)) = SymOK sk /\
     sk.sym_base.as_pc < LENGTH prog /\ EL sk.sym_base.as_pc prog = AsmOp op /\
     MEM op ["CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE"; "CREATE2"] /\
-    sym_step prog (asm_data_env prog vs0.vs_code) (AsmOp op) sk = SymOK sk' /\
+    sym_step_own prog env vs0.vs_code (AsmOp op) sk = SymOK sk' /\
     sk.sym_base.as_requests = s.vs_requests /\
     sk.sym_base.as_outcomes = s.vs_outcomes /\
     sk'.sym_base.as_requests = s'.vs_requests /\
     sk'.sym_base.as_outcomes = s'.vs_outcomes
 Proof
   strip_tac >>
-  drule_all codegen_request_step_runs >>
+  drule_all codegen_request_step_runs_own >>
   disch_then (qx_choosel_then [`n`, `ast`, `ss`, `m`, `ast1`, `ss1`]
     strip_assume_tac) >>
   qpat_x_assum `!j stk1 PG1 G1 tn1 fn1 inst1 s1 oms1 om1 hs1 h1. _` kall_tac >>
   drule_all step_inst_request_outcomes >> strip_tac >>
   qpat_x_assum `MEM inst.inst_opcode _` kall_tac >>
-  `asm_static_wf prog` by fs[focus_s7_symbolic_context_def] >>
+  `asm_static_wf prog` by fs[focus_s7_symbolic_context_own_def] >>
   `ast1.as_requests <> ast.as_requests` by
     (strip_tac >> gvs[]) >>
   `ast1.as_outcomes = TL ast.as_outcomes` by gvs[] >>
   qspecl_then [`m`, `ast`, `ss`, `ast1`, `ss1`] mp_tac
-    (Q.INST [`p` |-> `prog`, `env` |-> `asm_data_env prog vs0.vs_code`]
-       asm_sym_call_window) >>
+    (Q.INST [`p` |-> `prog`, `env` |-> `env`, `own` |-> `vs0.vs_code`]
+       asm_sym_call_window_own) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qx_choosel_then [`k`, `sk`, `sk'`, `op`] strip_assume_tac) >>
   qexistsl_tac [`n + k`, `sk`, `sk'`, `op`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- metis_tac[sym_steps_compose] >>
+  >- metis_tac[SIMP_RULE bool_ss [sym_steps_mode_def]
+      (Q.INST [`allow_own` |-> `T`] sym_steps_mode_compose)] >>
   qpat_x_assum `MEM op _` kall_tac >> gvs[]
 QED
 
-(* ===== The request step on the finalized program ===== *)
-
-(* A symbolic run of the compiled program that reaches a call-family step
-   is matched by a run of the finalized program from the same entry state,
-   reaching the same request and outcome state before and after the call. *)
-Theorem accepted_finalizer_call_window:
-  !fin rp prog prog' E data env n sk sk' op.
+Theorem accepted_finalizer_call_window_own[local]:
+  !fin rp prog prog' E env n sk sk' op.
   fin IN accepted_finalizers /\ fin rp prog = SOME prog' /\
   asm_static_wf prog /\ E.as_pc = 0 /\
-  env = asm_data_env prog (assemble prog ++ data) /\
+  env = asm_data_env prog' E.as_code /\
   MEM op ["CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE"; "CREATE2"] /\
-  sym_steps prog env n (sym_init E) = SymOK sk /\
+  sym_steps_own prog env E.as_code n (sym_init E) = SymOK sk /\
   sk.sym_base.as_pc < LENGTH prog /\ EL sk.sym_base.as_pc prog = AsmOp op /\
-  sym_step prog env (AsmOp op) sk = SymOK sk' ==>
+  sym_step_own prog env E.as_code (AsmOp op) sk = SymOK sk' ==>
   ?m cb cb'.
     asm_steps (SND (compute_label_offsets prog')) (build_offset_to_pc prog')
-      prog' m (E with as_code := assemble prog' ++ data) = AsmOK cb /\
+      prog' m E = AsmOK cb /\
     asm_steps (SND (compute_label_offsets prog')) (build_offset_to_pc prog')
-      prog' (m + 1) (E with as_code := assemble prog' ++ data) = AsmOK cb' /\
+      prog' (m + 1) E = AsmOK cb' /\
     cb.as_requests = sk.sym_base.as_requests /\
     cb.as_outcomes = sk.sym_base.as_outcomes /\
     cb'.as_requests = sk'.sym_base.as_requests /\
     cb'.as_outcomes = sk'.sym_base.as_outcomes
 Proof
   rpt strip_tac >>
-  qspecl_then [`fin`, `rp`, `prog`, `prog'`, `data`] mp_tac
-    finalizer_prefix_static >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  `asm_static_wf prog'` by
+    (`fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+     pop_assum strip_assume_tac >- gvs[combinTheory.K_THM] >>
+     gvs[] >> drule asm_opt_finalizer_refines_own >> simp[asm_refines_own_def]) >>
   qspecl_then [`fin`, `rp`, `prog`, `prog'`] mp_tac
-    accepted_finalizers_prefix_transport >>
+    (BETA_RULE accepted_finalizers_prefix_transport_own) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qx_choose_then `kk` strip_assume_tac) >>
-  qpat_x_assum `!env s n a. _` (qspecl_then [`env`, `E`, `n`, `sk`] mp_tac) >>
+  qpat_x_assum `!env own s n a. _`
+    (qspecl_then [`env`, `E.as_code`, `E`, `n`, `sk`] mp_tac) >>
   (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qspec_then `op` mp_tac o CONJUNCT2) >>
   (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
                 qpat_x_assum `MEM op _` mp_tac >> rw[])) >>
   disch_then (qx_choosel_then [`m`, `b`] strip_assume_tac) >>
+  `!q ss. sym_step_own q env E.as_code (AsmOp op) ss =
+          sym_step q env (AsmOp op) ss` by
+    (rpt gen_tac >> irule asmSymPcOwnTheory.sym_step_own_eq >>
+     qpat_assum `MEM op _` (mp_tac o SIMP_RULE (srw_ss()) []) >>
+     disch_then (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC) >> simp[]) >>
+  qpat_assum `!q ss. sym_step_own _ _ _ _ _ = _` (fn th =>
+    qpat_assum `sym_step_own prog env E.as_code (AsmOp op) sk = _`
+      (assume_tac o PURE_REWRITE_RULE [th])) >>
   drule_all_then (qspecl_then [`prog'`, `env`] strip_assume_tac)
     sym_step_call_request_cong >>
   qpat_x_assum `MEM op _` kall_tac >>
@@ -469,42 +470,45 @@ Proof
    b.sym_base.as_outcomes = sk.sym_base.as_outcomes` by
     (qpat_x_assum `(b.sym_base with as_pc := 0) = _` mp_tac >>
      simp[asm_state_component_equality]) >>
-  `sym_steps prog' env (m + 1) (sym_init E) = SymOK b'` by
-    (irule sym_steps_compose >> qexists_tac `b` >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     rewrite_tac[ONE, sym_steps_def] >> gvs[]) >>
-  qabbrev_tac `E' = E with as_code := assemble prog' ++ data` >>
-  `sym_init E' = sym_init E` by simp[Abbr `E'`, sym_init_def] >>
-  `asm_sym_rel prog' env E' (sym_init E')` by
-    (irule asm_sym_rel_init >> simp[Abbr `E'`] >>
-     metis_tac[asm_data_env_ok_asm_data_env]) >>
-  `?cb. asm_steps (SND (compute_label_offsets prog'))
-          (build_offset_to_pc prog') prog' m E' = AsmOK cb /\
-        asm_sym_rel prog' env cb b` by
-    metis_tac[asm_sym_steps_lockstep] >>
-  `?cb'. asm_steps (SND (compute_label_offsets prog'))
-           (build_offset_to_pc prog') prog' (m + 1) E' = AsmOK cb' /\
-         asm_sym_rel prog' env cb' b'` by
-    metis_tac[asm_sym_steps_lockstep] >>
-  imp_res_tac asm_sym_rel_oracle >>
-  qexistsl_tac [`m`, `cb`, `cb'`] >> gvs[]
+  `sym_steps_own prog' env E.as_code (m + 1) (sym_init E) = SymOK b'` by
+    (irule (SIMP_RULE bool_ss [sym_steps_mode_def]
+       (Q.INST [`allow_own` |-> `T`] sym_steps_mode_compose)) >>
+     qexists_tac `b` >> conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_x_assum `env = asm_data_env prog' E.as_code` kall_tac >>
+     qpat_assum `!q ss. sym_step_own _ _ _ _ _ = _` (fn th =>
+       asm_simp_tac (srw_ss()) [asmOptOwnPruneUnreachableTheory.sym_steps_own_one,
+                               th, GREATER_EQ, GSYM NOT_LESS])) >>
+  qabbrev_tac `lo' = SND (compute_label_offsets prog')` >>
+  `code_labels_agree prog' lo'` by simp[Abbr `lo'`] >>
+  `asm_sym_rel_own lo' prog' env E.as_code E (sym_init E)` by
+    (irule asm_sym_rel_own_init >>
+     simp[Abbr `lo'`, asm_data_env_lo_ok_canonical, asm_data_env_ok_asm_data_env]) >>
+  `?cb. asm_steps lo' (build_offset_to_pc prog') prog' m E = AsmOK cb /\
+        asm_sym_rel_own lo' prog' env E.as_code cb b` by
+    metis_tac[SIMP_RULE bool_ss [sym_steps_mode_def]
+      (Q.INST [`allow_own` |-> `T`] asm_sym_steps_mode_sim)] >>
+  `?cb'. asm_steps lo' (build_offset_to_pc prog') prog' (m + 1) E = AsmOK cb' /\
+         asm_sym_rel_own lo' prog' env E.as_code cb' b'` by
+    metis_tac[SIMP_RULE bool_ss [sym_steps_mode_def]
+      (Q.INST [`allow_own` |-> `T`] asm_sym_steps_mode_sim)] >>
+  imp_res_tac asm_sym_rel_oracle_own >>
+  qexistsl_tac [`m`, `cb`, `cb'`] >> gvs[Abbr `lo'`]
 QED
 
 (* TOP-LEVEL: through an accepted finalizer, a lowered request step is the
    frame's next recorded call, answered in the call trace by the head of
    the step's outcomes. *)
-Theorem codegen_request_step_alignment_opt:
+Theorem codegen_request_step_alignment_opt_own:
   !fin rpolicy unit cpl prog prog' vs0 q0 es qs es0 s s' result final.
   fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
   generate_context_plan unit.cu_context = SOME cpl /\
   codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
   codegen_context_obligations (\_ _ _ _. F) unit.cu_context cpl /\
-  label_flow_ok unit.cu_context /\ sym_unit_static_ok unit /\
-  codegen_asm_entry_rel cpl prog vs0 (entry_asm_state vs0 es0) /\
-  vs0.vs_code = assemble prog ++ vs0.vs_data_section /\
+  label_flow_own_ok unit.cu_context /\ sym_unit_static_ok unit /\
+  codegen_asm_entry_rel_reloc (lo_reloc prog prog') cpl prog vs0 (entry_asm_state vs0 es0) /\
+  vs0.vs_code = assemble prog' ++ vs0.vs_data_section /\
   asm_frame_rel prog' vs0.vs_data_section es0
-    (entry_asm_state vs0 es0 with
-       as_code := assemble prog' ++ vs0.vs_data_section) es0 /\
+    (entry_asm_state vs0 es0) es0 /\
   joint_trace vs0 unit.cu_context q0 es qs
     (JointConfig stk PG G tn fn inst s oms om hs h) /\
   active_inst fn inst s /\ inst.inst_opcode <> INVOKE /\
@@ -513,7 +517,7 @@ Theorem codegen_request_step_alignment_opt:
   (!j stk1 PG1 G1 tn1 fn1 inst1 s1 oms1 om1 hs1 h1.
     j <= LENGTH es /\
     EL j (q0::qs) = JointConfig stk1 PG1 G1 tn1 fn1 inst1 s1 oms1 om1 hs1 h1 ==>
-    ~in_revert_forward fn1 s1 /\ focus_s7_symbolic_guard prog cpl fn1 inst1 s1) /\
+    ~in_revert_forward fn1 s1 /\ focus_s7_symbolic_guard_own (lo_reloc prog prog') cpl fn1 inst1 s1) /\
   run_call es0 = SOME (result,final) /\
   ~frame_resource_starved es0 result final ==>
   LENGTH s.vs_requests < LENGTH (call_requests es0) /\
@@ -526,25 +530,30 @@ Proof
   rpt gen_tac >> strip_tac >>
   `asm_static_wf prog` by
     metis_tac[codegen_context_obligations_def, codegen_asm_static_wf] >>
-  `focus_s7_symbolic_context unit prog` by
-    (rewrite_tac[focus_s7_symbolic_context_def] >>
+  `focus_s7_symbolic_context_own T unit prog` by
+    (simp_tac bool_ss [focus_s7_symbolic_context_own_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  drule_all codegen_request_source_window >>
+  qspecl_then [`fin`, `rpolicy`, `prog`, `prog'`, `vs0.vs_data_section`]
+    mp_tac finalizer_prefix_static >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  `code_labels_agree prog (lo_reloc prog prog')` by simp[lo_reloc_code_labels_agree] >>
+  mp_tac (Q.INST [`p` |-> `prog`, `q` |-> `prog'`, `code` |-> `vs0.vs_code`]
+    lo_reloc_data_env) >> simp_tac bool_ss [] >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  drule_all codegen_request_source_window_own >>
   disch_then (qx_choosel_then [`n`, `sk`, `sk'`, `op`] strip_assume_tac) >>
   qpat_x_assum `!j stk1 PG1 G1 tn1 fn1 inst1 s1 oms1 om1 hs1 h1. _` kall_tac >>
   drule_all step_inst_request_outcomes >> strip_tac >>
+  `(entry_asm_state vs0 es0).as_code = vs0.vs_code /\
+    (entry_asm_state vs0 es0).as_pc = 0` by simp[entry_asm_state_def] >>
   qspecl_then [`fin`, `rpolicy`, `prog`, `prog'`, `entry_asm_state vs0 es0`,
-    `vs0.vs_data_section`, `asm_data_env prog vs0.vs_code`, `n`, `sk`, `sk'`,
-    `op`] mp_tac accepted_finalizer_call_window >>
-  (impl_tac
-   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-       >- simp[entry_asm_state_def] >>
-       qpat_assum `vs0.vs_code = _` (fn th => rewrite_tac[th]))) >>
+    `asm_data_env prog' vs0.vs_code`, `n`, `sk`, `sk'`, `op`]
+    mp_tac accepted_finalizer_call_window_own >>
+  qpat_assum `(entry_asm_state vs0 es0).as_code = vs0.vs_code`
+    (fn th => PURE_REWRITE_TAC [th]) >>
+  (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> REFL_TAC)) >>
   disch_then (qx_choosel_then [`mb`, `cb`, `cb'`] strip_assume_tac) >>
-  `asm_frame_prog_ok prog'` by metis_tac[finalizer_prefix_static] >>
-  `asm_frame_rel_tail [] prog' vs0.vs_data_section es0
-     (entry_asm_state vs0 es0 with
-        as_code := assemble prog' ++ vs0.vs_data_section) es0` by
+  `asm_frame_rel_tail [] prog' vs0.vs_data_section es0 (entry_asm_state vs0 es0) es0` by
     (rewrite_tac[asm_frame_rel_tail_nil] >> first_assum ACCEPT_TAC) >>
   `?esa pa. asm_frame_rel_tail [] prog' vs0.vs_data_section es0 cb esa /\
      call_trace es0 = pa ++ call_trace esa` by
@@ -555,9 +564,13 @@ Proof
   `cb.as_requests = s.vs_requests /\ cb.as_outcomes = s.vs_outcomes /\
    cb'.as_requests = s'.vs_requests /\ cb'.as_outcomes = s'.vs_outcomes` by
     gvs[] >>
-  gvs[asm_frame_rel_tail_def, asm_frame_rel_def] >>
+  map_every (fn pat =>
+    qpat_assum pat (strip_assume_tac o MATCH_MP frame_request_window_oracle))
+    [`asm_frame_rel_tail [] prog' _ es0 cb esa`,
+     `asm_frame_rel_tail [] prog' _ es0 cb' esb`] >>
   qspecl_then [`\rq. T`, `call_trace es0`, `pa`,
     `call_trace esa`, `pb`, `call_trace esb`, `s.vs_requests`,
     `s'.vs_requests`] mp_tac trace_request_pairing >>
-  simp[listTheory.FILTER_T, GSYM call_requests_def]
+  rewrite_tac[listTheory.FILTER_T, GSYM call_requests_def] >>
+  metis_tac[]
 QED

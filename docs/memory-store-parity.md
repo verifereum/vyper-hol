@@ -130,6 +130,4 @@ python bytecode/memory_store_witnesses.py execute \
   --fixtures /tmp/memory-store-oracle --output RESULT_DIRECTORY
 ```
 
-These results establish the listed comparisons. Issue #549 also documents an
-untested frontend limitation: empty `HexBytes` and `Bytes` literals share a
-representation, although Vyper's empty-value fast path distinguishes them.
+These results establish the listed comparisons.

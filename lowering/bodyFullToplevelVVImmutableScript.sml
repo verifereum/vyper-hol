@@ -1,7 +1,7 @@
 (* Raw TopLevelName immutable judgment, conditional on the ctor source interface. *)
 Theory bodyFullToplevelVVImmutable
 Ancestors
-  bodySimFull bodySim exprSimSource bodyToplevelMemory gasOutcomeFullCompose
+  bodySimFull bodySim exprSimSource gasOutcomeFullCompose
   exprSimTopLevelImmutable exprSimHypsDefs exprLoweringProps exprLowering
   loweringPosts bodyPtrDefs accountsRelProps fragGasPathPtr context words
   finite_map pred_set list vyperInterpreter vyperState vyperAST exprSimHyps

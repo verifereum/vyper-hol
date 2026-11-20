@@ -60,7 +60,7 @@ QED
 
 (* A flag member compiles to StackValue (Lit _) and emits no instruction
    (compile_expr_def), in runtime and constructor frames alike; the source
-   side is exprSimFlagWord's. *)
+   side is exprSimProps' eval_expr_flag_member_gas. *)
 Theorem flag_member_value_full[local]:
   expr_body_pre cenv cx env (FlagMember ann nsid mid) es ==>
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

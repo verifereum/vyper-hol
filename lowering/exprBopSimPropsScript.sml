@@ -104,7 +104,6 @@ Theorem eval_expr_bop_cases:
             res = bop_result cx ann bop [expr_type e1; expr_type e2] v1 v2 es')
 Proof
   rpt gen_tac >>
-  Cases_on `bop = In \/ bop = NotIn` >> (
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, builtin_args_length_ok_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
@@ -126,10 +125,10 @@ Proof
   >- (simp[] >> rw[] >> simp[]) >>
   rename1 `read_result cx r2 st2 = (INL v2, es2)` >>
   simp[Once evaluate_def, bind_def, return_def, get_accounts_def,
-       lift_sum_def, lift_option_type_def, type_check_def, assert_def,
-       bop_result_def] >>
+       lift_sum_def, type_check_def, assert_def,
+       precompile_call_success_def, bop_result_def] >>
   BasicProvers.every_case_tac >>
-  gvs[bind_def, return_def, raise_def, read_result_def] >> rw[] >> gvs[])
+  gvs[bind_def, return_def, raise_def, read_result_def] >> rw[] >> gvs[]
 QED
 
 Theorem eval_operand_frame:
@@ -428,7 +427,6 @@ Theorem eval_expr_bop_bind:
                 v1 v2 es2, es2)) od)
 Proof
   simp[FUN_EQ_THM] >> gen_tac >>
-  Cases_on `bop = In \/ bop = NotIn` >> (
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, builtin_args_length_ok_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
@@ -446,10 +444,10 @@ Proof
   reverse (Cases_on `res2`) >- simp[] >>
   rename1 `read_result cx r2 st2 = (INL v2, es2)` >>
   simp[Once evaluate_def, bind_def, return_def, get_accounts_def,
-       lift_sum_def, lift_option_type_def, type_check_def, assert_def,
-       bop_result_def] >>
+       lift_sum_def, type_check_def, assert_def,
+       precompile_call_success_def, bop_result_def] >>
   BasicProvers.every_case_tac >>
-  gvs[bind_def, return_def, raise_def, read_result_def])
+  gvs[bind_def, return_def, raise_def, read_result_def]
 QED
 
 Theorem bop_result_gas_obs[simp]:

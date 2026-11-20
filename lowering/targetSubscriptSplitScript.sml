@@ -16,7 +16,7 @@
 
 Theory targetSubscriptSplit
 Ancestors
-  targetLocalLive targetPlaceLive targetSubscriptMemory targetSubscriptStorage targetSubscriptDecode targetSubscriptContinuation
+  targetLocalLive targetPlaceLive targetSubscriptMemory targetSubscriptStorage targetSubscriptContinuation
   targetPlaceSimCasesBase exprReasonOperand exprSimPopNestedLocalHandoff
   exprSimFieldLayout exprSafeOperandBuiltins exprSafeOperand
   exprSimSource evalNoHalt
@@ -339,7 +339,6 @@ Proof
       Cases_on `builtin_args_length_ok bt (LENGTH es)`
       >- (Cases_on `bt = Len` >> rpt gen_tac >> strip_tac >>
           Cases_on `bt = Env MsgGas` >>
-          Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
           Cases_on `code_slice_source bt es`
           >>~- ([`code_slice_source bt es = SOME _`],
                 rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>

@@ -11,11 +11,11 @@ Ancestors
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
-  stmtSimIf stmtLoweringMono stmtLowering compileEnv fragExec
+  stmtLoweringMono stmtLowering compileEnv fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness stmtSimReason stmtSimReasonExpr
-  stmtSimReasonStorage stmtSimReasonCode supportedExprs stmtSimAssign stmtSimDeclStore
+  stmtSimReasonStorage supportedExprs stmtSimAssign stmtSimDeclStore
   stmtSimAugAssign vyperTypeEvalSoundness vyperTypeInvariants
   vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimBuiltins
   exprReasonOperand
@@ -25,8 +25,8 @@ Ancestors
   stmtSimAssignStorage supportedDecls vyperTypeContractStaticMaps
   vyperTypeContract compileVyper supportedTypes stmtSimAssignAttr
   stmtSimAssignStorageCopy
-  stmtSimAugAssignAttr stmtSimAssignAttrStorage stmtSimAugAssignStorage
-  stmtSimAugAssignAttrStorage stmtSimAssignMem stmtSimAssignTupleMem
+  stmtSimAssignAttrStorage
+  stmtSimAssignMem
   stmtSimAssignTupleTargets
   memoryLocalRhsProps stmtPoppedKeys exprOpenMain bodyStorageMetadata
   vyperPureExpr targetPlaceSim targetPlaceSimCases exprSimDefs

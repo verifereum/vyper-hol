@@ -72,6 +72,10 @@ Proof
   >~ [`Literal (BaseT (BytesT (Dynamic _))) (BytesL _)`]
   >- (strip_tac >> simp[GSYM event_arg_compatible_alias_def] >>
       irule literal_event_arg_compatible >> fs[Once well_typed_expr_def, expr_type_def] >>
+      metis_tac[typedCopyCompatibilityTheory.event_arg_compatible_reflexive])
+  >~ [`Literal (BaseT (BytesT (Dynamic _))) (HexBytesL _)`]
+  >- (strip_tac >> simp[GSYM event_arg_compatible_alias_def] >>
+      irule literal_event_arg_compatible >> fs[Once well_typed_expr_def, expr_type_def] >>
       metis_tac[typedCopyCompatibilityTheory.event_arg_compatible_reflexive]) >>
   simp[lowered_value_type_def, GSYM event_arg_compatible_alias_def,
        typedCopyCompatibilityTheory.event_arg_compatible_reflexive]

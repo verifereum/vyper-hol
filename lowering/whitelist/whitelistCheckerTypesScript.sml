@@ -215,11 +215,6 @@ QED
 
 (* Row 21: the checker types literal elements and struct fields exactly, and
    an exact copy is whitelisted. *)
-Theorem supported_copy_types_refl:
-  supported_copy_types ty ty
-Proof
-  simp[supported_copy_types_def]
-QED
 
 (* ===== Binary operators ===== *)
 

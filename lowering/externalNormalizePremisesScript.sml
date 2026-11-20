@@ -2,7 +2,7 @@
 Theory externalNormalizePremises
 Ancestors
   externalReturnBounds typedMemoryCopy typedNormalizeProducer valueEncodingTyping
-  typedNormalizeStaticRigidity valueCopyBytes vyperTypeSystem
+  valueCopyBytes vyperTypeSystem
   exprSimDefs exprSimProps loweringPosts vyperTyping vyperValue compileEnv valueEncoding
   externalReturnNormalizeMem allocaSiteResource exprLoweringProps
   venomMemDefs venomExecSemantics finite_map stmtSimReturnWiden exprSimAlloc

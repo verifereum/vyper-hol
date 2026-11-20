@@ -58,13 +58,14 @@ or check and is easy to miss:
   the caller's side, through `eval_create` and the call-outcome oracle, but no
   current theorem covers that caller (next item).
 - **A caller that creates contracts or makes a delegate `raw_call` is not
-  covered.** `vyper_call_correct` assumes `supported_program tops`, which rejects
-  these bodies twice (`lowering/proofs/supported/`): `body_stmts_safe` rejects
-  every `expr_evm_run_root` expression (every `create_*` call and every `raw_call`
-  with `is_delegate_call=True`), and `supported_stmts` admits no `create_*` or
-  `raw_call` at all. The source semantics already models both on the caller's
-  side through the call-outcome oracle (`eval_create`, `eval_raw_call`); these
-  `supported_program` checks are what keep such bodies outside the theorem.
+  covered.** `vyper_call_correct` assumes `supported_program tops`, whose
+  function-body check `supported_function_body` (`lowering/proofs/supported/`)
+  keeps both out: `supported_stmts` admits no `create_*` or `raw_call` at all,
+  and `body_stmts_safe` separately rejects every `expr_evm_run_root` expression,
+  which includes every `create_*` call. The source semantics already models
+  both on the caller's side through the call-outcome oracle (`eval_create`,
+  `eval_raw_call`); these `supported_program` checks are what keep such bodies
+  outside the theorem.
   `e2e_deploy_correctness` also requires `supported_program tops` and
   `supported_program_deploy tops`. It covers constructors that make supported
   external calls, including calls to the computed precompiles.

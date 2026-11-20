@@ -200,7 +200,8 @@ Theorem extcall_dispatch_failure_path:
   compile_alloc_buffer 0 sz = (rb,sp) /\
   emit_void RETURNDATACOPY [rb.buf_operand;Lit 0w;zop] sp = ((),sc) /\
   emit_inst REVERT [rb.buf_operand;zop] [] sc = ((),sb) /\
-  fn_has_code sf sb func /\ ~u.vs_halted /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sf sb func /\ ~u.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+    u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp) /\
   allocas_from lo u /\ lo <= u.vs_alloca_next /\
   LENGTH u.vs_returndata < dimword (:256) ==>
   ?t Gf tnf. t.vs_returndata = u.vs_returndata /\
@@ -216,6 +217,14 @@ Proof
   `~s.vs_halted /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
    s.vs_returndata = u.vs_returndata` by
     (gvs[Abbr `s`, jump_to_def, next_inst_def, allocas_from_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp` by
+    (qpat_assum `Abbrev (s = _)`
+       (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u /\ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[jump_to_def, next_inst_def, allocas_below_fmp_def, pending_alloca_size_def] >>
+     metis_tac[arithmeticTheory.ADD_COMM]) >>
   `?t. run_inst_seq (emitted_insts sf sb) s = Abort Revert_abort t /\
        t.vs_returndata = s.vs_returndata` by
     (qpat_x_assum `emit_op RETURNDATASIZE _ _ = _` mp_tac >>
@@ -506,7 +515,8 @@ Theorem extcall_dispatch_abort:
   compile_alloc_buffer 0 sz = (rb,sp) /\
   emit_void RETURNDATACOPY [rb.buf_operand;Lit 0w;zop] sp = ((),sc) /\
   emit_inst REVERT [rb.buf_operand;zop] [] sc = ((),sb) /\
-  fn_has_code sf sb func /\ ~u.vs_halted /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sf sb func /\ ~u.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+    u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp) /\
   allocas_from lo u /\ lo <= u.vs_alloca_next /\
   u.vs_returndata = oc.co_returnData /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -669,7 +679,7 @@ Theorem extcall_dispatch_counted_status[local]:
                   w2n ao + w2n az <= s.vs_alloca_next) /\
     (!j. w2n ao <= j /\ j < w2n ao + w2n az ==> j NOTIN tn.t_mem)) /\
   (cap <> 0 ==> ?p. buf = Var p /\ ptr_covers G tn p s cap) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ alloca_history func s /\
+  allocas_from lo s /\ alloca_history func s /\
   step_inst_base inst s = OK u /\
   u = update_var out (if success then 1w else 0w) t /\
   u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\
@@ -693,6 +703,9 @@ Proof
   qhdtm_assum `extcall_request_ready`
     (strip_assume_tac o REWRITE_RULE [extcall_request_ready_def]) >>
   `stmt_state_rel H ctx func cenv cx ee s` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx ee s`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule stateRelProjTheory.stmt_state_rel_local_ptrs_alloca >> strip_tac >>
   `w2n (n2w cap : bytes32) = cap` by (simp[w2n_n2w] >> decide_tac) >>
   `eval_operand (Lit (n2w cap)) s = SOME (n2w cap)` by simp[eval_operand_def] >>
@@ -846,7 +859,7 @@ Theorem extcall_dispatch_selected:
       (?p. default_op = Var p /\ ptr_covers G tn p s (type_memory_bytes cenv default_ty)) /\
       (!w. eval_operand default_op s = SOME w ==>
           w2n w + type_memory_bytes cenv default_ty <= s.vs_alloca_next))) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ alloca_history func s /\
+  allocas_from lo s /\ alloca_history func s /\
   lo <= s.vs_alloca_next /\ s0.vs_alloca_next <= s.vs_alloca_next /\
   ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
@@ -908,6 +921,34 @@ Proof
       `!H. valid_horizon cx st0 H ee.storage_trace ==>
           gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
             (OK (jump_to fail_lbl (next_inst u)),step_prov PG G inst u,step_taint inst s u tn)` by fs[] >>
+      `?H:(bool # bytes32 # type_value) list # num list.
+        stmt_state_rel H ctx func cenv cx ee s` by
+        (qhdtm_assum `extcall_request_ready`
+           (strip_assume_tac o REWRITE_RULE [extcall_request_ready_def]) >>
+         rename1 `valid_horizon cx st0 h ee.storage_trace` >>
+         qexists_tac `h` >>
+         qpat_assum `!k. valid_horizon cx st0 k ee.storage_trace ==>
+                       stmt_state_rel k ctx func cenv cx ee s /\ _`
+           (qspec_then `h` mp_tac) >> simp[]) >>
+      rename1 `stmt_state_rel entry_h ctx func cenv cx ee s` >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+        s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp` by
+        (strip_tac >> conj_tac
+         >- (qpat_assum `stmt_state_rel entry_h ctx func cenv cx ee s`
+               (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+             simp[]) >>
+         qpat_assum `stmt_state_rel entry_h ctx func cenv cx ee s`
+           (mp_tac o MATCH_MP stateRelProjTheory.stmt_state_rel_fmp_room) >>
+         qpat_assum `ctx_has_dalloca ctx` mp_tac >>
+         POP_ASSUM_LIST (K ALL_TAC) >> simp[fmp_room_def] >> decide_tac) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+        u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp` by
+        (PURE_REWRITE_TAC [allocas_below_fmp_def, pending_alloca_size_def] >>
+         map_every (fn field => qpat_assum field (PURE_REWRITE_TAC o single))
+           [`u.vs_allocas = s.vs_allocas`, `u.vs_alloca_next = s.vs_alloca_next`,
+            `u.vs_fmp = s.vs_fmp`, `u.vs_initial_fmp = s.vs_initial_fmp`] >>
+         qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
+           (ACCEPT_TAC o PURE_REWRITE_RULE [allocas_below_fmp_def, pending_alloca_size_def])) >>
       drule_all extcall_dispatch_abort >> strip_tac >>
       qexistsl_tac [`f`,`Gf`,`tf`] >> simp[] >>
       rpt strip_tac >>

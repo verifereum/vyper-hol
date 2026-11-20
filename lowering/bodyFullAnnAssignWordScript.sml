@@ -6,6 +6,7 @@ Ancestors
   bodyExprPreFacts exprSimHyps exprSimSource supportedStmtTraverse vyperTypeCallGraph
   bodySimDeclCases supportedExprTraverse stmtSimProps loweringSlice exprLoweringProps
   bodyFullAllocaFresh gasShadowCompileStmtHelpers gasShadowCompileStmtBase
+  bodyFullHashKeccakFixed bodyFullIfExpReach stateRelProj
   stmtSimDeclSource stmtSimDeclStore bodyMemoryDefs logStoreDataOriginPtr bodyBinopFragMemory
   compileEnv exprLowering stmtLowering loweringPosts vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
@@ -69,7 +70,8 @@ Theorem annassign_word_full_continuation[local]:
   eval_operand op u = SOME (typed_val_to_w256 tyv v) /\ op_taint tn1 op = {} /\
   lookup_var p u = SOME w /\ w2n w + 32 < dimword (:256) /\
   w2n w + 32 <= u.vs_alloca_next /\ ptr_covers G1 tn1 p u 32 /\
-  allocas_from lo u /\ lo <= u.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo u /\ lo <= u.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
   fn_has_code b sf func /\ ~u.vs_halted /\
   u.vs_current_bb = b.cs_current_bb /\ u.vs_inst_idx = LENGTH b.cs_current_insts /\
   (!tail. new_variable id tyv v (mid with gas_obs := tail) =
@@ -92,7 +94,6 @@ Proof
   strip_tac >>
   `compile_store_memory ce op (Var p) typ typ b = ((),sf)` by
     simp[contextTheory.compile_store_memory_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all compile_store_memory_word_origin_ptr_path >>
   disch_then (qspecl_then [`explicit`, `PG`] mp_tac) >> strip_tac >>
   irule gasOutcomeFullComposeTheory.gas_outcome_full_pure >>
@@ -320,7 +321,9 @@ Theorem annassign_word_full_rhs[local]:
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
   MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code a b func /\ fn_has_code shadow_a shadow_b shadow_func /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved ce a /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce a /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+  (!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s) /\
   (!H. dead_lo_ok H (DF H) lo old cx) /\ ce.ce_is_ctor = old.ce_is_ctor /\
   ce.ce_return_buf = old.ce_return_buf /\ ce.ce_return_pc = old.ce_return_pc /\
   (!x sz. old.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -352,11 +355,6 @@ Theorem annassign_word_full_rhs[local]:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   strip_tac >>
-  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
-    (rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >>
-     disch_then drule >> strip_tac >>
-     fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
-        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`, `a`, `b`, `shadow_a`, `shadow_b`,
@@ -375,7 +373,8 @@ Proof
      simp[]) >>
   simp[post_value_type_word] >> disch_tac >>
   irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
-  goal_assum (drule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)) >> simp[]
+  goal_assum (drule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)) >> simp[] >>
+  rpt strip_tac >> qexists_tac `v` >> simp[]
 QED
 
 Theorem annassign_word_full_declared_layout[local]:
@@ -500,7 +499,10 @@ Theorem annassign_word_full_runtime_preparation[local]:
   ctx_inst_ids_distinct ctx /\ gas_shadow_function func shadow_func /\
   MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sf func /\ fn_has_code shadow_sa shadow_sf shadow_func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==>
+    (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s)) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   gas_admissible (eval_stmt cx (AnnAssign id (expr_type e) e)) (stmt_res_ok lctx) es /\
@@ -560,7 +562,12 @@ Proof
   `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
   qpat_x_assum `type_memory_bytes cenv (expr_type e) = 32` (assume_tac o SYM) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
-    s0.vs_alloca_next + pending_alloca_size func s0 <= w2n s0.vs_initial_fmp` by simp[] >>
+    s0.vs_alloca_next + pending_alloca_size func s0 <= w2n s0.vs_initial_fmp` by
+    (strip_tac >>
+     `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` by
+       metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     conj_tac >- metis_tac[stmt_state_rel_allocas_below_fmp] >>
+     drule stmt_state_rel_fmp_room >> simp[fmp_room_def] >> decide_tac) >>
   drule_all annassign_full_alloc_entry >>
   disch_then (qspecl_then [`PG`, `gas_explicit_sites ctx shadow_ctx`]
     (qx_choosel_then [`w`, `t`, `G'`, `tn'`] strip_assume_tac)) >>
@@ -587,11 +594,28 @@ Proof
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
   `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
      lookup_var x t = SOME w` by metis_tac[] >>
+  `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv' cx es t` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv' cx es t`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+    (Cases_on `ctx_has_dalloca ctx`
+     >- (qpat_assum `ctx_has_dalloca ctx ==> (!bb. _) /\ (!fn inst s. _)`
+           (drule_then strip_assume_tac) >>
+         qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK t,G',tn')`
+           (qspec_then `ARB` (fn path =>
+           qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn phi =>
+           qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _` (fn safe =>
+           ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+             (LIST_CONJ [path,phi,safe]))))))) >>
+     rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >>
+     disch_then drule >> strip_tac >>
+     fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
+        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   drule_all annassign_word_full_rhs >> disch_tac >>
   `?H:(bool # 256 word # type_value) list # num list.
-      stmt_state_rel H ctx func cenv' cx es t` by
-    (qexists_tac `storage_trace_horizon es.storage_trace` >>
-     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+      stmt_state_rel H ctx func cenv' cx es t` by goal_assum (drule_at Any) >>
   qexistsl_tac [`w`, `t`, `G'`, `tn'`] >> fs[post_value_type_word] >> gvs[] >>
   goal_assum (drule_at Any)
 QED
@@ -614,7 +638,7 @@ Theorem annassign_word_full_source_action[local]:
   is_word_type (expr_type e) /\ evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
   cenv.ce_alloca_locals /\ FLOOKUP cenv.ce_vars id = NONE /\
   expr_sim_inv cenv cx env es /\ expr_body_pre cenv' cx env e es /\
-  ~ctx_has_dalloca ctx /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\ ~block_is_terminated sa /\
   declare_local cenv id (expr_type e) sa = (cenv',r) /\
@@ -676,6 +700,15 @@ Proof
   drule annassign_word_full_store_ready >> disch_then drule >>
   disch_then (fn th => first_assum (mp_then (Pos hd) mp_tac th)) >>
   disch_then drule_all >> strip_tac >> gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (`valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace`
+       by fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+       (drule_then strip_assume_tac) >>
+     qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ u`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+     qpat_assum `stmt_state_rel _ ctx func cenv' cx mid u`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   irule annassign_word_full_continuation >> simp[] >>
   goal_assum (drule_at (Pat `compile_stmt _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `emit_void MSTORE _ _ = _`)) >>
@@ -740,7 +773,10 @@ Theorem annassign_word_full_execution_sep:
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
   MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sf func /\ fn_has_code shadow_sa shadow_sf shadow_func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==>
+    (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s)) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~block_is_terminated sa /\
@@ -880,6 +916,9 @@ Theorem annassign_word_full_execution:
         halt_exit H cx ee res r)
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==>
+    (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s)` by simp[] >>
   drule_all annassign_word_full_execution_sep >>
   disch_then (fn th => irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
     irule_at Any th) >>

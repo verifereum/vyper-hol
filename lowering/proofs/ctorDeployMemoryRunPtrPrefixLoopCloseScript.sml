@@ -295,7 +295,7 @@ Theorem prefix_loop_element_setup_at_index_pair:
   FLOOKUP G ip = SOME (slot,32) /\
   op_taint tn (Var ip) = {} /\ (!k. k < 32 ==> slot+k NOTIN tn.t_mem) /\
   op_taint tn src = {} /\ op_taint tn dst = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t H qt.
     run_inst_seq (emitted_insts st st') s = OK t /\
     (!D' k. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st')
@@ -334,7 +334,6 @@ Proof
      mp_tac (Q.ISPEC `vs:value list` (Q.SPEC `j:num` TAKE_DROP_SUC)) >>
      asm_simp_tac bool_ss [GSYM APPEND_ASSOC,APPEND]) >>
   `!k. k < 32 ==> k+slot NOTIN tn.t_mem` by metis_tac[ADD_COMM] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `TAKE j avs ++ _ = avs` (fn av_eq =>
     qpat_assum `TAKE j vs ++ _ = vs` (fn v_eq =>
       drule (PURE_REWRITE_RULE [av_eq,v_eq] (Q.INST
@@ -445,6 +444,7 @@ Proof
      rpt strip_tac >> first_x_assum (qspec_then `slot+k` mp_tac) >> simp[]) >>
   `mload slot X0 = n2w j` by
     (qpat_x_assum `mload _ X0 = _` mp_tac >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp X0` by simp[] >>
   drule_all prefix_loop_element_setup_at_index_pair >>
   disch_then (qspecl_then [`func`,`PG`,`Ddead`] strip_assume_tac) >>
   `X0.vs_inst_idx = LENGTH st.cs_current_insts` by simp[] >>

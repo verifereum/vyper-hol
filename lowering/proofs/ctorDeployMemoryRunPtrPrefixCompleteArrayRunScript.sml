@@ -555,6 +555,7 @@ Proof
     (qpat_x_assum `DISJOINT X2.t_mem _` mp_tac >>
      simp_tac std_ss [DISJOINT_DEF,EXTENSION,IN_INTER,NOT_IN_EMPTY,GSPECIFICATION] >>
      rpt strip_tac >> first_x_assum (qspec_then `slot+a` mp_tac) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp X0` by simp[] >>
   drule_all prefix_loop_element_setup_at_index_pair >>
   disch_then (qspecl_then [`func`,`PG`,`Ddead`] strip_assume_tac) >>
   `X0.vs_inst_idx = LENGTH st.cs_current_insts` by simp[] >>
@@ -1046,6 +1047,7 @@ Proof
     (qpat_x_assum `DISJOINT X2.t_mem _` mp_tac >>
      simp_tac std_ss [DISJOINT_DEF,EXTENSION,IN_INTER,NOT_IN_EMPTY,GSPECIFICATION] >>
      rpt strip_tac >> first_x_assum (qspec_then `slot+a` mp_tac) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp X0` by simp[] >>
   drule_all prefix_loop_element_setup_at_index_pair >>
   disch_then (qspecl_then [`func`,`PG`,`Ddead`] strip_assume_tac) >>
   `X0.vs_inst_idx = LENGTH st.cs_current_insts` by simp[] >>

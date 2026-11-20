@@ -749,16 +749,6 @@ Resume intcall_args_defaults_scope_mutual_from_actions[builtin]:
           rpt gen_tac >> disch_tac >> BETA_TAC >>
           irule intcall_args_scope_bind >> reverse conj_tac
           >- metis_tac[] >> simp[return_def]) >>
-      Cases_on `blt = Bop In \/ blt = Bop NotIn` >> simp[]
-      >- (irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
-          rpt gen_tac >> disch_tac >> BETA_TAC >>
-          simp[type_check_def, assert_def, lift_option_type_def, lift_sum_def,
-               bind_def, return_def, raise_def] >>
-          rpt IF_CASES_TAC >> simp[bind_def, raise_def] >>
-          Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
-          simp[bind_def, return_def, raise_def] >>
-          Cases_on `evaluate_membership x (blt = Bop NotIn) (HD v') (EL 1 v')` >>
-          simp[return_def, raise_def]) >>
       Cases_on `blt = Env MsgGas` >> simp[]
       >- (rpt gen_tac >> simp[next_gas_reading_def] >>
           Cases_on `s.gas_obs` >> simp[return_def, raise_def]) >>
@@ -982,6 +972,7 @@ Proof
   Cases_on `lowered_value_type cenv e = expr_type e` >- gvs[] >>
   `(?n s. e = Literal (BaseT (StringT n)) (StringL s)) \/
    (?n bs. e = Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) \/
+   (?n bs. e = Literal (BaseT (BytesT (Dynamic n))) (HexBytesL bs)) \/
    (?ty n args. e = Builtin ty (Concat n) args) \/
    (?ann ensure method_id tys args.
       e = TypeBuiltin ann (AbiEncode ensure method_id) tys args) \/
@@ -1001,6 +992,7 @@ Proof
      rename1 `Call ann target args dret` >> Cases_on `target` >>
      simp[lowered_value_type_def]) >>
   pop_assum mp_tac >> strip_tac >> gvs[expr_type_def]
+  >- (drule type_widens_from_bytestring >> simp[is_bytestring_type_def])
   >- (drule type_widens_from_bytestring >> simp[is_bytestring_type_def])
   >- (drule type_widens_from_bytestring >> simp[is_bytestring_type_def])
   >- (gvs[well_typed_expr_def, well_typed_builtin_app_def] >>

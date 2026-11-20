@@ -31,7 +31,7 @@ QED
 
 Theorem guard_selected_raw_inputs[local]:
   vyper_call_staging fin policy tops (assemble prog') am tx ret es /\
-  vs0 = opt_entry_state prog prog' cplan es /\ txp = tx with code := vs0.vs_code /\
+  vs0 = opt_entry_state_own prog prog' cplan es /\ txp = tx with code := vs0.vs_code /\
   code_layout_valid vs0 /\ raw_variant fmp vs vs0 ==>
   source_typing_ok tops am txp /\ source_deployment_rel tops am txp /\
   dispatched_vyper_call tops txp vs.vs_call_ctx.cc_calldata ret /\
@@ -43,26 +43,23 @@ Theorem guard_selected_raw_inputs[local]:
   vs.vs_fmp = fmp /\ vs.vs_initial_fmp = fmp
 Proof
   simp[vyper_call_staging_def, vyper_frame_staging_def] >> strip_tac >> gvs[] >>
-  rename1 `raw_variant fmp vs (opt_entry_state prog prog' cplan es)` >>
-  qabbrev_tac `vs0 = opt_entry_state prog prog' cplan es` >>
-  `LENGTH vs0.vs_code < 2 ** 256` by
-    (qpat_assum `code_layout_valid vs0`
-       (mp_tac o REWRITE_RULE [code_layout_valid_def]) >>
-     simp[dimword_def, dimindex_256] >> strip_tac >>
-     irule LESS_EQ_LESS_TRANS >> qexists_tac `2 ** 255` >> fs[]) >>
+  rename1 `raw_variant fmp vs (opt_entry_state_own prog prog' cplan es)` >>
+  qabbrev_tac `vs0 = opt_entry_state_own prog prog' cplan es` >>
+  `tx with code := vs0.vs_code = tx` by
+    metis_tac[Abbr `vs0`, opt_entry_own_txp_identity] >>
   `source_deployment_rel tops am tx` by
     fs[call_state_rel_def] >>
   `vs.vs_outcomes = MAP SND (call_trace es) /\
    vs.vs_call_ctx.cc_calldata = buffer_to_list (FST (HD es.contexts)).msgParams.data` by
     (drule raw_variant_outcomes >> drule raw_variant_call_ctx >>
-     simp[Abbr `vs0`, opt_entry_state_def, entry_venom_state_def]) >>
+     simp[Abbr `vs0`, opt_entry_state_own_def, entry_venom_state_def]) >>
   `wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es` by
     fs[call_state_rel_def, evm_state_ok_def] >>
   drule_all call_trace_outcomes_bounded >> strip_tac >>
   `LENGTH vs.vs_call_ctx.cc_calldata < 2 ** 64` by
-    metis_tac[Abbr `vs0`, raw_variant_opt_entry_calldata_bound] >>
+    metis_tac[Abbr `vs0`, raw_variant_opt_entry_calldata_bound_own] >>
   `initial_venom_state_rel tops am (tx with code := vs0.vs_code) vs` by
-    metis_tac[Abbr `vs0`, opt_entry_initial_venom_state_rel,
+    metis_tac[Abbr `vs0`, opt_entry_initial_venom_state_rel_own,
               raw_variant_initial_venom_state_rel] >>
   `code_layout_valid vs /\ vs.vs_fmp = fmp /\ vs.vs_initial_fmp = fmp` by
     (qpat_assum `raw_variant _ _ _`
@@ -71,15 +68,14 @@ Proof
        `\st:venom_state. (st.vs_fmp, st.vs_initial_fmp, st.vs_code,
                          st.vs_data_section, st.vs_labels)`) >>
      simp[] >> strip_tac >> fs[code_layout_valid_def]) >>
-  fs[source_typing_ok_code_update, source_deployment_rel_def, layouts_agree_def,
-     dispatched_vyper_call_code_update]
+  fs[LENGTH_MAP]
 QED
 
 Theorem guard_source_marks:
   s1_request_prefix tops /\ supported_program tops /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   vyper_call_staging fin policy tops (assemble prog') am tx ret es /\
-  vs0 = opt_entry_state prog prog' cplan es /\ txp = tx with code := vs0.vs_code /\
+  vs0 = opt_entry_state_own prog prog' cplan es /\ txp = tx with code := vs0.vs_code /\
   code_layout_valid vs0 /\ w2n fmp < 2 ** 254 /\
   unit_alloca_budget unit.cu_context +
     32 * ctx_dload_count unit.cu_context <= w2n fmp ==>

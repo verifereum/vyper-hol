@@ -144,6 +144,7 @@ Proof
    w2n (n2w d:256 word) + 32 <= s.vs_alloca_next /\ ptr_covers G tn output s 32` by
     gvs[eval_operand_def, abi_decoder_operand_live_def, abi_decoder_older_vars_def,
         not_fresh_at_def, w2n_n2w, LESS_MOD] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all abi_decode_allocated_word_success_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `t.vs_inst_idx = LENGTH en.cs_current_insts` by fs[abi_valid_allocated_post_def] >>

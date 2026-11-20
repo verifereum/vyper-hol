@@ -49,30 +49,26 @@ Theorem default_bytes_alloc_origin:
   compile_alloc_buffer cap st = (buf,allocated) /\
   fn_has_code st allocated fn /\
   FLOOKUP s.vs_allocas st.cs_next_id = NONE /\ cap < dimword (:256) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  let p = STRING #"%" (toString st.cs_next_var);
-      a = (update_var p (n2w s.vs_alloca_next)
-        (s with <|vs_allocas := s.vs_allocas |+
-          (st.cs_next_id,(s.vs_alloca_next,cap));
-          vs_alloca_next := s.vs_alloca_next+cap|>))
-        with vs_inst_idx := LENGTH allocated.cs_current_insts;
-      H = G |+ (p,(s.vs_alloca_next,cap));
-      u = tn with <|t_var := tn.t_var |+ (p,{});
-        t_mem := tn.t_mem UNION
-          {j | s.vs_alloca_next <= j /\ j < s.vs_alloca_next+cap}|>
-  in !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
-    (s,G,tn) [] (OK a,H,u)
+  !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK ((update_var (STRING #"%" (toString st.cs_next_var)) (n2w s.vs_alloca_next)
+      (s with <|vs_allocas := s.vs_allocas |+ (st.cs_next_id,(s.vs_alloca_next,cap));
+        vs_alloca_next := s.vs_alloca_next+cap|>))
+      with vs_inst_idx := LENGTH allocated.cs_current_insts),
+     G |+ (STRING #"%" (toString st.cs_next_var),(s.vs_alloca_next,cap)),
+     tn with <|t_var := tn.t_var |+ (STRING #"%" (toString st.cs_next_var),{});
+       t_mem := tn.t_mem UNION {j | s.vs_alloca_next <= j /\
+         j < s.vs_alloca_next+cap}|>)
 Proof
-  strip_tac >> simp_tac bool_ss [LET_THM] >> rpt gen_tac >>
+  strip_tac >> rpt gen_tac >>
   `emit_op ALLOCA [Lit (n2w cap)] st = (buf.buf_operand,allocated)` by
     (gvs[compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
      pairarg_tac >> gvs[]) >>
   irule prefix_register_address_emit_origin >> simp[] >>
   qexistsl_tac [`ALLOCA`,`[Lit (n2w cap)]`,`buf.buf_operand`,`st`] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
-    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   drule_all prefix_register_alloc_pair >>
   disch_then (qspecl_then [`STRING #"%" (toString st.cs_next_var)`,
     `tn`,`0`,`PG`,`G`,`D`] mp_tac) >>
@@ -93,7 +89,9 @@ Theorem default_bytes_registration_prelude_footprint:
   alloca_inv s /\ alloca_frontier_inv_from k ctx fn site s /\
   fn_inst_ids_distinct fn /\ k + unit_alloca_budget ctx < dimword (:256) /\
   FLOOKUP s.vs_allocas st.cs_next_id = NONE /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   alloca_history fn s /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?ready H u p.
@@ -128,7 +126,8 @@ Theorem default_bytes_registration_prelude_footprint:
       (s,G,tn) [] (OK ready,H,u)) /\
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u ready) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
-    (!v. ~not_fresh_at first v ==> lookup_var v ready = lookup_var v s)
+    (!v. ~not_fresh_at first v ==> lookup_var v ready = lookup_var v s) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp ready)
 Proof
   strip_tac >>
   drule default_bytes_guard_shape >> strip_tac >>
@@ -148,11 +147,23 @@ Proof
   drule_all default_bytes_address_prelude_footprint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] (qx_choose_then `a`
     (qx_choose_then `H0` (qx_choose_then `u0` (qx_choose_then `p` strip_assume_tac))))) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by simp[] >>
   drule_all default_bytes_guard_prelude >>
   disch_then (qspec_then `PG` (qx_choose_then `ready` (qx_choose_then `H`
     (qx_choose_then `u` strip_assume_tac)))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ready` by
+    (`ready.vs_allocas = a.vs_allocas /\ ready.vs_fmp = a.vs_fmp /\
+       ready.vs_initial_fmp = a.vs_initial_fmp` by
+       (qpat_assum `ready = update_var _ _ (update_var _ _ a) with vs_inst_idx := _` (PURE_ONCE_REWRITE_TAC o single) >>
+        simp[update_var_def]) >>
+     PURE_REWRITE_TAC [allocas_below_fmp_def] >>
+     qpat_assum `ready.vs_allocas = a.vs_allocas` (PURE_REWRITE_TAC o single) >>
+     qpat_assum `ready.vs_fmp = a.vs_fmp` (PURE_REWRITE_TAC o single) >>
+     qpat_assum `ready.vs_initial_fmp = a.vs_initial_fmp` (PURE_REWRITE_TAC o single) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp a`
+       (ACCEPT_TAC o PURE_REWRITE_RULE [allocas_below_fmp_def])) >>
   qexistsl [`ready`,`H`,`u`,`p`] >>
+  qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp ready`
+    (fn th => simp_tac bool_ss [th]) >>
   pure_rewrite_tac[CONJ_ASSOC] >>
   reverse conj_tac >- suspend "footprint" >>
   reverse conj_tac >- suspend "pullback" >>
@@ -264,7 +275,10 @@ Theorem default_bytes_registration_prelude:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u ready) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all default_bytes_registration_prelude_footprint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
+  drule_all default_bytes_registration_prelude_footprint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
   qexistsl [`ready`,`H`,`u`,`p`] >> simp[]
 QED

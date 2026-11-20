@@ -132,7 +132,8 @@ Proof
      Cases_on `abi_decoder_dynamic (type_to_abi_dec_info sf ce ty)` >>
      fs[abi_decoder_needs_offset_iff, abi_member_head_size_def] >> decide_tac) >>
   `fn_has_code st mid func /\ fn_has_code mid child func` by
-    metis_tac[fn_has_code_split] >>
+    (qspecl_then [`st`, `mid`, `child`, `func`] mp_tac fn_has_code_split >>
+     asm_simp_tac bool_ss []) >>
   `mid.cs_next_var <= ceiling.cs_next_var /\ child.cs_next_var <= ceiling.cs_next_var` by
     decide_tac >>
   asm "setup" (qspecl_then [`ty`, `ao`, `vo`, `st`, `mid`, `child`, `en`, `ops`, `s`, `G`, `tn`] mp_tac) >>
@@ -229,7 +230,20 @@ Proof
      asm_simp_tac bool_ss [TAKE, EL, HD, TL, MAP, SUM, LESS_EQ_MONO,
         prim_recTheory.INV_SUC_EQ, AC ADD_ASSOC ADD_COMM])) >>
   disch_then (qx_choose_then `u` (qx_choose_then `H` (qx_choose_then `z` strip_assume_tac))) >>
-  qexistsl_tac [`u`, `H`, `z`] >> conj_tac >- metis_tac[] >>
+  qexistsl_tac [`u`, `H`, `z`] >> conj_tac >- (
+    rpt conj_tac
+    >- (qpat_assum `u.vs_accounts = t.vs_accounts` SUBST1_TAC >>
+        qpat_assum `t.vs_accounts = r.vs_accounts` SUBST1_TAC >>
+        qpat_assum `r.vs_accounts = s.vs_accounts` (fn th => simp_tac bool_ss [th]))
+    >- (qpat_assum `u.vs_transient = t.vs_transient` SUBST1_TAC >>
+        qpat_assum `t.vs_transient = r.vs_transient` SUBST1_TAC >>
+        qpat_assum `r.vs_transient = s.vs_transient` (fn th => simp_tac bool_ss [th]))
+    >- (qpat_assum `u.vs_call_ctx = t.vs_call_ctx` SUBST1_TAC >>
+        qpat_assum `t.vs_call_ctx = r.vs_call_ctx` SUBST1_TAC >>
+        qpat_assum `r.vs_call_ctx = s.vs_call_ctx` (fn th => simp_tac bool_ss [th]))
+    >- (qpat_assum `u.vs_immutables = t.vs_immutables` SUBST1_TAC >>
+        qpat_assum `t.vs_immutables = r.vs_immutables` SUBST1_TAC >>
+        qpat_assum `r.vs_immutables = s.vs_immutables` (fn th => simp_tac bool_ss [th]))) >>
   rpt gen_tac >>
   qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] _`
     (qspecl_then [`D`, `explicit`] mp_tac) >>
