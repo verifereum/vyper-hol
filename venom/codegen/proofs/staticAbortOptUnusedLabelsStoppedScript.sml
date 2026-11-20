@@ -1,13 +1,15 @@
 Theory staticAbortOptUnusedLabelsStopped
 Ancestors
+  asmSymOwnCode asmSymPcOwn asmSpliceOwn
+  staticAbortProtectedTraceCoverage staticAbortProtectedStepControl
   staticAbortOptMergeIszeroSync codegenSymRel asmSplice asmSymPc asmSymSem
   asmOptimizer asmSem arithmetic list
 
-Theorem unused_label_one_stopped_prefix:
+Theorem unused_label_one_stopped_prefix_mode:
   !p. p = pre ++ [AsmLabel l] ++ tail ==>
   ~MEM l (asm_label_refs p) /\ s.as_pc = 0 /\
-  sym_steps p env n (sym_init s) = SymOK ss ==>
-  ?j. sym_steps (pre ++ tail) env j (sym_init s) =
+  sym_steps_mode allow_own p env own n (sym_init s) = SymOK ss ==>
+  ?j. sym_steps_mode allow_own (pre ++ tail) env own j (sym_init s) =
       SymOK (sym_with_pc (splice_pc (LENGTH pre) 1 0 ss.sym_base.as_pc) ss)
 Proof
   qx_gen_tac `p` >>
@@ -15,37 +17,38 @@ Proof
   qabbrev_tac `q = pre ++ tail` >>
   qabbrev_tac `r = splice_pc (LENGTH (pre:asm_inst list)) 1 0` >>
   qid_spec_tac `ss` >> Induct_on `n`
-  >- (simp[sym_steps_def] >> rpt strip_tac >> qexists_tac `0` >>
-      simp[sym_steps_def, Abbr `r`, splice_pc_def, sym_init_def, sym_with_pc_def]) >>
-  gen_tac >> rewrite_tac[ADD1, sym_steps_add] >>
-  Cases_on `sym_steps p env n (sym_init s)` >> simp[] >>
-  rename1 `sym_steps p env n (sym_init s) = SymOK u` >>
+  >- (simp[sym_steps_mode_zero] >> rpt strip_tac >> qexists_tac `0` >>
+      simp[sym_steps_mode_zero, Abbr `r`, splice_pc_def, sym_init_def, sym_with_pc_def]) >>
+  gen_tac >> rewrite_tac[ADD1, sym_steps_mode_add] >>
+  Cases_on `sym_steps_mode allow_own p env own n (sym_init s)` >> simp[] >>
+  rename1 `sym_steps_mode allow_own p env own n (sym_init s) = SymOK u` >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `?j. sym_steps q env j (sym_init s) = SymOK (sym_with_pc (r u.sym_base.as_pc) u)`
+  `?j. sym_steps_mode allow_own q env own j (sym_init s) = SymOK (sym_with_pc (r u.sym_base.as_pc) u)`
     by metis_tac[] >>
   `u.sym_base.as_pc < LENGTH p /\
-   sym_step p env (EL u.sym_base.as_pc p) u = SymOK ss` by
-    (qpat_assum `sym_steps p env 1 u = SymOK ss` mp_tac >>
-     rewrite_tac[ONE, sym_steps_def] >> simp[AllCaseEqs()]) >>
+   (if allow_own then sym_step_own p env own (EL u.sym_base.as_pc p) u
+    else sym_step p env (EL u.sym_base.as_pc p) u) = SymOK ss` by
+    fs[sym_steps_mode_ok_one] >>
   Cases_on `u.sym_base.as_pc = LENGTH pre`
   >- suspend "label" >>
   suspend "retained"
 QED
 
-Resume unused_label_one_stopped_prefix[label]:
+Resume unused_label_one_stopped_prefix_mode[label]:
   `EL u.sym_base.as_pc p = AsmLabel l` by simp[Abbr `p`, EL_APPEND_EQN] >>
-  `u.sym_base.as_stack = []` by metis_tac[sym_init_prefix_base_stack] >>
+  `u.sym_base.as_stack = []` by metis_tac[sym_init_prefix_base_stack_mode] >>
   `ss = sym_with_pc (u.sym_base.as_pc + 1) u` by
     (qpat_assum `EL _ p = AsmLabel l` (fn th =>
-       qpat_assum `sym_step p env _ u = _` (mp_tac o PURE_REWRITE_RULE [th])) >>
-     simp[sym_step_def, sym_lift_def, asm_step_def, asm_next_def, sym_with_pc_def,
+       qpat_assum `(if allow_own then sym_step_own _ _ _ _ u else sym_step _ _ _ u) = _`
+         (mp_tac o PURE_REWRITE_RULE [th])) >>
+     simp[sym_step_own_eq, sym_step_def, sym_lift_def, asm_step_def, asm_next_def, sym_with_pc_def,
           sym_state_component_equality, asm_state_component_equality]) >>
   `sym_with_pc (r ss.sym_base.as_pc) ss = sym_with_pc (r u.sym_base.as_pc) u` by
     simp[Abbr `r`, splice_pc_def, sym_with_pc_def] >>
   qexists_tac `j` >> simp[]
 QED
 
-Resume unused_label_one_stopped_prefix[retained]:
+Resume unused_label_one_stopped_prefix_mode[retained]:
   Q.SUBGOAL_THEN `u.sym_base.as_pc < LENGTH pre \/ LENGTH pre + 1 <= u.sym_base.as_pc`
     assume_tac >- decide_tac >>
   `r u.sym_base.as_pc < LENGTH q /\ EL (r u.sym_base.as_pc) q = EL u.sym_base.as_pc p` by
@@ -60,27 +63,32 @@ Resume unused_label_one_stopped_prefix[retained]:
      irule (cj 2 (SRULE [] (Q.INST [`pat` |-> `[AsmLabel l]`, `repl` |-> `[]:asm_inst list`]
        splice_jump_ok))) >> qexists_tac `l` >> fs[Abbr `p`]) >>
   `sym_state_labels_in (asm_label_refs p) u` by
-    (qpat_assum `sym_steps p env n _ = SymOK u`
-       (mp_then (Pos last) mp_tac sym_steps_labels_in) >>
-     simp[sym_state_labels_in_def, sym_init_def, MEM_MAP]) >>
-  `sym_step q env (EL u.sym_base.as_pc p) (sym_with_pc (r u.sym_base.as_pc) u) =
+    (`(sym_init s).sym_base.as_stack = []` by simp[sym_init_def] >>
+     `sym_state_labels_in (asm_label_refs p) (sym_init s)`
+       by simp[sym_state_labels_in_def, sym_init_def, MEM_MAP] >>
+     Cases_on `allow_own` >>
+     RULE_ASSUM_TAC (PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES])
+     >- (drule_all sym_steps_own_preserves_splice_invariant >> simp[]) >>
+     drule_all sym_steps_labels_in >> simp[]) >>
+  `(if allow_own then sym_step_own q env own (EL u.sym_base.as_pc p) (sym_with_pc (r u.sym_base.as_pc) u)
+    else sym_step q env (EL u.sym_base.as_pc p) (sym_with_pc (r u.sym_base.as_pc) u)) =
      SymOK (sym_with_pc (r ss.sym_base.as_pc) ss)` suffices_by
-    (strip_tac >> qexists_tac `j+1` >> simp[sym_steps_add] >>
+    (strip_tac >> qexists_tac `j+1` >> simp[sym_steps_mode_add] >>
      qabbrev_tac `v = sym_with_pc (r u.sym_base.as_pc) u` >>
      `v.sym_base.as_pc = r u.sym_base.as_pc` by simp[Abbr `v`, sym_with_pc_def] >>
-     simp[Once sym_steps_pos, sym_steps_def]) >>
+     simp[sym_steps_mode_ok_one]) >>
   qabbrev_tac `inst = EL u.sym_base.as_pc p` >>
   Cases_on `inst = AsmOp "JUMP"` >- suspend "jump" >>
   Cases_on `inst = AsmOp "JUMPI"` >- suspend "jumpi" >>
   suspend "linear"
 QED
 
-Resume unused_label_one_stopped_prefix[jump]:
-  fs[sym_step_def, sym_step_op_def] >> metis_tac[]
+Resume unused_label_one_stopped_prefix_mode[jump]:
+  fs[sym_step_own_eq, sym_step_def, sym_step_op_def] >> metis_tac[]
 QED
 
-Resume unused_label_one_stopped_prefix[jumpi]:
-  gns[sym_step_def, sym_step_op_def] >>
+Resume unused_label_one_stopped_prefix_mode[jumpi]:
+  gns[sym_step_own_eq, sym_step_def, sym_step_op_def] >>
   namedCases_on `u.sym_stack` ["", "dest rest"] >> gns[sym_jumpi_def] >>
   namedCases_on `rest` ["", "cond stk"] >> gns[sym_jumpi_def] >>
   Cases_on `cond` >> gns[sym_jumpi_def] >>
@@ -101,26 +109,38 @@ Resume unused_label_one_stopped_prefix[jumpi]:
   gs[sym_jump_def, sym_with_pc_def, sym_state_component_equality]
 QED
 
-Resume unused_label_one_stopped_prefix[linear]:
+Resume unused_label_one_stopped_prefix_mode[linear]:
   `ss.sym_base.as_pc = u.sym_base.as_pc + 1` by
-    (drule_all sym_step_pc_next >> simp[]) >>
+    (drule_all protected_step_pc_next >> simp[]) >>
   `r ss.sym_base.as_pc = r u.sym_base.as_pc + 1` by
     (simp[Abbr `r`] >> irule (cj 1 splice_pc_next) >> simp[]) >>
-  `!t. sym_step q env inst t = sym_step p env inst t` by
-    (gen_tac >> irule sym_step_prog_cong >> simp[Abbr `p`, Abbr `q`]) >>
+  `!t. (if allow_own then sym_step_own q env own inst t else sym_step q env inst t) =
+       (if allow_own then sym_step_own p env own inst t else sym_step p env inst t)` by
+    (gen_tac >> irule protected_step_prog_cong >> simp[Abbr `p`, Abbr `q`]) >>
   qabbrev_tac `v = sym_with_pc (r u.sym_base.as_pc) u` >>
   qabbrev_tac `delta = u.sym_base.as_pc - r u.sym_base.as_pc` >>
   `v.sym_base.as_pc + delta = u.sym_base.as_pc` by
     simp[Abbr `v`, Abbr `delta`, Abbr `r`, sym_with_pc_def, splice_pc_def] >>
   `sym_with_pc (v.sym_base.as_pc + delta) v = u` by
     simp[Abbr `v`, sym_with_pc_def] >>
-  mp_tac (Q.INST [`ss` |-> `v`, `n` |-> `delta`] sym_step_pc_add) >>
+  mp_tac (Q.INST [`ss` |-> `v`, `n` |-> `delta`] protected_step_pc_add) >>
   simp[] >>
-  Cases_on `sym_step p env inst v` >> simp[sym_result_pc_add_def] >>
+  Cases_on `(if allow_own then sym_step_own p env own inst v else sym_step p env inst v)` >> simp[sym_result_pc_add_def] >>
   disch_then (assume_tac o SYM) >> simp[] >>
-  drule_all sym_step_pc_next >> strip_tac >>
+  drule_all protected_step_pc_next >> strip_tac >>
   qpat_assum `sym_with_pc _ _ = ss` (SUBST_ALL_TAC o SYM) >>
   gns[Abbr `v`, sym_with_pc_def, sym_state_component_equality, asm_state_component_equality]
 QED
 
-Finalise unused_label_one_stopped_prefix
+Finalise unused_label_one_stopped_prefix_mode
+
+Theorem unused_label_one_stopped_prefix:
+  !p. p = pre ++ [AsmLabel l] ++ tail ==>
+  ~MEM l (asm_label_refs p) /\ s.as_pc = 0 /\
+  sym_steps p env n (sym_init s) = SymOK ss ==>
+  ?j. sym_steps (pre ++ tail) env j (sym_init s) =
+      SymOK (sym_with_pc (splice_pc (LENGTH pre) 1 0 ss.sym_base.as_pc) ss)
+Proof
+  MATCH_ACCEPT_TAC (Q.INST [`allow_own` |-> `F`, `own` |-> `[]`] unused_label_one_stopped_prefix_mode
+    |> PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES])
+QED

@@ -26,26 +26,6 @@ Proof
        vfmExecutionTheory.process_deletions_def]
 QED
 
-Theorem deploy_ctor_start_pending[local]:
-  deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) ==>
-  es0.pending_deletions = am.pending_deletions
-Proof
-  pure_rewrite_tac[deploy_ctor_start_def] >> rpt strip_tac >>
-  drule pending_all_constants >> simp[] >> strip_tac >>
-  `state_rel_frame (\(s:evaluation_state) t.
-      t.pending_deletions = s.pending_deletions)
-    (ignore_bind (send_call_value mut (deploy_evaluation_context tops am tx))
-      (lock_if_nr (deploy_evaluation_context tops am tx) nr (is_view_mut mut)))` by
-    (rewrite_tac[vyperStateTheory.ignore_bind_def] >>
-     match_mp_tac pending_frame_bind >> conj_tac
-     >- MATCH_ACCEPT_TAC (cj 1 pending_frame_setup) >>
-     gen_tac >> BETA_TAC >> MATCH_ACCEPT_TAC (cj 2 pending_frame_setup)) >>
-  qpat_x_assum `state_rel_frame _ _` mp_tac >>
-  pure_rewrite_tac[vyperCallOutcomeFrameTheory.state_rel_frame_def] >>
-  disch_then (qspec_then `initial_state am_c [env] with <|outcomes := NONE; requests := []|>` mp_tac) >>
-  simp[initial_state_def]
-QED
-
 Theorem deploy_ctor_start_nr[local]:
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) ==> ~nr
@@ -53,22 +33,6 @@ Proof
   simp[e2eDeployDefsTheory.deploy_state_rel_def,
     e2eDeployDefsTheory.constructor_args_encode_def, deploy_ctor_start_def] >>
   rpt strip_tac >> gvs[]
-QED
-
-Theorem deploy_ctor_body_pending[local]:
-  deploy_source_ok tops am tx /\
-  deploy_state_rel tops deploy_bc am tx es /\
-  deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
-  eval_stmts (deploy_evaluation_context tops am tx) stmts
-    (es0 with <|gas_obs := gs; outcomes := SOME outcomes|>) = (res,st) ==>
-  st.pending_deletions = am.pending_deletions
-Proof
-  strip_tac >> drule deploy_ctor_start_pending >> strip_tac >>
-  `~supported_stmts_expr_exists constructor_call_root stmts` by
-    (gvs[deploy_source_ok_def, e2eDeployDefsTheory.deploy_state_rel_def,
-         deploy_ctor_start_def, e2eDeployDefsTheory.constructor_call_free_def] >> metis_tac[]) >>
-  drule_all (cj 2 pending_call_free_statements) >>
-  gvs[e2eDeployDefsTheory.deploy_state_rel_def]
 QED
 
 Theorem deploy_send_call_value_observations[local]:
@@ -873,7 +837,7 @@ Theorem deploy_runtime_snapshot_slice[local]:
   deploy_phases policy tops (deploy_bc,bytes)
     (rpolicy,dunit,dout,prog,cplan) /\ deploy_source_ok tops am tx /\
   deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es) /\
+  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
   snap.vs_code = vs.vs_code /\ snap.vs_labels = vs.vs_labels /\
   FLOOKUP snap.vs_labels "runtime_begin" = SOME codepos ==>
   TAKE (LENGTH bytes)
@@ -895,9 +859,9 @@ Proof
        (qspec_then `es` strip_assume_tac))
        e2eEntryTheory.entry_venom_state_frame_fields >>
      gvs[deploy_entry_state_def] >>
-     qpat_assum `_ with vs_alloca_next := _ = _`
+     qpat_assum `_ with <|vs_outcomes := _; vs_alloca_next := _|> = _`
        (mp_tac o Q.AP_TERM `\s. s.vs_code`) >> simp[] >> strip_tac >>
-     qpat_x_assum `_ with vs_alloca_next := _ = _`
+     qpat_x_assum `_ with <|vs_outcomes := _; vs_alloca_next := _|> = _`
        (mp_tac o Q.AP_TERM `\s. s.vs_labels`) >> simp[] >>
      strip_tac >>
      qpat_x_assum `!l. FLOOKUP _ l = _`
@@ -951,7 +915,7 @@ Theorem deploy_ctor_return:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es) /\
+    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
@@ -968,8 +932,6 @@ Theorem deploy_ctor_return:
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `~nr` by (drule_all deploy_ctor_start_nr >> simp[]) >>
-  `st.pending_deletions = am.pending_deletions` by
-    (drule_all deploy_ctor_body_pending >> simp[]) >>
   `deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx) nr mut am_c res st =
    INL (finalize_pending_deletions
      (abstract_machine_from_state am_c.sources am_c.exports am_c.layouts st
@@ -1010,16 +972,16 @@ Proof
   gvs[initial_evaluation_context_def,
       e2eDeployDefsTheory.deploy_evaluation_context_def] >>
   `accounts_agree H tx.target
-    (process_deletions am.pending_deletions st.accounts)
-    (process_deletions am.pending_deletions before.vs_accounts)` by
+    (process_deletions st.pending_deletions st.accounts)
+    (process_deletions st.pending_deletions before.vs_accounts)` by
     (irule (SRULE [e2eDeployDefsTheory.deploy_evaluation_context_def,
       initial_evaluation_context_def]
       (Q.SPEC `deploy_evaluation_context tops am tx`
         accountsRelPropsTheory.accounts_agree_process_deletions)) >> fs[]) >>
-  Cases_on `MEM tx.target am.pending_deletions`
-  >- (`!a. process_deletions am.pending_deletions
+  Cases_on `MEM tx.target st.pending_deletions`
+  >- (`!a. process_deletions st.pending_deletions
         (update_account tx.target a before.vs_accounts) =
-        process_deletions am.pending_deletions before.vs_accounts` by
+        process_deletions st.pending_deletions before.vs_accounts` by
         (gen_tac >> irule accountsRelPropsTheory.process_deletions_update_mem >>
          fs[]) >> fs[]) >>
   `(lookup_account tx.target before.vs_accounts).code =

@@ -708,8 +708,12 @@ Resume prefix_members_complete_mode_cons[head]:
      simp_tac bool_ss [MAP_APPEND, MAP] >>
      disch_then (mp_then Any mp_tac abiDecoderMemberSliceTheory.abi_tuple_child_offset_ranges) >>
      simp[Excl "enc_def"] >> strip_tac >>
-     qpat_x_assum `checked ==> _ /\ alloca_history func initial` mp_tac >>
-     fs[MAP_APPEND, MAP, Excl "enc_def"] >> decide_tac) >>
+     qpat_x_assum `checked ==> _ /\ alloca_history func initial`
+       (fn bound => qpat_assum `checked` (mp_tac o CONJUNCT1 o MP bound)) >>
+     qpat_assum `LENGTH (enc (vyper_to_abi_type env ty) av) +
+       abi_tuple_child_offset _ _ (LENGTH preavs) <= LENGTH (enc (Tuple _) _)` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp_tac bool_ss [MAP_APPEND, MAP] >> decide_tac) >>
   qpat_assum `SND ops = Var child_dst` SUBST_ALL_TAC >>
   BETA_TAC >>
   asm "child" (fn th =>

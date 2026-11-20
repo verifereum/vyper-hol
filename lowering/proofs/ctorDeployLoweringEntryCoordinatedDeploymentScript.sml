@@ -68,6 +68,8 @@ Theorem deploy_ctor_entry_registered_coordinated_normalized:
     ?fuel'. run_context fuel' unit.cu_context vs = r)
 Proof
  rpt gen_tac >> strip_tac >>
+ `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
+   fs[o1PassContractTheory.gas_variant_def, venomStateTheory.venom_state_component_equality] >>
  drule (deploy_ctor_entry_before_register |> SPEC_ALL |>
    Q.INST [`cap` |-> `imm_len tops`, `is_payable` |-> `mut = Payable`] |> GEN_ALL |> SRULE []) >>
  disch_then drule_all >> strip_tac >>

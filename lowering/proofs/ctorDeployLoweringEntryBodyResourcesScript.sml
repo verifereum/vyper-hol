@@ -55,7 +55,7 @@ Theorem deploy_ctor_entry_registered_map_bounds_normalized_gas_path:
  exts ints fb rr fargs ce_pack pos_args st_pay st1 ce1 st2 st3 keep_bound.
  deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
  deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es) /\
+ gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\
@@ -195,7 +195,7 @@ Theorem deploy_ctor_entry_registered_map_bounds_gas_path:
  body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0 keep_bound.
  deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
  deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es) /\
+ gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) ==>
@@ -326,10 +326,16 @@ Theorem deploy_ctor_entry_registered_local_bounds_normalized_gas_path:
  (!fuel r. run_from fuel unit.cu_context func actual = r /\ (!err. r <> Error err) ==>
     ?fuel'. run_context fuel' unit.cu_context vs = r)
 Proof
- rpt gen_tac >>
- MATCH_ACCEPT_TAC (deploy_ctor_entry_registered_map_bounds_normalized_gas_path |>
-   SPEC_ALL |> Q.INST [`keep_bound` |-> `F`] |>
-   PURE_REWRITE_RULE [IMP_CLAUSES, AND_CLAUSES])
+ rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+ `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
+   fs[o1PassContractTheory.gas_variant_def, venomStateTheory.venom_state_component_equality] >>
+ qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `rp`, `unit`, `dout`, `prog`,
+    `cplan`, `am`, `tx`, `es`, `vs`, `body'`, `cenv`, `nr`,
+    `key`, `ut`, `imm`, `lbl`, `sa`, `sb`, `sj`, `se`,
+    `sp`, `sf`, `func`, `mut`, `nr'`, `body''`, `am_c`, `es0`,
+    `exts`, `ints`, `fb`, `rr`, `fargs`, `ce_pack`, `pos_args`, `st_pay`,
+    `st1`, `ce1`, `st2`, `st3`, `F`]
+   mp_tac deploy_ctor_entry_registered_map_bounds_normalized_gas_path >> simp[]
 QED
 
 Theorem deploy_ctor_entry_registered_local_bounds_gas_path:
@@ -378,10 +384,15 @@ Theorem deploy_ctor_entry_registered_local_bounds_gas_path:
  (!fuel r. run_from fuel unit.cu_context func actual = r /\ (!err. r <> Error err) ==>
     ?fuel'. run_context fuel' unit.cu_context vs = r)
 Proof
- rpt gen_tac >>
- MATCH_ACCEPT_TAC (deploy_ctor_entry_registered_map_bounds_gas_path |>
-   SPEC_ALL |> Q.INST [`keep_bound` |-> `F`] |>
-   PURE_REWRITE_RULE [IMP_CLAUSES, AND_CLAUSES])
+ rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+ `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
+   fs[o1PassContractTheory.gas_variant_def, venomStateTheory.venom_state_component_equality] >>
+ qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `rp`, `unit`, `dout`, `prog`,
+    `cplan`, `am`, `tx`, `es`, `vs`, `body'`, `cenv`, `nr`,
+    `key`, `ut`, `imm`, `lbl`, `sa`, `sb`, `sj`, `se`,
+    `sp`, `sf`, `func`, `mut`, `nr'`, `body''`, `am_c`, `es0`,
+    `F`]
+   mp_tac deploy_ctor_entry_registered_map_bounds_gas_path >> simp[]
 QED
 
 Theorem deploy_ctor_section_alloca_sep:
@@ -526,7 +537,7 @@ QED
 Theorem deploy_ctor_entry_runtime_label:
  !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs.
  deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
- gas_variant vs (deploy_entry_state prog cplan tops es) ==>
+ gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
  IS_SOME (FLOOKUP vs.vs_labels "runtime_begin")
 Proof
  rpt gen_tac >> simp[deploy_phases_def] >> strip_tac >>
@@ -544,7 +555,7 @@ Theorem deploy_ctor_entry_base_zero:
  !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs
  body cenv nr key ut imm lbl sa sb sj se sp sf func actual.
  deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
- gas_variant vs (deploy_entry_state prog cplan tops es) /\
+ gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  eval_operand imm actual = SOME 0w /\ actual.vs_labels = vs.vs_labels ==>
@@ -558,7 +569,7 @@ Proof
 QED
 
 Theorem gas_variant_deploy_entry_memory[local]:
-  gas_variant vs (deploy_entry_state prog cplan tops es) ==> vs.vs_memory = []
+  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==> vs.vs_memory = []
 Proof
   rewrite_tac[o1PassContractTheory.gas_variant_def] >> strip_tac >>
   pop_assum (mp_tac o AP_TERM ``venom_state_vs_memory``) >>
@@ -570,7 +581,7 @@ Theorem deploy_ctor_entry_body_resources_gas_path:
  body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0.
  deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
  deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es) /\
+ gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) ==>
@@ -694,6 +705,8 @@ Theorem deploy_ctor_entry_registered_map_bounds_normalized:
     ?fuel'. run_context fuel' unit.cu_context vs = r)
 Proof
  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+ `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
+   fs[o1PassContractTheory.gas_variant_def, venomStateTheory.venom_state_component_equality] >>
  drule_all deploy_ctor_entry_registered_map_bounds_normalized_gas_path >>
  disch_then (qspec_then `keep_bound` strip_assume_tac) >>
  conj_tac >- first_assum ACCEPT_TAC >>
@@ -747,6 +760,8 @@ Theorem deploy_ctor_entry_registered_map_bounds:
     ?fuel'. run_context fuel' unit.cu_context vs = r)
 Proof
  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+ `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
+   fs[o1PassContractTheory.gas_variant_def, venomStateTheory.venom_state_component_equality] >>
  drule_all deploy_ctor_entry_registered_map_bounds_gas_path >>
  disch_then (qspec_then `keep_bound` strip_assume_tac) >>
  conj_tac >- first_assum ACCEPT_TAC >>
@@ -817,6 +832,8 @@ Theorem deploy_ctor_entry_registered_local_bounds_normalized:
     ?fuel'. run_context fuel' unit.cu_context vs = r)
 Proof
  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+ `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
+   fs[o1PassContractTheory.gas_variant_def, venomStateTheory.venom_state_component_equality] >>
  drule_all deploy_ctor_entry_registered_local_bounds_normalized_gas_path >> strip_tac >>
  conj_tac >- first_assum ACCEPT_TAC >>
  conj_tac >- first_assum ACCEPT_TAC >>
@@ -868,6 +885,8 @@ Theorem deploy_ctor_entry_registered_local_bounds:
     ?fuel'. run_context fuel' unit.cu_context vs = r)
 Proof
  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+ `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
+   fs[o1PassContractTheory.gas_variant_def, venomStateTheory.venom_state_component_equality] >>
  drule_all deploy_ctor_entry_registered_local_bounds_gas_path >> strip_tac >>
  conj_tac >- first_assum ACCEPT_TAC >>
  conj_tac >- first_assum ACCEPT_TAC >>
@@ -880,7 +899,7 @@ Theorem deploy_ctor_entry_body_resources:
  body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0.
  deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
  deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es) /\
+ gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) ==>

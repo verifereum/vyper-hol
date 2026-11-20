@@ -1173,7 +1173,11 @@ Proof
         `sb` |-> `sc`,`tv` |-> `vt`,`p` |-> `src_ptr`,`op` |-> `src_op`]
         (INST_TYPE [alpha |-> ``:256``]
           stmtSimLogTopicsTheory.log_arg_footprint_bound)) >>
-      (impl_tac >- fs[]) >> fs[]) >>
+      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+      qpat_assum `val_footprint vt v = LENGTH source_bytes + 32`
+        (fn footprint => disch_then (mp_tac o REWRITE_RULE
+          [ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM] footprint])) >>
+      simp_tac bool_ss [arithmeticTheory.ADD_ASSOC]) >>
    `w2n (src_ptr+32w) = w2n src_ptr+32` by
      (simp[wordsTheory.w2n_add_2,wordsTheory.w2n_n2w] >> decide_tac) >>
    `w2n (src_ptr+32w) + LENGTH source_bytes <= length_state.vs_alloca_next` by

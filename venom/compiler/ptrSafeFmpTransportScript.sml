@@ -57,9 +57,13 @@ Theorem source_memory_write_ranges_fmp_fields[simp]:
     (s with <|vs_fmp := p; vs_initial_fmp := i; vs_call_entry_fmp := e|>) =
   source_memory_write_ranges inst s
 Proof
-  strip_tac >> Cases_on `inst.inst_opcode` >>
-  simp[source_memory_write_ranges_def, fixed_source_write_range_def,
-       sized_source_write_range_def] >> gvs[]
+  strip_tac >>
+  PURE_REWRITE_TAC [source_memory_write_ranges_def, fixed_source_write_range_def,
+                    sized_source_write_range_def, eval_operand_fmp_update] >>
+  Cases_on `inst.inst_opcode` >>
+  qpat_x_assum `inst.inst_opcode = _` SUBST1_TAC >>
+  CONV_TAC (REWRITE_CONV [opcode_case_def]) >>
+  fs[]
 QED
 
 Theorem new_site_bytes_fmp_fields:
