@@ -108,14 +108,13 @@ Proof
    get_instruction tb E.vs_inst_idx = SOME (HD tb.bb_instructions) /\
    E = E with vs_inst_idx := phi_prefix_length tb.bb_instructions` by
     metis_tac[] >>
-  (* The positive fuel premise must match 0 < N, not the trace length. *)
-  qpat_x_assum `0 < LENGTH (dftGasFromListTraceDefs$trace_blocks _ _ _ _ _ _)` kall_tac >>
-  drule_all (REWRITE_RULE [] (Q.INST [`root_sf` |-> `sf`, `root_tf` |-> `dft_fn sf`,
-                    `bb` |-> `sb`, `bt` |-> `tb`, `ps` |-> `prefix`,
-                    `xs` |-> `src`, `ys` |-> `dst`, `rho` |-> `schedule`,
-                    `root_entry` |-> `E`, `sp` |-> `E`, `st` |-> `E`,
-                    `inst` |-> `HD tb.bb_instructions`]
+  mp_tac (Q.INST [`root_sf` |-> `sf`, `root_tf` |-> `dft_fn sf`,
+                  `bb` |-> `sb`, `bt` |-> `tb`, `ps` |-> `prefix`,
+                  `xs` |-> `src`, `ys` |-> `dst`, `rho` |-> `schedule`,
+                  `root_entry` |-> `E`, `sp` |-> `E`, `st` |-> `E`,
+                  `inst` |-> `HD tb.bb_instructions`]
     (CONV_RULE (RAND_CONV (REPEATC Unwind.UNWIND_FORALL_CONV))
-       (SPEC_ALL focus_initial_singleton_packet)))) >>
+       (SPEC_ALL focus_initial_singleton_packet))) >>
+  (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))) >>
   simp[Abbr `q80`] >> disch_then (irule_at Any)
 QED
