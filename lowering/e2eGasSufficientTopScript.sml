@@ -78,15 +78,6 @@ Proof
      add_frame_gas_fields, relationTheory.RTC_REFL]
 QED
 
-Triviality entry_data_section_bound:
-  code_layout_valid vs /\ vs.vs_code = code ++ vs.vs_data_section /\ code <> [] ==>
-  LENGTH vs.vs_data_section < dimword (:256) DIV 2
-Proof
-  strip_tac >>
-  `0 < LENGTH code` by (Cases_on `code` >> fs[]) >>
-  fs[code_layout_valid_def] >> decide_tac
-QED
-
 (* Gas sufficiency for calls compiled with the final assembly optimizer. *)
 Theorem vyper_call_gas_sufficient_asm_opt:
   !policy tops deploy_bc runtime_bc am tx es.
@@ -242,7 +233,7 @@ Proof
        (qspecl_then [`D`, `vs`, `vs.vs_initial_fmp`] mp_tac) >>
      impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
   `LENGTH vs.vs_data_section < dimword (:256) DIV 2` by
-    (irule entry_data_section_bound >> conj_tac >- FIRST_ASSUM ACCEPT_TAC >>
+    (irule data_section_length_bound >> conj_tac >- FIRST_ASSUM ACCEPT_TAC >>
      qexists_tac `assemble prog'` >> simp[]) >>
   `!eom. max_live_eom out.po_unit.cu_context = SOME eom ==>
          eom <= w2n vs.vs_initial_fmp` by
@@ -488,7 +479,7 @@ Proof
           metis_tac[deploy_venom_result_rel_terminates]) >>
        simp[Abbr`Du`, taint_within_def]) >> simp[]) >>
   `LENGTH vs.vs_data_section < dimword (:256) DIV 2` by
-    (irule entry_data_section_bound >> conj_tac >- FIRST_ASSUM ACCEPT_TAC >>
+    (irule data_section_length_bound >> conj_tac >- FIRST_ASSUM ACCEPT_TAC >>
      qexists_tac `assemble prog'` >> simp[]) >>
   `!eom. max_live_eom dout.po_unit.cu_context = SOME eom ==>
          eom <= w2n vs.vs_initial_fmp` by

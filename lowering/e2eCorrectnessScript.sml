@@ -1806,7 +1806,7 @@ Proof
   simp[] >> metis_tac[lower_vyper_runtime_unit_no_runtime_begin]
 QED
 
-Triviality data_section_length_bound:
+Theorem data_section_length_bound:
   code_layout_valid vs /\
   vs.vs_code = prefix ++ vs.vs_data_section /\ prefix <> [] ==>
   LENGTH vs.vs_data_section < dimword (:256) DIV 2
