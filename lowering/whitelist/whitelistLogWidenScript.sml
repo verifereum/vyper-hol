@@ -632,7 +632,8 @@ Theorem body_log_widen_case:
   !cx id args tops ctx func cenv env env' ret_ty lctx RetQ es fields.
     body_stmt_safe tops (Log id args) /\
     body_exprs_ok cx args /\ body_inv tops ctx cenv cx /\
-    supported_pure_exprs tops args /\
+    supported_effect_free_exprs tops args /\
+    ~supported_exprs_exists (const_name_root cx) args /\
     supported_event_fields tops id = SOME fields /\
     EVERY supported_scalar_type (MAP (SND o FST) fields) /\
     LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e)) args fields /\
@@ -675,8 +676,8 @@ Proof
     mp_tac compile_log_stmt_frag_widen >>
   impl_tac >- (
     simp[] >>
-    conj_tac >- metis_tac[supported_pure_expr_no_mutate] >>
-    conj_tac >- metis_tac[supported_pure_exprs_bytestring_iff] >>
+    conj_tac >- metis_tac[supported_effect_free_expr_no_mutate] >>
+    conj_tac >- metis_tac[supported_effect_free_exprs_bytestring_iff] >>
     irule body_log_args_ready >>
     gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
         int_calls_stmt_def, AllCaseEqs()] >>
