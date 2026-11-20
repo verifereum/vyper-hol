@@ -22,7 +22,8 @@ Ancestors
   loweringStateRelDefs list finite_map bodySim compileEnv compileVyper moduleLowering
   intCallCallee supportedDecls supportedProgram vyperTypeInvariants
   immutableLocationProps immutableSectionRel immutableRelation option pair
-  bodyStorageMetadata structFieldsProps
+  bodyStorageMetadata structFieldsProps bodyInvSplit bodyInvCodeProps
+  bodySimModsProps compileUnit vyperTypeContract vyperTypeContractStaticMaps alist
 Libs
   monadsyntax
 
@@ -37,16 +38,33 @@ QED
 
 (* Rebuilding an internal callee's environment uses the same checked
    module metadata as its caller. *)
-Theorem body_inv_build_internal_env:
-  body_inv tops ctx caller cx ==>
-  body_inv tops ctx
-    ((build_compile_env tops Internal mut fname args ret stmts use_trans)
-       with <| ce_target := caller.ce_target;
-               ce_is_ctor := caller.ce_is_ctor |>) cx
+Theorem body_inv_build_internal_env_mods:
+  contract_inv mods exps ctx caller cx /\ ALOOKUP mods src = SOME tops /\
+  cenv = (build_compile_env_unit mods src Internal mut fname args ret stmts use_trans)
+    with <| ce_target := caller.ce_target; ce_is_ctor := caller.ce_is_ctor |> ==>
+  contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx
 Proof
-  rw[body_inv_def, cenv_module_pins_def, build_compile_env_def] >>
+  rw[contract_inv_def, cenv_module_pins_mods_def, module_body_inv_def,
+     build_compile_env_unit_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  metis_tac[]
+  gvs[immutable_section_layout_mods_def] >> res_tac >> fs[] >> metis_tac[]
+QED
+
+Theorem body_inv_ce_vars_update[local,simp]:
+  body_inv tops ctx (cenv with ce_vars updated_by f) cx <=> body_inv tops ctx cenv cx
+Proof
+  simp[body_inv_split_def, contract_inv_def, module_body_inv_def,
+       cenv_module_pins_mods_def, cenv_module_pins_def,
+       immutable_section_layout_mods_def]
+QED
+
+Theorem body_inv_ce_return_update[local,simp]:
+  body_inv tops ctx (cenv with <|ce_return_buf := rb; ce_return_pc := rpc|>) cx
+  <=> body_inv tops ctx cenv cx
+Proof
+  simp[body_inv_split_def, contract_inv_def, module_body_inv_def,
+       cenv_module_pins_mods_def, cenv_module_pins_def,
+       immutable_section_layout_mods_def]
 QED
 
 Theorem compile_register_positional_args_body_inv:
@@ -61,8 +79,7 @@ Proof
   simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   first_x_assum irule >>
-  goal_assum (drule_at Any) >> simp[] >>
-  gvs[body_inv_def, cenv_module_pins_def] >> metis_tac[]
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem materialize_internal_params_body_inv[local]:
@@ -80,8 +97,7 @@ Proof
   simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   first_x_assum irule >>
-  goal_assum (drule_at Any) >> simp[] >>
-  gvs[body_inv_def, cenv_module_pins_def] >> metis_tac[]
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem compile_internal_prologue_body_inv:
@@ -99,7 +115,7 @@ Proof
   drule_at (Pat `materialize_internal_params _ _ _ = _`)
     materialize_internal_params_body_inv >>
   disch_then (qspecl_then [`tops`, `cx`, `ctx`] mp_tac) >>
-  (impl_tac >- (gvs[body_inv_def, cenv_module_pins_def] >> metis_tac[])) >> simp[]
+  simp[]
 QED
 
 (* A compile env that binds only parameters, with a type environment that
@@ -366,16 +382,44 @@ Proof
 QED
 
 (* A bare global has its declared type in the compiler environment. *)
-Theorem body_inv_bare_global_type:
-  !tops ctx cenv cx env es src id ty.
-    body_inv tops ctx cenv cx /\ env_consistent env cx es /\
-    FLOOKUP env.bare_globals (src,id) = SOME ty ==>
-    src = NONE /\ cenv.ce_module_var_type (src,id) = SOME ty
+Theorem build_var_type_map_src_other[local]:
+  src <> other ==> build_var_type_map_src src tops later (other,id) = later (other,id)
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all env_consistent_bare_global_find_NONE >> strip_tac >>
-  `src = NONE` by metis_tac[body_inv_def] >> gvs[] >>
-  `ts = tops` by gvs[body_inv_def] >> gvs[] >>
+  Induct_on `tops` >> simp[build_var_type_map_src_def] >>
+  Cases >> simp[build_var_type_map_src_def]
+QED
+
+Theorem build_var_type_map_src_has_decl[local]:
+  !tops.
+    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) tops)) /\
+    MEM (VariableDecl vis mut id ty init) tops ==>
+    build_var_type_map_src src tops later (src,id) = SOME ty
+Proof
+  Induct >> simp[] >> Cases >>
+  simp[build_var_type_map_src_def, toplevel_vtype_keys_toplevel_def, ALL_DISTINCT_APPEND] >>
+  rpt strip_tac >> gvs[] >> metis_tac[module_toplevel_vtype_key_MEM_Variable]
+QED
+
+Theorem build_var_type_map_mods_has_decl[local]:
+  !mods tops. ALOOKUP mods src = SOME tops /\
+    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) tops)) /\
+    MEM (VariableDecl vis mut id ty init) tops ==>
+    build_var_type_map_mods mods (src,id) = SOME ty
+Proof
+  Induct >> simp[] >> PairCases >>
+  rw[build_var_type_map_mods_def] >>
+  gvs[build_var_type_map_src_other] >> metis_tac[build_var_type_map_src_has_decl]
+QED
+
+Theorem body_inv_bare_global_type_mods:
+  contract_inv mods exps ctx cenv cx /\ module_body_inv mods active tops cenv cx /\
+  env_consistent env cx es /\ FLOOKUP env.bare_globals (src,id) = SOME ty ==>
+  cenv.ce_module_var_type (src,id) = SOME ty
+Proof
+  strip_tac >>
+  drule_all_then strip_assume_tac env_consistent_bare_global_find_NONE >>
+  drule_all_then strip_assume_tac body_inv_modules_aligned_mods >>
+  drule_then (assume_tac o SPEC_ALL) contract_inv_module_codes >>
   drule bare_global_variable_decl >>
   disch_then (qx_choosel_then [`dvis`, `dmut`, `dty`, `dslot`]
     (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
@@ -383,7 +427,24 @@ Proof
     fs[env_consistent_def, env_context_consistent_def] >>
   `dty = ty` by
     (fs[bare_globals_complete_def] >> metis_tac[SOME_11]) >>
-  gvs[body_inv_def] >> metis_tac[build_maps_variable]
+  `cenv.ce_module_var_type = build_var_type_map_mods mods` by
+    fs[contract_inv_def, cenv_module_pins_mods_def] >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by metis_tac[] >>
+  gvs[] >> irule build_var_type_map_mods_has_decl >> simp[] >> metis_tac[]
+QED
+
+Theorem body_inv_bare_global_type:
+  !tops ctx cenv cx env es src id ty.
+    body_inv tops ctx cenv cx /\ env_consistent env cx es /\
+    FLOOKUP env.bare_globals (src,id) = SOME ty ==>
+    src = NONE /\ cenv.ce_module_var_type (src,id) = SOME ty
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_then assume_tac body_inv_contract >> drule_then assume_tac body_inv_module >>
+  drule_all_then strip_assume_tac env_consistent_bare_global_find_NONE >>
+  drule_then (assume_tac o SPEC_ALL) contract_inv_module_codes >>
+  conj_tac >- (Cases_on `src` >> gvs[ALOOKUP_def]) >>
+  drule_all body_inv_bare_global_type_mods >> simp[]
 QED
 
 (* Distinct immutables placed as build_compile_env places them occupy

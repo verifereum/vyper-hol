@@ -4,7 +4,7 @@ Ancestors
   bodyFullShadowBodyInv
   bodyFullBuiltinWordWeiPrefix bodyFullBuiltinWordWeiContinuation
   bodyFullPreds bodySimFull exprSimSource gasOutcomeFullCompose
-  exprSimWordBuiltins gasShadowCompileStmtHelpers
+  exprSimWordBuiltins gasShadowCompileStmtHelpers bodyInvCodeProps exprBodyPreProps
   exprLoweringProps exprSimUnopProps fragExec exprSimDefs gasExemptCert
   vyperStorageTrace vyperStorageFootprint gasStorage compileEnv vyperTypeSystem vyperContext vyperAST list
 
@@ -33,11 +33,11 @@ Theorem word_wei_sim_full:
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   `cx_tops cx = tops` by
-    (irule gasContextTheory.cx_tops_module >> fs[bodySimTheory.body_inv_def]) >>
+    metis_tac[body_inv_main_code] >>
   drule as_wei_value_argument_shape >> strip_tac >> gvs[] >>
   `expr_body_pre cenv cx env e es` by
     (irule expr_body_pre_builtin_arg >> conj_tac
-     >- fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+     >- metis_tac[expr_body_pre_static_facts] >>
      qexistsl_tac [`BaseT (UintT 256)`, `[e]`, `AsWeiValue dn`, `es`] >>
      simp[]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
