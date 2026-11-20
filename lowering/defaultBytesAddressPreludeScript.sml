@@ -72,7 +72,7 @@ Theorem default_bytes_scalar_add_boundary[local]:
   eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
   op_taint tn left = {} /\ op_taint tn right = {} /\
   op_prov G left = NONE /\ op_prov G right = NONE /\
-  fn_has_code sa sb fn /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t H u.
@@ -113,7 +113,7 @@ Theorem default_bytes_address_joint:
   emit_op CALLDATALOAD [head] sb = (offset,sc) /\
   emit_op ADD [Lit 4w;offset] sc = (src,sd) /\
   fn_has_code sa sd fn /\ fn_inst_ids_distinct fn /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t H u.
@@ -160,7 +160,11 @@ Proof
       (mp_then Any strip_assume_tac prefix_register_address_emit_shape) >>
      simp[loweringStateRelDefsTheory.not_fresh_at_def,
        ASCIInumbersTheory.toString_11]) >>
-  drule_all calldata_load_overwrite_trace_uniform >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `t1`, update_var_def, allocas_below_fmp_def] >>
+     metis_tac[]) >>
+  drule_all calldata_load_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspecl_then [`PG`,`H1`]
     (qx_choose_then `t2` (qx_choose_then `H2` (qx_choose_then `u2` strip_assume_tac)))) >>
   `t2 = (update_var ("%" ++ toString sb.cs_next_var)
@@ -177,6 +181,11 @@ Proof
         simp[abi_decode_load_def, abi_decode_source_def]) >>
      gvs[run_inst_seq_def] >>
      gvs[venom_state_component_equality, update_var_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t2` by
+    (qpat_assum `t2 = _` SUBST1_TAC >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t1` mp_tac >>
+     simp[NoAsms, update_var_def, allocas_below_fmp_def] >>
+     metis_tac[]) >>
   `allocas_from lo t2` by
     (fs[ptrDisciplineTheory.allocas_from_def] >> metis_tac[]) >>
   `eval_operand (Lit (4w:bytes32)) t2 = SOME 4w /\
@@ -343,6 +352,7 @@ Proof
   drule_all default_bytes_allocation_boundary_footprint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] (qx_choose_then `a`
     (qx_choose_then `H0` (qx_choose_then `u0` (qx_choose_then `p` strip_assume_tac))))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by simp[] >>
   drule_all default_bytes_address_joint >>
   disch_then (qspecl_then [`u0`,`PG`,`H0`] (qx_choose_then `ready`
     (qx_choose_then `H` (qx_choose_then `u` strip_assume_tac)))) >>
