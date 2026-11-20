@@ -649,7 +649,7 @@ Proof
     gasFocusWalkInventoryReplayTheory.focus_stopped_filling_replay
 QED
 
-Theorem focus_own_prefix_budget[local]:
+Theorem focus_own_prefix_budget:
   fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
   codegen_assembly rpolicy out.po_unit = SOME prog /\ unit_shape_ok out.po_unit /\
   vs0.vs_code = assemble prog' ++ vs0.vs_data_section /\

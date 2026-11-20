@@ -253,7 +253,7 @@ Proof
   metis_tac[sym_steps_mode_terminal_disciplined]
 QED
 
-Theorem asm_opt_transfer_own_terminal[local]:
+Theorem asm_opt_transfer_own_terminal:
   asm_refines_own prog prog' /\ asm_static_wf prog /\
   code_labels_agree prog lo /\ asm_data_env_lo_ok lo prog env s.as_code /\
   asm_data_env_ok prog' env s.as_code /\ s.as_pc = 0 /\
