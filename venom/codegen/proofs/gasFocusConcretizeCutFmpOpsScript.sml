@@ -72,17 +72,6 @@ Proof
   simp[bind_outputs_def]
 QED
 
-Theorem cut_fmp_history_update[local]:
-  ptr_history_content tn s t ==>
-  ptr_history_content tn (s with vs_fmp := w) (t with vs_fmp := w)
-Proof
-  strip_tac >>
-  fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
-     ptr_core_shared_def, ptr_shared_fields_def,
-     contract_storage_def, contract_transient_def] >>
-  qpat_x_assum `s.vs_call_ctx = t.vs_call_ctx` (SUBST_ALL_TAC o SYM) >> simp[]
-QED
-
 Theorem cut_fmp_bind_fields[local]:
   bind_outputs outs vals (s with vs_fmp := w) = SOME s' ==>
   s'.vs_params = s.vs_params /\ s'.vs_allocas = s.vs_allocas /\
@@ -238,7 +227,8 @@ Resume ptr_focus_fmp_op_step[attach]:
           qexists_tac `a.po_taint` >>
           `ptr_history_content a.po_taint post s'` by
             (irule ptr_history_content_bind_outputs >>
-             rpt (goal_assum (drule_at Any)) >> irule cut_fmp_history_update >> simp[]) >>
+             rpt (goal_assum (drule_at Any)) >>
+             irule concretizePtrDallocaProducerTheory.ptr_history_content_fmp >> simp[]) >>
           fs[MEM] >> simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def])) >>
      irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
   `ptr_paired_params positions z zt

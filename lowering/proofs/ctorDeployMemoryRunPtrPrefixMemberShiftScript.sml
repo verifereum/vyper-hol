@@ -57,6 +57,7 @@ Proof
      Cases_on `dyn` >> gvs[abi_decoder_reentry_opcode_def, mk_inst_def]) >>
   drule_all deploy_ctor_decoder_sequence_ambient >> strip_tac >>
   drule_all deploy_ctor_decoder_sequence_observations >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all prefix_member_setup_pair_floor >>
   disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
   simp[LET_THM] >> strip_tac >>

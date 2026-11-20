@@ -17,7 +17,7 @@ Theorem prefix_copy_cnt_success_steps:
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
   abi_decode_load DLOAD a s = n2w cnt /\
   cnt <= limit /\ limit < dimword (:256) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   let i = mk_inst iid DLOAD [src] [x];
       j = mk_inst (iid+1) GT [Var x; Lit (n2w limit)] [y];
       k = mk_inst (iid+2) ISZERO [Var y] [z];
@@ -86,6 +86,12 @@ Proof
    allocas_from lo (update_var y 0w (update_var x (n2w cnt) s)) /\
    allocas_from lo (update_var z 1w (update_var y 0w (update_var x (n2w cnt) s)))` by
     (gvs[allocas_from_def, update_var_def] >> metis_tac[]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp (update_var x (n2w cnt) s)) /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp (update_var y 0w (update_var x (n2w cnt) s))) /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp (update_var z 1w (update_var y 0w (update_var x (n2w cnt) s))))` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   simp[prefix_dload_ptr_step, prefix_iszero_ptr_step, prefix_assert_ptr_step,
        prefix_dload_output_taint, prefix_guard_output_taint] >>
   irule prefix_compare_ptr_step >>
@@ -140,7 +146,7 @@ Theorem prefix_copy_count_success_block:
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
   abi_decode_load DLOAD a s = n2w cnt /\
   cnt <= limit /\ limit < dimword (:256) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   let i = mk_inst iid DLOAD [src] [x];
       j = mk_inst (iid+1) GT [Var x;Lit (n2w limit)] [y];
       k = mk_inst (iid+2) ISZERO [Var y] [z];
@@ -177,6 +183,10 @@ Proof
     mk_inst (iid+1) GT [Var x;Lit (n2w limit)] [y];
     mk_inst (iid+2) ISZERO [Var y] [z];
     mk_inst (iid+3) ASSERT [Var z] []]` >>
+  `!m. ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := m)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   `!m. eval_operand src (s with vs_inst_idx := m) = SOME a /\
        abi_decode_load DLOAD a (s with vs_inst_idx := m) = n2w cnt /\
        allocas_from lo (s with vs_inst_idx := m)` by
@@ -220,7 +230,7 @@ Theorem prefix_copy_success_block:
   eval_operand lenop s = SOME k /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= w2n d /\ w2n d+w2n k <= b+sz /\
   op_taint tn (Var dst) = {} /\ op_taint tn src = {} /\ op_taint tn lenop = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst fuel ctx (mk_inst iid DLOADBYTES [Var dst;src;lenop] []) s = OK t ==>
   let qt = step_taint (mk_inst iid DLOADBYTES [Var dst;src;lenop] []) s t tn in
     qt.t_mem SUBSET tn.t_mem /\
@@ -258,7 +268,7 @@ Theorem prefix_copy_count_success_ptr:
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
   abi_decode_load DLOAD a s = n2w cnt /\
   cnt <= limit /\ limit < dimword (:256) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   let i = mk_inst iid DLOAD [src] [x];
       j = mk_inst (iid+1) GT [Var x;Lit (n2w limit)] [y];
       k = mk_inst (iid+2) ISZERO [Var y] [z];
@@ -293,6 +303,10 @@ Proof
     mk_inst (iid+1) GT [Var x;Lit (n2w limit)] [y];
     mk_inst (iid+2) ISZERO [Var y] [z];
     mk_inst (iid+3) ASSERT [Var z] []]` >>
+  `!m. ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := m)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   `!m. eval_operand src (s with vs_inst_idx := m) = SOME a /\
        abi_decode_load DLOAD a (s with vs_inst_idx := m) = n2w cnt /\
        allocas_from lo (s with vs_inst_idx := m)` by
@@ -338,7 +352,7 @@ Theorem prefix_copy_success_ptr:
   eval_operand lenop s = SOME k /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= w2n d /\ w2n d+w2n k <= b+sz /\
   op_taint tn (Var dst) = {} /\ op_taint tn src = {} /\ op_taint tn lenop = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst 0 ctx (mk_inst iid DLOADBYTES [Var dst;src;lenop] []) s = OK t ==>
   inst_seq_ptr D lo ctx fn PG G tn [mk_inst iid DLOADBYTES [Var dst;src;lenop] []] s
     G (step_taint (mk_inst iid DLOADBYTES [Var dst;src;lenop] []) s t tn)
@@ -375,7 +389,7 @@ Theorem prefix_bytestring_success_ghost:
   FLOOKUP G dst = SOME (b,sz) /\ b <= w2n d /\
   w2n d + abi_decode_bytes_copy_size n <= b+sz /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts st st') s = OK t ==>
   ?H qt.
     qt.t_mem SUBSET tn.t_mem /\
@@ -510,6 +524,11 @@ Resume prefix_bytestring_success_ghost[finish]:
     (simp[Abbr `u`, Abbr `i`, ghostPcTransportPtrTheory.eval_operand_inst_idx,
        eval_operand_def, op_taint_def, allocas_from_def] >>
      gvs[eval_operand_def, lookup_var_def, allocas_from_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp_tac (srw_ss()) [Abbr `u`, Abbr `s3`] >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
   `!fuel. qt.t_mem SUBSET q3.t_mem /\
     DISJOINT (range_bytes [(w2n d,abi_decode_bytes_copy_size n)]) qt.t_mem /\
     qt.t_var = q3.t_var /\ qt.t_stor = q3.t_stor /\
@@ -622,7 +641,7 @@ Theorem prefix_bulk_arith_success_block:
   get_instruction bb s.vs_inst_idx = SOME (mk_inst iid opc [a;b] [x]) /\
   eval_operand a s = SOME u /\ eval_operand b s = SOME v /\
   op_taint tn a = {} /\ op_taint tn b = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   let t = update_var x (if opc = ADD then u+v else u*v) s;
       H = if opc = ADD then set_prov G [x] (first_prov G [a;b])
           else DRESTRICT G (COMPL {x});
@@ -686,7 +705,7 @@ Theorem prefix_bulk_header_success_block:
   eval_operand (Var dst) s = SOME a /\ eval_operand value s = SOME w /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= w2n a /\ w2n a+32 <= b+sz /\
   op_taint tn (Var dst) = {} /\ op_taint tn value = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   let t = mstore (w2n a) w s;
       qt = step_taint (mk_inst iid MSTORE [Var dst;value] []) s t tn
   in step_inst fuel ctx (mk_inst iid MSTORE [Var dst;value] []) s = OK t /\
@@ -734,7 +753,7 @@ QED
 Theorem prefix_bulk_reload_success_block:
   get_instruction bb s.vs_inst_idx = SOME (mk_inst iid DLOAD [src] [x]) /\
   eval_operand src s = SOME a /\ abi_decode_load DLOAD a s = w /\
-  op_taint tn src = {} /\ allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  op_taint tn src = {} /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   let t = update_var x w s;
       H = DRESTRICT G (COMPL {x});
       qt = tn with t_var := tn.t_var |+ (x,{})
@@ -875,7 +894,7 @@ Theorem prefix_bulk_body_success_block:
      FLOOKUP G dst = SOME (b,sz) /\ b <= w2n d /\
      w2n d+32+cnt*mem_sz <= b+sz /\
      op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-     allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+     allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
      isPREFIX ys (DROP s.vs_inst_idx bb.bb_instructions) /\
      run_inst_seq ys s = OK t ==>
      ?H qt.
@@ -926,6 +945,11 @@ Proof
        FLOOKUP_DRESTRICT, op_taint_def, allocas_from_def] >>
      fs[MEM, eval_operand_def, lookup_var_def, op_taint_def, allocas_from_def] >>
      metis_tac[DECIDE ``n+32+k <= m ==> n+32 <= m``]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp_tac (srw_ss()) [Abbr `s1`] >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def, mstore_def, write_memory_def, update_var_def] >> metis_tac[]) >>
   drule_all prefix_bulk_header_success_block >>
   disch_then (mp_tac o SRULE [LET_THM, FORALL_AND_THM]) >>
   qabbrev_tac `h = mk_inst (iid+1) MSTORE [Var dst;Var x] []` >>
@@ -944,6 +968,11 @@ Proof
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, op_taint_def,
        Abbr `q1`, allocas_from_def] >>
      fs[allocas_from_def, op_taint_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp_tac (srw_ss()) [Abbr `s2`, Abbr `r2`, Abbr `s1`] >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def, mstore_def, write_memory_def, update_var_def] >> metis_tac[]) >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `MUL`] prefix_bulk_arith_success_block)) >>
   disch_then (mp_tac o SRULE [LET_THM, FORALL_AND_THM]) >>
   qabbrev_tac `i2 = mk_inst (iid+2) MUL [Var x;Lit (n2w mem_sz)] [p]` >>
@@ -963,6 +992,11 @@ Proof
      Cases_on `src` >>
      fs[MEM, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
        op_taint_def, Abbr `q1`, allocas_from_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp_tac (srw_ss()) [Abbr `s3`, Abbr `r3`, Abbr `s2`, Abbr `r2`, Abbr `s1`] >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def, mstore_def, write_memory_def, update_var_def] >> metis_tac[]) >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] prefix_bulk_arith_success_block)) >>
   disch_then (mp_tac o SRULE [LET_THM, FORALL_AND_THM]) >>
   qabbrev_tac `i3 = mk_inst (iid+3) ADD [src;Lit 32w] [q]` >>
@@ -982,6 +1016,11 @@ Proof
        allocas_from_def] >>
      fs[MEM, eval_operand_def, lookup_var_def, op_taint_def,
        Abbr `q1`, allocas_from_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s4` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp_tac (srw_ss()) [Abbr `s4`, Abbr `r4`, Abbr `s3`, Abbr `r3`, Abbr `s2`, Abbr `r2`, Abbr `s1`] >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def, mstore_def, write_memory_def, update_var_def] >> metis_tac[]) >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] prefix_bulk_arith_success_block)) >>
   disch_then (mp_tac o SRULE [LET_THM, FORALL_AND_THM]) >>
   qabbrev_tac `i4 = mk_inst (iid+4) ADD [Var dst;Lit 32w] [z]` >>
@@ -1023,6 +1062,11 @@ Proof
     (assume_tac o SRULE [step_inst_non_invoke, mk_inst_def]) >>
   qpat_assum `get_instruction bb s5.vs_inst_idx = _`
     (assume_tac o SRULE [mk_inst_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s5` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp_tac (srw_ss()) [Abbr `s5`, Abbr `r5`, Abbr `s4`, Abbr `r4`, Abbr `s3`, Abbr `r3`, Abbr `s2`, Abbr `r2`, Abbr `s1`] >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def, mstore_def, write_memory_def, update_var_def] >> metis_tac[]) >>
   drule_all (SRULE [step_inst_non_invoke, mk_inst_def] prefix_copy_success_block) >>
   disch_then (mp_tac o SRULE [LET_THM, FORALL_AND_THM, GSYM mk_inst_def]) >>
   simp[LESS_MOD] >>
@@ -1128,7 +1172,7 @@ Theorem prefix_bulk_success_ghost:
   FLOOKUP G dst = SOME (b,sz) /\ b <= w2n d /\
   w2n d+32+cnt*mem_sz <= b+sz /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts st st') s = OK t ==>
   ?H qt.
     qt.t_mem SUBSET tn.t_mem /\
@@ -1233,6 +1277,11 @@ Resume prefix_bulk_success_ghost[body]:
        op_taint_def, allocas_from_def] >>
      Cases_on `src` >> gvs[op_taint_def, FLOOKUP_UPDATE, allocas_from_def] >> metis_tac[]) >>
   qabbrev_tac `u3 = s3 with vs_inst_idx := s.vs_inst_idx+4` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u3` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp_tac (srw_ss()) [Abbr `u3`, Abbr `s3`] >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def, mstore_def, write_memory_def, update_var_def] >> metis_tac[]) >>
   `isPREFIX ys (DROP u3.vs_inst_idx bb.bb_instructions)` by
     (qpat_x_assum `isPREFIX (emitted_insts st st') _` mp_tac >>
      asm_rewrite_tac[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>

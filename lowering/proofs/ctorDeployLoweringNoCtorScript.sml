@@ -2075,8 +2075,9 @@ Proof
   (impl_tac >-
     (simp[Abbr `bb`, Abbr `t`, venomInstTheory.mk_inst_def,
           venomInstTheory.is_terminator_def] >>
-     PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
-     simp[venomExecSemanticsTheory.exec_alloca_def, AllCaseEqs()])) >>
+     simp[NoAsms, venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
+     simp[NoAsms, venomExecSemanticsTheory.exec_alloca_def,
+          eval_operand_def, AllCaseEqs()])) >>
   strip_tac >> qexists_tac `final'` >>
   `run_context 1 ctx s = Halt final'` by
     (qpat_assum `run_block_non_phis 0 ctx bb t = _` mp_tac >>

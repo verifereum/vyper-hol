@@ -4517,7 +4517,16 @@ Theorem compile_as_wei_value_int_shape[local]:
 Proof
   strip_tac >> simp[builtinMiscTheory.compile_as_wei_value_int_def] >>
   Cases_on `scale = 1` >> simp[]
-  >- (irule shape_step_return >> simp[]) >>
+  >- (Cases_on `signed` >> simp[]
+      >- (qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+          `shape_stable P` by
+            (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+             mp_tac (Q.SPEC `[v]:operand list` shape_stable_plain_operands) >> simp[]) >>
+          shape_scalar_emit_bind_tac `P` `negative_op` (simp[Abbr `P`]) >>
+          shape_scalar_emit_bind_tac `P` `ok_op` all_tac >>
+          shape_scalar_assert_tac `P` >>
+          irule shape_step_return >> simp[Abbr `P`]) >>
+      irule shape_step_return >> simp[]) >>
   qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
   `shape_stable P` by
     (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
@@ -8653,9 +8662,13 @@ Resume compile_type_builtin_dispatch_body_shape[convert]:
             type_memory_bytes cenv (lowered_value_type cenv (HD args)) <
             type_memory_bytes cenv ret_ty` >>
   pop_assum (fn th => REWRITE_TAC [th])
-  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> irule shape_step_as_stack_val >>
+  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> irule shape_step_as_memory_val >>
       shape_under_tac compile_bytestring_widen_copy_shape `\st. T` >>
       simp[shape_stable_def]) >>
+  Cases_on `is_bytestring_type (expr_type (HD args)) /\ is_bytestring_type ret_ty` >>
+  pop_assum (fn th => REWRITE_TAC [th])
+  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> irule shape_step_as_memory_val >>
+      shape_under_tac compile_type_convert_shape `\st. T` >> simp[shape_stable_def]) >>
   Cases_on `ret_ty` >> simp[] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
   irule shape_step_as_stack_val >>
   shape_under_tac compile_type_convert_shape `\st. T` >> simp[shape_stable_def]

@@ -2387,28 +2387,6 @@ Proof
   simp[as_stack_val_def] >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem ctor_as_ptr_val_first_emission[local]:
-  (!a x b. m a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-      a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i.
-       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\
-       i.inst_opcode <> PHI))) ==>
-  !a x b. as_ptr_val rt loc (m a) = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-      a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i.
-       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\
-       i.inst_opcode <> PHI))
-Proof
-  strip_tac >> rpt gen_tac >> Cases_on `m a` >>
-  simp[as_ptr_val_def] >> strip_tac >> gvs[] >> metis_tac[]
-QED
-
 Theorem ctor_not_dispatch_first_emission:
   (!env ty e a x b. cfn env ty e a = (x,b) ==>
     cs_extends a b /\
@@ -2532,7 +2510,7 @@ Resume ctor_scalar_dispatch_first_emission[cdslice]:
   rewrite_tac[state_pair_let_bind] >>
   ho_match_mp_tac first_emission_bind >> conj_tac
   >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
-  gen_tac >> ho_match_mp_tac ctor_as_ptr_val_first_emission >>
+  gen_tac >> ho_match_mp_tac first_emission_as_ptr_val >>
   ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
   drule ctor_slice_calldata_first_emission_strong >> simp[]
 QED
@@ -2749,7 +2727,7 @@ Resume ctor_bytes_precompile_dispatch_first_emission[add]:
   >- metis_tac[] >>
   gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
   >- metis_tac[ctor_unwrap_value_first_emission] >>
-  gen_tac >> ho_match_mp_tac ctor_as_ptr_val_first_emission >>
+  gen_tac >> ho_match_mp_tac first_emission_as_ptr_val >>
   ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
   drule ctor_ecadd_points_first_emission_strong >> simp[]
 QED
@@ -2763,7 +2741,7 @@ Resume ctor_bytes_precompile_dispatch_first_emission[mul]:
   >- metis_tac[ctor_unwrap_value_first_emission] >>
   gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
   >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
-  gen_tac >> ho_match_mp_tac ctor_as_ptr_val_first_emission >>
+  gen_tac >> ho_match_mp_tac first_emission_as_ptr_val >>
   ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
   drule ctor_ecmul_point_first_emission_strong >> simp[]
 QED
@@ -2776,7 +2754,7 @@ Resume ctor_bytes_precompile_dispatch_first_emission[method]:
       >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
       gen_tac >> Cases_on `rt = BaseT (BytesT (Fixed 4))` >> simp[] >>
       FIRST [ho_match_mp_tac ctor_as_stack_val_first_emission,
-             ho_match_mp_tac ctor_as_ptr_val_first_emission] >>
+             ho_match_mp_tac first_emission_as_ptr_val] >>
       ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
       drule ctor_method_id_runtime_first_emission_strong >> simp[]) >>
   metis_tac[ctor_literal_vv_first_emission]
@@ -2790,7 +2768,7 @@ Resume ctor_bytes_precompile_dispatch_first_emission[slice]:
       >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
       gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
       >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
-      gen_tac >> ho_match_mp_tac ctor_as_ptr_val_first_emission >>
+      gen_tac >> ho_match_mp_tac first_emission_as_ptr_val >>
       ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
       drule ctor_slice_code_first_emission_strong >> simp[]) >>
   Cases_on `is_extcode (HD args)`
@@ -2811,7 +2789,7 @@ Resume ctor_bytes_precompile_dispatch_first_emission[slice_ext]:
   >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
   gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
   >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
-  gen_tac >> ho_match_mp_tac ctor_as_ptr_val_first_emission >>
+  gen_tac >> ho_match_mp_tac first_emission_as_ptr_val >>
   ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
   drule ctor_slice_extcode_first_emission_strong >> simp[]
 QED
@@ -2826,7 +2804,7 @@ Resume ctor_bytes_precompile_dispatch_first_emission[slice_bytes]:
   >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
   gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
   >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
-  gen_tac >> ho_match_mp_tac ctor_as_ptr_val_first_emission >>
+  gen_tac >> ho_match_mp_tac first_emission_as_ptr_val >>
   ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
   drule ctor_slice_data_first_emission_strong >> simp[]
 QED
@@ -2844,7 +2822,7 @@ Resume ctor_bytes_precompile_dispatch_first_emission[slice_fixed]:
   >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
   gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
   >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
-  gen_tac >> ho_match_mp_tac ctor_as_ptr_val_first_emission >>
+  gen_tac >> ho_match_mp_tac first_emission_as_ptr_val >>
   ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
   drule ctor_slice_data_first_emission_strong >> simp[]
 QED
@@ -3225,8 +3203,18 @@ Theorem ctor_as_wei_value_int_first_emission:
        i.inst_opcode <> PHI))
 Proof
   ntac 3 gen_tac >> Cases_on `scale = 1`
-  >- simp[builtinMiscTheory.compile_as_wei_value_int_def, comp_return_def,
-          cs_extends_refl] >>
+  >- (Cases_on `signed` >>
+      simp[builtinMiscTheory.compile_as_wei_value_int_def, comp_return_def,
+           cs_extends_refl] >>
+      ho_match_mp_tac first_emission_strong >>
+      ho_match_mp_tac first_emission_strong_bind >> conj_tac
+      >- (rpt gen_tac >> strip_tac >>
+          irule (cj 3 first_emission_emit_helpers) >>
+          goal_assum (drule_at Any) >> simp[]) >>
+      gen_tac >> rewrite_tac[GSYM cs_appends_def, comp_ignore_bind_def] >>
+      rpt (ho_match_mp_tac cs_appends_bind >> conj_tac
+           >- simp[cs_appends_emit_helpers] >> gen_tac) >>
+      simp[cs_appends_return]) >>
   `!ok. cs_appends (if signed then
        comp_bind (emit_op SLT [v; Lit 0w]) (\pos.
        comp_bind (emit_op ISZERO [pos]) (\nn. emit_op AND [nn; ok]))
@@ -3297,7 +3285,7 @@ Proof
   rewrite_tac[state_pair_let_bind] >>
   ho_match_mp_tac first_emission_bind >> conj_tac
   >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
-  gen_tac >> ho_match_mp_tac ctor_as_ptr_val_first_emission >>
+  gen_tac >> ho_match_mp_tac first_emission_as_ptr_val >>
   rpt gen_tac >> disch_tac >> drule ctor_uint2str_first_emission >> simp[]
 QED
 
@@ -4015,8 +4003,12 @@ Proof
   Cases_on `is_bytestring_type (expr_type (HD args)) /\ is_bytestring_type rt /\
     type_memory_bytes env (lowered_value_type env (HD args)) < type_memory_bytes env rt` >>
   simp[]
-  >- (ho_match_mp_tac ctor_as_stack_val_first_emission >>
+  >- (ho_match_mp_tac first_emission_as_ptr_val >>
       metis_tac[ctor_bytestring_widen_copy_first_emission]) >>
+  Cases_on `is_bytestring_type (expr_type (HD args)) /\ is_bytestring_type rt` >>
+  simp[]
+  >- (ho_match_mp_tac first_emission_as_ptr_val >>
+      metis_tac[ctor_type_convert_first_emission]) >>
   Cases_on `rt` >> simp_tac (srw_ss()) [] >>
   ho_match_mp_tac ctor_as_stack_val_first_emission >>
   metis_tac[ctor_type_convert_first_emission]
@@ -4074,7 +4066,7 @@ Proof
   >- metis_tac[] >>
   gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
   >- metis_tac[ctor_unwrap_value_first_emission] >>
-  gen_tac >> ho_match_mp_tac ctor_as_ptr_val_first_emission >>
+  gen_tac >> ho_match_mp_tac first_emission_as_ptr_val >>
   ho_match_mp_tac first_emission_strong >>
   metis_tac[ctor_lower_abi_decode_first_emission_strong]
 QED
@@ -4178,13 +4170,13 @@ Proof
           gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
           >- (ho_match_mp_tac first_emission_strong >> rpt gen_tac >> strip_tac >>
               irule (cj 2 first_emission_emit_helpers) >> goal_assum $ drule_at Any >> simp[]) >>
-          gen_tac >> ho_match_mp_tac ctor_as_ptr_val_first_emission >>
+          gen_tac >> ho_match_mp_tac first_emission_as_ptr_val >>
           ho_match_mp_tac first_emission_strong >> metis_tac[ctor_lower_abi_encode_first_emission_strong]) >>
       ho_match_mp_tac first_emission_bind >> conj_tac
       >- metis_tac[] >>
       gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
       >- metis_tac[ctor_unwrap_value_first_emission] >>
-      gen_tac >> ho_match_mp_tac ctor_as_ptr_val_first_emission >>
+      gen_tac >> ho_match_mp_tac first_emission_as_ptr_val >>
       ho_match_mp_tac first_emission_strong >> metis_tac[ctor_lower_abi_encode_first_emission_strong]) >>
   rewrite_tac[state_pair_let_bind] >>
   ho_match_mp_tac first_emission_bind >> conj_tac

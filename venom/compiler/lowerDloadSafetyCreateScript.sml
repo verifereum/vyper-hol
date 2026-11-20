@@ -4,6 +4,7 @@ Ancestors
   lowerDloadOracleCallAssembly lowerDloadSafetyUpdates lowerDloadSafetyKernel
   lowerDloadSafetyValues lowerDloadSafetyAssemblyPremises
   lowerDloadSafetyRelation lowerDloadSafetyAmbient lowerDloadSafetyAllocBounds
+  lowerDloadExternalBackward lowerDloadPtrCreateInterfaces
   ptrDiscipline venomExecSemantics venomCallOracleDefs venomState
   pointerConfinedDefs codegenRel contextCodegenRel memLocDefs finite_map pred_set list words
 
@@ -30,29 +31,14 @@ Proof
   simp[]
 QED
 
-Theorem ld_create_taint:
-  MEM inst.inst_opcode [CREATE;CREATE2] /\
-  ss.vs_allocas = s.vs_allocas /\ ss.vs_fmp = s.vs_fmp ==>
-  step_taint inst s ss tn =
-    tn with t_var := set_var_taint tn.t_var inst.inst_outputs (out_taint tn inst s)
-Proof
-  strip_tac >>
-  gvs[step_taint_def, mem_taint_def, new_site_bytes_def, step_writes_def,
-      range_bytes_def, source_memory_write_ranges_def, store_taint_def,
-      adopt_reset_def, imm_taint_def, written_taint_def,
-      taint_component_equality] >>
-  rpt (CASE_TAC >> gvs[]) >>
-  simp[FLOOKUP_DEF] >> SET_TAC[]
-QED
-
 Theorem ld_create_effect:
   ld_vars P A f /\ tn.t_var = f.lf_tv /\
   MEM inst (fn_insts f.lf_fn) /\
   ld_memory lo A tn f.lf_src f.lf_tgt /\
-  ld_nonghost tn f.lf_src f.lf_tgt /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  ld_nonghost tn f.lf_src f.lf_tgt /\ ~f.lf_src.vs_call_ctx.cc_static /\
   MEM inst.inst_opcode [CREATE;CREATE2] /\
-  venom_create_request f.lf_src value off sz salt =
-    venom_create_request f.lf_tgt value off' sz salt /\
+  read_memory (w2n off) (w2n sz) f.lf_src =
+    read_memory (w2n off') (w2n sz) f.lf_tgt /\
   exec_create inst f.lf_tgt value off' sz salt = OK ts ==>
   ?ss. exec_create inst f.lf_src value off sz salt = OK ss /\
     ld_vars P A (f with <|lf_src := ss; lf_tgt := ts;
@@ -72,30 +58,61 @@ Theorem ld_create_effect:
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `f.lf_src.vs_outcomes = f.lf_tgt.vs_outcomes` by fs[ld_nonghost_def] >>
-  drule_all ld_create_exec_steps >> strip_tac >>
-  `w = w /\ ld_memory lo A tn rs rt /\ ld_nonghost tn rs rt /\
-   rs.vs_vars = f.lf_src.vs_vars /\ rt.vs_vars = f.lf_tgt.vs_vars /\
-   rs.vs_allocas = f.lf_src.vs_allocas /\ rt.vs_allocas = f.lf_tgt.vs_allocas /\
-   rs.vs_alloca_next = f.lf_src.vs_alloca_next /\ rt.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
-   rs.vs_current_bb = f.lf_src.vs_current_bb /\ rt.vs_current_bb = f.lf_tgt.vs_current_bb /\
-   rs.vs_prev_bb = f.lf_src.vs_prev_bb /\ rt.vs_prev_bb = f.lf_tgt.vs_prev_bb /\
-   rs.vs_inst_idx = f.lf_src.vs_inst_idx /\ rt.vs_inst_idx = f.lf_tgt.vs_inst_idx` by
-    (irule ld_consume_create_effect >> metis_tac[]) >>
+  `f.lf_tgt.vs_outcomes <> []` by fs[dload_exec_create_success_iff] >>
+  `f.lf_src.vs_outcomes <> []` by fs[] >>
+  drule_all ld_exec_create_backward >> strip_tac >>
+  rename1 `consume_create_outcome _ f.lf_src = (_,rs)` >>
+  rename1 `consume_create_outcome _ f.lf_tgt = (_,rt)` >>
+  qpat_assum `consume_create_outcome _ f.lf_src = _`
+    (strip_assume_tac o MATCH_MP dload_consume_create_footprint) >>
+  qpat_assum `consume_create_outcome _ f.lf_tgt = _`
+    (strip_assume_tac o MATCH_MP dload_consume_create_footprint) >>
+  `ld_memory lo A tn rs rt /\
+   (!tn'. tn'.t_imm = tn.t_imm ==> ld_nonghost tn' rs rt)` by
+    (drule_all dload_consume_create_world >> strip_tac >>
+     conj_tac >-
+       (qpat_assum `rs.vs_memory = _` (fn th => REWRITE_TAC[ld_memory_def, th]) >>
+        qpat_assum `rt.vs_memory = _` (fn th => REWRITE_TAC[th]) >>
+        first_assum (ACCEPT_TAC o REWRITE_RULE [ld_memory_def])) >>
+     rpt strip_tac >>
+     qpat_assum `consume_create_outcome _ f.lf_src = _`
+       (fn th => once_rewrite_tac[MATCH_MP dload_consume_create_state th]) >>
+     qpat_assum `consume_create_outcome _ f.lf_tgt = _`
+       (fn th => once_rewrite_tac[MATCH_MP dload_consume_create_state th]) >>
+     qpat_assum `ld_nonghost _ f.lf_src f.lf_tgt`
+       (strip_assume_tac o REWRITE_RULE [ld_nonghost_def]) >>
+     fs[ld_nonghost_def, storage_agree_except_def, word_agree_except_def,
+        Excl "consume_create_outcome_eq"] >> metis_tac[]) >>
   `rs.vs_fmp = f.lf_src.vs_fmp /\ rs.vs_memory = f.lf_src.vs_memory /\
    rt.vs_memory = f.lf_tgt.vs_memory` by gvs[consume_create_outcome_eq] >>
   `step_taint inst f.lf_src (update_var out w rs) tn =
-   tn with t_var := set_var_taint tn.t_var inst.inst_outputs (out_taint tn inst f.lf_src)` by
-    (irule ld_create_taint >> simp[update_var_def]) >>
+   tn with <|t_var := set_var_taint tn.t_var inst.inst_outputs (out_taint tn inst f.lf_src);
+     t_stor := {}; t_trans := {}|>` by
+    (qpat_assum `consume_create_outcome _ f.lf_src = _`
+       (mp_then (Pat `consume_create_outcome _ _ = _`) mp_tac
+         dload_create_taint_after_consume) >>
+     disch_then (qspecl_then [`tn`,`out`,`inst`] mp_tac) >>
+     simp[Excl "consume_create_outcome_eq"]) >>
+  `ld_nonghost (step_taint inst f.lf_src (update_var out w rs) tn) rs rt` by
+    (first_x_assum irule >> simp[]) >>
   qexists `update_var out w rs` >>
   (conj_tac >- metis_tac[]) >>
   (conj_tac >-
-    (`rs.vs_params = f.lf_src.vs_params /\ rt.vs_params = f.lf_tgt.vs_params` by
+    (`rs.vs_params = f.lf_src.vs_params /\ rt.vs_params = f.lf_tgt.vs_params /\
+      rs.vs_vars = f.lf_src.vs_vars /\ rt.vs_vars = f.lf_tgt.vs_vars` by
        gvs[consume_create_outcome_eq] >>
      simp[update_var_def] >> irule ld_oracle_call_vars >> simp[] >>
      (conj_tac >- (qexists `w` >> simp[])) >>
      irule ld_inst_output_ir >> qexists `inst` >> simp[])) >>
-  gvs[ld_memory_def, ld_nonghost_def, update_var_def,
-      step_prov_def, ld_erase_set_prov, out_prov_def] >> metis_tac[]
+  qpat_assum `ts = update_var _ _ _` (fn th => REWRITE_TAC[th]) >>
+  conj_tac
+  >- (qpat_x_assum `ld_memory lo A tn rs rt` mp_tac >>
+      qpat_assum `step_taint _ _ _ _ = _` (fn th => REWRITE_TAC[th]) >>
+      simp[NoAsms, ld_memory_def, update_var_def] >> metis_tac[]) >>
+  conj_tac
+  >- (qpat_x_assum `ld_nonghost (step_taint _ _ _ _) rs rt` mp_tac >>
+      simp[NoAsms, ld_nonghost_def, update_var_def] >> metis_tac[]) >>
+  fs[update_var_def, step_prov_def, ld_erase_set_prov, out_prov_def]
 QED
 
 Theorem ld_create_observed_bytes:
@@ -264,8 +281,6 @@ Theorem ld_create_step:
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all ld_create_operands >> strip_tac >>
-  `tn.t_stor = {} /\ tn.t_trans = {}` by
-    (fs[taint_ok_def] >> metis_tac[]) >>
   `~about_to_revert f.lf_fn inst f.lf_src` by
     (fs[MEM] >> gvs[about_to_revert_def]) >>
   `read_memory (w2n x) (w2n n) f.lf_src = read_memory (w2n y) (w2n n) f.lf_tgt` by
@@ -273,11 +288,10 @@ Proof
      qpat_assum `access_ok _ _ _ _ _` (irule_at Any) >>
      qpat_assum `taint_ok _ _ _ _` (irule_at Any) >>
      simp[] >> metis_tac[]) >>
-  `venom_create_request f.lf_src v x n sw = venom_create_request f.lf_tgt v y n sw` by
-    (irule ld_create_request_equal >> metis_tac[]) >>
+  `f.lf_src.vs_call_ctx = f.lf_tgt.vs_call_ctx` by fs[ld_nonghost_def] >>
+  `~f.lf_src.vs_call_ctx.cc_static` by simp[] >>
   drule_all ld_create_effect >> disch_then (qspec_then `PG` strip_assume_tac) >>
   qexists `ss` >> simp[] >>
-  `f.lf_src.vs_call_ctx = f.lf_tgt.vs_call_ctx` by fs[ld_nonghost_def] >>
   pure_once_rewrite_tac[step_inst_base_def] >>
   gvs[] >> simp[eval_operands_def]
 QED

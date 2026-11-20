@@ -1,5 +1,6 @@
 (* Creation-frame completion after the initcode has returned its bytes.
-   TOP-LEVEL: deploy_frame_complete, deploy_handle_step_out_of_gas.
+   TOP-LEVEL: deploy_frame_complete, deploy_handle_step_out_of_gas,
+              deploy_run_frame_deposit_oog.
    This hook does not establish reachability of that return state. *)
 Theory e2eDeployFrame
 Ancestors

@@ -38,7 +38,7 @@ Theorem raw_call_fetched_early_exit[local]:
   (!j. w2n iw <= j /\ j < w2n iw + w2n nw ==> j NOTIN tn.t_mem) /\
   (nw = 0w \/ w2n iw + w2n nw <= t.vs_alloca_next) /\
   (n2w cap = (0w:bytes32) \/ w2n rw + w2n (n2w cap:bytes32) <= t.vs_alloca_next) /\
-  allocas_from lo t /\ ~ctx_has_dalloca ctx /\ ~t.vs_halted /\
+  allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ ~t.vs_halted /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb t.vs_inst_idx = SOME inst ==>
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,G,tn) []
@@ -332,6 +332,7 @@ Proof
           else [gas;addr;vop;dp;len;op;Lit (n2w cap)])
          [STRING #"%" (toString s7.cs_next_var)]` by
         simp[Abbr `inst`,Abbr `opc`,Abbr `ops`] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp t7` by simp[] >>
       irule raw_call_fetched_early_exit >>
       qpat_assum `inst = mk_inst _ _ _ _` (irule_at (Pat `inst = mk_inst _ _ _ _`)) >>
       qexistsl_tac [`n2w amount`,`n2w ro`,`n2w (LENGTH bs)`,`n2w (b + 32)`,
@@ -873,6 +874,8 @@ Proof
      TRY (first_assum ACCEPT_TAC) >>
      qpat_assum `v = u` (fn th => rewrite_tac[GSYM th]) >>
      first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp q /\
+    q.vs_alloca_next + pending_alloca_size func q <= w2n q.vs_initial_fmp` by simp[] >>
   mp_tac (SIMP_RULE bool_ss [LET_THM]
     (Q.INST [`n` |-> `cap`,`rev` |-> `rev`,`stat` |-> `stat`,
       `success` |-> `outcome.co_success`,`s` |-> `q`,

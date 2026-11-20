@@ -7,6 +7,7 @@ Ancestors
   o1LowerDloadShared o1LowerDloadRangeTransport ptrDiscipline ptrStaticDiscipline
   contextCodegenRel codegenRel unitShapeDefs venomExecSemantics venomWf
   venomState venomInst vfmState memLocDefs pointerConfinedDefs words byte finite_map pred_set list
+  fmpStageOpSimMemEffects[qualified,ignore_grammar]
 
 Theorem cut_storage_store[local]:
   MEM inst.inst_opcode [SSTORE; TSTORE] /\ inst.inst_outputs = [] /\
@@ -75,25 +76,6 @@ Proof
        contract_storage_def, contract_transient_def,
        vfmStateTheory.lookup_account_def, vfmStateTheory.lookup_storage_def] >>
   fs[ld_shared_agree_def, word_agree_except_def] >> metis_tac[]
-QED
-
-Theorem cut_storage_load_ghost[local]:
-  MEM inst.inst_opcode [SLOAD; TLOAD] /\ inst.inst_outputs = [out] ==>
-  step_prov PG G inst (update_var out w s) = DRESTRICT G (COMPL {out}) /\
-  step_taint inst s (update_var out w s) tn =
-    tn with t_var := tn.t_var |+ (out,out_taint tn inst s)
-Proof
-  strip_tac >> gvs[MEM] >>
-  simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def,
-       set_var_taint_def, adopt_reset_def, store_taint_def, imm_taint_def,
-       mem_taint_def, new_site_bytes_def, step_writes_def,
-       source_memory_write_ranges_def, mem_write_ops_def,
-       range_bytes_def, update_var_def, FLOOKUP_DEF, EXTENSION,
-       taint_component_equality, SF CONJ_ss] >>
-  namedCases_on `inst.inst_operands` ["", "a rest"] >> simp[written_taint_def] >>
-  namedCases_on `rest` ["", "b rest2"] >> simp[written_taint_def] >>
-  namedCases_on `rest2` ["", "c rest3"] >> simp[written_taint_def] >>
-  Cases_on `rest3` >> simp[written_taint_def]
 QED
 
 Theorem cut_istore[local]:
@@ -397,7 +379,7 @@ Theorem cut_storage_load_data[local]:
   s.vs_returndata = t.vs_returndata ==>
   ^cut_data
 Proof
-  strip_tac >> drule_all cut_storage_load_ghost >> strip_tac >>
+  strip_tac >> drule_all fmpStageOpSimMemEffectsTheory.fmp_mem_storage_load_ghost >> strip_tac >>
   gvs[update_var_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def,
       fmp_value_rel_def, ld_value_agree_scalar, ld_shared_agree_def]
 QED

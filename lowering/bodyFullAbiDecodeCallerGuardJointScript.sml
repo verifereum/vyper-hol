@@ -263,8 +263,13 @@ Resume abi_decode_caller_guard_joint[success]:
         qpat_assum `src = Var input` SUBST1_TAC >>
         simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
              loweringStateRelDefsTheory.not_fresh_at_def]) >>
-     conj_tac >- (qexists_tac `input` >> simp[] >>
-       irule abi_decode_ptr_window_frame >> qexistsl [`Gp`,`u`,`tnp`] >> gvs[]) >>
+     conj_tac >- (qexists_tac `input` >> conj_tac >- first_assum ACCEPT_TAC >>
+       match_mp_tac (Q.INST [`G` |-> `Gp`, `s` |-> `u`, `tn` |-> `tnp`]
+         (SPEC_ALL abi_decode_ptr_window_frame)) >>
+       qpat_assum `!x. not_fresh_at sb x ==> lookup_var x v = lookup_var x u /\ _`
+         (fn frame => qpat_assum `not_fresh_at sb input`
+           (strip_assume_tac o MATCH_MP (Q.SPEC `input` frame))) >>
+       asm_rewrite_tac[]) >>
      metis_tac[]) >>
   `eval_operand len v = SOME (n2w (LENGTH input_bytes))` by
     (`?x. len = Var x` by metis_tac[emitted_insts_emit_op] >>

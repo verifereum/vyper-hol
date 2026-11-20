@@ -117,9 +117,11 @@ Resume default_bytes_allocation_boundary_footprint[origin]:
   qexistsl [`ALLOCA`,`[Lit (n2w cap)]`,`buf.buf_operand`,`st`] >>
   qpat_x_assum `s.vs_alloca_next + cap < dimword (:256)` kall_tac >>
   qpat_x_assum `k + unit_alloca_budget ctx < dimword (:256)` kall_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   drule_all prefix_register_alloc_pair >>
   disch_then (qspecl_then [`STRING #"%" (toString st.cs_next_var)`,
-    `tn`,`0`,`fn`,`PG`,`G`,`D`] mp_tac) >>
+    `tn`,`0`,`PG`,`G`,`D`] mp_tac) >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   simp[run_inst_seq_def, mk_inst_def, is_terminator_def,
     unitTransformDefsTheory.inst_mem_below_frontier_def,
@@ -128,6 +130,8 @@ Resume default_bytes_allocation_boundary_footprint[origin]:
 QED
 Resume default_bytes_allocation_boundary_footprint[pullback]:
   gen_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   drule_all prefix_register_alloc_run_continuation >>
   simp[NoAsms, LET_THM] >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] mp_tac) >>

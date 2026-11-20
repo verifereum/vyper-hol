@@ -221,7 +221,14 @@ End
 (* Integer case *)
 Definition compile_as_wei_value_int_def:
   compile_as_wei_value_int val_op scale is_signed =
-    if scale = 1 then return val_op
+    if scale = 1 then
+      (if is_signed then
+         do neg <- emit_op SLT [val_op; Lit 0w];
+            nonnegative <- emit_op ISZERO [neg];
+            emit_void ASSERT [nonnegative];
+            return val_op
+         od
+       else return val_op)
     else
       do product <- emit_op MUL [val_op; Lit (n2w scale)];
          (* Overflow check: div(product, value) == denom || value == 0 *)

@@ -3,6 +3,7 @@ Theory bodyFullBuiltinConcatLoop
 Ancestors stmtSimProps[qualified,ignore_grammar]
   gasOutcomeFull[qualified,ignore_grammar] exprSimDefs[qualified,ignore_grammar]
   bodyFullBuiltinConcatHead bodyFullPreds bodySimFull
+  bodyFullIfExpReach[qualified,ignore_grammar] bodyFullHashKeccakFixed[qualified,ignore_grammar]
   gasOutcomeFullCompose gasOutcomeFullGuarded gasExemptCert
   exprSimConcatArgs exprSimConcatSource exprSimWordArgs
   gasShadowCompile gasShadowCompileHelpers gasShadowState gasShadowUnit gasExplicitSites
@@ -37,7 +38,9 @@ Theorem concat_args_sim_full:
        expr_body_pre cenv cx env e st) /\
     body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
     (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
     (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
@@ -125,7 +128,8 @@ Theorem concat_args_sim_full:
                  FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
                  regions_disjoint p n b sz) ==>
               mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory)))
-      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
   Induct >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS)
   >- (gvs[exprLoweringTheory.compile_concat_def,comp_return_def] >>
@@ -208,15 +212,22 @@ Proof
   qpat_x_assum `expr_sim_full _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`sa`,`sc`,`shadow_sa`,`shadow_sc`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (simp[] >> rpt strip_tac >>
-     drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
-     qpat_x_assum `~ctx_has_dalloca ctx`
-       (mp_tac o REWRITE_RULE [ptrDisciplineTheory.ctx_has_dalloca_def,EXISTS_MEM]) >>
-     simp_tac bool_ss [] >>
-     disch_then (qspec_then `fn` mp_tac) >> simp[] >>
-     disch_then (qspec_then `inst` mp_tac) >> simp[] >>
-     simp[unitTransformDefsTheory.dalloca_no_wrap_def])) >> strip_tac >>
-  qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ headQ childR` >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+     (\H rr ee G tn u. headQ H rr ee G tn u /\
+       ?cm. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (s0,G0,tn0) cm (OK u,G,tn)) childR` by
+    (irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
+     qpat_assum `gas_outcome_full _ _ _ _ _ _ headQ childR` (irule_at Any) >>
+     rpt strip_tac >> simp[] >> goal_assum (drule_at Any)) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ headQ childR` kall_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (qpat_assum `body_inv _ ctx _ cx` (fn inv =>
+       qpat_assum `MEM func ctx.ctx_functions` (fn member =>
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi (CONJ inv member))))) >>
   rewrite_tac[eval_exprs_cons_action] >>
   irule gas_outcome_full_bind_all >> rpt conj_tac
   >~ [`gas_marked_exec _ _ _ _ _ _ _`]
@@ -241,6 +252,7 @@ Proof
   rpt strip_tac >>
   qpat_assum `expr_exit res r` mp_tac >>
   qpat_assum `halt_exit H cx ee res r` mp_tac >>
+  qpat_assum `ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
   Cases_on `res` >>
   simp[exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def] >>
@@ -254,7 +266,8 @@ Resume concat_args_sim_full[continue]:
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _`
     (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
-  qunabbrev_tac `childQ` >> disch_then (strip_assume_tac o BETA_RULE) >>
+  qunabbrev_tac `childQ` >> qunabbrev_tac `headQ` >>
+  disch_then (strip_assume_tac o BETA_RULE) >>
   qpat_x_assum `res = INL v` SUBST_ALL_TAC >>
   qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _`
     (assume_tac o SIMP_RULE bool_ss [sumTheory.INL_11,UNWIND_THM1]) >>
@@ -310,6 +323,27 @@ Resume concat_args_sim_full[continue]:
      qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _`
        (qspec_then `H` mp_tac) >> simp[])) >>
   disch_then (strip_assume_tac o SIMP_RULE bool_ss [LET_THM]) >>
+  `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_no_wrap inst z` by
+    (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK t,G1,tn1)` (fn path =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
+       qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> _` (fn safe =>
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+           (LIST_CONJ [path,no_phi,safe])))))) >>
+  `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_no_wrap inst z` by
+    (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+         gas_origin_ptr_path _ (t,G1,tn1) [] (OK u,G2,tn2) /\ _`
+       (fn th => qpat_assum `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace`
+         (assume_tac o CONJUNCT1 o MATCH_MP th)) >>
+     qpat_assum `gas_origin_ptr_path _ (t,G1,tn1) [] (OK u,G2,tn2)` (fn path =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
+       qpat_assum `!fn inst z. frag_reachable ctx func t fn inst z ==> _` (fn safe =>
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+           (LIST_CONJ [path,no_phi,safe])))))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_path _ (t,G1,tn1) [] (OK u,G2,tn2) /\ _`
+       (fn th => qpat_assum `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace`
+         (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+          CONJUNCT1 o CONJUNCT2 o MATCH_MP th))) >>
   suspend "tail"
 QED
 
@@ -341,6 +375,9 @@ Resume concat_args_sim_full[tail]:
       `s0` |-> `u`, `G0` |-> `G2`, `tn0` |-> `tn2`] o SPEC_ALL) >>
   (impl_tac >- (rpt conj_tac >> asm_simp_tac arith_ss [LET_THM] >>
      rpt strip_tac >> asm_rewrite_tac[]
+     >~ [`dalloca_no_wrap inst z`]
+     >- (qpat_assum `!fn inst z. frag_reachable ctx func u fn inst z ==> _` irule >>
+         goal_assum (drule_at Any))
      >~ [`expr_body_pre cenv cx env x st`]
      >- (qpat_assum `!x st. MEM x (e::args) /\ _ ==> _`
            (qspecl_then [`x`,`st`] mp_tac) >> simp[])
@@ -398,13 +435,15 @@ Resume concat_args_sim_full[tail_outcome]:
   qpat_assum `gas_outcome_full _ _ _ _ (bind (eval_exprs cx args) _) (ee,t,G1,tn1) _ _`
     (irule_at Any) >>
   conj_tac >- suspend "posts" >>
-  simp[Abbr `mappedR`,Abbr `tailR`] >> rpt strip_tac >>
-  qpat_assum `res = SUM_MAP (CONS v) I res'` mp_tac >>
+  simp[Abbr `mappedR`,Abbr `tailR`] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `res = SUM_MAP (CONS v) I res'` SUBST_ALL_TAC >>
   qpat_assum `expr_exit res' r` mp_tac >>
   qpat_assum `halt_exit H cx ee' res' r` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-  gvs[] >> Cases_on `res'` >>
-  fs[stmtSimPropsTheory.expr_exit_INR_type,exprSimDefsTheory.halt_exit_def]
+  qpat_assum `ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  Cases_on `res'` >>
+  simp[sumTheory.SUM_MAP_def,combinTheory.I_THM,exprSimDefsTheory.expr_exit_def,
+       stmtSimPropsTheory.expr_exit_INR_type,exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume concat_args_sim_full[posts]:

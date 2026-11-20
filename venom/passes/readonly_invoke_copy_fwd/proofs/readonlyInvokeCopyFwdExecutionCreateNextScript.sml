@@ -6,23 +6,11 @@ Ancestors
   readonlyInvokeCopyFwdStepsExternalOracle readonlyInvokeCopyFwdRel
   readonlyInvokeCopyFwdHeterogeneousLedger readonlyInvokeCopyFwdMapCoverage
   o1LowerDloadOccurrence internalReturnCopyFwdSim allocaFrontierBound
+  o1LowerDloadShared
   lowerDloadPtrCreateInterfaces pointerConfinedDefs ptrDiscipline memLocDefs
   frameViewFacts frameRel taintAgree venomCallOracleDefs extCallOracle
   venomExecSemantics venomState venomInst codegenRel contextCodegenRel
   finite_map list pred_set words
-
-Theorem ricf_opaque_create_request[local]:
-  ricf_opaque_frame_agree fn D X sites PG G tn s t /\
-  tn.t_stor = {} /\ tn.t_trans = {} /\
-  read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t ==>
-  venom_create_request s value off sz salt =
-    venom_create_request t value off' sz salt
-Proof
-  strip_tac >> fs[ricf_opaque_frame_agree_def, read_memory_def] >>
-  drule ricf_create_request_agree >>
-  simp[ricf_opaque_view_def, venom_create_request_def, read_memory_def] >>
-  metis_tac[]
-QED
 
 Theorem ricf_execution_create_next:
   ricf_execution_invariant vs C D stk PG G tn fn inst s t
@@ -32,7 +20,7 @@ Theorem ricf_execution_create_next:
   EVERY wf_function C.ctx_functions /\ EVERY wf_ssa C.ctx_functions /\
   EVERY fn_inst_wf C.ctx_functions /\ mem_inv raw_mem_ok C vs /\
   ricf_full_alloca_copies fn /\ ricf_src_alloca fn /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  ptr_discipline lo C vs /\ taint_within D C vs /\ opaque_use_ok fn /\
   active_inst fn inst s /\ ~in_revert_forward fn s /\
   MEM inst.inst_opcode [CREATE;CREATE2] /\ step_inst fuel C inst s = OK u /\
   active_inst fn next (u with vs_inst_idx := SUC s.vs_inst_idx) ==>
@@ -63,8 +51,7 @@ Proof
     (fs[ricf_execution_invariant_def, ricf_heterogeneous_source_ledger_def] >>
      metis_tac[occ_frame_reachable_projection]) >>
   `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
-  `tn.t_stor = {} /\ tn.t_trans = {} /\
-   (!op. MEM op inst.inst_operands ==> op_taint tn op = {})` by
+  `!op. MEM op inst.inst_operands ==> op_taint tn op = {}` by
     (gvs[MEM, taint_ok_def] >> metis_tac[]) >>
   `!op x. MEM op (vop::sizeop::salt_ops) /\ eval_operand op s = SOME x ==>
     eval_operand op t = SOME x` by
@@ -113,39 +100,47 @@ Proof
      disch_then (mp_tac o AP_TERM ``\v:venom_state. v.vs_outcomes``) >>
      simp[ricf_opaque_view_def]) >>
   `t.vs_outcomes <> []` by metis_tac[] >>
-  `venom_create_request s value off size_word salt =
-    venom_create_request t value off' size_word salt` by
-    (mp_tac (Q.INST [`X` |-> `ircf_dead (ricf_original_copy_ids C) s stk`,
-       `PG` |-> `ricf_complete_params PG s.vs_params`,
-       `sz` |-> `size_word:256 word`] ricf_opaque_create_request) >>
-     (impl_tac >- simp[]) >> simp[]) >>
-  `!z v. consume_create_outcome
-      (venom_create_request s value off size_word salt) t = (z,v) ==>
+  qabbrev_tac `rq = venom_create_request s value off size_word salt` >>
+  qabbrev_tac `rq' = venom_create_request t value off' size_word salt` >>
+  `(rq.cr_kind = CreateCall \/ ?sw. rq.cr_kind = Create2Call sw) /\ ~rq.cr_static` by
+    (Cases_on `salt` >> simp[Abbr `rq`, venom_create_request_def]) >>
+  `inst.inst_opcode <> INVOKE /\ LENGTH s.vs_requests < LENGTH u.vs_requests` by
+    (conj_tac >- fs[MEM] >> drule_all ld_create_step_request_growth >> simp[]) >>
+  `tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+     (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+     (s.vs_transient s.vs_call_ctx.cc_address)` by
+    (fs[taint_within_def, Excl "consume_create_outcome_eq"] >> metis_tac[]) >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
+    (qpat_assum `ricf_opaque_frame_agree _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[NoAsms, ricf_opaque_frame_agree_def, ricf_frame_agree_def] >> strip_tac >>
+     drule taint_agree_shared >> simp[ricf_opaque_view_def, ld_shared_agree_def]) >>
+  `request_agree_except D rq rq'` by
+    (simp[Abbr `rq`, Abbr `rq'`] >> irule ld_venom_create_request_masked >>
+     simp[] >> metis_tac[ld_shared_accounts_observe, ld_shared_transient_observe]) >>
+  `!z v. consume_create_outcome rq' t = (z,v) ==>
     step_inst fuel Ct inst t = OK (update_var out z v)` by
     (rpt gen_tac >> strip_tac >>
      qpat_assum `step_inst fuel Ct inst t = _` (fn th => pure_rewrite_tac[th]) >>
-     pure_rewrite_tac[exec_create_def, LET_THM] >>
-     qpat_assum `venom_create_request s value off size_word salt = _`
-       (fn th => pure_rewrite_tac[GSYM th]) >>
-     qpat_assum `consume_create_outcome _ t = (z,v)`
-       (fn th => pure_rewrite_tac[th]) >>
-     simp[Excl "consume_create_outcome_eq"]) >>
+     qpat_x_assum `Abbrev (rq' = _)` (fn th =>
+       simp[exec_create_def, GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th),
+            Excl "consume_create_outcome_eq"])) >>
   `r.vs_allocas = s.vs_allocas /\ r.vs_fmp = s.vs_fmp` by
     (qpat_x_assum `consume_create_outcome _ s = (w,r)` mp_tac >>
      simp[consume_create_outcome_eq] >> rpt strip_tac >> gvs[]) >>
   `step_prov PG G inst (update_var out w r) = set_prov G [out] NONE /\
    step_taint inst s (update_var out w r) tn =
-     tn with t_var := set_var_taint tn.t_var [out] {} /\
+     tn with <|t_var := set_var_taint tn.t_var [out] {}; t_stor := {}; t_trans := {}|> /\
    occurrence_sites_step a B inst (update_var out w r) = B` by
-    (fs[MEM, Excl "consume_create_outcome_eq"] >>
-     simp[step_prov_def, out_prov_def, step_taint_def, out_taint_def,
-      mem_taint_def, store_taint_def, imm_taint_def, new_site_bytes_def,
-      step_writes_def, written_taint_def, occurrence_sites_step_def,
-      source_memory_write_ranges_def, range_bytes_def, adopt_reset_def,
-      taint_component_equality, update_var_def, FLOOKUP_DEF,
-      Excl "consume_create_outcome_eq"] >>
-     simp[EXTENSION] >> metis_tac[]) >>
-  mp_tac (Q.INST [`rq` |-> `venom_create_request s value off size_word salt`]
+    (`step_taint inst s u tn =
+      tn with <|t_var := set_var_taint tn.t_var inst.inst_outputs (out_taint tn inst s);
+        t_stor := {}; t_trans := {}|>` by
+       (drule_all dload_create_step_taint >> simp[]) >>
+     qpat_x_assum `u = update_var out w r` SUBST_ALL_TAC >>
+     fs[MEM, Excl "consume_create_outcome_eq"] >>
+     simp[step_prov_def, out_prov_def, out_taint_def, occurrence_sites_step_def,
+       Excl "consume_create_outcome_eq"]) >>
+  mp_tac (Q.INST [`rq` |-> `rq`, `rq'` |-> `rq'`]
     ricf_execution_consume_create_next) >>
   (impl_tac >- (gvs[Excl "consume_create_outcome_eq"] >> metis_tac[])) >>
   simp[Excl "consume_create_outcome_eq"]

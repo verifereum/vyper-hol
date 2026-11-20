@@ -7,7 +7,9 @@ Ancestors exprSimDefs[qualified,ignore_grammar]
   exprSimMemoryStack vyperTyping vyperTypeSystem builtinHashing
   vyperContext builtinSimple bodyFullGhostFrame vyperStorageTrace vyperStorageFootprint compileEnv
   loweringPosts bodyPtrDefs venomState fragGasSeqPtr vyperAST list exprSimHyps
-  bodyInvNoDalloca bodyFullUnaryValueCompose
+  bodyInvNoDalloca bodyFullHashKeccakFixed[qualified,ignore_grammar] bodyFullUnaryValueCompose
+  contextRawReachable[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar]
+  unitTransformDefs[qualified,ignore_grammar]
 Libs pairLib
 
 Theorem method_id_runtime_joint_outcome_from_suffix:
@@ -18,7 +20,6 @@ Theorem method_id_runtime_joint_outcome_from_suffix:
     lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
     compile_method_id_runtime (expr_type e) x fixed sm = (op,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    ~ctx_has_dalloca ctx /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     local_ptrs_reserved cenv sa /\
     (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
@@ -80,7 +81,9 @@ Theorem method_id_runtime_joint_outcome_from_suffix:
     MEM shadow_func shadow_ctx.ctx_functions /\
     fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
     (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
     gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
@@ -106,7 +109,8 @@ Theorem method_id_runtime_joint_outcome_from_suffix:
         vv_store_bound cx (expr_type (Builtin ann MethodId [e])) (lowered_value_type cenv (Builtin ann MethodId [e])) ee (Value v) (if fixed then StackValue ann op else LocatedValue ann (mk_ptr op LocMemory)) t /\
         ptr_vv_ok cx (post_value_type cenv (Builtin ann MethodId [e])) (Value v) (if fixed then StackValue ann op else LocatedValue ann (mk_ptr op LocMemory)) ee G tn t /\
         (~fixed ==> ptr_buf_ok cenv (Builtin ann MethodId [e]) op G t))
-      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
   disch_tac >> rpt gen_tac >> strip_tac >> simp_tac std_ss [LET_THM] >>
   `post_value_type cenv e = expr_type e` by
@@ -146,11 +150,6 @@ Resume method_id_runtime_joint_outcome_from_suffix[child_run]:
     (`cs_extends shadow_sa ss` by metis_tac[cj 2 compile_expr_grows] >>
      `cs_extends ss shadow_sb` by metis_tac[fragExecTheory.cs_appends_def] >>
      metis_tac[fragExecTheory.fn_has_code_split]) >>
-  `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s` by
-    (rpt strip_tac >>
-     drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
-     fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
-        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ e es`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `ss`, `x`,
@@ -229,7 +228,7 @@ Theorem method_id_runtime_sim_full_from_suffix:
     lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
     compile_method_id_runtime (expr_type e) x fixed sm = (op,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     local_ptrs_reserved cenv sa /\
     (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
     (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
@@ -273,7 +272,6 @@ Theorem method_id_runtime_sim_full_from_suffix:
       cenv cx ty (Builtin ann MethodId [e]) es
 Proof
   disch_tac >> rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `expr_body_pre cenv cx env e es` by
     (drule expr_body_pre_builtin_arg >> disch_then irule >> gvs[expr_body_pre_def]) >>
   Q.SUBGOAL_THEN `is_bytes_or_string_type (expr_type e) /\
@@ -327,7 +325,12 @@ Resume method_id_runtime_sim_full_from_suffix[value_run]:
       disch_then (assume_tac o BETA_RULE o PURE_REWRITE_RULE [LET_THM]) >>
       irule gas_outcome_full_post_mono >>
       qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
-      simp[] >> metis_tac[])
+      simp[] >> qx_genl_tac [`H`,`res`,`ee`,`G'`,`tn'`,`t`] >>
+      disch_then (qx_choose_then `v` strip_assume_tac) >>
+      qexists_tac `v` >> simp[] >>
+      qpat_assum `expr_post H ctx func cenv cx _ _ _ _ _ ee v _ t`
+        (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+         CONJUNCT1 o REWRITE_RULE [expr_post_def]))
 QED
 
 Resume method_id_runtime_sim_full_from_suffix[vv_run]:
@@ -393,7 +396,11 @@ Resume method_id_runtime_sim_full_from_suffix[vv_source_transport]:
   strip_tac >>
   drule gas_outcome_full_post_mono >> disch_then irule >>
   BETA_TAC >> conj_tac
-  >- (rpt gen_tac >> strip_tac >> gvs[] >>
+  >- (qx_genl_tac [`H`,`res`,`ee`,`Gresult`,`tnt`,`t`] >> strip_tac >> gvs[] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+        (qpat_assum `expr_post H ctx func cenv cx _ _ _ _ _ ee _ _ t`
+           (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+            CONJUNCT1 o REWRITE_RULE [expr_post_def])) >>
       Cases_on `fixed` >>
       gvs[expr_type_def, is_word_type_def, is_bytestring_type_def,
           contextTheory.vv_location_def, contextTheory.mk_ptr_def]) >>
