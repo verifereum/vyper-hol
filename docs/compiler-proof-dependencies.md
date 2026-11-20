@@ -178,8 +178,9 @@ target account in `es.originalAccounts`; success
 compares returned/installed `runtime_bc ++ section` satisfying `immutables_section_rel`,
 accounts modulo target code and dead storage, transient storage modulo dead
 target storage, and logs.
-`venomToAsmProps.gen_fn_simulation` is separately **ADMITTED**, Milestone 4.2,
-with internal-return/frame relations. Both are **off the runtime call path**.
+`venomToAsmProps.gen_fn_simulation` (Milestone 4.2, with internal-return/frame
+relations) is proved, and S7's `codegen_correct` uses it. The deployment
+theorem is **off the runtime call path**.
 
 The [completed retirement ledger](../lowering/e2eLegacy.md) maps all21 obsolete
 definitions/all14 claims to the new API, preserves exact original proof
