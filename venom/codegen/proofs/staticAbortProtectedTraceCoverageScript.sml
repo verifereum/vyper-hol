@@ -21,6 +21,18 @@ Proof
   Cases_on `allow_own` >> simp[sym_steps_mode_def, sym_steps_def, sym_steps_own_def]
 QED
 
+Theorem sym_steps_mode_pos:
+  0 < n /\ ss.sym_base.as_pc < LENGTH p ==>
+  sym_steps_mode allow_own p env own n ss =
+    case (if allow_own then sym_step_own p env own else sym_step p env)
+           (EL ss.sym_base.as_pc p) ss of
+      SymOK next => sym_steps_mode allow_own p env own (n-1) next
+    | r => r
+Proof
+  Cases_on `n` >> simp[sym_steps_mode_suc] >> rpt strip_tac >>
+  Cases_on `allow_own` >> simp[sym_steps_mode_suc]
+QED
+
 Theorem sym_steps_mode_ok_one:
   sym_steps_mode allow_own p env own 1 ss = SymOK next <=>
   ss.sym_base.as_pc < LENGTH p /\
