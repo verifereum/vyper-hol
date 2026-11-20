@@ -469,13 +469,11 @@ Theorem cut_create_nonstatic_exception[local]:
      (inst.inst_opcode = CREATE2 /\ ?salt. rest = [salt]))
 Proof
   simp[MEM] >> strip_tac >>
+  Cases_on `r` >> fs[passSimulationDefsTheory.terminates_def] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_opcode_eqs, exec_create_def,
-       Excl "consume_create_outcome_eq", AllCaseEqs()] >>
-  rpt strip_tac >>
-  gvs[passSimulationDefsTheory.terminates_def, eval_operands_def,
-      pairTheory.UNCURRY, Excl "consume_create_outcome_eq", AllCaseEqs()] >>
-  metis_tac[]
+  simp[step_inst_base_opcode_eqs, AllCaseEqs(), exec_create_not_Halt,
+       exec_create_not_IntRet, exec_create_abort_iff] >>
+  rpt strip_tac >> gvs[eval_operands_def] >> metis_tac[]
 QED
 
 Theorem cut_create_nonstatic_abort[local]:
