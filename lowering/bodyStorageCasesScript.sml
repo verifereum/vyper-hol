@@ -42,19 +42,13 @@ Proof
   gvs[expr_size_def]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem supported_function_decl_main:
+  IS_SOME (supported_function_decl tops id vis) ==> FST id = NONE
 Proof
-  ho_match_mp_tac supported_pure_expr_ind >>
-  simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND] >>
-  rpt conj_tac >> rpt gen_tac >>
-  TRY (Cases_on `base`) >>
-  simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND] >>
-  simp[int_calls_target_indices, EVERY_FLAT, EVERY_MAP, EVERY_MEM] >>
-  rw[] >> TRY (Cases_on `default`) >>
-  gvs[int_calls_expr_def, MEM_FLAT, MEM_MAP, PULL_EXISTS, EVERY_MEM] >>
-  metis_tac[]
+  Cases_on `id` >> CCONTR_TAC >>
+  gvs[supported_lookup_other_module]
 QED
-*)
+
 Theorem supported_pure_main_calls:
   (!tops e. supported_pure_expr tops e ==>
     EVERY (\c. FST c = NONE /\
@@ -69,14 +63,15 @@ Theorem supported_pure_main_calls:
     EVERY (\c. FST c = NONE /\
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e))
 Proof
-  cheat
-QED
-
-Theorem supported_function_decl_main:
-  IS_SOME (supported_function_decl tops id vis) ==> FST id = NONE
-Proof
-  Cases_on `id` >> CCONTR_TAC >>
-  gvs[supported_lookup_other_module]
+  ho_match_mp_tac supported_pure_expr_ind >>
+  simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND] >>
+  rpt conj_tac >> rpt gen_tac >>
+  TRY (Cases_on `base`) >> TRY (Cases_on `target`) >>
+  simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND] >>
+  simp[int_calls_target_indices, EVERY_FLAT, EVERY_MAP, EVERY_MEM] >>
+  rw[] >> TRY (Cases_on `default`) >>
+  gvs[int_calls_expr_def, target_indices_def, MEM_FLAT, MEM_MAP, PULL_EXISTS, EVERY_MEM] >>
+  metis_tac[supported_function_decl_main]
 QED
 
 (* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
