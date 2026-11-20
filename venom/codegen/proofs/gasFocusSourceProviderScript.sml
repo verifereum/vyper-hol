@@ -4281,46 +4281,6 @@ Proof
   simp[NoAsms, code_end_offset_ok_def] >> metis_tac[]
 QED
 
-Theorem focus_opt_layout_cut_bound[local]:
-  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
-  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
-  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
-  o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
-  code_layout_valid vs0 /\
-  unit.cu_context.ctx_entry = SOME nm /\
-  lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
-  fn_entry_label entryfn = SOME lbl /\
-  w2n vs0.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
-  unit_alloca_budget unit.cu_context +
-    32 * ctx_dload_count unit.cu_context <= w2n fmp /\
-  dead_wf D /\
-  V = vs0 with <|vs_gas_readings := L; vs_fmp := fmp; vs_initial_fmp := fmp|> /\
-  o1_safe_upto D lo n unit.cu_context V /\
-  n <= LENGTH (gas_events_blocks f unit.cu_context entryfn
-    (V with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)) /\
-  run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit
-    (init_ir_supply unit) = SOME (pre,t) /\
-  pre.cu_context.ctx_entry = SOME nm /\
-  run_callee_first rpolicy o1_fn_passes
-    (fcg_postorder (fcg_analyze pre.cu_context) nm)
-    (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)) t =
-    SOME (out.po_unit,t') /\
-  stage 0 = (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context /\
-  stage 9 = out.po_unit.cu_context /\
-  (!k. k < 9 ==> ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
-    (stage k) (stage (SUC k))) /\
-  (!k. k <= 9 ==> o1_ctx_shape (stage k) /\
-    EVERY (o1_fn_row k) (stage k).ctx_functions) /\
-  generate_context_plan out.po_unit.cu_context = SOME cpl /\
-  codegen_asm_entry_rel cpl prog vs0 ast /\
-  code_end_offset_ok (\ctx fn i s. raw_reachable V ctx fn i s /\ gas_cut n V s) (stage 2) ==>
-  code_end_offset_ok (\ctx fn i s. raw_reachable V ctx fn i s /\ gas_cut n V s) (stage 3)
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `n2w cpl.cp_initial_fmp = vs0.vs_initial_fmp` by fs[codegen_asm_entry_rel_def] >>
-  drule_all_then ACCEPT_TAC focus_opt_layout_cut_bound_for
-QED
-
 Theorem focus_history_source_slice[local]:
   !N C7 C8 root_sf root_tf root_entry j obs acts blocks calls ms_tab es_tab ks_tab
     rooted_eval p d q8 raw_slots sites unused a e sf tf inc entry order res nrest
@@ -4863,54 +4823,6 @@ Proof
   qpat_assum `raw_reachable root4 (stage 7) sf src_inst u`
     (fn reached => qpat_assum `gas_cut n root4 u`
       (fn cut => simp[NoAsms,code_end_offset_ok_def,reached,cut]))
-QED
-
-Theorem focus_selected_c7_opt_point[local]:
-  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
-  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
-  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
-  o1_initial_state_ok vs0 /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
-  code_layout_valid vs0 /\
-  unit.cu_context.ctx_entry = SOME nm /\
-  lookup_function nm unit.cu_context.ctx_functions = SOME entryfn /\
-  fn_entry_label entryfn = SOME lbl /\
-  w2n vs0.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
-  unit_alloca_budget unit.cu_context +
-    32 * ctx_dload_count unit.cu_context <= w2n fmp /\
-  dead_wf D /\
-  V = vs0 with <|vs_gas_readings := L; vs_fmp := fmp; vs_initial_fmp := fmp|> /\
-  o1_safe_upto D lo n unit.cu_context V /\
-  n <= LENGTH (gas_events_blocks f unit.cu_context entryfn
-    (vs0 with <|vs_gas_readings := L; vs_fmp := fmp; vs_initial_fmp := fmp;
-                vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)) /\
-  run_pipeline_stages rpolicy o1_pipeline_spec.ps_pre_walk_stages unit
-    (init_ir_supply unit) = SOME (pre,t) /\
-  pre.cu_context.ctx_entry = SOME nm /\
-  run_callee_first rpolicy o1_fn_passes
-    (fcg_postorder (fcg_analyze pre.cu_context) nm)
-    (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)) t =
-    SOME (out.po_unit,t') /\
-  stage 0 = (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context /\
-  stage 9 = out.po_unit.cu_context /\
-  (!k. k < 9 ==> ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
-    (stage k) (stage (SUC k))) /\
-  (!k. k <= 9 ==> o1_ctx_shape (stage k) /\ EVERY (o1_fn_row k) (stage k).ctx_functions) /\
-  generate_context_plan out.po_unit.cu_context = SOME cpl /\
-  codegen_asm_entry_rel cpl prog vs0 ast /\
-  (!fn inst s. raw_reachable V unit.cu_context fn inst s /\ gas_cut n V s ==>
-    inst_dload_in_section inst s) /\
-  (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-    ~MEM (Label "code_end") inst.inst_operands) /\
-  LENGTH vs0.vs_data_section < dimword (:256) DIV 2 /\
-  root = vs0 with <|vs_gas_readings := L; vs_prev_bb := NONE;
-                   vs_current_bb := lbl7; vs_inst_idx := 0|> /\
-  raw_reachable root (stage 7) sf src_inst u /\ gas_cut n root u ==>
-  inst_dload_in_section src_inst u /\
-  code_end_offset_ok (\ctx fn i s. fn = sf /\ i = src_inst /\ s = u) (stage 7)
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `n2w cpl.cp_initial_fmp = vs0.vs_initial_fmp` by fs[codegen_asm_entry_rel_def] >>
-  drule_all_then ACCEPT_TAC focus_selected_c7_opt_point_for
 QED
 
 Theorem focus_history_observation_agreement[local]:

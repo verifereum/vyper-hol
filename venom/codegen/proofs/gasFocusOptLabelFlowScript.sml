@@ -480,22 +480,6 @@ Proof
     (qspec_then `j` mp_tac) >> simp[]
 QED
 
-Theorem fmp_label_flow_rewrite[local]:
-  split_fmp_entry f = SOME (FmpEntryLayout users oldpc suffix) /\
-  analyze_fmp_reclaims infos ctx f = SOME plan /\
-  fmp_make_root_layout ctx f info runner s0 = SOME (FmpRootLayout n root pc s1) /\
-  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist f plan) f.fn_blocks =
-    SOME (FmpBlocksResult blocks leftover s2) /\
-  fmp_install_root ctx f (FmpRootLayout n root pc s2) blocks = SOME (out,s3) /\
-  g.fn_blocks = out /\ wf_function f /\ ir_supply_inst_ok s1 /\
-  (!x. code_end_var f x ==> MEM x s1.irs_used_vars /\ x <> runner) /\
-  middle_code_end_lifetime f /\ label_flow_ok (C with ctx_functions := [f]) ==>
-  middle_code_end_lifetime g /\ label_flow_ok (C with ctx_functions := [g])
-Proof
-  MATCH_ACCEPT_TAC (SIMP_RULE bool_ss []
-    (Q.INST [`check_plain_flow` |-> `T`] fmp_label_flow_rewrite_track_strict))
-QED
-
 Theorem fmp_label_flow_seal[local]:
   fmp_checked_seal ctx f info blocks = SOME g ==>
   g.fn_blocks = blocks
