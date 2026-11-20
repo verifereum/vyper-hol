@@ -750,7 +750,9 @@ Definition type_builtin_result_ok_def:
   type_builtin_result_ok tenv (AbiEncode ensure method_id) result_ty target_ty arg_tys =
     (?n. result_ty = BaseT (BytesT (Dynamic n)) ∧ target_ty = TupleT arg_tys ∧
          abi_encode_size_ok tenv ensure target_ty method_id n) ∧
-  type_builtin_result_ok tenv Empty result_ty target_ty arg_tys = (result_ty = target_ty) ∧
+  (* As in Vyper, empty's argument is a value type: never None or (). *)
+  type_builtin_result_ok tenv Empty result_ty target_ty arg_tys =
+    (result_ty = target_ty /\ assignable_type tenv target_ty) ∧
   type_builtin_result_ok tenv MaxValue result_ty target_ty arg_tys = (result_ty = target_ty) ∧
   type_builtin_result_ok tenv MinValue result_ty target_ty arg_tys = (result_ty = target_ty) ∧
   type_builtin_result_ok tenv Epsilon result_ty target_ty arg_tys = (result_ty = target_ty) ∧
@@ -939,7 +941,10 @@ Definition well_typed_expr_def:
   well_typed_expr env (Builtin ty blt es) =
     (well_typed_exprs env es /\ well_typed_builtin_app ty blt (MAP expr_type es) /\
      slice_operands_ok blt es /\ builtin_operands_ok ty blt es /\
-     well_formed_type env.type_defs ty) /\
+     well_formed_type env.type_defs ty /\
+     (* As in Vyper, a list literal has a value type: no empty tuple and no
+        None-typed element. *)
+     (case blt of MakeArray _ _ => assignable_type env.type_defs ty | _ => T)) /\
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\ well_formed_type env.type_defs ty /\
      type_builtin_result_ok env.type_defs tb ty target_ty (MAP expr_type es) /\

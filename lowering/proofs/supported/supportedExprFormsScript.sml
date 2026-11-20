@@ -37,26 +37,18 @@ End
 (* Operand type, NOT result type: comparisons have a bool result. Exposing
    the literal facts separately also gives TASK_021 the AugAssign contract. *)
 Definition supported_binop_def:
-  supported_binop op ty rhs_ty literal_base nonnegative_exponent <=>
-    case op of
-      Exp => supported_integer_type ty /\
-        (literal_base \/ nonnegative_exponent)
-    | Eq => ~is_bytestring_type ty
-    | NotEq => ~is_bytestring_type ty
-    | ExpMod => F
-    | In => ~is_ArrayT rhs_ty
-    | NotIn => ~is_ArrayT rhs_ty
-    | _ => T
+  supported_binop (op : binop) (ty : type) (rhs_ty : type)
+    (literal_base : bool) (nonnegative_exponent : bool) <=>
+    T
 End
 
 
 Definition supported_literal_elements_def:
-  supported_literal_elements tops ty es <=>
+  supported_literal_elements tops ty (es : expr list) <=>
     supported_place_type tops ty /\
     case ty of
-      ArrayT elem bound => EVERY (supported_copy_types elem o expr_type) es
-    | TupleT tys => supported_tuple_type ty /\
-        LIST_REL supported_copy_types tys (MAP expr_type es)
+      ArrayT elem bound => T
+    | TupleT tys => T
     | _ => F
 End
 
@@ -67,10 +59,7 @@ Definition supported_struct_elements_def:
       StructT id =>
         (case supported_struct_fields tops id of
            SOME declared =>
-             EVERY (\(name,e).
-               case ALOOKUP declared name of
-                 SOME dst => supported_copy_types dst (expr_type e)
-               | NONE => F) fields
+             EVERY (\(name,e). IS_SOME (ALOOKUP declared name)) fields
          | NONE => F)
     | _ => F
 End
@@ -81,32 +70,11 @@ Definition supported_builtin_form_def:
       (Bop op, [a; b]) =>
         supported_binop op (expr_type a) (expr_type b)
           (supported_integer_literal a) (supported_nonnegative_literal b)
-    | (Not, [a]) => T
-    | (Neg, [a]) => T
-    | (Abs, [a]) => T
-    | (AsWeiValue d, [a]) => supported_unsigned_type (expr_type a)
-    | (AddMod, [a; b; c]) => T
-    | (MulMod, [a; b; c]) => T
-    | (PowMod256, [a; b]) => T
-    | (Env item, []) => T
-    | (Acc item, [a]) => item <> Code
-    | (MethodId, [a]) => T
-    | (Sha256, [a]) => T
-    | (BlockHash, [a]) => T
-    | (BlobHash, [a]) => T
-    | (ECRecover, [a; b; c; d]) => T
-    | (ECAdd, [a; b]) => T
-    | (ECMul, [a; b]) => T
-    | (MakeArray NONE (Fixed n), args) =>
-        supported_place_type tops ty /\ supported_tuple_type ty
+    | (MakeArray NONE (Fixed n), args) => supported_place_type tops ty
     | (MakeArray (SOME elem) bnd, args) =>
         ty = ArrayT elem bnd /\ supported_place_type tops ty
-    | (Uint2Str n, [a]) => supported_unsigned_type (expr_type a)
-    | (Len, [a]) => T
-    | (CalldataLen, []) => T
-    | (CalldataSlice n, [a]) => T
-    | (Ceil, [a]) => T
-    | _ => F
+    | (MakeArray NONE (Dynamic n), args) => F
+    | _ => builtin_args_length_ok blt (LENGTH es)
 End
 
 Definition supported_type_builtin_form_def:
@@ -118,10 +86,8 @@ Definition supported_type_builtin_form_def:
     | (Epsilon, []) => ty = target /\ ty = BaseT DecimalT
     | (Convert, [a]) => ty = target /\ valid_conversion (expr_type a) ty
     | (Extract32, [a; b]) => ty = target
-    | (AbiEncode F (SOME mid), [a]) => LENGTH mid = 4 /\
-        (case target of TupleT [t] => supported_tuple_type t | _ => F)
-    | (AbiDecode F, [a]) => ty = target /\ supported_tuple_type ty /\
-        (case ty of TupleT ts => 2 <= LENGTH ts | _ => F)
+    | (AbiEncode et mid, a::rest) => T
+    | (AbiDecode u, [a]) => ty = target
     | _ => F
 End
 
@@ -129,10 +95,10 @@ End
 
 Definition supported_storage_scalar_def:
   supported_storage_scalar tops id ty <=>
-    supported_full_word_type ty /\
+    supported_storage_type tops ty /\
     case supported_variable_decl tops id of
-      SOME (Private, Storage, declared, SOME slot) => declared = ty
-    | SOME (Private, Transient, declared, SOME slot) => declared = ty
+      SOME (vis, Storage, declared, SOME slot) => declared = ty
+    | SOME (vis, Transient, declared, SOME slot) => declared = ty
     | _ => F
 End
 
@@ -158,10 +124,10 @@ End
 Definition supported_storage_dynamic_array_def:
   supported_storage_dynamic_array tops id <=>
     case supported_variable_decl tops id of
-      SOME (Private, Storage, ArrayT elem (Dynamic n), SOME slot) =>
-        supported_full_word_type elem
-    | SOME (Private, Transient, ArrayT elem (Dynamic n), SOME slot) =>
-        supported_full_word_type elem
+      SOME (vis, Storage, ArrayT elem (Dynamic n), SOME slot) =>
+        supported_storage_type tops elem
+    | SOME (vis, Transient, ArrayT elem (Dynamic n), SOME slot) =>
+        supported_storage_type tops elem
     | _ => F
 End
 
@@ -205,6 +171,8 @@ Definition supported_place_root_def:
     case supported_variable_decl tops id of
       SOME (vis, Storage, ty, SOME slot) => supported_storage_type tops ty
     | SOME (vis, Transient, ty, SOME slot) => supported_storage_type tops ty
+    | SOME (vis, Immutable, ty, offset) => supported_value_type tops ty
+    | SOME (vis, Constant e, ty, slot) => T
     | SOME _ => F
     | NONE =>
         (case supported_hashmap_decl tops id of
@@ -238,7 +206,8 @@ End
 (* The lowering allocates the result with the return type's memory size and
    decodes into it, so every admitted value type may be returned. *)
 Definition supported_external_return_type_def:
-  supported_external_return_type tops ty <=> supported_value_type tops ty
+  supported_external_return_type tops ty <=>
+    ty = NoneT \/ supported_value_type tops ty
 End
 
 Theorem supported_external_none_rejected:

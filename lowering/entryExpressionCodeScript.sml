@@ -290,7 +290,7 @@ Resume entry_code_supported_union[pop]:
      (compile_get_target_ptr
        (expr_child_callback (expr_size (Pop ann (TopLevelNameTarget p)) + cenv_defaults_size cenv) compile_expr)
        cenv (TopLevelNameTarget p))` by
-    (irule entry_code_get_target_ptr >> simp[targetPlaceLiveTheory.target_indices_def]) >>
+    (irule entry_code_get_target_ptr >> simp[supportedExprsTheory.target_indices_def]) >>
   rw[entry_preserves_code_def, compile_expr_body_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   qpat_x_assum `entry_preserves_code _ (compile_get_target_ptr _ _ _)`
