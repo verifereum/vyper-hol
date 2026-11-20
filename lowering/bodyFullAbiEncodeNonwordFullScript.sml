@@ -1,7 +1,7 @@
 Theory bodyFullAbiEncodeNonwordFull
 Ancestors exprSimAbiEncodeStateTransport[qualified,ignore_grammar] abiBuiltinEncodeSource[qualified,ignore_grammar]
   bodyFullIntCallReturnFrame[qualified,ignore_grammar]
-  bodyFullPreds bodySimFull bodyInvNoDalloca bodyFullAbiEncodeArgStep
+  bodyFullPreds bodySimFull bodyFullAbiEncodeArgStep
   bodyFullAbiEncodeSetupTail bodyFullAbiEncodeFinish bodyFullAbiEncodeAllocOrigin
   bodyFullAbiEncodeSuffix bodyFullAbiEncodeUniformTranslation
   exprSimAbiEncodeNonwordCase exprSimAbiEncodeRuntimeInputs
@@ -23,7 +23,6 @@ Theorem abi_encode_nonword_vv_full_from_packaging:
         ce cx cty (TypeBuiltin ann (AbiEncode F mid) ty [e]) es
 Proof
   strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `expr_body_pre ce cx env e es` by
     (irule abi_encode_body_arg_pre >> goal_assum (drule_at Any) >> simp[]) >>
   rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
@@ -78,7 +77,8 @@ Proof
     `shadow_mid` |-> `shadow_si`, `shadow_sb` |-> `shadow_sm`]
     abi_encode_arg_step_full) >>
   simp[expr_can_mutate_def] >>
-  strip_tac >>
+  qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _`
+    (fn nowrap => disch_then (fn step => strip_assume_tac (MP step nowrap))) >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   simp[eval_expr_singleton_type_builtin_action,
     vyperContextTheory.type_builtin_args_length_ok_def] >>
@@ -335,6 +335,13 @@ Resume abi_encode_nonword_vv_full_from_packaging[finish_ready]:
   disch_then (qx_choose_then `t` (qx_choose_then `Gf` (qx_choose_then `tnf`
     (qx_choose_then `cut` (qx_choose_then `Gcut` (qx_choose_then `tncut`
       strip_assume_tac)))))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `abi_encode_exec_frame func u t` (fn frame =>
+       qpat_assum `alloca_inv t` (fn inv =>
+         qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u /\ _` (fn bound =>
+           mp_tac (MATCH_MP abiEncoderWindowJointPhasesTheory.window_exec_frame_alloca_budget
+             (LIST_CONJ [frame,inv,bound]))))) >>
+     simp_tac bool_ss [IMP_CONJ_THM]) >>
   `!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
          (s,G1,tn1) [] (OK t,Gf,tnf)` by
     (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
@@ -430,9 +437,10 @@ Resume abi_encode_nonword_vv_full_from_packaging[finish_ready]:
           loweringPostsTheory.post_value_type_def, vyperStateTheory.read_result_def,
           vyperStateTheory.return_def]) >>
      ntac 5 (conj_tac >- simp[]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac >-
        (qpat_assum `ptr_vv_ok _ _ _ _ ee Gf tnf t` mp_tac >>
-        simp_tac (srw_ss()) [bodyPtrDefsTheory.ptr_vv_ok_def,
+        simp_tac (srw_ss()) [bodyPtrDefsTheory.ptr_vv_ok_def, contextTheory.mk_ptr_def,
           loweringPostsTheory.post_value_type_def, vyperStateTheory.read_result_def,
           vyperStateTheory.return_def]) >>
      conj_tac >-
