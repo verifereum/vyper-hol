@@ -11,9 +11,11 @@ Ancestors
   exprPtrCleanBufferPost valueEncodingTyping valueEncodingProps
   abiDecoderReentry abiMalformedSiteFrame abiMalformedRecursiveInterface
   fragExec fragGasOriginPtr instIdxIndep ghostPcTransportPtr
+  fragGasSeqPtrContext[qualified]
   exprLoweringProps emitHelperProps allocaHistory compileEnv
   bodyPtrDefs ptrDiscipline venomExecSemantics venomInst venomMemDefs venomState
   list rich_list arithmetic finite_map pred_set words valueEncoding valueEncodingDefs
+  bodyFullHashKeccakFixed
 
 Theorem bulk_decode_actual_cuts[local]:
   compile_abi_decode_to_buf (Var output) pos MLOAD (Var source) hi
@@ -232,7 +234,6 @@ Theorem abi_valid_allocated_joint_bulk:
     (ArrayTV tv (Dynamic maxn)) v ctx func cenv cx es st en (Var source) hi
     pos (Var output) B L xs p d dstid live ceiling s ==>
   !G tn PG lo.
-  ~ctx_has_dalloca ctx /\
   abi_decode_ptr_window G tn s source (n2w B) L /\
   ptr_covers G tn output s (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
   op_prov G pos = NONE /\ op_prov G hi = NONE /\
@@ -289,7 +290,9 @@ Proof
      qpat_assum `d+cap < dimword (:256)` mp_tac >>
      qpat_assum `cap = _ + _` (fn th => pure_rewrite_tac[th]) >>
      simp[] >> decide_tac) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qhdtm_assum `stmt_state_rel`
+       (ACCEPT_TAC o MATCH_MP (SPEC_ALL bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp))) >>
   drule_all bulk_decode_header_ghosts >>
   disch_then (qspec_then `PG` (qx_choose_then `G2` (qx_choose_then `tn2`
     (map_every assume_tac o CONJUNCTS o BETA_RULE o PURE_REWRITE_RULE [LET_THM])))) >>
@@ -315,7 +318,39 @@ Proof
      qpat_assum `s2.vs_alloca_next = s.vs_alloca_next` (fn th => rewrite_tac[th]) >>
      decide_tac) >>
   `eval_operand cnt s2 = SOME (n2w (LENGTH vs))` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (strip_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` (drule_then assume_tac) >>
+     `allocas_below_fmp s2 <=> allocas_below_fmp r2` by
+       simp[Abbr `s2`, allocas_below_fmp_def] >>
+     PURE_ASM_REWRITE_TAC [] >>
+     `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+     `inst_extends st c1 /\ inst_extends c1 c2` by
+       (conj_tac >- (drule_all abi_decode_dynarray_position_prefix_shape >> simp[]) >>
+        drule_all abi_decode_array_header_shape >> simp[]) >>
+     `inst_extends c2 en` by
+       (qpat_x_assum `abi_decode_bulk_payload _ _ _ _ _ _ _ = _` mp_tac >>
+        simp[abi_decode_bulk_payload_def, compile_abi_dec_addr_def,
+             abi_decode_copy_opcode_def, comp_bind_def] >>
+        pairarg_tac >> strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
+        imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
+        metis_tac[inst_extends_trans]) >>
+     `emitted_insts st en = (emitted_insts st c1 ++ emitted_insts c1 c2) ++
+          emitted_insts c2 en` by
+       (`inst_extends st c2` by metis_tac[inst_extends_trans] >>
+        metis_tac[emitted_insts_append, inst_extends_def, APPEND_ASSOC]) >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+        ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
+        i.inst_opcode <> DALLOCA) (emitted_insts st c1 ++ emitted_insts c1 c2)` by
+       (drule_all abi_decoder_bulk_allocation_shape >>
+        qpat_assum `emitted_insts st en = _`
+          (fn th => simp_tac bool_ss [th, EVERY_APPEND]) >>
+        pure_rewrite_tac[EVERY_MEM] >> rpt strip_tac >> res_tac >>
+        fs[MEM_APPEND, abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def] >>
+        res_tac >> gvs[]) >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts st c1 ++ emitted_insts c1 c2`, `s`] >>
+     simp[bop_run_inst_seq_append_ok] >> qexists_tac `r1` >> simp[]) >>
   drule_all abi_decode_bulk_payload_success_joint >>
   disch_then (qspec_then `PG` (qx_choose_then `G3` (qx_choose_then `tn3`
     (map_every assume_tac o CONJUNCTS)))) >>

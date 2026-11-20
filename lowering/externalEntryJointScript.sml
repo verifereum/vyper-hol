@@ -30,6 +30,7 @@ Ancestors
   selectedBodyCode bodyMemAggregatePath fragGasPathFrameMem venomMemProofs
   moduleLoweringProps vyperCompiler nonreentrantEntryPath externalReturnPackage entryDispatchProps
   vyperTypeContractGetter vyperTypeContractSoundness vyperTypeContractContext
+  bodyFullHashKeccakFixed
 
 (* Helper: the runtime entry function, its label and its phi-free entry block. *)
 Theorem runtime_entry_function_no_phi_nr:
@@ -267,7 +268,7 @@ Theorem selected_entry_after_lock:
   lock_if_nr cx T (is_view_mut mut) es0 = (INL (),es_lock) /\
   compile_nonreentrant_lock nkey T (mut = View) sa = ((),sl) /\
   fn_has_code sa sl func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ ~block_is_terminated sa /\
+  ~block_is_terminated sa /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   fresh_vars_wrt sa s0 /\ local_ptrs_reserved cenv sa /\
@@ -302,7 +303,10 @@ Proof
   strip_tac >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
     not_fresh_at sa x` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (qpat_assum `!H. stmt_state_rel H ctx func cenv cx es0 s0 /\ _`
+       (qspec_then `ARB` strip_assume_tac) >>
+     drule_then ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   drule_all (INST_TYPE [alpha |-> ``:256``]
     nonreentrant_entry_success_joint_with_view) >> strip_tac >>
   `es_lock.storage_trace = es0.storage_trace ++ [StorageLock nkey]` by
@@ -469,7 +473,7 @@ Theorem external_entry_abort_from_registration:
   lock_if_nr cx T (is_view_mut mut) es0 = (INR exc,es_abort) /\
   compile_guarded_body cenv T global_nonreentrant_slot T (mut = View)
     fbody rt sa = ((),st') /\
-  fn_has_code sa st' func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa st' func /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   s0.vs_gas_readings = ss.vs_gas_readings /\
@@ -490,7 +494,10 @@ Proof
   drule_all guarded_body_code_from_registration >> simp[] >> strip_tac >>
   `global_nonreentrant_slot < dimword (:256)` by
     simp[global_nonreentrant_slot_def, wordsTheory.dimword_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (qpat_assum `!H. stmt_state_rel H ctx func cenv cx es0 s0 /\ _`
+       (qspec_then `ARB` strip_assume_tac) >>
+     drule_then ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   drule_all (INST_TYPE [alpha |-> ``:256``]
     nonreentrant_entry_abort_joint_with_view) >>
   disch_then (qx_choosel_then [`a`,`s_abort`,`G_abort`,`tn_abort`]
