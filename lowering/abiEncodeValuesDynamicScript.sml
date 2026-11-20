@@ -77,8 +77,8 @@ Proof
   metis_tac[]
 QED
 
-(* No tuple source allocation is needed. The dynamic member uses its typed
-   materialized source and the original ABI type, then closes the head. *)
+(* Encode from the materialized member without allocating a source tuple.
+   The window input's ABI type and value need only encode to the same bytes. *)
 Theorem abi_encode_values_dynamic_body_input:
   compile_abi_encode_to_buf (Var dest) src ei st = (len,mid) /\
   abi_encode_child_suffix (Var head) (Var cursor) offset len mid = (len,en) /\
