@@ -3,7 +3,7 @@ Theory bodyFullBopRestWordBoundedControl
 Ancestors
   bodyFullBopRestWordControl bodyPtrBopInBoundedLayout
   bodyPtrSignedConvertClamp fragGasCopyLoop
-  bodyPtrBopInLoopSearch bodyPtrBopInLoopCode bodyPtrBopInLoopLookups bodyPtrBopInLoopLayout
+  bodyPtrBopInLoopSearch bodyPtrBopInLoopCode bodyPtrBopInLoopLayout
   bodyPtrBopInLoopContract bodyPtrBopInLiteralSuffix bodyPtrBopInScalarTransport
   exprLoweringProps fragExecMem fragGasEmitCtrl fragGasSeqPtr fragGasOriginPtr fragGasOriginPtrLoop stmtAppendStorageRunPtr
   gasEvents gasCount ptrSafeRun memSafeRun instMemFrontier

@@ -19,7 +19,7 @@ Theory fnBlockBodySteps
 Ancestors
   fnPlanPlaceRevertPostamble
   fnBlockBodyHelpers fnBlockPlanStatic fnAliasStep
-  fnFrameStepsRevertForwardDeep fnFrameDeep fnSimSpec fnPlanPlace asmRunBounded
+  fnFrameStepsRevertForwardDeep fnSimSpec fnPlanPlace asmRunBounded
   fnPlanCover fnPlanPlaceDfsBlock fnPlanLineage fnLineageStatic
   fnPlanPrefix opcodeClass cfgAnalysisProps
   stepWriteFootprintForward asmTargetSafety codegen allocMono

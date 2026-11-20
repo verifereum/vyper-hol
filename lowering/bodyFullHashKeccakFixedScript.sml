@@ -1,7 +1,7 @@
 (* Joint fixed-byte Keccak suffix: instruction certificates precede horizons. *)
 Theory bodyFullHashKeccakFixed
 Ancestors
-  bodyPtrHashBuiltinsKeccakFixedRun bodyPtrHashBuiltinsKeccakFixedFrame
+  bodyPtrHashBuiltinsKeccakFixedRun
   allocationPtr bodyPtrHashBuiltinsKeccakFixed instIdxIndep
   ptrSafeRun codegenRel contextCodegenRel memLocDefs bodyPtrHashBuiltinsBoundary
   bodyFullAllocGeneric bodyFullGhostFrame instSeqPtrLo

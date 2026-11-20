@@ -1,5 +1,5 @@
 Theory bodyPtrBopInLoopCode
-Ancestors bodyPtrBopInLoopLayout bodyPtrBopInLoopLookups
+Ancestors bodyPtrBopInLoopLayout
   bodyPtrBopInLoopControl bodyPtrBopInLoopExit compileEnv exprLowering list
 
 Theorem membership_compiled_loop_exit:

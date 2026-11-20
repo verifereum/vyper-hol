@@ -4,7 +4,7 @@ Ancestors wordLoadStorePtr bodyPtrPopTargetSimMapKeyRun exprSimMapKey exprLoweri
   exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs context
   codegenRel ASCIInumbers rich_list venomInst
   bodyPtrEnvBuiltinsSelectorSuffix bodyPtrEnvBuiltinsSelectorBuffer
-  bodyPtrEnvBuiltinsEdges assignBasePtrLiteralGhost
+  bodyPtrEnvBuiltinsEdges
   bodyPtrHashBuiltinsKeccakBytesRun bodyPtrHashBuiltinsKeccak
   exprSimPtrTopLevelImmutableCopy typedCopyPtr fragExecPtr fragGasSeqPtr
   venomState venomExecSemantics ptrDiscipline bodyPtrDefs words finite_map pred_set

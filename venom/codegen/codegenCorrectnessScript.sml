@@ -69,7 +69,7 @@ Ancestors
   asmToBytecodeProps venomToAsmProps codegen vfmExecution
   codegenRel asmSem asmWf stackPlanGen stackPlanTypes planExec
   symbolResolve venomExecSemantics venomState venomInst contextCodegenRel
-  stackOpSim fnPlanDecomp list rich_list finite_map arithmetic
+  stackOpSim list rich_list finite_map arithmetic
   frameOutcome callTrace unitShapeDefs vfmExecutionProp unitMemInv
   frameGas venomRunBounded frameStep codegenEntryBounded
   codegenAsmProgOk asmFrameRel venomRetProps

@@ -1,7 +1,7 @@
 Theory abiEncodeEndpointMetadata
 Ancestors
   exprSimProps
-  exprSimAggregateLayout exprSimHyps exprSimHypsDefs exprSimSource abiEncodeListSupplier
+  exprSimAggregateLayout exprSimHyps exprSimHypsDefs exprSimSource abiDecoderSingletonFragment[qualified]
   compileEnv valueEncoding valueEncodingProps words arithmetic abiTypeBoundProps allocLimits
   abiEncodeArgsCase exprSimAbiEncodeArgsPhysicalCapacity
   vyperTypeSystem list

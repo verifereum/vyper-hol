@@ -1,6 +1,6 @@
 Theory lowerDloadLoadCertificate
 Ancestors
-  lowerDloadScratchProducer lowerDloadLoadProducer lowerDloadBytesProducer
+  lowerDloadScratchProducer lowerDloadBytesProducer
   lowerDloadOwnership lowerDloadRelocation lowerDloadProvenanceSupport
   lowerDloadMacroBoundary lowerDloadPhaseBoundary lowerDloadCompletedOutput
   lowerDloadLoadValues lowerDloadMacroMemory lowerDloadFrameCertificate lowerDloadAllocation

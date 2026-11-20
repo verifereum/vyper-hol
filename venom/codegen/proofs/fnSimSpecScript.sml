@@ -12,7 +12,7 @@
 Theory fnSimSpec
 Ancestors
   fnPlanPlaceRevertPostamble
-  frameRel codegenRel contextCodegenRelProps fnPlanDecomp blockSimHelpers
+  frameRel codegenRel contextCodegenRelProps blockSimHelpers
   cleanOpsSim genBlockSim codegen symbolResolve venomExecSemantics venomState
   venomInst fcgDefs livenessDefs dfgDefs cfgDefs fnPlanLineage
   list rich_list finite_map arithmetic dftGasToListBound asmRunBounded venomRunBounded
