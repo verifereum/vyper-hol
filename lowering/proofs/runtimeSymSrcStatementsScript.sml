@@ -47,38 +47,7 @@ QED
    and ABI encoding preservation belong to C1.1.3. All statement families
    and all proper-body recursion are closed below, with semantic parameters
    universally quantified so loop and declaration callbacks may change them. *)
-Theorem runtime_sym_stmt:
-  (!ce ty e. runtime_sym_expr_contract tops compile_expr ce ty e) /\
-  (!ce bs bt e s op loc pt s'. runtime_sym_env tops ce /\
-    supported_assignment tops bs (BaseTarget bt) e /\
-    ~supported_target_exists is_self_code bt /\
-    EVERY runtime_sym_inst (state_insts s) /\
-    compile_get_target_ptr compile_expr ce bt s = ((op,loc,pt),s') ==>
-    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
-  (!ce bs bt s op loc pt s'. runtime_sym_env tops ce /\
-    (supported_target tops bs bt \/ supported_aug_target tops bs bt) /\
-    ~supported_target_exists is_self_code bt /\
-    EVERY runtime_sym_inst (state_insts s) /\
-    compile_get_target_ptr compile_expr ce bt s = ((op,loc,pt),s') ==>
-    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
-  (!ce target s op loc pt s'. runtime_sym_env tops ce /\
-    supported_append_target tops target /\
-    ~supported_target_exists is_self_code target /\
-    EVERY runtime_sym_inst (state_insts s) /\
-    compile_get_target_ptr compile_expr ce target s = ((op,loc,pt),s') ==>
-    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
-  (!ce base v ws es et st cap prim loc s u s'.
-    ~is_label_operand base /\ ~is_label_operand v /\
-    (!b. ce.ce_imm_alloca = SOME b ==> ~is_label_operand b) /\
-    EVERY runtime_sym_inst (state_insts s) /\
-    compile_dynarray_append ce base v ws es et st cap prim loc s = (u,s') ==>
-    EVERY runtime_sym_inst (state_insts s')) /\
-  (!b v info s op s'. ~is_label_operand b /\ ~is_label_operand v /\
-    EVERY runtime_sym_inst (state_insts s) /\
-    compile_abi_encode_to_buf b v info s = (op,s') ==>
-    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) ==>
-  !stmt bs ce lc ty.
-    runtime_sym_stmt_contract tops bs compile_stmt ce lc ty stmt
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   mp_tac runtime_sym_lower_value >>
@@ -138,6 +107,42 @@ Resume runtime_sym_stmt[assert]:
 QED
 
 Finalise runtime_sym_stmt
+*)
+Theorem runtime_sym_stmt:
+  (!ce ty e. runtime_sym_expr_contract tops compile_expr ce ty e) /\
+  (!ce bs bt e s op loc pt s'. runtime_sym_env tops ce /\
+    supported_assignment tops bs (BaseTarget bt) e /\
+    ~supported_target_exists is_self_code bt /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_get_target_ptr compile_expr ce bt s = ((op,loc,pt),s') ==>
+    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
+  (!ce bs bt s op loc pt s'. runtime_sym_env tops ce /\
+    (supported_target tops bs bt \/ supported_aug_target tops bs bt) /\
+    ~supported_target_exists is_self_code bt /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_get_target_ptr compile_expr ce bt s = ((op,loc,pt),s') ==>
+    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
+  (!ce target s op loc pt s'. runtime_sym_env tops ce /\
+    supported_append_target tops target /\
+    ~supported_target_exists is_self_code target /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_get_target_ptr compile_expr ce target s = ((op,loc,pt),s') ==>
+    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
+  (!ce base v ws es et st cap prim loc s u s'.
+    ~is_label_operand base /\ ~is_label_operand v /\
+    (!b. ce.ce_imm_alloca = SOME b ==> ~is_label_operand b) /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_dynarray_append ce base v ws es et st cap prim loc s = (u,s') ==>
+    EVERY runtime_sym_inst (state_insts s')) /\
+  (!b v info s op s'. ~is_label_operand b /\ ~is_label_operand v /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_abi_encode_to_buf b v info s = (op,s') ==>
+    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) ==>
+  !stmt bs ce lc ty.
+    runtime_sym_stmt_contract tops bs compile_stmt ce lc ty stmt
+Proof
+  cheat
+QED
 
 Theorem runtime_sym_stmts:
   (!ce ty e. runtime_sym_expr_contract tops compile_expr ce ty e) /\

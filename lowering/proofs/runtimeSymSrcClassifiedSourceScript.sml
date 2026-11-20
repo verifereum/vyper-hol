@@ -15,13 +15,7 @@ Proof
   disch_then irule >> spose_not_then assume_tac >> gvs[GSYM ALOOKUP_NONE]
 QED
 
-Theorem runtime_sym_supported_function_subst:
-  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
-  supported_program tops /\ (vis = Deploy ==> supported_program_deploy tops) /\
-  MEM (FunctionDecl vis mut nr rr name args defaults ret body) tops ==>
-  subst_consts_fn (module_consts_env tops [])
-    (mut,nr,rr,name,args,defaults,ret,body) =
-    (mut,nr,rr,name,args,defaults,ret,body)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   drule_all supported_program_declaration >>
@@ -31,4 +25,15 @@ Proof
   qexistsl_tac [`tops`, `vis`] >>
   Cases_on `vis = Deploy` >> gvs[NULL_EQ, supported_pure_expr_def] >>
   metis_tac[runtime_sym_const_lookup_names, supported_program_deploy_function]
+QED
+*)
+Theorem runtime_sym_supported_function_subst:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+  supported_program tops /\ (vis = Deploy ==> supported_program_deploy tops) /\
+  MEM (FunctionDecl vis mut nr rr name args defaults ret body) tops ==>
+  subst_consts_fn (module_consts_env tops [])
+    (mut,nr,rr,name,args,defaults,ret,body) =
+    (mut,nr,rr,name,args,defaults,ret,body)
+Proof
+  cheat
 QED

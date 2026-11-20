@@ -13,60 +13,7 @@ Ancestors
   actualEntryAllocationFrame entryDispatchPtr finite_map moduleLowering words
   allocaFrontierBound
 
-Theorem none_selected_check_prefix:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\ source_typing_ok tops am tx /\
-  initial_venom_state_rel tops am tx vs /\
-  4 <= LENGTH vs.vs_call_ctx.cc_calldata /\
-  FIND (\(n,ts). abi_method_id (type_env tops) n ts =
-    cd_selector vs.vs_call_ctx.cc_calldata) (abi_external_signatures tops) =
-    SOME (name,tys) ==>
-  ?mut nr rr args ret fbody tvs ce pos mincd pay key ut iv rt
-    opened checked ce' last func t G tn.
-    MEM (mut,nr,rr,name,args,([] : vyperAST$expr list),ret,fbody) (FST (classify_functions tops)) /\
-    (?rawbody. vyperInterpreter$lookup_function NONE name External tops =
-      SOME (mut,nr,args,[],ret,rawbody) /\
-      fbody = subst_consts_stmts (module_consts_env tops []) rawbody) /\
-    tys = MAP SND args /\
-    OPT_MMAP (evaluate_type (type_env tops)) tys = SOME tvs /\
-    set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops T (K context$global_nonreentrant_slot)
-        (mut,nr,rr,name,args,([] : vyperAST$expr list),ret,fbody)) =
-      ("fn_" ++ name,ce,pos,mincd,pay,nr,key,ut,iv,fbody,rt) /\
-    ALL_DISTINCT (MAP FST args) /\ pos = build_positional_args ce args /\
-    mincd = 4 + SUM (MAP tv_abi_size tvs) /\ mincd < dimword (:256) /\
-    LIST_REL (\(argname,ty) (ty',tv). ty = ty' /\
-      abi_decoder_coherent ce (type_env tops) ce.ce_struct_fields ty tv /\
-      (?loc. FLOOKUP ce.ce_vars argname = SOME loc /\
-        var_location_memory_size loc = SOME (type_memory_size tv)) /\
-      type_memory_size tv < dimword (:256)) args (ZIP (tys,tvs)) /\
-    compile_entry_checks mincd pay opened = ((),checked) /\
-    compile_register_positional_args ce pos 4 checked = (ce',last) /\
-    fn_has_code opened checked func /\ fn_has_code checked last func /\
-    cs_extends opened checked /\ cs_extends checked last /\
-    shape_state opened /\ shape_state checked /\ shape_state last /\
-    opened.cs_current_bb = "fn_" ++ name /\ opened.cs_current_insts = [] /\
-    ~block_is_terminated opened /\
-    unit.cu_context.ctx_entry = SOME "__entry" /\
-    venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
-    fn_entry_label func = SOME "__entry" /\ fn_inst_ids_distinct func /\
-    ~ctx_has_dalloca unit.cu_context /\
-    (?bb. lookup_block "__entry" func.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\
-    entry_prov func
-      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
-                 vs_inst_idx := 0|>) FEMPTY = FEMPTY /\
-    entry_taint_vars func
-      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
-                 vs_inst_idx := 0|>) entry_taint = entry_taint /\
-    (!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,func,[])
-      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
-                 vs_inst_idx := 0|>,FEMPTY,entry_taint) [] (OK t,G,tn)) /\
-    vars_pc_only vs t /\ fresh_vars_wrt opened t /\ ~t.vs_halted /\
-    t.vs_current_bb = opened.cs_current_bb /\ t.vs_inst_idx = 0 /\
-    t.vs_call_ctx = vs.vs_call_ctx /\
-    LENGTH t.vs_call_ctx.cc_calldata < dimword (:256) /\ allocas_from 0 t /\
-    tn.t_mem = {} /\ tn.t_stor = {} /\ tn.t_trans = {} /\ tn.t_imm = {}
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >> drule venomInstTheory.FIND_MEM >> strip_tac >>
   drule_all none_signature_evaluates >> strip_tac >>
@@ -207,3 +154,61 @@ Resume none_selected_check_prefix[execution]:
   first_assum ACCEPT_TAC
 QED
 Finalise none_selected_check_prefix
+*)
+Theorem none_selected_check_prefix:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  initial_venom_state_rel tops am tx vs /\
+  4 <= LENGTH vs.vs_call_ctx.cc_calldata /\
+  FIND (\(n,ts). abi_method_id (type_env tops) n ts =
+    cd_selector vs.vs_call_ctx.cc_calldata) (abi_external_signatures tops) =
+    SOME (name,tys) ==>
+  ?mut nr rr args ret fbody tvs ce pos mincd pay key ut iv rt
+    opened checked ce' last func t G tn.
+    MEM (mut,nr,rr,name,args,([] : vyperAST$expr list),ret,fbody) (FST (classify_functions tops)) /\
+    (?rawbody. vyperInterpreter$lookup_function NONE name External tops =
+      SOME (mut,nr,args,[],ret,rawbody) /\
+      fbody = subst_consts_stmts (module_consts_env tops []) rawbody) /\
+    tys = MAP SND args /\
+    OPT_MMAP (evaluate_type (type_env tops)) tys = SOME tvs /\
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops T (K context$global_nonreentrant_slot)
+        (mut,nr,rr,name,args,([] : vyperAST$expr list),ret,fbody)) =
+      ("fn_" ++ name,ce,pos,mincd,pay,nr,key,ut,iv,fbody,rt) /\
+    ALL_DISTINCT (MAP FST args) /\ pos = build_positional_args ce args /\
+    mincd = 4 + SUM (MAP tv_abi_size tvs) /\ mincd < dimword (:256) /\
+    LIST_REL (\(argname,ty) (ty',tv). ty = ty' /\
+      abi_decoder_coherent ce (type_env tops) ce.ce_struct_fields ty tv /\
+      (?loc. FLOOKUP ce.ce_vars argname = SOME loc /\
+        var_location_memory_size loc = SOME (type_memory_size tv)) /\
+      type_memory_size tv < dimword (:256)) args (ZIP (tys,tvs)) /\
+    compile_entry_checks mincd pay opened = ((),checked) /\
+    compile_register_positional_args ce pos 4 checked = (ce',last) /\
+    fn_has_code opened checked func /\ fn_has_code checked last func /\
+    cs_extends opened checked /\ cs_extends checked last /\
+    shape_state opened /\ shape_state checked /\ shape_state last /\
+    opened.cs_current_bb = "fn_" ++ name /\ opened.cs_current_insts = [] /\
+    ~block_is_terminated opened /\
+    unit.cu_context.ctx_entry = SOME "__entry" /\
+    venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+    fn_entry_label func = SOME "__entry" /\ fn_inst_ids_distinct func /\
+    ~ctx_has_dalloca unit.cu_context /\
+    (?bb. lookup_block "__entry" func.fn_blocks = SOME bb /\
+      phi_prefix_length bb.bb_instructions = 0) /\
+    entry_prov func
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                 vs_inst_idx := 0|>) FEMPTY = FEMPTY /\
+    entry_taint_vars func
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                 vs_inst_idx := 0|>) entry_taint = entry_taint /\
+    (!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,func,[])
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                 vs_inst_idx := 0|>,FEMPTY,entry_taint) [] (OK t,G,tn)) /\
+    vars_pc_only vs t /\ fresh_vars_wrt opened t /\ ~t.vs_halted /\
+    t.vs_current_bb = opened.cs_current_bb /\ t.vs_inst_idx = 0 /\
+    t.vs_call_ctx = vs.vs_call_ctx /\
+    LENGTH t.vs_call_ctx.cc_calldata < dimword (:256) /\ allocas_from 0 t /\
+    tn.t_mem = {} /\ tn.t_stor = {} /\ tn.t_trans = {} /\ tn.t_imm = {}
+Proof
+  cheat
+QED

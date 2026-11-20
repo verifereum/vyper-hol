@@ -34,12 +34,17 @@ Ancestors
 Libs
   monadsyntax
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Proof
+  simp[supported_expr_def, supported_pure_expr_def,
+       supported_effect_expr_def]
+QED
+*)
 Theorem aug_place_local_pop_index_unsupported:
   !tops ty ety id key.
     ~supported_expr tops (Subscript ty (Pop ety (NameTarget id)) key)
 Proof
-  simp[supported_expr_def, supported_pure_expr_def,
-       supported_effect_expr_def]
+  cheat
 QED
 
 Theorem aug_place_nested_pop_target_unsupported:

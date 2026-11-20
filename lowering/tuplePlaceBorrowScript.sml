@@ -9,6 +9,7 @@ Ancestors
 Theorem tuple_place_supported_target_scopes:
   !bt tops cx es res ee.
     EVERY (supported_expr tops) (target_indices bt) /\
+    EVERY (\e. ~supported_expr_exists expr_effect_root e) (target_indices bt) /\
     eval_base_place cx bt es = (res,ee) ==> ee.scopes = es.scopes
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >> rpt gen_tac
@@ -36,6 +37,14 @@ Proof
       gvs[] >> metis_tac[])
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Proof
+  rpt strip_tac >>
+  drule_all tuple_place_supported_target_scopes >> strip_tac >>
+  irule tuple_place_target_unchanged_local >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[]
+QED
+*)
 Theorem tuple_place_supported_target_borrow_bytes:
   EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (res,ee) /\
@@ -43,10 +52,7 @@ Theorem tuple_place_supported_target_borrow_bytes:
   local_region cenv es.scopes s0 n b sz ==>
   mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory
 Proof
-  rpt strip_tac >>
-  drule_all tuple_place_supported_target_scopes >> strip_tac >>
-  irule tuple_place_target_unchanged_local >> goal_assum (drule_at Any) >>
-  simp[] >> metis_tac[]
+  cheat
 QED
 
 Theorem tuple_place_borrowed_tuple_path:

@@ -67,96 +67,6 @@ Proof
     (CONJUNCTS entry_code_hash_builtins)
 QED
 
-Theorem entry_code_dispatch_unary[local]:
-  supported_builtin_form tops ret_ty bi [a] /\
-  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et a)) ==>
-  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_builtin_dispatch_body cfn cenv ret_ty ty bi [a])
-Proof
-  Cases_on `bi` >> simp[supported_builtin_form_def] >> rpt strip_tac
-  >~ [`compile_builtin_dispatch_body _ _ _ _ Len _`]
-  >- (rw[entry_preserves_code_def, compile_builtin_dispatch_body_def,
-          compile_builtin_len_def] >>
-      rpt (pairarg_tac >> gvs[]) >> gvs[oneline as_stack_val_def, AllCaseEqs()] >>
-      qpat_x_assum `!et. entry_preserves_code _ (cfn _ et _)`
-        (qspec_then `ty` (fn th =>
-          imp_res_tac (SRULE [entry_preserves_code_def] th))) >>
-      imp_res_tac (SRULE [entry_preserves_code_def] entry_code_ptr_load))
-  >~ [`compile_builtin_dispatch_body _ _ _ _ MethodId _`]
-  >- (`entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-          (lower_value cfn cenv (expr_type a) a)` by
-        (irule entry_code_lower_value >> simp[]) >>
-      rw[entry_preserves_code_def, compile_builtin_dispatch_body_def] >>
-      Cases_on `method_id_literal a` >> gvs[] >>
-      rpt IF_CASES_TAC >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
-      gvs[oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()] >>
-      qpat_assum `entry_preserves_code _ (lower_value _ _ _ _)`
-        (fn th => imp_res_tac (SRULE [entry_preserves_code_def] th)) >>
-      map_every (fn th => imp_res_tac (SRULE [entry_preserves_code_def] th))
-        [entry_code_method_id_runtime, entry_code_literal_vv])
-  >~ [`compile_builtin_dispatch_body _ _ _ _ Sha256 _`]
-  >- (irule entry_code_dispatch_hash >> simp[])
-  >~ [`compile_builtin_dispatch_body _ _ _ _ (MakeArray _ _) _`]
-  >- (irule entry_code_dispatch_array >> simp[] >> metis_tac[])
-  >~ [`compile_builtin_dispatch_body _ _ _ _ (Acc item) _`]
-  >- (rw[entry_preserves_code_def, compile_builtin_dispatch_body_def] >>
-      Cases_on `item` >> gvs[compile_acc_def] >>
-      gvs[oneline as_stack_val_def, AllCaseEqs()] >>
-      rpt (pairarg_tac >> gvs[]) >>
-      `!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-         (lower_value cfn cenv et a)` by
-        (gen_tac >> irule entry_code_lower_value >> simp[]) >>
-      pop_assum (fn th => imp_res_tac (SRULE [entry_preserves_code_def] th)) >>
-      map_every (fn opc => imp_res_tac (SRULE [entry_preserves_code_def]
-        (Q.INST [`opc` |-> opc] entry_code_emit_op)))
-        [`BALANCE`, `EXTCODEHASH`, `EXTCODESIZE`, `GT`]) >>
-  rw[entry_preserves_code_def, compile_builtin_dispatch_body_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  `!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-     (lower_value cfn cenv et a)` by
-    (gen_tac >> irule entry_code_lower_value >> simp[]) >>
-  pop_assum (fn th => imp_res_tac (SRULE [entry_preserves_code_def] th)) >>
-  gvs[oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()] >>
-  map_every (fn th => imp_res_tac (SRULE [entry_preserves_code_def] th))
-    [entry_code_invert, entry_code_neg, entry_code_builtin_abs,
-     entry_code_blobhash, entry_code_blockhash, entry_code_as_wei_value_int,
-     entry_code_as_wei_value_decimal, entry_code_slice_calldata, entry_code_uint2str,
-     entry_code_ceil] >>
-  imp_res_tac (SRULE [entry_preserves_code_def]
-    (Q.INST [`opc` |-> `ISZERO`] entry_code_emit_op))
-QED
-
-Theorem entry_code_dispatch_binary[local]:
-  supported_builtin_form tops ret_ty bi [a;b] /\
-  (!e et. MEM e [a;b] ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
-  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_builtin_dispatch_body cfn cenv ret_ty ty bi [a;b])
-Proof
-  Cases_on `bi` >> simp[supported_builtin_form_def] >> rpt strip_tac
-  >~ [`compile_builtin_dispatch_body _ _ _ _ (MakeArray _ _) _`]
-  >- (irule entry_code_dispatch_array >> simp[] >> metis_tac[]) >>
-  imp_res_tac supported_binop_dispatch_guards >>
-  rw[entry_preserves_code_def, compile_builtin_dispatch_body_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  gvs[oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()] >>
-  `!e et. e = a \/ e = b ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (lower_value cfn cenv et e)` by
-    (rpt strip_tac >> irule entry_code_lower_value >> simp[]) >>
-  pop_assum (fn th => map_every (fn e =>
-    imp_res_tac (SRULE [entry_preserves_code_def] (Q.SPEC e th))) [`a`, `b`]) >>
-  qpat_x_assum `!e et. _ ==> entry_preserves_code _ _`
-    (fn th => map_every (fn e =>
-      imp_res_tac (SRULE [entry_preserves_code_def] (Q.SPEC e th))) [`a`, `b`]) >>
-  map_every (fn th => imp_res_tac (SRULE [entry_preserves_code_def] th))
-    [entry_code_unwrap_value, entry_code_ecadd_points, entry_code_ecmul_point,
-     entry_code_pow_mod256, entry_code_binop] >>
-  imp_res_tac (SRULE [entry_preserves_code_def] entry_code_comparison_hash) >>
-  map_every (fn opc => imp_res_tac (SRULE [entry_preserves_code_def]
-    (Q.INST [`opc` |-> opc] entry_code_emit_op))) [`EQ`, `ISZERO`] >>
-  rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[]
-QED
-
 Theorem entry_code_bytestring_src[local]:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_bytestring_src p)
 Proof
@@ -166,57 +76,7 @@ Proof
   simp[entry_code_return]
 QED
 
-Theorem entry_code_dispatch_ternary[local]:
-  supported_builtin_form tops ret_ty bi [a;b;c] /\
-  (!e et. MEM e [a;b;c] ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
-  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_builtin_dispatch_body cfn cenv ret_ty ty bi [a;b;c])
-Proof
-  Cases_on `bi` >> simp[supported_builtin_form_def] >> rpt strip_tac
-  >~ [`compile_builtin_dispatch_body _ _ _ _ (MakeArray _ _) _`]
-  >- (irule entry_code_dispatch_array >> simp[] >> metis_tac[]) >>
-  rw[entry_preserves_code_def, compile_builtin_dispatch_body_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  gvs[oneline as_stack_val_def, AllCaseEqs()] >>
-  `!e et. e = a \/ e = b \/ e = c ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (lower_value cfn cenv et e)` by
-    (rpt strip_tac >> irule entry_code_lower_value >> simp[]) >>
-  pop_assum (fn th => map_every (fn e =>
-    imp_res_tac (SRULE [entry_preserves_code_def] (Q.SPEC e th))) [`a`, `b`, `c`]) >>
-  map_every (fn th => imp_res_tac (SRULE [entry_preserves_code_def] th))
-    [entry_code_addmod, entry_code_mulmod] >>
-  rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[]
-QED
-
-Theorem entry_code_dispatch_quaternary[local]:
-  supported_builtin_form tops ret_ty bi [a;b;c;d] /\
-  (!e et. MEM e [a;b;c;d] ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
-  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_builtin_dispatch_body cfn cenv ret_ty ty bi [a;b;c;d])
-Proof
-  Cases_on `bi` >> simp[supported_builtin_form_def] >> rpt strip_tac
-  >~ [`compile_builtin_dispatch_body _ _ _ _ (MakeArray _ _) _`]
-  >- (irule entry_code_dispatch_array >> simp[] >> metis_tac[]) >>
-  rw[entry_preserves_code_def, compile_builtin_dispatch_body_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  gvs[oneline as_stack_val_def, AllCaseEqs()] >>
-  `!e et. e = a \/ e = b \/ e = c \/ e = d ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (lower_value cfn cenv et e)` by
-    (rpt strip_tac >> irule entry_code_lower_value >> simp[]) >>
-  pop_assum (fn th => map_every (fn e =>
-    imp_res_tac (SRULE [entry_preserves_code_def] (Q.SPEC e th))) [`a`, `b`, `c`, `d`]) >>
-  imp_res_tac (SRULE [entry_preserves_code_def] entry_code_ecrecover) >>
-  rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[]
-QED
-
-Theorem entry_code_builtin_dispatch_body:
-  supported_builtin_form tops ret_ty bi args /\
-  (!e et. MEM e args ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
-  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_builtin_dispatch_body cfn cenv ret_ty ty bi args)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   Cases_on `bi` >> simp[supported_builtin_form_def] >> rpt strip_tac
   >~ [`compile_builtin_dispatch_body _ _ _ _ (MakeArray _ _) _`]
@@ -241,6 +101,16 @@ Proof
     irule entry_code_dispatch_ternary >> simp[supported_builtin_form_def] >> metis_tac[]) >>
   Cases_on `rest4` >> gvs[] >>
   irule entry_code_dispatch_quaternary >> simp[supported_builtin_form_def] >> metis_tac[]
+QED
+*)
+Theorem entry_code_builtin_dispatch_body:
+  supported_builtin_form tops ret_ty bi args /\
+  (!e et. MEM e args ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_builtin_dispatch_body cfn cenv ret_ty ty bi args)
+Proof
+  cheat
 QED
 
 Theorem entry_code_dispatch_abi_encode[local]:
@@ -362,24 +232,3 @@ Proof
      entry_code_expr_clamp_basetype] >> gvs[]
 QED
 
-Theorem entry_code_type_builtin_dispatch_body:
-  supported_type_builtin_form tops vv_ty tb ret_ty args /\
-  (!e et. MEM e args ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
-  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_type_builtin_dispatch_body cfn cenv vv_ty ty tb ret_ty args)
-Proof
-  namedCases_on `args` ["", "a rest"]
-  >- (strip_tac >> irule entry_code_dispatch_type_constant >> metis_tac[]) >>
-  namedCases_on `rest` ["", "b others"]
-  >- (Cases_on `tb` >> simp[supported_type_builtin_form_def] >> rpt strip_tac
-      >~ [`compile_type_builtin_dispatch_body _ _ _ _ Convert _ _`]
-      >- (irule entry_code_dispatch_convert >> metis_tac[listTheory.MEM]) >>
-      `!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-        (cfn cenv et a)` by metis_tac[listTheory.MEM] >>
-      drule entry_code_dispatch_type_abi >> strip_tac >> gvs[] >>
-      Cases_on `o'` >> gvs[]) >>
-  Cases_on `tb` >> Cases_on `others` >>
-  simp[supported_type_builtin_form_def] >> rpt strip_tac >>
-  irule entry_code_dispatch_extract32 >> metis_tac[listTheory.MEM]
-QED

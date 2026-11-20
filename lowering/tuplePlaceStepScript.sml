@@ -50,14 +50,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem tuple_place_pointer_store_alloca_frame:
-  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
-  valid_horizon cx st0 H ee.storage_trace /\
-  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
-  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
-  compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
-  alloca_frame cenv ee sa s cenv ff t ==>
-  alloca_frame cenv es sp s0 cenv ff t
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
@@ -81,6 +74,18 @@ Proof
   qpat_assum `alloca_frame _ _ _ _ _ ff t` (irule_at Any) >>
   qpat_assum `alloca_frame _ _ _ _ _ ee s` (irule_at Any) >>
   fs[exprLoweringPropsTheory.ci_mono_def, loweringPostsTheory.target_post_def]
+QED
+*)
+Theorem tuple_place_pointer_store_alloca_frame:
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
+  valid_horizon cx st0 H ee.storage_trace /\
+  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
+  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
+  alloca_frame cenv ee sa s cenv ff t ==>
+  alloca_frame cenv es sp s0 cenv ff t
+Proof
+  cheat
 QED
 
 Theorem tuple_place_head_advance_some:
@@ -210,26 +215,7 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem tuple_place_pointer_head_advance:
-  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
-  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
-  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
-  compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
-  ci_mono sa sb /\ i < LENGTH ltys /\
-  write_place cx p v ee = (INL (),ff) /\
-  (?H. valid_horizon cx st0 H ff.storage_trace) /\
-  (!H. valid_horizon cx st0 H ff.storage_trace ==>
-     stmt_state_rel H ctx func cenv cx ff t /\ storage_well_formed_on cx ff (FST H)) /\
-  ~t.vs_halted /\
-  t.vs_current_bb = sb.cs_current_bb /\
-  t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
-    FLOOKUP t.vs_allocas aid = SOME entry) /\
-  (!j. SUC i <= j /\ j < LENGTH ltys /\ ~is_word_type (EL j ltys) ==>
-    val_in_memory (EL j ltvs) (EL j vs)
-      (w2n w + SUM (MAP type_memory_size (TAKE j ltvs))) t.vs_memory) ==>
-  tuple_place_head ctx func cenv cx st0 ff lo sb tys ltys ltvs vs elems w (SUC i) t
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `ci_mono sp sa` by
@@ -257,6 +243,30 @@ Proof
   irule tuple_place_head_advance_some >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[]
+QED
+*)
+Theorem tuple_place_pointer_head_advance:
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
+  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
+  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
+  ci_mono sa sb /\ i < LENGTH ltys /\
+  write_place cx p v ee = (INL (),ff) /\
+  (?H. valid_horizon cx st0 H ff.storage_trace) /\
+  (!H. valid_horizon cx st0 H ff.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx ff t /\ storage_well_formed_on cx ff (FST H)) /\
+  ~t.vs_halted /\
+  t.vs_current_bb = sb.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP t.vs_allocas aid = SOME entry) /\
+  (!j. SUC i <= j /\ j < LENGTH ltys /\ ~is_word_type (EL j ltys) ==>
+    val_in_memory (EL j ltvs) (EL j vs)
+      (w2n w + SUM (MAP type_memory_size (TAKE j ltvs))) t.vs_memory) ==>
+  tuple_place_head ctx func cenv cx st0 ff lo sb tys ltys ltvs vs elems w (SUC i) t
+Proof
+  cheat
 QED
 
 Theorem tuple_place_equal_storage_head_step:

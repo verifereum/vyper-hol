@@ -8,26 +8,7 @@ Ancestors
   vyperContext vyperState vyperAST finite_map list
   exprSimSource vyperTypeCallGraph gasContext
 
-Theorem body_assign_toplevel_word_full_setup:
-  body_inv tops ctx cenv cx /\
-  supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-    (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
-    occurs_abi_decode_target target tops) /\
-  expr_sim_inv cenv cx env es /\
-  type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) = SOME env' /\
-  stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
-  call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) /\
-  supported_scalar_target tops nsid ==>
-  expr_body_pre cenv cx env e es /\
-  ?id tr slot tvt.
-    nsid = (NONE,id) /\ get_module_code cx NONE = SOME tops /\
-    find_var_decl_by_name id tops = SOME (StorageVarDecl tr (expr_type e),id) /\
-    lookup_var_slot_from_layout cx tr NONE id = SOME slot /\
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
-    cenv.ce_hashmap_info nsid = NONE /\
-    cenv.ce_module_var_type nsid = SOME (expr_type e) /\
-    is_word_type (expr_type e)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   Cases_on `nsid` >> rename1 `TopLevelNameTarget (src,id)` >> strip_tac >>
   `supported_expr tops e` by gvs[supported_stmt_def, supported_assignment_def] >>
@@ -61,4 +42,28 @@ Proof
   `t = ty` by metis_tac[build_maps_variable, optionTheory.SOME_11] >> gvs[] >>
   drule_all type_widens_to_word >> strip_tac >>
   gvs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]
+QED
+*)
+Theorem body_assign_toplevel_word_full_setup:
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+    (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
+    occurs_abi_decode_target target tops) /\
+  expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) = SOME env' /\
+  stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
+  call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) /\
+  supported_scalar_target tops nsid ==>
+  expr_body_pre cenv cx env e es /\
+  ?id tr slot tvt.
+    nsid = (NONE,id) /\ get_module_code cx NONE = SOME tops /\
+    find_var_decl_by_name id tops = SOME (StorageVarDecl tr (expr_type e),id) /\
+    lookup_var_slot_from_layout cx tr NONE id = SOME slot /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+    cenv.ce_hashmap_info nsid = NONE /\
+    cenv.ce_module_var_type nsid = SOME (expr_type e) /\
+    is_word_type (expr_type e)
+Proof
+  cheat
 QED

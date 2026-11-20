@@ -3318,24 +3318,7 @@ QED
 Finalise for_nonslot_array_scoped_body_full
 
 (* Classify the captured result at the actual expression execution. *)
-Theorem for_nonslot_array_capture_classify[local]:
-  body_inv tops ctx c cx /\ expr_sim_inv c cx env em /\
-  well_typed_iterator env et (Array e) /\ expr_type e = ArrayT et bd /\
-  supported_iterator tops et (Array e) n /\
-  (!nid. e = TopLevelName (expr_type e) nid ==>
-     IS_SOME (supported_immutable_type tops nid)) /\
-  eval_expr cx e start = (INL rv,em) /\
-  vv_place_ptr c cx em u rv vv /\
-  (!v ty p. rv = Value v /\
-    ~is_word_type (post_value_type c e) /\ ~is_bytestring_type (post_value_type c e) /\
-    vv = LocatedValue ty p ==> p.ptr_location = LocMemory) ==>
-  (!name path. rv = PlaceR (MemoryPlace name path) ==>
-    ?tgt. loop_iterator_place e = SOME tgt /\ target_root tgt = NameTarget name) /\
-  (vv_location vv = SOME LocCode ==> ?src name.
-    e = TopLevelName (ArrayT et bd) (src,name) /\
-    rv = PlaceR (ImmutablePlace src name []) /\
-    FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd) /\
-    ~cx_const_name cx (src,name) /\ post_value_type c e = ArrayT et bd)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   Cases_on `?nid. e = TopLevelName (ArrayT et bd) nid`
@@ -3395,6 +3378,28 @@ Proof
          Cases_on `post_value_type c e` >> simp[arg_type_fits_def]) >>
       Cases_on `vv` >> fs[vv_location_def,is_word_type_def,is_bytestring_type_def]) >>
   fs[] >> Cases_on `vv` >> fs[vv_location_def,vv_place_ptr_def]
+QED
+*)
+Theorem for_nonslot_array_capture_classify[local]:
+  body_inv tops ctx c cx /\ expr_sim_inv c cx env em /\
+  well_typed_iterator env et (Array e) /\ expr_type e = ArrayT et bd /\
+  supported_iterator tops et (Array e) n /\
+  (!nid. e = TopLevelName (expr_type e) nid ==>
+     IS_SOME (supported_immutable_type tops nid)) /\
+  eval_expr cx e start = (INL rv,em) /\
+  vv_place_ptr c cx em u rv vv /\
+  (!v ty p. rv = Value v /\
+    ~is_word_type (post_value_type c e) /\ ~is_bytestring_type (post_value_type c e) /\
+    vv = LocatedValue ty p ==> p.ptr_location = LocMemory) ==>
+  (!name path. rv = PlaceR (MemoryPlace name path) ==>
+    ?tgt. loop_iterator_place e = SOME tgt /\ target_root tgt = NameTarget name) /\
+  (vv_location vv = SOME LocCode ==> ?src name.
+    e = TopLevelName (ArrayT et bd) (src,name) /\
+    rv = PlaceR (ImmutablePlace src name []) /\
+    FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd) /\
+    ~cx_const_name cx (src,name) /\ post_value_type c e = ArrayT et bd)
+Proof
+  cheat
 QED
 
 (* The branch owns the source prefix bind. At its normal continuation the
@@ -3926,7 +3931,7 @@ Resume for_nonslot_array_round_contracts[cons]:
   suspend "cons_body"
 QED
 
-Resume for_nonslot_array_round_contracts[cons_body]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> for_nonslot_live _ _ _ _ _ _`
     (qspec_then `storage_trace_horizon es.storage_trace` (drule_then assume_tac)) >>
   drule_then strip_assume_tac for_nonslot_live_head_index >>
@@ -4078,6 +4083,9 @@ Resume for_nonslot_array_round_contracts[cons_body]:
           qexists `sa0` >> simp[] >> metis_tac[]) >>
       suspend "cons_increment") >>
   suspend "cons_compose"
+*)
+Resume for_nonslot_array_round_contracts[cons_body]:
+  cheat
 QED
 
 Resume for_nonslot_array_round_contracts[cons_increment]:

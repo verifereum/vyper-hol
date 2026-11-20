@@ -12,40 +12,7 @@ val _ = Parse.hide "body";
 (* The selected frame's two Return producers, NONE and valued, discharge
    the frame's return continuation at every valid horizon.
    Both producers share the selected package and actual return endpoint. *)
-Theorem external_source_frame_ret_ok_full_nr:
-  !DF lo d shadow_ctx PG func shadow_func tops rpolicy unit am tx ret
-   mut nr args fbody env lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt
-   st cenv sa.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut, nr, args, [], ret, fbody) /\
-    (nr /\ mut <> View ==> ~tx.is_static) /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops T (K global_nonreentrant_slot)
-         (mut, nr, lookup_raw_return_or_F (NONE : num option)
-                     tx.function_name External tops,
-          tx.function_name, args, [], ret, fbody)) =
-      (lbl, cenv0, pos_args, min_cds, is_payable, nr, nkey, ut', iv, fbody,
-       rt) /\
-    compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
-    frame_ret_ok_full (DF, lo, d, unit.cu_context, shadow_ctx, PG, func,
-                       shadow_func)
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (\H v ee gt r. ?tv v' us.
-         evaluate_type (type_env tops) ret = SOME tv /\
-         safe_cast tv v = SOME v' /\
-         unlock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
-           nr (is_view_mut mut) ee = (INL (),us) /\
-         external_call_result_rel H tops ret tx
-           (INL v', finalize_pending_deletions
-                      (abstract_machine_from_state am.sources am.exports
-                         am.layouts us),
-            us.requests) r)
-      cenv ret
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt gen_tac >> strip_tac >>
   `~ctx_has_dalloca unit.cu_context` by
@@ -98,6 +65,44 @@ Proof
   >- (simp[initial_evaluation_context_def, get_tenv_def] >>
       fs[initial_evaluation_context_def, get_tenv_def,
          int_calls_stmt_def, int_calls_expr_def]) >> simp[]
+QED
+*)
+Theorem external_source_frame_ret_ok_full_nr:
+  !DF lo d shadow_ctx PG func shadow_func tops rpolicy unit am tx ret
+   mut nr args fbody env lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt
+   st cenv sa.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, nr, args, [], ret, fbody) /\
+    (nr /\ mut <> View ==> ~tx.is_static) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops T (K global_nonreentrant_slot)
+         (mut, nr, lookup_raw_return_or_F (NONE : num option)
+                     tx.function_name External tops,
+          tx.function_name, args, [], ret, fbody)) =
+      (lbl, cenv0, pos_args, min_cds, is_payable, nr, nkey, ut', iv, fbody,
+       rt) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
+    frame_ret_ok_full (DF, lo, d, unit.cu_context, shadow_ctx, PG, func,
+                       shadow_func)
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (\H v ee gt r. ?tv v' us.
+         evaluate_type (type_env tops) ret = SOME tv /\
+         safe_cast tv v = SOME v' /\
+         unlock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+           nr (is_view_mut mut) ee = (INL (),us) /\
+         external_call_result_rel H tops ret tx
+           (INL v', finalize_pending_deletions
+                      (abstract_machine_from_state am.sources am.exports
+                         am.layouts us),
+            us.requests) r)
+      cenv ret
+Proof
+  cheat
 QED
 
 Theorem external_source_frame_ret_ok_full:

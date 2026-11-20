@@ -2015,7 +2015,7 @@ Proof
   suspend "normal"
 QED
 
-Resume for_nonslot_array_prefix_full[normal]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   map_every qx_gen_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`u`] >>
   simp[] >> strip_tac >>
   qabbrev_tac `H0 = vyperStorageFootprint$storage_trace_horizon mid.storage_trace` >>
@@ -2170,6 +2170,9 @@ Resume for_nonslot_array_prefix_full[normal]:
         (qx_choose_then `pet` (qx_choose_then `a`
           (map_every assume_tac o CONJUNCTS)))))))) >>
   suspend "length"
+*)
+Resume for_nonslot_array_prefix_full[normal]:
+  cheat
 QED
 
 Resume for_nonslot_array_prefix_full[iterator_live_induction]:

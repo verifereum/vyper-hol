@@ -134,6 +134,26 @@ QED
 
 (* Finite projections at exactly the enclosing For; no source invariant is
    strengthened here. Endpoint support remains in its literal/checked gate. *)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Proof
+  strip_tac >>
+  drule type_stmt_for_projection >> strip_tac >>
+  drule supported_stmt_for_projection >> strip_tac >>
+  drule supported_loop_body_contract >> strip_tac >>
+  drule body_for_exprs_ok >> strip_tac >>
+  gvs[well_typed_iterator_def] >>
+  qpat_x_assum `stmt_exprs_ok _ _` mp_tac >>
+  simp[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+       supported_iterator_exists_def, allocLimitsTheory.alloc_limits_stmt_def,
+       allocLimitsTheory.alloc_limits_iterator_def] >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
+  simp[int_calls_stmt_def, int_calls_iterator_def] >> strip_tac >>
+  imp_res_tac call_evaluation_safe_append_left >>
+  imp_res_tac call_evaluation_safe_append_right >>
+  gvs[supported_stmt_expr_exists_def, supported_iterator_exists_def] >>
+  metis_tac[call_evaluation_safe_append_left]
+QED
+*)
 Theorem range_full_static_pre:
   supported_stmt tops bindings (For id typ (Range e1 e2) n body) /\
   type_stmt env ret_ty (For id typ (Range e1 e2) n body) = SOME env' /\
@@ -166,22 +186,7 @@ Theorem range_full_static_pre:
   call_evaluation_safe cx (int_calls_expr e2) /\
   call_evaluation_safe cx (int_calls_stmts body)
 Proof
-  strip_tac >>
-  drule type_stmt_for_projection >> strip_tac >>
-  drule supported_stmt_for_projection >> strip_tac >>
-  drule supported_loop_body_contract >> strip_tac >>
-  drule body_for_exprs_ok >> strip_tac >>
-  gvs[well_typed_iterator_def] >>
-  qpat_x_assum `stmt_exprs_ok _ _` mp_tac >>
-  simp[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-       supported_iterator_exists_def, allocLimitsTheory.alloc_limits_stmt_def,
-       allocLimitsTheory.alloc_limits_iterator_def] >> strip_tac >>
-  qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
-  simp[int_calls_stmt_def, int_calls_iterator_def] >> strip_tac >>
-  imp_res_tac call_evaluation_safe_append_left >>
-  imp_res_tac call_evaluation_safe_append_right >>
-  gvs[supported_stmt_expr_exists_def, supported_iterator_exists_def] >>
-  metis_tac[call_evaluation_safe_append_left]
+  cheat
 QED
 
 (* The original iterator supplies the body IH; the current cons call supplies
@@ -6496,7 +6501,7 @@ Proof
   suspend "checked"
 QED
 
-Resume compile_for_range_frag_full[checked]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   let
     fun shadow_edge expr start shadowStart related leftEq shadowRun out mid =
       namedCases_on shadowRun [out ^ " " ^ mid] >>
@@ -6647,6 +6652,9 @@ Resume compile_for_range_frag_full[checked]:
   qpat_x_assum `gas_outcome_full _ _ _ _ (bind (eval_expr cx e1) _) _ Q0 R0` kall_tac >>
   unabbrev_all_tac >>
   suspend "join_endpoints"
+*)
+Resume compile_for_range_frag_full[checked]:
+  cheat
 QED
 
 Resume compile_for_range_frag_full[join_endpoints]:

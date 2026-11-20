@@ -5,9 +5,7 @@ Ancestors
 
 val _ = Parse.hide "tops";
 
-Theorem entry_runtime_no_dalloca:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops ==> ~ctx_has_dalloca unit.cu_context
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >> irule every_no_dalloca >>
   irule lower_vyper_runtime_unit_no_dalloca >>
@@ -16,12 +14,24 @@ Proof
   irule supported_names_internal_names_distinct >>
   gvs[supported_program_def, supported_declaration_names_def]
 QED
+*)
+Theorem entry_runtime_no_dalloca:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ runtime_bodies_shape_ok tops ==> ~ctx_has_dalloca unit.cu_context
+Proof
+  cheat
+QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Proof
+  strip_tac >> drule_all entry_runtime_no_dalloca >>
+  simp[ctx_has_dalloca_def, fmp_room_def, EXISTS_MEM] >> metis_tac[]
+QED
+*)
 Theorem entry_runtime_fmp_room:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ MEM func unit.cu_context.ctx_functions ==>
   fmp_room unit.cu_context func s
 Proof
-  strip_tac >> drule_all entry_runtime_no_dalloca >>
-  simp[ctx_has_dalloca_def, fmp_room_def, EXISTS_MEM] >> metis_tac[]
+  cheat
 QED

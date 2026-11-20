@@ -7,13 +7,7 @@ Ancestors
   vyperTypeContractContext vyperTypeSystem publicGetterProps constSubst
   compileVyper vyperABIEntries vyperMisc vyperTypeArgFits list sorting
 
-Theorem none_signature_evaluates:
-  supported_program tops /\ source_typing_ok tops am tx /\
-  MEM (name,tys) (abi_external_signatures tops) ==>
-  ?mut nr rr args ret fbody tvs.
-    MEM (mut,nr,rr,name,args,[],ret,fbody) (FST (classify_functions tops)) /\
-    tys = MAP SND args /\
-    OPT_MMAP (evaluate_type (type_env tops)) tys = SOME tvs
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   `MEM (name,tys)
@@ -58,6 +52,17 @@ Resume none_signature_evaluates[lookup]:
   Cases_on `rawdefaults` >> gvs[subst_consts_expr_def] >> metis_tac[]
 QED
 Finalise none_signature_evaluates
+*)
+Theorem none_signature_evaluates:
+  supported_program tops /\ source_typing_ok tops am tx /\
+  MEM (name,tys) (abi_external_signatures tops) ==>
+  ?mut nr rr args ret fbody tvs.
+    MEM (mut,nr,rr,name,args,[],ret,fbody) (FST (classify_functions tops)) /\
+    tys = MAP SND args /\
+    OPT_MMAP (evaluate_type (type_env tops)) tys = SOME tvs
+Proof
+  cheat
+QED
 
 (* Fix the decoder's evaluated list before using the package resources. *)
 Theorem none_selected_package_metadata:

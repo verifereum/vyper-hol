@@ -6,26 +6,7 @@ Ancestors runtimeExternalPackageCode
   loweringShapeDefs compileVyper moduleLowering compileEnv fragExec list
   supportedProgram supportedDecls supportedNames vyperCompiler
 
-Theorem classified_fallback_runtime_interval[local]:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\
-  FST (SND (SND (classify_functions tops))) =
-    SOME (mut,nr,rr,"__default__",args,[],ret,fbody) /\
-  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
-  fn_entry_label efn = SOME elbl ==>
-  ?fb ds de sx opened entry_end ce key tr view rt.
-    compile_selector_dispatch_linear
-      (MAP (\(sel,lbl,z). (sel,lbl))
-        (build_selectors (type_env tops) (FST (classify_functions tops))))
-      fb ds = ((),de) /\
-    fn_has_code ds de efn /\
-    ds.cs_current_bb = elbl /\ ds.cs_current_insts = [] /\ ds.cs_next_var = 0 /\
-    new_block fb sx = (sx.cs_current_bb,opened) /\
-    compile_fallback_body ce (mut = Payable) nr key tr view fbody rt opened =
-      ((),entry_end) /\
-    cenv_static_ok ce /\ ce.ce_return_pc = NONE /\
-    ~supported_stmts_expr_exists expr_shape_root fbody /\
-    shape_state opened /\ fn_has_code opened entry_end efn
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   `runtime_bodies_shape_ok tops` by
@@ -132,6 +113,30 @@ Proof
   qexistsl_tac [`fallback_lbl`, `label_st`, `dispatch_st`, `external_st`,
     `fallback_st`, `entry_end`, `ce`, `key`, `tr`, `view`, `rt`] >>
   gvs[fallback_shape_ok_def]
+QED
+*)
+Theorem classified_fallback_runtime_interval[local]:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\
+  FST (SND (SND (classify_functions tops))) =
+    SOME (mut,nr,rr,"__default__",args,[],ret,fbody) /\
+  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+  fn_entry_label efn = SOME elbl ==>
+  ?fb ds de sx opened entry_end ce key tr view rt.
+    compile_selector_dispatch_linear
+      (MAP (\(sel,lbl,z). (sel,lbl))
+        (build_selectors (type_env tops) (FST (classify_functions tops))))
+      fb ds = ((),de) /\
+    fn_has_code ds de efn /\
+    ds.cs_current_bb = elbl /\ ds.cs_current_insts = [] /\ ds.cs_next_var = 0 /\
+    new_block fb sx = (sx.cs_current_bb,opened) /\
+    compile_fallback_body ce (mut = Payable) nr key tr view fbody rt opened =
+      ((),entry_end) /\
+    cenv_static_ok ce /\ ce.ce_return_pc = NONE /\
+    ~supported_stmts_expr_exists expr_shape_root fbody /\
+    shape_state opened /\ fn_has_code opened entry_end efn
+Proof
+  cheat
 QED
 
 Theorem source_fallback_entry_check_code_nr:

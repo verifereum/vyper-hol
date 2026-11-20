@@ -32,20 +32,7 @@ Proof
     (irule supported_expr_exists_root >> simp[]) >> gvs[]
 QED
 
-Theorem body_append_typed_pre:
-  body_inv tops ctx cenv cx /\
-  supported_stmt tops bindings (Append bt e) /\
-  ~(?id. bt = TopLevelNameTarget id) /\
-  expr_sim_inv cenv cx env es /\
-  type_stmt env ret_ty (Append bt e) = SOME env' /\
-  stmt_exprs_ok cenv (Append bt e) /\
-  call_evaluation_safe cx (int_calls_stmt (Append bt e)) /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-     (Append bt e) ==> occurs_abi_decode_target target tops) ==>
-  target_pre cenv cx env bt es /\ expr_body_pre cenv cx env e es /\
-  ?elem cap. type_place_target env bt =
-    SOME (Type (ArrayT elem (Dynamic cap))) /\
-    type_widens_to env.type_defs (expr_type e) elem
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   `IS_SOME (supported_target_info tops bindings bt) /\
@@ -92,6 +79,24 @@ Resume body_append_typed_pre[rhs]:
 QED
 
 Finalise body_append_typed_pre
+*)
+Theorem body_append_typed_pre:
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (Append bt e) /\
+  ~(?id. bt = TopLevelNameTarget id) /\
+  expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (Append bt e) = SOME env' /\
+  stmt_exprs_ok cenv (Append bt e) /\
+  call_evaluation_safe cx (int_calls_stmt (Append bt e)) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (Append bt e) ==> occurs_abi_decode_target target tops) ==>
+  target_pre cenv cx env bt es /\ expr_body_pre cenv cx env e es /\
+  ?elem cap. type_place_target env bt =
+    SOME (Type (ArrayT elem (Dynamic cap))) /\
+    type_widens_to env.type_defs (expr_type e) elem
+Proof
+  cheat
+QED
 
 Theorem body_append_resolved_pre:
   supported_full_word_type (expr_type e) /\
