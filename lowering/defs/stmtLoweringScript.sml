@@ -1057,17 +1057,17 @@ Definition compile_stmt_def:
             compile_internal_return_from_env cenv ty (lowered_value_type cenv e)
               val_op rpc
         | _ =>
-            (* External return: ABI encoding + nonreentrant unlock.
-               Mirrors Python: vyper/codegen_venom/stmt.py:_lower_external_return which unlocks
-               before encoding/returning.
-               Normalize when ret_src_typ ≠ ret_typ for non-prim,
-               non-bytestring-to-bytestring. Python lines 936-945. *)
+            (* Compatible bounded returns can be encoded at their physical
+               layout, as in Python's _lower_external_return. *)
             let is_prim = is_word_type ty in
             let src_ty = lowered_value_type cenv e in
+            let use_src_layout =
+              (¬cenv.ce_raw_return ∧ ¬is_prim ∧ src_ty ≠ ty ∧
+               vyperTypeSystem$arg_type_fits src_ty ty) in
             let needs_normalize =
               (¬is_prim ∧
                ¬(is_bytestring_type ty ∧ is_bytestring_type src_ty) ∧
-               src_ty ≠ ty) in
+               src_ty ≠ ty ∧ ¬use_src_layout) in
             let nr_info = cenv.ce_nonreentrant in
             let is_nonreentrant = FST nr_info in
             let nkey = FST (SND nr_info) in
@@ -1097,8 +1097,16 @@ Definition compile_stmt_def:
                       F nkey use_transient is_view
                  od
                else
+                 let sf = cenv.ce_struct_fields in
+                 let enc_ty =
+                   if vyperABI$needs_external_call_wrap src_ty ∧
+                      is_abi_dynamic sf src_ty
+                   then TupleT [src_ty] else src_ty in
                  compile_external_return (SOME ret_op) is_prim F
-                   cenv.ce_ret_enc_info cenv.ce_max_return_size
+                   (if use_src_layout then type_to_abi_enc_info sf cenv enc_ty
+                    else cenv.ce_ret_enc_info)
+                   (if use_src_layout then abi_size_bound sf enc_ty
+                    else cenv.ce_max_return_size)
                    is_nonreentrant nkey use_transient is_view
             od)
     od ∧
