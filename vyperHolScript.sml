@@ -65,7 +65,6 @@ Ancestors
   bodyMemArrayLayout bodyMemTupleLayout bodyMemBiMethodIdEndpoint
   bodyMemEcArithAssemble bodyMemEcArithSafe bodyMemRawCallFinish
   stmtSimAugAssignPlaceStorage
-  stmtSimIfCounted
   (* assignment-to-place pieces the deleted stmtSimAssignPlace imported *)
   immutableAssignMetadata immutableAssignRepresentation immutableAssignStore
   immutableDeployAssignRestore immutableAssignCode immutableAssignEmpty

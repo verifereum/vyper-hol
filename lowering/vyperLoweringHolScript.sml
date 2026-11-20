@@ -49,7 +49,6 @@ Ancestors
   nonreentrantEntryEquiv
   transientLockFrameProps
   selectorCompilerProps checkedSelectorTableProps
-  immutableStagingBridge
   immutableRepSensitivity
   immutableCodeLayout
   e2eDeployFrame ctorDeployLoweringEntry

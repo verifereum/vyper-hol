@@ -207,7 +207,6 @@ immutableCodeLayoutTheory
 immutableConstructorRelationTheory
 immutableCopyExecutionTheory
 immutableDeployExecutionTheory
-immutableDeployRelationTheory
 immutableEncodingProofsTheory
 immutableEncodingTheory
 immutableLocationPropsTheory
@@ -215,7 +214,6 @@ immutableMemoryFrameTheory
 immutableRelationTheory
 immutableSectionRelTheory
 immutableSectionTheory
-immutableStagingBridgeTheory
 immutableValueTheory
 immutableWordExecutionTheory
 intCallCalleeTheory:compile_internal_function_prologue
