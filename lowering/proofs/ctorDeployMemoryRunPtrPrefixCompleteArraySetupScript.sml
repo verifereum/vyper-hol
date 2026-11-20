@@ -19,7 +19,8 @@ Ancestors
   exprLowering fragExec instIdxIndep rich_list exprLoweringProps abiDecoderLoop
   abiEncoderRegisteredEffect ctorAbiActualFrame ctorAbiActualObservations fragGasSeqAbort
   abiDecoderRecursiveLoopContext abiDecoderTypedContract abiEncoderZeroFrame venomWf
-  fragGasOriginPtr
+  fragGasOriginPtr intCallCallee[qualified,ignore_grammar]
+  frameAllocationEffects[qualified,ignore_grammar]
 
 val Ok = ``\k ctx func site ids D N d outsz next limit_st
     tv vs slot_id slot base prefix cursor s.
@@ -550,6 +551,8 @@ Theorem prefix_complete_array_index_entry_mode:
     t.vs_inst_idx = LENGTH st'.cs_current_insts /\ abi_decode_sim ctx func s t /\
     t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
     t.vs_block_ctx = s.vs_block_ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+      t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp) /\
     ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt t) ==>
      !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn s)
 Proof
@@ -603,16 +606,50 @@ Proof
        simp[mk_inst_def,is_terminator_def] >>
      rpt strip_tac >>
      irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >> simp[] >> qexists_tac `st` >> asm_rewrite_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+    t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp` by
+    (strip_tac >>
+     `EVERY (\i. MEM i (fn_insts func) /\ i.inst_opcode <> INVOKE)
+       (emitted_insts st st')` by
+       (simp_tac bool_ss [EVERY_MEM] >> rpt strip_tac
+        >- (qpat_assum `!i. MEM i (emitted_insts st st') ==> _`
+              (drule_then ACCEPT_TAC)) >>
+        gvs[mk_inst_def]) >>
+     drule_all intCallCalleeTheory.run_inst_seq_static_charge >> strip_tac >>
+     `t.vs_initial_fmp = s.vs_initial_fmp` by
+       metis_tac[run_inst_seq_initial_fmp] >>
+     `t.vs_fmp = s.vs_fmp` by
+       (irule (BETA_RULE (Q.ISPEC `\u:venom_state. u.vs_fmp`
+          run_inst_seq_preserves_field)) >>
+        qexists_tac `emitted_insts st st'` >> simp[] >>
+        rpt strip_tac >> gvs[]
+        >- (qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+            simp_tac (srw_ss()) [step_inst_base_opcode_eqs, mk_inst_def,
+              eval_operand_def] >>
+            disch_then (ACCEPT_TAC o
+              MATCH_MP frameAllocationEffectsTheory.exec_alloca_preserves_fmp)) >>
+        irule venomInstProofs1Theory.step_inst_base_preserves_fmp_ordinary >>
+        qexists_tac `mk_inst (st.cs_next_id+1) MSTORE
+          [Var (STRING #"%" (toString st.cs_next_var));Lit 0w] []` >>
+        simp[mk_inst_def,is_terminator_def,is_alloca_op_def,is_ext_call_op_def]) >>
+     fs[allocas_below_fmp_def,alloca_inv_def,alloca_next_valid_def] >>
+     rpt strip_tac >>
+     qpat_assum `!aid b sz. FLOOKUP t.vs_allocas aid = SOME (b,sz) ==> _`
+       (drule_then assume_tac) >> decide_tac) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`p`,`H`,`qt`] >>
   conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
-  simp[eval_op_inst_idx] >>
+  simp[eval_op_inst_idx,allocas_below_fmp_def,pending_alloca_size_def] >>
   conj_tac >- (fs[allocas_from_def] >> metis_tac[]) >>
   conj_tac >-
     (rpt strip_tac >>
      `v <> STRING #"%" (toString st.cs_next_var)` by
        (fs[abi_decoder_older_vars_def] >> metis_tac[LESS_EQ_REFL]) >>
      metis_tac[]) >>
-  metis_tac[]
+  conj_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >>
+  qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t /\ _`
+    (drule_then (strip_assume_tac o SRULE [allocas_below_fmp_def,pending_alloca_size_def])) >>
+  asm_simp_tac bool_ss [ADD_COMM] >> first_assum ACCEPT_TAC
 QED
 
 
@@ -785,6 +822,8 @@ Theorem prefix_complete_array_setup_mode_exact:
     prepared.vs_code = initial.vs_code /\ prepared.vs_gas_readings = initial.vs_gas_readings /\
     prepared.vs_outcomes = initial.vs_outcomes /\ prepared.vs_tx_ctx = initial.vs_tx_ctx /\
     prepared.vs_block_ctx = initial.vs_block_ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp prepared /\
+      prepared.vs_alloca_next + pending_alloca_size func prepared <= w2n prepared.vs_initial_fmp) /\
     (!a n. (a+n <= d \/ d+32 <= a) /\ (a+n <= slot \/ slot+32 <= a) ==>
       mem_bytes_at a n prepared.vs_memory = mem_bytes_at a n initial.vs_memory) /\
     (!x. abi_decoder_older_vars st.cs_next_var x ==>
@@ -960,7 +999,9 @@ val PreparedPk = ``
     0 sb d slot slot 32 loop_st.cs_next_var prepared /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     prepared.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
-  fn_inst_ids_distinct func /\ k + unit_alloca_budget ctx < dimword(:256) /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\ k + unit_alloca_budget ctx < dimword(:256) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp prepared /\
+    prepared.vs_alloca_next + pending_alloca_size func prepared <= w2n prepared.vs_initial_fmp) /\
   lo <= slot /\ lo <= d /\ D <= d /\ d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= D+N /\
   venomMemDefs$regions_disjoint (slot,32) (d,type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
   header_st.cs_next_id IN ctor_actual_sites func ids /\ frag_ids body_st end_st SUBSET ids /\
@@ -1028,7 +1069,9 @@ Theorem prefix_complete_array_setup_loop_mode_exact:
   FLOOKUP G dst_var = SOME (b,sz) /\ b <= d /\
   d+type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= b+sz /\
   op_taint tn src = {} /\ op_taint tn (Var dst_var) = {} /\
-  allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo initial /\ lo <= initial.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+    initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) /\
   abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var slot_var) src (Var dst_var)
     DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
@@ -1081,8 +1124,6 @@ Proof
   `checked ==> sb < dimword (:256) /\ sb+32 <= LENGTH initial.vs_data_section /\
     fn_inst_ids_distinct func /\ alloca_history func initial` by
     (strip_tac >> fs[] >> decide_tac) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
-    initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp` by simp[] >>
   drule_all prefix_complete_array_setup_mode_exact >>
   disch_then (qspecl_then [`tv`,`PG`,`Ddead`] strip_assume_tac) >>
   qpat_x_assum `Var slot_var = Var iv` (SUBST_ALL_TAC o SYM o SRULE []) >>

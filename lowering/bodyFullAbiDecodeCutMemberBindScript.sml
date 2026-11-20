@@ -125,7 +125,14 @@ Proof
   asm "member_entry" (fn entry =>
     qpat_assum `Span start finish'` (fn span_th =>
       qpat_assum `Good start s` (fn good_th =>
-        asm "prefix" (mp_tac o C MATCH_MP (CONJ entry (CONJ span_th good_th)))))) >>
+        let
+          val static = valOf (List.find (can (match_term ``~ctx_has_dalloca ctx``) o concl)
+            (CONJUNCTS entry))
+          val selector_entry = PURE_REWRITE_RULE [EQT_INTRO static, AND_CLAUSES] entry
+          val marked_entry = CONJ selector_entry (CONJ span_th good_th)
+        in
+          assume_tac static >> asm "prefix" (mp_tac o C MATCH_MP marked_entry)
+        end))) >>
   disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
   qpat_x_assum `(?rstate Gr tnr. _) \/ _`
     (DISJ_CASES_THEN2
