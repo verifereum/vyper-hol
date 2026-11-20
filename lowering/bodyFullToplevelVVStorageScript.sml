@@ -1,7 +1,7 @@
 (* Empty-code TopLevelName storage and transient reads, at full horizons. *)
 Theory bodyFullToplevelVVStorage
 Ancestors
-  bodySimFull bodySim exprSimSource bodyToplevelMemory gasOutcomeFullCompose
+  bodySimFull bodySim exprSimSource gasOutcomeFullCompose
   exprSimTopLevelStorage exprSimTopLevelProps exprSimHypsDefs
   exprLoweringProps exprLowering loweringPosts bodyPtrDefs
   vyperStorageFootprint vyperStorageBackend vyperTypeValues

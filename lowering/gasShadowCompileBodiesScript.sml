@@ -1,7 +1,7 @@
 Theory gasShadowCompileBodies
 Ancestors
   gasShadowCompileBase gasShadowCompilePure gasShadowCompileHelpers
-  gasShadowCompileOps gasShadowCompileConvert gasShadowCompileNames
+  gasShadowCompileConvert gasShadowCompileNames
   gasShadowCompileBuiltinBytes exprLowering gasShadow gasShadowState compileEnv
   list pair
 
