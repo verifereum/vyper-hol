@@ -7,7 +7,7 @@ Ancestors
   gasOutcomeFullCompose gasExemptCert gasStorage gasSummary vyperStorageTrace
   exprLowering loweringPosts bodyPtrDefs compileEnv vyperInterpreter
   vyperAST vyperState vyperStorageFootprint stmtSimProps
-  bodyInvNoDalloca contextRawReachable unitMemInv
+  bodyFullIfExpReach contextRawReachable unitMemInv
 
 Theorem compile_rest_word_membership_full:
   !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop e1 e2 bd es.
@@ -28,13 +28,11 @@ Proof
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e1) e1 es` by
     (fs[body_exprs_full_ok_def, body_expr_full_ok_def] >> metis_tac[]) >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
-  `!start fn inst s. frag_reachable ctx func start fn inst s ==>
-    dalloca_no_wrap inst s` by
-    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
-        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (mp_tac (Q.INST [`fn` |-> `func`, `ctx` |-> `ctx`, `tops` |-> `tops`,
+        `cenv` |-> `cenv`, `cx` |-> `cx`] bodyFullIfExpReachTheory.body_inv_no_phi) >>
+     simp[]) >>
   drule_all rest_word_full_compile_layout >> strip_tac >>
   `gas_admissible (bind (eval_expr cx e1) (read_result cx)) expr_res_ok es` by
     metis_tac[bop_first_admissible] >>
@@ -42,7 +40,7 @@ Proof
   rewrite_tac[expr_sim_full_def] >> disch_then drule_all >> strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ needleQ needleR` >>
   pure_once_rewrite_tac[REWRITE_RULE [ETA_AX] eval_expr_bop_bind] >>
-  irule gas_outcome_full_bind_all >> rpt conj_tac
+  irule gas_outcome_full_bind_all_path >> rpt conj_tac
   >~ [`gas_marked_exec _ _ _ _ _ _ _`]
   >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >>
       qexistsl [`mid`, `t`, `v`] >> gvs[])
@@ -91,8 +89,26 @@ Resume compile_rest_word_membership_full[after_needle]:
         stmt_state_rel H ctx func cenv cx mid t /\
         storage_well_formed_on cx mid (FST H) /\
         ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t` by
-        (rpt strip_tac >> first_x_assum drule >>
+        (rpt strip_tac >>
+         qpat_assum `!H. valid_horizon _ _ H _ ==> (_ H _ _ _ _ t)`
+           (qspec_then `H` (drule_then (mp_tac o BETA_RULE))) >>
          simp[Abbr `needleQ`, expr_post_def]) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+        (qpat_assum `needleQ (storage_trace_horizon _) _ _ _ _ t` mp_tac >>
+         simp_tac bool_ss [Abbr `needleQ`] >>
+         strip_tac >> first_assum ACCEPT_TAC) >>
+      `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_no_wrap inst u` by
+        (qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _`
+           (qspec_then `storage_trace_horizon mid.storage_trace`
+             (drule_then assume_tac)) >>
+         qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)`
+           (fn path => ASSUME_TAC (MATCH_MP (REWRITE_RULE[GSYM AND_IMP_INTRO]
+              bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap) path)) >>
+         qpat_x_assum `(!bb. MEM bb func.fn_blocks ==> _) ==> _`
+           (fn th => mp_tac th) >>
+         impl_tac >- first_assum ACCEPT_TAC >>
+         impl_tac >- first_assum ACCEPT_TAC >>
+         disch_then ACCEPT_TAC) >>
       qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _` mp_tac >>
       rewrite_tac[expr_vv_sim_full_def] >>
       disch_then (qspecl_then [`st0`, `s1`, `sm`, `sh1`, `shm`, `vv`, `t`, `G1`, `tn1`] mp_tac) >>
@@ -126,7 +142,10 @@ Resume compile_rest_word_membership_full[after_needle]:
       simp[exprSimDefsTheory.halt_exit_def] >>
       metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
   disj2_tac >> qexists `y` >> simp[] >>
-  rpt strip_tac >> first_x_assum drule >> simp[Abbr `needleQ`]
+  rpt strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> (_ H _ _ _ _ t)`
+    (qspec_then `H` (drule_then (mp_tac o BETA_RULE))) >>
+  simp[Abbr `needleQ`]
 QED
 
 Resume compile_rest_word_membership_full[after_array]:
@@ -142,6 +161,10 @@ Resume compile_rest_word_membership_full[after_array]:
       `vv_holds cenv cx (post_value_type cenv e2) x' vv (mid' with gas_obs := []) t'` by
         (fs[Abbr `arrayQ`, vv_post_def] >>
          simp[GSYM evaluation_state_component_equality]) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by
+        (qpat_assum `arrayQ (storage_trace_horizon _) _ _ _ _ _` mp_tac >>
+         simp_tac bool_ss [Abbr `arrayQ`] >> strip_tac >>
+         first_assum ACCEPT_TAC) >>
       drule_all rest_word_full_array_read >> strip_tac >>
       `!H. valid_horizon cx st0 H mid'.storage_trace ==>
         needleQ H (INL x) mid G1 tn1 t` by
@@ -274,6 +297,15 @@ Resume compile_rest_word_membership_full[after_array]:
       `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
       qpat_x_assum `INL x = INL v`
         (SUBST_ALL_TAC o REWRITE_RULE [sumTheory.INL_11]) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp q` by
+        (`allocas_below_fmp q <=> allocas_below_fmp t'` by
+           (qpat_assum `membership_loop_frame sm _ _ t' _ _ q`
+              (assume_tac o List.last o CONJUNCTS o
+               REWRITE_RULE [bodyPtrBopInLoopContractTheory.membership_loop_frame_def]) >>
+            qpat_x_assum `q = _`
+              (fn th => CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [th]))) >>
+            simp[ptrDisciplineTheory.allocas_below_fmp_def]) >>
+         PURE_ASM_REWRITE_TAC [] >> first_assum ACCEPT_TAC) >>
       qunabbrev_tac `answer` >>
       drule_all (SIMP_RULE bool_ss [post_value_type_def, expr_type_def] rest_word_full_parent_post) >>
       simp[post_value_type_def, expr_type_def]) >>
