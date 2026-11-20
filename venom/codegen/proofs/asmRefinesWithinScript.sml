@@ -14,13 +14,22 @@ Proof
   gen_tac >> Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >> simp[]
 QED
 
+Theorem sym_run_within_for_mono:
+  ∀k k' ss.
+    sym_run_within_for stepf P Q p k ss ∧ k ≤ k' ⇒
+    sym_run_within_for stepf P Q p k' ss
+Proof
+  Induct >> simp[sym_run_within_for_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `k'` >> gvs[sym_run_within_for_def] >>
+  Cases_on `stepf (EL ss.sym_base.as_pc p) ss` >> gvs[]
+QED
+
 Theorem sym_run_within_mono:
   ∀k k' ss.
     sym_run_within P Q p env k ss ∧ k ≤ k' ⇒ sym_run_within P Q p env k' ss
 Proof
-  Induct >> simp[sym_run_within_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `k'` >> gvs[sym_run_within_def] >>
-  Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >> gvs[]
+  rewrite_tac[sym_run_within_for_sym_step] >>
+  MATCH_ACCEPT_TAC sym_run_within_for_mono
 QED
 
 Theorem asm_refines_both_refl:

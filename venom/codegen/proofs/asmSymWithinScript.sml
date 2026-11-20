@@ -16,6 +16,8 @@ Theory asmSymWithin
 Ancestors
   asmSymSemWithin
   asmSymBridge asmDataEnv asmRunBounded asmSymSem asmSem list
+  asmSymModeOwn asmSymOwnCode asmSymOwnStep asmSpliceOwn codegenSymRel
+  asmRefinesWithin fnPlanPlaceRevertPostamble
 
 (* A symbolic value as the word asm_inst_gas_ok reads; label values are
    never a memory operand of a step that doesn't go wrong, so their word
@@ -175,6 +177,34 @@ Proof
   gvs[asm_mem_ranges_def]
 QED
 
+(* The code offset can be a word in own mode. Its stack slot is not a
+   memory operand, so only the destination and length need to be words. *)
+Theorem sym_codecopy_own_shape[local]:
+  (∀e. sym_codecopy_own p env own ss ≠ SymError e) ∧
+  (∀m. sym_codecopy_own p env own ss ≠ SymBad m) ⇒
+  ∃dst src sz t. ss.sym_stack = Val dst :: src :: Val sz :: t
+Proof
+  simp[sym_codecopy_own_def] >> BasicProvers.every_case_tac >> fs[]
+QED
+
+Theorem sym_step_mem_ranges_own[local]:
+  LIST_REL (λsv w. sval_conc lo sv = SOME w) ss.sym_stack cstk ∧
+  (∀e. sym_step_own p env own inst ss ≠ SymError e) ∧
+  (∀m. sym_step_own p env own inst ss ≠ SymBad m) ⇒
+  asm_mem_ranges inst (MAP sval_word ss.sym_stack) =
+  asm_mem_ranges inst cstk
+Proof
+  strip_tac >> Cases_on `inst = AsmOp "CODESIZE"`
+  >- simp[asm_mem_ranges_def] >>
+  Cases_on `inst = AsmOp "CODECOPY"`
+  >- (gvs[sym_step_own_def, sym_step_op_own_def] >>
+      drule_all sym_codecopy_own_shape >> strip_tac >>
+      gvs[LIST_REL_CONS1, sval_conc_def, sval_word_def, asm_mem_ranges_def]) >>
+  `sym_step_own p env own inst ss = sym_step p env inst ss` by
+    (Cases_on `inst` >> gvs[sym_step_own_def, sym_step_def, sym_step_op_own_def]) >>
+  metis_tac[sym_step_mem_ranges]
+QED
+
 Theorem list_cases3[local]:
   ∀l. l = [] ∨ (∃a. l = [a]) ∨ (∃a b. l = [a; b]) ∨
       ∃a b c t. l = a::b::c::t
@@ -212,7 +242,120 @@ Proof
   simp[sym_gas_ok_def] >> irule gas_ok_ranges >> simp[]
 QED
 
+Theorem sym_gas_ok_conc_mode[local]:
+  asm_static_wf p ∧ (¬allow_own ⇒ lo = SND (compute_label_offsets p)) ∧
+  asm_sym_rel_own lo p env own cs ss ∧
+  (∀e. (if allow_own then sym_step_own p env own inst ss
+        else sym_step p env inst ss) ≠ SymError e) ∧
+  (∀m. (if allow_own then sym_step_own p env own inst ss
+        else sym_step p env inst ss) ≠ SymBad m) ⇒
+  (sym_gas_ok H inst ss.sym_stack ⇔ asm_inst_gas_ok H inst cs.as_stack)
+Proof
+  strip_tac >>
+  Cases_on `allow_own` >> gvs[] >>
+  TRY (irule sym_gas_ok_conc >>
+       metis_tac[asm_sym_rel_own_canonical]) >>
+  `asm_mem_ranges inst (MAP sval_word ss.sym_stack) =
+   asm_mem_ranges inst cs.as_stack` by
+    (fs[asm_sym_rel_own_def] >> metis_tac[sym_step_mem_ranges_own]) >>
+  `LENGTH ss.sym_stack = LENGTH cs.as_stack` by
+    (fs[asm_sym_rel_own_def] >> metis_tac[LIST_REL_LENGTH]) >>
+  simp[sym_gas_ok_def] >> irule gas_ok_ranges >> simp[]
+QED
+
 (* ===== Runs ===== *)
+
+(* These abbreviations keep the chosen instruction step and recursive run
+   paired without changing either symbolic evaluator. *)
+val _ = Parse.temp_overload_on ("within_step", ``\allow_own p env own inst ss.
+  if allow_own then sym_step_own p env own inst ss else sym_step p env inst ss``);
+val _ = Parse.temp_overload_on ("within_run", ``\allow_own p env own k ss.
+  if allow_own then sym_run_own p env own k ss else sym_run p env k ss``);
+
+Theorem within_run_nonbad_at_step[local]:
+  ss.sym_base.as_pc < LENGTH p ∧
+  (∀fuel msg. within_run allow_own p env own fuel ss ≠ SymBad msg) ⇒
+  ∀msg. within_step allow_own p env own (EL ss.sym_base.as_pc p) ss ≠ SymBad msg
+Proof
+  Cases_on `allow_own` >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `∀fuel msg. _` (qspecl_then [`SUC 0`, `msg`] mp_tac) >>
+  simp[Once sym_run_own_def, Once sym_run_def]
+QED
+
+Theorem within_run_nonbad_after_step[local]:
+  ss.sym_base.as_pc < LENGTH p ∧
+  (∀fuel msg. within_run allow_own p env own fuel ss ≠ SymBad msg) ∧
+  within_step allow_own p env own (EL ss.sym_base.as_pc p) ss = SymOK ss' ⇒
+  ∀fuel msg. within_run allow_own p env own fuel ss' ≠ SymBad msg
+Proof
+  Cases_on `allow_own` >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `∀fuel msg. _` (qspecl_then [`SUC fuel`, `msg`] mp_tac) >>
+  simp[Once sym_run_own_def, Once sym_run_def]
+QED
+
+Theorem asm_run_bounded_sym_within_mode:
+  ∀k cs ss.
+    asm_static_wf p ∧ code_labels_agree p lo ∧
+    (¬allow_own ⇒ lo = SND (compute_label_offsets p)) ∧
+    asm_sym_rel_own lo p env own cs ss ∧
+    (∀fuel msg. within_run allow_own p env own fuel ss ≠ SymBad msg) ∧
+    asm_run_bounded lo (build_offset_to_pc p) p H k cs ⇒
+    sym_run_within_for (within_step allow_own p env own)
+      (sym_gas_ok H) (λi. i = AsmOp "RETURNDATACOPY") p k ss
+Proof
+  Induct >- simp[asm_run_bounded_def] >>
+  rpt gen_tac >> strip_tac >>
+  `ss.sym_base.as_pc = cs.as_pc` by fs[asm_sym_rel_own_def] >>
+  qpat_x_assum `asm_run_bounded _ _ _ _ _ _` mp_tac >>
+  simp[asm_run_bounded_def, sym_run_within_for_def] >>
+  Cases_on `EL cs.as_pc p = AsmOp "RETURNDATACOPY"` >> simp[] >>
+  strip_tac >>
+  `MEM (EL cs.as_pc p) p` by simp[EL_MEM] >>
+  `∀msg. within_step allow_own p env own (EL cs.as_pc p) ss ≠ SymBad msg` by
+    (mp_tac within_run_nonbad_at_step >> simp[]) >>
+  mp_tac (Q.INST [`ai` |-> `EL cs.as_pc p`] asm_sym_inst_step_mode) >>
+  (impl_tac >- simp[]) >> disch_then assume_tac >>
+  `∀e. within_step allow_own p env own (EL cs.as_pc p) ss ≠ SymError e` by
+    (rpt strip_tac >> gvs[]) >>
+  `sym_gas_ok H (EL cs.as_pc p) ss.sym_stack` by metis_tac[sym_gas_ok_conc_mode] >>
+  simp[] >>
+  Cases_on `within_step allow_own p env own (EL cs.as_pc p) ss` >>
+  gvs[] >>
+  rename1 `asm_sym_rel_own lo p env own cs1 ss1` >>
+  first_x_assum (qspecl_then [`cs1`, `ss1`] mp_tac) >> simp[] >>
+  disch_then irule >> metis_tac[within_run_nonbad_after_step]
+QED
+
+Theorem sym_within_asm_run_bounded_mode:
+  ∀k cs ss.
+    asm_static_wf p ∧ code_labels_agree p lo ∧
+    (¬allow_own ⇒ lo = SND (compute_label_offsets p)) ∧
+    asm_sym_rel_own lo p env own cs ss ∧
+    sym_run_within_for (within_step allow_own p env own)
+      (sym_gas_ok H) (λi. i = AsmOp "RETURNDATACOPY") p k ss ⇒
+    asm_run_bounded lo (build_offset_to_pc p) p H k cs
+Proof
+  Induct >- simp[sym_run_within_for_def] >>
+  rpt gen_tac >> strip_tac >>
+  `ss.sym_base.as_pc = cs.as_pc` by fs[asm_sym_rel_own_def] >>
+  qpat_x_assum `sym_run_within_for _ _ _ _ _ _` mp_tac >>
+  simp[asm_run_bounded_def, sym_run_within_for_def] >>
+  Cases_on `EL cs.as_pc p = AsmOp "RETURNDATACOPY"` >> simp[] >>
+  strip_tac >>
+  `MEM (EL cs.as_pc p) p` by simp[EL_MEM] >>
+  `(∀e. within_step allow_own p env own (EL cs.as_pc p) ss ≠ SymError e) ∧
+   (∀m. within_step allow_own p env own (EL cs.as_pc p) ss ≠ SymBad m)` by
+    (rpt strip_tac >> gvs[]) >>
+  mp_tac (Q.INST [`ai` |-> `EL cs.as_pc p`] asm_sym_inst_step_mode) >>
+  (impl_tac >- simp[]) >> disch_then assume_tac >>
+  `asm_inst_gas_ok H (EL cs.as_pc p) cs.as_stack` by metis_tac[sym_gas_ok_conc_mode] >>
+  simp[] >>
+  Cases_on `within_step allow_own p env own (EL cs.as_pc p) ss` >>
+  gvs[] >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+
 
 Theorem asm_run_bounded_sym_within_rel[local]:
   ∀k cs ss.
@@ -223,30 +366,12 @@ Theorem asm_run_bounded_sym_within_rel[local]:
     sym_run_within (sym_gas_ok H) (λi. i = AsmOp "RETURNDATACOPY")
       p env k ss
 Proof
-  Induct >- simp[asm_run_bounded_def] >>
   rpt gen_tac >> strip_tac >>
-  `ss.sym_base.as_pc = cs.as_pc` by fs[asm_sym_rel_def] >>
-  qpat_x_assum `asm_run_bounded _ _ _ _ _ _` mp_tac >>
-  simp[asm_run_bounded_def, sym_run_within_def] >>
-  Cases_on `EL cs.as_pc p = AsmOp "RETURNDATACOPY"` >> simp[] >>
-  strip_tac >>
-  `∀msg. sym_step p env (EL cs.as_pc p) ss ≠ SymBad msg`
-    by (rpt strip_tac >>
-        qpat_x_assum `∀fuel msg. _` (qspecl_then [`SUC 0`, `msg`] mp_tac) >>
-        simp[Once sym_run_def]) >>
-  drule_all asm_sym_step >> strip_tac >>
-  `∀e. sym_step p env (EL cs.as_pc p) ss ≠ SymError e`
-    by (rpt strip_tac >> gvs[asm_sym_step_rel_def]) >>
-  `sym_gas_ok H (EL cs.as_pc p) ss.sym_stack` by metis_tac[sym_gas_ok_conc] >>
-  simp[] >>
-  Cases_on `sym_step p env (EL cs.as_pc p) ss` >>
-  gvs[asm_sym_step_rel_def] >>
-  rename1 `asm_sym_rel p env cs1 ss1` >>
-  first_x_assum (qspecl_then [`cs1`, `ss1`] mp_tac) >> simp[] >>
-  disch_then irule >> rpt gen_tac >>
-  qpat_x_assum `∀fuel msg. sym_run _ _ _ ss ≠ _`
-    (qspecl_then [`SUC fuel`, `msg`] mp_tac) >>
-  simp[Once sym_run_def]
+  mp_tac (Q.INST [`allow_own` |-> `F`, `own` |-> `cs.as_code`,
+    `lo` |-> `SND (compute_label_offsets p)`] asm_run_bounded_sym_within_mode) >>
+  disch_then (qspecl_then [`k`, `cs`, `ss`] mp_tac) >>
+  simp[code_labels_agree_refl, asm_sym_rel_own_canonical] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[GSYM sym_run_within_for_sym_step]
 QED
 
 Theorem sym_within_asm_run_bounded_rel[local]:
@@ -257,23 +382,12 @@ Theorem sym_within_asm_run_bounded_rel[local]:
     asm_run_bounded (SND (compute_label_offsets p)) (build_offset_to_pc p)
       p H k cs
 Proof
-  Induct >- simp[sym_run_within_def] >>
   rpt gen_tac >> strip_tac >>
-  `ss.sym_base.as_pc = cs.as_pc` by fs[asm_sym_rel_def] >>
-  qpat_x_assum `sym_run_within _ _ _ _ _ _` mp_tac >>
-  simp[asm_run_bounded_def, sym_run_within_def] >>
-  Cases_on `EL cs.as_pc p = AsmOp "RETURNDATACOPY"` >> simp[] >>
-  strip_tac >>
-  `(∀e. sym_step p env (EL cs.as_pc p) ss ≠ SymError e) ∧
-   (∀m. sym_step p env (EL cs.as_pc p) ss ≠ SymBad m)`
-    by (rpt strip_tac >> gvs[]) >>
-  drule_all asm_sym_step >> strip_tac >>
-  `asm_inst_gas_ok H (EL cs.as_pc p) cs.as_stack`
-    by metis_tac[sym_gas_ok_conc] >>
-  simp[] >>
-  Cases_on `sym_step p env (EL cs.as_pc p) ss` >>
-  gvs[asm_sym_step_rel_def] >>
-  first_x_assum irule >> metis_tac[]
+  mp_tac (Q.INST [`allow_own` |-> `F`, `own` |-> `cs.as_code`,
+    `lo` |-> `SND (compute_label_offsets p)`] sym_within_asm_run_bounded_mode) >>
+  disch_then (qspecl_then [`k`, `cs`, `ss`] mp_tac) >>
+  simp[code_labels_agree_refl, asm_sym_rel_own_canonical] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[GSYM sym_run_within_for_sym_step]
 QED
 
 (* A bounded concrete run of a label-disciplined program is a
@@ -331,4 +445,41 @@ Proof
   irule sym_within_asm_run_bounded >> simp[] >>
   qexists_tac `asm_data_env p' (assemble p' ++ x)` >>
   fs[asm_data_env_ok_asm_data_env]
+QED
+
+(* Relocate the concrete source's labels and keep its installed code when
+   replaying the transported bound on the finalizer's output. *)
+Theorem asm_refines_run_bounded_own:
+  !p q.
+    asm_static_wf p ∧ asm_static_wf q ∧
+    (∃c. ∀P Q env own s k.
+       sym_within_ok P Q ∧
+       sym_run_within_for (sym_step_own p env own) P Q p k (sym_init s) ⇒
+       sym_run_within_for (sym_step_own q env own) P Q q (c * k) (sym_init s)) ⇒
+    ∃c. ∀H k s env lo lo'.
+      s.as_pc = 0 ∧ code_labels_agree p lo ∧ code_labels_agree q lo' ∧
+      asm_data_env_lo_ok lo p env s.as_code ∧
+      asm_data_env_lo_ok lo' q env s.as_code ∧
+      label_disciplined_own env s.as_code p s ∧
+      asm_run_bounded lo (build_offset_to_pc p) p H k s ⇒
+      asm_run_bounded lo' (build_offset_to_pc q) q H (c * k) s
+Proof
+  rpt gen_tac >> strip_tac >> qexists_tac `c` >> rpt gen_tac >> strip_tac >>
+  `asm_sym_rel_own lo p env s.as_code s (sym_init s) /\
+   asm_sym_rel_own lo' q env s.as_code s (sym_init s)` by
+    metis_tac[asm_sym_rel_own_init] >>
+  `sym_run_within_for (sym_step_own p env s.as_code) (sym_gas_ok H)
+    (λi. i = AsmOp "RETURNDATACOPY") p k (sym_init s)` by
+    (mp_tac (Q.INST [`allow_own` |-> `T`, `own` |-> `s.as_code`]
+       asm_run_bounded_sym_within_mode) >>
+     disch_then (qspecl_then [`k`, `s`, `sym_init s`] mp_tac) >>
+     fs[label_disciplined_own_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
+  qpat_x_assum `∀P Q env own s k. _`
+    (qspecl_then [`sym_gas_ok H`, `λi. i = AsmOp "RETURNDATACOPY"`,
+      `env`, `s.as_code`, `s`, `k`] mp_tac) >>
+  simp[sym_within_ok_gas] >> strip_tac >>
+  mp_tac (Q.INST [`allow_own` |-> `T`, `own` |-> `s.as_code`,
+    `p` |-> `q`, `lo` |-> `lo'`] sym_within_asm_run_bounded_mode) >>
+  disch_then (qspecl_then [`c * k`, `s`, `sym_init s`] mp_tac) >> simp[] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
 QED
