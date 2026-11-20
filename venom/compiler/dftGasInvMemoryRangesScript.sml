@@ -25,6 +25,29 @@ Proof
   Cases_on `os7` >> gvs[DISJ_IMP_THM, FORALL_AND_THM]
 QED
 
+Theorem inv_reachable_memory_ranges_oracle:
+  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  C'.ctx_entry = C.ctx_entry /\ o1_ctx_shape C /\
+  ctx_labels_bound C initial.vs_labels /\ o1_run_state_ok initial /\
+  ev_reachable orc initial C' p d fn' inst t /\
+  inv_memory_observation inst.inst_opcode ==>
+  ?fn sS bb bb'. MEM fn C.ctx_functions /\ fn' = dft_fn fn /\ dft_fn_rel fn fn' /\
+    ev_reachable orc initial C p d fn inst sS /\
+    lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    sS.vs_current_bb = t.vs_current_bb /\
+    inst_mem_ranges inst sS = inst_mem_ranges inst t /\
+    sS.vs_initial_fmp = t.vs_initial_fmp /\ sS.vs_requests = t.vs_requests
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = DRET`
+  >- (drule_all inv_reachable_dret_exact >> strip_tac >>
+      qexistsl_tac [`fn`, `t`, `bb`, `bb'`] >> metis_tac[]) >>
+  drule_all inv_reachable_memory_observation_oracle >> strip_tac >>
+  qexistsl_tac [`fn`, `sS`, `bb`, `bb'`] >>
+  metis_tac[inv_non_dret_ranges_cong]
+QED
+
 Theorem inv_reachable_memory_ranges:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
@@ -40,10 +63,5 @@ Theorem inv_reachable_memory_ranges:
     inst_mem_ranges inst sS = inst_mem_ranges inst t /\
     sS.vs_initial_fmp = t.vs_initial_fmp
 Proof
-  strip_tac >> Cases_on `inst.inst_opcode = DRET`
-  >- (drule_all inv_reachable_dret_exact >> strip_tac >>
-      qexistsl_tac [`fn`, `t`, `bb`, `bb'`] >> metis_tac[]) >>
-  drule_all inv_reachable_memory_observation >> strip_tac >>
-  qexistsl_tac [`fn`, `sS`, `bb`, `bb'`] >>
-  metis_tac[inv_non_dret_ranges_cong]
+  strip_tac >> drule_all inv_reachable_memory_ranges_oracle >> metis_tac[]
 QED

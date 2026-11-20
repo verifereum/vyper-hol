@@ -105,6 +105,7 @@ Proof
    (!x. Lit slot = Var x ==> not_fresh_at sb x) /\
    op_taint tn (Lit slot) = {}` by simp[eval_operand_def, op_taint_def] >>
   `~(w2n (if tr then tload slot s else sload slot s) < cap)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all append_storage_guard_abort_actual >>
   disch_then (qspecl_then [`func`, `PG`, `G`, `D`] strip_assume_tac) >>
   imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
@@ -163,6 +164,7 @@ Proof
    op_taint tn (Lit slot) = {} /\
    w2n (if tr then tload slot s else sload slot s) < cap` by
      simp[eval_operand_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all append_storage_guard_actual >>
   disch_then (qspecl_then [`func`, `PG`, `G`, `D`] strip_assume_tac) >>
   `sb.cs_next_var <= s3.cs_next_var` by
@@ -197,6 +199,7 @@ Resume append_storage_word_success_path_ptr[suffix_inputs]:
      qpat_assum `~s.vs_call_ctx.cc_static` mp_tac >>
      rpt (pop_assum kall_tac) >>
      simp[state_frame_def, venom_state_component_equality] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all append_storage_suffix_actual >>
   disch_then (qspecl_then [`func`, `PG`, `G'`, `D`] strip_assume_tac) >>
   suspend "compose"

@@ -85,6 +85,19 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
+Theorem enters_block_outcome_suffix:
+  enters_block fn s t ==>
+  enters_block fn (s with vs_outcomes := s.vs_outcomes ++ extra)
+    (t with vs_outcomes := t.vs_outcomes ++ extra)
+Proof
+  strip_tac >>
+  `t.vs_outcomes = s.vs_outcomes` by
+    (fs[enters_block_def] >> drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+     disch_then (mp_tac o Q.AP_TERM `\u. u.vs_outcomes`) >> simp[]) >>
+  drule enters_block_outcomes_update >>
+  disch_then (qspec_then `s.vs_outcomes ++ extra` mp_tac) >> simp[]
+QED
+
 Theorem setup_callee_outcomes_update:
   setup_callee fn args s = SOME t ==>
   setup_callee fn args (s with vs_outcomes := os) =
@@ -172,7 +185,7 @@ Proof
 QED
 
 Theorem step_taint_noncall_outcomes_update:
-  i.inst_opcode <> CALL ==>
+  ~MEM i.inst_opcode [CALL; DELEGATECALL; CREATE; CREATE2] ==>
   step_taint i (s with vs_outcomes := xs) (t with vs_outcomes := ys) tn =
     step_taint i s t tn
 Proof

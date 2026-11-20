@@ -81,8 +81,7 @@ Theorem compile_log_topic_ops_seq_ptr:
     supported_event_leaf_type (SND arg) /\
     ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs /\
   encode_indexed_event_topics (REPLICATE (LENGTH xs) T) (MAP SND xs) vs = SOME topics /\
-  LIST_REL (\arg v. ptr_val_ok cx (SND arg) v (FST arg) G tn s) xs vs /\
-  ~ctx_has_dalloca ctx ==>
+  LIST_REL (\arg v. ptr_val_ok cx (SND arg) v (FST arg) G tn s) xs vs ==>
   ?t Gf tnf. run_inst_seq (emitted_insts sm sb) s = OK t /\
     inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sm sb) s Gf tnf /\
     LIST_REL (\op w. eval_operand op t = SOME w) ops topics /\

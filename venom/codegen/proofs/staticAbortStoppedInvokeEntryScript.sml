@@ -5,6 +5,7 @@ Ancestors
   fnFrameBoundaryInvoke fnFrameDeepInvoke contextStaticAbortRel
   contextCodegenRelProps venomExecProps venomExecSemantics venomInst
   contextCodegenRel list
+  symFrameInvokeSupport
 
 val _ = Parse.hide "cp";
 val _ = Parse.hide "base";
@@ -95,7 +96,7 @@ Proof
    asm_block_at prog ast.as_pc (execute_plan cpl.cp_initial_fmp (iops ++ rops))` by
     (irule (Q.INST [`ops` |-> `ops`,
        `post` |-> `[SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++ post`]
-       (SPEC_ALL sym_invoke_selected_entry_facts)) >>
+       (SPEC_ALL symFrameInvokeSupportTheory.sym_invoke_selected_entry_facts)) >>
      rpt conj_tac >>
      TRY (first_assum ACCEPT_TAC >> NO_TAC)
      >- (qexistsl_tac [`arranged`, `dfg`] >> first_assum ACCEPT_TAC)
@@ -116,7 +117,7 @@ Proof
     (fs[unit_shape_ok_def, EVERY_MEM] >> metis_tac[EL_MEM]) >>
   `MEM (AsmLabel nm) prog` by
     (qpat_x_assum `callee.fn_name = nm` (SUBST1_TAC o SYM) >>
-     irule sym_invoke_callee_code_label >>
+     irule symFrameInvokeSupportTheory.sym_invoke_callee_code_label >>
      conj_tac >- first_assum ACCEPT_TAC >>
      qexistsl_tac [`cpl`, `ctx`, `j`, `cas.as_pc`, `EL j cpl.cp_regions`] >>
      rpt conj_tac >> TRY (REFL_TAC >> NO_TAC) >> first_assum ACCEPT_TAC) >>

@@ -354,13 +354,13 @@ QED
 
 Theorem abi_image_wei_int_label:
   compile_as_wei_value_int v scale signed sa = (Label l,sb) ==>
-  v = Label l /\ sb = sa /\ scale = 1
+  v = Label l /\ sb.cs_blocks = sa.cs_blocks /\ scale = 1
 Proof
-  simp[builtinMiscTheory.compile_as_wei_value_int_def] >>
-  rpt (IF_CASES_TAC >> simp[]) >>
-  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  metis_tac[abi_image_emit_not_label]
+  Cases_on `scale = 1` >> Cases_on `signed` >>
+  simp[builtinMiscTheory.compile_as_wei_value_int_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[]
 QED
 
 Theorem abi_image_wei_decimal_not_label:
@@ -603,7 +603,8 @@ QED
 Theorem abi_image_builtin_wei_label:
   compile_builtin_dispatch_body f ce vt ty (AsWeiValue denom) args sa = (vv,sb) /\
   vv_operand vv = Label l ==>
-  lower_value f ce (expr_type (HD args)) (HD args) sa = (Label l,sb)
+  ?sm. lower_value f ce (expr_type (HD args)) (HD args) sa = (Label l,sm) /\
+       sb.cs_blocks = sm.cs_blocks
 Proof
   simp[compile_builtin_dispatch_body_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[AllCaseEqs()] >>
@@ -619,8 +620,9 @@ Theorem abi_image_builtin_label:
   vv_operand vv = Label l ==>
   (bi = Acc Address /\
    lower_value f ce (BaseT AddressT) (HD args) sa = (Label l,sb)) \/
-  (?denom. bi = AsWeiValue denom /\
-   lower_value f ce (expr_type (HD args)) (HD args) sa = (Label l,sb))
+  (?denom sm. bi = AsWeiValue denom /\
+   lower_value f ce (expr_type (HD args)) (HD args) sa = (Label l,sm) /\
+   sb.cs_blocks = sm.cs_blocks)
 Proof
   Cases_on `bi` >> strip_tac
   >~ [`compile_builtin_dispatch_body _ _ _ _ (Acc item) _ _ = _`] >-
@@ -687,11 +689,8 @@ Theorem abi_image_type_builtin_convert_label:
 Proof
   simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  gvs[AllCaseEqs(), vv_operand_def] >>
-  qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
-  qmatch_goalsub_abbrev_tac `as_stack_val vt res` >>
-  Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
-  strip_tac >> gvs[vv_operand_def] >>
+  gvs[oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs(),
+      vv_operand_def, mk_ptr_def] >>
   metis_tac[abi_image_convert_label, abi_image_widen_copy_not_label]
 QED
 
@@ -844,6 +843,7 @@ Resume abi_image_compile_mutual[builtin]:
   rpt gen_tac >> simp[Once compile_expr_raw_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >> strip_tac >>
   drule_all abi_image_builtin_label >> strip_tac >>
+  TRY (`sm.cs_blocks = sa.cs_blocks` suffices_by metis_tac[]) >>
   drule_at (Pat `lower_value`) abi_image_child_lower_label >>
   (impl_tac
    >- (rpt strip_tac >>

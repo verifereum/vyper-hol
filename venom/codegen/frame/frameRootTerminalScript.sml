@@ -85,27 +85,6 @@ Proof
   qexistsl_tac [`c1`,`rb1`] >> gvs[]
 QED
 
-Theorem root_inner_inst[local]:
-  s.contexts = [(c,rb)] /\ step_inner s = (INR e,u) /\
-  e <> SOME InvalidJumpDest /\ e <> SOME Impossible ==>
-  ?op. frame_inst_at s s op /\ step_inst op s = (INR e,u)
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `step_inner s = _` mp_tac >>
-  simp[step_inner_def, get_current_context_def, bind_def, return_def] >>
-  Cases_on `FLOOKUP c.msgParams.parsed c.pc`
-  >- (Cases_on `LENGTH c.msgParams.code <= c.pc` >>
-      gvs[frame_inst_at_def] >> strip_tac >>
-      goal_assum $ drule_at Any >> simp[]) >>
-  rename1 `FLOOKUP c.msgParams.parsed c.pc = SOME op` >>
-  gvs[ignore_bind_def] >>
-  Cases_on `step_inst op s` >> Cases_on `FST (step_inst op s)` >> gvs[bind_def]
-  >- (strip_tac >>
-      drule inc_pc_or_jump_inr_eq >> gvs[]) >>
-  strip_tac >> qexists_tac `op` >>
-  gvs[frame_inst_at_def]
-QED
-
 Theorem root_step_ends_at_inst:
   wf_state s /\ s.contexts = [(c,rb)] /\
   (!a. c.msgParams.outputTo <> Code a) /\ step s = (r,t) ==>
@@ -118,7 +97,7 @@ Theorem root_step_ends_at_inst:
 Proof
   strip_tac >> conj_tac >> strip_tac >> gvs[] >>
   drule_all root_inner_terminal >> strip_tac >> gvs[] >>
-  drule_at (Pat `step_inner _ = _`) root_inner_inst >> simp[] >>
+  drule_at (Pat `step_inner _ = _`) step_inner_terminal_inst >> simp[] >>
   strip_tac >>
   goal_assum $ drule_at Any >> gvs[]
 QED

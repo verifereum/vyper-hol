@@ -143,7 +143,7 @@ Proof
     simplify_unreachable_inst_subset]
 QED
 
-Theorem code_end_round_static[local]:
+Theorem code_end_round_static:
   wf_ssa f /\ wf_function f /\ fn_inst_wf f /\ first_block_no_preds f /\
   scfg_phi_safe f /\ fn_defs_reach_uses f /\ EVERY label_positions_ok (fn_insts f) /\
   (!x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>
@@ -303,6 +303,49 @@ Proof
   metis_tac[wf_ssa_defs_reach_uses, fn_shape_ok_scfg_shape]
 QED
 
+Theorem simplify_cfg_code_end_stage_preserves_under_requests:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C Ct /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  code_end_offset_ok (\ctx fn inst s. raw_reachable vs ctx fn inst s /\ P s.vs_requests) C /\
+  EVERY (\f. !x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>
+    i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) C.ctx_functions ==>
+  code_end_offset_ok (\ctx fn inst s. raw_reachable vs ctx fn inst s /\ P s.vs_requests) Ct /\
+  EVERY (\f. !x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>
+    i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) Ct.ctx_functions
+Proof
+  strip_tac >>
+  `EVERY simplify_cfg_fn_ok C.ctx_functions` by
+    (fs[o1_ctx_shape_def, EVERY_MEM] >>
+     rpt strip_tac >> irule simplify_cfg_fn_ok_ssa >> metis_tac[o1_fn_shape_def]) >>
+  `!f. MEM f C.ctx_functions ==>
+    (!x i. code_end_var (simplify_cfg_fn f) x /\ MEM i (fn_insts (simplify_cfg_fn f)) /\
+      MEM (Var x) i.inst_operands ==> i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) /\
+    (!x. code_end_var (simplify_cfg_fn f) x ==> code_end_var f x)` by
+    (gen_tac >> disch_tac >> irule code_end_ssa_fn_static >>
+     fs[o1_ctx_shape_def, EVERY_MEM] >> metis_tac[]) >>
+  reverse conj_tac
+  >- (drule simplify_cfg_stage_functions >> strip_tac >>
+      simp[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
+  simp[code_end_offset_ok_def] >> rpt gen_tac >> strip_tac >>
+  rename1 `raw_reachable vs Ct fn inst vs'` >>
+  drule_all code_end_stage_origins >> strip_tac >>
+  `ctx_bisim C Ct` by metis_tac[simplify_cfg_stage_bisim] >>
+  drule_all code_end_origin_payload >>
+  disch_then (qx_choosel_then [`f`,`s`] strip_assume_tac) >>
+  `code_end_var f x` by metis_tac[] >>
+  drule scfg_payload_frame >>
+  disch_then (strip_assume_tac o MATCH_MP o1FrameLockstepTheory.execution_frame_fields) >>
+  `P s.vs_requests` by simp[] >>
+  qpat_x_assum `code_end_offset_ok _ _` mp_tac >>
+  simp[code_end_offset_ok_def] >>
+  `eval_operand (Var x) s = SOME w` by metis_tac[scfg_payload_operand] >>
+  `s.vs_labels = vs'.vs_labels` by
+    (qpat_x_assum `scfg_payload _ _` mp_tac >>
+     pure_rewrite_tac[scfg_payload_def] >> strip_tac >>
+     qpat_x_assum `vs' = _` SUBST1_TAC >> simp[scfg_ctrl_def]) >>
+  metis_tac[]
+QED
+
 Theorem simplify_cfg_code_end_stage_preserves:
   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C Ct /\
   o1_ctx_shape C /\ o1_ssa_inv C vs /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
@@ -313,32 +356,10 @@ Theorem simplify_cfg_code_end_stage_preserves:
   EVERY (\f. !x i. code_end_var f x /\ MEM i (fn_insts f) /\ MEM (Var x) i.inst_operands ==>
     i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) Ct.ctx_functions
 Proof
-  strip_tac >>
-  `EVERY simplify_cfg_fn_ok C.ctx_functions` by
-    (fs[o1_ctx_shape_def, o1_ssa_inv_def, EVERY_MEM] >>
-     rpt strip_tac >> irule simplify_cfg_fn_ok_ssa >> metis_tac[o1_fn_shape_def]) >>
-  `!f. MEM f C.ctx_functions ==>
-    (!x i. code_end_var (simplify_cfg_fn f) x /\ MEM i (fn_insts (simplify_cfg_fn f)) /\
-      MEM (Var x) i.inst_operands ==> i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) /\
-    (!x. code_end_var (simplify_cfg_fn f) x ==> code_end_var f x)` by
-    (gen_tac >> disch_tac >> irule code_end_ssa_fn_static >>
-     fs[o1_ctx_shape_def, o1_ssa_inv_def, EVERY_MEM] >> metis_tac[]) >>
-  reverse conj_tac
-  >- (drule simplify_cfg_stage_functions >> strip_tac >>
-      simp[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
-  simp[code_end_offset_ok_def] >> rpt gen_tac >> strip_tac >>
-  drule_all code_end_stage_origins >> strip_tac >>
-  `ctx_bisim C Ct` by metis_tac[simplify_cfg_stage_bisim] >>
-  drule_all code_end_origin_payload >>
-  disch_then (qx_choosel_then [`f`,`s`] strip_assume_tac) >>
-  `code_end_var f x` by metis_tac[] >>
-  qpat_x_assum `code_end_offset_ok _ _` mp_tac >>
-  simp[code_end_offset_ok_def] >>
-  `eval_operand (Var x) s = SOME w` by metis_tac[scfg_payload_operand] >>
-  `s.vs_labels = vs'.vs_labels` by
-    (qpat_x_assum `scfg_payload _ _` mp_tac >>
-     pure_rewrite_tac[scfg_payload_def] >> strip_tac >>
-     qpat_x_assum `vs' = _` SUBST1_TAC >> simp[scfg_ctrl_def]) >>
+  `(\ctx fn inst s. raw_reachable vs ctx fn inst s) = raw_reachable vs` by
+    simp_tac bool_ss [FUN_EQ_THM] >>
+  mp_tac (Q.INST [`P` |-> `\_. T`] simplify_cfg_code_end_stage_preserves_under_requests) >>
+  asm_simp_tac bool_ss [o1_ssa_inv_def] >>
   metis_tac[]
 QED
 

@@ -12,6 +12,7 @@ Ancestors option[qualified,ignore_grammar] vyperTypeValues[qualified,ignore_gram
   gasShadowCompile gasShadowState gasShadow gasExemptCert
   vyperStorageTrace vyperStorageFootprint
   bodyPtrDefs loweringPosts compileEnv vyperInterpreter vyperState vyperAST
+  bodyFullIfExpReach
 
 Theorem subscript_nocopy_bind_full:
   !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et bd.
@@ -179,7 +180,7 @@ QED
 Resume subscript_nocopy_bind_full[bind_base]:
   qpat_assum `~subscript_reads_base _ _ _` (fn th =>
     pure_once_rewrite_tac[MATCH_MP eval_expr_subscript_bind th]) >>
-  irule gas_outcome_full_bind_all >>
+  irule gas_outcome_full_bind_all_path >>
   `!res : eval_result + exception. !r.
      (?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r) <=> expr_exit res r` by
     (Cases >> simp[]) >> simp[] >>
@@ -207,6 +208,8 @@ Resume subscript_nocopy_bind_full[after_base]:
   strip_tac >> fs[] >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
     gvs[storage_trace_domain_def] >>
+  qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> gas_origin_ptr_path _ _ _ _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
   `baseQ (storage_trace_horizon mid.storage_trace) res mid G1 tn1 s` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> baseQ H _ _ _ _ _ /\ _`
        (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
@@ -264,10 +267,13 @@ Resume subscript_nocopy_bind_full[after_base]:
     (simp[] >> rpt conj_tac
      >~ [`local_ptrs_reserved _ _`] >- metis_tac[local_ptrs_reserved_next_var]
      >~ [`gas_admissible _ _ _`] >- metis_tac[expr_body_pre_gas_admissible]
-     >- (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
-          qpat_assum `MEM func ctx.ctx_functions` (fn member =>
-            ACCEPT_TAC (Q.SPEC `s` (MATCH_MP pow_compose_reachable_no_wrap
-              (CONJ inv member))))))
+     >- (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+           metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+         qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK s,G1,tn1)` (fn path =>
+           qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
+           qpat_assum `!fn i v. frag_reachable ctx func s0 fn i v ==> _`
+             (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+              CONJ path o CONJ no_phi))))
      >> rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
        (drule_then strip_assume_tac) >> fs[vv_post_def])) >>

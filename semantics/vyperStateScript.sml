@@ -5,7 +5,7 @@ Ancestors
   vyperAST vyperMisc vyperNsidFmap vyperValue vyperValueOperation
   vyperStorage vyperContext extCallOracle[ignore_grammar]
 Libs
-  cv_transLib wordsLib monadsyntax
+  cv_transLib wordsLib monadsyntax vyperCvLib
 
 (* `subscript`s are the possible kinds of keys into HashMaps *)
 
@@ -816,29 +816,10 @@ val evaluate_subscripts_pre_def =
    avoid traversing the large semantic context with the ambient simpset. *)
 val subscript_pre_ss = boolSimps.bool_ss ++ rewrites [LET_THM, value_11];
 
-(* Unwind translator-generated equalities before descending into their bodies.
-   In particular, an impossible constructor premise discards its whole branch. *)
 val pre_constructor_rewrites = Rewrite.add_rewrites Rewrite.bool_rewrites
-  (GSYM AND_IMP_INTRO ::
-   List.concat (map (fn ty => #rewrs (TypeBase.simpls_of ty))
+  (pre_constructor_rules
     [``:value``, ``:array_value``, ``:type_value``, ``:subscript``,
-     ``:value option``, ``:subscript list``, ``:num # num``]));
-fun mk_pre_cleanup_conv rewrites =
-  let
-    val root = CHANGED_CONV (FIRST_CONV
-      [Rewrite.REWRITES_CONV rewrites, Unwind.UNWIND_FORALL_CONV])
-    (* Only traverse logical structure: semantic expressions in equality
-       premises are opaque. Reduce a false premise before visiting its body. *)
-    fun cleanup tm =
-      ((root THENC cleanup) ORELSEC
-       (if is_forall tm then
-          QUANT_CONV cleanup THENC TRY_CONV (root THENC cleanup)
-        else if is_imp tm orelse is_conj tm then
-          RATOR_CONV (RAND_CONV cleanup) THENC
-          ((root THENC cleanup) ORELSEC
-           (RAND_CONV cleanup THENC TRY_CONV (root THENC cleanup)))
-        else ALL_CONV)) tm
-  in cleanup end;
+     ``:value option``, ``:subscript list``, ``:num # num``]);
 
 (* List induction keeps the IH universal in every non-subscript argument.
    Only this unconditional IH is added to the goal-only cleanup rules. *)

@@ -23,7 +23,7 @@ Theorem same_type_store_core[local]:
   (type_memory_size tv = 0 \/ w2n dw + type_memory_size tv <= s.vs_alloca_next) /\
   ptr_covers G tn xs s (type_memory_size tv) /\
   ptr_covers G tn xd s (type_memory_size tv) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -127,7 +127,6 @@ Resume same_type_store_core[bytes]:
      isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     (gvs[fn_has_code_def, exprLoweringPropsTheory.same_blocks_def, IS_PREFIX_APPEND] >>
      simp[DROP_APPEND]) >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
   drule_all (SRULE [GSYM vfmConstantsTheory.word_size_def]
     (Q.INST [`n` |-> `32 + 32 * word_size len`]
       (SPEC_ALL compile_store_bytestring_origin_ptr_path))) >>
@@ -249,7 +248,7 @@ Theorem abi_encode_same_type_store_origin:
   (type_memory_size tv = 0 \/ w2n dw + type_memory_size tv <= s.vs_alloca_next) /\
   ptr_covers G tn xs s (type_memory_size tv) /\
   ptr_covers G tn xd s (type_memory_size tv) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   alloca_history func s /\ alloca_inv s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\

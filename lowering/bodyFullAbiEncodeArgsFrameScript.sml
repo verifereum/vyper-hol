@@ -1,7 +1,7 @@
 (* Whole-list frames for retained ABI argument resources. *)
 Theory bodyFullAbiEncodeArgsFrame
 Ancestors
-  bodyFullAbiEncodeRetention bodyFullAbiEncodeBorrowed abiEncodeArgsSim
+  bodySimFull[qualified] bodyFullAbiEncodeBorrowed abiEncodeArgsSim
   representationCleanPtr loweringPosts bodyPtrDefs arithmetic words
   assignTuplePtrCopyLen logValueFramePtr abiDecodeStaticProps allocaHistory
   ptrDiscipline venomExecSemantics venomState abiTupleProps

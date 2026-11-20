@@ -170,6 +170,8 @@ Resume annassign_other_typed_full_execution[prefix]:
   gnvs[Excl "NOT_AND"] >>
   qpat_x_assum `unwrap_value cenv' vv sv = _ /\ _` strip_assume_tac >>
   `type_memory_size dtv = type_memory_bytes cenv typ` by simp[] >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
   qspecl_then
     [`DF`,`lo`,`d`,`PG`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,
      `cenv`,`cenv'`,`cx`,`es`,`id`,`typ`,`e`,`st0`,`sa`,`r`,`a`,`b`,
@@ -202,7 +204,8 @@ Resume annassign_other_typed_full_execution[compose]:
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> rpt strip_tac >> Cases_on `res`
-  >- fs[Abbr `childR`, exprSimDefsTheory.expr_exit_def] >>
+  >- (qpat_x_assum `childR _ (INL _) _ _ _` mp_tac >>
+      simp[Abbr `childR`, exprSimDefsTheory.expr_exit_def, NoAsms]) >>
   fs[Abbr `childR`, stmt_exit_ptr_def, exprSimDefsTheory.halt_exit_def] >>
   gvs[stmtSimPropsTheory.expr_exit_INR_type])
 QED

@@ -4,6 +4,7 @@ Ancestors
   haltExitProj
   typeBuiltinPrereqs
   bodyInvNoDalloca bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
+  bodyFullIfExpReach[qualified,ignore_grammar] bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyFullPreds bodyFullOfVV bodyFullExprGeneric bodyFullAllocGeneric
   bodyFullExtract32Prepare bodyFullExtract32Suffix bodyFullExtract32SuffixExit
   bodyFullExtract32JoinFrame bodyPtrTypeBuiltinsSavedOperand wordArgsPtr
@@ -39,7 +40,6 @@ Theorem extract32_vv_full[local]:
     cenv cx ty (TypeBuiltin ann Extract32 ret [src;off]) es
 Proof
   strip_tac >> drule extract32_full_pre_shape >> strip_tac >> gvs[] >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   simp[bodySimFullTheory.expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
   drule extract32_compile_equations >> strip_tac >> gvs[] >>
   qpat_assum `expr_type src = _`
@@ -77,7 +77,7 @@ Proof
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ srcQ srcR` >>
   rewrite_tac[eval_expr_extract32_vv_bind] >>
-  irule gas_outcome_full_bind_all >>
+  irule gas_outcome_full_bind_all_path >>
   `!res : value + exception. !r.
      (?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r) <=>
        expr_exit res r` by (Cases >> simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
@@ -111,9 +111,22 @@ QED
 
 Resume extract32_vv_full[source_continuation]:
   qx_genl_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`s`] >> strip_tac >>
+  RULE_ASSUM_TAC BETA_RULE >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
     gvs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+  `!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_no_wrap inst z` by
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+       gas_origin_ptr_path _ (s0,G0,tn0) marks (OK s,G1,tn1)`
+       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK s,G1,tn1)` (fn path =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
+       qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> _` (fn safe =>
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+           (LIST_CONJ [path,no_phi,safe])))))) >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\ ~s.vs_halted /\ mid.gas_obs = []`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   simp[Abbr `srcQ`, NoAsms] >> strip_tac >> gvs[] >>
@@ -139,12 +152,14 @@ Resume extract32_vv_full[source_continuation]:
   `post_value_type cenv src = expr_type src` by
     simp[loweringPostsTheory.post_value_type_bytestring, compileEnvTheory.is_bytestring_type_def] >>
   `alloca_inv s` by
-    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+       expr_post H ctx func cenv cx src es sa s1 s0 mid (BytesV bs) src_op s /\ _`
       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >>
      strip_tac >> fs[loweringPostsTheory.expr_post_def, stmt_state_rel_def]) >>
   `?p. eval_operand src_op s = SOME (n2w p)` by
-    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+       expr_post H ctx func cenv cx src es sa s1 s0 mid (BytesV bs) src_op s /\ _`
       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
      drule typeBuiltinPrereqsTheory.extract32_source_post_alloca_bound >>
@@ -251,13 +266,18 @@ Resume extract32_vv_full[offset_inputs]:
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  drule fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec >>
-  simp[fragExecTheory.exit_result_def] >>
-  rpt strip_tac >>
-  drule contextRawReachableTheory.frag_reachable_members >>
-  disch_then drule >> strip_tac >>
-  fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
-  simp[unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `expr_post _ _ _ _ _ src es sa s2 s0 mid _ _ u`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def]) >>
+     drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> simp[]) >>
+  `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_no_wrap inst z` by
+    (qpat_assum `gas_origin_ptr_path _ (s,G1,tn1) [] (OK u,G2,tn2)` (fn path =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
+       qpat_assum `!fn inst z. frag_reachable ctx func s fn inst z ==> _` (fn safe =>
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+           (LIST_CONJ [path,no_phi,safe])))))) >>
+  drule fragGasOriginPtrTheory.gas_origin_ptr_path_projections >>
+  metis_tac[fragGasSeqPtrTheory.gas_path_ptr_ok_not_halted]
 QED
 
 Resume extract32_vv_full[offset_continuation]:
@@ -342,6 +362,10 @@ Resume extract32_vv_full[suffix_entry]:
      gvs[arithmeticTheory.LESS_MOD]) >>
   `p' + (LENGTH bs + 32) < dimword (:256)` by decide_tac >>
   asm "offset_post" assume_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (asm "offset_post" (mp_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def]) >>
+     strip_tac >>
+     drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> simp[]) >>
   drule_all (SIMP_RULE (srw_ss()) []
     (Q.INST [`src_op` |-> `Var sv`, `len` |-> `Var len'`, `dp` |-> `Var data'`]
       exprSimExtract32PostTheory.extract32_offset_post_view)) >> strip_tac >>
@@ -433,7 +457,9 @@ Resume extract32_vv_full[suffix_entry]:
      simp[exprLoweringPropsTheory.stmt_state_rel_def]) >>
   reverse conj_tac >-
     (rpt strip_tac >>
-     gvs[loweringPostsTheory.post_value_type_def, vyperASTTheory.expr_type_def]) >>
+     gvs[loweringPostsTheory.post_value_type_def, vyperASTTheory.expr_type_def,
+         loweringPostsTheory.vv_post_def] >>
+     metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp]) >>
   qx_gen_tac `H` >> disch_tac >>
   `expr_post H ctx func cenv cx off mid s2 s3 u ee (IntV i) off_op t /\
    ghost_inv_at (DF H) lo d cenv cx ee G3 tn3 t` by metis_tac[] >>

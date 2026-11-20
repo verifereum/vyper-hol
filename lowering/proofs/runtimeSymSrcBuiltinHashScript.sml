@@ -5,7 +5,7 @@ Ancestors
   builtinHashing context compileEnv emitHelper loweringShapeDefs venomInst
   list stackPlanTypes
 
-Theorem runtime_sym_keccak256_bytesm:
+Theorem runtime_sym_keccak256_bytesm[local]:
   ~is_label_operand v /\ EVERY runtime_sym_inst (state_insts s) /\
   compile_keccak256_bytesm v m s = (op,s') ==>
   EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op
@@ -21,16 +21,7 @@ Proof
   metis_tac[runtime_sym_nonlabel_reserved]
 QED
 
-Theorem runtime_sym_keccak256_word:
-  ~is_label_operand v /\ EVERY runtime_sym_inst (state_insts s) /\
-  compile_keccak256_word v s = (op,s') ==>
-  EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op
-Proof
-  simp[compile_keccak256_word_def, GSYM compile_keccak256_bytesm_def] >>
-  metis_tac[runtime_sym_keccak256_bytesm]
-QED
-
-Theorem runtime_sym_method_id_hash:
+Theorem runtime_sym_method_id_hash[local]:
   ~is_label_operand v /\ EVERY runtime_sym_inst (state_insts s) /\
   compile_method_id_hash ty v s = (op,s') ==>
   EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op

@@ -1,5 +1,5 @@
 Theory o1CodeEndConcretizeRead
-Ancestors
+Ancestors lowerDloadPublicCopyPointEffect[qualified]
   concretizePtrObservationInterface lowerDloadSafetyPublicCopy
   concretizePtrOpaqueRetpc ptrDiscipline venomState venomInst
   contextCodegenRel codegenRel list finite_map pred_set
@@ -16,7 +16,7 @@ Theorem code_end_concretize_read_value:
 Proof
   strip_tac >>
   `!v. off = Var v ==> v NOTIN fn_pv P fn` by
-    (metis_tac[ld_public_copy_scalar_nonpointer, MEM]) >>
+    (metis_tac[lowerDloadPublicCopyPointEffectTheory.ld_public_copy_scalar_nonpointer, MEM]) >>
   `op_prov G off = NONE` by
     (Cases_on `off` >> gvs[op_prov_def] >>
      metis_tac[flookup_thm, SUBSET_DEF]) >>

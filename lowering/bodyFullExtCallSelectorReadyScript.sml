@@ -8,6 +8,7 @@ Ancestors
   bodyPtrSignedConvertSourceFrame bodyFullPathHistory valueEncodingProps
   loweringShapeRules venomMemDefs finite_map exprSimExtCallCase exprSafeOperand
   bodyPtrBytestringBuiltinsWindowGhost exprSimProps loweringPosts
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 (* Retain the write's exact memory and ghost frame at the PC after MSTORE.
    The short selector-tail post forgets these once it has read the four bytes. *)
@@ -16,7 +17,7 @@ Theorem selector_write_frame[local]:
   fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
   lookup_var root s = SOME w /\ ptr_covers G tn root s capacity /\
   32 <= capacity /\ w2n w + capacity <= s.vs_alloca_next /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?m Gm tm.
@@ -72,7 +73,7 @@ Theorem selector_suffix_frame[local]:
   LENGTH bs = 4 /\ lookup_var root s = SOME w /\
   not_fresh_at sm root /\ ptr_covers G tn root s capacity /\ 32 <= capacity /\
   w2n w + capacity < dimword (:256) /\ w2n w + capacity <= s.vs_alloca_next /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?p t Gf tf m.
@@ -102,7 +103,11 @@ Proof
   `lookup_var root m = SOME w` by metis_tac[] >>
   `lo <= m.vs_alloca_next /\ w2n w + 28 < dimword (:256) /\
    28 + 4 <= capacity` by decide_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp m` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp m` by
+    (qpat_assum `m = _` SUBST1_TAC >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def, mstore_def] >> metis_tac[]) >>
   `emit_op ADD [Var root;Lit (n2w 28)] sm = (off,sb)` by simp[] >>
   drule_all (Q.SPECL [`root`,`28`,`4`,`capacity`] typed_copy_origin_ptr_add_path) >>
   disch_then (qspecl_then [`explicit`,`PG`,`0`,`0`] strip_assume_tac) >>
@@ -176,7 +181,7 @@ Theorem selector_packing_run[local]:
   stmt_state_rel (H0 : (bool # bytes32 # type_value) list # num list)
     ctx func cenv cx ee s /\ local_ptrs_reserved cenv sa /\
   alloca_history func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?q p w t Gf tf.
     ba.buf_operand = Var q /\ off = Var p /\ not_fresh_at sp q /\ not_fresh_at sp p /\
@@ -210,6 +215,14 @@ Theorem selector_packing_run[local]:
     t.vs_code = s.vs_code /\ t.vs_labels = s.vs_labels /\ t.vs_requests = s.vs_requests
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel H0 ctx func cenv cx ee s`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp` by
+    (qpat_assum `stmt_state_rel H0 ctx func cenv cx ee s`
+       (mp_tac o MATCH_MP stmt_state_rel_fmp_room) >>
+     simp[fmp_room_def] >> rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all (Q.SPEC `F` (GEN ``has_args:bool`` extcall_request_buffer_setup) |> SIMP_RULE (srw_ss()) []) >>
   disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`] (qx_choose_then `q`
     (qx_choose_then `w` (qx_choose_then `u` (qx_choose_then `Gu`
@@ -224,6 +237,12 @@ Proof
      decide_tac) >>
   `emit_void MSTORE [Var q; Lit (calldata_method_id bs)] sb = ((),sm) /\
    emit_op ADD [Var q;Lit 28w] sm = (off,sp)` by metis_tac[] >>
+  `stmt_state_rel H0 ctx func cenv cx ee u` by
+    (qpat_assum `!H. stmt_state_rel H ctx func cenv cx ee s ==> stmt_state_rel H ctx func cenv cx ee u`
+       (qspec_then `H0` (drule_then ACCEPT_TAC))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `stmt_state_rel H0 ctx func cenv cx ee u`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all selector_suffix_frame >>
   disch_then (qspecl_then [`explicit`,`PG`] (qx_choose_then `p` (qx_choose_then `t`
     (qx_choose_then `Gf` (qx_choose_then `tf` (qx_choose_then `m` strip_assume_tac)))))) >>
@@ -360,7 +379,7 @@ Theorem extcall_selector_packing_ready:
   emit_void MSTORE [ba.buf_operand;Lit (n2w mid)] sb = ((),sm) /\
   emit_op ADD [ba.buf_operand;Lit 28w] sm = (off,sp) /\
   fn_has_code se sb func /\ fn_has_code sb sm func /\ fn_has_code sm sp func /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\
   (if abi > cap then abi else cap) + 32 < dimword (:256) /\
   (?H. valid_horizon cx st0 H ee.storage_trace) /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>

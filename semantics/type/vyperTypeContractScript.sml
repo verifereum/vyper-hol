@@ -696,19 +696,55 @@ Definition iterator_mutability_ok_def:
     (expr_mutability_ok mods mut x /\ expr_mutability_ok mods mut y)
 End
 
+(* Vyper lowers revert reasons in a constant context. Check call targets
+   independently of the enclosing function's expression mutability. *)
+Definition reason_calls_ok_def:
+  reason_calls_ok mods (Name _ _) = T /\
+  reason_calls_ok mods (TopLevelName _ _) = T /\
+  reason_calls_ok mods (FlagMember _ _ _) = T /\
+  reason_calls_ok mods (IfExp _ c x y) =
+    (reason_calls_ok mods c /\ reason_calls_ok mods x /\ reason_calls_ok mods y) /\
+  reason_calls_ok mods (Literal _ _) = T /\
+  reason_calls_ok mods (StructLit _ _ kes) =
+    EVERY (reason_calls_ok mods) (MAP SND kes) /\
+  reason_calls_ok mods (Subscript _ x y) =
+    (reason_calls_ok mods x /\ reason_calls_ok mods y) /\
+  reason_calls_ok mods (Attribute _ x _) = reason_calls_ok mods x /\
+  reason_calls_ok mods (Builtin _ _ es) = EVERY (reason_calls_ok mods) es /\
+  reason_calls_ok mods (TypeBuiltin _ _ _ es) = EVERY (reason_calls_ok mods) es /\
+  reason_calls_ok mods (Pop _ tgt) = reason_target_calls_ok mods tgt /\
+  reason_calls_ok mods (Call _ ct es default) =
+    (call_target_mutability_ok mods View ct /\ EVERY (reason_calls_ok mods) es /\
+     case default of NONE => T | SOME e => reason_calls_ok mods e) /\
+  reason_target_calls_ok mods (NameTarget _) = T /\
+  reason_target_calls_ok mods (TopLevelNameTarget _) = T /\
+  reason_target_calls_ok mods (SubscriptTarget tgt e) =
+    (reason_target_calls_ok mods tgt /\ reason_calls_ok mods e) /\
+  reason_target_calls_ok mods (AttributeTarget tgt _) =
+    reason_target_calls_ok mods tgt
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL (_,e) => expr_size e
+    | INR (_,tgt) => base_assignment_target_size tgt)` >>
+  rw[] >>
+  Induct_on `kes` >> rw[] >> PairCases_on `h` >> rw[] >> res_tac >> simp[]
+End
+
 Definition assert_reason_mutability_ok_def:
   assert_reason_mutability_ok mods mut (AssertReason e) =
-    expr_mutability_ok mods mut e /\
+    (expr_mutability_ok mods mut e /\ reason_calls_ok mods e) /\
   assert_reason_mutability_ok mods mut (AssertCustomError err) =
-    EVERY (expr_mutability_ok mods mut) (custom_error_exprs err) /\
+    (EVERY (expr_mutability_ok mods mut) (custom_error_exprs err) /\
+     EVERY (reason_calls_ok mods) (custom_error_exprs err)) /\
   assert_reason_mutability_ok mods mut _ = T
 End
 
 Definition raise_reason_mutability_ok_def:
   raise_reason_mutability_ok mods mut (RaiseReason e) =
-    expr_mutability_ok mods mut e /\
+    (expr_mutability_ok mods mut e /\ reason_calls_ok mods e) /\
   raise_reason_mutability_ok mods mut (RaiseCustomError err) =
-    EVERY (expr_mutability_ok mods mut) (custom_error_exprs err) /\
+    (EVERY (expr_mutability_ok mods mut) (custom_error_exprs err) /\
+     EVERY (reason_calls_ok mods) (custom_error_exprs err)) /\
   raise_reason_mutability_ok mods mut _ = T
 End
 

@@ -1,8 +1,7 @@
 (* Classified memory reads and comparisons through the ordinary adapter. *)
 Theory lowerDloadSafetyClassifiedReadCoverage
 Ancestors
-  lowerDloadSafetyMloadEffects lowerDloadSafetyIloadEffects
-  lowerDloadSafetyComparisonEffects lowerDloadSafetyOrdinaryCoverage
+  lowerDloadClassifiedReadPointEffect lowerDloadSafetyOrdinaryCoverage
   lowerDloadOracleCallAssembly lowerDloadSafetyAssemblyPremises
   lowerDloadSafetyAmbient lowerDloadSafetyRelation lowerDloadSafetyKernel
   ptrDiscipline venomExecSemantics finite_map pred_set list words
@@ -27,58 +26,18 @@ Theorem ld_sync_classified_read_effect:
     ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
     ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb
 Proof
-  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  `fn_shape_ok fn` by
-    (drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
-  `MEM inst (fn_insts fn)` by
-    (drule ld_sync_source >> metis_tac[ld_active_inst_member]) >>
-  `fn_ptr_ok P fn` by metis_tac[ld_sync_ptr_ok] >>
-  `s.vs_labels = t.vs_labels` by metis_tac[ld_sync_labels] >>
-  `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
-    metis_tac[ld_sync_access_ok, ld_sync_taint_ok] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule ld_sync_slots >> strip_tac >>
+  drule ld_sync_maps >> strip_tac >>
+  drule_all ld_sync_dyn_floor >> strip_tac >>
   `t.vs_alloca_next < dimword(:256)` by metis_tac[ld_sync_ambient_headroom] >>
-  `FDOM A = ld_slots A (f::fs) /\ EVERY (ld_maps A) (f::fs)` by
-    metis_tac[ld_sync_slots, ld_sync_maps] >>
   `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz < dimword(:256)` by
     (drule ld_sync_active >> simp[Excl "MEM"] >> strip_tac >>
      metis_tac[ld_alloc_target_no_wrap, HD]) >>
-  `!a. a IN FRANGE f.lf_H ==> a IN FDOM A` by
-    metis_tac[ld_global_selected, MEM] >>
-  drule_all ld_sync_dyn_floor >> strip_tac >>
-  `!a b c n. FLOOKUP A a = SOME (b,c,n) ==> b+n <= dyn_floor C vs0` by
-    metis_tac[] >>
-  drule ld_sync_dyn_agree >> strip_tac >>
-  `inst.inst_opcode <> INVOKE` by (fs[MEM] >> gvs[]) >>
-  drule ld_sync_active >> simp[Excl "MEM"] >> strip_tac >>
-  drule ld_sync_ghosts >> simp[Excl "MEM"] >> strip_tac >>
-  drule ld_sync_memory >> strip_tac >>
-  gvs[step_inst_non_invoke, Excl "MEM"] >>
-  qpat_assum `f.lf_tv = tn.t_var` (assume_tac o SYM) >>
-  (Cases_on `inst.inst_opcode = MLOAD`
-  >- (gvs[Excl "MEM"] >>
-      `~in_revert_forward f.lf_fn f.lf_src` by metis_tac[MEM] >>
-      drule_all ld_mload_effect >>
-      disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
-      qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
-      simp[] >> (qpat_assum `FDOM A = _` (fn th => rewrite_tac[GSYM th]) >>
-       gen_tac >> strip_tac >> irule ld_set_prov_selected >>
-       qexistsl_tac [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[])) >>
-  (Cases_on `inst.inst_opcode = ILOAD`
-  >- (gvs[Excl "MEM"] >>
-      `~in_revert_forward f.lf_fn f.lf_src` by metis_tac[MEM] >>
-      drule_all ld_iload_effect >>
-      disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
-      qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
-      simp[] >> (qpat_assum `FDOM A = _` (fn th => rewrite_tac[GSYM th]) >>
-       gen_tac >> strip_tac >> irule ld_set_prov_selected >>
-       qexistsl_tac [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[])) >>
-  `MEM inst.inst_opcode [LT;GT;EQ]` by gvs[MEM] >>
-  drule_all ld_comparison_effect >>
-  disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
-  qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
-  simp[] >> (qpat_assum `FDOM A = _` (fn th => rewrite_tac[GSYM th]) >>
-       gen_tac >> strip_tac >> irule ld_set_prov_selected >>
-       qexistsl_tac [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[])))
+  `!a b c n. FLOOKUP A a = SOME (b,c,n) ==> b+n <= dyn_floor C vs0` by metis_tac[] >>
+  `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
+    metis_tac[ld_sync_access_ok, ld_sync_taint_ok] >>
+  drule_all ld_sync_classified_read_effect_at >> simp[]
 QED
 
 Theorem ld_sync_classified_read_coverage:

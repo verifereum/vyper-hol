@@ -8,6 +8,7 @@ Ancestors
   selectorDispatch bodyPtrDefs bodyFullUnwrapRun abiBuiltinAllocation compileEnv
   fragGasSeqPtr fragGasOriginPtrLoop venomMemDefs loweringShapeDefs valueEncodingProps
   bodyMemoryDefs bodyPtrBytestringBuiltinsWindowGhost abiCallerAllocation loweringPosts
+  bodyFullHashKeccakFixed
 
 (* Close the exact selector write at the new PC. Unlike the selector-only
    tail, this does not compute the calldata operand yet. *)
@@ -17,7 +18,7 @@ Theorem extcall_selector_setup_store[local]:
   LENGTH bs = 4 /\ lookup_var q s = SOME w /\
   32 <= n /\ ptr_covers G tn q s n /\ w2n w + n <= s.vs_alloca_next /\
   allocas_from lo s /\ alloca_history func s /\ alloca_inv s /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?u Gu tu.
@@ -45,6 +46,7 @@ Proof
    eval_operand (Lit (calldata_method_id bs)) s = SOME (calldata_method_id bs) /\
    op_taint tn (Lit (calldata_method_id bs)) = {}` by
     simp[eval_operand_def, op_taint_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all clean_mstore_overwrite_prefix_uniform_origin_joint >>
   disch_then (qspec_then `PG` (qx_choose_then `u` (qx_choose_then `Gu`
      (qx_choose_then `tu` strip_assume_tac)))) >>
@@ -138,7 +140,9 @@ Theorem extcall_request_buffer_setup:
   stmt_state_rel (H0 : (bool # bytes32 # type_value) list # num list)
     ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   alloca_history func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?q w t Gt tt.
     shared.buf_operand = Var q /\
@@ -196,7 +200,7 @@ Theorem extcall_request_buffer_setup:
     pure_frame cenv func es sa s t
 Proof
   strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
   drule_all (INST_TYPE [``:'b`` |-> ``:256``] (SPEC_ALL alloc_buffer_origin_ptr_path_exact)) >>
   disch_then (qspecl_then [`tn`, `explicit`, `PG`, `G`]
     (qx_choose_then `q` (qx_choose_then `w` (qx_choose_then `u`
@@ -242,6 +246,9 @@ Resume extcall_request_buffer_setup[tuple]:
     (qpat_assum `stmt_state_rel _ _ _ _ _ _ u`
        (mp_tac o MATCH_MP stmt_state_rel_local_ptrs_alloca) >> simp[]) >>
   `w2n w + n <= u.vs_alloca_next` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `stmt_state_rel H0 ctx func cenv cx es u`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   drule_all extcall_selector_setup_store >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choose_then `v` (qx_choose_then `Gv` (qx_choose_then `tv` strip_assume_tac)))) >>
@@ -270,7 +277,9 @@ Resume extcall_request_buffer_setup[tuple]:
     (qpat_assum `!H. stmt_state_rel H ctx func cenv cx es s ==> stmt_state_rel H ctx func cenv cx es v`
        (qspec_then `H0` mp_tac) >> simp[]) >>
   `lo <= v.vs_alloca_next` by decide_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
+    (qpat_assum `stmt_state_rel H0 ctx func cenv cx es v`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   drule_all (Q.INST [`sa` |-> `sc`, `sb` |-> `sd`, `s` |-> `v`]
     (INST_TYPE [``:'b`` |-> ``:256``] (SPEC_ALL alloc_buffer_origin_ptr_path_exact))) >>
   disch_then (qspecl_then [`tv`, `explicit`, `PG`, `Gv`] strip_assume_tac) >>

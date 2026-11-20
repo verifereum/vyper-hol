@@ -43,7 +43,7 @@ val owned_decoder_state = ``\st s G tn.
 
 Theorem abi_decode_owned_mcopy_joint_effect:
   emit_void MCOPY [Var dst;Var src;count_op] sa = ((),sb) /\
-  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (^owned_decoder_state) sa s G tn /\ (?H. V H) /\
@@ -74,6 +74,8 @@ Theorem abi_decode_owned_mcopy_joint_effect:
     tnf.t_mem = tn.t_mem DIFF {i | b <= i /\ i < b+n}
 Proof
   BETA_TAC >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
   `local_ptrs_rel fn ce es.scopes s` by
     metis_tac[stmt_state_rel_local_ptrs_alloca] >>
   `eval_operand (Var dst) s = SOME (n2w b) /\

@@ -7,7 +7,7 @@ Ancestors
   sourceValueRejection loweringShapeSource loweringShapeProps o1PipelineCorrect
   supportedNames supportedProgramProps
   loweringShapeDefs unitShapeDefs venomExecProofs entryValueRevertPtr
-  entryDispatchPtr sourceEntryCode actualRegistrationCode entryLocals
+  entryDispatchPtr actualRegistrationCode entryLocals
   actualEntryAllocationFrame runtimeBodyStartDefs entryDispatchProps
   moduleLoweringProps stmtLoweringProps exprLoweringProps vyperInterpreter
   vyperContext venomExecSemantics venomState compileEnv loweringStateRelDefs

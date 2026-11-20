@@ -34,7 +34,7 @@ QED
 (* Zero width still consumes the emitted MCOPY instruction. *)
 Theorem slot_flat_copy[local]:
   emit_void MCOPY [Var dst;src;Lit (n2w n)] sa = ((),sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   allocas_from lo s /\ s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand src s = SOME a /\ lookup_var dst s = SOME b /\
   n < dimword (:256) /\
@@ -103,7 +103,7 @@ QED
 
 Theorem slot_word_store[local]:
   emit_void MSTORE [Var dst;op] sa = ((),sb) /\ fn_has_code sa sb fn /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\ allocas_from lo s /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   lookup_var dst s = SOME b /\ ptr_covers G tn dst s 32 /\
   w2n b + 32 <= s.vs_alloca_next /\
@@ -169,7 +169,7 @@ Theorem extcall_tuple_slot_write:
     sa = ((),sb) /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
   type_memory_bytes ce ty = type_memory_size tv /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   allocas_from lo s /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ lookup_var dst s = SOME b /\
   (if is_word_type ty then
@@ -216,7 +216,6 @@ Proof
       `lookup_var x s = SOME a` by fs[eval_operand_def] >>
       `w2n a + type_memory_size tv <= s.vs_alloca_next /\
        w2n b + type_memory_size tv <= s.vs_alloca_next` by decide_tac >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
       drule_all (Q.INST [`rt` |-> `ty`, `sty` |-> `ty`, `stv` |-> `tv`,
         `sw` |-> `a`, `dw` |-> `b`] extcall_default_bytes_store_capacity_joint) >>
       disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>

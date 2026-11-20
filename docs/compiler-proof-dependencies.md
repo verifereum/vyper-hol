@@ -69,7 +69,7 @@ preserves its historical schema.
 | `source_storage_ok tops am tx` | environmental/layout/hash guard | Conditional `eval_stmt_preserves_contract_storage_well_formed` family and `take_adopt_call_outcome_storage_suffix`. No complete deployment/transaction producer; Milestone 7. |
 | `call_state_rel tops runtime_bc am tx es` | environmental | No general producer or satisfiability theorem. L6/L8 **consume**, not produce, it; transaction corollary deferred to Milestone 7. |
 | `valid_vyper_call tops tx calldata ret` | environmental ABI/function boundary | No general producer. Exact External lookup/no fallback/no defaults, count, binding and encoded calldata supplied by caller. |
-| `call_outcomes_ok am tx (MAP SND (call_trace es))` | environmental outcome-payload guard | **No current producer**, neither arbitrary EVM callee nor source-executed callee. Milestone 7. |
+| `call_outcomes_ok am tx (MAP SND (call_trace es))` | outcome-payload guard | `call_state_rel_call_outcomes_ok` from `call_state_rel`, and `deploy_state_rel_call_outcomes_ok` from `deploy_state_rel`. |
 
 The [partial-producer detail](compiler-proof-status-2026-10-09.md#what-partial-producers-actually-establish)
 is part of this inventory: runtime readiness requires installed exact sources
@@ -78,13 +78,11 @@ constants setup; call machine preservation assumes `checked_external_call_inputs
 Storage preservation consumes runtime-storage consistency, protected-call,
 call-evaluation and oracle-storage premises. These are not universal producers.
 
-`call_outcomes_ok` quantifies **all records**, including failed and static ones:
-return-data length `<2**256`, `accounts_runtime_well_typed co_accounts` and `contract_storage_well_formed` on
-those accounts and `co_tStorage` in the actual source context. Account balance
-`<2**256` and code length `<=24576` guards do not imply storage validity.
-The evaluator checks account bounds on successful nonstatic adoption, not the
-storage premise. Nothing here relaxes the existing type/storage oracle guards
-or pretends an implemented universal storage validator exists.
+`call_outcomes_ok` requires return-data length `< 2**256` and
+`accounts_runtime_well_typed co_accounts` on every record, including failed and
+static outcomes. `call_storage_ok` for runtime calls and `deploy_storage_ok`
+for constructors supply the separate finite-trace storage obligations over
+the regions and backends observed for the chosen gas readings.
 
 ## S1–S7: current admitted producers
 

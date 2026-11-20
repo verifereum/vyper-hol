@@ -5833,6 +5833,8 @@ Theorem args_materialize_to_lock[local]:
        (s,G,tn) [] (OK t,G',tn'))
 Proof
   DISCH_THEN (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size callee s <= w2n s.vs_initial_fmp` by simp[] >>
   mp_tac (Q.SPECL [`caps`, `ce`, `sa`, `ce'`, `sm`, `callee`, `env`,
     `s`, `f0`, `mr`, `ctx`, `lo`, `d`, `cx`, `es`, `PG`, `G`, `tn`,
     `Ds`, `explicit`] materialize_params_full) >>

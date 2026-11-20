@@ -11,7 +11,7 @@ Ancestors
   venomExecSemantics venomState venomInst context words list finite_map
   loweringPosts valueEncodingProofs instMemFrontier pred_set vyperTypeInvariants instIdxIndep
   bodyMemoryDefs
-  codegenRel bodyPtrBytestringBuiltinsSliceEndpoint exprSimAlloc
+  codegenRel bodyPtrBytestringBuiltinsCalldataCopy[qualified] exprSimAlloc
 
 (* Instantiate the closed provider before its existential witnesses enter scope. *)
 fun calldata_horizons initial target provider =

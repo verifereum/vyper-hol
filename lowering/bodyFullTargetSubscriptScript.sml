@@ -60,7 +60,8 @@ Definition subscript_tail_full_def:
       compile_get_target_ptr compile_expr cenv (SubscriptTarget bt e) sa =
         (r, sb) /\
       fn_has_code sn sb func /\ fn_inst_ids_distinct func /\
-      ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t2) /\
+      local_ptrs_reserved cenv sa /\
       sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
       (!H. dead_lo_ok H (DF H) lo cenv cx) /\
       (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>

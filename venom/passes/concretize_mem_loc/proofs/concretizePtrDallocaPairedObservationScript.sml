@@ -2,16 +2,19 @@ Theory concretizePtrDallocaPairedObservation
 Ancestors
   concretizePtrDallocaFinalObservation concretizePtrDallocaHaltSteps
   concretizePtrDallocaGhostHistory concretizePtrDallocaGhostInterface
-  concretizePtrCallFamily concretizePtrOrdinaryNext concretizePtrObservationInterface
+  concretizePtrCallFamily concretizePtrCallPointExecution
+  concretizePtrOrdinaryNext concretizePtrObservationInterface
   concretizePtrMloadRecovery concretizePtrMloadEndpoint concretizePtrReturnTransport
   concretizePtrPairedPrefix concretizePtrPairedFields
   concretizePtrStructuralTranscript concretizePtrStructuralTrace
   concretizePtrChronologicalHistory concretizePtrEventEmbedding
-  concretizePtrSourceOwnership concretizePtrParamSupport concretizePtrOwnershipErasure
+  concretizePtrSourceOwnership concretizePtrTaggedSupport
+  concretizePtrParamSupport concretizePtrOwnershipErasure
   concretizePtrAllocationSize concretizePtrPrefixLedger
   concretizePtrRequestHistory concretizePtrOpaqueRetpc concretizePtrValueTransport
   concretizeStepStructure concretizeStepShape concretizeLayoutLocalReturn
-  lowerDloadRequestObservation ptrDiscipline ptrStaticDiscipline
+  lowerDloadRequestObservation lowerDloadPtrCreateInterfaces lowerDloadPtrCreate
+  ptrDiscipline ptrStaticDiscipline
   o1PassContract unitShapeDefs unitLabelMapIdentity contextCodegenRel
   memLocDefs concretizeMemLocDefs pointerConfinedDefs opcodeClass
   concretizePtrDallocaObservationTransport concretizePtrTaintContent
@@ -48,6 +51,192 @@ Proof
   simp[consume_call_outcome_eq, update_var_def, record_request_def,
       computed_precompile_def]
 QED
+
+Theorem ptr_dalloca_create_request_growth[local]:
+  ptr_mixed_vars (births : (num # num) |-> (num # num)) positions TG tn f g s t /\
+  s.vs_labels = t.vs_labels /\ s.vs_outcomes = t.vs_outcomes /\
+  s.vs_call_ctx = t.vs_call_ctx /\
+  EVERY (ptr_nonopaque_operand f) inst.inst_operands /\
+  ptr_use_ok P pv inst /\ FDOM TG SUBSET pv /\ taint_ok f tn inst s /\
+  MEM inst.inst_opcode [CREATE;CREATE2] /\ step_inst fuel CT inst t = OK post ==>
+  ?srcpost. step_inst 0 CS inst s = OK srcpost /\
+    LENGTH s.vs_requests < LENGTH srcpost.vs_requests
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ptr_mixed_vars_eval_presence >> strip_tac >>
+  `?vop offop szop salt n.
+      ((inst.inst_opcode = CREATE /\ inst.inst_operands = [vop;offop;szop]) \/
+       (inst.inst_opcode = CREATE2 /\ inst.inst_operands = [vop;offop;szop;salt])) /\
+      eval_operand szop t = SOME n /\ w2n n <= 2 * max_code_size /\
+      (!op. MEM op inst.inst_operands ==> eval_operand op t <> NONE) /\
+      inst.inst_outputs <> [] /\ LENGTH inst.inst_outputs = 1 /\
+      t.vs_outcomes <> [] /\ ~t.vs_call_ctx.cc_static` by
+    (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+     fs[MEM] >> simp[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+     rpt strip_tac >>
+     gvs[eval_operands_def, dload_exec_create_success_iff, Excl "consume_create_outcome_eq"] >>
+     metis_tac[optionTheory.NOT_SOME_NONE]) >>
+  `op_prov TG szop = NONE /\ op_taint tn szop = {} /\ ptr_nonopaque_operand f szop` by
+    (`op_prov TG szop = NONE /\
+       (!op. MEM op inst.inst_operands ==> op_taint tn op = {})` by
+       (irule dload_create_operand_safety >> simp[] >>
+        conj_tac >- metis_tac[] >>
+        metis_tac[]) >>
+     fs[EVERY_MEM] >> metis_tac[MEM]) >>
+  `eval_operand szop s = SOME n` by
+    (drule_all ptr_mixed_vars_eval >>
+     Cases_on `eval_operand szop s` >>
+     simp[ptr_lookup_transport_def, ptr_value_transport_scalar_empty]) >>
+  `!op. MEM op inst.inst_operands ==> eval_operand op s <> NONE` by
+    (qx_gen_tac `arg` >> strip_tac >>
+     `eval_operand arg t <> NONE` by metis_tac[] >>
+     qpat_assum `!op. IS_SOME (eval_operand op s) <=> _`
+       (qspec_then `arg` mp_tac) >>
+     Cases_on `eval_operand arg s` >> Cases_on `eval_operand arg t` >> gvs[]) >>
+  `s.vs_outcomes <> [] /\ ~s.vs_call_ctx.cc_static` by fs[] >>
+  `?out. inst.inst_outputs = [out]` by
+    (Cases_on `inst.inst_outputs` >> gvs[LENGTH_EQ_NUM_compute]) >>
+  `?srcpost. step_inst 0 CS inst s = OK srcpost` by
+    (gvs[step_inst_non_invoke, step_inst_base_opcode_eqs,
+         dload_exec_create_success_iff, eval_operands_def, AllCaseEqs(),
+         Excl "consume_create_outcome_eq"] >>
+     Cases_on `eval_operand vop s` >> gvs[Excl "consume_create_outcome_eq"] >>
+     rename1 `eval_operand vop s = SOME valueS` >>
+     Cases_on `eval_operand offop s` >> gvs[Excl "consume_create_outcome_eq"] >>
+     rename1 `eval_operand offop s = SOME offS` >>
+     TRY (qpat_assum `inst.inst_opcode = CREATE2` (K ALL_TAC) >>
+          Cases_on `eval_operand salt s` >> gvs[Excl "consume_create_outcome_eq"]) >>
+     qmatch_goalsub_abbrev_tac `consume_create_outcome req s` >>
+     Cases_on `consume_create_outcome req s` >>
+     simp[Excl "consume_create_outcome_eq"]) >>
+  qexists `srcpost` >> conj_tac >- first_assum ACCEPT_TAC >>
+  drule_all ld_create_step_request_growth >> simp[]
+QED
+
+(* The request clause is needed only at the paired source pre-state. *)
+Theorem focus_cut_paired_request_observation:
+  dead_wf D /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  active_inst at.po_fn at.po_inst at.po_state /\
+  EVERY bb_well_formed at.po_fn.fn_blocks /\
+  inst_wf a.po_inst /\ MEM a.po_inst (fn_insts a.po_fn) /\
+  fn_ptr_ok P a.po_fn /\ opaque_use_ok a.po_fn /\
+  taint_ok a.po_fn a.po_taint a.po_inst a.po_state /\
+  (!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P a.po_fn) /\
+  ptr_history_content a.po_taint a.po_state at.po_state /\
+  ptr_mixed_vars (births : (num # num) |-> (num # num))
+    positions TG a.po_taint a.po_fn at.po_fn a.po_state at.po_state /\
+  (!ops x y n j.
+    mem_read_ops a.po_inst = SOME ops /\
+    eval_operand ops.iao_ofst a.po_state = SOME x /\
+    eval_operand ops.iao_ofst at.po_state = SOME y /\
+    MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state) /\
+    ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {}
+      (SOME x) (SOME y) /\ j < n /\ w2n x + j NOTIN a.po_taint.t_mem ==>
+    read_byte (w2n x+j) a.po_state.vs_memory =
+    read_byte (w2n y+j) at.po_state.vs_memory) /\
+  at.po_taint.t_stor SUBSET a.po_taint.t_stor /\
+  at.po_taint.t_trans SUBSET a.po_taint.t_trans /\
+  (!srcpost. a.po_inst.inst_opcode <> INVOKE /\
+    step_inst 0 C a.po_inst a.po_state = OK srcpost /\
+    LENGTH a.po_state.vs_requests < LENGTH srcpost.vs_requests ==>
+      a.po_taint.t_stor SUBSET D.d_stor a.po_state.vs_call_ctx.cc_address
+        (a.po_state.vs_accounts a.po_state.vs_call_ctx.cc_address).storage /\
+      a.po_taint.t_trans SUBSET D.d_trans a.po_state.vs_call_ctx.cc_address
+        (a.po_state.vs_transient a.po_state.vs_call_ctx.cc_address)) /\
+  at.po_inst.inst_opcode <> INVOKE /\
+  step_inst fuelt C' at.po_inst at.po_state = OK post /\
+  LENGTH at.po_state.vs_requests < LENGTH post.vs_requests ==>
+  at.po_taint.t_stor SUBSET D.d_stor at.po_state.vs_call_ctx.cc_address
+    (at.po_state.vs_accounts at.po_state.vs_call_ctx.cc_address).storage /\
+  at.po_taint.t_trans SUBSET D.d_trans at.po_state.vs_call_ctx.cc_address
+    (at.po_state.vs_transient at.po_state.vs_call_ctx.cc_address)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ld_request_growth_external >> strip_tac >>
+  `~MEM at.po_inst.inst_opcode [ASSIGN;NOP]` by fs[MEM] >>
+  `at.po_inst = a.po_inst` by
+    (qpat_assum `at.po_inst = concretize_inst_with_positions _ _`
+       (fn th => once_rewrite_tac[th] >>
+         irule concretize_positions_other_opcode >>
+         rewrite_tac[GSYM th] >> first_assum ACCEPT_TAC)) >>
+  `a.po_inst.inst_opcode <> INVOKE` by fs[] >>
+  `MEM a.po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2]` by fs[] >>
+  suspend "actual_request"
+QED
+
+Resume focus_cut_paired_request_observation[actual_request]:
+  markerLib.RESUME_TAC >> (
+  `?srcpost. step_inst 0 C a.po_inst a.po_state = OK srcpost /\
+     LENGTH a.po_state.vs_requests < LENGTH srcpost.vs_requests` by
+    (Cases_on `MEM a.po_inst.inst_opcode [CALL;STATICCALL]`
+     >- suspend "call" >>
+     `a.po_state.vs_labels = at.po_state.vs_labels /\ a.po_state.vs_call_ctx = at.po_state.vs_call_ctx` by
+       metis_tac[ptr_history_content_labels, ptr_history_content_call_ctx] >>
+     `a.po_state.vs_outcomes = at.po_state.vs_outcomes` by
+       fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+          ptr_core_shared_def, concretizePtrSharedFieldsTheory.ptr_shared_fields_def] >>
+     `step_inst fuelt C' a.po_inst at.po_state = OK post` by metis_tac[] >>
+     Cases_on `a.po_inst.inst_opcode = DELEGATECALL`
+     >- (drule_all ptr_dalloca_delegate_request_growth >> simp[]) >>
+     `MEM a.po_inst.inst_opcode [CREATE;CREATE2]` by fs[MEM] >>
+     `ptr_use_ok P (fn_pv P a.po_fn) a.po_inst /\ FDOM TG SUBSET fn_pv P a.po_fn` by
+       (fs[fn_ptr_ok_def, SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]) >>
+     `EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands` by
+       (irule ptr_nonopaque_instruction_operands >> fs[MEM]) >>
+     drule_all ptr_dalloca_create_request_growth >> simp[]) >>
+  `a.po_taint.t_stor SUBSET D.d_stor a.po_state.vs_call_ctx.cc_address
+    (a.po_state.vs_accounts a.po_state.vs_call_ctx.cc_address).storage /\
+   a.po_taint.t_trans SUBSET D.d_trans a.po_state.vs_call_ctx.cc_address
+    (a.po_state.vs_transient a.po_state.vs_call_ctx.cc_address)` by
+    (qpat_assum `!sp. _ /\ step_inst 0 C _ _ = OK sp /\ _ ==> _`
+       (qspec_then `srcpost` mp_tac) >> simp[]) >>
+  `a.po_state.vs_call_ctx = at.po_state.vs_call_ctx` by
+    (drule ptr_history_content_call_ctx >> simp[]) >>
+  qpat_assum `ptr_history_content a.po_taint a.po_state at.po_state`
+    (strip_assume_tac o SIMP_RULE (srw_ss())
+      [ptr_history_content_def, ptr_taint_content_def,
+       contract_storage_def, contract_transient_def,
+       vfmStateTheory.lookup_account_def]) >>
+  irule ptr_dalloca_request_taint_transport >>
+  simp[] >> qexistsl [`a.po_state`,`a.po_taint`] >> simp[])
+QED
+
+Resume focus_cut_paired_request_observation[call]:
+  markerLib.RESUME_TAC >> (
+  `~is_terminator at.po_inst.inst_opcode` by fs[MEM, is_terminator_def] >>
+  `post.vs_current_bb = at.po_state.vs_current_bb` by
+    (drule_all venomInstProofsTheory.step_preserves_control_flow >> simp[]) >>
+  drule_all ptr_ordinary_next_active >> strip_tac >>
+  rename1 `active_inst at.po_fn next (post with vs_inst_idx := _)` >>
+  qabbrev_tac `zt = ptr_observe at.po_stack at.po_params
+    (step_prov at.po_params at.po_prov at.po_inst post)
+    (step_taint at.po_inst at.po_state post at.po_taint) at.po_fn next
+    (post with vs_inst_idx := SUC at.po_state.vs_inst_idx)` >>
+  `ptr_observe at.po_stack at.po_params at.po_prov at.po_taint
+     at.po_fn at.po_inst at.po_state = at` by
+    simp[NoAsms, ptr_observe_def, ptr_observation_component_equality] >>
+  `ptr_chrono_step C' at zt` by
+    (drule_all (cj 1 ptr_chrono_step_rules) >>
+     disch_then (qspecl_then [`at.po_stack`,`at.po_params`,`at.po_prov`,`at.po_taint`]
+       mp_tac) >> fs[Abbr `zt`]) >>
+  `zt.po_state.vs_requests = post.vs_requests` by
+    simp[Abbr `zt`, ptr_observe_def] >>
+  drule_all ptr_focus_call_execute >>
+  disch_then (qspec_then `C` strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `step_inst 0 C a.po_inst a.po_state = OK srcpost` >>
+  qpat_assum `zt.po_state = _ with vs_inst_idx := _`
+    (mp_tac o Q.AP_TERM `\s. s.vs_requests`) >>
+  simp[] >> strip_tac >>
+  `LENGTH srcpost.vs_requests = LENGTH post.vs_requests` by
+    (qpat_assum `ptr_history_content (step_taint _ _ _ _) _ _`
+       (mp_tac o MATCH_MP ptr_history_content_request_lengths) >> simp[]) >>
+  qpat_assum `ptr_history_content a.po_taint a.po_state at.po_state`
+    (mp_tac o MATCH_MP ptr_history_content_request_lengths) >>
+  decide_tac)
+QED
+
+Finalise focus_cut_paired_request_observation
 
 (* Both observations use the same actual stage bridge and endpoint ledger.
    In particular, a request bound is obtained from an actual source step. *)
@@ -201,6 +390,7 @@ Resume ptr_dalloca_paired_observation_taint_static[observations]:
              irule concretize_positions_other_opcode >>
              rewrite_tac[GSYM th] >> first_assum ACCEPT_TAC)) >>
       `a.po_inst.inst_opcode <> INVOKE` by fs[] >>
+      `step_inst fuelt C' a.po_inst at.po_state = OK post` by metis_tac[] >>
       Cases_on `MEM a.po_inst.inst_opcode [CALL;STATICCALL]`
       >- (`~is_terminator at.po_inst.inst_opcode` by fs[is_terminator_def] >>
           `EVERY bb_well_formed at.po_fn.fn_blocks` by
@@ -210,7 +400,9 @@ Resume ptr_dalloca_paired_observation_taint_static[observations]:
              disch_then (qspec_then `lp a.po_fn` assume_tac) >>
              fs[ptr_paired_code_def, wf_function_def, EVERY_MEM]) >>
           `post.vs_current_bb = at.po_state.vs_current_bb` by
-            (drule venomInstProofsTheory.step_preserves_control_flow >> simp[]) >>
+            (qpat_assum `step_inst fuelt C' at.po_inst at.po_state = OK post`
+               (mp_then Any mp_tac venomInstProofsTheory.step_preserves_control_flow) >>
+             simp[]) >>
           `?next. active_inst at.po_fn next
              (post with vs_inst_idx := SUC at.po_state.vs_inst_idx)` by
             (irule ptr_ordinary_next_active >> metis_tac[]) >>
@@ -240,43 +432,46 @@ Resume ptr_dalloca_paired_observation_taint_static[observations]:
             `nextt` |-> `zt.po_state`] ptr_dalloca_actual_request_observation) >>
           (impl_tac >- (rpt conj_tac >> asm_rewrite_tac[] >>
             simp[Abbr`zt`, ptr_observe_def])) >> simp[]) >>
-      Cases_on `a.po_inst.inst_opcode = DELEGATECALL`
-      >- (`a.po_state.vs_outcomes = at.po_state.vs_outcomes` by
-            (qpat_x_assum `ptr_history_content a.po_taint a.po_state at.po_state` mp_tac >>
-             simp[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
-                  ptr_core_shared_def, concretizePtrSharedFieldsTheory.ptr_shared_fields_def] >>
-             strip_tac >> first_assum ACCEPT_TAC) >>
-          mp_tac (Q.INST [`inst` |-> `a.po_inst`, `s` |-> `a.po_state`,
-            `t` |-> `at.po_state`, `CS` |-> `C`, `CT` |-> `C'`,
-            `fuel` |-> `fuelt`, `post` |-> `post`, `f` |-> `a.po_fn`,
-            `g` |-> `at.po_fn`, `births` |-> `births`, `positions` |-> `positions`,
-            `TG` |-> `TG`, `tn` |-> `a.po_taint`]
-            ptr_dalloca_delegate_request_growth) >>
-          (impl_tac >- (rpt conj_tac >> fs[])) >>
-          disch_then (qx_choose_then `srcpost` strip_assume_tac) >>
-          `a.po_taint.t_stor SUBSET D.d_stor a.po_state.vs_call_ctx.cc_address
-             (a.po_state.vs_accounts a.po_state.vs_call_ctx.cc_address).storage /\
-           a.po_taint.t_trans SUBSET D.d_trans a.po_state.vs_call_ctx.cc_address
-             (a.po_state.vs_transient a.po_state.vs_call_ctx.cc_address)` by
-            (qpat_assum `taint_within D C vs`
-               (mp_tac o CONJUNCT1 o REWRITE_RULE [taint_within_def]) >>
-             disch_then (qspecl_then [`a.po_stack`,`a.po_params`,`a.po_prov`,
-               `a.po_taint`,`a.po_fn`,`a.po_inst`,`a.po_state`,`0`,`srcpost`]
-               mp_tac) >> simp[]) >>
-          `a.po_state.vs_call_ctx = at.po_state.vs_call_ctx` by
-            (drule ptr_history_content_call_ctx >> simp[]) >>
-          qpat_assum `ptr_history_content a.po_taint a.po_state at.po_state`
-            (strip_assume_tac o SIMP_RULE (srw_ss())
-              [ptr_history_content_def, ptr_taint_content_def,
-               contract_storage_def, contract_transient_def,
-               vfmStateTheory.lookup_account_def]) >>
-          mp_tac (Q.INST [`D` |-> `D`, `tn` |-> `a.po_taint`,
-            `s` |-> `a.po_state`, `t` |-> `at.po_state`, `tt` |-> `at.po_taint`]
-            ptr_dalloca_request_taint_transport) >>
-          (impl_tac >- (rpt conj_tac >> asm_rewrite_tac[])) >> simp[]) >>
-      `a.po_taint.t_stor = {} /\ a.po_taint.t_trans = {}` by
-        (fs[MEM, taint_ok_def] >> metis_tac[]) >>
-      fs[SUBSET_EMPTY]) >>
+      `a.po_state.vs_outcomes = at.po_state.vs_outcomes` by
+        (qpat_assum `ptr_history_content a.po_taint a.po_state at.po_state` mp_tac >>
+         simp[NoAsms, ptr_history_content_def, ptr_taint_content_def,
+              ptr_taint_control_def, ptr_core_shared_def,
+              concretizePtrSharedFieldsTheory.ptr_shared_fields_def]) >>
+      `?srcpost. step_inst 0 C a.po_inst a.po_state = OK srcpost /\
+          LENGTH a.po_state.vs_requests < LENGTH srcpost.vs_requests` by
+        (Cases_on `a.po_inst.inst_opcode = DELEGATECALL`
+         >- (drule_all ptr_dalloca_delegate_request_growth >> simp[]) >>
+         `MEM a.po_inst.inst_opcode [CREATE;CREATE2]` by fs[MEM] >>
+         `a.po_state.vs_call_ctx = at.po_state.vs_call_ctx` by
+           metis_tac[ptr_history_content_call_ctx] >>
+         `FDOM TG SUBSET fn_pv P a.po_fn` by
+           (simp[SUBSET_DEF] >> rpt strip_tac >>
+            `?tag. FLOOKUP TG x = SOME tag` by metis_tac[FLOOKUP_DEF] >>
+            irule ptr_source_tagged_var_support >>
+            rpt (goal_assum (drule_at Any))) >>
+         `EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands` by
+           (irule ptr_nonopaque_instruction_operands >> fs[MEM]) >>
+         drule_all ptr_dalloca_create_request_growth >> simp[]) >>
+      `a.po_taint.t_stor SUBSET D.d_stor a.po_state.vs_call_ctx.cc_address
+         (a.po_state.vs_accounts a.po_state.vs_call_ctx.cc_address).storage /\
+       a.po_taint.t_trans SUBSET D.d_trans a.po_state.vs_call_ctx.cc_address
+         (a.po_state.vs_transient a.po_state.vs_call_ctx.cc_address)` by
+        (qpat_assum `taint_within D C vs`
+           (mp_tac o CONJUNCT1 o REWRITE_RULE [taint_within_def]) >>
+         disch_then (qspecl_then [`a.po_stack`,`a.po_params`,`a.po_prov`,
+           `a.po_taint`,`a.po_fn`,`a.po_inst`,`a.po_state`,`0`,`srcpost`]
+           mp_tac) >> simp[]) >>
+      `a.po_state.vs_call_ctx = at.po_state.vs_call_ctx` by
+        (drule ptr_history_content_call_ctx >> simp[]) >>
+      qpat_assum `ptr_history_content a.po_taint a.po_state at.po_state`
+        (strip_assume_tac o SIMP_RULE (srw_ss())
+          [ptr_history_content_def, ptr_taint_content_def,
+           contract_storage_def, contract_transient_def,
+           vfmStateTheory.lookup_account_def]) >>
+      mp_tac (Q.INST [`D` |-> `D`, `tn` |-> `a.po_taint`,
+        `s` |-> `a.po_state`, `t` |-> `at.po_state`, `tt` |-> `at.po_taint`]
+        ptr_dalloca_request_taint_transport) >>
+      (impl_tac >- (rpt conj_tac >> asm_rewrite_tac[])) >> simp[]) >>
   rpt gen_tac >> strip_tac >>
   `MEM at.po_inst.inst_opcode [STOP;RETURN;SINK;SELFDESTRUCT]` by
     (drule step_inst_halt_opcodes >> simp[]) >>

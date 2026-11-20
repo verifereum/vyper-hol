@@ -32,7 +32,7 @@ Proof
 QED
 
 (* The n-th output function is MakeSSA's run on the n-th input one. *)
-Theorem make_ssa_src_stage_el[local]:
+Theorem make_ssa_src_stage_el:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C /\ n < LENGTH C.ctx_functions ==>
   n < LENGTH C'.ctx_functions /\
@@ -52,7 +52,7 @@ Proof
   gvs[LIST_REL_EL_EQN]
 QED
 
-Theorem make_ssa_src_stage_fn[local]:
+Theorem make_ssa_src_stage_fn:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C /\ MEM fn' C'.ctx_functions ==>
   ?fn t t'. MEM fn C.ctx_functions /\ ALL_DISTINCT (fn_labels fn) /\
@@ -67,7 +67,7 @@ QED
 
 (* ===== Static rows ===== *)
 
-Theorem make_ssa_src_stage_fmp_free[local]:
+Theorem make_ssa_src_stage_fmp_free:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C /\ fmp_free_ctx C ==> fmp_free_ctx C'
 Proof
@@ -90,7 +90,7 @@ Proof
   gvs[kept_opcode_def, pre_fmp_opcode_def]
 QED
 
-Theorem make_ssa_src_stage_callee_first[local]:
+Theorem make_ssa_src_stage_callee_first:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C /\ callee_first names C.ctx_functions ==>
   callee_first names C'.ctx_functions
@@ -105,7 +105,7 @@ Proof
   simp[fn_identity_metadata_eq_def] >> metis_tac[]
 QED
 
-Theorem make_ssa_src_stage_dload_count[local]:
+Theorem make_ssa_src_stage_dload_count:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C ==> ctx_dload_count C' = ctx_dload_count C
 Proof
@@ -172,7 +172,7 @@ QED
 (* The headroom bound reads only the frontier, the initial free-memory
    pointer and the DLOAD count, which the stage keeps; and the stage adds
    no DALLOCA. *)
-Theorem make_ssa_src_stage_headroom[local]:
+Theorem make_ssa_src_stage_headroom:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
   vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\

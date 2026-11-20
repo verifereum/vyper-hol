@@ -12,6 +12,7 @@ Ancestors exprLowering[qualified,ignore_grammar]
   exprSimSubscriptArrayFramed stateRelProj vyperEvalExprPreservesScopesDom
   bodyPtrSignedConvertSourceFrame exprSimHash exprSimWordArgs
   bodyFullTargetAttribute[qualified,ignore_grammar]
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyFullUnwrapRun[qualified,ignore_grammar] wordArgsPtr[qualified,ignore_grammar]
   gasOutcomeFullCompose vyperStorageFootprint exprSimDefs
 
@@ -556,7 +557,7 @@ Theorem subscript_captured_fixed_execution:
   compile_array_subscript p.ptr_operand iop F n ws esz
     (is_signed_type (expr_type idx)) loader sn = (dst,sb) /\
   fn_has_code sn sb fn /\ alloca_history fn u /\
-  ~ctx_has_dalloca ctx /\ ~u.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\ ~u.vs_halted /\
   u.vs_current_bb = sn.cs_current_bb /\ u.vs_inst_idx = LENGTH sn.cs_current_insts ==>
   ?w i iw v q Gq tnq.
     p.ptr_location = LocMemory /\ key = IntV i /\
@@ -666,7 +667,6 @@ Proof
    (!x. Lit (n2w n) = Var x ==> not_fresh_at sn x) /\
    op_prov G' (Lit (n2w n)) = NONE /\ op_taint tn' (Lit (n2w n)) = {}` by
     simp[eval_operand_def, ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all array_tail_scalar_uniform >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choose_then `q` (qx_choose_then `Gq` (qx_choose_then `tnq` strip_assume_tac)))) >>
@@ -920,7 +920,7 @@ Theorem subscript_captured_fixed_outcome:
   compile_array_subscript p.ptr_operand iop F n ws esz
     (is_signed_type (expr_type idx)) loader sn = (dst,sb) /\
   fn_has_code sn sb fn /\ alloca_history fn u /\
-  ~ctx_has_dalloca ctx /\ ~u.vs_halted /\
+  ~u.vs_halted /\
   u.vs_current_bb = sn.cs_current_bb /\ u.vs_inst_idx = LENGTH sn.cs_current_insts /\
   (!H. valid_horizon cx st0 H fin.storage_trace ==>
     stmt_state_rel H ctx fn ce cx es s0 /\
@@ -971,6 +971,10 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H _ ==> _`
     (qspec_then `storage_trace_horizon fin.storage_trace` mp_tac) >>
   impl_tac >- simp[GSYM storage_trace_domain_def] >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `expr_post _ ctx fn ce cx idx _ _ _ _ _ _ _ u`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+        MATCH_MP expr_post_state)) >>
   drule_all subscript_captured_fixed_execution >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   qpat_x_assum `i = if _ then _ else _` kall_tac >>
@@ -995,6 +999,12 @@ Proof
       contextTheory.mk_ptr_def, contextTheory.vv_location_def,
       vyperASTTheory.expr_type_def, post_value_type_def] >>
   qx_gen_tac `H` >> disch_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp q` by
+    (qpat_assum `q with <|vs_vars := _; vs_inst_idx := _|> = u`
+       (mp_tac o Q.AP_TERM `\z. allocas_below_fmp z`) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[ptrDisciplineTheory.allocas_below_fmp_def] >>
+     metis_tac[]) >>
   `q.vs_alloca_next = u.vs_alloca_next` by
     (qpat_assum `_ with <|vs_vars := _; vs_inst_idx := _|> = u`
        (mp_tac o Q.AP_TERM `\z. z.vs_alloca_next`) >> simp[]) >>

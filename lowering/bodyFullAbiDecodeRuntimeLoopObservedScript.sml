@@ -168,6 +168,7 @@ Resume abi_decode_dyn_loop_word_frame_split_entry[header]:
   pop_assum (map_every assume_tac o CONJUNCTS o BETA_RULE) >>
   `s.vs_current_bb = sa.cs_current_bb` by
     (qpat_assum `sa.cs_current_bb = hdr` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   mp_tac (abi_decode_loop_header_observed |> SPEC_ALL |>
     Q.INST [`j` |-> `k`, `idx` |-> `header_idx`, `sf` |-> `header_sf`,
             `exit_lbl` |-> `SND (SND (labels:string # string # string))`,
@@ -356,23 +357,28 @@ Resume abi_decode_dyn_loop_word_frame_split_entry[body_pre]:
 QED
 
 Resume abi_decode_dyn_loop_word_frame_split_entry[body_post]:
-  let
-    val take_result = qx_choose_then `t` (qx_choose_then `Gf` (qx_choose_then `tnf`
-      (map_every assume_tac o CONJUNCTS o CONV_RULE (REDEPTH_CONV BETA_CONV))))
-    val physical = qx_gen_tac `H` >> disch_tac >> irule gas_origin_ptr_path_trans >>
-      qexistsl_tac [`Gu`,`u`,`tnu`] >>
-      conj_tac >> first_assum (qspec_then `H` MATCH_MP_TAC) >> first_assum ACCEPT_TAC
-    fun observer result = qx_gen_tac `obs` >> disch_tac >>
-      `gas_path ctx obs s (0 + 0) (^result)` suffices_by simp[NoAsms] >>
+  disch_then (DISJ_CASES_THEN
+    (qx_choose_then `t` (qx_choose_then `Gf` (qx_choose_then `tnf`
+      (map_every assume_tac o CONJUNCTS o CONV_RULE (REDEPTH_CONV BETA_CONV))))))
+  >- (disj1_tac >> qexistsl_tac [`t`,`Gf`,`tnf`] >>
+      conj_tac >-
+        (qx_gen_tac `H` >> disch_tac >> irule gas_origin_ptr_path_trans >>
+         qexistsl_tac [`Gu`,`u`,`tnu`] >>
+         conj_tac >> first_assum (qspec_then `H` MATCH_MP_TAC) >> first_assum ACCEPT_TAC) >>
+      qx_gen_tac `obs` >> disch_tac >>
+      `gas_path ctx obs s (0 + 0) (Abort Revert_abort t)` suffices_by simp[NoAsms] >>
       irule gas_path_then >> qexists_tac `u` >>
-      conj_tac >> first_assum (qspec_then `obs` MATCH_MP_TAC) >> first_assum ACCEPT_TAC
-    val choose = qexistsl_tac [`t`,`Gf`,`tnf`]
-  in
-    disch_then (DISJ_CASES_THEN take_result)
-    >- (disj1_tac >> choose >> conj_tac >- physical >> observer ``Abort Revert_abort t``) >>
-    disj2_tac >> choose >> conj_tac >- physical >>
-    conj_tac >- observer ``OK t``
-  end >>
+      conj_tac >> first_assum (qspec_then `obs` MATCH_MP_TAC) >> first_assum ACCEPT_TAC) >>
+  disj2_tac >> qexistsl_tac [`t`,`Gf`,`tnf`] >>
+  conj_tac >-
+    (qx_gen_tac `H` >> disch_tac >> irule gas_origin_ptr_path_trans >>
+     qexistsl_tac [`Gu`,`u`,`tnu`] >>
+     conj_tac >> first_assum (qspec_then `H` MATCH_MP_TAC) >> first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (qx_gen_tac `obs` >> disch_tac >>
+     `gas_path ctx obs s (0 + 0) (OK t)` suffices_by simp[NoAsms] >>
+     irule gas_path_then >> qexists_tac `u` >>
+     conj_tac >> first_assum (qspec_then `obs` MATCH_MP_TAC) >> first_assum ACCEPT_TAC) >>
   `j <= SUC k` by simp[] >>
   rpt (FIRST [first_assum ACCEPT_TAC, conj_tac])
   >- (qx_gen_tac `x` >> disch_tac >>
@@ -456,11 +462,11 @@ Finalise abi_decode_dyn_loop_word_frame_split_entry
 Theorem abi_decode_dyn_loop_word_frame_from_body:
   ^runtime_loop_word_frame_statement
 Proof
-  let val norm = REDEPTH_CONV BETA_CONV THENC simpLib.SIMP_CONV bool_ss [] in
-    CONV_TAC norm >> qx_gen_tac `keep_word` >> disch_tac >>
-    qspec_then `keep_word` (mp_tac o CONV_RULE norm)
-      abi_decode_dyn_loop_word_frame_split_entry
-  end >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  simp_tac bool_ss [] >> qx_gen_tac `keep_word` >> disch_tac >>
+  qspec_then `keep_word` (mp_tac o CONV_RULE (REDEPTH_CONV BETA_CONV))
+    abi_decode_dyn_loop_word_frame_split_entry >>
+  CONV_TAC (LAND_CONV (simpLib.SIMP_CONV bool_ss [])) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   rpt (ho_match_mp_tac InductiveDefinitionContextTheory.MONO_FORALL >> gen_tac) >>
   (match_mp_tac boolTheory.MONO_IMP >> conj_tac >- (disch_then ACCEPT_TAC)) >>
@@ -475,8 +481,9 @@ QED
 Theorem abi_decode_dyn_loop_observed_conditional:
   (^closed_body_observed_statement_typed) ==> (^observed_loop_clause_typed)
 Proof
-  let val norm = REDEPTH_CONV BETA_CONV THENC simpLib.SIMP_CONV bool_ss [] in
-    CONV_TAC norm >>
-    ACCEPT_TAC (CONV_RULE norm (Q.SPEC `F` abi_decode_dyn_loop_word_frame_from_body))
-  end
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >> simp_tac bool_ss [] >>
+  mp_tac (CONV_RULE (REDEPTH_CONV BETA_CONV)
+    (Q.SPEC `F` abi_decode_dyn_loop_word_frame_from_body)) >>
+  CONV_TAC (LAND_CONV (simpLib.SIMP_CONV bool_ss [])) >>
+  disch_then ACCEPT_TAC
 QED

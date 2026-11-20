@@ -36,7 +36,7 @@ Theorem bop_suffix_full_halt:
   MEM shadow_func shadow_ctx.ctx_functions /\ fn_has_code sa sb func /\
   fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   gas_admissible (bind (eval_expr cx (Builtin ann (Bop bop) [e1;e2])) (read_result cx))
@@ -143,6 +143,12 @@ Proof
   `!a. a IN ({x;y} UNION IMAGE Lit UNIV) ==>
      op_prov G2 a = NONE /\ op_taint tn2 a = {}` by
     metis_tac[bop_scalar_binop_input_clean] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (`stmt_state_rel (storage_trace_horizon fin.storage_trace) ctx func cenv cx fin u` by
+       fs[loweringPostsTheory.expr_post_def] >>
+     qpat_assum `stmt_state_rel _ ctx func cenv cx fin u`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     simp[]) >>
   `allocas_from lo u` by fs[ghost_inv_at_def] >>
   `MEM bop [Add; Sub; Mul; Div; Mod; UnsafeAdd; UnsafeSub; UnsafeMul;
     UnsafeDiv; And; Or; XOr; ShL; ShR; Eq; NotEq; Lt; LtE; Gt; GtE;
@@ -196,7 +202,6 @@ Resume bop_suffix_full_halt[full_success]:
 QED
 
 Resume bop_suffix_full_halt[full_abort]:
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all bop_word_scalar_abort_joint >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
   irule gas_outcome_full_intro >>
@@ -325,7 +330,7 @@ Theorem bop_word_suffix_full_halt:
   MEM shadow_func shadow_ctx.ctx_functions /\ fn_has_code sa sb func /\
   fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   gas_admissible (bind (eval_expr cx (Builtin ann (Bop bop) [e1;e2])) (read_result cx))

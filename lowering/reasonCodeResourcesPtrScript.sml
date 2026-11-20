@@ -2,7 +2,7 @@
    Reuse the semantic copy boundary: do not duplicate sub-layout decoding. *)
 Theory reasonCodeResourcesPtr
 Ancestors
-  exprSimCopy reasonResourcesPtr reasonCodeCopyPtr representationCleanPtr
+  exprSimCopy reasonResourcesPtr reasonTupleCopyPtr[qualified] representationCleanPtr
   exprSimProps valueEncoding valueEncodingDefs valueEncodingProps loweringPosts bodyPtrDefs
   immutableConstructorRelation immutableCopyExecution
   compileEnv venomState venomMemProofs valueEncodingProofs words list arithmetic

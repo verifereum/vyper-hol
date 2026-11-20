@@ -20,7 +20,7 @@ Theorem guard_scalar_step_safe[local]:
   EVERY (\op. op_taint tn op = {} /\ op_prov G op = NONE) ops /\
   step_inst fuel ctx (mk_inst id opc ops outs) s = OK t /\
   t.vs_requests = s.vs_requests /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_safe_step D lo fuel ctx fn PG G tn (mk_inst id opc ops outs) s
 Proof
   strip_tac >>
@@ -106,7 +106,7 @@ Theorem guard_scalar_continuation[local]:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops outs) /\
   step_inst_base (mk_inst id opc ops outs) s = OK t /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!fuel. ptr_safe_run D lo fuel ctx fn PG
     (step_prov PG G (mk_inst id opc ops outs) t)
     (step_taint (mk_inst id opc ops outs) s t tn)
@@ -131,7 +131,7 @@ Theorem guard_scalar_indexed_continuation[local]:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb n = SOME (mk_inst id opc ops outs) /\
   step_inst_base (mk_inst id opc ops outs) s = OK t /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!fuel. ptr_safe_run D lo fuel ctx fn PG
     (step_prov PG G (mk_inst id opc ops outs) t)
     (step_taint (mk_inst id opc ops outs) s t tn)
@@ -147,6 +147,7 @@ Proof
   irule guard_scalar_continuation >>
   simp_tac (srw_ss()) [allocas_from_def] >>
   asm_rewrite_tac[GSYM allocas_from_def] >>
+  simp_tac (srw_ss()) [allocas_below_fmp_def] >>
   goal_assum $ drule_at (Pat `get_instruction`) >>
   qexists_tac `t with vs_inst_idx := n` >>
   simp[step_prov_inst_idx, step_taint_inst_idx] >>
@@ -181,7 +182,7 @@ Theorem guard_scalar_indexed_origin[local]:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb n = SOME (mk_inst id opc ops outs) /\
   step_inst_base (mk_inst id opc ops outs) s = OK t /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted ==>
   gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
     (s with vs_inst_idx := n,G,tn) []
     (OK (t with vs_inst_idx := SUC n),
@@ -203,7 +204,7 @@ Proof
   `ptr_inst_ok D lo 0 ctx fn G tn ins (s with vs_inst_idx := n)` by
     (`ptr_safe_step D lo 0 ctx fn PG G tn ins (s with vs_inst_idx := n)` by
        (simp[Abbr `ins`] >> irule guard_scalar_step_safe >>
-        fs[allocas_from_def] >> metis_tac[]) >> fs[ptr_safe_step_def]) >>
+        fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >> fs[ptr_safe_step_def]) >>
   `inst_mem_below_frontier ins (s with vs_inst_idx := n) /\
    inst_dload_in_section ins (s with vs_inst_idx := n)` by
     (fs[MEM] >> simp[Abbr `ins`,inst_mem_below_frontier_def,
@@ -230,7 +231,7 @@ Theorem registration_ptr_guard_origin_frame:
   (!x. src = Var x ==> not_fresh_at sa x) /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\ fresh_vars_wrt sa s /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?vars G' tn'.
@@ -328,14 +329,14 @@ Resume registration_ptr_guard_origin_frame[ghosts]:
        (s1 with vs_inst_idx := LENGTH sa.cs_current_insts + 1,G1,tn1) []
        (OK (s2 with vs_inst_idx := SUC (LENGTH sa.cs_current_insts + 1)),G2,tn2)` by
        (simp[Abbr `G2`,Abbr `tn2`,Abbr `i1`] >> irule guard_scalar_indexed_origin >>
-        goal_assum $ drule_at Any >> fs[Abbr `s1`,update_var_def,allocas_from_def] >>
+        goal_assum $ drule_at Any >> fs[Abbr `s1`,update_var_def,allocas_from_def,allocas_below_fmp_def] >>
         metis_tac[]) >>
      `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
        (s2 with vs_inst_idx := LENGTH sa.cs_current_insts + 2,G2,tn2) []
        (OK (s2 with vs_inst_idx := SUC (LENGTH sa.cs_current_insts + 2)),G3,tn3)` by
        (simp[Abbr `G3`,Abbr `tn3`,Abbr `i2`] >> irule guard_scalar_indexed_origin >>
         goal_assum $ drule_at Any >>
-        fs[Abbr `s2`,Abbr `s1`,update_var_def,allocas_from_def] >> metis_tac[]) >>
+        fs[Abbr `s2`,Abbr `s1`,update_var_def,allocas_from_def,allocas_below_fmp_def] >> metis_tac[]) >>
      `LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts + 3` by simp[] >>
      `s with <|vs_vars := s2.vs_vars; vs_inst_idx := LENGTH sb.cs_current_insts|> =
       s2 with vs_inst_idx := LENGTH sb.cs_current_insts` by
@@ -377,7 +378,9 @@ Resume registration_ptr_guard_origin_frame[parts]:
      ((update_var v1 1w (update_var v0 0w s)) with vs_inst_idx := LENGTH sa.cs_current_insts + 2)` by
     (qunabbrev_tac `i2` >>
      irule guard_scalar_indexed_continuation >>
-     conj_tac >- asm_rewrite_tac[] >>
+     conj_tac >-
+       (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+        simp_tac (srw_ss()) [allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
      reverse conj_tac >-
        (qpat_x_assum `allocas_from lo s` mp_tac >>
         simp[allocas_from_def, update_var_def]) >>
@@ -390,7 +393,9 @@ Resume registration_ptr_guard_origin_frame[parts]:
      ((update_var v0 0w s) with vs_inst_idx := LENGTH sa.cs_current_insts + 1)` by
     (qunabbrev_tac `i1` >>
      irule guard_scalar_indexed_continuation >>
-     conj_tac >- asm_rewrite_tac[] >>
+     conj_tac >-
+       (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+        simp_tac (srw_ss()) [allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
      reverse conj_tac >-
        (qpat_x_assum `allocas_from lo s` mp_tac >>
         simp[allocas_from_def, update_var_def]) >>
@@ -437,7 +442,9 @@ Theorem registration_ptr_guard_ptr_frame:
         (s with <|vs_vars := vars; vs_inst_idx := LENGTH sb.cs_current_insts|>)) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  rpt strip_tac >> drule_all registration_ptr_guard_origin_frame >>
+  rpt strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all registration_ptr_guard_origin_frame >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`vars`,`G'`,`tn'`] >> simp[]
 QED

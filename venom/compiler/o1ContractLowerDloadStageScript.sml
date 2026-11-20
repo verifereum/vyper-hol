@@ -73,7 +73,7 @@ Proof
 QED
 
 (* A well-formed DLOAD or DLOADBYTES is always expanded. *)
-Theorem lower_dload_inst_supply_no_dload[local]:
+Theorem lower_dload_inst_supply_no_dload:
   lower_dload_inst_supply s i = (xs,t) /\ inst_wf i ==>
   EVERY (\j. j.inst_opcode <> DLOAD /\ j.inst_opcode <> DLOADBYTES) xs
 Proof
@@ -94,7 +94,7 @@ Proof
 QED
 
 (* The output has no DLOAD or DLOADBYTES. *)
-Theorem lower_dload_stage_no_dload[local]:
+Theorem lower_dload_stage_no_dload:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   o1_ctx_shape C /\ MEM g C'.ctx_functions /\ MEM inst (fn_insts g) ==>
   inst.inst_opcode <> DLOAD /\ inst.inst_opcode <> DLOADBYTES

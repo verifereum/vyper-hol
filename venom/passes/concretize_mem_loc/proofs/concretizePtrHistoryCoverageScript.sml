@@ -8,7 +8,7 @@ Ancestors
   venomState venomInst venomInstProps venomExecProofs stepWriteFootprintForward
   list finite_map arithmetic
 
-Theorem ptr_paired_history_forwarding_transport[local]:
+Theorem ptr_paired_history_forwarding_transport:
   EVERY fn_inst_wf C.ctx_functions /\
   ptr_paired_prefix R lp positions lo vs C Ct
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
@@ -92,7 +92,7 @@ QED
 (* Conditional integration only: the universal step premise is not discharged.
    A history that runs a revert forwarding's RETURNDATACOPY leaves the paired
    prefix there and stays inside the forwarding window up to its REVERT. *)
-Theorem ptr_paired_history_safe_append[local]:
+Theorem ptr_paired_history_safe_append:
   ptr_paired_prefix R lp positions lo vs C Ct
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   EVERY (\n. ~in_revert_forward (EL n h).po_fn (EL n h).po_state) done /\

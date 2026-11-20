@@ -81,6 +81,35 @@ val transport = ``\p q.
        MAP sval_val b.sym_stack = MAP sval_val a.sym_stack /\
        FDOM b.sym_mem_labels = FDOM a.sym_mem_labels)``;
 
+Theorem merge_jumpdests_prefix_transport_for:
+  !tr. (!p. tr p p) /\
+  (!pre x y next third more.
+    (next = AsmLabel y /\ y <> x \/
+     next = AsmPushLabel y /\ third = AsmOp "JUMP") /\
+    asm_static_wf (pre ++ AsmLabel x :: next :: third :: more) ==>
+    tr (pre ++ AsmLabel x :: next :: third :: more)
+      (MAP (rename_push_label x y)
+        (pre ++ AsmLabel x :: next :: third :: more))) /\
+  (!p q r. tr p q /\ tr q r ==> tr p r) ==>
+  !p. asm_static_wf p ==> tr p (FST (merge_jumpdests p))
+Proof
+  gen_tac >> strip_tac >>
+  qspec_then `(\p q. asm_static_wf p ==> asm_static_wf q /\ tr p q)`
+    mp_tac merge_jumpdests_walk_relation >> BETA_TAC >>
+  (impl_tac >- (rpt conj_tac
+    >- simp[]
+    >- metis_tac[] >>
+    rpt gen_tac >> disch_tac >> disch_tac >> conj_tac
+    >- (irule rename_static_wf >>
+        simp[asm_label_refs_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+        (gvs[MEM, MEM_APPEND])) >>
+    metis_tac[])) >>
+  disch_tac >> gen_tac >>
+  qpat_x_assum `!n done rest changed. _`
+    (qspecl_then [`LENGTH p`, `[]`, `p`, `F`] mp_tac) >>
+  simp[merge_jumpdests_def]
+QED
+
 Theorem merge_jumpdests_prefix_transport_conditional:
   (!pre x y next third more.
     (next = AsmLabel y /\ y <> x \/
@@ -92,20 +121,9 @@ Theorem merge_jumpdests_prefix_transport_conditional:
   (!p q r. ^transport p q /\ ^transport q r ==> ^transport p r) ==>
   !p. asm_static_wf p ==> ^transport p (FST (merge_jumpdests p))
 Proof
-  qabbrev_tac `tr = ^transport` >> strip_tac >>
-  `!p. tr p p` by (unabbrev_all_tac >> MATCH_ACCEPT_TAC prefix_transport_refl) >>
-  qspec_then `(\p q. asm_static_wf p ==> asm_static_wf q /\ tr p q)`
-    mp_tac merge_jumpdests_walk_relation >> BETA_TAC >>
-  (impl_tac >- (rpt conj_tac
-    >- simp[]
-    >- metis_tac[] >>
-    rpt gen_tac >> disch_tac >> disch_tac >> conj_tac
-    >- (irule rename_static_wf >>
-        simp[asm_label_refs_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
-        (gvs[MEM, MEM_APPEND])) >>
-    qpat_x_assum `Abbrev _` kall_tac >> metis_tac[])) >>
-  disch_tac >> gen_tac >>
-  qpat_x_assum `!n done rest changed. _`
-    (qspecl_then [`LENGTH p`, `[]`, `p`, `F`] mp_tac) >>
-  simp[merge_jumpdests_def]
+  BETA_TAC >> strip_tac >>
+  mp_tac (BETA_RULE (Q.SPEC `^transport` merge_jumpdests_prefix_transport_for)) >>
+  impl_tac >- (rpt conj_tac >>
+    FIRST [first_assum ACCEPT_TAC, ACCEPT_TAC (BETA_RULE prefix_transport_refl)]) >>
+  simp[]
 QED

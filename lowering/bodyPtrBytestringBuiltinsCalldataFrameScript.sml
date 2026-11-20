@@ -1,7 +1,7 @@
 (* Semantic framing of writes into the allocation obtained by runtime replay. *)
 Theory bodyPtrBytestringBuiltinsCalldataFrame
 Ancestors
-  bodyPtrBytestringBuiltinsCalldataRuntime exprSimCalldataSlice
+  exprSimCalldataSlice
   exprSimLiteralBuffer exprLoweringProps loweringSlice immutableMemoryFrame
   compileEnv loweringStateRelDefs venomState list finite_map loweringPosts emitHelperProps words
   bodyPtrBytestringBuiltinsExternalSlice venomExecSemantics venomInst

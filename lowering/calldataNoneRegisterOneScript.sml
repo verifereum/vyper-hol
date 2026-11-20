@@ -1,5 +1,5 @@
 Theory calldataNoneRegisterOne
-Ancestors defaultBytesRegistrationPrelude defaultBytesAddressPrelude
+Ancestors exprLoweringProps defaultBytesRegistrationPrelude defaultBytesAddressPrelude
   registrationGuardRejectOrigin ctorDeployMemoryRunPtrPrefixRegisterAddress
   fragGasOriginPtr loweringShapeDefs loweringStateRelDefs fragExec
   emitHelperProps context compileEnv abiEncoder abiDecoderContract words arithmetic
@@ -74,6 +74,7 @@ Resume registration_wrapped_prefix_origin[guard]:
      simp[allocas_from_def] >> fs[allocas_from_def] >> metis_tac[]) >>
   `(4w + abi_decode_load CALLDATALOAD ((4w+n2w (off-4)):bytes32) a) <+ 4w` by
     gvs[abi_decode_load_def, abi_decode_source_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   `?z H1 u1. z.vs_returndata = [] /\
     !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
       (t,H,u) [] (Abort Revert_abort z,H1,u1)` by
@@ -261,6 +262,8 @@ Resume none_registration_singleton_paths[pass]:
     ?d. entry = (d,type_memory_size tv) /\ d+type_memory_size tv < dimword (:256)` by
     (qpat_assum `FLOOKUP s.vs_allocas st.cs_next_id = NONE` (fn th => simp[NoAsms, th])) >>
   `0 <= s.vs_alloca_next` by simp[] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp)` by simp[] >>
   drule_all (Q.INST [`lo` |-> `0`] entryPtrSeamRegisterTheory.registration_argument_prepare_guarded_joint) >>
   disch_then (qspecl_then [`tn`,`[]`,`G`] strip_assume_tac) >>
   rename1 `lookup_var q t = SOME (n2w d)` >>

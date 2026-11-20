@@ -1,6 +1,6 @@
 (* The count-bound comparison threads one deterministic ghost. *)
 Theory decoderCountComparisonCorePtr
-Ancestors ghostPcTransportPtr fragGasSeqPtr unitTransformDefs fragGasOriginPtr instMemFrontier memSafeRun wordLoadStorePtr decoderCountLoadCorePtr decoderSetupStepPtr decoderNavigationPtr
+Ancestors ghostPcTransportPtr fragGasSeqPtr unitTransformDefs fragGasOriginPtr instMemFrontier memSafeRun wordLoadStorePtr decoderSetupStepPtr decoderNavigationPtr
   calldataClampPtr typedCopyPtr bodyPtrDefs compileEnv loweringStateRelDefs emitHelper venomInst
   venomExecSemantics venomState words list rich_list arithmetic finite_map
   ptrDiscipline ptrSafeRun venomInstProofs codegenRel contextCodegenRel
@@ -17,7 +17,7 @@ Theorem emit_count_comparison_endpoint_ptr_origin_core_joint:
       !k. inst_seq_ptr D lower ctx' func PG G tn (emitted_insts sa sb)
         (s with vs_inst_idx := k) HG u) /\
     (!D lower explicit ctx' func.
-      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
       ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
       s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -33,7 +33,7 @@ Theorem emit_count_comparison_endpoint_ptr_origin_core_joint:
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     (!D lower ctx' func.
-      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
       s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
@@ -54,7 +54,7 @@ Proof
      simp[Abbr `inst`, Abbr `out`, run_inst_seq_def] >>
      metis_tac[]) >>
   `step_inst_base inst s = OK t` by metis_tac[] >>
-  `!D lower fuel ctx' fn. allocas_from lower s /\ ~ctx_has_dalloca ctx' ==>
+  `!D lower fuel ctx' fn. allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) ==>
     ptr_inst_ok D lower fuel ctx' fn G tn inst s` by
     (rpt strip_tac >>
      `op_taint tn (Lit bound) = {}` by simp[op_taint_def] >>
@@ -78,7 +78,7 @@ Proof
      `allocas_from 0 s` by simp[allocas_from_def] >>
      gvs[update_var_def, mk_inst_def, Abbr `out`] >> metis_tac[]) >>
   `!D lower ctx' func.
-      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
       s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
@@ -147,7 +147,7 @@ Theorem emit_count_comparison_endpoint_ptr_origin_core:
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?HG u. (!D lower explicit ctx' func.
-      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
       ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
       s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
@@ -163,7 +163,7 @@ Theorem emit_count_comparison_endpoint_ptr_origin_core:
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     (!D lower ctx' func.
-      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
       s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>

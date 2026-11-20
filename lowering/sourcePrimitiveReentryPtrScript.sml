@@ -27,7 +27,7 @@ Theorem source_primitive_decoder_reentry_ptr_origin:
   not_fresh_at sa p /\ (!x. src = Var x ==> not_fresh_at sa x) /\
   ptr_covers G tn p s C /\ op_taint tn src = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\ allocas_from lo s /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t H u.
     run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
@@ -107,7 +107,6 @@ Resume source_primitive_decoder_reentry_ptr_origin[bytes]:
     (Cases_on `src` >> gvs[calldata_operand_live_not_fresh, abi_decoder_operand_live_def]) >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all bytestring_sentinel_reentry_sequence >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (SRULE [GSYM abi_decode_bytes_copy_size_def]
     (Q.INST [`C` |-> `abi_decode_bytes_copy_size m`]
       calldata_bytestring_overwrite_endpoint_core_uniform_origin)) >>
@@ -173,6 +172,9 @@ Theorem source_primitive_decoder_reentry_ptr:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  disch_then (strip_assume_tac o MATCH_MP source_primitive_decoder_reentry_ptr_origin) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all source_primitive_decoder_reentry_ptr_origin >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`t`, `H`, `u`] >> simp[]
 QED

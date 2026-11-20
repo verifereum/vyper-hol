@@ -8,7 +8,7 @@ Ancestors
   ptrStaticDiscipline memLocDefs pointerConfinedDefs pred_set finite_map
   frameViewFacts o1LowerDloadAddressArithmetic words arithmetic
 
-Theorem fmp_static_descriptor_size_nonpointer[local]:
+Theorem fmp_static_descriptor_size_nonpointer:
   ptr_use_static_ok P pv inst /\
   (mem_read_ops inst = SOME ops \/ mem_write_ops inst = SOME ops) /\
   ops.iao_max_size = SOME (Var v) ==> v NOTIN pv

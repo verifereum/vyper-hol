@@ -1,7 +1,7 @@
 (* A finite decoder uses a sequence of independently checked child intervals. *)
 Theory calldataNoneFiniteMembers
 Ancestors
-  calldataMembersRawCallsite calldataSourceSize calldataDynOwned
+  bodyPtrBytestringBuiltinsWindowGhost[qualified] calldataSourceSize calldataDynOwned
   sourceOwnedComplexPtr abiDecoderMemberCons abiDecoderMemberSetup
   calldataEmptyArrayChild abiDecoderOffset calldataSourceCorrespondence
   fragGasOriginPtrLoop abiDecoderCoherence abiDecoderDynamic vyperCalldata
@@ -162,6 +162,7 @@ Proof
     (qpat_assum `eval_operand (Var root) s = _` mp_tac >> rewrite_tac[eval_operand_def]) >>
   `not_fresh_at a root /\ (!q. src = Var q ==> not_fresh_at a q)` by
     metis_tac[calldata_operand_live_not_fresh] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (Q.INST [`C` |-> `sz:num`] decoderMemberJointModularTheory.calldata_member_setup_joint_modular) >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl [`r`,`H`,`u`,`q`] >>

@@ -1,7 +1,7 @@
 Theory runtimeSymSrcCreateCalls
 Ancestors
   runtimeSymSrcGeneratorContracts runtimeSymSrcEmission runtimeSymSrcInterfaces
-  runtimeSymSrcCallStaging runtimeSymSrcSystemCreate runtimeSymSrcAbiEncode
+  runtimeSymSrcCallStaging runtimeSymSrcAbiEncode
   runtimeSymSrcContext runtimeSymSrcContextTypedBase
   exprLowering compileEnv emitHelper list stackPlanTypes supportedExprs
 

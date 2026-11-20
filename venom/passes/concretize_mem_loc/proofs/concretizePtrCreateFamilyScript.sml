@@ -3,6 +3,7 @@
  *)
 Theory concretizePtrCreateFamily
 Ancestors
+  lowerDloadExternalBackward lowerDloadPtrCreateInterfaces
   memoryReadRel
   concretizePtrStorageReadProducer concretizePtrRequestHistory
   concretizePtrMloadRecovery concretizePtrPairedPrefix concretizePtrChronologicalHistory
@@ -23,7 +24,7 @@ Ancestors
   concretizePtrTaintContent ptrDiscipline venomState venomCallOracleDefs
   concretizePtrOpaqueRetpc concretizePtrSharedFields extCallOracle venomExecSemantics list words pred_set arithmetic
 
-Theorem ptr_create_family_current_stores[local]:
+Theorem ptr_create_family_current_stores:
   ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} ==>
   s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient
 Proof
@@ -51,34 +52,38 @@ Proof
   simp[FUN_EQ_THM] >> metis_tac[]
 QED
 
-Theorem ptr_create_family_request[local]:
-  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
-  read_memory (w2n off) (w2n sz) s = read_memory (w2n ot) (w2n sz) t ==>
-  venom_create_request s value off sz salt =
-  venom_create_request t value ot sz salt
-Proof
-  strip_tac >> drule_all ptr_create_family_current_stores >>
-  simp[venom_create_request_def]
-QED
-
 Theorem ptr_create_family_completion[local]:
-  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
-  consume_create_outcome rq s = (w,u) /\
-  consume_create_outcome rq t = (v,z) ==>
-  w = v /\ u.vs_returndata = z.vs_returndata /\ ptr_history_content tn u z
+  ptr_history_content tn s t /\ s.vs_outcomes <> [] /\
+  read_memory (w2n off) (w2n sz) s = read_memory (w2n ot) (w2n sz) t /\
+  consume_create_outcome (venom_create_request s value off sz salt) s = (w,u) /\
+  consume_create_outcome (venom_create_request t value ot sz salt) t = (v,z) ==>
+  ptr_history_content tn u z /\ u.vs_accounts = z.vs_accounts /\
+  u.vs_transient = z.vs_transient
 Proof
   strip_tac >>
-  drule_all ptr_create_family_current_stores >> strip_tac >>
-  `ptr_request_history (record_request rq s.vs_requests)
-     (record_request rq t.vs_requests)` by
-    (irule ptr_request_record >> fs[ptr_history_content_def]) >>
+  drule_then assume_tac ptr_history_content_call_ctx >>
+  `ptr_request_history
+     (record_request (venom_create_request s value off sz salt) s.vs_requests)
+     (record_request (venom_create_request t value ot sz salt) t.vs_requests)` by
+    (irule ptr_request_record >> fs[ptr_history_content_def] >>
+     simp[ptr_request_shell_def, venom_create_request_def]) >>
+  `s.vs_outcomes = t.vs_outcomes /\ s.vs_logs = t.vs_logs /\
+    s.vs_pending_deletions = t.vs_pending_deletions` by
+    fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+       ptr_core_shared_def, ptr_shared_fields_def] >>
+  `w = v /\ u.vs_accounts = z.vs_accounts /\ u.vs_transient = z.vs_transient /\
+    u.vs_outcomes = z.vs_outcomes /\ u.vs_returndata = z.vs_returndata /\
+    u.vs_logs = z.vs_logs /\ u.vs_pending_deletions = z.vs_pending_deletions` by
+    (drule_all dload_consume_create_world >> simp[]) >>
+  qpat_assum `consume_create_outcome _ s = _`
+    (fn th => once_rewrite_tac[MATCH_MP dload_consume_create_state th]) >>
+  qpat_assum `consume_create_outcome _ t = _`
+    (fn th => once_rewrite_tac[MATCH_MP dload_consume_create_state th]) >>
   fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
-     ptr_core_shared_def, ptr_shared_fields_def] >>
-  gvs[consume_create_outcome_eq] >>
-  simp[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
-       ptr_core_shared_def, ptr_shared_fields_def,
-       contract_storage_def, contract_transient_def,
-       storage_agree_except_def, word_agree_except_def]
+     ptr_core_shared_def, ptr_shared_fields_def, contract_storage_def,
+     contract_transient_def, storage_agree_except_def, word_agree_except_def,
+     Excl "consume_create_outcome_eq"] >>
+  metis_tac[]
 QED
 
 Theorem ptr_create_family_call_completion[local]:
@@ -86,7 +91,9 @@ Theorem ptr_create_family_call_completion[local]:
   rq.cr_kind = DelegateMessageCall /\
   consume_call_outcome rq ro rz s = (w,u) /\
   consume_call_outcome rq' rt rz t = (v,z) ==>
-  w = v /\ u.vs_returndata = z.vs_returndata /\ ptr_history_content tn u z
+  w = v /\ u.vs_returndata = z.vs_returndata /\ ptr_history_content tn u z /\
+  (~rq.cr_static /\ s.vs_outcomes <> [] /\ (HD s.vs_outcomes).co_success ==>
+    u.vs_accounts = z.vs_accounts /\ u.vs_transient = z.vs_transient)
 Proof
   strip_tac >>
   `ptr_request_history (record_request rq s.vs_requests)
@@ -127,37 +134,39 @@ Proof
 QED
 
 
-Theorem ptr_create_family_mixed_execution[local]:
+Theorem ptr_create_family_mixed_execution:
   ptr_mixed_vars births positions TG tn f g s t /\
-  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  ptr_history_content tn s t /\
   read_memory (w2n off) (w2n sz) s = read_memory (w2n ot) (w2n sz) t /\
   MEM inst.inst_opcode [CREATE; CREATE2] /\
   inst.inst_outputs = [out] /\ ~retpc_var f out /\
   exec_create inst t value ot sz salt = OK z ==>
   ?u. exec_create inst s value off sz salt = OK u /\
-      ptr_history_content tn u z /\
+      ptr_history_content tn u z /\ u.vs_accounts = z.vs_accounts /\
+      u.vs_transient = z.vs_transient /\
       ptr_mixed_vars births positions (step_prov PT TG inst u)
         (step_taint inst s u tn) f g u z
 Proof
   strip_tac >>
-  `t.vs_outcomes <> []` by
-    (CCONTR_TAC >> gvs[exec_create_def, AllCaseEqs()]) >>
-  `s.vs_outcomes <> []` by
+  `s.vs_outcomes = t.vs_outcomes` by
     fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
        ptr_core_shared_def, ptr_shared_fields_def] >>
-  `venom_create_request s value off sz salt = venom_create_request t value ot sz salt` by
-    (irule ptr_create_family_request >> metis_tac[]) >>
-  qpat_x_assum `exec_create _ _ _ _ _ _ = OK _` mp_tac >>
-  simp[exec_create_def, AllCaseEqs(), Excl "consume_create_outcome_eq"] >>
-  strip_tac >> gvs[Excl "consume_create_outcome_eq"] >>
-  Cases_on `consume_create_outcome (venom_create_request t value ot sz salt) s` >>
-  Cases_on `consume_create_outcome (venom_create_request t value ot sz salt) t` >>
-  gvs[Excl "consume_create_outcome_eq"] >>
-  `q = q' /\ ptr_history_content tn r r'` by
-    (drule_all ptr_create_family_completion >> simp[]) >>
-  gvs[Excl "consume_create_outcome_eq"] >>
-  simp[ptr_history_content_update_var] >>
-  `ptr_mixed_vars births positions TG tn f g r r'` by
+  `s.vs_outcomes <> []` by fs[dload_exec_create_success_iff] >>
+  drule_all ld_exec_create_backward >> strip_tac >>
+  `out' = out` by metis_tac[listTheory.CONS_11] >>
+  qpat_x_assum `out' = out` SUBST_ALL_TAC >>
+  rename1 `consume_create_outcome _ s = (_,rS)` >>
+  rename1 `consume_create_outcome _ t = (_,rT)` >>
+  `ptr_history_content tn rS rT /\ rS.vs_accounts = rT.vs_accounts /\
+    rS.vs_transient = rT.vs_transient` by
+    (irule ptr_create_family_completion >> metis_tac[]) >>
+  qpat_x_assum `z = update_var _ _ _` SUBST_ALL_TAC >>
+  qexists_tac `update_var out w rS` >>
+  conj_tac >- simp[Excl "consume_create_outcome_eq"] >>
+  conj_tac >- simp[ptr_history_content_update_var] >>
+  conj_tac >- simp[update_var_def] >>
+  conj_tac >- simp[update_var_def] >>
+  `ptr_mixed_vars births positions TG tn f g rS rT` by
     (irule ptr_mixed_vars_fields >>
      rpt (goal_assum (drule_at Any)) >>
      qpat_x_assum `consume_create_outcome _ s = _` mp_tac >>
@@ -172,7 +181,7 @@ Proof
   rpt strip_tac >> fs[ptr_mixed_vars_def, op_taint_def, word_agree_except_def]
 QED
 
-Theorem ptr_create_family_delegate_mixed_execution[local]:
+Theorem ptr_create_family_delegate_mixed_execution:
   ptr_mixed_vars births positions TG tn f g s t /\
   ptr_history_content tn s t /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t /\
@@ -181,6 +190,8 @@ Theorem ptr_create_family_delegate_mixed_execution[local]:
     (rt:bytes32) (rz:bytes32) = OK z ==>
   ?u. exec_delegatecall inst s gas addr (ao:bytes32) az (ro:bytes32) rz = OK u /\
       u.vs_returndata = z.vs_returndata /\ ptr_history_content tn u z /\
+      (~s.vs_call_ctx.cc_static /\ (HD s.vs_outcomes).co_success ==>
+        u.vs_accounts = z.vs_accounts /\ u.vs_transient = z.vs_transient) /\
       ptr_mixed_vars births positions (step_prov PT TG inst u)
         (step_taint inst s u tn) f g u z
 Proof
@@ -203,12 +214,18 @@ Proof
   rename1 `consume_call_outcome _ (w2n ro) _ s = (ws,us)` >>
   simp[exec_delegatecall_def, AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
   strip_tac >> gvs[exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
-  `ws = wt /\ us.vs_returndata = zt.vs_returndata /\ ptr_history_content tn us zt` by
-    (irule ptr_create_family_call_completion >>
-     rpt (goal_assum (drule_at Any)) >>
-     simp[ptr_request_shell_def, venom_call_request_def] >>
-     fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
-        ptr_core_shared_def, ptr_shared_fields_def]) >>
+  `ws = wt /\ us.vs_returndata = zt.vs_returndata /\ ptr_history_content tn us zt /\
+    (~s.vs_call_ctx.cc_static /\ (HD s.vs_outcomes).co_success ==>
+      us.vs_accounts = zt.vs_accounts /\ us.vs_transient = zt.vs_transient)` by
+    (qmatch_asmsub_abbrev_tac `consume_call_outcome rq _ _ s = _` >>
+     qmatch_asmsub_abbrev_tac `consume_call_outcome rq' _ _ t = _` >>
+     `ptr_request_shell rq rq'` by
+       (simp[Abbr `rq`, Abbr `rq'`, ptr_request_shell_def, venom_call_request_def] >>
+        fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+           ptr_core_shared_def, ptr_shared_fields_def]) >>
+     `rq.cr_kind = DelegateMessageCall` by simp[Abbr `rq`] >>
+     drule_all ptr_create_family_call_completion >>
+     simp[Abbr `rq`, venom_call_request_def, Excl "consume_call_outcome_eq"]) >>
   gvs[Excl "consume_call_outcome_eq"] >>
   `ptr_mixed_vars births positions TG tn f g us zt` by
     (irule ptr_mixed_vars_fields >>
@@ -216,6 +233,11 @@ Proof
      qpat_x_assum `consume_call_outcome _ _ _ s = _` mp_tac >>
      qpat_x_assum `consume_call_outcome _ _ _ t = _` mp_tac >>
      simp[consume_call_outcome_eq] >> rpt strip_tac >> gvs[]) >>
+  `~s.vs_call_ctx.cc_static /\ (HD s.vs_outcomes).co_success ==>
+      (update_var out wt us).vs_accounts = (update_var out wt zt).vs_accounts /\
+      (update_var out wt us).vs_transient = (update_var out wt zt).vs_transient` by
+    simp[update_var_def] >>
+  simp[Excl "consume_call_outcome_eq"] >>
   drule ptr_mixed_vars_update >> disch_then irule >> simp[] >>
   simp[step_prov_def, out_prov_def, set_prov_def,
        step_taint_def, set_var_taint_def, out_taint_def,
@@ -226,7 +248,6 @@ QED
 
 Theorem ptr_create_family_taint[local]:
   taint_ok fn tn inst s /\ MEM inst.inst_opcode [DELEGATECALL; CREATE; CREATE2] ==>
-  (MEM inst.inst_opcode [CREATE; CREATE2] ==> tn.t_stor = {} /\ tn.t_trans = {}) /\
   (!off len j. MEM (off,len) (source_memory_read_ranges inst s) /\ j < len ==>
      off + j NOTIN tn.t_mem) /\
   (!op. MEM op inst.inst_operands ==> op_taint tn op = {})
@@ -384,7 +405,7 @@ Proof
   gvs[op_prov_def] >> metis_tac[optionTheory.option_CASES]
 QED
 
-Theorem ptr_create_family_delegate_operand_transport[local]:
+Theorem ptr_create_family_delegate_operand_transport:
   ptr_mixed_vars births positions TG tn f g s t /\
   s.vs_labels = t.vs_labels /\
   EVERY (ptr_nonopaque_operand f) inst.inst_operands /\
@@ -446,6 +467,8 @@ Theorem ptr_create_family_delegate_endpoint_execution_static[local]:
   step_inst fuel C' a.po_inst at.po_state = OK t' ==>
   ?s'. step_inst 0 C a.po_inst a.po_state = OK s' /\
     s'.vs_returndata = t'.vs_returndata /\ ptr_history_content a.po_taint s' t' /\
+    (~a.po_state.vs_call_ctx.cc_static /\ (HD a.po_state.vs_outcomes).co_success ==>
+      s'.vs_accounts = t'.vs_accounts /\ s'.vs_transient = t'.vs_transient) /\
     ptr_mixed_vars births positions (step_prov PT TG a.po_inst s')
       (step_taint a.po_inst a.po_state s' a.po_taint) a.po_fn at.po_fn s' t'
 Proof
@@ -513,7 +536,8 @@ Theorem ptr_create_family_endpoint_execution_static[local]:
   ~in_revert_forward a.po_fn a.po_state /\
   step_inst fuel C' a.po_inst at.po_state = OK t' ==>
   ?s'. step_inst 0 C a.po_inst a.po_state = OK s' /\
-    ptr_history_content a.po_taint s' t' /\
+    ptr_history_content a.po_taint s' t' /\ s'.vs_accounts = t'.vs_accounts /\
+    s'.vs_transient = t'.vs_transient /\
     ptr_mixed_vars births positions (step_prov PT TG a.po_inst s')
       (step_taint a.po_inst a.po_state s' a.po_taint)
       a.po_fn at.po_fn s' t'
@@ -523,8 +547,6 @@ Proof
   `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
     (irule ptr_create_family_endpoint_taint >> rpt (goal_assum (drule_at Any))) >>
   `MEM a.po_inst.inst_opcode [DELEGATECALL; CREATE; CREATE2]` by fs[MEM] >>
-  `a.po_taint.t_stor = {} /\ a.po_taint.t_trans = {}` by
-    (drule_all ptr_create_family_taint >> simp[]) >>
   `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
       a.po_state at.po_state /\
    ptr_history_content a.po_taint a.po_state at.po_state /\
@@ -659,7 +681,8 @@ Proof
      simp[step_inst_non_invoke] >> strip_tac >>
      drule step_inst_base_intret_opcodes >> fs[MEM]) >>
   `?post. step_inst 0 C a.po_inst a.po_state = OK post /\
-    ptr_history_content a.po_taint post s' /\
+    ptr_history_content a.po_taint post s' /\ post.vs_accounts = s'.vs_accounts /\
+    post.vs_transient = s'.vs_transient /\
     ptr_mixed_vars births positions (step_prov PT TG a.po_inst post)
       (step_taint a.po_inst a.po_state post a.po_taint) a.po_fn at.po_fn post s'` by
     (irule ptr_create_family_endpoint_execution_static >>
@@ -690,8 +713,12 @@ Proof
      (tokens,registry,births,PT,step_prov PT TG a.po_inst z.po_state,saved,entries)` by
     (simp[ptr_paired_sample_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
      (reverse conj_tac
-      >- (irule ptr_history_content_masks >> goal_assum (drule_at Any) >>
-          fs[MEM] >> simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def])) >>
+      >- (`post.vs_call_ctx = s'.vs_call_ctx` by
+            metis_tac[ptr_history_content_call_ctx] >>
+          fs[MEM, ptr_history_content_def, ptr_taint_content_def,
+             step_taint_def, imm_taint_def, contract_storage_def, contract_transient_def,
+             storage_agree_except_def, word_agree_except_def] >>
+          first_assum ACCEPT_TAC)) >>
      gvs[step_prov_def, out_prov_def] >>
      irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >>
      simp[step_taint_def]) >>
@@ -800,6 +827,8 @@ Proof
   `?post. step_inst 0 C a.po_inst a.po_state = OK post /\
     post.vs_returndata = s'.vs_returndata /\
     ptr_history_content a.po_taint post s' /\
+    (~a.po_state.vs_call_ctx.cc_static /\ (HD a.po_state.vs_outcomes).co_success ==>
+      post.vs_accounts = s'.vs_accounts /\ post.vs_transient = s'.vs_transient) /\
     ptr_mixed_vars births positions (step_prov PT TG a.po_inst post)
       (step_taint a.po_inst a.po_state post a.po_taint) a.po_fn at.po_fn post s'` by
     (irule ptr_create_family_delegate_endpoint_execution_static >>
@@ -830,8 +859,17 @@ Proof
      (tokens,registry,births,PT,step_prov PT TG a.po_inst z.po_state,saved,entries)` by
     (simp[ptr_paired_sample_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
      (reverse conj_tac
-      >- (irule ptr_history_content_masks >> goal_assum (drule_at Any) >>
-          simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def])) >>
+      >- (`post.vs_call_ctx = s'.vs_call_ctx` by
+            metis_tac[ptr_history_content_call_ctx] >>
+          Cases_on `~a.po_state.vs_call_ctx.cc_static /\
+             post.vs_requests <> a.po_state.vs_requests /\
+             ~computed_precompile (LAST post.vs_requests) /\
+             post.vs_outcomes <> a.po_state.vs_outcomes /\
+             (HD a.po_state.vs_outcomes).co_success` >>
+          fs[ptr_history_content_def, ptr_taint_content_def, step_taint_def,
+            store_taint_def, adopt_reset_def, imm_taint_def, contract_storage_def,
+            contract_transient_def, storage_agree_except_def, word_agree_except_def] >>
+          first_assum ACCEPT_TAC)) >>
      gvs[step_prov_def, out_prov_def] >>
      irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >>
      simp[step_taint_def]) >>
@@ -870,7 +908,7 @@ Proof
 QED
 
 
-Theorem ptr_create_family_delegate_written_byte[local]:
+Theorem ptr_create_family_delegate_written_byte:
   exec_delegatecall inst s gas addr ao az ro rz = OK t /\
   j < MIN (w2n rz) (LENGTH t.vs_returndata) ==>
   read_byte (w2n ro + j) t.vs_memory = EL j t.vs_returndata

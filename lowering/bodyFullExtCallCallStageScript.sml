@@ -271,7 +271,11 @@ Proof
      >- (Cases_on `az = 0w` >> fs[]) >>
      `n2w cap <> (0w:bytes32) ==>
         ?p. buf = Var p /\ ptr_covers G tn p t (w2n (n2w cap:bytes32))` by
-       (Cases_on `cap = 0` >> fs[Excl "w2n_n2w"]) >>
+       (Cases_on `cap = 0` >- asm_simp_tac bool_ss [] >>
+        strip_tac >>
+        qpat_assum `w2n (n2w cap:bytes32) = cap` SUBST1_TAC >>
+        qpat_assum `cap <> 0 ==> ?p. buf = Var p /\ ptr_covers G tn p t cap`
+          (fn covers => qpat_assum `cap <> 0` (ACCEPT_TAC o MATCH_MP covers))) >>
      Q.SUBGOAL_THEN
        `n2w cap = (0w:bytes32) \/ w2n ro + w2n (n2w cap:bytes32) <= t.vs_alloca_next` ASSUME_TAC
      >- simp[Excl "w2n_n2w"] >>

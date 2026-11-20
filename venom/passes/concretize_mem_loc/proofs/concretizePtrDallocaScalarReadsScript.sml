@@ -135,7 +135,7 @@ Finalise ptr_dalloca_scalar_read_context
 
 (* This bound concerns the actual ILOAD descriptor, not arbitrary immutable
    addresses. Pointer discipline excludes provenance on this scalar operand. *)
-Theorem ptr_dalloca_scalar_iload_bound[local]:
+Theorem ptr_dalloca_scalar_iload_bound:
   inst.inst_opcode = ILOAD /\ inst.inst_operands = [op] /\
   eval_operand op s = SOME x /\ op_prov G op = NONE /\
   access_ok lo G fn inst s /\ ~in_revert_forward fn s ==>

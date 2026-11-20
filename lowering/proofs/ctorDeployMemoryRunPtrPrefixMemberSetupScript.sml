@@ -1,7 +1,7 @@
 (* Zero-high-bound member-address setup. *)
 Theory ctorDeployMemoryRunPtrPrefixMemberSetup
 Ancestors
-  fragGasSeqPtr fragGasOriginPtrLoop bodyPtrPrecompileBuiltinsSeq loweringStateRelDefs
+  fragGasSeqPtr fragGasSeqPtrContext fragGasOriginPtrLoop bodyPtrPrecompileBuiltinsSeq loweringStateRelDefs
   exprSimUnwrap slotCopyExecution compileEnv
   ctorDeployMemoryRunPtrPrefixBoolBody ctorDeployMemoryRunPtrPrefixSteps
   ctorDeployMemoryRunPtrPrefixSequence ctorDeployMemoryRunPtrPrefixCopyRun
@@ -61,7 +61,7 @@ QED
 Theorem prefix_member_dload_pair:
   eval_operand off s = SOME a /\ op_taint tn off = {} /\
   abi_decode_load DLOAD a s = w /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   let i = mk_inst iid DLOAD [off] [x];
       t = update_var x w s;
       H = DRESTRICT G (COMPL {x});
@@ -86,7 +86,7 @@ QED
 Theorem prefix_member_add_block:
   eval_operand a s = SOME u /\ eval_operand c s = SOME v /\
   op_taint tn a = {} /\ op_taint tn c = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst iid ADD [a;c] [x]) ==>
   (ptr_safe_block D lo fuel ctx fn PG
      (set_prov G [x] (first_prov G [a;c]))
@@ -106,7 +106,7 @@ QED
 Theorem prefix_member_dload_block:
   eval_operand off s = SOME a /\ op_taint tn off = {} /\
   abi_decode_load DLOAD a s = w /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst iid DLOAD [off] [x]) ==>
   (ptr_safe_block D lo fuel ctx fn PG (DRESTRICT G (COMPL {x}))
      (tn with t_var := tn.t_var |+ (x,{})) bb
@@ -130,7 +130,7 @@ Theorem prefix_member_static_pair:
   eval_operand (Var dst) s = SOME d /\
   op_taint tn src = {} /\ op_taint tn off = {} /\ op_taint tn (Var dst) = {} /\
   FLOOKUP G dst = SOME (b,sz) /\ dst <> x /\ x <> y /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq [mk_inst iid ADD [src;off] [x];
                 mk_inst (iid+1) ADD [Var dst;Lit vo] [y]] s = OK t ==>
   ?H qt.
@@ -170,13 +170,17 @@ Proof
      Cases_on `first_prov G [src;off]` >>
      gvs[set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def,
          eval_operand_def, lookup_var_def] >> metis_tac[]) >>
+  `!k. ctx_has_dalloca ctx ==> allocas_below_fmp (s1 with vs_inst_idx := k)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `s1`, update_var_def, allocas_below_fmp_def] >>
+     tautLib.TAUT_TAC) >>
   `eval_operand (Lit vo) s1 = SOME vo /\ op_taint q1 (Lit vo) = {}` by
     simp[eval_operand_def, op_taint_def] >>
   `step_inst_base (mk_inst iid ADD [src;off] [x]) s = OK s1 /\
    step_inst_base (mk_inst (iid+1) ADD [Var dst;Lit vo] [y]) s1 = OK s2` by
-    (unabbrev_all_tac >> conj_tac >>
-     irule (cj 1 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
-       prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
+    (conj_tac
+     >- (simp[Abbr `s1`] >> irule slot_copy_step_add >> simp[]) >>
+     simp[Abbr `s2`] >> irule slot_copy_step_add >> simp[]) >>
   `t = s2` by gvs[run_inst_seq_def] >>
   `!D'. inst_seq_ptr D' lo ctx fn PG G tn
      [mk_inst iid ADD [src;off] [x];
@@ -267,7 +271,7 @@ QED
 
 Theorem prefix_member_offset_pair:
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq [mk_inst iid ADD [src;Lit ao] [x];
                 mk_inst (iid+1) DLOAD [Var x] [y]] s = OK t ==>
   ?H qt.
@@ -299,14 +303,16 @@ Proof
   `eval_operand (Lit ao) s = SOME ao /\ op_taint tn (Lit ao) = {}` by
     simp[eval_operand_def, op_taint_def] >>
   `step_inst_base (mk_inst iid ADD [src;Lit ao] [x]) s = OK s1` by
-    (simp[Abbr `s1`] >>
-     irule (cj 1 (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
-       prefix_bool_body_arith_certificate))) >> simp[SF SFY_ss]) >>
+    (simp[Abbr `s1`] >> irule slot_copy_step_add >> simp[]) >>
   `eval_operand (Var x) s1 = SOME (a+ao) /\
    op_taint q1 (Var x) = {} /\ allocas_from lo s1` by
     (simp[Abbr `s1`, Abbr `q1`, eval_operand_def, lookup_var_def, update_var_def,
           op_taint_def, FLOOKUP_UPDATE, allocas_from_def] >>
      fs[allocas_from_def] >> metis_tac[]) >>
+  `!k. ctx_has_dalloca ctx ==> allocas_below_fmp (s1 with vs_inst_idx := k)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `s1`, update_var_def, allocas_below_fmp_def] >>
+     tautLib.TAUT_TAC) >>
   `step_inst_base (mk_inst (iid+1) DLOAD [Var x] [y]) s1 = OK s2` by
     (simp[Abbr `s2`, Abbr `w`] >>
      drule exprSimUnwrapTheory.step_DLOAD >>
@@ -357,6 +363,9 @@ Proof
           (qpat_x_assum `allocas_from lo s1` mp_tac >>
            simp[instIdxIndepTheory.eval_op_inst_idx, allocas_from_def, Abbr `w`,
                 abi_decode_load_def, abi_decode_source_def]) >>
+        `ctx_has_dalloca ctx ==> allocas_below_fmp (s1 with vs_inst_idx := s.vs_inst_idx+1)` by
+          (qpat_assum `!k. ctx_has_dalloca ctx ==> allocas_below_fmp (s1 with vs_inst_idx := k)`
+             (ACCEPT_TAC o Q.SPEC `s.vs_inst_idx+1`)) >>
         qunabbrev_tac `s2` >>
         drule_all prefix_member_dload_pair >>
         simp[LET_THM, instIdxIndepTheory.update_var_idx]) >>
@@ -397,7 +406,7 @@ Theorem prefix_member_setup_static_pair:
   eval_operand src s = SOME a /\ eval_operand (Var dst) s = SOME d /\
   abi_decoder_operand_live st.cs_next_var (Var dst) /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (b,sz) /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  FLOOKUP G dst = SOME (b,sz) /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts st middle) s = OK t ==>
   ?H qt child_dst.
     SND ops = Var child_dst /\ FLOOKUP H child_dst = SOME (b,sz) /\
@@ -453,7 +462,7 @@ Theorem prefix_member_setup_dynamic_pair:
   abi_decoder_operand_live st.cs_next_var (Var dst) /\
   abi_decoder_operand_live st.cs_next_var src /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (b,sz) /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  FLOOKUP G dst = SOME (b,sz) /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts st middle) s = OK t ==>
   ?H qt child_dst.
     SND ops = Var child_dst /\ FLOOKUP H child_dst = SOME (b,sz) /\
@@ -505,6 +514,13 @@ Proof
    eval_operand (Var dst) u2 = SOME d /\ allocas_from lo u2` by
     (simp[Abbr `u2`, eval_operand_def, lookup_var_def, allocas_from_def] >>
      Cases_on `src` >> fs[eval_operand_def, lookup_var_def, allocas_from_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u2` by
+    (strip_tac >>
+     `allocas_below_fmp u` by
+       (qpat_assum `run_inst_seq _ s = OK u` (mp_then Any irule run_inst_seq_allocas_below_fmp) >>
+        simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
+     qpat_assum `allocas_below_fmp u` mp_tac >>
+     simp[NoAsms, Abbr `u2`, allocas_below_fmp_def] >> tautLib.TAUT_TAC) >>
   drule_at (Pat `run_inst_seq _ _ = _`) prefix_member_static_pair >>
   disch_then drule_all >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
@@ -561,7 +577,7 @@ Theorem prefix_member_setup_ghost:
   abi_decoder_operand_live st.cs_next_var (Var dst) /\
   abi_decoder_operand_live st.cs_next_var src /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (b,sz) /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  FLOOKUP G dst = SOME (b,sz) /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts st middle) s = OK t ==>
   ?H qt child_dst.
     SND ops = Var child_dst /\ FLOOKUP H child_dst = SOME (b,sz) /\
@@ -615,7 +631,7 @@ Theorem prefix_member_setup_pair:
   abi_decoder_operand_live st.cs_next_var (Var dst) /\
   middle.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (b,sz) /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  FLOOKUP G dst = SOME (b,sz) /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts st middle) s = OK t ==>
   ?H qt child_dst.
     SND ops = Var child_dst /\ FLOOKUP H child_dst = SOME (b,sz) /\

@@ -16,10 +16,11 @@
  * entryPtrSeamPrefix's external_entry_reaches_registration_ptr provides.
  *)
 Theory entryPtrSeamRegister
-Ancestors allocaFrontierRoom fragGasPathFrameMem
+Ancestors allocaFrontierRoom allocaSiteResource compileAllocaProvenance
+  decoderOriginAllocationFrame fragGasPathFrameMem
   memSafeRun unitTransformDefs codegenRel venomInstProofs
   fragGasOriginPtr fragGasOrigin fragGasSeqPtr fragGasSeqMem instMemFrontier ptrSafetyTransport decoderNavigationPtr decoderMemberPrefixPtr
-  sourceOwnedCoherentPtr sourceOwnedComplexPtr sourceOwnedArrayConstructorPtr decoderArrayInitPtr entryPtrSeamDecoder entryDecoderBudgetBoundary actualDecoderAllocationPtr actualAllocaReplayPtr
+  sourceOwnedCoherentPtr sourceOwnedComplexPtr sourceOwnedArrayConstructorPtr decoderArrayInitPtr abiDecoderValidArray[qualified] actualDecoderAllocationPtr actualAllocaReplayPtr
   actualAllocSitesCredit acceptedContextPhi sourceWordDecoderPtr sourceBytesRepresentation
   sourceEncodingWindows sourceEncodingLayout sourcePrimitiveMemberPtr sourcePrimitiveReentryPtr canonicalMemberTraversalPtr sourcePrimitiveComplexPtr sourceRecursiveComplexPtr
   entryStateRel entryArgPtrs entryLocals registrationGuardPtr
@@ -785,7 +786,7 @@ Theorem registration_owner_alloca_ptr:
     (!p sz. p <> q /\ ptr_covers G tn p s sz ==>
       ptr_covers H u p t sz) /\
     (!D lower ctx func.
-      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+      fn_has_code sa sb func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
       s.vs_current_bb = sa.cs_current_bb /\
       s.vs_inst_idx = LENGTH sa.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx func PG H u
@@ -864,7 +865,7 @@ Theorem registration_alloc_buffer_ptr:
     t.vs_gas_readings = s.vs_gas_readings /\
     (!p sz. p <> q /\ ptr_covers G tn p s sz ==> ptr_covers H u p t sz) /\
     (!D lower ctx' func.
-      fn_has_code st last func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      fn_has_code st last func /\ allocas_from lower s /\ (ctx_has_dalloca ctx' ==> allocas_below_fmp s) /\
       s.vs_current_bb = st.cs_current_bb /\
       s.vs_inst_idx = LENGTH st.cs_current_insts /\
       (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
@@ -1085,7 +1086,7 @@ QED
 Theorem registration_alloc_buffer_origin[local]:
   emit_op ALLOCA [Lit (n2w n)] sa = (Var q,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb fn /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
@@ -1132,7 +1133,8 @@ Theorem registration_argument_prepare_joint[local]:
   (!entry. FLOOKUP s.vs_allocas st.cs_next_id = SOME entry ==>
     ?p. entry = (p,n) /\ p+n < dimword (:256)) /\
   fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t H u q p.
@@ -1238,6 +1240,22 @@ Proof
      disch_then (qspecl_then [`tn`, `tv0`, `v0`, `p0`] mp_tac) >> simp[]) >>
   `allocated.vs_current_bb = a.cs_current_bb` by simp[] >>
   `~allocated.vs_halted` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
+       mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp allocated` by
+    (strip_tac >>
+     qabbrev_tac `ins = mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [q]` >>
+     `MEM ins (fn_insts fn)` by
+       (irule fn_has_code_current_member >>
+        qexistsl_tac [`st`,`a`] >> gvs[Abbr `ins`]) >>
+     `exec_alloca ins s (n2w n : bytes32) = OK allocated` by
+       gvs[Abbr `ins`, run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, AllCaseEqs()] >>
+     `ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit (n2w n)]` by
+       simp[Abbr `ins`, mk_inst_def] >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
+       (drule_then strip_assume_tac) >>
+     drule_all alloca_site_below_fmp >> simp[]) >>
   drule_all decoderMemberPrefixPtrTheory.member_navigation_source_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
@@ -1382,7 +1400,10 @@ Theorem registration_argument_prepare_forward_robust_resources:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  rpt strip_tac >> drule_all registration_argument_prepare_joint >>
+  rpt strip_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp)` by simp[] >>
+  drule_all registration_argument_prepare_joint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
   qexistsl_tac [`t`, `H`, `u`, `q`, `p`] >> simp[]
 QED
@@ -1404,7 +1425,8 @@ Theorem registration_argument_prepare_guarded_joint:
   (!entry. FLOOKUP s.vs_allocas st.cs_next_id = SOME entry ==>
     ?p. entry = (p,n) /\ p+n < dimword (:256)) /\
   fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t H u q p.
@@ -1482,6 +1504,13 @@ Resume registration_argument_prepare_guarded_joint[guard]:
      decide_tac) >>
   `!x. src = Var x ==> not_fresh_at mid x` by
     (rpt strip_tac >> gvs[calldataDynOwnedTheory.calldata_operand_live_not_fresh]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (strip_tac >>
+     qpat_assum `!D explicit. gas_origin_ptr_path (D,_,explicit,_,_,_) (s,G,tn) [] (OK t,H,u)`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
+       (drule_then strip_assume_tac) >>
+     drule_all decoder_origin_path_allocas_below_fmp >> simp[]) >>
   drule_all registrationGuardPtrTheory.registration_ptr_guard_origin_frame >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   drule calldataRegistrationExecTheory.registration_ptr_guard_code >> strip_tac >>
@@ -1650,7 +1679,10 @@ Theorem registration_argument_prepare_guarded_robust_resources:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  rpt strip_tac >> drule_all registration_argument_prepare_guarded_joint >>
+  rpt strip_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp)` by simp[] >>
+  drule_all registration_argument_prepare_guarded_joint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
   qexistsl_tac [`t`,`H`,`u`,`q`,`p`] >> simp[]
 QED
@@ -1926,7 +1958,8 @@ Theorem registration_aggregate_singleton_joint:
   (!bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\
   fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t H u q p.
@@ -1975,6 +2008,9 @@ Theorem registration_aggregate_singleton_joint:
     t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
     t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
     t.vs_gas_readings = s.vs_gas_readings /\
+    t.vs_initial_fmp = s.vs_initial_fmp /\
+    t.vs_alloca_next + pending_alloca_size fn t <=
+      s.vs_alloca_next + pending_alloca_size fn s /\
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
@@ -2022,6 +2058,15 @@ Proof
   `lo <= ready.vs_alloca_next` by decide_tac >>
   `compile_abi_decode_to_buf (Var q) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) first = ((),last)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ready /\
+    ready.vs_alloca_next + pending_alloca_size fn ready <= w2n ready.vs_initial_fmp` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,_,explicit,_,_,_) (s,G,tn) [] (OK ready,H,u)`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`gas_origin_ptr_path (ARB,_,{},ctx,fn,PG) (s,G,tn) [] (OK ready,H,u)`,
+        `fn_inst_ids_distinct fn`, `ready.vs_fmp = s.vs_fmp`, `alloca_inv ready`,
+        `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_origin_path_room]) >>
   drule sourceOwnedCoherentPtrTheory.source_owned_coherent_decoder_ptr >>
   disch_then (drule_at (Pat `compile_abi_decode_to_buf`)) >>
   disch_then (drule_at (Pat `ptr_covers`)) >>
@@ -2046,6 +2091,13 @@ Proof
      qpat_assum `!D explicit. gas_origin_ptr_path _ (ready,H,u) _ _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
      metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
+  `t.vs_initial_fmp = s.vs_initial_fmp /\
+    t.vs_alloca_next + pending_alloca_size fn t <=
+      s.vs_alloca_next + pending_alloca_size fn s` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path (D,_,explicit,_,_,_) (s,G,tn) [] (OK t,H',u')`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     drule_all decoder_origin_path_allocation_frame >>
+     simp_tac (srw_ss()) []) >>
   qexistsl_tac [`t`, `H'`, `u'`, `q`, `p`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   `CALLDATALOAD <> ALLOCA` by simp[] >>
@@ -2271,7 +2323,10 @@ Theorem registration_aggregate_singleton_ptr_resources:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  rpt strip_tac >> drule_all registration_aggregate_singleton_joint >>
+  rpt strip_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp)` by simp[] >>
+  drule_all registration_aggregate_singleton_joint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
   qexistsl_tac [`t`, `H`, `u`, `q`, `p`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
@@ -2424,8 +2479,12 @@ Proof
   `compile_register_positional_args ce
     [(name,F,dyn,sz,type_to_abi_dec_info sf ce ty)] (4+h) st = (ce',last)` by
     (Cases_on `prim` >> gvs[registration_primitive_as_aggregate]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp)` by simp[] >>
   drule_all registration_aggregate_singleton_joint >>
-  simp[]
+  disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`H`,`u`,`q`,`p`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem registration_singleton_ptr_resources:

@@ -1,5 +1,5 @@
 Theory lowerDloadOracleCallAssembly
-Ancestors
+Ancestors lowerDloadMemoryWritePointEffect[qualified]
   lowerDloadSafetyAssemblyPremises lowerDloadSafetyAllocBounds venomWf
   lowerDloadExternalCallEffects lowerDloadSafetyWriteAssembly lowerDloadSafetyBytes
   lowerDloadSafetyAmbient lowerDloadSafetyValues lowerDloadSafetyUpdates
@@ -20,7 +20,7 @@ Theorem ld_numeric_operand_observation:
 Proof
   strip_tac >>
   `?x. eval_operand op f.lf_src = SOME x` by
-    (irule ld_write_operand_defined >> metis_tac[]) >>
+    (irule lowerDloadMemoryWritePointEffectTheory.ld_write_operand_defined >> metis_tac[]) >>
   qexists_tac `x` >> simp[] >>
   `!v. op = Var v ==> ~retpc_var f.lf_fn v` by
     (gen_tac >> disch_tac >> irule ld_numeric_operand_nonopaque >> metis_tac[]) >>

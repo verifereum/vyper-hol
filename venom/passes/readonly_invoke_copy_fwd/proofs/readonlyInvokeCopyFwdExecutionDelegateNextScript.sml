@@ -26,37 +26,18 @@ Theorem ricf_delegate_frame_consume[local]:
     ~(ro <= db+k /\ db+k < ro + LENGTH (TAKE rs r.vs_returndata)) /\
     ~(ro <= sb+k /\ sb+k < ro + LENGTH (TAKE rs r.vs_returndata))) ==>
   w = z /\ ricf_opaque_frame_agree fn D X sites PG G
-    (tn with t_mem := tn.t_mem DIFF
-      {i | ro <= i /\ i < ro + LENGTH (TAKE rs r.vs_returndata)}) r u
+    (ricf_call_taint tn rq1 s r ro rs) r u
 Proof
   strip_tac >>
-  `w = z /\ ricf_opaque_frame_agree fn D X sites PG G
-    (ricf_call_taint tn rq1 s r ro rs) r u` by
-    (Cases_on `rs = 0`
-     >- (gvs[Excl "consume_call_outcome_eq"] >>
-         irule (Q.INST [`rq2` |-> `rq2`, `t` |-> `t`,
-           `ro2` |-> `ro'`] ricf_opaque_frame_consume_call_zero) >>
-         simp[Excl "consume_call_outcome_eq"] >> metis_tac[]) >>
-     gvs[Excl "consume_call_outcome_eq"] >>
-     irule (Q.INST [`rq2` |-> `rq2`, `t` |-> `t`]
-       ricf_opaque_frame_consume_call) >>
-     simp[Excl "consume_call_outcome_eq"] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  `!tm. ricf_opaque_frame_agree fn D X sites PG G
-      (tm with <|t_stor := {}; t_trans := {}|>) r u ==>
-      ricf_opaque_frame_agree fn D X sites PG G tm r u` by
-    (rpt (pop_assum (K ALL_TAC)) >> rpt gen_tac >>
-     simp[ricf_opaque_frame_agree_def, ricf_frame_agree_def,
-       taint_agree_def, ld_shared_agree_def, op_taint_def,
-       ircf_cross_def, word_agree_except_def] >>
-     rpt strip_tac >> metis_tac[]) >>
-  Cases_on `~rq1.cr_static /\ r.vs_requests <> s.vs_requests /\
-    ~computed_precompile (LAST r.vs_requests) /\
-    r.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success` >>
-  fs[ricf_call_taint_def, Excl "consume_call_outcome_eq"] >>
-  first_x_assum (qspec_then `tn with t_mem := tn.t_mem DIFF
-    {i | ro <= i /\ i < ro + LENGTH (TAKE rs r.vs_returndata)}` mp_tac) >>
-  gvs[Excl "consume_call_outcome_eq"]
+  Cases_on `rs = 0`
+  >- (gvs[Excl "consume_call_outcome_eq"] >>
+      irule (Q.INST [`rq2` |-> `rq2`, `t` |-> `t`,
+        `ro2` |-> `ro'`] ricf_opaque_frame_consume_call_zero) >>
+      simp[Excl "consume_call_outcome_eq"] >> metis_tac[]) >>
+  gvs[Excl "consume_call_outcome_eq"] >>
+  irule (Q.INST [`rq2` |-> `rq2`, `t` |-> `t`]
+    ricf_opaque_frame_consume_call) >>
+  simp[Excl "consume_call_outcome_eq"] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem ricf_execution_delegate_next:
@@ -162,15 +143,16 @@ Proof
     simp[source_memory_write_ranges_def] >>
   `step_prov PG G inst (update_var out w r) = set_prov G [out] NONE /\
    step_taint inst s (update_var out w r) tn =
-     tn with <|t_mem := tn.t_mem DIFF
-       {i | w2n ro <= i /\ i < w2n ro + LENGTH (TAKE (w2n rs) r.vs_returndata)};
-       t_var := set_var_taint tn.t_var [out] {}|> /\
+     (ricf_call_taint tn rq1 s r (w2n ro) (w2n rs)
+       with t_var := set_var_taint tn.t_var [out] {}) /\
    occurrence_sites_step a B inst (update_var out w r) = B` by
     (`r.vs_allocas = s.vs_allocas /\ r.vs_fmp = s.vs_fmp` by
        (qpat_x_assum `consume_call_outcome rq1 _ _ s = _` mp_tac >>
         simp[consume_call_outcome_eq] >> rpt strip_tac >> gvs[]) >>
-     mp_tac (INST_TYPE [alpha |-> ``:num``] ricf_execution_delegate_annotations) >>
-     (impl_tac >- simp[]) >> simp[]) >>
+     mp_tac (Q.INST [`rq` |-> `rq1`]
+       (INST_TYPE [alpha |-> ``:num``] ricf_execution_delegate_annotations)) >>
+     (impl_tac >- simp[Abbr `rq1`, venom_call_request_def]) >>
+     simp[]) >>
   `!gam. gam = ricf_phase_ranges 0 ledger \/
       MEM gam (ricf_phase_stack_ranges stk ledger) \/
       gam = ricf_site_triples sites \/
@@ -188,12 +170,12 @@ Proof
   `rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
    rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient` by
     simp[Abbr `rq1`, Abbr `rq2`, venom_call_request_def] >>
-  qabbrev_tac `mask = tn with t_mem := tn.t_mem DIFF
-    {i | w2n ro <= i /\ i < w2n ro + LENGTH (TAKE (w2n rs) r.vs_returndata)}` >>
+  qabbrev_tac `mask = ricf_call_taint tn rq1 s r (w2n ro) (w2n rs)` >>
   `step_taint inst s (update_var out w r) tn =
-    mask with t_var := set_var_taint mask.t_var [out] {}` by simp[Abbr `mask`] >>
+    mask with t_var := set_var_taint mask.t_var [out] {}` by
+    simp[Abbr `mask`, ricf_call_taint_def] >>
   qpat_x_assum `step_taint inst s (update_var out w r) tn =
-    tn with <|t_mem := _; t_var := _|>` (K ALL_TAC) >>
+    mask with t_var := set_var_taint tn.t_var [out] {}` kall_tac >>
   Cases_on `consume_call_outcome rq2 (w2n ro') (w2n rs) t` >>
   rename1 `consume_call_outcome rq2 (w2n ro') (w2n rs) t =
     (target_result,target_state)` >>
@@ -245,7 +227,7 @@ Proof
        `ro` |-> `source_off`, `ro'` |-> `target_off`, `rs` |-> `output_size`,
        `rq1` |-> `rq1`, `rq2` |-> `rq2`, `z` |-> `target_result`]
        ricf_delegate_frame_consume) >>
-     simp[ricf_consume_call_merge, merge_callee_state_def, Abbr `mask`,
+     simp[ricf_consume_call_merge, merge_callee_state_def, Abbr `mask`, ricf_call_taint_def,
        Abbr `source_off`, Abbr `target_off`, Abbr `output_size`,
        Excl "consume_call_outcome_eq"] >>
      (impl_tac >- (gvs[Excl "consume_call_outcome_eq"] >>
@@ -265,7 +247,7 @@ Proof
            (mp_then Any strip_assume_tac ricf_consume_call_footprint) >>
          qpat_assum `consume_call_outcome rq2 _ _ t = _`
            (mp_then Any strip_assume_tac ricf_consume_call_footprint) >>
-         gvs[Abbr `mask`, ircf_cross_def, Excl "consume_call_outcome_eq"] >>
+         gvs[Abbr `mask`, ricf_call_taint_def, ircf_cross_def, Excl "consume_call_outcome_eq"] >>
          metis_tac[]) >>
      gvs[Excl "consume_call_outcome_eq"] >>
      qmatch_goalsub_abbrev_tac `ircf_cross mask crossed_ranges r target_state` >>
@@ -290,10 +272,10 @@ Proof
         qpat_x_assum `consume_call_outcome rq2 _ _ t = _` mp_tac >>
         simp[consume_call_outcome_eq] >> rpt strip_tac >> gvs[]) >>
      Cases_on `w2n rs = 0`
-     >- (gvs[ricf_support_agree_def, Abbr `mask`,
+     >- (gvs[ricf_support_agree_def, Abbr `mask`, ricf_call_taint_def,
            read_byte_write_memory_with_expansion, Excl "consume_call_outcome_eq"] >>
          metis_tac[]) >>
-     gvs[ricf_support_agree_def, Abbr `mask`,
+     gvs[ricf_support_agree_def, Abbr `mask`, ricf_call_taint_def,
        read_byte_write_memory_with_expansion, Excl "consume_call_outcome_eq"] >>
      rpt strip_tac >> IF_CASES_TAC >>
      simp[Excl "consume_call_outcome_eq"] >> metis_tac[]) >>

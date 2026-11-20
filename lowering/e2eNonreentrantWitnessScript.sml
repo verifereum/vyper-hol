@@ -4,6 +4,7 @@ Ancestors
   supportedProgram immutableSectionRel alist integer_word option
   compileVyper e2eProducers vfmRunCall callTrace
   vyperCalldata vyperInterpreter
+  e2eGasSufficient frameGas callTraceEntryProvenance callTraceRootMetadata
 Libs
   finite_mapLib computeLib wordsLib intReduce cv_transLib
 
@@ -316,4 +317,94 @@ Proof
   simp[asmOptimizerTheory.accepted_finalizers_def]
 QED
 
+local
+  val runtime_parsed = cv_eval ``parse_code 0 FEMPTY ^runtime_bc``
+  val runtime_call_free = SIMP_RULE (srw_ss())
+    [listTheory.EVERY_MEM, rich_listTheory.MEM_COUNT_LIST] (EQT_ELIM
+      ((REWRITE_CONV [runtime_parsed, rich_listTheory.COUNT_LIST_GENLIST] THENC EVAL) ``
+        EVERY (\pc. ~MEM (FLOOKUP (parse_code 0 FEMPTY ^runtime_bc) pc)
+          [SOME Call; SOME StaticCall; SOME DelegateCall; SOME Create; SOME Create2])
+          (COUNT_LIST (LENGTH ^runtime_bc))``))
+
+  val dispatch_facts = map EVAL [
+    ``calldata_dispatch ^tops (^get_tx).calldata``,
+    ``calldata_dispatch ^tops (^locked_tx).calldata``,
+    ``vyperInterpreter$lookup_function NONE "locked_get" External ^tops``]
+  fun selected_source_facts (tx, name) =
+    let
+      val selected = ``^tx with <| function_name := ^name; args := [] |>``
+    in
+      map (SIMP_RULE (srw_ss()) [] o EVAL) [
+        ``call_storage_ok ^am_call ^selected [] gs``,
+        ``FST (call_external (SOME []) obs ^am_call ^selected)``]
+    end
+  val gas_source_facts =
+    selected_source_facts (get_tx, ``"get"``) @
+    selected_source_facts (locked_tx, ``"locked_get"``)
+in
+
+(* Both selected calls meet the gas-sufficiency guards at every added gas. *)
+Theorem asm_opt_nonreentrant_call_gas_sufficiency_nonvacuity:
+  ?policy tops deploy_bc runtime_bc am tx_get es_get tx_locked es_locked.
+    asm_opt_finalizer IN accepted_finalizers /\
+    ~program_reads_self_code tops /\
+    compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc,runtime_bc) /\
+    supported_program tops /\
+    source_typing_ok tops am tx_get /\ call_state_rel tops runtime_bc am tx_get es_get /\
+    source_typing_ok tops am tx_locked /\ call_state_rel tops runtime_bc am tx_locked es_locked /\
+    calldata_dispatch tops tx_get.calldata = SOME ("get",[]) /\
+    calldata_dispatch tops tx_locked.calldata = SOME ("locked_get",[]) /\
+    (?mut args dflts ret body.
+      vyperInterpreter$lookup_function NONE "locked_get" External tops =
+        SOME (mut,T,args,dflts,ret,body)) /\
+    !tx es g' f vals.
+      ((tx,es) = (tx_get,es_get) \/ (tx,es) = (tx_locked,es_locked)) /\
+      calldata_dispatch tops tx.calldata = SOME (f,vals) ==>
+      (!gs. call_storage_ok am
+         (tx with <| function_name := f; args := vals |>)
+         (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
+      (!obs. ~gas_source_exempt tops
+         (tx with <| function_name := f; args := vals |>)
+         (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+            obs am (tx with <| function_name := f; args := vals |>))) /\
+      LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64
+Proof
+  `!es. wf_state es /\
+        (FST (HD es.contexts)).msgParams.code = ^runtime_bc /\
+        (FST (HD es.contexts)).msgParams.parsed = parse_code 0 FEMPTY ^runtime_bc ==>
+        call_trace es = []` by (
+    rpt strip_tac >>
+    Cases_on `call_trace es` >> simp[] >>
+    rename1 `call_trace es = entry :: _` >>
+    PairCases_on `entry` >>
+    rename1 `call_trace es = (rq,oc) :: _` >>
+    `MEM (rq,oc) (call_trace es)` by simp[] >>
+    drule_all call_trace_entry_origin >> strip_tac >>
+    rename1 `run_call_reaches es reached` >>
+    `(FST (HD reached.contexts)).msgParams = (FST (HD es.contexts)).msgParams`
+      by (irule run_call_reaches_root_msgParams >> asm_rewrite_tac[]) >>
+    qpat_x_assum `observable_call _` mp_tac >>
+    simp[observable_call_def, next_opcode_def] >>
+    IF_CASES_TAC >> simp[] >>
+    qspec_then `(FST (HD reached.contexts)).pc` mp_tac runtime_call_free >>
+    fs[arithmeticTheory.NOT_LE] >> metis_tac[]) >>
+  `wf_state ^get_es /\ wf_state ^locked_es` by (
+    mp_tac (List.nth (get_facts, 1)) >> mp_tac (List.nth (locked_facts, 1)) >>
+    simp[call_state_rel_def, evm_state_ok_def]) >>
+  `!g. call_trace (add_frame_gas g ^get_es) = [] /\
+       call_trace (add_frame_gas g ^locked_es) = []` by (
+    gen_tac >> conj_tac >> first_x_assum irule >>
+    (conj_tac
+     >- (irule add_frame_gas_wf_state >> asm_rewrite_tac[]) >>
+     simp[add_frame_gas_def, p23_frame_def])) >>
+  MAP_EVERY exists_tac
+    [``o1_policy all_capabilities``, tops, deploy_bc, runtime_bc, am_call,
+     get_tx, get_es, locked_tx, locked_es] >>
+  rewrite_tac ([compile] @ compile_guards @ get_facts @ locked_facts @ dispatch_facts) >>
+  simp[asmOptimizerTheory.accepted_finalizers_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs (dispatch_facts @ gas_source_facts @ [gas_source_exempt_def, source_exempt_def])
+QED
+
+end
 end

@@ -33,7 +33,7 @@ Proof
      simp[encode_inst_def, evm_opcode_byte_def, evm_opcode_table_def,
           opcode_def]) >>
   `frame_inst_at e e ReturnDataCopy` by (irule frame_inst_at_self >> simp[]) >>
-  fs[frame_inst_at_def] >> gvs[]
+  fs[frame_inst_at_step] >> gvs[]
 QED
 
 Theorem asm_frame_current_gas[local]:
@@ -99,7 +99,7 @@ Proof
       `frame_op_gas H + 64 * D <= frame_gas_left e` by decide_tac >>
       drule_all asm_frame_current_gas >> simp[]) >>
   drule_all (cj 2 asm_frame_step) >> strip_tac
-  >- (fs[frame_inst_at_def] >> metis_tac[frame_reaches_last]) >>
+  >- (fs[frame_inst_at_step] >> metis_tac[frame_reaches_last]) >>
   drule_all frame_next_inst_at >> simp[] >> strip_tac >>
   `frame_op_gas H <= frame_gas_left e` by decide_tac >>
   drule_all asm_frame_gas_step >> strip_tac >>
@@ -129,7 +129,7 @@ Proof
     asm_evm_rel (prog ++ [AsmDataItem data]) a es` by
     metis_tac[asm_frame_rel_def] >>
   drule_all frame_next_opcode >> strip_tac >>
-  simp[frame_inst_at_def] >> rpt strip_tac >>
+  simp[frame_inst_at_step] >> rpt strip_tac >>
   gvs[] >>
   metis_tac[frame_encode_returndatacopy, MEM_EL]
 QED
@@ -163,13 +163,13 @@ Proof
   drule_all (cj 2 asm_frame_step) >> strip_tac
   >- (strip_tac >>
       `t = e` by
-        (irule frame_reaches_last >> gvs[frame_inst_at_def]) >> gvs[]) >>
+        (irule frame_reaches_last >> gvs[frame_inst_at_step]) >> gvs[]) >>
   gvs[] >> strip_tac >>
   `t = e \/ RTC (\a b. LENGTH a.contexts >= LENGTH e.contexts /\
       step a = (INL (),b)) es1 t` by
-    (irule frame_reaches_next >> gvs[frame_inst_at_def])
+    (irule frame_reaches_next >> gvs[frame_inst_at_step])
   >- gvs[] >>
   first_x_assum (qspecl_then [`prog`, `data`, `es0`, `as1`, `es1`, `H`, `t`]
     mp_tac) >>
-  simp[] >> gvs[frame_inst_at_def, frame_next_def] >> metis_tac[]
+  simp[] >> gvs[frame_inst_at_step, frame_next_def] >> metis_tac[]
 QED

@@ -16,7 +16,7 @@ Theorem abi_decode_word_store_observed[local]:
   eval_operand (Var dst) s = SOME dw /\ eval_operand value s = SOME w /\
   ptr_covers G tn dst s 32 /\ op_taint tn value = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\ allocas_from lo s /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   w2n dw + 32 <= s.vs_alloca_next ==>
   ?t Gf tnf.
@@ -165,7 +165,7 @@ val input_origin = ``\s.
 
 Theorem abi_decode_owned_word_store_observed_exact:
   emit_void MSTORE [Var dst;value] sa = ((),sb) /\
-  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (^owned_decoder_state) sa s G tn /\ (?H. V H) /\

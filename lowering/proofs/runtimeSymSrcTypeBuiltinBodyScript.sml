@@ -124,17 +124,19 @@ Resume runtime_sym_type_builtin_body[convert]:
   IF_CASES_TAC >> simp[]
   >- (Cases_on `compile_bytestring_widen_copy (type_memory_bytes ce rt) v'
           (type_memory_bytes ce (lowered_value_type ce (HD args))) st1` >>
-      simp[as_stack_val_def] >>
+      simp[as_ptr_val_def] >>
       strip_tac >> gvs[] >>
       first_x_assum (drule_all_then strip_assume_tac) >>
-      simp[runtime_sym_value_def]) >>
+      simp[runtime_sym_value_def, mk_ptr_def]) >>
+  IF_CASES_TAC >> simp[] >>
   Cases_on `rt` >> simp[] >>
-  qmatch_goalsub_abbrev_tac `as_stack_val vt cv` >>
-  Cases_on `cv` >> simp[as_stack_val_def] >>
+  FIRST [qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory cv`,
+         qmatch_goalsub_abbrev_tac `as_stack_val vt cv`] >>
+  Cases_on `cv` >> simp[as_stack_val_def, as_ptr_val_def] >>
   disch_then (CONJUNCTS_THEN2 (SUBST_ALL_TAC o SYM) (SUBST_ALL_TAC o SYM)) >>
   qpat_x_assum `Abbrev _` (assume_tac o SYM o SRULE [markerTheory.Abbrev_def]) >>
   first_x_assum (drule_all_then strip_assume_tac) >>
-  simp[runtime_sym_value_def, is_label_operand_def]
+  simp[runtime_sym_value_def, mk_ptr_def, is_label_operand_def]
 QED
 Resume runtime_sym_type_builtin_body[encode]:
   `?e bytes. args = [e] /\ ~ensure /\ mid = SOME bytes` by

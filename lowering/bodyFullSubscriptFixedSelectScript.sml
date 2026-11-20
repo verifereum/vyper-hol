@@ -24,7 +24,7 @@ Theorem fixed_select_counted[local]:
   op_taint tn bop = {} /\ op_taint tn iop = {} /\ op_prov G iop = NONE /\
   (!x. bop = Var x ==> not_fresh_at sn x) /\
   (!x. iop = Var x ==> not_fresh_at sn x) /\
-  allocas_from lo u /\ ~ctx_has_dalloca ctx /\ ~u.vs_halted /\
+  allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\ ~u.vs_halted /\
   u.vs_current_bb = sn.cs_current_bb /\ u.vs_inst_idx = LENGTH sn.cs_current_insts /\
   alloca_history fn u ==>
   ?q Gq tq.
@@ -81,7 +81,6 @@ Proof
    (!x. Lit (n2w n) = Var x ==> not_fresh_at sn x) /\
    op_prov G (Lit (n2w n)) = NONE /\ op_taint tn (Lit (n2w n)) = {}` by
     simp[eval_operand_def, op_prov_def, op_taint_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all array_tail_scalar_uniform >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choosel_then [`q`,`Gq`,`tq`] strip_assume_tac)) >>
@@ -381,7 +380,7 @@ Theorem subscript_fixed_memory_select_full:
   op_taint tn bop = {} /\ op_taint tn iop = {} /\ op_prov G iop = NONE /\
   (!x. bop = Var x ==> not_fresh_at sn x) /\
   (!x. iop = Var x ==> not_fresh_at sn x) /\
-  allocas_from lo u /\ ~ctx_has_dalloca ctx /\ ~u.vs_halted /\
+  allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\ ~u.vs_halted /\
   u.vs_current_bb = sn.cs_current_bb /\ u.vs_inst_idx = LENGTH sn.cs_current_insts /\
   alloca_history fn u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
   local_ptrs_reserved ce sn /\ sa.cs_next_var <= sn.cs_next_var /\ sn.cs_next_id <= sb.cs_next_id /\
@@ -539,6 +538,14 @@ Proof
          rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
          goal_assum (drule_at (Pat `array_length_frame _ _ _ _ _ _ _`)) >>
          rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp q` by
+        (qpat_assum `array_length_frame _ u _ _ q _ _`
+           (strip_assume_tac o SRULE [] o
+            Q.AP_TERM `\st. (st.vs_allocas,st.vs_initial_fmp,st.vs_fmp)` o
+            cj 1 o REWRITE_RULE[array_length_frame_def]) >>
+         strip_tac >>
+         qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` drule >>
+         simp[allocas_below_fmp_def] >> metis_tac[]) >>
       disj1_tac >> qexists `q` >> conj_tac >- REFL_TAC >>
       qexists `child` >>
       qpat_assum `select_result _ _ _ _ _ = (INL child,fin)` SUBST1_TAC >>

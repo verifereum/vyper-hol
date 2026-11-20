@@ -282,8 +282,9 @@ Proof
                w2n a + n * type_memory_size etv <= b + sz` by
        (strip_tac >>
         `n <> 0` by
-          fs[Once (cj 3 vyperValueTheory.evaluate_type_def),
-             vyperASTTheory.bound_length_def, AllCaseEqs()] >>
+          (Cases_on `n` >> simp[] >>
+           qpat_x_assum `evaluate_type _ (ArrayT et (Fixed 0)) = SOME _` mp_tac >>
+           simp[Once vyperValueTheory.evaluate_type_def]) >>
         `ptr_mem_ok cx (ArrayT et (Fixed n)) (ArrayV (SArrayV kvs)) p.ptr_operand Gi tni it` by
           fs[ptr_vv_ok_def] >>
         `val_footprint (ArrayTV etv (Fixed n)) (ArrayV (SArrayV kvs)) <> 0` by

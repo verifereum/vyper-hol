@@ -5,7 +5,7 @@ Ancestors exprSimDefs[qualified,ignore_grammar]
   exprSimWordArgs gasOutcomeFullCompose exprSimSource exprLowering compileEnv
   valueEncoding gasShadowCompileHelpers gasShadowState gasShadow
   gasShadowCompileStmtHelpers gasShadowCompileContext gasShadowCompileConvert
-  forPtrAllocationFrame stateRelProj
+  forPtrAllocationFrame stateRelProj bodyFullIfExpReach
 
 val _ = Parse.hide "base";
 
@@ -19,7 +19,8 @@ Theorem make_array_loop_full:
     ctx_inst_ids_distinct ctx /\ fn_inst_ids_distinct func /\
     gas_shadow_context ctx shadow_ctx /\ gas_shadow_function func shadow_func /\
     MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_no_wrap inst z) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==>
            not_fresh_at csbase x) /\
     (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==>
@@ -112,7 +113,8 @@ Theorem make_array_loop_full:
                 FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
                 loweringStateRelDefs$regions_disjoint p n b sz) ==>
               mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory))
-      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   qabbrev_tac `packet = (\cs ee s G tn.
     (?events. ee.storage_trace = ebase.storage_trace ++ events) /\
@@ -230,11 +232,11 @@ Proof
   (impl_tac >-
     (qunabbrev_tac `packet` >> qunabbrev_tac `prefix` >>
      simp[comp_bind_def, arithmeticTheory.ADD_COMM] >>
-     gvs[typeLayoutPropsTheory.type_memory_size_list_sum])) >>
+     gvs[typeLayoutPropsTheory.type_memory_size_list_sum] >> first_assum ACCEPT_TAC)) >>
   disch_then assume_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Qslot _` >>
   rewrite_tac[eval_exprs_cons_action] >>
-  irule gas_outcome_full_bind_all >>
+  irule gas_outcome_full_bind_all_path >>
   conj_tac >-
     (gen_tac >> BETA_TAC >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
      simp[cj 6 vyperStorageTraceTheory.evaluate_storage_trace_frame,
@@ -249,10 +251,25 @@ QED
 
 Resume make_array_loop_full[continuation]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
+                    gas_origin_ptr_path _ (s,G,tn) marks (OK t'',G1,tn1)`
+    (mk_asm "slot_path") >>
   `Qslot (storage_trace_horizon mid.storage_trace) res mid G1 tn1 t''` by
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   qpat_x_assum `Qslot _ _ _ _ _ _` mp_tac >>
   simp[Abbr `Qslot`] >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  asm_x "slot_path"
+    (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
+  `!fn i z. frag_reachable ctx func t'' fn i z ==> dalloca_no_wrap i z` by
+    (qpat_assum `gas_origin_ptr_path _ (s,G,tn) marks (OK t'',G1,tn1)` (fn path =>
+       qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+       qpat_assum `MEM func ctx.ctx_functions` (fn member =>
+       qpat_assum `!fn i z. frag_reachable ctx func s fn i z ==> _`
+         (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+          CONJ path o CONJ (MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi
+            (CONJ inv member))))))) >>
   disj1_tac >> goal_assum (drule_at Any) >> BETA_TAC >>
   `expr_sim_inv cenv cx env mid` by
     (qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
@@ -298,7 +315,8 @@ Resume make_array_loop_full[continuation]:
     (\hh rr fin Gf tf out. Qtail0 hh rr fin Gf tf out /\
       !id entry. FLOOKUP t''.vs_allocas id = SOME entry ==>
         FLOOKUP out.vs_allocas id = SOME entry)
-    (\hh rr fin gt r. expr_exit rr r /\ halt_exit hh cx fin rr r)` by
+    (\hh rr fin gt r. expr_exit rr r /\ halt_exit hh cx fin rr r /\
+      (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))` by
     (qpat_assum `gas_outcome_full _ _ _ _ (eval_exprs cx args) _ Qtail0 _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      simp_tac bool_ss [gasOutcomeFullTheory.gas_outcome_full_def] >>
@@ -323,11 +341,14 @@ Resume make_array_loop_full[continuation]:
 QED
 
 Resume make_array_loop_full[tail_entry]:
-  simp[] >> rpt conj_tac >> suspend "tail_entry_close"
+  simp[] >> rpt conj_tac
+  >~ [`!fn inst z. frag_reachable ctx func t'' fn inst z ==> dalloca_no_wrap inst z`]
+  >- first_assum ACCEPT_TAC >>
+  suspend "tail_entry_close"
 QED
 
 Resume make_array_loop_full[tail_entry_close]:
-  gvs[typeLayoutPropsTheory.type_memory_size_list_sum]
+  gvs[typeLayoutPropsTheory.type_memory_size_list_sum] >> decide_tac
 QED
 
 Resume make_array_loop_full[tail_right_cert]:

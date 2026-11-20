@@ -1584,6 +1584,7 @@ Resume append_nested_memory_cont_full[capacity]:
   `allocas_from lo t` by fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
   `ptr_covers G tn p t (32*(1+cap))` by simp[arithmeticTheory.ADD_COMM] >>
   `cap < dimword (:256) /\ w2n bp+32*(1+cap) <= dimword (:256)` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all appendMemoryPtrTheory.append_memory_word_ptr >>
   disch_then (qspecl_then [`func`, `PG`, `DF (storage_trace_horizon mid.storage_trace)`]
     strip_assume_tac) >>
@@ -1748,6 +1749,7 @@ Resume append_nested_memory_cont_full[success]:
      simp[venomStateTheory.eval_operand_def, arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
   `allocas_from lo t` by fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
   `ptr_covers G tn p t (32*(1+cap))` by simp[arithmeticTheory.ADD_COMM] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all appendMemoryPtrTheory.append_memory_word_ptr >>
   disch_then (qspecl_then [`func`, `PG`, `DF (storage_trace_horizon mid.storage_trace)`]
     strip_assume_tac) >>
@@ -2194,6 +2196,7 @@ Proof
   strip_tac >>
   `(!x. bop = Var x ==> not_fresh_at sm x) /\
    w2n (if tr then tload slot t else sload slot t) < cap` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all appendStorageStageTransportPtrTheory.append_storage_guard_actual >>
   disch_then (qspecl_then [`func`, `PG`, `G`, `D`] strip_assume_tac) >>
   suspend "suffix"
@@ -2221,6 +2224,7 @@ Resume append_nested_storage_success_path[suffix]:
      rpt (pop_assum kall_tac) >>
      simp[stateFrameTheory.state_frame_def, venomStateTheory.venom_state_component_equality] >>
      metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by simp[] >>
   drule_all appendStorageStageTransportPtrTheory.append_storage_suffix_actual >>
   disch_then (qspecl_then [`func`, `PG`, `G'`, `D`] strip_assume_tac) >>
   suspend "compose"
@@ -2351,6 +2355,7 @@ Proof
   strip_tac >>
   `(!x. bop = Var x ==> not_fresh_at sm x) /\
    ~(w2n (if tr then tload slot t else sload slot t) < cap)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all appendStorageStageTransportPtrTheory.append_storage_guard_abort_actual >>
   disch_then (qspecl_then [`func`, `PG`, `G`,
     `<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`]
@@ -2862,6 +2867,7 @@ Resume append_nested_storage_cont_framed[static]:
   `allocas_from lo t` by fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
   `w2n (if tr then tload slot t else sload slot t) < cap` by simp[] >>
   `t.vs_call_ctx.cc_static` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all appendStorageStaticPtrTheory.append_storage_word_static_origin_path >>
   disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
   `!tail. append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v

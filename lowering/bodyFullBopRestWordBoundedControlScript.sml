@@ -27,7 +27,7 @@ Theorem rest_word_membership_bounded_compare_segment_joint:
     (sa.cs_next_label + (if cond_site then 5 else 3)) /\
   no = fresh_label_output (if cond_site then "in_body" else "in_incr")
     (sa.cs_next_label + (if cond_site then 2 else 4)) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
   eval_operand lhs s = SOME x /\ eval_operand rhs s = SOME y /\
@@ -63,13 +63,12 @@ Proof
      Cases_on `cond_site` >> simp[] >>
      Cases_on `0 < skip` >>
      Cases_on `is_ctor /\ loc = LocCode /\ IS_SOME imm` >> simp[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all rest_word_membership_segment_compare_joint >> simp[]
 QED
 Theorem rest_word_membership_bounded_condition_joint:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) (SOME cap) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_cond" (sa.cs_next_label+1) /\
   s.vs_inst_idx = 0 /\ membership_loop_registers sa i r G tn s /\
@@ -106,7 +105,7 @@ QED
 Theorem rest_word_membership_bounded_found_joint:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) (SOME cap) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_found" (sa.cs_next_label+3) /\
   s.vs_inst_idx = 0 /\
@@ -131,14 +130,13 @@ Proof
    get_instruction bb 1 = SOME (mk_inst (sa.cs_next_id+13+delta+width+1) JMP
      [Label (fresh_label_output "in_exit" (sa.cs_next_label+5))] [])` by
     simp[get_instruction_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all rest_word_membership_segment_found_joint >> simp[]
 QED
 
 Theorem rest_word_membership_bounded_increment_joint:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) (SOME cap) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_incr" (sa.cs_next_label+4) /\
   s.vs_inst_idx = 0 /\
@@ -176,14 +174,13 @@ Proof
      simp[loweringStateRelDefsTheory.not_fresh_at_def] >> rpt strip_tac >>
      first_x_assum (qspec_then `8+delta+width` mp_tac) >>
      first_x_assum (qspec_then `1` mp_tac) >> simp[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all rest_word_membership_segment_increment_joint >> simp[]
 QED
 
 Theorem rest_word_membership_bounded_notin_joint:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) (SOME cap) F sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = 0 /\
   delta = (if 0 < skip then 1 else 0) /\
   width = (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1) /\
@@ -211,14 +208,13 @@ Proof
      first_x_assum (qspec_then `9+delta+width` mp_tac) >> simp[]) >>
   drule membership_bounded_loop_exit >> strip_tac >>
   `op = Var dst` by gvs[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all rest_word_membership_segment_notin_joint >> simp[]
 QED
 
 Theorem rest_word_membership_bounded_capacity_joint:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) (SOME cap) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_entry" sa.cs_next_label /\
   s.vs_inst_idx = 2 /\
@@ -257,6 +253,10 @@ Proof
     (drule_all run_inst_seq_gas_origin_ptr_path >>
      disch_then (qspec_then `explicit` mp_tac) >>
      simp[Abbr `code`, mk_inst_def, is_terminator_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (t with vs_inst_idx := 5)` by
+    (qpat_assum `t = update_var _ _ _` SUBST1_TAC >>
+     simp[allocas_below_fmp_def, update_var_def] >>
+     metis_tac[allocas_below_fmp_def]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
     (t with vs_inst_idx := 5,G1,tn1) [] (OK u,G1,tn1)` by
     (`u = jump_to (fresh_label_output "in_cond" (sa.cs_next_label+1))
@@ -322,7 +322,7 @@ Finalise rest_word_membership_bounded_capacity_joint
 Theorem rest_word_membership_bounded_init_joint:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) (SOME cap) is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. len = Var x ==> not_fresh_at sa x) /\
@@ -362,6 +362,11 @@ Proof
    allocas_from lo (t with vs_inst_idx := 2)` by
     (irule (Q.GEN `u` rest_word_membership_segment_init_prefix_joint) >>
      metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (t with vs_inst_idx := 2)` by
+    (qpat_assum `t = update_var _ _ _` SUBST1_TAC >>
+     qpat_assum `e = jump_to _ _` SUBST1_TAC >>
+     simp[allocas_below_fmp_def, update_var_def, jump_to_def] >>
+     metis_tac[allocas_below_fmp_def]) >>
   `eval_operand len (t with vs_inst_idx := 2) = SOME (n2w n) /\
    op_prov G2 len = NONE /\ op_taint tn2 len = {}` by
     (drule_all membership_loop_frame_operand >> simp[]) >>

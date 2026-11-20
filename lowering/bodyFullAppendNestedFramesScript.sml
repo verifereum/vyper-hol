@@ -245,8 +245,10 @@ Theorem append_storage_guard_conditional_uniform:
       FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
-  `~ctx_has_dalloca (ctx with ctx_functions := [])` by simp[ctx_has_dalloca_def] >>
-  drule_all append_storage_guard_actual >>
+  `ctx_has_dalloca (ctx with ctx_functions := []) ==> allocas_below_fmp s`
+    by simp[ctx_has_dalloca_def] >>
+  drule_all (Q.INST [`ctx` |-> `ctx with ctx_functions := []`]
+    append_storage_guard_actual) >>
   disch_then (qspecl_then [`func`,`PG`,`G`,`ARB`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts st0 st3) s = OK t` >>
   rename1 `op_taint tf lop = {}` >>
@@ -301,8 +303,10 @@ Theorem append_storage_guard_abort_conditional_uniform:
       FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
-  `~ctx_has_dalloca (ctx with ctx_functions := [])` by simp[ctx_has_dalloca_def] >>
-  drule_all append_storage_guard_abort_actual >>
+  `ctx_has_dalloca (ctx with ctx_functions := []) ==> allocas_below_fmp s`
+    by simp[ctx_has_dalloca_def] >>
+  drule_all (Q.INST [`ctx` |-> `ctx with ctx_functions := []`]
+    append_storage_guard_abort_actual) >>
   disch_then (qspecl_then [`func`,`PG`,`G`,`ARB`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts st0 st3) s = Abort Revert_abort t` >>
   rename1 `op_taint tf lop = {}` >>

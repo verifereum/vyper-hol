@@ -28,7 +28,8 @@ Theorem structlit_bytes_store_origin_ptr_path:
   (type_memory_size dtv = 0 \/ w2n dw + type_memory_size dtv <= s.vs_alloca_next) /\
   ptr_covers G tn xs s (type_memory_size stv) /\
   ptr_covers G tn xd s (type_memory_size dtv) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -216,6 +217,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   first_x_assum drule_all >>
   disch_then (REPEAT_TCL CHOOSE_THEN (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all structlit_bytes_store_origin_ptr_path >>
   disch_then (qspecl_then [`explicit`, `PG`]
     (qx_choose_then `u` (qx_choose_then `G2` (qx_choose_then `tn2` strip_assume_tac)))) >>

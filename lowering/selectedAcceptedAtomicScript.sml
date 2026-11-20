@@ -1,5 +1,6 @@
 Theory selectedAcceptedAtomic
 Ancestors
+  decoderOriginAllocationFrame
   selectedAcceptedInterfaces calldataExactScalarAccepted calldataExactBytesJoint
   defaultWordDecodeExec calldataScalarSourceExact calldataSourceWord
   calldataReconstruction calldataRegistration abiDecoderCoherence
@@ -37,6 +38,7 @@ Proof
      simp[]) >>
   `compile_abi_decode_to_buf (Var child) src CALLDATALOAD (Lit 0w) (Lit 0w)
      (DecPrimWord cl) st = ((),last)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all calldata_word_accepted_resource_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `t = v with vs_inst_idx := initial.vs_inst_idx` by metis_tac[exec_result_11] >>
@@ -59,6 +61,12 @@ Proof
      qpat_assum `type_memory_size tv = 32`
        (fn th => rewrite_tac[th, arithmeticTheory.LESS_EQ_REFL]) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `v.vs_initial_fmp = initial.vs_initial_fmp /\
+   v.vs_alloca_next + pending_alloca_size fn v <=
+     initial.vs_alloca_next + pending_alloca_size fn initial` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (initial,G,tn) [] (OK v,H,u)`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     drule_all decoder_origin_path_allocation_frame >> simp[NoAsms]) >>
   qexistsl [`v`,`[]`,`H`,`u`] >>
   qpat_assum `type_memory_size tv = 32` (fn th => rewrite_tac[th]) >>
   rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[NoAsms]]
@@ -90,6 +98,12 @@ Proof
      disch_then (qspecl_then [`lower`,`v`] mp_tac) >>
      impl_tac >- (rewrite_tac[LESS_EQ_REFL] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
      disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+  `v.vs_initial_fmp = initial.vs_initial_fmp /\
+   v.vs_alloca_next + pending_alloca_size fn v <=
+     initial.vs_alloca_next + pending_alloca_size fn initial` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (initial,G,tn) [] (OK v,H,u)`
+       (qspecl_then [`ARB`,`{}`] assume_tac) >>
+     drule_all decoder_origin_path_allocation_frame >> simp[NoAsms]) >>
   qexistsl [`v`,`sc`,`H`,`u`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED

@@ -5,7 +5,7 @@ Ancestors
   lowerDloadPtrStatic o1PassContract o1PassLift list venomInst venomFnScheduleRunner
   contextCodegenRel venomExecProofs venomState venomFnInstsProofs staticAbortDefs
 
-Theorem cfg_old_code_end_var[local]:
+Theorem cfg_old_code_end_var:
   !g x. code_end_var g x ==> !f.
   (!j v. MEM j (fn_insts g) /\ MEM v j.inst_outputs /\
     MEM v (fn_ir_vars f) /\
@@ -21,7 +21,7 @@ Proof
   metis_tac[code_end_var_rules]
 QED
 
-Theorem cfg_split_old_definition[local]:
+Theorem cfg_split_old_definition:
   wf_function f /\ ir_supply_covers_fn s f /\ ir_supply_inst_ok s /\
   MEM pred f.fn_blocks /\ MEM target f.fn_blocks /\
   build_split_block_supply s pred target = (split,repls,t) /\
@@ -190,15 +190,16 @@ Proof
   simp[supply_norm_inv_def] >> metis_tac[]
 QED
 
-Theorem cfg_norm_code_end_offset_ok:
+Theorem cfg_norm_code_end_offset_ok_under:
   ctx_pass_stage rpolicy (CFP_Simple VP_CFGNormalization) view C C' /\
   o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
   vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  (!s t. execution_frame s = execution_frame t /\ P t ==> P s) /\
   code_end_offset_ok
-    (\ctx fn inst s. raw_reachable vs ctx fn inst s /\
+    (\ctx fn inst s. raw_reachable vs ctx fn inst s /\ P s /\
                      (guarded ==> ~in_static_abort_prefix fn s)) C ==>
   code_end_offset_ok
-    (\ctx fn inst s. raw_reachable vs ctx fn inst s /\
+    (\ctx fn inst s. raw_reachable vs ctx fn inst s /\ P s /\
                      (guarded ==> ~in_static_abort_prefix fn s)) C'
 Proof
   strip_tac >> `ctx_bisim C C'` by metis_tac[cfg_norm_stage_bisim] >>
@@ -221,10 +222,28 @@ Proof
   drule_all cfg_fn_codecopy_back >>
   disch_then (qx_choose_then `source_state` strip_assume_tac) >>
   `raw_reachable vs C source_fn inst source_state` by metis_tac[frame_reach_raw_reachable] >>
+  `P source_state` by metis_tac[] >>
   `source_state.vs_labels = vs'.vs_labels` by
     (qpat_x_assum `execution_frame _ = _` mp_tac >> simp[]) >>
   qpat_x_assum `code_end_offset_ok _ _` mp_tac >>
-  simp[code_end_offset_ok_def] >> metis_tac[]
+  simp[code_end_offset_ok_def] >>
+  disch_then (qspecl_then
+    [`source_fn`, `inst`, `source_state`, `dst`, `x`, `sz`, `w`, `base'`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem cfg_norm_code_end_offset_ok:
+  ctx_pass_stage rpolicy (CFP_Simple VP_CFGNormalization) view C C' /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  code_end_offset_ok
+    (\ctx fn inst s. raw_reachable vs ctx fn inst s /\
+                     (guarded ==> ~in_static_abort_prefix fn s)) C ==>
+  code_end_offset_ok
+    (\ctx fn inst s. raw_reachable vs ctx fn inst s /\
+                     (guarded ==> ~in_static_abort_prefix fn s)) C'
+Proof
+  mp_tac (Q.INST [`P` |-> `\s:venom_state. T`] cfg_norm_code_end_offset_ok_under) >> simp[]
 QED
 
 Theorem cfg_code_end_stage_preserves[local]:

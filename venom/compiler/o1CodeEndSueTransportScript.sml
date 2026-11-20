@@ -73,7 +73,7 @@ Proof
   Cases_on `segment` >> gvs[] >> metis_tac[rich_listTheory.MEM_FRONT, MEM]
 QED
 
-Theorem sue_frame_codecopy_projection[local]:
+Theorem sue_frame_codecopy_projection:
   ir_supply_inst_ok supply /\ ir_supply_covers_fn supply fn /\
   sue_expand_function_supply supply fn = (fn',supply') /\
   sue_frame_align C C' fn fn' s0 inst' t /\ inst'.inst_opcode = CODECOPY ==>
@@ -121,7 +121,7 @@ Proof
   qpat_x_assum `!j. MEM j (fn_insts fn') ==> _` mp_tac >> simp[]
 QED
 
-Theorem sue_code_end_stage_pairs[local]:
+Theorem sue_code_end_stage_pairs:
   ctx_pass_stage rpolicy (CFP_Simple VP_SingleUseExpansion) view C C' /\
   o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
   EVERY (o1_fn_row 6) C.ctx_functions ==>
@@ -145,18 +145,19 @@ Proof
   metis_tac[]
 QED
 
-Theorem sue_code_end_stage_preserves:
+Theorem sue_code_end_stage_preserves_under_requests:
   ctx_pass_stage rpolicy (CFP_Simple VP_SingleUseExpansion) view C C' /\
   o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
   EVERY (o1_fn_row 6) C.ctx_functions /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
-  code_end_offset_ok (raw_reachable vs) C ==>
-  code_end_offset_ok (raw_reachable vs) C'
+  code_end_offset_ok (\ctx fn inst s. raw_reachable vs ctx fn inst s /\ P s.vs_requests) C ==>
+  code_end_offset_ok (\ctx fn inst s. raw_reachable vs ctx fn inst s /\ P s.vs_requests) C'
 Proof
   strip_tac >>
   `ctx_bisim C C'` by metis_tac[sue_stage_bisim] >>
   drule_all sue_code_end_stage_pairs >>
   disch_then (qspec_then `vs.vs_labels` assume_tac) >>
   simp[code_end_offset_ok_def] >> rpt gen_tac >> strip_tac >>
+  rename1 `raw_reachable vs C' fn inst vs'` >>
   `frame_origin vs C C' fn inst vs'` by
     (irule frame_sim_raw_origins >> simp[] >>
      fs[ctx_pass_stage_def] >>
@@ -180,8 +181,24 @@ Proof
   `raw_reachable vs C source_fn source_inst source_state` by metis_tac[frame_reach_raw_reachable] >>
   `source_state.vs_labels = vs'.vs_labels` by
     (qpat_x_assum `execution_frame _ = _` mp_tac >> simp[]) >>
+  `P source_state.vs_requests` by
+    (qpat_assum `execution_frame _ = _`
+       (assume_tac o MATCH_MP o1FrameLockstepTheory.execution_frame_fields) >> simp[]) >>
   qpat_x_assum `code_end_offset_ok _ _` mp_tac >>
   simp[code_end_offset_ok_def] >> metis_tac[]
+QED
+
+Theorem sue_code_end_stage_preserves:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SingleUseExpansion) view C C' /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  EVERY (o1_fn_row 6) C.ctx_functions /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  code_end_offset_ok (raw_reachable vs) C ==>
+  code_end_offset_ok (raw_reachable vs) C'
+Proof
+  `(\ctx fn inst s. raw_reachable vs ctx fn inst s) = raw_reachable vs` by
+    simp_tac bool_ss [FUN_EQ_THM] >>
+  mp_tac (Q.INST [`P` |-> `\_. T`] sue_code_end_stage_preserves_under_requests) >>
+  asm_simp_tac bool_ss []
 QED
 
 Theorem sue_code_end_run_contract:

@@ -236,6 +236,20 @@ Proof
       entry_venom_state_fresh]
 QED
 
+Theorem opt_entry_initial_venom_state_rel_own:
+  !tops prog prog' am tx es cplan.
+  call_state_rel tops (assemble prog') am tx es ==>
+  initial_venom_state_rel tops am
+    (tx with code := (opt_entry_state_own prog prog' cplan es).vs_code)
+    (opt_entry_state_own prog prog' cplan es)
+Proof
+  rpt strip_tac >>
+  drule_then (qspec_then `cplan` assume_tac) entry_venom_state_initial_venom_state_rel >>
+  drule_then (qspecl_then [`prog`, `prog'`, `cplan`] SUBST1_TAC)
+    opt_entry_own_txp_identity >>
+  fs[initial_venom_state_rel_def, venom_env_rel_def, opt_entry_state_own_def]
+QED
+
 (* L7 has NO premises. *)
 Theorem entry_venom_state_o1_initial_state_ok:
   !prog cp es.

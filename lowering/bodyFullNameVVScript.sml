@@ -1,7 +1,7 @@
 (* Direct joint local-place simulation for Name. *)
 Theory bodyFullNameVV
 Ancestors
-  bodySimFull bodyNameValueMemory gasOutcomeFullCompose exprSimHyps abiBuiltinEncodeWord
+  bodySimFull gasOutcomeFullCompose exprSimHyps abiBuiltinEncodeWord
   bodyPtrDefs fragGasOriginPtr exprSimNameValue exprSimNameWord exprSimSource
   exprLoweringProps entryDecodeStaticProps vyperTyping loweringSlice exprSimProps
   exprSimHypsDefs exprSimDefs vyperTypeEnv vyperInterpreter vyperState

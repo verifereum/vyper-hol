@@ -23,7 +23,7 @@ Theorem abi_decode_loop_header_observed:
   emit_op ISZERO [lt] se = (done,sf) /\
   emit_inst JNZ [done;Label exit_lbl;Label body_lbl] [] sf = ((),sg) /\
   fn_has_code sa sb fn /\ fn_has_code sb sd fn /\ fn_has_code sd sg fn /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ sa.cs_current_insts = [] /\
   s.vs_inst_idx = 0 /\ allocas_from lo s /\
   (^owned_decoder_state) live protected sa s G tn /\
@@ -76,7 +76,7 @@ Theorem abi_decode_loop_setup_observed:
   abi_decode_array_element_setup (Var counter) src (Var dst) MLOAD
     (Var input) hi ei asz msz sa = ((idx,child_src,child_dst),sb) /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (^owned_decoder_state) live protected sa s G tn /\
@@ -134,6 +134,7 @@ Theorem abi_decode_loop_setup_observed:
     u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
     u.vs_alloca_next = s.vs_alloca_next /\ u.vs_labels = s.vs_labels /\
     tnu.t_mem = tn.t_mem /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
     (!x. not_fresh_at sa x ==>
       lookup_var x u = lookup_var x s /\ FLOOKUP Gu x = FLOOKUP G x /\
       op_taint tnu (Var x) = op_taint tn (Var x)) /\

@@ -3,6 +3,7 @@ Ancestors
   symFnStep fnStaticAbortBoundary contextStaticAbortRel fnBlockStepHelpers
   fnPlanLineage venomExecProofs venomExecSemantics unitShapeDefs symFnSimSpec
   contextCodegenRel list
+  symFnStepOwn
 
 val _ = Parse.hide "cp";
 val _ = Parse.hide "base";
@@ -156,7 +157,7 @@ Resume stopped_nonentry_lift[phis_ok]:
     (drule_at (Pat `body_inv_abort`)) >>
   disch_then (drule_at (Pat `sym_frame_inv`)) >>
   (impl_tac >- simp[]) >> disch_tac >>
-  drule_all sym_nonentry_run_rest >>
+  drule_all symFnStepOwnTheory.sym_nonentry_run_rest >>
   disch_then (qspecl_then [`fuel`, `ctx`] SUBST1_TAC) >>
   `!m. asm_steps lo o2pc prog (n + m) ast = asm_steps lo o2pc prog m as1` by
     metis_tac[stackOpSimTheory.asm_steps_add_ok] >>

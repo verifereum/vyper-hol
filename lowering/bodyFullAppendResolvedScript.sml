@@ -2,7 +2,7 @@
 Theory bodyFullAppendResolved
 Ancestors
   stateRelProj stmtSimDefs vyperScopePreservation
-  bodyFullPreds bodySimFull gasOutcomeFullCompose bodyInvNoDalloca
+  bodyFullPreds bodySimFull gasOutcomeFullCompose
   bodyFullShared bodyFullMemoryFrames bodyAppendResolvedPre appendMemoryRel appendMemoryPtr
   bodyNameMemoryFacts representationCleanPtr appendMemoryPath
   normalizationPrefixPtr robustCopyTransportPtr exprSimAggregateEncoding allocaHistoryFragment
@@ -126,7 +126,6 @@ Theorem body_append_local_word_full:
 Proof
   rpt strip_tac >> rw[body_stmt_full_ok_def] >>
   rw[stmt_frag_full_def] >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `~(?nm. NameTarget id = TopLevelNameTarget nm)` by simp[] >>
   drule_all body_append_resolved_pre >> strip_tac >>
   irule gas_outcome_full_initial_domain >>
@@ -401,6 +400,8 @@ Resume body_append_local_word_full[append_suffix]:
     (qpat_assum `ptr_covers _ _ _ _ _` mp_tac >> simp[ADD_COMM]) >>
   `op_taint tn1 shadow_op = {}` by fs[ptr_val_ok_def] >>
   `allocas_from lo t` by fs[ghost_inv_at_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> simp[]) >>
   drule_all (Q.INST [`D` |-> `DF (storage_trace_horizon mid.storage_trace)`,
                      `fn` |-> `func`, `PG` |-> `PG`] append_memory_word_ptr) >>
   disch_then (qspecl_then [`mid`, `func`, `PG`, `DF`] strip_assume_tac) >>
@@ -679,6 +680,22 @@ Resume body_append_local_word_full[append_success]:
   `u.vs_alloca_next = t.vs_alloca_next /\ u.vs_allocas = t.vs_allocas` by
     (qpat_assum `state_frame u = _` mp_tac >> rpt (pop_assum kall_tac) >>
      simp[stateFrameTheory.state_frame_def, dynCopyExecTheory.mstore_control_fields]) >>
+  `!idx. ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := idx)` by
+    (`u.vs_initial_fmp = t.vs_initial_fmp /\ u.vs_fmp = t.vs_fmp` by
+       (qpat_assum `state_frame u = _`
+          (mp_tac o AP_TERM ``\s:venom_state. (s.vs_initial_fmp,s.vs_fmp)``) >>
+        simp_tac std_ss [stateFrameTheory.state_frame_def, mstore_def,
+          write_memory_with_expansion_def, LET_THM, venom_state_accfupds,
+          pairTheory.PAIR_EQ]) >>
+     gen_tac >> disch_tac >>
+     `allocas_below_fmp (u with vs_inst_idx := idx) = allocas_below_fmp t` by
+       (pure_rewrite_tac [allocas_below_fmp_def, venom_state_accfupds] >>
+        map_every (fn q => qpat_assum q (fn th => pure_rewrite_tac [th]))
+          [`u.vs_initial_fmp = t.vs_initial_fmp`, `u.vs_fmp = t.vs_fmp`,
+           `u.vs_allocas = t.vs_allocas`] >> REFL_TAC) >>
+     pop_assum SUBST1_TAC >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t`
+       (fn bound => qpat_assum `ctx_has_dalloca ctx` (ACCEPT_TAC o MP bound))) >>
   `!x. not_fresh_at sa x ==>
        FLOOKUP Gf x = FLOOKUP G0 x /\
        op_taint tnf (Var x) = op_taint tn0 (Var x)` by

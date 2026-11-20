@@ -20,7 +20,7 @@ Theorem extract32_suffix_certificate:
   eval_operand offset s = SOME (n2w n) /\
   n < dimword(:256) /\ p+32+LENGTH bs < dimword(:256) /\
   (!span. 0 < LENGTH bs /\ span <= LENGTH bs ==> ptr_covers G tn data s span) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s ==>
   ?HG th.
     (!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s HG th) /\
     (!t. run_inst_seq (emitted_insts sa sb) s = OK t ==>

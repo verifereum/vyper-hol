@@ -1,9 +1,9 @@
 Theory vyperCheckContractFrontendLibTest
 Ancestors
   jsonToVyper jsonToVyperExpr jsonAST vyperAST vyperTypeContract
-  jsonNominalSources
+  jsonNominalSources vyperStorage
 Libs
-  vyperCheckContractFrontendLib vyperConstEvalLib
+  vyperCheckContractFrontendLib vyperConstEvalLib cv_transLib
 
 (* Declare fixtures relative to this source file so holbuild stages them at
    the same relative path and includes their contents in the cache key. *)
@@ -484,9 +484,23 @@ val _ = check_fixture true "address_bytes20.json";
 val _ = check_fixture false "address_bytes32.json";
 val _ = check_fixture true "address_bytes32.json";
 val _ = check_fixture false "mutability.json";
+val _ = check_fixture false "assert_view_reason.json";
+val _ = check_fixture false "raise_view_custom_error.json";
 (* The operator forms Vyper accepts next to the ones the checker rejects. *)
 val _ = check_fixture false "operator_forms.json";
 val _ = check_fixture false "storage.json";
+val _ = check_fixture false "decimal_map_key.json";
+
+(* Pinned legacy and Venom bytecode write these slots for decimal_map_key.vy.
+   The map's layout slot is 0 and the keys are 1.5 and -1.25. *)
+Theorem decimal_map_key_matches_pinned_slots:
+  hashmap_slot 0w (encode_hashmap_key (BaseT DecimalT) (DecimalV 15000000000)) =
+    0xe57318393fbc3527c4c66c6d13a85c170b8dfa130f80dde3557bf02a721ce1b3w /\
+  hashmap_slot 0w (encode_hashmap_key (BaseT DecimalT) (DecimalV (-12500000000))) =
+    0x8814a88af2daef0f3a47b81774a1a2e18ae61f89ba56a319073b65ba9b14b6daw
+Proof
+  CONV_TAC cv_eval
+QED
 val _ = check_fixture false "imported_struct/main.json";
 val _ = check_fixture false "imported_flag/main.json";
 (* lib2 reads lib1's constant and main reads lib2's. *)
@@ -540,6 +554,12 @@ fun check_fixture_rejected path =
    handle Fail message =>
      if String.isSubstring "check_contract returned NONE" message then ()
      else raise Fail message);
+
+(* Both code generators at the pin reject mutating calls in revert reasons.
+   The nested calls check traversal through arguments as well as roots. *)
+val _ = app check_fixture_rejected
+  ["assert_mutating_reason.json", "raise_mutating_reason.json",
+   "assert_mutating_custom_error.json", "raise_mutating_custom_error.json"];
 
 (* A same-named internal function doesn't capture a bare builtin call: Vyper
    compiles these to the builtin (a console call, INVALID, a runtime shift),
@@ -716,8 +736,8 @@ val _ =
      if String.isSubstring "check_contract returned NONE" message then ()
      else raise Fail message);
 
-(* Ordinary slices, like calldata slices, fold a constant length to a literal
-   for their result capacity. A constant start remains a runtime expression. *)
+(* An ordinary slice keeps the Slice node and folds its closed start and
+   length operands. The length determines the result capacity. *)
 val slice_uint_json =
   "{\"typeclass\":\"integer\",\"bits\":256,\"is_signed\":false}";
 val slice_sum_json =
@@ -744,11 +764,9 @@ val () = if aconv (rhs (concl (bossLib.EVAL
     ``translate_expr (module_expr_ctx [] (0:int) NONE [] [] [] []) ^expected_ordinary_slice``)))
   ``Builtin (BaseT (BytesT (Dynamic 2))) (Slice 2)
       [Name (BaseT (BytesT (Dynamic 10))) "b";
-       Builtin (BaseT (UintT 256)) (Bop Add)
-         [Literal (BaseT (UintT 256)) (IntL 1);
-          Literal (BaseT (UintT 256)) (IntL 1)];
+       Literal (BaseT (UintT 256)) (IntL 2);
        Literal (BaseT (UintT 256)) (IntL 2)]``
-  then () else raise Fail "ordinary slice did not fold its length";
+  then () else raise Fail "ordinary slice did not preserve its folded operands";
 
 (* Issue 565: the public getter flag follows the pragma, except for explicit
    reentrant, constant and immutable declarations (g37/g38/g39 controls). *)
@@ -771,8 +789,6 @@ Proof
   simp[jsonToVyperTopLevelTheory.translate_toplevel_def]
 QED
 
-(* Without bound=, range endpoints are folded to literals; with it, they stay
-   the translated expressions. *)
 Theorem range_static_folded_endpoints:
   !ctx.
     translate_iter ctx (BaseT (IntT 8))
@@ -781,17 +797,22 @@ Theorem range_static_folded_endpoints:
             (JE_Int 2 (JT_Integer 8 T)) (JT_Integer 8 T);
           JE_Int 127 (JT_Integer 8 T)] NONE) =
     Range (Literal (BaseT (IntT 8)) (IntL (-3)))
-          (Literal (BaseT (IntT 8)) (IntL 127)) /\
-    translate_iter ctx (BaseT (IntT 8))
-      (JIter_Range
-         [JE_BinOp (JE_Int (-5) (JT_Integer 8 T)) JBop_Add
-            (JE_Int 2 (JT_Integer 8 T)) (JT_Integer 8 T);
-          JE_Int 127 (JT_Integer 8 T)]
-         (SOME (JE_Int 1 (JT_Integer 256 F)))) =
-    Range (Builtin (BaseT (IntT 8)) (Bop Add)
-             [Literal (BaseT (IntT 8)) (IntL (-5));
-              Literal (BaseT (IntT 8)) (IntL 2)])
           (Literal (BaseT (IntT 8)) (IntL 127))
 Proof
   gen_tac >> CONV_TAC EVAL
+QED
+
+Theorem range_bounded_folded_endpoint:
+  translate_stmt [] [] ^call_ctx
+    (JS_For "i" (JT_Integer 8 T) (JTA_Integer 8 T)
+       (JIter_Range
+          [JE_Name "n" NONE JMissingSource (JT_Integer 8 T);
+           JE_BinOp (JE_Int 2 (JT_Integer 8 T)) JBop_Add
+             (JE_Int 3 (JT_Integer 8 T)) (JT_Integer 8 T)]
+          (SOME (JE_Int 4 (JT_Integer 256 F)))) [JS_Pass]) =
+    For "i" (BaseT (IntT 8))
+      (Range (Name (BaseT (IntT 8)) "n") (Literal (BaseT (IntT 8)) (IntL 5)))
+      4 [Pass]
+Proof
+  EVAL_TAC
 QED
