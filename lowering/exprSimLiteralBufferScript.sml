@@ -4,8 +4,7 @@
  * A bytes or string literal not of a word type is lowered to a buffer of
  * its own (compile_bytelike_literal): an ALLOCA, the length word, and the
  * bytes in 32-byte chunks.  This theory proves that case of the
- * expression simulation; exprSimLeaves uses it for compile_literal_memory_sim and
- * compile_literal_case_sim.
+ * expression simulation; exprSimHash uses it.
  *
  * TOP-LEVEL:
  *   compile_literal_other_vv_sim — the buffer simulates the literal
