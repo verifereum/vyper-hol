@@ -768,7 +768,7 @@ Theorem rest_word_membership_suffix_const_full_horizon[local]:
   !i s Gs Ts.
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) bound is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
   (!x. needle = Var x ==> not_fresh_at sa x) /\
   (!x. len = Var x ==> not_fresh_at sa x) /\ LENGTH ws < dimword (:256) /\
   (!H. guard H ==>
@@ -855,6 +855,10 @@ Resume rest_word_membership_suffix_const_full_horizon[condition]:
   qpat_x_assum `!i s Gs Ts. _` kall_tac >>
   rpt (qpat_x_assum `!h. guard h ==> _`
     (qspec_then `H` (drule_then strip_assume_tac))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `membership_loop_frame sa G0 T0 s0 _ _ u`
+       (assume_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     pure_asm_rewrite_tac []) >>
   `eval_operand len u = SOME (n2w (LENGTH ws)) /\
    op_prov Gu len = NONE /\ op_taint Tu len = {}` by
     metis_tac[membership_loop_frame_operand] >>
@@ -899,6 +903,10 @@ Resume rest_word_membership_suffix_const_full_horizon[compare]:
   qpat_x_assum `!i s Gs Ts. _` kall_tac >>
   rpt (qpat_x_assum `!h. guard h ==> _`
     (qspec_then `H` (drule_then strip_assume_tac))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `membership_loop_frame sa G0 T0 s0 _ _ u`
+       (assume_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     pure_asm_rewrite_tac []) >>
   `eval_operand needle u = SOME w /\ op_prov Gu needle = NONE /\
    op_taint Tu needle = {}` by metis_tac[membership_loop_frame_operand] >>
   `gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
@@ -932,6 +940,10 @@ Resume rest_word_membership_suffix_const_full_horizon[found]:
   qpat_x_assum `!i s Gs Ts. _` kall_tac >>
   rpt (qpat_x_assum `!h. guard h ==> _`
     (qspec_then `H` (drule_then strip_assume_tac))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `membership_loop_frame sa G0 T0 s0 _ _ u`
+       (assume_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     pure_asm_rewrite_tac []) >>
   `gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
     (u,Gu,Tu) [] (OK fu,FG,FT) /\
    membership_loop_frame sa G0 T0 s0 FG FT fu /\
@@ -963,6 +975,10 @@ Resume rest_word_membership_suffix_const_full_horizon[increment]:
   qpat_x_assum `!i s Gs Ts. _` kall_tac >>
   rpt (qpat_x_assum `!h. guard h ==> _`
     (qspec_then `H` (drule_then strip_assume_tac))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `membership_loop_frame sa G0 T0 s0 _ _ u`
+       (assume_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     pure_asm_rewrite_tac []) >>
   `gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
     (u,Gu,Tu) [] (OK iu,IG,IT) /\
    membership_loop_frame sa G0 T0 s0 IG IT iu /\
@@ -988,7 +1004,7 @@ Finalise rest_word_membership_suffix_const_full_horizon
 Theorem rest_word_membership_loop_const_full_horizon_joint_all:
   compile_array_membership_loop needle arr len stride skip
     (compile_ptr_load is_ctor imm loc) bound is_in sa = (op,sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
   (!x. needle = Var x ==> not_fresh_at sa x) /\
   (!x. len = Var x ==> not_fresh_at sa x) /\ LENGTH ws < dimword (:256) /\
   (!cap. bound = SOME cap ==> LENGTH ws <= cap /\ cap < dimword (:256)) /\
@@ -1099,7 +1115,6 @@ Resume rest_word_membership_loop_const_full_horizon_joint_all[entry]:
      >- (simp_tac std_ss [] >> irule (SIMP_RULE bool_ss [] (Q.GENL
            [`idx`,`result`,`e`,`t`,`G2`,`tn2`,`u`] rest_word_membership_init_joint)) >>
          pure_asm_rewrite_tac [] >> metis_tac[]) >>
-     `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by simp[] >>
      simp_tac std_ss [] >> drule (Q.GENL
        [`idx`,`result`,`a`,`b`,`e`,`t`,`G2`,`tn2`,`G3`,`tn3`,`u`]
        rest_word_membership_bounded_init_joint) >>
@@ -1134,6 +1149,10 @@ Resume rest_word_membership_loop_const_full_horizon_joint_all[notin_exit]:
   qpat_x_assum `!i s Gs Ts. _` kall_tac >>
   rpt (qpat_x_assum `!h. guard h ==> _`
     (qspec_then `H` (drule_then strip_assume_tac))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp fin` by
+    (qpat_assum `membership_loop_frame sa G0 T0 s0 _ _ fin`
+       (assume_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     pure_asm_rewrite_tac []) >>
   `gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
       (fin,GF,TF) [] (OK nu,NG,NT) /\
     membership_loop_frame sa G0 T0 s0 NG NT nu /\

@@ -4119,6 +4119,8 @@ Proof
   `materialize_internal_params (ce1 with ce_imm_alloca := entry_info2) caps reserved =
      (entry_info0 with ce_imm_alloca := entry_info2,materialized)` by
     (irule intcall_callee_materialize_imm >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp at_reserve /\
+    at_reserve.vs_alloca_next + pending_alloca_size callee at_reserve <= w2n at_reserve.vs_initial_fmp` by simp[] >>
   qpat_assum `materialize_internal_params (ce1 with ce_imm_alloca := _) _ _ = _`
     (mp_then (Pos hd) mp_tac materialize_params_full) >>
   disch_then (qspecl_then [`callee`, `penv`, `at_reserve`, `at_reserve.vs_alloca_next`,

@@ -895,6 +895,7 @@ Resume rest_word_membership_tail_fixed_const_full[run]:
     t.vs_current_bb = ct.cs_current_bb /\
     t.vs_inst_idx = LENGTH ct.cs_current_insts` by
     (irule rest_word_membership_loop_const_full_horizon_joint_all >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
      conj_tac
      >- (gen_tac >> disch_tac >>
          qpat_assum `!H. guard H ==> read_result _ _ _ = _ /\ _`

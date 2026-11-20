@@ -211,8 +211,9 @@ Resume rest_word_membership_tail_dynamic_const_full[bounded_search]:
 QED
 
 Resume rest_word_membership_tail_dynamic_const_full[bounded_run]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sh` by simp[] >>
   irule rest_word_membership_loop_const_full_horizon_joint_all >>
-  conj_tac >- metis_tac[] >> conj_tac >- simp[] >>
+  conj_tac >- metis_tac[] >>
   conj_tac >- (`LENGTH ws = array_length (ArrayTV et (Dynamic cap)) av` by simp[Abbr `ws`] >> simp[]) >>
   reverse conj_tac >- simp[] >>
   qexistsl_tac [`vv_operand nv`, `SOME cap`, `cenv.ce_imm_alloca`,

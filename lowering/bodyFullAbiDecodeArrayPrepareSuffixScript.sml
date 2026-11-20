@@ -367,6 +367,7 @@ Resume abi_decode_array_prepare_suffix_width_joint[reload]:
    (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tnv.t_mem) /\
    w2n a+32 <= v.vs_alloca_next` by
     fs[abiDecodePtrMemberFrameTheory.abi_decode_ptr_window_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by simp[] >>
   drule_all (BETA_RULE bodyFullAbiDecodeLoopHeaderExactTheory.abi_decode_loop_counter_load_exact) >>
   disch_then (qspecl_then [`explicit`,`PG`] (qx_choose_then `w`
     (qx_choose_then `Gw` (qx_choose_then `tnw` strip_assume_tac)))) >>

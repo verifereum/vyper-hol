@@ -248,6 +248,7 @@ Proof
   `(!i. w2n (n2w cell:bytes32) <= i /\
          i < w2n (n2w cell:bytes32)+32 ==> i NOTIN tn.t_mem) /\
    w2n (n2w cell:bytes32)+32 <= s.vs_alloca_next` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all abi_decode_loop_counter_load_exact >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   `not_fresh_at s1 input /\ local_ptrs_reserved ce s1 /\

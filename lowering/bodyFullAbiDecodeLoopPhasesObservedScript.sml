@@ -64,6 +64,7 @@ Theorem abi_decode_loop_header_observed:
        i IN tnf.t_mem ==> i IN tn.t_mem)
 Proof
   BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >> disch_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   mp_tac (SPEC_ALL (BETA_RULE abi_decode_loop_header_joint_exact)) >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
   qexistsl_tac [`t`,`Gf`,`tnf`] >>
