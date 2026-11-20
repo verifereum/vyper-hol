@@ -35,9 +35,10 @@ Ancestors exprSimAggregateNestedStore[qualified,ignore_grammar]
   allocaSiteResource abiEncoderAdmissible abiEncoderWindowContract reasonCopySourcePtr
   abiEncoderWindowJoint
   exprSimAbiEncodeExecFrame
-  exprSimAbiEncodeCallerFrame exprSimAbiEncodeFrameTransfer abiDecodeStaticProps
+  exprSimAbiEncodeCallerFrame exprSimAbiEncodeFrameTransfer exprSimAbiEncodeFramedSuffix
+  abiDecodeStaticProps
   exprSimAbiEncodeStateTransport
-  bodyFullUnwrapSlotPost bodyInvNoDalloca stateRelProj
+  bodyFullUnwrapSlotPost bodyFullIfExpReach stateRelProj
   logEmitStep rawLogPtrInst instMemFrontier venomInst venomExecSemantics
   ptrDiscipline ptrSafeRun emitHelper fragExec rich_list
   abiBuiltinAllocation abiEncoderAppend abiEncoderAllocationShape
@@ -46,7 +47,6 @@ Ancestors exprSimAggregateNestedStore[qualified,ignore_grammar]
   immutableMemoryFrame exprSimProps valueEncoding venomState tuplePlaceZero exprPtrUnwrapFacts stmtSimLogDataFrame placeMemoryTypeInterfaces memoryLocalRhsProps typedLogFieldChecked venomMemDefs bytesCopyProps vyperTyping
 
 val _ = Parse.hide "body";
-val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
 (* Exact declared-data compiler boundaries; no runtime registration is claimed. *)
 Theorem log_full_declared_data_stage_code:
@@ -998,10 +998,53 @@ QED
 
 Finalise log_full_field_capture_runtime
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem log_encoder_allocas_below_fmp[local]:
+  abi_encode_exec_frame func s t /\ alloca_inv t /\ allocas_below_fmp s /\
+  s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp ==>
+  allocas_below_fmp t
+Proof
+  strip_tac >> drule exprSimAbiEncodeFramedSuffixTheory.abi_encode_framed_semantic_fields >>
+  strip_tac >>
+  fs[exprSimAbiEncodeExecFrameTheory.abi_encode_exec_frame_def,
+     alloca_inv_def, alloca_next_valid_def, allocas_below_fmp_def] >>
+  rpt strip_tac >> res_tac >> decide_tac
+QED
+
+Theorem log_argument_exit_allocas[local]:
+  expr_exit res r /\ (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u) ==>
+  ctx_has_dalloca ctx ==>
+  !u. (r = Halt u \/ ?ir. r = IntRet ir u) ==> allocas_below_fmp u
+Proof
+  Cases_on `res` >> Cases_on `r` >> simp[expr_exit_def] >>
+  Cases_on `y` >> simp[expr_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
+QED
+
+Theorem compile_log_frag_full:
+  !cx id args DF lo d PG tops bindings ctx shadow_ctx func
+   shadow_func cenv env env' ret_ty lctx RetQ es.
+    body_exprs_full_ok cx args /\
+    supported_effect_free_exprs tops args /\
+    ~supported_exprs_exists (const_name_root cx) args /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (Log id args) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (Log id args) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Log id args) = SOME env' /\
+    stmt_exprs_ok cenv (Log id args) /\
+    call_evaluation_safe cx (int_calls_stmt (Log id args)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Log id args))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Log id args)))
+      (eval_stmt cx (Log id args)) es
 Proof
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `supported_log tops id args` by
     (qpat_assum `supported_stmt tops bindings (Log id args)` mp_tac >>
      simp_tac bool_ss [supported_stmt_def]) >>
@@ -1018,20 +1061,15 @@ Proof
   `!name ty. FLOOKUP env.var_types name = SOME ty ==>
      ?p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz)` by
     fs[expr_sim_inv_def] >>
-  `supported_stmt tops [] (Log id args)` by simp[supported_stmt_def] >>
-  `body_stmt_safe tops (Log id args)` by metis_tac[supported_stmt_body_safe] >>
-  `EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) args` by
-    (fs[body_stmt_safe_log_args, EVERY_CONJ] >>
-     rw[EVERY_MEM] >> irule alloc_limits_expr_not_extcode >>
+  `EVERY (\e. ~is_extcode e) args` by
+    (rw[EVERY_MEM] >> irule alloc_limits_expr_not_extcode >>
      metis_tac[exprSimSourceTheory.alloc_limits_exprs_mem]) >>
   `EVERY (\e. ~expr_has_effect e) args` by
-    (fs[supported_pure_exprs_every, EVERY_MEM] >>
+    (fs[supported_effect_free_exprs_every, EVERY_MEM] >>
      metis_tac[supported_pure_expr_effect_free]) >>
   `EVERY (\e. post_value_type cenv e = expr_type e) args` by
-    (fs[supported_pure_exprs_every, EVERY_MEM] >> rpt strip_tac >>
-     irule post_value_type_not_int_call >> rpt strip_tac >>
-     qpat_x_assum `!e. MEM e args ==> supported_pure_expr tops e` drule >>
-     simp[supported_pure_expr_def]) >>
+    (fs[supported_effect_free_exprs_every, EVERY_MEM] >>
+     metis_tac[supported_pure_int_calls, post_value_type_no_calls]) >>
   `~supported_exprs_exists
       (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
    call_evaluation_safe cx (int_calls_exprs args) /\
@@ -1039,15 +1077,30 @@ Proof
       occurs_abi_decode_target target tops)` by
     fs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
        int_calls_stmt_def, AllCaseEqs()] >>
+  `!e ee. MEM e args /\ expr_sim_inv cenv cx env ee ==>
+      expr_body_pre cenv cx env e ee` by
+    (rpt gen_tac >> strip_tac >>
+     `supported_effect_free_expr tops e /\ ~is_extcode e /\ well_typed_expr env e /\
+      ~supported_expr_exists (const_name_root cx) e /\
+      ~supported_expr_exists
+        (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+      (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+         occurs_abi_decode_target target tops)` by
+       (fs[supported_effect_free_exprs_every, EVERY_MEM,
+           supported_exprs_exists_every, EXISTS_MEM] >>
+        metis_tac[well_typed_exprs_member]) >>
+     `int_calls_expr e = [] /\ ~expr_has_evm_run e` by
+       metis_tac[supported_pure_int_calls, cj 1 supported_effect_free_pure,
+                 supported_expr_no_evm_run, supportedExprsTheory.supported_expr_def] >>
+     `(!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+          is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target)) /\
+       cx_tops cx = tops` by fs[body_inv_def, gasContextTheory.cx_tops_def] >>
+     qspecl_then [`cenv`,`cx`,`env`,`e`,`ee`,`int_calls_exprs args`]
+       irule stmt_expr_body_pre >> simp[] >>
+     metis_tac[supported_pure_expr_effect_free, no_effect_call_operands]) >>
   qabbrev_tac `RR = \tail ee.
-    EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) tail /\
-    body_exprs_full_ok cx tail /\ expr_sim_inv cenv cx env ee /\
-    supported_pure_exprs tops tail /\ well_typed_exprs env tail /\
-    ~supported_exprs_exists
-      (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) tail /\
-    call_evaluation_safe cx (int_calls_exprs tail) /\
-    (!target. supported_exprs_exists (expr_abi_decode_target_root target) tail ==>
-       occurs_abi_decode_target target tops)` >>
+    (!e. MEM e tail ==> MEM e args) /\
+    body_exprs_full_ok cx tail /\ expr_sim_inv cenv cx env ee` >>
   `!e tail ee. RR (e::tail) ee ==>
      expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
        cenv cx (expr_type e) e ee /\
@@ -1055,35 +1108,8 @@ Proof
        RR tail ee1 /\
        ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v` by
     (rpt gen_tac >> simp[Abbr `RR`] >> strip_tac >>
-     qpat_x_assum `supported_pure_exprs _ _`
-       (strip_assume_tac o SIMP_RULE std_ss [Once supported_pure_expr_def]) >>
-     qpat_x_assum `well_typed_exprs _ _`
-       (strip_assume_tac o SIMP_RULE std_ss [Once well_typed_expr_def]) >>
-     qpat_x_assum `~supported_exprs_exists _ _`
-       (strip_assume_tac o SIMP_RULE std_ss
-         [Once supported_expr_exists_def, DE_MORGAN_THM]) >>
-     qpat_x_assum `call_evaluation_safe _ _`
-       (assume_tac o SIMP_RULE std_ss [Once int_calls_expr_def]) >>
-     qpat_x_assum `!target. supported_exprs_exists _ _ ==> _`
-       (strip_assume_tac o SIMP_RULE std_ss
-         [Once supported_expr_exists_def, DISJ_IMP_THM, FORALL_AND_THM]) >>
      fs[body_exprs_full_ok_def] >>
-     `call_evaluation_safe cx (int_calls_exprs tail)` by
-       (irule call_evaluation_safe_append_right >>
-        qexists_tac `int_calls_expr e` >> first_assum ACCEPT_TAC) >>
-     `expr_body_pre cenv cx env e ee` by
-       (qpat_assum `body_stmt_safe _ (Expr _)`
-         (strip_assume_tac o SIMP_RULE std_ss
-           [body_stmt_safe_def, supported_stmt_expr_exists_def,
-            int_calls_stmt_def, EVERY_CONJ, GSYM expr_has_evm_run_def]) >>
-        `supported_program tops /\ get_module_code cx NONE = SOME tops /\
-         (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-           is_dynamic (vyper_to_abi_type (type_env tops) target))` by fs[body_inv_def] >>
-        `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
-        qspecl_then [`cenv`,`cx`,`env`,`e`,`ee`,`int_calls_exprs tail`]
-          irule_body_pre stmt_expr_body_pre >> simp[] >>
-        metis_tac[supportedExprTraverseTheory.supported_pure_expr_effect_free,
-                  supportedExprTraverseTheory.no_effect_call_operands]) >>
+     `expr_body_pre cenv cx env e ee` by metis_tac[] >>
      conj_tac
      >- (qpat_x_assum `body_expr_full_ok cx e`
            (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
@@ -1139,7 +1165,7 @@ Proof
       `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
         fs[ret_pc_ok_def] >>
       `~exprs_can_mutate cenv args` by
-        metis_tac[bodySimLogArgsTheory.supported_pure_expr_no_mutate] >>
+        metis_tac[bodySimLogArgsTheory.supported_effect_free_expr_no_mutate] >>
       `?h. cenv.ce_event_info (nsid_to_string id) =
               SOME (h, MAP (SND o FST) fields, MAP SND fields) /\
            lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id =
@@ -1164,7 +1190,9 @@ Proof
       (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
       disch_then (qspecl_then
         [`args`,`es`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`ops`,`s0`,`G0`,`tn0`] mp_tac) >>
-      impl_tac >- (simp[Abbr `RR`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      impl_tac >-
+        (asm_simp_tac bool_ss [Abbr `RR`] >>
+         metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi]) >>
       strip_tac >>
       qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ captureQ captureR` >>
       qpat_x_assum `gas_outcome_full _ _ _ _ _ _ captureQ captureR`
@@ -1200,7 +1228,8 @@ Proof
           conj_tac >- simp[] >> simp[Abbr `captureR`] >>
           rpt strip_tac >> Cases_on `res` >- fs[expr_exit_def] >>
           simp[stmt_exit_ptr_def] >>
-          gvs[stmtSimPropsTheory.expr_exit_INR_type, halt_exit_def]) >>
+          gvs[stmtSimPropsTheory.expr_exit_INR_type, halt_exit_def] >>
+          metis_tac[log_argument_exit_allocas]) >>
       suspend "selected_capture") >>
   irule gas_outcome_full_bad_intro >>
   qexistsl_tac [`storage_trace_horizon es.storage_trace`, `func`, `G0`,
@@ -1294,22 +1323,7 @@ QED
 
 Resume compile_log_frag_full[selected_physical]:
   `EVERY (\e. expr_body_pre cenv cx env e es) args` by
-    (simp[EVERY_MEM] >> rpt strip_tac >>
-     `supported_pure_expr tops e /\ well_typed_expr env e /\
-      ~supported_expr_exists
-        (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
-      (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
-         occurs_abi_decode_target target tops)` by
-       (fs[supported_pure_exprs_every, EVERY_MEM,
-           supported_exprs_exists_every, EXISTS_MEM] >>
-        metis_tac[well_typed_exprs_member]) >>
-     `supported_expr tops e` by simp[supportedExprsTheory.supported_expr_def] >>
-     drule_then strip_assume_tac supported_expr_body_calls >>
-     `call_evaluation_safe cx (int_calls_expr e)` by
-       metis_tac[exprSimSourceTheory.call_evaluation_safe_exprs_mem] >>
-     `int_calls_expr e = []` by metis_tac[supported_pure_int_calls] >>
-     `cx_tops cx = tops` by fs[body_inv_def, gasContextTheory.cx_tops_def] >>
-     irule_body_pre stmt_expr_body_pre >> fs[body_inv_def] >> metis_tac[]) >>
+    (simp[EVERY_MEM] >> metis_tac[]) >>
   `mid with gas_obs := [] = mid` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
   `eval_exprs cx args
@@ -1344,7 +1358,7 @@ QED
 Resume compile_log_frag_full[selected_layouts]:
   `EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
              is_bytestring_type (expr_type e)) args` by
-    metis_tac[bodySimLogArgsTheory.supported_pure_exprs_bytestring_iff] >>
+    metis_tac[bodySimLogArgsTheory.supported_effect_free_exprs_bytestring_iff] >>
   qabbrev_tac `lops = ZIP (MAP FST ops, MAP expr_type args)` >>
   `LIST_REL (\y x. FST y = FST x /\
        (is_bytestring_type (SND y) <=> is_bytestring_type (SND x))) ops lops` by
@@ -1686,6 +1700,9 @@ QED
 
 
 Resume compile_log_frag_full[topic_all_h]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp tp` by
+    (qpat_assum `stmt_state_rel (storage_trace_horizon _) ctx func cenv cx mid tp`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `local_ptrs_reserved cenv topic_sa` by
     (qspecl_then [`cenv`,`sm`,`topic_sa`] match_mp_tac
        exprLoweringPropsTheory.local_ptrs_reserved_next_var >> fs[ci_mono_def]) >>
@@ -1960,7 +1977,10 @@ Resume compile_log_frag_full[packing_ready]:
      (!x. FST f = Var x ==> not_fresh_at sa x) /\
      (!dst sc. compile_store_memory cenv (FST f) dst dty (SND f) sc = ((),sc)) /\
      (!p mem. val_in_memory dtv v p mem)))` >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp ta` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ta` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ ta`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     simp[]) >>
   mp_tac (Q.INST
     [`cenv` |-> `cenv`, `tenv` |-> `get_tenv cx`, `xb` |-> `q`,
      `bw` |-> `bw`, `cap` |-> `cap`,
@@ -2093,6 +2113,9 @@ drule exprSimStorageCopyTheory.copy_static_fields >> strip_tac >>
  (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
     stmt_state_rel H ctx func cenv cx mid packed`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
+`ctx_has_dalloca ctx ==> allocas_below_fmp packed` by
+ (qpat_assum `stmt_state_rel (storage_trace_horizon _) ctx func cenv cx mid packed`
+    (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
 `gas_path_mem ctx func ta 0 (OK packed)` by
  (qpat_assum `!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     (ta,Ga,tna) [] (OK packed,Gpacked,tnpacked)`
@@ -2679,7 +2702,16 @@ Resume compile_log_frag_full[encoded_topics]:
   qpat_assum `op_taint tnenc len = {}` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >>
   simp_tac (srw_ss()) [EVERY_DEF,ptrDisciplineTheory.op_taint_def]) >>
-`ctx_has_dalloca ctx ==> allocas_below_fmp encoded` by simp[] >>
+`ctx_has_dalloca ctx ==> allocas_below_fmp encoded` by
+ (strip_tac >>
+  qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp prepared /\ _`
+    (drule_then strip_assume_tac) >>
+  `alloca_inv encoded` by
+    (qpat_assum `!u. gas_path_mem ctx func prepared 0 (OK u) ==> alloca_inv u`
+       (drule_then ACCEPT_TAC)) >>
+  match_mp_tac (Q.INST [`func` |-> `func`, `s` |-> `prepared`]
+    (SPEC_ALL log_encoder_allocas_below_fmp)) >>
+  asm_rewrite_tac[]) >>
 Cases_on `encoded.vs_call_ctx.cc_static`
 >- suspend "encoded_static" >>
 mp_tac (Q.INST
@@ -2706,7 +2738,6 @@ suspend "encoded_log"
 QED
 
 Resume compile_log_frag_full[encoded_static]:
-  `ctx_has_dalloca ctx ==> allocas_below_fmp encoded` by simp[] >>
 mp_tac (Q.INST
  [`topic_ops` |-> `Lit (n2w h)::topic_ops`, `topics` |-> `n2w h::topics`,
   `ptr_op` |-> `dst.buf_operand`, `len_op` |-> `len`,
@@ -4024,6 +4055,9 @@ Resume compile_log_frag_full[logged_finish_post]:
  (qpat_assum `!H. valid_horizon cx st0 H done_es.storage_trace ==>
    stmt_state_rel H ctx func cenv cx (done_es with gas_obs := []) fin`
    (qspec_then `post_H` match_mp_tac) >> first_assum ACCEPT_TAC) >>
+`ctx_has_dalloca ctx ==> allocas_below_fmp fin` by
+ (qpat_assum `stmt_state_rel post_H ctx func cenv cx (done_es with gas_obs := []) fin`
+   (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
 `storage_well_formed_on cx (done_es with gas_obs := []) (FST post_H)` by
  (qpat_assum `!H. valid_horizon cx st0 H done_es.storage_trace ==>
    storage_well_formed_on cx (done_es with gas_obs := []) (FST H)`
@@ -4282,7 +4316,13 @@ qabbrev_tac `log_ev = <|logger := cx.txn.target;
   (impl_tac >- first_assum ACCEPT_TAC) >>
   simp_tac bool_ss [bodyPtrDefsTheory.ghost_inv_at_def] >>
   strip_tac >> asm_rewrite_tac[]) >>
-`ctx_has_dalloca ctx ==> allocas_below_fmp tp` by simp[] >>
+`ctx_has_dalloca ctx ==> allocas_below_fmp tp` by
+ (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx mid tp /\ _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp
+                    o CONJUNCT1) >> simp[]) >>
 Cases_on `tp.vs_call_ctx.cc_static`
 >- suspend "empty_static" >>
 mp_tac (Q.INST
@@ -4302,7 +4342,6 @@ QED
 
 
 Resume compile_log_frag_full[empty_static]:
-  `ctx_has_dalloca ctx ==> allocas_below_fmp tp` by simp[] >>
 mp_tac (Q.INST
  [`topic_ops` |-> `Lit (n2w h)::topic_ops`, `topics` |-> `n2w h::topics`,
   `ptr_op` |-> `Lit 0w`, `len_op` |-> `Lit 0w`,
@@ -4614,6 +4653,9 @@ Resume compile_log_frag_full[empty_finish_post]:
  (qpat_assum `!H. valid_horizon cx st0 H done_es.storage_trace ==>
    stmt_state_rel H ctx func cenv cx (done_es with gas_obs := []) fin`
    (qspec_then `post_H` match_mp_tac) >> first_assum ACCEPT_TAC) >>
+`ctx_has_dalloca ctx ==> allocas_below_fmp fin` by
+ (qpat_assum `stmt_state_rel post_H ctx func cenv cx (done_es with gas_obs := []) fin`
+   (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
 `storage_well_formed_on cx (done_es with gas_obs := []) (FST post_H)` by
  (qpat_assum `!H. valid_horizon cx st0 H done_es.storage_trace ==>
    storage_well_formed_on cx (done_es with gas_obs := []) (FST H)`
@@ -4646,36 +4688,13 @@ QED
 
 
 Finalise compile_log_frag_full
-*)
-Theorem compile_log_frag_full:
-  !cx id args DF lo d PG tops bindings ctx shadow_ctx func
-   shadow_func cenv env env' ret_ty lctx RetQ es.
-    body_exprs_full_ok cx args /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (Log id args) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (Log id args) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Log id args) = SOME env' /\
-    stmt_exprs_ok cenv (Log id args) /\
-    call_evaluation_safe cx (int_calls_stmt (Log id args)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Log id args))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Log id args)))
-      (eval_stmt cx (Log id args)) es
-Proof
-  cheat
-QED
 
 Theorem body_log_aggregate_full:
   !cx id args fields DF lo d PG tops ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     body_exprs_full_ok cx args /\
+    supported_effect_free_exprs tops args /\
+    ~supported_exprs_exists (const_name_root cx) args /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
     supported_log tops id args /\
