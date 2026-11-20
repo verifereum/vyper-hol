@@ -139,34 +139,37 @@ Proof
   qexistsl [`pre`, `post`, `vis`, `ty`, `slot`] >> gvs[]
 QED
 
+Theorem compute_immutables_len_byte_coverage:
+  !tops sft i. i < compute_immutables_len sft tops ==>
+    ?pre vis name ty slot post.
+      tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
+      compute_immutables_len sft pre <= i /\
+      i < compute_immutables_len sft pre + type_mem_bytes sft ty
+Proof
+  Induct >- simp[compute_immutables_len_def] >>
+  rpt gen_tac >> once_rewrite_tac[immutable_len_cons] >> strip_tac >>
+  Cases_on `i < compute_immutables_len sft [h]`
+  >- (qexists_tac `[]` >> Cases_on `h` >>
+      gvs[compute_immutables_len_def] >>
+      rename1 `mut = Immutable` >>
+      Cases_on `mut` >> gvs[compute_immutables_len_def]) >>
+  first_x_assum (qspecl_then [`sft`, `i - compute_immutables_len sft [h]`] mp_tac) >>
+  impl_tac >- decide_tac >> strip_tac >>
+  qexistsl [`h::pre`, `vis`, `name`, `ty`, `slot`, `post`] >>
+  once_rewrite_tac[immutable_len_cons] >> simp[] >> decide_tac
+QED
+
 Theorem singleton_immutable_regions_cover[local]:
   i < imm_len_mods [(NONE,tops)] ==>
   ?name off size. immutable_region_mods [(NONE,tops)] NONE name off size /\
                   off <= i /\ i < off + size
 Proof
   simp[imm_len_mods_singleton, imm_len_def, singleton_immutable_region] >>
-  qabbrev_tac `sft = get_struct_fields (make_struct_fields_map tops)` >>
-  pop_assum kall_tac >> qid_spec_tac `i` >> qid_spec_tac `tops` >>
-  Induct >- simp[compute_immutables_len_def] >>
-  rpt gen_tac >> once_rewrite_tac[immutable_len_cons] >> strip_tac >>
-  Cases_on `i < compute_immutables_len sft [h]`
-  >- (Cases_on `h` >> gvs[compute_immutables_len_def] >>
-      rename1 `VariableDecl v mut name ty slot` >>
-      Cases_on `mut` >> gvs[] >>
-      qexistsl [`name`, `0`, `type_mem_bytes sft ty`] >>
-      simp[] >>
-      qexists_tac `[]` >> simp[compute_immutables_len_def]) >>
-  first_x_assum (qspec_then `i - compute_immutables_len sft [h]` mp_tac) >>
-  impl_tac >- decide_tac >> strip_tac >>
-  rename1 `width = type_mem_bytes sft ty` >>
-  `off + compute_immutables_len sft [h] <= i /\
-   i < off + compute_immutables_len sft [h] + width` by decide_tac >>
-  rename1 `tops = pre ++ [VariableDecl vis Immutable name ty slot] ++ post` >>
-  qexistsl [`name`, `off + compute_immutables_len sft [h]`, `width`] >>
-  simp[] >>
-  qexistsl [`h::pre`, `post`, `vis`, `ty`, `slot`] >>
-  simp[] >> once_rewrite_tac[immutable_len_cons] >>
-  simp[compute_immutables_len_def, ADD_COMM]
+  strip_tac >> drule compute_immutables_len_byte_coverage >> strip_tac >>
+  qexistsl [`name`,
+            `compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre`,
+            `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty`] >>
+  simp[] >> qexistsl [`pre`, `post`, `vis`, `ty`, `slot`] >> simp[]
 QED
 
 Theorem singleton_immutable_section_layout[local]:
