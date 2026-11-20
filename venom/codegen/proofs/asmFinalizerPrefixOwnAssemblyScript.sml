@@ -1,6 +1,6 @@
 Theory asmFinalizerPrefixOwnAssembly
 Ancestors
-  asmFinalizerPrefixFrame asmFinalizerPrefixStatic
+  asmFinalizerPrefixFrame asmFinalizerPrefixStatic asmFinalizerPrefixOwn
   codegenEntryRel codegenSymRel asmDataEnv asmSymBridge asmSymSem arithmetic
   asmRelocDataEnv asmSymOwnStep asmSymModeOwn asmSymForwardOwn asmSpliceOwn
   fnPlanPlaceRevertPostamble asmSem
@@ -92,4 +92,27 @@ Proof
   qpat_assum `!n ss. _ ==> n <= B /\ _` drule >> strip_tac >>
   `b_gas.sym_base.as_gas_readings = ss.sym_base.as_gas_readings` by
     fs[asm_state_component_equality] >> metis_tac[]
+QED
+
+Theorem focus_finalizer_prefix_bridge_own:
+  !fin rpolicy prog prog' vs0 es0 result final.
+    asm_static_wf prog /\
+    fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+    vs0.vs_code = assemble prog' ++ vs0.vs_data_section /\
+    asm_frame_rel_tail [] prog' vs0.vs_data_section es0
+      (entry_asm_state vs0 es0) es0 /\
+    run_call es0 = SOME (result,final) /\
+    ~frame_resource_starved es0 result final ==>
+    ?max_cost. !n ast.
+      asm_steps (lo_reloc prog prog') (build_offset_to_pc prog)
+        prog n (entry_asm_state vs0 es0) = AsmOK ast /\
+      (?ss. sym_steps_own prog (asm_data_env prog' vs0.vs_code) vs0.vs_code n
+        (sym_init (entry_asm_state vs0 es0)) = SymOK ss) ==>
+      n <= max_cost /\
+      (ast.as_pc < LENGTH prog /\ EL ast.as_pc prog = AsmOp "GAS" ==>
+        ast.as_gas_readings <> [])
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all_then assume_tac (BETA_RULE accepted_finalizers_prefix_transport_own) >>
+  drule_all_then ACCEPT_TAC (BETA_RULE focus_finalizer_prefix_bridge_own_conditional)
 QED
