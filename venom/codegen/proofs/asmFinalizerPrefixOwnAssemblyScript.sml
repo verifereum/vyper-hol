@@ -5,18 +5,7 @@ Ancestors
   asmRelocDataEnv asmSymOwnStep asmSymModeOwn asmSymForwardOwn asmSpliceOwn
   fnPlanPlaceRevertPostamble asmSem
 
-val transport_own = ``\p q.
-  ?K. 0 < K /\ !env own s n a.
-    s.as_pc = 0 /\ sym_steps_own p env own n (sym_init s) = SymOK a ==>
-    (?m b. sym_steps_own q env own m (sym_init s) = SymOK b /\ n <= K * (m+1)) /\
-    (!op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE";
-                 "CREATE2"} /\
-       a.sym_base.as_pc < LENGTH p /\ EL a.sym_base.as_pc p = AsmOp op ==>
-     ?m b. sym_steps_own q env own m (sym_init s) = SymOK b /\
-       b.sym_base.as_pc < LENGTH q /\ EL b.sym_base.as_pc q = AsmOp op /\
-       (b.sym_base with as_pc := 0) = (a.sym_base with as_pc := 0) /\
-       MAP sval_val b.sym_stack = MAP sval_val a.sym_stack /\
-       FDOM b.sym_mem_labels = FDOM a.sym_mem_labels)``;
+val transport_own = ``asm_prefix_transport_own``;
 
 Theorem asm_sym_rel_own_gas_readings[local]:
   asm_sym_rel_own lo p env own cs ss ==>
