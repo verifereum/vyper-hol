@@ -11,6 +11,7 @@ Ancestors
   venomInst venomExecSemantics venomState venomMemDefs freshWrites ptrDiscipline
   bodyPtrDefs compileEnv loweringStateRelDefs valueEncodingProps
   finite_map list rich_list pred_set words combin pair
+  bodyFullAbiDecodeOwnedStateProps
 
 (* Same owned-state quotation as the finite constructor contracts. *)
 val owned_decoder_state = ``\st s G tn.
@@ -51,18 +52,6 @@ val input_origin = ``\s.
    (?name ib isz. local_region ce es.scopes s name ib isz /\
      ib <= w2n input_word /\ w2n input_word + LENGTH input_bytes <= ib + isz))``;
 
-Triviality owned_decoder_allocas_below_fmp:
-  (^owned_decoder_state) st s G tn /\ (?H. V H) ==>
-  ctx_has_dalloca ctx ==> allocas_below_fmp s
-Proof
-  BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_assum `?H. V H` (qx_choose_then `world` assume_tac) >>
-  qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es s /\ _`
-    (qspec_then `world` (fn rel => qpat_assum `V world`
-      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
-       CONJUNCT1 o MP rel)))
-QED
-
 Theorem abi_decode_owned_word_store_observed[local]:
   emit_void MSTORE [Var dst;value] sa = ((),sb) /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
@@ -97,10 +86,13 @@ Theorem abi_decode_owned_word_store_observed[local]:
          val_in_memory tv v (w2n dw) mem)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `(^owned_decoder_state) sa s G tn` (fn owned =>
-    qpat_assum `?H. V H` (fn world =>
-      assume_tac (MATCH_MP owned_decoder_allocas_below_fmp (CONJ owned world)) >>
-      map_every assume_tac (CONJUNCTS (BETA_RULE owned)))) >>
+  qpat_x_assum `(^owned_decoder_state) sa s G tn`
+    (map_every assume_tac o CONJUNCTS o BETA_RULE) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (strip_tac >> irule owned_decoder_allocas_below_fmp >>
+     qexistsl [`V`,`ce`,`ctx`,`cx`,`es`,`fn`] >> simp[] >> rpt strip_tac >>
+     qpat_assum `!H. V H ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
   RULE_ASSUM_TAC BETA_RULE >> BETA_TAC >>
   mp_tac (BETA_RULE
     bodyFullAbiDecodeOwnedWordStoreObservedTheory.abi_decode_owned_word_store_observed_exact) >>
@@ -273,12 +265,15 @@ Proof
   `(!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at start x) /\
    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at start x)` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  qpat_assum `Abbrev (OS = _)` (fn ab =>
-    qpat_assum `OS start s G tn` (fn owned =>
-      qpat_assum `?H. V H` (fn world =>
-        assume_tac (MATCH_MP (PURE_REWRITE_RULE
-          [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] ab)]
-          owned_decoder_allocas_below_fmp) (CONJ owned world))))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `Abbrev (OS = _)` (fn ab =>
+       qpat_assum `OS start s G tn`
+         (map_every assume_tac o CONJUNCTS o BETA_RULE o
+          PURE_REWRITE_RULE [REWRITE_RULE [markerTheory.Abbrev_def] ab])) >>
+     strip_tac >> irule owned_decoder_allocas_below_fmp >>
+     qexistsl [`V`,`ce`,`ctx`,`cx`,`es`,`fn`] >> simp[] >> rpt strip_tac >>
+     qpat_assum `!H. V H ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
   qpat_assum `Abbrev (OS = _)` (fn th =>
     drule_all (PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]
       abi_decode_owned_relative_load_exact)) >>
@@ -304,12 +299,15 @@ Proof
        qpat_assum `OS start s G tn`
          (ACCEPT_TAC o cj 2 o BETA_RULE o
           PURE_REWRITE_RULE [REWRITE_RULE [markerTheory.Abbrev_def] ab]))) >>
-  qpat_assum `Abbrev (OS = _)` (fn ab =>
-    qpat_assum `OS cs'' t Gf tnf` (fn owned =>
-      qpat_assum `?H. V H` (fn world =>
-        assume_tac (MATCH_MP (PURE_REWRITE_RULE
-          [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] ab)]
-          owned_decoder_allocas_below_fmp) (CONJ owned world))))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `Abbrev (OS = _)` (fn ab =>
+       qpat_assum `OS cs'' t Gf tnf`
+         (map_every assume_tac o CONJUNCTS o BETA_RULE o
+          PURE_REWRITE_RULE [REWRITE_RULE [markerTheory.Abbrev_def] ab])) >>
+     strip_tac >> irule owned_decoder_allocas_below_fmp >>
+     qexistsl [`V`,`ce`,`ctx`,`cx`,`es`,`fn`] >> simp[] >> rpt strip_tac >>
+     qpat_assum `!H. V H ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
   qpat_x_assum `!value clamp sa sb fn ctx s w G tn lo explicit PG. _` drule_all >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choose_then `cr` (qx_choose_then `CG` (qx_choose_then `CT` strip_assume_tac))))
