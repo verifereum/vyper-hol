@@ -490,9 +490,7 @@ Theorem structlit_fields_bundled_full[local]:
     ghost_inv_at (DF H) lo d ce cx ee G tn s /\
     wb_frame ce ees ee fr sf s /\ ghost_kept_at lo ce ees fr Gf tnf sf G tn /\
     MAP FDOM ees.scopes = MAP FDOM ee.scopes /\
-    ~s.vs_halted /\ s.vs_current_bb = cs.cs_current_bb /\
-    s.vs_inst_idx = LENGTH cs.cs_current_insts /\
-    alloca_history func s /\ sf.vs_alloca_next <= s.vs_alloca_next /\
+    ~s.vs_halted /\ expr_sim_full_endpoint func cs sf s /\
     not_fresh_at cs root /\ lookup_var root s = SOME (n2w addr) /\
     ptr_covers G tn root s capacity /\
     FLOOKUP s.vs_allocas aid = SOME (addr,capacity) /\
@@ -549,6 +547,7 @@ Theorem structlit_fields_bundled_full[local]:
       halt_exit H cx ee (INR exc : eval_result + exception) r /\
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
+  PURE_REWRITE_TAC [expr_sim_full_endpoint_def, GSYM CONJ_ASSOC] >>
   gen_tac >>
   disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
   Induct
@@ -908,7 +907,7 @@ Proof
      `literal_prefix_ok cells tn'' z` by
        (irule (INST_TYPE [``:'a`` |-> ``:num # num``] structlit_prefix_child_frame) >>
         qexistsl_tac [`G''`, `G0`, `addr`, `aid`, `capacity`, `ce`, `mid`, `es`, `lo`, `s0`, `si`, `tn0`] >>
-        simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+        simp[] >> first_assum ACCEPT_TAC) >>
      simp[] >>
      qpat_assum `expr_post H ctx func ce cx e es si su s0 mid v op z`
        (strip_assume_tac o SIMP_RULE (srw_ss()) [expr_post_def]) >>
@@ -921,7 +920,7 @@ Proof
      >- (qpat_assum `not_fresh_at si root`
            (mp_tac o SIMP_RULE (srw_ss()) [loweringStateRelDefsTheory.not_fresh_at_def]) >>
          simp[loweringStateRelDefsTheory.not_fresh_at_def] >> decide_tac) >>
-     metis_tac[arithmeticTheory.ADD_COMM]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func ce cx mid z` by
     (qpat_assum `expr_post (storage_trace_horizon mid.storage_trace) ctx func ce cx e es si su s0 mid v op z`
        (ACCEPT_TAC o CONJUNCT1 o PURE_REWRITE_RULE [expr_post_def])) >>
@@ -1020,8 +1019,11 @@ Proof
      qexists_tac `expr_type e` >> simp[type_widens_to_def, well_formed_type_def]) >>
   `~is_word_type fty` by metis_tac[compileEnvTheory.type_widens_to_word] >>
   `value_has_type ftv v /\ val_wf ftv v` by
-    metis_tac[vyperTypeArgFitsTheory.type_widens_to_value_has_type,
-              cj 1 valueEncodingTypingTheory.value_has_type_val_wf, optionTheory.SOME_11] >>
+    (mp_tac (Q.INST [`tenv` |-> `get_tenv cx`,
+       `t` |-> `lowered_value_type ce e`, `u` |-> `fty`, `tv` |-> `stv`, `v` |-> `v`]
+       vyperTypeArgFitsTheory.type_widens_to_value_has_type) >>
+     simp[] >> strip_tac >>
+     simp[cj 1 valueEncodingTypingTheory.value_has_type_val_wf]) >>
   `type_memory_bytes ce fty = type_memory_size ftv` by
     (irule expr_sim_inv_memory_size >> qexistsl_tac [`cx`, `env`, `es`] >> simp[]) >>
   `sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
@@ -1391,9 +1393,7 @@ Theorem structlit_allocated_fields_bundled_full[local]:
     ghost_inv_at (DF H) lo d ce cx ee G tn s /\
     wb_frame ce es ee sa s0 s /\ ghost_kept_at lo ce es sa G0 tn0 s0 G tn /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\
-    ~s.vs_halted /\ s.vs_current_bb = cs.cs_current_bb /\
-    s.vs_inst_idx = LENGTH cs.cs_current_insts /\
-    alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+    ~s.vs_halted /\ expr_sim_full_endpoint func cs s0 s /\
     not_fresh_at cs root /\ lookup_var root s = SOME (n2w (w2n w)) /\
     ptr_covers G tn root s (type_memory_size_list tvs) /\
     FLOOKUP s.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_size_list tvs) /\
@@ -1466,7 +1466,6 @@ Theorem structlit_allocated_fields_bundled_full[local]:
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_then strip_assume_tac expr_sim_full_endpoint_fields >>
   irule (Q.INST [`ees` |-> `es`, `sf` |-> `s0`, `fr` |-> `sa`,
     `Gf` |-> `G0`, `tnf` |-> `tn0`, `aid` |-> `sa.cs_next_id`,
     `addr` |-> `w2n (w:bytes32)`, `capacity` |-> `type_memory_size_list tvs`]
@@ -1679,7 +1678,8 @@ Proof
       (nsid_to_string (src_id_opt,id)))`, `sm`, `sb`, `shadow_sm`, `shadow_sb`,
     `u`, `t`, `G`, `tn`]
     (INST_TYPE [alpha |-> ``:256``] structlit_allocated_fields_bundled_full)) >>
-  (impl_tac >- (simp[expr_sim_full_code_def, expr_sim_full_endpoint_def] >> rpt conj_tac >>
+  (impl_tac >- (simp[expr_sim_full_code_def, expr_sim_full_endpoint_def,
+                   GSYM CONJ_ASSOC] >> rpt conj_tac >>
     TRY (FIRST_ASSUM ACCEPT_TAC) >>
     TRY (qexists_tac `Hbase` >> FIRST_ASSUM ACCEPT_TAC) >>
     TRY (qpat_assum `ba.buf_operand = Var q` (fn eq =>
