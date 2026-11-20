@@ -160,6 +160,7 @@ Proof
   `(!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at start x) /\
    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at start x)` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `Abbrev (OS = _)` (fn th =>
     drule_all (PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]
       abi_decode_bytes_head_joint_observed)) >>
@@ -198,6 +199,7 @@ Proof
    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sh x)` by
     metis_tac[freshWritesTheory.not_fresh_at_mono,local_ptrs_reserved_next_var] >>
   `off+32 <= LENGTH input_bytes` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   qpat_assum `Abbrev (OS = _)` (fn th =>
     drule_all (PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]
       abi_decode_bytes_owned_load_frame_joint_observed)) >>
@@ -230,6 +232,7 @@ Proof
   `eval_operand cnt v = SOME (n2w c)` by simp[] >>
   `abi_decoder_operand_live sl.cs_next_var cnt` by
     fs[abi_decoder_operand_live_def,abi_decoder_older_vars_def,not_fresh_at_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by simp[] >>
   qpat_assum `Abbrev (OS = _)` (fn th =>
     drule_all (PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]
       abi_decode_bytes_count_joint_observed)) >>
@@ -405,6 +408,7 @@ Proof
           comp_ignore_bind_def, comp_return_def] >> strip_tac >> gvs[]) >>
   `EVERY (\i. i.inst_opcode <> ALLOCA) (emitted_insts sc sg)` by
     metis_tac[bodyFullAbiDecodeScalarNoAllocaTheory.abi_decode_scalar_seq_no_alloca] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp w` by simp[] >>
   qpat_assum `Abbrev (OS = _)` (fn th =>
     drule_all (PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]
       bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_scalar_frame_joint)) >>
@@ -566,6 +570,7 @@ Proof
      rpt (pop_assum kall_tac) >> ntac 2 disch_tac >>
      simp[] >> gen_tac >> strip_tac >> asm_rewrite_tac[] >>
      simp[op_prov_def,op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp y` by simp[] >>
   qpat_assum `Abbrev (OS = _)` (fn th =>
     drule_all ((PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]
       bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_scalar_frame_joint) |>
@@ -813,6 +818,7 @@ Proof
        qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es z5 /\ _`
           (mp_tac o CONJUNCT1 o CONJUNCT2 o (fn th => MATCH_MP th vh)))) >>
      simp[ghost_inv_at_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z5` by simp[] >>
   qpat_assum `Abbrev (OS = _)` (fn th =>
     drule_all ((PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]
       bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_scalar_frame_joint) |>

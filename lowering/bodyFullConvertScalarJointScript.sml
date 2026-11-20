@@ -1,6 +1,6 @@
 Theory bodyFullConvertScalarJoint
 Ancestors
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv bodyInvNoDalloca[qualified,ignore_grammar]
   haltExitProj
   bodyFullPreds bodySimFull bodyFullOfVV bodyFullExprGeneric
   bodyFullConvertScalarSuffix bodyFullConvertScalarFrame bodyFullPathHistory
@@ -19,7 +19,6 @@ Theorem convert_scalar_vv_sim_full:
     cenv cx ty (TypeBuiltin ann Convert dst [e]) es
 Proof
   strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[bodyInvNoDallocaTheory.body_inv_no_dalloca] >>
   drule expr_body_pre_convert >> strip_tac >> gvs[] >>
   simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `compile_expr cenv ty (TypeBuiltin _ _ _ _) sa = _` mp_tac >>
@@ -146,6 +145,12 @@ Resume convert_scalar_vv_sim_full[continuation]:
     (rpt strip_tac >> irule convertScalarTypingTheory.scalar_flag_member_count >>
      qexistsl_tac [`cx`,`env`,`es`] >>
      gvs[exprSimHypsDefsTheory.expr_body_pre_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (`stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid t` by
+       fs[loweringPostsTheory.expr_post_def] >>
+     qpat_assum `stmt_state_rel _ ctx func cenv cx mid t`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     simp[]) >>
   drule_all scalar_convert_origin_path >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`] strip_assume_tac) >>
   Cases_on `convert_result cx (expr_type e) ann v`
@@ -205,6 +210,13 @@ Resume convert_scalar_vv_sim_full[continuation]:
       disch_then (qspec_then `lowered_value_type cenv (TypeBuiltin ann Convert ann [e])` strip_assume_tac) >>
       `mid with gas_obs := [] = mid` by
         (qpat_assum `mid.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by
+        (`t' = (t with vs_inst_idx := t'.vs_inst_idx) with vs_vars := t'.vs_vars` by
+           metis_tac[stateFrameTheory.state_frame_eq_reconstruct] >>
+         qpat_x_assum `t' = (t with vs_inst_idx := _) with vs_vars := _` SUBST1_TAC >>
+         qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         simp[ptrDisciplineTheory.allocas_below_fmp_def] >> metis_tac[]) >>
       simp[contextTheory.vv_location_def]) >>
   qpat_x_assum `!exc. INR _ = INR exc ==> _`
     (qspec_then `y` mp_tac) >> simp_tac bool_ss [] >> strip_tac >>

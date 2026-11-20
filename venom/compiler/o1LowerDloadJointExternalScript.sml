@@ -8,6 +8,7 @@ Ancestors
   o1LowerDloadJointRelation o1LowerDloadShared o1PassContract venomCallOracleProps
   o1LowerDloadOccurrence o1LowerDloadJointScalar o1LowerDloadOpaque
   o1LowerDloadEnvironment o1LowerDloadRelocationKernel pointerConfinedDefs finite_map memLocDefs
+  lowerDloadPtrCreateInterfaces
   ptrDiscipline venomExecSemantics venomCallOracleDefs extCallOracle
   venomState list pred_set venomInst unitShapeDefs contextCodegenRel codegenRel
 
@@ -129,25 +130,6 @@ Proof
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
-Theorem ld_joint_concrete_shared_inputs:
-  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
-  active_inst fn inst s /\
-  MEM inst.inst_opcode [CREATE;CREATE2] ==>
-  tn.t_stor = {} /\ tn.t_trans = {} /\
-  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient
-Proof
-  strip_tac >>
-  `frame_reachable vs C stk PG G tn fn inst s` by
-    metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
-  `tn.t_stor = {} /\ tn.t_trans = {}` by
-    (fs[taint_ok_def, MEM] >> metis_tac[]) >>
-  `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
-    fs[ld_joint_boundary_def] >>
-  metis_tac[ld_shared_clean_accounts, ld_shared_clean_transient]
-QED
-
 Theorem ld_joint_delegatecall_operands[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
@@ -233,7 +215,16 @@ Theorem ld_joint_delegatecall_execute:
         (TAKE rs r1.vs_returndata) t).vs_memory |> /\
     step_inst fuel C' inst t = OK (update_var out w r2) /\
     request_agree_except D rq1 rq2 /\
-    ld_shared_agree D s.vs_call_ctx.cc_address tn r1 r2 /\
+    rq1.cr_static = s.vs_call_ctx.cc_static /\
+    ld_shared_agree D s.vs_call_ctx.cc_address
+      (tn with <|t_stor := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+          ~computed_precompile (LAST r1.vs_requests) /\
+          r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+        then {} else tn.t_stor;
+        t_trans := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+          ~computed_precompile (LAST r1.vs_requests) /\
+          r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+        then {} else tn.t_trans|>) r1 r2 /\
     source_memory_write_ranges inst s = [(ro,rs)] /\
     (rs=0 \/ (ro=ro' /\ (ro+rs<=lo \/
        dyn_floor C vs<=ro /\ ro+rs<=dimword (:256))) \/
@@ -301,14 +292,9 @@ Proof
   `LIST_REL (request_agree_except D) s.vs_requests t.vs_requests` by
     fs[ld_shared_agree_def, Excl "consume_call_outcome_eq"] >>
   drule_all ld_consume_call_outcome_masked_observation >> strip_tac >>
-  drule_all ld_consume_call_outcome_shared >> strip_tac >>
-  `ld_shared_agree D s.vs_call_ctx.cc_address tn r1 r2` by
-    (qpat_x_assum `ld_shared_agree _ _ (tn with <|t_stor := _; t_trans := _|>) _ _`
-       mp_tac >>
-     Cases_on `r1.vs_accounts = s.vs_accounts` >>
-     Cases_on `r1.vs_transient = s.vs_transient` >>
-     simp[ld_shared_agree_def, word_agree_except_def,
-        Excl "consume_call_outcome_eq"] >> metis_tac[]) >>
+  drule_all ld_consume_call_outcome_shared_effects >> strip_tac >>
+  `rq1.cr_static = s.vs_call_ctx.cc_static` by
+    simp[Abbr `rq1`, venom_call_request_def] >>
   `r1.vs_logs = r2.vs_logs /\
    r1.vs_pending_deletions = r2.vs_pending_deletions` by
     fs[ld_shared_agree_def, Excl "consume_call_outcome_eq"] >>
@@ -487,8 +473,12 @@ Resume ld_joint_delegatecall_next[dyn]:
 QED
 
 Resume ld_joint_delegatecall_next[shared]:
-  fs[ld_shared_agree_def, step_taint_def, imm_taint_def,
-     store_taint_def, adopt_reset_def, update_var_def, Abbr `target`]
+  qpat_x_assum `ld_shared_agree _ _ _ r1 r2` mp_tac >>
+  qpat_assum `s1 = update_var _ _ _` (fn th => REWRITE_TAC[th]) >>
+  qpat_assum `rq1.cr_static = _` (fn th =>
+    simp[NoAsms, th, ld_shared_agree_def, step_taint_def, imm_taint_def,
+      store_taint_def, adopt_reset_def, update_var_def, Abbr `target`]) >>
+  strip_tac >> fs[]
 QED
 
 Finalise ld_joint_delegatecall_next
@@ -523,44 +513,13 @@ Proof
       memory_range_of_operands_def])
 QED
 
-Theorem ld_exec_create_transport[local]:
-  s.vs_outcomes = t.vs_outcomes /\ s.vs_accounts = t.vs_accounts /\
-  s.vs_transient = t.vs_transient /\ s.vs_logs = t.vs_logs /\
-  s.vs_pending_deletions = t.vs_pending_deletions /\
-  venom_create_request s value off sz salt = rq /\
-  venom_create_request t value off' sz salt = rq /\
-  exec_create inst s value off sz salt = OK s1 ==>
-  ?out w r. inst.inst_outputs = [out] /\ s1 = update_var out w r /\
-    r = s with <|vs_accounts := r.vs_accounts; vs_transient := r.vs_transient;
-      vs_logs := r.vs_logs; vs_outcomes := r.vs_outcomes;
-      vs_pending_deletions := r.vs_pending_deletions;
-      vs_returndata := r.vs_returndata;
-      vs_requests := record_request rq s.vs_requests|> /\
-    exec_create inst t value off' sz salt = OK (update_var out w (t with <|
-      vs_accounts := r.vs_accounts; vs_transient := r.vs_transient;
-      vs_logs := r.vs_logs; vs_outcomes := r.vs_outcomes;
-      vs_pending_deletions := r.vs_pending_deletions;
-      vs_returndata := r.vs_returndata;
-      vs_requests := record_request rq t.vs_requests|>))
-Proof
-  strip_tac >>
-  qpat_x_assum `exec_create _ _ _ _ _ _ = _` mp_tac >>
-  simp[exec_create_def, Excl "consume_create_outcome_eq", AllCaseEqs()] >>
-  strip_tac >> Cases_on `consume_create_outcome rq s` >>
-  gvs[Excl "consume_create_outcome_eq"] >>
-  drule_all ld_consume_create_outcome_transport >>
-  disch_then (CONJUNCTS_THEN assume_tac) >>
-  qexistsl_tac [`q`,`r`] >>
-  simp[Excl "consume_create_outcome_eq", venom_state_fupdcanon] >>
-  qpat_x_assum `r = _` mp_tac >> simp[venom_state_fupdcanon]
-QED
-
 Theorem ld_joint_create_execute:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
+    n a U B HP H sites X ts /\ taint_within_upto D ncut C vs /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   MEM inst.inst_opcode [CREATE;CREATE2] /\ step_inst fuel C inst s = OK s1 ==>
-  ?out w r rq. inst.inst_outputs = [out] /\ s1 = update_var out w r /\
+  ?out w r rq rq'. inst.inst_outputs = [out] /\ s1 = update_var out w r /\
     ~computed_precompile rq /\
     r = s with <|vs_accounts := r.vs_accounts; vs_transient := r.vs_transient;
       vs_logs := r.vs_logs; vs_outcomes := r.vs_outcomes;
@@ -572,8 +531,8 @@ Theorem ld_joint_create_execute:
       vs_logs := r.vs_logs; vs_outcomes := r.vs_outcomes;
       vs_pending_deletions := r.vs_pending_deletions;
       vs_returndata := r.vs_returndata;
-      vs_requests := record_request rq t.vs_requests|>)) /\
-    request_agree_except D rq rq
+      vs_requests := record_request rq' t.vs_requests|>)) /\
+    request_agree_except D rq rq'
 Proof
   strip_tac >>
   `?vop offop szop value off sz salt rest.
@@ -602,19 +561,20 @@ Proof
    ?off'. eval_operand offop t = SOME off' /\
     read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t` by
     (drule ld_joint_create_operands >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> metis_tac[]) >>
-  `s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient` by
-    (drule ld_joint_concrete_shared_inputs >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> simp[]) >>
+  `LENGTH s.vs_requests < LENGTH s1.vs_requests` by
+    (drule_all ld_create_step_request_growth >> simp[]) >>
+  `inst.inst_opcode <> INVOKE` by fs[MEM] >>
+  drule_all ld_joint_call_shared_observation >> strip_tac >>
   `s.vs_outcomes = t.vs_outcomes /\ s.vs_logs = t.vs_logs /\
    s.vs_pending_deletions = t.vs_pending_deletions` by
     fs[ld_joint_boundary_def, ld_shared_agree_def] >>
-  `venom_create_request t value off' sz salt =
-   venom_create_request s value off sz salt` by simp[venom_create_request_def] >>
-  drule_at (Pat `exec_create _ _ _ _ _ _ = _`) ld_exec_create_transport >>
-  disch_then (qspecl_then [`t`,`venom_create_request s value off sz salt`,`off'`] mp_tac) >>
-  simp[] >> disch_then (qx_choose_then `co` (qx_choose_then `cw`
+  drule_all dload_exec_create_forward >>
+  disch_then (qspec_then `off'` mp_tac) >>
+  disch_then (qx_choose_then `co` (qx_choose_then `cw`
     (qx_choose_then `cr` assume_tac))) >>
   rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
-  qexistsl_tac [`co`,`cw`,`cr`,`venom_create_request s value off sz salt`] >>
+  qexistsl_tac [`co`,`cw`,`cr`,`venom_create_request s value off sz salt`,
+    `venom_create_request t value off' sz salt`] >>
   (simp[] >> conj_tac
    >- simp[venom_create_request_def, computed_precompile_def] >>
    conj_tac
@@ -623,13 +583,12 @@ Proof
        `eval_operand vop t = SOME value /\ eval_operand szop t = SOME sz` by
          metis_tac[MEM] >>
        gvs[] >> metis_tac[MEM]) >>
-   simp[request_agree_except_def, accounts_agree_except_def,
-        transient_agree_except_def, storage_agree_except_def, word_agree_except_def])
+   irule ld_venom_create_request_masked >> simp[])
 QED
 
 Theorem ld_joint_create_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ o1_ctx_shape C /\
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\ taint_within_upto D ncut C vs /\
   ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   ~in_revert_forward fn s /\ MEM inst.inst_opcode [CREATE;CREATE2] /\
   step_inst fuel C inst s = OK s1 /\
@@ -645,7 +604,8 @@ Theorem ld_joint_create_next:
 Proof
   strip_tac >> drule_all ld_joint_create_execute >>
   disch_then (qx_choose_then `out` (qx_choose_then `w`
-    (qx_choose_then `r` (qx_choose_then `rq` assume_tac)))) >>
+    (qx_choose_then `r` (qx_choose_then `rq`
+      (qx_choose_then `rq'` assume_tac))))) >>
   rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
   qmatch_asmsub_abbrev_tac `step_inst fuel C' inst t = OK target` >>
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by

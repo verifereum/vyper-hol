@@ -2837,6 +2837,6 @@ Proof
   `expr_sim ctx func cenv cx ty (TypeBuiltin ann Convert t [e1]) es` by
     (irule dynamic_convert_lower_case >> metis_tac[]) >>
   irule expr_vv_sim_stack >> simp[] >> conj_tac
-  >- (gen_tac >> irule compile_convert_stack) >>
+  >- simp[compile_convert_stack] >>
   metis_tac[eval_expr_type_builtin_value]
 QED

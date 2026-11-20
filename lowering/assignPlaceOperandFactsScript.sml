@@ -70,5 +70,21 @@ Proof
          metis_tac[assign_place_builtin_pointer_not_label])
   >> simp[compile_expr_body_def, expr_size_def, expr_type_def] >>
   pure_once_rewrite_tac [cj 3 compile_expr_raw_def] >>
-  simp[] >> metis_tac[assign_place_type_builtin_pointer_not_label]
+  simp[] >> strip_tac >>
+  irule assign_place_type_builtin_pointer_not_label >>
+  goal_assum (drule_at (Pat `compile_type_builtin_dispatch_body`)) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  rename1 `lower_value _ _ (expr_type (HD args)) (HD args) _ = _` >>
+  fs[expr_body_pre_def, expr_sim_inv_def,
+     cj 10 vyperTypeSystemTheory.well_typed_expr_def,
+     vyperTypeSystemTheory.well_typed_type_builtin_args_def] >>
+  Cases_on `args` >> gvs[] >>
+  gvs[exprBopLoweringTheory.lower_value_child_call, expr_size_def] >>
+  irule lower_compile_expr_not_label >>
+  goal_assum (drule_at Any) >>
+  rename1 `lower_value _ _ (expr_type arg) arg sa = (x,st)` >>
+  qexistsl_tac [`arg`, `sa`, `st`, `expr_type arg`] >>
+  conj_tac >- fs[SF ETA_ss] >>
+  irule exprSimSourceTheory.well_typed_exprs_member >>
+  qexists_tac `[arg]` >> simp[]
 QED

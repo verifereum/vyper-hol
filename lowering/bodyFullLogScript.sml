@@ -204,7 +204,7 @@ Theorem compile_log_emit_static_origin_ptr_path:
   (w2n len <> 0 ==> ?v. ptr_op = Var v /\ ptr_covers G tn v s (w2n len)) /\
   (!i. w2n off <= i /\ i < w2n off + w2n len ==> i NOTIN tn.t_mem) /\
   (w2n len = 0 \/ w2n off + w2n len <= s.vs_alloca_next) /\
-  s.vs_call_ctx.cc_static /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_call_ctx.cc_static /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   fn_has_code sa sb func /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   allocas_from lo s /\ lo <= s.vs_alloca_next ==>
@@ -296,7 +296,7 @@ Theorem log_full_bytes_store_runtime_path:
     ptr_covers G tn xs s n /\ ptr_covers G tn xd s n /\
     (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
        val_in_memory stv v (w2n sw) mem) /\
-    allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t Gf tnf.
@@ -339,7 +339,6 @@ Proof
     (gvs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >> simp[DROP_APPEND]) >>
   `n = 32 + 32 * ((len+31) DIV 32)` by
     simp[GSYM vfmConstantsTheory.word_size_def] >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by simp[] >>
   drule_all (Q.SPECL [`lo`, `explicit`, `ctx`, `func`, `PG`]
     compile_store_bytestring_origin_ptr_path) >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
@@ -408,7 +407,7 @@ Theorem log_full_store_data_fold:
      not_fresh_at sa xb /\ lookup_var xb s = SOME bw /\
      ptr_covers G tn xb s cap /\ off + type_memory_size dtv <= cap /\
      w2n bw + cap < dimword (:256) /\ w2n bw + cap <= s.vs_alloca_next /\
-     allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+     allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
      ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
      s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -441,7 +440,7 @@ Theorem log_full_store_data_fold:
     not_fresh_at sa xb /\ lookup_var xb s = SOME bw /\
     ptr_covers G tn xb s cap /\ off + type_memory_size_list dtvs <= cap /\
     w2n bw + cap < dimword (:256) /\ w2n bw + cap <= s.vs_alloca_next /\
-    allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -503,6 +502,10 @@ Resume log_full_store_data_fold[field]:
   `lookup_var xb t1 = SOME bw /\ t1.vs_allocas = s.vs_allocas /\
    t1.vs_alloca_next = s.vs_alloca_next` by
     gvs[typed_copy_state_frame_def, venom_state_component_equality] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t1` by
+    (qpat_assum `typed_copy_state_frame _ _ _ s t1`
+       (mp_tac o MATCH_MP typedCopyOriginPtrBaseTheory.typed_copy_state_frame_allocas_below_fmp) >>
+     strip_tac >> asm_rewrite_tac[]) >>
   `not_fresh_at mid xb` by
     metis_tac[loweringShapeDefsTheory.not_fresh_at_mono, ci_mono_def] >>
   `ptr_covers G1 tn1 xb t1 cap` by (gvs[ptr_covers_def] >> metis_tac[]) >>
@@ -699,7 +702,7 @@ Theorem log_full_data_field_runtime_path:
   not_fresh_at sa xb /\ lookup_var xb s = SOME bw /\
   ptr_covers G tn xb s cap /\ off + type_memory_size dtv <= cap /\
   w2n bw + cap < dimword (:256) /\ w2n bw + cap <= s.vs_alloca_next /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -745,6 +748,10 @@ Resume log_full_data_field_runtime_path[address]:
   disch_then (qx_choosel_then [`p`, `t1`, `G1`, `tn1`]
     (map_every assume_tac o CONJUNCTS)) >>
   gnvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t1` by
+    (qpat_assum `typed_copy_state_frame _ _ _ s t1`
+       (mp_tac o MATCH_MP typedCopyOriginPtrBaseTheory.typed_copy_state_frame_allocas_below_fmp) >>
+     strip_tac >> asm_rewrite_tac[]) >>
   `w2n (n2w (w2n (bw:bytes32) + off) : bytes32) = w2n bw + off` by
     (rewrite_tac [wordsTheory.w2n_n2w] >> irule arithmeticTheory.LESS_MOD >> simp[]) >>
   suspend "field_store"
@@ -1973,6 +1980,7 @@ Resume compile_log_frag_full[packing_ready]:
      (!x. FST f = Var x ==> not_fresh_at sa x) /\
      (!dst sc. compile_store_memory cenv (FST f) dst dty (SND f) sc = ((),sc)) /\
      (!p mem. val_in_memory dtv v p mem)))` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ta` by simp[] >>
   mp_tac (Q.INST
     [`cenv` |-> `cenv`, `tenv` |-> `get_tenv cx`, `xb` |-> `q`,
      `bw` |-> `bw`, `cap` |-> `cap`,
@@ -2717,6 +2725,7 @@ suspend "encoded_log"
 QED
 
 Resume compile_log_frag_full[encoded_static]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp encoded` by simp[] >>
 mp_tac (Q.INST
  [`topic_ops` |-> `Lit (n2w h)::topic_ops`, `topics` |-> `n2w h::topics`,
   `ptr_op` |-> `dst.buf_operand`, `len_op` |-> `len`,
@@ -4311,6 +4320,7 @@ QED
 
 
 Resume compile_log_frag_full[empty_static]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp tp` by simp[] >>
 mp_tac (Q.INST
  [`topic_ops` |-> `Lit (n2w h)::topic_ops`, `topics` |-> `n2w h::topics`,
   `ptr_op` |-> `Lit 0w`, `len_op` |-> `Lit 0w`,

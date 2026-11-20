@@ -149,7 +149,8 @@ Proof
     (irule step_taint_no_memory_effect >>
      gvs[MEM, source_memory_write_ranges_def, mk_inst_def,
          venomStateTheory.update_var_def, written_taint_def]) >>
-  `opc <> CALL /\ opc <> ISTORE /\ opc <> SSTORE /\ opc <> TSTORE` by
+  `opc <> CALL /\ opc <> DELEGATECALL /\ opc <> CREATE /\ opc <> CREATE2 /\
+   opc <> ISTORE /\ opc <> SSTORE /\ opc <> TSTORE` by
     gvs[MEM] >>
   conj_tac
   >- (irule single_output_ghost_inv >>

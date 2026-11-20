@@ -3466,7 +3466,8 @@ Proof
   >- (irule lower_value_labels >> simp[]) >>
   rpt gen_tac >> Cases_on `ret_ty` >> simp[] >>
   rpt (IF_CASES_TAC >> simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]) >>
-  simp[GSYM added_labels_def] >> irule as_stack_val_labels >>
+  simp[GSYM added_labels_def] >>
+  FIRST [irule as_ptr_val_labels, irule as_stack_val_labels] >>
   simp[compile_type_convert_labels, compile_bytestring_widen_copy_labels]
 QED
 

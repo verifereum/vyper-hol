@@ -1390,13 +1390,11 @@ Proof
       rpt (pairarg_tac >> simp[]))
   >- (rpt strip_tac >>
       gvs[bind_def, AllCaseEqs()] >>
+      rename1 `selfdestruct_tail cx target st = (INL _,_)` >>
       qpat_x_assum `selfdestruct_tail _ _ _ = _` mp_tac >>
-      simp[selfdestruct_tail_def, vyperInterpreterTheory.transfer_value_def,
-           bind_def, ignore_bind_def, lift_option_type_def,
-           check_not_static_def, check_def, assert_def, get_accounts_def,
-           update_accounts_def, update_pending_deletions_def,
-           return_def, raise_def] >>
-      rpt (CASE_TAC >> gvs[])) >>
+      qspecl_then [`cx`,`target`,`st`]
+        (qx_choosel_then [`ex`,`out`] SUBST1_TAC) selfdestruct_tail_raises >>
+      simp[]) >>
   simp[loweringPostsTheory.post_value_type_def, expr_type_def,
        lowered_value_type_def, vyperValueTheory.evaluate_type_def,
        valueEncodingTheory.type_memory_size_def]

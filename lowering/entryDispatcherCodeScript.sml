@@ -234,9 +234,12 @@ Proof
       imp_res_tac (SRULE [entry_preserves_code_def] th))) >>
   rpt IF_CASES_TAC >> gvs[] >>
   Cases_on `ret_ty` >>
-  gvs[oneline as_stack_val_def, AllCaseEqs()] >>
+  gvs[oneline as_stack_val_def, exprBopLoweringTheory.as_ptr_val_pair,
+      AllCaseEqs()] >>
   map_every (fn th => imp_res_tac (SRULE [entry_preserves_code_def] th))
-    [entry_code_type_convert, entry_code_bytestring_widen_copy]
+    [entry_code_type_convert, entry_code_bytestring_widen_copy] >>
+  qmatch_goalsub_abbrev_tac `SND result` >>
+  Cases_on `result` >> fs[markerTheory.Abbrev_def] >> metis_tac[]
 QED
 
 Theorem entry_code_dispatch_type_constant[local]:

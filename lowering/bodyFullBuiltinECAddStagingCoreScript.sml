@@ -475,7 +475,10 @@ Resume ecadd_staging_full_from_transfers[after_first_copy]:
      disch_then ACCEPT_TAC) >>
   `lookup_var p2 ta = lookup_var p2 t2 /\
    FLOOKUP Ga p2 = FLOOKUP G2 p2 /\
-   op_taint tna (Var p2) = op_taint tn2 (Var p2)` by metis_tac[] >>
+   op_taint tna (Var p2) = op_taint tn2 (Var p2)` by
+    (qpat_assum `!x. not_fresh_at s2 x ==> lookup_var x ta = lookup_var x t2 /\ _`
+       (qspec_then `p2` (fn frame =>
+         qpat_assum `not_fresh_at s2 p2` (ACCEPT_TAC o MATCH_MP frame)))) >>
   `lookup_var p2 ta = SOME w2 /\ ptr_covers Ga tna p2 ta 64` by
     (pure_rewrite_tac[bodyPtrDefsTheory.ptr_covers_def] >>
      qpat_assum `lookup_var p2 ta = lookup_var p2 t2` (fn th => rewrite_tac[th]) >>

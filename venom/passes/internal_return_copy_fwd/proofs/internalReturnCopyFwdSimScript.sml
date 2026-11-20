@@ -1674,7 +1674,7 @@ Theorem ircf_redirect_create_ok:
   frame_reachable vs C stk PG G tn fn inst s /\
   EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
   EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
-  ptr_discipline lo C vs /\
+  ptr_discipline lo C vs /\ taint_within D C vs /\
   ircf_cross tn (ircf_gam_cur fn_meta rma C fn s) s t /\
   taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
   step_inst_base inst s = OK s' ==>
@@ -1713,7 +1713,7 @@ Proof
     ti.inst_outputs = inst.inst_outputs` by
     (gvs[ircf_block_plan_def, ircf_redirect_op_def] >> metis_tac[]) >>
   `MEM inst.inst_opcode [CREATE; CREATE2]` by simp[] >>
-  drule_all taint_agree_external_clean_shared >> strip_tac >>
+  drule_all taint_agree_create_snapshots >> strip_tac >>
   `?t'. step_inst_base ti t = OK t' /\
      taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk)
        (step_taint inst s s' tn) s' t'` by
@@ -1739,7 +1739,7 @@ Theorem ircf_redirect_create2_ok:
   frame_reachable vs C stk PG G tn fn inst s /\
   EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
   EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
-  ptr_discipline lo C vs /\
+  ptr_discipline lo C vs /\ taint_within D C vs /\
   ircf_cross tn (ircf_gam_cur fn_meta rma C fn s) s t /\
   taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
   step_inst_base inst s = OK s' ==>
@@ -1775,7 +1775,7 @@ Proof
     (qpat_x_assum `!pos. _` (fn th => map_every mp_tac [Q.SPEC `0` th, Q.SPEC `2` th, Q.SPEC `3` th]) >>
      simp[] >> rpt strip_tac >> gvs[ircf_block_plan_def, ircf_redirect_op_def] >> metis_tac[]) >>
   `MEM inst.inst_opcode [CREATE; CREATE2]` by simp[] >>
-  drule_all taint_agree_external_clean_shared >> strip_tac >>
+  drule_all taint_agree_create_snapshots >> strip_tac >>
   `?t'. step_inst_base ti t = OK t' /\
      taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk)
        (step_taint inst s s' tn) s' t'` by
@@ -2042,7 +2042,7 @@ Theorem ircf_redirect_ordinary_ok:
   frame_reachable vs C stk PG G tn fn inst s /\ MEM fn C.ctx_functions /\
   EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
   EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
-  ptr_discipline lo C vs /\
+  ptr_discipline lo C vs /\ taint_within D C vs /\
   ircf_cross tn (ircf_gam_cur fn_meta rma C fn s) s t /\
   taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
   step_inst_base inst s = OK s' ==>

@@ -1,5 +1,6 @@
 Theory concretizeLayoutExternalCreate
 Ancestors concretizeLayoutCutSafe concretizeLayoutExternalRequests concretizeLayoutSupplement
+  lowerDloadPtrCreateInterfaces lowerDloadPtrScalar
   venomCallOracleDefs extCallOracle ptrDiscipline venomState venomExecSemantics
   venomInst list pred_set frameRelocationAllocationSteps frameRelocationGuardedValues
   frameOriginUpdates frameRelocationGhostCopy frameRelocationLocal finite_map
@@ -11,40 +12,46 @@ Ancestors concretizeLayoutCutSafe concretizeLayoutExternalRequests concretizeLay
   frameRelocationBinding frameRelocationDemand frameRelocationCleanValueSteps
   frameRelocationTaintOrder frameRelocationCopyTaint frameRelocationMemory
 
-(* CREATE's clean-storage side condition makes the adopted external snapshot
-   exact; immutable taint and historical request agreement are retained. *)
 Theorem concretize_clean_create_completion:
-  concretize_local_obs s t /\ concretize_supplement D tn s t /\
-  tn.t_stor = {} /\ tn.t_trans = {} /\
-  rq.cr_accounts = s.vs_accounts /\ rq.cr_tStorage = s.vs_transient /\
-  consume_create_outcome rq s = (w,post) /\
-  consume_create_outcome rq t = (w',post') ==>
+  concretize_local_obs s t /\ concretize_supplement D tn s t /\ s.vs_outcomes <> [] /\
+  request_agree_except D (venom_create_request s value off sz salt)
+    (venom_create_request t value offT sz salt) /\
+  consume_create_outcome (venom_create_request s value off sz salt) s = (w,post) /\
+  consume_create_outcome (venom_create_request t value offT sz salt) t = (w',post') ==>
   w = w' /\ concretize_local_obs post post' /\
-  concretize_supplement D tn post post' /\
+  concretize_supplement D (tn with <|t_stor := Mst; t_trans := Mtr|>) post post' /\
   post.vs_vars = s.vs_vars /\ post'.vs_vars = t.vs_vars /\
   post.vs_memory = s.vs_memory /\ post'.vs_memory = t.vs_memory
 Proof
-  strip_tac >> drule_all concretize_supplement_clean_accounts >> strip_tac >>
-  `s.vs_logs = t.vs_logs /\ s.vs_pending_deletions = t.vs_pending_deletions` by
-    fs[concretize_local_obs_def, dead_result_rel_def] >>
-  `request_agree_except D rq rq` by
-    simp[request_agree_except_def, call_request_component_equality,
-         accounts_agree_except_def, transient_agree_except_def,
-         storage_agree_except_def, word_agree_except_def] >>
-  `LIST_REL (request_agree_except D)
-     (record_request rq s.vs_requests) (record_request rq t.vs_requests)` by
-    (irule request_agree_record_request >> fs[concretize_supplement_def]) >>
+  strip_tac >>
   `s.vs_outcomes = t.vs_outcomes` by fs[concretize_supplement_def] >>
-  qpat_x_assum `consume_create_outcome rq s = _` mp_tac >>
-  qpat_x_assum `consume_create_outcome rq t = _` mp_tac >>
-  simp[consume_create_outcome_eq] >> rpt strip_tac >> gvs[] >>
-  gvs[concretize_local_obs_def, dead_result_rel_def, concretize_supplement_def,
-      accounts_agree_except_def, transient_agree_except_def,
-      storage_agree_except_def, word_agree_except_def] >>
-  irule request_agree_record_request >>
-  simp[request_agree_except_def, call_request_component_equality,
-       accounts_agree_except_def, transient_agree_except_def,
-       storage_agree_except_def, word_agree_except_def]
+  drule_all dload_consume_create_world >> disch_then (strip_assume_tac o SIMP_RULE bool_ss []) >>
+  `LIST_REL (request_agree_except D)
+     (record_request (venom_create_request s value off sz salt) s.vs_requests)
+     (record_request (venom_create_request t value offT sz salt) t.vs_requests)` by
+    (irule request_agree_record_request >> fs[concretize_supplement_def]) >>
+  qabbrev_tac `M = <|d_stor := K (K UNIV); d_trans := K (K UNIV);
+                     d_imm := K UNIV; d_ret := K {}|>` >>
+  `LIST_REL (request_agree_except M) s.vs_requests t.vs_requests` by
+    fs[Abbr `M`, concretize_local_obs_def, dead_result_rel_def] >>
+  `request_agree_except M (venom_create_request s value off sz salt)
+      (venom_create_request t value offT sz salt)` by
+    fs[Abbr `M`, request_agree_except_def, accounts_agree_except_def,
+       transient_agree_except_def, storage_agree_except_def, key_taint_def,
+       word_agree_except_def, Excl "consume_create_outcome_eq"] >>
+  `LIST_REL (request_agree_except M)
+     (record_request (venom_create_request s value off sz salt) s.vs_requests)
+     (record_request (venom_create_request t value offT sz salt) t.vs_requests)` by
+    metis_tac[request_agree_record_request] >>
+  `post.vs_logs = post'.vs_logs /\ post.vs_pending_deletions = post'.vs_pending_deletions` by
+    fs[concretize_local_obs_def, dead_result_rel_def, Excl "consume_create_outcome_eq"] >>
+  qpat_assum `consume_create_outcome _ s = _`
+    (fn th => once_rewrite_tac[MATCH_MP dload_consume_create_state th]) >>
+  qpat_assum `consume_create_outcome _ t = _`
+    (fn th => once_rewrite_tac[MATCH_MP dload_consume_create_state th]) >>
+  fs[Abbr `M`, concretize_local_obs_def, dead_result_rel_def, concretize_supplement_def,
+     accounts_agree_except_def, transient_agree_except_def,
+     storage_agree_except_def, word_agree_except_def, Excl "consume_create_outcome_eq"]
 QED
 
 Theorem create_success_envelope[local]:
@@ -60,7 +67,11 @@ QED
 Theorem concretize_create_observation:
   MEM inst.inst_opcode [CREATE; CREATE2] /\
   concretize_local_obs s t /\ concretize_supplement D tn s t /\
-  tn.t_stor = {} /\ tn.t_trans = {} /\
+  s.vs_call_ctx = t.vs_call_ctx /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+    (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+  tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+    (s.vs_transient s.vs_call_ctx.cc_address) /\
   read_memory (w2n off) (w2n sz) s = read_memory (w2n offT) (w2n sz) t /\
   exec_create inst s value off sz salt = OK post ==>
   ?post'. exec_create inst t value offT sz salt = OK post' /\
@@ -71,34 +82,43 @@ Theorem concretize_create_observation:
       post.vs_vars = (update_var out w s).vs_vars /\
       post'.vs_vars = (update_var out w t).vs_vars)
 Proof
-  strip_tac >> drule_all concretize_supplement_clean_accounts >> strip_tac >>
-  `s.vs_outcomes = t.vs_outcomes` by fs[concretize_supplement_def] >>
-  `s.vs_outcomes <> []` by
-    (CCONTR_TAC >> gvs[exec_create_def, AllCaseEqs()]) >>
-  `venom_create_request s value off sz salt =
-   venom_create_request t value offT sz salt` by simp[venom_create_request_def] >>
-  drule create_success_envelope >> strip_tac >>
-  Cases_on `consume_create_outcome (venom_create_request s value off sz salt) t` >>
+  strip_tac >>
+  qpat_x_assum `exec_create _ _ _ _ _ _ = _`
+    (strip_assume_tac o REWRITE_RULE [dload_exec_create_success_iff]) >>
+  `request_agree_except D (venom_create_request s value off sz salt)
+     (venom_create_request t value offT sz salt)` by
+    (irule concretize_request_observation >> simp[venom_create_request_def] >>
+     metis_tac[]) >>
+  Cases_on `consume_create_outcome (venom_create_request t value offT sz salt) t` >>
   rename1 `consume_create_outcome _ t = (wT,pT)` >>
-  `(venom_create_request s value off sz salt).cr_accounts = s.vs_accounts /\
-   (venom_create_request s value off sz salt).cr_tStorage = s.vs_transient` by
-    simp[venom_create_request_def] >>
-  drule_all concretize_clean_create_completion >> strip_tac >>
-  gns[Excl "consume_create_outcome_eq"] >>
-  qexists_tac `update_var out wT pT` >> conj_tac
-  >- (simp[exec_create_def, Excl "consume_create_outcome_eq"] >>
-      qpat_x_assum `venom_create_request s _ _ _ _ = _`
-        (fn th => rewrite_tac[GSYM th]) >>
-      simp[Excl "consume_create_outcome_eq"]) >>
+  drule_all concretize_clean_create_completion >>
+  disch_then (qspecl_then [`if s.vs_call_ctx.cc_static then tn.t_trans else {}`,
+    `if s.vs_call_ctx.cc_static then tn.t_stor else {}`] strip_assume_tac) >>
+  qpat_x_assum `w = wT` (SUBST_ALL_TAC o SYM) >>
+  rename1 `consume_create_outcome _ s = (w,p)` >>
+  qpat_x_assum `post = _` SUBST_ALL_TAC >>
+  `t.vs_outcomes <> []` by
+    metis_tac[concretize_supplement_def] >>
+  qexists_tac `update_var out w pT` >> conj_tac
+  >- (pure_rewrite_tac[dload_exec_create_success_iff] >>
+      qexistsl_tac [`out`,`w`,`pT`] >>
+      fs[concretize_supplement_def, Excl "consume_create_outcome_eq"]) >>
   conj_tac
   >- gvs[concretize_local_obs_def, dead_result_rel_def, update_var_def,
           Excl "consume_create_outcome_eq"] >>
-  `concretize_supplement D tn (update_var out w p) (update_var out wT pT)` by
-    metis_tac[concretize_supplement_update_var] >>
-  (conj_tac >- gvs[concretize_supplement_def, step_taint_def, adopt_reset_def,
-     store_taint_def, imm_taint_def, update_var_def, MEM,
-     Excl "consume_create_outcome_eq"]) >>
-  simp[update_var_def] >> qexists_tac `wT` >> simp[]
+  conj_tac
+  >- (`step_taint inst s (update_var out w p) tn =
+        tn with <|t_var := set_var_taint tn.t_var inst.inst_outputs (out_taint tn inst s);
+          t_stor := if s.vs_call_ctx.cc_static then tn.t_stor else {};
+          t_trans := if s.vs_call_ctx.cc_static then tn.t_trans else {}|>` by
+        (irule dload_create_taint_after_consume >>
+         qpat_assum `consume_create_outcome _ s = _` (irule_at Any) >>
+         simp[Excl "consume_create_outcome_eq"]) >>
+      simp[Excl "consume_create_outcome_eq"] >>
+      irule concretize_supplement_update_var >>
+      qpat_assum `s.vs_call_ctx = t.vs_call_ctx` (fn th =>
+        fs[th, concretize_supplement_def, Excl "consume_create_outcome_eq"])) >>
+  simp[update_var_def] >> qexists_tac `w` >> simp[]
 QED
 
 Theorem concretize_create_abort_observation:
@@ -138,7 +158,11 @@ Theorem concretize_create_local_execution:
   MEM inst.inst_opcode [CREATE; CREATE2] /\
   local_rel (\u. F) (guarded_ptr Opaque L rv)
     (guarded_bytes Opaque rv tn) R concretize_local_obs s t /\
-  concretize_supplement D tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  concretize_supplement D tn s t /\ s.vs_call_ctx = t.vs_call_ctx /\
+  tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+    (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+  tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+    (s.vs_transient s.vs_call_ctx.cc_address) /\
   read_memory (w2n off) (w2n sz) s = read_memory (w2n offT) (w2n sz) t /\
   exec_create inst s value off sz salt = OK post /\
   (!a b. next a b ==> R a b) ==>
@@ -236,24 +260,22 @@ QED
 
 Theorem create_ghosts[local]:
   MEM inst.inst_opcode [CREATE; CREATE2] /\ inst.inst_outputs = [v] /\
-  post.vs_allocas = s.vs_allocas /\ post.vs_fmp = s.vs_fmp /\
-  (inst.inst_operands = [opv;opd;opn] \/
-   inst.inst_operands = [opv;opd;opn;ops]) ==>
-  step_prov PG (SND o_f rv) inst post = SND o_f (origin_set rv [v] NONE) /\
-  step_taint inst s post tn = tn with t_var := tn.t_var |+ (v,{})
+  ~s.vs_call_ctx.cc_static /\ exec_create inst s value off sz salt = OK post ==>
+  step_taint inst s post tn =
+    tn with <|t_var := tn.t_var |+ (v,{}); t_stor := {}; t_trans := {}|>
 Proof
   strip_tac >>
-  `new_site_bytes s post = {}` by
-    (irule new_site_bytes_unchanged >> simp[]) >>
-  fs[MEM] >>
-  simp[step_prov_def, out_prov_def, set_prov_def, origin_set_def,
-       step_taint_def, mem_taint_def, step_writes_def,
-       codegenRelTheory.source_memory_write_ranges_def, written_taint_def,
-       range_bytes_def, store_taint_def, adopt_reset_def, imm_taint_def,
-       out_taint_def, set_var_taint_def, taint_component_equality,
-       fmap_eq_flookup, FLOOKUP_o_f, FLOOKUP_DRESTRICT] >>
-  rpt conj_tac >> rpt gen_tac >>
-  Cases_on `x = v` >> simp[]
+  `out_taint tn inst s = {}` by
+    (irule out_taint_opcode_exclusion >> fs[MEM]) >>
+  qpat_x_assum `exec_create _ _ _ _ _ _ = _`
+    (strip_assume_tac o REWRITE_RULE [dload_exec_create_success_iff]) >>
+  `out = v` by metis_tac[listTheory.CONS_11] >>
+  qpat_x_assum `out = v` SUBST_ALL_TAC >>
+  qpat_assum `consume_create_outcome _ s = _`
+    (mp_then (Pat `consume_create_outcome _ _ = _`) mp_tac
+      dload_create_taint_after_consume) >>
+  disch_then (qspecl_then [`tn`,`v`,`inst`] mp_tac) >>
+  simp[set_var_taint_def, Excl "consume_create_outcome_eq"]
 QED
 
 Theorem concretize_create_local_complete_headroom_static:
@@ -309,7 +331,7 @@ Proof
     (qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
      simp[joint_transition_ordinary, step_inst_def] >> fs[MEM]) >>
   drule_all (SRULE [MEM] create_base_envelope) >> strip_tac >> (
-  `s.vs_labels = t.vs_labels` by fs[relocation_env_def] >>
+  `s.vs_labels = t.vs_labels /\ s.vs_call_ctx = t.vs_call_ctx` by fs[relocation_env_def] >>
   `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
     (drule resolved_config_current >> simp[] >> strip_tac >>
      rpt strip_tac >> irule reachable_resolved_support >>
@@ -333,7 +355,21 @@ Proof
      simp[mem_read_ops_def] >> metis_tac[]) >>
   `read_memory (w2n off) (w2n sz) s = read_memory (w2n offT) (w2n sz) t` by
     suspend "read" >>
-  `tn.t_stor = {} /\ tn.t_trans = {}` by (fs[taint_ok_def] >> fs[MEM]) >>
+  `tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+     (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+     (s.vs_transient s.vs_call_ctx.cc_address)` by
+    (`active_inst fn inst s` by
+       (fs[joint_config_reachable_def] >>
+        metis_tac[joint_origin_history_projection, frameHistoryDefinitionsTheory.frame_history_active]) >>
+     `gas_cut ncut vs0 s` by
+       metis_tac[layout_cut_safe_edge_frame, layout_cut_safe_frame, layout_cut_safe_frame_cfg] >>
+     `taint_within_upto D ncut C vs0` by fs[layout_cut_safe_def] >>
+     `inst.inst_opcode <> INVOKE` by fs[MEM] >>
+     `step_inst 0 C inst s = OK post` by gvs[step_inst_non_invoke] >>
+     `LENGTH s.vs_requests < LENGTH post.vs_requests` by
+       (irule ld_create_step_request_growth >> fs[MEM] >> metis_tac[]) >>
+     drule_all taint_within_upto_request >> simp[]) >>
   `!a b. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a b ==>
          joint_relocation_demand lo (concretize_positions C') q0 es qs c a b` by
     (rpt strip_tac >> irule joint_relocation_demand_retained >>
@@ -374,11 +410,21 @@ Resume concretize_create_local_complete_headroom_static[taint]:
   markerLib.RESUME_TAC >> (
   drule create_execution_fields >> strip_tac >>
   rev_drule create_execution_fields >> strip_tac >> gvs[] >>
-  `step_taint inst s post tn = tn with t_var := tn.t_var |+ (out,{})` by
-    (irule (cj 2 create_ghosts) >> simp[MEM] >> metis_tac[]) >>
-  `step_taint inst t post' un = un with t_var := un.t_var |+ (out,{})` by
-    (irule (cj 2 create_ghosts) >> simp[MEM] >> metis_tac[]) >>
-  asm_rewrite_tac[] >> irule relocation_clean_write_taint >> metis_tac[])
+  `~t.vs_call_ctx.cc_static` by fs[relocation_env_def] >>
+  `step_taint inst s post tn =
+    tn with <|t_var := tn.t_var |+ (out,{}); t_stor := {}; t_trans := {}|>` by
+    (irule create_ghosts >> simp[MEM] >> metis_tac[]) >>
+  `step_taint inst t post' un =
+    un with <|t_var := un.t_var |+ (out,{}); t_stor := {}; t_trans := {}|>` by
+    (irule create_ghosts >> simp[MEM] >> metis_tac[]) >>
+  qpat_x_assum `relocation_taint_le _ tn un` mp_tac >>
+  simp[relocation_taint_le_def, op_taint_def, FLOOKUP_UPDATE] >>
+  strip_tac >> conj_tac
+  >- (qpat_x_assum `demand_taint _ _ _` mp_tac >>
+      qpat_x_assum `!a b. joint_relocation_demand _ _ _ _ _ (SUC c) a b ==> _` mp_tac >>
+      rpt (pop_assum kall_tac) >>
+      simp[demand_taint_def] >> metis_tac[]) >>
+  gen_tac >> IF_CASES_TAC >> fs[])
 QED
 Finalise concretize_create_local_complete_headroom_static
 

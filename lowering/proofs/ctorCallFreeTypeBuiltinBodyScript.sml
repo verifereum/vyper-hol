@@ -37,17 +37,6 @@ local
     Cases_on `as_ptr_val vv_ty LocMemory action` >>
     drule as_ptr_val_result >> strip_tac >> gvs[];
 
-  val convert_case =
-    Cases_on `args` >- gvs[type_builtin_arity_def] >> rename1 `arg::rest` >>
-    simp[compile_type_builtin_dispatch_body_def] >> rpt strip_tac >>
-    pairarg_tac >> simp[] >>
-    rename1 `lower_value cfn cenv ety arg st = (v,st1)` >>
-    `EVERY (\i. P i.inst_opcode) (state_insts st1)` by
-      (qpat_x_assum `!e ety. MEM e _ ==> !st. _ ==> EVERY _ (state_insts (SND (lower_value _ _ _ _ st)))` (qspecl_then [`arg`, `ety`] mp_tac) >>
-       simp[NoAsms, MEM] >> disch_then (qspec_then `st` mp_tac) >> simp[]) >>
-    rpt (IF_CASES_TAC >> simp[]) >> Cases_on `ret_ty` >>
-    simp[as_stack_val_pair] >> pairarg_tac >> simp[] >> metis_tac[pairTheory.SND];
-
   val extract_case =
     Cases_on `args` >- gvs[type_builtin_arity_def] >> rename1 `a::rest` >>
     Cases_on `rest` >- gvs[type_builtin_arity_def] >> rename1 `a::b::tail` >>
@@ -200,7 +189,7 @@ Proof
   >~ [`compile_type_builtin_dispatch_body _ _ _ _ Epsilon _ _`]
   >- simp[compile_type_builtin_dispatch_body_def]
   >~ [`compile_type_builtin_dispatch_body _ _ _ _ Convert _ _`]
-  >- convert_case
+  >- suspend "convert"
   >~ [`compile_type_builtin_dispatch_body _ _ _ _ Extract32 _ _`]
   >- extract_case
   >~ [`compile_type_builtin_dispatch_body _ _ _ _ (AbiDecode unwrap) _ _`]
@@ -211,6 +200,21 @@ Proof
       Cases_on `is_word_type (expr_type arg)` >- encode_word >> encode_nonword) >>
   encode_general
 QED
+
+Resume outcomes_free_type_builtin_dispatch_body[convert]:
+  Cases_on `args` >- gvs[type_builtin_arity_def] >> rename1 `arg::rest` >>
+  simp[compile_type_builtin_dispatch_body_def] >> rpt strip_tac >>
+  pairarg_tac >> simp[] >>
+  rename1 `lower_value cfn cenv ety arg st = (v,st1)` >>
+  `EVERY (\i. P i.inst_opcode) (state_insts st1)` by
+    (qpat_x_assum `!e ety. MEM e _ ==> !st. _ ==> EVERY _ (state_insts (SND (lower_value _ _ _ _ st)))`
+       (qspecl_then [`arg`, `ety`] mp_tac) >>
+     simp[NoAsms, MEM] >> disch_then (qspec_then `st` mp_tac) >> simp[]) >>
+  rpt (IF_CASES_TAC >> simp[]) >> Cases_on `ret_ty` >>
+  simp[as_stack_val_pair, as_ptr_val_pair] >> first_assum irule >> simp[]
+QED
+
+Finalise outcomes_free_type_builtin_dispatch_body
 
 end
 

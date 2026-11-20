@@ -45,8 +45,10 @@ Proof
 QED
 
 Theorem step_taint_nonmemory_frame:
-  inst.inst_opcode <> CALL /\ inst.inst_opcode <> SSTORE /\
-  inst.inst_opcode <> TSTORE /\ inst.inst_opcode <> ISTORE ==>
+  inst.inst_opcode <> CALL /\ inst.inst_opcode <> DELEGATECALL /\
+  inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2 /\
+  inst.inst_opcode <> SSTORE /\ inst.inst_opcode <> TSTORE /\
+  inst.inst_opcode <> ISTORE ==>
   (step_taint inst s t tn).t_stor = tn.t_stor /\
   (step_taint inst s t tn).t_trans = tn.t_trans /\
   (step_taint inst s t tn).t_imm = tn.t_imm

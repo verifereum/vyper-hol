@@ -2679,11 +2679,10 @@ Proof
   strip_tac >> simp[compile_type_builtin_dispatch_body_def] >>
   ho_match_mp_tac alloca_suffix_pair_bind_floor >>
   simp[alloca_suffix_lower_value] >> rpt strip_tac >>
-  rpt IF_CASES_TAC >>
-  simp[alloca_suffix_refl, exprBopLoweringTheory.as_stack_val_pair,
-       alloca_suffix_bytestring_widen_copy] >>
-  Cases_on `rt` >>
-  simp[exprBopLoweringTheory.as_stack_val_pair, alloca_suffix_type_convert]
+  rpt IF_CASES_TAC >> Cases_on `rt` >>
+  simp[alloca_suffix_refl, exprBopLoweringTheory.as_ptr_val_pair,
+       exprBopLoweringTheory.as_stack_val_pair,
+       alloca_suffix_bytestring_widen_copy, alloca_suffix_type_convert]
 QED
 
 Theorem alloca_suffix_extract32_load[local]:

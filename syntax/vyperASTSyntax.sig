@@ -338,8 +338,8 @@ signature vyperASTSyntax = sig
   val mk_Send_tm : term -> term
   val dest_Send_tm : term -> term
   val is_Send : term -> bool
-  val mk_raw_call_flags : {max_outsize: term, is_delegate: term, is_static: term, revert_on_failure: term} -> term
-  val dest_raw_call_flags : term -> {max_outsize: term, is_delegate: term, is_static: term, revert_on_failure: term}
+  val mk_raw_call_flags : {max_outsize: term, is_delegate: term, is_static: term, revert_on_failure: term, kws: term} -> term
+  val dest_raw_call_flags : term -> {max_outsize: term, is_delegate: term, is_static: term, revert_on_failure: term, kws: term}
   val is_raw_call_flags : term -> bool
 
   val RawCallTarget_tm : term

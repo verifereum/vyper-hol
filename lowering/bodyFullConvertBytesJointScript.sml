@@ -12,6 +12,28 @@ Ancestors
   gasShadowCompile gasShadowState exprLowering exprLoweringProps compileEnv
   vyperContext vyperInterpreter vyperState vyperAST
 
+Theorem convert_memory_vv_post[local]:
+  expr_post H ctx func cenv cx (TypeBuiltin typ Convert typ [e])
+    es sa sb s0 ee v op s /\ storage_well_formed_on cx ee (FST H) /\
+  ~is_word_type typ ==>
+  vv_post H ctx func cenv cx (TypeBuiltin typ Convert typ [e])
+    es sa sb s0 ee (Value v) (LocatedValue typ (mk_ptr op LocMemory)) s
+Proof
+  strip_tac >>
+  irule (SIMP_RULE (srw_ss()) [loweringPostsTheory.post_value_type_def, expr_type_def]
+    (Q.INST [`e` |-> `TypeBuiltin typ Convert typ [e]`]
+      exprSimStackTheory.vv_post_stack_as_memory)) >>
+  simp[] >> metis_tac[dynamic_word_vv_post]
+QED
+
+Theorem convert_memory_store_bound[local]:
+  ~is_word_type ty ==>
+  (vv_store_bound cx ty lt es tv (LocatedValue ty (mk_ptr op LocMemory)) s <=>
+   vv_store_bound cx ty lt es tv (StackValue ty op) s)
+Proof
+  strip_tac >> simp[exprSimMemDefsTheory.vv_store_bound_def, contextTheory.mk_ptr_def]
+QED
+
 Theorem widen_copy_same_endpoint[local]:
   emitted_insts sm sb = emitted_insts sm sc ++ emitted_insts sc sb /\
   emit_void MCOPY [Var dst;Var src;Lit (n2w k)] sc = ((),sb) /\
@@ -165,15 +187,18 @@ Theorem cast_endpoint_vv_posts[local]:
   tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
   alloca_history func u /\ s0.vs_alloca_next <= t.vs_alloca_next ==>
   vv_post H ctx func cenv cx (TypeBuiltin dst Convert dst [e]) es sa sb s0 ee
-    (Value vout) (StackValue dst (Var src)) u /\
-  vv_store_bound cx dst dst ee (Value vout) (StackValue dst (Var src)) u /\
+    (Value vout) (LocatedValue dst (mk_ptr (Var src) LocMemory)) u /\
+  vv_store_bound cx dst dst ee (Value vout)
+    (LocatedValue dst (mk_ptr (Var src) LocMemory)) u /\
   u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
   alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
   ghost_inv_at D lo d cenv cx ee Gf tnf u /\
-  ptr_vv_ok cx dst (Value vout) (StackValue dst (Var src)) ee Gf tnf u /\
+  ptr_vv_ok cx dst (Value vout)
+    (LocatedValue dst (mk_ptr (Var src) LocMemory)) ee Gf tnf u /\
   ghost_kept_at lo cenv es sa G0 tn0 s0 Gf tnf
 Proof
   strip_tac >>
+  `~is_word_type dst` by metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
   `u = (t with vs_inst_idx := u.vs_inst_idx) with vs_vars := u.vs_vars` by
     metis_tac[stateFrameTheory.state_frame_eq_reconstruct] >>
   `u.vs_memory = t.vs_memory /\ u.vs_allocas = t.vs_allocas /\
@@ -195,7 +220,7 @@ Proof
      qexistsl_tac [`e`,`rty`,`v`] >>
      simp[]) >>
   conj_tac
-  >- (irule dynamic_word_vv_post >> simp[]) >>
+  >- (irule convert_memory_vv_post >> simp[]) >>
   `ghost_inv_at D lo d cenv cx ee Gf tnf u` by
     (irule bodyFullGhostFrameTheory.ghost_inv_at_exterior_frame >>
      qexistsl_tac [`G`,`ee`,`t`,`sm`,`tn`] >> simp[] >> metis_tac[]) >>
@@ -211,11 +236,13 @@ Proof
   `eval_operand (Var src) u = SOME a /\ eval_operand (Var src) t = SOME a` by
     (simp[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
   simp[] >> conj_tac
-  >- (simp[exprSimMemDefsTheory.vv_store_bound_def, read_result_def, return_def] >>
+  >- (simp[convert_memory_store_bound, exprSimMemDefsTheory.vv_store_bound_def,
+           read_result_def, return_def] >>
       rpt strip_tac >> gvs[] >>
       drule exprSimPropsTheory.val_store_size_le >> strip_tac >>
       decide_tac) >>
-  simp[bodyPtrDefsTheory.ptr_vv_ok_def, read_result_def, return_def] >>
+  simp[bodyPtrDefsTheory.ptr_vv_ok_def, contextTheory.mk_ptr_def,
+       read_result_def, return_def] >>
   `op_taint tnf (Var src) = op_taint tn (Var src) /\
    FLOOKUP Gf src = FLOOKUP G src` by metis_tac[] >>
   drule_all convert_bytestring_memory >> strip_tac >>
@@ -264,13 +291,13 @@ Proof
   rename1 `lower_value compile_expr cenv (expr_type e) e sa = (x,sm)` >>
   simp[exprBopLoweringTheory.lower_value_child_call, SF ETA_ss, expr_type_def] >>
   strip_tac >>
-  `?out. vv = StackValue ann out /\
+  `?out. vv = LocatedValue ann (mk_ptr out LocMemory) /\
     (if type_memory_bytes cenv (lowered_value_type cenv e) < type_memory_bytes cenv ann
      then compile_bytestring_widen_copy (type_memory_bytes cenv ann) x
        (type_memory_bytes cenv (lowered_value_type cenv e)) sm
      else compile_type_convert x (mk_convert_op (expr_type e) ann) sm) = (out,sb)` by
     (Cases_on `type_memory_bytes cenv (lowered_value_type cenv e) < type_memory_bytes cenv ann` >>
-     Cases_on `ann` >> gvs[exprBopLoweringTheory.as_stack_val_pair] >>
+     gvs[oneline as_ptr_val_def, AllCaseEqs()] >>
      metis_tac[pairTheory.PAIR]) >> gvs[] >>
   `?shadow_sm. lower_value compile_expr cenv (expr_type e)
       (gas_shadow_expr e) shadow_sa = (x,shadow_sm) /\
@@ -292,7 +319,7 @@ Proof
   strip_tac >>
   `cs_extends sm sb /\ cs_extends shadow_sm shadow_sb` by
     (Cases_on `type_memory_bytes cenv (lowered_value_type cenv e) < type_memory_bytes cenv ann` >>
-     Cases_on `ann` >> gvs[exprBopLoweringTheory.as_stack_val_pair] >>
+     gs[oneline as_ptr_val_def, AllCaseEqs()] >>
      metis_tac[cj 1 externalEntryShapeTheory.compile_type_convert_labels,
        cj 1 externalEntryShapeTheory.compile_bytestring_widen_copy_labels, pairTheory.SND]) >>
   `fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func` by
@@ -535,16 +562,18 @@ Resume convert_bytes_vv_sim_full[cast_success]:
     `post_value_type cenv e = expr_type e` by simp[] >>
     `storage_well_formed_on cx mid (FST H')` by metis_tac[] >>
     drule_all cast_endpoint_vv_posts >> strip_tac >>
-    simp[lowered_value_type_def, expr_type_def, contextTheory.vv_location_def] >>
     `eval_operand (Var src) t' = eval_operand (Var src) t /\
      FLOOKUP H src = FLOOKUP G1 src` by
       (simp[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
-    qpat_x_assum `ptr_buf_ok cenv e (Var src) G1 t` mp_tac >>
-    simp[bodyPtrDefsTheory.ptr_buf_ok_def, lowered_value_type_def, expr_type_def] >>
-    rpt strip_tac >>
-    qpat_x_assum `!w. eval_operand (Var src) t = SOME w ==> ?b sz. _`
-      (qspec_then `w` mp_tac) >> simp[] >>
-    strip_tac >> qexistsl_tac [`b`,`sz`] >> simp[] >> decide_tac) >> simp[])
+    `ptr_buf_ok cenv (TypeBuiltin ann Convert ann [e]) (Var src) H t'` by
+      (qpat_x_assum `ptr_buf_ok cenv e (Var src) G1 t` mp_tac >>
+       simp[bodyPtrDefsTheory.ptr_buf_ok_def, lowered_value_type_def, expr_type_def] >>
+       rpt strip_tac >>
+       qpat_x_assum `!w. eval_operand (Var src) t = SOME w ==> ?b sz. _`
+         (qspec_then `w` mp_tac) >> simp[] >>
+       strip_tac >> qexistsl_tac [`b`,`sz`] >> simp[] >> decide_tac) >>
+    gvs[lowered_value_type_def, expr_type_def, contextTheory.vv_location_def,
+        contextTheory.vv_operand_def, contextTheory.mk_ptr_def]) >> simp[])
 QED
 
 Resume convert_bytes_vv_sim_full[widen]:
@@ -687,19 +716,25 @@ Resume convert_bytes_vv_sim_full[widen]:
     >- (qpat_assum `!aid b len. _ /\ _ ==> regions_disjoint _ _ _ _` mp_tac >> simp[])
     >> qpat_assum `!name b len. local_region _ _ _ _ _ _ ==> _` mp_tac >> simp[])) >>
   strip_tac >>
+  `ptr_buf_ok cenv (TypeBuiltin ann Convert ann [e]) (Var dst) Gf
+     (mcopy (w2n dw) (w2n a) (type_memory_size tv) z)` by
+    (qpat_assum `!e. lowered_value_type cenv e = ann ==> _`
+       (qspec_then `TypeBuiltin ann Convert ann [e]` mp_tac) >>
+     qpat_assum `q = (mcopy _ _ _ z) with vs_inst_idx := _` SUBST1_TAC >>
+     simp[lowered_value_type_def, expr_type_def,
+          bodyPtrIfExpAllocSourceTheory.ptr_buf_ok_inst_idx, NoAsms]) >>
   `mid with gas_obs := [] = mid` by
     (qpat_assum `mid.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
   pop_assum SUBST1_TAC >>
   simp[lowered_value_type_def, expr_type_def, contextTheory.vv_location_def,
        bodyPtrDefsTheory.ptr_vv_ok_def, contextTheory.vv_operand_def,
-       bodyFullConvertEndpointPostsTheory.dynamic_word_vv_post] >>
+       contextTheory.mk_ptr_def, convert_memory_vv_post, convert_memory_store_bound] >>
   qpat_assum `vv_store_bound _ _ _ _ _ _ q` mp_tac >>
   qpat_assum `ptr_val_ok cx ann vout _ _ _ q` mp_tac >>
-  qpat_assum `!e. lowered_value_type cenv e = ann ==> _` (qspec_then `TypeBuiltin ann Convert ann [e]` mp_tac) >>
   qpat_assum `s0.vs_alloca_next <= t.vs_alloca_next` mp_tac >>
   qpat_assum `t.vs_alloca_next <= q.vs_alloca_next` mp_tac >>
   simp[lowered_value_type_def, expr_type_def, vyperStateTheory.read_result_def] >>
-  gvs[vyperStateTheory.return_def]
+  gvs[vyperStateTheory.return_def, bodyPtrDefsTheory.ptr_val_ok_def]
 QED
 
 Finalise convert_bytes_vv_sim_full

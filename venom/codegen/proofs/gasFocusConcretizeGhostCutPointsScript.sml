@@ -103,35 +103,3 @@ Proof
   qpat_assum `!i. i < LENGTH h ==> _` (drule_then strip_assume_tac) >>
   fs[mem_inv_raw_reachable] >> metis_tac[]
 QED
-
-Theorem focus_concretize_ghost_cut_points:
-  o1_ctx_shape C /\ o1_safe_upto D lo n C vs /\
-  ptr_paired_prefix R lp positions lo vs C Ct
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  gas_cut n vs at.po_state ==>
-  gas_cut n vs a.po_state /\
-  (!i. i < LENGTH h ==>
-    gas_cut n vs (EL i h).po_state /\
-    EVERY (\f. gas_cut n vs f.cf_state) (EL i h).po_stack /\
-    ptr_observation_reachable vs C (EL i h) /\
-    raw_reachable vs C (EL i h).po_fn (EL i h).po_inst (EL i h).po_state /\
-    access_ok lo (EL i h).po_prov (EL i h).po_fn (EL i h).po_inst (EL i h).po_state /\
-    taint_ok (EL i h).po_fn (EL i h).po_taint (EL i h).po_inst (EL i h).po_state /\
-    allocas_from lo (EL i h).po_state /\
-    (ctx_has_dalloca C ==> allocas_below_fmp (EL i h).po_state) /\
-    raw_mem_ok C (EL i h).po_fn (EL i h).po_inst (EL i h).po_state /\
-    dload_offset_ok C (EL i h).po_fn (EL i h).po_inst (EL i h).po_state /\
-    dload_headroom_ok C (EL i h).po_fn (EL i h).po_inst (EL i h).po_state /\
-    (!tsi ri bi PTi TGi si ei. EL i H = (tsi,ri,bi,PTi,TGi,si,ei) ==>
-      ptr_params_erases (dyn_floor C vs) bi PTi (EL i h).po_params /\
-      ptr_ledger_erases (dyn_floor C vs) bi TGi (EL i h).po_prov /\
-      ptr_saved_erases (dyn_floor C vs) bi si (EL i h).po_stack)) /\
-  (!q. q < LENGTH ht ==>
-    gas_cut n vs (EL q ht).po_state /\
-    EVERY (\f. gas_cut n vs f.cf_state) (EL q ht).po_stack)
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  fs[o1_safe_upto_def] >>
-  `mem_inv (\ctx fn inst s. gas_cut n vs s ==> dload_headroom_ok ctx fn inst s) C vs` by fs[mem_inv_raw_reachable] >>
-  drule_all focus_concretize_ghost_cut_points_cut_headroom >> simp[]
-QED

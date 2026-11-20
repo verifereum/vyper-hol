@@ -19,7 +19,6 @@ val () = List.app cv_rep_delete
    "vyperABI.MAP_n2w_o_ORD_ho",
    "vyperABI.cv_within_int_bound_thm",
    "contractABI.cv_i2w_thm",
-   "vfmCompute.MAP_o_n2w_ORD_CONS_CHR_110_CON_ho",
    "vfmCompute.cv_dimword_thm",
    "vfmCompute.cv_rep_bool_bool_itself_datatype",
    "vfmCompute.cv_word_size_thm",

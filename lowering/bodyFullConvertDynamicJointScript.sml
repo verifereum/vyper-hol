@@ -324,6 +324,7 @@ Resume convert_dynamic_vv_sim_full[continuation]:
   >- (drule_all bodyPtrTypeBuiltinsBytesWordTypesTheory.bytestring_scalar_type_partition_cases >>
       qpat_x_assum `~((?k. bt = IntT k) \/ bt = DecimalT)` mp_tac >>
       POP_ASSUM_LIST (K all_tac) >> simp[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   Cases_on `v = BytesV [] \/ v = StringV []`
   >- (drule_all bytes_word_empty_convert_origin_path >>
       disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`] mp_tac) >>

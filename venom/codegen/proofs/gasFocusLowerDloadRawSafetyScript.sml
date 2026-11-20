@@ -2,7 +2,7 @@
 Theory gasFocusLowerDloadRawSafety
 Ancestors
   gasFocusLowerDloadRawPointSafety gasFocusLowerDloadRawCompletedInvoke
-  gasFocusLowerDloadRoot gasFocusLowerDloadControlEntry gasFocusLowerDloadCallEntry
+  gasFocusLowerDloadRoot gasFocusLowerDloadControlEntryExact gasFocusLowerDloadCallEntry
   gasFocusLowerDloadCutGuards gasFocusLowerDloadEnvironmentPoint
   gasFocusLowerDloadArithmeticBindingPoint gasFocusLowerDloadLogStorePoint
   gasFocusLowerDloadScratchNext gasFocusLowerDloadBytesWrite gasFocusLowerDloadBytesNext
@@ -260,11 +260,12 @@ Resume ld_focus_actual_raw_safety[block_point]:
   rename1 `enters_block gn u tp` >> rename1 `active_inst gn j tp` >>
   qpat_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_then Any (qspecl_then [`j`,`tp`,`u`,`names`,`fuel`,`gn`,`Sigma`,`C'`] mp_tac)
-      ld_focus_control_entry) >>
+      ld_focus_control_entry_exact) >>
   (impl_tac >- (simp[NoAsms] >> rpt conj_tac >>
     FIRST [first_assum ACCEPT_TAC, fs[MEM], metis_tac[]])) >>
   strip_tac >> disj1_tac >>
-  qexistsl [`stk`,`PG`,`G'`,`entry_taint_vars source (jump_to lbl' s) tn`,
+  qexistsl [`stk`,`PG`,`entry_prov source (jump_to lbl' s) G`,
+    `entry_taint_vars source (jump_to lbl' s) tn`,
     `source`,`ni`,`s1`,`tp`,`A`,`g`,`fs`,`N`,`X'`,`0`] >>
   qpat_assum `(\lo P Sigma names fs f0 A0 A frames. _) lo P Sigma names fs f A A (g::fs)`
     (strip_assume_tac o BETA_RULE) >>

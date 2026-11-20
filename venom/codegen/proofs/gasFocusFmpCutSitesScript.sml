@@ -34,21 +34,6 @@ Proof
   gvs[update_var_def, w2n_n2w] >> decide_tac
 QED
 
-Theorem cut_sites_step_prov[local]:
-  prov_sites P G /\ param_sites P PG /\ inst.inst_opcode <> ALLOCA /\
-  (inst.inst_opcode = DALLOCA ==>
-   !site. out_prov PG G inst t = SOME site ==> P site) ==>
-  prov_sites P (step_prov PG G inst t)
-Proof
-  strip_tac >> simp[step_prov_def] >> irule prov_sites_set >> simp[] >>
-  Cases_on `inst.inst_opcode = DALLOCA` >- metis_tac[] >>
-  simp[out_prov_def] >> Cases_on `inst.inst_opcode = PARAM` >> simp[]
-  >- (rpt strip_tac >> gvs[AllCaseEqs(), param_sites_def] >>
-      metis_tac[MEM_EL]) >>
-  Cases_on `inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/
-            inst.inst_opcode = ASSIGN` >> simp[] >> metis_tac[prov_sites_first]
-QED
-
 (* The suspended callers carry the same bounds relative to their own
    frontiers. In particular a return uses the saved caller's bound, not
    the larger frontier of the callee at its return instruction. *)
@@ -110,7 +95,7 @@ Resume cut_sites_invariant[next]:
   pure_rewrite_tac[venom_state_accfupds, venom_state_accessors] >>
   rpt conj_tac >- simp[] >- decide_tac
   >- (gvs[EVERY_MEM] >> metis_tac[LESS_EQ_TRANS])
-  >- (irule cut_sites_step_prov >> simp[] >> conj_tac
+  >- (irule fmpStageReclaimSoundTheory.fmp_sites_step >> simp[] >> conj_tac
       >- (gvs[param_sites_def] >> Cases >> simp[] >> strip_tac >>
           qpat_assum `!site. MEM (SOME site) PG ==> _` drule >>
           disch_then (assume_tac o SRULE []) >> gvs[] >> decide_tac) >>

@@ -95,7 +95,7 @@ Theorem bytes_tail_round_certificate[local]:
   emit_op AND [up;mask] c2 = (rounded,sb) /\
   eval_operand cnt s = SOME (n2w c) /\
   c+31 < dimword(:256) /\ fresh_vars_wrt sa s /\
-  op_prov G cnt = NONE /\ op_taint tn cnt = {} /\ ~ctx_has_dalloca ctx /\
+  op_prov G cnt = NONE /\ op_taint tn cnt = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?r Gr tr.
     run_inst_seq (emitted_insts sa sb) s = OK (r with vs_inst_idx := s.vs_inst_idx) /\
@@ -117,7 +117,6 @@ Proof
   drule_all bytes_tail_round_code >> simp[] >> strip_tac >>
   `!op. op IN {cnt;Lit 31w} ==> op_prov G op = NONE /\ op_taint tn op = {}` by
     (simp[] >> rpt strip_tac >> gvs[op_prov_def, op_taint_def]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
@@ -136,7 +135,7 @@ Theorem bytes_tail_offset_certificate[local]:
   emit_op ADD [Var dst;offset] sa = (Var last,sb) /\
   ptr_covers G tn dst s (q+32) /\ lookup_var dst s = SOME (n2w d) /\
   eval_operand offset s = SOME (n2w q) /\ op_taint tn offset = {} /\
-  d+q < dimword(:256) /\ ~ctx_has_dalloca ctx /\
+  d+q < dimword(:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t Gt tt.
     run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
@@ -156,7 +155,6 @@ Proof
   strip_tac >>
   `w2n (n2w d:bytes32) = d` by simp[wordsTheory.w2n_n2w] >>
   `w2n (n2w d:bytes32) + q < dimword(:256)` by asm_rewrite_tac[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `emit_op ADD _ sa = _` (mp_then Any mp_tac emit_addr_add_seq_ptr) >>
   disch_then drule_all >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
@@ -182,7 +180,7 @@ QED
 Theorem bytes_tail_pad_certificate[local]:
   emit_void MSTORE [Var last;Lit 0w] sa = ((),sb) /\
   ptr_covers G tn last s 32 /\ lookup_var last s = SOME (n2w j) /\
-  j < dimword(:256) /\ j+32 <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  j < dimword(:256) /\ j+32 <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t tt.
     run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
@@ -210,8 +208,7 @@ Proof
      OK (mstore (w2n (n2w j:bytes32)) 0w s)` by (irule step_MSTORE >> simp[]) >>
   `step_inst_base i s = OK r` by simp[Abbr `i`, Abbr `r`] >>
   `inst_seq_ptr D 0 ctx fn PG G tn [i] s G (step_taint i s r tn)` by
-    (`ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
-     drule_all clean_word_store_checked_cursors >>
+    (drule_all clean_word_store_checked_cursors >>
      disch_then (qspecl_then [`sa.cs_next_id`, `fn`, `PG`, `D`, `s.vs_inst_idx`] mp_tac) >>
      simp[Abbr `i`, Abbr `r`]) >>
   drule_all mstore_raw_ghost_frame >>
@@ -225,7 +222,7 @@ QED
 Theorem bytes_tail_count_certificate[local]:
   emit_op ADD [Lit 32w;cnt] sa = (Var len,sb) /\
   eval_operand cnt s = SOME (n2w c) /\ op_taint tn cnt = {} /\
-  ~ctx_has_dalloca ctx /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t Gt tt.
     run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
     run_inst_seq_mem_ok (emitted_insts sa sb) s /\
@@ -244,7 +241,6 @@ Proof
   strip_tac >>
   `eval_operand (Lit 32w) s = SOME 32w /\ op_taint tn (Lit 32w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `emit_op ADD _ sa = _`
     (mp_then Any mp_tac (SRULE [] (Q.INST
        [`f` |-> `word_add:bytes32 -> bytes32 -> bytes32`, `opc` |-> `ADD`]
@@ -272,7 +268,7 @@ QED
 
 Theorem bytes_tail_copy_certificate[local]:
   emit_void MCOPY [Var dst;Var ar;len] sa = ((),sb) /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~ctx_has_dalloca ctx /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var dst s = SOME (n2w d) /\ lookup_var ar s = SOME (n2w a) /\
   eval_operand len s = SOME (n2w n) /\ op_taint tn len = {} /\
   d < dimword(:256) /\ a < dimword(:256) /\ n < dimword(:256) /\
@@ -303,7 +299,6 @@ Proof
        (mp_then (Pat `emit_void MCOPY _ _ = _`) mp_tac emit_mcopy_mem_ok) >> simp[]) >>
   `ptr_covers G tn dst s (w2n (n2w n:bytes32)) /\
    ptr_covers G tn ar s (w2n (n2w n:bytes32))` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `emit_void MCOPY _ sa = _` (mp_then Any mp_tac emit_mcopy_normalized_ptr) >>
   disch_then drule_all >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
@@ -345,7 +340,7 @@ QED
 Theorem bytes_tail_runtime_cuts[local]:
   abi_decode_bytes_runtime_tail (Var dst) (Var ar) cnt cm = ((),en) /\
   s.vs_inst_idx = LENGTH cm.cs_current_insts /\ fresh_vars_wrt cm s /\
-  ~ctx_has_dalloca ctx /\ eval_operand cnt s = SOME (n2w c) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ eval_operand cnt s = SOME (n2w c) /\
   op_prov G cnt = NONE /\ op_taint tn cnt = {} /\
   lookup_var dst s = SOME (n2w d) /\ lookup_var ar s = SOME (n2w a) /\
   ptr_covers G tn dst s cap /\ ptr_covers G tn ar s (32+c) /\
@@ -400,6 +395,13 @@ Proof
   `ptr_covers Gr tr dst r (contractABI$ceil32 c+32)` by (irule ptr_covers_mono >> metis_tac[]) >>
   `d+contractABI$ceil32 c < dimword(:256)` by
     (qpat_assum `contractABI$ceil32 c+32 <= _` mp_tac >> qpat_assum `cap+d < _` mp_tac >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by
+    (`allocas_below_fmp r <=> allocas_below_fmp s` by
+       (qpat_assum `r = _` SUBST1_TAC >>
+        simp[ptrDisciplineTheory.allocas_below_fmp_def]) >>
+     qpat_assum `allocas_below_fmp r <=> allocas_below_fmp s`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
   drule_all bytes_tail_offset_certificate >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   rename [`run_inst_seq (emitted_insts c3 c4) r = OK (u4 with vs_inst_idx := _)`,
@@ -411,6 +413,13 @@ Proof
     (qpat_assum `contractABI$ceil32 c+32 <= _` mp_tac >>
      qpat_assum `cap+d <= _` mp_tac >>
      asm_rewrite_tac[] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u4` by
+    (`allocas_below_fmp u4 <=> allocas_below_fmp r` by
+       (qpat_assum `u4 = _` SUBST1_TAC >>
+        simp[ptrDisciplineTheory.allocas_below_fmp_def]) >>
+     qpat_assum `allocas_below_fmp u4 <=> allocas_below_fmp r`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
   drule_all bytes_tail_pad_certificate >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   rename [`run_inst_seq (emitted_insts c4 c5) u4 = OK (u5 with vs_inst_idx := _)`,
@@ -433,6 +442,13 @@ Proof
     (qpat_assum `emit_op ADD [Lit 32w;cnt] c5 = _` mp_tac >>
      simp[NoAsms, loweringShapeRulesTheory.emit_op_eq] >> metis_tac[]) >>
   qpat_x_assum `len = Var _` SUBST_ALL_TAC >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u5` by
+    (`allocas_below_fmp u5 <=> allocas_below_fmp u4` by
+       (qpat_assum `u5 = _` SUBST1_TAC >>
+        simp[ptrDisciplineTheory.allocas_below_fmp_def, mstore_def, write_memory_with_expansion_def]) >>
+     qpat_assum `allocas_below_fmp u5 <=> allocas_below_fmp u4`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
   drule_all bytes_tail_count_certificate >>
   disch_then (qspecl_then [`fn`, `PG`, `G4`, `D`] strip_assume_tac) >>
   rename [`run_inst_seq (emitted_insts c5 c6) u5 = OK (u6 with vs_inst_idx := _)`,
@@ -456,6 +472,13 @@ Proof
     (qpat_assum `cap+d < _` mp_tac >> qpat_assum `cap+d <= _` mp_tac >>
      qpat_assum `a+(c+32) <= _` mp_tac >> qpat_assum `c <= contractABI$ceil32 c` mp_tac >>
      qpat_assum `contractABI$ceil32 c+32 <= _` mp_tac >> asm_rewrite_tac[] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u6` by
+    (`allocas_below_fmp u6 <=> allocas_below_fmp u5` by
+       (qpat_assum `u6 = _` SUBST1_TAC >>
+        simp[ptrDisciplineTheory.allocas_below_fmp_def]) >>
+     qpat_assum `allocas_below_fmp u6 <=> allocas_below_fmp u5`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
   drule_all bytes_tail_copy_certificate >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   rename [`run_inst_seq (emitted_insts c6 en) u6 = OK (u with vs_inst_idx := _)`,
@@ -506,7 +529,7 @@ QED
 Theorem abi_decode_valid_bytes_tail_certificate:
   abi_decode_bytes_runtime_tail (Var dst) (Var ar) cnt cm = ((),en) /\
   s.vs_inst_idx = LENGTH cm.cs_current_insts /\ fresh_vars_wrt cm s /\
-  ~ctx_has_dalloca ctx /\ eval_operand cnt s = SOME (n2w c) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ eval_operand cnt s = SOME (n2w c) /\
   op_prov G cnt = NONE /\ op_taint tn cnt = {} /\
   abi_decode_ptr_window G tn s srcvar (n2w B) L /\
   abi_decode_ptr_window G tn s ar (n2w (B+p)) (32+c) /\
