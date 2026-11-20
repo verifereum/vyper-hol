@@ -25,8 +25,46 @@ Ancestors
   externalReturnEncoderSites fragGasPathFrameMem bodyMemAggregatePath
   externalReturnSourceWindow registeredAllocationWindow allocaSiteResource
   fragGasEmitCtrl instMemFrontier fragGasOriginPtrLoop
+  abiEncodeMaterialize aggregateEvaluatedLayout exprSimAbiEncodeArgsPhysicalCapacity
+  externalReturnSupport placeRelayoutSemantic retAbiPlanProps
 
   vyperLoweringCorrect
+
+Theorem return_source_abi_fields[local]:
+  (update_cenv_ret_abi ce ty).ce_ret_enc_info =
+    type_to_abi_enc_info ce.ce_struct_fields ce
+      (if needs_external_call_wrap ty /\ is_abi_dynamic ce.ce_struct_fields ty
+       then TupleT [ty] else ty) /\
+  (update_cenv_ret_abi ce ty).ce_max_return_size =
+    abi_size_bound ce.ce_struct_fields
+      (if needs_external_call_wrap ty /\ is_abi_dynamic ce.ce_struct_fields ty
+       then TupleT [ty] else ty)
+Proof
+  simp[compileVyperTheory.update_cenv_ret_abi_def, external_return_needs_wrap_eq] >>
+  IF_CASES_TAC >> gvs[] >>
+  simp[Once exprLoweringTheory.type_to_abi_enc_info_def,
+       Once abi_size_bound_def, is_abi_dynamic_def, abi_embedded_static_size_def]
+QED
+
+Theorem return_wrap_fits[local]:
+  !t u. arg_type_fits t u ==> needs_external_call_wrap t = needs_external_call_wrap u
+Proof
+  Cases >> Cases >> simp[arg_type_fits_def, vyperABITheory.needs_external_call_wrap_def] >>
+  metis_tac[vyperTypeArgFitsTheory.arg_types_fit_LENGTH]
+QED
+
+Theorem return_abi_size_fits[local]:
+  arg_type_fits t u /\ ce.ce_struct_fields = ce'.ce_struct_fields ==>
+  (update_cenv_ret_abi ce t).ce_max_return_size <=
+    (update_cenv_ret_abi ce' u).ce_max_return_size
+Proof
+  strip_tac >> drule return_wrap_fits >> strip_tac >>
+  `is_abi_dynamic ce'.ce_struct_fields t = is_abi_dynamic ce'.ce_struct_fields u` by
+    metis_tac[cj 1 abi_args_fits_static_shape] >>
+  `arg_type_fits (TupleT [t]) (TupleT [u])` by simp[arg_type_fits_def] >>
+  asm_simp_tac bool_ss [return_source_abi_fields] >> IF_CASES_TAC >>
+  metis_tac[cj 1 abi_args_fits_size_bound]
+QED
 
 Theorem valued_return_compiler_transient[local]:
   (nr /\ ~iv ==> ut) ==>
@@ -276,55 +314,106 @@ Resume return_selected_valued_frag_full_core[buffered_return]:
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   qpat_assum `ghost_inv_at _ lo d ce cx mid G1 tn1 t`
     (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
-  `type_widens_to (type_env tops) (post_value_type ce e) ret` by
-    metis_tac[] >>
-  `env_consistent env cx es /\ env.type_defs = get_tenv cx /\
-   sfields_tenv_consistent ce.ce_struct_fields env.type_defs /\
-   (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
-      ce.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
-    (qpat_assum `expr_sim_inv ce cx env es` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[expr_sim_inv_def] >> rpt strip_tac >>
-     fs[vyperTypeInvariantsTheory.env_consistent_def,
-       vyperTypeInvariantsTheory.env_context_consistent_def]) >>
-  `!id ty. FLOOKUP env.var_types id = SOME ty ==>
-     well_formed_type env.type_defs ty` by
-    (rpt gen_tac >> strip_tac >>
-     qspecl_then [`env`,`cx`,`es`,`id`,`ty`] mp_tac
-       exprSimSourceTheory.env_consistent_var_type_evaluates >>
-     simp[vyperTypeSystemTheory.well_formed_type_def]) >>
-  qspecl_then [`ce`,`e`,`env`] mp_tac
-    exprSimIfExpCompatTheory.ifexp_lowered_type_classify >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_tac >>
-  Q.SUBGOAL_THEN `post_value_type ce e = lowered_value_type ce e \/
-   is_bytestring_type (post_value_type ce e) /\
-   is_bytestring_type (lowered_value_type ce e)` ASSUME_TAC
-  >-
+  suspend "buffered_physical_type"
+QED
+
+Resume return_selected_valued_frag_full_core[buffered_physical_type]:
+  `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    metis_tac[expr_sim_inv_physical_type] >>
+  `arg_type_fits (expr_type e) ret` by
+    (qpat_assum `type_widens_to (type_env tops) (expr_type e) ret` mp_tac >>
+     PURE_REWRITE_TAC [type_widens_to_def] >>
+     disch_then (DISJ_CASES_THEN2 SUBST1_TAC strip_assume_tac)
+     >- MATCH_ACCEPT_TAC (cj 1 vyperTypeSystemTheory.arg_type_fits_refl) >>
+     first_assum ACCEPT_TAC) >>
+  qabbrev_tac `physical_ty = lowered_value_type ce e` >>
+  `arg_type_fits physical_ty ret` by
+    (qspecl_then [`physical_ty`,`expr_type e`] mp_tac
+       (cj 1 assignRelayoutCallerTheory.arg_type_fits_trans) >>
+     simp[] >> disch_then (qspec_then `ret` ACCEPT_TAC)) >>
+  `~is_word_type (expr_type e) /\ ~is_word_type physical_ty` by
+    (qspecl_then [`expr_type e`,`ret`] mp_tac arg_type_fits_word_type >>
+     qspecl_then [`physical_ty`,`ret`] mp_tac arg_type_fits_word_type >> simp[]) >>
+  Q.SUBGOAL_THEN `post_value_type ce e = physical_ty \/
+    is_bytestring_type (post_value_type ce e) /\ is_bytestring_type physical_ty` ASSUME_TAC
+  >- (qspecl_then [`ce`,`e`] mp_tac materialize_post_lowered_classify >> simp[]) >>
+  `alloc_limits_expr ce e` by
+    (qpat_assum `stmt_exprs_ok ce (Return (SOME e))`
+       (ACCEPT_TAC o cj 2 o REWRITE_RULE [stmt_exprs_ok_def,
+          allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_expr_def])) >>
+  `value_runtime_typed env physical_ty v` by
+    (simp[Abbr `physical_ty`] >>
+     qspecl_then [`ce`,`e`,`env`,`cx`,
+       `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,`v`,
+       `mid with gas_obs := []`] mp_tac
+       expr_sim_inv_read_lowered_typed >>
+     CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
+  qpat_x_assum `value_runtime_typed env physical_ty v` mp_tac >>
+  PURE_REWRITE_TAC [vyperTypeExprSoundnessTheory.value_runtime_typed_def] >>
+  disch_then (qx_choose_then `physical_tv` strip_assume_tac) >>
+  `evaluate_type (get_tenv cx) physical_ty = SOME physical_tv /\
+   evaluate_type (type_env tops) physical_ty = SOME physical_tv /\
+   val_wf physical_tv v /\ safe_cast physical_tv v = SOME v` by
+    (imp_res_tac valueTypingMemoryPropsTheory.value_has_type_memory_wf >>
+     imp_res_tac vyperTypingTheory.safe_cast_well_typed >>
+     qpat_assum `get_tenv cx = type_env tops`
+       (fn th => PURE_ONCE_REWRITE_TAC [GSYM th]) >>
+     qpat_assum `env.type_defs = get_tenv cx`
+       (fn th => PURE_ONCE_REWRITE_TAC [GSYM th]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `needs_external_call_wrap physical_ty = needs_external_call_wrap ret /\
+   vyper_to_abi_type (type_env tops) physical_ty = vyper_to_abi_type (type_env tops) ret /\
+   vyper_to_abi (type_env tops) physical_ty v = vyper_to_abi (type_env tops) ret v` by
+    (conj_tac >- (irule return_wrap_fits >> first_assum ACCEPT_TAC) >>
+     conj_tac >- (irule (cj 1 abi_args_fits_abi_type) >> first_assum ACCEPT_TAC) >>
+     qspecl_then [`physical_ty`,`ret`,`physical_tv`,`dtv`] mp_tac
+       (Q.INST [`tenv` |-> `type_env tops`] (cj 1 abi_args_fits_conversion)) >>
+     simp[] >> disch_then (qspec_then `v` ACCEPT_TAC)) >>
+  suspend "buffered_metadata"
+QED
+
+Resume return_selected_valued_frag_full_core[buffered_metadata]:
+  `ret <> NoneT` by
+    (qpat_assum `IS_SOME (type_stmt env ret (Return (SOME e)))` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[type_stmt_def, AllCaseEqs()]) >>
+  qabbrev_tac `abi_ce = if physical_ty = ret then ce else update_cenv_ret_abi ce physical_ty` >>
+  `ce.ce_max_return_size = (update_cenv_ret_abi ce ret).ce_max_return_size` by
     (map_every (fn pat => qpat_assum pat mp_tac)
-      [`lowered_value_type ce e = expr_type e \/ _`,
-       `expr_sim_inv ce cx env es`,`well_typed_expr env e`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac
-     >- metis_tac[loweringPostsTheory.post_value_type_lowered]
-     >- metis_tac[loweringPostsTheory.post_value_type_bytestring]
-     >- (gvs[] >> drule_all return_intcall_lowered_widens >> strip_tac >>
-         Cases_on `is_word_type ty`
-         >- (drule_all typedMemoryCopyTheory.typed_copy_word_widening >>
-             strip_tac >> gvs[loweringPostsTheory.post_value_type_def]) >>
-         Cases_on `is_bytestring_type ty`
-         >- (drule_all typedMemoryCopyTheory.typed_copy_bytestring_source >>
-             strip_tac >> gvs[loweringPostsTheory.post_value_type_def]) >>
-         gvs[loweringPostsTheory.post_value_type_def])) >>
+       [`ce.ce_max_return_size = cenv.ce_max_return_size`,
+        `cenv.ce_max_return_size = cenv0.ce_max_return_size`,
+        `_.ce_max_return_size = if ret = NoneT then 0 else _`,
+        `cenv0 = _ with ce_target := target`,
+        `ce.ce_struct_fields = make_struct_fields_map tops`, `ret <> NoneT`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rpt disch_tac >>
+     gvs[compileVyperTheory.update_cenv_ret_abi_def,
+         compileVyperTheory.build_compile_env_ce_struct_fields]) >>
+  `abi_ce.ce_max_return_size <= ce.ce_max_return_size` by
+    (Cases_on `physical_ty = ret` >> simp[Abbr `abi_ce`] >>
+     metis_tac[return_abi_size_fits]) >>
+  `ce.ce_max_return_size < dimword (:256)` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`stmt_exprs_ok ce (Return (SOME e))`,`ce.ce_is_external`,
+        `~ce.ce_raw_return`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[stmt_exprs_ok_def, compileVyperTheory.stmt_valued_return_def,
+          compileVyperTheory.return_buffer_ok_def, wordsTheory.dimword_def] >>
+     rpt strip_tac >> gvs[]) >>
+  `abi_ce.ce_max_return_size < dimword (:256)` by decide_tac >>
+  suspend "buffered_encode"
+QED
+
+Resume return_selected_valued_frag_full_core[buffered_encode]:
   Q.SUBGOAL_THEN `!src_st src_state Gs ts (src:operand) own_start own_end.
-   compile_external_return (SOME src) F F ce.ce_ret_enc_info
-     ce.ce_max_return_size nr nkey ut (mut=View) src_st = ((),sb) /\
+   compile_external_return (SOME src) F F abi_ce.ce_ret_enc_info
+     abi_ce.ce_max_return_size nr nkey ut (mut=View) src_st = ((),sb) /\
    fn_has_code src_st sb func /\ local_ptrs_reserved ce src_st /\
    (!x. src=Var x ==> not_fresh_at src_st x) /\
    own_end.cs_next_id <= src_st.cs_next_id /\
    stmt_state_rel (storage_trace_horizon mid.storage_trace)
      ctx func ce cx mid src_state /\
-   expr_val_at ce cx ret own_start own_end mid v src src_state /\
-   ptr_val_ok cx ret v src Gs ts src_state /\
+   expr_val_at ce cx physical_ty own_start own_end mid v src src_state /\
+   ptr_val_ok cx physical_ty v src Gs ts src_state /\
    ~src_state.vs_halted /\
    src_state.vs_current_bb=src_st.cs_current_bb /\
    src_state.vs_inst_idx=LENGTH src_st.cs_current_insts /\
@@ -382,32 +471,31 @@ Resume return_selected_valued_frag_full_core[buffered_return]:
   `(!x. op = Var x ==> not_fresh_at sm x)` by
     metis_tac[compile_lower_value_var] >>
   `fn_has_code sm sb func` by metis_tac[fn_has_code_split] >>
-  Cases_on `~is_word_type ret /\
-    ~(is_bytestring_type ret /\ is_bytestring_type (lowered_value_type ce e)) /\
-    lowered_value_type ce e <> ret`
-  >- suspend "buffered_normalize" >>
-  `compile_external_return (SOME op) F F ce.ce_ret_enc_info
-    ce.ce_max_return_size nr nkey ut (mut = View) sm = ((),sb)` by
+  `compile_external_return (SOME op) F F abi_ce.ce_ret_enc_info
+    abi_ce.ce_max_return_size nr nkey ut (mut = View) sm = ((),sb)` by
     (map_every (fn pat => qpat_assum pat mp_tac)
        [`stmt_env ce lctx ret (Return (SOME e)) sa = _`,
         `lower_value compile_expr ce ret e sa = (op,sm)`,
-        `~(~is_word_type ret /\ _ /\ _)`,`~ce.ce_raw_return`,
-        `~is_word_type ret`,`ce.ce_nonreentrant = _`,
+        `Abbrev (physical_ty = _)`, `Abbrev (abi_ce = _)`,
+        `arg_type_fits physical_ty ret`, `~ce.ce_raw_return`,
+        `~is_word_type ret`, `ce.ce_nonreentrant = _`,
         `ce.ce_return_pc = NONE`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
+     Cases_on `compile_external_return (SOME op) F F abi_ce.ce_ret_enc_info
+       abi_ce.ce_max_return_size nr nkey ut (mut = View) sm` >>
+     Cases_on `physical_ty = ret` >>
      fs[stmt_env_def,declare_stmt_local_def,Once compile_stmt_def,
-        comp_bind_def,comp_ignore_bind_def,comp_return_def,LET_THM] >>
-     Cases_on `compile_external_return (SOME op) F F ce.ce_ret_enc_info
-       ce.ce_max_return_size nr nkey ut (mut = View) sm` >>
-     gvs[pairTheory.UNCURRY,comp_bind_def,comp_ignore_bind_def,comp_return_def]) >>
+        comp_bind_def,comp_ignore_bind_def,comp_return_def,LET_THM,
+        pairTheory.UNCURRY, return_source_abi_fields, markerTheory.Abbrev_def] >>
+     gvs[comp_bind_def,comp_return_def,return_source_abi_fields,oneTheory.one]) >>
   suspend "buffered_direct_dispatch"
 QED
 
 Resume return_selected_valued_frag_full_core[buffered_direct_dispatch]:
-  Q.SUBGOAL_THEN `expr_val_at ce cx ret sa sm mid v op t /\
-    ptr_val_ok cx ret v op G1 tn1 t` ASSUME_TAC
-  >- (Cases_on `post_value_type ce e=ret`
-      >- (qpat_assum `post_value_type ce e=ret`
+  Q.SUBGOAL_THEN `expr_val_at ce cx physical_ty sa sm mid v op t /\
+    ptr_val_ok cx physical_ty v op G1 tn1 t` ASSUME_TAC
+  >- (Cases_on `post_value_type ce e=physical_ty`
+      >- (qpat_assum `post_value_type ce e=physical_ty`
             (fn th => PURE_REWRITE_TAC [GSYM th]) >>
           conj_tac >> first_assum ACCEPT_TAC) >>
       suspend "buffered_direct_widened_source") >>
@@ -436,33 +524,26 @@ Resume return_selected_valued_frag_full_core[buffered_direct_ret_ready]:
 QED
 
 Resume return_selected_valued_frag_full_core[buffered_direct_widened_source]:
-  `is_bytestring_type (post_value_type ce e) /\ is_bytestring_type ret` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`post_value_type ce e = lowered_value_type ce e \/ _`,
-       `post_value_type ce e <> ret`,`~is_word_type ret`,
-       `~(~is_word_type ret /\ _ /\ _)`,
-       `type_widens_to (get_tenv cx) (post_value_type ce e) ret`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     metis_tac[typedMemoryCopyTheory.type_widens_from_bytestring]) >>
+  `is_bytestring_type (post_value_type ce e) /\ is_bytestring_type physical_ty` by metis_tac[] >>
   `evaluate_type (get_tenv cx) (post_value_type ce e)=SOME ptv /\
-   evaluate_type (get_tenv cx) ret=SOME dtv` by
+   evaluate_type (get_tenv cx) physical_ty=SOME physical_tv` by
     (qpat_assum `get_tenv cx=type_env tops`
        (fn th => PURE_REWRITE_TAC [th]) >>
      conj_tac >> first_assum ACCEPT_TAC) >>
   `~is_word_type (post_value_type ce e)` by
     metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
-  `val_footprint ptv v=val_footprint dtv v` by
-    (qspecl_then [`get_tenv cx`,`post_value_type ce e`,`ret`,
-      `ptv`,`dtv`,`v`] mp_tac valueCopyBytesTheory.bytestring_val_footprint_eq >>
+  `val_footprint ptv v=val_footprint physical_tv v` by
+    (qspecl_then [`get_tenv cx`,`post_value_type ce e`,`physical_ty`,
+      `ptv`,`physical_tv`,`v`] mp_tac valueCopyBytesTheory.bytestring_val_footprint_eq >>
      simp[]) >>
-  `val_store_size ptv v=val_store_size dtv v` by
-    (qspecl_then [`get_tenv cx`,`post_value_type ce e`,`ret`,
-      `ptv`,`dtv`,`v`] mp_tac valueCopyBytesTheory.bytestring_val_store_size_eq >>
+  `val_store_size ptv v=val_store_size physical_tv v` by
+    (qspecl_then [`get_tenv cx`,`post_value_type ce e`,`physical_ty`,
+      `ptv`,`physical_tv`,`v`] mp_tac valueCopyBytesTheory.bytestring_val_store_size_eq >>
      simp[]) >>
-  `!addr mem. val_in_memory ptv v addr mem ==> val_in_memory dtv v addr mem` by
+  `!addr mem. val_in_memory ptv v addr mem ==> val_in_memory physical_tv v addr mem` by
     (rpt strip_tac >>
-     qspecl_then [`get_tenv cx`,`post_value_type ce e`,`ret`,
-       `ptv`,`dtv`,`v`,`addr`,`mem`] mp_tac
+     qspecl_then [`get_tenv cx`,`post_value_type ce e`,`physical_ty`,
+       `ptv`,`physical_tv`,`v`,`addr`,`mem`] mp_tac
        valueCopyBytesTheory.bytestring_val_in_memory_transfer >> simp[]) >>
   `val_wf ptv v` by
     (qpat_assum `value_has_type ptv v`
@@ -474,31 +555,31 @@ Resume return_selected_valued_frag_full_core[buffered_direct_widened_source]:
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      drule_all valueCopyBytesTheory.bytestring_type_value >> metis_tac[]) >>
   pop_assum strip_assume_tac >>
-  `?dbt. dtv = BaseTV dbt` by
+  `?dbt. physical_tv = BaseTV dbt` by
     (map_every (fn pat => qpat_assum pat mp_tac)
-       [`is_bytestring_type ret`,`evaluate_type (get_tenv cx) ret=SOME dtv`] >>
+       [`is_bytestring_type physical_ty`,`evaluate_type (get_tenv cx) physical_ty=SOME physical_tv`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      drule_all valueCopyBytesTheory.bytestring_type_value >> metis_tac[]) >>
   pop_assum strip_assume_tac >>
   `!name offset. local_val_at ce cx name offset ptv v ==>
-     local_val_at ce cx name offset dtv v` by
+     local_val_at ce cx name offset physical_tv v` by
     (map_every (fn pat => qpat_assum pat mp_tac)
-       [`ptv = BaseTV sbt`,`dtv = BaseTV dbt`,`val_wf ptv v`,
-        `val_footprint ptv v = val_footprint dtv v`] >>
+       [`ptv = BaseTV sbt`,`physical_tv = BaseTV dbt`,`val_wf ptv v`,
+        `val_footprint ptv v = val_footprint physical_tv v`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      metis_tac[exprSimPropsTheory.local_val_at_base,
        arithmeticTheory.LESS_EQ_REFL]) >>
-  `expr_val_at ce cx ret sa sm mid v op t` by
+  `expr_val_at ce cx physical_ty sa sm mid v op t` by
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`expr_val_at ce cx (post_value_type ce e) sa sm mid v op t`,
        `evaluate_type (get_tenv cx) (post_value_type ce e)=SOME ptv`,
-       `evaluate_type (get_tenv cx) ret=SOME dtv`,
-       `~is_word_type (post_value_type ce e)`,`~is_word_type ret`,
-       `val_wf dtv v`,`val_footprint ptv v=val_footprint dtv v`,
+       `evaluate_type (get_tenv cx) physical_ty=SOME physical_tv`,
+       `~is_word_type (post_value_type ce e)`,`~is_word_type physical_ty`,
+       `val_wf physical_tv v`,`val_footprint ptv v=val_footprint physical_tv v`,
        `!name offset. local_val_at ce cx name offset ptv v ==> _`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp_tac bool_ss [expr_val_at_def] >>
      rpt disch_tac >> gen_tac >> strip_tac >>
-     `tv = dtv` by metis_tac[optionTheory.SOME_11] >>
+     `tv = physical_tv` by metis_tac[optionTheory.SOME_11] >>
      pop_assum SUBST_ALL_TAC >> conj_tac
      >- first_assum ACCEPT_TAC >>
      qpat_assum `!tv. SOME ptv = SOME tv ==> _`
@@ -512,15 +593,15 @@ Resume return_selected_valued_frag_full_core[buffered_direct_widened_source]:
      >- (disj2_tac >> disj1_tac >> qexistsl_tac [`n`,`b`,`sz`] >> gvs[] >>
          first_assum MATCH_MP_TAC >> first_assum ACCEPT_TAC) >>
      disj2_tac >> disj2_tac >> gvs[]) >>
-  `ptr_val_ok cx ret v op G1 tn1 t` by
+  `ptr_val_ok cx physical_ty v op G1 tn1 t` by
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`ptr_val_ok cx (post_value_type ce e) v op G1 tn1 t`,
        `evaluate_type (get_tenv cx) (post_value_type ce e)=SOME ptv`,
-       `evaluate_type (get_tenv cx) ret=SOME dtv`,
-       `~is_word_type (post_value_type ce e)`,`~is_word_type ret`,
-       `val_footprint ptv v=val_footprint dtv v`,
-       `val_store_size ptv v=val_store_size dtv v`,
-       `!addr mem. val_in_memory ptv v addr mem ==> val_in_memory dtv v addr mem`] >>
+       `evaluate_type (get_tenv cx) physical_ty=SOME physical_tv`,
+       `~is_word_type (post_value_type ce e)`,`~is_word_type physical_ty`,
+       `val_footprint ptv v=val_footprint physical_tv v`,
+       `val_store_size ptv v=val_store_size physical_tv v`,
+       `!addr mem. val_in_memory ptv v addr mem ==> val_in_memory physical_tv v addr mem`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp_tac bool_ss [ptr_val_ok_def,ptr_mem_ok_def] >>
      rpt disch_tac >> metis_tac[optionTheory.SOME_11]) >>
   conj_tac >> first_assum ACCEPT_TAC
@@ -597,599 +678,10 @@ Resume return_selected_valued_frag_full_core[buffered_post]:
   simp[NoAsms]
 QED
 
-Resume return_selected_valued_frag_full_core[buffered_normalize]:
-  Cases_on `compile_alloc_buffer (type_memory_bytes ce ret) sm` >>
-  rename1 `compile_alloc_buffer (type_memory_bytes ce ret) sm = (nbuf,nalloc)` >>
-  Cases_on `compile_store_memory_typed ce nbuf.buf_operand ret op
-    (lowered_value_type ce e) nalloc` >>
-  rename1 `compile_store_memory_typed ce nbuf.buf_operand ret op
-    (lowered_value_type ce e) nalloc = (norm_result,ncopy)` >>
-  Cases_on `norm_result` >>
-  `compile_external_return (SOME nbuf.buf_operand) F F ce.ce_ret_enc_info
-     ce.ce_max_return_size nr nkey ut (mut=View) ncopy = ((),sb)` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`stmt_env ce lctx ret (Return (SOME e)) sa = _`,
-       `lower_value compile_expr ce ret e sa = (op,sm)`,
-       `compile_alloc_buffer (type_memory_bytes ce ret) sm = (nbuf,nalloc)`,
-       `compile_store_memory_typed ce nbuf.buf_operand ret op
-          (lowered_value_type ce e) nalloc = ((),ncopy)`,
-       `~is_word_type ret /\ _ /\ _`,`~ce.ce_raw_return`,
-       `ce.ce_nonreentrant = _`,`ce.ce_return_pc = NONE`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     gvs[stmt_env_def,declare_stmt_local_def,Once compile_stmt_def,
-       comp_bind_def,comp_ignore_bind_def,comp_return_def,LET_THM] >>
-     Cases_on `compile_external_return (SOME nbuf.buf_operand) F F ce.ce_ret_enc_info
-       ce.ce_max_return_size nr nkey ut (mut=View) ncopy` >>
-     gvs[pairTheory.UNCURRY,Once compile_stmt_def,comp_bind_def,
-       comp_ignore_bind_def,comp_return_def,LET_THM]) >>
-  suspend "buffered_normalize_same_type"
-QED
-
-Resume return_selected_valued_frag_full_core[buffered_normalize_same_type]:
-  `post_value_type ce e = lowered_value_type ce e` by
-    metis_tac[typedMemoryCopyTheory.type_widens_from_bytestring] >>
-  `~is_word_type (lowered_value_type ce e) /\
-   ~is_bytestring_type (lowered_value_type ce e) /\
-   ~is_bytestring_type ret` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`post_value_type ce e = lowered_value_type ce e`,
-       `type_widens_to (type_env tops) (post_value_type ce e) ret`,
-       `~is_word_type ret /\ _ /\ _`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     metis_tac[typedMemoryCopyTheory.return_source_word_widens_eq,
-       typedMemoryCopyTheory.type_widens_from_bytestring,
-       typedMemoryCopyTheory.typed_copy_bytestring_source]) >>
-  `0 < type_memory_size ptv` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`post_value_type ce e = lowered_value_type ce e`,
-       `type_widens_to (type_env tops) (post_value_type ce e) ret`,
-       `evaluate_type (type_env tops) (post_value_type ce e) = SOME ptv`,
-       `evaluate_type (type_env tops) ret = SOME dtv`,
-       `~is_word_type ret /\ _ /\ _`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     `type_memory_size ptv <> 0` by
-       metis_tac[wideningZeroLayoutTheory.type_widens_to_zero_layout] >>
-     decide_tac) >>
-  suspend "buffered_normalize_source"
-QED
-
-Resume return_selected_valued_frag_full_core[buffered_normalize_source]:
-  `evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv /\
-   ~is_word_type (post_value_type ce e)` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`get_tenv cx = type_env tops`,
-       `post_value_type ce e = lowered_value_type ce e`,
-       `~is_word_type (lowered_value_type ce e)`,
-       `evaluate_type (type_env tops) (post_value_type ce e) = SOME ptv`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
-  `evaluate_type (type_env tops) (lowered_value_type ce e) = SOME ptv` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`post_value_type ce e = lowered_value_type ce e`,
-       `evaluate_type (type_env tops) (post_value_type ce e) = SOME ptv`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
-  `val_footprint ptv v = type_memory_size ptv` by
-    (irule exprSimAggregateChildrenTheory.evaluated_nonbytes_footprint >>
-     qexistsl_tac [`type_env tops`,`lowered_value_type ce e`] >> simp[]) >>
-  `struct_args_unique tops` by
-    (qpat_assum `source_typing_ok tops am tx` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rewrite_tac[e2eDefsTheory.source_typing_ok_def] >>
-     strip_tac >> metis_tac[typedCopyProducerTheory.checked_contract_struct_args_unique]) >>
-  `type_memory_bytes ce (lowered_value_type ce e) = type_memory_size ptv /\
-   type_memory_bytes ce ret = type_memory_size dtv` by
-    (conj_tac >> irule typeLayoutPropsTheory.type_memory_bytes_evaluated >>
-     qexists_tac `tops` >> simp[]) >>
-  `?sw. eval_operand op t = SOME sw /\
-     w2n sw + type_memory_size ptv <= t.vs_alloca_next /\
-     w2n sw + type_memory_size ptv < dimword (:256)` by
-    (drule_all (Q.INST [`ty` |-> `post_value_type ce e`,`tv` |-> `ptv`,
-        `s` |-> `t`] expr_val_at_frontier) >>
-     disch_then (qx_choose_then `sw` strip_assume_tac) >>
-     qexists_tac `sw` >> asm_rewrite_tac[] >> conj_tac
-     >- (gvs[] >> decide_tac) >>
-     drule_all (Q.INST [`t` |-> `post_value_type ce e`,`tv` |-> `ptv`,
-        `s` |-> `t`,`w` |-> `sw`] exprSimTypedAllocTheory.expr_val_at_bound) >>
-     simp[]) >>
-  suspend "buffered_normalize_source_ptr"
-QED
-
-Resume return_selected_valued_frag_full_core[buffered_normalize_source_ptr]:
-  `val_footprint ptv v <> 0 /\
-   type_memory_size ptv <= val_footprint ptv v` by simp[] >>
-  drule_all (Q.INST [`ty` |-> `post_value_type ce e`,`tv` |-> `ptv`,
-      `w` |-> `sw`,`m` |-> `type_memory_size ptv`]
-    representationCleanPtrTheory.ptr_val_ok_read_covers) >> strip_tac >>
-  rename1 `op = Var norm_src` >>
-  `lookup_var norm_src t = SOME sw` by fs[venomStateTheory.eval_operand_def] >>
-  `!mem. mem_agree_outside tn1.t_mem t.vs_memory mem ==>
-     val_in_memory ptv v (w2n sw) mem` by
-    (qpat_assum `ptr_val_ok cx (post_value_type ce e) v op G1 tn1 t` mp_tac >>
-     qpat_assum `eval_operand op t = SOME sw` mp_tac >>
-     qpat_assum `evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv` mp_tac >>
-     qpat_assum `~is_word_type (post_value_type ce e)` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[bodyPtrDefsTheory.ptr_val_ok_def,bodyPtrDefsTheory.ptr_mem_ok_def] >>
-     metis_tac[]) >>
-  `val_wf ptv v` by metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
-  suspend "buffered_normalize_allocation"
-QED
-
-Resume return_selected_valued_frag_full_core[buffered_normalize_allocation]:
-  `type_memory_bytes ce ret < 2 ** 64` by
-    (irule return_selected_lookup_size >> metis_tac[]) >>
-  `type_memory_bytes ce ret < dimword (:256)` by
-    (qpat_assum `type_memory_bytes ce ret < 2 ** 64` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp_tac (srw_ss()) [wordsTheory.dimword_def,
-       fcpLib.INDEX_CONV ``dimindex (:256)``] >> decide_tac) >>
-  `ci_mono sm nalloc` by
-    (qspecl_then [`type_memory_bytes ce ret`,`sm`] mp_tac
-      ci_mono_compile_alloc_buffer >> simp[]) >>
-  `ci_mono nalloc ncopy` by
-    (qspecl_then [`ce`,`nbuf.buf_operand`,`ret`,`op`,
-       `lowered_value_type ce e`,`nalloc`] mp_tac
-      (cj 1 ci_mono_typed_memory_family) >> simp[]) >>
-  `ci_mono ncopy sb` by
-    (qspecl_then [`SOME nbuf.buf_operand`,`F`,`F`,`ce.ce_ret_enc_info`,
-       `ce.ce_max_return_size`,`nr`,`nkey`,`ut`,`mut = View`,`ncopy`] mp_tac
-      (cj 3 ci_mono_return_helpers) >> simp[]) >>
-  `cs_extends sm nalloc /\ cs_extends nalloc ncopy /\ cs_extends ncopy sb` by
-    fs[ci_mono_def] >>
-  `fn_has_code sm nalloc func /\ fn_has_code nalloc ncopy func /\
-   fn_has_code ncopy sb func` by metis_tac[fn_has_code_split,cs_extends_trans] >>
-  `sa.cs_next_var <= sm.cs_next_var` by
-    (qspecl_then [`ce`,`ret`,`e`,`sa`] mp_tac
-      (cj 2 ci_mono_compile_expr_sa) >> simp[ci_mono_def]) >>
-  `local_ptrs_reserved ce sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by simp[] >>
-  qpat_assum `stmt_state_rel _ ctx func ce cx mid t`
-    (fn pre =>
-      let
-        val target_h = hd (snd (strip_comb (concl pre)))
-        val alloc_th = bodyFullAllocaFreshTheory.alloc_buffer_origin_ptr_path
-        val (_,packet) = strip_exists (snd (dest_imp (concl alloc_th)))
-        val frame_h = fst (dest_forall (List.nth (strip_conj packet,6)))
-        val alloc_at_h = INST_TYPE
-          (match_type (type_of frame_h) (type_of target_h)) alloc_th
-      in
-        drule_all (Q.INST
-          [`G` |-> `G1`,`tn` |-> `tn1`,
-           `explicit` |-> `gas_explicit_sites ctx shadow_ctx`] alloc_at_h)
-      end) >>
-  disch_then (qspecl_then [`tn1`,`shadow_ctx`,`PG`,`G1`] strip_assume_tac) >>
-  suspend "buffered_normalize_allocated"
-QED
-
-Resume return_selected_valued_frag_full_core[buffered_normalize_allocated]:
-  rename1 `nbuf.buf_operand = Var norm_dst` >>
-  rename1 `lookup_var norm_dst norm_alloc = SOME norm_dw` >>
-  rename1 `ptr_covers norm_G norm_tn norm_dst norm_alloc (type_memory_bytes ce ret)` >>
-  `norm_alloc.vs_memory=t.vs_memory /\ norm_alloc.vs_halted=t.vs_halted /\
-   norm_alloc.vs_labels=t.vs_labels` by
-    (qpat_assum `norm_alloc with <|vs_vars := t.vs_vars; vs_allocas := t.vs_allocas;
-       vs_alloca_next := t.vs_alloca_next; vs_inst_idx := t.vs_inst_idx|> = t` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[venomStateTheory.venom_state_component_equality]) >>
-  `eval_operand op norm_alloc=eval_operand op t` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`norm_alloc.vs_labels=t.vs_labels`,`!x. op=Var x ==> not_fresh_at sm x`,
-        `!x. not_fresh_at sm x ==> lookup_var x norm_alloc=lookup_var x t /\ _`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
-     Cases_on `op` >> simp[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
-  `!name b sz. local_region ce mid.scopes norm_alloc name b sz <=>
-    local_region ce mid.scopes t name b sz` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`local_ptrs_reserved ce sm`,
-        `!x. not_fresh_at sm x ==> lookup_var x norm_alloc=lookup_var x t /\ _`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >> rpt gen_tac >>
-     irule loweringStateRelDefsTheory.local_region_lookup_cong >>
-     rpt strip_tac >>
-     `not_fresh_at sm p` by
-       metis_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
-     metis_tac[]) >>
-  `expr_val_at ce cx (post_value_type ce e) sa sm mid v op norm_alloc` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`expr_val_at ce cx (post_value_type ce e) sa sm mid v op t`,
-        `eval_operand op norm_alloc=eval_operand op t`,
-        `!aid entry. FLOOKUP t.vs_allocas aid=SOME entry ==> _`,
-        `!name b sz. local_region ce mid.scopes norm_alloc name b sz <=> _`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp_tac bool_ss [expr_val_at_def] >> rpt disch_tac >>
-     gen_tac >> strip_tac >>
-     qpat_assum `!tv. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\ _ ==> _`
-       (qspec_then `tv` mp_tac) >>
-     qpat_assum `evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv`
-       (fn ev => qpat_assum `~is_word_type (post_value_type ce e)`
-         (fn nw => simp_tac bool_ss [ev,nw])) >>
-     disch_then (CONJUNCTS_THEN2 ASSUME_TAC
-       (qx_choose_then `source_addr` strip_assume_tac)) >>
-     asm_rewrite_tac[] >> qexists_tac `source_addr` >>
-     asm_rewrite_tac[]
-     >- (disj1_tac >> qexistsl_tac [`aid`,`b`,`sz`] >>
-         asm_rewrite_tac[] >> first_assum MATCH_MP_TAC >> first_assum ACCEPT_TAC) >>
-     disj2_tac >> disj1_tac >> qexistsl_tac [`n`,`b`,`sz`] >>
-     asm_rewrite_tac[]) >>
-  suspend "buffered_normalize_allocated_resources"
-QED
-
-Resume return_selected_valued_frag_full_core[buffered_normalize_allocated_resources]:
-  `not_fresh_at sm norm_src` by metis_tac[] >>
-  qpat_assum `not_fresh_at sm norm_src` (fn nf =>
-    qpat_assum `!x. not_fresh_at sm x ==>
-      lookup_var x norm_alloc=lookup_var x t /\ _`
-      (qspec_then `norm_src` (fn th => strip_assume_tac (MP th nf)))) >>
-  `lookup_var norm_src norm_alloc = SOME sw` by metis_tac[] >>
-  `ptr_covers norm_G norm_tn norm_src norm_alloc (type_memory_size ptv)` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`ptr_covers G1 tn1 norm_src t (type_memory_size ptv)`,
-       `lookup_var norm_src norm_alloc=lookup_var norm_src t`,
-       `FLOOKUP norm_G norm_src=FLOOKUP G1 norm_src`,
-       `op_taint norm_tn (Var norm_src)=op_taint tn1 (Var norm_src)`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[bodyPtrDefsTheory.ptr_covers_def]) >>
-  qpat_assum `compile_alloc_buffer (type_memory_bytes ce ret) sm = (nbuf,nalloc)`
-    (strip_assume_tac o MATCH_MP compile_alloc_buffer_parts) >>
-  `local_ptrs_reserved ce nalloc` by
-    (irule local_ptrs_reserved_next_var >> qexists_tac `sm` >>
-     simp[ci_mono_def] >> metis_tac[]) >>
-  `acyclic_struct_metadata ce.ce_struct_fields` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`source_typing_ok tops am tx`,`supported_program tops`,
-       `ce.ce_struct_fields=make_struct_fields_map tops`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     rewrite_tac[e2eDefsTheory.source_typing_ok_def] >> rpt strip_tac >>
-     metis_tac[typedCopyProducerTheory.supported_checked_struct_metadata_acyclic]) >>
-  `sfields_tenv_consistent ce.ce_struct_fields (type_env tops) /\
-   (!name fields. FLOOKUP ce.ce_struct_fields name=SOME fields ==>
-     ALL_DISTINCT (MAP FST fields) /\
-     EVERY (\(fname,fty,sz). !tv. evaluate_type (type_env tops) fty=SOME tv ==>
-       sz=type_memory_size tv) fields)` by
-    (qpat_assum `expr_sim_inv ce cx env es` mp_tac >>
-     qpat_assum `get_tenv cx=type_env tops` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> fs[expr_sim_inv_def] >> gvs[] >> metis_tac[]) >>
-  suspend "buffered_normalize_window"
-QED
-
-Resume return_selected_valued_frag_full_core[buffered_normalize_window]:
-  `!mem. mem_agree_outside norm_tn.t_mem norm_alloc.vs_memory mem ==>
-     val_in_memory ptv v (w2n sw) mem` by
-    (qspecl_then [`tn1.t_mem`,`norm_tn.t_mem`,`t.vs_memory`,
-        `norm_alloc.vs_memory`,`{i | t.vs_alloca_next <= i}`,
-        `ptv`,`v`,`w2n sw`] mp_tac
-       robustCopyTransportPtrTheory.robust_val_in_memory_exterior_frame >>
-     impl_tac
-     >- (asm_rewrite_tac[] >> simp[] >> rpt strip_tac >> decide_tac) >>
-     disch_then ACCEPT_TAC) >>
-  suspend "buffered_normalize_separate"
-QED
-
-Resume return_selected_valued_frag_full_core[buffered_normalize_separate]:
-  qpat_assum `stmt_state_rel _ ctx func ce cx mid t`
-    (fn pre => qpat_assum `!H'. stmt_state_rel H' ctx func ce cx mid t ==> _`
-      (fn frame => ASSUME_TAC (MP (SPEC (hd (snd (strip_comb (concl pre)))) frame) pre))) >>
-  `eval_operand op norm_alloc = SOME sw` by metis_tac[] >>
-  `norm_dst = STRING #"%" (toString sm.cs_next_var)` by
-    (qpat_assum `nbuf.buf_operand = Var norm_dst` mp_tac >>
-     qpat_assum `nbuf.buf_operand = Var (STRING _ _)` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
-  `MEM (mk_inst sm.cs_next_id ALLOCA
-     [Lit (n2w (type_memory_bytes ce ret))] [norm_dst]) (fn_insts func)` by
-    (qspecl_then [`type_memory_bytes ce ret`,`sm`,`nalloc`,`nbuf`,`func`] mp_tac
-       exprSimAllocTheory.buffer_alloc_code >> simp[]) >>
-  `not_local_ptr ce mid.scopes norm_dst` by
-    metis_tac[exprSimOperandsTheory.fresh_not_local_ptr] >>
-  `0 < val_footprint ptv v` by simp[] >>
-  Q.SUBGOAL_THEN `w2n sw + type_memory_size ptv <= w2n norm_dw \/
-   w2n norm_dw + type_memory_size dtv <= w2n sw` ASSUME_TAC
-  >-
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`stmt_state_rel _ ctx func ce cx mid norm_alloc`,
-        `fn_inst_ids_distinct func`,
-        `expr_val_at ce cx (post_value_type ce e) sa sm mid v op norm_alloc`,
-        `evaluate_type (type_env tops) (post_value_type ce e)=SOME ptv`,
-        `get_tenv cx=type_env tops`,`~is_word_type (post_value_type ce e)`,
-        `0 < val_footprint ptv v`,`eval_operand op norm_alloc=SOME sw`,
-        `MEM (mk_inst sm.cs_next_id ALLOCA
-          [Lit (n2w (type_memory_bytes ce ret))] [norm_dst]) (fn_insts func)`,
-        `not_local_ptr ce mid.scopes norm_dst`,
-        `FLOOKUP norm_alloc.vs_allocas sm.cs_next_id=_`,
-        `norm_dst=STRING #"%" (toString sm.cs_next_var)`,
-        `val_footprint ptv v=type_memory_size ptv`,
-        `type_memory_bytes ce ret=type_memory_size dtv`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     qpat_assum `stmt_state_rel _ ctx func ce cx mid norm_alloc`
-      (fn pre =>
-        let
-          val target_h = hd (snd (strip_comb (concl pre)))
-          val th = externalReturnNormalizeMemTheory.normalize_alloca_source_separate
-          val source_h = hd (snd (strip_comb
-            (hd (strip_conj (fst (dest_imp (concl th)))))))
-          val typed_th = INST_TYPE (match_type (type_of source_h) (type_of target_h)) th
-        in
-          mp_tac (SRULE [instruction_accessors,mk_inst_def]
-      (Q.INST [`H` |-> `storage_trace_horizon mid.storage_trace`,`ce` |-> `ce`,`cx` |-> `cx`,`ctx` |-> `ctx`,`func` |-> `func`,
-        `es` |-> `mid`,`s` |-> `norm_alloc`,`ty` |-> `post_value_type ce e`,
-        `sa` |-> `sa`,`sb` |-> `sm`,`v` |-> `v`,`src` |-> `op`,
-        `tv` |-> `ptv`,`p` |-> `sw`,`x` |-> `norm_dst`,
-        `inst` |-> `mk_inst sm.cs_next_id ALLOCA
-          [Lit (n2w (type_memory_bytes ce ret))] [norm_dst]`,
-        `b` |-> `w2n (norm_dw:bytes32)`,`sz` |-> `type_memory_bytes ce ret`]
-        typed_th))
-        end) >>
-     impl_tac >- (asm_rewrite_tac[] >> gvs[mk_inst_def] >> metis_tac[]) >>
-     asm_rewrite_tac[]) >>
-  suspend "buffered_normalize_copy"
-QED
-
-Resume return_selected_valued_frag_full_core[buffered_normalize_copy]:
-  `compile_store_memory_typed ce (Var norm_dst) ret (Var norm_src)
-     (lowered_value_type ce e) nalloc=((),ncopy)` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`compile_store_memory_typed ce nbuf.buf_operand ret op
-          (lowered_value_type ce e) nalloc=((),ncopy)`,
-       `nbuf.buf_operand=Var norm_dst`,`op=Var norm_src`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
-  `type_widens_to (type_env tops) (lowered_value_type ce e) ret` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`type_widens_to (type_env tops) (post_value_type ce e) ret`,
-       `post_value_type ce e=lowered_value_type ce e`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
-  `not_fresh_at nalloc norm_src /\ ~norm_alloc.vs_halted` by
-    (conj_tac
-     >- (irule stmtFragPtrTheory.not_fresh_at_mono >>
-         qexists_tac `sm` >> rpt conj_tac >>
-         FIRST [first_assum ACCEPT_TAC,
-           (qpat_assum `ci_mono sm nalloc` mp_tac >> simp[ci_mono_def])]) >>
-     qpat_assum `norm_alloc.vs_halted=t.vs_halted`
-       (fn th => PURE_REWRITE_TAC [th]) >> first_assum ACCEPT_TAC) >>
-  `lo <= norm_alloc.vs_alloca_next` by metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
-  `ptr_covers norm_G norm_tn norm_dst norm_alloc (type_memory_size dtv) /\
-   w2n norm_dw + type_memory_size dtv < dimword (:256)` by
-    (qpat_assum `type_memory_bytes ce ret=type_memory_size dtv`
-       (fn th => PURE_REWRITE_TAC [GSYM th]) >>
-     conj_tac >> first_assum ACCEPT_TAC) >>
-  Q.SUBGOAL_THEN `type_memory_size ptv=0 \/
-    w2n sw + type_memory_size ptv <= norm_alloc.vs_alloca_next` ASSUME_TAC
-  >- (disj2_tac >>
-      map_every (fn pat => qpat_assum pat mp_tac)
-        [`w2n sw + type_memory_size ptv <= t.vs_alloca_next`,
-         `t.vs_alloca_next <= norm_alloc.vs_alloca_next`] >>
-      POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
-  Q.SUBGOAL_THEN `type_memory_size dtv=0 \/
-    w2n norm_dw + type_memory_size dtv <= norm_alloc.vs_alloca_next` ASSUME_TAC
-  >- (disj2_tac >>
-      map_every (fn pat => qpat_assum pat mp_tac)
-        [`w2n norm_dw + type_memory_bytes ce ret <= norm_alloc.vs_alloca_next`,
-         `type_memory_bytes ce ret=type_memory_size dtv`] >>
-      POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp norm_alloc)` by simp[] >>
-  drule_all (Q.INST
-    [`cenv` |-> `ce`,`xd` |-> `norm_dst`,`dty` |-> `ret`,
-     `xs` |-> `norm_src`,`sty` |-> `lowered_value_type ce e`,
-     `sa` |-> `nalloc`,`sb` |-> `ncopy`,`tenv` |-> `type_env tops`,
-     `stv` |-> `ptv`,`dtv` |-> `dtv`,`v` |-> `v`,`s` |-> `norm_alloc`,
-     `sw` |-> `sw`,`dw` |-> `norm_dw`,`G` |-> `norm_G`,`tn` |-> `norm_tn`,
-     `ctx` |-> `ctx`,`lo` |-> `lo`,`func` |-> `func`,`PG` |-> `PG`,
-     `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
-    typedCopyOriginPtrTheory.compile_store_memory_typed_origin_ptr_path) >>
-  disch_then (qspecl_then [`shadow_ctx`,`PG`]
-    (qx_choose_then `norm_copy` (qx_choose_then `copy_G`
-      (qx_choose_then `copy_tn` strip_assume_tac)))) >>
-  suspend "buffered_normalize_copied"
-QED
-
-Resume return_selected_valued_frag_full_core[buffered_normalize_copied]:
-  qpat_assum `typed_copy_state_frame nalloc (w2n norm_dw)
-    (type_memory_size dtv) norm_alloc norm_copy`
-    (strip_assume_tac o REWRITE_RULE [typedMemoryCopyTheory.typed_copy_state_frame_def]) >>
-  qpat_assum `not_fresh_at nalloc norm_dst` (fn nf =>
-    qpat_assum `!p. not_fresh_at nalloc p ==>
-      FLOOKUP copy_G p=FLOOKUP norm_G p /\ _`
-      (qspec_then `norm_dst` (fn th => strip_assume_tac (MP th nf)))) >>
-  `lookup_var norm_dst norm_copy=lookup_var norm_dst norm_alloc` by
-    (qpat_assum `!x. not_fresh_at nalloc x ==>
-       lookup_var x norm_copy=lookup_var x norm_alloc` irule >>
-     first_assum ACCEPT_TAC) >>
-  `lookup_var norm_dst norm_copy=SOME norm_dw` by asm_rewrite_tac[] >>
-  `ptr_covers copy_G copy_tn norm_dst norm_copy (type_memory_size dtv)` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`ptr_covers norm_G norm_tn norm_dst norm_alloc (type_memory_size dtv)`,
-       `lookup_var norm_dst norm_copy=lookup_var norm_dst norm_alloc`,
-       `FLOOKUP copy_G norm_dst=FLOOKUP norm_G norm_dst`,
-       `op_taint copy_tn (Var norm_dst)=op_taint norm_tn (Var norm_dst)`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[bodyPtrDefsTheory.ptr_covers_def]) >>
-  `evaluate_type (get_tenv cx) ret=SOME dtv` by asm_rewrite_tac[] >>
-  `ptr_val_ok cx ret v (Var norm_dst) copy_G copy_tn norm_copy` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`~is_word_type ret`, `evaluate_type (get_tenv cx) ret=SOME dtv`,
-        `val_wf dtv v`,
-        `ptr_covers copy_G copy_tn norm_dst norm_copy (type_memory_size dtv)`,
-        `lookup_var norm_dst norm_copy=SOME norm_dw`,
-        `!mem. mem_agree_outside copy_tn.t_mem norm_copy.vs_memory mem ==>
-           val_in_memory dtv v (w2n norm_dw) mem`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     irule (Q.INST [`tv` |-> `dtv`]
-       rawCallBufferPtrTheory.ptr_val_ok_from_type_covers) >>
-     simp[] >> rpt strip_tac >> fs[]) >>
-  `copy_static norm_copy=copy_static norm_alloc` by
-    (qpat_assum `norm_copy with <|vs_vars:=norm_alloc.vs_vars;
-       vs_memory:=norm_alloc.vs_memory; vs_prev_bb:=norm_alloc.vs_prev_bb;
-       vs_current_bb:=norm_alloc.vs_current_bb;vs_inst_idx:=norm_alloc.vs_inst_idx|>
-       =norm_alloc` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[exprSimStorageCopyTheory.copy_static_def,
-       venomStateTheory.venom_state_component_equality]) >>
-  `norm_copy.vs_allocas=norm_alloc.vs_allocas` by
-    (qpat_assum `norm_copy with <|vs_vars:=norm_alloc.vs_vars;
-       vs_memory:=norm_alloc.vs_memory; vs_prev_bb:=norm_alloc.vs_prev_bb;
-       vs_current_bb:=norm_alloc.vs_current_bb;vs_inst_idx:=norm_alloc.vs_inst_idx|>
-       =norm_alloc` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[venomStateTheory.venom_state_component_equality]) >>
-  suspend "buffered_normalize_state"
-QED
-
-Resume return_selected_valued_frag_full_core[buffered_normalize_state]:
-  `stmt_state_rel (storage_trace_horizon mid.storage_trace)
-     ctx func ce cx mid norm_copy` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`stmt_state_rel (storage_trace_horizon mid.storage_trace)
-          ctx func ce cx mid norm_alloc`,
-       `local_ptrs_reserved ce nalloc`,
-       `copy_static norm_copy=copy_static norm_alloc`,
-       `!x. not_fresh_at nalloc x ==> lookup_var x norm_copy=lookup_var x norm_alloc`,
-       `typed_copy_frame (w2n norm_dw) (type_memory_size dtv)
-          norm_alloc.vs_memory norm_copy.vs_memory`,
-       `MEM (mk_inst sm.cs_next_id ALLOCA
-          [Lit (n2w (type_memory_bytes ce ret))] [norm_dst]) (fn_insts func)`,
-       `FLOOKUP norm_alloc.vs_allocas sm.cs_next_id=
-          SOME (w2n norm_dw,type_memory_bytes ce ret)`,
-       `!name b len. local_region ce mid.scopes norm_alloc name b len ==> _`,
-       `type_memory_bytes ce ret=type_memory_size dtv`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     irule (SRULE [mk_inst_def]
-       (Q.INST [`ctx` |-> `ctx`,`func` |-> `func`,`cenv` |-> `ce`,
-         `cx` |-> `cx`,`es` |-> `mid`,`st` |-> `nalloc`,
-         `s` |-> `norm_alloc`,`t` |-> `norm_copy`,
-         `inst` |-> `mk_inst sm.cs_next_id ALLOCA
-           [Lit (n2w (type_memory_bytes ce ret))] [norm_dst]`,
-         `b` |-> `w2n (norm_dw:bytes32)`,`sz` |-> `type_memory_size dtv`]
-         (SPEC_ALL exprSimCopyTheory.copy_buffer_state_rel_frame))) >>
-     qexistsl_tac [`dtv`,`nalloc`,`norm_alloc`,`norm_dst`,`norm_dw`,`ret`,`sm`] >>
-     gvs[mk_inst_def,typedMemoryCopyTheory.typed_copy_frame_def,
-       loweringStateRelDefsTheory.regions_disjoint_def] >>
-     metis_tac[arithmeticTheory.ADD_COMM]) >>
-  `FLOOKUP norm_copy.vs_allocas sm.cs_next_id=
-     SOME (w2n norm_dw,type_memory_bytes ce ret)` by
-    (qpat_assum `norm_copy.vs_allocas=norm_alloc.vs_allocas`
-       (fn th => PURE_REWRITE_TAC [th]) >> first_assum ACCEPT_TAC) >>
-  `sm.cs_next_id < ncopy.cs_next_id` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`ci_mono nalloc ncopy`,`nalloc.cs_next_id=sm.cs_next_id+1`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[ci_mono_def] >> rpt strip_tac >> decide_tac) >>
-  `val_footprint dtv v <= type_memory_bytes ce ret` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`val_wf dtv v`,`type_memory_bytes ce ret = type_memory_size dtv`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     asm_rewrite_tac[] >> irule exprSimPropsTheory.val_footprint_le >>
-     first_assum ACCEPT_TAC) >>
-  suspend "buffered_normalize_ownership"
-QED
-
-Resume return_selected_valued_frag_full_core[buffered_normalize_ownership]:
-  qpat_assum `MEM (mk_inst sm.cs_next_id ALLOCA
-     [Lit (n2w (type_memory_bytes ce ret))] [norm_dst]) (fn_insts func)`
-    (ASSUME_TAC o REWRITE_RULE [mk_inst_def]) >>
-  `!name lb len. local_region ce mid.scopes norm_copy name lb len ==>
-     w2n norm_dw + type_memory_bytes ce ret <= lb \/ lb+len <= w2n norm_dw` by
-    (rpt gen_tac >> strip_tac >>
-     drule_all (SRULE [mk_inst_def]
-       (Q.INST [`func` |-> `func`,`cenv` |-> `ce`,`cx` |-> `cx`,
-         `es` |-> `mid`,`s` |-> `norm_copy`,
-         `inst` |-> `mk_inst sm.cs_next_id ALLOCA
-           [Lit (n2w (type_memory_bytes ce ret))] [norm_dst]`,
-         `q` |-> `norm_dst`,`b` |-> `w2n (norm_dw:bytes32)`,
-         `sz` |-> `type_memory_bytes ce ret`,`n` |-> `name`,
-         `lb` |-> `lb`,`lsz` |-> `len`,`ctx` |-> `ctx`]
-         (SPEC_ALL exprSimOperandsTheory.alloca_clear_of_locals))) >>
-     asm_rewrite_tac[]) >>
-  `expr_val_at ce cx ret sm ncopy mid v (Var norm_dst) norm_copy` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`evaluate_type (get_tenv cx) ret=SOME dtv`,`val_wf dtv v`,
-       `~is_word_type ret`,`lookup_var norm_dst norm_copy=SOME norm_dw`,
-       `FLOOKUP norm_copy.vs_allocas sm.cs_next_id=
-          SOME (w2n norm_dw,type_memory_bytes ce ret)`,
-       `sm.cs_next_id<ncopy.cs_next_id`,
-       `val_footprint dtv v<=type_memory_bytes ce ret`,
-       `!name lb len. local_region ce mid.scopes norm_copy name lb len ==> _`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     simp[expr_val_at_def,venomStateTheory.eval_operand_def] >>
-     disj1_tac >> qexistsl_tac [`sm.cs_next_id`,`w2n norm_dw`,
-       `type_memory_bytes ce ret`] >> simp[] >> metis_tac[]) >>
-  suspend "buffered_normalize_join"
-QED
-
-Resume return_selected_valued_frag_full_core[buffered_normalize_join]:
-  drule exprSimStorageCopyTheory.copy_static_fields >> strip_tac >>
-  `local_ptrs_reserved ce ncopy` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`local_ptrs_reserved ce nalloc`,`ci_mono nalloc ncopy`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> fs[ci_mono_def] >>
-     metis_tac[local_ptrs_reserved_next_var]) >>
-  `not_fresh_at ncopy norm_dst` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`not_fresh_at nalloc norm_dst`,`ci_mono nalloc ncopy`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> fs[ci_mono_def] >>
-     metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
-  `allocas_from lo norm_copy /\ lo<=norm_copy.vs_alloca_next` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`allocas_from lo norm_alloc`,`lo<=norm_alloc.vs_alloca_next`,
-       `norm_copy.vs_allocas=norm_alloc.vs_allocas`,
-       `norm_copy.vs_alloca_next=norm_alloc.vs_alloca_next`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[ptrDisciplineTheory.allocas_from_def] >> metis_tac[]) >>
-  `norm_copy.vs_accounts=t.vs_accounts /\
-   norm_copy.vs_transient=t.vs_transient /\
-   norm_copy.vs_immutables=t.vs_immutables /\
-   norm_copy.vs_logs=t.vs_logs /\
-   norm_copy.vs_requests=t.vs_requests /\
-   norm_copy.vs_pending_deletions=t.vs_pending_deletions /\
-   norm_copy.vs_call_ctx=t.vs_call_ctx` by
-    (qpat_assum `norm_copy with <|vs_vars:=norm_alloc.vs_vars;
-       vs_memory:=norm_alloc.vs_memory;vs_prev_bb:=norm_alloc.vs_prev_bb;
-       vs_current_bb:=norm_alloc.vs_current_bb;vs_inst_idx:=norm_alloc.vs_inst_idx|>
-       =norm_alloc` mp_tac >>
-     qpat_assum `norm_alloc with <|vs_vars:=t.vs_vars;vs_allocas:=t.vs_allocas;
-       vs_alloca_next:=t.vs_alloca_next;vs_inst_idx:=t.vs_inst_idx|> = t` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[venomStateTheory.venom_state_component_equality] >> metis_tac[]) >>
-  `!D. stor_taint_ok_at D copy_tn norm_copy <=> stor_taint_ok_at D tn1 t` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`norm_copy.vs_accounts=t.vs_accounts`,`norm_copy.vs_transient=t.vs_transient`,
-       `norm_copy.vs_immutables=t.vs_immutables`,`norm_copy.vs_call_ctx=t.vs_call_ctx`,
-       `copy_tn.t_stor=norm_tn.t_stor`,`copy_tn.t_trans=norm_tn.t_trans`,
-       `copy_tn.t_imm=norm_tn.t_imm`,`norm_tn.t_stor=tn1.t_stor`,
-       `norm_tn.t_trans=tn1.t_trans`,`norm_tn.t_imm=tn1.t_imm`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[bodyPtrDefsTheory.stor_taint_ok_at_def]) >>
-  suspend "buffered_normalize_path"
-QED
-
-Resume return_selected_valued_frag_full_core[buffered_normalize_path]:
-  `!D. gas_origin_ptr_path
-    (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (t,G1,tn1) [] (OK norm_copy,copy_G,copy_tn)` by
-    (gen_tac >>
-     qpat_assum `!D. gas_origin_ptr_path _ (t,G1,tn1) []
-       (OK norm_alloc,norm_G,norm_tn)`
-       (qspec_then `D` (mp_then Any mp_tac
-         fragGasOriginPtrTheory.gas_origin_ptr_path_append)) >>
-     disch_then (qspecl_then [`norm_alloc`,`norm_G`,`norm_tn`,`[]`,
-       `OK norm_copy`,`copy_G`,`copy_tn`] mp_tac) >>
-     asm_rewrite_tac[listTheory.APPEND_NIL]) >>
-  `compile_external_return (SOME (Var norm_dst)) F F ce.ce_ret_enc_info
-     ce.ce_max_return_size nr nkey ut (mut=View) ncopy=((),sb)` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`compile_external_return (SOME nbuf.buf_operand) F F ce.ce_ret_enc_info
-          ce.ce_max_return_size nr nkey ut (mut=View) ncopy=((),sb)`,
-       `nbuf.buf_operand=Var norm_dst`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
-  `not_fresh_at ncopy (STRING #"%" (toString sm.cs_next_var))` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-      [`not_fresh_at ncopy norm_dst`,
-       `norm_dst=STRING #"%" (toString sm.cs_next_var)`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
-  qpat_assum `!src_st src_state Gs ts src own_start own_end. _`
-    (qspecl_then [`ncopy`,`norm_copy`,`copy_G`,`copy_tn`,`Var norm_dst`,
-      `sm`,`ncopy`] mp_tac) >>
-  impl_tac >- asm_simp_tac (srw_ss()) [] >>
-  disch_then (qx_choose_then `buffered_ss` (qx_choose_then `buffered_Gf`
-    (qx_choose_then `buffered_tf` (qx_choose_then `buffered_av` strip_assume_tac)))) >>
-  qpat_assum `!buffered_ss buffered_Gf buffered_tf buffered_av. _`
-    (qspecl_then [`buffered_ss`,`buffered_Gf`,`buffered_tf`,`buffered_av`]
-      MATCH_MP_TAC) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
 Resume return_selected_valued_frag_full_core[buffered_shared_entry]:
   `alloca_history func src_state` by suspend "buffered_shared_history" >>
-  `compile_external_return (SOME src) F F ce.ce_ret_enc_info
-      ce.ce_max_return_size nr nkey T (mut = View) src_st = ((),sb)` by
+  `compile_external_return (SOME src) F F abi_ce.ce_ret_enc_info
+      abi_ce.ce_max_return_size nr nkey T (mut = View) src_st = ((),sb)` by
     (`nr /\ ~(mut = View) ==> ut` by simp[] >>
      pop_assum (ONCE_REWRITE_TAC o single o GSYM o
        MATCH_MP valued_return_compiler_transient) >>
@@ -1253,11 +745,11 @@ Resume return_selected_valued_frag_full_core[buffered_unlock_resources]:
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      qpat_assum `unlocked = _` SUBST1_TAC >>
      Cases_on `nr /\ mut <> View` >> simp[venomStateTheory.tstore_def]) >>
-  `expr_val_at ce cx ret own_start own_end prepared_es v src unlocked /\
-    ptr_val_ok cx ret v src Gs unlock_tn unlocked` by
+  `expr_val_at ce cx physical_ty own_start own_end prepared_es v src unlocked /\
+    ptr_val_ok cx physical_ty v src Gs unlock_tn unlocked` by
     (map_every (fn pat => qpat_assum pat mp_tac)
-       [`expr_val_at ce cx ret own_start own_end mid v src src_state`,
-        `ptr_val_ok cx ret v src Gs ts src_state`,
+       [`expr_val_at ce cx physical_ty own_start own_end mid v src src_state`,
+        `ptr_val_ok cx physical_ty v src Gs ts src_state`,
         `prepared_es.scopes = mid.scopes`, `unlocked.vs_vars = src_state.vs_vars`,
         `unlocked.vs_allocas = src_state.vs_allocas`,
         `unlocked.vs_memory = src_state.vs_memory`, `unlock_tn.t_mem = ts.t_mem`,
@@ -1331,19 +823,11 @@ Resume return_selected_valued_frag_full_core[buffered_shared_history]:
 QED
 
 Resume return_selected_valued_frag_full_core[buffered_shared_allocation]:
-  rename1 `compile_alloc_buffer ce.ce_max_return_size unlock_st = (retbuf,renc_st)` >>
-  rename1 `compile_abi_encode_to_buf retbuf.buf_operand src ce.ce_ret_enc_info
+  rename1 `compile_alloc_buffer abi_ce.ce_max_return_size unlock_st = (retbuf,renc_st)` >>
+  rename1 `compile_abi_encode_to_buf retbuf.buf_operand src abi_ce.ce_ret_enc_info
     renc_st = (renc_len,renc_en)` >>
-  `ce.ce_max_return_size < dimword (:256)` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`stmt_exprs_ok ce (Return (SOME e))`,`ce.ce_is_external`,
-        `~ce.ce_raw_return`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[stmt_exprs_ok_def,compileVyperTheory.stmt_valued_return_def,
-       compileVyperTheory.return_buffer_ok_def,wordsTheory.dimword_def] >>
-     rpt strip_tac >> gvs[]) >>
   `ci_mono unlock_st renc_st` by
-    (qspecl_then [`ce.ce_max_return_size`,`unlock_st`] mp_tac
+    (qspecl_then [`abi_ce.ce_max_return_size`,`unlock_st`] mp_tac
       ci_mono_compile_alloc_buffer >> simp[]) >>
   `cs_extends unlock_st renc_st /\ cs_extends renc_st renc_en /\
    cs_extends renc_en sb` by
@@ -1373,7 +857,7 @@ QED
 Resume return_selected_valued_frag_full_core[buffered_allocated]:
   rename1 `retbuf.buf_operand = Var rdst` >>
   rename1 `lookup_var rdst ra = SOME rw` >>
-  rename1 `ptr_covers rG rtn rdst ra ce.ce_max_return_size` >>
+  rename1 `ptr_covers rG rtn rdst ra abi_ce.ce_max_return_size` >>
   `ra.vs_memory=unlocked.vs_memory /\ ra.vs_halted=unlocked.vs_halted /\
    ra.vs_labels=unlocked.vs_labels` by
     (qpat_assum `ra with <|vs_vars := unlocked.vs_vars; vs_allocas := unlocked.vs_allocas;
@@ -1397,19 +881,19 @@ Resume return_selected_valued_frag_full_core[buffered_allocated]:
      `not_fresh_at unlock_st p` by
        metis_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
      metis_tac[]) >>
-  `expr_val_at ce cx ret own_start own_end prepared_es v src ra` by
+  `expr_val_at ce cx physical_ty own_start own_end prepared_es v src ra` by
     (map_every (fn pat => qpat_assum pat mp_tac)
-       [`expr_val_at ce cx ret own_start own_end prepared_es v src unlocked`,
+       [`expr_val_at ce cx physical_ty own_start own_end prepared_es v src unlocked`,
         `eval_operand src ra=eval_operand src unlocked`,
         `!aid entry. FLOOKUP unlocked.vs_allocas aid=SOME entry ==> _`,
         `!name b sz. local_region ce prepared_es.scopes ra name b sz <=> _`] >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp_tac bool_ss [expr_val_at_def] >> rpt disch_tac >>
      gen_tac >> strip_tac >>
-     qpat_assum `!tv. evaluate_type (get_tenv cx) ret = SOME tv /\ _ ==> _`
+     qpat_assum `!tv. evaluate_type (get_tenv cx) physical_ty = SOME tv /\ _ ==> _`
        (qspec_then `tv` mp_tac) >>
-     qpat_assum `evaluate_type (get_tenv cx) ret = SOME tv`
-       (fn ev => qpat_assum `~is_word_type ret`
+     qpat_assum `evaluate_type (get_tenv cx) physical_ty = SOME tv`
+       (fn ev => qpat_assum `~is_word_type physical_ty`
          (fn nw => simp_tac bool_ss [ev,nw])) >>
      disch_then (CONJUNCTS_THEN2 ASSUME_TAC
        (qx_choose_then `source_addr` strip_assume_tac)) >>
@@ -1423,92 +907,106 @@ Resume return_selected_valued_frag_full_core[buffered_allocated]:
 QED
 
 Resume return_selected_valued_frag_full_core[buffered_shared_source_prepare]:
-  `evaluate_type (get_tenv cx) ret = SOME dtv` by metis_tac[] >>
+  `evaluate_type (get_tenv cx) physical_ty = SOME physical_tv` by metis_tac[] >>
   `?source_w. eval_operand src unlocked = SOME source_w` by
-    (qpat_assum `expr_val_at ce cx ret own_start own_end prepared_es v src unlocked` mp_tac >>
-     qpat_assum `~is_word_type ret` mp_tac >>
-     qpat_assum `evaluate_type (get_tenv cx) ret=SOME dtv` mp_tac >>
+    (qpat_assum `expr_val_at ce cx physical_ty own_start own_end prepared_es v src unlocked` mp_tac >>
+     qpat_assum `~is_word_type physical_ty` mp_tac >>
+     qpat_assum `evaluate_type (get_tenv cx) physical_ty=SOME physical_tv` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[expr_val_at_def] >> metis_tac[]) >>
   `!mem. mem_agree_outside unlock_tn.t_mem unlocked.vs_memory mem ==>
-    val_in_memory dtv v (w2n source_w) mem` by
-    (qpat_assum `ptr_val_ok cx ret v src Gs unlock_tn unlocked` mp_tac >>
+    val_in_memory physical_tv v (w2n source_w) mem` by
+    (qpat_assum `ptr_val_ok cx physical_ty v src Gs unlock_tn unlocked` mp_tac >>
      map_every (fn pat => qpat_assum pat mp_tac)
-       [`~is_word_type ret`,
-        `evaluate_type (get_tenv cx) ret = SOME dtv`,
+       [`~is_word_type physical_ty`,
+        `evaluate_type (get_tenv cx) physical_ty = SOME physical_tv`,
         `eval_operand src unlocked = SOME source_w`] >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[ptr_val_ok_def,ptr_mem_ok_def] >> metis_tac[]) >>
-  `0 < val_footprint dtv v ==>
-    w2n source_w + val_footprint dtv v <= unlocked.vs_alloca_next` by
+  `0 < val_footprint physical_tv v ==>
+    w2n source_w + val_footprint physical_tv v <= unlocked.vs_alloca_next` by
     (map_every (fn pat => qpat_assum pat mp_tac)
        [`stmt_state_rel _ ctx func ce cx prepared_es unlocked`,
-        `expr_val_at ce cx ret own_start own_end prepared_es v src unlocked`,
-        `evaluate_type (get_tenv cx) ret = SOME dtv`,
-        `~is_word_type ret`,`eval_operand src unlocked = SOME source_w`] >>
+        `expr_val_at ce cx physical_ty own_start own_end prepared_es v src unlocked`,
+        `evaluate_type (get_tenv cx) physical_ty = SOME physical_tv`,
+        `~is_word_type physical_ty`,`eval_operand src unlocked = SOME source_w`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     drule_all (Q.INST [`ty` |-> `ret`,`s` |-> `unlocked`,`tv` |-> `dtv`]
+     drule_all (Q.INST [`ty` |-> `physical_ty`,`s` |-> `unlocked`,`tv` |-> `physical_tv`]
        expr_val_at_frontier) >>
      disch_then (qx_choose_then `front_w` strip_assume_tac) >>
      `front_w=source_w` by metis_tac[optionTheory.SOME_11] >>
      gvs[] >> decide_tac) >>
-  `ret <> NoneT` by
-    (qpat_assum `IS_SOME (type_stmt env ret (Return (SOME e)))` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[vyperTypeSystemTheory.type_stmt_def,AllCaseEqs()]) >>
-  drule_all return_selected_plan_nr >> strip_tac >>
-  `abi_encoder_admissible ce.ce_ret_enc_info` by
-    (drule_all externalReturnZeroLayoutTheory.external_package_return_encoder >>
-     disch_then SUBST1_TAC >>
-     simp[externalReturnWindowResourcesTheory.return_plan_encoder_admissible]) >>
   suspend "buffered_source_plan"
 QED
 
 Resume return_selected_valued_frag_full_core[buffered_source_plan]:
+  `abi_encoder_admissible abi_ce.ce_ret_enc_info` by
+    (Cases_on `physical_ty = ret`
+     >- (simp[Abbr `abi_ce`] >>
+         drule_all externalReturnZeroLayoutTheory.external_package_return_encoder >>
+         disch_then SUBST1_TAC >>
+         simp[externalReturnWindowResourcesTheory.return_plan_encoder_admissible]) >>
+     simp[Abbr `abi_ce`, externalReturnWindowResourcesTheory.return_plan_encoder_admissible]) >>
   `abi_enc_plan (type_env tops)
-    (if needs_external_call_wrap ret /\
-       is_dynamic (vyper_to_abi_type (type_env tops) ret)
-     then TupleT [ret] else ret) ce.ce_ret_enc_info` by
-    metis_tac[return_same_frame_plan] >>
-  `vyper_abi_size_bound (type_env tops)
-    (if needs_external_call_wrap ret /\
-       is_dynamic (vyper_to_abi_type (type_env tops) ret)
-     then TupleT [ret] else ret) <= ce.ce_max_return_size` by
-    metis_tac[return_same_frame_capacity] >>
-  `?abi_v. vyper_to_abi (type_env tops) ret v = SOME abi_v` by
+    (if needs_external_call_wrap physical_ty /\
+       is_dynamic (vyper_to_abi_type (type_env tops) physical_ty)
+     then TupleT [physical_ty] else physical_ty) abi_ce.ce_ret_enc_info /\
+   vyper_abi_size_bound (type_env tops)
+    (if needs_external_call_wrap physical_ty /\
+       is_dynamic (vyper_to_abi_type (type_env tops) physical_ty)
+     then TupleT [physical_ty] else physical_ty) <= abi_ce.ce_max_return_size` by
+    (Cases_on `physical_ty = ret`
+     >- (drule_all return_selected_plan_nr >> strip_tac >>
+         qpat_assum `physical_ty = ret`
+           (fn th => simp_tac bool_ss [Abbr `abi_ce`, th]) >>
+         conj_tac
+         >- (irule return_same_frame_plan >> qexists_tac `cenv` >>
+             rpt conj_tac >> first_assum ACCEPT_TAC) >>
+         irule return_same_frame_capacity >> qexists_tac `cenv` >>
+         rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     `assignable_type (type_env tops) ret` by
+       (drule_all return_selected_type_assignable >> simp[]) >>
+     `assignable_type (type_env tops) physical_ty` by
+       (qspecl_then [`physical_ty`,`ret`] mp_tac (cj 1 arg_type_fits_source_assignable) >>
+        simp[] >> disch_then (qspec_then `type_env tops` mp_tac) >>
+        simp[well_formed_type_def]) >>
+     drule return_source_type_keys >> strip_tac >>
+     qspecl_then [`tops`,`ce`,`physical_ty`] mp_tac update_cenv_ret_abi_plan >>
+     simp[Abbr `abi_ce`]) >>
+  `?abi_v. vyper_to_abi (type_env tops) physical_ty v = SOME abi_v` by
     (map_every (fn pat => qpat_assum pat mp_tac)
-       [`evaluate_type (type_env tops) ret = SOME dtv`,`value_has_type dtv v`] >>
+       [`evaluate_type (type_env tops) physical_ty = SOME physical_tv`,`value_has_type physical_tv v`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[cj 1 vyperTypeABITheory.vyper_to_abi_total]) >>
   Q.SUBGOAL_THEN
     `?ct rv.
       contractABI$enc ct rv =
-        (if needs_external_call_wrap ret /\
-            is_dynamic (vyper_to_abi_type (type_env tops) ret)
+        (if needs_external_call_wrap physical_ty /\
+            is_dynamic (vyper_to_abi_type (type_env tops) physical_ty)
          then contractABI$enc
-           (Tuple [vyper_to_abi_type (type_env tops) ret])
+           (Tuple [vyper_to_abi_type (type_env tops) physical_ty])
            (contractABI$ListV [abi_v])
-         else contractABI$enc (vyper_to_abi_type (type_env tops) ret) abi_v) /\
-      LENGTH (contractABI$enc ct rv) <= ce.ce_max_return_size /\
+         else contractABI$enc (vyper_to_abi_type (type_env tops) physical_ty) abi_v) /\
+      LENGTH (contractABI$enc ct rv) <= abi_ce.ce_max_return_size /\
       (!mem. mem_agree_outside unlock_tn.t_mem unlocked.vs_memory mem ==>
-        abi_encoder_window_input ce.ce_ret_enc_info ct rv
-          (w2n (source_w:bytes32)) (val_footprint dtv v) mem)`
+        abi_encoder_window_input abi_ce.ce_ret_enc_info ct rv
+          (w2n (source_w:bytes32)) (val_footprint physical_tv v) mem)`
     (qx_choose_then `ct` (qx_choose_then `rv` strip_assume_tac))
   >- (map_every (fn pat => qpat_assum pat mp_tac)
        [`abi_enc_plan (type_env tops) (if _ then _ else _) _`,
         `vyper_abi_size_bound (type_env tops) (if _ then _ else _) <= _`,
-        `evaluate_type (type_env tops) ret = SOME dtv`,
-        `value_has_type dtv v`,`safe_cast dtv v = SOME v`,
-        `vyper_to_abi (type_env tops) ret v = SOME abi_v`,
+        `evaluate_type (type_env tops) physical_ty = SOME physical_tv`,
+        `value_has_type physical_tv v`,`safe_cast physical_tv v = SOME v`,
+        `vyper_to_abi (type_env tops) physical_ty v = SOME abi_v`,
         `!mem. mem_agree_outside unlock_tn.t_mem unlocked.vs_memory mem ==> val_in_memory _ _ _ _`] >>
       POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
-      Cases_on `needs_external_call_wrap ret /\
-        is_dynamic (vyper_to_abi_type (type_env tops) ret)`
+      Cases_on `needs_external_call_wrap physical_ty /\
+        is_dynamic (vyper_to_abi_type (type_env tops) physical_ty)`
       >- suspend "buffered_shared_wrapped" >>
-      `abi_enc_plan (type_env tops) ret ce.ce_ret_enc_info /\
-       vyper_abi_size_bound (type_env tops) ret <= ce.ce_max_return_size` by
+      `abi_enc_plan (type_env tops) physical_ty abi_ce.ce_ret_enc_info /\
+       vyper_abi_size_bound (type_env tops) physical_ty <= abi_ce.ce_max_return_size` by
         metis_tac[] >>
       asm_rewrite_tac[] >>
       suspend "buffered_shared_unwrapped") >>
-  qabbrev_tac `cap=val_footprint dtv v` >>
+  qabbrev_tac `cap=val_footprint physical_tv v` >>
   `!i. i<cap ==> (w2n source_w+i IN rtn.t_mem <=>
     w2n source_w+i IN unlock_tn.t_mem)` by
     (map_every (fn pat => qpat_assum pat mp_tac)
@@ -1521,7 +1019,7 @@ Resume return_selected_valued_frag_full_core[buffered_source_plan]:
      `~(unlocked.vs_alloca_next <= w2n source_w+i)` by decide_tac >>
      asm_simp_tac bool_ss []) >>
   `!mem. mem_agree_outside rtn.t_mem ra.vs_memory mem ==>
-    abi_encoder_window_input ce.ce_ret_enc_info ct rv
+    abi_encoder_window_input abi_ce.ce_ret_enc_info ct rv
       (w2n source_w) cap mem` by
     (gen_tac >> strip_tac >>
      mp_tac (Q.SPECL [`unlock_tn.t_mem`,`rtn.t_mem`,`unlocked.vs_memory`,`ra.vs_memory`,
@@ -1529,7 +1027,7 @@ Resume return_selected_valued_frag_full_core[buffered_source_plan]:
        robustCopyTransportPtrTheory.copied_window_agree_witness) >>
      impl_tac >- asm_rewrite_tac[] >>
      disch_then (qx_choose_then `mix` strip_assume_tac) >>
-     `abi_encoder_window_input ce.ce_ret_enc_info ct rv
+     `abi_encoder_window_input abi_ce.ce_ret_enc_info ct rv
        (w2n source_w) cap mix` by
        (simp_tac bool_ss [Abbr `cap`] >>
         qpat_assum `!mem. mem_agree_outside unlock_tn.t_mem unlocked.vs_memory mem ==>
@@ -1542,8 +1040,8 @@ QED
 
 Resume return_selected_valued_frag_full_core[buffered_shared_unwrapped]:
   mp_tac (Q.INST
-    [`env` |-> `type_env tops`,`ty` |-> `ret`,`ei` |-> `ce.ce_ret_enc_info`,
-     `tv` |-> `dtv`,`v` |-> `v`,`av` |-> `abi_v`,
+    [`env` |-> `type_env tops`,`ty` |-> `physical_ty`,`ei` |-> `abi_ce.ce_ret_enc_info`,
+     `tv` |-> `physical_tv`,`v` |-> `v`,`av` |-> `abi_v`,
      `tainted` |-> `unlock_tn.t_mem`,`initial_mem` |-> `unlocked.vs_memory`,
      `sb` |-> `w2n (source_w:bytes32)`]
     abiEncoderSourceRobustTheory.abi_encoder_source_window_robust) >>
@@ -1567,9 +1065,9 @@ Resume return_selected_valued_frag_full_core[buffered_generic_resources]:
   `eval_operand src ra=SOME (n2w (w2n source_w)) /\
    eval_operand retbuf.buf_operand ra=SOME (n2w (w2n rw))` by
     asm_simp_tac (srw_ss()) [venomStateTheory.eval_operand_def,wordsTheory.n2w_w2n] >>
-  `ptr_val_ok cx ret v src Gs unlock_tn unlocked` by metis_tac[] >>
+  `ptr_val_ok cx physical_ty v src Gs unlock_tn unlocked` by metis_tac[] >>
   `op_taint unlock_tn src={}` by
-    (qpat_assum `ptr_val_ok cx ret v src Gs unlock_tn unlocked` mp_tac >>
+    (qpat_assum `ptr_val_ok cx physical_ty v src Gs unlock_tn unlocked` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[ptr_val_ok_def]) >>
   `op_taint rtn src={}` by
     (map_every (fn pat => qpat_assum pat mp_tac)
@@ -1578,7 +1076,7 @@ Resume return_selected_valued_frag_full_core[buffered_generic_resources]:
      POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
      Cases_on `src` >> fs[ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
   `op_taint rtn retbuf.buf_operand={}` by
-    (qpat_assum `ptr_covers rG rtn rdst ra ce.ce_max_return_size` mp_tac >>
+    (qpat_assum `ptr_covers rG rtn rdst ra abi_ce.ce_max_return_size` mp_tac >>
      qpat_assum `retbuf.buf_operand=Var rdst` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[ptr_covers_def]) >>
   `!x. src=Var x \/ retbuf.buf_operand=Var x ==> not_fresh_at renc_st x` by
@@ -1588,9 +1086,9 @@ Resume return_selected_valued_frag_full_core[buffered_generic_resources]:
      POP_ASSUM_LIST (K ALL_TAC) >> simp[ci_mono_def] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
   `0<cap ==> ?p. src=Var p /\ ptr_covers rG rtn p ra cap` by
-    (strip_tac >> `val_footprint dtv v<>0` by fs[Abbr `cap`] >>
-     mp_tac (Q.SPECL [`cx`,`ret`,`v`,`src`,`Gs`,`unlock_tn`,`unlocked`,
-       `dtv`,`source_w:bytes32`,`cap`]
+    (strip_tac >> `val_footprint physical_tv v<>0` by fs[Abbr `cap`] >>
+     mp_tac (Q.SPECL [`cx`,`physical_ty`,`v`,`src`,`Gs`,`unlock_tn`,`unlocked`,
+       `physical_tv`,`source_w:bytes32`,`cap`]
        representationCleanPtrTheory.ptr_val_ok_read_covers) >>
      impl_tac >- (asm_rewrite_tac[] >> simp[Abbr `cap`]) >>
      disch_then (qx_choose_then `source_var` strip_assume_tac) >>
@@ -1624,7 +1122,7 @@ Resume return_selected_valued_frag_full_core[buffered_generic_output_resources]:
        `retbuf.buf_operand=Var (STRING #"%" (toString unlock_st.cs_next_var))`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
   `MEM (mk_inst unlock_st.cs_next_id ALLOCA
-      [Lit (n2w ce.ce_max_return_size)] [rdst]) (fn_insts func)` by
+      [Lit (n2w abi_ce.ce_max_return_size)] [rdst]) (fn_insts func)` by
     (drule_all exprSimAllocTheory.buffer_alloc_code >>
      asm_simp_tac bool_ss []) >>
   `not_local_ptr ce prepared_es.scopes rdst` by
@@ -1633,29 +1131,29 @@ Resume return_selected_valued_frag_full_core[buffered_generic_output_resources]:
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> asm_rewrite_tac[] >>
      irule (Q.SPECL [`ce`,`unlock_st`,`prepared_es.scopes`,`unlock_st.cs_next_var`]
        local_ptrs_reserved_fresh) >> simp[]) >>
-  `expr_val_at ce cx ret own_start own_end prepared_es v src ra` by
+  `expr_val_at ce cx physical_ty own_start own_end prepared_es v src ra` by
     first_assum ACCEPT_TAC >>
-  `eval_operand src ra=SOME source_w /\ cap<=val_footprint dtv v` by
+  `eval_operand src ra=SOME source_w /\ cap<=val_footprint physical_tv v` by
     asm_simp_tac (srw_ss()) [Abbr `cap`,wordsTheory.n2w_w2n] >>
   `(mk_inst unlock_st.cs_next_id ALLOCA
-      [Lit (n2w ce.ce_max_return_size)] [rdst]).inst_outputs=[rdst] /\
+      [Lit (n2w abi_ce.ce_max_return_size)] [rdst]).inst_outputs=[rdst] /\
    own_end.cs_next_id <=
      (mk_inst unlock_st.cs_next_id ALLOCA
-       [Lit (n2w ce.ce_max_return_size)] [rdst]).inst_id /\
+       [Lit (n2w abi_ce.ce_max_return_size)] [rdst]).inst_id /\
    FLOOKUP ra.vs_allocas
      (mk_inst unlock_st.cs_next_id ALLOCA
-       [Lit (n2w ce.ce_max_return_size)] [rdst]).inst_id=
-       SOME (w2n rw,ce.ce_max_return_size)` by
+       [Lit (n2w abi_ce.ce_max_return_size)] [rdst]).inst_id=
+       SOME (w2n rw,abi_ce.ce_max_return_size)` by
     asm_simp_tac (srw_ss()) [venomInstTheory.mk_inst_def] >>
   `venomMemDefs$regions_disjoint
-    (w2n source_w,cap) (w2n rw,ce.ce_max_return_size)` by
+    (w2n source_w,cap) (w2n rw,abi_ce.ce_max_return_size)` by
     (drule_all (Q.INST
-      [`s` |-> `ra`,`ty` |-> `ret`,`sa` |-> `own_start`,`sb` |-> `own_end`,
-       `v` |-> `v`,`src` |-> `(src:operand)`,`tv` |-> `dtv`,
+      [`s` |-> `ra`,`ty` |-> `physical_ty`,`sa` |-> `own_start`,`sb` |-> `own_end`,
+       `v` |-> `v`,`src` |-> `(src:operand)`,`tv` |-> `physical_tv`,
        `p` |-> `(source_w:bytes32)`,`cap` |-> `cap`,
        `inst` |-> `mk_inst unlock_st.cs_next_id ALLOCA
-          [Lit (n2w ce.ce_max_return_size)] [rdst]`,
-       `x` |-> `rdst`,`b` |-> `w2n (rw:bytes32)`,`sz` |-> `ce.ce_max_return_size`]
+          [Lit (n2w abi_ce.ce_max_return_size)] [rdst]`,
+       `x` |-> `rdst`,`b` |-> `w2n (rw:bytes32)`,`sz` |-> `abi_ce.ce_max_return_size`]
       externalReturnSourceWindowTheory.expression_source_window_disjoint) >>
      disch_then ACCEPT_TAC) >>
   `0<cap ==> w2n source_w+cap<=ra.vs_alloca_next /\
@@ -1669,16 +1167,16 @@ Resume return_selected_valued_frag_full_core[buffered_generic_output_resources]:
          POP_ASSUM_LIST (K ALL_TAC) >> decide_tac)
      >- (map_every (fn pat => qpat_assum pat mp_tac)
           [`venomMemDefs$regions_disjoint (w2n source_w,cap) _`,
-           `LENGTH (contractABI$enc ct rv)<=ce.ce_max_return_size`] >>
+           `LENGTH (contractABI$enc ct rv)<=abi_ce.ce_max_return_size`] >>
          POP_ASSUM_LIST (K ALL_TAC) >>
          simp_tac bool_ss [venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
      first_assum MATCH_MP_TAC >> first_assum ACCEPT_TAC) >>
   `unlock_st.cs_next_id NOTIN frag_ids renc_st renc_en` by
     (irule externalReturnEncoderSitesTheory.allocated_encoder_site_excluded >>
-     qexistsl_tac [`retbuf`,`ce.ce_max_return_size`] >> first_assum ACCEPT_TAC) >>
+     qexistsl_tac [`retbuf`,`abi_ce.ce_max_return_size`] >> first_assum ACCEPT_TAC) >>
   mp_tac (Q.INST
     [`s` |-> `ra`,`parent` |-> `unlock_st.cs_next_id`,
-     `p` |-> `w2n (rw:bytes32)`,`n` |-> `ce.ce_max_return_size`,
+     `p` |-> `w2n (rw:bytes32)`,`n` |-> `abi_ce.ce_max_return_size`,
      `ids` |-> `frag_ids renc_st renc_en`,
      `k` |-> `LENGTH (contractABI$enc ct rv)`]
     registeredAllocationWindowTheory.registered_allocation_subwindow_disjoint) >>
@@ -1714,7 +1212,7 @@ Resume return_selected_valued_frag_full_core[buffered_generic_scratch]:
      rpt conj_tac
      >- first_assum ACCEPT_TAC
      >- (strip_tac >>
-         `cap<=val_footprint dtv v /\ own_end.cs_next_id<=inst.inst_id` by
+         `cap<=val_footprint physical_tv v /\ own_end.cs_next_id<=inst.inst_id` by
            (asm_simp_tac (srw_ss()) [Abbr `cap`] >>
             qpat_assum `inst.inst_id IN frag_ids renc_st renc_en` mp_tac >>
             qpat_assum `own_end.cs_next_id<=unlock_st.cs_next_id` mp_tac >>
@@ -1723,9 +1221,9 @@ Resume return_selected_valued_frag_full_core[buffered_generic_scratch]:
             simp[abiEncoderPropsTheory.frag_ids_def,ci_mono_def] >> decide_tac) >>
          drule_all (Q.INST
            [`ctx` |-> `ctx`,`func` |-> `func`,`ce` |-> `ce`,`cx` |-> `cx`,
-            `es` |-> `prepared_es`,`s` |-> `ra`,`ty` |-> `ret`,
+            `es` |-> `prepared_es`,`s` |-> `ra`,`ty` |-> `physical_ty`,
             `sa` |-> `own_start`,`sb` |-> `own_end`,`v` |-> `v`,`src` |-> `(src:operand)`,
-            `tv` |-> `dtv`,`p` |-> `(source_w:bytes32)`,`cap` |-> `cap`,
+            `tv` |-> `physical_tv`,`p` |-> `(source_w:bytes32)`,`cap` |-> `cap`,
             `inst` |-> `inst`,`x` |-> `scratch_var`,`b` |-> `b`,`sz` |-> `sz`]
            externalReturnSourceWindowTheory.expression_source_window_disjoint) >>
          disch_then ACCEPT_TAC) >>
@@ -1750,7 +1248,7 @@ Resume return_selected_valued_frag_full_core[buffered_generic_call]:
      simp[exprLoweringPropsTheory.fmp_room_def] >> decide_tac) >>
   mp_tac (Q.INST
     [`window_dst` |-> `retbuf.buf_operand`,`window_src` |-> `(src:operand)`,
-     `ei` |-> `ce.ce_ret_enc_info`,`st` |-> `renc_st`,
+     `ei` |-> `abi_ce.ce_ret_enc_info`,`st` |-> `renc_st`,
      `out` |-> `renc_len`,`en` |-> `renc_en`,`ctx` |-> `ctx`,`func` |-> `func`,
      `s` |-> `ra`,`at` |-> `ct`,`av` |-> `rv`,
      `sb` |-> `w2n (source_w:bytes32)`,`cap` |-> `cap`,
@@ -1802,9 +1300,9 @@ Resume return_selected_valued_frag_full_core[buffered_encoded_endpoint]:
        `op_taint rtn retbuf.buf_operand={}`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[venomStateTheory.eval_operand_def] >>
      metis_tac[]) >>
-  `ptr_covers rGenc rtenc rdst rencoded ce.ce_max_return_size` by
+  `ptr_covers rGenc rtenc rdst rencoded abi_ce.ce_max_return_size` by
     (map_every (fn pat => qpat_assum pat mp_tac)
-      [`ptr_covers rG rtn rdst ra ce.ce_max_return_size`,
+      [`ptr_covers rG rtn rdst ra abi_ce.ce_max_return_size`,
        `lookup_var rdst ra=SOME rw`,`lookup_var rdst rencoded=SOME rw`,
        `FLOOKUP rGenc rdst=FLOOKUP rG rdst`,
        `op_taint rtenc (Var rdst)=op_taint rtn (Var rdst)`] >>
@@ -1819,8 +1317,8 @@ Resume return_selected_valued_frag_full_core[buffered_encoded_endpoint]:
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`lo<=ra.vs_alloca_next`,`ra.vs_alloca_next<=rencoded.vs_alloca_next`,
        `w2n rw+LENGTH (contractABI$enc ct rv)<=ra.vs_alloca_next`,
-       `LENGTH (contractABI$enc ct rv)<=ce.ce_max_return_size`,
-       `ce.ce_max_return_size<dimword (:256)`] >>
+       `LENGTH (contractABI$enc ct rv)<=abi_ce.ce_max_return_size`,
+       `abi_ce.ce_max_return_size<dimword (:256)`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
   suspend "buffered_encoded_resources"
 QED
@@ -2029,10 +1527,12 @@ QED
 
 Resume return_selected_valued_frag_full_core[buffered_return_finish]:
   qexistsl_tac [`ret_ss`,`rGenc`,`rtenc`,`abi_v`] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- metis_tac[] >>
   conj_tac
   >- (qpat_assum `contractABI$enc ct rv = _` mp_tac >>
       qpat_assum `Abbrev (ret_ss=_)` mp_tac >>
+      qpat_assum `needs_external_call_wrap physical_ty = needs_external_call_wrap ret` mp_tac >>
+      qpat_assum `vyper_to_abi_type (type_env tops) physical_ty = _` mp_tac >>
       POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
       asm_simp_tac bool_ss [Abbr `ret_ss`,venomStateTheory.halt_state_def,
         venomStateTheory.set_returndata_def,
@@ -2108,11 +1608,11 @@ QED
 
 
 Resume return_selected_valued_frag_full_core[buffered_shared_wrapped]:
-  `abi_enc_plan (type_env tops) (TupleT [ret]) ce.ce_ret_enc_info /\
-   vyper_abi_size_bound (type_env tops) (TupleT [ret]) <= ce.ce_max_return_size` by
+  `abi_enc_plan (type_env tops) (TupleT [physical_ty]) abi_ce.ce_ret_enc_info /\
+   vyper_abi_size_bound (type_env tops) (TupleT [physical_ty]) <= abi_ce.ce_max_return_size` by
     metis_tac[] >>
   asm_rewrite_tac[] >>
-  qspecl_then [`type_env tops`,`ret`,`dtv`,`v`,`v`,`T`]
+  qspecl_then [`type_env tops`,`physical_ty`,`physical_tv`,`v`,`v`,`T`]
     (mp_tac o PURE_REWRITE_RULE [boolTheory.COND_CLAUSES])
     vyperLoweringCorrectTheory.return_abi_value_package >>
   impl_tac >- asm_rewrite_tac[] >>
@@ -2121,24 +1621,24 @@ Resume return_selected_valued_frag_full_core[buffered_shared_wrapped]:
   `wrapped_value=ArrayV (TupleV [v])` by fs[] >>
   `wrapped_av=contractABI$ListV [abi_v]` by
     (map_every (fn pat => qpat_assum pat mp_tac)
-      [`vyper_to_abi (type_env tops) (TupleT [ret]) wrapped_value=SOME wrapped_av`,
+      [`vyper_to_abi (type_env tops) (TupleT [physical_ty]) wrapped_value=SOME wrapped_av`,
        `wrapped_value=ArrayV (TupleV [v])`,
-       `vyper_to_abi (type_env tops) ret v=SOME abi_v`] >>
+       `vyper_to_abi (type_env tops) physical_ty v=SOME abi_v`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      gvs[vyperABITheory.vyper_to_abi_def]) >>
   `LENGTH (contractABI$enc
-      (Tuple [vyper_to_abi_type (type_env tops) ret])
-      (contractABI$ListV [abi_v])) <= ce.ce_max_return_size` by
+      (Tuple [vyper_to_abi_type (type_env tops) physical_ty])
+      (contractABI$ListV [abi_v])) <= abi_ce.ce_max_return_size` by
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`LENGTH (contractABI$enc
-          (vyper_to_abi_type (type_env tops) (TupleT [ret]))
+          (vyper_to_abi_type (type_env tops) (TupleT [physical_ty]))
           wrapped_av) <= _`,
        `wrapped_av=contractABI$ListV [abi_v]`,
-       `vyper_abi_size_bound (type_env tops) (TupleT [ret]) <= ce.ce_max_return_size`] >>
+       `vyper_abi_size_bound (type_env tops) (TupleT [physical_ty]) <= abi_ce.ce_max_return_size`] >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[vyperABITheory.vyper_to_abi_type_def] >> rpt strip_tac >>
      metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-  Cases_on `val_footprint dtv v=type_memory_size dtv`
+  Cases_on `val_footprint physical_tv v=type_memory_size physical_tv`
   >- suspend "buffered_shared_wrapped_nominal" >>
   suspend "buffered_shared_wrapped_packed"
 QED
@@ -2146,37 +1646,37 @@ QED
 Resume return_selected_valued_frag_full_core[buffered_shared_wrapped_nominal]:
   `!mem. mem_agree_outside unlock_tn.t_mem unlocked.vs_memory mem ==>
      val_in_memory wrapped_tv wrapped_value (w2n source_w) mem` by metis_tac[] >>
-  `val_footprint wrapped_tv wrapped_value=val_footprint dtv v` by
+  `val_footprint wrapped_tv wrapped_value=val_footprint physical_tv v` by
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`wrapped_value=ArrayV (TupleV [v])`,
-       `type_memory_size wrapped_tv=type_memory_size dtv`,
-       `val_footprint dtv v=type_memory_size dtv`] >>
+       `type_memory_size wrapped_tv=type_memory_size physical_tv`,
+       `val_footprint physical_tv v=type_memory_size physical_tv`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[loweringPostsTheory.val_footprint_def]) >>
-  drule_all (Q.INST [`env` |-> `type_env tops`,`ty` |-> `TupleT [ret]`,
-    `ei` |-> `ce.ce_ret_enc_info`,`tv` |-> `wrapped_tv`,`v` |-> `wrapped_value`,
+  drule_all (Q.INST [`env` |-> `type_env tops`,`ty` |-> `TupleT [physical_ty]`,
+    `ei` |-> `abi_ce.ce_ret_enc_info`,`tv` |-> `wrapped_tv`,`v` |-> `wrapped_value`,
     `av` |-> `wrapped_av`,`sb` |-> `w2n (source_w:bytes32)`,
     `tainted` |-> `unlock_tn.t_mem`,`initial_mem` |-> `unlocked.vs_memory`]
     abiEncoderSourceRobustTheory.abi_encoder_source_window_robust) >>
   disch_then (qx_choose_then `wrapped_ct` (qx_choose_then `wrapped_rv` strip_assume_tac)) >>
   `contractABI$enc wrapped_ct wrapped_rv=contractABI$enc
-    (Tuple [vyper_to_abi_type (type_env tops) ret]) (contractABI$ListV [abi_v])` by
+    (Tuple [vyper_to_abi_type (type_env tops) physical_ty]) (contractABI$ListV [abi_v])` by
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`contractABI$enc wrapped_ct wrapped_rv=_`,
        `wrapped_av=contractABI$ListV [abi_v]`] >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp_tac bool_ss [vyperABITheory.vyper_to_abi_type_def]) >>
-  `LENGTH (contractABI$enc wrapped_ct wrapped_rv)<=ce.ce_max_return_size` by
+  `LENGTH (contractABI$enc wrapped_ct wrapped_rv)<=abi_ce.ce_max_return_size` by
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`LENGTH (contractABI$enc wrapped_ct wrapped_rv)<=_`,
-       `vyper_abi_size_bound (type_env tops) (TupleT [ret])<=ce.ce_max_return_size`] >>
+       `vyper_abi_size_bound (type_env tops) (TupleT [physical_ty])<=abi_ce.ce_max_return_size`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   `!mem. mem_agree_outside unlock_tn.t_mem unlocked.vs_memory mem ==>
-    abi_encoder_window_input ce.ce_ret_enc_info wrapped_ct wrapped_rv
-      (w2n source_w) (val_footprint dtv v) mem` by
+    abi_encoder_window_input abi_ce.ce_ret_enc_info wrapped_ct wrapped_rv
+      (w2n source_w) (val_footprint physical_tv v) mem` by
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`!mem. mem_agree_outside unlock_tn.t_mem unlocked.vs_memory mem ==>
-         abi_encoder_window_input ce.ce_ret_enc_info wrapped_ct wrapped_rv _ _ mem`,
-       `val_footprint wrapped_tv wrapped_value=val_footprint dtv v`] >>
+         abi_encoder_window_input abi_ce.ce_ret_enc_info wrapped_ct wrapped_rv _ _ mem`,
+       `val_footprint wrapped_tv wrapped_value=val_footprint physical_tv v`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   qexistsl_tac [`wrapped_ct`,`wrapped_rv`] >> asm_rewrite_tac[]
 QED
@@ -2189,14 +1689,14 @@ Resume return_selected_valued_frag_full_core[buffered_shared_wrapped_packed]:
 QED
 
 Resume return_selected_valued_frag_full_core[buffered_shared_wrapped_bytes]:
-  qpat_x_assum `ret=BaseT (BytesT (Dynamic _))` SUBST_ALL_TAC >>
-  qpat_x_assum `dtv=BaseTV (BytesT (Dynamic _))` SUBST_ALL_TAC >>
+  qpat_x_assum `physical_ty=BaseT (BytesT (Dynamic _))` SUBST_ALL_TAC >>
+  qpat_x_assum `physical_tv=BaseTV (BytesT (Dynamic _))` SUBST_ALL_TAC >>
   qpat_x_assum `v=vyperValue$BytesV _` SUBST_ALL_TAC >>
   rename1 `value_has_type (BaseTV (BytesT (Dynamic packed_n))) (vyperValue$BytesV packed_bs)` >>
-  `ce.ce_ret_enc_info=AbiComplex
+  `abi_ce.ce_ret_enc_info=AbiComplex
     [(AbiBytestring packed_n,32,type_memory_size (BaseTV (BytesT (Dynamic packed_n))),T)]` by
     (qpat_assum `abi_enc_plan (type_env tops)
-       (TupleT [BaseT (BytesT (Dynamic packed_n))]) ce.ce_ret_enc_info` mp_tac >>
+       (TupleT [BaseT (BytesT (Dynamic packed_n))]) abi_ce.ce_ret_enc_info` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      ntac 3 (simp[Once abiEncoderPropsTheory.abi_enc_plan_cases,vyperABITheory.vyper_to_abi_type_def,
        vyperABITheory.vyper_base_to_abi_type_def,contractABITheory.is_dynamic_def,
@@ -2211,7 +1711,7 @@ Resume return_selected_valued_frag_full_core[buffered_shared_wrapped_bytes]:
   qpat_assum `abi_v=contractABI$BytesV (packed_bs)` (fn av =>
     qpat_assum `LENGTH (contractABI$enc
       (Tuple [vyper_to_abi_type (type_env tops) (BaseT (BytesT (Dynamic packed_n)))])
-      (contractABI$ListV [abi_v]))<=ce.ce_max_return_size`
+      (contractABI$ListV [abi_v]))<=abi_ce.ce_max_return_size`
       (ASSUME_TAC o PURE_REWRITE_RULE [av,vyperABITheory.vyper_to_abi_type_def,
         vyperABITheory.vyper_base_to_abi_type_def])) >>
   qexistsl_tac [`Tuple [Bytes NONE]`,`contractABI$ListV [contractABI$BytesV packed_bs]`] >>
@@ -2229,14 +1729,14 @@ Resume return_selected_valued_frag_full_core[buffered_shared_wrapped_bytes]:
 QED
 
 Resume return_selected_valued_frag_full_core[buffered_shared_wrapped_string]:
-  qpat_x_assum `ret=BaseT (StringT _)` SUBST_ALL_TAC >>
-  qpat_x_assum `dtv=BaseTV (StringT _)` SUBST_ALL_TAC >>
+  qpat_x_assum `physical_ty=BaseT (StringT _)` SUBST_ALL_TAC >>
+  qpat_x_assum `physical_tv=BaseTV (StringT _)` SUBST_ALL_TAC >>
   qpat_x_assum `v=StringV _` SUBST_ALL_TAC >>
   rename1 `value_has_type (BaseTV (StringT packed_n)) (StringV packed_str)` >>
-  `ce.ce_ret_enc_info=AbiComplex
+  `abi_ce.ce_ret_enc_info=AbiComplex
     [(AbiBytestring packed_n,32,type_memory_size (BaseTV (StringT packed_n)),T)]` by
     (qpat_assum `abi_enc_plan (type_env tops)
-       (TupleT [BaseT (StringT packed_n)]) ce.ce_ret_enc_info` mp_tac >>
+       (TupleT [BaseT (StringT packed_n)]) abi_ce.ce_ret_enc_info` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      ntac 4 (simp[Once abiEncoderPropsTheory.abi_enc_plan_cases,vyperABITheory.vyper_to_abi_type_def,
        vyperABITheory.vyper_base_to_abi_type_def,contractABITheory.is_dynamic_def,
@@ -2251,7 +1751,7 @@ Resume return_selected_valued_frag_full_core[buffered_shared_wrapped_string]:
   qpat_assum `abi_v=contractABI$BytesV (MAP n2w_o_ORD packed_str)` (fn av =>
     qpat_assum `LENGTH (contractABI$enc
       (Tuple [vyper_to_abi_type (type_env tops) (BaseT (StringT packed_n))])
-      (contractABI$ListV [abi_v]))<=ce.ce_max_return_size`
+      (contractABI$ListV [abi_v]))<=abi_ce.ce_max_return_size`
       (ASSUME_TAC o PURE_REWRITE_RULE [av,vyperABITheory.vyper_to_abi_type_def,
         vyperABITheory.vyper_base_to_abi_type_def])) >>
   qexistsl_tac [`Tuple [String]`,

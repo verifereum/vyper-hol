@@ -65,10 +65,6 @@ P2 is ported. These still differ from the oracle with it:
 - `main/abi_static`
 - `main/mixed_event_types`
 
-## Not yet attributed
-
-- `memory-stores/w01_return_intcall_dynarray_bytes_widen`
-
 ## Constant folding (#543), not #5127
 
 - `raw-system/rl05_3topics_concat`: HOL hashes the literal `b"x"` at runtime
