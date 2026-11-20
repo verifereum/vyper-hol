@@ -11,7 +11,7 @@
    make_tuple/array/array_elems [6]: MakeArray (NONE/SOME).
    struct_lit [6]: StructLit fields; abi_encode_args [6]: AbiEncode.
    concat [6]: Concat (currently rejected by supported_builtin_form).
-   call/acc [7]: Call and Acc. Call children are precisely args and default.
+   call/acc [7]: Call and Acc. Calls use args, defaults and RawLog topic elements.
 
    The aggregate signatures include forms outside the current whitelist. *)
 Theory runtimeSymSrcGeneratorContracts
@@ -190,6 +190,9 @@ Definition runtime_sym_call_clause_def:
        MEM e (omitted_defaults ce (nsid_to_string fid) (LENGTH es)) ==>
        runtime_sym_expr_contract tops cfn
          (cenv_without_defaults ce (nsid_to_string fid)) t e) /\
+    (!topics data e t. target = RawLog /\ es = [topics;data] /\
+       MEM e (raw_log_topic_exprs topics) ==>
+       runtime_sym_expr_contract tops cfn ce t e) /\
     runtime_sym_env tops ce /\ supported_expr tops (Call rt target es default) /\
     ~supported_expr_exists is_self_code (Call rt target es default) /\
     EVERY runtime_sym_inst (state_insts s) /\
