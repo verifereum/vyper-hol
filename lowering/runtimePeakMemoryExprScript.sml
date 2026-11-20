@@ -465,7 +465,8 @@ Proof
 QED
 
 Theorem dalloca_windows_ext_call_args:
-  !args tys. (!ct e. MEM e args ==> preserves_dalloca_windows window (cfn cenv ct e)) ==>
+  !args tys. (!e. MEM e args ==>
+    preserves_dalloca_windows window (cfn cenv (expr_type e) e)) ==>
     preserves_dalloca_windows window (compile_ext_call_args cfn cenv kw_es tys args)
 Proof
   Induct >> Cases_on `tys` >>

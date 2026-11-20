@@ -382,19 +382,19 @@ Definition log_alloc_ok_def:
           abi_size_bound cenv.ce_struct_fields (TupleT tys) < 2 ** 64
 End
 
-(* A custom error's two buffers are below Python's allocation limit, as
-   _revert_with_custom_error allocates them through allocate_buffer: the
-   arguments' tuple at the declared types, and its ABI encoding behind the
-   selector word.  An error the compile env doesn't know has none, since
-   compile_revert_with_custom_error emits INVALID for it. *)
+(* A custom error reserves its ABI payload and the selector word at the
+   saved argument layouts. A composite argument can also be materialized
+   individually. The encoder's 32-byte cursor needs no separate check.
+   An unknown error emits INVALID without allocating a buffer. *)
 Definition custom_error_alloc_ok_def:
   custom_error_alloc_ok cenv (CustomError id positional kwargs) ⇔
     case cenv.ce_error_info (nsid_to_string id) of
       NONE => T
-    | SOME params =>
-        let t = TupleT (MAP SND params) in
-          type_memory_bytes cenv t < 2 ** 64 ∧
-          abi_size_bound cenv.ce_struct_fields t + 32 < 2 ** 64
+    | SOME _ =>
+        let tys = MAP (lowered_value_type cenv)
+                    (custom_error_exprs (CustomError id positional kwargs)) in
+          EVERY (type_alloc_ok cenv) tys ∧
+          abi_size_bound cenv.ce_struct_fields (TupleT tys) + 32 < 2 ** 64
 End
 
 (* For a target in storage or transient storage, SOME of the place type

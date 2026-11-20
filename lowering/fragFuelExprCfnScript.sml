@@ -1016,7 +1016,7 @@ Proof
   FIRST [fa (lv :: base @ helpers)] >> simp[is_terminator_def]
 QED
 
-Theorem fuel_ok_compile_ext_call_args[local]:
+Theorem fuel_ok_compile_ext_call_args:
   !cfn. (!c t e Wv E. fuel_ok Wv {} E (cfn c t e)) ==>
     !tys es cenv kw_es Wv E.
       fuel_ok Wv {} E (compile_ext_call_args cfn cenv kw_es tys es)

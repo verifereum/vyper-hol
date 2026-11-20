@@ -833,21 +833,6 @@ Proof
 QED
 
 (* Complete routine cases before suspending the constructor-specific proofs. *)
-Theorem cs_appends_custom_error_store_args[local]:
-  !es ce tys dst off. cs_appends (compile_custom_error_store_args ce es tys dst off)
-Proof
-  Induct >> rpt gen_tac >> Cases_on `tys` >>
-  pure_rewrite_tac[compile_custom_error_store_args_def] >>
-  simp[cs_appends_return] >>
-  rpt (FIRST [first_assum MATCH_ACCEPT_TAC,
-              irule cs_appends_bind >> conj_tac,
-              irule cs_appends_ignore_bind >> conj_tac, gen_tac, IF_CASES_TAC] >>
-       BETA_TAC >> simp[cs_appends_emit_helpers, cs_appends_return]) >>
-  rw[cs_appends_def] >>
-  metis_tac[first_emission_compile_expr, first_emission_store_memory,
-            unwrap_value_labels, pairTheory.SND]
-QED
-
 Theorem first_emission_revert_with_custom_error[local]:
   !ce err a x b. compile_revert_with_custom_error ce err a = (x,b) ==>
   cs_extends a b /\
@@ -856,24 +841,46 @@ Theorem first_emission_revert_with_custom_error[local]:
     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
 Proof
   gen_tac >> Cases >> rename1 `CustomError id pos kws` >> rpt gen_tac >>
-  `!n. cs_appends (compile_alloc_buffer n)` by
-    (rw[cs_appends_def] >> metis_tac[compile_alloc_buffer_labels, pairTheory.SND]) >>
   pure_rewrite_tac[compile_revert_with_custom_error_def, LET_THM] >> BETA_TAC >>
   Cases_on `ce.ce_error_info (nsid_to_string id)` >>
   pure_rewrite_tac[optionTheory.option_case_def] >> BETA_TAC
   >- (rpt strip_tac >> drule_at Any (cj 1 first_emission_emit_helpers) >>
       simp[] >> metis_tac[]) >>
-  map_every qid_spec_tac [`b`, `x`, `a`] >>
-  ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- metis_tac[first_emission_alloc_buffer] >>
-  gen_tac >> BETA_TAC >> rewrite_tac[GSYM cs_appends_def] >>
-  rpt (FIRST [irule cs_appends_bind >> conj_tac,
-              irule cs_appends_ignore_bind >> conj_tac, gen_tac, IF_CASES_TAC] >>
-       BETA_TAC >>
-       simp[cs_appends_emit_helpers, cs_appends_return,
-            cs_appends_custom_error_store_args]) >>
-  rw[cs_appends_def] >>
-  metis_tac[compile_alloc_buffer_labels, compile_abi_encode_labels, pairTheory.SND]
+  once_rewrite_tac[comp_bind_def] >>
+  Cases_on `compile_ext_call_args compile_expr ce []
+    (MAP (lowered_value_type ce) (custom_error_exprs (CustomError id pos kws)))
+    (custom_error_exprs (CustomError id pos kws)) a` >>
+  rename1 `_ = (args,sa)` >>
+  simp_tac bool_ss [LET_THM, pairTheory.UNCURRY, pairTheory.FST, pairTheory.SND] >>
+  qmatch_goalsub_abbrev_tac `tail sa = (x,b)` >>
+  `!ca y cb. tail ca = (y,cb) ==>
+    cs_extends ca cb /\
+    (!fn. fn_has_code ca cb fn ==> ?bb i.
+      lookup_block ca.cs_current_bb fn.fn_blocks = SOME bb /\
+      isPREFIX (ca.cs_current_insts ++ [i]) bb.bb_instructions /\
+      i.inst_opcode <> PHI)` by
+    (qunabbrev_tac `tail` >> ho_match_mp_tac first_emission_strong_bind >> conj_tac
+     >- metis_tac[first_emission_alloc_buffer] >>
+     gen_tac >> BETA_TAC >> rewrite_tac[GSYM cs_appends_def] >>
+     rpt (FIRST [irule cs_appends_bind >> conj_tac,
+                 irule cs_appends_ignore_bind >> conj_tac, gen_tac, IF_CASES_TAC] >>
+          BETA_TAC >> simp[cs_appends_emit_helpers, cs_appends_return]) >>
+     rw[cs_appends_def] >>
+     metis_tac[compile_abi_encode_values_to_buf_labels, pairTheory.SND]) >>
+  disch_tac >>
+  qpat_x_assum `!ca y cb. tail ca = _ ==> _`
+    (qspecl_then [`sa`, `x`, `b`] mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `compile_ext_call_args _ _ _ _ _ _ = _`
+    (mp_tac o MATCH_MP (MATCH_MP first_emission_ext_call_args (cj 1 first_emission_compile_expr))) >>
+  disch_then (CONJUNCTS_THEN2 assume_tac (DISJ_CASES_THEN strip_assume_tac)) >>
+  (conj_tac >- (irule cs_extends_trans >> qexists_tac `sa` >> simp[]))
+  >- (qx_gen_tac `fn` >> disch_tac >>
+      `fn_has_code sa b fn` by
+        (mp_tac (Q.SPECL [`a`, `sa`, `b`, `fn`] fn_has_code_split) >> simp[]) >>
+      qpat_x_assum `!fn. fn_has_code sa b fn ==> _` (qspec_then `fn` mp_tac) >>
+      fs[]) >>
+  mp_tac (Q.INST [`b` |-> `sa`, `c` |-> `b`] first_emission_preserved) >>
+  simp[]
 QED
 
 val fe_simple_stmt =

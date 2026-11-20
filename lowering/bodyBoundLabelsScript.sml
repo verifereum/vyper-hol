@@ -2396,21 +2396,6 @@ Proof
   simp[bound_labels_expr_mutual]
 QED
 
-Theorem bound_labels_custom_error_store_args[local]:
-  (!l. compiler_label l ==> P l) ==>
-  !es tys dst off s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
-  EVERY P (MAP (\bb. bb.bb_label)
-    (all_blocks (SND (compile_custom_error_store_args ce es tys dst off s))))
-Proof
-  strip_tac >> Induct >> rpt gen_tac >> Cases_on `tys` >> rpt strip_tac >>
-  simp[compile_custom_error_store_args_def, comp_return_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[cj 1 bound_labels_expr_mutual,
-    bound_labels_emit_op, bound_labels_unwrap_value, bound_labels_store_memory,
-    comp_return_def]),
-    gen_tac, strip_tac, irule bound_labels_bind,
-    irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
-QED
-
 Theorem bound_labels_revert_with_custom_error[local]:
   (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
@@ -2423,7 +2408,8 @@ Proof
   simp[bound_labels_emit_inst] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_alloc_buffer, bound_labels_emit_void,
     bound_labels_emit_op, bound_labels_emit_inst,
-    bound_labels_custom_error_store_args, cj 2 bound_labels_abi_encode,
+    bound_labels_ext_call_args, cj 1 bound_labels_expr_mutual,
+    bound_labels_abi_encode_values_to_buf,
     comp_return_def]), gen_tac, strip_tac, irule bound_labels_bind,
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
 QED
