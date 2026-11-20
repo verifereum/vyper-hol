@@ -12661,7 +12661,9 @@ Proof
               (qspec_then `DF H` ACCEPT_TAC)) >>
         simp[Abbr `stmtR`,stmt_exit_ptr_def,expr_exit_def,halt_exit_def]) >>
         `EL i tys <> EL i dtys /\
-          ~(is_bytestring_type (EL i dtys) /\ is_bytestring_type (EL i tys))` by metis_tac[] >>
+          ~(is_bytestring_type (EL i dtys) /\ is_bytestring_type (EL i tys))` by
+          (qpat_assum `~(EL i tys = EL i dtys \/ _)` mp_tac >>
+           POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
         `target_store_place cenv head = SOME (SOME (ValPT (EL i dtys)))` by
           (qspecl_then [`compile_expr`,`cenv`,`head`,`c`,`place_result`,`place_cs`]
              mp_tac allocLimitsPropsTheory.compile_get_target_ptr_store_place >>
@@ -14406,7 +14408,9 @@ Proof
         (impl_tac >- (pure_asm_rewrite_tac[] >> simp[NoAsms])) >>
         disch_then ACCEPT_TAC) >>
         `EL i tys <> EL i dtys /\
-          ~(is_bytestring_type (EL i dtys) /\ is_bytestring_type (EL i tys))` by metis_tac[] >>
+          ~(is_bytestring_type (EL i dtys) /\ is_bytestring_type (EL i tys))` by
+          (qpat_assum `~(EL i tys = EL i dtys \/ _)` mp_tac >>
+           POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
         `target_store_place cenv head = SOME (SOME (ValPT (EL i dtys)))` by
           (qspecl_then [`compile_expr`,`cenv`,`head`,`c`,`place_result`,`place_cs`]
              mp_tac allocLimitsPropsTheory.compile_get_target_ptr_store_place >>

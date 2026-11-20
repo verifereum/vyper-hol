@@ -182,9 +182,16 @@ Resume extcall_request_snapshot_word_owned_full[normal]:
        (strip_assume_tac o REWRITE_RULE [reason_uniform_shape_def]) >>
      qpat_x_assum `!sa vv sb. _ ==> reason_result_shape _ _ _`
        (drule_then assume_tac) >>
+     qpat_assum `arg_type_fits (lowered_value_type cenv e) (expr_type e)`
+       (mp_tac o MATCH_MP arg_type_fits_word_type) >>
+     qpat_assum `reason_result_shape t' loc shadow_vv` mp_tac >>
+     FIRST [qpat_assum `t' = expr_type e` mp_tac,
+            qpat_assum `t' = lowered_value_type cenv e` mp_tac] >>
+     qpat_assum `is_word_type (vv_type (ext_call_arg_value _ shadow_vv))` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
      Cases_on `shadow_vv` >>
-     fs[reason_result_shape_def, ext_call_arg_value_def, vv_type_def] >>
-     metis_tac[arg_type_fits_word_type]) >>
+     simp[reason_result_shape_def, ext_call_arg_value_def, vv_type_def] >>
+     metis_tac[]) >>
   `post_value_type cenv e = expr_type e` by
     (Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv` >>
      gvs[post_value_type_def, vyperASTTheory.expr_type_def] >>
