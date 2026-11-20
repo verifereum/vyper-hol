@@ -6,9 +6,12 @@
  * The prefix is the selector dispatch (compile_selector_dispatch_linear)
  * and the selected function's entry checks (compile_entry_checks: the call
  * value check when it is nonpayable, the calldata size check), which pass:
- * send_call_value returned INL, and the calldata_encodes premise bounds
- * the calldata size (the nr=F wrapper takes it from valid_vyper_call).  They change only variables and the PC and write no memory, so the
- * ghost there carries no memory, storage, transient or immutable taint.
+ * send_call_value returned INL, and the calldata_encodes premise, with
+ * the argument count, typing and decoder agreement the hints below name,
+ * bounds the calldata size (the nr=F wrapper takes calldata_encodes from
+ * valid_vyper_call).  They change only variables and the PC and write no
+ * memory, so the ghost there carries no memory, storage, transient or
+ * immutable taint.
  * Registration (compile_register_positional_args) starts where the checks
  * end, in the same block, and the guarded body where it ends.
  *
