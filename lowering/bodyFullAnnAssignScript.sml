@@ -163,6 +163,9 @@ Proof
      Cases_on `lookup_scopes id es.scopes` >> simp[] >>
      qpat_x_assum `!id entry. lookup_scopes _ _ = _ ==> _`
        (drule_then mp_tac) >> simp[FLOOKUP_DEF]) >>
+  `ctx_has_dalloca ctx ==>
+    (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s)` by simp[] >>
   drule_all annassign_word_full_execution_sep >>
   disch_then (qspec_then `RetQ` assume_tac) >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (fn outcome =>
