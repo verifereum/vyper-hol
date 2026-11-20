@@ -3203,8 +3203,18 @@ Theorem ctor_as_wei_value_int_first_emission:
        i.inst_opcode <> PHI))
 Proof
   ntac 3 gen_tac >> Cases_on `scale = 1`
-  >- simp[builtinMiscTheory.compile_as_wei_value_int_def, comp_return_def,
-          cs_extends_refl] >>
+  >- (Cases_on `signed` >>
+      simp[builtinMiscTheory.compile_as_wei_value_int_def, comp_return_def,
+           cs_extends_refl] >>
+      ho_match_mp_tac first_emission_strong >>
+      ho_match_mp_tac first_emission_strong_bind >> conj_tac
+      >- (rpt gen_tac >> strip_tac >>
+          irule (cj 3 first_emission_emit_helpers) >>
+          goal_assum (drule_at Any) >> simp[]) >>
+      gen_tac >> rewrite_tac[GSYM cs_appends_def, comp_ignore_bind_def] >>
+      rpt (ho_match_mp_tac cs_appends_bind >> conj_tac
+           >- simp[cs_appends_emit_helpers] >> gen_tac) >>
+      simp[cs_appends_return]) >>
   `!ok. cs_appends (if signed then
        comp_bind (emit_op SLT [v; Lit 0w]) (\pos.
        comp_bind (emit_op ISZERO [pos]) (\nn. emit_op AND [nn; ok]))
