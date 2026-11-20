@@ -120,24 +120,37 @@ Proof
     rpt gen_tac >> BETA_TAC) >> simp[entry_code_return]
 QED
 
+Theorem entry_code_abi_encode_value_rows[local]:
+  !rows off. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_abi_encode_value_rows cenv dst cursor off rows)
+Proof
+  Induct >> rpt gen_tac
+  >- simp[compile_abi_encode_value_rows_def, entry_code_return] >>
+  PairCases_on `h` >>
+  simp[compile_abi_encode_value_rows_def, LET_THM, compileEnvTheory.comp_ignore_bind_def] >>
+  irule entry_code_bind >> simp[entry_code_emit_op] >> gen_tac >> BETA_TAC >>
+  irule entry_code_bind >> simp[] >> IF_CASES_TAC >>
+  rpt (irule entry_code_bind >> reverse conj_tac
+    >- simp[entry_code_emit_op, entry_code_emit_void, entry_code_unwrap_value,
+             entry_code_encode_to_buf] >> gen_tac >> BETA_TAC) >>
+  simp[entry_code_emit_void, entry_code_store_memory]
+QED
+
+Theorem entry_code_abi_encode_values_to_buf:
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_abi_encode_values_to_buf cenv dst rows)
+Proof
+  simp[compile_abi_encode_values_to_buf_def, LET_THM, compileEnvTheory.comp_ignore_bind_def] >>
+  rpt (irule entry_code_bind >> reverse conj_tac
+    >- simp[entry_code_alloc_buffer, entry_code_emit_void, entry_code_abi_encode_value_rows] >>
+    gen_tac >> BETA_TAC) >> simp[entry_code_emit_op]
+QED
+
 Theorem entry_code_external_call_kwargs:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_external_call_kwargs cenv addr vals tys memsz abisz mid retsz
-      minsz retmem static value gas skip hasdef def rt dt einfo dinfo)
+    (compile_external_call_kwargs cenv addr vals tys abisz mid retsz
+      minsz retmem static value gas skip hasdef def rt dt dinfo)
 Proof
-  `!dst. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-     (if vals = [] then comp_return () else
-        do tmp <- compile_alloc_buffer memsz;
-           compile_extcall_store_values cenv (ZIP (vals,tys)) tmp.buf_operand 0;
-           p <- emit_op ADD [dst; Lit 32w];
-           compile_abi_encode_to_buf p tmp.buf_operand einfo;
-           comp_return () od)` by
-    (rpt gen_tac >> IF_CASES_TAC >> simp[entry_code_return,
-       compileEnvTheory.comp_ignore_bind_def] >>
-     rpt (irule entry_code_bind >> reverse conj_tac
-       >- simp[entry_code_alloc_buffer, entry_code_extcall_store_values,
-               entry_code_emit_op, entry_code_encode_to_buf] >>
-       rpt gen_tac >> BETA_TAC) >> simp[entry_code_return]) >>
   `!p n. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
       (do emit_void RETURNDATACOPY [p; Lit 0w; n]; emit_inst REVERT [p; n] [] od)` by
     (rpt gen_tac >> simp[compileEnvTheory.comp_ignore_bind_def] >>
@@ -145,7 +158,7 @@ Proof
   fs[compileEnvTheory.comp_ignore_bind_def] >>
   simp[compile_external_call_kwargs_def, compileEnvTheory.comp_ignore_bind_def] >>
   let
-    val boundaries = [entry_code_extcall_store_values, entry_code_encode_to_buf,
+    val boundaries = [entry_code_abi_encode_values_to_buf,
       entry_code_return, entry_code_emit_op,
       entry_code_emit_void, entry_code_emit_inst, entry_code_fresh_label,
       entry_code_new_block, entry_code_alloc_buffer, entry_code_extcodesize_check,

@@ -217,15 +217,24 @@ Proof
   strip_tac >> apply_symbolic_frame symbolic_frame_default_return_path >> simp[]
 QED
 
+Theorem runtime_data_frame_abi_encode_values_to_buf:
+  (!n. runtime_data_frame (compile_alloc_buffer n)) /\
+  (!vv. runtime_data_frame (unwrap_value cenv vv)) /\
+  (!src dst ty. runtime_data_frame (compile_store_memory cenv src dst ty ty)) /\
+  (!dst src info. runtime_data_frame (compile_abi_encode_to_buf dst src info)) ==>
+  runtime_data_frame (compile_abi_encode_values_to_buf cenv dst rows)
+Proof
+  strip_tac >> apply_symbolic_frame symbolic_frame_abi_encode_values_to_buf >> simp[]
+QED
+
 Theorem runtime_data_frame_external_call_kwargs:
   (!n. runtime_data_frame (compile_alloc_buffer n)) /\
-  (!vs buf off. runtime_data_frame (compile_extcall_store_values cenv vs buf off)) /\
-  (!dst src info. runtime_data_frame (compile_abi_encode_to_buf dst src info)) /\
+  (!dst rows. runtime_data_frame (compile_abi_encode_values_to_buf cenv dst rows)) /\
   (!rt dt buf res dop addr skip lo hi info.
      runtime_data_frame (compile_default_return_path cenv rt dt buf res dop addr skip lo hi info)) /\
   (!lo hi. runtime_data_frame (compile_return_value_decode lo hi)) /\
   (!dst src opc lo hi info. runtime_data_frame (compile_abi_decode_to_buf dst src opc lo hi info)) ==>
-  runtime_data_frame (compile_external_call_kwargs cenv addr vals tys mem abi mid rabi lo rmem static value gas skip has_default dop rt dt einfo dinfo)
+  runtime_data_frame (compile_external_call_kwargs cenv addr vals tys abi mid rabi lo rmem static value gas skip has_default dop rt dt dinfo)
 Proof
   strip_tac >> apply_symbolic_frame symbolic_frame_external_call_kwargs >> simp[]
 QED

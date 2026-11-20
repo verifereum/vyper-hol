@@ -81,11 +81,24 @@ structure compilerNativeParity = struct
       "external-calls/oracle/e30_default_ret_tuple.hex",
       "external-calls/oracle/e37_default_ret_string.hex",
       "external-calls/oracle/e38_default_ret_local_array.hex",
+      "external-calls/oracle/e40_extcall_gas.hex",
+      "external-calls/oracle/e41_staticcall_gas.hex",
+      "external-calls/oracle/e42_extcall_gas_value_order.hex",
+      "external-calls/oracle/e43_extcall_all_kwargs.hex",
       "external-calls/oracle/e45_default_ret_ifexp.hex",
+      "external-calls/oracle/i02_iface_default_param.hex",
+      "external-calls/oracle/i03_two_ifaces_same_name.hex",
+      "external-calls/oracle/i09_iface_ret_iface.hex",
+      "external-calls/oracle/i13_ext_fn_before_iface.hex",
+      "external-calls/oracle/i15_iface_ret_iface_direct.hex",
+      "external-calls/oracle/m10c_iface_storage_main.hex",
+      "internal-frames/oracle/p74_int_ext_call.hex",
       "memory-stores/oracle/dec_from_memory2.hex",
       "memory-stores/oracle/t03_tuple_assign_abi_decode.hex",
       "memory-stores/oracle/t04_tuple_assign_extcall.hex",
-      "memory-stores/oracle/t11_tuple_onew_decode_mem.hex"]
+      "memory-stores/oracle/t11_tuple_onew_decode_mem.hex",
+      "python-o1-asm-opt/interface_calls.hex",
+      "python-o1-no-asm-opt/interface_calls.hex"]
 
   fun hex_files root dir = let
     val d = OS.FileSys.openDir (OS.Path.concat (root, dir))

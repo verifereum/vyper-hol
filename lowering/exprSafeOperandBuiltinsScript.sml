@@ -441,8 +441,8 @@ Proof
 QED
 
 Theorem compile_external_call_zero_safe_operand:
-  compile_external_call_kwargs cenv addr vals tys memsz abisz mid retsz minsz
-    outsz static value gas skip default dop NoneT dt einfo dinfo sa = (r,sb) ==>
+  compile_external_call_kwargs cenv addr vals tys abisz mid retsz minsz
+    outsz static value gas skip default dop NoneT dt dinfo sa = (r,sb) ==>
   safe_operand sb r
 Proof
   simp[compile_external_call_kwargs_def, LET_THM,
@@ -839,8 +839,8 @@ Proof
 QED
 
 Theorem compile_external_call_not_label:
-  compile_external_call_kwargs cenv addr vals tys msz asz mid rsz mn rms
-    stat value gas skip hasdef dop rt dt einfo dinfo sa = (op,sb) ==>
+  compile_external_call_kwargs cenv addr vals tys asz mid rsz mn rms
+    stat value gas skip hasdef dop rt dt dinfo sa = (op,sb) ==>
   !l. op <> Label l
 Proof
   simp[compile_external_call_kwargs_def, comp_bind_def,

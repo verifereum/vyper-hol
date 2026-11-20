@@ -104,9 +104,10 @@ fixtures, because the witness library compiles single-module exports.
 ## Keyword operands
 
 These sources cover the keyword operands of an external call and `send`
-(#553); `e19_gas_kw` and `s02_send_gas` are the issue's witnesses. All match
-the pinned Vyper bytecode exactly. Each is in `parity-fixtures.txt` and checked by the native runner;
-`e29_default_ret_skip` above is too.
+(#553). The table records the matches from the original probe. At the
+current pin, `e44_skip_contract_check`, `s01_send` and `s02_send_gas` match
+exactly. The other keyword operands in the table still differ in bounded ABI
+decoding. The native runner checks these expected differences.
 
 | Source | What it covers | After |
 |---|---|---|
@@ -126,10 +127,9 @@ These sources pass a positional argument whose type is narrower than the
 declared parameter type (#553, a06-06). Vyper lays the argument buffer out
 with the types of the lowered argument values, so the calldata length follows
 the call site; the type checker admits a bytestring or dynamic array with a
-smaller bound (`arg_type_fits`). They matched the pinned Vyper bytecode
-exactly until the v0.5.0b1 pin changed their bytes; the comparison returns
-with the ports listed in
-[`pending-5127-port.md`](../bytecode/pending-5127-port.md). A storage,
+smaller bound (`arg_type_fits`). Direct request encoding restores exact
+deployment and runtime bytecode against the current pin for all five fixtures
+below. The table gives the original probe sizes. A storage,
 transient or immutable variable is the exception: Vyper reads it at its
 annotated type, which for a call argument is the declared parameter type.
 A narrower struct field (`self.p.name` with `name: String[5]`) is not admitted

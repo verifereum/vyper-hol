@@ -31,6 +31,7 @@ val _ = augment_srw_ss [rewrites [
   deploy_blocks_frame_ext_call_kwarg, deploy_blocks_frame_create_salt,
   deploy_blocks_frame_array_subscript, deploy_blocks_frame_stage_intcall_args,
   deploy_blocks_frame_external_call_kwargs, deploy_blocks_frame_default_return_path,
+  deploy_blocks_frame_abi_encode_values_to_buf,
   deploy_blocks_frame_extcall_store_values, deploy_blocks_frame_multi_vvs,
   deploy_blocks_frame_return_value_decode,
   deploy_blocks_frame_create_copy, deploy_blocks_frame_create_blueprint,

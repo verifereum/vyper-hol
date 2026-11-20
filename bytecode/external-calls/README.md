@@ -7,11 +7,12 @@ and interface constructors used as call arguments
 keyword operands `value=`, `gas=`, `default_return_value=` and
 `skip_contract_check=` of extcall/staticcall, and `send` with and without
 `gas=` ([issue #553](https://github.com/verifereum/vyper-hol/issues/553)).
-`parity-fixtures.txt` selects 13 exact bytecode comparisons; the other sources
-are controls and related witnesses kept for diagnostic comparison.
+`parity-fixtures.txt` selects 19 fixtures for independent oracle checking,
+including the six restored by direct request encoding. The native runner
+tracks expected bounded ABI decoder differences separately.
 The `m10c_iface_storage_main` witness covers first-occurrence DFT dependency
-ordering (issue #574); its exact-bytes check is removed until the changed ABI
-encoder is ported.
+ordering (issue #574). The native runner records its
+[bounded ABI decoder difference](../pending-bounded-decode-guards.md).
 The existing 101-fixture corpus is unchanged.
 
 `oracle/` contains independently generated annotated AST/layout JSON and

@@ -8,7 +8,7 @@ Ancestors
   selectorDispatch bodyPtrDefs bodyFullUnwrapRun abiBuiltinAllocation compileEnv
   fragGasSeqPtr fragGasOriginPtrLoop venomMemDefs loweringShapeDefs valueEncodingProps
   bodyMemoryDefs bodyPtrBytestringBuiltinsWindowGhost abiCallerAllocation loweringPosts
-  bodyFullHashKeccakFixed
+  bodyFullHashKeccakFixed exprSimProps
 
 (* Close the exact selector write at the new PC. Unlike the selector-only
    tail, this does not compute the calldata operand yet. *)
@@ -363,3 +363,171 @@ Resume extcall_request_buffer_setup[tuple]:
 QED
 
 Finalise extcall_request_buffer_setup
+
+(* Direct request packing starts after the selector store. The allocated
+   buffer already covers the four selector bytes and the entire payload. *)
+Theorem extcall_direct_request_buffer:
+  compile_alloc_buffer n sa = (shared,sb) /\
+  emit_void MSTORE [shared.buf_operand;Lit (calldata_method_id bs)] sb = ((),sc) /\
+  fn_has_code sa sb func /\ fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
+  LENGTH bs = 4 /\ 32 <= n /\ n < dimword (:256) /\
+  stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list)
+    ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  alloca_history func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?q w t Gt tt.
+    shared.buf_operand = Var q /\ not_fresh_at sc q /\
+    lookup_var q t = SOME w /\ ptr_covers Gt tt q t n /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
+    lo <= w2n w /\ w2n w + n < dimword (:256) /\ w2n w + n <= t.vs_alloca_next /\
+    venomState$read_memory (w2n w + 28) 4 t = bs /\
+    (!i. w2n w + 28 <= i /\ i < w2n w + 32 ==> i NOTIN tt.t_mem) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gt,tt)) /\
+    (!H : (bool # bytes32 # type_value) list # num list.
+      stmt_state_rel H ctx func cenv cx es s ==> stmt_state_rel H ctx func cenv cx es t) /\
+    (!D. ghost_inv_at D lo d cenv cx es G tn s ==> ghost_inv_at D lo d cenv cx es Gt tt t) /\
+    wb_frame cenv es es sa s t /\ ghost_kept_at lo cenv es sa G tn s Gt tt /\
+    ~t.vs_halted /\ alloca_history func t /\ allocas_from lo t /\
+    t.vs_current_bb = sc.cs_current_bb /\ t.vs_inst_idx = LENGTH sc.cs_current_insts /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    (!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==> FLOOKUP t.vs_allocas aid = SOME ent) /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP Gt x = FLOOKUP G x /\ op_taint tt (Var x) = op_taint tn (Var x)) /\
+    tt.t_stor = tn.t_stor /\ tt.t_trans = tn.t_trans /\ tt.t_imm = tn.t_imm /\
+    (!a k. (a+k <= lo \/
+           (?name b len. local_region cenv es.scopes s name b len /\
+                         b <= a /\ a+k <= b+len) \/
+           (?aid b len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) /\
+                        b <= a /\ a+k <= b+len)) ==>
+      mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory /\
+      (!i. a <= i /\ i < a+k /\ i IN tt.t_mem ==> i IN tn.t_mem))
+Proof
+  strip_tac >>
+  drule_all (Q.SPEC `F` (GEN ``has_args:bool`` extcall_request_buffer_setup) |>
+    SIMP_RULE (srw_ss()) []) >>
+  disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`]
+    (qx_choose_then `q` (qx_choose_then `w` (qx_choose_then `u`
+      (qx_choose_then `Gu` (qx_choose_then `tu` strip_assume_tac)))))) >>
+  `stmt_state_rel H0 ctx func cenv cx es u` by metis_tac[] >>
+  `alloca_inv u` by metis_tac[stmt_state_rel_local_ptrs_alloca] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    metis_tac[stmt_state_rel_allocas_below_fmp] >>
+  `emit_void MSTORE [Var q;Lit (calldata_method_id bs)] sb = ((),sc)` by metis_tac[] >>
+  mp_tac (Q.INST [`s` |-> `u`, `G` |-> `Gu`, `tn` |-> `tu`,
+    `sa` |-> `sb`, `sb` |-> `sc`, `explicit` |-> `explicit`, `PG` |-> `PG`]
+    (SPEC_ALL extcall_selector_setup_store)) >>
+  impl_tac >- asm_rewrite_tac[] >>
+  strip_tac >>
+  `!name b k. local_region cenv es.scopes u name b k <=>
+               local_region cenv es.scopes s name b k` by
+    (rpt gen_tac >> irule local_region_lookup_cong >> rpt strip_tac >>
+     `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `!H : (bool # bytes32 # type_value) list # num list.
+      stmt_state_rel H ctx func cenv cx es s ==> stmt_state_rel H ctx func cenv cx es u'` by
+    (qx_gen_tac `H` >> strip_tac >>
+     qspecl_then [`n`,`sa`,`sb`,`shared`,`func`] mp_tac buffer_alloc_code >>
+     simp[] >> strip_tac >>
+     qpat_assum `u' = (mstore _ _ _ with vs_inst_idx := _)` SUBST1_TAC >>
+     simp[stmt_state_rel_inst_idx] >> irule literal_mstore_state_rel >>
+     reverse conj_tac >- metis_tac[] >>
+     qexistsl [`w2n w`,`mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
+       [STRING #"%" (toString sa.cs_next_var)]`,`n`] >>
+     simp[mk_inst_def] >>
+     rpt strip_tac >>
+     `local_region cenv es.scopes s name lb lsz` by metis_tac[] >>
+     qpat_assum `!name b len. local_region cenv es.scopes s name b len ==> _`
+       (drule_then mp_tac) >> simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
+  `!a k. a+k <= w2n w \/ w2n w + 32 <= a ==>
+     mem_bytes_at a k u'.vs_memory = mem_bytes_at a k s.vs_memory` by
+    (rpt gen_tac >> disch_tac >>
+     qpat_assum `u' = (mstore _ _ _ with vs_inst_idx := _)` SUBST1_TAC >>
+     simp_tac (srw_ss()) [] >>
+     qpat_assum `u.vs_memory = s.vs_memory` (SUBST1_TAC o SYM) >>
+     irule mstore_mem_bytes_at_disjoint >> first_assum ACCEPT_TAC) >>
+  `!i. i < s.vs_alloca_next /\ i IN tu'.t_mem ==> i IN tn.t_mem` by
+    (fs[SUBSET_DEF] >> metis_tac[]) >>
+  `!a k. (a+k <= lo \/
+           (?name b len. local_region cenv es.scopes s name b len /\
+                         b <= a /\ a+k <= b+len) \/
+           (?aid b len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) /\
+                        b <= a /\ a+k <= b+len)) ==>
+      mem_bytes_at a k u'.vs_memory = mem_bytes_at a k s.vs_memory /\
+      (!i. a <= i /\ i < a+k /\ i IN tu'.t_mem ==> i IN tn.t_mem)` by
+    (mp_tac (Q.INST [`start` |-> `w2n (w:bytes32)`,`H` |-> `H0`,
+       `t` |-> `u'`,`tt` |-> `tu'`] extcall_setup_protected_window) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  `ci_mono sb sc` by metis_tac[ci_mono_emit_void, pairTheory.SND] >>
+  `not_fresh_at sc q` by metis_tac[ci_mono_def, not_fresh_at_mono] >>
+  `!name b k. local_region cenv es.scopes s name b k ==>
+     mem_bytes_at b k u'.vs_memory = mem_bytes_at b k s.vs_memory /\
+     (!i. b <= i /\ i < b+k /\ i IN tu'.t_mem ==> i IN tn.t_mem)` by
+    (rpt gen_tac >> disch_tac >>
+     qpat_assum `!a k. _ \/ _ \/ _ ==> mem_bytes_at a k u'.vs_memory = _ /\ _`
+       (qspecl_then [`b`,`k`] mp_tac) >> metis_tac[LESS_EQ_REFL]) >>
+  `!aid b k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,k) ==>
+     mem_bytes_at b k u'.vs_memory = mem_bytes_at b k s.vs_memory /\
+     (!i. b <= i /\ i < b+k /\ i IN tu'.t_mem ==> i IN tn.t_mem)` by
+    (rpt gen_tac >> disch_tac >>
+     qpat_assum `!a k. _ \/ _ \/ _ ==> mem_bytes_at a k u'.vs_memory = _ /\ _`
+       (qspecl_then [`b`,`k`] mp_tac) >> metis_tac[LESS_EQ_REFL]) >>
+  `!x. not_fresh_at sa x ==> lookup_var x u' = lookup_var x s /\
+    FLOOKUP Gu' x = FLOOKUP G x /\ op_taint tu' (Var x) = op_taint tn (Var x)` by
+    metis_tac[] >>
+  `wb_frame cenv es es sa s u'` by
+    (simp_tac bool_ss [wb_frame_def] >> rpt conj_tac
+     >- (rpt strip_tac >>
+         qpat_assum `!x. not_fresh_at sa x ==> lookup_var x u' = _ /\ _`
+           (drule_then (fn th => PURE_ONCE_REWRITE_TAC [cj 1 th])) >>
+         first_assum ACCEPT_TAC)
+     >- metis_tac[]
+     >- (rpt strip_tac >>
+         qpat_assum `!aid b k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,k) ==> _`
+           (drule_all_then (ACCEPT_TAC o CONJUNCT1))) >>
+     irule locals_kept_regions >> rpt strip_tac >>
+     qpat_assum `!name b k. local_region _ _ s name b k ==> _`
+       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+  `ghost_kept_at lo cenv es sa G tn s Gu' tu'` by
+    (simp[ghost_kept_at_def] >> rpt conj_tac >> metis_tac[]) >>
+  `u'.vs_accounts = s.vs_accounts /\ u'.vs_transient = s.vs_transient /\
+    u'.vs_call_ctx = s.vs_call_ctx /\ u'.vs_immutables = s.vs_immutables` by
+    (qpat_assum `u' = (mstore _ _ _ with vs_inst_idx := _)`
+       (fn th => PURE_REWRITE_TAC [th,mstore_def, LET_THM]) >>
+     asm_simp_tac (srw_ss()) []) >>
+  qpat_assum `stmt_state_rel H0 ctx func cenv cx es s`
+    (assume_tac o CONJUNCT1 o MATCH_MP stmt_state_rel_local_ptrs_alloca) >>
+  `lo <= u'.vs_alloca_next` by decide_tac >>
+  `!D. ghost_inv_at D lo d cenv cx es G tn s ==> ghost_inv_at D lo d cenv cx es Gu' tu' u'` by
+    (rpt strip_tac >>
+     `stor_taint_ok_at D tu' u'` by
+       (qpat_assum `ghost_inv_at D lo d cenv cx es G tn s`
+          (mp_tac o cj 4 o REWRITE_RULE [ghost_inv_at_def]) >>
+        simp[stor_taint_ok_at_def]) >>
+     `mem_bytes_at 0 lo u'.vs_memory = mem_bytes_at 0 lo s.vs_memory /\
+       (!i. i < lo /\ i IN tu'.t_mem ==> i IN tn.t_mem)` by
+       (qpat_assum `!a k. _ \/ _ \/ _ ==> mem_bytes_at a k u'.vs_memory = _ /\ _`
+          (qspecl_then [`0`,`lo`] mp_tac) >> simp[]) >>
+     `!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+       lookup_var x u' = SOME w` by
+       (rpt strip_tac >>
+        qpat_assum `!x. not_fresh_at sa x ==> lookup_var x u' = _ /\ _`
+          (drule_then (fn th => PURE_ONCE_REWRITE_TAC [cj 1 th])) >>
+        first_assum ACCEPT_TAC) >>
+     `!x. not_fresh_at sa x ==> FLOOKUP Gu' x = FLOOKUP G x /\
+       op_taint tu' (Var x) = op_taint tn (Var x)` by
+       (gen_tac >> disch_tac >>
+        qpat_assum `!x. not_fresh_at sa x ==> lookup_var x u' = _ /\ _`
+          (drule_then (ACCEPT_TAC o CONJUNCT2))) >>
+     mp_tac (Q.INST [`fn` |-> `func`,`s'` |-> `u'`,`HG` |-> `Gu'`,
+       `tm` |-> `tu'`,`es'` |-> `es`] ghost_inv_at_local_window_transport) >>
+     impl_tac >- asm_rewrite_tac[] >>
+     disch_then ACCEPT_TAC) >>
+  qexistsl [`q`,`w`,`u'`,`Gu'`,`tu'`] >>
+  asm_rewrite_tac[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  metis_tac[gas_origin_ptr_path_trans]
+QED

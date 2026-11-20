@@ -50,9 +50,9 @@ Theorem runtime_data_frame_call_composed:
       (cenv_without_defaults cenv (nsid_to_string id))
       (omitted_defaults cenv (nsid_to_string id) (LENGTH args)) stack tys)) /\
   (!buf vs off. runtime_data_frame (store_multi_results buf vs off)) /\
-  (!a vs ts ms az mid rz mn rb sc v g sk hd d rt dt ei di.
-    runtime_data_frame (compile_external_call_kwargs cenv a vs ts ms az mid rz mn rb
-      sc v g sk hd d rt dt ei di)) /\
+  (!a vs ts az mid rz mn rb sc v g sk hd d rt dt di.
+    runtime_data_frame (compile_external_call_kwargs cenv a vs ts az mid rz mn rb
+      sc v g sk hd d rt dt di)) /\
   (!n. runtime_data_frame (compile_raw_call_outbuf n)) /\
   (!a p n g v ct sz rof ov op.
     runtime_data_frame (compile_raw_call_finish a p n g v ct sz rof ov op)) /\
