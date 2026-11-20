@@ -12,10 +12,6 @@ The changes, as they appear in the pinned Python compiler:
 
 - P4 direct ABI encoder: values are encoded straight into the destination
   buffer, and an external call sends exactly the encoded length plus 4 bytes.
-  It also covers `_revert_with_custom_error`, which lowers each argument as
-  a value (`snapshot_value_for_delayed_use`), keeps no declared-type
-  argument tuple, and encodes with `abi_encode_values_to_buf`; the
-  `custom-errors/` fixtures return to parity with that port.
 - P8 `raw_create` bytecode type: `raw_create` types its bytecode argument
   with the argument's own type rather than `Bytes[49152]`, which sizes its
   initcode buffer (the HOL lowering still snapshots 49152 bytes).
@@ -57,12 +53,6 @@ P2 is ported. These still differ from the oracle with it:
 - `create-builtins/cb02_blueprint_args`
 - `create-builtins/cb05_blueprint_rof`
 - `create-builtins/cb07_blueprint_args_salt`
-- `custom-errors/ce_assert_dynamic`
-- `custom-errors/ce_assert_noargs`
-- `custom-errors/ce_assert_static`
-- `custom-errors/ce_raise_kwargs`
-- `custom-errors/ce_raise_noargs`
-- `custom-errors/ce_raise_static`
 - `external-entries/base_dom1`
 - `main/event_log`
 - `main/mixed_event_log`
@@ -84,8 +74,6 @@ P2 is ported. These still differ from the oracle with it:
 
 - `abi-codegen/enc_ensT_bytes`
 - `create-builtins/cb06_blueprint_dyn_offset`
-- `custom-errors/ce_raise_dynamic`
-- `custom-errors/ce_raise_dynarray`
 - `main/abi_dynamic`
 - `main/abi_static`
 - `main/mixed_event_types`
