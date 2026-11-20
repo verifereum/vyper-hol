@@ -67,8 +67,8 @@ needs S3/S4/S7 and memory/reachability facts at the concrete `Inv`
 `raw_reachable vs0` (`vs0` the O1 output's entry state) rather than one the
 caller supplies. On the ordinary path they have S5's form and come from
 `e2eProducers.o1_pipeline_memory_obligations_raw`; on the static-abort path they
-come from `abort_context_obligations_raw` and exclude the abort prefix
-(`codegen_memory_obligations_abort`). The S5 export itself is used by the
+come from `abort_context_obligations_raw`, and their memory obligations exclude
+the abort prefix (`codegen_memory_obligations_abort`). The S5 export itself is used by the
 gas-sufficiency proofs. S2/S6 produce
 shape. On the ordinary path L5 consumes that memory fact; layout or empty
 entry memory does not manufacture memory safety.
