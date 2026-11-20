@@ -2334,7 +2334,7 @@ Proof
          POP_ASSUM_LIST (K all_tac) >>
          simp[EVERY_MEM, exprSimHypsDefsTheory.expr_body_pre_def] >>
          metis_tac[]) >>
-      ntac 2 (conj_tac >- fs[]) >>
+      conj_tac >- fs[] >>
       conj_tac >-
         (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
          qexists_tac `si` >> gvs[exprLoweringPropsTheory.ci_mono_def]) >>
