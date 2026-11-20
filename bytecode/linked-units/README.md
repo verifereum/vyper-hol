@@ -4,9 +4,9 @@ Programs of several modules, compiled with `compile_vyper_mods`
 (`lowering/defs/compileUnitScript.sml`) and compared with the pinned Python
 compiler's bytes.
 
-- `sources/twin_names/`: two modules that each declare `x` and `foo`; the
-  main module exports a function of the other (`exports:`), initializes it
-  (`initializes:`) with storage and an immutable, and calls `lib.__init__()`
+- `sources/twin_names/`: two modules that each declare `x`, an immutable
+  `IMM` and `foo`; the main module exports a function of the other
+  (`exports:`), initializes it (`initializes:`), and calls `lib.__init__()`
   from its constructor.
 - `sources/iface_exports/`: the main module exports a named interface of a
   module that provides one of its functions by re-exporting a third module's,
