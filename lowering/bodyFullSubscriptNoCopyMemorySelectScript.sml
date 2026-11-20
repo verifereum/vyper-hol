@@ -11,7 +11,7 @@ Ancestors bodyFullSubscriptLocalCutOrigin[qualified,ignore_grammar] abiEncodeArg
   gasShadowCompile gasShadowState gasShadow gasExemptCert stateRelProj
   vyperStorageTrace vyperStorageFootprint bodyPtrDefs loweringPosts compileEnv
   vyperInterpreter vyperState vyperAST context exprSimWordArgs wordArgsPtr
-  exprReasonOperand exprSimHyps
+  exprReasonOperand exprSimHyps bodyInvNoDalloca[qualified,ignore_grammar]
 
 Theorem subscript_nocopy_memory_place_select_full:
   body_inv tops ctx cenv cx /\
@@ -30,7 +30,7 @@ Theorem subscript_nocopy_memory_place_select_full:
     (is_signed_type (expr_type e2))
     (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc) st2 = (dst,sb) /\
   fn_has_code sa sb func /\ fn_has_code st2 sb func /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   local_ptrs_reserved cenv st2 /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
@@ -112,6 +112,7 @@ Theorem subscript_nocopy_memory_place_select_full:
        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_then assume_tac bodyInvNoDallocaTheory.body_inv_no_dalloca >>
   qabbrev_tac `H0 = storage_trace_horizon fin.storage_trace` >>
   `valid_horizon cx st0 H0 fin.storage_trace` by
     fs[Abbr `H0`, storage_trace_domain_def] >>

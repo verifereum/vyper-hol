@@ -70,6 +70,7 @@ Proof
   `!s raw t. eval_expr cx e1 s = (INL raw,t) ==> body_expr_full_ok cx e2` by
     (rpt strip_tac >> first_x_assum irule >> simp[vyperStateTheory.return_def] >>
      metis_tac[]) >>
+  drule_then assume_tac bodyInvNoDallocaTheory.body_inv_no_dalloca >>
   irule subscript_nocopy_bind_full >>
   qpat_assum `expr_type e1 = ArrayT et bd` (irule_at Any) >>
   qpat_assum `expr_body_pre _ _ _ _ _` (irule_at Any) >>

@@ -35,7 +35,7 @@ Theorem subscript_nocopy_bind_full:
         (is_signed_type (expr_type e2))
         (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc) st2 = (dst,sb) /\
       fn_has_code sa sb func /\ fn_has_code st2 sb func /\
-      fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+      fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
       local_ptrs_reserved cenv st2 /\
       sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
