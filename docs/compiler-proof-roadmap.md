@@ -140,12 +140,20 @@ One [source evaluator](../semantics/vyperInterpreterScript.sml) has two modes:
 `call_external NONE` concretely runs callees; `call_external (SOME os)` takes
 outcomes. Arbitrary SOME lists use this same evaluator, not a theorem-only
 interpreter. Runtime theorem mode uses
-`call_external (SOME (MAP SND (call_trace es))) gobs am tx` for existential
-source gas observations `gobs`, not yet tied to EVM readings.
+`call_external (SOME (MAP SND (call_trace es))) gobs am tx` for source gas
+observations `gobs`. When calldata dispatch selects a function and the frame
+is not resource-starved, `vyper_call_correct`'s `call_result_rel` relates
+them, at `tx` with that function and its arguments, to the EVM's readings
+`gas_readings es` through `gas_readings_rel` (below), which picks
+existentially which slots of `gobs` the readings fill, leaving the other
+readings unused, then covers every `gobs` that matches them, with any tail.
 Venom and [assembly](../venom/codegen/defs/asmSemScript.sml) CALL/STATICCALL also
-use `take_outcome`, `record_request`, `adopt_outcome`: ordinary exhaustion is a
-failed call; failed/static calls adopt no accounts/transient/log effects;
-successful nonstatic calls adopt the supplied complete payload. Source
+use `take_outcome`, `record_request`, `adopt_outcome`. A call that finds the
+outcome list empty stops the run: Venom aborts (`ExHalt_abort`), assembly
+faults (`AsmFault`) and the source raises an error. Failed/static calls adopt
+no accounts/transient/log effects; successful nonstatic calls adopt the
+supplied accounts, transient storage, logs and deletions, except computed
+calls (below), which take only the outcome's success. Source
 `take_call_outcome` checks successful nonstatic account balance/code bounds;
 this is **not a storage validator**. The public `call_outcomes_ok` additionally
 requires bounded return data and runtime well-typed accounts for every record,
@@ -269,8 +277,8 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D22 | Actual entry transfer/block/code/log/layout guards | `call_state_rel` uses LIVE post-transfer accounts, block window/nonzero bounds, <=24576 bytes, empty logs and declared slots/source installation. Satisfiability not established. | 7 |
 | D23 | Encoding wf only; remove positive-size hypothesis | `asm_encoding_wf` replaces `asm_wf` in encoding/step consumers; zero-size reverse lookup repaired. **Still absent:** general producer for actual generated output. | 2.1 |
 | D24 | Reserved-label exclusions | `reserved_label`, `unit_shape_ok`, supported internal-name rules; S6 must produce shape, not arbitrary label-map assumptions. | 3 |
-| D25 | Exact External call/count/binding; no fallback/defaults | `valid_vyper_call` implemented via real lookup; no general producer. Fallback invocation remains deferred. | 7 |
-| D26 | Initial and outcome storage validity | `vyper_call_correct` takes fixed regions that decode at the entry state (`storage_ok H`) and against which, when calldata dispatch selects a function, every gas filling's source storage observations are checked (`call_within H`, `storage_observations_ok`); `call_storage_ok` is the per-gas-filling guard over the trace's own horizon, which decodes at the entry state and in every adopted backend; `call_outcomes_ok` holds only return-data and account bounds. Account/code guard alone is insufficient; no producer from arbitrary EVM callees. | 7 |
+| D25 | Exact External call/count/binding; no fallback/defaults | `valid_vyper_call` implemented via real lookup; no general producer. `vyper_call_correct` covers fallback invocation: unmatched calldata dispatches to a declared `__default__` (`calldata_dispatch`), and `calldata_result_rel` covers that call. | 7 |
+| D26 | Initial and outcome storage validity | `vyper_call_correct` takes fixed regions that decode at the entry state (`storage_ok H`) and against which, when calldata dispatch selects a function, every gas filling's source storage observations are checked (`call_within H`, `storage_observations_ok`); `call_storage_ok` is the per-gas-filling guard over the trace's own horizon, which decodes at the entry state and in every adopted backend; `call_outcomes_ok` holds only return-data and account bounds. Account/code guard alone is insufficient. The storage guards have no producer for arbitrary EVM callees; `closed_world_call_outcomes_ok` gives `call_storage_ok` only under its closed-world premises, for the gas observations related to the EVM readings, unless the frame is resource-starved. | 7 |
 | D27 | Preserve/re-prove existing true claims | Completed retirement ledger preserves proof text/Git identities and four structural APIs. **Clarification:** D30's unused false claims retire without same-name replacements. The creation-frame theorem was introduced as a separate statement and has since been proved. | every proof owner |
 | D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` is proved for canonical args, actual pre-constant deployment readiness, an uninstalled source target and an empty target account in `es.originalAccounts`. Constructors may make supported calls and take outcomes from their creation frame's trace. | 6 item7 |
 | D29 | Retire unused codegen_fn_correct; frame-aware gen_fn_simulation | Actual entry/IntRet/return relations and concrete maps; separate ADMITTED off-path target. This intentionally differs from old roadmap “restate codegen_fn_correct”. | 4.2 |
