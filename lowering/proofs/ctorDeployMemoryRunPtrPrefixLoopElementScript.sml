@@ -400,7 +400,7 @@ Theorem prefix_loop_element_dynamic_uniform_pair:
   eval_operand head s = SOME a /\ eval_operand base_op s = SOME c /\
   op_taint tn head = {} /\ op_taint tn base_op = {} /\
   base_op <> Var x /\ x <> y /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq [mk_inst iid DLOAD [head] [x];
     mk_inst (iid+1) ADD [base_op;Var x] [y]] s = OK t ==>
   ?H qt.
@@ -448,6 +448,15 @@ Proof
      `(mk_inst iid DLOAD [head] [x]).inst_opcode <> INVOKE /\
       (mk_inst (iid+1) ADD [base_op;Var x] [y]).inst_opcode <> INVOKE` by
        simp[mk_inst_def] >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := k)` by
+       (`allocas_below_fmp (s with vs_inst_idx := k) <=> allocas_below_fmp s` by
+          simp[allocas_below_fmp_def] >> simp[]) >>
+     `ctx_has_dalloca ctx ==>
+        allocas_below_fmp (update_var x (abi_decode_load DLOAD addr s) s
+          with vs_inst_idx := SUC k)` by
+       (`allocas_below_fmp (update_var x (abi_decode_load DLOAD addr s) s
+          with vs_inst_idx := SUC k) <=> allocas_below_fmp s` by
+          simp[allocas_below_fmp_def,update_var_def] >> simp[]) >>
      mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`, `off` |-> `head`,
        `a` |-> `addr:bytes32`, `w` |-> `abi_decode_load DLOAD (addr:bytes32) s`, `D` |-> `D'`, `fuel` |-> `0`]
        prefix_member_dload_pair) >>
@@ -481,6 +490,9 @@ Proof
   rpt gen_tac >> strip_tac >> strip_tac >>
   irule prefix_loop_element_dload_cursor_block >> simp[] >>
   qexistsl [`a`,`iid`,`head`,`x`] >> simp[Abbr `g1`] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (`allocas_below_fmp s1 <=> allocas_below_fmp s` by
+       simp[Abbr `s1`,allocas_below_fmp_def,update_var_def] >> simp[]) >>
   irule (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
     prefix_loop_element_arith_cursor_block)) >> simp[] >>
   conj_tac >- (fs[Abbr `s1`,update_var_def,allocas_from_def] >> metis_tac[]) >>
@@ -499,7 +511,7 @@ Theorem prefix_loop_element_arith_seq_facts[local]:
   (opc = ADD \/ opc = MUL) /\
   eval_operand a s = SOME (u:bytes32) /\ eval_operand b s = SOME v /\
   op_taint tn a = {} /\ op_taint tn b = {} /\
-  allocas_from (lo:num) s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from (lo:num) s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D lo 0 ctx fn G tn (mk_inst iid opc [a;b] [x]) s /\
   step_prov PG G (mk_inst iid opc [a;b] [x])
     (update_var x (if opc = ADD then u+v else u*v) s) =
@@ -525,7 +537,7 @@ Theorem prefix_loop_element_arith_seq_cons[local]:
   (opc = ADD \/ opc = MUL) /\
   eval_operand a s = SOME (u:bytes32) /\ eval_operand b s = SOME v /\
   op_taint tn a = {} /\ op_taint tn b = {} /\
-  allocas_from (lo:num) s /\ ~ctx_has_dalloca ctx /\
+  allocas_from (lo:num) s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   inst_seq_ptr D lo ctx fn PG
     (set_prov G [x] (if opc = ADD then first_prov G [a;b] else NONE))
     (tn with t_var := tn.t_var |+ (x,{})) rest
@@ -557,7 +569,7 @@ Theorem prefix_loop_element_indexed_uniform_pair:
   op_taint tn dst = {} /\ op_taint tn idx = {} /\
   op_prov G dst = prov /\
   ALL_DISTINCT [x;y;z] /\ dst <> Var x /\ dst <> Var y /\ idx <> Var x /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq
     [mk_inst iid ADD [dst;Lit 32w] [x];
      mk_inst (iid+1) MUL [idx;Lit stride] [y];
@@ -623,19 +635,28 @@ Proof
           FLOOKUP_DRESTRICT]) >>
      `!k. allocas_from lo (s with vs_inst_idx := k)` by
        (fs[allocas_from_def] >> metis_tac[]) >>
+     `!k. allocas_below_fmp (s with vs_inst_idx := k) <=> allocas_below_fmp s` by
+       simp[allocas_below_fmp_def] >>
+     `!a v k. allocas_below_fmp (update_var a v s with vs_inst_idx := k) <=>
+        allocas_below_fmp s` by simp[allocas_below_fmp_def,update_var_def] >>
      irule prefix_loop_element_arith_seq_cons >>
      simp[op_taint_def,eval_operand_def] >>
      irule prefix_loop_element_arith_seq_cons >>
      simp[op_taint_def,eval_operand_def,
        instIdxIndepTheory.update_var_idx] >>
-     conj_tac >- (simp[allocas_from_def,update_var_def] >> metis_tac[allocas_from_def]) >>
+     conj_tac
+     >- (simp[allocas_from_def,update_var_def] >>
+         qpat_assum `allocas_from lo s` (ACCEPT_TAC o REWRITE_RULE[allocas_from_def])) >>
      simp[] >>
      irule prefix_loop_element_arith_seq_cons >>
      simp[instIdxIndepTheory.update_var_idx,instIdxIndepTheory.eval_op_inst_idx,
        update_var_def,prefix_loop_element_taint_rules,op_taint_def,
        eval_operand_def,lookup_var_def,FLOOKUP_UPDATE,inst_seq_ptr_def] >>
-     (qpat_x_assum `allocas_from lo s` mp_tac >>
-      simp[allocas_from_def])) >>
+     simp[allocas_from_def,allocas_below_fmp_def] >>
+     conj_tac
+     >- qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+          (ACCEPT_TAC o REWRITE_RULE[allocas_below_fmp_def]) >>
+     qpat_assum `allocas_from lo s` (ACCEPT_TAC o REWRITE_RULE[allocas_from_def])) >>
   qexistsl [`g3`,`q3`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (Cases_on `prov` >> simp[Abbr `g3`,set_prov_def,FLOOKUP_UPDATE,FLOOKUP_DRESTRICT]) >>
@@ -663,6 +684,10 @@ Proof
   simp[op_prov_def] >>
   ` (case prov of NONE => NONE | SOME site => SOME site) = prov` by
     (Cases_on `prov` >> simp[]) >> simp[] >>
+  `allocas_below_fmp s1 <=> allocas_below_fmp s` by
+    simp[Abbr `s1`,allocas_below_fmp_def,update_var_def] >>
+  `allocas_below_fmp s2 <=> allocas_below_fmp s` by
+    simp[Abbr `s2`,Abbr `s1`,allocas_below_fmp_def,update_var_def] >>
   irule (SRULE [LET_THM] (Q.INST [`opc` |-> `MUL`]
     prefix_loop_element_arith_cursor_block)) >> simp[] >>
   conj_tac >- (fs[Abbr `s1`,allocas_from_def,update_var_def] >> metis_tac[]) >>
@@ -696,7 +721,7 @@ Theorem prefix_loop_indexed_compiled_uniform_pair:
   abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var idx /\
   op_taint tn base_op = {} /\ op_taint tn idx = {} /\
-  op_prov G base_op = prov /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  op_prov G base_op = prov /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts st st') s = OK t ==>
   ?H qt.
     (!D' k. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st')
@@ -757,7 +782,7 @@ Theorem prefix_loop_dynamic_compiled_uniform_pair:
   eval_operand head s = SOME a /\ eval_operand base_op s = SOME c /\
   abi_decoder_operand_live st.cs_next_var base_op /\
   op_taint tn head = {} /\ op_taint tn base_op = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts st st') s = OK t ==>
   ?H qt.
     (!D' k. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st')
@@ -809,7 +834,7 @@ Theorem prefix_loop_mload_compiled_uniform_pair:
   FLOOKUP G ip = SOME (b,sz) /\ b <= w2n p /\ w2n p+32 <= b+sz /\
   op_taint tn (Var ip) = {} /\
   (!k. k < 32 ==> w2n p+k NOTIN tn.t_mem) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts st st') s = OK t ==>
   ?H qt.
     (!D' k. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st')
@@ -838,7 +863,6 @@ Proof
       comp_bind_def,comp_ignore_bind_def,comp_return_def,emitted_insts_def] >>
      qpat_x_assum `_ = st'` (SUBST1_TAC o SYM) >>
      simp[DROP_LENGTH_APPEND]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all prefix_loop_element_mload_pair >>
   disch_then (qspecl_then [`"%" ++ toString st.cs_next_var`,`st.cs_next_id`,
     `0`,`fn`,`PG`,`D`] mp_tac) >> simp[LET_THM] >> strip_tac >>
@@ -856,7 +880,8 @@ Proof
        simp[mk_inst_def] >>
      `mload (w2n p) (s with vs_inst_idx := k) = mload (w2n p) s` by
        simp[mload_def] >>
-     `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := k)` by simp[] >>
+     `allocas_below_fmp (s with vs_inst_idx := k) <=> allocas_below_fmp s` by
+       simp[allocas_below_fmp_def] >>
      mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`, `D` |-> `D'`,
        `fuel` |-> `0`, `iid` |-> `st.cs_next_id`,
        `x` |-> `"%" ++ toString st.cs_next_var`] prefix_loop_element_mload_pair) >>
@@ -974,7 +999,7 @@ Theorem prefix_loop_optional_compiled_uniform_pair:
   eval_operand head s = SOME a /\ eval_operand base_op s = SOME c /\
   abi_decoder_operand_live st.cs_next_var base_op /\
   op_taint tn head = {} /\ op_taint tn base_op = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts st st') s = OK t ==>
   ?H qt.
     (!D' k. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st')
@@ -1013,7 +1038,7 @@ Theorem prefix_loop_element_setup_uniform_pair:
   abi_decoder_operand_live st.cs_next_var src /\
   abi_decoder_operand_live st.cs_next_var dst /\
   op_taint tn src = {} /\ op_taint tn dst = {} /\ op_prov G dst = prov /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq (emitted_insts st c4) s = OK t ==>
   ?H qt.
     (!D' k. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st c4)
@@ -1057,6 +1082,11 @@ Proof
    op_taint q1 src = {} /\ op_taint q1 dst = {} /\ op_prov H1 dst = prov /\
    allocas_from lo s1` by
     (gs[allocas_from_def] >> metis_tac[abi_decoder_operand_live_mono,LESS_EQ_ADD]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (strip_tac >> irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts st c1`,`s`] >> simp[] >>
+     qpat_assum `emit_op MLOAD _ st = _` (mp_then Any strip_assume_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
+     simp[mk_inst_def,is_terminator_def,is_alloca_op_def]) >>
   rev_drule_at (Pat `abi_decode_indexed_address _ _ _ _ = _`)
     prefix_loop_indexed_compiled_uniform_pair >>
   disch_then (drule_at (Pat `run_inst_seq _ _ = _`)) >>
@@ -1078,6 +1108,12 @@ Proof
        qexists `st.cs_next_var+1` >> simp[]) >>
      conj_tac >- (irule abi_decoder_operand_live_mono >>
        qexists `st.cs_next_var+1` >> simp[]) >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
+    (strip_tac >> irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts c1 c2`,`s1`] >> simp[] >>
+     qpat_assum `abi_decode_indexed_address _ _ _ c1 = _`
+       (mp_then Any mp_tac prefix_loop_indexed_code) >>
+     simp[LET_THM] >> strip_tac >> simp[mk_inst_def,is_terminator_def,is_alloca_op_def]) >>
   drule_at (Pat `(if _ then _ else _) = _`) prefix_loop_optional_compiled_uniform_pair >>
   disch_then (drule_at (Pat `run_inst_seq _ _ = _`)) >> simp[] >>
   disch_then drule_all >>
@@ -1093,6 +1129,16 @@ Proof
    op_taint q3 idx = {} /\ op_taint q3 dst = {} /\ op_prov H3 dst = prov /\
    allocas_from lo s3` by
     (gs[allocas_from_def] >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by
+    (strip_tac >> irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts c2 c3`,`s2`] >> simp[] >>
+     Cases_on `dec_info_needs_offset di` >> fs[]
+     >- (drule prefix_loop_dynamic_code >> strip_tac >>
+         simp[mk_inst_def,is_terminator_def,is_alloca_op_def]) >>
+     qpat_assum `comp_return head c2 = (child_src,c3)` mp_tac >>
+     simp_tac bool_ss [comp_return_def,pairTheory.PAIR_EQ] >>
+     disch_then (fn th => PURE_REWRITE_TAC [GSYM (CONJUNCT2 th)]) >>
+     simp[emitted_insts_def,DROP_LENGTH_NIL]) >>
   drule_at (Pat `abi_decode_indexed_address _ _ _ _ = _`)
     prefix_loop_indexed_compiled_uniform_pair >>
   disch_then (drule_at (Pat `run_inst_seq _ _ = _`)) >> simp[] >>
@@ -1177,7 +1223,7 @@ Theorem prefix_loop_element_setup_labels_pair:
   FLOOKUP G ip = SOME (ib,isz) /\ ib <= w2n p /\ w2n p+32 <= ib+isz /\
   op_taint tn (Var ip) = {} /\ (!k. k < 32 ==> w2n p+k NOTIN tn.t_mem) /\
   op_taint tn src = {} /\ op_taint tn dst = {} /\ op_prov G dst = prov /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t H qt.
     run_inst_seq (emitted_insts st st') s = OK t /\
     (!D' k. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st')

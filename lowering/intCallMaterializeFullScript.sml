@@ -451,7 +451,9 @@ Theorem materialize_params_full:
     mat_inv func cenv env st s f0 mr /\
     s.vs_alloca_next + internal_stack_size cenv (MAP (\c. (FST c,FST (SND c))) caps)
       < dimword (:256) /\
-    ~ctx_has_dalloca ctx /\ lo <= f0 /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+      s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+    lo <= f0 /\
     ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\ es.scopes = [env] /\
     (!nm entry. FLOOKUP env nm = SOME entry ==>
@@ -493,6 +495,8 @@ Proof
                  ~is_terminator i.inst_opcode) code /\
       (!D k. inst_seq_ptr D lo ctx func PG G tn code
         (s with vs_inst_idx := k) J qt) /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp us /\
+        us.vs_alloca_next + pending_alloca_size func us <= w2n us.vs_initial_fmp) /\
       (!D. D IN Ds ==> ghost_inv_at D lo d ce cx es J qt us) /\
       (!nm p sz. FLOOKUP ce.ce_vars nm = SOME (PtrVar (Var p) sz) ==>
          not_fresh_at cs p) /\
@@ -608,6 +612,42 @@ Resume materialize_params_full[stack]:
      simp[mk_inst_def, exec_write2_def,
           eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
           wordsTheory.w2n_n2w] >> fs[lookup_var_def]) >>
+  `MEM (mk_inst cs.cs_next_id ALLOCA [Lit (n2w sz)] [dst]) (fn_insts func)` by
+    simp[Abbr `dst`] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ut /\
+    ut.vs_alloca_next + pending_alloca_size func ut <= w2n ut.vs_initial_fmp` by
+    (strip_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp us /\ _`
+       (drule_then strip_assume_tac) >>
+     `exec_alloca (mk_inst cs.cs_next_id ALLOCA [Lit (n2w sz)] [dst])
+       us (n2w sz:bytes32) = OK u` by
+       (qpat_assum `u = update_var _ _ _` SUBST1_TAC >>
+        simp[exec_alloca_def, mk_inst_def, wordsTheory.w2n_n2w]) >>
+     `u.vs_alloca_next + pending_alloca_size func u <=
+       us.vs_alloca_next + pending_alloca_size func us` by
+       (irule exec_alloca_static_charge >>
+        qexistsl_tac [`mk_inst cs.cs_next_id ALLOCA [Lit (n2w sz)] [dst]`,`n2w sz:bytes32`] >>
+        simp[mk_inst_def]) >>
+     `u.vs_alloca_next <= w2n us.vs_initial_fmp` by decide_tac >>
+     qpat_assum `ut = mstore _ _ u` SUBST1_TAC >>
+     conj_tac
+     >- (gvs[allocas_below_fmp_def, mstore_def, update_var_def, FLOOKUP_UPDATE] >>
+         rpt strip_tac >> Cases_on `cs.cs_next_id = aid` >> gvs[] >>
+         (decide_tac ORELSE
+          qpat_assum `!id b k. FLOOKUP us.vs_allocas id = SOME (b,k) ==> _`
+            (drule_then ACCEPT_TAC))) >>
+     `u.vs_initial_fmp = us.vs_initial_fmp` by
+       (qpat_assum `u = _` SUBST1_TAC >> simp[update_var_def]) >>
+     `pending_alloca_size func (mstore us.vs_alloca_next a u) =
+       pending_alloca_size func u` by simp[mstore_def, pending_alloca_size_def] >>
+     qpat_assum `pending_alloca_size func (mstore _ _ _) = _` (ONCE_REWRITE_TAC o single) >>
+     `u.vs_alloca_next + pending_alloca_size func u <= w2n us.vs_initial_fmp` by decide_tac >>
+     `(mstore us.vs_alloca_next a u).vs_alloca_next = u.vs_alloca_next /\
+       (mstore us.vs_alloca_next a u).vs_initial_fmp = us.vs_initial_fmp` by simp[mstore_def] >>
+     qpat_assum `(mstore _ _ u).vs_alloca_next = u.vs_alloca_next` SUBST1_TAC >>
+     qpat_assum `(mstore _ _ u).vs_initial_fmp = us.vs_initial_fmp` SUBST1_TAC >>
+     qpat_assum `u.vs_alloca_next + pending_alloca_size func u <= w2n us.vs_initial_fmp`
+       ACCEPT_TAC) >>
   rename1 `FLOOKUP env nm = SOME stack_entry` >>
   `value_has_type stack_entry.type stack_entry.value` by
     (qpat_x_assum `!nm entry. FLOOKUP env nm = SOME entry ==> _`
@@ -639,13 +679,16 @@ Resume materialize_params_full[stack_finish]:
   simp[is_terminator_def] >> conj_tac
   >- suspend "stack_pointer" >>
   conj_tac
+  >- (strip_tac >>
+      qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp ut /\ _`
+        (drule_then (mp_tac o CONJUNCT2)) >>
+      simp[]) >>
+  conj_tac
   >- suspend "stack_ghost" >>
   suspend "stack_tail"
 QED
 
 Resume materialize_params_full[stack_pointer]:
-  `MEM (mk_inst cs.cs_next_id ALLOCA [Lit (n2w sz)] [dst]) (fn_insts func)` by
-    simp[Abbr `dst`] >>
   `!D k. inst_seq_ptr D lo ctx func PG J qt
     [mk_inst cs.cs_next_id ALLOCA [Lit (n2w sz)] [dst];
      mk_inst (cs.cs_next_id+1) MSTORE [Var dst;Var p] []]

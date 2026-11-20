@@ -17,7 +17,7 @@ val RegisterAddressAddMode = ``\checked.
  eval_operand a initial = SOME u /\ eval_operand b initial = SOME v /\
  (checked ==> alloca_history func initial) /\
  op_taint tn a = {} /\ op_taint tn b = {} /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+ allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
  fresh_vars_wrt st initial /\ fn_has_code st middle func /\
  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -25,6 +25,7 @@ val RegisterAddressAddMode = ``\checked.
  eval_operand out prepared = SOME (u+v) /\ op_taint qt out = {} /\
  fresh_vars_wrt middle prepared /\
  prepared.vs_memory = initial.vs_memory /\ prepared.vs_allocas = initial.vs_allocas /\
+ prepared.vs_fmp = initial.vs_fmp /\ prepared.vs_initial_fmp = initial.vs_initial_fmp /\
  prepared.vs_alloca_next = initial.vs_alloca_next /\
  prepared.vs_data_section = initial.vs_data_section /\
  prepared.vs_call_ctx = initial.vs_call_ctx /\ prepared.vs_labels = initial.vs_labels /\
@@ -91,7 +92,6 @@ Proof
       (strip_tac >> gvs[not_fresh_at_def]) >>
     Cases_on `first_prov G [a;b]` >>
     simp[set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def]) >>
- `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
  conj_tac >- (drule_all prefix_register_address_add_run >> simp[update_var_def]) >>
  strip_tac >> `alloca_history func initial` by metis_tac[] >>
  drule_all ctor_checked_arg_add_reach >> strip_tac >> gvs[update_var_def]
@@ -102,7 +102,7 @@ val RegisterAddressDloadMode = ``\checked.
  emit_op DLOAD [off] st = (out,middle) /\
  eval_operand off initial = SOME a /\ op_taint tn off = {} /\
  (checked ==> w2n a + 32 <= LENGTH initial.vs_data_section /\ alloca_history func initial) /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+ allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
  fresh_vars_wrt st initial /\ fn_has_code st middle func /\
  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -110,6 +110,7 @@ val RegisterAddressDloadMode = ``\checked.
  eval_operand out prepared = SOME (abi_decode_load DLOAD a initial) /\
  op_taint qt out = {} /\ fresh_vars_wrt middle prepared /\
  prepared.vs_memory = initial.vs_memory /\ prepared.vs_allocas = initial.vs_allocas /\
+ prepared.vs_fmp = initial.vs_fmp /\ prepared.vs_initial_fmp = initial.vs_initial_fmp /\
  prepared.vs_alloca_next = initial.vs_alloca_next /\
  prepared.vs_data_section = initial.vs_data_section /\
  prepared.vs_call_ctx = initial.vs_call_ctx /\ prepared.vs_labels = initial.vs_labels /\
@@ -176,7 +177,6 @@ Proof
     `x <> STRING #"%" (toString st.cs_next_var)` by
       (strip_tac >> gvs[not_fresh_at_def]) >>
     simp[FLOOKUP_DRESTRICT, op_taint_def, FLOOKUP_UPDATE]) >>
- `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
  conj_tac >-
    (drule_all (SRULE [] (Q.INST
      [`w` |-> `abi_decode_load DLOAD a s`] prefix_register_address_dload_run)) >>
@@ -195,13 +195,14 @@ val RegisterAddressDynamicMode = ``\checked.
  (checked ==> off < dimword (:256) /\ off + 32 <= LENGTH initial.vs_data_section /\
    alloca_history func initial) /\
  fresh_vars_wrt st initial /\ fn_has_code st middle func /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+ allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
  ?prepared H qt.
  eval_operand src prepared = SOME (abi_decode_load DLOAD (n2w off : bytes32) initial) /\
  op_taint qt src = {} /\ fresh_vars_wrt middle prepared /\
  prepared.vs_memory = initial.vs_memory /\ prepared.vs_allocas = initial.vs_allocas /\
+ prepared.vs_fmp = initial.vs_fmp /\ prepared.vs_initial_fmp = initial.vs_initial_fmp /\
  prepared.vs_alloca_next = initial.vs_alloca_next /\
  prepared.vs_data_section = initial.vs_data_section /\
  prepared.vs_call_ctx = initial.vs_call_ctx /\ prepared.vs_labels = initial.vs_labels /\
@@ -243,6 +244,9 @@ Proof
    (qx_choose_then `p1` (qx_choose_then `H1`
      (qx_choose_then `q1` strip_assume_tac)))) >>
  `allocas_from lo p1` by metis_tac[allocas_from_def] >>
+ `allocas_below_fmp p1 <=> allocas_below_fmp initial` by
+   simp[allocas_below_fmp_def] >>
+ `ctx_has_dalloca ctx ==> allocas_below_fmp p1` by simp[] >>
  `op_taint q1 head = {}` by fs[op_taint_def] >>
  `checked ==> w2n (0w + n2w off : bytes32) + 32 <= LENGTH p1.vs_data_section /\
     alloca_history func p1` by
@@ -252,6 +256,9 @@ Proof
    (qx_choose_then `p2` (qx_choose_then `H2`
      (qx_choose_then `q2` strip_assume_tac)))) >>
  `allocas_from lo p2` by metis_tac[allocas_from_def] >>
+ `allocas_below_fmp p2 <=> allocas_below_fmp initial` by
+   simp[allocas_below_fmp_def] >>
+ `ctx_has_dalloca ctx ==> allocas_below_fmp p2` by simp[] >>
  `eval_operand (Lit 0w) p2 = SOME 0w /\ op_taint q2 (Lit 0w) = {}` by
    simp[eval_operand_def, op_taint_def] >>
  `checked ==> alloca_history func p2` by metis_tac[] >>
@@ -294,7 +301,7 @@ Theorem prefix_entry_register_singleton_address_paired_mode:
  (st.cs_blocks = last.cs_blocks \/ !bb.
    lookup_block last.cs_current_bb func.fn_blocks = SOME bb ==>
      phi_prefix_length bb.bb_instructions = 0) /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+ allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
  ?src middle prepared H qt.
@@ -311,6 +318,7 @@ Theorem prefix_entry_register_singleton_address_paired_mode:
    lookup_block last.cs_current_bb func.fn_blocks = SOME bb ==>
      phi_prefix_length bb.bb_instructions = 0) /\
  prepared.vs_memory = initial.vs_memory /\ prepared.vs_allocas = initial.vs_allocas /\
+ prepared.vs_fmp = initial.vs_fmp /\ prepared.vs_initial_fmp = initial.vs_initial_fmp /\
  prepared.vs_alloca_next = initial.vs_alloca_next /\
  prepared.vs_data_section = initial.vs_data_section /\
  prepared.vs_call_ctx = initial.vs_call_ctx /\ prepared.vs_labels = initial.vs_labels /\
@@ -381,7 +389,7 @@ Theorem prefix_entry_register_canonical_address_paired_mode:
  (st.cs_blocks = last.cs_blocks \/ !bb.
    lookup_block last.cs_current_bb func.fn_blocks = SOME bb ==>
      phi_prefix_length bb.bb_instructions = 0) /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+ allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\
  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
  ?src middle prepared sb H qt.
@@ -401,6 +409,7 @@ Theorem prefix_entry_register_canonical_address_paired_mode:
    lookup_block last.cs_current_bb func.fn_blocks = SOME bb ==>
      phi_prefix_length bb.bb_instructions = 0) /\
  prepared.vs_memory = initial.vs_memory /\ prepared.vs_allocas = initial.vs_allocas /\
+ prepared.vs_fmp = initial.vs_fmp /\ prepared.vs_initial_fmp = initial.vs_initial_fmp /\
  prepared.vs_alloca_next = initial.vs_alloca_next /\ allocas_from lo prepared /\
  prepared.vs_data_section = initial.vs_data_section /\
  prepared.vs_call_ctx = initial.vs_call_ctx /\ prepared.vs_labels = initial.vs_labels /\

@@ -554,13 +554,15 @@ Proof
 QED
 
 Theorem intcall_callee_base_protected_sites[local]:
-  ptr_byte_frame_inv (ctx,x) G s /\ ~ctx_has_dalloca ctx /\
+  ptr_byte_frame_inv (ctx,x) G s /\
   (!b sz. MEM (SOME (b,sz)) PG ==> x < b \/ b + sz <= x) /\
   inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> DALLOCA /\
   step_inst_base inst s = OK u ==>
   ptr_byte_frame_inv (ctx,x) (step_prov PG G inst u) u
 Proof
   simp[ptr_byte_frame_inv_def] >> strip_tac >>
+  `u.vs_initial_fmp = s.vs_initial_fmp` by
+    metis_tac[ctxLookupAgreeHelpersTheory.step_inst_base_initial_fmp] >>
   `x < u.vs_alloca_next /\
    (!aid b sz. FLOOKUP u.vs_allocas aid = SOME (b,sz) ==>
       x < b \/ b + sz <= x)` by
@@ -597,7 +599,7 @@ Theorem intcall_callee_protected_ordinary_step:
   step_inst fuel ctx inst s = OK u /\
   ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
   inst.inst_opcode <> DALLOCA /\ inst.inst_opcode <> SETFMP /\
-  inst.inst_opcode <> DRET /\ ~ctx_has_dalloca ctx /\
+  inst.inst_opcode <> DRET /\
   ~in_revert_forward fn s /\ lo <= x /\
   ptr_safe_step D lo fuel ctx fn PG G tn inst s /\
   ptr_byte_frame_inv (ctx,x) G s /\
@@ -2523,7 +2525,7 @@ Proof
 QED
 
 Theorem intcall_ghost_terminator_sites[local]:
-  ptr_byte_frame_inv (ctx,x) G s /\ ~ctx_has_dalloca ctx /\
+  ptr_byte_frame_inv (ctx,x) G s /\
   is_terminator inst.inst_opcode /\ step_inst fuel ctx inst s = OK u ==>
   ptr_byte_frame_inv (ctx,x) (entry_prov func u G) u
 Proof
@@ -2533,6 +2535,9 @@ Proof
   `u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next` by
     metis_tac[venomExecSemanticsTheory.step_inst_non_invoke,
               venomMemProofsTheory.step_inst_base_preserves_alloca_fields] >>
+  `u.vs_initial_fmp = s.vs_initial_fmp` by
+    metis_tac[venomExecSemanticsTheory.step_inst_non_invoke,
+              ctxLookupAgreeHelpersTheory.step_inst_base_initial_fmp] >>
   fs[ptr_byte_frame_inv_def] >> metis_tac[bodyFullIntCallByteFrameTheory.ptr_byte_frame_entry_prov]
 QED
 
@@ -4119,6 +4124,8 @@ Proof
   `materialize_internal_params (ce1 with ce_imm_alloca := entry_info2) caps reserved =
      (entry_info0 with ce_imm_alloca := entry_info2,materialized)` by
     (irule intcall_callee_materialize_imm >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp at_reserve /\
+    at_reserve.vs_alloca_next + pending_alloca_size callee at_reserve <= w2n at_reserve.vs_initial_fmp` by simp[] >>
   qpat_assum `materialize_internal_params (ce1 with ce_imm_alloca := _) _ _ = _`
     (mp_then (Pos hd) mp_tac materialize_params_full) >>
   disch_then (qspecl_then [`callee`, `penv`, `at_reserve`, `at_reserve.vs_alloca_next`,

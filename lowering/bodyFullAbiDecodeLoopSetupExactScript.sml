@@ -171,7 +171,7 @@ Theorem abi_decode_loop_setup_joint_exact:
   abi_decode_array_element_setup (Var counter) src (Var dst) MLOAD
     (Var input) hi ei asz msz sa = ((idx,child_src,child_dst),sb) /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (^owned_decoder_state) sa s G tn /\
@@ -227,6 +227,7 @@ Theorem abi_decode_loop_setup_joint_exact:
     u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
     u.vs_alloca_next = s.vs_alloca_next /\ u.vs_labels = s.vs_labels /\
     tnu.t_mem = tn.t_mem /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
     (!x. not_fresh_at sa x ==>
       lookup_var x u = lookup_var x s /\ FLOOKUP Gu x = FLOOKUP G x /\
       op_taint tnu (Var x) = op_taint tn (Var x)) /\
@@ -275,7 +276,9 @@ Proof
     metis_tac[valueEncodingPropsTheory.mem_word_at_eq_mload, w2n_n2w,
       arithmeticTheory.LESS_MOD] >>
   `allocas_from lo t` by metis_tac[allocas_from_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
+  `allocas_below_fmp t <=> allocas_below_fmp s` by simp[allocas_below_fmp_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (PURE_ASM_REWRITE_TAC [] >> first_assum ACCEPT_TAC) >>
   drule_all abi_decode_loop_source_joint_exact >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   `!obs. fn_has_code sa sb obs ==> gas_path ctx obs s 0 (OK u)` by
@@ -326,6 +329,24 @@ Resume abi_decode_loop_setup_joint_exact[select]:
   `h < dimword (:256) /\
    (dec_info_needs_offset ei ==> srcoff+32+j*asz+32 <= LENGTH input_bytes)` by
     (conj_tac >- decide_tac >> strip_tac >> res_tac >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (strip_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t` (drule_then assume_tac) >>
+     qpat_assum `u = v with vs_inst_idx := _` SUBST1_TAC >>
+     `!v pc. allocas_below_fmp (v with vs_inst_idx := pc) <=> allocas_below_fmp v` by
+       simp[allocas_below_fmp_def] >>
+     PURE_ASM_REWRITE_TAC [] >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts s1 s4`, `t`] >> simp[] >>
+     qpat_assum `emit_op ADD _ s1 = _`
+       (strip_assume_tac o MATCH_MP loweringShapeRulesTheory.emit_op_facts) >>
+     qpat_assum `emit_op MUL _ s2 = _`
+       (strip_assume_tac o MATCH_MP loweringShapeRulesTheory.emit_op_facts) >>
+     qpat_assum `emit_op ADD _ s3 = _`
+       (strip_assume_tac o MATCH_MP loweringShapeRulesTheory.emit_op_facts) >>
+     pure_asm_rewrite_tac [emitted_insts_def, GSYM APPEND_ASSOC,
+       DROP_LENGTH_APPEND, APPEND] >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   drule_all abi_decode_loop_select_joint_exact >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac)
   >- suspend "reject" >>
