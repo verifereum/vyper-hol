@@ -50,7 +50,6 @@ End
 Definition supported_scalar_type_def:
   supported_scalar_type ty <=>
     supported_word_type ty \/ supported_string_type ty \/
-    ty = BaseT (BytesT (Fixed 0)) \/
     (case ty of FlagT id => T | _ => F)
 End
 

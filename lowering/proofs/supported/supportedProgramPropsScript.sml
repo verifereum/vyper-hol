@@ -78,7 +78,7 @@ Theorem supported_event_field_leaves_positive:
                   supported_program tops)
       [[FlagDecl "Mode" ["A"]; EventDecl "Changed" [(("value",ty),indexed)]]])
     [F;T])
-    [FlagT (NONE,"Mode"); BaseT (BytesT (Fixed 0)); BaseT (BytesT (Fixed 20))]
+    [FlagT (NONE,"Mode"); BaseT (BytesT (Fixed 1)); BaseT (BytesT (Fixed 20))]
 Proof
   EVAL_TAC >>
   simp[finite_mapTheory.FUNION_FEMPTY_2, finite_mapTheory.FLOOKUP_UPDATE]
@@ -93,8 +93,8 @@ Theorem supported_event_nested_leaves_positive:
     supported_declaration_header tops
       (EventDecl "Changed" [(("value",ty),F)]))
     [ArrayT (FlagT (NONE,"Mode")) (Fixed 2);
-     ArrayT (BaseT (BytesT (Fixed 0))) (Dynamic 3);
-     TupleT [FlagT (NONE,"Mode"); BaseT (BytesT (Fixed 0));
+     ArrayT (BaseT (BytesT (Fixed 1))) (Dynamic 3);
+     TupleT [FlagT (NONE,"Mode"); BaseT (BytesT (Fixed 1));
              BaseT (BytesT (Fixed 20))];
      StructT (NONE,"Payload");
      ArrayT (TupleT [StructT (NONE,"Payload");
@@ -102,7 +102,7 @@ Theorem supported_event_nested_leaves_positive:
     [[FlagDecl "Mode" ["A"];
       StructDecl "Payload"
         [("mode",FlagT (NONE,"Mode"));
-         ("empty",BaseT (BytesT (Fixed 0)));
+         ("empty",BaseT (BytesT (Fixed 1)));
          ("tag",BaseT (BytesT (Fixed 20)))]]]
 Proof
   EVAL_TAC >>
