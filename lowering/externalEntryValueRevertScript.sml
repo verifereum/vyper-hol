@@ -5,7 +5,7 @@ Ancestors
   entryChecksLayout entryChecksPassPtr
   fragGasOriginPtr fragGasOrigin fragGasPathPtr gasEvents gasCount memSafeRun instMemFrontier
   loweringStateRelDefs ptrDiscipline ptrSafeRun actualEntryAllocationFrame
-  moduleLoweringProps entryReachBodyFmp
+  moduleLoweringProps
   sourceUnitExecution gasShadowRunLowering gasShadowUnitGuards gasShadowUnit
   gasShadowModuleDefs vyperCall
   list pair fragExec
@@ -95,58 +95,6 @@ Proof
   metis_tac[external_entry_reject_readings_nr]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >>
-  drule_all entry_runtime_no_dalloca >> strip_tac >>
-  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
-  drule_all entry_value_reject_callvalue >> strip_tac >>
-  drule_all lower_runtime_named_source_packages >> strip_tac >>
-  drule_all run_lowering_entry_label >> strip_tac >>
-  drule_all run_lowering_selected_entry_code >> strip_tac >>
-  drule_all source_selected_linear_dispatch_target >>
-  disch_then (qspec_then `fl` assume_tac) >>
-  `compile_entry_checks mc F sc = ((),sk)` by
-    (qpat_x_assum `compile_entry_checks _ _ _ = _` mp_tac >> simp[]) >>
-  drule_all compile_entry_checks_nonpayable_head >> strip_tac >>
-  `phi_prefix_length bb.bb_instructions = 0` by
-    (Cases_on `bb.bb_instructions` >>
-     gvs[get_instruction_def, phi_prefix_length_def]) >>
-  qabbrev_tac `ss = vs with <|vs_prev_bb := NONE;
-    vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
-  `fresh_vars_wrt sf ss /\ ~ss.vs_halted /\ allocas_from 0 ss /\
-   LENGTH ss.vs_call_ctx.cc_calldata < dimword (:256)` by
-    (drule_all initial_entry_dispatch_scalars >>
-     disch_then (qspecl_then [`0`, `"__entry"`, `sf`] mp_tac) >>
-     simp[Abbr `ss`]) >>
-  `EVERY (\(sel,lbl). sel < 2 ** 32)
-    (MAP (\(sel,lbl,z). (sel,lbl)) sels)` by
-    (qspecl_then [`type_env tops`, `FST (classify_functions tops)`]
-       mp_tac entryDispatchPropsTheory.linear_selectors_lt >> simp[]) >>
-  drule compile_selector_dispatch_linear_ptr_endpoint >>
-  disch_then (qspecl_then [`entry_taint`, `ss`, `0`, `fn`] mp_tac) >>
-  disch_then (qspecl_then [`unit.cu_context`, `[]`, `FEMPTY`] mp_tac) >>
-  (impl_tac >-
-    (simp[Abbr `ss`] >> rpt strip_tac >> gvs[])) >>
-  strip_tac >>
-  `fresh_vars_wrt sc tt` by
-    (gvs[fresh_vars_wrt_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
-  `allocas_from 0 tt /\ tt.vs_call_ctx.cc_callvalue <> 0w` by
-    (drule vars_pc_only_allocas >>
-     drule vars_pc_only_fields >> simp[Abbr `ss`] >>
-     fs[allocas_from_def] >> metis_tac[]) >>
-  drule_all entryDispatchPtrTheory.compile_selector_dispatch_linear_layout >> strip_tac >>
-  qexistsl_tac [`fn`, `sc`, `sk`, `mc`, `tt`, `G'`, `tn'`] >>
-  simp[block_is_terminated_def, Abbr `ss`] >>
-  rpt strip_tac >>
-  irule ptr_safe_blocks_nonphi_run >>
-  conj_tac >- metis_tac[] >>
-  simp[] >>
-  qexistsl_tac [`b0`, `mk_inst sf.cs_next_id CALLDATASIZE []
-    [STRING #"%" (toString sf.cs_next_var)]`] >>
-  gvs[mk_inst_def]
-QED
-*)
 Theorem external_value_reject_dispatch[local]:
   lower_vyper_runtime_unit tops rp = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
@@ -179,7 +127,61 @@ Theorem external_value_reject_dispatch[local]:
       !fuel. ptr_safe_blocks D 0 fuel unit.cu_context func [] FEMPTY entry_taint
       (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>))
 Proof
-  cheat
+  strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  drule_all entry_value_reject_callvalue >> strip_tac >>
+  drule_all lower_runtime_named_source_packages >> strip_tac >>
+  drule_all run_lowering_entry_label >> strip_tac >>
+  drule_all run_lowering_selected_entry_code >> strip_tac >>
+  drule_all source_selected_linear_dispatch_target >>
+  disch_then (qspec_then `fl` assume_tac) >>
+  `compile_entry_checks mc F sc = ((),sk)` by
+    (qpat_x_assum `compile_entry_checks _ _ _ = _` mp_tac >> simp[]) >>
+  drule_all compile_entry_checks_nonpayable_head >> strip_tac >>
+  `phi_prefix_length bb.bb_instructions = 0` by
+    (Cases_on `bb.bb_instructions` >>
+     gvs[get_instruction_def, phi_prefix_length_def]) >>
+  qabbrev_tac `ss = vs with <|vs_prev_bb := NONE;
+    vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
+  `allocas_below_fmp ss` by
+    (irule initial_entry_allocas_below_fmp >>
+     goal_assum (drule_at Any) >> simp[Abbr `ss`, vars_pc_only_def]) >>
+  `fresh_vars_wrt sf ss /\ ~ss.vs_halted /\ allocas_from 0 ss /\
+   LENGTH ss.vs_call_ctx.cc_calldata < dimword (:256)` by
+    (drule_all initial_entry_dispatch_scalars >>
+     disch_then (qspecl_then [`0`, `"__entry"`, `sf`] mp_tac) >>
+     simp[Abbr `ss`]) >>
+  `EVERY (\(sel,lbl). sel < 2 ** 32)
+    (MAP (\(sel,lbl,z). (sel,lbl)) sels)` by
+    (qspecl_then [`type_env tops`, `FST (classify_functions tops)`]
+       mp_tac entryDispatchPropsTheory.linear_selectors_lt >> simp[]) >>
+  drule compile_selector_dispatch_linear_ptr_endpoint >>
+  disch_then (qspecl_then [`entry_taint`, `ss`, `0`, `fn`] mp_tac) >>
+  disch_then (qspecl_then [`unit.cu_context`, `[]`, `FEMPTY`] mp_tac) >>
+  (impl_tac >-
+    (simp[Abbr `ss`] >> rpt strip_tac >> gvs[])) >>
+  strip_tac >>
+  `fresh_vars_wrt sc tt` by
+    (gvs[fresh_vars_wrt_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `allocas_from 0 tt /\ tt.vs_call_ctx.cc_callvalue <> 0w` by
+    (drule vars_pc_only_allocas >>
+     drule vars_pc_only_fields >> simp[Abbr `ss`] >>
+     fs[allocas_from_def] >> metis_tac[]) >>
+  `vars_pc_only vs tt` by
+    (irule vars_pc_only_trans >> qexists_tac `ss` >>
+     conj_tac >- simp[Abbr `ss`, vars_pc_only_def] >> simp[]) >>
+  `allocas_below_fmp tt` by
+    (drule initial_entry_allocas_below_fmp >> disch_then irule >> simp[]) >>
+  drule_all entryDispatchPtrTheory.compile_selector_dispatch_linear_layout >> strip_tac >>
+  qexistsl_tac [`fn`, `sc`, `sk`, `mc`, `tt`, `G'`, `tn'`] >>
+  simp[block_is_terminated_def, Abbr `ss`] >>
+  rpt strip_tac >>
+  irule ptr_safe_blocks_nonphi_run >>
+  conj_tac >- metis_tac[] >>
+  simp[] >>
+  qexistsl_tac [`b0`, `mk_inst sf.cs_next_id CALLDATASIZE []
+    [STRING #"%" (toString sf.cs_next_var)]`] >>
+  gvs[mk_inst_def]
 QED
 
 Theorem nonpayable_check_joint_reject:
