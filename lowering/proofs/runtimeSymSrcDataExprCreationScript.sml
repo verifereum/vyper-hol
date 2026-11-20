@@ -20,7 +20,6 @@ Theorem runtime_data_frame_create_blueprint_args:
   (!copy vv. runtime_data_frame (compile_snapshot_vv cenv copy vv)) /\
   (!n. runtime_data_frame (compile_alloc_buffer n)) /\
   (!dst rows. runtime_data_frame (compile_abi_encode_values_to_buf cenv dst rows)) /\
-  runtime_data_frame (compile_create_ctor_args cfn cenv es) /\
   (!vv. runtime_data_frame (unwrap_value cenv vv)) /\
   (!e. MEM e es ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
   runtime_data_frame (compile_create_blueprint_args cfn cenv raw later_es es)

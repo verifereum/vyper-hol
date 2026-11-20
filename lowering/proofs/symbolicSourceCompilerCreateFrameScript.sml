@@ -45,12 +45,14 @@ Theorem symbolic_frame_create_blueprint_args:
   (!copy vv. symbolic_frame R (compile_snapshot_vv cenv copy vv)) /\
   (!n. symbolic_frame R (compile_alloc_buffer n)) /\
   (!dst rows. symbolic_frame R (compile_abi_encode_values_to_buf cenv dst rows)) /\
-  symbolic_frame R (compile_create_ctor_args cfn cenv es) /\
   (!vv. symbolic_frame R (unwrap_value cenv vv)) /\
   (!e. MEM e es ==> symbolic_frame R (cfn cenv (expr_type e) e)) ==>
   symbolic_frame R (compile_create_blueprint_args cfn cenv raw later_es es)
 Proof
-  strip_tac >> Cases_on `raw`
+  strip_tac >>
+  `symbolic_frame R (compile_create_ctor_args cfn cenv es)` by
+    (irule symbolic_frame_create_ctor_args >> simp[]) >>
+  Cases_on `raw`
   >- (namedCases_on `es` ["", "arg remaining"] >>
       simp[compile_create_blueprint_args_def, comp_ignore_bind_def] >>
       Cases_on `remaining` >>

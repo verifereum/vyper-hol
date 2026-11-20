@@ -636,7 +636,6 @@ QED
 Theorem deploy_blocks_frame_create_blueprint_args:
   (!copy vv. deploy_blocks_frame (compile_snapshot_vv cenv copy vv)) /\
   (!dst rows. deploy_blocks_frame (compile_abi_encode_values_to_buf cenv dst rows)) /\
-  deploy_blocks_frame (compile_create_ctor_args cfn cenv es) /\
   (!vv. deploy_blocks_frame (unwrap_value cenv vv)) /\
   (!e. MEM e es ==> deploy_blocks_frame (cfn cenv (expr_type e) e)) ==>
   deploy_blocks_frame (compile_create_blueprint_args cfn cenv raw later_es es)
