@@ -67,11 +67,7 @@ Proof
     (CONJUNCTS entry_code_hash_builtins)
 QED
 
-Theorem entry_code_dispatch_unary[local]:
-  supported_builtin_form tops ret_ty bi [a] /\
-  (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et a)) ==>
-  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_builtin_dispatch_body cfn cenv ret_ty ty bi [a])
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `bi` >> simp[supported_builtin_form_def] >> rpt strip_tac
   >~ [`compile_builtin_dispatch_body _ _ _ _ Len _`]
@@ -125,6 +121,17 @@ Proof
   imp_res_tac (SRULE [entry_preserves_code_def]
     (Q.INST [`opc` |-> `ISZERO`] entry_code_emit_op))
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: suspected false under the widened gate (new builtin forms may allocate dynamically); deleted, callers split
+  Theorem entry_code_dispatch_unary[local]:
+    supported_builtin_form tops ret_ty bi [a] /\
+    (!et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et a)) ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+      (compile_builtin_dispatch_body cfn cenv ret_ty ty bi [a])
+  Proof
+    cheat
+  QED
+*)
 
 Theorem entry_code_dispatch_binary[local]:
   supported_builtin_form tops ret_ty bi [a;b] /\

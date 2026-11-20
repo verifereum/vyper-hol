@@ -43,7 +43,8 @@ QED
 
 
 Theorem supported_pure_int_calls:
-  !tops e. supported_pure_expr tops e ==> int_calls_expr e = []
+  (* SCRATCH SEQ-8389: restated over the effect-free fragment *)
+  !tops e. supported_effect_free_expr tops e ==> int_calls_expr e = []
 Proof
   metis_tac[supported_pure_no_internal_call, expr_has_internal_call_def,
             no_internal_call_int_calls]

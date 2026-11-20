@@ -1057,10 +1057,7 @@ QED
    function has its FMP convention set (lower_vyper_runtime_unit_raw_defaults).  The
    label and PHI facts S4 also needs follow from unit_wf and
    o1_source_unit_ok (o1_source_unit_label_refs_no_phi). *)
-Theorem lower_vyper_runtime_unit_o1_shape_extras:
-  !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops
-    ==> unit_entry_no_params unit /\ unit_fmp_unsealed unit
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt gen_tac >> strip_tac >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
@@ -1086,6 +1083,14 @@ Proof
   `MEM g.fn_name (MAP (\f. f.fn_name) rest)` by
     (simp[listTheory.MEM_MAP] >> metis_tac[]) >>
   gs[]
+QED
+*)
+Theorem lower_vyper_runtime_unit_o1_shape_extras:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops
+    ==> unit_entry_no_params unit /\ unit_fmp_unsealed unit
+Proof
+  cheat
 QED
 
 (* The dead bytes of a source call's result: those storage_dead gives in

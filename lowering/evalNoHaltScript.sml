@@ -473,58 +473,7 @@ Proof
   gvs[ignore_bind_halt, state_ops_nh] >> metis_tac[oneTheory.one]
 QED
 
-Theorem eval_no_halt_every[local]:
-  (!cx s. ~supported_stmt_expr_exists expr_halt_root s /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s) ==>
-     !st st'. eval_stmt cx s st = (INR HaltException, st') ==> F) /\
-  (!cx ss. ~supported_stmts_expr_exists expr_halt_root ss /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss) ==>
-     !st st'. eval_stmts cx ss st = (INR HaltException, st') ==> F) /\
-  (!cx it. ~supported_iterator_exists expr_halt_root it /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_iterator it) ==>
-     !st st'. eval_iterator cx it st = (INR HaltException, st') ==> F) /\
-  (!cx tyv nm ss vs. ~supported_stmts_expr_exists expr_halt_root ss /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss) ==>
-     !st st'. eval_for cx tyv nm ss vs st = (INR HaltException, st') ==> F) /\
-  (!cx e. ~supported_expr_exists expr_halt_root e /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) ==>
-     !st st'. eval_expr cx e st = (INR HaltException, st') ==> F) /\
-  (!cx es. EVERY (\e. ~supported_expr_exists expr_halt_root e /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) es ==>
-     !st st'. eval_exprs cx es st = (INR HaltException, st') ==> F) /\
-  (!cx t. ~supported_target_exists expr_halt_root t /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t) ==>
-     !st st'. eval_base_place cx t st = (INR HaltException, st') ==> F) /\
-  (!cx t. ~supported_target_exists expr_halt_root t /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t) ==>
-     !st st'. eval_target_place cx t st = (INR HaltException, st') ==> F) /\
-  (!cx g v. ~supported_assignment_exists expr_halt_root g /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_atarget g) ==>
-     !st st'. assign_tuple_targets cx g v st = (INR HaltException, st') ==> F) /\
-  (!cx gs vs. ~supported_assignments_exists expr_halt_root gs /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_atargets gs) ==>
-     !st st'. assign_tuple_target_list cx gs vs st = (INR HaltException, st') ==>
-              F)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt gen_tac
   >~ [`Call _ (IntCall (src_id_opt,fn)) es _`] >- suspend "IntCall"
@@ -689,6 +638,64 @@ Resume eval_no_halt_every[IntCallLive]:
 QED
 
 Finalise eval_no_halt_every
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (callee bodies may halt); callers split
+  Theorem eval_no_halt_every[local]:
+    (!cx s. ~supported_stmt_expr_exists expr_halt_root s /\
+       EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
+                  get_module_code cx NONE = SOME tops /\
+                  IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s) ==>
+       !st st'. eval_stmt cx s st = (INR HaltException, st') ==> F) /\
+    (!cx ss. ~supported_stmts_expr_exists expr_halt_root ss /\
+       EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
+                  get_module_code cx NONE = SOME tops /\
+                  IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss) ==>
+       !st st'. eval_stmts cx ss st = (INR HaltException, st') ==> F) /\
+    (!cx it. ~supported_iterator_exists expr_halt_root it /\
+       EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
+                  get_module_code cx NONE = SOME tops /\
+                  IS_SOME (supported_function_decl tops c Internal)) (int_calls_iterator it) ==>
+       !st st'. eval_iterator cx it st = (INR HaltException, st') ==> F) /\
+    (!cx tyv nm ss vs. ~supported_stmts_expr_exists expr_halt_root ss /\
+       EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
+                  get_module_code cx NONE = SOME tops /\
+                  IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss) ==>
+       !st st'. eval_for cx tyv nm ss vs st = (INR HaltException, st') ==> F) /\
+    (!cx e. ~supported_expr_exists expr_halt_root e /\
+       EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
+                  get_module_code cx NONE = SOME tops /\
+                  IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) ==>
+       !st st'. eval_expr cx e st = (INR HaltException, st') ==> F) /\
+    (!cx es. EVERY (\e. ~supported_expr_exists expr_halt_root e /\
+       EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
+                  get_module_code cx NONE = SOME tops /\
+                  IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) es ==>
+       !st st'. eval_exprs cx es st = (INR HaltException, st') ==> F) /\
+    (!cx t. ~supported_target_exists expr_halt_root t /\
+       EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
+                  get_module_code cx NONE = SOME tops /\
+                  IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t) ==>
+       !st st'. eval_base_place cx t st = (INR HaltException, st') ==> F) /\
+    (!cx t. ~supported_target_exists expr_halt_root t /\
+       EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
+                  get_module_code cx NONE = SOME tops /\
+                  IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t) ==>
+       !st st'. eval_target_place cx t st = (INR HaltException, st') ==> F) /\
+    (!cx g v. ~supported_assignment_exists expr_halt_root g /\
+       EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
+                  get_module_code cx NONE = SOME tops /\
+                  IS_SOME (supported_function_decl tops c Internal)) (int_calls_atarget g) ==>
+       !st st'. assign_tuple_targets cx g v st = (INR HaltException, st') ==> F) /\
+    (!cx gs vs. ~supported_assignments_exists expr_halt_root gs /\
+       EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
+                  get_module_code cx NONE = SOME tops /\
+                  IS_SOME (supported_function_decl tops c Internal)) (int_calls_atargets gs) ==>
+       !st st'. assign_tuple_target_list cx gs vs st = (INR HaltException, st') ==>
+                F)
+  Proof
+    cheat
+  QED
+*)
 
 Theorem calls_pre_every[local]:
   (l = [] \/ ?tops. supported_program tops /\
@@ -790,11 +797,7 @@ Proof
 QED
 
 (* The body an external entry runs never halts in a supported program. *)
-Theorem external_body_no_halt:
-  supported_program tops /\ get_module_code cx NONE = SOME tops /\
-  lookup_function src name External tops =
-    SOME (mut,nr,args,dflts,ret,fbody) ==>
-  eval_stmts cx fbody st <> (INR HaltException, st')
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> drule lookup_function_External_cases >> strip_tac
   >- (drule_all (SRULE [] (Q.INST [`vis` |-> `External`] supported_program_function)) >>
@@ -807,15 +810,21 @@ Proof
   disj1_tac >>
   drule_all selected_public_getter_body_int_calls_empty >> simp[]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (bodies may halt: selfdestruct, raw_revert); callers split
+  Theorem external_body_no_halt:
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    lookup_function src name External tops =
+      SOME (mut,nr,args,dflts,ret,fbody) ==>
+    eval_stmts cx fbody st <> (INR HaltException, st')
+  Proof
+    cheat
+  QED
+*)
 
 (* The constructor body (declared, or the synthetic empty one) never halts
    in a supported program. *)
-Theorem deploy_body_no_halt:
-  supported_program tops /\ supported_program_deploy tops /\
-  get_module_code cx NONE = SOME tops /\
-  lookup_function src name Deploy tops =
-    SOME (mut,nr,args,dflts,ret,fbody) ==>
-  eval_stmts cx fbody st <> (INR HaltException, st')
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   drule vyperTypeContractStaticMapsTheory.lookup_function_Deploy_SOME_cases >>
@@ -827,3 +836,15 @@ Proof
   drule (cj 2 supported_stmts_storage_syntax) >> strip_tac >>
   irule (cj 4 eval_no_halt) >> metis_tac[]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (bodies may halt: selfdestruct, raw_revert); callers split
+  Theorem deploy_body_no_halt:
+    supported_program tops /\ supported_program_deploy tops /\
+    get_module_code cx NONE = SOME tops /\
+    lookup_function src name Deploy tops =
+      SOME (mut,nr,args,dflts,ret,fbody) ==>
+    eval_stmts cx fbody st <> (INR HaltException, st')
+  Proof
+    cheat
+  QED
+*)

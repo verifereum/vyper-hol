@@ -231,10 +231,7 @@ Proof
     is_event_bytestring_type_def, is_bytestring_type_def, is_word_type_def]
 QED
 
-Theorem log_scalar_topic_shape:
-  supported_scalar_type ty ==>
-  (is_event_bytestring_type ty = is_bytestring_type ty) /\
-  (~is_bytestring_type ty ==> supported_word_type ty /\ is_word_type ty)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   `supported_event_leaf_type ty` by simp[supported_event_leaf_type_def] >>
@@ -247,6 +244,16 @@ Proof
      simp[supported_string_type_def, is_bytestring_type_def]) >>
   metis_tac[supported_scalar_type_def]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (flag scalars); callers split
+  Theorem log_scalar_topic_shape:
+    supported_scalar_type ty ==>
+    (is_event_bytestring_type ty = is_bytestring_type ty) /\
+    (~is_bytestring_type ty ==> supported_word_type ty /\ is_word_type ty)
+  Proof
+    cheat
+  QED
+*)
 
 Theorem compile_encode_log_topic_event_run:
   stmt_state_rel H ctx func cenv cx es s /\

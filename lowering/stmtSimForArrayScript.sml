@@ -21,8 +21,8 @@ Theorem array_for_hypotheses:
     assignable_type env.type_defs ty /\ id NOTIN FDOM env.var_types /\
     iterator_unmodified (Array (Name (ArrayT ty (Fixed n)) name)) body /\
     type_stmts (extend_local env id ty F) ret_ty body = SOME env_b /\
-    supported_stmts tops bindings body /\
-    ~supported_stmts_expr_exists expr_internal_call_root body
+    (* SCRATCH SEQ-8389: restated; loop bodies may call internal functions *)
+    supported_stmts tops bindings body
 Proof
   rpt gen_tac >> strip_tac >>
   `?name. e = Name (ArrayT ty (Fixed n)) name` by

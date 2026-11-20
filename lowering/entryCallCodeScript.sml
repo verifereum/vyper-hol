@@ -303,6 +303,17 @@ Proof
   metis_tac[]
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  Cases_on `ct` >> Cases_on `default_ret` >>
+  simp[supported_effect_expr_def] >> rpt strip_tac
+  >~ [`compile_call _ _ _ _ (IntCall _) _ _`]
+    >- (irule entry_code_intcall >> simp[] >> metis_tac[])
+  >~ [`compile_call _ _ _ _ (ExtCall _ _ p _) _ _`]
+    >- (PairCases_on `p` >> irule entry_code_extcall >> simp[]) >>
+  irule entry_code_send >> simp[]
+QED
+*)
 Theorem entry_code_supported_call:
   supported_effect_expr tops (Call source_ty ct args default_ret) /\
   (!e et. MEM e args ==>
@@ -314,11 +325,5 @@ Theorem entry_code_supported_call:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_call cfn cenv ret_ty ty ct args default_ret)
 Proof
-  Cases_on `ct` >> Cases_on `default_ret` >>
-  simp[supported_effect_expr_def] >> rpt strip_tac
-  >~ [`compile_call _ _ _ _ (IntCall _) _ _`]
-    >- (irule entry_code_intcall >> simp[] >> metis_tac[])
-  >~ [`compile_call _ _ _ _ (ExtCall _ _ p _) _ _`]
-    >- (PairCases_on `p` >> irule entry_code_extcall >> simp[]) >>
-  irule entry_code_send >> simp[]
+  cheat
 QED

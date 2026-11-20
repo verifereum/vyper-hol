@@ -872,18 +872,25 @@ Proof
   Cases_on `rest` >> gvs[]
 QED
 
-Theorem raw_call_pre_flags:
-  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
-  ~flags.rcf_is_delegate /\
-  flags.rcf_max_outsize < dimword (:256) /\
-  LENGTH args = 2 + LENGTH flags.rcf_kws /\
-  raw_call_kws_ok flags (DROP 2 args) /\
-  ann = raw_call_return_type flags /\ dflt = NONE
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   simp[expr_body_pre_def, well_typed_expr_def,
        supportedExprTraverseTheory.expr_has_evm_run_thm] >>
   strip_tac >> gvs[supportedExprTraverseTheory.expr_evm_run_root_def]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (delegate raw calls are accepted); callers split
+  Theorem raw_call_pre_flags:
+    expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
+    ~flags.rcf_is_delegate /\
+    flags.rcf_max_outsize < dimword (:256) /\
+    LENGTH args = 2 + LENGTH flags.rcf_kws /\
+    raw_call_kws_ok flags (DROP 2 args) /\
+    ann = raw_call_return_type flags /\ dflt = NONE
+  Proof
+    cheat
+  QED
+*)
 
 Theorem raw_call_outbuf_capacity[local]:
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es /\

@@ -9,6 +9,8 @@ Ancestors
 Theorem tuple_place_supported_target_scopes:
   !bt tops cx es res ee.
     EVERY (supported_expr tops) (target_indices bt) /\
+    (* SCRATCH SEQ-8389: restated; effect calls in keys *)
+    EVERY (\e. ~supported_expr_exists expr_effect_root e) (target_indices bt) /\
     eval_base_place cx bt es = (res,ee) ==> ee.scopes = es.scopes
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >> rpt gen_tac

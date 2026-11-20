@@ -6,13 +6,14 @@ Ancestors
 val _ = Parse.hide "tops";
 
 Theorem entry_runtime_no_dalloca:
+  (* SCRATCH SEQ-8389: restated with the raw-shape fact as an explicit premise *)
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops ==> ~ctx_has_dalloca unit.cu_context
+  supported_program tops /\ runtime_bodies_shape_ok tops ==> ~ctx_has_dalloca unit.cu_context
 Proof
   strip_tac >> irule every_no_dalloca >>
   irule lower_vyper_runtime_unit_no_dalloca >>
   goal_assum $ drule_at Any >>
-  reverse conj_tac >- metis_tac[supported_program_runtime_bodies_shape_ok] >>
+  reverse conj_tac >- simp[] >>
   irule supported_names_internal_names_distinct >>
   gvs[supported_program_def, supported_declaration_names_def]
 QED

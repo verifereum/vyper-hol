@@ -146,21 +146,7 @@ Proof
   gvs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]
 QED
 
-Theorem body_append_runtime_metadata:
-  body_inv tops ctx cenv cx /\
-  supported_storage_dynamic_array tops (src,id) /\
-  env_consistent env cx es /\
-  type_place_target env (TopLevelNameTarget (src,id)) = SOME (Type ty) ==>
-  ?elem n tr key slot tv.
-    ty = ArrayT elem (Dynamic n) /\ supported_full_word_type elem /\
-    cenv.ce_module_var_type (src,id) = SOME ty /\
-    cenv.ce_module_dynarray_capacity (src,id) = n /\
-    find_var_decl_by_name id tops = SOME (StorageVarDecl tr ty,key) /\
-    lookup_var_slot_from_layout cx tr src key = SOME slot /\
-    evaluate_type (get_tenv cx) ty = SOME tv /\
-    eval_target_place cx (TopLevelNameTarget (src,id)) es =
-      (INL (StoragePlace tr (n2w slot) tv),
-       es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tv])
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   drule supported_append_storage_decl >> strip_tac >>
@@ -179,6 +165,25 @@ Proof
     (fs[body_inv_def] >> metis_tac[optionTheory.SOME_11]) >>
   gvs[] >> drule_all append_storage_target_eval >>
   metis_tac[]
+QED
+*)
+Theorem body_append_runtime_metadata:
+  body_inv tops ctx cenv cx /\
+  supported_storage_dynamic_array tops (src,id) /\
+  env_consistent env cx es /\
+  type_place_target env (TopLevelNameTarget (src,id)) = SOME (Type ty) ==>
+  ?elem n tr key slot tv.
+    ty = ArrayT elem (Dynamic n) /\ supported_full_word_type elem /\
+    cenv.ce_module_var_type (src,id) = SOME ty /\
+    cenv.ce_module_dynarray_capacity (src,id) = n /\
+    find_var_decl_by_name id tops = SOME (StorageVarDecl tr ty,key) /\
+    lookup_var_slot_from_layout cx tr src key = SOME slot /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\
+    eval_target_place cx (TopLevelNameTarget (src,id)) es =
+      (INL (StoragePlace tr (n2w slot) tv),
+       es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tv])
+Proof
+  cheat
 QED
 
 Theorem append_storage_compiler_location:

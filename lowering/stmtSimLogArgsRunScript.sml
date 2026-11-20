@@ -13,12 +13,19 @@ Libs
   monadsyntax
 
 
-Theorem log_scalar_base[local]:
-  supported_scalar_type ty ==> ?bt. ty = BaseT bt
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `ty` >> simp[supported_scalar_type_def, supported_word_type_def,
     supported_string_type_def]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (flag scalars); callers split
+  Theorem log_scalar_base[local]:
+    supported_scalar_type ty ==> ?bt. ty = BaseT bt
+  Proof
+    cheat
+  QED
+*)
 
 Theorem log_scalar_word_or_bytestring[local]:
   !ty. supported_scalar_type ty ==> is_word_type ty \/ is_bytestring_type ty

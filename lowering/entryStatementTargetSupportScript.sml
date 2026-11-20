@@ -12,13 +12,18 @@ Proof
   first_x_assum (qspec_then `b` mp_tac) >> simp[] >> metis_tac[]
 QED
 
-Theorem supported_target_index:
-  supported_target tops bindings bt /\ MEM e (target_indices bt) ==>
-  supported_expr tops e
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `bt` >> simp[supported_target_def, target_indices_def] >>
   rpt BasicProvers.TOP_CASE_TAC >>
   simp[target_indices_def] >> metis_tac[]
+QED
+*)
+Theorem supported_target_index:
+  supported_target tops bindings bt /\ MEM e (target_indices bt) ==>
+  supported_expr tops e
+Proof
+  cheat
 QED
 
 Theorem supported_assignment_tuple_index:

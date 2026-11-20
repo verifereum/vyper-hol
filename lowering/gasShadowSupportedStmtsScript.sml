@@ -144,11 +144,7 @@ Proof
        combinTheory.o_DEF]
 QED
 
-Theorem shadow_iterator_support[local]:
-  (!tops e. supported_pure_expr tops e ==> supported_pure_expr tops (gas_shadow_expr e)) /\
-  (!tops e. supported_expr tops e ==> supported_expr tops (gas_shadow_expr e)) ==>
-  !iter tops ty n. supported_iterator tops ty iter n ==>
-    supported_iterator tops ty (gas_shadow_iterator iter) n
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> Cases
   >- (rpt gen_tac >> rename1 `Array arr` >> simp[gas_shadow_iterator_def] >>
@@ -200,6 +196,15 @@ Proof
   gvs[gas_shadow_iterator_def, gas_shadow_expr_def, supported_iterator_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
 QED
+*)
+Theorem shadow_iterator_support[local]:
+  (!tops e. supported_pure_expr tops e ==> supported_pure_expr tops (gas_shadow_expr e)) /\
+  (!tops e. supported_expr tops e ==> supported_expr tops (gas_shadow_expr e)) ==>
+  !iter tops ty n. supported_iterator tops ty iter n ==>
+    supported_iterator tops ty (gas_shadow_iterator iter) n
+Proof
+  cheat
+QED
 
 Theorem shadow_pure_identity[local]:
   !e. pure_expr e ==> gas_shadow_expr e = e
@@ -228,14 +233,7 @@ Proof
     (irule supported_expr_exists_root >> simp[]) >> gvs[]
 QED
 
-Theorem shadow_stmt_support[local]:
-  ((!tops e. supported_pure_expr tops e ==> supported_pure_expr tops (gas_shadow_expr e)) /\
-   (!tops e. supported_effect_expr tops e ==> supported_effect_expr tops (gas_shadow_expr e)) /\
-   (!tops e. supported_expr tops e ==> supported_expr tops (gas_shadow_expr e))) ==>
-  (!tops bindings s. supported_stmt tops bindings s ==>
-    supported_stmt tops bindings (gas_shadow_stmt s)) /\
-  (!tops bindings ss. supported_stmts tops bindings ss ==>
-    supported_stmts tops bindings (MAP gas_shadow_stmt ss))
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> ho_match_mp_tac supported_stmt_ind >>
   rpt conj_tac >> rpt gen_tac >>
@@ -260,6 +258,18 @@ Proof
   >- (irule listTheory.EVERY_MONOTONIC >> goal_assum (drule_at Any) >> simp[]) >>
   Cases_on `supported_event_fields tops id` >>
   gvs[listTheory.LIST_REL_MAP1, combinTheory.o_DEF, SF ETA_ss]
+QED
+*)
+Theorem shadow_stmt_support[local]:
+  ((!tops e. supported_pure_expr tops e ==> supported_pure_expr tops (gas_shadow_expr e)) /\
+   (!tops e. supported_effect_expr tops e ==> supported_effect_expr tops (gas_shadow_expr e)) /\
+   (!tops e. supported_expr tops e ==> supported_expr tops (gas_shadow_expr e))) ==>
+  (!tops bindings s. supported_stmt tops bindings s ==>
+    supported_stmt tops bindings (gas_shadow_stmt s)) /\
+  (!tops bindings ss. supported_stmts tops bindings ss ==>
+    supported_stmts tops bindings (MAP gas_shadow_stmt ss))
+Proof
+  cheat
 QED
 
 Theorem gas_shadow_supported_stmts_from_expr:

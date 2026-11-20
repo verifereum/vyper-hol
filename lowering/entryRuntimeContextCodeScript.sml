@@ -4,13 +4,12 @@ Ancestors
   supportedProgram supportedNames list
 
 Theorem entry_runtime_context_no_dalloca:
-  supported_program tops /\ lower_vyper_runtime_unit tops pol = SOME unit ==>
+  (* SCRATCH SEQ-8389: restated with the raw-shape fact as an explicit premise *)
+  supported_program tops /\ runtime_bodies_shape_ok tops /\ lower_vyper_runtime_unit tops pol = SOME unit ==>
   !f. MEM f unit.cu_context.ctx_functions ==>
     ~EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts f)
 Proof
   strip_tac >>
-  `runtime_bodies_shape_ok tops` by
-    metis_tac[supported_program_runtime_bodies_shape_ok] >>
   `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
       (FST (SND (classify_functions tops))))` by
     (irule supported_names_internal_names_distinct >>
