@@ -30,12 +30,12 @@ Inductive aux_trace:
     (pg with <| ps_stack := ss; ps_spilled := sp |>)
     (sops,seen,pout) st /\
   succ_trace lv dfg cfg fn ss sp rest seen
-    (pg with <| ps_alloc := pout.ps_alloc with
-                  sa_free_slots := pg.ps_alloc.sa_free_slots;
-                ps_label_counter := pout.ps_label_counter |>)
+    (pg with ps_label_counter := pout.ps_label_counter)
     (rops,final,pend) rt ==>
   succ_trace lv dfg cfg fn ss sp (succ::rest) visited pg
-    (sops ++ rops,final,pend) (st ++ rt)
+    (sops ++ rops,final,pend with ps_alloc := pend.ps_alloc with
+      sa_next_offset := MAX pout.ps_alloc.sa_next_offset
+                            pend.ps_alloc.sa_next_offset) (st ++ rt)
 End
 
 Theorem dfs_trace_erasure:
@@ -101,11 +101,12 @@ Theorem succ_trace_cons:
       (pg with <| ps_stack := ss; ps_spilled := sp |>)
       (sops,seen,pout) st /\
     succ_trace lv dfg cfg fn ss sp rest seen
-      (pg with <| ps_alloc := pout.ps_alloc with
-                    sa_free_slots := pg.ps_alloc.sa_free_slots;
-                  ps_label_counter := pout.ps_label_counter |>)
+      (pg with ps_label_counter := pout.ps_label_counter)
       (rops,final,pend) rt /\
-    result = (sops ++ rops,final,pend) /\ tr = st ++ rt
+    result = (sops ++ rops,final,pend with ps_alloc := pend.ps_alloc with
+      sa_next_offset := MAX pout.ps_alloc.sa_next_offset
+                            pend.ps_alloc.sa_next_offset) /\
+    tr = st ++ rt
 Proof
   simp[Once (cj 2 aux_trace_cases)] >> metis_tac[]
 QED
