@@ -1165,8 +1165,8 @@ Proof
       simp[loweringPostsTheory.expr_val_rel_def,
            instIdxIndepTheory.eval_op_inst_idx]) >>
    `log_arg_rel cenv cx sa sc mid capture_state (src_op,BaseT bt) v` by
-     (fs[stmtSimLogArgsTheory.log_arg_rel_def] >>
-      irule stmtSimLogArgsTheory.log_arg_clear_base >> goal_assum (drule_at Any)) >>
+     (rewrite_tac [stmtSimLogArgsTheory.log_arg_rel_def] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
    `w2n src_ptr + 32 + LENGTH source_bytes < dimword (:256)` by
      (mp_tac (Q.INST [`H` |-> `storage_trace_horizon length_mid.storage_trace`,
         `es` |-> `mid`,`s` |-> `capture_state`,`ty` |-> `BaseT bt`,
