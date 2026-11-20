@@ -15,26 +15,22 @@ Proof
   simp[Once compile_log_store_data_def]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  Cases_on `ty` >>
-  simp[supported_scalar_type_def, supported_word_type_def,
-       supported_string_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[supported_word_type_def, supported_string_type_def,
-       evaluate_type_def, type_memory_bytes_def, type_memory_size_def] >>
-  rpt strip_tac >> gvs[type_memory_size_def, vfmConstantsTheory.word_size_def] >>
-  rename1 `BaseT (BytesT bd)` >> Cases_on `bd` >>
-  gvs[supported_word_type_def, supported_string_type_def,
-       evaluate_type_def, type_memory_bytes_def, type_memory_size_def,
-       vfmConstantsTheory.word_size_def, AllCaseEqs()]
-QED
-*)
 Theorem log_scalar_memory_size:
   supported_scalar_type ty /\ evaluate_type tenv ty = SOME tv ==>
   type_memory_bytes cenv ty = type_memory_size tv
 Proof
-  cheat
+  Cases_on `ty` >>
+  simp[supported_scalar_type_def, supported_word_type_def,
+       supported_string_type_def]
+  >~ [`evaluate_type _ (FlagT _)`]
+  >- (rw[evaluate_type_def, AllCaseEqs(), type_memory_bytes_def] >>
+      simp[type_memory_size_def]) >>
+  rename1 `supported_word_type (BaseT bt)` >> Cases_on `bt` >>
+  TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
+  rw[supported_word_type_def, supported_string_type_def, evaluate_type_def,
+     AllCaseEqs(), type_memory_bytes_def, type_memory_size_def,
+     vfmConstantsTheory.word_size_def] >>
+  simp[type_memory_size_def, vfmConstantsTheory.word_size_def]
 QED
 
 Theorem log_data_prefix_bounds:
