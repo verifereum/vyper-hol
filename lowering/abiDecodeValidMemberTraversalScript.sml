@@ -827,7 +827,7 @@ Theorem decoder_joint_members_head_entry[local]:
     (abi_decoder_member_infos sf ce tys)
     (ao + abi_embedded_static_size ce.ce_struct_fields ty)
     (vo + type_memory_bytes ce ty) end_st = ((),en) /\
-  ~ctx_has_dalloca ctx /\ abi_decode_ptr_window G tn s source (n2w B) L /\
+  abi_decode_ptr_window G tn s source (n2w B) L /\
   ptr_covers G tn output s outsz /\ op_prov G pos = NONE /\ op_prov G hi = NONE /\
   op_taint tn pos = {} /\ op_taint tn hi = {} /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\ alloca_history func s ==>
@@ -1111,7 +1111,7 @@ Theorem decoder_joint_complex_guard[local]:
   p + headsz <= L /\ middle.cs_next_var <= ceiling.cs_next_var /\
   fresh_vars_wrt ceiling s /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  ~ctx_has_dalloca ctx /\ abi_decode_ptr_window G tn s source (n2w B) L /\
+  abi_decode_ptr_window G tn s source (n2w B) L /\
   ptr_covers G tn output s n /\ op_prov G pos = NONE /\ op_prov G hi = NONE /\
   op_taint tn pos = {} /\ op_taint tn hi = {} /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\ alloca_history func s ==>
@@ -1157,7 +1157,9 @@ Proof
   `alloca_inv s` by metis_tac[stmt_state_rel_local_ptrs_alloca] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st middle)` by fs[EVERY_MEM] >>
   drule_all entry_straight_line_alloca_history >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   drule_all member_scalar_guard_actual_run >>
   disch_then (qspec_then `PG` (qx_choose_then `G1` (qx_choose_then `tn1` strip_assume_tac))) >>
   qpat_x_assum `r = _` SUBST_ALL_TAC >>
