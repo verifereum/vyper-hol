@@ -148,8 +148,8 @@ use `take_outcome`, `record_request`, `adopt_outcome`. A call that finds the
 outcome list empty stops the run: Venom aborts (`ExHalt_abort`), assembly
 faults (`AsmFault`) and the source raises an error. Failed/static calls adopt
 no accounts/transient/log effects; successful nonstatic calls adopt the
-supplied complete payload, except computed calls (below), which take only
-the outcome's success. Source
+supplied accounts, transient storage, logs and deletions, except computed
+calls (below), which take only the outcome's success. Source
 `take_call_outcome` checks successful nonstatic account balance/code bounds;
 this is **not a storage validator**. The public `call_outcomes_ok` additionally
 requires bounded return data and runtime well-typed accounts for every record,
