@@ -1214,18 +1214,6 @@ Proof
   REWRITE_TAC[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND]
 QED
 
-Theorem splice_steps_add[local]:
-  !p env m n ss. sym_steps p env (m+n) ss =
-    case sym_steps p env m ss of
-      SymOK mid => sym_steps p env n mid | r => r
-Proof
-  gen_tac >> gen_tac >> Induct >- simp[sym_steps_def] >>
-  rpt gen_tac >>
-  pure_rewrite_tac[arithmeticTheory.ADD_CLAUSES, sym_steps_def] >>
-  Cases_on `ss.sym_base.as_pc >= LENGTH p` >> simp[] >>
-  Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >> simp[]
-QED
-
 Theorem splice_steps_outside[local]:
   !env n u a.
   asm_splice_ok pat repl /\ asm_static_wf (pre ++ pat ++ post) /\
@@ -1546,12 +1534,22 @@ Theorem bounded_splice_prefix_transport:
         FDOM b.sym_mem_labels = FDOM a.sym_mem_labels)
 Proof
   rpt gen_tac >> strip_tac >>
+  (* sym_steps_add is downstream in codegenSymRel. *)
+  `!p env m n ss. sym_steps p env (m+n) ss =
+    case sym_steps p env m ss of
+      SymOK mid => sym_steps p env n mid | r => r` by
+    (gen_tac >> gen_tac >> Induct >- simp[sym_steps_def] >>
+     rpt gen_tac >>
+     pure_rewrite_tac[arithmeticTheory.ADD_CLAUSES, sym_steps_def] >>
+     Cases_on `ss.sym_base.as_pc >= LENGTH p` >> simp[] >>
+     Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >> simp[]) >>
+  pop_assum (mk_asm "steps_add") >>
   mp_tac (Q.ISPECL [`pre:asm_inst list`, `pat:asm_inst list`, `repl:asm_inst list`,
     `post:asm_inst list`, `D:num`,
     `sym_steps (pre ++ pat ++ post)`, `sym_steps (pre ++ repl ++ post)`]
     bounded_splice_prefix_transport_by_steps) >>
   impl_tac
-  >- (simp[sym_steps_def, splice_steps_add] >> rpt conj_tac
+  >- (asm "steps_add" (fn th => simp[sym_steps_def, th]) >> rpt conj_tac
       >- (rpt strip_tac >> metis_tac[sym_steps_base_stack, sym_steps_labels_in])
       >- (rpt strip_tac >> mp_tac (Q.SPECL [`env`, `n`, `u`, `a`] splice_steps_outside) >> simp[])
       >> first_assum ACCEPT_TAC) >>
