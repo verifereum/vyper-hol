@@ -1,69 +1,12 @@
 Theory bodyFullExtCallAddressOwnedPrefix
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullExtCallPositional bodyFullExtCallTargetOutcome bodyFullExtCallPosList
+  bodyFullExtCallTargetOutcome bodyFullExtCallPosList
   gasOutcomeFull gasOutcomeFullCompose gasExemptCert vyperStorageTrace vyperStorageFootprint
   exprSimDefs bodyFullIfExpReach
   exprSimSource exprSafeOperand exprSimWordArgs exprLoweringProps stmtSimProps
   bodySimFull compileEnv loweringPosts vyperInterpreter wordArgsPtr
   evalNoHalt supportedExprTraverse vyperTypeCallGraph list
-
-Theorem extcall_positional_no_halt[local]:
-  EVERY (\e. ~expr_has_effect e) xs /\
-  (!e. MEM e xs ==> expr_body_pre cenv cx env e mid) ==>
-  !st st'. eval_exprs cx xs st <> (INR HaltException, st')
-Proof
-  strip_tac >> rpt gen_tac >> irule (cj 2 eval_no_halt) >>
-  conj_tac
-  >- (strip_tac >>
-      qpat_x_assum `supported_exprs_exists _ _` mp_tac >>
-      rewrite_tac[supported_exprs_exists_every, EXISTS_MEM] >>
-      disch_then (qx_choose_then `e` strip_assume_tac) >>
-      `expr_body_pre cenv cx env e mid` by metis_tac[] >>
-      `~supported_expr_exists expr_effect_root e` by
-        fs[EVERY_MEM, expr_has_effect_def] >>
-      fs[exprSimHypsDefsTheory.expr_body_pre_def, expr_has_evm_run_def,
-         expr_halt_root_split, supported_expr_exists_disj] >>
-      qpat_x_assum `~supported_expr_exists expr_effect_root e` irule >>
-      irule (cj 1 supported_expr_exists_mono) >>
-      goal_assum (drule_at Any) >> rpt strip_tac >> gvs[expr_effect_root_def]) >>
-  `EVERY (\c. FST c = NONE /\ ?ts. supported_program ts /\
-       get_module_code cx NONE = SOME ts /\
-       IS_SOME (supported_function_decl ts c Internal)) (int_calls_exprs xs)` by
-    (fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
-     qpat_x_assum `!e. MEM e xs ==> _` mp_tac >>
-     Induct_on `xs` >> simp[int_calls_expr_def, EVERY_APPEND] >>
-     metis_tac[]) >>
-  Cases_on `int_calls_exprs xs` >> simp[] >>
-  fs[EVERY_MEM] >> metis_tac[optionTheory.SOME_11]
-QED
-
-Theorem extcall_positional_exit_replay[local]:
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
-    (eval_exprs cx xs) (mid,t,G,tn) Q (\H res ee gt r. expr_exit res r) /\
-  (!st st'. eval_exprs cx xs st <> (INR HaltException, st')) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
-    (eval_exprs cx xs) (mid,t,G,tn) Q
-    (\H res ee gt r. ?exc. res = INR exc /\
-       expr_exit (INR exc : value list + exception) r /\
-       halt_exit H cx ee (INR exc : value list + exception) r /\
-       (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
-Proof
-  strip_tac >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _`
-    (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def]) >>
-  rewrite_tac[gas_outcome_full_def] >> qexists_tac `marks`
-  >- (disj1_tac >> metis_tac[])
-  >- (disj2_tac >> disj1_tac >> qexistsl_tac [`res`,`ee`,`r`,`G'`,`tn'`] >>
-      rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
-      `res <> INR HaltException` by
-        (qpat_assum `!tail. eval_exprs cx xs _ = _` (qspec_then `[]` mp_tac) >>
-         simp[] >> metis_tac[]) >>
-      rpt strip_tac >> res_tac >> simp[] >>
-      Cases_on `res` >> Cases_on `r` >> gvs[halt_exit_def,expr_exit_def] >>
-      Cases_on `y` >> gvs[expr_exit_def]) >>
-  disj2_tac >> disj2_tac >> metis_tac[]
-QED
 
 (* At each bind, expose that the producer's cut has consumed its observations. *)
 val operand_bind_tac =
@@ -97,7 +40,6 @@ Theorem extcall_request_guarded_operand_prefix_address_owned:
      body_exprs_full_ok cx (DROP (1 + n) args)) /\
   (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
      expr_body_pre cenv cx env e st) /\
-  EVERY (\e. ~expr_has_effect e) (xs ++ kw_es) /\
   lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,sm) /\
   lower_value compile_expr cenv (BaseT AddressT) (gas_shadow_expr addr)
     shadow_sa = (ao,shadow_sm) /\
@@ -143,13 +85,13 @@ Theorem extcall_request_guarded_operand_prefix_address_owned:
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_no_wrap inst z) /\
-    pure_frame cenv func mid sm t u /\
+    wb_frame cenv mid ee sm t u /\
+    MAP FDOM ee.scopes = MAP FDOM mid.scopes /\
+    expr_sim_inv cenv cx env ee /\
     (!x w. not_fresh_at sm x /\ lookup_var x t = SOME w ==> lookup_var x u = SOME w) /\
     (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x u = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
-    (ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) =
-    (mid with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
       stmt_state_rel H ctx func cenv cx ee u /\
       storage_well_formed_on cx ee (FST H) /\
@@ -158,10 +100,20 @@ Theorem extcall_request_guarded_operand_prefix_address_owned:
       ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\
       ghost_kept_at lo cenv mid sm G1 tn1 t G2 tn2 /\
       LIST_REL (\(e,sv) v.
-        (?si se ss vv raw.
+        (?si se ss vv raw copy.
           compile_expr cenv (expr_type e) e si = (vv,se) /\
-          compile_snapshot_vv cenv F
+          compile_snapshot_vv cenv copy
             (ext_call_arg_value (lowered_value_type cenv e) vv) se = (sv,ss) /\
+          (~copy ==> ~exprs_can_mutate cenv kw_es) /\
+          (copy /\ ~is_word_type (lowered_value_type cenv e) ==>
+            ?p w tv. vv_location sv = SOME LocMemory /\ vv_operand sv = Var p /\
+              eval_operand (vv_operand sv) u = SOME w /\
+              evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tv /\
+              val_wf tv v /\ FLOOKUP u.vs_allocas se.cs_next_id =
+                SOME (w2n w,type_memory_size tv) /\
+              se.cs_next_id < ss.cs_next_id /\
+              (!n b sz. local_region cenv ee.scopes u n b sz ==>
+                regions_disjoint (w2n w) (type_memory_size tv) b sz)) /\
           sm.cs_next_var <= si.cs_next_var /\ sm.cs_next_id <= si.cs_next_id /\
           se.cs_next_var <= sb.cs_next_var /\ se.cs_next_id <= sb.cs_next_id /\
           ss.cs_next_var <= sb.cs_next_var /\ ss.cs_next_id <= sb.cs_next_id /\
@@ -178,7 +130,7 @@ Theorem extcall_request_guarded_operand_prefix_address_owned:
           vv_holds cenv cx (lowered_value_type cenv e) raw sv ee u /\
           vv_at cenv cx (lowered_value_type cenv e) si ss ee raw sv u /\
           ptr_vv_ok cx (lowered_value_type cenv e) raw sv ee G2 tn2 u /\
-          vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee raw sv u) /\
+          vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) ee raw sv u) /\
         vv_storage_live H cx sv ee u /\
         (!tag op. sv = StackValue tag op /\ ~is_word_type (lowered_value_type cenv e) ==>
           ptr_buf_ok cenv e op G2 u) /\
@@ -239,9 +191,6 @@ Proof
        (mp_tac o REWRITE_RULE [listTheory.APPEND_NIL] o Q.SPEC `[]`) >>
      pure_asm_rewrite_tac[] >> simp[]) >>
   `body_exprs_full_ok cx xs` by metis_tac[] >>
-  `!st st'. eval_exprs cx xs st <> (INR HaltException, st')` by
-    (irule extcall_positional_no_halt >> fs[EVERY_APPEND] >>
-     qexistsl [`cenv`,`env`,`mid`] >> simp[]) >>
   `is_word_type (expr_type addr)` by simp[is_word_type_def] >>
   drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
@@ -256,7 +205,6 @@ Proof
      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\ ghost_inv_at _ _ _ _ _ mid _ _ _`
        (drule_then strip_assume_tac) >> fs[expr_post_def]) >>
   operand_bind_tac >>
-  irule_at Any extcall_positional_exit_replay >>
   irule_at Any extcall_request_positional_packing_outcome >>
   qpat_assum `compile_ext_call_args _ _ _ _ xs sm = _` (irule_at Any) >>
   qpat_assum `compile_ext_call_args _ _ _ _ (MAP _ xs) shadow_sm = _` (irule_at Any) >>

@@ -12,7 +12,7 @@ Ancestors
   stmtSimProps vyperStorageTrace gasExemptCert
   entryReachBodyFirstEmissionExprSupport exprSimDefs
   bodyFullBuiltinWordPowCompose stmtLoweringMono freshWrites stateRelProj
-  bodyPtrBopRepresentationFrame
+  bodyPtrBopRepresentationFrame vyperEvalExprPreservesScopesDom
   bodyFullIfExpReach
 
 Theorem keyword_suffix_ci_mono[local]:
@@ -57,11 +57,23 @@ Proof
   disj2_tac >> metis_tac[]
 QED
 
+Theorem keyword_head_scope_domains[local]:
+  (!tail. bind (eval_expr cx e) (read_result cx)
+    (es with gas_obs := obs ++ tail) = (INL v,ee with gas_obs := tail)) ==>
+  MAP FDOM ee.scopes = MAP FDOM es.scopes
+Proof
+  disch_then (qspec_then `[]` mp_tac) >>
+  simp[] >> disch_then (strip_assume_tac o MATCH_MP (REWRITE_RULE [ETA_AX] eval_expr_read_INL)) >>
+  drule read_result_state >>
+  disch_then (SUBST_ALL_TAC o SYM) >>
+  drule eval_expr_preserves_scopes_dom >> simp[]
+QED
+
 (* The scalar and materialized cases agree on the frame for the suffix. *)
 Theorem extcall_keyword_head_outcome[local]:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
-  expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
+  expr_body_pre cenv cx env e es /\
   expr_type e = ext_call_kw_type rt k /\
   compile_ext_call_kwarg compile_expr cenv rt k e sa = ((op,dt),sb) /\
   compile_ext_call_kwarg compile_expr cenv rt k (gas_shadow_expr e)
@@ -96,13 +108,12 @@ Theorem extcall_keyword_head_outcome[local]:
       s0.vs_alloca_next <= t.vs_alloca_next /\
       ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
-      return_buf_frame d cenv sb t /\ pure_frame cenv func es sa s0 t /\
+      return_buf_frame d cenv sb t /\ wb_frame cenv es ee sa s0 t /\
+      MAP FDOM ee.scopes = MAP FDOM es.scopes /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
         lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
       t.vs_labels = s0.vs_labels /\
-      (ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) =
-        (es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) /\
       (!x. op = Var x ==> not_fresh_at sb x) /\
       (k <> EKDefault ==> ?w. eval_operand op t = SOME w /\
            dest_NumV v = SOME (w2n w) /\ op_taint tn op = {}) /\
@@ -128,6 +139,9 @@ Proof
       disch_then (qspec_then `PG` (mp_tac o MATCH_MP extcall_keyword_outcome_allocations)) >>
       disch_tac >> irule gas_outcome_full_post_source >>
       goal_assum (drule_at Any) >> simp[] >> rpt gen_tac >> strip_tac >>
+      `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+        (qpat_assum `res = INL v` SUBST_ALL_TAC >>
+         drule keyword_head_scope_domains >> simp[]) >>
       qexists_tac `v` >> gvs[] >> qexists_tac `aid` >> simp[] >>
       first_assum ACCEPT_TAC) >>
   `dt = rt /\
@@ -145,16 +159,13 @@ Proof
   disch_tac >> irule gas_outcome_full_post_source >>
   goal_assum (drule_at Any) >> simp[] >> rpt gen_tac >> strip_tac >>
   rename1 `expr_post H ctx func cenv cx e es sa sb s0 ee v op t` >>
-  `ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
-   es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>` by
-    (`ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
-     qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
-     gvs[] >>
-     drule (REWRITE_RULE [ETA_AX] eval_expr_read_INL) >> strip_tac >>
-     drule read_result_state >> simp[] >> disch_then SUBST_ALL_TAC >>
-     drule_all effect_free_source_projection >> simp[]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `res = INL v` SUBST_ALL_TAC >>
+     drule keyword_head_scope_domains >> simp[]) >>
   `is_word_type (expr_type e)` by
     (Cases_on `k` >> gvs[ext_call_kw_type_def,is_word_type_def]) >>
+  qpat_assum `expr_post H ctx func cenv cx e es sa sb s0 ee v op t`
+    (assume_tac o MATCH_MP exprSimWordArgsTheory.expr_post_frame) >>
   qexists_tac `v` >>
   gvs[expr_post_def] >> Cases_on `k` >>
   gvs[ext_call_kw_type_def, is_word_type_def, bodyPtrDefsTheory.ptr_val_ok_def]
@@ -169,7 +180,6 @@ Theorem extcall_request_keywords_owned_outcome:
   expr_sim_inv cenv cx env es /\
   (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
     expr_body_pre cenv cx env e st) /\
-  EVERY (\e. ~expr_has_effect e) xs /\
   MAP expr_type xs = MAP (ext_call_kw_type rt) ks /\
   compile_ext_call_kwargs compile_expr cenv rt ks xs sa = ((vo,go,dopt),sb) /\
   compile_ext_call_kwargs compile_expr cenv rt ks (MAP gas_shadow_expr xs)
@@ -205,13 +215,12 @@ Theorem extcall_request_keywords_owned_outcome:
       s0.vs_alloca_next <= t.vs_alloca_next /\
       ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
-      return_buf_frame d cenv sb t /\ pure_frame cenv func es sa s0 t /\
+      return_buf_frame d cenv sb t /\ wb_frame cenv es ee sa s0 t /\
+      MAP FDOM ee.scopes = MAP FDOM es.scopes /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
         lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
       t.vs_labels = s0.vs_labels /\
-      (ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) =
-        (es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) /\
       (case ext_call_kwarg EKGas ks vs of
          NONE => go = NONE
        | SOME v => ?op w. go = SOME op /\ eval_operand op t = SOME w /\
@@ -257,7 +266,7 @@ Proof
         (irule storage_well_formed_on_backends >> simp[]) >>
       qpat_x_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
         (qspec_then `H` mp_tac) >>
-      simp[] >> strip_tac >> gvs[ghost_inv_at_def] >>
+      simp[] >> strip_tac >> gvs[ghost_inv_at_def, wb_frame_refl] >>
       first_assum ACCEPT_TAC) >>
   suspend "cons"
 QED
@@ -410,10 +419,8 @@ Resume extcall_request_keywords_owned_outcome[tail]:
       (CONJUNCTS_THEN2 assume_tac
         (qx_choose_then `orig` (CONJUNCTS_THEN2 assume_tac
           (qx_choose_then `vs` (MAP_EVERY assume_tac o CONJUNCTS)))))))) >>
-  `ee.scopes = mid.scopes /\ mid.scopes = es.scopes` by
-    (qpat_assum `ee with <|outcomes := NONE; requests := []; gas_obs := []; storage_trace := []|> = _` mp_tac >>
-     qpat_assum `mid with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> = _` mp_tac >>
-     simp[evaluation_state_component_equality]) >>
+  `MAP FDOM ee.scopes = MAP FDOM mid.scopes /\
+   MAP FDOM mid.scopes = MAP FDOM es.scopes` by simp[] >>
   `stmt_state_rel H ctx func cenv cx es s0` by
     (`valid_horizon cx st0 H mid.storage_trace` by
        (`valid_horizon cx st0 H (mid with gas_obs := obs).storage_trace` suffices_by simp[] >>
@@ -429,29 +436,21 @@ Resume extcall_request_keywords_owned_outcome[tail]:
        (mp_then Any mp_tac valid_horizon_frame) >>
      simp[] >> disch_then irule >> simp[] >> irule storage_trace_frame_bind_all >>
      simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
-  `!n b sz. local_region cenv mid.scopes t n b sz <=>
-             local_region cenv es.scopes s0 n b sz` by
-    (`local_ptrs_rel func cenv es.scopes s0` by
-       (qpat_assum `stmt_state_rel H _ _ _ _ es s0`
-          (mp_then Any mp_tac stmt_state_rel_local_ptrs_alloca) >> simp[]) >>
-     rpt gen_tac >> eq_tac >> strip_tac
-     >- (irule exprSimPropsTheory.local_region_frame >>
-         conj_tac >- (qexists_tac `func` >> simp[]) >>
-         qexistsl_tac [`sa`,`mid.scopes`,`t`] >> simp[]) >>
-     irule exprSimPropsTheory.local_region_frame_fwd >>
-     qexistsl_tac [`s0`,`sa`,`es.scopes`] >> simp[]) >>
   `ci_mono sm sb` by
     (qspecl_then [`ks`,`xs`,`sm`] mp_tac keyword_suffix_ci_mono >> simp[]) >>
   `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
    sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id` by
     fs[ci_mono_def] >>
-  `pure_frame cenv func es sa s0 u` by
-    (irule exprSimPropsTheory.pure_frame_trans >>
-     simp[] >> qexistsl [`mid`,`sm`,`t`] >> simp[]) >>
+  `wb_frame cenv es ee sa s0 u` by
+    (irule (horizonTypeLib.at_horizon_named "H" wb_frame_trans) >>
+     qpat_assum `stmt_state_rel H ctx func cenv cx es s0` (irule_at Any) >>
+     qpat_assum `wb_frame cenv es mid sa s0 t` (irule_at Any) >>
+     qpat_assum `wb_frame cenv mid ee sm t u` (irule_at Any) >> simp[]) >>
   `ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2` by
-    (qpat_assum `ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1`
-       (mp_then Any mp_tac ghost_kept_at_trans) >>
-     disch_then (qspecl_then [`tn2`,`sm`,`t`,`mid`,`G2`] mp_tac) >> simp[]) >>
+    (irule (horizonTypeLib.at_horizon_named "H" ghost_kept_at_wb_trans) >>
+     qpat_assum `stmt_state_rel H ctx func cenv cx es s0` (irule_at Any) >>
+     qpat_assum `ghost_kept_at lo cenv mid sm G1 tn1 t G2 tn2` (irule_at Any) >>
+     qpat_assum `wb_frame cenv es mid sa s0 t` (irule_at Any) >> simp[]) >>
   `(!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x u = SOME w) /\
    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -465,14 +464,14 @@ Resume extcall_request_keywords_owned_outcome[tail]:
   `s0.vs_alloca_next <= u.vs_alloca_next` by
     (irule arithmeticTheory.LESS_EQ_TRANS >> qexists `t.vs_alloca_next` >> simp[]) >>
   qexists `v::vs` >> simp[sumTheory.SUM_MAP_def] >>
-  conj_tac
-  >- (qpat_assum `ee with <|outcomes := NONE; requests := []; gas_obs := []; storage_trace := []|> = _` mp_tac >>
-      qpat_assum `mid with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> = _` mp_tac >>
-      simp[evaluation_state_component_equality]) >>
   `!w. eval_operand op t = SOME w ==> eval_operand op u = SOME w` by
     (Cases_on `op` >> gvs[venomStateTheory.eval_operand_def]) >>
   `op_taint tn2 op = op_taint tn1 op /\ op_prov G2 op = op_prov G1 op` by
-    (Cases_on `op` >> gvs[ghost_kept_at_def, ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def] >> metis_tac[]) >>
+    (Cases_on `op` >> simp[ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def] >>
+     rename1 `_ /\ FLOOKUP G2 x = FLOOKUP G1 x` >>
+     qpat_assum `ghost_kept_at lo cenv mid sm G1 tn1 t G2 tn2`
+       (qspec_then `x` mp_tac o CONJUNCT1 o REWRITE_RULE [ghost_kept_at_def]) >>
+     simp[ptrDisciplineTheory.op_taint_def]) >>
   `!x. op = Var x ==> not_fresh_at sb x` by metis_tac[not_fresh_at_mono] >>
   Cases_on `k` >> gvs[ext_call_kwarg_def] >>
   TRY (qpat_x_assum `!w. eval_operand op t = SOME w ==> _` (fn th =>
@@ -485,26 +484,27 @@ Resume extcall_request_keywords_owned_outcome[tail]:
   `FLOOKUP u.vs_allocas aid = SOME (w2n w,type_memory_size tv)` by simp[] >>
   `val_footprint tv v <= type_memory_size tv` by
     simp[exprSimPropsTheory.val_footprint_le] >>
-  `alloca_inv u` by metis_tac[stmt_state_rel_local_ptrs_alloca] >>
+  `mem_bytes_at (w2n w) (type_memory_size tv) u.vs_memory =
+   mem_bytes_at (w2n w) (type_memory_size tv) t.vs_memory` by
+    (qpat_assum `wb_frame cenv mid ee sm t u`
+       (mp_tac o cj 3 o REWRITE_RULE [wb_frame_def]) >>
+     disch_then (qspecl_then [`aid`,`w2n w`,`type_memory_size tv`] mp_tac) >>
+     impl_tac >- (simp[GSYM loweringStateRelDefsTheory.regions_disjoint_def] >> first_assum ACCEPT_TAC) >>
+     simp[]) >>
   `mem_bytes_at (w2n w) (val_footprint tv v) u.vs_memory =
    mem_bytes_at (w2n w) (val_footprint tv v) t.vs_memory` by
-    (qpat_assum `pure_frame cenv func mid sm t u`
-       (mp_tac o CONJUNCT2 o REWRITE_RULE [pure_frame_def]) >>
-     disch_then irule >> rpt gen_tac >> strip_tac >>
-     `aid <> inst.inst_id` by decide_tac >>
-     qpat_assum `alloca_inv u`
-       (mp_tac o cj 1 o REWRITE_RULE [venomMemDefsTheory.alloca_inv_def]) >>
-     simp[venomMemDefsTheory.allocas_non_overlapping_def] >>
-     disch_then (qspecl_then [`aid`,`inst.inst_id`,`w2n w`,`type_memory_size tv`,`b`,`sz`] mp_tac) >>
-     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+    (qpat_assum `mem_bytes_at (w2n w) (type_memory_size tv) u.vs_memory = _`
+       (mp_tac o MATCH_MP (cj 1 valueEncodingProofsTheory.mem_bytes_at_agree_window) o SYM) >>
+     disch_then (qspecl_then [`w2n w`,`val_footprint tv v`] mp_tac) >> simp[]) >>
   `!i. w2n w <= i /\ i < w2n w + val_footprint tv v /\ i IN tn2.t_mem ==>
        i IN tn1.t_mem` by
     (gen_tac >> strip_tac >>
+     `i < w2n w + type_memory_size tv` by decide_tac >>
      qpat_assum `ghost_kept_at lo cenv mid sm G1 tn1 t G2 tn2`
        (mp_tac o cj 2 o REWRITE_RULE [ghost_kept_at_def]) >>
-     disch_then (qspecl_then [`aid`,`w2n w`,`type_memory_size tv`,`i`] irule) >>
-     simp[GSYM loweringStateRelDefsTheory.regions_disjoint_def] >>
-     qexistsl [`aid`,`tv`,`w`] >> simp[] >> first_assum ACCEPT_TAC) >>
+     disch_then (qspecl_then [`aid`,`w2n w`,`type_memory_size tv`,`i`] mp_tac) >>
+     impl_tac >- (simp[GSYM loweringStateRelDefsTheory.regions_disjoint_def] >> first_assum ACCEPT_TAC) >>
+     simp[]) >>
   `!x. op = Var x ==> FLOOKUP G2 x = FLOOKUP G1 x` by
     (rpt strip_tac >> fs[ptrDisciplineTheory.op_prov_def]) >>
   `ptr_mem_ok cx (lowered_value_type cenv e) v op G2 tn2 u` by
@@ -521,86 +521,3 @@ Resume extcall_request_keywords_owned_outcome[tail]:
 QED
 
 Finalise extcall_request_keywords_owned_outcome
-
-(* Forget the exact row for consumers that only need the original post. *)
-Theorem extcall_request_keywords_outcome:
-  body_exprs_full_ok cx xs /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  expr_sim_inv cenv cx env es /\
-  (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
-    expr_body_pre cenv cx env e st) /\
-  EVERY (\e. ~expr_has_effect e) xs /\
-  MAP expr_type xs = MAP (ext_call_kw_type rt) ks /\
-  compile_ext_call_kwargs compile_expr cenv rt ks xs sa = ((vo,go,dopt),sb) /\
-  compile_ext_call_kwargs compile_expr cenv rt ks (MAP gas_shadow_expr xs)
-    shadow_sa = ((vo,go,dopt),shadow_sb) /\
-  gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
-  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
-  gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
-  MEM shadow_func shadow_ctx.ctx_functions /\
-  fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx es s0 /\
-    storage_well_formed_on cx es (FST H) /\
-    ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
-  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
-  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full
-    (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (eval_exprs cx xs) (es,s0,G0,tn0)
-    (\H res ee G tn t. ?vs. res = INL vs /\ LENGTH vs = LENGTH xs /\
-      expr_sim_inv cenv cx env ee /\
-      stmt_state_rel H ctx func cenv cx ee t /\
-      storage_well_formed_on cx ee (FST H) /\
-      t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
-      alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-      s0.vs_alloca_next <= t.vs_alloca_next /\
-      ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
-      ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
-      return_buf_frame d cenv sb t /\ pure_frame cenv func es sa s0 t /\
-      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-        lookup_var x t = SOME w) /\
-      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
-      t.vs_labels = s0.vs_labels /\
-      (ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) =
-        (es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) /\
-      (case ext_call_kwarg EKGas ks vs of
-         NONE => go = NONE
-       | SOME v => ?op w. go = SOME op /\ eval_operand op t = SOME w /\
-           (!x. op = Var x ==> not_fresh_at sb x) /\
-           dest_NumV v = SOME (w2n w) /\ op_taint tn op = {}) /\
-      (case ext_call_kwarg EKValue ks vs of
-         NONE => vo = NONE
-       | SOME v => ?op w. vo = SOME op /\ eval_operand op t = SOME w /\
-           (!x. op = Var x ==> not_fresh_at sb x) /\
-           dest_NumV v = SOME (w2n w) /\ op_taint tn op = {}) /\
-      (case ext_call_kwarg EKDefault ks vs of
-         NONE => dopt = NONE
-       | SOME v => ?e op dt. dopt = SOME (op,dt) /\
-           ext_call_kwarg EKDefault ks xs = SOME e /\
-           (!x. op = Var x ==> not_fresh_at sb x) /\
-           if is_word_type rt then
-             dt = rt /\ expr_val_rel cx rt v op t /\ ptr_val_ok cx rt v op G tn t
-           else dt = lowered_value_type cenv e /\ ptr_val_ok cx dt v op G tn t /\
-                ptr_mem_ok cx dt v op G tn t /\ ptr_buf_ok cenv e op G t /\
-                (!w. eval_operand op t = SOME w /\ type_memory_bytes cenv dt <> 0 ==>
-                  w2n w + type_memory_bytes cenv dt <= t.vs_alloca_next)))
-    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
-      (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
-Proof
-  disch_then (assume_tac o MATCH_MP extcall_request_keywords_owned_outcome) >>
-  irule gas_outcome_full_post_mono >> goal_assum (drule_at Any) >>
-  simp[] >> rpt gen_tac >>
-  disch_then (qx_choose_then `vs` (MAP_EVERY assume_tac o CONJUNCTS)) >>
-  qexists `vs` >> simp[] >>
-  Cases_on `ext_call_kwarg EKDefault ks vs` >> gvs[] >>
-  Cases_on `is_word_type rt` >> gvs[] >> metis_tac[]
-QED

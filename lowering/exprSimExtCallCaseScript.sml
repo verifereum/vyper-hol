@@ -82,8 +82,7 @@ Definition extcall_default_ready_def:
     (has_default <=> IS_SOME default_opt) /\
     (ret_type = NoneT ==> ~has_default) /\
     !d. default_opt = SOME d ==>
-        (default_ty = ret_type \/
-         is_bytestring_type default_ty /\ is_bytestring_type ret_type) /\
+        type_widens_to (get_tenv cx) default_ty ret_type /\
         ?tv rtv w. evaluate_type (get_tenv cx) default_ty = SOME tv /\
                evaluate_type (get_tenv cx) ret_type = SOME rtv /\
                value_has_type tv d /\ val_wf tv d /\
