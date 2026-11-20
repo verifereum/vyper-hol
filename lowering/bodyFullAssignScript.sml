@@ -18546,6 +18546,7 @@ Theorem body_assign_toplevel_copy_full:
     body_expr_full_ok cx e /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    struct_args_unique tops /\
     supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
@@ -18573,8 +18574,7 @@ Theorem body_assign_toplevel_copy_full:
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   reverse (Cases_on `lowered_value_type cenv e = expr_type e`)
-  >- (`struct_args_unique tops` by fs[body_inv_def] >>
-      irule body_assign_other_full >> simp[] >>
+  >- (irule body_assign_other_full >> simp[] >>
       qexistsl_tac [`bindings`, `env`, `env'`, `tops`] >> gvs[]) >>
   rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   irule gas_outcome_full_initial_domain >>
