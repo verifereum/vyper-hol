@@ -1,7 +1,7 @@
 (* One pass through a nonbulk calldata decoder loop. *)
 Theory calldataNoneArrayIteration
 Ancestors
-  calldataArrayRawCallsite decoderLoopHeaderCorePtr decoderLoopBackedgeCorePtr
+  decoderLoopHeaderCorePtr decoderLoopBackedgeCorePtr
   abiDecoderLoopRegisters decoderGhostFramePtr allocaFrontierBound
   calldataDynOwned calldataChildFrame calldataFiniteTransport ptrDiscipline
   abiDecodeRanges abiDecoderExecution

@@ -1,7 +1,7 @@
 Theory fnLineageInvActualReplay
 Ancestors fnPlanLineageInventory fnPlanLineageReplay fnPlanLineageSetup planWf
   reorderSim fnPlanLineagePhiTemporal
-  fnLineageInvCleanupCoherence stackPlanGen
+  stackPlanGen
   stackPlanOps stackPlanTypes stackModel list rich_list
 
 (* Silent spill release is independent of the entire physical stack, not

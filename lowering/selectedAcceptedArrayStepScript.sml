@@ -2,7 +2,7 @@
 Theory selectedAcceptedArrayStep
 Ancestors
   decoderOriginAllocationFrame
-  selectedAcceptedInterfaces calldataArrayRawCallsite calldataMemberResourceFrame
+  selectedAcceptedInterfaces calldataMemberResourceFrame
   decoderLoopHeaderCorePtr decoderLoopBackedgeCorePtr robustCopyTransportPtr
   fragGasOriginPtrExec vyperCalldataProps vyperCalldata words arithmetic
   calldataSourceCorrespondence calldataDynStep decoderArraySetupPtr
