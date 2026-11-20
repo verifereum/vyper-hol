@@ -425,7 +425,7 @@ Proof
   metis_tac[CONJUNCT2 subst_consts_stmt_abi_decode_target]
 QED
 
-Theorem constant_expr_no_internal_calls[local]:
+Theorem constant_expr_no_internal_calls:
   (!e. constant_expr mods e ==> int_calls_expr e = []) /\
   (!es. EVERY (constant_expr mods) es ==> int_calls_exprs es = []) /\
   (!fs. EVERY (constant_expr mods) (MAP SND fs) ==> int_calls_named_exprs fs = [])
