@@ -348,7 +348,9 @@ Proof
   disch_then (qspecl_then [`explicit`,`PG`] (DISJ_CASES_THEN
     (qx_choose_then `v` (qx_choose_then `Gv` (qx_choose_then `tnv` strip_assume_tac)))))
   >- (qexistsl_tac [`Abort Revert_abort v`,`Gv`,`tnv`] >>
-      asm_rewrite_tac[] >> metis_tac[]) >>
+      asm_rewrite_tac[] >> conj_tac
+      >- (rpt strip_tac >> first_x_assum irule >> simp[]) >>
+      disj1_tac >> qexists_tac `v` >> REFL_TAC) >>
   suspend "reload"
 QED
 
