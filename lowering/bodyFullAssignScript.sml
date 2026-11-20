@@ -18575,6 +18575,7 @@ Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   reverse (Cases_on `lowered_value_type cenv e = expr_type e`)
   >- (irule body_assign_other_full >> simp[] >>
+      conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl_tac [`bindings`, `env`, `env'`, `tops`] >> gvs[]) >>
   rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   irule gas_outcome_full_initial_domain >>
