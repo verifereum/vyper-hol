@@ -10,7 +10,7 @@ Theory placeStoreStorage
 Ancestors
   stmtSimDefs exprSimHypsDefs typedCopyDomain vyperStoragePlaceProvenance
   vyperStoragePlaceObserved
-  loweringPosts fragGasMode accountsRelProps copyExecution stmtSimStoreCopy placeStoreCopyChunk placeStoreCopyPath
+  loweringPosts fragGasMode accountsRelProps copyExecution stmtSimStoreCopy placeStoreCopyPath
   stmtLowering exprLowering compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperValue vyperTypeSystem
   venomState fragGasSeq fragGasPath arithmetic venomExecSemantics venomInst exprLoweringProps

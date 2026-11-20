@@ -1,7 +1,7 @@
 (* Decode a constructor tuple member into its allocated argument buffer. *)
 Theory ctorArgDecode
 Ancestors
-  ctorAbiActual ctorAbiActualRecursive ctorAbiActualFrame
+  ctorAbiActualRecursive ctorAbiActualFrame
   abiDecoderMemberBody abiDecoderTypedContract abiDecoderCoherence abiDecoderContract
   actualAllocCredit actualAllocExec moduleLowering compileVyper
   entryArgPtrs emitHelperProps abiEncoderProps abiEncoderRegisteredEffect

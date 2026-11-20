@@ -2,7 +2,7 @@
 Theory bodyFullAbiEncodeStore
 Ancestors
   fragGasOriginPtrLoop exprPtrUnwrapCopyEdges wordLoadStorePtr
-  assignBasePtrLiteralGhost robustCopyTransportPtr bodyPtrDefs
+  exprPtrUnwrapFrames[qualified] robustCopyTransportPtr bodyPtrDefs
   allocationPtr localPtrsProps ghostPcTransportPtr instIdxIndep
   instMemFrontier ptrSafeRun ptrDiscipline venomInst venomState
   venomExecSemantics venomInstProofs valueEncodingProps valueEncodingProofs

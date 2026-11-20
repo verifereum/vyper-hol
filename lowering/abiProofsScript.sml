@@ -4,7 +4,7 @@ Theory abiProofs
 Ancestors
   (* Descriptor, physical-scratch and source-value encoding. *)
   (* Canonical and actual-source decoding. *)
-  ctorAbiActual ctorArgDecode
+  ctorArgDecode
   abiDecoderValidRecursive abiDecoderValidWrapping
   (* Builtins, empty values and caller inputs. *)
   abiEmptyDispatch

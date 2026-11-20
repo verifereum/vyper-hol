@@ -94,8 +94,7 @@ QED
    Helpers: memory read/write queries for MemLiveness
    ========================================================================= *)
 
-(* Find base allocations referenced by an operand, using bp_result.
-   Matches Python MemLiveness._find_base_ptrs. *)
+(* The canonical liveness analysis uses sorted allocation sets for smerge. *)
 Definition find_base_allocas_def:
   find_base_allocas (bpr : bp_result) op =
     case op of
@@ -727,21 +726,34 @@ Definition alloc_liveset_item_le_def:
 End
 (* Order sidecar for memory liveness. Unlike the canonical sorted sets, these
    lists model OrderedSet insertion: union appends unseen keys; deletion keeps
-   survivor order. Pointer may-sets use canonical order; singleton resolutions
-   (the ordinary lowering case) have no pointer-order ambiguity. *)
+   survivor order. *)
 Definition ml_ordered_union_def:
   ml_ordered_union xs ys =
     FOLDL (\acc x. if MEM x acc then acc else acc ++ [x]) xs ys
 End
 
+(* Vyper #5248 visits an operand's possible base pointers in insertion order. *)
+Definition find_base_allocas_first_seen_def:
+  find_base_allocas_first_seen (bpr : bp_result) op =
+    case op of
+      Var v => nub_first (MAP ptr_base (bp_get_ptrs bpr v))
+    | _ => []
+End
+
+Definition find_base_allocas_first_seen_opt_def:
+  find_base_allocas_first_seen_opt bpr NONE = [] /\
+  find_base_allocas_first_seen_opt bpr (SOME op) =
+    find_base_allocas_first_seen bpr op
+End
+
 Definition ml_ordered_inst_def:
   ml_ordered_inst bpr mems sizes lbl idx inst live la keys =
-    let ws = find_base_allocas_opt bpr (inst_write_op inst) in
-    let rs = find_base_allocas_opt bpr (inst_read_op inst) in
+    let ws = find_base_allocas_first_seen_opt bpr (inst_write_op inst) in
+    let rs = find_base_allocas_first_seen_opt bpr (inst_read_op inst) in
     let l1 = ml_ordered_union live rs in
     let l2 = if inst.inst_opcode = INVOKE then
       (case inst.inst_operands of Label name :: _ =>
-        FOLDL (\s op. ml_ordered_union s (find_base_allocas bpr op))
+        FOLDL (\s op. ml_ordered_union s (find_base_allocas_first_seen bpr op))
           (ml_ordered_union l1 (mems name)) inst.inst_operands
        | _ => l1) else l1 in
     let la' = la |+ ((lbl,idx),l2) in
@@ -808,7 +820,7 @@ Definition ml_ordered_keys_def:
         (FILTER (\a. MEM a (ml_lookup us addr))
           (ml_ordered_union (ml_lookup ola addr) esc))) [] keys' in
     FOLDL (\acc inst. ml_ordered_union acc
-      (find_base_allocas_opt bpr (inst_write_op inst))) ks (fn_insts fn)
+      (find_base_allocas_first_seen_opt bpr (inst_write_op inst))) ks (fn_insts fn)
 End
 
 (* The sidecar supplies priority, not membership. Complete missing local keys
