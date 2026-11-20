@@ -140,9 +140,11 @@ One [source evaluator](../semantics/vyperInterpreterScript.sml) has two modes:
 `call_external NONE` concretely runs callees; `call_external (SOME os)` takes
 outcomes. Arbitrary SOME lists use this same evaluator, not a theorem-only
 interpreter. Runtime theorem mode uses
-`call_external (SOME (MAP SND (call_trace es))) gobs am tx` for source gas
-observations `gobs`; `vyper_call_correct`'s `call_result_rel` relates them
-to the EVM's readings `gas_readings es` through `gas_readings_rel` (below).
+`call_external (SOME (MAP SND (call_trace es))) gobs am tx` for existential
+source gas observations `gobs`. When calldata dispatch selects a function and
+the frame is not resource-starved, `vyper_call_correct`'s `call_result_rel`
+relates them, at `tx` with that function and its arguments, to the EVM's
+readings `gas_readings es` through `gas_readings_rel` (below).
 Venom and [assembly](../venom/codegen/defs/asmSemScript.sml) CALL/STATICCALL also
 use `take_outcome`, `record_request`, `adopt_outcome`. A call that finds the
 outcome list empty stops the run: Venom aborts (`ExHalt_abort`), assembly
