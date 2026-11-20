@@ -38,5 +38,6 @@ Theorem layout_body_pre_contract:
 Proof
   simp[expr_body_pre_def, layout_abi_def, layout_call_def,
        int_calls_expr_def, supportedExprTraverseTheory.supported_expr_exists_def,
+       supportedExprTraverseTheory.call_operands_effect_root_def,
        const_name_root_def]
 QED

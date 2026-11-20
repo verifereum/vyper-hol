@@ -534,6 +534,8 @@ Theorem body_extcall_case_full:
 Proof
   rpt gen_tac >> strip_tac >> PairCases_on `sig` >> fs[] >>
   irule extcall_body_full_ok_of_vv >> rpt gen_tac >> strip_tac >>
+  `acyclic_struct_metadata cenv.ce_struct_fields` by
+    fs[bodySimTheory.body_inv_def] >>
   drule_then assume_tac body_inv_no_dalloca >>
   rewrite_tac [expr_vv_sim_full_def] >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>

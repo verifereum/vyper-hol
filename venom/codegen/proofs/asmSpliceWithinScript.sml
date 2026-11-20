@@ -232,23 +232,6 @@ Proof
   gvs[sym_within_ok_def]
 QED
 
-Theorem within_stop[local]:
-  ss.sym_base.as_pc < LENGTH p /\ Q (EL ss.sym_base.as_pc p) ==>
-  sym_run_within P Q p env (SUC n) ss
-Proof
-  simp[sym_run_within_def]
-QED
-
-Theorem within_terminal_step[local]:
-  ss.sym_base.as_pc < LENGTH p /\ P (EL ss.sym_base.as_pc p) ss.sym_stack /\
-  sym_terminal (sym_step p env (EL ss.sym_base.as_pc p) ss) ==>
-  sym_run_within P Q p env (SUC n) ss
-Proof
-  simp[sym_run_within_def] >>
-  Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >>
-  simp[sym_terminal_def]
-QED
-
 (* A prefix guard written on run states. This allows both step models to
    use the splice certificates' existing window checkpoint equations. *)
 Overload sym_prefix_all = ``\(runf:num -> sym_state -> sym_result) P Q p n s.

@@ -1101,7 +1101,9 @@ Proof
            is_dynamic (vyper_to_abi_type (type_env tops) target))` by fs[body_inv_def] >>
         `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
         qspecl_then [`cenv`,`cx`,`env`,`e`,`ee`,`int_calls_exprs tail`]
-          irule_body_pre stmt_expr_body_pre >> simp[] >> metis_tac[]) >>
+          irule_body_pre stmt_expr_body_pre >> simp[] >>
+        metis_tac[supportedExprTraverseTheory.supported_pure_expr_effect_free,
+                  supportedExprTraverseTheory.no_effect_call_operands]) >>
      conj_tac
      >- (qpat_x_assum `body_expr_full_ok cx e`
            (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>

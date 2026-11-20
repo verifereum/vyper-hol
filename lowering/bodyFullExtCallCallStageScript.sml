@@ -475,6 +475,11 @@ Theorem extcall_call_stage_full:
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr value gas buf off len cap target value_opt calldata has_default
     default_op default_ty default_opt ee s /\
+  (IS_SOME default_opt /\ ~is_word_type default_ty ==>
+    ?w aid tv. eval_operand default_op s = SOME w /\
+      evaluate_type (get_tenv cx) default_ty = SOME tv /\
+      FLOOKUP s.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+      aid < sp.cs_next_id) /\
   alloca_history func s /\ allocas_from lo s /\
   lo <= s.vs_alloca_next /\ s0.vs_alloca_next <= s.vs_alloca_next /\
   ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
@@ -498,6 +503,11 @@ Theorem extcall_call_stage_full:
   (!rd ee' z Gu tu.
     extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr buf cap target
       has_default default_op default_ty default_opt rd ee' z /\
+    (IS_SOME default_opt /\ ~is_word_type default_ty ==>
+      ?w aid tv. eval_operand default_op z = SOME w /\
+        evaluate_type (get_tenv cx) default_ty = SOME tv /\
+        FLOOKUP z.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+        aid < sr.cs_next_id) /\
     alloca_history func z /\ allocas_from lo z /\
     lo <= z.vs_alloca_next /\ s0.vs_alloca_next <= z.vs_alloca_next /\
     (!H. valid_horizon cx st0 H ee'.storage_trace ==>
@@ -556,6 +566,32 @@ Proof
   ASM_SIMP_TAC bool_ss [] >> strip_tac >>
   qpat_x_assum `r = OK t` SUBST_ALL_TAC >>
   drule_all extcall_precheck_dispatch_operands >> strip_tac >>
+  `sp.cs_next_id <= s1.cs_next_id` by
+    (qpat_x_assum `(if ret_type = NoneT /\ ~skip then _ else _) sp = ((),s1)` mp_tac >>
+     Cases_on `ret_type = NoneT /\ ~skip` >> simp[comp_return_def]
+     >- (strip_tac >>
+         `ci_mono sp (SND (compile_extcodesize_check addr sp))` by
+           (rewrite_tac[compile_extcodesize_check_def] >>
+            irule ci_mono_bind >> simp[ci_mono_emit_op,ci_mono_emit_void]) >>
+         pop_assum mp_tac >> simp[ci_mono_def]) >>
+     strip_tac >> simp[]) >>
+  `IS_SOME default_opt /\ ~is_word_type default_ty ==>
+    ?w aid tv. eval_operand default_op t = SOME w /\
+      evaluate_type (get_tenv cx) default_ty = SOME tv /\
+      FLOOKUP t.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+      aid < s1.cs_next_id` by
+    (strip_tac >>
+     qpat_assum `IS_SOME default_opt /\ ~is_word_type default_ty ==> _`
+       (drule_all_then (qx_choosel_then [`w`,`aid`,`tv`] strip_assume_tac)) >>
+     `safe_operand sp default_op` by
+       (qpat_assum `EVERY (safe_operand sp) [addr;value;gas;buf;off;len;default_op]`
+          (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+        disch_then (qspec_then `default_op` mp_tac) >>
+        simp[NoAsms]) >>
+     `eval_operand default_op t = eval_operand default_op s` by
+       (qpat_assum `!p. safe_operand sp p ==> eval_operand p t = _ /\ _`
+          (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+     qexistsl_tac [`w`,`aid`,`tv`] >> simp[] >> decide_tac) >>
   `EVERY (\p. op_taint tn1 p = {}) [addr;value;gas;buf;off;len]` by fs[EVERY_DEF] >>
   qabbrev_tac `inst = mk_inst s1.cs_next_id (if stat then STATICCALL else CALL)
     (if stat then [gas;addr;off;len;buf;Lit (n2w cap)]
@@ -585,6 +621,14 @@ Proof
     (qpat_assum `p.cs_next_id = _` (pure_rewrite_tac o single) >> first_assum ACCEPT_TAC) >>
   `s4.cs_current_bb = t.vs_current_bb /\ LENGTH s4.cs_current_insts = SUC t.vs_inst_idx`
     by metis_tac[] >>
+  `IS_SOME default_opt /\ ~is_word_type default_ty ==>
+    ?w aid tv. eval_operand default_op t = SOME w /\
+      evaluate_type (get_tenv cx) default_ty = SOME tv /\
+      FLOOKUP t.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+      aid < p.cs_next_id` by
+    (qpat_assum `p.cs_next_id = s1.cs_next_id`
+       (pure_rewrite_tac o single) >>
+     first_assum ACCEPT_TAC) >>
   `s0.vs_alloca_next <= t.vs_alloca_next` by simp[] >>
   `!g. OPTION_BIND source_gas dest_NumV = SOME g ==> g = w2n gw` by
     (rpt strip_tac >> qpat_assum `!gw g. _ ==> _` drule_all >> simp[]) >>

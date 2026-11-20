@@ -6,7 +6,7 @@ Ancestors
    new variable, so use the unwrap counter at the snapshot endpoint. *)
 Theorem extcall_saved_operand_not_fresh:
   compile_expr ce et e si = (vv,sm) /\ local_ptrs_reserved ce si /\
-  compile_snapshot_vv ce F (ext_call_arg_value ty vv) sm = (saved,ss) ==>
+  compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) ==>
   !x. vv_operand saved = Var x ==> not_fresh_at ss x
 Proof
   strip_tac >>
@@ -23,5 +23,8 @@ Proof
        | LocatedValue tag p => (!x. p.ptr_operand = Var x ==> not_fresh_at sm x)` by
         (Cases_on `ext_call_arg_value ty vv` >> gvs[vv_operand_def]) >>
       metis_tac[compiler_unwrap_value_var]) >>
-  simp[comp_return_def] >> strip_tac >> gvs[]
+  Cases_on `copy` >> simp[comp_bind_def, comp_return_def]
+  >- (pairarg_tac >> simp[] >> strip_tac >> gvs[vv_operand_def, mk_ptr_def] >>
+      metis_tac[compiler_materialize_vv_var]) >>
+  strip_tac >> gvs[]
 QED

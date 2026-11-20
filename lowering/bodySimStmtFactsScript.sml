@@ -16,20 +16,6 @@ Ancestors
 Libs
   monadsyntax
 
-val irule_body_pre = bodyConstNameLib.irule_body_pre;
-
-Theorem body_inv_cx_tops[local]:
-  body_inv tops ctx cenv cx ==>
-  cx_tops cx = tops /\
-  (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-            is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target))
-Proof
-  strip_tac >>
-  `cx_tops cx = tops` by
-    (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
-  fs[body_inv_def]
-QED
-
 Definition reason_covered_def:
   reason_covered cenv r <=>
     (!sa vv sb. compile_expr cenv (expr_type r) r sa = (vv, sb) ==>
@@ -116,18 +102,6 @@ Proof
   simp[NoAsms, bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac read_result_state >> gvs[] >>
   drule_all expr_body_pre_eval_result >> simp[]
-QED
-
-Theorem expr_body_pre_eval_gas[local]:
-  !cenv cx env e es gs res es'.
-    expr_body_pre cenv cx env e es /\
-    (do result <- eval_expr cx e; read_result cx result od)
-      (es with gas_obs := gs) = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\
-    !v. res = INL v ==> value_runtime_typed env (expr_type e) v
-Proof
-  rpt gen_tac >> strip_tac >> irule expr_body_pre_eval >>
-  qexists_tac `es with gas_obs := gs` >> fs[]
 QED
 
 Theorem body_inv_storage_var_types:
@@ -278,45 +252,6 @@ Proof
   `type_memory_size (TupleTV tvs) + 64 < dimword (:256)` by
     metis_tac[allocation_limit_word_room] >>
   decide_tac
-QED
-
-Theorem body_assign_tuple_rhs_pre[local]:
-  body_inv tops ctx cenv cx /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-     (Assign (TupleTarget gs) e) ==>
-     occurs_abi_decode_target target tops) /\
-  supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
-  expr_sim_inv cenv cx env es /\
-  type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
-  body_stmt_safe tops (Assign (TupleTarget gs) e) /\
-    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
-  call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) ==>
-  expr_body_pre cenv cx env e es
-Proof
-  rpt strip_tac >>
-  `supported_expr tops e` by
-    gvs[supported_stmt_def, supported_assignment_def] >>
-  `well_typed_expr env e` by gvs[type_stmt_def] >>
-  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
-    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
-      supported_assignment_exists_def, supported_iterator_exists_def,
-      supported_assert_exists_def, supported_raise_exists_def,
-      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
-      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
-      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
-      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
-  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
-    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
-      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
-      alloc_limits_expr_def]) >>
-  imp_res_tac alloc_limits_expr_not_extcode >>
-  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
-    gvs[body_inv_def] >>
-  drule_then strip_assume_tac body_inv_cx_tops >>
-     irule_body_pre stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
-  qexists_tac `[]` >> simp[] >>
-  metis_tac[call_evaluation_safe_append_right]
 QED
 
 Theorem body_tuple_target_local_aligned:
