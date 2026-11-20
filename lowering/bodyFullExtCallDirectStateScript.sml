@@ -100,7 +100,7 @@ QED
 
 (* Only writes into the payload and the designated private allocations
    are allowed between the compiler's two cuts. *)
-Theorem abi_encode_saved_state_phase:
+Theorem abi_encode_saved_state_phase_pure:
   abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
     shared pbase capacity root dst dst_offset prefix a u Gu tu /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s) /\
@@ -122,6 +122,7 @@ Theorem abi_encode_saved_state_phase:
   (!i. EVERY (\(p,n). i < p \/ p+n <= i) outs /\
     (!aid p n. aid IN ids /\ FLOOKUP v.vs_allocas aid = SOME (p,n) ==>
       i < p \/ p+n <= i) /\ i IN tv.t_mem ==> i IN tu.t_mem) ==>
+  (pure_frame ce func ee se u v /\ wb_frame ce ee ee se u v) /\
   abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
     shared pbase capacity root dst dst_offset prefix c v Gv tv
 Proof
@@ -136,7 +137,7 @@ Proof
      res_tac >> decide_tac) >>
   mp_tac (Q.INST [`front` |-> `se`,`st` |-> `a`,`en` |-> `c`,`s` |-> `u`,
     `t` |-> `v`,`b` |-> `pbase`,`cap` |-> `capacity`,`G` |-> `Gu`,`G'` |-> `Gv`,
-    `tn` |-> `tu`,`tn'` |-> `tv`] extcall_direct_row_phase) >>
+    `tn` |-> `tu`,`tn'` |-> `tv`] extcall_direct_row_phase_pure) >>
   impl_tac >- asm_rewrite_tac[] >>
   strip_tac >>
   mp_tac (Q.INST [`st` |-> `a`,`en` |-> `c`,`s` |-> `u`,`t` |-> `v`,
@@ -169,12 +170,17 @@ Proof
      qpat_assum `wb_frame ce ee ee se s u` (irule_at Any) >>
      qpat_assum `ghost_kept_at lo ce ee se G tn s Gu tu` (irule_at Any) >>
      qpat_assum `ghost_kept_at lo ce ee se Gu tu u Gv tv` (irule_at Any) >> simp[]) >>
+  conj_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
   PURE_REWRITE_TAC [abi_encode_saved_state_def] >> asm_rewrite_tac[] >>
   qpat_assum `ci_mono a c` (strip_assume_tac o REWRITE_RULE [ci_mono_def]) >>
   `not_fresh_at c root /\ not_fresh_at c dst` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
   asm_rewrite_tac[] >> decide_tac
 QED
+
+Theorem abi_encode_saved_state_phase =
+  let val premise = fst (dest_imp (concl abi_encode_saved_state_phase_pure))
+  in DISCH premise (CONJUNCT2 (UNDISCH abi_encode_saved_state_phase_pure)) end
 
 Theorem extcall_direct_state_phase:
   extcall_direct_state ctx func ce cx st0 ee DF lo d se s G tn
@@ -309,7 +315,7 @@ Proof
     extcall_direct_state_selector_length
 QED
 
-Theorem abi_encode_saved_state_arith:
+Theorem abi_encode_saved_state_arith_pure:
   abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
     shared pbase capacity root dst dst_offset prefix a u Gu tu /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s) /\
@@ -326,15 +332,20 @@ Theorem abi_encode_saved_state_arith:
     FLOOKUP Gv x = FLOOKUP Gu x /\ op_taint tv (Var x) = op_taint tu (Var x)) /\
   tv.t_stor = tu.t_stor /\ tv.t_trans = tu.t_trans /\ tv.t_imm = tu.t_imm /\
   tv.t_mem = tu.t_mem ==>
+  (pure_frame ce func ee se u v /\ wb_frame ce ee ee se u v) /\
   abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
     shared pbase capacity root dst dst_offset prefix c v Gv tv
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   mp_tac (Q.INST [`ids` |-> `{}:num set`,`outs` |-> `[]:(num#num) list`]
-    abi_encode_saved_state_phase) >>
+    abi_encode_saved_state_phase_pure) >>
   impl_tac >- (asm_simp_tac (srw_ss()) [IN_INSERT] >> metis_tac[]) >>
   disch_then ACCEPT_TAC
 QED
+
+Theorem abi_encode_saved_state_arith =
+  let val premise = fst (dest_imp (concl abi_encode_saved_state_arith_pure))
+  in DISCH premise (CONJUNCT2 (UNDISCH abi_encode_saved_state_arith_pure)) end
 
 Theorem extcall_direct_state_arith:
   extcall_direct_state ctx func ce cx st0 ee DF lo d se s G tn

@@ -15,7 +15,7 @@ Ancestors
 
 Libs horizonTypeLib
 
-Theorem extcall_saved_runtime_copy_replay:
+Theorem extcall_saved_runtime_copy_replay_pure:
   lowered_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\ p.ptr_location = LocCode /\ ~ce.ce_is_ctor /\
   sm.cs_next_var <= su.cs_next_var /\ sm.cs_next_id <= su.cs_next_id /\
@@ -37,6 +37,7 @@ Theorem extcall_saved_runtime_copy_replay:
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) ==>
   ?z G' tn'.
+    pure_frame ce fn ee su t z /\
     gas_origin_ptr_path
       (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,
        lo,explicit,ctx,fn,PG) (t,G,tn) [] (OK z,G',tn') /\
@@ -106,7 +107,7 @@ Proof
   suspend "posts"
 QED
 
-Resume extcall_saved_runtime_copy_replay[posts]:
+Resume extcall_saved_runtime_copy_replay_pure[posts]:
   markerLib.RESUME_TAC >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
     expr_post H ctx fn ce cx e ee si sb t ee v (Var root) z` by
@@ -138,7 +139,7 @@ Resume extcall_saved_runtime_copy_replay[posts]:
   suspend "frames"
 QED
 
-Resume extcall_saved_runtime_copy_replay[frames]:
+Resume extcall_saved_runtime_copy_replay_pure[frames]:
   markerLib.RESUME_TAC >>
   `MEM (mk_inst su.cs_next_id ALLOCA [Lit (n2w (type_memory_size rt))] [root])
      (fn_insts fn)` by
@@ -155,11 +156,11 @@ Resume extcall_saved_runtime_copy_replay[frames]:
     mem_bytes_at off len z.vs_memory = mem_bytes_at off len t.vs_memory` by metis_tac[] >>
   `u = update_var root dst (buffer_allocation_fields t su.cs_next_id (type_memory_size rt))` by simp[] >>
   `ghost_kept_at lo ce ee si G tn t G tn` by simp[ghost_kept_at_def] >>
-  drule_all runtime_code_copy_retained_frames >> strip_tac >>
+  drule_all runtime_code_copy_retained_frames_pure >> strip_tac >>
   suspend "value"
 QED
 
-Resume extcall_saved_runtime_copy_replay[value]:
+Resume extcall_saved_runtime_copy_replay_pure[value]:
   markerLib.RESUME_TAC >>
   qabbrev_tac `q = z with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   `expr_post H0 ctx fn ce cx e ee si sb t ee v (Var root) q` by simp[Abbr `q`] >>
@@ -225,6 +226,7 @@ Resume extcall_saved_runtime_copy_replay[value]:
          (mp_tac o cj 4 o REWRITE_RULE [expr_post_def]) >> asm_rewrite_tac[]) >>
      qpat_assum `Abbrev (q = _)` (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
      asm_rewrite_tac[slice_capture_value_index]) >>
+  `pure_frame ce fn ee su t q` by simp[Abbr `q`] >>
   qexistsl [`q`,`HG`,`tf`] >>
   asm_rewrite_tac[] >>
   conj_tac
@@ -237,4 +239,13 @@ Resume extcall_saved_runtime_copy_replay[value]:
   gvs[Abbr `q`,eval_operand_def,lookup_var_def]
 QED
 
-Finalise extcall_saved_runtime_copy_replay
+Finalise extcall_saved_runtime_copy_replay_pure
+
+Theorem extcall_saved_runtime_copy_replay =
+  let
+    val (witnesses, result) = strip_exists (rand (concl extcall_saved_runtime_copy_replay_pure))
+    val drop_frame = DISCH result (CONJUNCT2 (ASSUME result))
+    fun under_exists witness th = HO_MATCH_MP MONO_EXISTS (GEN witness th)
+  in
+    IMP_TRANS extcall_saved_runtime_copy_replay_pure (itlist under_exists witnesses drop_frame)
+  end

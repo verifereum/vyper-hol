@@ -116,7 +116,7 @@ Proof
 QED
 
 
-Theorem abi_encode_saved_restore_row:
+Theorem abi_encode_saved_restore_row_pure:
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
@@ -157,6 +157,7 @@ Theorem abi_encode_saved_restore_row:
   pbase+dst_offset+LENGTH (FLAT (abi_tuple_heads hl 0 (TAKE i ats) (TAKE i avs))) <= pbase+capacity /\
   pbase+dst_offset+hl+LENGTH (FLAT (abi_tuple_tails (TAKE i ats) (TAKE i avs))) <= pbase+capacity ==>
   ?z Gz tz.
+    (pure_frame ce func ee su u z /\ wb_frame ce ee ee su u z) /\
     abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
       shared pbase capacity root dst dst_offset prefix sb z Gz tz /\
     abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) cursor loc slot i sb z Gz tz /\
@@ -175,7 +176,7 @@ Proof
   qpat_assum `abi_encode_saved_state _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [abi_encode_saved_state_def]) >>
   `sm.cs_next_var <= su.cs_next_var /\ sm.cs_next_id <= su.cs_next_id` by decide_tac >>
-  mp_tac (Q.INST [`front` |-> `se`] extcall_direct_restore_saved) >>
+  mp_tac (Q.INST [`front` |-> `se`] extcall_direct_restore_saved_pure) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`z`,`Gz`,`tz`] strip_assume_tac) >>
   `abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
@@ -196,6 +197,15 @@ Proof
   qpat_assum `ty = _` (fn th => PURE_ONCE_REWRITE_TAC [GSYM th]) >>
   first_assum ACCEPT_TAC
 QED
+
+Theorem abi_encode_saved_restore_row =
+  let
+    val (witnesses, result) = strip_exists (rand (concl abi_encode_saved_restore_row_pure))
+    val drop_frame = DISCH result (CONJUNCT2 (ASSUME result))
+    fun under_exists witness th = HO_MATCH_MP MONO_EXISTS (GEN witness th)
+  in
+    IMP_TRANS abi_encode_saved_restore_row_pure (itlist under_exists witnesses drop_frame)
+  end
 
 Theorem extcall_direct_restore_row:
   ty = lowered_value_type ce e /\

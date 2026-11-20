@@ -63,7 +63,7 @@ Proof
   drule_all copy_ctor_run >> strip_tac >> fs[copy_runtime_frame_def] >> metis_tac[]
 QED
 
-Theorem extcall_saved_ctor_copy_replay:
+Theorem extcall_saved_ctor_copy_replay_pure:
   lowered_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\ p.ptr_location = LocCode /\ ce.ce_is_ctor /\
   compile_expr ce (expr_type e) e si = (LocatedValue (expr_type e) p,sm) /\
@@ -90,6 +90,7 @@ Theorem extcall_saved_ctor_copy_replay:
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) ==>
   ?z G' tn'.
+    pure_frame ce fn ee su t z /\
     gas_origin_ptr_path
       (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,
        lo,explicit,ctx,fn,PG) (t,G,tn) [] (OK z,G',tn') /\
@@ -204,7 +205,7 @@ Proof
   `wb_frame ce ee ee si t t /\ ghost_kept_at lo ce ee si G tn t G tn` by
     simp[wb_frame_def, ghost_kept_at_def] >>
   `u = update_var root dst (buffer_allocation_fields t su.cs_next_id (type_memory_size rt))` by simp[] >>
-  drule_all ctor_code_copy_retained_frames >> strip_tac >>
+  drule_all ctor_code_copy_retained_frames_pure >> strip_tac >>
   `not_fresh_at mid root` by (drule_all allocated_copy_operands_old >> simp[]) >>
   `lookup_var root z = SOME dst` by (fs[copy_runtime_frame_def, lookup_var_def] >> metis_tac[]) >>
   `val_wf rt v /\ w2n a + type_memory_size rt < dimword(:256)` by
@@ -284,7 +285,7 @@ Proof
      simp[expr_val_at_def, instIdxIndepTheory.eval_op_inst_idx,
        local_region_def, venomStateTheory.lookup_var_def]) >>
   qexistsl [`z with vs_inst_idx := LENGTH sb.cs_current_insts`,`HG`,`tf`] >>
-  simp[] >>
+  asm_rewrite_tac[] >> simp[] >>
   conj_tac >-
     (gen_tac >> disch_tac >>
      conj_tac >- (irule gas_origin_ptr_path_from_no_dead >> first_assum ACCEPT_TAC) >>
@@ -298,3 +299,12 @@ Proof
   simp[expr_store_bound_def, blockPrefixEquivTheory.lookup_var_set_inst_idx] >>
   gvs[] >> decide_tac
 QED
+
+Theorem extcall_saved_ctor_copy_replay =
+  let
+    val (witnesses, result) = strip_exists (rand (concl extcall_saved_ctor_copy_replay_pure))
+    val drop_frame = DISCH result (CONJUNCT2 (ASSUME result))
+    fun under_exists witness th = HO_MATCH_MP MONO_EXISTS (GEN witness th)
+  in
+    IMP_TRANS extcall_saved_ctor_copy_replay_pure (itlist under_exists witnesses drop_frame)
+  end

@@ -74,7 +74,7 @@ Proof
     lookup_var_def, stor_taint_ok_at_def, allocas_from_def] >> metis_tac[]
 QED
 
-Theorem runtime_code_copy_retained_frames:
+Theorem runtime_code_copy_retained_frames_pure:
   compile_alloc_buffer nb sb = (buf,mid) /\ fn_has_code sb mid func /\
   stmt_state_rel H ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sb /\ nb < dimword (:256) /\
@@ -89,6 +89,7 @@ Theorem runtime_code_copy_retained_frames:
   (!off len. off+len <= w2n d \/ w2n d+nb <= off ==>
     mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory) /\
   tf.t_mem SUBSET tn.t_mem /\ ghost_kept_at lo cenv es sa Gi ti s0 G tn ==>
+  pure_frame cenv func ee sb s (z with vs_inst_idx := LENGTH sc.cs_current_insts) /\
   ghost_kept_at lo cenv es sa Gi ti s0 HG tf /\
   wb_frame cenv ee ee sb s (z with vs_inst_idx := LENGTH sc.cs_current_insts) /\
   ghost_kept_at lo cenv ee sb G tn s HG tf
@@ -120,8 +121,30 @@ Proof
      reverse conj_tac >- metis_tac[] >>
      qexistsl [`nb`, `w2n d`] >>
      fs[regions_disjoint_def] >> metis_tac[]) >>
-  simp[] >>
+  `pure_frame cenv func ee sb s z` by
+    (match_mp_tac (Q.SPECL [`cenv`,`func`,`ee`,`sb`,`s`,`z`,`sb.cs_next_id`,
+       `[Lit (n2w nb)]`,`[root]`,`w2n (d:bytes32)`,`nb`] exprSimPropsTheory.pure_frame_fresh_alloca) >>
+     `MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w nb)] [root]) (fn_insts func)` by
+       (drule exprPtrUnwrapAllocationTheory.unwrap_alloc_generated_code >> strip_tac >>
+        drule_all exprSimAllocTheory.buffer_alloc_code >> gvs[]) >>
+     `FLOOKUP z.vs_allocas sb.cs_next_id = SOME (w2n d,nb)` by
+       (qpat_assum `z.vs_allocas = u.vs_allocas` (rewrite_tac o single) >>
+        first_assum ACCEPT_TAC) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     TRY (simp_tac bool_ss [arithmeticTheory.LESS_EQ_REFL] >> NO_TAC)
+     >- (rpt strip_tac >>
+         qpat_assum `!off len. _ ==> mem_bytes_at off len z.vs_memory = _` irule >>
+         first_assum drule >> decide_tac) >>
+     simp_tac bool_ss [regions_disjoint_def] >>
+     rpt strip_tac >>
+     qpat_assum `!off len. _ ==> mem_bytes_at off len z.vs_memory = _` irule >>
+     decide_tac) >>
+  simp[pure_frame_inst_idx] >>
   qpat_x_assum `wb_frame cenv ee ee sb s z` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
   simp[wb_frame_def, lookup_var_def, locals_kept_def] >> metis_tac[]
 QED
+
+Theorem runtime_code_copy_retained_frames =
+  let val premise = fst (dest_imp (concl runtime_code_copy_retained_frames_pure))
+  in DISCH premise (CONJUNCT2 (UNDISCH runtime_code_copy_retained_frames_pure)) end

@@ -1,7 +1,7 @@
 Theory bodyFullExtCallDirectRow
 Ancestors
   abiEncodeValuesPrefixFrame
-  bodyFullExtCallDirectState bodyFullExtCallDirectWord bodyFullExtCallDirectStore
+  bodyFullExtCallDirectPhase bodyFullExtCallDirectState bodyFullExtCallDirectWord bodyFullExtCallDirectStore
   bodyFullExtCallDirectMaterialize bodyFullExtCallDirectUnwrap
   abiEncodeValuesRun abiEncodeValuesMetadata abiEncodeValuesPhases abiDecodeRanges
   abiEncoderWindowJointPhases abiEncoderWindowPhase abiEncoderWindowContract
@@ -12,7 +12,7 @@ Ancestors
   contractABI vyperABI vyperValue vyperTyping venomState venomInst
   finite_map pred_set list arithmetic pair words
 
-Theorem abi_encode_saved_row:
+Theorem abi_encode_saved_row_pure:
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
@@ -65,6 +65,7 @@ Theorem abi_encode_saved_row:
   h + abi_member_head_size at <= hl /\ off <= capacity-dst_offset /\
   (is_dynamic at ==> off + LENGTH (enc at av) <= capacity-dst_offset) ==>
   ?z Gz tz.
+    (pure_frame ce func ee se u z /\ wb_frame ce ee ee se u z) /\
     abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
       shared pbase capacity root dst dst_offset prefix en z Gz tz /\
     abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) cursor loc slot (SUC i) en z Gz tz /\
@@ -74,6 +75,10 @@ Proof
   drule_all abi_encode_saved_state_resources >> strip_tac >>
   qpat_assum `abi_encode_saved_state _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [abi_encode_saved_state_def]) >>
+  qpat_assum `?H. valid_horizon cx st0 H ee.storage_trace` (qx_choose_then `hz` assume_tac) >>
+  `stmt_state_rel hz ctx func ce cx ee u` by
+    (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee u /\ _`
+       (drule_then (ACCEPT_TAC o cj 1))) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s` by
     (gen_tac >> disch_tac >> first_assum (drule_then (ACCEPT_TAC o cj 1))) >>
   `hl <= off /\ pbase+dst_offset+h <= pbase+capacity /\ pbase+dst_offset+off <= pbase+capacity` by decide_tac >>
@@ -86,7 +91,7 @@ Proof
       impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
       qpat_assum `saved = StackValue tag src` SUBST_ALL_TAC >>
       mp_tac (Q.INST [`a` |-> `su`,`c` |-> `en`]
-        abi_encode_saved_word_row) >>
+        abi_encode_saved_word_row_pure) >>
       impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
       disch_then ACCEPT_TAC) >>
   Cases_on `is_dynamic at`
@@ -94,7 +99,7 @@ Proof
   suspend "static"
 QED
 
-Resume abi_encode_saved_row[dynamic]:
+Resume abi_encode_saved_row_pure[dynamic]:
   qpat_assum `is_dynamic at ==> abi_enc_plan _ _ _` (drule_then assume_tac) >>
   `is_abi_dynamic ce.ce_struct_fields ty /\ abi_member_head_size at = 32` by
     (simp[abi_member_head_size_def] >> metis_tac[]) >>
@@ -111,10 +116,11 @@ Resume abi_encode_saved_row[dynamic]:
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >> metis_tac[]) >>
   disch_then (qx_choosel_then [`u1`,`G1`,`t1`,`hp`,`tp`]
     (strip_assume_tac o SIMP_RULE bool_ss [FST,SND])) >>
-  `abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
-    shared pbase capacity root dst dst_offset prefix su1 u1 G1 t1` by
+  `(pure_frame ce func ee se u u1 /\ wb_frame ce ee ee se u u1) /\
+    abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
+      shared pbase capacity root dst dst_offset prefix su1 u1 G1 t1` by
     (mp_tac (Q.INST [`a` |-> `su`,`c` |-> `su1`,
-       `v` |-> `u1`,`Gv` |-> `G1`,`tv` |-> `t1`] abi_encode_saved_state_arith) >>
+       `v` |-> `u1`,`Gv` |-> `G1`,`tv` |-> `t1`] abi_encode_saved_state_arith_pure) >>
      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
      disch_then ACCEPT_TAC) >>
   `abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) (Var p) loc slot i su1 u1 G1 t1` by
@@ -122,7 +128,7 @@ Resume abi_encode_saved_row[dynamic]:
      qpat_assum `window_phase ctx func su su1 {} [] u u1` (irule_at Any) >>
      qexistsl_tac [`tu`,`Gu`] >> asm_rewrite_tac[]) >>
   mp_tac (Q.INST [`su` |-> `su1`,`sb` |-> `su2`,`cursor` |-> `Var p`,
-    `u` |-> `u1`,`Gu` |-> `G1`,`tu` |-> `t1`] abi_encode_saved_restore_row) >>
+    `u` |-> `u1`,`Gu` |-> `G1`,`tu` |-> `t1`] abi_encode_saved_restore_row_pure) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >> metis_tac[]) >>
   disch_then (qx_choosel_then [`u2`,`G2`,`t2`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
   qpat_x_assum `head_op = Var hp` SUBST_ALL_TAC >>
@@ -163,15 +169,27 @@ Resume abi_encode_saved_row[dynamic]:
     `u` |-> `u2`,`Gu` |-> `G2`,`tu` |-> `t2`,`cursor` |-> `p`,
     `head` |-> `hp`,`tail` |-> `tp`,
     `ei` |-> `type_to_abi_enc_info ce.ce_struct_fields ce ty`]
-    abi_encode_saved_store_dynamic) >>
+    abi_encode_saved_store_dynamic_pure) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >> metis_tac[]) >>
-  strip_tac >> qexistsl_tac [`z`,`Gz`,`tz`] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  `(pure_frame ce func ee se u u2 /\ wb_frame ce ee ee se u u2)` by
+    (mp_tac (Q.INST [`H` |-> `hz`,`a` |-> `su1`,`v` |-> `u1`,`z` |-> `u2`]
+       (INST_TYPE [alpha |-> ``:num # num``] abi_encode_saved_frames_trans)) >>
+     impl_tac >-
+       (qpat_assum `ci_mono su su1` (strip_assume_tac o REWRITE_RULE [ci_mono_def]) >>
+        rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+     disch_then ACCEPT_TAC) >>
+  `pure_frame ce func ee se u z /\ wb_frame ce ee ee se u z` by
+    (mp_tac (Q.INST [`H` |-> `hz`,`a` |-> `se`,`v` |-> `u2`]
+       (INST_TYPE [alpha |-> ``:num # num``] abi_encode_saved_frames_trans)) >>
+     asm_simp_tac bool_ss [arithmeticTheory.LESS_EQ_REFL]) >>
+  qexistsl_tac [`z`,`Gz`,`tz`] >> asm_rewrite_tac[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   gen_tac >> irule gas_origin_ptr_path_trans >>
   qexistsl_tac [`G1`,`u1`,`t1`] >> asm_rewrite_tac[] >>
   irule gas_origin_ptr_path_trans >> qexistsl_tac [`G2`,`u2`,`t2`] >> asm_rewrite_tac[]
 QED
 
-Resume abi_encode_saved_row[static]:
+Resume abi_encode_saved_row_pure[static]:
   `~is_abi_dynamic ce.ce_struct_fields ty` by metis_tac[] >>
   drule_all abi_encode_values_static_cuts >>
   disch_then (qx_choosel_then [`head_op`,`su1`,`src`,`su2`] strip_assume_tac) >>
@@ -182,10 +200,11 @@ Resume abi_encode_saved_row[static]:
     `s` |-> `u`,`G` |-> `Gu`,`tn` |-> `tu`] abi_encode_values_head_address) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >> metis_tac[]) >>
   disch_then (qx_choosel_then [`hp`,`u1`,`G1`,`t1`] strip_assume_tac) >>
-  `abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
-    shared pbase capacity root dst dst_offset prefix su1 u1 G1 t1` by
+  `(pure_frame ce func ee se u u1 /\ wb_frame ce ee ee se u u1) /\
+    abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
+      shared pbase capacity root dst dst_offset prefix su1 u1 G1 t1` by
     (mp_tac (Q.INST [`a` |-> `su`,`c` |-> `su1`,
-       `v` |-> `u1`,`Gv` |-> `G1`,`tv` |-> `t1`] abi_encode_saved_state_arith) >>
+       `v` |-> `u1`,`Gv` |-> `G1`,`tv` |-> `t1`] abi_encode_saved_state_arith_pure) >>
      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
      disch_then ACCEPT_TAC) >>
   `abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) cursor loc slot i su1 u1 G1 t1` by
@@ -193,7 +212,7 @@ Resume abi_encode_saved_row[static]:
      qpat_assum `window_phase ctx func su su1 {} [] u u1` (irule_at Any) >>
      qexistsl_tac [`tu`,`Gu`] >> asm_rewrite_tac[]) >>
   mp_tac (Q.INST [`su` |-> `su1`,`sb` |-> `su2`,`u` |-> `u1`,
-    `Gu` |-> `G1`,`tu` |-> `t1`] abi_encode_saved_restore_row) >>
+    `Gu` |-> `G1`,`tu` |-> `t1`] abi_encode_saved_restore_row_pure) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >> metis_tac[]) >>
   disch_then (qx_choosel_then [`u2`,`G2`,`t2`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
   qpat_x_assum `head_op = Var hp` SUBST_ALL_TAC >>
@@ -206,15 +225,36 @@ Resume abi_encode_saved_row[static]:
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   mp_tac (Q.INST [`a` |-> `su2`,`c` |-> `en`,
     `u` |-> `u2`,`Gu` |-> `G2`,`tu` |-> `t2`,`head` |-> `hp`]
-    abi_encode_saved_store_static) >>
+    abi_encode_saved_store_static_pure) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >> metis_tac[]) >>
-  strip_tac >> qexistsl_tac [`z`,`Gz`,`tz`] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  `(pure_frame ce func ee se u u2 /\ wb_frame ce ee ee se u u2)` by
+    (mp_tac (Q.INST [`H` |-> `hz`,`a` |-> `su1`,`v` |-> `u1`,`z` |-> `u2`]
+       (INST_TYPE [alpha |-> ``:num # num``] abi_encode_saved_frames_trans)) >>
+     impl_tac >-
+       (qpat_assum `ci_mono su su1` (strip_assume_tac o REWRITE_RULE [ci_mono_def]) >>
+        rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+     disch_then ACCEPT_TAC) >>
+  `pure_frame ce func ee se u z /\ wb_frame ce ee ee se u z` by
+    (mp_tac (Q.INST [`H` |-> `hz`,`a` |-> `se`,`v` |-> `u2`]
+       (INST_TYPE [alpha |-> ``:num # num``] abi_encode_saved_frames_trans)) >>
+     asm_simp_tac bool_ss [arithmeticTheory.LESS_EQ_REFL]) >>
+  qexistsl_tac [`z`,`Gz`,`tz`] >> asm_rewrite_tac[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   gen_tac >> irule gas_origin_ptr_path_trans >>
   qexistsl_tac [`G1`,`u1`,`t1`] >> asm_rewrite_tac[] >>
   irule gas_origin_ptr_path_trans >> qexistsl_tac [`G2`,`u2`,`t2`] >> asm_rewrite_tac[]
 QED
 
-Finalise abi_encode_saved_row
+Finalise abi_encode_saved_row_pure
+
+Theorem abi_encode_saved_row =
+  let
+    val (witnesses, result) = strip_exists (rand (concl abi_encode_saved_row_pure))
+    val drop_frame = DISCH result (CONJUNCT2 (ASSUME result))
+    fun under_exists witness th = HO_MATCH_MP MONO_EXISTS (GEN witness th)
+  in
+    IMP_TRANS abi_encode_saved_row_pure (itlist under_exists witnesses drop_frame)
+  end
 
 Theorem extcall_direct_row:
   ty = lowered_value_type ce e /\
