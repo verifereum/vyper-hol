@@ -1215,7 +1215,8 @@ Proof
    check_value_type (type_env_all_modules mods) vt` by
     (gvs[check_toplevel_decl_def] >>
      Cases_on `kt` >> gvs[hashmap_key_type_def, assignable_type_def] >>
-     rename1 `BaseT b` >> Cases_on `b` >> gvs[hashmap_key_type_def]) >>
+     rename1 `key_base <> BytesT (Fixed 0)` >> Cases_on `key_base` >>
+     gvs[hashmap_key_type_def]) >>
   drule_all build_getter_args_assignable >>
       simp[combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
 QED
