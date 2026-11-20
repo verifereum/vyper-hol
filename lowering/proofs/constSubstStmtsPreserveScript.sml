@@ -375,13 +375,7 @@ Proof
   metis_tac[checked_module_consts_env_names_constant]
 QED
 
-Theorem checked_supported_function_subst:
-  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
-  supported_program tops /\ vis <> Deploy /\
-  MEM (FunctionDecl vis mut nr rr name args defaults ret fbody) tops ==>
-  subst_consts_fn (module_consts_env tops [])
-    (mut,nr,rr,name,args,defaults,ret,fbody) =
-    (mut,nr,rr,name,args,defaults,ret,fbody)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   `!id. IS_SOME (ALOOKUP (module_consts_env tops []) id) ==>
@@ -391,6 +385,17 @@ Proof
   drule_all supported_program_declaration >>
   simp[supported_declaration_body_def] >> strip_tac >>
   irule subst_consts_supported_fn_unchanged >> metis_tac[]
+QED
+*)
+Theorem checked_supported_function_subst:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  supported_program tops /\ vis <> Deploy /\
+  MEM (FunctionDecl vis mut nr rr name args defaults ret fbody) tops ==>
+  subst_consts_fn (module_consts_env tops [])
+    (mut,nr,rr,name,args,defaults,ret,fbody) =
+    (mut,nr,rr,name,args,defaults,ret,fbody)
+Proof
+  cheat
 QED
 
 

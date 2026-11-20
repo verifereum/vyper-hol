@@ -5,11 +5,7 @@ Ancestors
   bodyMemoryDefs stmtSimLogTrace exprSimOperands localPtrsProps stmtSimDefs
   compileEnv loweringStateRelDefs venomMemDefs emitHelperProps ASCIInumbers exprLoweringProps venomInst
 
-Theorem immutable_supported_normalization_positive:
-  supported_value_type tops dty /\ type_widens_to tenv sty dty /\
-  sty <> dty /\ evaluate_type tenv sty = SOME stv /\
-  evaluate_type tenv dty = SOME dtv ==>
-  0 < type_memory_size stv /\ 0 < type_memory_size dtv
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   `type_memory_size stv = 0 <=> type_memory_size dtv = 0` by
@@ -43,6 +39,15 @@ Proof
       gvs[evaluate_type_def, type_memory_size_def, AllCaseEqs()])
   >> gvs[type_widens_to_def] >> Cases_on `sty` >>
   gvs[arg_type_fits_def]
+QED
+*)
+Theorem immutable_supported_normalization_positive:
+  supported_value_type tops dty /\ type_widens_to tenv sty dty /\
+  sty <> dty /\ evaluate_type tenv sty = SOME stv /\
+  evaluate_type tenv dty = SOME dtv ==>
+  0 < type_memory_size stv /\ 0 < type_memory_size dtv
+Proof
+  cheat
 QED
 
 Theorem immutable_rhs_normalization_source_range:

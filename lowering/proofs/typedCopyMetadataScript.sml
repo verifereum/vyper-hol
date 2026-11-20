@@ -141,45 +141,6 @@ Proof
   Cases_on `b'` >> simp[supported_word_type_def, is_word_type_def]
 QED
 
-Theorem supported_value_type_shallow_metadata:
-  struct_args_unique tops /\ supported_value_type tops ty ==>
-  shallow_copy_type (make_struct_fields_map tops) ty
-Proof
-  rpt strip_tac >>
-  Cases_on `ty` >>
-  fs[supported_value_type_def, supported_scalar_type_def,
-     supported_word_type_def, supported_string_type_def, shallow_copy_type_def]
-  >- (fs[EVERY_MEM] >> rpt strip_tac >> first_x_assum drule >>
-      rename1 `supported_scalar_type elem ==> _` >>
-      Cases_on `elem` >> simp[supported_scalar_type_def,
-          supported_word_type_def, supported_string_type_def, shallow_copy_type_def])
-  >- (rename1 `supported_word_type elem` >>
-      qmatch_asmsub_rename_tac `bound_CASE bd` >>
-      Cases_on `bd` >> gvs[] >> drule supported_word_type_is_word >> strip_tac >>
-      Cases_on `elem` >> gvs[is_word_type_def, shallow_copy_type_def])
-  >> rename1 `nsid_to_string nsid` >>
-  Cases_on `supported_struct_fields tops nsid` >> gvs[] >>
-  rename1 `supported_struct_fields tops nsid = SOME args` >>
-  Cases_on `nsid` >>
-  rename1 `supported_struct_fields tops (modid,name) = SOME args` >>
-  Cases_on `modid` >> gvs[supported_struct_fields_other_module, nsid_to_string_def] >>
-  drule supported_struct_fields_origin >> strip_tac >>
-  simp[EVERY_MEM] >> rpt strip_tac >>
-  rename1 `MEM triple (get_struct_fields (make_struct_fields_map tops) name)` >>
-  Cases_on `FLOOKUP (make_struct_fields_map tops) name` >>
-  gvs[get_struct_fields_def] >>
-  drule make_struct_fields_origin >>
-  strip_tac >> gvs[] >>
-  fs[struct_args_unique_def] >>
-  rename1 `MEM (StructDecl name found_args) tops` >>
-  `found_args = args` by metis_tac[] >> gvs[EVERY_MEM] >>
-  `MEM (FST (SND triple)) (MAP SND args)` by
-    (qpat_x_assum `MAP (FST o SND) _ = MAP SND _`
-       (SUBST1_TAC o SYM) >>
-     simp[MEM_MAP] >> qexists_tac `triple` >> simp[]) >>
-  fs[MEM_MAP] >> metis_tac[supported_word_type_is_word]
-QED
-
 Theorem built_struct_fields_every:
   FEVERY (λ(name,fields). EVERY (P o FST o SND) fields) sf /\
   (!name args. MEM (StructDecl name args) tops ==> EVERY (P o SND) args) ==>

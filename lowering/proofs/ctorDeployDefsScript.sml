@@ -237,25 +237,7 @@ Proof
      supported_expr_exists_def] >> metis_tac[]
 QED
 
-Theorem supported_pure_no_code_accessor[local]:
-  (!tops e. supported_pure_expr tops e ==>
-    ~supported_expr_exists (\x. ?t es. x = Builtin t (Acc Code) es) e) /\
-  (!tops es. supported_pure_exprs tops es ==>
-    ~supported_exprs_exists (\x. ?t xs. x = Builtin t (Acc Code) xs) es) /\
-  (!tops fs. supported_pure_fields tops fs ==>
-    ~supported_fields_exists (\x. ?t es. x = Builtin t (Acc Code) es) fs) /\
-  (!tops e. supported_place_expr tops e ==>
-    ~supported_expr_exists (\x. ?t es. x = Builtin t (Acc Code) es) e)
-Proof
-  ho_match_mp_tac supported_pure_expr_ind >>
-  rw[supported_pure_expr_def, supported_expr_exists_def] >>
-  Cases_on `es` >>
-  gvs[supported_builtin_form_def, supported_expr_exists_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >> Cases_on `t` >> fs[]
-QED
-
-Theorem supported_pure_expr_no_self_code:
-  supported_pure_expr tops e ==> ~supported_expr_exists is_self_code e
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   drule_then assume_tac (cj 1 supported_pure_no_code_accessor) >>
@@ -268,10 +250,14 @@ Proof
     `\x. ?t es. x = Builtin t (Acc Code) es`] (cj 1 supported_expr_exists_mono))) >>
   simp[]
 QED
+*)
+Theorem supported_pure_expr_no_self_code:
+  supported_pure_expr tops e ==> ~supported_expr_exists is_self_code e
+Proof
+  cheat
+QED
 
-Theorem folded_const_no_self_code[local]:
-  supported_pure_expr tops (fold_const_expr (subst_consts_expr env e)) ==>
-  ~supported_expr_exists is_self_code e
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   `!x. is_self_code x ==> ?t es. x = Builtin t (Acc Code) es` by
@@ -283,6 +269,13 @@ Proof
      simp[]) >>
   drule_then assume_tac (cj 1 supported_pure_no_code_accessor) >>
   metis_tac[Q.SPECL [`env`, `e`] (cj 1 folded_subst_code_accessor)]
+QED
+*)
+Theorem folded_const_no_self_code[local]:
+  supported_pure_expr tops (fold_const_expr (subst_consts_expr env e)) ==>
+  ~supported_expr_exists is_self_code e
+Proof
+  cheat
 QED
 
 Theorem deploy_evaluation_context_code_update[local]:

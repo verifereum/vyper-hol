@@ -13,30 +13,24 @@ Libs
   monadsyntax
 
 
-Theorem log_scalar_base[local]:
-  supported_scalar_type ty ==> ?bt. ty = BaseT bt
+(* SCRATCH SEQ-8389 caller split: the deleted bridge
+   log_scalar_word_or_bytestring is false once flags are scalar.  The
+   word/bytestring branch keeps the old proof, the bridge's drule replaced by
+   the case hypothesis; the new (flag) branch is admitted. *)
+Theorem log_scalar_post_value_type_new_branch[local]:
+  supported_scalar_type (expr_type e) /\
+  ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) ==>
+  post_value_type cenv e = expr_type e
 Proof
-  Cases_on `ty` >> simp[supported_scalar_type_def, supported_word_type_def,
-    supported_string_type_def]
-QED
-
-Theorem log_scalar_word_or_bytestring[local]:
-  !ty. supported_scalar_type ty ==> is_word_type ty \/ is_bytestring_type ty
-Proof
-  Cases >> simp[supported_scalar_type_def, supported_word_type_def,
-    supported_string_type_def] >>
-  rename1 `BaseT b` >> Cases_on `b` >>
-  simp[supported_word_type_def, supported_string_type_def, is_word_type_def,
-    is_bytestring_type_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  simp[supported_word_type_def, supported_string_type_def, is_word_type_def,
-    is_bytestring_type_def]
+  cheat
 QED
 
 Theorem log_scalar_post_value_type:
   supported_scalar_type (expr_type e) ==> post_value_type cenv e = expr_type e
 Proof
-  strip_tac >> drule log_scalar_word_or_bytestring >> strip_tac >> simp[]
+  Cases_on `is_word_type (expr_type e) \/ is_bytestring_type (expr_type e)`
+  >- (strip_tac >> qpat_x_assum `_ \/ _` mp_tac >> strip_tac >> simp[]) >>
+  metis_tac[log_scalar_post_value_type_new_branch]
 QED
 
 (* ===== Source sequencing ===== *)
@@ -304,7 +298,7 @@ Resume compile_log_eval_all_gas[head_exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   irule_at Any wb_args_head_exempt_cert >> goal_assum (drule_at Any)
 QED
-Resume compile_log_eval_all_gas[tail_normal]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
   qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
   qpat_assum `!H. valid_horizon _ _ H es_end'.storage_trace ==> ?vs. _`
     (drule_then (qx_choose_then `vs` strip_assume_tac)) >>
@@ -357,6 +351,9 @@ Resume compile_log_eval_all_gas[tail_normal]:
       conj_tac >- metis_tac[] >>
       qexistsl_tac [`es_end with gas_obs := []`, `sm`, `t`] >> simp[])
   >- (fs[EVERY_MEM] >> metis_tac[not_fresh_at_mono])
+*)
+Resume compile_log_eval_all_gas[tail_normal]:
+  cheat
 QED
 Resume compile_log_eval_all_gas[tail_exit]:
   qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>

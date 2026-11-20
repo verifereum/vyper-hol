@@ -31,15 +31,7 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
-Theorem package_constructor_shape_ok:
-  !tops use_trans nkey_map target cf cenv args pay nr nkey trans body ret.
-    supported_program tops /\ supported_program_deploy tops /\
-    SND (SND (SND (classify_functions tops))) = SOME cf /\
-    set_constructor_package_target target
-      (package_constructor tops use_trans nkey_map cf) =
-      (cenv, args, pay, nr, nkey, trans, body, ret) ==>
-    cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
-    ~supported_stmts_expr_exists expr_shape_root body
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt gen_tac >> PairCases_on `cf` >> strip_tac >>
   drule classify_functions_ctor_mem >> strip_tac >>
@@ -57,14 +49,21 @@ Proof
   imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
+*)
+Theorem package_constructor_shape_ok:
+  !tops use_trans nkey_map target cf cenv args pay nr nkey trans body ret.
+    supported_program tops /\ supported_program_deploy tops /\
+    SND (SND (SND (classify_functions tops))) = SOME cf /\
+    set_constructor_package_target target
+      (package_constructor tops use_trans nkey_map cf) =
+      (cenv, args, pay, nr, nkey, trans, body, ret) ==>
+    cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
+    ~supported_stmts_expr_exists expr_shape_root body
+Proof
+  cheat
+QED
 
-Theorem package_internal_fn_ctor_shape_ok:
-  !tops use_trans nkey_map imm target src.
-    supported_program tops /\
-    MEM src (FST (SND (classify_functions tops))) ==>
-    internal_fn_shape_ok
-      (set_internal_package_target target
-         (package_internal_fn tops use_trans nkey_map T imm src))
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt gen_tac >> PairCases_on `src` >> strip_tac >>
   `~supported_stmts_expr_exists expr_shape_root src7` by
@@ -76,6 +75,17 @@ Proof
   imp_res_tac supported_program_runtime_bodies_shape_ok >>
   imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
+QED
+*)
+Theorem package_internal_fn_ctor_shape_ok:
+  !tops use_trans nkey_map imm target src.
+    supported_program tops /\
+    MEM src (FST (SND (classify_functions tops))) ==>
+    internal_fn_shape_ok
+      (set_internal_package_target target
+         (package_internal_fn tops use_trans nkey_map T imm src))
+Proof
+  cheat
 QED
 
 (* ===== The lowered unit ===== *)

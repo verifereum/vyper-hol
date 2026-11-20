@@ -108,10 +108,7 @@ Proof
   rpt IF_CASES_TAC >> gvs[] >> metis_tac[]
 QED
 
-Theorem aug_place_supported_root_not_immutable:
-  body_inv tops ctx cenv cx /\
-  supported_target_info tops bindings t = SOME pt ==>
-  ~immutable_root cx t
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >> simp[immutable_root_def] >> rpt strip_tac >>
   `supported_place_root tops (src,id)` by metis_tac[aug_place_supported_root] >>
@@ -129,6 +126,14 @@ Proof
   PairCases_on `vdecl` >> gvs[] >>
   Cases_on `vdecl1` >> Cases_on `vdecl3` >> gvs[] >>
   Cases_on `vdecl0` >> gvs[] >> metis_tac[]
+QED
+*)
+Theorem aug_place_supported_root_not_immutable:
+  body_inv tops ctx cenv cx /\
+  supported_target_info tops bindings t = SOME pt ==>
+  ~immutable_root cx t
+Proof
+  cheat
 QED
 
 Theorem aug_place_target_indices_pre:

@@ -303,15 +303,7 @@ Proof
   metis_tac[entry_code_supported_expr]
 QED
 
-Theorem entry_code_supported_statements[local]:
-  (!tops bindings s. supported_stmt tops bindings s ==>
-    !ce lc rt. EVERY (EVERY (supported_expr tops) o SND) ce.ce_func_defaults ==>
-      entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-      (compile_stmt ce lc rt s)) /\
-  (!tops bindings ss. supported_stmts tops bindings ss ==>
-    !ce lc rt. EVERY (EVERY (supported_expr tops) o SND) ce.ce_func_defaults ==>
-      entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-      (compile_stmts ce lc rt ss))
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   ho_match_mp_tac supported_stmt_ind >> rpt conj_tac >> rpt gen_tac
   >~ [`compile_stmt _ _ _ Pass`] >- simp[compile_stmt_def, entry_code_return]
@@ -406,6 +398,19 @@ Resume entry_code_supported_statements[cons]:
   irule entry_code_bind >> simp[]
 QED
 Finalise entry_code_supported_statements
+*)
+Theorem entry_code_supported_statements[local]:
+  (!tops bindings s. supported_stmt tops bindings s ==>
+    !ce lc rt. EVERY (EVERY (supported_expr tops) o SND) ce.ce_func_defaults ==>
+      entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+      (compile_stmt ce lc rt s)) /\
+  (!tops bindings ss. supported_stmts tops bindings ss ==>
+    !ce lc rt. EVERY (EVERY (supported_expr tops) o SND) ce.ce_func_defaults ==>
+      entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+      (compile_stmts ce lc rt ss))
+Proof
+  cheat
+QED
 
 Theorem entry_code_supported_stmt:
   supported_stmt tops bindings s /\

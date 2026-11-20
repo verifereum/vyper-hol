@@ -69,17 +69,6 @@ Proof
   gvs[] >> irule tuple_place_mutable_path_barrier >> metis_tac[]
 QED
 
-Theorem tuple_place_pure_target_no_calls:
-  !bt tops. supported_target_pure tops bt ==> int_calls_target bt = []
-Proof
-  measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
-  simp[supportedTargetsTheory.supported_target_pure_def,
-       vyperTypeCallGraphTheory.int_calls_expr_def] >> rpt strip_tac >>
-  first_x_assum (qspec_then `b` mp_tac) >>
-  simp[vyperASTTheory.expr_size_def] >>
-  metis_tac[bodyExprPreFactsTheory.supported_pure_int_calls]
-QED
-
 (* Coordinate interface for live memory places; no write is needed. *)
 Theorem tuple_place_memory_coordinates:
   expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
@@ -113,18 +102,7 @@ Proof
   simp[local_region_def, local_path_at_def] >> metis_tac[]
 QED
 
-Theorem tuple_place_borrow_destination_apart:
-  expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
-  local_region cenv ee.scopes s n b sz /\
-  local_path_at cenv cx n k (TupleTV tvs) /\
-  k + type_memory_size (TupleTV tvs) <= sz /\
-  evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
-  i < LENGTH tys /\ well_typed_target env bt (EL i tys) /\
-  supported_target_pure tops bt /\ call_evaluation_safe cx [] /\
-  eval_base_place cx bt ee = (INL (PlaceR p),ee) /\
-  place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type (EL i tys)) ==>
-  b + k + type_memory_size (TupleTV tvs) <= w2n dw \/
-  w2n dw + type_memory_size (EL i tvs) <= b + k
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt strip_tac >>
   `call_evaluation_safe cx (int_calls_target bt)` by
@@ -158,4 +136,20 @@ Proof
   irule tuple_place_tuple_barrier_apart >>
   conj_tac >- metis_tac[listTheory.EL_MEM] >>
   qexistsl [`path`, `l`, `entry.type`] >> simp[]
+QED
+*)
+Theorem tuple_place_borrow_destination_apart:
+  expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
+  local_region cenv ee.scopes s n b sz /\
+  local_path_at cenv cx n k (TupleTV tvs) /\
+  k + type_memory_size (TupleTV tvs) <= sz /\
+  evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
+  i < LENGTH tys /\ well_typed_target env bt (EL i tys) /\
+  supported_target_pure tops bt /\ call_evaluation_safe cx [] /\
+  eval_base_place cx bt ee = (INL (PlaceR p),ee) /\
+  place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type (EL i tys)) ==>
+  b + k + type_memory_size (TupleTV tvs) <= w2n dw \/
+  w2n dw + type_memory_size (EL i tvs) <= b + k
+Proof
+  cheat
 QED

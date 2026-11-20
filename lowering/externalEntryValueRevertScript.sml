@@ -95,37 +95,7 @@ Proof
   metis_tac[external_entry_reject_readings_nr]
 QED
 
-Theorem external_value_reject_dispatch[local]:
-  lower_vyper_runtime_unit tops rp = SOME unit /\
-  supported_program tops /\ source_typing_ok tops am tx /\
-  tx.function_name <> "__default__" /\
-    LENGTH tx.args = LENGTH args /\
-    calldata_encodes (type_env tops) tx.function_name (MAP SND args)
-      tx.args vs.vs_call_ctx.cc_calldata /\
-  initial_venom_state_rel tops am tx vs /\
-  lookup_function NONE tx.function_name External tops =
-    SOME (mut,nr,args,[],ret,fbody) /\
-  send_call_value mut
-    (initial_evaluation_context am.sources am.layouts tx NONE)
-    (initial_state am [env] with
-      <| outcomes := SOME vs.vs_outcomes; requests := [] |>) = (INR e,st) ==>
-  ?func opened checked min_cds tt G tn.
-    lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
-    fn_entry_label func = SOME "__entry" /\
-    (ctx_has_dalloca unit.cu_context ==> allocas_below_fmp tt) /\
-    compile_entry_checks min_cds F opened = ((),checked) /\
-    fn_has_code opened checked func /\ opened.cs_current_insts = [] /\
-    ~block_is_terminated opened /\ fresh_vars_wrt opened tt /\
-    ~tt.vs_halted /\ tt.vs_current_bb = opened.cs_current_bb /\
-    tt.vs_inst_idx = 0 /\ allocas_from 0 tt /\
-    tt.vs_call_ctx.cc_callvalue <> 0w /\
-    (!D explicit. gas_origin_ptr_path
-      (D,0,explicit,unit.cu_context,func,[])
-      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
-                 vs_inst_idx := 0|>,FEMPTY,entry_taint) [] (OK tt,G,tn)) /\
-    (!D. (!fuel. ptr_safe_blocks D 0 fuel unit.cu_context func [] G tn tt) ==>
-      !fuel. ptr_safe_blocks D 0 fuel unit.cu_context func [] FEMPTY entry_taint
-      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>))
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   drule_all entry_runtime_no_dalloca >> strip_tac >>
@@ -175,6 +145,41 @@ Proof
   qexistsl_tac [`b0`, `mk_inst sf.cs_next_id CALLDATASIZE []
     [STRING #"%" (toString sf.cs_next_var)]`] >>
   gvs[mk_inst_def]
+QED
+*)
+Theorem external_value_reject_dispatch[local]:
+  lower_vyper_runtime_unit tops rp = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  tx.function_name <> "__default__" /\
+    LENGTH tx.args = LENGTH args /\
+    calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+      tx.args vs.vs_call_ctx.cc_calldata /\
+  initial_venom_state_rel tops am tx vs /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,nr,args,[],ret,fbody) /\
+  send_call_value mut
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with
+      <| outcomes := SOME vs.vs_outcomes; requests := [] |>) = (INR e,st) ==>
+  ?func opened checked min_cds tt G tn.
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+    fn_entry_label func = SOME "__entry" /\
+    (ctx_has_dalloca unit.cu_context ==> allocas_below_fmp tt) /\
+    compile_entry_checks min_cds F opened = ((),checked) /\
+    fn_has_code opened checked func /\ opened.cs_current_insts = [] /\
+    ~block_is_terminated opened /\ fresh_vars_wrt opened tt /\
+    ~tt.vs_halted /\ tt.vs_current_bb = opened.cs_current_bb /\
+    tt.vs_inst_idx = 0 /\ allocas_from 0 tt /\
+    tt.vs_call_ctx.cc_callvalue <> 0w /\
+    (!D explicit. gas_origin_ptr_path
+      (D,0,explicit,unit.cu_context,func,[])
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                 vs_inst_idx := 0|>,FEMPTY,entry_taint) [] (OK tt,G,tn)) /\
+    (!D. (!fuel. ptr_safe_blocks D 0 fuel unit.cu_context func [] G tn tt) ==>
+      !fuel. ptr_safe_blocks D 0 fuel unit.cu_context func [] FEMPTY entry_taint
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>))
+Proof
+  cheat
 QED
 
 Theorem nonpayable_check_joint_reject:

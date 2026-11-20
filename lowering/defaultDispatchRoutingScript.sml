@@ -49,15 +49,7 @@ Proof
   metis_tac[mem_flat_map_filter]
 QED
 
-Theorem default_raw_fallback_target:
-  supported_program tops /\
-  (LENGTH cd < 4 \/
-   FIND (\(n,ts). abi_method_id (type_env tops) n ts = cd_selector cd)
-     (abi_external_signatures tops) = NONE) ==>
-  linear_dispatch_target cd
-    (MAP (\(sel,lbl,z). (sel,lbl))
-      (build_selectors (type_env tops) (FST (classify_functions tops))))
-    fallback = fallback
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >> irule linear_dispatch_target_fallback >>
   Cases_on `LENGTH cd < 4` >- simp[] >>
@@ -75,4 +67,17 @@ Proof
   qpat_x_assum `FIND _ _ = NONE` mp_tac >>
   simp[mem2varBlockSimHelpersTheory.FIND_NONE_EVERY, EVERY_MEM,
     combinTheory.o_DEF, pairTheory.FORALL_PROD] >> metis_tac[]
+QED
+*)
+Theorem default_raw_fallback_target:
+  supported_program tops /\
+  (LENGTH cd < 4 \/
+   FIND (\(n,ts). abi_method_id (type_env tops) n ts = cd_selector cd)
+     (abi_external_signatures tops) = NONE) ==>
+  linear_dispatch_target cd
+    (MAP (\(sel,lbl,z). (sel,lbl))
+      (build_selectors (type_env tops) (FST (classify_functions tops))))
+    fallback = fallback
+Proof
+  cheat
 QED

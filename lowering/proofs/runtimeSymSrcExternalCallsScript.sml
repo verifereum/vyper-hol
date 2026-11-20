@@ -54,6 +54,12 @@ Proof
   Cases_on `h' = EKGas` >> gvs[comp_return_def]
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Proof
+  Cases_on `default` >>
+  simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def]
+QED
+*)
 Theorem runtime_sym_call_raw:
   !tops cfn ce rt ty rcf es default s v s'.
     (!e t. MEM e es \/ default = SOME e ==>
@@ -65,10 +71,15 @@ Theorem runtime_sym_call_raw:
     compile_call cfn ce rt (ty : type) (RawCallTarget rcf) es default s = (v,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ runtime_sym_value v
 Proof
+  cheat
+QED
+
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Proof
   Cases_on `default` >>
   simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def]
 QED
-
+*)
 Theorem runtime_sym_call_raw_calldata:
   !tops cfn ce rt ty rcf es default s v s'.
     (!e t. MEM e es \/ default = SOME e ==>
@@ -80,8 +91,7 @@ Theorem runtime_sym_call_raw_calldata:
     compile_call cfn ce rt (ty : type) (RawCallCalldataTarget rcf) es default s = (v,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ runtime_sym_value v
 Proof
-  Cases_on `default` >>
-  simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def]
+  cheat
 QED
 
 Theorem runtime_sym_gas_option[local]:

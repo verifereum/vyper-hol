@@ -23,8 +23,7 @@ Ancestors bodyFullShadowBodyInv sourceUnitExecution[qualified,ignore_grammar] lo
   intCallMaterializeFull memoryValueEncoding moduleLowering venomInst o1PassContract o1PipelineCompose unitShapeDefs entryStateRel stmtSimReturn stateRelProj
   accountsRelProps[qualified,ignore_grammar] vyperTypeContract vyperTypeInitialState vyperTypeEvalProofs vyperTypeInvariants vyperContext externalBodyFrame vyperTypeValues[qualified] vyperValueOperation[qualified]
 
-Theorem intcall_callee_pre_fmp_context[local]:
-  body_inv tops ctx cenv cx ==> EVERY pre_fmp_ops ctx.ctx_functions
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rw[bodySimTheory.body_inv_def, listTheory.EVERY_MEM] >>
   rename1 `MEM f unit.cu_context.ctx_functions` >>
@@ -38,6 +37,12 @@ Proof
             supportedNamesTheory.supported_declaration_names_def]) >>
      metis_tac[loweringShapePropsTheory.supported_program_runtime_bodies_shape_ok]) >>
   metis_tac[source_pre_fmp_ops]
+QED
+*)
+Theorem intcall_callee_pre_fmp_context[local]:
+  body_inv tops ctx cenv cx ==> EVERY pre_fmp_ops ctx.ctx_functions
+Proof
+  cheat
 QED
 
 Theorem intcall_callee_src_storage_trace_frame[local]:

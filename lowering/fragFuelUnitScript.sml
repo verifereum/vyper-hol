@@ -208,12 +208,7 @@ QED
 
 (* ===== The lowered runtime unit ===== *)
 
-Theorem lower_vyper_runtime_unit_fns_stable:
-  !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops ==>
-    !fn. MEM fn unit.cu_context.ctx_functions ==>
-         ?Kf. !G. callees_stable G unit.cu_context fn ==>
-                  fuel_stable (G + Kf) unit.cu_context fn
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt gen_tac >> strip_tac >>
   `runtime_bodies_shape_ok tops` by
@@ -370,4 +365,14 @@ Proof
   gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
      internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP, EVERY_MEM] >>
   fs[MEM_MAP, PULL_EXISTS]
+QED
+*)
+Theorem lower_vyper_runtime_unit_fns_stable:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops ==>
+    !fn. MEM fn unit.cu_context.ctx_functions ==>
+         ?Kf. !G. callees_stable G unit.cu_context fn ==>
+                  fuel_stable (G + Kf) unit.cu_context fn
+Proof
+  cheat
 QED

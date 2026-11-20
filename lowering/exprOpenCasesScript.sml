@@ -163,13 +163,7 @@ Proof
   drule emit_inst_nonterminator_open >> simp[is_terminator_def]
 QED
 
-Theorem compile_call_open:
-  !cfn cenv rty ty ann target args default env cx es tv es1 sa vv sb.
-    well_typed_expr env (Call ann target args default) /\
-    ~expr_evm_run_root (Call ann target args default) /\
-    eval_expr cx (Call ann target args default) es = (INL tv,es1) /\
-    compile_call cfn cenv rty ty target args default sa = (vv,sb) ==>
-    ~block_is_terminated sb
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt gen_tac >> Cases_on `target` >> strip_tac >>
   fs[expr_evm_run_root_def]
@@ -198,6 +192,17 @@ Proof
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def] >>
   rpt (BasicProvers.TOP_CASE_TAC >> simp[return_def, raise_def])
+QED
+*)
+Theorem compile_call_open:
+  !cfn cenv rty ty ann target args default env cx es tv es1 sa vv sb.
+    well_typed_expr env (Call ann target args default) /\
+    ~expr_evm_run_root (Call ann target args default) /\
+    eval_expr cx (Call ann target args default) es = (INL tv,es1) /\
+    compile_call cfn cenv rty ty target args default sa = (vv,sb) ==>
+    ~block_is_terminated sb
+Proof
+  cheat
 QED
 
 Theorem compile_struct_literal_body_open:

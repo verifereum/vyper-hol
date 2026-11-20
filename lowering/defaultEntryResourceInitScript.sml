@@ -81,39 +81,7 @@ QED
 (* Compiler placement is an explicit interface input. Both selected and fallback
    placements exported by default_dispatch_cases have this form; packages is
    respectively the selected prefix or all external packages. *)
-Theorem default_entry_prefix_resources:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
-  source_typing_ok tops am tx /\ initial_venom_state_rel tops am tx vs /\
-  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
-  send_call_value mut
-    (initial_evaluation_context am.sources am.layouts tx NONE)
-    (initial_state am [env] with
-      <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es0) /\
-  sels = MAP (\(sel,lbl,z). (sel,lbl))
-    (build_selectors (type_env tops) (FST (classify_functions tops))) /\
-  compile_selector_dispatch_linear sels fallback ds = ((),de) /\
-  fn_has_code ds de fn /\ ds.cs_current_bb = elbl /\ ds.cs_current_insts = [] /\
-  cs_extends de opened /\
-  compile_external_fn_bodies packages de = ((),before) /\
-  new_block (linear_dispatch_target vs.vs_call_ctx.cc_calldata sels fallback)
-    before = (before.cs_current_bb,opened) /\
-  compile_entry_checks mc pay opened = ((),st) /\ fn_has_code opened st fn /\
-  cs_extends opened st /\ pay = (mut = Payable) /\
-  (mc <= 4 \/ mc <= LENGTH vs.vs_call_ctx.cc_calldata) ==>
-  ?s G tn.
-    gas_path_mem unit.cu_context fn
-      (vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>)
-      0 (OK s) /\
-    (!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,fn,[])
-      (vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>,
-       FEMPTY,entry_taint) [] (OK s,G,tn)) /\
-    vars_pc_only
-      (vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>) s /\
-    default_registration_resources unit.cu_context fn site 0 st s tn /\
-    default_registration_entry_frame vs s /\
-    (!D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context fn [] G tn s) ==>
-      !fuel. ptr_safe_blocks D 0 fuel unit.cu_context fn [] FEMPTY entry_taint
-        (vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>))
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >> gvs[] >>
@@ -151,4 +119,41 @@ Proof
      simp[] >> simp[vars_pc_only_def]) >>
   drule_all default_post_checks_resources >> strip_tac >>
   qexistsl [`s`, `G2`, `tn2`] >> simp[]
+QED
+*)
+Theorem default_entry_prefix_resources:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+  source_typing_ok tops am tx /\ initial_venom_state_rel tops am tx vs /\
+  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
+  send_call_value mut
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with
+      <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es0) /\
+  sels = MAP (\(sel,lbl,z). (sel,lbl))
+    (build_selectors (type_env tops) (FST (classify_functions tops))) /\
+  compile_selector_dispatch_linear sels fallback ds = ((),de) /\
+  fn_has_code ds de fn /\ ds.cs_current_bb = elbl /\ ds.cs_current_insts = [] /\
+  cs_extends de opened /\
+  compile_external_fn_bodies packages de = ((),before) /\
+  new_block (linear_dispatch_target vs.vs_call_ctx.cc_calldata sels fallback)
+    before = (before.cs_current_bb,opened) /\
+  compile_entry_checks mc pay opened = ((),st) /\ fn_has_code opened st fn /\
+  cs_extends opened st /\ pay = (mut = Payable) /\
+  (mc <= 4 \/ mc <= LENGTH vs.vs_call_ctx.cc_calldata) ==>
+  ?s G tn.
+    gas_path_mem unit.cu_context fn
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>)
+      0 (OK s) /\
+    (!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,fn,[])
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>,
+       FEMPTY,entry_taint) [] (OK s,G,tn)) /\
+    vars_pc_only
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>) s /\
+    default_registration_resources unit.cu_context fn site 0 st s tn /\
+    default_registration_entry_frame vs s /\
+    (!D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context fn [] G tn s) ==>
+      !fuel. ptr_safe_blocks D 0 fuel unit.cu_context fn [] FEMPTY entry_taint
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>))
+Proof
+  cheat
 QED

@@ -231,23 +231,6 @@ Proof
     is_event_bytestring_type_def, is_bytestring_type_def, is_word_type_def]
 QED
 
-Theorem log_scalar_topic_shape:
-  supported_scalar_type ty ==>
-  (is_event_bytestring_type ty = is_bytestring_type ty) /\
-  (~is_bytestring_type ty ==> supported_word_type ty /\ is_word_type ty)
-Proof
-  strip_tac >>
-  `supported_event_leaf_type ty` by simp[supported_event_leaf_type_def] >>
-  drule log_event_topic_shape >> simp[] >> strip_tac >>
-  `!t. supported_string_type t ==> is_bytestring_type t` by
-    (Cases >> simp[supported_string_type_def, is_bytestring_type_def] >>
-     rename1 `BaseT bt` >> Cases_on `bt` >>
-     simp[supported_string_type_def, is_bytestring_type_def] >>
-     rename1 `BaseT (BytesT bd)` >> Cases_on `bd` >>
-     simp[supported_string_type_def, is_bytestring_type_def]) >>
-  metis_tac[supported_scalar_type_def]
-QED
-
 Theorem compile_encode_log_topic_event_run:
   stmt_state_rel H ctx func cenv cx es s /\
   log_arg_rel cenv cx sa sm es s (x,ty) v /\

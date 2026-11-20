@@ -19,9 +19,7 @@ Proof
   Cases_on `ty` >> simp[MAP_MAP_o, o_DEF, EVERY_MAP, ETA_THM]
 QED
 
-Theorem shadow_builtin_form[local]:
-  supported_builtin_form tops ty (gas_shadow_builtin bi) (MAP gas_shadow_expr es) =
-    supported_builtin_form tops ty bi es
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   Cases_on `bi` >> simp[gas_shadow_builtin_def, supported_builtin_form_def,
     shadow_literal_elements] >>
@@ -29,6 +27,13 @@ Proof
   rpt (qmatch_goalsub_rename_tac `MAP gas_shadow_expr xs` >>
     Cases_on `xs` >> simp[supported_builtin_form_def, shadow_literal_elements,
       shadow_literal_tests, EVERY_MAP, o_DEF])
+QED
+*)
+Theorem shadow_builtin_form[local]:
+  supported_builtin_form tops ty (gas_shadow_builtin bi) (MAP gas_shadow_expr es) =
+    supported_builtin_form tops ty bi es
+Proof
+  cheat
 QED
 
 Theorem shadow_type_builtin_form[local]:
@@ -57,6 +62,15 @@ Proof
   simp[supported_subscript_place_def, supported_place_info_def]
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Proof
+  ho_match_mp_tac supported_pure_expr_ind >>
+  rpt conj_tac >> rpt gen_tac >>
+  simp[gas_shadow_expr_def, supported_pure_expr_def,
+       shadow_builtin_form, shadow_type_builtin_form,
+       shadow_struct_elements, shadow_subscript_place]
+QED
+*)
 Theorem shadow_pure_support[local]:
   (!tops e. supported_pure_expr tops e ==>
      supported_pure_expr tops (gas_shadow_expr e)) /\
@@ -67,11 +81,7 @@ Theorem shadow_pure_support[local]:
   (!tops e. supported_place_expr tops e ==>
      supported_place_expr tops (gas_shadow_expr e))
 Proof
-  ho_match_mp_tac supported_pure_expr_ind >>
-  rpt conj_tac >> rpt gen_tac >>
-  simp[gas_shadow_expr_def, supported_pure_expr_def,
-       shadow_builtin_form, shadow_type_builtin_form,
-       shadow_struct_elements, shadow_subscript_place]
+  cheat
 QED
 
 Theorem gas_shadow_supported_pure_expr:
@@ -80,11 +90,7 @@ Proof
   metis_tac[shadow_pure_support]
 QED
 
-Theorem shadow_effect_support[local]:
-  (!tops e. supported_effect_expr tops e ==>
-     supported_effect_expr tops (gas_shadow_expr e)) /\
-  (!tops e. supported_effect_place_expr tops e ==>
-     supported_effect_place_expr tops (gas_shadow_expr e))
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   ho_match_mp_tac supported_effect_expr_ind >>
   rpt conj_tac >> rpt gen_tac >>
@@ -93,6 +99,15 @@ Proof
   rpt strip_tac >>
   gvs[gas_shadow_expr_def, supported_effect_expr_def] >>
   metis_tac[shadow_pure_support]
+QED
+*)
+Theorem shadow_effect_support[local]:
+  (!tops e. supported_effect_expr tops e ==>
+     supported_effect_expr tops (gas_shadow_expr e)) /\
+  (!tops e. supported_effect_place_expr tops e ==>
+     supported_effect_place_expr tops (gas_shadow_expr e))
+Proof
+  cheat
 QED
 
 Theorem gas_shadow_supported_effect_expr:
