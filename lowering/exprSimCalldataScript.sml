@@ -75,7 +75,7 @@ Proof
        assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
        builtin_args_length_ok_def] >>
   simp[Once evaluate_def, return_def, evaluate_builtin_def] >>
-  rw[] >> gvs[]
+  rw[] >> gvs[is_self_codesize_def, return_def, bind_def, ignore_bind_def]
 QED
 
 Theorem calldata_source_all_tails:

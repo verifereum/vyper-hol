@@ -641,7 +641,9 @@ Theorem compile_acc_case:
 Proof
   rpt strip_tac >> Cases_on `item = Code`
   >- (gvs[] >> irule compile_acc_code_case >> simp[]) >>
-  irule compile_acc_read_case >> simp[]
+  Cases_on `is_self_codesize (Acc item) args`
+  >- (irule exprSimAccountsTheory.compile_acc_self_codesize_case >> simp[])
+  >- (irule compile_acc_read_case >> simp[])
 QED
 
 (* method_id of a literal signature with output_type=bytes4: the folded
