@@ -4,6 +4,7 @@ Ancestors
   exprOperandVar exprSimWordArgs exprSimProps exprSimMapKey
   bodyPtrDefs loweringPosts exprLoweringProps fragGasOriginPtr
   bodyFullUnwrapRun ptrDiscipline loweringStateRelDefs
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   allocaHistory venomState compileEnv finite_map words pred_set list pair fragExec
 
 Theorem mapping_suffix_full_run:
@@ -11,7 +12,6 @@ Theorem mapping_suffix_full_run:
    else (key,sn)) = (hashed,sp) /\
   compile_mapping_subscript bop hashed sp = (slot,sb) /\
   (!x. key = Var x \/ bop = Var x ==> not_fresh_at sn x) /\
-  ~ctx_has_dalloca ctx /\
   (if is_bytestring_type kt then
      ?x b base cap bs.
        key = Var x /\ eval_operand key s = SOME (n2w b) /\
@@ -70,7 +70,9 @@ Proof
          rpt strip_tac >> gvs[] >>
          irule compiler_ci_mono_not_fresh >> qexists_tac `sn` >> simp[]) >>
      metis_tac[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `stmt_state_rel H0 ctx func cenv cx es s` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> simp[]) >>
   drule_all mapping_key_prefix_full_run >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   suspend "slot"
@@ -138,7 +140,6 @@ Resume mapping_suffix_full_run[frames]:
      qexistsl_tac [`sn`, `s`] >>
      simp[wb_frame_refl, Abbr `a`, lookup_var_def] >>
      metis_tac[lookup_var_def]) >>
-  `stmt_state_rel H0 ctx func cenv cx es s` by metis_tac[] >>
   `sn.cs_next_var <= sp.cs_next_var /\ sn.cs_next_id <= sp.cs_next_id` by
     gvs[ci_mono_def, cs_extends_def] >>
   conj_tac >- (irule wb_frame_trans >> simp[] >> conj_tac
