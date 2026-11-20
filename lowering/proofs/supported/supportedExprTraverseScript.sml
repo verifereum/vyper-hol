@@ -90,14 +90,9 @@ Definition target_has_internal_call_def:
     supported_target_exists expr_internal_call_root target
 End
 
-(* The calls the source runs on the EVM even when it takes external calls
-   from the outcome oracle: a delegate raw_call (eval_raw_call's
-   run_raw_call) and the creates (eval_create's run_create_evm). *)
+(* The body proof's remaining exclusion for creation calls.
+   Both raw_call forms take delegate outcomes in oracle mode. *)
 Definition expr_evm_run_root_def:
-  expr_evm_run_root (Call ty (RawCallTarget flags) es default) =
-    flags.rcf_is_delegate /\
-  expr_evm_run_root (Call ty (RawCallCalldataTarget flags) es default) =
-    flags.rcf_is_delegate /\
   expr_evm_run_root (Call ty (CreateTarget kind has_salt rof kw_order) es default) = T /\
   expr_evm_run_root _ = F
 End
@@ -334,8 +329,7 @@ Proof
     supported_effect_expr_has_effect]
 QED
 
-(* The supported subset has no raw_call or create, the calls the source
-   runs on the EVM even with the outcome oracle. *)
+(* The supported subset has no create or selfdestruct root. *)
 Theorem supported_pure_no_halt[local]:
   (!tops e. supported_pure_expr tops e ==>
       ~supported_expr_exists expr_halt_root e) /\

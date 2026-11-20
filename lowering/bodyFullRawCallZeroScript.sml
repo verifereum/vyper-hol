@@ -7,10 +7,11 @@ Ancestors
 
 Theorem raw_call_zero_normal_suffix_joint:
   compile_raw_call_finish to_op dp dl gas_op val_op
-    (if stat then StaticCall else RegularCall) 0 rev ov op sa = (result,sb) /\
-  emit_op (if stat then STATICCALL else CALL)
-    (if stat then [gas_op;to_op;dp;dl;op;Lit 0w]
-     else [gas_op;to_op;val_op;dp;dl;op;Lit 0w]) sa = (ok,sc) /\
+    call_ty 0 rev ov op sa = (result,sb) /\
+  (case call_ty of
+    RegularCall => emit_op CALL [gas_op;to_op;val_op;dp;dl;op;Lit 0w]
+  | StaticCall => emit_op STATICCALL [gas_op;to_op;dp;dl;op;Lit 0w]
+  | DelegateCall => emit_op DELEGATECALL [gas_op;to_op;dp;dl;op;Lit 0w]) sa = (ok,sc) /\
   (rev ==> success) /\
   eval_operand ok s = SOME (if success then 1w else 0w) /\
   op_taint tn ok = {} /\ op_prov G ok = NONE /\
@@ -36,7 +37,7 @@ Proof
       simp[comp_return_def] >> strip_tac >>
       rename1 `fresh_label "call_failed" call_end = (fl,sl)` >>
       rename1 `emit_inst JNZ [status;Label good;Label bad] [] sj = ((),sn)` >>
-      `call_end = sc /\ status = ok` by (Cases_on `stat` >> gvs[]) >>
+      `call_end = sc /\ status = ok` by (Cases_on `call_ty` >> gvs[]) >>
       gvs[] >>
       `sb.cs_current_bb = good /\ sb.cs_current_insts = []` by
         metis_tac[emitHelperPropsTheory.new_block_props] >>
@@ -48,7 +49,7 @@ Proof
       gvs[venomStateTheory.jump_to_def, venomStateTheory.eval_operand_def,
            op_taint_def, ptr_vv_ok_def, read_result_def, return_def, ptr_val_ok_none]) >>
   gvs[] >> drule raw_call_nonrevert_finish_code >> simp[comp_return_def] >>
-  strip_tac >> Cases_on `stat` >> gvs[] >>
+  strip_tac >> Cases_on `call_ty` >> gvs[] >>
   (conj_tac >- simp[gas_origin_ptr_path_rules] >>
    simp[ptr_vv_ok_def, read_result_def, return_def, ptr_val_ok_def, is_word_type_def])
 QED
