@@ -5,30 +5,42 @@ Ancestors
   asmOptPruneJumps asmOptInefficientJumps asmOptPruneUnused asmOptPeephole
 
 (* A quotation abbreviation only: no logical transport constant is introduced. *)
-val transport = ``\p q.
+val transport_for = ``\(steps : asm_inst list -> 'env -> num -> sym_state -> sym_result) p q.
   ?K. 0 < K /\ !env s n a.
-    s.as_pc = 0 /\ sym_steps p env n (sym_init s) = SymOK a ==>
-    (?m b. sym_steps q env m (sym_init s) = SymOK b /\ n <= K * (m+1)) /\
+    s.as_pc = 0 /\ steps p env n (sym_init s) = SymOK a ==>
+    (?m b. steps q env m (sym_init s) = SymOK b /\ n <= K * (m+1)) /\
     (!op. op IN {"GAS"; "CALL"; "STATICCALL"; "DELEGATECALL"; "CREATE";
                  "CREATE2"} /\
        a.sym_base.as_pc < LENGTH p /\ EL a.sym_base.as_pc p = AsmOp op ==>
-     ?m b. sym_steps q env m (sym_init s) = SymOK b /\
+     ?m b. steps q env m (sym_init s) = SymOK b /\
        b.sym_base.as_pc < LENGTH q /\ EL b.sym_base.as_pc q = AsmOp op /\
        (b.sym_base with as_pc := 0) = (a.sym_base with as_pc := 0) /\
        MAP sval_val b.sym_stack = MAP sval_val a.sym_stack /\
        FDOM b.sym_mem_labels = FDOM a.sym_mem_labels)``;
 
-Theorem prefix_transport_refl:
-  !p. ^transport p p
+val canonical_transport = Term.inst [mk_vartype "'env" |-> ``:string |-> word8 list``]
+  transport_for;
+val transport = rhs (concl (BETA_CONV ``^canonical_transport sym_steps``));
+
+Theorem prefix_transport_refl_for:
+  !steps.
+  !p. ^transport_for steps p p
 Proof
-  BETA_TAC >> gen_tac >> qexists_tac `1` >> conj_tac >- simp[] >>
+  BETA_TAC >> ntac 2 gen_tac >> qexists_tac `1` >> conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >>
   conj_tac >- (qexistsl_tac [`n`, `a`] >> simp[]) >>
   rpt strip_tac >> qexistsl_tac [`n`, `a`] >> simp[]
 QED
 
-Theorem prefix_transport_trans:
-  !p q r. ^transport p q /\ ^transport q r ==> ^transport p r
+Theorem prefix_transport_refl:
+  !p. ^transport p p
+Proof
+  BETA_TAC >> MATCH_ACCEPT_TAC (BETA_RULE (Q.ISPEC `sym_steps` prefix_transport_refl_for))
+QED
+
+Theorem prefix_transport_trans_for:
+  !steps.
+  !p q r. ^transport_for steps p q /\ ^transport_for steps q r ==> ^transport_for steps p r
 Proof
   BETA_TAC >> rpt gen_tac >>
   disch_then (CONJUNCTS_THEN2
@@ -36,10 +48,10 @@ Proof
     (qx_choose_then `k2` strip_assume_tac)) >>
   qexists_tac `k1 * (k2 + 1)` >> conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >>
-  qpat_assum `!env s n a. _ /\ sym_steps p _ _ _ = _ ==> _`
+  qpat_assum `!env s n a. _ /\ steps p _ _ _ = _ ==> _`
     (qspecl_then [`env`, `s`, `n`, `a`] mp_tac) >>
   (impl_tac >- simp[]) >> disch_then strip_assume_tac >> conj_tac
-  >- (qpat_assum `!env s n a. _ /\ sym_steps q _ _ _ = _ ==> _`
+  >- (qpat_assum `!env s n a. _ /\ steps q _ _ _ = _ ==> _`
         (qspecl_then [`env`, `s`, `m`, `b`] mp_tac) >>
       (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
       qexistsl_tac [`m'`, `b'`] >> simp[] >>
@@ -51,7 +63,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!op. _ ==> ?m b. _` drule_all >>
   disch_then (qx_choosel_then [`m1`, `b1`] strip_assume_tac) >>
-  qpat_assum `!env s n a. _ /\ sym_steps q _ _ _ = _ ==> _`
+  qpat_assum `!env s n a. _ /\ steps q _ _ _ = _ ==> _`
     (qspecl_then [`env`, `s`, `m1`, `b1`] mp_tac) >>
   (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
   qpat_x_assum `!op. _ ==> ?m b. _` drule_all >>
@@ -59,23 +71,33 @@ Proof
   qexistsl_tac [`m2`, `b2`] >> gvs[]
 QED
 
-Theorem accepted_finalizers_prefix_transport_conditional:
-  (!p. asm_static_wf p ==> ^transport p (FST (merge_iszero p))) /\
-  (!p. asm_static_wf p ==> ^transport p (FST (prune_inefficient_jumps p))) /\
-  (!p. asm_static_wf p ==> ^transport p (FST (optimize_inefficient_jumps p))) /\
-  (!p q c. asm_static_wf p /\ stack_peephole_opts p = SOME(q,c) ==>
-     ^transport p q) /\
-  (!p. asm_static_wf p ==> ^transport p (FST (merge_jumpdests p))) /\
-  (!p. asm_static_wf p ==> ^transport p (FST (prune_unreachable_code p))) /\
-  (!p. asm_static_wf p ==> ^transport p (FST (prune_unused_jumpdests p))) ==>
-  !fin rp p q. fin IN accepted_finalizers /\ fin rp p = SOME q /\
-    asm_static_wf p ==> ^transport p q
+Theorem prefix_transport_trans:
+  !p q r. ^transport p q /\ ^transport q r ==> ^transport p r
 Proof
-  qabbrev_tac `tr = ^transport` >> strip_tac >>
+  BETA_TAC >> MATCH_ACCEPT_TAC (BETA_RULE (Q.ISPEC `sym_steps` prefix_transport_trans_for))
+QED
+
+Theorem accepted_finalizers_prefix_transport_conditional_for:
+  !steps.
+  (!p. asm_static_wf p ==> ^transport_for steps p (FST (merge_iszero p))) /\
+  (!p. asm_static_wf p ==> ^transport_for steps p (FST (prune_inefficient_jumps p))) /\
+  (!p. asm_static_wf p ==> ^transport_for steps p (FST (optimize_inefficient_jumps p))) /\
+  (!p q c. asm_static_wf p /\ stack_peephole_opts p = SOME(q,c) ==>
+     ^transport_for steps p q) /\
+  (!p. asm_static_wf p ==> ^transport_for steps p (FST (merge_jumpdests p))) /\
+  (!p. asm_static_wf p ==> ^transport_for steps p (FST (prune_unreachable_code p))) /\
+  (!p. asm_static_wf p ==> ^transport_for steps p (FST (prune_unused_jumpdests p))) ==>
+  !fin rp p q. fin IN accepted_finalizers /\ fin rp p = SOME q /\
+    asm_static_wf p ==> ^transport_for steps p q
+Proof
+  gen_tac >>
+  qabbrev_tac `tr = ^transport_for steps` >> strip_tac >>
   `!p q r. tr p q /\ tr q r ==> tr p r`
-    by (unabbrev_all_tac >> MATCH_ACCEPT_TAC prefix_transport_trans) >>
+    by (unabbrev_all_tac >> BETA_TAC >> MATCH_ACCEPT_TAC (BETA_RULE (Q.ISPEC
+      `steps:asm_inst list -> 'env -> num -> sym_state -> sym_result` prefix_transport_trans_for))) >>
   `!p. tr p p`
-    by (unabbrev_all_tac >> MATCH_ACCEPT_TAC prefix_transport_refl) >>
+    by (unabbrev_all_tac >> BETA_TAC >> MATCH_ACCEPT_TAC (BETA_RULE (Q.ISPEC
+      `steps:asm_inst list -> 'env -> num -> sym_state -> sym_result` prefix_transport_refl_for))) >>
   `!p q r. (asm_static_wf p ==> asm_static_wf q /\ tr p q) /\
             (asm_static_wf q ==> asm_static_wf r /\ tr q r) ==>
             (asm_static_wf p ==> asm_static_wf r /\ tr p r)`
@@ -98,4 +120,19 @@ Proof
   gvs[asm_opt_finalizer_def, optimize_assembly_def] >>
   Cases_on `rp.rpol_final_assembly = FAP_Optimize` >> gvs[] >>
   metis_tac[]
+QED
+
+Theorem accepted_finalizers_prefix_transport_conditional:
+  (!p. asm_static_wf p ==> ^transport p (FST (merge_iszero p))) /\
+  (!p. asm_static_wf p ==> ^transport p (FST (prune_inefficient_jumps p))) /\
+  (!p. asm_static_wf p ==> ^transport p (FST (optimize_inefficient_jumps p))) /\
+  (!p q c. asm_static_wf p /\ stack_peephole_opts p = SOME(q,c) ==>
+     ^transport p q) /\
+  (!p. asm_static_wf p ==> ^transport p (FST (merge_jumpdests p))) /\
+  (!p. asm_static_wf p ==> ^transport p (FST (prune_unreachable_code p))) /\
+  (!p. asm_static_wf p ==> ^transport p (FST (prune_unused_jumpdests p))) ==>
+  !fin rp p q. fin IN accepted_finalizers /\ fin rp p = SOME q /\
+    asm_static_wf p ==> ^transport p q
+Proof
+  BETA_TAC >> MATCH_ACCEPT_TAC (BETA_RULE (Q.ISPEC `sym_steps` accepted_finalizers_prefix_transport_conditional_for))
 QED

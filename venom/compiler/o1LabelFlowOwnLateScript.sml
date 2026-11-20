@@ -13,28 +13,28 @@ Ancestors
    Existing support: o1LabelFlowSimplifyPreservation/SimplifyChain/Retention,
    o1LabelFlowSueNegative, o1LabelFlowLateDft, and
    o1LabelFlowCfgSplitTaint/CfgSplitPreservation. *)
-Theorem compose_late_own:
-  !k pass rp observed s f out ctx.
+Theorem compose_late_own_track_fmp:
+  !trackFmp k pass rp observed s f out ctx.
   ((k = 5 /\ pass = CFP_Simple VP_SimplifyCFG) \/
    (k = 6 /\ pass = CFP_Simple VP_SingleUseExpansion) \/
    (k = 7 /\ pass = CFP_Simple VP_DFT) \/
    (k = 8 /\ pass = CFP_Simple VP_CFGNormalization)) /\
   fn_pass_step rp pass observed s f out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
+  (trackFmp ==> EVERY fmp_sig_no_param observed.cu_context.ctx_functions) /\
   o1_fn_row k f /\
   (label_flow_own_ok (ctx with ctx_functions := [f]) /\
    (k <= 1 ==> !i. MEM i (fn_insts f) ==>
      ~MEM (Label "code_end") i.inst_operands) /\
    (2 <= k /\ k <= 4 ==> middle_code_end_lifetime f) /\
-   (k <= 3 ==> no_raw_fmp_ops f) /\ fmp_sig_no_param f) ==>
+   (trackFmp /\ k <= 3 ==> no_raw_fmp_ops f) /\ (trackFmp ==> fmp_sig_no_param f)) ==>
   (label_flow_own_ok (ctx with ctx_functions := [out.fpo_function]) /\
    (SUC k <= 1 ==> !i. MEM i (fn_insts out.fpo_function) ==>
      ~MEM (Label "code_end") i.inst_operands) /\
    (2 <= SUC k /\ SUC k <= 4 ==>
      middle_code_end_lifetime out.fpo_function) /\
-   (SUC k <= 3 ==> no_raw_fmp_ops out.fpo_function) /\
-   fmp_sig_no_param out.fpo_function)
+   (trackFmp /\ SUC k <= 3 ==> no_raw_fmp_ops out.fpo_function) /\
+   (trackFmp ==> fmp_sig_no_param out.fpo_function))
 Proof
   mp_tac simplify_row5_code_end_uses_conditional >>
   (impl_tac >-
@@ -59,7 +59,8 @@ Proof
        i.inst_operands = [dst; Var x; sz] /\ dst <> Var x /\ sz <> Var x)` by
     (fs[label_flow_own_ok_def] >> metis_tac[]) >>
   reverse conj_tac
-  >- (drule fn_pass_step_fmp_sig_no_param >> simp[fn_pass_tag_def]) >>
+  >- (strip_tac >> drule fn_pass_step_fmp_sig_no_param >>
+      simp[fn_pass_tag_def]) >>
   irule label_flow_own_ok_from_code_end_use >>
   simp[] >> reverse conj_tac
   >- fs[o1_fn_shape_def])
@@ -67,4 +68,30 @@ Proof
   >- (drule sue_row_code_end_uses >> simp[])
   >- (drule dft_row7_code_end_uses >> simp[]) >>
   drule cfg_norm_row_code_end_uses >> simp[]
+QED
+
+Theorem compose_late_own:
+  !k pass rp observed s f out ctx.
+  ((k = 5 /\ pass = CFP_Simple VP_SimplifyCFG) \/
+   (k = 6 /\ pass = CFP_Simple VP_SingleUseExpansion) \/
+   (k = 7 /\ pass = CFP_Simple VP_DFT) \/
+   (k = 8 /\ pass = CFP_Simple VP_CFGNormalization)) /\
+  fn_pass_step rp pass observed s f out /\
+  o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
+  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
+  o1_fn_row k f /\
+  (label_flow_own_ok (ctx with ctx_functions := [f]) /\
+   (k <= 1 ==> !i. MEM i (fn_insts f) ==>
+     ~MEM (Label "code_end") i.inst_operands) /\
+   (2 <= k /\ k <= 4 ==> middle_code_end_lifetime f) /\
+   (k <= 3 ==> no_raw_fmp_ops f) /\ fmp_sig_no_param f) ==>
+  (label_flow_own_ok (ctx with ctx_functions := [out.fpo_function]) /\
+   (SUC k <= 1 ==> !i. MEM i (fn_insts out.fpo_function) ==>
+     ~MEM (Label "code_end") i.inst_operands) /\
+   (2 <= SUC k /\ SUC k <= 4 ==>
+     middle_code_end_lifetime out.fpo_function) /\
+   (SUC k <= 3 ==> no_raw_fmp_ops out.fpo_function) /\
+   fmp_sig_no_param out.fpo_function)
+Proof
+  MATCH_ACCEPT_TAC (SIMP_RULE bool_ss [] (Q.SPEC `T` compose_late_own_track_fmp))
 QED
