@@ -2,6 +2,7 @@ Theory bodyFullAbiDecodeMemberPrefix
 Ancestors
   exprSimWordBuiltins[qualified,ignore_grammar]
   bodyFullAbiDecodeFiniteGuardEffect[qualified,ignore_grammar]
+  bodyFullAbiDecodeOwnedStateProps
   bodyFullAbiDecodeFiniteObserved bodyFullAbiDecodeScalarObserved
   bodyFullAbiDecodeRelativeLoadExact[qualified,ignore_grammar]
   bodyPtrBopScalarOutcome bodyPtrBopScalarSeq fragGasPath
@@ -489,7 +490,7 @@ QED
 (* Alpha-identical entry quotations from the shared interface. *)
 val owned_decoder_pre = ``\start finish dst src opc base_op hi d write_start size s G tn.
   opc = MLOAD /\ fn_has_code start finish fn /\ fn_inst_ids_distinct fn /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved ce start /\ (?H. V H) /\
+  local_ptrs_reserved ce start /\ (?H. V H) /\
   w2n input_word+LENGTH input_bytes < dimword (:256) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
@@ -518,7 +519,7 @@ val owned_decoder_pre = ``\start finish dst src opc base_op hi d write_start siz
 
 val guarded_decoder_pre = ``\start finish dst src opc base_op hi d write_start size s G tn.
   opc = MLOAD /\ fn_has_code start finish fn /\ fn_inst_ids_distinct fn /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved ce start /\ (?H. V H) /\
+  local_ptrs_reserved ce start /\ (?H. V H) /\
   w2n input_word+LENGTH input_bytes < dimword (:256) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
@@ -575,6 +576,13 @@ val bounded_member_entry = ``\dst src opc base_op hi elems ao vo env sf pretys p
     (^owned_decoder_pre) start finish dst src opc base_op hi d (d+vo)
       (SUM (MAP (type_memory_bytes ce) tys)) s G tn``;
 
+fun member_alloca_bound state =
+  strip_tac >> irule owned_decoder_allocas_below_fmp >>
+  qexistsl [`V`,`ce`,`ctx`,`cx`,`es`,`fn`] >> simp[] >>
+  rpt strip_tac >>
+  qpat_assum `!H. V H ==> stmt_state_rel H _ _ _ _ _ ^state /\ _`
+    (drule_then (ACCEPT_TAC o CONJUNCT1));
+
 (* Compose the selected zero-cost outcomes at an emitted cut. *)
 Theorem member_prefix_observed_then[local]:
   !sa sb sc u.
@@ -617,7 +625,7 @@ Theorem abi_decode_member_select_joint_observed[local]:
         op_taint tnu (Var x) = op_taint tn (Var x))))
 Proof
   gen_tac >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by (member_alloca_bound ``s``) >>
   `allocas_from lo s` by
     (qpat_x_assum `?H. V H` strip_assume_tac >>
      qpat_x_assum `!H. V H ==> _` drule >>
@@ -738,6 +746,7 @@ Proof
   `(^owned_decoder_state) slot_end u Gf tnf` by
     (BETA_TAC >> asm_rewrite_tac[] >> metis_tac[]) >>
   pop_assum (assume_tac o BETA_RULE) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by (member_alloca_bound ``u``) >>
   `?out t Gl tnl.
     offset_val = Var out /\ not_fresh_at load_end out /\
     (?raw. run_inst_seq (emitted_insts slot_end load_end) u = OK raw /\
@@ -841,6 +850,7 @@ Proof
      simp[bodyPtrDefsTheory.ghost_inv_at_def] >> metis_tac[]) >>
   qpat_x_assum `(^owned_decoder_state) load_end t Gl tnl`
     (assume_tac o BETA_RULE) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by (member_alloca_bound ``t``) >>
   `(?z Gz tnz. (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
      (t,Gl,tnl) [] (Abort Revert_abort z,Gz,tnz)) /\
      (!obs. fn_has_code load_end select_end obs ==>
@@ -1037,6 +1047,10 @@ Proof
       drule_all fragExecTheory.fn_has_code_split >> strip_tac >> simp[]) >>
   rename1 `eval_operand elem_src selected = SOME (n2w q)` >>
   rename1 `(^owned_decoder_state) select_end selected Gs tns` >>
+  qpat_assum `(^owned_decoder_state) select_end selected Gs tns`
+    (assume_tac o BETA_RULE) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp selected` by
+    (member_alloca_bound ``selected``) >>
   `start.cs_next_var <= select_end.cs_next_var /\
    select_end.cs_next_var <= head_start.cs_next_var` by
     (conj_tac
@@ -1129,8 +1143,6 @@ Proof
        lookup_var x u = lookup_var x selected /\ FLOOKUP Gu x = FLOOKUP Gs x /\
        op_taint tnu (Var x) = op_taint tns (Var x))` by
     (BETA_TAC >> irule (BETA_RULE abi_decode_member_destination_owned_observed) >>
-     qpat_assum `(^owned_decoder_state) select_end selected Gs tns`
-       (assume_tac o BETA_RULE) >>
      asm_rewrite_tac[] >>
      conj_tac >-
        (qexists_tac `Lit (n2w vo)` >>
