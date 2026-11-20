@@ -72,7 +72,7 @@ Ancestors
   immutableAssignMetadata immutableAssignRepresentation immutableAssignStore
   immutableDeployAssignRestore immutableAssignCode immutableAssignEmpty
   immutableAssignCompose immutableAssignOpen
-  assignPlacePureFacts assignPlacePureCode assignPlaceEmpty
+  assignPlacePureCode assignPlaceEmpty
   assignPlaceEmptyCompose
   assignPlaceGasCompose assignPlaceBytesStore
   (* whitelist: retained raw-call and CREATE compiler shape proofs *)
@@ -81,7 +81,7 @@ Ancestors
   normalizationAllocPtr
   ptrSafetyTransport staticTypeFitsPtr
   (* end-to-end runtime correctness *)
-  e2eCorrectness guardRequestAlignment
+  e2eCorrectness
   (* sufficient gas, the companions to the call and deploy theorems *)
   e2eGasSufficient e2eGasSufficientTop
   (* deployment: the constructor frame and deploy correctness *)

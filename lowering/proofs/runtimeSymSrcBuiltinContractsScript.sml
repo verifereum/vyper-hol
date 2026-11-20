@@ -1,7 +1,7 @@
 Theory runtimeSymSrcBuiltinContracts
 Ancestors
   runtimeSymSrcGeneratorContracts runtimeSymSrcBuiltinByteSimple
-  runtimeSymSrcBuiltinHash runtimeSymSrcBuiltinMisc runtimeSymSrcBuiltinStrings
+  runtimeSymSrcBuiltinMisc runtimeSymSrcBuiltinStrings
 
 Theorem runtime_sym_simple_contract:
   runtime_sym_simple_clauses

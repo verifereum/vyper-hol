@@ -1,6 +1,6 @@
 Theory bodyPtrPrecompileBuiltinsRecoveryInput
 Ancestors bodyPtrPrecompileBuiltinsPrefixes bodyPtrPrecompileBuiltinsStaging
-          bodyPtrPrecompileBuiltinsSeq bodyPtrPrecompileBuiltinsAllocationTransport
+          bodyPtrPrecompileBuiltinsSeq bodyFullHashKeccakFixed[qualified]
           bodyPtrPrecompileBuiltinsObservations
           compileEnv context emitHelper exprLoweringProps fragExec
           venomExecSemantics venomState ptrDiscipline bodyPtrDefs

@@ -1,7 +1,7 @@
 (* Memory checking for the common SHA256 precompile continuation. *)
 Theory bodyMemBiSha256Suffix
 Ancestors
-  bodyMemBiSha256Bounds emitHelper fragExecMem instMemFrontier memSafeRun
+  emitHelper fragExecMem instMemFrontier memSafeRun
   exprLoweringProps compileEnv loweringStateRelDefs emitHelperProps venomExecSemantics venomInst venomState venomMemProps
   venomMemDefs venomInstProps venomInstProofs words list bufferAllocationExecution exprSimHash
 
