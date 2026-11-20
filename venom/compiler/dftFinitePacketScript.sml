@@ -817,7 +817,9 @@ Proof
      qpat_assum `MEM inst bb.bb_instructions` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> metis_tac[dft_packet_active_block]) >>
   `st.vs_current_bb = bt.bb_label` by
-    metis_tac[simplifyCfgDefsTheory.lookup_block_member_label] >>
+    (qpat_assum `lookup_block st.vs_current_bb tf.fn_blocks = SOME bt`
+      (ACCEPT_TAC o SYM o cj 2 o
+       MATCH_MP simplifyCfgDefsTheory.lookup_block_member_label)) >>
   `active_inst tf inst st` by
     (simp[contextCodegenRelTheory.active_inst_def] >>
      qexists_tac `bt` >>

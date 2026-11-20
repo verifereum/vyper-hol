@@ -1,6 +1,7 @@
 Theory gasFocusLowerDloadFrameRequestRow
 Ancestors o1PipelineCompose[qualified]
   lowerDloadRequestObservation lowerDloadSafetyLocations
+  lowerDloadPtrCreate lowerDloadPtrCreateInterfaces
   gasFocusLowerDloadCutGuards lowerDloadPtrAggregate lowerDloadPublicTrace
   contextCodegenRel lowerDloadDefs list o1SafeUpto lowerDloadSafetyAmbient
   lowerDloadPtrPhase concretizeLayoutCutSafe ptrDiscipline pred_set
@@ -87,13 +88,6 @@ Proof
     (strip_assume_tac o REWRITE_RULE [o1_safe_upto_def, o1_ptr_safe_upto_def]) >>
   drule_all ptr_discipline_upto_at >> strip_tac >>
   drule_then assume_tac dload_boundary_shared_store >>
-  Cases_on `MEM inst.inst_opcode [CREATE; CREATE2]`
-  >- (qpat_x_assum `MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]` kall_tac >>
-      gvs[MEM, taint_ok_def, dload_shared_store_def]) >>
-  `MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL]` by
-    (qpat_assum `MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]` mp_tac >>
-     qpat_assum `~MEM inst.inst_opcode [CREATE; CREATE2]` mp_tac >>
-     simp_tac bool_ss [MEM] >> metis_tac[]) >>
   suspend "calls"
 QED
 
@@ -101,7 +95,7 @@ Resume ld_focus_frame_request_row[calls]:
   `MEM inst (fn_insts fn)` by metis_tac[ld_active_inst_member] >>
   `~MEM inst.inst_opcode [ASSIGN; PHI; RET; RETFMP; DRET] /\
    inst.inst_opcode <> RETURNDATACOPY /\ inst.inst_opcode <> REVERT` by
-    (qpat_assum `MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL]` mp_tac >>
+    (qpat_assum `MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]` mp_tac >>
      simp_tac bool_ss [MEM] >> strip_tac >> simp[]) >>
   `opaque_use_ok fn` by fs[fn_shape_ok_def] >>
   `!v. MEM (Var v) inst.inst_operands ==>
@@ -143,13 +137,26 @@ Resume ld_focus_frame_request_row[calls]:
 QED
 
 Resume ld_focus_frame_request_row[backward_growth]:
+  Cases_on `inst.inst_opcode = CREATE \/ inst.inst_opcode = CREATE2`
+  >- suspend "create" >>
   Cases_on `inst.inst_opcode = DELEGATECALL`
   >- suspend "delegate" >>
   Q.SUBGOAL_THEN `inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL`
     assume_tac
-  >- (qpat_assum `MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL]` mp_tac >>
+  >- (qpat_assum `MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]` mp_tac >>
       simp_tac bool_ss [MEM] >> metis_tac[]) >>
   suspend "call_static"
+QED
+
+Resume ld_focus_frame_request_row[create]:
+  `FDOM G SUBSET fn_pv P fn` by metis_tac[] >>
+  `s.vs_labels = t0.vs_labels` by metis_tac[dload_equal_environment_code] >>
+  `?s1. step_inst fuel C inst s = OK s1` by
+    (drule_all (Q.INST [`U` |-> `set (fn_ir_vars fn) DIFF {v | retpc_var fn v}`]
+                      dload_boundary_core_create) >>
+     disch_then (qspec_then `C` strip_assume_tac) >> metis_tac[]) >>
+  `MEM inst.inst_opcode [CREATE;CREATE2]` by fs[MEM] >>
+  qexists `s1` >> simp[] >> drule_all ld_create_step_request_growth >> simp[]
 QED
 
 Resume ld_focus_frame_request_row[delegate]:

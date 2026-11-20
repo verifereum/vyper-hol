@@ -72,6 +72,7 @@ Theorem abi_decode_bytes_head_joint:
       (s,G,tn) [] (Abort Revert_abort t,Gf,tnf))
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_head_joint_observed >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac)
   >- (disj1_tac >> qexistsl_tac [`t`, `Gf`, `tnf`] >> asm_rewrite_tac[]) >>
@@ -103,6 +104,7 @@ Theorem abi_decode_bytes_count_joint:
       (s,G,tn) [] (Abort Revert_abort t,Gf,tnf))
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_count_joint_observed >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac)
   >- (disj1_tac >> qexistsl_tac [`t`, `Gf`, `tnf`] >> asm_rewrite_tac[]) >>
@@ -142,6 +144,7 @@ Theorem abi_decode_bytes_owned_load_frame_joint:
        op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_owned_load_frame_joint_observed >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`out`, `ar`, `t`, `Gf`, `tnf`] >> asm_rewrite_tac[]

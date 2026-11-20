@@ -336,6 +336,7 @@ Resume extcall_return_full_default_value[entry]:
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   rename1 `lookup_var q a = SOME dw` >>
   `LENGTH a.vs_returndata < dimword (:256)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by simp[] >>
   drule_all (INST_TYPE [alpha |-> ``:256``]
     extcallReturnDefaultControlJointTheory.return_default_shell_entry) >>
   disch_then (qspecl_then [`tm`, `explicit`, `PG`, `J`]

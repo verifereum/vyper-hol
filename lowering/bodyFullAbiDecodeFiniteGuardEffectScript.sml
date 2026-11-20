@@ -43,7 +43,7 @@ val owned_decoder_state = ``\st s G tn.
 Theorem abi_decode_scalar_guard_success_joint_effect:
   bop_scalar_seq {x | not_fresh_at sa x} A (emitted_insts sa sb) B /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\ inst_extends sa sb /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sa sb fn /\ inst_extends sa sb /\
   sb.cs_current_bb = sa.cs_current_bb /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -68,7 +68,6 @@ Theorem abi_decode_scalar_guard_success_joint_effect:
     tnf.t_mem = tn.t_mem
 Proof
   strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (bop_scalar_seq_run |> Q.INST [`D` |-> `<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`]) >>
   disch_then (qspecl_then [`fn`, `PG`] strip_assume_tac) >>
   `lo <= s.vs_alloca_next` by fs[] >>

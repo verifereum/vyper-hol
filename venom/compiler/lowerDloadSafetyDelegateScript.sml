@@ -1,6 +1,7 @@
 Theory lowerDloadSafetyDelegate
 Ancestors
-  lowerDloadExternalBoundary lowerDloadOracleCallAssembly lowerDloadSafetyKernel
+  lowerDloadExternalBoundary lowerDloadExternalEffects[qualified,ignore_grammar]
+  lowerDloadOracleCallAssembly lowerDloadSafetyKernel
   lowerDloadSafetyValues lowerDloadSafetyUpdates lowerDloadSafetyAssemblyPremises
   lowerDloadSafetyRelation lowerDloadSafetyAmbient lowerDloadSafetyAllocBounds
   ptrDiscipline venomExecSemantics venomCallOracleDefs extCallOracle venomState pointerConfinedDefs
@@ -266,14 +267,55 @@ Proof
      `f.lf_src.vs_call_ctx = f.lf_tgt.vs_call_ctx` by fs[ld_nonghost_def] >>
      fs[venom_call_request_def] >>
      asm_rewrite_tac[] >> fs[Abbr `xs`, w2n_11] >> metis_tac[]) >>
+  qabbrev_tac `adopts =
+    (~f.lf_src.vs_call_ctx.cc_static /\ (HD f.lf_src.vs_outcomes).co_success)` >>
+  `rs.vs_requests <> f.lf_src.vs_requests /\
+   ~computed_precompile (LAST rs.vs_requests) /\
+   rs.vs_outcomes <> f.lf_src.vs_outcomes` by
+    (Cases_on `f.lf_src.vs_outcomes` >- fs[] >>
+     qpat_x_assum `consume_call_outcome rqs _ _ _ = _` mp_tac >>
+     simp[Abbr `rqs`, consume_call_outcome_eq, take_outcome_def,
+          computed_precompile_def] >>
+     strip_tac >> qpat_x_assum `_ = rs` (fn th => REWRITE_TAC[GSYM th]) >>
+     simp[record_request_changed, record_request_def, computed_precompile_def]) >>
+  `adopts ==> rs.vs_accounts = u.vs_accounts /\
+    rs.vs_transient = u.vs_transient` by
+    (`f.lf_src.vs_call_ctx = f.lf_tgt.vs_call_ctx /\
+      f.lf_src.vs_outcomes = f.lf_tgt.vs_outcomes` by fs[ld_nonghost_def] >>
+     `rqs.cr_kind = rq.cr_kind /\ rqs.cr_value = rq.cr_value /\
+      rqs.cr_target = rq.cr_target /\ rqs.cr_data = rq.cr_data` by
+       simp[Abbr `rqs`, venom_call_request_def] >>
+     strip_tac >>
+     `~rqs.cr_static /\ ~rq.cr_static /\ (HD f.lf_src.vs_outcomes).co_success` by
+       (qpat_assum `rq = _` (fn th => once_rewrite_tac[th]) >>
+        simp[Abbr `rqs`, venom_call_request_def] >>
+        fs[Abbr `adopts`, Excl "consume_call_outcome_eq"] >>
+        metis_tac[]) >>
+     drule_all lowerDloadExternalEffectsTheory.ld_call_consume_reset_maps >>
+     simp[Excl "consume_call_outcome_eq"]) >>
+  qabbrev_tac `tn'' = tn' with
+    <|t_stor := if adopts then {} else tn'.t_stor;
+      t_trans := if adopts then {} else tn'.t_trans|>` >>
+  `ld_nonghost tn'' rs u` by
+    (Cases_on `adopts`
+     >- (`rs.vs_accounts = u.vs_accounts /\ rs.vs_transient = u.vs_transient` by
+           (qpat_assum `T ==> _` mp_tac >> simp[NoAsms]) >>
+         qpat_assum `ld_nonghost tn' rs u`
+           (strip_assume_tac o SRULE [ld_nonghost_def]) >>
+         simp[Abbr `tn''`, ld_nonghost_def,
+              storage_agree_except_def, word_agree_except_def,
+              Excl "consume_call_outcome_eq"] >>
+         qpat_x_assum `!k x y. _ ==> word_agree_except _ x y` mp_tac >>
+         rpt (pop_assum kall_tac) >> simp[word_agree_except_def]) >>
+     simp[Abbr `tn''`, Excl "consume_call_outcome_eq"]) >>
   `step_taint inst f.lf_src (update_var out w rs) tn =
-    tn' with t_var := set_var_taint f.lf_tv inst.inst_outputs {}` by
+    tn'' with t_var := set_var_taint f.lf_tv inst.inst_outputs {}` by
     (drule_at (Pat `source_memory_write_ranges _ _ = _`) ld_oracle_call_taint >>
      disch_then (qspecl_then [`tn`,`update_var out w rs`] mp_tac) >>
      simp[update_var_def] >>
      disch_then SUBST1_TAC >>
-     simp[Abbr `tn'`, Abbr `xs`, adopt_reset_def, ADD_COMM,
-          taint_component_equality]) >>
+     simp[Abbr `tn''`, Abbr `tn'`, Abbr `xs`, Abbr `adopts`,
+          adopt_reset_def, ADD_COMM, taint_component_equality]) >>
   qexists `update_var out w rs` >>
   (conj_tac >-
     (simp[NoAsms, exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
@@ -281,18 +323,17 @@ Proof
   (conj_tac >- (simp[update_var_def] >> irule ld_oracle_call_vars >> simp[] >>
      (conj_tac >- (qexists `w` >> simp[])) >>
      irule ld_inst_output_ir >> qexists `inst` >> simp[])) >>
-  qpat_x_assum `rq = _` kall_tac >>
-  qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` kall_tac >>
-  simp[update_var_def] >>
-  conj_tac
-  >- (qpat_x_assum `ld_memory lo A tn' rs u` mp_tac >>
-      simp[ld_memory_def, update_var_def] >> metis_tac[]) >>
-  qpat_x_assum `ld_nonghost tn' rs u` mp_tac >>
-  simp[ld_nonghost_def, update_var_def] >> rpt strip_tac >>
-  qpat_x_assum `rs.vs_call_ctx = _` (fn th => rewrite_tac[GSYM th]) >>
-  first_assum (qspec_then `a` mp_tac) >> simp[] >>
-  qpat_x_assum `ld_memory lo A tn' rs u` mp_tac >>
-  simp[ld_memory_def] >> metis_tac[]
+  qpat_assum `step_taint inst f.lf_src (update_var out w rs) tn = _`
+    (fn th => once_rewrite_tac[th]) >>
+  qpat_assum `ts = update_var out w u` (fn th => once_rewrite_tac[th]) >>
+  (conj_tac >-
+    (irule ld_memory_update_var >>
+     qpat_assum `ld_memory lo A tn' rs u` mp_tac >>
+     simp[NoAsms, Abbr `tn''`, ld_memory_def] >>
+     disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  (conj_tac >- (irule ld_nonghost_update_var >> first_assum ACCEPT_TAC)) >>
+  simp[update_var_def, Abbr `tn''`, Excl "consume_call_outcome_eq"]
 QED
 
 Theorem ld_delegate_step:

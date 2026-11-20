@@ -22,7 +22,7 @@ Ancestors
   vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimBuiltins
   exprReasonOperand stmtSimDeclCompose
   vyperTypeValues vyperTyping vyperTypeDefaults stmtSimAssignTuple
-  vyperTypeEnvPreservation bodySimExprCases bodyStoragePreservation
+  vyperTypeEnvPreservation bodySimExprCases
   vyperCallOutcomeStorage vyperTypeStoragePreservation
   stmtSimAssignStorage supportedDecls vyperTypeContractStaticMaps
   vyperTypeContract compileVyper supportedTypes stmtSimAssignAttr

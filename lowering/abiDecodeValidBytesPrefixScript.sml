@@ -143,7 +143,7 @@ QED
 Theorem abi_decode_bytes_addr_load[local]:
   emit_op ADD [Var src;pos] sh = (Var ar,sp) /\
   emit_op MLOAD [Var ar] sp = (Var cnt,sl) /\
-  not_fresh_at sh src /\ ~ctx_has_dalloca ctx /\
+  not_fresh_at sh src /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   abi_decode_ptr_window G tn s src (n2w B) L /\
   eval_operand pos s = SOME (n2w p) /\ op_taint tn pos = {} /\
   p + 32 + c <= L /\ B + L < dimword (:256) /\ B + L <= s.vs_alloca_next ==>
@@ -164,7 +164,6 @@ Proof
   `ptr_covers G tn src s (p+(32+c)) /\ lookup_var src s = SOME (n2w B)` by
     (fs[abi_decode_ptr_window_def] >> irule ptr_covers_mono >> qexists `L` >> simp[]) >>
   `w2n (n2w B : bytes32) + p < dimword (:256)` by simp[w2n_n2w] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all emit_addr_add_seq_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts sh sp) s = OK v` >>
@@ -197,7 +196,9 @@ Proof
 QED
 
 Resume abi_decode_bytes_addr_load[load]:
-  `ctx_has_dalloca ctx ==> allocas_below_fmp vp` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp vp` by
+    (`allocas_below_fmp vp <=> allocas_below_fmp s` by fs[Abbr `vp`, update_var_def, ptrDisciplineTheory.allocas_below_fmp_def] >>
+     asm_rewrite_tac[]) >>
   drule_all emit_mload_clean_seq_ptr >>
   disch_then (qspecl_then [`D`, `fn`, `PG`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts sp sl) vp = OK w` >>
@@ -254,7 +255,7 @@ Finalise abi_decode_bytes_addr_load
 Theorem abi_decode_bytes_scalar_cut[local]:
   bop_scalar_seq R A code C /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ run_inst_seq code s = OK t ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ run_inst_seq code s = OK t ==>
   ?H u.
     EVERY (\i. ~is_terminator i.inst_opcode) code /\
     run_inst_seq_mem_ok code s /\
@@ -278,7 +279,9 @@ Proof
   `run_inst_seq code (s with vs_inst_idx := pc) = OK (t with vs_inst_idx := pc)` by
     simp[run_inst_seq_inst_idx, instIdxIndepTheory.exec_result_map_def] >>
   qpat_x_assum `run_inst_seq _ s = OK t` kall_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := pc)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := pc)` by
+    (`allocas_below_fmp (s with vs_inst_idx := pc) <=> allocas_below_fmp s` by fs[ptrDisciplineTheory.allocas_below_fmp_def] >>
+     asm_rewrite_tac[]) >>
   drule_all bop_scalar_seq_run >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
   rename1 `inst_seq_ptr _ _ _ _ _ _ _ _ _ H u` >>
@@ -300,7 +303,7 @@ Theorem abi_decode_valid_bytes_prefix_certificate:
   op_prov G hi = NONE /\ op_taint tn hi = {} /\
   abi_decode_load MLOAD (n2w (B+p) : bytes32) s = n2w c /\
   c <= n /\ n < dimword (:256) /\ p + 32 + c <= L /\
-  B + L < dimword (:256) /\ B + L <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx ==>
+  B + L < dimword (:256) /\ B + L <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?ar cv m H u.
     addr = Var ar /\ cnt = Var cv /\ inst_extends sa cm /\
     m.vs_inst_idx = LENGTH cm.cs_current_insts /\
@@ -317,6 +320,7 @@ Theorem abi_decode_valid_bytes_prefix_certificate:
     m.vs_memory = s.vs_memory /\ m.vs_allocas = s.vs_allocas /\
     m.vs_alloca_next = s.vs_alloca_next /\ m.vs_call_ctx = s.vs_call_ctx /\
     m.vs_data_section = s.vs_data_section /\
+    m.vs_fmp = s.vs_fmp /\ m.vs_initial_fmp = s.vs_initial_fmp /\
     (!x. not_fresh_at sa x ==> lookup_var x m = lookup_var x s /\
        FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
@@ -401,6 +405,9 @@ Proof
      qpat_assum `emit_op MLOAD _ _ = _`
        (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
      simp[Abbr `lc`, mk_inst_def, is_terminator_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp hi_state` by
+    (`allocas_below_fmp hi_state <=> allocas_below_fmp s` by fs[Abbr `hi_state`, venom_state_component_equality, ptrDisciplineTheory.allocas_below_fmp_def] >>
+     asm_rewrite_tac[]) >>
   drule_all abi_decode_bytes_addr_load >>
   qpat_assum `Abbrev (lc = _)` (fn th => rewrite_tac[GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
@@ -443,6 +450,9 @@ Proof
         op_prov Gl op = NONE /\ op_taint tl op = {}` by
     (simp[] >> rpt strip_tac >>
      gvs[ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp l` by
+    (`allocas_below_fmp l <=> allocas_below_fmp s` by fs[venom_state_component_equality, ptrDisciplineTheory.allocas_below_fmp_def] >>
+     asm_rewrite_tac[]) >>
   drule_all (Q.INST [`G` |-> `Gl`, `tn` |-> `tl`, `s` |-> `l`, `t` |-> `t`]
       abi_decode_bytes_scalar_cut) >>
   disch_then (qspecl_then [`s.vs_inst_idx + LENGTH (hc ++ lc)`,`fn`,`PG`,`D`] strip_assume_tac) >>

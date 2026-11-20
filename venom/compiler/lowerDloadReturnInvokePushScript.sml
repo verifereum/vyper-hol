@@ -306,8 +306,8 @@ Proof
   `!j k. j < k /\ k < LENGTH (fc::f::fs) ==>
     list_precedes (EL j (fc::f::fs)).lf_fn.fn_name
       (EL k (fc::f::fs)).lf_fn.fn_name names` by
-    (rpt strip_tac >> irule ld_order_fresh_push >>
-     fs[Abbr `Stable`] >> metis_tac[]) >>
+    (mp_tac (Q.INST [`frames` |-> `f::fs`] ld_order_fresh_push) >>
+     (impl_tac >- (fs[Abbr `Stable`] >> metis_tac[])) >> simp[]) >>
   `!g. MEM g (f::fs) ==> FRANGE g.lf_H SUBSET FDOM A /\
       (!a. MEM (SOME a) g.lf_Q ==> a IN FDOM A)` by
     (qpat_assum `ld_global lo A (f::fs)` mp_tac >>

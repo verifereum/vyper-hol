@@ -152,7 +152,7 @@ Proof
      qpat_assum `taint_ok _ _ _ _`
        (fn taint =>
           qpat_assum `~about_to_revert _ _ _` (fn live =>
-            mp_tac (MATCH_MP (CONJUNCT1 (CONJUNCT2 (REWRITE_RULE [taint_ok_def] taint))) live))) >>
+            mp_tac (MATCH_MP (CONJUNCT2 (REWRITE_RULE [taint_ok_def] taint)) live))) >>
      disch_then (qspecl_then [`w2n p`,`w2n bytes`,`w2n p + j`] mp_tac) >>
      simp[] >>
      qpat_assum `MEM a.po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2]`

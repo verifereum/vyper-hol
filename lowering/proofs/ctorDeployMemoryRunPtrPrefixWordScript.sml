@@ -28,7 +28,7 @@ Theorem prefix_noclamp_steps:
     FLOOKUP G dst = SOME (b,sz) /\ b <= w2n a /\
     w2n a + 32 <= b+sz /\ op_taint tn src = {} /\
     op_taint tn (Var dst) = {} /\ allocas_from lo s /\
-    ~ctx_has_dalloca ctx ==>
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     let i = mk_inst iid DLOAD [src] [x];
         j = mk_inst (iid+1) MSTORE [Var dst; Var x] [];
         l = update_var x (word_of_bytes T (0w:bytes32)
@@ -74,6 +74,10 @@ Proof
   simp[slotCopyExecutionTheory.slot_copy_step_store, prefix_dload_ptr_step] >>
   conj_tac
   >- (irule prefix_mstore_ghost_step >> simp[prefix_mstore_endpoint]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (update_var x v s)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms,allocas_below_fmp_def,update_var_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   irule prefix_mstore_ptr_step >>
   simp[prefix_dload_output_taint] >> metis_tac[]
 QED
@@ -86,7 +90,7 @@ Theorem prefix_decoder_noclamp_ptr:
     eval_operand src s = SOME w /\ eval_operand (Var dst) s = SOME a /\
     FLOOKUP G dst = SOME (b,sz) /\ b <= w2n a /\ w2n a + 32 <= b+sz /\
     op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-    allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+    allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?l t G1 tn1 tn2.
       let i = mk_inst st.cs_next_id DLOAD [src] [x];
           j = mk_inst (st.cs_next_id+1) MSTORE [Var dst;Var x] [];
@@ -128,6 +132,10 @@ Proof
     (gvs[allocas_from_def, Abbr `l1`] >> metis_tac[]) >>
   `op_taint tn1 (Var x) = {}` by
     simp[Abbr `tn1`, Abbr `i`, prefix_dload_output_taint] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp l1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms,Abbr `l1`,Abbr `l`,allocas_below_fmp_def,update_var_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `ptr_safe_step D lo fuel ctx fn PG G1 tn1 j l1` by
     (simp[Abbr `j`] >> irule prefix_mstore_ptr_step >>
      simp[Abbr `l1`, eval_op_inst_idx] >> metis_tac[]) >>

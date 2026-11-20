@@ -20,7 +20,7 @@ Ancestors concretizePtrRequestHistory concretizePtrReturnTransport
   ptrDiscipline pointerConfinedDefs unitShapeDefs venomExecSemantics memLocDefs
   venomState venomInst finite_map list pred_set
 
-Theorem ptr_history_content_fmp[local]:
+Theorem ptr_history_content_fmp:
   ptr_history_content tn s t ==>
   ptr_history_content tn (s with vs_fmp := v) (t with vs_fmp := v)
 Proof

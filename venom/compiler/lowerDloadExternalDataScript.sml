@@ -257,11 +257,9 @@ Resume ld_normal_external_backward[create_shared]:
   markerLib.RESUME_TAC >> (
   `ld_shared_state (step_taint i s rS tn) (step_taint i t rT un) rS rT` by
     (irule ld_create_consume_tainted_shared >>
-     goal_assum (drule_at Any) >>
-     reverse conj_tac >- simp[MEM] >>
-     goal_assum (drule_at (Pat `consume_create_outcome _ _ = _`)) >>
-     goal_assum (drule_at (Pat `consume_create_outcome _ _ = _`)) >>
-     simp[MEM, venom_create_request_def, Excl "consume_create_outcome_eq"]) >>
+     qpat_assum `consume_create_outcome _ s = _` (irule_at Any) >>
+     qpat_assum `consume_create_outcome _ t = _` (irule_at Any) >>
+     gvs[MEM, venom_create_request_def, Excl "consume_create_outcome_eq"]) >>
   drule ld_consume_create_frame_fields >> strip_tac >>
   rev_drule ld_consume_create_frame_fields >> strip_tac >>
   drule ld_consume_create_vars >> disch_tac >>

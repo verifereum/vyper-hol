@@ -515,49 +515,6 @@ Proof
   goal_assum $ drule_at (Pat `fmp_install_root _ _ _ _ = _`) >> simp[]
 QED
 
-Theorem focus_label_flow_lower_dload[local]:
-  fn_pass_step rp (CFP_Simple VP_LowerDload) observed s f out /\
-  (!i. MEM i (fn_insts f) ==> ~MEM (Label "code_end") i.inst_operands) /\
-  label_flow_ok (C with ctx_functions := [f]) ==>
-  label_flow_ok (C with ctx_functions := [out.fpo_function]) /\
-  middle_code_end_lifetime out.fpo_function
-Proof
-  strip_tac >> drule lower_dload_step_supply >> strip_tac >> conj_tac
-  >- (irule lower_dload_function_label_flow_ok >> metis_tac[]) >>
-  rewrite_tac[middle_code_end_lifetime_def] >> rpt strip_tac >>
-  irule lower_dload_function_code_end_lifetime >> metis_tac[]
-QED
-
-Theorem focus_label_flow_concretize[local]:
-  fn_pass_step rp (CFP_Simple VP_ConcretizeMemLoc) observed s f out /\
-  label_flow_ok (C with ctx_functions := [f]) /\ middle_code_end_lifetime f ==>
-  label_flow_ok (C with ctx_functions := [out.fpo_function]) /\
-  middle_code_end_lifetime out.fpo_function
-Proof
-  strip_tac >>
-  `execute_configured_fn_pass rp (CFP_Simple VP_ConcretizeMemLoc)
-    observed s f = SOME out` by fs[fn_pass_step_def] >>
-  gvs[execute_configured_fn_pass_concretize, AllCaseEqs()] >>
-  gvs[concretize_function_fuel_in_context_def, AllCaseEqs()] >>
-  `label_flow_ok (C with ctx_functions :=
-    [concretize_function_with_positions layout.cl_positions f]) /\
-   middle_code_end_lifetime
-    (concretize_function_with_positions layout.cl_positions f)` by
-    (conj_tac >- metis_tac[concretize_label_flow] >>
-     drule (PURE_REWRITE_RULE [GSYM middle_code_end_lifetime_def]
-       concretize_function_code_end_lifetime) >> simp[]) >>
-  gvs[apply_context_concretize_layout_def, apply_concretize_layout_def] >>
-  qmatch_goalsub_abbrev_tac `middle_code_end_lifetime g` >>
-  `g.fn_blocks =
-    (concretize_function_with_positions layout.cl_positions f).fn_blocks` by
-    simp[Abbr `g`] >>
-  `!x. code_end_var g x <=>
-    code_end_var (concretize_function_with_positions layout.cl_positions f) x` by
-    metis_tac[code_end_var_same_blocks] >>
-  (conj_tac >- metis_tac[label_flow_ok_same_blocks] >>
-   fs[middle_code_end_lifetime_def, fn_insts_def])
-QED
-
 Theorem focus_label_flow_step_shape[local]:
   fn_pass_step rp pass observed s f out /\ o1_ctx_shape observed.cu_context ==>
   o1_fn_shape observed.cu_context f /\ ir_supply_covers_fn s f
@@ -635,8 +592,8 @@ Proof
         metis_tac[label_flow_ok_seed_free_function] >>
       drule_all first_make_ssa_step_seed_free_flow >>
       metis_tac[label_flow_ok_seed_free_function])
-  >- metis_tac[focus_label_flow_lower_dload]
-  >- metis_tac[focus_label_flow_concretize]
+  >- metis_tac[o1LabelFlowMiddleTheory.middle_lower_dload_step]
+  >- metis_tac[o1LabelFlowMiddleTheory.middle_concretize_step]
   >- metis_tac[focus_label_flow_fmp_step]
   >- metis_tac[focus_label_flow_second_ssa]
   >- (irule (SRULE [] (Q.INST [`k` |-> `5`] focus_label_flow_late_step)) >> metis_tac[])
@@ -673,7 +630,15 @@ Proof
      drule chain_facts_row >> disch_then (qspec_then `LENGTH o1_fn_passes` mp_tac) >>
      simp[]) >>
   gvs[stage_ctx_def, stage_fns_def, label_flow_ok_def, MEM_MAP] >>
-  metis_tac[MEM_EL]
+  map_every qx_gen_tac [`fn`, `inst`] >> strip_tac >>
+  qpat_x_assum `MEM _ chains`
+    (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  rename1 `i < LENGTH chains` >>
+  qpat_assum `!i. i < LENGTH u.cu_context.ctx_functions ==>
+      !inst. MEM inst (fn_insts (EL (LENGTH o1_fn_passes) (FST (EL i chains)))) ==> _`
+    (qspec_then `i` mp_tac) >>
+  impl_tac >- simp[] >>
+  disch_then (qspec_then `inst` mp_tac) >> gvs[]
 QED
 
 Theorem focus_opt_label_flow:

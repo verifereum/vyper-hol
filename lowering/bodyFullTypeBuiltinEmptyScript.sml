@@ -29,7 +29,6 @@ QED
 
 Resume empty_expr_full_ok[vv]:
   Cases_on `is_word_type typ` >- suspend "word" >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   rewrite_tac[bodySimFullTheory.expr_vv_sim_full_def] >>
   rpt gen_tac >> strip_tac >> fs[] >>
   irule gas_outcome_full_initial_domain >>
@@ -79,6 +78,12 @@ Resume empty_expr_full_ok[vv]:
   `stmt_state_rel H ctx func cenv cx es' s0 /\
    storage_well_formed_on cx es' (FST H)` by metis_tac[] >>
   drule_all empty_memory_full_post >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ t`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
+     qpat_assum `stmt_state_rel H ctx func cenv cx es' t`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     simp[]) >>
   simp[exprLoweringTheory.lowered_value_type_def,
     contextTheory.base_ptr_def, contextTheory.vv_location_def] >>
   fs[loweringPostsTheory.vv_post_def, bodyPtrDefsTheory.ptr_vv_ok_def,

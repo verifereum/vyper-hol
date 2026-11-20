@@ -1,12 +1,13 @@
 Theory concretizePtrDallocaPersistentSteps
 Ancestors
-  ptrDiscipline lowerDloadMaskedStorage venomState venomInst
+  ptrDiscipline lowerDloadMaskedStorage lowerDloadPtrCreateInterfaces
+  venomExecSemantics venomCallOracleDefs extCallOracle venomState venomInst
   finite_map pred_set list
 
 (* Persistent masks need only the demanded store selector, not equality of
    states.  These boundaries apply to actual step_taint results, including
    halting results.  The chronology join must supply selector evaluation,
-   operand-mask inclusion, and the CALL adoption decision separately. *)
+   operand-mask inclusion, and the oracle adoption decision separately. *)
 Theorem ptr_dalloca_store_mask_mono[local]:
   Y SUBSET X /\
   (!a v. inst.inst_opcode = opc /\ inst.inst_operands = [a;v] ==>
@@ -41,7 +42,8 @@ QED
 
 Theorem ptr_dalloca_adopt_mask_mono[local]:
   Y SUBSET X /\ instT.inst_opcode = inst.inst_opcode /\
-  (inst.inst_opcode = CALL ==> adoptedT = adopted) ==>
+  (MEM inst.inst_opcode [CALL;DELEGATECALL;CREATE;CREATE2] ==>
+   adoptedT = adopted) ==>
   adopt_reset instT adoptedT Y SUBSET adopt_reset inst adopted X
 Proof
   rw[adopt_reset_def] >> gvs[]
@@ -56,13 +58,15 @@ Theorem ptr_dalloca_persistent_next:
           inst.inst_opcode = ISTORE) /\ inst.inst_operands = [a;v] ==>
      eval_operand a t = eval_operand a s /\
      op_taint un v SUBSET op_taint tn v) /\
-  (inst.inst_opcode = CALL ==>
+  (MEM inst.inst_opcode [CALL;DELEGATECALL;CREATE;CREATE2] ==>
     ((~t.vs_call_ctx.cc_static /\ postT.vs_requests <> t.vs_requests /\
         ~computed_precompile (LAST postT.vs_requests) /\
-      postT.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success) =
+      postT.vs_outcomes <> t.vs_outcomes /\
+        ((HD t.vs_outcomes).co_success \/ MEM inst.inst_opcode [CREATE;CREATE2])) =
      (~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
         ~computed_precompile (LAST post.vs_requests) /\
-      post.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success))) ==>
+      post.vs_outcomes <> s.vs_outcomes /\
+        ((HD s.vs_outcomes).co_success \/ MEM inst.inst_opcode [CREATE;CREATE2])))) ==>
   (step_taint instT t postT un).t_stor SUBSET
     (step_taint inst s post tn).t_stor /\
   (step_taint instT t postT un).t_trans SUBSET
@@ -74,11 +78,43 @@ Proof
   Cases_on `instT = inst`
   >- (gvs[step_taint_def] >> rpt conj_tac
       >- (irule ptr_dalloca_adopt_mask_mono >> simp[] >>
+          conj_tac >- first_assum ACCEPT_TAC >>
           irule ptr_dalloca_store_mask_mono >> simp[])
       >- (irule ptr_dalloca_adopt_mask_mono >> simp[] >>
+          conj_tac >- first_assum ACCEPT_TAC >>
           irule ptr_dalloca_store_mask_mono >> simp[])
       >> irule ptr_dalloca_imm_mask_mono >> simp[]) >>
   gvs[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def]
+QED
+
+(* The non-CALL opcodes cannot select a computed precompile. An actual
+   successful dispatch has a nonempty queue and consumes its head. *)
+Theorem ptr_dalloca_noncall_reset_step:
+  MEM inst.inst_opcode [DELEGATECALL;CREATE;CREATE2] /\
+  step_inst fuel C inst s = OK post ==>
+  ((~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST post.vs_requests) /\
+    post.vs_outcomes <> s.vs_outcomes /\
+    ((HD s.vs_outcomes).co_success \/ MEM inst.inst_opcode [CREATE;CREATE2])) <=>
+   (~s.vs_call_ctx.cc_static /\
+    ((HD s.vs_outcomes).co_success \/ MEM inst.inst_opcode [CREATE;CREATE2])))
+Proof
+  simp[MEM] >> strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  rpt strip_tac
+  >>~- ([`exec_delegatecall _ _ _ _ _ _ _ _ = _`],
+    qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
+    simp[exec_delegatecall_def, AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
+    pairarg_tac >> simp[AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
+    strip_tac >> gvs[Excl "consume_call_outcome_eq"] >>
+    Cases_on `s.vs_outcomes` >>
+    gvs[consume_call_outcome_eq, venom_call_request_def, take_outcome_def,
+        computed_precompile_def, record_request_def, update_var_def]) >>
+  gvs[dload_exec_create_success_iff, Excl "consume_create_outcome_eq"] >>
+  Cases_on `s.vs_outcomes` >>
+  gvs[consume_create_outcome_eq, venom_create_request_def, take_outcome_def,
+      computed_precompile_def, record_request_def, update_var_def]
 QED
 
 (* Block entry changes only t_var.  INVOKE entry clears it, and return

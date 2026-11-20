@@ -233,6 +233,7 @@ Resume prefix_bytestring_complete_mode_contract[package]:
   `b <= w2n (n2w d:bytes32) /\
    w2n (n2w d:bytes32) + abi_decode_bytes_copy_size n <= b+sz` by
     (simp[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all prefix_bytestring_success_ghost >>
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
   drule_all ctor_actual_sequence_world >> strip_tac >>

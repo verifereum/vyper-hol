@@ -3,6 +3,7 @@ Theory bodyFullBuiltinECRecover
 Ancestors
   bodyFullShadowBodyInv
   bodyFullExprGeneric bodyFullPreds bodySimFull bodyInvNoDalloca
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyFullBuiltinPrecompileRecoveryArgs bodyFullBuiltinPrecompileRecoveryBuffers
   bodyFullBuiltinPrecompileSuffixSuccess bodyFullBuiltinPrecompileSuffixAbort
   gasOutcomeFull gasOutcomeFullCompose gasShadowCompileStmtHelpers gasShadow gasShadowState
@@ -34,7 +35,6 @@ Theorem ecrecover_expr_sim_full:
       cenv cx ty (Builtin a ECRecover args) es
 Proof
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `a = BaseT AddressT /\ LENGTH args = 4 /\
    EVERY (\e. is_word_type (expr_type e)) args` by
     metis_tac[ecrecover_pre_types] >>
@@ -247,6 +247,19 @@ Proof
          (strip_assume_tac o MATCH_MP th)) >>
      qpat_assum `typed_args_post H _ _ _ _ _ _ _ _ _ _ _ sarg`
        (strip_assume_tac o PURE_REWRITE_RULE [typed_args_post_def]) >> simp[]) >>
+  `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid sarg` by
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> stmt_state_rel _ _ _ _ _ _ sarg /\ _`
+       (fn th => qpat_assum `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace`
+         (ACCEPT_TAC o CONJUNCT1 o MATCH_MP th))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sarg /\
+    sarg.vs_alloca_next + pending_alloca_size func sarg <= w2n sarg.vs_initial_fmp` by
+    (strip_tac >> conj_tac
+     >- (qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ sarg`
+           (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >> simp[]) >>
+     qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ sarg`
+       (fn state => qpat_assum `ctx_has_dalloca ctx`
+         (fn gc => POP_ASSUM_LIST (K all_tac) >> MAP_EVERY assume_tac [state,gc])) >>
+     fs[stmt_state_rel_def,fmp_room_def] >> res_tac >> decide_tac) >>
   qpat_assum `ghost_inv_at (DF (storage_trace_horizon _)) _ _ _ _ _ _ _ sarg`
     (fn ghost => let
        val actualDF = rator (hd (snd (strip_comb (concl ghost))));
@@ -479,6 +492,9 @@ Proof
     (fn th => qpat_assum
       `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace`
       (strip_assume_tac o MATCH_MP th)) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sbuf` by
+    (qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ sbuf`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `mid.outcomes = SOME sbuf.vs_outcomes` by
     (qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ sbuf`
        (fn state => POP_ASSUM_LIST (K all_tac) >> mp_tac state) >>
@@ -735,13 +751,16 @@ Proof
          simp[below_frontier_MLOAD]) >>
       `li.inst_opcode = MLOAD /\ inst_dload_in_section li scall` by
         simp[Abbr `li`,mk_inst_def,inst_dload_in_section_def] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp scall` by
+        (qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ scall`
+           (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
       `!D. ptr_inst_ok D lo 0 ctx func Gc tnc li scall` by
         (gen_tac >> qunabbrev_tac `li` >>
          qpat_assum `ptr_covers Gc tnc qo scall 32`
            (fn covers => qpat_assum `allocas_from lo scall`
-             (fn allocas => qpat_assum `~ctx_has_dalloca ctx`
-               (fn nd => POP_ASSUM_LIST (K all_tac) >>
-                 MAP_EVERY assume_tac [covers,allocas,nd]))) >>
+             (fn allocas => qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp scall`
+               (fn bound => POP_ASSUM_LIST (K all_tac) >>
+                 MAP_EVERY assume_tac [covers,allocas,bound]))) >>
          irule ptr_inst_ok_mload_lo >> simp[]) >>
       rename1 `lookup_block scall.vs_current_bb func.fn_blocks = SOME bfin` >>
       `!D. gas_origin_ptr_edge (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -1194,6 +1213,9 @@ Proof
                    (fn transient => pure_rewrite_tac
                      [MATCH_MP storage_well_formed_on_backends (CONJ accounts transient)])) >>
              first_assum ACCEPT_TAC)]) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp sfin` by
+        (qpat_assum `stmt_state_rel H ctx func cenv cx _ sfin`
+           (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
       rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
         FIRST_PROVE [simp[NoAsms,exprSimMemDefsTheory.expr_store_bound_def,
           expr_type_def,is_word_type_def,ptr_val_ok_def] >>

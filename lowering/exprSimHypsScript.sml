@@ -252,8 +252,8 @@ Ancestors
   vyperEvalOutcomeSuffix vyperRuntimeAccounts
   vyperStorageLayoutSafety vyperTypeStoragePreservation
   vyperTypeEvalStoragePreservation vyperCallOutcomeStorage
-  supportedExprTraverse exprStoragePreservation
-  vyperLookup vyperPlaceResultTyping supportedProgram bodyStoragePreservation
+  supportedExprTraverse
+  vyperLookup vyperPlaceResultTyping supportedProgram
   structFieldsProps vyperTypeABI vyperValue vfmConstants valueEncoding pair
   vyperPlaceInvariants placeTypingProps allocLimits
   vyperTypeEvalProofs

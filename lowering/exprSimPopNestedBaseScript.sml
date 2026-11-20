@@ -19,7 +19,7 @@ Ancestors
   vyperPlaceFrames vyperStatePreservation
   exprSimHash fragGasSeqAbort gasSummary exprSimVVFrame stmtSimProps
   gasOutcome gasExemptCert gasSummaryCompose fragGasMode fragGasPath
-  exprOracleStoragePreservation bodyStoragePreservation vyperTypeStoragePreservation
+  vyperTypeStoragePreservation
   vyperTypeExprSoundness supportedExprTraverse supportedProgram evalNoHalt
   vyperStorageLayoutSafety vyperPlaceStoragePreservation accountsRelProps vyperStorage
 
@@ -568,29 +568,6 @@ Proof
        vyperValueTheory.evaluate_type_def, AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem nested_pop_storage_natural_region:
-  storage_layout_safe cx /\
-  storage_place_region cx (StoragePlace tr slot (ArrayTV tv (Dynamic n))) ==>
-  ?mid name keys root root_tv path delta.
-    declared_storage_region cx mid name keys = SOME (tr,root,root_tv) /\
-    storage_subregion root_tv path delta (ArrayTV tv (Dynamic n)) /\
-    slot = root + n2w delta /\ w2n slot = w2n root + delta /\
-    w2n root + type_slot_size root_tv <= dimword(:256) /\
-    w2n slot + type_slot_size (ArrayTV tv (Dynamic n)) <= dimword(:256)
-Proof
-  strip_tac >> fs[storage_place_region_def] >>
-  drule_all vyperStorageLayoutSafetyTheory.storage_layout_safe_region_nonoverflow >> strip_tac >>
-  drule storage_subregion_bounds >> strip_tac >>
-  `w2n root + delta < dimword(:256)` by
-    (fs[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
-  `delta < dimword(:256)` by decide_tac >>
-  `w2n (n2w delta : bytes32) = delta` by simp[] >>
-  `w2n (root + n2w delta : bytes32) = w2n root + delta` by
-    simp[wordsTheory.w2n_add_2] >>
-  qexistsl [`mid`, `var_name`, `keys`, `root`, `tv'`, `path`, `delta`] >>
-  simp[] >> decide_tac
-QED
-
 Theorem nested_pop_slots_word_offset:
   slots_in_range raw (w2n (w:bytes32) + off) tv ==>
   slots_in_range raw (w2n (w + n2w off)) tv
@@ -692,145 +669,6 @@ Definition nested_pop_result_slots_def:
     storage_mapping_region cx tr slot (HashMapT kt vt) /\
   nested_pop_result_slots cx st (Value _) = T
 End
-
-Theorem nested_pop_mapping_leaf_slots:
-  contract_storage_well_formed cx st /\
-  storage_mapping_region cx tr slot (Type typ) /\
-  evaluate_type (get_tenv cx) typ = SOME tv /\
-  get_storage_backend cx tr st = (INL raw,st) ==>
-  slots_in_range raw (w2n slot) tv
-Proof
-  strip_tac >>
-  qpat_x_assum `storage_mapping_region _ _ _ _` mp_tac >>
-  rewrite_tac[storage_mapping_region_def] >> strip_tac >>
-  qpat_x_assum `!subs leaf_slot leaf_tv. _`
-    (qspecl_then [`[]`, `slot`, `tv`] mp_tac) >>
-  asm_simp_tac bool_ss [vyperStorageLayoutSafetyTheory.resolve_hashmap_leaf_def,
-                       optionTheory.option_case_def, APPEND_NIL] >>
-  strip_tac >>
-  drule_all vyperStorageLayoutSafetyTheory.contract_storage_well_formed_region >> simp[]
-QED
-
-Theorem nested_pop_lookup_global_slots:
-  contract_storage_well_formed cx st /\
-  lookup_global cx mid var_name st = (INL pv,st') ==>
-  nested_pop_result_slots cx st pv
-Proof
-  Cases_on `pv` >> simp[nested_pop_result_slots_def]
-  >- (Cases_on `p` >> simp[nested_pop_result_slots_def] >> rpt strip_tac >>
-      drule lookup_global_storage_region >> strip_tac >>
-      drule_all vyperStorageLayoutSafetyTheory.contract_storage_well_formed_region >> simp[]) >>
-  strip_tac >> drule lookup_global_mapping_region >> simp[]
-QED
-
-Theorem nested_pop_extend_result_slots:
-  contract_storage_well_formed cx st /\
-  nested_pop_result_slots cx st pv /\
-  extend_place cx pv sb st = (INL pv',st') ==>
-  nested_pop_result_slots cx st pv'
-Proof
-  Cases_on `pv` >> simp[extend_place_def, raise_def, nested_pop_result_slots_def]
-  >- (Cases_on `p` >>
-      simp[extend_place_def, bind_def, ignore_bind_def, return_def, raise_def,
-           record_storage_event_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
-      >~ [`extend_storage_place _ _ _ _ _ _`]
-      >- (drule extend_storage_place_subregion >> strip_tac >> gvs[] >>
-          simp[nested_pop_result_slots_def] >> rpt strip_tac >>
-          gvs[nested_pop_result_slots_def] >>
-          drule_all nested_pop_extend_storage_slots >> simp[]) >>
-      simp[extend_memory_place_def, nested_pop_result_slots_def]) >>
-  Cases_on `sb` >> simp[extend_place_def, raise_def] >>
-  Cases_on `v` >>
-  simp[extend_place_def, bind_def, lift_option_type_def, return_def, raise_def,
-       ignore_bind_def, record_storage_event_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[nested_pop_result_slots_def, vyperMiscTheory.option_CASE_rator,
-      return_def, raise_def, AllCaseEqs()] >>
-  drule storage_mapping_region_step >>
-  disch_then (qspec_then `v'` assume_tac) >>
-  simp[] >> rpt strip_tac >>
-  irule nested_pop_mapping_leaf_slots >> goal_assum (drule_at Any) >>
-  simp[] >> metis_tac[]
-QED
-
-Theorem nested_pop_result_slots_storage_frame[local]:
-  (!b. get_storage cx st' b = get_storage cx st b) ==>
-  (nested_pop_result_slots cx st' pv <=> nested_pop_result_slots cx st pv)
-Proof
-  strip_tac >> Cases_on `pv` >> simp[nested_pop_result_slots_def] >>
-  Cases_on `p` >>
-  simp[nested_pop_result_slots_def, vyperStorageBackendTheory.get_storage_backend_eq]
-QED
-
-(* nested_pop_extend_result_slots, the extension run in a state that only
-   differs from st off the storage backends (its trace, say). *)
-Theorem nested_pop_extend_result_slots_frame[local]:
-  contract_storage_well_formed cx st /\ nested_pop_result_slots cx st pv /\
-  (!b. get_storage cx s b = get_storage cx st b) /\
-  extend_place cx pv sb s = (INL pv',st') ==>
-  nested_pop_result_slots cx st pv'
-Proof
-  strip_tac >>
-  `contract_storage_well_formed cx s` by
-    (irule vyperStorageLayoutSafetyTheory.contract_storage_well_formed_storage_frame >>
-     qexists `st` >> simp[]) >>
-  `nested_pop_result_slots cx s pv` by
-    metis_tac[nested_pop_result_slots_storage_frame] >>
-  drule_all nested_pop_extend_result_slots >>
-  metis_tac[nested_pop_result_slots_storage_frame]
-QED
-
-Theorem nested_pop_eval_base_slots:
-  !bt cx st pv st'.
-    contract_storage_well_formed cx st /\
-    EVERY pure_expr (target_indices bt) /\
-    eval_base_place cx bt st = (INL pv,st') ==>
-    nested_pop_result_slots cx st pv
-Proof
-  measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
-  rpt gen_tac
-  >~ [`eval_base_place cx (TopLevelNameTarget p) st`]
-  >- (PairCases_on `p` >>
-      simp[target_indices_def, Once evaluate_def, bind_def, AllCaseEqs(),
-           get_scopes_def, type_check_def, assert_def, ignore_bind_def,
-           return_def, raise_def] >> rpt strip_tac >> gvs[] >>
-      simp[nested_pop_result_slots_def] >>
-      metis_tac[nested_pop_lookup_global_slots]) >>
-  simp[target_indices_def, Once evaluate_def, bind_def, AllCaseEqs(),
-       get_scopes_def, type_check_def, assert_def, ignore_bind_def,
-       return_def, raise_def] >> rpt strip_tac >> gvs[] >>
-  simp[nested_pop_result_slots_def] >>
-  qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
-  simp[expr_size_def] >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
-  drule_all nested_pop_eval_base_pure_state >> strip_tac >> gvs[]
-  >~ [`pure_expr e`]
-  >- (drule_all eval_expr_preserves_state >> strip_tac >> gvs[] >>
-      drule read_result_state >> strip_tac >> gvs[] >>
-      drule_at (Pat `extend_place _ _ _ _ = _`) nested_pop_extend_result_slots_frame >>
-      disch_then irule >> simp[] >> Cases >>
-      rpt (qpat_x_assum `_ = _ with storage_trace := _`
-             (fn th => once_rewrite_tac [th])) >>
-      simp[vyperStorageBackendTheory.get_storage_def]) >>
-  drule_at (Pat `extend_place _ _ _ _ = _`) nested_pop_extend_result_slots_frame >>
-  disch_then irule >> simp[] >> Cases >>
-  rpt (qpat_x_assum `_ = _ with storage_trace := _`
-         (fn th => once_rewrite_tac [th])) >>
-  simp[vyperStorageBackendTheory.get_storage_def]
-QED
-
-Theorem nested_pop_eval_target_slots:
-  contract_storage_well_formed cx st /\
-  EVERY pure_expr (target_indices bt) /\
-  eval_target_place cx bt st = (INL (StoragePlace tr slot tv),st') /\
-  get_storage_backend cx tr st = (INL raw,st) ==>
-  slots_in_range raw (w2n slot) tv
-Proof
-  simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  drule_all nested_pop_eval_base_slots >> strip_tac >>
-  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def,
-                       nested_pop_result_slots_def]
-QED
 
 Theorem nested_pop_suffix_path:
   fn_has_code sa sb func /\ sb.cs_current_bb = sa.cs_current_bb /\

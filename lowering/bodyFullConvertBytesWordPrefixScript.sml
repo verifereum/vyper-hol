@@ -9,7 +9,7 @@ Ancestors
 
 Theorem prefix_uniform_checks[local]:
   ALL_DISTINCT [src;len;dp] /\ lookup_var src s = SOME a /\
-  ptr_covers G tn src s 64 /\ ~ctx_has_dalloca ctx /\
+  ptr_covers G tn src s 64 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   run_inst_seq [mk_inst i MLOAD [Var src] [len];
                 mk_inst j ADD [Var src;Lit 32w] [dp]] s = OK t ==>
   ?H th.
@@ -38,14 +38,13 @@ Proof
          (update_var len (mload (w2n a) s) s) tn)`] >>
   simp[] >> gen_tac >>
   `32 <= (64:num)` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bodyPtrSignedConvertSourceFixedTheory.bytestring_source_uniform_checks >>
   disch_then (qspecl_then [`D`, `fn`, `PG`] strip_assume_tac) >>
   gvs[]
 QED
 
 Theorem bytes_word_prefix_fixed_frame:
-  ALL_DISTINCT [src;len;dp] /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [src;len;dp] /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var src s = SOME a /\ ptr_covers G tn src s 64 /\
   w2n a + 64 <= dimword (:256) /\ mload (w2n a) s = n2w n /\ n <= 32 /\
   (!x. w2n a <= x /\ x < w2n a+32 ==> x NOTIN tn.t_mem) /\

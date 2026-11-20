@@ -452,8 +452,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `ptr_use_ok P (fn_pv P f) i` by metis_tac[fn_ptr_ok_def] >>
   `op_prov G sz = NONE /\
-   (!arg. MEM arg i.inst_operands ==> op_taint tn arg = {}) /\
-   tn.t_stor = {} /\ tn.t_trans = {}` by
+   (!arg. MEM arg i.inst_operands ==> op_taint tn arg = {})` by
     (irule dload_create_operand_safety >> simp[] >> metis_tac[]) >>
   `op_taint tn sz = {} /\ op_taint tn off = {}` by
     (gvs[] >> metis_tac[MEM]) >>
@@ -1146,9 +1145,6 @@ Resume dload_normal_copied_safety[taint]:
       simp[taint_ok_def] >> strip_tac >>
       first_x_assum (qspec_then `op` mp_tac) >> simp[] >>
       strip_tac >> gvs[] >> fs[MEM] >> metis_tac[]) >>
-  reverse conj_tac
-  >- (drule dload_boundary_shared_store >>
-      simp[dload_shared_store_def] >> rpt strip_tac >> fs[taint_ok_def] >> metis_tac[]) >>
   suspend "memory"
 QED
 

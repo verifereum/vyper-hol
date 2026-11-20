@@ -324,10 +324,8 @@ Proof
   `run_call es = SOME (INL (),es')` by
     (irule frame_outcome_nested_run >> Cases_on `rest` >> gvs[] >> metis_tac[]) >>
   `call_trace es = []` by (drule frame_obs_terminal >> simp[]) >>
-  mp_tac (Q.INST [`es0` |-> `es0`, `es` |-> `es`,
-    `c0` |-> `c0`, `c` |-> `c`, `rb` |-> `rb`, `rest` |-> `rest`,
-    `r` |-> `INL ()`, `es'` |-> `es'`, `exc` |-> `e`,
-    `out` |-> `c'.returnData`, `lgs` |-> `lgs`] frame_outcome_mid) >>
+  mp_tac (Q.INST [`r` |-> `INL ()`, `exc` |-> `e`,
+    `out` |-> `c'.returnData`] frame_outcome_mid) >>
   simp[] >> strip_tac >>
   qexists_tac `c.logs ++ lgs` >>
   simp[call_requests_def, frame_last_def] >> gvs[]

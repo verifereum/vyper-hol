@@ -127,11 +127,9 @@ Proof
     (qpat_x_assum `t.po_inst = concretize_inst_with_positions _ _` mp_tac >>
      simp[concretize_inst_with_positions_def]) >>
   `step_inst fuelT C' a.po_inst t.po_state = OK postT` by metis_tac[] >>
-  `a.po_inst.inst_opcode = CALL ==>
-    ptr_call_adopted a.po_state post = ptr_call_adopted t.po_state postT` by
-    (strip_tac >> drule_all ptr_dalloca_call_adoption >> simp[]) >>
-  irule ptr_dalloca_persistent_next >> simp[] >>
-  gvs[concretizePtrRequestCompletionProbeTheory.ptr_call_adopted_def]
+  irule ptr_dalloca_persistent_next >> simp[] >> strip_tac >>
+  `MEM a.po_inst.inst_opcode [CALL;DELEGATECALL;CREATE;CREATE2]` by simp[] >>
+  drule_all ptr_dalloca_oracle_adoption >> simp[]
 QED
 
 (* Use the actual ordinary chronology witnesses; no equality between a
