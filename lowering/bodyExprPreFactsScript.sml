@@ -132,7 +132,6 @@ Theorem stmt_expr_body_pre:
        (\e. ~is_extcode e /\
              ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
     ~is_extcode e /\
-    ~supported_expr_exists call_operands_effect_root e /\
     ~supported_expr_exists (const_name_root cx) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
@@ -166,7 +165,6 @@ Theorem stmt_expr_body_pre_alloc:
     ~supported_expr_exists (\e. ~is_extcode e /\ ~byte_widths_expr e) e /\
     alloc_limits_expr cenv e /\
     ~is_extcode e /\
-    ~supported_expr_exists call_operands_effect_root e /\
     ~supported_expr_exists (const_name_root cx) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\

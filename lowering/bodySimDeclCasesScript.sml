@@ -125,9 +125,22 @@ QED
 
 (* ===== AnnAssign ===== *)
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem body_annassign_rhs_pre:
+  !cenv cx env e es tops id typ ctx.
+    body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    body_stmt_safe tops (AnnAssign id typ e) /\
+    stmt_exprs_ok cenv (AnnAssign id typ e) /\
+    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) ==>
+    expr_body_pre cenv cx env e es
 Proof
   rpt strip_tac >>
+  drule_all body_inv_stmt_const_name_free >>
+  simp[supported_stmt_expr_exists_def, supported_assignment_exists_def] >>
+  strip_tac >>
   qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
     SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, supported_iterator_exists_def,
@@ -142,26 +155,10 @@ Proof
       alloc_limits_expr_def]) >>
   imp_res_tac alloc_limits_expr_not_extcode >>
   `cx_tops cx = tops` by (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
-  irule_body_pre stmt_expr_body_pre >>
+  irule stmt_expr_body_pre >>
   gvs[body_inv_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       int_calls_stmt_def] >>
-  imp_res_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >> simp[] >>
   qexists_tac `[]` >> simp[]
-QED
-*)
-Theorem body_annassign_rhs_pre:
-  !cenv cx env e es tops id typ ctx.
-    body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-    body_stmt_safe tops (AnnAssign id typ e) /\
-    stmt_exprs_ok cenv (AnnAssign id typ e) /\
-    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) ==>
-    expr_body_pre cenv cx env e es
-Proof
-  cheat
 QED
 
 (* A declaration of a word type: stmtSimDecl's
