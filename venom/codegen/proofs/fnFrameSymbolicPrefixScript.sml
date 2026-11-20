@@ -684,7 +684,7 @@ Proof
   qhdtm_assum `body_plan_inv_reloc` (irule_at Any) >> simp[]
 QED
 
-Theorem body_plan_symbolic_jnz_step_own[local]:
+Theorem body_plan_symbolic_jnz_step_own:
   body_plan_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as
@@ -830,7 +830,7 @@ Resume body_plan_symbolic_jnz_step_own[package]:
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Finalise body_plan_symbolic_jnz_step_own[local]
+Finalise body_plan_symbolic_jnz_step_own
 
 Theorem body_plan_symbolic_jnz_step:
   body_plan_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
@@ -1007,7 +1007,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem body_plan_symbolic_jmp_step_own[local]:
+Theorem body_plan_symbolic_jmp_step_own:
   body_plan_inv_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs ast

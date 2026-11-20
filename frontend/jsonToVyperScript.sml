@@ -231,17 +231,31 @@ End
 
 (* Get all externally-callable names from a module's toplevels:
    external functions + public variable/hashmap getters *)
-Definition get_external_func_names_def:
-  get_external_func_names [] = [] ∧
-  get_external_func_names (t::ts) =
+Definition get_external_fn_names_def:
+  get_external_fn_names [] = [] ∧
+  get_external_fn_names (t::ts) =
     if is_external_function t then
       case get_function_name t of
-        SOME name => name :: get_external_func_names ts
-      | NONE => get_external_func_names ts
+        SOME name => name :: get_external_fn_names ts
+      | NONE => get_external_fn_names ts
+    else get_external_fn_names ts
+End
+
+Definition get_public_getter_names_def:
+  get_public_getter_names [] = [] ∧
+  get_public_getter_names (t::ts) =
+    if is_external_function t then get_public_getter_names ts
     else
       case get_public_var_name t of
-        SOME name => name :: get_external_func_names ts
-      | NONE => get_external_func_names ts
+        SOME name => name :: get_public_getter_names ts
+      | NONE => get_public_getter_names ts
+End
+
+(* A module's own exposed functions in the compiler's order: its external
+   functions, then its public getters, each in declaration order. *)
+Definition get_external_func_names_def:
+  get_external_func_names ts =
+    get_external_fn_names ts ++ get_public_getter_names ts
 End
 
 (* Find module body by raw source_id in imports list *)
@@ -337,6 +351,14 @@ Definition find_interface_functions_def:
         | NONE => NONE
 End
 
+(* An interface member exported through module src_id, paired with the module
+   that defines it: src_id may provide it by re-exporting another module's
+   function (exps is src_id's exports). *)
+Definition export_source_def:
+  export_source src_id exps n =
+    (n, case ALOOKUP exps n of SOME final_src_id => final_src_id | NONE => src_id)
+End
+
 (* Expand a single export expression using only compact indexes.
    exports_map: already-computed source_id -> exported (name, defining source_id)
    all_import_maps: source_id -> alias map
@@ -359,10 +381,10 @@ Definition expand_single_export_def:
                 | SOME final_src_id => [(func_name, final_src_id)]
                 | NONE =>
                     case find_interface_functions exports_map all_import_maps src_id func_name of
-                    | SOME iface_fns => MAP (λn. (n, src_id)) iface_fns
+                    | SOME iface_fns => MAP (export_source src_id exps) iface_fns
                     | NONE =>
                         case lookup_inline_interface all_inline_maps src_id func_name of
-                        | SOME iface_fns => MAP (λn. (n, src_id)) iface_fns
+                        | SOME iface_fns => MAP (export_source src_id exps) iface_fns
                         | NONE => [(func_name, src_id)])
            | NONE => [(func_name, src_id)]) ∧
   expand_single_export _ _ _ _ _ = []
@@ -437,7 +459,7 @@ Definition compute_index_exports_def:
     (src_id, import_map, ext_names, inline_map, export_anns) =
     let ext_funcs = MAP (λn. (n, src_id)) ext_names in
     let reexports = expand_export_annotations exports_map all_import_maps all_inline_maps import_map export_anns in
-    ext_funcs ++ reexports
+    reexports ++ ext_funcs
 End
 
 Definition build_exports_map_from_indexes_def:
@@ -1439,4 +1461,35 @@ Definition annotate_sources_slots_def:
        (the layout keys use the original alias, not source_id). *)
     (src_id, annotate_slots layout NONE tops) ::
     annotate_sources_slots layout rest
+End
+
+(* Annotate one module's toplevels from layouts keyed by (source id, name):
+   a storage or transient variable gets its slot, an immutable its offset in
+   the immutable section (code_layout). *)
+Definition annotate_slots_mods_def:
+  annotate_slots_mods slots imms src ([] : toplevel list) = ([] : toplevel list) ∧
+  annotate_slots_mods slots imms src (VariableDecl vis mut name ty _ :: rest) =
+    VariableDecl vis mut name ty
+      (if mut = Immutable then ALOOKUP imms (src, name)
+       else ALOOKUP slots (src, name)) ::
+    annotate_slots_mods slots imms src rest ∧
+  annotate_slots_mods slots imms src
+      (HashMapDecl vis is_trans name kt vt _ :: rest) =
+    HashMapDecl vis is_trans name kt vt (ALOOKUP slots (src, name)) ::
+    annotate_slots_mods slots imms src rest ∧
+  annotate_slots_mods slots imms src (top :: rest) =
+    top :: annotate_slots_mods slots imms src rest
+End
+
+(* Annotate every module of a linked unit.  The layout nests an initialized
+   module's entries under its alias path; layout_import_map (from
+   translate_annotated_ast) maps that path to the module's source id.  A
+   module only `uses:`-ed has no entries, so its variables get none. *)
+Definition annotate_sources_slots_mods_def:
+  annotate_sources_slots_mods (layout : json_storage_layout) lmap sources =
+    let (st, tr) = extract_storage_layout lmap layout in
+    let imms = transform_storage_layout lmap
+                 (MAP (λ(key, info). (key, info.offset)) layout.code) in
+    MAP (λ(src, tops). (src, annotate_slots_mods (st ++ tr) imms src tops))
+      sources
 End

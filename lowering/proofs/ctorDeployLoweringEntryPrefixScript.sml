@@ -32,7 +32,7 @@ Proof
 QED
 
 Theorem deploy_ctor_entry_initial_fields[local]:
- gas_variant vs (deploy_entry_state prog cplan tops es) ==>
+ gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
  fresh_vars_wrt (initial_compile_state "__deploy") vs /\
  ~vs.vs_halted /\ vs.vs_allocas = FEMPTY /\
  vs.vs_alloca_next = imm_len tops
@@ -124,7 +124,7 @@ Theorem deploy_ctor_prefix_entry:
    (rpolicy,dunit,dout,prog,cplan) /\
  deploy_source_ok tops am tx /\
  deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es) /\
+ gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rpolicy runtime_bc dunit
    (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,st_epilogue,st_final,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\
@@ -561,6 +561,8 @@ Theorem deploy_ctor_entry_before_register:
         ?fuel'. run_context fuel' dunit.cu_context vs = r)
 Proof
  rpt gen_tac >> strip_tac >>
+ `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
+   fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
  drule_all deploy_ctor_prefix_entry >>
  disch_then (map_every assume_tac o CONJUNCTS) >>
  qpat_x_assum `?e. _` (qx_choose_then `e` (map_every assume_tac o CONJUNCTS)) >>
@@ -571,8 +573,7 @@ Proof
  `vars_pc_only vs t` by
    (irule vars_pc_only_trans >> goal_assum $ drule_at Any >> simp[]) >>
  `t.vs_allocas = FEMPTY /\ t.vs_alloca_next = imm_len tops` by
-   (drule deploy_ctor_vars_pc_frame >> strip_tac >>
-    qpat_x_assum `vars_pc_only e t` (strip_assume_tac o MATCH_MP deploy_ctor_vars_pc_frame) >>
+   (drule deploy_ctor_vars_pc_frame >> strip_tac >> qpat_x_assum `vars_pc_only e t` (strip_assume_tac o MATCH_MP deploy_ctor_vars_pc_frame) >>
     simp[]) >>
  `dunit.cu_context.ctx_entry = SOME func.fn_name` by
    (fs[deploy_ctor_code_def] >> drule lower_vyper_deploy_unit_entry >> simp[]) >>
@@ -591,7 +592,7 @@ Theorem deploy_ctor_entry_before_register_gas_path:
   exts ints fb cf cenv0 pos_args is_payable ret cap st_pay st1 cenv1 st2 st3.
  deploy_phases policy tops (deploy_bc,runtime_bc) (rpolicy,dunit,dout,prog,cplan) /\
  deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es) /\
+ gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rpolicy runtime_bc dunit
    (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\

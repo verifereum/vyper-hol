@@ -14,8 +14,8 @@ val () = computeLib.upd_compset (computeLib.add_thms
   [alistTheory.fmap_to_alist_FEMPTY, integer_wordTheory.i2w_pos])
 
 (* Mirrors the premises of e2e_deploy_correctness and vyper_call_correct_guarded.
-   Both require supported programs and bound the trace length. Deployment requires
-   a call-free constructor. Calls use calldata dispatch with external lookup.
+   Both require supported programs and bound the trace length. Calls use
+   calldata dispatch with external lookup.
    The earlier call_outcomes_ok, 0xEF-prefix and valid_vyper_call premises were
    dropped from the tops. The result relations carry the finite-storage guards. *)
 Definition vyper_deploy_and_call_premises_def:
@@ -26,7 +26,6 @@ Definition vyper_deploy_and_call_premises_def:
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     supported_program_deploy tops /\
-    constructor_call_free tops /\
     deploy_typing_ok tops am_dep tx_dep /\
     deploy_state_rel tops deploy_bc am_dep tx_dep es_dep /\
     LENGTH (call_trace es_dep) < 2 ** 64 /\

@@ -420,6 +420,11 @@ Theorem extcall_selector_packing_ready:
     extcall_request_ready st0 ctx func cenv cx rt es sa s0 sp stat
       addr value gas ba.buf_operand off (Lit 4w) cap target value_opt calldata
       hasdef def dt dopt ee t /\
+    (IS_SOME dopt /\ ~is_word_type dt ==>
+      ?w aid tv. eval_operand def t = SOME w /\
+        evaluate_type (get_tenv cx) dt = SOME tv /\
+        FLOOKUP t.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+        aid < sp.cs_next_id) /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,Gf,tf)) /\
     alloca_history func t /\ allocas_from lo t /\
@@ -612,6 +617,17 @@ Proof
   qpat_assum `EVERY (safe_operand sp) [addr;value;gas;def]`
     (strip_assume_tac o REWRITE_RULE [listTheory.EVERY_DEF]) >>
   `op_taint tf (Lit 4w) = {}` by simp[op_taint_def] >>
+  `IS_SOME dopt /\ ~is_word_type dt ==>
+    ?dw aid tv. eval_operand def t = SOME dw /\
+      evaluate_type (get_tenv cx) dt = SOME tv /\
+      FLOOKUP t.vs_allocas aid = SOME (w2n dw,type_memory_size tv) /\
+      aid < sp.cs_next_id` by
+    (strip_tac >>
+     `?dv. dopt = SOME dv` by metis_tac[optionTheory.IS_SOME_EXISTS] >>
+     qpat_assum `!dv. dopt = SOME dv /\ ~is_word_type dt ==> _ /\ _ /\
+       (?w aid tv. _ /\ _ /\ _ /\ FLOOKUP s.vs_allocas aid = SOME _ /\ _)`
+       (drule_all_then (qx_choosel_then [`dw`,`aid`,`tv`] strip_assume_tac o cj 3)) >>
+     qexistsl_tac [`dw`,`aid`,`tv`] >> simp[] >> decide_tac) >>
   `!name b k. local_region cenv ee.scopes t name b k ==>
     loweringStateRelDefs$regions_disjoint (w2n w) cap b k` by
     (rpt gen_tac >> disch_tac >>
@@ -662,7 +678,8 @@ Proof
   `tv' = tv /\ dw = w'` by
     (qpat_x_assum `evaluate_type _ dt = SOME tv'` mp_tac >>
      qpat_x_assum `eval_operand def s = SOME dw` mp_tac >> simp[]) >>
-  gvs[] >>
+  qpat_x_assum `tv' = tv` SUBST_ALL_TAC >>
+  qpat_x_assum `dw = w'` SUBST_ALL_TAC >>
   drule_then assume_tac exprSimPropsTheory.val_footprint_le >>
   qpat_assum `regions_disjoint (w2n w) n _ _` mp_tac >>
   rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac

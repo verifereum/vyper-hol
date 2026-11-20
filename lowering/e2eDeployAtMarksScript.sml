@@ -307,11 +307,6 @@ Proof
      metis_tac[compile_vyper_runtime_nonempty_asm_opt]) >>
   drule_all deploy_entry_facts >> strip_tac >>
   `txp.function_name = "__init__"` by gvs[deploy_state_rel_def] >>
-  `load_contract (SOME vs.vs_outcomes)
-      (gas_explicit marks vs.vs_gas_readings ++ tail) am txp [(NONE, tops)] [] =
-   load_contract NONE
-      (gas_explicit marks vs.vs_gas_readings ++ tail) am txp [(NONE, tops)] []` by
-    metis_tac[load_contract_call_free] >>
   Cases_on `deploy_source_exempt tops
               (load_contract (SOME vs.vs_outcomes)
                  (gas_explicit marks vs.vs_gas_readings ++ tail) am txp
@@ -344,7 +339,7 @@ Proof
              (run_context fuel dunit.cu_context vs)
              (run_context fuel' dout.po_unit.cu_context vs_out)` by
     metis_tac[ctx_sim_def] >>
-  qspecl_then [`H`, `tops`, `runtime_bc`, `am`, `txp`,
+  qspecl_then [`H`, `tops`, `runtime_bc`, `am`, `txp`, `SOME vs.vs_outcomes`,
                `gas_explicit marks vs.vs_gas_readings ++ tail`,
                `load_contract (SOME vs.vs_outcomes)
                   (gas_explicit marks vs.vs_gas_readings ++ tail) am txp

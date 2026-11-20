@@ -4,6 +4,7 @@ Ancestors
   contextStaticAbortRel fnBlockBodySteps stackOpSim fnBlockBodyHelpers
   fnPlanPrefix venomWf stackPlanGen staticAbortDefs list venomInst
   venomExecProps unitShapeDefs fnBlockPlanStatic planExec
+  fnPlanPlaceRevertPostamble
 
 (* The full pre-cut frame relation exposes exactly the concrete stack shape
    and shared fields needed by generated_lineage_static_abort_prefix.
@@ -103,6 +104,103 @@ Definition body_inv_abort_def:
     (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret)
 End
 
+Definition body_inv_abort_reloc_def:
+  body_inv_abort_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs ast Inv
+      ra pc_ret rest mem0 <=>
+    ctx = unit.cu_context /\
+    code_labels_agree prog lo /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cpl /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    i < LENGTH ctx.ctx_functions /\
+    EL i ctx.ctx_functions = fn /\ EL i cpl.cp_regions = r /\
+    MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+    (!f inst callee_name args callee.
+       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+       MEM inst (fn_insts f) /\ inst.inst_opcode = INVOKE /\
+       inst.inst_operands = Label callee_name :: args /\
+       lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+       fn_has_retpc callee) /\
+    (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+    codegen_context_obligations_abort Inv ctx cpl /\
+    (!f inst l.
+       MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+       inst.inst_opcode <> PHI /\ MEM (Label l) (compute_operands inst) ==>
+       IS_SOME (FLOOKUP lo l)) /\
+    reachability_closed Inv ctx /\
+    (!inst. active_inst fn inst vs ==> Inv ctx fn inst vs) /\
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\
+    ch = cleanup_caller_height (LENGTH ctx.ctx_functions) ctx
+           (fcg_analyze ctx) fn.fn_name /\
+    growth = cleanup_growth_table ctx (fcg_analyze ctx) /\
+    spill_base = r.sr_spill_base /\
+    generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+      spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+    fn_ops = r.sr_plan /\
+    ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+    fn_reachable fn bb.bb_label /\
+    lineage_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      bb.bb_label ps_l /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      bb.bb_label ps_dfs /\
+    generate_block_plan liveness dfg cfg fn bb ps_dfs =
+      SOME (block_ops, ps_dfs_after) /\
+    generate_block_plan liveness dfg cfg fn bb
+      (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
+      SOME (block_ops, ps_after) /\
+    ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
+    ps_after.ps_spilled = ps_dfs_after.ps_spilled /\
+    (?prefixL prefixD core.
+       ps_after.ps_stack = prefixL ++ core /\
+       ps_dfs_after.ps_stack = prefixD ++ core /\
+       (!v. MEM v (live_vars_at liveness bb.bb_label
+                     (LENGTH bb.bb_instructions)) ==>
+          ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)) /\
+    block_plan_state liveness dfg cfg fn bb
+      (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
+      k ps /\
+    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions)
+      (k - LENGTH (get_params bb.bb_instructions))
+      (DROP (k - LENGTH (get_params bb.bb_instructions)) (non_param_insts bb))
+      ps = SOME (rest_ops, ps_after) /\
+    block_ops = SOLabel bb.bb_label :: prefix_ops ++ rest_ops /\
+    phi_prefix_length bb.bb_instructions <= k /\
+    (!i j. revert_forward_pair bb i j ==> k <= i \/ j < k) /\
+    vs.vs_inst_idx = k /\
+    asm_block_at prog pc0 (execute_plan cpl.cp_initial_fmp block_ops) /\
+    ast.as_pc = pc0 + LENGTH (execute_plan cpl.cp_initial_fmp
+                                 (SOLabel bb.bb_label :: prefix_ops)) /\
+    fn_frame_inv ctx cpl lo fn ra rest mem0 ps vs ast /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+       operand_val (frame_view fn ra vs) lo at =
+       operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
+    (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret)
+End
+
+Theorem body_inv_abort_reloc_canonical:
+  body_inv_abort rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs ast Inv
+      ra pc_ret rest mem0 <=>
+  lo = SND (compute_label_offsets prog) /\
+  body_inv_abort_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs ast Inv
+      ra pc_ret rest mem0
+Proof
+  Cases_on `lo = SND (compute_label_offsets prog)` >>
+  simp[body_inv_abort_def, body_inv_abort_reloc_def, code_labels_agree_refl]
+QED
+
 (* Halt and IntRet retain the exact original clauses. Only Abort may
    forget the source exception constructor and irrelevant spill values. *)
 Definition body_result_abort_def:
@@ -138,8 +236,8 @@ QED
 
 (* This is the single implementation-level cut: all later consumers use
    the full invariant up to here and only the exception witness afterwards. *)
-Theorem body_inv_abort_pending:
-  body_inv_abort rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+Theorem body_inv_abort_pending_reloc:
+  body_inv_abort_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs ast Inv
       ra pc_ret rest mem0 /\
@@ -148,7 +246,7 @@ Theorem body_inv_abort_pending:
            asm_steps lo o2pc prog n ast = AsmRevert out) /\
           out.as_requests = vs.vs_requests
 Proof
-  pure_rewrite_tac[body_inv_abort_def] >> strip_tac >>
+  pure_rewrite_tac[body_inv_abort_reloc_def] >> strip_tac >>
   `MEM fn ctx.ctx_functions` by metis_tac[EL_MEM] >>
   `codegen_ready_fn fn` by
     (fs[codegen_context_obligations_abort_def, codegen_ready_def, EVERY_MEM]) >>
@@ -204,13 +302,13 @@ Proof
   drule static_abort_frame_cut >> strip_tac >>
   `?n out.
      n <= LENGTH (execute_plan cpl.cp_initial_fmp ops) + 4 /\
-     (asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     (asm_steps lo (build_offset_to_pc prog)
           prog n ast = AsmFault out \/
-      asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      asm_steps lo (build_offset_to_pc prog)
           prog n ast = AsmRevert out) /\
      out.as_requests = ast.as_requests /\ out.as_returndata = [] /\
      !q mid. q < n /\
-       asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+       asm_steps lo (build_offset_to_pc prog)
          prog q ast = AsmOK mid ==>
        mid.as_requests = ast.as_requests /\ mid.as_pc < LENGTH prog /\
        case EL mid.as_pc prog of
@@ -219,12 +317,26 @@ Proof
                       "CREATE"; "CREATE2"; "SELFDESTRUCT"]
        | AsmDataHeader _ => F | AsmDataItem _ => F | AsmDataLabel _ => F
        | _ => T` suffices_by metis_tac[] >>
-  irule generated_lineage_static_abort_prefix >>
+  irule generated_lineage_static_abort_prefix_reloc >>
   first_assum (irule_at (Pat `lineage_state _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `dfs_block_state _ _ _ _ _ _ _`)) >>
   rpt (first_assum (irule_at Any)) >>
   fs[codegen_context_obligations_abort_def] >>
   metis_tac[]
+QED
+
+Theorem body_inv_abort_pending:
+  body_inv_abort rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs ast Inv
+      ra pc_ret rest mem0 /\
+  in_static_abort_prefix fn vs ==>
+  ?n out. (asm_steps lo o2pc prog n ast = AsmFault out \/
+           asm_steps lo o2pc prog n ast = AsmRevert out) /\
+          out.as_requests = vs.vs_requests
+Proof
+  simp[body_inv_abort_reloc_canonical] >>
+  metis_tac[body_inv_abort_pending_reloc]
 QED
 
 (* Source classification is supplied by staticAbortExec, not by a second

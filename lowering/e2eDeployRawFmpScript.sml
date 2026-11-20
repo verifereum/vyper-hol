@@ -5,7 +5,6 @@ Ancestors
   deployUnitExecution deployUnitExecutionBoundary compileVyper o1PassContract lowerDloadDefs e2eEntry
   asmOptimizer vyperTypeContractSoundness vyperCompiler stackPlanGen list arithmetic
   ctorDeployEntryTransport ctorDeployBodyJoint ctorDeployShape deployUnitExecutionTransport
-  deployUnitOutcomesTransport
 
 (* A successful asm_opt compilation exposes the deployment unit's phases, with
    the final assembly optimizer's output as the deployed code. *)
@@ -89,23 +88,6 @@ Proof
   fs[Abbr `n`, MAX_DEF] >> decide_tac
 QED
 
-(* Move the deploy certificate to any call outcomes for a call-free constructor. *)
-Theorem deploy_unit_execution_correct_with_outcomes:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx
-   shadow_ctx marks vs outs.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_source_ok tops am tx /\
-    tx.function_name = "__init__" /\
-    deploy_unit_execution_correct_with shadow_ctx marks tops runtime_bc am tx
-      dunit vs ==>
-    deploy_unit_execution_correct_with shadow_ctx marks tops runtime_bc am tx
-      dunit (vs with vs_outcomes := outs)
-Proof
-  rpt strip_tac >> irule deploy_certificate_outcomes_transport >>
-  fs[deploy_phases_def] >> metis_tac[]
-QED
-
 (* The deploy gas link's certificate premise at the raw free-memory pointer. *)
 Theorem deploy_unit_execution_correct_raw_fmp:
   !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es fmp.
@@ -133,21 +115,27 @@ Proof
   drule_all deploy_unit_execution_correct_fixed_shadow >>
   disch_then (qx_choose_then `shadow_ctx` assume_tac) >>
   qexists_tac `shadow_ctx` >> rpt strip_tac >>
+  `vs.vs_outcomes = MAP SND (call_trace es)` by
+    gvs[raw_variant_def, gas_variant_def, opt_deploy_entry_state_def,
+        opt_entry_state_def, entry_venom_state_def,
+        venomStateTheory.venom_state_component_equality] >>
+  `call_outcomes_ok am
+     (tx with code := (opt_deploy_entry_state prog prog' cplan tops es).vs_code)
+     vs.vs_outcomes` by
+    (qpat_assum `deploy_state_rel tops (assemble prog') am tx es`
+       (mp_tac o MATCH_MP deploy_state_rel_call_outcomes_ok) >>
+     simp[e2eDefsTheory.call_outcomes_ok_def]) >>
   qabbrev_tac `s = deploy_entry_state prog cplan tops es0 with
-    vs_gas_readings := vs.vs_gas_readings` >>
-  qpat_x_assum `!vs. gas_variant _ _ ==> _`
-    (qspec_then `s` mp_tac) >>
-  (impl_tac >- simp[Abbr `s`, gas_variant_def]) >>
+    <|vs_outcomes := vs.vs_outcomes; vs_gas_readings := vs.vs_gas_readings|>` >>
+  qpat_x_assum `!outs vs. call_outcomes_ok _ _ outs /\ gas_variant _ _ ==> _`
+    (qspecl_then [`vs.vs_outcomes`, `s`] mp_tac) >>
+  (impl_tac >- simp[Abbr `s`, gas_variant_def,
+                     venomStateTheory.venom_state_fupdfupds]) >>
   disch_then (qx_choose_then `marks` assume_tac) >>
-  `(tx with code := (opt_deploy_entry_state prog prog' cplan tops es).vs_code).
-    function_name = "__init__"` by simp[] >>
-  drule_all deploy_unit_execution_correct_with_outcomes >>
-  disch_then (qspec_then `vs.vs_outcomes` assume_tac) >>
   drule_all deploy_certificate_raw_fmp_transport >>
   disch_then (qspecl_then [`fmp`, `fmp`, `vs.vs_call_entry_fmp`] assume_tac) >>
-  `((s with vs_outcomes := vs.vs_outcomes) with
-      <|vs_fmp := fmp; vs_initial_fmp := fmp;
-        vs_call_entry_fmp := vs.vs_call_entry_fmp|>) = vs` by
+  `(s with <|vs_fmp := fmp; vs_initial_fmp := fmp;
+             vs_call_entry_fmp := vs.vs_call_entry_fmp|>) = vs` by
     gvs[Abbr `s`, raw_variant_def, gas_variant_def,
         venomStateTheory.venom_state_component_equality] >>
   qexists_tac `marks` >> gvs[]

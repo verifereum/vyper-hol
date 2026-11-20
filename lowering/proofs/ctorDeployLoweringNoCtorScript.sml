@@ -59,7 +59,7 @@ QED
 Theorem no_ctor_entry_code:
   deploy_state_rel tops deploy_bc am tx es /\
   classify_functions tops = (exts, ints, fb, NONE) /\
-  gas_variant vs (deploy_entry_state prog cplan tops es) ==>
+  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
   vs.vs_code = deploy_bc /\
   vs.vs_labels = n2w o_f SND (compute_label_offsets prog)
 Proof
@@ -2010,7 +2010,10 @@ Theorem no_ctor_entry_sequence:
     ss.vs_pending_deletions = vs.vs_pending_deletions /\
     ss.vs_requests = vs.vs_requests
 Proof
-  strip_tac >> drule_all no_ctor_runtime_suffix >> strip_tac >>
+  strip_tac >>
+  `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
+    fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
+  drule_all no_ctor_runtime_suffix >> strip_tac >>
   drule_all no_ctor_entry_code >> strip_tac >>
   drule deploy_imm_budget_ok >> strip_tac >>
   `imm_len tops < dimword(:256) /\
@@ -2100,7 +2103,7 @@ Theorem no_ctor_target_execution:
   deploy_phases policy tops (deploy_bc, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
   deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es) /\
+  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
   classify_functions tops = (exts, ints, fb, NONE) ==>
   ?fuel ss. run_context fuel dunit.cu_context vs = Halt ss /\
     ss.vs_returndata = runtime_bc ++ REPLICATE (imm_len tops) 0w /\
@@ -2588,7 +2591,7 @@ QED
 
 Theorem no_ctor_entry_frame:
   deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es) ==>
+  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
   vs.vs_accounts = accounts_after_transfer tx am.accounts /\
   vs.vs_transient = am.tStorage /\ vs.vs_logs = [] /\
   vs.vs_pending_deletions = am.pending_deletions /\ vs.vs_requests = []
@@ -2606,7 +2609,7 @@ QED
 Theorem no_ctor_source_halt:
   deploy_source_ok tops am tx /\
   deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es) /\
+  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
   classify_functions tops = (exts,ints,fb,NONE) /\
   ss.vs_returndata = runtime_bc ++ REPLICATE (imm_len tops) 0w /\
   ss.vs_accounts = vs.vs_accounts /\
@@ -2661,6 +2664,8 @@ Theorem deploy_no_ctor_correct:
                (run_context fuel dunit.cu_context vs)
 Proof
   rpt gen_tac >> strip_tac >>
+  `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
+    fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
   drule_all no_ctor_target_execution >> strip_tac >>
   drule_all no_ctor_source_halt >>
   disch_then (qspec_then `HS` strip_assume_tac) >>

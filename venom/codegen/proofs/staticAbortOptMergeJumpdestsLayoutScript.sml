@@ -1,6 +1,7 @@
 Theory staticAbortOptMergeJumpdestsLayout
 Ancestors
   asmOptMergeJumpdests asmSymBridge asmSymSem asmOptimizer asmWf asmIR
+  fnPlanPlaceRevertPostamble asmSymOwnStep
   asmToBytecodeProofs asmEncodeParse codegenEncodingWf codegenRel
   symbolResolve words finite_map list rich_list arithmetic
 
@@ -73,6 +74,23 @@ Proof
   Cases_on `l = a` >> simp[] >>
   fs[compute_label_offsets_snoc, FLOOKUP_UPDATE] >>
   drule header_free_lookup_below_end >> disch_then drule >> simp[]
+QED
+
+(* A row tag with a resolved jump offset names a code label. *)
+Theorem canonical_jump_binding_relocated:
+  asm_static_wf p /\
+  FLOOKUP (SND (compute_label_offsets p)) l = SOME off /\
+  FLOOKUP (build_offset_to_pc p) off = SOME j ==>
+  FLOOKUP (lo_reloc p installed) l = SOME off
+Proof
+  strip_tac >>
+  drule offset_to_pc_reverse >> strip_tac >>
+  drule offset_to_pc_label >> strip_tac >>
+  `asm_data_at_end p` by fs[asm_static_wf_def] >>
+  `EL j p = AsmLabel l` by metis_tac[lookup_at_code_label_names_it] >>
+  `MEM (AsmLabel l) p` by metis_tac[EL_MEM] >>
+  mp_tac (Q.SPECL [`p`, `installed`] lo_reloc_code_labels_agree) >>
+  simp[code_labels_agree_def]
 QED
 
 Theorem canonical_named_code_label[local]:

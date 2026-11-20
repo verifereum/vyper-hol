@@ -155,6 +155,7 @@ Proof
   irule_body_pre stmt_expr_body_pre >>
   gvs[body_inv_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       int_calls_stmt_def] >>
+  imp_res_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >> simp[] >>
   qexists_tac `[]` >> simp[]
 QED
 
@@ -789,7 +790,6 @@ Proof
         (irule o REWRITE_RULE [body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff]) >>
       simp[] >> rpt conj_tac
       >- fs[body_stmts_safe_iff]
-      >- fs[body_stmts_safe_iff]
       >- metis_tac[for_declare_stmts_exprs_ok]
       >- (qexistsl_tac [`bindings`, `tops`] >> simp[] >>
           fs[body_stmts_safe_iff])
@@ -1016,12 +1016,14 @@ Proof
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def,
          allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_iterator_def] >>
+     imp_res_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >> simp[] >>
      qexists_tac `int_calls_expr e2 ++ int_calls_stmts body'` >> simp[]) >>
   `!ei. expr_sim_inv cenv cx env ei ==> expr_body_pre cenv cx env e2 ei` by
     (rpt strip_tac >> irule_body_pre stmt_expr_body_pre_alloc >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def,
          allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_iterator_def] >>
+     imp_res_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >> simp[] >>
      qexists_tac `int_calls_stmts body'` >>
      metis_tac[call_evaluation_safe_append_right, listTheory.APPEND_ASSOC]) >>
   `expr_sim ctx func cenv cx typ e1 es` by
@@ -1085,7 +1087,7 @@ Resume body_for_range[body]:
   `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
   drule for_body_abi_targets >> strip_tac >>
   qpat_x_assum `body_stmts_ok _ _`
-    (irule o REWRITE_RULE [body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff]) >>
+    (irule o REWRITE_RULE [body_stmts_ok_def]) >>
   simp[] >> rpt conj_tac
   >- metis_tac[for_declare_stmts_exprs_ok]
   >- (qexistsl_tac [`bindings`, `tops`] >> simp[] >>
@@ -1254,7 +1256,6 @@ Proof
   qpat_x_assum `body_stmts_ok _ _`
     (irule o REWRITE_RULE [body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff]) >>
   simp[] >> rpt conj_tac
-  >- fs[body_stmts_safe_iff]
   >- fs[body_stmts_safe_iff]
   >- metis_tac[for_declare_stmts_exprs_ok]
   >- (qexistsl_tac [`bindings`, `tops`] >> simp[] >>

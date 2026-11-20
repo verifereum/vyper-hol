@@ -65,7 +65,7 @@ Theorem prefix_scalar_complete_shift_code:
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= d /\ d+32 <= b+sz /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  allocas_from lo initial /\ ~ctx_has_dalloca ctx /\ lo <= d /\
+  allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial) /\ lo <= d /\
   lo <= initial.vs_alloca_next /\ alloca_inv initial /\
   alloca_frontier_inv_from k ctx func site initial /\
   ctor_actual_scratch func ids scratch_base N initial /\
@@ -103,7 +103,8 @@ Theorem prefix_scalar_complete_shift_code:
      !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial) /\
     (!D'. inst_seq_ptr D' lo ctx func PG G tn (emitted_insts st st') initial H qt)
 Proof
-  strip_tac >> drule_all prefix_scalar_complete_shift >>
+  strip_tac >>
+  drule_all prefix_scalar_complete_shift >>
   disch_then (qspecl_then [`site'`,`PG`,`D`] mp_tac) >>
   simp[LET_THM] >> strip_tac >>
   drule_all prefix_scalar_sequence_code >> disch_tac >>
@@ -128,7 +129,7 @@ Theorem prefix_canonical_member_setup_complete_shift_code:
   abi_decoder_operand_live st.cs_next_var (Var dst) /\
   middle.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (b,sz) /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  FLOOKUP G dst = SOME (b,sz) /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lo <= s.vs_alloca_next /\ ~s.vs_halted /\
   fn_has_code st middle fn /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
@@ -427,6 +428,7 @@ Proof
      (DecPrimWord clamp) st = ((),st')` by metis_tac[] >>
   `mem_bytes_at sb 32 initial.vs_data_section = enc (vyper_to_abi_type env ty) av /\
    d+32 <= b+sz` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all prefix_scalar_complete_shift_code >>
   disch_then (qspecl_then [`site`,`PG`,`Ddead`] mp_tac) >>
   simp[LET_THM, Excl "enc_def"] >> strip_tac >>
@@ -466,6 +468,7 @@ Proof
      (DecPrimWord clamp) st = ((),st')` by metis_tac[] >>
   `mem_bytes_at sb 32 initial.vs_data_section = enc (vyper_to_abi_type env ty) av /\
    d+32 <= b+sz` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all prefix_scalar_complete_shift_code >>
   disch_then (qspecl_then [`site`,`PG`,`Ddead`] mp_tac) >>
   simp[LET_THM, Excl "enc_def"] >> strip_tac >>
@@ -577,6 +580,7 @@ Proof
      metis_tac[not_fresh_at_def]) >>
   `fn_has_code st middle func` by
     (mp_tac (Q.SPECL [`st`,`middle`,`final`,`func`] fn_has_code_split) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all prefix_canonical_member_setup_complete_shift_code >>
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
   qpat_x_assum `LET _ _` (strip_assume_tac o SIMP_RULE bool_ss [LET_THM]) >>
@@ -638,6 +642,7 @@ Proof
      metis_tac[not_fresh_at_def]) >>
   `fn_has_code st middle func` by
     (mp_tac (Q.SPECL [`st`,`middle`,`final`,`func`] fn_has_code_split) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all prefix_canonical_member_setup_complete_shift_code >>
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `allocas_from lo prepared` >>
@@ -708,8 +713,12 @@ Resume prefix_members_complete_mode_cons[head]:
      simp_tac bool_ss [MAP_APPEND, MAP] >>
      disch_then (mp_then Any mp_tac abiDecoderMemberSliceTheory.abi_tuple_child_offset_ranges) >>
      simp[Excl "enc_def"] >> strip_tac >>
-     qpat_x_assum `checked ==> _ /\ alloca_history func initial` mp_tac >>
-     fs[MAP_APPEND, MAP, Excl "enc_def"] >> decide_tac) >>
+     qpat_x_assum `checked ==> _ /\ alloca_history func initial`
+       (fn bound => qpat_assum `checked` (mp_tac o CONJUNCT1 o MP bound)) >>
+     qpat_assum `LENGTH (enc (vyper_to_abi_type env ty) av) +
+       abi_tuple_child_offset _ _ (LENGTH preavs) <= LENGTH (enc (Tuple _) _)` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp_tac bool_ss [MAP_APPEND, MAP] >> decide_tac) >>
   qpat_assum `SND ops = Var child_dst` SUBST_ALL_TAC >>
   BETA_TAC >>
   asm "child" (fn th =>

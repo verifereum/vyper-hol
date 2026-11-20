@@ -19,11 +19,17 @@ Ancestors
   abiDecoderMemberCons abiDecoderCoherence abiDecodeRanges
   abiValidAllocatedMemberJoin abiValidAllocatedMemberEntry abiDecoderReentry
   decoderGhostFramePtr valueEncodingTyping valueEncodingProofs
-  robustCopyTransportPtr exprSimProps vyperTypeABI
+  robustCopyTransportPtr exprSimProps vyperTypeABI bodyFullHashKeccakFixed
   abiDecoderComplexExecute abiMalformedMemberSetup abiMalformedConstructorContract
   abiDecoderDynamicLoopSetup freshWrites abiValidAllocatedComplex
   abiDecoderMembers contractABI abiDecoderStruct abiDecoderFixedMemory
   abiValidAggregateHeads vyperABIValid exprSimAggregateEncoding vyperValue
+
+Triviality member_allocas_below_fmp_vars:
+  allocas_below_fmp (s with vs_vars := vars) <=> allocas_below_fmp s
+Proof
+  simp[allocas_below_fmp_def]
+QED
 
 Theorem member_guard_scalar_code[local]:
   abi_decode_complex_head_guard pos hi n sa = ((),sb) ==>
@@ -46,7 +52,7 @@ QED
 Theorem member_scalar_actual_run[local]:
   bop_scalar_seq {x | not_fresh_at sa x} A (emitted_insts sa sb) B /\
   sb.cs_current_bb = sa.cs_current_bb /\ isPREFIX sa.cs_current_insts sb.cs_current_insts /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
   allocas_from lo s /\ run_inst_seq (emitted_insts sa sb) s = OK u ==>
@@ -65,6 +71,12 @@ Proof
   drule_all entry_straight_line_code_slice >> strip_tac >>
   drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
   qabbrev_tac `sn = s with vs_inst_idx := LENGTH sa.cs_current_insts` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sn` by
+    (strip_tac >>
+     qpat_assum `ctx_has_dalloca ctx` (fn mode =>
+       qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+         (fn bound => mp_tac (MP bound mode))) >>
+     simp[Abbr `sn`, allocas_below_fmp_def]) >>
   qabbrev_tac `un = u with vs_inst_idx := LENGTH sa.cs_current_insts` >>
   `isPREFIX (emitted_insts sa sb) (DROP sn.vs_inst_idx bb.bb_instructions)` by
     simp[Abbr `sn`, IS_PREFIX_APPEND] >>
@@ -77,7 +89,6 @@ Proof
   `~sn.vs_halted /\ sn.vs_current_bb = sa.cs_current_bb /\ allocas_from lo sn` by
     (fs[Abbr `sn`, allocas_from_def] >> (metis_tac[Abbr `sn`, allocas_from_def])) >>
   qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = OK u` kall_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp sn` by simp[] >>
   drule_all bop_scalar_seq_run >>
   disch_then (fn th => assume_tac th >>
     qspecl_then [`func`, `PG`, `ARB`] strip_assume_tac th) >>
@@ -108,7 +119,7 @@ QED
 
 Theorem member_scalar_guard_actual_run[local]:
   abi_decode_complex_head_guard pos hi n sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   op_prov G pos = NONE /\ op_prov G hi = NONE /\
@@ -240,7 +251,7 @@ QED
 
 Theorem allocated_member_head_add_origin[local]:
   emit_op ADD [pos;Lit (n2w ao)] sa = (out,sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand pos s = SOME (n2w p) /\ op_taint tn pos = {} /\
@@ -348,7 +359,7 @@ Theorem allocated_member_read_origin[local]:
   w2n a + 32 <= s.vs_alloca_next /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb ==>
   ?H u. op_taint u out = {} /\ op_prov H out = NONE /\
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
@@ -365,6 +376,12 @@ Proof
   `t = s with vs_vars := t.vs_vars` by
     (drule_all convert_mload_run >> fs[update_var_def]) >>
   qabbrev_tac `sn = s with vs_inst_idx := LENGTH sa.cs_current_insts` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sn` by
+    (strip_tac >>
+     qpat_assum `ctx_has_dalloca ctx` (fn mode =>
+       qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+         (fn bound => mp_tac (MP bound mode))) >>
+     simp[Abbr `sn`, allocas_below_fmp_def]) >>
   qabbrev_tac `tnr = t with vs_inst_idx := LENGTH sa.cs_current_insts` >>
   `run_inst_seq (emitted_insts sa sb) sn = OK tnr` by
     (drule emit_op_run_pc >> simp[is_terminator_def] >>
@@ -391,7 +408,7 @@ Theorem allocated_member_address_read_origin[local]:
   run_inst_seq (emitted_insts c1 c2) r1 = OK r2 /\
   run_inst_seq (emitted_insts c2 c3) r2 = OK r3 /\
   fn_has_code c1 c2 func /\ fn_has_code c2 c3 func /\
-  allocas_from lo r1 /\ ~ctx_has_dalloca ctx /\ ~r1.vs_halted /\
+  allocas_from lo r1 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r1) /\ ~r1.vs_halted /\
   r1.vs_current_bb = c1.cs_current_bb /\
   lookup_var source r1 = SOME (n2w B) /\ ptr_covers G tn source r1 L /\
   eval_operand head r1 = SOME (n2w h) /\ op_taint tn head = {} /\ op_prov G head = NONE /\
@@ -410,7 +427,6 @@ Proof
   `w2n (n2w B : bytes32) = B /\ w2n (n2w (B+h) : bytes32) = B+h` by
     (simp[w2n_n2w, LESS_MOD] >> decide_tac) >>
   `w2n (n2w B : bytes32) + h < dimword (:256)` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp r1` by simp[] >>
   drule_all member_navigation_emit_pointer_pc_uniform_origin >>
   disch_then (qspec_then `PG` (qx_choose_then `q`
     (qx_choose_then `G2` (qx_choose_then `tn2` strip_assume_tac)))) >>
@@ -431,6 +447,9 @@ Proof
   `!x. not_fresh_at c1 x ==> not_fresh_at c2 x` by
     (qpat_assum `emit_op ADD _ c1 = _` (mp_then Any mp_tac emitted_insts_emit_op) >>
      simp[not_fresh_at_def] >> metis_tac[DECIDE ``a+1 <= n ==> a <= n``]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r2` by
+    (qpat_assum `r2 = r1 with vs_vars := r2.vs_vars` (fn th => once_rewrite_tac [th]) >>
+     rewrite_tac[member_allocas_below_fmp_vars] >> first_assum ACCEPT_TAC) >>
   gvs[] >>
   qpat_assum `ptr_covers G2 tn2 q r2 32`
     (mp_then Any mp_tac allocated_member_read_origin) >>
@@ -440,7 +459,7 @@ Proof
     mp_then Any mp_tac) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
   disch_then (drule_at (Pat `allocas_from _ _`)) >>
-  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  disch_then (drule_at (Pat `ctx_has_dalloca ctx ==> allocas_below_fmp r2`)) >>
   disch_then (qspec_then `PG` mp_tac) >>
   (impl_tac >- (simp[w2n_n2w, LESS_MOD] >> metis_tac[])) >>
   disch_then (qx_choose_then `H` (qx_choose_then `u` strip_assume_tac)) >>
@@ -495,7 +514,7 @@ Theorem allocated_dynamic_suffix_origin[local]:
   emit_op ISZERO [under] c5 = (test,c6) /\
   emit_void ASSERT [test] c6 = ((),sb) /\
   run_inst_seq (emitted_insts c3 sb) r3 = OK t /\
-  fn_has_code c3 sb func /\ ~ctx_has_dalloca ctx /\ ~r3.vs_halted /\
+  fn_has_code c3 sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r3) /\ ~r3.vs_halted /\
   r3.vs_current_bb = c3.cs_current_bb /\ allocas_from lo r3 /\
   op_taint tn pos = {} /\ op_prov G pos = NONE /\
   op_taint tn off = {} /\ op_prov G off = NONE ==>
@@ -521,7 +540,7 @@ QED
 Theorem allocated_dynamic_source_origin[local]:
   compile_getelemptr_abi pos T ao MLOAD (Var source) hi sa = (out,sb) /\
   hi <> Lit 0w /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   allocas_from lo s /\ abi_decode_ptr_window G tn s source (n2w B) L /\
   not_fresh_at sa source /\ (!x. pos = Var x ==> not_fresh_at sa x) /\
@@ -565,6 +584,9 @@ Proof
          qexistsl_tac [`G`,`s`,`tn`] >> simp[])
      >> fs[abi_decode_ptr_window_def] >> rpt strip_tac >>
      qpat_assum `!i. B <= i /\ i < B + L ==> _` irule >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r1` by
+    (qpat_assum `r1 = s with vs_vars := r1.vs_vars` (fn th => once_rewrite_tac [th]) >>
+     rewrite_tac[member_allocas_below_fmp_vars] >> first_assum ACCEPT_TAC) >>
   drule_all allocated_member_address_read_origin >>
   disch_then (qspec_then `PG` (qx_choose_then `G3` (qx_choose_then `tn3` strip_assume_tac))) >>
   `~r3.vs_halted /\ r3.vs_current_bb = c3.cs_current_bb` by
@@ -572,6 +594,9 @@ Proof
      imp_res_tac emit_op_same_blocks >> fs[same_blocks_def]) >>
   `op_taint tn3 pos = {} /\ op_prov G3 pos = NONE` by
     (Cases_on `pos` >> gvs[op_taint_def,op_prov_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r3` by
+    (qpat_assum `r3 = r1 with vs_vars := r3.vs_vars` (fn th => once_rewrite_tac [th]) >>
+     rewrite_tac[member_allocas_below_fmp_vars] >> first_assum ACCEPT_TAC) >>
   drule_all allocated_dynamic_suffix_origin >>
   disch_then (qspec_then `PG` (qx_choose_then `H` (qx_choose_then `u` strip_assume_tac))) >>
   `sa.cs_next_var <= sb.cs_next_var /\ c4.cs_next_var <= sb.cs_next_var` by
@@ -597,7 +622,7 @@ QED
 Theorem allocated_member_source_origin[local]:
   compile_getelemptr_abi pos dyn ao MLOAD (Var source) hi sa = (out,sb) /\
   hi <> Lit 0w /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   allocas_from lo s /\ abi_decode_ptr_window G tn s source (n2w B) L /\
   not_fresh_at sa source /\ (!x. pos = Var x ==> not_fresh_at sa x) /\
@@ -614,9 +639,9 @@ Theorem allocated_member_source_origin[local]:
       FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   Cases_on `dyn`
-  >- (simp[] >> strip_tac >> irule allocated_dynamic_source_origin >>
+  >- (simp_tac bool_ss [] >> strip_tac >> irule allocated_dynamic_source_origin >>
       simp[] >> qexistsl_tac [`B`,`L`,`ao`,`hi`,`p`,`pos`,`source`] >> simp[]) >>
-  simp[] >> strip_tac >>
+  simp_tac bool_ss [] >> strip_tac >>
   drule getelemptr_static_emit >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >>
   drule abiDecoderReentryTheory.abi_decoder_operand_live_emit >> strip_tac >>
@@ -628,7 +653,7 @@ QED
 Theorem allocated_member_setup_origin[local]:
   abi_decode_member_setup (Var output) pos MLOAD (Var source) hi dyn ao vo st = (ops,en) /\
   run_inst_seq (emitted_insts st en) s = OK t /\ fn_has_code st en func /\ hi <> Lit 0w /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\ allocas_from lo s /\
   abi_decode_ptr_window G tn s source (n2w B) L /\
   not_fresh_at st source /\ not_fresh_at st output /\
@@ -657,7 +682,7 @@ Proof
   disch_then (drule_at (Pat `abi_decode_ptr_window _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = SOME _`)) >>
   disch_then (drule_at (Pat `allocas_from _ _`)) >>
-  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  disch_then (drule_at (Pat `ctx_has_dalloca ctx ==> allocas_below_fmp s`)) >>
   disch_then (qpat_assum `fn_has_code st mid func` o mp_then Any mp_tac) >>
   disch_then (qspecl_then [`r`,`PG`] mp_tac) >>
   (impl_tac >- simp[]) >>
@@ -674,7 +699,9 @@ Proof
     simp[eval_operand_def, op_taint_def, op_prov_def] >>
   `w2n (n2w d : bytes32) + vo < dimword (:256)` by
     (`d < dimword (:256)` by decide_tac >> simp[w2n_n2w, LESS_MOD]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by
+    (qpat_assum `r = s with vs_vars := r.vs_vars` (fn th => once_rewrite_tac [th]) >>
+     rewrite_tac[member_allocas_below_fmp_vars] >> first_assum ACCEPT_TAC) >>
   drule_all member_navigation_emit_pointer_pc_uniform_origin >>
   disch_then (qspec_then `PG` (qx_choose_then `x`
     (qx_choose_then `H` (qx_choose_then `u` strip_assume_tac)))) >>
@@ -710,7 +737,7 @@ Theorem decoder_member_setup_reentry_ghosts[local]:
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   (dyn ==> p + ao + 32 <= L) /\ vo + n <= outsz /\
-  ~ctx_has_dalloca ctx /\ abi_decode_ptr_window G tn s source (n2w B) L /\
+  abi_decode_ptr_window G tn s source (n2w B) L /\
   ptr_covers G tn output s outsz /\ op_prov G pos = NONE /\ op_prov G hi = NONE /\
   op_taint tn pos = {} /\ op_taint tn hi = {} /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\ alloca_history func s ==>
@@ -759,6 +786,12 @@ Proof
         eval_operand_def, abiDecoderReentryTheory.abi_decoder_operand_live_def,
         abiDecoderReentryTheory.abi_decoder_older_vars_def, not_fresh_at_def] >>
      Cases_on `pos` >> Cases_on `hi` >> gvs[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (fs[abi_malformed_entry_def] >>
+     qpat_assum `stmt_state_rel _ ctx func cenv cx es s`
+       (mp_tac o MATCH_MP
+         bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     DISCH_THEN ACCEPT_TAC) >>
   drule_all allocated_member_setup_origin >>
   disch_then (qspec_then `PG` (qx_choose_then `x` (qx_choose_then `H1`
     (qx_choose_then `tn1` strip_assume_tac)))) >>
@@ -1124,6 +1157,7 @@ Proof
   `alloca_inv s` by metis_tac[stmt_state_rel_local_ptrs_alloca] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st middle)` by fs[EVERY_MEM] >>
   drule_all entry_straight_line_alloca_history >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all member_scalar_guard_actual_run >>
   disch_then (qspec_then `PG` (qx_choose_then `G1` (qx_choose_then `tn1` strip_assume_tac))) >>
   qpat_x_assum `r = _` SUBST_ALL_TAC >>

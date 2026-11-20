@@ -1,19 +1,8 @@
 Theory staticAbortOptStackLayout
 Ancestors
   staticAbortOptPruneUnreachableLayout asmSplice asmSymBridge asmOptPeephole
-  asmOptimizer asmSymSem codegenEncodingWf symbolResolve asmIR asmWf
+  asmOptimizer asmSymSem codegenEncodingWf asmRelocDataEnv symbolResolve asmIR asmWf
   finite_map list pred_set words arithmetic
-
-(* The binding domain records declarations, not their current byte offsets. *)
-Theorem stack_layout_binding_domain[local]:
-  !p. FDOM (SND (compute_label_offsets p)) =
-      {l | MEM (AsmLabel l) p \/ MEM (AsmDataHeader l) p}
-Proof
-  ho_match_mp_tac SNOC_INDUCT >> conj_tac
-  >- simp[compute_label_offsets_def, EXTENSION] >>
-  gen_tac >> disch_tac >> qx_gen_tac `a` >> Cases_on `a` >>
-  simp[compute_label_offsets_snoc, MEM_SNOC, EXTENSION] >> metis_tac[]
-QED
 
 Theorem stack_peephole_one_layout:
   !pre pat repl tail.
@@ -70,7 +59,7 @@ Proof
   rpt conj_tac
   >- suspend "producer"
   >- simp[optionTheory.IS_SOME_EQ_NOT_NONE, flookup_thm,
-          stack_layout_binding_domain, MEM_APPEND]
+          compute_label_offsets_domain, MEM_APPEND]
   >- suspend "canonical"
   >- simp[splice_pc_def]
   >- (rewrite_tac[splice_pc_def] >> IF_CASES_TAC >> decide_tac) >>

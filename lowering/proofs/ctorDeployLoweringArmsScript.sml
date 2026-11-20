@@ -261,6 +261,14 @@ Proof
        (rpt gen_tac >> irule deploy_body_no_halt >>
         gvs[ctorDeployDefsTheory.deploy_source_ok_def] >> metis_tac[]) >>
      metis_tac[]) >>
+  `load_contract orc gobs am tx [(NONE,tops)] [] =
+     deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx)
+       F mut am_c res st` by
+    (qspecl_then [`tops`, `am`, `tx`, `mut`, `F`, `body`, `am_c`, `es0`,
+                  `gobs`, `orc`, `res`, `st`] mp_tac deploy_ctor_source_run >>
+     simp[]) >>
+  ONCE_REWRITE_TAC [pairTheory.PAIR_FST_SND_EQ] >>
+  simp[GSYM load_contract_def] >>
   qabbrev_tac `cx = deploy_evaluation_context tops am tx` >>
   qabbrev_tac `G = ignore_bind (send_call_value mut cx)
      (ignore_bind (set_scopes [env])
@@ -299,16 +307,26 @@ Proof
     ignore_bind (set_scopes [env])
       (ignore_bind (lock_if_nr cx F (is_view_mut mut)) (eval_stmts cx body))` by
     simp[FUN_EQ_THM, bind_def, Excl "lock_if_nr_def", Excl "is_view_mut_def"] >>
-  simp[load_contract_trace_def, call_external_function_trace_def,
+  qabbrev_tac `am0 = am with <|immutables updated_by CONS (tx.target,imms);
+                              exports updated_by CONS (tx.target,[])|>` >>
+  `?r am' rqs obs. call_external_function_trace orc gobs am0 cx F mut
+       tops [(NONE,tops)] args [] tx.args body NoneT = (r,am',rqs,obs)` by
+    metis_tac[pairTheory.ABS_PAIR_THM] >>
+  qspecl_then [`tops`, `am`, `tx`, `orc`, `gobs`, `imms`, `am0`, `cx`,
+               `mut`, `F`, `args`, `[]`, `NoneT`, `body`, `r`, `am'`,
+               `rqs`, `obs`] mp_tac load_contract_trace_selected >>
+  impl_tac >- fs[Abbr `am0`, Abbr `cx`] >>
+  disch_then (mp_tac o Q.AP_TERM `SND`) >> simp[] >>
+  disch_then SUBST1_TAC >>
+  qpat_x_assum `call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _ = _`
+    (mp_tac o Q.AP_TERM `\(_,_,_,trace). trace`) >>
+  simp[call_external_function_trace_def, Abbr `am0`, Abbr `G`,
        GSYM deploy_evaluation_context_def,
        Excl "lock_if_nr_def", Excl "is_view_mut_def"] >>
-  gvs[] >>
   Cases_on `res`
-  >- (Cases_on `x` >>
-      simp[deploy_ctor_finish_def, unlock_if_nr_def, return_def]) >>
-  rename1 `INR ex` >> Cases_on `ex` >>
-  gvs[deploy_ctor_finish_def, unlock_if_nr_def, return_def,
-      vyperValueOperationTheory.safe_cast_def]
+  >- (Cases_on `x` >> gvs[unlock_if_nr_def, return_def]) >>
+  rename1 `eval_stmts _ _ _ = (INR ex,st)` >> Cases_on `ex` >>
+  gvs[unlock_if_nr_def, return_def, vyperValueOperationTheory.safe_cast_def]
 QED
 
 (* The bad-storage arm: the body's storage failure is the deployment's, and
@@ -322,7 +340,7 @@ Theorem deploy_ctor_bad_storage_arm:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es) /\
+    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
@@ -401,7 +419,7 @@ Theorem deploy_ctor_exempt_arm:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es) /\
+    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
