@@ -58,7 +58,12 @@ Theorem literal_base_event_arg_compatible:
     well_typed_literal (BaseT bt) lit /\ event_arg_compatible fty (BaseT bt) ==>
     event_arg_compatible fty (lowered_value_type cenv (Literal (BaseT bt) lit))
 Proof
-  rpt gen_tac >> Cases_on `bt` >> Cases_on `lit` >> rw[] >>
+  rpt gen_tac >> Cases_on `lit`
+  >~ [`HexBytesL bs`]
+  >- (strip_tac >> drule well_typed_literal_hex_bytes >> strip_tac >>
+      gvs[well_typed_literal_def, compatible_bound_def, lowered_value_type_def] >>
+      drule_all (CONJUNCT2 event_arg_compatible_bytestring_narrow) >> simp[]) >>
+  Cases_on `bt` >> rw[] >>
   FIRST [drule_all literal_bytes_event_arg_compatible >> simp[],
     gvs[well_typed_literal_def, lowered_value_type_def, expr_type_def, AllCaseEqs()] >>
     drule_all (CONJUNCT1 event_arg_compatible_bytestring_narrow) >> simp[]]

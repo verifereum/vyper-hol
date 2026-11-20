@@ -65,6 +65,8 @@ Definition pin_fold_builtin_def:
     case (b,es) of
     | (Len,[Literal _ (BytesL bs)]) =>
         Literal (BaseT bt) (IntL (&(LENGTH bs)))
+    | (Len,[Literal _ (HexBytesL bs)]) =>
+        Literal (BaseT bt) (IntL (&(LENGTH bs)))
     | (Len,[Literal _ (StringL s)]) =>
         Literal (BaseT bt) (IntL (&(LENGTH s)))
     | _ =>

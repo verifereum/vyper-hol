@@ -126,7 +126,12 @@ Theorem abi_image_literal_not_label:
 Proof
   Cases_on `lit`
   >- (Cases_on `b` >> simp[compile_literal_vv_def, comp_return_def] >>
-      rpt strip_tac >> gvs[vv_operand_def]) >>
+      rpt strip_tac >> gvs[vv_operand_def])
+  >~ [`compile_literal_vv _ (HexBytesL _) _ = _`]
+  >- (simp[compile_literal_vv_def, comp_bind_def, comp_return_def] >>
+      rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+      gvs[vv_operand_def, base_ptr_def] >>
+      metis_tac[abi_image_bytelike_not_label]) >>
   simp[compile_literal_vv_def, comp_return_def, comp_bind_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
   gvs[vv_operand_def, base_ptr_def]
@@ -840,16 +845,23 @@ Resume abi_image_compile_mutual[expr]:
 QED
 
 Resume abi_image_compile_mutual[builtin]:
-  rpt gen_tac >> simp[Once compile_expr_raw_def] >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >> strip_tac >>
-  drule_all abi_image_builtin_label >> strip_tac >>
-  TRY (`sm.cs_blocks = sa.cs_blocks` suffices_by metis_tac[]) >>
-  drule_at (Pat `lower_value`) abi_image_child_lower_label >>
-  (impl_tac
-   >- (rpt strip_tac >>
-       `expr_size e + cenv_defaults_size ce' <
-        list_size expr_size args + cenv_defaults_size ce` by decide_tac >>
-       metis_tac[])) >> simp[]
+  let
+    val child_label_tac =
+      drule_at (Pat `lower_value`) abi_image_child_lower_label >>
+      (impl_tac
+       >- (rpt strip_tac >>
+           `expr_size e + cenv_defaults_size ce' <
+            list_size expr_size args + cenv_defaults_size ce` by decide_tac >>
+           metis_tac[])) >> simp[]
+  in
+    rpt gen_tac >> simp[Once compile_expr_raw_def] >>
+    CONV_TAC (DEPTH_CONV ETA_CONV) >> strip_tac >>
+    drule_all abi_image_builtin_label >> strip_tac
+    >~ [`bi = AsWeiValue denom`]
+    >- (`sm.cs_blocks = sa.cs_blocks` suffices_by metis_tac[] >>
+        child_label_tac) >>
+    child_label_tac
+  end
 QED
 
 Resume abi_image_compile_mutual[type_builtin]:

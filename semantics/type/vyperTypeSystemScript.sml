@@ -113,8 +113,18 @@ Definition well_typed_literal_def:
     (LENGTH bs = 20) /\
   well_typed_literal (BaseT (BytesT bd)) (BytesL bs) =
     compatible_bound bd (LENGTH bs) /\
+  well_typed_literal (BaseT (BytesT (Dynamic n))) (HexBytesL bs) =
+    compatible_bound (Dynamic n) (LENGTH bs) /\
   well_typed_literal _ _ = F
 End
+
+Theorem well_typed_literal_hex_bytes:
+  well_typed_literal ann (HexBytesL bs) ==> ?n. ann = BaseT (BytesT (Dynamic n))
+Proof
+  Cases_on `ann` >> simp[well_typed_literal_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >> simp[well_typed_literal_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >> simp[well_typed_literal_def]
+QED
 
 Definition well_typed_binop_def:
   well_typed_binop ty Add t1 t2 = (t1 = ty /\ t2 = ty /\ is_numeric_type ty) /\
