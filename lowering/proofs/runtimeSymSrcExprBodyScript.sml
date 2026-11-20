@@ -2,7 +2,30 @@ Theory runtimeSymSrcExprBody
 Ancestors
   runtimeSymSrcGeneratorContracts runtimeSymSrcEmission runtimeSymSrcInterfaces
   runtimeSymSrcBlockEmission runtimeSymSrcLiteralEnv exprLowering compileEnv context emitHelper
+  runtimeSymSrcTargetDomains
   supportedExprs supportedExprTraverse exprCallBounds exprCallbackContracts exprSimHypsDefs vyperAST list venomInst stackPlanTypes finite_map
+
+Theorem runtime_sym_occurrence_size[local]:
+  (!p a. supported_expr_exists p a ==>
+     !e. p = (\x. x = e) ==> expr_size e <= expr_size a) /\
+  (!p t. supported_target_exists p t ==>
+     !e. p = (\x. x = e) ==> expr_size e < base_assignment_target_size t) /\
+  (!p es. supported_exprs_exists p es ==>
+     !e. p = (\x. x = e) ==> expr_size e < list_size expr_size es) /\
+  (!p opt. supported_opt_exists p opt ==>
+     !e. p = (\x. x = e) ==> expr_size e < option_size expr_size opt) /\
+  (!p fs. supported_fields_exists p fs ==>
+     !e. p = (\x. x = e) ==>
+       expr_size e < list_size (pair_size (list_size char_size) expr_size) fs)
+Proof
+  ho_match_mp_tac supported_expr_exists_ind >>
+  rw[supported_expr_exists_def, expr_size_def, list_size_def,
+     basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def] >>
+  gvs[expr_size_def] >> res_tac >>
+  qpat_assum `!e'. (\x. x = e) = (\x. x = e') ==> _`
+    (mp_tac o Q.SPEC `e`) >>
+  simp[NoAsms] >> strip_tac >> decide_tac
+QED
 
 Theorem runtime_sym_expr_body_call:
   runtime_sym_call_clause tops /\
@@ -198,28 +221,36 @@ QED
 Resume runtime_sym_expr_body[call]:
   irule runtime_sym_expr_body_call >> simp[runtime_sym_generators_call]
 QED
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
-  simp[NoAsms, runtime_sym_expr_contract_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `target` >>
-  gvs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
-      supported_expr_exists_def] >>
+Resume runtime_sym_expr_body[pop]:
+  simp[NoAsms, runtime_sym_expr_contract_def, supported_expr_def,
+       supported_pure_expr_def, supported_effect_expr_def,
+       supported_expr_exists_def, SF ETA_ss] >>
+  rpt gen_tac >> strip_tac >>
+  `!e t. supported_target_exists (\x. x = e) target ==>
+     runtime_sym_expr_contract tops cfn ce t e` by
+    (rpt strip_tac >> first_x_assum irule >>
+     drule (cj 2 runtime_sym_occurrence_size) >>
+     disch_then (qspec_then `e` mp_tac) >> simp[expr_size_def]) >>
+  `!e. supported_target_exists (\x. x = e) target ==>
+     supported_expr tops e \/ supported_place_expr tops e \/
+       supported_effect_place_expr tops e` by
+    (fs[supported_target_exists_indices, EVERY_MEM, EXISTS_MEM] >>
+     metis_tac[cj 1 runtime_sym_pure_occurrence_domain]) >>
   drule runtime_sym_generators_target_ptr >>
   pure_rewrite_tac[runtime_sym_target_ptr_clause_def] >> disch_tac >>
   drule runtime_sym_generators_expr_primitive >>
   pure_rewrite_tac[runtime_sym_expr_primitive_clauses_def] >>
   disch_then (assume_tac o cj 7) >>
-  gvs[compile_expr_body_def, expr_type_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
+  qpat_x_assum `compile_expr_body _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[NoAsms, compile_expr_body_def, expr_type_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
   qpat_x_assum `!cfn ce target s op loc pt s'. _`
     (drule_at (Pat `compile_get_target_ptr _ _ _ _ = _`)) >>
-  simp[supported_expr_exists_def] >> strip_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
   qpat_x_assum `!base ws size ctor imm loc s op s'. _`
     (drule_at (Pat `compile_dynarray_pop _ _ _ _ _ _ _ = _`)) >>
   gvs[runtime_sym_env_def] >> strip_tac >>
   simp[runtime_sym_value_def, mk_ptr_def]
-*)
-Resume runtime_sym_expr_body[pop]:
-  cheat
 QED
 Resume runtime_sym_expr_body[ifexp_arms]:
   qpat_x_assum `!t. runtime_sym_expr_contract _ _ _ _ _ /\ _`
