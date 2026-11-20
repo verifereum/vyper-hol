@@ -208,11 +208,19 @@ Proof
          rename1 `BytesT b` >> Cases_on `b` >>
          simp[is_bytestring_type_def, exprLoweringTheory.type_to_abi_dec_info_def]) >>
      disj2_tac >> disj2_tac >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`) none_decode_leaf_paths >>
   disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = SOME _`)) >>
   disch_then (drule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
-  disch_then irule >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  asm_rewrite_tac[]
+  disch_then (drule_at (Pat `allocas_from _ _`)) >>
+  disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `eval_operand src _ = SOME _`)) >>
+  disch_then (mp_tac o Q.INST [`PG` |-> `PG`] o SPEC_ALL) >>
+  impl_tac >- (rpt conj_tac >> asm_rewrite_tac[]) >>
+  strip_tac
+  >- (disj1_tac >> qexistsl [`z`,`H`,`u`] >> asm_rewrite_tac[]) >>
+  disj2_tac >> qexistsl [`v`,`sc`,`H`,`u`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem none_coherent_decode_paths:
