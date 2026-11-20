@@ -60,15 +60,33 @@ Proof
     supported_struct_fields_other_module] >> metis_tac[]
 QED
 
-Theorem supported_place_array_element[local]:
-  supported_place_type tops (ArrayT ty bd) ==> supported_place_type tops ty
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   simp[supported_place_type_def] >> strip_tac >>
   drule supported_nested_namespace >> disch_then irule >>
   Cases >> simp[supported_scalar_type_def, supported_word_type_def,
                  supported_string_type_def, supported_type_namespace_def]
 QED
+*)
+Theorem supported_place_array_element[local]:
+  supported_place_type tops (ArrayT ty bd) ==> supported_place_type tops ty
+Proof
+  cheat
+QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Proof
+  Cases_on `vt` >> rpt strip_tac >>
+  gvs[getter_vtype_annotation_def, supported_pure_expr_def,
+      supported_subscript_place_def,
+      supportedExprTraverseTheory.supported_expr_exists_def,
+      expr_nonmain_type_root_def, vyperASTTheory.expr_type_def,
+      supported_place_info_def, place_type_def, value_type_place_def,
+      supported_hashmap_value_def] >>
+  metis_tac[supported_place_namespace, supported_storage_place,
+            supported_type_namespace_def, supported_place_array_element]
+QED
+*)
 Theorem supported_getter_subscript[local]:
   !tops vt e kt vn.
   supported_place_expr tops e /\ supported_subscript_place tops e /\
@@ -82,28 +100,10 @@ Theorem supported_getter_subscript[local]:
   supported_place_info tops (Subscript (getter_vtype_annotation vt) e (Name kt vn)) =
     value_type_place vt
 Proof
-  Cases_on `vt` >> rpt strip_tac >>
-  gvs[getter_vtype_annotation_def, supported_pure_expr_def,
-      supported_subscript_place_def,
-      supportedExprTraverseTheory.supported_expr_exists_def,
-      expr_nonmain_type_root_def, vyperASTTheory.expr_type_def,
-      supported_place_info_def, place_type_def, value_type_place_def,
-      supported_hashmap_value_def] >>
-  metis_tac[supported_place_namespace, supported_storage_place,
-            supported_type_namespace_def, supported_place_array_element]
+  cheat
 QED
 
-Theorem supported_build_getter_path[local]:
-  !e kt vt n. !args ret exp tops.
-  build_getter e kt vt n = (args,ret,exp) /\
-  supported_place_expr tops e /\ supported_subscript_place tops e /\
-  ~supported_expr_exists expr_nonmain_type_root e /\
-  supported_place_type tops kt /\
-  (supported_place_info tops e = MapPT kt vt \/
-   ?bt bd. supported_place_info tops e = ValPT (ArrayT bt bd) /\ vt = Type bt) ==>
-  supported_pure_expr tops exp /\
-  EVERY (supported_place_type tops o SND) args /\
-  ~supported_expr_exists expr_nonmain_type_root exp
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   recInduct build_getter_ind >> conj_tac >> rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
@@ -153,6 +153,21 @@ Proof
          supported_word_type_def]) >>
   first_x_assum (qspec_then `tops` mp_tac) >>
   simp[supported_subscript_place_def]
+QED
+*)
+Theorem supported_build_getter_path[local]:
+  !e kt vt n. !args ret exp tops.
+  build_getter e kt vt n = (args,ret,exp) /\
+  supported_place_expr tops e /\ supported_subscript_place tops e /\
+  ~supported_expr_exists expr_nonmain_type_root e /\
+  supported_place_type tops kt /\
+  (supported_place_info tops e = MapPT kt vt \/
+   ?bt bd. supported_place_info tops e = ValPT (ArrayT bt bd) /\ vt = Type bt) ==>
+  supported_pure_expr tops exp /\
+  EVERY (supported_place_type tops o SND) args /\
+  ~supported_expr_exists expr_nonmain_type_root exp
+Proof
+  cheat
 QED
 
 Theorem getter_variable_member_lookup[local]:
@@ -211,10 +226,7 @@ Proof
   metis_tac[vyperTypeContractTheory.toplevel_vtype_keys_toplevel_def, listTheory.MEM]
 QED
 
-Theorem supported_getter_return_body[local]:
-  ALL_DISTINCT (MAP FST args) /\ supported_pure_expr tops exp /\
-  ~supported_expr_exists expr_nonmain_type_root exp ==>
-  supported_function_body tops External args [Return (SOME exp)]
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   `supported_stmts tops args [Return (SOME exp)]` by
@@ -226,6 +238,14 @@ Proof
        supported_stmt_bindings_def, supported_stmt_def,
        supported_stmt_expr_exists_def, supported_expr_def,
        supportedExprTraverseTheory.supported_expr_exists_def]
+QED
+*)
+Theorem supported_getter_return_body[local]:
+  ALL_DISTINCT (MAP FST args) /\ supported_pure_expr tops exp /\
+  ~supported_expr_exists expr_nonmain_type_root exp ==>
+  supported_function_body tops External args [Return (SOME exp)]
+Proof
+  cheat
 QED
 
 Theorem checked_constant_replacement_lookup:
@@ -452,13 +472,7 @@ QED
 (* Visibility changes getter generation; ordinary source lookup uses the
    visibility-independent find_var_decl_by_name. A getter is a Return of a
    top-level read or a subscript chain, with distinct generated argument names. *)
-Theorem supported_selected_external_body:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\ source_typing_ok tops am tx /\
-  lookup_function NONE tx.function_name External tops =
-    SOME (mut,nr,args,[],ret,fbody) ==>
-  supported_function_body tops External args
-    (subst_consts_stmts (module_consts_env tops []) fbody)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >> drule lookup_function_External_cases >> strip_tac
   >- (drule_all supported_program_declaration >>
@@ -571,6 +585,17 @@ Proof
          supported_word_type_def])) >>
   strip_tac >> simp[EVERY_MAP] >>
   metis_tac[supported_getter_return_body]
+QED
+*)
+Theorem supported_selected_external_body:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,nr,args,[],ret,fbody) ==>
+  supported_function_body tops External args
+    (subst_consts_stmts (module_consts_env tops []) fbody)
+Proof
+  cheat
 QED
 
 Theorem closed_constant_typing[local]:

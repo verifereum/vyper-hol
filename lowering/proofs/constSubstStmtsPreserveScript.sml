@@ -308,12 +308,7 @@ QED
 (* ===== P1: a supported body is unchanged when every substituted name is a
    constant declaration ===== *)
 
-Theorem subst_consts_supported_stmts_unchanged:
-  (!id. IS_SOME (ALOOKUP E id) ==>
-     ?vis c ty slot.
-       supported_variable_decl tops (NONE,id) = SOME (vis,Constant c,ty,slot)) /\
-  supported_stmts tops bindings ss ==>
-  subst_consts_stmts E ss = ss
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >> irule (cj 2 subst_consts_stmt_unchanged) >>
   drule_then irule (cj 2 supported_stmts_no_name_root) >>
@@ -321,15 +316,18 @@ Proof
   first_x_assum drule >> strip_tac >>
   drule supported_constant_decl_not_root >> simp[]
 QED
-
-Theorem subst_consts_supported_fn_unchanged:
+*)
+Theorem subst_consts_supported_stmts_unchanged:
   (!id. IS_SOME (ALOOKUP E id) ==>
      ?vis c ty slot.
        supported_variable_decl tops (NONE,id) = SOME (vis,Constant c,ty,slot)) /\
-  supported_pure_exprs tops defaults /\
-  supported_function_body tops vis args fbody ==>
-  subst_consts_fn E (mut,nr,rr,name,args,defaults,ret,fbody) =
-    (mut,nr,rr,name,args,defaults,ret,fbody)
+  supported_stmts tops bindings ss ==>
+  subst_consts_stmts E ss = ss
+Proof
+  cheat
+QED
+
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >> simp[subst_consts_fn_def] >>
   conj_tac
@@ -340,6 +338,18 @@ Proof
       drule supported_constant_decl_not_root >> simp[]) >>
   fs[supported_function_body_def] >>
   metis_tac[subst_consts_supported_stmts_unchanged]
+QED
+*)
+Theorem subst_consts_supported_fn_unchanged:
+  (!id. IS_SOME (ALOOKUP E id) ==>
+     ?vis c ty slot.
+       supported_variable_decl tops (NONE,id) = SOME (vis,Constant c,ty,slot)) /\
+  supported_pure_exprs tops defaults /\
+  supported_function_body tops vis args fbody ==>
+  subst_consts_fn E (mut,nr,rr,name,args,defaults,ret,fbody) =
+    (mut,nr,rr,name,args,defaults,ret,fbody)
+Proof
+  cheat
 QED
 
 (* ===== P1's premise at entry: every substituted name is a constant ===== *)

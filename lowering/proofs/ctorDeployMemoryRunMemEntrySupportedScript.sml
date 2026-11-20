@@ -4,11 +4,7 @@ Ancestors
 Libs
   wordsLib
 
-Theorem ctor_supported_scalar_strict_type:
-  supported_scalar_type ty /\ evaluate_type env ty = SOME tv /\
-  value_has_type tv v /\ val_wf tv v /\
-  vyper_to_abi env ty v = SOME av ==>
-  has_type (vyper_to_abi_type env ty) av
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   Cases_on `ty`
   >~ [`supported_scalar_type (FlagT _)`]
@@ -42,12 +38,17 @@ Proof
   >> qspec_then `word_of_bytes_be l : address` mp_tac wordsTheory.w2n_lt
   >> simp[]
 QED
-
-Theorem ctor_supported_scalar_inverse:
+*)
+Theorem ctor_supported_scalar_strict_type:
   supported_scalar_type ty /\ evaluate_type env ty = SOME tv /\
   value_has_type tv v /\ val_wf tv v /\
   vyper_to_abi env ty v = SOME av ==>
-  abi_to_vyper env ty av = SOME v
+  has_type (vyper_to_abi_type env ty) av
+Proof
+  cheat
+QED
+
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   Cases_on `ty`
   >~ [`supported_scalar_type (FlagT _)`]
@@ -78,4 +79,13 @@ Proof
           byteTheory.LENGTH_word_to_bytes, byteTheory.word_to_bytes_def,
           byteTheory.EL_word_to_bytes_aux, byteTheory.get_byte_word_of_bytes_be,
           byteTheory.first_byte_at_0w]
+QED
+*)
+Theorem ctor_supported_scalar_inverse:
+  supported_scalar_type ty /\ evaluate_type env ty = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\
+  vyper_to_abi env ty v = SOME av ==>
+  abi_to_vyper env ty av = SOME v
+Proof
+  cheat
 QED

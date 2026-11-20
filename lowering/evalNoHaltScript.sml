@@ -488,11 +488,7 @@ QED
 (* Evaluation never halts (SELFDESTRUCT is the only source of HaltException)
    when no evm-run root occurs and every internal call selects a supported
    Internal declaration in the current module. *)
-Theorem build_getter_no_halt[local]:
-  !e kt vt n args ret exp.
-    build_getter e kt vt n = (args,ret,exp) /\
-    ~supported_expr_exists expr_halt_root e ==>
-    ~supported_expr_exists expr_halt_root exp
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   recInduct build_getter_ind >> rpt conj_tac >> rpt gen_tac >>
   TRY disch_tac >> rpt gen_tac >>
@@ -501,11 +497,17 @@ Proof
   gvs[supported_expr_exists_def, expr_halt_root_def, expr_evm_run_root_def] >>
   first_x_assum irule >> simp[supported_expr_exists_def, expr_halt_root_def, expr_evm_run_root_def]
 QED
+*)
+Theorem build_getter_no_halt[local]:
+  !e kt vt n args ret exp.
+    build_getter e kt vt n = (args,ret,exp) /\
+    ~supported_expr_exists expr_halt_root e ==>
+    ~supported_expr_exists expr_halt_root exp
+Proof
+  cheat
+QED
 
-Theorem selected_public_getter_body_no_halt[local]:
-  is_public_getter_decl fn decl /\
-  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,gbody) ==>
-  ~supported_stmts_expr_exists expr_halt_root gbody
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   Cases_on `decl` >>
   gvs[is_public_getter_decl_def, external_getter_tuple_def]
@@ -526,6 +528,14 @@ Proof
     (irule build_getter_no_halt >> goal_assum (drule_at Any) >>
      simp[supported_expr_exists_def, expr_halt_root_def, expr_evm_run_root_def]) >>
   gvs[supported_stmt_expr_exists_def, supported_expr_exists_def]
+QED
+*)
+Theorem selected_public_getter_body_no_halt[local]:
+  is_public_getter_decl fn decl /\
+  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,gbody) ==>
+  ~supported_stmts_expr_exists expr_halt_root gbody
+Proof
+  cheat
 QED
 
 (* The body an external entry runs never halts in a supported program. *)

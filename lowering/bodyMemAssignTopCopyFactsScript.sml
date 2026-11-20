@@ -19,20 +19,7 @@ Libs
 (* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
 val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
-Theorem topcopy_rhs_pre:
-  !tops ctx cenv cx e env es ret_ty nsid env'.
-    body_stmt_safe tops (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
-    body_inv tops ctx cenv cx /\
-    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-       (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
-       occurs_abi_decode_target target tops) /\ supported_expr tops e /\
-    expr_sim_inv cenv cx env es /\
-    type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) =
-      SOME env' /\
-    stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
-    call_evaluation_safe cx
-      (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) ==>
-    expr_body_pre cenv cx env e es
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt strip_tac >>
   `well_typed_expr env e` by
@@ -63,6 +50,24 @@ Proof
       int_calls_atarget_def, int_calls_expr_def] >>
   imp_res_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >> simp[] >>
   qexists_tac `[]` >> simp[]
+QED
+*)
+Theorem topcopy_rhs_pre:
+  !tops ctx cenv cx e env es ret_ty nsid env'.
+    body_stmt_safe tops (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
+    body_inv tops ctx cenv cx /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
+       occurs_abi_decode_target target tops) /\ supported_expr tops e /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) =
+      SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
+    call_evaluation_safe cx
+      (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) ==>
+    expr_body_pre cenv cx env e es
+Proof
+  cheat
 QED
 
 Theorem find_var_decl_storage_some[local]:

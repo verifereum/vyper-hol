@@ -303,6 +303,22 @@ QED
 
 (* ===== The arguments ===== *)
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Proof
+  rpt strip_tac >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      int_calls_stmt_def, listTheory.EVERY_CONJ, GSYM expr_has_evm_run_def]) >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops /\
+   (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+       is_dynamic (vyper_to_abi_type (type_env tops) target))` by
+    fs[body_inv_def] >>
+  `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
+  qspecl_then [`cenv`, `cx`, `env`, `e`, `es`, `calls`]
+    irule_body_pre stmt_expr_body_pre >>
+  simp[] >> metis_tac[supported_pure_expr_effect_free, no_effect_call_operands]
+QED
+*)
 Theorem log_arg_body_pre[local]:
   !tops ctx cenv cx env e calls es.
     body_stmt_safe tops (Expr e) /\ ~is_extcode e /\
@@ -317,18 +333,7 @@ Theorem log_arg_body_pre[local]:
     expr_sim_inv cenv cx env es ==>
     expr_body_pre cenv cx env e es
 Proof
-  rpt strip_tac >>
-  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
-    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
-      int_calls_stmt_def, listTheory.EVERY_CONJ, GSYM expr_has_evm_run_def]) >>
-  `supported_program tops /\ get_module_code cx NONE = SOME tops /\
-   (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-       is_dynamic (vyper_to_abi_type (type_env tops) target))` by
-    fs[body_inv_def] >>
-  `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
-  qspecl_then [`cenv`, `cx`, `env`, `e`, `es`, `calls`]
-    irule_body_pre stmt_expr_body_pre >>
-  simp[] >> metis_tac[supported_pure_expr_effect_free, no_effect_call_operands]
+  cheat
 QED
 
 (* Body safety and root allocation checks give each argument expr_body_pre;

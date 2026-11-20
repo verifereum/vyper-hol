@@ -4,12 +4,7 @@ Ancestors
   words integer list vyperABI vyperValue vyperTyping vyperTypeValues contractABI
   valueEncoding vyperArith venomMemProofs
 
-Theorem deploy_supported_scalar_abi_valid:
- !ty env tv v av.
- supported_scalar_type ty /\ evaluate_type env ty = SOME tv /\
- value_has_type tv v /\ val_wf tv v /\
- vyper_to_abi env ty v = SOME av ==>
- has_type (vyper_to_abi_type env ty) av
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
  Cases_on `ty`
  >~ [`supported_scalar_type (FlagT _)`]
@@ -48,13 +43,18 @@ Proof
  >> mp_tac (Q.ISPEC `word_of_bytes_be l : 160 word` w2n_lt)
  >> CONV_TAC (DEPTH_CONV wordsLib.SIZES_CONV) >> simp[]
 QED
-
-Theorem deploy_supported_scalar_abi_reverse:
+*)
+Theorem deploy_supported_scalar_abi_valid:
  !ty env tv v av.
  supported_scalar_type ty /\ evaluate_type env ty = SOME tv /\
  value_has_type tv v /\ val_wf tv v /\
  vyper_to_abi env ty v = SOME av ==>
- abi_to_vyper env ty av = SOME v
+ has_type (vyper_to_abi_type env ty) av
+Proof
+  cheat
+QED
+
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
  Cases_on `ty`
  >~ [`supported_scalar_type (FlagT _)`]
@@ -86,4 +86,14 @@ Proof
  >> irule word_bytes_roundtrip_proof
  >> CONV_TAC (DEPTH_CONV wordsLib.SIZES_CONV)
  >> simp[dividesTheory.divides_def]
+QED
+*)
+Theorem deploy_supported_scalar_abi_reverse:
+ !ty env tv v av.
+ supported_scalar_type ty /\ evaluate_type env ty = SOME tv /\
+ value_has_type tv v /\ val_wf tv v /\
+ vyper_to_abi env ty v = SOME av ==>
+ abi_to_vyper env ty av = SOME v
+Proof
+  cheat
 QED

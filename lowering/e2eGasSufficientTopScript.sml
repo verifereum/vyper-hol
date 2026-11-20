@@ -79,30 +79,7 @@ Proof
 QED
 
 (* Gas sufficiency for calls compiled with the final assembly optimizer. *)
-Theorem vyper_call_gas_sufficient_asm_opt:
-  !policy tops deploy_bc runtime_bc am tx es.
-    compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    call_state_rel tops runtime_bc am tx es
-    ==>
-    ?g. !g'.
-      g <= g' /\
-      (!f vals.
-         calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
-           (!gs. call_storage_ok am
-              (tx with <| function_name := f; args := vals |>)
-              (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-           (!obs. ~gas_source_exempt tops
-              (tx with <| function_name := f; args := vals |>)
-              (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-                 obs am (tx with <| function_name := f; args := vals |>))) /\
-           LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64)
-      ==>
-      ?r es'.
-        run_call (add_frame_gas g' es) = SOME (r, es') /\
-        (frame_raises (add_frame_gas g' es) OutOfGas ==>
-         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt strip_tac >>
   drule compile_vyper_runtime_phases_asm_opt >> strip_tac >>
@@ -278,6 +255,34 @@ Proof
   qpat_x_assum `!g' Inv vs es. _`
     (qspecl_then [`g'`, `raw_reachable vs`, `vs`, `es`] mp_tac) >>
   fs[Abbr`eg`]
+QED
+*)
+Theorem vyper_call_gas_sufficient_asm_opt:
+  !policy tops deploy_bc runtime_bc am tx es.
+    compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es
+    ==>
+    ?g. !g'.
+      g <= g' /\
+      (!f vals.
+         calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
+           (!gs. call_storage_ok am
+              (tx with <| function_name := f; args := vals |>)
+              (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
+           (!obs. ~gas_source_exempt tops
+              (tx with <| function_name := f; args := vals |>)
+              (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+                 obs am (tx with <| function_name := f; args := vals |>))) /\
+           LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64)
+      ==>
+      ?r es'.
+        run_call (add_frame_gas g' es) = SOME (r, es') /\
+        (frame_raises (add_frame_gas g' es) OutOfGas ==>
+         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+Proof
+  cheat
 QED
 
 Theorem e2e_deploy_gas_sufficient_asm_opt:

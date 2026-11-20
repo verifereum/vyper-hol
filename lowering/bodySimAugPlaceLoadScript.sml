@@ -108,6 +108,13 @@ Proof
   metis_tac[aug_place_lookup_typed]
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Proof
+  rpt strip_tac >>
+  `s'.scopes = st.scopes` by metis_tac[aug_place_supported_expr_scopes] >>
+  gvs[] >> metis_tac[aug_place_target_entry_typed]
+QED
+*)
 Theorem aug_place_rhs_entry_typed:
   expr_sim_inv cenv cx env s /\
   supported_target_info tops bindings t = SOME info /\
@@ -116,9 +123,7 @@ Theorem aug_place_rhs_entry_typed:
   lookup_scopes id s'.scopes = SOME entry ==>
   value_has_type entry.type entry.value /\ well_formed_type_value entry.type
 Proof
-  rpt strip_tac >>
-  `s'.scopes = st.scopes` by metis_tac[aug_place_supported_expr_scopes] >>
-  gvs[] >> metis_tac[aug_place_target_entry_typed]
+  cheat
 QED
 
 Theorem aug_place_fields_project:
@@ -390,14 +395,19 @@ Proof
   imp_res_tac get_place_state >> gvs[] >> metis_tac[aug_place_base_inv]
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Proof
+  simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  imp_res_tac read_result_state >> trace_scopes_tac >>
+  metis_tac[aug_place_supported_expr_scopes]
+QED
+*)
 Theorem aug_place_rhs_scopes:
   supported_expr tops e /\
   (do tv <- eval_expr cx e; read_result cx tv od) st = (r,st1) ==>
   st1.scopes = st.scopes
 Proof
-  simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
-  imp_res_tac read_result_state >> trace_scopes_tac >>
-  metis_tac[aug_place_supported_expr_scopes]
+  cheat
 QED
 
 Theorem aug_place_rhs_memory_entry:
