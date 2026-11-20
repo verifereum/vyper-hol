@@ -145,8 +145,8 @@ observations `gobs`. When calldata dispatch selects a function and the frame
 is not resource-starved, `vyper_call_correct`'s `call_result_rel` relates
 them, at `tx` with that function and its arguments, to the EVM's readings
 `gas_readings es` through `gas_readings_rel` (below), which picks
-existentially which slots of `gobs` the readings fill, then covers every
-`gobs` that matches them, with any tail.
+existentially which slots of `gobs` the readings fill, leaving the other
+readings unused, then covers every `gobs` that matches them, with any tail.
 Venom and [assembly](../venom/codegen/defs/asmSemScript.sml) CALL/STATICCALL also
 use `take_outcome`, `record_request`, `adopt_outcome`. A call that finds the
 outcome list empty stops the run: Venom aborts (`ExHalt_abort`), assembly
