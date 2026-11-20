@@ -140,7 +140,10 @@ Theorem generated_revert_cut_spine_reloc:
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs ast Inv
     ra pc_ret rest mem0 /\
-  (!l. IS_SOME (FLOOKUP lo l) ==> IS_SOME (FLOOKUP (row_lo:string |-> num) l)) /\
+  (!f inst l.
+    MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+    inst.inst_opcode <> PHI /\ MEM (Label l) (compute_operands inst) ==>
+    IS_SOME (FLOOKUP (row_lo:string |-> num) l)) /\
   in_revert_forward fn vs ==>
   ?j P R pc step pre emit post m d.
     revert_forward_pair bb k j /\ k < j /\ j < LENGTH bb.bb_instructions /\
@@ -289,6 +292,8 @@ Proof
      `MEM (EL q bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
      `MEM (EL q bb.bb_instructions) (fn_insts fn)` by
        metis_tac[body_inst_ready] >>
+     `(EL q bb.bb_instructions).inst_opcode <> PHI` by
+       simp[] >>
      `!l. MEM (Label l) (compute_operands (EL q bb.bb_instructions)) ==>
        IS_SOME (FLOOKUP row_lo l)` by metis_tac[] >>
      `LENGTH (compute_operands (EL q bb.bb_instructions)) <= 16` by decide_tac >>
@@ -394,6 +399,13 @@ Theorem generated_revert_cut_spine:
         2 <= m q + extra /\ d q + extra + 2 = m q + extra))
 Proof
   pure_rewrite_tac[body_inv_abort_reloc_canonical] >> strip_tac >>
+  `!f inst l.
+    MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+    inst.inst_opcode <> PHI /\ MEM (Label l) (compute_operands inst) ==>
+    IS_SOME (FLOOKUP (SND (compute_label_offsets prog)) l)` by
+    (qpat_assum `lo = SND (compute_label_offsets prog)` (SUBST1_TAC o SYM) >>
+     qhdtm_assum `body_inv_abort_reloc`
+       (ACCEPT_TAC o cj 14 o REWRITE_RULE [body_inv_abort_reloc_def])) >>
   irule generated_revert_cut_spine_reloc >>
-  rpt (goal_assum (drule_at Any)) >> simp[]
+  rpt (goal_assum (drule_at Any)) >> simp[] >> first_assum ACCEPT_TAC
 QED

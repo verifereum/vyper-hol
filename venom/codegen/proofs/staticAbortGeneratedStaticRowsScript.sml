@@ -634,7 +634,9 @@ Theorem generated_static_cut_rows_reloc:
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 cvs cut Inv
     ra pc_ret rest mem0 /\
-  (!l. IS_SOME (FLOOKUP lo l) ==>
+  (!f inst l.
+    MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+    inst.inst_opcode <> PHI /\ MEM (Label l) (compute_operands inst) ==>
     IS_SOME (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
   in_static_abort_prefix fn cvs ==>
   ?V e rank pc height need tag boolean edge.
@@ -737,7 +739,12 @@ Theorem generated_static_cut_rows:
     (!j. tag e j=NONE /\ ~boolean e j)
 Proof
   lets >> strip_tac >> fs[body_inv_abort_reloc_canonical] >>
-  `!l. IS_SOME (FLOOKUP lo l) ==>
-        IS_SOME (FLOOKUP (SND (compute_label_offsets prog)) l)` by simp[] >>
+  `!f inst l.
+    MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+    inst.inst_opcode <> PHI /\ MEM (Label l) (compute_operands inst) ==>
+    IS_SOME (FLOOKUP (SND (compute_label_offsets prog)) l)` by
+    (qpat_assum `lo = SND (compute_label_offsets prog)` (SUBST1_TAC o SYM) >>
+     qhdtm_assum `body_inv_abort_reloc`
+       (ACCEPT_TAC o cj 14 o REWRITE_RULE [body_inv_abort_reloc_def])) >>
   drule_all (norm_lets generated_static_cut_rows_reloc) >> simp[]
 QED

@@ -10,7 +10,10 @@ Theorem generated_static_cut_interval_reloc:
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 cvs cut Inv
     ra pc_ret rest mem0 /\
-  (!l. IS_SOME (FLOOKUP lo l) ==> IS_SOME (FLOOKUP (row_lo:string |-> num) l)) /\
+  (!f inst l.
+    MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+    inst.inst_opcode <> PHI /\ MEM (Label l) (compute_operands inst) ==>
+    IS_SOME (FLOOKUP (row_lo:string |-> num) l)) /\
   in_static_abort_prefix fn cvs ==>
   ?j ops qs.
     generate_context_plan unit.cu_context = SOME cpl /\
@@ -147,6 +150,13 @@ Theorem generated_static_cut_interval:
     cut.as_call_ctx = cvs.vs_call_ctx /\ cut.as_requests = cvs.vs_requests
 Proof
   pure_rewrite_tac[body_inv_abort_reloc_canonical] >> strip_tac >>
+  `!f inst l.
+    MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+    inst.inst_opcode <> PHI /\ MEM (Label l) (compute_operands inst) ==>
+    IS_SOME (FLOOKUP (SND (compute_label_offsets prog)) l)` by
+    (qpat_assum `lo = SND (compute_label_offsets prog)` (SUBST1_TAC o SYM) >>
+     qhdtm_assum `body_inv_abort_reloc`
+       (ACCEPT_TAC o cj 14 o REWRITE_RULE [body_inv_abort_reloc_def])) >>
   irule generated_static_cut_interval_reloc >>
   rpt (goal_assum (drule_at Any)) >> simp[]
 QED
