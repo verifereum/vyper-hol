@@ -13,7 +13,6 @@ Theorem codegen_request_cut_outcome:
   !fin tops am tx rpolicy unit out prog cplan prog' es r es'
    vs0 D k vs fn inst s fuel s' fn' inst' t fuel' t'.
     fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     supported_program tops /\ source_typing_ok tops am tx /\
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
@@ -22,7 +21,7 @@ Theorem codegen_request_cut_outcome:
     fin rpolicy prog = SOME prog' /\
     call_state_rel tops (assemble prog') am tx es /\
     run_call es = SOME (r,es') /\ ~frame_resource_starved es r es' /\
-    vs0 = opt_entry_state prog prog' cplan es /\
+    vs0 = opt_entry_state_own prog prog' cplan es /\
     raw_safe_rq_upto D 0 k unit.cu_context vs /\
     ctx_rq_upto D k unit.cu_context out.po_unit.cu_context vs vs0 /\
     (?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
@@ -52,15 +51,15 @@ Proof
   rpt gen_tac >> strip_tac >>
   `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
   gvs[]
-  >- (`opt_entry_state prog prog cplan es = entry_venom_state prog cplan es` by
-        metis_tac[opt_entry_state_identity] >>
+  >- (`opt_entry_state_own prog prog cplan es = entry_venom_state prog cplan es` by
+        metis_tac[opt_entry_state_own_identity] >>
       pop_assum (fn th => fs[th]) >>
       qspecl_then [`fn'`, `inst'`, `fuel'`, `es'`, `LENGTH s.vs_requests`] mp_tac
         codegen_request_cut_outcome_identity >>
       impl_tac >- (simp[] >> metis_tac[]) >>
       strip_tac >> gvs[]) >>
   qspecl_then [`fn'`, `inst'`, `fuel'`, `es'`, `LENGTH s.vs_requests`] mp_tac
-    codegen_request_cut_outcome_opt >>
+    codegen_request_cut_outcome_opt_own >>
   impl_tac >- (simp[] >> metis_tac[]) >>
   strip_tac >> gvs[]
 QED

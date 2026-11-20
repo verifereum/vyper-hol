@@ -88,11 +88,3 @@ Proof
     mp_tac raw_fmp_choice >>
   simp[opt_entry_state_own_def, opt_entry_state_def, entry_venom_state_def]
 QED
-
-Theorem source_typing_ok_code_update:
-  source_typing_ok tops am tx /\ LENGTH c < 2 ** 256 ==>
-  source_typing_ok tops am (tx with code := c)
-Proof
-  rw[source_typing_ok_def] >>
-  qexistsl_tac [`art`, `cenv`] >> fs[call_tx_well_typed_def]
-QED
