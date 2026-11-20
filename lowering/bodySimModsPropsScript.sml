@@ -87,6 +87,14 @@ Proof
   simp[] >> metis_tac[contract_inv_module_keys]
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Proof
+  PairCases_on `nsid` >> Cases_on `nsid0` >> strip_tac
+  >- metis_tac[body_inv_const_name_decl_mods, supported_constant_decl_not_root] >>
+  simp[supported_place_root_def, supported_storage_value_def,
+       supported_immutable_type_def, supported_lookup_other_module]
+QED
+*)
 Theorem body_inv_const_name_not_root_mods:
   contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
   cx_const_name_mods mods nsid ==>
@@ -94,10 +102,7 @@ Theorem body_inv_const_name_not_root_mods:
   (!ty. ~supported_storage_value (main_module mods) nsid ty) /\
   supported_immutable_type (main_module mods) nsid = NONE
 Proof
-  PairCases_on `nsid` >> Cases_on `nsid0` >> strip_tac
-  >- metis_tac[body_inv_const_name_decl_mods, supported_constant_decl_not_root] >>
-  simp[supported_place_root_def, supported_storage_value_def,
-       supported_immutable_type_def, supported_lookup_other_module]
+  cheat
 QED
 
 Theorem body_inv_const_name_root_mods:

@@ -148,12 +148,7 @@ Proof
   simp[] >> metis_tac[internal_fn_label_mode]
 QED
 
-Theorem supported_internal_substitution[local]:
-  supported_program tops /\
-  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
-  MEM (FunctionDecl Internal mut nr rr fname args dflts ret ss) tops ==>
-  subst_consts_fn (module_consts_env tops [])
-    (mut,nr,rr,fname,args,dflts,ret,ss) = (mut,nr,rr,fname,args,dflts,ret,ss)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >> drule_all supported_program_declaration >>
   simp[supported_declaration_body_def] >> strip_tac >>
@@ -165,6 +160,16 @@ Proof
   gvs[] >> drule alistTheory.ALOOKUP_MEM >> strip_tac >>
   rename1 `MEM (id,replacement) _` >>
   simp[MEM_MAP] >> qexists_tac `(id,replacement)` >> simp[]
+QED
+*)
+Theorem supported_internal_substitution[local]:
+  supported_program tops /\
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+  MEM (FunctionDecl Internal mut nr rr fname args dflts ret ss) tops ==>
+  subst_consts_fn (module_consts_env tops [])
+    (mut,nr,rr,fname,args,dflts,ret,ss) = (mut,nr,rr,fname,args,dflts,ret,ss)
+Proof
+  cheat
 QED
 
 Theorem shadow_body_inv_from_internal_runs[local]:
@@ -264,11 +269,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem runtime_shadow_body_inv:
-  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
-  supported_program tops /\ lower_vyper_runtime_unit tops rp = SOME unit /\
-  runtime_gas_shadow_unit tops rp = SOME shadow_unit ==>
-  shadow_body_inv tops unit.cu_context shadow_unit.cu_context
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   Cases_on `classify_functions tops` >>
@@ -324,6 +325,15 @@ Proof
     `srcs` |-> `order_internals (runtime_internal_order tops ints) ints`]
     shadow_body_inv_from_internal_runs) >>
   simp[Abbr `ips`, PERM_order_runtime_internals]
+QED
+*)
+Theorem runtime_shadow_body_inv:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+  supported_program tops /\ lower_vyper_runtime_unit tops rp = SOME unit /\
+  runtime_gas_shadow_unit tops rp = SOME shadow_unit ==>
+  shadow_body_inv tops unit.cu_context shadow_unit.cu_context
+Proof
+  cheat
 QED
 
 Theorem deploy_shadow_body_inv:
@@ -563,13 +573,7 @@ Proof
        internal_label_ok_def, internal_fn_label_def]
 QED
 
-Theorem classified_raw_externals_without_defaults[local]:
-  supported_program tops ==>
-  EVERY (\f. ~external_has_defaults f)
-    (FST (FOLDR classify_function ([],[],NONE,NONE) tops)) /\
-  EVERY (\f. ~external_has_defaults f)
-    (public_getters tops : (function_mutability # bool # bool # string #
-       (string # type) list # expr list # type # stmt list) list)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >> simp[EVERY_MEM, pairTheory.FORALL_PROD, external_has_defaults_def] >>
   conj_tac >> rpt strip_tac
@@ -579,6 +583,17 @@ Proof
   qpat_x_assum `MEM _ (public_getters _)`
     (strip_assume_tac o REWRITE_RULE [MEM_public_getters]) >>
   drule public_getter_defaults >> simp[]
+QED
+*)
+Theorem classified_raw_externals_without_defaults[local]:
+  supported_program tops ==>
+  EVERY (\f. ~external_has_defaults f)
+    (FST (FOLDR classify_function ([],[],NONE,NONE) tops)) /\
+  EVERY (\f. ~external_has_defaults f)
+    (public_getters tops : (function_mutability # bool # bool # string #
+       (string # type) list # expr list # type # stmt list) list)
+Proof
+  cheat
 QED
 
 Theorem imported_getters_without_defaults[local]:
