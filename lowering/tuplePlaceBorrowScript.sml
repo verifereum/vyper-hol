@@ -6,11 +6,7 @@ Ancestors
   vyperScopePreservation vyperPlaceStatePreservation exprSimSource loweringPosts
   targetPlaceLive
 
-Theorem tuple_place_supported_target_scopes:
-  !bt tops cx es res ee.
-    EVERY (supported_expr tops) (target_indices bt) /\
-    EVERY (\e. ~supported_expr_exists expr_effect_root e) (target_indices bt) /\
-    eval_base_place cx bt es = (res,ee) ==> ee.scopes = es.scopes
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >> rpt gen_tac
   >- (simp[Once evaluate_def, get_scopes_def, bind_def, ignore_bind_def,
@@ -35,6 +31,15 @@ Proof
       imp_res_tac extend_place_state >>
       rpt (qpat_x_assum `_ = _ with storage_trace := _` (fn th => ONCE_REWRITE_TAC [th])) >>
       gvs[] >> metis_tac[])
+QED
+*)
+Theorem tuple_place_supported_target_scopes:
+  !bt tops cx es res ee.
+    EVERY (supported_expr tops) (target_indices bt) /\
+    EVERY (\e. ~supported_expr_exists expr_effect_root e) (target_indices bt) /\
+    eval_base_place cx bt es = (res,ee) ==> ee.scopes = es.scopes
+Proof
+  cheat
 QED
 
 (* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)

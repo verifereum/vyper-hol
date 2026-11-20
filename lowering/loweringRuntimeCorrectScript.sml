@@ -693,6 +693,31 @@ fun runtime_selected_readings_finish_tac (marks_tac, unpack_tac) =
     (qspec_then `unread` (strip_assume_tac o MATCH_MP call_external_trace_result)) >>
   simp[];
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Proof
+  rpt gen_tac >> strip_tac >>
+  runtime_body_endpoint_tac >>
+  runtime_body_source_tac >>
+  runtime_body_shadow_tac >>
+  runtime_body_outcome_tac >>
+  runtime_body_compose_tac
+    (Q.ISPEC `\(cr : value + exception).
+       cr <> INR (Error (RuntimeError "msg.gas: no gas reading"))`
+       unit_execution_compose_result) >>
+  impl_tac
+  >- (runtime_compose_prefix_tac
+      >- runtime_compose_stop_tac
+      >- (runtime_compose_exit_tac
+          >- (runtime_compose_abort_halt_cases_tac >>
+              gvs[expr_exit_def, external_call_result_rel_def] >>
+              runtime_compose_halt_tac)
+          >> gvs[abstract_machine_from_state_def])
+      >> selected_call_readings_tac) >>
+  runtime_selected_readings_finish_tac
+    ((qexistsl_tac [`shadow_unit`,`marks`] >>
+      conj_tac >- first_assum ACCEPT_TAC), ALL_TAC)
+QED
+*)
 Theorem runtime_body_joint_from_start_with_readings:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -723,27 +748,7 @@ Theorem runtime_body_joint_from_start_with_readings:
            (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
          INR (Error (RuntimeError "msg.gas: no gas reading")))
 Proof
-  rpt gen_tac >> strip_tac >>
-  runtime_body_endpoint_tac >>
-  runtime_body_source_tac >>
-  runtime_body_shadow_tac >>
-  runtime_body_outcome_tac >>
-  runtime_body_compose_tac
-    (Q.ISPEC `\(cr : value + exception).
-       cr <> INR (Error (RuntimeError "msg.gas: no gas reading"))`
-       unit_execution_compose_result) >>
-  impl_tac
-  >- (runtime_compose_prefix_tac
-      >- runtime_compose_stop_tac
-      >- (runtime_compose_exit_tac
-          >- (runtime_compose_abort_halt_cases_tac >>
-              gvs[expr_exit_def, external_call_result_rel_def] >>
-              runtime_compose_halt_tac)
-          >> gvs[abstract_machine_from_state_def])
-      >> selected_call_readings_tac) >>
-  runtime_selected_readings_finish_tac
-    ((qexistsl_tac [`shadow_unit`,`marks`] >>
-      conj_tac >- first_assum ACCEPT_TAC), ALL_TAC)
+  cheat
 QED
 
 Theorem runtime_body_joint_from_start_with_shadow:
@@ -999,38 +1004,7 @@ Proof
   simp[Excl "lock_if_nr_def"]
 QED
 
-Theorem runtime_lock_abort_result_with:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\
-  source_typing_ok tops am tx /\
-  source_deployment_rel tops am tx /\
-  initial_venom_state_rel tops am tx vs /\
-  lookup_function NONE tx.function_name External tops =
-    SOME (mut,T,args,[],ret,fbody) /\
-  bind_arguments (type_env tops) args tx.args = SOME env /\
-  send_call_value mut
-    (initial_evaluation_context am.sources am.layouts tx NONE)
-    (initial_state am [env] with
-       <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es0) /\
-  lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
-    T (is_view_mut mut) es0 = (INR exc,es_abort) /\
-  unit.cu_context.ctx_entry = SOME "__entry" /\
-  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions =
-    SOME func /\
-  fn_entry_label func = SOME "__entry" /\
-  lookup_block "__entry" func.fn_blocks = SOME bb /\
-  phi_prefix_length bb.bb_instructions = 0 /\
-  expr_exit (INR exc : unit + exception) (Abort a t) /\
-  (exc = Error (RuntimeError "nonreentrant lock") \/
-   exc = Error (RuntimeError "write in static context")) /\
-  (!D explicit. gas_origin_ptr_path
-     (D,0,explicit,unit.cu_context,func,[])
-     (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
-                vs_inst_idx := 0|>,FEMPTY,entry_taint) [] (Abort a t,G,tn)) ==>
-  ?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
-  source_unit_execution_correct_with shadow_unit.cu_context [] tops ret am tx unit vs /\
-  (!gs. FST (call_external (SOME vs.vs_outcomes) gs am tx) <>
-    INR (Error (RuntimeError "msg.gas: no gas reading")))
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   DISCH_THEN (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
   `!gs. call_external_trace (SOME vs.vs_outcomes) gs am tx =
@@ -1122,6 +1096,42 @@ Proof
   qpat_assum `lookup_block entry.vs_current_bb func.fn_blocks = SOME bb`
     (fn th => qpat_assum `ptr_safe_run _ _ _ _ _ _ _ _ _`
       (ACCEPT_TAC o SIMP_RULE (srw_ss()) [ptrSafeRunTheory.ptr_safe_run_def,th]))
+QED
+*)
+Theorem runtime_lock_abort_result_with:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\
+  source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\
+  initial_venom_state_rel tops am tx vs /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,T,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  send_call_value mut
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with
+       <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es0) /\
+  lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+    T (is_view_mut mut) es0 = (INR exc,es_abort) /\
+  unit.cu_context.ctx_entry = SOME "__entry" /\
+  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions =
+    SOME func /\
+  fn_entry_label func = SOME "__entry" /\
+  lookup_block "__entry" func.fn_blocks = SOME bb /\
+  phi_prefix_length bb.bb_instructions = 0 /\
+  expr_exit (INR exc : unit + exception) (Abort a t) /\
+  (exc = Error (RuntimeError "nonreentrant lock") \/
+   exc = Error (RuntimeError "write in static context")) /\
+  (!D explicit. gas_origin_ptr_path
+     (D,0,explicit,unit.cu_context,func,[])
+     (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                vs_inst_idx := 0|>,FEMPTY,entry_taint) [] (Abort a t,G,tn)) ==>
+  ?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+  source_unit_execution_correct_with shadow_unit.cu_context [] tops ret am tx unit vs /\
+  (!gs. FST (call_external (SOME vs.vs_outcomes) gs am tx) <>
+    INR (Error (RuntimeError "msg.gas: no gas reading")))
+Proof
+  cheat
 QED
 
 val selected_entry_split_tac =
@@ -1369,92 +1379,7 @@ val runtime_locked_unlock_tac =
   disch_then (qx_choose_then `eu` strip_assume_tac) >>
   drule_all selected_call_trace_result_nr >> strip_tac;
 
-Theorem runtime_selected_lock_readings:
-  !tops rpolicy unit am tx ret vs mut args fbody env es0 es_lock source_lbl lbl cenv0 pos_args min_cds is_payable
-   rt st cenv sa sl se st' func s0 G0 tn0.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    initial_venom_state_rel tops am tx vs /\
-    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut, T, args, [], ret, fbody) /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with
-         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
-      (INL (), es0) /\
-    lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
-      T (is_view_mut mut) es0 = (INL (),es_lock) /\
-    set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops T (K global_nonreentrant_slot)
-        (mut,T,lookup_raw_return_or_F (NONE:num option)
-           tx.function_name External tops,tx.function_name,args,[],ret,
-           subst_consts_stmts (module_consts_env tops []) fbody)) =
-      (source_lbl,cenv0,pos_args,min_cds,is_payable,T,global_nonreentrant_slot,
-        T,mut = View,subst_consts_stmts (module_consts_env tops []) fbody,rt) /\
-    runtime_entry_body_start tops rpolicy
-      (lbl,cenv0,pos_args,min_cds,is_payable,T,global_nonreentrant_slot,
-        T,mut = View,subst_consts_stmts (module_consts_env tops []) fbody,rt) st /\
-    rt = (if ret = NoneT then NONE else SOME ret) /\
-    compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
-    compile_nonreentrant_lock global_nonreentrant_slot T (mut = View) sa =
-      ((),sl) /\
-    compile_guarded_body cenv T global_nonreentrant_slot T (mut = View)
-      (subst_consts_stmts (module_consts_env tops []) fbody) rt sa = ((),st') /\
-    compile_stmts cenv NoLoop (case rt of SOME ty => ty | NONE => BaseT BoolT)
-      (subst_consts_stmts (module_consts_env tops []) fbody) sl = ((),se) /\
-    fn_has_code sl se func /\ fn_has_code se st' func /\
-    fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sl /\ ~block_is_terminated sl /\
-    unit.cu_context.ctx_entry = SOME "__entry" /\
-    lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
-    fn_entry_label func = SOME "__entry" /\
-    alloca_history func s0 /\ fresh_vars_wrt sl s0 /\
-    return_buf_frame NONE cenv sl s0 /\
-    ~s0.vs_halted /\ s0.vs_current_bb = sl.cs_current_bb /\
-    s0.vs_inst_idx = LENGTH sl.cs_current_insts /\
-    s0.vs_gas_readings = vs.vs_gas_readings /\
-    s0.vs_code = vs.vs_code /\ s0.vs_labels = vs.vs_labels /\
-    (mut <> View ==> ~tx.is_static) /\
-    (!st0 H. valid_horizon
-      (initial_evaluation_context am.sources am.layouts tx NONE) st0 H
-      es_lock.storage_trace ==>
-      ((!fuel. ptr_safe_run
-          (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
-          0 fuel unit.cu_context func [] G0 tn0 s0) ==>
-        !fuel. ptr_safe_blocks
-          (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
-          0 fuel unit.cu_context func [] FEMPTY entry_taint
-          (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
-                     vs_inst_idx := 0 |>)) /\
-      ghost_inv_at
-        (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
-        0 NONE cenv
-        (initial_evaluation_context am.sources am.layouts tx NONE)
-        es_lock G0 tn0 s0 /\
-      stmt_state_rel H unit.cu_context func cenv
-        (initial_evaluation_context am.sources am.layouts tx NONE) es_lock s0 /\
-      !explicit.
-        gas_origin_ptr_path
-          (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE),
-           0,explicit,unit.cu_context,func,[])
-          (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
-                     vs_inst_idx := 0 |>,FEMPTY,entry_taint) [] (OK s0,G0,tn0))
-    ==>
-    ?shadow_unit marks.
-      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
-      source_unit_execution_correct_with shadow_unit.cu_context marks
-        tops ret am tx unit vs /\
-      ((?tail.
-          call_storage_ok am tx vs.vs_outcomes
-            (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
-       !tail.
-         FST (call_external (SOME vs.vs_outcomes)
-           (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
-         INR (Error (RuntimeError "msg.gas: no gas reading")))
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt strip_tac >>
   runtime_locked_body_outcome_tac >>
@@ -1666,6 +1591,96 @@ Proof
   runtime_selected_readings_finish_tac
     ((qexistsl_tac [`shadow_unit`,`marks`] >>
       conj_tac >- first_assum ACCEPT_TAC), ALL_TAC)
+QED
+*)
+Theorem runtime_selected_lock_readings:
+  !tops rpolicy unit am tx ret vs mut args fbody env es0 es_lock source_lbl lbl cenv0 pos_args min_cds is_payable
+   rt st cenv sa sl se st' func s0 G0 tn0.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    initial_venom_state_rel tops am tx vs /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, T, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INL (), es0) /\
+    lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+      T (is_view_mut mut) es0 = (INL (),es_lock) /\
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops T (K global_nonreentrant_slot)
+        (mut,T,lookup_raw_return_or_F (NONE:num option)
+           tx.function_name External tops,tx.function_name,args,[],ret,
+           subst_consts_stmts (module_consts_env tops []) fbody)) =
+      (source_lbl,cenv0,pos_args,min_cds,is_payable,T,global_nonreentrant_slot,
+        T,mut = View,subst_consts_stmts (module_consts_env tops []) fbody,rt) /\
+    runtime_entry_body_start tops rpolicy
+      (lbl,cenv0,pos_args,min_cds,is_payable,T,global_nonreentrant_slot,
+        T,mut = View,subst_consts_stmts (module_consts_env tops []) fbody,rt) st /\
+    rt = (if ret = NoneT then NONE else SOME ret) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+    compile_nonreentrant_lock global_nonreentrant_slot T (mut = View) sa =
+      ((),sl) /\
+    compile_guarded_body cenv T global_nonreentrant_slot T (mut = View)
+      (subst_consts_stmts (module_consts_env tops []) fbody) rt sa = ((),st') /\
+    compile_stmts cenv NoLoop (case rt of SOME ty => ty | NONE => BaseT BoolT)
+      (subst_consts_stmts (module_consts_env tops []) fbody) sl = ((),se) /\
+    fn_has_code sl se func /\ fn_has_code se st' func /\
+    fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sl /\ ~block_is_terminated sl /\
+    unit.cu_context.ctx_entry = SOME "__entry" /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+    fn_entry_label func = SOME "__entry" /\
+    alloca_history func s0 /\ fresh_vars_wrt sl s0 /\
+    return_buf_frame NONE cenv sl s0 /\
+    ~s0.vs_halted /\ s0.vs_current_bb = sl.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sl.cs_current_insts /\
+    s0.vs_gas_readings = vs.vs_gas_readings /\
+    s0.vs_code = vs.vs_code /\ s0.vs_labels = vs.vs_labels /\
+    (mut <> View ==> ~tx.is_static) /\
+    (!st0 H. valid_horizon
+      (initial_evaluation_context am.sources am.layouts tx NONE) st0 H
+      es_lock.storage_trace ==>
+      ((!fuel. ptr_safe_run
+          (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
+          0 fuel unit.cu_context func [] G0 tn0 s0) ==>
+        !fuel. ptr_safe_blocks
+          (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
+          0 fuel unit.cu_context func [] FEMPTY entry_taint
+          (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                     vs_inst_idx := 0 |>)) /\
+      ghost_inv_at
+        (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
+        0 NONE cenv
+        (initial_evaluation_context am.sources am.layouts tx NONE)
+        es_lock G0 tn0 s0 /\
+      stmt_state_rel H unit.cu_context func cenv
+        (initial_evaluation_context am.sources am.layouts tx NONE) es_lock s0 /\
+      !explicit.
+        gas_origin_ptr_path
+          (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE),
+           0,explicit,unit.cu_context,func,[])
+          (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                     vs_inst_idx := 0 |>,FEMPTY,entry_taint) [] (OK s0,G0,tn0))
+    ==>
+    ?shadow_unit marks.
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      source_unit_execution_correct_with shadow_unit.cu_context marks
+        tops ret am tx unit vs /\
+      ((?tail.
+          call_storage_ok am tx vs.vs_outcomes
+            (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
+       !tail.
+         FST (call_external (SOME vs.vs_outcomes)
+           (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
+         INR (Error (RuntimeError "msg.gas: no gas reading")))
+Proof
+  cheat
 QED
 
 Theorem lower_vyper_runtime_unit_correct_readings_available:

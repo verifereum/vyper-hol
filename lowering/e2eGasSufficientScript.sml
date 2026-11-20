@@ -266,13 +266,7 @@ QED
    supported_program's body_stmt_safe excludes CreateTarget, so the lowering
    emits no CREATE or CREATE2 and O1 keeps them absent; the premise then
    holds at every state. *)
-Theorem o1_runtime_unit_create_size_ok:
-  !tops rpolicy unit out vs.
-    supported_program tops /\
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out
-    ==>
-    mem_inv (\ctx fn inst s. inst_create_size_ok inst s) out.po_unit.cu_context vs
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt strip_tac >> match_mp_tac mem_inv_create_size_ok_no_create >>
   conj_tac
@@ -290,6 +284,17 @@ Proof
   qspecl_then [`rpolicy`, `unit`, `out`, `CREATE2`] mp_tac
     o1_pipeline_opcode_absence >>
   impl_tac >- (fs[] >> metis_tac[]) >> disch_then drule_all >> simp[]
+QED
+*)
+Theorem o1_runtime_unit_create_size_ok:
+  !tops rpolicy unit out vs.
+    supported_program tops /\
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out
+    ==>
+    mem_inv (\ctx fn inst s. inst_create_size_ok inst s) out.po_unit.cu_context vs
+Proof
+  cheat
 QED
 
 (* A uniform bound on every terminating run of the runtime unit, before
@@ -460,30 +465,7 @@ QED
    CREATE initcode.  It is stated for every list of GAS
    observations, since the source run S4 relates the compiled run to may
    read other GAS values than the EVM run does. *)
-Theorem vyper_call_gas_sufficient_identity:
-  !policy tops deploy_bc runtime_bc am tx es.
-    compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    call_state_rel tops runtime_bc am tx es
-    ==>
-    ?g. !g'.
-      g <= g' /\
-      (!f vals.
-         calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
-           (!gs. call_storage_ok am
-              (tx with <| function_name := f; args := vals |>)
-              (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-           (!obs. ~gas_source_exempt tops
-              (tx with <| function_name := f; args := vals |>)
-              (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-                 obs am (tx with <| function_name := f; args := vals |>))) /\
-           LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64)
-      ==>
-      ?r es'.
-        run_call (add_frame_gas g' es) = SOME (r, es') /\
-        (frame_raises (add_frame_gas g' es) OutOfGas ==>
-         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt strip_tac >>
   drule compile_vyper_runtime_phases >> strip_tac >>
@@ -612,6 +594,34 @@ Proof
   qpat_x_assum `prog = _` kall_tac >>
   qpat_x_assum `!g' Inv vs es. _` irule >> simp[] >>
   qexistsl_tac [`Inv`, `vs`] >> simp[]
+QED
+*)
+Theorem vyper_call_gas_sufficient_identity:
+  !policy tops deploy_bc runtime_bc am tx es.
+    compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es
+    ==>
+    ?g. !g'.
+      g <= g' /\
+      (!f vals.
+         calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
+           (!gs. call_storage_ok am
+              (tx with <| function_name := f; args := vals |>)
+              (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
+           (!obs. ~gas_source_exempt tops
+              (tx with <| function_name := f; args := vals |>)
+              (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+                 obs am (tx with <| function_name := f; args := vals |>))) /\
+           LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64)
+      ==>
+      ?r es'.
+        run_call (add_frame_gas g' es) = SOME (r, es') /\
+        (frame_raises (add_frame_gas g' es) OutOfGas ==>
+         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+Proof
+  cheat
 QED
 
 

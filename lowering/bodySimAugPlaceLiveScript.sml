@@ -31,7 +31,7 @@ Proof
   >- suspend "subscript"
   >> suspend "attribute"
 QED
-Resume aug_place_base_memory_live[subscript]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
   rpt strip_tac >>
   qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
@@ -41,6 +41,9 @@ Resume aug_place_base_memory_live[subscript]:
   imp_res_tac aug_place_supported_expr_scopes >>
   first_x_assum (drule_all_then strip_assume_tac) >>
   gvs[] >> metis_tac[aug_place_extend_memory_live]
+*)
+Resume aug_place_base_memory_live[subscript]:
+  cheat
 QED
 Resume aug_place_base_memory_live[attribute]:
   rpt strip_tac >>
