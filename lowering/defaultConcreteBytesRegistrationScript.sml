@@ -3,6 +3,7 @@ Theory defaultConcreteBytesRegistration
 Ancestors defaultConcreteRegistrationDefs defaultConcreteRegistrationInit
   defaultBytesRegistration vyperCalldata abiDecoderContract words list rich_list
   defaultConcreteRegistrationCompiler defaultConcreteRegistrationResources
+  decoderOriginAllocationFrame[qualified,ignore_grammar]
   defaultConcreteRegistrationOwners compileEnv moduleLowering finite_map pred_set arithmetic
 
 Theorem default_registration_dynamic_decode:
@@ -78,7 +79,7 @@ QED
 
 Theorem default_registration_bytes_head:
   EVERY (\tv. type_memory_size tv < dimword (:256)) all_tvs /\
-  fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct fn /\
   venomInst$lookup_function fn.fn_name ctx.ctx_functions = SOME fn ==>
   !ce st off name dyn sz info rest tv tvs s G tn owners ce1 st1 x.
     4 <= off /\ ~s.vs_halted /\
@@ -135,6 +136,20 @@ Proof
    s.vs_current_bb = st.cs_current_bb /\
    s.vs_inst_idx = LENGTH st.cs_current_insts` by
     fs[default_registration_invariant_def, default_registration_resources_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by
+    (strip_tac >>
+     `fmp_room ctx fn s` by
+       fs[default_registration_invariant_def, default_registration_resources_def] >>
+     `s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp /\
+       w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+       (qpat_assum `fmp_room ctx fn s` (mp_tac o REWRITE_RULE [exprLoweringPropsTheory.fmp_room_def]) >>
+        (impl_tac >- (disj1_tac >> first_assum ACCEPT_TAC)) >>
+        strip_tac >> conj_tac >- decide_tac >> first_assum ACCEPT_TAC) >>
+     simp[ptrDisciplineTheory.allocas_below_fmp_def] >>
+     qpat_assum `alloca_inv s` (strip_assume_tac o REWRITE_RULE
+       [venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def]) >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all default_bytes_registration_step_footprint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
   suspend "finish"
@@ -196,6 +211,19 @@ Resume default_registration_bytes_head[finish]:
     ins.inst_operands = [Lit (n2w (type_memory_size tv))] /\ ins.inst_outputs = [p] /\
     ins.inst_id = st.cs_next_id /\ st.cs_next_id < st1.cs_next_id` by
     suspend "allocation" >>
+  `fmp_room ctx fn out` by
+    (`fmp_room ctx fn s` by
+       fs[default_registration_invariant_def, default_registration_resources_def] >>
+     `gas_origin_ptr_path (ARB,0,K F,ctx,fn,PG) (s,G,tn) [] (OK out,H,u)` by
+       (first_x_assum (qspecl_then [`ARB`,`K F`] ACCEPT_TAC)) >>
+     drule_all decoderOriginAllocationFrameTheory.decoder_origin_path_allocation_frame >>
+     strip_tac >>
+     `out.vs_fmp = s.vs_fmp` by
+       (qpat_assum `out = _` (fn eq => once_rewrite_tac[eq]) >> simp[]) >>
+     `LENGTH s.vs_memory <= LENGTH out.vs_memory` by
+       metis_tac[fragGasPathFrameMemTheory.gas_path_mem_memory_length] >>
+     irule exprLoweringPropsTheory.fmp_room_static_charge >>
+     qexists_tac `s` >> simp[]) >>
   `default_registration_resources ctx fn site k st1 out u` by
     (irule default_registration_resources_transport >>
      simp[] >> qexistsl [`s`,`st`,`tn`] >> simp[] >>
