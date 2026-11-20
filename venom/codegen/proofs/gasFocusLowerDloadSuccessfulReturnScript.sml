@@ -197,7 +197,10 @@ Resume ld_focus_successful_run[invoke]:
      drule o1LowerDloadRunnerBoundaryTheory.ld_invoke_bind_control >> strip_tac >>
      qpat_x_assum `get_instruction bb (u with vs_inst_idx := _).vs_inst_idx = SOME nexti`
        mp_tac >> simp[get_instruction_def]) >>
-  drule_all (BETA_RULE ld_focus_invoke_pop_correlated) >>
+  mp_tac (Q.INST [`vs0` |-> `vs`, `fn'` |-> `gn`, `args` |-> `argsS`,
+    `cs` |-> `cs'`, `u` |-> `uc`, `q` |-> `u`]
+    (BETA_RULE ld_focus_invoke_pop_correlated)) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then
     [`PG2`,`G2`,`tn2`,`inst1`,`s1`,`t1`,`A1`,`frames1`,`N1`,`Y1`,`p1`,`h1`]
     (map_every assume_tac o CONJUNCTS)) >>

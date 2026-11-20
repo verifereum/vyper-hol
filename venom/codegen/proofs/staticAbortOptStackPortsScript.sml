@@ -489,7 +489,9 @@ Resume fixed_positive_port[fixed_fall]:
   Q.SPEC_TAC (`EL i d`, `ins`) >> gen_tac >>
   simp[MEM] >> disch_then strip_assume_tac >>
   qpat_x_assum `ins = _` SUBST1_TAC >>
-  (simp[port_lookups])
+  SIMP_TAC (bool_ss ++ stringSimps.STRING_ss)
+    [asm_inst_11, port_lookups, optionTheory.option_case_def] >>
+  simp[]
 QED
 
 Finalise fixed_positive_port
