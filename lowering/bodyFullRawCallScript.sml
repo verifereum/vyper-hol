@@ -362,14 +362,28 @@ Proof
         (gen_tac >> Cases_on `cx.txn.is_static /\ amount <> 0`
          >- (simp[Abbr `err`] >> irule raw_call_static_value_abort >>
              simp[Abbr `stat`, Abbr `delegate`] >>
-             metis_tac[]) >>
+             map_every (fn pat => qpat_assum pat mp_tac)
+               [`delegate ==> amount = 0`, `flags.rcf_is_static ==> amount = 0`,
+                `cx.txn.is_static /\ amount <> 0`] >>
+             POP_ASSUM_LIST (K ALL_TAC) >> tautLib.TAUT_TAC) >>
          simp[Abbr `err`] >>
          irule raw_call_oracle_empty >>
-         simp[Abbr `stat`, Abbr `delegate`] >> metis_tac[]) >>
+         simp[Abbr `stat`, Abbr `delegate`] >>
+         qpat_x_assum `~(cx.txn.is_static /\ amount <> 0)` mp_tac >>
+         map_every (fn pat => qpat_assum pat mp_tac)
+           [`~(delegate /\ stat)`, `delegate ==> amount = 0`,
+            `flags.rcf_is_static ==> amount = 0`,
+            `esK.outcomes = SOME t7.vs_outcomes`,
+            `t7.vs_outcomes = [] \/ (cx.txn.is_static /\ amount <> 0)`] >>
+         POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> tautLib.TAUT_TAC) >>
       Q.SUBGOAL_THEN `t7.vs_outcomes = [] \/
          (call_ty = RegularCall /\ t7.vs_call_ctx.cc_static /\ (n2w amount : bytes32) <> 0w)` ASSUME_TAC
        >- (simp[GSYM w2n_eq_0, Abbr `call_ty`] >>
-          Cases_on `delegate` >> Cases_on `stat` >> simp[] >> metis_tac[]) >>
+           qpat_x_assum `delegate ==> amount = 0` mp_tac >>
+           qpat_assum `stat ==> amount = 0` mp_tac >>
+           qpat_assum `t7.vs_outcomes = [] \/ (cx.txn.is_static /\ amount <> 0)` mp_tac >>
+           POP_ASSUM_LIST (K ALL_TAC) >>
+           Cases_on `delegate` >> Cases_on `stat` >> simp[] >> tautLib.TAUT_TAC) >>
       irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
       qexistsl_tac [`G7`,`esK`,`Abort ExHalt_abort (halt_state (set_returndata [] t7))`,
                     `INR (Error (RuntimeError err))`,`tn7`] >>
