@@ -1,6 +1,6 @@
 Theory bodyFullBopRestWordLoads
 Ancestors
-  bodyPtrBopInSlotLoad bodyPtrBopInCodeLoad bodyPtrBopInElementLoad
+  bodyPtrBopInSlotLoad bodyPtrBopInCodeContents[qualified] bodyPtrBopInElementLoad
   bodyPtrBopInLoopContract bodyPtrBopInLoopLayout bodyPtrBopInBoundedAddress bodyPtrBopInBoundedLayout
   augAssignPtrScalarRun typedCopyOriginPtrBase typedCopyLoopHeaderPtr typedCopyPtr instSeqComposePtr
   augAssignPtrScalarCertificate fragGasCopyLoop fragGasSeqPtr fragGasOriginPtr

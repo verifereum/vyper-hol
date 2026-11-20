@@ -1,6 +1,6 @@
 Theory o1LabelFlowCompose
 Ancestors
-  o1LabelFlowSource o1LabelFlowMiddle o1LabelFlowLateContracts
+  o1LabelFlowMiddle o1LabelFlowLateContracts
   o1PipelineCorrect o1PipelineCompose o1ScheduleDecomp
   o1PartialSchedule o1FnScheduleDecompHelpers o1ComposeSupport
   venomPassSchedule list irSupply venomPipelineRunner fcgPruning

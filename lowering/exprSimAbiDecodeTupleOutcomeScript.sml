@@ -3,7 +3,7 @@
 Theory exprSimAbiDecodeTupleOutcome
 Ancestors
   exprSimAbiDecodeTupleSource exprSimAbiDecodeChildFrame
-  exprSimAbiDecodeMemberReject exprSimAbiDecodeMemberOutcome
+  exprSimAbiDecodeMemberOutcome
   abiDecoderMemberSetup abiDecoderAppend abiDecoderFiniteControl
   abiDecoderSiteEffect abiDecoderCoherence valueEncodingProps fragExec
   abiEncoder compileEnv emitHelper emitHelperProps exprLoweringProps

@@ -1,7 +1,7 @@
 Theory abiArgsLabelBoundary
 Ancestors
   loweringStateRelDefs
-  compileEnv exprSimDefs exprSimProps loweringPosts exprSimHyps exprSimWordArgs abiArgsLabelObserver
+  compileEnv exprSimDefs exprSimProps loweringPosts exprSimHyps exprSimWordArgs
   fragExec venomExecProofs venomExecSemantics exprSimAbiEncodeArgsCountedLabels vyperStorageFootprint
 
 (* Operational steps include returning INVOKE: the caller label map survives. *)

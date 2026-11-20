@@ -1,9 +1,9 @@
 Theory abiEncodeArgsSim
 Ancestors
   loweringStateRelDefs valueEncodingDefs
-  abiEncodeMaterialize abiEncodeArgsScopes abiEncodeArgsWindows abiDecoderReentry
+  abiEncodeMaterialize abiEncodeArgsScopes abiDecoderReentry
   vyperStorageTrace vyperStorageFootprint
-  compileEnv exprSimDefs exprSimProps loweringPosts exprSimHyps exprSimWordArgs abiArgsLabelObserver exprOperandVar
+  compileEnv exprSimDefs exprSimProps loweringPosts exprSimHyps exprSimWordArgs exprOperandVar
   abiArgsLabelBoundary
 
 Definition abi_args_post_def:

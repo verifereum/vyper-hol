@@ -1,6 +1,6 @@
 Theory gasFocusOptLabelFlow
 Ancestors o1LabelFlowCompose[qualified]
-  o1LabelFlowSource o1LabelFlowMiddle o1LabelFlowLateContracts
+  o1LabelFlowMiddle o1LabelFlowLateContracts
   fmpLowerDefs fmpStepBridge fmpStepLayout fmpStepOpaque fmpStepRewriteOrigin
   fmpStepRewriteSupply fmpLowerIndexedProps fmpStepRetpcShape
   o1ContractMakeSsaReplay o1LabelFlowMiddleSsaAssembly

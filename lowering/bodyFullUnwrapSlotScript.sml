@@ -5,7 +5,7 @@ Ancestors
   exprPtrUnwrapMarked exprSimMemUnwrap fragGasOriginPtr fragGasSeqPtr
   bodyPtrEnvBuiltinsEdges bodyPtrDefs loweringPosts exprSimMemDefs
   exprLowering compileEnv context
-  bodyFullUnwrapSlotOrigin bodyFullUnwrapSlotEndpoint bodyFullUnwrapSlotPost
+  bodyFullUnwrapSlotOrigin bodyFullUnwrapSlotPost
   bodyFullUnwrapRun fragGasOriginPtrDead exprLoweringProps localPtrsProps
   exprSimProps loweringStateRelDefs ptrDiscipline finite_map pred_set
   vyperStorageFootprint exprSimFieldLayout valueEncodingProps words
