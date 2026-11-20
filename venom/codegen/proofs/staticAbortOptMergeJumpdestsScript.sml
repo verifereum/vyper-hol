@@ -24,7 +24,8 @@ Theorem merge_protected_terminal:
         sym_terminal (sym_steps q env m (sym_init s)) /\
         t.as_requests = out.as_requests
 Proof
-  ACCEPT_TAC protected_terminal_legacy
+  MATCH_ACCEPT_TAC (Q.INST [`allow_own` |-> `F`] protected_terminal_general
+    |> PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES, IMP_CLAUSES, AND_CLAUSES])
 QED
 
 fun bind_names names =

@@ -6,20 +6,35 @@ Ancestors
 val names_conv = TOP_DEPTH_CONV (Unwind.UNWIND_FORALL_CONV ORELSEC BETA_CONV)
 
 (* The matching concrete exception and symbolic termination use one count. *)
-Theorem protected_terminal_legacy:
+Theorem protected_terminal_general:
   !env. env = asm_data_env orig (assemble orig ++ data) ==>
-  !run. run = (\r n. asm_steps (SND (compute_label_offsets r)) (build_offset_to_pc r)
-                    r n (s with as_code := assemble r ++ data)) ==>
-  s.as_pc = 0 /\ asm_static_wf orig /\ asm_static_wf p /\
-  FILTER is_data_inst p = FILTER is_data_inst orig /\ asm_refines p q /\
+  !run. run = (\r n. asm_steps
+    (if allow_own then lo_reloc r orig else SND (compute_label_offsets r))
+    (build_offset_to_pc r) r n (if allow_own then s else (s with as_code := assemble r ++ data))) ==>
+  (allow_own ==> s.as_code = assemble orig ++ data) /\ s.as_pc = 0 /\ asm_static_wf orig /\ asm_static_wf p /\
+  FILTER is_data_inst p = FILTER is_data_inst orig /\
+  (if allow_own then asm_refines_own p q else asm_refines p q) /\
   (run p n = AsmRevert out \/ run p n = AsmFault out) /\
-  sym_terminal (sym_steps p env n (sym_init s)) ==>
+  sym_terminal (sym_steps_mode allow_own p env s.as_code n (sym_init s)) ==>
   asm_static_wf q /\ FILTER is_data_inst q = FILTER is_data_inst orig /\
   ?m t. (run q m = AsmRevert t \/ run q m = AsmFault t) /\
-        sym_terminal (sym_steps q env m (sym_init s)) /\
+        sym_terminal (sym_steps_mode allow_own q env s.as_code m (sym_init s)) /\
         t.as_requests = out.as_requests
 Proof
-  CONV_TAC names_conv >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  CONV_TAC names_conv >> Cases_on `allow_own` >>
+  PURE_REWRITE_TAC [sym_steps_mode_def, COND_CLAUSES, IMP_CLAUSES, AND_CLAUSES] >>
+  disch_then (map_every assume_tac o CONJUNCTS)
+  >- (`asm_static_wf q /\ FILTER is_data_inst q = FILTER is_data_inst orig` by
+        metis_tac[asm_refines_own_def] >>
+      `sym_terminal (sym_steps_own p (asm_data_env orig s.as_code) s.as_code n (sym_init s))` by
+        (qpat_assum `s.as_code = _` (fn eq =>
+           qpat_assum `sym_terminal _` (ACCEPT_TAC o PURE_REWRITE_RULE [GSYM eq]))) >>
+      mp_tac (Q.INST [`installed` |-> `orig`] installed_terminal_refinement) >>
+      (impl_tac >- (rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >> metis_tac[])) >>
+      qpat_assum `s.as_code = _` (pure_rewrite_tac o single o GSYM) >>
+      disch_then (qx_choosel_then [`m`,`t`] (map_every assume_tac o CONJUNCTS)) >>
+      conj_tac >- first_assum ACCEPT_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
+      qexistsl [`m`,`t`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qabbrev_tac `env = asm_data_env orig (assemble orig ++ data)` >>
   qabbrev_tac `start = s with as_code := assemble p ++ data` >>
   qabbrev_tac `dest = s with as_code := assemble q ++ data` >>
@@ -52,7 +67,7 @@ Proof
   suspend "refinement"
 QED
 
-Resume protected_terminal_legacy[refinement]:
+Resume protected_terminal_general[refinement]:
   `?fuel'. sym_result_rel (sym_run p env n (sym_init s))
                        (sym_run q env fuel' (sym_init s))` by
     (qpat_assum `asm_refines p q` (mp_tac o REWRITE_RULE [asm_refines_def]) >>
@@ -87,7 +102,7 @@ Resume protected_terminal_legacy[refinement]:
        asm_state_component_equality] >> metis_tac[]
 QED
 
-Finalise protected_terminal_legacy
+Finalise protected_terminal_general
 
 Theorem protected_terminal_mode:
   !env. env = asm_data_env orig (assemble orig ++ data) ==>
@@ -104,21 +119,9 @@ Theorem protected_terminal_mode:
         sym_terminal (sym_steps_mode allow_own q env s.as_code m (sym_init s)) /\
         t.as_requests = out.as_requests
 Proof
-  CONV_TAC names_conv >> Cases_on `allow_own` >>
-  PURE_REWRITE_TAC [sym_steps_mode_def, COND_CLAUSES] >>
-  disch_then (map_every assume_tac o CONJUNCTS)
-  >- (`asm_static_wf q /\ FILTER is_data_inst q = FILTER is_data_inst orig` by
-        metis_tac[asm_refines_own_def] >>
-      `sym_terminal (sym_steps_own p (asm_data_env orig s.as_code) s.as_code n (sym_init s))` by
-        (qpat_assum `s.as_code = _` (fn eq =>
-           qpat_assum `sym_terminal _` (ACCEPT_TAC o PURE_REWRITE_RULE [GSYM eq]))) >>
-      mp_tac (Q.INST [`installed` |-> `orig`] installed_terminal_refinement) >>
-      (impl_tac >- (rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >> metis_tac[])) >>
-      qpat_assum `s.as_code = _` (pure_rewrite_tac o single o GSYM) >>
-      disch_then (qx_choosel_then [`m`,`t`] (map_every assume_tac o CONJUNCTS)) >>
-      conj_tac >- first_assum ACCEPT_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl [`m`,`t`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  mp_tac (CONV_RULE names_conv protected_terminal_legacy) >>
-  (impl_tac >- (rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]))) >>
+  CONV_TAC names_conv >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac (CONV_RULE names_conv protected_terminal_general) >>
+  (impl_tac >- (conj_tac >- (strip_tac >> first_assum ACCEPT_TAC) >>
+    rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]))) >>
   disch_then ACCEPT_TAC
 QED
