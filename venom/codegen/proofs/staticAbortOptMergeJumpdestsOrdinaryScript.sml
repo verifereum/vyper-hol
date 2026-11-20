@@ -1,5 +1,6 @@
 Theory staticAbortOptMergeJumpdestsOrdinary
 Ancestors
+  staticAbortProtectedTraceCoverage codegenSymRel
   asmOwnMergeStep asmOwnMergeCodecopy asmSymPcOwn asmSymPc asmSplice
   asmOptMergeJumpdests asmOptimizer asmSymSem asmSymOwnCode list rich_list
 
@@ -63,4 +64,42 @@ Proof
   `b.sym_base.as_pc = a.sym_base.as_pc` by fs[rn_rel_def] >>
   qexists_tac `out` >>
   simp[sym_steps_pos,sym_steps_def,EL_MAP]
+QED
+
+Theorem merge_rename_nonjump_fetch_ok_mode:
+  !i. i = a.sym_base.as_pc ==>
+  !inst. inst = EL i p ==>
+    rn_rel x y a b /\ ~sym_data_label p env x /\ i < LENGTH p /\
+    inst <> AsmOp "JUMP" /\ inst <> AsmOp "JUMPI" /\
+    sym_steps_mode allow_own p env own 1 a = SymOK t ==>
+    ?t'. sym_steps_mode allow_own (MAP (rename_push_label x y) p) env own 1 b = SymOK t' /\
+         rn_rel x y t t'
+Proof
+  Cases_on `allow_own` >> PURE_REWRITE_TAC [sym_steps_mode_def, COND_CLAUSES]
+  >- (simp[] >> strip_tac >>
+      qabbrev_tac `inst = EL a.sym_base.as_pc p` >>
+      `sym_step_own p env own inst a = SymOK t` by
+        (drule (iffLR (Q.INST [`allow_own` |-> `T`] sym_steps_mode_ok_one
+           |> PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES])) >> simp[Abbr `inst`]) >>
+      qabbrev_tac `pf = FILTER (\i. i <> AsmLabel x) p` >>
+      `!l. MEM (AsmDataHeader l) pf <=> MEM (AsmDataHeader l) p` by
+        simp[Abbr `pf`, MEM_FILTER] >>
+      `INDEX_OF (AsmLabel x) pf = NONE` by simp[Abbr `pf`, INDEX_OF_eq_NONE, MEM_FILTER] >>
+      `~sym_data_label pf env x` by fs[sym_data_label_def] >>
+      `sym_step_own pf env own inst a = SymOK t` by metis_tac[sym_step_own_prog_cong] >>
+      `rename_push_label x y inst <> AsmOp "JUMP" /\
+       rename_push_label x y inst <> AsmOp "JUMPI"` by
+        (Cases_on `inst` >> rw[rename_push_label_def] >> fs[]) >>
+      mp_tac (Q.INST [`p` |-> `pf`] rename_step_own_under) >>
+      (impl_tac >- simp[codecopy_rel_own]) >>
+      disch_then (qspecl_then [`a`,`b`,`inst`] mp_tac) >> simp[] >>
+      disch_then (qx_choose_then `out` strip_assume_tac) >>
+      `sym_step_own (MAP (rename_push_label x y) p) env own (rename_push_label x y inst) b =
+       sym_step_own (MAP (rename_push_label x y) pf) env own (rename_push_label x y inst) b` by
+        (irule sym_step_own_prog_cong >> simp[mem_rename]) >>
+      `b.sym_base.as_pc = a.sym_base.as_pc` by fs[rn_rel_def] >>
+      qexists_tac `out` >>
+      simp[Q.INST [`allow_own` |-> `T`] sym_steps_mode_ok_one
+             |> PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES], EL_MAP, Abbr `inst`]) >>
+  MATCH_ACCEPT_TAC merge_rename_nonjump_fetch_ok
 QED

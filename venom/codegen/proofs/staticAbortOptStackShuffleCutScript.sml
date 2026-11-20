@@ -1,8 +1,9 @@
 Theory staticAbortOptStackShuffleCut
 Ancestors combin[qualified,ignore_grammar]
+  staticAbortProtectedFetch staticAbortProtectedTraceCoverage asmSymPcOwn asmSymOwnCode
   staticAbortOptStackStopped
   stackOpSim asmOptPeephole asmOptimizer asmSplice asmSymSem asmWf asmSem
-  codegenSymRel[qualified,ignore_grammar] staticAbortStraight planExec alist
+  codegenSymRel staticAbortStraight planExec alist
   staticAbortProtectedActualPrefix asmDataEnv asmSymBridge
   list rich_list arithmetic finite_map pred_set words
 
@@ -256,49 +257,50 @@ Proof
 QED
 
 val cut_visit_result = ``
-  \q env u ss (repl:asm_inst list) (ops:num option list).
-    ?out. sym_steps q env (LENGTH repl) u = SymOK out /\
+  \allow_own own q env u ss (repl:asm_inst list) (ops:num option list).
+    ?out. sym_steps_mode allow_own q env own (LENGTH repl) u = SymOK out /\
       out.sym_base.as_pc = u.sym_base.as_pc + LENGTH repl /\
       out.sym_base.as_call_ctx = ss.sym_base.as_call_ctx /\
       out.sym_base.as_requests = ss.sym_base.as_requests /\
       out.sym_stack = ^cut_fold ss.sym_stack ops``;
 
-Theorem fixed_cut_visit[local]:
+Theorem fixed_cut_visit_mode[local]:
   MEM (c,pat,repl,ops) ^fixed_cut_cases /\
   u.sym_base.as_pc = LENGTH pre /\
-  sym_steps (pre++pat++tail) env c u = SymOK ss /\
+  sym_steps_mode allow_own (pre++pat++tail) env own c u = SymOK ss /\
   (!i. i < LENGTH ops ==> ^cut_size (EL i ops) (LENGTH (^cut_fold ss.sym_stack (TAKE i ops)))) ==>
-  ^cut_visit_result (pre++repl++tail) env u ss repl ops
+  ^cut_visit_result allow_own own (pre++repl++tail) env u ss repl ops
 Proof
   BETA_TAC >>
   disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
     (CONJUNCTS_THEN2 assume_tac
       (fn th => qspec_then `0:num` assume_tac th >> qspec_then `1:num` assume_tac th)))) >>
   gvs[] >>
-  qpat_x_assum `sym_steps _ _ _ _ = SymOK _` mp_tac >>
+  qpat_x_assum `sym_steps_mode allow_own _ _ _ _ _ = SymOK _` mp_tac >>
   Cases_on `u.sym_stack` >>
-  simp[sym_steps_pos, EL_APPEND_EQN] >>
-  simp[sym_step_def, sym_step_op_def, dup_table_def, swap_table_def,
-       sym_dup_def, sym_swap_def, sym_set_stack_def, asm_next_def, LUPDATE_compute] >>
+  simp[protected_mode_fetch_one, protected_mode_fetch_two, protected_mode_fetch_three, sym_steps_mode_zero, EL_APPEND_EQN] >>
+  simp[literal_stack_dispatch, sym_dup_def, sym_swap_def, sym_set_stack_def, asm_next_def, LUPDATE_compute] >>
   rename1 `u.sym_stack = _ :: stk` >> Cases_on `stk` >>
-  simp[sym_steps_pos, sym_steps_def, EL_APPEND_EQN, sym_step_def, sym_step_op_def,
-       dup_table_def, swap_table_def, sym_dup_def, sym_swap_def, sym_set_stack_def,
-       asm_next_def, LUPDATE_compute] >> strip_tac >> gvs[LUPDATE_compute]
+  simp[protected_mode_fetch_one, protected_mode_fetch_two, protected_mode_fetch_three,
+       sym_steps_mode_zero, EL_APPEND_EQN, literal_stack_dispatch, sym_dup_def, sym_swap_def,
+       sym_set_stack_def, asm_next_def, LUPDATE_compute] >> strip_tac >> gvs[LUPDATE_compute]
 QED
 
 (* The first, protected SWAP rules out a mere prefix match without a
    dispatch-table entry.  The pending second SWAP is a slot permutation. *)
-Theorem guarded_cut_visit[local]:
+Theorem guarded_cut_visit_mode[local]:
   asm_swap_op a /\ u.sym_base.as_pc = LENGTH pre /\
-  sym_steps (pre++[a;a]++tail) env 1 u = SymOK ss ==>
+  sym_steps_mode allow_own (pre++[a;a]++tail) env own 1 u = SymOK ss ==>
   ?n. 0 < n /\ n <= 16 /\ a = ^cut_fetch (SOME n) /\
-      ^cut_visit_result (pre++tail) env u ss [] [SOME n]
+      ^cut_visit_result allow_own own (pre++tail) env u ss [] [SOME n]
 Proof
   Cases_on `a` >> simp[Excl "isPREFIX", asm_swap_op_def] >> strip_tac >>
-  rename1 `sym_steps (_ ++ [AsmOp name; AsmOp name] ++ _) _ _ _ = _` >>
+  rename1 `sym_steps_mode allow_own (_ ++ [AsmOp name; AsmOp name] ++ _) _ _ _ _ = _` >>
   `isPREFIX "SWAP" name` by fs[] >>
-  qpat_x_assum `sym_steps _ _ _ _ = SymOK _` mp_tac >>
-  simp[sym_steps_pos, sym_steps_def, EL_APPEND_EQN] >>
+  `name <> "CODESIZE" /\ name <> "CODECOPY"` by
+    (conj_tac >> disch_then SUBST_ALL_TAC >> fs[]) >>
+  qpat_x_assum `sym_steps_mode allow_own _ _ _ _ _ = SymOK _` mp_tac >>
+  simp[protected_mode_fetch_one, protected_mode_fetch_two, protected_mode_fetch_three, sym_steps_mode_zero, EL_APPEND_EQN] >>
   Cases_on `ALOOKUP swap_table name`
   >- (drule_all swap_prefix_unknown >> strip_tac >>
       drule_all sym_step_unknown_op >>
@@ -325,13 +327,13 @@ val cut_families = ``
     (?c ops. MEM (c,pat,repl,ops) ^fixed_cut_cases) \/
     (?a. asm_swap_op a /\ pat=[a;a] /\ repl=[])``;
 
-Theorem cut_residual_visit[local]:
+Theorem cut_residual_visit_mode[local]:
   ^cut_families pat repl /\
   0 < c /\ c < LENGTH pat /\ u.sym_base.as_pc=LENGTH pre /\
-  sym_steps (pre++pat++tail) env c u = SymOK ss ==>
+  sym_steps_mode allow_own (pre++pat++tail) env own c u = SymOK ss ==>
   ?ops. MAP ^cut_fetch ops = DROP c pat /\ EVERY ^cut_fit ops /\
     ((!i. i < LENGTH ops ==> ^cut_size (EL i ops) (LENGTH (^cut_fold ss.sym_stack (TAKE i ops)))) ==>
-     ^cut_visit_result (pre++repl++tail) env u ss repl ops)
+     ^cut_visit_result allow_own own (pre++repl++tail) env u ss repl ops)
 Proof
   BETA_TAC >> strip_tac
   >- (`?ops. MEM (c,pat,repl,ops) ^fixed_cut_cases` by (
@@ -340,24 +342,27 @@ Proof
         `c=1 \/ c=2` by decide_tac >> gvs[]) >>
       drule fixed_cut_case_fetch >> strip_tac >> qexists `ops'` >>
       simp[] >> strip_tac >>
-      drule (BETA_RULE fixed_cut_visit) >>
-      disch_then (qspecl_then [`u`,`tail`,`ss`,`pre`,`env`] mp_tac) >> simp[]) >>
+      mp_tac (Q.INST [`u` |-> `u`, `ss` |-> `ss`, `env` |-> `env`, `ops` |-> `ops'`]
+        (BETA_RULE fixed_cut_visit_mode)) >>
+      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+      qpat_assum `u.sym_base.as_pc = LENGTH pre` (pure_rewrite_tac o single) >>
+      disch_then ACCEPT_TAC) >>
   `c=1` by gvs[] >> gvs[] >>
-  drule_all (BETA_RULE guarded_cut_visit) >> strip_tac >> qexists `[SOME n]` >> gvs[]
+  drule_all (BETA_RULE guarded_cut_visit_mode) >> strip_tac >> qexists `[SOME n]` >> gvs[]
 QED
 
-Theorem cut_family_stopped[local]:
+Theorem cut_family_stopped_mode[local]:
   ^cut_families pat repl /\
   asm_static_wf (pre++pat++tail) /\ s.as_pc=0 /\
-  sym_steps (pre++pat++tail) env n (sym_init s)=SymOK ss /\
+  sym_steps_mode allow_own (pre++pat++tail) env own n (sym_init s)=SymOK ss /\
   LENGTH pre < ss.sym_base.as_pc /\ ss.sym_base.as_pc < LENGTH pre+LENGTH pat ==>
   ?j u. u.sym_base.as_pc=LENGTH pre /\
-     sym_steps (pre++pat++tail) env (ss.sym_base.as_pc-LENGTH pre) u=SymOK ss /\
-     sym_steps (pre++repl++tail) env j (sym_init s)=SymOK u
+     sym_steps_mode allow_own (pre++pat++tail) env own (ss.sym_base.as_pc-LENGTH pre) u=SymOK ss /\
+     sym_steps_mode allow_own (pre++repl++tail) env own j (sym_init s)=SymOK u
 Proof
   BETA_TAC >> strip_tac >>
   qspecl_then [`pre`,`pat`,`repl`,`tail`,`env`,`s`,`n`,`ss`] mp_tac
-    (REWRITE_RULE[LET_THM] stack_peephole_one_stopped_prefix) >>
+    (REWRITE_RULE[LET_THM] stack_peephole_one_stopped_prefix_mode) >>
   gvs[] >> metis_tac[]
 QED
 
@@ -379,18 +384,18 @@ Proof
   metis_tac[EL_MEM]
 QED
 
-Theorem strict_shuffle_symbolic[local]:
+Theorem strict_shuffle_symbolic_mode[local]:
   !p. p = pre++pat++tail ==>
   !q. q = pre++repl++tail ==>
   !b. b = LENGTH pre ==>
   ^cut_families pat repl /\ asm_static_wf p /\ s.as_pc=0 /\
-  sym_steps p env n (sym_init s) = SymOK ss /\
+  sym_steps_mode allow_own p env own n (sym_init s) = SymOK ss /\
   e IN V /\ pc e=ss.sym_base.as_pc /\ b < pc e /\ pc e < b+LENGTH pat /\
   ^cut_just height tag boolean e ss.sym_stack /\ ^cut_hop p V rank pc height tag boolean edge ==>
   ?z j u ops path.
     ^strict_path V rank pc height edge path e z ops /\ LENGTH ops=b+LENGTH pat-pc e /\
     z IN V /\ pc z=b+LENGTH pat /\ rank z < rank e /\
-    sym_steps q env j (sym_init s)=SymOK u /\
+    sym_steps_mode allow_own q env own j (sym_init s)=SymOK u /\
     u.sym_base.as_pc=splice_pc b (LENGTH pat) (LENGTH repl) (pc z) /\
     u.sym_base.as_call_ctx=ss.sym_base.as_call_ctx /\ u.sym_base.as_requests=ss.sym_base.as_requests /\
     ^cut_just height tag boolean z u.sym_stack
@@ -398,10 +403,10 @@ Proof
   CONV_TAC (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2)) >> BETA_TAC >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `LENGTH pre < ss.sym_base.as_pc /\ ss.sym_base.as_pc < LENGTH pre + LENGTH pat` by simp[] >>
-  drule_all_then strip_assume_tac (BETA_RULE cut_family_stopped) >>
+  drule_all_then strip_assume_tac (BETA_RULE cut_family_stopped_mode) >>
   qabbrev_tac `c = ss.sym_base.as_pc - LENGTH (pre:asm_inst list)` >>
   `0 < c /\ c < LENGTH pat /\ pc e=LENGTH pre+c` by simp[Abbr `c`] >>
-  drule_all_then strip_assume_tac (BETA_RULE cut_residual_visit) >>
+  drule_all_then strip_assume_tac (BETA_RULE cut_residual_visit_mode) >>
   drule_all_then strip_assume_tac (BETA_RULE cut_suffix_fetch) >>
   drule (BETA_RULE strict_shuffle_walk) >>
   disch_then (qspecl_then [`ops`,`e`,`ss.sym_stack`] mp_tac) >>
@@ -409,12 +414,12 @@ Proof
   Q.SUBGOAL_THEN `^strict_path V rank pc height edge path e z ops /\ LENGTH ss.sym_stack = height e`
     (mp_tac o MATCH_MP (BETA_RULE strict_path_sizes) o BETA_RULE)
   >- (BETA_TAC >> asm_rewrite_tac[]) >> strip_tac >>
-  qpat_assum `_ ==> ?out. sym_steps _ _ _ _ = SymOK out /\ _` drule >> strip_tac >>
+  qpat_assum `_ ==> ?out. sym_steps_mode allow_own _ _ _ _ _ = SymOK out /\ _` drule >> strip_tac >>
   qpat_assum `!tail. LENGTH ops = _ /\ _` (qspec_then `tail` strip_assume_tac) >>
   qexistsl [`z`,`j+LENGTH repl`,`out`,`ops`,`path`] >>
   `pc z=pc e+LENGTH ops /\ z IN V` by metis_tac[LESS_EQ_REFL] >>
   `pc z = LENGTH pre+LENGTH pat /\ ops <> []` by (Cases_on `ops` >> gvs[]) >>
-  simp[codegenSymRelTheory.sym_steps_add, splice_pc_def]
+  simp[sym_steps_mode_add, splice_pc_def]
 QED
 
 val cut_origin = ``\p l origin.
@@ -504,15 +509,16 @@ Proof
   PairCases_on `a` >> gvs[] >> metis_tac[]
 QED
 
-Theorem cut_endpoint_shape[local]:
-  asm_sym_rel q env t u /\
+Theorem cut_endpoint_shape_mode[local]:
+  (if allow_own then asm_sym_rel_own (lo_reloc q orig) q env own else asm_sym_rel q plain_env) t u /\
+  (allow_own ==> asm_static_wf q) /\
   t.as_pc=pc x /\ t.as_call_ctx=cc /\ t.as_requests=req /\
   ^cut_just height tag boolean x u.sym_stack /\ ^cut_slots q cc height need tag boolean x ==>
   ^cut_shape q cc req pc height need tag boolean x t
 Proof
   BETA_TAC >> disch_then (CONJUNCTS_THEN2 (mk_asm "rel") (map_every assume_tac o CONJUNCTS)) >>
-  asm "rel" (strip_assume_tac o BETA_RULE o REWRITE_RULE[LIST_REL_EL_EQN] o
-                    CONJUNCT1 o REWRITE_RULE[asm_sym_rel_def]) >>
+  asm "rel" (strip_assume_tac o MATCH_MP protected_cut_relation_pc) >>
+  asm "rel" (mk_asm "slots" o MATCH_MP protected_cut_relation_slots) >>
   simp[] >> conj_tac >- (
     rpt gen_tac >> disch_tac >>
     qpat_assum `!k l o'. tag x k=SOME(l,o') ==> k<height x /\ o'<LENGTH q /\ _`
@@ -520,25 +526,122 @@ Proof
     qpat_assum `!k l o'. tag x k=SOME(l,o') ==> k<height x /\ EL k u.sym_stack=Lab l 0`
       (drule_then strip_assume_tac) >>
     `EL k t.as_stack = (n2w off:bytes32)` by (
-      qpat_assum `!i. i<LENGTH u.sym_stack ==> sval_conc _ _ = SOME _`
-        (qspec_then `k` mp_tac) >>
-      (impl_tac >- simp[]) >>
-      qpat_assum `EL k u.sym_stack = Lab l 0` (fn th => rewrite_tac[th, sval_conc_def]) >>
-      qpat_assum `FLOOKUP (SND (compute_label_offsets q)) l = SOME off`
-        (fn th => simp[NoAsms, th, EQ_SYM_EQ])) >>
+      `k < LENGTH u.sym_stack` by simp[] >>
+      asm "slots" (fn th =>
+        qpat_assum `k < LENGTH u.sym_stack` (fn lt =>
+          qspecl_then [`l`,`off`,`dest`] mp_tac
+            (CONJUNCT2 (MATCH_MP (Q.SPEC `k:num` th) lt)))) >>
+      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+      disch_then ACCEPT_TAC) >>
     simp[] >> metis_tac[]) >>
   rpt gen_tac >> disch_tac >>
   qpat_assum `!k. boolean x k ==> k<height x /\ (_=Val 0w \/ _=Val 1w)`
     (drule_then strip_assume_tac) >>
-  qpat_assum `!i. i<LENGTH u.sym_stack ==> sval_conc _ _ = SOME _`
-    (qspec_then `k` mp_tac) >> (impl_tac >- simp[]) >>
-  qpat_assum `EL k u.sym_stack = Val _`
-    (fn th => rewrite_tac[th, sval_conc_def, optionTheory.SOME_11]) >>
-  disch_then (SUBST1_TAC o SYM) >> rewrite_tac[]
+  `k < LENGTH u.sym_stack` by simp[] >>
+  asm "slots" (fn th => qpat_assum `k < LENGTH u.sym_stack`
+    (mp_tac o CONJUNCT1 o MATCH_MP (Q.SPEC `k:num` th))) >>
+  simp[]
 QED
 
 (* The selected exit and the actual run do not depend on any destination
    table. Only the last Shape projection uses the destination's Slots. *)
+Theorem stack_shuffle_strict_endpoint_mode:
+  !p. p = pre++pat++tail ==>
+  !q. q = pre++repl++tail ==>
+  !b. b = LENGTH pre ==>
+  !env. env = asm_data_env orig (assemble orig ++ data) ==>
+  !f. f = splice_pc b (LENGTH pat) (LENGTH repl) ==>
+  ^cut_families pat repl /\
+  asm_static_wf orig /\ asm_static_wf p /\ asm_static_wf q /\
+  FILTER is_data_inst p = FILTER is_data_inst orig /\
+  FILTER is_data_inst q = FILTER is_data_inst orig /\
+  s.as_pc=0 /\ s.as_code=assemble orig ++ data /\
+  sym_steps_mode allow_own p env s.as_code n (sym_init s)=SymOK ss /\
+  (if allow_own then asm_sym_rel_own (lo_reloc p orig) p (asm_data_env orig s.as_code) s.as_code
+   else asm_sym_rel p (asm_data_env p (assemble p ++ data))) t ss /\
+  e IN V /\ pc e=ss.sym_base.as_pc /\ b<pc e /\ pc e<b+LENGTH pat /\
+  ^cut_shape p cc req pc height need tag boolean e t /\
+  ^cut_just height tag boolean e ss.sym_stack /\
+  ^cut_rows p cc V rank pc height need tag boolean edge ==>
+  ?z j u t' ops path.
+    ^strict_path V rank pc height edge path e z ops /\ LENGTH ops=b+LENGTH pat-pc e /\
+    z IN V /\ pc z=b+LENGTH pat /\ rank z<rank e /\
+    sym_steps_mode allow_own q env s.as_code j (sym_init s)=SymOK u /\
+    u.sym_base.as_pc=f (pc z) /\ LENGTH u.sym_stack=height z /\
+    u.sym_base.as_call_ctx=cc /\ u.sym_base.as_requests=req /\
+    ^cut_just height (^cut_translate f tag) boolean z u.sym_stack /\
+    asm_steps (if allow_own then lo_reloc q orig else SND (compute_label_offsets q))
+      (build_offset_to_pc q) q j (if allow_own then s else (s with as_code := assemble q ++ data)) = AsmOK t' /\
+    (if allow_own then asm_sym_rel_own (lo_reloc q orig) q (asm_data_env orig s.as_code) s.as_code
+     else asm_sym_rel q (asm_data_env q (assemble q ++ data))) t' u /\
+    t'.as_pc=u.sym_base.as_pc /\ LENGTH t'.as_stack=LENGTH u.sym_stack /\
+    t'.as_call_ctx=cc /\ t'.as_requests=req /\
+    (^cut_slots q cc height need (^cut_translate f tag) boolean z ==>
+     ^cut_shape q cc req (f o pc) height need (^cut_translate f tag) boolean z t')
+Proof
+  CONV_TAC (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2)) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_then assume_tac cut_rows_hop >>
+  rule_assum_tac BETA_RULE >> BETA_TAC >>
+  qabbrev_tac `env = asm_data_env orig (assemble orig ++ data)` >>
+  `?z j u ops path.
+     ^strict_path V rank pc height edge path e z ops /\
+     LENGTH ops=LENGTH pre+LENGTH pat-pc e /\
+     z IN V /\ pc z=LENGTH pre+LENGTH pat /\ rank z<rank e /\
+     sym_steps_mode allow_own (pre++repl++tail) env s.as_code j (sym_init s)=SymOK u /\
+     u.sym_base.as_pc=splice_pc (LENGTH pre) (LENGTH pat) (LENGTH repl) (pc z) /\
+     u.sym_base.as_call_ctx=ss.sym_base.as_call_ctx /\
+     u.sym_base.as_requests=ss.sym_base.as_requests /\
+     ^cut_just height tag boolean z u.sym_stack` by (
+    BETA_TAC >>
+    irule (BETA_RULE (CONV_RULE (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2)) strict_shuffle_symbolic_mode)) >>
+    qpat_x_assum `s.as_code = _` kall_tac >>
+    asm_rewrite_tac[] >> qexists `n` >> asm_rewrite_tac[]) >>
+  rule_assum_tac BETA_RULE >> unabbrev_all_tac >>
+  drule_all_then (qx_choose_then `out` strip_assume_tac) stopped_symbolic_prefix_mode >>
+  `^cut_just height (^cut_translate (splice_pc (LENGTH pre) (LENGTH pat) (LENGTH repl)) tag)
+     boolean z u.sym_stack` by (
+    BETA_TAC >> irule (BETA_RULE cut_translate_just) >> asm_rewrite_tac[]) >>
+  `ss.sym_base.as_call_ctx=cc /\ ss.sym_base.as_requests=req` by (
+    qpat_assum `(if allow_own then asm_sym_rel_own _ _ _ _ else asm_sym_rel _ _) t ss`
+      (strip_assume_tac o MATCH_MP protected_cut_relation_context) >>
+    qpat_assum `t.as_pc = pc e /\ _` (map_every assume_tac o CONJUNCTS) >>
+    simp[]) >>
+  qabbrev_tac `f = splice_pc (LENGTH (pre:asm_inst list)) (LENGTH pat) (LENGTH repl)` >>
+  qabbrev_tac `tg = \x k. OPTION_MAP (\(l,o'). (l,f o')) (tag x k)` >>
+  rule_assum_tac BETA_RULE >>
+  `^cut_slots (pre++repl++tail) cc height need tg boolean z ==>
+   ^cut_shape (pre++repl++tail) cc req (f o pc) height need tg boolean z out` by (
+    (BETA_TAC >> disch_tac >>
+     `^cut_just height tg boolean z u.sym_stack` by
+       (qpat_assum `Abbrev (tg = _)`
+          (pure_rewrite_tac o single o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+        BETA_TAC >> first_assum ACCEPT_TAC) >>
+     pop_assum (assume_tac o BETA_RULE) >>
+     `out.as_pc = (f o pc) z /\ out.as_call_ctx = cc /\ out.as_requests = req` by
+       simp[combinTheory.o_THM] >>
+     pop_assum (map_every assume_tac o CONJUNCTS) >>
+     `allow_own ==> asm_static_wf (pre++repl++tail)` by
+       (strip_tac >> first_assum ACCEPT_TAC) >>
+     mp_tac (BETA_RULE (Q.INST [`q` |-> `pre++repl++tail`,
+       `env` |-> `asm_data_env orig s.as_code`, `own` |-> `s.as_code`,
+       `plain_env` |-> `asm_data_env (pre++repl++tail) (assemble (pre++repl++tail) ++ data)`,
+       `t` |-> `out`, `x` |-> `z`, `pc` |-> `f o pc`, `tag` |-> `tg`]
+       cut_endpoint_shape_mode)) >>
+     (impl_tac >- rpt (FIRST [first_assum ACCEPT_TAC, conj_tac])) >>
+     disch_then ACCEPT_TAC)) >>
+  qexistsl [`z`,`j`,`u`,`out`,`ops`,`path`] >>
+  BETA_TAC >> rule_assum_tac BETA_RULE >>
+  asm_rewrite_tac[] >>
+  qpat_assum `Abbrev (tg = _)`
+    (fn th => rewrite_tac[REWRITE_RULE[markerTheory.Abbrev_def] th]) >>
+  BETA_TAC >>
+  qpat_assum `LENGTH u.sym_stack = height z /\
+              (!k l o'. OPTION_MAP _ (tag z k) = SOME (l,o') ==> _) /\ _`
+    (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2)
+QED
+
+
 Theorem stack_shuffle_strict_endpoint:
   !p. p = pre++pat++tail ==>
   !q. q = pre++repl++tail ==>
@@ -571,49 +674,6 @@ Theorem stack_shuffle_strict_endpoint:
     (^cut_slots q cc height need (^cut_translate f tag) boolean z ==>
      ^cut_shape q cc req (f o pc) height need (^cut_translate f tag) boolean z t')
 Proof
-  CONV_TAC (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2)) >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_then assume_tac cut_rows_hop >>
-  rule_assum_tac BETA_RULE >> BETA_TAC >>
-  qabbrev_tac `env = asm_data_env orig (assemble orig ++ data)` >>
-  `?z j u ops path.
-     ^strict_path V rank pc height edge path e z ops /\
-     LENGTH ops=LENGTH pre+LENGTH pat-pc e /\
-     z IN V /\ pc z=LENGTH pre+LENGTH pat /\ rank z<rank e /\
-     sym_steps (pre++repl++tail) env j (sym_init s)=SymOK u /\
-     u.sym_base.as_pc=splice_pc (LENGTH pre) (LENGTH pat) (LENGTH repl) (pc z) /\
-     u.sym_base.as_call_ctx=ss.sym_base.as_call_ctx /\
-     u.sym_base.as_requests=ss.sym_base.as_requests /\
-     ^cut_just height tag boolean z u.sym_stack` by (
-    BETA_TAC >>
-    irule (BETA_RULE (CONV_RULE (REPEATC (HO_REWR_CONV UNWIND_FORALL_THM2)) strict_shuffle_symbolic)) >>
-    asm_rewrite_tac[] >> qexists `n` >> asm_rewrite_tac[]) >>
-  rule_assum_tac BETA_RULE >> unabbrev_all_tac >>
-  drule_all_then (qx_choose_then `out` strip_assume_tac) stopped_symbolic_prefix_actual_code >>
-  `^cut_just height (^cut_translate (splice_pc (LENGTH pre) (LENGTH pat) (LENGTH repl)) tag)
-     boolean z u.sym_stack` by (
-    BETA_TAC >> irule (BETA_RULE cut_translate_just) >> asm_rewrite_tac[]) >>
-  `ss.sym_base.as_call_ctx=cc /\ ss.sym_base.as_requests=req` by (
-    qpat_assum `asm_sym_rel _ _ t ss`
-      (strip_assume_tac o cj 2 o REWRITE_RULE[asm_sym_rel_def]) >>
-    qpat_assum `t.as_pc = pc e /\ _` (map_every assume_tac o CONJUNCTS) >>
-    simp[]) >>
-  qabbrev_tac `f = splice_pc (LENGTH (pre:asm_inst list)) (LENGTH pat) (LENGTH repl)` >>
-  qabbrev_tac `tg = \x k. OPTION_MAP (\(l,o'). (l,f o')) (tag x k)` >>
-  rule_assum_tac BETA_RULE >>
-  `^cut_slots (pre++repl++tail) cc height need tg boolean z ==>
-   ^cut_shape (pre++repl++tail) cc req (f o pc) height need tg boolean z out` by (
-    (BETA_TAC >> disch_tac >>
-    MATCH_MP_TAC (Q.GENL [`env`,`u`] (BETA_RULE cut_endpoint_shape)) >>
-    qexistsl [`asm_data_env (pre++repl++tail) (assemble (pre++repl++tail) ++ data)`,`u`] >>
-    asm_rewrite_tac[combinTheory.o_THM] >> (simp[combinTheory.o_THM, Q.GENL [`env`,`u`] (BETA_RULE cut_endpoint_shape)]))) >>
-  qexistsl [`z`,`j`,`u`,`out`,`ops`,`path`] >>
-  BETA_TAC >> rule_assum_tac BETA_RULE >>
-  asm_rewrite_tac[] >>
-  qpat_assum `Abbrev (tg = _)`
-    (fn th => rewrite_tac[REWRITE_RULE[markerTheory.Abbrev_def] th]) >>
-  BETA_TAC >>
-  qpat_assum `LENGTH u.sym_stack = height z /\
-              (!k l o'. OPTION_MAP _ (tag z k) = SOME (l,o') ==> _) /\ _`
-    (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2)
+  MATCH_ACCEPT_TAC (Q.INST [`allow_own` |-> `F`]
+    stack_shuffle_strict_endpoint_mode |> PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES])
 QED

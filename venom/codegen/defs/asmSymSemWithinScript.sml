@@ -37,6 +37,20 @@ Definition sym_run_within_def:
       | _ => T))
 End
 
+(* The same bound with a supplied symbolic instruction step. *)
+Definition sym_run_within_for_def:
+  (sym_run_within_for step P Q p 0 ss <=> F) /\
+  (sym_run_within_for step P Q p (SUC k) ss <=>
+     ss.sym_base.as_pc < LENGTH p /\
+     (Q (EL ss.sym_base.as_pc p) \/
+      P (EL ss.sym_base.as_pc p) ss.sym_stack /\
+      case step (EL ss.sym_base.as_pc p) ss of
+        SymOK ss' => sym_run_within_for step P Q p k ss'
+      | SymError _ => F
+      | SymBad _ => F
+      | _ => T))
+End
+
 (* Instructions that touch no memory, call, create or self-destruct: the
    ones a finalizer may run where its input runs others (stack shuffles,
    jumps, pushes, labels, ISZERO and arithmetic). *)

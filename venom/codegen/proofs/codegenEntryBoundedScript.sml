@@ -11,7 +11,8 @@
 
 Theory codegenEntryBounded
 Ancestors
-  codegenEntryFacts
+  codegenEntryFacts codegenEntrySymbolicOwn codegenLabelDisciplined
+  fnPlanPlaceRevertPostamble
   codegenEntrySim asmRunBounded codegenEntryRel contextCodegenRel unitMemInv
   codegen asmSem venomExecSemantics venomState unitShapeDefs
   passSimulationDefs frameRel venomInst codegenRel venomRunBounded
@@ -26,22 +27,23 @@ val _ = Parse.hide "cp";
    Inv. Every assembly memory range is bounded by twice the word range,
    so creation safety and terminal execution give asm_run_bounded.
    The function budget already includes the generated entry prefix. *)
-Theorem codegen_entry_asm_bounded_state:
+Theorem codegen_entry_asm_bounded_state_reloc:
   !rpolicy unit cp prog fuel M.
     generate_context_plan unit.cu_context = SOME cp /\
     codegen_assembly rpolicy unit = SOME prog /\
     unit_shape_ok unit
     ==>
-    ?N H. !Inv vs as.
+    ?N H. !lo Inv vs as.
+      code_labels_agree prog lo /\
       codegen_context_obligations Inv unit.cu_context cp /\
       codegen_reachability_package Inv unit.cu_context vs /\
-      codegen_asm_entry_rel cp prog vs as /\
+      codegen_asm_entry_rel_reloc lo cp prog vs as /\
       terminates (run_context fuel unit.cu_context vs) /\
       (!fn inst s. Inv unit.cu_context fn inst s /\ ~in_revert_forward fn s ==>
          EVERY (\(off,len). len = 0 \/ off + len <= M) (inst_mem_ranges inst s)) /\
       (!fn inst s. Inv unit.cu_context fn inst s ==> inst_create_size_ok inst s)
       ==>
-      asm_run_bounded (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      asm_run_bounded lo (build_offset_to_pc prog)
         prog H N as
 Proof
   rpt gen_tac >> strip_tac >>
@@ -64,36 +66,35 @@ Proof
     by (drule generate_context_plan_regions_length >>
         Cases_on `cp.cp_regions` >> gvs[]) >>
   `asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp r.sr_plan)`
-    by (fs[codegen_asm_entry_rel_def] >>
+    by (fs[codegen_asm_entry_rel_reloc_def] >>
         metis_tac[codegen_assembly_first_region]) >>
   `fn_entry_state_rel cp fe
     (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
     as 0w []`
-    by metis_tac[codegen_asm_entry_fn_state_rel] >>
+    by (fs[codegen_asm_entry_rel_reloc_def] >>
+        metis_tac[codegen_entry_fn_state_rel_fields]) >>
   `MEM fe.fn_name (fcg_analyze unit.cu_context).fcg_reachable`
     by (irule codegen_entry_reachable >>
         gvs[codegen_context_obligations_def]) >>
   mp_tac codegen_invoke_targets_retpc >> (impl_tac >- simp[]) >> strip_tac >>
-  mp_tac (CONJUNCT1 (Q.SPECL [`T`, `fuel`] gen_fn_sims_resource_all)) >>
-  rewrite_tac[gen_fn_sim_at_def] >>
+  mp_tac (CONJUNCT1 (Q.SPECL [`T`, `fuel`] gen_fn_sims_resource_all_reloc)) >>
+  rewrite_tac[gen_fn_sim_at_reloc_def] >>
   disch_then (qspecl_then [`rpolicy`, `unit`, `cp`, `prog`, `unit.cu_context`,
-    `SND (compute_label_offsets prog)`, `build_offset_to_pc prog`,
+    `lo`, `build_offset_to_pc prog`,
     `0`, `r`, `fe`,
     `vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>`,
     `as`, `Inv`, `0w`, `0`, `[]`] mp_tac) >>
   impl_tac
-  >- (gvs[codegen_asm_entry_rel_def, fn_has_retpc_def] >> metis_tac[]) >>
+  >- (gvs[codegen_asm_entry_rel_reloc_def, fn_has_retpc_def] >> metis_tac[]) >>
   simp[cost_le_def] >> strip_tac >> suspend "bounded"
 QED
 
-Resume codegen_entry_asm_bounded_state[bounded]:
+Resume codegen_entry_asm_bounded_state_reloc[bounded]:
   `!n R. n <= fn_sim_budget unit.cu_context prog fuel /\
-    create_safe_prefix (SND (compute_label_offsets prog))
-      (build_offset_to_pc prog) prog n as /\
-    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
-      prog n as = R /\
+    create_safe_prefix lo (build_offset_to_pc prog) prog n as /\
+    asm_steps lo (build_offset_to_pc prog) prog n as = R /\
     (?t. R = AsmHalt t \/ R = AsmRevert t \/ R = AsmFault t) ==>
-    asm_run_bounded (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    asm_run_bounded lo (build_offset_to_pc prog)
       prog (2 * dimword (:256)) (SUC (fn_sim_budget unit.cu_context prog fuel)) as`
     by (rpt strip_tac >> irule asm_run_bounded_mono >>
         qexists_tac `SUC n` >> simp[] >>
@@ -103,7 +104,38 @@ Resume codegen_entry_asm_bounded_state[bounded]:
   gvs[terminates_def] >> metis_tac[run_context_not_ok]
 QED
 
-Finalise codegen_entry_asm_bounded_state
+Finalise codegen_entry_asm_bounded_state_reloc
+
+Theorem codegen_entry_asm_bounded_state:
+  !rpolicy unit cp prog fuel M.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit
+    ==>
+    ?N H. !Inv vs as.
+      codegen_context_obligations Inv unit.cu_context cp /\
+      codegen_reachability_package Inv unit.cu_context vs /\
+      codegen_asm_entry_rel cp prog vs as /\
+      terminates (run_context fuel unit.cu_context vs) /\
+      (!fn inst s. Inv unit.cu_context fn inst s /\ ~in_revert_forward fn s ==>
+         EVERY (\(off,len). len = 0 \/ off + len <= M) (inst_mem_ranges inst s)) /\
+      (!fn inst s. Inv unit.cu_context fn inst s ==> inst_create_size_ok inst s)
+      ==>
+      asm_run_bounded (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+        prog H N as
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all codegen_entry_asm_bounded_state_reloc >>
+  disch_then (qspecl_then [`fuel`, `M`] strip_assume_tac) >>
+  qexistsl_tac [`N`, `H`] >> rpt strip_tac >>
+  first_x_assum (qspecl_then [`SND (compute_label_offsets prog)`,
+    `Inv`, `vs`, `as`] mp_tac) >>
+  impl_tac
+  >- (rpt conj_tac >>
+      FIRST [first_assum ACCEPT_TAC,
+             simp[codegen_asm_entry_rel_reloc_def, GSYM codegen_asm_entry_rel_def]]) >>
+  simp[]
+QED
 
 (* The bound from the codegen frame's initial context. *)
 Theorem codegen_entry_asm_bounded:
@@ -149,6 +181,41 @@ QED
 (* The bound from the Venom run's resource bound: venom_run_bounded's
    memory invariant has its own reachability witness, and the conjunction
    of it with Inv carries both the obligations and the memory bound. *)
+Theorem codegen_entry_asm_bounded_run_reloc:
+  !rpolicy unit cp prog fuel M.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit
+    ==>
+    ?N H. !lo Inv vs as.
+      code_labels_agree prog lo /\
+      codegen_context_obligations Inv unit.cu_context cp /\
+      codegen_reachability_package Inv unit.cu_context vs /\
+      codegen_asm_entry_rel_reloc lo cp prog vs as /\
+      venom_run_bounded fuel M unit.cu_context vs /\
+      mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs
+      ==>
+      asm_run_bounded lo (build_offset_to_pc prog)
+        prog H N as
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all codegen_entry_asm_bounded_state_reloc >>
+  disch_then (qspecl_then [`fuel`, `M`] strip_assume_tac) >>
+  qexistsl_tac [`N`, `H`] >> rpt gen_tac >> strip_tac >>
+  fs[venom_run_bounded_def] >>
+  qpat_x_assum `mem_inv (\ctx fn inst s. in_revert_forward fn s \/ _) _ _`
+    (fn th1 =>
+     qpat_x_assum `mem_inv (\ctx fn inst s. inst_create_size_ok inst s) _ _`
+       (fn th2 => mp_tac (MATCH_MP mem_inv_conj (CONJ th1 th2)))) >>
+  disch_then (qx_choose_then `MemInv` strip_assume_tac o
+              REWRITE_RULE [mem_inv_def]) >>
+  qpat_x_assum `!lo Inv vs as. _` (qspecl_then
+    [`lo`, `\c f i s. Inv c f i s /\ MemInv c f i s`, `vs`, `as`] mp_tac) >>
+  simp[] >> disch_then irule >>
+  gvs[codegen_context_obligations_conj, codegen_reachability_package_conj] >>
+  metis_tac[]
+QED
+
 Theorem codegen_entry_asm_bounded_run:
   !rpolicy unit cp prog fuel M.
     generate_context_plan unit.cu_context = SOME cp /\
@@ -166,19 +233,14 @@ Theorem codegen_entry_asm_bounded_run:
         prog H N as
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all codegen_entry_asm_bounded_state >>
+  drule_all codegen_entry_asm_bounded_run_reloc >>
   disch_then (qspecl_then [`fuel`, `M`] strip_assume_tac) >>
-  qexistsl_tac [`N`, `H`] >> rpt gen_tac >> strip_tac >>
-  fs[venom_run_bounded_def] >>
-  qpat_x_assum `mem_inv (\ctx fn inst s. in_revert_forward fn s \/ _) _ _`
-    (fn th1 =>
-     qpat_x_assum `mem_inv (\ctx fn inst s. inst_create_size_ok inst s) _ _`
-       (fn th2 => mp_tac (MATCH_MP mem_inv_conj (CONJ th1 th2)))) >>
-  disch_then (qx_choose_then `MemInv` strip_assume_tac o
-              REWRITE_RULE [mem_inv_def]) >>
-  qpat_x_assum `!Inv vs as. _` (qspecl_then
-    [`\c f i s. Inv c f i s /\ MemInv c f i s`, `vs`, `as`] mp_tac) >>
-  simp[] >> disch_then irule >>
-  gvs[codegen_context_obligations_conj, codegen_reachability_package_conj] >>
-  metis_tac[]
+  qexistsl_tac [`N`, `H`] >> rpt strip_tac >>
+  first_x_assum (qspecl_then [`SND (compute_label_offsets prog)`,
+    `Inv`, `vs`, `as`] mp_tac) >>
+  impl_tac
+  >- (rpt conj_tac >>
+      FIRST [first_assum ACCEPT_TAC,
+             simp[codegen_asm_entry_rel_reloc_def, GSYM codegen_asm_entry_rel_def]]) >>
+  simp[]
 QED

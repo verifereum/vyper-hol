@@ -1,23 +1,23 @@
 Theory staticAbortOptPruneJumpsStopped
 Ancestors
   staticAbortOptMergeIszeroSync staticAbortOptMergeIszeroOutside
-  staticAbortProtectedTraceCoverage asmSplice asmSymPc asmSymSem
+  asmSymPcOwn staticAbortProtectedTraceCoverage asmSplice asmSymPc asmSymSem
   codegenSymRel asmOptimizer asmWf asmSem arithmetic list
 
-Theorem prune_jump_site_stopped_prefix:
+Theorem prune_jump_site_stopped_prefix_mode:
   !p. p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail ==>
   !q. q = pre ++ [AsmLabel x] ++ tail ==>
   !b. b = LENGTH pre ==>
   !c. c = ss.sym_base.as_pc ==>
   asm_static_wf p /\ s.as_pc = 0 /\
-  sym_steps p env n (sym_init s) = SymOK ss ==>
+  sym_steps_mode allow_own p env own n (sym_init s) = SymOK ss ==>
   if c = b+1 then
-    ?h j u. n = h+1 /\ sym_steps p env h (sym_init s) = SymOK u /\
-      u.sym_base.as_pc = b /\ sym_steps p env 1 u = SymOK ss /\
-      sym_steps q env j (sym_init s) = SymOK u /\
+    ?h j u. n = h+1 /\ sym_steps_mode allow_own p env own h (sym_init s) = SymOK u /\
+      u.sym_base.as_pc = b /\ sym_steps_mode allow_own p env own 1 u = SymOK ss /\
+      sym_steps_mode allow_own q env own j (sym_init s) = SymOK u /\
       ss = (sym_with_pc (b+1) u with sym_stack := Lab x 0 :: u.sym_stack)
   else
-    ?j. sym_steps q env j (sym_init s) = SymOK (sym_with_pc (splice_pc b 2 0 c) ss)
+    ?j. sym_steps_mode allow_own q env own j (sym_init s) = SymOK (sym_with_pc (splice_pc b 2 0 c) ss)
 Proof
   CONV_TAC (REPEATC Unwind.UNWIND_FORALL_CONV) >> strip_tac >>
   qabbrev_tac `b = LENGTH pre` >>
@@ -35,21 +35,23 @@ Proof
   `INDEX_OF (AsmLabel x) p = SOME (b+2)` by
     simp[Abbr `p`, Abbr `b`, INDEX_OF_APPEND, INDEX_OF_CONS] >>
   `!u. u.sym_base.as_pc = b ==>
-      sym_steps p env 1 u =
+      sym_steps_mode allow_own p env own 1 u =
       SymOK (sym_with_pc (b+1) u with sym_stack := Lab x 0 :: u.sym_stack)` by (
-    rpt strip_tac >> simp[Once sym_steps_pos, sym_step_push_label, sym_steps_def,
-                          asm_next_def, sym_with_pc_def]) >>
+    rpt strip_tac >> Cases_on `allow_own` >>
+    simp[sym_steps_mode_ok_one, sym_step_own_eq, sym_step_push_label,
+         asm_next_def, sym_with_pc_def]) >>
   `!u. u.sym_base.as_pc = b ==>
-      sym_steps p env 2 u = SymOK (sym_with_pc (b+2) u)` by (
+      sym_steps_mode allow_own p env own 2 u = SymOK (sym_with_pc (b+2) u)` by (
     rpt strip_tac >>
     qspecl_then [`1`, `1`, `u`] mp_tac
-      (Q.INST [`p` |-> `p`, `env` |-> `env`] sym_steps_add) >>
+      (Q.INST [`p` |-> `p`, `env` |-> `env`] sym_steps_mode_add) >>
     simp[] >> disch_then (once_rewrite_tac o single) >>
-    simp[Once sym_steps_pos, sym_with_pc_def, sym_steps_def,
+    Cases_on `allow_own` >>
+    simp[sym_steps_mode_ok_one, sym_with_pc_def, sym_step_own_eq,
          sym_step_def, sym_step_op_def, sym_jump_def, sym_jump_dest_def]) >>
-  `!h u. sym_steps p env h (sym_init s) = SymOK u /\
+  `!h u. sym_steps_mode allow_own p env own h (sym_init s) = SymOK u /\
          ~(b < u.sym_base.as_pc /\ u.sym_base.as_pc < b+2) ==>
-         ?j. sym_steps q env j (sym_init s) =
+         ?j. sym_steps_mode allow_own q env own j (sym_init s) =
              SymOK (sym_with_pc (splice_pc b 2 0 u.sym_base.as_pc) u)` by
     (suspend "replay") >>
   reverse IF_CASES_TAC
@@ -58,12 +60,12 @@ Proof
   suspend "interior"
 QED
 
-Resume prune_jump_site_stopped_prefix[replay]:
+Resume prune_jump_site_stopped_prefix_mode[replay]:
   mp_tac (Q.INST [`pat` |-> `[AsmPushLabel x; AsmOp "JUMP"]`,
                   `repl` |-> `[]`, `tail` |-> `AsmLabel x :: tail`]
     (CONV_RULE (REPEATC (FIRST_CONV
        [Unwind.UNWIND_FORALL_CONV, REWR_CONV LET_THM THENC BETA_CONV]))
-       merge_iszero_synchronized_replay)) >>
+       merge_iszero_synchronized_replay_mode)) >>
   unabbrev_all_tac >>
   rule_assum_tac (REWRITE_RULE[rich_listTheory.APPEND_ASSOC_CONS, APPEND]) >>
   simp[rich_listTheory.APPEND_ASSOC_CONS] >>
@@ -79,35 +81,54 @@ Resume prune_jump_site_stopped_prefix[replay]:
                                 `AsmLabel x :: tail`]
         (CONV_RULE (REDEPTH_CONV (FIRST_CONV [Unwind.UNWIND_FORALL_CONV,
                                                REWR_CONV LET_THM, BETA_CONV]))
-          merge_iszero_outside_fetch_ok))) >>
+          merge_iszero_outside_fetch_ok_mode))) >>
       simp[rich_listTheory.APPEND_ASSOC_CONS]) >>
     rpt strip_tac >>
     `v = sym_with_pc (LENGTH pre + 2) u` by (
-      qpat_x_assum `!u. _ ==> sym_steps _ _ 2 u = _`
+      qpat_x_assum `!u. _ ==> sym_steps_mode _ _ _ _ 2 u = _`
         (qspec_then `u` mp_tac) >> simp[]) >>
     qexists_tac `0` >>
-    simp[sym_steps_def, splice_pc_def, sym_with_pc_def,
+    simp[sym_steps_mode_zero, splice_pc_def, sym_with_pc_def,
          sym_state_component_equality, asm_state_component_equality])) >>
   simp[]
 QED
 
-Resume prune_jump_site_stopped_prefix[interior]:
-  `1 <= n /\ ?u. sym_steps p env (n-1) (sym_init s) = SymOK u /\
-         u.sym_base.as_pc = b /\ sym_steps p env 1 u = SymOK ss` by (
+Resume prune_jump_site_stopped_prefix_mode[interior]:
+  `1 <= n /\ ?u. sym_steps_mode allow_own p env own (n-1) (sym_init s) = SymOK u /\
+         u.sym_base.as_pc = b /\ sym_steps_mode allow_own p env own 1 u = SymOK ss` by (
     qspecl_then [`n`, `b`, `b+1`, `s`, `ss`] mp_tac
-      (Q.INST [`p` |-> `p`, `env` |-> `env`] protected_prefix_window_entry) >>
+      (Q.INST [`p` |-> `p`, `env` |-> `env`] protected_prefix_window_entry_mode) >>
     simp[] >> disch_then irule >> rpt strip_tac >>
     `j = b+1` by decide_tac >> gvs[asm_reachable_marker_def]) >>
   `sym_with_pc (splice_pc b 2 0 u.sym_base.as_pc) u = u` by
     simp[splice_pc_def, sym_with_pc_def, sym_state_component_equality,
          asm_state_component_equality] >>
-  qpat_x_assum `!h u. sym_steps p env h _ = _ /\ _ ==> _`
+  qpat_x_assum `!h u. sym_steps_mode allow_own p env own h _ = _ /\ _ ==> _`
     (qspecl_then [`n-1`, `u`] mp_tac) >>
   simp[] >> strip_tac >>
   `n-1+1 = n` by decide_tac >>
   qexistsl_tac [`n-1`, `j`, `u`] >> simp[] >>
-  qpat_x_assum `!u. _ ==> sym_steps p env 1 u = _`
+  qpat_x_assum `!u. _ ==> sym_steps_mode allow_own p env own 1 u = _`
     (qspec_then `u` mp_tac) >> simp[]
 QED
 
-Finalise prune_jump_site_stopped_prefix
+Finalise prune_jump_site_stopped_prefix_mode
+
+Theorem prune_jump_site_stopped_prefix:
+  !p. p = pre ++ [AsmPushLabel x; AsmOp "JUMP"; AsmLabel x] ++ tail ==>
+  !q. q = pre ++ [AsmLabel x] ++ tail ==>
+  !b. b = LENGTH pre ==>
+  !c. c = ss.sym_base.as_pc ==>
+  asm_static_wf p /\ s.as_pc = 0 /\
+  sym_steps p env n (sym_init s) = SymOK ss ==>
+  if c = b+1 then
+    ?h j u. n = h+1 /\ sym_steps p env h (sym_init s) = SymOK u /\
+      u.sym_base.as_pc = b /\ sym_steps p env 1 u = SymOK ss /\
+      sym_steps q env j (sym_init s) = SymOK u /\
+      ss = (sym_with_pc (b+1) u with sym_stack := Lab x 0 :: u.sym_stack)
+  else
+    ?j. sym_steps q env j (sym_init s) = SymOK (sym_with_pc (splice_pc b 2 0 c) ss)
+Proof
+  MATCH_ACCEPT_TAC (Q.INST [`allow_own` |-> `F`, `own` |-> `[]`] prune_jump_site_stopped_prefix_mode
+    |> PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES])
+QED
