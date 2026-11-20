@@ -91,7 +91,8 @@ Theorem prefix_complete_backedge_support_mode:
   slot < dimword (:256) /\ j < LENGTH vs /\ LENGTH vs < dimword (:256) /\
   ip = Var slot_var /\ FLOOKUP G slot_var = SOME (slot,32) /\
   op_taint tn ip = {} /\ op_taint tn (Var iv) = {} /\ lo <= slot /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   FLOOKUP G dst = SOME (b,sz) /\ op_taint tn (Var dst) = {} /\
   abi_decoder_operand_live next (Var dst) /\
   FINITE B /\ B SUBSET {a | d <= a /\ a < d + 32 + SUC j * type_memory_size tv} /\
@@ -131,7 +132,6 @@ Proof
   simp[w2n_n2w] >> disch_tac >>
   qpat_x_assum `ip = Var slot_var` SUBST_ALL_TAC >>
   `slot_var <> fresh` by metis_tac[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `eval_operand (Var iv) s = SOME (n2w j)`
     (mp_then (Pos (el 3)) mp_tac prefix_loop_increment_steps) >>
   disch_then drule_all >>
