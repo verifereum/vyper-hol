@@ -33,7 +33,7 @@ Theorem ec_arith_staged_cut:
   MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   gas_admissible (eval_expr cx (Builtin a bt [e1;e2])) expr_vv_res_ok es /\
@@ -115,7 +115,7 @@ Theorem ec_arith_staged_cut:
     (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
     (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
     (lo <> 0 ==> !z. cenv.ce_imm_alloca = SOME (Var z) ==> not_fresh_at sm z) /\
-    ~u.vs_halted /\ ~ctx_has_dalloca ctx /\
+    ~u.vs_halted /\
     lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX [gi;ci;ai] (DROP u.vs_inst_idx bb.bb_instructions) /\
     (func.fn_name,id) NOTIN gas_explicit_sites ctx shadow_ctx /\
@@ -279,9 +279,7 @@ Resume ec_arith_staged_cut[join]:
     assume_tac layouts >>
     asm_x "stage_premises" (fn common =>
       DISJ_CASES_THEN2
-        (mp_tac o MATCH_MP ecadd_staging_full o C CONJ
-          (LIST_CONJ (List.filter
-            (fn th => not (aconv (concl th) ``~ctx_has_dalloca ctx``)) (CONJUNCTS common))))
+        (mp_tac o MATCH_MP ecadd_staging_full o C CONJ common)
         (mp_tac o MATCH_MP ecmul_staging_full_from_transfers o C CONJ common) layouts)) >>
   disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
   `res = Var dst` by
