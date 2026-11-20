@@ -175,7 +175,7 @@ Theorem supported_program_defaults:
     EVERY (supported_default_expression tops) defaults
 Proof
   strip_tac >> drule_all supported_program_declaration >>
-  Cases_on `vis = Internal` >>
+  Cases_on `vis = Deploy` >>
   simp[supported_declaration_header_def, supported_declaration_body_def, NULL_EQ]
 QED
 
@@ -184,13 +184,6 @@ Theorem supported_program_internal_names:
     ALL_DISTINCT (supported_internal_function_names tops)
 Proof
   simp[supported_program_def]
-QED
-
-Theorem supported_internal_body_contract:
-  supported_function_body tops Internal args stmts ==>
-    ~supported_stmts_expr_exists expr_internal_call_root stmts
-Proof
-  simp[supported_function_body_def]
 QED
 
 Theorem supported_function_body_binding_contract:

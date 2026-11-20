@@ -34,6 +34,14 @@ Proof
        supported_function_body_def, NULL_EQ] >> metis_tac[]
 QED
 
+Theorem int_calls_target_indices[local]:
+  !t. int_calls_target t = FLAT (MAP int_calls_expr (target_indices t))
+Proof
+  measureInduct_on `base_assignment_target_size t` >>
+  Cases_on `t` >> simp[int_calls_expr_def, target_indices_def] >>
+  gvs[expr_size_def]
+QED
+
 Theorem supported_pure_main_calls:
   (!tops e. supported_pure_expr tops e ==>
     EVERY (\c. FST c = NONE /\
@@ -52,7 +60,10 @@ Proof
   simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND] >>
   rpt conj_tac >> rpt gen_tac >>
   TRY (Cases_on `base`) >>
-  simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND]
+  simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND] >>
+  simp[int_calls_target_indices, EVERY_FLAT, EVERY_MAP, EVERY_MEM] >>
+  rw[] >> TRY (Cases_on `default`) >> gvs[int_calls_expr_def] >>
+  metis_tac[EVERY_MEM]
 QED
 
 Theorem supported_function_decl_main:

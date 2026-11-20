@@ -210,26 +210,3 @@ Definition supported_external_return_type_def:
     ty = NoneT \/ supported_value_type tops ty
 End
 
-Theorem supported_external_none_rejected:
-  ~supported_external_return_type tops NoneT
-Proof
-  simp[supported_external_return_type_def, supported_value_type_def,
-       supported_scalar_type_def, supported_word_type_def,
-       supported_string_type_def]
-QED
-
-Theorem supported_binop_dispatch_guards:
-  supported_binop op ty rhs lb ne ==>
-  ~((op = In \/ op = NotIn) /\ is_ArrayT rhs) /\
-  ~(is_bytestring_type ty /\ (op = Eq \/ op = NotEq))
-Proof
-  Cases_on `op` >> simp[supported_binop_def]
-QED
-
-Theorem supported_shift_contract:
-  supported_binop ShL ty rhs lb ne /\
-  (supported_binop Exp ty rhs lb ne <=>
-    supported_integer_type ty /\ (lb \/ ne))
-Proof
-  simp[supported_binop_def]
-QED

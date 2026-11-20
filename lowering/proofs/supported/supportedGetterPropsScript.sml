@@ -60,22 +60,13 @@ Proof
     supported_struct_fields_other_module] >> metis_tac[]
 QED
 
-Theorem supported_place_namespace[local]:
-  supported_place_type tops ty ==> supported_type_namespace ty
+Theorem supported_place_array_element[local]:
+  supported_place_type tops (ArrayT ty bd) ==> supported_place_type tops ty
 Proof
   simp[supported_place_type_def] >> strip_tac >>
   drule supported_nested_namespace >> disch_then irule >>
   Cases >> simp[supported_scalar_type_def, supported_word_type_def,
                  supported_string_type_def, supported_type_namespace_def]
-QED
-
-Theorem supported_place_array_element[local]:
-  supported_place_type tops (ArrayT ty bd) ==> supported_place_type tops ty
-Proof
-  Cases_on `bd` >>
-  simp[Once supported_place_type_def, Once supported_nested_type_def,
-       supported_scalar_type_def, supported_word_type_def, supported_string_type_def,
-       supported_place_type_def]
 QED
 
 Theorem supported_getter_subscript[local]:

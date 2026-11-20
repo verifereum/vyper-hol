@@ -304,7 +304,10 @@ Theorem no_halt_root_no_evm_run:
   (!ss. ~supported_stmts_expr_exists expr_halt_root ss ==>
         ~supported_stmts_expr_exists expr_evm_run_root ss)
 Proof
-  simp[expr_halt_root_split, supported_expr_exists_disj,
+  `expr_halt_root = (\x. expr_halt_root x \/ expr_evm_run_root x)` by
+    simp[FUN_EQ_THM, expr_evm_run_root_def] >>
+  pop_assum (fn th => ONCE_REWRITE_TAC [th]) >>
+  simp[supported_expr_exists_disj,
        supported_assignment_exists_disj, supported_iterator_exists_disj,
        supported_assert_exists_disj, supported_raise_exists_disj,
        supported_stmt_expr_exists_disj]
