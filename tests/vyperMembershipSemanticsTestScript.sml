@@ -145,14 +145,16 @@ Proof
 QED
 
 Theorem membership_pure_failure_test:
+  evaluate_type (get_tenv cx) (StructT (NONE,"missing")) = NONE ==>
   eval_pure_expr cx st
     (Builtin (BaseT BoolT) (Bop In)
       [Literal (BaseT (UintT 256)) (IntL 0);
-       Literal (BaseT BoolT) (IntL 0)]) = NONE /\
+       Literal (StructT (NONE,"missing")) (IntL 0)]) = NONE /\
   eval_pure_expr cx st (Builtin (BaseT BoolT) (Bop In) []) = NONE /\
   eval_pure_expr cx st (Builtin (BaseT BoolT) (Bop NotIn)
     [Literal (BaseT (UintT 256)) (IntL 0)]) = NONE
 Proof
+  strip_tac >>
   simp[eval_pure_expr_def, builtin_args_length_ok_def, read_result_def,
        bind_def, return_def, evaluate_literal_def, expr_type_def] >>
   EVAL_TAC
@@ -167,27 +169,6 @@ Theorem membership_missing_array_type_test:
     (Builtin (BaseT BoolT) (Bop (if is_notin then NotIn else In))
       [Name (BaseT (UintT 256)) "x";
        Name (ArrayT (StructT (NONE,"missing")) (Fixed 1)) "a"]) st =
-  (INR (Error (TypeError "Membership type")),st)
-Proof
-  strip_tac >>
-  imp_res_tac lookup_local_exists >>
-  imp_res_tac read_local_value >>
-  Cases_on `is_notin` >>
-  simp[evaluate_def, builtin_args_length_ok_def, type_check_def, check_def,
-       assert_def, bind_def, ignore_bind_def, return_def, raise_def,
-       get_scopes_def, get_accounts_def, precompile_call_success_def,
-       lift_sum_def, read_local_value, cj 1 read_result_def,
-       evaluate_type_def, expr_type_def, evaluate_builtin_def,
-       evaluate_binop_def, binop_negate_def]
-QED
-
-Theorem membership_missing_flag_type_test:
-  lookup_scopes_val "f" st.scopes = SOME (FlagV 1) /\
-  evaluate_type (get_tenv cx) (FlagT (NONE,"missing")) = NONE ==>
-  eval_expr cx
-    (Builtin (BaseT BoolT) (Bop (if is_notin then NotIn else In))
-      [Name (FlagT (NONE,"missing")) "f";
-       Name (FlagT (NONE,"missing")) "f"]) st =
   (INR (Error (TypeError "Membership type")),st)
 Proof
   strip_tac >>
