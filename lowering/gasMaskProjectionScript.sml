@@ -99,3 +99,37 @@ Proof
   pop_assum SUBST1_TAC >>
   simp[gas_explicit_append, APPEND_ASSOC]
 QED
+
+(* Project raw readings into the marked prefix of the selected execution. *)
+Theorem gas_mask_projection_padded:
+  !sites selected slots unused readings markf (P : bytes32 list -> bool).
+    LENGTH slots = LENGTH sites /\
+    PERM (MAP THE (FILTER IS_SOME slots) ++ unused) readings /\
+    (!raw.
+       LIST_REL (\slot w. slot = NONE \/ slot = SOME w) slots raw ==>
+       (?rest. MAP selected sites = markf (raw ++ [0w]) ++ rest) /\
+       !suffix. P (gas_explicit (markf (raw ++ [0w])) (raw ++ [0w]) ++ suffix)) ==>
+    ?source_slots source_unused.
+      PERM (MAP THE (FILTER IS_SOME source_slots) ++ source_unused) readings /\
+      !gs tail.
+        LIST_REL (\slot w. slot = NONE \/ slot = SOME w) source_slots gs ==>
+        P (gs ++ tail)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule gas_mask_projection >>
+  qexistsl_tac [`MAP selected sites`, `slots`, `unused`] >>
+  `LENGTH (MAP selected sites) = LENGTH slots` by simp[] >>
+  asm_rewrite_tac[] >>
+  qx_genl_tac [`raw`, `tail`] >> strip_tac >>
+  qpat_assum `!raw. LIST_REL _ slots raw ==> _` (qspec_then `raw` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (CONJUNCTS_THEN2 (qx_choose_then `rest` assume_tac) assume_tac) >>
+  `LENGTH (markf (raw ++ [0w]) ++ rest) = LENGTH raw` by
+    (qpat_assum `MAP selected sites = _` (fn eq => rewrite_tac[GSYM eq]) >>
+     drule LIST_REL_LENGTH >> simp[]) >>
+  qpat_assum `MAP selected sites = _` (fn eq => once_rewrite_tac[eq]) >>
+  qpat_assum `LENGTH (markf _ ++ rest) = LENGTH raw` (fn len =>
+    once_rewrite_tac
+      [MATCH_MP (Q.INST [`pad` |-> `[0w:bytes32]`] gas_mask_padded_split) len]) >>
+  first_assum MATCH_ACCEPT_TAC
+QED
