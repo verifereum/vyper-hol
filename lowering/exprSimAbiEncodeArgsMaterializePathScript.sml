@@ -3,7 +3,7 @@ Ancestors
   exprSimHashBoundary
     loweringStateRelDefs
   abiEncodeMaterialize exprSimAbiGasBridge exprSimHash vyperCompiler context
-  loweringPosts compileEnv finite_map exprSimAbiEncodeSeparation
+  loweringPosts compileEnv finite_map
   entrySinkExtraction fragGasSeq stmtReasonLitFragMemory emitHelperProps
   abiDecodeStaticProps fragGasMode list exprSimHyps
   exprSimAggregateLayout storageCopyGasPath

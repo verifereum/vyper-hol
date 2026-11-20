@@ -1,6 +1,6 @@
 (* Forward source conversion for allocation-free bytes/string leaves. *)
 Theory sourceBytesRepresentation
-Ancestors abiDecoderBytestring abiDecoderString abiDecoderCoherence
+Ancestors abiDecoderString abiDecoderCoherence
   vyperABI vyperTyping vyperValue compileEnv valueEncoding valueEncodingDefs exprLowering
   contractABI list abiDecoderBytes calldataTypedRobustPtr abiDecoderBytestringCases
 

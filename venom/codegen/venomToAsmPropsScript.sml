@@ -25,7 +25,7 @@
 
 Theory venomToAsmProps
 Ancestors
-  frameRel codegenRel contextCodegenRelProps fnPlanDecomp blockSimHelpers
+  frameRel codegenRel contextCodegenRelProps blockSimHelpers
   cleanOpsSim genBlockSim codegen symbolResolve venomExecSemantics venomState
   venomInst fcgDefs livenessDefs dfgDefs cfgDefs fnPlanLineage
   fnSimSpec fnBlockStep fnEntryStep

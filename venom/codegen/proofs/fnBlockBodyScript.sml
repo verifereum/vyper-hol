@@ -13,8 +13,8 @@
 Theory fnBlockBody
 Ancestors
   fnBlockPlanStatic fnAliasStep fnFrameStepsRevertForwardDeep
-  fnFrameDeep fnLineageStatic fnPlanPrefix fnSimSpec fnFrameSteps fnFrameBoundary fnFrameTerminal gasFrameSim
-  genFrameSim fnPlanPlace fnPlanCover fnAliasInv fnPlanLineage frameRel
+  fnLineageStatic fnPlanPrefix fnSimSpec fnFrameSteps fnFrameBoundary gasFrameSim
+  genFrameSim fnPlanPlace fnPlanCover fnPlanLineage frameRel
   venomExecSemantics fnBlockBodyClasses fnBlockBodySteps fnBlockBodyHelpers
   unitShapeDefs rich_list arithmetic stackOpSim
 

@@ -10,7 +10,7 @@ Ancestors
   lowerDloadAssignProducer lowerDloadParameterEnvelope lowerDloadAffineProducer memLocDefs
   lowerDloadShiftProducer lowerDloadCompareProducer lowerDloadOrdinaryExecution
   lowerDloadPureEffects lowerDloadMloadProducer lowerDloadOperand
-  lowerDloadStoreCertificate lowerDloadCertificateProbe lowerDloadFrameCertificate
+  lowerDloadCertificateProbe lowerDloadFrameCertificate
   lowerDloadEffectTransport lowerDloadByteStoreCertificate lowerDloadCopyCertificate
 
 (* A single annotation-step completion for variable-only families. Selection

@@ -1,7 +1,7 @@
 (* Safety-only observation boundaries for the LowerDload memory contract. *)
 Theory lowerDloadSafetyBoundary
 Ancestors
-  o1PassContract unitTransformDefs unitShapeDefs lowerDloadRelocationBoundary
+  o1PassContract unitTransformDefs unitShapeDefs
   ptrDiscipline finite_map list fcgDefs
 
 Theorem lower_dload_initial_allocations_static:
