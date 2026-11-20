@@ -52,11 +52,11 @@ reports each export clean.
 Their exact premises are in the linked owners and
 [dependency inventory](compiler-proof-dependencies.md#s1s7-stage-producers).
 
-| Stage | Actual export / owner | Contract to prove later | Owner milestone |
+| Stage | Actual export / owner | Contract | Owner milestone |
 |---|---|---|---|
 | S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/loweringRuntimeCorrectScript.sml)) | Raw lowering + supported syntax + typing/storage/deployment/valid call/initial state/outcome guards -> terminating `source_unit_execution_correct` | 6 |
-| S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` (same owner) | Lowering + `check_contract` + `raw_shape_free_program` -> `o1_source_unit_ok` | 5 |
-| S3 | `loweringMemCorrect.lower_vyper_runtime_unit_memory_ok` (same owner) | S1 boundary + **non-exemption** + no `DALLOCA` -> `raw_unit_memory_ok` | 5 |
+| S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` ([source](../lowering/vyperLoweringCorrectScript.sml)) | Lowering + `check_contract` + `raw_shape_free_program` -> `o1_source_unit_ok` | 5 |
+| S3 | `loweringMemCorrect.lower_vyper_runtime_unit_memory_ok` ([source](../lowering/loweringMemCorrectScript.sml)) | S1 boundary + **non-exemption** + no `DALLOCA` -> `raw_unit_memory_ok` | 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` ([source](../venom/compiler/o1PipelineCorrectScript.sml)) | Actual O1 success + raw shape/entry/memory -> forward simulation up to any well-formed dead-byte set `D` (`ctx_sim D`, `dead_wf D`) | 3 |
 | S5 | `o1PipelineCorrect.o1_pipeline_memory_obligations` (same owner) | O1 + generated plan + raw shape/entry/memory + initial FMP -> **one existential `Inv`** with output memory/reachability | 5 |
 | S6 | `o1PipelineCorrect.run_venom_pipeline_output_shape` (same owner) | Actual O1 success + raw shape -> `unit_shape_ok` | 3 |
@@ -67,10 +67,11 @@ needs S3/S4/S5/S7; it chooses **the same `Inv` from S5**, rather than asking the
 caller for one. S2/S6 produce shape. L5 consumes S5 memory; layout or empty
 entry memory does not manufacture memory safety.
 
-**Off the runtime call path:** `venomToAsmProps.gen_fn_simulation` is separately
-ADMITTED (4.2). The separate deployment theorem
+`venomToAsmProps.gen_fn_simulation` is proved (4.2); S7's `codegen_correct`
+uses it through `codegenEntrySim.codegen_entry_asm_sim`.
+**Off the runtime call path:** the separate deployment theorem
 `e2eDeployCorrectness.e2e_deploy_correctness` is proved (6 item 7). Current top/generic
-logical closures contain neither, nor any retired API.
+logical closures contain neither it nor any retired API.
 
 **Named inventory, not forced plan arithmetic:** TASK056's source ledger is
 **130 -> 128**, removing only the local
@@ -80,9 +81,9 @@ identities/multiplicities were preserved in the named ledgers
 `/tmp/m1-056-sites-before.txt` / `/tmp/m1-056-sites-final.txt` (ephemeral receipts).
 This docs task changes zero sites; it does not recount/certify admissions.
 See the [dated inventory](compiler-proof-status-2026-10-09.md#off-the-runtime-call-path-retirement-and-proof-history).
-Remaining problems are the seven stage proofs, old dispatched-pass gaps, and
-absent environmental producers/satisfiability, not unfinished Milestone 1
-statement edits.
+At Milestone 1 the remaining problems were the seven stage proofs (all proved
+since), old dispatched-pass gaps, and absent environmental
+producers/satisfiability, not unfinished Milestone 1 statement edits.
 
 ## Principles
 
@@ -272,7 +273,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D16 | Runtime immutables without a separate exclusion | The call theorem carries no separate immutable restriction. `call_state_rel` still requires frame code `runtime_bc ++ section` with `immutables_section_rel` for the target's immutables, and the live target account's code to equal the frame code; source installation is exact. Deployment remains separate. | 6 item7 |
 | D17 | Forward success/weak abort transport, not observable_equiv for aborts | `unitTransformDefs.unit_result_rel`: Halt observables; Abort requires only REVERT stays REVERT. Failure returndata/kind/requests may differ. S4 proved, on `ctx_sim`'s `dead_result_rel`, which also lets Halt observables differ at dead bytes. | 3 |
 | D18 | S6 output shape, not new compiler final-hook check | S6 proved; existing literal O1 hooks unchanged. Raw-only restrictions not required of output. | 3 |
-| D19 | Syntax memory restrictions + raw memory contract | Internal local/nested-call/loop-call/name/fallback-argument exclusions in whitelist; `raw_unit_memory_ok` below frontier at actual sites. S3/S5 ADMITTED; empty memory is not a producer. | 5 |
+| D19 | Syntax memory restrictions + raw memory contract | `raw_unit_memory_ok` is the raw memory contract at actual sites; S3 produces it and S5 takes it as a premise. S3/S5 proved; empty memory is not a producer. | 5 |
 | D20 | Reachability at visited states, not unincremented results | `enters_block`, `fn_entry_inv`, `reachability_closed`, `codegen_reachability_package` include post-PHI, incremented continuations and INVOKE entries. Definitions are not a reachability proof. | 5 |
 | D21 | `tx_return_bytes` | Raw-return functions use `raw_return_bytes`; otherwise `return_bytes` is empty for `NoneT` and uses a singleton tuple iff `needs_external_call_wrap`. | 6 |
 | D22 | Actual entry transfer/block/code/log/layout guards | `call_state_rel` uses LIVE post-transfer accounts, block window/nonzero bounds, <=24576 bytes, empty logs and declared slots/source installation. Satisfiability not established. | 7 |
@@ -282,7 +283,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D26 | Initial and outcome storage validity | `vyper_call_correct` takes fixed regions that decode at the entry state (`storage_ok H`) and against which, when calldata dispatch selects a function, every gas filling's source storage observations are checked (`call_within H`, `storage_observations_ok`); `call_storage_ok` is the per-gas-filling guard over the trace's own horizon, which decodes at the entry state and in every adopted backend; `call_outcomes_ok` holds only return-data and account bounds. Account/code guard alone is insufficient. The storage guards have no producer for arbitrary EVM callees; `closed_world_call_outcomes_ok` gives `call_storage_ok` only under its closed-world premises, for the gas observations related to the EVM readings, unless the frame is resource-starved. | 7 |
 | D27 | Preserve/re-prove existing true claims | Completed retirement ledger preserves proof text/Git identities and four structural APIs. **Clarification:** D30's unused false claims retire without same-name replacements. The creation-frame theorem was introduced as a separate statement and has since been proved. | every proof owner |
 | D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` is proved for canonical args, actual pre-constant deployment readiness, an uninstalled source target and an empty target account in `es.originalAccounts`. Constructors may make supported calls and take outcomes from their creation frame's trace. | 6 item7 |
-| D29 | Retire unused codegen_fn_correct; frame-aware gen_fn_simulation | Actual entry/IntRet/return relations and concrete maps; separate ADMITTED off-path target. This intentionally differs from old roadmap “restate codegen_fn_correct”. | 4.2 |
+| D29 | Retire unused codegen_fn_correct; frame-aware gen_fn_simulation | Actual entry/IntRet/return relations and concrete maps; proved; S7's `codegen_correct` uses it. This intentionally differs from old roadmap “restate codegen_fn_correct”. | 4.2 |
 | D30 | Fresh output labels proved; unused false local claims retired | `fresh_label_output_inj` / output-state `fresh_label_produces_external` proved. Assign/zero-pad/generate-runtime correctness claims retired with provenance, not rewritten under the same names; Assign belongs to statement induction, runtime to S1. | 6 |
 | D31 | Do not claim call_state_rel satisfiable in Milestone1 | No general producer or satisfiability theorem; focused checks are not a compiled-program witness. Top-level transaction construction is explicitly future work. | 7 |
 
@@ -301,7 +302,7 @@ assembled code/parser, concrete labels/outcomes). Its conclusion is
 `run_call` plus the resource alternative or `venom_frame_rel`.
 No sufficient-gas assumption remains. `codegen_fn_correct` is retired;
 `gen_fn_simulation` has actual entry/return relations and an `IntRet` clause,
-separately ADMITTED for 4.2. Existing bridges are not trace-aware S7 proofs.
+and is proved (4.2). Existing bridges are not trace-aware S7 proofs.
 
 ### 1.3 Lowering statement and the result relation
 
@@ -530,8 +531,7 @@ Remaining work, roughly in dependency order (all future):
 2. **H42-function / owner Milestone 4.2:** prove actual
    [venomToAsmProps.gen_fn_simulation](../venom/codegen/venomToAsmPropsScript.sml)
    by mutual fuel induction over INVOKE/RET, using `fnPlanDecomp` structural
-   decomposition. This separately ADMITTED theorem is currently off the top
-   call path, not a proved INVOKE induction hypothesis.
+   decomposition. It is proved now, and S7's `codegen_correct` uses it.
 
    | Actual input | Required future frame-aware invariant fact |
    |---|---|
@@ -561,7 +561,7 @@ Remaining work, roughly in dependency order (all future):
 ## Milestone 5: Cross-stage invariants
 
 **Owner: Milestone 5 / vyperLoweringCorrect S2/S3 and o1PipelineCorrect S5.**
-These producers exist as ADMITTED statements; this milestone proves them.
+These producers were ADMITTED statements at Milestone 1; all three are proved now.
 Actual memory API is
 [unitTransformDefs](../venom/compiler/unitTransformDefsScript.sml), not the
 older compat `lowering_memory_safe` interface, which was deleted: its proof
