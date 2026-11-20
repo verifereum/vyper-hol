@@ -67,7 +67,6 @@ Proof
   `env.type_defs = get_tenv cx` by
     fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   `~is_word_type (expr_type e)` by metis_tac[return_source_word_widens_eq] >>
-  `supported_copy_types (expr_type e) (expr_type e)` by simp[supported_copy_types_def] >>
   drule_all annassign_relayout_source_classify >> strip_tac >>
   `type_widens_to (get_tenv cx) (lowered_value_type cenv e) dty` by
     metis_tac[type_widens_to_trans] >>

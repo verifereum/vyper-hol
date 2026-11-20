@@ -21,19 +21,18 @@ Proof
 QED
 
 Theorem annassign_relayout_source_classify:
-  !cenv cx env e es typ.
-    expr_body_pre cenv cx env e es /\
-    supported_copy_types typ (expr_type e) /\ ~is_word_type typ /\
+  !cenv cx env e es.
+    expr_body_pre cenv cx env e es /\ ~is_word_type (expr_type e) /\
     ~(lowered_value_type cenv e = expr_type e \/
       is_bytestring_type (expr_type e) /\
       is_bytestring_type (lowered_value_type cenv e) /\
       arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
-    expr_type e = typ /\ ~is_bytestring_type typ /\
+    ~is_bytestring_type (expr_type e) /\
     ~is_word_type (lowered_value_type cenv e) /\
     ~is_bytestring_type (lowered_value_type cenv e) /\
     post_value_type cenv e = lowered_value_type cenv e /\
     lowered_value_type cenv e <> expr_type e /\
-    type_widens_to (get_tenv cx) (lowered_value_type cenv e) typ /\
+    type_widens_to (get_tenv cx) (lowered_value_type cenv e) (expr_type e) /\
     ?stv. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -50,13 +49,6 @@ Proof
   drule ifexp_body_pre_intcall_physical >> strip_tac >>
   `~is_bytestring_type ty` by
     (gvs[expr_type_def] >> metis_tac[compileEnvTheory.arg_type_fits_bytestring_source]) >>
-  `typ = ty` by
-    (qpat_x_assum `supported_copy_types _ _` mp_tac >>
-     simp[supported_copy_types_def, expr_type_def] >>
-     rpt strip_tac >> gvs[] >>
-     BasicProvers.every_case_tac >>
-     gvs[is_bytestring_type_def] >>
-     metis_tac[typedCopyMetadataTheory.supported_word_type_is_word]) >>
   gvs[expr_type_def] >>
   drule ifexp_intcall_copy_source >> simp[] >> strip_tac >>
   `~is_word_type (lowered_value_type cenv (Call ty (IntCall fid) args drv))` by

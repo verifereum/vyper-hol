@@ -34,9 +34,7 @@ QED
 
 Theorem supported_stmt_annassign[local]:
   supported_stmt tops bindings (AnnAssign id typ e) =
-    (supported_place_type tops typ /\
-     (supported_copy_types typ (expr_type e) \/
-      arg_type_fits (expr_type e) typ) /\ supported_expr tops e)
+    (supported_place_type tops typ /\ supported_expr tops e)
 Proof
   simp[Once supported_stmt_def]
 QED
