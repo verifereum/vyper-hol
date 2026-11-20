@@ -111,9 +111,11 @@ bytecode/native/bytecode_parity_json.exe DIR NAME...   # some fixtures
 
 Each fixture prints `PASS`, `FAIL` (the bytes differ, the compiler returned
 `NONE`, or it stopped), or `REJECT` (the frontend could not decode or
-rejected the program, or it has more than one module). A fixture that
-reaches the compiler also prints `sp=T` or `sp=F`: whether the program is in
-`supported_program` and `supported_program_deploy`. The exit status is non-zero unless every
+rejected the program). A single-module fixture that reaches the compiler
+also prints `sp=T` or `sp=F`: whether the program is in `supported_program`
+and `supported_program_deploy`. A fixture of several modules (a linked
+unit) prints `sp=F modules=N` without evaluating them, since
+`supported_program` is over one module. The exit status is non-zero unless every
 fixture passes. With `NATIVE_PARITY_DUMP=<dir>`, the native bytes of each
 compiled fixture are written to `<dir>/<name>.hex`; `<dir>` must not be `DIR`. Fixtures listed in
 `../pending-5127-port.md` fail until their port lands; to check only the
@@ -128,12 +130,17 @@ fixtures in parity, pass the names in the suite's `parity-fixtures.txt`.
 - translate it with the cv-translated `translate_annotated_ast` that
   `vyperTestEmitTheory` emits;
 - drop empty interface sources;
-- annotate storage slots and compile.
+- annotate storage slots and compile: one remaining module with
+  `annotate_sources_slots` and `compile_vyper`; several with
+  `annotate_sources_slots_mods`, which also takes the translation's layout
+  import map, and `compile_vyper_mods` with the translation's exports.
 
-The generator exports two entry points for this, next to `compile`. The
-first is `annotate_sources_slots`, applied to cv_typeLib's `to_` functions
-for the layout and the translated sources. The second is the cv
-constructors, so that the frontend's cv values can be rebuilt as the
+The generator exports entry points for this, next to `compile`:
+`annotate_sources_slots`, applied to cv_typeLib's `to_` functions for the
+layout and the translated sources; `annotate_sources_slots_mods`, which
+also decodes the layout import map; `compile_mods`, `compile_vyper_mods` with the exports
+decoded the same way; `supported`, the two predicates behind `sp=`; and the
+cv constructors, so that the frontend's cv values can be rebuilt as the
 compiler's.
 
 The build uses `polyc`, not holbuild, because the emitted frontend lives in
@@ -142,9 +149,13 @@ the hidden `tests/.emit/` directory, which holbuild doesn't scan.
 `--no-holbuild`, the script first builds `compilerNativeEmitTheory` and
 `vyperTestEmitTheory`.
 
-`tools/native_export_parity.py` runs it over every single-module contract
+`tools/native_export_parity.py` runs it over every single-source contract
 the upstream Vyper test exports (`tools/vyper_test_exports.py`) deploy at
-the oracle's profile. The exported bytes carry metadata, constructor
+the oracle's profile. A source whose program keeps several modules once
+empty interface sources are dropped (one importing a built-in module such
+as `math`, say) compiles as a linked unit, prints `sp=F`, and so is
+reported `outside`, even when its bytes match.
+The exported bytes carry metadata, constructor
 arguments and immutables, so it compiles each source again with the patched
 pinned Vyper, as the witness suites are compiled (no metadata, Venom,
 `-O none`, prague), and compares against those bytes. A mismatch on a
@@ -162,7 +173,8 @@ With `--minimize`, it also reduces each divergence to `<name>.min.vy`.
 
 ## What the generator exports
 
-It starts from `compile_vyper (K SOME) (o1_policy all_capabilities)` and the
+It starts from the entry points (`compile_vyper (K SOME) (o1_policy
+all_capabilities)`, `compile_vyper_mods` and the others above) and the
 fixture programs. From there it follows the constants of `EVAL`'s default
 compset (every rule is a theorem):
 about 1700 constants and 107 datatypes. For each constant it takes the
