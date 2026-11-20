@@ -810,8 +810,10 @@ Definition ml_ordered_keys_def:
     let (us,ola,keys) = ml_ordered_iter fuel bpr mems sizes pallocas cfg fn
       FEMPTY FEMPTY FEMPTY [] in
     (* Python adds the escaped allocations to every instruction's liveat,
-       creating the entries of instructions the passes never reached. *)
-    let esc = ml_escaped_allocas bpr fn in
+       in the order their pointers were discovered. *)
+    let esc = nub_first (FLAT
+      (MAP (\v. find_base_allocas_first_seen bpr (Var v))
+        (FLAT (MAP fmp_escaping_operands (fn_insts fn))))) in
     let keys' = if esc = [] then keys else
       ml_ordered_union keys (FLAT (MAP (\bb.
         MAPi (\i inst. (bb.bb_label,i)) bb.bb_instructions) fn.fn_blocks)) in
