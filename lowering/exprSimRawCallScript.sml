@@ -828,11 +828,6 @@ Proof
   drule_all raw_call_frame_bytes >> simp[]
 QED
 
-
-(* The bytes header read and pointer arithmetic have no GAS observations. *)
-
-
-
 (* Oracle tail, independent of the expression producing calldata. *)
 Theorem raw_call_kind_memory_oracle_exec[local]:
   stmt_state_rel H ctx func cenv cx es s /\ inst.inst_outputs = [out] /\
@@ -933,8 +928,6 @@ Proof
   qexists_tac `s'` >> simp[hash_write_memory_read_self] >>
   metis_tac[]
 QED
-
-(* Turn the parametric external-call equation into emitted code execution. *)
 
 (* A fresh result variable is disjoint from source locals even after adoption. *)
 Theorem raw_call_result_frame:
@@ -1093,18 +1086,6 @@ Theorem raw_call_finish_view_control:
 Proof
   simp[raw_call_finish_view_def, jump_to_def]
 QED
-
-(* Reconstruct allocation invariants after oracle consumption.  Unlike control
-   positions, local pointer variables must be retained by this boundary. *)
-
-
-
-(* Entry-age frames for arbitrary temporary-variable environments.  Operand
- * and state cleaning already use eval_operand_drop_fresh and
- * stmt_state_rel_drop_fresh; do not duplicate those exported boundaries. *)
-
-
-
 
 Theorem raw_call_success_run_aged:
   (do len <- emit_op RETURNDATASIZE [];
