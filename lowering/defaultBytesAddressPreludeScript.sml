@@ -302,7 +302,8 @@ Theorem default_bytes_address_prelude_footprint:
   alloca_inv s /\ alloca_frontier_inv_from k ctx fn site s /\
   fn_inst_ids_distinct fn /\ k + unit_alloca_budget ctx < dimword (:256) /\
   FLOOKUP s.vs_allocas st.cs_next_id = NONE /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   alloca_history fn s /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?ready H u p.
@@ -337,7 +338,8 @@ Theorem default_bytes_address_prelude_footprint:
       (s,G,tn) [] (OK ready,H,u)) /\
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u ready) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
-    (!v. ~not_fresh_at after_src v ==> lookup_var v ready = lookup_var v s)
+    (!v. ~not_fresh_at after_src v ==> lookup_var v ready = lookup_var v s) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp ready)
 Proof
   strip_tac >>
   drule compile_alloc_buffer_extends >> strip_tac >>
@@ -352,14 +354,53 @@ Proof
   drule_all default_bytes_allocation_boundary_footprint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] (qx_choose_then `a`
     (qx_choose_then `H0` (qx_choose_then `u0` (qx_choose_then `p` strip_assume_tac))))) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by simp[] >>
+  `cap <= pending_alloca_size fn s` by
+    (qabbrev_tac `i = mk_inst st.cs_next_id ALLOCA [Lit (n2w cap)]
+       [STRING #"%" (toString st.cs_next_var)]` >>
+     `MEM i (fn_insts fn)` by
+       (drule_all entryArgPtrsTheory.entry_alloc_buffer_inst >> simp[Abbr `i`]) >>
+     `st.cs_next_id NOTIN FDOM s.vs_allocas` by fs[FLOOKUP_DEF] >>
+     `MEM i (FILTER (\j. j.inst_opcode = ALLOCA /\
+         j.inst_id NOTIN FDOM s.vs_allocas) (fn_insts fn))` by
+       simp[MEM_FILTER, Abbr `i`, mk_inst_def] >>
+     mp_tac (Q.ISPECL [`alloca_lit_size`, `i:instruction`,
+       `FILTER (\j. j.inst_opcode = ALLOCA /\
+          j.inst_id NOTIN FDOM s.vs_allocas) (fn_insts fn)`] listTheory.SUM_MAP_MEM_bound) >>
+     simp[Abbr `i`, pending_alloca_size_def, alloca_lit_size_def, mk_inst_def, w2n_n2w]) >>
+  `a.vs_fmp = s.vs_fmp /\ a.vs_initial_fmp = s.vs_initial_fmp` by
+    (qpat_assum `a = s with <|vs_vars := _; vs_allocas := _;
+       vs_alloca_next := _; vs_inst_idx := _|>`
+       (PURE_ONCE_REWRITE_TAC o single) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by
+    (strip_tac >>
+     `allocas_below_fmp s /\
+       s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp`
+       by metis_tac[] >>
+     `s.vs_alloca_next + cap <= w2n s.vs_initial_fmp` by decide_tac >>
+     fs[allocas_below_fmp_def] >> rpt strip_tac >>
+     Cases_on `aid = st.cs_next_id`
+     >- (fs[] >> metis_tac[]) >>
+     metis_tac[]) >>
   drule_all default_bytes_address_joint >>
   disch_then (qspecl_then [`u0`,`PG`,`H0`] (qx_choose_then `ready`
     (qx_choose_then `H` (qx_choose_then `u` strip_assume_tac)))) >>
   drule_all default_bytes_address_memory >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   `gas_path_mem ctx fn a 0 (OK ready) /\ alloca_history fn ready` by gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ready` by
+    (`ready.vs_allocas = a.vs_allocas /\ ready.vs_fmp = a.vs_fmp /\
+       ready.vs_initial_fmp = a.vs_initial_fmp` by
+       (qpat_assum `ready = a with <|vs_vars := _; vs_inst_idx := _|>` (PURE_ONCE_REWRITE_TAC o single) >>
+        simp[]) >>
+     PURE_REWRITE_TAC [allocas_below_fmp_def] >>
+     qpat_assum `ready.vs_allocas = a.vs_allocas` (PURE_REWRITE_TAC o single) >>
+     qpat_assum `ready.vs_fmp = a.vs_fmp` (PURE_REWRITE_TAC o single) >>
+     qpat_assum `ready.vs_initial_fmp = a.vs_initial_fmp` (PURE_REWRITE_TAC o single) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp a`
+       (ACCEPT_TAC o PURE_REWRITE_RULE [allocas_below_fmp_def])) >>
   qexistsl [`ready`,`H`,`u`,`p`] >>
+  qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp ready`
+    (fn th => simp_tac bool_ss [th]) >>
   pure_rewrite_tac[CONJ_ASSOC] >>
   reverse conj_tac >- suspend "footprint" >>
   reverse conj_tac >- suspend "pullback" >>
@@ -496,7 +537,10 @@ Theorem default_bytes_address_prelude:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u ready) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all default_bytes_address_prelude_footprint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
+  drule_all default_bytes_address_prelude_footprint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
   qexistsl [`ready`,`H`,`u`,`p`] >> simp[]
 QED
