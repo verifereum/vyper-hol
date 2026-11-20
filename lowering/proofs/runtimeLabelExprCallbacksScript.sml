@@ -384,24 +384,10 @@ Proof
   irule rb_step_bind_for >> qexists_tac `(rb_value_ok_for source_checks)` >> BETA_TAC >>
   reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
   irule rb_step_bind_for >> qexists_tac `(rb_value_ok_for source_checks)` >> BETA_TAC >>
-  reverse conj_tac >- simp[rb_compile_snapshot_vv_for] >> gen_tac >> strip_tac >>
+  reverse conj_tac >- simp[rb_compile_snapshot_vv_for, rb_ext_call_arg_value_for] >> gen_tac >> strip_tac >>
   irule rb_step_bind_for >> qexists_tac `EVERY (rb_value_ok_for source_checks)` >> BETA_TAC >>
   reverse conj_tac >- (first_x_assum irule >> simp[]) >>
   simp[rb_step_return_for]
-QED
-
-Theorem rb_compile_create_ctor_tuple_for[local]:
-  (rb_env_ok_for source_checks) ce /\
-  (!e. MEM e args ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce (expr_type e) e)) ==>
-  (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_create_ctor_tuple cfn ce args)
-Proof
-  strip_tac >> pure_rewrite_tac[compile_create_ctor_tuple_def, LET_THM] >> BETA_TAC >>
-  irule rb_step_bind_for >> qexists_tac `EVERY (rb_value_ok_for source_checks)` >> BETA_TAC >>
-  reverse conj_tac >- simp[rb_compile_create_ctor_args_for] >> gen_tac >> strip_tac >>
-  irule rb_step_bind_for >> qexists_tac `(rb_buffer_ok_for source_checks)` >> BETA_TAC >>
-  reverse conj_tac >- simp[rb_compile_alloc_buffer_for] >>
-  gen_tac >> simp[rb_buffer_ok_for_def] >> strip_tac >>
-  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_compile_extcall_store_values_for, rb_every_zip_fst, rb_step_return_for]
 QED
 
 (* Encoder antecedent: conjunct 2 of runtimeLabelABI$rb_abi_encode_for. *)
@@ -429,13 +415,13 @@ Proof
       irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> simp[rb_emit_inst_for, rb_step_return_for]) >>
   Cases_on `args = []` >> simp[rb_step_return_for] >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  irule rb_step_bind_for >> qexists_tac `(rb_operand_ok_for source_checks)` >> BETA_TAC >>
-  reverse conj_tac >- simp[rb_compile_create_ctor_tuple_for] >> gen_tac >> strip_tac >>
+  irule rb_step_bind_for >> qexists_tac `EVERY (rb_value_ok_for source_checks)` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_create_ctor_args_for] >> gen_tac >> strip_tac >>
   irule rb_step_bind_for >> qexists_tac `(rb_buffer_ok_for source_checks)` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_alloc_buffer_for] >>
   gen_tac >> simp[rb_buffer_ok_for_def] >> strip_tac >>
   irule rb_step_bind_for >> qexists_tac `(rb_operand_ok_for source_checks)` >> BETA_TAC >>
-  simp[rb_step_return_for]
+  simp[rb_step_return_for, rb_compile_abi_encode_values_to_buf_for, rb_every_zip_fst]
 QED
 
 Theorem rb_compile_create_snapshot_for[local]:
@@ -484,16 +470,16 @@ Proof
   qexists_tac `\p. (rb_operand_ok_for source_checks) (FST p) /\ (rb_operand_ok_for source_checks) (SND p)` >> BETA_TAC >>
   reverse conj_tac
   >- (Cases_on `args = []` >> simp[rb_step_return_for] >>
-      irule rb_step_bind_for >> qexists_tac `(rb_operand_ok_for source_checks)` >> BETA_TAC >>
-      reverse conj_tac >- simp[rb_compile_create_ctor_tuple_for] >> gen_tac >> strip_tac >>
+      irule rb_step_bind_for >> qexists_tac `EVERY (rb_value_ok_for source_checks)` >> BETA_TAC >>
+      reverse conj_tac >- simp[rb_compile_create_ctor_args_for] >> gen_tac >> strip_tac >>
       irule rb_step_bind_for >> qexists_tac `(rb_buffer_ok_for source_checks)` >> BETA_TAC >>
       reverse conj_tac >- simp[rb_compile_alloc_buffer_for] >>
       gen_tac >> simp[rb_buffer_ok_for_def] >> strip_tac >>
       irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> conj_tac >- simp[rb_compile_copy_memory_dynamic_for] >>
       irule rb_bind_emit_op_for >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
       irule rb_step_bind_for >> qexists_tac `(rb_operand_ok_for source_checks)` >> BETA_TAC >>
-      reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
-      irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_step_return_for]) >>
+      reverse conj_tac >- simp[rb_compile_abi_encode_values_to_buf_for, rb_every_zip_fst] >>
+      gen_tac >> strip_tac >> irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_step_return_for]) >>
   Cases >> simp[] >> strip_tac >>
   irule rb_step_bind_for >> qexists_tac `(rb_operand_ok_for source_checks)` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_lower_value_for] >> gen_tac >> strip_tac >>
@@ -970,19 +956,6 @@ Proof
      rb_step_legacy,
      rb_value_ok_legacy]
     (Q.INST [`source_checks` |-> `({"runtime_begin"}, F)`] rb_compile_create_ctor_args_for))
-QED
-
-Theorem rb_compile_create_ctor_tuple:
-  rb_env_ok ce /\
-  (!e. MEM e args ==> rb_step rb_value_ok (cfn ce (expr_type e) e)) ==>
-  rb_step rb_operand_ok (compile_create_ctor_tuple cfn ce args)
-Proof
-  ACCEPT_TAC (SIMP_RULE std_ss
-    [rb_env_ok_legacy,
-     rb_operand_ok_legacy,
-     rb_step_legacy,
-     rb_value_ok_legacy]
-    (Q.INST [`source_checks` |-> `({"runtime_begin"}, F)`] rb_compile_create_ctor_tuple_for))
 QED
 
 Theorem rb_compile_create_blueprint_args:
