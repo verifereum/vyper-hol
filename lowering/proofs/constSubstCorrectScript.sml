@@ -191,11 +191,7 @@ Proof
   ho_match_mp_tac const_local_refs_ind >>
   simp[const_local_refs_def, constant_expr_def, subst_consts_expr_def,
        constant_value_def, expr_type_def] >>
-  rpt strip_tac >> gvs[SF ETA_ss]
-  >~ [`constant_builtin bi`]
-  >- (first_x_assum (qspec_then `E` mp_tac) >> simp[] >> strip_tac >>
-      Cases_on `es` >> gvs[subst_consts_expr_def] >>
-      rename1 `h::rest` >> Cases_on `rest` >> gvs[subst_consts_expr_def]) >>
+  rpt strip_tac >> gvs[SF ETA_ss] >>
   rename1 `TopLevelName ty ns` >> PairCases_on `ns` >> Cases_on `ns0` >>
   gvs[subst_consts_expr_def, const_local_refs_def, const_replacements_ok_def,
       expr_type_def] >>
@@ -2546,13 +2542,6 @@ Proof
       simp[protected_cell_frame_reads, protected_cell_frame_call_primitives]) >>
   Cases_on `bt = Env MsgGas`
   >- simp[protected_cell_frame_next_gas_reading] >>
-  Cases_on `bt = Bop In \/ bt = Bop NotIn`
-  >- (simp[] >> irule protected_cell_frame_bind >> reverse conj_tac
-      >- (simp[state_rel_frame_result] >> metis_tac[]) >>
-      rpt strip_tac >> simp_tac bool_ss [] >>
-      irule protected_cell_frame_bind >> simp[protected_cell_frame_pure_guards] >>
-      rpt strip_tac >> irule protected_cell_frame_bind >>
-      simp[protected_cell_frame_pure_guards, protected_cell_frame_reads]) >>
   simp[] >> irule protected_cell_frame_bind >> reverse conj_tac
   >- (Cases_on `code_slice_source bt es`
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
@@ -3561,21 +3550,7 @@ Resume constant_expr_replay_aux[builtin]:
       `result_array_length cx pv' st = (INL n,st)` by
         metis_tac[constant_result_length, const_result_at_observe] >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
-           type_check_def, assert_def])
-  >- (qexistsl [`Value v`,`roots`] >>
-      simp[const_result_at_def, expr_type_def] >> conj_tac
-      >- gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def,
-             artifact_env_def, expr_type_def] >>
-      rpt strip_tac >> gvs[] >>
-      simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
-           type_check_def, assert_def, lift_option_type_def, lift_sum_def])
-  >- (qexistsl [`Value v`,`roots`] >>
-      simp[const_result_at_def, expr_type_def] >> conj_tac
-      >- gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def,
-             artifact_env_def, expr_type_def] >>
-      rpt strip_tac >> gvs[] >>
-      simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
-           type_check_def, assert_def, lift_option_type_def, lift_sum_def]) >>
+           type_check_def, assert_def]) >>
   qexistsl [`Value v`,`roots`] >> simp[const_result_at_def, expr_type_def] >>
   conj_tac
   >- gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def, artifact_env_def, expr_type_def] >>
@@ -5069,7 +5044,6 @@ Proof
           rpt strip_tac >> gvs[EVERY_DEF] >> metis_tac[]) >>
       `code_slice_source bi es = NONE /\ bi <> Env MsgGas` by
         (Cases_on `bi` >> gvs[constant_builtin_def, code_slice_source_SOME]) >>
-      Cases_on `bi = Bop In \/ bi = Bop NotIn` >>
       qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, ignore_bind_def, bind_def, type_check_def,
            assert_def, raise_def, return_def, AllCaseEqs()] >>
@@ -6103,23 +6077,6 @@ Proof
                   gvs[const_subst_expr_ok_def] >>
                   metis_tac[const_subst_context_expr_frame]) >>
               rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
-          rpt strip_tac >> irule const_computations_related_refl >>
-          simp[const_results_related_def]) >>
-      Cases_on `bi = Bop In \/ bi = Bop NotIn`
-      >- (`LENGTH es = 2` by
-            (gvs[type_check_def, assert_def, return_def, raise_def,
-                 builtin_args_length_ok_def, AllCaseEqs()]) >>
-          `expr_type (EL 1 (MAP (subst_consts_expr env') es)) =
-           expr_type (EL 1 es)` by
-            (qpat_x_assum `MAP expr_type _ = MAP expr_type es` mp_tac >>
-             simp[LIST_EQ_REWRITE, subst_consts_exprs_map, EL_MAP] >>
-             disch_then (qspec_then `1` mp_tac) >> simp[]) >>
-          simp[] >> simp_tac bool_ss [GSYM vyperStateTheory.bind_assoc] >>
-          irule const_computations_related_prefix >> reverse conj_tac
-          >- (drule_all const_subst_exprs_from_elements >>
-              simp[const_subst_exprs_ok_def, const_computations_related_eq,
-                   subst_consts_exprs_map] >>
-              disch_then (qspec_then `s` mp_tac) >> simp[bind_def]) >>
           rpt strip_tac >> irule const_computations_related_refl >>
           simp[const_results_related_def]) >>
       Cases_on `bi = Env MsgGas` >> simp[]

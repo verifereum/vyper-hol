@@ -570,21 +570,6 @@ Proof
           imp_res_tac result_array_length_state >> gvs[] >>
           rpt strip_tac >> first_x_assum irule >> simp[] >>
           first_assum ACCEPT_TAC) >>
-      Cases_on `bt = Bop In \/ bt = Bop NotIn`
-      >- (gvs[accesses_expr_def, int_calls_expr_def] >>
-          qpat_x_assum `!A R st res st'. _`
-            (qspecl_then [`A`,`R`] mp_tac) >> simp[] >> disch_tac >>
-          `!s r t. eval_exprs cx es s = (r,t) ==> ^immutable_frame cx A s t` by
-            (BETA_TAC >> rpt strip_tac >> first_x_assum irule >> simp[] >>
-             first_assum ACCEPT_TAC) >>
-          qpat_x_assum `!st res st'. (_ /\ eval_exprs _ _ _ = _) ==> _` kall_tac >>
-          qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
-          qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
-          simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-            assert_def, return_def, raise_def, lift_option_type_def,
-            vyperMiscTheory.option_CASE_rator, AllCaseEqs()] >> strip_tac >>
-          imp_res_tac lift_sum_state >> gvs[] >>
-          first_x_assum drule_all >> simp[]) >>
       Cases_on `bt = Env MsgGas`
       >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
             assert_def, return_def, raise_def, AllCaseEqs()] >>

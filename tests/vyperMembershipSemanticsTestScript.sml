@@ -37,10 +37,10 @@ Proof
   Cases_on `is_notin` >>
   simp[evaluate_def, builtin_args_length_ok_def, type_check_def, check_def,
        assert_def, bind_def, ignore_bind_def, return_def, raise_def,
-       get_scopes_def, get_accounts_def, lift_option_type_def,
+       get_scopes_def, get_accounts_def, precompile_call_success_def,
        lift_sum_def, read_local_value, cj 1 read_result_def, evaluate_literal_def,
-       evaluate_builtin_def, evaluate_type_def, expr_type_def,
-       evaluate_membership_def, evaluate_in_array_def,
+       evaluate_type_def, expr_type_def,
+       evaluate_builtin_def, evaluate_binop_def, binop_negate_def, evaluate_in_array_def,
        vyperValueTheory.make_array_value_def,
        vyperValueTheory.enumerate_static_array_def,
        vyperValueTheory.default_value_def, compatible_bound_def,
@@ -68,7 +68,7 @@ Proof
   simp[evaluate_def, builtin_args_length_ok_def, type_check_def, check_def,
        assert_def, bind_def, ignore_bind_def, return_def, raise_def,
        get_scopes_def, lift_option_type_def, lift_sum_def, cj 1 read_result_def,
-       evaluate_type_def, expr_type_def, evaluate_membership_def,
+       evaluate_type_def, expr_type_def, evaluate_builtin_def, evaluate_binop_def, binop_negate_def,
        evaluate_in_array_def, default_value_def, type_slot_size_def,
        wordsTheory.dimword_def] >>
   CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >>
@@ -139,7 +139,7 @@ Proof
   Cases_on `is_notin` >>
   simp[eval_pure_expr_def, lookup_name_def, builtin_args_length_ok_def, read_result_def,
        bind_def, return_def, evaluate_type_def, expr_type_def,
-       evaluate_membership_def, evaluate_in_array_def, default_value_def,
+       evaluate_builtin_def, evaluate_binop_def, binop_negate_def, evaluate_in_array_def, default_value_def,
        type_slot_size_def, wordsTheory.dimword_def] >>
   CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >> EVAL_TAC
 QED
