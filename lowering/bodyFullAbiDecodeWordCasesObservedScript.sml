@@ -51,9 +51,21 @@ val input_origin = ``\s.
    (?name ib isz. local_region ce es.scopes s name ib isz /\
      ib <= w2n input_word /\ w2n input_word + LENGTH input_bytes <= ib + isz))``;
 
+Triviality owned_decoder_allocas_below_fmp:
+  (^owned_decoder_state) st s G tn /\ (?H. V H) ==>
+  ctx_has_dalloca ctx ==> allocas_below_fmp s
+Proof
+  BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. V H` (qx_choose_then `world` assume_tac) >>
+  qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es s /\ _`
+    (qspec_then `world` (fn rel => qpat_assum `V world`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+       CONJUNCT1 o MP rel)))
+QED
+
 Theorem abi_decode_owned_word_store_observed[local]:
   emit_void MSTORE [Var dst;value] sa = ((),sb) /\
-  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (^owned_decoder_state) sa s G tn /\ (?H. V H) /\
@@ -84,7 +96,12 @@ Theorem abi_decode_owned_word_store_observed[local]:
        !mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
          val_in_memory tv v (w2n dw) mem)
 Proof
-  BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `(^owned_decoder_state) sa s G tn` (fn owned =>
+    qpat_assum `?H. V H` (fn world =>
+      assume_tac (MATCH_MP owned_decoder_allocas_below_fmp (CONJ owned world)) >>
+      map_every assume_tac (CONJUNCTS (BETA_RULE owned)))) >>
+  RULE_ASSUM_TAC BETA_RULE >> BETA_TAC >>
   mp_tac (BETA_RULE
     bodyFullAbiDecodeOwnedWordStoreObservedTheory.abi_decode_owned_word_store_observed_exact) >>
   (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >>
@@ -127,7 +144,7 @@ QED
 
 val observed_clamp_boundary = ``!value clamp sa sb fn ctx s w G tn lo explicit PG.
   compile_abi_clamp_basetype value clamp sa = ((),sb) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand value s = SOME w /\ op_prov G value = NONE /\
@@ -158,7 +175,7 @@ val guarded_observed_pre = ``\start finish dst src opc base_op hi info env sf ty
        off + abi_member_head_size (vyper_to_abi_type env ty) <= h)) /\
   compile_abi_decode_to_buf dst src opc base_op hi info start = ((),finish) /\
   opc = MLOAD /\ fn_has_code start finish fn /\ fn_inst_ids_distinct fn /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved ce start /\ (?H. V H) /\
+  local_ptrs_reserved ce start /\ (?H. V H) /\
   w2n input_word+LENGTH input_bytes < dimword (:256) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
@@ -256,7 +273,12 @@ Proof
   `(!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at start x) /\
    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at start x)` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  qpat_assum `Abbrev (OS = _)` (fn ab =>
+    qpat_assum `OS start s G tn` (fn owned =>
+      qpat_assum `?H. V H` (fn world =>
+        assume_tac (MATCH_MP (PURE_REWRITE_RULE
+          [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] ab)]
+          owned_decoder_allocas_below_fmp) (CONJ owned world))))) >>
   qpat_assum `Abbrev (OS = _)` (fn th =>
     drule_all (PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]
       abi_decode_owned_relative_load_exact)) >>
@@ -282,6 +304,12 @@ Proof
        qpat_assum `OS start s G tn`
          (ACCEPT_TAC o cj 2 o BETA_RULE o
           PURE_REWRITE_RULE [REWRITE_RULE [markerTheory.Abbrev_def] ab]))) >>
+  qpat_assum `Abbrev (OS = _)` (fn ab =>
+    qpat_assum `OS cs'' t Gf tnf` (fn owned =>
+      qpat_assum `?H. V H` (fn world =>
+        assume_tac (MATCH_MP (PURE_REWRITE_RULE
+          [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] ab)]
+          owned_decoder_allocas_below_fmp) (CONJ owned world))))) >>
   qpat_x_assum `!value clamp sa sb fn ctx s w G tn lo explicit PG. _` drule_all >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choose_then `cr` (qx_choose_then `CG` (qx_choose_then `CT` strip_assume_tac))))
