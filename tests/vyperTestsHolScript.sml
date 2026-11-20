@@ -47,6 +47,7 @@ Ancestors
   vyperRawCallCalldataTest
   vyperSendCpsCVTest
   vyperSendModesTest
+  vyperStateCheckpointTest
   vyperStorageOutcomeTest
   vyperStoragePopTest
   vyperStringBoolConvertTest

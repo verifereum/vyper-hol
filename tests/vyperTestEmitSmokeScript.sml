@@ -52,14 +52,17 @@ val expected_status =
    ("test_expected_revert",true), ("test_unexpected_revert",false),
    ("test_null_code",true), ("test_raw_without_deployer_nonce",true),
    ("test_raw_deployer_nonce",true), ("test_raw_deployer_nonce_rewind",false),
-   ("test_raw_deployer_nonce_address_mismatch",false)];
+   ("test_raw_deployer_nonce_address_mismatch",false),
+   ("test_checkpoint_balance",true), ("test_checkpoint_balance_mismatch",false)];
 val expected_names = List.map #1 expected_status;
-(* Raw-deployment failures must fail for their own reason. *)
+(* Failures must report the intended mismatch boundary. *)
 val expected_errors =
   [("test_raw_deployer_nonce_rewind",
     "raw deployment deployer nonce below replay"),
    ("test_raw_deployer_nonce_address_mismatch",
-    "raw deployment address mismatch")];
+    "raw deployment address mismatch"),
+   ("test_checkpoint_balance_mismatch",
+    "field=balance slot=none expected=8 actual=7")];
 val () =
   if List.map #1 prepared = expected_names then ()
   else raise Fail "prepared fixture names differ from expected names or order";
