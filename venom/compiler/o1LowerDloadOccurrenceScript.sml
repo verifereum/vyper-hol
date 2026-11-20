@@ -3,7 +3,7 @@
 Theory o1LowerDloadOccurrence
 Ancestors
   ptrDisciplineEmptyTaint
-  o1LowerDloadGhost o1LowerDloadAllocation ptrDiscipline ctxLookupAgreeHelpers
+  o1LowerDloadGhost ptrDiscipline ctxLookupAgreeHelpers
   finite_map
   venomExecSemantics venomMemProps venomExecProofs pred_set list
 

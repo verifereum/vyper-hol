@@ -1,6 +1,6 @@
 Theory dftGasInvAliasNormal
 Ancestors
-  contextCodegenRel contextCodegenRelProps dftGasInvAlias venomInst list rich_list
+  contextCodegenRel contextCodegenRelProps venomInst list rich_list
   dftScheduleOrder dftWf dftRunRel venomWf dftTopoSort
 
 Theorem inv_alias_resolve_opaque:

@@ -1,7 +1,7 @@
 Theory exprSendPtr
 Ancestors
   sourceUnitExecution
-  callStepPtr wordArgsPtr exprSimSend fragGasSeqPtr fragGasPathPtr stmtAssertPtr
+  callStepPtr wordArgsPtr exprSimSend fragGasSeqPtr fragGasPathPtr stmtAbortPtr[qualified] stmtSimAssertProps[qualified]
   ptrSafeRun ptrDiscipline venomExecSemantics venomExecProofs
   venomInst venomInstProofs venomInstProofs1 venomState opcodeClass memLocDefs codegenRel contextCodegenRel list
   venomCallOracleDefs venomMemProps ghostPcTransportPtr

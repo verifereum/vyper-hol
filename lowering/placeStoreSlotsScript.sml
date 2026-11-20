@@ -26,7 +26,7 @@ Ancestors
   localPtrsProps venomInstProofs exprSimAggregateEncoding vyperStorageBackend vfmState venomMemDefs
   stmtSimDefs exprSimHypsDefs typedCopyDomain vyperStoragePlaceProvenance vyperStoragePlaceRegion vyperStorageFrame
   loweringPosts fragGasMode accountsRelProps copyExecution stmtSimStoreCopy
-  placeStoreCopyChunk fragGasSeq typedMemoryCopy placeMemoryArrayControl
+  fragGasSeq typedMemoryCopy placeMemoryArrayControl
   stmtLowering exprLowering compileEnv loweringStateRelDefs context
   vyperInterpreter vyperState vyperValue vyperTypeSystem vyperTyping
   vyperStorage valueEncoding valueEncodingDefs valueEncodingProps valueEncodingTyping

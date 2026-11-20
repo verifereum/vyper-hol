@@ -1,6 +1,6 @@
 Theory bodyPtrBopScalarStep
 Ancestors
-  bodyPtrBopCompare typedCopyPtr fragGasSeqPtr ptrSafeRun ptrDiscipline
+  typedCopyPtr fragGasSeqPtr ptrSafeRun ptrDiscipline
   venomExecSemantics venomExecProofs venomInstProofs venomInst venomState
   codegenRel contextCodegenRel finite_map list pred_set
 

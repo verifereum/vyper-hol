@@ -1,7 +1,7 @@
 Theory appendStorageAggregateRel
 Ancestors
   appendStorageRel storageCopyLive placeStoreSlots
-  stmtSimStoreCopyState stmtSimAssignStorageCopy
+  stmtSimAssignStorageCopy
   stmtSimAppendStorage stmtSimStoreCopy bodyMemAssignTopCopySem
   stmtSimDefs stmtSimProps exprSimProps exprLoweringProps
   vyperStorageFootprint accountsRelProps loweringStateRelDefs vyperStorageFrame vyperStorageBackend
