@@ -962,12 +962,7 @@ QED
 
 Finalise eval_name_projection_mutual
 
-Theorem supported_target_eval_scopes:
-  !target tops bindings pt cx es res es'.
-    supported_target_info tops bindings target = SOME pt /\
-    (* SCRATCH SEQ-8389: restated; effect calls in keys *)
-    ~supported_target_exists expr_effect_root target /\
-    eval_base_place cx target es = (res,es') ==> es'.scopes = es.scopes
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   measureInduct_on `base_assignment_target_size target` >>
   Cases_on `target` >> rpt strip_tac
@@ -989,11 +984,22 @@ Proof
   disch_then drule_all >> strip_tac >>
   metis_tac[supported_expr_scopes]
 QED
+*)
+Theorem supported_target_eval_scopes:
+  !target tops bindings pt cx es res es'.
+    supported_target_info tops bindings target = SOME pt /\
+    (* SCRATCH SEQ-8389: restated; effect calls in keys *)
+    ~supported_target_exists expr_effect_root target /\
+    eval_base_place cx target es = (res,es') ==> es'.scopes = es.scopes
+Proof
+  cheat
+QED
 
 Theorem supported_target_place_scopes:
   !target tops bindings pt cx es res es'.
     supported_target_info tops bindings target = SOME pt /\
-    ~supported_target_exists expr_internal_call_root target /\
+    (* SCRATCH SEQ-8389: restated; effect calls in keys *)
+    ~supported_target_exists expr_effect_root target /\
     eval_target_place cx target es = (res,es') ==> es'.scopes = es.scopes
 Proof
   rpt strip_tac >>
@@ -1053,7 +1059,7 @@ Resume supported_simple_target_eval_scopes[subscript]:
   cheat
 QED
 
-Resume supported_simple_target_eval_scopes[attribute]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   rename1 `eval_base_place cx (AttributeTarget inner fname) es = _` >>
   Cases_on `inner` >> gvs[] >>
   rename1 `eval_base_place cx (AttributeTarget (TopLevelNameTarget nsid) fname) es = _` >>
@@ -1062,23 +1068,28 @@ Resume supported_simple_target_eval_scopes[attribute]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
   imp_res_tac lookup_global_scopes >> imp_res_tac extend_place_state >> gvs[] >>
   trace_scopes_tac
+*)
+Resume supported_simple_target_eval_scopes[attribute]:
+  cheat
 QED
 
 Finalise supported_simple_target_eval_scopes
 
-Theorem supported_any_target_place_scopes:
-  !target tops bindings cx es res es'.
-    (supported_target tops bindings target \/
-     (?pt. supported_target_info tops bindings target = SOME pt)) /\
-    ~supported_target_exists expr_internal_call_root target /\
-    eval_target_place cx target es = (res,es') ==> es'.scopes = es.scopes
-Proof
-  rpt strip_tac
-  >- (gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-      imp_res_tac supported_simple_target_eval_scopes >>
-      Cases_on `pv` >> gvs[get_place_def, return_def, raise_def]) >>
-  metis_tac[supported_target_place_scopes]
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (it pinned an exclusion); no theorem uses it
+  Theorem supported_any_target_place_scopes:
+    !target tops bindings cx es res es'.
+      (supported_target tops bindings target \/
+       (?pt. supported_target_info tops bindings target = SOME pt)) /\
+      ~supported_target_exists expr_internal_call_root target /\
+      eval_target_place cx target es = (res,es') ==> es'.scopes = es.scopes
+  Proof
+    rpt strip_tac
+    >- (gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
+        imp_res_tac supported_simple_target_eval_scopes >>
+        Cases_on `pv` >> gvs[get_place_def, return_def, raise_def]) >>
+    metis_tac[supported_target_place_scopes]
+  QED
+*)
 
 Theorem projection_length[local]:
   !a b name.

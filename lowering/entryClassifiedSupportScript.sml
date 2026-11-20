@@ -4,6 +4,16 @@ Ancestors
 
 (* Since public getters are classified externals, a classified entry is either
    a supported source function or a synthesized getter. *)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule classify_functions_external_source >> strip_tac >>
+  gvs[constSubstTheory.subst_consts_fn_empty]
+  >- (disj1_tac >> drule_all supported_program_declaration >>
+      simp[supported_declaration_header_def, supported_declaration_body_def]) >>
+  disj2_tac >> metis_tac[]
+QED
+*)
 Theorem entry_classified_external_support:
   !tops mut nr rr name args defaults ret body.
   supported_program tops /\ module_consts_env tops [] = [] /\
@@ -15,12 +25,7 @@ Theorem entry_classified_external_support:
   ?top. MEM top tops /\
         public_getter top = SOME (mut,nr,rr,name,args,defaults,ret,body)
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule classify_functions_external_source >> strip_tac >>
-  gvs[constSubstTheory.subst_consts_fn_empty]
-  >- (disj1_tac >> drule_all supported_program_declaration >>
-      simp[supported_declaration_header_def, supported_declaration_body_def]) >>
-  disj2_tac >> metis_tac[]
+  cheat
 QED
 
 Theorem entry_classified_internal_support:

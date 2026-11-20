@@ -52,16 +52,16 @@ Proof
 QED
 
 Theorem lower_vyper_runtime_unit_no_create:
+  (* SCRATCH SEQ-8389: restated with the raw-shape and grouped-default
+     facts as explicit premises; callers split on them *)
   !tops rp unit. supported_program tops /\
+    runtime_bodies_shape_ok tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     lower_vyper_runtime_unit tops rp = SOME unit ==>
     !fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
       inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2
 Proof
   rpt gen_tac >> strip_tac >>
-  `runtime_bodies_shape_ok tops` by
-    metis_tac[supported_program_runtime_bodies_shape_ok] >>
-  `~EXISTS external_has_defaults (FST (classify_functions tops))` by
-    metis_tac[supported_program_no_external_defaults] >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
   rename1 `classify_functions tops = (exts, ints, fb, ctor)` >>
   `!x. MEM x exts ==> external_fn_shape_ok

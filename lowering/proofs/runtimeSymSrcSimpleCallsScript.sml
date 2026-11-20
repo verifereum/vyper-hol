@@ -78,16 +78,7 @@ Proof
   rename1 `addr::amount::gas::rest` >> Cases_on `rest` >> simp[supported_root_effect_expr_def]
 QED
 
-Theorem runtime_sym_call_send:
-  runtime_sym_lower_value_clause tops ==>
-  !cfn ce rt ty has_gas es default s v s'.
-    (!e t. MEM e es \/ default = SOME e ==>
-           runtime_sym_expr_contract tops cfn ce t e) /\
-    runtime_sym_env tops ce /\ supported_expr tops (Call rt (Send has_gas) es default) /\
-    ~supported_expr_exists is_self_code (Call rt (Send has_gas) es default) /\
-    EVERY runtime_sym_inst (state_insts s) /\
-    compile_call cfn ce rt (ty : type) (Send has_gas) es default s = (v,s') ==>
-    EVERY runtime_sym_inst (state_insts s') /\ runtime_sym_value v
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   pure_rewrite_tac[runtime_sym_lower_value_clause_def] >> strip_tac >>
   rpt gen_tac >> strip_tac >> drule runtime_sym_supported_send >> strip_tac >>
@@ -101,4 +92,18 @@ Proof
   simp[is_label_operand_def] >> strip_tac >>
   simp[runtime_sym_value_def, is_label_operand_def] >>
   drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_emit_void >> simp[]
+QED
+*)
+Theorem runtime_sym_call_send:
+  runtime_sym_lower_value_clause tops ==>
+  !cfn ce rt ty has_gas es default s v s'.
+    (!e t. MEM e es \/ default = SOME e ==>
+           runtime_sym_expr_contract tops cfn ce t e) /\
+    runtime_sym_env tops ce /\ supported_expr tops (Call rt (Send has_gas) es default) /\
+    ~supported_expr_exists is_self_code (Call rt (Send has_gas) es default) /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_call cfn ce rt (ty : type) (Send has_gas) es default s = (v,s') ==>
+    EVERY runtime_sym_inst (state_insts s') /\ runtime_sym_value v
+Proof
+  cheat
 QED

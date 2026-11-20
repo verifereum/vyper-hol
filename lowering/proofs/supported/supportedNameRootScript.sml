@@ -8,6 +8,13 @@ Ancestors
 
 (* p marks top-level names that are neither storage, immutable nor a place
    root; supported_pure_expr and supported_place_expr admit no such name. *)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  ho_match_mp_tac supported_pure_expr_ind >>
+  rw[supported_pure_expr_def, supported_expr_exists_def] >>
+  rpt strip_tac >> res_tac >> gvs[]
+QED
+*)
 Theorem supported_pure_no_name_root:
   (!tops e. supported_pure_expr tops e ==>
     (!x. p x ==> ?ty id. x = TopLevelName ty id /\
@@ -30,11 +37,17 @@ Theorem supported_pure_no_name_root:
        supported_immutable_type tops id = NONE) ==>
     ~supported_expr_exists p e)
 Proof
-  ho_match_mp_tac supported_pure_expr_ind >>
-  rw[supported_pure_expr_def, supported_expr_exists_def] >>
-  rpt strip_tac >> res_tac >> gvs[]
+  cheat
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  ho_match_mp_tac supported_effect_expr_ind >>
+  rw[supported_effect_expr_def, supported_expr_exists_def] >>
+  imp_res_tac supported_pure_no_name_root >>
+  rpt strip_tac >> res_tac >> gvs[]
+QED
+*)
 Theorem supported_effect_no_name_root:
   (!tops e. supported_effect_expr tops e ==>
     (!x. p x ==> ?ty id. x = TopLevelName ty id /\
@@ -47,10 +60,7 @@ Theorem supported_effect_no_name_root:
        supported_immutable_type tops id = NONE) ==>
     ~supported_expr_exists p e)
 Proof
-  ho_match_mp_tac supported_effect_expr_ind >>
-  rw[supported_effect_expr_def, supported_expr_exists_def] >>
-  imp_res_tac supported_pure_no_name_root >>
-  rpt strip_tac >> res_tac >> gvs[]
+  cheat
 QED
 
 Theorem supported_expr_no_name_root:
@@ -79,6 +89,15 @@ Proof
   metis_tac[supported_expr_no_name_root]
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  Cases_on `target` >>
+  simp[supported_target_def, supported_expr_exists_def] >>
+  qmatch_goalsub_rename_tac `supported_target_exists p parent` >>
+  Cases_on `parent` >> simp[supported_expr_exists_def] >>
+  metis_tac[supported_expr_no_name_root]
+QED
+*)
 Theorem supported_target_no_name_root[local]:
   supported_target tops bindings target /\
   (!x. p x ==> ?ty id. x = TopLevelName ty id /\
@@ -86,11 +105,7 @@ Theorem supported_target_no_name_root[local]:
      supported_immutable_type tops id = NONE) ==>
   ~supported_target_exists p target
 Proof
-  Cases_on `target` >>
-  simp[supported_target_def, supported_expr_exists_def] >>
-  qmatch_goalsub_rename_tac `supported_target_exists p parent` >>
-  Cases_on `parent` >> simp[supported_expr_exists_def] >>
-  metis_tac[supported_expr_no_name_root]
+  cheat
 QED
 
 Theorem supported_assignment_no_name_root[local]:
@@ -163,17 +178,7 @@ Proof
   gvs[supported_expr_exists_def] >> rpt strip_tac >> res_tac >> gvs[]
 QED
 
-Theorem supported_stmts_no_name_root:
-  (!tops bindings s. supported_stmt tops bindings s ==>
-    (!x. p x ==> ?ty id. x = TopLevelName ty id /\
-       ~supported_place_root tops id /\ ~supported_storage_value tops id ty /\
-       supported_immutable_type tops id = NONE) ==>
-    ~supported_stmt_expr_exists p s) /\
-  (!tops bindings ss. supported_stmts tops bindings ss ==>
-    (!x. p x ==> ?ty id. x = TopLevelName ty id /\
-       ~supported_place_root tops id /\ ~supported_storage_value tops id ty /\
-       supported_immutable_type tops id = NONE) ==>
-    ~supported_stmts_expr_exists p ss)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   ho_match_mp_tac supported_stmt_ind >>
   rw[supported_stmt_def, supported_stmt_expr_exists_def,
@@ -208,6 +213,21 @@ Proof
   imp_res_tac supported_iterator_no_name_root >>
   imp_res_tac (cj 1 supported_pure_no_name_root) >>
   gvs[]
+QED
+*)
+Theorem supported_stmts_no_name_root:
+  (!tops bindings s. supported_stmt tops bindings s ==>
+    (!x. p x ==> ?ty id. x = TopLevelName ty id /\
+       ~supported_place_root tops id /\ ~supported_storage_value tops id ty /\
+       supported_immutable_type tops id = NONE) ==>
+    ~supported_stmt_expr_exists p s) /\
+  (!tops bindings ss. supported_stmts tops bindings ss ==>
+    (!x. p x ==> ?ty id. x = TopLevelName ty id /\
+       ~supported_place_root tops id /\ ~supported_storage_value tops id ty /\
+       supported_immutable_type tops id = NONE) ==>
+    ~supported_stmts_expr_exists p ss)
+Proof
+  cheat
 QED
 
 (* ===== Constant declarations ===== *)

@@ -34,6 +34,15 @@ Proof
        supported_function_body_def, NULL_EQ] >> metis_tac[]
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  ho_match_mp_tac supported_pure_expr_ind >>
+  simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND] >>
+  rpt conj_tac >> rpt gen_tac >>
+  TRY (Cases_on `base`) >>
+  simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND]
+QED
+*)
 Theorem supported_pure_main_calls:
   (!tops e. supported_pure_expr tops e ==>
     EVERY (\c. FST c = NONE /\
@@ -48,11 +57,7 @@ Theorem supported_pure_main_calls:
     EVERY (\c. FST c = NONE /\
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e))
 Proof
-  ho_match_mp_tac supported_pure_expr_ind >>
-  simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND] >>
-  rpt conj_tac >> rpt gen_tac >>
-  TRY (Cases_on `base`) >>
-  simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND]
+  cheat
 QED
 
 Theorem supported_function_decl_main:
@@ -62,6 +67,14 @@ Proof
   gvs[supported_lookup_other_module]
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  ho_match_mp_tac supported_effect_expr_ind >>
+  simp[supported_effect_expr_def, int_calls_expr_def, EVERY_APPEND] >>
+  rpt conj_tac >> rpt gen_tac >> simp[] >>
+  metis_tac[supported_pure_main_calls, supported_function_decl_main]
+QED
+*)
 Theorem supported_effect_main_calls:
   (!tops e. supported_effect_expr tops e ==>
     EVERY (\c. FST c = NONE /\
@@ -70,10 +83,7 @@ Theorem supported_effect_main_calls:
     EVERY (\c. FST c = NONE /\
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e))
 Proof
-  ho_match_mp_tac supported_effect_expr_ind >>
-  simp[supported_effect_expr_def, int_calls_expr_def, EVERY_APPEND] >>
-  rpt conj_tac >> rpt gen_tac >> simp[] >>
-  metis_tac[supported_pure_main_calls, supported_function_decl_main]
+  cheat
 QED
 
 Theorem supported_expr_main_calls:
@@ -84,14 +94,7 @@ Proof
   metis_tac[supported_pure_main_calls, supported_effect_main_calls]
 QED
 
-Theorem supported_target_info_storage_syntax:
-  !tops bindings target.
-    IS_SOME (supported_target_info tops bindings target) ==>
-    ~supported_target_exists expr_halt_root target /\
-    ~supported_target_exists expr_evm_run_root target /\
-    ~supported_target_exists call_operands_effect_root target /\
-    EVERY (\c. FST c = NONE /\
-               IS_SOME (supported_function_decl tops c Internal)) (int_calls_target target)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt gen_tac >>
   map_every qid_spec_tac [`bindings`, `tops`, `target`] >>
@@ -108,14 +111,22 @@ Proof
   metis_tac[supported_expr_no_halt, supported_expr_no_evm_run, expr_has_evm_run_def,
             supported_expr_main_calls, supported_expr_no_call_operand_effects, optionTheory.IS_SOME_EXISTS]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (subscript keys may halt or run calls); callers split
+  Theorem supported_target_info_storage_syntax:
+    !tops bindings target.
+      IS_SOME (supported_target_info tops bindings target) ==>
+      ~supported_target_exists expr_halt_root target /\
+      ~supported_target_exists expr_evm_run_root target /\
+      ~supported_target_exists call_operands_effect_root target /\
+      EVERY (\c. FST c = NONE /\
+                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_target target)
+  Proof
+    cheat
+  QED
+*)
 
-Theorem supported_target_storage_syntax:
-  supported_target tops bindings target ==>
-  ~supported_target_exists expr_halt_root target /\
-  ~supported_target_exists expr_evm_run_root target /\
-  ~supported_target_exists call_operands_effect_root target /\
-  EVERY (\c. FST c = NONE /\
-               IS_SOME (supported_function_decl tops c Internal)) (int_calls_target target)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `target` >>
   simp[supported_target_def, supported_expr_exists_def, call_operands_effect_root_def, int_calls_expr_def] >>
@@ -124,6 +135,19 @@ Proof
   metis_tac[supported_expr_no_halt, supported_expr_no_evm_run, expr_has_evm_run_def,
             supported_expr_main_calls, supported_expr_no_call_operand_effects]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (subscript keys may halt or run calls); callers split
+  Theorem supported_target_storage_syntax:
+    supported_target tops bindings target ==>
+    ~supported_target_exists expr_halt_root target /\
+    ~supported_target_exists expr_evm_run_root target /\
+    ~supported_target_exists call_operands_effect_root target /\
+    EVERY (\c. FST c = NONE /\
+                 IS_SOME (supported_function_decl tops c Internal)) (int_calls_target target)
+  Proof
+    cheat
+  QED
+*)
 
 Theorem supported_assignment_storage_syntax:
   supported_assignment tops bindings tgt e ==>

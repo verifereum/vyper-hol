@@ -17,13 +17,7 @@ Proof
   simp[external_has_defaults_def, listTheory.NULL_EQ] >> rpt strip_tac >> simp[]
 QED
 
-Theorem source_signature_table[local]:
-  supported_program tops ==>
-  !name tys.
-    MEM (name,tys) (abi_external_signatures tops) <=>
-    MEM (name,tys)
-      (MAP (\(mut,nr,rr,n,args,ds,ret,body). (n,MAP SND args))
-        (FST (classify_functions tops)))
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> rpt gen_tac >>
   drule supported_program_no_external_defaults >>
@@ -32,6 +26,17 @@ Proof
   mp_tac (MATCH_MP sortingTheory.PERM_MEM_EQ abi_signature_partition) >>
   disch_then (qspec_then `(name,tys)` mp_tac) >>
   asm_rewrite_tac[] >> metis_tac[]
+QED
+*)
+Theorem source_signature_table[local]:
+  supported_program tops ==>
+  !name tys.
+    MEM (name,tys) (abi_external_signatures tops) <=>
+    MEM (name,tys)
+      (MAP (\(mut,nr,rr,n,args,ds,ret,body). (n,MAP SND args))
+        (FST (classify_functions tops)))
+Proof
+  cheat
 QED
 
 Theorem table_no_hit[local]:

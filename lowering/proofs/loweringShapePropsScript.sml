@@ -14547,14 +14547,21 @@ QED
 
 
 
-Theorem supported_program_const_replacement_shape:
-  supported_program tops /\
-  ALOOKUP (module_consts_env tops []) id = SOME e ==>
-  ~supported_expr_exists expr_shape_root e
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> drule_all supported_program_const_replacement >>
   metis_tac[cj 1 supported_pure_shape]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (pure fragment holds raw-shape calls); callers split
+  Theorem supported_program_const_replacement_shape:
+    supported_program tops /\
+    ALOOKUP (module_consts_env tops []) id = SOME e ==>
+    ~supported_expr_exists expr_shape_root e
+  Proof
+    cheat
+  QED
+*)
 
 (* SCRATCH SEQ-8389 DELETED: false under the widened gate (raw calls, creates, selfdestruct and grouped defaults are accepted); callers split per the step-3 ruling
   Theorem supported_program_runtime_bodies_shape_ok:
@@ -14608,13 +14615,7 @@ QED
 (* build_compile_env maps module variables to storage/transient slots or
    immutable offsets and arguments and locals to MemLoc; external functions
    have no return PC. *)
-Theorem package_external_fn_shape_ok:
-  !tops use_trans nkey_map target src.
-    runtime_bodies_shape_ok tops /\
-    MEM src (FST (classify_functions tops)) ==>
-    external_fn_shape_ok
-      (set_external_package_target target
-         (package_external_fn tops use_trans nkey_map src))
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt gen_tac >> strip_tac >> PairCases_on `src` >>
   `~supported_stmts_expr_exists expr_shape_root src7`
@@ -14628,14 +14629,19 @@ Proof
   imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
-
-Theorem package_internal_fn_shape_ok:
+*)
+Theorem package_external_fn_shape_ok:
   !tops use_trans nkey_map target src.
     runtime_bodies_shape_ok tops /\
-    MEM src (FST (SND (classify_functions tops))) ==>
-    internal_fn_shape_ok
-      (set_internal_package_target target
-         (package_internal_fn tops use_trans nkey_map F 0 src))
+    MEM src (FST (classify_functions tops)) ==>
+    external_fn_shape_ok
+      (set_external_package_target target
+         (package_external_fn tops use_trans nkey_map src))
+Proof
+  cheat
+QED
+
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt gen_tac >> PairCases_on `src` >> strip_tac >>
   `~supported_stmts_expr_exists expr_shape_root src7`
@@ -14646,6 +14652,17 @@ Proof
   imp_res_tac supported_program_runtime_bodies_shape_ok >>
   imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
+QED
+*)
+Theorem package_internal_fn_shape_ok:
+  !tops use_trans nkey_map target src.
+    runtime_bodies_shape_ok tops /\
+    MEM src (FST (SND (classify_functions tops))) ==>
+    internal_fn_shape_ok
+      (set_internal_package_target target
+         (package_internal_fn tops use_trans nkey_map F 0 src))
+Proof
+  cheat
 QED
 
 Theorem package_fallback_fn_shape_ok:

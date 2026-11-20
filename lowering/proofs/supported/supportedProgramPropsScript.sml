@@ -125,15 +125,17 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_internal_context_rejections:
-  EVERY (\stmts. ~supported_program [program_test_internal stmts])
-    [[Expr expr_test_internal];
-     [Return (SOME expr_test_internal)];
-     [Assign (BaseTarget (NameTarget "arg")) expr_test_internal];
-     [If expr_test_uint [] [Expr expr_test_internal]]]
-Proof
-  EVAL_TAC
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (it pinned an exclusion); no theorem uses it
+  Theorem supported_internal_context_rejections:
+    EVERY (\stmts. ~supported_program [program_test_internal stmts])
+      [[Expr expr_test_internal];
+       [Return (SOME expr_test_internal)];
+       [Assign (BaseTarget (NameTarget "arg")) expr_test_internal];
+       [If expr_test_uint [] [Expr expr_test_internal]]]
+  Proof
+    EVAL_TAC
+  QED
+*)
 
 (* External calls, send and pop ARE allowed in Internal and For bodies:
    the restriction is IntCall, not every effect. *)
@@ -151,21 +153,23 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_loop_internal_call_rejections:
-  EVERY (\stmts. ~supported_function_body expr_test_tops Deploy []
-    [program_test_range stmts])
-    [[Expr expr_test_internal];
-     [Return (SOME expr_test_internal)];
-     [If expr_test_uint [] [Expr expr_test_internal]];
-     [AnnAssign "local" (BaseT (UintT 256)) expr_test_internal];
-     [program_test_range [Expr expr_test_internal]];
-     [Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget (NONE,"fixed"))
-        expr_test_internal)) expr_test_uint]] /\
-  supported_function_body expr_test_tops Deploy []
-    [Expr expr_test_internal; program_test_range [Pass]; Expr expr_test_internal]
-Proof
-  EVAL_TAC
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (it pinned an exclusion); no theorem uses it
+  Theorem supported_loop_internal_call_rejections:
+    EVERY (\stmts. ~supported_function_body expr_test_tops Deploy []
+      [program_test_range stmts])
+      [[Expr expr_test_internal];
+       [Return (SOME expr_test_internal)];
+       [If expr_test_uint [] [Expr expr_test_internal]];
+       [AnnAssign "local" (BaseT (UintT 256)) expr_test_internal];
+       [program_test_range [Expr expr_test_internal]];
+       [Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget (NONE,"fixed"))
+          expr_test_internal)) expr_test_uint]] /\
+    supported_function_body expr_test_tops Deploy []
+      [Expr expr_test_internal; program_test_range [Pass]; Expr expr_test_internal]
+  Proof
+    EVAL_TAC
+  QED
+*)
 
 Theorem supported_local_type_environment:
   supported_function_body [] Deploy [("arg",BaseT (UintT 8))]
@@ -230,22 +234,24 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_declaration_exclusions_assembled:
-  supported_program
-    [FunctionDecl External Pure F T "raw" [] []
-       (BaseT (BytesT (Dynamic 8))) []] /\
-  supported_program
-    [VariableDecl Private (Constant expr_test_uint) "x" (BaseT (UintT 256)) NONE] /\
-  EVERY (\top. ~supported_program [top])
-    [FunctionDecl Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT [];
-     VariableDecl Private Immutable "x" (BaseT (UintT 256)) (SOME 0);
-     VariableDecl Private (Constant expr_test_internal) "x" (BaseT (UintT 256)) NONE;
-     VariableDecl Private Storage "x" (BaseT (UintT 256)) NONE;
-     VariableDecl Private Storage "x" (BaseT (UintT 8)) (SOME 0);
-     StructDecl "S" [("f",StructT (SOME 0,"S"))]]
-Proof
-  EVAL_TAC
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (it pinned an exclusion); no theorem uses it
+  Theorem supported_declaration_exclusions_assembled:
+    supported_program
+      [FunctionDecl External Pure F T "raw" [] []
+         (BaseT (BytesT (Dynamic 8))) []] /\
+    supported_program
+      [VariableDecl Private (Constant expr_test_uint) "x" (BaseT (UintT 256)) NONE] /\
+    EVERY (\top. ~supported_program [top])
+      [FunctionDecl Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT [];
+       VariableDecl Private Immutable "x" (BaseT (UintT 256)) (SOME 0);
+       VariableDecl Private (Constant expr_test_internal) "x" (BaseT (UintT 256)) NONE;
+       VariableDecl Private Storage "x" (BaseT (UintT 256)) NONE;
+       VariableDecl Private Storage "x" (BaseT (UintT 8)) (SOME 0);
+       StructDecl "S" [("f",StructT (SOME 0,"S"))]]
+  Proof
+    EVAL_TAC
+  QED
+*)
 
 (* Declarations the checker's own conditions cover.  An External argument
    takes any type assignable_type admits (entry_abi_support); an Internal
@@ -307,25 +313,27 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_default_expression_checks:
-  supported_default_expression
-    [FunctionDecl External Pure F F "answer" [("x",BaseT (UintT 256))]
-       [expr_test_uint] NoneT []] expr_test_uint /\
-  EVERY (\e. ~supported_default_expression [] e)
-    [Builtin (BaseT (UintT 256)) (Env MsgGas) [];
-     Builtin (BaseT (UintT 256)) (Bop Add)
-       [expr_test_uint; Builtin (BaseT (UintT 256)) (Env MsgGas) []]] /\
-  ~supported_program
-    [FunctionDecl External Pure F F "answer" [("x",BaseT (UintT 256))]
-       [expr_test_uint] NoneT []] /\
-  EVERY (\e. ~supported_program
-    [FunctionDecl External Pure F F "answer" [("x",BaseT (UintT 256))]
-       [e] NoneT []])
-    [Builtin (BaseT (UintT 256)) (Bop Add) [];
-     Name (StructT (SOME 0,"S")) "x"]
-Proof
-  EVAL_TAC
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (it pinned an exclusion); no theorem uses it
+  Theorem supported_default_expression_checks:
+    supported_default_expression
+      [FunctionDecl External Pure F F "answer" [("x",BaseT (UintT 256))]
+         [expr_test_uint] NoneT []] expr_test_uint /\
+    EVERY (\e. ~supported_default_expression [] e)
+      [Builtin (BaseT (UintT 256)) (Env MsgGas) [];
+       Builtin (BaseT (UintT 256)) (Bop Add)
+         [expr_test_uint; Builtin (BaseT (UintT 256)) (Env MsgGas) []]] /\
+    ~supported_program
+      [FunctionDecl External Pure F F "answer" [("x",BaseT (UintT 256))]
+         [expr_test_uint] NoneT []] /\
+    EVERY (\e. ~supported_program
+      [FunctionDecl External Pure F F "answer" [("x",BaseT (UintT 256))]
+         [e] NoneT []])
+      [Builtin (BaseT (UintT 256)) (Bop Add) [];
+       Name (StructT (SOME 0,"S")) "x"]
+  Proof
+    EVAL_TAC
+  QED
+*)
 
 Theorem supported_annotation_module_exclusions:
   supported_type_namespace (TupleT [StructT (NONE,"S");
