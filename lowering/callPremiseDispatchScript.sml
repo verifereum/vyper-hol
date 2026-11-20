@@ -18,34 +18,17 @@ End
 Theorem same_call_env_reads[local]:
   same_call_env cx cx' ==>
   get_module_code cx' = get_module_code cx /\
-  get_tenv cx' = get_tenv cx /\
-  lookup_var_slot_from_layout cx' = lookup_var_slot_from_layout cx /\
-  (!b. get_storage_backend cx' b = get_storage_backend cx b)
+  get_tenv cx' = get_tenv cx
 Proof
-  rw[same_call_env_def, FUN_EQ_THM, get_module_code_def, get_tenv_def,
-     lookup_var_slot_from_layout_def] >>
-  Cases_on `b` >> simp[get_storage_backend_def]
-QED
-
-Theorem same_call_env_storage[local]:
-  same_call_env cx cx' ==>
-  storage_var_info cx' = storage_var_info cx /\
-  declared_storage_region cx' = declared_storage_region cx
-Proof
-  strip_tac >> drule same_call_env_reads >>
-  rw[FUN_EQ_THM, storage_var_info_def, declared_storage_region_def]
+  rw[same_call_env_def, FUN_EQ_THM, get_module_code_def, get_tenv_def]
 QED
 
 Theorem same_call_env_preds[local]:
   same_call_env cx cx' ==>
-  (contract_storage_well_formed cx' st <=> contract_storage_well_formed cx st) /\
   (immutables_ready g vt cx' imms <=> immutables_ready g vt cx imms)
 Proof
-  strip_tac >> drule same_call_env_reads >> drule same_call_env_storage >>
-  rpt strip_tac >> fs[same_call_env_def] >>
-  simp[contract_storage_well_formed_def, well_formed_storage_def,
-       storage_var_in_range_def,
-       immutables_ready_def]
+  strip_tac >> drule same_call_env_reads >> fs[same_call_env_def] >>
+  simp[immutables_ready_def]
 QED
 
 Theorem initial_context_same_call_env[local]:

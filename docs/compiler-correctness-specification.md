@@ -306,15 +306,13 @@ that whole execution into an outcome. Re-applying a frame theorem to an inner
 call requires its own premises. No current theorem connects all source-executed
 callees to the EVM outcomes or proves a closed-world/reentrant composition.
 
-`call_outcomes_ok` has **no current producer**. For every outcome (including
-failed and static ones) it requires return-data length <2**256, the actual runtime
-account bounds (balances <2**256, code length <=24576) and source contract-storage validity of the supplied
-accounts/transient storage in the actual initial context. The source checks
-account bounds on successful nonstatic adoption, **not storage validity**.
-Type/storage preservation theorems consume guards; they do not weaken them or
-manufacture a universal environmental producer. The detailed
-[partial-producer audit](compiler-proof-status-2026-10-09.md#what-partial-producers-actually-establish)
-records readiness/input/constants/protected-storage/oracle hypotheses.
+`call_outcomes_ok` requires return-data length `< 2**256` and
+`accounts_runtime_well_typed` for every outcome, including failed and static
+ones. `call_state_rel_call_outcomes_ok` and `deploy_state_rel_call_outcomes_ok`
+derive the guard for `MAP SND (call_trace es)` from the call and deploy state
+relations, respectively. The finite trace guards `call_storage_ok` for runtime
+calls and `deploy_storage_ok` for constructors check the storage regions and
+backends observed by the source execution for the chosen gas readings.
 
 The shared entry Venom state has **cc_gas=0**, concrete assembly labels and plan
 FMP fields. Venom GAS consumes the frame-local `gas_readings es`, returning zero
