@@ -257,15 +257,17 @@ Datatype:
 End
 
 (* Complete storage layout for a contract *)
-(* Storage keys are (module_path_opt, var_name):
+(* Keys are (module_path_opt, var_name):
    - (NONE, "counter") for main module variables
    - (SOME "lib1", "counter") for the variables of the module initialized as
-     lib1, and (SOME "lib2.lib1", "counter") when lib2 initializes it *)
+     lib1, and (SOME "lib2.lib1", "counter") when lib2 initializes it
+   Immutables (code) are keyed the same way: the compiler nests an
+   initialized module's immutables under its alias too. *)
 Datatype:
   json_storage_layout = <|
     storage : ((string option # string) # storage_slot_info) list;
     transient : ((string option # string) # storage_slot_info) list;
-    code : (string # code_slot_info) list  (* immutables - no module nesting *)
+    code : ((string option # string) # code_slot_info) list
   |>
 End
 

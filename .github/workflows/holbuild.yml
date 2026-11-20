@@ -279,7 +279,8 @@ jobs:
 
   export-parity:
     # Compiles every contract of the Vyper test exports natively and compares
-    # the bytes with the patched pinned Vyper's (tools/native_export_parity.py).
+    # the bytes with the patched pinned Vyper's (tools/native_export_parity.py),
+    # and checks the multi-module fixtures in bytecode/linked-units.
     if: ${{ !cancelled() && needs.export-vyper-tests.result == 'success' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     needs: export-vyper-tests
     runs-on: ubuntu-26.04-arm
@@ -325,6 +326,17 @@ jobs:
           git -C vyper-src checkout --detach "$pin"
           sh bytecode/python-o1-bytecode-fixtures --install "$RUNNER_TEMP/vyper-patched" \
             --vyper-repo vyper-src
+
+      - name: Check native bytecode parity on the linked-unit fixtures
+        # Regenerates the committed oracles with the patched pin first, so a
+        # stale oracle fails the job too.
+        run: |
+          PYTHONHASHSEED=0 "$RUNNER_TEMP/vyper-patched/venv/bin/python" -P -s \
+            bytecode/linked-units/oracle.py "$RUNNER_TEMP/linked-units" \
+            bytecode/linked-units/sources/* \
+            tests/fixtures/check_contract/{multimodule_storage,nested_initializes,attribute_initializes,imported_deploy,initializes_alias_shadow}
+          diff -r bytecode/linked-units/oracle "$RUNNER_TEMP/linked-units"
+          bytecode/native/bytecode_parity_json.exe bytecode/linked-units/oracle
 
       - name: Check native bytecode parity on the exported contracts
         run: |
