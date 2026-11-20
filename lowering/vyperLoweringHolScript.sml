@@ -106,4 +106,4 @@ Ancestors
   forPtrAllocationFrame internalReturnImmutableTypes logBytesCodePtr
   logBytesRobustSeqPtr logBytesSeqPtr revertReasonPrefixPtr
   reasonCompilerProps reasonLiteralBufferPtr reasonSourceProps
-  reasonTypingProps revertReasonSuffixPathPtr
+  reasonTypingProps revertReasonPrefixCodePtr revertReasonSuffixPathPtr
