@@ -164,6 +164,7 @@ Resume abi_encode_args_tuple_prepared_state_frame[continuation]:
   qpat_x_assum `compile_store_abi_tuple _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
   (Q.SUBGOAL_THEN `n = 0 \/ w2n bw + n <= t.vs_alloca_next` assume_tac >- simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
   drule_all (INST_TYPE [``:'b`` |-> ``:'a``] abi_encode_tuple_staging_zero_safe_with_frame) >>
   disch_then (qspecl_then [`explicit`, `PG`, `d`] mp_tac) >>
   disch_then (qspecl_then [`cx`, `G0`, `tn0`] strip_assume_tac) >>

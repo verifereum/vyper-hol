@@ -1,6 +1,6 @@
 Theory bodyFullAbiEncodeWordFull
 Ancestors
-  bodySimFull bodyInvNoDalloca bodyFullAbiEncodeAllocOrigin
+  bodySimFull bodyFullAbiEncodeAllocOrigin
   bodyFullAbiEncodeStore bodyFullAbiEncodeSuffix bodyFullAbiEncodeUniformTranslation
   bodyFullAbiEncodeWordStageWindow bodyFullAbiEncodeWordPack
   exprSimAbiEncodeWordResult bodyFullAbiEncodeResultResources
@@ -20,7 +20,6 @@ Theorem abi_encode_word_vv_full_from_packaging:
     ce cx cty (TypeBuiltin ann (AbiEncode F mid) ty [e]) es
 Proof
   strip_tac >> rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `expr_body_pre ce cx env e es` by
     (irule abi_encode_body_arg_pre >> goal_assum (drule_at Any) >> simp[]) >>
   qpat_x_assum `compile_expr ce cty (TypeBuiltin _ _ _ _) sa = _` mp_tac >>
@@ -260,6 +259,14 @@ Resume abi_encode_word_vv_full_from_packaging[word_outcome]:
   `ghost_inv_at (DF H) lo d ce cx ee Gp tnp packed` by
     (qpat_assum `!H D. _ ==> ghost_inv_at D lo d ce cx ee Gp tnp packed`
        (qspecl_then [`H`,`DF H`] irule) >> simp[]) >>
+  `abi_encode_staged_observation H ctx func ce cx ee sh out
+     (OPTION_MAP bytes_method_id_word mid) cap p ct rv u packed` by
+    (qpat_assum `!H. stmt_state_rel H ctx func ce cx ee u ==> _`
+       (qspec_then `H` irule) >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp packed` by
+    (qhdtm_assum `abi_encode_staged_observation`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+       CONJUNCT1 o REWRITE_RULE [exprSimAbiEncodeStagedObserverTheory.abi_encode_staged_observation_def])) >>
   reverse conj_tac
   >- (qpat_assum `ty = TupleT [expr_type e]` SUBST_ALL_TAC >>
       qpat_assum `expr_type (TypeBuiltin _ _ _ _) = BaseT _`
@@ -269,10 +276,6 @@ Resume abi_encode_word_vv_full_from_packaging[word_outcome]:
           qpat_assum `ptr_vv_ok _ _ _ _ _ Gp tnp packed`
             (assume_tac o REWRITE_RULE [post_value_type_def, eq, contextTheory.mk_ptr_def])) >>
       simp[contextTheory.vv_location_def, is_bytestring_type_def]) >>
-  `abi_encode_staged_observation H ctx func ce cx ee sh out
-     (OPTION_MAP bytes_method_id_word mid) cap p ct rv u packed` by
-    (qpat_assum `!H. stmt_state_rel H ctx func ce cx ee u ==> _`
-       (qspec_then `H` irule) >> first_assum ACCEPT_TAC) >>
   `~expr_has_effect e ==> pure_frame ce func es sa s0 packed` by
     (strip_tac >>
      qpat_assum `pure_frame ce func es sa s0 u ==> _` irule >> simp[]) >>
