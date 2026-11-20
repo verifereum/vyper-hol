@@ -330,7 +330,7 @@ Proof
     rename1 `compile_stmt _ _ _ (Append tgt _)` >>
     Cases_on `?nid. tgt = TopLevelNameTarget nid`
     >- (gvs[] >> irule entry_code_append_stmt >>
-        simp[targetPlaceLiveTheory.target_indices_def] >>
+        simp[supportedExprsTheory.target_indices_def] >>
         metis_tac[entry_code_supported_pure_expr]) >>
     `?pt. supported_target_info tops bindings tgt = SOME pt` by
       (Cases_on `tgt` >> gvs[]) >>

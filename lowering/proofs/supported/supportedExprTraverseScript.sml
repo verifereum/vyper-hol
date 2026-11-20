@@ -90,22 +90,28 @@ Definition target_has_internal_call_def:
     supported_target_exists expr_internal_call_root target
 End
 
-(* The body proof's remaining exclusion for creation calls.
-   Both raw_call forms take delegate outcomes in oracle mode. *)
+(* Creation calls, which run EVM code (eval_create's run_create_evm). *)
+Definition expr_create_root_def:
+  expr_create_root (Call ty (CreateTarget kind has_salt rof kw_order) es default) = T /\
+  expr_create_root (_ : expr) = F
+End
+
+(* The body proof's exclusion for calls that run EVM code: none remain.
+   Both raw_call forms take delegate outcomes in oracle mode, and creation
+   calls are a body case of their own. *)
 Definition expr_evm_run_root_def:
-  expr_evm_run_root (Call ty (CreateTarget kind has_salt rof kw_order) es default) = T /\
-  expr_evm_run_root _ = F
+  expr_evm_run_root (_ : expr) = F
 End
 
 Definition expr_halt_root_def:
   expr_halt_root e <=>
-    expr_evm_run_root e \/
+    expr_create_root e \/
     ?ty es default. e = Call ty SelfDestructTarget es default
 End
 
 Theorem expr_halt_root_split:
   expr_halt_root =
-    (\x. expr_evm_run_root x \/
+    (\x. expr_create_root x \/
          ?ty es default. x = Call ty SelfDestructTarget es default)
 Proof
   simp[FUN_EQ_THM, expr_halt_root_def]
