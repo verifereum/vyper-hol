@@ -17,7 +17,7 @@
 
 Theory codegenGasAsmOpt
 Ancestors
-  asmOptFinalizerWithin asmSymSemWithin
+  asmOptFinalizerWithin asmOptFinalizerWithinOwn asmSymSemWithin
   codegenAsmOpt codegenEntryBounded asmFrameSurplus asmSymWithin asmOptNoRdc
   asmDataEnv contextCodegenRel
   venomRunBounded venomRetProps codegenAsmStaticWf codegenLabelDisciplined codegenEntryRel
@@ -246,12 +246,7 @@ Theorem codegen_opt_run_bounded_own[local]:
     generate_context_plan unit.cu_context = SOME cplan /\
     codegen_assembly rpolicy unit = SOME prog /\
     asm_opt_finalizer rpolicy prog = SOME prog' /\
-    unit_shape_ok unit /\
-    (asm_static_wf prog ==>
-     ?c. !P Q env own s k.
-       sym_within_ok P Q /\
-       sym_run_within_for (sym_step_own prog env own) P Q prog k (sym_init s) ==>
-       sym_run_within_for (sym_step_own prog' env own) P Q prog' (c * k) (sym_init s))
+    unit_shape_ok unit
     ==>
     ?N H. !Inv vs as.
       codegen_context_obligations Inv unit.cu_context cplan /\
@@ -274,7 +269,7 @@ Proof
       metis_tac[codegen_context_obligations_def, codegen_asm_static_wf]) >>
   `asm_static_wf prog' /\ FILTER is_data_inst prog' = FILTER is_data_inst prog` by
     metis_tac[asm_opt_finalizer_refines_own, asm_refines_own_def] >>
-  qpat_x_assum `asm_static_wf prog ==> ?c. _` drule >>
+  drule asm_opt_finalizer_within_own >> BETA_TAC >> simp[] >>
   disch_then assume_tac >>
   qspecl_then [`prog`, `prog'`] mp_tac asm_refines_run_bounded_own >>
   (impl_tac >- simp[]) >>
@@ -318,7 +313,6 @@ Proof
   simp[code_labels_agree_refl]
 QED
 
-(* Statement freeze for sign-off. *)
 Theorem codegen_gas_surplus_asm_opt_own:
   !rpolicy unit cplan prog prog' fuel M D.
     generate_context_plan unit.cu_context = SOME cplan /\
@@ -349,7 +343,26 @@ Theorem codegen_gas_surplus_asm_opt_own:
       ==>
       r <> INR (SOME OutOfGas) /\ D <= frame_gas_left s'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all codegen_opt_run_bounded_own >>
+  disch_then (qspecl_then [`fuel`, `M`]
+    (qx_choosel_then [`N`, `H`] assume_tac)) >>
+  qspecl_then [`H`, `N`, `D`] (qx_choose_then `g` assume_tac)
+    asm_frame_gas_surplus >>
+  qexists_tac `g` >> rpt gen_tac >> strip_tac >>
+  qabbrev_tac `s0 = entry_asm_state vs (add_frame_gas g' es)` >>
+  `s0.as_code = vs.vs_code` by simp[Abbr`s0`, entry_asm_state_def] >>
+  `asm_frame_prog_ok prog' /\
+   asm_run_bounded (SND (compute_label_offsets prog'))
+     (build_offset_to_pc prog') prog' H N s0` by
+    (qpat_x_assum `!Inv vs as. codegen_context_obligations _ _ _ /\ _ ==> _`
+       (qspecl_then [`Inv`, `vs`, `s0`] mp_tac) >>
+     simp[]) >>
+  qpat_x_assum `!prog data es0 a e s op r s'. asm_frame_prog_ok _ /\ _ ==> _`
+    (qspecl_then [`prog'`, `vs.vs_data_section`, `add_frame_gas g' es`,
+                  `s0`, `add_frame_gas g' es`, `s`, `op`, `r`, `s'`] mp_tac) >>
+  impl_tac >- simp[] >>
+  simp[]
 QED
 
 Theorem codegen_gas_sufficient_asm_opt_own:
