@@ -112,7 +112,7 @@ Definition well_typed_literal_def:
   well_typed_literal (BaseT AddressT) (BytesL bs) =
     (LENGTH bs = 20) /\
   well_typed_literal (BaseT (BytesT bd)) (BytesL bs) =
-    compatible_bound bd (LENGTH bs) /\
+    (bd <> Fixed 0 /\ compatible_bound bd (LENGTH bs)) /\
   well_typed_literal (BaseT (BytesT (Dynamic n))) (HexBytesL bs) =
     compatible_bound (Dynamic n) (LENGTH bs) /\
   well_typed_literal _ _ = F
@@ -442,7 +442,8 @@ Definition well_formed_type_def:
 End
 
 Definition assignable_type_def:
-  assignable_type tenv (BaseT bt) = well_formed_type tenv (BaseT bt) /\
+  assignable_type tenv (BaseT bt) =
+    (well_formed_type tenv (BaseT bt) /\ bt <> BytesT (Fixed 0)) /\
   assignable_type tenv (TupleT tys) =
     (tys <> [] /\ well_formed_type tenv (TupleT tys) /\
      EVERY (assignable_type tenv) tys) /\
@@ -554,7 +555,7 @@ Definition hashmap_key_type_def:
   hashmap_key_type (BaseT DecimalT) = T /\
   hashmap_key_type (BaseT BoolT) = T /\
   hashmap_key_type (BaseT AddressT) = T /\
-  hashmap_key_type (BaseT (BytesT _)) = T /\
+  hashmap_key_type (BaseT (BytesT bd)) = (bd <> Fixed 0) /\
   hashmap_key_type (BaseT (StringT _)) = T /\
   hashmap_key_type (FlagT _) = T /\
   hashmap_key_type _ = F
@@ -664,8 +665,8 @@ Definition valid_conversion_def:
   valid_conversion (BaseT AddressT) (BaseT BoolT) = T /\
   valid_conversion (BaseT BoolT) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT BoolT) (BaseT (UintT _)) = T /\
-  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Fixed k))) = (m <> k) /\
-  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Fixed m))) = (n <= m) /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Fixed k))) = (0 < k /\ m <> k) /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Fixed m))) = (0 < m /\ n <= m) /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic k))) = (k < n) /\
   valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (UintT _)) = (n <= 32) /\
@@ -708,7 +709,7 @@ Definition valid_conversion_def:
 End
 
 Definition extract32_result_base_ok_def:
-  extract32_result_base_ok (BytesT (Fixed n)) = T /\
+  extract32_result_base_ok (BytesT (Fixed n)) = (0 < n) /\
   extract32_result_base_ok (UintT n) = T /\
   extract32_result_base_ok (IntT n) = T /\
   extract32_result_base_ok AddressT = T /\
