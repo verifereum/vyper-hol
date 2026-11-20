@@ -1,7 +1,7 @@
 (* A fixed successful Args endpoint is allocated and staged once. *)
 Theory bodyFullAbiEncodeTuplePrepared
 Ancestors
-  bodyFullAbiEncodeTupleAlloc bodyFullAbiEncodeTupleZero bodyFullAbiEncodeArgs
+  bodyFullAbiEncodeTupleAlloc bodyFullAbiEncodeTupleZero bodyFullAbiEncodePureFrame[qualified]
   bodyFullPathHistory exprSimAbiEncodeArgsSeparation abiEncodeEndpointMetadata
   valueEncodingTyping abiBuiltinAllocation abiTupleEncodePrepare
   emitHelperProps loweringShapeDefs abiArgsLabelBoundary

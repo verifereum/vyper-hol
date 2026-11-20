@@ -1,7 +1,7 @@
 (* Capacity interfaces for allocated aggregate buffers, including reused sites. *)
 Theory bodyMemAggregateBounds
 Ancestors
-  bodyAllocMemory bodyMemAggregateSide exprSimMemDefs fragExecMem
+  bodyAllocMemory bodyMemAggregatePath[qualified] exprSimAggregateSource[qualified] exprSimMemDefs fragExecMem
   exprSimHypsDefs loweringPosts venomMemDefs venomState words exprLoweringProps
 
 Theorem aggregate_alloca_capacity_mem:

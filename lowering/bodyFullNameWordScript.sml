@@ -1,7 +1,7 @@
 Theory bodyFullNameWord
 Ancestors
   bodySimFull gasOutcomeFullCompose bodyFullGhostFrame bodyPtrMakeArrayMloadFrame
-  bodyNameWordMemory bodyNameWordTypeMemory bodyNameMemoryFacts
+  bodyNameWordTypeMemory bodyNameMemoryFacts
   exprSimSource exprSimHypsDefs exprSimNameValue exprSimNameWord
   exprSimProps entryDecodeStaticProps
   exprLoweringProps exprLowering loweringSlice loweringPosts bodyPtrDefs

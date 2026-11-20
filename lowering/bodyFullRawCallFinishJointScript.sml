@@ -3,7 +3,7 @@ Theory bodyFullRawCallFinishJoint
 Ancestors
   bodyFullRawCallCall bodyFullRawCallZero bodyFullRawCallBytes
   bodyFullRawCallTupleAllocFrame bodyFullRawCallTupleLength
-  bodyFullRawCallTupleCopy bodyFullRawCallTupleWriteSeparation
+  bodyFullRawCallTupleCopy
   bodyFullRawCallTupleWriteFrame bodyFullRawCallRevertExit
   bodyFullAllocGeneric rawCallBufferPtr fragGasSeqPtr instSeqComposePtr
   stateRelProj valueEncodingProps bodyMemBiSha256Suffix

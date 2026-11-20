@@ -14,7 +14,7 @@
  *)
 Theory bodyFullIfExp
 Ancestors
-  bodyFullIfExpArm bodyFullIfExpWiden bodyFullIfExpWidenCall
+  bodyFullIfExpWiden bodyFullIfExpWidenCall
   bodyFullIfExpFinish bodyFullIfExpShadow bodyFullAllocGeneric typedCopyOriginPtr
   bodyFullIfExpPrepare bodyFullOfVV bodyFullUnwrap bodyFullPreds
   bodySimFull gasOutcomeFullCompose gasOutcomeFull gasOutcomeFullGuarded gasShadowCompile

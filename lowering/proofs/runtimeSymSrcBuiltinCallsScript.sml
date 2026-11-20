@@ -1,7 +1,7 @@
 Theory runtimeSymSrcBuiltinCalls
 Ancestors
   runtimeSymSrcAbiCalls runtimeSymSrcAbiEncode runtimeSymSrcAbiDecode
-  runtimeSymSrcAbiWrappers runtimeSymSrcSystemCreate runtimeSymSrcCallStaging
+  runtimeSymSrcAbiWrappers runtimeSymSrcCallStaging
   runtimeSymSrcGeneratorContracts stackPlanTypes
 
 (* The preparation families export unconditional preservation facts.  Import

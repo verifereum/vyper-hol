@@ -2,7 +2,7 @@
    releases it before STOP; RetQ compares those actual cleanup endpoints. *)
 Theory externalReturnNoneNrFullFrag
 Ancestors
-  externalReturnNoneFullFrag externalReturnPackage entryStateRel rawReturnHeader
+  externalReturnPackage entryStateRel rawReturnHeader
   stmtSimReturn nonreentrantExit nonreentrantEntryEquiv loweringHalt
   bodySimFull bodyPtrDefs stmtSimDefs exprSimDefs exprSimHypsDefs bodySim e2eDefs
   gasOutcomeFullCompose fragGasOriginPtr fragGasOriginPtrExec fragGasEmitCtrl

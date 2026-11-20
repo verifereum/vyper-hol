@@ -1,7 +1,7 @@
 (* Source observations carried by a single decoder endpoint. *)
 Theory entryDecoderStateFrame
 Ancestors
-  entryDecoderObservations abiDecoderReentry abiDecoderVarExtend
+  abiDecoderValidBytes[qualified] ctorAbiActualObservations[qualified] oracleExecProps[qualified] abiDecoderReentry abiDecoderVarExtend
   execEquivParamDefs abiDecoderVarSequence venomExecSemantics venomState
   venomInst exprLoweringProps list
 
