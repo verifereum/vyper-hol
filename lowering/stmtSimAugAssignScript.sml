@@ -27,7 +27,7 @@ Ancestors
   exprBopSimDefs exprBopSimProps exprBopBytes
   exprSimSource gasContext gasExemptCert gasSummary gasSummaryCompose
   fragGasMode fragGasPath fragGasPathMem fragGasSeq gasCount
-  exprSimName exprSimNameWord exprSimMemoryPath exprSimProps
+  exprSimNameWord exprSimMemoryPath exprSimProps
   stmtSimProps
   exprSimHypsDefs
   stmtSimDefs
@@ -36,7 +36,7 @@ Ancestors
   allocLimits
   list rich_list finite_map pred_set
   fragExec localPtrsProps  exprSimHyps exprSimOps exprSimBinopFrag
-  exprSimOperators exprSimLeaves loweringSlice  stmtSimDecl
+  exprSimOperators loweringSlice  stmtSimDecl
   stmtSimDeclStore stmtSimAssignStore stmtSimDeclPath stmtSimDeclCompose exprOpenPrimitives
   exprLowering exprBopLowering stmtLowering emitHelper emitHelperProps
   exprLoweringProps compileEnv loweringStateRelDefs valueEncoding

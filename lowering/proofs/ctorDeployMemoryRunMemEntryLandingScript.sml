@@ -2,7 +2,6 @@ Theory ctorDeployMemoryRunMemEntryLanding
 Ancestors
   loweringStateRelDefs
   ctorDeployLoweringEntryStateRel
- ctorDeployMemoryRunMemEntryProvenance ctorDeployMemoryRunMemEntryResources
  ctorDeployMemoryRunMemEntrySourceWorld ctorDeployMemoryRunMemEntryZeroImmutables
  ctorDeployLoweringFrame
  ctorDeployLoweringEntryTransport entryStateRel compileEnv compileVyper
