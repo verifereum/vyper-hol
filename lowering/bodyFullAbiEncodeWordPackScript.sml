@@ -7,10 +7,11 @@ Ancestors
   emitHelper emitHelperProps exprLoweringProps localPtrsProps freshWrites
   fragExec compileEnv venomState venomExecSemantics venomInst finite_map words arithmetic
   pred_set list rich_list ptrDiscipline bodyPtrDefs loweringStateRelDefs loweringPosts
+  bodyFullHashKeccakFixed typedCopyOriginPtrBase
 
 Theorem abi_encode_word_pack_origin:
   lower_abi_encode F mid (Var src) (AbiCopy 32) 32 st = (out,final) /\
-  fn_has_code st final func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st final func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ local_ptrs_reserved ce origin /\ cs_extends origin st /\
   origin.cs_next_var <= st.cs_next_var /\ origin.cs_next_id <= st.cs_next_id /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x) /\
@@ -91,6 +92,9 @@ Proof
   `stmt_state_rel H0 ctx func ce cx ee allocated_s` by
     (qpat_assum `!H'. stmt_state_rel H' ctx func ce cx ee s ==> _`
       (qspec_then `H0` mp_tac) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp allocated_s` by
+    (qpat_assum `stmt_state_rel H0 ctx func ce cx ee allocated_s`
+      (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   `alloca_inv allocated_s` by metis_tac[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca] >>
   `lo <= w2n w` by
     (fs[allocas_from_def] >> metis_tac[]) >>
@@ -235,6 +239,10 @@ Resume abi_encode_word_pack_origin[tail]:
   `ready_s.vs_alloca_next < dimword (:256)` by
     metis_tac[alloca_room_next_lt] >>
   `sb < dimword (:256)` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ready_s` by
+    (qpat_assum `typed_copy_state_frame _ _ _ allocated_s ready_s`
+      (rewrite_tac o single o MATCH_MP typed_copy_state_frame_allocas_below_fmp) >>
+     first_assum ACCEPT_TAC) >>
   drule_all bodyPtrMakeArrayPrimitiveInstallTheory.emit_void_fetch_boundary >> strip_tac >>
   qabbrev_tac `i = mk_inst ready.cs_next_id MCOPY [Var dp; Var src; Lit 32w] []` >>
   qabbrev_tac `u = mcopy d sb 32 ready_s` >>
@@ -269,6 +277,10 @@ QED
 Resume abi_encode_word_pack_origin[copy_effect]:
   `typed_copy_state_frame ready d 32 ready_s copied` by
     simp[NoAsms, Abbr `copied`, Abbr `u`, typedMemoryCopyTheory.typed_copy_mcopy_state_frame] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp copied` by
+    (qpat_assum `typed_copy_state_frame ready d 32 ready_s copied`
+      (rewrite_tac o single o MATCH_MP typed_copy_state_frame_allocas_below_fmp) >>
+     first_assum ACCEPT_TAC) >>
   `~copied.vs_halted /\ copied.vs_current_bb = body_end.cs_current_bb /\
    copied.vs_inst_idx = LENGTH body_end.cs_current_insts /\
    copied.vs_allocas = ready_s.vs_allocas /\ copied.vs_alloca_next = ready_s.vs_alloca_next /\

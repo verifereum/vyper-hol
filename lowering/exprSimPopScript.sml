@@ -36,7 +36,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   list rich_list finite_map arithmetic words
-  fragExec loweringSlice  exprSimHyps exprSimLeaves exprSimAggregateLayout
+  fragExec loweringSlice  exprSimHyps exprSimAggregateLayout
   exprSimAggregateEncoding exprLowering exprLoweringProps emitHelper
   emitHelperProps compileEnv loweringStateRelDefs localPtrsProps valueEncoding valueEncodingDefs valueEncodingProps memoryValueEncoding
   vyperAST vyperInterpreter vyperState vyperValue vyperValueOperation
