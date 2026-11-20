@@ -141,5 +141,8 @@ Theorem ecadd_staging_full:
         regions_disjoint (w2n wo) (w2n (64w:256 word)) off (type_memory_size tv)))
 Proof
   match_mp_tac ecadd_staging_full_from_transfers >>
-  rpt gen_tac >> MATCH_ACCEPT_TAC ec_point_copy_origin_ptr_path
+  rpt strip_tac >>
+  irule (Q.INST [`bp` |-> `bp`, `nd` |-> `nd`, `pp` |-> `pp`]
+    (SPEC_ALL ec_point_copy_origin_ptr_path)) >> simp[] >>
+  qexistsl_tac [`bp`,`nd`,`pp`] >> simp[]
 QED

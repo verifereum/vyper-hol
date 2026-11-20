@@ -65,7 +65,7 @@ QED
    boundary here rather than changing the read-only arithmetic toolkit. *)
 Theorem unsigned_sub_ptr_inst_ok:
   op_prov G x = NONE /\ op_prov G y = NONE /\
-  op_taint tn x = {} /\ op_taint tn y = {} /\ ~ctx_has_dalloca ctx /\
+  op_taint tn x = {} /\ op_taint tn y = {} /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id SUB [x;y] [z]) s = OK (update_var z w s) ==>
   ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id SUB [x;y] [z]) s
 Proof
@@ -73,7 +73,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
        source_memory_write_ranges_def, source_memory_read_ranges_def,
        allocas_from_def] >>
-  simp[GSYM mk_inst_def, step_inst_non_invoke, update_var_def] >>
+  simp[GSYM mk_inst_def, step_inst_non_invoke, update_var_def, allocas_below_fmp_def] >>
   rpt strip_tac >> gvs[op_prov_def, FLOOKUP_DEF] >> metis_tac[]
 QED
 
@@ -168,7 +168,7 @@ Proof
 QED
 
 Theorem unsigned_normalize_uniform_checks:
-  ALL_DISTINCT [len;data;sub;bits;dst] /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [len;data;sub;bits;dst] /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var len s = SOME nv /\ lookup_var data s = SOME dw /\
   op_prov G (Var len) = NONE /\ op_prov G (Var data) = NONE /\
   op_taint tn (Var len) = {} /\
@@ -189,6 +189,14 @@ Proof
   strip_tac >>
   drule_all unsigned_normalize_ghost_chain >> disch_then (qspec_then `PG` strip_assume_tac) >>
   gvs[] >> gen_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := q)) /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp
+     (update_var sub (32w-nv) s with vs_inst_idx := SUC q)) /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp
+     (update_var bits ((32w-nv)*8w) (update_var sub (32w-nv) s)
+        with vs_inst_idx := SUC (SUC q)))` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[allocas_below_fmp_def, update_var_def, NoAsms] >> metis_tac[]) >>
   simp[inst_seq_ptr_def, unsigned_step_cursor, is_terminator_def,
        exec_result_map_def] >>
   conj_tac
@@ -202,8 +210,7 @@ Proof
       simp[op_prov_def, FLOOKUP_DRESTRICT, op_taint_def, FLOOKUP_UPDATE] >>
       qexists_tac `(update_var bits ((32w-nv)*8w) (update_var sub (32w-nv) s))
         with vs_inst_idx := SUC q` >>
-      simp[unsigned_step_cursor, is_terminator_def,
-           exec_result_map_def]) >>
+      simp[unsigned_step_cursor, is_terminator_def, exec_result_map_def]) >>
   irule unsigned_shift_ptr_inst_ok >>
   simp[op_prov_def, FLOOKUP_DRESTRICT, op_taint_def, FLOOKUP_UPDATE] >>
   reverse conj_tac >- fs[op_prov_def] >>
@@ -214,7 +221,7 @@ Proof
 QED
 
 Theorem unsigned_suffix_uniform_checks:
-  ALL_DISTINCT [len;dp;data;sub;bits;dst] /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [len;dp;data;sub;bits;dst] /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_var len s = SOME nv /\ lookup_var dp s = SOME a /\
   ptr_covers G tn dp s 32 /\ op_prov G (Var len) = NONE /\
   op_taint tn (Var len) = {} /\
@@ -236,9 +243,20 @@ Proof
   disch_then (qx_choose_then `u` (qx_choose_then `v` (qx_choose_then `w` strip_assume_tac))) >>
   `eval_operand (Var dp) s = SOME a` by simp[eval_operand_def] >>
   drule_all unsigned_payload_ghost_update >> strip_tac >>
-  gen_tac >> simp[Once inst_seq_ptr_def, unsigned_step_cursor,
+  gen_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := q)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[allocas_below_fmp_def, NoAsms] >> metis_tac[]) >>
+  simp[Once inst_seq_ptr_def, unsigned_step_cursor,
     is_terminator_def, exec_result_map_def] >>
   conj_tac >- (irule ptr_inst_ok_mload >> simp[eval_operand_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (`allocas_below_fmp u <=> allocas_below_fmp s` by
+       (qpat_assum `u = update_var _ _ s` SUBST1_TAC >>
+        simp[update_var_def, allocas_below_fmp_def]) >>
+     qpat_assum `allocas_below_fmp u <=> allocas_below_fmp s`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
   simp[AC INTER_ASSOC INTER_COMM] >>
   irule (SRULE [DRESTRICT_DRESTRICT, op_taint_def, FLOOKUP_UPDATE,
     AC INTER_ASSOC INTER_COMM]
@@ -277,7 +295,8 @@ Theorem unsigned_suffix_fixed_frame:
     (!p. ~MEM p [data;sub;bits;dst] ==> lookup_var p t = lookup_var p s /\
       FLOOKUP H p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
 Proof
-  strip_tac >> drule_all unsigned_suffix_uniform_checks >> strip_tac >>
+  strip_tac >> `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule_all unsigned_suffix_uniform_checks >> strip_tac >>
   drule_all unsigned_suffix_run_endpoint >>
   disch_then (qx_choose_then `u` (qx_choose_then `v` (qx_choose_then `w` strip_assume_tac))) >>
   `shift_taint SHR (w2n ((32w-n2w n)*8w:256 word))

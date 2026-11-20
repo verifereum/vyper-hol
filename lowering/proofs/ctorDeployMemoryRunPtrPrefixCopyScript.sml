@@ -212,6 +212,7 @@ Proof
    w2n (n2w d:bytes32)+32+LENGTH vs * type_memory_bytes ce ty <= b+sz /\
    w2n (n2w d:bytes32)+32+LENGTH vs * type_memory_bytes ce ty < dimword (:256)` by
     (simp[] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all prefix_bulk_success_ghost >>
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
   `actual.vs_allocas = initial.vs_allocas /\

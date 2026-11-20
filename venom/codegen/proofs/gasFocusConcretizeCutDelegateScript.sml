@@ -72,6 +72,8 @@ Theorem ptr_focus_delegate_structural[local]:
   step_inst 0 C a.po_inst a.po_state = OK post /\
   step_inst 0 C' at.po_inst at.po_state = OK target /\
   ptr_history_content a.po_taint post target /\
+  (~a.po_state.vs_call_ctx.cc_static /\ (HD a.po_state.vs_outcomes).co_success ==>
+   post.vs_accounts = target.vs_accounts /\ post.vs_transient = target.vs_transient) /\
   ptr_mixed_vars births positions (step_prov PT TG a.po_inst post)
     (step_taint a.po_inst a.po_state post a.po_taint) a.po_fn at.po_fn post target ==>
   ?z TG'.
@@ -131,8 +133,17 @@ Resume ptr_focus_delegate_structural[sample]:
   simp[ptr_paired_sample_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
   conj_tac
   >- (irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
-  irule ptr_history_content_masks >> goal_assum (drule_at Any) >>
-  simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def]
+  `post.vs_call_ctx = target.vs_call_ctx` by
+    metis_tac[ptr_history_content_call_ctx] >>
+  Cases_on `~a.po_state.vs_call_ctx.cc_static /\
+     post.vs_requests <> a.po_state.vs_requests /\
+     ~computed_precompile (LAST post.vs_requests) /\
+     post.vs_outcomes <> a.po_state.vs_outcomes /\
+     (HD a.po_state.vs_outcomes).co_success` >>
+  fs[ptr_history_content_def, ptr_taint_content_def, step_taint_def,
+     store_taint_def, adopt_reset_def, imm_taint_def, contract_storage_def,
+     contract_transient_def, storage_agree_except_def, word_agree_except_def] >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume ptr_focus_delegate_structural[cursor]:

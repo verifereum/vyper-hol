@@ -12,7 +12,8 @@ Ancestors
   lowerDloadSafetyRelation lowerDloadSafetyScalarEffects
   lowerDloadOracleCallAssembly o1PassContract venomInst
   venomExecSemantics ptrDiscipline lowerDloadSafetyValues lowerDloadSafetyUpdates
-  venomState memLocDefs pointerConfinedDefs finite_map list words
+  venomState memLocDefs pointerConfinedDefs finite_map list words venomLayout
+Overload ceil32[local] = “venomLayout$ceil32”
 
 Theorem ld_dalloca_step[local]:
   inst.inst_opcode = DALLOCA /\

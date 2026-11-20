@@ -365,6 +365,110 @@ Proof
   Cases_on `reverting` >> gvs[Abbr `exc`, vfm_abort_def]
 QED
 
+Theorem frame_probe_two_opcode_encodings[local]:
+  parse_code 0 FEMPTY [0xa0w; 0xf3w] = FEMPTY |+ (0, Log 0) |+ (1, Return) /\
+  parse_code 0 FEMPTY [0xf1w; 0w] = FEMPTY |+ (0, Call) |+ (1, Stop)
+Proof
+  conj_tac >>
+  simp[Once parse_code_def, parse_opcode_cond_thm, opcode_def, dimword_8] >>
+  simp[Once parse_code_def, parse_opcode_cond_thm, opcode_def, dimword_8] >>
+  simp[Once parse_code_def]
+QED
+
+(* LOG0 and RETURN observe the same symbolic byte. The middle frame's
+   saved snapshot must survive settlement of the top frame. *)
+Theorem nested_frame_probe_preserves_caller:
+  rb <> prb ==>
+  ?start pre settled child parent bottom parent'.
+    start.contexts = [(child,rb); (parent,prb); (bottom,brb)] /\
+    run_frame start = SOME (INR NONE,pre) /\
+    frame_outcome start (INL ()) settled NONE [byte]
+      [<| logger := addr; topics := []; data := [byte] |>] /\
+    settled.contexts = [(parent',prb); (bottom,brb)] /\
+    parent'.returnData = [byte] /\
+    parent'.logs = parent.logs ++ [<| logger := addr; topics := []; data := [byte] |>] /\
+    ~frame_outcome start (INL ())
+      (settled with contexts := [(parent',rb); (bottom,brb)]) NONE [byte]
+      [<| logger := addr; topics := []; data := [byte] |>]
+Proof
+  strip_tac >>
+  qabbrev_tac `c = initial_context addr [0xa0w; 0xf3w] F
+    empty_return_destination (make_sub_tx 0w addr 0 1000 [])` >>
+  qabbrev_tac `mem = vfmBuffer$buffer_of_list (byte :: REPLICATE 31 0w)` >>
+  qabbrev_tac `ev = <| logger := addr; topics := []; data := [byte] |>` >>
+  qabbrev_tac `child = c with <| stack := [0w; 1w; 0w; 1w]; memory := mem |>` >>
+  qabbrev_tac `logged = child with <| stack := [0w; 1w]; pc := 1;
+                                       gasUsed := 383; logs := [ev] |>` >>
+  qabbrev_tac `returned = logged with <| stack := []; returnData := [byte] |>` >>
+  qabbrev_tac `parent = c with gasUsed := 1000` >>
+  qabbrev_tac `bottom = parent with pc := 2` >>
+  qabbrev_tac `start = frame_probe_es with
+    contexts := [(child,rb); (parent,prb); (bottom,brb)]` >>
+  qabbrev_tac `mid = start with contexts := [(logged,rb); (parent,prb); (bottom,brb)]` >>
+  qabbrev_tac `pre = start with contexts := [(returned,rb); (parent,prb); (bottom,brb)]` >>
+  `step start = (INL (),mid)` by
+    (simp[step_eq_handle_step_inner, handle_def, step_inner_def, Abbr `start`,
+          get_current_context_def, bind_def, return_def, Abbr `child`, Abbr `c`,
+          vfmContextTheory.initial_context_def, initial_msg_params_def,
+          frame_probe_two_opcode_encodings, FLOOKUP_UPDATE] >>
+     simp[step_inst_def, step_log_def, pop_stack_def, memory_expansion_info_def,
+          memory_expansion_cost_def, word_size_def, log_data_cost_def,
+          consume_gas_def, static_gas_def, expand_memory_def, assert_not_static_def,
+          get_static_def, get_callee_def, read_memory_def, push_logs_def,
+          inc_pc_or_jump_def, is_call_def, opcode_def, get_current_context_def,
+          set_current_context_def, bind_def, ignore_bind_def, return_def, assert_def,
+          make_sub_tx_def, Abbr `mem`, vfmBufferTheory.buffer_take_to_list,
+          Abbr `mid`, Abbr `logged`, Abbr `ev`,
+          vfmContextTheory.initial_context_def, initial_msg_params_def,
+          frame_probe_two_opcode_encodings]) >>
+  `run_frame mid = SOME (INR NONE,pre)` by
+    (irule run_frame_terminal_call >>
+     simp[Abbr `mid`, Abbr `pre`, Abbr `start`, Abbr `returned`,
+          Abbr `logged`, Abbr `child`, Abbr `c`,
+          vfmContextTheory.initial_context_def, initial_msg_params_def,
+          empty_return_destination_def] >>
+     simp[step_inner_def, get_current_context_def, bind_def, return_def,
+          frame_probe_two_opcode_encodings, FLOOKUP_UPDATE] >>
+     simp[step_inst_def, step_return_def, pop_stack_def, memory_expansion_info_def,
+          memory_expansion_cost_def, word_size_def, consume_gas_def, static_gas_def,
+          expand_memory_def, read_memory_def, set_return_data_def, finish_def,
+          get_current_context_def, set_current_context_def, bind_def,
+          ignore_bind_def, return_def, assert_def, make_sub_tx_def,
+          Abbr `mem`, vfmBufferTheory.buffer_take_to_list]) >>
+  `run_frame start = SOME (INR NONE,pre)` by
+    (`run_frame start = run_frame mid` suffices_by simp[] >>
+     `LENGTH start.contexts = 3 /\ LENGTH mid.contexts = 3` by
+       simp[Abbr `mid`, Abbr `start`] >>
+     `start.contexts <> []` by (Cases_on `start.contexts` >> gvs[]) >>
+     irule run_frame_prefix >> simp[] >>
+     irule relationTheory.RTC_SINGLE >> simp[]) >>
+  qabbrev_tac `parent' = parent with <| gasUsed := 383; pc := 1; stack := [1w];
+                                         returnData := [byte]; logs := [ev] |>` >>
+  qabbrev_tac `settled = pre with contexts := [(parent',prb); (bottom,brb)]` >>
+  `handle_exception NONE pre = (INL (),settled)` by
+    (mp_tac (Q.INST [`s` |-> `pre`, `child` |-> `returned`, `child_rb` |-> `rb`,
+      `parent_rb` |-> `prb`, `rest` |-> `[(bottom,brb)]`,
+      `r` |-> `<| offset := 0; size := 0 |>`] asm_handle_exception_memory_success) >>
+     simp[Abbr `settled`, Abbr `pre`, Abbr `start`, Abbr `parent'`, Abbr `parent`,
+          Abbr `returned`, Abbr `logged`, Abbr `child`, Abbr `c`,
+          initial_msg_params_def, make_sub_tx_def, empty_return_destination_def,
+          vfmContextTheory.initial_context_def, b2w_def]) >>
+  `start.contexts = [(child,rb); (parent,prb); (bottom,brb)] /\
+   pre.contexts = [(returned,rb); (parent,prb); (bottom,brb)] /\
+   settled.txParams = start.txParams` by
+    simp[Abbr `settled`, Abbr `pre`, Abbr `start`] >>
+  `child.msgParams.outputTo = empty_return_destination /\
+   returned.msgParams.outputTo = empty_return_destination /\
+   returned.returnData = [byte] /\ child.logs = [] /\ returned.logs = [ev]` by
+    simp[Abbr `returned`, Abbr `logged`, Abbr `child`, Abbr `c`, initial_msg_params_def] >>
+  qexistsl_tac [`start`, `pre`, `settled`, `child`, `parent`, `bottom`, `parent'`] >>
+  simp[Abbr `ev`] >>
+  conj_tac
+  >- simp[frame_outcome_def, empty_return_destination_def] >>
+  simp[Abbr `settled`, Abbr `parent'`, Abbr `parent`, Abbr `c`] >>
+  strip_tac >> drule_all frame_outcome_nested_caller >> simp[]
+QED
+
 (* A child can fail after an ordinary call pushes its frame, or during a
    precompile call that pushes and settles it in the same step. In both
    cases an ordinary continuation at the original depth stays in the run. *)
@@ -417,4 +521,121 @@ Proof
     `child_rb` |-> `rb`, `parent` |-> `parent`, `parent_rb` |-> `prb`,
     `rest` |-> `rest`, `r` |-> `mr`] asm_handle_exception_memory_exception) >>
   simp[]
+QED
+
+(* CALL the identity precompile with zero forwarded gas, then STOP in
+   the caller. The raw step fails at depth two and the run ends at depth one. *)
+Theorem frame_probe_identity_call_continues:
+  ?start entered next.
+    LENGTH start.contexts = 1 /\
+    (FST (HD start.contexts)).msgParams.code = [0xf1w; 0w] /\
+    (FST (HD start.contexts)).stack = [0w; 4w; 0w; 0w; 0w; 0w; 0w] /\
+    step_inner start = (INR (SOME OutOfGas),entered) /\
+    LENGTH entered.contexts = 2 /\
+    (FST (HD entered.contexts)).msgParams.callee = 4w /\
+    (FST (HD entered.contexts)).msgParams.gasLimit = 0 /\
+    handle_step (SOME OutOfGas) entered = (INL (),next) /\
+    LENGTH next.contexts = 1 /\
+    (FST (HD next.contexts)).stack = [0w] /\
+    run_frame start = SOME (INR NONE,next)
+Proof
+  qabbrev_tac `caller_start = make_asm_call_state asm_oracle_initial 0w 3000 0 []
+    [0xf1w; 0w] F` >>
+  qabbrev_tac `start = caller_start with contexts updated_by MAP
+    (\(c,rb). (c with stack := [0w; 4w; 0w; 0w; 0w; 0w; 0w],rb))` >>
+  qabbrev_tac `c = initial_context 0w [0xf1w; 0w] F empty_return_destination
+    (make_sub_tx 0w 0w 0 3000 [])` >>
+  `start.contexts =
+     [(c with stack := [0w; 4w; 0w; 0w; 0w; 0w; 0w],caller_start.rollback)] /\
+   start.msdomain = Collect empty_domain /\
+   start.rollback = make_rollback empty_accounts empty_transient_storage 0w 0w` by
+    simp[Abbr `start`, Abbr `caller_start`, Abbr `c`, make_asm_call_state_def,
+         asm_oracle_initial_def, empty_call_context_def, transfer_value_def] >>
+  `fIN (4w:address) precompile_addresses` by
+    (simp[precompile_addresses_def, finite_setTheory.fIN_fset_ABS, MEM_GENLIST] >>
+     qexists_tac `3` >> simp[]) >>
+  `(w2w (4w:bytes32):address) = 4w` by EVAL_TAC >>
+  qabbrev_tac `popped = start with contexts := [(c,caller_start.rollback)]` >>
+  `pop_stack 7 start = (INL [0w; 4w; 0w; 0w; 0w; 0w; 0w],popped)` by
+    (drule asm_pop_stack_state >> disch_then (qspec_then `7` mp_tac) >>
+     simp[Abbr `popped`, Abbr `c`, vfmContextTheory.initial_context_def]) >>
+  `popped.contexts = [(c,caller_start.rollback)] /\ popped.msdomain = Collect empty_domain /\
+   popped.rollback = start.rollback` by simp[Abbr `popped`] >>
+  qabbrev_tac `accessed = popped with <|
+    rollback := popped.rollback with accesses := popped.rollback.accesses with
+      addresses := fINSERT 4w popped.rollback.accesses.addresses;
+    msdomain := Collect (empty_domain with addresses updated_by fINSERT 4w) |>` >>
+  `access_address 4w popped = (INL cold_access_cost,accessed)` by
+    (mp_tac (Q.INST [`s` |-> `popped`, `d` |-> `empty_domain`, `a` |-> `4w`]
+       asm_access_address_collect) >>
+     simp[Abbr `accessed`, make_rollback_def]) >>
+  `accessed.contexts = [(c,caller_start.rollback)] /\
+   accessed.rollback.accounts = empty_accounts` by simp[Abbr `accessed`, make_rollback_def] >>
+  `?prepared.
+    asm_call_prepare Call start =
+      (INL (0w,4w,0,0,0,[],0,0,0,empty_accounts),prepared) /\
+    prepared.contexts = [(c with gasUsed := cold_access_cost,caller_start.rollback)]` by
+    (simp[asm_call_prepare_def, call_has_value_def, max_expansion_range_def,
+          memory_expansion_info_def, get_current_context_def, bind_def, return_def] >>
+     simp[get_accounts_def, get_delegate_def, is_delegation_def, lookup_account_def,
+          empty_accounts_def, empty_account_state_def, get_current_context_def,
+          set_current_context_def, bind_def, ignore_bind_def, return_def] >>
+     simp[get_gas_left_def, call_gas_def, static_gas_def, consume_gas_def,
+          expand_memory_def, get_callee_def, get_current_context_def,
+          set_current_context_def, bind_def, ignore_bind_def, return_def, assert_def,
+          Abbr `c`, initial_msg_params_def, make_sub_tx_def, cold_access_cost_def]) >>
+  pop_assum strip_assume_tac >>
+  `?entered child rb parent prb.
+    step_inner start = (INR (SOME OutOfGas),entered) /\
+    entered.contexts = [(child,rb); (parent,prb)] /\
+    child.msgParams.outputTo = empty_return_destination /\
+    child.msgParams.callee = 4w /\ child.msgParams.gasLimit = 0 /\ child.gasUsed = 0 /\
+    parent.msgParams = c.msgParams /\ parent.stack = [] /\ parent.pc = 0` by
+    (simp[step_inner_def, get_current_context_def, bind_def, return_def, Abbr `c`,
+          vfmContextTheory.initial_context_def, initial_msg_params_def,
+          frame_probe_two_opcode_encodings, FLOOKUP_UPDATE] >>
+     simp[step_inst_def, asm_step_call_factor, asm_call_finish_def,
+          lookup_account_def, empty_accounts_def, empty_account_state_def,
+          set_return_data_def, get_num_contexts_def,
+          get_current_context_def, set_current_context_def, bind_def, ignore_bind_def,
+          return_def] >>
+     simp[proceed_call_def, dispatch_precompiles_def, precompile_identity_def,
+          get_rollback_def, read_memory_def, get_caller_def, get_value_def,
+          get_static_def, push_context_def, get_call_data_def, consume_gas_def,
+          get_current_context_def, set_current_context_def, bind_def, ignore_bind_def,
+          return_def, assert_def, fail_def, vfmBufferTheory.buffer_take_to_list,
+          vfmContextTheory.initial_context_def, initial_msg_params_def, make_sub_tx_def,
+          empty_return_destination_def, frame_probe_two_opcode_encodings]) >>
+  pop_assum strip_assume_tac >>
+  qabbrev_tac `next = entered with <|
+    contexts := [(parent with <| pc := 1; stack := [0w]; returnData := [] |>,prb)];
+    rollback := rb |>` >>
+  `handle_step (SOME OutOfGas) entered = (INL (),next)` by
+    (`handle_step (SOME OutOfGas) entered = handle_exception (SOME OutOfGas) entered` by
+       (mp_tac (Q.INST [`t` |-> `entered`, `e` |-> `SOME OutOfGas`,
+          `child_rb` |-> `rb`, `tail` |-> `[(parent,prb)]`,
+          `mr` |-> `<| offset := 0; size := 0 |>`] asm_handle_step_memory) >>
+        simp[vfm_abort_def, empty_return_destination_def]) >>
+     mp_tac (Q.INST [`s` |-> `entered`, `child_rb` |-> `rb`, `parent_rb` |-> `prb`,
+       `exc` |-> `OutOfGas`, `rest` |-> `[]`,
+       `r` |-> `<| offset := 0; size := 0 |>`] asm_handle_exception_memory_exception) >>
+     simp[Abbr `next`, empty_return_destination_def,
+          vfmContextTheory.execution_state_component_equality,
+          vfmContextTheory.context_component_equality]) >>
+  `run_frame next = SOME (INR NONE,next)` by
+    (irule run_frame_terminal_call >> simp[Abbr `next`, Abbr `c`,
+       vfmContextTheory.initial_context_def, initial_msg_params_def,
+       empty_return_destination_def] >>
+     simp[step_inner_def, get_current_context_def, bind_def, return_def,
+          initial_msg_params_def, frame_probe_two_opcode_encodings, FLOOKUP_UPDATE] >>
+     simp[step_inst_def, set_return_data_def, finish_def, get_current_context_def,
+          set_current_context_def, bind_def, ignore_bind_def, return_def,
+          vfmContextTheory.context_component_equality,
+          vfmContextTheory.execution_state_component_equality]) >>
+  `run_frame start = run_frame next` by
+    (irule frame_probe_child_failure_continues >>
+     simp[] >> conj_tac >- simp[Abbr `next`] >>
+     qexistsl_tac [`entered`, `start`, `OutOfGas`] >> simp[]) >>
+  qexistsl_tac [`start`, `entered`, `next`] >>
+  simp[Abbr `next`, Abbr `c`, initial_msg_params_def]
 QED

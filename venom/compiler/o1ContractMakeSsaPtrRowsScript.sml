@@ -179,10 +179,8 @@ Proof
     (strip_assume_tac o REWRITE_RULE [taint_ok_def]) >>
   rewrite_tac [taint_ok_def] >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac
-  >- (strip_tac >> `~about_to_revert fn inst s` by metis_tac[] >>
-      rpt strip_tac >> gvs[] >> metis_tac[]) >>
-  rpt strip_tac >> gvs[]
+  (strip_tac >> `~about_to_revert fn inst s` by metis_tac[] >>
+      rpt strip_tac >> gvs[] >> metis_tac[])
 QED
 
 Theorem lockstep_sim_rows[local]:

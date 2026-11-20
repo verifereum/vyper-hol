@@ -34,12 +34,12 @@ Theorem ricf_execution_delegate_annotations:
   inst.inst_opcode = DELEGATECALL /\
   3 < LENGTH inst.inst_operands /\ inst.inst_outputs = [out] /\
   source_memory_write_ranges inst s = [(w2n (ro:256 word),w2n (rs:256 word))] /\
-  r.vs_allocas = s.vs_allocas /\ r.vs_fmp = s.vs_fmp ==>
+  r.vs_allocas = s.vs_allocas /\ r.vs_fmp = s.vs_fmp /\
+  rq.cr_static = s.vs_call_ctx.cc_static ==>
   step_prov PG G inst (update_var out w r) = set_prov G [out] NONE /\
   step_taint inst s (update_var out w r) tn =
-    tn with <|t_mem := tn.t_mem DIFF
-                {i | w2n ro <= i /\ i < w2n ro + LENGTH (TAKE (w2n rs) r.vs_returndata)};
-              t_var := set_var_taint tn.t_var [out] {}|> /\
+    (ricf_call_taint tn rq s r (w2n ro) (w2n rs)
+      with t_var := set_var_taint tn.t_var [out] {}) /\
   occurrence_sites_step a B inst (update_var out w r) = B
 Proof
   strip_tac >>
@@ -52,5 +52,5 @@ Proof
   (impl_tac >- gvs[update_var_def]) >>
   strip_tac >>
   gvs[step_prov_def, out_prov_def, occurrence_sites_step_def,
-    adopt_reset_def, update_var_def, taint_component_equality]
+    ricf_call_taint_def, adopt_reset_def, update_var_def, taint_component_equality]
 QED

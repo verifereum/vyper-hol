@@ -1,7 +1,8 @@
 Theory lowerDloadExternalEffects
 Ancestors
   lowerDloadExternalInputs lowerDloadOracleAdoption lowerDloadOracleSelection
-  lowerDloadSharedState lowerDloadExternalBackward venomCallOracleDefs
+  lowerDloadSharedState lowerDloadExternalBackward
+  venomCallOracleDefs
   extCallOracle ptrDiscipline venomState venomExecSemantics list
   o1LowerDloadConcreteExternal lowerDloadOwnership
 
@@ -54,12 +55,12 @@ Theorem ld_external_taint_projections:
     adopt_reset i (~s.vs_call_ctx.cc_static /\
       r.vs_requests <> s.vs_requests /\
     ~computed_precompile (LAST r.vs_requests) /\ r.vs_outcomes <> s.vs_outcomes /\
-      (HD s.vs_outcomes).co_success) tn.t_stor /\
+      ((HD s.vs_outcomes).co_success \/ MEM i.inst_opcode [CREATE;CREATE2])) tn.t_stor /\
   (step_taint i s r tn).t_trans =
     adopt_reset i (~s.vs_call_ctx.cc_static /\
       r.vs_requests <> s.vs_requests /\
     ~computed_precompile (LAST r.vs_requests) /\ r.vs_outcomes <> s.vs_outcomes /\
-      (HD s.vs_outcomes).co_success) tn.t_trans
+      ((HD s.vs_outcomes).co_success \/ MEM i.inst_opcode [CREATE;CREATE2])) tn.t_trans
 Proof
   simp[MEM] >> strip_tac >>
   simp[step_taint_def, store_taint_def, imm_taint_def]
@@ -69,7 +70,7 @@ QED
    computed precompile or an empty-stream fallback. *)
 Theorem ld_call_consume_reset_maps:
   s.vs_outcomes = t.vs_outcomes /\
-  rq.cr_kind = MessageCall /\ rt.cr_kind = MessageCall /\
+  rq.cr_kind = rt.cr_kind /\
   ~rq.cr_static /\ ~rt.cr_static /\
   rq.cr_value = rt.cr_value /\ rq.cr_target = rt.cr_target /\
   rq.cr_data = rt.cr_data /\
@@ -80,8 +81,7 @@ Theorem ld_call_consume_reset_maps:
   s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success ==>
   s'.vs_accounts = t'.vs_accounts /\ s'.vs_transient = t'.vs_transient
 Proof
-  strip_tac >>
-  `rq.cr_kind = rt.cr_kind` by simp[] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all ld_computed_precompile_cong >> strip_tac >>
   gvs[consume_call_outcome_eq, record_request_changed, record_request_def, take_outcome_rest] >>
   Cases_on `t.vs_outcomes` >> gvs[take_outcome_def, adopt_outcome_def]
@@ -93,12 +93,12 @@ Theorem ld_external_shared_taint:
   (adopted <=> (~s.vs_call_ctx.cc_static /\
     s'.vs_requests <> s.vs_requests /\
     ~computed_precompile (LAST s'.vs_requests) /\ s'.vs_outcomes <> s.vs_outcomes /\
-    (HD s.vs_outcomes).co_success)) /\
+    ((HD s.vs_outcomes).co_success \/ MEM i.inst_opcode [CREATE;CREATE2]))) /\
   (adopted <=> (~t.vs_call_ctx.cc_static /\
     t'.vs_requests <> t.vs_requests /\
     ~computed_precompile (LAST t'.vs_requests) /\ t'.vs_outcomes <> t.vs_outcomes /\
-    (HD t.vs_outcomes).co_success)) /\
-  (i.inst_opcode = CALL /\ adopted ==>
+    ((HD t.vs_outcomes).co_success \/ MEM i.inst_opcode [CREATE;CREATE2]))) /\
+  (MEM i.inst_opcode [CALL;DELEGATECALL;CREATE;CREATE2] /\ adopted ==>
     s'.vs_accounts = t'.vs_accounts /\ s'.vs_transient = t'.vs_transient) ==>
   ld_shared_state (step_taint i s s' tn) (step_taint i t t' un) s' t'
 Proof
@@ -108,7 +108,7 @@ Proof
     store_taint TSTORE u i x u.t_trans = u.t_trans` by
     (qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >>
      strip_tac >> simp[imm_taint_def, store_taint_def]) >>
-  Cases_on `i.inst_opcode = CALL /\ adopted` >>
+  Cases_on `MEM i.inst_opcode [CALL;DELEGATECALL;CREATE;CREATE2] /\ adopted` >>
   gvs[ld_shared_state_def, step_taint_def, adopt_reset_def,
       storage_agree_except_def, word_agree_except_def]
 QED
@@ -169,27 +169,28 @@ Proof
     ~computed_precompile (LAST t'.vs_requests) /\
      t'.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success)` by
     (drule_all ld_call_consume_adoption_test >> simp[Excl "consume_call_outcome_eq"]) >>
+  `i.inst_opcode = CALL /\ (~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
+      ~computed_precompile (LAST s'.vs_requests) /\
+      s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) ==>
+    s'.vs_accounts = t'.vs_accounts /\ s'.vs_transient = t'.vs_transient` by
+    (rpt strip_tac >>
+     `~rq.cr_static /\ ~rt.cr_static` by gvs[MEM, Excl "consume_call_outcome_eq"] >>
+     drule_all ld_call_consume_reset_maps >> simp[Excl "consume_call_outcome_eq"]) >>
   irule ld_external_shared_taint >>
   goal_assum (drule_at (Pat `ld_shared_state _ _ s' t'`)) >>
-  reverse conj_tac >- gvs[MEM] >>
+  reverse conj_tac >- fs[MEM] >>
   qexists_tac `(~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
     ~computed_precompile (LAST s'.vs_requests) /\
-     s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success)` >>
-  simp[] >> strip_tac >>
-  `~rq.cr_static /\ ~rt.cr_static` by gvs[MEM] >>
-  `s'.vs_requests <> s.vs_requests /\
-    ~computed_precompile (LAST s'.vs_requests) /\ s'.vs_outcomes <> s.vs_outcomes /\
-    (HD s.vs_outcomes).co_success` by metis_tac[] >>
-  drule_all ld_call_consume_reset_maps >> simp[]
+    s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success)` >>
+  gvs[MEM, Excl "consume_call_outcome_eq"] >> metis_tac[]
 QED
 
-(* DELEGATECALL consumes the same oracle as CALL but never resets masks:
-   adopted accounts are the outcome's on both sides. *)
+(* DELEGATECALL resets masks when the common successful outcome is adopted. *)
 Theorem ld_delegate_consume_tainted_shared:
   i.inst_opcode = DELEGATECALL /\ ld_shared_state tn un s t /\
-  rq.cr_kind = rt.cr_kind /\ rq.cr_value = rt.cr_value /\
+  rq.cr_kind = DelegateMessageCall /\ rt.cr_kind = DelegateMessageCall /\ rq.cr_value = rt.cr_value /\
   rq.cr_target = rt.cr_target /\ rq.cr_data = rt.cr_data /\
-  rq.cr_static = rt.cr_static /\
+  rq.cr_static = s.vs_call_ctx.cc_static /\ rt.cr_static = t.vs_call_ctx.cc_static /\
   rq.cr_accounts = s.vs_accounts /\ rq.cr_tStorage = s.vs_transient /\
   rt.cr_accounts = t.vs_accounts /\ rt.cr_tStorage = t.vs_transient /\
   consume_call_outcome rq roS rs s = (wS,s') /\
@@ -198,6 +199,7 @@ Theorem ld_delegate_consume_tainted_shared:
 Proof
   strip_tac >>
   drule ld_shared_state_environment >> strip_tac >>
+  `rq.cr_kind = rt.cr_kind /\ rq.cr_static = rt.cr_static` by simp[] >>
   `ld_shared_state tn un s' t'` by
     (drule_all ld_call_consume_shared >> simp[Excl "consume_call_outcome_eq"]) >>
   `s.vs_call_ctx.cc_static = t.vs_call_ctx.cc_static` by simp[] >>
@@ -208,29 +210,50 @@ Proof
     ~computed_precompile (LAST t'.vs_requests) /\
      t'.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success)` by
     (drule_all ld_call_consume_adoption_test >> simp[Excl "consume_call_outcome_eq"]) >>
+  `(~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
+      ~computed_precompile (LAST s'.vs_requests) /\
+      s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) ==>
+    s'.vs_accounts = t'.vs_accounts /\ s'.vs_transient = t'.vs_transient` by
+    (rpt strip_tac >>
+     `~rq.cr_static /\ ~rt.cr_static` by gvs[MEM, Excl "consume_call_outcome_eq"] >>
+     drule_all ld_call_consume_reset_maps >> simp[Excl "consume_call_outcome_eq"]) >>
   irule ld_external_shared_taint >>
   goal_assum (drule_at (Pat `ld_shared_state _ _ s' t'`)) >>
-  simp[MEM]
+  reverse conj_tac >- fs[MEM] >>
+  qexists_tac `(~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST s'.vs_requests) /\
+    s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success)` >>
+  gvs[MEM, Excl "consume_call_outcome_eq"] >> metis_tac[]
 QED
 
-(* The CREATE variants never reset masks; the single generic mask boundary
-   therefore applies without an adoption-test premise at their consumer. *)
 Theorem ld_create_consume_tainted_shared:
   MEM i.inst_opcode [CREATE;CREATE2] /\ ld_shared_state tn un s t /\
+  (rq.cr_kind = CreateCall \/ ?salt. rq.cr_kind = Create2Call salt) /\
   rq.cr_kind = rt.cr_kind /\ rq.cr_value = rt.cr_value /\
   rq.cr_target = rt.cr_target /\ rq.cr_data = rt.cr_data /\
-  rq.cr_static = rt.cr_static /\
+  ~rq.cr_static /\ ~rt.cr_static /\
   rq.cr_accounts = s.vs_accounts /\ rq.cr_tStorage = s.vs_transient /\
   rt.cr_accounts = t.vs_accounts /\ rt.cr_tStorage = t.vs_transient /\
   consume_create_outcome rq s = (wS,s') /\
   consume_create_outcome rt t = (wT,t') ==>
   ld_shared_state (step_taint i s s' tn) (step_taint i t t' un) s' t'
 Proof
-  strip_tac >> drule_all ld_create_consume_shared >>
-  qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >>
-  strip_tac >>
-  simp[ld_shared_state_def, step_taint_def, adopt_reset_def,
-       store_taint_def, imm_taint_def]
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule ld_shared_state_environment >> strip_tac >>
+  `rq.cr_static = rt.cr_static` by simp[] >>
+  `ld_shared_state tn un s' t'` by
+    (drule_all ld_create_consume_shared >> simp[Excl "consume_create_outcome_eq"]) >>
+  qpat_assum `rq.cr_kind = CreateCall \/ _` strip_assume_tac >>
+  Cases_on `t.vs_outcomes` >>
+  qpat_x_assum `consume_create_outcome _ s = _` mp_tac >>
+  qpat_x_assum `consume_create_outcome _ t = _` mp_tac >>
+  fs[MEM] >>
+  gvs[consume_create_outcome_eq, take_outcome_def, computed_precompile_def,
+      record_request_def, adopt_outcome_def] >>
+  rpt strip_tac >>
+  gvs[ld_shared_state_def, step_taint_def, adopt_reset_def, store_taint_def,
+      imm_taint_def, storage_agree_except_def, word_agree_except_def] >>
+  Cases_on `t.vs_call_ctx.cc_static` >> fs[]
 QED
 
 Theorem ld_extract_result_frame_fields:
