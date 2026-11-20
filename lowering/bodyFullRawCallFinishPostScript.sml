@@ -972,10 +972,11 @@ QED
    to the successful continuation without changing any framed resource. *)
 Theorem raw_call_zero_finish_post[local]:
   compile_raw_call_finish to_op dp dl gas_op val_op
-    (if stat then StaticCall else RegularCall) 0 rev ov op sa = (result,sb) /\
-  emit_op (if stat then STATICCALL else CALL)
-    (if stat then [gas_op;to_op;dp;dl;op;Lit 0w]
-     else [gas_op;to_op;val_op;dp;dl;op;Lit 0w]) sa = (ok,sc) /\
+    call_ty 0 rev ov op sa = (result,sb) /\
+  (case call_ty of
+    RegularCall => emit_op CALL [gas_op;to_op;val_op;dp;dl;op;Lit 0w]
+  | StaticCall => emit_op STATICCALL [gas_op;to_op;dp;dl;op;Lit 0w]
+  | DelegateCall => emit_op DELEGATECALL [gas_op;to_op;dp;dl;op;Lit 0w]) sa = (ok,sc) /\
   (rev ==> success) /\
   eval_operand ok s = SOME (if success then 1w else 0w) /\
   op_taint tn ok = {} /\ op_prov G ok = NONE /\
@@ -1053,10 +1054,11 @@ QED
 (* The JNZ moves to the empty good block without touching the CALL packet. *)
 Theorem raw_call_positive_bytes_good_entry[local]:
   compile_raw_call_finish to_op dp dl gas_op val_op
-    (if stat then StaticCall else RegularCall) n T (Var x) op sa = (result,sb) /\
-  emit_op (if stat then STATICCALL else CALL)
-    (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w n)]
-     else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
+    call_ty n T (Var x) op sa = (result,sb) /\
+  (case call_ty of
+    RegularCall => emit_op CALL [gas_op;to_op;val_op;dp;dl;op;Lit (n2w n)]
+  | StaticCall => emit_op STATICCALL [gas_op;to_op;dp;dl;op;Lit (n2w n)]
+  | DelegateCall => emit_op DELEGATECALL [gas_op;to_op;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
   0 < n /\ eval_operand ok s = SOME 1w /\ op_taint tn ok = {} /\
   fn_has_code sc sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = sc.cs_current_bb /\
@@ -1074,7 +1076,7 @@ Proof
   drule raw_call_finish_revert_compile >> simp[] >> strip_tac >>
   rename1 `fresh_label "call_failed" call_end = (fl,sl)` >>
   rename1 `emit_inst JNZ [status;Label good;Label bad] [] sj = ((),sn)` >>
-  `call_end = sc /\ status = ok` by (Cases_on `stat` >> gvs[]) >>
+  `call_end = sc /\ status = ok` by (Cases_on `call_ty` >> gvs[]) >>
   gvs[] >>
   `ci_mono call_end sl /\ ci_mono sl sj /\ ci_mono sj sn /\
    ci_mono sn s5 /\ ci_mono s5 s6 /\ ci_mono s6 s7 /\
@@ -1104,10 +1106,11 @@ QED
    into the live CALL output row; the physical run is fixed before D. *)
 Theorem raw_call_positive_bytes_finish_path[local]:
   compile_raw_call_finish to_op dp dl gas_op val_op
-    (if stat then StaticCall else RegularCall) n T (Var x) op sa = (result,sb) /\
-  emit_op (if stat then STATICCALL else CALL)
-    (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w n)]
-     else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
+    call_ty n T (Var x) op sa = (result,sb) /\
+  (case call_ty of
+    RegularCall => emit_op CALL [gas_op;to_op;val_op;dp;dl;op;Lit (n2w n)]
+  | StaticCall => emit_op STATICCALL [gas_op;to_op;dp;dl;op;Lit (n2w n)]
+  | DelegateCall => emit_op DELEGATECALL [gas_op;to_op;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
   0 < n /\ n < dimword (:256) /\ 64 + ((n+31) DIV 32)*32 < dimword (:256) /\
   eval_operand ok s = SOME 1w /\ op_taint tn ok = {} /\
   fn_has_code sc sb func /\ fn_inst_ids_distinct func /\
@@ -1335,10 +1338,11 @@ Finalise raw_call_positive_bytes_finish_path
 
 Theorem raw_call_positive_bytes_finish_post[local]:
   compile_raw_call_finish to_op dp dl gas_op val_op
-    (if stat then StaticCall else RegularCall) n T (Var x) op sa = (result,sb) /\
-  emit_op (if stat then STATICCALL else CALL)
-    (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w n)]
-     else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
+    call_ty n T (Var x) op sa = (result,sb) /\
+  (case call_ty of
+    RegularCall => emit_op CALL [gas_op;to_op;val_op;dp;dl;op;Lit (n2w n)]
+  | StaticCall => emit_op STATICCALL [gas_op;to_op;dp;dl;op;Lit (n2w n)]
+  | DelegateCall => emit_op DELEGATECALL [gas_op;to_op;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
   0 < n /\ n < dimword (:256) /\ 64 + ((n+31) DIV 32)*32 < dimword (:256) /\
   eval_operand ok s = SOME 1w /\ op_taint tn ok = {} /\
   fn_has_code sc sb func /\ fn_inst_ids_distinct func /\
@@ -1477,10 +1481,11 @@ Finalise raw_call_positive_bytes_finish_post
 
 Theorem raw_call_finish_continuation_full:
   compile_raw_call_finish to_op dp dl gas_op val_op
-    (if stat then StaticCall else RegularCall) n rev ov op sa = (result,sb) /\
-  emit_op (if stat then STATICCALL else CALL)
-    (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w n)]
-     else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
+    call_ty n rev ov op sa = (result,sb) /\
+  (case call_ty of
+    RegularCall => emit_op CALL [gas_op;to_op;val_op;dp;dl;op;Lit (n2w n)]
+  | StaticCall => emit_op STATICCALL [gas_op;to_op;dp;dl;op;Lit (n2w n)]
+  | DelegateCall => emit_op DELEGATECALL [gas_op;to_op;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
   eval_operand ok s = SOME (if success then 1w else 0w) /\
   op_taint tn ok = {} /\ op_prov G ok = NONE /\
   fn_has_code sc sb func /\ fn_inst_ids_distinct func /\
@@ -1577,7 +1582,7 @@ QED
 
 Resume raw_call_finish_continuation_full[zero]:
   qpat_x_assum `n = 0` SUBST_ALL_TAC >>
-  qpat_x_assum `emit_op _ _ _ = _` (assume_tac o SRULE []) >>
+  qpat_x_assum `_ sa = (ok,sc)` (assume_tac o SRULE []) >>
   qpat_x_assum `expr_type e = _` (assume_tac o SRULE []) >>
   `(rev ==> success)` by metis_tac[] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
@@ -1621,7 +1626,7 @@ Resume raw_call_finish_continuation_full[tuple]:
   drule raw_call_nonrevert_finish_code >>
   disch_then (qx_choose_then `ok1` (qx_choose_then `sc1`
     (map_every assume_tac o CONJUNCTS))) >>
-  `(ok1,sc1) = (ok,sc)` by (Cases_on `stat` >> fs[]) >>
+  `(ok1,sc1) = (ok,sc)` by (Cases_on `call_ty` >> fs[]) >>
   pop_assum (map_every SUBST_ALL_TAC o CONJUNCTS o REWRITE_RULE [pairTheory.PAIR_EQ]) >>
   `safe_operand sc (Var x)` by simp[exprSafeOperandTheory.safe_operand_def] >>
   `0 < n /\ 64 + ((n+31) DIV 32)*32 < dimword (:256)` by decide_tac >>

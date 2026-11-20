@@ -42,7 +42,7 @@ Theory extCallOracleStep
 Ancestors
   list words
   compileEnv loweringStateRelDefs localPtrsProps exprLoweringProps accountsRelProps
-  vyperInterpreter vyperState vyperValue vyperCallOutcome extCallOracle
+  vyperInterpreter vyperState vyperValue vyperCallOutcome vyperCallOutcomeProps extCallOracle
   venomCallOracleDefs venomExecSemantics venomInst venomState venomMemProps
 
 (* ===== Requests ===== *)
@@ -222,6 +222,73 @@ Proof
   qexists_tac `SND (consume_call_outcome rq' (w2n ro) (w2n rz) s)` >>
   rpt conj_tac
   >- gvs[exec_ext_call_def, Abbr `rq'`]
+  >- simp[venom_state_component_equality]
+  >- simp[]
+  >- simp[] >>
+  strip_tac >> qpat_x_assum `es1 = _` SUBST1_TAC >>
+  irule state_rel_adopt_consume >> simp[]
+QED
+
+Theorem exec_delegate_call_oracle_step:
+  state_rel H func cenv cx es s /\ inst.inst_outputs = [out] /\
+  w2w aw = target /\
+  value_opt = (if s.vs_call_ctx.cc_static then NONE else SOME 0) /\
+  (!g. gas_cap = SOME g ==> g = w2n gas) /\
+  take_delegate_outcome gas_cap target
+    (read_memory (w2n ao) (w2n az) s) value_opt es =
+    (INL (rq,outcome),es1) ==>
+  ?s'. exec_delegatecall inst s gas aw ao az ro rz =
+         OK (update_var out (if outcome.co_success then 1w else 0w) s') /\
+       s' = s with <| vs_outcomes := s'.vs_outcomes;
+                      vs_requests := s'.vs_requests;
+                      vs_accounts := s'.vs_accounts;
+                      vs_transient := s'.vs_transient;
+                      vs_logs := s'.vs_logs;
+                      vs_pending_deletions := s'.vs_pending_deletions;
+                      vs_returndata := s'.vs_returndata;
+                      vs_memory := s'.vs_memory |> /\
+       s'.vs_memory = (write_memory_with_expansion (w2n ro)
+         (TAKE (w2n rz) outcome.co_returnData) s).vs_memory /\
+       s'.vs_returndata = outcome.co_returnData /\
+       (local_ptrs_rel func cenv es.scopes s' /\
+        immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s' ==>
+        state_rel H func cenv cx (SND (adopt_call_outcome rq outcome es1)) s')
+Proof
+  strip_tac >>
+  `accounts_rel H cx es s /\ es.outcomes = SOME s.vs_outcomes` by
+    fs[state_rel_def] >>
+  Cases_on `s.vs_outcomes = []`
+  >- gvs[take_delegate_outcome_def, take_request_outcome_def] >>
+  `?rest. rq = (delegate_outcome_request target
+                  (read_memory (w2n ao) (w2n az) s) value_opt es
+                with cr_gas := gas_cap) /\
+          take_outcome rq s.vs_outcomes = (outcome,rest) /\
+          es1 = es with <| outcomes := SOME rest;
+                           requests := record_request rq es.requests;
+                           storage_trace := es.storage_trace ++
+                             [StorageOutcome rq outcome] |>` by
+    (drule take_delegate_outcome_success >> strip_tac >>
+     qexists_tac `rest` >> gvs[]) >>
+  qabbrev_tac `rq' = venom_call_request s aw 0w ao az F with
+    <| cr_kind := DelegateMessageCall; cr_gas := SOME (w2n gas) |>` >>
+  `request_agree H cx.txn.target rq rq'` by
+    (qpat_x_assum `rq = _` SUBST1_TAC >>
+     drule_then (qspecl_then [`target`, `read_memory (w2n ao) (w2n az) s`,
+                              `value_opt`] strip_assume_tac)
+       accounts_rel_call_request >>
+     Cases_on `s.vs_call_ctx.cc_static` >>
+     gvs[Abbr `rq'`, delegate_outcome_request_def, request_agree_def,
+         venom_call_request_def, call_outcome_request_def,
+         call_request_component_equality]) >>
+  Cases_on `take_outcome rq' s.vs_outcomes` >>
+  rename1 `take_outcome rq' _ = (outcome',rest')` >>
+  drule_all take_outcome_agree >> strip_tac >>
+  `outcome'.co_success = outcome.co_success /\
+   outcome'.co_returnData = outcome.co_returnData` by
+    (qpat_x_assum `_ = outcome'` (SUBST1_TAC o SYM) >> simp[]) >>
+  qexists_tac `SND (consume_call_outcome rq' (w2n ro) (w2n rz) s)` >>
+  rpt conj_tac
+  >- gvs[exec_delegatecall_def, Abbr `rq'`]
   >- simp[venom_state_component_equality]
   >- simp[]
   >- simp[] >>

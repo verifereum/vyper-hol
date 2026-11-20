@@ -1545,3 +1545,87 @@ Proof
   Cases_on `q2` >> simp[] >> strip_tac >>
   rw[vyperStateTheory.return_def, raise_def, bind_def, ignore_bind_def]
 QED
+
+Theorem raw_delegate_call_source_tail:
+  flags.rcf_is_delegate /\ ~flags.rcf_is_static /\
+  IS_SOME es.outcomes /\ outcomes_accounts_typed es.outcomes ==>
+  (es.outcomes = SOME [] /\
+   eval_raw_call cx flags target data 0 gas es =
+     (INR (Error (RuntimeError "take_call_outcome")),es)) \/
+  ?rq outcome es1 es2.
+    take_delegate_outcome (OPTION_BIND gas dest_NumV) target data
+      (if cx.txn.is_static then NONE else SOME 0) es =
+        (INL (rq,outcome),es1) /\
+    adopt_call_outcome rq outcome es1 = (INL (),es2) /\
+    eval_raw_call cx flags target data 0 gas es =
+      (if flags.rcf_revert_on_failure /\ ~outcome.co_success then
+         INR (Error (RevertData outcome.co_returnData))
+       else INL (Value
+         (if flags.rcf_revert_on_failure then
+            if flags.rcf_max_outsize = 0 then NoneV
+            else BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)
+          else if flags.rcf_max_outsize = 0 then BoolV outcome.co_success
+          else ArrayV (TupleV [BoolV outcome.co_success;
+            BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)]))),es2) /\
+    es2.gas_obs = es.gas_obs /\ LENGTH outcome.co_returnData < dimword (:256) /\
+    (!gs. eval_raw_call cx flags target data 0 gas (es with gas_obs := gs) =
+      (FST (eval_raw_call cx flags target data 0 gas es),es2 with gas_obs := gs))
+Proof
+  strip_tac >>
+  qabbrev_tac `vo = if cx.txn.is_static then NONE else SOME 0` >>
+  qabbrev_tac `gas_cap = OPTION_BIND gas dest_NumV` >>
+  `!s. frame_call_value cx (SOME 0) s = (INL vo,s)` by
+    (Cases_on `cx.txn.is_static` >>
+     simp[Abbr `vo`, frame_call_value_def, check_def, assert_def,
+          ignore_bind_def, bind_def, vyperStateTheory.return_def]) >>
+  Cases_on `es.outcomes` >> fs[] >>
+  rename1 `es.outcomes = SOME os` >> Cases_on `os`
+  >- simp[eval_raw_call_def, take_delegate_outcome_def,
+         take_request_outcome_def, type_check_def, assert_def, bind_def,
+         ignore_bind_def, raise_def, vyperStateTheory.return_def] >>
+  rename1 `es.outcomes = SOME (outcome::rest)` >>
+  fs[outcomes_accounts_typed_def] >>
+  qabbrev_tac `rq = delegate_outcome_request target data vo es with
+    cr_gas := gas_cap` >>
+  qabbrev_tac `es1 = es with <| outcomes := SOME rest;
+      requests := record_request rq es.requests;
+      storage_trace := es.storage_trace ++ [StorageOutcome rq outcome] |>` >>
+  `rq.cr_kind = DelegateMessageCall /\ ~computed_precompile rq` by
+    simp[Abbr `rq`, delegate_outcome_request_def, computed_precompile_def] >>
+  `!g. take_delegate_outcome gas_cap target data vo (es with gas_obs := g) =
+      (INL (rq,outcome),es1 with gas_obs := g)` by
+    (gen_tac >>
+     `(delegate_outcome_request target data vo (es with gas_obs := g) with
+       cr_gas := gas_cap) = rq` by
+       simp[Abbr `rq`, delegate_outcome_request_def, call_outcome_request_def] >>
+     PURE_REWRITE_TAC [take_delegate_outcome_def] >>
+     qpat_x_assum `(delegate_outcome_request _ _ _ _ with cr_gas := _) = rq`
+       (fn th => PURE_ONCE_REWRITE_TAC [th]) >>
+     simp[take_request_outcome_def, take_outcome_def,
+          Abbr `es1`, evaluation_state_component_equality]) >>
+  `take_delegate_outcome gas_cap target data vo es = (INL (rq,outcome),es1)` by
+    (PURE_REWRITE_TAC [take_delegate_outcome_def] >>
+     qpat_assum `Abbrev (rq = _)`
+       (fn th => PURE_ONCE_REWRITE_TAC [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
+     simp[take_request_outcome_def, take_outcome_def, Abbr `es1`]) >>
+  qabbrev_tac `es2 = SND (adopt_call_outcome rq outcome es1)` >>
+  `adopt_call_outcome rq outcome es1 = (INL (),es2)` by
+    (simp[Abbr `es2`, adopt_call_outcome_equation] >>
+     Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >> simp[]) >>
+  `!g. adopt_call_outcome rq outcome (es1 with gas_obs := g) =
+      (INL (),es2 with gas_obs := g)` by
+    metis_tac[calldata_adopt_call_outcome_gas_obs, pairTheory.FST, pairTheory.SND] >>
+  `es2.gas_obs = es.gas_obs` by
+    (Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
+     simp[Abbr `es2`, Abbr `es1`, adopt_call_outcome_equation]) >>
+  qexistsl_tac [`rq`,`outcome`,`es1`,`es2`] >>
+  qpat_assum `Abbrev (gas_cap = _)` (fn gas_eq =>
+    qpat_assum `Abbrev (vo = _)` (fn value_eq =>
+      simp[GSYM (REWRITE_RULE [markerTheory.Abbrev_def] gas_eq),
+           GSYM (REWRITE_RULE [markerTheory.Abbrev_def] value_eq),
+           eval_raw_call_def, type_check_def, assert_def, bind_def,
+           ignore_bind_def, vyperStateTheory.return_def, raise_def])) >>
+  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `outcome.co_success` >>
+  Cases_on `flags.rcf_max_outsize = 0` >>
+  simp[vyperStateTheory.return_def, raise_def, bind_def, ignore_bind_def]
+QED

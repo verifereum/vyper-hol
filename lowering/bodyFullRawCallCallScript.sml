@@ -1,4 +1,4 @@
-(* Counted memory CALL/STATICCALL followed by the joint pointer endpoint. *)
+(* Counted memory raw call followed by the joint pointer endpoint. *)
 Theory bodyFullRawCallCall
 Ancestors
   bodyFullRawCallCallFrame bodyFullRawCallCallOrigin bodyFullRawCallCallStorage
@@ -9,7 +9,8 @@ Ancestors
 
 Triviality raw_call_written_taint:
   ((inst.inst_opcode = CALL /\ LENGTH inst.inst_operands = 7) \/
-   (inst.inst_opcode = STATICCALL /\ LENGTH inst.inst_operands = 6)) /\
+   (MEM inst.inst_opcode [STATICCALL; DELEGATECALL] /\
+    LENGTH inst.inst_operands = 6)) /\
   source_memory_write_ranges inst s = [(dst,cap)] /\
   u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp ==>
   (step_taint inst s u tn).t_mem =
@@ -32,12 +33,14 @@ Proof
 QED
 
 Theorem raw_call_actual_call_full:
-  emit_op (if stat then STATICCALL else CALL)
-    (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
-     else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]) sa = (ok,sb) /\
-  inst = mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
-    (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
-     else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)])
+  emit_op (case call_ty of
+    RegularCall => CALL | StaticCall => STATICCALL | DelegateCall => DELEGATECALL)
+    (if call_ty = RegularCall then [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]
+     else [gas_op;to_op;dp;dl;op;Lit (n2w cap)]) sa = (ok,sb) /\
+  inst = mk_inst sa.cs_next_id (case call_ty of
+    RegularCall => CALL | StaticCall => STATICCALL | DelegateCall => DELEGATECALL)
+    (if call_ty = RegularCall then [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]
+     else [gas_op;to_op;dp;dl;op;Lit (n2w cap)])
     [STRING #"%" (toString sa.cs_next_var)] /\
   fn_has_code sa sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -51,10 +54,12 @@ Theorem raw_call_actual_call_full:
   eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\
   eval_operand op s = SOME ro /\ eval_operand val_op s = SOME val_word /\
   w2w aw = target /\
-  w2n (if stat then 0w else val_word) = (case value_opt of NONE => 0 | SOME n => n) /\
-  (stat \/ cx.txn.is_static) = IS_NONE value_opt /\
+  w2n (if call_ty = RegularCall then val_word else 0w) =
+    (case value_opt of NONE => 0 | SOME n => n) /\
+  (call_ty = StaticCall \/ cx.txn.is_static) = IS_NONE value_opt /\
   (!g. gas_cap = SOME g ==> g = w2n gas) /\
-  take_call_outcome gas_cap target (read_memory (w2n ao) (w2n az) s) value_opt es =
+  (if call_ty = DelegateCall then take_delegate_outcome else take_call_outcome)
+    gas_cap target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\ cap < dimword (:256) /\
   EVERY (\p. op_taint tn p = {}) inst.inst_operands /\
   (!j. w2n ao <= j /\ j < w2n ao + w2n az ==> j NOTIN tn.t_mem) /\
@@ -100,9 +105,9 @@ Proof
      simp[regions_disjoint_def, DISJ_COMM]) >>
   qpat_x_assum `inst = _` (mk_asm "call_inst") >>
   qpat_x_assum `w2w aw = target` (SUBST_ALL_TAC o SYM) >>
-  drule raw_call_oracle_emit_run_aged >>
+  drule raw_call_kind_oracle_emit_run_aged >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `take_call_outcome _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `(if _ then _ else _) _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand gas_op s = _`)) >>
   disch_then (drule_at (Pat `eval_operand val_op s = _`)) >>
   disch_then (qspecl_then [`gas`,`aw`] mp_tac) >>
@@ -135,13 +140,15 @@ Proof
    u.vs_memory = (write_memory_with_expansion (w2n ro)
      (TAKE cap outcome.co_returnData) s).vs_memory /\
    u.vs_returndata = outcome.co_returnData` by simp[Abbr `u`,update_var_def] >>
-  `inst.inst_opcode = (if stat then STATICCALL else CALL) /\
-   inst.inst_operands = (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
-       else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]) /\
+  `inst.inst_opcode = (case call_ty of
+     RegularCall => CALL | StaticCall => STATICCALL | DelegateCall => DELEGATECALL) /\
+   inst.inst_operands =
+     (if call_ty = RegularCall then [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]
+      else [gas_op;to_op;dp;dl;op;Lit (n2w cap)]) /\
    inst.inst_outputs = [STRING #"%" (toString sa.cs_next_var)]` by simp[mk_inst_def] >>
   `source_memory_write_ranges inst s = [(w2n ro,cap)] /\
    source_memory_read_ranges inst s = [(w2n ao,w2n az)]` by
-    (Cases_on `stat` >>
+    (Cases_on `call_ty` >>
      simp[source_memory_write_ranges_def, source_memory_read_ranges_def,
           mem_write_ops_def, mem_read_ops_def, memory_range_of_operands_def,
           eval_operand_def]) >>
@@ -152,30 +159,41 @@ Proof
 QED
 
 Resume raw_call_actual_call_full[ghost]:
-  `exec_ext_call inst s gas aw (if stat then 0w else val_word)
-      ao az ro (n2w cap : bytes32) (stat \/ s.vs_call_ctx.cc_static) = OK u` by
-    (qpat_x_assum `t = _` kall_tac >>
-     qpat_x_assum `inst = mk_inst _ _ _ _` kall_tac >>
+  `(if call_ty = DelegateCall then exec_delegatecall inst s gas aw ao az ro (n2w cap : bytes32)
+    else exec_ext_call inst s gas aw (if call_ty = RegularCall then val_word else 0w)
+      ao az ro (n2w cap : bytes32) (call_ty = StaticCall \/ s.vs_call_ctx.cc_static)) = OK u` by
+    (qpat_assum `inst.inst_opcode = _` mp_tac >>
+     qpat_assum `inst.inst_operands = _` mp_tac >>
+     qpat_assum `step_inst_base inst s = OK u` mp_tac >>
+     map_every (fn pattern => qpat_assum pattern mp_tac)
+       [`eval_operand gas_op s = SOME gas`, `eval_operand to_op s = SOME aw`,
+        `eval_operand dp s = SOME ao`, `eval_operand dl s = SOME az`,
+        `eval_operand op s = SOME ro`, `eval_operand val_op s = SOME val_word`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `call_ty` >> simp[] >> rpt strip_tac >>
      qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
-     `eval_operand (Lit (n2w cap)) s = SOME (n2w cap)` by simp[eval_operand_def] >>
-     Cases_on `stat` >>
-     qpat_x_assum `inst.inst_opcode = _` (assume_tac o SRULE []) >>
-     qpat_x_assum `inst.inst_operands = _` (assume_tac o SRULE []) >>
      qpat_assum `inst.inst_opcode = _` (fn eq =>
        let val th = valOf (List.find (fn th =>
          let val (_,body) = strip_forall (concl th)
          in aconv (rhs (fst (dest_imp body))) (rhs (concl eq)) end)
          (CONJUNCTS step_inst_base_opcode_eqs))
        in PURE_ONCE_REWRITE_TAC [MATCH_MP th eq] end) >>
-     qpat_assum `inst.inst_operands = _` (fn th => pure_once_rewrite_tac [th]) >>
-     asm_simp_tac bool_ss [list_case_def, pairTheory.pair_case_def,
-                           optionTheory.option_case_def] >>
-     IF_CASES_TAC >> simp[]) >>
+     simp[eval_operand_def] >>
+     TRY (IF_CASES_TAC >> simp[NoAsms]) >>
+     rpt strip_tac >> first_assum ACCEPT_TAC) >>
+  `stor_taint_ok_at D tn s` by
+    (qpat_assum `ghost_inv_at D lo d cenv cx es G tn s` mp_tac >>
+     simp[NoAsms, ghost_inv_at_def]) >>
   `stor_taint_ok_at D (step_taint inst s u tn) u` by
-    (drule_at (Pat `exec_ext_call _ _ _ _ _ _ _ _ _ _ = _`)
-       raw_call_exec_stor_taint_at >>
-     disch_then (qspecl_then [`tn`,`D`] mp_tac) >>
-     Cases_on `stat` >> gns[ghost_inv_at_def]) >>
+    (Cases_on `call_ty` >>
+     qpat_x_assum `(if _ then exec_delegatecall _ _ _ _ _ _ _ _ else _) = _`
+       (assume_tac o SRULE []) >>
+     qpat_x_assum `inst.inst_opcode = _` (assume_tac o SRULE []) >>
+     FIRST [drule_at (Pat `exec_ext_call _ _ _ _ _ _ _ _ _ _ = _`)
+              raw_call_exec_stor_taint_at,
+            drule_at (Pat `exec_delegatecall _ _ _ _ _ _ _ _ = _`)
+              raw_delegate_call_exec_stor_taint_at] >>
+     disch_then (qspecl_then [`tn`,`D`] mp_tac) >> simp[]) >>
   `!x. not_fresh_at sa x ==>
     FLOOKUP (step_prov PG G inst u) x = FLOOKUP G x /\
     op_taint (step_taint inst s u tn) (Var x) = op_taint tn (Var x) /\
@@ -188,7 +206,7 @@ Resume raw_call_actual_call_full[ghost]:
   `(step_taint inst s u tn).t_mem = tn.t_mem DIFF
     {j | w2n ro <= j /\ j < w2n ro + LENGTH (TAKE cap outcome.co_returnData)}` by
     (qpat_assum `u.vs_returndata = _` (fn th => REWRITE_TAC[GSYM th]) >>
-     irule raw_call_written_taint >> Cases_on `stat` >> simp[]) >>
+     irule raw_call_written_taint >> Cases_on `call_ty` >> simp[]) >>
   qexists `u` >> simp_tac bool_ss [LET_THM] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
   >- suspend "safe"
@@ -212,16 +230,29 @@ Resume raw_call_actual_call_full[origin]:
   qpat_assum `LENGTH sb.cs_current_insts = _` (fn th => rewrite_tac[th]) >>
   qpat_assum `ghost_inv_at _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o SRULE [ghost_inv_at_def]) >>
-  irule raw_call_step_origin_full >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >-
-    (qexists `bb` >> simp[]) >>
-  qexistsl [`ao`,`az`,`dl`,`dp`,`gas_op`,`op`,`n2w cap`,`ro`,
-             `Lit (n2w cap)`,`to_op`,`val_op`] >>
-  Cases_on `stat` >> simp[eval_operand_def]
+  let
+    val operands = [`bb` |-> `bb`, `ao` |-> `ao`, `az` |-> `az`,
+      `dl` |-> `dl`, `dp` |-> `dp`, `gas_op` |-> `gas_op`, `op` |-> `op`,
+      `rn` |-> `(n2w cap : bytes32)`, `ro` |-> `ro`, `rz` |-> `Lit (n2w cap)`,
+      `to_op` |-> `to_op`]
+    val ordinary = Q.INST ((`val_op` |-> `val_op`) :: operands) raw_call_step_origin_full
+    val delegate = Q.INST operands raw_delegate_call_step_origin_full
+    fun close rule =
+      mp_tac rule >> impl_tac
+      >- (qpat_assum `s.vs_inst_idx = LENGTH sa.cs_current_insts` (fn index =>
+           qpat_assum `get_instruction bb s.vs_inst_idx = SOME inst` (fn fetch =>
+             simp[eval_operand_def, fetch, REWRITE_RULE [index] fetch]))) >>
+      disch_then ACCEPT_TAC
+  in
+    (Cases_on `call_ty` >>
+     qpat_x_assum `inst.inst_opcode = _` (assume_tac o SRULE []) >>
+     qpat_x_assum `inst.inst_operands = _` (assume_tac o SRULE [])) THENL
+      [close ordinary, close delegate, close ordinary]
+  end
 QED
 
 Resume raw_call_actual_call_full[frame]:
-  drule raw_call_take_adopt_fields >> strip_tac >>
+  drule raw_call_kind_take_adopt_fields >> strip_tac >>
   irule raw_call_clean_write_ghost_at >>
   conj_tac >-
     (qpat_x_assum `stor_taint_ok_at _ _ _` mp_tac >>
@@ -241,7 +272,7 @@ Resume raw_call_actual_call_full[kept]:
 QED
 
 Resume raw_call_actual_call_full[taint]:
-  Cases_on `stat` >>
+  Cases_on `call_ty` >>
   simp[step_taint_def, op_taint_def, set_var_taint_def,
        out_taint_def, mk_inst_def, FLOOKUP_UPDATE]
 QED
@@ -249,7 +280,7 @@ QED
 Resume raw_call_actual_call_full[prov]:
   qpat_assum `ok = _` (fn th => rewrite_tac[th]) >>
   irule step_prov_out_none >>
-  Cases_on `stat` >> simp[out_prov_def]
+  Cases_on `call_ty` >> simp[out_prov_def]
 QED
 
 Finalise raw_call_actual_call_full
