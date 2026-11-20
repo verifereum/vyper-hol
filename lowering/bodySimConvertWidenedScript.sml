@@ -44,8 +44,11 @@ Proof
      Cases_on `is_bytestring_type a`
      >- (irule intcall_convert_from_bytestring_sim >> metis_tac[]) >>
      suspend "scalar") >>
-  simp[] >> irule expr_vv_sim_stack >> simp[] >> conj_tac
-  >- (gen_tac >> irule compile_convert_stack) >>
+  simp[] >> Cases_on `is_bytestring_type typ`
+  >- metis_tac[exprSimConvertBytesTheory.expr_vv_sim_convert_bytestring,
+                exprSimConvertBytesTheory.valid_conversion_to_bytestring] >>
+  irule expr_vv_sim_stack >> simp[] >> conj_tac
+  >- simp[compile_convert_stack] >>
   metis_tac[eval_expr_type_builtin_value]
 QED
 

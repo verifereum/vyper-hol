@@ -687,11 +687,8 @@ Theorem abi_image_type_builtin_convert_label:
 Proof
   simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  gvs[AllCaseEqs(), vv_operand_def] >>
-  qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
-  qmatch_goalsub_abbrev_tac `as_stack_val vt res` >>
-  Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
-  strip_tac >> gvs[vv_operand_def] >>
+  gvs[oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs(),
+      vv_operand_def, mk_ptr_def] >>
   metis_tac[abi_image_convert_label, abi_image_widen_copy_not_label]
 QED
 
