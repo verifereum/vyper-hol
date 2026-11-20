@@ -21,7 +21,7 @@ Theorem abi_encode_capture_store_origin:
   ptr_covers G tn xs s (type_memory_size tv) /\
   FLOOKUP G xd = SOME (w2n dw,type_memory_size tv) /\ op_taint tn (Var xd) = {} /\
   FLOOKUP s.vs_allocas aid = SOME (w2n dw,type_memory_size tv) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code su sb func /\ fn_inst_ids_distinct func /\
   alloca_history func s /\ alloca_inv s /\
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
