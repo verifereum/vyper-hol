@@ -25,7 +25,8 @@ Theorem bytes_word_empty_convert_origin_path:
   w2n a + 64 <= dimword(:256) /\
   mload (w2n a) s = n2w n /\ n <= 32 /\
   (!x. w2n a <= x /\ x < w2n a+32+n ==> x NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
@@ -109,6 +110,13 @@ Resume bytes_word_empty_convert_origin_path[ghosts]:
     (qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK u`
       (mp_then Any mp_tac run_inst_seq_append) >>
      disch_then (qspec_then `emitted_insts sm sb` mp_tac) >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (`allocas_below_fmp u <=> allocas_below_fmp s` by
+       (qpat_assum `u = s with vs_vars := _` SUBST1_TAC >>
+        simp[allocas_below_fmp_def]) >>
+     qpat_assum `allocas_below_fmp u <=> allocas_below_fmp s`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
   drule bytes_word_continuation_uniform >>
   disch_then (qspecl_then [`u`,`tn1`,`sf`] mp_tac) >>
   disch_then (qspec_then `fn` mp_tac) >>

@@ -9144,7 +9144,8 @@ Proof
       >- (rpt gen_tac >> strip_tac >> qexists `v` >> gvs[arithmeticTheory.ADD_COMM]) >>
       rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def] >> strip_tac >>
       conj_tac >- (simp[stmt_exit_ptr_def] >> metis_tac[expr_exit_INR_type]) >>
-      conj_tac >- metis_tac[halt_exit_INR_type] >>
+      conj_tac >- (qpat_assum `halt_exit _ _ _ (INR _) _`
+        (MATCH_ACCEPT_TAC o MATCH_MP (iffLR halt_exit_INR_type))) >>
       rpt strip_tac
       >- (qpat_assum `ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u`
             (fn frame => qpat_assum `ctx_has_dalloca ctx` (fn active =>
@@ -18600,10 +18601,15 @@ Proof
   reverse conj_tac >- first_assum ACCEPT_TAC >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `is_word_type ity`
-  >- (irule body_assign_other_immutable_word_write_full >>
-      rpt (CHANGED_TAC (first_assum (irule_at Any))) >>
-      qexists `marks` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  irule body_assign_other_immutable_nonword_write_full >>
-  rpt (CHANGED_TAC (first_assum (irule_at Any))) >>
-  qexists `marks` >> rpt conj_tac >> first_assum ACCEPT_TAC
+  >| [irule body_assign_other_immutable_word_write_full,
+      irule body_assign_other_immutable_nonword_write_full] >>
+  qpat_assum `supported_stmt tops bindings (Assign (BaseTarget t) e)` (irule_at Any) >>
+  qpat_assum `type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env'` (irule_at Any) >>
+  qpat_assum `compile_get_target_ptr compile_expr cenv t =
+    comp_return (Lit (n2w off),SOME LocCode,SOME (ValPT ity))` (irule_at Any) >>
+  qpat_assum `compile_expr cenv (expr_type e) e sa = (vv,sm)` (irule_at Any) >>
+  qpat_assum `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
+    shadow_sa = (op,shadow_su)` (irule_at Any) >>
+  qexistsl [`su`, `shadow_sb`, `shadow_func`, `marks`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED

@@ -16,7 +16,7 @@ Theorem ptr_inst_ok_external_copy:
     (?wa. eval_operand addr s = SOME wa) /\ op_taint tn addr = {})) /\
   eval_operand start s = SOME a /\ eval_operand cnt_op s = SOME n /\
   op_taint tn start = {} /\ op_taint tn cnt_op = {} /\
-  ptr_covers G tn dst s (w2n n) /\ ~ctx_has_dalloca ctx ==>
+  ptr_covers G tn dst s (w2n n) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc ops []) s
 Proof
   strip_tac >> gvs[ptr_covers_def] >>
@@ -80,7 +80,7 @@ Theorem emit_external_copy_counted:
     (?wa. eval_operand addr s = SOME wa) /\ op_taint tn addr = {})) /\
   eval_operand start s = SOME a /\ eval_operand cnt_op s = SOME n /\
   op_taint tn start = {} /\ op_taint tn cnt_op = {} /\
-  ptr_covers G tn dst s (w2n n) /\ ~ctx_has_dalloca ctx /\
+  ptr_covers G tn dst s (w2n n) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   !D PG. ?t tn'.
@@ -142,7 +142,7 @@ QED
 Theorem external_size_inst_check:
   MEM opc [CALLDATASIZE; CODESIZE; EXTCODESIZE] /\
   (!op. MEM op ops ==> op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id opc ops [out]) s = OK t /\
   t.vs_requests = s.vs_requests ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc ops [out]) s
@@ -386,7 +386,7 @@ Theorem external_copy_store_counted:
     (?wa. eval_operand addr r = SOME wa) /\ op_taint tn addr = {})) /\
   eval_operand start r = SOME a /\ eval_operand cnt_op r = SOME n /\
   op_taint tn start = {} /\ op_taint tn cnt_op = {} /\
-  ptr_covers G tn dst r (w2n n) /\ ~ctx_has_dalloca ctx /\ ~r.vs_halted /\
+  ptr_covers G tn dst r (w2n n) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r) /\ ~r.vs_halted /\
   r.vs_current_bb = sc.cs_current_bb /\ r.vs_inst_idx = LENGTH sc.cs_current_insts /\
   emit_void MSTORE [Var root;cnt_op] sd = ((),sb) /\ fn_has_code sd sb fn /\
   lookup_var root r = SOME b /\ 32 <= N /\ ptr_covers G tn root r N ==>
@@ -423,7 +423,10 @@ Proof
      simp[]) >>
   `v.vs_current_bb = sd.cs_current_bb /\
    v.vs_inst_idx = LENGTH sd.cs_current_insts /\ ~v.vs_halted` by simp[Abbr `v`] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by simp[] >>
+  `allocas_below_fmp v <=> allocas_below_fmp r` by
+    simp[Abbr `v`, allocas_below_fmp_def, write_memory_with_expansion_def,
+         write_memory_def, expand_memory_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by metis_tac[] >>
   drule_all emit_scratch_word_counted >>
   disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
   rename1 `tm.t_var = tc.t_var` >>

@@ -1214,7 +1214,8 @@ Proof
      qexistsl_tac [`fmp`, `vs0`] >> simp[] >>
      metis_tac[opt_entry_initial_venom_state_rel]) >>
   qpat_x_assum `source_unit_execution_correct_at _ _ _ _ _ _ _` mp_tac >>
-  simp[source_unit_execution_correct_at_def] >> strip_tac
+  simp[source_unit_execution_correct_at_def,
+       source_unit_execution_correct_with_def] >> strip_tac
   >- metis_tac[]
   >- (gen_tac >> strip_tac >>
       qpat_assum `!tail. call_external_trace _ _ _ _ = _`
@@ -1843,7 +1844,7 @@ Proof
   `raw_variant fmp vs vs0` by
     simp[Abbr `vs`, raw_variant_def, gas_variant_def, venom_state_component_equality] >>
   `source_unit_execution_correct_at marks tops ret am txp unit vs` by
-    (rewrite_tac[source_unit_execution_correct_at_with] >>
+    (rewrite_tac[source_unit_execution_correct_at_def] >>
      qexists_tac `shadow_ctx` >>
      qunabbrev_tac `marks` >> qunabbrev_tac `vs` >>
      qpat_assum `!gs. source_unit_execution_correct_with _ _ _ _ _ _ _ _ /\ _`
@@ -2584,7 +2585,8 @@ Proof
                `raw_reachable vs`, `vs`, `es`] mp_tac codegen_correct >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >> qexistsl_tac [`r`, `es'`] >> gvs[venom_frame_rel_def] >>
-  metis_tac[frameGasTheory.frame_raises_inst_raises]
+  metis_tac[SRULE [vfm_abort_def] (Q.INST [`exc` |-> `Reverted`]
+    frameGasTheory.frame_inst_raises_frame_raises)]
 QED
 
 (* The same under the final assembly optimizer, which excludes, for now,
@@ -2736,7 +2738,8 @@ Proof
     mp_tac codegen_reverts_asm_opt >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >> qexistsl_tac [`r`, `es'`] >> fs[] >>
-  metis_tac[frameGasTheory.frame_raises_inst_raises]
+  metis_tac[SRULE [vfm_abort_def] (Q.INST [`exc` |-> `Reverted`]
+    frameGasTheory.frame_inst_raises_frame_raises)]
 QED
 
 (* Both accepted finalizers. *)

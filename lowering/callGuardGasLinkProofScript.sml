@@ -8,8 +8,6 @@ Ancestors
   gasMaskProjection gasSummary gasEvents gasExplicitSites o1SafeUpto
   codegenSymRel asmFrameRel oracleExecProps venomExecSemantics venomInst
   words arithmetic list sorting
-Libs
-  stepInstBaseLib
 
 Theorem guard_runtime_phases:
   fin IN accepted_finalizers /\
@@ -127,18 +125,6 @@ Proof
   simp[]
 QED
 
-Theorem request_step_has_outcome[local]:
-  inst.inst_opcode <> INVOKE /\ step_inst fuel C inst s = OK t /\
-  LENGTH s.vs_requests < LENGTH t.vs_requests ==>
-  s.vs_outcomes <> []
-Proof
-  strip_tac >> gvs[step_inst_non_invoke] >>
-  Cases_on `MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]`
-  >- (gvs[] >> with_opcode_clause gvs >>
-      gvs[exec_ext_call_def, exec_delegatecall_def, exec_create_def, AllCaseEqs()]) >>
-  gvs[] >> drule_all step_inst_base_oracle >> strip_tac >> gvs[]
-QED
-
 Theorem guard_request_cut_pair[local]:
   raw_safe_rq_upto D 0 k C vs /\
   (?fn inst s fuel s'.
@@ -150,7 +136,7 @@ Theorem guard_request_cut_pair[local]:
      raw_safe_rq_upto D 0 k C vs /\
      raw_reachable vs C fn inst s /\ inst.inst_opcode <> INVOKE /\
      LENGTH s.vs_requests = k /\ step_inst fuel C inst s = OK s' /\
-     k < LENGTH s'.vs_requests /\ s.vs_outcomes <> [] ==>
+     k < LENGTH s'.vs_requests ==>
      (?fn' inst' t fuel' t'.
         raw_reachable vs0 C' fn' inst' t /\ inst'.inst_opcode <> INVOKE /\
         LENGTH t.vs_requests = k /\ step_inst fuel' C' inst' t = OK t' /\
@@ -186,8 +172,7 @@ Proof
     (CONJUNCTS_THEN2
       (qx_choosel_then [`fn`, `inst`, `s`, `fuel`, `s'`] strip_assume_tac)
       (qspecl_then [`fn`, `inst`, `s`, `fuel`, `s'`] mp_tac))) >>
-  impl_tac
-  >- (asm_rewrite_tac[] >> irule request_step_has_outcome >> metis_tac[]) >>
+  impl_tac >- asm_rewrite_tac[] >>
   disch_then (CONJUNCTS_THEN2
     (qx_choosel_then [`fn'`, `inst'`, `t`, `fuel'`, `t'`] strip_assume_tac)
     strip_assume_tac) >>
@@ -310,5 +295,11 @@ Proof
   irule guard_request_cut_pair >>
   asm_rewrite_tac[] >>
   qpat_x_assum `!H k fn inst s fuel s'. _`
-    (qspecl_then [`H`, `recorded_outcomes_count obs_pre`] ACCEPT_TAC)
+    (qspecl_then [`H`, `recorded_outcomes_count obs_pre`] assume_tac) >>
+  rpt gen_tac >> strip_tac >>
+  `s.vs_outcomes <> []` by
+    (mp_tac (Q.INST [`t` |-> `s'`] jointRequestCutTheory.recording_step_has_outcome) >>
+     fs[extCallOracleTheory.record_request_def]) >>
+  first_x_assum (qspecl_then [`fn`, `inst`, `s`, `fuel`, `s'`] mp_tac) >>
+  asm_rewrite_tac[]
 QED

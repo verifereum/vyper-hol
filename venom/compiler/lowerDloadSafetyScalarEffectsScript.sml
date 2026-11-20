@@ -83,7 +83,9 @@ Proof
    inst.inst_opcode <> SHR /\ inst.inst_opcode <> SAR /\
    inst.inst_opcode <> MSTORE /\ inst.inst_opcode <> ISTORE /\
    inst.inst_opcode <> MCOPY /\ inst.inst_opcode <> SSTORE /\
-   inst.inst_opcode <> TSTORE /\ inst.inst_opcode <> CALL` by (gvs[MEM] >> simp[]) >>
+   inst.inst_opcode <> TSTORE /\ inst.inst_opcode <> CALL /\
+   inst.inst_opcode <> DELEGATECALL /\ inst.inst_opcode <> CREATE /\
+   inst.inst_opcode <> CREATE2` by (gvs[MEM] >> simp[]) >>
   `out_taint tn inst s = {}` by
     (namedCases_on `inst.inst_operands` ["", "a rest"]
      >- simp[out_taint_def] >>

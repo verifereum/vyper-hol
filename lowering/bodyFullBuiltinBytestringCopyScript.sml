@@ -10,6 +10,9 @@ Ancestors
   instMemFrontier memSafeRun ptrDiscipline venomExecSemantics
   venomState venomInst emitHelper emitHelperProps exprLoweringProps
   compileEnv loweringStateRelDefs wordLoadStorePtr list finite_map
+  decoderOriginAllocationFrame[qualified,ignore_grammar]
+  bodyMemAggregatePath[qualified,ignore_grammar]
+  fragGasOrigin[qualified,ignore_grammar] fragGasMode[qualified,ignore_grammar]
 
 Theorem bytestring_external_copy_origin_edge:
   emit_void opc ops sa = ((),sb) /\ fn_has_code sa sb func /\
@@ -22,7 +25,7 @@ Theorem bytestring_external_copy_origin_edge:
   op_taint tn start = {} /\ op_taint tn cnt = {} /\
   ptr_covers G tn dst s (w2n wn) /\
   w2n wd + w2n wn <= s.vs_alloca_next /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   step_inst_base (mk_inst sa.cs_next_id opc ops []) s = OK u ==>
@@ -61,7 +64,7 @@ Theorem bytestring_length_store_origin_edge:
   lookup_var root s = SOME b /\ eval_operand cnt s = SOME n /\
   ptr_covers G tn root s 32 /\ op_taint tn cnt = {} /\
   w2n b + 32 <= s.vs_alloca_next /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   !D. gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
@@ -111,7 +114,7 @@ Theorem bytestring_external_copy_length_full_run:
   32 <= N /\ ptr_covers G tn root s N /\
   w2n wd + w2n wn <= s.vs_alloca_next /\
   w2n b + 32 <= s.vs_alloca_next /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   step_inst_base (mk_inst sa.cs_next_id opc ops []) s =
@@ -169,6 +172,12 @@ Proof
     gvs[emit_void_def, comp_bind_def, comp_ignore_bind_def,
         comp_return_def, fresh_id_def, emit_def,
         write_memory_with_expansion_def, write_memory_def, expand_memory_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `u = (write_memory_with_expansion _ _ s) with vs_inst_idx := _` SUBST1_TAC >>
+     simp[allocas_below_fmp_def, write_memory_with_expansion_def, write_memory_def,
+          expand_memory_def] >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+       (ACCEPT_TAC o SRULE[allocas_below_fmp_def])) >>
   `ptr_covers G tc root u 32` by
     (gvs[ptr_covers_def, op_taint_def, lookup_var_def,
          write_memory_with_expansion_def, write_memory_def,
@@ -240,7 +249,9 @@ Theorem bytestring_external_output_full_resources:
     step_inst_base (mk_inst sc.cs_next_id opc ops []) v =
       OK (write_memory_with_expansion (w2n wd) bytes v)) /\
   alloca_history func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+     s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+  ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?p w t HG tm.
@@ -332,6 +343,26 @@ Proof
     (qpat_assum `!v wd. _ ==> step_inst_base _ v = _`
        (qspecl_then [`v`,`w+32w`] match_mp_tac) >>
      simp[eval_operand_def]) >>
+  `v.vs_fmp = s.vs_fmp` by
+    (qpat_assum `v with <|vs_vars := _;vs_allocas := _;
+      vs_alloca_next := _;vs_inst_idx := _|> = s`
+       (mp_tac o Q.AP_TERM `\st. st.vs_fmp`) >> simp[]) >>
+  qpat_assum `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK v,G2,tn2)` (assume_tac o SPEC_ALL) >>
+  `gas_path_mem ctx func s 0 (OK v)` by
+    (qpat_assum `gas_origin_ptr_path _ _ [] (OK v,G2,tn2)`
+       (mp_tac o MATCH_MP fragGasOriginTheory.gas_origin_path_erase o CONJUNCT1 o
+        MATCH_MP fragGasOriginPtrTheory.gas_origin_ptr_path_projections) >>
+     simp[fragGasModeTheory.gas_marked_path_def]) >>
+  `alloca_inv v` by
+    (`alloca_inv s` by fs[stmt_state_rel_def] >>
+     drule_all bodyMemAggregatePathTheory.aggregate_mem_path_alloca_inv >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
+    (strip_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> _ /\ _` (drule_then strip_assume_tac) >>
+     drule_all decoderOriginAllocationFrameTheory.decoder_origin_path_allocas_below_fmp >>
+     simp[]) >>
+  qpat_x_assum `gas_origin_ptr_path _ _ [] (OK v,G2,tn2)` kall_tac >>
   mp_tac (bytestring_external_copy_length_full_run |> Q.INST
     [`sa` |-> `sc`,`sm` |-> `sd`,`s` |-> `v`,`G` |-> `G2`,
      `tn` |-> `tn2`,`wd` |-> `w+32w`,`wn` |-> `n2w n`,`b` |-> `w`]) >>
@@ -353,11 +384,11 @@ Proof
       (s,G,tn) [] (OK t,G2,tm)` by
     (gen_tac >>
      qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`
-       (qspec_then `D` mp_tac) >>
+       (qspec_then `D` (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
+     disch_then (qspecl_then [`v`,`G2`,`tn2`,`[]`,`OK t`,`G2`,`tm`] mp_tac) >>
+     simp[NoAsms] >>
      qpat_assum `!D. gas_origin_ptr_path _ (v,G2,tn2) _ _`
-       (qspec_then `D` mp_tac) >>
-     rpt (pop_assum kall_tac) >>
-     metis_tac[gas_origin_ptr_path_append,APPEND_NIL]) >>
+       (qspec_then `D` (fn path => disch_then (fn join => ACCEPT_TAC (MP join path))))) >>
   `t.vs_vars = v.vs_vars /\ t.vs_allocas = v.vs_allocas /\
    t.vs_alloca_next = v.vs_alloca_next` by
     (qpat_assum `t = _`
@@ -608,5 +639,15 @@ Proof
       >- (qexistsl_tac [`N`,`allocinst`] >> rpt conj_tac >>
           TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
       first_assum ACCEPT_TAC) >>
-  metis_tac[]
+  qpat_assum `t = mstore _ _ (write_memory_with_expansion _ _ _) with vs_inst_idx := _`
+    (rewrite_tac o single o GSYM o REWRITE_RULE [venom_state_accfupds] o BETA_RULE o
+     Q.AP_TERM `\st. st.vs_memory`) >>
+  TRY (first_assum ACCEPT_TAC) >>
+  qpat_assum `!name b len. local_region cenv es.scopes s name b len ==>
+      _ /\ (!i. b <= i /\ i < b+len /\ i IN tm.t_mem ==> _)` mp_tac >>
+  qpat_assum `tm.t_mem =
+      tn2.t_mem DIFF {i | w2n (w+32w) <= i /\ i < w2n (w+32w)+n} DIFF
+      {i | w2n w <= i /\ i < w2n w+32}` (fn taint =>
+    qpat_assum `w2n (w+32w) = w2n w+32` (fn offset =>
+      simp[NoAsms, taint, offset]))
 QED

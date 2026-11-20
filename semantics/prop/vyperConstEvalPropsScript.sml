@@ -2,19 +2,26 @@
    the interpreter. *)
 Theory vyperConstEvalProps
 Ancestors
-  vyperConstEval vyperEvalPureExpr vyperContext vyperState vyperValue vyperAST
-  vyperValueOperation
+  vyperConstEval vyperPinFold vyperEvalPureExpr vyperContext vyperState
+  vyperValue vyperAST vyperValueOperation
 
-Theorem evaluate_builtin_closed[local]:
-  closed_builtin b /\ EVERY (\t. ?bt. t = BaseT bt) tys ==>
+(* The builtins either folder admits read neither the context nor the
+   accounts once their argument types are base types. *)
+Theorem evaluate_builtin_closed:
+  (closed_builtin b \/ pin_foldable_builtin b) /\
+  EVERY (\t. ?bt. t = BaseT bt) tys ==>
   evaluate_builtin cx acc (BaseT bt) b tys vs =
   evaluate_builtin empty_evaluation_context empty_accounts (BaseT bt) b tys vs
 Proof
-  Cases_on `b` >> rw[closed_builtin_def] >>
+  Cases_on `b` >> rw[closed_builtin_def, pin_foldable_builtin_def] >>
   simp[evaluate_builtin_def, evaluate_type_def] >>
   Cases_on `tys` >> gvs[] >> Cases_on `t` >> gvs[] >>
   Cases_on `t'` >> gvs[evaluate_type_def]
 QED
+
+val closed_builtin_context_free =
+  cj 1 (REWRITE_RULE [GSYM AND_IMP_INTRO, DISJ_IMP_THM]
+          evaluate_builtin_closed);
 
 Theorem eval_constant_pure:
   (!e v. eval_constant e = SOME v ==>
@@ -33,7 +40,7 @@ Proof
    code_slice_source b es = NONE` by
     (Cases_on `b` >> gvs[closed_builtin_def]) >>
   gvs[] >>
-  drule_all evaluate_builtin_closed >> simp[]
+  drule_all closed_builtin_context_free >> simp[]
 QED
 
 Theorem eval_constant_sound_mutual[local]:
@@ -53,7 +60,7 @@ Proof
    ~precompile_builtin b /\ code_slice_source b es = NONE` by
     (Cases_on `b` >> gvs[closed_builtin_def]) >>
   drule (cj 2 eval_constant_pure) >> strip_tac >>
-  drule_all evaluate_builtin_closed >> strip_tac >>
+  drule_all closed_builtin_context_free >> strip_tac >>
   simp[get_accounts_def, bind_def, return_def, ignore_bind_def,
        vyperInterpreterTheory.precompile_call_success_def]
 QED

@@ -17,7 +17,7 @@ Theorem raw_call_outbuf_add_joint:
   eval_operand ov s = SOME w /\ op_taint tn ov = {} /\
   op_prov G ov = SOME (b,n) /\
   (!x. ov = Var x ==> not_fresh_at sa x) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?G1 tn1.

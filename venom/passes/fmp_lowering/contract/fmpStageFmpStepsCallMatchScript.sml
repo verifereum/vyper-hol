@@ -15,7 +15,7 @@ Ancestors
   fmpAnalysisDefs fmpAnalysisProps fmpWfDefs o1PassContract contextCodegenRel
   venomInst venomExecSemantics venomWf list rich_list finite_map words arithmetic
 
-Theorem call_collect_member[local]:
+Theorem call_collect_member:
   !insts targets inst nm ops.
   fmp_collect_invokes insts = SOME targets /\ MEM inst insts /\
   inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) ==>

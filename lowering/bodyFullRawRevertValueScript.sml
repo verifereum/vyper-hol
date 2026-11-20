@@ -18,7 +18,7 @@ Theorem raw_revert_value_full_from_tail:
     fn_has_code sm sb func /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    ~t.vs_halted /\ ~ctx_has_dalloca ctx /\
+    ~t.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     (!x. op = Var x ==> not_fresh_at sm x) /\
     expr_post H ctx func cenv cx e es sa sm s0 ee (BytesV bs) op t /\
     expr_store_bound cx (expr_type e) (BytesV bs) op t /\
@@ -41,8 +41,6 @@ Theorem raw_revert_value_full_from_tail:
       cenv cx ty (Call ann RawRevert args dflt) es
 Proof
   disch_then (mk_asm "tail_contract") >> rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by
-    metis_tac[bodyInvNoDallocaTheory.body_inv_no_dalloca] >>
   drule raw_revert_source_pre >> strip_tac >> gvs[] >>
   `expr_body_pre cenv cx env e es` by
     (first_x_assum irule >> gvs[expr_body_pre_def]) >>
@@ -193,6 +191,11 @@ Resume raw_revert_value_full_from_tail[tail]:
       es sa sm s0 mid (BytesV bs') data t /\
    ghost_inv_at (DF (storage_trace_horizon mid.storage_trace)) lo d cenv cx mid G1 tn1 t /\
    expr_store_bound cx (expr_type e) (BytesV bs') data t` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (strip_tac >>
+     qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ t`
+       (mp_tac o REWRITE_RULE [expr_post_def]) >>
+     metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp]) >>
   `?w G2 tn2. !D'.
      gas_origin_ptr_path (D',lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
        (t,G1,tn1) [] (Abort Revert_abort w,G2,tn2)` by

@@ -19,13 +19,13 @@ Ancestors
   o1ContractCfgNormCursors cfgNormSupplySim stateFrame
   gasFocusPlainGasPreEdge codegenAsmProgOk
   gasFocusGasPreEdge[qualified,ignore_grammar]
+  gasFocusWalkStaticLabels[qualified,ignore_grammar]
   gasFocusOptLabelFlow[qualified,ignore_grammar]
   gasFocusOptStaticAssembly[qualified,ignore_grammar]
   venomPipelineDriverProps[qualified,ignore_grammar]
   dftGasFromListUnion[qualified,ignore_grammar]
   requestCutPacketOracle[qualified,ignore_grammar]
   requestCutStaticFrontier[qualified,ignore_grammar]
-  requestCutStaticObservation[qualified,ignore_grammar]
   requestCutAbortBound[qualified,ignore_grammar]
   requestCutLabels[qualified,ignore_grammar]
   requestCutStaticCfgAbort[qualified,ignore_grammar]
@@ -1867,72 +1867,6 @@ Proof
   PairCases_on `row` >>
   drule cfg_norm_cursors_head >> strip_tac >>
   drule venomStepPropsTheory.step_inst_ok_halted >> simp[]
-QED
-
-Theorem focus_bounded_source_recording_position:
-  C.ctx_entry = SOME nm /\ lookup_function nm C.ctx_functions = SOME sf /\
-  fn_entry_label sf = SOME lbl /\
-  root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
-  LENGTH B <= LENGTH raw /\
-  ((!F. N <= F ==> ?z. B = gas_events_blocks F C sf (root_entry with vs_gas_readings := raw ++ [0w]) ++ z) \/
-   (?F z. N <= F /\ (!err. run_blocks F C sf (root_entry with vs_gas_readings := raw ++ [0w]) <> Error err) /\
-          B = gas_events_blocks F C sf (root_entry with vs_gas_readings := raw ++ [0w]) ++ z)) ==>
-  !k w. dftGasFromListUnion$recorded C (vs0 with vs_gas_readings := raw ++ [0w]) k w <=>
-    ?F i z. N <= F /\ B = gas_events_blocks F C sf (root_entry with vs_gas_readings := raw ++ [0w]) ++ z /\
-      i < LENGTH (gas_events_blocks F C sf (root_entry with vs_gas_readings := raw ++ [0w])) /\
-      FST (EL i (trace_gas (trace_blocks [] 0 F C sf (root_entry with vs_gas_readings := raw ++ [0w])))) =
-        k /\
-      EL i raw = w
-Proof
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  rpt (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >> disch_tac >>
-  qabbrev_tac `R = root_entry with vs_gas_readings := raw ++ [0w]` >>
-  `!n. trace_context n C (vs0 with vs_gas_readings := raw ++ [0w]) =
-       trace_blocks [] 0 n C sf R` by
-    simp[trace_context_def, trace_function_def, Abbr `R`] >>
-  qpat_x_assum `root_entry = _` kall_tac >>
-  `!n m k w. MEM (k,w) (trace_gas (trace_blocks [] 0 n C sf R)) /\
-     (n <= m \/ (!err. run_blocks m C sf R <> Error err)) ==>
-     MEM (k,w) (trace_gas (trace_blocks [] 0 m C sf R))` by
-    (rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
-     Cases_on `n <= m`
-     >- (`?suffix. trace_blocks [] 0 m C sf R = trace_blocks [] 0 n C sf R ++ suffix` by
-           (irule (cj 3 dftGasFromListTracePrefixTheory.trace_prefix) >> simp[]) >>
-         simp[dftGasFromListReadingsTheory.trace_gas_append]) >>
-     `trace_blocks [] 0 n C sf R = trace_blocks [] 0 m C sf R` by
-       (irule (cj 3 dftGasFromListTracePrefixTheory.trace_stable) >> gvs[]) >>
-     metis_tac[]) >>
-  `!fuel i z. B = gas_events_blocks fuel C sf R ++ z /\
-     i < LENGTH (gas_events_blocks fuel C sf R) ==>
-     SND (EL i (trace_gas (trace_blocks [] 0 fuel C sf R))) = EL i raw` by
-    (simp[gas_events_length] >> rpt strip_tac >>
-     `i < LENGTH raw` by gvs[LENGTH_APPEND, gas_events_length] >>
-     `i < LENGTH (trace_gas (trace_blocks [] 0 fuel C sf R))` by
-       simp[dftGasFromListReadingsTheory.trace_gas_lengths] >>
-     `EL i (MAP SND (trace_gas (trace_blocks [] 0 fuel C sf R))) = EL i raw` by
-       (simp[dftGasFromListReadingsTheory.trace_gas_readings,
-             dftGasFromListReadingsTheory.gas_prefix_genlist] >>
-        simp[Abbr `R`, EL_APPEND1]) >>
-     gvs[EL_MAP]) >>
-  `!k w. dftGasFromListUnion$recorded C
-      (vs0 with vs_gas_readings := raw ++ [0w]) k w <=>
-    ?fuel z. N <= fuel /\ B = gas_events_blocks fuel C sf R ++ z /\
-      MEM (k,w) (trace_gas (trace_blocks [] 0 fuel C sf R))` by
-    (simp[dftGasFromListUnionTheory.recorded_def] >> rpt gen_tac >> eq_tac
-     >- (strip_tac >> qpat_x_assum `(!fuel. _) \/ _` strip_assume_tac
-         >- (qpat_x_assum `!fuel. N <= fuel ==> _` (qspec_then `MAX n N` mp_tac) >>
-             simp[MAX_LE] >> strip_tac >> qexistsl [`MAX n N`,`z`] >>
-             simp[MAX_LE] >> first_x_assum irule >> qexists_tac `n` >> simp[MAX_LE]) >>
-         rename1 `B = gas_events_blocks fuel C sf R ++ z` >>
-         qexistsl [`fuel`,`z`] >> simp[] >>
-         first_x_assum irule >> qexists_tac `n` >> simp[]) >>
-     strip_tac >> qexists_tac `fuel` >> simp[]) >>
-  simp[] >>
-  simp_tac bool_ss [MEM_EL, quantHeuristicsTheory.PAIR_EQ_EXPAND,
-    dftGasFromListReadingsTheory.trace_gas_lengths, gas_events_length] >>
-  qpat_x_assum `!fuel i z. _ ==> SND _ = _`
-    (fn th => POP_ASSUM_LIST (K (assume_tac (REWRITE_RULE [gas_events_length] th)))) >>
-  metis_tac[]
 QED
 
 (* The native trace carries dynamic keys; the event list keeps only static
@@ -4858,213 +4792,6 @@ Proof
   disj2_tac >> qexistsl [`ev`,`r`,`t`,`extra`] >> simp[]
 QED
 
-(* A retained activation cannot descend from the as-yet unrecorded
-   focus call. Thus the child cannot contribute a retained cut key. *)
-Theorem focus_terminal_retained_uncovered:
-  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
-    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
-  o1_ctx_shape C8 /\
-  lookup_function nm C8.ctx_functions = SOME root_tf /\
-  j < LENGTH (trace_blocks [] 0 N C8 root_tf root_entry) /\ EL j (trace_blocks [] 0 N C8 root_tf
-    root_entry) = ((p,d,inst8.inst_id),fn8,inst8,s8) /\
-  Kroot = FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab ([],e))))
-    (FST (SND (SND (SND (SND (THE (FLOOKUP acts [])))))))) /\
-  Kroot = Kcut ++ kr /\
-  (!k x. MEM (k,x) g ==> MEM k Kcut) ==>
-  !k x y. MEM (k,x) g /\ (MEM (k,y) obs \/ MEM (k,y) (if inst8.inst_opcode =
-    INVOKE then trace_gas (trace_step p d (N-d) C8 fn8 inst8 s8) else [])) /\
-    ~(MEM k Kcut /\ MEM k (MAP FST obs)) ==> x = y
-Proof
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  qabbrev_tac `tr8 = trace_blocks [] 0 N C8 root_tf root_entry` >>
-  `ALL_DISTINCT (MAP FST tr8)` by
-    (simp[Abbr `tr8`] >> irule (cj 3 dftGasFromListTraceNamesTheory.trace_names_distinct) >>
-     `MEM root_tf C8.ctx_functions` by metis_tac[lookup_function_MEM] >>
-     `EVERY (\f. EVERY (\bb. ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions))
-         f.fn_blocks) C8.ctx_functions` by
-       (qpat_assum `o1_ctx_shape C8` mp_tac >>
-        simp_tac bool_ss [o1_ctx_shape_def,venomWfTheory.ctx_inst_ids_distinct_def] >>
-        strip_tac >> simp[EVERY_MEM] >> rpt strip_tac >>
-        drule_all venomWfPropsTheory.all_distinct_flat_map_member >>
-        BETA_TAC >> strip_tac >>
-        drule_all venomWfPropsTheory.all_distinct_flat_map_member >> simp[]) >>
-     pop_assum mp_tac >> qpat_assum `MEM root_tf C8.ctx_functions` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[EVERY_MEM] >> metis_tac[]) >>
-  qhdtm_assum `dft_focus_packet_rel`
-    (strip_assume_tac o PURE_REWRITE_RULE [dft_focus_packet_rel_def]) >>
-  qpat_x_assum `(j,obs) = _`
-    (SUBST_ALL_TAC o SYM o CONJUNCT1 o REWRITE_RULE [pairTheory.PAIR_EQ]) >>
-  `~IS_SOME (FLOOKUP calls (p,d,inst8.inst_id))` by
-    (rewrite_tac[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
-     rename1 `FLOOKUP calls (p,d,inst8.inst_id) = SOME callrec` >>
-     PairCases_on `callrec` >>
-     qpat_assum `!a e cid q h b0 done ent ret.
-       FLOOKUP calls (a,e,cid) = SOME (q,h,b0,done,ent,ret) ==> _`
-       (drule_then strip_assume_tac) >>
-     `FST (EL callrec1 tr8) = (p,d,inst8.inst_id)` by simp[Abbr `tr8`] >>
-     `callrec1 < LENGTH tr8` by decide_tac >>
-     qspecl_then [`MAP FST tr8`,`callrec1`,`j`] mp_tac ALL_DISTINCT_EL_IMP >>
-     simp[EL_MAP] >> decide_tac) >>
-  `!e cid a. IS_SOME (FLOOKUP acts ((e,cid)::a)) ==>
-     IS_SOME (FLOOKUP calls (a,e,cid)) /\ IS_SOME (FLOOKUP acts a)` by
-    (map_every qx_gen_tac [`de`,`id`,`path`] >>
-     simp[optionTheory.IS_SOME_EXISTS] >>
-     disch_then (qx_choose_then `actrec` assume_tac) >> PairCases_on `actrec` >>
-     qpat_assum `!a sf tf inc entry order res nrest.
-       FLOOKUP acts a = SOME (sf,tf,inc,entry,order,res,nrest) ==> _`
-       (drule_then strip_assume_tac) >>
-     qpat_assum `!e cid parent. _ ==> ?q h b0 done ret.
-       FLOOKUP calls (parent,e,cid) = SOME (q,h,b0,done,_,ret)`
-       (qspecl_then [`de`,`id`,`path`] (strip_assume_tac o SIMP_RULE std_ss [])) >>
-     conj_tac >- (goal_assum (drule_at Any) >> simp[]) >>
-     qpat_assum `!a e cid q h b0 done ent ret.
-       FLOOKUP calls (a,e,cid) = SOME (q,h,b0,done,ent,ret) ==> _`
-       (drule_then strip_assume_tac) >> goal_assum (drule_at Any) >> simp[]) >>
-  `!extra. ~IS_SOME (FLOOKUP acts (extra ++ (d,inst8.inst_id)::p))` by
-    (Induct >> pure_rewrite_tac[APPEND]
-     >- (strip_tac >> qpat_assum `!e cid a. IS_SOME (FLOOKUP acts _) ==> _`
-           (drule_then (mp_tac o CONJUNCT1)) >>
-         qpat_assum `~IS_SOME (FLOOKUP calls _)` mp_tac >> simp[NoAsms]) >>
-     qx_gen_tac `hd` >> PairCases_on `hd` >> strip_tac >>
-     qpat_assum `!e cid a. IS_SOME (FLOOKUP acts _) ==> _`
-       (drule_then (mp_tac o CONJUNCT2)) >>
-     qpat_assum `~IS_SOME (FLOOKUP acts (extra ++ _))` mp_tac >> simp[NoAsms]) >>
-  qx_gen_tac `k` >> PairCases_on `k` >> map_every qx_gen_tac [`x`,`y`] >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `MEM (k0,k1,k2) Kcut` by
-    (qpat_assum `!k x. MEM (k,x) g ==> MEM k Kcut` (drule_then ACCEPT_TAC)) >>
-  `F` suffices_by simp[] >>
-  qpat_x_assum `MEM (_,y) obs \/ _` (DISJ_CASES_THEN assume_tac)
-  >- (`MEM (k0,k1,k2) (MAP FST obs)` by
-        (simp[NoAsms,MEM_MAP] >> qexists `((k0,k1,k2),y)` >>
-         simp[NoAsms] >> first_assum ACCEPT_TAC) >>
-      fs[]) >>
-  Cases_on `inst8.inst_opcode = INVOKE` >>
-  qpat_x_assum `MEM (_,y) (if _ then _ else [])` mp_tac >> simp[] >> strip_tac >>
-  `MEM (k0,k1,k2) (MAP FST (trace_gas (trace_step p d (N-d) C8 fn8 inst8 s8)))` by
-    (simp[MEM_MAP,pairTheory.EXISTS_PROD] >> goal_assum (drule_at Any) >> simp[]) >>
-  drule_then assume_tac dftGasFromListTraceNamesTheory.trace_gas_name_mem >>
-  `?extra. k0 = extra ++ (d,inst8.inst_id)::p` by
-    (qpat_x_assum `MEM (k0,k1,k2) (MAP FST (trace_step _ _ _ _ _ _ _))` mp_tac >>
-     qspecl_then [`p`,`d`,`N-d`,`C8`,`fn8`,`inst8`,`s8`] mp_tac
-       (cj 1 dftGasFromListTraceNamesTheory.trace_regions) >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[EVERY_MEM,MEM_MAP] >> rpt strip_tac >>
-     first_x_assum drule >> simp[dftGasFromListTraceNamesTheory.frame_below_def] >>
-     metis_tac[pairTheory.FST]) >>
-  `MEM (k0,k1,k2) Kroot` by
-    (qpat_assum `Kroot = Kcut ++ kr` (fn th => simp[NoAsms,th,MEM_APPEND]) >>
-     disj1_tac >> first_assum ACCEPT_TAC) >>
-  qpat_assum `Kroot = FLAT (MAP _ _)` (fn keys =>
-    qpat_assum `FLOOKUP acts [] = SOME (root_sf,root_tf,0,root_entry,_,NONE,NONE)`
-      (fn root => qpat_x_assum `MEM (k0,k1,k2) Kroot`
-        (assume_tac o SIMP_RULE bool_ss
-          [keys,root,pairTheory.FST,pairTheory.SND,optionTheory.THE_DEF]))) >>
-  drule_all_then strip_assume_tac dft_packet_retained_key_origin >>
-  qpat_assum `!a e bb bt ps xs ys ro st h0 be ct fr cl br.
-    FLOOKUP blocks (a,e) = SOME (bb,bt,ps,xs,ys,ro,st,h0,be,ct,fr,cl,br) ==> _`
-    (drule_then strip_assume_tac) >>
-  qpat_assum `!extra. ~IS_SOME (FLOOKUP acts (extra ++ _))`
-    (qspec_then `extra` mp_tac) >>
-  qpat_assum `FLOOKUP acts k0 = SOME _` mp_tac >>
-  qpat_assum `k0 = _` (fn eq => pure_rewrite_tac [eq]) >> simp[NoAsms]
-QED
-
-(* Discharge only the pairs not already covered by the selected cut. At a
-   successful cut the visit itself belongs to the source remainder. *)
-Theorem focus_terminal_native_pair_reduction:
-  o1_ctx_shape C7 /\ o1_ctx_shape C8 /\
-  C7.ctx_entry = SOME nm /\ C8.ctx_entry = SOME nm /\
-  lookup_function nm C7.ctx_functions = SOME root_sf /\
-  lookup_function nm C8.ctx_functions = SOME root_tf /\
-  fn_entry_label root_sf = SOME lbl /\ fn_entry_label root_tf = SOME lbl /\
-  root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
-  terminates (run_blocks fuel7 C7 root_sf (root_entry with vs_gas_readings := raw ++ [0w])) /\
-  j < LENGTH (trace_blocks [] 0 N C8 root_tf root_entry) /\ EL j (trace_blocks [] 0 N C8 root_tf
-    root_entry) = ((p,d,inst8.inst_id),fn8,inst8,s8) /\
-  obs = trace_gas (TAKE j (trace_blocks [] 0 N C8 root_tf root_entry)) /\
-  cfg_norm_joint_cursors C8 C9 (schedules,current,saved)
-    (JointConfig stk8 PG8 G8 tn8 fn8 inst8 s8 oms8 om8 hs8 hist8)
-    (JointConfig stk9 PG9 G9 tn9 fn9 inst9 s9 oms9 om9 hs9 hist9) /\
-  step_inst (N-d) C8 inst8 s8 = r /\
-  ((?u. r = OK u /\ u.vs_halted) \/ (?u. r = Halt u) \/ (?ex u. r = Abort ex u)) /\
-  (((!k x y. MEM k Kcut /\ MEM k (MAP FST obs) /\
-       dftGasFromListUnion$recorded C7 (vs0 with vs_gas_readings := raw ++ [0w]) k x /\
-       dftGasFromListUnion$recorded C8 vs0 k y ==> x = y) /\
-    ((?before visit after.
-      (trace_blocks [] 0 fuel7 C7 root_sf (root_entry with vs_gas_readings := raw ++ [0w])) =
-        before ++ visit::after /\
-      trace_gas before = ZIP (Kcut,TAKE (LENGTH Kcut) raw) /\
-      (\g. !k x y. MEM (k,x) g /\ (MEM (k,y) obs \/ MEM (k,y) (if inst8.inst_opcode =
-        INVOKE then trace_gas (trace_step p d (N-d) C8 fn8 inst8 s8) else [])) /\ ~(MEM k Kcut /\
-        MEM k (MAP FST obs)) ==> x = y) (trace_gas before) /\ (\g. !k x y. MEM (k,x) g /\
-        (MEM (k,y) obs \/ MEM (k,y) (if inst8.inst_opcode = INVOKE then trace_gas (trace_step p d (N-d) C8
-        fn8 inst8 s8) else [])) /\ ~(MEM k Kcut /\ MEM k (MAP FST obs)) ==> x =
-        y) (trace_gas (visit::after))) \/
-     ((?t. Kcut = MAP FST (trace_gas (trace_blocks [] 0 fuel7 C7 root_sf (root_entry with
-       vs_gas_readings := raw ++ [0w]))) ++ t) /\ (\g. !k x y. MEM (k,x) g /\ (MEM (k,y) obs \/
-       MEM (k,y) (if inst8.inst_opcode = INVOKE then trace_gas (trace_step p d (N-d) C8 fn8 inst8 s8) else
-       [])) /\ ~(MEM k Kcut /\ MEM k (MAP FST obs)) ==> x = y) (trace_gas (trace_blocks [] 0 fuel7 C7
-       root_sf (root_entry with vs_gas_readings := raw ++ [0w])))))) \/ static_exit) ==>
-  (?orc.
-    (!fuel. gas_res_rel (run_context fuel C7
-      (vs0 with vs_gas_readings := raw ++ [0w])) (ev_context orc fuel C7 vs0)) /\
-    (!fuel. gas_res_rel (run_context fuel C8 vs0) (ev_context orc fuel C8 vs0)) /\
-    (!p d fn inst s. ev_reachable orc vs0 C7 p d fn inst s ==>
-      ?ws. raw_reachable (vs0 with vs_gas_readings := raw ++ [0w])
-        C7 fn inst (s with vs_gas_readings := ws)) /\
-    (!fn inst s. raw_reachable vs0 C8 fn inst s ==>
-      ?p d. ev_reachable orc vs0 C8 p d fn inst
-        (s with vs_gas_readings := vs0.vs_gas_readings))) \/ static_exit
-Proof
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  Cases_on `static_exit` >- simp[] >>
-  qpat_x_assum `(_ /\ _) \/ F`
-    (CONJUNCTS_THEN2 assume_tac assume_tac o REWRITE_RULE []) >>
-  Q.SUBGOAL_THEN `(?u. r = Halt u) \/ (?ex u. r = Abort ex u)` assume_tac
-  >- (qpat_x_assum `(?u. r = OK u /\ _) \/ _` $ DISJ_CASES_THEN2 strip_assume_tac assume_tac
-      >- (`step_inst (N-d) C8 inst8 s8 = OK u` by simp[] >>
-          drule_all focus_stopped_cursor_ok_nonhalted >> simp[]) >>
-      first_assum ACCEPT_TAC) >>
-  drule_all (SIMP_RULE bool_ss [LET_THM] focus_stopped_terminal_recordings) >>
-  disch_tac >>
-  qabbrev_tac `R = root_entry with vs_gas_readings := raw ++ [0w]` >>
-  qabbrev_tac `tr7 = trace_blocks [] 0 fuel7 C7 root_sf R` >>
-  qabbrev_tac `H = if inst8.inst_opcode = INVOKE then
-      trace_gas (trace_step p d (N-d) C8 fn8 inst8 s8) else []` >>
-  `!k y. dftGasFromListUnion$recorded C8 vs0 k y ==> MEM (k,y) obs \/ MEM (k,y) H` by
-    (Cases_on `inst8.inst_opcode = INVOKE` >> simp[Abbr `H`]) >>
-  `!n. trace_context n C7 (vs0 with vs_gas_readings := raw ++ [0w]) =
-       trace_blocks [] 0 n C7 root_sf R` by
-    simp[trace_context_def, trace_function_def, Abbr `R`] >>
-  `!k x. dftGasFromListUnion$recorded C7 (vs0 with vs_gas_readings := raw ++ [0w]) k x ==>
-         MEM (k,x) (trace_gas tr7)` by
-    (simp[dftGasFromListUnionTheory.recorded_def, Abbr `tr7`] >> rpt strip_tac >>
-     Cases_on `n <= fuel7`
-     >- (`?suffix. trace_blocks [] 0 fuel7 C7 root_sf R =
-                   trace_blocks [] 0 n C7 root_sf R ++ suffix` by
-           (irule (cj 3 dftGasFromListTracePrefixTheory.trace_prefix) >> simp[]) >>
-         simp[dftGasFromListReadingsTheory.trace_gas_append]) >>
-     `trace_blocks [] 0 n C7 root_sf R = trace_blocks [] 0 fuel7 C7 root_sf R` by
-       (irule (cj 3 dftGasFromListTracePrefixTheory.trace_stable) >>
-        simp[] >> gen_tac >> strip_tac >> fs[terminates_def]) >>
-     metis_tac[]) >>
-  disj1_tac >> irule focus_stopped_shared_recording_replay >>
-  reverse conj_tac >- (simp[] >> qexistsl [`root_sf`,`lbl`,`nm`] >> simp[]) >>
-  map_every qx_gen_tac [`k`,`x`,`y`] >> strip_tac >>
-  Cases_on `MEM k Kcut /\ MEM k (MAP FST obs)` >- metis_tac[] >>
-  `MEM (k,x) (trace_gas tr7)` by metis_tac[] >>
-  Q.SUBGOAL_THEN `MEM (k,y) obs \/ MEM (k,y) H` assume_tac >- metis_tac[] >>
-  qpat_x_assum `(?before visit after. tr7 = before ++ visit::after /\ _) \/ _`
-    (strip_assume_tac o BETA_RULE)
-  >- (qpat_x_assum `MEM (k,x) (trace_gas tr7)` mp_tac >>
-      qpat_assum `tr7 = _` (fn th => pure_rewrite_tac
-        [th, dftGasFromListReadingsTheory.trace_gas_append, MEM_APPEND]) >>
-      metis_tac[]) >>
-  metis_tac[]
-QED
-
 (* Assemble the static alternative only once the fixed C7 entry abort and
    the guarded post-DFT contracts are available. *)
 Theorem focus_selected_static_exit_join:
@@ -5124,41 +4851,6 @@ Proof
   conj_tac >- fs[lowered_mem_fact_def] >>
   qpat_assum `(?b u. run_context b C7 v7 = Abort ExHalt_abort u) ==> _` drule >>
   disch_then ACCEPT_TAC
-QED
-
-(* On failure only the executed part of the cut supplies a native recording. *)
-Theorem focus_selected_cut_covered_agreement:
-  dft_focus_packet_rel N C7 C8 root_sf root_tf root_entry (j,obs)
-    acts blocks calls ms_tab es_tab ks_tab rooted_eval p d q8 raw_slots sites unused /\
-  C7.ctx_entry = SOME nm /\ C8.ctx_entry = SOME nm /\
-  lookup_function nm C7.ctx_functions = SOME root_sf /\
-  lookup_function nm C8.ctx_functions = SOME root_tf /\
-  fn_entry_label root_sf = SOME lbl /\ fn_entry_label root_tf = SOME lbl /\
-  root_entry = vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
-  LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots raw /\
-  Kroot = FLAT (MAP (\e. FLAT (THE (FLOOKUP ks_tab ([],e))))
-    (FST (SND (SND (SND (SND (THE (FLOOKUP acts [])))))))) /\
-  Kroot = Kcut ++ kr /\ raw_slots = Mcut ++ mr /\ LENGTH Mcut = LENGTH Kcut /\
-  terminates (run_blocks fuel C7 root_sf (root_entry with vs_gas_readings := raw ++ [0w])) /\
-  ((?before after. (trace_blocks [] 0 fuel C7 root_sf (root_entry with vs_gas_readings := raw ++ [0w])) =
-    before ++ after /\
-      trace_gas before = ZIP (Kcut,TAKE (LENGTH Mcut) raw)) \/
-   (?t. Kcut = MAP FST (trace_gas (trace_blocks [] 0 fuel C7 root_sf (root_entry with
-     vs_gas_readings := raw ++ [0w]))) ++ t)) ==>
-  !k x y. MEM k Kcut /\ MEM k (MAP FST obs) /\
-    dftGasFromListUnion$recorded C7 (vs0 with vs_gas_readings := raw ++ [0w]) k x /\
-    dftGasFromListUnion$recorded C8 vs0 k y ==> x = y
-Proof
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `LENGTH Kcut <= LENGTH raw` by
-    (drule LIST_REL_LENGTH >> asm_rewrite_tac[LENGTH_APPEND] >> decide_tac) >>
-  qpat_x_assum `(?before after. _ /\ _) \/ _` strip_assume_tac
-  >- (rename1 `trace_gas before = ZIP _` >>
-      `trace_gas before = ZIP (Kcut,TAKE (LENGTH Kcut) raw)` by simp[] >>
-      metis_tac[focus_stopped_cut_observed_agreement]) >>
-  rpt strip_tac >>
-  metis_tac[SIMP_RULE bool_ss [LET_THM] focus_failed_prefix_observed_agreement]
 QED
 
 (* The owner of a GAS site is the function at the actual native visit,

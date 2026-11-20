@@ -1,3 +1,0 @@
-Theory staticAbortAsmOptHol
-Ancestors
-  codegenStaticAbortAsmOpt staticAbortFrameException staticAbortAsmOptCorrect

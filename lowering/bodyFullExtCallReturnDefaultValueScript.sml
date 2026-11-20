@@ -336,6 +336,7 @@ Resume extcall_return_full_default_value[entry]:
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   rename1 `lookup_var q a = SOME dw` >>
   `LENGTH a.vs_returndata < dimword (:256)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by simp[] >>
   drule_all (INST_TYPE [alpha |-> ``:256``]
     extcallReturnDefaultControlJointTheory.return_default_shell_entry) >>
   disch_then (qspecl_then [`tm`, `explicit`, `PG`, `J`]
@@ -643,6 +644,7 @@ Resume extcall_return_full_default_value[after_payload]:
   >- suspend "default_success" >>
   `~skip /\ ~ext_call_has_code target ee.accounts` by metis_tac[] >>
   `compile_extcodesize_check addr_op de = ((),ck)` by fs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp p` by simp[] >>
   drule_all bodyFullExtCallPrecheckTheory.extcall_codesize_checked_path >>
   disch_then (qspecl_then [`explicit`,`PG`,`Gp`] mp_tac) >>
   `(n2w (LENGTH (lookup_account (w2w aw) p.vs_accounts).code) : bytes32) = 0w` by metis_tac[] >>
@@ -686,6 +688,7 @@ Resume extcall_return_full_default_value[default_success]:
      `LENGTH (lookup_account target t.vs_accounts).code MOD dimword (:256) <> 0` by
        (strip_tac >> qpat_x_assum `cw <> 0w` mp_tac >>
         simp[Abbr `cw`, GSYM w2n_eq_0, w2n_n2w]) >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp p` by simp[] >>
      drule_all bodyFullExtCallPrecheckTheory.extcall_codesize_checked_path >>
      disch_then (qspecl_then [`explicit`,`PG`,`Gp`] mp_tac) >>
      qpat_assum `Abbrev (cw = _)` (SUBST1_TAC o SYM o REWRITE_RULE[markerTheory.Abbrev_def]) >>

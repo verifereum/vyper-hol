@@ -64,7 +64,7 @@ QED
 
 Theorem abi_decode_ptr_address:
   compile_abi_dec_addr (Var src) pos sa = (addr,sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   abi_decode_ptr_window G tn s src b h /\
@@ -138,7 +138,7 @@ Finalise abi_decode_ptr_address
 Theorem abi_decode_ptr_relative_load:
   compile_abi_dec_addr (Var src) pos sa = (addr,sb) /\
   emit_op MLOAD [addr] sb = (v,sc) /\
-  fn_has_code sa sc func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sc func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   abi_decode_ptr_window G tn s src b h /\
@@ -182,6 +182,12 @@ Proof
   `lookup_var ap u = SOME (b+n2w p) /\ ptr_covers H tm ap u 32 /\
    (!i. w2n (b+n2w p) <= i /\ i < w2n (b+n2w p)+32 ==> i NOTIN tm.t_mem)` by
     gvs[abi_decode_ptr_window_def, ptr_covers_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `state_frame u = _`
+       (strip_assume_tac o SRULE [state_frame_def] o Q.AP_TERM `\st. (st.vs_allocas,st.vs_initial_fmp,st.vs_fmp)`) >>
+     strip_tac >>
+     qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` drule >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   qpat_x_assum `addr = Var ap` SUBST_ALL_TAC >>
   `!out. ptr_inst_ok D 0 0 ctx func H tm
     (mk_inst sb.cs_next_id MLOAD [Var ap] [out]) u` by

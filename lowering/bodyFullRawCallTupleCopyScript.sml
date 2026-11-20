@@ -27,7 +27,7 @@ Theorem raw_call_tuple_copy_checked:
  (a+32+LENGTH bs <= b \/ b+32 <= a) /\
  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
     val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV bs) a mem) /\
- allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
  run_inst_seq (emitted_insts sa sb) s = OK t ==>
  ?Gf tnf.
    (!D. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s Gf tnf) /\
@@ -61,6 +61,14 @@ Proof
   qabbrev_tac `cnt = 32+((n+31) DIV 32)*32` >>
   qabbrev_tac `u = mstore b (val_to_w256 (BoolV success)) s` >>
   qabbrev_tac `v = update_var q (n2w (b+32)) u` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `u`, mstore_def, LET_THM, allocas_below_fmp_def] >>
+     metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` mp_tac >>
+     simp[NoAsms, Abbr `v`, update_var_def, allocas_below_fmp_def] >>
+     metis_tac[]) >>
   qabbrev_tac `w = mcopy (b+32) a cnt v` >>
   qabbrev_tac `i1 = mk_inst sa.cs_next_id MSTORE [Var p;ok] []` >>
   qabbrev_tac `i2 = mk_inst (sa.cs_next_id+1) ADD [Var p;Lit 32w] [q]` >>

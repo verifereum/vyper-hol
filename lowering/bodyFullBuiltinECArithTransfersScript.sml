@@ -16,7 +16,7 @@ Theorem ec_scalar_store_origin_ptr_path:
   (!x. scalar = Var x ==> not_fresh_at sa x) /\
   pd + 32 <= nd /\ w2n bw + nd < dimword (:256) /\
   w2n bw + nd <= s.vs_alloca_next /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?t G' tn'.
@@ -85,6 +85,11 @@ Proof
     (gen_tac >> irule ptr_inst_ok_lower_bound_transport >>
      conj_tac >- simp[] >> qexists_tac `0` >>
      simp[Abbr `i1`, literal_add_ptr_inst_ok]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp
+     (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `u`, update_var_def, allocas_below_fmp_def] >>
+     metis_tac[]) >>
   `!D. ptr_inst_ok D lo 0 ctx func Gu tu i2
      (u with vs_inst_idx := SUC s.vs_inst_idx)` by
     (gen_tac >> irule ptr_inst_ok_lower_bound_transport >>
@@ -123,7 +128,7 @@ Theorem ec_point_word_load_origin_ptr_path:
   not_fresh_at sa pp /\ ps + 32 <= ns /\
   w2n pw + ns < dimword (:256) /\ w2n pw + ns <= s.vs_alloca_next /\
   (!i. w2n pw + ps <= i /\ i < w2n pw + ps + 32 ==> i NOTIN tn.t_mem) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?u Gu tu.
@@ -186,6 +191,11 @@ Proof
   `!D. ptr_inst_ok D lo 0 ctx func G tn i1 s` by
     (gen_tac >> irule ptr_inst_ok_lower_bound_transport >>
      conj_tac >- simp[] >> qexists_tac `0` >> simp[Abbr `i1`, literal_add_ptr_inst_ok]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp
+     (v with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `v`, update_var_def, allocas_below_fmp_def] >>
+     metis_tac[]) >>
   `!D. ptr_inst_ok D lo 0 ctx func Gv tv i2
      (v with vs_inst_idx := SUC s.vs_inst_idx)` by
     (gen_tac >> irule ptr_inst_ok_lower_bound_transport >>
@@ -252,7 +262,7 @@ Theorem ec_point_word_transfer_origin_ptr_path:
   w2n pw+ns < dimword (:256) /\ w2n bw+nd < dimword (:256) /\
   w2n pw+ns <= s.vs_alloca_next /\ w2n bw+nd <= s.vs_alloca_next /\
   (!i. w2n pw+ps <= i /\ i < w2n pw+ps+32 ==> i NOTIN tn.t_mem) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?t G' tn'.
@@ -311,6 +321,12 @@ Proof
      pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >> simp[rich_listTheory.DROP_APPEND2]) >>
   `w2n bw + nd <= u.vs_alloca_next /\ lo <= u.vs_alloca_next /\
    ~u.vs_halted /\ lookup_block u.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `u with <|vs_vars := _; vs_inst_idx := _|> = s`
+       (mp_tac o Q.AP_TERM `\z. allocas_below_fmp z`) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all ec_scalar_store_origin_ptr_path >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   qexistsl [`t`,`G'`,`tn'`] >>

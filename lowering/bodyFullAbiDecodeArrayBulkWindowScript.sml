@@ -109,6 +109,7 @@ Theorem abi_decode_bulk_window_add_joint:
       tn) (Var x) = op_taint tn (Var x))
 Proof
   BETA_TAC >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (abi_decode_ptr_output_address |> Q.INST [
     `D` |-> `<|d_stor := K (K {}); d_trans := K (K {});
               d_imm := K {}; d_ret := K {}|>`]) >>

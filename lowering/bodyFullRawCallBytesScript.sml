@@ -28,7 +28,7 @@ Theorem raw_call_bytes_success_full_path:
        i NOTIN tn.t_mem) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   alloca_history func s /\ alloca_inv s /\ allocas_from lo s /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?Gf tf.
@@ -193,6 +193,10 @@ Resume raw_call_bytes_success_full_path[checks]:
   `scalar_code {a0} C` by
     simp[Abbr `C`, scalar_code_def, scalar_shape_def,
          scalar_binary_def, scalar_available_def, mk_inst_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `s0`, update_var_def, ptrDisciplineTheory.allocas_below_fmp_def] >>
+     tautLib.TAUT_TAC) >>
   `?H tm. inst_seq_ptr D lo ctx func PG G0 tn0 C s0 H tm` by
     (irule scalar_code_inst_seq_ptr_lo >>
      simp[Abbr `s0`, ptrDisciplineTheory.allocas_from_def] >>
@@ -411,6 +415,10 @@ QED
 
 Resume raw_call_bytes_success_full_path[storecheck]:
   qmatch_goalsub_abbrev_tac `ptr_inst_ok D lo fuel ctx func Gf tm inst v` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms, Abbr `v`, update_var_def, ptrDisciplineTheory.allocas_below_fmp_def] >>
+     tautLib.TAUT_TAC) >>
   `lookup_var p v = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
     op_taint tm (Var p) = op_taint tn (Var p)` by
     simp[Abbr `v`, Abbr `Gf`, Abbr `tm`, lookup_var_def,

@@ -42,7 +42,7 @@ Proof
   Cases_on `FLOOKUP TG s'` >> simp[] >> metis_tac[]
 QED
 
-Theorem ptr_shift_execution[local]:
+Theorem ptr_shift_execution:
   ptr_mixed_vars births positions TG tn f g s t /\
   s.vs_labels = t.vs_labels /\
   EVERY (\op. ptr_nonopaque_operand f op /\ op_prov TG op = NONE)

@@ -9,7 +9,7 @@ Theorem compile_bytestring_copy_len_seq_ptr:
   compile_bytestring_copy_len (Var src) sa = (count_op,sb) /\
   lookup_var src s = SOME a /\ ptr_covers G tn src s 32 /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf sf.
     run_inst_seq (emitted_insts sa sb) s = OK sf /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
@@ -50,7 +50,7 @@ Theorem compile_store_bytestring_seq_ptr:
   mload (w2n a) s = n2w len /\
   ptr_covers G tn src s n /\ ptr_covers G tn dst s n /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?Gf tnf sf.
     run_inst_seq (emitted_insts sa sb) s = OK sf /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
@@ -86,7 +86,17 @@ Proof
    ptr_covers G1 tn1 src u (w2n ((n2w n):256 word)) /\
    ptr_covers G1 tn1 dst u (w2n ((n2w n):256 word))` by
     suspend "coverage" >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (disch_tac >>
+     irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl_tac [`emitted_insts sa sc`, `s`] >> simp[] >>
+     drule compile_bytestring_copy_len_code >>
+     simp[EVERY_MEM] >> rpt strip_tac >>
+     qpat_assum `!i. MEM i (emitted_insts sa sc) ==> _` (drule_then strip_assume_tac) >>
+     gvs[is_terminator_def, is_alloca_op_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
+     simp[Abbr `u`, allocas_below_fmp_def, NoAsms] >> metis_tac[]) >>
   drule_all emit_mcopy_seq_ptr >>
   disch_then (qspecl_then [`fn`,`PG`,`D`]
     (qx_choose_then `tf` (qx_choose_then `t` strip_assume_tac))) >>

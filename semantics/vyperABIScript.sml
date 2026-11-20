@@ -4,12 +4,11 @@ Ancestors
   arithmetic byte combin cv cv_std divides
   finite_map list option pair rich_list string words
 Libs
-  cv_transLib wordsLib dep_rewrite
+  cv_transLib wordsLib dep_rewrite vyperCvLib
 
 (* Keep the Vyper translations of helpers also used by contractABI. *)
 val () = List.app cv_rep_delete
-  ["contractABI.MAP_o_n2w_ORD_function_signatu_ho",
-   "contractABI.cv_dimword_thm",
+  ["contractABI.cv_dimword_thm",
    "contractABI.cv_rep_bool_bool_itself_datatype",
    "contractABI.cv_num_to_dec_string_thm"];
 
@@ -626,54 +625,6 @@ Theorem cv_ALOOKUP_snd_size_pair:
 Proof
   rpt strip_tac \\ irule cv_ALOOKUP_snd_size \\ simp[cv_nsid_ispair_bool]
 QED
-
-(* Helper tactic: find cv_fst/cv_snd subterms in the goal and add bounds as assumptions.
-   Also adds c2n bounds for terms like c2n (cv_fst x). Returns ALL_TAC if no terms found. *)
-fun cv_bounds_tac (asl, concl) = let
-  val cv_fst_tm = ``cv_fst``
-  val cv_snd_tm = ``cv_snd``
-  val c2n_tm = ``cv$c2n``
-  fun is_cv_proj tm =
-    is_comb tm andalso let val (f, _) = dest_comb tm in
-      f ~~ cv_fst_tm orelse f ~~ cv_snd_tm
-    end
-  fun is_c2n tm =
-    is_comb tm andalso (rator tm ~~ c2n_tm)
-  (* Find all cv_fst/cv_snd projections *)
-  fun find_cv_projs tm acc =
-    if is_cv_proj tm then
-      find_cv_projs (rand tm) (tm :: acc)
-    else if is_comb tm then
-      find_cv_projs (rator tm) (find_cv_projs (rand tm) acc)
-    else acc
-  (* Find all c2n applications (any argument, not just projections) *)
-  fun find_c2n_projs tm acc =
-    if is_c2n tm then (tm :: acc)
-    else if is_comb tm then
-      find_c2n_projs (rator tm) (find_c2n_projs (rand tm) acc)
-    else acc
-  val projs = find_cv_projs concl []
-  val c2n_projs = find_c2n_projs concl []
-  fun mk_proj_bound_tac proj = let
-      val (f, a) = dest_comb proj
-    in
-      if f ~~ cv_fst_tm then
-        ASSUME_TAC (SPEC a cv_size_cv_fst_le)
-      else
-        ASSUME_TAC (SPEC a cv_size_cv_snd_le)
-    end
-  fun mk_c2n_bound_tac c2n_app = let
-      val inner = rand c2n_app
-    in
-      ASSUME_TAC (SPEC inner c2n_le_cv_size)
-    end
-  val proj_tacs = map mk_proj_bound_tac projs
-  val c2n_tacs = map mk_c2n_bound_tac c2n_projs
-  val all_tacs = proj_tacs @ c2n_tacs
-in
-  if null all_tacs then ALL_TAC (asl, concl)
-  else EVERY all_tacs (asl, concl)
-end;
 
 val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
   "vyper_to_abi_pre vyper_to_abi_list_pre vyper_to_abi_same_pre vyper_to_abi_sparse_pre"

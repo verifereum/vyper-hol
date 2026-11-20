@@ -124,6 +124,7 @@ Proof
   `!op. op IN {head;cnt;hi} ==> op_prov G op = NONE /\ op_taint tn op = {}` by
     (rpt strip_tac >> gvs[]) >>
   `lo <= s.vs_alloca_next` by fs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all abi_decode_bytes_payload_run >> strip_tac
   >- (disj1_tac >>
       `p+c <= h` by

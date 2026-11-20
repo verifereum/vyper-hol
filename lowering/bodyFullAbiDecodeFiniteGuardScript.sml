@@ -67,7 +67,9 @@ Theorem abi_decode_scalar_guard_success_joint:
        lookup_var x u = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
        op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
-  strip_tac >> mp_tac abi_decode_scalar_guard_success_joint_effect >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  mp_tac abi_decode_scalar_guard_success_joint_effect >>
   (impl_tac >- asm_rewrite_tac[]) >>
   disch_then (qx_choose_then `u` (qx_choose_then `Gf`
     (qx_choose_then `tnf` strip_assume_tac))) >>
@@ -77,7 +79,7 @@ QED
 Theorem abi_decode_scalar_guard_abort_joint:
   bop_scalar_seq R A (emitted_insts sa sb) B /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\ inst_extends sa sb /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sa sb fn /\ inst_extends sa sb /\
   sb.cs_current_bb = sa.cs_current_bb /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\

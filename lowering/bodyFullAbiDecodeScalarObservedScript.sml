@@ -33,6 +33,7 @@ Proof
         isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     (gvs[fn_has_code_def, IS_PREFIX_APPEND] >>
      simp[DROP_APPEND1, DROP_LENGTH_NIL]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all bop_word_scalar_success_joint >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`G'`, `tn'`] >> simp[] >> conj_tac
@@ -65,6 +66,7 @@ Theorem member_scalar_revert_observed:
     (!obs. fn_has_code sa sb obs ==> gas_path ctx obs s 0 (Abort Revert_abort u))
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all abi_decode_scalar_guard_abort_joint >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   reverse (drule_all bop_scalar_seq_abort_prefix >> strip_tac)

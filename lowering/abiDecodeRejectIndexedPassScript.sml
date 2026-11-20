@@ -42,7 +42,7 @@ Theorem indexed_pass_destination_cut[local]:
   32 + j * stride + stride <= total /\
   d + 32 + j * stride < dimword (:256) /\ stride < dimword (:256) /\
   en.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
-  fn_has_code st en func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st en func /\ allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?raw u Gu tu child.
@@ -195,7 +195,7 @@ QED
 Theorem indexed_pass_scalar_path[local]:
   bop_scalar_seq {x | not_fresh_at sa x} A (emitted_insts sa sb) B /\
   inst_extends sa sb /\ sb.cs_current_bb = sa.cs_current_bb /\ fn_has_code sa sb func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ allocas_from lower s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\ allocas_from lower s /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
   run_inst_seq (emitted_insts sa sb) s = OK raw ==>
@@ -259,7 +259,7 @@ Theorem indexed_pass_indirect_cut[local]:
   ~(w2n (n2w (a+delta) : bytes32) < a \/
     L < w2n (n2w (a+delta) : bytes32) + k) /\
   sg.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
-  fn_has_code sa sg func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ allocas_from lower s /\
+  fn_has_code sa sg func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\ allocas_from lower s /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!op. op IN {data;off;hi} ==> op_prov G op = NONE /\ op_taint tn op = {}) ==>
   ?u Gu tu.
@@ -371,7 +371,7 @@ Theorem malformed_indexed_pass_joint:
   32 + j*mem_sz + mem_sz <= outsz /\ child_sites SUBSET sites /\
   sa.cs_next_var <= sg.cs_next_var /\ sg.cs_next_var <= ceiling.cs_next_var /\
   child.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
-  fn_has_code sg child func /\ ~ctx_has_dalloca ctx /\ allocas_from lower s /\ ~s.vs_halted /\
+  fn_has_code sg child func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lower s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?u Gu tu q.
     abi_malformed_entry H ctx func cenv cx es child child_sites dstid live
@@ -446,6 +446,10 @@ Proof
   `abi_decoder_operand_live sg.cs_next_var idx` by metis_tac[abi_decoder_operand_live_mono] >>
   `not_fresh_at sg root` by fs[loweringStateRelDefsTheory.not_fresh_at_def] >>
   drule indexed_destination_structure >> strip_tac >>
+  `allocas_below_fmp v = allocas_below_fmp s` by
+    (qpat_assum `v = s with <|vs_vars := v.vs_vars; vs_inst_idx := _|>` (fn th => once_rewrite_tac[th]) >>
+     simp[allocas_below_fmp_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by metis_tac[] >>
   drule_all indexed_pass_destination_cut >>
   disch_then (qspec_then `PG`
     (qx_choose_then `raw` (qx_choose_then `u` (qx_choose_then `Gu`

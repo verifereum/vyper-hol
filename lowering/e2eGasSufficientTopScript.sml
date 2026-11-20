@@ -121,7 +121,6 @@ Theorem vyper_call_gas_sufficient_asm_opt:
         (frame_raises (add_frame_gas g' es) OutOfGas ==>
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
-  PURE_REWRITE_TAC [frame_raises_inst_raises] >>
   rpt strip_tac >>
   drule compile_vyper_runtime_phases_asm_opt >> strip_tac >>
   qpat_x_assum `runtime_bc = assemble _` SUBST_ALL_TAC >>
@@ -170,6 +169,8 @@ Proof
           out.po_unit.cu_context vs` by
     metis_tac[o1_runtime_unit_create_size_ok] >>
   qexists_tac `g` >> rpt strip_tac >>
+  drule call_state_rel_add_frame_gas_raises >>
+  disch_then (qspec_then `g'` (fn th => PURE_REWRITE_TAC [th])) >>
   qabbrev_tac `eg = add_frame_gas g' es` >>
   `wf_state es` by fs[call_state_rel_def, evm_state_ok_def] >>
   `outcomes_accounts_typed (SOME (MAP SND (call_trace eg)))` by
@@ -312,23 +313,6 @@ Proof
   fs[Abbr`eg`]
 QED
 
-Triviality compile_vyper_deploy_phases_asm_opt:
-  compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) ==>
-  ?rpolicy dunit dout prog prog' cplan.
-    deploy_phases policy tops (assemble prog, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    asm_opt_finalizer rpolicy prog = SOME prog' /\
-    deploy_bc = assemble prog'
-Proof
-  simp[compile_vyper_def, deploy_phases_def] >> strip_tac >>
-  drule compile_vyper_with_success_phases >> strip_tac >>
-  gvs[finalize_codegen_def, o1PipelineCorrectTheory.o1_pipeline_def,
-      AllCaseEqs()] >>
-  qpat_x_assum `codegen_assembly rpolicy deploy_out.po_unit = SOME _`
-    (strip_assume_tac o MATCH_MP codegen_assembly_success_shape) >>
-  goal_assum $ drule_at Any >> gvs[]
-QED
-
 (* The constructor's finalized creation frame reserves enough gas at each
    step to pay the largest permitted code deposit. *)
 Theorem e2e_deploy_gas_sufficient_asm_opt:
@@ -343,6 +327,7 @@ Theorem e2e_deploy_gas_sufficient_asm_opt:
     ==>
     ?g. !g'.
       g <= g' /\
+      LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64 /\
       (!gs. deploy_storage_ok tops am tx
               (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
       (!obs. ~deploy_gas_source_exempt tops
@@ -696,6 +681,7 @@ Theorem e2e_deploy_gas_sufficient:
                  (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
          (!obs. ~deploy_gas_source_exempt tops
             (load_contract NONE obs am tx [(NONE, tops)] [])) /\
+         LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64 /\
          r = INR (SOME OutOfGas) ==>
          max_code_size < LENGTH runtime_bc + imm_len tops \/
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
@@ -703,6 +689,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `?g. !g'.
      g <= g' /\
+     LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64 /\
      (!gs. deploy_storage_ok tops am tx
              (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
      (!obs. ~deploy_gas_source_exempt tops

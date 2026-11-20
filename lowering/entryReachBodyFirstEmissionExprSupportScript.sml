@@ -2685,6 +2685,26 @@ Proof
   rw[cs_appends_def] >> metis_tac[cj 1 compile_copy_memory_labels, pairTheory.SND]
 QED
 
+Theorem first_emission_as_ptr_val:
+  (!a v b. m a = (v,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. as_ptr_val ty loc (m a) = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `m a` >>
+  simp[as_ptr_val_def] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
 Theorem first_emission_type_builtin_convert:
   (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
     cs_extends a b /\
@@ -2710,7 +2730,8 @@ Proof
   >~ [`StackValue vv_ty (Lit 0w)`] >- simp[cs_extends_refl] >>
   Cases_on `ret_ty` >> simp[] >>
   map_every qid_spec_tac [`b'`, `x`, `st1`] >>
-  ho_match_mp_tac first_emission_as_stack_val
+  FIRST [ho_match_mp_tac first_emission_as_ptr_val,
+         ho_match_mp_tac first_emission_as_stack_val]
   >>~- ([`compile_type_convert`], MATCH_ACCEPT_TAC first_emission_type_convert) >>
   ho_match_mp_tac first_emission_strong >> metis_tac[first_emission_widen_copy]
 QED

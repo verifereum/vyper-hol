@@ -731,7 +731,8 @@ Theorem annassign_full_rhs_from_entry:
     (!x cap. old.ce_return_buf = SOME (PtrVar (Var x) cap) ==>
       not_fresh_at sa x) /\
     return_buf_frame d old sa s0 /\ alloca_history func s0 /\
-    ~ctx_has_dalloca ctx /\ storage_trace_domain cx st0 es.storage_trace /\
+    (!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_no_wrap inst z) /\
+    storage_trace_domain cx st0 es.storage_trace /\
     gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       ce cx (expr_type e) e es /\
@@ -825,14 +826,15 @@ Proof
    (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at b x)` by
     (fs[ret_pc_ok_def] >> metis_tac[]) >>
   simp[] >>
-  `!fn inst s. frag_reachable ctx func entry fn inst s ==> dalloca_no_wrap inst s` by
-    (rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >>
-     disch_then drule >> strip_tac >>
-     fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
-        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   `return_buf_frame d ce a entry` by
     (irule return_buf_frame_frame >> qexistsl_tac [`old`,`s0`,`sa`] >>
      simp[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp entry` by
+    (`stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func ce cx es entry` by
+       metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     qpat_assum `stmt_state_rel _ ctx func ce cx es entry`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     simp[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`,`a`,`b`,`shadow_a`,`shadow_b`,
@@ -924,7 +926,8 @@ Theorem annassign_full_alloc_entry:
     (!x cap. old.ce_return_buf = SOME (PtrVar (Var x) cap) ==>
       not_fresh_at sa x) /\
     return_buf_frame d old sa s0 /\ alloca_history func s0 /\
-    ~ctx_has_dalloca ctx /\ storage_trace_domain cx st0 es.storage_trace /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
+      s0.vs_alloca_next + pending_alloca_size func s0 <= w2n s0.vs_initial_fmp) /\ storage_trace_domain cx st0 es.storage_trace /\
     (!H. valid_horizon cx st0 H es.storage_trace ==>
       stmt_state_rel H ctx func old cx es s0 /\
       storage_well_formed_on cx es (FST H) /\
@@ -973,7 +976,7 @@ Proof
     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   `allocas_from lo s0 /\ lo <= s0.vs_alloca_next` by
     fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp s0)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by metis_tac[] >>
   drule_all (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
     alloc_buffer_origin_ptr_path_exact) >>
   disch_then (qspecl_then [`tn0`,`explicit`,`PG`,`G0`] strip_assume_tac) >> gvs[] >>
@@ -1095,7 +1098,9 @@ Theorem annassign_full_alloc_rhs_prefix:
     (!x cap. old.ce_return_buf = SOME (PtrVar (Var x) cap) ==>
       not_fresh_at sa x) /\
     return_buf_frame d old sa s0 /\ alloca_history func s0 /\
-    ~ctx_has_dalloca ctx /\ storage_trace_domain cx st0 es.storage_trace /\
+    (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+    (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+    storage_trace_domain cx st0 es.storage_trace /\
     gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       ce cx (expr_type e) e es /\
@@ -1180,9 +1185,23 @@ Theorem annassign_full_alloc_rhs_prefix:
           (ctx_has_dalloca ctx ==> !s. rr = Halt s ==> allocas_below_fmp s))
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
+    s0.vs_alloca_next + pending_alloca_size func s0 <= w2n s0.vs_initial_fmp` by
+    (strip_tac >>
+     `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func old cx es s0` by
+       metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     conj_tac >- metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
+     drule stmt_state_rel_fmp_room >> simp[fmp_room_def] >> decide_tac) >>
   drule_all annassign_full_alloc_entry >>
   disch_then (qspecl_then [`PG`,`gas_explicit_sites ctx shadow_ctx`]
     (qx_choosel_then [`w`,`entry`,`Ga`,`tna`] strip_assume_tac)) >>
+  `!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_no_wrap inst z` by
+    (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK entry,Ga,tna)`
+       (qspec_then `ARB` (fn path =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn phi =>
+       qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> _` (fn safe =>
+       ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+         (LIST_CONJ [path,phi,safe]))))))) >>
   drule_all annassign_full_rhs_from_entry >> strip_tac >>
   qexistsl_tac [`w`,`entry`,`Ga`,`tna`] >> asm_rewrite_tac[] >>
   gen_tac >> first_x_assum irule
@@ -1390,7 +1409,7 @@ Theorem annassign_memory_full_bytes_store_path:
   w2n dw + type_memory_size dtv < dimword (:256) /\
   (type_memory_size stv = 0 \/ w2n sw + type_memory_size stv <= s.vs_alloca_next) /\
   (type_memory_size dtv = 0 \/ w2n dw + type_memory_size dtv <= s.vs_alloca_next) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -1459,7 +1478,7 @@ Theorem annassign_memory_full_bytes_suffix_post:
     dty sty (type_memory_bytes ce dty) b = ((),sf) /\
   ~is_word_type dty /\ ~is_word_type sty /\
   is_bytestring_type sty /\ is_bytestring_type dty /\
-  src_loc <> SOME LocMemory /\ ~ctx_has_dalloca ctx /\
+  src_loc <> SOME LocMemory /\
   stmt_state_rel (H0 : (bool # 256 word # type_value) list # num list)
     ctx func ce cx mid s /\
   fn_has_code b sf func /\ fn_inst_ids_distinct func /\
@@ -1569,6 +1588,11 @@ Proof
   disch_then (qspecl_then [`explicit`,`ctx`,`PG`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[] >> NO_TAC, metis_tac[]])) >>
   disch_then (qx_choosel_then [`t`,`Gf`,`tf`] strip_assume_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `typed_copy_state_frame _ _ _ s t`
+       (fn th => rewrite_tac[MATCH_MP
+         typedCopyOriginPtrBaseTheory.typed_copy_state_frame_allocas_below_fmp th]) >>
+     first_assum ACCEPT_TAC) >>
   `alloca_history func t` by
     (metis_tac[body_full_path_alloca_history]) >>
   `return_buf_frame d ce sf t` by suspend "return_frame" >>

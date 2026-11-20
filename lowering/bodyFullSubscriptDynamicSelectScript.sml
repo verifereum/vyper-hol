@@ -136,7 +136,7 @@ Theorem subscript_dynamic_value_select_full:
   mem_word_taint tn.t_mem (w2n a) = {} /\
   (!x. bop = Var x ==> not_fresh_at sn x) /\
   (!x. iop = Var x ==> not_fresh_at sn x) /\
-  allocas_from lo u /\ alloca_history fn u /\ ~ctx_has_dalloca ctx /\ ~u.vs_halted /\
+  allocas_from lo u /\ alloca_history fn u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\ ~u.vs_halted /\
   u.vs_current_bb = sn.cs_current_bb /\ u.vs_inst_idx = LENGTH sn.cs_current_insts /\
   type_memory_bytes ce et = type_memory_size tv /\
   vv_own ce cx (ArrayT et (Dynamic cap)) sa sm fin
@@ -217,6 +217,14 @@ Proof
   reverse (Cases_on `idx_in_range (is_signed_type (expr_type idx)) iw (n2w (LENGTH vs))`)
   >- gvs[fragExecTheory.exit_result_def, expr_exit_def, halt_exit_def] >>
   fs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp q` by
+    (qpat_assum `array_length_frame _ u _ _ q _ _`
+       (strip_assume_tac o SRULE [] o
+        Q.AP_TERM `\st. (st.vs_allocas,st.vs_initial_fmp,st.vs_fmp)` o
+        cj 1 o REWRITE_RULE[array_length_frame_def]) >>
+     strip_tac >>
+     qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` drule >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   `read_result cx (Value (EL (Num i) vs)) fin = (INL (EL (Num i) vs),fin)` by
     simp[read_result_def, return_def] >>
   `fin with gas_obs := [] = fin` by simp[evaluation_state_component_equality] >>
@@ -285,7 +293,7 @@ Theorem subscript_dynamic_memory_select_full:
   mem_word_taint tn.t_mem (w2n a) = {} /\
   (!x. bop = Var x ==> not_fresh_at sn x) /\
   (!x. iop = Var x ==> not_fresh_at sn x) /\
-  allocas_from lo u /\ alloca_history fn u /\ ~ctx_has_dalloca ctx /\ ~u.vs_halted /\
+  allocas_from lo u /\ alloca_history fn u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\ ~u.vs_halted /\
   u.vs_current_bb = sn.cs_current_bb /\ u.vs_inst_idx = LENGTH sn.cs_current_insts /\
   type_memory_bytes ce et = type_memory_size tv /\
   (0 <= i /\ Num i < LENGTH vs ==>
@@ -376,6 +384,14 @@ Proof
   reverse (Cases_on `idx_in_range (is_signed_type (expr_type idx)) iw (n2w (LENGTH vs))`)
   >- gvs[fragExecTheory.exit_result_def, expr_exit_def, halt_exit_def] >>
   fs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp q` by
+    (qpat_assum `array_length_frame _ u _ _ q _ _`
+       (strip_assume_tac o SRULE [] o
+        Q.AP_TERM `\st. (st.vs_allocas,st.vs_initial_fmp,st.vs_fmp)` o
+        cj 1 o REWRITE_RULE[array_length_frame_def]) >>
+     strip_tac >>
+     qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` drule >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
   rename1 `lookup_var row_var u = SOME (row_word:256 word)` >>
   `q.vs_alloca_next = u.vs_alloca_next /\ q.vs_memory = u.vs_memory /\ tm.t_mem = tn.t_mem` by
     (fs[array_length_frame_def] >>

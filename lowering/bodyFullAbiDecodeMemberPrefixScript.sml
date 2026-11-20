@@ -160,6 +160,7 @@ Proof
   `sb.cs_current_bb = sa.cs_current_bb /\
    sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id` by
     (drule emit_op_facts >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (BETA_RULE bodyFullAbiDecodeFiniteGuardEffectTheory.abi_decode_scalar_guard_success_joint_effect) >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   `(!obs. fn_has_code sa sb obs ==> gas_path ctx obs s 0 (OK u)) /\
@@ -281,6 +282,7 @@ Proof
       disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
       qexistsl_tac [`u`, `Gf`, `tnf`] >> asm_rewrite_tac[]) >>
   disj2_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (BETA_RULE bodyFullAbiDecodeFiniteGuardEffectTheory.abi_decode_scalar_guard_success_joint_effect) >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   `(!obs. fn_has_code sa sb obs ==> gas_path ctx obs s 0 (OK u)) /\
@@ -355,6 +357,7 @@ Theorem abi_decode_member_destination_joint_observed[local]:
       op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (abi_decode_ptr_output_address |> Q.INST [`D` |-> `ARB`, `PG` |-> `PG`]) >>
   disch_then (qspecl_then [`fn`, `PG`] mp_tac) >>
   simp_tac (srw_ss()) [LET_THM] >> strip_tac >>

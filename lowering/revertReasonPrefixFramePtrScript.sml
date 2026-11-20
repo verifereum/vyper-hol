@@ -22,8 +22,10 @@ QED
 Theorem inst_seq_ptr_nonmemory_taint_frame:
   !is D lo ctx func PG G tn s Gf tnf.
     inst_seq_ptr D lo ctx func PG G tn is s Gf tnf /\
-    EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> SSTORE /\
-      i.inst_opcode <> TSTORE /\ i.inst_opcode <> ISTORE) is ==>
+    EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> DELEGATECALL /\
+      i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2 /\
+      i.inst_opcode <> SSTORE /\ i.inst_opcode <> TSTORE /\
+      i.inst_opcode <> ISTORE) is ==>
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     tnf.t_imm = tn.t_imm
 Proof

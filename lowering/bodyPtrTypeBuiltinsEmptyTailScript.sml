@@ -11,7 +11,7 @@ Theorem empty_buffer_tail_certificate:
      else compile_zero_words (Var p) ((sz+31) DIV 32)) sa = ((),sb) /\
     not_fresh_at sa p /\ lookup_var p s = SOME w /\
     ptr_covers G tn p s sz /\ w2n w+sz < dimword (:256) /\
-    (if header then 32 <= sz else sz MOD 32 = 0) /\ ~ctx_has_dalloca ctx ==>
+    (if header then 32 <= sz else sz MOD 32 = 0) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?t H th. run_inst_seq (emitted_insts sa sb) s = OK t /\
       inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H th /\
       lookup_var p t = SOME w /\ ptr_covers H th p t sz /\
@@ -31,12 +31,10 @@ Proof
            (disch_then SUBST1_TAC >> simp[]) >> decide_tac) >>
       `32*((sz+31) DIV 32) <= sz` by simp[] >>
       `w2n w+sz < dimword (:256)` by decide_tac >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
       drule_all empty_zero_words_certificate >>
       disch_then (qspecl_then [`D`, `func`, `PG`] strip_assume_tac) >>
       qexistsl_tac [`t`, `H`, `th`] >> gvs[venom_state_component_equality]) >>
   gvs[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all empty_zero_store_certificate >>
   disch_then (qspecl_then [`D`, `func`, `PG`, `sa.cs_next_id`] strip_assume_tac) >>
   qexistsl_tac [`mstore (w2n w) 0w s`, `G`, `tn'`] >>
