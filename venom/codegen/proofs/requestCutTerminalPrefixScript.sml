@@ -1,7 +1,8 @@
 Theory requestCutTerminalPrefix
 Ancestors
   jointRequestCut requestCutFinalizerTerminal blockSimHelpers
-  asmFrameRel codegenEntryRel asmOptimizer asmDataEnv asmSem
+  asmFrameRel codegenEntryRel asmOptimizer asmDataEnv asmSem asmSymSem
+  asmRelocDataEnv finalizerContractOwn
   contextCodegenRel o1PassContract venomState callTrace extCallOracle vfmExecution
   venomExecSemantics venomInst
   list rich_list
@@ -68,6 +69,52 @@ Proof
     `s` |-> `entry_asm_state vs0 es`, `n` |-> `n + m`, `a` |-> `out`,
     `r` |-> `result`] asm_finalizer_terminal_oracle) >>
   (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE asm_rewrite_tac[]))) >>
+  strip_tac >>
+  `LENGTH (call_requests es) <= LENGTH out.as_requests` by metis_tac[IS_PREFIX_LENGTH] >>
+  decide_tac
+QED
+
+Theorem request_cut_terminal_prefix_crossed_own:
+  fin IN accepted_finalizers /\ fin rp prog = SOME prog' /\
+  asm_frame_prog_ok prog' /\ vs0.vs_code = assemble prog' ++ vs0.vs_data_section /\
+  (fin = asm_opt_finalizer ==>
+    asm_static_wf prog /\
+    asm_data_env_lo_ok (lo_reloc prog prog') prog (asm_data_env prog' vs0.vs_code)
+      vs0.vs_code /\
+    label_disciplined_own (asm_data_env prog' vs0.vs_code) vs0.vs_code
+      prog (entry_asm_state vs0 es)) /\
+  asm_frame_rel_tail [] prog' vs0.vs_data_section es (entry_asm_state vs0 es) es /\
+  run_call es = SOME (result,final) /\ ~frame_resource_starved es result final /\
+  asm_steps (lo_reloc prog prog') (build_offset_to_pc prog)
+    prog n (entry_asm_state vs0 es) = AsmOK ast /\
+  (asm_steps (lo_reloc prog prog') (build_offset_to_pc prog) prog m ast = AsmHalt out \/
+   asm_steps (lo_reloc prog prog') (build_offset_to_pc prog) prog m ast = AsmRevert out \/
+   asm_steps (lo_reloc prog prog') (build_offset_to_pc prog) prog m ast = AsmFault out) /\
+  LENGTH out.as_requests <= LENGTH t.vs_requests /\
+  raw_variant fmp vs vs0 /\ raw_reachable vs C fn inst s /\
+  inst.inst_opcode <> INVOKE /\ LENGTH s.vs_requests = k /\
+  step_inst fuel C inst s = OK post /\ k < LENGTH post.vs_requests ==>
+  k < LENGTH t.vs_requests
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `entry_asm_state vs0 es with as_code := assemble prog' ++ vs0.vs_data_section =
+    entry_asm_state vs0 es` by simp[entry_asm_state_def, asm_state_component_equality] >>
+  `k < LENGTH (call_requests es)` by
+    (mp_tac (Q.INST [`t` |-> `post`] request_cut_entry_has_pending) >>
+     (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))) >>
+     simp[]) >>
+  `asm_steps (lo_reloc prog prog') (build_offset_to_pc prog) prog (n + m)
+     (entry_asm_state vs0 es) = AsmHalt out \/
+   asm_steps (lo_reloc prog prog') (build_offset_to_pc prog) prog (n + m)
+     (entry_asm_state vs0 es) = AsmRevert out \/
+   asm_steps (lo_reloc prog prog') (build_offset_to_pc prog) prog (n + m)
+     (entry_asm_state vs0 es) = AsmFault out` by
+    metis_tac[asm_steps_compose_halt, asm_steps_compose_revert, asm_steps_compose_fault] >>
+  mp_tac (Q.INST [`rpolicy` |-> `rp`, `data` |-> `vs0.vs_data_section`,
+    `s` |-> `entry_asm_state vs0 es`, `n` |-> `n + m`, `a` |-> `out`,
+    `r` |-> `result`] asm_finalizer_terminal_oracle_own) >>
+  (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE
+    fs[entry_asm_state_def]))) >>
   strip_tac >>
   `LENGTH (call_requests es) <= LENGTH out.as_requests` by metis_tac[IS_PREFIX_LENGTH] >>
   decide_tac
