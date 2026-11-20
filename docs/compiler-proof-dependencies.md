@@ -96,8 +96,8 @@ the regions and backends observed for the chosen gas readings.
 ## S1–S7: stage producers
 
 Every row is proved: `holbuild check` reports each export below clean, with
-no admission in its closure. S1 is proved from the entry bridge,
-`body_stmts_sim` and the halt bridge. Generic composition and each L1–L13 have none. See [source owners and receipt](compiler-proof-status-2026-10-09.md#built-logical-admission-path).
+no admission in its closure. S1 is proved from the entry bridge, the joint
+body simulation (`bodySimFullMain.body_stmts_sim_full`) and the halt bridge. Generic composition and each L1–L13 have none. See [source owners and receipt](compiler-proof-status-2026-10-09.md#built-logical-admission-path).
 
 | ID | Saved export | Consumes / produces | Future owner |
 |---|---|---|---|
