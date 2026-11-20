@@ -384,7 +384,8 @@ Proof
       simp[w2n_n2w,arithmeticTheory.LESS_MOD]) >>
   disch_then (DISJ_CASES_THEN2 (qx_choose_then `rr` assume_tac)
                              (qx_choose_then `rw` strip_assume_tac))
-  >- (drule_all member_scalar_revert_observed >>
+  >- (`ctx_has_dalloca ctx ==> allocas_below_fmp w` by simp[] >>
+      drule_all member_scalar_revert_observed >>
       disch_then (qspecl_then [`explicit`,`PG`]
         (qx_choose_then `z` (qx_choose_then `Gz` (qx_choose_then `Tz` strip_assume_tac)))) >>
       qexistsl_tac [`Abort Revert_abort z`,`Gz`,`Tz`] >> conj_tac
