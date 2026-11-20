@@ -451,6 +451,25 @@ Definition main_module_def:
   main_module mods = case ALOOKUP mods NONE of SOME tops => tops | NONE => []
 End
 
+(* The functions the exports expose at run time, in export order: the
+   exported functions of exported_fns, with an exported __default__ (which
+   classify_function keeps out of the external functions) at its export
+   position.  The pinned compiler orders the runtime internals by walking
+   these first. *)
+Definition exported_runtime_fns_def:
+  exported_runtime_fns mods ([] : (string # num) list) = [] ∧
+  exported_runtime_fns mods ((fname, n) :: exps) =
+    (case ALOOKUP mods (SOME n) of
+       NONE => []
+     | SOME tops =>
+         if fname = "__default__" then
+           (case FOLDR classify_function ([], [], NONE, NONE) tops of
+              (exts, ints, SOME f, ctor) => [(SOME n, f)]
+            | _ => [])
+         else exported_fn (SOME n) tops fname) ++
+    exported_runtime_fns mods exps
+End
+
 (* The fallback an export names (`exports: lib.__default__`, or through
    `lib.__interface__`): the first exported `__default__` whose module
    declares one. *)
@@ -742,7 +761,7 @@ Definition lower_vyper_runtime_unit_mods_def:
     let main = main_module mods in
     let (ext_fns, int_fns, fb_fn, ctor_fn, imp_ctors) =
           classify_functions_unit mods exps in
-    let exported = FILTER (λ(src, f). IS_SOME src) ext_fns in
+    let exported = exported_runtime_fns mods exps in
     let selectors = build_selectors tenv (MAP SND ext_fns) in
     let external_fns =
           MAP (set_external_package_target rpolicy.rpol_target o
@@ -1202,6 +1221,7 @@ Proof
        runtime_internal_order_unit_singleton, order_internals_unit_singleton,
        package_external_fn_unit_singleton, package_internal_fn_unit_singleton,
        package_fallback_fn_unit_singleton, cj 1 package_fallback_fn_def,
+       cj 1 exported_runtime_fns_def,
        package_external_group_unit_singleton,
        compute_immutables_len_unit_singleton, make_struct_fields_map_mods_singleton,
        fn_allocs_ok_unit_singleton, consts_env_mods_singleton, EVERY_APPEND] >>
