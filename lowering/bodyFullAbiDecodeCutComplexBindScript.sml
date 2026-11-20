@@ -185,7 +185,12 @@ Theorem abi_decode_complex_marked_bind:
   ^marked_complex
 Proof
   strip_tac >> MATCH_MP_TAC (Q.INST [`MemberSpan` |-> `Span`] complex_marked_bind_on_slices) >>
-  asm_rewrite_tac[] >> metis_tac[]
+  asm_rewrite_tac[] >>
+  qx_genl_tac [`a`, `m`, `b`] >> strip_tac >>
+  qpat_assum `!a m b. Span a b /\ cs_extends a m /\ cs_extends m b ==> _`
+    (qspecl_then [`a`, `m`, `b`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (ACCEPT_TAC o CONJUNCT2)
 QED
 
 (* The cut and observer are fixed through the two phases. A successful
