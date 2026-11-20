@@ -43,7 +43,6 @@ Proof
   metis_tac[staticAbortFrameExceptionTheory.asm_frame_exception_requests]
 QED
 
-(* Statement freeze for sign-off. *)
 Theorem codegen_correct_static_abort_asm_opt_own:
   !fuel rpolicy unit cp prog prog' Inv vs es a vs'.
     generate_context_plan unit.cu_context = SOME cp /\
@@ -71,5 +70,14 @@ Theorem codegen_correct_static_abort_asm_opt_own:
        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs)) /\
     call_requests es <<= vs'.vs_requests
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `codegen_ready unit.cu_context` by fs[codegen_context_obligations_abort_def] >>
+  `asm_static_wf prog` by metis_tac[codegen_asm_static_wf] >>
+  `asm_opt_finalizer IN accepted_finalizers` by simp[accepted_finalizers_def] >>
+  `asm_frame_prog_ok prog'` by metis_tac[finalizer_prefix_static] >>
+  `(entry_asm_state vs es).as_code = assemble prog' ++ vs.vs_data_section` by
+    simp[entry_asm_state_def] >>
+  drule_all_then strip_assume_tac
+    codegenStaticAbortAsmOptTheory.codegen_entry_asm_sim_abort_asm_opt_own >>
+  metis_tac[staticAbortFrameExceptionTheory.asm_frame_exception_requests]
 QED

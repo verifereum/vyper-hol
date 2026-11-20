@@ -196,7 +196,7 @@ val ModeTerminal = ``\allow_own orig s data req_bound p.
 
 (* Finish a pending certificate from the already selected rooted table and
    the symbolic endpoint of the actual protected prefix. *)
-Theorem stack_selected_table_restart[local]:
+Theorem stack_selected_table_restart_mode[local]:
   !orig s data req_bound q j u cc req V e rank pc height need tag boolean edge.
   ^Entry orig s data q /\
   sym_steps_mode allow_own q (asm_data_env orig (assemble orig ++ data)) s.as_code j (sym_init s) = SymOK u /\
@@ -219,7 +219,7 @@ Proof
   rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >> simp[]
 QED
 
-Resume stack_selected_table_restart[root]:
+Resume stack_selected_table_restart_mode[root]:
   `^Slots q cc (height e) (need e) (tag e) (boolean e)` by
     (BETA_TAC >> first_assum irule >> first_assum ACCEPT_TAC) >>
   pop_assum (map_every assume_tac o CONJUNCTS o BETA_RULE) >>
@@ -251,7 +251,7 @@ Resume stack_selected_table_restart[root]:
   simp[]
 QED
 
-Resume stack_selected_table_restart[open]:
+Resume stack_selected_table_restart_mode[open]:
   ` {x | x IN V /\ ^Reach edge e x} = V` by
     (simp[EXTENSION] >> BETA_TAC >> gen_tac >>
      eq_tac >- simp[] >> disch_tac >> conj_tac >- first_assum ACCEPT_TAC >>
@@ -293,7 +293,7 @@ Resume stack_selected_table_restart[open]:
   disch_then ACCEPT_TAC
 QED
 
-Finalise stack_selected_table_restart
+Finalise stack_selected_table_restart_mode
 
 val erase = ``[AsmOp "DUP1"; AsmOp "SWAP1"; AsmOp "POP"]``;
 val fixed = ``\w d.
@@ -1219,7 +1219,7 @@ Finalise stack_build_selected_table
 
 (* A replayed cut and its root demands use the same table returned by the
    selected-port builder. The initial row is inactive in the other cases. *)
-Theorem stack_attach_replayed_cut[local]:
+Theorem stack_attach_replayed_cut_mode[local]:
   !orig s data req_bound p q cc req b m d V pc height rank need tag boolean edge
     z H R G B ih ir it ib init dest start j u.
   !n. n = LENGTH d ==>
@@ -1255,13 +1255,13 @@ Proof
       (map_every (assume_tac o BETA_RULE) o stack_packet 4))) >>
   qspecl_then [`orig`,`s`,`data`,`req_bound`,`q`,`j`,`u`,`cc`,`req`,`live`,`root`,
       `^Rk ann`,`^Pc ann`,`^Ht ann`,`^Nd ann`,`^Tg ann`,`^Bl ann`,`live_edge`]
-    (mp_tac o CONV_RULE (REDEPTH_CONV BETA_CONV)) stack_selected_table_restart >>
+    (mp_tac o CONV_RULE (REDEPTH_CONV BETA_CONV)) stack_selected_table_restart_mode >>
   (impl_tac >-
     (rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >> simp[])) >>
   disch_then ACCEPT_TAC
 QED
 
-Theorem stack_attach_replayed_image[local]:
+Theorem stack_attach_replayed_image_mode[local]:
   !orig s data req_bound p q cc req b m d V pc height rank need tag boolean edge
     z H R G B v j u.
   !f. f = splice_pc b m (LENGTH d) ==>
@@ -1298,7 +1298,7 @@ Proof
     `0`,`0`,`\k:num. NONE:(string#num)option`,`\k:num. F`,`F`,`v`,`v`,`j`,`u`]
     (mp_tac o PURE_REWRITE_RULE [COND_CLAUSES, F_IMP] o
       CONV_RULE (stack_inline_lets 6 ALL_CONV THENC REDEPTH_CONV BETA_CONV))
-    stack_attach_replayed_cut >>
+    stack_attach_replayed_cut_mode >>
   (impl_tac >-
     (ntac 8 (conj_tac >- first_assum ACCEPT_TAC) >>
      conj_tac >- rewrite_tac[] >>
@@ -1318,7 +1318,7 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
-Theorem stack_replayed_nonstrict[local]:
+Theorem stack_replayed_nonstrict_mode[local]:
   !pre w d tail orig s data req_bound p q cc req V pc height rank need tag boolean edge
    z H R G B e k u.
    !b. b = LENGTH pre ==>
@@ -1383,7 +1383,7 @@ Proof
     `height`,`rank`,`need`,`tag`,`boolean`,`edge`,`z`,`H`,`R`,`G`,`B`,`e`,`j`,
     `sym_with_pc (f (pc e)) u`]
     (stack_apply_aliases [`Abbrev (f = _)`] (mp_tac o BETA_RULE))
-    (CONV_RULE (stack_aliases 27 stack_alias_head) stack_attach_replayed_image) >>
+    (CONV_RULE (stack_aliases 27 stack_alias_head) stack_attach_replayed_image_mode) >>
   (impl_tac >-
     (ntac 4 (conj_tac >- first_assum ACCEPT_TAC) >>
      conj_tac >- first_assum ACCEPT_TAC >>
@@ -1395,7 +1395,7 @@ Proof
 QED
 
 (* A strict permutation/POP cut restarts at its retained exit. *)
-Theorem stack_replayed_shuffle[local]:
+Theorem stack_replayed_shuffle_mode[local]:
   !pre w d tail orig s data req_bound p q cc req V pc height rank need tag boolean edge
     z H R G B e k t u.
   !b. b = LENGTH pre ==>
@@ -1472,7 +1472,7 @@ Proof
   qspecl_then [`orig`,`s`,`data`,`req_bound`,`p`,`q`,`cc`,`req`,`b`,`m`,`d`,`V`,
     `pc`,`height`,`rank`,`need`,`tag`,`boolean`,`edge`,`z`,`H`,`R`,`G`,`B`,`exit`,`j`,`out`]
     (stack_apply_aliases [`Abbrev (f = _)`] (mp_tac o BETA_RULE))
-    (CONV_RULE (stack_aliases 27 stack_alias_head) stack_attach_replayed_image) >>
+    (CONV_RULE (stack_aliases 27 stack_alias_head) stack_attach_replayed_image_mode) >>
   (impl_tac >-
     (rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >>
      TRY (simp[IN_UNION] >> NO_TAC) >>
@@ -1488,7 +1488,7 @@ Proof
 QED
 
 (* At a strict commutative cut the binary instruction remains pending. *)
-Theorem stack_replayed_comm[local]:
+Theorem stack_replayed_comm_mode[local]:
   !pre a tail orig s data req_bound p q cc req V pc height rank need tag boolean edge
     z H R G B e k u.
   !b. b = LENGTH pre ==>
@@ -1523,7 +1523,7 @@ Proof
   suspend "attach"
 QED
 
-Resume stack_replayed_comm[endpoint_input]:
+Resume stack_replayed_comm_mode[endpoint_input]:
   CONV_TAC (REDEPTH_CONV BETA_CONV) >>
   ntac 10 (conj_tac >- (first_assum ACCEPT_TAC ORELSE (sym_tac >> first_assum ACCEPT_TAC))) >>
   conj_tac >-
@@ -1535,7 +1535,7 @@ Resume stack_replayed_comm[endpoint_input]:
       qpat_assum `e IN V` (ACCEPT_TAC o CONJUNCT2 o MP th)))
 QED
 
-Resume stack_replayed_comm[attach]:
+Resume stack_replayed_comm_mode[attach]:
   disch_then (qx_choose_then `j` (qx_choose_then `out` (qx_choose_then `exit`
     (qx_choose_then `name` (fn th =>
       let val ps = map (SIMP_RULE bool_ss [LET_THM,FST,arithmeticTheory.ADD_CLAUSES])
@@ -1559,7 +1559,7 @@ Resume stack_replayed_comm[attach]:
   suspend "restart"
 QED
 
-Resume stack_replayed_comm[initial_row]:
+Resume stack_replayed_comm_mode[initial_row]:
   qspecl_then [`q`,`cc`,`^Pc ann`,`^Ht ann`,`^Rk ann`,`^Nd ann`,`^Tg ann`,`^Bl ann`,
     `^First`,`^Copy exit`] (mp_tac o BETA_RULE) stack_local_one >>
   (impl_tac >-
@@ -1590,13 +1590,13 @@ Resume stack_replayed_comm[initial_row]:
     ACCEPT_TAC (CONV_RULE (REDEPTH_CONV BETA_CONV) h))
 QED
 
-Resume stack_replayed_comm[restart]:
+Resume stack_replayed_comm_mode[restart]:
   qspecl_then [`orig`,`s`,`data`,`req_bound`,`p`,`q`,`cc`,`req`,`b`,`2`,`[a]`,`V`,`pc`,
     `height`,`rank`,`need`,`tag`,`boolean`,`edge`,`z`,`H`,`R`,`G`,`B`,
     `height e`,`rank e`,`it`,`ib`,`T`,`exit`,`e`,`j`,`out`]
     (mp_tac o CONV_RULE (REDEPTH_CONV BETA_CONV) o
       PURE_REWRITE_RULE [LENGTH,GSYM arithmeticTheory.ONE,COND_CLAUSES,IMP_CLAUSES])
-    stack_attach_replayed_cut >>
+    stack_attach_replayed_cut_mode >>
   map_every (fn (term,solve) =>
     disch_then (qspec_then term mp_tac) >> (impl_tac >- solve))
     [(`1`, REFL_TAC), (`splice_pc b 2 1`, REFL_TAC),
@@ -1621,11 +1621,11 @@ Resume stack_replayed_comm[restart]:
   disch_then (fn h => CONV_TAC (REDEPTH_CONV BETA_CONV) >> ACCEPT_TAC h)
 QED
 
-Finalise stack_replayed_comm[local]
+Finalise stack_replayed_comm_mode[local]
 
 (* Each contextual rewrite preserves a pending certificate with a new actual
    replay endpoint. ModeTerminal inputs use the whole-pass refinement separately. *)
-Theorem stack_pending_contextual[local]:
+Theorem stack_pending_contextual_mode[local]:
   !orig s data req_bound pre w d tail.
   !p. p = pre++w++tail ==>
   !q. q = pre++d++tail ==>
@@ -1661,7 +1661,7 @@ Proof
   suspend "restart"
 QED
 
-Resume stack_pending_contextual[layout]:
+Resume stack_pending_contextual_mode[layout]:
   qspecl_then [`pre`,`w`,`d`,`tail`] (mp_tac o BETA_RULE) stack_window_layout >>
   (impl_tac >-
     (qpat_assum `Abbrev (p = _)` (fn h => PURE_REWRITE_TAC
@@ -1673,14 +1673,14 @@ Resume stack_pending_contextual[layout]:
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Resume stack_pending_contextual[entry]:
+Resume stack_pending_contextual_mode[entry]:
   CONV_TAC (REDEPTH_CONV BETA_CONV) >>
   rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >>
   qpat_assum `FILTER is_data_inst q = FILTER is_data_inst p` SUBST1_TAC >>
   first_assum ACCEPT_TAC
 QED
 
-Resume stack_pending_contextual[ports]:
+Resume stack_pending_contextual_mode[ports]:
   qspecl_then [`pre`,`w`,`d`,`tail`,`p`,`q`,`cc`,`req`,`V`,`rank`,`pc`,`height`,`need`,`tag`,`boolean`,`edge`]
     (mp_tac o CONV_RULE (stack_inline_lets 4 ALL_CONV)) stack_select_ports >>
   map_every (fn pat => qpat_assum pat
@@ -1704,7 +1704,7 @@ Resume stack_pending_contextual[ports]:
   first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [LET_THM,IN_GSPEC_IFF])
 QED
 
-Resume stack_pending_contextual[restart]:
+Resume stack_pending_contextual_mode[restart]:
   asm "stack-source-open" (assume_tac o CONJUNCT1 o
     CONV_RULE stack_inline_alias) >>
   `u.sym_base.as_pc = pc e /\ LENGTH u.sym_stack = height e /\
@@ -1722,11 +1722,11 @@ Resume stack_pending_contextual[restart]:
   suspend "outside"
 QED
 
-Resume stack_pending_contextual[outside]:
+Resume stack_pending_contextual_mode[outside]:
   qspecl_then [`pre`,`w`,`d`,`tail`,`orig`,`s`,`data`,`req_bound`,`p`,`q`,
     `cc`,`req`,`V`,`pc`,`height`,`rank`,`need`,`tag`,`boolean`,`edge`,`z`,
     `H`,`R`,`G`,`B`,`e`,`k`,`u`]
-    (mp_tac o BETA_RULE o CONV_RULE (stack_inline_lets 3 ALL_CONV)) stack_replayed_nonstrict >>
+    (mp_tac o BETA_RULE o CONV_RULE (stack_inline_lets 3 ALL_CONV)) stack_replayed_nonstrict_mode >>
   map_every (fn pat => qpat_assum pat
       (PURE_REWRITE_TAC o single o GSYM o REWRITE_RULE [markerTheory.Abbrev_def]))
     [`Abbrev (b = _)`,`Abbrev (m = _)`] >>
@@ -1735,11 +1735,11 @@ Resume stack_pending_contextual[outside]:
   disch_then ACCEPT_TAC
 QED
 
-Resume stack_pending_contextual[shuffle]:
+Resume stack_pending_contextual_mode[shuffle]:
   qspecl_then [`pre`,`w`,`d`,`tail`,`orig`,`s`,`data`,`req_bound`,`p`,`q`,
     `cc`,`req`,`V`,`pc`,`height`,`rank`,`need`,`tag`,`boolean`,`edge`,`z`,
     `H`,`R`,`G`,`B`,`e`,`k`,`t`,`u`]
-    (mp_tac o BETA_RULE o CONV_RULE (stack_inline_lets 3 ALL_CONV)) stack_replayed_shuffle >>
+    (mp_tac o BETA_RULE o CONV_RULE (stack_inline_lets 3 ALL_CONV)) stack_replayed_shuffle_mode >>
   map_every (fn pat => qpat_assum pat
       (PURE_REWRITE_TAC o single o GSYM o REWRITE_RULE [markerTheory.Abbrev_def]))
     [`Abbrev (b = _)`,`Abbrev (m = _)`] >>
@@ -1749,7 +1749,7 @@ Resume stack_pending_contextual[shuffle]:
   disch_then ACCEPT_TAC
 QED
 
-Resume stack_pending_contextual[comm]:
+Resume stack_pending_contextual_mode[comm]:
   qpat_assum `?a. asm_commutative_op a /\ w=[AsmOp "SWAP1";a] /\ d=[a]` (qx_choose_then `a` (map_every assume_tac o CONJUNCTS) o BETA_RULE) >>
   `m = 2` by
     (qpat_assum `w = [AsmOp "SWAP1"; a]` (fn hw => simp[NoAsms, Abbr `m`, hw])) >>
@@ -1759,7 +1759,7 @@ Resume stack_pending_contextual[comm]:
   qspecl_then [`pre`,`a`,`tail`,`orig`,`s`,`data`,`req_bound`,`p`,`q`,
     `cc`,`req`,`V`,`pc`,`height`,`rank`,`need`,`tag`,`boolean`,`edge`,`z`,
     `H`,`R`,`G`,`B`,`e`,`k`,`u`]
-    (mp_tac o BETA_RULE o CONV_RULE (stack_inline_lets 1 ALL_CONV)) stack_replayed_comm >>
+    (mp_tac o BETA_RULE o CONV_RULE (stack_inline_lets 1 ALL_CONV)) stack_replayed_comm_mode >>
   qpat_assum `Abbrev (b = _)` (PURE_REWRITE_TAC o single o GSYM o
     REWRITE_RULE [markerTheory.Abbrev_def]) >>
   (impl_tac >-
@@ -1779,11 +1779,11 @@ Resume stack_pending_contextual[comm]:
   disch_then ACCEPT_TAC
 QED
 
-Finalise stack_pending_contextual[local]
+Finalise stack_pending_contextual_mode[local]
 
 
 (* Replay each pending endpoint through the same six closures as the optimizer. *)
-Theorem stack_pending_walk[local]:
+Theorem stack_pending_walk_mode[local]:
   !orig s data req_bound p q ch.
   ^Entry orig s data p /\ ^ModePending allow_own orig s data req_bound p /\
   stack_peephole_opts p = SOME(q,ch) ==>
@@ -1799,7 +1799,7 @@ Proof
          qspecl_then [`orig`,`s`,`data`,`req_bound`,`pre`,w,d,`tail`]
            (mp_tac o PURE_REWRITE_RULE [GSYM APPEND_ASSOC,APPEND,APPEND_NIL] o
               CONV_RULE (REDEPTH_CONV BETA_CONV) o
-              CONV_RULE (stack_inline_lets 4 ALL_CONV)) stack_pending_contextual >>
+              CONV_RULE (stack_inline_lets 4 ALL_CONV)) stack_pending_contextual_mode >>
          (impl_tac >-
            (conj_tac >- prove_window >>
             first_assum ACCEPT_TAC)) >>
@@ -1863,7 +1863,7 @@ Proof
       rpt (FIRST [first_assum ACCEPT_TAC,conj_tac]) >>
       qpat_assum `a.as_requests = out.as_requests` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
   qspecl_then [`orig`,`s`,`data`,`req_bound`,`p`,`q`,`ch`]
-    (mp_tac o BETA_RULE) stack_pending_walk >>
+    (mp_tac o BETA_RULE) stack_pending_walk_mode >>
   (impl_tac >- rpt (FIRST [first_assum ACCEPT_TAC,conj_tac])) >>
   disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
   conj_tac >- first_assum ACCEPT_TAC >>

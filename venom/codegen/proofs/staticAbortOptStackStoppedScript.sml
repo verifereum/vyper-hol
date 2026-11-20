@@ -5,7 +5,7 @@ Ancestors stackOpAsmSim[qualified,ignore_grammar] stackOpSim[qualified,ignore_gr
   asmSymPc asmSymSem asmSem asmWf list arithmetic
 
 (* Bounded successful visits only; terminal results never need replay here. *)
-Theorem literal_stack_dispatch[local]:
+Theorem literal_stack_dispatch:
   sym_step p env (AsmOp "DUP1") u = sym_dup 0 u /\
   sym_step p env (AsmOp "DUP2") u = sym_dup 1 u /\
   sym_step p env (AsmOp "SWAP1") u = sym_swap 1 u /\
