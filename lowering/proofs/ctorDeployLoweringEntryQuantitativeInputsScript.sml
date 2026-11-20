@@ -3,24 +3,17 @@ Ancestors
  ctorDeployLoweringEntryScalarInputs ctorDeployLoweringFrame ctorSourceInputs
  supportedTypes valueEncoding vyperTypeValues vyperValue vyperTyping vyperABI contractABI words list
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
- Cases_on `ty` >>
- simp[supported_scalar_type_def, supported_word_type_def,
-      supported_string_type_def] >>
- Cases_on `b` >>
- simp[supported_word_type_def, supported_string_type_def] >>
- rpt strip_tac >>
- gvs[evaluate_type_def, type_memory_size_def] >>
- rename1 `BytesT bd` >> Cases_on `bd` >>
- gvs[evaluate_type_def, type_memory_size_def, AllCaseEqs()]
-QED
-*)
 Theorem deploy_scalar_memory_size_positive:
  !ty env tv. supported_scalar_type ty /\
  evaluate_type env ty = SOME tv ==> 32 <= type_memory_size tv
 Proof
-  cheat
+  Cases_on `ty` >>
+  simp[supported_scalar_type_def, supported_word_type_def,
+       supported_string_type_def]
+  >- (Cases_on `b` >>
+      simp[evaluate_type_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[type_memory_size_def]) >>
+  rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs(), type_memory_size_def]
 QED
 
 Theorem deploy_scalar_tuple_memory_cardinality:
