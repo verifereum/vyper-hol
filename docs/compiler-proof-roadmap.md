@@ -63,11 +63,13 @@ Their exact premises are in the linked owners and
 | S7 | `codegenCorrectness.codegen_correct` ([source](../venom/codegen/codegenCorrectnessScript.sml)) | Generated plan/assembly + shape + context/reachability + initial frame relation -> actual `run_call`, resource alternatives or `venom_frame_rel` | 2.1 / 4 |
 
 The top uses S1 even on exempt source executions. Only its non-exempt branch
-needs S3/S4/S7 and memory/reachability facts of S5's form, at the concrete
-`Inv` `raw_reachable vs0` (`vs0` the O1 output's entry state) rather than one
-the caller supplies. They come from `e2eProducers.o1_pipeline_memory_obligations_raw`
-on the ordinary path and from `abort_context_obligations_raw` on the static-abort
-path; the S5 export itself is used by the gas-sufficiency proofs. S2/S6 produce
+needs S3/S4/S7 and memory/reachability facts at the concrete `Inv`
+`raw_reachable vs0` (`vs0` the O1 output's entry state) rather than one the
+caller supplies. On the ordinary path they have S5's form and come from
+`e2eProducers.o1_pipeline_memory_obligations_raw`; on the static-abort path they
+come from `abort_context_obligations_raw` and exclude the abort prefix
+(`codegen_memory_obligations_abort`). The S5 export itself is used by the
+gas-sufficiency proofs. S2/S6 produce
 shape. On the ordinary path L5 consumes that memory fact; layout or empty
 entry memory does not manufacture memory safety.
 
@@ -547,7 +549,8 @@ Remaining work, roughly in dependency order (all future):
    Define this running invariant before block induction. Existing
    `context_venom_asm_rel`/`venom_asm_rel` equal-length/value requirements cannot
    substitute for it. `reachability_closed`/`fn_entry_inv` supply actual
-   instruction sites; S5 must provide their witness. This was the planned proof
+   instruction sites; the runtime proof supplies their witness, `raw_reachable vs0`.
+   This was the planned proof
    design; `gen_fn_simulation` is proved now.
 3. **asm→EVM / owner Milestone 4.3:** consume H21-frame/hard/trace/static/pure/
    encoding/lift. Initialize assembly with `gas_readings es` and actual trace
