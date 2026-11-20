@@ -391,13 +391,12 @@ Definition evaluate_binop_def:
            INL $ FlagV (Num(int_xor (&n1) (&n2)))
            | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
-     | In => (case v2 of
+     | In => if tv = NoneTV then INR (TypeError "Membership type") else
+       (case v2 of
          FlagV n2 => (case v1 of FlagV n1 =>
            INL $ BoolV (int_and (&n1) (&n2) ≠ 0)
            | _ => INR (TypeError "binop"))
-       | ArrayV av => (case tv of
-           NoneTV => INR (TypeError "Membership type")
-         | _ => INL $ BoolV $ evaluate_in_array tv v1 av)
+       | ArrayV av => INL $ BoolV $ evaluate_in_array tv v1 av
        | _ => INR (TypeError "binop"))
      | Eq => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
@@ -458,7 +457,8 @@ Definition evaluate_binop_def:
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            INL (DecimalV (if i1 < i2 then i2 else i1)) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
-     | NotIn => binop_negate $ evaluate_binop u tv In v1 v2
+     | NotIn => if tv = NoneTV then INR (TypeError "Membership type") else
+       binop_negate $ evaluate_binop u tv In v1 v2
      | NotEq => binop_negate $ evaluate_binop u tv Eq v1 v2
      | _ => INR (TypeError "binop")
 Termination
@@ -486,8 +486,7 @@ Theorem evaluate_binop_membership_array:
      | _ => INL (BoolV (if neg then ~evaluate_in_array tv v av
                       else evaluate_in_array tv v av)))
 Proof
-  Cases_on `neg` >> Cases_on `tv` >>
-  simp[evaluate_binop_def, binop_negate_def]
+  Cases_on `neg` >> Cases_on `tv` >> simp[evaluate_binop_def, binop_negate_def]
 QED
 
 Theorem evaluate_binop_membership_sparse_defaults:
