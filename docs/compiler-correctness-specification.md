@@ -359,16 +359,20 @@ The result relation ties source gas observations to the frame's EVM gas readings
   alternative: its failure is the call's oracle outcome, which the source and
   Venom both take. The call theorem gives no gas bound or guarantee of
   success regardless of resources; the companion `vyper_call_gas_sufficient`
-  does: with enough gas the run exists, and, provided the call trace's outcomes are
-  storage-valid (`call_outcomes_storage_ok`) and none of its source
-  observations is exempt (`~gas_source_exempt`), the frame runs out of gas only
-  if it reaches a `RETURNDATACOPY` instruction (`frame_inst_at`). The identity
+  does: with enough gas the run exists. On unmatched calldata that run runs
+  out of gas only if it reaches a `RETURNDATACOPY` instruction
+  (`frame_inst_at`). When `calldata_dispatch` selects a source call, the same
+  holds provided the raised-gas run's call trace has `call_storage_ok` for
+  every gas filling of its outcomes, no exempt source observation
+  (`~gas_source_exempt`) and fewer than 2⁶⁴ entries. The identity
   case composes proved lowering, O1 fuel/memory and codegen gas bounds. The
   assembly-optimizer case is proved too, so no admitted theorem lies under
   the general companion. The deploy companion `e2e_deploy_gas_sufficient`
-  similarly composes proved stage bounds; under its source-exemption and
-  storage premises, OutOfGas implies oversized deposited code or a reached
-  `RETURNDATACOPY`. Both deploy finalizer cases include these alternatives.
+  similarly composes proved stage bounds; with enough added gas, and under
+  its source-exemption, storage and trace-length (fewer than 2⁶⁴ entries)
+  conditions on that raised-gas run, OutOfGas implies that the code to deposit
+  is oversized or that the frame reached a `RETURNDATACOPY` instruction.
+  Both deploy finalizer cases include these alternatives.
 - msg.gas beyond `gas_readings_rel`, `gas=` beyond its forwarded operand and
   arbitrary unsupported programs are outside this runtime contract. Static entry
   (`ctxt.msgParams.static = tx.is_static`), runtime immutables (`installed_code_rel`
