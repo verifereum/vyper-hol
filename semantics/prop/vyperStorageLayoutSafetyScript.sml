@@ -1,4 +1,4 @@
-(* Transparent declared storage regions and layout safety infrastructure. *)
+(* Declared storage regions, decodability and lock separation. *)
 
 Theory vyperStorageLayoutSafety
 Ancestors
@@ -162,26 +162,6 @@ Definition nonreentrant_slot_separated_def:
           ranges_disjoint lock 1 (w2n slot) (type_slot_size tv)
 End
 
-(* Layout safety is stated directly over semantic declared regions.  Each
-   region fits in the word-addressed storage space, and two different logical
-   regions on one backend are disjoint.  Equality of logical region names is
-   the sole aliasing case; no cryptographic injectivity is inferred.  The final
-   conjunct reserves the transient nonreentrant metadata slot. *)
-Definition storage_layout_safe_def:
-  storage_layout_safe cx <=>
-    well_formed_layout cx /\
-    (!mid n subs b slot tv.
-       declared_storage_region cx mid n subs = SOME (b,slot,tv) ==>
-       w2n slot + type_slot_size tv <= dimword(:256)) /\
-    (!mid1 n1 subs1 mid2 n2 subs2 b slot1 tv1 slot2 tv2.
-       declared_storage_region cx mid1 n1 subs1 = SOME (b,slot1,tv1) /\
-       declared_storage_region cx mid2 n2 subs2 = SOME (b,slot2,tv2) ==>
-       (mid1,n1,subs1) = (mid2,n2,subs2) \/
-       ranges_disjoint (w2n slot1) (type_slot_size tv1)
-                       (w2n slot2) (type_slot_size tv2)) /\
-    nonreentrant_slot_separated cx
-End
-
 Theorem declared_storage_region_stk[simp]:
   declared_storage_region (cx with stk updated_by f) mid n subs =
   declared_storage_region cx mid n subs
@@ -214,49 +194,6 @@ Proof
   simp[nonreentrant_slot_separated_def]
 QED
 
-Theorem storage_layout_safe_stk[simp]:
-  storage_layout_safe (cx with stk updated_by f) <=> storage_layout_safe cx
-Proof
-  simp[storage_layout_safe_def]
-QED
-
-Theorem storage_layout_safe_push_context:
-  storage_layout_safe cx ==>
-  storage_layout_safe (cx with stk updated_by CONS src_fn)
-Proof
-  simp[]
-QED
-
-Theorem push_function_preserves_storage_layout_safe:
-  storage_layout_safe cx /\
-  push_function src_fn sc cx st = (INL cx',st') ==>
-  storage_layout_safe cx'
-Proof
-  simp[vyperInterpreterTheory.push_function_def,
-       vyperStateTheory.return_def] >>
-  rpt strip_tac >> gvs[]
-QED
-
-Theorem storage_layout_safe_nonreentrant_slot_separation:
-  storage_layout_safe cx /\
-  cx.nonreentrant_slot = SOME lock /\
-  declared_storage_region cx mid n subs = SOME (T,slot,tv) ==>
-  ranges_disjoint lock 1 (w2n slot) (type_slot_size tv)
-Proof
-  Cases_on `cx.nonreentrant_slot` >>
-  gvs[storage_layout_safe_def, nonreentrant_slot_separated_def] >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
-QED
-Theorem storage_layout_safe_nonreentrant_slot_nonoverflow:
-  storage_layout_safe cx /\
-  cx.nonreentrant_slot = SOME lock ==>
-  lock + 1 <= dimword(:256)
-Proof
-  Cases_on `cx.nonreentrant_slot` >>
-  gvs[storage_layout_safe_def, nonreentrant_slot_separated_def]
-QED
-
-
 Theorem contract_storage_well_formed_storage:
   contract_storage_well_formed cx st ==> well_formed_storage cx st
 Proof
@@ -270,31 +207,6 @@ Theorem contract_storage_well_formed_region:
   slots_in_range storage (w2n slot) tv
 Proof
   simp[contract_storage_well_formed_def] >> metis_tac[]
-QED
-
-Theorem storage_layout_safe_layout:
-  storage_layout_safe cx ==> well_formed_layout cx
-Proof
-  simp[storage_layout_safe_def]
-QED
-
-Theorem storage_layout_safe_region_nonoverflow:
-  storage_layout_safe cx /\
-  declared_storage_region cx mid n subs = SOME (b,slot,tv) ==>
-  w2n slot + type_slot_size tv <= dimword(:256)
-Proof
-  simp[storage_layout_safe_def] >> metis_tac[]
-QED
-
-Theorem storage_layout_safe_region_separation:
-  storage_layout_safe cx /\
-  declared_storage_region cx mid1 n1 subs1 = SOME (b,slot1,tv1) /\
-  declared_storage_region cx mid2 n2 subs2 = SOME (b,slot2,tv2) /\
-  (mid1,n1,subs1) <> (mid2,n2,subs2) ==>
-  ranges_disjoint (w2n slot1) (type_slot_size tv1)
-                  (w2n slot2) (type_slot_size tv2)
-Proof
-  simp[storage_layout_safe_def] >> metis_tac[]
 QED
 
 (* Any state transformation that leaves both protected backends unchanged

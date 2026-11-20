@@ -273,13 +273,9 @@ Libs
    (record_pop), and replace_popped keeps the keys. *)
 
 (* The source takes external calls from the outcome oracle (state_rel's
-   outcomes are SOME).  The storage conjuncts: every declared storage and
-   transient region decodes (contract_storage_well_formed), the layout
-   keeps the regions in
-   range and apart (storage_layout_safe), and every successful outcome
-   still to consume leaves the regions decoding (oracle_storage_ok), as
-   e2eDefs's source_storage_ok and call_outcomes_ok ask of the entry state
-   and the outcomes.  Every immutable or constant the source can read by
+   outcomes are SOME).  The finite storage conditions on the execution
+   trace are in call_storage_ok.
+   Every immutable or constant the source can read by
    name (env.bare_globals) is an immutable of the module being lowered, at
    an ImmutableLoc whose bytes end below 2 ** 256, as build_compile_env
    places a supported program's immutables (immutableLocationProps).
