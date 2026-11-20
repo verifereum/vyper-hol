@@ -3122,23 +3122,6 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem compile_create_ctor_tuple_labels:
-  !cfn cenv args s.
-    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
-      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
-    cs_extends s (SND (compile_create_ctor_tuple cfn cenv args s)) /\
-    EVERY (isPREFIX "@") (added_labels s (SND (compile_create_ctor_tuple cfn cenv args s)))
-Proof
-  rpt gen_tac >> disch_tac >>
-  rewrite_tac[compile_create_ctor_tuple_def] >> simp[LET_THM] >>
-  irule comp_bind_labels >> simp[compile_create_ctor_args_labels] >>
-  rpt gen_tac >> BETA_TAC >>
-  irule comp_bind_labels >> simp[compile_alloc_buffer_labels] >>
-  rpt gen_tac >> BETA_TAC >>
-  irule comp_ignore_bind_labels >>
-  simp[compile_extcall_store_values_labels, comp_return_labels]
-QED
-
 Theorem compile_create_blueprint_args_labels:
   !cfn cenv raw later_es args s.
     (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
@@ -3161,8 +3144,8 @@ Proof
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac] >>
        rpt gen_tac >> BETA_TAC >>
-       simp[compile_alloc_buffer_labels, compile_create_ctor_tuple_labels,
-            cj 2 compile_abi_encode_labels, comp_return_labels])
+       simp[compile_alloc_buffer_labels, compile_create_ctor_args_labels,
+            compile_abi_encode_values_to_buf_labels, comp_return_labels])
 QED
 
 Theorem compile_create_snapshot_labels:
@@ -3195,7 +3178,7 @@ Proof
        rpt gen_tac >> BETA_TAC >>
        simp[compile_create_snapshot_labels, lower_value_labels, emit_op_labels,
             compile_alloc_buffer_labels, compile_copy_memory_dynamic_labels,
-            compile_create_ctor_tuple_labels, cj 2 compile_abi_encode_labels,
+            compile_create_ctor_args_labels, compile_abi_encode_values_to_buf_labels,
             comp_return_labels, compile_create_salt_labels, compile_create_dispatch_labels]) >>
   PairCases_on `x` >> simp[] >>
   irule comp_bind_labels >> simp[lower_value_labels] >>

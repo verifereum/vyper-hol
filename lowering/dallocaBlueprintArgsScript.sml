@@ -3,8 +3,8 @@ Ancestors
   dallocaCreateBlueprint builtinCreate context exprLowering exprLoweringProps
   emitHelper emitHelperProps compileEnv loweringStateRelDefs loweringPosts
   createMemoryInterface valueEncodingProps vyperTyping vyperValue exprBopSimProps
-  vyperTypeExtCallSoundness
-  abiEncoderWindowRun abiEncoderWindowContract abiTypeBoundProps
+  vyperTypeExtCallSoundness vyperTypeSystem exprSimHyps
+  exprSimAbiEncodeArgsPhysicalCapacity abiEncodeValuesPhases
   venomExecSemantics venomInst venomState list rich_list words finite_map
 
 Theorem create_blueprint_check_operand:
@@ -32,14 +32,14 @@ QED
 Theorem create_blueprint_encoded_args_compile:
   args <> [] /\
   compile_create_blueprint_args cfn ce F later_es args cb = ((args_ptr,args_len),sa) ==>
-  ?buf c1 src c2.
-    compile_create_ctor_tuple cfn ce args cb = (src,c1) /\
+  ?vals c1 buf c2.
+    compile_create_ctor_args cfn ce args cb = (vals,c1) /\
     compile_alloc_buffer
       (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) c1 =
       (buf,c2) /\
-    compile_abi_encode_to_buf buf.buf_operand src
-      (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)))
-      c2 = (args_len,sa) /\ args_ptr = buf.buf_operand
+    compile_abi_encode_values_to_buf ce buf.buf_operand
+      (ZIP (vals,MAP (lowered_value_type ce) args)) c2 = (args_len,sa) /\
+    args_ptr = buf.buf_operand
 Proof
   Cases_on `args` >>
   simp[compile_create_blueprint_args_def, comp_bind_def, comp_return_def] >>
@@ -47,129 +47,46 @@ Proof
   rpt (goal_assum $ drule_at Any)
 QED
 
-Theorem create_blueprint_encoded_check_operand:
-  compile_create_blueprint_check is_lit target offset ca = (Var code_name,cb) /\
-  compile_alloc_buffer capacity cb = (buf,c1) /\
-  compile_create_ctor_tuple cfn ce args c1 = (src,c2) /\
-  (!ce' ty e st. ci_mono st (SND (cfn ce' ty e st))) ==>
-  not_fresh_at c2 code_name
+(* Allocation is checked against annotations, while saved rows have their
+   physical types. The child expression preconditions provide the widening. *)
+Theorem create_ctor_args_abi_bound:
+  EVERY (\e. expr_body_pre ce cx env e es) args ==>
+  abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) <=
+  abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))
 Proof
-  strip_tac >> drule create_blueprint_check_operand >> strip_tac >>
-  `ci_mono cb c1` by
-    (mp_tac (Q.SPECL [`capacity`, `cb`] ci_mono_compile_alloc_buffer) >> simp[]) >>
-  `ci_mono c1 c2` by
-    (mp_tac (Q.SPECL [`cfn`, `ce`, `args`, `c1`]
-       ci_mono_compile_create_ctor_tuple) >> simp[]) >>
-  irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `cb` >>
-  fs[ci_mono_def] >> decide_tac
+  strip_tac >> irule (cj 2 abi_args_fits_size_bound) >>
+  pop_assum mp_tac >> Induct_on `args` >> simp[arg_type_fits_def] >>
+  metis_tac[expr_body_pre_lowered_fits]
 QED
 
-(* The constructor-tuple producer supplies the typed input window and the
-   captured register at s_tup. This theorem executes the encoder stage. *)
-Theorem create_blueprint_encoded_args_prefix:
-  compile_abi_encode_to_buf dst src
-    (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)))
-    c2 = (args_len,sa) /\
-  abi_encoder_window_pre ctx func c2 sa dst src
-    (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)))
-    (vyper_to_abi_type tenv (TupleT (MAP (lowered_value_type ce) args))) av
-    source_base source_cap dest_base s_tup /\
-  sfields_tenv_consistent ce.ce_struct_fields tenv /\
-  evaluate_type tenv (TupleT (MAP (lowered_value_type ce) args)) = SOME tv /\
-  value_has_type tv v /\
-  vyper_to_abi tenv (TupleT (MAP (lowered_value_type ce) args)) v = SOME av /\
-  abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) < 2 ** 64 /\
-  compile_create_blueprint_check is_lit target offset ca = (Var code_name,cb) /\
-  compile_alloc_buffer capacity cb = (buf,c1) /\
-  compile_create_ctor_tuple cfn ce args c1 = (src,c2) /\
-  (!ce' ty e st. ci_mono st (SND (cfn ce' ty e st))) /\
-  lookup_var code_name s_tup = SOME captured ==>
-  ?s2.
-    window_strong_result ctx func c2 sa args_len
-      (vyper_to_abi_type tenv (TupleT (MAP (lowered_value_type ce) args))) av
-      dest_base s_tup s2 /\
-    eval_operand (Var code_name) s2 = SOME captured /\
-    eval_operand args_len s2 =
-      SOME (n2w (LENGTH (enc (vyper_to_abi_type tenv
-        (TupleT (MAP (lowered_value_type ce) args))) av))) /\
-    w2n (n2w (LENGTH (enc (vyper_to_abi_type tenv
-      (TupleT (MAP (lowered_value_type ce) args))) av)) : bytes32) < 2 ** 64
+Theorem raw_create_bytecode_bound:
+  expr_body_pre ce cx env bytecode es /\
+  expr_type bytecode = BaseT (BytesT (Dynamic bound)) ==>
+  bytelike_type_bound (lowered_value_type ce bytecode) <= bound
 Proof
-  strip_tac >> drule_all create_blueprint_encoded_check_operand >> strip_tac >>
-  drule_all create_ctor_encoding_bound >> strip_tac >>
-  drule_all abi_props_vyper_typed >> strip_tac >>
-  `LENGTH (enc (vyper_to_abi_type tenv
-     (TupleT (MAP (lowered_value_type ce) args))) av) < 2 ** 64` by
-    metis_tac[arithmeticTheory.LESS_EQ_LESS_TRANS] >>
-  `LENGTH (enc (vyper_to_abi_type tenv
-     (TupleT (MAP (lowered_value_type ce) args))) av) < dimword (:256)` by
-    (fs[dimword_def, venomMemPropsTheory.dimindex_256] >> decide_tac) >>
-  drule_all compile_abi_encode_to_buf_window_strong_run >>
-  disch_then (qx_choose_then `s2` assume_tac) >>
-  drule window_strong_result_public >> strip_tac >>
-  drule abi_encoder_window_result_output >> strip_tac >>
-  drule_all abi_encoder_window_result_vars >> strip_tac >>
-  qexists_tac `s2` >>
-  asm_simp_tac bool_ss [eval_operand_def, w2n_n2w, arithmeticTheory.LESS_MOD]
+  strip_tac >> drule expr_body_pre_lowered_fits >> asm_rewrite_tac[] >>
+  Cases_on `lowered_value_type ce bytecode` >> simp[arg_type_fits_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >> simp[arg_type_fits_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[arg_type_fits_def, bytelike_type_bound_def, vyperASTTheory.bound_length_def]
 QED
 
-Theorem window_strong_result_enc_cong[local]:
-  enc at av = enc bt bv /\
-  window_strong_result ctx func st st' out at av d s t ==>
-  window_strong_result ctx func st st' out bt bv d s t
+(* RawCreate writes the ABI suffix at the runtime end of the copied
+   initcode. Both windows are inside the same registered allocation. *)
+Theorem raw_create_initcode_prefix_frame:
+  window_phase ctx func st en ids [(b+len,n)] s t /\ alloca_inv s /\
+  FLOOKUP s.vs_allocas owner = SOME (b,cap) /\ owner NOTIN ids /\
+  len + n <= cap ==>
+  FLOOKUP t.vs_allocas owner = SOME (b,cap) /\
+  mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory
 Proof
-  strip_tac >> gvs[window_strong_result_def, abi_encoder_window_result_def] >>
-  metis_tac[]
-QED
-
-(* Equal representative bytes retain the canonical encoder result. *)
-Theorem create_blueprint_encoded_args_representative_prefix:
-  compile_abi_encode_to_buf dst src
-    (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)))
-    c2 = (args_len,sa) /\
-  abi_encoder_window_pre ctx func c2 sa dst src
-    (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)))
-    ct rv source_base source_cap dest_base s_tup /\
-  enc ct rv = enc (vyper_to_abi_type tenv
-    (TupleT (MAP (lowered_value_type ce) args))) av /\
-  sfields_tenv_consistent ce.ce_struct_fields tenv /\
-  evaluate_type tenv (TupleT (MAP (lowered_value_type ce) args)) = SOME tv /\
-  value_has_type tv v /\
-  vyper_to_abi tenv (TupleT (MAP (lowered_value_type ce) args)) v = SOME av /\
-  abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) < 2 ** 64 /\
-  compile_create_blueprint_check is_lit target offset ca = (Var code_name,cb) /\
-  compile_alloc_buffer capacity cb = (buf,c1) /\
-  compile_create_ctor_tuple cfn ce args c1 = (src,c2) /\
-  (!ce' ty e st. ci_mono st (SND (cfn ce' ty e st))) /\
-  lookup_var code_name s_tup = SOME captured ==>
-  ?s2.
-    window_strong_result ctx func c2 sa args_len
-      (vyper_to_abi_type tenv (TupleT (MAP (lowered_value_type ce) args))) av
-      dest_base s_tup s2 /\
-    eval_operand (Var code_name) s2 = SOME captured /\
-    eval_operand args_len s2 =
-      SOME (n2w (LENGTH (enc (vyper_to_abi_type tenv
-        (TupleT (MAP (lowered_value_type ce) args))) av))) /\
-    w2n (n2w (LENGTH (enc (vyper_to_abi_type tenv
-      (TupleT (MAP (lowered_value_type ce) args))) av)) : bytes32) < 2 ** 64
-Proof
-  strip_tac >> drule_all create_blueprint_encoded_check_operand >> strip_tac >>
-  drule_all create_ctor_encoding_bound >> strip_tac >>
-  drule_all abi_props_vyper_typed >> strip_tac >>
-  `LENGTH (enc (vyper_to_abi_type tenv
-     (TupleT (MAP (lowered_value_type ce) args))) av) < 2 ** 64` by
-    metis_tac[arithmeticTheory.LESS_EQ_LESS_TRANS] >>
-  `LENGTH (enc (vyper_to_abi_type tenv
-     (TupleT (MAP (lowered_value_type ce) args))) av) < dimword (:256)` by
-    (fs[dimword_def, venomMemPropsTheory.dimindex_256] >> decide_tac) >>
-  drule_all compile_abi_encode_to_buf_window_strong_run >>
-  disch_then (qx_choose_then `s2` assume_tac) >>
-  drule_all window_strong_result_enc_cong >> strip_tac >>
-  drule window_strong_result_public >> strip_tac >>
-  drule abi_encoder_window_result_output >> strip_tac >>
-  drule_all abi_encoder_window_result_vars >> strip_tac >>
-  qexists_tac `s2` >>
-  asm_simp_tac bool_ss [eval_operand_def, w2n_n2w, arithmeticTheory.LESS_MOD]
+  strip_tac >>
+  mp_tac (Q.INST [`q` |-> `b`, `n` |-> `len`, `sz` |-> `cap`,
+    `outs` |-> `[(b+len,n)]`, `tn'` |-> `tn`]
+    abi_encode_values_registered_window) >>
+  impl_tac
+  >- (asm_simp_tac (srw_ss()) [venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  simp[]
 QED
 
 Theorem create_blueprint_raw_args_prefix:

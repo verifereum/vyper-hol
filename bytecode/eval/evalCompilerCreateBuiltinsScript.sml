@@ -3,7 +3,16 @@
 Theory evalCompilerCreateBuiltins
 Ancestors
   evalCompilerCreateBuiltins1 evalCompilerCreateBuiltins2
-  createProxyCompileTest createCopyCompileTest createBlueprintCompileTest
+  createProxyCompileTest createCopyCompileTest createBlueprintCompileTest createRawCompileTest
+  evalCompilerCreateBuiltinsCb02BlueprintArgs
+  evalCompilerCreateBuiltinsCb05BlueprintRof
+  evalCompilerCreateBuiltinsCb07BlueprintArgsSalt
+  evalCompilerCreateBuiltinsRcr04RawcreateStorage
+  evalCompilerCreateBuiltinsCb06BlueprintDynOffset
+  evalCompilerCreateBuiltinsRcr03RawcreateRof
+  evalCompilerCreateBuiltinsRcr06RawcreateSalt
+  evalCompilerCreateBuiltinsRcr02RawcreateArgsSalt
+  evalCompilerCreateBuiltinsRcr05RawcreateArgs
 Libs
   evalCompilerBytecodeLib wordsLib
 
@@ -34,6 +43,14 @@ Proof
   CONV_TAC (LAND_CONV (K create_blueprint_compiled)) >> EVAL_TAC
 QED
 
+Theorem rcr01_rawcreate_matches_python_oracle:
+  ^(lhs (concl create_raw_compiled)) =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes_from
+      "../create-builtins/oracle/rcr01_rawcreate.hex")
+Proof
+  CONV_TAC (LAND_CONV (K create_raw_compiled)) >> EVAL_TAC
+QED
+
 val suffix = "_matches_python_oracle"
 val checked_names = List.concat (map DB.theorems
   ["evalCompilerCreateBuiltins1",
@@ -55,6 +72,15 @@ val checked_names = List.concat (map DB.theorems
    "evalCompilerCreateBuiltinsCb13BlueprintMixedBytesOffset",
    "evalCompilerCreateBuiltinsCb14BlueprintMixedHighOffset",
    "evalCompilerCreateBuiltinsCb15BlueprintMembershipFlag",
+   "evalCompilerCreateBuiltinsCb02BlueprintArgs",
+   "evalCompilerCreateBuiltinsCb05BlueprintRof",
+   "evalCompilerCreateBuiltinsCb07BlueprintArgsSalt",
+   "evalCompilerCreateBuiltinsRcr04RawcreateStorage",
+   "evalCompilerCreateBuiltinsCb06BlueprintDynOffset",
+   "evalCompilerCreateBuiltinsRcr03RawcreateRof",
+   "evalCompilerCreateBuiltinsRcr06RawcreateSalt",
+   "evalCompilerCreateBuiltinsRcr02RawcreateArgsSalt",
+   "evalCompilerCreateBuiltinsRcr05RawcreateArgs",
    "evalCompilerCreateBuiltins"])
   |> map #1
   |> List.filter (String.isSuffix suffix)

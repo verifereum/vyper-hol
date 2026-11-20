@@ -348,22 +348,14 @@ Proof
   simp[]
 QED
 
-Theorem compile_create_ctor_tuple_callback_contract:
-  expr_callbacks_agree f g cenv es ⇒
-  compile_create_ctor_tuple f cenv es = compile_create_ctor_tuple g cenv es
-Proof
-  strip_tac >> drule compile_create_ctor_args_callback_contract >>
-  simp[compile_create_ctor_tuple_def]
-QED
-
 Theorem compile_create_blueprint_args_callback_contract:
   expr_callbacks_agree f g cenv es ⇒
   compile_create_blueprint_args f cenv raw later_es es =
   compile_create_blueprint_args g cenv raw later_es es
 Proof
   strip_tac >>
-  `compile_create_ctor_tuple f cenv es = compile_create_ctor_tuple g cenv es` by
-    (irule compile_create_ctor_tuple_callback_contract >> simp[]) >>
+  `compile_create_ctor_args f cenv es = compile_create_ctor_args g cenv es` by
+    (irule compile_create_ctor_args_callback_contract >> simp[]) >>
   Cases_on `raw` >> simp[compile_create_blueprint_args_def] >>
   Cases_on `es` >> fs[] >> rename1 `e::rest` >> Cases_on `rest` >>
   fs[lower_value_def]
@@ -376,8 +368,8 @@ Theorem compile_raw_create_callback_contract:
   compile_raw_create g cenv bytecode value es salt rof
 Proof
   simp[] >> strip_tac >>
-  `compile_create_ctor_tuple f cenv es = compile_create_ctor_tuple g cenv es` by
-    (irule compile_create_ctor_tuple_callback_contract >> simp[]) >>
+  `compile_create_ctor_args f cenv es = compile_create_ctor_args g cenv es` by
+    (irule compile_create_ctor_args_callback_contract >> simp[]) >>
   `compile_create_salt f cenv salt = compile_create_salt g cenv salt` by
     (irule compile_create_salt_callback_contract >> simp[]) >>
   simp[compile_raw_create_def, lower_value_def]

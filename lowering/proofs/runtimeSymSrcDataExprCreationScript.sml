@@ -8,21 +8,19 @@ fun apply_symbolic_frame theorem =
     (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
       (Q.GEN `R` theorem)))
 
-Theorem runtime_data_frame_create_ctor_tuple:
-  (!n. runtime_data_frame (compile_alloc_buffer n)) /\
-  (!vs p off. runtime_data_frame (compile_extcall_store_values cenv vs p off)) /\
+Theorem runtime_data_frame_create_ctor_args:
   (!copy vv. runtime_data_frame (compile_snapshot_vv cenv copy vv)) /\
   (!e. MEM e es ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
-  runtime_data_frame (compile_create_ctor_tuple cfn cenv es)
+  runtime_data_frame (compile_create_ctor_args cfn cenv es)
 Proof
-  strip_tac >> apply_symbolic_frame symbolic_frame_create_ctor_tuple >> simp[]
+  strip_tac >> apply_symbolic_frame symbolic_frame_create_ctor_args >> simp[]
 QED
 
 Theorem runtime_data_frame_create_blueprint_args:
   (!copy vv. runtime_data_frame (compile_snapshot_vv cenv copy vv)) /\
   (!n. runtime_data_frame (compile_alloc_buffer n)) /\
-  (!p s enc. runtime_data_frame (compile_abi_encode_to_buf p s enc)) /\
-  runtime_data_frame (compile_create_ctor_tuple cfn cenv es) /\
+  (!dst rows. runtime_data_frame (compile_abi_encode_values_to_buf cenv dst rows)) /\
+  runtime_data_frame (compile_create_ctor_args cfn cenv es) /\
   (!vv. runtime_data_frame (unwrap_value cenv vv)) /\
   (!e. MEM e es ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
   runtime_data_frame (compile_create_blueprint_args cfn cenv raw later_es es)
@@ -46,8 +44,8 @@ Theorem runtime_data_frame_raw_create:
   (!vv ty. runtime_data_frame (compile_create_snapshot cenv vv ty)) /\
   (!n. runtime_data_frame (compile_alloc_buffer n)) /\
   (!d s n. runtime_data_frame (compile_copy_memory_dynamic d s n)) /\
-  runtime_data_frame (compile_create_ctor_tuple cfn cenv es) /\
-  (!d s enc. runtime_data_frame (compile_abi_encode_to_buf d s enc)) /\
+  runtime_data_frame (compile_create_ctor_args cfn cenv es) /\
+  (!dst rows. runtime_data_frame (compile_abi_encode_values_to_buf cenv dst rows)) /\
   runtime_data_frame (compile_create_salt cfn cenv salt) /\
   (!p n v s b. runtime_data_frame (compile_create_dispatch p n v s b)) ==>
   runtime_data_frame (compile_raw_create cfn cenv bytecode value es salt rof)

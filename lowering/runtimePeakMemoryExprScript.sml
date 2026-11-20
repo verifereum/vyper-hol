@@ -490,15 +490,6 @@ Proof
   windows_tac [dalloca_windows_snapshot] >> metis_tac[]
 QED
 
-Theorem dalloca_windows_create_ctor_tuple:
-  (!ct e. MEM e args ==> preserves_dalloca_windows window (cfn cenv ct e)) ==>
-  preserves_dalloca_windows window (compile_create_ctor_tuple cfn cenv args)
-Proof
-  strip_tac >> simp[compile_create_ctor_tuple_def] >>
-  windows_tac [dalloca_windows_extcall_store_values] >>
-  metis_tac[dalloca_windows_create_ctor_args]
-QED
-
 Theorem dalloca_windows_extcall_setup[local]:
   preserves_dalloca_windows window (compile_extcodesize_check addr) /\
   preserves_dalloca_windows window (compile_return_value_decode min_sz max_sz)
@@ -608,7 +599,7 @@ Proof
   strip_tac >>
   simp[compile_raw_create_def, compile_copy_memory_dynamic_def] >>
   windows_tac [dalloca_windows_create_snapshot, dalloca_windows_create_dispatch,
-               dalloca_windows_abi_encode, dalloca_windows_create_ctor_tuple,
+               dalloca_windows_abi_encode_values, dalloca_windows_create_ctor_args,
                dalloca_windows_lower_value, dalloca_windows_create_salt] >>
   metis_tac[]
 QED

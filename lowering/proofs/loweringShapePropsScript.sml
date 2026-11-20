@@ -7825,7 +7825,12 @@ Proof
   qx_gen_tac `head_vv` >> simp[] >>
   match_mp_tac shape_step_bind >>
   qexists_tac `\v st. P st /\ value_shape_ok st v` >> conj_tac
-  >- (irule compile_snapshot_vv_shape_framed >> simp[Abbr `P`]) >>
+  >- (irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`,
+                    `\st. P st /\ value_shape_ok st (ext_call_arg_value (lowered_value_type cenv h) head_vv)`,
+                    `\v st. P st /\ value_shape_ok st v`] >>
+      reverse (rpt conj_tac) >- (irule compile_snapshot_vv_shape_framed >> simp[Abbr `P`]) >>
+      simp[value_shape_ok_ext_call_arg_value]) >>
   qx_gen_tac `snapped` >> simp[] >>
   qmatch_goalsub_abbrev_tac `shape_step internal compiler_label HeadFrame _ _` >>
   `shape_stable HeadFrame` by

@@ -956,20 +956,6 @@ Proof
   simp[pairTheory.FORALL_PROD, alloca_suffix_return]
 QED
 
-Theorem alloca_suffix_extcall_store_values[local]:
-  !vs off a. k <= a.cs_next_var ==>
-  alloca_suffix k a
-    (SND (compile_extcall_store_values cenv vs buf off a))
-Proof
-  Induct >> simp[compile_extcall_store_values_def, alloca_suffix_return] >>
-  rpt gen_tac >> PairCases_on `h` >> strip_tac >>
-  Cases_on `is_word_type h1` >> Cases_on `is_bytestring_type h1` >>
-  simp[compile_extcall_store_values_def, comp_ignore_bind_def] >>
-  rpt (rpt strip_tac >> simp[] >> irule alloca_suffix_bind_floor >>
-       simp[alloca_suffix_emit_op, alloca_suffix_emit_void,
-            alloca_suffix_unwrap_value, alloca_suffix_store_bytestring])
-QED
-
 Theorem alloca_suffix_encode_static_loop[local]:
   k <= a.cs_next_var ==>
   alloca_suffix k a
@@ -1594,8 +1580,8 @@ val alloca_suffix_create_tac = fn helpers => rpt (FIRST [
     alloca_suffix_emit_op, alloca_suffix_emit_void, alloca_suffix_emit_inst,
     alloca_suffix_alloc_buffer, alloca_suffix_fresh_label, alloca_suffix_new_block,
     alloca_suffix_return, alloca_suffix_lower_value, alloca_suffix_unwrap_value,
-    alloca_suffix_snapshot_vv, alloca_suffix_extcall_store_values,
-    cj 2 alloca_suffix_encode_family, alloca_suffix_copy_memory_dynamic] @ helpers)),
+    alloca_suffix_snapshot_vv, alloca_suffix_abi_encode_values,
+    alloca_suffix_copy_memory_dynamic] @ helpers)),
   gen_tac, DISCH_TAC, conj_tac,
   ho_match_mp_tac alloca_suffix_bind_floor,
   ho_match_mp_tac alloca_suffix_ignore_floor,
@@ -1610,16 +1596,6 @@ Proof
   strip_tac >> Induct_on `args` >>
   simp[Once compile_create_ctor_args_def] >>
   alloca_suffix_create_tac []
-QED
-
-Theorem alloca_suffix_create_ctor_tuple[local]:
-  (!ce ty e a. k <= a.cs_next_var ==>
-    alloca_suffix k a (SND (cfn ce ty e a))) ==>
-  !ce args a. k <= a.cs_next_var ==>
-    alloca_suffix k a (SND (compile_create_ctor_tuple cfn ce args a))
-Proof
-  strip_tac >> simp[compile_create_ctor_tuple_def] >>
-  alloca_suffix_create_tac [alloca_suffix_create_ctor_args]
 QED
 
 Theorem alloca_suffix_create_salt[local]:
@@ -1664,7 +1640,7 @@ Theorem alloca_suffix_raw_create[local]:
     alloca_suffix k a (SND (compile_raw_create cfn ce be ve es salt rof a))
 Proof
   strip_tac >> simp[compile_raw_create_def] >>
-  alloca_suffix_create_tac [alloca_suffix_create_snapshot, alloca_suffix_create_ctor_tuple,
+  alloca_suffix_create_tac [alloca_suffix_create_snapshot, alloca_suffix_create_ctor_args,
     alloca_suffix_create_salt, alloca_suffix_create_dispatch]
 QED
 
@@ -1706,7 +1682,7 @@ Theorem alloca_suffix_create_blueprint_args[local]:
       (SND (compile_create_blueprint_args cfn ce raw later_es es a))
 Proof
   strip_tac >> simp[compile_create_blueprint_args_def] >>
-  alloca_suffix_create_tac [alloca_suffix_create_ctor_tuple]
+  alloca_suffix_create_tac [alloca_suffix_create_ctor_args]
 QED
 
 Theorem alloca_suffix_create_blueprint_append[local]:

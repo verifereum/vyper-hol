@@ -9,11 +9,11 @@ fun frame_tac goal =
      >- (simp[] >> frame_tac) >> gen_tac >> BETA_TAC) >> simp[]) goal
 
 Theorem symbolic_frame_create_ctor_args:
-  (!copy vv. symbolic_frame R (compile_snapshot_vv cenv copy vv)) ==>
-  !es. (!e. MEM e es ==> symbolic_frame R (cfn cenv (expr_type e) e)) ==>
+  (!copy vv. symbolic_frame R (compile_snapshot_vv cenv copy vv)) /\
+  (!e. MEM e es ==> symbolic_frame R (cfn cenv (expr_type e) e)) ==>
   symbolic_frame R (compile_create_ctor_args cfn cenv es)
 Proof
-  strip_tac >> Induct >> simp[compile_create_ctor_args_def] >>
+  Induct_on `es` >> simp[compile_create_ctor_args_def] >>
   rpt strip_tac >>
   match_mp_tac symbolic_frame_bind >> conj_tac
   >- (first_x_assum (qspec_then `h` mp_tac) >> simp[]) >>
@@ -39,24 +39,13 @@ Proof
   Cases_on `salt` >> simp[compile_create_salt_def, symbolic_frame_lower_value]
 QED
 
-Theorem symbolic_frame_create_ctor_tuple:
-  (!n. symbolic_frame R (compile_alloc_buffer n)) /\
-  (!vs p off. symbolic_frame R (compile_extcall_store_values cenv vs p off)) /\
-  (!copy vv. symbolic_frame R (compile_snapshot_vv cenv copy vv)) /\
-  (!e. MEM e es ==> symbolic_frame R (cfn cenv (expr_type e) e)) ==>
-  symbolic_frame R (compile_create_ctor_tuple cfn cenv es)
-Proof
-  strip_tac >> simp[compile_create_ctor_tuple_def, comp_ignore_bind_def,
-                    symbolic_frame_create_ctor_args]
-QED
-
 Theorem symbolic_frame_create_blueprint_args:
   (!opc ops. symbolic_frame R (emit_op opc ops)) /\
   symbolic_frame R (emit_inst INVALID [] []) /\
   (!copy vv. symbolic_frame R (compile_snapshot_vv cenv copy vv)) /\
   (!n. symbolic_frame R (compile_alloc_buffer n)) /\
-  (!p s enc. symbolic_frame R (compile_abi_encode_to_buf p s enc)) /\
-  symbolic_frame R (compile_create_ctor_tuple cfn cenv es) /\
+  (!dst rows. symbolic_frame R (compile_abi_encode_values_to_buf cenv dst rows)) /\
+  symbolic_frame R (compile_create_ctor_args cfn cenv es) /\
   (!vv. symbolic_frame R (unwrap_value cenv vv)) /\
   (!e. MEM e es ==> symbolic_frame R (cfn cenv (expr_type e) e)) ==>
   symbolic_frame R (compile_create_blueprint_args cfn cenv raw later_es es)
@@ -90,8 +79,8 @@ Theorem symbolic_frame_raw_create:
   (!vv ty. symbolic_frame R (compile_create_snapshot cenv vv ty)) /\
   (!n. symbolic_frame R (compile_alloc_buffer n)) /\
   (!d s n. symbolic_frame R (compile_copy_memory_dynamic d s n)) /\
-  symbolic_frame R (compile_create_ctor_tuple cfn cenv es) /\
-  (!d s enc. symbolic_frame R (compile_abi_encode_to_buf d s enc)) /\
+  symbolic_frame R (compile_create_ctor_args cfn cenv es) /\
+  (!dst rows. symbolic_frame R (compile_abi_encode_values_to_buf cenv dst rows)) /\
   symbolic_frame R (compile_create_salt cfn cenv salt) /\
   (!p n v s b. symbolic_frame R (compile_create_dispatch p n v s b)) ==>
   symbolic_frame R (compile_raw_create cfn cenv bytecode value es salt rof)

@@ -228,15 +228,21 @@ Definition allocation_test_array_def:
   allocation_test_array n =
     Name (ArrayT (BaseT (UintT 256)) (Fixed n)) "args"
 End
+
+Overload allocation_test_bytecode[local] =
+  ``\n. Name (BaseT (BytesT (Dynamic n))) "bytecode"``
+
 Theorem create_raw_alloc_boundary_eval:
   ext_call_alloc_ok cenv (CreateTarget RawCreate F T [])
-    [allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59 - 1537)] /\
+    [allocation_test_bytecode 64;allocation_test_word;allocation_test_array (2 ** 59 - 3)] /\
   ~ext_call_alloc_ok cenv (CreateTarget RawCreate F T [])
-    [allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59 - 1536)] /\
+    [allocation_test_bytecode 64;allocation_test_word;allocation_test_array (2 ** 59 - 2)] /\
+  ext_call_alloc_ok cenv (CreateTarget RawCreate F T [])
+    [allocation_test_bytecode 32;allocation_test_word;allocation_test_array (2 ** 59 - 2)] /\
   ext_call_alloc_ok cenv (CreateTarget RawCreate T F [7;2])
-    [allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59 - 1537);allocation_test_word] /\
+    [allocation_test_bytecode 64;allocation_test_word;allocation_test_array (2 ** 59 - 3);allocation_test_word] /\
   ~ext_call_alloc_ok cenv (CreateTarget RawCreate T F [7;2])
-    [allocation_test_word;allocation_test_word;allocation_test_array (2 ** 59 - 1536);allocation_test_word]
+    [allocation_test_bytecode 64;allocation_test_word;allocation_test_array (2 ** 59 - 2);allocation_test_word]
 Proof
   EVAL_TAC
 QED
@@ -273,14 +279,17 @@ Proof
   EVAL_TAC
 QED
 
-(* Struct metadata can describe a larger staging footprint than its ABI
-   fields. The checker must use the environment's actual physical size. *)
+(* Struct metadata can describe a large operand even when its ABI fields
+   fit. CREATE checks its ABI buffer and the expression checks the operand. *)
 Theorem create_alloc_struct_environment_eval:
   abi_size_bound (cenv with ce_struct_fields := FEMPTY |+ ("S", [("field", BaseT (UintT 256), 2 ** 64)])).ce_struct_fields (TupleT [expr_type (Name (StructT (NONE,"S")) "args")]) = 32 /\
   type_memory_bytes (cenv with ce_struct_fields := FEMPTY |+ ("S", [("field", BaseT (UintT 256), 2 ** 64)])) (TupleT [expr_type (Name (StructT (NONE,"S")) "args")]) = 2 ** 64 /\
-  ~ext_call_alloc_ok (cenv with ce_struct_fields := FEMPTY |+ ("S", [("field", BaseT (UintT 256), 2 ** 64)])) (CreateTarget RawCreate F T []) [allocation_test_word;allocation_test_word;(Name (StructT (NONE,"S")) "args")] /\
-  ~ext_call_alloc_ok (cenv with ce_struct_fields := FEMPTY |+ ("S", [("field", BaseT (UintT 256), 2 ** 64)])) (CreateTarget (CreateFromBlueprint F) F T [])
-    [allocation_test_word;allocation_test_word;allocation_test_word;(Name (StructT (NONE,"S")) "args")]
+  ext_call_alloc_ok (cenv with ce_struct_fields := FEMPTY |+ ("S", [("field", BaseT (UintT 256), 2 ** 64)])) (CreateTarget RawCreate F T [])
+    [allocation_test_bytecode 64;allocation_test_word;Name (StructT (NONE,"S")) "args"] /\
+  ext_call_alloc_ok (cenv with ce_struct_fields := FEMPTY |+ ("S", [("field", BaseT (UintT 256), 2 ** 64)])) (CreateTarget (CreateFromBlueprint F) F T [])
+    [allocation_test_word;allocation_test_word;allocation_test_word;Name (StructT (NONE,"S")) "args"] /\
+  ~alloc_limits_expr (cenv with ce_struct_fields := FEMPTY |+ ("S", [("field", BaseT (UintT 256), 2 ** 64)]))
+    (Name (StructT (NONE,"S")) "args")
 Proof
   EVAL_TAC
 QED
