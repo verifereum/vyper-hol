@@ -432,8 +432,6 @@ Proof
        valid_horizon cx st0 H ee.storage_trace /\
        stmt_state_rel H ctx func cenv cx ke z /\
        ghost_inv_at (DF H) lo d cenv cx ke G3 tn3 z` by simp[] >>
-  `?H. valid_horizon cx st0 H ke.storage_trace` by
-    (qexists `storage_trace_horizon ke.storage_trace` >> first_assum ACCEPT_TAC) >>
   `ci_mono s2 s3` by
     (fs[exprLoweringPropsTheory.ci_mono_def] >> simp[]) >>
   `ci_mono s3 s5` by
@@ -538,23 +536,36 @@ Proof
      ke.scopes = ee.scopes /\ ke.immutables = ee.immutables /\
      (!tr. get_storage cx ke tr = get_storage cx ee tr)` by
     (strip_tac >>
+     `get_module_code cx NONE = SOME tops` by
+       (qpat_assum `body_inv tops ctx cenv cx`
+          (ACCEPT_TAC o cj 3 o REWRITE_RULE [bodySimTheory.body_inv_def])) >>
      `EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
         (int_calls_exprs kw_es)` by
        (simp[bodyStorageCasesTheory.body_exprs_main_calls_every, listTheory.EVERY_MEM] >>
         rpt strip_tac >>
-        `expr_body_pre cenv cx env e ee` by metis_tac[] >>
-        fs[exprSimHypsDefsTheory.expr_body_pre_def, bodySimTheory.body_inv_def,
-           listTheory.EVERY_MEM] >> metis_tac[]) >>
+        `expr_body_pre cenv cx env e ee` by
+          (qpat_assum `!e st. MEM e kw_es /\ _ ==> _`
+             (qspecl_then [`e`,`ee`] mp_tac) >> simp[]) >>
+        qpat_assum `expr_body_pre cenv cx env e ee`
+          (mp_tac o Q.SPEC `c` o REWRITE_RULE [listTheory.EVERY_MEM] o cj 8 o
+           REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def]) >>
+        simp[]) >>
      drule_all targetPureWalkSourceTheory.nonmutating_exprs_source_frame >>
      simp[vyperMachineFrameTheory.machine_frame_def] >> strip_tac >>
      gen_tac >> Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+  `MAP FDOM ke.scopes = MAP FDOM ee.scopes` by
+    (qpat_assum `eval_exprs cx kw_es (ee with gas_obs := _) = (INL kws,ke)`
+       (mp_tac o MATCH_MP
+         vyperEvalExprPreservesScopesDomTheory.eval_exprs_preserves_scopes_dom) >>
+     simp[]) >>
   mp_tac (Q.INST [`sa` |-> `s1`, `sb` |-> `s2`, `se` |-> `s5`, `svs` |-> `av`,
            `kw_es` |-> `kw_es`, `env` |-> `env`,
            `pos` |-> `ee`, `ee` |-> `ke`, `t` |-> `zg`, `Gp` |-> `G2`,
            `tp` |-> `tn2`, `G` |-> `Gg`, `tn` |-> `tng`]
     extcall_keyword_packing_rows) >>
   (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-     >- (qexists `storage_trace_horizon ke.storage_trace` >> first_assum ACCEPT_TAC) >>
+     >~ [`?H. valid_horizon cx st0 H ke.storage_trace`]
+     >- (qexists_tac `storage_trace_horizon ke.storage_trace` >> first_assum ACCEPT_TAC) >>
      qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> stmt_state_rel _ _ _ _ _ ee u /\ _`
        mp_tac >>
      simp[NoAsms, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM])) >>
@@ -646,7 +657,9 @@ Proof
   `valid_horizon cx st0 entry_h es.storage_trace` by
     (`storage_trace_domain cx st0 es.storage_trace` by
        metis_tac[vyperStorageFootprintTheory.storage_trace_domain_prefix] >>
-     fs[Abbr `entry_h`, vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+     qpat_assum `storage_trace_domain cx st0 es.storage_trace`
+       (mp_tac o REWRITE_RULE [vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+     simp[NoAsms, Abbr `entry_h`]) >>
   `valid_horizon cx st0 pack_h ee.storage_trace` by
     simp[Abbr `pack_h`] >>
   qpat_assum `!K. valid_horizon _ _ K ee.storage_trace ==> stmt_state_rel _ _ _ _ _ ee u /\ _`
