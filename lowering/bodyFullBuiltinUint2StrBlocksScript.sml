@@ -2,7 +2,7 @@ Theory bodyFullBuiltinUint2StrBlocks
 Ancestors
   bodyPtrDefs bodyPtrBytestringBuiltinsCalldataCopy
   immutableMemoryFrame valueEncodingProps loweringStateRelDefs
-  ptrDiscipline venomState finite_map words list pred_set byte
+  ptrDiscipline allocasBelowFmpUpdatesProps venomState finite_map words list pred_set byte
   localPtrsProps exprSimProps exprSimUint2Str fragGasSeqPtr
   bodyPtrBytestringBuiltinsUintGhost ptrSafeRun venomExecSemantics venomInst
   exprLoweringProps emitHelperProps codegenRel contextCodegenRel bodyFullUnwrapRun
@@ -114,18 +114,6 @@ Proof
 QED
 
 (* allocas_from is supplied by ghost_inv_at at the loop boundary. *)
-Theorem u2s_allocas_below_fmp_updates[local]:
-  (allocas_below_fmp (update_var x w s) <=> allocas_below_fmp s) /\
-  (allocas_below_fmp (s with vs_inst_idx := k) <=> allocas_below_fmp s) /\
-  (allocas_below_fmp (mstore addr v s) <=> allocas_below_fmp s) /\
-  (allocas_below_fmp (s with <|vs_vars := vars; vs_inst_idx := k|>) <=>
-     allocas_below_fmp s) /\
-  (allocas_below_fmp (s with <|vs_memory := mem; vs_vars := vars; vs_inst_idx := k|>) <=>
-     allocas_below_fmp s)
-Proof
-  simp[update_var_def, mstore_def, write_memory_with_expansion_def, allocas_below_fmp_def]
-QED
-
 Theorem u2s_body_pointer_sequence:
   not_fresh_at a p /\ n+32 <= sz /\ b+sz < dimword(:256) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
@@ -168,11 +156,11 @@ Proof
   qabbrev_tac `tn4 = step_taint subi s3 u4 tn3` >>
   qabbrev_tac `s4 = u4 with vs_inst_idx := 4` >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s2` by
-    simp[Abbr `s2`, u2s_allocas_below_fmp_updates] >>
+    simp[Abbr `s2`, allocas_below_fmp_updates] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s3` by
-    simp[Abbr `s3`, u2s_allocas_below_fmp_updates] >>
+    simp[Abbr `s3`, allocas_below_fmp_updates] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s4` by
-    simp[Abbr `s4`, Abbr `u4`, u2s_allocas_below_fmp_updates] >>
+    simp[Abbr `s4`, Abbr `u4`, allocas_below_fmp_updates] >>
   qabbrev_tac `tn5 = tn4 with t_mem := tn4.t_mem DIFF {j | b+n-i <= j /\ j < b+n-i+32}` >>
   qexistsl_tac
     [`DRESTRICT G4 (COMPL {u2s_var a 0; u2s_var a 1; u2s_var a 9; u2s_var a 10})`,
@@ -324,7 +312,7 @@ Resume u2s_body_pointer_sequence[tail]:
      simp[Abbr `G3`, Abbr `G2`, Abbr `tn3`, Abbr `tn2`,
           FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s5` by
-    simp[Abbr `s5`, u2s_allocas_below_fmp_updates] >>
+    simp[Abbr `s5`, allocas_below_fmp_updates] >>
   `lookup_var (u2s_var a 0) s5 = SOME (n2w x) /\
    lookup_var (u2s_var a 1) s5 = SOME (n2w i) /\ allocas_from lo s5` by
     (simp[Abbr `s5`, Abbr `s4`, Abbr `u4`, Abbr `s3`, Abbr `s2`,
@@ -334,26 +322,26 @@ Resume u2s_body_pointer_sequence[tail]:
   fs[op_taint_def] >>
   simp[Abbr `cs`] >>
   irule u2s_clean_scalar_seq_cons >>
-  rewrite_tac [u2s_allocas_below_fmp_updates] >>
+  rewrite_tac [allocas_below_fmp_updates] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM, op_prov_def, op_taint_def] >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def] >>
   simp[GSYM mk_inst_def] >>
   qexists_tac `safe_div (n2w x) 10w` >> simp[] >>
   irule u2s_clean_assign_seq_cons >>
-  rewrite_tac [u2s_allocas_below_fmp_updates] >>
+  rewrite_tac [allocas_below_fmp_updates] >>
   simp[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
        allocas_from_def, update_var_def] >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
        lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   simp[GSYM mk_inst_def] >>
-  simp[u2s_allocas_below_fmp_updates] >>
+  simp[allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qexists_tac `safe_div (n2w x) 10w` >> simp[] >>
   irule u2s_clean_scalar_seq_cons >>
-  rewrite_tac [u2s_allocas_below_fmp_updates] >>
+  rewrite_tac [allocas_below_fmp_updates] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM, op_prov_def, op_taint_def,
        FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, allocas_from_def] >>
-  simp[u2s_allocas_below_fmp_updates] >>
+  simp[allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qexists_tac `1w + n2w i` >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
@@ -361,10 +349,10 @@ Resume u2s_body_pointer_sequence[tail]:
   simp[GSYM mk_inst_def] >>
   conj_tac >- (fs[lookup_var_def] >> simp[WORD_ADD_COMM]) >>
   irule u2s_clean_assign_seq_cons >>
-  rewrite_tac [u2s_allocas_below_fmp_updates] >>
+  rewrite_tac [allocas_below_fmp_updates] >>
   simp[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
        allocas_from_def, update_var_def] >>
-  simp[u2s_allocas_below_fmp_updates] >>
+  simp[allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qexists_tac `1w + n2w i` >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
@@ -465,7 +453,7 @@ Proof
      `stmt_state_rel H0 ctx fn cenv cx es t` by fs[u2s_safe_def] >>
      qpat_assum `stmt_state_rel H0 ctx fn cenv cx es t`
        (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
-     rewrite_tac [u2s_allocas_below_fmp_updates]) >>
+     rewrite_tac [allocas_below_fmp_updates]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
        (t with vs_inst_idx := 9,G',tn') []
        (OK (jump_to (u2s_label a 1) t),G',tn')` by
@@ -637,13 +625,13 @@ Resume u2s_zero_pointer_sequence[sequence]:
   simp[op_taint_def, op_prov_def, lookup_var_def, update_var_def,
        FLOOKUP_UPDATE, eval_operand_def, allocas_from_def, w2n_n2w,
        ptr_covers_def] >>
-  simp[u2s_allocas_below_fmp_updates] >>
+  simp[allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   irule u2s_pointer_arith_seq_cons >>
   fs[op_taint_def] >>
   simp[op_prov_def, op_taint_def, FLOOKUP_UPDATE, allocas_from_def,
        mstore_def, write_memory_with_expansion_def] >>
-  simp[u2s_allocas_below_fmp_updates] >>
+  simp[allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qexists_tac `n2w (b+n)` >>
   fs[lookup_var_def] >>
@@ -653,7 +641,7 @@ Resume u2s_zero_pointer_sequence[sequence]:
   irule u2s_pointer_arith_seq_cons >>
   simp[op_prov_def, op_taint_def, FLOOKUP_UPDATE, allocas_from_def,
        update_var_def] >>
-  simp[u2s_allocas_below_fmp_updates] >>
+  simp[allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qexists_tac `n2w (b+n-1)` >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def,
@@ -663,13 +651,13 @@ Resume u2s_zero_pointer_sequence[sequence]:
   simp[op_taint_def, op_prov_def, lookup_var_def, update_var_def,
        FLOOKUP_UPDATE, eval_operand_def, allocas_from_def, w2n_n2w,
        ptr_covers_def] >>
-  simp[u2s_allocas_below_fmp_updates] >>
+  simp[allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qmatch_goalsub_abbrev_tac `mstore z w (s with <|vs_memory := mem; vs_vars := _; vs_inst_idx := _|>)` >>
   irule u2s_pointer_assign_seq_cons >>
   simp[op_prov_def, op_taint_def, FLOOKUP_UPDATE, allocas_from_def,
        mstore_def, write_memory_with_expansion_def] >>
-  simp[u2s_allocas_below_fmp_updates] >>
+  simp[allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qexists_tac `n2w (b+n-1)` >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
@@ -750,7 +738,7 @@ Proof
      `stmt_state_rel H0 ctx fn cenv cx es t` by fs[u2s_safe_def] >>
      qpat_assum `stmt_state_rel H0 ctx fn cenv cx es t`
        (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
-     rewrite_tac [u2s_allocas_below_fmp_updates]) >>
+     rewrite_tac [allocas_below_fmp_updates]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
        (t with vs_inst_idx := 6,G',tn') []
        (OK (jump_to (u2s_label a 5) t),G',tn')` by
@@ -832,7 +820,7 @@ Resume u2s_final_pointer_sequence[sequence]:
   irule u2s_pointer_arith_seq_cons >>
   fs[op_taint_def, lookup_var_def] >>
   simp[op_prov_def, op_taint_def, FLOOKUP_UPDATE, allocas_from_def, update_var_def] >>
-  simp[u2s_allocas_below_fmp_updates] >>
+  simp[allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qexists_tac `n2w (b+n-i)` >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def,
@@ -841,12 +829,12 @@ Resume u2s_final_pointer_sequence[sequence]:
   irule u2s_clean_mstore_seq_cons >>
   simp[op_taint_def, op_prov_def, lookup_var_def, update_var_def,
        FLOOKUP_UPDATE, eval_operand_def, allocas_from_def, w2n_n2w, ptr_covers_def] >>
-  simp[u2s_allocas_below_fmp_updates] >>
+  simp[allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   irule u2s_pointer_assign_seq_cons >>
   simp[op_prov_def, op_taint_def, FLOOKUP_UPDATE, allocas_from_def,
        mstore_def, write_memory_with_expansion_def] >>
-  simp[u2s_allocas_below_fmp_updates] >>
+  simp[allocas_below_fmp_updates] >>
   conj_tac >- fs[allocas_from_def] >>
   qexists_tac `n2w (b+n-i)` >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
@@ -932,7 +920,7 @@ Proof
      `stmt_state_rel H0 ctx fn cenv cx es t` by fs[u2s_safe_def] >>
      qpat_assum `stmt_state_rel H0 ctx fn cenv cx es t`
        (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
-     rewrite_tac [u2s_allocas_below_fmp_updates]) >>
+     rewrite_tac [allocas_below_fmp_updates]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
        (t with vs_inst_idx := 4,G',tn') []
        (OK (jump_to (u2s_label a 5) t),G',tn')` by

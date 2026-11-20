@@ -9,7 +9,8 @@ Ancestors
   bodySimFull bodyFullPreds exprSimECArith
   gasShadowCompile exprSimHypsDefs exprLowering loweringPosts vyperAST list
   vyperStorageTrace vyperStorageFootprint exprSimHyps exprSimOperands exprSimSource
-  stateRelProj allocaSiteResource bodyFullHashKeccakFixed[qualified,ignore_grammar]
+  stateRelProj allocaSiteResource allocasBelowFmpUpdatesProps
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 open compileEnvTheory;
 
@@ -483,10 +484,9 @@ Proof
       qpat_assum `ib.buf_operand = Var src` (fn th =>
         qpat_assum `_ cm = ((),sp)` (assume_tac o REWRITE_RULE [th])) >>
       `ctx_has_dalloca ctx ==> allocas_below_fmp tm` by
-        (`allocas_below_fmp tm <=> allocas_below_fmp ta` by
-           (qpat_assum `tm with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|> = ta` mp_tac >>
-            simp[NoAsms, venomStateTheory.venom_state_component_equality] >> strip_tac >>
-            asm_rewrite_tac[ptrDisciplineTheory.allocas_below_fmp_def]) >>
+        (qpat_assum `tm with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|> = ta`
+           (assume_tac o REWRITE_RULE[allocas_below_fmp_updates] o
+            Q.AP_TERM `allocas_below_fmp`) >>
          asm_rewrite_tac[]) >>
       drule_all (SRULE [] (Q.INST [`pd` |-> `64`, `nd` |-> `96`]
         (SPEC_ALL ec_scalar_store_origin_ptr_path))) >>
