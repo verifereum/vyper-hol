@@ -446,21 +446,16 @@ QED
  * Not on the logical dependency path of call correctness.
  *
  * Proof idea: relate the constructor's CODECOPY-decoded canonical
- * ABI tail to source binding, simulate its Call-free body and runtime-return
+ * ABI tail to source binding, simulate its body and runtime-return
  * epilogue, then apply Verifereum handle_create/handle_exception in the SINGLE
  * fresh creation frame. Deposit gas/size failures are resource starvation.
  * Exclude the 0xEF runtime prefix. Match installed runtime code and all remaining
  * account fields, transient storage and logs; use explicit source failure
  * cases, exempting only the existing exact dynamic ABI strictness predicate.
  *
- * The source runs with NONE for the call oracle: constructor_call_free excludes EVERY Call
- * (including internal calls and Send) and the precompile builtins, whose
- * STATICCALL the EVM can fail for lack of gas, while checked constant
- * initializers are pure. No oracle/callee is needed. Its gas observations gobs
- * are existential, as in call_result_rel_guarded: msg.gas in the constructor reads the
- * readings the EVM run produced. The theorem does not claim agreement for
- * malformed constructors excluded by constructor_args_encode. There is no
- * nested-creation frame_outcome claim and no Some-root oracle hypothesis.
+ * The constructor's oracle uses the creation frame's call outcomes.
+ * The source gas observations are related to the frame's GAS readings.
+ * The entry relation supplies the arguments via constructor_args_encode.
  *
  * A constructor that halts (selfdestruct) makes load_contract succeed without
  * installing the source at tx.target, so that INL is told apart by
@@ -473,7 +468,6 @@ Theorem e2e_deploy_correctness_identity:
   !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\ supported_program_deploy tops /\
-    constructor_call_free tops /\
     deploy_typing_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     LENGTH (call_trace es) < 2 ** 64
@@ -528,7 +522,6 @@ Theorem e2e_deploy_correctness_asm_opt:
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
     ~program_reads_self_code tops /\
     supported_program tops /\ supported_program_deploy tops /\
-    constructor_call_free tops /\
     deploy_typing_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     LENGTH (call_trace es) < 2 ** 64
@@ -579,7 +572,6 @@ Theorem e2e_deploy_correctness:
     (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\ supported_program_deploy tops /\
-    constructor_call_free tops /\
     deploy_typing_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     LENGTH (call_trace es) < 2 ** 64
@@ -611,7 +603,6 @@ val _ =
       (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
       compile_vyper fin policy tops = SOME (deploy_bc,runtime_bc) /\
       supported_program tops /\ supported_program_deploy tops /\
-      constructor_call_free tops /\
       deploy_typing_ok tops am tx /\
       deploy_state_rel tops deploy_bc am tx es /\
       LENGTH (call_trace es) < 2 ** 64 ==>

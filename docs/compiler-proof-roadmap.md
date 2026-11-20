@@ -67,8 +67,8 @@ caller for one. S2/S6 produce shape. L5 consumes S5 memory; layout or empty
 entry memory does not manufacture memory safety.
 
 **Off the runtime call path:** `venomToAsmProps.gen_fn_simulation` is separately
-ADMITTED (4.2); meaningful `e2eDeployCorrectness.e2e_deploy_correctness` is separately
-ADMITTED (6 item 7), not the old proved `T` placeholder. Current top/generic
+ADMITTED (4.2). The separate deployment theorem
+`e2eDeployCorrectness.e2e_deploy_correctness` is proved (6 item 7). Current top/generic
 logical closures contain neither, nor any retired API.
 
 **Named inventory, not forced plan arithmetic:** TASK056's source ledger is
@@ -203,8 +203,10 @@ The identity case composes the stage bounds S1b
 `e2e_deploy_gas_sufficient` uses the proved S1b-d `deploy_unit_run_bounded`,
 the same S6b, and the proved S7g-d `deploy_frame_gas_sufficient`. Its OutOfGas
 conclusion allows oversized deposited code or a reached `RETURNDATACOPY`;
-the per-finalizer case theorems give the stronger code-size-only alternative.
-Both assembly-optimizer cases have proofs that inherit upstream admissions.
+its per-finalizer cases (`e2e_deploy_gas_sufficient_identity`,
+`e2e_deploy_gas_sufficient_asm_opt`) allow the same two alternatives.
+No admitted theorem lies under either companion, assembly-optimizer cases
+included.
 
 On success the result relates `tx_return_bytes`, accounts after EVM pending
 deletions and transient storage modulo dead target storage, ordered concrete logs
@@ -256,8 +258,8 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D24 | Reserved-label exclusions | `reserved_label`, `unit_shape_ok`, supported internal-name rules; S6 must produce shape, not arbitrary label-map assumptions. | 3 |
 | D25 | Exact External call/count/binding; no fallback/defaults | `valid_vyper_call` implemented via real lookup; no general producer. Fallback invocation remains deferred. | 7 |
 | D26 | Initial and outcome storage validity | `source_storage_ok` + `call_outcomes_ok` use actual context/storage invariants. Account/code guard alone is insufficient; no producer from arbitrary EVM callees. | 7 |
-| D27 | Preserve/re-prove existing true claims | Completed retirement ledger preserves proof text/Git identities and four structural APIs. **Clarification:** D30's unused false claims retire without same-name replacements; meaningful deployment is a new admission, not a proof upgrade of old T. | every proof owner |
-| D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` ADMITTED; **implementation boundary refinement:** `constructor_call_free`, canonical args, actual pre-constant deployment readiness, uninstalled source target, and empty target account in `es.originalAccounts`. The precompile builtins are excluded too, so the constructor, which runs with the frame's outcome list, takes no outcome from it. | 6 item7 |
+| D27 | Preserve/re-prove existing true claims | Completed retirement ledger preserves proof text/Git identities and four structural APIs. **Clarification:** D30's unused false claims retire without same-name replacements. The creation-frame theorem was introduced as a separate statement and has since been proved. | every proof owner |
+| D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` is proved for canonical args, actual pre-constant deployment readiness, an uninstalled source target and an empty target account in `es.originalAccounts`. Constructors may make supported calls and take outcomes from their creation frame's trace. | 6 item7 |
 | D29 | Retire unused codegen_fn_correct; frame-aware gen_fn_simulation | Actual entry/IntRet/return relations and concrete maps; separate ADMITTED off-path target. This intentionally differs from old roadmap “restate codegen_fn_correct”. | 4.2 |
 | D30 | Fresh output labels proved; unused false local claims retired | `fresh_label_output_inj` / output-state `fresh_label_produces_external` proved. Assign/zero-pad/generate-runtime correctness claims retired with provenance, not rewritten under the same names; Assign belongs to statement induction, runtime to S1. | 6 |
 | D31 | Do not claim call_state_rel satisfiable in Milestone1 | No general producer or satisfiability theorem; focused checks are not a compiled-program witness. Top-level transaction construction is explicitly future work. | 7 |
@@ -310,7 +312,7 @@ L6/L7/L8 use one concrete `entry_venom_state`. L5 still consumes memory.
 The 2026-09-29 identity-finalizer decision is implemented: `K SOME`, with
 `finalize_codegen_identity`, not the unused/insufficient `finalizer_correct`
 that only asserted target safety and never behavior preservation. Meaningful
-single-frame deployment replaces the old T placeholder, but is ADMITTED.
+single-frame deployment is covered by `e2e_deploy_correctness`.
 
 ### 1.6 Inventory cleanup
 
@@ -660,31 +662,27 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    their data from pure results. `raw_call` and
    `raw_create` are excluded, not future missing cases of S1. Wire conversion
    proofs into the actual lowering rollup without inventing gas-number reads.
-7. **H6-deploy / owner Milestone 6 item7:** prove actual separately ADMITTED
-   `e2eDeployCorrectness.e2e_deploy_correctness` using
+7. **H6-deploy / owner Milestone 6 item7:**
+   `e2eDeployCorrectness.e2e_deploy_correctness` is proved using
    [e2eDeployDefs](../lowering/e2eDeployDefsScript.sml): `constructor_args_encode`,
-   `constructor_call_free`, `deploy_typing_ok`, `deploy_storage_ok`,
-   `deploy_state_rel`, `deploy_result_rel`. Constructor is source-Call-free,
-   including internal Call/Send/nested reasons, and free of the precompile
-   builtins (sha256/ecrecover/ecadd/ecmul), so it takes no outcome from the
-   frame's outcome list it runs with.
-   Existing [e2eDeployChecks](../lowering/e2e/e2eDeployChecksScript.sml)
-   `constructor_call_exclusion` is a named negative boundary check;
-   `constructor_precompile_builtin_excluded` checks SHA256 excluded, Keccak256 not.
-   Neither proves constructor/deployment simulation.
+   `deploy_typing_ok`, `deploy_storage_ok`, `deploy_state_rel`,
+   `deploy_result_rel`. Constructors may make supported external calls,
+   including the computed precompile builtins (sha256, ecrecover, ecadd and
+   ecmul). The source run uses the creation frame's call outcomes.
 
    Inputs are canonical tuple ABI argument bytes (no selector), actual checked
    deployment/runtime artifacts and **pre-constant deployment readiness**, an
    uninstalled source target, an empty target account in `es.originalAccounts`,
    and exactly one fresh nonstatic Code frame with
    `deploy_bc ++ args_bytes`, empty calldata/memory and live transfer (that the
-   runtime has no 0xEF prefix is proved, `compile_vyper_runtime_not_ef`). Prove constructor CODECOPY/ABI/body, epilogue, runtime embedding
-   and creation completion: returned **and installed** `runtime_bc ++ section`
-   satisfying `immutables_section_rel`, other accounts equal, target modulo code
-   and dead storage, transient storage
-   modulo dead target storage, and ordered logs;
-   explicit failure/resource/exemption cases. Do not require runtime readiness
-   for an undeployed target or claim the old T placeholder was this proof.
+   runtime has no 0xEF prefix is proved, `compile_vyper_runtime_not_ef`).
+   The frame's call trace has fewer than 2⁶⁴ entries. The assembly-optimizer
+   case requires `~program_reads_self_code tops`.
+   Successful installation returns and deposits `runtime_bc ++ section`
+   satisfying `immutables_section_rel`. The result relation compares accounts
+   and transient storage at the run's storage horizon, ordered logs and call
+   requests. The theorem includes a resource-exhaustion alternative. The result
+   relation handles failure and source exemptions.
    Nested creation frames and general runtime immutables remain generalizations.
 
 ## Milestone 7: Full theorem

@@ -22,28 +22,6 @@ Proof
   simp[exprs_case_def, expr_sim_case_def, expr_vv_case_def]
 QED
 
-Theorem layout_narrow_not_supported_return:
-  ~supported_return_type tops layout_narrow
-Proof
-  EVAL_TAC
-QED
-
-Theorem layout_narrow_header_excluded:
-  ~supported_declaration_header tops
-    (FunctionDecl Internal mut nr rr name args dflts layout_narrow (stmts:stmt list))
-Proof
-  simp[supported_declaration_header_def, supported_function_return_def,
-       layout_narrow_not_supported_return]
-QED
-
-Theorem layout_narrow_declaration_excluded:
-  supported_program tops ==>
-  ~MEM (FunctionDecl Internal mut nr rr name args dflts layout_narrow (stmts:stmt list)) tops
-Proof
-  simp[supported_program_def, supported_declaration_headers_def,
-       listTheory.EVERY_MEM] >> metis_tac[layout_narrow_header_excluded]
-QED
-
 Theorem layout_body_pre_contract:
   expr_body_pre ce cx env layout_abi es <=>
     expr_sim_inv ce cx env es /\ well_typed_expr env layout_abi /\
@@ -60,5 +38,6 @@ Theorem layout_body_pre_contract:
 Proof
   simp[expr_body_pre_def, layout_abi_def, layout_call_def,
        int_calls_expr_def, supportedExprTraverseTheory.supported_expr_exists_def,
+       supportedExprTraverseTheory.call_operands_effect_root_def,
        const_name_root_def]
 QED

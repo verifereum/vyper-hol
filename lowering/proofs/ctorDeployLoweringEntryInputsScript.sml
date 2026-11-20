@@ -166,7 +166,7 @@ Theorem deploy_ctor_decoder_inputs:
  exts ints fb rr fargs ce_pack pos_args imm_opt ce0 initial.
  deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
  deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es) /\
+ gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\

@@ -46,7 +46,8 @@ Theorem prefix_complete_array_index_pair:
   k + unit_alloca_budget ctx < dimword (:256) /\
   D <= d /\ d+32 <= D+N /\ mload d s = n2w (LENGTH vs) /\
   st.cs_next_var < limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME
     (mk_inst st.cs_next_id ALLOCA [Lit 32w] [iv]) /\
@@ -87,8 +88,6 @@ Proof
     (drule ctor_actual_index_insts >> drule abi_decode_index_init_shape >> simp[]) >>
   `run_inst_seq [mk_inst st.cs_next_id ALLOCA [Lit 32w] [iv];
     mk_inst (st.cs_next_id+1) MSTORE [Var iv;Lit 0w] []] s = OK t` by metis_tac[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
-    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp` by simp[] >>
   drule_all (Q.INST [`fn` |-> `func`] prefix_loop_index_slot_run) >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`Ddead`] strip_assume_tac) >>
   qexistsl [`t`,`p`,`H`,`qt`] >> simp[] >> metis_tac[]
@@ -174,7 +173,7 @@ Theorem prefix_complete_array_guard_entry_mode_exact:
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   fn_has_code st st' func /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (checked ==> sb < dimword (:256) /\ sb+32 <= LENGTH s.vs_data_section /\
     alloca_history func s) ==>
   ?t H qt.
@@ -253,7 +252,6 @@ Proof
      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
         i.inst_opcode <> GAS) (emitted_insts st st')` by
        simp[mk_inst_def, is_terminator_def] >>
-     `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
      `inst_seq_ptr D lo ctx func PG G tn (emitted_insts st st') s H qt` by
        (mp_tac (Q.INST [`iid` |-> `st.cs_next_id`, `cnt` |-> `n`, `limit` |-> `maxn`,
           `fn` |-> `func`, `a` |-> `n2w sb`, `ys` |-> `[]`, `G'` |-> `H`, `tn'` |-> `qt`]
@@ -359,7 +357,7 @@ Theorem prefix_complete_array_header_entry_mode_exact:
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   fn_has_code st st' func /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (checked ==> w2n a + 32 <= LENGTH s.vs_data_section /\
     d+32 <= s.vs_alloca_next /\ alloca_history func s) ==>
   ?t H qt.
@@ -514,7 +512,8 @@ Theorem prefix_complete_array_index_entry_mode:
   k + unit_alloca_budget ctx < dimword (:256) /\
   D <= d /\ d+32 <= D+N /\ mload d s = n2w (LENGTH vs) /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   fn_has_code st st' func /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   (checked ==> fn_inst_ids_distinct func /\ alloca_history func s) ==>
@@ -787,6 +786,7 @@ Proof
    header_st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
   `checked ==> sb < dimword (:256) /\ sb+32 <= LENGTH initial.vs_data_section /\
     alloca_history func initial` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all prefix_complete_array_guard_entry_mode_exact >>
   disch_then (qspecl_then [`PG`,`G`,`Ddead`] strip_assume_tac) >>
   rename1 `abi_decode_sim ctx func initial guard` >>
@@ -806,6 +806,7 @@ Proof
   `checked ==> w2n (n2w sb : bytes32) + 32 <= LENGTH guard.vs_data_section /\
     d+32 <= guard.vs_alloca_next /\ alloca_history func guard` by
     (fs[abi_decoder_address_frame_def,w2n_n2w] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp guard` by simp[] >>
   drule_all prefix_complete_array_header_entry_mode_exact >>
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
   `t.vs_allocas = initial.vs_allocas /\
@@ -817,6 +818,8 @@ Proof
     (fs[abi_decoder_address_frame_def,abi_decode_load_def,abi_decode_source_def]) >>
   `mload d t = n2w (LENGTH vs)` by metis_tac[valueEncodingPropsTheory.mem_word_at_eq_mload] >>
   `checked ==> fn_inst_ids_distinct func /\ alloca_history func t` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+    t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp` by simp[] >>
   drule_all prefix_complete_array_index_entry_mode >>
   disch_then (qspecl_then [`tv`,`qt`,`outsz`,`PG`,`H`,`Ddead`] strip_assume_tac) >>
   `!x. abi_decoder_older_vars st.cs_next_var x ==>

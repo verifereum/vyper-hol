@@ -35,9 +35,8 @@ bounds where those types are supported. Typing and allocation are separate.
 ### `supportedDeclsTheory`
 
 - `supported_declaration_header tops top`, `supported_declaration_headers tops`:
-  Internal function arguments use supported value types, and only Internal
-  functions may have defaults. External functions may return NoneT or a
-  supported place type. Other returns use `supported_return_type`.
+  Only Internal functions may have defaults. External functions may return
+  `NoneT` or a supported place type. Deploy return types follow `supported_return_type`.
   Storage and transient variables require explicit slots and supported
   storage types. Hash maps require slots and supported keys and values,
   including nested maps. Private immutable declarations use supported

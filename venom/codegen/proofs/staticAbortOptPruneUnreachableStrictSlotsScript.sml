@@ -1,10 +1,11 @@
 Theory staticAbortOptPruneUnreachableStrictSlots
 Ancestors
+  codegenSymRel
   staticAbortOptPruneUnreachableLayout staticAbortOptPruneUnreachableZeroOrigin
   asmSplice asmSymPc asmSymSem asmOptimizer asmWf
   arithmetic finite_map list option pair pred_set words
 
-Theorem prune_one_strict_slots:
+Theorem prune_one_strict_slots_mode:
   !pre t x tail V e height need tag boolean cc env n s ss p q d r Z tagQ Hit.
   p = pre ++ [t;x] ++ tail ==> q = pre ++ [t] ++ tail ==>
   d = LENGTH pre+1 ==> r = (\i. if i<d then i else i-1) ==>
@@ -22,7 +23,7 @@ Theorem prune_one_strict_slots:
       ?dest. Hit p l dest)) /\
   (!k l i. tag e k=SOME(l,i) ==> k<LENGTH ss.sym_stack /\ EL k ss.sym_stack=Lab l 0) /\
   s.as_pc=0 /\
-  sym_steps q env n (sym_init s) = SymOK (sym_with_pc (r ss.sym_base.as_pc) ss) /\
+  sym_steps_mode allow_own q env own n (sym_init s) = SymOK (sym_with_pc (r ss.sym_base.as_pc) ss) /\
   (!v k l. v IN V /\ tag v k=SOME(l,d) ==> ?j. tag e j=SOME(l,d)) ==>
   !v. v IN V ==>
     (need v ==> cc.cc_static) /\
@@ -79,10 +80,39 @@ Proof
         (simp[sym_with_pc_def] >> metis_tac[EL_MEM]) >>
       `?j. Z l j` suffices_by
         (disch_then (assume_tac o SELECT_RULE) >> simp[]) >>
-      drule_all stopped_lab_zero_producer >>
+      drule_all stopped_lab_zero_producer_mode >>
       disch_then (qx_choose_then `m` (qx_choose_then `u` strip_assume_tac)) >>
       qexists `u.sym_base.as_pc` >> simp[Abbr `Z`]) >>
   qpat_x_assum `!i. i<>d /\ i<LENGTH p ==> _`
     (drule_all_then strip_assume_tac) >>
   simp[Abbr `Z`]
+QED
+
+Theorem prune_one_strict_slots:
+  !pre t x tail V e height need tag boolean cc env n s ss p q d r Z tagQ Hit.
+  p = pre ++ [t;x] ++ tail ==> q = pre ++ [t] ++ tail ==>
+  d = LENGTH pre+1 ==> r = (\i. if i<d then i else i-1) ==>
+  Z = (\l j. j<LENGTH q /\ (EL j q=AsmPushLabel l \/ EL j q=AsmPushOfst l 0)) ==>
+  tagQ = (\v k. OPTION_MAP (\(l,i). (l,if i=d then (@j. Z l j) else r i)) (tag v k)) ==>
+  Hit = (\prog l j. ?off.
+    FLOOKUP (SND(compute_label_offsets prog)) l = SOME off /\
+    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc prog) off = SOME j) ==>
+  asm_terminal_op t /\ ~asm_reachable_marker x /\ asm_static_wf p /\
+  (!v:num#num. v IN V ==>
+    (need v ==> cc.cc_static) /\
+    (!k. boolean v k ==> k<height v /\ tag v k=NONE) /\
+    (!k l i. tag v k=SOME(l,i) ==> k<height v /\ i<LENGTH p /\
+      (EL i p=AsmPushLabel l \/ EL i p=AsmPushOfst l 0) /\
+      ?dest. Hit p l dest)) /\
+  (!k l i. tag e k=SOME(l,i) ==> k<LENGTH ss.sym_stack /\ EL k ss.sym_stack=Lab l 0) /\
+  s.as_pc=0 /\
+  sym_steps q env n (sym_init s) = SymOK (sym_with_pc (r ss.sym_base.as_pc) ss) /\
+  (!v k l. v IN V /\ tag v k=SOME(l,d) ==> ?j. tag e j=SOME(l,d)) ==>
+  !v. v IN V ==>
+    (need v ==> cc.cc_static) /\
+    (!k. boolean v k ==> k<height v /\ tagQ v k=NONE) /\
+    (!k l j. tagQ v k=SOME(l,j) ==> k<height v /\ Z l j /\ ?dest. Hit q l dest)
+Proof
+  MATCH_ACCEPT_TAC (Q.INST [`allow_own` |-> `F`, `own` |-> `[]`] prune_one_strict_slots_mode
+    |> PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES])
 QED

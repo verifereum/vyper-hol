@@ -35,7 +35,7 @@ Theorem prefix_member_setup_complete_shift:
   abi_decoder_operand_live st.cs_next_var (Var dst) /\
   middle.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (b,sz) /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  FLOOKUP G dst = SOME (b,sz) /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lo <= s.vs_alloca_next /\ ~s.vs_halted /\
   fn_has_code st middle fn /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
@@ -154,7 +154,7 @@ Theorem prefix_canonical_member_setup_complete_shift:
   abi_decoder_operand_live st.cs_next_var (Var dst) /\
   middle.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (b,sz) /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  FLOOKUP G dst = SOME (b,sz) /\ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lo <= s.vs_alloca_next /\ ~s.vs_halted /\
   fn_has_code st middle fn /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\

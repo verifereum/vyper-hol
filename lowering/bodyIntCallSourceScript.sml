@@ -11,10 +11,7 @@ Theorem supported_runtime_callable:
   (?rr. MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops) /\
   supported_pure_exprs tops dflts /\
   EVERY (supported_default_expression tops) dflts /\
-  EVERY (supported_value_type tops o SND) args /\
-  supported_return_type tops ret /\
-  supported_function_body tops Internal args ss /\
-  supported_return_layouts ret ss
+  supported_function_body tops Internal args ss
 Proof
   strip_tac >> drule lookup_callable_function_F_SOME_MEM >> strip_tac >>
   drule_all supported_program_declaration >>
@@ -32,10 +29,7 @@ Theorem supported_internal_callable:
   (?rr. MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops) /\
   supported_pure_exprs tops dflts /\
   EVERY (supported_default_expression tops) dflts /\
-  EVERY (supported_value_type tops o SND) args /\
-  supported_return_type tops ret /\
-  supported_function_body tops Internal args ss /\
-  supported_return_layouts ret ss
+  supported_function_body tops Internal args ss
 Proof
   strip_tac >>
   gvs[optionTheory.IS_SOME_EXISTS] >>
@@ -113,10 +107,7 @@ Theorem body_intcall_source_selection:
     (?rr. MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops) /\
     supported_pure_exprs tops dflts /\
     EVERY (supported_default_expression tops) dflts /\
-    EVERY (supported_value_type tops o SND) args /\
-    supported_return_type tops ret /\
-    supported_function_body tops Internal args ss /\
-    supported_return_layouts ret ss
+    supported_function_body tops Internal args ss
 Proof
   strip_tac >>
   drule expr_body_pre_intcall_main >> strip_tac >> gvs[] >>

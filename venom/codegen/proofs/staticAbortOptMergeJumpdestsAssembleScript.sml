@@ -4,6 +4,7 @@ Ancestors
   staticAbortOptMergeJumpdestsLayout staticAbortOptMergeJumpdestsArms
   staticAbortOptMergeJumpdestsLift staticAbortOptPruneUnreachableZeroOrigin
   staticAbortProtectedActualPrefix staticAbortOptMergeIszeroBranchPackage staticAbortRoleStep
+  asmSymOwnCode codegenSymRel
   asmOptMergeJumpdests asmOptimizer asmSymBridge asmSymSem asmSem asmIR
   asmToBytecodeProofs asmDataEnv staticAbortStraight rat words finite_map pred_set
   indexedLists list rich_list arithmetic alist option pair
@@ -15,8 +16,8 @@ fun expand_lets th = CONV_RULE expand_names th
 fun bind_names names =
   map_every (fn name => gen_tac >> disch_then (mk_asm name)) names
 
-Theorem rename_synchronized_root[local]:
-  rn_rel x y e f /\ asm_sym_rel p env cut e /\
+Theorem rename_synchronized_root_mode[local]:
+  rn_rel x y e f /\ (if allow_own then asm_sym_rel_own (lo_reloc p installed) p env own else asm_sym_rel p env) cut e /\
   (!k l o'. tag k = SOME(l,o') ==> k < LENGTH e.sym_stack /\ EL k e.sym_stack = Lab l 0) /\
   (!k. boolean k ==> k < LENGTH e.sym_stack /\
     (EL k e.sym_stack = Val 0w \/ EL k e.sym_stack = Val 1w)) ==>
@@ -28,10 +29,9 @@ Theorem rename_synchronized_root[local]:
     (EL k f.sym_stack = Val 0w \/ EL k f.sym_stack = Val 1w))
 Proof
   strip_tac >>
-  drule_then strip_assume_tac asm_sym_rel_pc >>
-  qpat_assum `asm_sym_rel p env cut e`
-    (CONJUNCTS_THEN2 kall_tac (CONJUNCTS_THEN2 strip_assume_tac kall_tac) o
-      REWRITE_RULE [asm_sym_rel_def]) >>
+  qpat_assum `(if allow_own then _ else asm_sym_rel p env) cut e` (fn th =>
+    assume_tac (MATCH_MP protected_cut_relation_pc th) >>
+    assume_tac (MATCH_MP protected_cut_relation_context th)) >>
   qpat_x_assum `rn_rel x y e f` (map_every assume_tac o CONJUNCTS o REWRITE_RULE[rn_rel_def]) >>
   qpat_x_assum `LIST_REL _ _ _` (CONJUNCTS_THEN2 assume_tac (mk_asm "elts") o REWRITE_RULE[LIST_REL_EL_EQN]) >>
   gns[] >>
@@ -46,7 +46,7 @@ QED
 
 (* Select a producer using the value in the actual stopped stack, not the
    old origin or the numeric offset.  The projection may drop a data label. *)
-Theorem rename_root_choices[local]:
+Theorem rename_root_choices_mode[local]:
   !C. C = (\l j. ?off. FLOOKUP (SND (compute_label_offsets q)) l = SOME off /\
     off < dimword(:256) /\ FLOOKUP (build_offset_to_pc q) off = SOME j) ==>
   !Prod. Prod = (\i a. i < LENGTH q /\
@@ -56,7 +56,7 @@ Theorem rename_root_choices[local]:
   !E. E = (\u. case u of NONE => NONE
     | SOME i => if ?a j. Prod i a /\ C a j
                 then SOME((@a. Prod i a),i) else NONE) ==>
-  sym_steps q env n (sym_init s) = SymOK f /\ LENGTH f.sym_stack = h /\
+  sym_steps_mode allow_own q env own n (sym_init s) = SymOK f /\ LENGTH f.sym_stack = h /\
   (!k l o'. tag k = SOME(l,o') ==> k < LENGTH f.sym_stack /\
      ?a. EL k f.sym_stack = Lab a 0 /\ (a = l \/ (l = x /\ a = y))) ==>
   ?D. LENGTH D = h /\ (!k. k < h ==> G (tag k) (EL k D)) /\
@@ -70,7 +70,7 @@ Proof
     (rpt gen_tac >> disch_tac >>
      qpat_assum `!k l o'. tag k = _ ==> _` (drule_then strip_assume_tac) >>
      `MEM (Lab a 0) f.sym_stack` by metis_tac[EL_MEM] >>
-     drule_all stopped_lab_zero_producer >> strip_tac >>
+     drule_all stopped_lab_zero_producer_mode >> strip_tac >>
      qexistsl [`u.sym_base.as_pc`,`a`] >> simp[markerLib.L "prod"]) >>
   `!i a b. Prod i a /\ Prod i b ==> a = b` by
     (simp[markerLib.L "prod"] >> metis_tac[asm_inst_11, asm_inst_distinct]) >>
@@ -98,7 +98,7 @@ Proof
   qpat_x_assum `E (Choice k) = _` mp_tac >> simp[markerLib.L "expose"]
 QED
 
-Theorem rename_protected_endpoint[local]:
+Theorem rename_protected_endpoint_mode[local]:
   !Shape. Shape = (\p cc req pc height need tag boolean (i:num#num) (t:asm_state).
     t.as_pc = pc i /\ LENGTH t.as_stack = height i /\
     t.as_call_ctx = cc /\ t.as_requests = req /\
@@ -182,13 +182,13 @@ Theorem rename_protected_endpoint[local]:
   !q. q = MAP (rename_push_label x y) p ==>
   asm_static_wf p /\ p = pre ++ [AsmLabel x; next; third] ++ tail /\
   ((next = AsmLabel y /\ y <> x) \/ (next = AsmPushLabel y /\ third = AsmOp "JUMP")) /\
-  sym_steps p env n (sym_init s) = SymOK e /\
+  sym_steps_mode allow_own p env own n (sym_init s) = SymOK e /\
   Open p cc req V {} rank pc height need tag boolean edge /\
-  w IN V /\ Shape p cc req pc height need tag boolean w cut /\ asm_sym_rel p env cut e /\
+  w IN V /\ Shape p cc req pc height need tag boolean w cut /\ (if allow_own then asm_sym_rel_own (lo_reloc p installed) p env own else asm_sym_rel p env) cut e /\
   (!k l o'. tag w k = SOME(l,o') ==> k < LENGTH e.sym_stack /\ EL k e.sym_stack = Lab l 0) /\
   (!k. boolean w k ==> k < LENGTH e.sym_stack /\
      (EL k e.sym_stack = Val 0w \/ EL k e.sym_stack = Val 1w)) ==>
-  ?m z f. sym_steps q env m (sym_init s) = SymOK f /\ z IN V /\
+  ?m z f. sym_steps_mode allow_own q env own m (sym_init s) = SymOK f /\ z IN V /\
     f.sym_base.as_pc = pc z /\ LENGTH f.sym_stack = height z /\
     f.sym_base.as_call_ctx = cc /\ f.sym_base.as_requests = req /\
     (!k l o'. tag z k = SOME(l,o') ==> k < LENGTH f.sym_stack /\
@@ -204,7 +204,7 @@ Proof
        PURE_REWRITE_RULE [REWRITE_RULE [markerTheory.label_def] sh])) >>
   `rn_rel x y (sym_init s) (sym_init s)` by
     simp[rn_rel_def, sym_init_def, ml_rel_def, mem_blocks_ok_def] >>
-  drule_all (expand_lets merge_rename_stopped_replay) >>
+  drule_all (expand_lets merge_rename_stopped_replay_mode) >>
   asm "mapped" (pure_rewrite_tac o single o GSYM o REWRITE_RULE [markerTheory.label_def]) >>
   disch_then (DISJ_CASES_THEN2
     (qx_choose_then `m` (qx_choose_then `f` strip_assume_tac))
@@ -215,12 +215,12 @@ Proof
   suspend "short"
 QED
 
-Resume rename_protected_endpoint[sync]:
-  drule_all rename_synchronized_root >> disch_then (map_every assume_tac o CONJUNCTS) >>
+Resume rename_protected_endpoint_mode[sync]:
+  drule_all rename_synchronized_root_mode >> disch_then (map_every assume_tac o CONJUNCTS) >>
   qexistsl [`m`,`w`,`f`] >> simp[]
 QED
 
-Resume rename_protected_endpoint[short]:
+Resume rename_protected_endpoint_mode[short]:
   `!l j.
     ((?off. FLOOKUP (SND(compute_label_offsets p)) l = SOME off /\
             off < dimword(:256) /\ FLOOKUP (build_offset_to_pc p) off = SOME j) <=>
@@ -241,21 +241,22 @@ Resume rename_protected_endpoint[short]:
          qpat_assum `!l j. (_ <=> INDEX_OF _ p = _) /\ _`
            (assume_tac o PURE_REWRITE_RULE eqs)
       end)))) >>
-  mp_tac (Q.INST [`a` |-> `u`, `b` |-> `v`] (expand_lets merge_rename_short_root)) >>
+  mp_tac (Q.INST [`a` |-> `u`, `b` |-> `v`] (expand_lets merge_rename_short_root_mode)) >>
   impl_tac >- (rpt (FIRST [first_assum ACCEPT_TAC, conj_tac])) >>
   asm "mapped" (pure_rewrite_tac o single o GSYM o REWRITE_RULE [markerTheory.label_def]) >>
   disch_then (qx_choose_then `j` (qx_choose_then `z` (qx_choose_then `f`
      (map_every assume_tac o CONJUNCTS)))) >>
   qexistsl [`m+1`,`z`,`f`] >>
-  once_rewrite_tac[codegenSymRelTheory.sym_steps_add] >> simp[]
+  once_rewrite_tac[codegenSymRelTheory.sym_steps_mode_add] >> simp[]
 QED
 
-Finalise rename_protected_endpoint
+Finalise rename_protected_endpoint_mode
 
-Theorem rename_actual_root[local]:
+Theorem rename_actual_root_mode[local]:
   !lo. lo = SND (compute_label_offsets q) ==>
   !otp. otp = build_offset_to_pc q ==>
-  asm_sym_rel q env t f /\ t.as_pc = i /\ LENGTH t.as_stack = h /\
+  (if allow_own then asm_sym_rel_own (lo_reloc q installed) q env own else asm_sym_rel q plain_env) t f /\
+  (allow_own ==> asm_static_wf q) /\ t.as_pc = i /\ LENGTH t.as_stack = h /\
   t.as_call_ctx = cc /\ t.as_requests = req /\ (need ==> cc.cc_static) /\
   (!k l orig. tag k = SOME(l,orig) ==>
     k < h /\ orig < LENGTH q /\
@@ -274,18 +275,23 @@ Theorem rename_actual_root[local]:
   (!k. boolean k ==> k < h /\ (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))
 Proof
   CONV_TAC expand_names >> strip_tac >> simp[] >>
-  qpat_x_assum `asm_sym_rel q env t f`
-    (CONJUNCTS_THEN2 (CONJUNCTS_THEN2 assume_tac (mk_asm "slots") o
-                     REWRITE_RULE[LIST_REL_EL_EQN]) kall_tac o REWRITE_RULE[asm_sym_rel_def]) >>
+  drule_then strip_assume_tac protected_cut_relation_pc >>
+  qpat_x_assum `(if allow_own then _ else asm_sym_rel q plain_env) t f`
+    (mk_asm "slots" o MATCH_MP protected_cut_relation_slots) >>
   conj_tac
   >- (rpt gen_tac >> disch_tac >>
       qpat_assum `!k l orig. _ ==> k < h /\ _` (drule_then strip_assume_tac) >>
       qpat_assum `!k l orig. _ ==> k < LENGTH f.sym_stack /\ _` (drule_then strip_assume_tac) >>
-      asm "slots" (qspec_then `k` mp_tac) >> simp[sval_conc_def] >>
-      metis_tac[]) >>
+      `EL k t.as_stack = n2w off` by
+        (asm "slots" (qspec_then `k` (drule_then (mp_tac o cj 2))) >>
+         disch_then (qspecl_then [`l`,`off`,`j`] mp_tac) >>
+         (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+         disch_then ACCEPT_TAC) >>
+      simp[] >> metis_tac[]) >>
   rpt gen_tac >> disch_tac >>
   first_x_assum (drule_then strip_assume_tac) >>
-  asm "slots" (qspec_then `k` mp_tac) >> simp[sval_conc_def]
+  asm "slots" (qspec_then `k` (drule_then (mp_tac o cj 1))) >> simp[] >> fs[]
+
 QED
 
 (* The arm table specifies the image of the edge relation.  Use uniqueness
@@ -417,6 +423,503 @@ fun unfold_named labels = named_equations labels
 
 fun unfold_fact labels pat ttac = named_equations labels
   (fn eqs => qpat_assum pat (ttac o expand_lets o PURE_REWRITE_RULE eqs))
+
+Theorem merge_rename_covered_cut_mode:
+  !C. C = (\r l j. ?off. FLOOKUP (SND (compute_label_offsets r)) l = SOME off /\
+    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc r) off = SOME j) ==>
+  !Target. Target = (\r tags j. ?l orig off. tags 0 = SOME(l,orig) /\
+    FLOOKUP (SND (compute_label_offsets r)) l = SOME off /\
+    off < dimword(:256) /\ FLOOKUP (build_offset_to_pc r) off = SOME j) ==>
+  !Shape. Shape = (\r cc req pc height need tag boolean (v:num#num) (t:asm_state).
+    t.as_pc = pc v /\ LENGTH t.as_stack = height v /\
+    t.as_call_ctx = cc /\ t.as_requests = req /\ (need v ==> t.as_call_ctx.cc_static) /\
+    (!k l orig. tag v k = SOME(l,orig) ==>
+       k < height v /\ orig < LENGTH r /\
+       (EL orig r = AsmPushLabel l \/ (?d. EL orig r = AsmPushOfst l d) \/ EL orig r = AsmDataLabel l) /\
+       ?off j. FLOOKUP (SND (compute_label_offsets r)) l = SOME off /\
+         off < dimword(:256) /\ FLOOKUP (build_offset_to_pc r) off = SOME j /\
+         EL k t.as_stack = (n2w off:bytes32)) /\
+    (!k. boolean v k ==> k < height v /\ (EL k t.as_stack = 0w \/ EL k t.as_stack = 1w))) ==>
+  !Flow. Flow = (\r pc height tag boolean (a:num#num) (b:num#num).
+    !hi. hi = height a ==>
+    !hj. hj = height b ==>
+    !ins. ins = EL (pc a) r ==>
+    !inherit. inherit = (\(src:num->num option) (fresh:num->(string#num)option) (bnew:num->bool).
+      (!k l orig. tag b k = SOME(l,orig) ==>
+        k<hj /\ (fresh k = SOME(l,orig) \/ ?j. src k = SOME j /\ j<hi /\ tag a j = SOME(l,orig))) /\
+      (!k. boolean b k ==> k<hj /\ (bnew k \/ ?j. src k = SOME j /\ j<hi /\ boolean a j))) ==>
+    case ins of
+      AsmLabel l => hj=hi /\ inherit (\k. SOME k) (\k. NONE) (\k. F)
+    | AsmPush bs => hj=hi+1 /\
+        inherit (\k. if k=0 then NONE else SOME(k-1)) (\k. NONE)
+          (\k. k=0 /\ !t u. asm_step (SND (compute_label_offsets r)) (build_offset_to_pc r)
+                                    (AsmPush bs) t = AsmOK u ==>
+                         EL 0 u.as_stack = 0w \/ EL 0 u.as_stack = 1w)
+    | AsmPushLabel l => hj=hi+1 /\ inherit (\k. if k=0 then NONE else SOME(k-1))
+                                         (\k. if k=0 then SOME(l,pc a) else NONE) (\k. F)
+    | AsmPushOfst l d => hj=hi+1 /\ inherit (\k. if k=0 then NONE else SOME(k-1))
+                                         (\k. if k=0 /\ d=0 then SOME(l,pc a) else NONE) (\k. F)
+    | AsmOp name =>
+        (case ALOOKUP dup_table name of
+           SOME n => n<hi /\ hj=hi+1 /\
+             inherit (\k. SOME(if k=0 then n else k-1)) (\k. NONE) (\k. F)
+         | NONE => case ALOOKUP swap_table name of
+             SOME n => 0<n /\ n<hi /\ hj=hi /\
+               inherit (\k. SOME(if k=0 then n else if k=n then 0 else k)) (\k. NONE) (\k. F)
+           | NONE =>
+               !n. n = asm_op_arity name ==>
+               !m. m = hj+asm_op_arity name-hi ==>
+               n<=hi /\ hj=m+(hi-n) /\ ((name="JUMP" \/ name="JUMPI") ==> m=0) /\
+               inherit (\k. if k<m then NONE else SOME(k-m+n)) (\k. NONE)
+                 (\k. k=0 /\ m=1 /\ asm_returns_zero_or_one ins /\
+                    !t u. LENGTH t.as_stack=hi /\
+                      asm_step (SND (compute_label_offsets r)) (build_offset_to_pc r) ins t = AsmOK u ==>
+                      EL 0 u.as_stack=0w \/ EL 0 u.as_stack=1w))
+    | _ => F) ==>
+  !EdgeOK. EdgeOK = (\r pc height tag boolean a b.
+    Flow r pc height tag boolean a b /\
+    (if EL (pc a) r = AsmOp "JUMP" then Target r (tag a) (pc b)
+     else if EL (pc a) r = AsmOp "JUMPI" then pc b = pc a+1 \/ Target r (tag a) (pc b)
+     else pc b = pc a+1)) ==>
+  !Slots. Slots = (\r cc h need tag boolean.
+    (need ==> cc.cc_static) /\ (!k. boolean k ==> k<h /\ tag k=NONE) /\
+    (!k l orig. tag k=SOME(l,orig) ==> k<h /\ orig<LENGTH r /\
+      (EL orig r=AsmPushLabel l \/ EL orig r=AsmPushOfst l 0) /\
+      ?j. C r l j)) ==>
+  !Dispatch. Dispatch = (\r cc i h tag (pc:num#num->num) height R.
+    !fall. fall = (\v. pc v=i+1) ==>
+    !arm. arm = (\P n. ?v. R v /\ P v /\ height v=n) ==>
+    !legal. legal = (\P n. !v. R v ==> P v /\ height v=n) ==>
+    !next. next = (\n. arm fall n /\ legal fall n) ==>
+    !clear. clear = (\n. !k. k<n ==> tag k=NONE) ==>
+    !stop. stop = (\n. n<=h /\ clear n /\ !v. ~R v) ==>
+    !dst. dst = (\v. Target r tag (pc v)) ==>
+    case EL i r of
+      AsmLabel l => next h
+    | AsmPush bs => next (h+1)
+    | AsmPushLabel l => IS_SOME (FLOOKUP (SND (compute_label_offsets r)) l) /\ next (h+1)
+    | AsmPushOfst l d => IS_SOME (FLOOKUP (SND (compute_label_offsets r)) l) /\ next (h+1)
+    | AsmOp name =>
+        if name="INVALID" then stop 0
+        else if name="REVERT" then stop 2
+        else if MEM name ["SSTORE";"TSTORE";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]
+             then cc.cc_static /\ stop (asm_op_arity name)
+        else (case ALOOKUP dup_table name of
+           SOME n => n<h /\ next (h+1)
+         | NONE => case ALOOKUP swap_table name of
+             SOME n => 0<n /\ n<h /\ next h
+           | NONE =>
+               if name="JUMP" then 1<=h /\ arm dst (h-1) /\ legal dst (h-1)
+               else if name="JUMPI" then 2<=h /\ tag 1=NONE /\
+                 arm fall (h-2) /\ arm dst (h-2) /\ legal (\v. fall v \/ dst v) (h-2)
+               else ?m. static_abort_straight name m /\ asm_op_arity name<=h /\
+                    clear (asm_op_arity name) /\ next (h-asm_op_arity name+m))
+    | _ => F) ==>
+  !Rows. Rows = (\r cc V X (rank:num#num->num) pc height need tag boolean edge.
+    (!v. v IN V ==> Slots r cc (height v) (need v) (tag v) (boolean v)) /\
+    (!a b. edge a b ==> a IN V DIFF X /\ b IN V /\ rank b<rank a /\
+      Flow r pc height tag boolean a b) /\
+    (!v. v IN V DIFF X ==> pc v<LENGTH r /\
+      Dispatch r cc (pc v) (height v) (tag v) pc height (edge v))) ==>
+  !Open. Open = (\r cc req V X (rank:num#num->num) pc height need tag boolean edge.
+    !S. S = Shape r cc req pc height need tag boolean ==>
+    FINITE V /\ X SUBSET V /\ (!v. v IN V ==> ?t. S v t) /\
+    (!v. v IN V DIFF X ==> pc v<LENGTH r) /\
+    (!a b. edge a b ==> a IN V DIFF X /\ b IN V /\ rank b<rank a /\
+      EdgeOK r pc height tag boolean a b) /\
+    (!v t. v IN V DIFF X /\ S v t ==>
+       (?u. (asm_steps (SND (compute_label_offsets r)) (build_offset_to_pc r) r 1 t = AsmRevert u \/
+             asm_steps (SND (compute_label_offsets r)) (build_offset_to_pc r) r 1 t = AsmFault u) /\
+             u.as_requests=req) \/
+       (?w u. edge v w /\ asm_steps (SND (compute_label_offsets r)) (build_offset_to_pc r) r 1 t = AsmOK u /\ S w u))) ==>
+  !Reach. Reach = (\(edge:(num#num)->(num#num)->bool) v w.
+    ?n (path:num->num#num). path 0=v /\ path n=w /\ !k. k<n ==> edge (path k) (path (SUC k))) ==>
+  !Root. Root = (\f tag boolean.
+    (!k l orig. tag k=SOME(l,orig) ==> k<LENGTH f.sym_stack /\ EL k f.sym_stack=Lab l 0) /\
+    (!k. boolean k ==> k<LENGTH f.sym_stack /\ (EL k f.sym_stack=Val 0w \/ EL k f.sym_stack=Val 1w))) ==>
+  !q. q = MAP (rename_push_label x y) p ==>
+  !env0. env0 = asm_data_env p0 (assemble p0 ++ data) ==>
+  asm_static_wf p0 /\ asm_static_wf p /\ FILTER is_data_inst p = FILTER is_data_inst p0 /\
+  s.as_pc=0 /\ s.as_code=assemble p0 ++ data /\
+  p = pre ++ [AsmLabel x; next; third] ++ tail /\
+  ((next = AsmLabel y /\ y <> x) \/ (next = AsmPushLabel y /\ third = AsmOp "JUMP")) /\
+  sym_steps_mode allow_own p env0 s.as_code n (sym_init s) = SymOK f /\
+  asm_steps (if allow_own then lo_reloc p p0 else SND (compute_label_offsets p))
+    (build_offset_to_pc p) p n (if allow_own then s else (s with as_code := assemble p ++ data)) = AsmOK cut /\
+  (if allow_own then asm_sym_rel_own (lo_reloc p p0) p (asm_data_env p0 s.as_code) s.as_code
+    else asm_sym_rel p (asm_data_env p (assemble p ++ data))) cut f /\
+  Open p cc req V {} rank pc height need tag boolean edge /\
+  Rows p cc V {} rank pc height need tag boolean edge /\
+  e IN V /\ (!v. v IN V ==> Reach edge e v) /\
+  Shape p cc req pc height need tag boolean e cut /\ Root f (tag e) (boolean e) /\
+  req <<= final_req ==>
+  asm_static_wf q /\ FILTER is_data_inst q = FILTER is_data_inst p0 /\
+  ?m g t W z N Pc H Nd Tg B R.
+    sym_steps_mode allow_own q env0 s.as_code m (sym_init s) = SymOK g /\
+    asm_steps (if allow_own then lo_reloc q p0 else SND (compute_label_offsets q))
+      (build_offset_to_pc q) q m (if allow_own then s else (s with as_code := assemble q ++ data)) = AsmOK t /\
+    (if allow_own then asm_sym_rel_own (lo_reloc q p0) q (asm_data_env p0 s.as_code) s.as_code
+     else asm_sym_rel q (asm_data_env q (assemble q ++ data))) t g /\
+    Open q cc req W {} N Pc H Nd Tg B R /\
+    Rows q cc W {} N Pc H Nd Tg B R /\
+    z IN W /\ (!v. v IN W ==> Reach R z v) /\
+    Shape q cc req Pc H Nd Tg B z t /\ Root g (Tg z) (B z) /\ req <<= final_req
+Proof
+  bind_names ["canon","tgt","shape","flow","edgeOK","slots","dispatch","rows","open",
+            "reach","root","mapped","env_init"] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `asm_static_wf q` by
+    (unfold_named ["mapped"] >> irule rename_site_wf >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     qexistsl [`next`,`pre`,`tail`,`third`] >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `FILTER is_data_inst q = FILTER is_data_inst p0` by
+    (unfold_named ["mapped"] >> rewrite_tac[rename_filter_data] >> first_assum ACCEPT_TAC) >>
+  (conj_tac >- first_assum ACCEPT_TAC) >> (conj_tac >- first_assum ACCEPT_TAC) >>
+  `(if allow_own then asm_sym_rel_own (lo_reloc p p0) p env0 s.as_code
+     else asm_sym_rel p env0) cut f` by
+    (unfold_named ["env_init"] >>
+     `asm_data_env p0 (assemble p0 ++ data) = asm_data_env p (assemble p ++ data)` by
+       (irule asm_data_env_agree >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     Cases_on `allow_own` >>
+     qpat_assum `(if _ then asm_sym_rel_own _ _ _ _ else asm_sym_rel p _) cut f` mp_tac >>
+     PURE_REWRITE_TAC [COND_CLAUSES] >>
+     qpat_assum `s.as_code = _` (pure_rewrite_tac o single) >>
+     asm_rewrite_tac[]) >>
+  suspend "prefix"
+QED
+
+Resume merge_rename_covered_cut_mode[prefix]:
+  unfold_fact ["root"] `Root f _ _` (map_every assume_tac o CONJUNCTS) >>
+  unfold_fact ["shape"] `Shape p cc req pc height need tag boolean e cut`
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [GSYM CONJ_ASSOC]) >>
+  mp_tac (Q.INST [`w` |-> `e`, `env` |-> `env0`, `own` |-> `s.as_code`, `installed` |-> `p0`]
+    (Q.INST [`e` |-> `f`] (expand_lets rename_protected_endpoint_mode))) >>
+  (impl_tac >-
+    (unfold_fact ["open","edgeOK","shape","flow","tgt"]
+       `Open p cc req V {} rank pc height need tag boolean edge`
+       (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [GSYM CONJ_ASSOC]) >>
+     pure_rewrite_tac [GSYM CONJ_ASSOC] >>
+     rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]))) >>
+  named_equations ["mapped"] (pure_rewrite_tac o map GSYM) >>
+  disch_then (qx_choose_then `m` (qx_choose_then `w` (qx_choose_then `g`
+    (map_every assume_tac o CONJUNCTS)))) >>
+  `sym_steps_mode allow_own q (asm_data_env p0 (assemble p0 ++ data)) s.as_code m (sym_init s) = SymOK g` by
+    unfold_fact ["env_init"] `sym_steps_mode allow_own q env0 s.as_code m _ = SymOK g` ACCEPT_TAC >>
+  drule_all (Q.INST [`p` |-> `p0`, `q` |-> `q`, `ss` |-> `g`, `n` |-> `m`] stopped_symbolic_prefix_mode) >>
+  disch_then (qx_choose_then `t` (map_every assume_tac o CONJUNCTS)) >>
+  qexistsl [`m`,`g`,`t`] >>
+  qpat_assum `sym_steps_mode allow_own q env0 s.as_code m _ = SymOK g` (pure_rewrite_tac o single) >>
+  qpat_assum `asm_steps _ _ q m _ = AsmOK t` (pure_rewrite_tac o single) >>
+  qpat_assum `(if allow_own then asm_sym_rel_own _ _ _ _ else asm_sym_rel q _) t g` (rewrite_tac o single) >>
+  suspend "arms"
+QED
+
+Resume merge_rename_covered_cut_mode[arms]:
+  `!l j. (C p l j <=> INDEX_OF (AsmLabel l) p = SOME j) /\
+         (C q l j <=> INDEX_OF (AsmLabel l) p = SOME j)` by
+    (qspecl_then [`p`,`x`,`y`] mp_tac (expand_lets merge_rename_named_layout) >>
+     (impl_tac >-
+       ((reverse conj_tac >- first_assum ACCEPT_TAC) >>
+        qpat_x_assum `next = _ /\ _ \/ _` strip_assume_tac
+        >- (disj1_tac >> qexistsl [`pre`,`third`,`tail`] >> simp[]) >>
+        disj2_tac >> qexistsl [`pre`,`tail`] >> simp[])) >>
+     named_equations ["mapped"] (pure_rewrite_tac o map GSYM) >>
+     unfold_named ["canon"] >> simp[]) >>
+  qabbrev_tac `ImageRow = \r cc i h (ts:num->(string#num) option) (arms:num->num->bool).
+    let fall = \j. j = i+1 in
+    let clear = \a. !k. k<a ==> ts k=NONE in
+    let dest = \j. ?l orig. ts 0=SOME(l,orig) /\ C r l j in
+    case EL i r of
+      AsmLabel l => (!j hj. arms j hj <=> fall j /\ hj=h)
+    | AsmPush bs => (!j hj. arms j hj <=> fall j /\ hj=h+1)
+    | AsmPushLabel l => IS_SOME (FLOOKUP (SND (compute_label_offsets r)) l) /\
+        (!j hj. arms j hj <=> fall j /\ hj=h+1)
+    | AsmPushOfst l d => IS_SOME (FLOOKUP (SND (compute_label_offsets r)) l) /\
+        (!j hj. arms j hj <=> fall j /\ hj=h+1)
+    | AsmOp name =>
+        (name="INVALID" \/ (name="REVERT" /\ 2<=h /\ clear 2) \/
+         (MEM name ["SSTORE";"TSTORE";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"] /\
+          asm_op_arity name<=h /\ clear (asm_op_arity name) /\ cc.cc_static)) /\
+        (!j hj. ~arms j hj) \/
+        (case ALOOKUP dup_table name of
+           SOME n => n<h /\ (!j hj. arms j hj <=> fall j /\ hj=h+1)
+         | NONE => case ALOOKUP swap_table name of
+             SOME n => 0<n /\ n<h /\ (!j hj. arms j hj <=> fall j /\ hj=h)
+           | NONE =>
+               if name="JUMP" then 1<=h /\ (?j. dest j) /\
+                 (!j hj. arms j hj <=> dest j /\ hj=h-1)
+               else if name="JUMPI" then 2<=h /\ ts 1=NONE /\ (?j. dest j) /\
+                 (!j hj. arms j hj <=> (fall j \/ dest j) /\ hj=h-2)
+               else ?m. static_abort_straight name m /\ asm_op_arity name<=h /\
+                 clear (asm_op_arity name) /\
+                 (!j hj. arms j hj <=> fall j /\ hj=h-asm_op_arity name+m))
+    | _ => F` >>
+  `!r ts j. Target r ts j <=> ?l orig. ts 0=SOME(l,orig) /\ C r l j` by
+    (unfold_named ["tgt","canon"] >> POP_ASSUM_LIST (K ALL_TAC) >>
+     rpt gen_tac >> eq_tac
+     >- (disch_then (qx_choose_then `l` (qx_choose_then `o'`
+           (qx_choose_then `off` strip_assume_tac))) >>
+         qexistsl [`l`,`o'`] >> conj_tac >- first_assum ACCEPT_TAC >>
+         qexists `off` >> asm_rewrite_tac[]) >>
+     disch_then (qx_choose_then `l` (qx_choose_then `o'`
+       (CONJUNCTS_THEN2 assume_tac (qx_choose_then `off` strip_assume_tac)))) >>
+     qexistsl [`l`,`o'`,`off`] >> asm_rewrite_tac[]) >>
+  `!r cc i h ts (P:num#num->num) (H:num#num->num) S.
+      ImageRow r cc i h ts (\j n. ?b. S b /\ P b=j /\ H b=n) <=>
+      Dispatch r cc i h ts P H S` by
+    (qpat_assum `Abbrev (ImageRow = _)`
+       (pure_rewrite_tac o single o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     unfold_named ["dispatch"] >>
+     qpat_assum `!r ts j. Target r ts j <=> _` (pure_rewrite_tac o single) >>
+     unfold_named ["canon"] >>
+     CONV_TAC expand_names >>
+     MATCH_ACCEPT_TAC (expand_lets rename_row_dispatch)) >>
+  mp_tac (expand_lets (Q.INST [`nr` |-> `rank:num#num->num`]
+    (Q.INST [`rank` |-> `\a:num#num. (&(nr a:num):rat)`] merge_rename_decorated_arms))) >>
+  rewrite_tac [RAT_OF_NUM_LES] >>
+  (impl_tac >-
+    (unfold_fact ["canon"] `!l j. (C p l j <=> _) /\ _` assume_tac >>
+     unfold_fact ["open","edgeOK","shape","flow","tgt"]
+       `Open p cc req V {} rank pc height need tag boolean edge`
+       (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [DIFF_EMPTY, GSYM CONJ_ASSOC]) >>
+     unfold_fact ["rows","slots","dispatch","canon","tgt","flow"]
+       `Rows p cc V {} rank pc height need tag boolean edge`
+       (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [DIFF_EMPTY]) >>
+     named_equations ["mapped"] (pure_rewrite_tac o map GSYM) >>
+     pure_rewrite_tac [GSYM CONJ_ASSOC] >>
+     rpt (FIRST [first_assum ACCEPT_TAC, conj_tac])
+     >- (qx_gen_tac `v` >> disch_tac >>
+          qpat_assum `!a. a IN V ==> ?t. t.as_pc = pc a /\ _`
+            (qspec_then `v` (drule_then assume_tac)) >>
+          qpat_assum `!a. a IN V ==> (need a ==> _) /\ _`
+            (qspec_then `v` (drule_then (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [GSYM CONJ_ASSOC]))) >>
+          qpat_assum `!a. a IN V ==> pc a < LENGTH p /\ _`
+            (qspec_then `v` (drule_then (map_every assume_tac o CONJUNCTS))) >>
+          rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >>
+          `Dispatch p cc (pc v) (height v) (tag v) pc height (edge v)` by
+            (unfold_named ["dispatch","tgt"] >>
+             CONV_TAC expand_names >>
+             first_assum ACCEPT_TAC) >>
+          `ImageRow p cc (pc v) (height v) (tag v)
+             (\j n. ?b. edge v b /\ pc b=j /\ height b=n)` by
+            (qpat_assum `!r cc i h ts P H S. ImageRow r cc i h ts _ <=> _`
+               (pure_rewrite_tac o single) >> first_assum ACCEPT_TAC) >>
+          named_equations ["canon"] (fn canon_eq =>
+            qpat_assum `Abbrev (ImageRow = _)` (fn row_eq =>
+              pop_assum (ACCEPT_TAC o expand_lets o PURE_REWRITE_RULE canon_eq o
+                expand_lets o PURE_REWRITE_RULE
+                  [REWRITE_RULE [markerTheory.Abbrev_def] row_eq])))) >>
+     map_every qx_gen_tac [`v`,`w`] >> disch_tac >>
+     unfold_fact ["tgt","canon"] `!r ts j. Target r ts j <=> _` (fn dest_eq =>
+       rewrite_tac [GSYM dest_eq, CONJ_ASSOC] >>
+       first_assum (qspecl_then [`v`,`w`] (drule_then
+         (ACCEPT_TAC o REWRITE_RULE [CONJ_ASSOC])))))) >>
+  named_equations ["mapped"] (pure_rewrite_tac o map GSYM) >>
+  disch_then (qx_choose_then `rel` (mk_asm "decorated")) >>
+  qabbrev_tac `Prod = \i a. i < LENGTH q /\
+    (EL i q = AsmPushLabel a \/ EL i q = AsmPushOfst a 0)` >>
+  qabbrev_tac `ChoiceOK = \(old:(string#num) option) choice. case old of NONE => choice = NONE
+    | SOME (l,o') => ?i a. choice = SOME i /\ Prod i a /\ (a = l \/ l = x /\ a = y)` >>
+  qabbrev_tac `Expose = \u. case u of NONE => NONE
+    | SOME i => if ?a j. Prod i a /\ C q a j
+                then SOME((@a. Prod i a),i) else NONE` >>
+  qabbrev_tac `Decor = {u:((num#num)#num option list) | FST u IN V /\
+    LENGTH (SND u) = height (FST u) /\
+    !k. k < height (FST u) ==> ChoiceOK (tag (FST u) k) (EL k (SND u))}` >>
+  qabbrev_tac `Proj = \(u:(num#num)#num option list) k.
+    if k < height (FST u) then Expose (EL k (SND u)) else NONE` >>
+  `?D. LENGTH D = height w /\
+     (!k. k < height w ==> ChoiceOK (tag w k) (EL k D)) /\
+     (!k a i. Proj (w,D) k = SOME(a,i) ==>
+       k < LENGTH g.sym_stack /\ EL k g.sym_stack = Lab a 0)` by
+    (map_every qunabbrev_tac [`Proj`,`Expose`,`ChoiceOK`,`Prod`] >>
+     unfold_named ["canon"] >> rewrite_tac [pairTheory.FST, pairTheory.SND] >>
+     irule (expand_lets rename_root_choices_mode) >>
+     goal_assum (drule_at Any) >> conj_tac
+     >- first_assum ACCEPT_TAC
+     >> qexistsl [`allow_own`,`env0`,`m`,`s.as_code`,`s`] >> first_assum ACCEPT_TAC) >>
+  `(w,D) IN Decor` by simp[Abbr `Decor`] >>
+  `FINITE V` by
+    unfold_fact ["open"] `Open p cc req V {} rank pc height need tag boolean edge`
+      (ACCEPT_TAC o CONJUNCT1) >>
+  qspecl_then [`q`,`cc`,`req`] (fn th =>
+    qspecl_then [`V`,`\v:num#num. (&(rank v:num):rat)`,`pc`,`height`,`need`,
+                 `Proj`,`boolean`,`Decor`,`(w,D)`,`rel`] mp_tac (expand_lets th))
+    merge_rename_reachable_lift >>
+  (impl_tac >-
+    (BETA_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     map_every qunabbrev_tac [`Decor`,`Proj`,`Expose`,`ChoiceOK`,`Prod`] >>
+     unfold_named ["canon"] >> BETA_TAC >>
+     rewrite_tac [RAT_OF_NUM_LES, CONJ_ASSOC] >>
+     asm "decorated" (ACCEPT_TAC o REWRITE_RULE [CONJ_ASSOC]))) >>
+  disch_then (qx_choose_then `verts` (qx_choose_then `entry` (qx_choose_then `ranks`
+    (qx_choose_then `pos` (qx_choose_then `ht` (qx_choose_then `needed`
+      (qx_choose_then `tags` (qx_choose_then `bools` (qx_choose_then `arcs`
+        (map_every assume_tac o CONJUNCTS)))))))))) >>
+  `?nat_rank. !a b. a IN verts /\ b IN verts /\ rat$rat_les (ranks a) (ranks b) ==>
+                    (nat_rank a:num) < nat_rank b` by
+    (match_mp_tac (GEN_ALL rename_rank_compress) >> first_assum ACCEPT_TAC) >>
+  suspend "package"
+QED
+
+Resume merge_rename_covered_cut_mode[package]:
+  `!a b. arcs a b ==> a IN verts /\ b IN verts /\ nat_rank b < nat_rank a /\
+                      EdgeOK q pos ht tags bools a b` by
+    (map_every qx_gen_tac [`a`,`b`] >> disch_tac >>
+     qpat_assum `!x y. arcs x y ==> _`
+       (qspecl_then [`a`,`b`] (drule_then
+         (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
+           (CONJUNCTS_THEN2 assume_tac (mk_asm "lifted_edge")))))) >>
+     conj_tac >- first_assum ACCEPT_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- (qpat_assum `!a b. _ ==> nat_rank a < nat_rank b` irule >>
+                  rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     unfold_named ["edgeOK","flow","tgt"] >>
+     CONV_TAC expand_names >>
+     unfold_fact ["tgt","canon"] `!r ts j. Target r ts j <=> _` (fn dest_eq =>
+       rewrite_tac [dest_eq, CONJ_ASSOC] >>
+       asm "lifted_edge" (ACCEPT_TAC o REWRITE_RULE [CONJ_ASSOC]))) >>
+  `!v. v IN verts ==> pos v < LENGTH q /\ Slots q cc (ht v) (needed v) (tags v) (bools v) /\
+      Dispatch q cc (pos v) (ht v) (tags v) pos ht (arcs v)` by
+    (qx_gen_tac `v` >> disch_tac >>
+     qpat_assum `!v. v IN verts ==> pos v < LENGTH q /\ _`
+       (qspec_then `v` (drule_then (CONJUNCTS_THEN2 assume_tac
+         (CONJUNCTS_THEN2 assume_tac assume_tac)))) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- (unfold_named ["slots","canon"] >> first_assum ACCEPT_TAC) >>
+     `ImageRow q cc (pos v) (ht v) (tags v)
+        (\j n. ?b. arcs v b /\ pos b=j /\ ht b=n)` by
+       (qpat_assum `Abbrev (ImageRow = _)`
+          (pure_rewrite_tac o single o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+        unfold_named ["canon"] >>
+        CONV_TAC expand_names >>
+        rewrite_tac [CONJ_ASSOC] >>
+        first_assum (ACCEPT_TAC o REWRITE_RULE [CONJ_ASSOC])) >>
+     qpat_assum `!r cc i h ts P H S. ImageRow r cc i h ts _ <=> _`
+       (pure_rewrite_tac o single o GSYM) >> first_assum ACCEPT_TAC) >>
+  `Root g (tags entry) (bools entry)` by
+    (unfold_named ["root"] >>
+     qpat_assum `tags entry = Proj (w,D)` (pure_rewrite_tac o single) >>
+     qpat_assum `bools entry = boolean (FST (w,D))`
+       (fn th => pure_rewrite_tac [th, pairTheory.FST]) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `!v. v IN verts ==> !k l orig. tags v k = SOME(l,orig) ==>
+     k < ht v /\ orig < LENGTH q /\
+     (EL orig q = AsmPushLabel l \/ EL orig q = AsmPushOfst l 0) /\
+     ?off j. FLOOKUP (SND (compute_label_offsets q)) l = SOME off /\
+             off < dimword(:256) /\ FLOOKUP (build_offset_to_pc q) off = SOME j` by
+    (qx_gen_tac `v` >> disch_tac >>
+     qpat_assum `!v. v IN verts ==> pos v < LENGTH q /\ Slots q cc _ _ _ _ /\ _`
+       (qspec_then `v` (drule_then (assume_tac o cj 2))) >>
+     unfold_fact ["slots","canon"] `Slots q cc _ (needed v) (tags v) _`
+       (assume_tac o cj 3) >>
+     map_every qx_gen_tac [`k`,`l`,`orig`] >> disch_tac >>
+     qpat_assum `!k l orig. tags v k = SOME(l,orig) ==> _`
+       (qspecl_then [`k`,`l`,`orig`] (drule_then
+         (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
+           (CONJUNCTS_THEN2 assume_tac
+             (qx_choose_then `dest` (qx_choose_then `offset` assume_tac))))))) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl [`offset`,`dest`] >> first_assum ACCEPT_TAC) >>
+  `Slots q cc (ht entry) (needed entry) (tags entry) (bools entry)` by
+    (qpat_assum `!v. v IN verts ==> pos v < LENGTH q /\ Slots q cc _ _ _ _ /\ _`
+       (qspec_then `entry` (drule_then (ACCEPT_TAC o cj 2)))) >>
+  `Shape q cc req pos ht needed tags bools entry t` by
+    (unfold_named ["shape"] >>
+     qpat_assum `(if allow_own then asm_sym_rel_own _ _ _ _ else asm_sym_rel q _) t g`
+       (mp_then Any irule (expand_lets rename_actual_root_mode)) >>
+     `allow_own ==> asm_static_wf q` by (strip_tac >> first_assum ACCEPT_TAC) >>
+     unfold_fact ["root"] `Root g (tags entry) (bools entry)`
+       (map_every assume_tac o CONJUNCTS) >>
+     unfold_fact ["slots"] `Slots q cc _ (needed entry) (tags entry) _`
+       (assume_tac o cj 1) >>
+     qpat_assum `!v. v IN verts ==> !k l orig. tags v k = SOME(l,orig) ==> _`
+       (qspec_then `entry` (drule_then assume_tac)) >>
+     rpt (FIRST [first_assum ACCEPT_TAC, conj_tac, (simp[pairTheory.FST] >> NO_TAC)])) >>
+  qexistsl [`verts`,`entry`,`nat_rank`,`pos`,`ht`,`needed`,`tags`,`bools`,`arcs`] >>
+  reverse conj_tac
+  >- (conj_tac
+      >- (unfold_named ["rows"] >> pure_rewrite_tac [DIFF_EMPTY] >>
+          conj_tac >- (gen_tac >> disch_tac >>
+            qpat_assum `!v. v IN verts ==> pos v < LENGTH q /\ Slots q cc _ _ _ _ /\ _`
+              (drule_then (ACCEPT_TAC o cj 2))) >>
+          conj_tac >- (map_every qx_gen_tac [`a`,`b`] >> disch_tac >>
+            unfold_fact ["edgeOK"]
+              `!a b. arcs a b ==> a IN verts /\ b IN verts /\ _ /\ EdgeOK q pos ht tags bools a b`
+              (qspecl_then [`a`,`b`] (drule_then (map_every assume_tac o CONJUNCTS))) >>
+            rpt conj_tac >> first_assum ACCEPT_TAC) >>
+          gen_tac >> disch_tac >>
+          qpat_assum `!v. v IN verts ==> pos v < LENGTH q /\ Slots q cc _ _ _ _ /\ _`
+            (drule_then (CONJUNCTS_THEN2 assume_tac (assume_tac o CONJUNCT2))) >>
+          conj_tac >> first_assum ACCEPT_TAC) >>
+      unfold_named ["reach"] >> rpt (FIRST [first_assum ACCEPT_TAC, conj_tac])) >>
+  unfold_named ["open"] >> CONV_TAC expand_names >> pure_rewrite_tac [DIFF_EMPTY] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (unfold_named ["shape"] >> first_assum ACCEPT_TAC) >>
+  conj_tac >- (gen_tac >> disch_tac >>
+    qpat_assum `!v. v IN verts ==> pos v < LENGTH q /\ Slots q cc _ _ _ _ /\ _`
+      (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  suspend "step"
+QED
+
+Resume merge_rename_covered_cut_mode[step]:
+  map_every qx_gen_tac [`v`,`t0`] >> strip_tac >>
+  qpat_assum `!v. v IN verts ==> pos v < LENGTH q /\ Slots q cc _ _ _ _ /\ _`
+    (qspec_then `v` (drule_then (CONJUNCTS_THEN2 assume_tac
+      (mk_asm "step_dispatch" o CONJUNCT2)))) >>
+  unfold_fact ["shape"] `Shape q cc req pos ht needed tags bools v t0` assume_tac >>
+  unfold_named ["shape"] >>
+  match_mp_tac (GEN_ALL (expand_lets pending_role_step)) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (qx_gen_tac `w` >> disch_tac >>
+      unfold_fact ["edgeOK"]
+        `!a b. arcs a b ==> a IN verts /\ b IN verts /\ _ /\ EdgeOK q pos ht tags bools a b`
+        (qspecl_then [`v`,`w`] (drule_then (map_every assume_tac o CONJUNCTS))) >>
+      conj_tac >- unfold_fact ["flow"] `Flow q pos ht tags bools v w` ACCEPT_TAC >>
+      conj_tac
+      >- (qpat_assum `!v. v IN verts ==> pos v < LENGTH q /\ Slots q cc _ _ _ _ /\ _`
+            (qspec_then `w` (drule_then (assume_tac o cj 2))) >>
+          unfold_fact ["slots"] `Slots q cc _ (needed w) (tags w) _`
+            (ACCEPT_TAC o cj 1)) >>
+      qpat_assum `!v. v IN verts ==> !k l orig. tags v k = SOME(l,orig) ==> _`
+        (qspec_then `w` (drule_then mp_tac)) >>
+      POP_ASSUM_LIST (K ALL_TAC) >>
+      disch_tac >> map_every qx_gen_tac [`k`,`l`,`origin`] >> disch_tac >>
+      qpat_x_assum `!k l orig. tags w k = SOME(l,orig) ==> _`
+        (qspecl_then [`k`,`l`,`origin`] (drule_then strip_assume_tac)) >>
+      metis_tac[]) >>
+  asm_x "step_dispatch" (fn th => named_equations ["dispatch","tgt"]
+    (fn eqs => mp_tac (expand_lets (PURE_REWRITE_RULE eqs (REWRITE_RULE [markerTheory.label_def] th))))) >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  suspend "positive_dispatch"
+QED
+
+Resume merge_rename_covered_cut_mode[positive_dispatch]:
+  Cases_on `EL (pos v) q` >> pure_asm_rewrite_tac [asm_inst_case_def] >> BETA_TAC >>
+  FIRST [rename1 `AsmOp name` >> suspend "op_dispatch", metis_tac[]]
+QED
+
+Resume merge_rename_covered_cut_mode[op_dispatch]:
+  Cases_on `name = "INVALID"` >- simp[] >> pure_asm_rewrite_tac [] >>
+  Cases_on `name = "REVERT"` >- simp[] >> pure_asm_rewrite_tac [] >>
+  Cases_on `MEM name ["SSTORE"; "TSTORE"; "LOG0"; "LOG1"; "LOG2"; "LOG3"; "LOG4"]`
+  >- (pure_asm_rewrite_tac [] >> simp[]) >> pure_asm_rewrite_tac [] >>
+  reverse (Cases_on `ALOOKUP dup_table name`) >>
+  pure_asm_rewrite_tac [option_case_def] >- metis_tac[] >>
+  reverse (Cases_on `ALOOKUP swap_table name`) >>
+  pure_asm_rewrite_tac [option_case_def] >- metis_tac[] >>
+  Cases_on `name = "JUMP"` >- (simp[] >> metis_tac[]) >>
+  Cases_on `name = "JUMPI"` >> simp[] >> metis_tac[]
+QED
+
+Finalise merge_rename_covered_cut_mode
 
 Theorem merge_rename_covered_cut:
   !C. C = (\r l j. ?off. FLOOKUP (SND (compute_label_offsets r)) l = SOME off /\
@@ -557,352 +1060,6 @@ Theorem merge_rename_covered_cut:
     z IN W /\ (!v. v IN W ==> Reach R z v) /\
     Shape q cc req Pc H Nd Tg B z t /\ Root g (Tg z) (B z) /\ req <<= final_req
 Proof
-  bind_names ["canon","tgt","shape","flow","edgeOK","slots","dispatch","rows","open",
-            "reach","root","mapped","env_init"] >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `asm_static_wf q` by
-    (unfold_named ["mapped"] >> irule rename_site_wf >>
-     (conj_tac >- first_assum ACCEPT_TAC) >>
-     qexistsl [`next`,`pre`,`tail`,`third`] >>
-     conj_tac >> first_assum ACCEPT_TAC) >>
-  `FILTER is_data_inst q = FILTER is_data_inst p0` by
-    (unfold_named ["mapped"] >> rewrite_tac[rename_filter_data] >> first_assum ACCEPT_TAC) >>
-  (conj_tac >- first_assum ACCEPT_TAC) >> (conj_tac >- first_assum ACCEPT_TAC) >>
-  `asm_sym_rel p env0 cut f` by
-    (unfold_named ["env_init"] >>
-     `asm_data_env p0 (assemble p0 ++ data) = asm_data_env p (assemble p ++ data)` by
-       (irule asm_data_env_agree >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     pop_assum (pure_rewrite_tac o single) >> first_assum ACCEPT_TAC) >>
-  suspend "prefix"
+  MATCH_ACCEPT_TAC (Q.INST [`allow_own` |-> `F`] merge_rename_covered_cut_mode
+    |> PURE_REWRITE_RULE [sym_steps_mode_def, COND_CLAUSES])
 QED
-
-Resume merge_rename_covered_cut[prefix]:
-  unfold_fact ["root"] `Root f _ _` (map_every assume_tac o CONJUNCTS) >>
-  unfold_fact ["shape"] `Shape p cc req pc height need tag boolean e cut`
-    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [GSYM CONJ_ASSOC]) >>
-  mp_tac (Q.INST [`w` |-> `e`, `env` |-> `env0`]
-    (Q.INST [`e` |-> `f`] (expand_lets rename_protected_endpoint))) >>
-  (impl_tac >-
-    (unfold_fact ["open","edgeOK","shape","flow","tgt"]
-       `Open p cc req V {} rank pc height need tag boolean edge`
-       (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [GSYM CONJ_ASSOC]) >>
-     pure_rewrite_tac [GSYM CONJ_ASSOC] >>
-     rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]))) >>
-  named_equations ["mapped"] (pure_rewrite_tac o map GSYM) >>
-  disch_then (qx_choose_then `m` (qx_choose_then `w` (qx_choose_then `g`
-    (map_every assume_tac o CONJUNCTS)))) >>
-  `sym_steps q (asm_data_env p0 (assemble p0 ++ data)) m (sym_init s) = SymOK g` by
-    unfold_fact ["env_init"] `sym_steps q env0 m _ = SymOK g` ACCEPT_TAC >>
-  drule_all (Q.INST [`p` |-> `p0`, `q` |-> `q`] stopped_symbolic_prefix_actual_code) >>
-  disch_then (qx_choose_then `t` (map_every assume_tac o CONJUNCTS)) >>
-  qexistsl [`m`,`g`,`t`] >>
-  qpat_assum `sym_steps q env0 m _ = SymOK g` (pure_rewrite_tac o single) >>
-  qpat_assum `asm_steps _ _ q m _ = AsmOK t` (pure_rewrite_tac o single) >>
-  qpat_assum `asm_sym_rel q _ t g` (rewrite_tac o single) >>
-  suspend "arms"
-QED
-
-Resume merge_rename_covered_cut[arms]:
-  `!l j. (C p l j <=> INDEX_OF (AsmLabel l) p = SOME j) /\
-         (C q l j <=> INDEX_OF (AsmLabel l) p = SOME j)` by
-    (qspecl_then [`p`,`x`,`y`] mp_tac (expand_lets merge_rename_named_layout) >>
-     (impl_tac >-
-       ((reverse conj_tac >- first_assum ACCEPT_TAC) >>
-        qpat_x_assum `next = _ /\ _ \/ _` strip_assume_tac
-        >- (disj1_tac >> qexistsl [`pre`,`third`,`tail`] >> simp[]) >>
-        disj2_tac >> qexistsl [`pre`,`tail`] >> simp[])) >>
-     named_equations ["mapped"] (pure_rewrite_tac o map GSYM) >>
-     unfold_named ["canon"] >> simp[]) >>
-  qabbrev_tac `ImageRow = \r cc i h (ts:num->(string#num) option) (arms:num->num->bool).
-    let fall = \j. j = i+1 in
-    let clear = \a. !k. k<a ==> ts k=NONE in
-    let dest = \j. ?l orig. ts 0=SOME(l,orig) /\ C r l j in
-    case EL i r of
-      AsmLabel l => (!j hj. arms j hj <=> fall j /\ hj=h)
-    | AsmPush bs => (!j hj. arms j hj <=> fall j /\ hj=h+1)
-    | AsmPushLabel l => IS_SOME (FLOOKUP (SND (compute_label_offsets r)) l) /\
-        (!j hj. arms j hj <=> fall j /\ hj=h+1)
-    | AsmPushOfst l d => IS_SOME (FLOOKUP (SND (compute_label_offsets r)) l) /\
-        (!j hj. arms j hj <=> fall j /\ hj=h+1)
-    | AsmOp name =>
-        (name="INVALID" \/ (name="REVERT" /\ 2<=h /\ clear 2) \/
-         (MEM name ["SSTORE";"TSTORE";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"] /\
-          asm_op_arity name<=h /\ clear (asm_op_arity name) /\ cc.cc_static)) /\
-        (!j hj. ~arms j hj) \/
-        (case ALOOKUP dup_table name of
-           SOME n => n<h /\ (!j hj. arms j hj <=> fall j /\ hj=h+1)
-         | NONE => case ALOOKUP swap_table name of
-             SOME n => 0<n /\ n<h /\ (!j hj. arms j hj <=> fall j /\ hj=h)
-           | NONE =>
-               if name="JUMP" then 1<=h /\ (?j. dest j) /\
-                 (!j hj. arms j hj <=> dest j /\ hj=h-1)
-               else if name="JUMPI" then 2<=h /\ ts 1=NONE /\ (?j. dest j) /\
-                 (!j hj. arms j hj <=> (fall j \/ dest j) /\ hj=h-2)
-               else ?m. static_abort_straight name m /\ asm_op_arity name<=h /\
-                 clear (asm_op_arity name) /\
-                 (!j hj. arms j hj <=> fall j /\ hj=h-asm_op_arity name+m))
-    | _ => F` >>
-  `!r ts j. Target r ts j <=> ?l orig. ts 0=SOME(l,orig) /\ C r l j` by
-    (unfold_named ["tgt","canon"] >> POP_ASSUM_LIST (K ALL_TAC) >>
-     rpt gen_tac >> eq_tac
-     >- (disch_then (qx_choose_then `l` (qx_choose_then `o'`
-           (qx_choose_then `off` strip_assume_tac))) >>
-         qexistsl [`l`,`o'`] >> conj_tac >- first_assum ACCEPT_TAC >>
-         qexists `off` >> asm_rewrite_tac[]) >>
-     disch_then (qx_choose_then `l` (qx_choose_then `o'`
-       (CONJUNCTS_THEN2 assume_tac (qx_choose_then `off` strip_assume_tac)))) >>
-     qexistsl [`l`,`o'`,`off`] >> asm_rewrite_tac[]) >>
-  `!r cc i h ts (P:num#num->num) (H:num#num->num) S.
-      ImageRow r cc i h ts (\j n. ?b. S b /\ P b=j /\ H b=n) <=>
-      Dispatch r cc i h ts P H S` by
-    (qpat_assum `Abbrev (ImageRow = _)`
-       (pure_rewrite_tac o single o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     unfold_named ["dispatch"] >>
-     qpat_assum `!r ts j. Target r ts j <=> _` (pure_rewrite_tac o single) >>
-     unfold_named ["canon"] >>
-     CONV_TAC expand_names >>
-     MATCH_ACCEPT_TAC (expand_lets rename_row_dispatch)) >>
-  mp_tac (expand_lets (Q.INST [`nr` |-> `rank:num#num->num`]
-    (Q.INST [`rank` |-> `\a:num#num. (&(nr a:num):rat)`] merge_rename_decorated_arms))) >>
-  rewrite_tac [RAT_OF_NUM_LES] >>
-  (impl_tac >-
-    (unfold_fact ["canon"] `!l j. (C p l j <=> _) /\ _` assume_tac >>
-     unfold_fact ["open","edgeOK","shape","flow","tgt"]
-       `Open p cc req V {} rank pc height need tag boolean edge`
-       (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [DIFF_EMPTY, GSYM CONJ_ASSOC]) >>
-     unfold_fact ["rows","slots","dispatch","canon","tgt","flow"]
-       `Rows p cc V {} rank pc height need tag boolean edge`
-       (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [DIFF_EMPTY]) >>
-     named_equations ["mapped"] (pure_rewrite_tac o map GSYM) >>
-     pure_rewrite_tac [GSYM CONJ_ASSOC] >>
-     rpt (FIRST [first_assum ACCEPT_TAC, conj_tac])
-     >- (qx_gen_tac `v` >> disch_tac >>
-          qpat_assum `!a. a IN V ==> ?t. t.as_pc = pc a /\ _`
-            (qspec_then `v` (drule_then assume_tac)) >>
-          qpat_assum `!a. a IN V ==> (need a ==> _) /\ _`
-            (qspec_then `v` (drule_then (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [GSYM CONJ_ASSOC]))) >>
-          qpat_assum `!a. a IN V ==> pc a < LENGTH p /\ _`
-            (qspec_then `v` (drule_then (map_every assume_tac o CONJUNCTS))) >>
-          rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >>
-          `Dispatch p cc (pc v) (height v) (tag v) pc height (edge v)` by
-            (unfold_named ["dispatch","tgt"] >>
-             CONV_TAC expand_names >>
-             first_assum ACCEPT_TAC) >>
-          `ImageRow p cc (pc v) (height v) (tag v)
-             (\j n. ?b. edge v b /\ pc b=j /\ height b=n)` by
-            (qpat_assum `!r cc i h ts P H S. ImageRow r cc i h ts _ <=> _`
-               (pure_rewrite_tac o single) >> first_assum ACCEPT_TAC) >>
-          named_equations ["canon"] (fn canon_eq =>
-            qpat_assum `Abbrev (ImageRow = _)` (fn row_eq =>
-              pop_assum (ACCEPT_TAC o expand_lets o PURE_REWRITE_RULE canon_eq o
-                expand_lets o PURE_REWRITE_RULE
-                  [REWRITE_RULE [markerTheory.Abbrev_def] row_eq])))) >>
-     map_every qx_gen_tac [`v`,`w`] >> disch_tac >>
-     unfold_fact ["tgt","canon"] `!r ts j. Target r ts j <=> _` (fn dest_eq =>
-       rewrite_tac [GSYM dest_eq, CONJ_ASSOC] >>
-       first_assum (qspecl_then [`v`,`w`] (drule_then
-         (ACCEPT_TAC o REWRITE_RULE [CONJ_ASSOC])))))) >>
-  named_equations ["mapped"] (pure_rewrite_tac o map GSYM) >>
-  disch_then (qx_choose_then `rel` (mk_asm "decorated")) >>
-  qabbrev_tac `Prod = \i a. i < LENGTH q /\
-    (EL i q = AsmPushLabel a \/ EL i q = AsmPushOfst a 0)` >>
-  qabbrev_tac `ChoiceOK = \(old:(string#num) option) choice. case old of NONE => choice = NONE
-    | SOME (l,o') => ?i a. choice = SOME i /\ Prod i a /\ (a = l \/ l = x /\ a = y)` >>
-  qabbrev_tac `Expose = \u. case u of NONE => NONE
-    | SOME i => if ?a j. Prod i a /\ C q a j
-                then SOME((@a. Prod i a),i) else NONE` >>
-  qabbrev_tac `Decor = {u:((num#num)#num option list) | FST u IN V /\
-    LENGTH (SND u) = height (FST u) /\
-    !k. k < height (FST u) ==> ChoiceOK (tag (FST u) k) (EL k (SND u))}` >>
-  qabbrev_tac `Proj = \(u:(num#num)#num option list) k.
-    if k < height (FST u) then Expose (EL k (SND u)) else NONE` >>
-  `?D. LENGTH D = height w /\
-     (!k. k < height w ==> ChoiceOK (tag w k) (EL k D)) /\
-     (!k a i. Proj (w,D) k = SOME(a,i) ==>
-       k < LENGTH g.sym_stack /\ EL k g.sym_stack = Lab a 0)` by
-    (map_every qunabbrev_tac [`Proj`,`Expose`,`ChoiceOK`,`Prod`] >>
-     unfold_named ["canon"] >> rewrite_tac [pairTheory.FST, pairTheory.SND] >>
-     irule (expand_lets rename_root_choices) >>
-     goal_assum (drule_at Any) >> conj_tac
-     >- first_assum ACCEPT_TAC
-     >> qexistsl [`env0`,`m`,`s`] >> first_assum ACCEPT_TAC) >>
-  `(w,D) IN Decor` by simp[Abbr `Decor`] >>
-  `FINITE V` by
-    unfold_fact ["open"] `Open p cc req V {} rank pc height need tag boolean edge`
-      (ACCEPT_TAC o CONJUNCT1) >>
-  qspecl_then [`q`,`cc`,`req`] (fn th =>
-    qspecl_then [`V`,`\v:num#num. (&(rank v:num):rat)`,`pc`,`height`,`need`,
-                 `Proj`,`boolean`,`Decor`,`(w,D)`,`rel`] mp_tac (expand_lets th))
-    merge_rename_reachable_lift >>
-  (impl_tac >-
-    (BETA_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     map_every qunabbrev_tac [`Decor`,`Proj`,`Expose`,`ChoiceOK`,`Prod`] >>
-     unfold_named ["canon"] >> BETA_TAC >>
-     rewrite_tac [RAT_OF_NUM_LES, CONJ_ASSOC] >>
-     asm "decorated" (ACCEPT_TAC o REWRITE_RULE [CONJ_ASSOC]))) >>
-  disch_then (qx_choose_then `verts` (qx_choose_then `entry` (qx_choose_then `ranks`
-    (qx_choose_then `pos` (qx_choose_then `ht` (qx_choose_then `needed`
-      (qx_choose_then `tags` (qx_choose_then `bools` (qx_choose_then `arcs`
-        (map_every assume_tac o CONJUNCTS)))))))))) >>
-  `?nat_rank. !a b. a IN verts /\ b IN verts /\ rat$rat_les (ranks a) (ranks b) ==>
-                    (nat_rank a:num) < nat_rank b` by
-    (match_mp_tac (GEN_ALL rename_rank_compress) >> first_assum ACCEPT_TAC) >>
-  suspend "package"
-QED
-
-Resume merge_rename_covered_cut[package]:
-  `!a b. arcs a b ==> a IN verts /\ b IN verts /\ nat_rank b < nat_rank a /\
-                      EdgeOK q pos ht tags bools a b` by
-    (map_every qx_gen_tac [`a`,`b`] >> disch_tac >>
-     qpat_assum `!x y. arcs x y ==> _`
-       (qspecl_then [`a`,`b`] (drule_then
-         (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
-           (CONJUNCTS_THEN2 assume_tac (mk_asm "lifted_edge")))))) >>
-     conj_tac >- first_assum ACCEPT_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- (qpat_assum `!a b. _ ==> nat_rank a < nat_rank b` irule >>
-                  rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     unfold_named ["edgeOK","flow","tgt"] >>
-     CONV_TAC expand_names >>
-     unfold_fact ["tgt","canon"] `!r ts j. Target r ts j <=> _` (fn dest_eq =>
-       rewrite_tac [dest_eq, CONJ_ASSOC] >>
-       asm "lifted_edge" (ACCEPT_TAC o REWRITE_RULE [CONJ_ASSOC]))) >>
-  `!v. v IN verts ==> pos v < LENGTH q /\ Slots q cc (ht v) (needed v) (tags v) (bools v) /\
-      Dispatch q cc (pos v) (ht v) (tags v) pos ht (arcs v)` by
-    (qx_gen_tac `v` >> disch_tac >>
-     qpat_assum `!v. v IN verts ==> pos v < LENGTH q /\ _`
-       (qspec_then `v` (drule_then (CONJUNCTS_THEN2 assume_tac
-         (CONJUNCTS_THEN2 assume_tac assume_tac)))) >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- (unfold_named ["slots","canon"] >> first_assum ACCEPT_TAC) >>
-     `ImageRow q cc (pos v) (ht v) (tags v)
-        (\j n. ?b. arcs v b /\ pos b=j /\ ht b=n)` by
-       (qpat_assum `Abbrev (ImageRow = _)`
-          (pure_rewrite_tac o single o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-        unfold_named ["canon"] >>
-        CONV_TAC expand_names >>
-        rewrite_tac [CONJ_ASSOC] >>
-        first_assum (ACCEPT_TAC o REWRITE_RULE [CONJ_ASSOC])) >>
-     qpat_assum `!r cc i h ts P H S. ImageRow r cc i h ts _ <=> _`
-       (pure_rewrite_tac o single o GSYM) >> first_assum ACCEPT_TAC) >>
-  `Root g (tags entry) (bools entry)` by
-    (unfold_named ["root"] >>
-     qpat_assum `tags entry = Proj (w,D)` (pure_rewrite_tac o single) >>
-     qpat_assum `bools entry = boolean (FST (w,D))`
-       (fn th => pure_rewrite_tac [th, pairTheory.FST]) >>
-     conj_tac >> first_assum ACCEPT_TAC) >>
-  `!v. v IN verts ==> !k l orig. tags v k = SOME(l,orig) ==>
-     k < ht v /\ orig < LENGTH q /\
-     (EL orig q = AsmPushLabel l \/ EL orig q = AsmPushOfst l 0) /\
-     ?off j. FLOOKUP (SND (compute_label_offsets q)) l = SOME off /\
-             off < dimword(:256) /\ FLOOKUP (build_offset_to_pc q) off = SOME j` by
-    (qx_gen_tac `v` >> disch_tac >>
-     qpat_assum `!v. v IN verts ==> pos v < LENGTH q /\ Slots q cc _ _ _ _ /\ _`
-       (qspec_then `v` (drule_then (assume_tac o cj 2))) >>
-     unfold_fact ["slots","canon"] `Slots q cc _ (needed v) (tags v) _`
-       (assume_tac o cj 3) >>
-     map_every qx_gen_tac [`k`,`l`,`orig`] >> disch_tac >>
-     qpat_assum `!k l orig. tags v k = SOME(l,orig) ==> _`
-       (qspecl_then [`k`,`l`,`orig`] (drule_then
-         (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
-           (CONJUNCTS_THEN2 assume_tac
-             (qx_choose_then `dest` (qx_choose_then `offset` assume_tac))))))) >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl [`offset`,`dest`] >> first_assum ACCEPT_TAC) >>
-  `Slots q cc (ht entry) (needed entry) (tags entry) (bools entry)` by
-    (qpat_assum `!v. v IN verts ==> pos v < LENGTH q /\ Slots q cc _ _ _ _ /\ _`
-       (qspec_then `entry` (drule_then (ACCEPT_TAC o cj 2)))) >>
-  `Shape q cc req pos ht needed tags bools entry t` by
-    (unfold_named ["shape"] >>
-     qpat_assum `asm_sym_rel q _ t g`
-       (mp_then Any irule (expand_lets rename_actual_root)) >>
-     unfold_fact ["root"] `Root g (tags entry) (bools entry)`
-       (map_every assume_tac o CONJUNCTS) >>
-     unfold_fact ["slots"] `Slots q cc _ (needed entry) (tags entry) _`
-       (assume_tac o cj 1) >>
-     qpat_assum `!v. v IN verts ==> !k l orig. tags v k = SOME(l,orig) ==> _`
-       (qspec_then `entry` (drule_then assume_tac)) >>
-     rpt (FIRST [first_assum ACCEPT_TAC, conj_tac, (simp[pairTheory.FST] >> NO_TAC)])) >>
-  qexistsl [`verts`,`entry`,`nat_rank`,`pos`,`ht`,`needed`,`tags`,`bools`,`arcs`] >>
-  reverse conj_tac
-  >- (conj_tac
-      >- (unfold_named ["rows"] >> pure_rewrite_tac [DIFF_EMPTY] >>
-          conj_tac >- (gen_tac >> disch_tac >>
-            qpat_assum `!v. v IN verts ==> pos v < LENGTH q /\ Slots q cc _ _ _ _ /\ _`
-              (drule_then (ACCEPT_TAC o cj 2))) >>
-          conj_tac >- (map_every qx_gen_tac [`a`,`b`] >> disch_tac >>
-            unfold_fact ["edgeOK"]
-              `!a b. arcs a b ==> a IN verts /\ b IN verts /\ _ /\ EdgeOK q pos ht tags bools a b`
-              (qspecl_then [`a`,`b`] (drule_then (map_every assume_tac o CONJUNCTS))) >>
-            rpt conj_tac >> first_assum ACCEPT_TAC) >>
-          gen_tac >> disch_tac >>
-          qpat_assum `!v. v IN verts ==> pos v < LENGTH q /\ Slots q cc _ _ _ _ /\ _`
-            (drule_then (CONJUNCTS_THEN2 assume_tac (assume_tac o CONJUNCT2))) >>
-          conj_tac >> first_assum ACCEPT_TAC) >>
-      unfold_named ["reach"] >> rpt (FIRST [first_assum ACCEPT_TAC, conj_tac])) >>
-  unfold_named ["open"] >> CONV_TAC expand_names >> pure_rewrite_tac [DIFF_EMPTY] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- (unfold_named ["shape"] >> first_assum ACCEPT_TAC) >>
-  conj_tac >- (gen_tac >> disch_tac >>
-    qpat_assum `!v. v IN verts ==> pos v < LENGTH q /\ Slots q cc _ _ _ _ /\ _`
-      (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  suspend "step"
-QED
-
-Resume merge_rename_covered_cut[step]:
-  map_every qx_gen_tac [`v`,`t0`] >> strip_tac >>
-  qpat_assum `!v. v IN verts ==> pos v < LENGTH q /\ Slots q cc _ _ _ _ /\ _`
-    (qspec_then `v` (drule_then (CONJUNCTS_THEN2 assume_tac
-      (mk_asm "step_dispatch" o CONJUNCT2)))) >>
-  unfold_fact ["shape"] `Shape q cc req pos ht needed tags bools v t0` assume_tac >>
-  unfold_named ["shape"] >>
-  match_mp_tac (GEN_ALL (expand_lets pending_role_step)) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac
-  >- (qx_gen_tac `w` >> disch_tac >>
-      unfold_fact ["edgeOK"]
-        `!a b. arcs a b ==> a IN verts /\ b IN verts /\ _ /\ EdgeOK q pos ht tags bools a b`
-        (qspecl_then [`v`,`w`] (drule_then (map_every assume_tac o CONJUNCTS))) >>
-      conj_tac >- unfold_fact ["flow"] `Flow q pos ht tags bools v w` ACCEPT_TAC >>
-      conj_tac
-      >- (qpat_assum `!v. v IN verts ==> pos v < LENGTH q /\ Slots q cc _ _ _ _ /\ _`
-            (qspec_then `w` (drule_then (assume_tac o cj 2))) >>
-          unfold_fact ["slots"] `Slots q cc _ (needed w) (tags w) _`
-            (ACCEPT_TAC o cj 1)) >>
-      qpat_assum `!v. v IN verts ==> !k l orig. tags v k = SOME(l,orig) ==> _`
-        (qspec_then `w` (drule_then mp_tac)) >>
-      POP_ASSUM_LIST (K ALL_TAC) >>
-      disch_tac >> map_every qx_gen_tac [`k`,`l`,`origin`] >> disch_tac >>
-      qpat_x_assum `!k l orig. tags w k = SOME(l,orig) ==> _`
-        (qspecl_then [`k`,`l`,`origin`] (drule_then strip_assume_tac)) >>
-      metis_tac[]) >>
-  asm_x "step_dispatch" (fn th => named_equations ["dispatch","tgt"]
-    (fn eqs => mp_tac (expand_lets (PURE_REWRITE_RULE eqs (REWRITE_RULE [markerTheory.label_def] th))))) >>
-  POP_ASSUM_LIST (K ALL_TAC) >>
-  suspend "positive_dispatch"
-QED
-
-Resume merge_rename_covered_cut[positive_dispatch]:
-  Cases_on `EL (pos v) q` >> pure_asm_rewrite_tac [asm_inst_case_def] >> BETA_TAC >>
-  FIRST [rename1 `AsmOp name` >> suspend "op_dispatch", metis_tac[]]
-QED
-
-Resume merge_rename_covered_cut[op_dispatch]:
-  Cases_on `name = "INVALID"` >- simp[] >> pure_asm_rewrite_tac [] >>
-  Cases_on `name = "REVERT"` >- simp[] >> pure_asm_rewrite_tac [] >>
-  Cases_on `MEM name ["SSTORE"; "TSTORE"; "LOG0"; "LOG1"; "LOG2"; "LOG3"; "LOG4"]`
-  >- (pure_asm_rewrite_tac [] >> simp[]) >> pure_asm_rewrite_tac [] >>
-  reverse (Cases_on `ALOOKUP dup_table name`) >>
-  pure_asm_rewrite_tac [option_case_def] >- metis_tac[] >>
-  reverse (Cases_on `ALOOKUP swap_table name`) >>
-  pure_asm_rewrite_tac [option_case_def] >- metis_tac[] >>
-  Cases_on `name = "JUMP"` >- (simp[] >> metis_tac[]) >>
-  Cases_on `name = "JUMPI"` >> simp[] >> metis_tac[]
-QED
-
-Finalise merge_rename_covered_cut

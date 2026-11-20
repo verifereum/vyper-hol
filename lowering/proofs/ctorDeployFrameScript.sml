@@ -9,10 +9,11 @@ Theory ctorDeployFrame
 Ancestors
   ctorDeployDefs deployFrameReplay codegenCorrectness e2eDeployFrame
   frameOutcome vfmRunCall vfmState passSimulationDefs e2eDeployDefs accountsRelProps
-  frameGas venomRunBounded ctorDeployCallFree o1OpcodeAbsence
+  frameGas venomRunBounded e2eComposition
   codegenAsmProgOk frameRunRaises frameStep ctorDeployEntry immutableSectionRel
   unitMemInv ctxLookupAgree stepWriteFootprintBase contextCodegenRel
   o1PassContract venomPipelineDriverProps venomWf venomInst vyperInterpreter
+  relation
 
 (* Single-frame outcomes depend on the start state only through its one
    context's logs and the transaction parameters. *)
@@ -355,55 +356,44 @@ Proof
   gvs[venom_frame_rel_def]
 QED
 
-(* The constructor unit's Venom run makes no oversized CREATE: it makes no
-   CREATE at all.  constructor_call_free excludes CreateTarget, so the
-   lowered entry function has no CREATE, CREATE2 or INVOKE, and no O1 pass
-   introduces either create opcode. *)
-Theorem o1_deploy_unit_create_size_ok:
-  !tops rpolicy runtime_bc dunit dout am tx vs.
-    constructor_call_free tops /\ deploy_typing_ok tops am tx /\
-    lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
-    o1PipelineCorrect$o1_pipeline rpolicy dunit = SOME dout
-    ==>
-    mem_inv (\ctx fn inst s. inst_create_size_ok inst s) dout.po_unit.cu_context vs
+(* An opcode reached in the shadow-root run is reachable in the creation frame. *)
+Theorem shadow_root_frame_inst_at:
+  es.contexts <> [] /\ frame_inst_at (shadow_root es) ghost op ==>
+  ?s. frame_inst_at es s op
 Proof
-  rpt strip_tac >> match_mp_tac mem_inv_create_size_ok_no_create >>
-  conj_tac
-  >- (qpat_x_assum `o1PipelineCorrect$o1_pipeline _ _ = _` mp_tac >>
-      simp[o1PipelineCorrectTheory.o1_pipeline_def] >>
-      disch_then (assume_tac o MATCH_MP run_venom_pipeline_success_unit_wf) >>
-      fs[venomCompilerWfTheory.unit_wf_def]) >>
-  drule_all lower_vyper_deploy_unit_call_free_entry_ops >> strip_tac >>
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- (qspecl_then [`rpolicy`, `dunit`, `dout`, `efn`, `CREATE`] mp_tac
-        o1_pipeline_leaf_entry_opcode_absence >>
-      impl_tac >- fs[] >> disch_then drule_all >> simp[]) >>
-  qspecl_then [`rpolicy`, `dunit`, `dout`, `efn`, `CREATE2`] mp_tac
-    o1_pipeline_leaf_entry_opcode_absence >>
-  impl_tac >- fs[] >> disch_then drule_all >> simp[]
+  strip_tac >>
+  `LENGTH (shadow_root es).contexts = LENGTH es.contexts` by
+    simp[shadow_root_def, shadow_root_contexts_length] >>
+  fs[frame_inst_at_step] >>
+  `!t. RTC (\a b. LENGTH a.contexts >= LENGTH es.contexts /\
+                  step a = (INL (), b)) (shadow_root es) t ==>
+       ?s. RTC (\a b. LENGTH a.contexts >= LENGTH es.contexts /\
+                      step a = (INL (), b)) es s /\
+           s.contexts <> [] /\ shadow_root s = t` by
+    (ho_match_mp_tac RTC_ALT_RIGHT_INDUCT >> conj_tac
+     >- (qexists_tac `es` >> simp[]) >>
+     qx_genl_tac [`y`, `z`] >> strip_tac >>
+     qpat_x_assum `shadow_root s = y` (SUBST_ALL_TAC o SYM) >>
+     `LENGTH (shadow_root s).contexts = LENGTH s.contexts` by
+       simp[shadow_root_def, shadow_root_contexts_length] >>
+     drule_all shadow_root_step_continue >> strip_tac >>
+     qexists_tac `es'` >> simp[] >>
+     irule (cj 2 (SPEC_ALL RTC_RULES_RIGHT1)) >>
+     qexists_tac `s` >> fs[]) >>
+  qpat_x_assum `!t. RTC _ _ t ==> _` drule >> strip_tac >>
+  qexists_tac `s` >> simp[frame_inst_at_step] >>
+  Cases_on `s.contexts` >> fs[] >>
+  PairCases_on `h` >> Cases_on `t = []` >>
+  gvs[shadow_root_def, shadow_root_contexts_def, shadow_root_contexts_length]
 QED
 
-(* PLANNED ADMISSION S7g-d, sufficient gas for deployment: the deploy-side
-   counterpart of codegen_gas_sufficient together with deploy_venom_frame.
-   Given the constructor unit's resource bound, some gas g, independent of
-   the creation frame, is enough: with g' >= g more gas, the creation frame
-   ends in OutOfGas only when the code it deposits, runtime_bc and the
-   immutables section, is longer than max_code_size, which handle_create
-   rejects with OutOfGas at any gas.  No RETURNDATACOPY exemption: the
-   constructor makes no calls.  The last premise says what the constructor
-   returns, so the deposit's length is LENGTH runtime_bc + imm_len tops.
-   Proof idea: S7g's per-instruction argument on the root-shadowed frame
-   codegen runs (shadow_root), with no RETURNDATACOPY run, plus the
-   deposit, which costs at most code_deposit_cost * max_code_size.
-   wf_state es keeps the frame's own gas use within its limit: otherwise the
-   gassed frame could start with no gas left.  deploy_typing_ok fixes each
-   builtin's argument count, which the call-free lowering needs. *)
+(* Reserve gas for the code deposit. Revert-data copying has its own
+   escape because a failed call can return more bytes than the caller can copy. *)
 Theorem deploy_frame_gas_sufficient:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan fuel M.
     deploy_phases policy tops (deploy_bc, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
-    unit_shape_ok dout.po_unit /\
-    constructor_call_free tops
+    unit_shape_ok dout.po_unit
     ==>
     ?g. !g' am tx es Inv.
       g <= g' /\ wf_state es /\ deploy_typing_ok tops am tx /\
@@ -412,6 +402,9 @@ Theorem deploy_frame_gas_sufficient:
         <= dimword(:256) DIV 2 /\
       codegen_context_obligations Inv dout.po_unit.cu_context cplan /\
       codegen_reachability_package Inv dout.po_unit.cu_context
+        (deploy_entry_state prog cplan tops (add_frame_gas g' es)) /\
+      mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
+        dout.po_unit.cu_context
         (deploy_entry_state prog cplan tops (add_frame_gas g' es)) /\
       venom_run_bounded fuel M dout.po_unit.cu_context
         (deploy_entry_state prog cplan tops (add_frame_gas g' es)) /\
@@ -424,7 +417,8 @@ Theorem deploy_frame_gas_sufficient:
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
         (r = INR (SOME OutOfGas) ==>
-         max_code_size < LENGTH runtime_bc + imm_len tops)
+         max_code_size < LENGTH runtime_bc + imm_len tops \/
+         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
   rpt gen_tac >> strip_tac >>
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
@@ -437,18 +431,8 @@ Proof
                `code_deposit_cost * max_code_size`] mp_tac codegen_gas_surplus >>
   impl_tac >- fs[] >> disch_then (qx_choose_then `g` assume_tac) >>
   qexists_tac `g` >> rpt strip_tac >>
-  `!vs. mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
-          dout.po_unit.cu_context vs` by
-    (drule_all o1_deploy_unit_create_size_ok >> simp[]) >>
-  (* no RETURNDATACOPY anywhere in the creation code *)
-  drule_all lower_vyper_deploy_unit_call_free_entry >> strip_tac >>
-  `!fn inst. MEM fn dout.po_unit.cu_context.ctx_functions /\
-             MEM inst (fn_insts fn) ==> inst.inst_opcode <> RETURNDATACOPY` by
-    (rpt gen_tac >> strip_tac >>
-     qspecl_then [`rpolicy`, `dunit`, `dout`, `efn`, `RETURNDATACOPY`] mp_tac
-       o1_pipeline_leaf_entry_opcode_absence >>
-     impl_tac >- fs[] >> disch_then drule_all >> simp[]) >>
-  drule_all codegen_assembly_no_returndatacopy >> strip_tac >>
+  Cases_on `?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy`
+  >- metis_tac[run_call_total] >>
   `?c0 rb0. es.contexts = [(c0, rb0)]` by
     (fs[deploy_state_rel_def] >> metis_tac[add_frame_gas_single_context]) >>
   drule shadow_root_add_frame_gas >> disch_then (qspec_then `g'` assume_tac) >>
@@ -462,10 +446,9 @@ Proof
   qabbrev_tac `vs = deploy_entry_state prog cplan tops (add_frame_gas g' es)` >>
   qabbrev_tac `sh = shadow_root (add_frame_gas g' es)` >>
   `!t. ~frame_inst_at sh t ReturnDataCopy` by
-    (gen_tac >>
-     qspecl_then [`rpolicy`, `dout.po_unit`, `cplan`, `prog`, `fuel`, `M`,
-                  `Inv`, `vs`, `sh`, `t`] mp_tac codegen_no_returndatacopy >>
-     impl_tac >- fs[] >> simp[]) >>
+    (rpt strip_tac >> fs[Abbr `sh`] >>
+     `(add_frame_gas g' es).contexts <> []` by simp[] >>
+     drule_all shadow_root_frame_inst_at >> simp[]) >>
   `!s op r s'. frame_inst_at sh s op /\ step_inst op s = (r, s') /\
                LENGTH s'.contexts = LENGTH s.contexts ==>
                r <> INR (SOME OutOfGas) /\

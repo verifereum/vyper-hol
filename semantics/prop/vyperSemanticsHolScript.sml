@@ -5,6 +5,7 @@ Ancestors
   vyperImmutableAccessFrame
   vyperLogPreservation
   vyperEvalPureExpr
+  vyperEvalOutcomeReplace
   vyperTypeSoundness
   vyperABIValid
   vyperABIRoundtrip

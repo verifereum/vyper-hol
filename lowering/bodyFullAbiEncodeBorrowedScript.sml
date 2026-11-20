@@ -5,7 +5,7 @@ Ancestors
   abiEncodeArgsSim logValueFramePtr bodyPtrDefs loweringPosts exprSimProps
   valueEncodingProps valueEncodingProofs ptrDiscipline
 
-Theorem borrowed_footprint_frame[local]:
+Theorem abi_encode_borrowed_footprint_frame:
   expr_sim_inv ce cx env es /\
   stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s /\
   stmt_state_rel (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx ee t /\ ee.scopes = es.scopes /\
@@ -72,5 +72,5 @@ Proof
   >- (Cases_on `op` >> gvs[ghost_kept_at_def, op_taint_def]) >>
   rpt gen_tac >> strip_tac >>
   `eval_operand op s = SOME w` by metis_tac[] >>
-  drule_all borrowed_footprint_frame >> simp[]
+  drule_all abi_encode_borrowed_footprint_frame >> simp[]
 QED

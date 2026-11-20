@@ -18,7 +18,8 @@ Theorem prefix_loop_increment_steps:
   eval_operand (Var iv) s = SOME (n2w j) /\
   FLOOKUP G ip = SOME (slot,32) /\
   op_taint tn (Var ip) = {} /\ op_taint tn (Var iv) = {} /\
-  slot < dimword(:256) /\ allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  slot < dimword(:256) /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   let a = mk_inst iid ADD [Var iv;Lit 1w] [fresh];
       k = mk_inst (iid+1) MSTORE [Var ip;Var fresh] [];
       u = update_var fresh (n2w (SUC j)) s;
@@ -68,6 +69,10 @@ Proof
 QED
 
 Resume prefix_loop_increment_steps[steps]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms,Abbr `u`, update_var_def, allocas_below_fmp_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   gen_tac >> conj_tac
   >- (simp[Abbr `a`] >> irule prefix_bool_body_arith_ptr_step >> simp[op_taint_def]) >>
   conj_tac
@@ -107,7 +112,8 @@ Theorem prefix_loop_increment_run:
   eval_operand (Var iv) s = SOME (n2w j) /\
   FLOOKUP G ip = SOME (slot,32) /\
   op_taint tn (Var ip) = {} /\ op_taint tn (Var iv) = {} /\
-  slot < dimword(:256) /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  slot < dimword(:256) /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   bb.bb_instructions = prefix ++ abi_decode_backedge_insts iid iv fresh (Var ip) hdr /\
   s.vs_inst_idx = LENGTH prefix /\
@@ -141,6 +147,15 @@ Proof
     (simp[Abbr `u`,Abbr `t`,Abbr `u1`,Abbr `t2`,update_var_def,mstore_def,
       allocas_from_def,write_memory_with_expansion_def] >>
      gvs[allocas_from_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u1` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms,Abbr `u1`, Abbr `u`, update_var_def, allocas_below_fmp_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms,Abbr `t`, Abbr `u`, mstore_def, write_memory_with_expansion_def,
+       update_var_def, allocas_below_fmp_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `get_instruction bb s.vs_inst_idx = SOME a /\
    get_instruction bb u1.vs_inst_idx = SOME k /\
    get_instruction bb t2.vs_inst_idx = SOME (mk_inst (iid+2) JMP [Label hdr] [])` by
@@ -160,8 +175,11 @@ Proof
   strip_tac >>
   `!fuel. ptr_safe_run D lo fuel ctx fn PG H qt t2` by
     (irule prefix_loop_entry_jump_run >>
-     simp[Abbr `t2`] >> qexistsl [`hdr`,`hdr_bb`,`iid+2`] >>
-     gs[jump_to_def] >> metis_tac[]) >>
+     simp[Abbr `t2`] >> conj_tac
+     >- (qexistsl [`hdr`,`hdr_bb`,`iid+2`] >> gs[jump_to_def] >> metis_tac[]) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t` mp_tac >>
+     simp[NoAsms,allocas_below_fmp_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   gen_tac >>
   `step_inst fuel ctx a s = OK u` by
     (simp[Abbr `a`,step_inst_non_invoke] >> asm_rewrite_tac[]) >>
@@ -195,7 +213,8 @@ Theorem prefix_loop_increment_path:
   eval_operand (Var iv) s = SOME (n2w j) /\
   FLOOKUP G ip = SOME (slot,32) /\
   op_taint tn (Var ip) = {} /\ op_taint tn (Var iv) = {} /\
-  slot < dimword(:256) /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  slot < dimword(:256) /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   bb.bb_instructions = prefix ++ abi_decode_backedge_insts iid iv fresh (Var ip) hdr /\
   s.vs_inst_idx = LENGTH prefix /\
@@ -230,6 +249,15 @@ Proof
     (simp[Abbr `u`,Abbr `t`,update_var_def,mstore_def,
       allocas_from_def,write_memory_with_expansion_def] >>
      gvs[allocas_from_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (u with vs_inst_idx := s.vs_inst_idx + 1)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms,Abbr `u`, update_var_def, allocas_below_fmp_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (t with vs_inst_idx := s.vs_inst_idx + 2)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms,Abbr `t`, Abbr `u`, mstore_def, write_memory_with_expansion_def,
+       update_var_def, allocas_below_fmp_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `eval_operand (Var ip) (u with vs_inst_idx := s.vs_inst_idx + 1) = SOME (n2w slot) /\
    eval_operand (Var fresh) (u with vs_inst_idx := s.vs_inst_idx + 1) =
      SOME (n2w (SUC j))` by
@@ -359,6 +387,7 @@ Proof
   qabbrev_tac `q = step_taint a s u tn` >>
   qabbrev_tac `qt = step_taint k u raw q` >>
   qabbrev_tac `t = jump_to hdr raw` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `eval_operand (Var iv) s = SOME (n2w j)`
     (mp_then (Pos (el 3)) mp_tac prefix_loop_increment_steps) >>
   disch_then drule_all >>

@@ -11,8 +11,7 @@ Theorem entry_classified_external_support:
     (FST (classify_functions tops)) ==>
   (NULL defaults /\
    supported_function_return tops External ret /\
-   supported_function_body tops External args body /\
-   supported_return_layouts ret body) \/
+   supported_function_body tops External args body) \/
   ?top. MEM top tops /\
         public_getter top = SOME (mut,nr,rr,name,args,defaults,ret,body)
 Proof
@@ -31,10 +30,7 @@ Theorem entry_classified_internal_support:
     (FST (SND (classify_functions tops))) ==>
   supported_pure_exprs tops defaults /\
   EVERY (supported_default_expression tops) defaults /\
-  EVERY (supported_value_type tops o SND) args /\
-  supported_function_return tops Internal ret /\
-  supported_function_body tops Internal args body /\
-  supported_return_layouts ret body
+  supported_function_body tops Internal args body
 Proof
   rpt gen_tac >> simp[MEM_classify_internal] >> strip_tac >>
   gvs[constSubstTheory.subst_consts_fn_empty] >>
@@ -49,8 +45,7 @@ Theorem entry_classified_fallback_support:
     SOME (mut,nr,rr,name,args,defaults,ret,body) ==>
   NULL defaults /\
   supported_function_return tops External ret /\
-  supported_function_body tops External args body /\
-  supported_return_layouts ret body
+  supported_function_body tops External args body
 Proof
   rpt gen_tac >> strip_tac >> drule classify_functions_fallback_mem >> strip_tac >>
   gvs[constSubstTheory.subst_consts_fn_empty] >>

@@ -129,7 +129,7 @@ Theorem deploy_ctor_prefix_fail_run_ptr_safe:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es) /\
+    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     (!marks. ~deploy_source_exempt tops
                (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
                   [(NONE, tops)] [])) /\
@@ -153,7 +153,7 @@ Proof
      strip_tac >> drule_all ctor_prefix_entry_value >> simp[Abbr `s0`]) >>
   `s0.vs_allocas = FEMPTY` by
     (fs[gas_variant_def, Abbr `s0`] >>
-     qpat_x_assum `deploy_entry_state _ _ _ _ = _`
+     qpat_x_assum `(deploy_entry_state _ _ _ _ with vs_outcomes := _) = _`
        (mp_tac o Q.AP_TERM `\x. x.vs_allocas`) >>
      simp[deploy_entry_state_def, entry_venom_state_def,
           init_venom_state_def]) >>

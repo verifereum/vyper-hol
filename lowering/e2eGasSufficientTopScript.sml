@@ -17,7 +17,7 @@ Ancestors
   ctorDeployDefs ctorDeployDefsReach ctorDeployRawEntryFacts
   ctorDeployFrame ctorDeployShape ctorDeployDead ctorDeployRunBounded
   ctorDeployInitcodeAsm ctorDeployMemoryFrontier ctorDeployLoweringSource
-  ctorDeployCallFree deployUnitProducers deployUnitExecution deployUnitExitSafe
+  deployUnitProducers deployUnitExecution deployUnitExitSafe
   deployFrameReplay compileVyper compilePhasesProps
   codegen codegenGasAsmOpt codegenAsmProgOk codegenAsmOpt
   codegenEntrySim codegenEntryRel asmFrameRel codegenRel frameRel
@@ -320,7 +320,6 @@ Theorem e2e_deploy_gas_sufficient_asm_opt:
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
     ~program_reads_self_code tops /\
     supported_program tops /\ supported_program_deploy tops /\
-    constructor_call_free tops /\
     deploy_typing_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     ~(?t. runtime_bc = 0xEFw :: t)
@@ -331,12 +330,14 @@ Theorem e2e_deploy_gas_sufficient_asm_opt:
       (!gs. deploy_storage_ok tops am tx
               (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
       (!obs. ~deploy_gas_source_exempt tops
-         (load_contract NONE obs am tx [(NONE, tops)] []))
+         (load_contract (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+            obs am tx [(NONE, tops)] []))
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
         (r = INR (SOME OutOfGas) ==>
-         max_code_size < LENGTH runtime_bc + imm_len tops)
+         max_code_size < LENGTH runtime_bc + imm_len tops \/
+         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
   rpt strip_tac >>
   drule compile_vyper_deploy_phases_asm_opt >> strip_tac >>
@@ -359,14 +360,6 @@ Proof
   drule_all lower_vyper_deploy_unit_sym_src_ok >> strip_tac >>
   drule_all o1_pipeline_label_flow_preserved >> strip_tac >>
   drule_all o1_pipeline_sym_unit_static_ok >> strip_tac >>
-  drule_all lower_vyper_deploy_unit_call_free_entry >> strip_tac >>
-  `!fn inst. MEM fn dout.po_unit.cu_context.ctx_functions /\
-             MEM inst (fn_insts fn) ==> inst.inst_opcode <> RETURNDATACOPY` by
-    (rpt gen_tac >> strip_tac >>
-     qspecl_then [`rpolicy`, `dunit`, `dout`, `efn`, `RETURNDATACOPY`] mp_tac
-       o1_pipeline_leaf_entry_opcode_absence >>
-     impl_tac >- fs[] >> disch_then drule_all >> simp[]) >>
-  drule_all codegen_assembly_no_returndatacopy >> strip_tac >>
   `lowering_context_ok dunit.cu_context` by metis_tac[deploy_unit_context_ok] >>
   qspecl_then [`tops`, `rpolicy`, `runtime_bc`, `dunit`, `am`, `tx`]
     mp_tac deploy_unit_fns_fuel_stable >>
@@ -381,18 +374,20 @@ Proof
     codegen_gas_surplus_asm_opt >>
   impl_tac >- simp[] >> disch_then (qx_choose_then `g` assume_tac) >>
   qexists_tac `g` >> rpt strip_tac >>
-  `!vs. mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
-          dout.po_unit.cu_context vs` by
-    (drule_all o1_deploy_unit_create_size_ok >> simp[]) >>
   `?c0 rb0. es.contexts = [(c0, rb0)] /\ wf_state es` by
     fs[deploy_state_rel_def] >>
   qabbrev_tac `eg = add_frame_gas g' es` >>
+  Cases_on `?s. frame_inst_at eg s ReturnDataCopy`
+  >- (qspec_then `eg` strip_assume_tac run_call_total >> metis_tac[]) >>
   `deploy_state_rel tops (assemble prog') am tx eg` by
     (simp[Abbr`eg`] >> irule deploy_state_rel_add_frame_gas >> simp[]) >>
   qpat_x_assum `deploy_state_rel _ _ _ _ es` kall_tac >>
   `?ctxt rb. eg.contexts = [(ctxt, rb)] /\
              ctxt.msgParams.outputTo = Code tx.target /\ wf_state eg` by
     fs[deploy_state_rel_def] >>
+  `!t. ~frame_inst_at (shadow_root eg) t ReturnDataCopy` by
+    (rpt strip_tac >> `eg.contexts <> []` by simp[] >>
+     drule_all shadow_root_frame_inst_at >> metis_tac[]) >>
   `shadow_root eg = add_frame_gas g' (shadow_root es)` by
     (simp[Abbr`eg`] >> irule shadow_root_add_frame_gas >> fs[]) >>
   `wf_state (shadow_root eg)` by simp[shadow_root_wf_state] >>
@@ -423,11 +418,18 @@ Proof
     fs[Abbr`txp`, deploy_state_rel_def] >>
   `!gs. deploy_storage_ok tops am txp vs.vs_outcomes gs` by
     simp[Abbr`txp`, deploy_storage_ok_code_update] >>
-  `!obs. load_contract NONE obs am txp [(NONE,tops)] [] =
-         load_contract NONE obs am tx [(NONE,tops)] []` by
+  `!obs. load_contract (SOME vs.vs_outcomes) obs am txp [(NONE,tops)] [] =
+         load_contract (SOME vs.vs_outcomes) obs am tx [(NONE,tops)] []` by
     simp[Abbr`txp`, load_contract_def, load_contract_trace_code_update] >>
   `!obs. ~deploy_gas_source_exempt tops
-          (load_contract NONE obs am txp [(NONE,tops)] [])` by fs[] >>
+          (load_contract (SOME vs.vs_outcomes) obs am txp [(NONE,tops)] [])` by fs[] >>
+  `mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
+      dout.po_unit.cu_context vs` by
+    (qspecl_then [`asm_opt_finalizer`, `policy`, `tops`, `runtime_bc`,
+                 `rpolicy`, `dunit`, `dout`, `prog`, `prog'`, `cplan`,
+                 `am`, `tx`, `txp`, `eg`, `vs`] mp_tac
+       deploy_entry_create_size_ok >>
+     impl_tac >- fs[Abbr `txp`, Abbr `vs`, gas_variant_refl] >> simp[]) >>
   qspecl_then [`asm_opt_finalizer`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
                `dunit`, `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`,
                `eg`, `vs.vs_initial_fmp`] mp_tac
@@ -449,7 +451,7 @@ Proof
                              s.vs_data_section = vi.vs_data_section)
           dunit.cu_context vi /\
         deploy_venom_result_rel H tops runtime_bc txp
-          (load_contract NONE obs am txp [(NONE,tops)] [])
+          (load_contract (SOME vs.vs_outcomes) obs am txp [(NONE,tops)] [])
           (run_context efuel dunit.cu_context vi)` by
     (gen_tac >> strip_tac >>
      `gas_variant vi vs` by metis_tac[raw_variant_gas_variant, o1_run_state_ok_def] >>
@@ -469,9 +471,6 @@ Proof
        mp_tac deploy_unit_exit_safe_runs >>
      REWRITE_TAC [APPEND_NIL] >>
      qabbrev_tac `obs = gas_explicit marks vi.vs_gas_readings` >>
-     `load_contract (SOME vi.vs_outcomes) obs am txp [(NONE,tops)] [] =
-      load_contract NONE obs am txp [(NONE,tops)] []` by
-       metis_tac[load_contract_call_free] >>
      `deploy_storage_ok tops am txp vi.vs_outcomes obs` by
        (qpat_assum `vi.vs_outcomes = vs.vs_outcomes`
           (fn th => PURE_REWRITE_TAC [th]) >>
@@ -479,7 +478,7 @@ Proof
           (qspec_then `obs` ACCEPT_TAC)) >>
      `~deploy_source_exempt tops
          (load_contract (SOME vi.vs_outcomes) obs am txp [(NONE,tops)] [])` by
-       (qpat_assum `load_contract (SOME vi.vs_outcomes) obs am txp _ _ = _`
+       (qpat_assum `vi.vs_outcomes = vs.vs_outcomes`
           (fn th => PURE_REWRITE_TAC [th]) >>
         qpat_assum `!obs. ~deploy_gas_source_exempt tops _`
           (qspec_then `obs` (ACCEPT_TAC o CONJUNCT1 o
@@ -501,7 +500,7 @@ Proof
         drule raw_reachable_code_data >> strip_tac >>
         simp[] >> irule lowered_unit_dload_in_section >>
         metis_tac[]) >>
-     qpat_assum `load_contract (SOME vi.vs_outcomes) obs am txp _ _ = _`
+     qpat_assum `vi.vs_outcomes = vs.vs_outcomes`
        (fn th => qpat_x_assum `deploy_venom_result_rel H _ _ _ _ _`
           (assume_tac o REWRITE_RULE [th])) >>
      qexistsl_tac [`H`, `obs`, `vf`] >> rpt conj_tac >>
@@ -550,10 +549,11 @@ Proof
              (run_context vfuel dout.po_unit.cu_context vs)` by
     metis_tac[ctx_sim_def] >>
   `~deploy_source_exempt tops
-      (load_contract NONE obs am txp [(NONE,tops)] [])` by
+      (load_contract (SOME vs.vs_outcomes) obs am txp [(NONE,tops)] [])` by
     fs[deploy_gas_source_exempt_def] >>
-  qspecl_then [`H`, `tops`, `runtime_bc`, `am`, `txp`, `obs`,
-               `load_contract NONE obs am txp [(NONE,tops)] []`,
+  qspecl_then [`H`, `tops`, `runtime_bc`, `am`, `txp`,
+               `SOME vs.vs_outcomes`, `obs`,
+               `load_contract (SOME vs.vs_outcomes) obs am txp [(NONE,tops)] []`,
                `run_context efuel dunit.cu_context vs_in`,
                `run_context vfuel dout.po_unit.cu_context vs`] mp_tac
     deploy_venom_result_rel_dead >>
@@ -563,12 +563,6 @@ Proof
   drule_all opt_deploy_asm_frame_rel >>
   disch_then (qspecl_then [`prog`, `cplan`] assume_tac) >>
   qabbrev_tac `sh = shadow_root eg` >>
-  `!t. ~frame_inst_at sh t ReturnDataCopy` by
-    (gen_tac >>
-     qspecl_then [`rpolicy`, `dout.po_unit`, `cplan`, `prog`, `prog'`, `fuel'`,
-                  `M`, `raw_reachable vs`, `vs`, `sh`, `t`] mp_tac
-       codegen_no_returndatacopy_asm_opt >>
-     impl_tac >- fs[Abbr`vs`, Abbr`sh`] >> simp[]) >>
   `!s op r s'. frame_inst_at sh s op /\ step_inst op s = (r, s') /\
                LENGTH s'.contexts = LENGTH s.contexts ==>
                r <> INR (SOME OutOfGas) /\
@@ -586,7 +580,7 @@ Proof
   disch_then (qx_choosel_then [`r`, `es'`]
      (fn th => map_every assume_tac (CONJUNCTS th))) >>
   qspecl_then [`H`, `eg`, `ctxt`, `rb`, `txp`, `tops`, `runtime_bc`,
-               `load_contract NONE obs am txp [(NONE,tops)] []`,
+               `load_contract (SOME vs.vs_outcomes) obs am txp [(NONE,tops)] []`,
                `run_context vfuel dout.po_unit.cu_context vs`,
                `r`, `es'`] mp_tac deploy_frame_gas_tail >>
   impl_tac
@@ -660,15 +654,13 @@ QED
 
 (* TOP-LEVEL: one theorem over the accepted finalizers, with
    e2e_deploy_correctness's finalizer premises.  The RETURNDATACOPY escape is
-   for constructors that call out; with today's call-free constructors only
-   the code-size escape is taken. *)
+   for constructors that call out. *)
 Theorem e2e_deploy_gas_sufficient:
   !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
     (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\ supported_program_deploy tops /\
-    constructor_call_free tops /\
     deploy_typing_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     ~(?t. runtime_bc = 0xEFw :: t)
@@ -680,7 +672,8 @@ Theorem e2e_deploy_gas_sufficient:
         ((!gs. deploy_storage_ok tops am tx
                  (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
          (!obs. ~deploy_gas_source_exempt tops
-            (load_contract NONE obs am tx [(NONE, tops)] [])) /\
+            (load_contract (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+               obs am tx [(NONE, tops)] [])) /\
          LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64 /\
          r = INR (SOME OutOfGas) ==>
          max_code_size < LENGTH runtime_bc + imm_len tops \/
@@ -693,12 +686,14 @@ Proof
      (!gs. deploy_storage_ok tops am tx
              (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
      (!obs. ~deploy_gas_source_exempt tops
-        (load_contract NONE obs am tx [(NONE, tops)] []))
+        (load_contract (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+           obs am tx [(NONE, tops)] []))
      ==>
      ?r es'.
        run_call (add_frame_gas g' es) = SOME (r, es') /\
        (r = INR (SOME OutOfGas) ==>
-        max_code_size < LENGTH runtime_bc + imm_len tops)` by
+        max_code_size < LENGTH runtime_bc + imm_len tops \/
+        ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)` by
     (`fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
      pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
      >- (drule_all e2e_deploy_gas_sufficient_identity >> simp[])
@@ -710,5 +705,6 @@ Proof
   qexistsl_tac [`r`, `es'`] >> simp[] >> rpt strip_tac >>
   qpat_x_assum `!g'. g <= g' /\ _ ==> _` (qspec_then `g'` mp_tac) >>
   impl_tac >- simp[] >>
-  strip_tac >> gvs[]
+  strip_tac >> gvs[] >>
+  DISJ2_TAC >> qexists_tac `s` >> first_assum ACCEPT_TAC
 QED

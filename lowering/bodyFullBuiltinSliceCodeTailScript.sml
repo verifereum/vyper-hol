@@ -23,7 +23,9 @@ Theorem slice_code_tail_full:
   emit_void copy_op copy_ops se = ((),sf) /\
   emit_void MSTORE [out;cnt] sf = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   MEM query_op [CODESIZE;EXTCODESIZE] /\ LENGTH query_ops <= 1 /\
   (!arg. MEM arg query_ops ==> op_taint tn arg = {}) /\
   step_inst_base
@@ -90,7 +92,8 @@ Theorem slice_code_tail_full:
         (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr out LocMemory)) ee HG tm t /\
       ptr_buf_ok cenv e out HG t /\
       ghost_kept_at lo cenv es sa G tn s HG tm)
-    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_assum `e = _` SUBST_ALL_TAC >>
@@ -118,6 +121,9 @@ Proof
            (ACCEPT_TAC o MATCH_MP (cj 7 (iffLR bodyPtrDefsTheory.ghost_inv_at_def))))
      >> qpat_assum `ghost_inv_at _ lo d cenv cx es G tn s`
           (ACCEPT_TAC o MATCH_MP (cj 8 (iffLR bodyPtrDefsTheory.ghost_inv_at_def)))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `ctx_has_dalloca ctx ==> _ /\ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `cs_extends sa sc /\ cs_extends sc sd /\ cs_extends sd se /\
    cs_extends se sf /\ cs_extends sf sb` by
     (rpt conj_tac
@@ -140,6 +146,11 @@ Proof
   (impl_tac >- simp[]) >>
   disch_then (qx_choose_then `size_var` (qx_choose_then `zq`
     (qx_choose_then `G4` (qx_choose_then `tn4` strip_assume_tac)))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp zq` by
+    (qpat_assum `zq = _` SUBST1_TAC >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     simp[NoAsms,ptrDisciplineTheory.allocas_below_fmp_def,
+          venomStateTheory.update_var_def] >> metis_tac[]) >>
   `!x. start = Var x ==> not_fresh_at sa x` by simp[] >>
   `!x. cnt = Var x ==> not_fresh_at sa x` by simp[] >>
   `zq.vs_labels = s.vs_labels` by simp[venomStateTheory.update_var_def] >>
@@ -294,6 +305,12 @@ Proof
     (qpat_assum `!H. stmt_state_rel H ctx func cenv cx es s ==> _`
        (qspec_then `storage_trace_horizon es.storage_trace` match_mp_tac) >>
      first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp zb /\
+    zb.vs_alloca_next + pending_alloca_size func zb <= w2n zb.vs_initial_fmp` by
+    (qpat_assum `zb = s with <|vs_vars := _;vs_inst_idx := _|>` SUBST1_TAC >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp _ /\ _` mp_tac >>
+     simp[NoAsms,ptrDisciplineTheory.allocas_below_fmp_def,
+          exprLoweringPropsTheory.pending_alloca_size_def] >> metis_tac[]) >>
   `allocas_from lo zb /\ lo <= zb.vs_alloca_next` by
     (simp[ptrDisciplineTheory.allocas_from_def] >>
      qpat_assum `allocas_from lo s`
