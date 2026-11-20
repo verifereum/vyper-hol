@@ -1981,27 +1981,54 @@ Resume for_storage_array_entry_full[entry_ghost]:
   simp[NoAsms, Excl "step_taint_inst_idx", Excl "step_taint_inst_idx_left",
        Excl "step_taint_inst_idx_right", step_prov_def, set_prov_def, out_prov_def,
        first_prov_def, op_prov_def, FLOOKUP_DRESTRICT] >>
-  ntac 2
-    (simp[NoAsms, Excl "step_taint_inst_idx", Excl "step_taint_inst_idx_left",
-          Excl "step_taint_inst_idx_right", Once inst_seq_ptr_def] >>
-     conj_tac
-     >- (irule scalar_ptr_inst_ok_lo >>
-         simp[scalar_shape_def, scalar_binary_def, scalar_unary_def,
-              op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
-              allocas_from_def, allocas_below_fmp_def] >>
-         metis_tac[allocas_from_def, allocas_below_fmp_def]) >>
-     simp[Excl "step_taint_inst_idx", Excl "step_taint_inst_idx_left",
-          Excl "step_taint_inst_idx_right", step_inst_base_opcode_eqs,
-          exec_pure1_def, eval_operand_def, lookup_var_def, update_var_def,
-          FLOOKUP_UPDATE, bool_to_word_def] >>
-     simp[Excl "step_taint_inst_idx", Excl "step_taint_inst_idx_left",
-          Excl "step_taint_inst_idx_right", scalar_shape_def, scalar_binary_def,
-          scalar_unary_def, step_inst_base_opcode_eqs, exec_pure1_def,
-          eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
-          bool_to_word_def, set_var_taint_def, out_taint_def, op_taint_def] >>
-     simp[NoAsms, Excl "step_taint_inst_idx", Excl "step_taint_inst_idx_left",
-          Excl "step_taint_inst_idx_right", step_prov_def, set_prov_def,
-          out_prov_def, first_prov_def, op_prov_def, FLOOKUP_DRESTRICT]) >>
+  (* ISZERO *)
+  simp[NoAsms, Excl "step_taint_inst_idx", Excl "step_taint_inst_idx_left",
+       Excl "step_taint_inst_idx_right", Once inst_seq_ptr_def] >>
+  conj_tac >- (
+    irule scalar_ptr_inst_ok_lo >>
+    simp[scalar_shape_def, scalar_binary_def, scalar_unary_def,
+         op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+    qpat_assum `allocas_from lo s` mp_tac >>
+    qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    simp[allocas_from_def, allocas_below_fmp_def] >>
+    metis_tac[]) >>
+  simp[Excl "step_taint_inst_idx", Excl "step_taint_inst_idx_left",
+       Excl "step_taint_inst_idx_right", step_inst_base_opcode_eqs,
+       exec_pure1_def, eval_operand_def,
+       lookup_var_def, update_var_def, FLOOKUP_UPDATE, bool_to_word_def] >>
+  simp[Excl "step_taint_inst_idx", Excl "step_taint_inst_idx_left",
+       Excl "step_taint_inst_idx_right", scalar_shape_def, scalar_binary_def,
+       scalar_unary_def, step_inst_base_opcode_eqs, exec_pure1_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       bool_to_word_def, set_var_taint_def, out_taint_def, op_taint_def] >>
+  simp[NoAsms, Excl "step_taint_inst_idx", Excl "step_taint_inst_idx_left",
+       Excl "step_taint_inst_idx_right", step_prov_def, set_prov_def,
+       out_prov_def, first_prov_def, op_prov_def, FLOOKUP_DRESTRICT] >>
+  (* ASSERT *)
+  simp[NoAsms, Excl "step_taint_inst_idx", Excl "step_taint_inst_idx_left",
+       Excl "step_taint_inst_idx_right", Once inst_seq_ptr_def] >>
+  conj_tac >- (
+    irule scalar_ptr_inst_ok_lo >>
+    simp[scalar_shape_def, scalar_binary_def, scalar_unary_def,
+         op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+    qpat_assum `allocas_from lo s` mp_tac >>
+    qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    simp[allocas_from_def, allocas_below_fmp_def] >>
+    metis_tac[]) >>
+  simp[Excl "step_taint_inst_idx", Excl "step_taint_inst_idx_left",
+       Excl "step_taint_inst_idx_right", step_inst_base_opcode_eqs,
+       exec_pure1_def, eval_operand_def,
+       lookup_var_def, update_var_def, FLOOKUP_UPDATE, bool_to_word_def] >>
+  simp[Excl "step_taint_inst_idx", Excl "step_taint_inst_idx_left",
+       Excl "step_taint_inst_idx_right", scalar_shape_def, scalar_binary_def,
+       scalar_unary_def, step_inst_base_opcode_eqs, exec_pure1_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       bool_to_word_def, set_var_taint_def, out_taint_def, op_taint_def] >>
+  simp[NoAsms, Excl "step_taint_inst_idx", Excl "step_taint_inst_idx_left",
+       Excl "step_taint_inst_idx_right", step_prov_def, set_prov_def,
+       out_prov_def, first_prov_def, op_prov_def, FLOOKUP_DRESTRICT] >>
   simp[inst_seq_ptr_def, pred_setTheory.INTER_ASSOC, DRESTRICT_UNIV])
 QED
 Resume for_storage_array_entry_full[entry_mem]:
