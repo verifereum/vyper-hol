@@ -1145,7 +1145,36 @@ QED
    is MLOAD/MSTORE for a word and compile_store_memory at one type
    otherwise (compile_store_memory_run).  m < 2 ** 256, since evaluate_type
    bounds the array's size. *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem array_for_source_ready[local]:
+  (!tenv s tyv t s3 vs t3 s4 x t4.
+    tenv = get_tenv cx /\
+    lift_option_type (evaluate_type tenv typ) "For evaluate_type" s = (INL tyv,t) /\
+    eval_iterator cx (Array e) s3 = (INL vs,t3) /\
+    check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s4 = (INL x,t4)
+    ==> body_for_ok cx tyv id stmts vs) /\
+  supported_stmt tops bindings (For id typ (Array e) n stmts) /\
+  expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+  type_stmt env ret_ty (For id typ (Array e) n stmts) = SOME env' /\
+  e = Name (ArrayT typ (Fixed n)) arr ==>
+  ?name env_b entry tv ptr sz al vs.
+    e = Name (ArrayT typ (Fixed n)) name /\ env' = env /\
+    well_typed_expr env (Name (ArrayT typ (Fixed n)) name) /\
+    id NOTIN FDOM env.var_types /\
+    iterator_unmodified (Array (Name (ArrayT typ (Fixed n)) name)) stmts /\
+    type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
+    supported_stmts tops bindings stmts /\
+    lookup_scopes name es.scopes = SOME entry /\
+    evaluate_type (get_tenv cx) typ = SOME tv /\
+    entry.type = ArrayTV tv (Fixed n) /\
+    value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
+    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var ptr) sz) /\
+    cenv.ce_var_type name = SOME (ArrayT typ (Fixed n)) /\
+    0 < n /\ n < dimword (:256) /\ entry.value = ArrayV (SArrayV al) /\
+    vs = array_elements (ArrayTV tv (Fixed n)) (SArrayV al) /\ LENGTH vs = n /\
+    (!gs. eval_iterator cx (Array (Name (ArrayT typ (Fixed n)) name))
+            (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) /\
+    body_stmts_ok cx stmts /\
+    FLOOKUP cenv.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE
 Proof
   strip_tac >> drule_all array_for_hypotheses >> strip_tac >> gvs[] >>
   drule_all array_name_local_binding >> strip_tac >>
@@ -1184,41 +1213,6 @@ Proof
   qexistsl_tac [`entry`, `tv`] >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
   qexists_tac `al` >> fs[Abbr `vs`]
-QED
-*)
-Theorem array_for_source_ready[local]:
-  (!tenv s tyv t s3 vs t3 s4 x t4.
-    tenv = get_tenv cx /\
-    lift_option_type (evaluate_type tenv typ) "For evaluate_type" s = (INL tyv,t) /\
-    eval_iterator cx (Array e) s3 = (INL vs,t3) /\
-    check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s4 = (INL x,t4)
-    ==> body_for_ok cx tyv id stmts vs) /\
-  supported_stmt tops bindings (For id typ (Array e) n stmts) /\
-  expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-  type_stmt env ret_ty (For id typ (Array e) n stmts) = SOME env' /\
-  e = Name (ArrayT typ (Fixed n)) arr ==>
-  ?name env_b entry tv ptr sz al vs.
-    e = Name (ArrayT typ (Fixed n)) name /\ env' = env /\
-    well_typed_expr env (Name (ArrayT typ (Fixed n)) name) /\
-    id NOTIN FDOM env.var_types /\
-    iterator_unmodified (Array (Name (ArrayT typ (Fixed n)) name)) stmts /\
-    type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
-    supported_stmts tops bindings stmts /\
-    ~supported_stmts_expr_exists expr_internal_call_root stmts /\
-    lookup_scopes name es.scopes = SOME entry /\
-    evaluate_type (get_tenv cx) typ = SOME tv /\
-    entry.type = ArrayTV tv (Fixed n) /\
-    value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
-    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var ptr) sz) /\
-    cenv.ce_var_type name = SOME (ArrayT typ (Fixed n)) /\
-    0 < n /\ n < dimword (:256) /\ entry.value = ArrayV (SArrayV al) /\
-    vs = array_elements (ArrayTV tv (Fixed n)) (SArrayV al) /\ LENGTH vs = n /\
-    (!gs. eval_iterator cx (Array (Name (ArrayT typ (Fixed n)) name))
-            (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) /\
-    body_stmts_ok cx stmts /\
-    FLOOKUP cenv.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE
-Proof
-  cheat
 QED
 
 Theorem array_for_layout_ready:
@@ -1350,7 +1344,6 @@ Theorem array_body_direct_snapshot:
     FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\ name <> id /\
     type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
     iterator_unmodified (Array (Name aty name)) stmts /\
-    ~supported_stmts_expr_exists expr_internal_call_root stmts /\
     lookup_scopes name ei.scopes = SOME entry /\
     eval_stmts cx stmts
       (ei with scopes :=
@@ -1383,7 +1376,6 @@ Theorem array_body_scope_callback:
     supported_stmts tops bindings stmts /\
     FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\ name <> id /\
     iterator_unmodified (Array (Name aty name)) stmts /\
-    ~supported_stmts_expr_exists expr_internal_call_root stmts /\
     lookup_scopes name ei.scopes = SOME entry /\
     lookup_scopes id ei.scopes = NONE /\
     eval_stmts cx stmts
