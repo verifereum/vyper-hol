@@ -33,6 +33,9 @@ val member_resources = ``\a b ctx fn site limit lower s.
   (^member_pc) a s /\ (^member_history) a b fn s /\
   alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
   fresh_vars_wrt limit s /\ allocas_from lower s /\ lower <= s.vs_alloca_next``;
+val member_room = ``\ctx fn s. ctx_has_dalloca ctx ==>
+  allocas_below_fmp s /\
+  s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp``;
 val member_frame = ``\a b ctx fn site limit lower s (G:string |-> num # num) tn d sz t H u sc.
   (^member_resources) b b ctx fn site limit lower t /\
   (^member_history) a b fn t /\ s.vs_alloca_next <= t.vs_alloca_next /\
@@ -61,12 +64,14 @@ val member_child = ``\ctx fn site limit lo PG di tv.
     compile_abi_decode_to_buf (Var q) src CALLDATALOAD (Lit 0w) (Lit 0w)
       di mid = ((),en) /\ fn_has_code mid en fn /\ (^member_exit) mid en fn /\
     en.cs_next_var <= limit.cs_next_var /\
+    (^member_room) ctx fn s /\
     (^member_resources) mid en ctx fn site limit lo s /\
     (^member_live) mid src (Var q) q s p d G tn (type_memory_size tv) /\
     (^member_owner) mid en s oid base cap d (type_memory_size tv) ==>
     (^member_abort) lo ctx fn PG s G tn \/
     ?t H u sc. IS_SOME (cd_decode F s.vs_call_ctx.cc_calldata tv (w2n p)) /\
       (^member_path) lo ctx fn PG s G tn (OK t) H u /\
+      (^member_room) ctx fn t /\
       (^member_frame) mid en ctx fn site limit lo s G tn d (type_memory_size tv) t H u sc``;
 
 Theorem finite_member_frame_join[local]:
@@ -141,10 +146,11 @@ Theorem finite_member_setup[local]:
   (^member_live) a src (Var root) root s p d G tn extent /\
   vo + sz <= extent /\ d + vo < dimword (:256) /\
   b.cs_next_var <= limit.cs_next_var /\ b.cs_next_id <= c.cs_next_id /\
-  fn_has_code a b fn /\ ~ctx_has_dalloca ctx ==>
+  fn_has_code a b fn /\ (^member_room) ctx fn s ==>
   ?r H u q.
     SND ops = Var q /\
     (^member_path) lo ctx fn PG s G tn (OK r) H u /\
+    (^member_room) ctx fn r /\
     (^member_frame) a b ctx fn site limit lo s G tn (d+vo) 0 r H u [] /\
     (^member_resources) b c ctx fn site limit lo r /\
     (^member_live) b (FST ops) (Var q) q r
@@ -162,7 +168,9 @@ Proof
     (qpat_assum `eval_operand (Var root) s = _` mp_tac >> rewrite_tac[eval_operand_def]) >>
   `not_fresh_at a root /\ (!q. src = Var q ==> not_fresh_at a q)` by
     metis_tac[calldata_operand_live_not_fresh] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (strip_tac >> qpat_assum `ctx_has_dalloca ctx ==> _ /\ _`
+      (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
   drule_all (Q.INST [`C` |-> `sz:num`] decoderMemberJointModularTheory.calldata_member_setup_joint_modular) >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl [`r`,`H`,`u`,`q`] >>
@@ -170,6 +178,13 @@ Proof
    r.vs_halted = s.vs_halted /\ r.vs_call_ctx = s.vs_call_ctx /\
    r.vs_data_section = s.vs_data_section /\ r.vs_memory = s.vs_memory` by
     (qpat_assum `r = s with <|vs_vars := _; vs_inst_idx := _|>` (fn th => ONCE_REWRITE_TAC[th]) >> simp[NoAsms]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp r /\
+    r.vs_alloca_next + pending_alloca_size fn r <= w2n r.vs_initial_fmp` by
+    (qpat_assum `r = s with <|vs_vars := _; vs_inst_idx := _|>` SUBST1_TAC >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[ptrDisciplineTheory.allocas_below_fmp_def,
+       exprLoweringPropsTheory.pending_alloca_size_def] >> metis_tac[]) >>
   qpat_x_assum `r = s with <|vs_vars := _; vs_inst_idx := _|>` kall_tac >>
   `alloca_inv r /\ alloca_frontier_inv ctx fn site r /\ allocas_from lo r` by
     (qpat_assum `alloca_inv s` mp_tac >>
@@ -271,7 +286,7 @@ Theorem none_finite_members_paths:
     (^member_child) ctx fn site limit lo PG (type_to_abi_dec_info sf ce ty) tv) tys tvs /\
   compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (abi_decoder_member_infos sf ce tys) ao vo a = ((),c) /\
-  fn_has_code a c fn /\ (^member_exit) a c fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code a c fn /\ (^member_exit) a c fn /\ (^member_room) ctx fn s /\
   c.cs_next_var <= limit.cs_next_var /\
   (^member_resources) a c ctx fn site limit lo s /\
   (^member_live) a src (Var root) root s p d G tn extent /\
@@ -280,6 +295,7 @@ Theorem none_finite_members_paths:
   (^member_abort) lo ctx fn PG s G tn \/
   ?t H u sc. IS_SOME (cd_decode_list F s.vs_call_ctx.cc_calldata tvs (w2n p) ao) /\
     (^member_path) lo ctx fn PG s G tn (OK t) H u /\
+    (^member_room) ctx fn t /\
     (^member_frame) a c ctx fn site limit lo s G tn (d+vo) (SUM (MAP type_memory_size tvs)) t H u sc
 Proof
   BETA_TAC >> Induct_on `tys` >> gen_tac >> Cases_on `tvs` >>
@@ -447,6 +463,7 @@ Proof
   conj_tac
   >- (rpt gen_tac >> irule gas_origin_ptr_path_trans >>
       qexistsl [`J`,`t1`,`v`] >> simp[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   rewrite_tac[listTheory.MAP,listTheory.SUM] >>
   mp_tac (BETA_RULE (Q.INST [`b` |-> `e`, `r` |-> `t1`, `H` |-> `J`, `u` |-> `v`,
     `t` |-> `t2`, `J` |-> `gh`, `v` |-> `w`, `sc` |-> `sc1`, `tc` |-> `sc2`,
