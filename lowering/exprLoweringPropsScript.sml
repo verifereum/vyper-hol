@@ -3778,27 +3778,6 @@ Proof
   simp[pairTheory.UNCURRY, ci_mono_comp_return]
 QED
 
-Theorem ci_mono_compile_extcall_store_values[local]:
-  ∀cenv vals buf_op offset sa.
-    ci_mono sa
-      (SND (compile_extcall_store_values cenv vals buf_op offset sa))
-Proof
-  Induct_on `vals` >> rpt gen_tac
-  >- simp[compile_extcall_store_values_def, ci_mono_comp_return] >>
-  PairCases_on `h` >>
-  simp[Once compile_extcall_store_values_def, LET_THM] >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_unwrap_value] >>
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
-  >- (IF_CASES_TAC >>
-      simp[ci_mono_emit_void, ci_mono_compile_store_bytestring] >>
-      IF_CASES_TAC >>
-      simp[ci_mono_emit_void, ci_mono_compile_store_bytestring]) >>
-  rpt strip_tac >> first_x_assum irule
-QED
-
 Theorem ci_mono_compile_abi_encode_value_rows:
   ∀rows cenv dst cursor static_ofst s.
     ci_mono s
@@ -4013,8 +3992,7 @@ val ci_mono_create_tac = fn thms => rpt (FIRST [
     ci_mono_emit_inst, ci_mono_compile_alloc_buffer,
     ci_mono_fresh_label, ci_mono_new_block, ci_mono_comp_return,
     ci_mono_lower_value_cfn, ci_mono_compile_multi_vvs,
-    ci_mono_compile_extcall_store_values,
-    cj 2 ci_mono_compile_abi_encode,
+    ci_mono_compile_abi_encode_values_to_buf,
     ci_mono_compile_copy_memory_dynamic,
     ci_mono_compile_word_copy_loop] @ thms)),
   gen_tac,
@@ -4095,22 +4073,13 @@ Proof
   simp[ci_mono_comp_return]
 QED
 
-Theorem ci_mono_compile_create_ctor_tuple:
-  ∀cfn cenv args sa.
-    (∀ce ty e st. ci_mono st (SND (cfn ce ty e st))) ⇒
-    ci_mono sa (SND (compile_create_ctor_tuple cfn cenv args sa))
-Proof
-  rpt gen_tac >> strip_tac >> simp[compile_create_ctor_tuple_def] >>
-  ci_mono_create_tac [ci_mono_compile_create_ctor_args]
-QED
-
 Theorem ci_mono_compile_create_blueprint_args:
   ∀cfn cenv raw later_es args sa.
     (∀ce ty e st. ci_mono st (SND (cfn ce ty e st))) ⇒
     ci_mono sa (SND (compile_create_blueprint_args cfn cenv raw later_es args sa))
 Proof
   rpt gen_tac >> strip_tac >> simp[compile_create_blueprint_args_def] >>
-  ci_mono_create_tac [ci_mono_compile_create_ctor_tuple,
+  ci_mono_create_tac [ci_mono_compile_create_ctor_args,
     ci_mono_compile_snapshot_vv, ci_mono_unwrap_value]
 QED
 
@@ -4128,7 +4097,7 @@ Theorem ci_mono_compile_raw_create[local]:
 Proof
   rpt gen_tac >> strip_tac >> simp[compile_raw_create_def] >>
   ci_mono_create_tac [ci_mono_compile_create_snapshot,
-    ci_mono_compile_create_ctor_tuple, ci_mono_compile_create_salt,
+    ci_mono_compile_create_ctor_args, ci_mono_compile_create_salt,
     ci_mono_compile_create_dispatch]
 QED
 

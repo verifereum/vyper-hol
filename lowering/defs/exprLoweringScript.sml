@@ -1011,9 +1011,9 @@ End
    has_default: T if default_return_value provided
    default_op: operand for default return value (only used if has_default)
    Mirrors Python: expr.py _lower_external_call + _parse_external_call_kwargs *)
-(* Lowering an external-call argument first produces a VyperValue.  Pointer
-   arguments are deliberately unwrapped only when Python stores the temporary
-   argument tuple, after allocating the shared call buffer. *)
+(* Direct external-call packing unwraps each saved VyperValue while encoding
+   its ABI row. Callers of compile_extcall_store_values use unwrap_value when
+   storing arguments in a temporary tuple. *)
 Definition unwrap_value_def:
   unwrap_value cenv (StackValue ty op) = return op ∧
   unwrap_value cenv (LocatedValue ty p) =
@@ -2721,21 +2721,10 @@ Definition compile_create_ctor_args_def:
   compile_create_ctor_args cfn cenv [] = comp_return ([] : vyper_value list) ∧
   compile_create_ctor_args cfn cenv (e::es) =
     do vv <- cfn cenv (expr_type e) e;
-       vv <- compile_snapshot_vv cenv (exprs_can_mutate cenv es) vv;
+       vv <- compile_snapshot_vv cenv (exprs_can_mutate cenv es)
+               (ext_call_arg_value (lowered_value_type cenv e) vv);
        rest <- compile_create_ctor_args cfn cenv es;
        comp_return (vv::rest)
-    od
-End
-
-(* Evaluate the constructor arguments before allocating the temporary tuple,
-   then unwrap them while storing it, exactly as for external-call arguments. *)
-Definition compile_create_ctor_tuple_def:
-  compile_create_ctor_tuple cfn cenv args =
-    let tys = MAP (lowered_value_type cenv) args in
-    do vals <- compile_create_ctor_args cfn cenv args;
-       tmp <- compile_alloc_buffer (type_memory_bytes cenv (TupleT tys));
-       compile_extcall_store_values cenv (ZIP (vals,tys)) tmp.buf_operand 0;
-       return tmp.buf_operand
     od
 End
 
@@ -2756,11 +2745,10 @@ Definition compile_create_blueprint_args_def:
        | _ => do emit_inst INVALID [] []; return (Lit 0w,Lit 0w) od)
     else if args = [] then return (Lit 0w,Lit 0w)
     else
-      let tuple_ty = TupleT (MAP (lowered_value_type cenv) args) in
-      let enc = type_to_abi_enc_info cenv.ce_struct_fields cenv tuple_ty in
-      do src <- compile_create_ctor_tuple cfn cenv args;
-         buf <- compile_alloc_buffer (abi_size_bound cenv.ce_struct_fields tuple_ty);
-         len <- compile_abi_encode_to_buf buf.buf_operand src enc;
+      let tys = MAP (lowered_value_type cenv) args in
+      do vals <- compile_create_ctor_args cfn cenv args;
+         buf <- compile_alloc_buffer (abi_size_bound cenv.ce_struct_fields (TupleT tys));
+         len <- compile_abi_encode_values_to_buf cenv buf.buf_operand (ZIP (vals,tys));
          return (buf.buf_operand,len)
       od
 End
@@ -2795,25 +2783,21 @@ End
 
 Definition compile_raw_create_def:
   compile_raw_create cfn cenv bytecode_e value_e ctor_args salt_e rof =
-    (* RawCreate._inputs promotes its bytecode use to Bytes[49152]. Names in
-       our AST retain declaration types, so use the builtin bound for buffer
-       capacity and slot copying, while evaluating the original expression. *)
-    let maxlen = 49152 in
-    let bytecode_ty = BaseT (BytesT (Dynamic maxlen)) in
-    let tuple_ty = TupleT (MAP (lowered_value_type cenv) ctor_args) in
-    let enc = type_to_abi_enc_info cenv.ce_struct_fields cenv tuple_ty in
-    let abi_size = abi_size_bound cenv.ce_struct_fields tuple_ty in
+    let bytecode_ty = lowered_value_type cenv bytecode_e in
+    let maxlen = bytelike_type_bound bytecode_ty in
+    let tys = MAP (lowered_value_type cenv) ctor_args in
+    let abi_size = abi_size_bound cenv.ce_struct_fields (TupleT tys) in
     do vv <- cfn cenv (expr_type bytecode_e) bytecode_e;
        bytecode <- compile_create_snapshot cenv vv bytecode_ty;
        len <- emit_op MLOAD [bytecode];
        data <- emit_op ADD [bytecode; Lit 32w];
        (ptr,total) <-
          (if ctor_args = [] then return (data,len)
-          else do src <- compile_create_ctor_tuple cfn cenv ctor_args;
+          else do vals <- compile_create_ctor_args cfn cenv ctor_args;
                   buf <- compile_alloc_buffer (maxlen + abi_size);
                   compile_copy_memory_dynamic buf.buf_operand data len;
                   dst <- emit_op ADD [buf.buf_operand; len];
-                  args_len <- compile_abi_encode_to_buf dst src enc;
+                  args_len <- compile_abi_encode_values_to_buf cenv dst (ZIP (vals,tys));
                   total <- emit_op ADD [len; args_len];
                   return (buf.buf_operand,total)
                od);

@@ -59,7 +59,7 @@ Theorem runtime_data_frame_call_closed:
 Proof
   strip_tac >> irule runtime_data_frame_call_composed >>
   simp[runtime_data_frame_multi_vvs, runtime_data_frame_stage_intcall_args,
-       runtime_data_frame_extcall_store_values, runtime_data_frame_raw_call_outbuf,
+       runtime_data_frame_abi_encode_values_to_buf, runtime_data_frame_raw_call_outbuf,
        runtime_data_frame_raw_call_finish, runtime_data_frame_msg_data_to_memory,
        runtime_data_frame_create_proxy_buf, runtime_data_frame_create_dispatch,
        runtime_data_frame_create_copy, runtime_data_frame_create_blueprint_append]

@@ -5104,8 +5104,8 @@ Proof
   rpt (FIRST [gen_tac,
     CHANGED_TAC (simp[ci_mono_lower_value_cfn, ci_mono_emit_op, ci_mono_comp_return,
       ci_mono_compile_alloc_buffer, ci_mono_compile_copy_memory_dynamic,
-      ci_mono_compile_create_ctor_tuple, ci_mono_compile_create_salt,
-      ctor_create_dispatch_ci_mono, cj 2 ci_mono_compile_abi_encode]),
+      ci_mono_compile_create_ctor_args, ci_mono_compile_create_salt,
+      ctor_create_dispatch_ci_mono, ci_mono_compile_abi_encode_values_to_buf]),
     ho_match_mp_tac ci_mono_bind >> conj_tac,
     ho_match_mp_tac ci_mono_ignore_bind >> conj_tac,
     IF_CASES_TAC, pairarg_tac])

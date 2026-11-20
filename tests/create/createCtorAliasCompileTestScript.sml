@@ -16,6 +16,12 @@ val () = computeLib.upd_compset (computeLib.add_thms
 val compiled = memoryStoreWitnessLib.evaluate
   "constructor-alias/oracle" "ctor_alias"
 val _ = save_thm ("create_ctor_alias_compiled", #evaluation compiled)
+Theorem ctor_alias_matches_python_oracle:
+  ^(#term compiled) = SOME ^(memoryStoreWitnessLib.oracle "constructor-alias/oracle" "ctor_alias")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation compiled))) >> EVAL_TAC
+QED
+
 val runtime = #2 (pairSyntax.dest_pair
   (optionSyntax.dest_some (rhs (concl (#evaluation compiled)))))
 
