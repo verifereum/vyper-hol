@@ -1,5 +1,6 @@
 Theory abiEncodeValuesSource
 Ancestors
+  abiEncoderWindow
   abiEncoderSourceRobust abiEncoderLiveSource abiEncoderWindowJoint
   abiEncoderWindowPhase abiEncoderWindowContract exprSimAbiEncodeExecFrame
   abiEncoderSourceInvoke abiEncoderAdmissible abiEncoderProps abiEncoderOpenInput entryDecodePlanProps
@@ -10,8 +11,83 @@ Ancestors
   valueEncodingProps valueEncodingDefs vyperABI vyperValue vyperTyping contractABI
   venomState venomInst venomMemDefs words finite_map list pred_set
 
-(* The recursive encoder can choose a representative ABI value with the same
-   bytes as the row's physical type. This choice is independent of tainted memory. *)
+
+(* Choose one representative for all memories that agree on the live source. *)
+Theorem abi_encode_values_plan_window_input:
+  abi_enc_plan env ty ei /\ evaluate_type env ty = SOME tv /\
+  value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
+  (!mem. mem_agree_outside tainted initial_mem mem ==> val_in_memory tv v sb mem) ==>
+  abi_encoder_admissible ei /\
+  ?ct rv. enc ct rv = enc (vyper_to_abi_type env ty) av /\
+    !mem. mem_agree_outside tainted initial_mem mem ==>
+      abi_encoder_window_input ei ct rv sb (val_footprint tv v) mem
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  conj_tac >- metis_tac[cj 1 abi_enc_plan_admissible] >>
+  drule_all abi_encoder_source_window_robust >>
+  disch_then (qx_choosel_then [`ct`,`rv`] strip_assume_tac) >>
+  qexistsl_tac [`ct`,`rv`] >> asm_rewrite_tac[]
+QED
+
+Theorem abi_encode_values_source_window_input:
+  compile_abi_encode_to_buf dst src ei st = (out,en) /\
+  abi_encoder_admissible ei /\
+  (?ct rv. enc ct rv = bs /\
+    !mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      abi_encoder_window_input ei ct rv sb cap mem) /\
+  eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
+  op_taint tn src = {} /\ op_taint tn dst = {} /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
+  fn_has_code st en func /\ fn_inst_ids_distinct func /\
+  alloca_inv s /\ alloca_room ctx func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+  (0 < cap ==> sb + cap <= s.vs_alloca_next /\
+    venomMemDefs$regions_disjoint (sb,cap) (d,LENGTH bs) /\
+    ?p. src = Var p /\ ptr_covers G tn p s cap) /\
+  d + LENGTH bs <= s.vs_alloca_next /\
+  (0 < LENGTH bs ==> ?p. dst = Var p /\ ptr_covers G tn p s (LENGTH bs)) /\
+  (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id IN frag_ids st en /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+    sz = 32 /\ (0 < cap ==> venomMemDefs$regions_disjoint (sb,cap) (b,sz)) /\
+    venomMemDefs$regions_disjoint (d,LENGTH bs) (b,sz)) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t G' tn'.
+    mem_bytes_at d (LENGTH bs) t.vs_memory = bs /\
+    eval_operand out t = SOME (n2w (LENGTH bs)) /\
+    window_phase ctx func st en (window_alloca_sites func (frag_ids st en))
+      [(d,LENGTH bs)] s t /\ abi_encode_exec_frame func s t /\
+    op_taint tn' out = {} /\ (!x. out = Var x ==> not_fresh_at en x) /\
+    (!i. d <= i /\ i < d + LENGTH bs ==> i NOTIN tn'.t_mem) /\
+    (!x. not_fresh_at st x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    (!i. (i < d \/ d + LENGTH bs <= i) /\
+      (!id b sz. id IN window_alloca_sites func (frag_ids st en) /\
+        FLOOKUP t.vs_allocas id = SOME (b,sz) ==> i < b \/ b + sz <= i) ==>
+      (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?ct rv. enc ct rv = bs /\ _`
+    (qx_choosel_then [`ct`,`rv`] strip_assume_tac) >>
+  mp_tac (Q.INST [`at` |-> `ct`, `av` |-> `rv`, `explicit` |-> `explicit`, `PG` |-> `PG`]
+    (SPEC_ALL compile_abi_encode_to_buf_window_joint)) >>
+  impl_tac
+  >- (qpat_assum `enc ct rv = bs` (fn th => PURE_REWRITE_TAC [th]) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choose_then `t` (qx_choose_then `G'` (qx_choose_then `tn'` strip_assume_tac))) >>
+  `window_phase ctx func st en (window_alloca_sites func (frag_ids st en))
+    [(d,LENGTH bs)] s t` by metis_tac[window_phase_strong_result] >>
+  `mem_bytes_at d (LENGTH bs) t.vs_memory = bs /\
+   eval_operand out t = SOME (n2w (LENGTH bs))` by
+    metis_tac[window_strong_result_public, abi_encoder_window_result_output] >>
+  qexistsl_tac [`t`,`G'`,`tn'`] >>
+  qpat_assum `enc ct rv = bs` (fn th => ONCE_REWRITE_TAC [GSYM th]) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]
+QED
+
 Theorem abi_encode_values_source_window:
   compile_abi_encode_to_buf dst src ei st = (out,en) /\
   abi_enc_plan env ty ei /\ evaluate_type env ty = SOME tv /\
@@ -53,27 +129,15 @@ Theorem abi_encode_values_source_window:
     tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')
 Proof
-  strip_tac >> drule_all abi_encoder_source_window_robust >>
-  disch_then (qx_choose_then `ct` (qx_choose_then `rv` strip_assume_tac)) >>
-  `enc ct rv = bs` by metis_tac[] >>
-  `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
-    abi_encoder_window_input ei ct rv sb cap mem` by asm_rewrite_tac[] >>
-  `abi_encoder_admissible ei` by metis_tac[cj 1 abi_enc_plan_admissible] >>
-  mp_tac (Q.INST [`at` |-> `ct`, `av` |-> `rv`, `explicit` |-> `explicit`, `PG` |-> `PG`]
-    (SPEC_ALL compile_abi_encode_to_buf_window_joint)) >>
-  impl_tac
-  >- (qpat_assum `enc ct rv = bs` (fn th => PURE_REWRITE_TAC [th]) >>
-      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then (qx_choose_then `t` (qx_choose_then `G'` (qx_choose_then `tn'` strip_assume_tac))) >>
-  `window_phase ctx func st en (window_alloca_sites func (frag_ids st en))
-    [(d,LENGTH bs)] s t` by metis_tac[window_phase_strong_result] >>
-  `mem_bytes_at d (LENGTH bs) t.vs_memory = bs /\
-   eval_operand out t = SOME (n2w (LENGTH bs))` by
-    metis_tac[window_strong_result_public, abi_encoder_window_result_output] >>
-  qexistsl_tac [`t`,`G'`,`tn'`] >>
-  qpat_assum `bs = enc (vyper_to_abi_type env ty) av` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
-  qpat_assum `enc ct rv = bs` (fn th => ONCE_REWRITE_TAC [GSYM th]) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_values_plan_window_input >>
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  mp_tac abi_encode_values_source_window_input >>
+  impl_tac >-
+    (qpat_x_assum `bs = _` SUBST_ALL_TAC >>
+     qpat_x_assum `cap = _` SUBST_ALL_TAC >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem abi_encode_values_typed_layout:

@@ -1,6 +1,6 @@
 Theory abiEncodeValuesDynamic
 Ancestors
-  abiEncodeValuesPhases abiEncodeValuesSource
+  abiEncodeValuesPhases abiEncodeValuesSource abiEncoderWindow abiEncoderAdmissible
   abiEncoderWindowJointPhases abiEncoderWindowPhase
   abiEncoderRegisteredEffect abiEncoderWindowContract abiEncoderChildCode
   exprSimAbiEncodeExecFrame bodyFullAbiEncodeOriginFloor
@@ -77,15 +77,15 @@ Proof
   metis_tac[]
 QED
 
-(* No tuple source allocation is needed. The dynamic member uses its typed
-   materialized source and the original ABI type, then closes the head. *)
-Theorem abi_encode_values_dynamic_body:
+(* Encode from the materialized member without allocating a source tuple.
+   The window input's ABI type and value need only encode to the same bytes. *)
+Theorem abi_encode_values_dynamic_body_input:
   compile_abi_encode_to_buf (Var dest) src ei st = (len,mid) /\
   abi_encode_child_suffix (Var head) (Var cursor) offset len mid = (len,en) /\
-  abi_enc_plan env ty ei /\ evaluate_type env ty = SOME tv /\
-  value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
-  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory tv v sb mem) /\
-  bs = enc (vyper_to_abi_type env ty) av /\ cap = val_footprint tv v /\
+  abi_encoder_admissible ei /\
+  (?ct rv. enc ct rv = bs /\
+    !mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      abi_encoder_window_input ei ct rv sb cap mem) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand (Var dest) s = SOME (n2w tail) /\
   eval_operand (Var head) s = SOME (n2w head_addr) /\
   eval_operand (Var cursor) s = SOME (n2w slot) /\ eval_operand offset s = SOME (n2w off) /\
@@ -134,7 +134,7 @@ Proof
   `(!x. src = Var x \/ Var dest = Var x ==> not_fresh_at st x) /\
    (0 < LENGTH bs ==> ?p. Var dest = Var p /\ ptr_covers G tn p s (LENGTH bs))` by metis_tac[] >>
   mp_tac (Q.INST [`dst` |-> `Var dest`, `d` |-> `tail`, `en` |-> `mid`, `out` |-> `len`]
-    abi_encode_values_source_window) >>
+    abi_encode_values_source_window_input) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
   disch_then (qx_choose_then `u` (qx_choose_then `Gu` (qx_choose_then `tu` strip_assume_tac))) >>
   `st.cs_next_var <= mid.cs_next_var` by
@@ -203,4 +203,66 @@ Proof
      first_assum ACCEPT_TAC) >>
   qexistsl_tac [`t`,`G'`,`tn'`] >> asm_rewrite_tac[] >>
   rpt conj_tac >> metis_tac[abi_encode_exec_frame_trans, not_fresh_at_mono, gas_origin_ptr_path_trans]
+QED
+
+Theorem abi_encode_values_dynamic_body:
+  compile_abi_encode_to_buf (Var dest) src ei st = (len,mid) /\
+  abi_encode_child_suffix (Var head) (Var cursor) offset len mid = (len,en) /\
+  abi_enc_plan env ty ei /\ evaluate_type env ty = SOME tv /\
+  value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory tv v sb mem) /\
+  bs = enc (vyper_to_abi_type env ty) av /\ cap = val_footprint tv v /\
+  eval_operand src s = SOME (n2w sb) /\ eval_operand (Var dest) s = SOME (n2w tail) /\
+  eval_operand (Var head) s = SOME (n2w head_addr) /\
+  eval_operand (Var cursor) s = SOME (n2w slot) /\ eval_operand offset s = SOME (n2w off) /\
+  op_taint tn src = {} /\ op_taint tn (Var dest) = {} /\ op_taint tn offset = {} /\
+  (!x. src = Var x \/ Var dest = Var x \/ Var head = Var x \/
+       Var cursor = Var x \/ offset = Var x ==> not_fresh_at st x) /\
+  ptr_covers G tn head s 32 /\ ptr_covers G tn cursor s 32 /\
+  ptr_covers G tn dest s (LENGTH bs) /\
+  fn_has_code st mid func /\ fn_has_code mid en func /\ fn_inst_ids_distinct func /\
+  alloca_inv s /\ alloca_room ctx func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+  (0 < cap ==> sb + cap <= s.vs_alloca_next /\
+    venomMemDefs$regions_disjoint (sb,cap) (tail,LENGTH bs) /\
+    ?p. src = Var p /\ ptr_covers G tn p s cap) /\
+  tail + LENGTH bs <= s.vs_alloca_next /\ head_addr + 32 <= s.vs_alloca_next /\
+  slot + 32 <= s.vs_alloca_next /\ FLOOKUP s.vs_allocas site = SOME (slot,32) /\
+  venomMemDefs$regions_disjoint (head_addr,32) (slot,32) /\
+  venomMemDefs$regions_disjoint (tail,LENGTH bs) (head_addr,32) /\
+  venomMemDefs$regions_disjoint (tail,LENGTH bs) (slot,32) /\
+  (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id IN frag_ids st mid /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+    sz = 32 /\ (0 < cap ==> venomMemDefs$regions_disjoint (sb,cap) (b,sz)) /\
+    venomMemDefs$regions_disjoint (tail,LENGTH bs) (b,sz)) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t G' tn'.
+    mem_word_at head_addr t.vs_memory = n2w off /\
+    mem_word_at slot t.vs_memory = n2w (off + LENGTH bs) /\
+    mem_bytes_at tail (LENGTH bs) t.vs_memory = bs /\
+    (!i. (head_addr <= i /\ i < head_addr + 32) \/
+         (slot <= i /\ i < slot + 32) \/
+         (tail <= i /\ i < tail + LENGTH bs) ==> i NOTIN tn'.t_mem) /\
+    window_phase ctx func st en (site INSERT window_alloca_sites func (frag_ids st mid))
+      [(head_addr,32);(tail,LENGTH bs)] s t /\ abi_encode_exec_frame func s t /\
+    (!x. not_fresh_at st x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    (!i. (i < head_addr \/ head_addr + 32 <= i) /\ (i < tail \/ tail + LENGTH bs <= i) /\
+      (!id b sz. id IN (site INSERT window_alloca_sites func (frag_ids st mid)) /\
+        FLOOKUP t.vs_allocas id = SOME (b,sz) ==> i < b \/ b+sz <= i) ==>
+      (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_values_plan_window_input >>
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  mp_tac abi_encode_values_dynamic_body_input >>
+  impl_tac >-
+    (qpat_x_assum `bs = _` SUBST_ALL_TAC >>
+     qpat_x_assum `cap = _` SUBST_ALL_TAC >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
 QED
