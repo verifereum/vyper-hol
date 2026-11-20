@@ -23,6 +23,7 @@ Ancestors
   ownSymSrcUnit o1LabelFlowOwnCompose codegenSymOwnRel ctorDeployRawEntryFacts
   e2eDeployDefs e2eDefs ctorDeployDefs deployUnitExecution deployUnitExitSafe
   ctorDeployMemoryFrontier ctorDeployImmBudget ctorDeployInitcode
+  deployDynamicMemory loweringShapeSource[qualified]
   ctorDeployEntry ctorDeployShape ctorDeployDefsReach ctorDeployDead
   ctorDeployLoweringSource
   ctorDeployFrame compileVyper codegen e2eProducers e2eComposition e2eEntry
@@ -403,7 +404,28 @@ Proof
     (deploy_storage_trace (SOME vs.vs_outcomes)
        (gas_explicit marks vs.vs_gas_readings ++ tail) am txp tops)` >>
   `w2n vs.vs_initial_fmp <= w2n vs.vs_fmp` by simp[] >>
-  drule_all deploy_selected_memory >> strip_tac >>
+  `raw_unit_memory_ok dunit.cu_context vs /\
+   ptr_discipline (imm_len tops) dunit.cu_context vs /\
+   taint_within (deploy_dead H tops runtime_bc am txp) dunit.cu_context vs /\
+   mem_inv dload_offset_ok dunit.cu_context vs /\
+   mem_inv dload_headroom_ok dunit.cu_context vs` by
+    (Cases_on `deploy_dalloca_form_occurs loweringShapeSource$expr_raw_shape_root tops`
+     >- (`txp = tx` by metis_tac[deploy_own_txp_identity] >>
+         `deploy_typing_ok tops am tx` by fs[deploy_source_ok_def] >>
+         `!fn inst s. raw_reachable vs dunit.cu_context fn inst s ==>
+           dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+           (qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
+                        `dunit`, `dout`, `prog`, `prog'`, `cplan`,
+                        `am`, `tx`, `es`, `vs_out`, `vs`, `fmp`]
+             mp_tac deploy_entry_raw_no_wrap >>
+            impl_tac >- simp[] >> disch_then ACCEPT_TAC) >>
+         irule deploy_selected_memory_from_no_wrap >>
+         rpt conj_tac >>
+         TRY (first_assum ACCEPT_TAC) >>
+         TRY (qexistsl_tac [`cplan`, `assemble prog`, `dout`, `policy`,
+                             `prog`, `rpolicy`, `runtime_bc`] >> simp[]) >>
+         gvs[]) >>
+     metis_tac[deploy_selected_memory]) >>
   `ctx_sim (deploy_dead H tops runtime_bc am txp) dunit.cu_context
      dout.po_unit.cu_context vs vs_out /\
    (fin = asm_opt_finalizer ==>
