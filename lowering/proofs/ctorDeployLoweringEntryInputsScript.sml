@@ -161,12 +161,12 @@ Proof
 QED
 
 Theorem deploy_ctor_decoder_inputs:
- !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs
+ !policy tops runtime_bc rp unit dout prog prog' cplan am tx es vs
  body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0
  exts ints fb rr fargs ce_pack pos_args imm_opt ce0 initial.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
- deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+ deploy_phases policy tops (assemble prog,runtime_bc) (rp,unit,dout,prog,cplan) /\
+ deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
+ gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\
@@ -242,4 +242,56 @@ Proof
  drule_all deploy_ctor_bound_decoder_metadata >> strip_tac >>
  drule_all deploy_ctor_entry_data_size >> strip_tac >>
  gvs[mem_bytes_at_def, TAKE_LENGTH_APPEND] >> qexists `avs` >> simp[]
+QED
+
+Theorem deploy_ctor_decoder_inputs_canonical:
+ !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs
+ body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0
+ exts ints fb rr fargs ce_pack pos_args imm_opt ce0 initial.
+ deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
+ deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
+ gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+ deploy_ctor_code tops rp runtime_bc unit
+   (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
+ deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\
+ classify_functions tops =
+   (exts,ints,fb,SOME (mut,nr,rr,"__init__",fargs,[],NoneT,body)) /\
+ set_constructor_package_target rp.rpol_target
+   (package_constructor tops T (K global_nonreentrant_slot)
+     (mut,nr,rr,"__init__",fargs,[],NoneT,body)) =
+   (ce_pack,pos_args,mut = Payable,nr,key,ut,body,NoneT) /\
+ ce0 = (ce_pack with ce_imm_alloca := imm_opt) /\
+ initial.vs_data_section = vs.vs_data_section ==>
+ nr = F /\ nr' = nr /\ body' = body /\
+ pos_args = build_positional_args ce0 fargs /\
+ ALL_DISTINCT (MAP FST fargs) /\
+ EVERY (\a. ?off. FLOOKUP ce0.ce_vars (FST a) =
+   SOME (MemLoc off (type_memory_bytes ce0 (SND a)))) fargs /\
+ EVERY (\a. type_memory_bytes ce0 (SND a) < dimword(:256)) fargs /\
+ LENGTH initial.vs_data_section < dimword(:256) /\
+ ?scope avs.
+ bind_arguments (type_env tops) fargs tx.args = SOME scope /\
+ LENGTH avs = LENGTH fargs /\
+ initial.vs_data_section =
+   enc (Tuple (vyper_to_abi_types (type_env tops) (MAP SND fargs))) (ListV avs) /\
+ mem_bytes_at 0 (LENGTH initial.vs_data_section) initial.vs_data_section =
+   initial.vs_data_section /\
+ has_types (vyper_to_abi_types (type_env tops) (MAP SND fargs)) avs /\
+ (!i. i < LENGTH fargs ==>
+   ?entry. lookup_scopes (FST (EL i fargs)) [scope] = SOME entry /\
+     val_wf entry.type entry.value /\
+     type_memory_size entry.type <= type_memory_bytes ce0 (SND (EL i fargs)) /\
+     abi_decoder_coherent ce0 (type_env tops) ce0.ce_struct_fields
+       (SND (EL i fargs)) entry.type /\
+     abi_decoder_metadata ce0 (type_env tops) (SND (EL i fargs)) entry.type
+       (type_to_abi_dec_info ce0.ce_struct_fields ce0 (SND (EL i fargs)))
+       (EL i avs) entry.value) /\
+ local_ptrs_rel func ce0 [scope] initial
+Proof
+  rpt gen_tac >> strip_tac >>
+  `deploy_bc = assemble prog` by fs[deploy_phases_def] >>
+  qpat_x_assum `deploy_bc = _` SUBST_ALL_TAC >>
+  `gas_variant vs (opt_deploy_entry_state_own prog prog cplan tops es
+      with vs_outcomes := vs.vs_outcomes)` by simp[opt_deploy_entry_state_own_identity] >>
+  drule_all deploy_ctor_decoder_inputs >> simp[]
 QED

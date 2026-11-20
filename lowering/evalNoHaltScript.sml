@@ -1,5 +1,5 @@
 (* Source evaluation never halts (INR HaltException) on syntax without an
-   expr_halt_root node (selfdestruct, delegate raw_call, create) when
+   expr_halt_root node (selfdestruct or create) when
    every internal call it makes is to the main module of a supported
    program.  Only selfdestruct raises the halt, and an internal call passes
    on its callee body's halt; external calls, send and raw_call surface a

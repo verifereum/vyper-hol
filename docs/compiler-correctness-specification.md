@@ -58,13 +58,14 @@ or check and is easy to miss:
   the caller's side, through `eval_create` and the call-outcome oracle, but no
   current theorem covers that caller (next item).
 - **A caller that creates contracts or makes a delegate `raw_call` is not
-  covered.** `vyper_call_correct` assumes `supported_program tops`, which rejects
-  these bodies twice (`lowering/proofs/supported/`): `body_stmts_safe` rejects
-  every `expr_evm_run_root` expression (every `create_*` call and every `raw_call`
-  with `is_delegate_call=True`), and `supported_stmts` admits no `create_*` or
-  `raw_call` at all. The source semantics already models both on the caller's
-  side through the call-outcome oracle (`eval_create`, `eval_raw_call`); these
-  `supported_program` checks are what keep such bodies outside the theorem.
+  covered.** `vyper_call_correct` assumes `supported_program tops`, whose
+  function-body check `supported_function_body` (`lowering/proofs/supported/`)
+  keeps both out: `supported_stmts` admits no `create_*` or `raw_call` at all,
+  and `body_stmts_safe` separately rejects every `expr_evm_run_root` expression,
+  which includes every `create_*` call. The source semantics already models
+  both on the caller's side through the call-outcome oracle (`eval_create`,
+  `eval_raw_call`); these `supported_program` checks are what keep such bodies
+  outside the theorem.
   `e2e_deploy_correctness` also requires `supported_program tops` and
   `supported_program_deploy tops`. It covers constructors that make supported
   external calls, including calls to the computed precompiles.
@@ -140,19 +141,22 @@ The exact observation type/relation is a phase-2 deliverable. It should support 
 
 ### Revert data
 
-The current theorems observe that a frame failed, not the bytes it returned on
-failure. For a source `AssertException s`, `exception_outcome_rel`
+The current theorems relate frame failure to source exceptions. For a source
+`AssertException s`, `exception_outcome_rel`
 (`lowering/e2eDefsScript.sml`) requires a failed frame outcome that is `Reverted`
 and raised by the frame itself (`frame_raises es Reverted`), or any failure when
-`s = "UNREACHABLE"`; `deploy_result_rel` (`lowering/e2eDeployDefsScript.sml`)
-requires `Reverted` or, for `"UNREACHABLE"`, any failure. For a source `Error e`
-(for example the bubbled failure of an `extcall`) both relations
-accept any failed frame outcome; when `unspecified_behaviour_exempt tops e` holds
-(see the exemption under
-[Observations, resources and limits](#observations-resources-and-limits)) they
-constrain the frame not at all. Wherever a failure is required, the output
-bytes of `frame_outcome` are existentially quantified, so reason strings, custom
-error payloads and bubbled revert data are not compared. The one exception is
+`s = "UNREACHABLE"`. The deploy relation `deploy_result_rel`
+(`lowering/e2eDeployDefsScript.sml`) requires `Reverted` or, for
+`"UNREACHABLE"`, any failure. A source
+`Error (RevertData d)`, such as a bubbled `extcall` failure, requires a
+`Reverted` frame outcome in both the call and deploy theorems. The call
+relation also requires `frame_raises es Reverted`. For other source errors,
+both relations accept any failed frame outcome. When
+`unspecified_behaviour_exempt tops e` holds (see the exemption under
+[Observations, resources and limits](#observations-resources-and-limits)),
+any frame outcome is allowed. These relations quantify existentially over the
+output bytes of `frame_outcome`. This leaves reason strings, custom error
+payloads and bubbled revert data unspecified. The one exception is
 calldata for which `calldata_dispatch tops tx.calldata = NONE`
 (`semantics/vyperCalldataScript.sml`): a selector miss in a contract without
 `__default__`, fewer than 4 bytes without `__default__`, or a selector hit whose
@@ -164,7 +168,8 @@ failures carry these obligations only where its result relation applies:
 `e2e_deploy_correctness` concludes `creation_resource_starved es r es' \/
 deploy_call_result_rel ...`, and `deploy_call_result_rel` requires
 `deploy_result_rel` only for gas fillings that satisfy `deploy_storage_ok`.
-Whether the theorems should promise revert bytes is an open scope question.
+The guarantee that the output bytes equal `d` for `Error (RevertData d)` is
+deferred.
 
 ## Calls and nested contexts
 
@@ -180,7 +185,6 @@ storage backends the source adopts from external call outcomes.
 ```sml
   !fin policy tops deploy_bc runtime_bc am tx es H.
     fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     source_typing_ok tops am tx /\
@@ -342,12 +346,14 @@ The result relation ties source gas observations to the frame's EVM gas readings
   only on success or halt; `exception_outcome_rel` compares none of them on
   failure. Terminal leftover outcome lists are not related observations.
 - Assertion/raise requires Reverted, except `"UNREACHABLE"` permits any failure.
-  Non-exempt source Error requires a failed frame. Lowering requires a
+  A source `Error (RevertData d)` requires `Reverted` in both the call and deploy
+  theorems. Other non-exempt source errors require a failed frame of any kind.
+  The failure payload is unspecified in these cases (see
+  [Revert data](#revert-data)). Lowering requires a
   terminating Halt/Abort, never a stuck Error, OK, IntRet or fuel-zero escape;
   escaped Break/Continue/Return control has no corresponding result clause.
-  There is **no revert-data/reason/general abort-kind equality** (see
-  [Revert data](#revert-data)). The pipeline
-  is a forward simulation with deliberately weaker failure observations.
+  The pipeline is a forward simulation with deliberately weaker failure
+  observations.
 - The sole exemption is exact `RuntimeError "abi_decode invalid"` when a function
   body contains a dynamic ABI decode target. It is not arbitrary ReturnReject,
   every decoder error, static-only decoding or `"abi_decode conversion"`.
@@ -384,9 +390,9 @@ The result relation ties source gas observations to the frame's EVM gas readings
 The proved `e2e_deploy_correctness` covers fresh single-frame creation with
 canonical constructor arguments, deployment typing, an uninstalled source
 target and an empty target account in `es.originalAccounts`. It requires fewer
-than 2⁶⁴ entries in the creation frame's call trace. The assembly-optimizer
-case requires `~program_reads_self_code tops`. With the finite storage guard,
-the result relation uses the constructor's call outcomes and
+than 2⁶⁴ entries in the creation frame's call trace. Source reads of `self.code`
+use the creation frame's code, including in the assembly-optimizer case. With
+the finite storage guard, the result relation uses the constructor's call outcomes and
 compares accounts and transient storage at the run's storage horizon,
 along with logs and call requests. Successful installation returns and deposits
 `runtime_bc ++ section` satisfying `immutables_section_rel`.

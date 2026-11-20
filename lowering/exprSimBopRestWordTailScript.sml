@@ -2,7 +2,7 @@
 Theory exprSimBopRestWordTail
 Ancestors
   exprSimBopRestWordIterate exprSimBopRestWordBasics
-  exprSimBopRestWordIndex exprSimBopRestWordStorageLoads
+  exprSimBopRestWordIndex
 
 (* Located representations depend on the value read, not the syntax of the
    captured source result.  Normalize once before using value-load adapters. *)

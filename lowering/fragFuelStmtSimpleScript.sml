@@ -65,6 +65,7 @@ Proof
   >- (irule fuel_ok_emit_void_any >> simp[]) >>
   BasicProvers.TOP_CASE_TAC >> simp_tac (srw_ss()) [comp_bind_return] >>
   fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void_any,
+             fuel_ok_compile_ptr_load, fuel_ok_compile_ptr_store,
              fuel_ok_lower_value_compile_expr, fuel_ok_compile_binop] >>
   simp[is_terminator_def]
 QED

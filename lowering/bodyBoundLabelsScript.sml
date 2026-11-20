@@ -2393,8 +2393,9 @@ Theorem bound_labels_stmt_augassign[local]:
 Proof
   strip_tac >> simp[compile_stmt_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
-    bound_labels_binop, comp_return_def]),
-    gen_tac, strip_tac, irule bound_labels_bind, conj_tac, CASE_TAC]) >>
+    bound_labels_binop, bound_labels_ptr_load, bound_labels_ptr_store,
+    comp_return_def]),
+    gen_tac, strip_tac, irule bound_labels_bind, conj_tac, IF_CASES_TAC, CASE_TAC]) >>
   FIRST [irule bound_labels_get_target_ptr, irule bound_labels_lower_value] >>
   simp[bound_labels_expr_mutual]
 QED

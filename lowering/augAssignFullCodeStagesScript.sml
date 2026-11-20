@@ -39,10 +39,16 @@ Theorem augassign_full_code_stages:
       fn_has_code shadow_s0 shadow_sf shadow_func) \/
      ?loc cur rhs result s1 s2 s3 shadow_s1 shadow_s2 shadow_s3.
        FST (SND r) = SOME loc /\
-       emit_op (case loc of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD)
-         [FST r] s0 = (cur,s1) /\
-       emit_op (case loc of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD)
-         [FST r] shadow_s0 = (cur,shadow_s1) /\
+       (if loc = LocCode then
+          compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc (FST r)
+        else
+          emit_op (case loc of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD)
+            [FST r]) s0 = (cur,s1) /\
+       (if loc = LocCode then
+          compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc (FST r)
+        else
+          emit_op (case loc of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD)
+            [FST r]) shadow_s0 = (cur,shadow_s1) /\
        lower_value compile_expr cenv ty e s1 = (rhs,s2) /\
        lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_s1 =
          (rhs,shadow_s2) /\
@@ -51,10 +57,16 @@ Theorem augassign_full_code_stages:
        compile_binop bop cur rhs ty NONE
          (if bop = Exp then expr_int_literal e else NONE) shadow_s2 =
          (result,shadow_s3) /\
-       emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE)
-         [FST r; result] s3 = ((),sf) /\
-       emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE)
-         [FST r; result] shadow_s3 = ((),shadow_sf) /\
+       (if loc = LocCode then
+          compile_ptr_store cenv.ce_is_ctor cenv.ce_imm_alloca loc (FST r) result
+        else
+          emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE)
+            [FST r; result]) s3 = ((),sf) /\
+       (if loc = LocCode then
+          compile_ptr_store cenv.ce_is_ctor cenv.ce_imm_alloca loc (FST r) result
+        else
+          emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE)
+            [FST r; result]) shadow_s3 = ((),shadow_sf) /\
        gas_shadow_state s1 shadow_s1 /\ gas_shadow_state s2 shadow_s2 /\
        gas_shadow_state s3 shadow_s3 /\
        ci_mono s0 s1 /\ ci_mono s1 s2 /\ ci_mono s2 s3 /\ ci_mono s3 sf /\
@@ -88,7 +100,7 @@ Proof
   >- (`ci_mono s0 sf /\ ci_mono shadow_s0 shadow_sf` by
         metis_tac[ci_mono_emit_void, pairTheory.SND] >>
       gvs[ci_mono_def] >> imp_res_tac fn_has_code_split >> simp[]) >>
-  rename1 `emit_op _ _ shadow_s0 = (shadow_cur,shadow_s1)` >>
+  rename1 `(if loc = LocCode then _ else _) shadow_s0 = (shadow_cur,shadow_s1)` >>
   rename1 `lower_value _ _ _ (gas_shadow_expr e) shadow_s1 =
     (shadow_rhs,shadow_s2)` >>
   rename1 `compile_binop _ shadow_cur shadow_rhs _ _ _ shadow_s2 =
@@ -96,7 +108,7 @@ Proof
   `cur = shadow_cur /\ gas_shadow_state s1 shadow_s1` by
     (irule augassign_shadow_step >>
      rpt (first_assum (irule_at Any)) >>
-     simp[gas_shadow_compiles_emit_op]) >>
+     rw[gas_shadow_compiles_emit_op, gasShadowCompileContextTheory.gas_shadow_compiles_ptr_load]) >>
   gvs[] >>
   `rhs = shadow_rhs /\ gas_shadow_state s2 shadow_s2` by
     (irule augassign_shadow_step >>
@@ -109,13 +121,15 @@ Proof
      simp[gas_shadow_compiles_binop]) >>
   gvs[] >>
   `ci_mono s0 s1 /\ ci_mono shadow_s0 shadow_s1` by
-    metis_tac[ci_mono_emit_op, pairTheory.SND] >>
+    (Cases_on `loc = LocCode` >> gvs[] >>
+     metis_tac[ci_mono_compile_ptr_load, ci_mono_emit_op, pairTheory.SND]) >>
   `ci_mono s1 s2 /\ ci_mono shadow_s1 shadow_s2` by
     metis_tac[cj 2 compile_expr_grows, ci_mono_def] >>
   `ci_mono s2 s3 /\ ci_mono shadow_s2 shadow_s3` by
     metis_tac[compile_binop_grows, ci_mono_def] >>
   `ci_mono s3 sf /\ ci_mono shadow_s3 shadow_sf` by
-    metis_tac[ci_mono_emit_void, pairTheory.SND] >>
+    (Cases_on `loc = LocCode` >> gvs[] >>
+     metis_tac[ci_mono_compile_ptr_store, ci_mono_emit_void, pairTheory.SND]) >>
   gvs[ci_mono_def] >>
   imp_res_tac cs_extends_trans >> imp_res_tac fn_has_code_split >> simp[]
 QED

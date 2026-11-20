@@ -317,7 +317,8 @@ Proof
   qid_spec_tac `st` >>
   rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
     gen_tac, CHANGED_TAC (simp[every_state_insts_return,
-      opcode_every_emit_op, opcode_every_emit_void, (b7 outcomes_free_binop)]),
+      opcode_every_emit_op, opcode_every_emit_void, (b7 outcomes_free_binop),
+      (b7 outcomes_free_ptr_load), (b7 outcomes_free_ptr_store)]),
     qid_spec_tac `st` >> ho_match_mp_tac every_state_insts_lower_value >>
       simp[(b7 outcomes_free_unwrap_value)]]) >> metis_tac[]
 QED

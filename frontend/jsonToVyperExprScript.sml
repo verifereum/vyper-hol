@@ -1220,6 +1220,8 @@ Definition canonical_literal_origin_def:
     SOME (JE_Bytes n (origin_hex_bytes bs)) /\
   canonical_literal_origin (Literal ty (BytesL bs)) =
     SOME (JE_Hex (origin_hex_bytes bs) JT_None) /\
+  canonical_literal_origin (Literal (BaseT (BytesT (Dynamic n))) (HexBytesL bs)) =
+    SOME (JE_HexBytes n (origin_hex_bytes bs)) /\
   canonical_literal_origin _ = NONE
 End
 
@@ -1356,7 +1358,8 @@ Definition translate_expr_with_policy_def:
     Literal (BaseT (BytesT (Dynamic len))) (BytesL (hex_string_to_bytes (FILTER isHexDigit (strip_0x hex))))) /\
 
   (translate_expr_with_policy resolve ctx (JE_HexBytes len hex) =
-    Literal (BaseT (BytesT (Dynamic len))) (BytesL (hex_string_to_bytes (FILTER isHexDigit (strip_0x hex))))) /\
+    Literal (BaseT (BytesT (Dynamic len)))
+      (HexBytesL (hex_string_to_bytes (FILTER isHexDigit (strip_0x hex))))) /\
 
   (translate_expr_with_policy resolve ctx (JE_Hex hex typ) =
     let bytes = hex_string_to_bytes (FILTER isHexDigit (strip_0x hex)) in

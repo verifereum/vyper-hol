@@ -4117,7 +4117,9 @@ Proof
   >~ [`compile_literal_vv ty (IntL n)`]
   >- (simp[compile_literal_vv_def] >> shape_literal_return_tac)
   >~ [`compile_literal_vv ty (DecimalL n)`]
-  >- (simp[compile_literal_vv_def] >> shape_literal_return_tac) >>
+  >- (simp[compile_literal_vv_def] >> shape_literal_return_tac)
+  >~ [`compile_literal_vv ty (HexBytesL bs)`]
+  >- (simp[compile_literal_vv_def] >> shape_literal_buffer_tac) >>
   Cases_on `ty` >> simp[compile_literal_vv_def]
   >- (rename1 `BaseT bt` >> Cases_on `bt` >> simp[] >>
       TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[]) >>
@@ -10637,7 +10639,9 @@ Proof
   >- (simp[] >> stmt_drop (ho_match_mp_tac stmt_shape_emit_void >>
        simp[cenv_shape_ok_stable, stmt_shape_stable_plain, shape_stable_conj] >>
        stmt_shape_emit_simp)) >>
-  rename1 `SOME loc` >> Cases_on `loc` >> simp[stmt_return_bind] >>
+  rename1 `SOME loc` >> Cases_on `loc = LocCode`
+  >- (gvs[stmt_return_bind] >> suspend "immutable") >>
+  Cases_on `loc` >> gvs[stmt_return_bind] >>
   (stmt_bind `\cur st. plain_operand st cur /\
        (plain_operand st (FST r) /\ cenv_shape_ok st cenv)` `cur`
      (ho_match_mp_tac stmt_shape_frame >>
@@ -10655,6 +10659,28 @@ Proof
       simp[stmt_shape_stable_plain] >> irule compile_binop_shape) >>
    stmt_plain_void_drop)
 QED
+
+Resume compile_augassign_shape[immutable]:
+  stmt_bind `\cur st. plain_operand st cur /\ plain_operand st (FST r) /\
+                       cenv_shape_ok st cenv` `cur`
+    (irule shape_step_frame_from >>
+     irule_at Any compile_ptr_load_cenv_shape >>
+     qexists_tac `\st. plain_operand st (FST r)` >>
+     simp[stmt_shape_stable_plain]) >>
+  stmt_bind `\rhs st. plain_operand st rhs /\ plain_operand st cur /\
+                       plain_operand st (FST r) /\ cenv_shape_ok st cenv` `rhs`
+    (irule shape_step_frame_from >> irule_at Any lower_value_shape >>
+     qexists_tac `\st. plain_operand st cur /\ plain_operand st (FST r) /\ cenv_shape_ok st cenv` >>
+     simp[cenv_shape_ok_stable, stmt_shape_stable_plain, shape_stable_conj]) >>
+  stmt_bind `\res st. plain_operand st res /\ plain_operand st (FST r) /\
+                       cenv_shape_ok st cenv` `res`
+    (irule shape_step_frame_from >> irule_at Any compile_binop_shape >>
+     qexists_tac `\st. plain_operand st (FST r) /\ cenv_shape_ok st cenv` >>
+     simp[cenv_shape_ok_stable, stmt_shape_stable_plain, shape_stable_conj]) >>
+  irule shape_step_conseq >> irule_at Any compile_ptr_store_cenv_shape >> simp[]
+QED
+
+Finalise compile_augassign_shape[local]
 
 Theorem compile_append_shape:
   !bt e cenv lctx ty internal.

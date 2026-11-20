@@ -1,6 +1,6 @@
 Theory gasShadowCompileHelpers
 Ancestors
-  gasShadowCompileOps gasShadowCompileConvert gasShadowCompileContext
+  gasShadowCompileConvert gasShadowCompileContext
   gasShadowCompileAbi gasShadowCompileCallSupport gasShadowCompileBuiltinCreate
   gasShadowCompileMembership gasShadowCompilePure
   exprLowering gasShadow gasShadowState compileEnv list vyperOriginFold vyperPinFold

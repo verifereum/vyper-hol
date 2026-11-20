@@ -4,7 +4,7 @@ Ancestors
   ctorDeployDefs ctorDeployShape ctorDeployImmBudget ctorDeployMemoryFrontier
   ctorDeployInitcode ctorDeployInitcodeAsm ctorDeployDefsReach deployUnitProducers
   acceptedContextPhi ptrOkCheck o1PipelineCompose o1PipelineCorrect
-  codegenEncodingWf immutableCodeLayout asmWf
+  codegenEncodingWf immutableCodeLayout asmWf ctorDeployLoweringReturn asmOptimizer
   e2eDeployDefs e2eEntry lowerDloadDefs unitShapeDefs vyperCompiler list arithmetic
 
 Theorem deploy_raw_entry_context_facts:
@@ -67,38 +67,25 @@ Proof
 QED
 
 Theorem deploy_raw_entry_code_layout:
+  fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
   deploy_phases policy tops (assemble prog, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
   deploy_state_rel tops (assemble prog') am tx es /\
-  deploy_source_ok tops am
-    (tx with code := (opt_deploy_entry_state prog prog' cplan tops es).vs_code) ==>
+  deploy_source_ok tops am tx ==>
   code_layout_valid
-    ((opt_deploy_entry_state prog prog' cplan tops es) with
+    ((opt_deploy_entry_state_own prog prog' cplan tops es) with
       <|vs_gas_readings := gs; vs_fmp := fmp; vs_initial_fmp := fmp|>)
 Proof
-  strip_tac >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
-  drule_all deploy_unit_defs_reach_uses >> strip_tac >>
-  drule_all deploy_bc_size_bounded >> strip_tac >>
-  `unit_shape_ok dout.po_unit` by
-    (irule run_venom_pipeline_output_shape >>
-     fs[deploy_phases_def] >> metis_tac[]) >>
-  `codegen_assembly rpolicy dout.po_unit = SOME prog` by fs[deploy_phases_def] >>
-  drule_all codegen_assembly_asm_encoding_wf >> strip_tac >>
-  `FLOOKUP (SND (compute_label_offsets prog)) "code_end" =
-     SOME (LENGTH (assemble prog))` by
-    (irule immutable_code_end_length >>
-     fs[deploy_phases_def] >> metis_tac[APPEND_ASSOC]) >>
+  strip_tac >> drule_all deploy_relocated_data_layout >> strip_tac >>
   `?args_bytes.
      (FST (HD es.contexts)).msgParams.code = assemble prog' ++ args_bytes /\
      constructor_args_encode tops tx args_bytes` by
-    gvs[deploy_state_rel_def] >>
-  `constructor_args_encode tops
-     (tx with code := (opt_deploy_entry_state prog prog' cplan tops es).vs_code)
-     args_bytes` by fs[constructor_args_encode_def] >>
+    fs[deploy_state_rel_def] >>
   drule_all constructor_args_size_bounded >> strip_tac >>
-  simp[code_layout_valid_def, opt_deploy_entry_state_def, opt_entry_state_def,
-       entry_venom_state_def, finite_mapTheory.FLOOKUP_o_f,
-       wordsTheory.dimword_def, venomLayoutTheory.dimindex_256] >>
-  fs[] >> decide_tac
+  simp[code_layout_valid_def, opt_deploy_entry_state_own_def, opt_entry_state_own_def,
+       entry_venom_state_frame_fields, finite_mapTheory.FLOOKUP_o_f,
+       rich_listTheory.DROP_LENGTH_APPEND, wordsTheory.dimword_def, venomLayoutTheory.dimindex_256] >>
+  qpat_assum `LENGTH args_bytes < 2 ** 128`
+    (assume_tac o REWRITE_RULE [EVAL ``2 ** 128 : num``]) >>
+  decide_tac
 QED

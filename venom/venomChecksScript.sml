@@ -16,7 +16,8 @@ Ancestors
   (* the compiler's unit-shape and unit-transform hypotheses *)
   unitShapeChecks unitTransformChecks
   (* passes: call-frame allocation, effect and abort order in DFT, FMP aliasing, DSE checks *)
-  concretizeCallFrameRegression dftEffectOrderTest dftAbortOrderTest fmpAliasProbe dsePassChecks
+  concretizeCallFrameRegression concretizeEscapeOrderRegression
+  dftEffectOrderTest dftAbortOrderTest fmpAliasProbe dsePassChecks
   mem2varWitness functionInlinerReturnPcWitness phiElimNonVacuity
   assertCombinerNonVacuity
   (* branch_opt's output checker accepts and runs a rewritten function *)

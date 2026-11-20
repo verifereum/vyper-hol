@@ -40,6 +40,7 @@ Proof
       gvs[reason_result_shape_def]) >>
   `(?n st. e = Literal (BaseT (StringT n)) (StringL st)) \/
    (?n bs. e = Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) \/
+   (?n bs. e = Literal (BaseT (BytesT (Dynamic n))) (HexBytesL bs)) \/
    (?ann n args. e = Builtin ann (Concat n) args) \/
    (?ann en method tys args. e = TypeBuiltin ann (AbiEncode en method) tys args) \/
    (?ann fid args dr. e = Call ann (IntCall fid) args dr)` by
@@ -58,6 +59,9 @@ Proof
      rename1 `Call ann tgt args dr` >> Cases_on `tgt` >>
      simp[lowered_value_type_def]) >>
   pop_assum mp_tac >> strip_tac
+  >- (gvs[Once compile_expr_raw_def, compile_expr_body_def, vyperASTTheory.expr_type_def,
+          compile_literal_vv_def, comp_bind_def, comp_return_def] >>
+      pairarg_tac >> gvs[])
   >- (gvs[Once compile_expr_raw_def, compile_expr_body_def, vyperASTTheory.expr_type_def,
           compile_literal_vv_def, comp_bind_def, comp_return_def] >>
       pairarg_tac >> gvs[])

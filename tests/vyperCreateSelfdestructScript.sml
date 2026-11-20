@@ -701,7 +701,11 @@ Theorem blueprint_constructor_can_make_empty_source_valid:
       [F;T])
     [F;T]
 Proof
-  simp[listTheory.EVERY_DEF] >> CONV_TAC cv_eval
+  simp[listTheory.EVERY_DEF] >> rpt conj_tac
+  >- CONV_TAC cv_eval
+  >- CONV_TAC cv_eval
+  >- CONV_TAC cv_eval
+  >- CONV_TAC cv_eval
 QED
 
 Definition blueprint_test_captured_address_def:

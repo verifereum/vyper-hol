@@ -148,6 +148,7 @@ fun dest_StringL tm = dest_string (dest_StringL_tm tm)
 val (BytesL_tm, mk_BytesL_tm, dest_BytesL_tm, is_BytesL) = syntax_fns1 "vyperAST" "BytesL"
 val (IntL_tm, mk_IntL_tm, dest_IntL_tm, is_IntL) = syntax_fns1 "vyperAST" "IntL"
 val (DecimalL_tm, mk_DecimalL_tm, dest_DecimalL_tm, is_DecimalL) = syntax_fns1 "vyperAST" "DecimalL"
+val (HexBytesL_tm, mk_HexBytesL_tm, dest_HexBytesL_tm, is_HexBytesL) = syntax_fns1 "vyperAST" "HexBytesL"
 
 val (Signed_tm, mk_Signed_tm, dest_Signed_tm, is_Signed) = syntax_fns1 "vyperAST" "Signed"
 val (Unsigned_tm, mk_Unsigned_tm, dest_Unsigned_tm, is_Unsigned) = syntax_fns1 "vyperAST" "Unsigned"

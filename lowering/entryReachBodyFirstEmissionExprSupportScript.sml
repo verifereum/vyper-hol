@@ -60,7 +60,14 @@ Theorem first_emission_literal_vv:
      lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
-  rpt gen_tac >> Cases_on `lit` >>
+  rpt gen_tac >> Cases_on `lit`
+  >~ [`HexBytesL bs`] >-
+    (simp[compile_literal_vv_def] >>
+     map_every qid_spec_tac [`b`, `x`, `a`] >>
+     ho_match_mp_tac first_emission_strong >>
+     ho_match_mp_tac first_emission_strong_bind >> conj_tac
+     >- metis_tac[first_emission_bytelike_literal] >>
+     simp[comp_return_def, cs_extends_refl]) >>
   simp[compile_literal_vv_def, comp_return_def, cs_extends_refl]
   >- (Cases_on `b'` >> simp[compile_literal_vv_def, comp_return_def, cs_extends_refl])
   >- (Cases_on `ty` >> simp[] >>

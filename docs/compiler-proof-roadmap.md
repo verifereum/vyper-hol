@@ -148,8 +148,21 @@ failed call; failed/static calls adopt no accounts/transient/log effects;
 successful nonstatic calls adopt the supplied complete payload. Source
 `take_call_outcome` checks successful nonstatic account balance/code bounds;
 this is **not a storage validator**. The public `call_outcomes_ok` additionally
-requires bounded return data, account bounds and actual source storage validity
-for every record, including failed and static ones. No arbitrary-callee or source-executed-callee producer exists yet.
+requires bounded return data and runtime well-typed accounts for every record,
+including failed and static ones. Storage validity is separate.
+`vyper_call_correct` fixes the storage regions: `storage_ok H` asks them to be
+consistent, their locks separated and decoding at the entry state, and
+`call_within H` checks, when calldata dispatch selects a function, every gas
+filling's source storage observations against them (`storage_observations_ok`).
+e2eDefs's finite trace guard `call_storage_ok` is the per-gas-filling form
+over the trace's own horizon: the roots and lock slots the call's source
+storage trace observes are in range, its regions are consistent, their locks
+separated, and they decode at the entry state and in every adopted backend.
+`call_state_rel_call_outcomes_ok` produces `call_outcomes_ok` from the EVM
+call trace. `closed_world_call_outcomes_ok` produces `call_storage_ok` under
+its closed-world premises, for the gas observations related to the EVM
+readings, unless the frame is resource-starved. No arbitrary-callee or
+source-executed-callee producer of the storage guards exists yet.
 
 **Deterministic observer, not a freely chosen oracle.**
 [callTrace](../venom/codegen/frame/callTraceScript.sml) defines `frame_obs_tr`
@@ -257,7 +270,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D23 | Encoding wf only; remove positive-size hypothesis | `asm_encoding_wf` replaces `asm_wf` in encoding/step consumers; zero-size reverse lookup repaired. **Still absent:** general producer for actual generated output. | 2.1 |
 | D24 | Reserved-label exclusions | `reserved_label`, `unit_shape_ok`, supported internal-name rules; S6 must produce shape, not arbitrary label-map assumptions. | 3 |
 | D25 | Exact External call/count/binding; no fallback/defaults | `valid_vyper_call` implemented via real lookup; no general producer. Fallback invocation remains deferred. | 7 |
-| D26 | Initial and outcome storage validity | `source_storage_ok` + `call_outcomes_ok` use actual context/storage invariants. Account/code guard alone is insufficient; no producer from arbitrary EVM callees. | 7 |
+| D26 | Initial and outcome storage validity | `vyper_call_correct` takes fixed regions that decode at the entry state (`storage_ok H`) and against which, when calldata dispatch selects a function, every gas filling's source storage observations are checked (`call_within H`, `storage_observations_ok`); `call_storage_ok` is the per-gas-filling guard over the trace's own horizon, which decodes at the entry state and in every adopted backend; `call_outcomes_ok` holds only return-data and account bounds. Account/code guard alone is insufficient; no producer from arbitrary EVM callees. | 7 |
 | D27 | Preserve/re-prove existing true claims | Completed retirement ledger preserves proof text/Git identities and four structural APIs. **Clarification:** D30's unused false claims retire without same-name replacements. The creation-frame theorem was introduced as a separate statement and has since been proved. | every proof owner |
 | D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` is proved for canonical args, actual pre-constant deployment readiness, an uninstalled source target and an empty target account in `es.originalAccounts`. Constructors may make supported calls and take outcomes from their creation frame's trace. | 6 item7 |
 | D29 | Retire unused codegen_fn_correct; frame-aware gen_fn_simulation | Actual entry/IntRet/return relations and concrete maps; separate ADMITTED off-path target. This intentionally differs from old roadmap “restate codegen_fn_correct”. | 4.2 |
@@ -676,8 +689,8 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    and exactly one fresh nonstatic Code frame with
    `deploy_bc ++ args_bytes`, empty calldata/memory and live transfer (that the
    runtime has no 0xEF prefix is proved, `compile_vyper_runtime_not_ef`).
-   The frame's call trace has fewer than 2⁶⁴ entries. The assembly-optimizer
-   case requires `~program_reads_self_code tops`.
+   The frame's call trace has fewer than 2⁶⁴ entries. Source reads of `self.code`
+   use the creation frame's code, including in the assembly-optimizer case.
    Successful installation returns and deposits `runtime_bc ++ section`
    satisfying `immutables_section_rel`. The result relation compares accounts
    and transient storage at the run's storage horizon, ordered logs and call
@@ -694,9 +707,9 @@ composition fully verified. Concrete T10.3 inputs:
 | Handoff | Actual definitions / partial input | Deferred contract |
 |---|---|---|
 | H7-fallback | `valid_vyper_call` excludes `__default__`; whitelist only allows argument-free fallback declaration | Extend call boundary/dispatcher reasoning for fallback invocation; no current producer or fallback correctness theorem is supplied by this roadmap. |
-| H7-storage | `source_storage_ok`, `source_typing_ok`, `contract_storage_well_formed`, `storage_layout_safe` | Deployment establishes and later transactions preserve exact installed-source/readiness, machine/tx typing and actual storage/layout/hash separation. Existing storage-preservation and load/call typing results are **conditional partial producers**: retain runtime-storage consistency, protected calls, evaluation/oracle-storage and external-call-input readiness hypotheses. |
+| H7-storage | `storage_ok`, `call_storage_ok`, `deploy_storage_ok`, `source_typing_ok`, `contract_storage_well_formed` | Deployment establishes and later transactions preserve exact installed-source/readiness, machine/tx typing and storage that decodes over the regions each call observes. The finite-trace storage guards are `call_storage_ok` (from a `valid_horizon` over the call's source storage trace by `valid_horizon_call_storage_ok`, or under closed-world premises by `closed_world_call_outcomes_ok`) and `deploy_storage_ok` (each gas filling's premise in `deploy_call_result_rel`, which `e2e_deploy_correctness` concludes for a creation run that is not resource-starved). Existing storage-preservation and call typing results are **conditional partial producers**. The finite-horizon ones (`call_external_storage_well_formed_on`, `load_contract_storage_well_formed_on`, and per construct `vyperFiniteStoragePreservation`) take a `valid_horizon` over the actual trace, or regions that decode before (`storage_well_formed_on`) with the trace's observations checked against them (`storage_observations_ok`), and conclude the regions decode after. The whole-contract ones (`vyperTypeEvalStoragePreservation`, `vyperTypeStoragePreservation`, `vyperCallOutcomeStorage`) take `contract_storage_well_formed` and, where they use them, `oracle_storage_ok` and, for the call and create adapters, `protected_storage_calls_preserve` or `protected_storage_creates_preserve`. Call machine preservation (`checked_call_external_preserves_machine_well_typed`) takes `checked_external_call_inputs_ready`. |
 | H7-entry | `call_state_rel`, `source_deployment_rel`, `valid_vyper_call` | Construct a real top-level transaction entry with live transfer, wf/Collect, code/parser/length, fresh Memory frame, installed singleton source/layouts, exact ABI bindings and block ties. Prove **satisfiability of the combined environmental boundary**, not merely implication from it; no universal compile success or supported/satisfiable compiled-program witness exists here. D31 deliberately defers this. |
-| H7-callees | `call_outcomes_ok` and source concrete `call_external NONE` / `load_contract NONE` | Prove the **source-executed-callee** producer: under explicit source typing/storage/protected-call assumptions, if the source itself ran every callee, all corresponding outcomes, including failed and static ones, satisfy the return-data length and account bounds **and contract storage validity in the actual caller context**. No current such lemma exists; arbitrary EVM callee validity does not imply it. |
+| H7-callees | `call_outcomes_ok` and source concrete `call_external NONE` / `load_contract NONE` | Prove the **source-executed-callee** producer: under explicit source typing/storage/protected-call assumptions, if the source itself ran every callee, all corresponding outcomes, including failed and static ones, satisfy the return-data length and account bounds of `call_outcomes_ok`, **and the caller's storage trace over them satisfies `call_storage_ok` (`deploy_storage_ok` for a constructor caller)**. No current such lemma exists; arbitrary EVM callee validity does not imply it. |
 | H7-compose | Frame theorem / H21 trace and frame decomposition | Split actual nested execution into prefix, inner `run_call`, suffix with environment transports; apply separately to reentrant/multicontract entries. Compose transactions by persistent world-state induction, rebuilding a fresh **outcome trace oracle** at each top call and relating source gas observations to EVM readings. |
 
 Read the [actual partial-producer premises](compiler-proof-status-2026-10-09.md#what-partial-producers-actually-establish)

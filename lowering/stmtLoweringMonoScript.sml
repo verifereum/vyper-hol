@@ -134,7 +134,8 @@ val ci_mono_stmt_rws =
   [ci_mono_store_immutable_bytestring, ci_mono_compile_expr_sa,
    ci_mono_context_helpers, ci_mono_compile_store_slots,
    ci_mono_compile_dynarray_append, ci_mono_comp_get,
-   ci_mono_compile_ptr_load, ci_mono_compile_imm_store_word,
+   ci_mono_compile_ptr_load, ci_mono_compile_ptr_store,
+   ci_mono_compile_imm_store_word,
    ci_mono_compile_imm_store_words, ci_mono_compile_imm_copy_to_memory];
 
 Theorem ci_mono_compile_get_target_ptr:

@@ -11,11 +11,11 @@ Ancestors
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
-  stmtSimIf stmtLoweringMono stmtLowering compileEnv fragExec
+  stmtLoweringMono stmtLowering compileEnv fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness stmtSimReason stmtSimReasonExpr
-  stmtSimReasonStorage stmtSimReasonCode supportedExprs stmtSimAssign stmtSimDeclStore
+  stmtSimReasonStorage supportedExprs stmtSimAssign stmtSimDeclStore
   stmtSimAugAssign vyperTypeEvalSoundness vyperTypeInvariants
   vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimBuiltins
   exprReasonOperand
@@ -25,8 +25,8 @@ Ancestors
   stmtSimAssignStorage supportedDecls vyperTypeContractStaticMaps
   vyperTypeContract compileVyper supportedTypes stmtSimAssignAttr
   stmtSimAssignStorageCopy
-  stmtSimAugAssignAttr stmtSimAssignAttrStorage stmtSimAugAssignStorage
-  stmtSimAugAssignAttrStorage stmtSimAssignMem stmtSimAssignTupleMem
+  stmtSimAssignAttrStorage
+  stmtSimAssignMem
   stmtSimAssignTupleTargets
   memoryLocalRhsProps stmtPoppedKeys exprOpenMain bodyStorageMetadata
   vyperPureExpr targetPlaceSim targetPlaceSimCases exprSimDefs
@@ -104,13 +104,19 @@ Theorem aug_place_code_parts:
       ((FST (SND r) = NONE /\ emit_void INVALID [] s0 = ((),sf)) \/
        ?loc cur rhs result s1 s2 s3.
          FST (SND r) = SOME loc /\
-         emit_op (case loc of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD)
-           [FST r] s0 = (cur,s1) /\
+         (if loc = LocCode then
+            compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc (FST r)
+          else
+            emit_op (case loc of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD)
+              [FST r]) s0 = (cur,s1) /\
          lower_value compile_expr cenv ty e s1 = (rhs,s2) /\
          compile_binop bop cur rhs ty NONE
            (if bop = Exp then expr_int_literal e else NONE) s2 = (result,s3) /\
-         emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE)
-           [FST r; result] s3 = ((),sf))
+         (if loc = LocCode then
+            compile_ptr_store cenv.ce_is_ctor cenv.ce_imm_alloca loc (FST r) result
+          else
+            emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE)
+              [FST r; result]) s3 = ((),sf))
 Proof
   rpt gen_tac >>
   simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
@@ -121,7 +127,11 @@ Proof
   simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] 
   >- (Cases_on `emit_void INVALID [] cstart` >> simp[oneTheory.one]) >>
   rename1 `FST (SND ptr_result) = SOME loc` >>
-  Cases_on `emit_op (case loc of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD) [FST ptr_result] cstart` >>
+  Cases_on `(if loc = LocCode then
+               compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc (FST ptr_result)
+             else
+               emit_op (case loc of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD)
+                 [FST ptr_result]) cstart` >>
   rename1 `_ = (cur,s1)` >> simp[] >>
   Cases_on `lower_value compile_expr cenv ty e s1` >>
   rename1 `_ = (rhs,s2)` >> simp[] >>
@@ -129,8 +139,13 @@ Proof
     (if bop = Exp then expr_int_literal e else NONE) s2` >>
   rename1 `compile_binop _ _ _ _ _ _ _ = (result,cstore)` >>
   simp[] >>
-  Cases_on `emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE) [FST ptr_result; result] cstore` >>
-  simp[oneTheory.one]
+  Cases_on `(if loc = LocCode then
+               compile_ptr_store cenv.ce_is_ctor cenv.ce_imm_alloca loc (FST ptr_result) result
+             else
+               emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE)
+                 [FST ptr_result; result]) cstore` >>
+  Cases_on `loc = LocCode` >> gvs[oneTheory.one] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
 Theorem aug_place_eval_cases:

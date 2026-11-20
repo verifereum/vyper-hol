@@ -1059,6 +1059,50 @@ QED
 
 Finalise compile_literal_other_vv_sim
 
+Theorem hex_bytes_literal_compile:
+  compile_expr cenv ty (Literal (BaseT (BytesT (Dynamic n))) (HexBytesL bs)) =
+  compile_expr cenv ty (Literal (BaseT (BytesT (Dynamic n))) (BytesL bs))
+Proof
+  simp[FUN_EQ_THM, compile_expr_def, compile_literal_vv_def, expr_type_def]
+QED
+
+Theorem hex_bytes_literal_eval:
+  eval_expr cx (Literal ann (HexBytesL bs)) =
+  eval_expr cx (Literal ann (BytesL bs))
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  simp[SimpLHS, Once evaluate_def, return_def, evaluate_literal_def] >>
+  simp[Once evaluate_def, return_def, evaluate_literal_def]
+QED
+
+Theorem compile_hex_bytes_literal_vv_sim:
+  expr_vv_ok cenv (Literal ann (HexBytesL bs))
+Proof
+  rw[expr_vv_ok_def] >>
+  `?n. ann = BaseT (BytesT (Dynamic n))` by
+    (fs[expr_sim_pre_def, well_typed_expr_def] >>
+     drule well_typed_literal_hex_bytes >> simp[]) >>
+  gvs[] >>
+  `expr_vv_ok cenv (Literal (BaseT (BytesT (Dynamic n))) (BytesL bs))` by
+    (irule compile_literal_other_vv_sim >> simp[is_word_type_def]) >>
+  `expr_sim_pre cenv cx env (Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) es` by
+    fs[expr_sim_pre_def, well_typed_expr_def, well_typed_literal_def,
+       byte_widths_expr_def, alloc_limits_expr_def, literal_alloc_ok_def,
+       int_calls_expr_def, supportedExprTraverseTheory.expr_has_evm_run_def,
+       supportedExprTraverseTheory.supported_expr_exists_def,
+       supportedExprTraverseTheory.expr_evm_run_root_def,
+       supportedExprTraverseTheory.call_operands_effect_root_def,
+       const_name_root_def, supportedProgramTheory.expr_abi_decode_target_root_def] >>
+  fs[expr_vv_ok_def] >>
+  first_x_assum (drule_at Any) >>
+  disch_then (qspecl_then [`ctx`, `func`, `ty`] mp_tac) >>
+  simp[expr_vv_sim_def, hex_bytes_literal_compile, hex_bytes_literal_eval,
+       vv_post_def, post_value_type_def, expr_type_def,
+       supportedExprTraverseTheory.expr_has_effect_def,
+       supportedExprTraverseTheory.supported_expr_exists_def,
+       supportedExprTraverseTheory.expr_effect_root_def]
+QED
+
 (* Allocation execution with the frame used by composed buffer payloads. *)
 Theorem alloc_buffer_frame_run:
   !func cenv cx es sa sm buf sz s.

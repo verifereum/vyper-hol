@@ -25,35 +25,12 @@ Proof
   goal_assum $ drule_at Any >> gvs[]
 QED
 
-Theorem deploy_source_ok_opt_code:
-  !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es.
-    fin IN accepted_finalizers /\
-    fin rpolicy prog = SOME prog' /\
-    deploy_phases policy tops (assemble prog, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_state_rel tops (assemble prog') am tx es /\
-    deploy_source_ok tops am tx ==>
-    deploy_source_ok tops am
-      (tx with code := (opt_deploy_entry_state prog prog' cplan tops es).vs_code)
-Proof
-  rpt strip_tac >>
-  drule_all deploy_bc_size_bounded >> strip_tac >>
-  `?args_bytes.
-     (FST (HD es.contexts)).msgParams.code = assemble prog' ++ args_bytes /\
-     constructor_args_encode tops tx args_bytes` by
-    gvs[deploy_state_rel_def] >>
-  drule_all constructor_args_size_bounded >> strip_tac >>
-  gvs[deploy_source_ok_def, deploy_typing_ok_def, call_tx_well_typed_def,
-      opt_deploy_entry_state_def, opt_entry_state_def, LENGTH_APPEND] >>
-  decide_tac
-QED
-
 Theorem deploy_raw_fmp_exists:
   !policy tops runtime_bc rpolicy dunit dout prog prog' cplan es.
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) ==>
     ?fmp:bytes32.
-      w2n (opt_deploy_entry_state prog prog' cplan tops es).vs_initial_fmp <=
+      w2n (opt_deploy_entry_state_own prog prog' cplan tops es).vs_initial_fmp <=
         w2n fmp /\
       w2n fmp < 2 ** 254 /\
       imm_len tops + unit_alloca_budget dunit.cu_context +
@@ -83,12 +60,11 @@ Proof
     (fs[wordsTheory.dimword_def, venomLayoutTheory.dimindex_256] >>
      decide_tac) >>
   qexists_tac `n2w n` >>
-  simp[opt_deploy_entry_state_def, opt_entry_state_def, entry_venom_state_def,
+  simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def,
        wordsTheory.w2n_n2w] >>
   fs[Abbr `n`, MAX_DEF] >> decide_tac
 QED
 
-(* The deploy gas link's certificate premise at the raw free-memory pointer. *)
 Theorem deploy_unit_execution_correct_raw_fmp:
   !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es fmp.
     fin IN accepted_finalizers /\
@@ -98,34 +74,24 @@ Theorem deploy_unit_execution_correct_raw_fmp:
     deploy_state_rel tops (assemble prog') am tx es /\
     deploy_source_ok tops am tx ==>
     ?shadow_ctx. !vs.
-      raw_variant fmp vs (opt_deploy_entry_state prog prog' cplan tops es) ==>
+      raw_variant fmp vs (opt_deploy_entry_state_own prog prog' cplan tops es) ==>
       ?marks. deploy_unit_execution_correct_with shadow_ctx marks
-        tops runtime_bc am
-        (tx with code := (opt_deploy_entry_state prog prog' cplan tops es).vs_code)
-        dunit vs
+        tops runtime_bc am tx dunit vs
 Proof
   rpt strip_tac >>
-  `deploy_source_ok tops am
-    (tx with code := (opt_deploy_entry_state prog prog' cplan tops es).vs_code)` by
-    (drule_all deploy_source_ok_opt_code >> simp[]) >>
-  `tx.function_name = "__init__"` by gvs[deploy_state_rel_def] >>
   drule_all deploy_unit_shape_ok >> strip_tac >>
-  drule deploy_reconstructed_entry >>
-  disch_then (qspecl_then [`prog`, `cplan`] (qx_choose_then `es0` strip_assume_tac)) >>
   drule_all deploy_unit_execution_correct_fixed_shadow >>
   disch_then (qx_choose_then `shadow_ctx` assume_tac) >>
   qexists_tac `shadow_ctx` >> rpt strip_tac >>
   `vs.vs_outcomes = MAP SND (call_trace es)` by
-    gvs[raw_variant_def, gas_variant_def, opt_deploy_entry_state_def,
-        opt_entry_state_def, entry_venom_state_def,
-        venomStateTheory.venom_state_component_equality] >>
-  `call_outcomes_ok am
-     (tx with code := (opt_deploy_entry_state prog prog' cplan tops es).vs_code)
-     vs.vs_outcomes` by
-    (qpat_assum `deploy_state_rel tops (assemble prog') am tx es`
-       (mp_tac o MATCH_MP deploy_state_rel_call_outcomes_ok) >>
-     simp[e2eDefsTheory.call_outcomes_ok_def]) >>
-  qabbrev_tac `s = deploy_entry_state prog cplan tops es0 with
+    (qpat_assum `raw_variant _ _ _`
+       (mp_tac o SRULE [raw_variant_def, gas_variant_def]) >>
+     disch_then (mp_tac o Q.AP_TERM `\s. s.vs_outcomes`) >>
+     simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
+          entry_venom_state_frame_fields]) >>
+  `call_outcomes_ok am tx vs.vs_outcomes` by
+    (drule deploy_state_rel_call_outcomes_ok >> simp[]) >>
+  qabbrev_tac `s = opt_deploy_entry_state_own prog prog' cplan tops es with
     <|vs_outcomes := vs.vs_outcomes; vs_gas_readings := vs.vs_gas_readings|>` >>
   qpat_x_assum `!outs vs. call_outcomes_ok _ _ outs /\ gas_variant _ _ ==> _`
     (qspecl_then [`vs.vs_outcomes`, `s`] mp_tac) >>
@@ -147,11 +113,10 @@ Theorem deploy_raw_fmp_focus_mask_entry:
    vs_out fmp shadow_ctx func.
     fin IN accepted_finalizers /\
     fin rpolicy prog = SOME prog' /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_state_rel tops (assemble prog') am tx es /\
-    vs_out = opt_deploy_entry_state prog prog' cplan tops es /\
+    vs_out = opt_deploy_entry_state_own prog prog' cplan tops es /\
     deploy_source_ok tops am (tx with code := vs_out.vs_code) /\
     w2n vs_out.vs_initial_fmp <= w2n fmp /\
     w2n fmp < 2 ** 254 /\

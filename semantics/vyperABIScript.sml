@@ -12,6 +12,11 @@ val () = List.app cv_rep_delete
    "contractABI.cv_rep_bool_bool_itself_datatype",
    "contractABI.cv_num_to_dec_string_thm"];
 
+(* contractABI and vyperValue each define a representation of 'a itself, and
+   the translator uses the one loaded last; make it vyperValue's, to match the
+   translations kept above in whichever order the ancestors are loaded. *)
+val () = cv_memLib.cv_from_to_add vyperValueTheory.from_bool_to_bool_itself_thm;
+
 (* Overloads to disambiguate ABI value constructors from Vyper value constructors *)
 Overload abi_IntV[local] = ``IntV : int -> abi_value``
 Overload abi_BytesV[local] = ``BytesV : word8 list -> abi_value``

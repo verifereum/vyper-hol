@@ -1,4 +1,4 @@
-(* A piece of deploy_ctor_entry_reaches_body (ctorDeployLoweringEntry).
+(* A piece of deploy_ctor_entry_joint (ctorDeployLoweringEntry).
    fmp_room holds vacuously at every state of the constructor function: a
    supported program's raw deployment unit has no DALLOCA. *)
 Theory ctorDeployLoweringEntryFmp

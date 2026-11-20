@@ -16,11 +16,11 @@ Ancestors
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage vyperScopePreservation stmtSimForArrayFrame
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
-  stmtSimIf stmtLoweringMono stmtLowering compileEnv loweringStateRelDefs fragExec
+  stmtLoweringMono stmtLowering compileEnv loweringStateRelDefs fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness stmtSimReason stmtSimReasonExpr
-  stmtSimReasonStorage stmtSimReasonCode supportedExprs stmtSimAssign stmtSimDeclStore
+  stmtSimReasonStorage supportedExprs stmtSimAssign stmtSimDeclStore
   stmtSimAugAssign vyperTypeEvalSoundness vyperTypeInvariants
   vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimBuiltins
   exprReasonOperand
@@ -31,8 +31,8 @@ Ancestors
   vyperStoragePlaceProvenance vyperPlaceStoragePreservation accountsRelProps
   vyperTypeContract compileVyper supportedTypes stmtSimAssignAttr
   stmtSimAssignStorageCopy
-  stmtSimAugAssignAttr stmtSimAssignAttrStorage stmtSimAugAssignStorage
-  stmtSimAugAssignAttrStorage stmtSimAssignMem stmtSimAssignTupleMem
+  stmtSimAssignAttrStorage
+  stmtSimAssignMem
   stmtSimAssignTupleTargets
   memoryLocalRhsProps stmtPoppedKeys exprOpenMain bodyStorageMetadata
   vyperPureExpr targetPlaceSim targetPlaceSimCases exprSimDefs
@@ -1396,11 +1396,16 @@ Proof
      simp[cj 1 compile_expr_ci_mono, ci_mono_def] >>
      rpt strip_tac >> gvs[]) >>
   `cs_extends s0' sb` by
-    (qpat_x_assum `FST (SND r) = NONE /\ _ \/ _` strip_assume_tac >>
+    (qpat_x_assum `FST (SND r) = NONE /\ _ \/ _` strip_assume_tac
+     >- metis_tac[REWRITE_RULE [cs_appends_def] cs_appends_emit_helpers] >>
+     rename1 `FST (SND r) = SOME loc` >>
+     Cases_on `loc = LocCode` >> gvs[] >>
      imp_res_tac (REWRITE_RULE [cs_appends_def] cs_appends_emit_helpers) >>
      imp_res_tac (cj 2 compile_expr_grows) >>
      imp_res_tac compile_binop_grows >>
-     fs[cs_appends_def] >> metis_tac[cs_extends_trans]) >>
+     fs[cs_appends_def] >>
+     metis_tac[cs_extends_trans, ci_mono_def, ci_mono_compile_ptr_load,
+               ci_mono_compile_ptr_store, pairTheory.SND]) >>
   `fn_has_code sa s0' func` by metis_tac[fn_has_code_mid, cs_extends_refl] >>
   `target_sim ctx func cenv cx env bt es` by
     (fs[target_case_def, target_pre_def]) >>

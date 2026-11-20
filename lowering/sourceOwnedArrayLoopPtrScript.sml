@@ -3,7 +3,7 @@ Theory sourceOwnedArrayLoopPtr
 Ancestors
   decoderOriginAllocationFrame decoderLoopHeaderCorePtr decoderLoopBackedgeCorePtr decoderArraySetupPtr fragGasSeqMem fragGasOriginPtr
   calldataDynOwned sourceRecursiveComplexPtr sourceEncodingWindows sourceEncodingLayout
-  actualAllocaReplayPtr abiDecoderCoherence abiDecoderContract
+  abiDecoderCoherence abiDecoderContract
   abiDecoderExecution abiDecoderFrame abiDecoderReentry abiDecoderLoop
   abiDecoderDynamicLoopSetup abiDecoderArraySetupCode abiDecoderArraySlice
   abiDecoderValidArrayMemory abiDecoderValidArrayBackedge
