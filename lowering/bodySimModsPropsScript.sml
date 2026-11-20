@@ -186,8 +186,9 @@ Proof
           add_annotated_immutables_mods_def, add_annotated_immutables_src_def,
           add_module_var_locations_mods_def, add_module_var_locations_src_def,
           FLOOKUP_UPDATE, AllCaseEqs()] >>
-     strip_tac >> rpt gen_tac >> Cases_on `src` >> simp[] >>
-     Cases_on `x = 2` >> simp[] >> metis_tac[]) >>
+     strip_tac >> rpt gen_tac >> Cases_on `src` >- simp[] >>
+     rename1 `SOME src_id = SOME 2` >> simp[] >>
+     Cases_on `src_id = 2` >> simp[] >> metis_tac[]) >>
   simp[immutable_section_layout_mods_def, loweringStateRelDefsTheory.regions_disjoint_def,
        imm_len_mods_def, compute_immutables_len_unit_def,
        annotated_immutables_len_def, type_mem_bytes_def] >>

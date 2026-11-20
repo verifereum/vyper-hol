@@ -11,7 +11,7 @@ Ancestors
   venomCompilerTypes sorting constSubstStmtsPreserve supportedNameRoot
   vyperTypeContractStaticMaps e2eDeployDefs bodySim ctorDeployShape
   bodyInvSplit bodyInvModuleProps bodySimModsProps
-  bodyInternalFunctionIntervalProps
+  bodyInternalFunctionIntervalProps internalBlockPackagingProps
   compileUnit constSubstMods intCallLookup alist pair
   externalEntryShape externalEntryChecks loweringShapeRules
   context emitHelper stmtLowering
@@ -148,6 +148,24 @@ Proof
   simp[] >> metis_tac[internal_fn_label_mode]
 QED
 
+Theorem supported_internal_substitution[local]:
+  supported_program tops /\
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+  MEM (FunctionDecl Internal mut nr rr fname args dflts ret ss) tops ==>
+  subst_consts_fn (module_consts_env tops [])
+    (mut,nr,rr,fname,args,dflts,ret,ss) = (mut,nr,rr,fname,args,dflts,ret,ss)
+Proof
+  strip_tac >> drule_all supported_program_declaration >>
+  simp[supported_declaration_body_def] >> strip_tac >>
+  irule subst_consts_supported_fn_unchanged >>
+  qexistsl [`tops`, `Internal`] >> simp[] >>
+  drule distinct_module_consts_env_names_constant >> strip_tac >>
+  rpt strip_tac >> first_x_assum irule >>
+  Cases_on `ALOOKUP (module_consts_env tops []) id` >>
+  gvs[] >> drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+  simp[MEM_MAP] >> qexists_tac `(id,x)` >> simp[]
+QED
+
 Theorem shadow_body_inv_from_internal_runs[local]:
   supported_program tops /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
@@ -184,17 +202,7 @@ Proof
       `cap` |-> `if is_ctor then imm_len tops else 0`, `id` |-> `build_func_ids 0 tops fname`,
       `tys` |-> `MAP SND (args : (string # type) list)`] packaged_internal_mode) >> fs[]) >>
   qpat_x_assum `mode = is_ctor` SUBST_ALL_TAC >>
-  `subst_consts_fn (module_consts_env tops [])
-    (mut,nr,rr,fname,args,dflts,ret,ss) = (mut,nr,rr,fname,args,dflts,ret,ss)` by
-    (drule_all supported_program_declaration >>
-     simp[supported_declaration_body_def] >> strip_tac >>
-     irule subst_consts_supported_fn_unchanged >>
-     qexistsl [`tops`, `Internal`] >> simp[] >>
-     drule distinct_module_consts_env_names_constant >> strip_tac >>
-     rpt strip_tac >> first_x_assum irule >>
-     Cases_on `ALOOKUP (module_consts_env tops []) id` >>
-     gvs[] >> drule alistTheory.ALOOKUP_MEM >> strip_tac >>
-     simp[MEM_MAP] >> qexists_tac `(id,x)` >> simp[]) >>
+  drule_all supported_internal_substitution >> strip_tac >>
   `MEM (mut,nr,rr,fname,args,dflts,ret,ss) srcs` by
     (qpat_assum `PERM srcs _` (mp_tac o MATCH_MP PERM_MEM_EQ) >>
      disch_then (qspec_then `(mut,nr,rr,fname,args,dflts,ret,ss)` SUBST1_TAC) >>
@@ -416,38 +424,6 @@ Proof
   qexistsl_tac [`start`, `old`, `entry`, `after`] >> simp[]
 QED
 
-Theorem package_internal_blocks_label_segments[local]:
-  !descs segs entry.
-    LIST_REL
-      (\d seg. seg <> [] /\ (HD seg).bb_label = FST d /\
-        EVERY (\bb. isPREFIX "@" bb.bb_label) (TL seg)) descs segs /\
-    ALL_DISTINCT (MAP FST descs) /\
-    EVERY (\d. internal_label_ok (FST d) /\
-               ~MEM (FST d) (MAP (\bb. bb.bb_label) entry)) descs ==>
-    package_internal_blocks descs (entry ++ FLAT segs) =
-      SOME (entry,
-            MAP2 (\d seg. mk_internal_function (FST d) seg (FST (SND d))
-                            (SND (SND d))) descs segs)
-Proof
-  Induct >- rw[package_internal_blocks_def] >>
-  PairCases >> rw[LIST_REL_CONS1] >>
-  rename1 `LIST_REL _ descs segs` >>
-  rename1 `segment <> []` >>
-  Cases_on `segment` >> gvs[] >>
-  rename1 `¬MEM first.bb_label (MAP FST descs)` >>
-  `split_blocks_at first.bb_label (entry ++ first :: (t ++ FLAT segs)) =
-     SOME (entry, first :: (t ++ FLAT segs))` by
-    (irule split_blocks_at_append_delimiter >> simp[]) >>
-  gs[package_internal_blocks_def] >>
-  first_x_assum (qspecl_then [`segs`, `first :: t`] mp_tac) >>
-  impl_tac
-  >- (`!lbl. isPREFIX "@" lbl ==> ~internal_label_ok lbl` by
-        (Cases >> simp[internal_label_ok_def]) >>
-      fs[EVERY_MEM, MEM_MAP, pairTheory.FORALL_PROD, pairTheory.EXISTS_PROD] >>
-      metis_tac[]) >>
-  simp[]
-QED
-
 Theorem internal_fn_descriptors_map[local]:
   internal_fn_descriptors packages =
     MAP (\(label,ce,params,buf,nr,key,trans,view,ctor,ilen,ss,rt).
@@ -476,10 +452,12 @@ Proof
   strip_tac >> drule compile_internal_fn_bodies_label_segments >> strip_tac >>
   drule extract_context_internal_names >> strip_tac >>
   `ALL_DISTINCT (MAP FST (internal_fn_descriptors packages))` by fs[] >>
-  `EVERY (\d. internal_label_ok (FST d) /\
+  `EVERY (\d. ~isPREFIX "@" (FST d) /\
        ~MEM (FST d) (MAP (\bb. bb.bb_label) (all_blocks start)))
        (internal_fn_descriptors packages)` by
-    (fs[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
+    (`!lbl. isPREFIX "@" lbl ==> ~internal_label_ok lbl` by
+       (Cases >> simp[internal_label_ok_def]) >>
+     fs[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
   `LIST_REL
       (\d seg. seg <> [] /\ (HD seg).bb_label = FST d /\
         EVERY (\bb. isPREFIX "@" bb.bb_label) (TL seg))
@@ -487,7 +465,9 @@ Proof
     (rewrite_tac[internal_fn_descriptors_map, LIST_REL_MAP1] >>
      irule LIST_REL_mono >> goal_assum (drule_at Any) >>
      simp[combinTheory.o_DEF, pairTheory.FORALL_PROD]) >>
-  drule_all package_internal_blocks_label_segments >> strip_tac >>
+  drule_all (Q.SPECL [`internal_fn_descriptors packages`, `segments`,
+    `all_blocks start`, `isPREFIX "@"`] package_internal_blocks_separated_segments) >>
+  strip_tac >>
   qpat_x_assum `extract_context_with_internals _ _ _ = _` mp_tac >>
   simp[extract_context_with_internals_def, GSYM all_blocks_def] >>
   strip_tac >>
@@ -932,17 +912,7 @@ Proof
   strip_tac >>
   simp[consts_env_mods_singleton, subst_consts_fn_mods_singleton,
        subst_consts_mods_singleton] >>
-  `subst_consts_fn (module_consts_env tops []) (mut,nr,rr,fname,args,dflts,ret,ss) =
-    (mut,nr,rr,fname,args,dflts,ret,ss)` by
-    (drule_all supported_program_declaration >>
-     simp[supported_declaration_body_def] >> strip_tac >>
-     irule subst_consts_supported_fn_unchanged >>
-     qexistsl [`tops`, `Internal`] >> simp[] >>
-     drule distinct_module_consts_env_names_constant >> strip_tac >>
-     rpt strip_tac >> first_x_assum irule >>
-     Cases_on `ALOOKUP (module_consts_env tops []) id` >>
-     gvs[] >> drule alistTheory.ALOOKUP_MEM >> strip_tac >>
-     simp[MEM_MAP] >> qexists_tac `(id,x)` >> simp[]) >>
+  drule_all supported_internal_substitution >> strip_tac >>
   fs[subst_consts_fn_def]
 QED
 
