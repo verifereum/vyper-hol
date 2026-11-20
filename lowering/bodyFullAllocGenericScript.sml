@@ -3,9 +3,9 @@
    path of a bytestring copy. *)
 Theory bodyFullAllocGeneric
 Ancestors
-  bodyPtrIfExpAllocOrdered bodyPtrIfExpAllocSource bodyPtrIfExpAllocCompiler
+  bodyPtrIfExpAllocSeparation[qualified] bodyPtrIfExpAllocSource bodyPtrIfExpAllocCompiler
   bodyPtrIfExpAllocGhost bodyPtrIfExpAllocKept
-  bodyPtrIfExpBytesPost bodyPtrIfExpBytesSemantic bodyPtrIfExpBytesCounted
+  bodyPtrIfExpBytesPost bodyPtrIfExpBytesCounted
   bodyPtrIfExpAllocLocals allocationPtr fragGasSeqPtrContext bytesCopyCode
   bodyCopyMemory bodyPtrDefs bodyPtrPrecompileBuiltinsAllocationFrame
   fragGasSeqPtr fragGasOriginPtr fragExecPtr ptrSafetyTransport

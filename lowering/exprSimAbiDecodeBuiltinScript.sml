@@ -6,7 +6,7 @@ Ancestors
   valueEncodingDefs
   abiBuiltinDecodeCorrect abiBuiltinSource abiBuiltinDecodeEffect
   exprSimAbiDecodeTupleSource exprSimAbiDecodeMemberOutcome
-  exprSimAbiDecodeCompositePrefix exprSimAbiDecodeMemberReject
+  exprSimAbiDecodeCompositePrefix
   builtinAbi fragExec vyperABI venomState venomExecSemantics
   abiDecoderSiteEffect actualDecoderSites
   exprSimAbiDecodeBuiltinLayout exprSimAbiDecodeRecursiveClosure

@@ -1,7 +1,7 @@
 (* Global registration permits retained calls; execution safety stays regional. *)
 Theory exprSimAbiEncodeRegistration
 Ancestors
-  exprSimAbiEncodeCompatibility exprSimAbiEncodeResources
+  fragExec[qualified] exprSimAbiEncodeResources
   exprLoweringProps fcgDefs venomInst venomExecSemantics relation pred_set list rich_list
 
 Theorem abi_encode_singleton_edge:

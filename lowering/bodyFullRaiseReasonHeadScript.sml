@@ -1,7 +1,7 @@
 (* One checked execution for the reason encoder's four-instruction head. *)
 Theory bodyFullRaiseReasonHead
 Ancestors
-  stmtReasonMemory revertReasonPrefixBoundaryPtr revertReasonPrefixCodePtr
+  stmtReasonMemory revertReasonPrefixBoundaryPtr entrySinkExtraction[qualified] revertReasonCopyPtr[qualified]
   revertReasonLayout revertReasonPrefixPtr
   fragGasSeqPtr instSeqPtrLo fragGasOriginPtrLoop
   venomInst venomState list rich_list arithmetic
