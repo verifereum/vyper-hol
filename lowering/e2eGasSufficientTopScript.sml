@@ -12,7 +12,7 @@ Ancestors
   codegenSymOwnRel o1LabelFlowOwnCompose
   e2eGasSufficient e2eComposition asmOptimizer
   e2eCorrectness e2eDefs e2eEntry e2eOptEntry e2eProducers
-  callCodeTrace callRawVariant sourceUnitExitSafe exprSimHypsDefs
+  callRawVariant sourceUnitExitSafe exprSimHypsDefs
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeSource runtimeLabelReadiness runtimeSymSrcUnit fragFuelUnit
   e2eDeployRawFmp e2eDeployAtMarks e2eDeployDefs deploySymSrcUnit

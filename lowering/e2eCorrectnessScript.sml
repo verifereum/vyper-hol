@@ -42,7 +42,7 @@ Ancestors
   venomCompilerWf venomWf o1LabelFlowCompose o1LabelFlowOwnCompose
   contextStaticAbortRel
   list callRawVariant ctorDeployRunBounded rawReachableFmp ctxLookupAgreeHelpers
-  callCodeTrace callCodeStorage guardSourceAlignment vyperCallFiniteStorageSupport
+  guardSourceAlignment vyperCallFiniteStorageSupport
   fragGasOriginEvents fragGasOriginPtrSafeUpto o1SafeUpto acceptedContextPhi
   venomState venomLayout gasMaskProjection gasEvents gasExplicitSites
   oracleExecProps gasFocusStaticPrefixDriver words arithmetic sorting

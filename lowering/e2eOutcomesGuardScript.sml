@@ -11,7 +11,7 @@ Ancestors
   guardTerminalBackend guardSourceAlignment asmOptimizer asmOptNonemptyFinalizer
   vfmAccountDeletion e2eEntry
   vyperCallFiniteStorageSupport guardRequestCutAlignment loweringCalldataCorrect
-  callRawVariant callCodeTrace sourceUnitExecution vyperLoweringCorrect gasSummary
+  callRawVariant sourceUnitExecution vyperLoweringCorrect gasSummary
   stackPlanGen
   vfmDecreasesGas relation pair arithmetic list
   gasFocusPacketPipelineStages requestCutSelectedReplay
