@@ -232,6 +232,21 @@ End
 Overload allocation_test_bytecode[local] =
   ``\n. Name (BaseT (BytesT (Dynamic n))) "bytecode"``
 
+(* The literal occupies five bytes even under a Bytes[64] annotation.
+   The compiler emits a 64-byte literal buffer, a 64-byte snapshot, and
+   a 37-byte buffer for the five initcode bytes and one ABI word.
+   The shared encoder then allocates its 32-byte cursor. *)
+Theorem create_raw_physical_allocations_eval:
+  MAP alloca_size (FILTER (\i. i.inst_opcode = ALLOCA)
+    (SND (compile_raw_create compile_expr cenv
+      (Literal (BaseT (BytesT (Dynamic 64))) (BytesL [96w;0w;96w;0w;243w]))
+      (Literal (BaseT (UintT 256)) (IntL 0))
+      [Literal (BaseT (UintT 256)) (IntL 7)] NONE F
+      (initial_compile_state "entry"))).cs_current_insts) = [64;64;37;32]
+Proof
+  EVAL_TAC
+QED
+
 Theorem create_raw_alloc_boundary_eval:
   ext_call_alloc_ok cenv (CreateTarget RawCreate F T [])
     [allocation_test_bytecode 64;allocation_test_word;allocation_test_array (2 ** 59 - 3)] /\
