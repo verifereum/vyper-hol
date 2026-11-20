@@ -46,23 +46,6 @@ Proof
   simp[rb_emit_inst_for]
 QED
 
-Theorem rb_compile_custom_error_store_args_for[local]:
-  !es tys dst off. (rb_expr_contract_for source_checks) /\ (rb_env_ok_for source_checks) ce /\ (rb_operand_ok_for source_checks) dst ==>
-  (rb_step_for source_checks) (K T) (compile_custom_error_store_args ce es tys dst off)
-Proof
-  Induct >> Cases_on `tys` >>
-  simp[compile_custom_error_store_args_def, rb_step_return_for] >> rpt strip_tac >>
-  irule rb_step_bind_for >> qexists_tac `(rb_value_ok_for source_checks)` >> BETA_TAC >>
-  reverse conj_tac >- gvs[rb_expr_contract_for_def] >> gen_tac >> strip_tac >>
-  irule rb_step_bind_for >> qexists_tac `(rb_operand_ok_for source_checks)` >> BETA_TAC >>
-  reverse conj_tac >- (IF_CASES_TAC >> simp[rb_step_return_for, rb_emit_op_for]) >>
-  gen_tac >> strip_tac >>
-  irule rb_step_bind_for >> qexists_tac `(rb_operand_ok_for source_checks)` >> BETA_TAC >>
-  reverse conj_tac >- simp[rb_unwrap_value_for] >> gen_tac >> strip_tac >>
-  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> conj_tac >- simp[rb_compile_store_memory_for] >>
-  first_x_assum irule >> simp[]
-QED
-
 Theorem rb_compile_revert_with_custom_error_for[local]:
   (rb_expr_contract_for source_checks) /\ (rb_env_ok_for source_checks) ce ==>
   (rb_step_for source_checks) (K T) (compile_revert_with_custom_error ce err)
@@ -71,11 +54,11 @@ Proof
   rename1 `CustomError id positional kwargs` >>
   pure_rewrite_tac[compile_revert_with_custom_error_def, LET_THM] >> BETA_TAC >>
   Cases_on `ce.ce_error_info (nsid_to_string id)` >> simp[rb_emit_inst_for] >>
-  irule rb_step_bind_for >> qexists_tac `(rb_buffer_ok_for source_checks)` >> BETA_TAC >>
-  reverse conj_tac >- simp[rb_compile_alloc_buffer_for] >>
-  gen_tac >> simp[rb_buffer_ok_for_def] >> strip_tac >>
-  irule rb_bind_return_for >> BETA_TAC >>
-  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> conj_tac >- simp[rb_compile_custom_error_store_args_for] >>
+  irule rb_step_bind_for >>
+  qexists_tac `EVERY (rb_value_ok_for source_checks)` >> BETA_TAC >>
+  reverse conj_tac >- (irule rb_compile_ext_call_args_for >>
+    gvs[rb_expr_contract_for_def]) >>
+  gen_tac >> strip_tac >>
   irule rb_step_bind_for >> qexists_tac `(rb_buffer_ok_for source_checks)` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_alloc_buffer_for] >>
   gen_tac >> simp[rb_buffer_ok_for_def] >> strip_tac >>
@@ -86,7 +69,9 @@ Proof
       simp[rb_emit_inst_for]) >>
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_step_bind_for >> qexists_tac `(rb_operand_ok_for source_checks)` >> BETA_TAC >>
-  reverse conj_tac >- simp[rb_abi_encode_for] >> gen_tac >> strip_tac >>
+  reverse conj_tac >- (irule rb_compile_abi_encode_values_to_buf_for >>
+    simp[rb_abi_encode_for, rb_every_zip_fst]) >>
+  gen_tac >> strip_tac >>
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   simp[rb_emit_inst_for]
@@ -655,18 +640,6 @@ Proof
      rb_step_legacy,
      rb_value_ok_legacy]
     (Q.INST [`source_checks` |-> `({"runtime_begin"}, F)`] rb_compile_revert_with_reason_for))
-QED
-
-Theorem rb_compile_custom_error_store_args:
-  !es tys dst off. rb_expr_contract /\ rb_env_ok ce /\ rb_operand_ok dst ==>
-  rb_step (K T) (compile_custom_error_store_args ce es tys dst off)
-Proof
-  ACCEPT_TAC (SIMP_RULE std_ss
-    [rb_env_ok_legacy,
-     rb_expr_contract_legacy,
-     rb_operand_ok_legacy,
-     rb_step_legacy]
-    (Q.INST [`source_checks` |-> `({"runtime_begin"}, F)`] rb_compile_custom_error_store_args_for))
 QED
 
 Theorem rb_compile_revert_with_custom_error:

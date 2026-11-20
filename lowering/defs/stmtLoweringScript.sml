@@ -191,59 +191,33 @@ Definition compile_reason_message_def:
 End
 
 (* ===== Revert with Custom Error ===== *)
-(* Store each argument at its declared type's offset in the argument tuple,
-   evaluating them in order: the first at the tuple's base, later ones at
-   base + offset.
-   Mirrors Python: vyper/codegen_venom/stmt.py:_store_custom_error_args *)
-Definition compile_custom_error_store_args_def:
-  compile_custom_error_store_args cenv [] _ dst offset = return () ∧
-  compile_custom_error_store_args cenv _ [] dst offset = return () ∧
-  compile_custom_error_store_args cenv (e::es) (ty::tys) dst offset =
-    do vv <- compile_expr cenv (expr_type e) e;
-       arg_ptr <- (if offset = 0 then return dst
-                   else emit_op ADD [dst; Lit (n2w offset)]);
-       v <- unwrap_value cenv vv;
-       compile_store_memory cenv v arg_ptr ty (lowered_value_type cenv e);
-       compile_custom_error_store_args cenv es tys dst
-         (offset + type_memory_bytes cenv ty)
-    od
-Termination
-  WF_REL_TAC `measure (λ(cenv,es,tys,dst,off). LENGTH es)` >> simp[]
-End
-
 (* Revert with selector || abi_encode(args) of a declared custom error.
-   The arguments are stored in a tuple buffer at their declared types, then
-   ABI-encoded behind the selector word; the revert starts at buf+28, so the
-   data begins with the 4-byte selector.  An error the compile env doesn't
-   know emits INVALID, as an unknown event does.
+   Snapshot the checked arguments in declaration order, using the same
+   per-value snapshots as external-call arguments with no trailing operands.
+   Encode at the saved layouts behind the declared selector word. The revert
+   starts at buf+28, where the four selector bytes begin.
    Mirrors Python: vyper/codegen_venom/stmt.py:_revert_with_custom_error *)
 Definition compile_revert_with_custom_error_def:
   compile_revert_with_custom_error cenv (CustomError id positional kwargs) =
-    let err = CustomError id positional kwargs in
+    let arg_es = custom_error_exprs (CustomError id positional kwargs) in
     case cenv.ce_error_info (nsid_to_string id) of
       NONE => emit_inst INVALID [] []
     | SOME params =>
-        let arg_types = MAP SND params in
-        let args_tuple_t = TupleT arg_types in
-        let arg_es = custom_error_exprs err in
-        do args_alloc <- compile_alloc_buffer
-             (type_memory_bytes cenv args_tuple_t);
-           args_buf <- return args_alloc.buf_operand;
-           compile_custom_error_store_args cenv arg_es arg_types args_buf 0;
+        let arg_types = MAP (lowered_value_type cenv) arg_es in
+        do args <- compile_ext_call_args compile_expr cenv [] arg_types arg_es;
            buf_alloc <- compile_alloc_buffer
-             (abi_size_bound cenv.ce_struct_fields args_tuple_t + 32);
+             (abi_size_bound cenv.ce_struct_fields (TupleT arg_types) + 32);
            buf <- return buf_alloc.buf_operand;
            emit_void MSTORE
-             [buf; Lit (n2w (cenv.ce_method_id (SND id) arg_types))];
+             [buf; Lit (n2w (cenv.ce_method_id (SND id) (MAP SND params)))];
            if NULL arg_es then
              do revert_offset <- emit_op ADD [buf; Lit 28w];
                 emit_inst REVERT [revert_offset; Lit 4w] []
              od
            else
              do payload_buf <- emit_op ADD [buf; Lit 32w];
-                encoded_len <- compile_abi_encode_to_buf payload_buf args_buf
-                  (type_to_abi_enc_info cenv.ce_struct_fields cenv
-                     args_tuple_t);
+                encoded_len <- compile_abi_encode_values_to_buf cenv payload_buf
+                  (ZIP (args,arg_types));
                 revert_offset <- emit_op ADD [buf; Lit 28w];
                 revert_len <- emit_op ADD [Lit 4w; encoded_len];
                 emit_inst REVERT [revert_offset; revert_len] []
