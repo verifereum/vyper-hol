@@ -144,6 +144,7 @@ Definition initial_venom_state_rel_def:
     tx_env_ok tx /\ venom_env_rel tx vs /\
     vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
     vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0 /\
+    vs.vs_fmp = vs.vs_initial_fmp /\
     vs.vs_returndata = [] /\ vs.vs_requests = [] /\
     vs.vs_pending_deletions = am.pending_deletions /\
     immutables_section_rel tops (account_immutables am tx.target) vs.vs_data_section
