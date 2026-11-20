@@ -19,7 +19,7 @@ Theorem bytestring_calldata_prefix_full_run:
   a < dimword (:256) /\ n < dimword (:256) /\
   LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
   a+n < dimword (:256) /\ a+n <= LENGTH s.vs_call_ctx.cc_calldata /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t G' tn'.
@@ -50,6 +50,9 @@ Proof
     OK (update_var (STRING #"%" (toString sa.cs_next_var))
       (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s)` by
     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read0_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >>
+     disch_then ACCEPT_TAC) >>
   mp_tac (bytestring_source_size_full_run |> Q.INST
     [`sb` |-> `sm`, `opc` |-> `CALLDATASIZE`, `ops` |-> `[]`,
      `wl` |-> `n2w (LENGTH s.vs_call_ctx.cc_calldata)`]) >>
@@ -82,6 +85,10 @@ Proof
   impl_tac >- (simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
   disch_then (qx_choose_then `v` strip_assume_tac) >>
   `run_inst_seq (emitted_insts sm sb) u = OK v` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     qpat_assum `u = _` SUBST1_TAC >>
+     simp[allocas_below_fmp_def, update_var_def]) >>
   mp_tac (bytestring_slice_bounds_full_run |> Q.INST
     [`sa` |-> `sm`, `s` |-> `u`, `u` |-> `v`,
      `len` |-> `Lit (n2w n)`, `G` |-> `G1`, `tn` |-> `tn1`,
