@@ -6,7 +6,7 @@
  *)
 Theory guardRequestCutOpt
 Ancestors
-  guardRequestCutIdentity fnFrameRequestPrefixOpt fnFrameSymbolicPrefix
+  guardRequestCutIdentity loweringMemCorrect fnFrameRequestPrefixOpt fnFrameSymbolicPrefix
   jointRequestCut frameJointTransition asmOptimizer
   codegenSymRel codegenEntrySim e2eOptEntry e2eProducers e2eEntry e2eDefs
   e2eRequestCutDefs runtimeSymSrcUnit o1LabelFlowCompose o1PassLift
@@ -67,20 +67,42 @@ Proof
   simp[]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem codegen_request_cut_outcome_opt_own:
+  !fn inst fuel final k.
+  asm_opt_finalizer rpolicy prog = SOME prog' /\
+  supported_program tops /\
+  source_typing_ok tops am tx /\
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  codegen_assembly rpolicy out.po_unit = SOME prog /\
+  generate_context_plan out.po_unit.cu_context = SOME cplan /\
+  call_state_rel tops (assemble prog') am tx es /\
+  run_call es = SOME (r,final) /\ ~frame_resource_starved es r final /\
+  (?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+    mem_inv (\ctx fn inst u.
+      (request_cut k u /\ ~in_static_abort_prefix fn u) ==>
+      lowered_mem_ok eom (w2n u.vs_initial_fmp) ctx fn inst u)
+      out.po_unit.cu_context (opt_entry_state_own prog prog' cplan es)) /\
+  code_end_offset_ok (\ctx fn inst u.
+    raw_reachable (opt_entry_state_own prog prog' cplan es) ctx fn inst u /\
+    request_cut k u /\ ~in_static_abort_prefix fn u) out.po_unit.cu_context /\
+  raw_reachable (opt_entry_state_own prog prog' cplan es) out.po_unit.cu_context
+    fn inst t /\
+  inst.inst_opcode <> INVOKE /\ LENGTH t.vs_requests = k /\
+  step_inst fuel out.po_unit.cu_context inst t = OK t' /\
+  k < LENGTH t'.vs_requests ==>
+  k < LENGTH (call_requests es) /\
+  EL k (call_requests es) = EL k t'.vs_requests /\
+  t.vs_outcomes <> [] /\
+  MEM (EL k (call_requests es), HD t.vs_outcomes) (call_trace es)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `LENGTH t.vs_requests = k` (SUBST_ALL_TAC o SYM) >>
-  drule supported_program_raw_shape_free_program >> strip_tac >>
   `?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art` by
     fs[source_typing_ok_def] >>
-  drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
-  drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_checked_source_shape >> strip_tac >>
   drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
-  `~ctx_has_dalloca unit.cu_context` by
-    (irule every_no_dalloca >>
-     drule_all lower_vyper_runtime_unit_no_dalloca_checked >> simp[]) >>
   `codegen_context_obligations (\_ _ _ _. F) out.po_unit.cu_context cplan` by
     (irule o1_pipeline_codegen_obligations >>
      simp[codegen_memory_obligations_def] >> metis_tac[]) >>
@@ -126,36 +148,4 @@ Proof
       impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
       simp[]) >>
   simp[]
-QED
-*)
-Theorem codegen_request_cut_outcome_opt_own:
-  !fn inst fuel final k.
-  asm_opt_finalizer rpolicy prog = SOME prog' /\
-  supported_program tops /\
-  source_typing_ok tops am tx /\
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
-  codegen_assembly rpolicy out.po_unit = SOME prog /\
-  generate_context_plan out.po_unit.cu_context = SOME cplan /\
-  call_state_rel tops (assemble prog') am tx es /\
-  run_call es = SOME (r,final) /\ ~frame_resource_starved es r final /\
-  (?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
-    mem_inv (\ctx fn inst u.
-      (request_cut k u /\ ~in_static_abort_prefix fn u) ==>
-      lowered_mem_ok eom (w2n u.vs_initial_fmp) ctx fn inst u)
-      out.po_unit.cu_context (opt_entry_state_own prog prog' cplan es)) /\
-  code_end_offset_ok (\ctx fn inst u.
-    raw_reachable (opt_entry_state_own prog prog' cplan es) ctx fn inst u /\
-    request_cut k u /\ ~in_static_abort_prefix fn u) out.po_unit.cu_context /\
-  raw_reachable (opt_entry_state_own prog prog' cplan es) out.po_unit.cu_context
-    fn inst t /\
-  inst.inst_opcode <> INVOKE /\ LENGTH t.vs_requests = k /\
-  step_inst fuel out.po_unit.cu_context inst t = OK t' /\
-  k < LENGTH t'.vs_requests ==>
-  k < LENGTH (call_requests es) /\
-  EL k (call_requests es) = EL k t'.vs_requests /\
-  t.vs_outcomes <> [] /\
-  MEM (EL k (call_requests es), HD t.vs_outcomes) (call_trace es)
-Proof
-  cheat
 QED

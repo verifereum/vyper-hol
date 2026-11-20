@@ -2,7 +2,7 @@
 Theory ctorCallFreeExpr
 Ancestors
   list pair vyperAST venomInst loweringShapeDefs loweringShapeProps exprLowering
-  exprCallBounds supportedExprTraverse e2eDeployDefs
+  exprCallBounds supportedExprTraverse exprCallbackSupport e2eDeployDefs
   ctorCallFreeRules ctorCallFreeValues ctorCallFreeMemory ctorCallFreeABI
   ctorCallFreeOps ctorCallFreeCallbacks ctorCallFreeBodies ctorCallFreeMembership
   loweringCallOpcodes ctorCallFreeExprBody ctorCallFreeBuiltinBody ctorCallFreeTypeBuiltinBody
@@ -184,7 +184,7 @@ Theorem outcomes_free_expr_join[local]:
          opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
          opc <> RETURNDATACOPY ==> P opc) ==>
   (!ann target args d. ~R (Call ann target args d) ==>
-    P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY) ==>
+    ~expr_create_root (Call ann target args d) /\ P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY) ==>
   (
   (!child ce ty st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
@@ -265,14 +265,13 @@ Proof
     rpt strip_tac >> first_assum irule >> simp[] >> metis_tac[]) >>
   all_tac >~ [`compile_call _ _ _ _ _ _ _ _ (* sg *)`] >- (map_every qx_gen_tac [`ann`, `target`, `args`, `d`, `call_st`] >>
     disch_then SUBST_ALL_TAC >> qid_spec_tac `call_st` >>
-    `P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY` by
+    `~expr_create_root (Call ann target args d) /\
+     P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY` by
       metis_tac[supported_expr_exists_root] >>
     `!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
            opc <> CREATE /\ opc <> CREATE2 ==> P opc` by
       (rpt strip_tac >> Cases_on `opc = CALL` >> gvs[] >>
        Cases_on `opc = STATICCALL` >> gvs[] >> Cases_on `opc = DELEGATECALL` >> gvs[]) >>
-    `~expr_shape_root (Call ann target args d)` by
-      metis_tac[supported_expr_exists_root] >>
     ho_match_mp_tac opcode_every_call >> simp[] >> conj_tac
     >- (rpt strip_tac >> first_assum irule >> simp[] >>
         conj_tac >- metis_tac[opcode_defaults_without] >>
@@ -289,7 +288,7 @@ Theorem outcomes_free_compile_expr_mutual[local]:
          opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
          opc <> RETURNDATACOPY ==> P opc) ==>
   (!ann target args d. ~R (Call ann target args d) ==>
-    P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY) ==>
+    ~expr_create_root (Call ann target args d) /\ P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY) ==>
   (!ann bi args. ~R (Builtin ann bi args) /\ precompile_builtin bi ==>
     P STATICCALL) ==>
   (
@@ -356,7 +355,7 @@ Theorem outcomes_free_compile_expr:
          opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
          opc <> RETURNDATACOPY ==> P opc) ==>
   (!ann target args d. ~R (Call ann target args d) ==>
-    P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY) ==>
+    ~expr_create_root (Call ann target args d) /\ P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY) ==>
   (!ann bi args. ~R (Builtin ann bi args) /\ precompile_builtin bi ==>
     P STATICCALL) ==>
   (
@@ -381,7 +380,7 @@ Theorem outcomes_free_compile_get_target_ptr:
          opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
          opc <> RETURNDATACOPY ==> P opc) ==>
   (!ann target args d. ~R (Call ann target args d) ==>
-    P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY) ==>
+    ~expr_create_root (Call ann target args d) /\ P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY) ==>
   (!ann bi args. ~R (Builtin ann bi args) /\ precompile_builtin bi ==>
     P STATICCALL) ==>
   (
@@ -414,7 +413,7 @@ Theorem compile_expr_opcode_every:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (!ann target args d. ~R (Call ann target args d) ==>
-    P INVOKE /\ P RETURNDATACOPY) ==>
+    ~expr_create_root (Call ann target args d) /\ P INVOKE /\ P RETURNDATACOPY) ==>
   (
   !e cenv ret_ty st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
@@ -430,7 +429,7 @@ Theorem compile_expr_opcode_every:
 Proof
   ntac 2 strip_tac >>
   `!ann target args d. ~R (Call ann target args d) ==>
-    P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY` by
+    ~expr_create_root (Call ann target args d) /\ P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY` by
     (rpt gen_tac >> strip_tac >> first_x_assum drule >> simp[]) >>
   `!ann bi args. ~R (Builtin ann bi args) /\ precompile_builtin bi ==>
     P STATICCALL` by simp[] >>
@@ -455,7 +454,7 @@ Theorem compile_get_target_ptr_opcode_every:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (!ann target args d. ~R (Call ann target args d) ==>
-    P INVOKE /\ P RETURNDATACOPY) ==>
+    ~expr_create_root (Call ann target args d) /\ P INVOKE /\ P RETURNDATACOPY) ==>
   (
   !target cenv st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
@@ -471,7 +470,7 @@ Theorem compile_get_target_ptr_opcode_every:
 Proof
   ntac 2 strip_tac >>
   `!ann target args d. ~R (Call ann target args d) ==>
-    P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY` by
+    ~expr_create_root (Call ann target args d) /\ P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY` by
     (rpt gen_tac >> strip_tac >> first_x_assum drule >> simp[]) >>
   `!ann bi args. ~R (Builtin ann bi args) /\ precompile_builtin bi ==>
     P STATICCALL` by simp[] >>
@@ -496,7 +495,7 @@ Theorem compile_multi_exprs_opcode_every:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (!ann target args d. ~R (Call ann target args d) ==>
-    P INVOKE /\ P RETURNDATACOPY) ==>
+    ~expr_create_root (Call ann target args d) /\ P INVOKE /\ P RETURNDATACOPY) ==>
   (
   !es cenv st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
@@ -534,7 +533,7 @@ Theorem compile_struct_lit_opcode_every:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (!ann target args d. ~R (Call ann target args d) ==>
-    P INVOKE /\ P RETURNDATACOPY) ==>
+    ~expr_create_root (Call ann target args d) /\ P INVOKE /\ P RETURNDATACOPY) ==>
   (
   !fields cenv ty buf off st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>

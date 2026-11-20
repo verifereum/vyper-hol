@@ -14,7 +14,7 @@ Ancestors
   frameOriginReachable frameOriginHistory
   concretizePtrCoverageStaticMemReachability
   callTrace unitTransformDefs o1PipelineCorrect venomExecSemantics
-  stackPlanGen vyperLoweringCorrect loweringShapeSource contextRawReachable
+  stackPlanGen vyperLoweringCorrect loweringMemCorrect contextRawReachable
   venomWf list rich_list words arithmetic
 
 (* A configuration of a trace that ends at a call step: it is
@@ -90,15 +90,35 @@ Proof
   metis_tac[lowered_reads_disjoint, lowered_writes_disjoint]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem codegen_request_cut_outcome_identity:
+  !fn inst fuel final k.
+  supported_program tops /\ source_typing_ok tops am tx /\
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  codegen_assembly rpolicy out.po_unit = SOME prog /\
+  generate_context_plan out.po_unit.cu_context = SOME cplan /\
+  call_state_rel tops (assemble prog) am tx es /\
+  run_call es = SOME (r,final) /\ ~frame_resource_starved es r final /\
+  (?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+    mem_inv (\ctx fn inst u.
+      (request_cut k u /\ ~in_static_abort_prefix fn u) ==>
+      lowered_mem_ok eom (w2n u.vs_initial_fmp) ctx fn inst u)
+      out.po_unit.cu_context (entry_venom_state prog cplan es)) /\
+  raw_reachable (entry_venom_state prog cplan es) out.po_unit.cu_context
+    fn inst t /\
+  inst.inst_opcode <> INVOKE /\ LENGTH t.vs_requests = k /\
+  step_inst fuel out.po_unit.cu_context inst t = OK t' /\
+  k < LENGTH t'.vs_requests ==>
+  k < LENGTH (call_requests es) /\
+  EL k (call_requests es) = EL k t'.vs_requests /\
+  t.vs_outcomes <> [] /\
+  MEM (EL k (call_requests es), HD t.vs_outcomes) (call_trace es)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `LENGTH t.vs_requests = k` (SUBST_ALL_TAC o SYM) >>
-  drule supported_program_raw_shape_free_program >> strip_tac >>
   `?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art` by
     fs[source_typing_ok_def] >>
-  drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
-  drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_checked_source_shape >> strip_tac >>
   drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   `codegen_context_obligations (\_ _ _ _. F) out.po_unit.cu_context cplan` by
@@ -133,31 +153,4 @@ Proof
              irule (cj 2 request_cut_trace_memory)] >>
       metis_tac[]) >>
   simp[]
-QED
-*)
-Theorem codegen_request_cut_outcome_identity:
-  !fn inst fuel final k.
-  supported_program tops /\ source_typing_ok tops am tx /\
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
-  codegen_assembly rpolicy out.po_unit = SOME prog /\
-  generate_context_plan out.po_unit.cu_context = SOME cplan /\
-  call_state_rel tops (assemble prog) am tx es /\
-  run_call es = SOME (r,final) /\ ~frame_resource_starved es r final /\
-  (?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
-    mem_inv (\ctx fn inst u.
-      (request_cut k u /\ ~in_static_abort_prefix fn u) ==>
-      lowered_mem_ok eom (w2n u.vs_initial_fmp) ctx fn inst u)
-      out.po_unit.cu_context (entry_venom_state prog cplan es)) /\
-  raw_reachable (entry_venom_state prog cplan es) out.po_unit.cu_context
-    fn inst t /\
-  inst.inst_opcode <> INVOKE /\ LENGTH t.vs_requests = k /\
-  step_inst fuel out.po_unit.cu_context inst t = OK t' /\
-  k < LENGTH t'.vs_requests ==>
-  k < LENGTH (call_requests es) /\
-  EL k (call_requests es) = EL k t'.vs_requests /\
-  t.vs_outcomes <> [] /\
-  MEM (EL k (call_requests es), HD t.vs_outcomes) (call_trace es)
-Proof
-  cheat
 QED

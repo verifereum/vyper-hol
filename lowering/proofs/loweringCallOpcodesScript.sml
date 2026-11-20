@@ -2,29 +2,7 @@ Theory loweringCallOpcodes
 Ancestors list pair vyperAST exprLowering compileEnv context venomInst
   loweringShapeDefs loweringShapeProps exprCallbackContracts supportedExprTraverse
   ctorCallFreeRules ctorCallFreeValues ctorCallFreeCallbacks
-  loweringCallArgsOpcodes loweringExtCallOpcodes builtinSystem
-
-Theorem call_callback_child_supported:
-  MEM child (call_callback_children args d) /\
-  ~supported_expr_exists R (Call ann target args d) ==>
-  ~supported_expr_exists R child
-Proof
-  strip_tac >> fs[supported_expr_exists_def] >>
-  Cases_on `MEM child args`
-  >- metis_tac[supported_exprs_exists_every, EXISTS_MEM] >>
-  Cases_on `MEM child (case d of NONE => [] | SOME x => [x])`
-  >- (Cases_on `d` >> gvs[supported_expr_exists_def]) >>
-  `?topic_expr. MEM topic_expr args /\ MEM child (raw_log_topic_exprs topic_expr)` by
-    (fs[call_callback_children_def, MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
-  pop_assum strip_assume_tac >>
-  `~supported_expr_exists R topic_expr` by
-    metis_tac[supported_exprs_exists_every, EXISTS_MEM] >>
-  Cases_on `topic_expr` >> gvs[raw_log_topic_exprs_def] >>
-  qmatch_asmsub_rename_tac `raw_log_topic_exprs (Builtin topic_ann bi es)` >>
-  Cases_on `bi` >>
-  gvs[raw_log_topic_exprs_def, supported_expr_exists_def] >>
-  metis_tac[supported_exprs_exists_every, EXISTS_MEM]
-QED
+  loweringCallArgsOpcodes loweringExtCallOpcodes builtinSystem ctorCallFreeOps
 
 Theorem opcode_every_intcall:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
@@ -195,11 +173,135 @@ Proof
 
 QED
 
+Theorem opcode_every_raw_call_outbuf[local]:
+  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
+         opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
+  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_raw_call_outbuf n st)))
+Proof
+  strip_tac >> simp[compile_raw_call_outbuf_def] >>
+  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
+    IF_CASES_TAC, gen_tac,
+    CHANGED_TAC (simp[every_state_insts_return, opcode_every_emit_op,
+                      UNDISCH opcode_every_alloc_buffer])])
+QED
+
+Theorem opcode_every_raw_call_finish[local]:
+  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
+         opc <> CREATE /\ opc <> CREATE2 ==> P opc) /\ P RETURNDATACOPY ==>
+  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_raw_call_finish to data len gas value ct
+                           n rof out out_ptr st)))
+Proof
+  strip_tac >> Cases_on `ct` >> Cases_on `rof` >>
+  Cases_on `n > 0` >> simp[compile_raw_call_finish_def] >>
+  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac, gen_tac,
+    CHANGED_TAC (simp[every_state_insts_return, every_state_insts_fresh_label,
+      every_state_insts_new_block, opcode_every_emit_op, opcode_every_emit_void,
+      opcode_every_emit_inst, UNDISCH opcode_every_alloc_buffer,
+      outcomes_free_compile_select])])
+QED
+
+Theorem opcode_every_msg_data_to_memory[local]:
+  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
+         opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
+  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_msg_data_to_memory st)))
+Proof
+  strip_tac >> simp[compile_msg_data_to_memory_def, compile_alloc_dynamic_def] >>
+  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac, gen_tac,
+    CHANGED_TAC (simp[every_state_insts_return, opcode_every_emit_op,
+                      opcode_every_emit_void])])
+QED
+
+Theorem snd_same_state[local]:
+  SND (if b then (x,s) else (y,s)) = s
+Proof
+  Cases_on `b` >> simp[]
+QED
+
+Theorem opcode_every_default_gas[local]:
+  P GAS /\ EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (case gas of NONE => emit_op GAS [] st | SOME g => (g,st))))
+Proof
+  Cases_on `gas` >> simp[opcode_every_emit_op]
+QED
+
+Theorem opcode_every_raw_call[local]:
+  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
+         opc <> CREATE /\ opc <> CREATE2 ==> P opc) /\ P RETURNDATACOPY /\
+  (!e ty st. MEM e args ==> EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (cfn ce ty e st)))) ==>
+  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_call cfn ce rt ty
+        (if with_calldata then RawCallCalldataTarget flags else RawCallTarget flags)
+        args d st)))
+Proof
+  strip_tac >>
+  `!e ety. MEM e args ==> !st.
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (lower_value cfn ce ety e st)))` by
+    (rpt gen_tac >> strip_tac >> ho_match_mp_tac every_state_insts_lower_value >>
+     simp[UNDISCH opcode_every_unwrap_value]) >>
+  `!kw st. (!e. MEM e kw ==> MEM e args) ==>
+      EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+      EVERY (\i. P i.inst_opcode) (state_insts (SND
+        (compile_ext_call_kwargs cfn ce NoneT flags.rcf_kws kw st)))` by
+    (rpt gen_tac >> strip_tac >>
+     qspecl_then [`kw`, `flags.rcf_kws`, `cfn`, `ce`, `NoneT`]
+       mp_tac (UNDISCH opcode_every_ext_call_kwargs) >>
+     (impl_tac >- metis_tac[]) >> simp[]) >>
+  Cases_on `with_calldata` >> Cases_on `args` >> TRY (Cases_on `t`) >>
+  simp[compile_call_def, snd_same_state] >> rpt strip_tac >>
+  rpt (pairarg_tac >> gvs[snd_same_state]) >>
+  `P INVALID /\ P GAS /\ P MLOAD /\ P ADD` by simp[] >>
+  rpt (qpat_x_assum `_ = (_,_)`
+    (SUBST1_TAC o SYM o PURE_REWRITE_RULE [pairTheory.SND] o Q.AP_TERM `SND`)) >>
+  rpt (FIRST [irule opcode_every_raw_call_finish,
+              irule opcode_every_raw_call_outbuf,
+              irule opcode_every_msg_data_to_memory,
+              irule opcode_every_default_gas,
+              irule opcode_every_emit_inst, irule opcode_every_emit_op,
+              qpat_assum `!kw st'. _ ==> _ ==> EVERY _
+                (state_insts (SND (compile_ext_call_kwargs _ _ _ _ kw st')))` irule,
+              qpat_assum `!e ety. _ ==> !st'. _ ==> EVERY _
+                (state_insts (SND (lower_value _ _ ety e st')))` irule] >> simp[])
+QED
+
+Theorem opcode_every_selfdestruct[local]:
+  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
+         opc <> CREATE /\ opc <> CREATE2 ==> P opc) /\
+  (!e ty st. MEM e args ==> EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (cfn ce ty e st)))) ==>
+  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_call cfn ce rt ty SelfDestructTarget args d st)))
+Proof
+  strip_tac >>
+  `!e ety. MEM e args ==> !st.
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (lower_value cfn ce ety e st)))` by
+    (rpt gen_tac >> strip_tac >> ho_match_mp_tac every_state_insts_lower_value >>
+     simp[UNDISCH opcode_every_unwrap_value]) >>
+  simp[compile_call_def, compile_selfdestruct_def] >> rpt strip_tac >>
+  rpt (FIRST [pairarg_tac >> gvs[], BasicProvers.FULL_CASE_TAC >> gvs[]]) >>
+  `P INVALID /\ P SELFDESTRUCT` by simp[] >>
+  metis_tac[SND, opcode_every_emit_inst, opcode_every_emit_void, MEM]
+QED
+
 Theorem opcode_every_call:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) /\
   P INVOKE /\ P RETURNDATACOPY /\
-  ~expr_shape_root (Call ann target args d) /\
+  ~expr_create_root (Call ann target args d) /\
   (!id. target = IntCall id ==>
     !e ty st. MEM e (omitted_defaults ce (nsid_to_string id) (LENGTH args)) ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -212,14 +314,22 @@ Theorem opcode_every_call:
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_call cfn ce rt ty target args d st)))
 Proof
-  strip_tac >> Cases_on `target` >> gvs[expr_shape_root_def] >>
+  strip_tac >> Cases_on `target` >> gvs[expr_create_root_def] >>
   all_tac >~ [`compile_call _ _ _ _ (ExtCall _ _ signature _) _ _ _`] >-
     (PairCases_on `signature` >> ho_match_mp_tac opcode_every_extcall >> simp[] >>
      rpt strip_tac >> first_x_assum irule >>
      gvs[call_callback_children_def] >> metis_tac[MEM_APPEND]) >>
+  all_tac >~ [`compile_call _ _ _ _ (RawCallTarget _) _ _ _`] >-
+    (ho_match_mp_tac (SIMP_RULE (srw_ss()) []
+        (Q.INST [`with_calldata` |-> `F`] opcode_every_raw_call)) >> simp[] >>
+     gvs[call_callback_children_def] >> metis_tac[MEM_APPEND]) >>
+  all_tac >~ [`compile_call _ _ _ _ (RawCallCalldataTarget _) _ _ _`] >-
+    (ho_match_mp_tac (SIMP_RULE (srw_ss()) []
+        (Q.INST [`with_calldata` |-> `T`] opcode_every_raw_call)) >> simp[] >>
+     gvs[call_callback_children_def] >> metis_tac[MEM_APPEND]) >>
   FIRST [ho_match_mp_tac opcode_every_intcall, ho_match_mp_tac opcode_every_extcall,
     ho_match_mp_tac opcode_every_send, ho_match_mp_tac opcode_every_raw_log,
-    ho_match_mp_tac opcode_every_raw_revert] >>
+    ho_match_mp_tac opcode_every_raw_revert, ho_match_mp_tac opcode_every_selfdestruct] >>
   simp[] >> rpt strip_tac >> first_x_assum irule >>
   gvs[call_callback_children_def] >> metis_tac[MEM_APPEND]
 QED
