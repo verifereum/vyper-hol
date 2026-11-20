@@ -70,9 +70,10 @@ Proof
       comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
       emit_def, emitted_insts_def] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC] >>
-  simp[DROP_LENGTH_APPEND, bop_scalar_seq_def, mk_inst_def, SUBSET_INSERT_RIGHT,
-       not_fresh_at_def, ASCIInumbersTheory.toString_11] >>
-  simp[SUBSET_DEF]
+  simp[DROP_LENGTH_APPEND] >>
+  ntac 7 (simp[Once bop_scalar_seq_def, mk_inst_def,
+               not_fresh_at_def, ASCIInumbersTheory.toString_11]) >>
+  simp[bop_scalar_seq_def, SUBSET_INSERT_RIGHT, SUBSET_DEF]
 QED
 
 Theorem abi_decode_bytes_scalar_head[local]:

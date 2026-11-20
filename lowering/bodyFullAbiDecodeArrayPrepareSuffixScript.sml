@@ -1,5 +1,6 @@
 Theory bodyFullAbiDecodeArrayPrepareSuffix
 Ancestors ptrDiscipline[qualified,ignore_grammar] dynCopyExec[qualified,ignore_grammar]
+  bodyFullAbiDecodeOwnedStateProps[qualified,ignore_grammar]
   bodyFullAbiDecodeGuardReadJoint bodyFullAbiDecodeBytesArithmetic
   abiDecoderDynarrayBound abiDecoderRange abiDecoderReentry
   exprSimWordBuiltins abiEncoder emitHelper emitHelperProps
@@ -345,15 +346,15 @@ Theorem abi_decode_array_prepare_suffix_width_joint:
          i IN tnu.t_mem)))
 Proof
   BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_assum `?H. V H` (qx_choose_then `world` assume_tac) >>
   `fn_has_code count_st guard_st fn /\ fn_has_code guard_st reload_st fn /\
    fn_has_code reload_st header_st fn` by
     simp[] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
-    (qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es u /\ _`
-       (qspec_then `world` (fn rel => qpat_assum `V world`
-         (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
-          CONJUNCT1 o MP rel)))) >>
+    (strip_tac >>
+     irule bodyFullAbiDecodeOwnedStatePropsTheory.owned_decoder_allocas_below_fmp >>
+     qexistsl [`V`,`ce`,`ctx`,`cx`,`es`,`fn`] >> simp[] >> rpt strip_tac >>
+     qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es u /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
   mp_tac (BETA_RULE (Q.INST [`sa` |-> `count_st`, `sb` |-> `guard_st`,
     `s` |-> `u`, `G` |-> `Gu`, `tn` |-> `tnu`] array_payload_guard_owned)) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
@@ -382,10 +383,11 @@ Resume abi_decode_array_prepare_suffix_width_joint[reload]:
    w2n a+32 <= v.vs_alloca_next` by
     fs[abiDecodePtrMemberFrameTheory.abi_decode_ptr_window_def] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
-    (qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es v /\ _`
-       (qspec_then `world` (fn rel => qpat_assum `V world`
-         (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
-          CONJUNCT1 o MP rel)))) >>
+    (strip_tac >>
+     irule bodyFullAbiDecodeOwnedStatePropsTheory.owned_decoder_allocas_below_fmp >>
+     qexistsl [`V`,`ce`,`ctx`,`cx`,`es`,`fn`] >> simp[] >> rpt strip_tac >>
+     qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es v /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
   mp_tac (BETA_RULE (Q.INST [`sa` |-> `guard_st`, `sb` |-> `reload_st`,
     `s` |-> `v`, `G` |-> `Gv`, `tn` |-> `tnv`, `counter` |-> `addr`,
     `out` |-> `cnt`] bodyFullAbiDecodeLoopHeaderExactTheory.abi_decode_loop_counter_load_exact)) >>
@@ -417,10 +419,11 @@ Resume abi_decode_array_prepare_suffix_width_joint[store]:
     `(^input_origin) w` >-
     (irule abi_decode_input_origin_transport >> qexistsl_tac [`u`,`count_st`] >> simp[]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp w` by
-    (qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es w /\ _`
-       (qspec_then `world` (fn rel => qpat_assum `V world`
-         (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
-          CONJUNCT1 o MP rel)))) >>
+    (strip_tac >>
+     irule bodyFullAbiDecodeOwnedStatePropsTheory.owned_decoder_allocas_below_fmp >>
+     qexistsl [`V`,`ce`,`ctx`,`cx`,`es`,`fn`] >> simp[] >> rpt strip_tac >>
+     qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es w /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
   mp_tac (abi_decode_owned_word_store_observed_exact |>
     Q.INST [`w` |-> `n2w c`] |>
     Q.INST [`sa` |-> `reload_st`, `sb` |-> `header_st`,
