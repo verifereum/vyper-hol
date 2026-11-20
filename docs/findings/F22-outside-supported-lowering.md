@@ -37,9 +37,8 @@ Assign/AugAssign simulation cases are still unproved in
   width≤134 (aligned widths therefore≤128), so this136-bit case is excluded.
 - **Unsigned negation of zero:** source `Neg` on uint8 `IntV 0` succeeds0.
   Current `compile_neg` emits `SGT 0,0; ASSERT; SUB 0,0`, so aborts before SUB.
-  Source negation is **checked**, not wrapped: nonzero unsigned inputs fail the
-  source bound. The catalogue's exclusion must not be taken to imply that
-  source unsigned negation wraps.
+  Nonzero unsigned inputs fail the evaluator's source bound. The source type
+  checker rejects unsigned `Neg` before evaluation.
 - **Several ABI encode arguments:** `abi_encode(uint256(1),uint256(2))`, true
   ensure, no method ID: source/reference encode tuple(1,2),64 payload bytes;
   HOL TypeBuiltin lowering uses only the first expression/its type, so the
@@ -61,7 +60,7 @@ regressions. No named original fixture exercises these excluded mismatches.
 | Byte hashmap write keys | source hashes byte keys; lowering read hashes but write uses raw key | `supported_hashmap_key_type`: integer/bool/address only |
 | Nested/transient hashmaps | lowering loses type/location on nested/write paths | `supported_declaration_header`, nonnested/nontransient maps |
 | Narrow `<<` and integer `~` | historical raw SHL/NOT comparison; current proofs account for the source types | source operand checks in `vyperTypeSystem` |
-| Unsigned negation | source checked negation accepts0; target requires input strictly greater than lower bound0 and rejects0 | signed/decimal Neg only |
+| Unsigned negation | the source evaluator accepts zero; lowering rejects zero | `well_typed_builtin_app` in `vyperTypeSystem` excludes unsigned `Neg` |
 | Nonliteral power | source checks mathematical power; target EXP wraps first and bound-checks the wrapped value | power needs a literal base or nonnegative literal exponent |
 | Widths not multiple8 | source type/evaluator permits widths; target uses byte-based width/8 clamps | `supported_int_width` |
 | Memory-type `empty` | source constructs empty/default aggregate; lowering supplies pointer0 without constructing it | Empty only W |
