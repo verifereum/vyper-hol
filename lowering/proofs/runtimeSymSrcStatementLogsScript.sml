@@ -61,7 +61,11 @@ Proof
       goal_assum (drule_at Any) >> irule runtime_sym_ordinary_inst >>
       simp[EVERY_APPEND, EVERY_REVERSE, is_label_operand_def]) >>
   drule_all runtime_sym_alloc_buffer >> strip_tac >>
-  drule runtime_sym_abi_encode_values_to_buf >> disch_then drule_all >> strip_tac >>
+  drule runtime_sym_abi_encode_values_to_buf >>
+  disch_then (qspecl_then [`tops`,`ce`,`buf.buf_operand`,
+    `SND (split_log_ops (ZIP (saved,MAP (lowered_value_type ce) args)) x2)`,
+    `sb`,`len`,`se`] mp_tac) >>
+  impl_tac >- fs[combinTheory.o_DEF] >> strip_tac >>
   irule runtime_sym_emit_inst >> goal_assum (drule_at Any) >> qexists `0` >>
   goal_assum (drule_at Any) >> irule runtime_sym_ordinary_inst >>
   simp[EVERY_APPEND, EVERY_REVERSE, is_label_operand_def]

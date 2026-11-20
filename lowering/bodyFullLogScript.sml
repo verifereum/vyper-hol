@@ -10,11 +10,10 @@
  *)
 Theory bodyFullLog
 Ancestors exprSimAggregateNestedStore[qualified,ignore_grammar]
-  bodyFullPreds bodySimFull bodyFullShared gasShadow bodySim exprSimHypsDefs supportedStmts
+  bodyFullPreds bodySimFull bodyFullShared gasShadow bodySim exprSimHypsDefs supportedStmts arithmetic
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
   bodyExprPreFacts allocLimits allocLimitsProps exprSimSource vyperTypeCallGraph
-  bodyFullLogArgs bodyFullLogScalarTopics bodyFullLogSuffix
-  abiEncoderSourceRobust supportedStmtTraverse
+  bodyFullLogScalarTopics bodyFullLogSuffix supportedStmtTraverse
   bodySimLogArgs stmtSimLogTrace exprSimHyps whitelistLogWiden
   supportedExprs supportedExprTraverse
   vyperTypeCallStackSoundness vyperTypeExprSoundness vyperTypeInvariants
@@ -26,9 +25,9 @@ Ancestors exprSimAggregateNestedStore[qualified,ignore_grammar]
   vyperEventCompatibility vyperEvent vyperABI supportedTypes e2eDefs vyperTypeContract
   stmtSimLogSuffix eventLoweringStructure
   exprSimIfExpCompat structFieldsProps typedCopyCompatibility typedLogSplitArgs
-  exprLoweringProps loweringStateRelDefs gasOutcomeFull
+  exprLowering exprLoweringProps loweringStateRelDefs gasOutcomeFull
   fragGasPathFrameMem bodyMemAggregatePath bodyFullAllocaFresh
-  bodyFullLogDataField fragGasOriginPtr
+  fragGasOriginPtr
   exprSimCopy exprSimAlloc typedMemoryCopy exprSimStorageCopy
   valueEncodingDefs vyperTypeDefaults valueEncodingProps
   robustCopyTransportPtr abiEncoderWindow abiTypeBoundProps decoderGhostFramePtr
@@ -49,7 +48,7 @@ Ancestors exprSimAggregateNestedStore[qualified,ignore_grammar]
   abiBuiltinAllocation abiEncoderAppend abiEncoderAllocationShape
   compilerInstructionSuffix emitHelperProps stmtLoweringMono loweringHalt abiEncoderProps
   bodyFullAllocGeneric bodyCopyMemoryBase valueCopy valueCopyBytes representationCleanPtr
-  immutableMemoryFrame exprSimProps valueEncoding venomState tuplePlaceZero exprPtrUnwrapFacts stmtSimLogDataFrame placeMemoryTypeInterfaces memoryLocalRhsProps typedLogFieldChecked venomMemDefs bytesCopyProps vyperTyping
+  immutableMemoryFrame exprSimProps valueEncoding venomState tuplePlaceZero exprPtrUnwrapFacts placeMemoryTypeInterfaces typedLogFieldChecked venomMemDefs bytesCopyProps vyperTyping
 
 val _ = Parse.hide "body";
 val irule_body_pre = bodyConstNameLib.irule_body_pre;
@@ -197,7 +196,7 @@ Proof
      qspecl_then [`supported_event_leaf_type`,`LENGTH tops`,`tops`,`ty`] mp_tac
        supported_nested_evaluated_assignable >> simp[] >>
      disch_then (qspecl_then [`get_tenv cx`,`{}`] mp_tac) >>
-     simp[DRESTRICT_UNIV] >> metis_tac[optionTheory.IS_SOME_EXISTS]) >>
+     simp[finite_mapTheory.DRESTRICT_UNIV] >> metis_tac[optionTheory.IS_SOME_EXISTS]) >>
   `EVERY (assignable_type (get_tenv cx)) src` by
     metis_tac[cj 2 arg_type_fits_source_assignable] >>
   `!ty. MEM ty src ==>
@@ -568,6 +567,15 @@ Proof
        check_not_static_eq, push_log_def]
 QED
 
+Theorem log_topics_values[local]:
+  !ops ws. LIST_REL (\op w. safe_operand a op /\ eval_operand op s = SOME w /\
+    op_taint tn op = {}) ops ws ==>
+    eval_operands ops s = SOME ws /\ EVERY (\op. safe_operand a op /\ op_taint tn op = {}) ops
+Proof
+  Induct >> Cases_on `ws` >> simp[eval_operands_def, exec_operand_list_def] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
 (* Runtime coverage, not nominal source capacity, suffices for bytes stores. *)
 Theorem log_full_emit_outcome[local]:
   encode_source_event (get_tenv cx) cx.sources cx.txn.target id vs = SOME ev /\
@@ -901,7 +909,11 @@ Proof
            bodySimLogArgsTheory.body_log_aggregate_metadata >>
          impl_tac >- simp[] >> disch_then ACCEPT_TAC) >>
       drule_all_then strip_assume_tac log_full_snapshot_cuts >>
-      drule_all_then strip_assume_tac extcall_request_positional_packing_outcome >>
+      mp_tac (Q.INST [`xs` |-> `args`,`kw_es` |-> `[]`,`svs` |-> `saved`,
+        `sb` |-> `sm`,`shadow_sb` |-> `shadow_sm`]
+        (SPEC_ALL extcall_request_positional_packing_outcome)) >>
+      impl_tac >- asm_rewrite_tac [MAP] >>
+      disch_tac >>
       qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ captureQ captureR` >>
       qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
         qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
@@ -1123,13 +1135,10 @@ Resume compile_log_frag_full[selected_topics]:
      `LENGTH raw_topics = LENGTH (FILTER I flags)` by
        simp[Abbr `raw_topics`, split_log_ops_lengths] >>
      fs[Abbr `all_ops`, Abbr `flags`, wordsTheory.dimword_def] >> decide_tac) >>
-  `eval_operands all_ops tp = SOME (n2w h::topics) /\
-    EVERY (\op. safe_operand se op /\ op_taint tnp op = {}) all_ops` by
-    (simp[Abbr `all_ops`, eval_operands_def, eval_operand_def, op_taint_def] >>
-     qpat_assum `LIST_REL (\op w. _ /\ _ /\ _) ops topics` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> map_every qid_spec_tac [`ops`,`topics`] >>
-     Induct >> Cases_on `ops` >>
-     simp[eval_operands_def, exec_operand_list_def] >> metis_tac[]) >>
+  `LIST_REL (\op w. safe_operand se op /\ eval_operand op tp = SOME w /\
+     op_taint tnp op = {}) all_ops (n2w h::topics)` by
+    simp[Abbr `all_ops`, eval_operand_def, op_taint_def] >>
+  drule log_topics_values >> strip_tac >>
   suspend "selected_data"
 QED
 
