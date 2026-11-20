@@ -37,12 +37,15 @@ val CshiftMode = ``\checked ty tv.
  FLOOKUP G dst = SOME (b,sz) /\ b <= d /\
  d + type_memory_bytes ce ty <= b+sz /\
  op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+ allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+   initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) /\
  lo <= initial.vs_alloca_next /\ lo <= d /\
  (checked ==> sb + LENGTH (enc (vyper_to_abi_type env ty) av) <=
    LENGTH initial.vs_data_section /\ alloca_history func initial) ==>
  ?actual H qt B.
  allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
+ (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+   actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
  val_in_memory tv v d actual.vs_memory /\
  abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st st'))
    [(d,type_memory_bytes ce ty)] initial actual /\

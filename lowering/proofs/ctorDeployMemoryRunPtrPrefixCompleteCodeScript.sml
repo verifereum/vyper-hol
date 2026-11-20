@@ -23,7 +23,29 @@ Ancestors
   ctorDeployMemoryRunMemEntryWord ctorDeployMemoryRunMemEntryMembersSetupWorld
   fragGasPathMem abiDecoderDynamic abiDecoderOffset vyperABI
   ctorDeployMemoryRunMemEntryCompositeSetup abiDecodeRanges entrySinkExtraction
-  fragGasOriginPtr
+  fragGasOriginPtr fragGasSeqPtrContext[qualified,ignore_grammar]
+
+Theorem prefix_decoder_sequence_room:
+  run_inst_seq code s = OK t /\
+  EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) code /\
+  EVERY (\i. ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode) code /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+     s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+     t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp)
+Proof
+  strip_tac >> strip_tac >>
+  qpat_assum `ctx_has_dalloca ctx ==> _` (drule_then strip_assume_tac) >>
+  `t.vs_initial_fmp = s.vs_initial_fmp` by
+    (drule run_inst_seq_initial_fmp >> simp[]) >>
+  conj_tac >-
+    (irule fragGasSeqPtrContextTheory.run_inst_seq_allocas_below_fmp >>
+     qexistsl [`code`,`s`] >> asm_rewrite_tac[] >>
+     fs[EVERY_MEM] >> rpt strip_tac >> res_tac >>
+     gvs[abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
+  fs[pending_alloca_size_def]
+QED
 
 Theorem prefix_scalar_sequence_code:
   compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
@@ -202,12 +224,15 @@ val MshiftMode = ``\checked tys tvs.
  FLOOKUP G dst = SOME (b,sz) /\ b <= d /\
  d + SUM (MAP (type_memory_bytes ce) (pretys ++ tys)) <= b+sz /\
  op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\ lo <= initial.vs_alloca_next /\ lo <= d /\
+ allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+   initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) /\ lo <= initial.vs_alloca_next /\ lo <= d /\
  (checked ==> sb + LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ tys)))
    (ListV (preavs ++ avs))) <= LENGTH initial.vs_data_section /\
    alloca_history func initial) ==>
  ?actual H qt B.
  allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
+ (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+   actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
  tuple_in_memory vs tvs (d + SUM (MAP (type_memory_bytes ce) pretys)) actual.vs_memory /\
  abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st final))
    [(d + SUM (MAP (type_memory_bytes ce) pretys), SUM (MAP (type_memory_bytes ce) tys))] initial actual /\
@@ -287,7 +312,7 @@ Proof
 QED
 
 (* Mode templates preserve the generic padded-read contracts above. *)
-val CshiftModeWithGuard = ``\within_fmp checked ty tv.
+val CshiftMode = ``\checked ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
@@ -314,12 +339,15 @@ val CshiftModeWithGuard = ``\within_fmp checked ty tv.
  FLOOKUP G dst = SOME (b,sz) /\ b <= d /\
  d + type_memory_bytes ce ty <= b+sz /\
  op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
- allocas_from lo initial /\ within_fmp ctx initial /\
+ allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+   initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) /\
  lo <= initial.vs_alloca_next /\ lo <= d /\
  (checked ==> sb + LENGTH (enc (vyper_to_abi_type env ty) av) <=
    LENGTH initial.vs_data_section /\ alloca_history func initial) ==>
  ?actual H qt B.
  allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
+ (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+   actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
  val_in_memory tv v d actual.vs_memory /\
  abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st st'))
    [(d,type_memory_bytes ce ty)] initial actual /\
@@ -347,12 +375,8 @@ val CshiftModeWithGuard = ``\within_fmp checked ty tv.
    !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial) /\
  (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
+val CshiftCode = rhs (concl (SIMP_CONV bool_ss [] ``(^CshiftMode) F``));
 
-val CshiftMode = rhs (concl (REDEPTH_CONV BETA_CONV
-  ``(^CshiftModeWithGuard) (\ctx (s:venom_state). ~ctx_has_dalloca ctx)``));
-val ScalarShiftMode = rhs (concl (REDEPTH_CONV BETA_CONV
-  ``(^CshiftModeWithGuard) (\ctx s. ctx_has_dalloca ctx ==> allocas_below_fmp s)``));
-val CshiftCode = rhs (concl (SIMP_CONV bool_ss [] ``(^ScalarShiftMode) F``));
 
 (* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
    joint gas-origin pointer path; the original proof below proves the rest.
@@ -395,7 +419,7 @@ Proof
 QED
 *)
 Theorem prefix_scalar_complete_mode_contract:
-  type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> (^ScalarShiftMode) checked ty tv
+  type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> (^CshiftMode) checked ty tv
 Proof
   disch_tac >> BETA_TAC >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -417,9 +441,26 @@ Proof
      (DecPrimWord clamp) st = ((),st')` by metis_tac[] >>
   `mem_bytes_at sb 32 initial.vs_data_section = enc (vyper_to_abi_type env ty) av /\
    d+32 <= b+sz` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp initial /\ _`
+      (fn th => ACCEPT_TAC (DISCH (lhand (concl th)) (CONJUNCT1 (UNDISCH th))))) >>
   drule_all prefix_scalar_complete_shift_code >>
   disch_then (qspecl_then [`site`,`PG`,`Ddead`] mp_tac) >>
   simp[LET_THM, Excl "enc_def"] >> strip_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+   actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp)` by
+    (`abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
+     drule_all abi_decoder_clamped_word_shape >> strip_tac >>
+     drule_all abi_decoder_word_reentry_code >> strip_tac >>
+     mp_tac (Q.INST [`code` |-> `emitted_insts st st'`, `s` |-> `initial`,
+       `t` |-> `actual`, `ctx` |-> `ctx`, `func` |-> `func`] prefix_decoder_sequence_room) >>
+     fs[EVERY_CONJ]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\
+   (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_alloca_next + pending_alloca_size func (actual with vs_inst_idx := LENGTH st'.cs_current_insts) <= w2n (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_initial_fmp)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp actual /\ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp_tac (srw_ss()) [allocas_below_fmp_def,pending_alloca_size_def] >>
+     metis_tac[]) >>
   `checked ==> gas_path_mem ctx func initial 0
       (OK (actual with vs_inst_idx := LENGTH st'.cs_current_insts)) /\
       alloca_history func (actual with vs_inst_idx := LENGTH st'.cs_current_insts)` by
@@ -470,16 +511,16 @@ Proof
 QED
 *)
 Theorem prefix_scalar_complete_checked_contract:
-  type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> (^ScalarShiftMode) T ty tv
+  type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> (^CshiftMode) T ty tv
 Proof
   simp[prefix_scalar_complete_mode_contract]
 QED
 
 
-
-
 val HshiftMode = ``\checked ctx func site ids D N limit_st tv v d sz st st' initial G tn actual H qt B Ddead lo PG.
  allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
+ (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+   actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
  val_in_memory tv v d actual.vs_memory /\
  abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st st'))
    [(d,sz)] initial actual /\
@@ -590,10 +631,25 @@ Proof
      metis_tac[not_fresh_at_def]) >>
   `fn_has_code st middle func` by
     (mp_tac (Q.SPECL [`st`,`middle`,`final`,`func`] fn_has_code_split) >> simp[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp initial /\ _`
+      (fn th => ACCEPT_TAC (DISCH (lhand (concl th)) (CONJUNCT1 (UNDISCH th))))) >>
   drule_all prefix_canonical_member_setup_complete_shift_code >>
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `allocas_from lo prepared` >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+   t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp)` by
+    (drule ctor_actual_member_setup_opcodes >> strip_tac >>
+     mp_tac (Q.INST [`code` |-> `emitted_insts st middle`, `s` |-> `initial`,
+       `t` |-> `t`, `ctx` |-> `ctx`, `func` |-> `func`] prefix_decoder_sequence_room) >>
+     fs[Abbr `prepared`, EVERY_CONJ]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp prepared /\
+   prepared.vs_alloca_next + pending_alloca_size func prepared <= w2n prepared.vs_initial_fmp)` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t /\ _` mp_tac >>
+     qunabbrev_tac `prepared` >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp_tac (srw_ss()) [allocas_below_fmp_def,pending_alloca_size_def] >>
+     metis_tac[]) >>
   `abi_decode_sim ctx func initial prepared /\
    abi_encoder_registered_effect {} [] initial prepared` by
     (qunabbrev_tac `prepared` >>
