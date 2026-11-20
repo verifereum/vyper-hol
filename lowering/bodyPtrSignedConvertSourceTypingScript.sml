@@ -2,7 +2,7 @@
 Theory bodyPtrSignedConvertSourceTyping
 Ancestors exprSimHyps memoryLocalRhsProps bodyPtrSignedConvertLayout bodySim
   supportedExprs supportedExprForms vyperTypeSystem exprLowering exprSimHypsDefs compileEnv
-  vyperTypeEvalProofs
+  vyperTypeEvalProofs exprBodyPreProps
 Libs monadsyntax
 
 Theorem internal_call_lowered_bytestring:
@@ -15,7 +15,8 @@ Theorem internal_call_lowered_bytestring:
     (lowered_value_type cenv (Call ty (IntCall id) args d))
 Proof
   Cases_on `d` >> PairCases_on `id` >> strip_tac >>
-  gvs[expr_body_pre_def, supported_expr_def, supported_pure_expr_def,
+  drule_then strip_assume_tac expr_body_pre_static_facts >>
+  gvs[supported_expr_def, supported_pure_expr_def,
       supported_effect_expr_def, AllCaseEqs()] >>
   gvs[well_typed_expr_def] >>
   qpat_x_assum `IS_SOME _` mp_tac >>
@@ -60,7 +61,7 @@ Proof
   strip_tac >> conj_tac
   >- (drule_all source_lowered_bytestring >> simp[]) >>
   drule_all memory_rhs_read_lowered_typed >> strip_tac >>
-  gvs[expr_body_pre_def] >> drule_all memory_rhs_runtime_layout >> simp[]
+  drule_then strip_assume_tac expr_body_pre_static_facts >> drule_all memory_rhs_runtime_layout >> simp[]
 QED
 
 Theorem source_read_zero_bytes:
@@ -72,7 +73,7 @@ Theorem source_read_zero_bytes:
   v = BytesV []
 Proof
   strip_tac >> drule_all memory_rhs_read_lowered_typed >>
-  strip_tac >> gvs[expr_body_pre_def] >>
+  strip_tac >> drule_then strip_assume_tac expr_body_pre_static_facts >>
   drule_all memory_rhs_runtime_layout >>
   simp[vyperValueTheory.evaluate_type_def] >> strip_tac >>
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
@@ -87,7 +88,7 @@ Theorem source_read_zero_string:
   v = StringV []
 Proof
   strip_tac >> drule_all memory_rhs_read_lowered_typed >>
-  strip_tac >> gvs[expr_body_pre_def] >>
+  strip_tac >> drule_then strip_assume_tac expr_body_pre_static_facts >>
   drule_all memory_rhs_runtime_layout >>
   simp[vyperValueTheory.evaluate_type_def] >> strip_tac >>
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
@@ -118,7 +119,7 @@ Theorem source_read_bytestring_view:
            v = StringV str /\ LENGTH str <= n)
 Proof
   strip_tac >> drule_all exprSimHypsTheory.memory_rhs_read_annotation_typed >>
-  strip_tac >> gvs[expr_body_pre_def] >>
+  strip_tac >> drule_then strip_assume_tac expr_body_pre_static_facts >>
   drule_all memory_rhs_runtime_layout >> strip_tac >>
   drule_all bytestring_typed_value_view >> simp[]
 QED
@@ -138,17 +139,16 @@ QED
 
 (* Internal return layout is supplied by the body contract, even when the
    source annotation widens the signature's return type. *)
-Theorem body_internal_return_signature[local]:
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env (Call ann (IntCall id) args drv) es ==>
+Theorem body_internal_return_signature_mods[local]:
+  expr_body_pre_mods mods cenv cx env (Call ann (IntCall id) args drv) es ==>
   ?sig. FLOOKUP env.fn_sigs id = SOME sig /\
         cenv.ce_func_return_type (nsid_to_string id) = sig.ret_ty
 Proof
-  Cases_on `id` >> strip_tac >>
-  gvs[expr_body_pre_def, vyperTypeCallGraphTheory.int_calls_expr_def] >>
-  gvs[well_typed_expr_def, optionTheory.IS_SOME_EXISTS, body_inv_def] >>
-  PairCases_on `x` >>
-  drule_all supported_internal_signature_return >> metis_tac[]
+  strip_tac >>
+  drule_then assume_tac expr_body_pre_mods_inv >>
+  drule_then mp_tac expr_body_pre_mods_well_typed >>
+  Cases_on `id` >> simp[well_typed_expr_def] >>
+  rpt strip_tac >> drule_all expr_sim_inv_mods_return_type >> metis_tac[]
 QED
 
 Theorem body_internal_lowered_bytestring[local]:
@@ -157,9 +157,12 @@ Theorem body_internal_lowered_bytestring[local]:
   is_bytestring_type ann ==>
   is_bytestring_type (lowered_value_type cenv (Call ann (IntCall id) args drv))
 Proof
-  strip_tac >> drule_all body_internal_return_signature >> strip_tac >>
+  strip_tac >>
+  drule_all_then assume_tac body_inv_expr_body_pre_mods >>
+  drule_then strip_assume_tac body_internal_return_signature_mods >>
+  drule_then assume_tac expr_body_pre_mods_well_typed >>
   Cases_on `id` >>
-  gvs[expr_body_pre_def, well_typed_expr_def, lowered_value_type_def] >>
+  gvs[well_typed_expr_def, lowered_value_type_def] >>
   metis_tac[type_widens_to_def, compileEnvTheory.arg_type_fits_bytestring_source]
 QED
 
@@ -190,7 +193,7 @@ Proof
   strip_tac >> conj_tac
   >- (drule_all body_source_lowered_bytestring >> simp[]) >>
   drule_all memory_rhs_read_lowered_typed_unwidened >> strip_tac >>
-  gvs[expr_body_pre_def] >> drule_all memory_rhs_runtime_layout >> simp[]
+  drule_then strip_assume_tac expr_body_pre_static_facts >> drule_all memory_rhs_runtime_layout >> simp[]
 QED
 
 Theorem body_source_lowered_nonzero_capacity:
@@ -212,7 +215,7 @@ Theorem body_source_lowered_zero_empty:
   v = BytesV [] \/ v = StringV []
 Proof
   strip_tac >> drule_all memory_rhs_read_lowered_typed_unwidened >> strip_tac >>
-  gvs[expr_body_pre_def] >> drule_all memory_rhs_runtime_layout >>
+  drule_then strip_assume_tac expr_body_pre_static_facts >> drule_all memory_rhs_runtime_layout >>
   simp[vyperValueTheory.evaluate_type_def] >> strip_tac >>
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
 QED
