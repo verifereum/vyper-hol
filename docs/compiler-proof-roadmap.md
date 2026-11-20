@@ -58,7 +58,7 @@ Their exact premises are in the linked owners and
 | S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` ([source](../lowering/vyperLoweringCorrectScript.sml)) | Lowering + `check_contract` + `raw_shape_free_program` -> `o1_source_unit_ok` | 5 |
 | S3 | `loweringMemCorrect.lower_vyper_runtime_unit_memory_ok` ([source](../lowering/loweringMemCorrectScript.sml)) | Lowering + initial state + no `DALLOCA` + entry FMP floor + memory-safe and pointer-safe entry runs at every fuel -> `raw_unit_memory_ok`, pointer discipline and taint bounds | 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` ([source](../venom/compiler/o1PipelineCorrectScript.sml)) | Actual O1 success + raw shape/entry/memory -> forward simulation up to any well-formed dead-byte set `D` (`ctx_sim D`, `dead_wf D`) | 3 |
-| S5 | `o1PipelineCorrect.o1_pipeline_memory_obligations` (same owner) | O1 + generated plan + raw shape/entry/memory + initial FMP -> **one existential `Inv`** with output memory/reachability | 5 |
+| S5 | `o1PipelineCorrect.o1_pipeline_memory_obligations` (same owner) | Generated plan for the O1 output + `o1_lowered_inv` of the output + matching initial FMP -> **one existential `Inv`** with output memory obligations/reachability | 5 |
 | S6 | `o1PipelineCorrect.run_venom_pipeline_output_shape` (same owner) | Actual O1 success + raw shape -> `unit_shape_ok` | 3 |
 | S7 | `codegenCorrectness.codegen_correct` ([source](../venom/codegen/codegenCorrectnessScript.sml)) | Generated plan/assembly + shape + context/reachability + initial frame relation -> actual `run_call`, resource alternatives or `venom_frame_rel` | 2.1 / 4 |
 
@@ -528,12 +528,12 @@ Remaining work, roughly in dependency order (all future):
    - ASSERT abort, using `revert_postamble` label facts;
    - `some_name`: emit lemmas for every EVM-opcode instruction. This is the
      largest local item.
-2. **H42-function / owner Milestone 4.2:** prove actual
+2. **H42-function / owner Milestone 4.2 (done):** the plan was to prove actual
    [venomToAsmProps.gen_fn_simulation](../venom/codegen/venomToAsmPropsScript.sml)
    by mutual fuel induction over INVOKE/RET, using `fnPlanDecomp` structural
    decomposition. It is proved now, and S7's `codegen_correct` uses it.
 
-   | Actual input | Required future frame-aware invariant fact |
+   | Actual input | Frame-aware invariant fact the proof needs |
    |---|---|
    | `fn_entry_state_rel`, `fn_has_retpc`, `unit_shape_ok` / `opaque_use_ok` | Fresh callee vars need not already be valued. Handle return-address variables and copies/PHIs under the actual entry relation. Use concrete `lo = SND (compute_label_offsets prog)`, `o2pc = build_offset_to_pc prog`, and actual return-label lookup. |
    | RET operand order / `IntRet` conclusion | At RET the callee stack is **exactly its RET operands above caller `rest`**, so JUMP pops the return destination and leaves `REVERSE ret.iret_values ++ rest` at `pc_ret`. Do not equate assembly return address with a source return-PC token. |
@@ -567,7 +567,7 @@ Actual memory API is
 older compat `lowering_memory_safe` interface, which was deleted: its proof
 was a `cheat`, and it would not have established S3's raw-unit contract.
 
-| Handoff | Exact current input/contract | Concrete deferred proof |
+| Handoff | Input/contract at Milestone 1 | Proof planned at Milestone 1 |
 |---|---|---|
 | H5-S2 | Lowering success + `check_contract` + `raw_shape_free_program` -> `o1_source_unit_ok` | Inspect raw emission: only ALLOCA among allocation/FMP forms, no ASSERT_UNREACHABLE; RET only internal, STOP/RETURN only entry; fresh legal labels, read0 empty operands, first block no predecessor, restricted RETPC uses. This supplies S4/S6 raw shape, not a compile-success theorem. |
 | H5-S3 | S1 boundary + `~source_exempt` -> `raw_unit_memory_ok` | Alloca-aware buffer/layout induction, checked `unit_alloca_budget`, memory accesses below frontier and frontier <2**256. Fresh empty memory alone proves nothing about later accesses. Exemption exclusion is essential: dynamic decoding may read unchecked wrapping offsets. |
