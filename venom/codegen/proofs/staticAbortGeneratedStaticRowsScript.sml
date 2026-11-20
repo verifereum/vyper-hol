@@ -627,18 +627,15 @@ val open_tm = ``\S Flow p (cc:call_context) req (V:(num#num)->bool) X
         asm_steps (SND(compute_label_offsets p)) (build_offset_to_pc p)
           p 1 t = AsmOK u /\ S_here y u))``;
 
-Theorem generated_static_cut_rows:
+Theorem generated_static_cut_rows_reloc:
   !Shape. Shape = ^shape_tm ==>
   !Flow. Flow = ^flow_tm ==>
-  body_inv_abort rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+  body_inv_abort_reloc rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 cvs cut Inv
     ra pc_ret rest mem0 /\
-  sym_frame_inv prog env ctx cpl fn ret srest labs0 ps cut sc /\
-  label_flow_ok ctx /\
-  code_end_offset_ok (\ctx fn inst s. Inv ctx fn inst s /\ ~in_static_abort_prefix fn s)
-    ctx /\ sym_unit_static_ok unit /\
-  asm_static_wf prog /\ (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+  (!l. IS_SOME (FLOOKUP lo l) ==>
+    IS_SOME (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
   in_static_abort_prefix fn cvs ==>
   ?V e rank pc height need tag boolean edge.
     ^open_tm Shape Flow prog cut.as_call_ctx cut.as_requests V {} rank pc height need tag boolean edge /\
@@ -647,14 +644,16 @@ Theorem generated_static_cut_rows:
     Shape prog cut.as_call_ctx cut.as_requests pc height need tag boolean e cut /\
     (!j. tag e j=NONE /\ ~boolean e j)
 Proof
-  lets >> strip_tac >> drule_all generated_static_cut_interval >> strip_tac >>
+  lets >> strip_tac >>
+  drule_all (Q.INST [`row_lo` |-> `SND (compute_label_offsets prog)`]
+    generated_static_cut_interval_reloc) >> strip_tac >>
   `bb.bb_label = bb.bb_label` by REFL_TAC >>
   drule_all (norm_lets static_interval_rows) >>
   disch_then (qspecl_then [`0:num`, `LENGTH cut.as_stack - LENGTH ps.ps_stack`] assume_tac) >>
   suspend "certify"
 QED
 
-Resume generated_static_cut_rows[certify]:
+Resume generated_static_cut_rows_reloc[certify]:
   qpat_x_assum `?V e rank I edge. _` (REPEAT_TCL CHOOSE_THEN
     (CONJUNCTS_THEN2 (mk_asm "table") (mk_asm "entry"))) >>
   qmatch_asmsub_rename_tac `iface e = (cut.as_pc,_,F,_,_)` >>
@@ -681,7 +680,7 @@ Resume generated_static_cut_rows[certify]:
   qexistsl [`V`,`e`,`rank`,`pch`,`ht`,`nd`,`tg`,`bl`,`edge`] >>
   (* The interpreter's rank comparison is rational; it preserves the
      natural comparison after embedding. *)
-  mp_tac (norm_lets (Q.SPECL [`prog`,`sc`,`cut`,`V`,`e`,`\x. rat$rat_of_num (rank x)`,
+  mp_tac (norm_lets (Q.SPECL [`prog`,`sym_init cut`,`cut`,`V`,`e`,`\x. rat$rat_of_num (rank x)`,
                   `pch`,`ht`,`nd`,`tg`,`bl`,`edge`]
     staticAbortOptMergeIszeroBranchPackageTheory.pending_rows_rooted_package)) >>
   lets >> PURE_REWRITE_TAC [DIFF_EMPTY,ratTheory.RAT_OF_NUM_LES] >>
@@ -715,4 +714,30 @@ Resume generated_static_cut_rows[certify]:
   asm "entry" (fn th => simp[th])
 QED
 
-Finalise generated_static_cut_rows
+Finalise generated_static_cut_rows_reloc
+
+Theorem generated_static_cut_rows:
+  !Shape. Shape = ^shape_tm ==>
+  !Flow. Flow = ^flow_tm ==>
+  body_inv_abort rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 cvs cut Inv
+    ra pc_ret rest mem0 /\
+  sym_frame_inv prog env ctx cpl fn ret srest labs0 ps cut sc /\
+  label_flow_ok ctx /\
+  code_end_offset_ok (\ctx fn inst s. Inv ctx fn inst s /\ ~in_static_abort_prefix fn s)
+    ctx /\ sym_unit_static_ok unit /\
+  asm_static_wf prog /\ (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+  in_static_abort_prefix fn cvs ==>
+  ?V e rank pc height need tag boolean edge.
+    ^open_tm Shape Flow prog cut.as_call_ctx cut.as_requests V {} rank pc height need tag boolean edge /\
+    ^rows_tm Flow prog cut.as_call_ctx V {} rank pc height need tag boolean edge /\
+    e IN V /\ (!x. x IN V ==> ^reach_tm edge e x) /\
+    Shape prog cut.as_call_ctx cut.as_requests pc height need tag boolean e cut /\
+    (!j. tag e j=NONE /\ ~boolean e j)
+Proof
+  lets >> strip_tac >> fs[body_inv_abort_reloc_canonical] >>
+  `!l. IS_SOME (FLOOKUP lo l) ==>
+        IS_SOME (FLOOKUP (SND (compute_label_offsets prog)) l)` by simp[] >>
+  drule_all (norm_lets generated_static_cut_rows_reloc) >> simp[]
+QED
