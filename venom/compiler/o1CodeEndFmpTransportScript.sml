@@ -167,7 +167,7 @@ Theorem fmp_lower_indexed_protected[local]:
 Proof
   map_every qid_spec_tac [`s'`, `left`, `out`, `restores`, `s`, `k`] >>
   Induct_on `is` >- simp[fmp_lower_indexed_def] >>
-  simp[fmp_lower_indexed_cons] >> rpt gen_tac >> strip_tac >>
+  SIMP_TAC bool_ss [fmp_lower_indexed_cons, MEM] >> rpt gen_tac >> strip_tac >>
   drule fmp_control_emit_vars_mono >> strip_tac >>
   drule fmp_control_inst_vars_mono >> strip_tac >>
   `!pt. ~MEM (pt,x) later` by
@@ -213,7 +213,7 @@ Proof
   qpat_x_assum `!s rs out left s'. _`
     (qspecl_then [`s2`, `later`, `tail`, `left`, `s'`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >>
-  simp[fn_insts_blocks_def, MEM_APPEND] >> metis_tac[]
+  SIMP_TAC bool_ss [fn_insts_blocks_def, MEM_APPEND] >> metis_tac[]
 QED
 
 (* Expose the common block-lowering and root-installation decomposition

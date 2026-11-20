@@ -111,7 +111,10 @@ Proof
   (* The positive fuel premise must match 0 < N, not the trace length. *)
   qpat_x_assum `0 < LENGTH (dftGasFromListTraceDefs$trace_blocks _ _ _ _ _ _)` kall_tac >>
   drule_all (REWRITE_RULE [] (Q.INST [`root_sf` |-> `sf`, `root_tf` |-> `dft_fn sf`,
-                    `C7` |-> `C7`, `C8` |-> `C8`, `st` |-> `E`]
+                    `bb` |-> `sb`, `bt` |-> `tb`, `ps` |-> `prefix`,
+                    `xs` |-> `src`, `ys` |-> `dst`, `rho` |-> `schedule`,
+                    `root_entry` |-> `E`, `sp` |-> `E`, `st` |-> `E`,
+                    `inst` |-> `HD tb.bb_instructions`]
     (CONV_RULE (RAND_CONV (REPEATC Unwind.UNWIND_FORALL_CONV))
        (SPEC_ALL focus_initial_singleton_packet)))) >>
   simp[Abbr `q80`] >> disch_then (irule_at Any)
