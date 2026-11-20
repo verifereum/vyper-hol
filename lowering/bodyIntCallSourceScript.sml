@@ -1,7 +1,7 @@
 (* Source selection boundaries for the internal-call body simulation. *)
 Theory bodyIntCallSource
 Ancestors
-  bodySim supportedProgram supportedDecls bodyIntCallReturn
+  bodySim supportedProgram supportedDecls
   vyperTypeContractStaticMaps vyperInterpreter list exprSimHypsDefs
   intCallLookup
 

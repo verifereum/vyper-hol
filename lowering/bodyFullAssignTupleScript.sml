@@ -42,7 +42,6 @@ Ancestors bodyImmutableStoreMemory[qualified,ignore_grammar]
   bodyMemoryDefs[qualified,ignore_grammar] tuplePlaceWriteOutcome[qualified,ignore_grammar]
   tuplePlacePointerReady[qualified,ignore_grammar] bodyFullStoreSlotsStatic[qualified,ignore_grammar]
   placeStoreSlots[qualified,ignore_grammar] gasOriginPtrLabels[qualified,ignore_grammar]
-  typedNormalizeWidening[qualified,ignore_grammar]
 
 
 val _ = Parse.hide "body";

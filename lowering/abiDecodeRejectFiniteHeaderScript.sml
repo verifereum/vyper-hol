@@ -5,7 +5,7 @@ Ancestors
   abiMalformedNavigation abiDecodePtrMemberFrame abiDecoderExecution
   abiEncoderWindowSequence decoderNavigationPtr decoderMemberPrefixPtr
   decoderArraySetupPtr decoderGhostFramePtr typedCopyOriginPtrBase
-  actualAllocaReplayPtr fragGasOriginPtrLoop
+  fragGasOriginPtrLoop
   venomState venomInst venomExecSemantics fragExec compileEnv emitHelperProps
   bodyPtrDefs ptrDiscipline exprLoweringProps loweringStateRelDefs
   emitHelper abiEncoder words finite_map list arithmetic
