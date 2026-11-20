@@ -13,11 +13,11 @@ Assign/AugAssign simulation cases are still unproved in
 
 ## Minimal concrete definition-level counterexamples
 
-- **Narrow left shift:** uint8 x=128, unsigned shift=1. Source
+- **Historical narrow left shift:** uint8 x=128, unsigned shift=1. Source
   `evaluate_binop (Unsigned 8) ... ShL (IntV 128) (IntV 1)` returns `IntV 0`
-  (mod256); lowered SHL1,128 leaves **word256**, with no narrow truncation.
-  This is an AST/operator-level mismatch; shift variables/literals need not be
-  rejected by evaluation. Current whitelist admits ShL only at full-word ints.
+  (mod256); the raw SHL of 128 by 1 leaves **word256**. This comparison
+  predates the current proof support for narrow shifts. The source checker
+  still checks the operand types and the shift amount.
 - **Non-first storage struct field:** `S={a:uint256,b:uint256}`, module `s:S`
   at slot5, contents5=11,6=22, expression `s.b`. Source reads22. Current
   `compile_attribute` cannot recover struct name from a TopLevelName base,
@@ -37,9 +37,8 @@ Assign/AugAssign simulation cases are still unproved in
   width≤134 (aligned widths therefore≤128), so this136-bit case is excluded.
 - **Unsigned negation of zero:** source `Neg` on uint8 `IntV 0` succeeds0.
   Current `compile_neg` emits `SGT 0,0; ASSERT; SUB 0,0`, so aborts before SUB.
-  Source negation is **checked**, not wrapped: nonzero unsigned inputs fail the
-  source bound. The catalogue's exclusion must not be taken to imply that
-  source unsigned negation wraps.
+  Nonzero unsigned inputs fail the evaluator's source bound. The source type
+  checker rejects unsigned `Neg` before evaluation.
 - **Several ABI encode arguments:** `abi_encode(uint256(1),uint256(2))`, true
   ensure, no method ID: source/reference encode tuple(1,2),64 payload bytes;
   HOL TypeBuiltin lowering uses only the first expression/its type, so the
@@ -60,8 +59,8 @@ regressions. No named original fixture exercises these excluded mismatches.
 | Storage struct non-first read | concrete22/11 example above | `supported_storage_field_read` |
 | Byte hashmap write keys | source hashes byte keys; lowering read hashes but write uses raw key | `supported_hashmap_key_type`: integer/bool/address only |
 | Nested/transient hashmaps | lowering loses type/location on nested/write paths | `supported_declaration_header`, nonnested/nontransient maps |
-| Narrow `<<` and integer `~` | source bounds/wraps narrow result; raw SHL/NOT leaves256-bit result | `supported_binop`, `supported_builtin_form` |
-| Unsigned negation | source checked negation accepts0; target requires input strictly greater than lower bound0 and rejects0 | signed/decimal Neg only |
+| Narrow `<<` and integer `~` | historical raw SHL/NOT comparison; current proofs account for the source types | source operand checks in `vyperTypeSystem` |
+| Unsigned negation | the source evaluator accepts zero; lowering rejects zero | `well_typed_builtin_app` in `vyperTypeSystem` excludes unsigned `Neg` |
 | Nonliteral power | source checks mathematical power; target EXP wraps first and bound-checks the wrapped value | power needs a literal base or nonnegative literal exponent |
 | Widths not multiple8 | source type/evaluator permits widths; target uses byte-based width/8 clamps | `supported_int_width` |
 | Memory-type `empty` | source constructs empty/default aggregate; lowering supplies pointer0 without constructing it | Empty only W |
@@ -69,9 +68,9 @@ regressions. No named original fixture exercises these excluded mismatches.
 | Conversions | checker width restrictions apply | width-aware `valid_conversion` relation |
 | Several ABI encode args / other flags | concrete example; lower encodes first arg; current dispatcher DOES honor ensure via enc_ty | exact single tuple/false ensure/SOME4-byte ID form |
 | ABI decode unwrap flag | source wrapper-sensitive decoding; lowering ignores flag | false flag, identical tuple target/result,≥2 members |
-| Indexed aggregate / bytes20 events | incompatible aggregate topics;20-byte values conflated with address encoding | scalar fields; bytes20 excluded |
+| Indexed aggregate / bytes20 events | aggregate topics remain excluded; type-directed word topic encoding covers bytes20 | scalar fields, including bytes20 |
 | Mismatched event args | source checker does not establish declared argument agreement; lowering drops unmatched arguments | `supported_log`: declared exact types/count |
-| Bytes/String comparisons | source compares values; lower compares hashes | Eq/NotEq restricted W; no collision-freedom theorem assumed |
+| Bytes/String comparisons | source compares values; lower compares hashes | `supported_binop` excludes bytestring operands. Source typing checks the other operand types. |
 
 ## Current files, regression exports and reference evidence
 

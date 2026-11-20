@@ -14,7 +14,7 @@ Theory stmtSimAugAssignPlaceStorage
 Ancestors
   valueEncodingProps
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
-  vyperStorageLayoutSafety vyperLookupStorage vyperScopePreservation
+  vyperStorageLayoutSafety vyperLookupStorage vyperScopePreservation stmtSimForArrayFrame
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
   stmtSimIf stmtLoweringMono stmtLowering compileEnv loweringStateRelDefs fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
@@ -434,17 +434,7 @@ Theorem aug_place_singleton_storage:
   eval_expr cx e s = (r,s') ==>
   get_storage cx s' tr = get_storage cx s tr
 Proof
-  strip_tac >>
-  `?r'. eval_exprs cx [e] s = (r',s')` by
-    (Cases_on `r`
-     >- (rename1 `eval_expr cx e s = (INL tv,s')` >>
-         simp[evaluate_def, bind_def, return_def] >>
-         Cases_on `read_result cx tv s'` >>
-         drule read_result_state >> strip_tac >> gvs[] >>
-         rename1 `read_result cx tv s' = (rr,s')` >>
-         Cases_on `rr` >> simp[])
-     >> simp[evaluate_def, bind_def]) >>
-  metis_tac[]
+  strip_tac >> drule eval_exprs_singleton_end_state >> metis_tac[]
 QED
 
 Theorem aug_place_pure_storage_mutual:
@@ -474,6 +464,9 @@ Proof
   >- (`pure_expr (TopLevelName ty id)` by simp[pure_expr_def] >>
       drule_all eval_expr_preserves_state >>
       disch_then (fn th => once_rewrite_tac [th]) >> simp[])
+  >~ [`eval_expr cx (FlagMember _ _ _) s = (r,s')`]
+  >- (gvs[Once evaluate_def] >>
+      drule vyperStatePreservationTheory.lookup_flag_mem_state >> simp[])
   >~ [`eval_expr cx (IfExp ty e e' e'') s = (r,s')`]
   >- (gvs[evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >>
      imp_res_tac read_result_state >> imp_res_tac vyperStatePreservationTheory.conditional_result_state >>
