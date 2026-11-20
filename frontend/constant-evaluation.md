@@ -61,7 +61,7 @@ justify replacing every expression the compiler folds at runtime.
 
 The frontend resolves constant values together with their source literal origins.
 The origin records preserve distinctions that the translated expression alone
-cannot recover, including Bytes versus HexBytes and the spelling of Hex values.
+cannot recover, such as the spelling of Hex values.
 
 1. Constants are evaluated in passes over every module, imported modules
    first (`evaluated_origin_constants`, `imported_origin_constants` and
