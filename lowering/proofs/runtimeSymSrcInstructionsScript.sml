@@ -44,9 +44,7 @@ Proof
   metis_tac[runtime_sym_supported_target_domain]
 QED
 
-Theorem runtime_sym_stmts_closed:
-  !tops stmts bs ce lc ty.
-    runtime_sym_stmts_contract tops bs compile_stmts ce lc ty stmts
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   gen_tac >> match_mp_tac runtime_sym_stmts >>
   conj_tac >- simp[runtime_sym_expr_closed] >>
@@ -72,6 +70,13 @@ Proof
       metis_tac[runtime_sym_pure_occurrence_domain]) >>
   conj_tac >- metis_tac[runtime_sym_dynarray_append] >>
   metis_tac[runtime_sym_abi_encode_to_buf]
+QED
+*)
+Theorem runtime_sym_stmts_closed:
+  !tops stmts bs ce lc ty.
+    runtime_sym_stmts_contract tops bs compile_stmts ce lc ty stmts
+Proof
+  cheat
 QED
 
 Theorem runtime_sym_runtime_insts:

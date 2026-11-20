@@ -48,13 +48,7 @@ Proof
      concat_buffer_type_not_word]
 QED
 
-Theorem supported_reason_code:
-  !cenv cx env es tops e.
-    expr_sim_inv cenv cx env es /\
-    supported_string_reason tops e /\ well_typed_expr env e /\
-    ~reason_covered cenv e ==>
-    !sa vv sb. compile_expr cenv (expr_type e) e sa = (vv, sb) ==>
-               reason_code_vv vv
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt gen_tac >> strip_tac >>
   `?n. expr_type e = BaseT (StringT n)` by
@@ -74,6 +68,17 @@ Proof
   qspecl_then [`cenv`, `env`, `e`, `n`] mp_tac compile_expr_string_reason >>
   impl_tac >- (fs[expr_sim_inv_def] >> metis_tac[]) >>
   fs[reason_covered_def] >> metis_tac[]
+QED
+*)
+Theorem supported_reason_code:
+  !cenv cx env es tops e.
+    expr_sim_inv cenv cx env es /\
+    supported_string_reason tops e /\ well_typed_expr env e /\
+    ~reason_covered cenv e ==>
+    !sa vv sb. compile_expr cenv (expr_type e) e sa = (vv, sb) ==>
+               reason_code_vv vv
+Proof
+  cheat
 QED
 
 Theorem expr_body_pre_eval_result:
@@ -130,12 +135,7 @@ Proof
   first_x_assum drule >> strip_tac >> simp[]
 QED
 
-Theorem supported_scalar_target_decl:
-  !tops src id.
-    supported_scalar_target tops (src, id) ==>
-    src = NONE /\ find_var_decl_by_name id tops <> NONE /\
-    ?vis mut ty slot. MEM (VariableDecl vis mut id ty slot) tops /\
-                      is_word_type ty
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt gen_tac >> simp[supported_scalar_target_def] >>
   Cases_on `supported_variable_decl tops (src, id)` >> simp[] >>
@@ -147,9 +147,20 @@ Proof
   gvs[supported_full_word_type_def] >> first_assum (irule_at Any) >>
   simp[is_word_type_def]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (flag and string storage scalars); callers split
+  Theorem supported_scalar_target_decl:
+    !tops src id.
+      supported_scalar_target tops (src, id) ==>
+      src = NONE /\ find_var_decl_by_name id tops <> NONE /\
+      ?vis mut ty slot. MEM (VariableDecl vis mut id ty slot) tops /\
+                        is_word_type ty
+  Proof
+    cheat
+  QED
+*)
 
-Theorem topcopy_not_bytestring:
-  !tops t. supported_storage_type tops t ==> ~is_bytestring_type t
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `t` >> simp[is_bytestring_type_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
@@ -161,6 +172,14 @@ Proof
        Once supportedTypesTheory.supported_nested_type_def,
        supportedTypesTheory.supported_full_word_type_def]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (bytestrings in storage); callers split
+  Theorem topcopy_not_bytestring:
+    !tops t. supported_storage_type tops t ==> ~is_bytestring_type t
+  Proof
+    cheat
+  QED
+*)
 
 Theorem topcopy_no_length_word:
   !tops t. supported_storage_type tops t /\

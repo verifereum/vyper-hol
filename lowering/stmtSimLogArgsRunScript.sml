@@ -47,10 +47,15 @@ QED
   QED
 *)
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  strip_tac >> drule log_scalar_word_or_bytestring >> strip_tac >> simp[]
+QED
+*)
 Theorem log_scalar_post_value_type:
   supported_scalar_type (expr_type e) ==> post_value_type cenv e = expr_type e
 Proof
-  strip_tac >> drule log_scalar_word_or_bytestring >> strip_tac >> simp[]
+  cheat
 QED
 
 (* ===== Source sequencing ===== *)

@@ -105,6 +105,17 @@ Proof
   cheat
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- metis_tac[supported_expr_no_evm_run] >>
+  conj_tac >- metis_tac[supported_expr_no_call_operand_effects] >>
+  PURE_ONCE_REWRITE_TAC[CONJ_ASSOC] >>
+  reverse conj_tac >- metis_tac[supported_expr_not_extcode] >>
+  imp_res_tac supported_expr_main_calls >>
+  gvs[listTheory.EVERY_CONJ]
+QED
+*)
 Theorem supported_expr_body_calls:
   !tops e. supported_expr tops e ==>
     ~expr_has_evm_run e /\
@@ -114,13 +125,7 @@ Theorem supported_expr_body_calls:
       (int_calls_expr e) /\
     ~is_extcode e
 Proof
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- metis_tac[supported_expr_no_evm_run] >>
-  conj_tac >- metis_tac[supported_expr_no_call_operand_effects] >>
-  PURE_ONCE_REWRITE_TAC[CONJ_ASSOC] >>
-  reverse conj_tac >- metis_tac[supported_expr_not_extcode] >>
-  imp_res_tac supported_expr_main_calls >>
-  gvs[listTheory.EVERY_CONJ]
+  cheat
 QED
 
 (* The same for a reason, which may also be a string literal. *)

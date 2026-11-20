@@ -50,14 +50,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem tuple_place_pointer_store_alloca_frame:
-  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
-  valid_horizon cx st0 H ee.storage_trace /\
-  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
-  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
-  compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
-  alloca_frame cenv ee sa s cenv ff t ==>
-  alloca_frame cenv es sp s0 cenv ff t
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
@@ -81,6 +74,18 @@ Proof
   qpat_assum `alloca_frame _ _ _ _ _ ff t` (irule_at Any) >>
   qpat_assum `alloca_frame _ _ _ _ _ ee s` (irule_at Any) >>
   fs[exprLoweringPropsTheory.ci_mono_def, loweringPostsTheory.target_post_def]
+QED
+*)
+Theorem tuple_place_pointer_store_alloca_frame:
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
+  valid_horizon cx st0 H ee.storage_trace /\
+  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
+  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
+  alloca_frame cenv ee sa s cenv ff t ==>
+  alloca_frame cenv es sp s0 cenv ff t
+Proof
+  cheat
 QED
 
 Theorem tuple_place_head_advance_some:

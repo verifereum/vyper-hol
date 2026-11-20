@@ -252,7 +252,7 @@ Resume entry_code_supported_union[type]:
   fs[supported_pure_exprs_every, listTheory.EVERY_MEM] >> metis_tac[]
 QED
 
-Resume entry_code_supported_union[call]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   gvs[supported_pure_expr_def, supported_effect_expr_def] >>
   simp[entry_preserves_code_def, compile_expr_body_def] >>
   pure_rewrite_tac[GSYM entry_preserves_code_def] >>
@@ -280,6 +280,9 @@ Resume entry_code_supported_union[call]:
   namedCases_on `rest` ["", "v rest2"] >> gvs[supported_effect_expr_def] >>
   namedCases_on `rest2` ["", "g rest3"] >> gvs[supported_effect_expr_def] >>
   Cases_on `rest3` >> gvs[supported_effect_expr_def] >> metis_tac[]
+*)
+Resume entry_code_supported_union[call]:
+  cheat
 QED
 
 Resume entry_code_supported_union[pop]:

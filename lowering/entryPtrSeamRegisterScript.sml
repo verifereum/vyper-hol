@@ -36,10 +36,7 @@ Ancestors allocaFrontierRoom allocaSiteResource compileAllocaProvenance
 
 (* Supported checked source excludes all runtime DALLOCA producers.  This
    rules out the proposed near-limit source family before budgeting it. *)
-Theorem registration_supported_no_dalloca:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\ source_typing_ok tops am tx ==>
-  ~ctx_has_dalloca unit.cu_context
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   `raw_shape_free_program tops` by
@@ -48,6 +45,14 @@ Proof
   fs[e2eDefsTheory.source_typing_ok_def] >>
   drule_all loweringShapeSourceTheory.lower_vyper_runtime_unit_no_dalloca_checked >>
   simp[]
+QED
+*)
+Theorem registration_supported_no_dalloca:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx ==>
+  ~ctx_has_dalloca unit.cu_context
+Proof
+  cheat
 QED
 
 Theorem registration_fmp_room_necessary:

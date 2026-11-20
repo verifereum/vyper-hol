@@ -43,19 +43,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem lower_vyper_runtime_unit_sym_src_ok_own:
-  !tops rpolicy unit.
-  supported_program tops /\
-  lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
-  label_flow_own_ok unit.cu_context /\
-  (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-             ~MEM (Label "code_end") inst.inst_operands) /\
-  EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
-                    ds.ds_items) unit.cu_data_segment /\
-  ((?fn inst. MEM fn unit.cu_context.ctx_functions /\
-              MEM inst (fn_insts fn) /\
-              MEM (Label "runtime_begin") inst.inst_operands) ==>
-   EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt gen_tac >> strip_tac >>
   `o1_source_unit_ok unit` by
@@ -71,6 +59,23 @@ Proof
    metis_tac[],
    metis_tac[lower_vyper_runtime_unit_data_bytes],
    metis_tac[lower_vyper_runtime_unit_no_runtime_begin]]
+QED
+*)
+Theorem lower_vyper_runtime_unit_sym_src_ok_own:
+  !tops rpolicy unit.
+  supported_program tops /\
+  lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
+  label_flow_own_ok unit.cu_context /\
+  (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+             ~MEM (Label "code_end") inst.inst_operands) /\
+  EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
+                    ds.ds_items) unit.cu_data_segment /\
+  ((?fn inst. MEM fn unit.cu_context.ctx_functions /\
+              MEM inst (fn_insts fn) /\
+              MEM (Label "runtime_begin") inst.inst_operands) ==>
+   EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment)
+Proof
+  cheat
 QED
 
 Theorem lower_vyper_deploy_unit_sym_src_ok_own:

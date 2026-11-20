@@ -85,6 +85,19 @@ Proof
        supported_place_type_def]
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  Cases_on `vt` >> rpt strip_tac >>
+  gvs[getter_vtype_annotation_def, supported_pure_expr_def,
+      supported_subscript_place_def,
+      supportedExprTraverseTheory.supported_expr_exists_def,
+      expr_nonmain_type_root_def, vyperASTTheory.expr_type_def,
+      supported_place_info_def, place_type_def, value_type_place_def,
+      supported_hashmap_value_def] >>
+  metis_tac[supported_place_namespace, supported_storage_place,
+            supported_type_namespace_def, supported_place_array_element]
+QED
+*)
 Theorem supported_getter_subscript[local]:
   !tops vt e kt vn.
   supported_place_expr tops e /\ supported_subscript_place tops e /\
@@ -98,15 +111,7 @@ Theorem supported_getter_subscript[local]:
   supported_place_info tops (Subscript (getter_vtype_annotation vt) e (Name kt vn)) =
     value_type_place vt
 Proof
-  Cases_on `vt` >> rpt strip_tac >>
-  gvs[getter_vtype_annotation_def, supported_pure_expr_def,
-      supported_subscript_place_def,
-      supportedExprTraverseTheory.supported_expr_exists_def,
-      expr_nonmain_type_root_def, vyperASTTheory.expr_type_def,
-      supported_place_info_def, place_type_def, value_type_place_def,
-      supported_hashmap_value_def] >>
-  metis_tac[supported_place_namespace, supported_storage_place,
-            supported_type_namespace_def, supported_place_array_element]
+  cheat
 QED
 
 (* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
@@ -478,13 +483,7 @@ QED
 (* Visibility changes getter generation; ordinary source lookup uses the
    visibility-independent find_var_decl_by_name. A getter is a Return of a
    top-level read or a subscript chain, with distinct generated argument names. *)
-Theorem supported_selected_external_body:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\ source_typing_ok tops am tx /\
-  lookup_function NONE tx.function_name External tops =
-    SOME (mut,nr,args,[],ret,fbody) ==>
-  supported_function_body tops External args
-    (subst_consts_stmts (module_consts_env tops []) fbody)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> drule lookup_function_External_cases >> strip_tac
   >- (drule_all supported_program_declaration >>
@@ -597,6 +596,17 @@ Proof
          supported_word_type_def])) >>
   strip_tac >> simp[EVERY_MAP] >>
   metis_tac[supported_getter_return_body]
+QED
+*)
+Theorem supported_selected_external_body:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,nr,args,[],ret,fbody) ==>
+  supported_function_body tops External args
+    (subst_consts_stmts (module_consts_env tops []) fbody)
+Proof
+  cheat
 QED
 
 Theorem closed_constant_typing[local]:

@@ -123,36 +123,7 @@ Proof
   gvs[mcopy_def, write_memory_with_expansion_def]
 QED
 
-Theorem raw_call_tuple_build_no_restore_run[local]:
-  compile_alloc_buffer (32 + sz) sa = (buf,sm) /\
-  emit_void MSTORE [buf.buf_operand;ok] sm = ((),sn) /\
-  emit_op ADD [buf.buf_operand;Lit 32w] sn = (dst,sb) /\
-  emit_void MCOPY [dst;src;Lit (n2w sz)] sb = ((),sc) /\
-  stmt_state_rel H ctx func cenv cx es s /\
-  wb_frame cenv es0 es sf s0 s /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sf /\
-  sf.cs_next_var <= sa.cs_next_var /\ sf.cs_next_id <= sa.cs_next_id /\
-  MAP FDOM es0.scopes = MAP FDOM es.scopes /\ 32 + sz < dimword (:256) /\
-  MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (32 + sz))]
-    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
-  srcid < sa.cs_next_id /\ FLOOKUP s.vs_allocas srcid = SOME (w2n a,len) /\
-  val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV bs) (w2n a) s.vs_memory /\
-  val_wf (BaseTV (BytesT (Dynamic n))) (BytesV bs) /\
-  type_memory_size (BaseTV (BytesT (Dynamic n))) <= len /\
-  type_memory_size (BaseTV (BytesT (Dynamic n))) <= sz /\
-  safe_operand sa ok /\ safe_operand sa src /\
-  eval_operand ok s = SOME (if success then 1w else 0w) /\
-  eval_operand src s = SOME a ==>
-  ?t w. run_inst_seq (emitted_insts sa sc) s = OK t /\
-    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es0 es sf s0 t /\
-    t.vs_fmp = s.vs_fmp /\ eval_operand buf.buf_operand t = SOME w /\
-    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,32 + sz) /\
-    w2n w + (32 + sz) < dimword (:256) /\
-    val_in_memory (TupleTV [BaseTV BoolT; BaseTV (BytesT (Dynamic n))])
-      (ArrayV (TupleV [BoolV success; BytesV bs])) (w2n w) t.vs_memory /\
-    (!p. safe_operand sa p ==> eval_operand p t = eval_operand p s) /\
-    (!name lb lsz. local_region cenv es.scopes t name lb lsz ==>
-      w2n w + (32 + sz) <= lb \/ lb + lsz <= w2n w)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   `stmt_state_rel H ctx func cenv cx es (s with vs_fmp := s.vs_fmp)` by simp[] >>
@@ -217,6 +188,40 @@ Resume raw_call_tuple_build_no_restore_run[separation]:
 QED
 
 Finalise raw_call_tuple_build_no_restore_run
+*)
+Theorem raw_call_tuple_build_no_restore_run[local]:
+  compile_alloc_buffer (32 + sz) sa = (buf,sm) /\
+  emit_void MSTORE [buf.buf_operand;ok] sm = ((),sn) /\
+  emit_op ADD [buf.buf_operand;Lit 32w] sn = (dst,sb) /\
+  emit_void MCOPY [dst;src;Lit (n2w sz)] sb = ((),sc) /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  wb_frame cenv es0 es sf s0 s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sf /\
+  sf.cs_next_var <= sa.cs_next_var /\ sf.cs_next_id <= sa.cs_next_id /\
+  MAP FDOM es0.scopes = MAP FDOM es.scopes /\ 32 + sz < dimword (:256) /\
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (32 + sz))]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
+  srcid < sa.cs_next_id /\ FLOOKUP s.vs_allocas srcid = SOME (w2n a,len) /\
+  val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV bs) (w2n a) s.vs_memory /\
+  val_wf (BaseTV (BytesT (Dynamic n))) (BytesV bs) /\
+  type_memory_size (BaseTV (BytesT (Dynamic n))) <= len /\
+  type_memory_size (BaseTV (BytesT (Dynamic n))) <= sz /\
+  safe_operand sa ok /\ safe_operand sa src /\
+  eval_operand ok s = SOME (if success then 1w else 0w) /\
+  eval_operand src s = SOME a ==>
+  ?t w. run_inst_seq (emitted_insts sa sc) s = OK t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es0 es sf s0 t /\
+    t.vs_fmp = s.vs_fmp /\ eval_operand buf.buf_operand t = SOME w /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,32 + sz) /\
+    w2n w + (32 + sz) < dimword (:256) /\
+    val_in_memory (TupleTV [BaseTV BoolT; BaseTV (BytesT (Dynamic n))])
+      (ArrayV (TupleV [BoolV success; BytesV bs])) (w2n w) t.vs_memory /\
+    (!p. safe_operand sa p ==> eval_operand p t = eval_operand p s) /\
+    (!name lb lsz. local_region cenv es.scopes t name lb lsz ==>
+      w2n w + (32 + sz) <= lb \/ lb + lsz <= w2n w)
+Proof
+  cheat
+QED
 
 Theorem raw_call_nonrevert_finish_code:
   compile_raw_call_finish to_op dp dl gas val call_ty n F ov op sa = (result,sb) ==>
@@ -2212,65 +2217,7 @@ Proof
   gvs[expr_val_at_def, eval_operand_def, lookup_var_def, local_region_def]
 QED
 
-Theorem raw_call_prefix_sim[local]:
-  exprs_case nocalls ctx func cenv cx (a::d::kws) /\
-  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
-  (nocalls ==> int_calls_expr (Call ann (RawCallTarget flags) (a::d::kws) dflt) = []) /\
-  lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
-  lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
-  emit_op MLOAD [data] s2 = (len,s3) /\
-  emit_op ADD [data; Lit 32w] s3 = (ptr_op,s4) /\
-  compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws kws s4 =
-    ((vo,go,ignored),s5) /\
-  (case go of SOME g => (g,s5) | NONE => emit_op GAS [] s5) = (gas,s6) /\
-  fn_has_code sa s6 func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-     stmt_state_rel H ctx func cenv cx es s0 /\
-     storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
-  s0.vs_current_bb = sa.cs_current_bb /\
-  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!av dv kvs. storage_trace_frame (k av dv kvs)) /\
-  (!H exc ee r. expr_exit (INR exc : value + exception) r /\
-     halt_exit H cx ee (INR exc : value + exception) r ==> R H (INR exc) ee r) /\
-  (!gsA av esA tA gsD bs esD tD gsK kvs esK tm tk t xs b gw.
-    bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) =
-      (INL av,esA) /\ esA.gas_obs = [] /\
-    (!H. valid_horizon cx st0 H esA.storage_trace ==>
-       expr_post H ctx func cenv cx a es sa s1 s0 esA av addr tA) /\
-    bind (eval_expr cx d) (read_result cx) (esA with gas_obs := gsD) =
-      (INL (BytesV bs),esD) /\ esD.gas_obs = [] /\
-    (!H. valid_horizon cx st0 H esD.storage_trace ==>
-       expr_post H ctx func cenv cx d esA s1 s2 tA esD (BytesV bs) data tD) /\
-    eval_exprs cx kws (esD with gas_obs := gsK) = (INL kvs,esK) /\
-    esK.gas_obs = [] /\ expr_sim_inv cenv cx env esK /\
-    (?H. valid_horizon cx st0 H esK.storage_trace) /\
-    (!H. valid_horizon cx st0 H esK.storage_trace ==>
-       typed_args_post H ctx func cenv cx esD s4 tm esK kws xs kvs tk /\
-       stmt_state_rel H ctx func cenv cx esK t) /\
-    vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
-    go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ignored = NONE /\
-    expr_val_rel cx (BaseT AddressT) av addr t /\
-    (!op w. MEM op xs /\ eval_operand op tk = SOME w ==>
-       eval_operand op t = SOME w) /\
-    eval_operand len t = SOME (n2w (LENGTH bs)) /\
-    eval_operand ptr_op t = SOME (n2w (b+32)) /\
-    eval_operand gas t = SOME gw /\
-    mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
-    b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
-    wb_frame cenv es esK sa s0 t /\
-    ~t.vs_halted /\ t.vs_current_bb = s6.cs_current_bb /\
-    t.vs_inst_idx = LENGTH s6.cs_current_insts /\
-    (!x. addr = Var x \/ len = Var x \/ ptr_op = Var x \/ gas = Var x \/
-         MEM (Var x) xs ==> not_fresh_at s6 x) /\
-    safe_operand s6 addr /\ safe_operand s6 len /\ safe_operand s6 ptr_op /\
-    safe_operand s6 gas /\ safe_operand s6
-      (case ext_call_kwarg EKValue flags.rcf_kws xs of NONE => Lit 0w | SOME v => v) ==>
-    gas_outcome F (cx_tops cx) (ctx,func) cx st0 (k av (BytesV bs) kvs) (esK,t) Q R) ==>
-  gas_outcome F (cx_tops cx) (ctx,func) cx st0
-    (bind (bind (eval_expr cx a) (read_result cx)) (\av.
-     bind (bind (eval_expr cx d) (read_result cx)) (\dv.
-     bind (eval_exprs cx kws) (k av dv)))) (es,s0) Q R
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   `ci_mono sa s1 /\ ci_mono s1 s2` by
@@ -2647,6 +2594,69 @@ Resume raw_call_prefix_sim[continuation]:
 QED
 
 Finalise raw_call_prefix_sim
+*)
+Theorem raw_call_prefix_sim[local]:
+  exprs_case nocalls ctx func cenv cx (a::d::kws) /\
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
+  (nocalls ==> int_calls_expr (Call ann (RawCallTarget flags) (a::d::kws) dflt) = []) /\
+  lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
+  lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
+  emit_op MLOAD [data] s2 = (len,s3) /\
+  emit_op ADD [data; Lit 32w] s3 = (ptr_op,s4) /\
+  compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws kws s4 =
+    ((vo,go,ignored),s5) /\
+  (case go of SOME g => (g,s5) | NONE => emit_op GAS [] s5) = (gas,s6) /\
+  fn_has_code sa s6 func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!av dv kvs. storage_trace_frame (k av dv kvs)) /\
+  (!H exc ee r. expr_exit (INR exc : value + exception) r /\
+     halt_exit H cx ee (INR exc : value + exception) r ==> R H (INR exc) ee r) /\
+  (!gsA av esA tA gsD bs esD tD gsK kvs esK tm tk t xs b gw.
+    bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) =
+      (INL av,esA) /\ esA.gas_obs = [] /\
+    (!H. valid_horizon cx st0 H esA.storage_trace ==>
+       expr_post H ctx func cenv cx a es sa s1 s0 esA av addr tA) /\
+    bind (eval_expr cx d) (read_result cx) (esA with gas_obs := gsD) =
+      (INL (BytesV bs),esD) /\ esD.gas_obs = [] /\
+    (!H. valid_horizon cx st0 H esD.storage_trace ==>
+       expr_post H ctx func cenv cx d esA s1 s2 tA esD (BytesV bs) data tD) /\
+    eval_exprs cx kws (esD with gas_obs := gsK) = (INL kvs,esK) /\
+    esK.gas_obs = [] /\ expr_sim_inv cenv cx env esK /\
+    (?H. valid_horizon cx st0 H esK.storage_trace) /\
+    (!H. valid_horizon cx st0 H esK.storage_trace ==>
+       typed_args_post H ctx func cenv cx esD s4 tm esK kws xs kvs tk /\
+       stmt_state_rel H ctx func cenv cx esK t) /\
+    vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
+    go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ignored = NONE /\
+    expr_val_rel cx (BaseT AddressT) av addr t /\
+    (!op w. MEM op xs /\ eval_operand op tk = SOME w ==>
+       eval_operand op t = SOME w) /\
+    eval_operand len t = SOME (n2w (LENGTH bs)) /\
+    eval_operand ptr_op t = SOME (n2w (b+32)) /\
+    eval_operand gas t = SOME gw /\
+    mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
+    b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
+    wb_frame cenv es esK sa s0 t /\
+    ~t.vs_halted /\ t.vs_current_bb = s6.cs_current_bb /\
+    t.vs_inst_idx = LENGTH s6.cs_current_insts /\
+    (!x. addr = Var x \/ len = Var x \/ ptr_op = Var x \/ gas = Var x \/
+         MEM (Var x) xs ==> not_fresh_at s6 x) /\
+    safe_operand s6 addr /\ safe_operand s6 len /\ safe_operand s6 ptr_op /\
+    safe_operand s6 gas /\ safe_operand s6
+      (case ext_call_kwarg EKValue flags.rcf_kws xs of NONE => Lit 0w | SOME v => v) ==>
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0 (k av (BytesV bs) kvs) (esK,t) Q R) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
+    (bind (bind (eval_expr cx a) (read_result cx)) (\av.
+     bind (bind (eval_expr cx d) (read_result cx)) (\dv.
+     bind (eval_exprs cx kws) (k av dv)))) (es,s0) Q R
+Proof
+  cheat
+QED
 
 (* Oracle tail, independent of the expression producing calldata. *)
 Theorem raw_call_memory_oracle_exec[local]:
@@ -4544,17 +4554,7 @@ Proof
   first_x_assum drule_all >> simp[raw_call_value_def]
 QED
 
-Theorem raw_call_keywords_decode[local]:
-  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
-  expr_sim_inv cenv cx env es2 /\
-  eval_exprs cx kws es2 = (INL kvs,es') /\
-  typed_args_post H ctx func cenv cx es0 sa s0 es' kws xs kvs s ==>
-  ?amount. raw_call_value flags.rcf_kws kvs = SOME amount /\
-    eval_operand (case ext_call_kwarg EKValue flags.rcf_kws xs of
-      NONE => Lit 0w | SOME x => x) s = SOME (n2w amount) /\
-    amount < dimword (:256) /\
-    (flags.rcf_is_static ==> amount = 0) /\
-    LENGTH kvs = LENGTH flags.rcf_kws /\ expr_sim_inv cenv cx env es'
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> drule raw_call_pre_flags >> simp[] >> strip_tac >>
   drule raw_call_kwargs_types >> strip_tac >>
@@ -4572,6 +4572,21 @@ Proof
   qexists_tac `amount` >> fs[] >> strip_tac >>
   `~MEM EKValue flags.rcf_kws` by fs[raw_call_kws_ok_def] >>
   gvs[raw_call_value_def, ext_call_kwarg_not_mem]
+QED
+*)
+Theorem raw_call_keywords_decode[local]:
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
+  expr_sim_inv cenv cx env es2 /\
+  eval_exprs cx kws es2 = (INL kvs,es') /\
+  typed_args_post H ctx func cenv cx es0 sa s0 es' kws xs kvs s ==>
+  ?amount. raw_call_value flags.rcf_kws kvs = SOME amount /\
+    eval_operand (case ext_call_kwarg EKValue flags.rcf_kws xs of
+      NONE => Lit 0w | SOME x => x) s = SOME (n2w amount) /\
+    amount < dimword (:256) /\
+    (flags.rcf_is_static ==> amount = 0) /\
+    LENGTH kvs = LENGTH flags.rcf_kws /\ expr_sim_inv cenv cx env es'
+Proof
+  cheat
 QED
 
 Theorem raw_call_prefix_source_ready:
@@ -4723,55 +4738,7 @@ Proof
   qexistsl_tac [`res`,`ee`,`r`] >> simp[]
 QED
 
-Theorem raw_call_tail_outcome[local]:
-  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
-  bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) = (INL av,esA) /\
-  bind (eval_expr cx d) (read_result cx) (esA with gas_obs := gsD) =
-    (INL (BytesV bs),esD) /\
-  eval_exprs cx kws (esD with gas_obs := gsK) = (INL kvs,esK) /\
-  esK.gas_obs = [] /\ expr_sim_inv cenv cx env esK /\
-  (?H. valid_horizon cx st0 H esK.storage_trace) /\
-  (!H. valid_horizon cx st0 H esK.storage_trace ==>
-     typed_args_post H ctx func cenv cx esD s4 tm esK kws xs kvs tk /\
-     stmt_state_rel H ctx func cenv cx esK t) /\
-  expr_val_rel cx (BaseT AddressT) av addr t /\
-  (!x w. MEM x xs /\ eval_operand x tk = SOME w ==> eval_operand x t = SOME w) /\
-  eval_operand len t = SOME (n2w (LENGTH bs)) /\
-  eval_operand dp t = SOME (n2w (b+32)) /\ eval_operand gas t = SOME gw /\
-  (!g. OPTION_BIND (ext_call_kwarg EKGas flags.rcf_kws kvs) dest_NumV = SOME g ==>
-       g = w2n gw) /\
-  mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
-  b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
-  wb_frame cenv es esK sa s0 t /\ local_ptrs_reserved cenv sa /\
-  ci_mono sa s6 /\ fn_has_code s6 sb func /\ fn_inst_ids_distinct func /\
-  ~t.vs_halted /\ t.vs_current_bb = s6.cs_current_bb /\
-  t.vs_inst_idx = LENGTH s6.cs_current_insts /\
-  safe_operand s6 addr /\ safe_operand s6 len /\ safe_operand s6 dp /\
-  safe_operand s6 gas /\ safe_operand s6
-    (case ext_call_kwarg EKValue flags.rcf_kws xs of NONE => Lit 0w | SOME v => v) /\
-  compile_raw_call_outbuf flags.rcf_max_outsize s6 = ((ov,op),s7) /\
-  compile_raw_call_finish addr dp len gas
-    (case ext_call_kwarg EKValue flags.rcf_kws xs of NONE => Lit 0w | SOME v => v)
-    (if flags.rcf_is_static then StaticCall else RegularCall)
-    flags.rcf_max_outsize flags.rcf_revert_on_failure ov op s7 = (result,sb) ==>
-  gas_outcome F (cx_tops cx) (ctx,func) cx st0
-    (do
-      type_check (LENGTH (av::BytesV bs::kvs) = 2 + LENGTH flags.rcf_kws) "raw_call args";
-      target <- lift_option_type (dest_AddressV av) "raw_call target";
-      data <- lift_option_type (dest_BytesV (BytesV bs)) "raw_call data";
-      amount <- lift_option_type (raw_call_value flags.rcf_kws kvs) "raw_call value";
-      eval_raw_call cx flags target data amount
-        (ext_call_kwarg EKGas flags.rcf_kws kvs)
-    od) (esK,t)
-    (\H res ee u. (\H res ee u. ?tv. res = INL tv /\
-      vv_post H ctx func cenv cx
-        (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE)
-        es sa sb s0 ee tv
-        (if flags.rcf_max_outsize = 0 then StackValue ann result
-         else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)) u)
-        H res ee u /\
-      u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   rename1 `valid_horizon cx st0 H0 esK.storage_trace` >>
@@ -5077,6 +5044,59 @@ Resume raw_call_tail_outcome[lift]:
 QED
 
 Finalise raw_call_tail_outcome
+*)
+Theorem raw_call_tail_outcome[local]:
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
+  bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) = (INL av,esA) /\
+  bind (eval_expr cx d) (read_result cx) (esA with gas_obs := gsD) =
+    (INL (BytesV bs),esD) /\
+  eval_exprs cx kws (esD with gas_obs := gsK) = (INL kvs,esK) /\
+  esK.gas_obs = [] /\ expr_sim_inv cenv cx env esK /\
+  (?H. valid_horizon cx st0 H esK.storage_trace) /\
+  (!H. valid_horizon cx st0 H esK.storage_trace ==>
+     typed_args_post H ctx func cenv cx esD s4 tm esK kws xs kvs tk /\
+     stmt_state_rel H ctx func cenv cx esK t) /\
+  expr_val_rel cx (BaseT AddressT) av addr t /\
+  (!x w. MEM x xs /\ eval_operand x tk = SOME w ==> eval_operand x t = SOME w) /\
+  eval_operand len t = SOME (n2w (LENGTH bs)) /\
+  eval_operand dp t = SOME (n2w (b+32)) /\ eval_operand gas t = SOME gw /\
+  (!g. OPTION_BIND (ext_call_kwarg EKGas flags.rcf_kws kvs) dest_NumV = SOME g ==>
+       g = w2n gw) /\
+  mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
+  b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
+  wb_frame cenv es esK sa s0 t /\ local_ptrs_reserved cenv sa /\
+  ci_mono sa s6 /\ fn_has_code s6 sb func /\ fn_inst_ids_distinct func /\
+  ~t.vs_halted /\ t.vs_current_bb = s6.cs_current_bb /\
+  t.vs_inst_idx = LENGTH s6.cs_current_insts /\
+  safe_operand s6 addr /\ safe_operand s6 len /\ safe_operand s6 dp /\
+  safe_operand s6 gas /\ safe_operand s6
+    (case ext_call_kwarg EKValue flags.rcf_kws xs of NONE => Lit 0w | SOME v => v) /\
+  compile_raw_call_outbuf flags.rcf_max_outsize s6 = ((ov,op),s7) /\
+  compile_raw_call_finish addr dp len gas
+    (case ext_call_kwarg EKValue flags.rcf_kws xs of NONE => Lit 0w | SOME v => v)
+    (if flags.rcf_is_static then StaticCall else RegularCall)
+    flags.rcf_max_outsize flags.rcf_revert_on_failure ov op s7 = (result,sb) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
+    (do
+      type_check (LENGTH (av::BytesV bs::kvs) = 2 + LENGTH flags.rcf_kws) "raw_call args";
+      target <- lift_option_type (dest_AddressV av) "raw_call target";
+      data <- lift_option_type (dest_BytesV (BytesV bs)) "raw_call data";
+      amount <- lift_option_type (raw_call_value flags.rcf_kws kvs) "raw_call value";
+      eval_raw_call cx flags target data amount
+        (ext_call_kwarg EKGas flags.rcf_kws kvs)
+    od) (esK,t)
+    (\H res ee u. (\H res ee u. ?tv. res = INL tv /\
+      vv_post H ctx func cenv cx
+        (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE)
+        es sa sb s0 ee tv
+        (if flags.rcf_max_outsize = 0 then StackValue ann result
+         else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)) u)
+        H res ee u /\
+      u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
+Proof
+  cheat
+QED
 
 Theorem compile_expr_raw_call:
   compile_expr cenv ty (Call ann (RawCallTarget flags) (a::d::kws) dflt) sa =

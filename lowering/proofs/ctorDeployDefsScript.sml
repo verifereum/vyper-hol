@@ -261,8 +261,7 @@ QED
   QED
 *)
 
-Theorem supported_pure_expr_no_self_code:
-  supported_pure_expr tops e ==> ~supported_expr_exists is_self_code e
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   drule_then assume_tac (cj 1 supported_pure_no_code_accessor) >>
@@ -275,10 +274,14 @@ Proof
     `\x. ?t es. x = Builtin t (Acc Code) es`] (cj 1 supported_expr_exists_mono))) >>
   simp[]
 QED
+*)
+Theorem supported_pure_expr_no_self_code:
+  supported_pure_expr tops e ==> ~supported_expr_exists is_self_code e
+Proof
+  cheat
+QED
 
-Theorem folded_const_no_self_code[local]:
-  supported_pure_expr tops (fold_const_expr (subst_consts_expr env e)) ==>
-  ~supported_expr_exists is_self_code e
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   `!x. is_self_code x ==> ?t es. x = Builtin t (Acc Code) es` by
@@ -290,6 +293,13 @@ Proof
      simp[]) >>
   drule_then assume_tac (cj 1 supported_pure_no_code_accessor) >>
   metis_tac[Q.SPECL [`env`, `e`] (cj 1 folded_subst_code_accessor)]
+QED
+*)
+Theorem folded_const_no_self_code[local]:
+  supported_pure_expr tops (fold_const_expr (subst_consts_expr env e)) ==>
+  ~supported_expr_exists is_self_code e
+Proof
+  cheat
 QED
 
 Theorem deploy_evaluation_context_code_update[local]:

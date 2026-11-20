@@ -9,13 +9,7 @@ Ancestors
   ctorDeployLoweringCodeShape loweringShapeRules list ctorUnitShape
   allocaFrontierBound venomInst venomWf venomExecProps fragExec rich_list
 
-Theorem deploy_internal_package_shape:
-  !tops use_trans nkey_map target is_ctor immutables_len src.
-    runtime_bodies_shape_ok tops /\
-    MEM src (FST (SND (classify_functions tops))) ==>
-    internal_fn_shape_ok
-      (set_internal_package_target target
-        (package_internal_fn tops use_trans nkey_map is_ctor immutables_len src))
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt gen_tac >> PairCases_on `src` >> strip_tac >>
   `~supported_stmts_expr_exists expr_shape_root src7` by
@@ -27,6 +21,17 @@ Proof
   simp[package_internal_fn_def, set_internal_package_target_def,
     update_cenv_nonreentrant_def, internal_fn_shape_ok_def, cenv_static_ok_def] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+*)
+Theorem deploy_internal_package_shape:
+  !tops use_trans nkey_map target is_ctor immutables_len src.
+    runtime_bodies_shape_ok tops /\
+    MEM src (FST (SND (classify_functions tops))) ==>
+    internal_fn_shape_ok
+      (set_internal_package_target target
+        (package_internal_fn tops use_trans nkey_map is_ctor immutables_len src))
+Proof
+  cheat
 QED
 
 Theorem deploy_build_env_no_return_pc:
@@ -78,15 +83,7 @@ Proof
     update_cenv_nonreentrant_def]
 QED
 
-Theorem deploy_internal_package_certificates:
-  !tops target ut key is_ctor cap srcs ifns.
-    supported_program tops /\
-    PERM srcs (FST (SND (classify_functions tops))) /\
-    ifns = MAP (set_internal_package_target target o
-      package_internal_fn tops ut key is_ctor cap) srcs ==>
-    EVERY internal_fn_shape_ok ifns /\
-    EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ifns) /\
-    ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns))
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt gen_tac >> strip_tac >>
   `runtime_bodies_shape_ok tops` by
@@ -106,6 +103,19 @@ Proof
     internal_fn_descriptors_MAP_package_internal_fn] >>
   fs[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
   irule deploy_internal_package_shape >> simp[]
+QED
+*)
+Theorem deploy_internal_package_certificates:
+  !tops target ut key is_ctor cap srcs ifns.
+    supported_program tops /\
+    PERM srcs (FST (SND (classify_functions tops))) /\
+    ifns = MAP (set_internal_package_target target o
+      package_internal_fn tops ut key is_ctor cap) srcs ==>
+    EVERY internal_fn_shape_ok ifns /\
+    EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ifns) /\
+    ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns))
+Proof
+  cheat
 QED
 
 Theorem deploy_internal_body_certificates:

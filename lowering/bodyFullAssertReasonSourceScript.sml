@@ -86,16 +86,7 @@ Proof
   metis_tac[call_evaluation_safe_append_right]
 QED
 
-Theorem assert_reason_condition_source_pre:
-  body_inv tops ctx cenv cx /\
-  supported_stmt tops bindings (Assert e (AssertReason r)) /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-      (Assert e (AssertReason r)) ==> occurs_abi_decode_target target tops) /\
-  expr_sim_inv cenv cx env es /\
-  type_stmt env ret_ty (Assert e (AssertReason r)) = SOME env' /\
-  stmt_exprs_ok cenv (Assert e (AssertReason r)) /\
-  call_evaluation_safe cx (int_calls_stmt (Assert e (AssertReason r))) ==>
-  expr_sim_pre cenv cx env e es
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   `supported_pure_expr tops e /\ supported_expr tops e /\ int_calls_expr e = []` by
@@ -110,3 +101,19 @@ Proof
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   drule supported_expr_body_calls >> strip_tac >> gvs[] >> metis_tac[]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (assert conditions may call internal functions); callers split
+  Theorem assert_reason_condition_source_pre:
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (Assert e (AssertReason r)) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+        (Assert e (AssertReason r)) ==> occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assert e (AssertReason r)) = SOME env' /\
+    stmt_exprs_ok cenv (Assert e (AssertReason r)) /\
+    call_evaluation_safe cx (int_calls_stmt (Assert e (AssertReason r))) ==>
+    expr_sim_pre cenv cx env e es
+  Proof
+    cheat
+  QED
+*)

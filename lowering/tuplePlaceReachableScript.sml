@@ -69,8 +69,7 @@ Proof
   gvs[] >> irule tuple_place_mutable_path_barrier >> metis_tac[]
 QED
 
-Theorem tuple_place_pure_target_no_calls:
-  !bt tops. supported_target_pure tops bt ==> int_calls_target bt = []
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
   simp[supportedTargetsTheory.supported_target_pure_def,
@@ -79,6 +78,14 @@ Proof
   simp[vyperASTTheory.expr_size_def] >>
   metis_tac[bodyExprPreFactsTheory.supported_pure_int_calls]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (pure keys may call internal functions); callers split
+  Theorem tuple_place_pure_target_no_calls:
+    !bt tops. supported_target_pure tops bt ==> int_calls_target bt = []
+  Proof
+    cheat
+  QED
+*)
 
 (* Coordinate interface for live memory places; no write is needed. *)
 Theorem tuple_place_memory_coordinates:

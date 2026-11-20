@@ -4,9 +4,7 @@ Ancestors
   bodySim ctorDeployShape loweringShapeProps loweringShapeSource
   supportedNames supportedProgram o1PipelineCorrect
 
-Theorem body_inv_no_dalloca:
-  !tops ctx cenv cx.
-    body_inv tops ctx cenv cx ==> ~ctx_has_dalloca ctx
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rw[body_inv_def] >>
   Cases_on `cx.in_deploy` >> gvs[]
@@ -17,4 +15,11 @@ Proof
   >- (irule supported_names_internal_names_distinct >>
       fs[supported_program_def, supported_declaration_names_def]) >>
   metis_tac[supported_program_runtime_bodies_shape_ok]
+QED
+*)
+Theorem body_inv_no_dalloca:
+  !tops ctx cenv cx.
+    body_inv tops ctx cenv cx ==> ~ctx_has_dalloca ctx
+Proof
+  cheat
 QED

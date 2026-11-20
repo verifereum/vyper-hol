@@ -21,31 +21,7 @@ Proof
   rpt CASE_TAC >> gvs[]
 QED
 
-Theorem none_fallback_entry_joint:
-  !tops rpolicy unit am tx vs.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\ source_typing_ok tops am tx /\
-    source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
-    ~EXISTS is_default_decl tops /\
-    (LENGTH vs.vs_call_ctx.cc_calldata < 4 \/
-     FIND (\(name,tys). abi_method_id (type_env tops) name tys =
-       cd_selector vs.vs_call_ctx.cc_calldata) (abi_external_signatures tops) = NONE) ==>
-    ?func s G' tn'.
-      unit.cu_context.ctx_entry = SOME "__entry" /\
-      venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
-      fn_entry_label func = SOME "__entry" /\ s.vs_returndata = [] /\
-      (!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,func,[])
-        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
-                   vs_inst_idx := 0|>,FEMPTY,entry_taint) []
-        (Abort Revert_abort s,G',tn')) /\
-      (?bb. lookup_block "__entry" func.fn_blocks = SOME bb /\
-        phi_prefix_length bb.bb_instructions = 0) /\
-      entry_prov func
-        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
-                   vs_inst_idx := 0|>) FEMPTY = FEMPTY /\
-      entry_taint_vars func
-        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
-                   vs_inst_idx := 0|>) entry_taint = entry_taint
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt gen_tac >> strip_tac >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
@@ -99,4 +75,33 @@ Proof
        entry_prov_def, entry_taint_vars_def, phis_prov_def, phis_taint_def,
        Abbr `ss`]) >>
   qexistsl_tac [`func`, `s`, `G'`, `tn'`] >> simp[] >> metis_tac[]
+QED
+*)
+Theorem none_fallback_entry_joint:
+  !tops rpolicy unit am tx vs.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\ source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
+    ~EXISTS is_default_decl tops /\
+    (LENGTH vs.vs_call_ctx.cc_calldata < 4 \/
+     FIND (\(name,tys). abi_method_id (type_env tops) name tys =
+       cd_selector vs.vs_call_ctx.cc_calldata) (abi_external_signatures tops) = NONE) ==>
+    ?func s G' tn'.
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      fn_entry_label func = SOME "__entry" /\ s.vs_returndata = [] /\
+      (!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,func,[])
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                   vs_inst_idx := 0|>,FEMPTY,entry_taint) []
+        (Abort Revert_abort s,G',tn')) /\
+      (?bb. lookup_block "__entry" func.fn_blocks = SOME bb /\
+        phi_prefix_length bb.bb_instructions = 0) /\
+      entry_prov func
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                   vs_inst_idx := 0|>) FEMPTY = FEMPTY /\
+      entry_taint_vars func
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                   vs_inst_idx := 0|>) entry_taint = entry_taint
+Proof
+  cheat
 QED

@@ -17,16 +17,7 @@ Libs
 (* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
 val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
-Theorem body_append_expr_pre:
-  body_stmt_safe tops (Append (TopLevelNameTarget nid) e) /\
-  body_inv tops ctx cenv cx /\ supported_expr tops e /\
-  expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-  stmt_exprs_ok cenv (Append (TopLevelNameTarget nid) e) /\
-  call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget nid) e)) /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-              (Append (TopLevelNameTarget nid) e) ==>
-            occurs_abi_decode_target target tops) ==>
-  expr_body_pre cenv cx env e es
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
     SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
@@ -53,6 +44,20 @@ Proof
   rpt conj_tac
   >~ [`call_evaluation_safe`] >- (qexists_tac `[]` >> simp[]) >>
   metis_tac[]
+QED
+*)
+Theorem body_append_expr_pre:
+  body_stmt_safe tops (Append (TopLevelNameTarget nid) e) /\
+  body_inv tops ctx cenv cx /\ supported_expr tops e /\
+  expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+  stmt_exprs_ok cenv (Append (TopLevelNameTarget nid) e) /\
+  call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget nid) e)) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+              (Append (TopLevelNameTarget nid) e) ==>
+            occurs_abi_decode_target target tops) ==>
+  expr_body_pre cenv cx env e es
+Proof
+  cheat
 QED
 
 Theorem body_append_word_encoding:
@@ -90,21 +95,7 @@ Proof
   irule gas_bad_storage_at_initial >> simp[]
 QED
 
-Theorem body_append_storage_fragment:
-  body_stmt_safe tops (Append (TopLevelNameTarget (src,id)) e) /\
-  (!s p t. eval_target_place cx (TopLevelNameTarget (src,id)) s = (INL p,t) ==>
-             body_expr_ok cx e) /\
-  body_inv tops ctx cenv cx /\ supported_storage_dynamic_array tops (src,id) /\
-  supported_expr tops e /\ expr_sim_inv cenv cx env es /\
-  type_stmt env ret_ty (Append (TopLevelNameTarget (src,id)) e) = SOME env' /\
-  stmt_exprs_ok cenv (Append (TopLevelNameTarget (src,id)) e) /\
-  call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget (src,id)) e)) /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-              (Append (TopLevelNameTarget (src,id)) e) ==>
-            occurs_abi_decode_target target tops) ==>
-  stmt_frag ctx func cx lctx RetQ cenv
-    (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget (src,id)) e))
-    (eval_stmt cx (Append (TopLevelNameTarget (src,id)) e)) es
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> drule_all body_append_target_bounds >> strip_tac >>
   drule append_typing_target >> strip_tac >>
@@ -149,6 +140,25 @@ Proof
      simp[env_consistent_def, env_context_consistent_def]) >>
   gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def]
 QED
+*)
+Theorem body_append_storage_fragment:
+  body_stmt_safe tops (Append (TopLevelNameTarget (src,id)) e) /\
+  (!s p t. eval_target_place cx (TopLevelNameTarget (src,id)) s = (INL p,t) ==>
+             body_expr_ok cx e) /\
+  body_inv tops ctx cenv cx /\ supported_storage_dynamic_array tops (src,id) /\
+  supported_expr tops e /\ expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (Append (TopLevelNameTarget (src,id)) e) = SOME env' /\
+  stmt_exprs_ok cenv (Append (TopLevelNameTarget (src,id)) e) /\
+  call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget (src,id)) e)) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+              (Append (TopLevelNameTarget (src,id)) e) ==>
+            occurs_abi_decode_target target tops) ==>
+  stmt_frag ctx func cx lctx RetQ cenv
+    (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget (src,id)) e))
+    (eval_stmt cx (Append (TopLevelNameTarget (src,id)) e)) es
+Proof
+  cheat
+QED
 
 Theorem append_aggregate_lowered_type:
   !cenv e env. ~is_bytestring_type (expr_type e) /\ int_calls_expr e = [] /\
@@ -162,91 +172,93 @@ Proof
       is_bytestring_type_def, concat_buffer_type_def]
 QED
 
-Theorem body_append_storage_aggregate_fragment:
-  body_stmt_safe tops (Append (TopLevelNameTarget (src,id)) e) /\
-  (!s p t. eval_target_place cx (TopLevelNameTarget (src,id)) s = (INL p,t) ==>
-             body_expr_ok cx e) /\
-  body_inv tops ctx cenv cx /\
-  supported_variable_decl tops (src,id) = SOME (vis,mut,ArrayT elem (Dynamic cap),SOME ast_slot) /\
-  (mut = Storage \/ mut = Transient) /\ ~supported_full_word_type elem /\
-  type_memory_bytes cenv elem < 2 ** 64 /\
-  supported_stmt tops bindings (Append (TopLevelNameTarget (src,id)) e) /\
-  supported_pure_expr tops e /\ expr_sim_inv cenv cx env es /\
-  type_stmt env ret_ty (Append (TopLevelNameTarget (src,id)) e) = SOME env' /\
-  stmt_exprs_ok cenv (Append (TopLevelNameTarget (src,id)) e) /\
-  call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget (src,id)) e)) /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-              (Append (TopLevelNameTarget (src,id)) e) ==>
-            occurs_abi_decode_target target tops) ==>
-  stmt_frag ctx func cx lctx RetQ cenv
-    (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget (src,id)) e))
-    (eval_stmt cx (Append (TopLevelNameTarget (src,id)) e)) es
-Proof
-  strip_tac >> (
-  drule_all bodyAppendStorageFactsTheory.append_narrow_annotation >> strip_tac >>
-  `supported_storage_type tops elem /\ ~is_bytestring_type elem /\
-   ~is_word_type elem` by
-    metis_tac[bodyAppendStorageFactsTheory.append_storage_element_domain] >>
-  drule_at (Pat `supported_variable_decl _ _ = _`)
-    bodyAppendStorageLayoutFactsTheory.append_aggregate_target_layout >>
-  simp[] >> disch_then drule_all >> strip_tac >>
-  `supported_expr tops e` by simp[supported_expr_def] >>
-  `well_typed_expr env e` by (drule append_typing_target >> metis_tac[]) >>
-  `!observations. expr_body_pre cenv cx env e
-     (es with storage_trace := observations)` by
-    metis_tac[body_append_expr_pre, expr_body_pre_storage_trace] >>
-  `body_expr_ok cx e` by metis_tac[] >>
-  `!observations. expr_sim ctx func cenv cx elem e
-     (es with storage_trace := observations)` by metis_tac[body_expr_ok_def] >>
-  `int_calls_expr e = []` by metis_tac[supported_pure_int_calls] >>
-  `lowered_value_type cenv e = elem` by
-    metis_tac[append_aggregate_lowered_type] >>
-  `post_value_type cenv e = elem` by metis_tac[post_value_type_lowered] >>
-  `get_module_code cx src = SOME tops` by
-    (drule supported_variable_decl_mem >> strip_tac >> gvs[body_inv_def]) >>
-  `well_formed_type_value tv` by metis_tac[evaluate_type_well_formed_type_value] >>
-  `cap < dimword (:256)` by
-    (`cap <= cap * type_slot_size tv` by
-       (Cases_on `type_slot_size tv` >> fs[] >> simp[arithmeticTheory.MULT_CLAUSES]) >>
-     qpat_x_assum `type_slot_size (ArrayTV _ _) < _` mp_tac >>
-     pure_rewrite_tac[type_slot_size_def, bound_length_def] >> decide_tac) >>
-  drule_all body_append_root_metadata >> strip_tac >>
-  irule stmt_frag_storage_rel_discharge >>
-  conj_tac >- simp[evaluate_storage_trace_frame] >> strip_tac >>
-  drule_all append_storage_compiler_location >> strip_tac >>
-  `32 * type_slot_size tv < dimword (:256)` by
-    (fs[wordsTheory.dimword_def] >> decide_tac) >>
-  `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
-  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
-   (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
-     ALL_DISTINCT (MAP FST fields) /\
-     EVERY (\(fname,fty,sz). !tv.
-       evaluate_type (get_tenv cx) fty = SOME tv ==> sz = type_memory_size tv) fields)` by
-    (fs[expr_sim_inv_def] >> first_assum ACCEPT_TAC) >>
-  `!observations gs v es1.
-    bind (eval_expr cx e) (read_result cx)
-      (es with <|gas_obs := gs; storage_trace := observations|>) = (INL v,es1) ==>
-    value_has_type tv v /\ val_wf tv v /\
-    val_footprint tv v <= type_memory_bytes cenv elem` by
-    (rpt strip_tac >>
-     `expr_body_pre cenv cx env e
-        (es with <|gas_obs := gs; storage_trace := observations|>)` by simp[] >>
-     drule_all (REWRITE_RULE [ETA_AX] exprSimSourceTheory.expr_body_pre_eval) >>
-     strip_tac >>
-     `env.type_defs = get_tenv cx` by
-       (qpat_assum `expr_sim_inv cenv cx env es`
-          (mp_tac o CONJUNCT1 o REWRITE_RULE [expr_sim_inv_def]) >>
-        simp[env_consistent_def, env_context_consistent_def]) >>
-     `value_has_type tv v` by
-       gvs[expr_result_typed_def, expr_runtime_typed_def,
-           value_result_typed_def, value_runtime_typed_def] >>
-     `val_wf tv v` by metis_tac[cj 1 value_has_type_val_wf] >>
-     metis_tac[val_footprint_le, valueEncodingPropsTheory.type_memory_size_slots]) >>
-  irule compile_append_storage_aggregate_stmt_frag >> simp[] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qexists_tac `rslot` >> simp[] >>
-  conj_tac >- metis_tac[] >>
-  rpt gen_tac >> strip_tac >>
-  irule (INST_TYPE [alpha |-> ``:256``] append_storage_copy_success_post) >>
-  rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[])
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (it pinned an exclusion); no theorem uses it
+  Theorem body_append_storage_aggregate_fragment:
+    body_stmt_safe tops (Append (TopLevelNameTarget (src,id)) e) /\
+    (!s p t. eval_target_place cx (TopLevelNameTarget (src,id)) s = (INL p,t) ==>
+               body_expr_ok cx e) /\
+    body_inv tops ctx cenv cx /\
+    supported_variable_decl tops (src,id) = SOME (vis,mut,ArrayT elem (Dynamic cap),SOME ast_slot) /\
+    (mut = Storage \/ mut = Transient) /\ ~supported_full_word_type elem /\
+    type_memory_bytes cenv elem < 2 ** 64 /\
+    supported_stmt tops bindings (Append (TopLevelNameTarget (src,id)) e) /\
+    supported_pure_expr tops e /\ expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Append (TopLevelNameTarget (src,id)) e) = SOME env' /\
+    stmt_exprs_ok cenv (Append (TopLevelNameTarget (src,id)) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget (src,id)) e)) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+                (Append (TopLevelNameTarget (src,id)) e) ==>
+              occurs_abi_decode_target target tops) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget (src,id)) e))
+      (eval_stmt cx (Append (TopLevelNameTarget (src,id)) e)) es
+  Proof
+    strip_tac >> (
+    drule_all bodyAppendStorageFactsTheory.append_narrow_annotation >> strip_tac >>
+    `supported_storage_type tops elem /\ ~is_bytestring_type elem /\
+     ~is_word_type elem` by
+      metis_tac[bodyAppendStorageFactsTheory.append_storage_element_domain] >>
+    drule_at (Pat `supported_variable_decl _ _ = _`)
+      bodyAppendStorageLayoutFactsTheory.append_aggregate_target_layout >>
+    simp[] >> disch_then drule_all >> strip_tac >>
+    `supported_expr tops e` by simp[supported_expr_def] >>
+    `well_typed_expr env e` by (drule append_typing_target >> metis_tac[]) >>
+    `!observations. expr_body_pre cenv cx env e
+       (es with storage_trace := observations)` by
+      metis_tac[body_append_expr_pre, expr_body_pre_storage_trace] >>
+    `body_expr_ok cx e` by metis_tac[] >>
+    `!observations. expr_sim ctx func cenv cx elem e
+       (es with storage_trace := observations)` by metis_tac[body_expr_ok_def] >>
+    `int_calls_expr e = []` by metis_tac[supported_pure_int_calls] >>
+    `lowered_value_type cenv e = elem` by
+      metis_tac[append_aggregate_lowered_type] >>
+    `post_value_type cenv e = elem` by metis_tac[post_value_type_lowered] >>
+    `get_module_code cx src = SOME tops` by
+      (drule supported_variable_decl_mem >> strip_tac >> gvs[body_inv_def]) >>
+    `well_formed_type_value tv` by metis_tac[evaluate_type_well_formed_type_value] >>
+    `cap < dimword (:256)` by
+      (`cap <= cap * type_slot_size tv` by
+         (Cases_on `type_slot_size tv` >> fs[] >> simp[arithmeticTheory.MULT_CLAUSES]) >>
+       qpat_x_assum `type_slot_size (ArrayTV _ _) < _` mp_tac >>
+       pure_rewrite_tac[type_slot_size_def, bound_length_def] >> decide_tac) >>
+    drule_all body_append_root_metadata >> strip_tac >>
+    irule stmt_frag_storage_rel_discharge >>
+    conj_tac >- simp[evaluate_storage_trace_frame] >> strip_tac >>
+    drule_all append_storage_compiler_location >> strip_tac >>
+    `32 * type_slot_size tv < dimword (:256)` by
+      (fs[wordsTheory.dimword_def] >> decide_tac) >>
+    `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
+    `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+     (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+       ALL_DISTINCT (MAP FST fields) /\
+       EVERY (\(fname,fty,sz). !tv.
+         evaluate_type (get_tenv cx) fty = SOME tv ==> sz = type_memory_size tv) fields)` by
+      (fs[expr_sim_inv_def] >> first_assum ACCEPT_TAC) >>
+    `!observations gs v es1.
+      bind (eval_expr cx e) (read_result cx)
+        (es with <|gas_obs := gs; storage_trace := observations|>) = (INL v,es1) ==>
+      value_has_type tv v /\ val_wf tv v /\
+      val_footprint tv v <= type_memory_bytes cenv elem` by
+      (rpt strip_tac >>
+       `expr_body_pre cenv cx env e
+          (es with <|gas_obs := gs; storage_trace := observations|>)` by simp[] >>
+       drule_all (REWRITE_RULE [ETA_AX] exprSimSourceTheory.expr_body_pre_eval) >>
+       strip_tac >>
+       `env.type_defs = get_tenv cx` by
+         (qpat_assum `expr_sim_inv cenv cx env es`
+            (mp_tac o CONJUNCT1 o REWRITE_RULE [expr_sim_inv_def]) >>
+          simp[env_consistent_def, env_context_consistent_def]) >>
+       `value_has_type tv v` by
+         gvs[expr_result_typed_def, expr_runtime_typed_def,
+             value_result_typed_def, value_runtime_typed_def] >>
+       `val_wf tv v` by metis_tac[cj 1 value_has_type_val_wf] >>
+       metis_tac[val_footprint_le, valueEncodingPropsTheory.type_memory_size_slots]) >>
+    irule compile_append_storage_aggregate_stmt_frag >> simp[] >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    qexists_tac `rslot` >> simp[] >>
+    conj_tac >- metis_tac[] >>
+    rpt gen_tac >> strip_tac >>
+    irule (INST_TYPE [alpha |-> ``:256``] append_storage_copy_success_post) >>
+    rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[])
+  QED
+*)

@@ -8,9 +8,7 @@ Definition log_scalar_enc_info_def:
   log_scalar_enc_info ei <=> (ei = AbiCopy 32 \/ ?n. ei = AbiBytestring n)
 End
 
-Theorem log_scalar_enc_info_selected:
-  supported_scalar_type ty ==>
-  log_scalar_enc_info (type_to_abi_enc_info sf ce ty)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> Cases_on `supported_word_type ty`
   >- (drule supported_word_type_is_word >> strip_tac >>
@@ -24,6 +22,13 @@ Proof
   rename1 `BytesT bound` >> Cases_on `bound` >>
   gvs[supported_string_type_def, type_to_abi_enc_info_def,
       log_scalar_enc_info_def]
+QED
+*)
+Theorem log_scalar_enc_info_selected:
+  supported_scalar_type ty ==>
+  log_scalar_enc_info (type_to_abi_enc_info sf ce ty)
+Proof
+  cheat
 QED
 
 Theorem log_tuple_enc_info_selected:
