@@ -32,6 +32,8 @@ Proof
   >- simp[Once evaluate_def, return_def]
   >- (PairCases_on `id` >> rpt strip_tac >>
       gvs[Once evaluate_def] >> metis_tac[lookup_global_scopes])
+  >- (rpt strip_tac >> gvs[Once evaluate_def] >>
+      drule lookup_flag_mem_scopes >> simp[])
   >- suspend "ifexp"
   >- suspend "structlit"
   >- suspend "subscript"
@@ -271,15 +273,17 @@ Resume aug_place_effect_scopes_mutual[send]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
       assert_def, return_def, raise_def, AllCaseEqs()] >>
-  imp_res_tac eval_send_preserves_non_accounts >> gvs[] >>
-  metis_tac[aug_place_pure_exprs_scopes, supported_pure_expr_def]
+  `supported_pure_exprs tops [a; v]` by simp[supported_pure_expr_def] >>
+  imp_res_tac eval_send_preserves_non_accounts >>
+  imp_res_tac aug_place_pure_exprs_scopes >> gvs[]
 QED
 Resume aug_place_effect_scopes_mutual[send_gas]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
       assert_def, return_def, raise_def, AllCaseEqs()] >>
-  imp_res_tac eval_send_preserves_non_accounts >> gvs[] >>
-  metis_tac[aug_place_pure_exprs_scopes, supported_pure_expr_def]
+  `supported_pure_exprs tops [a; v; g]` by simp[supported_pure_expr_def] >>
+  imp_res_tac eval_send_preserves_non_accounts >>
+  imp_res_tac aug_place_pure_exprs_scopes >> gvs[]
 QED
 Resume aug_place_effect_scopes_mutual[extcall]:
   rpt strip_tac >>

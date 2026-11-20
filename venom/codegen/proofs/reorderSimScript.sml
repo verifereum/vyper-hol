@@ -164,6 +164,47 @@ Definition residual_budget_wf_def:
           LIST_ELEM_COUNT op ps.ps_stack <= LIST_ELEM_COUNT op pending)
 End
 
+Theorem foldl_release_spill_layout[local]:
+  !offsets al spilled live.
+    ALL_DISTINCT offsets /\
+    (!off. MEM off offsets ==>
+       ?op. FLOOKUP spilled op = SOME off /\ op NOTIN live) /\
+    spill_alloc_layout_wf al spilled ==>
+    spill_alloc_layout_wf (FOLDL (λal off. free_spill_slot off al) al offsets)
+      (DRESTRICT spilled live)
+Proof
+  Induct
+  >- (simp[spill_alloc_layout_wf_def, FLOOKUP_DRESTRICT] >>
+      metis_tac[optionTheory.NOT_NONE_SOME]) >>
+  rpt gen_tac >> simp[] >> strip_tac >>
+  `?op. FLOOKUP spilled op = SOME h /\ op NOTIN live` by metis_tac[] >>
+  `DRESTRICT (spilled \\ op) live = DRESTRICT spilled live` by
+    (simp[fmap_eq_flookup, FLOOKUP_DRESTRICT, DOMSUB_FLOOKUP_THM] >>
+     gen_tac >> Cases_on `op = x` >> gvs[]) >>
+  `spill_alloc_layout_wf
+     (FOLDL (λal off. free_spill_slot off al) (free_spill_slot h al) offsets)
+     (DRESTRICT (spilled \\ op) live)` suffices_by simp[] >>
+  first_x_assum irule >> simp[] >> conj_tac
+  >- (simp[DOMSUB_FLOOKUP_THM] >> metis_tac[optionTheory.SOME_11]) >>
+  metis_tac[spill_alloc_layout_wf_after_free]
+QED
+
+Theorem release_dead_spills_layout_wf:
+  !next ps.
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
+    spill_alloc_layout_wf (release_dead_spills next ps).ps_alloc
+      (release_dead_spills next ps).ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`next`,`ps`] strip_assume_tac
+    release_dead_spills_alloc_offsets >>
+  `(release_dead_spills next ps).ps_spilled =
+    DRESTRICT ps.ps_spilled (λop. case op of Var v => MEM v next | _ => F)` by
+    simp[release_dead_spills_def] >>
+  asm_rewrite_tac[] >> irule foldl_release_spill_layout >>
+  simp[] >> metis_tac[]
+QED
+
 Definition pending_inventory_wf_def:
   pending_inventory_wf pending (ps : plan_state) <=>
     !op. LIST_ELEM_COUNT op pending <=

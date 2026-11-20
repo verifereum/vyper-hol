@@ -11,8 +11,7 @@ Theorem release_dead_spills_stack_update:
     release_dead_spills nl (ps with ps_stack := stk) =
     (release_dead_spills nl ps) with ps_stack := stk
 Proof
-  simp[release_dead_spills_def,
-       fnPlanLineageSetupTheory.release_fold_stack_update]
+  simp[release_dead_spills_def, plan_state_component_equality]
 QED
 
 Theorem optimistic_swap_plan_bottom_frame:
@@ -728,20 +727,6 @@ Proof
   Cases_on `EL 1 inst.inst_operands` >> simp[plan_state_component_equality]
 QED
 
-Theorem release_fold_cleanup_frame[local]:
-  !xs ps ch promised.
-    FOLDL (\ps (op,off). ps with <|ps_spilled := ps.ps_spilled \\ op;
-      ps_alloc := free_spill_slot off ps.ps_alloc|>)
-      (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) xs =
-    (FOLDL (\ps (op,off). ps with <|ps_spilled := ps.ps_spilled \\ op;
-      ps_alloc := free_spill_slot off ps.ps_alloc|>) ps xs) with
-      <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>
-Proof
-  Induct >> rpt gen_tac >> simp[] >> PairCases_on `h` >> simp[] >>
-  first_x_assum (qspecl_then [`ps with <|ps_spilled := ps.ps_spilled \\ h0;
-    ps_alloc := free_spill_slot h1 ps.ps_alloc|>`, `ch`, `promised`] mp_tac) >> simp[]
-QED
-
 Theorem release_dead_spills_cleanup_frame:
   !nl ps ch promised.
     release_dead_spills nl
@@ -749,7 +734,7 @@ Theorem release_dead_spills_cleanup_frame:
     (release_dead_spills nl ps) with
       <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>
 Proof
-  simp[release_dead_spills_def, release_fold_cleanup_frame]
+  simp[release_dead_spills_def, plan_state_component_equality]
 QED
 
 Theorem push_outputs_cleanup_frame[local]:

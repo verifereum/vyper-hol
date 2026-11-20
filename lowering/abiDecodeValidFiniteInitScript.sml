@@ -9,6 +9,7 @@ Ancestors
   abiMalformedMemberSetup abiMalformedSiteFrame loweringStateRelDefs
   abiDecoderSequenceReach entryDecoderHistoryFrame decoderNavigationPtr
   abiDecodePtrMemberFrame decoderGhostFramePtr abiCallerAllocation
+  decoderWorldFramePtr bodyFullHashKeccakFixed
   allocaSiteResource stateRelProj abiDecodeStaticProps
   bodyPtrBopHashSuffix fragGasOriginPtr freshWrites
   abiDecoderArrayLoopInit abiDecoderDynarrayPrefix abiDecoderIndexInit abiDecoderContract
@@ -151,7 +152,9 @@ Theorem finite_init_index_cut[local]:
   abi_decode_index_init hs = (ip,ls) /\ fn_has_code hs ls func /\
   run_inst_seq (emitted_insts hs ls) (u with vs_inst_idx := LENGTH hs.cs_current_insts) =
     OK (t with vs_inst_idx := LENGTH hs.cs_current_insts) /\
-  ~ctx_has_dalloca ctx /\ ~u.vs_halted /\ u.vs_current_bb = hs.cs_current_bb /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+    u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp) /\
+  ~u.vs_halted /\ u.vs_current_bb = hs.cs_current_bb /\
   allocas_from lo u /\ u.vs_allocas = s.vs_allocas /\
   u.vs_alloca_next = s.vs_alloca_next /\ lo <= s.vs_alloca_next /\
   alloca_room ctx func s /\ alloca_inv s /\
@@ -185,6 +188,13 @@ Proof
      metis_tac[alloca_site_registered_below]) >>
   qabbrev_tac `u0 = u with vs_inst_idx := LENGTH hs.cs_current_insts` >>
   qabbrev_tac `t0 = t with vs_inst_idx := LENGTH hs.cs_current_insts` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u0 /\
+    u0.vs_alloca_next + pending_alloca_size func u0 <= w2n u0.vs_initial_fmp` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u /\ _` mp_tac >>
+     qpat_assum `Abbrev (u0 = _)`
+       (rewrite_tac o single o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_below_fmp_def, pending_alloca_size_def] >> metis_tac[]) >>
   `~u0.vs_halted /\ u0.vs_allocas = s.vs_allocas /\ u0.vs_alloca_next = s.vs_alloca_next /\
    u0.vs_current_bb = hs.cs_current_bb /\ u0.vs_inst_idx = LENGTH hs.cs_current_insts /\
    allocas_from lo u0 /\ eval_operand ip t0 = SOME (n2w slot)` by
@@ -310,7 +320,7 @@ Theorem abi_valid_allocated_finite_init_joint:
   MEM (mk_inst (ls.cs_next_id-2) ALLOCA [Lit 32w]
     [STRING #"%" (toString (ls.cs_next_var-1))]) (fn_insts func) /\
   ls.cs_next_id-2 IN sites /\
-  ~ctx_has_dalloca ctx /\ abi_decode_ptr_window G tn s source (n2w B) L /\
+  abi_decode_ptr_window G tn s source (n2w B) L /\
   ptr_covers G tn output s outsz /\
   op_prov G pos = NONE /\ op_prov G hi = NONE /\
   op_taint tn pos = {} /\ op_taint tn hi = {} /\
@@ -383,7 +393,11 @@ Proof
       imp_res_tac alloca_site_registered_below >> decide_tac) >>
   `p+32 <= L` by decide_tac >>
   qabbrev_tac `u0 = u with vs_inst_idx := LENGTH gs.cs_current_insts` >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+     s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp` by
+    (drule stmt_state_rel_fmp_room >> simp[fmp_room_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all (Q.INST [`cap` |-> `outsz`, `u` |-> `u0`] finite_init_header_cut) >>
   disch_then (qspec_then `PG` (qx_choosel_then [`Ghead`,`thd`] strip_assume_tac)) >>
   `~u.vs_halted /\ u.vs_current_bb = hs.cs_current_bb /\ allocas_from lo u /\
@@ -391,6 +405,39 @@ Proof
     (fs[Abbr `u0`, allocas_from_def] >> first_assum ACCEPT_TAC) >>
   `!aid e. FLOOKUP s.vs_allocas aid = SOME e ==> FLOOKUP t.vs_allocas aid = SOME e` by
     fs[abi_valid_allocated_effect_def, abi_malformed_resource_post_def] >>
+  `t.vs_fmp = s.vs_fmp /\ u.vs_fmp = s.vs_fmp /\
+   u.vs_initial_fmp = s.vs_initial_fmp` by
+    (drule_all abi_decode_array_loop_init_reentry_code >> strip_tac >>
+     drule_all abi_decode_dynarray_position_prefix_shape >> strip_tac >>
+     drule_all abi_decode_array_header_shape >> strip_tac >>
+     drule abi_decode_index_init_shape >> strip_tac >>
+     `inst_extends st hs` by metis_tac[inst_extends_trans] >>
+     `emitted_insts st ls = emitted_insts st hs ++ emitted_insts hs ls` by
+       (irule emitted_insts_append >> fs[inst_extends_def]) >>
+     `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts hs ls)` by fs[] >>
+     qpat_assum `run_inst_seq (emitted_insts st ls) s = OK t` (fn run =>
+       qpat_assum `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode)
+                     (emitted_insts st ls)` (fn code =>
+         strip_assume_tac (MATCH_MP (SPEC_ALL decoder_run_world_frame) (CONJ code run)))) >>
+     qpat_assum `run_inst_seq (emitted_insts hs ls) _ = OK _` (fn run =>
+       qpat_assum `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode)
+                     (emitted_insts hs ls)` (fn code =>
+         strip_assume_tac (SRULE [] (MATCH_MP (SPEC_ALL decoder_run_world_frame) (CONJ code run))))) >>
+     qpat_assum `run_inst_seq (emitted_insts st ls) s = OK t`
+       (assume_tac o MATCH_MP run_inst_seq_initial_fmp) >>
+     qpat_assum `run_inst_seq (emitted_insts hs ls) _ = OK _`
+       (mp_tac o MATCH_MP run_inst_seq_initial_fmp) >> simp[] >>
+     qpat_assum `t.vs_fmp = u.vs_fmp` (once_rewrite_tac o single o GSYM) >>
+     qpat_assum `t.vs_fmp = s.vs_fmp` (once_rewrite_tac o single) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+     u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _` mp_tac >>
+     pure_rewrite_tac[allocas_below_fmp_def, pending_alloca_size_def] >>
+     qpat_assum `u.vs_allocas = s.vs_allocas` (pure_rewrite_tac o single) >>
+     qpat_assum `u.vs_alloca_next = s.vs_alloca_next` (pure_rewrite_tac o single) >>
+     qpat_assum `u.vs_fmp = s.vs_fmp` (pure_rewrite_tac o single) >>
+     qpat_assum `u.vs_initial_fmp = s.vs_initial_fmp` (pure_rewrite_tac o single) >>
+     simp[NoAsms]) >>
   drule_all finite_init_index_cut >>
   disch_then (qspecl_then [`thd`,`PG`,`Ghead`]
     (qx_choosel_then [`J`,`tj`,`q`] strip_assume_tac)) >>
@@ -402,6 +449,13 @@ Proof
      fs[abi_valid_allocated_effect_def] >>
      first_x_assum drule >> strip_tac >> fs[allocas_from_def] >>
      metis_tac[LESS_EQ_TRANS]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t0` by
+    (`stmt_state_rel H ctx func cenv cx es t0` by
+      (qhdtm_assum `abi_valid_allocated_effect`
+         (strip_assume_tac o CONJUNCT1 o REWRITE_RULE [abi_valid_allocated_effect_def]) >>
+       fs[abi_malformed_resource_post_def, Abbr `t0`, stmt_state_rel_inst_idx]) >>
+     qpat_assum `stmt_state_rel H ctx func cenv cx es t0`
+       (ACCEPT_TAC o MATCH_MP (SPEC_ALL bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp))) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t0,J,tj) []
      (OK (jump_to (fresh_label_output "dec_dyn_hdr" ls.cs_next_label) t0),J,tj)` by
     (rpt gen_tac >> irule decoderNavigationPtrTheory.jump_origin_ptr_path >>

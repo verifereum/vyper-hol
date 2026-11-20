@@ -343,11 +343,26 @@ End
 
 Definition release_dead_spills_def:
   release_dead_spills next_liveness ps =
-    let dead = FILTER (λ(op, off).
-      case op of Var v => ¬ MEM v next_liveness | _ => T)
-      (fmap_to_alist ps.ps_spilled) in
-    FOLDL (λps' (op, off).
-      ps' with <| ps_spilled := ps'.ps_spilled \\ op;
-                  ps_alloc := free_spill_slot off ps'.ps_alloc |>)
-    ps dead
+    let live = (λop. case op of Var v => MEM v next_liveness | _ => F) in
+    let dead = DRESTRICT ps.ps_spilled (COMPL live) in
+    let alloc = ps.ps_alloc in
+    (* The allocator bounds all occupied slots. Scan that range in order
+       so releasing slots does not depend on enumerating a finite map. *)
+    let offsets =
+      if dead = FEMPTY then []
+      else FILTER (λoff. ¬ FEVERY (λkv. SND kv ≠ off) dead)
+        (GENLIST (λi. alloc.sa_spill_base + i)
+          (alloc.sa_next_offset - alloc.sa_spill_base)) in
+    ps with <| ps_spilled := DRESTRICT ps.ps_spilled live;
+               ps_alloc := FOLDL (λal off. free_spill_slot off al)
+                 alloc offsets |>
 End
+
+(* Let kernel evaluation reduce the live and dead restrictions on concrete
+   spill maps in stack-planner witnesses. *)
+val () = computeLib.add_persistent_funs [
+  "finite_map.DRESTRICT_FEMPTY",
+  "finite_map.DRESTRICT_FUPDATE",
+  "pred_set.IN_ABS",
+  "pred_set.IN_COMPL"
+];

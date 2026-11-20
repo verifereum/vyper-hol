@@ -5,7 +5,7 @@ Ancestors
   ctorReturnFrame bodyFullShared fragGasEmitCtrl bodyPtrDefs
   ctorDeployLoweringDefs ctorDeployDefs e2eDeployDefs
   compileEnv emitHelper stmtSimDefs stmtSimProps fragGasOriginPtr
-  loweringPosts loweringStateRelDefs bodySim exprLoweringProps
+  loweringPosts loweringStateRelDefs bodySim exprLoweringProps bodyFullHashKeccakFixed
   venomExecSemantics venomState vyperInterpreter vyperState
 
 (* A fallthrough appends the zero-mark jump and epilogue at one endpoint
@@ -24,7 +24,7 @@ Theorem deploy_ctor_fallthrough_joint:
     LENGTH runtime_bc + imm_len tops < dimword(:256) /\
     (imm_len tops <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
        !x. imm = Var x ==> not_fresh_at st_exit x) /\
-    ~ctx_has_dalloca ctx /\ P H0 /\
+    P H0 /\
     (!H. P H ==>
        stmt_state_rel H ctx func cenv' cx ee t /\
        ghost_inv_at (deploy_dead H tops runtime_bc am tx) (imm_len tops)
@@ -73,6 +73,10 @@ Proof
   qexistsl_tac [`final`, `G'`, `tn'`] >> simp[] >>
   gen_tac >> strip_tac >>
   `allocas_from (imm_len tops) t` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `!H. P H ==> stmt_state_rel H ctx func cenv' cx ee t /\ _`
+       (qspec_then `H0` mp_tac) >> simp[] >> strip_tac >>
+     metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp]) >>
   `gas_origin_ptr_path (deploy_dead H tops runtime_bc am tx,
      imm_len tops, explicit, ctx, func, [])
      (t, G, tn) [] (OK sx, G, tn)` by

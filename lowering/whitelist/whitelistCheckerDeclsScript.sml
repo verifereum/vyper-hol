@@ -510,7 +510,7 @@ Proof
   Cases_on `op` >>
   gvs[well_typed_binop_def, supported_binop_def, supported_numeric_type_def,
       supported_integer_type_def, supported_unsigned_type_def,
-      supported_word_type_def] >>
+      supported_word_type_def, compileEnvTheory.is_bytestring_type_def] >>
   imp_res_tac assignable_int_width >> gvs[supported_int_width_def] >>
   gvs[assignable_type_def, well_formed_type_def, evaluate_type_def,
       AllCaseEqs()] >>

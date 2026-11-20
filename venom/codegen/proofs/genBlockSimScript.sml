@@ -1182,83 +1182,18 @@ Proof
   metis_tac[rich_listTheory.MEM_TAKE]
 QED
 
-Theorem generated_plan_state_wf_remove_free[local]:
-  !base ps op off.
-    generated_plan_state_wf base ps /\
-    FLOOKUP ps.ps_spilled op = SOME off ==>
-    generated_plan_state_wf base
-      (ps with <| ps_spilled := ps.ps_spilled \\ op;
-                  ps_alloc := free_spill_slot off ps.ps_alloc |>)
-Proof
-  rpt gen_tac >> strip_tac >>
-  fs[generated_plan_state_wf_def] >>
-  rpt conj_tac
-  >- (fs[plan_slots_bounded_def, alloc_slots_bounded_def] >>
-      simp[plan_slots_bounded_def, alloc_slots_bounded_def,
-           free_spill_slot_def, EVERY_SNOC,
-           finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
-      metis_tac[])
-  >- metis_tac[doSwapSimTheory.spill_alloc_layout_wf_after_free]
-  >> fs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION,
-        finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
-     metis_tac[]
-QED
-
-Theorem generated_plan_state_wf_release_fold[local]:
-  !dead base ps.
-    generated_plan_state_wf base ps /\
-    ALL_DISTINCT (MAP FST dead) /\
-    (!op off. MEM (op,off) dead ==>
-       FLOOKUP ps.ps_spilled op = SOME off) ==>
-    generated_plan_state_wf base
-      (FOLDL (\ps' (op,off).
-         ps' with <| ps_spilled := ps'.ps_spilled \\ op;
-                     ps_alloc := free_spill_slot off ps'.ps_alloc |>) ps dead)
-Proof
-  Induct
-  >- simp[]
-  >> rpt gen_tac >> PairCases_on `h` >> simp[] >> strip_tac >>
-  `FLOOKUP ps.ps_spilled h0 = SOME h1` by metis_tac[] >>
-  `generated_plan_state_wf base'
-     (ps with <| ps_spilled := ps.ps_spilled \\ h0;
-                 ps_alloc := free_spill_slot h1 ps.ps_alloc |>)` by
-    metis_tac[generated_plan_state_wf_remove_free] >>
-  `!op off. MEM (op,off) dead ==>
-     FLOOKUP (ps.ps_spilled \\ h0) op = SOME off` by (
-    rpt gen_tac >> strip_tac >>
-    `op <> h0` by (
-      strip_tac >>
-      qpat_x_assum `~MEM h0 (MAP FST dead)` mp_tac >>
-      simp[MEM_MAP] >> qexists `(op,off)` >> simp[]) >>
-    simp[finite_mapTheory.DOMSUB_FLOOKUP_THM] >> metis_tac[]) >>
-  first_x_assum irule >> simp[]
-QED
-
-Theorem all_distinct_map_fst_filter[local]:
-  !(P : ('a # 'b) -> bool) xs.
-    ALL_DISTINCT (MAP FST xs) ==>
-    ALL_DISTINCT (MAP FST (FILTER P xs))
-Proof
-  gen_tac >> Induct
-  >- simp[]
-  >> gen_tac >> PairCases_on `h` >> simp[] >> strip_tac >>
-     Cases_on `P (h0,h1)` >> gvs[] >>
-     fs[MEM_MAP, MEM_FILTER] >> metis_tac[]
-QED
 Theorem generated_plan_state_wf_release_dead_spills:
   !base next_liveness ps.
     generated_plan_state_wf base ps ==>
     generated_plan_state_wf base (release_dead_spills next_liveness ps)
 Proof
-  rpt gen_tac >> strip_tac >>
-  simp[release_dead_spills_def] >>
-  irule generated_plan_state_wf_release_fold >>
-  rpt conj_tac
-  >- (rpt gen_tac >> strip_tac >>
-      fs[MEM_FILTER, alistTheory.MEM_pair_fmap_to_alist_FLOOKUP])
-  >- (irule all_distinct_map_fst_filter >>
-      simp[alistTheory.ALL_DISTINCT_fmap_to_alist_keys])
-  >> first_assum ACCEPT_TAC
+  simp[generated_plan_state_wf_def] >> rpt strip_tac
+  >- metis_tac[release_dead_spills_plan_slots_bounded]
+  >- metis_tac[release_dead_spills_layout_wf]
+  >- simp[release_dead_spills_def] >>
+  fs[release_dead_spills_def, finite_mapTheory.FDOM_DRESTRICT,
+     pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+  metis_tac[]
 QED
 
 (* ===== apply_prefix_ops initial_fmp field preservation ===== *)
