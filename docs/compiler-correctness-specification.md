@@ -180,7 +180,6 @@ storage backends the source adopts from external call outcomes.
 ```sml
   !fin policy tops deploy_bc runtime_bc am tx es H.
     fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\
     source_typing_ok tops am tx /\
@@ -380,9 +379,9 @@ The result relation ties source gas observations to the frame's EVM gas readings
 The proved `e2e_deploy_correctness` covers fresh single-frame creation with
 canonical constructor arguments, deployment typing, an uninstalled source
 target and an empty target account in `es.originalAccounts`. It requires fewer
-than 2⁶⁴ entries in the creation frame's call trace. The assembly-optimizer
-case requires `~program_reads_self_code tops`. With the finite storage guard,
-the result relation uses the constructor's call outcomes and
+than 2⁶⁴ entries in the creation frame's call trace. Source reads of `self.code`
+use the creation frame's code, including in the assembly-optimizer case. With
+the finite storage guard, the result relation uses the constructor's call outcomes and
 compares accounts and transient storage at the run's storage horizon,
 along with logs and call requests. Successful installation returns and deposits
 `runtime_bc ++ section` satisfying `immutables_section_rel`.
