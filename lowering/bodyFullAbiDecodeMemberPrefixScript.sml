@@ -120,7 +120,7 @@ Theorem abi_decode_member_slot_joint_observed[local]:
   eval_operand src s = SOME (n2w off) /\
   off+ao+head_size <= h /\ h < dimword (:256) /\
   op_prov G src = NONE /\ op_taint tn src = {} /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sa sb fn /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   allocas_from lo s /\ (^owned_decoder_state) sa s G tn /\
@@ -160,7 +160,6 @@ Proof
   `sb.cs_current_bb = sa.cs_current_bb /\
    sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id` by
     (drule emit_op_facts >> simp[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (BETA_RULE bodyFullAbiDecodeFiniteGuardEffectTheory.abi_decode_scalar_guard_success_joint_effect) >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   `(!obs. fn_has_code sa sb obs ==> gas_path ctx obs s 0 (OK u)) /\
@@ -228,7 +227,7 @@ Theorem abi_decode_member_actual_joint_observed[local]:
   abi_decoder_operand_live sa.cs_next_var src /\
   op_prov G src = NONE /\ op_prov G offset = NONE /\
   op_taint tn src = {} /\ op_taint tn offset = {} /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sa sb fn /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   allocas_from lo s /\ (^owned_decoder_state) sa s G tn /\
@@ -278,12 +277,10 @@ Proof
      simp_tac (srw_ss()) [DROP_LENGTH_APPEND, mk_inst_def]) >>
   drule_all abi_decode_member_actual_run >> strip_tac
   >- (disj1_tac >> `lo <= s.vs_alloca_next` by fs[] >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
       drule_all member_scalar_revert_observed >>
       disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
       qexistsl_tac [`u`, `Gf`, `tnf`] >> asm_rewrite_tac[]) >>
   disj2_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (BETA_RULE bodyFullAbiDecodeFiniteGuardEffectTheory.abi_decode_scalar_guard_success_joint_effect) >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   `(!obs. fn_has_code sa sb obs ==> gas_path ctx obs s 0 (OK u)) /\
@@ -324,6 +321,7 @@ Theorem abi_decode_member_actual_joint:
       op_taint tnf (Var x) = op_taint tn (Var x)))
 Proof
   BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (BETA_RULE abi_decode_member_actual_joint_observed) >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac)
   >- (disj1_tac >> qexistsl_tac [`t`, `Gf`, `tnf`] >> asm_rewrite_tac[]) >>
@@ -336,7 +334,7 @@ Theorem abi_decode_member_destination_joint_observed[local]:
   ptr_covers G tn dst s cap /\ lookup_var dst s = SOME b /\
   eval_operand pos s = SOME (n2w q) /\
   op_taint tn (Var dst) = {} /\ op_taint tn pos = {} /\
-  ~ctx_has_dalloca ctx /\ q+k <= cap /\ w2n b+cap < dimword(:256) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ q+k <= cap /\ w2n b+cap < dimword(:256) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -358,7 +356,6 @@ Theorem abi_decode_member_destination_joint_observed[local]:
       op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (abi_decode_ptr_output_address |> Q.INST [`D` |-> `ARB`, `PG` |-> `PG`]) >>
   disch_then (qspecl_then [`fn`, `PG`] mp_tac) >>
   simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
@@ -413,7 +410,7 @@ Theorem abi_decode_member_destination_owned_observed[local]:
   ptr_covers G tn dst s cap /\ lookup_var dst s = SOME b /\
   eval_operand pos s = SOME (n2w q) /\
   op_taint tn (Var dst) = {} /\ op_taint tn pos = {} /\
-  ~ctx_has_dalloca ctx /\ q+k <= cap /\ w2n b+cap < dimword(:256) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ q+k <= cap /\ w2n b+cap < dimword(:256) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -483,6 +480,7 @@ Theorem abi_decode_member_destination_owned:
       op_taint tnf (Var x) = op_taint tn (Var x))
 Proof
   BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (BETA_RULE abi_decode_member_destination_owned_observed) >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`t`, `Gf`, `tnf`] >> asm_rewrite_tac[]
@@ -619,6 +617,7 @@ Theorem abi_decode_member_select_joint_observed[local]:
         op_taint tnu (Var x) = op_taint tn (Var x))))
 Proof
   gen_tac >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `allocas_from lo s` by
     (qpat_x_assum `?H. V H` strip_assume_tac >>
      qpat_x_assum `!H. V H ==> _` drule >>
