@@ -1,7 +1,7 @@
 (* The actual child, ADD, unwrap and store continuation of MakeArray. *)
 Theory bodyFullMakeArrayStore
 Ancestors
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv exprSimFullBundleProps exprBodyPreProps bodyInvCodeProps
   bodyFullMakeArrayInputs wideningZeroLayout exprSimAggregateChildren
   bodyFullPreds bodyFullUnwrap gasOutcomeFullCompose bodyFullUnwrapRun
   logStoreDataOriginPtr typedCopyOriginPtr wordArgsPtr
@@ -18,17 +18,13 @@ Ancestors
 
 val _ = Parse.hide "base";
 
-Theorem make_array_slot_full:
+Theorem make_array_slot_full_bundled:
     (
         body_inv tops ctx cenv cx /\
         shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env ebase /\
         csbase.cs_next_id <= aid /\ csbase.cs_next_id <= sa.cs_next_id /\
         csbase.cs_next_var <= sa.cs_next_var /\
         local_ptrs_reserved cenv csbase /\ local_ptrs_reserved cenv sa /\
-        ctx_inst_ids_distinct ctx /\ fn_inst_ids_distinct func /\
-        gas_shadow_context ctx shadow_ctx /\
-        gas_shadow_function func shadow_func /\
-        MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
         (!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_no_wrap inst z) /\
         (!H. dead_lo_ok H (DF H) lo cenv cx) /\
         (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==>
@@ -50,15 +46,13 @@ Theorem make_array_slot_full:
         base+cap <= s.vs_alloca_next /\
         (!name b n. local_region cenv ee.scopes s name b n ==>
                     loweringStateRelDefs$regions_disjoint base cap b n) /\
-        alloca_history func s /\ sbase.vs_alloca_next <= s.vs_alloca_next /\
         (!a b. FLOOKUP sbase.vs_allocas a = SOME b ==>
                FLOOKUP s.vs_allocas a = SOME b) /\
         MAP FDOM ebase.scopes = MAP FDOM ee.scopes /\
         wb_frame cenv ebase ee csbase sbase s /\
         ghost_kept_at lo cenv ebase csbase Gbase tnbase sbase G tn /\
         return_buf_frame d cenv cs s /\ ~s.vs_halted /\
-        s.vs_current_bb = cs.cs_current_bb /\
-        s.vs_inst_idx = LENGTH cs.cs_current_insts /\
+        expr_sim_full_endpoint func cs sbase s /\
         (!H. valid_horizon cx st0 H ee.storage_trace ==>
              stmt_state_rel H ctx func cenv cx ee s /\
              storage_well_formed_on cx ee (FST H) /\
@@ -80,8 +74,8 @@ Theorem make_array_slot_full:
         compile_store_memory cenv src dst dty
           (lowered_value_type cenv (gas_shadow_expr e))
      od) shadow_sa = ((),shadow_sb) /\
-    gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
-    fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func ==>
+    expr_sim_full_code (ctx,shadow_ctx,func,shadow_func)
+      (sa,sb,shadow_sa,shadow_sb) ==>
     gas_outcome_full
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx))
@@ -97,15 +91,13 @@ Theorem make_array_slot_full:
         base+cap <= s.vs_alloca_next /\
         (!name b n. local_region cenv ee.scopes s name b n ==>
                     loweringStateRelDefs$regions_disjoint base cap b n) /\
-        alloca_history func s /\ sbase.vs_alloca_next <= s.vs_alloca_next /\
         (!a b. FLOOKUP sbase.vs_allocas a = SOME b ==>
                FLOOKUP s.vs_allocas a = SOME b) /\
         MAP FDOM ebase.scopes = MAP FDOM ee.scopes /\
         wb_frame cenv ebase ee csbase sbase s /\
         ghost_kept_at lo cenv ebase csbase Gbase tnbase sbase G tn /\
         return_buf_frame d cenv cs s /\ ~s.vs_halted /\
-        s.vs_current_bb = cs.cs_current_bb /\
-        s.vs_inst_idx = LENGTH cs.cs_current_insts /\
+        expr_sim_full_endpoint func cs sbase s /\
         (!H. valid_horizon cx st0 H ee.storage_trace ==>
              stmt_state_rel H ctx func cenv cx ee s /\
              storage_well_formed_on cx ee (FST H) /\
@@ -131,6 +123,7 @@ Theorem make_array_slot_full:
       (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
         (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
+  REWRITE_TAC [expr_sim_full_code_def, expr_sim_full_endpoint_def] >>
   BETA_TAC >> strip_tac >>
   irule gas_outcome_full_initial_domain >>
   simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
@@ -231,7 +224,7 @@ Proof
   suspend "slot"
 QED
 
-Resume make_array_slot_full[slot]:
+Resume make_array_slot_full_bundled[slot]:
   qx_genl_tac [`marks`,`res`,`ee`,`G1`,`tn1`,`t`] >> BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
@@ -335,7 +328,7 @@ Resume make_array_slot_full[slot]:
   suspend "unwrap"
 QED
 
-Resume make_array_slot_full[unwrap]:
+Resume make_array_slot_full_bundled[unwrap]:
   `fn_has_code sn sc func` by metis_tac[fn_has_code_split,cs_extends_trans] >>
   mp_tac (Q.INST [`sb` |-> `sn`, `op` |-> `src`, `s` |-> `at`,
     `s0` |-> `s`, `G` |-> `Ga`, `tn` |-> `tna`, `Gi` |-> `G`, `ti` |-> `tn`,
@@ -356,9 +349,7 @@ Resume make_array_slot_full[unwrap]:
             qexistsl_tac [`cx`,`es with gas_obs := gas_explicit marks s.vs_gas_readings`,`ee`] >>
             simp[vyperStateTheory.bind_def,exprSimSourceTheory.expr_body_pre_gas_obs]) >>
          `env.type_defs = get_tenv cx` by
-           gvs[exprSimHypsDefsTheory.expr_body_pre_def,exprSimHypsDefsTheory.expr_sim_inv_def,
-               vyperTypeInvariantsTheory.env_consistent_def,
-               vyperTypeInvariantsTheory.env_context_consistent_def] >>
+           metis_tac[expr_body_pre_env_type_defs] >>
          gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def])
      >- (qpat_x_assum `cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==> _` mp_tac >>
          simp[update_var_def])
@@ -370,9 +361,7 @@ Resume make_array_slot_full[unwrap]:
      (es with gas_obs := gas_explicit marks s.vs_gas_readings) = (INL v,ee)` by
     simp[vyperStateTheory.bind_def] >>
   `env.type_defs = get_tenv cx` by
-    gvs[exprSimHypsDefsTheory.expr_body_pre_def,exprSimHypsDefsTheory.expr_sim_inv_def,
-        vyperTypeInvariantsTheory.env_consistent_def,
-        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+    metis_tac[expr_body_pre_env_type_defs] >>
   `value_runtime_typed env (lowered_value_type cenv e) v` by
     (irule memory_rhs_read_lowered_typed_unwidened >>
      qexistsl_tac [`cx`,`es with gas_obs := gas_explicit marks s.vs_gas_readings`,`ee`] >> simp[vyperStateTheory.bind_def]) >>
@@ -473,7 +462,7 @@ Resume make_array_slot_full[unwrap]:
   suspend "memory_store"
 QED
 
-Resume make_array_slot_full[word_store]:
+Resume make_array_slot_full_bundled[word_store]:
   `type_widens_to (get_tenv cx) (expr_type e) dty` by
     simp[vyperTypeSystemTheory.type_widens_to_def,
          vyperTypeSystemTheory.well_formed_type_def] >>
@@ -513,7 +502,7 @@ Resume make_array_slot_full[word_store]:
   qexistsl_tac [`t'`,`Gf`,`tnf`] >> simp[]
 QED
 
-Resume make_array_slot_full[memory_store]:
+Resume make_array_slot_full_bundled[memory_store]:
   `~is_word_type (expr_type e)` by
     metis_tac[aggregateEvaluatedLayoutTheory.arg_type_fits_word_type] >>
   `~is_word_type (post_value_type cenv e)` by
@@ -528,7 +517,7 @@ Resume make_array_slot_full[memory_store]:
   suspend "positive_store"
 QED
 
-Resume make_array_slot_full[zero_store]:
+Resume make_array_slot_full_bundled[zero_store]:
   `lowered_value_type cenv e = dty` by metis_tac[type_widens_to_zero_layout] >>
   `stv = dtv /\ type_memory_size dtv = 0` by
     (qpat_assum `evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv` mp_tac >>
@@ -566,7 +555,7 @@ Resume make_array_slot_full[zero_store]:
   gen_tac >> irule (cj 1 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >> simp[]
 QED
 
-Resume make_array_slot_full[positive_store]:
+Resume make_array_slot_full_bundled[positive_store]:
   `ptr_buf_ok cenv e src G' z` by metis_tac[] >>
   `?xs. src = Var xs` by
     (qpat_assum `ptr_buf_ok cenv e src G' z`
@@ -600,7 +589,7 @@ Resume make_array_slot_full[positive_store]:
   suspend "aggregate_store"
 QED
 
-Resume make_array_slot_full[bytes_store]:
+Resume make_array_slot_full_bundled[bytes_store]:
   `is_bytestring_type (lowered_value_type cenv e)` by
     metis_tac[compileEnvTheory.arg_type_fits_bytestring_source] >>
   `compile_store_bytestring (Var xs) (Var out) sc = ((),sb)` by
@@ -696,7 +685,7 @@ Resume make_array_slot_full[bytes_store]:
   suspend "bytes_finish"
 QED
 
-Resume make_array_slot_full[bytes_finish]:
+Resume make_array_slot_full_bundled[bytes_finish]:
   markerLib.RESUME_TAC >>
   mp_tac (Q.SPECL [`Var xs`,`Var out`,`sc`,`sb`,`z`,`sw`,
     `n2w (base+off)`,`hlen`] buffer_store_bytestring_run) >>
@@ -769,7 +758,7 @@ Resume make_array_slot_full[bytes_finish]:
   POP_ASSUM_LIST (K all_tac) >> decide_tac
 QED
 
-Resume make_array_slot_full[aggregate_store]:
+Resume make_array_slot_full_bundled[aggregate_store]:
   `post_value_type cenv e = lowered_value_type cenv e` by
     (qpat_assum `~is_word_type (expr_type e)` mp_tac >>
      qpat_assum `arg_type_fits (lowered_value_type cenv e) (expr_type e)` mp_tac >>
@@ -830,8 +819,9 @@ Resume make_array_slot_full[aggregate_store]:
      POP_ASSUM_LIST (K all_tac) >>
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)) >>
   `acyclic_struct_metadata cenv.ce_struct_fields` by
-    (qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> simp[bodySimTheory.body_inv_def]) >>
+    (qpat_assum `body_inv tops ctx cenv cx`
+       (ACCEPT_TAC o MATCH_MP contract_inv_acyclic_struct_metadata o
+        MATCH_MP bodySimTheory.body_inv_contract)) >>
   `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
      ALL_DISTINCT (MAP FST fields) /\
@@ -860,7 +850,7 @@ Resume make_array_slot_full[aggregate_store]:
   qexistsl_tac [`t'`,`Gf`,`tnf`] >> simp[]
 QED
 
-Resume make_array_slot_full[finish]:
+Resume make_array_slot_full_bundled[finish]:
   markerLib.RESUME_TAC >> strip_tac >>
   qpat_assum `typed_copy_state_frame sc (base+off) (type_memory_size dtv) z u`
     (strip_assume_tac o REWRITE_RULE
@@ -914,7 +904,7 @@ Resume make_array_slot_full[finish]:
   suspend "finish_frame"
 QED
 
-Resume make_array_slot_full[finish_frame]:
+Resume make_array_slot_full_bundled[finish_frame]:
   markerLib.RESUME_TAC >>
   `mem_bytes_at base cap z.vs_memory = mem_bytes_at base cap s.vs_memory` by
     (qpat_assum `expr_post (storage_trace_horizon ee.storage_trace)
@@ -984,7 +974,7 @@ Resume make_array_slot_full[finish_frame]:
   simp[] >> suspend "finish_parent"
 QED
 
-Resume make_array_slot_full[finish_parent]:
+Resume make_array_slot_full_bundled[finish_parent]:
   markerLib.RESUME_TAC >>
   `?observations. ee.storage_trace = es.storage_trace ++ observations` by
     (qpat_assum `eval_expr cx e (es with gas_obs := _) = (INL tv,ee)` mp_tac >>
@@ -1179,7 +1169,7 @@ Resume make_array_slot_full[finish_parent]:
   suspend "finish_post"
 QED
 
-Resume make_array_slot_full[finish_post]:
+Resume make_array_slot_full_bundled[finish_post]:
   markerLib.RESUME_TAC >>
   `!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
     lookup_var x z = SOME w` by
@@ -1211,9 +1201,7 @@ Resume make_array_slot_full[finish_post]:
   `cenv.ce_module = NONE /\ cenv.ce_module_vars =
     add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
       tops 0 (add_module_var_locations tops FEMPTY)` by
-    (qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[bodySimTheory.body_inv_def,bodySimTheory.cenv_module_pins_def]) >>
+    (drule body_inv_module_locations >> simp[]) >>
   `cenv.ce_is_ctor ==> !nm io ity itv.
     FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc io) /\
     cenv.ce_module_var_type (cenv.ce_module,nm) = SOME ity /\
@@ -1300,7 +1288,7 @@ Resume make_array_slot_full[finish_post]:
   suspend "finish_ghost"
 QED
 
-Resume make_array_slot_full[finish_ghost]:
+Resume make_array_slot_full_bundled[finish_ghost]:
   markerLib.RESUME_TAC >>
   `(!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x)` by
@@ -1367,7 +1355,7 @@ Resume make_array_slot_full[finish_ghost]:
   simp[] >> rpt conj_tac >> suspend "finish_close"
 QED
 
-Resume make_array_slot_full[finish_close]:
+Resume make_array_slot_full_bundled[finish_close]:
   markerLib.RESUME_TAC >- first_assum ACCEPT_TAC >>
   strip_tac >>
   qpat_assum `~expr_has_effect e ==> _ /\ _` mp_tac >>
@@ -1385,4 +1373,123 @@ Resume make_array_slot_full[finish_close]:
      POP_ASSUM_LIST (K all_tac) >> metis_tac[])) >> simp[]
 QED
 
-Finalise make_array_slot_full
+Finalise make_array_slot_full_bundled
+
+Theorem make_array_slot_full:
+    (
+        body_inv tops ctx cenv cx /\
+        shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env ebase /\
+        csbase.cs_next_id <= aid /\ csbase.cs_next_id <= sa.cs_next_id /\
+        csbase.cs_next_var <= sa.cs_next_var /\
+        local_ptrs_reserved cenv csbase /\ local_ptrs_reserved cenv sa /\
+        ctx_inst_ids_distinct ctx /\ fn_inst_ids_distinct func /\
+        gas_shadow_context ctx shadow_ctx /\
+        gas_shadow_function func shadow_func /\
+        MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
+        (!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_no_wrap inst z) /\
+        (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+        (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==>
+               not_fresh_at csbase x) /\
+        (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==>
+               not_fresh_at csbase x) /\
+        (!H. valid_horizon cx st0 H ebase.storage_trace ==>
+             stmt_state_rel H ctx func cenv cx ebase sbase)) /\ body_expr_full_ok cx e /\ expr_body_pre cenv cx env e es /\
+    arg_type_fits (expr_type e) dty /\
+    evaluate_type (get_tenv cx) dty = SOME dtv /\
+    type_memory_bytes cenv dty = type_memory_size dtv /\
+    off + type_memory_size dtv <= cap /\
+    (\cs ee s G tn.
+        (?events. ee.storage_trace = ebase.storage_trace ++ events) /\
+        FLOOKUP s.vs_allocas aid = SOME (base,cap) /\
+        lookup_var q s = SOME (n2w base) /\
+        ptr_covers G tn q s cap /\ not_fresh_at cs q /\
+        aid < cs.cs_next_id /\ base+cap < dimword (:256) /\
+        base+cap <= s.vs_alloca_next /\
+        (!name b n. local_region cenv ee.scopes s name b n ==>
+                    loweringStateRelDefs$regions_disjoint base cap b n) /\
+        alloca_history func s /\ sbase.vs_alloca_next <= s.vs_alloca_next /\
+        (!a b. FLOOKUP sbase.vs_allocas a = SOME b ==>
+               FLOOKUP s.vs_allocas a = SOME b) /\
+        MAP FDOM ebase.scopes = MAP FDOM ee.scopes /\
+        wb_frame cenv ebase ee csbase sbase s /\
+        ghost_kept_at lo cenv ebase csbase Gbase tnbase sbase G tn /\
+        return_buf_frame d cenv cs s /\ ~s.vs_halted /\
+        s.vs_current_bb = cs.cs_current_bb /\
+        s.vs_inst_idx = LENGTH cs.cs_current_insts /\
+        (!H. valid_horizon cx st0 H ee.storage_trace ==>
+             stmt_state_rel H ctx func cenv cx ee s /\
+             storage_well_formed_on cx ee (FST H) /\
+             ghost_inv_at (DF H) lo d cenv cx ee G tn s)) sa es s G tn /\ (\ps (off:num) s tn.
+        EVERY (\(rt,v,p,n).
+          val_wf rt v /\ val_footprint rt v <= n /\
+          base <= p /\ p+n <= (base:num)+(off:num) /\
+          (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+               val_in_memory rt v p m)) ps) ps off s tn /\
+    gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+    (do vv <- compile_expr cenv (expr_type e) e;
+        dst <- emit_op ADD [Var q; Lit (n2w off)];
+        src <- unwrap_value cenv vv;
+        compile_store_memory cenv src dst dty (lowered_value_type cenv e)
+     od) sa = ((),sb) /\
+    (do vv <- compile_expr cenv (expr_type (gas_shadow_expr e)) (gas_shadow_expr e);
+        dst <- emit_op ADD [Var q; Lit (n2w off)];
+        src <- unwrap_value cenv vv;
+        compile_store_memory cenv src dst dty
+          (lowered_value_type cenv (gas_shadow_expr e))
+     od) shadow_sa = ((),shadow_sb) /\
+    gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
+    fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func ==>
+    gas_outcome_full
+      (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx))
+      (es,s,G,tn)
+      (\H res ee Gf tnf t.
+        ?v. res = INL v /\ value_has_type dtv v /\ val_wf dtv v /\
+            (\cs ee s G tn.
+        (?events. ee.storage_trace = ebase.storage_trace ++ events) /\
+        FLOOKUP s.vs_allocas aid = SOME (base,cap) /\
+        lookup_var q s = SOME (n2w base) /\
+        ptr_covers G tn q s cap /\ not_fresh_at cs q /\
+        aid < cs.cs_next_id /\ base+cap < dimword (:256) /\
+        base+cap <= s.vs_alloca_next /\
+        (!name b n. local_region cenv ee.scopes s name b n ==>
+                    loweringStateRelDefs$regions_disjoint base cap b n) /\
+        alloca_history func s /\ sbase.vs_alloca_next <= s.vs_alloca_next /\
+        (!a b. FLOOKUP sbase.vs_allocas a = SOME b ==>
+               FLOOKUP s.vs_allocas a = SOME b) /\
+        MAP FDOM ebase.scopes = MAP FDOM ee.scopes /\
+        wb_frame cenv ebase ee csbase sbase s /\
+        ghost_kept_at lo cenv ebase csbase Gbase tnbase sbase G tn /\
+        return_buf_frame d cenv cs s /\ ~s.vs_halted /\
+        s.vs_current_bb = cs.cs_current_bb /\
+        s.vs_inst_idx = LENGTH cs.cs_current_insts /\
+        (!H. valid_horizon cx st0 H ee.storage_trace ==>
+             stmt_state_rel H ctx func cenv cx ee s /\
+             storage_well_formed_on cx ee (FST H) /\
+             ghost_inv_at (DF H) lo d cenv cx ee G tn s)) sb ee t Gf tnf /\ (\ps (off:num) s tn.
+        EVERY (\(rt,v,p,n).
+          val_wf rt v /\ val_footprint rt v <= n /\
+          base <= p /\ p+n <= (base:num)+(off:num) /\
+          (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+               val_in_memory rt v p m)) ps) ps off t tnf /\
+            (!m. mem_agree_outside tnf.t_mem t.vs_memory m ==>
+                 val_in_memory dtv v ((base:num)+(off:num)) m) /\
+            (!(p:num) (n:num). (base:num)+(off:num)+type_memory_size dtv <= p /\ p+n <= base+cap ==>
+                   mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory) /\
+            (~expr_has_effect e ==>
+              (!name b n. local_region cenv es.scopes s name b n ==>
+                mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
+              !p n. (p+n <= base \/ base+cap <= p) /\
+                (!inst b sz. MEM inst (fn_insts func) /\
+                  inst.inst_opcode = ALLOCA /\ sa.cs_next_id <= inst.inst_id /\
+                  FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
+                  loweringStateRelDefs$regions_disjoint p n b sz) ==>
+                mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory))
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+Proof
+  SIMP_TAC bool_ss [AC CONJ_ASSOC CONJ_COMM] >>
+  ACCEPT_TAC (SIMP_RULE bool_ss [AC CONJ_ASSOC CONJ_COMM]
+    (REWRITE_RULE [expr_sim_full_code_def, expr_sim_full_endpoint_def]
+      make_array_slot_full_bundled))
+QED
