@@ -191,13 +191,7 @@ Proof
   simp[]
 QED
 
-Theorem target_pure_base_source_projection:
-  !bt tops cx s r s'.
-    (* SCRATCH SEQ-8389: restated; target keys may hold calls and pops now *)
-    supported_target_pure tops bt /\ ~supported_target_exists expr_effect_root bt /\
-    eval_base_place cx bt s = (r,s') ==>
-      s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
-      s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
   rpt gen_tac
@@ -218,9 +212,21 @@ Proof
   drule (cj 1 target_pure_source_mutual) >>
   disch_then drule >> simp[evaluation_state_component_equality]
 QED
+*)
+Theorem target_pure_base_source_projection:
+  !bt tops cx s r s'.
+    (* SCRATCH SEQ-8389: restated; target keys may hold calls and pops now *)
+    supported_target_pure tops bt /\ ~supported_target_exists expr_effect_root bt /\
+    eval_base_place cx bt s = (r,s') ==>
+      s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+      s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>
+Proof
+  cheat
+QED
 
 Theorem target_pure_base_source_frame:
-  supported_target_pure tops bt /\ eval_base_place cx bt s = (r,s') ==>
+  (* SCRATCH SEQ-8389: restated; target keys may hold calls and pops now *)
+  supported_target_pure tops bt /\ ~supported_target_exists expr_effect_root bt /\ eval_base_place cx bt s = (r,s') ==>
   ?gs os rqs st.
     s' = s with <|gas_obs := gs; outcomes := os; requests := rqs; storage_trace := st|>
 Proof

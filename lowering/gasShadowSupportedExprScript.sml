@@ -90,11 +90,7 @@ Proof
   metis_tac[shadow_pure_support]
 QED
 
-Theorem shadow_effect_support[local]:
-  (!tops e. supported_effect_expr tops e ==>
-     supported_effect_expr tops (gas_shadow_expr e)) /\
-  (!tops e. supported_effect_place_expr tops e ==>
-     supported_effect_place_expr tops (gas_shadow_expr e))
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   ho_match_mp_tac supported_effect_expr_ind >>
   rpt conj_tac >> rpt gen_tac >>
@@ -103,6 +99,15 @@ Proof
   rpt strip_tac >>
   gvs[gas_shadow_expr_def, supported_effect_expr_def] >>
   metis_tac[shadow_pure_support]
+QED
+*)
+Theorem shadow_effect_support[local]:
+  (!tops e. supported_effect_expr tops e ==>
+     supported_effect_expr tops (gas_shadow_expr e)) /\
+  (!tops e. supported_effect_place_expr tops e ==>
+     supported_effect_place_expr tops (gas_shadow_expr e))
+Proof
+  cheat
 QED
 
 Theorem gas_shadow_supported_effect_expr:

@@ -404,11 +404,7 @@ Proof
   cheat
 QED
 
-Theorem ctor_supported_aggregate_length_bound:
-  supported_value_type tops ty /\ evaluate_type (type_env tops) ty = SOME tv /\
-  value_has_type tv v /\ val_wf tv v /\ type_memory_size tv < 2 ** 64 /\
-  vyper_to_abi (type_env tops) ty v = SOME (ListV avs) ==>
-  LENGTH avs < 2 ** 256
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >>
   Cases_on `supported_scalar_type ty`
@@ -424,6 +420,15 @@ Proof
   qexists `v` >> simp[] >>
   gvs[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
   first_x_assum drule >> simp[supported_scalar_type_def]
+QED
+*)
+Theorem ctor_supported_aggregate_length_bound:
+  supported_value_type tops ty /\ evaluate_type (type_env tops) ty = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\ type_memory_size tv < 2 ** 64 /\
+  vyper_to_abi (type_env tops) ty v = SOME (ListV avs) ==>
+  LENGTH avs < 2 ** 256
+Proof
+  cheat
 QED
 
 Theorem ctor_supported_tuple_strict_bounded:
@@ -524,11 +529,7 @@ Proof
   fs[type_memory_size_def] >> imp_res_tac ctor_bounded_product >> decide_tac
 QED
 
-Theorem ctor_supported_value_strict_type_bounded:
-  supported_value_type tops ty /\ evaluate_type (type_env tops) ty = SOME tv /\
-  value_has_type tv v /\ val_wf tv v /\ type_memory_size tv < 2 ** 64 /\
-  vyper_to_abi (type_env tops) ty v = SOME av ==>
-  has_type (vyper_to_abi_type (type_env tops) ty) av
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> Cases_on `supported_scalar_type ty`
   >- metis_tac[ctor_supported_scalar_strict_type] >>
@@ -543,4 +544,13 @@ Proof
     (gvs[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
      first_x_assum drule >> simp[supported_scalar_type_def]) >>
   drule_all (SRULE [] ctor_supported_struct_strict_bounded) >> simp[]
+QED
+*)
+Theorem ctor_supported_value_strict_type_bounded:
+  supported_value_type tops ty /\ evaluate_type (type_env tops) ty = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\ type_memory_size tv < 2 ** 64 /\
+  vyper_to_abi (type_env tops) ty v = SOME av ==>
+  has_type (vyper_to_abi_type (type_env tops) ty) av
+Proof
+  cheat
 QED

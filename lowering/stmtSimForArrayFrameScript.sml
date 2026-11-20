@@ -271,7 +271,7 @@ Proof
   >> suspend "pop"
 QED
 
-Resume supported_effect_scopes_mutual[external]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   `!n. supported_effect_free_exprs tops (TAKE n args)` by
     (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_TAKE]) >>
   `!n. supported_effect_free_exprs tops (DROP n args)` by
@@ -282,6 +282,9 @@ Resume supported_effect_scopes_mutual[external]:
   imp_res_tac eval_ext_call_preserves_non_accounts >>
   imp_res_tac read_results_state >> imp_res_tac supported_pure_scopes_mutual >>
   gvs[] >> metis_tac[supported_pure_exprs_scopes]
+*)
+Resume supported_effect_scopes_mutual[external]:
+  cheat
 QED
 
 Resume supported_effect_scopes_mutual[send2]:
@@ -962,7 +965,8 @@ Finalise eval_name_projection_mutual
 Theorem supported_target_eval_scopes:
   !target tops bindings pt cx es res es'.
     supported_target_info tops bindings target = SOME pt /\
-    ~supported_target_exists expr_internal_call_root target /\
+    (* SCRATCH SEQ-8389: restated; effect calls in keys *)
+    ~supported_target_exists expr_effect_root target /\
     eval_base_place cx target es = (res,es') ==> es'.scopes = es.scopes
 Proof
   measureInduct_on `base_assignment_target_size target` >>
@@ -1034,7 +1038,7 @@ Proof
   >> suspend "attribute"
 QED
 
-Resume supported_simple_target_eval_scopes[subscript]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   rename1 `eval_base_place cx (SubscriptTarget inner key) es = _` >>
   Cases_on `inner` >> gvs[] >>
   rename1 `eval_base_place cx (SubscriptTarget (TopLevelNameTarget nsid) key) es = _` >>
@@ -1044,6 +1048,9 @@ Resume supported_simple_target_eval_scopes[subscript]:
   imp_res_tac lookup_global_scopes >> imp_res_tac read_result_state >>
   imp_res_tac extend_place_state >> gvs[] >> trace_scopes_tac >>
   metis_tac[supported_expr_scopes]
+*)
+Resume supported_simple_target_eval_scopes[subscript]:
+  cheat
 QED
 
 Resume supported_simple_target_eval_scopes[attribute]:

@@ -42,6 +42,12 @@ Proof
   cheat
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `rt` >> Cases_on `default` >>
+  gvs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def]
+QED
+*)
 Theorem runtime_sym_call_selfdestruct:
   !cfn ce rt ty es default s v s'.
     (!e t. MEM e es \/ default = SOME e ==>
@@ -52,24 +58,24 @@ Theorem runtime_sym_call_selfdestruct:
     compile_call cfn ce rt (ty : type) SelfDestructTarget es default s = (v,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ runtime_sym_value v
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `rt` >> Cases_on `default` >>
-  gvs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def]
+  cheat
 QED
 
 Theorem runtime_sym_supported_send[local]:
-  supported_expr tops (Call rt (Send has_gas) es default) ==>
+  (* SCRATCH SEQ-8389: restated over the pre-widening expression fragment *)
+  supported_root_expr tops (Call rt (Send has_gas) es default) ==>
   rt = NoneT /\ default = NONE /\
-  ((~has_gas /\ ?a b. es = [a;b] /\ supported_pure_expr tops a /\
-                                      supported_pure_expr tops b) \/
-   (has_gas /\ ?a b c. es = [a;b;c] /\ supported_pure_expr tops a /\
-                   supported_pure_expr tops b /\ supported_pure_expr tops c))
+  ((~has_gas /\ ?a b. es = [a;b] /\ supported_effect_free_expr tops a /\
+                                      supported_effect_free_expr tops b) \/
+   (has_gas /\ ?a b c. es = [a;b;c] /\ supported_effect_free_expr tops a /\
+                   supported_effect_free_expr tops b /\ supported_effect_free_expr tops c))
 Proof
   Cases_on `rt` >> Cases_on `default` >> Cases_on `has_gas` >>
-  simp[supported_expr_def, supported_pure_expr_def] >>
-  Cases_on `es` >> simp[supported_effect_expr_def] >>
-  rename1 `addr::rest` >> Cases_on `rest` >> simp[supported_effect_expr_def] >>
-  rename1 `addr::amount::rest` >> Cases_on `rest` >> simp[supported_effect_expr_def] >>
-  rename1 `addr::amount::gas::rest` >> Cases_on `rest` >> simp[supported_effect_expr_def]
+  simp[supported_root_expr_def, supported_effect_free_expr_def] >>
+  Cases_on `es` >> simp[supported_root_effect_expr_def] >>
+  rename1 `addr::rest` >> Cases_on `rest` >> simp[supported_root_effect_expr_def] >>
+  rename1 `addr::amount::rest` >> Cases_on `rest` >> simp[supported_root_effect_expr_def] >>
+  rename1 `addr::amount::gas::rest` >> Cases_on `rest` >> simp[supported_root_effect_expr_def]
 QED
 
 Theorem runtime_sym_call_send:

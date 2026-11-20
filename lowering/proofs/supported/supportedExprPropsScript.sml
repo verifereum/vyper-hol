@@ -269,17 +269,19 @@ QED
   QED
 *)
 
-Theorem supported_external_nonword_arguments_rejected:
-  EVERY (\arg_ty. ~supported_effect_expr
-    [InterfaceDecl "I" [("remote",[("arg",arg_ty)],BaseT (UintT 256),View)]]
-    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[arg_ty],BaseT (UintT 256)) [])
-      [expr_test_address; Name arg_ty "arg"] NONE))
-    [BaseT (StringT 32); BaseT (BytesT (Dynamic 32));
-     BaseT (UintT 7); TupleT [BaseT (UintT 256)];
-     ArrayT (BaseT (UintT 256)) (Fixed 2); StructT (NONE,"Pair"); NoneT]
-Proof
-  EVAL_TAC
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (it pinned an exclusion); no theorem uses it
+  Theorem supported_external_nonword_arguments_rejected:
+    EVERY (\arg_ty. ~supported_effect_expr
+      [InterfaceDecl "I" [("remote",[("arg",arg_ty)],BaseT (UintT 256),View)]]
+      (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[arg_ty],BaseT (UintT 256)) [])
+        [expr_test_address; Name arg_ty "arg"] NONE))
+      [BaseT (StringT 32); BaseT (BytesT (Dynamic 32));
+       BaseT (UintT 7); TupleT [BaseT (UintT 256)];
+       ArrayT (BaseT (UintT 256)) (Fixed 2); StructT (NONE,"Pair"); NoneT]
+  Proof
+    EVAL_TAC
+  QED
+*)
 
 (* No declaration decides admission: the lowering hashes the call-site
    signature, as the source semantics does. *)
@@ -301,41 +303,45 @@ Proof
 QED
 (* Effectful place keys have their own E cases. Other effectful children and
    call arguments retain the independent evaluation-order restrictions. *)
-Theorem supported_effect_nesting_counterexamples:
-  EVERY (\e. ~supported_expr expr_test_tops e)
-    [Builtin (BaseT (UintT 256)) (Bop Add) [expr_test_internal; expr_test_uint];
-     IfExp (BaseT (UintT 256)) expr_test_internal expr_test_uint expr_test_uint;
-     IfExp (BaseT (UintT 256)) (Name (BaseT BoolT) "c") expr_test_internal expr_test_uint;
-     IfExp (BaseT (UintT 256)) (Name (BaseT BoolT) "c") expr_test_uint expr_test_internal;
-     StructLit (StructT (NONE,"Pair")) (NONE,"Pair") [("first",expr_test_internal)];
-     Builtin (TupleT [BaseT (UintT 256)]) (MakeArray NONE (Fixed 1)) [expr_test_internal];
-     TypeBuiltin (BaseT (IntT 256)) Convert (BaseT (IntT 256)) [expr_test_internal];
-     Call (BaseT (UintT 256)) (IntCall (NONE,"helper")) [expr_test_pop] NONE;
-     Call (BaseT (UintT 256)) (IntCall (NONE,"helper")) [expr_test_internal] NONE;
-     Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
-       [expr_test_internal; expr_test_uint] NONE;
-     Call (BaseT (UintT 256)) (ExtCall F F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [EKValue])
-       [expr_test_address; expr_test_uint; expr_test_internal] NONE;
-     Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
-       [expr_test_address; expr_test_internal] NONE;
-     Call NoneT (Send F) [expr_test_internal; expr_test_uint] NONE;
-     Call NoneT (Send F) [expr_test_address; expr_test_pop] NONE;
-     Call (BaseT (UintT 256)) (IntCall (NONE,"helper")) [expr_test_uint] (SOME expr_test_uint)]
-Proof
-  EVAL_TAC
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (it pinned an exclusion); no theorem uses it
+  Theorem supported_effect_nesting_counterexamples:
+    EVERY (\e. ~supported_expr expr_test_tops e)
+      [Builtin (BaseT (UintT 256)) (Bop Add) [expr_test_internal; expr_test_uint];
+       IfExp (BaseT (UintT 256)) expr_test_internal expr_test_uint expr_test_uint;
+       IfExp (BaseT (UintT 256)) (Name (BaseT BoolT) "c") expr_test_internal expr_test_uint;
+       IfExp (BaseT (UintT 256)) (Name (BaseT BoolT) "c") expr_test_uint expr_test_internal;
+       StructLit (StructT (NONE,"Pair")) (NONE,"Pair") [("first",expr_test_internal)];
+       Builtin (TupleT [BaseT (UintT 256)]) (MakeArray NONE (Fixed 1)) [expr_test_internal];
+       TypeBuiltin (BaseT (IntT 256)) Convert (BaseT (IntT 256)) [expr_test_internal];
+       Call (BaseT (UintT 256)) (IntCall (NONE,"helper")) [expr_test_pop] NONE;
+       Call (BaseT (UintT 256)) (IntCall (NONE,"helper")) [expr_test_internal] NONE;
+       Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
+         [expr_test_internal; expr_test_uint] NONE;
+       Call (BaseT (UintT 256)) (ExtCall F F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [EKValue])
+         [expr_test_address; expr_test_uint; expr_test_internal] NONE;
+       Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
+         [expr_test_address; expr_test_internal] NONE;
+       Call NoneT (Send F) [expr_test_internal; expr_test_uint] NONE;
+       Call NoneT (Send F) [expr_test_address; expr_test_pop] NONE;
+       Call (BaseT (UintT 256)) (IntCall (NONE,"helper")) [expr_test_uint] (SOME expr_test_uint)]
+  Proof
+    EVAL_TAC
+  QED
+*)
 
-Theorem supported_raw_call_forms_excluded:
-  EVERY (\target. ~supported_expr expr_test_tops (Call NoneT target [] NONE))
-    [RawCallTarget <| rcf_max_outsize := 0; rcf_is_delegate := F;
-                     rcf_is_static := F; rcf_revert_on_failure := T;
-                     rcf_kws := [] |>;
-     RawLog; RawRevert; SelfDestructTarget;
-     CreateTarget CreateMinimalProxy F T []; CreateTarget CreateCopyOf F T [];
-     CreateTarget (CreateFromBlueprint F) T T []; CreateTarget RawCreate F T []]
-Proof
-  EVAL_TAC
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (it pinned an exclusion); no theorem uses it
+  Theorem supported_raw_call_forms_excluded:
+    EVERY (\target. ~supported_expr expr_test_tops (Call NoneT target [] NONE))
+      [RawCallTarget <| rcf_max_outsize := 0; rcf_is_delegate := F;
+                       rcf_is_static := F; rcf_revert_on_failure := T;
+                       rcf_kws := [] |>;
+       RawLog; RawRevert; SelfDestructTarget;
+       CreateTarget CreateMinimalProxy F T []; CreateTarget CreateCopyOf F T [];
+       CreateTarget (CreateFromBlueprint F) T T []; CreateTarget RawCreate F T []]
+  Proof
+    EVAL_TAC
+  QED
+*)
 
 Theorem supported_occurrence_traversal_coverage:
   EVERY expr_has_internal_call

@@ -54,10 +54,7 @@ Ancestors
   QED
 *)
 
-Theorem deploy_frame_supported_target_info_no_extcode:
-  !target tops bindings pt.
-    supported_target_info tops bindings target = SOME pt ==>
-    ~supported_target_exists is_extcode target
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   gen_tac >> measureInduct_on `base_assignment_target_size target` >>
   Cases_on `target` >>
@@ -67,10 +64,18 @@ Proof
   first_x_assum (qspec_then `b` mp_tac) >> simp[] >>
   metis_tac[deploy_frame_supported_expr_no_extcode]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (own-code reads are accepted); callers split
+  Theorem deploy_frame_supported_target_info_no_extcode:
+    !target tops bindings pt.
+      supported_target_info tops bindings target = SOME pt ==>
+      ~supported_target_exists is_extcode target
+  Proof
+    cheat
+  QED
+*)
 
-Theorem deploy_frame_supported_target_no_extcode:
-  supported_target tops bindings target ==>
-  ~supported_target_exists is_extcode target
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `target` >>
   simp[supported_target_def, supported_expr_exists_def] >>
@@ -78,11 +83,17 @@ Proof
   simp[supported_target_def, supported_expr_exists_def] >>
   metis_tac[deploy_frame_supported_expr_no_extcode]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (own-code reads are accepted); callers split
+  Theorem deploy_frame_supported_target_no_extcode:
+    supported_target tops bindings target ==>
+    ~supported_target_exists is_extcode target
+  Proof
+    cheat
+  QED
+*)
 
-Theorem deploy_frame_supported_assignment_no_extcode:
-  supported_assignment tops bindings target e ==>
-  ~supported_assignment_exists is_extcode target /\
-  ~supported_expr_exists is_extcode e
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `target`
   >- (simp[supported_assignment_def, supported_assignment_exists_def] >>
@@ -102,84 +113,102 @@ Proof
   Cases_on `h` >> simp[supported_assignment_exists_def] >>
   metis_tac[deploy_frame_supported_target_no_extcode]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (own-code reads are accepted); callers split
+  Theorem deploy_frame_supported_assignment_no_extcode:
+    supported_assignment tops bindings target e ==>
+    ~supported_assignment_exists is_extcode target /\
+    ~supported_expr_exists is_extcode e
+  Proof
+    cheat
+  QED
+*)
 
-Theorem deploy_frame_supported_string_no_extcode:
-  supported_string_reason tops e ==> ~supported_expr_exists is_extcode e
-Proof
-  Cases_on `e` >> simp[supported_string_reason_def] >>
-  all_tac >~ [`Literal ty lit`]
-  >- (Cases_on `lit` >>
-      simp[supported_string_reason_def, supported_expr_exists_def, is_extcode_def]) >>
-  metis_tac[deploy_frame_supported_pure_no_extcode]
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (own-code reads are accepted); callers split
+  Theorem deploy_frame_supported_string_no_extcode:
+    supported_string_reason tops e ==> ~supported_expr_exists is_extcode e
+  Proof
+    Cases_on `e` >> simp[supported_string_reason_def] >>
+    all_tac >~ [`Literal ty lit`]
+    >- (Cases_on `lit` >>
+        simp[supported_string_reason_def, supported_expr_exists_def, is_extcode_def]) >>
+    metis_tac[deploy_frame_supported_pure_no_extcode]
+  QED
+*)
 
-Theorem deploy_frame_supported_iterator_no_extcode:
-  supported_iterator tops ty iter n ==>
-  ~supported_iterator_exists is_extcode iter
-Proof
-  Cases_on `iter`
-  >- (rename1 `Array arr` >> strip_tac >> simp[supported_iterator_exists_def] >>
-      Cases_on `(?t v. arr = Name t v) \/ (?t nid. arr = TopLevelName t nid)`
-      >- gvs[supported_expr_exists_def, is_extcode_def] >>
-      `supported_expr tops arr` by (Cases_on `arr` >> gvs[supported_iterator_def]) >>
-      metis_tac[deploy_frame_supported_expr_no_extcode]) >>
-  rename1 `Range a b` >>
-  `supported_iterator tops ty (Range a b) n ==>
-   (supported_pure_expr tops a /\ supported_pure_expr tops b) \/
-   (?at al bt bl. a = Literal at al /\ b = Literal bt bl)` by
-    (Cases_on `a` >> Cases_on `b` >>
-     simp[supported_iterator_def] >> metis_tac[]) >>
-  strip_tac >> first_x_assum drule >> strip_tac >>
-  simp[supported_iterator_exists_def, supported_expr_exists_def, is_extcode_def] >>
-  metis_tac[deploy_frame_supported_pure_no_extcode]
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (own-code reads are accepted); callers split
+  Theorem deploy_frame_supported_iterator_no_extcode:
+    supported_iterator tops ty iter n ==>
+    ~supported_iterator_exists is_extcode iter
+  Proof
+    Cases_on `iter`
+    >- (rename1 `Array arr` >> strip_tac >> simp[supported_iterator_exists_def] >>
+        Cases_on `(?t v. arr = Name t v) \/ (?t nid. arr = TopLevelName t nid)`
+        >- gvs[supported_expr_exists_def, is_extcode_def] >>
+        `supported_expr tops arr` by (Cases_on `arr` >> gvs[supported_iterator_def]) >>
+        metis_tac[deploy_frame_supported_expr_no_extcode]) >>
+    rename1 `Range a b` >>
+    `supported_iterator tops ty (Range a b) n ==>
+     (supported_pure_expr tops a /\ supported_pure_expr tops b) \/
+     (?at al bt bl. a = Literal at al /\ b = Literal bt bl)` by
+      (Cases_on `a` >> Cases_on `b` >>
+       simp[supported_iterator_def] >> metis_tac[]) >>
+    strip_tac >> first_x_assum drule >> strip_tac >>
+    simp[supported_iterator_exists_def, supported_expr_exists_def, is_extcode_def] >>
+    metis_tac[deploy_frame_supported_pure_no_extcode]
+  QED
+*)
 
-Theorem deploy_frame_supported_stmts_no_extcode_mutual:
-  (!tops bindings s. supported_stmt tops bindings s ==>
-    ~supported_stmt_expr_exists is_extcode s) /\
-  (!tops bindings ss. supported_stmts tops bindings ss ==>
-    ~supported_stmts_expr_exists is_extcode ss)
-Proof
-  ho_match_mp_tac supported_stmt_ind >>
-  simp[supported_stmt_def, supported_stmt_expr_exists_def] >>
-  rpt conj_tac >> rpt gen_tac >>
-  all_tac >~ [`supported_aug_target tops bindings target`]
-  >- (Cases_on `supported_target_info tops bindings target` >>
-      simp[supported_aug_target_def]
-      >- metis_tac[deploy_frame_supported_expr_no_extcode,
-                   deploy_frame_supported_target_no_extcode] >>
-      Cases_on `x` >> simp[] >>
-      metis_tac[deploy_frame_supported_expr_no_extcode,
-                deploy_frame_supported_target_no_extcode,
-                deploy_frame_supported_target_info_no_extcode]) >>
-  all_tac >~ [`supported_append_target tops target`]
-  >- (Cases_on `target` >>
-      simp[supported_append_target_def, supported_target_pure_def,
-           supported_expr_exists_def] >>
-      metis_tac[deploy_frame_supported_pure_no_extcode,
-                supported_target_pure_expr_exclusion]) >>
-  all_tac >~ [`supported_assert_reason tops reason`]
-  >- (Cases_on `reason` >>
-      simp[supported_assert_reason_def, supported_assert_exists_def] >>
-      metis_tac[deploy_frame_supported_string_no_extcode,
-                deploy_frame_supported_pure_no_extcode]) >>
-  all_tac >~ [`supported_raise_reason tops reason`]
-  >- (Cases_on `reason` >>
-      simp[supported_raise_reason_def, supported_raise_exists_def] >>
-      metis_tac[deploy_frame_supported_string_no_extcode]) >>
-  simp[supported_expr_exists_def, supported_log_def] >>
-  metis_tac[deploy_frame_supported_expr_no_extcode,
-            deploy_frame_supported_pure_no_extcode,
-            deploy_frame_supported_assignment_no_extcode,
-            deploy_frame_supported_iterator_no_extcode]
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (own-code reads are accepted); callers split
+  Theorem deploy_frame_supported_stmts_no_extcode_mutual:
+    (!tops bindings s. supported_stmt tops bindings s ==>
+      ~supported_stmt_expr_exists is_extcode s) /\
+    (!tops bindings ss. supported_stmts tops bindings ss ==>
+      ~supported_stmts_expr_exists is_extcode ss)
+  Proof
+    ho_match_mp_tac supported_stmt_ind >>
+    simp[supported_stmt_def, supported_stmt_expr_exists_def] >>
+    rpt conj_tac >> rpt gen_tac >>
+    all_tac >~ [`supported_aug_target tops bindings target`]
+    >- (Cases_on `supported_target_info tops bindings target` >>
+        simp[supported_aug_target_def]
+        >- metis_tac[deploy_frame_supported_expr_no_extcode,
+                     deploy_frame_supported_target_no_extcode] >>
+        Cases_on `x` >> simp[] >>
+        metis_tac[deploy_frame_supported_expr_no_extcode,
+                  deploy_frame_supported_target_no_extcode,
+                  deploy_frame_supported_target_info_no_extcode]) >>
+    all_tac >~ [`supported_append_target tops target`]
+    >- (Cases_on `target` >>
+        simp[supported_append_target_def, supported_target_pure_def,
+             supported_expr_exists_def] >>
+        metis_tac[deploy_frame_supported_pure_no_extcode,
+                  supported_target_pure_expr_exclusion]) >>
+    all_tac >~ [`supported_assert_reason tops reason`]
+    >- (Cases_on `reason` >>
+        simp[supported_assert_reason_def, supported_assert_exists_def] >>
+        metis_tac[deploy_frame_supported_string_no_extcode,
+                  deploy_frame_supported_pure_no_extcode]) >>
+    all_tac >~ [`supported_raise_reason tops reason`]
+    >- (Cases_on `reason` >>
+        simp[supported_raise_reason_def, supported_raise_exists_def] >>
+        metis_tac[deploy_frame_supported_string_no_extcode]) >>
+    simp[supported_expr_exists_def, supported_log_def] >>
+    metis_tac[deploy_frame_supported_expr_no_extcode,
+              deploy_frame_supported_pure_no_extcode,
+              deploy_frame_supported_assignment_no_extcode,
+              deploy_frame_supported_iterator_no_extcode]
+  QED
+*)
 
-Theorem deploy_frame_supported_stmts_no_extcode:
-  supported_stmts tops bindings ss ==>
-  ~supported_stmts_expr_exists is_extcode ss
-Proof
-  metis_tac[cj 2 deploy_frame_supported_stmts_no_extcode_mutual]
-QED
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (own-code reads are accepted); callers split
+  Theorem deploy_frame_supported_stmts_no_extcode:
+    supported_stmts tops bindings ss ==>
+    ~supported_stmts_expr_exists is_extcode ss
+  Proof
+    metis_tac[cj 2 deploy_frame_supported_stmts_no_extcode_mutual]
+  QED
+*)
 
 Theorem deploy_frame_expr_exists_disj:
   (!p e q. supported_expr_exists (\x. p x \/ q x) e <=>

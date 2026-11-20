@@ -9,30 +9,29 @@ Ancestors
 (* p marks top-level names that are neither storage, immutable nor a place
    root; supported_pure_expr and supported_place_expr admit no such name. *)
 Theorem supported_pure_no_name_root:
-  (* SCRATCH SEQ-8389: restated over the effect-free fragment *)
-  (!tops e. supported_effect_free_expr tops e ==>
+  (!tops e. supported_pure_expr tops e ==>
     (!x. p x ==> ?ty id. x = TopLevelName ty id /\
        ~supported_place_root tops id /\ ~supported_storage_value tops id ty /\
        supported_immutable_type tops id = NONE) ==>
     ~supported_expr_exists p e) /\
-  (!tops es. supported_effect_free_exprs tops es ==>
+  (!tops es. supported_pure_exprs tops es ==>
     (!x. p x ==> ?ty id. x = TopLevelName ty id /\
        ~supported_place_root tops id /\ ~supported_storage_value tops id ty /\
        supported_immutable_type tops id = NONE) ==>
     ~supported_exprs_exists p es) /\
-  (!tops fs. supported_effect_free_fields tops fs ==>
+  (!tops fs. supported_pure_fields tops fs ==>
     (!x. p x ==> ?ty id. x = TopLevelName ty id /\
        ~supported_place_root tops id /\ ~supported_storage_value tops id ty /\
        supported_immutable_type tops id = NONE) ==>
     ~supported_fields_exists p fs) /\
-  (!tops e. supported_effect_free_place_expr tops e ==>
+  (!tops e. supported_place_expr tops e ==>
     (!x. p x ==> ?ty id. x = TopLevelName ty id /\
        ~supported_place_root tops id /\ ~supported_storage_value tops id ty /\
        supported_immutable_type tops id = NONE) ==>
     ~supported_expr_exists p e)
 Proof
-  ho_match_mp_tac supported_effect_free_expr_ind >>
-  rw[supported_effect_free_expr_def, supported_expr_exists_def] >>
+  ho_match_mp_tac supported_pure_expr_ind >>
+  rw[supported_pure_expr_def, supported_expr_exists_def] >>
   rpt strip_tac >> res_tac >> gvs[]
 QED
 
