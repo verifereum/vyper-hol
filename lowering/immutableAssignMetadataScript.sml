@@ -3,7 +3,28 @@ Theory immutableAssignMetadata
 Ancestors
   immutableDeployAssignFacts bodySim bodyStorageMetadata supportedDecls exprSimHypsDefs
   vyperTypeInvariants vyperTypeEnv vyperTypeSystem finite_map exprSimSource
-  vyperInterpreter vyperState
+  vyperInterpreter vyperState bodyInvSplit bodyInvCodeProps
+  bodyInvMetadataProps immutableRegionTypingProps alist
+
+Theorem immutable_assign_bare_global_mods:
+  contract_inv mods exps ctx ce cx /\ cx.in_deploy /\
+  expr_sim_inv_mods mods ce cx env es /\
+  ALOOKUP mods src = SOME tops /\
+  supported_immutable_type tops (NONE,id) = SOME ity ==>
+  ce.ce_is_ctor /\ FLOOKUP env.bare_globals (src,id) = SOME ity
+Proof
+  strip_tac >>
+  qpat_x_assum `supported_immutable_type _ _ = _` mp_tac >>
+  simp[supported_immutable_type_def] >>
+  Cases_on `supported_variable_decl tops (NONE,id)` >> simp[] >>
+  rename1 `_ = SOME decl` >> PairCases_on `decl` >>
+  Cases_on `decl0` >> Cases_on `decl1` >> Cases_on `decl3` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule_then strip_assume_tac supported_variable_decl_mem >> gvs[] >>
+  conj_tac
+  >- (drule_then assume_tac contract_inv_constructor >> simp[]) >>
+  drule_all immutable_decl_bare_global_mods >> simp[]
+QED
 
 Theorem immutable_assign_bare_global:
   body_inv tops ctx ce cx /\ cx.in_deploy /\
@@ -12,19 +33,14 @@ Theorem immutable_assign_bare_global:
   src = NONE /\ ce.ce_is_ctor /\
   FLOOKUP env.bare_globals (src,id) = SOME ity
 Proof
-  strip_tac >>
-  qpat_x_assum `supported_immutable_type _ _ = _` mp_tac >>
-  simp[supported_immutable_type_def] >>
-  Cases_on `supported_variable_decl tops (src,id)` >> simp[] >>
-  rename1 `_ = SOME decl` >> PairCases_on `decl` >>
-  Cases_on `decl0` >> Cases_on `decl1` >> Cases_on `decl3` >>
-  simp[] >> strip_tac >> gvs[] >>
-  drule_then strip_assume_tac supported_variable_decl_mem >> gvs[] >>
-  `get_module_code cx NONE = SOME tops /\
-   bare_globals_complete env.bare_globals cx /\ ce.ce_is_ctor` by
-    fs[bodySimTheory.body_inv_def, expr_sim_inv_def, env_consistent_def,
-       env_context_consistent_def] >>
-  simp[] >> metis_tac[bare_globals_complete_def]
+  Cases_on `src`
+  >- (strip_tac >> drule_then assume_tac body_inv_contract >>
+      drule_then strip_assume_tac body_inv_main_code >>
+      fs[expr_sim_inv_split_def] >>
+      irule immutable_assign_bare_global_mods >>
+      qexistsl_tac [`ctx`, `cx`, `es`, `[]`, `[(NONE,tops)]`, `tops`] >>
+      simp[ALOOKUP_def] >> metis_tac[]) >>
+  simp[supported_immutable_type_def, supported_lookup_other_module]
 QED
 
 Theorem immutable_assign_rhs_target:
