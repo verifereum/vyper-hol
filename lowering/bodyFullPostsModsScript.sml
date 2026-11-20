@@ -1,14 +1,14 @@
 (* Value posts and simulations for the linked unit's immutable section. *)
 Theory bodyFullPostsMods
 Ancestors
-  bodySimFull loweringPosts loweringStateRelDefs bodyPtrDefs bodySim
+  bodySimFull bodySimEntry loweringPosts loweringStateRelDefs bodyPtrDefs bodySim
   exprLowering exprLoweringProps compileEnv bodyInvSplit bodyFullShadowBodyInv
   exprSimDefs exprSimMapDefs exprSimHypsDefs stmtSimDefs stmtLowering
   gasOutcomeFull gasShadow gasShadowState gasShadowUnit
   gasExplicitSites gasContext allocaHistory contextRawReachable unitMemInv
   vyperInterpreter vyperState vyperAST vyperContext vyperTypeSystem
-  vyperTypeCallGraph vyperStoragePlaceProvenance vyperStorageFootprint
-  venomState venomWf alist list pair option
+  vyperTypeCallGraph vyperTypeInvariants vyperStoragePlaceProvenance vyperStorageFootprint
+  venomState venomWf alist finite_map list pair option
 
 (* Only the immutable lookup changes module. The expression's frame
    and its local variables still belong to the active compile env. *)
@@ -360,12 +360,21 @@ Definition frame_ret_ok_full_mods_def[nocompute]:
         (eval_stmt cx (Return eo)) es
 End
 
+Theorem ce_module_update_same[local]:
+  cenv with ce_module := cenv.ce_module = cenv
+Proof
+  simp[compile_env_component_equality]
+QED
+
 Theorem immutable_holds_mods_singleton:
   cenv.ce_modules = [(NONE,tops)] /\ cenv.ce_module = NONE ==>
   (immutable_holds_mods cenv cx t tv w es s <=>
    immutable_holds cenv cx t tv w es s)
 Proof
-  cheat
+  strip_tac >>
+  `cenv with ce_module := NONE = cenv` by metis_tac[ce_module_update_same] >>
+  simp[immutable_holds_mods_def, ALOOKUP_def] >>
+  metis_tac[]
 QED
 
 Theorem vv_place_ptr_mods_singleton:
@@ -373,7 +382,13 @@ Theorem vv_place_ptr_mods_singleton:
   (vv_place_ptr_mods cenv cx es s tv vv <=>
    vv_place_ptr cenv cx es s tv vv)
 Proof
-  cheat
+  strip_tac >>
+  `cenv with ce_module := NONE = cenv` by metis_tac[ce_module_update_same] >>
+  Cases_on `vv` >> Cases_on `tv` >>
+  TRY (rename1 `PlaceR place` >> Cases_on `place`) >>
+  simp[vv_place_ptr_mods_def, ALOOKUP_def] >>
+  rename1 `vv_place_ptr _ _ _ _ (PlaceR (ImmutablePlace src id path)) _` >>
+  Cases_on `src` >> simp[vv_place_ptr_def]
 QED
 
 Theorem vv_holds_mods_singleton:
@@ -381,7 +396,35 @@ Theorem vv_holds_mods_singleton:
   (vv_holds_mods cenv cx t tv vv es s <=>
    vv_holds cenv cx t tv vv es s)
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `vv` >> simp[vv_holds_mods_def] >>
+  rename1 `p.ptr_location = LocCode` >>
+  Cases_on `p.ptr_location = LocCode` >>
+  simp[vv_holds_def, vv_holds_mods_def, immutable_holds_mods_singleton]
+QED
+
+Theorem stmt_state_rel_immutable_frame[local]:
+  cenv.ce_modules = [(NONE,tops)] /\ cenv.ce_module = NONE /\
+  stmt_state_rel H ctx func cenv cx es s ==>
+  immutable_frame_mods func cenv cx es s
+Proof
+  strip_tac >>
+  `cenv with ce_module := NONE = cenv` by metis_tac[ce_module_update_same] >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
+  simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
+       immutable_frame_mods_def, immutable_alloca_sep_mods_def,
+       immutables_rel_mods_def, ALOOKUP_def, FORALL_OPTION]
+QED
+
+Theorem immutable_frame_conj_singleton[local]:
+  cenv.ce_modules = [(NONE,tops)] /\ cenv.ce_module = NONE ==>
+  (stmt_state_rel H ctx func cenv cx es s /\
+   immutable_frame_mods func cenv cx es s /\ P <=>
+   stmt_state_rel H ctx func cenv cx es s /\ P)
+Proof
+  strip_tac >>
+  Cases_on `stmt_state_rel H ctx func cenv cx es s` >> simp[] >>
+  drule_all stmt_state_rel_immutable_frame >> simp[]
 QED
 
 Theorem expr_post_mods_singleton:
@@ -389,7 +432,9 @@ Theorem expr_post_mods_singleton:
   (expr_post_mods H ctx func cenv cx e es sa sb s0 es' v op s <=>
    expr_post H ctx func cenv cx e es sa sb s0 es' v op s)
 Proof
-  cheat
+  strip_tac >>
+  simp[expr_post_mods_def, expr_post_def] >>
+  metis_tac[stmt_state_rel_immutable_frame]
 QED
 
 Theorem vv_post_mods_singleton:
@@ -397,7 +442,10 @@ Theorem vv_post_mods_singleton:
   (vv_post_mods H ctx func cenv cx e es sa sb s0 es' tv vv s <=>
    vv_post H ctx func cenv cx e es sa sb s0 es' tv vv s)
 Proof
-  cheat
+  strip_tac >>
+  simp[vv_post_mods_def, vv_post_def,
+       immutable_frame_conj_singleton, vv_holds_mods_singleton,
+       vv_place_ptr_mods_singleton]
 QED
 
 Theorem expr_sim_full_mods_singleton:
@@ -405,7 +453,10 @@ Theorem expr_sim_full_mods_singleton:
   (expr_sim_full_mods cfg cenv cx ty e es <=>
    expr_sim_full cfg cenv cx ty e es)
 Proof
-  cheat
+  strip_tac >> PairCases_on `cfg` >>
+  simp[expr_sim_full_mods_def, expr_sim_full_def,
+       dead_lo_ok_mods_singleton, ghost_inv_at_mods_singleton,
+       immutable_frame_conj_singleton, SF CONJ_ss, expr_post_mods_singleton]
 QED
 
 Theorem expr_vv_sim_full_mods_singleton:
@@ -413,7 +464,10 @@ Theorem expr_vv_sim_full_mods_singleton:
   (expr_vv_sim_full_mods cfg cenv cx ty e es <=>
    expr_vv_sim_full cfg cenv cx ty e es)
 Proof
-  cheat
+  strip_tac >> PairCases_on `cfg` >>
+  simp[expr_vv_sim_full_mods_def, expr_vv_sim_full_def,
+       dead_lo_ok_mods_singleton, ghost_inv_at_mods_singleton,
+       immutable_frame_conj_singleton, SF CONJ_ss, vv_post_mods_singleton]
 QED
 
 Theorem expr_map_sim_full_mods_singleton:
@@ -421,7 +475,19 @@ Theorem expr_map_sim_full_mods_singleton:
   (expr_map_sim_full_mods cfg cenv cx ty e es <=>
    expr_map_sim_full cfg cenv cx ty e es)
 Proof
-  cheat
+  strip_tac >> PairCases_on `cfg` >>
+  simp[expr_map_sim_full_mods_def, expr_map_sim_full_def,
+       dead_lo_ok_mods_singleton, ghost_inv_at_mods_singleton,
+       immutable_frame_conj_singleton, SF CONJ_ss]
+QED
+
+Theorem same_frame_module_fields[local]:
+  same_frame cenv cenv' ==>
+  cenv'.ce_modules = cenv.ce_modules /\
+  cenv'.ce_module = cenv.ce_module /\
+  cenv'.ce_module_vars = cenv.ce_module_vars
+Proof
+  simp[same_frame_def, compile_env_component_equality]
 QED
 
 Theorem stmt_frag_full_mods_singleton:
@@ -429,14 +495,70 @@ Theorem stmt_frag_full_mods_singleton:
   (stmt_frag_full_mods cfg cx lctx RetQ cenv m shadow_m source es <=>
    stmt_frag_full cfg cx lctx RetQ cenv m shadow_m source es)
 Proof
-  cheat
+  strip_tac >>
+  PairCases_on `cfg` >>
+  simp[stmt_frag_full_mods_def, stmt_frag_full_def, cenv_top_ext_def,
+       compile_env_component_equality,
+       dead_lo_ok_mods_singleton, ghost_inv_at_mods_singleton,
+       immutable_frame_conj_singleton, SF CONJ_ss]
+QED
+
+Theorem expr_sim_inv_mods_singleton:
+  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+  cenv.ce_module = NONE /\ immutable_section_layout_mods [(NONE,tops)] cenv ==>
+  (expr_sim_inv_mods [(NONE,tops)] cenv cx env es <=>
+   expr_sim_inv cenv cx env es)
+Proof
+  strip_tac >>
+  `cx_tops cx = tops` by simp[cx_tops_def, get_module_code_def, ALOOKUP_def] >>
+  simp[expr_sim_inv_split_def] >>
+  eq_tac >> simp[] >> strip_tac >>
+  `env_consistent env cx es` by fs[expr_sim_inv_mods_def] >>
+  `env_context_consistent env cx` by fs[env_consistent_def] >>
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 ASSUME_TAC ASSUME_TAC) >>
+  `?ts. get_module_code cx src = SOME ts /\ is_bare_global_decl id ts` by
+    metis_tac[env_context_consistent_bare_global_find_NONE] >>
+  `src = NONE /\ ts = tops` by
+    (qpat_x_assum `get_module_code cx src = SOME ts` mp_tac >>
+     Cases_on `src` >> simp[get_module_code_def, ALOOKUP_def] >> metis_tac[]) >>
+  qpat_x_assum `src = NONE` SUBST_ALL_TAC >>
+  qpat_x_assum `ts = tops` SUBST_ALL_TAC >>
+  simp[] >>
+  `?vis ty' slot. MEM (VariableDecl vis Immutable id ty' slot) tops` by
+    (mp_tac (Q.SPECL [`env`, `cx`, `es`, `tops`, `id`]
+                     bare_global_clause_immutable) >>
+     simp[get_module_code_def, ALOOKUP_def]) >>
+  qpat_x_assum `MEM (VariableDecl _ Immutable _ _ _) tops`
+    (strip_assume_tac o REWRITE_RULE [MEM_SPLIT]) >>
+  `?off size. immutable_region_mods [(NONE,tops)] NONE id off size` by
+    (simp[immutable_region_mods_def, ALOOKUP_def] >>
+     qexists_tac `compute_immutables_len
+       (get_struct_fields (make_struct_fields_map_mods [(NONE,tops)])) l1` >>
+     qexistsl_tac [`l1`, `l2`, `vis`, `ty'`, `slot`] >> simp[]) >>
+  qpat_x_assum `immutable_section_layout_mods _ _`
+    (mp_tac o Q.SPECL [`NONE`, `id`, `off`] o CONJUNCT1 o
+     REWRITE_RULE [immutable_section_layout_mods_def]) >>
+  metis_tac[IS_SOME_EXISTS]
 QED
 
 Theorem frame_ret_ok_full_mods_singleton:
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
-  cenv.ce_modules = [(NONE,tops)] /\ cenv.ce_module = NONE ==>
+  cenv.ce_modules = [(NONE,tops)] /\ cenv.ce_module = NONE /\
+  immutable_section_layout_mods [(NONE,tops)] cenv ==>
   (frame_ret_ok_full_mods [(NONE,tops)] cfg cx RetQ cenv ret_ty <=>
    frame_ret_ok_full cfg cx RetQ cenv ret_ty)
 Proof
-  cheat
+  strip_tac >>
+  `cx_tops cx = tops` by simp[cx_tops_def, get_module_code_def, ALOOKUP_def] >>
+  `!cenv'. same_frame cenv cenv' ==>
+      cenv'.ce_modules = [(NONE,tops)] /\ cenv'.ce_module = NONE /\
+      immutable_section_layout_mods [(NONE,tops)] cenv'` by
+    (gen_tac >> disch_then (mp_tac o MATCH_MP same_frame_module_fields) >>
+     simp[] >> strip_tac >>
+     qpat_x_assum `immutable_section_layout_mods [(NONE,tops)] cenv` mp_tac >>
+     simp[immutable_section_layout_mods_def] >> metis_tac[]) >>
+  PairCases_on `cfg` >>
+  simp[frame_ret_ok_full_mods_def, frame_ret_ok_full_def, GSYM AND_IMP_INTRO, SF CONJ_ss,
+       expr_sim_inv_mods_singleton, expr_sim_full_mods_singleton,
+       expr_vv_sim_full_mods_singleton, stmt_frag_full_mods_singleton]
 QED

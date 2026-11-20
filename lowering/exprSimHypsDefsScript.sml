@@ -85,7 +85,8 @@ Theorem cx_const_name_def:
   cx_const_name cx ((src:num option),id) <=>
     src = NONE /\ MEM id (MAP FST (module_consts_env (cx_tops cx) []))
 Proof
-  cheat
+  Cases_on `src` >>
+  simp[cx_const_name_split_def, cx_const_name_mods_def, ALOOKUP_def]
 QED
 
 Definition const_name_root_def:
@@ -108,7 +109,8 @@ End
 Theorem const_name_root_mods_singleton:
   const_name_root_mods [(NONE,cx_tops cx)] = const_name_root cx
 Proof
-  cheat
+  simp[FUN_EQ_THM] >> gen_tac >> Cases_on `x` >>
+  simp[const_name_root_mods_def, const_name_root_def, cx_const_name_split_def]
 QED
 
 (* Shared tables cover the linked unit. The active module still owns its
@@ -238,7 +240,13 @@ Theorem expr_sim_inv_def:
       cenv.ce_module_vars cenv.ce_modules cx env.bare_globals
       env.bare_global_assignable
 Proof
-  cheat
+  simp[expr_sim_inv_split_def, expr_sim_inv_mods_def, GSYM cx_const_name_split_def] >>
+  eq_tac >> strip_tac >>
+  rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >>
+  rpt gen_tac >> strip_tac >>
+  rpt (qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\ _ ==> _`
+    (mp_tac o Q.SPECL [`src`, `id`, `ty`])) >>
+  simp[] >> metis_tac[IS_SOME_EXISTS]
 QED
 
 Theorem extend_local_bare_globals[simp]:
@@ -369,7 +377,38 @@ Theorem expr_body_pre_def:
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
               is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target))
 Proof
-  cheat
+  `(EVERY (\c. FST c = NONE /\
+            ?tops. supported_program tops /\
+                   get_module_code cx NONE = SOME tops /\
+                   IS_SOME (supported_function_decl tops c Internal))
+       (int_calls_expr e)) <=>
+    EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+    EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                      supported_program tops /\
+                      IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
+       (int_calls_expr e)` by
+    (simp[EVERY_MEM, FORALL_PROD] >> eq_tac >> strip_tac >> rpt strip_tac >>
+     res_tac >> gvs[] >> metis_tac[]) >>
+  simp[expr_body_pre_split_def, expr_body_pre_mods_def, const_name_root_mods_singleton,
+       type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2] >>
+  eq_tac >> strip_tac >> simp[] >>
+  `expr_sim_inv_mods [(NONE,cx_tops cx)] cenv cx env es` by
+    fs[expr_sim_inv_split_def] >>
+  `!x. unallocated_bare_global_root cenv env x ==> const_name_root cx x` by
+    (gen_tac >> Cases_on `x` >>
+     simp[unallocated_bare_global_root_def, const_name_root_def] >>
+     rename1 `cx_const_name cx nsid` >> PairCases_on `nsid` >>
+     rw[IS_SOME_EXISTS] >>
+     qpat_x_assum `expr_sim_inv _ _ _ _`
+       (mp_tac o CONJUNCT2 o REWRITE_RULE [expr_sim_inv_split_def]) >>
+     disch_then (qspecl_then [`nsid0`, `nsid1`] mp_tac) >>
+     simp[]) >>
+  `~supported_expr_exists (unallocated_bare_global_root cenv env) e` by
+    (strip_tac >>
+     qpat_x_assum `~supported_expr_exists (const_name_root cx) e` mp_tac >>
+     simp[] >> irule (CONJUNCT1 supported_expr_exists_mono) >>
+     metis_tac[]) >>
+  simp[]
 QED
 
 Definition expr_sim_ok_def:

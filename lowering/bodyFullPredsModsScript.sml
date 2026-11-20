@@ -4,7 +4,7 @@ Ancestors
   bodyFullPreds bodyFullPostsMods bodyFullShadowBodyInv bodyInvSplit bodySim
   exprSimHypsDefs exprSimMapDefs supportedStmts supportedProgram
   supportedExprTraverse allocLimits placeTypingProps compileEnv exprLowering
-  gasShadow gasContext vyperInterpreter vyperTypeSystem vyperTypeCallGraph
+  gasShadow gasContext bodySimFull vyperInterpreter vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness vyperState vyperContext vyperAST
   vyperTypeInvariants list alist option pair finite_map
 
@@ -153,6 +153,90 @@ End
 Theorem body_exprs_full_ok_mods_def =
   CONJUNCT2 body_expr_full_ok_mods_def;
 
+Theorem contract_inv_singleton_pins[local]:
+  contract_inv [(NONE,tops)] [] ctx cenv cx ==>
+  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+  cenv.ce_modules = [(NONE,tops)] /\
+  immutable_section_layout_mods [(NONE,tops)] cenv /\
+  cx_tops cx = tops
+Proof
+  simp[contract_inv_def, cenv_module_pins_mods_def] >>
+  strip_tac >> simp[cx_tops_def, get_module_code_def, ALOOKUP_def]
+QED
+
+Theorem contract_inv_singleton_guard[local]:
+  (contract_inv [(NONE,tops)] [] ctx cenv cx ==> P) <=>
+  (contract_inv [(NONE,tops)] [] ctx cenv cx ==>
+   cenv.ce_modules = [(NONE,tops)] ==> cx_tops cx = tops ==>
+   immutable_section_layout_mods [(NONE,tops)] cenv ==> P)
+Proof
+  metis_tac[contract_inv_singleton_pins]
+QED
+
+Theorem body_inv_singleton[local]:
+  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+  !ts ctx cenv. body_inv ts ctx cenv cx <=>
+    ts = tops /\ contract_inv [(NONE,tops)] [] ctx cenv cx /\
+    cenv.ce_module = NONE
+Proof
+  strip_tac >> rpt gen_tac >>
+  `!ts. contract_inv [(NONE,ts)] [] ctx cenv cx ==>
+        ALOOKUP cx.sources cx.txn.target = SOME [(NONE,ts)] /\
+        cenv_module_pins_mods [(NONE,ts)] cenv` by
+    simp[contract_inv_def] >>
+  simp[body_inv_split_def, module_body_inv_def, ALOOKUP_def,
+       cenv_module_pins_split_def, SF CONJ_ss] >>
+  eq_tac >> strip_tac >> gvs[] >>
+  qpat_x_assum `!ts. contract_inv _ _ _ _ _ ==> _` (qspec_then `ts` mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem singleton_call_sources[local]:
+  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+  EVERY (\c. ?ts. get_module_code cx (FST c) = SOME ts /\
+                 supported_program ts /\
+                 IS_SOME (supported_function_decl ts (NONE,SND c) Internal))
+    (int_calls_expr e) ==>
+  EVERY (\c. FST c = NONE) (int_calls_expr e)
+Proof
+  simp[EVERY_MEM, FORALL_PROD, get_module_code_def, ALOOKUP_def] >>
+  rpt strip_tac >> res_tac >> gvs[AllCaseEqs()]
+QED
+
+Theorem expr_body_pre_mods_singleton[local]:
+  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+  cenv.ce_module = NONE /\ immutable_section_layout_mods [(NONE,tops)] cenv ==>
+  (expr_body_pre_mods [(NONE,tops)] cenv cx env e es <=>
+   expr_body_pre cenv cx env e es)
+Proof
+  strip_tac >>
+  `cx_tops cx = tops` by simp[cx_tops_def, get_module_code_def, ALOOKUP_def] >>
+  simp[expr_body_pre_split_def] >>
+  qpat_assum `ALOOKUP cx.sources _ = _`
+    (assume_tac o MATCH_MP singleton_call_sources) >>
+  simp[expr_body_pre_mods_def, expr_sim_inv_mods_singleton,
+       type_env_def, type_env_all_modules_def, FUNION_FEMPTY_2,
+       SF CONJ_ss] >>
+  metis_tac[]
+QED
+
+Theorem expr_map_pre_mods_singleton[local]:
+  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+  cenv.ce_module = NONE /\ immutable_section_layout_mods [(NONE,tops)] cenv ==>
+  (expr_map_pre_mods [(NONE,tops)] cenv cx env e es <=>
+   expr_map_pre cenv cx env e es)
+Proof
+  strip_tac >>
+  `cx_tops cx = tops` by simp[cx_tops_def, get_module_code_def, ALOOKUP_def] >>
+  simp[expr_map_pre_split_def] >>
+  qpat_assum `ALOOKUP cx.sources _ = _`
+    (assume_tac o MATCH_MP singleton_call_sources) >>
+  simp[expr_map_pre_mods_def, expr_sim_inv_mods_singleton,
+       type_env_def, type_env_all_modules_def, FUNION_FEMPTY_2,
+       SF CONJ_ss] >>
+  metis_tac[]
+QED
+
 Theorem body_expr_full_ok_mods_singleton:
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
   (!e. body_expr_full_ok_mods [(NONE,tops)] [] cx e <=>
@@ -160,7 +244,29 @@ Theorem body_expr_full_ok_mods_singleton:
   (!es. body_exprs_full_ok_mods [(NONE,tops)] [] cx es <=>
          body_exprs_full_ok cx es)
 Proof
-  cheat
+  strip_tac >>
+  `(!mods exps cx e. mods = [(NONE,tops)] /\ exps = [] /\
+      ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+      (body_expr_full_ok_mods mods exps cx e <=> body_expr_full_ok cx e)) /\
+    (!mods exps cx es. mods = [(NONE,tops)] /\ exps = [] /\
+      ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+      (body_exprs_full_ok_mods mods exps cx es <=> body_exprs_full_ok cx es))` by
+    (ho_match_mp_tac body_expr_full_ok_mods_ind >> rpt conj_tac >>
+     rpt strip_tac >> gvs[] >>
+     ASSUM_LIST (MAP_EVERY assume_tac o mapfilter (MATCH_MP body_inv_singleton)) >>
+     once_rewrite_tac[body_expr_full_ok_mods_def, body_expr_full_ok_def] >>
+     simp[module_body_inv_def, ALOOKUP_def] >>
+     simp[FORALL_OPTION, GSYM shadow_body_inv_split_def, GSYM AND_IMP_INTRO] >>
+     once_rewrite_tac[contract_inv_singleton_guard] >>
+     simp[expr_body_pre_mods_singleton, expr_map_pre_mods_singleton,
+         expr_sim_full_mods_singleton, expr_vv_sim_full_mods_singleton,
+         expr_map_sim_full_mods_singleton] >>
+     Cases_on `?s tv t s1 v t1. eval_expr cx' e s = (INL tv,t) /\
+                              read_result cx' tv s1 = (INL v,t1)` >>
+     simp[] >>
+     qpat_x_assum `_ ==> (body_exprs_full_ok_mods _ _ _ _ <=> _)` mp_tac >>
+     simp[]) >>
+  conj_tac >> gen_tac >> first_x_assum irule >> simp[]
 QED
 
 Theorem body_stmt_full_ok_mods_singleton:
@@ -168,7 +274,16 @@ Theorem body_stmt_full_ok_mods_singleton:
   (body_stmt_full_ok_mods [(NONE,tops)] [] cx s <=>
      body_stmt_full_ok cx s)
 Proof
-  cheat
+  strip_tac >>
+  qpat_assum `ALOOKUP cx.sources _ = SOME [(NONE,tops)]`
+    (assume_tac o MATCH_MP body_inv_singleton) >>
+  simp[body_stmt_full_ok_mods_def, body_stmt_full_ok_def,
+       module_body_inv_def, ALOOKUP_def,
+       FORALL_OPTION, GSYM shadow_body_inv_split_def,
+       GSYM AND_IMP_INTRO] >>
+  once_rewrite_tac[contract_inv_singleton_guard] >>
+  simp[expr_sim_inv_mods_singleton, frame_ret_ok_full_mods_singleton,
+       stmt_frag_full_mods_singleton]
 QED
 
 Theorem body_stmts_full_ok_mods_singleton:
@@ -176,7 +291,16 @@ Theorem body_stmts_full_ok_mods_singleton:
   (body_stmts_full_ok_mods [(NONE,tops)] [] cx ss <=>
      body_stmts_full_ok cx ss)
 Proof
-  cheat
+  strip_tac >>
+  qpat_assum `ALOOKUP cx.sources _ = SOME [(NONE,tops)]`
+    (assume_tac o MATCH_MP body_inv_singleton) >>
+  simp[body_stmts_full_ok_mods_def, body_stmts_full_ok_def,
+       module_body_inv_def, ALOOKUP_def,
+       FORALL_OPTION, GSYM shadow_body_inv_split_def,
+       GSYM AND_IMP_INTRO] >>
+  once_rewrite_tac[contract_inv_singleton_guard] >>
+  simp[expr_sim_inv_mods_singleton, frame_ret_ok_full_mods_singleton,
+       stmt_frag_full_mods_singleton]
 QED
 
 Theorem body_results_full_ok_mods_singleton:
@@ -184,7 +308,9 @@ Theorem body_results_full_ok_mods_singleton:
   (body_results_full_ok_mods [(NONE,tops)] [] cx es <=>
      body_results_full_ok cx es)
 Proof
-  cheat
+  strip_tac >> Induct_on `es` >>
+  simp[body_results_full_ok_mods_def, body_results_full_ok_def,
+       body_expr_full_ok_mods_singleton]
 QED
 
 Theorem body_iterator_full_ok_mods_singleton:
@@ -192,7 +318,9 @@ Theorem body_iterator_full_ok_mods_singleton:
   (body_iterator_full_ok_mods [(NONE,tops)] [] cx it <=>
      body_iterator_full_ok cx it)
 Proof
-  cheat
+  strip_tac >> Cases_on `it` >>
+  simp[body_iterator_full_ok_mods_def, body_iterator_full_ok_def,
+       body_expr_full_ok_mods_singleton]
 QED
 
 Theorem body_for_full_ok_mods_singleton:
@@ -200,7 +328,9 @@ Theorem body_for_full_ok_mods_singleton:
   (body_for_full_ok_mods [(NONE,tops)] [] cx tyv nm body vs <=>
      body_for_full_ok cx tyv nm body vs)
 Proof
-  cheat
+  strip_tac >>
+  simp[body_for_full_ok_mods_def, body_for_full_ok_def,
+       body_stmts_full_ok_mods_singleton]
 QED
 
 Theorem body_base_target_full_ok_mods_singleton:
@@ -208,7 +338,12 @@ Theorem body_base_target_full_ok_mods_singleton:
   (body_base_target_full_ok_mods [(NONE,tops)] [] cx t <=>
      body_base_target_full_ok cx t)
 Proof
-  cheat
+  strip_tac >>
+  completeInduct_on `base_assignment_target_size t` >>
+  Cases_on `t` >>
+  gvs[body_base_target_full_ok_mods_def, body_base_target_full_ok_def,
+      body_expr_full_ok_mods_singleton, expr_size_def] >>
+  first_x_assum irule >> simp[]
 QED
 
 Theorem body_tuple_target_full_ok_mods_singleton:
@@ -218,7 +353,20 @@ Theorem body_tuple_target_full_ok_mods_singleton:
   (!gs vs. body_tuple_targets_full_ok_mods [(NONE,tops)] [] cx gs vs <=>
          body_tuple_targets_full_ok cx gs vs)
 Proof
-  cheat
+  strip_tac >>
+  `(!mods exps cx g v. mods = [(NONE,tops)] /\ exps = [] /\
+      ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+      (body_tuple_target_full_ok_mods mods exps cx g v <=>
+       body_tuple_target_full_ok cx g v)) /\
+    (!mods exps cx gs vs. mods = [(NONE,tops)] /\ exps = [] /\
+      ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+      (body_tuple_targets_full_ok_mods mods exps cx gs vs <=>
+       body_tuple_targets_full_ok cx gs vs))` by
+    (ho_match_mp_tac body_tuple_target_full_ok_mods_ind >> rpt conj_tac >>
+     rpt strip_tac >>
+     once_rewrite_tac[body_tuple_target_full_ok_mods_def, body_tuple_target_full_ok_def] >>
+     gvs[body_base_target_full_ok_mods_singleton]) >>
+  conj_tac >> rpt gen_tac >> first_x_assum irule >> simp[]
 QED
 
 Theorem expr_body_pre_mods_map_subscript_base:
@@ -227,5 +375,19 @@ Theorem expr_body_pre_mods_map_subscript_base:
     place_type cenv obj = MapPT kt vt ==>
     expr_map_pre_mods mods cenv cx env obj es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `place_map_tables_agree_on_defined cenv env /\
+   (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
+              cenv.ce_hashmap_info nsid = NONE)` by
+    gvs[expr_body_pre_mods_def, expr_sim_inv_mods_def] >>
+  gvs[expr_body_pre_mods_def, Once well_typed_expr_def,
+      byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
+      expr_has_evm_run_thm, EVERY_APPEND]
+  >- (drule_all place_type_well_typed_on_defined >> simp[]) >>
+  drule_all place_type_checked_place_on_defined >> strip_tac >>
+  rename1 `type_place_expr env obj = SOME bty` >>
+  Cases_on `bty` >> gvs[value_type_place_def] >>
+  simp[expr_map_pre_mods_def] >>
+  gvs[supported_expr_exists_def] >>
+  metis_tac[call_evaluation_safe_append_left]
 QED
