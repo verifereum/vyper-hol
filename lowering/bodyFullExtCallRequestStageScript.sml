@@ -28,8 +28,6 @@ Theorem request_stage_operands_layout[local]:
     (case go of SOME g => (g,s3) | NONE => emit_op GAS [] s3) = (gas,s5) /\
     compile_external_call_kwargs cenv ao av
       (MAP (lowered_value_type cenv) (TAKE (LENGTH ats) rest))
-      (SUM (MAP (type_memory_bytes cenv)
-        (MAP (lowered_value_type cenv) (TAKE (LENGTH ats) rest))))
       (abi_size_bound cenv.ce_struct_fields
         (TupleT (MAP (lowered_value_type cenv) (TAKE (LENGTH ats) rest))))
       (cenv.ce_method_id name ats)
@@ -41,8 +39,6 @@ Theorem request_stage_operands_layout[local]:
       (case vo of SOME v => v | NONE => Lit 0w) gas skip
       (IS_SOME def) (case def of SOME (d,dt) => d | NONE => Lit 0w)
       rt (case def of SOME (d,dt) => dt | NONE => rt)
-      (type_to_abi_enc_info cenv.ce_struct_fields cenv
-        (TupleT (MAP (lowered_value_type cenv) (TAKE (LENGTH ats) rest))))
       (type_to_abi_dec_info cenv.ce_struct_fields cenv
         (if needs_external_call_wrap rt then TupleT [rt] else rt))
       s5 = (result,sb) /\
@@ -590,7 +586,7 @@ Proof
        mp_tac >>
      simp[NoAsms, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM])) >>
   disch_then (mk_asm "packing_rows") >>
-  qpat_assum `compile_external_call_kwargs _ ao av _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ s5 = _`
+  qpat_assum `compile_external_call_kwargs _ ao av _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ s5 = _`
     (mp_tac o MATCH_MP extcall_request_buffer_layout) >>
   disch_then (qx_choose_then `ba` (qx_choose_then `sb1` (qx_choose_then `sb2`
     (qx_choose_then `len` (qx_choose_then `sb3` (qx_choose_then `off`
@@ -616,8 +612,7 @@ Proof
       >- (gen_tac >> simp[Abbr `f`] >>
           rpt (FIRST [irule comp_bind_labels, irule comp_ignore_bind_labels] >>
             conj_tac >> rpt gen_tac >> BETA_TAC >>
-            simp[compile_alloc_buffer_labels,compile_extcall_store_values_labels,
-                 emit_op_labels,compile_abi_encode_labels])) >>
+            simp[emit_op_labels,compile_abi_encode_values_to_buf_labels])) >>
       first_x_assum (qspec_then `sb2` (ACCEPT_TAC o CONJUNCT1))) >>
   sg `cs_extends sp sr`
   >- (qpat_assum `comp_ignore_bind _ _ sp = (_,sr)`

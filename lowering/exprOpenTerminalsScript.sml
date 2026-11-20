@@ -283,10 +283,10 @@ Proof
 QED
 
 Theorem compile_external_call_kwargs_open:
-  !cenv addr vals tys memsz abisz mid retsz minsz retmem static value gas skip
-   has_default default_op rty dty enc dec sa v sb.
-    compile_external_call_kwargs cenv addr vals tys memsz abisz mid retsz minsz
-      retmem static value gas skip has_default default_op rty dty enc dec sa =
+  !cenv addr vals tys abisz mid retsz minsz retmem static value gas skip
+   has_default default_op rty dty dec sa v sb.
+    compile_external_call_kwargs cenv addr vals tys abisz mid retsz minsz
+      retmem static value gas skip has_default default_op rty dty dec sa =
       (v,sb) ==> ~block_is_terminated sb
 Proof
   rpt gen_tac >>

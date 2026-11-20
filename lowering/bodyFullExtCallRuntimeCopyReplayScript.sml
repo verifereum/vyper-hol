@@ -11,7 +11,9 @@ Ancestors
   exprSimCopy exprSimStorageCopy exprSimAlloc exprLoweringProps
   loweringPosts loweringStateRelDefs bodyPtrDefs ptrDiscipline
   compileEnv context vyperStorageFootprint vyperState valueEncodingProps
-  exprLowering venomState venomInst bufferAllocationExecution finite_map words arithmetic
+  exprLowering exprSimSliceCaptureControl venomState venomInst bufferAllocationExecution finite_map words arithmetic
+
+Libs horizonTypeLib
 
 Theorem extcall_saved_runtime_copy_replay:
   lowered_value_type ce e = expr_type e /\
@@ -52,7 +54,8 @@ Theorem extcall_saved_runtime_copy_replay:
     (!x. not_fresh_at su x ==>
        lookup_var x z = lookup_var x t /\ FLOOKUP G' x = FLOOKUP G x /\
        op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn'
+    wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn' /\
+    expr_val_at ce cx (expr_type e) su sb ee v src z
 Proof
   strip_tac >>
   `post_value_type ce e = expr_type e` by metis_tac[post_value_type_lowered] >>
@@ -192,6 +195,36 @@ Resume extcall_saved_runtime_copy_replay[value]:
     (qpat_assum `eval_operand (Var root) q = SOME dst` (fn th => pure_rewrite_tac[th]) >>
      simp[NoAsms] >> disj2_tac >> once_rewrite_tac[ADD_COMM] >>
      first_assum ACCEPT_TAC) >>
+  `expr_val_at ce cx (expr_type e) su sb ee v (Var root) q` by
+    (`vv_post H0 ctx fn ce cx e ee su su t ee (Value v) (LocatedValue (expr_type e) p) t` by
+       (`vv_post H0 ctx fn ce cx e ee si su t ee (Value v) (LocatedValue (expr_type e) p) t` by metis_tac[] >>
+        qpat_assum `p.ptr_location = LocCode` (fn loc =>
+          qpat_assum `vv_post H0 ctx fn ce cx e ee si su t ee _ _ t` mp_tac >>
+          POP_ASSUM_LIST (K ALL_TAC) >>
+          simp[loc, vv_post_def, vv_at_def, vv_own_def,
+            exprSimPropsTheory.locals_kept_refl, pure_frame_refl])) >>
+     `!ty. evaluate_type (get_tenv cx) (expr_type e) = SOME ty ==>
+       type_memory_bytes ce (expr_type e) = type_memory_size ty` by simp[] >>
+     `MAP FDOM ee.scopes = MAP FDOM ee.scopes` by simp[] >>
+     `su.cs_next_var <= su.cs_next_var /\ su.cs_next_id <= su.cs_next_id` by simp[] >>
+     `expr_post H0 ctx fn ce cx e ee su sb t ee v (Var root) z` by
+       (mp_tac (Q.INST [`H` |-> `H0`] (INST [``s:venom_state`` |-> ``t:venom_state``,
+          ``s0:venom_state`` |-> ``t:venom_state``,
+          ``sa:compile_state`` |-> ``su:compile_state``,
+          ``sm:compile_state`` |-> ``su:compile_state``,
+          ``t:vyperAST$type`` |-> ``expr_type e``,
+          ``cenv:compile_env`` |-> ``ce:compile_env``,
+          ``func:ir_function`` |-> ``fn:ir_function``,
+          ``es:evaluation_state`` |-> ``ee:evaluation_state``,
+          ``a:venom_state`` |-> ``allocst:venom_state``,
+          ``op:operand`` |-> ``Var root``, ``nb:num`` |-> ``type_memory_size rt``,
+          ``k:num`` |-> ``SUC t.vs_inst_idx``] (horizonTypeLib.at_horizon_named "H" unwrap_code_copy_endpoint_post))) >>
+        asm_simp_tac (srw_ss()) []) >>
+     `expr_val_at ce cx (expr_type e) su sb ee v (Var root) z` by
+       (qpat_assum `expr_post H0 ctx fn ce cx e ee su sb t ee v (Var root) z`
+         (mp_tac o cj 4 o REWRITE_RULE [expr_post_def]) >> asm_rewrite_tac[]) >>
+     qpat_assum `Abbrev (q = _)` (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     asm_rewrite_tac[slice_capture_value_index]) >>
   qexistsl [`q`,`HG`,`tf`] >>
   asm_rewrite_tac[] >>
   conj_tac

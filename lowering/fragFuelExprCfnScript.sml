@@ -967,28 +967,46 @@ Proof
   simp[is_terminator_def]
 QED
 
+Theorem fuel_ok_compile_abi_encode_value_rows[local]:
+  !rows off Wv E.
+    fuel_ok Wv {} E (compile_abi_encode_value_rows cenv dst cursor off rows)
+Proof
+  Induct >> simp[compile_abi_encode_value_rows_def, fuel_ok_return] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp_tac std_ss [compile_abi_encode_value_rows_def, LET_THM] >>
+  fa (fuel_ok_compile_abi_encode_to_buf :: base @ helpers) >>
+  simp[is_terminator_def]
+QED
+
+Theorem fuel_ok_compile_abi_encode_values_to_buf:
+  fuel_ok Wv {} E (compile_abi_encode_values_to_buf cenv dst rows)
+Proof
+  simp_tac std_ss [compile_abi_encode_values_to_buf_def] >>
+  fa (fuel_ok_compile_abi_encode_value_rows :: base) >>
+  simp[is_terminator_def]
+QED
+
 Theorem fuel_ok_compile_external_call_kwargs:
-  !cenv addr arg_vals arg_types mem_sz abi_sz mid ret_abi min_ret ret_mem
-   is_static cv gas skip has_def def_op rt dt enc dec Wv E.
+  !cenv addr arg_vals arg_types abi_sz mid ret_abi min_ret ret_mem
+   is_static cv gas skip has_def def_op rt dt dec Wv E.
     fuel_ok Wv {} E
-      (compile_external_call_kwargs cenv addr arg_vals arg_types mem_sz abi_sz
-         mid ret_abi min_ret ret_mem is_static cv gas skip has_def def_op rt dt
-         enc dec)
+      (compile_external_call_kwargs cenv addr arg_vals arg_types abi_sz
+         mid ret_abi min_ret ret_mem is_static cv gas skip has_def def_op rt dt dec)
 Proof
   rpt gen_tac >> simp_tac std_ss [compile_external_call_kwargs_def, LET_THM] >>
-  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 

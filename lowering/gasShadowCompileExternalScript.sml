@@ -2,7 +2,7 @@
 Theory gasShadowCompileExternal
 Ancestors
   gasShadowCompileCallSupport gasShadowCompileAbi gasShadowCompileArith
-  gasShadowCompileContext gasShadowCompileBase gasShadowState
+  gasShadowCompileConvert gasShadowCompileContext gasShadowCompileBase gasShadowState
   exprLowering compileEnv emitHelper venomInst
 
 Theorem gas_shadow_compiles_extcodesize_check:
@@ -43,14 +43,46 @@ Proof
   simp[gas_shadow_compiles_return]
 QED
 
+Theorem gas_shadow_compiles_abi_encode_value_rows[local]:
+  !rows cenv dst cursor static_ofst.
+    gas_shadow_compiles (compile_abi_encode_value_rows cenv dst cursor static_ofst rows)
+      (compile_abi_encode_value_rows cenv dst cursor static_ofst rows)
+Proof
+  Induct >> rpt gen_tac
+  >- simp[compile_abi_encode_value_rows_def, gas_shadow_compiles_return] >>
+  PairCases_on `h` >>
+  simp[compile_abi_encode_value_rows_def, LET_THM, comp_ignore_bind_def] >>
+  match_mp_tac gas_shadow_compiles_bind >> simp[gas_shadow_compiles_emit_op] >>
+  gen_tac >> BETA_TAC >>
+  match_mp_tac gas_shadow_compiles_bind >> simp[] >>
+  IF_CASES_TAC >>
+  rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
+       >- simp[gas_shadow_compiles_emit_op, gas_shadow_compiles_emit_void,
+               gas_shadow_compiles_unwrap_value, gas_shadow_compiles_abi_encode_to_buf]
+       >> gen_tac >> BETA_TAC) >>
+  simp[gas_shadow_compiles_emit_void, gas_shadow_compiles_store_memory]
+QED
+
+Theorem gas_shadow_compiles_abi_encode_values_to_buf:
+  gas_shadow_compiles (compile_abi_encode_values_to_buf cenv dst rows)
+    (compile_abi_encode_values_to_buf cenv dst rows)
+Proof
+  simp[compile_abi_encode_values_to_buf_def, LET_THM, comp_ignore_bind_def] >>
+  rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
+       >- simp[gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_emit_void,
+               gas_shadow_compiles_abi_encode_value_rows]
+       >> gen_tac >> BETA_TAC) >>
+  simp[gas_shadow_compiles_emit_op]
+QED
+
 Theorem gas_shadow_compiles_external_call_kwargs:
   gas_shadow_compiles
-    (compile_external_call_kwargs cenv addr_op vals tys mem_size abi_size method_id
+    (compile_external_call_kwargs cenv addr_op vals tys abi_size method_id
       return_size min_size ret_bytes staticcall call_value gas_op skip_check
-      has_default default_op return_ty default_ty enc_info dec_info)
-    (compile_external_call_kwargs cenv addr_op vals tys mem_size abi_size method_id
+      has_default default_op return_ty default_ty dec_info)
+    (compile_external_call_kwargs cenv addr_op vals tys abi_size method_id
       return_size min_size ret_bytes staticcall call_value gas_op skip_check
-      has_default default_op return_ty default_ty enc_info dec_info)
+      has_default default_op return_ty default_ty dec_info)
 Proof
   Cases_on `vals = []` >> Cases_on `return_ty = NoneT` >>
   Cases_on `skip_check` >> Cases_on `staticcall` >> Cases_on `has_default` >>
@@ -58,8 +90,7 @@ Proof
   rpt (BETA_TAC >> pure_rewrite_tac[comp_bind_assoc] >>
        match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_emit_void,
-               gas_shadow_compiles_extcall_store_values,
-               gas_shadow_compiles_abi_encode_to_buf,
+               gas_shadow_compiles_abi_encode_values_to_buf,
                gas_shadow_compiles_extcodesize_check,
                gas_shadow_compiles_fresh_label, gas_shadow_compiles_emit_inst,
                gas_shadow_compiles_new_block,

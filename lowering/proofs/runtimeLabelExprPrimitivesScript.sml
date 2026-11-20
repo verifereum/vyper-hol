@@ -87,6 +87,53 @@ Proof
   simp[rb_emit_void_for, rb_compile_store_bytestring_for]
 QED
 
+Theorem rb_compile_abi_encode_value_rows_for[local]:
+  (!dst src info. rb_operand_ok_for source_checks dst /\ rb_operand_ok_for source_checks src ==>
+    rb_step_for source_checks (rb_operand_ok_for source_checks)
+      (compile_abi_encode_to_buf dst src info)) /\
+  rb_env_ok_for source_checks ce ==>
+  !rows off. EVERY (rb_value_ok_for source_checks o FST) rows /\
+    rb_operand_ok_for source_checks dst /\ rb_operand_ok_for source_checks cursor ==>
+    rb_step_for source_checks (K T) (compile_abi_encode_value_rows ce dst cursor off rows)
+Proof
+  strip_tac >> Induct >> simp[compile_abi_encode_value_rows_def, rb_step_return_for] >>
+  gen_tac >> gen_tac >> PairCases_on `h` >> simp[] >> strip_tac >>
+  pure_rewrite_tac[compile_abi_encode_value_rows_def, LET_THM] >> BETA_TAC >>
+  irule rb_bind_emit_op_for >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >>
+  reverse conj_tac >- simp[] >>
+  Cases_on `is_abi_dynamic ce.ce_struct_fields h1` >> simp[]
+  >- (ntac 2 (irule rb_bind_emit_op_for >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+      irule rb_step_bind_for >> qexists_tac `rb_operand_ok_for source_checks` >> BETA_TAC >>
+      reverse conj_tac >- simp[rb_unwrap_value_for] >> gen_tac >> strip_tac >>
+      irule rb_step_bind_for >> qexists_tac `rb_operand_ok_for source_checks` >> BETA_TAC >>
+      reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
+      irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> conj_tac >- simp[rb_emit_void_for] >>
+      irule rb_bind_emit_op_for >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+      simp[rb_emit_void_for]) >>
+  irule rb_step_bind_for >> qexists_tac `rb_operand_ok_for source_checks` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_unwrap_value_for] >> gen_tac >> strip_tac >>
+  simp[rb_compile_store_memory_for]
+QED
+
+Theorem rb_compile_abi_encode_values_to_buf_for:
+  (!dst src info. rb_operand_ok_for source_checks dst /\ rb_operand_ok_for source_checks src ==>
+    rb_step_for source_checks (rb_operand_ok_for source_checks)
+      (compile_abi_encode_to_buf dst src info)) /\
+  rb_env_ok_for source_checks ce /\ EVERY (rb_value_ok_for source_checks o FST) rows /\
+  rb_operand_ok_for source_checks dst ==>
+  rb_step_for source_checks (rb_operand_ok_for source_checks)
+    (compile_abi_encode_values_to_buf ce dst rows)
+Proof
+  strip_tac >> pure_rewrite_tac[compile_abi_encode_values_to_buf_def, LET_THM] >> BETA_TAC >>
+  irule rb_step_bind_for >> qexists_tac `rb_buffer_ok_for source_checks` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer_for] >>
+  gen_tac >> simp[rb_buffer_ok_for_def] >> strip_tac >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> conj_tac >- simp[rb_emit_void_for] >>
+  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> reverse conj_tac >- simp[rb_emit_op_for] >>
+  irule rb_compile_abi_encode_value_rows_for >> simp[]
+QED
+
 (* ABI antecedents are rb_abi_encode_for conjunct 2 and rb_abi_decode_for conjunct 1. *)
 Theorem rb_compile_external_call_kwargs_for:
   (!dst src info. (rb_operand_ok_for source_checks) dst /\ (rb_operand_ok_for source_checks) src ==>
@@ -99,8 +146,8 @@ Theorem rb_compile_external_call_kwargs_for:
   (rb_env_ok_for source_checks) ce /\ EVERY ((rb_value_ok_for source_checks) o FST) (ZIP (avs,tys)) /\ (rb_operand_ok_for source_checks) addr /\
   (rb_operand_ok_for source_checks) value /\ (rb_operand_ok_for source_checks) gas /\ (rb_operand_ok_for source_checks) default_op ==>
   (rb_step_for source_checks) (rb_operand_ok_for source_checks)
-    (compile_external_call_kwargs ce addr avs tys msz asz mid rsz minsz rmsz
-       static value gas skip has_default default_op rty dty enc_info dec_info)
+    (compile_external_call_kwargs ce addr avs tys asz mid rsz minsz rmsz
+       static value gas skip has_default default_op rty dty dec_info)
 Proof
   strip_tac >> pure_rewrite_tac[compile_external_call_kwargs_def, LET_THM] >>
   BETA_TAC >>
@@ -136,14 +183,10 @@ QED
 
 Resume rb_compile_external_call_kwargs_for[args]:
   Cases_on `avs = []` >> simp[rb_step_return_for] >>
-  irule rb_step_bind_for >> qexists_tac `(rb_buffer_ok_for source_checks)` >> BETA_TAC >>
-  reverse conj_tac >- simp[rb_compile_alloc_buffer_for] >>
-  gen_tac >> simp[rb_buffer_ok_for_def] >> strip_tac >>
-  irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> conj_tac
-  >- (irule rb_compile_extcall_store_values_for >> simp[]) >>
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
-  irule rb_step_bind_for >> qexists_tac `(rb_operand_ok_for source_checks)` >> BETA_TAC >>
-  reverse conj_tac >- simp[] >> simp[rb_emit_op_for]
+  irule rb_step_bind_for >> qexists_tac `rb_operand_ok_for source_checks` >> BETA_TAC >>
+  reverse conj_tac >- (irule rb_compile_abi_encode_values_to_buf_for >> simp[]) >>
+  simp[rb_emit_op_for]
 QED
 
 Resume rb_compile_external_call_kwargs_for[result]:
@@ -573,8 +616,8 @@ Theorem rb_compile_external_call_kwargs:
   rb_env_ok ce /\ EVERY (rb_value_ok o FST) (ZIP (avs,tys)) /\ rb_operand_ok addr /\
   rb_operand_ok value /\ rb_operand_ok gas /\ rb_operand_ok default_op ==>
   rb_step rb_operand_ok
-    (compile_external_call_kwargs ce addr avs tys msz asz mid rsz minsz rmsz
-       static value gas skip has_default default_op rty dty enc_info dec_info)
+    (compile_external_call_kwargs ce addr avs tys asz mid rsz minsz rmsz
+       static value gas skip has_default default_op rty dty dec_info)
 Proof
   ACCEPT_TAC (SIMP_RULE std_ss
     [rb_env_ok_legacy,

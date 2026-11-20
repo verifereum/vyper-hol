@@ -1,0 +1,156 @@
+Theory bodyFullExtCallDirectPhase
+Ancestors
+  bodyFullExtCallDirectWindows bodyFullExtCallDirectFrame
+  abiEncoderWindowPhase abiEncoderWindowContract exprSimAbiEncodeExecFrame exprLoweringProps
+  bodyFullAbiEncodeOriginFloor abiEncodeValuesPhases memoryReadProps
+  loweringStateRelDefs loweringPosts
+  vyperStorageFootprint bodyPtrDefs fragGasOriginPtr
+  compileEnv ptrDiscipline venomState venomInst venomMemDefs
+  exprSimWordArgs wordArgsPtr fragGasOriginPtrLoop
+  finite_map pred_set list words arithmetic pair
+Libs horizonTypeLib
+
+(* Pack the pure execution result at its actual cut, with one endpoint
+   for every valid storage horizon. Delayed unwrap has the same frame. *)
+Theorem extcall_direct_row_phase:
+  window_phase ctx func st en ids outs s t /\
+  abi_encode_exec_frame func s t /\
+  fn_inst_ids_distinct func /\ alloca_history func s /\
+  local_ptrs_reserved ce front /\ front.cs_next_var <= st.cs_next_var /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at front x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at front x) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ee s /\ storage_well_formed_on cx ee (FST H) /\
+    ghost_inv_at (DF H) lo d ce cx ee G tn s) /\
+  (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
+  (!x. not_fresh_at st x ==>
+    FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+  tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+  FLOOKUP s.vs_allocas shared = SOME (b,cap) /\ front.cs_next_id <= shared /\
+  (!aid. aid IN ids ==> front.cs_next_id <= aid) /\
+  EVERY (\(p,n). b <= p /\ p+n <= b+cap) outs /\
+  (!aid. aid IN shared INSERT ids ==>
+    ?inst x. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_id = aid /\ inst.inst_outputs = [x] /\ not_local_ptr ce ee.scopes x) /\
+  (!i. EVERY (\(p,n). i < p \/ p+n <= i) outs /\
+    (!aid p n. aid IN ids /\ FLOOKUP t.vs_allocas aid = SOME (p,n) ==>
+      i < p \/ p+n <= i) /\ i IN tn'.t_mem ==> i IN tn.t_mem) ==>
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ee t /\ storage_well_formed_on cx ee (FST H) /\
+    ghost_inv_at (DF H) lo d ce cx ee G' tn' t) /\
+  wb_frame ce ee ee front s t /\ ghost_kept_at lo ce ee front G tn s G' tn' /\
+  alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+  ~t.vs_halted /\ t.vs_current_bb = en.cs_current_bb /\
+  t.vs_inst_idx = LENGTH en.cs_current_insts /\
+  (!x. not_fresh_at st x ==>
+    (!w. lookup_var x s = SOME w ==> lookup_var x t = SOME w) /\
+    FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ee t /\ ghost_inv_at (DF H) lo d ce cx ee G' tn' t /\
+    wb_frame ce ee ee front s t /\ ghost_kept_at lo ce ee front G tn s G' tn' /\ alloca_history func t` by
+    (qx_gen_tac `hz` >> disch_tac >>
+     qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _`
+       (qspec_then `hz` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     strip_tac >>
+     `allocas_from lo s /\ lo <= s.vs_alloca_next` by metis_tac[ghost_inv_at_def] >>
+     qpat_assum `window_phase ctx func st en ids outs s t`
+       (mp_then (Pos hd) (mp_tac o SPEC_ALL)
+         (Q.INST [`p` |-> `b`,`cut` |-> `(front:compile_state).cs_next_id`,`H` |-> `hz`]
+           extcall_direct_encode_windows)) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     strip_tac >>
+     qpat_assum `stmt_state_rel hz ctx func ce cx ee s`
+       (mp_then (Pos (el 3)) (mp_tac o SPEC_ALL)
+         (Q.INST [`H` |-> `hz`,`cut` |-> `front`,
+           `D` |-> `(DF:((bool # bytes32 # type_value) list # num list) -> dead) hz`]
+           (SPEC_ALL extcall_direct_encode_phase_frame))) >>
+     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
+     disch_then ACCEPT_TAC) >>
+  qpat_x_assum `?H. valid_horizon cx st0 H ee.storage_trace`
+    (qx_choose_then `hz` assume_tac) >>
+  qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H _ _ _ _ _ t /\ _`
+    (qspec_then `hz` (drule_then strip_assume_tac)) >>
+  drule_then strip_assume_tac window_phase_control >>
+  drule_then strip_assume_tac window_phase_resources >>
+  drule_then assume_tac window_alloca_growth_frontier >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- (gen_tac >> disch_tac >>
+      qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H _ _ _ _ _ s /\ _`
+        (drule_then strip_assume_tac) >>
+      qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H _ _ _ _ _ t /\ _`
+        (drule_then strip_assume_tac) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC)
+  >- (qpat_assum `window_alloca_growth s t`
+        (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [window_alloca_growth_def])) >>
+  metis_tac[window_phase_vars]
+QED
+
+(* Writes for the ABI members start at byte 32. Cursor and scratch are
+   registered apart from the selector word. *)
+Theorem extcall_direct_selector_frame:
+  window_phase ctx func st en ids outs s t /\ alloca_inv s /\
+  FLOOKUP s.vs_allocas shared = SOME (b,cap) /\ shared NOTIN ids /\
+  32 <= cap /\ EVERY (\(p,n). b+32 <= p) outs /\
+  read_memory (b+28) 4 s = selector /\
+  (!i. b+28 <= i /\ i < b+32 ==> i NOTIN tn.t_mem) /\
+  (!i. EVERY (\(p,n). i < p \/ p+n <= i) outs /\
+    (!aid p n. aid IN ids /\ FLOOKUP t.vs_allocas aid = SOME (p,n) ==>
+      i < p \/ p+n <= i) /\ i IN tn'.t_mem ==> i IN tn.t_mem) ==>
+  FLOOKUP t.vs_allocas shared = SOME (b,cap) /\
+  read_memory (b+28) 4 t = selector /\
+  (!i. b+28 <= i /\ i < b+32 ==> i NOTIN tn'.t_mem)
+Proof
+  strip_tac >>
+  `EVERY (\r. venomMemDefs$regions_disjoint (b+28,4) r) outs` by
+    (simp_tac (srw_ss()) [EVERY_MEM, FORALL_PROD, venomMemDefsTheory.regions_disjoint_def] >>
+     rpt gen_tac >> disch_tac >>
+     qpat_assum `EVERY (\(p,n). b+32 <= p) outs`
+       (mp_tac o Q.SPEC `(p_1,p_2)` o REWRITE_RULE [EVERY_MEM]) >>
+     simp[]) >>
+  mp_tac (Q.INST [`owner` |-> `shared`,`q` |-> `b+28`,`n` |-> `4`,`sz` |-> `cap`]
+    abi_encode_values_registered_window) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+  rewrite_tac[read_memory_eq_mem_bytes_at] >> strip_tac >>
+  qpat_assum `read_memory (b+28) 4 s = selector`
+    (assume_tac o REWRITE_RULE [read_memory_eq_mem_bytes_at]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  `i < b + 28 + 4` by decide_tac >>
+  metis_tac[]
+QED
+
+(* Both frame relations stay at the Stage 1 boundary when later encoder
+   phases run at later cuts. Compose the same zero-observation path. *)
+Theorem extcall_direct_row_frame_trans:
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list)
+    ctx func ce cx ee s /\ local_ptrs_reserved ce front /\
+  front.cs_next_var <= st.cs_next_var /\ front.cs_next_id <= st.cs_next_id /\
+  wb_frame ce ee ee front s u /\ ghost_kept_at lo ce ee front G tn s Gu tu /\
+  wb_frame ce ee ee st u t /\ ghost_kept_at lo ce ee st Gu tu u G' tn' /\
+  (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,Gu,tu)) /\
+  (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK t,G',tn')) ==>
+  wb_frame ce ee ee front s t /\ ghost_kept_at lo ce ee front G tn s G' tn' /\
+  (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn'))
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  conj_tac
+  >- (mp_tac (Q.SPECL [`func`,`ce`,`cx`,`ee`,`s`,`front`,`ee`,`ee`,
+        `st`,`u`,`t`,`ctx`]
+       (horizonTypeLib.at_horizon_named "H" exprSimWordArgsTheory.wb_frame_trans)) >>
+      asm_rewrite_tac[])
+  >> conj_tac
+  >- (irule (horizonTypeLib.at_horizon_named "H" wordArgsPtrTheory.ghost_kept_at_wb_trans) >>
+      qpat_assum `stmt_state_rel H ctx func ce cx ee s` (irule_at Any) >>
+      qpat_assum `wb_frame ce ee ee front s u` (irule_at Any) >>
+      qpat_assum `ghost_kept_at lo ce ee front G tn s Gu tu` (irule_at Any) >>
+      qpat_assum `ghost_kept_at lo ce ee st Gu tu u G' tn'` (irule_at Any) >>
+      simp[])
+  >> gen_tac >>
+  irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+  qexistsl_tac [`Gu`,`u`,`tu`] >> simp[]
+QED

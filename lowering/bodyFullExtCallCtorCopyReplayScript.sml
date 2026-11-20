@@ -12,6 +12,8 @@ Ancestors
   venomState venomInst freshWrites words finite_map ptrDiscipline
   loweringStateRelDefs fragExec venomExecSemantics vyperStorageFootprint
 
+Libs horizonTypeLib
+
 Theorem saved_ctor_immutable_operand[local]:
   lo <> 0 /\ local_ptrs_reserved ce su /\ immutable_base_zero ce t /\
   ghost_inv_at D lo d ce cx ee G tn t /\ ce.ce_imm_alloca = SOME region ==>
@@ -105,7 +107,8 @@ Theorem extcall_saved_ctor_copy_replay:
     (!x. not_fresh_at su x ==>
        lookup_var x z = lookup_var x t /\ FLOOKUP G' x = FLOOKUP G x /\
        op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn'
+    wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn' /\
+    expr_val_at ce cx (expr_type e) su sb ee v src z
 Proof
   strip_tac >>
   `post_value_type ce e = expr_type e` by simp[post_value_type_lowered] >>
@@ -252,6 +255,34 @@ Proof
   pop_assum (mk_asm "copy_post") >>
   `eval_operand (Var root) z = SOME dst` by
     (rewrite_tac[eval_operand_def] >> first_assum ACCEPT_TAC) >>
+  `expr_val_at ce cx (expr_type e) su sb ee v (Var root)
+    (z with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (`vv_post H0 ctx fn ce cx e ee su su t ee (Value v) (LocatedValue (expr_type e) p) t` by
+       (`vv_post H0 ctx fn ce cx e ee si su t ee (Value v) (LocatedValue (expr_type e) p) t` by metis_tac[] >>
+        qpat_assum `p.ptr_location = LocCode` (fn loc =>
+          pop_assum mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+          simp[loc, vv_post_def, vv_at_def, vv_own_def,
+            exprSimPropsTheory.locals_kept_refl, pure_frame_refl])) >>
+     `!ty. evaluate_type (get_tenv cx) (expr_type e) = SOME ty ==>
+       type_memory_bytes ce (expr_type e) = type_memory_size ty` by simp[] >>
+     `su.cs_next_var <= su.cs_next_var /\ su.cs_next_id <= su.cs_next_id` by simp[] >>
+     `expr_post H0 ctx fn ce cx e ee su sb t ee v (Var root) z` by
+       (mp_tac (Q.INST [`H` |-> `H0`] (INST [``s:venom_state`` |-> ``t:venom_state``,
+          ``s0:venom_state`` |-> ``t:venom_state``,
+          ``sa:compile_state`` |-> ``su:compile_state``,
+          ``sm:compile_state`` |-> ``su:compile_state``,
+          ``t:vyperAST$type`` |-> ``expr_type e``,
+          ``cenv:compile_env`` |-> ``ce:compile_env``,
+          ``func:ir_function`` |-> ``fn:ir_function``,
+          ``es:evaluation_state`` |-> ``ee:evaluation_state``,
+          ``a:venom_state`` |-> ``allocst:venom_state``,
+          ``op:operand`` |-> ``Var root``, ``nb:num`` |-> ``type_memory_size rt``,
+          ``k:num`` |-> ``SUC t.vs_inst_idx``] (horizonTypeLib.at_horizon_named "H" ctor_code_copy_endpoint_post))) >>
+        asm_simp_tac (srw_ss()) []) >>
+     qpat_assum `expr_post H0 ctx fn ce cx e ee su sb t ee v (Var root) z`
+       (mp_tac o cj 4 o REWRITE_RULE [expr_post_def]) >>
+     simp[expr_val_at_def, instIdxIndepTheory.eval_op_inst_idx,
+       local_region_def, venomStateTheory.lookup_var_def]) >>
   qexistsl [`z with vs_inst_idx := LENGTH sb.cs_current_insts`,`HG`,`tf`] >>
   simp[] >>
   conj_tac >-

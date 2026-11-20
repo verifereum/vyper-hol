@@ -104,13 +104,13 @@ Proof
 QED
 
 Theorem runtime_sym_call_external_cond:
-  (!ce addr vals tys am aa mid ra mn rm static value gas skip hasdef def rt dt enc dec s op s'.
+  (!ce addr vals tys aa mid ra mn rm static value gas skip hasdef def rt dt dec s op s'.
     runtime_sym_env tops ce /\ EVERY runtime_sym_value vals /\
     ~is_label_operand addr /\ ~is_label_operand value /\
     ~is_label_operand gas /\ ~is_label_operand def /\
     EVERY runtime_sym_inst (state_insts s) /\
-    compile_external_call_kwargs ce addr vals tys am aa mid ra mn rm
-      static value gas skip hasdef def rt dt enc dec s = (op,s') ==>
+    compile_external_call_kwargs ce addr vals tys aa mid ra mn rm
+      static value gas skip hasdef def rt dt dec s = (op,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
   runtime_sym_multi_vvs_clause tops /\ runtime_sym_lower_value_clause tops ==>
   !cfn ce rt ty static skip fname ats ret opts es default s v s'.
@@ -164,8 +164,8 @@ Proof
   `~is_label_operand (case value_opt of NONE => Lit 0w | SOME x => x)` by
     (Cases_on `value_opt` >> simp[is_label_operand_def]) >>
   drule_all runtime_sym_default_option >> strip_tac >>
-  qpat_x_assum `!ce addr vals tys am aa mid ra mn rm static value gas skip hasdef def rt dt enc dec s op s'. _`
-    (drule_at (Pat `compile_external_call_kwargs _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  qpat_x_assum `!ce addr vals tys aa mid ra mn rm static value gas skip hasdef def rt dt dec s op s'. _`
+    (drule_at (Pat `compile_external_call_kwargs _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[] >> strip_tac >>
   Cases_on `ret = NoneT` >>
   qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
