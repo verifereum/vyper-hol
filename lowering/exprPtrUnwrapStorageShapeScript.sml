@@ -6,7 +6,11 @@ Ancestors
 Theorem compile_literal_located_memory[local]:
   compile_literal_vv ty lit sa = (LocatedValue t p,sb) ==> p.ptr_location = LocMemory
 Proof
-  Cases_on `lit` >> simp[compile_literal_vv_def, AllCaseEqs(),
+  Cases_on `lit`
+  >~ [`HexBytesL bs`] >-
+    (simp[compile_literal_vv_def, comp_bind_def, comp_return_def, base_ptr_def] >>
+     strip_tac >> pairarg_tac >> gvs[]) >>
+  simp[compile_literal_vv_def, AllCaseEqs(),
     comp_return_def, comp_bind_def, base_ptr_def, mk_ptr_def] >>
   rpt strip_tac >> gvs[]
   >- (Cases_on `b` >> gvs[compile_literal_vv_def, comp_return_def])

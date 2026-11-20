@@ -12,6 +12,8 @@ Definition fold_const_builtin_def:
     case (bi,es) of
       (Sha256,[Literal aty (BytesL bs)]) =>
         Literal ty (BytesL (word_to_bytes (SHA_256_bytes bs : bytes32) T))
+    | (Sha256,[Literal aty (HexBytesL bs)]) =>
+        Literal ty (BytesL (word_to_bytes (SHA_256_bytes bs : bytes32) T))
     | (Sha256,[Literal aty (StringL s)]) =>
         Literal ty (BytesL
           (word_to_bytes (SHA_256_bytes (string_to_bytes s) : bytes32) T))

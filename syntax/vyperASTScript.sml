@@ -49,6 +49,7 @@ Datatype:
   | BytesL (word8 list)
   | IntL int
   | DecimalL int
+  | HexBytesL (word8 list)
 End
 
 Datatype:

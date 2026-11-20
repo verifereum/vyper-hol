@@ -275,12 +275,15 @@ Proof
   >- (Cases_on `ty` >> simp[compile_literal_vv_def] >>
       irule rb_step_bind_for >> qexists_tac `(rb_buffer_ok_for source_checks)` >> BETA_TAC >>
       simp[rb_compile_bytelike_literal_for, rb_step_return_for, rb_buffer_ok_for_def,
+           base_ptr_def, rb_value_ok_for_def, rb_ptr_ok_for_def])
+  >- (Cases_on `ty` >> simp[compile_literal_vv_def, rb_step_return_for, rb_value_ok_for_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >>
+      simp[compile_literal_vv_def, rb_step_return_for, rb_value_ok_for_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >>
+      simp[compile_literal_vv_def, rb_step_return_for, rb_value_ok_for_def] >>
+      irule rb_step_bind_for >> qexists_tac `(rb_buffer_ok_for source_checks)` >> BETA_TAC >>
+      simp[rb_compile_bytelike_literal_for, rb_step_return_for, rb_buffer_ok_for_def,
            base_ptr_def, rb_value_ok_for_def, rb_ptr_ok_for_def]) >>
-  Cases_on `ty` >> simp[compile_literal_vv_def, rb_step_return_for, rb_value_ok_for_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[compile_literal_vv_def, rb_step_return_for, rb_value_ok_for_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  simp[compile_literal_vv_def, rb_step_return_for, rb_value_ok_for_def] >>
   irule rb_step_bind_for >> qexists_tac `(rb_buffer_ok_for source_checks)` >> BETA_TAC >>
   simp[rb_compile_bytelike_literal_for, rb_step_return_for, rb_buffer_ok_for_def,
        base_ptr_def, rb_value_ok_for_def, rb_ptr_ok_for_def]

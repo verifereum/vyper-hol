@@ -748,12 +748,14 @@ Proof
       simp[compile_literal_vv_def, alloca_suffix_return])
   >- (Cases_on `ty` >> simp[compile_literal_vv_def] >>
       irule alloca_suffix_bind_floor >>
+      simp[alloca_suffix_bytelike_literal, alloca_suffix_return])
+  >- (Cases_on `ty` >> simp[compile_literal_vv_def, alloca_suffix_return] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >>
+      simp[compile_literal_vv_def, alloca_suffix_return] >>
+      rename1 `BytesT bnd` >> Cases_on `bnd` >>
+      simp[compile_literal_vv_def, alloca_suffix_return] >>
+      irule alloca_suffix_bind_floor >>
       simp[alloca_suffix_bytelike_literal, alloca_suffix_return]) >>
-  Cases_on `ty` >> simp[compile_literal_vv_def, alloca_suffix_return] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[compile_literal_vv_def, alloca_suffix_return] >>
-  rename1 `BytesT bnd` >> Cases_on `bnd` >>
-  simp[compile_literal_vv_def, alloca_suffix_return] >>
   irule alloca_suffix_bind_floor >>
   simp[alloca_suffix_bytelike_literal, alloca_suffix_return]
 QED
