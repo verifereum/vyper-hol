@@ -26,7 +26,7 @@ Ancestors
   externalReturnSourceWindow registeredAllocationWindow allocaSiteResource
   fragGasEmitCtrl instMemFrontier fragGasOriginPtrLoop
 
-  vyperLoweringCorrect
+  vyperLoweringCorrect abiEncoderWindowJointPhases[qualified]
 
 Theorem valued_return_compiler_transient[local]:
   (nr /\ ~iv ==> ut) ==>
@@ -100,7 +100,6 @@ QED
 Theorem return_selected_valued_frag_full_core[local]:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
-  ~ctx_has_dalloca ctx /\
   lookup_function NONE tx.function_name External tops =
     SOME (mut,nr,args,[],ret,fbody) /\
   set_external_package_target target
@@ -213,7 +212,9 @@ Proof
       simp[] >> rpt strip_tac >> fs[] >>
       Cases_on `res` >- fs[expr_exit_def] >>
       fs[stmt_exit_ptr_def, halt_exit_def,
-         GSYM (Q.INST_TYPE [`:'a` |-> `:value`] expr_exit_INR_type)]) >>
+         GSYM (Q.INST_TYPE [`:'a` |-> `:value`] expr_exit_INR_type)] >>
+      rpt strip_tac >> gvs[] >> Cases_on `y` >>
+      gvs[expr_exit_def, AllCaseEqs()]) >>
   rpt strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
      mid.storage_trace` by fs[storage_trace_domain_def] >>
@@ -358,6 +359,7 @@ Resume return_selected_valued_frag_full_core[buffered_return]:
      ss.vs_logs=t.vs_logs /\ ss.vs_requests=t.vs_requests /\
      ss.vs_pending_deletions=t.vs_pending_deletions /\
      ss.vs_call_ctx=t.vs_call_ctx /\
+     (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\
      (!H. stor_taint_ok_at (DF H) tn1 t ==>
        gas_origin_ptr_path
          (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -740,7 +742,9 @@ Resume return_selected_valued_frag_full_core[buffered_normalize_allocation]:
     (qspecl_then [`ce`,`ret`,`e`,`sa`] mp_tac
       (cj 2 ci_mono_compile_expr_sa) >> simp[ci_mono_def]) >>
   `local_ptrs_reserved ce sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `stmt_state_rel _ ctx func ce cx mid t`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   qpat_assum `stmt_state_rel _ ctx func ce cx mid t`
     (fn pre =>
       let
@@ -960,7 +964,9 @@ Resume return_selected_valued_frag_full_core[buffered_normalize_copy]:
         [`w2n norm_dw + type_memory_bytes ce ret <= norm_alloc.vs_alloca_next`,
          `type_memory_bytes ce ret=type_memory_size dtv`] >>
       POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp norm_alloc)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp norm_alloc` by
+    (qpat_assum `stmt_state_rel _ ctx func ce cx mid norm_alloc`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   drule_all (Q.INST
     [`cenv` |-> `ce`,`xd` |-> `norm_dst`,`dty` |-> `ret`,
      `xs` |-> `norm_src`,`sty` |-> `lowered_value_type ce e`,
@@ -1213,6 +1219,9 @@ Resume return_selected_valued_frag_full_core[buffered_shared_entry]:
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `nr /\ mut <> View ==> ~src_state.vs_call_ctx.cc_static` by
     fs[stmt_state_rel_def,loweringStateRelDefsTheory.state_rel_def,loweringStateRelDefsTheory.call_ctx_rel_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp src_state` by
+    (qpat_assum `stmt_state_rel _ ctx func ce cx mid src_state`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   mp_tac (Q.INST [`iv` |-> `mut = View`,`st` |-> `src_st`,`st'` |-> `unlock_st`,
       `s` |-> `src_state`,`G` |-> `Gs`,`tn` |-> `ts`]
     (SPEC_ALL optional_transient_unlock_paths_joint)) >>
@@ -1351,7 +1360,9 @@ Resume return_selected_valued_frag_full_core[buffered_shared_allocation]:
       cs_extends_emit_inst] >>
   `fn_has_code unlock_st renc_st func /\ fn_has_code renc_st renc_en func /\
    fn_has_code renc_en sb func` by metis_tac[fn_has_code_split,cs_extends_trans] >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp unlocked)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp unlocked` by
+    (qpat_assum `stmt_state_rel _ ctx func ce cx prepared_es unlocked`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   qpat_assum `stmt_state_rel _ ctx func ce cx prepared_es unlocked`
     (fn pre =>
       let
@@ -1978,6 +1989,13 @@ Resume return_selected_valued_frag_full_core[buffered_return_pointer]:
     asm_simp_tac (srw_ss()) [venomExecSemanticsTheory.step_inst_non_invoke] >>
   `mem_safe_step 0 ctx ret_inst rencoded` by
     asm_simp_tac (srw_ss()) [memSafeRunTheory.mem_safe_step_non_invoke] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp rencoded` by
+    (strip_tac >>
+     drule_at (Pat `abi_encode_exec_frame func ra rencoded`)
+       abiEncoderWindowJointPhasesTheory.window_exec_frame_alloca_budget >>
+     disch_then (qspec_then `ctx` mp_tac) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then (ACCEPT_TAC o CONJUNCT1)) >>
   suspend "buffered_return_path"
 QED
 
@@ -1993,7 +2011,6 @@ Resume return_selected_valued_frag_full_core[buffered_return_path]:
           (qspec_then `H` mp_tac) >>
         qpat_assum `stor_taint_ok_at (DF H) tn1 t` mp_tac >>
         POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
-     `ctx_has_dalloca ctx ==> allocas_below_fmp rencoded` by simp[] >>
      `ptr_inst_ok (DF H) lo 0 ctx func rGenc rtenc ret_inst rencoded` by
        (qunabbrev_tac `ret_inst` >>
         mp_tac (Q.INST
@@ -2028,6 +2045,11 @@ Resume return_selected_valued_frag_full_core[buffered_return_path]:
 QED
 
 Resume return_selected_valued_frag_full_core[buffered_return_finish]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ret_ss` by
+    (`allocas_below_fmp ret_ss <=> allocas_below_fmp rencoded` by
+       simp[NoAsms, Abbr `ret_ss`, venomStateTheory.halt_state_def,
+            venomStateTheory.set_returndata_def, ptrDisciplineTheory.allocas_below_fmp_def] >>
+     asm_rewrite_tac[]) >>
   qexistsl_tac [`ret_ss`,`rGenc`,`rtenc`,`abi_v`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac
@@ -2075,6 +2097,7 @@ Resume return_selected_valued_frag_full_core[buffered_return_finish]:
     (simp_tac (srw_ss()) [Abbr `ret_ss`,
        venomStateTheory.halt_state_def,venomStateTheory.set_returndata_def] >>
      first_assum ACCEPT_TAC)) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   gen_tac >> strip_tac >>
   `gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     (t,G1,tn1) [] (OK unlocked,Gs,unlock_tn)` by
@@ -2386,7 +2409,8 @@ Resume return_selected_valued_frag_full_core[word_finish]:
         (metis_tac[ghost_inv_at_def])) >>
   simp[NoAsms, fragExecTheory.exit_result_def, stmt_exit_ptr_def,
     expr_exit_def, halt_exit_def] >>
-  qx_gen_tac `tail` >> suspend "word_post"
+  conj_tac >- (qx_gen_tac `tail` >> suspend "word_post") >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume return_selected_valued_frag_full_core[word_post]:
@@ -2555,7 +2579,9 @@ Resume return_selected_valued_frag_full_core[raw_unlock]:
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
        loweringStateRelDefsTheory.call_ctx_rel_def]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `stmt_state_rel _ ctx func ce cx mid t`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   mp_tac (Q.INST [`iv` |-> `mut = View`,`st` |-> `sm`,`st'` |-> `su`,
       `s` |-> `t`,`G` |-> `G1`,`tn` |-> `tn1`]
     (SPEC_ALL optional_transient_unlock_paths_joint)) >>
@@ -2603,7 +2629,9 @@ Resume return_selected_valued_frag_full_core[raw_unlocked_allocation]:
         `!u. gas_path_mem ctx func t 0 (OK u) ==> alloca_inv u`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
      metis_tac[fragGasPathFrameMemTheory.gas_path_mem_zero_history]) >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp raw_u)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp raw_u` by
+    (qpat_assum `stmt_state_rel _ ctx func ce cx prepared_es raw_u`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   qpat_assum `stmt_state_rel _ ctx func ce cx prepared_es raw_u`
     (fn pre =>
       let
@@ -2846,7 +2874,13 @@ Resume return_selected_valued_frag_full_core[raw_copy_joint]:
        i < w2n source_w + 32 + LENGTH bs ==> i NOTIN raw_tn.t_mem`
        (qspec_then `i` mp_tac) >>
      impl_tac >- decide_tac >> simp[]) >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp raw_alloc)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp raw_alloc` by
+    (qpat_assum `stmt_state_rel _ ctx func ce cx prepared_es raw_u`
+       (fn related =>
+         qpat_assum `!H'. stmt_state_rel H' ctx func ce cx prepared_es raw_u ==>
+                         stmt_state_rel H' ctx func ce cx prepared_es raw_alloc`
+           (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp
+            o (fn transfer => MATCH_MP transfer related)))) >>
   qspecl_then [`lo`,`gas_explicit_sites ctx shadow_ctx`,`ctx`,`func`,`PG`,
     `sr`,`sc`,`raw_src`,`raw_dst`,`raw_G`,`raw_tn`,`raw_alloc`,
     `source_w`,`raw_w`,`LENGTH bs`,`32 + 32 * word_size (LENGTH bs)`,`raw_bb`]
@@ -2993,7 +3027,13 @@ Resume return_selected_valued_frag_full_core[raw_terminal_clean]:
 QED
 
 Resume return_selected_valued_frag_full_core[raw_terminal_joint]:
-  `ctx_has_dalloca ctx ==> allocas_below_fmp raw_end` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp raw_end` by
+    (`allocas_below_fmp raw_end <=> allocas_below_fmp raw_alloc` by
+       (qpat_assum `raw_copy_state with <|vs_vars := raw_alloc.vs_vars;
+          vs_memory := raw_alloc.vs_memory|> = raw_alloc` mp_tac >>
+        simp[NoAsms, Abbr `raw_end`, ptrDisciplineTheory.allocas_below_fmp_def,
+             venomStateTheory.venom_state_component_equality]) >>
+     asm_rewrite_tac[]) >>
   drule_all externalReturnRawJointTheory.compile_external_return_raw_joint >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`]
     (qx_choose_then `raw_ss` (qx_choose_then `raw_final_G`
@@ -3079,7 +3119,8 @@ Resume return_selected_valued_frag_full_core[raw_finish]:
   >- (first_assum (qspec_then `H` MATCH_MP_TAC) >>
         metis_tac[ghost_inv_at_def]) >>
   simp[NoAsms,fragExecTheory.exit_result_def,stmt_exit_ptr_def,expr_exit_def,halt_exit_def] >>
-  qx_gen_tac `tail` >> suspend "raw_post"
+  conj_tac >- (qx_gen_tac `tail` >> suspend "raw_post") >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume return_selected_valued_frag_full_core[raw_post]:
@@ -3121,7 +3162,6 @@ Finalise return_selected_valued_frag_full_core
 Theorem return_selected_valued_frag_full:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
-  ~ctx_has_dalloca ctx /\
   lookup_function NONE tx.function_name External tops =
     SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
@@ -3164,7 +3204,6 @@ QED
 Theorem return_selected_valued_frag_full_nr:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
-  ~ctx_has_dalloca ctx /\
   lookup_function NONE tx.function_name External tops =
     SOME (mut,nr,args,[],ret,fbody) /\
   set_external_package_target target

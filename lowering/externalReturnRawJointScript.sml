@@ -57,6 +57,7 @@ Theorem compile_external_return_raw_joint:
     ss.vs_immutables = s.vs_immutables /\
     ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
     ss.vs_pending_deletions = s.vs_pending_deletions /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\
     !D. stor_taint_ok_at D tn s ==>
       gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
         (s,G,tn) [] (Halt ss,G',tn')
@@ -99,7 +100,8 @@ Proof
       gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
         (s,G,tn) [] (Halt ss,G2,tn2))` suffices_by
     (strip_tac >> simp[Abbr `ss`, Abbr `s2`, Abbr `v`, Abbr `s1`, Abbr `u`,
-       halt_state_def, set_returndata_def, update_var_def]) >>
+       halt_state_def, set_returndata_def, update_var_def, allocas_below_fmp_def] >>
+     fs[allocas_below_fmp_def]) >>
   gen_tac >> strip_tac >>
   `ptr_inst_ok D lo 0 ctx func G tn i s` by suspend "load_check" >>
   `ptr_inst_ok D lo 0 ctx func G1 tn1 j s1` by suspend "add_check" >>
