@@ -131,8 +131,8 @@ They are separately saved Hyp0/no-axiom/no-admission objects. In particular:
 - L9 `frameOutcome.frame_outcome_single_frame_run` consumes `frame_outcome`;
   it is not a derivation of that relation for arbitrary EVM runs.
 - `e2eCorrectness.e2e_vyper_to_evm` is clean generic composition with explicit
-  stage contracts; `vyper_call_correct` closes them with S1–S7 (admitted at
-  Milestone 1, proved now).
+  stage contracts; at Milestone 1, `vyper_call_correct` closed them with
+  admitted S1–S7. All seven are proved now.
 
 TASK056 full saved logical closures: top378/generic30 recorded nodes, no legacy,
 deployment or function-simulation dependencies. Source admission count is
