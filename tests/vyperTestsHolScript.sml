@@ -25,6 +25,7 @@ Ancestors
   vyperDecimalConvertTest
   vyperScalarConvertPairsTest
   vyperEqualitySemanticsTest
+  vyperBytesEqualityLoweringTest
   vyperDecimalMulTest
   vyperDelegateRawCallTest
   vyperECPrecompileTest
