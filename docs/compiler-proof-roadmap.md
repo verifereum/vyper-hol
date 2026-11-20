@@ -31,8 +31,8 @@ The call headline is documented in the
   identity finalization yields `runtime_bc = assemble prog` via L1.
 - `e2eCorrectness.vyper_call_correct` has the exact
   [Milestone 1 call schema](compiler-correctness-specification.md#milestone-1-runtime-contract-2026-10-09).
-  Its composition proof inherits **exactly seven ADMITTED stage leaves**, not
-  one. The old configured `e2e_vyper_to_evm_O1` export is retired.
+  At Milestone 1 its composition proof inherited **exactly seven ADMITTED
+  stage leaves**; all seven stages are proved now. The old configured `e2e_vyper_to_evm_O1` export is retired.
 - `e2eCorrectness.e2e_vyper_to_evm` is **proved generic composition** with
   explicit stage contracts; each L1–L13 structural producer is proved with
   zero admission leaves. They do not prove the stages they compose.
@@ -43,13 +43,14 @@ The call headline is documented in the
 - 101 whitelist membership proofs and historical strict101/exact-byte evidence
   have identified scopes. Neither is universal compile success or semantic
   correctness. The subsequent [TASK060 exit verification](compiler-proof-milestone-1-exit-2026-10-09.md)
-  also passed final merged validation; S1–S7 remain admitted.
+  also passed final merged validation; S1–S7 were still admitted then.
 
 ### Current stage contracts and proof owners
 
-Names below are actual exports. All seven rows are **ADMITTED**, not proved.
+Names below are actual exports. All seven rows are proved: `holbuild check`
+reports each export clean.
 Their exact premises are in the linked owners and
-[dependency inventory](compiler-proof-dependencies.md#s1s7-current-admitted-producers).
+[dependency inventory](compiler-proof-dependencies.md#s1s7-stage-producers).
 
 | Stage | Actual export / owner | Contract to prove later | Owner milestone |
 |---|---|---|---|
@@ -269,9 +270,9 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D14 | STOP clears data, empty setup_callee accepted, CALL/STATICCALL outcomes | `venomExecSemantics` implemented; DELEGATECALL takes its outcome from the oracle too, but DELEGATECALL/CREATE/CREATE2 stay excluded by `unit_shape_ok`, not oracle-certified. | 2.1 / 4 |
 | D15 | Exclude static entry, not change write effects | `call_state_rel`/`initial_ctx_rel` nonstatic; outgoing STATICCALL is allowed. No static-entry correctness claim. | 7 generalization |
 | D16 | Runtime immutables without a separate exclusion | The call theorem carries no separate immutable restriction. `call_state_rel` still requires frame code `runtime_bc ++ section` with `immutables_section_rel` for the target's immutables, and the live target account's code to equal the frame code; source installation is exact. Deployment remains separate. | 6 item7 |
-| D17 | Forward success/weak abort transport, not observable_equiv for aborts | `unitTransformDefs.unit_result_rel`: Halt observables; Abort requires only REVERT stays REVERT. Failure returndata/kind/requests may differ. S4 ADMITTED. | 3 |
-| D18 | S6 output shape, not new compiler final-hook check | S6 ADMITTED; existing literal O1 hooks unchanged. Raw-only restrictions not required of output. | 3 |
-| D19 | Syntax memory restrictions + raw memory contract | Internal local/nested-call/loop-call/name/fallback-argument exclusions in whitelist; `raw_unit_memory_ok` below frontier at actual sites. S3/S5 ADMITTED; empty memory is not a producer. | 5 |
+| D17 | Forward success/weak abort transport, not observable_equiv for aborts | `unitTransformDefs.unit_result_rel`: Halt observables; Abort requires only REVERT stays REVERT. Failure returndata/kind/requests may differ. S4 proved. | 3 |
+| D18 | S6 output shape, not new compiler final-hook check | S6 proved; existing literal O1 hooks unchanged. Raw-only restrictions not required of output. | 3 |
+| D19 | Syntax memory restrictions + raw memory contract | Internal local/nested-call/loop-call/name/fallback-argument exclusions in whitelist; `raw_unit_memory_ok` below frontier at actual sites. S3/S5 proved; empty memory is not a producer. | 5 |
 | D20 | Reachability at visited states, not unincremented results | `enters_block`, `fn_entry_inv`, `reachability_closed`, `codegen_reachability_package` include post-PHI, incremented continuations and INVOKE entries. Definitions are not a reachability proof. | 5 |
 | D21 | `tx_return_bytes` | Raw-return functions use `raw_return_bytes`; otherwise `return_bytes` is empty for `NoneT` and uses a singleton tuple iff `needs_external_call_wrap`. | 6 |
 | D22 | Actual entry transfer/block/code/log/layout guards | `call_state_rel` uses LIVE post-transfer accounts, block window/nonzero bounds, <=24576 bytes, empty logs and declared slots/source installation. Satisfiability not established. | 7 |
@@ -318,7 +319,7 @@ contract belongs to Milestone 6.
 D17 selected forward `unit_result_rel`, not equal failure observables; S4
 now relaxes its Halt case to `dead_result_rel D`, equal outside a dead-byte set
 `D`. S4 and S6 are stated for actual O1; S5 supplies memory/reachability. All
-are ADMITTED.
+are proved.
 Old pass APIs do not prove the executed driver, callee-first mixed contexts,
 pruning or label mapping. F25/F26 remain concrete Milestone 3 inputs below.
 

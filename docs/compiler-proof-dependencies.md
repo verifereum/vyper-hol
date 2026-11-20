@@ -93,13 +93,11 @@ static outcomes. `call_storage_ok` for runtime calls and `deploy_storage_ok`
 for constructors supply the separate finite-trace storage obligations over
 the regions and backends observed for the chosen gas readings.
 
-## S1–S7: current admitted producers
+## S1–S7: stage producers
 
-Each row except S1 is **ADMITTED**, a final statement/memo with future
-proof owner. S1 is proved from the entry bridge, `body_stmts_sim` and the
-halt bridge, and rests on the named admissions listed in
-`lowering/loweringRuntimeCorrectScript.sml` and on `body_stmts_sim`'s case
-admissions. Generic composition and each L1–L13 have none. See [source owners and receipt](compiler-proof-status-2026-10-09.md#built-logical-admission-path).
+Every row is proved: `holbuild check` reports each export below clean, with
+no admission in its closure. S1 is proved from the entry bridge,
+`body_stmts_sim` and the halt bridge. Generic composition and each L1–L13 have none. See [source owners and receipt](compiler-proof-status-2026-10-09.md#built-logical-admission-path).
 
 | ID | Saved export | Consumes / produces | Future owner |
 |---|---|---|---|
@@ -133,7 +131,8 @@ They are separately saved Hyp0/no-axiom/no-admission objects. In particular:
 - L9 `frameOutcome.frame_outcome_single_frame_run` consumes `frame_outcome`;
   it is not a derivation of that relation for arbitrary EVM runs.
 - `e2eCorrectness.e2e_vyper_to_evm` is clean generic composition with explicit
-  stage contracts; `vyper_call_correct` closes them with admitted S1–S7.
+  stage contracts; `vyper_call_correct` closes them with S1–S7 (admitted at
+  Milestone 1, proved now).
 
 TASK056 full saved logical closures: top378/generic30 recorded nodes, no legacy,
 deployment or function-simulation dependencies. Source admission count is
@@ -199,5 +198,5 @@ local/targeted, not full final integration. TASK065 strict101/exact-byte proof i
 **historical only**. The subsequent [TASK060 exit report](compiler-proof-milestone-1-exit-2026-10-09.md)
 certifies the final project/optional/module closure, all selected generated
 results, all101 membership/strict bytecode objects, independent bytes and final
-documentation/dependency/admission checks. Later milestones must still prove
-the admitted stages and environment producers. See [evidence provenance](compiler-proof-status-2026-10-09.md#evidence-provenance-and-remaining-checkpoint-debt).
+documentation/dependency/admission checks. Later milestones have since proved
+the stages; the environment producers in the hypothesis table remain partial. See [evidence provenance](compiler-proof-status-2026-10-09.md#evidence-provenance-and-remaining-checkpoint-debt).
