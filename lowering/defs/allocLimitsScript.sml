@@ -262,13 +262,13 @@ Definition alloc_limits_expr_def:
         Empty => (~is_word_type ty ==> type_memory_bytes cenv ty < 2 ** 64)
       | Convert => (~is_word_type ty ==> type_memory_bytes cenv ty < 2 ** 64)
       | AbiEncode ensure mid =>
-          (let single = (LENGTH es = 1 /\ ~ensure) in
-           let enc_ty = if single then expr_type (HD es)
-                        else TupleT (MAP expr_type es) in
+          (let arg_tys = MAP (lowered_value_type cenv) es in
+           let enc_ty = if LENGTH es = 1 /\ ~ensure then HD arg_tys
+                        else TupleT arg_tys in
            let mid_size = case mid of NONE => 0 | SOME _ => 4 in
            32 + 32 * word_size
              (abi_size_bound cenv.ce_struct_fields enc_ty + mid_size) < 2 ** 64 /\
-           (~single ==> type_memory_bytes cenv enc_ty < 2 ** 64))
+           EVERY (type_alloc_ok cenv) arg_tys)
       | AbiDecode unwrap =>
           (let wty = if unwrap /\ needs_external_call_wrap ty then TupleT [ty]
                      else ty in
@@ -750,19 +750,17 @@ Theorem alloc_limits_abi_encode_output:
   alloc_limits_expr ce (TypeBuiltin t (AbiEncode ensure mid) ty es) ==>
   32 + 32 * word_size
     (abi_size_bound ce.ce_struct_fields
-      (if LENGTH es = 1 /\ ~ensure then expr_type (HD es)
-       else TupleT (MAP expr_type es)) +
+      (if LENGTH es = 1 /\ ~ensure then lowered_value_type ce (HD es)
+       else TupleT (MAP (lowered_value_type ce) es)) +
      (case mid of NONE => 0 | SOME _ => 4)) < 2 ** 64
 Proof
-  simp[Once alloc_limits_expr_def, LET_THM]
+  Cases_on `es` >> simp[Once alloc_limits_expr_def, LET_THM]
 QED
 
 Theorem alloc_limits_abi_encode_staging:
-  alloc_limits_expr ce (TypeBuiltin t (AbiEncode ensure mid) ty es) /\
-  ~(LENGTH es = 1 /\ ~ensure) ==>
-  type_memory_bytes ce (TupleT (MAP expr_type es)) < 2 ** 64
+  alloc_limits_expr ce (TypeBuiltin t (AbiEncode ensure mid) ty es) ==>
+  EVERY (type_alloc_ok ce) (MAP (lowered_value_type ce) es)
 Proof
-  Cases_on `LENGTH es = 1 /\ ~ensure` >>
   simp[Once alloc_limits_expr_def, LET_THM]
 QED
 
