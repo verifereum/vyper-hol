@@ -1049,10 +1049,10 @@ Theorem classify_functions_unit_singleton:
       (MAP (λf. (NONE, f)) exts, MAP (λf. (NONE, f)) ints,
        OPTION_MAP (λf. (NONE, f)) fb, ctor, [])
 Proof
-  Cases_on `FOLDR classify_function ([], [], NONE, NONE) tops` >>
-  PairCases_on `r` >>
-  rename1 `FOLDR classify_function ([], [], NONE, NONE) tops =
-           (exts, ints, fb, ctor)` >>
+  `∃exts ints fb ctor.
+     FOLDR classify_function ([], [], NONE, NONE) tops = (exts, ints, fb, ctor)`
+    by metis_tac[pairTheory.PAIR] >>
+  pop_assum strip_assume_tac >>
   Cases_on `fb` >> Cases_on `ctor` >>
   simp[classify_functions_unit_def, classify_functions_def, main_module_def,
        alistTheory.ALOOKUP_def, unit_internal_fns_def, imported_ctors_def,
@@ -1063,14 +1063,16 @@ QED
 Theorem build_func_defaults_mods_singleton:
   build_func_defaults_mods [(NONE, tops)] = build_func_defaults tops
 Proof
-  Cases_on `FOLDR classify_function ([], [], NONE, NONE) tops` >>
-  PairCases_on `r` >>
+  `∃exts ints fb ctor.
+     FOLDR classify_function ([], [], NONE, NONE) tops = (exts, ints, fb, ctor)`
+    by metis_tac[pairTheory.PAIR] >>
+  pop_assum strip_assume_tac >>
   simp[build_func_defaults_mods_def, build_func_defaults_def,
        classify_functions_def, unit_internal_fns_def,
        consts_env_mods_singleton, subst_consts_fn_mods_singleton,
        nsid_to_string_def, MAP_MAP_o, combinTheory.o_DEF] >>
   irule MAP_CONG >> simp[] >>
-  rpt strip_tac >> PairCases_on `x` >>
+  rpt strip_tac >> rename1 `MEM fd _` >> PairCases_on `fd` >>
   simp[fn_decl_name_def, subst_consts_fn_def]
 QED
 
@@ -1211,8 +1213,9 @@ Theorem lower_vyper_runtime_unit_mods_singleton:
   lower_vyper_runtime_unit_mods [(NONE, tops)] [] rpolicy =
   lower_vyper_runtime_unit tops rpolicy
 Proof
-  Cases_on `classify_functions tops` >> PairCases_on `r` >>
-  rename1 `classify_functions tops = (exts, ints, fb, ctor)` >>
+  `∃exts ints fb ctor. classify_functions tops = (exts, ints, fb, ctor)`
+    by metis_tac[pairTheory.PAIR] >>
+  pop_assum strip_assume_tac >>
   Cases_on `fb` >>
   simp[lower_vyper_runtime_unit_mods_def, lower_vyper_runtime_unit_def,
        classify_functions_unit_singleton, main_module_def, alistTheory.ALOOKUP_def,
@@ -1232,8 +1235,9 @@ Theorem lower_vyper_deploy_unit_mods_singleton:
   lower_vyper_deploy_unit_mods [(NONE, tops)] [] rpolicy bytes =
   lower_vyper_deploy_unit tops rpolicy bytes
 Proof
-  Cases_on `classify_functions tops` >> PairCases_on `r` >>
-  rename1 `classify_functions tops = (exts, ints, fb, ctor)` >>
+  `∃exts ints fb ctor. classify_functions tops = (exts, ints, fb, ctor)`
+    by metis_tac[pairTheory.PAIR] >>
+  pop_assum strip_assume_tac >>
   Cases_on `ctor` >>
   simp[lower_vyper_deploy_unit_mods_def, lower_vyper_deploy_unit_def,
        classify_functions_unit_singleton, make_struct_fields_map_mods_singleton,
