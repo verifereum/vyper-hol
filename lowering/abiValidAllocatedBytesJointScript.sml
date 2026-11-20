@@ -15,7 +15,7 @@ Theorem abi_valid_allocated_bytes_joint_observations:
   (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
   abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
     st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   abi_decode_ptr_window G tn s source (n2w B) L /\
   ptr_covers G tn output s (type_memory_bytes ce ty) /\
   op_prov G pos = NONE /\ op_prov G hi = NONE /\
@@ -89,7 +89,16 @@ Proof
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
   `32 + contractABI$ceil32 n <= out_cap` by
     simp[Abbr `out_cap`, abiDecoderBytesTheory.abi_decode_bytes_copy_size_def, contractABITheory.ceil32_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp pruned` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp pruned` by
+    (`pruned.vs_allocas = s.vs_allocas /\ pruned.vs_fmp = s.vs_fmp /\
+       pruned.vs_initial_fmp = s.vs_initial_fmp` by
+       simp[Abbr `pruned`, abi_decoder_prune_vars_def] >>
+     PURE_REWRITE_TAC [allocas_below_fmp_def] >>
+     qpat_assum `pruned.vs_allocas = s.vs_allocas` (PURE_REWRITE_TAC o single) >>
+     qpat_assum `pruned.vs_fmp = s.vs_fmp` (PURE_REWRITE_TAC o single) >>
+     qpat_assum `pruned.vs_initial_fmp = s.vs_initial_fmp` (PURE_REWRITE_TAC o single) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+       (ACCEPT_TAC o PURE_REWRITE_RULE [allocas_below_fmp_def])) >>
   drule_all abi_decode_valid_bytes_pruned_certificate >>
   disch_then (qspecl_then [`func`, `PG`] (qx_choose_then `Gf` (qx_choose_then `tf`
     (map_every assume_tac o CONJUNCTS)))) >>
