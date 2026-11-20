@@ -126,28 +126,6 @@ Proof
        comp_ignore_bind_def] >> rpt (pairarg_tac >> gvs[])
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >> gvs[log_eval_view_def] >>
-  drule split_log_ops_view >> disch_then (qspec_then `flags` strip_assume_tac) >>
-  `log_non_indexed_types flags (MAP SND xs) = MAP SND (SND (split_log_ops xs flags))` by
-    simp[split_log_ops_data_types] >>
-  `EVERY (\t. is_word_type t \/ is_bytestring_type t)
-     (MAP SND (SND (split_log_ops xs flags)))` by
-    (`EVERY (supported_scalar_type o SND) (SND (split_log_ops xs flags))` by
-       (irule log_split_data_every >> simp[]) >>
-     gvs[EVERY_MAP, EVERY_MEM] >> metis_tac[log_scalar_topic_shape]) >>
-  `!buf off. compile_log_store_data cenv (SND (split_log_ops ys flags))
-       (MAP SND (SND (split_log_ops xs flags))) buf off =
-     compile_log_store_data cenv (SND (split_log_ops xs flags))
-       (MAP SND (SND (split_log_ops xs flags))) buf off` by
-    (rpt gen_tac >> irule compile_log_store_data_view >> simp[]) >>
-  `SND (split_log_ops ys flags) <> []` by (strip_tac >> gvs[]) >>
-  simp[Once compile_stmt_def, NULL_EQ, comp_bind_def, comp_return_def,
-    comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> simp[]
-QED
-*)
 Theorem compile_log_data_trace:
   cenv.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
   log_eval_view cenv args sa xs sm /\
@@ -169,7 +147,24 @@ Theorem compile_log_data_trace:
        (Lit (n2w (LENGTH (Lit (n2w h)::topics))) ::
          REVERSE (Lit (n2w h)::topics) ++ [len;dst.buf_operand]) [] s4 = ((),sb))
 Proof
-  cheat
+  strip_tac >> gvs[log_eval_view_def] >>
+  drule split_log_ops_view >> disch_then (qspec_then `flags` strip_assume_tac) >>
+  `log_non_indexed_types flags (MAP SND xs) = MAP SND (SND (split_log_ops xs flags))` by
+    simp[split_log_ops_data_types] >>
+  `EVERY (\t. is_word_type t \/ is_bytestring_type t)
+     (MAP SND (SND (split_log_ops xs flags)))` by
+    (`EVERY (supported_scalar_type o SND) (SND (split_log_ops xs flags))` by
+       (irule log_split_data_every >> simp[]) >>
+     gvs[EVERY_MAP, EVERY_MEM] >> metis_tac[supported_scalar_word_or_bytestring]) >>
+  `!buf off. compile_log_store_data cenv (SND (split_log_ops ys flags))
+       (MAP SND (SND (split_log_ops xs flags))) buf off =
+     compile_log_store_data cenv (SND (split_log_ops xs flags))
+       (MAP SND (SND (split_log_ops xs flags))) buf off` by
+    (rpt gen_tac >> irule compile_log_store_data_view >> simp[]) >>
+  `SND (split_log_ops ys flags) <> []` by (strip_tac >> gvs[]) >>
+  simp[Once compile_stmt_def, NULL_EQ, comp_bind_def, comp_return_def,
+    comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[]
 QED
 
 Theorem log_buffer_trace_code:

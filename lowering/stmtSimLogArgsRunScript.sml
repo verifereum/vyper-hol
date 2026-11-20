@@ -1,7 +1,7 @@
 Theory stmtSimLogArgsRun
 Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimProps exprLowering
-  stmtSimLogArgs stmtSimLogArgsGrowth exprReasonOperand exprOperandVar vyperTypeSystem
+  stmtSimLogArgs stmtSimLogArgsGrowth stmtSimLogTopics exprReasonOperand exprOperandVar vyperTypeSystem
   exprSimWordArgs supportedTypes  exprSimOps
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   gasStorage vyperStorageTrace vyperStorageFootprint
@@ -13,24 +13,10 @@ Libs
   monadsyntax
 
 
-(* SCRATCH SEQ-8389 caller split: the deleted bridge
-   log_scalar_word_or_bytestring is false once flags are scalar.  The
-   word/bytestring branch keeps the old proof, the bridge's drule replaced by
-   the case hypothesis; the new (flag) branch is admitted. *)
-Theorem log_scalar_post_value_type_new_branch[local]:
-  supported_scalar_type (expr_type e) /\
-  ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) ==>
-  post_value_type cenv e = expr_type e
-Proof
-  cheat
-QED
-
 Theorem log_scalar_post_value_type:
   supported_scalar_type (expr_type e) ==> post_value_type cenv e = expr_type e
 Proof
-  Cases_on `is_word_type (expr_type e) \/ is_bytestring_type (expr_type e)`
-  >- (strip_tac >> qpat_x_assum `_ \/ _` mp_tac >> strip_tac >> simp[]) >>
-  metis_tac[log_scalar_post_value_type_new_branch]
+  strip_tac >> drule supported_scalar_word_or_bytestring >> strip_tac >> simp[]
 QED
 
 (* ===== Source sequencing ===== *)
