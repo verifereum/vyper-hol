@@ -63,6 +63,9 @@ Theorem dispatched_call_correct_from_selected_endpoint:
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
     initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     vyperInterpreter$lookup_function NONE tx.function_name External tops =
       SOME (mut,F,args,[],ret,fbody) /\
     (!env es0. tx.function_name <> "__default__" /\
@@ -216,6 +219,9 @@ Theorem dispatched_nonreentrant_result[local]:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
   source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
+  (ctx_has_dalloca unit.cu_context ==>
+    unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254) /\
   outcomes_accounts_typed (SOME vs.vs_outcomes) /\
   calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
     SOME (tx.function_name,tx.args) /\
@@ -343,6 +349,9 @@ Triviality dispatched_call_readings_from_selected_endpoint:
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
     initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     vyperInterpreter$lookup_function NONE tx.function_name External tops =
       SOME (mut,F,args,[],ret,fbody) /\
     (!env es0. tx.function_name <> "__default__" /\
@@ -385,6 +394,9 @@ Theorem dispatched_call_correct_with_readings:
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
     initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     vyperInterpreter$lookup_function NONE tx.function_name External tops =
       SOME (mut,nr,args,[],ret,fbody) ==>
     ?marks.
@@ -421,6 +433,9 @@ Theorem dispatched_call_correct:
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
     initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     vyperInterpreter$lookup_function NONE tx.function_name External tops =
       SOME (mut,nr,args,[],ret,fbody) ==>
     source_unit_execution_correct tops ret am tx unit vs /\
