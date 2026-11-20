@@ -59,7 +59,7 @@ Definition supported_event_leaf_type_def:
     supported_scalar_type ty \/
     case ty of
       FlagT id => T
-    | BaseT (BytesT (Fixed n)) => n <= 32
+    | BaseT (BytesT (Fixed n)) => 0 < n /\ n <= 32
     | _ => F
 End
 
