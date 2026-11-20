@@ -138,6 +138,7 @@ Proof
   metis_tac[lower_vyper_runtime_unit_memory_ok_from_no_wrap]
 QED
 
+(* GATE_ADMISSION: missing case, raw_call with msg.data runtime source shape *)
 Theorem lower_vyper_runtime_unit_source_shape_raw_call_calldata:
   !tops rpolicy unit layouts addr art.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -151,10 +152,10 @@ Theorem lower_vyper_runtime_unit_source_shape_raw_call_calldata:
           (\e. ?ty f es d. e = Call ty (RawCallCalldataTarget f) es d)) dflts)) ==>
     o1_source_unit_ok unit /\ unit_entry_no_params unit
 Proof
-  (* GATE_ADMISSION: missing case, raw_call with msg.data runtime source shape *)
   cheat
 QED
 
+(* GATE_ADMISSION: missing case, create_copy_of runtime source shape *)
 Theorem lower_vyper_runtime_unit_source_shape_create_copy:
   !tops rpolicy unit layouts addr art.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -170,10 +171,10 @@ Theorem lower_vyper_runtime_unit_source_shape_create_copy:
                  e = Call ty (CreateTarget CreateCopyOf s r ks) es d)) dflts)) ==>
     o1_source_unit_ok unit /\ unit_entry_no_params unit
 Proof
-  (* GATE_ADMISSION: missing case, create_copy_of runtime source shape *)
   cheat
 QED
 
+(* GATE_ADMISSION: missing case, create_from_blueprint runtime source shape *)
 Theorem lower_vyper_runtime_unit_source_shape_create_blueprint:
   !tops rpolicy unit layouts addr art.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -191,10 +192,10 @@ Theorem lower_vyper_runtime_unit_source_shape_create_blueprint:
           dflts)) ==>
     o1_source_unit_ok unit /\ unit_entry_no_params unit
 Proof
-  (* GATE_ADMISSION: missing case, create_from_blueprint runtime source shape *)
   cheat
 QED
 
+(* GATE_ADMISSION: held, blueprint DALLOCA no-wrap and FMP floor *)
 Theorem lower_vyper_runtime_unit_blueprint_raw_fmp:
   !tops rpolicy unit layouts addr art.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -223,7 +224,6 @@ Theorem lower_vyper_runtime_unit_blueprint_raw_fmp:
       !fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
         dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp)
 Proof
-  (* GATE_ADMISSION: held, blueprint DALLOCA no-wrap and FMP floor *)
   cheat
 QED
 
