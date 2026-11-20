@@ -2,7 +2,6 @@
 Theory vyperLoweringHol
 Ancestors
   (* arbitrary-calldata entry and S1 suppliers *)
-  calldataArrayRawCallsite
   calldataBulkOperationalCertificate calldataBulkSourceOutcome
   calldataExactBytesJoint
   calldataExactScalarAccepted calldataExactScalarRejected calldataNoneFallbackJoint

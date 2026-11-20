@@ -1,7 +1,7 @@
 (* The real DLOAD decoder header: concrete edge and synchronized ghost. *)
 Theory ctorDeployMemoryRunPtrPrefixHeader
 Ancestors
-  ctorDeployMemoryRunPtrPrefixBlocks ctorDeployMemoryRunPtrPrefixSequence
+  ctorDeployMemoryRunPtrPrefixSequence
   abiDecoderExecution abiDecoderContract emitHelperProps ptrSafeRun ptrDiscipline
   venomExecSemantics venomExecProofs venomState venomInst words arithmetic list rich_list
 
