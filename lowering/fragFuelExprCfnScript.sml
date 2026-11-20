@@ -16,7 +16,7 @@
  *   fuel_ok_compile_ifexp_arm, fuel_ok_compile_snapshot_vv,
  *   fuel_ok_compile_abi_encode_args, fuel_ok_compile_ext_call_kwarg,
  *   fuel_ok_compile_ext_call_kwargs, fuel_ok_compile_create_salt,
- *   fuel_ok_compile_create_ctor_args, fuel_ok_compile_create_ctor_tuple,
+ *   fuel_ok_compile_create_ctor_args,
  *   fuel_ok_compile_create_blueprint_args,
  *   fuel_ok_compile_create_snapshot, fuel_ok_compile_raw_create,
  *   fuel_ok_compile_create_call, fuel_ok_compile_store_words,
@@ -656,25 +656,23 @@ Proof
   simp[fuel_ok_return]
 QED
 
-Theorem fuel_ok_compile_create_ctor_tuple:
-  !cfn. (!c t e Wv E. fuel_ok Wv {} E (cfn c t e)) ==>
-    !cenv args Wv E.
-      fuel_ok Wv {} E (compile_create_ctor_tuple cfn cenv args)
+Theorem fuel_ok_compile_abi_encode_value_rows[local]:
+  !rows off Wv E.
+    fuel_ok Wv {} E (compile_abi_encode_value_rows cenv dst cursor off rows)
 Proof
-  rpt strip_tac >> simp_tac std_ss [compile_create_ctor_tuple_def] >>
-  FIRST [fa1 (fuel_ok_compile_create_ctor_args :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_create_ctor_args :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_create_ctor_args :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_create_ctor_args :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_create_ctor_args :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_create_ctor_args :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_create_ctor_args :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_create_ctor_args :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_create_ctor_args :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_create_ctor_args :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_create_ctor_args :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_create_ctor_args :: base @ helpers)] >>
-  FIRST [fa (fuel_ok_compile_create_ctor_args :: base @ helpers)] >> simp[is_terminator_def]
+  Induct >> simp[compile_abi_encode_value_rows_def, fuel_ok_return] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp_tac std_ss [compile_abi_encode_value_rows_def, LET_THM] >>
+  fa (fuel_ok_compile_abi_encode_to_buf :: base @ helpers) >>
+  simp[is_terminator_def]
+QED
+
+Theorem fuel_ok_compile_abi_encode_values_to_buf:
+  fuel_ok Wv {} E (compile_abi_encode_values_to_buf cenv dst rows)
+Proof
+  simp_tac std_ss [compile_abi_encode_values_to_buf_def] >>
+  fa (fuel_ok_compile_abi_encode_value_rows :: base) >>
+  simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_create_blueprint_args:
@@ -683,19 +681,19 @@ Theorem fuel_ok_compile_create_blueprint_args:
       fuel_ok Wv {} E (compile_create_blueprint_args cfn cenv raw later_es args)
 Proof
   rpt strip_tac >> simp_tac std_ss [compile_create_blueprint_args_def] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
-  FIRST [fa (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
+  FIRST [fa (lv :: fuel_ok_compile_snapshot_vv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_abi_encode_values_to_buf :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
@@ -725,19 +723,19 @@ Theorem fuel_ok_compile_raw_create:
         (compile_raw_create cfn cenv bytecode_e value_e ctor_args salt_e rof)
 Proof
   rpt strip_tac >> simp_tac std_ss [compile_raw_create_def] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
-  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
-  FIRST [fa (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_values_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_values_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_values_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_values_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_values_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_values_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_values_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_values_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_values_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_values_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_values_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_values_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa (lv :: fuel_ok_compile_create_ctor_args :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_values_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
@@ -964,25 +962,6 @@ Proof
   FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz :: fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers)] >>
   FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz :: fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers)] >>
   FIRST [fa (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz :: fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers)] >>
-  simp[is_terminator_def]
-QED
-
-Theorem fuel_ok_compile_abi_encode_value_rows[local]:
-  !rows off Wv E.
-    fuel_ok Wv {} E (compile_abi_encode_value_rows cenv dst cursor off rows)
-Proof
-  Induct >> simp[compile_abi_encode_value_rows_def, fuel_ok_return] >>
-  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
-  simp_tac std_ss [compile_abi_encode_value_rows_def, LET_THM] >>
-  fa (fuel_ok_compile_abi_encode_to_buf :: base @ helpers) >>
-  simp[is_terminator_def]
-QED
-
-Theorem fuel_ok_compile_abi_encode_values_to_buf:
-  fuel_ok Wv {} E (compile_abi_encode_values_to_buf cenv dst rows)
-Proof
-  simp_tac std_ss [compile_abi_encode_values_to_buf_def] >>
-  fa (fuel_ok_compile_abi_encode_value_rows :: base) >>
   simp[is_terminator_def]
 QED
 

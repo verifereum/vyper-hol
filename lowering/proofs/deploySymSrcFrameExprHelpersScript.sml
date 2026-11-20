@@ -625,19 +625,17 @@ Proof
   strip_tac >> apply_symbolic_frame symbolic_frame_subscript >> simp[]
 QED
 
-Theorem deploy_blocks_frame_create_ctor_tuple:
-  (!vs p off. deploy_blocks_frame (compile_extcall_store_values cenv vs p off)) /\
+Theorem deploy_blocks_frame_create_ctor_args:
   (!copy vv. deploy_blocks_frame (compile_snapshot_vv cenv copy vv)) /\
   (!e. MEM e es ==> deploy_blocks_frame (cfn cenv (expr_type e) e)) ==>
-  deploy_blocks_frame (compile_create_ctor_tuple cfn cenv es)
+  deploy_blocks_frame (compile_create_ctor_args cfn cenv es)
 Proof
-  strip_tac >> apply_symbolic_frame symbolic_frame_create_ctor_tuple >> simp[]
+  strip_tac >> apply_symbolic_frame symbolic_frame_create_ctor_args >> simp[]
 QED
 
 Theorem deploy_blocks_frame_create_blueprint_args:
   (!copy vv. deploy_blocks_frame (compile_snapshot_vv cenv copy vv)) /\
-  (!p s enc. deploy_blocks_frame (compile_abi_encode_to_buf p s enc)) /\
-  deploy_blocks_frame (compile_create_ctor_tuple cfn cenv es) /\
+  (!dst rows. deploy_blocks_frame (compile_abi_encode_values_to_buf cenv dst rows)) /\
   (!vv. deploy_blocks_frame (unwrap_value cenv vv)) /\
   (!e. MEM e es ==> deploy_blocks_frame (cfn cenv (expr_type e) e)) ==>
   deploy_blocks_frame (compile_create_blueprint_args cfn cenv raw later_es es)
@@ -659,8 +657,8 @@ Theorem deploy_blocks_frame_raw_create:
   deploy_blocks_frame (lower_value cfn cenv (expr_type value) value) /\
   (!vv ty. deploy_blocks_frame (compile_create_snapshot cenv vv ty)) /\
   (!d s n. deploy_blocks_frame (compile_copy_memory_dynamic d s n)) /\
-  deploy_blocks_frame (compile_create_ctor_tuple cfn cenv es) /\
-  (!d s enc. deploy_blocks_frame (compile_abi_encode_to_buf d s enc)) /\
+  deploy_blocks_frame (compile_create_ctor_args cfn cenv es) /\
+  (!dst rows. deploy_blocks_frame (compile_abi_encode_values_to_buf cenv dst rows)) /\
   deploy_blocks_frame (compile_create_salt cfn cenv salt) /\
   (!p n v s b. deploy_blocks_frame (compile_create_dispatch p n v s b)) ==>
   deploy_blocks_frame (compile_raw_create cfn cenv bytecode value es salt rof)

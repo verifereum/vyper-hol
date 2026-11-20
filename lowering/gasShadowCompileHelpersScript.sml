@@ -2,7 +2,7 @@ Theory gasShadowCompileHelpers
 Ancestors
   gasShadowCompileConvert gasShadowCompileContext
   gasShadowCompileAbi gasShadowCompileCallSupport gasShadowCompileBuiltinCreate
-  gasShadowCompileMembership gasShadowCompilePure
+  gasShadowCompileMembership gasShadowCompilePure gasShadowCompileExternal
   exprLowering gasShadow gasShadowState compileEnv list vyperOriginFold vyperPinFold
 
 Theorem gas_shadow_compiles_lower_value:
@@ -280,24 +280,6 @@ Proof
    simp[gas_shadow_compiles_return])
 QED
 
-Theorem gas_shadow_compiles_create_ctor_tuple:
-  (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
-  gas_shadow_compiles (compile_create_ctor_tuple f cenv args)
-    (compile_create_ctor_tuple g cenv (if sh then MAP gas_shadow_expr args else args))
-Proof
-  strip_tac >> Cases_on `sh` >>
-  simp[compile_create_ctor_tuple_def, MAP_MAP_o, combinTheory.o_DEF,
-       SF ETA_ss, comp_ignore_bind_def, gas_shadow_lowered_value_type] >>
-  (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-   >- (drule gas_shadow_compiles_create_ctor_args >> metis_tac[COND_CLAUSES]) >>
-   gen_tac >> BETA_TAC >>
-   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-        >- simp[gas_shadow_compiles_alloc_buffer,
-                gas_shadow_compiles_extcall_store_values] >> gen_tac >> BETA_TAC) >>
-   simp[gas_shadow_compiles_return])
-QED
-
 Theorem gas_shadow_compiles_ext_call_kwarg:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
     (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
@@ -345,10 +327,10 @@ Theorem gas_shadow_compiles_create_blueprint_args:
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
-  `gas_shadow_compiles (compile_create_ctor_tuple f cenv args)
-     (compile_create_ctor_tuple g cenv
+  `gas_shadow_compiles (compile_create_ctor_args f cenv args)
+     (compile_create_ctor_args g cenv
        (if sh then MAP gas_shadow_expr args else args))`
-    by (irule gas_shadow_compiles_create_ctor_tuple >> simp[]) >>
+    by (irule gas_shadow_compiles_create_ctor_args >> simp[]) >>
   Cases_on `sh` >> Cases_on `raw_args` >>
   namedCases_on `args` ["", "entry rest"] >>
   simp[compile_create_blueprint_args_def, comp_ignore_bind_def,
@@ -363,7 +345,7 @@ Proof
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- (simp[gas_shadow_compiles_snapshot_vv, gas_shadow_compiles_unwrap_value,
                 gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_emit_op,
-                gas_shadow_compiles_abi_encode_to_buf] >>
+                gas_shadow_compiles_abi_encode_values_to_buf] >>
            fs[FORALL_BOOL, MAP]) >> gen_tac >> BETA_TAC) >>
   simp[gas_shadow_compiles_return]
 QED
@@ -380,7 +362,7 @@ Theorem gas_shadow_compiles_raw_create:
 Proof
   strip_tac >>
   drule gas_shadow_compiles_lower_value >> strip_tac >>
-  drule gas_shadow_compiles_create_ctor_tuple >> strip_tac >>
+  drule gas_shadow_compiles_create_ctor_args >> strip_tac >>
   drule gas_shadow_compiles_create_salt >> strip_tac >>
   Cases_on `sh` >> Cases_on `ctor_args = []` >>
   gvs[compile_raw_create_def, MAP_MAP_o, combinTheory.o_DEF, SF ETA_ss,
@@ -393,7 +375,7 @@ Proof
            >- (simp[gas_shadow_compiles_alloc_buffer,
                     gas_shadow_compiles_copy_memory_dynamic,
                     gas_shadow_compiles_emit_op,
-                    gas_shadow_compiles_abi_encode_to_buf] >>
+                    gas_shadow_compiles_abi_encode_values_to_buf] >>
                fs[FORALL_BOOL]) >> gen_tac >> BETA_TAC) >>
       simp[gas_shadow_compiles_return]) >>
   gen_tac >> pairarg_tac >> gvs[] >>

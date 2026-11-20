@@ -12,9 +12,6 @@ The changes, as they appear in the pinned Python compiler:
 
 - P4 direct ABI encoder: values are encoded straight into the destination
   buffer, and an external call sends exactly the encoded length plus 4 bytes.
-- P8 `raw_create` bytecode type: `raw_create` types its bytecode argument
-  with the argument's own type rather than `Bytes[49152]`, which sizes its
-  initcode buffer (the HOL lowering still snapshots 49152 bytes).
 
 P1 (ceil32: `and(add(x, 31), not 31)`), P2 (dynamic external arguments
 assert that their calldata offset isn't below 4, `_get_abi_arg_ptr`), P5 (a
@@ -28,13 +25,11 @@ that writes a variable the base reads or makes a risky call, also a
 source-semantics change) and P9 (constructor argument snapshot: each
 constructor argument is read as it is evaluated, a composite one copied
 before a later argument that can modify memory or storage, also a
-source-semantics change) are ported. P2 still heads sections below: two
-fixtures that differ for other reasons, and those that also need P4 or P8.
-A fixture listed under several changes needs all of them. The attribution
-comes from reverting one change at a time in the pinned compiler and
-recompiling. The creation fixtures' P4 entries are by elimination: P4 can't
-be reverted on its own, and no revert of the other changes restores those
-fixtures.
+source-semantics change) are ported. The CREATE paths now use P4, and P8
+sizes the `raw_create` buffers from the bytecode argument's type. P2 still
+heads sections below: two fixtures that differ for other reasons, and
+those that also need P4. The attribution comes from reverting one change
+at a time in the pinned compiler and recompiling.
 
 ## P2 (calldata argument guard)
 
@@ -50,9 +45,6 @@ P2 is ported. These still differ from the oracle with it:
 ## P4 (direct ABI encoder)
 
 - `abi-codegen/enc_multi`
-- `create-builtins/cb02_blueprint_args`
-- `create-builtins/cb05_blueprint_rof`
-- `create-builtins/cb07_blueprint_args_salt`
 - `external-entries/base_dom1`
 - `main/event_log`
 - `main/mixed_event_log`
@@ -66,29 +58,12 @@ P2 is ported. These still differ from the oracle with it:
   the copy, so the pop is lost; the source semantics pops the array itself.
   Since vyperlang/vyper#5280, after the pin, the compiler rejects such a pop.
 
-## P8 (`raw_create` bytecode type)
-
-- `create-builtins/rcr04_rawcreate_storage`
-
 ## P2 (calldata argument guard) + P4 (direct ABI encoder)
 
 - `abi-codegen/enc_ensT_bytes`
-- `create-builtins/cb06_blueprint_dyn_offset`
 - `main/abi_dynamic`
 - `main/abi_static`
 - `main/mixed_event_types`
-
-## P2 (calldata argument guard) + P8 (`raw_create` bytecode type)
-
-- `create-builtins/rcr01_rawcreate`
-- `create-builtins/rcr03_rawcreate_rof`
-- `create-builtins/rcr06_rawcreate_salt`
-
-## P2 (calldata argument guard) + P4 (direct ABI encoder) + P8 (`raw_create` bytecode type)
-
-- `create-builtins/rcr02_rawcreate_args_salt`
-- `create-builtins/rcr05_rawcreate_args`
-- `constructor-alias/ctor_alias`
 
 ## Not yet attributed
 
