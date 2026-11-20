@@ -1,28 +1,17 @@
-(* S2 from the type checker: a checked contract lowers to an O1 source unit
-   once it avoids raw_call and creation. The checker allows these;
-   the unit shape rejects delegate or calldata raw_call,
-   and the body-shape proof has no case for plain raw_call or creation yet.
-   TOP-LEVEL: lower_vyper_runtime_unit_source_unit_ok_checked,
-   supported_program_raw_shape_free_program,
-   supported_names_internal_names_distinct. *)
+(* S2 for checked runtime units without source calls that emit DALLOCA. *)
 Theory loweringShapeSource
 Ancestors
   list alist option loweringShapeProps vyperTypeSystem vyperTypeContract
   vyperTypeContractContext supportedProgram supportedExprTraverse
   supportedStmtTraverse compileVyper constSubst constSubstCorrect vyperAST supportedNames
 
-(* The shape roots the type checker doesn't exclude: expr_shape_root less its
-   builtin arity cases. The checker accepts selfdestruct, which the unit
-   shape rejects. The unit shape rejects creation,
-   delegate raw_call (DELEGATECALL) and the calldata form (DALLOCA); a plain
-   raw_call passes it, but the body-shape proof has no case for it yet. *)
 Definition expr_raw_shape_root_def:
   expr_raw_shape_root e <=>
-    (?ty flags es d. e = Call ty (RawCallTarget flags) es d) \/
     (?ty flags es d. e = Call ty (RawCallCalldataTarget flags) es d) \/
-    (?ty es d. e = Call ty SelfDestructTarget es d) \/
-    (?ty kind salted rof order es d.
-       e = Call ty (CreateTarget kind salted rof order) es d)
+    (?ty salted rof order es d.
+       e = Call ty (CreateTarget CreateCopyOf salted rof order) es d) \/
+    (?ty blueprint salted rof order es d.
+       e = Call ty (CreateTarget (CreateFromBlueprint blueprint) salted rof order) es d)
 End
 
 Definition raw_shape_free_program_def:
