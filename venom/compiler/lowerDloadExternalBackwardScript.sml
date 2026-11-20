@@ -1,6 +1,6 @@
 Theory lowerDloadExternalBackward
 Ancestors
-  lowerDloadOracleSelection
+  lowerDloadOracleSelection lowerDloadSharedState[qualified]
   venomExecSemantics venomCallOracleDefs extCallOracle venomState list
 
 (* Requests may have different account snapshots and histories. Only their
