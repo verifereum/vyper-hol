@@ -2,7 +2,47 @@ Theory runtimeSymSrcExprBody
 Ancestors
   runtimeSymSrcGeneratorContracts runtimeSymSrcEmission runtimeSymSrcInterfaces
   runtimeSymSrcBlockEmission runtimeSymSrcLiteralEnv exprLowering compileEnv context emitHelper
-  supportedExprs supportedExprTraverse exprCallBounds exprSimHypsDefs vyperAST list venomInst stackPlanTypes finite_map
+  supportedExprs supportedExprTraverse exprCallBounds exprCallbackContracts exprSimHypsDefs vyperAST list venomInst stackPlanTypes finite_map
+
+Theorem runtime_sym_expr_body_call:
+  runtime_sym_call_clause tops /\
+  (!child_env t child.
+     expr_size child + cenv_defaults_size child_env <
+     expr_size (Call rt target es default) + cenv_defaults_size ce ==>
+     runtime_sym_expr_contract tops cfn child_env t child) ==>
+  runtime_sym_expr_contract tops (compile_expr_body cfn bfn tfn)
+    ce ty (Call rt target es default)
+Proof
+  pure_rewrite_tac[runtime_sym_call_clause_def] >> strip_tac >>
+  `!e t. MEM e es \/ default = SOME e ==>
+     runtime_sym_expr_contract tops cfn ce t e` by
+    (rpt strip_tac >> first_x_assum irule
+     >- (pure_rewrite_tac[arithmeticTheory.LT_ADD_RCANCEL] >>
+         irule expr_call_arg_bound >> simp[])
+     >> gvs[] >> simp[expr_call_default_bound]) >>
+  `!fid e t. target = IntCall fid /\
+     MEM e (omitted_defaults ce (nsid_to_string fid) (LENGTH es)) ==>
+     runtime_sym_expr_contract tops cfn
+       (cenv_without_defaults ce (nsid_to_string fid)) t e` by
+    (rpt strip_tac >> first_x_assum irule >>
+     drule omitted_default_bound >> decide_tac) >>
+  `!topics data e t. target = RawLog /\ es = [topics;data] /\
+     MEM e (raw_log_topic_exprs topics) ==>
+     runtime_sym_expr_contract tops cfn ce t e` by
+    (rpt strip_tac >>
+     qpat_assum `!child_env t child. _ ==> runtime_sym_expr_contract _ _ _ _ _` irule >>
+     pure_rewrite_tac[arithmeticTheory.LT_ADD_RCANCEL] >>
+     irule arithmeticTheory.LESS_TRANS >> qexists `expr_size topics` >>
+     simp[raw_log_topic_exprs_member_bound] >>
+     irule expr_call_arg_bound >> simp[]) >>
+  simp[NoAsms, runtime_sym_expr_contract_def, compile_expr_body_def, expr_type_def] >>
+  rpt gen_tac >> strip_tac >>
+  `supported_expr tops (Call rt target es default)` by
+    fs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def] >>
+  qpat_x_assum `!cfn ce rt ty target es default s v s'. _`
+    (drule_at (Pat `compile_call _ _ _ _ _ _ _ _ = _`)) >>
+  asm_rewrite_tac[]
+QED
 
 Theorem runtime_sym_expr_body:
   runtime_sym_generator_contracts tops /\
@@ -155,29 +195,8 @@ Resume runtime_sym_expr_body[topname]:
   simp[NoAsms, runtime_sym_expr_contract_def] >>
   metis_tac[runtime_sym_compile_topname]
 QED
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
-  drule runtime_sym_generators_call >>
-  pure_rewrite_tac[runtime_sym_call_clause_def] >> disch_tac >>
-  simp[NoAsms, runtime_sym_expr_contract_def, compile_expr_body_def, expr_type_def] >>
-  `!e t. MEM e es \/ default = SOME e ==>
-     runtime_sym_expr_contract tops cfn ce t e` by
-    (rpt gen_tac >> strip_tac >> first_x_assum irule
-     >- (pure_rewrite_tac[arithmeticTheory.LT_ADD_RCANCEL] >>
-         irule expr_call_arg_bound >> simp[])
-     >> gvs[] >> simp[expr_call_default_bound]) >>
-  `!fid e t. target = IntCall fid /\
-     MEM e (omitted_defaults ce (nsid_to_string fid) (LENGTH es)) ==>
-     runtime_sym_expr_contract tops cfn
-       (cenv_without_defaults ce (nsid_to_string fid)) t e` by
-    (rpt strip_tac >> first_x_assum irule >>
-     drule omitted_default_bound >> decide_tac) >>
-  simp[NoAsms, supported_pure_expr_def, supported_expr_def,
-       supported_effect_expr_def] >> rpt gen_tac >> strip_tac >>
-  first_x_assum irule >> simp[supported_expr_def] >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
-*)
 Resume runtime_sym_expr_body[call]:
-  cheat
+  irule runtime_sym_expr_body_call >> simp[runtime_sym_generators_call]
 QED
 (* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   simp[NoAsms, runtime_sym_expr_contract_def] >> rpt gen_tac >> strip_tac >>
