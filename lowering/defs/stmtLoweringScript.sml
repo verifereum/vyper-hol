@@ -895,7 +895,7 @@ Definition compile_stmt_def:
      od) ∧
 
   (* AugAssign: load + binop + store.
-     Handles memory, storage, transient targets.
+     Handles memory, storage, transient and constructor immutable targets.
      Mirrors Python: vyper/codegen_venom/stmt.py:lower_AugAssign *)
   compile_stmt cenv lctx ty (AugAssign target_ty bt bop e) =
     do tgt_result <- compile_get_target_ptr compile_expr cenv bt;
@@ -915,11 +915,15 @@ Definition compile_stmt_def:
                                        LocStorage => SSTORE
                                      | LocTransient => TSTORE
                                      | _ => MSTORE);
-               cur_op <- emit_op load_opc [dst_op];
+               cur_op <- (if loc = LocCode then
+                            compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc dst_op
+                          else emit_op load_opc [dst_op]);
                rhs_op <- lower_value compile_expr cenv target_ty e;
                res_op <- compile_binop bop cur_op rhs_op target_ty NONE
                            (if bop = Exp then expr_int_literal e else NONE);
-               emit_void store_opc [dst_op; res_op]
+               (if loc = LocCode then
+                  compile_ptr_store cenv.ce_is_ctor cenv.ce_imm_alloca loc dst_op res_op
+                else emit_void store_opc [dst_op; res_op])
             od)
     od ∧
 
