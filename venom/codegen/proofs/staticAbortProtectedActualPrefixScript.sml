@@ -1,7 +1,7 @@
 (* Actual-code concretization of a successful protected symbolic prefix. *)
 Theory staticAbortProtectedActualPrefix
 Ancestors
-  asmSymOwnCode asmWf finalizerContract
+  asmSymOwnCode asmWf finalizerContract staticAbortOptMergeJumpdestsLayout
   asmDataEnv codegenSymRel asmSymSem asmSymBridge list asmSem
   asmSymForwardOwn asmRelocDataEnv asmSymModeOwn fnPlanPlaceRevertPostamble asmSpliceOwn
 
@@ -210,4 +210,37 @@ Proof
       (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC ORELSE metis_tac[])) >>
       disch_then ACCEPT_TAC) >>
   MATCH_ACCEPT_TAC stopped_symbolic_prefix_actual_code
+QED
+
+Theorem protected_cut_relation_pc:
+  (if allow_own then asm_sym_rel_own lo p env own else asm_sym_rel p plain_env) cs ss ==>
+  ss.sym_base.as_pc = cs.as_pc /\ LENGTH ss.sym_stack = LENGTH cs.as_stack
+Proof
+  Cases_on `allow_own` >> PURE_REWRITE_TAC [COND_CLAUSES]
+  >- (strip_tac >> drule asm_sym_rel_own_pc >> simp[] >>
+      fs[asm_sym_rel_own_def] >> metis_tac[LIST_REL_LENGTH]) >>
+  MATCH_ACCEPT_TAC asm_sym_rel_pc
+QED
+
+Theorem protected_cut_relation_slots:
+  (if allow_own then asm_sym_rel_own (lo_reloc p installed) p env own else asm_sym_rel p plain_env) cs ss ==>
+  !k. k < LENGTH ss.sym_stack ==>
+    (!w. EL k ss.sym_stack = Val w ==> EL k cs.as_stack = w) /\
+    (!l off dest. (allow_own ==> asm_static_wf p) /\ EL k ss.sym_stack = Lab l 0 /\
+        FLOOKUP (SND (compute_label_offsets p)) l = SOME off /\
+        FLOOKUP (build_offset_to_pc p) off = SOME dest ==>
+      EL k cs.as_stack = n2w off)
+Proof
+  Cases_on `allow_own` >>
+  PURE_REWRITE_TAC [COND_CLAUSES, asm_sym_rel_own_def, asm_sym_rel_def] >>
+  strip_tac >> gen_tac >> disch_tac >>
+  qpat_assum `LIST_REL _ ss.sym_stack cs.as_stack`
+    (mp_tac o REWRITE_RULE [LIST_REL_EL_EQN]) >> strip_tac >>
+  first_x_assum (qspec_then `k` (drule_then (mk_asm "slot"))) >>
+  conj_tac
+  >- (rpt strip_tac >> asm_x "slot" mp_tac >> simp[sval_conc_def]) >>
+  rpt gen_tac >> strip_tac >>
+  TRY (`FLOOKUP (lo_reloc p installed) l = SOME off` by
+       (irule canonical_jump_binding_relocated >> metis_tac[])) >>
+  asm_x "slot" mp_tac >> simp[sval_conc_def]
 QED
