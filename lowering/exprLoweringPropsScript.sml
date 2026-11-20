@@ -2301,13 +2301,31 @@ Proof
   metis_tac[]
 QED
 
+Theorem ci_mono_emit_codesize_if[local]:
+  ∀ b sa op.
+    ci_mono sa
+      (SND (if b then emit_op CODESIZE [] sa
+             else emit_op EXTCODESIZE [op] sa))
+Proof
+  rpt gen_tac >> Cases_on `b` >> simp[ci_mono_emit_op]
+QED
+
 Theorem ci_mono_compile_acc_cfn[local]:
   ∀ cfn cenv addr_e item sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
     ci_mono sa (SND (compile_acc cfn cenv addr_e item sa))
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `item`
-  >- (rewrite_tac[Once compile_acc_def] >> irule ci_mono_lower_value_cfn >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `item` THENL [
+    (rewrite_tac[Once compile_acc_def] >>
+     irule ci_mono_lower_value_cfn >> metis_tac[]),
+    ALL_TAC,
+    ALL_TAC,
+    (Cases_on `is_self_addr addr_e` THENL [
+       simp[compile_acc_def, ci_mono_emit_op],
+       ALL_TAC]),
+    ALL_TAC,
+    ALL_TAC] >>
   simp[compile_acc_def, LET_THM, pairTheory.UNCURRY] >>
   rpt strip_tac >>
   TRY (irule ci_mono_emit_inst >> NO_TAC) >>

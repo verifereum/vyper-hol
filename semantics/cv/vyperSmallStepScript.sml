@@ -1,7 +1,7 @@
 Theory vyperSmallStep
 Ancestors
   arithmetic combin pair list While
-  vyperMisc vyperValue vyperContext vyperState vyperCreate vyperInterpreter vyperABI
+  vyperMisc vyperNsidFmap vyperValue vyperContext vyperState vyperCreate vyperInterpreter vyperABI
   vyperCallOutcome[ignore_grammar]
 Libs
   wordsLib
@@ -54,7 +54,9 @@ Datatype:
   | SubscriptK1 type eval_result eval_continuation
   | AttributeK type identifier eval_continuation
   | BuiltinK type builtin (type list) eval_continuation
+  | SelfCodesizeK type builtin (type list) eval_continuation
   | CodeSliceK type num bool type type (type list) eval_continuation
+  | MembershipK type bool eval_continuation
   | LenK eval_continuation
   | TypeBuiltinK type_builtin type (type list) eval_continuation
   | CallSendK bool eval_continuation
@@ -155,9 +157,15 @@ Definition eval_expr_cps_def:
     (case type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st of
        (INR ex, st) => AK cx8 (ApplyExc ex) st k
      | (INL (), st) => if bt = Len then eval_expr_cps cx8 (HD es) st (LenK k)
+                       else if bt = Bop In ∨ bt = Bop NotIn then
+                         eval_exprs_cps cx8 es st
+                           (MembershipK (expr_type (EL 1 es)) (bt = Bop NotIn) k)
                        else if bt = Env MsgGas then
                          liftk cx8 ApplyTv
                            (do v <- next_gas_reading; return $ Value v od st) k
+                       else if is_self_codesize bt es then
+                         eval_exprs_cps cx8 es st
+                           (SelfCodesizeK ty bt (MAP expr_type es) k)
                        else (case (bt, es) of
                          (Slice n, [Builtin code_ty (Acc Code) [addr]; start; len]) =>
                            eval_exprs_cps cx8 [start; len; addr] st
@@ -403,7 +411,9 @@ Definition apply_exc_def:
   apply_exc cx ex st (AttributeK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (PopK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (BuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (SelfCodesizeK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CodeSliceK _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (MembershipK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (LenK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TypeBuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK _ k) = AK cx (ApplyExc ex) st k ∧
@@ -585,12 +595,25 @@ Definition apply_vals_def:
     apply_vals cx (v::vs) st k ∧
   apply_vals cx vs st (StructLitK ks k) =
     apply_tv cx (Value $ StructV (ZIP (ks, vs))) st k ∧
+  apply_vals cx vs st (MembershipK ty neg k) =
+    liftk cx ApplyTv (do
+      type_check (LENGTH vs = 2) "Membership args";
+      tv <- lift_option_type (evaluate_type (get_tenv cx) ty) "Membership type";
+      v <- lift_sum $ evaluate_membership tv neg (EL 0 vs) (EL 1 vs);
+      return $ Value v
+    od st) k ∧
   apply_vals cx vs st (BuiltinK ty bt tys k) =
     liftk cx ApplyTv (do
       acc <- get_accounts;
       v <- lift_sum $ evaluate_builtin cx acc ty bt tys vs;
       precompile_call_success bt vs;
       return $ Value v
+    od st) k ∧
+  apply_vals cx vs st (SelfCodesizeK ty bt tys k) =
+    liftk cx ApplyTv (do
+      v <- lift_sum (evaluate_self_codesize cx vs);
+      precompile_call_success bt vs;
+      return (Value v)
     od st) k ∧
   apply_vals cx [start_v; len_v; addr_v] st
              (CodeSliceK ty n is_self code_ty addr_ty tys k) =
@@ -908,6 +931,57 @@ Proof
   simp[stepk_def, apply_vals_def]
 QED
 
+Theorem cont_self_codesize_vals[local]:
+  !cx vs st ty bt tys k.
+  cont (AK cx (ApplyVals vs) st (SelfCodesizeK ty bt tys k)) =
+  cont (liftk cx ApplyTv (do
+    v <- lift_sum (evaluate_self_codesize cx vs);
+    precompile_call_success bt vs;
+    return (Value v)
+  od st) k)
+Proof
+  rpt gen_tac >>
+  qspec_then `AK cx (ApplyVals vs) st (SelfCodesizeK ty bt tys k)`
+    mp_tac cont_step >>
+  simp[stepk_def, apply_vals_def]
+QED
+
+Theorem cont_self_codesize_result[local]:
+  !cx ty tys k vs st v st'.
+  lift_sum (evaluate_self_codesize cx vs) st = (INL v,st') ==>
+  cont (AK cx (ApplyVals vs) st (SelfCodesizeK ty (Acc Codesize) tys k)) =
+  cont (AK cx (ApplyTv (Value v)) st' k)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rw[cont_self_codesize_vals] >>
+  simp[liftk1, bind_def, return_def, precompile_call_success_def] >>
+  Cases_on `do return (); return (Value v) od st'` >> Cases_on `q` >> simp[] >>
+  qpat_x_assum `do return (); return (Value v) od st' = _`
+    (fn th => assume_tac (SIMP_RULE (srw_ss()) [bind_def, ignore_bind_def, return_def] th)) >>
+  gvs[]
+QED
+
+Theorem cont_self_codesize_error[local]:
+  !cx ty tys k vs st ex st'.
+  lift_sum (evaluate_self_codesize cx vs) st = (INR ex,st') ==>
+  cont (AK cx (ApplyVals vs) st (SelfCodesizeK ty (Acc Codesize) tys k)) =
+  cont (AK cx (ApplyExc ex) st' k)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rw[cont_self_codesize_vals] >>
+  Cases_on `lift_sum (evaluate_self_codesize cx vs) st` >> Cases_on `q` >>
+  gvs[liftk1, bind_def, return_def, precompile_call_success_def]
+QED
+
+Theorem cont_self_codesize_exc[local]:
+  !cx ex st ty tys k.
+  cont (AK cx (ApplyExc ex) st (SelfCodesizeK ty (Acc Codesize) tys k)) =
+  cont (AK cx (ApplyExc ex) st k)
+Proof
+  rpt gen_tac >>
+  simp[cont_def, Once OWHILE_THM, stepk_def, apply_exc_def]
+QED
+
 Theorem cont_codeslicek_exc[local]:
   cont (AK cx (ApplyExc ex) st (CodeSliceK ty n is_self cty aty tys k)) =
   cont (AK cx (ApplyExc ex) st k)
@@ -1123,7 +1197,8 @@ Proof
 QED
 
 Theorem ordinary_eval_expr_cps_eq[local]:
-  bt <> Len /\ bt <> Env MsgGas /\
+  bt <> Len /\ bt <> Env MsgGas /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+  ~is_self_codesize bt es /\
   ~(?n code_ty addr start len. bt = Slice n /\
     es = [Builtin code_ty (Acc Code) [addr];start;len]) ==>
   eval_expr_cps cx (Builtin ty bt es) st k =
@@ -1146,7 +1221,8 @@ Proof
 QED
 
 Theorem ordinary_eval_expr_eq[local]:
-  bt <> Len /\ bt <> Env MsgGas /\
+  bt <> Len /\ bt <> Env MsgGas /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+  ~is_self_codesize bt es /\
   ~(?n code_ty addr start len. bt = Slice n /\
     es = [Builtin code_ty (Acc Code) [addr];start;len]) ==>
   eval_expr cx (Builtin ty bt es) st =
@@ -1162,15 +1238,92 @@ Theorem ordinary_eval_expr_eq[local]:
     return $ Value v
   od st)
 Proof
-  strip_tac >>
+  rpt strip_tac >>
   `code_slice_source bt es = NONE` by
     (Cases_on `code_slice_source bt es` >> simp[] >>
      rename1 `SOME pr` >> PairCases_on `pr` >> gvs[code_slice_source_SOME]) >>
   pure_once_rewrite_tac [evaluate_def] >> simp[]
 QED
 
+Theorem self_codesize_eval_expr_eq[local]:
+  is_self_codesize bt es ==>
+  eval_expr cx (Builtin ty bt es) st =
+  (do
+    type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args";
+    v <- do
+      vs <- eval_exprs cx es;
+      acc <- get_accounts;
+      v <- lift_sum (evaluate_self_codesize cx vs);
+      precompile_call_success bt vs;
+      return v
+    od;
+    return (Value v)
+  od st)
+Proof
+  strip_tac >>
+  Cases_on `bt` >> gvs[is_self_codesize_def] >>
+  Cases_on `a` >> gvs[is_self_codesize_def] >>
+  Cases_on `es` >> gvs[is_self_codesize_def] >>
+  Cases_on `t` >> gvs[is_self_codesize_def] >>
+  Cases_on `h` >> gvs[is_self_addr_def] >>
+  Cases_on `b` >> gvs[is_self_addr_def] >>
+  Cases_on `l` >> gvs[is_self_addr_def] >>
+  Cases_on `e` >> gvs[is_self_addr_def] >>
+  pure_once_rewrite_tac [evaluate_def] >>
+  Cases_on `eval_expr cx (Builtin t (Env SelfAddr) []) st` >>
+  Cases_on `q` >>
+  qpat_x_assum `eval_expr cx (Builtin t (Env SelfAddr) []) st = _`
+    (fn th => SUBST1_TAC th) >>
+  simp[is_self_codesize_def, builtin_args_length_ok_def, type_check_def,
+       assert_def, bind_def, evaluate_def, return_def, raise_def, AllCaseEqs()]
+QED
+
+Theorem cps_builtin_self_codesize[local]:
+  is_self_codesize bt es /\
+  cont (eval_exprs_cps cx es st
+    (SelfCodesizeK ty bt (MAP expr_type es) k)) =
+  cont (liftk cx ApplyVals (eval_exprs cx es st)
+    (SelfCodesizeK ty bt (MAP expr_type es) k)) ==>
+  cont (eval_expr_cps cx (Builtin ty bt es) st k) =
+  cont (liftk cx ApplyTv (eval_expr cx (Builtin ty bt es) st) k)
+Proof
+  strip_tac >>
+  drule self_codesize_eval_expr_eq >>
+  Cases_on `bt` >> gvs[is_self_codesize_def] >>
+  Cases_on `a` >> gvs[is_self_codesize_def] >>
+  Cases_on `es` >> gvs[is_self_codesize_def] >>
+  Cases_on `t` >> gvs[is_self_codesize_def] >>
+  Cases_on `h` >> gvs[is_self_addr_def] >>
+  Cases_on `b` >> gvs[is_self_addr_def] >>
+  Cases_on `l` >> gvs[is_self_addr_def] >>
+  Cases_on `e` >> gvs[is_self_addr_def] >>
+  pure_once_rewrite_tac [eval_expr_cps_def] >>
+  gvs[is_self_codesize_def, builtin_args_length_ok_def, type_check_def,
+      assert_def, liftk1, bind_def] >>
+  qpat_x_assum `cont (eval_exprs_cps cx _ _ _) = _`
+    (fn th => rw[th]) >>
+  first_x_assum
+    (qspecl_then [`ty`, `st`, `cx`] (fn th => asm_rewrite_tac [th])) >>
+  Cases_on `eval_expr cx (Builtin t (Env SelfAddr) []) st` >>
+  Cases_on `q` >>
+  rw[liftk1, bind_def] >>
+  simp[ignore_bind_def, bind_def] >>
+  simp[liftk1, bind_def] >>
+  simp[stepk_def, apply_vals_def,
+       apply_exc_def, bind_def, ignore_bind_def, liftk1, return_def,
+       get_accounts_def] >>
+  rpt (CASE_TAC >> simp[return_def, assert_def, bind_def, ignore_bind_def]) >>
+  gvs[assert_def, bind_def, ignore_bind_def, return_def] >>
+  TRY (qpat_x_assum `lift_sum (evaluate_self_codesize cx _) _ = _`
+    (fn th => assume_tac (MATCH_MP cont_self_codesize_result th))) >>
+  TRY (qpat_x_assum `lift_sum (evaluate_self_codesize cx _) _ = _`
+    (fn th => assume_tac (MATCH_MP cont_self_codesize_error th))) >>
+  gvs[cont_self_codesize_exc]
+QED
+
 Theorem cps_builtin_ordinary[local]:
-  bt <> Len /\ bt <> Env MsgGas /\
+  bt <> Len /\ bt <> Env MsgGas /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+  ~is_self_codesize bt es /\
   ~(?n code_ty addr start len. bt = Slice n /\
     es = [Builtin code_ty (Acc Code) [addr];start;len]) /\
   (!r. type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st = (INL (),r) ==>
@@ -1187,13 +1340,47 @@ Proof
   simp[ignore_bind_def, bind_def] >>
   Cases_on `type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st` >>
   Cases_on `q` >> simp[liftk1, bind_def] >>
-  Cases_on `x` >> gvs[] >>
   Cases_on `eval_exprs cx es r` >> Cases_on `q` >>
   simp[liftk1, bind_def] >>
   simp[cont_def, Once OWHILE_THM, stepk_def, apply_vals_def,
        apply_exc_def, bind_def, ignore_bind_def, liftk1, return_def,
        get_accounts_def] >>
   rpt (CASE_TAC >> simp[return_def])
+QED
+
+Theorem cps_builtin_membership[local]:
+  (bt = Bop In \/ bt = Bop NotIn) /\
+  (!r. type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st = (INL (),r) ==>
+    !s k. cont (eval_exprs_cps cx es s k) =
+      cont (liftk cx ApplyVals (eval_exprs cx es s) k)) ==>
+  cont (eval_expr_cps cx (Builtin ty bt es) st k) =
+  cont (liftk cx ApplyTv (eval_expr cx (Builtin ty bt es) st) k)
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  `bt <> Len` by (strip_tac >> fs[]) >>
+  pure_once_rewrite_tac [eval_expr_cps_def, evaluate_def] >>
+  qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
+  qpat_assum `bt = Bop In \/ bt = Bop NotIn` (fn th => rewrite_tac[th]) >>
+  simp[ignore_bind_def, bind_def] >>
+  Cases_on `type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st` >>
+  Cases_on `q` >> simp[liftk1, bind_def] >>
+  Cases_on `x` >> fs[] >>
+  Cases_on `eval_exprs cx es r` >> Cases_on `q` >>
+  simp[liftk1, bind_def] >>
+  simp[cont_def, Once OWHILE_THM, stepk_def, apply_vals_def,
+       apply_exc_def, bind_def, ignore_bind_def, liftk1, return_def] >>
+  rename1 `eval_exprs cx es _ = (INL vs,r2)` >>
+  Cases_on `type_check (LENGTH vs = 2) "Membership args" r2` >>
+  rename1 `type_check _ _ _ = (tc_res,r3)` >>
+  Cases_on `tc_res` >> simp[] >>
+  Cases_on `lift_option_type (evaluate_type (get_tenv cx) (expr_type (EL 1 es)))
+              "Membership type" r3` >>
+  rename1 `lift_option_type _ _ _ = (ty_res,r4)` >>
+  Cases_on `ty_res` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `lift_sum mres r4` >>
+  Cases_on `lift_sum mres r4` >>
+  rename1 `lift_sum _ _ = (m_res,r5)` >>
+  Cases_on `m_res` >> simp[]
 QED
 
 Theorem eval_cps_aux:
@@ -1673,7 +1860,8 @@ Proof
                             (is_self_addr addr) code_ty (expr_type addr) [addr_v]` >>
                 simp[lift_sum_def, return_def, raise_def, liftk1, bind_def,
                      ignore_bind_def, precompile_call_success_def] >>
-                rpt (CASE_TAC >> simp[return_def, raise_def])) >>
+                rpt (CASE_TAC >> simp[return_def, raise_def]) >>
+                gvs[is_self_codesize_def]) >>
             rename1 `eval_exprs cx [addr] r = (INR addr_ex,addr_st)` >>
             qmatch_goalsub_abbrev_tac `CodeSliceK ty n is_self cty aty tys k` >>
             qspec_then `AK cx (ApplyExc addr_ex) addr_st (ExprsK1 h' (ExprsK1 h (CodeSliceK ty n is_self cty aty tys k)))`
@@ -1694,6 +1882,34 @@ Proof
         gvs[] >> pure_rewrite_tac [GSYM liftk1] >>
         irule cps_builtin_len >> rpt strip_tac >>
         first_x_assum drule_all >> simp[liftk1]) >>
+    Cases_on `bt = Bop In \/ bt = Bop NotIn`
+    >- (rpt (PRED_ASSUM (fn tm => is_forall tm andalso not
+          (can (find_term (fn t => same_const t ``Bop`` )) tm)) kall_tac) >>
+        pure_rewrite_tac [GSYM liftk1] >>
+        irule cps_builtin_membership >> simp[] >> rpt strip_tac >>
+        qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ (_ \/ _) ==> _`
+          (qspecl_then [`st`, `()`, `r`] mp_tac) >>
+        simp[liftk1]) >>
+    Cases_on `is_self_codesize bt es`
+    >- (pure_rewrite_tac [GSYM liftk1] >>
+        irule cps_builtin_self_codesize >>
+        Cases_on `bt` >> gvs[is_self_codesize_def] >>
+        Cases_on `a` >> gvs[is_self_codesize_def] >>
+        Cases_on `es` >> gvs[is_self_codesize_def] >>
+        Cases_on `t` >> gvs[is_self_codesize_def] >>
+        Cases_on `h` >> gvs[is_self_addr_def] >>
+        Cases_on `b` >> gvs[is_self_addr_def] >>
+        Cases_on `l` >> gvs[is_self_addr_def] >>
+        Cases_on `e` >> gvs[is_self_addr_def] >>
+        simp[] >>
+        qpat_x_assum
+          `!s'' t'. type_check (builtin_args_length_ok (Acc Codesize) 1)
+             "Builtin args" s'' = (INL (),t') ==> _`
+          (qspecl_then [`st`, `st`] mp_tac) >>
+        simp[is_self_codesize_def, builtin_args_length_ok_def,
+             type_check_def, assert_def, bind_def, return_def] >>
+        disch_then (qspecl_then [`st`, `k`] mp_tac) >>
+        simp[liftk1]) >>
     pure_rewrite_tac [GSYM liftk1] >>
     irule cps_builtin_ordinary >>
     reverse conj_tac >- metis_tac[] >>
@@ -2217,3 +2433,15 @@ Proof
   simp[Once OWHILE_THM] >> IF_CASES_TAC >>
   Cases_on `res` >> gvs[] >> simp[fromvalsk_def]
 QED
+
+
+
+
+
+
+
+
+
+(* CV validity only: expression evaluation reaches DoneK.  Registering this
+   precondition does not replace the CPS computation by its big-step result.
+   Keep it after existing translations so their equations are unchanged. *)

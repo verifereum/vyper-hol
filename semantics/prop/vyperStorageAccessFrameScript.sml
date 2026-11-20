@@ -2532,12 +2532,21 @@ Resume evaluate_finite_frame[builtin_args]:
      qexists_tac `env` >> simp[]) >>
   qpat_x_assum `^frame cx A st s1` (mk_asm "prefix") >>
   asm_x "args_ih" kall_tac >>
+  Cases_on `is_self_codesize bt es`
+  >- (gvs[Once evaluate_def, type_check_def, assert_def, return_def,
+          ignore_bind_def, bind_def, raise_def, get_accounts_def, AllCaseEqs()] >>
+      Cases_on `evaluate_self_codesize cx vs` >>
+      gvs[lift_sum_def, return_def, raise_def, AllCaseEqs()] >>
+      imp_res_tac precompile_call_success_state >>
+      gvs[return_def, raise_def, bind_def, oneline get_storage_def] >>
+      asm "prefix" (ACCEPT_TAC o SRULE [oneline get_storage_def]))
+  >- (
   gvs[Once evaluate_def, type_check_def, assert_def, return_def,
       ignore_bind_def, bind_def, raise_def, get_accounts_def, AllCaseEqs()] >>
   imp_res_tac precompile_call_success_state >>
   imp_res_tac lift_sum_state >>
   gvs[return_def, raise_def, bind_def, oneline get_storage_def] >>
-  asm "prefix" (ACCEPT_TAC o SRULE [oneline get_storage_def])
+  asm "prefix" (ACCEPT_TAC o SRULE [oneline get_storage_def]))
 QED
 
 Resume evaluate_finite_frame[builtin_slice]:
@@ -2597,7 +2606,7 @@ Resume evaluate_finite_frame[builtin_slice]:
   qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, type_check_def, assert_def, return_def,
        ignore_bind_def, bind_def, raise_def, get_accounts_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
+  strip_tac >> gvs[is_self_codesize_def, code_slice_source_SOME] >>
   imp_res_tac precompile_call_success_state >>
   imp_res_tac lift_sum_state >>
   gvs[return_def, raise_def, bind_def, oneline get_storage_def] >>
