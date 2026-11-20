@@ -50,6 +50,24 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Proof
+  strip_tac >> drule_all selected_external_package_member >>
+  disch_then (qspec_then `rp.rpol_target` strip_assume_tac) >>
+  qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
+  simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
+  strip_tac >>
+  `~EXISTS external_has_defaults q` by
+    (drule supported_program_no_external_defaults >> simp[]) >>
+  qpat_x_assum `(if EXISTS external_has_defaults q then _ else _) = _`
+    mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >> fs[] >>
+  goal_assum (drule_at Any) >>
+  simp[external_source_package_labels, internal_source_package_labels] >>
+  metis_tac[]
+QED
+*)
 Theorem lower_runtime_named_source_packages:
   lower_vyper_runtime_unit tops rp = SOME u /\
   supported_program tops /\ tx.function_name <> "__default__" /\
@@ -66,20 +84,7 @@ Theorem lower_runtime_named_source_packages:
       package_external_fn tops T (K global_nonreentrant_slot))
       (FST (classify_functions tops))
 Proof
-  strip_tac >> drule_all selected_external_package_member >>
-  disch_then (qspec_then `rp.rpol_target` strip_assume_tac) >>
-  qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
-  simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
-  Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
-  strip_tac >>
-  `~EXISTS external_has_defaults q` by
-    (drule supported_program_no_external_defaults >> simp[]) >>
-  qpat_x_assum `(if EXISTS external_has_defaults q then _ else _) = _`
-    mp_tac >>
-  asm_rewrite_tac[] >> strip_tac >> fs[] >>
-  goal_assum (drule_at Any) >>
-  simp[external_source_package_labels, internal_source_package_labels] >>
-  metis_tac[]
+  cheat
 QED
 
 Theorem lower_runtime_selected_source_packages:

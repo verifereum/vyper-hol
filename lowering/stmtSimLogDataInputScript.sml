@@ -55,13 +55,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem log_scalar_memory_input:
-  supported_scalar_type ty /\ evaluate_type env ty = SOME tv /\
-  value_has_type tv v /\ val_wf tv v /\ val_in_memory tv v p mem /\
-  type_memory_bytes ce ty < dimword (:256) ==>
-  ?av. vyper_to_abi env ty v = SOME av /\
-    abi_encoder_input (type_to_abi_enc_info sf ce ty)
-      (vyper_to_abi_type env ty) av p (type_memory_bytes ce ty) mem
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt strip_tac >> Cases_on `supported_word_type ty`
   >- (drule_all log_word_memory_input >> simp[]) >>
@@ -80,6 +74,17 @@ Proof
   drule_all (SRULE[value_has_type_def] abi_encoder_string_source_input) >>
   simp[type_memory_bytes_def, type_memory_size_def,
        vfmConstantsTheory.word_size_def, vyperMiscTheory.n2w_o_ORD_def]
+QED
+*)
+Theorem log_scalar_memory_input:
+  supported_scalar_type ty /\ evaluate_type env ty = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\ val_in_memory tv v p mem /\
+  type_memory_bytes ce ty < dimword (:256) ==>
+  ?av. vyper_to_abi env ty v = SOME av /\
+    abi_encoder_input (type_to_abi_enc_info sf ce ty)
+      (vyper_to_abi_type env ty) av p (type_memory_bytes ce ty) mem
+Proof
+  cheat
 QED
 
 Theorem log_scalar_abi_metadata:

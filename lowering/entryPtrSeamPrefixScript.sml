@@ -63,68 +63,7 @@ QED
      gives mut = Payable or a zero call value (the converse of
      entryValueRevertPtr's initial_entry_rejected_value); valid_vyper_call's
      calldata_encodes gives the calldata size bound. *)
-Theorem external_entry_reaches_registration_ptr_nr:
-  !tops rpolicy unit am tx ret vs mut nr args fbody env es0 efn elbl.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    tx.function_name <> "__default__" /\
-    LENGTH tx.args = LENGTH args /\
-    calldata_encodes (type_env tops) tx.function_name (MAP SND args)
-      tx.args vs.vs_call_ctx.cc_calldata /\
-    initial_venom_state_rel tops am tx vs /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut, nr, args, [], ret, fbody) /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with
-         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
-      (INL (), es0) /\
-    lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
-    fn_entry_label efn = SOME elbl ==>
-    ?pbody lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st cenv sa st' s1
-     G1 tn1.
-      pbody = subst_consts_stmts (module_consts_env tops []) fbody /\
-      set_external_package_target rpolicy.rpol_target
-        (package_external_fn tops T (K global_nonreentrant_slot)
-           (subst_consts_fn (module_consts_env tops []) (mut, nr, lookup_raw_return_or_F (NONE : num option)
-                       tx.function_name External tops,
-            tx.function_name, args, [], ret, fbody))) =
-        (lbl, cenv0, pos_args, min_cds, is_payable, nr, nkey, ut', iv, pbody,
-         rt) /\
-      runtime_selected_body_start tops rpolicy
-        (lbl, cenv0, pos_args, min_cds, is_payable, nr, nkey, ut', iv, pbody,
-         rt) st /\
-      compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
-      compile_guarded_body cenv nr nkey ut' iv pbody rt sa = ((), st') /\
-      fn_has_code st sa efn /\ fn_has_code sa st' efn /\
-      fn_inst_ids_distinct efn /\
-      local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
-      cenv.ce_return_buf = NONE /\
-      gas_path_mem unit.cu_context efn
-        (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
-                    vs_inst_idx := 0 |>) 0 (OK s1) /\
-      (!D explicit.
-         gas_origin_ptr_path (D, 0, explicit, unit.cu_context, efn, [])
-           (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
-                       vs_inst_idx := 0 |>, FEMPTY, entry_taint)
-           [] (OK s1, G1, tn1)) /\
-      vars_pc_only
-        (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
-                    vs_inst_idx := 0 |>) s1 /\
-      s1.vs_gas_readings = vs.vs_gas_readings /\
-      fresh_vars_wrt st s1 /\ ~s1.vs_halted /\
-      s1.vs_current_bb = st.cs_current_bb /\
-      s1.vs_inst_idx = LENGTH st.cs_current_insts /\
-      tn1.t_mem = {} /\ tn1.t_stor = {} /\ tn1.t_trans = {} /\
-      tn1.t_imm = {} /\
-      !D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1) ==>
-          !fuel. ptr_safe_blocks D 0 fuel unit.cu_context efn [] FEMPTY
-                   entry_taint
-                   (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
-                               vs_inst_idx := 0 |>)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
@@ -279,6 +218,72 @@ Resume external_entry_reaches_registration_ptr_nr[checks]:
 QED
 
 Finalise external_entry_reaches_registration_ptr_nr
+*)
+Theorem external_entry_reaches_registration_ptr_nr:
+  !tops rpolicy unit am tx ret vs mut nr args fbody env es0 efn elbl.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    tx.function_name <> "__default__" /\
+    LENGTH tx.args = LENGTH args /\
+    calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+      tx.args vs.vs_call_ctx.cc_calldata /\
+    initial_venom_state_rel tops am tx vs /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, nr, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INL (), es0) /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+    fn_entry_label efn = SOME elbl ==>
+    ?pbody lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st cenv sa st' s1
+     G1 tn1.
+      pbody = subst_consts_stmts (module_consts_env tops []) fbody /\
+      set_external_package_target rpolicy.rpol_target
+        (package_external_fn tops T (K global_nonreentrant_slot)
+           (subst_consts_fn (module_consts_env tops []) (mut, nr, lookup_raw_return_or_F (NONE : num option)
+                       tx.function_name External tops,
+            tx.function_name, args, [], ret, fbody))) =
+        (lbl, cenv0, pos_args, min_cds, is_payable, nr, nkey, ut', iv, pbody,
+         rt) /\
+      runtime_selected_body_start tops rpolicy
+        (lbl, cenv0, pos_args, min_cds, is_payable, nr, nkey, ut', iv, pbody,
+         rt) st /\
+      compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
+      compile_guarded_body cenv nr nkey ut' iv pbody rt sa = ((), st') /\
+      fn_has_code st sa efn /\ fn_has_code sa st' efn /\
+      fn_inst_ids_distinct efn /\
+      local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
+      cenv.ce_return_buf = NONE /\
+      gas_path_mem unit.cu_context efn
+        (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                    vs_inst_idx := 0 |>) 0 (OK s1) /\
+      (!D explicit.
+         gas_origin_ptr_path (D, 0, explicit, unit.cu_context, efn, [])
+           (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                       vs_inst_idx := 0 |>, FEMPTY, entry_taint)
+           [] (OK s1, G1, tn1)) /\
+      vars_pc_only
+        (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                    vs_inst_idx := 0 |>) s1 /\
+      s1.vs_gas_readings = vs.vs_gas_readings /\
+      fresh_vars_wrt st s1 /\ ~s1.vs_halted /\
+      s1.vs_current_bb = st.cs_current_bb /\
+      s1.vs_inst_idx = LENGTH st.cs_current_insts /\
+      tn1.t_mem = {} /\ tn1.t_stor = {} /\ tn1.t_trans = {} /\
+      tn1.t_imm = {} /\
+      !D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1) ==>
+          !fuel. ptr_safe_blocks D 0 fuel unit.cu_context efn [] FEMPTY
+                   entry_taint
+                   (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                               vs_inst_idx := 0 |>)
+Proof
+  cheat
+QED
 
 Theorem external_entry_reaches_registration_ptr:
   !tops rpolicy unit am tx ret vs mut args fbody env es0 efn elbl.

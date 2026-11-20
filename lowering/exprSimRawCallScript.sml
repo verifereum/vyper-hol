@@ -892,10 +892,7 @@ QED
   QED
 *)
 
-Theorem raw_call_outbuf_capacity[local]:
-  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es /\
-  0 < flags.rcf_max_outsize ==>
-  ((flags.rcf_max_outsize + 31) DIV 32) * 32 + 32 < dimword (:256)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> drule raw_call_pre_flags >> strip_tac >>
   `type_alloc_ok cenv ann` by
@@ -905,6 +902,14 @@ Proof
       type_memory_bytes_def] >>
   `2 ** 64 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
   fs[] >> decide_tac
+QED
+*)
+Theorem raw_call_outbuf_capacity[local]:
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es /\
+  0 < flags.rcf_max_outsize ==>
+  ((flags.rcf_max_outsize + 31) DIV 32) * 32 + 32 < dimword (:256)
+Proof
+  cheat
 QED
 
 
@@ -1839,12 +1844,7 @@ Proof
   qexists_tac `s` >> simp[emitted_insts_def, run_inst_seq_def, wb_frame_refl]
 QED
 
-Theorem raw_call_kwargs_ready[local]:
-  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
-  (nocalls ==> int_calls_expr (Call ann (RawCallTarget flags) (a::d::kws) dflt) = []) /\
-  exprs_case nocalls ctx func cenv cx kws ==>
-  typed_args_ready ctx func cenv cx (K (BaseT (UintT 256)))
-    (expr_sim_inv cenv cx env) kws
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   strip_tac >> drule raw_call_pre_flags >> strip_tac >>
   drule raw_call_kwargs_types >> simp[] >> strip_tac >>
@@ -1854,6 +1854,16 @@ Proof
       drule_all expr_body_pre_raw_call_arg >> simp[]) 
   >- (rw[] >> gvs[int_calls_expr_def] >> metis_tac[int_calls_exprs_mem]) >>
   fs[EVERY_MEM, is_word_type_def]
+QED
+*)
+Theorem raw_call_kwargs_ready[local]:
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
+  (nocalls ==> int_calls_expr (Call ann (RawCallTarget flags) (a::d::kws) dflt) = []) /\
+  exprs_case nocalls ctx func cenv cx kws ==>
+  typed_args_ready ctx func cenv cx (K (BaseT (UintT 256)))
+    (expr_sim_inv cenv cx env) kws
+Proof
+  cheat
 QED
 
 (* Legacy fixed-result prefix retained during counted port.

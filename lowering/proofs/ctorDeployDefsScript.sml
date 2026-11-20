@@ -237,15 +237,7 @@ Proof
      supported_expr_exists_def] >> metis_tac[]
 QED
 
-Theorem supported_pure_no_code_accessor[local]:
-  (!tops e. supported_pure_expr tops e ==>
-    ~supported_expr_exists (\x. ?t es. x = Builtin t (Acc Code) es) e) /\
-  (!tops es. supported_pure_exprs tops es ==>
-    ~supported_exprs_exists (\x. ?t xs. x = Builtin t (Acc Code) xs) es) /\
-  (!tops fs. supported_pure_fields tops fs ==>
-    ~supported_fields_exists (\x. ?t es. x = Builtin t (Acc Code) es) fs) /\
-  (!tops e. supported_place_expr tops e ==>
-    ~supported_expr_exists (\x. ?t es. x = Builtin t (Acc Code) es) e)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   ho_match_mp_tac supported_pure_expr_ind >>
   rw[supported_pure_expr_def, supported_expr_exists_def] >>
@@ -253,6 +245,21 @@ Proof
   gvs[supported_builtin_form_def, supported_expr_exists_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >> Cases_on `t` >> fs[]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (own-code reads are accepted); callers split
+  Theorem supported_pure_no_code_accessor[local]:
+    (!tops e. supported_pure_expr tops e ==>
+      ~supported_expr_exists (\x. ?t es. x = Builtin t (Acc Code) es) e) /\
+    (!tops es. supported_pure_exprs tops es ==>
+      ~supported_exprs_exists (\x. ?t xs. x = Builtin t (Acc Code) xs) es) /\
+    (!tops fs. supported_pure_fields tops fs ==>
+      ~supported_fields_exists (\x. ?t es. x = Builtin t (Acc Code) es) fs) /\
+    (!tops e. supported_place_expr tops e ==>
+      ~supported_expr_exists (\x. ?t es. x = Builtin t (Acc Code) es) e)
+  Proof
+    cheat
+  QED
+*)
 
 Theorem supported_pure_expr_no_self_code:
   supported_pure_expr tops e ==> ~supported_expr_exists is_self_code e

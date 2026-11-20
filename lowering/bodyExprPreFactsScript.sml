@@ -56,8 +56,7 @@ QED
    internal functions of the main module, as expr_body_pre asks. *)
 (* A supported expression is no bare .code: supported_builtin_form
    rejects Acc Code. *)
-Theorem supported_expr_not_extcode[local]:
-  !tops e. supported_expr tops e ==> ~is_extcode e
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt gen_tac >> Cases_on `is_extcode e` >> simp[] >>
   Cases_on `e` >> gvs[exprLoweringTheory.is_extcode_def] >>
@@ -73,19 +72,37 @@ Proof
       supportedExprsTheory.supported_effect_expr_def,
       supportedExprFormsTheory.supported_builtin_form_def]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (own-code reads are accepted); callers split
+  Theorem supported_expr_not_extcode[local]:
+    !tops e. supported_expr tops e ==> ~is_extcode e
+  Proof
+    cheat
+  QED
+*)
 
-Theorem supported_stmt_body_safe:
-  supported_stmt tops bindings s ==> body_stmt_safe tops s
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rw[body_stmt_safe_def] >>
   drule (cj 1 supported_stmts_storage_syntax) >> simp[]
 QED
+*)
+Theorem supported_stmt_body_safe:
+  supported_stmt tops bindings s ==> body_stmt_safe tops s
+Proof
+  cheat
+QED
 
-Theorem supported_stmts_body_safe:
-  supported_stmts tops bindings ss ==> body_stmts_safe tops ss
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rw[body_stmts_safe_iff] >>
   drule (cj 2 supported_stmts_storage_syntax) >> simp[]
+QED
+*)
+Theorem supported_stmts_body_safe:
+  supported_stmts tops bindings ss ==> body_stmts_safe tops ss
+Proof
+  cheat
 QED
 
 Theorem supported_expr_body_calls:

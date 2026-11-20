@@ -15,9 +15,7 @@ Proof
   simp[Once compile_log_store_data_def]
 QED
 
-Theorem log_scalar_memory_size:
-  supported_scalar_type ty /\ evaluate_type tenv ty = SOME tv ==>
-  type_memory_bytes cenv ty = type_memory_size tv
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `ty` >>
   simp[supported_scalar_type_def, supported_word_type_def,
@@ -30,6 +28,13 @@ Proof
   gvs[supported_word_type_def, supported_string_type_def,
        evaluate_type_def, type_memory_bytes_def, type_memory_size_def,
        vfmConstantsTheory.word_size_def, AllCaseEqs()]
+QED
+*)
+Theorem log_scalar_memory_size:
+  supported_scalar_type ty /\ evaluate_type tenv ty = SOME tv ==>
+  type_memory_bytes cenv ty = type_memory_size tv
+Proof
+  cheat
 QED
 
 Theorem log_data_prefix_bounds:

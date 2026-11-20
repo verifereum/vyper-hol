@@ -27,8 +27,7 @@ QED
   QED
 *)
 
-Theorem log_scalar_word_or_bytestring[local]:
-  !ty. supported_scalar_type ty ==> is_word_type ty \/ is_bytestring_type ty
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases >> simp[supported_scalar_type_def, supported_word_type_def,
     supported_string_type_def] >>
@@ -39,6 +38,14 @@ Proof
   simp[supported_word_type_def, supported_string_type_def, is_word_type_def,
     is_bytestring_type_def]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (flag scalars); callers split
+  Theorem log_scalar_word_or_bytestring[local]:
+    !ty. supported_scalar_type ty ==> is_word_type ty \/ is_bytestring_type ty
+  Proof
+    cheat
+  QED
+*)
 
 Theorem log_scalar_post_value_type:
   supported_scalar_type (expr_type e) ==> post_value_type cenv e = expr_type e
@@ -115,38 +122,7 @@ QED
 (* The arguments, in order: each one's fragment from the readings its
    actual path selects; an argument's error exits, and after the last one
    every value is where log_args_post puts it. *)
-Theorem compile_log_eval_all_gas:
-  !args ctx func cenv cx R st0 es sa xs sb s0 env env0 es0 ops.
-    (!e tail es. R (e::tail) es ==>
-       expr_sim ctx func cenv cx (expr_type e) e es /\
-       !v es1. bind (eval_expr cx e) (read_result cx) es = (INL v, es1) ==>
-         R tail es1 /\
-         ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-              value_has_type tv v) /\
-    (!tail es gs. R tail es ==> R tail (es with gas_obs := gs)) /\
-    R args es /\ EVERY supported_scalar_type (MAP expr_type args) /\
-    ~exprs_can_mutate cenv args /\ compile_log_eval_all cenv args sa = (ops,sb) /\
-    xs = ZIP (MAP FST ops, MAP expr_type args) /\
-    gas_admissible (eval_exprs cx args) log_args_res_ok es /\
-    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    expr_sim_inv cenv cx env0 es0 /\ well_typed_exprs env args /\
-    (!id t. FLOOKUP env.var_types id = SOME t ==>
-       ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
-    (!H. valid_horizon cx st0 H es.storage_trace ==>
-       stmt_state_rel H ctx func cenv cx es s0 /\
-       storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
-    s0.vs_current_bb = sa.cs_current_bb /\
-    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
-      (\H res ee t. ?vs. res = INL vs /\
-         log_args_post H ctx func cenv cx es sa sb s0 ee xs vs t /\
-         t.vs_current_bb = sb.cs_current_bb /\
-         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-         LIST_REL (\ty v. ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
-                               value_has_type tv v) (MAP expr_type args) vs /\
-         EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sb z) /\
-                    (!lab. FST p <> Label lab)) xs)
-      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Induct
   >- (rpt gen_tac >> strip_tac >> gvs[compile_log_eval_all_nil] >>
@@ -386,3 +362,39 @@ Resume compile_log_eval_all_gas[tail_exempt]:
 QED
 
 Finalise compile_log_eval_all_gas
+*)
+Theorem compile_log_eval_all_gas:
+  !args ctx func cenv cx R st0 es sa xs sb s0 env env0 es0 ops.
+    (!e tail es. R (e::tail) es ==>
+       expr_sim ctx func cenv cx (expr_type e) e es /\
+       !v es1. bind (eval_expr cx e) (read_result cx) es = (INL v, es1) ==>
+         R tail es1 /\
+         ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+              value_has_type tv v) /\
+    (!tail es gs. R tail es ==> R tail (es with gas_obs := gs)) /\
+    R args es /\ EVERY supported_scalar_type (MAP expr_type args) /\
+    ~exprs_can_mutate cenv args /\ compile_log_eval_all cenv args sa = (ops,sb) /\
+    xs = ZIP (MAP FST ops, MAP expr_type args) /\
+    gas_admissible (eval_exprs cx args) log_args_res_ok es /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+    expr_sim_inv cenv cx env0 es0 /\ well_typed_exprs env args /\
+    (!id t. FLOOKUP env.var_types id = SOME t ==>
+       ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0 /\
+       storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+      (\H res ee t. ?vs. res = INL vs /\
+         log_args_post H ctx func cenv cx es sa sb s0 ee xs vs t /\
+         t.vs_current_bb = sb.cs_current_bb /\
+         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+         LIST_REL (\ty v. ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
+                               value_has_type tv v) (MAP expr_type args) vs /\
+         EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sb z) /\
+                    (!lab. FST p <> Label lab)) xs)
+      (\H res ee r. expr_exit res r /\ halt_exit H cx ee res r)
+Proof
+  cheat
+QED

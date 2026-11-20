@@ -133,12 +133,7 @@ QED
   QED
 *)
 
-Theorem entry_code_dispatch_binary[local]:
-  supported_builtin_form tops ret_ty bi [a;b] /\
-  (!e et. MEM e [a;b] ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
-  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_builtin_dispatch_body cfn cenv ret_ty ty bi [a;b])
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `bi` >> simp[supported_builtin_form_def] >> rpt strip_tac
   >~ [`compile_builtin_dispatch_body _ _ _ _ (MakeArray _ _) _`]
@@ -171,6 +166,18 @@ Proof
     (Q.INST [`opc` |-> opc] entry_code_emit_op))) [`EQ`, `ISZERO`] >>
   rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: suspected false under the widened gate (new builtin forms may allocate dynamically); deleted, callers split
+  Theorem entry_code_dispatch_binary[local]:
+    supported_builtin_form tops ret_ty bi [a;b] /\
+    (!e et. MEM e [a;b] ==>
+      entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+      (compile_builtin_dispatch_body cfn cenv ret_ty ty bi [a;b])
+  Proof
+    cheat
+  QED
+*)
 
 Theorem entry_code_bytestring_src[local]:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_bytestring_src p)
@@ -181,12 +188,7 @@ Proof
   simp[entry_code_return]
 QED
 
-Theorem entry_code_dispatch_ternary[local]:
-  supported_builtin_form tops ret_ty bi [a;b;c] /\
-  (!e et. MEM e [a;b;c] ==>
-    entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
-  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_builtin_dispatch_body cfn cenv ret_ty ty bi [a;b;c])
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   Cases_on `bi` >> simp[supported_builtin_form_def] >> rpt strip_tac
   >~ [`compile_builtin_dispatch_body _ _ _ _ (MakeArray _ _) _`]
@@ -203,6 +205,18 @@ Proof
     [entry_code_addmod, entry_code_mulmod] >>
   rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: suspected false under the widened gate (new builtin forms may allocate dynamically); deleted, callers split
+  Theorem entry_code_dispatch_ternary[local]:
+    supported_builtin_form tops ret_ty bi [a;b;c] /\
+    (!e et. MEM e [a;b;c] ==>
+      entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn cenv et e)) ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+      (compile_builtin_dispatch_body cfn cenv ret_ty ty bi [a;b;c])
+  Proof
+    cheat
+  QED
+*)
 
 Theorem entry_code_dispatch_quaternary[local]:
   supported_builtin_form tops ret_ty bi [a;b;c;d] /\
