@@ -108,17 +108,13 @@ Proof
    get_instruction tb E.vs_inst_idx = SOME (HD tb.bb_instructions) /\
    E = E with vs_inst_idx := phi_prefix_length tb.bb_instructions` by
     metis_tac[] >>
-  mp_tac (Q.INST [`root_sf` |-> `sf`, `root_tf` |-> `dft_fn sf`,
-                  `bb` |-> `sb`, `bt` |-> `tb`, `ps` |-> `prefix`,
-                  `xs` |-> `src`, `ys` |-> `dst`, `rho` |-> `schedule`,
-                  `root_entry` |-> `E`, `sp` |-> `E`, `st` |-> `E`,
-                  `inst` |-> `HD tb.bb_instructions`, `PG` |-> `[]`,
-                  `G` |-> `FEMPTY`, `tn` |-> `entry_taint`, `oms` |-> `[]`,
-                  `om` |-> `FEMPTY`, `hs` |-> `[]`,
-                  `h` |-> `[OriginInitial E; OriginObserve (OriginSnapshot
-                    (dft_fn sf) [] FEMPTY FEMPTY (HD tb.bb_instructions) E)]`]
-    (CONV_RULE (RAND_CONV (REPEATC Unwind.UNWIND_FORALL_CONV))
-       (SPEC_ALL focus_initial_singleton_packet))) >>
+  mp_tac (CONV_RULE (RAND_CONV (REPEATC Unwind.UNWIND_FORALL_CONV))
+    (Q.SPECL [`N`, `C7`, `C8`, `sf`, `dft_fn sf`, `E`, `nm`, `lbl`,
+              `sb`, `tb`, `prefix`, `src`, `dst`, `schedule`, `E`, `E`,
+              `HD tb.bb_instructions`, `[]`, `FEMPTY`, `entry_taint`, `[]`,
+              `FEMPTY`, `[]`, `[OriginInitial E; OriginObserve (OriginSnapshot
+                (dft_fn sf) [] FEMPTY FEMPTY (HD tb.bb_instructions) E)]`]
+       focus_initial_singleton_packet)) >>
   (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))) >>
   simp[Abbr `q80`] >> disch_then (irule_at Any)
 QED
