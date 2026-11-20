@@ -67,16 +67,19 @@ Theorem release_dead_spills_live_domain:
     release_dead_spills next ps = ps
 Proof
   rpt strip_tac >>
-  simp[stackPlanOpsTheory.release_dead_spills_def] >>
-  `FILTER (\(op,off). case op of Var v => ~MEM v next | _ => T)
-     (alist$fmap_to_alist ps.ps_spilled) = []` suffices_by simp[] >>
-  simp[FILTER_EQ_NIL, EVERY_MEM] >>
-  Cases >> simp[] >> rpt strip_tac >>
-  rename1 `FLOOKUP ps.ps_spilled op = SOME off` >>
-  `op IN FDOM ps.ps_spilled` by
-    (qpat_x_assum `FLOOKUP _ _ = SOME _` mp_tac >>
-     simp[finite_mapTheory.FLOOKUP_DEF] >> IF_CASES_TAC >> simp[]) >>
-  first_x_assum drule >> strip_tac >> gvs[]
+  qabbrev_tac `live = (λop. case op of Var v => MEM v next | _ => F)` >>
+  `!op. op IN FDOM ps.ps_spilled ==> op IN live` by
+    (rpt strip_tac >> first_x_assum drule >> strip_tac >>
+     gvs[Abbr `live`, pred_setTheory.IN_APP]) >>
+  `DRESTRICT ps.ps_spilled (COMPL live) = FEMPTY` by
+    (simp[GSYM finite_mapTheory.DRESTRICT_EQ_FEMPTY,
+          pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+     metis_tac[]) >>
+  `DRESTRICT ps.ps_spilled live = ps.ps_spilled` by
+    (simp[finite_mapTheory.fmap_eq_flookup, finite_mapTheory.FLOOKUP_DRESTRICT] >>
+     gen_tac >> IF_CASES_TAC >>
+     gvs[finite_mapTheory.FLOOKUP_DEF] >> metis_tac[]) >>
+  gvs[Abbr `live`, release_dead_spills_def, plan_state_component_equality]
 QED
 
 (* Instruction planning cannot inspect cleanup bookkeeping.  These operation
@@ -240,15 +243,7 @@ Theorem release_dead_spills_cleanup_update:
     release_dead_spills next ps with
       <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>
 Proof
-  rpt gen_tac >> simp[release_dead_spills_def] >>
-  qmatch_goalsub_abbrev_tac `FOLDL _ _ dead` >>
-  qid_spec_tac `ps` >> qid_spec_tac `dead` >>
-  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h'` >>
-  simp[] >>
-  first_x_assum (qspec_then `ps' with
-    <|ps_spilled := ps'.ps_spilled \\ h'0;
-      ps_alloc := free_spill_slot h'1 ps'.ps_alloc|>` mp_tac) >>
-  simp[]
+  simp[release_dead_spills_def, plan_state_component_equality]
 QED
 
 Theorem popmany_individual_cleanup_update:

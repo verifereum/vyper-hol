@@ -80,7 +80,7 @@ Theorem terminal_escape_generated_ops:
   SOME [SOPush (Lit 32w); SOSpill 0; SODup 16; SORestore 0; SOSwap 1;
         SOEmit "RETURN"]
 Proof
-  rpt gen_tac >> EVAL_TAC
+  rpt gen_tac >> computeLib.RESTR_EVAL_TAC [``release_dead_spills``]
 QED
 
 Theorem terminal_escape_initial_wf:
@@ -340,7 +340,7 @@ Proof
        terminal_escape_function_premises, terminal_escape_initial_wf,
        terminal_escape_operand_premises, terminal_escape_initial_frame,
        terminal_escape_equiv] >>
-  EVAL_TAC >> simp[]
+  computeLib.RESTR_EVAL_TAC [``release_dead_spills``] >> simp[]
 QED
 
 (* Together with terminal_escape_halt_antecedent this refutes the frozen

@@ -4047,20 +4047,7 @@ Theorem release_dead_spills_inventory_subset:
     at IN FDOM (release_dead_spills nl ps).ps_spilled ==>
     MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
 Proof
-  `!(f : plan_state -> operand # num -> plan_state) l ps.
-     (!ps x. (f ps x).ps_stack = ps.ps_stack /\
-             FDOM (f ps x).ps_spilled SUBSET FDOM ps.ps_spilled) ==>
-     (FOLDL f ps l).ps_stack = ps.ps_stack /\
-     FDOM (FOLDL f ps l).ps_spilled SUBSET FDOM ps.ps_spilled` by
-    (ntac 2 gen_tac >> Induct_on `l` >> simp[] >> rpt strip_tac >>
-     metis_tac[SUBSET_TRANS]) >>
-  rpt gen_tac >> simp[release_dead_spills_def] >>
-  qmatch_goalsub_abbrev_tac `FOLDL f ps dead` >>
-  `(FOLDL f ps dead).ps_stack = ps.ps_stack /\
-   FDOM (FOLDL f ps dead).ps_spilled SUBSET FDOM ps.ps_spilled` by
-    (first_x_assum irule >>
-     simp[Abbr `f`, pairTheory.FORALL_PROD, SUBSET_DEF]) >>
-  gvs[SUBSET_DEF] >> metis_tac[]
+  simp[release_dead_spills_def, FDOM_DRESTRICT] >> metis_tac[]
 QED
 
 Theorem restore_spilled_plan_inventory_subset:
@@ -4500,11 +4487,7 @@ QED
 Theorem release_dead_spills_stack:
   (release_dead_spills nl ps).ps_stack = ps.ps_stack
 Proof
-  simp[release_dead_spills_def] >>
-  qspec_tac (`FILTER (\(op,off). case op of Lit v => T | Var v => ~MEM v nl | Label v => T)
-    (fmap_to_alist ps.ps_spilled)`, `xs`) >>
-  qid_spec_tac `ps` >> Induct_on `xs` >> simp[] >>
-  Cases_on `h` >> simp[]
+  simp[release_dead_spills_def]
 QED
 
 Theorem generate_inst_plan_jmp_inventory_subset:

@@ -1282,15 +1282,8 @@ Theorem rf_inventory_inv_release:
   rf_inventory_inv fn ra lo entry ps s ==>
   rf_inventory_inv fn ra lo entry (release_dead_spills nl ps) s
 Proof
-  `!dead (ps0:plan_state). rf_inventory_inv fn ra lo entry ps0 s ==>
-    rf_inventory_inv fn ra lo entry
-      (FOLDL (\ps' (op:operand,off:num).
-        ps' with <|ps_spilled := ps'.ps_spilled \\ op;
-                   ps_alloc := free_spill_slot off ps'.ps_alloc|>) ps0 dead) s` by
-    (Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-     PairCases_on `h` >> simp[] >> first_x_assum irule >>
-     gvs[rf_inventory_inv_def, finite_mapTheory.FDOM_DOMSUB] >> metis_tac[]) >>
-  simp[stackPlanOpsTheory.release_dead_spills_def]
+  strip_tac >> irule rf_inventory_inv_transport >>
+  metis_tac[release_dead_spills_inventory_subset]
 QED
 
 Theorem rf_inventory_inv_copy_pop:
@@ -1547,24 +1540,8 @@ Theorem rf_release_live_owned:
     MEM (Var x) (release_dead_spills nl ps).ps_stack \/
     Var x IN FDOM (release_dead_spills nl ps).ps_spilled
 Proof
-  rpt gen_tac >>
-  `!dead (ps0:plan_state).
-    EVERY (\p:operand # num. FST p <> Var x) dead /\
-    (MEM (Var x) ps0.ps_stack \/ Var x IN FDOM ps0.ps_spilled) ==>
-    MEM (Var x)
-      (FOLDL (\ps' (op:operand,off:num).
-        ps' with <|ps_spilled := ps'.ps_spilled \\ op;
-                   ps_alloc := free_spill_slot off ps'.ps_alloc|>) ps0 dead).ps_stack \/
-    Var x IN FDOM
-      (FOLDL (\ps' (op:operand,off:num).
-        ps' with <|ps_spilled := ps'.ps_spilled \\ op;
-                   ps_alloc := free_spill_slot off ps'.ps_alloc|>) ps0 dead).ps_spilled` by
-    (Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-     PairCases_on `h` >> first_x_assum irule >>
-     gvs[finite_mapTheory.FDOM_DOMSUB]) >>
-  strip_tac >> simp[release_dead_spills_def] >> first_x_assum irule >>
-  simp[EVERY_MEM, MEM_FILTER] >> Cases >> simp[] >>
-  rpt strip_tac >> Cases_on `q` >> gvs[] >> metis_tac[]
+  simp[fnPlanPrefixTheory.release_dead_spills_stack, phi_release_dead_spills_domain] >>
+  metis_tac[]
 QED
 
 Theorem rf_preparation_arranged:
@@ -2939,17 +2916,8 @@ Theorem rf_release_spill_lookup:
   FLOOKUP (release_dead_spills nl ps).ps_spilled x = SOME off ==>
   FLOOKUP ps.ps_spilled x = SOME off
 Proof
-  `!dead (ps:plan_state) x off.
-    FLOOKUP (FOLDL (\ps' (op:operand,addr:num).
-      ps' with <|ps_spilled := ps'.ps_spilled \\ op;
-        ps_alloc := free_spill_slot addr ps'.ps_alloc|>) ps dead).ps_spilled x = SOME off ==>
-    FLOOKUP ps.ps_spilled x = SOME off` by
-    (Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >>
-     simp[] >> strip_tac >> first_x_assum (drule_then mp_tac) >>
-     simp[finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
-     Cases_on `x = h0` >> simp[]) >>
-  simp[release_dead_spills_def] >> rpt strip_tac >>
-  first_x_assum (drule_then ACCEPT_TAC)
+  simp[release_dead_spills_def, finite_mapTheory.FLOOKUP_DRESTRICT] >>
+  rpt gen_tac >> IF_CASES_TAC >> simp[]
 QED
 
 Theorem rf_do_spill_at_has_spill:
