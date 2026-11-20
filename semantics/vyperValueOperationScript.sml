@@ -391,7 +391,8 @@ Definition evaluate_binop_def:
            INL $ FlagV (Num(int_xor (&n1) (&n2)))
            | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
-     | In => (case v2 of
+     | In => if tv = NoneTV then INR (TypeError "Membership type") else
+       (case v2 of
          FlagV n2 => (case v1 of FlagV n1 =>
            INL $ BoolV (int_and (&n1) (&n2) ≠ 0)
            | _ => INR (TypeError "binop"))
@@ -456,7 +457,8 @@ Definition evaluate_binop_def:
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            INL (DecimalV (if i1 < i2 then i2 else i1)) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
-     | NotIn => binop_negate $ evaluate_binop u tv In v1 v2
+     | NotIn => if tv = NoneTV then INR (TypeError "Membership type") else
+       binop_negate $ evaluate_binop u tv In v1 v2
      | NotEq => binop_negate $ evaluate_binop u tv Eq v1 v2
      | _ => INR (TypeError "binop")
 Termination
@@ -479,10 +481,12 @@ val () = cv_auto_trans_rec
 
 Theorem evaluate_binop_membership_array:
   evaluate_binop u tv (if neg then NotIn else In) v (ArrayV av) =
-    INL (BoolV (if neg then ~evaluate_in_array tv v av
-                 else evaluate_in_array tv v av))
+    (case tv of
+       NoneTV => INR (TypeError "Membership type")
+     | _ => INL (BoolV (if neg then ~evaluate_in_array tv v av
+                      else evaluate_in_array tv v av)))
 Proof
-  Cases_on `neg` >> simp[evaluate_binop_def, binop_negate_def]
+  Cases_on `neg` >> Cases_on `tv` >> simp[evaluate_binop_def, binop_negate_def]
 QED
 
 Theorem evaluate_binop_membership_sparse_defaults:
@@ -508,11 +512,13 @@ Theorem evaluate_binop_membership_array_boundaries:
       INL (BoolV neg) /\
   evaluate_binop (Unsigned 0) (ArrayTV (BaseTV (UintT 256)) (Fixed 0)) (if neg then NotIn else In)
     (IntV 0) (ArrayV (SArrayV [])) = INL (BoolV neg) /\
-  evaluate_binop (Unsigned 0) tv (if neg then NotIn else In) v (ArrayV (DynArrayV vs)) =
-      INL (BoolV (if neg then ~MEM v vs else MEM v vs)) /\
-  evaluate_binop (Unsigned 0) tv (if neg then NotIn else In) v (ArrayV (DynArrayV [])) = INL (BoolV neg)
+  (tv <> NoneTV ==>
+   evaluate_binop (Unsigned 0) tv (if neg then NotIn else In) v (ArrayV (DynArrayV vs)) =
+      INL (BoolV (if neg then ~MEM v vs else MEM v vs))) /\
+  (tv <> NoneTV ==>
+   evaluate_binop (Unsigned 0) tv (if neg then NotIn else In) v (ArrayV (DynArrayV [])) = INL (BoolV neg))
 Proof
-  simp[evaluate_binop_membership_array, evaluate_in_array_def]
+  Cases_on `tv` >> simp[evaluate_binop_membership_array, evaluate_in_array_def]
 QED
 
 (* concat *)

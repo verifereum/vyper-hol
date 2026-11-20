@@ -20,22 +20,9 @@ Proof
   simp[lookup_scopes_val_SOME] >> strip_tac >> simp[]
 QED
 
-Theorem evaluate_builtin_bop_type[local,simp]:
-  evaluate_type (get_tenv cx) t2 = SOME tv ==>
-  evaluate_builtin cx acc ty (Bop bop) [t1; t2] [v1; v2] =
-    evaluate_binop
-      (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-      tv bop v1 v2
-Proof
-  strip_tac >> simp[evaluate_builtin_def]
-QED
-
 (* The symbolic scope assumption fixes x=0 without requiring a whole contract. *)
 Theorem literal_membership_eval_test:
-  lookup_scopes_val "x" st.scopes = SOME (IntV 0) /\
-  evaluate_type (get_tenv cx)
-    (ArrayT (BaseT (UintT 256)) (Fixed 2)) =
-    SOME (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) ==>
+  lookup_scopes_val "x" st.scopes = SOME (IntV 0) ==>
   eval_expr cx
     (Builtin (BaseT BoolT) (Bop (if is_notin then NotIn else In))
       [Name (BaseT (UintT 256)) "x";
@@ -45,27 +32,21 @@ Theorem literal_membership_eval_test:
   (INL (Value (BoolV (~is_notin))),st)
 Proof
   strip_tac >>
-  qpat_assum `evaluate_type (get_tenv cx) (ArrayT (BaseT (UintT 256)) (Fixed 2)) =
-              SOME (ArrayTV (BaseTV (UintT 256)) (Fixed 2))`
-    (fn th => rewrite_tac[th]) >>
   imp_res_tac lookup_local_exists >>
   imp_res_tac read_local_value >>
   Cases_on `is_notin` >>
-  simp[expr_type_def] >>
   simp[evaluate_def, builtin_args_length_ok_def, type_check_def, check_def,
        assert_def, bind_def, ignore_bind_def, return_def, raise_def,
        get_scopes_def, get_accounts_def, precompile_call_success_def,
        lift_sum_def, read_local_value, cj 1 read_result_def, evaluate_literal_def,
-       evaluate_builtin_bop_type, evaluate_binop_def, binop_negate_def, evaluate_in_array_def,
+       evaluate_type_def, expr_type_def,
+       evaluate_builtin_def, evaluate_binop_def, binop_negate_def, evaluate_in_array_def,
        vyperValueTheory.make_array_value_def,
        vyperValueTheory.enumerate_static_array_def,
        vyperValueTheory.default_value_def, compatible_bound_def,
        type_slot_size_def, wordsTheory.dimword_def] >>
   CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >>
-  CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >>
-  EVAL_TAC >> simp[return_def, wordsTheory.dimword_def,
-                    fcpLib.INDEX_CONV ``dimindex(:256)``,
-                    vyperValueTheory.default_value_def]
+  EVAL_TAC >> simp[return_def]
 QED
 
 (* The named-array witness uses exactly the sparse local value produced by
@@ -73,10 +54,7 @@ QED
 Theorem local_array_membership_eval_test:
   lookup_scopes_val "x" st.scopes = SOME (IntV 0) /\
   lookup_scopes_val "a" st.scopes =
-    SOME (ArrayV (SArrayV [(0,IntV 7); (2,IntV 5)])) /\
-  evaluate_type (get_tenv cx)
-    (ArrayT (BaseT (UintT 256)) (Fixed 3)) =
-    SOME (ArrayTV (BaseTV (UintT 256)) (Fixed 3)) ==>
+    SOME (ArrayV (SArrayV [(0,IntV 7); (2,IntV 5)])) ==>
   eval_expr cx
     (Builtin (BaseT BoolT) (Bop (if is_notin then NotIn else In))
       [Name (BaseT (UintT 256)) "x";
@@ -87,26 +65,20 @@ Proof
   imp_res_tac lookup_local_exists >>
   imp_res_tac read_local_value >>
   Cases_on `is_notin` >>
-  simp[expr_type_def] >>
   simp[evaluate_def, builtin_args_length_ok_def, type_check_def, check_def,
        assert_def, bind_def, ignore_bind_def, return_def, raise_def,
        get_scopes_def, lift_option_type_def, lift_sum_def, cj 1 read_result_def,
-       evaluate_builtin_bop_type, evaluate_binop_def, binop_negate_def,
+       evaluate_type_def, expr_type_def, evaluate_builtin_def, evaluate_binop_def, binop_negate_def,
        evaluate_in_array_def, default_value_def, type_slot_size_def,
        wordsTheory.dimword_def] >>
   CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >>
-  EVAL_TAC >> simp[return_def, wordsTheory.dimword_def,
-                    fcpLib.INDEX_CONV ``dimindex(:256)``,
-                    vyperValueTheory.default_value_def]
+  EVAL_TAC >> simp[return_def]
 QED
 
 Theorem membership_cps_defaults_test:
   lookup_scopes_val "x" st.scopes = SOME (IntV 0) /\
   lookup_scopes_val "a" st.scopes =
-    SOME (ArrayV (SArrayV [(0,IntV 7); (2,IntV 5)])) /\
-  evaluate_type (get_tenv cx)
-    (ArrayT (BaseT (UintT 256)) (Fixed 3)) =
-    SOME (ArrayTV (BaseTV (UintT 256)) (Fixed 3)) ==>
+    SOME (ArrayV (SArrayV [(0,IntV 7); (2,IntV 5)])) ==>
   fromtvk (cont (eval_expr_cps cx
     (Builtin (BaseT BoolT) (Bop (if is_notin then NotIn else In))
       [Name (BaseT (UintT 256)) "x";
@@ -154,10 +126,7 @@ QED
 Theorem membership_pure_defaults_test:
   lookup_scopes_val "x" st.scopes = SOME (IntV 0) /\
   lookup_scopes_val "a" st.scopes =
-    SOME (ArrayV (SArrayV [(0,IntV 7); (2,IntV 5)])) /\
-  evaluate_type (get_tenv cx)
-    (ArrayT (BaseT (UintT 256)) (Fixed 3)) =
-    SOME (ArrayTV (BaseTV (UintT 256)) (Fixed 3)) ==>
+    SOME (ArrayV (SArrayV [(0,IntV 7); (2,IntV 5)])) ==>
   eval_pure_expr cx st
     (Builtin (BaseT BoolT) (Bop (if is_notin then NotIn else In))
       [Name (BaseT (UintT 256)) "x";
@@ -165,21 +134,14 @@ Theorem membership_pure_defaults_test:
   SOME (Value (BoolV (~is_notin)))
 Proof
   strip_tac >>
-  qpat_assum `evaluate_type (get_tenv cx) (ArrayT (BaseT (UintT 256)) (Fixed 3)) =
-              SOME (ArrayTV (BaseTV (UintT 256)) (Fixed 3))`
-    (fn th => rewrite_tac[th]) >>
   imp_res_tac lookup_local_exists >>
   imp_res_tac read_local_value >>
   Cases_on `is_notin` >>
-  rw[expr_type_def] >>
   simp[eval_pure_expr_def, lookup_name_def, builtin_args_length_ok_def, read_result_def,
-       bind_def, return_def,
-       evaluate_builtin_bop_type, evaluate_binop_def, binop_negate_def, evaluate_in_array_def, default_value_def,
+       bind_def, return_def, evaluate_type_def, expr_type_def,
+       evaluate_builtin_def, evaluate_binop_def, binop_negate_def, evaluate_in_array_def, default_value_def,
        type_slot_size_def, wordsTheory.dimword_def] >>
-  CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >>
-  EVAL_TAC >> simp[wordsTheory.dimword_def,
-                    fcpLib.INDEX_CONV ``dimindex(:256)``,
-                    vyperValueTheory.default_value_def]
+  CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >> EVAL_TAC
 QED
 
 Theorem membership_pure_failure_test:
@@ -197,48 +159,47 @@ Proof
 QED
 
 Theorem membership_missing_array_type_test:
+  lookup_scopes_val "x" st.scopes = SOME (IntV 0) /\
+  lookup_scopes_val "a" st.scopes = SOME (ArrayV (SArrayV [])) /\
   evaluate_type (get_tenv cx)
     (ArrayT (StructT (NONE,"missing")) (Fixed 1)) = NONE ==>
-  !is_notin.
-  evaluate_builtin cx acc (BaseT BoolT) (Bop (if is_notin then NotIn else In))
-    [BaseT (UintT 256); ArrayT (StructT (NONE,"missing")) (Fixed 1)]
-    [IntV 0; ArrayV (SArrayV [])] = INR (TypeError "Membership type")
+  eval_expr cx
+    (Builtin (BaseT BoolT) (Bop (if is_notin then NotIn else In))
+      [Name (BaseT (UintT 256)) "x";
+       Name (ArrayT (StructT (NONE,"missing")) (Fixed 1)) "a"]) st =
+  (INR (Error (TypeError "Membership type")),st)
 Proof
   strip_tac >>
-  qpat_assum `evaluate_type (get_tenv cx)
-    (ArrayT (StructT (NONE,"missing")) (Fixed 1)) = NONE`
-    (fn th => rewrite_tac[th]) >>
-  gen_tac >>
+  imp_res_tac lookup_local_exists >>
+  imp_res_tac read_local_value >>
   Cases_on `is_notin` >>
-  simp[evaluate_builtin_def]
+  simp[evaluate_def, builtin_args_length_ok_def, type_check_def, check_def,
+       assert_def, bind_def, ignore_bind_def, return_def, raise_def,
+       get_scopes_def, get_accounts_def, precompile_call_success_def,
+       lift_sum_def, read_local_value, cj 1 read_result_def,
+       evaluate_type_def, expr_type_def, evaluate_builtin_def,
+       evaluate_binop_def, binop_negate_def]
 QED
 
 Theorem membership_missing_flag_type_test:
+  lookup_scopes_val "f" st.scopes = SOME (FlagV 1) /\
   evaluate_type (get_tenv cx) (FlagT (NONE,"missing")) = NONE ==>
-  !is_notin.
-  evaluate_builtin cx acc (BaseT BoolT) (Bop (if is_notin then NotIn else In))
-    [FlagT (NONE,"missing"); FlagT (NONE,"missing")] [FlagV 1; FlagV 1] =
-    INR (TypeError "Membership type")
+  eval_expr cx
+    (Builtin (BaseT BoolT) (Bop (if is_notin then NotIn else In))
+      [Name (FlagT (NONE,"missing")) "f";
+       Name (FlagT (NONE,"missing")) "f"]) st =
+  (INR (Error (TypeError "Membership type")),st)
 Proof
   strip_tac >>
-  qpat_assum `evaluate_type (get_tenv cx) (FlagT (NONE,"missing")) = NONE`
-    (fn th => rewrite_tac[th]) >>
-  gen_tac >>
+  imp_res_tac lookup_local_exists >>
+  imp_res_tac read_local_value >>
   Cases_on `is_notin` >>
-  simp[evaluate_builtin_def]
-QED
-
-Theorem membership_resolved_none_type_test:
-  evaluate_type (get_tenv cx) NoneT = SOME NoneTV ==>
-  evaluate_builtin cx acc (BaseT BoolT) (Bop In)
-    [NoneT; NoneT] [FlagV 1; FlagV 1] =
-    INL (BoolV (int_and 1 1 ≠ 0))
-Proof
-  strip_tac >>
-  qpat_assum `evaluate_type (get_tenv cx) NoneT = SOME NoneTV`
-    (fn th => rewrite_tac[th]) >>
-  simp[evaluate_builtin_def, evaluate_binop_def, binop_negate_def,
-       int_bitwiseTheory.int_and_def]
+  simp[evaluate_def, builtin_args_length_ok_def, type_check_def, check_def,
+       assert_def, bind_def, ignore_bind_def, return_def, raise_def,
+       get_scopes_def, get_accounts_def, precompile_call_success_def,
+       lift_sum_def, read_local_value, cj 1 read_result_def,
+       evaluate_type_def, expr_type_def, evaluate_builtin_def,
+       evaluate_binop_def, binop_negate_def]
 QED
 
 (* The checker/lowering interface lives on the lowering side: the type system
