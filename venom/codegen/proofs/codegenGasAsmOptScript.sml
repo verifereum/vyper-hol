@@ -24,6 +24,7 @@ Ancestors
   codegenCorrectness asmFrameRel asmRunBounded asmSymSem passSimulationDefs
   vfmDecreasesGas frameGas frameStep
   codegenSymOwnRel fnPlanPlaceRevertPostamble
+  asmOptFinalizerOwn asmRelocDataEnv asmSymOwnStep asmSymOwnCode codegenEntrySim venomInst
 
 (* The optimized program's run from the entry assembly state is bounded,
    uniformly in the entry state. *)
@@ -235,6 +236,86 @@ Proof
   first_x_assum (qspecl_then [`g'`, `Inv`, `vs`, `es`, `s`, `op`, `s'`]
                    mp_tac) >>
   metis_tac[]
+QED
+
+(* The unoptimized assembly runs with the installed bytes and relocated
+   data labels. The optimizer's symbolic bound then gives a concrete bound
+   for the optimized assembly from the same state. *)
+Theorem codegen_opt_run_bounded_own[local]:
+  !rpolicy unit cplan prog prog' fuel M.
+    generate_context_plan unit.cu_context = SOME cplan /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    asm_opt_finalizer rpolicy prog = SOME prog' /\
+    unit_shape_ok unit /\
+    (asm_static_wf prog ==>
+     ?c. !P Q env own s k.
+       sym_within_ok P Q /\
+       sym_run_within_for (sym_step_own prog env own) P Q prog k (sym_init s) ==>
+       sym_run_within_for (sym_step_own prog' env own) P Q prog' (c * k) (sym_init s))
+    ==>
+    ?N H. !Inv vs as.
+      codegen_context_obligations Inv unit.cu_context cplan /\
+      codegen_reachability_package Inv unit.cu_context vs /\
+      label_flow_own_ok unit.cu_context /\ code_end_offset_ok Inv unit.cu_context /\
+      sym_unit_static_ok unit /\
+      vs.vs_code = assemble prog' ++ vs.vs_data_section /\
+      as.as_code = vs.vs_code /\
+      codegen_asm_entry_rel_reloc (lo_reloc prog prog') cplan prog vs as /\
+      venom_run_bounded fuel M unit.cu_context vs /\
+      mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs
+      ==>
+      asm_frame_prog_ok prog' /\
+      asm_run_bounded (SND (compute_label_offsets prog'))
+        (build_offset_to_pc prog') prog' H N as
+Proof
+  rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `asm_static_wf prog`)
+  >- (qexistsl_tac [`0`, `0`] >> rpt strip_tac >>
+      metis_tac[codegen_context_obligations_def, codegen_asm_static_wf]) >>
+  `asm_static_wf prog' /\ FILTER is_data_inst prog' = FILTER is_data_inst prog` by
+    metis_tac[asm_opt_finalizer_refines_own, asm_refines_own_def] >>
+  qpat_x_assum `asm_static_wf prog ==> ?c. _` drule >>
+  disch_then assume_tac >>
+  qspecl_then [`prog`, `prog'`] mp_tac asm_refines_run_bounded_own >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `c` assume_tac) >>
+  qspecl_then [`rpolicy`, `unit`, `cplan`, `prog`, `fuel`, `M`] mp_tac
+    codegen_entry_asm_bounded_run_reloc >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choosel_then [`N`, `H`] assume_tac) >>
+  qexistsl_tac [`c * N`, `H`] >> rpt gen_tac >> strip_tac >>
+  conj_tac >- metis_tac[asm_static_wf_frame_prog_ok] >>
+  qabbrev_tac `lo = lo_reloc prog prog'` >>
+  qabbrev_tac `env = asm_data_env prog' as.as_code` >>
+  `code_labels_agree prog lo` by simp[Abbr `lo`, lo_reloc_code_labels_agree] >>
+  `(!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+   asm_data_env_lo_ok lo prog env as.as_code` by
+    (simp[Abbr `lo`, Abbr `env`] >> irule lo_reloc_data_env >> simp[]) >>
+  `asm_data_env_lo_ok (SND (compute_label_offsets prog')) prog' env as.as_code` by
+    simp[Abbr `env`, asm_data_env_lo_ok_canonical, asm_data_env_ok_asm_data_env] >>
+  `(?v. run_context fuel unit.cu_context vs = Halt v) \/
+   (?a v. run_context fuel unit.cu_context vs = Abort a v)` by
+    (drule_all codegen_entry_selection >> strip_tac >>
+     `lookup_function fe.fn_name unit.cu_context.ctx_functions = SOME fe` by
+       simp[lookup_function_def, listTheory.FIND_thm] >>
+     `EVERY (\inst. ~MEM inst.inst_opcode [RET; RETFMP; DRET]) (fn_insts fe)` by
+       metis_tac[codegen_entry_no_returns] >>
+     `!ret v. run_context fuel unit.cu_context vs <> IntRet ret v` by
+       (rpt gen_tac >> irule run_context_not_int_ret >> rpt strip_tac >> gvs[]) >>
+     fs[venom_run_bounded_def, terminates_def] >>
+     Cases_on `run_context fuel unit.cu_context vs` >> fs[run_context_not_ok]) >>
+  `label_disciplined_own env as.as_code prog as` by
+    (qspecl_then [`T`, `lo`, `as.as_code`, `fuel`, `rpolicy`, `unit`,
+      `cplan`, `prog`, `Inv`, `vs`, `as`, `env`] mp_tac
+        codegen_label_disciplined_mode >> simp[]) >>
+  `asm_run_bounded lo (build_offset_to_pc prog) prog H N as` by
+    (qpat_x_assum `!lo Inv vs as. _`
+      (qspecl_then [`lo`, `Inv`, `vs`, `as`] mp_tac) >> simp[]) >>
+  `as.as_pc = 0` by fs[codegen_asm_entry_rel_reloc_def] >>
+  qpat_x_assum `!H k s env lo lo'. _`
+    (qspecl_then [`H`, `N`, `as`, `env`, `lo`, `SND (compute_label_offsets prog')`]
+      mp_tac) >>
+  simp[code_labels_agree_refl]
 QED
 
 (* Statement freeze for sign-off. *)
