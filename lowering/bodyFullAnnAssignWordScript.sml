@@ -773,7 +773,10 @@ Theorem annassign_word_full_execution_sep:
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
   MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sf func /\ fn_has_code shadow_sa shadow_sf shadow_func /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (ctx_has_dalloca ctx ==>
+    (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s)) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~block_is_terminated sa /\
@@ -831,9 +834,6 @@ Resume annassign_word_full_execution_sep[execution]:
      stmt_state_rel J ctx func cenv cx es s0` by
     (qexists_tac `storage_trace_horizon es.storage_trace` >>
      fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
-  `ctx_has_dalloca ctx ==>
-    (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s)` by simp[] >>
   drule_all annassign_word_full_runtime_preparation >>
   disch_then (qx_choosel_then [`p`, `sa'`, `sb`, `vop`, `w`, `t`, `G'`, `tn'`]
     strip_assume_tac) >> suspend "compose"
@@ -916,6 +916,9 @@ Theorem annassign_word_full_execution:
         halt_exit H cx ee res r)
 Proof
   strip_tac >>
+  `ctx_has_dalloca ctx ==>
+    (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s)` by simp[] >>
   drule_all annassign_word_full_execution_sep >>
   disch_then (fn th => irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
     irule_at Any th) >>
