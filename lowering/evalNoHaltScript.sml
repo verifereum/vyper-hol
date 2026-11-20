@@ -712,35 +712,7 @@ QED
 (* Evaluation never halts (SELFDESTRUCT is the only source of HaltException)
    when no evm-run root occurs and every internal call selects a supported
    Internal declaration in the current module. *)
-Theorem eval_no_halt:
-  (!cx e st st'.
-     ~supported_expr_exists expr_halt_root e /\
-     (int_calls_expr e = [] \/
-      ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
-             EVERY (\c. FST c = NONE /\
-                         IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) ==>
-     eval_expr cx e st <> (INR HaltException, st')) /\
-  (!cx es st st'.
-     ~supported_exprs_exists expr_halt_root es /\
-     (int_calls_exprs es = [] \/
-      ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
-             EVERY (\c. FST c = NONE /\
-                         IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es)) ==>
-     eval_exprs cx es st <> (INR HaltException, st')) /\
-  (!cx s st st'.
-     ~supported_stmt_expr_exists expr_halt_root s /\
-     (int_calls_stmt s = [] \/
-      ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
-             EVERY (\c. FST c = NONE /\
-                         IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s)) ==>
-     eval_stmt cx s st <> (INR HaltException, st')) /\
-  (!cx ss st st'.
-     ~supported_stmts_expr_exists expr_halt_root ss /\
-     (int_calls_stmts ss = [] \/
-      ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
-             EVERY (\c. FST c = NONE /\
-                         IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss)) ==>
-     eval_stmts cx ss st <> (INR HaltException, st'))
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
 Proof
   rpt conj_tac >> rpt gen_tac >>
   disch_then (CONJUNCTS_THEN2 assume_tac
@@ -755,6 +727,41 @@ Proof
   >- metis_tac[cj 1 eval_no_halt_every] >>
   metis_tac[cj 2 eval_no_halt_every]
 QED
+*)
+(* SCRATCH SEQ-8389 DELETED: false under the widened gate (callee bodies may halt); callers split
+  Theorem eval_no_halt:
+    (!cx e st st'.
+       ~supported_expr_exists expr_halt_root e /\
+       (int_calls_expr e = [] \/
+        ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
+               EVERY (\c. FST c = NONE /\
+                           IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) ==>
+       eval_expr cx e st <> (INR HaltException, st')) /\
+    (!cx es st st'.
+       ~supported_exprs_exists expr_halt_root es /\
+       (int_calls_exprs es = [] \/
+        ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
+               EVERY (\c. FST c = NONE /\
+                           IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es)) ==>
+       eval_exprs cx es st <> (INR HaltException, st')) /\
+    (!cx s st st'.
+       ~supported_stmt_expr_exists expr_halt_root s /\
+       (int_calls_stmt s = [] \/
+        ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
+               EVERY (\c. FST c = NONE /\
+                           IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s)) ==>
+       eval_stmt cx s st <> (INR HaltException, st')) /\
+    (!cx ss st st'.
+       ~supported_stmts_expr_exists expr_halt_root ss /\
+       (int_calls_stmts ss = [] \/
+        ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
+               EVERY (\c. FST c = NONE /\
+                           IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss)) ==>
+       eval_stmts cx ss st <> (INR HaltException, st'))
+  Proof
+    cheat
+  QED
+*)
 
 Theorem build_getter_no_halt[local]:
   !e kt vt n args ret exp.
