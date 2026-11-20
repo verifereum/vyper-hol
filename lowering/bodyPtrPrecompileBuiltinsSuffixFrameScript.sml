@@ -1,6 +1,6 @@
 Theory bodyPtrPrecompileBuiltinsSuffixFrame
 Ancestors bodyPtrPrecompileBuiltinsSuffixGhost bodyPtrPrecompileBuiltinsSuffixReady
-          bodyPtrPrecompileBuiltinsRuntime bodyPtrPrecompileBuiltinsContinuationFrame
+          bodyPtrPrecompileBuiltinsRuntime bodyPtrPrecompileBuiltinsCompilerStages[qualified] bodyPtrPrecompileBuiltinsSuffixPaths[qualified] exprPtrUnwrapFrames[qualified] typedCopyPtr[qualified]
           exprSimPrecompiles exprLoweringProps exprSimHash ptrDiscipline
           decoderGhostFramePtr venomExecSemantics venomInstProofs venomState
           venomInst venomCallOracleDefs compileEnv loweringStateRelDefs finite_map pred_set valueCopy

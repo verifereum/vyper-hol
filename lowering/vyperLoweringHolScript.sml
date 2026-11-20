@@ -4,7 +4,7 @@ Ancestors
   (* arbitrary-calldata entry and S1 suppliers *)
   calldataArrayRawCallsite
   calldataBulkOperationalCertificate calldataBulkSourceOutcome
-  calldataExactBytesJoint calldataExactMemberValues calldataMembersRawCallsite
+  calldataExactBytesJoint
   calldataExactScalarAccepted calldataExactScalarRejected calldataNoneFallbackJoint
   calldataNoneMetadata calldataRegistrationRawAddress
   calldataRegistrationTerminalBindings dispatchedArgsBind

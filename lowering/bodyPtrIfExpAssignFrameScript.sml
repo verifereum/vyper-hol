@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpAssignFrame
 Ancestors
-  bodyPtrIfExpAssign bodyPtrDefs ptrDiscipline venomInst venomState
+  fragGasSeqPtr[qualified] bodyPtrDefs ptrDiscipline venomInst venomState
   finite_map pred_set codegenRel
 
 Theorem assign_result_prov:

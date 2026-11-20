@@ -9,7 +9,7 @@ Ancestors concretizeLayoutStageSimulation[qualified] frameDecoratedPrefix frameF
   gasFocusFmpLocalEvents fmpStageBlockSimCode fmpStageRunnerFacts
   ptrStaticDiscipline passSimulationDefs o1PassContract venomWf
   lowerDloadPtrRawReachable o1LowerDloadGhost fmpLowerProps reachableNonhalted
-  gasFocusFmpCutSites fmpStageRel gasFocusFmpCutControlSegments
+  gasFocusFmpCutSites fmpStageRel fmpStageOpFrameForwardAbort[qualified] gasFocusFmpCutForwardLayout[qualified] o1LowerDloadHaltResult[qualified]
   o1LowerDloadOpaque fmpAnalysisProps lowerDloadPtrSupport
   frameFiniteControl frameFiniteExecution fmpStageFmpStepsRestoreBounds fmpLowerDefs
   gasFocusFmpCutInvokePush gasFocusFmpCutInvokePop frameInvokeReturn
