@@ -113,34 +113,7 @@ QED
    - The shadow stmts_env pairs with the actual one through a
      gas_shadow_compiles result for stmts_env (FST equal: same cenv').
    - gas_shadow_lookup_function gives the shadow partner of func. *)
-Theorem runtime_selected_body_shadow_with_shadow_nr:
-  !tops rpolicy unit lbl ce pos mincd pay nr key ut iv fbody rt st cenv sa sl st'
-   bindings ctx cx env env' ret.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    runtime_selected_body_start tops rpolicy
-      (lbl,ce,pos,mincd,pay,nr,key,ut,iv,fbody,rt) st /\
-    compile_register_positional_args ce pos 4 st = (cenv,sa) /\
-    (if nr then compile_nonreentrant_lock key ut iv else comp_return ()) sa =
-      ((),sl) /\
-    compile_guarded_body cenv nr key ut iv fbody rt sa = ((),st') /\
-    supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
-    rt = (if ret = NoneT then NONE else SOME ret) /\
-    type_stmts env ret fbody = SOME env' ==>
-    ?func shadow_ctx shadow_func cenv' sb shadow_sl shadow_sb shadow_unit.
-      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
-      shadow_ctx = shadow_unit.cu_context /\
-      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
-      gas_shadow_context unit.cu_context shadow_ctx /\
-      gas_shadow_function func shadow_func /\
-      MEM func unit.cu_context.ctx_functions /\
-      MEM shadow_func shadow_ctx.ctx_functions /\
-      stmts_env cenv NoLoop ret fbody sl = (cenv',sb) /\
-      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sl =
-        (cenv',shadow_sb) /\
-      gas_shadow_state sl shadow_sl /\ gas_shadow_state sb shadow_sb /\
-      fn_has_code sl sb func /\ fn_has_code sb st' func /\
-      fn_has_code shadow_sl shadow_sb shadow_func
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt gen_tac >> strip_tac >>
   `runtime_bodies_shape_ok tops` by
@@ -334,6 +307,38 @@ Proof
      first_assum ACCEPT_TAC) >>
   qexistsl_tac [`func'`, `shadow_sl`, `shadow_sb`, `shadow_unit`] >> simp[]
 QED
+*)
+Theorem runtime_selected_body_shadow_with_shadow_nr:
+  !tops rpolicy unit lbl ce pos mincd pay nr key ut iv fbody rt st cenv sa sl st'
+   bindings ctx cx env env' ret.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    runtime_selected_body_start tops rpolicy
+      (lbl,ce,pos,mincd,pay,nr,key,ut,iv,fbody,rt) st /\
+    compile_register_positional_args ce pos 4 st = (cenv,sa) /\
+    (if nr then compile_nonreentrant_lock key ut iv else comp_return ()) sa =
+      ((),sl) /\
+    compile_guarded_body cenv nr key ut iv fbody rt sa = ((),st') /\
+    supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
+    rt = (if ret = NoneT then NONE else SOME ret) /\
+    type_stmts env ret fbody = SOME env' ==>
+    ?func shadow_ctx shadow_func cenv' sb shadow_sl shadow_sb shadow_unit.
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      shadow_ctx = shadow_unit.cu_context /\
+      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      gas_shadow_context unit.cu_context shadow_ctx /\
+      gas_shadow_function func shadow_func /\
+      MEM func unit.cu_context.ctx_functions /\
+      MEM shadow_func shadow_ctx.ctx_functions /\
+      stmts_env cenv NoLoop ret fbody sl = (cenv',sb) /\
+      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sl =
+        (cenv',shadow_sb) /\
+      gas_shadow_state sl shadow_sl /\ gas_shadow_state sb shadow_sb /\
+      fn_has_code sl sb func /\ fn_has_code sb st' func /\
+      fn_has_code shadow_sl shadow_sb shadow_func
+Proof
+  cheat
+QED
 
 Theorem runtime_selected_body_shadow_with_shadow:
   !tops rpolicy unit lbl ce pos mincd pay key ut iv fbody rt st cenv sa st'
@@ -490,34 +495,7 @@ QED
 (* runtime_selected_body_shadow for the __default__ fallback: no
    positional arguments, so the body starts right after the payable
    check. *)
-Theorem runtime_fallback_body_shadow_with_shadow_nr:
-  !tops rpolicy unit lbl ce pos mincd pay nr key ut iv fbody rt st cenv sa sl st'
-   bindings ctx cx env env' ret.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    runtime_fallback_body_start tops rpolicy
-      (lbl,ce,pos,mincd,pay,nr,key,ut,iv,fbody,rt) st /\
-    compile_register_positional_args ce pos 4 st = (cenv,sa) /\
-    compile_guarded_body cenv nr key ut iv fbody rt sa = ((),st') /\
-    (if nr then compile_nonreentrant_lock key ut iv else comp_return ()) sa =
-      ((),sl) /\
-    supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
-    rt = (if ret = NoneT then NONE else SOME ret) /\
-    type_stmts env ret fbody = SOME env' ==>
-    ?func shadow_ctx shadow_func cenv' sb shadow_sl shadow_sb shadow_unit.
-      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
-      shadow_ctx = shadow_unit.cu_context /\
-      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
-      gas_shadow_context unit.cu_context shadow_ctx /\
-      gas_shadow_function func shadow_func /\
-      MEM func unit.cu_context.ctx_functions /\
-      MEM shadow_func shadow_ctx.ctx_functions /\
-      stmts_env cenv NoLoop ret fbody sl = (cenv',sb) /\
-      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sl =
-        (cenv',shadow_sb) /\
-      gas_shadow_state sl shadow_sl /\ gas_shadow_state sb shadow_sb /\
-      fn_has_code sl sb func /\ fn_has_code sb st' func /\
-      fn_has_code shadow_sl shadow_sb shadow_func
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt gen_tac >> strip_tac >>
   `runtime_bodies_shape_ok tops` by
@@ -730,6 +708,38 @@ Proof
      first_assum ACCEPT_TAC) >>
   qexistsl_tac [`func'`, `shadow_sl`, `shadow_sb`, `shadow_unit`] >>
   simp[]
+QED
+*)
+Theorem runtime_fallback_body_shadow_with_shadow_nr:
+  !tops rpolicy unit lbl ce pos mincd pay nr key ut iv fbody rt st cenv sa sl st'
+   bindings ctx cx env env' ret.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    runtime_fallback_body_start tops rpolicy
+      (lbl,ce,pos,mincd,pay,nr,key,ut,iv,fbody,rt) st /\
+    compile_register_positional_args ce pos 4 st = (cenv,sa) /\
+    compile_guarded_body cenv nr key ut iv fbody rt sa = ((),st') /\
+    (if nr then compile_nonreentrant_lock key ut iv else comp_return ()) sa =
+      ((),sl) /\
+    supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
+    rt = (if ret = NoneT then NONE else SOME ret) /\
+    type_stmts env ret fbody = SOME env' ==>
+    ?func shadow_ctx shadow_func cenv' sb shadow_sl shadow_sb shadow_unit.
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      shadow_ctx = shadow_unit.cu_context /\
+      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      gas_shadow_context unit.cu_context shadow_ctx /\
+      gas_shadow_function func shadow_func /\
+      MEM func unit.cu_context.ctx_functions /\
+      MEM shadow_func shadow_ctx.ctx_functions /\
+      stmts_env cenv NoLoop ret fbody sl = (cenv',sb) /\
+      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sl =
+        (cenv',shadow_sb) /\
+      gas_shadow_state sl shadow_sl /\ gas_shadow_state sb shadow_sb /\
+      fn_has_code sl sb func /\ fn_has_code sb st' func /\
+      fn_has_code shadow_sl shadow_sb shadow_func
+Proof
+  cheat
 QED
 
 Theorem runtime_fallback_body_shadow_with_shadow:

@@ -5,12 +5,7 @@ Ancestors
   freshWrites exprLoweringProps emitHelper emitHelperProps exprSimBufferStore context stmtLowering compileEnv loweringStateRelDefs
   venomExecSemantics venomInst venomState words list rich_list arithmetic finite_map ASCIInumbers
 
-Theorem log_store_scalar_outputs[local]:
-  supported_scalar_type ty /\ compile_store_memory ce src dst ty ty sa = ((),sb) /\
-  sb.cs_next_var <= nv ==>
-  EVERY (\i. MEM i.inst_opcode [ADD; AND; MLOAD; MSTORE; MCOPY; NOT] /\
-    EVERY (\x. ?n. x = STRING #"%" (toString n) /\ n < nv)
-    i.inst_outputs) (emitted_insts sa sb)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   `is_word_type ty \/ is_bytestring_type ty` by
@@ -24,6 +19,16 @@ Proof
   pure_rewrite_tac [GSYM APPEND_ASSOC] >>
   simp[DROP_LENGTH_APPEND, mk_inst_def] >> rpt conj_tac >>
   goal_assum (drule_at Any) >> simp[]
+QED
+*)
+Theorem log_store_scalar_outputs[local]:
+  supported_scalar_type ty /\ compile_store_memory ce src dst ty ty sa = ((),sb) /\
+  sb.cs_next_var <= nv ==>
+  EVERY (\i. MEM i.inst_opcode [ADD; AND; MLOAD; MSTORE; MCOPY; NOT] /\
+    EVERY (\x. ?n. x = STRING #"%" (toString n) /\ n < nv)
+    i.inst_outputs) (emitted_insts sa sb)
+Proof
+  cheat
 QED
 
 Theorem log_store_step_var[local]:

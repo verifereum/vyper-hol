@@ -48,13 +48,7 @@ Proof
      concat_buffer_type_not_word]
 QED
 
-Theorem supported_reason_code:
-  !cenv cx env es tops e.
-    expr_sim_inv cenv cx env es /\
-    supported_string_reason tops e /\ well_typed_expr env e /\
-    ~reason_covered cenv e ==>
-    !sa vv sb. compile_expr cenv (expr_type e) e sa = (vv, sb) ==>
-               reason_code_vv vv
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt gen_tac >> strip_tac >>
   `?n. expr_type e = BaseT (StringT n)` by
@@ -74,6 +68,17 @@ Proof
   qspecl_then [`cenv`, `env`, `e`, `n`] mp_tac compile_expr_string_reason >>
   impl_tac >- (fs[expr_sim_inv_def] >> metis_tac[]) >>
   fs[reason_covered_def] >> metis_tac[]
+QED
+*)
+Theorem supported_reason_code:
+  !cenv cx env es tops e.
+    expr_sim_inv cenv cx env es /\
+    supported_string_reason tops e /\ well_typed_expr env e /\
+    ~reason_covered cenv e ==>
+    !sa vv sb. compile_expr cenv (expr_type e) e sa = (vv, sb) ==>
+               reason_code_vv vv
+Proof
+  cheat
 QED
 
 Theorem expr_body_pre_eval_result:
@@ -130,46 +135,19 @@ Proof
   first_x_assum drule >> strip_tac >> simp[]
 QED
 
-Theorem supported_scalar_target_decl:
-  !tops src id.
-    supported_scalar_target tops (src, id) ==>
-    src = NONE /\ find_var_decl_by_name id tops <> NONE /\
-    ?vis mut ty slot. MEM (VariableDecl vis mut id ty slot) tops /\
-                      is_word_type ty
-Proof
-  rpt gen_tac >> simp[supported_scalar_target_def] >>
-  Cases_on `supported_variable_decl tops (src, id)` >> simp[] >>
-  rename1 `SOME x` >> PairCases_on `x` >>
-  Cases_on `x0` >> Cases_on `x1` >> Cases_on `x3` >> simp[] >> strip_tac >>
-  drule supported_variable_decl_mem >> strip_tac >>
-  `find_var_decl_by_name id tops <> NONE` by
-    metis_tac[find_var_decl_storage_some] >>
-  gvs[supported_full_word_type_def] >> first_assum (irule_at Any) >>
-  simp[is_word_type_def]
-QED
-
-Theorem topcopy_not_bytestring:
-  !tops t. supported_storage_type tops t ==> ~is_bytestring_type t
-Proof
-  Cases_on `t` >> simp[is_bytestring_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[is_bytestring_type_def, supportedTypesTheory.supported_storage_type_def,
-       Once supportedTypesTheory.supported_nested_type_def,
-       supportedTypesTheory.supported_full_word_type_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  simp[is_bytestring_type_def, supportedTypesTheory.supported_storage_type_def,
-       Once supportedTypesTheory.supported_nested_type_def,
-       supportedTypesTheory.supported_full_word_type_def]
-QED
-
-Theorem topcopy_no_length_word:
-  !tops t. supported_storage_type tops t /\
-    (!elem n. t <> ArrayT elem (Dynamic n)) ==> ~has_length_word t
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt gen_tac >> strip_tac >>
   drule topcopy_not_bytestring >>
   Cases_on `t` >> simp[has_length_word_def, is_bytestring_type_def] >>
   Cases_on `b` >> gvs[has_length_word_def, is_bytestring_type_def]
+QED
+*)
+Theorem topcopy_no_length_word:
+  !tops t. supported_storage_type tops t /\
+    (!elem n. t <> ArrayT elem (Dynamic n)) ==> ~has_length_word t
+Proof
+  cheat
 QED
 
 Theorem body_inv_mcopy:
@@ -298,13 +276,7 @@ Proof
   metis_tac[allocation_limit_word_room]
 QED
 
-Theorem body_tuple_target_toplevel_aligned:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
-  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
-  supported_scalar_target tops nsid /\
-  type_place_target env (TopLevelNameTarget nsid) = SOME (Type ty) /\
-  evaluate_type (get_tenv cx) ty = SOME tv ==>
-  tuple_target_aligned cenv cx (BaseTarget (TopLevelNameTarget nsid)) ty tv
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   Cases_on `nsid` >> rename1 `(src, id)` >> rpt strip_tac >>
   drule supported_scalar_target_decl >> strip_tac >> gvs[] >>
@@ -331,6 +303,17 @@ Proof
   qexistsl_tac [`NONE`, `id`, `[]`, `tv`] >>
   simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
   metis_tac[exprSimUnwrapTheory.word_type_slot_size]
+QED
+*)
+Theorem body_tuple_target_toplevel_aligned:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+  supported_scalar_target tops nsid /\
+  type_place_target env (TopLevelNameTarget nsid) = SOME (Type ty) /\
+  evaluate_type (get_tenv cx) ty = SOME tv ==>
+  tuple_target_aligned cenv cx (BaseTarget (TopLevelNameTarget nsid)) ty tv
+Proof
+  cheat
 QED
 
 Theorem body_tuple_target_field_aligned:

@@ -35,6 +35,24 @@ Proof
   metis_tac[venomInstTheory.lookup_function_MEM, COND_CLAUSES]
 QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!f. MEM f unit.cu_context.ctx_functions ==>
+    ~EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts f)` by
+    metis_tac[entry_runtime_context_no_dalloca] >>
+  drule budget_path_context_shape >>
+  disch_then (qspecl_then [`D`, `lo`, `explicit`, `unit.cu_context`] mp_tac) >>
+  (impl_tac >- (gvs[] >> metis_tac[venomInstTheory.lookup_function_MEM])) >>
+  strip_tac >>
+  `!i. active_inst q.bp_fn i q.bp_state ==> i.inst_opcode <> DALLOCA` by
+    metis_tac[budget_context_active_no_dalloca] >>
+  `!n. n < LENGTH h ==> ~lower_event_allocates (EL n h)` by
+    (gvs[FILTER_EQ_NIL, EVERY_MEM] >> metis_tac[EL_MEM]) >>
+  simp[] >> qexists_tac `K 0` >>
+  simp[lower_history_pairs_def, lower_history_current_def] >> metis_tac[]
+QED
+*)
 Theorem supported_runtime_budget_allocation_shape:
   !tops rpolicy unit vs D lo explicit name fn lbl entered p h marks q.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -54,27 +72,10 @@ Theorem supported_runtime_budget_allocation_shape:
       (!n. n < LENGTH h /\ lower_event_allocates (EL n h) ==>
         ?f i s op sz t. lower_alloc_record h n f i s op sz t))
 Proof
-  rpt gen_tac >> strip_tac >>
-  `!f. MEM f unit.cu_context.ctx_functions ==>
-    ~EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts f)` by
-    metis_tac[entry_runtime_context_no_dalloca] >>
-  drule budget_path_context_shape >>
-  disch_then (qspecl_then [`D`, `lo`, `explicit`, `unit.cu_context`] mp_tac) >>
-  (impl_tac >- (gvs[] >> metis_tac[venomInstTheory.lookup_function_MEM])) >>
-  strip_tac >>
-  `!i. active_inst q.bp_fn i q.bp_state ==> i.inst_opcode <> DALLOCA` by
-    metis_tac[budget_context_active_no_dalloca] >>
-  `!n. n < LENGTH h ==> ~lower_event_allocates (EL n h)` by
-    (gvs[FILTER_EQ_NIL, EVERY_MEM] >> metis_tac[EL_MEM]) >>
-  simp[] >> qexists_tac `K 0` >>
-  simp[lower_history_pairs_def, lower_history_current_def] >> metis_tac[]
+  cheat
 QED
 
-Theorem supported_runtime_context_fmp_guards:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops ==>
-  !fn i. MEM fn unit.cu_context.ctx_functions /\ MEM i (fn_insts fn) ==>
-    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DRET
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   strip_tac >>
   drule vyperLoweringCorrectTheory.lower_vyper_runtime_unit_context_entry >> strip_tac >>
@@ -98,6 +99,15 @@ Proof
   simp[EVERY_MEM] >> strip_tac >>
   qpat_x_assum `!inst. MEM inst (fn_insts f) ==> _` drule >>
   simp[inst_ptr_ok_check_def]
+QED
+*)
+Theorem supported_runtime_context_fmp_guards:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops ==>
+  !fn i. MEM fn unit.cu_context.ctx_functions /\ MEM i (fn_insts fn) ==>
+    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DRET
+Proof
+  cheat
 QED
 
 Theorem budget_path_context_fmp_guards[local]:

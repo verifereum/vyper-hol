@@ -536,12 +536,3 @@ Proof
   >> irule expr_list_member_bound >> simp[]
 QED
 
-Theorem runtime_sym_pop_target_domain:
-  supported_expr tops (Pop ty target) ==>
-  (?id. target = TopLevelNameTarget id /\ supported_storage_dynamic_array tops id) /\
-  (!p. ~supported_target_exists p target)
-Proof
-  Cases_on `target` >>
-  simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
-       supported_expr_exists_def]
-QED

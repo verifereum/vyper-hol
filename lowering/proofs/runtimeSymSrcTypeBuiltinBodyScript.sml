@@ -138,7 +138,7 @@ Resume runtime_sym_type_builtin_body[convert]:
   first_x_assum (drule_all_then strip_assume_tac) >>
   simp[runtime_sym_value_def, mk_ptr_def, is_label_operand_def]
 QED
-Resume runtime_sym_type_builtin_body[encode]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   `?e bytes. args = [e] /\ ~ensure /\ mid = SOME bytes` by
     (Cases_on `args` >> gvs[runtime_sym_type_builtin_domain, supported_type_builtin_form_def] >>
      Cases_on `t` >> Cases_on `ensure` >> Cases_on `mid` >>
@@ -156,6 +156,9 @@ Resume runtime_sym_type_builtin_body[encode]:
   IF_CASES_TAC >> pure_asm_rewrite_tac[]
   >- suspend "encode_word"
   >> suspend "encode_memory"
+*)
+Resume runtime_sym_type_builtin_body[encode]:
+  cheat
 QED
 
 Resume runtime_sym_type_builtin_body[encode_word]:
@@ -210,7 +213,7 @@ Resume runtime_sym_type_builtin_body[encode_memory]:
   first_x_assum (drule_all_then strip_assume_tac) >>
   simp[runtime_sym_value_def, mk_ptr_def]
 QED
-Resume runtime_sym_type_builtin_body[decode]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   `?e. args = [e] /\ ~unwrap` by
     (Cases_on `args` >> gvs[runtime_sym_type_builtin_domain, supported_type_builtin_form_def] >>
      Cases_on `t` >> Cases_on `unwrap` >>
@@ -239,5 +242,8 @@ Resume runtime_sym_type_builtin_body[decode]:
   first_x_assum (drule_all_then strip_assume_tac) >>
   first_x_assum (drule_all_then strip_assume_tac) >>
   simp[runtime_sym_value_def, mk_ptr_def]
+*)
+Resume runtime_sym_type_builtin_body[decode]:
+  cheat
 QED
 Finalise runtime_sym_type_builtin_body

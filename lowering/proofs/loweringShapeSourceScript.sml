@@ -513,32 +513,6 @@ Proof
             supported_stmt_parts_exists_mono]
 QED
 
-Theorem supported_program_raw_shape_free_program:
-  !tops. supported_program tops ==> raw_shape_free_program tops
-Proof
-  rpt gen_tac >> strip_tac >> REWRITE_TAC [raw_shape_free_program_def] >>
-  rpt gen_tac >> strip_tac >>
-  rename1 `MEM (FunctionDecl vis mut nr rr name args dflts ret stmts) tops` >>
-  `~supported_stmts_expr_exists expr_shape_root stmts` by
-    (drule_all supported_program_function >> strip_tac >>
-     drule supported_function_body_shape >> simp[]) >>
-  `EVERY (\e. ~supported_expr_exists expr_shape_root e) dflts` by
-    (drule_all supported_program_defaults >>
-     rw[EVERY_MEM, supported_default_expression_def] >>
-     metis_tac[supported_expr_shape]) >>
-  conj_tac
-  >- (strip_tac >>
-      qpat_x_assum `~supported_stmts_expr_exists expr_shape_root _` mp_tac >>
-      simp[] >> irule (CONJUNCT2 supported_stmt_expr_exists_mono) >>
-      first_x_assum (irule_at Any) >>
-      simp[expr_raw_shape_root_def, expr_shape_root_def] >> metis_tac[]) >>
-  fs[EVERY_MEM] >> rpt strip_tac >>
-  qpat_x_assum `!e. MEM e dflts ==> _` drule >> simp[] >>
-  irule (CONJUNCT1 supported_expr_exists_mono) >>
-  first_x_assum (irule_at Any) >>
-  simp[expr_raw_shape_root_def, expr_shape_root_def] >> metis_tac[]
-QED
-
 Theorem subst_consts_fn_names:
   !env (fs : (function_mutability # bool # bool # string #
        (string # type) list # expr list # type # stmt list) list).

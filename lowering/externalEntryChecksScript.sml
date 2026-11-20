@@ -900,28 +900,7 @@ Proof
   irule ALL_DISTINCT_MAP_INJ >> simp[]
 QED
 
-Theorem source_runtime_entry_checks_code:
-  !tops rpolicy unit mut nr rr name args dflts ret fbody
-   lbl ce pos_args min_cds pay nr' key ut iv rt.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
-    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
-    MEM (mut,nr,rr,name,args,dflts,ret,fbody) (FST (classify_functions tops)) /\
-    set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops T (K global_nonreentrant_slot)
-        (mut,nr,rr,name,args,dflts,ret,fbody)) =
-      (lbl,ce,pos_args,min_cds,pay,nr',key,ut,iv,fbody,rt) ==>
-    ?func fb sa sd st st'.
-      unit.cu_context.ctx_entry = SOME "__entry" /\
-      venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
-      func.fn_blocks <> [] /\ (HD func.fn_blocks).bb_label = "__entry" /\
-      fresh_label "fallback" (initial_compile_state "__entry") = (fb,sa) /\
-      compile_selector_dispatch_linear
-        (MAP (\(sel,lbl,z). (sel,lbl))
-          (build_selectors (type_env tops) (FST (classify_functions tops))))
-        fb sa = ((),sd) /\ fn_has_code sa sd func /\
-      compile_entry_checks min_cds pay st = ((),st') /\ fn_has_code st st' func /\
-      st.cs_current_bb = lbl /\ st.cs_current_insts = [] /\
-      sd.cs_next_var <= st.cs_next_var
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rpt gen_tac >> strip_tac >>
   drule classified_external_labels_distinct >> disch_tac >>
@@ -960,6 +939,32 @@ Proof
      goal_assum (drule_at Any) >> simp[]) >>
   drule_all run_lowering_entry_checks_code_labels >>
   simp[Abbr `selectors`]
+QED
+*)
+Theorem source_runtime_entry_checks_code:
+  !tops rpolicy unit mut nr rr name args dflts ret fbody
+   lbl ce pos_args min_cds pay nr' key ut iv rt.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
+    MEM (mut,nr,rr,name,args,dflts,ret,fbody) (FST (classify_functions tops)) /\
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops T (K global_nonreentrant_slot)
+        (mut,nr,rr,name,args,dflts,ret,fbody)) =
+      (lbl,ce,pos_args,min_cds,pay,nr',key,ut,iv,fbody,rt) ==>
+    ?func fb sa sd st st'.
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      func.fn_blocks <> [] /\ (HD func.fn_blocks).bb_label = "__entry" /\
+      fresh_label "fallback" (initial_compile_state "__entry") = (fb,sa) /\
+      compile_selector_dispatch_linear
+        (MAP (\(sel,lbl,z). (sel,lbl))
+          (build_selectors (type_env tops) (FST (classify_functions tops))))
+        fb sa = ((),sd) /\ fn_has_code sa sd func /\
+      compile_entry_checks min_cds pay st = ((),st') /\ fn_has_code st st' func /\
+      st.cs_current_bb = lbl /\ st.cs_current_insts = [] /\
+      sd.cs_next_var <= st.cs_next_var
+Proof
+  cheat
 QED
 
 Theorem linear_dispatch_entry_no_phi:

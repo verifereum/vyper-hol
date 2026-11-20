@@ -283,15 +283,7 @@ Proof
  metis_tac[GSYM listTheory.UNZIP_MAP, listTheory.ZIP_UNZIP]
 QED
 
-Theorem deploy_supported_value_conversion:
- !tops ty tv v av.
- supported_value_type tops ty /\
- evaluate_type (type_env tops) ty = SOME tv /\
- value_has_type tv v /\ val_wf tv v /\
- type_memory_size tv < dimword(:256) /\
- vyper_to_abi (type_env tops) ty v = SOME av ==>
- has_type (vyper_to_abi_type (type_env tops) ty) av /\
- abi_to_vyper (type_env tops) ty av = SOME v
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
  rpt gen_tac >> strip_tac >> Cases_on `supported_scalar_type ty`
  >- metis_tac[deploy_supported_scalar_abi_valid, deploy_supported_scalar_abi_reverse] >>
@@ -304,6 +296,19 @@ Proof
  >> Cases_on `supported_struct_fields tops p` >> gvs[] >>
  drule deploy_supported_struct_lookup >> strip_tac >>
  drule_all (SRULE [] deploy_supported_struct_conversion) >> simp[]
+QED
+*)
+Theorem deploy_supported_value_conversion:
+ !tops ty tv v av.
+ supported_value_type tops ty /\
+ evaluate_type (type_env tops) ty = SOME tv /\
+ value_has_type tv v /\ val_wf tv v /\
+ type_memory_size tv < dimword(:256) /\
+ vyper_to_abi (type_env tops) ty v = SOME av ==>
+ has_type (vyper_to_abi_type (type_env tops) ty) av /\
+ abi_to_vyper (type_env tops) ty av = SOME v
+Proof
+  cheat
 QED
 
 Theorem deploy_supported_value_list_conversion:

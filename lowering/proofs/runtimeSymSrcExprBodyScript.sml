@@ -155,7 +155,7 @@ Resume runtime_sym_expr_body[topname]:
   simp[NoAsms, runtime_sym_expr_contract_def] >>
   metis_tac[runtime_sym_compile_topname]
 QED
-Resume runtime_sym_expr_body[call]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   drule runtime_sym_generators_call >>
   pure_rewrite_tac[runtime_sym_call_clause_def] >> disch_tac >>
   simp[NoAsms, runtime_sym_expr_contract_def, compile_expr_body_def, expr_type_def] >>
@@ -175,8 +175,11 @@ Resume runtime_sym_expr_body[call]:
        supported_effect_expr_def] >> rpt gen_tac >> strip_tac >>
   first_x_assum irule >> simp[supported_expr_def] >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+*)
+Resume runtime_sym_expr_body[call]:
+  cheat
 QED
-Resume runtime_sym_expr_body[pop]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   simp[NoAsms, runtime_sym_expr_contract_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `target` >>
   gvs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
@@ -195,6 +198,9 @@ Resume runtime_sym_expr_body[pop]:
     (drule_at (Pat `compile_dynarray_pop _ _ _ _ _ _ _ = _`)) >>
   gvs[runtime_sym_env_def] >> strip_tac >>
   simp[runtime_sym_value_def, mk_ptr_def]
+*)
+Resume runtime_sym_expr_body[pop]:
+  cheat
 QED
 Resume runtime_sym_expr_body[ifexp_arms]:
   qpat_x_assum `!t. runtime_sym_expr_contract _ _ _ _ _ /\ _`

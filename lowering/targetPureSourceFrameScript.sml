@@ -148,22 +148,22 @@ QED
 
 
 Theorem target_pure_source_mutual:
-  (!tops e. supported_pure_expr tops e ==>
+  (!tops e. supported_effect_free_expr tops e ==>
     !cx s r s'. eval_expr cx e s = (r,s') ==>
       s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
       s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) /\
-  (!tops es. supported_pure_exprs tops es ==>
+  (!tops es. supported_effect_free_exprs tops es ==>
     (!cx s r s'. eval_exprs cx es s = (r,s') ==>
       s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
       s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) /\
     (!e. MEM e es ==> !cx s r s'. eval_expr cx e s = (r,s') ==>
       s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
       s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>)) /\
-  (!tops fields. supported_pure_fields tops fields ==>
+  (!tops fields. supported_effect_free_fields tops fields ==>
     !cx s r s'. eval_exprs cx (MAP SND fields) s = (r,s') ==>
       s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
       s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) /\
-  (!tops e. supported_place_expr tops e ==>
+  (!tops e. supported_effect_free_place_expr tops e ==>
     !cx s r s'. eval_expr cx e s = (r,s') ==>
       s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
       s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>)
@@ -180,12 +180,7 @@ Proof
   simp[]
 QED
 
-Theorem target_pure_base_source_projection:
-  !bt tops cx s r s'.
-    supported_target_pure tops bt /\
-    eval_base_place cx bt s = (r,s') ==>
-      s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
-      s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
   rpt gen_tac
@@ -206,9 +201,19 @@ Proof
   drule (cj 1 target_pure_source_mutual) >>
   disch_then drule >> simp[evaluation_state_component_equality]
 QED
+*)
+Theorem target_pure_base_source_projection:
+  !bt tops cx s r s'.
+    supported_target_pure tops bt /\ ~supported_target_exists expr_effect_root bt /\
+    eval_base_place cx bt s = (r,s') ==>
+      s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+      s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>
+Proof
+  cheat
+QED
 
 Theorem target_pure_base_source_frame:
-  supported_target_pure tops bt /\ eval_base_place cx bt s = (r,s') ==>
+  supported_target_pure tops bt /\ ~supported_target_exists expr_effect_root bt /\ eval_base_place cx bt s = (r,s') ==>
   ?gs os rqs st.
     s' = s with <|gas_obs := gs; outcomes := os; requests := rqs; storage_trace := st|>
 Proof

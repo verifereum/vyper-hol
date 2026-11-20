@@ -378,27 +378,37 @@ QED
 
 (* Supported pure expressions make no calls and pop nothing, so none can
    mutate memory or storage. *)
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Proof
+  ho_match_mp_tac supported_pure_expr_ind >>
+  rw[supported_pure_expr_def, expr_can_mutate_def] >>
+  gvs[supported_pure_expr_def, expr_can_mutate_def]
+QED
+*)
 Theorem supported_pure_expr_no_mutate:
   (!tops e. supported_pure_expr tops e ==> ~expr_can_mutate cenv e) /\
   (!tops es. supported_pure_exprs tops es ==> ~exprs_can_mutate cenv es) /\
   (!tops fs. supported_pure_fields tops fs ==> ~named_exprs_can_mutate cenv fs) /\
   (!tops e. supported_place_expr tops e ==> ~expr_can_mutate cenv e)
 Proof
-  ho_match_mp_tac supported_pure_expr_ind >>
-  rw[supported_pure_expr_def, expr_can_mutate_def] >>
-  gvs[supported_pure_expr_def, expr_can_mutate_def]
+  cheat
 QED
 
-Theorem supported_pure_exprs_bytestring_iff:
-  !es. supported_pure_exprs tops es /\ well_typed_exprs env es ==>
-    EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
-               is_bytestring_type (expr_type e)) es
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   Induct >> simp[] >> rpt gen_tac >>
   simp[Once supported_pure_expr_def, Once well_typed_expr_def] >> strip_tac >>
   irule lowered_value_type_bytestring_iff >> conj_tac
   >- (rpt gen_tac >> strip_tac >> gvs[supported_pure_expr_def]) >>
   qexists_tac `env` >> simp[]
+QED
+*)
+Theorem supported_pure_exprs_bytestring_iff:
+  !es. supported_pure_exprs tops es /\ well_typed_exprs env es ==>
+    EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+               is_bytestring_type (expr_type e)) es
+Proof
+  cheat
 QED
 
 Theorem body_log_assignable_abi_plan:

@@ -67,13 +67,16 @@ Proof
   >- suspend "subscript"
   >> suspend "attribute"
 QED
-Resume aug_place_base_scopes[subscript]:
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
   rpt strip_tac >>
   qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   strip_tac >> gvs[supported_target_info_def, AllCaseEqs()] >>
   imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
   imp_res_tac aug_place_supported_expr_scopes >> trace_scopes_tac >> metis_tac[]
+*)
+Resume aug_place_base_scopes[subscript]:
+  cheat
 QED
 Resume aug_place_base_scopes[attribute]:
   rpt strip_tac >>

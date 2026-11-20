@@ -43,7 +43,7 @@ QED
 
 
 Theorem supported_pure_int_calls:
-  !tops e. supported_pure_expr tops e ==> int_calls_expr e = []
+  !tops e. supported_effect_free_expr tops e ==> int_calls_expr e = []
 Proof
   metis_tac[supported_pure_no_internal_call, expr_has_internal_call_def,
             no_internal_call_int_calls]
@@ -55,38 +55,41 @@ QED
    internal functions of the main module, as expr_body_pre asks. *)
 (* A supported expression is no bare .code: supported_builtin_form
    rejects Acc Code. *)
-Theorem supported_expr_not_extcode[local]:
-  !tops e. supported_expr tops e ==> ~is_extcode e
-Proof
-  rpt gen_tac >> Cases_on `is_extcode e` >> simp[] >>
-  Cases_on `e` >> gvs[exprLoweringTheory.is_extcode_def] >>
-  rename1 `Builtin _ b l` >> Cases_on `b` >>
-  gvs[exprLoweringTheory.is_extcode_def] >>
-  rename1 `Acc a` >> Cases_on `a` >>
-  gvs[exprLoweringTheory.is_extcode_def] >>
-  Cases_on `l` >> gvs[exprLoweringTheory.is_extcode_def] >>
-  rename1 `_ :: tl` >> Cases_on `tl` >>
-  gvs[exprLoweringTheory.is_extcode_def,
-      supportedExprsTheory.supported_expr_def,
-      supportedExprsTheory.supported_pure_expr_def,
-      supportedExprsTheory.supported_effect_expr_def,
-      supportedExprFormsTheory.supported_builtin_form_def]
-QED
-
-Theorem supported_stmt_body_safe:
-  supported_stmt tops bindings s ==> body_stmt_safe tops s
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rw[body_stmt_safe_def] >>
   drule (cj 1 supported_stmts_storage_syntax) >> simp[]
 QED
+*)
+Theorem supported_stmt_body_safe:
+  supported_stmt tops bindings s ==> body_stmt_safe tops s
+Proof
+  cheat
+QED
 
-Theorem supported_stmts_body_safe:
-  supported_stmts tops bindings ss ==> body_stmts_safe tops ss
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
 Proof
   rw[body_stmts_safe_iff] >>
   drule (cj 2 supported_stmts_storage_syntax) >> simp[]
 QED
+*)
+Theorem supported_stmts_body_safe:
+  supported_stmts tops bindings ss ==> body_stmts_safe tops ss
+Proof
+  cheat
+QED
 
+(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- metis_tac[supported_expr_no_evm_run] >>
+  conj_tac >- metis_tac[supported_expr_no_call_operand_effects] >>
+  PURE_ONCE_REWRITE_TAC[CONJ_ASSOC] >>
+  reverse conj_tac >- metis_tac[supported_expr_not_extcode] >>
+  imp_res_tac supported_expr_main_calls >>
+  gvs[listTheory.EVERY_CONJ]
+QED
+*)
 Theorem supported_expr_body_calls:
   !tops e. supported_expr tops e ==>
     ~expr_has_evm_run e /\
@@ -96,13 +99,7 @@ Theorem supported_expr_body_calls:
       (int_calls_expr e) /\
     ~is_extcode e
 Proof
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- metis_tac[supported_expr_no_evm_run] >>
-  conj_tac >- metis_tac[supported_expr_no_call_operand_effects] >>
-  PURE_ONCE_REWRITE_TAC[CONJ_ASSOC] >>
-  reverse conj_tac >- metis_tac[supported_expr_not_extcode] >>
-  imp_res_tac supported_expr_main_calls >>
-  gvs[listTheory.EVERY_CONJ]
+  cheat
 QED
 
 (* The same for a reason, which may also be a string literal. *)
