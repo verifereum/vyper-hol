@@ -34,7 +34,8 @@
 
 Theory bodySim
 Ancestors
-  loweringPosts
+  loweringPosts bodyInvSplit compileUnit immSectionDead
+  vyperContext vyperTypeContractStaticMaps alist finite_map arithmetic
   list exprSimDefs exprSimHypsDefs stmtSimDefs compileEnv compileVyper vyperTypeContract
   supportedProgram supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
@@ -50,7 +51,12 @@ Libs
    and the module list the overlap analysis reads, function mutabilities,
    module-variable types and locations (immutables included), flag
    metadata, custom-error parameters and method ids (build_compile_env_module_pins, bodySimEntry). *)
-Definition cenv_module_pins_def:
+Definition cenv_module_pins_split_def[nocompute]:
+  cenv_module_pins tops cenv <=>
+    cenv.ce_module = NONE /\ cenv_module_pins_mods [(NONE,tops)] cenv
+End
+
+Theorem cenv_module_pins_def:
   cenv_module_pins tops cenv <=>
     cenv.ce_module = NONE /\
     cenv.ce_modules = [(NONE, tops)] /\
@@ -65,7 +71,14 @@ Definition cenv_module_pins_def:
     cenv.ce_method_id =
       (\s tys. w2n (calldata_method_id
                      (function_selector s (vyper_to_abi_types (type_env tops) tys))))
-End
+Proof
+  simp[cenv_module_pins_split_def, cenv_module_pins_mods_def,
+       build_func_mutability_mods_singleton, build_var_type_map_mods_singleton,
+       make_struct_fields_map_mods_singleton, add_module_var_locations_mods_singleton,
+       add_immutable_locations_unit_singleton, build_flag_info_mods_singleton,
+       lookup_custom_error_args_mods_singleton, type_env_all_modules_def,
+       type_env_def, FUNION_FEMPTY_2]
+QED
 
 (* A frame of the lowered program: ctx is the context of tops's runtime
    unit or, while cx.in_deploy, its deployment unit. The constructor and
@@ -89,7 +102,116 @@ End
    build_compile_env (cenv_module_pins), so its immutables sit where the
    section layout puts them (body_inv_immutable_section_layout), and the
    program is the main module alone, as source_deployment_rel has it. *)
-Definition body_inv_def:
+Definition body_inv_split_def[nocompute]:
+  body_inv tops ctx cenv cx <=>
+    contract_inv [(NONE,tops)] [] ctx cenv cx /\
+    module_body_inv [(NONE,tops)] NONE tops cenv cx /\
+    cenv_module_pins tops cenv
+End
+
+Theorem singleton_immutable_lookup[local]:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+  tops = pre ++ VariableDecl vis Immutable name ty slot :: post ==>
+  FLOOKUP (add_immutable_locations sft tops 0 vars) (NONE,name) =
+    SOME (ImmutableLoc (compute_immutables_len sft pre))
+Proof
+  strip_tac >> gvs[ALL_DISTINCT_APPEND, toplevel_vtype_keys_toplevel_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  irule (add_immutable_locations_declaration_lookup
+         |> Q.INST [`off` |-> `0`] |> SRULE []) >>
+  rpt strip_tac >> gvs[] >>
+  drule module_toplevel_vtype_key_MEM_Variable >>
+  disch_then (qspec_then `NONE` mp_tac) >> simp[]
+QED
+
+Theorem singleton_immutable_region[local]:
+  immutable_region_mods [(NONE,tops)] src name off width <=>
+    src = NONE /\
+    ?pre post vis ty slot.
+      tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
+      off = compute_immutables_len
+        (get_struct_fields (make_struct_fields_map tops)) pre /\
+      width = type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty
+Proof
+  Cases_on `src` >>
+  simp[immutable_region_mods_def, make_struct_fields_map_mods_singleton, ALOOKUP_def] >>
+  eq_tac >> rpt strip_tac >>
+  qexistsl [`pre`, `post`, `vis`, `ty`, `slot`] >> gvs[]
+QED
+
+Theorem compute_immutables_len_byte_coverage:
+  !tops sft i. i < compute_immutables_len sft tops ==>
+    ?pre vis name ty slot post.
+      tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
+      compute_immutables_len sft pre <= i /\
+      i < compute_immutables_len sft pre + type_mem_bytes sft ty
+Proof
+  Induct >- simp[compute_immutables_len_def] >>
+  rpt gen_tac >> once_rewrite_tac[immutable_len_cons] >> strip_tac >>
+  Cases_on `i < compute_immutables_len sft [h]`
+  >- (qexists_tac `[]` >> Cases_on `h` >>
+      gvs[compute_immutables_len_def] >>
+      rename1 `mut = Immutable` >>
+      Cases_on `mut` >> gvs[compute_immutables_len_def]) >>
+  first_x_assum (qspecl_then [`sft`, `i - compute_immutables_len sft [h]`] mp_tac) >>
+  impl_tac >- decide_tac >> strip_tac >>
+  qexistsl [`h::pre`, `vis`, `name`, `ty`, `slot`, `post`] >>
+  once_rewrite_tac[immutable_len_cons] >> simp[] >> decide_tac
+QED
+
+Theorem singleton_immutable_regions_cover[local]:
+  i < imm_len_mods [(NONE,tops)] ==>
+  ?name off size. immutable_region_mods [(NONE,tops)] NONE name off size /\
+                  off <= i /\ i < off + size
+Proof
+  simp[imm_len_mods_singleton, imm_len_def, singleton_immutable_region] >>
+  strip_tac >> drule compute_immutables_len_byte_coverage >> strip_tac >>
+  qexistsl [`name`,
+            `compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre`,
+            `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty`] >>
+  simp[] >> qexistsl [`pre`, `post`, `vis`, `ty`, `slot`] >> simp[]
+QED
+
+Theorem singleton_immutable_section_layout[local]:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+  cenv_module_pins tops cenv ==>
+  immutable_section_layout_mods [(NONE,tops)] cenv
+Proof
+  simp[cenv_module_pins_def, immutable_section_layout_mods_def] >>
+  strip_tac >> rpt conj_tac
+  >- (simp[singleton_immutable_region] >>
+      rpt gen_tac >> eq_tac >> strip_tac
+      >- (drule immutable_locations_origin >> strip_tac
+          >- (drule immutable_module_vars_origin >> simp[FLOOKUP_DEF]) >>
+          gvs[] >> metis_tac[]) >>
+      qpat_x_assum `src = NONE` SUBST_ALL_TAC >>
+      qpat_x_assum `off = _` SUBST_ALL_TAC >>
+      irule singleton_immutable_lookup >>
+      simp[] >> metis_tac[])
+  >- (simp[singleton_immutable_region, imm_len_mods_singleton, imm_len_def] >>
+      rpt strip_tac >> gvs[compute_immutables_len_append, compute_immutables_len_def])
+  >- (simp[singleton_immutable_region] >>
+      rpt strip_tac >> gvs[] >>
+      rename1 `left_name <> right_name` >>
+      rename1 `_ ++ [VariableDecl right_vis Immutable right_name _ right_slot] ++ right_post =
+               _ ++ [VariableDecl left_vis Immutable left_name _ left_slot] ++ left_post` >>
+      irule immutable_layout_disjoint >>
+      qexistsl [`left_name`, `right_name`, `left_post`, `right_post`,
+                `left_slot`, `right_slot`, `left_vis`, `right_vis`] >>
+      simp[] >> metis_tac[]) >>
+  metis_tac[singleton_immutable_regions_cover]
+QED
+
+Theorem classify_functions_unit_has_ctor_singleton[local]:
+  IS_SOME (FST (SND (SND (SND (classify_functions_unit [(NONE,tops)] []))))) <=>
+  IS_SOME (SND (SND (SND (classify_functions tops))))
+Proof
+  Cases_on `classify_functions tops` >>
+  rename1 `classify_functions tops = fs` >>
+  PairCases_on `fs` >> simp[classify_functions_unit_singleton]
+QED
+
+Theorem body_inv_def:
   body_inv tops ctx cenv cx <=>
     supported_program tops /\
     (?rpolicy unit.
@@ -130,7 +252,41 @@ Definition body_inv_def:
     (!vis mut rr name args dflts ret ss.
        MEM (FunctionDecl vis mut T rr name args dflts ret ss) tops ==>
        cx.nonreentrant_slot = SOME global_nonreentrant_slot)
-End
+Proof
+  Cases_on `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` >>
+  simp[body_inv_split_def, contract_inv_def, module_body_inv_def,
+       cenv_module_pins_split_def, cenv_module_pins_mods_def, type_env_def,
+       ALOOKUP_def, optionTheory.FORALL_OPTION, nsid_to_string_def,
+       get_module_code_def, get_tenv_def, type_env_all_modules_def, FUNION_FEMPTY_2,
+       lower_vyper_deploy_unit_mods_singleton, lower_vyper_runtime_unit_mods_singleton,
+       classify_functions_unit_has_ctor_singleton, build_func_ids_mods_singleton,
+       build_func_param_types_mods_singleton, build_func_info_mods_singleton,
+       build_func_return_type_mods_singleton, build_event_info_mods_singleton,
+       make_struct_fields_map_mods_singleton, build_hashmap_info_mods_singleton,
+       collect_module_vars_mods_singleton, build_func_defaults_mods_singleton,
+       build_func_mutability_mods_singleton, build_var_type_map_mods_singleton,
+       add_module_var_locations_mods_singleton, add_immutable_locations_unit_singleton,
+       build_flag_info_mods_singleton, lookup_custom_error_args_mods_singleton] >>
+  eq_tac >> strip_tac >> simp[]
+  >- (fs[cenv_module_pins_def] >> metis_tac[]) >>
+  rpt conj_tac
+  >- (qexistsl [`rpolicy`, `unit`] >> simp[])
+  >- (rpt strip_tac >> gvs[] >> res_tac) >>
+  irule singleton_immutable_section_layout >>
+  simp[cenv_module_pins_def, type_env_def]
+QED
+
+Theorem body_inv_contract:
+  body_inv tops ctx cenv cx ==> contract_inv [(NONE,tops)] [] ctx cenv cx
+Proof
+  simp[body_inv_split_def]
+QED
+
+Theorem body_inv_module:
+  body_inv tops ctx cenv cx ==> module_body_inv [(NONE,tops)] NONE tops cenv cx
+Proof
+  simp[body_inv_split_def]
+QED
 
 Theorem body_inv_nonreentrant_slot:
   body_inv tops ctx cenv cx /\
