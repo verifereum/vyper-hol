@@ -2193,7 +2193,6 @@ val C = ``\ce env sf ty tv.
  abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
    st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s ==>
  !G tn PG lo.
- ~ctx_has_dalloca ctx /\
  abi_decode_ptr_window G tn s source (n2w B) L /\
  ptr_covers G tn output s (type_memory_bytes ce ty) /\
  op_prov G pos = NONE /\ op_prov G hi = NONE /\
@@ -2222,7 +2221,7 @@ Theorem finite_array_decode_child_joint[local]:
   (^C) ce env sf ty tv /\
   abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
     child child_end (Var source) hi pos (Var child_out) B L xs q cd dstid live ceiling b /\
-  ~ctx_has_dalloca ctx /\ abi_decode_ptr_window G tn b source (n2w B) L /\
+  abi_decode_ptr_window G tn b source (n2w B) L /\
   ptr_covers G tn child_out b (type_memory_bytes ce ty) /\
   op_prov G pos = NONE /\ op_taint tn pos = {} /\
   op_prov G hi = NONE /\ op_taint tn hi = {} /\
@@ -2298,7 +2297,6 @@ Theorem abi_valid_allocated_finite_loop_joint:
      abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
        st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s ==>
      !G tn PG lo.
-     ~ctx_has_dalloca ctx /\
      abi_decode_ptr_window G tn s source (n2w B) L /\
      ptr_covers G tn output s (type_memory_bytes ce ty) /\
      op_prov G pos = NONE /\ op_prov G hi = NONE /\
@@ -2344,7 +2342,7 @@ Theorem abi_valid_allocated_finite_loop_joint:
   outsz = type_memory_bytes ce (ArrayT ty (Dynamic maxn)) /\
   LENGTH vs = abi_head_word (DROP p xs) /\ LENGTH vs <= maxn /\
   maxn < dimword (:256) /\ j <= LENGTH vs /\ p+32+LENGTH vs*abi_sz <= L /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
   alloca_history func s /\ op_prov G src = NONE /\ op_taint tn src = {} /\
   op_prov G hi = NONE /\ op_taint tn hi = {} /\
   abi_decode_ptr_window G tn s source (n2w B) L /\
@@ -2585,7 +2583,7 @@ Resume abi_valid_allocated_finite_loop_joint[iterate]:
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   (* Match the enclosing destination before the other coverage premises. *)
   qpat_assum `ptr_covers GB tnB output b outsz`
-    (mp_then (Pos (el 13)) drule_all finite_array_decode_child_joint) >>
+    (mp_then (Pos (el 12)) drule_all finite_array_decode_child_joint) >>
   disch_then (qspec_then `PG`
     (qx_choosel_then [`u`,`GU`,`tnU`] (map_every assume_tac o CONJUNCTS))) >>
   qhdtm_assum `abi_valid_allocated_post`
