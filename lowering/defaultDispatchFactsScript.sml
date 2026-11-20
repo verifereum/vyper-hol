@@ -1,6 +1,6 @@
 (* Raw dispatch facts: the selected signature, not its name, determines placement. *)
 Theory defaultDispatchFacts
-Ancestors sourceEntryCode runtimeBodyStartDefs checkedSelectorTableProps entryStateRel
+Ancestors runtimeBodyStartDefs checkedSelectorTableProps entryStateRel
   vyperCalldata compileVyper vyperABIEntries publicGetterProps list entryDispatchProps
   defaultDispatchRouting defaultDispatchPlacement constSubst constSubstStmtsPreserve
   supportedDecls loweringShapeSource

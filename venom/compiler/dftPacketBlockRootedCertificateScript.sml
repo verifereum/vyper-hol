@@ -1,6 +1,6 @@
 Theory dftPacketBlockRootedCertificate
 Ancestors
-  dftPacketSameLevelCompose dftPacketBlockRootedAppend dftPacketBlockAppendShape
+  dftPacketSameLevelCompose dftPacketClosedRows[qualified] dftPacketBlockAppendShape
   dftPacketBlockAppendSemantics dftPacketBlockAppendNative
   dftPacketLiteralFullRowExtend dftPacketClosedBodyBoundary
   dftPacketBlockCutAggregate dftPacketBlockFreshEntry

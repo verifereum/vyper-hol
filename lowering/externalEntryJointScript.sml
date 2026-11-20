@@ -27,7 +27,7 @@ Ancestors
   ptrDiscipline bodyPtrDefs runtimeBodyStartDefs fragGasOriginPtr
   entryPtrSeamPrefix entryPtrSeamRegister externalEntryChecks entryStateRel
   sourceEntrySelection
-  selectedBodyCode bodyMemAggregatePath fragGasPathFrameMem venomMemProofs
+  bodyMemAggregatePath fragGasPathFrameMem venomMemProofs
   moduleLoweringProps vyperCompiler nonreentrantEntryPath externalReturnPackage entryDispatchProps
   vyperTypeContractGetter vyperTypeContractSoundness vyperTypeContractContext
 

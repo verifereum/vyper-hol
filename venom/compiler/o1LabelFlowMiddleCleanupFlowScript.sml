@@ -1,6 +1,6 @@
 Theory o1LabelFlowMiddleCleanupFlow
 Ancestors
-  o1LabelFlowMiddleCleanup codegenSymRel makeSsaDefs
+  codegenSymRel makeSsaDefs
   makeSsaOriginCleanup makeSsaCurrentLockstepShape venomExecProofs venomInst unitLabelMapIdentity list
 
 Theorem simplified_phi_operand:

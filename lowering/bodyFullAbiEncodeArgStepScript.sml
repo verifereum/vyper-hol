@@ -3,7 +3,7 @@ Theory bodyFullAbiEncodeArgStep
 Ancestors
   bodyFullShadowBodyInv
   bodyFullPreds bodyFullAbiEncodeCapture bodyFullAbiEncodeBorrowed
-  bodyFullAbiEncodeRetention bodyFullOfVV abiEncodeArgsSim
+  bodyFullOfVV abiEncodeArgsSim
   abiTupleProps exprSimHyps exprSimSource gasOutcomeFullCompose
   gasShadowCompile exprSimAbiEncodeFramedArrayBody
   exprLowering compileEnv bodySimFull gasOutcomeFullCompose gasOutcomeFull
