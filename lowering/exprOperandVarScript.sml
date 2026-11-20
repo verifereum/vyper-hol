@@ -693,8 +693,8 @@ Proof
 QED
 
 Theorem compiler_external_call_var:
-  compile_external_call_kwargs cenv addr vals tys memsz abisz mid retsz minsz outsz
-    static value gas skip hasdef def rt dt enc_info dec_info sa = (op,sb) ==>
+  compile_external_call_kwargs cenv addr vals tys abisz mid retsz minsz outsz
+    static value gas skip hasdef def rt dt dec_info sa = (op,sb) ==>
   !x. op = Var x ==> not_fresh_at sb x
 Proof
   simp[compile_external_call_kwargs_def, LET_THM, comp_ignore_bind_def] >>

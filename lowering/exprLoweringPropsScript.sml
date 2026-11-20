@@ -3799,6 +3799,38 @@ Proof
   rpt strip_tac >> first_x_assum irule
 QED
 
+Theorem ci_mono_compile_abi_encode_value_rows:
+  ∀rows cenv dst cursor static_ofst s.
+    ci_mono s
+      (SND (compile_abi_encode_value_rows cenv dst cursor static_ofst rows s))
+Proof
+  Induct >> rpt gen_tac
+  >- simp[compile_abi_encode_value_rows_def, ci_mono_comp_return] >>
+  PairCases_on `h` >>
+  simp[Once compile_abi_encode_value_rows_def, LET_THM] >>
+  ho_match_mp_tac ci_mono_bind >> simp[ci_mono_emit_op] >> rpt gen_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> simp[] >> rpt gen_tac >>
+  IF_CASES_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind >>
+       simp[ci_mono_emit_op, ci_mono_unwrap_value, cj 2 ci_mono_compile_abi_encode] >>
+       rpt gen_tac) >>
+  TRY (ho_match_mp_tac ci_mono_ignore_bind >> simp[ci_mono_emit_void] >> rpt gen_tac) >>
+  TRY (ho_match_mp_tac ci_mono_bind >> simp[ci_mono_emit_op] >> rpt gen_tac) >>
+  simp[ci_mono_emit_void, ci_mono_compile_store_memory]
+QED
+
+Theorem ci_mono_compile_abi_encode_values_to_buf:
+  ∀cenv dst rows s.
+    ci_mono s (SND (compile_abi_encode_values_to_buf cenv dst rows s))
+Proof
+  simp[compile_abi_encode_values_to_buf_def, LET_THM] >> rpt gen_tac >>
+  ho_match_mp_tac ci_mono_bind >> simp[ci_mono_compile_alloc_buffer] >>
+  rpt gen_tac >>
+  rpt (ho_match_mp_tac ci_mono_ignore_bind >>
+       simp[ci_mono_emit_void, ci_mono_compile_abi_encode_value_rows] >> rpt gen_tac) >>
+  simp[ci_mono_emit_op]
+QED
+
 Theorem ci_mono_compile_extcall_store_args[local]:
   ∀ cfn cenv es tys buf_op offset sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
@@ -3826,33 +3858,26 @@ Proof
 QED
 
 Theorem ci_mono_compile_external_call_kwargs[local]:
-  ∀ cenv addr_op arg_vals arg_types args_mem_size args_abi_size method_id_val
+  ∀ cenv addr_op arg_vals arg_types args_abi_size method_id_val
     return_abi_size min_return_size ret_mem_bytes
     use_staticcall call_value gas_op
     skip_check has_default default_op
     return_type default_ty
-    args_enc_info ret_dec_info sa.
+    ret_dec_info sa.
     ci_mono sa
-      (SND (compile_external_call_kwargs cenv addr_op arg_vals arg_types
-        args_mem_size args_abi_size method_id_val return_abi_size
+      (SND (compile_external_call_kwargs cenv addr_op arg_vals arg_types args_abi_size method_id_val return_abi_size
         min_return_size ret_mem_bytes use_staticcall call_value gas_op
-        skip_check has_default default_op return_type default_ty args_enc_info
+        skip_check has_default default_op return_type default_ty
         ret_dec_info sa))
 Proof
   rpt gen_tac >> simp[compile_external_call_kwargs_def, LET_THM] >> BETA_TAC >> irule ci_mono_bind >> reverse conj_tac >- simp[ci_mono_compile_alloc_buffer] >> rpt strip_tac >> BETA_TAC >>
   ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_bind >> conj_tac
   >- (IF_CASES_TAC >- simp[ci_mono_comp_return] >>
-      rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
-      >- simp[ci_mono_compile_alloc_buffer] >>
-      rpt strip_tac >>
-      ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
-      >- simp[ci_mono_compile_extcall_store_values] >>
-      rpt strip_tac >>
-      ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
+      rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> simp[ci_mono_emit_op] >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
-      >- simp[cj 2 ci_mono_compile_abi_encode] >>
+      >- simp[ci_mono_compile_abi_encode_values_to_buf] >>
       simp[ci_mono_emit_op]) >>
   rpt strip_tac >> irule ci_mono_bind >> simp[ci_mono_emit_op] >> rpt strip_tac >> irule ci_mono_ignore_bind >> conj_tac >- (IF_CASES_TAC >> simp[ci_mono_compile_extcodesize_check, ci_mono_comp_return]) >>
   gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (gen_tac >> IF_CASES_TAC >> simp[ci_mono_emit_op]) >>

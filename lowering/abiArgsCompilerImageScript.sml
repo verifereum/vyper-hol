@@ -201,8 +201,8 @@ Proof
 QED
 
 Theorem abi_image_external_call_not_label:
-  compile_external_call_kwargs ce addr vals tys memsz abisz mid retsz mn outsz
-    static value gas skip hasdef def rt dt einfo dinfo sa = (op,sb) ==>
+  compile_external_call_kwargs ce addr vals tys abisz mid retsz mn outsz
+    static value gas skip hasdef def rt dt dinfo sa = (op,sb) ==>
   op <> Label l
 Proof
   simp[compile_external_call_kwargs_def, LET_THM, comp_bind_def,

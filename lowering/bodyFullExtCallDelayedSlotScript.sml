@@ -172,7 +172,8 @@ Theorem extcall_slot_nonmemory_unwrap[local]:
     (!x. not_fresh_at su x ==>
        lookup_var x z = lookup_var x t /\ FLOOKUP G' x = FLOOKUP G x /\
        op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn'
+    wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn' /\
+    expr_val_at ce cx (expr_type e) su sb ee v src z
 Proof
   strip_tac >>
   `post_value_type ce e = expr_type e` by metis_tac[post_value_type_lowered] >>
@@ -289,7 +290,7 @@ QED
 
 (* The unwrap returns a store input at a single physical endpoint.  The
    retained interval [si,sm) is used only for a non-memory saved value. *)
-Theorem extcall_slot_unwrap[local]:
+Theorem extcall_slot_unwrap:
   ty = lowered_value_type ce e /\
   ((?tag op0. saved = StackValue tag op0) \/
    (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location = LocMemory) \/
@@ -343,7 +344,12 @@ Theorem extcall_slot_unwrap[local]:
     (!x. not_fresh_at su x ==>
        lookup_var x z = lookup_var x t /\ FLOOKUP G' x = FLOOKUP G x /\
        op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn'
+    wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn' /\
+    (!p. saved = LocatedValue ty p /\ p.ptr_location <> LocMemory ==>
+      expr_val_at ce cx ty su sb ee v src z) /\
+    ((?tag op0. saved = StackValue tag op0) \/
+     (?p. saved = LocatedValue ty p /\ p.ptr_location = LocMemory) ==>
+      z = t)
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `val_wf rt v` by metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>

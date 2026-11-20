@@ -68,22 +68,53 @@ Proof
       every_state_insts_return])])
 QED
 
+Theorem opcode_every_abi_encode_value_rows[local]:
+  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
+         opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
+  !rows ce dst cursor off st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_abi_encode_value_rows ce dst cursor off rows st)))
+Proof
+  strip_tac >> Induct >> simp[compile_abi_encode_value_rows_def,
+    every_state_insts_return] >> rpt gen_tac >> PairCases_on `h` >>
+  qid_spec_tac `st` >> simp[compile_abi_encode_value_rows_def, LET_THM] >>
+  rpt (FIRST [IF_CASES_TAC >> gvs[],
+    ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
+    gen_tac, CHANGED_TAC (simp[UNDISCH opcode_every_unwrap_value,
+      UNDISCH opcode_every_store_memory, UNDISCH opcode_every_abi_encode,
+      opcode_every_emit_op, opcode_every_emit_void, every_state_insts_return])])
+QED
+
+Theorem opcode_every_abi_encode_values_to_buf:
+  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
+         opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
+  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_abi_encode_values_to_buf ce dst rows st)))
+Proof
+  strip_tac >> simp[compile_abi_encode_values_to_buf_def] >>
+  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
+    gen_tac, CHANGED_TAC (simp[UNDISCH opcode_every_abi_encode_value_rows,
+      UNDISCH opcode_every_alloc_buffer, opcode_every_emit_op,
+      opcode_every_emit_void, every_state_insts_return])])
+QED
+
 Theorem opcode_every_external_call_kwargs:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) /\ P RETURNDATACOPY ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_external_call_kwargs ce addr vs tys
-        memsz abisz mid retsz minret retmem static value gas skip
-        has_default default_op rt dt enc_info dec_info st)))
+      (state_insts (SND (compile_external_call_kwargs ce addr vs tys abisz mid retsz minret retmem static value gas skip
+        has_default default_op rt dt dec_info st)))
 Proof
   strip_tac >> simp[compile_external_call_kwargs_def] >>
   rpt (FIRST [IF_CASES_TAC >> gvs[],
     ho_match_mp_tac every_state_insts_bind >> conj_tac,
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
     gen_tac, CHANGED_TAC (simp[UNDISCH opcode_every_alloc_buffer,
-      UNDISCH opcode_every_extcall_store_values,
-      UNDISCH opcode_every_abi_encode,
+      UNDISCH opcode_every_abi_encode_values_to_buf,
       UNDISCH opcode_every_extcodesize_check,
       UNDISCH opcode_every_default_return_path,
       UNDISCH opcode_every_return_value_decode,

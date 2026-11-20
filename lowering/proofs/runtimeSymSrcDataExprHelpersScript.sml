@@ -39,10 +39,10 @@ Proof
 QED
 
 Theorem runtime_data_frame_external_call_closed[simp]:
-  runtime_data_frame (compile_external_call_kwargs cenv addr vals tys mem abi mid rabi lo rmem static value gas skip has_default dop rt dt einfo dinfo)
+  runtime_data_frame (compile_external_call_kwargs cenv addr vals tys abi mid rabi lo rmem static value gas skip has_default dop rt dt dinfo)
 Proof
   irule runtime_data_frame_external_call_kwargs >>
-  simp[runtime_data_frame_extcall_store_values,
+  simp[runtime_data_frame_abi_encode_values_to_buf,
        runtime_data_frame_default_return_path, runtime_data_frame_return_value_decode]
 QED
 
