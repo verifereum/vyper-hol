@@ -12,8 +12,8 @@ Ancestors
   vyperExprNoControl vyperEvalOutcomeSuffix vyperRuntimeAccounts
   vyperStorageLayoutSafety vyperTypeStoragePreservation
   vyperTypeEvalStoragePreservation vyperCallOutcomeStorage
-  supportedExprTraverse exprStoragePreservation
-  vyperLookup vyperEvalExprPreservesScopesDom vyperPlaceResultTyping supportedProgram bodyStoragePreservation evalNoHalt
+  supportedExprTraverse
+  vyperLookup vyperEvalExprPreservesScopesDom vyperPlaceResultTyping supportedProgram evalNoHalt
   vyperTypeABI vyperValue vyperPlaceInvariants placeTypingProps
 Libs
   pairLib monadsyntax

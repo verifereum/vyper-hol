@@ -39,14 +39,12 @@ QED
 Theorem same_call_env_preds[local]:
   same_call_env cx cx' ==>
   (contract_storage_well_formed cx' st <=> contract_storage_well_formed cx st) /\
-  (storage_layout_safe cx' <=> storage_layout_safe cx) /\
   (immutables_ready g vt cx' imms <=> immutables_ready g vt cx imms)
 Proof
   strip_tac >> drule same_call_env_reads >> drule same_call_env_storage >>
   rpt strip_tac >> fs[same_call_env_def] >>
   simp[contract_storage_well_formed_def, well_formed_storage_def,
-       storage_var_in_range_def, storage_layout_safe_def,
-       well_formed_layout_def, nonreentrant_slot_separated_def,
+       storage_var_in_range_def,
        immutables_ready_def]
 QED
 
