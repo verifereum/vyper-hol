@@ -697,6 +697,13 @@ Theorem extcall_request_post_gas_packing:
         option_CASE (ext_call_kwarg EKValue opts kws) (SOME 0) dest_NumV) calldata
       (IS_SOME def) (case def of NONE => Lit 0w | SOME (op,dt) => op)
       (case def of NONE => rt | SOME (op,dt) => dt) (ext_call_kwarg EKDefault opts kws) ke t /\
+    (IS_SOME (ext_call_kwarg EKDefault opts kws) /\
+      ~is_word_type (case def of NONE => rt | SOME (op,dt) => dt) ==>
+      ?w aid tv.
+        eval_operand (case def of NONE => Lit 0w | SOME (op,dt) => op) t = SOME w /\
+        evaluate_type (get_tenv cx) (case def of NONE => rt | SOME (op,dt) => dt) = SOME tv /\
+        FLOOKUP t.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+        aid < sp.cs_next_id) /\
     (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (zg,Gg,tng) [] (OK t,Gf,tf)) /\
     alloca_history func t /\ allocas_from lo t /\
