@@ -2,23 +2,22 @@
 Theory vyperLoweringHol
 Ancestors
   (* arbitrary-calldata entry and S1 suppliers *)
-  calldataArrayLiveMemory calldataArrayModularSetup calldataArrayRawCallsite
-  calldataBulkOperationalCertificate calldataBulkSourceOutcome calldataCoherentOwnedEndpoint
-  calldataExactBytesJoint calldataExactMemberValues calldataMembersRawCallsite
+  calldataArrayRawCallsite
+  calldataBulkOperationalCertificate calldataBulkSourceOutcome
+  calldataExactBytesJoint
   calldataExactScalarAccepted calldataExactScalarRejected calldataNoneFallbackJoint
   calldataNoneMetadata calldataRegistrationRawAddress
-  calldataRegistrationTerminalBindings calldataValidHeaderLocalFrontier dispatchedArgsBind
-  dispatchedSelectedFacts dispatchedSelectedPrefix dispatchedSelectedRelations
+  calldataRegistrationTerminalBindings dispatchedArgsBind
+  dispatchedSelectedFacts dispatchedSelectedPrefix
   dispatchedValueEntry dispatchedValueFallback dispatchedValuePrefix
   dispatchedValueSelection dispatchedValueSource fallbackEntryEndpoint
   loweringCalldataCorrect registrationGuardRejectOrigin
   dispatchedEntryValueRevert
   e2eLifecycle e2eTransactionWorld
-  e2eCodeFrame
+  e2eCodeFrame ownSymSrcUnit
   (* definitions *)
   moduleLowering compileUnit
   (* property statements and proofs *)
-  bodyMemStorageCopyStage
   dallocaBlueprintArgs
   dallocaCreateCopy dallocaCreateGeometry
   rawCallCalldataPeakMemory
@@ -36,7 +35,7 @@ Ancestors
   varsExt exprSimNameWord exprSimLiteralWord exprSimEnv
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
-  exprSimBuiltins exprSimExtCallCase bodyIntCallSeams bodySimFullMain bodyFullStructLit externalReturnValuedFull ctorReturnFrame stmtSimZero stmtSimPass stmtSimProps stmtSimSeq stmtSimExpr
+  exprSimBuiltins exprSimExtCallCase bodyIntCallSeams bodySimFullMain bodyFullStructLit externalReturnValuedFull ctorReturnFrame stmtSimZero stmtSimPass stmtSimProps stmtSimExpr
   stmtSimBreak stmtSimContinue stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
   stmtSimDeclMem stmtSimDeclEmpty exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
@@ -47,11 +46,9 @@ Ancestors
   stmtSimAssignAttrStorage stmtSimAugAssignAttr
   valueEncodingProofs
   localPtrsProps
-  externalEntryProps constructorGuardProps
-  nonreentrantEntryEquiv internalReturnLockProps
+  nonreentrantEntryEquiv
   transientLockFrameProps
   selectorCompilerProps checkedSelectorTableProps
-  immutableStagingBridge
   immutableRepSensitivity
   immutableCodeLayout
   e2eDeployFrame ctorDeployLoweringEntry
@@ -60,16 +57,16 @@ Ancestors
   loweringShapeDefs
   loweringShapeProps
   ctorShapeProps ctorUnitShape
-  intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
+  intCallStep extCallOracleStep intCallLookup intCallCallee intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
   bodyFullShadowBodyInvLowering
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
-  allocaFrontierWitness
   vyperLoweringCorrect
-  rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem rawReturnCorrect
+  rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem
   loweringMemCorrect
   asmSymBridge
+  asmSymBridgeOwn
   asmDataEnv
   asmOptOwnPeephole
   asmOptFinalizerCorrect
@@ -87,9 +84,8 @@ Ancestors
   asmSpliceWithin
   (* reached here instead of as holproject.toml roots *)
   targetPtrFacts bodyFullTarget
-  extcallReturnCompletedCut extcallReturnCountedReject extcallReturnDecodeSummary
   extcallReturnDecoderOwnership extcallReturnDefaultTypes extcallReturnFrameBridge
-  abiEncoderWindowJointPhases externalReturnLiveWindowResources logTopicsRunPtr
+  abiEncoderWindowJointPhases logTopicsRunPtr
   (* closed-world request-cut guard and producer *)
   e2eOutcomesProducer requestCutSelectedReplay
   (* providers awaiting their consumers *)

@@ -10,7 +10,7 @@ Theorem rest_word_membership_tail_dynamic_const_full:
  !DF lo d explicit ctx fn PG cenv cx e es sa sm s0 G0 tn0 tv vv ee u Gu Tu needleop needle av ety bd pbd et is_in out ct guard.
  (?cap. bd = Dynamic cap) /\
  compile_var_array_membership cenv needleop vv (ArrayT ety bd) is_in sm = (out,ct) /\
- fn_has_code sm ct fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+ fn_has_code sm ct fn /\ fn_inst_ids_distinct fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -210,8 +210,13 @@ Resume rest_word_membership_tail_dynamic_const_full[bounded_search]:
 QED
 
 Resume rest_word_membership_tail_dynamic_const_full[bounded_run]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sh` by
+    (qpat_assum `!h. guard h ==> gas_origin_ptr_path _ _ _ _ /\ _`
+       (qspec_then `H` (drule_then strip_assume_tac)) >>
+     drule bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp >>
+     simp[]) >>
   irule rest_word_membership_loop_const_full_horizon_joint_all >>
-  conj_tac >- metis_tac[] >> conj_tac >- simp[] >>
+  conj_tac >- metis_tac[] >>
   conj_tac >- (`LENGTH ws = array_length (ArrayTV et (Dynamic cap)) av` by simp[Abbr `ws`] >> simp[]) >>
   reverse conj_tac >- simp[] >>
   qexistsl_tac [`vv_operand nv`, `SOME cap`, `cenv.ce_imm_alloca`,
@@ -377,8 +382,13 @@ Resume rest_word_membership_tail_dynamic_const_full[runtime_callback]:
      (compile_ptr_load F cenv.ce_imm_alloca loc) (SOME cap) is_in sl = (out,ct)` by
     (`compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc =
        compile_ptr_load F cenv.ce_imm_alloca loc` by
-       (simp[FUN_EQ_THM] >> Cases_on `loc` >> fs[contextTheory.compile_ptr_load_def]) >>
-     metis_tac[]) >>
+       (qpat_assum `~(cenv.ce_is_ctor /\ loc = LocCode)` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        Cases_on `loc` >> simp[FUN_EQ_THM, contextTheory.compile_ptr_load_def]) >>
+     pop_assum (fn eq =>
+       qpat_assum `compile_array_membership_loop _ _ _ _ _
+         (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc) _ _ sl = (out,ct)`
+         (ACCEPT_TAC o PURE_REWRITE_RULE [eq]))) >>
   `?sp gp tp. !h. guard h ==>
     gas_origin_ptr_path (DF h,lo,explicit,ctx,fn,PG)
       (s,Gs,Ts) [] (OK sp,gp,tp) /\
@@ -397,6 +407,12 @@ Resume rest_word_membership_tail_dynamic_const_full[runtime_callback]:
 QED
 
 Resume rest_word_membership_tail_dynamic_const_full[runtime_prefix]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `!H. guard H ==> membership_loop_frame _ _ _ _ _ _ _ /\ _`
+       (qspec_then `H` (drule_then strip_assume_tac)) >>
+     qpat_assum `membership_loop_frame _ _ _ sh _ _ s`
+       (mp_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     simp[]) >>
   irule rest_word_membership_runtime_address_operand_joint_bounded_const >>
   conj_tac >- suspend "runtime_prefix_guard" >>
   conj_tac >- (rpt strip_tac >> fs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[]) >>
@@ -435,6 +451,12 @@ Resume rest_word_membership_tail_dynamic_const_full[runtime_prefix_operand]:
 QED
 
 Resume rest_word_membership_tail_dynamic_const_full[runtime_read]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sp` by
+    (qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (s,_,_) _ _ /\ _`
+       (qspec_then `H` (drule_then strip_assume_tac)) >>
+     qpat_assum `membership_loop_frame _ _ _ sh _ _ sp`
+       (mp_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     simp[]) >>
   simp[] >> Cases_on `loc`
   >- suspend "runtime_memory_read"
   >- suspend "runtime_storage_read"

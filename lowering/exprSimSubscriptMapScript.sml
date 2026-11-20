@@ -9,7 +9,6 @@ Ancestors
   exprSimArrayIndex exprSimDefs gasContext gasSummary gasSummaryCompose gasExemptCert vyperState
   exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness supportedExprTraverse allocLimits
-  exprOracleStoragePreservation bodyStoragePreservation
   vyperCallOutcomeStorage vyperEvalOutcomeSuffix vyperTypeInvariants
   vyperTypeEvalSoundness vyperTypeExprResult vyperRuntimeAccounts
   vyperExprNoControl vyperPlaceInvariants vyperTypeExprSoundness

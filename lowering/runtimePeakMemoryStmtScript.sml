@@ -63,26 +63,7 @@ Proof
   Induct >> simp[supported_assignment_exists_def] >> metis_tac[supported_assignment_exists_def]
 QED
 
-Theorem dalloca_windows_compile_stmt_mutual[local]:
-  (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
-  (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) ==>
-  ((!ce lc ty s.
-    compile_env_blueprint_free ce /\ compile_env_builtin_arity ce /\
-    ~supported_stmt_expr_exists blueprint_create_root s /\
-    ~supported_stmt_expr_exists short_builtin_args s ==>
-    preserves_dalloca_windows window (compile_stmt ce lc ty s)) /\
-   (!ce lc ty ss.
-    compile_env_blueprint_free ce /\ compile_env_builtin_arity ce /\
-    ~supported_stmts_expr_exists blueprint_create_root ss /\
-    ~supported_stmts_expr_exists short_builtin_args ss ==>
-    preserves_dalloca_windows window (compile_stmts ce lc ty ss)))
-Proof
-  strip_tac >> ho_match_mp_tac compile_stmt_ind >>
-  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
-  gvs[supported_stmt_expr_exists_def, supported_assignment_exists_def,
-      supported_assert_exists_def, supported_raise_exists_def, supported_iterator_exists_def,
-      supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
-  simp[Once compile_stmt_def] >>
+val compile_stmt_windows_tac =
   rpt (FIRST [
     CHANGED_TAC (windows_tac [dalloca_windows_range_checks, dalloca_windows_iter_elem_copy,
       dalloca_windows_emit_local_alloca, dalloca_windows_store_at_loc,
@@ -103,7 +84,34 @@ Proof
     irule dalloca_windows_reason_message,
     irule dalloca_windows_lower_value,
     irule dalloca_windows_compile_expr >> simp[],
-    irule dalloca_windows_compile_place >> simp[]]) >>
+    irule dalloca_windows_compile_place >> simp[]]);
+
+Theorem dalloca_windows_compile_stmt_mutual[local]:
+  (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
+  (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) ==>
+  ((!ce lc ty s.
+    compile_env_blueprint_free ce /\ compile_env_builtin_arity ce /\
+    ~supported_stmt_expr_exists blueprint_create_root s /\
+    ~supported_stmt_expr_exists short_builtin_args s ==>
+    preserves_dalloca_windows window (compile_stmt ce lc ty s)) /\
+   (!ce lc ty ss.
+    compile_env_blueprint_free ce /\ compile_env_builtin_arity ce /\
+    ~supported_stmts_expr_exists blueprint_create_root ss /\
+    ~supported_stmts_expr_exists short_builtin_args ss ==>
+    preserves_dalloca_windows window (compile_stmts ce lc ty ss)))
+Proof
+  strip_tac >> ho_match_mp_tac compile_stmt_ind >>
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+  gvs[supported_stmt_expr_exists_def, supported_assignment_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def, supported_iterator_exists_def,
+      supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
+  simp[Once compile_stmt_def]
+  (* Run the 27 induction cases in smaller groups, starting at the end
+     so the earlier goal positions stay fixed. *)
+  >>> SPLIT_LT 23 (ALL_LT, ALLGOALS compile_stmt_windows_tac)
+  >>> SPLIT_LT 18 (ALL_LT, SPLIT_LT 5 (ALLGOALS compile_stmt_windows_tac, ALL_LT))
+  >>> SPLIT_LT 9 (ALL_LT, SPLIT_LT 9 (ALLGOALS compile_stmt_windows_tac, ALL_LT))
+  >>> SPLIT_LT 9 (ALLGOALS compile_stmt_windows_tac, ALL_LT) >>
   metis_tac[dalloca_windows_supported_tuple_member]
 QED
 

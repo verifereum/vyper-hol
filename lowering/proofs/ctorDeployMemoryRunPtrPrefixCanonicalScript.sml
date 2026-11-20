@@ -178,6 +178,7 @@ Proof
            Abbr `t`, Abbr `l`, Abbr `w`, eval_operand_def, lookup_var_def,
            update_var_def, FLOOKUP_UPDATE]) >>
   strip_tac >> gen_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all prefix_decoder_noclamp_ptr >>
   disch_then (qspecl_then [`D`,`fuel`,`fn`,`PG`] mp_tac) >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
@@ -298,6 +299,7 @@ Proof
   qmatch_goalsub_abbrev_tac `update_var x w s` >>
   qabbrev_tac `l = update_var x w s` >>
   qabbrev_tac `t = mstore (w2n p) w l` >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   `!fuel. step_inst_base (mk_inst iid DLOAD [src] [x]) s = OK l /\
      step_inst_base (mk_inst (iid+1) MSTORE [Var dst;Var x] []) l = OK t /\
      ptr_safe_step D lo fuel ctx fn PG G tn (mk_inst iid DLOAD [src] [x]) s` by
@@ -318,6 +320,7 @@ Proof
 QED
 
 Resume prefix_canonical_noclamp_certificate[store]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `eval_operand src s = SOME a`
     (mp_then Any (drule_all_then mp_tac) prefix_noclamp_steps) >>
   disch_then (qspec_then `iid` mp_tac) >>

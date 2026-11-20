@@ -541,6 +541,7 @@ QED
 Definition hashmap_key_type_def:
   hashmap_key_type (BaseT (UintT _)) = T /\
   hashmap_key_type (BaseT (IntT _)) = T /\
+  hashmap_key_type (BaseT DecimalT) = T /\
   hashmap_key_type (BaseT BoolT) = T /\
   hashmap_key_type (BaseT AddressT) = T /\
   hashmap_key_type (BaseT (BytesT _)) = T /\

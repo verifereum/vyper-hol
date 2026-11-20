@@ -392,6 +392,7 @@ Theorem deploy_pipeline_gas_link:
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_state_rel tops (assemble prog') am tx es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
     vs_out = opt_deploy_entry_state prog prog' cplan tops es /\
     deploy_source_ok tops am (tx with code := vs_out.vs_code) /\
     w2n vs_out.vs_initial_fmp <= w2n fmp /\
@@ -431,7 +432,12 @@ Proof
   impl_tac
   >- (rpt gen_tac >>
       disch_then (ACCEPT_TAC o MATCH_MP focus_producer_finalizer)) >>
-  disch_then ACCEPT_TAC
+  disch_then (fn th =>
+    rpt gen_tac >> disch_then (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
+    qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
+      `dunit`, `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`,
+      `vs_out`, `fmp`, `r`, `es'`] mp_tac th >>
+    asm_rewrite_tac [])
 QED
 
 (* The -O none case of e2e_deploy_correctness: PLAN 5.11, D28, section 9.
@@ -469,7 +475,8 @@ Theorem e2e_deploy_correctness_identity:
     supported_program tops /\ supported_program_deploy tops /\
     constructor_call_free tops /\
     deploy_typing_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es
+    deploy_state_rel tops deploy_bc am tx es /\
+    LENGTH (call_trace es) < 2 ** 64
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -523,7 +530,8 @@ Theorem e2e_deploy_correctness_asm_opt:
     supported_program tops /\ supported_program_deploy tops /\
     constructor_call_free tops /\
     deploy_typing_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es
+    deploy_state_rel tops deploy_bc am tx es /\
+    LENGTH (call_trace es) < 2 ** 64
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -531,20 +539,7 @@ Theorem e2e_deploy_correctness_asm_opt:
        deploy_call_result_rel tops runtime_bc am tx es r es')
 Proof
   rpt gen_tac >> strip_tac >>
-  `?rpolicy dunit dout prog prog' cplan.
-     deploy_phases policy tops (assemble prog,runtime_bc)
-       (rpolicy,dunit,dout,prog,cplan) /\
-     asm_opt_finalizer rpolicy prog = SOME prog' /\ deploy_bc = assemble prog'` by
-    (qpat_assum `compile_vyper asm_opt_finalizer policy tops = SOME _`
-       (strip_assume_tac o MATCH_MP compile_vyper_with_success_phases o
-        REWRITE_RULE [compile_vyper_def]) >>
-     gvs[finalize_codegen_def, AllCaseEqs()] >>
-     qpat_assum `codegen_assembly rpolicy deploy_out.po_unit = SOME _`
-       (strip_assume_tac o MATCH_MP codegen_assembly_success_shape) >>
-     rename1 `generate_context_plan deploy_out.po_unit.cu_context = SOME cplan` >>
-     rename1 `asm_opt_finalizer rpolicy prog = SOME prog'` >>
-     qexistsl_tac [`rpolicy`, `deploy_unit`, `deploy_out`, `prog`, `prog'`, `cplan`] >>
-     asm_simp_tac bool_ss [deploy_phases_def, o1PipelineCorrectTheory.o1_pipeline_def]) >>
+  drule compile_vyper_deploy_phases_asm_opt >> strip_tac >>
   `asm_opt_finalizer IN accepted_finalizers` by simp[accepted_finalizers_def] >>
   drule_all compile_vyper_runtime_not_ef >> strip_tac >>
   qspec_then `es` strip_assume_tac run_call_total >>
@@ -586,7 +581,8 @@ Theorem e2e_deploy_correctness:
     supported_program tops /\ supported_program_deploy tops /\
     constructor_call_free tops /\
     deploy_typing_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es
+    deploy_state_rel tops deploy_bc am tx es /\
+    LENGTH (call_trace es) < 2 ** 64
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -617,7 +613,8 @@ val _ =
       supported_program tops /\ supported_program_deploy tops /\
       constructor_call_free tops /\
       deploy_typing_ok tops am tx /\
-      deploy_state_rel tops deploy_bc am tx es ==>
+      deploy_state_rel tops deploy_bc am tx es /\
+      LENGTH (call_trace es) < 2 ** 64 ==>
       ?r es'. run_call es = SOME (r,es') /\
         (creation_resource_starved es r es' \/
          deploy_call_result_rel tops runtime_bc am tx es r es')``;

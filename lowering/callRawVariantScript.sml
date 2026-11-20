@@ -56,6 +56,39 @@ Proof
   decide_tac
 QED
 
+Theorem raw_variant_opt_entry_calldata_bound_own:
+  !tops bc am tx prog prog' cp es fmp vs.
+    call_state_rel tops bc am tx es /\
+    raw_variant fmp vs (opt_entry_state_own prog prog' cp es) ==>
+    LENGTH vs.vs_call_ctx.cc_calldata < 2 ** 64
+Proof
+  rpt strip_tac >>
+  drule raw_variant_call_ctx >> strip_tac >>
+  gvs[opt_entry_state_own_def, entry_venom_state_def,
+      call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
+      evm_state_ok_def, vfmCalldataBoundTheory.calldata_bounded_def] >>
+  metis_tac[vfmBufferTheory.LENGTH_buffer_to_list]
+QED
+
+Theorem raw_fmp_choice_own:
+  !tops rpolicy unit out cp prog prog' es fmp.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    generate_context_plan out.po_unit.cu_context = SOME cp /\
+    fmp = (n2w (MAX cp.cp_initial_fmp
+                  (unit_alloca_budget unit.cu_context +
+                   32 * ctx_dload_count unit.cu_context)) : bytes32) ==>
+    w2n (opt_entry_state_own prog prog' cp es).vs_initial_fmp <= w2n fmp /\
+    w2n fmp < 2 ** 254 /\
+    unit_alloca_budget unit.cu_context +
+      32 * ctx_dload_count unit.cu_context <= w2n fmp
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `generate_context_plan _ = SOME cplan` >>
+  qspecl_then [`tops`, `rpolicy`, `unit`, `out`, `cplan`, `prog`, `prog'`, `es`, `fmp`]
+    mp_tac raw_fmp_choice >>
+  simp[opt_entry_state_own_def, opt_entry_state_def, entry_venom_state_def]
+QED
+
 Theorem source_typing_ok_code_update:
   source_typing_ok tops am tx /\ LENGTH c < 2 ** 256 ==>
   source_typing_ok tops am (tx with code := c)

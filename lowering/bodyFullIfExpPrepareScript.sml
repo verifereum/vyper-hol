@@ -1,7 +1,7 @@
 (* Uniform IfExp VV preparation, independent of the VV-to-expression conversion. *)
 Theory bodyFullIfExpPrepare
 Ancestors
-  bodyFullIfExpArm bodyFullIfExpWiden bodyFullIfExpWidenCall
+  bodyFullIfExpWiden bodyFullIfExpWidenCall
   bodyFullIfExpFinish bodyFullIfExpShadow bodyFullAllocGeneric typedCopyOriginPtr
   bodyFullUnwrap bodyFullPreds bodyFullIfExpReach bodyFullHashKeccakFixed
   bodySimFull gasOutcomeFullCompose gasOutcomeFull gasOutcomeFullGuarded gasShadowCompile

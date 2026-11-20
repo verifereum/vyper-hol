@@ -195,17 +195,17 @@ Proof
   rpt strip_tac >> gvs[well_typed_expr_def] >>
   `well_formed_type env.type_defs (expr_type arg)` by
     metis_tac[well_typed_expr_type_well_formed] >>
+  `~is_bytestring_type rt` by
+    (Cases_on `rt` >> gvs[is_bytestring_type_def, is_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[is_bytestring_type_def, is_word_type_def] >>
+     rename1 `BytesT bl` >> Cases_on `bl` >>
+     gvs[is_bytestring_type_def, is_word_type_def]) >>
   qpat_x_assum `compile_type_builtin_dispatch_body _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
   strip_tac >> rpt (pairarg_tac >> gvs[]) >>
   qpat_x_assum `COND _ _ _ = _` mp_tac >> IF_CASES_TAC
   >- (strip_tac >> gvs[word_result_ok_def]) >>
-  pop_assum kall_tac >> IF_CASES_TAC
-  >- (Cases_on `rt` >> gvs[is_bytestring_type_def, is_word_type_def] >>
-      rename1 `BaseT bt` >> Cases_on `bt` >>
-      gvs[is_bytestring_type_def, is_word_type_def] >>
-      rename1 `BytesT bl` >> Cases_on `bl` >>
-      gvs[is_bytestring_type_def, is_word_type_def]) >>
   pop_assum kall_tac >> strip_tac >> Cases_on `rt` >> gvs[is_word_type_def]
   >~ [`FlagT flag_nsid`] >-
     (`is_word_type (expr_type arg)` by

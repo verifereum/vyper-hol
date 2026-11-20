@@ -112,6 +112,7 @@ Proof
   `lookup_var dst s = SOME (n2w d)` by
     (qpat_assum `eval_operand (Var dst) s = SOME (n2w d)` mp_tac >>
      pure_rewrite_tac[eval_operand_def] >> disch_then irule) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   mp_tac (Q.INST [
     `sa` |-> `loop_body`, `sb` |-> `child`,
     `live` |-> `(aid,counter,cell,32,mem_bytes_at cell 32 s.vs_memory)::live`,
@@ -556,17 +557,16 @@ Resume abi_decode_loop_body_length_observed_conditional[success_robust]:
   `val_footprint tv v <= msz` by
     (qpat_assum `msz = type_memory_size tv` (fn th => rewrite_tac[th]) >>
      irule exprSimPropsTheory.val_footprint_le >> first_assum ACCEPT_TAC) >>
-  qpat_assum `mem_bytes_at a msz back.vs_memory = mem_bytes_at a msz old` mp_tac >>
-  qpat_assum `!k. k < msz /\ a+k IN tnb.t_mem ==> a+k IN old_taint` mp_tac >>
-  qpat_assum `!w. value_has_type tv w /\ val_wf tv w /\ val_in_memory tv w a old ==> _`
-    (qspec_then `v` mp_tac) >>
-  qpat_assum `mem_agree_outside tnb.t_mem back.vs_memory mem` mp_tac >>
-  qpat_assum `val_footprint tv v <= msz` mp_tac >>
-  qpat_assum `val_wf tv v` mp_tac >>
-  qpat_assum `value_has_type tv v` mp_tac >>
-  qpat_assum `val_in_memory tv v a old` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >>
-  metis_tac[robust_val_in_memory_decreasing_taint_transport]
+  mp_tac
+    (Q.SPECL [`tv`, `v`, `a`, `a`, `msz`, `old_taint`, `tnb.t_mem`,
+       `old`, `back.vs_memory`] robust_val_in_memory_decreasing_taint_transport) >>
+  (impl_tac >-
+    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qpat_assum `!w. value_has_type tv w /\ val_wf tv w /\ val_in_memory tv w a old ==> _`
+       (qspec_then `v` mp_tac) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then ACCEPT_TAC)) >>
+  disch_then (qspec_then `mem` match_mp_tac) >> first_assum ACCEPT_TAC
 QED
 
 Resume abi_decode_loop_body_length_observed_conditional[success_length]:

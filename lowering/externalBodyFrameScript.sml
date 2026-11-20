@@ -453,60 +453,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem external_body_prefix_storage:
-  !(tops : toplevel list) am tx os mut env es0.
-  contract_storage_well_formed
-    (initial_evaluation_context am.sources am.layouts tx NONE)
-    (initial_state am []) /\
-  storage_layout_safe
-    (initial_evaluation_context am.sources am.layouts tx NONE) /\
-  EVERY (\outcome.
-    LENGTH outcome.co_returnData < dimword(:256) /\
-    accounts_runtime_well_typed outcome.co_accounts /\
-    contract_storage_well_formed
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state
-        (am with <|accounts := outcome.co_accounts;
-                   tStorage := outcome.co_tStorage|>) [])) os /\
-  send_call_value mut
-    (initial_evaluation_context am.sources am.layouts tx NONE)
-    (initial_state am [env] with <|outcomes := SOME os; requests := []|>) =
-    (INL (),es0) ==>
-  contract_storage_well_formed
-    (initial_evaluation_context am.sources am.layouts tx NONE) es0 /\
-  storage_layout_safe
-    (initial_evaluation_context am.sources am.layouts tx NONE) /\
-  oracle_storage_ok
-    (initial_evaluation_context am.sources am.layouts tx NONE) es0 /\
-  outcomes_accounts_typed es0.outcomes /\ IS_SOME es0.outcomes
-Proof
-  rpt gen_tac >> strip_tac >>
-  `es0.outcomes = SOME os` by
-    (drule external_send_call_value_frame >>
-     simp[evaluation_state_component_equality, initial_state_def]) >>
-  `contract_storage_well_formed
-     (initial_evaluation_context am.sources am.layouts tx NONE)
-     (initial_state am [env] with <|outcomes := SOME os; requests := []|>)` by
-    (irule contract_storage_well_formed_storage_frame >>
-     goal_assum (drule_at Any) >>
-     Cases >> simp[get_storage_def, initial_state_def]) >>
-  reverse conj_tac
-  >- (gvs[oracle_storage_ok_def, outcomes_accounts_typed_def,
-           EVERY_MEM] >>
-      rpt strip_tac >> first_x_assum drule >> simp[] >> strip_tac >>
-      irule contract_storage_well_formed_storage_frame >>
-      goal_assum (drule_at Any) >>
-      Cases >> simp[get_storage_def, initial_state_def]) >>
-  qpat_x_assum `send_call_value _ _ _ = _` mp_tac >>
-  simp[send_call_value_def, vyperStateTheory.assert_def,
-       vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
-       vyperStateTheory.raise_def, vyperStateTheory.return_def] >>
-  rpt IF_CASES_TAC >> simp[] >> strip_tac >>
-  gvs[vyperStateTheory.bind_def, vyperStateTheory.assert_def,
-      vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
-  drule_all transfer_value_preserves_contract_storage_well_formed >> simp[]
-QED
-
 Theorem external_selected_args_distinct:
   supported_program tops /\ source_typing_ok tops am tx /\
   lookup_function NONE tx.function_name External tops =
@@ -1201,4 +1147,3 @@ Theorem external_body_frame:
 Proof
   rpt strip_tac >> drule_all external_source_body_frame >> simp[]
 QED
-

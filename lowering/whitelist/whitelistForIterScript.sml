@@ -57,7 +57,7 @@
 Theory whitelistForIter
 Ancestors
   vyperTypeContract
-  bodyDynArraySource bodySimDeclCases whitelistForIterDynFrag whitelistForIterMem whitelistForIterImm
+  bodyDynArraySource bodySimDeclCases whitelistForIterDynFrag whitelistForIterMem whitelistForIterImmLoop[qualified] whitelistForIterImmSource[qualified]
   exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs list finite_map pair
   bodySim allocLimits exprSimHyps exprLoweringProps
   stmtSimDecl stmtSimFor stmtSimForParts stmtLowering stmtLoweringMono

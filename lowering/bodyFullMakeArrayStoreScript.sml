@@ -29,7 +29,8 @@ Theorem make_array_slot_full:
         gas_shadow_context ctx shadow_ctx /\
         gas_shadow_function func shadow_func /\
         MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
-        ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+        (!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_no_wrap inst z) /\
+        (!H. dead_lo_ok H (DF H) lo cenv cx) /\
         (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==>
                not_fresh_at csbase x) /\
         (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==>
@@ -127,9 +128,22 @@ Theorem make_array_slot_full:
                   FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
                   loweringStateRelDefs$regions_disjoint p n b sz) ==>
                 mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory))
-      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   BETA_TAC >> strip_tac >>
+  irule gas_outcome_full_initial_domain >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+       cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
+       storage_trace_frame_read_result] >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (`valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+       fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H ctx func cenv cx es s /\ _`
+       (qspec_then `storage_trace_horizon es.storage_trace` (drule_then strip_assume_tac)) >>
+     qpat_assum `stmt_state_rel _ ctx func cenv cx es s`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   Cases_on `compile_expr cenv (expr_type e) e sa` >>
   rename1 `compile_expr cenv (expr_type e) e sa = (vv,sm)` >>
   Cases_on `emit_op ADD [Var q; Lit (n2w off)] sm` >>
@@ -187,13 +201,11 @@ Proof
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
   `!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u` by
-    metis_tac[pow_compose_reachable_no_wrap] >>
   qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`vv`,`s`,`G`,`tn`] mp_tac) >>
   simp[] >>
-  (impl_tac >- metis_tac[]) >> strip_tac >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   irule gas_outcome_full_bind_all >> rpt conj_tac
   >~ [`storage_trace_frame (eval_expr _ _)`]
@@ -421,6 +433,11 @@ Resume make_array_slot_full[unwrap]:
     (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sn` >> simp[]) >>
   `expr_post (storage_trace_horizon ee.storage_trace) ctx func cenv cx e
      es sa sc s ee v src z` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
+    (qpat_assum `expr_post (storage_trace_horizon ee.storage_trace)
+       ctx func cenv cx e es sa sc s ee v src z`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+        MATCH_MP exprSimWordArgsTheory.expr_post_state)) >>
   `FLOOKUP z.vs_allocas aid = SOME (base,cap)` by metis_tac[expr_post_def] >>
   `allocas_from lo z` by metis_tac[ghost_inv_at_def] >>
   `lo <= base` by metis_tac[ptrDisciplineTheory.allocas_from_def] >>

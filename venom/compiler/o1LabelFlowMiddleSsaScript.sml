@@ -1,7 +1,7 @@
 Theory o1LabelFlowMiddleSsa
 Ancestors
   o1LabelFlowMiddleInsertion o1LabelFlowMiddleOwnership
-  o1LabelFlowMiddleTraversal o1LabelFlowMiddleCleanup
+  o1LabelFlowMiddleTraversal
   o1MakeSsaCallAssembly o1MakeSsaRootedTree
   dominatorQueryProofs makeSsaCurrentProps o1PassContract
   o1MakeSsaOwnership o1MakeSsaEventOwnership irSupply venomInst

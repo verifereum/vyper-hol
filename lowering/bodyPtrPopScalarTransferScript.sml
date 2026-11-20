@@ -1,6 +1,6 @@
 Theory bodyPtrPopScalarTransfer
 Ancestors
-  bodyPtrPopRootTransfer fragGasSeqPtr ptrSafeRun ptrDiscipline venomExecSemantics
+  exprSendPtr[qualified] exprSimPopStorage[qualified] stmtAppendStorageRunPtr[qualified] fragGasSeqPtr ptrSafeRun ptrDiscipline venomExecSemantics
   venomInst venomState codegenRel contextCodegenRel finite_map pred_set
 
 Theorem pop_scalar_binary_step:

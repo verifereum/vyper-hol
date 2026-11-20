@@ -1,7 +1,7 @@
 (* A finite decoder uses a sequence of independently checked child intervals. *)
 Theory calldataNoneFiniteMembers
 Ancestors
-  calldataMembersRawCallsite calldataSourceSize calldataDynOwned
+  bodyPtrBytestringBuiltinsWindowGhost[qualified] calldataSourceSize calldataDynOwned
   sourceOwnedComplexPtr abiDecoderMemberCons abiDecoderMemberSetup
   calldataEmptyArrayChild abiDecoderOffset calldataSourceCorrespondence
   fragGasOriginPtrLoop abiDecoderCoherence abiDecoderDynamic vyperCalldata

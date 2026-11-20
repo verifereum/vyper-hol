@@ -18,7 +18,7 @@ Theorem empty_buffer_tail_effects:
      else compile_zero_words (Var p) ((sz+31) DIV 32)) sa = ((),sb) /\
     not_fresh_at sa p /\ lookup_var p s = SOME w /\
     ptr_covers G tn p s sz /\ w2n w+sz < dimword (:256) /\
-    (if header then 32 <= sz else sz MOD 32 = 0) /\ ~ctx_has_dalloca ctx ==>
+    (if header then 32 <= sz else sz MOD 32 = 0) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
     ?t Gf tnf. run_inst_seq (emitted_insts sa sb) s = OK t /\
       (!D lo. allocas_from lo s /\ lo <= s.vs_alloca_next ==>
         inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s Gf tnf) /\
@@ -118,6 +118,8 @@ Resume empty_buffer_origin_run[tail]:
   qpat_x_assum `lookup_var p u = _` kall_tac >>
   qpat_x_assum `ptr_covers G' tn' p u sz` kall_tac >>
   `w2n w+sz < dimword (:256)` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp
+     (u with vs_inst_idx := SUC s.vs_inst_idx)` by simp[] >>
   drule_all empty_buffer_tail_effects >>
   disch_then (qspecl_then [`func`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`t'`, `Gf`, `tnf`] >> gvs[]

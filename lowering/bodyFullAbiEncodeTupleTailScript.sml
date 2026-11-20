@@ -3,7 +3,7 @@ Theory bodyFullAbiEncodeTupleTail
 Ancestors
   bodyFullAbiEncodeSetupTail bodyFullAbiEncodeFinish bodyFullAbiEncodeSuffix
   bodyFullAbiEncodeUniformTranslation bodyFullAbiEncodeNonwordWindow
-  bodyFullAbiEncodeArgs bodySimFull bodyInvNoDalloca gasOutcomeFullCompose
+  bodySimFull bodyInvNoDalloca gasOutcomeFullCompose
   abiBuiltinEncodeCode abiBuiltinEncodeWord abiTupleEncodeMemory compileEnv abiEncodeArgsSim
   exprSimAbiEncodeTupleResources abiBuiltinAllocation allocationPtr
   bodyFullUnwrapRun ptrSafetyTransport fragGasSeqPtr fragExecPtr

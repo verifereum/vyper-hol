@@ -21,7 +21,7 @@ Ancestors
   arithmetic fragGasOriginPtr fragGasPathMem entryStateRel selectedEntryPrefixCode entryChecksPassPtr entryPrefixPtr sourceValueRejection
   entryChecksProps loweringShapeProps loweringShapeSource o1PipelineCorrect
   supportedNames supportedProgramProps loweringShapeDefs unitShapeDefs venomExecProofs list
-  entryValueRevertPtr entryDispatchPtr sourceEntryCode selectedBodyCode
+  entryValueRevertPtr entryDispatchPtr
   rawEntryCode entryCheckIntervals sourceEntrySelection actualRegistrationCode
   entryLocals actualEntryAllocationFrame runtimeBodyStartDefs
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps

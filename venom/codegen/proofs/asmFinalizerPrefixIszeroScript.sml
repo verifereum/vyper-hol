@@ -325,29 +325,34 @@ Proof
   qexists_tac `2` >> simp[] >> metis_tac[]
 QED
 
-Theorem merge_iszero_prefix_transport_conditional:
-  ^single_site /\ ^transitive_transport ==>
-  !p. asm_static_wf p ==> ^transport p (FST (merge_iszero p))
+Theorem merge_iszero_prefix_transport_for:
+  !tr. (!p. tr p p) /\
+  (!p q r. tr p q /\ tr q r ==> tr p r) /\
+  (!pre x rest. asm_returns_zero_or_one x /\
+    asm_static_wf (pre ++ [x; AsmOp "ISZERO"; AsmOp "ISZERO"] ++ rest) ==>
+    tr (pre ++ [x; AsmOp "ISZERO"; AsmOp "ISZERO"] ++ rest) (pre ++ [x] ++ rest)) /\
+  (!pre l rest. asm_static_wf (pre ++ [AsmOp "ISZERO"; AsmOp "ISZERO"] ++
+      AsmPushLabel l :: AsmOp "JUMPI" :: rest) ==>
+    tr (pre ++ [AsmOp "ISZERO"; AsmOp "ISZERO"] ++ AsmPushLabel l :: AsmOp "JUMPI" :: rest)
+       (pre ++ AsmPushLabel l :: AsmOp "JUMPI" :: rest)) ==>
+  !p. asm_static_wf p ==> tr p (FST (merge_iszero p))
 Proof
-  strip_tac >>
-  drule iszero_pair_site_conditional >> disch_then assume_tac >>
-  drule iszero_jumpi_site_conditional >> disch_then assume_tac >>
-  qpat_x_assum `!pre pat repl post D. _` kall_tac >>
+  gen_tac >> strip_tac >>
   `!sfx pre. asm_static_wf (pre ++ sfx) ==>
-      ^transport (pre ++ sfx) (pre ++ FST (merge_iszero_pairs sfx))`
-    by (qspec_then `^transport` mp_tac merge_iszero_pairs_relation >>
+      tr (pre ++ sfx) (pre ++ FST (merge_iszero_pairs sfx))`
+    by (qspec_then `tr` mp_tac merge_iszero_pairs_relation >>
         impl_tac
-        >- (conj_tac >- ACCEPT_TAC prefix_transport_refl >>
+        >- (conj_tac >- first_assum ACCEPT_TAC >>
             conj_tac >- first_assum ACCEPT_TAC >>
             pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
             qpat_x_assum `!pre x rest. asm_returns_zero_or_one x /\ _ ==> _` mp_tac >>
             pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]) >>
         simp[]) >>
   `!sfx pre. asm_static_wf (pre ++ sfx) ==>
-      ^transport (pre ++ sfx) (pre ++ FST (merge_iszero_jumpi sfx))`
-    by (qspec_then `^transport` mp_tac merge_iszero_jumpi_relation >>
+      tr (pre ++ sfx) (pre ++ FST (merge_iszero_jumpi sfx))`
+    by (qspec_then `tr` mp_tac merge_iszero_jumpi_relation >>
         impl_tac
-        >- (conj_tac >- ACCEPT_TAC prefix_transport_refl >>
+        >- (conj_tac >- first_assum ACCEPT_TAC >>
             conj_tac >- first_assum ACCEPT_TAC >>
             pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
             qpat_x_assum `!pre l rest. asm_static_wf _ ==> _` mp_tac >>
@@ -360,8 +365,24 @@ Proof
   qpat_x_assum `!p q r. _` irule >>
   qexists_tac `FST (merge_iszero_pairs p)` >>
   conj_tac
-  >- (qpat_x_assum `!sfx pre. _ ==> ^transport _ (_ ++ FST (merge_iszero_pairs _))`
+  >- (qpat_x_assum `!sfx pre. _ ==> tr _ (_ ++ FST (merge_iszero_pairs _))`
         (qspecl_then [`p`, `[]`] mp_tac) >> simp[]) >>
-  qpat_x_assum `!sfx pre. _ ==> ^transport _ (_ ++ FST (merge_iszero_jumpi _))`
+  qpat_x_assum `!sfx pre. _ ==> tr _ (_ ++ FST (merge_iszero_jumpi _))`
     (qspecl_then [`FST (merge_iszero_pairs p)`, `[]`] mp_tac) >> simp[]
+QED
+
+Theorem merge_iszero_prefix_transport_conditional:
+  ^single_site /\ ^transitive_transport ==>
+  !p. asm_static_wf p ==> ^transport p (FST (merge_iszero p))
+Proof
+  strip_tac >>
+  drule iszero_pair_site_conditional >> disch_then assume_tac >>
+  drule iszero_jumpi_site_conditional >> disch_then assume_tac >>
+  qpat_x_assum `!pre pat repl post D. _` kall_tac >>
+  rule_assum_tac (SIMP_RULE bool_ss [GSYM APPEND_ASSOC, APPEND] o BETA_RULE) >>
+  mp_tac (BETA_RULE (Q.SPEC `^transport` merge_iszero_prefix_transport_for)) >>
+  impl_tac >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> rpt conj_tac >>
+    FIRST [first_assum ACCEPT_TAC, ACCEPT_TAC (BETA_RULE prefix_transport_refl),
+           ASM_REWRITE_TAC [] >> NO_TAC]) >>
+  simp[]
 QED

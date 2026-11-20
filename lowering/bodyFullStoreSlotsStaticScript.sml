@@ -6,7 +6,7 @@ Ancestors
   bodyFullStoreSlotsStaticSeparation bodyFullStoreSlotsStaticTraceUnique
   bodyFullStoreSlotsStaticZero bodyFullStoreSlotsStaticHorizon
   bodyFullStoreSlotsStaticTransfer bodyFullStoreSlotsStaticExit
-  bodyFullStoreSlotsStaticEncoding bodyFullStoreSlotsStaticTraceTransfer
+  bodyFullStoreSlotsStaticEncoding
   exprSimAbiGasBridge ptrDiscipline bodyPtrDefs venomExecSemantics
   abiEncoderObserver fragExec
   venomState venomInst compileEnv list rich_list pred_set arithmetic exprSimAbiDecodeSetupObserve

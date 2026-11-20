@@ -2,6 +2,7 @@
 Theory fmpStageOpSimMemCreates
 Ancestors
   fmpStageOpSimMemCalls fmpStageOpSimMemReads fmpStageOpSimMemSupport
+  lowerDloadPtrCreateInterfaces
   fmpStageOpBase fmpStageRel o1LowerDloadExternalEffects o1LowerDloadShared
   o1LowerDloadConcreteExternal o1LowerDloadRelocationKernel
   memLocDefs ptrDiscipline contextCodegenRel codegenRel unitShapeDefs venomExecSemantics venomCallOracleDefs
@@ -38,21 +39,6 @@ Proof
   goal_assum (drule_at (Pat `fmp_stage_ctx _ _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `frame_reachable _ _ _ _ _ _ _ _ _`)) >>
   gvs[mem_read_ops_def, source_memory_read_ranges_def, memory_range_of_operands_def])
-QED
-
-Theorem fmp_mem_create_world[local]:
-  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
-  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
-  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
-  MEM inst.inst_opcode [CREATE;CREATE2] ==>
-  tn.t_stor = {} /\ tn.t_trans = {} /\
-  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient
-Proof
-  strip_tac >>
-  `taint_ok fn tn inst s` by metis_tac[fmp_stage_frame_facts] >>
-  `tn.t_stor = {} /\ tn.t_trans = {}` by (fs[taint_ok_def, MEM] >> metis_tac[]) >>
-  `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by fs[fmp_stage_rel_def] >>
-  metis_tac[ld_shared_clean_accounts, ld_shared_clean_transient]
 QED
 
 Theorem fmp_mem_create_inputs[local]:
@@ -107,8 +93,8 @@ Theorem fmp_mem_create_execute[local]:
   fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
   ~in_revert_forward fn s /\ MEM inst.inst_opcode [CREATE;CREATE2] /\
   step_inst k C inst s = OK s1 ==>
-  ?out w r rq. inst.inst_outputs = [out] /\ s1 = update_var out w r /\
-    ~computed_precompile rq /\
+  ?out w r rq rq'. inst.inst_outputs = [out] /\ s1 = update_var out w r /\
+    ~computed_precompile rq /\ request_agree_except D rq rq' /\
     r = s with <|vs_accounts := r.vs_accounts; vs_transient := r.vs_transient;
       vs_logs := r.vs_logs; vs_outcomes := r.vs_outcomes;
       vs_pending_deletions := r.vs_pending_deletions;
@@ -119,30 +105,30 @@ Theorem fmp_mem_create_execute[local]:
       vs_logs := r.vs_logs; vs_outcomes := r.vs_outcomes;
       vs_pending_deletions := r.vs_pending_deletions;
       vs_returndata := r.vs_returndata;
-      vs_requests := record_request rq t.vs_requests|>))
+      vs_requests := record_request rq' t.vs_requests|>))
 Proof
   strip_tac >> drule_all fmp_mem_create_inputs >> strip_tac >> (
   `s.vs_call_ctx = t.vs_call_ctx` by fs[fmp_stage_rel_def, fmp_frame_rel_def] >>
-  `s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient` by
-    metis_tac[fmp_mem_create_world] >>
   `s.vs_outcomes = t.vs_outcomes /\ s.vs_logs = t.vs_logs /\
    s.vs_pending_deletions = t.vs_pending_deletions` by
     fs[fmp_stage_rel_def, ld_shared_agree_def] >>
-  `venom_create_request t value off' sz salt =
-   venom_create_request s value off sz salt` by simp[venom_create_request_def] >>
-  qpat_x_assum `exec_create _ _ _ _ _ _ = _` mp_tac >>
-  simp[exec_create_def, Excl "consume_create_outcome_eq", AllCaseEqs()] >>
-  strip_tac >> Cases_on `consume_create_outcome (venom_create_request s value off sz salt) s` >>
-  gvs[Excl "consume_create_outcome_eq"] >>
-  drule_all ld_consume_create_outcome_transport >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `consume_create_outcome rq s` >>
-  qexistsl_tac [`q`,`r`,`rq`] >>
-  simp[Excl "consume_create_outcome_eq", venom_state_fupdcanon] >>
-  conj_tac >- simp[Abbr `rq`, venom_create_request_def, computed_precompile_def] >>
+  `inst.inst_opcode <> INVOKE /\ LENGTH s.vs_requests < LENGTH s1.vs_requests` by
+    (conj_tac >- fs[MEM] >> drule_all ld_create_step_request_growth >> simp[]) >>
+  `accounts_agree_except D s.vs_accounts t.vs_accounts /\
+   transient_agree_except D s.vs_transient t.vs_transient` by
+    (drule_all fmp_mem_external_world >> simp[]) >>
+  `request_agree_except D (venom_create_request s value off sz salt)
+     (venom_create_request t value off' sz salt)` by
+    (irule ld_venom_create_request_masked >> simp[]) >>
+  drule_all dload_exec_create_forward >>
+  disch_then (qspec_then `off'` strip_assume_tac) >>
+  qexistsl_tac [`out`,`w`,`r`,`venom_create_request s value off sz salt`,
+    `venom_create_request t value off' sz salt`] >>
+  simp[Excl "consume_create_outcome_eq"] >>
+  (conj_tac >- simp[venom_create_request_def, computed_precompile_def]) >>
   simp[step_inst_non_invoke] >>
   asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
-  simp[exec_create_def, Excl "consume_create_outcome_eq"] >>
-  gvs[Abbr `rq`, Excl "consume_create_outcome_eq"] >> metis_tac[])
+  gvs[Excl "consume_create_outcome_eq"] >> metis_tac[])
 QED
 
 Theorem fmp_mem_creates_ok[local]:
@@ -221,9 +207,7 @@ Resume fmp_mem_creates_ok[shared]:
        update_var_def, Abbr `target`, word_agree_except_def] >>
   qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >>
   fs[ld_shared_agree_def, word_agree_except_def] >>
-  simp[record_request_def, LIST_REL_APPEND, request_agree_except_def,
-       accounts_agree_except_def, transient_agree_except_def,
-       storage_agree_except_def, word_agree_except_def]
+  irule concretizeLayoutExternalRequestsTheory.request_agree_record_request >> simp[]
 QED
 
 Finalise fmp_mem_creates_ok

@@ -155,7 +155,7 @@ Proof
   metis_tac[prov_sites_first]
 QED
 
-Theorem fmp_sites_step[local]:
+Theorem fmp_sites_step:
   prov_sites P G /\ param_sites P PG /\
   inst.inst_opcode <> ALLOCA /\
   (inst.inst_opcode = DALLOCA ==>

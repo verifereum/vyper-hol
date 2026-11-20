@@ -23,7 +23,7 @@ Theorem raw_call_tuple_length_checked:
    TAKE n s.vs_returndata /\
  (!i. b+32 <= i /\ i < b+32+LENGTH (TAKE n s.vs_returndata) ==>
       i NOTIN tn.t_mem) /\
- allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+ allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
  run_inst_seq (emitted_insts sa sb) s = OK t ==>
  ?Gf tnf.
    (!D. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s Gf tnf) /\

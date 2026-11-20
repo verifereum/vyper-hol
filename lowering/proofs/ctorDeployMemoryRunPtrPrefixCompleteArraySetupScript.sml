@@ -87,7 +87,9 @@ Proof
     (drule ctor_actual_index_insts >> drule abi_decode_index_init_shape >> simp[]) >>
   `run_inst_seq [mk_inst st.cs_next_id ALLOCA [Lit 32w] [iv];
     mk_inst (st.cs_next_id+1) MSTORE [Var iv;Lit 0w] []] s = OK t` by metis_tac[] >>
-  drule_all prefix_loop_index_slot_run >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp` by simp[] >>
+  drule_all (Q.INST [`fn` |-> `func`] prefix_loop_index_slot_run) >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`Ddead`] strip_assume_tac) >>
   qexistsl [`t`,`p`,`H`,`qt`] >> simp[] >> metis_tac[]
 QED
@@ -251,6 +253,7 @@ Proof
      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
         i.inst_opcode <> GAS) (emitted_insts st st')` by
        simp[mk_inst_def, is_terminator_def] >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
      `inst_seq_ptr D lo ctx func PG G tn (emitted_insts st st') s H qt` by
        (mp_tac (Q.INST [`iid` |-> `st.cs_next_id`, `cnt` |-> `n`, `limit` |-> `maxn`,
           `fn` |-> `func`, `a` |-> `n2w sb`, `ys` |-> `[]`, `G'` |-> `H`, `tn'` |-> `qt`]

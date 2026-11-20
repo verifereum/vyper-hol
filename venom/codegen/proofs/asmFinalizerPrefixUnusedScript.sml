@@ -65,6 +65,40 @@ Proof
   simp[]
 QED
 
+Theorem prune_unused_prefix_walk:
+  !tr. (!p. tr p p) /\
+  (!p q r. tr p q /\ tr q r ==> tr p r) /\
+  (!pre l post.
+    asm_static_wf (pre ++ [AsmLabel l] ++ post) /\
+    ~MEM l (asm_label_refs (pre ++ [AsmLabel l] ++ post)) ==>
+    tr (pre ++ [AsmLabel l] ++ post) (pre ++ post)) ==>
+  !sfx pre used.
+    asm_static_wf (pre ++ sfx) /\
+    (!l. MEM l (asm_label_refs (pre ++ sfx)) ==> MEM l used) ==>
+    tr (pre ++ sfx)
+      (pre ++ FILTER ($~ o asm_unused_label used) sfx)
+Proof
+  gen_tac >> strip_tac >>
+  Induct >- simp[] >>
+  rpt gen_tac >> strip_tac >> reverse (Cases_on `asm_unused_label used h`) >> simp[]
+  >- (first_x_assum (qspecl_then [`pre ++ [h]`, `used`] mp_tac) >>
+      pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
+      disch_then irule >> simp[]) >>
+  Cases_on `h` >> gvs[asm_unused_label_def] >>
+  `!l. MEM l (asm_label_refs (pre ++ sfx)) ==> MEM l used` by
+    (qpat_assum `!l. MEM l (asm_label_refs (pre ++ AsmLabel s :: sfx)) ==> _`
+       mp_tac >> simp[label_refs_append, asm_label_refs_def]) >>
+  `~MEM s (asm_label_refs (pre ++ AsmLabel s :: sfx))` by metis_tac[] >>
+  `asm_static_wf (pre ++ sfx)` by
+    (mp_tac (Q.INST [`pfx` |-> `pre`, `pat` |-> `[AsmLabel s]`,
+                    `repl` |-> `[]`, `sfx` |-> `sfx`] asm_splice_window_refines) >>
+     simp[asm_splice_ok_def, unused_label_window_refines, is_data_inst_def,
+          asm_label_refs_def, asm_refines_def] >>
+     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
+     (impl_tac >- gvs[asm_label_refs_def]) >> simp[]) >>
+  metis_tac[listTheory.APPEND, listTheory.APPEND_ASSOC]
+QED
+
 Theorem filter_unused_prefix_under[local]:
   ^single_site /\ ^transitive ==>
   !sfx pre used.
@@ -84,24 +118,9 @@ Proof
     ~MEM l (asm_label_refs (pre ++ [AsmLabel l] ++ post)) ==>
     tr (pre ++ [AsmLabel l] ++ post) (pre ++ post)` by
     (unabbrev_all_tac >> match_mp_tac unused_label_prefix_site >> first_assum ACCEPT_TAC) >>
-  Induct >- simp[] >>
-  rpt gen_tac >> strip_tac >> reverse (Cases_on `asm_unused_label used h`) >> simp[]
-  >- (first_x_assum (qspecl_then [`pre ++ [h]`, `used`] mp_tac) >>
-      pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
-      disch_then irule >> simp[]) >>
-  Cases_on `h` >> gvs[asm_unused_label_def] >>
-  `!l. MEM l (asm_label_refs (pre ++ sfx)) ==> MEM l used` by
-    (qpat_assum `!l. MEM l (asm_label_refs (pre ++ AsmLabel s :: sfx)) ==> _`
-       mp_tac >> simp[label_refs_append, asm_label_refs_def]) >>
-  `~MEM s (asm_label_refs (pre ++ AsmLabel s :: sfx))` by metis_tac[] >>
-  `asm_static_wf (pre ++ sfx)` by
-    (mp_tac (Q.INST [`pfx` |-> `pre`, `pat` |-> `[AsmLabel s]`,
-                    `repl` |-> `[]`, `sfx` |-> `sfx`] asm_splice_window_refines) >>
-     simp[asm_splice_ok_def, unused_label_window_refines, is_data_inst_def,
-          asm_label_refs_def, asm_refines_def] >>
-     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
-     (impl_tac >- gvs[asm_label_refs_def]) >> simp[]) >>
-  metis_tac[listTheory.APPEND, listTheory.APPEND_ASSOC]
+  mp_tac (Q.SPEC `tr` prune_unused_prefix_walk) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  simp[]
 QED
 
 Theorem prune_unused_prefix_transport_conditional:

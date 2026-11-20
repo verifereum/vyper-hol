@@ -9,7 +9,8 @@
  *)
 Theory vyperHol
 Ancestors
-  codegenStaticAbort staticAbortAsmOptHol
+  codegenStaticAbort codegenStaticAbortAsmOpt staticAbortFrameException
+  staticAbortAsmOptCorrect
   runtimeLabelReadiness
   o1LabelReadiness
   runtimeLabelEntry
@@ -27,31 +28,30 @@ Ancestors
   constSubstStmts constSubstStmtsPreserve
   (* Venom execution: alloca size caching, jump independence *)
   allocaCacheProps jumpIndep
-  staticShadowRun staticShadowEvent staticShadowReachable staticShadowMemory
-  dftStaticAbort dftStaticEventAbort dftStaticShadowObservation dftStaticMemoryObservation dftStaticMemoryInv dftStaticContextSim dftStaticRequestSim dftStaticGasContract
+  staticShadowRun staticShadowEvent staticShadowReachable
+  dftStaticAbort dftStaticEventAbort dftStaticShadowObservation dftStaticContextSim dftStaticRequestSim
   (* passes: FMP lowering composition, memory merging *)
   fmpLowerSequenceExec mmTransform memzeroFrame
   mmBlockSimProofs mmSupplyWfProofs mmSupplySsaProofs
   (* O1: lifting per-function pass facts to the stage contract *)
   o1PassLift
   (* O1: the pipeline's request companion at an abort *)
-  o1PipelineRequests
+  dftRequestsGas
   (* O1: joint simulation, abort requests and memory for static frames *)
   o1StaticPipelineCorrect
   o1PipelineMemoryLoweredAbort
   (* codegen and compiler units: frame simulation, stack planning, unit checks,
      codegen request prefix *)
-  genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
+  genFrameSim o1SourceUnitCheck unitMemInv
   codegenRequestPrefix callTraceFrame guardPushProjections
   gasFocusParentProofs gasFocusStaticPrefixDriver
   gasFocusConcretizeGhostCutHistory gasFocusConcretizeCutFrameSupport
   fnStaticAbortSim
   contextStaticAbortRel
-  staticAbortMemDefs
   (* lowering: ABI correctness, target/place steps, typed copies and hashing,
      place typing *)
+  abiEncoderObserverCode
   abiProofs targetPlaceSimCases typedCopyAgreement bytestringHashProps
-  placeTypingE2EProps
   (* lowering: entry decoding, allocation frames and registration, constructor
      arguments, nonreentrancy, byte-builtin and concat memory, conversion from
      bytes, widened returns *)
@@ -64,35 +64,31 @@ Ancestors
      statement reason theories *)
   bodyMemArrayLayout bodyMemTupleLayout bodyMemBiMethodIdEndpoint
   bodyMemEcArithAssemble bodyMemEcArithSafe bodyMemRawCallFinish
-  stmtReasonKindsMemory stmtSimAugAssignPlaceStorage
-  stmtSimIfCounted stmtSimRaise stmtSimSeqMem
+  stmtSimAugAssignPlaceStorage
   (* assignment-to-place pieces the deleted stmtSimAssignPlace imported *)
   immutableAssignMetadata immutableAssignRepresentation immutableAssignStore
   immutableDeployAssignRestore immutableAssignCode immutableAssignEmpty
   immutableAssignCompose immutableAssignOpen
-  assignPlacePureFacts assignPlacePureCode assignPlaceEmpty
-  assignPlaceEmptyCompose assignPlaceContinuation assignPlaceCallerFacts
-  assignPlaceGasCompose assignPlaceStoreReady
-  assignEffectfulIndexNonempty assignEffectfulIndexUnifiedStore
-  assignEffectfulIndexEmptyCase assignEffectfulIndexNonmutating
+  assignPlacePureCode assignPlaceEmpty
+  assignPlaceEmptyCompose
+  assignPlaceGasCompose assignPlaceBytesStore
   (* whitelist: retained raw-call and CREATE compiler shape proofs *)
   whitelistS2CreateShape whitelistS2Shape
   (* pointer safety of the lowering *)
-  batchCopyRobustPtr liveArrayTransportPtr normalizationAllocPtr
-  ptrSafetyTransport returnMetadataPtr staticTypeFitsPtr structChildPtr
-  wordCopyRobustPtr
+  normalizationAllocPtr
+  ptrSafetyTransport staticTypeFitsPtr
   (* end-to-end runtime correctness *)
-  e2eCorrectness guardRequestAlignment
+  e2eCorrectness
   (* sufficient gas, the companions to the call and deploy theorems *)
   e2eGasSufficient e2eGasSufficientTop
   (* deployment: the constructor frame and deploy correctness *)
   e2eDeployCorrectness
   (* body induction: custom-error raise and assert pieces *)
-  bodyCustomErrorRaise bodyCustomErrorAssert stmtSimCustomErrorPath
-  bodyCustomErrorMemRaise bodyCustomErrorMemAssert stmtSimCustomErrorMemPath
+  stmtSimCustomErrorRevert
   (* codegen: its assembly is label-disciplined (the asm optimizer's premise) *)
   codegenLabelDisciplined
   codegenSymOwnRel
+  symS7OwnHol
   (* bytecode: a passing operand-stack checker excludes frame overflow *)
   stackBoundSoundness
   asmFinalizerPrefix

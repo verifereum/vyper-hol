@@ -308,11 +308,16 @@ Proof
     by simp[Abbr `t1`, asmSemTheory.asm_next_def] >>
   drule_then (qspecl_then [`q`, `env`] assume_tac) sym_step_jumpi_label >>
   reverse conj_tac
-  >- (rpt strip_tac >> irule window_bounded_cases >>
+  >- (`sym_steps_ok (λi stk. asm_plain_inst i) (λi. F) p env 4 ss` by
+        (ntac 3 (simp[Once sym_steps_ok_pos]) >>
+         simp[sym_steps_ok_one, asm_plain_inst_def, is_data_inst_def]) >>
+      `sym_steps_ok (λi stk. asm_plain_inst i) (λi. F) q env 2 ss` by
+        (simp[Once sym_steps_ok_pos] >>
+         simp[sym_steps_ok_one, asm_plain_inst_def, is_data_inst_def]) >>
+      rpt strip_tac >> irule window_bounded_cases >>
       Cases_on `w = 0w` >> Cases_on `INDEX_OF (AsmLabel l) p` >>
-      simp[sym_steps_pos, sym_steps_def, b2w_b2w_eq_zero, sym_terminal_def,
-           sym_steps_ok_pos, sym_steps_ok_def, asm_plain_inst_def,
-           is_data_inst_def]) >>
+      simp[sym_steps_pos, sym_steps_def, b2w_b2w_eq_zero,
+           sym_terminal_def]) >>
   simp[sym_steps_pos, sym_steps_def, b2w_b2w_eq_zero] >>
   IF_CASES_TAC >> simp[sym_terminal_def]
   >- simp[Abbr `s1`, Abbr `s2`, Abbr `s3`, Abbr `t1`,

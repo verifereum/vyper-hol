@@ -49,8 +49,12 @@ Proof
        irule gas_shadow_compiles_return) >>
    qmatch_goalsub_abbrev_tac `if widen_case then _ else _` >>
    Cases_on `widen_case` >> simp[]
-   >- (irule gas_shadow_compiles_as_stack_val >>
+   >- (irule gas_shadow_compiles_as_ptr_val >>
        irule gas_shadow_compiles_bytestring_widen_copy) >>
+   qmatch_goalsub_abbrev_tac `if cast_case then _ else _` >>
+   Cases_on `cast_case` >> simp[]
+   >- (irule gas_shadow_compiles_as_ptr_val >>
+       irule gas_shadow_compiles_type_convert) >>
    Cases_on `ret_ty` >> simp[] >>
    irule gas_shadow_compiles_as_stack_val >>
    irule gas_shadow_compiles_type_convert)

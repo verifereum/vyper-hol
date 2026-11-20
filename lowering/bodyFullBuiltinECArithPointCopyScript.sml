@@ -20,7 +20,8 @@ Theorem ec_point_copy_origin_ptr_path:
   w2n pw+64 <= s.vs_alloca_next /\ w2n bw+nd <= s.vs_alloca_next /\
   (!i. w2n pw <= i /\ i < w2n pw+64 ==> i NOTIN tn.t_mem) /\
   (w2n pw+64 <= w2n bw+pd \/ w2n bw+pd+64 <= w2n pw) /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?t G' tn'.
@@ -69,7 +70,7 @@ Proof
   rename1 `gas_origin_ptr_path _ (s,G,tn) [] (OK u,Gu,tu)` >>
   `u.vs_alloca_next = s.vs_alloca_next /\ u.vs_allocas = s.vs_allocas /\
    u.vs_halted = s.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
-    (qpat_x_assum `u with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|> = s` mp_tac >>
+    (qpat_assum `u with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
   `lookup_var pp u = SOME pw /\ lookup_var bp u = SOME bw /\
    ptr_covers Gu tu pp u 64 /\ ptr_covers Gu tu bp u nd` by
@@ -95,6 +96,11 @@ Proof
   `pd+32+32 <= nd /\
    (!i. w2n pw+32 <= i /\ i < w2n pw+32+32 ==> i NOTIN tu.t_mem)` by
     (conj_tac >- decide_tac >> simp[arithmeticTheory.ADD_ASSOC]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (`allocas_below_fmp u <=> allocas_below_fmp s` by
+       (qpat_assum `u with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|> = s` mp_tac >>
+        simp[venom_state_component_equality, allocas_below_fmp_def]) >>
+     simp[]) >>
   drule_all (SRULE [] (Q.INST [`ps` |-> `32`, `ns` |-> `64`]
     (SPEC_ALL ec_point_word_transfer_origin_ptr_path))) >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>

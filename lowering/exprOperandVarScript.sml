@@ -574,10 +574,15 @@ Proof
                type_memory_bytes cenv (lowered_value_type cenv (HD args)) <
                type_memory_bytes cenv rt` >>
      pop_assum (fn th => REWRITE_TAC [th])
-     >- (qmatch_goalsub_abbrev_tac `as_stack_val vt result` >>
-         Cases_on `result` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
-         rpt strip_tac >> gvs[contextTheory.vv_operand_def] >>
+     >- (simp[oneline as_ptr_val_def, AllCaseEqs()] >>
+         rpt strip_tac >> gvs[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
          metis_tac[compiler_bytestring_widen_copy_var]) >>
+     Cases_on `is_bytestring_type (expr_type (HD args)) /\ is_bytestring_type rt` >>
+     pop_assum (fn th => REWRITE_TAC [th])
+     >- (simp[oneline as_ptr_val_def, AllCaseEqs()] >>
+         rpt strip_tac >> gvs[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
+         `!x. v = Var x ==> not_fresh_at st1 x` by metis_tac[] >>
+         metis_tac[compiler_type_convert_var]) >>
      Cases_on `rt` >> simp[] >>
      qmatch_goalsub_abbrev_tac `as_stack_val vt result` >>
      Cases_on `result` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>

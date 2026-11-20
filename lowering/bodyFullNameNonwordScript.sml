@@ -1,6 +1,6 @@
 Theory bodyFullNameNonword
 Ancestors
-  bodySimFull gasOutcomeFullCompose bodyNameNonwordMemory
+  bodySimFull gasOutcomeFullCompose
   exprSimNameValue exprSimSource exprSimHypsDefs bodyPtrDefs
   gasShadow fragGasOriginPtr exprLoweringProps loweringPosts
   vyperTypeEnv vyperTypeSystem vyperTypeInvariants valueEncodingProofs

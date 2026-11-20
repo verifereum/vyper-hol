@@ -66,11 +66,12 @@ Proof
   simp[mk_inst_def, exec_write2_def, eval_operand_def] >>
   simp[Once run_inst_seq_def] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_pure2_def, eval_operand_def,
-       mstore_def, lookup_var_def] >>
+  pure_rewrite_tac[mk_inst_def, instruction_accessors, opcode_case_def] >>
+  simp[exec_pure2_def, eval_operand_def, emitHelperPropsTheory.lookup_var_mstore] >>
   simp[run_inst_seq_def] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_alloca_def] >>
+  `!p w z. (mstore p w z).vs_allocas = z.vs_allocas` by simp[mstore_def] >>
+  simp[mk_inst_def, exec_alloca_def, update_var_def] >>
   Cases_on `FLOOKUP s1.vs_allocas (id+3)` >> simp[] >>
   PairCases_on `x` >> simp[]
 QED

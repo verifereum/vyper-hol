@@ -2,7 +2,7 @@
 Theory selectedAcceptedMembers
 Ancestors
   decoderOriginAllocationFrame
-  selectedAcceptedInterfaces calldataExactMemberValues calldataMembersRawSubregion
+  selectedAcceptedInterfaces entryReachBodySequenceObservations[qualified] entrySinkExtraction[qualified] phiTransform[qualified]
   decoderMemberJointModular calldataEmptyArrayChild calldataSourceCorrespondence
   abiDecoderOffset abiDecoderDynamic abiDecoderMemberCons abiDecoderMemberCode abiDecoderComplexExecute
   abiDecoderContract abiDecoderFrame abiDecoderLoop fragExec venomExecSemantics venomInst

@@ -5,6 +5,7 @@ Ancestors
   bodyFullPreds bodySimFull exprSimAccounts exprSimSource exprSimHypsDefs
   gasOutcomeFullCompose gasOutcomeFull gasExemptCert bodyFullGhostFrame exprSimMemoryStack
   exprSimWordArgs exprLowering exprLoweringProps builtinSimple bodyInvNoDalloca
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   gasShadowCompileStmtHelpers gasShadowState gasShadow vyperTyping vyperTypeSystem vyperAST
   fragGasSeqPtr emitHelper emitHelperProps compileEnv allocaHistory
   vyperStorageTrace vyperStorageFootprint fragExec exprSimUnopComposeProps
@@ -29,7 +30,8 @@ Theorem account_full_from_suffix:
     (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
     (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
     eval_operand x s = SOME (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)) /\
-    op_taint tn x = {} /\ op_prov G x = NONE /\ ~ctx_has_dalloca ctx /\
+    op_taint tn x = {} /\ op_prov G x = NONE /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\ alloca_history func s /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -66,7 +68,6 @@ Theorem account_full_from_suffix:
       (Builtin (account_item_type item) (Acc item) [e]) es
 Proof
   disch_tac >> rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `expr_body_pre cenv cx env e es` by
     (drule expr_body_pre_builtin_arg >> disch_then irule >>
      gvs[expr_body_pre_def]) >>
@@ -209,6 +210,13 @@ Proof
     (rpt strip_tac >>
      qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
        (qspec_then `H` mp_tac) >> simp[loweringPostsTheory.expr_post_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+          stmt_state_rel H ctx func cenv cx mid t /\ _`
+       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+       CONJUNCT1)) >>
   qpat_x_assum `!item bs ee cx v x sa op sb func st0 cenv s ctx G tn DF lo d explicit PG. _`
     (drule_all_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac)) >>
   irule gas_outcome_full_pure >>
@@ -246,15 +254,22 @@ Proof
        loweringPostsTheory.expr_val_at_def,
        loweringPostsTheory.expr_val_rel_def] >>
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by
+    (drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> simp[]) >>
+  simp[] >>
   conj_tac
   >- (Cases_on `item` >>
-      gvs[account_item_type_def, vyperValueTheory.evaluate_type_def] >>
-      first_x_assum (qspec_then `BaseTV Uint256T` mp_tac) >>
-      simp[vyperValueTheory.evaluate_type_def]) >>
+         gvs[account_item_type_def, vyperValueTheory.evaluate_type_def] >>
+         first_x_assum (qspec_then `BaseTV Uint256T` mp_tac) >>
+       simp[vyperValueTheory.evaluate_type_def]) >>
   conj_tac
-  >- (rpt strip_tac >>
-      `not_fresh_at s1 x` by metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-      metis_tac[]) >>
+  >- (qx_genl_tac [`kept`,`value_word`] >> strip_tac >>
+      `not_fresh_at s1 kept` by
+        (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+      qpat_assum `!p. not_fresh_at s1 p ==> lookup_var p t' = _ /\ _`
+        (drule_then strip_assume_tac) >>
+      qpat_assum `!p w. not_fresh_at sa p /\ lookup_var p s0 = SOME w ==> _`
+        (qspecl_then [`kept`,`value_word`] mp_tac) >> simp[]) >>
   simp[] >> conj_tac
   >- gvs[exprSimPropsTheory.locals_kept_mem_tail] >>
   conj_tac

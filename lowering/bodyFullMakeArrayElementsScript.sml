@@ -17,7 +17,8 @@ Theorem make_array_elements_full:
     ctx_inst_ids_distinct ctx /\ fn_inst_ids_distinct func /\
     gas_shadow_context ctx shadow_ctx /\ gas_shadow_function func shadow_func /\
     MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_no_wrap inst z) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==>
            not_fresh_at csbase x) /\
     (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==>
@@ -114,7 +115,8 @@ Theorem make_array_elements_full:
                 FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
                 loweringStateRelDefs$regions_disjoint p n b sz) ==>
               mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory))
-      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   rpt gen_tac >> strip_tac >>
   `OPT_MMAP (evaluate_type (get_tenv cx)) (REPLICATE (LENGTH args) et) =
@@ -142,7 +144,8 @@ Proof
   simp[type_memory_size_list_replicate, arithmeticTheory.ADD_SYM] >>
   qexists_tac `ps` >>
   conj_tac >- gvs[arithmeticTheory.ADD_SYM] >>
-  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- gvs[arithmeticTheory.ADD_SYM] >>
+  conj_tac >- gvs[] >>
   conj_tac >- gvs[] >>
   rpt gen_tac >> strip_tac >>
   `LENGTH vs = LENGTH args` by (imp_res_tac LIST_REL_LENGTH >> gvs[]) >>

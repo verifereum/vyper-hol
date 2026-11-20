@@ -743,7 +743,7 @@ Theorem rest_word_membership_tail_fixed_const_full:
  !DF lo d explicit ctx fn PG cenv cx e es sa sm s0 G0 tn0 tv vv ee u Gu Tu needleop needle av ety bd pbd et is_in out ct guard.
  (?n. bd = Fixed n) /\
  compile_var_array_membership cenv needleop vv (ArrayT ety bd) is_in sm = (out,ct) /\
- fn_has_code sm ct fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+ fn_has_code sm ct fn /\ fn_inst_ids_distinct fn /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -895,7 +895,7 @@ Resume rest_word_membership_tail_fixed_const_full[run]:
     t.vs_current_bb = ct.cs_current_bb /\
     t.vs_inst_idx = LENGTH ct.cs_current_insts` by
     (irule rest_word_membership_loop_const_full_horizon_joint_all >>
-     conj_tac
+        conj_tac
      >- (gen_tac >> disch_tac >>
          qpat_assum `!H. guard H ==> read_result _ _ _ = _ /\ _`
            (drule_then strip_assume_tac) >>
@@ -1070,6 +1070,12 @@ Resume rest_word_membership_tail_fixed_const_full[runtime_prefix_and_read]:
 QED
 
 Resume rest_word_membership_tail_fixed_const_full[runtime_prefix]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `!H. guard H ==> membership_loop_frame _ _ _ _ _ _ _ /\ _`
+       (qspec_then `H` (drule_then strip_assume_tac)) >>
+     qpat_assum `membership_loop_frame _ _ _ u _ _ s`
+       (mp_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     simp[]) >>
   simp[NoAsms] >>
   irule (SRULE [Once arithmeticTheory.MULT_COMM]
     (Q.INST [`skip` |-> `0`, `delta` |-> `0`]
@@ -1102,6 +1108,12 @@ Resume rest_word_membership_tail_fixed_const_full[runtime_prefix_guard]:
 QED
 
 Resume rest_word_membership_tail_fixed_const_full[runtime_read]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sp` by
+    (qpat_assum `!h. guard h ==> gas_origin_ptr_path _ (s,_,_) _ _ /\ _`
+       (qspec_then `H` (drule_then strip_assume_tac)) >>
+     qpat_assum `membership_loop_frame _ _ _ u _ _ sp`
+       (mp_tac o MATCH_MP bodyPtrBopInElementLoadTheory.membership_loop_frame_allocas_below_fmp) >>
+     simp[]) >>
   `?t Gt Tt. !h. guard h ==>
     gas_origin_ptr_path (DF h,lo,explicit,ctx,fn,PG) (sp,gp,tp) [] (OK t,Gt,Tt) /\
     membership_loop_frame sm Gu Tu u Gt Tt t /\

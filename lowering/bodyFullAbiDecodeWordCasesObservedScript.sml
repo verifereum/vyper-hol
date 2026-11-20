@@ -84,9 +84,10 @@ Theorem abi_decode_owned_word_store_observed[local]:
        !mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
          val_in_memory tv v (w2n dw) mem)
 Proof
-  BETA_TAC >>
-  disch_then (mp_tac o MATCH_MP (BETA_RULE
-    bodyFullAbiDecodeOwnedWordStoreObservedTheory.abi_decode_owned_word_store_observed_exact)) >>
+  BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac (BETA_RULE
+    bodyFullAbiDecodeOwnedWordStoreObservedTheory.abi_decode_owned_word_store_observed_exact) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >>
   disch_then (qx_choose_then `t` (qx_choose_then `Gf` (qx_choose_then `tnf`
     (assume_tac o CONJUNCT2 o CONJUNCT2 o CONJUNCT2)))) >>
   qexistsl_tac [`t`,`Gf`,`tnf`] >> first_assum ACCEPT_TAC

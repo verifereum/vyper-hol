@@ -8,7 +8,7 @@ Ancestors
   e2eDefs vyperLoweringCorrect codegenCorrectness
   venomState unitTransformDefs unitShapeDefs contextPlanLayoutProps
   contextCodegenRel compileEnv loweringStateRelDefs symbolResolve finite_map words vyperArith
-  immutableSectionRel
+  immutableSectionRel fnPlanPlaceRevertPostamble
 
 Definition entry_venom_state_def:
   entry_venom_state prog cp es =
@@ -208,4 +208,28 @@ Proof
     (fn th => first_assum (SUBST1_TAC o MATCH_MP th)) opt_entry_state_identity >>
   gvs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
       entry_venom_state_frame_fields, vyperContextTheory.call_txn_component_equality]
+QED
+
+Definition opt_entry_state_own_def:
+  opt_entry_state_own prog prog' cplan es =
+    entry_venom_state prog' cplan es with
+      vs_labels := n2w o_f lo_reloc prog prog'
+End
+
+Theorem opt_entry_state_own_identity:
+  !prog cplan es.
+    opt_entry_state_own prog prog cplan es = entry_venom_state prog cplan es
+Proof
+  simp[opt_entry_state_own_def, lo_reloc_refl, venom_state_component_equality,
+       entry_venom_state_def]
+QED
+
+Theorem opt_entry_own_txp_identity:
+  !tops bc am tx prog prog' cplan es.
+    call_state_rel tops bc am tx es ==>
+    tx with code := (opt_entry_state_own prog prog' cplan es).vs_code = tx
+Proof
+  rw[opt_entry_state_own_def, entry_venom_state_frame_fields,
+     vyperContextTheory.call_txn_component_equality] >>
+  gvs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def]
 QED

@@ -16,7 +16,9 @@ Theorem raw_call_failure_block_origin_ptr:
  compile_alloc_buffer 0 sz = (rb,sp) /\
  emit_void RETURNDATACOPY [rb.buf_operand;Lit 0w;zop] sp = ((),sc) /\
  emit_inst REVERT [rb.buf_operand;zop] [] sc = ((),sb) /\
- fn_has_code sa sb func /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+ fn_has_code sa sb func /\ ~s.vs_halted /\
+ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+   s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
  allocas_from lo s /\ lo <= s.vs_alloca_next /\
  s.vs_current_bb = sa.cs_current_bb /\
  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -119,6 +121,7 @@ Resume raw_call_failure_block_origin_ptr[allocate]:
 QED
 
 Resume raw_call_failure_block_origin_ptr[read_edge]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
   qunabbrev_tac `a1` >> qunabbrev_tac `G1` >> qunabbrev_tac `tn1` >>
   qunabbrev_tac `readsz` >>
   pure_rewrite_tac[GSYM arithmeticTheory.ADD1] >>
@@ -141,6 +144,10 @@ Resume raw_call_failure_block_origin_ptr[alloc_edge]:
   `~a1.vs_halted /\ allocas_from lo a1 /\ lo <= a1.vs_alloca_next /\
     a1.vs_current_bb = s.vs_current_bb` by
     (fs[Abbr `a1`,Abbr `a`,update_var_def,allocas_from_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a1` by
+    (simp[NoAsms, Abbr `a1`, Abbr `a`, update_var_def, allocas_below_fmp_def] >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
+       (mp_tac o SRULE [allocas_below_fmp_def]) >> metis_tac[]) >>
   qunabbrev_tac `b2` >> qunabbrev_tac `G2` >> qunabbrev_tac `tn2` >>
   qunabbrev_tac `alloc` >> qunabbrev_tac `a1` >>
   pure_rewrite_tac[step_prov_inst_idx,step_taint_inst_idx] >>
@@ -153,7 +160,7 @@ QED
 
 Theorem raw_call_forward_pair_origin_ptr[local]:
  !ctx func PG lo explicit s G tn bb cid rid dst sz u t.
- ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+ ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
  get_instruction bb s.vs_inst_idx = SOME (mk_inst cid RETURNDATACOPY [dst;Lit 0w;sz] []) /\
  get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst rid REVERT [dst;sz] []) /\
@@ -198,6 +205,12 @@ Proof
           write_memory_with_expansion_def, write_memory_def, AllCaseEqs()] >>
      rpt strip_tac >> gvs[step_inst_base_opcode_eqs, AllCaseEqs(),
        write_memory_with_expansion_def, write_memory_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
+    (strip_tac >>
+     qpat_x_assum `step_inst_base _ s = OK u` mp_tac >>
+     simp[Abbr `copy`, Abbr `v`, step_inst_base_opcode_eqs, AllCaseEqs(),
+          write_memory_with_expansion_def, write_memory_def] >>
+     rw[] >> gvs[allocas_below_fmp_def] >> first_assum ACCEPT_TAC) >>
   `access_ok lo (step_prov PG G copy u) func rev v /\
    taint_ok func (step_taint copy s u tn) rev v` by
     (irule revert_forward_access_taint >>
@@ -263,6 +276,17 @@ Resume raw_call_failure_block_origin_ptr[pair]:
      simp[Abbr `rev`,Abbr `c2`,Abbr `b2`,GSYM arithmeticTheory.ADD_ASSOC,
           arithmeticTheory.ADD1,revert_state_def,set_returndata_def] >>
      metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp b2` by
+    (strip_tac >>
+     `allocas_below_fmp s /\ s.vs_alloca_next <= w2n s.vs_initial_fmp` by
+       (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
+          (drule_then strip_assume_tac) >>
+        conj_tac >- first_assum ACCEPT_TAC >> decide_tac) >>
+     qpat_x_assum `step_inst_base alloc a = OK b` mp_tac >>
+     simp[Abbr `alloc`,Abbr `a`,Abbr `b2`,step_inst_base_opcode_eqs,
+          mk_inst_def,exec_alloca_def,AllCaseEqs(),LET_THM,update_var_def] >>
+     strip_tac >> gvs[allocas_below_fmp_def,FLOOKUP_UPDATE,AllCaseEqs()] >>
+     rpt strip_tac >> gvs[] >> first_assum (drule_then ACCEPT_TAC)) >>
   qunabbrev_tac `copy` >> qunabbrev_tac `rev` >>
   irule raw_call_forward_pair_origin_ptr >>
   gvs[Abbr `b2`,allocas_from_def,arithmeticTheory.ADD1,

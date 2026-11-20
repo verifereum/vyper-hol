@@ -275,10 +275,20 @@ Proof
       disch_then (qspec_then `0` mp_tac) >>
       simp[runtime_sym_ordinary_inst, is_label_operand_def] >> strip_tac >>
       first_assum (drule_at (Pat `compile_internal_fn_bodies _ _ = _`)) >> simp[]) >>
-  PairCases_on `x` >> gvs[] >>
+  PairCases_on `x` >>
+  qpat_x_assum `option_CASE (SOME _) _ _ _ = _`
+    (assume_tac o SIMP_RULE bool_ss
+       [optionTheory.option_case_def, pairTheory.pair_case_def,
+        pairTheory.UNCURRY_DEF]) >>
   first_assum (drule_at (Pat `compile_fallback_body _ _ _ _ _ _ _ _ _ = _`)) >>
-  simp[] >> strip_tac >>
-  first_assum (drule_at (Pat `compile_internal_fn_bodies _ _ = _`)) >> simp[]
+  qmatch_goalsub_rename_tac
+    `(_ /\ EVERY runtime_sym_inst (state_insts before) ==> _) ==> _` >>
+  qpat_assum `state_insts before = _` (fn eq =>
+    qpat_assum `EVERY runtime_sym_inst ^(rhs (concl eq))`
+      (fn insts_ok => REWRITE_TAC [eq, insts_ok])) >>
+  strip_tac >>
+  first_assum (drule_at (Pat `compile_internal_fn_bodies _ _ = _`)) >>
+  disch_then (fn rule => first_assum (ACCEPT_TAC o MATCH_MP rule))
 QED
 
 Theorem runtime_sym_generate_grouped_runtime:

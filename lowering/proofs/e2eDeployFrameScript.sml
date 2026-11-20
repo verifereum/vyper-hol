@@ -1,5 +1,6 @@
 (* Creation-frame completion after the initcode has returned its bytes.
-   TOP-LEVEL: deploy_frame_complete, deploy_handle_step_out_of_gas.
+   TOP-LEVEL: deploy_frame_complete, deploy_handle_step_out_of_gas,
+              deploy_run_frame_deposit_oog.
    This hook does not establish reachability of that return state. *)
 Theory e2eDeployFrame
 Ancestors
@@ -57,6 +58,24 @@ Proof
   Cases_on `LENGTH c.returnData <= max_code_size` >> simp[] >>
   simp[vfmContextTheory.execution_state_component_equality,
        vfmContextTheory.rollback_state_component_equality]
+QED
+
+Theorem deploy_run_frame_deposit_oog:
+  LENGTH es.contexts = 1 /\
+  step_inner es = (INR NONE,pre) /\
+  pre.contexts = [(c,rb)] /\
+  c.msgParams.outputTo = Code target /\
+  (case c.returnData of h::_ => h <> n2w 0xef | [] => T) /\
+  c.msgParams.gasLimit < c.gasUsed + code_deposit_cost * LENGTH c.returnData ==>
+  run_frame es = SOME (INR (SOME OutOfGas),pre) /\ frame_raises es OutOfGas
+Proof
+  strip_tac >>
+  `run_frame es = SOME (INR (SOME OutOfGas),pre)` by
+    (irule frameGasTheory.run_frame_terminal >>
+     qexistsl_tac [`NONE`,`pre`] >>
+     drule_all deploy_create >>
+     simp[vfm_abort_def, arithmeticTheory.NOT_LESS_EQUAL]) >>
+  simp[frameGasTheory.frame_raises_def, vfm_abort_def] >> metis_tac[]
 QED
 
 (* Gas deposit and the runtime size limit can fail with OutOfGas, already

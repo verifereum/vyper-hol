@@ -334,6 +334,7 @@ Proof
      mp_tac (Q.ISPEC `vs:value list` (Q.SPEC `j:num` TAKE_DROP_SUC)) >>
      asm_simp_tac bool_ss [GSYM APPEND_ASSOC,APPEND]) >>
   `!k. k < 32 ==> k+slot NOTIN tn.t_mem` by metis_tac[ADD_COMM] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   qpat_assum `TAKE j avs ++ _ = avs` (fn av_eq =>
     qpat_assum `TAKE j vs ++ _ = vs` (fn v_eq =>
       drule (PURE_REWRITE_RULE [av_eq,v_eq] (Q.INST
@@ -347,7 +348,7 @@ Proof
   disch_then (drule_at (Pat `op_taint tn src = _`)) >>
   disch_then (drule_at (Pat `allocas_from lo s`)) >>
   disch_then (drule_at (Pat `fresh_vars_wrt limit_st s`)) >>
-  disch_then (drule_at (Pat `~ctx_has_dalloca ctx`)) >>
+  disch_then (drule_at (Pat `ctx_has_dalloca ctx ==> allocas_below_fmp s`)) >>
   disch_then (qspecl_then [`op_prov G dst`,`fn`,`PG`,`Ddead`] mp_tac) >>
   simp[LENGTH_TAKE,MIN_DEF,ADD_COMM,wordsTheory.w2n_n2w,Excl "enc_def"] >>
   disch_then (qx_choose_then `t`

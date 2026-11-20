@@ -55,7 +55,7 @@ val setup_cut = ``!ty ao vo st mid child en ops s G tn.
 val scalar_abort = ``!R A code C G tn ctx lo s func bb t PG.
   bop_scalar_seq R A code C /\
   (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
   run_inst_seq code s = Abort Revert_abort t ==>
@@ -64,10 +64,10 @@ val scalar_abort = ``!R A code C G tn ctx lo s func bb t PG.
     (^path) s G tn (Abort Revert_abort u) H z``;
 
 Theorem malformed_table_setup_for_prefix[local]:
-  (^scalar_abort) /\ ~ctx_has_dalloca ctx ==> (^setup_cut)
+  (^scalar_abort) ==> (^setup_cut)
 Proof
   simp_tac bool_ss [] >>
-  disch_then (CONJUNCTS_THEN2 (mk_asm "scalar") assume_tac) >>
+  disch_then (mk_asm "scalar") >>
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qmatch_asmsub_abbrev_tac `abi_decode_member_setup _ _ _ _ _ dyn _ _ _` >>
   `b+ao+(if dyn then 32 else 0) <= L` by (Cases_on `dyn` >> fs[]) >>
@@ -77,6 +77,11 @@ Proof
    stmt_state_rel H0 ctx func cenv cx es s` by
     fs[abi_malformed_entry_def, abi_decoder_operand_live_def,
        abi_decoder_older_vars_def, not_fresh_at_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (strip_tac >>
+     fs[stmt_state_rel_def, fmp_room_def, allocas_below_fmp_def,
+        alloca_inv_def, alloca_next_valid_def] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
   `B+L <= s.vs_alloca_next` by
     (drule stmt_state_rel_local_ptrs_alloca >> strip_tac >>
      fs[abi_malformed_allocated_window_def, alloca_inv_def, alloca_next_valid_def] >>
@@ -124,7 +129,7 @@ val head_cut = ``!pos hi k st sh p L s G tn ctx func ceiling lo PG.
   op_prov G pos = NONE /\ op_taint tn pos = {} /\
   op_prov G hi = NONE /\ op_taint tn hi = {} /\
   sh.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
-  fn_has_code st sh func /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  fn_has_code st sh func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   if p+k <= L then
@@ -308,7 +313,7 @@ Proof
      rule_assum_tac BETA_RULE >>
      `(^setup_cut)` by
        (BETA_TAC >> mp_tac (SIMP_RULE bool_ss [] malformed_table_setup_for_prefix) >>
-        (impl_tac >- (conj_tac >- first_assum ACCEPT_TAC >> first_assum ACCEPT_TAC)) >>
+        (impl_tac >- first_assum ACCEPT_TAC) >>
         disch_then ACCEPT_TAC) >>
      rule_assum_tac BETA_RULE >>
      `(?i. i < LENGTH ts /\ (^prefix_members) ts i)` by

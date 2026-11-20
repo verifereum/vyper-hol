@@ -42,10 +42,13 @@ Theorem source_memory_read_ranges_fmp_fields[simp]:
     (s with <|vs_fmp := p; vs_initial_fmp := i; vs_call_entry_fmp := e|>) =
   source_memory_read_ranges inst s
 Proof
-  strip_tac >> Cases_on `inst.inst_opcode` >>
-  asm_simp_tac (srw_ss()) [source_memory_read_ranges_def,
-    memory_range_of_operands_def, eval_operand_fmp_update,
-    eval_operands_fmp_fields] >> gvs[]
+  strip_tac >>
+  PURE_REWRITE_TAC [source_memory_read_ranges_def, memory_range_of_operands_def,
+                    eval_operand_fmp_update, eval_operands_fmp_fields] >>
+  Cases_on `inst.inst_opcode` >>
+  qpat_x_assum `inst.inst_opcode = _` SUBST1_TAC >>
+  CONV_TAC (REWRITE_CONV [opcode_case_def]) >>
+  fs[]
 QED
 
 Theorem source_memory_write_ranges_fmp_fields[simp]:

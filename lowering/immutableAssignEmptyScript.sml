@@ -2,7 +2,7 @@
 Theory immutableAssignEmpty
 Ancestors
   immutableAssignCode immutableAssignMetadata immutableDeployAssignRestore
-  immutableDeployAssignWord immutableDeployAssignBytes immutableDeployAssignAdmissible
+  immutableDeployAssignBytes immutableDeployAssignAdmissible
   memoryLocalRhsProps stmtSimDeclMem valueEncodingProps vyperTyping vyperTypeValues
   exprSimHypsDefs vyperTypeInvariants vyperTypeEnv
   venomState finite_map exprSimSource vyperInterpreter vyperState

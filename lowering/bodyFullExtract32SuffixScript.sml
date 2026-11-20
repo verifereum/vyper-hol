@@ -110,7 +110,7 @@ Theorem extract32_suffix_full:
   evaluate_type (get_tenv cx) (expr_type src) = SOME (BaseTV (BytesT (Dynamic m))) /\
   eval_operand srcop s = SOME (n2w p) /\
   (!span. 0 < LENGTH bs /\ span <= LENGTH bs ==> ptr_covers G tn data s span) /\
-  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
   fn_has_code st3 sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv st3 /\ sa.cs_next_var <= st3.cs_next_var /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st3 x) /\

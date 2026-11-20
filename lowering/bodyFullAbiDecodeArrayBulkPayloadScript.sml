@@ -13,6 +13,7 @@ Ancestors
   bodyFullAbiDecodeFiniteGuardEffect bodyFullAbiDecodeArrayBulkWindow
   bodyFullAbiDecodeOwnedCopyEffect stateRelProj venomMemDefs fragGasOriginPtrLoop
   fragGasPath valueEncodingProps
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 val owned_decoder_state = ``\st s G tn.
   alloca_history fn s /\ lo <= s.vs_alloca_next /\
@@ -254,6 +255,7 @@ Proof
     op_prov G op = NONE /\ op_taint tn op = {}` by
     (simp[] >> rpt strip_tac >> gvs[op_prov_def, op_taint_def]) >>
   `allocas_from lo s` by metis_tac[ghost_inv_at_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   mp_tac (Q.INST [
     `A` |-> `cnt INSERT src INSERT {op | ?w. op = Lit w}`,
     `B` |-> `data INSERT copy_sz INSERT cnt INSERT src INSERT {op | ?w. op = Lit w}`]
@@ -367,6 +369,9 @@ Resume abi_decode_array_bulk_joint_effect[source_address]:
    (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sb x) /\
    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sb x)` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `stmt_state_rel Hv ctx fn ce cx es u`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   mp_tac (abi_decode_bulk_window_add_joint |> BETA_RULE |> Q.INST
     [`dst` |-> `input`, `pos` |-> `data`, `sa` |-> `sb`, `sb` |-> `sc`,
      `out` |-> `sp`, `s` |-> `u`, `G` |-> `Gb`, `tn` |-> `tnb`,
@@ -422,6 +427,9 @@ Resume abi_decode_array_bulk_joint_effect[destination_address]:
    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x)` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
   `d+32+n*msz < dimword (:256)` by (simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp vc` by
+    (qpat_assum `stmt_state_rel Hv ctx fn ce cx es vc`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   mp_tac (abi_decode_bulk_window_add_joint |> BETA_RULE |> Q.INST
     [`dst` |-> `dp`, `pos` |-> `Lit 32w`, `sa` |-> `sc`, `sb` |-> `sd`,
      `out` |-> `dst`, `s` |-> `vc`, `G` |-> `Gc`, `tn` |-> `tnc`,

@@ -1816,8 +1816,9 @@ Proof
   strip_tac >> simp[compile_type_builtin_dispatch_body_def] >>
   irule pair_let_snd_preserves >> reverse conj_tac
   >- (irule bound_labels_lower_value >> simp[]) >>
-  rpt strip_tac >> simp[] >> IF_CASES_TAC >> simp[] >> IF_CASES_TAC
-  >- simp[bound_labels_as_stack_val, bound_labels_bytestring_widen_copy] >>
+  rpt strip_tac >> simp[] >> rpt IF_CASES_TAC >>
+  simp[bound_labels_as_ptr_val, bound_labels_as_stack_val,
+       bound_labels_bytestring_widen_copy, bound_labels_type_convert] >>
   Cases_on `rt` >> simp[bound_labels_as_stack_val, bound_labels_type_convert]
 QED
 

@@ -152,6 +152,7 @@ Proof
     prefix_member_canonical_inputs) >>
   (impl_tac >- asm_rewrite_tac[]) >> disch_tac >>
   drule_all prefix_member_setup_zero_base_reentry >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
   drule_all prefix_member_setup_pair_floor >>
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `allocas_from lo prepared` >>

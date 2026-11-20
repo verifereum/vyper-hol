@@ -61,7 +61,8 @@ Theorem extcall_request_head_halt_outcome:
   MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
@@ -88,14 +89,20 @@ Theorem extcall_request_head_halt_outcome:
       ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
       ~t.vs_halted /\ ee.gas_obs = [])
-    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   strip_tac >>
-  `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s` by
-    (rpt strip_tac >> drule frag_reachable_members >> disch_then drule >>
-     strip_tac >>
-     fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM, unitTransformDefsTheory.dalloca_no_wrap_def] >>
-     metis_tac[]) >>
+  irule gas_outcome_full_initial_domain >>
+  simp[cj 6 vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (`valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+       fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H ctx func cenv cx es s0 /\ _`
+       (qspec_then `storage_trace_horizon es.storage_trace` (drule_then strip_assume_tac)) >>
+     qpat_assum `stmt_state_rel _ ctx func cenv cx es s0`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx (BaseT AddressT) addr es` by
     (gvs[body_exprs_full_ok_def] >> metis_tac[body_expr_full_ok_def]) >>
@@ -176,8 +183,14 @@ Theorem extcall_request_head_outcome:
     (\H res ee gt r. expr_exit res r)
 Proof
   strip_tac >>
+  `!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z` by
+    (rpt strip_tac >> drule frag_reachable_members >> disch_then drule >>
+     strip_tac >>
+     fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
+        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   irule (Q.INST [`Q'` |-> `Q`,
-                  `R` |-> `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`]
+                  `R` |-> `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+                    (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)`]
            gas_outcome_full_post_mono) >>
   BETA_TAC >> rpt conj_tac
   >~ [`gas_outcome_full _ _ _ _ _ _ _ _`]
