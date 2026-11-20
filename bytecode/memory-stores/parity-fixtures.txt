@@ -47,3 +47,4 @@ p23_subscript_append
 p24_transient_field_append
 p25_complex_field_append
 p26_root_append
+w01_return_intcall_dynarray_bytes_widen
