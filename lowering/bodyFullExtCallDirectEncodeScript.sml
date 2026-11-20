@@ -141,10 +141,12 @@ Proof
 QED
 
 Theorem abi_encode_saved_values_execute =
-  SIMP_RULE bool_ss [] (Q.INST [`track_frame` |-> `F`] abi_encode_saved_values_execute_with_frame)
+  PURE_REWRITE_RULE [boolTheory.IMP_CLAUSES, boolTheory.AND_CLAUSES]
+    (Q.INST [`track_frame` |-> `F`] abi_encode_saved_values_execute_with_frame)
 
 Theorem abi_encode_saved_values_execute_pure =
-  SIMP_RULE bool_ss [] (Q.INST [`track_frame` |-> `T`] abi_encode_saved_values_execute_with_frame)
+  PURE_REWRITE_RULE [boolTheory.IMP_CLAUSES, boolTheory.AND_CLAUSES]
+    (Q.INST [`track_frame` |-> `T`] abi_encode_saved_values_execute_with_frame)
 
 
 Theorem extcall_direct_values_execute:

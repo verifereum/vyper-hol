@@ -1,6 +1,6 @@
 Theory bodyFullUnwrapCodeCtorFrame
 Ancestors
-  exprPtrCodeCopyEndpoint bodyFullUnwrapSlotPost bodyFullUnwrapRun
+  bodyFullUnwrapCodePureFrame exprPtrCodeCopyEndpoint bodyFullUnwrapSlotPost bodyFullUnwrapRun
   freshWrites exprPtrUnwrapAllocSemantic exprPtrUnwrapAllocation
   exprPtrUnwrapAllocSeparation exprPtrUnwrapRetained
   exprPtrUnwrapAllocationFrame exprSimStorageCopy bodyPtrDefs
@@ -217,23 +217,10 @@ Proof
      reverse conj_tac >- metis_tac[] >> qexistsl [`nb`, `w2n d`] >>
      fs[regions_disjoint_def] >> metis_tac[]) >>
   `pure_frame cenv func ee sb s z` by
-    (match_mp_tac (Q.SPECL [`cenv`,`func`,`ee`,`sb`,`s`,`z`,`sb.cs_next_id`,
-       `[Lit (n2w nb)]`,`[root]`,`w2n (d:bytes32)`,`nb`] exprSimPropsTheory.pure_frame_fresh_alloca) >>
-     `MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w nb)] [root]) (fn_insts func)` by
-       (drule exprPtrUnwrapAllocationTheory.unwrap_alloc_generated_code >> strip_tac >>
-        drule_all exprSimAllocTheory.buffer_alloc_code >> gvs[]) >>
-     `FLOOKUP z.vs_allocas sb.cs_next_id = SOME (w2n d,nb)` by
-       (qpat_assum `z.vs_allocas = u.vs_allocas` (rewrite_tac o single) >>
-        first_assum ACCEPT_TAC) >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     TRY (simp_tac bool_ss [arithmeticTheory.LESS_EQ_REFL] >> NO_TAC)
-     >- (rpt strip_tac >>
-         qpat_assum `!off len. _ ==> mem_bytes_at off len z.vs_memory = _` irule >>
-         first_assum drule >> decide_tac) >>
-     simp_tac bool_ss [regions_disjoint_def] >>
-     rpt strip_tac >>
-     qpat_assum `!off len. _ ==> mem_bytes_at off len z.vs_memory = _` irule >>
-     decide_tac) >>
+    (mp_tac (Q.INST [`dst_addr` |-> `w2n (d:bytes32)`]
+       unwrap_alloc_copy_pure_frame) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   simp[pure_frame_inst_idx] >>
   qpat_x_assum `wb_frame cenv ee ee sb s z` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>

@@ -11,6 +11,7 @@ Ancestors
   compileEnv exprLowering context bodyPtrDefs loweringPosts loweringStateRelDefs ptrDiscipline
   contractABI vyperABI vyperValue vyperTyping venomState venomInst
   finite_map pred_set list arithmetic pair words
+Libs pureFrameLib
 
 Theorem abi_encode_saved_row_pure:
   ty = lowered_value_type ce e /\
@@ -248,13 +249,7 @@ QED
 Finalise abi_encode_saved_row_pure
 
 Theorem abi_encode_saved_row =
-  let
-    val (witnesses, result) = strip_exists (rand (concl abi_encode_saved_row_pure))
-    val drop_frame = DISCH result (CONJUNCT2 (ASSUME result))
-    fun under_exists witness th = HO_MATCH_MP MONO_EXISTS (GEN witness th)
-  in
-    IMP_TRANS abi_encode_saved_row_pure (itlist under_exists witnesses drop_frame)
-  end
+  pureFrameLib.drop_frame abi_encode_saved_row_pure
 
 Theorem extcall_direct_row:
   ty = lowered_value_type ce e /\

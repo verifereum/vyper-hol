@@ -8,6 +8,7 @@ Ancestors
   compileEnv exprLowering context bodyPtrDefs ptrDiscipline contractABI
   vyperABI vyperValue vyperTyping venomState venomMemDefs
   words finite_map pred_set arithmetic list pair
+Libs pureFrameLib
 
 Theorem extcall_direct_word_source:
   saved = StackValue tag src /\ ty = lowered_value_type ce e /\ is_word_type ty /\
@@ -100,13 +101,7 @@ Proof
 QED
 
 Theorem abi_encode_saved_word_row =
-  let
-    val (witnesses, result) = strip_exists (rand (concl abi_encode_saved_word_row_pure))
-    val drop_frame = DISCH result (CONJUNCT2 (ASSUME result))
-    fun under_exists witness th = HO_MATCH_MP MONO_EXISTS (GEN witness th)
-  in
-    IMP_TRANS abi_encode_saved_word_row_pure (itlist under_exists witnesses drop_frame)
-  end
+  pureFrameLib.drop_frame abi_encode_saved_word_row_pure
 
 Theorem extcall_direct_word_row:
   extcall_direct_state ctx func ce cx st0 ee DF lo d se s G tn

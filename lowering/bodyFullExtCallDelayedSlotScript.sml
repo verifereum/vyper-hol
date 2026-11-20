@@ -9,6 +9,7 @@ Ancestors
   loweringPosts exprSimMemDefs vyperValue vyperStorageFootprint
   exprLowering exprSimWordArgs fragGasOriginPtr vyperState
   stateRelProj exprSimVVFrame bodyFullExtCallSavedOperand
+Libs pureFrameLib
 
 (* The slot address is computed before the saved argument is unwrapped. *)
 Theorem extcall_slot_address[local]:
@@ -378,13 +379,7 @@ Proof
 QED
 
 Theorem extcall_slot_unwrap =
-  let
-    val (witnesses, result) = strip_exists (rand (concl extcall_slot_unwrap_pure))
-    val drop_frame = DISCH result (CONJUNCT2 (ASSUME result))
-    fun under_exists witness th = HO_MATCH_MP MONO_EXISTS (GEN witness th)
-  in
-    IMP_TRANS extcall_slot_unwrap_pure (itlist under_exists witnesses drop_frame)
-  end
+  pureFrameLib.drop_frame extcall_slot_unwrap_pure
 
 (* Use the actual saved snapshot to protect the read operand from the ADD.
    The two physical endpoints do not depend on the storage horizon. *)

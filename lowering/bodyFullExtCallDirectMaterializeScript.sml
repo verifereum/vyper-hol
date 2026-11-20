@@ -9,6 +9,7 @@ Ancestors
   compileEnv exprLowering context contractABI
   vyperValue vyperTyping vyperABI venomState venomInst venomMemDefs
   finite_map pred_set list arithmetic pair words
+Libs pureFrameLib
 
 (* The cursor and payload remain owned throughout the per-row unwrap.
    The saved operand itself still uses its original compiler interval. *)
@@ -199,13 +200,7 @@ Proof
 QED
 
 Theorem abi_encode_saved_restore_row =
-  let
-    val (witnesses, result) = strip_exists (rand (concl abi_encode_saved_restore_row_pure))
-    val drop_frame = DISCH result (CONJUNCT2 (ASSUME result))
-    fun under_exists witness th = HO_MATCH_MP MONO_EXISTS (GEN witness th)
-  in
-    IMP_TRANS abi_encode_saved_restore_row_pure (itlist under_exists witnesses drop_frame)
-  end
+  pureFrameLib.drop_frame abi_encode_saved_restore_row_pure
 
 Theorem extcall_direct_restore_row:
   ty = lowered_value_type ce e /\

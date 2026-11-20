@@ -13,7 +13,7 @@ Ancestors
   compileEnv context vyperStorageFootprint vyperState valueEncodingProps
   exprLowering exprSimSliceCaptureControl venomState venomInst bufferAllocationExecution finite_map words arithmetic
 
-Libs horizonTypeLib
+Libs horizonTypeLib pureFrameLib
 
 Theorem extcall_saved_runtime_copy_replay_pure:
   lowered_value_type ce e = expr_type e /\
@@ -242,10 +242,4 @@ QED
 Finalise extcall_saved_runtime_copy_replay_pure
 
 Theorem extcall_saved_runtime_copy_replay =
-  let
-    val (witnesses, result) = strip_exists (rand (concl extcall_saved_runtime_copy_replay_pure))
-    val drop_frame = DISCH result (CONJUNCT2 (ASSUME result))
-    fun under_exists witness th = HO_MATCH_MP MONO_EXISTS (GEN witness th)
-  in
-    IMP_TRANS extcall_saved_runtime_copy_replay_pure (itlist under_exists witnesses drop_frame)
-  end
+  pureFrameLib.drop_frame extcall_saved_runtime_copy_replay_pure

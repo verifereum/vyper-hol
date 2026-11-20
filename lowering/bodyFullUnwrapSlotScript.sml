@@ -14,6 +14,7 @@ Ancestors
   exprSimPtrTopLevelStorageCopy exprSimStorageCopy venomState venomExecSemantics
   exprSimAbiEncodeMemoryLength arithmetic slotCopyExecution emitHelper
   assignTuplePtrAlloc bodyPtrBytestringBuiltinsAllocation bodyPtrMakeArrayExternalCaller
+Libs pureFrameLib
 
 (* A storage or transient aggregate is copied into a fresh buffer. *)
 Theorem unwrap_slot_copy_origin_ptr_no_dead_pure:
@@ -760,13 +761,7 @@ QED
 Finalise unwrap_slot_copy_origin_ptr_no_dead_pure
 
 Theorem unwrap_slot_copy_origin_ptr_no_dead =
-  let
-    val (witnesses, result) = strip_exists (rand (concl unwrap_slot_copy_origin_ptr_no_dead_pure))
-    val drop_frame = DISCH result (CONJUNCT2 (ASSUME result))
-    fun under_exists witness th = HO_MATCH_MP MONO_EXISTS (GEN witness th)
-  in
-    IMP_TRANS unwrap_slot_copy_origin_ptr_no_dead_pure (itlist under_exists witnesses drop_frame)
-  end
+  pureFrameLib.drop_frame unwrap_slot_copy_origin_ptr_no_dead_pure
 
 
 Theorem unwrap_slot_copy_origin_ptr:

@@ -9,7 +9,7 @@ Ancestors
   compileEnv exprLowering exprLoweringProps context contractABI
   valueEncodingDefs vyperValue vyperTyping vyperABI
   venomState venomInst venomMemDefs finite_map pred_set list arithmetic pair words
-Libs horizonTypeLib
+Libs horizonTypeLib pureFrameLib
 
 Theorem abi_encode_saved_store_static_pure:
   abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
@@ -128,13 +128,7 @@ Proof
 QED
 
 Theorem abi_encode_saved_store_static =
-  let
-    val (witnesses, result) = strip_exists (rand (concl abi_encode_saved_store_static_pure))
-    val drop_frame = DISCH result (CONJUNCT2 (ASSUME result))
-    fun under_exists witness th = HO_MATCH_MP MONO_EXISTS (GEN witness th)
-  in
-    IMP_TRANS abi_encode_saved_store_static_pure (itlist under_exists witnesses drop_frame)
-  end
+  pureFrameLib.drop_frame abi_encode_saved_store_static_pure
 
 Theorem extcall_direct_store_static:
   extcall_direct_state ctx func ce cx st0 ee DF lo d se s G tn
@@ -320,13 +314,7 @@ Proof
 QED
 
 Theorem abi_encode_saved_store_dynamic =
-  let
-    val (witnesses, result) = strip_exists (rand (concl abi_encode_saved_store_dynamic_pure))
-    val drop_frame = DISCH result (CONJUNCT2 (ASSUME result))
-    fun under_exists witness th = HO_MATCH_MP MONO_EXISTS (GEN witness th)
-  in
-    IMP_TRANS abi_encode_saved_store_dynamic_pure (itlist under_exists witnesses drop_frame)
-  end
+  pureFrameLib.drop_frame abi_encode_saved_store_dynamic_pure
 
 Theorem extcall_direct_store_dynamic:
   extcall_direct_state ctx func ce cx st0 ee DF lo d se s G tn

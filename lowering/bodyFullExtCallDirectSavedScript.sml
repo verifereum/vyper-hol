@@ -6,7 +6,7 @@ Ancestors
   targetPurePostTransport exprBopSimProps stateRelProj
   loweringPosts loweringStateRelDefs bodyPtrDefs fragGasOriginPtrDead
   vyperStorageFootprint compileEnv exprLowering context venomState freshWrites
-Libs horizonTypeLib
+Libs horizonTypeLib pureFrameLib
 
 (* Each later row reads the same saved value at its actual unwrap cut.
    Its original allocation interval is independent of the frame cutoff. *)
@@ -210,10 +210,4 @@ Proof
 QED
 
 Theorem extcall_direct_restore_saved =
-  let
-    val (witnesses, result) = strip_exists (rand (concl extcall_direct_restore_saved_pure))
-    val drop_frame = DISCH result (CONJUNCT2 (ASSUME result))
-    fun under_exists witness th = HO_MATCH_MP MONO_EXISTS (GEN witness th)
-  in
-    IMP_TRANS extcall_direct_restore_saved_pure (itlist under_exists witnesses drop_frame)
-  end
+  pureFrameLib.drop_frame extcall_direct_restore_saved_pure

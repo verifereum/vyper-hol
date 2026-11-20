@@ -12,7 +12,7 @@ Ancestors
   venomState venomInst freshWrites words finite_map ptrDiscipline
   loweringStateRelDefs fragExec venomExecSemantics vyperStorageFootprint
 
-Libs horizonTypeLib
+Libs horizonTypeLib pureFrameLib
 
 Theorem saved_ctor_immutable_operand[local]:
   lo <> 0 /\ local_ptrs_reserved ce su /\ immutable_base_zero ce t /\
@@ -301,10 +301,4 @@ Proof
 QED
 
 Theorem extcall_saved_ctor_copy_replay =
-  let
-    val (witnesses, result) = strip_exists (rand (concl extcall_saved_ctor_copy_replay_pure))
-    val drop_frame = DISCH result (CONJUNCT2 (ASSUME result))
-    fun under_exists witness th = HO_MATCH_MP MONO_EXISTS (GEN witness th)
-  in
-    IMP_TRANS extcall_saved_ctor_copy_replay_pure (itlist under_exists witnesses drop_frame)
-  end
+  pureFrameLib.drop_frame extcall_saved_ctor_copy_replay_pure

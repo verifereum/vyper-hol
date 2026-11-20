@@ -5,6 +5,7 @@ Ancestors
   exprLoweringProps loweringPosts loweringStateRelDefs bodyPtrDefs
   compileEnv exprLowering context vyperValue vyperStorageFootprint
   fragExec fragGasOriginPtr ptrDiscipline venomState venomInst words finite_map
+Libs pureFrameLib
 
 (* The row consumes the original saved value. A code-free unwrap retains
    its source allocation interval, while a copy owns its new interval. *)
@@ -92,13 +93,7 @@ Proof
 QED
 
 Theorem extcall_direct_saved_unwrap =
-  let
-    val (witnesses, result) = strip_exists (rand (concl extcall_direct_saved_unwrap_pure))
-    val drop_frame = DISCH result (CONJUNCT2 (ASSUME result))
-    fun under_exists witness th = HO_MATCH_MP MONO_EXISTS (GEN witness th)
-  in
-    IMP_TRANS extcall_direct_saved_unwrap_pure (itlist under_exists witnesses drop_frame)
-  end
+  pureFrameLib.drop_frame extcall_direct_saved_unwrap_pure
 
 (* The unwrap preserves live pointers issued before its input cut.
    Prefer the provenance frame of that cut for the new head and tail
