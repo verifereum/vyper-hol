@@ -9,7 +9,8 @@ Theory exprSimMapDefs
 Ancestors
   exprSimHypsDefs exprSimDefs loweringPosts gasOutcome gasContext
   vyperStoragePlaceProvenance exprLowering vyperInterpreter vyperState
-  vyperTypeCallGraph vyperTypeSystem
+  vyperTypeCallGraph vyperTypeSystem vyperContext option pair finite_map list
+  supportedExprTraverse
 
 (* The results the mapping judgment speaks of: any result, and the errors
    expr_res_ok allows. *)
@@ -66,7 +67,36 @@ End
 (* expr_body_pre for an expression naming a mapping, which
    well_typed_expr does not type: type_place_expr gives it a mapping's
    type. *)
-Definition expr_map_pre_def:
+Definition expr_map_pre_mods_def[nocompute]:
+  expr_map_pre_mods mods cenv cx env e es <=>
+    expr_sim_inv_mods mods cenv cx env es /\
+    (?kt vt. type_place_expr env e = SOME (HashMapT kt vt)) /\
+    byte_widths_expr e /\ alloc_limits_expr cenv e /\
+    call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
+    ~supported_expr_exists (const_name_root_mods mods) e /\
+    ~supported_expr_exists (unallocated_bare_global_root cenv env) e /\
+    EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                      supported_program tops /\
+                      IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
+          (int_calls_expr e) /\
+    (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+              EXISTS (occurs_abi_decode_target target o SND) mods) /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+              is_dynamic (vyper_to_abi_type (type_env_all_modules mods) target))
+End
+
+Definition expr_map_pre_split_def[nocompute]:
+  expr_map_pre cenv cx env e es <=>
+    expr_map_pre_mods [(NONE,cx_tops cx)] cenv cx env e es /\
+    expr_sim_inv cenv cx env es /\
+    EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+    (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+              occurs_abi_decode_target target (cx_tops cx)) /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+              is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target))
+End
+
+Theorem expr_map_pre_def:
   expr_map_pre cenv cx env e es <=>
     expr_sim_inv cenv cx env es /\
     (?kt vt. type_place_expr env e = SOME (HashMapT kt vt)) /\
@@ -82,7 +112,40 @@ Definition expr_map_pre_def:
               occurs_abi_decode_target target (cx_tops cx)) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
               is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target))
-End
+Proof
+  `(EVERY (\c. FST c = NONE /\
+            ?tops. supported_program tops /\
+                   get_module_code cx NONE = SOME tops /\
+                   IS_SOME (supported_function_decl tops c Internal))
+       (int_calls_expr e)) <=>
+    EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+    EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                      supported_program tops /\
+                      IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
+       (int_calls_expr e)` by
+    (simp[EVERY_MEM, FORALL_PROD] >> eq_tac >> strip_tac >> rpt strip_tac >>
+     res_tac >> gvs[] >> metis_tac[]) >>
+  simp[expr_map_pre_split_def, expr_map_pre_mods_def, const_name_root_mods_singleton,
+       type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2] >>
+  eq_tac >> strip_tac >> simp[] >>
+  `expr_sim_inv_mods [(NONE,cx_tops cx)] cenv cx env es` by
+    fs[expr_sim_inv_split_def] >>
+  `!x. unallocated_bare_global_root cenv env x ==> const_name_root cx x` by
+    (gen_tac >> Cases_on `x` >>
+     simp[unallocated_bare_global_root_def, const_name_root_def] >>
+     rename1 `cx_const_name cx nsid` >> PairCases_on `nsid` >>
+     rw[IS_SOME_EXISTS] >>
+     qpat_x_assum `expr_sim_inv _ _ _ _`
+       (mp_tac o CONJUNCT2 o REWRITE_RULE [expr_sim_inv_split_def]) >>
+     disch_then (qspecl_then [`nsid0`, `nsid1`] mp_tac) >>
+     simp[]) >>
+  `~supported_expr_exists (unallocated_bare_global_root cenv env) e` by
+    (strip_tac >>
+     qpat_x_assum `~supported_expr_exists (const_name_root cx) e` mp_tac >>
+     simp[] >> irule (CONJUNCT1 supported_expr_exists_mono) >>
+     metis_tac[]) >>
+  simp[]
+QED
 
 (* expr_vv_case for an expression naming a mapping. *)
 Definition expr_map_case_def:
