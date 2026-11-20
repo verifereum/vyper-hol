@@ -14,7 +14,8 @@ compiler's bytes.
   compiler's order (re-exports, external functions, public getters).
 - `sources/default_export/`, `sources/default_interface/`: the main module
   exports another module's `__default__`, directly and through its
-  `__interface__`.
+  `__interface__`, ahead of a function of that module; each calls its own
+  internal helper, so the runtime internals follow the export order.
 - The other cases are the multi-module programs in
   `tests/fixtures/check_contract/` (`multimodule_storage`,
   `nested_initializes`, `attribute_initializes`, `imported_deploy`,

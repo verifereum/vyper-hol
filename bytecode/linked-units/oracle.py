@@ -20,6 +20,18 @@ from vyper.compiler.input_bundle import FilesystemInputBundle
 from vyper.compiler.settings import OptimizationLevel, Settings
 
 
+def strip_prefix(x, prefix):
+    """Imports resolve to absolute paths: drop the case directory from every
+    string that starts with it, keeping the checkout's location out."""
+    if isinstance(x, dict):
+        return {k: strip_prefix(v, prefix) for k, v in x.items()}
+    if isinstance(x, list):
+        return [strip_prefix(v, prefix) for v in x]
+    if isinstance(x, str) and x.startswith(prefix):
+        return x[len(prefix):]
+    return x
+
+
 def main():
     out = Path(sys.argv[1]).resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -37,11 +49,10 @@ def main():
                 output_formats=("bytecode", "bytecode_runtime",
                                 "annotated_ast_dict", "layout"),
                 settings=settings, no_bytecode_metadata=True)
-        frontend = r["annotated_ast_dict"] | r["layout"]
-        # Imports resolve to absolute paths: keep the checkout's location out.
+        frontend = strip_prefix(r["annotated_ast_dict"] | r["layout"],
+                                str(case) + os.sep)
         text = json.dumps(frontend, separators=(",", ":"), sort_keys=True)
-        (out / f"{case.name}.json").write_text(
-            text.replace(str(case) + os.sep, "") + "\n")
+        (out / f"{case.name}.json").write_text(text + "\n")
         (out / f"{case.name}.hex").write_text(
             f"deploy={r['bytecode'].removeprefix('0x')}\n"
             f"runtime={r['bytecode_runtime'].removeprefix('0x')}\n")
