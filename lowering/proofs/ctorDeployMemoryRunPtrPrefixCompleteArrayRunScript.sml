@@ -374,19 +374,29 @@ Proof
 QED
 
 
-val Pk = ``
-  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var slot_var) src (Var dst_var)
-    DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi next limit_st slot_id /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Lit 0w) (Var slot_var) src (Var dst_var)
-    0 sb d slot slot 32 next initial /\
+val LoopCompiled = ``
+  abi_decoder_recursive_loop_compiled ce (sf:string |-> (string # type # num) list) ty func st middle end_st ops (Var slot_var) src (Var dst_var)
+    DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi next limit_st slot_id``;
+val LoopData = ``
+  abi_decoder_recursive_loop_data ce env (sf:string |-> (string # type # num) list) ty tv maxn avs vs DLOAD (Lit 0w) (Lit 0w) (Var slot_var) src (Var dst_var)
+    0 sb d slot slot 32 next initial``;
+val LoopSource = ``
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
-    initial.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
-  fn_inst_ids_distinct func /\ k + unit_alloca_budget ctx < dimword(:256) /\ ~ctx_has_dalloca ctx /\
+    initial.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)``;
+val LoopBounds = ``
   lo <= slot /\ lo <= d /\ D <= d /\ d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= D+N /\
   venomMemDefs$regions_disjoint (slot,32) (d,type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
   slot_id IN ctor_actual_sites func ids /\ frag_ids st end_st SUBSET ids /\
   slot_id NOTIN frag_ids middle end_st /\ b <= d /\
   d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= b+cap``;
+
+val LoopInputs = ``
+  (^LoopCompiled) /\ (^LoopData) /\ (^LoopSource) /\
+  fn_inst_ids_distinct func /\ k + unit_alloca_budget ctx < dimword(:256) /\ (^LoopBounds)``;
+val Pk = ``
+  (^LoopCompiled) /\ (^LoopData) /\ (^LoopSource) /\
+  fn_inst_ids_distinct func /\ k + unit_alloca_budget ctx < dimword(:256) /\
+  ~ctx_has_dalloca ctx /\ (^LoopBounds)``;
 
 val LoopAt = ``\label index j (s,G,tn,B).
   (^Ok) k ctx func site ids D N d
@@ -402,6 +412,9 @@ val LoopAt = ``\label index j (s,G,tn,B).
     mload d (s with vs_memory := mem) = n2w (LENGTH vs) /\
     elems_in_memory (TAKE j vs) (d+32) tv mem)``;
 
+val LoopInputsMode = ``(^LoopInputs) /\ (checked ==>
+  sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <=
+    LENGTH initial.vs_data_section)``;
 val PkMode = ``(^Pk) /\ (checked ==>
   sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <=
     LENGTH initial.vs_data_section)``;
@@ -409,7 +422,7 @@ val LoopAtMode = ``\label index j X. (^LoopAt) label index j X /\
   (checked ==> alloca_history func (FST X))``;
 
 Theorem prefix_complete_array_header_frame_pair_mode:
-  (^PkMode) /\ (^LoopAtMode) hdr 0 j X ==>
+  (^LoopInputsMode) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp (FST X)) /\ (^LoopAtMode) hdr 0 j X ==>
   ?Y. (^LoopAtMode) (if j < LENGTH vs then st.cs_current_bb else exit_lbl) 0 j Y /\
     (^FrameMode) X Y
 Proof
@@ -449,7 +462,7 @@ Proof
 QED
 
 Theorem prefix_complete_array_terminal_pair_mode:
-  (^PkMode) /\ (^LoopAtMode) hdr 0 (LENGTH vs) X ==>
+  (^LoopInputsMode) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp (FST X)) /\ (^LoopAtMode) hdr 0 (LENGTH vs) X ==>
   ?Y. (^LoopAtMode) exit_lbl 0 (LENGTH vs) Y /\ (^FrameMode) X Y
 Proof
   strip_tac >> drule_all prefix_complete_array_header_frame_pair_mode >> simp[]
@@ -496,7 +509,7 @@ Proof
 QED
 
 Theorem prefix_complete_array_body_pair_mode:
-  (^Pk) /\ j < LENGTH vs /\
+  (^LoopInputs) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp (FST X)) /\ j < LENGTH vs /\
   (^LoopAt) st.cs_current_bb (LENGTH st.cs_current_insts) j X /\
   (checked ==> sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <=
      LENGTH initial.vs_data_section /\ alloca_history func (FST X)) ==>
@@ -827,6 +840,7 @@ Theorem prefix_complete_array_successor_pair_mode:
   ?Y. (^LoopAtMode) hdr 0 (SUC j) Y /\ (^FrameMode) X Y
 Proof
   disch_then (mk_asm "child") >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (FST X)` by simp[] >>
   drule_all prefix_complete_array_header_frame_pair_mode >>
   disch_then (qspecl_then [`PG`,`Ddead`] mp_tac) >>
   asm_rewrite_tac[] >> strip_tac >>
@@ -948,7 +962,7 @@ Proof
 QED
 
 Theorem prefix_complete_array_header_frame_path_mode[local]:
-  (^PkMode) /\ (^LoopAtMode) hdr 0 j X ==>
+  (^LoopInputsMode) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp (FST X)) /\ (^LoopAtMode) hdr 0 j X ==>
   ?Y. (^LoopAtMode) (if j < LENGTH vs then st.cs_current_bb else exit_lbl) 0 j Y /\
     (^FramePathMode) X Y
 Proof
@@ -980,14 +994,14 @@ Proof
 QED
 
 Theorem prefix_complete_array_terminal_path_mode[local]:
-  (^PkMode) /\ (^LoopAtMode) hdr 0 (LENGTH vs) X ==>
+  (^LoopInputsMode) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp (FST X)) /\ (^LoopAtMode) hdr 0 (LENGTH vs) X ==>
   ?Y. (^LoopAtMode) exit_lbl 0 (LENGTH vs) Y /\ (^FramePathMode) X Y
 Proof
   strip_tac >> drule_all prefix_complete_array_header_frame_path_mode >> simp[]
 QED
 
 Theorem prefix_complete_array_body_path_mode[local]:
-  (^Pk) /\ j < LENGTH vs /\
+  (^LoopInputs) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp (FST X)) /\ j < LENGTH vs /\
   (^LoopAt) st.cs_current_bb (LENGTH st.cs_current_insts) j X /\
   (checked ==> sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <=
      LENGTH initial.vs_data_section /\ alloca_history func (FST X)) ==>
@@ -1314,6 +1328,7 @@ Theorem prefix_complete_array_successor_path_mode[local]:
   ?Y. (^LoopAtMode) hdr 0 (SUC j) Y /\ (^FramePathMode) X Y
 Proof
   disch_then (mk_asm "child") >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (FST X)` by simp[] >>
   drule_all prefix_complete_array_header_frame_path_mode >>
   disch_then (qspecl_then [`PG`,`Ddead`] mp_tac) >>
   asm_rewrite_tac[] >> strip_tac >>
