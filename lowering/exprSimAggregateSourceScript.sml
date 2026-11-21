@@ -218,6 +218,8 @@ Proof
     assert_def, ignore_bind_def, bind_def, return_def] >>
   Cases_on `rr` >>
   simp[get_accounts_def, lift_sum_def, vyperContextTheory.evaluate_builtin_def,
+    vyperContextTheory.is_self_codesize_def,
+    vyperContextTheory.evaluate_self_codesize_def,
     return_def, raise_def, bind_def]
 QED
 
@@ -234,5 +236,7 @@ Proof
     assert_def, ignore_bind_def, bind_def, return_def] >>
   Cases_on `rr` >>
   simp[get_accounts_def, lift_sum_def, vyperContextTheory.evaluate_builtin_def,
+    vyperContextTheory.is_self_codesize_def,
+    vyperContextTheory.evaluate_self_codesize_def,
     return_def, raise_def, bind_def]
 QED
