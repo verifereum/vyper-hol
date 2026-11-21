@@ -1,5 +1,6 @@
 Theory bodyFullAssignImmutableEmpty
 Ancestors
+  vfmBuffer[qualified,ignore_grammar]
   ctorDeployDeadSection immSectionDead valueEncodingDefs valueEncodingProps
   valueEncodingProofs abiEncoderMemory cv_std byte words divides arithmetic list
   ptrDiscipline context emitHelper fragExec
@@ -23,15 +24,6 @@ Proof
   rpt strip_tac >> res_tac >> decide_tac
 QED
 
-Theorem num_of_bytes_less_exp[local]:
-  !xs. num_of_bytes xs < 256 ** LENGTH xs
-Proof
-  Induct >> simp[num_of_bytes_def, EXP] >>
-  gen_tac >>
-  `w2n (h:word8) < 256` by (mp_tac (Q.ISPEC `h:word8` w2n_lt) >> simp[dimword_8]) >>
-  decide_tac
-QED
-
 Theorem mem_word_at_bytewise_mono[local]:
   LIST_REL (\x y. w2n x <= w2n y) (mem_bytes_at a 32 sec') (mem_bytes_at a 32 sec) ==>
   w2n (mem_word_at a sec') <= w2n (mem_word_at a sec)
@@ -40,7 +32,7 @@ Proof
   drule LIST_REL_REVERSE >>
   disch_then (assume_tac o MATCH_MP num_of_bytes_mono) >>
   `!m. num_of_bytes (REVERSE (mem_bytes_at a 32 m)) < dimword (:256)` by
-    (gen_tac >> mp_tac (Q.SPEC `REVERSE (mem_bytes_at a 32 m)` num_of_bytes_less_exp) >>
+    (gen_tac >> mp_tac (Q.SPEC `REVERSE (mem_bytes_at a 32 m)` vfmBufferTheory.num_of_bytes_lt) >>
      simp[dimword_def]) >>
   `!m. mem_word_at a m = word_of_bytes_be (mem_bytes_at a 32 m)` by
     simp[mem_word_at_def, mem_bytes_at_def, word_of_bytes_be_def] >>
