@@ -1,7 +1,7 @@
 (* Source composition for the non-slot Array branch of For. *)
 Theory bodyFullForArrayBranch
 Ancestors
-  bodyFullShadowBodyInv bodyStorageMetadata vyperSubscriptOverlap
+  bodyFullShadowBodyInv constSubst bodyStorageMetadata vyperSubscriptOverlap
   bodyFullForArrayRound gasOutcomeFull gasOutcomeFullCompose gasExemptCert
   gasContext gasSummary stmtSimForRounds stmtSimDefs exprSimDefs bodyPtrDefs
   haltExitProj vyperInterpreter vyperState vyperAST vyperValue
@@ -11,6 +11,7 @@ Ancestors
   gasShadow supportedStmts exprSimHyps bodyExprPreFacts bodyFullForArray
   bodyFullShared gasOutcomeFullGuarded bodyFullForRounds vyperEvalExprPreservesScopesDom
   bodyInvNoDalloca contextRawReachable
+  supportedExprTraverse[qualified,ignore_grammar]
 
 (* The loop continuation starts at the iterator's own captured endpoint. *)
 Theorem for_nonslot_array_prefix_continue_full:
@@ -109,6 +110,10 @@ Theorem nonslot_iterator_expr_pre[local]:
   expr_body_pre c cx env e es
 Proof
   strip_tac >>
+  `~supported_expr_exists (const_name_root cx) e` by
+    (drule_all bodySimTheory.body_inv_stmt_const_name_free >>
+     simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
+          supportedStmtTraverseTheory.supported_iterator_exists_def]) >>
   `cx_tops cx = tops` by
     (irule gasContextTheory.cx_tops_module >>
      qpat_assum `body_inv tops ctx c cx` mp_tac >> simp[NoAsms,body_inv_def]) >>
@@ -118,7 +123,6 @@ Proof
     (qpat_assum `body_inv tops ctx c cx` mp_tac >> simp[NoAsms,body_inv_def]) >>
   `well_typed_expr env e` by fs[vyperTypeSystemTheory.well_typed_iterator_def] >>
   `~expr_has_evm_run e /\
-   ~supported_expr_exists call_operands_effect_root e /\
    EVERY (\c. FST c = NONE) (int_calls_expr e) /\
    EVERY (\c. IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) /\
    ~is_extcode e /\ ~supported_expr_exists (const_name_root cx) e` suffices_by
@@ -152,37 +156,126 @@ Proof
     (qpat_assum `supported_iterator tops typ (Array e) n` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `e` >> simp[supported_iterator_def]) >>
   FIRST [
-       (drule_all_then assume_tac bodySimTheory.body_inv_const_name_free >>
-        drule_then strip_assume_tac bodyExprPreFactsTheory.supported_expr_body_calls >>
-        rpt conj_tac >> first_assum ACCEPT_TAC),
+       (drule_then assume_tac supportedExprTraverseTheory.supported_expr_no_evm_run >>
+        drule_then assume_tac bodyStorageCasesTheory.supported_expr_main_calls >>
+        `~is_extcode e` by
+          (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+           qexists_tac `c` >>
+           fs[stmt_exprs_ok_def,allocLimitsTheory.alloc_limits_stmt_def,
+              allocLimitsTheory.alloc_limits_iterator_def]) >>
+        fs[EVERY_CONJ]),
        (qpat_assum `e = Name _ _` SUBST_ALL_TAC >>
         simp[cj 1 supportedExprTraverseTheory.expr_has_evm_run_thm,
              supportedExprTraverseTheory.supported_expr_exists_def,
-             supportedExprTraverseTheory.call_operands_effect_root_def,
              vyperTypeCallGraphTheory.int_calls_expr_def,
              exprSimHypsDefsTheory.const_name_root_def,exprLoweringTheory.is_extcode_def]),
-       (rename1 `e = TopLevelName ty nid` >>
-        `IS_SOME (supported_immutable_type tops nid)` by
-          (qpat_assum `!nid. e = TopLevelName (expr_type e) nid ==> _`
-             (qspec_then `nid` mp_tac) >>
-           qpat_assum `e = TopLevelName ty nid` (fn th =>
-             rewrite_tac[th,vyperASTTheory.expr_type_def]) >> simp[]) >>
-        `~cx_const_name cx nid` by
-          (strip_tac >>
-           mp_tac (Q.INST [`nsid` |-> `nid`,`cenv` |-> `c`]
-             bodySimTheory.body_inv_const_name_not_root) >>
-           impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
-           strip_tac >> fs[]) >>
-        qpat_assum `e = TopLevelName _ _` SUBST_ALL_TAC >>
-        simp[cj 3 supportedExprTraverseTheory.expr_has_evm_run_thm,
-             supportedExprTraverseTheory.supported_expr_exists_def,
-             supportedExprTraverseTheory.call_operands_effect_root_def,
-             vyperTypeCallGraphTheory.int_calls_expr_def,
-             exprSimHypsDefsTheory.const_name_root_def,exprLoweringTheory.is_extcode_def])
+       (qpat_assum `e = TopLevelName _ _` SUBST_ALL_TAC >>
+        fs[cj 3 supportedExprTraverseTheory.expr_has_evm_run_thm,
+           supportedExprTraverseTheory.supported_expr_exists_def,
+           vyperTypeCallGraphTheory.int_calls_expr_def,exprLoweringTheory.is_extcode_def])
   ]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem array_constant_decl_mem[local]:
+  !tops id. constant_decl id tops <=>
+    ?vis init ty slot. MEM (VariableDecl vis (Constant init) id ty slot) tops
+Proof
+  Induct >> simp[constant_decl_def] >>
+  Cases_on `h` >> simp[constant_decl_def] >>
+  rename1 `VariableDecl vis mut name ty slot` >>
+  Cases_on `mut` >> simp[constant_decl_def] >> metis_tac[]
+QED
+
+Theorem array_constant_name_in_lowering[local]:
+  !tops acc name. constant_decl name tops ==>
+    MEM name (MAP FST (module_consts_env tops acc))
+Proof
+  recInduct module_consts_env_ind >>
+  simp[constant_decl_def, module_consts_env_def] >> rpt strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `module_consts_env rest acc'` >>
+  qspecl_then [`rest`, `acc'`] strip_assume_tac module_consts_env_acc_prefix >>
+  simp[Abbr `acc'`]
+QED
+
+(* GATE_ADMISSION: held, immutable struct-field array iterator at nonzero offset *)
+Theorem compile_for_immutable_field_array_frag_full:
+  !cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
+   shadow_func cenv env env' ret_ty lctx RetQ es.
+    ~(?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
+               supported_storage_value tops nid (ArrayT typ bd)) /\
+    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) /\ eval_iterator cx (Array e) s'3' = (INL vs,t') /\
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
+       (INL x,t'') ==>
+       body_for_full_ok cx tyv id body vs) /\
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_iterator_full_ok cx (Array e)) /\
+    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (For id typ (Array e) n body) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (For id typ (Array e) n body) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
+    stmt_exprs_ok cenv (For id typ (Array e) n body) /\
+    call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n body)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    ~supported_expr_exists (const_name_root cx) e /\
+    (?sid nid fld itv k atv bd.
+       e = Attribute (ArrayT typ bd) (TopLevelName (StructT sid) nid) fld /\
+       supported_immutable_type tops nid = SOME (StructT sid) /\
+       evaluate_type (get_tenv cx) (StructT sid) = SOME itv /\
+       evaluate_type (get_tenv cx) (ArrayT typ bd) = SOME atv /\
+       mem_path_offset itv [AttrSubscript fld] = SOME (k,atv) /\ 0 < k) ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (For id typ (Array e) n body))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n body)))
+      (eval_stmt cx (For id typ (Array e) n body)) es
+Proof
+  cheat
+QED
+
+Theorem compile_for_nonslot_array_frag_full:
+  !cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
+   shadow_func cenv env env' ret_ty lctx RetQ es.
+    ~(?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
+               supported_storage_value tops nid (ArrayT typ bd)) /\
+    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) /\ eval_iterator cx (Array e) s'3' = (INL vs,t') /\
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
+       (INL x,t'') ==>
+       body_for_full_ok cx tyv id body vs) /\
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_iterator_full_ok cx (Array e)) /\
+    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (For id typ (Array e) n body) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (For id typ (Array e) n body) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
+    ~supported_expr_exists (const_name_root cx) e /\
+    stmt_exprs_ok cenv (For id typ (Array e) n body) /\
+    call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n body)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (For id typ (Array e) n body))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n body)))
+      (eval_stmt cx (For id typ (Array e) n body)) es
 Proof
   rpt gen_tac >> strip_tac >>
   rewrite_tac[bodySimFullTheory.stmt_frag_full_def] >>
@@ -211,7 +304,15 @@ Proof
      IS_SOME (supported_immutable_type tops nid)` by
     (rpt strip_tac >>
      qpat_assum `e = TopLevelName _ _` SUBST_ALL_TAC >>
-     gvs[supported_iterator_def,vyperASTTheory.expr_type_def]) >>
+     gvs[supported_iterator_def,vyperASTTheory.expr_type_def] >>
+     PairCases_on `nid` >>
+     gvs[supportedDeclsTheory.supported_constant_type_def, AllCaseEqs(),
+         supportedExprTraverseTheory.supported_expr_exists_def,
+         exprSimHypsDefsTheory.const_name_root_def] >>
+     drule_then strip_assume_tac supported_variable_decl_mem >> gvs[] >>
+     drule_then assume_tac gasContextTheory.cx_tops_module >>
+     fs[exprSimHypsDefsTheory.cx_const_name_def] >>
+     metis_tac[array_constant_name_in_lowering, array_constant_decl_mem, supported_variable_decl_mem]) >>
   mp_tac (Q.INST [`c` |-> `cenv`,`sty` |-> `typ`,`fty` |-> `typ`,
       `loop_body` |-> `body'`,`sa0` |-> `sa`,`shadow_sa0` |-> `shadow_sa`]
       bodyFullForArrayRoundTheory.for_nonslot_array_layout_full) >>
@@ -393,86 +494,4 @@ Proof
     qpat_assum `ctx_has_dalloca ctx ==> !t. _ ==> allocas_below_fmp t` mp_tac >>
     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   disch_then ACCEPT_TAC
-QED
-*)
-(* GATE_ADMISSION: held, immutable struct-field array iterator at nonzero offset *)
-Theorem compile_for_immutable_field_array_frag_full:
-  !cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
-   shadow_func cenv env env' ret_ty lctx RetQ es.
-    ~(?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
-               supported_storage_value tops nid (ArrayT typ bd)) /\
-    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) /\ eval_iterator cx (Array e) s'3' = (INL vs,t') /\
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
-       (INL x,t'') ==>
-       body_for_full_ok cx tyv id body vs) /\
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_iterator_full_ok cx (Array e)) /\
-    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (For id typ (Array e) n body) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (For id typ (Array e) n body) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
-    stmt_exprs_ok cenv (For id typ (Array e) n body) /\
-    call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n body)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty /\
-    ~supported_expr_exists (const_name_root cx) e /\
-    (?sid nid fld itv k atv bd.
-       e = Attribute (ArrayT typ bd) (TopLevelName (StructT sid) nid) fld /\
-       supported_immutable_type tops nid = SOME (StructT sid) /\
-       evaluate_type (get_tenv cx) (StructT sid) = SOME itv /\
-       evaluate_type (get_tenv cx) (ArrayT typ bd) = SOME atv /\
-       mem_path_offset itv [AttrSubscript fld] = SOME (k,atv) /\ 0 < k) ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (For id typ (Array e) n body))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n body)))
-      (eval_stmt cx (For id typ (Array e) n body)) es
-Proof
-  cheat
-QED
-
-Theorem compile_for_nonslot_array_frag_full:
-  !cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
-   shadow_func cenv env env' ret_ty lctx RetQ es.
-    ~(?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
-               supported_storage_value tops nid (ArrayT typ bd)) /\
-    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) /\ eval_iterator cx (Array e) s'3' = (INL vs,t') /\
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
-       (INL x,t'') ==>
-       body_for_full_ok cx tyv id body vs) /\
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_iterator_full_ok cx (Array e)) /\
-    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (For id typ (Array e) n body) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (For id typ (Array e) n body) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
-    stmt_exprs_ok cenv (For id typ (Array e) n body) /\
-    call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n body)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (For id typ (Array e) n body))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n body)))
-      (eval_stmt cx (For id typ (Array e) n body)) es
-Proof
-  cheat
 QED
