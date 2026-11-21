@@ -330,7 +330,7 @@ Proof
 QED
 
 Theorem outcomes_free_acc:
-  P BALANCE /\ P EXTCODEHASH /\ P EXTCODESIZE /\ P GT /\ P INVALID /\
+  P BALANCE /\ P CODESIZE /\ P EXTCODEHASH /\ P EXTCODESIZE /\ P GT /\ P INVALID /\
   (!st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (lower_value cfn cenv (BaseT AddressT) addr_e st)))) /\
