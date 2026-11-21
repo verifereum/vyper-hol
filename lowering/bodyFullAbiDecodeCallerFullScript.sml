@@ -8,6 +8,7 @@ Ancestors
   exprSimMemDefs loweringPosts exprLowering vyperAST context vyperState
   exprSimAbiGasBridge venomExecSemantics exprOpenFirstOperand exprSimHyps stateRelProj
   bodyFullAbiDecodeCallerCollisionInterface vyperTyping
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 Libs
   markerLib
 
@@ -72,7 +73,7 @@ val owned_decoder_state = ``\st s G tn.
 
 val guarded_decoder_pre = ``\start finish dst src opc base_op hi d write_start size s G tn.
   opc = MLOAD /\ fn_has_code start finish fn /\ fn_inst_ids_distinct fn /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved ce start /\ (?H. V H) /\
+  local_ptrs_reserved ce start /\ (?H. V H) /\
   w2n input_word+LENGTH input_bytes < dimword (:256) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
@@ -114,7 +115,7 @@ val guarded_to_buf_entry = ``\dst src opc base_op hi info env sf ty tv live prot
 
 val caller_setup_pre = ``\data min_size max_size outsz st ready ops s G tn b data_var d.
   abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) /\
-  fn_has_code st ready fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st ready fn /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce st /\ origin.cs_next_var <= st.cs_next_var /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
@@ -711,6 +712,9 @@ Resume abi_decode_caller_full_conditional[normal_post]:
            qpat_assum `lookup_var (THE (case FST ops of _ => _)) t = SOME (n2w d)`
              (mp_tac o REWRITE_RULE [h])) >> simp[NoAsms]) >>
       `stmt_state_rel hh ctx func ce cx es1 t` by simp[] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+        (qpat_assum `stmt_state_rel hh ctx func ce cx es1 t`
+           (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
       `alloca_inv t` by
         (qpat_assum `stmt_state_rel hh ctx func ce cx es1 t`
            (ACCEPT_TAC o CONJUNCT2 o MATCH_MP stmt_state_rel_local_ptrs_alloca)) >>
