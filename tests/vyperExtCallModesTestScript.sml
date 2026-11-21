@@ -1,7 +1,7 @@
 (* Focused checks against the activated evaluator, independent of preservation. *)
 Theory vyperExtCallModesTest
 Ancestors
-  vyperInterpreterCV
+  vyperInterpreterCV vyperSmallStepCV vyperSmallStep[ignore_grammar]
   vyperExtCallConsumptionTest vyperCallOutcome extCallOracle
   vyperInterpreter vyperState vyperContext vyperABI vyperAST vyperValue
   vyperValueOperation list finite_map words vfmTypes pair
@@ -215,6 +215,35 @@ Theorem direct_extcall_forwards_gas:
 Proof
   simp (extcall_gas_expr_def :: gas_kwarg_def :: sstore_state_def ::
         DIRECT_CALL_SIMP) >>
+  CONV_TAC cv_eval
+QED
+
+(* Oracle mode records the gas= operand as the request's cap, and no cap
+   without the keyword: the oracle's failed outcome still leaves the request. *)
+Definition oracle_extcall_outcome_def:
+  oracle_extcall_outcome =
+    failed_outcome (call_outcome_request 0x99w [] NONE empty_state)
+End
+val () = cv_auto_trans oracle_extcall_outcome_def;
+val () = cv_auto_trans sstore_state_def;
+val () = cv_auto_trans gas_kwarg_def;
+val () = cv_auto_trans extcall_gas_expr_def;
+
+Definition oracle_extcall_gas_caps_def:
+  oracle_extcall_gas_caps gas =
+    MAP (\rq. rq.cr_gas)
+      (SND (vyperSmallStep$fromtvk (vyperSmallStep$cont
+        (vyperSmallStep$eval_expr_cps empty_evaluation_context
+          (extcall_gas_expr gas)
+          (sstore_state with outcomes := SOME [oracle_extcall_outcome])
+          vyperSmallStep$DoneK)))).requests
+End
+val () = cv_auto_trans oracle_extcall_gas_caps_def;
+
+Theorem oracle_extcall_records_gas_cap:
+  oracle_extcall_gas_caps (SOME 50000) = [SOME 50000] /\
+  oracle_extcall_gas_caps NONE = [NONE]
+Proof
   CONV_TAC cv_eval
 QED
 
