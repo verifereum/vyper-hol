@@ -4415,29 +4415,15 @@ QED
 Theorem body_assign_immutable_supported[local]:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (BaseTarget t) e) /\
-  immutable_root cx t /\
-  ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) ==>
+  immutable_root cx t /\ (?nsid. t = TopLevelNameTarget nsid) ==>
   ?nsid ity. t = TopLevelNameTarget nsid /\
     supported_immutable_type tops nsid = SOME ity
 Proof
-  strip_tac >>
-  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-    fs[body_inv_def] >>
-  `supported_target_info tops bindings t = NONE` by
-    (Cases_on `supported_target_info tops bindings t` >>
-     simp[] >> metis_tac[aug_place_supported_root_not_immutable]) >>
-  `supported_target tops bindings t` by
-    (qpat_x_assum `supported_stmt _ _ _` mp_tac >>
-     simp[Once supported_stmt_def, supported_assignment_def]) >>
-  Cases_on `t`
-  >- fs[immutable_root_def, target_root_def]
-  >- gvs[supported_target_def, optionTheory.IS_SOME_EXISTS]
-  >~ [`SubscriptTarget bt key`]
-  >- (Cases_on `bt` >> gvs[supported_target_def] >>
-      drule_all aug_place_legacy_subscript_info >> simp[SF SFY_ss]) >>
-  rename1 `supported_target _ _ (AttributeTarget bt fld)` >>
-  Cases_on `bt` >> gvs[supported_target_def] >>
-  drule_all aug_place_legacy_field_info >> simp[SF SFY_ss]
+  strip_tac >> gvs[] >>
+  `~supported_scalar_target tops nsid` by
+    metis_tac[augAssignFullTargetRoutesTheory.augassign_scalar_target_route] >>
+  fs[Once supported_stmt_def, supported_assignment_def,
+     supported_target_def, optionTheory.IS_SOME_EXISTS]
 QED
 
 Theorem body_assign_immutable_typed[local]:
@@ -8984,7 +8970,7 @@ Theorem body_assign_other_immutable_frontier_bind[local]:
         supported_storage_field_write tops nsid fld /\
         type_place_target env t = SOME (Type fty) /\ is_word_type fty) /\
     ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
-    immutable_root cx t /\
+    immutable_root cx t /\ (?nsid. t = TopLevelNameTarget nsid) /\
     (!src id ity off vv op st0 sa sm su sb shadow_sa shadow_su shadow_sb
         s0 G0 tn0 marks v ee z G tn.
       t = TopLevelNameTarget (src,id) /\ src = NONE /\ src = cenv.ce_module /\
@@ -9094,9 +9080,6 @@ Theorem body_assign_other_immutable_frontier_bind[local]:
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  `~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid)` by
-    (rpt strip_tac >> gvs[] >>
-     drule_all augAssignFullTargetRoutesTheory.augassign_scalar_target_route >> simp[]) >>
   drule_all_then strip_assume_tac body_assign_immutable_supported >>
   qpat_x_assum `t = TopLevelNameTarget _` SUBST_ALL_TAC >>
   rename1 `supported_immutable_type tops nsid = SOME ity` >>
@@ -18588,6 +18571,39 @@ Proof
   cheat
 QED
 
+(* GATE_ADMISSION: missing case, nested immutable nonempty assignment; owner: body place lane *)
+Theorem body_assign_nested_nonempty_immutable_full:
+  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_full_ok cx t) /\
+    body_expr_full_ok cx e /\
+    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+    struct_args_unique tops /\
+    supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (BaseTarget t) e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
+    immutable_root cx t /\ ~(?nsid. t = TopLevelNameTarget nsid) /\
+    ~supported_stmt_expr_exists (const_name_root cx) (Assign (BaseTarget t) e) ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
+      (eval_stmt cx (Assign (BaseTarget t) e)) es
+Proof
+  cheat
+QED
+
 Theorem body_assign_other_full:
   !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
@@ -18662,6 +18678,9 @@ Proof
   >- (irule body_assign_other_nonempty_target_full >>
       rpt (CHANGED_TAC (first_assum (irule_at Any))) >>
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  reverse (Cases_on `?nsid. t = TopLevelNameTarget nsid`)
+  >- (drule_all bodySimTheory.body_inv_stmt_const_name_free >> strip_tac >>
+      irule body_assign_nested_nonempty_immutable_full >> metis_tac[]) >>
   irule body_assign_other_immutable_frontier_bind >>
   rpt (CHANGED_TAC (first_assum (irule_at Any))) >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>

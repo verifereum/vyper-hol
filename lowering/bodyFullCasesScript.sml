@@ -200,6 +200,9 @@ Theorem body_assign_tuple_case_full:
 Proof
   rw[body_stmt_full_ok_def] >>
   drule_all body_inv_stmt_const_name_free >> strip_tac >>
+  Cases_on `EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
+                    ~(?nsid. t = TopLevelNameTarget nsid)) gs`
+  >- (irule body_assign_tuple_nested_immutable_full >> metis_tac[]) >>
   reverse (Cases_on `lowered_value_type cenv e = expr_type e`)
   >- (irule body_assign_tuple_widened_full >> metis_tac[]) >>
   Cases_on `?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
