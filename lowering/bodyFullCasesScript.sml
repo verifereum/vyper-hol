@@ -682,8 +682,9 @@ fun apply_case_lift lift =
 Definition internal_defaults_const_names_def:
   internal_defaults_const_names tops <=>
     EXISTS (\top. case top of
-      FunctionDecl Internal _ _ _ _ _ dflts _ _ =>
-        supported_exprs_exists (const_name_root_mods [(NONE,tops)]) dflts
+      FunctionDecl Internal _ _ _ _ _ dflts _ ss =>
+        supported_exprs_exists (const_name_root_mods [(NONE,tops)]) dflts \/
+        supported_stmts_expr_exists (const_name_root_mods [(NONE,tops)]) ss
     | _ => F) tops
 End
 
@@ -691,17 +692,20 @@ Theorem body_intcall_plain_defaults[local]:
   MEM (FunctionDecl Internal mut nr rr fn args dflts ret ss) tops /\
   cx_tops cx = tops /\
   ~internal_defaults_const_names tops /\ ~internal_defaults_msg_gas tops ==>
-  ~supported_exprs_exists (const_name_root cx) (DROP n dflts) /\
+  ~supported_exprs_exists (const_name_root cx) dflts /\
+  ~supported_stmts_expr_exists (const_name_root cx) ss /\
   ~supported_exprs_exists expr_msg_gas_root (DROP n dflts)
 Proof
   strip_tac >>
   `const_name_root_mods [(NONE,tops)] = const_name_root cx` by
     metis_tac[const_name_root_mods_singleton] >>
-  conj_tac >> irule bodyStorageCasesTheory.supported_exprs_exists_DROP
-  >- (qpat_x_assum `~internal_defaults_const_names tops` mp_tac >>
-      simp[internal_defaults_const_names_def, EXISTS_MEM] >>
-      disch_then (qspec_then `FunctionDecl Internal mut nr rr fn args dflts ret ss`
-        mp_tac) >> simp[]) >>
+  `~supported_exprs_exists (const_name_root cx) dflts /\
+    ~supported_stmts_expr_exists (const_name_root cx) ss` by
+    (qpat_x_assum `~internal_defaults_const_names tops` mp_tac >>
+     simp[internal_defaults_const_names_def, EXISTS_MEM] >>
+     disch_then (qspec_then `FunctionDecl Internal mut nr rr fn args dflts ret ss`
+       mp_tac) >> simp[]) >>
+  simp[] >> irule bodyStorageCasesTheory.supported_exprs_exists_DROP >>
   qpat_x_assum `~internal_defaults_msg_gas tops` mp_tac >>
   simp[supportedProgramTheory.internal_defaults_msg_gas_def, EXISTS_MEM] >>
   disch_then (qspec_then `FunctionDecl Internal mut nr rr fn args dflts ret ss`
@@ -787,11 +791,15 @@ Proof
     (drule bodyInvCodePropsTheory.body_inv_main_code >> strip_tac >>
      fs[body_inv_def]) >>
   qpat_assum `!ts. ALOOKUP _ _ = SOME _ ==> _` (drule_then strip_assume_tac) >>
-  `~supported_exprs_exists (const_name_root cx)
-        (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
+  `~supported_exprs_exists (const_name_root cx) dflts /\
+    ~supported_stmts_expr_exists (const_name_root cx) ss /\
     ~supported_exprs_exists expr_msg_gas_root
         (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)` by
     (drule_all body_intcall_plain_defaults >> simp[]) >>
+  `~supported_exprs_exists (const_name_root cx)
+        (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)` by
+    (irule bodyStorageCasesTheory.supported_exprs_exists_DROP >>
+     first_assum ACCEPT_TAC) >>
   `~MEM (src_id_opt,fn) cx.stk ==> body_exprs_full_ok cx es` by
     (strip_tac >> drule intcall_results_full_ih >> disch_then drule_all >>
      simp[]) >>
