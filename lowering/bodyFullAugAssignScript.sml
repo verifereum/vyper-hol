@@ -1024,40 +1024,26 @@ Resume body_augassign_nested_immutable_full[nested_store_dead]:
 QED
 
 Resume body_augassign_nested_immutable_full[nested_store_rel]:
-  `val_in_memory itv iv off w.vs_memory` by
-    (qpat_assum `!mem. mem_agree_outside tnw.t_mem w.vs_memory mem ==>
-       val_in_memory itv iv off mem` (qspec_then `w.vs_memory` mp_tac) >>
-     simp[NoAsms,bodyPtrDefsTheory.mem_agree_outside_def]) >>
   `val_in_memory ptv value (off+k) endState.vs_memory` by
     (qpat_assum `endState.vs_memory = _` SUBST1_TAC >>
      drule assignTuplePtrStoreWordTheory.store_lays_out_robust_ptr >>
      disch_then irule >> qexistsl_tac [`{}`,`w`] >>
      simp[bodyPtrDefsTheory.mem_agree_outside_def]) >>
-  `!a n. a+n <= off+k \/ off+k+32 <= a ==>
+  `LENGTH w.vs_memory <= LENGTH endState.vs_memory` by
+    simp[venomMemPropsTheory.LENGTH_mstore_eq] >>
+  `!a n. regions_disjoint a n (off+k) (type_memory_size ptv) ==>
     mem_bytes_at a n endState.vs_memory = mem_bytes_at a n w.vs_memory` by
     (rpt strip_tac >>
      qpat_assum `endState.vs_memory = _` SUBST1_TAC >>
-     irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> decide_tac) >>
-  `!a n. off <= a /\ a+n <= off+type_memory_size itv /\
-       (a+n <= off+k \/ off+k+type_memory_size ptv <= a) ==>
-       mem_bytes_at a n endState.vs_memory = mem_bytes_at a n w.vs_memory` by
-    (rpt strip_tac >>
-     qpat_assum `!a n. a+n <= off+k \/ off+k+32 <= a ==> _`
-       (qspecl_then [`a`,`n`] irule) >> decide_tac) >>
-  drule_all immutable_value_bytes_rel_replace_path >> strip_tac >>
-  `LENGTH w.vs_memory <= LENGTH endState.vs_memory` by
-    simp[venomMemPropsTheory.LENGTH_mstore_eq] >>
-  `!a n. regions_disjoint a n off (type_memory_size itv) ==>
-    mem_bytes_at a n endState.vs_memory = mem_bytes_at a n w.vs_memory` by
-    (rpt strip_tac >>
-     qpat_assum `!a n. a+n <= off+k \/ off+k+32 <= a ==> _`
-       (qspecl_then [`a`,`n`] irule) >>
-     qpat_assum `regions_disjoint a n off (type_memory_size itv)` mp_tac >>
-     simp_tac bool_ss [loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
-  irule immutable_store_stmt_state_rel >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  qexistsl_tac [`env`,`ee`,`id`,`off`,`w`,`cd`,`NONE`,`itv`,`root_ty`,`new`] >>
-  simp[]
+     irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+     qpat_assum `regions_disjoint a n (off+k) (type_memory_size ptv)` mp_tac >>
+     simp_tac bool_ss [loweringStateRelDefsTheory.regions_disjoint_def,
+       ASSUME ``type_memory_size ptv = 32``] >> decide_tac) >>
+  MATCH_MP_TAC (Q.INST [`env` |-> `env`,`es` |-> `ee`,`id` |-> `id`,
+    `itv` |-> `itv`,`k` |-> `k`,`off` |-> `off`,`path` |-> `path`,
+    `ptv` |-> `ptv`,`s` |-> `w`,`sa` |-> `cd`,`src` |-> `NONE`,
+    `ty` |-> `root_ty`,`v` |-> `value`] immutable_path_store_stmt_state_rel) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
 QED
 
 Resume body_augassign_nested_immutable_full[nested_store_history]:
