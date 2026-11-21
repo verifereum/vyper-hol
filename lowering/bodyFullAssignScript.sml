@@ -2020,6 +2020,10 @@ Proof
   `~supported_expr_exists (const_name_root cx) e` by
     (drule_all body_inv_stmt_const_name_free >>
      simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
+  `~is_extcode e` by
+    (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+     qexists_tac `cenv` >>
+     fs[stmt_exprs_ok_def, Once allocLimitsTheory.alloc_limits_stmt_def]) >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
@@ -2542,6 +2546,10 @@ Proof
   `~supported_expr_exists (const_name_root cx) e` by
     (drule_all body_inv_stmt_const_name_free >>
      simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
+  `~is_extcode e` by
+    (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+     qexists_tac `cenv` >>
+     fs[stmt_exprs_ok_def, Once allocLimitsTheory.alloc_limits_stmt_def]) >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `cx_tops cx = tops` by (fs[body_inv_def] >> drule cx_tops_module >> simp[]) >>
   irule stmt_expr_body_pre >>
@@ -7995,6 +8003,10 @@ Proof
   `~supported_expr_exists (const_name_root cx) e` by
     (drule_all body_inv_stmt_const_name_free >>
      simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
+  `~is_extcode e` by
+    (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+     qexists_tac `cenv` >>
+     fs[stmt_exprs_ok_def, Once allocLimitsTheory.alloc_limits_stmt_def]) >>
   `cx_tops cx = tops` by (fs[body_inv_def] >> drule cx_tops_module >> simp[]) >>
   irule stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
@@ -13962,6 +13974,10 @@ Proof
   `~supported_expr_exists (const_name_root cx) e` by
     (drule_all body_inv_stmt_const_name_free >>
      simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
+  `~is_extcode e` by
+    (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+     qexists_tac `cenv` >>
+     fs[stmt_exprs_ok_def, Once allocLimitsTheory.alloc_limits_stmt_def]) >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `cx_tops cx = tops` by (fs[body_inv_def] >> drule cx_tops_module >> simp[]) >>
   `call_evaluation_safe cx (int_calls_expr e)` by
