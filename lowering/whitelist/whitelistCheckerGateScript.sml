@@ -27,7 +27,12 @@ Ancestors
   supportedStmts
   supportedStmtTraverse supportedProgram
   whitelistCheckerDecls whitelistCheckerDeploy whitelistCheckerTypes
-  whitelistCheckerProgram whitelistCheckerExprs
+  whitelistCheckerProgram whitelistCheckerExprs whitelistCheckerStmts
+  whitelistCheckerFnSigs
+  relation vyperTypeContractStaticMaps vyperTypeCallGraph
+  vyperTypeCallGraphSoundness vyperTypeEventLookup placeTypingBuildProps
+  supportedNameRoot supportedGetterProps compileVyper constSubst constSubstMods
+  constSubstStmtsPreserve loweringShapeSource bodyExprPreFacts
 
 (* ===== Runtime gate ===== *)
 
@@ -93,18 +98,33 @@ Proof
   >> metis_tac[assignable_type_supported_event, checker_indexed_event_type_supported]
 QED
 
+Triviality checked_single_decl_any:
+  check_contract mode layouts addr [(NONE, tops)] = SOME art /\ MEM tl tops ==>
+  check_toplevel_decl [(NONE, tops)] art NONE tl
+Proof
+  strip_tac >> irule check_contract_toplevel_decl_MEM_checked >> simp[] >>
+  metis_tac[]
+QED
+
+Triviality checked_single_header:
+  check_contract mode am.layouts tx.target [(NONE, tops)] = SOME art /\
+  layouts_agree tops am tx /\ MEM tl tops ==>
+  supported_declaration_header tops tl
+Proof
+  strip_tac >> drule_all checked_single_decl_any >> strip_tac >>
+  drule check_contract_main_module_allocated >>
+  simp[module_allocated_def, EVERY_MEM] >>
+  disch_then (drule_then assume_tac) >>
+  metis_tac[layouts_agree_allocated_header, checker_supported_declaration_header]
+QED
+
 Theorem check_contract_supported_declaration_headers:
   check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
   layouts_agree tops am tx ==>
   supported_declaration_headers tops
 Proof
   rw[supported_declaration_headers_def, EVERY_MEM] >>
-  rename1 `MEM tl tops` >>
-  drule_all check_contract_single_decl >> strip_tac >>
-  drule check_contract_main_module_allocated >>
-  simp[module_allocated_def, EVERY_MEM] >>
-  disch_then (drule_then assume_tac) >>
-  metis_tac[layouts_agree_allocated_header, checker_supported_declaration_header]
+  metis_tac[checked_single_header]
 QED
 
 Theorem check_contract_supported_internal_function_names:
@@ -126,6 +146,271 @@ Proof
   rename1 `vis <> Internal` >> Cases_on `vis` >> gvs[]
 QED
 
+(* ===== The function-entry environment ===== *)
+
+Triviality checked_single_vtype_keys:
+  check_contract mode layouts addr [(NONE, tops)] = SOME art ==>
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))
+Proof
+  strip_tac >>
+  `contract_namespaces_ok F [(NONE, tops)]`
+    by metis_tac[check_contract_runtime_namespaces] >>
+  drule contract_namespaces_ok_module_toplevel_vtype_keys >> simp[]
+QED
+
+Triviality checker_variable_decl_facts:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+  MEM (VariableDecl vis mut id ty init) tops /\
+  supported_declaration_header tops (VariableDecl vis mut id ty init) ==>
+  supported_place_root tops (NONE,id) /\ build_hashmap_info tops (NONE,id) = NONE /\
+  ((mut = Storage \/ mut = Transient) ==> supported_storage_value tops (NONE,id) ty) /\
+  (mut = Immutable ==> supported_immutable_type tops (NONE,id) = SOME ty) /\
+  (!e. mut = Constant e ==> supported_constant_type tops (NONE,id) = SOME ty)
+Proof
+  strip_tac >> drule_all supported_variable_decl_distinct_mem >>
+  drule_all build_hashmap_info_variable >>
+  Cases_on `mut` >> Cases_on `init` >>
+  gvs[supported_declaration_header_def, supported_place_root_def,
+      supported_storage_value_def, supported_immutable_type_def,
+      supported_constant_type_def]
+QED
+
+Triviality checker_hashmap_decl_facts:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+  MEM (HashMapDecl vis tr id kt vt slot) tops /\
+  supported_declaration_header tops (HashMapDecl vis tr id kt vt slot) ==>
+  supported_place_root tops (NONE,id) /\
+  build_hashmap_info tops (NONE,id) = SOME (tr,kt,vt)
+Proof
+  strip_tac >> drule_all getter_hashmap_member_lookup >>
+  drule_all getter_hashmap_excludes_variable >>
+  drule_all build_hashmap_info_hashmap >>
+  Cases_on `slot` >> gvs[supported_place_root_def, supported_declaration_header_def]
+QED
+
+Triviality checked_single_vtype_ok:
+  check_contract mode am.layouts tx.target [(NONE, tops)] = SOME art /\
+  layouts_agree tops am tx /\
+  FLOOKUP art.cta_toplevel_vtypes k = SOME vt ==>
+  checker_vtype_ok tops k vt
+Proof
+  strip_tac >> drule checked_single_vtype_keys >>
+  drule check_contract_nonsig_maps >> rpt strip_tac >>
+  gvs[FLOOKUP_DRESTRICT_SOME] >> drule single_module_vtypes_sound >>
+  rpt strip_tac >> gvs[] >>
+  drule_all checked_single_header >> drule_all checked_single_decl_any >>
+  rpt strip_tac
+  >- (drule_all checker_variable_decl_facts >> Cases_on `mut` >>
+      gvs[checker_vtype_ok_def, check_toplevel_decl_def, type_env_all_modules_def,
+          FUNION_FEMPTY_2, GSYM type_env_def]) >>
+  drule_all checker_hashmap_decl_facts >>
+  gvs[checker_vtype_ok_def, check_toplevel_decl_def, check_value_type_def,
+      type_env_all_modules_def, FUNION_FEMPTY_2, GSYM type_env_def]
+QED
+
+Triviality checked_bare_global_vtype:
+  check_contract mode layouts addr mods = SOME art /\
+  FLOOKUP art.cta_bare_globals k = SOME ty ==>
+  FLOOKUP art.cta_toplevel_vtypes k = SOME (Type ty)
+Proof
+  strip_tac >> PairCases_on `k` >>
+  `ALOOKUP [((tx:call_txn).target, mods)] tx.target = SOME mods` by simp[] >>
+  drule_all check_contract_bare_globals_consistent_checked >>
+  disch_then (qspec_then `ARB` strip_assume_tac)
+QED
+
+Triviality checked_single_fn_sig_ret:
+  check_contract mode layouts addr [(NONE, tops)] = SOME art /\
+  FLOOKUP art.cta_fn_sigs k = SOME sig ==>
+  sig.ret_ty = NoneT \/ assignable_type (type_env tops) sig.ret_ty
+Proof
+  strip_tac >> drule check_contract_artifact_fields >> strip_tac >>
+  gvs[FLOOKUP_DRESTRICT_SOME] >> PairCases_on `k` >>
+  drule_all build_contract_type_artifact_fn_sigs_declared_sound >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  drule_all checked_single_decl_any >>
+  simp[check_toplevel_decl_def, type_env_all_modules_def, FUNION_FEMPTY_2,
+       GSYM type_env_def]
+QED
+
+Triviality checked_runtime_fn_sig_internal:
+  check_contract F layouts addr [(NONE, tops)] = SOME art /\
+  FLOOKUP art.cta_fn_sigs k = SOME sig ==>
+  IS_SOME (supported_function_decl tops k Internal)
+Proof
+  strip_tac >> drule check_contract_artifact_fields >> strip_tac >>
+  gvs[FLOOKUP_DRESTRICT_SOME] >> PairCases_on `k` >>
+  drule_all build_contract_type_artifact_fn_sigs_declared_sound >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  Cases_on `vis` >> gvs[include_fn_sig_def] >>
+  metis_tac[supported_function_decl_internal_MEM]
+QED
+
+Triviality checked_single_event_fields:
+  check_contract mode layouts addr [(NONE, tops)] = SOME art /\
+  FLOOKUP art.cta_event_fields k = SOME fields ==>
+  supported_event_fields tops k = SOME fields
+Proof
+  strip_tac >> drule check_contract_runtime_namespaces >>
+  simp[contract_namespaces_ok_def, contract_keys_def] >> strip_tac >>
+  qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+  simp[check_contract_def, live_artifact_def] >> strip_tac >> gvs[] >>
+  PairCases_on `k` >> drule single_module_event_fields >> strip_tac >> gvs[] >>
+  irule supported_event_fields_event_keys >> simp[]
+QED
+
+Triviality checked_single_assignable:
+  check_contract mode am.layouts tx.target [(NONE, tops)] = SOME art /\
+  layouts_agree tops am tx /\
+  FLOOKUP art.cta_bare_global_assignable k = SOME ty ==>
+  FLOOKUP art.cta_bare_globals k = SOME ty /\ supported_place_root tops k /\
+  supported_immutable_type tops k = SOME ty
+Proof
+  strip_tac >>
+  `contract_namespaces_ok mode [(NONE, tops)] /\
+   contract_namespaces_ok F [(NONE, tops)]`
+    by metis_tac[check_contract_artifact_fields, check_contract_runtime_namespaces] >>
+  drule checked_single_vtype_keys >> drule check_contract_nonsig_maps >>
+  rpt strip_tac >> PairCases_on `k` >> gvs[] >>
+  drule_all build_contract_type_artifact_bare_global_assignable_sound >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  drule_all checked_single_header >> strip_tac >>
+  drule_all checker_variable_decl_facts >> strip_tac >> fs[] >>
+  irule build_contract_type_artifact_bare_globals_complete >> simp[] >>
+  metis_tac[]
+QED
+
+Triviality checked_single_storage_value:
+  check_contract mode am.layouts tx.target [(NONE, tops)] = SOME art /\
+  layouts_agree tops am tx /\
+  FLOOKUP art.cta_bare_globals k = NONE /\
+  FLOOKUP art.cta_toplevel_vtypes k = SOME (Type ty) ==>
+  supported_storage_value tops k ty
+Proof
+  strip_tac >>
+  `contract_namespaces_ok F [(NONE, tops)]`
+    by metis_tac[check_contract_runtime_namespaces] >>
+  `ALOOKUP [(NONE, tops)] (NONE:num option) = SOME tops` by simp[] >>
+  drule checked_single_vtype_keys >> drule check_contract_nonsig_maps >>
+  rpt strip_tac >> gvs[FLOOKUP_DRESTRICT_SOME] >>
+  drule single_module_vtypes_sound >> strip_tac >> gvs[] >>
+  drule_all checked_single_header >> strip_tac >>
+  drule_all checker_variable_decl_facts >> strip_tac >>
+  Cases_on `mut` >> gvs[] >>
+  drule build_contract_type_artifact_bare_globals_complete >>
+  simp[PULL_EXISTS] >> disch_then drule >> simp[]
+QED
+
+Triviality checked_base_env_ok:
+  check_contract mode am.layouts tx.target [(NONE, tops)] = SOME art /\
+  layouts_agree tops am tx /\
+  env.type_defs = type_env tops /\ env.var_types = FEMPTY /\
+  env.toplevel_vtypes = art.cta_toplevel_vtypes /\
+  env.bare_globals = art.cta_bare_globals /\
+  env.event_fields = art.cta_event_fields /\
+  (!k sig. FLOOKUP env.fn_sigs k = SOME sig ==>
+     FLOOKUP art.cta_fn_sigs k = SOME sig /\
+     IS_SOME (supported_function_decl tops k Internal)) /\
+  (!k ty. FLOOKUP env.bare_global_assignable k = SOME ty ==>
+     FLOOKUP art.cta_bare_global_assignable k = SOME ty) ==>
+  checker_env_ok tops env /\ checker_stmt_env_ok tops env
+Proof
+  strip_tac >> simp[checker_env_ok_def, checker_stmt_env_ok_def] >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac
+  >~ [`MEM (StructDecl _ _) _`]
+  >- (drule_all checked_single_decl_any >>
+      simp[check_toplevel_decl_def, type_env_all_modules_def, FUNION_FEMPTY_2,
+           GSYM type_env_def, EVERY_MEM, FORALL_PROD] >> metis_tac[])
+  >~ [`checker_vtype_ok`] >- metis_tac[checked_single_vtype_ok]
+  >~ [`sig.ret_ty`] >- (res_tac >> metis_tac[checked_single_fn_sig_ret])
+  >~ [`supported_immutable_type`]
+  >- (res_tac >> metis_tac[checked_single_assignable])
+  >~ [`supported_storage_value`] >- metis_tac[checked_single_storage_value]
+  >~ [`FLOOKUP _ _ = SOME (Type _)`] >- metis_tac[checked_bare_global_vtype] >>
+  metis_tac[checked_single_event_fields]
+QED
+
+Triviality checker_envs_foldl_extend:
+  !args env. checker_env_ok tops env /\ checker_stmt_env_ok tops env /\
+    EVERY (\(_,ty). assignable_type (type_env tops) ty) args ==>
+    checker_env_ok tops (FOLDL (\env (id,ty). extend_local env id ty b) env args) /\
+    checker_stmt_env_ok tops (FOLDL (\env (id,ty). extend_local env id ty b) env args)
+Proof
+  Induct >> simp[] >> Cases >> simp[] >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >>
+  simp[checker_stmt_env_ok_extend_local] >>
+  irule checker_env_ok_extend_local >> simp[]
+QED
+
+Triviality foldl_extend_local_fn_sigs:
+  !args env. (FOLDL (\env (id,ty). extend_local env id ty b) env args) with fn_sigs := X =
+    FOLDL (\env (id,ty). extend_local env id ty b) (env with fn_sigs := X) args
+Proof
+  Induct >> simp[] >> Cases >> simp[extend_local_def]
+QED
+
+(* The entry environment of a body, with its signatures and assignable
+   immutables cut to fs and asg. *)
+Triviality checked_entry_env_ok:
+  check_contract mode am.layouts tx.target [(NONE, tops)] = SOME art /\
+  layouts_agree tops am tx /\
+  EVERY (\(_,ty). assignable_type (type_env tops) ty) args /\
+  (!k sig. FLOOKUP fs k = SOME sig ==>
+     FLOOKUP art.cta_fn_sigs k = SOME sig /\
+     IS_SOME (supported_function_decl tops k Internal)) /\
+  (!k ty. FLOOKUP asg k = SOME ty ==>
+     FLOOKUP art.cta_bare_global_assignable k = SOME ty) ==>
+  checker_env_ok tops (FOLDL (\env (id,ty). extend_local env id ty b)
+    (artifact_env art [(NONE, tops)] NONE with
+       <| fn_sigs := fs; bare_global_assignable := asg |>) args) /\
+  checker_stmt_env_ok tops (FOLDL (\env (id,ty). extend_local env id ty b)
+    (artifact_env art [(NONE, tops)] NONE with
+       <| fn_sigs := fs; bare_global_assignable := asg |>) args)
+Proof
+  strip_tac >> irule checker_envs_foldl_extend >> simp[] >>
+  irule checked_base_env_ok >>
+  simp[artifact_env_def, type_env_all_modules_def, FUNION_FEMPTY_2,
+       GSYM type_env_def] >>
+  qexistsl [`am`, `art`, `mode`, `tx`] >> simp[] >> metis_tac[]
+QED
+
+Triviality checked_runtime_entry_env_ok:
+  check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
+  layouts_agree tops am tx /\
+  EVERY (\(_,ty). assignable_type (type_env tops) ty) args ==>
+  checker_env_ok tops (function_entry_env art [(NONE, tops)] NONE vis args) /\
+  checker_stmt_env_ok tops (function_entry_env art [(NONE, tops)] NONE vis args)
+Proof
+  strip_tac >>
+  `function_entry_env art [(NONE, tops)] NONE vis args =
+   FOLDL (\env (id,ty). extend_local env id ty (vis = Internal))
+     (artifact_env art [(NONE, tops)] NONE with
+        <| fn_sigs := art.cta_fn_sigs;
+           bare_global_assignable := art.cta_bare_global_assignable |>) args`
+    by simp[function_entry_env_def, artifact_env_def] >>
+  pop_assum SUBST1_TAC >> irule checked_entry_env_ok >> simp[] >>
+  metis_tac[checked_runtime_fn_sig_internal]
+QED
+
+(* A body the checker types, in an environment meeting the bridge
+   invariant whose locals are the arguments, is in the body gate. *)
+Triviality checked_body_supported:
+  checker_env_ok tops env /\ checker_stmt_env_ok tops env /\
+  FDOM env.var_types = set (MAP FST args) /\ ALL_DISTINCT (MAP FST args) /\
+  type_stmts env ret fbody = SOME env' /\
+  IS_SOME (type_stmts env ret
+    (subst_consts_stmts (module_consts_env tops []) fbody)) /\
+  custom_errors_stmts_ok [(NONE, tops)] fbody ==>
+  supported_function_body tops vis args fbody
+Proof
+  strip_tac >> drule (cj 2 type_stmt_bindings_fresh) >> strip_tac >>
+  `supported_stmts tops (args ++ supported_stmts_bindings T fbody ++
+                         supported_stmts_bindings F fbody) fbody` by
+    (drule_then irule (cj 2 type_stmts_supported) >> rw[SUBSET_DEF] >> fs[]) >>
+  simp[supported_function_body_def] >> gvs[EVERY_MEM] >>
+  metis_tac[supported_stmts_body_safe]
+QED
+
 Theorem check_contract_supported_function_body:
   check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
   layouts_agree tops am tx /\
@@ -133,7 +418,15 @@ Theorem check_contract_supported_function_body:
   vis <> Deploy ==>
   supported_function_body tops vis args fbody
 Proof
-  cheat
+  strip_tac >> drule_all check_contract_single_body >>
+  simp[check_function_body_def, params_ok_def, consts_env_mods_singleton,
+       subst_consts_mods_singleton, type_env_all_modules_def, FUNION_FEMPTY_2,
+       GSYM type_env_def, optionTheory.IS_SOME_EXISTS] >>
+  strip_tac >> drule_all checked_runtime_entry_env_ok >>
+  disch_then (qspec_then `vis` strip_assume_tac) >>
+  irule checked_body_supported >>
+  qpat_assum `type_stmts _ _ fbody = _` (irule_at Any) >>
+  fs[function_entry_env_var_types_fdom]
 QED
 
 Theorem check_contract_supported_defaults:

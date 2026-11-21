@@ -30,7 +30,7 @@ Definition checker_stmt_env_ok_def:
        supported_event_fields tops id = SOME fields)
 End
 
-Theorem checker_stmt_env_ok_extend_local[local]:
+Theorem checker_stmt_env_ok_extend_local:
   checker_stmt_env_ok tops (extend_local env id ty b) <=>
   checker_stmt_env_ok tops env
 Proof
