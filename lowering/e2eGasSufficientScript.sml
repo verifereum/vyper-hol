@@ -177,7 +177,7 @@ Definition deploy_gas_source_exempt_def:
     src = INR (Error (RuntimeError "create initcode too large"))
 End
 
-(* GATE_ADMISSION: held, creation body case; create size at the call entry *)
+(* GATE_ADMISSION: missing case, creation body case; create size at the call entry *)
 Theorem call_entry_reachable_create_size_ok:
   !own fin tops rpolicy unit out prog prog' cplan am tx es vs.
     fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
@@ -205,7 +205,7 @@ Proof
   cheat
 QED
 
-(* GATE_ADMISSION: held, creation body case; create size at the deploy entry *)
+(* GATE_ADMISSION: missing case, creation body case; create size at the deploy entry *)
 Theorem deploy_entry_reachable_create_size_ok:
   !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs.
     fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\

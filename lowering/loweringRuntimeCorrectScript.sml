@@ -553,7 +553,7 @@ val runtime_shadow_body_inv_tac =
                 (LIST_CONJ [MATCH_MP source_typing_ok_vtype_keys_distinct typing,
                             supported, legacy, lowered, shadow])))))));
 
-(* GATE_ADMISSION: held, runtime entry with constant-name internal defaults *)
+(* GATE_ADMISSION: missing case, runtime entry with constant-name internal defaults *)
 Theorem runtime_selected_body_internal_constant_defaults:
   !am tx mut nr args fbody src_env os es0 DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
    ret_ty lctx RetQ ss es.

@@ -11108,7 +11108,7 @@ Proof
   simp[allocLimitsTheory.tuple_assign_alloc_ok_def] >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
-(* GATE_ADMISSION: held, private storage/transient bytestring tuple member *)
+(* GATE_ADMISSION: missing case, private storage/transient bytestring tuple member *)
 Theorem body_assign_tuple_targets_private_bytes_full:
   !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.

@@ -221,7 +221,7 @@ Proof
   suspend "use_ordinary"
 QED
 
-(* GATE_ADMISSION: held, nested immutable augmented assignment *)
+(* GATE_ADMISSION: missing case, nested immutable augmented assignment *)
 Theorem body_augassign_nested_immutable_full:
   !cx aty bop t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.

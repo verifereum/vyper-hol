@@ -13,7 +13,7 @@ Theory bodyFullCreateHeld
 Ancestors
   bodyFullPreds
 
-(* GATE_ADMISSION: held, creation body case; create_minimal_proxy_to *)
+(* GATE_ADMISSION: missing case, creation body case; create_minimal_proxy_to *)
 Theorem create_minimal_proxy_expr_full_ok:
   !cx ty s r ks es d.
     body_exprs_full_ok cx (create_operand_order CreateMinimalProxy s es) ==>
@@ -22,7 +22,7 @@ Proof
   cheat
 QED
 
-(* GATE_ADMISSION: held, creation body case; create_copy_of *)
+(* GATE_ADMISSION: missing case, creation body case; create_copy_of *)
 Theorem create_copy_expr_full_ok:
   !cx ty s r ks es d.
     body_exprs_full_ok cx (create_operand_order CreateCopyOf s es) ==>
@@ -31,7 +31,7 @@ Proof
   cheat
 QED
 
-(* GATE_ADMISSION: held, creation body case; create_from_blueprint *)
+(* GATE_ADMISSION: missing case, creation body case; create_from_blueprint *)
 Theorem create_blueprint_expr_full_ok:
   !cx ty b s r ks es d.
     body_exprs_full_ok cx (create_operand_order (CreateFromBlueprint b) s es) ==>
@@ -41,7 +41,7 @@ Proof
   cheat
 QED
 
-(* GATE_ADMISSION: held, creation body case; raw_create *)
+(* GATE_ADMISSION: missing case, creation body case; raw_create *)
 Theorem raw_create_expr_full_ok:
   !cx ty s r ks es d.
     body_exprs_full_ok cx (create_operand_order RawCreate s es) ==>

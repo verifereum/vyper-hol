@@ -14,7 +14,7 @@ val _ = Parse.hide "body";
 val machine_leaf = irule state_rel_frame_machine >>
   conj_tac >- simp[machine_frame_def];
 
-(* GATE_ADMISSION: held, nested internal call in a nonmutating callee *)
+(* GATE_ADMISSION: missing case, nested internal call in a nonmutating callee *)
 Theorem target_walk_internal_frame_nested:
   cenv.ce_func_mutability = build_func_mutability (cx_tops cx) /\
   (!vis mut nr rr fn args dflts ret body.

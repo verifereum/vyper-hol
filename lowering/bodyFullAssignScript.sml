@@ -18506,7 +18506,7 @@ QED
 Finalise body_assign_other_nonempty_target_full[local]
 
 (* Every other base target: subscripts, nested attributes, immutables. *)
-(* GATE_ADMISSION: held, nested immutable empty-value assignment *)
+(* GATE_ADMISSION: missing case, nested immutable empty-value assignment *)
 Theorem body_assign_nested_empty_immutable_full:
   !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
@@ -18696,7 +18696,7 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-(* GATE_ADMISSION: held, private storage/transient bytestring assignment *)
+(* GATE_ADMISSION: missing case, private storage/transient bytestring assignment *)
 Theorem body_assign_toplevel_bytes_full:
   !cx nsid e dty mut slot DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.

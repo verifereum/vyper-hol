@@ -162,7 +162,7 @@ Proof
   simp[]
 QED
 
-(* GATE_ADMISSION: held, constructor entry with constant-name internal defaults *)
+(* GATE_ADMISSION: missing case, constructor entry with constant-name internal defaults *)
 Theorem deploy_ctor_body_internal_constant_defaults:
   !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
    body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final

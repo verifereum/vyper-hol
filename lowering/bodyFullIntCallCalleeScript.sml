@@ -2509,7 +2509,7 @@ Proof
   >> (gvs[])
 QED
 
-(* GATE_ADMISSION: held, internal callee with constant names *)
+(* GATE_ADMISSION: missing case, internal callee with constant names *)
 Theorem intcall_callee_locked_body_frag_constants:
   body_inv tops ctx caller cx /\
   shadow_body_inv tops ctx shadow_ctx /\

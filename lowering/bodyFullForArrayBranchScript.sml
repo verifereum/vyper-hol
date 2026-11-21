@@ -201,7 +201,7 @@ Proof
   simp[Abbr `acc'`]
 QED
 
-(* GATE_ADMISSION: held, immutable struct-field array iterator at nonzero offset *)
+(* GATE_ADMISSION: missing case, immutable struct-field array iterator at nonzero offset *)
 Theorem compile_for_immutable_field_array_frag_full:
   !cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
