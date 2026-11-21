@@ -1,6 +1,6 @@
 (* Indexed non-slot array element preparation at the live body-entry cursor. *)
 Theory bodyFullForArrayElementPrepare
-Ancestors exprSimHyps[qualified,ignore_grammar]
+Ancestors bodyInvSplit bodyInvCodeProps bodyInvMetadataProps bodyInvExecutionProps compileUnit alist exprSimHyps[qualified,ignore_grammar]
   bodyFullForMemoryElementDispatch bodyFullForImmutableElementInput bodyFullForArray
   typedCopyOriginPtrBase typedMemoryCopy stmtReasonLitFragMemory
   stmtSimForArrayLoop whitelistForIterDynLoop fragGasSeqPtr fragExecMem fragExec
@@ -578,7 +578,11 @@ Resume for_nonslot_array_element_prepare_full[at_copy]:
      irule bodySimDeclCasesTheory.post_value_type_declared_return >>
      qexists_tac `tops` >>
      `supported_program tops /\ c.ce_func_return_type = build_func_return_type tops` by
-       fs[bodySimTheory.body_inv_def] >> simp[] >>
+       (drule_then assume_tac bodySimTheory.body_inv_contract >>
+        drule_then assume_tac bodySimTheory.body_inv_module >>
+        drule_all_then strip_assume_tac contract_inv_module_gate >>
+        drule_then assume_tac contract_inv_return_types >>
+        fs[compileUnitTheory.build_func_return_type_mods_singleton]) >> simp[] >>
      rpt gen_tac >> disch_then SUBST_ALL_TAC >>
      qpat_x_assum `supported_iterator _ _ (Array _) _` mp_tac >>
      simp[supportedStmtsTheory.supported_iterator_def]) >>
@@ -723,12 +727,16 @@ Resume for_nonslot_array_element_prepare_full[immutable_input]:
          op_taint tnCopy region = {} /\ op_prov GCopy region = NONE) /\
      (~c.ce_is_ctor ==>
        w2n a + stride <= LENGTH sCopy.vs_data_section /\ w2n a + stride < dimword (:256))`
-    >- (irule (INST_TYPE [alpha |-> ``:256``] for_immutable_element_copy_input) >>
+    >- (drule_then strip_assume_tac body_inv_main_code >>
+     `expr_sim_inv_mods [(NONE,tops)] c cx env es` by
+       fs[exprSimHypsDefsTheory.expr_sim_inv_split_def] >>
+     irule (INST_TYPE [alpha |-> ``:256``] for_immutable_element_copy_input_mods) >>
      simp[elem_size_in_location_def,is_slot_addressed_def] >> rpt conj_tac
      >- (qexists_tac `aidItem` >> simp[])
-     >- (qexists_tac `env` >> simp[])
-     >- (qexistsl [`H`,`av`,`bindings`,`ctx`,`e`,`func`,`id`,`loop_body`,`bound`,
-                    `Value (ArrayV av)`,`tops`] >> simp[])
+     >- (qexistsl [`av`,`bindings`,`e`,`env`,`id`,`loop_body`,
+                    `[(NONE,tops)]`,`bound`,`Value (ArrayV av)`] >>
+         simp[main_module_def, ALOOKUP_def])
+     >- (qexistsl [`H`,`ctx`,`func`] >> simp[])
      >> qexistsl [`D`,`d`] >> simp[]) >>
   suspend "immutable_binding"
 QED
@@ -1094,12 +1102,12 @@ Resume for_nonslot_array_element_prepare_full[immutable_robust_ctor_source]:
   `cv = v` by
     (qpat_assum `read_result cx (Value v) es = (INL cv,es)` mp_tac >>
      simp[vyperStateTheory.read_result_def,vyperStateTheory.return_def,NoAsms]) >>
-  `c.ce_module = NONE /\ get_module_code cx NONE = SOME tops /\
-   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
-    fs[bodySimTheory.body_inv_def,bodySimTheory.cenv_module_pins_def] >>
-  `get_tenv cx = type_env tops /\ cx_tops cx = tops` by
-    simp[vyperContextTheory.get_tenv_def,vyperContextTheory.type_env_all_modules_def,
-         vyperContextTheory.type_env_def,gasContextTheory.cx_tops_module] >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  `c.ce_module = NONE` by metis_tac[body_inv_module_locations] >>
+  `get_tenv cx = type_env tops` by
+    (drule_then assume_tac bodySimTheory.body_inv_contract >>
+     drule_then assume_tac contract_inv_type_env >>
+     fs[vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def]) >>
   `immutable_value_admissible rt rvRoot /\ val_in_memory rt rvRoot ro sCopy.vs_memory` by
     (qpat_assum `stmt_state_rel H ctx func c cx es sCopy`
        (mp_tac o MATCH_MP stateRelProjTheory.state_rel_immutables_rel o
@@ -1180,8 +1188,9 @@ QED
 
 Resume for_nonslot_array_element_prepare_full[immutable_robust_ctor_padded]:
   `c.ce_struct_fields = make_struct_fields_map tops` by
-    (qpat_assum `body_inv tops ctx c cx` mp_tac >>
-     simp[bodySimTheory.body_inv_def,NoAsms]) >>
+    (drule_then assume_tac bodySimTheory.body_inv_contract >>
+     drule_then assume_tac contract_inv_struct_fields >>
+     fs[compileUnitTheory.make_struct_fields_map_mods_singleton]) >>
   `!ty tv. evaluate_type (type_env tops) ty = SOME tv ==>
     type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty = type_memory_size tv` by
     (qpat_assum `c.ce_struct_fields = _` (SUBST1_TAC o SYM) >>
@@ -2068,8 +2077,8 @@ Resume for_nonslot_array_element_prepare_full[memory_dispatch]:
      ALL_DISTINCT (MAP FST fields) /\
      EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
        sz = type_memory_size tv) fields)` by
-    (qpat_assum `body_inv tops ctx c cx`
-       (map_every assume_tac o CONJUNCTS o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
+    (drule_then assume_tac bodySimTheory.body_inv_contract >>
+     drule_then assume_tac contract_inv_acyclic_struct_metadata >>
      qpat_assum `expr_sim_inv c cx env es`
        (map_every assume_tac o CONJUNCTS o
         REWRITE_RULE [exprSimHypsDefsTheory.expr_sim_inv_def]) >>

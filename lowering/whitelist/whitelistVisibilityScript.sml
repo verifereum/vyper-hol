@@ -6,6 +6,7 @@
 
 Theory whitelistVisibility
 Ancestors
+  moduleVariableKeyProps
   bodyAppendStorageFacts entryStateRel bodyStorageMetadata exprOpenCases
   supportedDecls compileVyper constSubst compileEnv vyperTypeEnv vyperTypeContract
   vyperContext vyperInterpreter vyperState vyperTypeInvariants exprSimHyps
@@ -305,24 +306,6 @@ Proof
   metis_tac[storage_capacity_source_lookup, storage_metadata_other_source]
 QED
 
-Theorem variable_keys_requalify[local]:
-  !tops (src:num option).
-    FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops) =
-    MAP (\(key,id). (NONE,id))
-      (FLAT (MAP (toplevel_vtype_keys_toplevel src) tops))
-Proof
-  Induct >> simp[] >> Cases >>
-  simp[toplevel_vtype_keys_toplevel_def]
-QED
-
-Theorem variable_keys_have_source[local]:
-  !tops src key id.
-    MEM (key,id) (FLAT (MAP (toplevel_vtype_keys_toplevel src) tops)) ==> key = src
-Proof
-  Induct >> simp[] >> Cases >> simp[toplevel_vtype_keys_toplevel_def] >>
-  metis_tac[]
-QED
-
 Theorem contract_inv_storage_metadata[local]:
   contract_inv mods exps ctx cenv cx ==>
   ALL_DISTINCT (MAP FST mods) /\
@@ -347,13 +330,8 @@ Proof
   REWRITE_TAC [GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_then (assume_tac o Q.SPEC `src`) contract_inv_module_codes >>
   drule_then strip_assume_tac contract_inv_storage_metadata >>
-  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops))` by
-    (
-     qpat_assum `!s ts. ALOOKUP mods s = SOME ts ==> _` (drule_then strip_assume_tac) >>
-     simp[] >>
-     ONCE_REWRITE_TAC [Q.SPECL [`tops`,`src`] variable_keys_requalify] >>
-     irule ALL_DISTINCT_MAP_INJ >> simp[pairTheory.FORALL_PROD] >>
-     metis_tac[variable_keys_have_source]) >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[contract_inv_unqualified_variable_keys] >>
   mp_tac (Q.SPECL [`tops`,`NONE`,`id`,`vis`,`mut`,`ty`,`slot`]
             supported_variable_decl_storage_binding) >>
   impl_tac >- simp[] >> strip_tac >>
