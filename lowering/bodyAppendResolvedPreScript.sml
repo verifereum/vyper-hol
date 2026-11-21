@@ -161,3 +161,13 @@ Proof
   strip_tac >> irule body_append_word_pre >>
   fs[supported_full_word_type_def, is_word_type_def] >> metis_tac[]
 QED
+
+Theorem append_resolved_rhs_body_pre:
+  expr_body_pre cenv cx env e es /\ target_pre cenv cx env bt es /\
+  eval_target_place cx bt es = (INL p,ee) ==>
+  expr_body_pre cenv cx env e ee
+Proof
+  simp[expr_body_pre_split_def, target_pre_def] >> strip_tac >>
+  drule_all_then assume_tac aug_place_target_inv >>
+  fs[expr_body_pre_mods_def, expr_sim_inv_split_def] >> first_assum ACCEPT_TAC
+QED
