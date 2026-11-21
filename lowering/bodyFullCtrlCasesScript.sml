@@ -115,6 +115,10 @@ Proof
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `well_typed_expr env e` by gvs[type_stmt_def] >>
+  `~is_extcode e` by
+    (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+     qexists_tac `cenv` >>
+     fs[stmt_exprs_ok_def, Once allocLimitsTheory.alloc_limits_stmt_def]) >>
   `expr_body_pre cenv cx env e es` by
     (bodyConstNameLib.irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
@@ -172,6 +176,10 @@ Proof
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
+  `~is_extcode e` by
+    (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+     qexists_tac `cenv` >>
+     fs[stmt_exprs_ok_def, Once allocLimitsTheory.alloc_limits_stmt_def]) >>
   `expr_body_pre cenv cx env e es` by
     (bodyConstNameLib.irule_body_pre stmt_expr_body_pre_alloc >> gvs[body_inv_def] >>
      qexists_tac `int_calls_stmts ss1 ++ int_calls_stmts ss2` >> simp[]) >>
