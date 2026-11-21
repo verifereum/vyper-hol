@@ -119,7 +119,9 @@ Proof
   qmatch_goalsub_abbrev_tac `run_inst_seq _ st` >>
   `eval_operand (Var (STRING #"%" (toString (sa.cs_next_var+5)))) st = SOME 0w` by
     simp[Abbr `st`, eval_operand_update_var] >>
-  simp[Once run_inst_seq_def, Once step_inst_base_def]
+  mp_tac (Q.SPECL [`Var (STRING #"%" (toString (sa.cs_next_var+5)))`,
+    `sa.cs_next_id+6`, `st`] step_ASSERT_revert) >>
+  simp[Once run_inst_seq_def, mk_inst_def]
 QED
 
 (* Keep one scalar certificate across both actual-position guards. *)
