@@ -17197,7 +17197,6 @@ fun nested_immutable_normalize_store origin g =
    (impl_tac >- simp[eval_operand_def]) >>
    nested_immutable_finish `zn:venom_state` `sn` `Gn` `tnn`) g;
 
-||||||| 14a4907b95
 Theorem body_assign_nested_nonempty_immutable_full:
   !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
