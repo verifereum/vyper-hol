@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeFinish
 Ancestors
+  abiDecoderLoopRegisters
   abiBuiltinEncodeCorrect abiBuiltinEncodeCode abiEncoderSequence
   abiEncoderRegisteredEffect abiDecoderReentry abiDecoderDynamicLoopSetup
   abiEncoderWrites abiEncoderWindowLookup emitHelperProps exprLoweringProps
@@ -30,16 +31,6 @@ Proof
   asm_simp_tac (srw_ss()) [run_inst_seq_def, Once step_inst_base_def,
     exec_pure2_def, bind_outputs_def, mk_inst_def]
 QED
-Theorem abi_encode_live_update_open[local]:
-  abi_decoder_operand_live next op ==>
-  eval_operand op (update_var (STRING #"%" (toString next)) w s) = eval_operand op s
-Proof
-  Cases_on `op` >>
-  simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
-    eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-  metis_tac[arithmeticTheory.LESS_EQ_REFL]
-QED
-
 
 Theorem abi_encode_finish_sequence_open:
   abi_builtin_encode_finish buf encoded_len mid_size st = ((),final) /\
@@ -74,7 +65,7 @@ Proof
         (conj_tac
          >- (simp[Abbr `prepared`] >>
              pure_rewrite_tac[stringTheory.STRCAT, APPEND] >>
-             simp[abi_encode_live_update_open]) >>
+             simp[abi_decoder_generated_update_operand]) >>
          simp[Abbr `prepared`, word_add_n2w,
            eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
       drule_all abi_encode_store_run_open >> strip_tac >>
@@ -97,7 +88,7 @@ Proof
       rpt strip_tac >>
       simp[Abbr `prepared`] >>
       pure_rewrite_tac[stringTheory.STRCAT, APPEND] >>
-      simp[abi_encode_live_update_open]) >>
+      simp[abi_decoder_generated_update_operand]) >>
   `mid_size = 0` by decide_tac >> gvs[abi_builtin_encode_finish_def] >> strip_tac >>
   drule_all abi_encode_store_run_open >> strip_tac >>
   qexists `mstore p (n2w len) initial` >>

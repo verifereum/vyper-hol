@@ -1,6 +1,7 @@
 (* Statement boundaries consume the expression certificate, not its proof. *)
 Theory runtimeLabelStmt
 Ancestors
+  listZipProps
   runtimeLabelExprCallbacks runtimeLabelExprPrimitives runtimeLabelBuiltinArithmetic
   runtimeLabelStmtIO runtimeLabelPrimitives runtimeLabelInvariant runtimeLabelValues runtimeLabelBuiltins runtimeLabelABI
   stmtLowering exprLowering compileEnv context emitHelper venomInst list
@@ -70,7 +71,7 @@ Proof
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_step_bind_for >> qexists_tac `(rb_operand_ok_for source_checks)` >> BETA_TAC >>
   reverse conj_tac >- (irule rb_compile_abi_encode_values_to_buf_for >>
-    simp[rb_abi_encode_for, rb_every_zip_fst]) >>
+    simp[rb_abi_encode_for, EVERY_FST_ZIP]) >>
   gen_tac >> strip_tac >>
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
@@ -471,7 +472,7 @@ Resume compile_stmts_label_checks[log]:
        (FST (split_log_ops (ZIP (saved,tys)) flags)) /\
      EVERY (rb_value_ok_for source_checks o FST)
        (SND (split_log_ops (ZIP (saved,tys)) flags))` by
-    (rpt gen_tac >> irule every_split_log_ops >> simp[rb_every_zip_fst]) >>
+    (rpt gen_tac >> irule every_split_log_ops >> simp[EVERY_FST_ZIP]) >>
   irule rb_step_bind_for >> qexists_tac `EVERY (rb_operand_ok_for source_checks)` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_log_saved_topics_for] >> gen_tac >> strip_tac >>
   rpt (irule rb_bind_return_for >> BETA_TAC) >>

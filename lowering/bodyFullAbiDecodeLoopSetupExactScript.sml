@@ -73,7 +73,17 @@ Proof
          cs_extends_refl, pairTheory.SND]) >>
      gvs[abi_decode_indexed_address_def, comp_bind_def] >>
      rpt (pairarg_tac >> gvs[]) >>
-     metis_tac[exprSimAccountsTheory.emit_op_extends_next_var, cs_extends_trans]) >>
+     rename1 `emit_op ADD [dst; Lit 32w] s5 = (data_op,s6)` >>
+     rename1 `emit_op MUL [idx; Lit (n2w msz)] s6 = (offset_op,s7)` >>
+     qpat_assum `emit_op ADD _ s5 = (_,s6)`
+       (strip_assume_tac o MATCH_MP exprSimAccountsTheory.emit_op_extends_next_var) >>
+     qpat_assum `emit_op MUL _ s6 = (_,s7)`
+       (strip_assume_tac o MATCH_MP exprSimAccountsTheory.emit_op_extends_next_var) >>
+     qpat_assum `emit_op ADD _ s7 = (child_dst,sb)`
+       (strip_assume_tac o MATCH_MP exprSimAccountsTheory.emit_op_extends_next_var) >>
+     irule cs_extends_trans >> qexists_tac `s7` >> conj_tac
+     >- (irule cs_extends_trans >> qexists_tac `s6` >> asm_rewrite_tac[]) >>
+     first_assum ACCEPT_TAC) >>
   `fn_has_code sa s1 fn /\ fn_has_code s1 s4 fn /\
    fn_has_code s4 s5 fn /\ fn_has_code s5 sb fn` by
     metis_tac[fragExecTheory.fn_has_code_split, cs_extends_trans] >>
