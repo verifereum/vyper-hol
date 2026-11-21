@@ -1033,13 +1033,17 @@ Proof
         Cases_on `eval_operand (Var iv) r1` >>
         Cases_on `eval_operand (Var cmp) r2` >> simp_tac (srw_ss()) []) >>
      `!D j. ptr_inst_ok D lo 0 ctx func hg ht ld (u with vs_inst_idx := j)` by
-       (rpt gen_tac >> irule ptr_inst_ok_lower_bound_transport >>
-        conj_tac >-
-          (qpat_assum `allocas_from lo u` mp_tac >>
-           POP_ASSUM_LIST (K ALL_TAC) >> simp[allocas_from_def]) >>
-        qexists_tac `0` >>
-        simp[] >> qpat_x_assum `ip = Var _` SUBST_ALL_TAC >>
-        simp[Abbr `ld`, wordLoadStorePtrTheory.ptr_inst_ok_mload]) >>
+       (rpt gen_tac >>
+        qpat_assum `ip = Var _` mp_tac >>
+        qpat_assum `ptr_covers hg ht _ u 32` mp_tac >>
+        qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` mp_tac >>
+        qpat_assum `allocas_from lo u` mp_tac >>
+        simp_tac bool_ss [Abbr `ld`] >>
+        POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> gvs[] >>
+        irule ptr_inst_ok_lower_bound_transport >>
+        conj_tac >- (fs[allocas_from_def] >> first_assum ACCEPT_TAC) >>
+        qexists_tac `0` >> simp[] >>
+        irule wordLoadStorePtrTheory.ptr_inst_ok_mload >> simp[]) >>
      `!D j. ptr_inst_ok D lo 0 ctx func g1 t1 lt (r1 with vs_inst_idx := j)` by
        (rpt gen_tac >>
         qpat_assum `op_prov g1 (Var iv) = NONE` mp_tac >>
