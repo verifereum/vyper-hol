@@ -174,6 +174,7 @@ Proof
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
     (bodyConstNameLib.irule_body_pre stmt_expr_body_pre_alloc >> gvs[body_inv_def] >>
+     conj_tac >- drule_then ACCEPT_TAC allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
      qexists_tac `int_calls_stmts ss1 ++ int_calls_stmts ss2` >> simp[]) >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
      cenv cx (BaseT BoolT) e es` by
