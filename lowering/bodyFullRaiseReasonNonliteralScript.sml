@@ -3,7 +3,7 @@ Theory bodyFullRaiseReasonNonliteral
 Ancestors
   bodyFullShadowBodyInv bodyInvCodeProps bodyInvMetadataProps exprBodyPreProps
   stateRelProj
-  bodyFullRaiseReasonContinuation bodyFullPreds bodySimFull bodyFullShared bodyInvNoDalloca
+  bodyFullRaiseReasonContinuation bodyFullPreds bodySimFull bodyFullShared
   reasonCompilerProps reasonSourceProps gasShadowCompileStmtHelpers
   reasonResourcesPtr
   exprSimSource exprSimHypsDefs exprOperandVar aggregateEvaluatedLayout vyperEvalExprPreservesScopesDom
@@ -130,14 +130,19 @@ Resume compile_raise_reason_nonliteral_frag_full[compose]:
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   conj_tac >- simp[] >>
-  simp[Abbr `reasonR`] >> rpt strip_tac >>
+  simp[Abbr `reasonR`] >> rpt gen_tac >> strip_tac >>
   Cases_on `res` >- fs[expr_exit_def] >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
-  simp[stmt_exit_ptr_def] >>
-  qpat_x_assum `expr_exit _ _` mp_tac >>
-  qpat_x_assum `halt_exit _ _ _ _ _` mp_tac >>
-  rpt (pop_assum kall_tac) >>
-  simp[halt_exit_def] >> metis_tac[expr_exit_INR_type]
+  `expr_exit (INR y : unit + exception) r` by
+    (qpat_assum `expr_exit _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> metis_tac[expr_exit_INR_type]) >>
+  `!ir t. r <> IntRet ir t` by
+    (qpat_assum `expr_exit _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     rpt strip_tac >> gvs[] >>
+     qpat_x_assum `expr_exit _ _` mp_tac >>
+     Cases_on `y` >> simp[expr_exit_def] >>
+     rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]) >>
+  fs[stmt_exit_ptr_def, halt_exit_def]
 QED
 
 Resume compile_raise_reason_nonliteral_frag_full[normal]:
@@ -189,7 +194,6 @@ Resume compile_raise_reason_nonliteral_frag_full[normal]:
     (qpat_assum `compile_expr _ _ e sa = _`
        (mp_then Any mp_tac (cj 1 compiler_compile_var)) >> simp[]) >>
   fs[] >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `?z Gf tnf. !H. valid_horizon cx st0 H mid.storage_trace ==>
      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
        (t,G1,tn1) [] (Abort Revert_abort z,Gf,tnf)` by
