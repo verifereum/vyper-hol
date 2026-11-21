@@ -12,13 +12,6 @@ Proof
   first_x_assum (qspec_then `b` mp_tac) >> simp[] >> metis_tac[]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  Cases_on `bt` >> simp[supported_target_def, supportedExprsTheory.target_indices_def] >>
-  rpt BasicProvers.TOP_CASE_TAC >>
-  simp[supportedExprsTheory.target_indices_def] >> metis_tac[]
-QED
-*)
 Theorem supported_target_index:
   supported_target tops bindings bt /\ MEM e (target_indices bt) ==>
   supported_expr tops e
