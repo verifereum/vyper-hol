@@ -1049,7 +1049,7 @@ QED
 
 Finalise for_nonslot_array_layout_full_with_increment
 
-Theorem for_nonslot_array_layout_full_with_done_age:
+Theorem for_nonslot_array_layout_full_with_done_age[local]:
   expr_type e = ArrayT sty bd /\ c.ce_alloca_locals /\
   local_ptrs_reserved c sa0 /\ gas_shadow_state sa0 shadow_sa0 /\
   compile_stmt c lctx ret_ty (For id fty (Array e) n loop_body) sa0 = ((),sb) /\

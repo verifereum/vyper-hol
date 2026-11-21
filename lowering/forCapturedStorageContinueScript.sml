@@ -528,13 +528,16 @@ Resume for_captured_storage_continue_full[cons_stages]:
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac >- (qexists `len - SUC (LENGTH rs)` >> first_assum ACCEPT_TAC) >>
   qpat_assum `cx_tops cx = tops` (rewrite_tac o single) >>
-  rpt (conj_tac >- (first_assum ACCEPT_TAC ORELSE
-    (qexists `bindings` >> first_assum ACCEPT_TAC))) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (qexists `bindings` >> first_assum ACCEPT_TAC) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   qexistsl [`bc`,`bc1`,`env_b`,`exit`,`incr`,`ai`,`next_var`,`ret_ty`,
     `sbCopy`,`sbBody`,`shadow_func`,`shadow_sbCopy`,`shadow_sbBody`,`si`,`sj`,`sk`,`sl`,`sm`] >>
   qpat_assum `!x. lvo = Var x ==> not_fresh_at saCopy x /\ not_fresh_at sbCopy x`
     (strip_assume_tac o SIMP_RULE bool_ss [IMP_CONJ_THM,FORALL_AND_THM]) >>
-  (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)) >> suspend "head_cut"
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- suspend "head_cut" >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >> first_assum ACCEPT_TAC
 QED
 
 Resume for_captured_storage_continue_full[head_cut]:
@@ -556,26 +559,33 @@ Resume for_captured_storage_continue_full[head_cut]:
 QED
 
 Resume for_captured_storage_continue_full[head_static]:
-  (rpt conj_tac >> TRY (first_assum ACCEPT_TAC))
-  >~ [`!x. not_fresh_at sa x ==> not_fresh_at saCopy x`] >-
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >-
     (gen_tac >> disch_tac >>
-     qpat_assum `!x. not_fresh_at sa x ==> _` (drule_then (ACCEPT_TAC o CONJUNCT1)))
-  >~ [`compile_slot_to_memory _ _ _ _ _ = _`] >-
-    (qpat_assum `stride = type_slot_size tyv` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC)
-  >~ [`lookup_block (slot_copy_cond saCopy) _ = _`] >-
-    (qpat_assum `stride = type_slot_size tyv` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC)
-  >~ [`saCopy.cs_current_insts = _`] >-
+     qpat_assum `!x. not_fresh_at sa x ==> _` (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (qpat_assum `stride = type_slot_size tyv` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (qpat_assum `stride = type_slot_size tyv` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >-
     (qpat_assum `stride = type_slot_size tyv` (SUBST1_TAC o SYM) >>
-     qpat_assum `saCopy.cs_current_insts = _` (fn th => simp[NoAsms,th]))
-  >~ [`!x. lvo = Var x ==> ~MEM x _`] >-
+     qpat_assum `saCopy.cs_current_insts = _` (fn th => simp[NoAsms,th])) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >-
     (gen_tac >> disch_tac >> qpat_assum `!x. lvo = Var x \/ bop = Var x ==> _` irule >>
-     disj1_tac >> first_assum ACCEPT_TAC)
-  >~ [`!x. bop = Var x ==> ~MEM x _`] >-
+     disj1_tac >> first_assum ACCEPT_TAC) >>
+  conj_tac >-
     (gen_tac >> disch_tac >> qpat_assum `!x. lvo = Var x \/ bop = Var x ==> _` irule >>
      disj2_tac >> first_assum ACCEPT_TAC) >>
-  gen_tac >> disch_tac >> qexists `len - SUC (LENGTH rs)` >>
-  qpat_assum `!H. valid_horizon _ _ H ei.storage_trace ==> for_captured_storage_live _ _ _ _ _ _`
-    (drule_then ACCEPT_TAC)
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (gen_tac >> disch_tac >> qexists `len - SUC (LENGTH rs)` >>
+     qpat_assum `!H. valid_horizon _ _ H ei.storage_trace ==> for_captured_storage_live _ _ _ _ _ _`
+       (drule_then ACCEPT_TAC)) >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume for_captured_storage_continue_full[nil]:
