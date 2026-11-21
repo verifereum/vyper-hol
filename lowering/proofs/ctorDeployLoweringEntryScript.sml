@@ -52,6 +52,7 @@ Theorem deploy_ctor_entry_joint_raw:
         (vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
                     vs_inst_idx := 0 |>) 0 (OK s0) /\
       alloca_history func s0 /\
+      (ctx_has_dalloca dunit.cu_context ==> allocas_below_fmp s0) /\
       return_buf_frame NONE cenv sa s0 /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts /\

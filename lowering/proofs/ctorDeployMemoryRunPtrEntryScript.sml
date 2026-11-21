@@ -251,6 +251,7 @@ val SourceEntryMode = ``\checked.
   fn_entry_label fn = SOME lbl ==>
   ?actual H qt scope fargs ce0.
     (checked ==> fmp_room unit.cu_context func actual) /\
+    (ctx_has_dalloca unit.cu_context ==> allocas_below_fmp actual) /\
     (checked ==> !D explicit. gas_origin_ptr_path (D, (imm_len tops), explicit, unit.cu_context, func, []) ((vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>), FEMPTY, entry_taint) [] (OK actual, H, qt)) /\
     (checked ==>
       gas_path_mem unit.cu_context func
@@ -441,6 +442,7 @@ Proof
     (qpat_x_assum `local_ptrs_rel fn cenv1 _ end_state` mp_tac >>
      simp[local_ptrs_rel_def, local_region_def]) >>
   (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac >- (strip_tac >> fs[])) >>
   (conj_tac >- (strip_tac >> simp[Abbr `initial`] >>
     metis_tac[gas_origin_ptr_path_trans])) >>
   (conj_tac >- (strip_tac >> conj_tac
@@ -522,6 +524,7 @@ Theorem deploy_ptr_entry_prefix_related_raw_checked:
     gas_path_mem unit.cu_context func
       (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) 0 (OK actual) /\
     alloca_history func actual /\
+    (ctx_has_dalloca unit.cu_context ==> allocas_below_fmp actual) /\
     actual.vs_code = vs.vs_code /\ actual.vs_labels = vs.vs_labels /\
     return_buf_frame NONE ce sa actual /\
     ~actual.vs_halted /\ actual.vs_current_bb = sa.cs_current_bb /\
