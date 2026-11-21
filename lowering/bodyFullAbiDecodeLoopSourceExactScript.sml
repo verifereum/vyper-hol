@@ -152,8 +152,9 @@ Proof
   conj_tac >- metis_tac[GSYM word_add_n2w, GSYM word_mul_n2w,
     arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM,
     arithmeticTheory.MULT_COMM] >>
-  conj_tac >- (Cases_on `data` >>
-    fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
-       not_fresh_at_def]) >>
+  conj_tac >- (qpat_assum `!x. data = Var x ==> not_fresh_at sb x` mp_tac >>
+    Cases_on `data` >>
+    simp[NoAsms, abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+         not_fresh_at_def]) >>
   metis_tac[lookup_var_def]
 QED
