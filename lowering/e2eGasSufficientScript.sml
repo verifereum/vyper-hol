@@ -486,6 +486,15 @@ Proof
     unit_alloca_budget unit.cu_context <= w2n vi.vs_initial_fmp /\
     w2n vi.vs_initial_fmp < 2 ** 254` by
     (strip_tac >> fs[] >> decide_tac) >>
+  `ctx_has_dalloca unit.cu_context ==>
+    !fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
+      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+    (strip_tac >>
+     qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `fmp`, `vi`]
+       mp_tac callDynamicMemoryTheory.call_raw_variant_no_wrap >> gvs[]) >>
+  `ctx_has_dalloca unit.cu_context ==>
+    !fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
+      dalloca_no_wrap inst s` by metis_tac[] >>
   drule_all lower_vyper_runtime_unit_correct_dispatched_readings_available >>
   disch_then (qx_choose_then `marks` strip_assume_tac) >>
   qabbrev_tac `obs = gas_explicit marks vi.vs_gas_readings` >>
@@ -523,9 +532,9 @@ Proof
   `raw_unit_memory_ok unit.cu_context vi /\ ptr_discipline 0 unit.cu_context vi` by
     (Cases_on `ctx_has_dalloca unit.cu_context`
      >- (`!fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
-           dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
-           (qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `fmp`, `vi`]
-              mp_tac callDynamicMemoryTheory.call_raw_variant_no_wrap >> gvs[]) >>
+            dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+           (qpat_assum `ctx_has_dalloca unit.cu_context ==>
+              !fn inst s. _ ==> _ /\ _` mp_tac >> simp[]) >>
          drule_all lower_vyper_runtime_unit_memory_ok_from_no_wrap >> simp[]) >>
      drule_all lower_vyper_runtime_unit_memory_ok >> simp[]) >>
   `mem_inv dload_offset_ok unit.cu_context vi` by

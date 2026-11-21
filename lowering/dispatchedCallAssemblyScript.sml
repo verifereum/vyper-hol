@@ -5,7 +5,7 @@ Ancestors
   loweringRuntimeCorrect gasShadowRunLowering loweringShapeProps
   gasShadowUnit sourceUnitExecution dispatchedSelectedEndpoint
   defaultDispatchFacts externalReturnPackage runtimeFallbackPackageEnvironment
-  externalEntryValueRevert vyperLoweringCorrect
+  externalEntryValueRevert vyperLoweringCorrect fragGasPathMem
 
 Triviality legacy_runtime_shadow_context[local]:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -71,6 +71,9 @@ Theorem dispatched_call_correct_from_selected_endpoint:
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
     initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s) /\
     (ctx_has_dalloca unit.cu_context ==>
       unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
       w2n vs.vs_initial_fmp < 2 ** 254) /\
@@ -151,6 +154,11 @@ val registered_lock_body_tac =
   impl_tac >- simp[] >>
   disch_then (qx_choosel_then [`s_lock`,`G_lock`,`tn_lock`]
     (MAP_EVERY ASSUME_TAC o CONJUNCTS)) >>
+  `gas_path unit.cu_context func
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                vs_inst_idx := 0|>) 0 (OK s_lock)` by
+    (qpat_assum `gas_path_mem _ _ _ 0 (OK s_lock)` mp_tac >>
+     metis_tac[gas_path_mem_exec]) >>
   `s_lock.vs_gas_readings = vs.vs_gas_readings /\
     s_lock.vs_code = vs.vs_code /\ s_lock.vs_labels = vs.vs_labels` by simp[] >>
   `mut <> View ==> ~tx.is_static` by
@@ -233,6 +241,9 @@ Theorem dispatched_nonreentrant_result[local]:
     unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
     w2n vs.vs_initial_fmp < 2 ** 254) /\
   outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+  (ctx_has_dalloca unit.cu_context ==>
+    !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+      dalloca_no_wrap inst s) /\
   calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
     SOME (tx.function_name,tx.args) /\
   vyperInterpreter$lookup_function NONE tx.function_name External tops =
@@ -354,6 +365,9 @@ Triviality dispatched_call_readings_from_selected_endpoint:
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
     initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s) /\
+    (ctx_has_dalloca unit.cu_context ==>
       unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
       w2n vs.vs_initial_fmp < 2 ** 254) /\
     vyperInterpreter$lookup_function NONE tx.function_name External tops =
@@ -401,6 +415,9 @@ Theorem dispatched_call_correct_with_readings:
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
     initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s) /\
+    (ctx_has_dalloca unit.cu_context ==>
       unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
       w2n vs.vs_initial_fmp < 2 ** 254) /\
     vyperInterpreter$lookup_function NONE tx.function_name External tops =
@@ -428,7 +445,8 @@ Proof
     dispatched_call_readings_from_selected_endpoint >>
   disch_then (drule_at (Pat `vyperInterpreter$lookup_function _ _ _ _ = _`)) >>
   disch_then (qspecl_then [`unit`,`am`,`vs`] mp_tac) >>
-  fs[dispatched_entry_endpoint_selected]
+  fs[dispatched_entry_endpoint_selected] >>
+  disch_then (fn result => first_assum (ACCEPT_TAC o MATCH_MP result))
 QED
 
 Theorem dispatched_call_correct:
@@ -441,6 +459,9 @@ Theorem dispatched_call_correct:
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
     initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s) /\
     (ctx_has_dalloca unit.cu_context ==>
       unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
       w2n vs.vs_initial_fmp < 2 ** 254) /\

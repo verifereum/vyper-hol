@@ -9,6 +9,7 @@ Ancestors
   loweringRuntimeCorrect supportedProgram entryDispatchProps publicGetterProps
   vyperTypeContractContext nonreentrantEntryEquiv vyperReadOnlySyntax
   vyperTypeContractGetter vyperTypeContract list
+  callDynamicMemory[qualified,ignore_grammar] o1PassContract lowerDloadDefs
 
 (* The call a contract makes of raw calldata: the external entry it
    dispatches to and the arguments it decodes (vyperCalldata), including the
@@ -65,6 +66,9 @@ Triviality runtime_dispatched_readings_certificate[local]:
       initial_venom_state_rel tops am tx vs /\
       outcomes_accounts_typed (SOME vs.vs_outcomes) /\
       (ctx_has_dalloca unit.cu_context ==>
+        !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+          dalloca_no_wrap inst s) /\
+      (ctx_has_dalloca unit.cu_context ==>
         unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
         w2n vs.vs_initial_fmp < 2 ** 254) ==>
       ?marks.
@@ -111,7 +115,10 @@ Theorem lower_vyper_runtime_unit_correct_dispatched_readings_available:
     (ctx_has_dalloca unit.cu_context ==>
       unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
       w2n vs.vs_initial_fmp < 2 ** 254) /\
-    outcomes_accounts_typed (SOME vs.vs_outcomes)
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s)
     ==>
 
     ?marks.
@@ -128,6 +135,9 @@ Proof
   drule_all runtime_dispatched_readings_certificate >>
   disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
   first_x_assum (qspecl_then [`am`, `tx`, `ret`, `vs`] mp_tac) >>
+  qpat_assum `ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s` (fn th => rewrite_tac[th]) >>
   simp[] >> strip_tac >> qexists_tac `marks` >>
   metis_tac[source_unit_execution_correct_at_def]
 QED
@@ -157,9 +167,24 @@ Proof
   drule_all runtime_dispatched_readings_certificate >>
   disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
   qexists_tac `shadow_unit.cu_context` >> rpt gen_tac >> strip_tac >>
-  first_x_assum (qspecl_then [`am`, `tx`, `ret`, `vs`] mp_tac) >>
-  impl_tac >- (simp[] >> decide_tac) >>
-  metis_tac[]
+  `raw_variant vs.vs_initial_fmp vs vs` by
+    simp[raw_variant_def, gas_variant_def, venomStateTheory.venom_state_component_equality] >>
+  `!fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+      dalloca_no_wrap inst s` by
+    (qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `vs.vs_initial_fmp`, `vs`]
+       mp_tac callDynamicMemoryTheory.call_raw_variant_no_wrap >>
+     impl_tac >- simp[] >> metis_tac[]) >>
+  `(ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s)` by (strip_tac >> first_assum ACCEPT_TAC) >>
+  `(ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254)` by (strip_tac >> conj_tac >> decide_tac) >>
+  qpat_assum `!am tx ret vs. _ ==> ?marks. _`
+    (qspecl_then [`am`, `tx`, `ret`, `vs`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choose_then `marks` strip_assume_tac) >>
+  qexists_tac `marks` >> first_assum ACCEPT_TAC
 QED
 
 (* S1, calldata that dispatches to nothing: no fallback, a short head, or a
