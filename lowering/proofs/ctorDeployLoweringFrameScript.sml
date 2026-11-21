@@ -1480,9 +1480,11 @@ Proof
      `frame_maps env_t deploy_art` by simp[] >>
      pure_once_rewrite_tac [body_const_cells_agree_def] >>
      qexistsl_tac [`roots`, `deploy_art`, `imms`, `A`] >>
-     rpt (conj_tac >- FIRST [first_assum ACCEPT_TAC,
+     qpat_assum `cx_tops (deploy_evaluation_context tops am tx) = tops`
+       (fn th => pure_rewrite_tac [th]) >>
+     rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
        simp[deploy_evaluation_context_def, initial_evaluation_context_def]]) >>
-     first_assum ACCEPT_TAC) >>
   qpat_x_assum `env_t = function_entry_env _ _ _ _ _` kall_tac >>
   `~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) compiled_body` by
     (`cenv.ce_modules = [(NONE,tops)]` by fs[body_inv_def, cenv_module_pins_def] >>

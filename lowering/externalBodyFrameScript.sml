@@ -843,9 +843,18 @@ Proof
          vyperTypeContractContextTheory.FOLDL_extend_local_args_static]) >>
   `const_cells_agree roots es` by
     fs[const_cells_agree_def, initial_state_def] >>
-  simp[body_const_cells_agree_def] >>
+  pure_once_rewrite_tac [body_const_cells_agree_def] >>
   qexistsl_tac [`roots`, `art`, `account_immutables am tx.target`, `A`] >>
-  simp[initial_evaluation_context_def]
+  qpat_assum `cx_tops (initial_evaluation_context am.sources am.layouts tx NONE) = tops`
+    (fn th => pure_rewrite_tac [th]) >>
+  conj_tac
+  >- qpat_assum `check_contract F am.layouts tx.target [(NONE,tops)] = SOME art`
+       (fn th => simp[NoAsms, initial_evaluation_context_def, th]) >>
+  conj_tac
+  >- qpat_assum `ALOOKUP am.sources tx.target = SOME [(NONE,tops)]`
+       (fn th => simp[NoAsms, initial_evaluation_context_def, th]) >>
+  conj_tac >- simp[NoAsms] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem external_source_body_frame_nr:
