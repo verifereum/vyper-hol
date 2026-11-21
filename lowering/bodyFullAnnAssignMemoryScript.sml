@@ -1,7 +1,7 @@
 (* Joint ordinary-memory and empty AnnAssign execution. *)
 Theory bodyFullAnnAssignMemory
 Ancestors
-  bodyFullPreds bodySimFull bodySim bodyInvNoDalloca gasShadow
+  bodyFullPreds bodySimFull bodySim gasShadow
   bodySimDeclCases bodyExprPreFacts exprSimHyps exprSimHypsDefs exprSimSource
   memoryLocalRhsProps supportedStmts supportedStmtTraverse
   stmtSimDeclEmpty stmtSimDeclSource bodyDeclCopyMemory

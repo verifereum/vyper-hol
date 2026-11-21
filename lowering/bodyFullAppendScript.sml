@@ -27,7 +27,7 @@ Ancestors
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
-  bodyInvNoDalloca targetPlaceSimCases vyperExprNoControl vyperTypeCallGraph
+  targetPlaceSimCases vyperExprNoControl vyperTypeCallGraph
   vyperTypeCallStackSoundness bodyFullShared vyperStorageTrace vyperStorageFootprint
   vyperEvalExprPreservesScopesDom immutableDeployPhysicalSource
 

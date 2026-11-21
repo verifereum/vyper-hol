@@ -11,7 +11,7 @@ Ancestors
   bodyFullBuiltinConcatScratch bodyPtrBytestringBuiltinsWindowGhost
   bodyPtrDefs loweringPosts exprSimWordArgs ptrDiscipline
   exprLowering compileEnv vyperAST gasShadowState gasShadow
-  bodyInvNoDalloca fragExec exprSimHyps gasExemptCert vyperStorageTrace
+  fragExec exprSimHyps gasExemptCert vyperStorageTrace
   vyperTyping[qualified,ignore_grammar]
   bodyFullIfExpReach
   contextRawReachable[qualified,ignore_grammar]

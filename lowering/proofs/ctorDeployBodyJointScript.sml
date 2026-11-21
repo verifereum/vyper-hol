@@ -29,7 +29,7 @@ Ancestors
   deployBodyReachability allocaBudgetProps unitTransformDefs contextRawReachable
   ctorDeployLoweringEntryTransport
   ctorDeployLoweringReturn ctorDeployLoweringHaltCode ctorDeployDead
-  bodyInvNoDalloca gasShadowStmtEnv gasOutcomeFull gasOutcomeFullCompose gasStorage gasExemptCert
+  gasShadowStmtEnv gasOutcomeFull gasOutcomeFullCompose gasStorage gasExemptCert
   fragGasOriginPtr fragGasOriginPtrExec fragExecPtr loweringShapeDefs
   bodySimFull bodySim loweringPosts stmtSimDefs stmtSimProps exprLowering
   ctorDeployLoweringCode ctorDeployLoweringEntryPrefix

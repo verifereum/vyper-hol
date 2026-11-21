@@ -11,7 +11,7 @@ Theory bodyFullSend
 Ancestors
   bodyFullShadowBodyInv
   bodyFullSendPost bodyFullExprGeneric bodyFullShared bodyFullPreds bodySimFull
-  bodyFullBuiltinWordPowCompose bodyInvNoDalloca
+  bodyFullBuiltinWordPowCompose
   gasOutcomeFullCompose gasOutcomeFull fragGasSeqPtr fragGasEmitCtrl
   gasShadowCompile gasShadowState gasShadow
   exprSendPtr exprSimSend exprSimHypsDefs bodySim

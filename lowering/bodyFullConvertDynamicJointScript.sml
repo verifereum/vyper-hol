@@ -1,7 +1,7 @@
 Theory bodyFullConvertDynamicJoint
 Ancestors
   bodyFullShadowBodyInv
-  haltExitProj typeBuiltinPrereqs bodyInvNoDalloca
+  haltExitProj typeBuiltinPrereqs
   bodyFullPreds bodySimFull exprLowering bodyFullOfVV bodyFullExprGeneric
   bodyFullConvertChildRead bodyFullPathHistory exprSafeOperand bodyPtrSignedConvertSourceTyping
   valueCopyBytes bodyPtrMakeArrayBytesTransport bodyPtrTypeBuiltinsBytesWordInputs

@@ -34,7 +34,6 @@ Ancestors exprSimWordArgs[qualified,ignore_grammar] vyperLookup[qualified,ignore
   bodyFullPathHistory[qualified,ignore_grammar]
   bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
   bodyFullIfExpReach[qualified,ignore_grammar]
-  bodyInvNoDalloca[qualified,ignore_grammar]
   stmtSimDeclCompose[qualified,ignore_grammar] bodyFullForRounds
 
 val _ = Parse.hide "body";

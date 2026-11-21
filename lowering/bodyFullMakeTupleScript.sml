@@ -2,7 +2,7 @@
 Theory bodyFullMakeTuple
 Ancestors exprSimDefs[qualified,ignore_grammar]
   bodyFullMakeArrayResultDefs bodyFullMakeArrayInit bodyFullMakeArrayLoop
-  bodyFullPreds bodySimFull bodyInvNoDalloca bodyMemTupleLayout
+  bodyFullPreds bodySimFull bodyMemTupleLayout
   exprSimAggregateLayout exprSimAggregateSource exprSimHyps exprSimHypsDefs exprSimSource
   exprOperandVar exprLoweringProps exprLowering compileEnv
   gasOutcomeFullStmts gasOutcomeFullCompose gasOutcomeFull gasStorage

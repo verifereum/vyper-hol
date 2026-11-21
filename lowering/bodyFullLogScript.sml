@@ -36,7 +36,7 @@ Ancestors exprSimAggregateNestedStore[qualified,ignore_grammar]
   exprSimAbiEncodeExecFrame
   exprSimAbiEncodeCallerFrame exprSimAbiEncodeFrameTransfer abiDecodeStaticProps
   exprSimAbiEncodeStateTransport
-  bodyFullUnwrapSlotPost bodyInvNoDalloca stateRelProj bodyFullPathHistory
+  bodyFullUnwrapSlotPost stateRelProj bodyFullPathHistory
   bodyMemoryDefs exprSimWordArgs fragGasOriginPtrLoop contractABI
   bodyFullExtCallPosList bodyFullExtCallDirectSaved bodyFullExtCallDirectLayout
   bodyFullExtCallSavedOperand bodyFullExtCallDirectState bodyFullExtCallDirectRow

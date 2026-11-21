@@ -1,6 +1,6 @@
 Theory bodyFullConvertScalarJoint
 Ancestors
-  bodyFullShadowBodyInv bodyInvNoDalloca[qualified,ignore_grammar]
+  bodyFullShadowBodyInv
   haltExitProj
   bodyFullPreds bodySimFull bodyFullOfVV bodyFullExprGeneric
   bodyFullConvertScalarSuffix bodyFullConvertScalarFrame bodyFullPathHistory

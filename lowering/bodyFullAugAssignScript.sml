@@ -15,7 +15,7 @@ Ancestors stateFrame[qualified,ignore_grammar] bodyPtrDefs[qualified,ignore_gram
   augAssignFullStageFrames augAssignFullImmutableStageFrames augAssignFullWriteback
   augAssignFullOperandReady augAssignFullOperatorSource
   augAssignFullCurrentSource augAssignFullOperator bodyFullBuiltinWordPowCompose
-  bodyInvNoDalloca exprSimSource targetPlaceSim
+  exprSimSource targetPlaceSim
   bodyFullTarget bodyFullTargetDefs bodyPtrPopTargetFragTransport
   stmtSimAugAssignPlace stmtSimAugAssignPlaceMemory stmtSimProps loweringPosts allocLimits
   gasContext targetPlaceSimCases stmtSimDefs vyperExprNoControl
