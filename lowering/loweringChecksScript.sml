@@ -46,3 +46,5 @@ Ancestors
   createSizeBoundaryTest
   (* Standalone ABI execution checks. *)
   abiScratchBuiltinOpenSource exprSimAbiEncodeRegion
+  (* S1 request-prefix companion cases. *)
+  s1PrefixLiteralWord s1PrefixWordWei s1PrefixRawCall
