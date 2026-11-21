@@ -10,7 +10,7 @@ Theory ctorDeployLoweringArms
 Ancestors
   ctorDeployLoweringEntrySelection ctorDeployLoweringSource
   ctorDeployLoweringDefs
-  ctorDeployDefs e2eDeployDefs gasStorage gasExemptCert fragGasOriginPtr
+  ctorDeployDefs e2eDeployDefs gasStorage fragGasOriginPtr
   vyperStorageTrace vyperStorageFootprint vyperTypeConstantFold vyperInterpreter
   vyperTypeContract vyperTypeConstantCells vyperTypeContractStaticMaps
   vyperTypeExprSoundness vyperContext
@@ -270,7 +270,21 @@ QED
    load_contract_trace is deploy_ctor_finish of the constructor body's run
    from deploy_ctor_start, and its trace is the body's: the constant
    evaluation before it observes no storage. *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem deploy_ctor_source_trace:
+  !tops am tx mut body am_c es0.
+    deploy_source_ok tops am tx /\ tx.function_name = "__init__" /\
+    deploy_ctor_start tops am tx (mut, F, body, am_c, es0) ==>
+    !orc gobs res st.
+      eval_stmts (deploy_evaluation_context tops am tx) body
+        (es0 with <| gas_obs := gobs; outcomes := orc |>) = (res, st) ==>
+      load_contract_trace orc gobs am tx [(NONE, tops)] [] =
+        ((if res = INR HaltException then
+            INL (finalize_pending_deletions
+              (abstract_machine_from_state am_c.sources am_c.exports am_c.layouts st),
+              st.requests)
+          else deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx)
+            F mut am_c res st),
+         st.storage_trace)
 Proof
   rpt gen_tac >> strip_tac >>
   `get_module_code (deploy_evaluation_context tops am tx) NONE = SOME tops` by
@@ -294,16 +308,13 @@ Proof
     (rpt strip_tac >> irule deploy_ctor_return_none >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      qexistsl [`gobs`, `orc`, `st`] >> gvs[]) >>
-  `res <> INR HaltException` by
-    (strip_tac >>
-     `!s s'. eval_stmts (deploy_evaluation_context tops am tx) body s <>
-             (INR HaltException, s')` by
-       (rpt gen_tac >> irule deploy_body_no_halt >>
-        gvs[ctorDeployDefsTheory.deploy_source_ok_def] >> metis_tac[]) >>
-     metis_tac[]) >>
   `load_contract orc gobs am tx [(NONE,tops)] [] =
-     deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx)
-       F mut am_c res st` by
+      if res = INR HaltException then
+        INL (finalize_pending_deletions
+          (abstract_machine_from_state am_c.sources am_c.exports am_c.layouts st),
+          st.requests)
+      else deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx)
+        F mut am_c res st` by
     (qspecl_then [`tops`, `am`, `tx`, `mut`, `F`, `body`, `am_c`, `es0`,
                   `gobs`, `orc`, `res`, `st`] mp_tac deploy_ctor_source_run >>
      simp[]) >>
@@ -367,21 +378,6 @@ Proof
   >- (Cases_on `x` >> gvs[unlock_if_nr_def, return_def]) >>
   rename1 `eval_stmts _ _ _ = (INR ex,st)` >> Cases_on `ex` >>
   gvs[unlock_if_nr_def, return_def, vyperValueOperationTheory.safe_cast_def]
-QED
-*)
-Theorem deploy_ctor_source_trace:
-  !tops am tx mut body am_c es0.
-    deploy_source_ok tops am tx /\ tx.function_name = "__init__" /\
-    deploy_ctor_start tops am tx (mut, F, body, am_c, es0) ==>
-    !orc gobs res st.
-      eval_stmts (deploy_evaluation_context tops am tx) body
-        (es0 with <| gas_obs := gobs; outcomes := orc |>) = (res, st) ==>
-      load_contract_trace orc gobs am tx [(NONE, tops)] [] =
-        (deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx)
-           F mut am_c res st,
-         st.storage_trace)
-Proof
-  cheat
 QED
 
 (* The bad-storage arm: the body's storage failure is the deployment's, and
@@ -489,11 +485,11 @@ Theorem deploy_ctor_exempt_arm:
            (vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
                        vs_inst_idx := 0 |>, FEMPTY, entry_taint)
            [] (OK s0, G0, tn0)) /\
-    gas_exempt_cert T tops (dunit.cu_context, func)
-      (ignore_bind (eval_stmts (deploy_evaluation_context tops am tx) body')
-         (return ()))
-      (es0 with outcomes := SOME vs.vs_outcomes, s0) marks (err, ee)
-      (leaf, finish) /\
+    (!tail. eval_stmts (deploy_evaluation_context tops am tx) body'
+      (es0 with <|gas_obs := gas_explicit marks vs.vs_gas_readings ++ tail;
+                  outcomes := SOME vs.vs_outcomes|>) =
+      (INR (Error err), ee with gas_obs := tail)) /\
+    unspecified_behaviour_exempt tops err /\
     (storage_trace_domain (deploy_evaluation_context tops am tx)
        (initial_state am [])
        (es0 with outcomes := SOME vs.vs_outcomes).storage_trace ==>
@@ -531,19 +527,8 @@ Proof
   mp_tac (Q.SPECL [`tops`, `am`, `tx`, `mut`, `body'`, `am_c`, `es0`]
     deploy_ctor_source_trace) >>
   impl_tac >- simp[] >> strip_tac >>
-  drule gas_exempt_cert_execution >> strip_tac >>
-  `!tail. eval_stmts (deploy_evaluation_context tops am tx) body'
-            (es0 with <| gas_obs := gas_explicit marks vs.vs_gas_readings ++ tail;
-                         outcomes := SOME vs.vs_outcomes |>) =
-          (INR (Error err), ee with gas_obs := tail)` by
-    (gen_tac >> first_x_assum (qspec_then `tail` mp_tac) >>
-     simp[ignore_bind_def, bind_def, return_def] >>
-     Cases_on `eval_stmts (deploy_evaluation_context tops am tx) body'
-                 (es0 with <| outcomes := SOME vs.vs_outcomes;
-                   gas_obs := gas_explicit marks vs.vs_gas_readings ++ tail |>)` >>
-     Cases_on `q` >> simp[]) >>
   qexistsl_tac [`INR (Error err)`, `ee.storage_trace`] >>
   fs[deploy_source_exempt_def] >> gen_tac >>
-  first_x_assum (qspec_then `tail` assume_tac) >>
+  qpat_x_assum `!tail. eval_stmts _ _ _ = _` (qspec_then `tail` assume_tac) >>
   first_x_assum drule >> simp[deploy_ctor_finish_def]
 QED

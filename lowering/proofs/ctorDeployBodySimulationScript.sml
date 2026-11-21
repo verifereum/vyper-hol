@@ -8,13 +8,71 @@ Ancestors
   e2eDeployDefs ctorDeployDefs compileEnv emitHelper
   vyperStorageLayoutSafety vyperLookupStorage vyperContext
   vyperInterpreter vyperState ctorDeployDeadLoad
+  ctorDeployLoweringArms ctorDeployLoweringEntrySourceFrame ctorDeployLoweringEntryTransport
+  constSubstStmts constSubstCorrect constSubst constSubstStmtsPreserve
+  ctorDeployLoweringEntrySelection vyperTypeContractStaticMaps
 
 val _ = Parse.hide "body";
+
+Theorem deploy_ctor_body_substitution:
+  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
+  deploy_ctor_start tops am tx (mut,F,body,am_c,es0) /\
+  lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit ==>
+  !os gx.
+    eval_stmts (deploy_evaluation_context tops am tx)
+      (subst_consts_stmts (module_consts_env tops []) body)
+      (es0 with <|outcomes := os; gas_obs := gx|>) =
+    eval_stmts (deploy_evaluation_context tops am tx) body
+      (es0 with <|outcomes := os; gas_obs := gx|>)
+Proof
+  strip_tac >>
+  drule_all deploy_frame_source_start_setup >> strip_tac >>
+  drule_all deploy_ctor_constant_cells >> strip_tac >>
+  `EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) /\
+   EVERY (no_sha256_expr o SND) (module_consts_env tops [])` by
+    (Cases_on `classify_functions tops` >> PairCases_on `r` >>
+     drule_all compileVyperTheory.lower_vyper_deploy_unit_consts_guard >> simp[]) >>
+  qabbrev_tac `cx = deploy_evaluation_context tops am tx` >>
+  `cx.txn.target = tx.target /\ cx.layouts = am.layouts /\
+   ALOOKUP cx.sources tx.target = SOME [(NONE,tops)]` by
+    simp[Abbr `cx`, deploy_evaluation_context_def, initial_evaluation_context_def] >>
+  `!src. IS_SOME src ==>
+      get_source_immutables src (constant_machine_immutables am_c tx.target) =
+      get_source_immutables src imms` by simp[merge_constant_imms_imports] >>
+  `!id tv v. FLOOKUP A id = SOME (tv,v) ==>
+      FLOOKUP (get_source_immutables NONE
+        (constant_machine_immutables am_c tx.target)) id = SOME (tv,v)` by
+    simp[vyperTypeContractTheory.merge_constant_imms_def,
+         vyperTypeInitialStateTheory.get_source_immutables_set_same,
+         finite_mapTheory.FLOOKUP_FUNION] >>
+  mp_tac (Q.INST [`cx` |-> `cx`, `mods` |-> `[(NONE,tops)]`,
+     `artifact` |-> `runtime_art`, `am` |-> `am_c`, `sc` |-> `es0.scopes`,
+     `imms` |-> `imms`, `A` |-> `A`, `current_src` |-> `NONE`] checked_module_consts_subst_context) >>
+  impl_tac >- (fs[] >> metis_tac[]) >> strip_tac >>
+  `const_subst_context roots cx env_body (module_consts_env tops [])
+     [(NONE,tops)] deploy_art` by
+    (qpat_assum `check_contract T _ _ _ = _`
+       (strip_assume_tac o MATCH_MP check_contract_nonsig_maps) >>
+     qpat_assum `check_contract F _ _ _ = _`
+       (strip_assume_tac o MATCH_MP check_contract_nonsig_maps) >>
+     irule (Q.INST [`art` |-> `runtime_art`,
+       `env` |-> `artifact_env runtime_art [(NONE,tops)] NONE`, `mode` |-> `T`]
+       const_subst_context_checked_artifact) >>
+     gvs[frame_maps_def, vyperTypeContractTheory.artifact_env_def] >> metis_tac[]) >>
+  `es0.immutables = am_c.immutables` by
+    (`?scope. bind_arguments (type_env tops) args tx.args = SOME scope` by
+       fs[deploy_ctor_start_def, deploy_ctor_singleton_type_env] >>
+     pop_assum strip_assume_tac >> drule_all deploy_ctor_source_start_fields >> simp[]) >>
+  rpt gen_tac >> irule const_subst_eval_stmts >>
+  goal_assum (drule_at Any) >> qexists_tac `NoneT` >>
+  fs[const_cells_agree_def, initial_state_def]
+QED
 
 Theorem deploy_ctor_body_frag_full:
   !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
    body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final
-   func mut am_c es0 shadow_ctx shadow_func.
+   func mut source_body am_c es0 shadow_ctx shadow_func.
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
@@ -25,7 +83,7 @@ Theorem deploy_ctor_body_frag_full:
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
     shadow_body_inv tops dunit.cu_context shadow_ctx /\
-    deploy_ctor_start tops am tx (mut, nr, body, am_c, es0) ==>
+    deploy_ctor_start tops am tx (mut, nr, source_body, am_c, es0) ==>
     stmt_frag_full
       ((\H. deploy_dead H tops runtime_bc am tx), imm_len tops, NONE,
        dunit.cu_context, shadow_ctx, [], func, shadow_func)
@@ -58,12 +116,25 @@ Proof
        (imm_len tops) nr nkey v ee r) cenv NoneT` by
     (irule constructor_frame_ret_ok_full >> simp[] >> metis_tac[]) >>
   `?args. lookup_function NONE tx.function_name Deploy tops =
-     SOME (mut, nr, args, [], NoneT, body)` by
+     SOME (mut, nr, args, [], NoneT, source_body)` by
     (qpat_assum `deploy_ctor_start _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [deploy_ctor_start_def]) >>
      metis_tac[]) >>
   `struct_args_unique tops` by
     metis_tac[deploy_source_ok_struct_args_unique] >>
+  `!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
+     occurs_abi_decode_target target tops` by
+    (`body = subst_consts_stmts (module_consts_env tops []) source_body` by
+       metis_tac[deploy_ctor_entry_selection_agrees] >>
+     qpat_x_assum `body = _` SUBST_ALL_TAC >>
+     `?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
+       fs[deploy_source_ok_def, deploy_typing_ok_def] >>
+     pop_assum strip_assume_tac >>
+     drule_all deploy_ctor_constant_cells >> strip_tac >>
+     `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
+     rpt strip_tac >>
+     drule_all checked_const_substitution_abi_decode_target >>
+     metis_tac[lookup_function_abi_decode_target_occurs]) >>
   qspecl_then [`\H. deploy_dead H tops runtime_bc am tx`, `imm_len tops`,
     `NONE`, `[]`, `tops`, `bindings`, `dunit.cu_context`, `shadow_ctx`,
     `func`, `shadow_func`, `cenv`, `deploy_evaluation_context tops am tx`,
@@ -73,6 +144,6 @@ Proof
        (imm_len tops) nr nkey v ee r`, `body`,
     `es0 with outcomes := SOME vs.vs_outcomes`]
     mp_tac body_stmts_sim_full >>
-  impl_tac >- (simp[] >> metis_tac[lookup_function_abi_decode_target_occurs]) >>
+  impl_tac >- simp[] >>
   simp[]
 QED
