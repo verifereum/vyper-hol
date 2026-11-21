@@ -67,8 +67,7 @@ Proof
 QED
 
 Theorem aug_place_memory_read_typed:
-  expr_sim_inv cenv cx env es /\
-  supported_target_info tops bindings t = SOME info /\
+  target_pre cenv cx env t es /\ type_place_target env t = SOME (Type ty) /\
   eval_target_place cx t es = (INL (MemoryPlace id path),st) /\
   read_place cx (MemoryPlace id path) st = (INL cur,st') /\
   stmt_state_rel H ctx func cenv cx st s /\
@@ -77,6 +76,7 @@ Theorem aug_place_memory_read_typed:
   ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv cur
 Proof
   strip_tac >> drule_all aug_place_target_memory_live >> strip_tac >>
+  `expr_sim_inv cenv cx env es` by fs[target_pre_def] >>
   `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by
     (drule_all aug_place_target_entry_typed >> simp[]) >>
   gvs[place_ptr_rel_def] >>
@@ -91,7 +91,7 @@ Proof
 QED
 
 Theorem aug_place_memory_access_ready:
-  expr_sim_inv cenv cx env es /\ body_inv tops ctx cenv cx /\
+  target_pre cenv cx env t es /\ body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (AugAssign ty t bop e) /\
   ((?bt fld. t = AttributeTarget bt fld) \/ (?bt key. t = SubscriptTarget bt key)) /\
   type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
@@ -105,6 +105,7 @@ Theorem aug_place_memory_access_ready:
        mload (w2n w) s = typed_val_to_w256 tv cur
 Proof
   strip_tac >>
+  `expr_sim_inv cenv cx env es` by fs[target_pre_def] >>
   `?info. supported_target_info tops bindings t = SOME info` by
     metis_tac[aug_place_supported_stmt_target_info] >>
   drule aug_place_typing >> strip_tac >>
@@ -1405,7 +1406,10 @@ Resume compile_augassign_place_memory_case[base_normal]:
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      first_x_assum (qspec_then `[]` assume_tac) >> metis_tac[]) >>
   qpat_assum `!tail. eval_target_place _ _ _ = _`
-    (qspec_then `[]` assume_tac) >>
+    (qspec_then `[]` (assume_tac o SIMP_RULE bool_ss [APPEND_NIL])) >>
+  `target_pre cenv cx env bt (es with gas_obs :=
+     gas_explicit marks' s0.vs_gas_readings)` by
+    fs[target_pre_def, expr_sim_inv_gas_obs] >>
   drule_all aug_place_target_memory_live >> strip_tac >>
   `expr_sim_inv cenv cx env (raw with gas_obs := [])` by
     fs[expr_body_pre_def] >>

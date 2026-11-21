@@ -396,6 +396,10 @@ Proof
        qpat_assum `!tail. eval_target_place _ _ _ = _`
          (qspec_then `[]` (ACCEPT_TAC o REWRITE_RULE [APPEND_NIL,upd])))) >>
   qmatch_asmsub_abbrev_tac `eval_target_place cx t (es with gas_obs := reads) = (INL p,st)` >>
+  `!id path. p = MemoryPlace id path ==>
+    ?entry v. lookup_scopes id st.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value path = INL v` by
+    fs[Abbr `targetQ`] >>
   `!H. valid_horizon cx st0 H st.storage_trace ==>
      target_post H ctx func cenv cx es sa ca s0 st (PlaceR p) (Type aty) r v /\
      target_ptr_ok cenv (PlaceR p) r Gtarget tnt v /\
