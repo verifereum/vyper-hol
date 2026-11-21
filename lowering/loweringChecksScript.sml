@@ -41,7 +41,11 @@ Ancestors
   entryPackagedRuntimeCode
   (* compiled creation code and events *)
   vyperCreateMemoryTest vyperEventForwardStruct vyperEventArgumentLifetime
-  checkedLogEmptyExecution checkedLogDataExecution
+  abiEmptyLogPath bodyFullLog
+  (* Log proof suppliers formerly reached through the staging execution checks. *)
+  abiLogAllocationFrame abiLogDataAllocation bodyFullLogDataField
+  checkedLogMetadata checkedLogValues eventLogSourceLookup eventLogTopicsPath
+  logArgumentCodeExecution logArgumentLogSafety logSourceFrame
   (* ABI encode/decode edge cases and size boundaries *)
   abiDecodeBoundsTest abiDecodeAliasTest abiDecoderBytesEdges
   createSizeBoundaryTest

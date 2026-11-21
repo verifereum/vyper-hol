@@ -1,49 +1,26 @@
 Theory symbolicSourceCompilerStmtFrame
 Ancestors
   moduleLowering
-  symbolicSourceCompilerFrame stmtLowering compileEnv
+  symbolicSourceCompilerFrame symbolicSourceCompilerExprFrame
+  symbolicSourceCompilerCallFrame stmtLowering compileEnv context
 Libs symbolicSourceCompilerFrameLib
 
 open symbolicSourceCompilerFrameLib
 
-Theorem symbolic_frame_log_save_arg:
-  (!c t v. symbolic_frame R (compile_materialize_vv c t v)) ==>
-  symbolic_frame R (compile_log_save_arg cenv ty op es)
+Theorem symbolic_frame_log_saved_topics[local]:
+  (!vv. symbolic_frame R (unwrap_value cenv vv)) /\
+  (!opc args. symbolic_frame R (emit_op opc args)) ==>
+  !rows. symbolic_frame R (compile_log_saved_topics cenv rows)
 Proof
-  strip_tac >> simp[compile_log_save_arg_def] >> IF_CASES_TAC >> simp[]
-QED
-
-Theorem symbolic_frame_log_eval_all:
-  (!c t e. symbolic_frame R (lower_value compile_expr c t e)) /\
-  (!c t v. symbolic_frame R (compile_materialize_vv c t v)) ==>
-  !es cenv. symbolic_frame R (compile_log_eval_all cenv es)
-Proof
-  strip_tac >> Induct >> simp[compile_log_eval_all_def, comp_ignore_bind_def] >>
-  rpt gen_tac >>
-  rpt (BETA_TAC >> irule symbolic_frame_bind >> reverse conj_tac
-       >- simp[symbolic_frame_log_save_arg] >> gen_tac) >> simp[]
-QED
-
-Theorem symbolic_frame_log_topic_ops:
-  (!op b. symbolic_frame R (compile_encode_log_topic op b)) ==>
-  !ops. symbolic_frame R (compile_log_topic_ops ops)
-Proof
-  strip_tac >> Induct >> simp[compile_log_topic_ops_def, comp_ignore_bind_def] >>
-  rpt gen_tac >>
-  rpt (BETA_TAC >> irule symbolic_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[]
-QED
-
-Theorem symbolic_frame_log_store_data:
-  (!op args. symbolic_frame R (emit_op op args)) /\
-  (!op args. symbolic_frame R (emit_void op args)) /\
-  (!c v b t s. symbolic_frame R (compile_store_memory c v b t s)) ==>
-  !ops tys cenv buf off.
-    symbolic_frame R (compile_log_store_data cenv ops tys buf off)
-Proof
-  strip_tac >> Induct >> Cases_on `tys` >>
-  simp[compile_log_store_data_def, comp_ignore_bind_def] >>
-  rpt gen_tac >>
-  rpt (BETA_TAC >> irule symbolic_frame_bind >> reverse conj_tac >- simp[] >> gen_tac) >> simp[]
+  strip_tac >>
+  `!op bs. symbolic_frame R (compile_encode_log_topic op bs)` by
+    (rpt gen_tac >> Cases_on `bs` >> simp[compile_encode_log_topic_def] >>
+     rpt (ho_match_mp_tac symbolic_frame_bind >> conj_tac >- simp[] >> gen_tac) >>
+     simp[]) >>
+  Induct >> rpt gen_tac >> TRY (PairCases_on `h`) >>
+  simp[compile_log_saved_topics_def] >>
+  rpt (ho_match_mp_tac symbolic_frame_bind >> conj_tac >- simp[] >> gen_tac) >>
+  simp[]
 QED
 
 Theorem symbolic_frame_tuple_load_all:
@@ -146,9 +123,6 @@ Theorem symbolic_frame_stmt_cond:
   (!i b v loc. symbolic_frame R (compile_store_at_loc i b v loc)) /\
   (!c e. symbolic_frame R (compile_reason_message c e)) /\
   (!c v (t:type) n. symbolic_frame R (compile_revert_with_reason c v t n)) /\
-  (!c es. symbolic_frame R (compile_log_eval_all c es)) /\
-  (!ops. symbolic_frame R (compile_log_topic_ops ops)) /\
-  (!c ops tys buf off. symbolic_frame R (compile_log_store_data c ops tys buf off)) /\
   (!a b i. symbolic_frame R (compile_abi_encode_to_buf a b i)) /\
   (!c. symbolic_frame R (compile_return_unlock c)) /\
   (!k t v. symbolic_frame R (compile_nonreentrant_unlock k t v)) /\
@@ -200,6 +174,12 @@ Resume symbolic_frame_stmt_cond[augassign]:
 QED
 
 Resume symbolic_frame_stmt_cond[log]:
+  `!es tys. symbolic_frame R (compile_ext_call_args compile_expr cenv [] tys es)` by
+    (rpt gen_tac >> irule symbolic_frame_ext_call_args >> simp[]) >>
+  `!rows. symbolic_frame R (compile_log_saved_topics cenv rows)` by
+    (irule symbolic_frame_log_saved_topics >> simp[]) >>
+  `!dst rows. symbolic_frame R (compile_abi_encode_values_to_buf cenv dst rows)` by
+    (rpt gen_tac >> irule symbolic_frame_abi_encode_values_to_buf >> simp[]) >>
   simp[Once compile_stmt_def, comp_ignore_bind_def] >>
   BasicProvers.TOP_CASE_TAC >> simp[] >> rename1 `SOME info` >> PairCases_on `info` >> simp[] >>
   rpt (BETA_TAC >> match_mp_tac symbolic_frame_bind >> conj_tac >- simp[] >> gen_tac) >> simp[] >>

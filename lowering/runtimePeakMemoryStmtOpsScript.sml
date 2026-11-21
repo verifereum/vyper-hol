@@ -179,26 +179,10 @@ Proof
   irule dalloca_windows_ext_call_args >> simp[]
 QED
 
-Theorem dalloca_windows_log_eval_all:
-  !args.
-    (!e. MEM e args ==> preserves_dalloca_windows window (compile_expr cenv (expr_type e) e)) ==>
-    preserves_dalloca_windows window (compile_log_eval_all cenv args)
+Theorem dalloca_windows_log_saved_topics:
+  !vs. preserves_dalloca_windows window (compile_log_saved_topics cenv vs)
 Proof
-  Induct >> simp[compile_log_eval_all_def, dalloca_windows_return] >>
-  rpt strip_tac >> windows_tac [compile_log_save_arg_def, dalloca_windows_materialize_vv] >>
-  metis_tac[]
-QED
-
-Theorem dalloca_windows_log_topic_ops:
-  !vs. preserves_dalloca_windows window (compile_log_topic_ops vs)
-Proof
-  Induct >> simp[compile_log_topic_ops_def, dalloca_windows_return] >>
+  Induct >> rpt gen_tac >> TRY (PairCases_on `h`) >>
+  simp[compile_log_saved_topics_def, dalloca_windows_return] >>
   windows_tac [compile_encode_log_topic_def, dalloca_windows_hash_ops]
-QED
-
-Theorem dalloca_windows_log_store_data:
-  !vs tys off. preserves_dalloca_windows window (compile_log_store_data cenv vs tys buf off)
-Proof
-  Induct >> Cases_on `tys` >> simp[compile_log_store_data_def, dalloca_windows_return] >>
-  windows_tac [dalloca_windows_store_memory]
 QED

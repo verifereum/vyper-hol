@@ -331,6 +331,25 @@ Proof
   simp[] >> metis_tac[supported_pure_expr_effect_free, no_effect_call_operands]
 QED
 
+Theorem body_log_snapshot_expr_pre:
+  EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) args /\
+  body_inv tops ctx cenv cx /\ supported_pure_exprs tops args /\
+  well_typed_exprs env args /\
+  ~supported_exprs_exists
+     (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
+  call_evaluation_safe cx (int_calls_exprs args) /\
+  (!target. supported_exprs_exists (expr_abi_decode_target_root target) args ==>
+            occurs_abi_decode_target target tops) ==>
+  !e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
+    expr_body_pre cenv cx env e st
+Proof
+  rpt strip_tac >>
+  qspecl_then [`tops`,`ctx`,`cenv`,`cx`,`env`,`e`,`[]`,`st`]
+    match_mp_tac log_arg_body_pre >>
+  fs[supported_pure_exprs_every, EVERY_MEM, supported_exprs_exists_every,
+     EXISTS_MEM] >> metis_tac[well_typed_exprs_member, call_evaluation_safe_exprs_mem]
+QED
+
 (* Body safety and root allocation checks give each argument expr_body_pre;
    expression evaluation then preserves the invariant and types its value. *)
 Theorem body_log_args_ready:

@@ -70,6 +70,27 @@ Proof
   simp[select_log_args_def, encode_indexed_event_topics_def]
 QED
 
+Theorem split_log_ops_indexed_rel:
+  !flags rows vs topics.
+    LENGTH flags = LENGTH rows /\
+    LIST_REL (\(flag,row) v. flag ==> R row v) (ZIP (flags,rows)) vs /\
+    encode_indexed_event_topics flags (MAP SND rows) vs = SOME topics ==>
+    LIST_REL (\(saved,hashed) topic.
+      ?ty v. hashed = is_bytestring_type ty /\ R (saved,ty) v /\
+        encode_event_topic ty v = SOME topic) (FST (split_log_ops rows flags)) topics
+Proof
+  Induct
+  >- (Cases_on `rows` >> Cases_on `vs` >> simp[split_log_ops_def, encode_indexed_event_topics_def]) >>
+  rpt gen_tac >> Cases_on `rows` >> Cases_on `vs` >> simp[] >>
+  rename1 `split_log_ops (row::rows) (flag::flags)` >> PairCases_on `row` >>
+  Cases_on `flag` >> simp[split_log_ops_def, LET_THM, encode_indexed_event_topics_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `split_log_ops rows flags` >> gvs[] >>
+  qmatch_assum_rename_tac `encode_indexed_event_topics flags (MAP SND rows) vals = SOME words` >>
+  first_x_assum (qspecl_then [`rows`,`vals`,`words`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem compile_split_log_topics_correct:
   !tenv flags args values field_types cs ops cs' ss.
     LENGTH flags = LENGTH args /\
