@@ -4,7 +4,7 @@
 Theory bodyFullBuiltinUint2Str
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullPreds bodySimFull bodyFullOfVV bodyFullAllocaFresh bodyInvNoDalloca
+  bodyFullPreds bodySimFull bodyFullOfVV bodyFullAllocaFresh
   bodyFullGhostFrame bodyFullUnwrapRun bodyFullShared bodyMemoryDefs
   bodyFullBuiltinUint2StrSuffix bodyFullBuiltinUint2StrRun
   bodyFullHashKeccakFixed[qualified,ignore_grammar]

@@ -12,7 +12,6 @@ roots = [
   # whitelist-removal leaves awaiting integration into the stage proofs
   "lowering/whitelist/whitelistVisibilityScript.sml",
   "lowering/whitelist/whitelistExprOpenScript.sml",
-  "lowering/whitelist/whitelistS2ExtrasScript.sml",
   "lowering/whitelist/whitelistCheckerTypesScript.sml",
   "lowering/whitelist/whitelistCheckerDeclsScript.sml",
   "lowering/whitelist/whitelistCheckerDeployScript.sml",

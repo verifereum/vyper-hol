@@ -2,7 +2,7 @@ Theory runtimeSymSrcGetterSource
 Ancestors
   runtimeSymSrcGetterExpr runtimeSymSrcGetterReturn runtimeSymSrcInterfaces
   runtimeSymSrcExpressions runtimeSymSrcPrimitives ctorDeployDefs
-  supportedGetterProps supportedExprs supportedProgram constSubst
+  supportedGetterProps supportedExprs supportedProgram supportedExprTraverse constSubst
   compileVyper vyperGetter compileEnv stmtLowering stackPlanTypes list alist
 
 Theorem runtime_sym_getter_stmts[local]:
@@ -43,6 +43,8 @@ Proof
 QED
 
 Theorem runtime_sym_subst_topname[local]:
+  (!id e. ALOOKUP (module_consts_env tops []) id = SOME e ==>
+    ~supported_expr_exists is_self_code e) /\
   supported_program tops /\ runtime_sym_env tops ce /\
   EVERY runtime_sym_inst (state_insts s) /\
   compile_expr ce ty
@@ -55,7 +57,9 @@ Proof
   >- metis_tac[runtime_sym_getter_topname_raw] >>
   strip_tac >>
   drule_all supported_program_const_replacement >> strip_tac >>
-  drule supported_pure_expr_no_self_code >> strip_tac >>
+  qpat_assum `!id e. ALOOKUP (module_consts_env tops []) id = SOME e ==> _`
+    (drule_at (Pat `ALOOKUP _ _ = _`)) >>
+  strip_tac >>
   qspec_then `tops` mp_tac runtime_sym_generators >>
   disch_then (mp_tac o cj 1 o MATCH_MP runtime_sym_expression_contracts) >>
   disch_then (qspecl_then [`ce`,`ty`,`x`] mp_tac) >>
@@ -64,6 +68,8 @@ Proof
 QED
 
 Theorem runtime_sym_subst_getter_stmts[local]:
+  (!id e. ALOOKUP (module_consts_env tops []) id = SOME e ==>
+    ~supported_expr_exists is_self_code e) /\
   getter nr (TopLevelName rt (NONE,id)) kt vt = (gm,gn,args,dflts,ret,gbody) /\
   supported_program tops /\ runtime_sym_env tops ce /\
   (!b v info s op s'. ~is_label_operand b /\ ~is_label_operand v /\
@@ -91,6 +97,8 @@ Proof
 QED
 
 Theorem runtime_sym_public_getter_stmts:
+  (!id e. ALOOKUP (module_consts_env tops []) id = SOME e ==>
+    ~supported_expr_exists is_self_code e) /\
   public_getter top = SOME (mut,nr,rr,name,args,dflts,ret,gbody) /\
   supported_program tops /\ runtime_sym_env tops ce /\
   (!b v info s op s'. ~is_label_operand b /\ ~is_label_operand v /\

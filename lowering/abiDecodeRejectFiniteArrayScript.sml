@@ -585,7 +585,7 @@ val success_ih = ``!H0 ce env sf ty tv v ctx func cenv cx es st en source hi pos
   output B L xs p d dstid live ceiling s G tn lo PG.
   abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
     st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s /\
-  ~ctx_has_dalloca ctx /\ (^child_ghosts) pos output (type_memory_bytes ce ty) s G tn ==>
+  (^child_ghosts) pos output (type_memory_bytes ce ty) s G tn ==>
   ?u H z. abi_valid_allocated_post tv v ctx func cenv cx es st en ceiling dstid
       d (type_memory_bytes ce ty) s u /\ (^worlds) s u /\ (^path) s G tn (OK u) H z /\
     ptr_covers H z output u (type_memory_bytes ce ty) /\
@@ -613,7 +613,7 @@ val reject_ih = ``\ce env sf ty tv. !H0 output b_op source hi st en func ctx cen
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   bytes = (^source_view) ty b /\ (^malformed_view) ty bytes /\
-  ~ctx_has_dalloca ctx /\ (^child_ghosts) b_op output (type_memory_bytes ce ty) s G tn ==>
+  (^child_ghosts) b_op output (type_memory_bytes ce ty) s G tn ==>
   (^abort) s G tn``;
 
 val good_at = ``\q. q <= L /\
@@ -625,7 +625,7 @@ val child_layout = ``
   memsz = type_memory_bytes ce ty /\
   child_sites = abi_malformed_scratch_sites sb se func /\ child_sites SUBSET sites /\
   compile_abi_decode_to_buf dstop child MLOAD (Var source) hi di sb = ((),se) /\
-  fn_has_code sb se func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sb se func /\ fn_inst_ids_distinct func /\
   st.cs_next_var <= sb.cs_next_var /\ se.cs_next_var <= ceiling.cs_next_var /\
   not_fresh_at sb ip /\ idx = Var iv``;
 val child_meta = ``
@@ -912,7 +912,6 @@ Theorem malformed_finite_array_first_failure_joint:
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   (^malformed_view) (ArrayT ty (Dynamic maxn)) (DROP p xs) /\
   n = abi_head_word (DROP p xs) /\ n <= maxn /\ p+32+n*stride <= L /\
-  ~ctx_has_dalloca ctx /\
   (^child_ghosts) pos output (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) s G tn ==>
   (^abort) s G tn
 Proof

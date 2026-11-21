@@ -4,7 +4,7 @@ Ancestors
   targetPureWalkCallees vyperReadOnlyTargetCallFree vyperMachineFrame
   vyperCallOutcomeFrame vyperReadOnlyCalls vyperInterpreter vyperState
   vyperEvalFrame exprLowering compileVyper vyperTypeContract
-  targetPureWalkTraversal exprOracleStorageInterfaces rich_list
+  targetPureWalkTraversal exprOracleStorageInterfaces rich_list vyperTypeCallGraph
 Libs monadsyntax
 
 val () = monadsyntax.enable_monad "vyper_evaluation";
@@ -13,6 +13,29 @@ val _ = Parse.hide "body";
 (* Transfer the existing primitive interface to the weaker, log-free frame. *)
 val machine_leaf = irule state_rel_frame_machine >>
   conj_tac >- simp[machine_frame_def];
+
+(* GATE_ADMISSION: held, nested internal call in a nonmutating callee *)
+Theorem target_walk_internal_frame_nested:
+  cenv.ce_func_mutability = build_func_mutability (cx_tops cx) /\
+  (!vis mut nr rr fn args dflts ret body.
+     MEM (FunctionDecl vis mut nr rr fn args dflts ret body) (cx_tops cx) ==>
+     function_mutability_ok [(NONE,cx_tops cx)] vis mut nr dflts body) /\
+  get_module_code cx NONE = SOME (cx_tops cx) ==>
+  !ty name actuals fallback.
+    supported_program (cx_tops cx) /\
+    IS_SOME (supported_function_decl (cx_tops cx) (NONE,name) Internal) /\
+    ~call_can_mutate cenv (IntCall (NONE,name)) /\
+    (?mut nr args dflts ret body.
+       lookup_callable_function cx.in_deploy name (cx_tops cx) =
+         SOME (mut,nr,args,dflts,ret,body) /\
+       (int_calls_exprs dflts <> [] \/ int_calls_stmts body <> [])) /\
+    state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
+      (eval_exprs cx actuals) ==>
+    state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
+      (eval_expr cx (Call ty (IntCall (NONE,name)) actuals fallback))
+Proof
+  cheat
+QED
 
 Theorem target_walk_internal_frame:
   cenv.ce_func_mutability = build_func_mutability (cx_tops cx) /\
@@ -39,6 +62,9 @@ Proof
   PairCases_on `x` >>
   rename1 `lookup_callable_function cx.in_deploy name (cx_tops cx) =
            SOME (mut,nr,args,dflts,ret,body)` >>
+  Cases_on `int_calls_exprs dflts = [] /\ int_calls_stmts body = []`
+  >| [ALL_TAC, metis_tac[target_walk_internal_frame_nested]] >>
+  pop_assum strip_assume_tac >>
   drule_all target_walk_callee_syntax >> strip_tac >> gvs[] >> (
   simp[Once evaluate_def, ignore_bind_def] >>
   match_mp_tac walk_bind >>

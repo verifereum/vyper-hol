@@ -2,7 +2,7 @@
 Theory bodyFullMakeTuple
 Ancestors exprSimDefs[qualified,ignore_grammar]
   bodyFullMakeArrayResultDefs bodyFullMakeArrayInit bodyFullMakeArrayLoop
-  bodyFullPreds bodySimFull bodyInvNoDalloca bodyMemTupleLayout
+  bodyFullPreds bodySimFull bodyMemTupleLayout
   exprSimAggregateLayout exprSimAggregateSource exprSimHyps exprSimHypsDefs exprSimSource
   exprOperandVar exprLoweringProps exprLowering compileEnv
   gasOutcomeFullStmts gasOutcomeFullCompose gasOutcomeFull gasStorage
@@ -31,7 +31,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   `expr_sim_inv cenv cx env es /\ compatible_bound n (LENGTH args)` by
     gvs[expr_body_pre_def,cj 9 vyperTypeSystemTheory.well_typed_expr_def,
-        vyperTypeSystemTheory.well_typed_builtin_app_def] >>
+        vyperTypeSystemTheory.well_typed_builtin_app_def,
+        vyperValueTheory.compatible_bound_def] >>
   `body_exprs_full_ok cx args` by
     (first_x_assum irule >> simp[vyperContextTheory.builtin_args_length_ok_def]) >>
   `!e ee. MEM e args /\ expr_sim_inv cenv cx env ee ==>

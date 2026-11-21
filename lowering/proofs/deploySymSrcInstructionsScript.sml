@@ -5,7 +5,7 @@ Ancestors
   deploySymSrcInternalBodies deploySymSrcGeneratorFrame runtimeSymSrcInstructions
   runtimeSymSrcContext runtimeSymSrcModuleArgPreservation runtimeSymSrcRuntimeBoundary
   runtimeSymSrcBlockEmission compileVyper vyperCompiler moduleLowering compileEnv
-  loweringShapeDefs context list
+  loweringShapeDefs context list vyperTypeContract constSubstCorrect
 
 Theorem deploy_sym_run_lowering[local]:
   !has bytes len args size ints ce stmts pay nr key trans rp entry unit.
@@ -22,6 +22,8 @@ Proof
 QED
 
 Theorem deploy_sym_deploy_insts:
+  check_contract T layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ supported_program_deploy tops /\
   ~program_reads_self_code tops /\
@@ -71,7 +73,10 @@ Proof
     qpat_assum `classify_functions tops = _` (fn classification =>
       drule_at (Pat `compile_internal_fn_bodies _ _ = _`)
         (SRULE [classification]
-          (Q.INST [`tops` |-> `tops`] deploy_sym_classified_internal_bodies_cond))) >>
+          (Q.INST [`tops` |-> `tops`, `layouts` |-> `layouts`, `addr` |-> `addr`,
+            `art` |-> `art`, `imms` |-> `imms`, `A` |-> `A`]
+            deploy_sym_classified_internal_bodies_cond))) >>
+    disch_then (qspecl_then [`layouts`, `imms`, `art`, `addr`, `A`] mp_tac) >>
     simp[] >> impl_tac >- (
       rpt gen_tac >> strip_tac >>
       rename1 `supported_stmts tops internal_bindings internal_body` >>

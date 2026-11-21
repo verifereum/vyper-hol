@@ -2,7 +2,7 @@ Theory bodyFullShadowBodyInv
 Ancestors
   gasShadowUnit gasShadowState gasShadow compileVyper vyperCompiler compileEnv
   moduleLowering fragExec venomInst venomWf vyperAST bodySim list
-  bodyInvSplit compileUnit bodyPtrDefs gasContext ptrDiscipline ptrSafeRun
+  bodyInvSplit compileUnit constSubst constSubstMods bodyPtrDefs gasContext ptrDiscipline ptrSafeRun
   loweringStateRelDefs venomState vyperState vyperContext
   alist finite_map pred_set words combin
 
@@ -28,10 +28,11 @@ Definition shadow_body_inv_mods_def[nocompute]:
         set_internal_package_target rpolicy.rpol_target
           (package_internal_fn_unit mods T (K global_nonreentrant_slot) is_ctor
             (if is_ctor then imm_len_mods mods else 0)
-            (src,(mut,nr,rr,name,args,dflts,ret,ss))) =
+            (src,subst_consts_fn_mods (consts_env_mods mods)
+              (mut,nr,rr,name,args,dflts,ret,ss))) =
           (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,
            compiled_ss,rt) /\
-        compiled_ss = ss /\
+        compiled_ss = subst_consts_stmts_mods (consts_env_mods mods) ss /\
         new_block label before = (old,entry) /\
         compile_internal_function ce params has_rb nr' key trans view ctor ilen
           compiled_ss rt entry = ((),final) /\
@@ -74,10 +75,11 @@ Theorem shadow_body_inv_def:
                compute_immutables_len
                  (get_struct_fields (make_struct_fields_map tops)) tops
              else 0)
-            (mut,nr,rr,name,args,dflts,ret,ss)) =
+            (subst_consts_fn (module_consts_env tops [])
+              (mut,nr,rr,name,args,dflts,ret,ss))) =
           (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,
            compiled_ss,rt) /\
-        compiled_ss = ss /\
+        compiled_ss = subst_consts_stmts (module_consts_env tops []) ss /\
         new_block label before = (old,entry) /\
         compile_internal_function ce params has_rb nr' key trans view ctor ilen
           compiled_ss rt entry = ((),final) /\
@@ -97,7 +99,9 @@ Proof
        ALOOKUP_def, optionTheory.FORALL_OPTION, nsid_to_string_def,
        build_func_ids_mods_singleton, lower_vyper_runtime_unit_mods_singleton,
        lower_vyper_deploy_unit_mods_singleton, package_internal_fn_unit_singleton,
-       imm_len_mods_singleton, immSectionDeadTheory.imm_len_def]
+       imm_len_mods_singleton, immSectionDeadTheory.imm_len_def,
+       consts_env_mods_singleton, subst_consts_fn_mods_singleton,
+       subst_consts_mods_singleton]
 QED
 
 Theorem shadow_body_inv_callee_code:
@@ -121,9 +125,10 @@ Theorem shadow_body_inv_callee_code:
              compute_immutables_len
                (get_struct_fields (make_struct_fields_map tops)) tops
            else 0)
-          (mut,nr,rr,name,args,dflts,ret,ss)) =
+          (subst_consts_fn (module_consts_env tops [])
+            (mut,nr,rr,name,args,dflts,ret,ss))) =
         (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,compiled_ss,rt) /\
-      compiled_ss = ss /\
+      compiled_ss = subst_consts_stmts (module_consts_env tops []) ss /\
       new_block label before = (old,entry) /\
       compile_internal_function ce params has_rb nr' key trans view ctor ilen
         compiled_ss rt entry = ((),final) /\

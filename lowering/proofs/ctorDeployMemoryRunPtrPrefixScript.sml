@@ -122,6 +122,51 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+Theorem deploy_ctor_prefix_fail_run_ptr_safe_fields:
+  !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
+   exts ints fb cf fn lbl.
+    deploy_phases policy tops (assemble prog, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    deploy_source_ok tops am tx /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    vs.vs_call_ctx.cc_callvalue <> 0w /\ vs.vs_allocas = FEMPTY /\
+    allocas_below_fmp vs /\
+    classify_functions tops = (exts, ints, fb, SOME cf) /\
+    (!mut nr body am_c es0.
+       ~deploy_ctor_start tops am tx (mut, nr, body, am_c, es0)) /\
+    lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl
+    ==>
+    !fuel. ptr_safe_blocks (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
+             fuel dunit.cu_context fn [] FEMPTY entry_taint
+             (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                         vs_inst_idx := 0 |>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all ctor_prefix_rejecting_code >> strip_tac >>
+  drule_all ctor_prefix_task_entry_label >> strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `ptr_safe_blocks _ _ _ _ _ _ _ _ s0` >>
+  `?bb rest j0 j1 j2 v0 v1.
+     lookup_block "__deploy" fn.fn_blocks = SOME bb /\
+     bb.bb_instructions =
+       mk_inst j0 CALLVALUE [] [v0] :: mk_inst j1 ISZERO [Var v0] [v1] ::
+       mk_inst j2 ASSERT [Var v1] [] :: rest` by
+    (qpat_x_assum `fn_has_code _ _ _` mp_tac >>
+     qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
+     qpat_x_assum `emit_op ISZERO _ _ = _` mp_tac >>
+     qpat_x_assum `_ = emit_op CALLVALUE _ _` mp_tac >>
+     simp[emit_op_def, emit_void_def, emit_inst_def, fresh_var_def,
+          fresh_id_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def, initial_compile_state_def, fn_has_code_def] >>
+     rpt strip_tac >> gvs[] >>
+     Cases_on `bb.bb_instructions` >> fs[] >>
+     Cases_on `t` >> fs[] >> Cases_on `t'` >> fs[] >>
+     simp[mk_inst_def]) >>
+  qspecl_then [`deploy_dead HS tops runtime_bc am tx`,`imm_len tops`,`dunit.cu_context`,`fn`,`bb`,`rest`,`s0`,
+    `j0`,`j1`,`j2`,`v0`,`v1`] mp_tac nonpayable_check_ptr_safe >>
+  fs[Abbr `s0`, allocas_below_fmp_def]
+QED
+
 Theorem deploy_ctor_prefix_fail_run_ptr_safe:
   !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
    exts ints fb cf fn lbl.
@@ -145,38 +190,13 @@ Theorem deploy_ctor_prefix_fail_run_ptr_safe:
                          vs_inst_idx := 0 |>)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all ctor_prefix_rejecting_code >> strip_tac >>
-  drule_all ctor_prefix_task_entry_label >> strip_tac >> gvs[] >>
-  qmatch_goalsub_abbrev_tac `ptr_safe_blocks _ _ _ _ _ _ _ _ s0` >>
-  `s0.vs_call_ctx.cc_callvalue <> 0w` by
-    (drule_all ctor_prefix_source_obstruction >>
-     strip_tac >> drule_all ctor_prefix_entry_value >> simp[Abbr `s0`]) >>
-  `s0.vs_allocas = FEMPTY` by
-    (fs[gas_variant_def, Abbr `s0`] >>
-     qpat_x_assum `(opt_deploy_entry_state_own _ _ _ _ _ with vs_outcomes := _) = _`
-       (mp_tac o Q.AP_TERM `\x. x.vs_allocas`) >>
-     simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def,
-          init_venom_state_def]) >>
-  `allocas_below_fmp s0` by
+  `vs.vs_call_ctx.cc_callvalue <> 0w` by
+    (drule_all ctor_prefix_source_obstruction >> strip_tac >>
+     drule_all ctor_prefix_entry_value >> simp[]) >>
+  `vs.vs_allocas = FEMPTY /\ allocas_below_fmp vs` by
     (qpat_assum `gas_variant vs _` (mp_tac o REWRITE_RULE [gas_variant_def]) >>
-     disch_then (mp_tac o Q.AP_TERM `\st. allocas_below_fmp st`) >>
-     simp[Abbr `s0`, allocas_below_fmp_def, opt_deploy_entry_state_own_def, opt_entry_state_own_def,
-          entry_venom_state_def, init_venom_state_def]) >>
-  `?bb rest j0 j1 j2 v0 v1.
-     lookup_block "__deploy" fn.fn_blocks = SOME bb /\
-     bb.bb_instructions =
-       mk_inst j0 CALLVALUE [] [v0] :: mk_inst j1 ISZERO [Var v0] [v1] ::
-       mk_inst j2 ASSERT [Var v1] [] :: rest` by
-    (qpat_x_assum `fn_has_code _ _ _` mp_tac >>
-     qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
-     qpat_x_assum `emit_op ISZERO _ _ = _` mp_tac >>
-     qpat_x_assum `_ = emit_op CALLVALUE _ _` mp_tac >>
-     simp[emit_op_def, emit_void_def, emit_inst_def, fresh_var_def,
-          fresh_id_def, emit_def, comp_bind_def, comp_ignore_bind_def,
-          comp_return_def, initial_compile_state_def, fn_has_code_def] >>
-     rpt strip_tac >> gvs[] >>
-     Cases_on `bb.bb_instructions` >> fs[] >>
-     Cases_on `t` >> fs[] >> Cases_on `t'` >> fs[] >>
-     simp[mk_inst_def]) >>
-  irule nonpayable_check_ptr_safe >> simp[Abbr `s0`] >> metis_tac[]
+     disch_then (mp_tac o Q.AP_TERM `\st. (st.vs_allocas,allocas_below_fmp st)`) >>
+     simp[allocas_below_fmp_def, opt_deploy_entry_state_own_def,
+          opt_entry_state_own_def, entry_venom_state_def, init_venom_state_def]) >>
+  drule_all deploy_ctor_prefix_fail_run_ptr_safe_fields >> simp[]
 QED

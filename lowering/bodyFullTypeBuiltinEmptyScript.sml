@@ -1,6 +1,5 @@
 Theory bodyFullTypeBuiltinEmpty
 Ancestors
-  bodyInvNoDalloca
   bodyFullPreds bodyFullOfVV bodyFullExprGeneric bodyFullAllocGeneric
   gasOutcomeFullCompose exprSimHyps exprSimSource exprSimAggregatesAllocCounted
   bodyFullEmptyCertificate bodyFullEmptyPost aggregateEvaluatedLayout

@@ -506,7 +506,7 @@ val parent_inputs = ``\par tv.
   type_memory_size tv < dimword (:256) /\ abi_size_bound sf par < dimword (:256) /\
   (^entry) st en b_op output b d (type_memory_bytes ce par) s /\
   (^pc) st s /\ en.cs_next_var <= ceiling.cs_next_var /\
-  (^malformed_view) par ((^source_view) par b) /\ ~ctx_has_dalloca ctx /\
+  (^malformed_view) par ((^source_view) par b) /\
   (^ghosts) b_op output (type_memory_bytes ce par) s G tn``;
 
 Theorem malformed_tuple_table_joint[local]:
@@ -663,7 +663,7 @@ val success_ih = ``!H0 ce env sf ty tv v ctx func cenv cx es st en source hi pos
   output B L xs p d dstid live ceiling s G tn lo PG.
   abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
     st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s /\
-  ~ctx_has_dalloca ctx /\ (^ghosts) pos output (type_memory_bytes ce ty) s G tn ==>
+  (^ghosts) pos output (type_memory_bytes ce ty) s G tn ==>
   ?u H z. abi_valid_allocated_post tv v ctx func cenv cx es st en ceiling dstid
       d (type_memory_bytes ce ty) s u /\ (^worlds) s u /\ (^path) s G tn (OK u) H z /\
     ptr_covers H z output u (type_memory_bytes ce ty) /\
@@ -690,14 +690,14 @@ val reject_ih = ``\ce env sf ty tv. !H0 output b_op source hi st en func ctx cen
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   bytes = (^source_view) ty b /\ (^malformed_view) ty bytes /\
-  ~ctx_has_dalloca ctx /\ (^ghosts) b_op output (type_memory_bytes ce ty) s G tn ==>
+  (^ghosts) b_op output (type_memory_bytes ce ty) s G tn ==>
   (^abort) s G tn``;
 
 Theorem malformed_table_success_specialize[local]:
-  (^success_ih) /\ ~ctx_has_dalloca ctx ==> (^valid_child)
+  (^success_ih) ==> (^valid_child)
 Proof
   simp_tac bool_ss [] >>
-  disch_then (CONJUNCTS_THEN2 (mk_asm "valid") assume_tac) >>
+  disch_then (mk_asm "valid") >>
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   asm "valid" drule_all >> simp[]
 QED
@@ -705,7 +705,7 @@ QED
 Theorem malformed_table_members_specialize[local]:
   LIST_REL (abi_decoder_coherent ce env sf) ts tvs /\
   EVERY (\(t,tv). (^reject_ih) ce env sf t tv) (ZIP (ts,tvs)) /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx ==> (^member_reject) ts
+  fn_inst_ids_distinct func ==> (^member_reject) ts
 Proof
   simp_tac bool_ss [] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -745,7 +745,7 @@ Proof
   qpat_x_assum `(?ts tvs. par = TupleT ts /\ _) \/ _` strip_assume_tac
   >- (qpat_x_assum `par = TupleT _` SUBST_ALL_TAC >>
       `(^valid_child)` by (BETA_TAC >> mp_tac malformed_table_success_specialize >> simp_tac bool_ss [] >>
-       (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> disch_then ACCEPT_TAC) >>
+       (impl_tac >- first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC) >>
       `(^member_reject) ts` by
         (mp_tac malformed_table_members_specialize >> simp_tac bool_ss [] >>
          (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_then ACCEPT_TAC) >>
@@ -758,7 +758,7 @@ Proof
         (BETA_TAC >> mp_tac (Q.INST [`env` |-> `env \\ nsid`,
                          `sf` |-> `sf \\ nsid_to_string nsid`]
                          malformed_table_success_specialize) >> simp_tac bool_ss [] >>
-         (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> disch_then ACCEPT_TAC) >>
+         (impl_tac >- first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC) >>
       `!args'. FLOOKUP env nsid = SOME (StructArgs args') ==>
         (\env sf. (^member_reject) (MAP SND args')) (env \\ nsid) (sf \\ nsid_to_string nsid)` by
         (rpt strip_tac >> `args' = args` by gvs[optionTheory.SOME_11, type_args_11] >>
@@ -773,7 +773,7 @@ Proof
       (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_then ACCEPT_TAC) >>
   qpat_x_assum `par = ArrayT _ (Fixed _)` SUBST_ALL_TAC >>
   `(^valid_child)` by (BETA_TAC >> mp_tac malformed_table_success_specialize >> simp_tac bool_ss [] >>
-       (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> disch_then ACCEPT_TAC) >>
+       (impl_tac >- first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC) >>
   `abi_decoder_coherent ce env sf t etv` by
     fs[abi_decoder_coherent_array_iff] >>
   `(^member_reject) (REPLICATE n t)` by

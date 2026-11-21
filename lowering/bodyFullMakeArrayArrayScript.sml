@@ -6,7 +6,7 @@ Ancestors
   bodyFullMakeArrayResultDefs bodyFullMakeArrayInit bodyFullMakeArrayHeader
   bodyFullMakeArrayElements exprOperandVar gasShadowState gasShadow
   exprSimCopy exprSimAggregateLoops exprSimDefs[qualified,ignore_grammar]
-  bodyInvNoDalloca bodyMemArrayLayout exprSimAggregateEncoding
+  bodyMemArrayLayout exprSimAggregateEncoding
   exprSimAggregateSource exprSimAggregateLayout gasOutcomeFullStmts
   gasOutcomeFullCompose gasShadowCompileContext exprSimSource
   exprLoweringProps emitHelperProps exprSimHyps exprSimHypsDefs bodySimFull

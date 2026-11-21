@@ -39,16 +39,85 @@ Ancestors
   runtimeFallbackSourceAlignment runtimeFallbackPackageEnvironment
   externalBodyFrame externalFrameRetOk runtimeBodyShadow externalBodySupport
   constSubst constSubstStmtsPreserve
-  externalCallSelected externalBodySourceOk bodySimFullMain bodySimFull
+  externalCallSelected externalBodySourceOk bodySimFullMain bodySimFull bodyLoopCalls
   entryStateRel entryReachBodyFmp entryReachBodyRuntimeResources
   bodyAbiDecodeTarget rawReturnHeader loweringHalt gasContext bodyPtrDefs
   gasOutcomeFull fragGasOriginPtr loweringPosts stmtSimDefs exprSimDefs
   exprLoweringProps vyperStorageTrace vyperStorageBackend vyperCall
   fragExec moduleLowering fragGasOrigin fragFuelUnit passSimulationDefs
   acceptedContextPhi vyperLoweringCorrect typedCopyProducer
-  vyperEvalReadingErrors unitExecutionComposeResult
+  deployBodyReachability contextRawReachable contextCodegenRel unitTransformDefs
+  venomInst venomState ptrDiscipline list
+  vyperEvalReadingErrors unitExecutionComposeResult vyperCalldata supportedProgram
 
 val _ = Parse.hide "body";
+
+(* GATE_ADMISSION: held, grouped external defaults; owner: constant-substitution lane *)
+Theorem runtime_body_grouped_default_readings:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    ~internal_defaults_msg_gas tops ==>
+    ?shadow_unit.
+      gas_shadow_unit unit shadow_unit /\
+      !am tx ret vs.
+        source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+        initial_venom_state_rel tops am tx vs /\
+        outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+        (ctx_has_dalloca unit.cu_context ==>
+          unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+          w2n vs.vs_initial_fmp < 2 ** 254) /\
+        (valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret \/
+         (calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
+            SOME (tx.function_name,tx.args) /\
+          ?mut nr args dflts fbody.
+            lookup_function NONE tx.function_name External tops =
+              SOME (mut,nr,args,dflts,ret,fbody))) ==>
+        ?marks.
+          source_unit_execution_correct_with shadow_unit.cu_context marks
+            tops ret am tx unit vs /\
+          ((?tail. call_storage_ok am tx vs.vs_outcomes
+             (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
+           !tail. FST (call_external (SOME vs.vs_outcomes)
+             (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
+             INR (Error (RuntimeError "msg.gas: no gas reading")))
+Proof
+  cheat
+QED
+
+(* GATE_ADMISSION: held, msg.gas in internal defaults; owner: constant-substitution lane *)
+Theorem runtime_body_internal_default_gas_readings:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    internal_defaults_msg_gas tops ==>
+    ?shadow_unit.
+      gas_shadow_unit unit shadow_unit /\
+      !am tx ret vs.
+        source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+        initial_venom_state_rel tops am tx vs /\
+        outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+        (ctx_has_dalloca unit.cu_context ==>
+          unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+          w2n vs.vs_initial_fmp < 2 ** 254) /\
+        (valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret \/
+         (calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
+            SOME (tx.function_name,tx.args) /\
+          ?mut nr args dflts fbody.
+            lookup_function NONE tx.function_name External tops =
+              SOME (mut,nr,args,dflts,ret,fbody))) ==>
+        ?marks.
+          source_unit_execution_correct_with shadow_unit.cu_context marks
+            tops ret am tx unit vs /\
+          ((?tail. call_storage_ok am tx vs.vs_outcomes
+             (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
+           !tail. FST (call_external (SOME vs.vs_outcomes)
+             (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
+             INR (Error (RuntimeError "msg.gas: no gas reading")))
+Proof
+  cheat
+QED
 
 (* ===== The source's result ===== *)
 
@@ -403,7 +472,7 @@ val runtime_body_endpoint_tac =
       `FST (SND (SND (classify_functions tops))) = SOME fb` by
         (qpat_assum `classify_functions tops = _` (fn th => simp[th])) >>
       drule_all classified_fallback_source_alignment_nr >>
-      disch_then (CONJUNCTS_THEN2 SUBST_ALL_TAC assume_tac) >>
+      disch_then SUBST_ALL_TAC >>
       gvs[] >>
       drule_all same_source_fallback_package_environment >>
       disch_then ACCEPT_TAC) >>
@@ -470,46 +539,210 @@ val runtime_body_shadow_tac =
          initial_evaluation_context_def]) >>
   `~cenv.ce_is_ctor` by
     gvs[bodySimTheory.body_inv_def, initial_evaluation_context_def] >>
-  `~ctx_has_dalloca unit.cu_context` by
-    metis_tac[entry_runtime_no_dalloca] >>
   `ctx_inst_ids_distinct unit.cu_context` by
     (drule_all caller_runtime_entry_integrity >> simp[]);
 
 val runtime_shadow_body_inv_tac =
   qpat_assum `source_typing_ok tops am tx` (fn typing =>
     qpat_assum `supported_program tops` (fn supported =>
-      qpat_assum `lower_vyper_runtime_unit tops rpolicy = SOME unit` (fn lowered =>
-        qpat_assum `runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit`
-          (fn shadow => assume_tac (MATCH_MP runtime_shadow_body_inv
-            (LIST_CONJ [MATCH_MP source_typing_ok_vtype_keys_distinct typing,
-                        supported, lowered, shadow]))))));
+      qpat_assum `~EXISTS external_has_defaults (FST (classify_functions tops))`
+        (fn legacy =>
+          qpat_assum `lower_vyper_runtime_unit tops rpolicy = SOME unit` (fn lowered =>
+            qpat_assum `runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit`
+              (fn shadow => assume_tac (MATCH_MP runtime_shadow_body_inv
+                (LIST_CONJ [MATCH_MP source_typing_ok_vtype_keys_distinct typing,
+                            supported, legacy, lowered, shadow])))))));
 
-val runtime_body_outcome_tac =
-  `struct_args_unique tops` by
-    (fs[source_typing_ok_def] >> metis_tac[checked_contract_struct_args_unique]) >>
-  runtime_shadow_body_inv_tac >>
-  drule_at (Pat `frame_ret_ok_full _ _ _ _ _`) body_stmts_sim_full >>
-  disch_then (qspecl_then [`tops`, `bindings`, `env_t`, `env'`, `NoLoop`,
-                           `compiled_body`, `es0`] mp_tac) >>
+(* GATE_ADMISSION: held, runtime entry with constant-name internal defaults *)
+Theorem runtime_selected_body_internal_constant_defaults:
+  !am tx mut nr args fbody src_env os es0 DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
+   ret_ty lctx RetQ ss es.
+    source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+    internal_defaults_const_names tops /\ ~internal_defaults_msg_gas tops /\
+    cx = initial_evaluation_context am.sources am.layouts tx NONE /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut,nr,args,[],ret_ty,fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME src_env /\
+    send_call_value mut cx
+      (initial_state am [src_env] with
+        <|outcomes := SOME os; requests := []|>) = (INL (),es0) /\
+    lock_if_nr cx nr (is_view_mut mut) es0 = (INL (),es) /\
+    ss = subst_consts_stmts (module_consts_env tops []) fbody /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ struct_args_unique tops /\
+    supported_stmts tops bindings ss /\
+    (!target. supported_stmts_expr_exists
+       (expr_abi_decode_target_root target) ss ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmts env ret_ty ss = SOME env' /\
+    stmts_exprs_ok cenv ss /\
+    call_evaluation_safe cx (int_calls_stmts ss) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmts_env cenv lctx ret_ty ss)
+      (stmts_env cenv lctx ret_ty (MAP gas_shadow_stmt ss))
+      (eval_stmts cx ss) es
+Proof
+  cheat
+QED
+
+Theorem runtime_selected_body_frag_full[local]:
+  !am tx mut nr args fbody src_env os es0 DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
+   ret_ty lctx RetQ ss es.
+    source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+    ~internal_defaults_msg_gas tops /\
+    cx = initial_evaluation_context am.sources am.layouts tx NONE /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut,nr,args,[],ret_ty,fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME src_env /\
+    send_call_value mut cx
+      (initial_state am [src_env] with
+        <|outcomes := SOME os; requests := []|>) = (INL (),es0) /\
+    lock_if_nr cx nr (is_view_mut mut) es0 = (INL (),es) /\
+    ss = subst_consts_stmts (module_consts_env tops []) fbody /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ struct_args_unique tops /\
+    supported_stmts tops bindings ss /\
+    (!target. supported_stmts_expr_exists
+       (expr_abi_decode_target_root target) ss ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmts env ret_ty ss = SOME env' /\
+    stmts_exprs_ok cenv ss /\
+    call_evaluation_safe cx (int_calls_stmts ss) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmts_env cenv lctx ret_ty ss)
+      (stmts_env cenv lctx ret_ty (MAP gas_shadow_stmt ss))
+      (eval_stmts cx ss) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `internal_defaults_const_names tops`
+  >- (qspecl_then [`am`,`tx`,`mut`,`nr`,`args`,`fbody`,`src_env`,`os`,`es0`,
+         `DF`,`lo`,`d`,`PG`,`tops`,`bindings`,`ctx`,`shadow_ctx`,`func`,
+         `shadow_func`,`cenv`,`cx`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`ss`,`es`]
+       mp_tac runtime_selected_body_internal_constant_defaults >> asm_rewrite_tac[]) >>
+  `?art A. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
+      constants_fold_module [(NONE,tops)] (account_immutables am tx.target)
+        NONE tops FEMPTY = SOME A` by fs[source_typing_ok_def] >>
+  pop_assum strip_assume_tac >>
+  drule bodyLoopCallsTheory.checked_module_loop_calls_ok >> disch_then assume_tac >>
+  `stmts_loop_calls_ok [(NONE,tops)] ss` by
+    (`stmts_loop_calls_ok [(NONE,tops)] fbody` by
+       (drule_all_then ACCEPT_TAC bodyLoopCallsTheory.checked_external_body_loop_calls_ok) >>
+     qpat_assum `ss = subst_consts_stmts _ fbody` SUBST1_TAC >>
+     drule_all_then ACCEPT_TAC bodyLoopCallsTheory.checked_subst_consts_loop_calls_ok) >>
+  qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,`ctx`,`shadow_ctx`,
+    `func`,`shadow_func`,`cenv`,`cx`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,
+    `ss`,`es`] mp_tac body_stmts_sim_full >>
+  asm_rewrite_tac[]
+QED
+
+fun runtime_selected_body_frag_tac nr endpoint =
+  qpat_assum `frame_ret_ok_full _ _ _ _ _` (fn frame_th =>
+    let
+      val (_, [frame, cx, retq, cenv, ret]) = strip_comb (concl frame_th)
+      val [df, lo, d, ctx, shadow_ctx, pg, func, shadow_func] =
+        map (fn tm => [ANTIQUOTE tm]) (pairSyntax.strip_pair frame)
+    in
+      qspecl_then
+        [`am`, `tx`, `mut`, nr, `args`, `fbody`, `env`, `vs.vs_outcomes`, `es0`,
+         df, lo, d, pg, `tops`, `bindings`, ctx, shadow_ctx, func, shadow_func,
+         [ANTIQUOTE cenv], [ANTIQUOTE cx], `env_t`, `env'`, [ANTIQUOTE ret],
+         `NoLoop`, [ANTIQUOTE retq], `compiled_body`, endpoint]
+        mp_tac runtime_selected_body_frag_full
+    end) >>
   impl_tac
-  >- (simp[] >> metis_tac[]) >>
-  disch_then (mp_tac o REWRITE_RULE [stmt_frag_full_def]) >>
-  disch_then (qspecl_then [`initial_state am []`, `sa`, `sb`, `shadow_sa`,
-                           `shadow_sb`, `s0`, `G0`, `tn0`, `cenv'`] mp_tac) >>
-  impl_tac
-  >- (`cenv.ce_return_buf = NONE` by fs[return_buf_frame_def] >>
-      simp[dead_lo_ok_def, ret_pc_ok_def, return_buf_sep_def, gas_admissible_def] >>
-      rpt strip_tac
-      >~ [`stmt_res_ok`] >- metis_tac[external_body_source_ok]
-      >~ [`dalloca_no_wrap`]
-      >- metis_tac[bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap]
-      >~ [`storage_well_formed_on`]
-      >- (drule (INST_TYPE [alpha |-> ``:256``] body_start_storage_well_formed) >>
-          disch_tac >> fs[valid_horizon_def])
-      >> qpat_x_assum `!st0 H. valid_horizon _ _ _ es0.storage_trace ==> _`
-           drule >> simp[]) >>
-  qpat_assum `cx_tops _ = tops` (fn th => REWRITE_TAC [th]) >>
-  strip_tac;
+  >- (simp[Abbr `compiled_body`, lock_if_nr_def, return_def] >> metis_tac[]);
+
+val runtime_entry_horizon_simp =
+  simp[valid_horizon_def, storage_trace_horizon_def, storage_trace_regions_def,
+       storage_trace_locks_def, regions_consistent_def, storage_locks_separated_def,
+       storage_well_formed_on_def, storage_observations_ok_def, storage_roots_fit_def,
+       storage_trace_backends_well_formed_def, arithmeticTheory.ADD1];
+
+val runtime_empty_trace_tac =
+  `es0.storage_trace = []` by
+    (drule send_call_value_accounts >> simp[initial_state_def]);
+
+val runtime_lock_trace_tac =
+  runtime_empty_trace_tac >>
+  `es_lock.storage_trace = [StorageLock global_nonreentrant_slot]` by
+    (drule_all lock_if_nr_success_trace >> simp[]);
+
+fun runtime_entry_allocas_tac endpoint =
+  qpat_assum `!st0 H. valid_horizon _ _ H ^endpoint ==> _`
+    (qspecl_then [`initial_state am []`, `storage_trace_horizon ^endpoint`] mp_tac) >>
+  impl_tac >- runtime_entry_horizon_simp >>
+  strip_tac >>
+  qpat_assum `stmt_state_rel _ unit.cu_context func cenv _ _ s0`
+    (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+  simp[];
+
+Theorem runtime_body_reached_dalloca_no_wrap[local]:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  unit.cu_context.ctx_entry = SOME "__entry" /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+  fn_entry_label func = SOME "__entry" /\
+  gas_path unit.cu_context func
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                vs_inst_idx := 0|>) 0 (OK s0) /\
+  (ctx_has_dalloca unit.cu_context ==>
+    !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+      dalloca_no_wrap inst s) ==>
+  !fn inst s. frag_reachable unit.cu_context func s0 fn inst s ==>
+    dalloca_no_wrap inst s
+Proof
+  strip_tac >>
+  Cases_on `ctx_has_dalloca unit.cu_context`
+  >- (`!bb label. lookup_block label func.fn_blocks = SOME bb ==>
+         phi_prefix_length bb.bb_instructions = 0` by
+        (rpt strip_tac >> drule_all lower_vyper_runtime_unit_block_phi >> simp[]) >>
+      `?bb. lookup_block "__entry" func.fn_blocks = SOME bb` by
+        (Cases_on `func.fn_blocks` >>
+         fs[fn_entry_label_def, entry_block_def, lookup_block_def, FIND_thm]) >>
+      qabbrev_tac `entry = vs with <|vs_prev_bb := NONE;
+        vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
+      `phi_prefix_length bb.bb_instructions = 0` by metis_tac[] >>
+      `enters_block func entry entry` by
+        simp[enters_block_def, Abbr `entry`, eval_phis_no_phi, venom_state_fupdfupds] >>
+      `!i. active_inst func i entry ==> raw_reachable vs unit.cu_context func i entry` by
+        (rpt strip_tac >> irule raw_reachable_entry >> fs[Abbr `entry`]) >>
+      `!i. active_inst func i s0 ==> raw_reachable vs unit.cu_context func i s0` by
+        (rpt strip_tac >>
+         qpat_assum `gas_path _ _ entry 0 (OK s0)` (fn path =>
+           irule raw_reachable_gas_path >> irule_at Any path >> simp[] >>
+           first_assum ACCEPT_TAC)) >>
+      rpt strip_tac >>
+      `raw_reachable vs unit.cu_context fn inst s` by
+        (drule raw_reachable_through_fragment >>
+         disch_then (qspec_then `vs` irule) >> first_assum ACCEPT_TAC) >>
+      metis_tac[]) >>
+  rpt strip_tac >>
+  `MEM func unit.cu_context.ctx_functions` by
+    metis_tac[venomInstTheory.lookup_function_MEM] >>
+  drule_then drule frag_reachable_members >> strip_tac >>
+  `inst.inst_opcode <> DALLOCA` by
+    (fs[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
+  simp[dalloca_no_wrap_def]
+QED
+
+val runtime_reached_no_wrap_tac =
+  `!fn inst s. frag_reachable unit.cu_context func s0 fn inst s ==>
+     dalloca_no_wrap inst s` by (
+  mp_tac (Q.INST
+    [`tops` |-> `tops`, `rpolicy` |-> `rpolicy`, `unit` |-> `unit`,
+     `func` |-> `func`, `vs` |-> `vs`, `s0` |-> `s0`]
+    runtime_body_reached_dalloca_no_wrap) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC);
 
 (* Compose at the body's marks, optionally retaining a call-result fact. *)
 fun runtime_body_compose_tac compose =
@@ -697,10 +930,15 @@ Theorem runtime_body_joint_from_start_with_readings:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    ~internal_defaults_msg_gas tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     initial_venom_state_rel tops am tx vs /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -727,7 +965,34 @@ Proof
   runtime_body_endpoint_tac >>
   runtime_body_source_tac >>
   runtime_body_shadow_tac >>
-  runtime_body_outcome_tac >>
+  runtime_reached_no_wrap_tac >>
+  `struct_args_unique tops` by
+    (fs[source_typing_ok_def] >> metis_tac[checked_contract_struct_args_unique]) >>
+  runtime_shadow_body_inv_tac >>
+  runtime_selected_body_frag_tac `F` `es0` >>
+  disch_then (mp_tac o REWRITE_RULE [stmt_frag_full_def]) >>
+  disch_then (qspecl_then [`initial_state am []`, `sa`, `sb`, `shadow_sa`,
+                           `shadow_sb`, `s0`, `G0`, `tn0`, `cenv'`] mp_tac) >>
+  impl_tac
+  >- (`cenv.ce_return_buf = NONE` by fs[return_buf_frame_def] >>
+      qpat_assum `!fn inst s. frag_reachable unit.cu_context func s0 fn inst s ==>
+          dalloca_no_wrap inst s`
+        (fn nowrap =>
+          simp[dead_lo_ok_def, ret_pc_ok_def, return_buf_sep_def, gas_admissible_def, nowrap]) >>
+      rpt strip_tac >> asm_simp_tac std_ss []
+      >~ [`stmt_res_ok`] >- metis_tac[external_body_source_ok]
+      >~ [`allocas_below_fmp`]
+      >- (runtime_empty_trace_tac >> runtime_entry_allocas_tac ``es0.storage_trace``)
+      >- (qpat_assum `!fn inst s. frag_reachable unit.cu_context func s0 fn inst s ==>
+             dalloca_no_wrap inst s`
+            (fn nowrap => first_assum (ACCEPT_TAC o MATCH_MP nowrap)))
+      >~ [`storage_well_formed_on`]
+      >- (drule (INST_TYPE [alpha |-> ``:256``] body_start_storage_well_formed) >>
+          disch_tac >> fs[valid_horizon_def])
+      >> (qpat_x_assum `!st0 H. valid_horizon _ _ _ es0.storage_trace ==> _`
+           drule >> simp[])) >>
+  qpat_assum `cx_tops _ = tops` (fn th => REWRITE_TAC [th]) >>
+  strip_tac >>
   runtime_body_compose_tac
     (Q.ISPEC `\(cr : value + exception).
        cr <> INR (Error (RuntimeError "msg.gas: no gas reading"))`
@@ -750,10 +1015,15 @@ Theorem runtime_body_joint_from_start_with_shadow:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    ~internal_defaults_msg_gas tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     initial_venom_state_rel tops am tx vs /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -776,10 +1046,15 @@ Theorem runtime_body_joint_from_start:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    ~internal_defaults_msg_gas tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     initial_venom_state_rel tops am tx vs /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -861,11 +1136,19 @@ Theorem lower_vyper_runtime_unit_body_joint_with_shadow:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    ~internal_defaults_msg_gas tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -888,11 +1171,19 @@ Theorem lower_vyper_runtime_unit_body_joint:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    ~internal_defaults_msg_gas tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -1002,6 +1293,8 @@ QED
 Theorem runtime_lock_abort_result_with:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    ~internal_defaults_msg_gas tops /\
   source_typing_ok tops am tx /\
   source_deployment_rel tops am tx /\
   initial_venom_state_rel tops am tx vs /\
@@ -1042,8 +1335,7 @@ Proof
   `?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
                 gas_shadow_unit unit shadow_unit` by
     (Cases_on `classify_functions tops` >> PairCases_on `r` >>
-     irule runtime_gas_shadow_unit_exists >> simp[] >>
-     drule loweringShapePropsTheory.supported_program_no_external_defaults >> simp[]) >>
+     irule runtime_gas_shadow_unit_exists >> fs[]) >>
   pop_assum strip_assume_tac >>
   qexists_tac `shadow_unit` >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -1138,6 +1430,58 @@ val selected_entry_split_tac =
                  <| outcomes := SOME vs.vs_outcomes; requests := [] |>)` >>
   rename1 `_ = (sres, es0)` >> Cases_on `sres`;
 
+fun runtime_alternate_readings_tac th =
+  qspecl_then [`tops`, `rpolicy`, `unit`] mp_tac th >>
+  impl_tac >- asm_rewrite_tac[] >>
+  disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
+  first_x_assum (qspecl_then [`am`, `tx`, `ret`, `vs`] mp_tac) >>
+  impl_tac >- asm_rewrite_tac[] >>
+  disch_then (qx_choose_then `marks` strip_assume_tac) >>
+  qexists_tac `marks` >> metis_tac[source_unit_execution_correct_at_def];
+
+Theorem lower_vyper_runtime_unit_correct_readings_available:
+  !tops rpolicy unit am tx ret vs.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\ source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s) ==>
+    ?marks.
+      source_unit_execution_correct_at marks tops ret am tx unit vs /\
+      ((?tail.
+          call_storage_ok am tx vs.vs_outcomes
+            (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
+       !tail.
+         FST (call_external (SOME vs.vs_outcomes)
+           (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
+         INR (Error (RuntimeError "msg.gas: no gas reading")))
+Proof
+  rpt strip_tac >> Cases_on `internal_defaults_msg_gas tops`
+  >- runtime_alternate_readings_tac runtime_body_internal_default_gas_readings >>
+  Cases_on `EXISTS external_has_defaults (FST (classify_functions tops))`
+  >- runtime_alternate_readings_tac runtime_body_grouped_default_readings >>
+  selected_entry_split_tac
+  >- (rename1 `INL u` >> Cases_on `u` >>
+      drule_all external_entry_joint_endpoint >> strip_tac >>
+      drule_all runtime_body_joint_from_start_with_readings >>
+      disch_then (qx_choosel_then [`shadow_unit`,`marks`] strip_assume_tac) >>
+      qexists_tac `marks` >>
+      metis_tac[source_unit_execution_correct_at_def]) >>
+  drule_all external_entry_value_revert >>
+  rewrite_tac[source_unit_execution_correct_def] >>
+  disch_then (qx_choose_then `marks` assume_tac) >>
+  qexists_tac `marks` >> simp[] >>
+  `value_transfer_ok tx am.accounts` by fs[initial_venom_state_rel_def] >>
+  drule_all external_entry_reject_readings >> simp[]
+QED
+
 Theorem lower_vyper_runtime_unit_correct:
   !tops rpolicy unit am tx ret vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -1145,20 +1489,18 @@ Theorem lower_vyper_runtime_unit_correct:
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    outcomes_accounts_typed (SOME vs.vs_outcomes) ==>
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s) ==>
     source_unit_execution_correct tops ret am tx unit vs
 Proof
-  rpt strip_tac >> selected_entry_split_tac
-  >- (rename1 `INL u` >> Cases_on `u` >>
-      drule_all lower_vyper_runtime_unit_body_joint >>
-      disch_then (qx_choosel_then [`shadow_ctx`, `func`, `shadow_func`, `marks`]
-        (MAP_EVERY ASSUME_TAC o CONJUNCTS)) >>
-      pure_rewrite_tac[source_unit_execution_correct_def,
-                       source_unit_execution_correct_at_def,
-                       source_unit_execution_correct_with_def] >>
-      qexists_tac `marks` >>
-      qexistsl_tac [`shadow_ctx`, `func`, `shadow_func`] >> simp[]) >>
-  irule external_entry_value_revert >> metis_tac[]
+  rpt strip_tac >>
+  drule_all lower_vyper_runtime_unit_correct_readings_available >>
+  metis_tac[source_unit_execution_correct_def]
 QED
 
 (* S1b, sufficient gas.  The lowered run ends within a fuel that does not
@@ -1179,7 +1521,13 @@ Theorem lower_vyper_runtime_unit_run_bounded:
     ?fuel. !vs.
       valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
       initial_venom_state_rel tops am tx vs /\
+      (ctx_has_dalloca unit.cu_context ==>
+        unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+        w2n vs.vs_initial_fmp < 2 ** 254) /\
       outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+      (ctx_has_dalloca unit.cu_context ==>
+        !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+          dalloca_no_wrap inst s) /\
       (!marks.
          call_storage_ok am tx vs.vs_outcomes
            (gas_explicit marks vs.vs_gas_readings)) /\
@@ -1198,7 +1546,7 @@ Proof
   qexists_tac `G` >> rpt strip_tac >> first_x_assum irule >>
   qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`, `vs`] mp_tac
     lower_vyper_runtime_unit_correct >>
-  impl_tac >- simp[] >>
+  impl_tac >- (simp[] >> first_assum ACCEPT_TAC) >>
   simp[source_unit_execution_correct_def,
        source_unit_execution_correct_at_def,
        source_unit_execution_correct_with_def] >>
@@ -1213,7 +1561,7 @@ Proof
   qpat_x_assum `lookup_block _ func.fn_blocks = SOME bb`
     (assume_tac o SIMP_RULE (srw_ss()) []) >>
   `phi_prefix_length bb.bb_instructions = 0`
-    by metis_tac[lower_vyper_runtime_unit_block_phi, entry_runtime_no_dalloca] >>
+    by metis_tac[lower_vyper_runtime_unit_block_phi] >>
   qexists_tac `SUC fuel` >>
   qspecl_then [`SUC fuel`, `unit.cu_context`, `vs`, `"__entry"`, `fn`,
                `"__entry"`] mp_tac run_context_run_blocks >>
@@ -1293,7 +1641,7 @@ val runtime_locked_body_outcome_tac =
     `unit.cu_context`,
     `initial_evaluation_context am.sources am.layouts tx NONE`,
     `env_t`,`env'`,`ret`] runtime_entry_body_shadow_with_shadow_nr) >>
-  impl_tac >- simp[] >>
+  impl_tac >- (asm_rewrite_tac[] >> simp[]) >>
   disch_then (qx_choosel_then [`func2`,`shadow_ctx`,`shadow_func`,`cenv'`,
     `sb`,`shadow_sl`,`shadow_sb`,`shadow_unit`] strip_assume_tac) >>
   `func2 = func` by gvs[] >>
@@ -1321,8 +1669,6 @@ val runtime_locked_return_frame_tac =
          initial_evaluation_context_def]) >>
   `~cenv.ce_is_ctor` by
     gvs[bodySimTheory.body_inv_def, initial_evaluation_context_def] >>
-  `~ctx_has_dalloca unit.cu_context` by
-    metis_tac[entry_runtime_no_dalloca] >>
   `ctx_inst_ids_distinct unit.cu_context` by
     (drule_all caller_runtime_entry_integrity >> simp[]) >>
   `struct_args_unique tops` by
@@ -1374,10 +1720,15 @@ Theorem runtime_selected_lock_readings:
    rt st cenv sa sl se st' func s0 G0 tn0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    ~internal_defaults_msg_gas tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     initial_venom_state_rel tops am tx vs /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, T, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -1412,6 +1763,9 @@ Theorem runtime_selected_lock_readings:
     unit.cu_context.ctx_entry = SOME "__entry" /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
     fn_entry_label func = SOME "__entry" /\
+    gas_path unit.cu_context func
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                  vs_inst_idx := 0|>) 0 (OK s0) /\
     alloca_history func s0 /\ fresh_vars_wrt sl s0 /\
     return_buf_frame NONE cenv sl s0 /\
     ~s0.vs_halted /\ s0.vs_current_bb = sl.cs_current_bb /\
@@ -1457,27 +1811,30 @@ Theorem runtime_selected_lock_readings:
          INR (Error (RuntimeError "msg.gas: no gas reading")))
 Proof
   rpt strip_tac >>
+  runtime_reached_no_wrap_tac >>
   runtime_locked_body_outcome_tac >>
   runtime_locked_return_frame_tac >>
   qpat_assum `send_call_value _ _ _ = (INL (),es0)` (fn send =>
     qpat_assum `lock_if_nr _ T _ es0 = (INL (),es_lock)` (fn lock =>
       assume_tac (MATCH_MP runtime_locked_well_formed_on (CONJ send lock)))) >>
   runtime_shadow_body_inv_tac >>
-  drule_at (Pat `frame_ret_ok_full _ _ _ _ _`) body_stmts_sim_full >>
-  disch_then (qspecl_then [`tops`, `bindings`, `env_t`, `env'`, `NoLoop`,
-                           `compiled_body`, `es_lock`] mp_tac) >>
-  impl_tac
-  >- (simp[] >> metis_tac[]) >>
+  runtime_selected_body_frag_tac `T` `es_lock` >>
   disch_then (mp_tac o REWRITE_RULE [stmt_frag_full_def]) >>
   disch_then (qspecl_then [`initial_state am []`, `sl`, `sb`, `shadow_sl`,
                            `shadow_sb`, `s0`, `G0`, `tn0`, `cenv'`] mp_tac) >>
   impl_tac
   >- (`cenv.ce_return_buf = NONE` by fs[return_buf_frame_def] >>
-      simp[dead_lo_ok_def, ret_pc_ok_def, return_buf_sep_def, gas_admissible_def] >>
-      rpt strip_tac
+      qpat_assum `!fn inst s. frag_reachable unit.cu_context func s0 fn inst s ==>
+          dalloca_no_wrap inst s`
+        (fn nowrap =>
+          simp[dead_lo_ok_def, ret_pc_ok_def, return_buf_sep_def, gas_admissible_def, nowrap]) >>
+      rpt strip_tac >> asm_simp_tac std_ss []
       >~ [`stmt_res_ok`] >- metis_tac[external_body_source_ok_nr]
-      >~ [`dalloca_no_wrap`]
-      >- metis_tac[bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap]
+      >~ [`allocas_below_fmp`]
+      >- (runtime_lock_trace_tac >> runtime_entry_allocas_tac ``es_lock.storage_trace``)
+      >- (qpat_assum `!fn inst s. frag_reachable unit.cu_context func s0 fn inst s ==>
+             dalloca_no_wrap inst s`
+            (fn nowrap => first_assum (ACCEPT_TAC o MATCH_MP nowrap)))
       >> qpat_x_assum `!st0 H. valid_horizon _ _ _ es_lock.storage_trace ==> _`
            drule >> simp[]) >>
   qpat_assum `cx_tops _ = tops` (fn th => REWRITE_TAC [th]) >>
@@ -1666,38 +2023,4 @@ Proof
   runtime_selected_readings_finish_tac
     ((qexistsl_tac [`shadow_unit`,`marks`] >>
       conj_tac >- first_assum ACCEPT_TAC), ALL_TAC)
-QED
-
-Theorem lower_vyper_runtime_unit_correct_readings_available:
-  !tops rpolicy unit am tx ret vs.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\ source_typing_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\
-    outcomes_accounts_typed (SOME vs.vs_outcomes) ==>
-    ?marks.
-      source_unit_execution_correct_at marks tops ret am tx unit vs /\
-      ((?tail.
-          call_storage_ok am tx vs.vs_outcomes
-            (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
-       !tail.
-         FST (call_external (SOME vs.vs_outcomes)
-           (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
-         INR (Error (RuntimeError "msg.gas: no gas reading")))
-Proof
-  rpt strip_tac >>
-  selected_entry_split_tac
-  >- (rename1 `INL u` >> Cases_on `u` >>
-      drule_all external_entry_joint_endpoint >> strip_tac >>
-      drule_all runtime_body_joint_from_start_with_readings >>
-      disch_then (qx_choosel_then [`shadow_unit`,`marks`] strip_assume_tac) >>
-      qexists_tac `marks` >>
-      metis_tac[source_unit_execution_correct_at_def]) >>
-  drule_all external_entry_value_revert >>
-  rewrite_tac[source_unit_execution_correct_def] >>
-  disch_then (qx_choose_then `marks` assume_tac) >>
-  qexists_tac `marks` >> simp[] >>
-  `value_transfer_ok tx am.accounts` by fs[initial_venom_state_rel_def] >>
-  drule_all external_entry_reject_readings >> simp[]
 QED

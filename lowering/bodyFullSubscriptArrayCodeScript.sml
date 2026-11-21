@@ -5,7 +5,7 @@ Ancestors vyperTyping[qualified,ignore_grammar] vyperValueOperation[qualified,ig
   bodyFullOfVV bodyFullPreds bodySimFull gasOutcomeFullCompose
   bodyFullAttributeAdd bodyFullGhostFrame bodyFullPathHistory
   bodyFullSubscriptArrayCodeBounds bodyFullSubscriptArrayCodeOps
-  bodyInvNoDalloca bodyFullIfExpReach stateRelProj exprSimSubscriptArraySuffix
+  bodyFullIfExpReach bodyFullHashKeccakFixed stateRelProj exprSimSubscriptArraySuffix
   gasShadowCompileStmtHelpers bodyPtrPrecompileBuiltinsGhost
   exprSimSubscriptArrayEndpoint exprSimSubscriptArrayOrigin
   exprSimSubscriptArrayCompose exprSimSubscriptArraySource
@@ -160,6 +160,7 @@ Theorem code_array_selected_outcome_tail[local]:
         (LocatedValue et (mk_ptr out LocCode)) t' /\
       t'.vs_current_bb = sb.cs_current_bb /\
       t'.vs_inst_idx = LENGTH sb.cs_current_insts /\ alloca_history func t' /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t') /\
       s0.vs_alloca_next <= t'.vs_alloca_next /\
       ghost_inv_at (DF H) lo d cenv cx ee G tn t' /\
       ptr_vv_ok cx (expr_type (Subscript et obj idx)) tv'
@@ -178,6 +179,13 @@ Proof
   qexistsl_tac [`Gf`, `fin`, `INL child`, `sf`, `tnf`] >>
   simp[NoAsms] >> conj_tac >- simp[] >>
   qx_gen_tac `H` >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sf` by
+    (qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==>
+       gas_origin_ptr_path _ _ _ _ /\ _`
+       (qspec_then `H` (drule_then mp_tac)) >>
+     simp[NoAsms, vv_post_def] >> strip_tac >>
+     first_assum (ACCEPT_TAC o MATCH_MP
+       bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `fin with gas_obs := [] = fin` by
     (qpat_x_assum `fin.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
   pop_assum SUBST1_TAC >>
@@ -205,7 +213,6 @@ Theorem subscript_array_framed_code_full:
       cenv cx ty (Subscript ann e1 e2) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_then assume_tac body_inv_no_dalloca >>
   drule_all_then assume_tac expr_body_pre_array_subscript_base >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty e1 es` by
@@ -684,7 +691,14 @@ Resume subscript_array_framed_code_full[fixed_selection]:
      pure_rewrite_tac[loweringShapeRulesTheory.emit_op_eq, pairTheory.PAIR_EQ] >>
      strip_tac >> gvs[]) >> gvs[] >>
   `eval_operand iop ib = SOME (n2w (w2n iw))` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp ib` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ib` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp it` mp_tac >>
+     qpat_assum `ib.vs_allocas = it.vs_allocas` (fn allocas =>
+       qpat_assum `ib.vs_fmp = it.vs_fmp` (fn fmp =>
+         qpat_assum `ib.vs_initial_fmp = it.vs_initial_fmp` (fn initial =>
+           POP_ASSUM_LIST (K all_tac) >>
+           simp[ptrDisciplineTheory.allocas_below_fmp_def, allocas, fmp, initial] >>
+           metis_tac[])))) >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
     bodyFullSubscriptArrayCodeOpsTheory.scalar_mul_add_joint_frame) >>
   disch_then (qspec_then `PG` mp_tac) >>
@@ -830,7 +844,14 @@ Resume subscript_array_framed_code_full[dynamic_selection]:
   `(!q. iop = Var q \/ len_op = Var q ==> not_fresh_at cs' q) /\
    (!l. iop <> Label l /\ len_op <> Label l)` by metis_tac[] >>
   `fn_has_code cs' cs'' func` by metis_tac[fn_has_code_split, cs_extends_trans] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp il` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp il` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp it` mp_tac >>
+     qpat_assum `il.vs_allocas = it.vs_allocas` (fn allocas =>
+       qpat_assum `il.vs_fmp = it.vs_fmp` (fn fmp =>
+         qpat_assum `il.vs_initial_fmp = it.vs_initial_fmp` (fn initial =>
+           POP_ASSUM_LIST (K all_tac) >>
+           simp[ptrDisciplineTheory.allocas_below_fmp_def, allocas, fmp, initial] >>
+           metis_tac[])))) >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
     array_bounds_check_read_only_joint_ok_frame) >>
   disch_then (qspec_then `PG` mp_tac) >>
@@ -874,7 +895,14 @@ Resume subscript_array_framed_code_full[dynamic_selection]:
   fs[compileEnvTheory.word_scale_def] >>
   `!q. iop = Var q ==> not_fresh_at cs'' q` by metis_tac[] >>
   `eval_operand iop ib = SOME (n2w (w2n iw))` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp ib` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ib` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp it` mp_tac >>
+     qpat_assum `ib.vs_allocas = it.vs_allocas` (fn allocas =>
+       qpat_assum `ib.vs_fmp = it.vs_fmp` (fn fmp =>
+         qpat_assum `ib.vs_initial_fmp = it.vs_initial_fmp` (fn initial =>
+           POP_ASSUM_LIST (K all_tac) >>
+           simp[ptrDisciplineTheory.allocas_below_fmp_def, allocas, fmp, initial] >>
+           metis_tac[])))) >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
     bodyFullSubscriptArrayCodeOpsTheory.code_dynamic_address_joint_frame) >>
   disch_then (qspec_then `PG` mp_tac) >>
@@ -1095,7 +1123,14 @@ Resume subscript_array_framed_code_full[dynamic_rejection]:
   `(!q. iop = Var q \/ len_op = Var q ==> not_fresh_at cs' q) /\
    (!l. iop <> Label l /\ len_op <> Label l)` by metis_tac[] >>
   `fn_has_code cs' cs'' func` by metis_tac[fn_has_code_split, cs_extends_trans] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp il` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp il` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp it` mp_tac >>
+     qpat_assum `il.vs_allocas = it.vs_allocas` (fn allocas =>
+       qpat_assum `il.vs_fmp = it.vs_fmp` (fn fmp =>
+         qpat_assum `il.vs_initial_fmp = it.vs_initial_fmp` (fn initial =>
+           POP_ASSUM_LIST (K all_tac) >>
+           simp[ptrDisciplineTheory.allocas_below_fmp_def, allocas, fmp, initial] >>
+           metis_tac[])))) >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``] array_bounds_check_joint_oob_frame) >>
   disch_then (qspec_then `PG` mp_tac) >>
   disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac) >>

@@ -1,7 +1,7 @@
 (* Joint word-declaration execution and source continuation. *)
 Theory bodyFullAnnAssignWord
 Ancestors
-  bodyFullAnnAssignWordPost bodyFullAnnAssignMemoryPost bodyInvNoDalloca
+  bodyFullAnnAssignWordPost bodyFullAnnAssignMemoryPost
   bodyFullShared ptrDiscipline bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   bodyExprPreFacts exprSimHyps exprSimSource supportedStmtTraverse vyperTypeCallGraph
   bodySimDeclCases supportedExprTraverse stmtSimProps loweringSlice exprLoweringProps
@@ -17,9 +17,12 @@ Theorem annassign_word_full_bind[local]:
     (s0,G0,tn0) [] (OK entry,Ga,tna)) /\
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,entry,Ga,tna)
-    P (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r) /\
+    P (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+         (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u)) /\
   (!H exc ee gt r. expr_exit (INR exc : value + exception) r /\
-    halt_exit H cx ee (INR exc) r ==> R H (INR exc) ee gt r) /\
+    halt_exit H cx ee (INR exc) r /\
+    (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u) ==>
+    R H (INR exc) ee gt r) /\
   (!marks res mid G1 tn1 u.
     (!tail. bind (eval_expr cx e) (read_result cx)
       (es with gas_obs := gas_explicit marks entry.vs_gas_readings ++ tail) =
@@ -352,7 +355,8 @@ Theorem annassign_word_full_rhs[local]:
       ptr_val_ok cx (post_value_type ce e) v op Gf tnf u /\
       (~is_word_type (post_value_type ce e) ==> ptr_buf_ok ce e op Gf u) /\
       ghost_kept_at lo ce es a G tn t Gf tnf)
-    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
   strip_tac >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
@@ -555,7 +559,8 @@ Theorem annassign_word_full_runtime_preparation[local]:
         ptr_val_ok cx (post_value_type cenv' e) v op Gf tnf u /\
         (~is_word_type (post_value_type cenv' e) ==> ptr_buf_ok cenv' e op Gf u) /\
         ghost_kept_at lo cenv' es a Ga tna t Gf tnf)
-      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
   strip_tac >> drule_all annassign_word_full_declared_layout >>
   disch_then (qx_choosel_then [`p`, `sa'`, `sb`, `vop`] strip_assume_tac) >> gvs[] >>
@@ -694,7 +699,9 @@ Theorem annassign_word_full_source_action[local]:
           off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem))
       (\H res ee gt r.
         (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
-        halt_exit H cx ee res r))
+        halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !u. (r = Halt u \/ ?ir. r = IntRet ir u) ==>
+          allocas_below_fmp u)))
 Proof
   rpt strip_tac >>
   drule annassign_word_full_store_ready >> disch_then drule >>
@@ -817,7 +824,9 @@ Theorem annassign_word_full_execution_sep:
         off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem))
     (\H res ee gt r.
         (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
-        halt_exit H cx ee res r)
+        halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !u. (r = Halt u \/ ?ir. r = IntRet ir u) ==>
+          allocas_below_fmp u))
 Proof
   strip_tac >>
   rename1 `compile_stmt _ _ _ (AnnAssign _ _ e) _ = ((),r'')` >>
@@ -845,7 +854,10 @@ Resume annassign_word_full_execution_sep[compose]:
   >- (rpt strip_tac >> simp[bodyPtrDefsTheory.stmt_exit_ptr_def,
         exprSimDefsTheory.halt_exit_def] >>
       fs[exprSimDefsTheory.halt_exit_def] >>
-      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      conj_tac >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+      strip_tac >> rpt strip_tac >> gvs[] >>
+      Cases_on `exc` >> fs[exprSimDefsTheory.expr_exit_def] >>
+      Cases_on `e'` >> fs[exprSimDefsTheory.expr_exit_def]) >>
   qunabbrev_tac `childR` >>
   goal_assum (drule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)) >>
   qexists_tac `tyv` >> simp[] >> suspend "continuation"

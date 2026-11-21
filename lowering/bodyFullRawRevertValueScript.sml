@@ -2,7 +2,7 @@
 Theory bodyFullRawRevertValue
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullRawRevertInterfaces bodyFullPreds bodySimFull exprSimHypsDefs bodyInvNoDalloca
+  bodyFullRawRevertInterfaces bodyFullPreds bodySimFull exprSimHypsDefs
   exprLowering gasOutcomeFullCompose
   exprOperandVar exprSimProps loweringPosts bodyPtrDefs exprSimMemDefs
   gasExemptCert vyperSystemControl vyperStorageFootprint

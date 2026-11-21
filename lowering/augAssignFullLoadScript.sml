@@ -57,6 +57,9 @@ Theorem augassign_load_joint:
   expr_sim_inv cenv cx env es /\
   supported_target_info tops bindings bt = SOME info /\
   eval_target_place cx bt es = (INL p,st) /\
+  (!id path. p = MemoryPlace id path ==>
+    ?entry v. lookup_scopes id st.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value path = INL v) /\
   compile_get_target_ptr compile_expr cenv bt sa = (r,sb) /\
   is_word_type ty /\
   ((FST (SND r) = NONE /\ emit_void INVALID [] sb = ((),sf)) \/
@@ -124,7 +127,7 @@ Resume augassign_load_joint[memory]:
   rename1 `MemoryPlace id path` >>
   `?entry v. lookup_scopes id st.scopes = SOME entry /\
     evaluate_subscripts entry.type entry.value path = INL v` by
-    metis_tac[aug_place_target_memory_live] >>
+    (first_x_assum (qspecl_then [`id`,`path`] mp_tac) >> simp[]) >>
   drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     augassign_memory_load_queries >>
   disch_then (drule_at (Pat `supported_target_info _ _ _ = _`)) >>

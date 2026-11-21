@@ -1,7 +1,7 @@
 Theory loweringRuntimeAllocationHistory
 Ancestors
   loweringCallBudgetHistory loweringJointPrefixHistory vyperLoweringCorrect
-  loweringBudgetActualShadow loweringBudgetCompilerCuts
+  loweringBudgetCompilerCuts
   loweringBudgetMarkedResidual loweringBudgetOracleConsumption
   loweringBudgetOraclePrefix loweringBudgetPathDeterminism
   loweringBudgetPrecompilePrefix loweringBudgetResidualArithmetic
@@ -15,7 +15,8 @@ Ancestors
 Theorem lower_vyper_runtime_unit_allocation_history:
   !tops rpolicy unit am tx ret vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\ source_typing_ok tops am tx /\
+    supported_program tops /\ ~ctx_has_dalloca unit.cu_context /\
+    source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\

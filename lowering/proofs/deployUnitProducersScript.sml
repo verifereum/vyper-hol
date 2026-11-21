@@ -3,7 +3,7 @@ Theory deployUnitProducers
 Ancestors
   compileVyper vyperCompiler venomInst
 
-Theorem run_deploy_lowering_context_ok[local]:
+Theorem run_deploy_lowering_context_ok:
   run_deploy_lowering has_constructor rpolicy runtime_bc immutables_len
     constructor_args data_size ctor_internal_fns cenv stmts is_payable
     is_nonreentrant nkey use_transient entry_label = SOME unit ==>

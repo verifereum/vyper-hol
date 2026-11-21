@@ -22,6 +22,9 @@ QED
 Theorem default_post_checks_resources:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ initial_venom_state_rel tops am tx initial /\
+  (ctx_has_dalloca unit.cu_context ==>
+    unit_alloca_budget unit.cu_context <= w2n initial.vs_initial_fmp /\
+    w2n initial.vs_initial_fmp < 2 ** 254) /\
   venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
   vars_pc_only initial s /\
   compile_entry_checks mc pay sc = ((),st) /\ sc.cs_current_insts = [] /\
@@ -40,8 +43,6 @@ Proof
   `alloca_history fn s` by
     (irule entry_checks_cursor_alloca_history >> simp[] >>
      qexistsl [`mc`, `pay`, `sc`, `st`] >> simp[]) >>
-  `fmp_room unit.cu_context fn s` by
-    (irule entry_runtime_fmp_room >> metis_tac[lookup_function_MEM]) >>
   `ctx_wf unit.cu_context` by
     (drule lowering_context_ok_integrity >> strip_tac >>
      drule lowering_context_ok_bridge >> strip_tac >>
@@ -51,6 +52,11 @@ Proof
     (irule entry_root_zero_frontier >> goal_assum $ drule_at Any >> simp[] >>
      metis_tac[lowering_context_ok_integrity, lowering_context_ok_bridge,
        reachable_call_graph_acyclic_def]) >>
+  `s.vs_fmp = s.vs_initial_fmp /\ s.vs_initial_fmp = initial.vs_initial_fmp` by
+    fs[vars_pc_only_def, venomStateTheory.venom_state_component_equality, initial_venom_state_rel_def] >>
+  `fmp_room unit.cu_context fn s` by
+    (irule entry_frontier_fmp_room >>
+     rpt conj_tac >> TRY (qexists_tac `site` >> first_assum ACCEPT_TAC) >> fs[]) >>
   simp[default_registration_resources_def, default_prefix_entry_frame,
        allocas_from_def, alloca_frontier_inv_from_def, GSYM alloca_frontier_inv_def] >>
   drule lowering_context_ok_alloca_budget >>
@@ -84,6 +90,9 @@ QED
 Theorem default_entry_prefix_resources:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   source_typing_ok tops am tx /\ initial_venom_state_rel tops am tx vs /\
+  (ctx_has_dalloca unit.cu_context ==>
+    unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254) /\
   venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
   send_call_value mut
     (initial_evaluation_context am.sources am.layouts tx NONE)
@@ -117,7 +126,6 @@ Theorem default_entry_prefix_resources:
 Proof
   strip_tac >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >> gvs[] >>
-  `~ctx_has_dalloca unit.cu_context` by metis_tac[entry_runtime_no_dalloca] >>
   `MEM fn unit.cu_context.ctx_functions` by metis_tac[lookup_function_MEM] >>
   `fn_inst_ids_distinct fn` by
     (`ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))` by
@@ -139,6 +147,10 @@ Proof
     (drule send_call_value_success_condition >>
      simp[initial_evaluation_context_def] >> strip_tac >>
      fs[initial_venom_state_rel_def, venom_env_rel_def, call_ctx_rel_def]) >>
+  `allocas_below_fmp
+     (vs with <|vs_prev_bb := NONE; vs_current_bb := ds.cs_current_bb; vs_inst_idx := 0|>)` by
+    (irule initial_entry_allocas_below_fmp >>
+     goal_assum (drule_at Any) >> simp[vars_pc_only_def]) >>
   drule default_entry_prefix_joint >>
   disch_then (qspecl_then [`st`,
     `vs with <|vs_prev_bb := NONE; vs_current_bb := ds.cs_current_bb; vs_inst_idx := 0|>`,
@@ -149,6 +161,13 @@ Proof
     (irule vars_pc_only_trans >>
      qexists_tac `vs with <|vs_prev_bb := NONE; vs_current_bb := ds.cs_current_bb; vs_inst_idx := 0|>` >>
      simp[] >> simp[vars_pc_only_def]) >>
-  drule_all default_post_checks_resources >> strip_tac >>
+  drule_at (Pat `vars_pc_only vs s`) default_post_checks_resources >>
+  disch_then (drule_at (Pat `compile_entry_checks mc _ opened = _`)) >>
+  disch_then (drule_at (Pat `fn_has_code opened st fn`)) >>
+  disch_then (drule_at (Pat `lower_vyper_runtime_unit tops rpolicy = SOME unit`)) >>
+  disch_then (drule_at (Pat `initial_venom_state_rel tops am tx vs`)) >>
+  disch_then (mp_tac o Q.INST [`tn` |-> `tn2`, `site` |-> `site`] o SPEC_ALL) >>
+  (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE (simp[] >> NO_TAC)))) >>
+  strip_tac >>
   qexistsl [`s`, `G2`, `tn2`] >> simp[]
 QED

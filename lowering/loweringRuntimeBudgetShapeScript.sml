@@ -1,7 +1,7 @@
 Theory loweringRuntimeBudgetShape
 Ancestors
   loweringCallBudgetHistory entryRuntimeContextCode allocaFrontierBound
-  list rich_list vyperCompiler
+  list rich_list vyperCompiler ptrDiscipline
 
 Theorem budget_context_active_no_dalloca[local]:
   (!f. MEM f ctx.ctx_functions ==>
@@ -38,7 +38,7 @@ QED
 Theorem supported_runtime_budget_allocation_shape:
   !tops rpolicy unit vs D lo explicit name fn lbl entered p h marks q.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
+    supported_program tops /\ ~ctx_has_dalloca unit.cu_context /\
     unit.cu_context.ctx_entry = SOME name /\
     lookup_function name unit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\
@@ -57,7 +57,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `!f. MEM f unit.cu_context.ctx_functions ==>
     ~EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts f)` by
-    metis_tac[entry_runtime_context_no_dalloca] >>
+    (fs[ctx_has_dalloca_def, EVERY_MEM] >> first_assum ACCEPT_TAC) >>
   drule budget_path_context_shape >>
   disch_then (qspecl_then [`D`, `lo`, `explicit`, `unit.cu_context`] mp_tac) >>
   (impl_tac >- (gvs[] >> metis_tac[venomInstTheory.lookup_function_MEM])) >>
@@ -77,27 +77,9 @@ Theorem supported_runtime_context_fmp_guards:
     i.inst_opcode <> SETFMP /\ i.inst_opcode <> DRET
 Proof
   strip_tac >>
-  drule vyperLoweringCorrectTheory.lower_vyper_runtime_unit_context_entry >> strip_tac >>
-  `!f. MEM f unit.cu_context.ctx_functions ==>
-    ~EXISTS (\j. j.inst_opcode = DALLOCA) (fn_insts f)` by
-    metis_tac[entry_runtime_context_no_dalloca] >>
-  `EVERY (\fn. fn_ptr_ok_check (ctx_ptr_param_list unit.cu_context) fn /\
-      wf_function fn /\
-      EVERY (\i. i.inst_opcode <> PHI) (fn_insts fn) /\
-      fn_ptr_ok_check (ctx_ptr_param_list unit.cu_context)
-        (fn_reachable_blocks fn)) unit.cu_context.ctx_functions` by
-    (gvs[lowering_context_ok_def, ptr_ok_check_def, EXISTS_MEM, EVERY_MEM] >>
-     metis_tac[]) >>
-  rpt gen_tac >> strip_tac >>
-  gvs[EVERY_MEM] >>
-  first_x_assum drule >> strip_tac >>
-  rename1 `MEM i (fn_insts f)` >>
-  qpat_x_assum `fn_ptr_ok_check _ f` mp_tac >>
-  simp[fn_ptr_ok_check_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
-  simp[EVERY_MEM] >> strip_tac >>
-  qpat_x_assum `!inst. MEM inst (fn_insts f) ==> _` drule >>
-  simp[inst_ptr_ok_check_def]
+  drule vyperLoweringCorrectTheory.lower_vyper_runtime_unit_fn_ptr_ok >>
+  simp[listTheory.EVERY_MEM, ptrDisciplineTheory.fn_ptr_ok_def] >>
+  metis_tac[]
 QED
 
 Theorem budget_path_context_fmp_guards[local]:

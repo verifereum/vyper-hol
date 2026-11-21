@@ -7,7 +7,7 @@ Ancestors exprSimDefs[qualified,ignore_grammar]
   exprSimMemoryStack vyperTyping vyperTypeSystem builtinHashing
   vyperContext builtinSimple bodyFullGhostFrame vyperStorageTrace vyperStorageFootprint compileEnv
   loweringPosts bodyPtrDefs venomState fragGasSeqPtr vyperAST list exprSimHyps
-  bodyInvNoDalloca bodyFullHashKeccakFixed[qualified,ignore_grammar] bodyFullUnaryValueCompose
+  bodyFullHashKeccakFixed[qualified,ignore_grammar] bodyFullUnaryValueCompose
   contextRawReachable[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar]
   unitTransformDefs[qualified,ignore_grammar]
 Libs pairLib

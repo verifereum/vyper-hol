@@ -22,56 +22,6 @@ Proof
   rpt IF_CASES_TAC >> gvs[] >> metis_tac[]
 QED
 
-Theorem target_walk_assignment_no_calls[local]:
-  (!t. ~supported_assignment_exists expr_internal_call_root t ==>
-       int_calls_atarget t = []) /\
-  (!ts. ~supported_assignments_exists expr_internal_call_root ts ==>
-        int_calls_atargets ts = [])
-Proof
-  ho_match_mp_tac int_calls_atarget_ind >>
-  simp[int_calls_atarget_def, supported_assignment_exists_def,
-       no_internal_call_int_calls]
-QED
-
-Theorem target_walk_iterator_no_calls[local]:
-  !iter. ~supported_iterator_exists expr_internal_call_root iter ==>
-         int_calls_iterator iter = []
-Proof
-  Cases >> simp[supported_iterator_exists_def, int_calls_iterator_def,
-                no_internal_call_int_calls]
-QED
-
-Theorem target_walk_assert_no_calls[local]:
-  !reason. ~supported_assert_exists expr_internal_call_root reason ==>
-           int_calls_assert_reason reason = []
-Proof
-  Cases >> simp[supported_assert_exists_def, int_calls_assert_reason_def,
-                no_internal_call_int_calls, int_calls_exprs_empty_every,
-                EVERY_MEM, EXISTS_MEM] >> metis_tac[no_internal_call_int_calls]
-QED
-
-Theorem target_walk_raise_no_calls[local]:
-  !reason. ~supported_raise_exists expr_internal_call_root reason ==>
-           int_calls_raise_reason reason = []
-Proof
-  Cases >> simp[supported_raise_exists_def, int_calls_raise_reason_def,
-                no_internal_call_int_calls, int_calls_exprs_empty_every,
-                EVERY_MEM, EXISTS_MEM] >> metis_tac[no_internal_call_int_calls]
-QED
-
-Theorem target_walk_stmts_no_calls[local]:
-  (!s. ~supported_stmt_expr_exists expr_internal_call_root s ==>
-       int_calls_stmt s = []) /\
-  (!ss. ~supported_stmts_expr_exists expr_internal_call_root ss ==>
-        int_calls_stmts ss = [])
-Proof
-  ho_match_mp_tac int_calls_stmt_ind >>
-  simp[int_calls_stmt_def, supported_stmt_expr_exists_def,
-       no_internal_call_int_calls, target_walk_assignment_no_calls,
-       target_walk_iterator_no_calls, target_walk_assert_no_calls,
-       target_walk_raise_no_calls]
-QED
-
 Theorem target_walk_callee_syntax:
   cenv.ce_func_mutability = build_func_mutability (cx_tops cx) /\
   (!vis mut nr rr fn args dflts ret body.
@@ -81,7 +31,8 @@ Theorem target_walk_callee_syntax:
   IS_SOME (supported_function_decl (cx_tops cx) (NONE,name) Internal) /\
   ~call_can_mutate cenv (IntCall (NONE,name)) /\
   lookup_callable_function cx.in_deploy name (cx_tops cx) =
-    SOME (mut,nr,args,dflts,ret,body) ==>
+    SOME (mut,nr,args,dflts,ret,body) /\
+  int_calls_exprs dflts = [] /\ int_calls_stmts body = [] ==>
   EVERY (expr_mutability_ok [(NONE,cx_tops cx)] View) dflts /\
   int_calls_exprs dflts = [] /\ (mut = View \/ mut = Pure) /\
   stmts_mutability_ok [(NONE,cx_tops cx)] View body /\
@@ -95,13 +46,6 @@ Proof
     (Cases_on `mut` >> gvs[call_can_mutate_def, nsid_to_string_def]) >>
   `function_mutability_ok [(NONE,cx_tops cx)] Internal mut nr dflts body` by
     metis_tac[] >>
-  `EVERY (expr_mutability_ok [(NONE,cx_tops cx)] View) dflts` by
-    (fs[function_mutability_ok_def, EVERY_MEM] >>
-     metis_tac[expr_target_mutability_view]) >>
-  `int_calls_exprs dflts = []` by
-    (fs[supported_pure_exprs_every, int_calls_exprs_empty_every, EVERY_MEM] >>
-     metis_tac[supported_pure_int_calls]) >>
-  gvs[function_mutability_ok_def] >>
-  metis_tac[stmt_mutability_view, target_walk_stmts_no_calls,
-            supported_internal_body_contract]
+  gvs[function_mutability_ok_def, EVERY_MEM] >>
+  metis_tac[expr_target_mutability_view, stmt_mutability_view]
 QED

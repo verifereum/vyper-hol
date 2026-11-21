@@ -5,12 +5,27 @@ Ancestors
   loweringRuntimeCorrect gasShadowRunLowering loweringShapeProps
   gasShadowUnit sourceUnitExecution dispatchedSelectedEndpoint
   defaultDispatchFacts externalReturnPackage runtimeFallbackPackageEnvironment
-  externalEntryValueRevert vyperLoweringCorrect
+  externalEntryValueRevert vyperLoweringCorrect fragGasPathMem
+
+Triviality legacy_runtime_shadow_context[local]:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+  runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit ==>
+  gas_shadow_context unit.cu_context shadow_unit.cu_context
+Proof
+  strip_tac >>
+  `?shadow. runtime_gas_shadow_unit tops rpolicy = SOME shadow /\
+            gas_shadow_unit unit shadow` by
+    (Cases_on `classify_functions tops` >> PairCases_on `r` >>
+     irule runtime_gas_shadow_unit_exists >> fs[]) >>
+  gvs[gas_shadow_unit_def]
+QED
 
 Theorem dispatched_call_correct_from_value_success:
   !tops rpolicy unit shadow_unit am tx ret vs mut nr args fbody.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
@@ -40,11 +55,7 @@ Proof
   reverse (namedCases_on `res` ["u", "e"])
   >- (qexists_tac `[]` >>
       `gas_shadow_context unit.cu_context shadow_unit.cu_context` by
-        (Cases_on `classify_functions tops` >> PairCases_on `r` >>
-         drule supported_program_no_external_defaults >> simp[] >> strip_tac >>
-         drule_at (Pat `classify_functions _ = _`) runtime_gas_shadow_unit_exists >>
-         disch_then (drule_at (Pat `lower_vyper_runtime_unit _ _ = _`)) >>
-         simp[gas_shadow_unit_def]) >>
+        (drule_all legacy_runtime_shadow_context >> simp[]) >>
       drule_all external_entry_value_revert_dispatched_with_nr >> simp[]) >>
   Cases_on `u` >>
   qpat_x_assum `!env es0. _` (qspecl_then [`env`, `es0`] mp_tac) >> simp[]
@@ -54,10 +65,18 @@ Theorem dispatched_call_correct_from_selected_endpoint:
   !tops rpolicy unit shadow_unit am tx ret vs mut args fbody.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    ~internal_defaults_msg_gas tops /\
     runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
     initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     vyperInterpreter$lookup_function NONE tx.function_name External tops =
       SOME (mut,F,args,[],ret,fbody) /\
     (!env es0. tx.function_name <> "__default__" /\
@@ -97,21 +116,20 @@ QED
 (* The source body uses the same package environment as the actual fallback. *)
 val fallback_source_package_tac =
   `vyperInterpreter$lookup_function NONE "__default__" External tops =
-    SOME (mut,T,args,[],ret,fbody)` by fs[] >>
+    SOME (mut,T,args,[],ret,fbody)` by
+    (qpat_assum `tx.function_name = "__default__"` (fn name_eq =>
+       qpat_assum `vyperInterpreter$lookup_function NONE tx.function_name External tops = _`
+         (ACCEPT_TAC o REWRITE_RULE [name_eq]))) >>
   `args = []` by metis_tac[default_fallback_no_args] >>
   drule_all default_fallback_classified >>
   strip_tac >>
   qabbrev_tac `rr = lookup_raw_return_or_F (NONE:num option) "__default__" External tops` >>
-  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
-    metis_tac[entryStateRelTheory.source_typing_ok_external_names_distinct] >>
-  drule_all default_fallback_lookup_decl >> strip_tac >>
-  `subst_consts_stmts (module_consts_env tops []) fbody = fbody` by
-    (drule_all checked_supported_external_subst >>
-     simp[constSubstTheory.subst_consts_fn_def]) >>
   `set_fallback_package_target rpolicy.rpol_target
     (package_fallback_fn tops T (K global_nonreentrant_slot)
-      (SOME (mut,T,rr,"__default__",[],([]:expr list),ret,fbody))) =
-      SOME (cenv,mut = Payable,T,global_nonreentrant_slot,T,mut = View,fbody,rt)` by
+      (SOME (mut,T,rr,"__default__",[],([]:expr list),ret,
+        subst_consts_stmts (module_consts_env tops []) fbody))) =
+      SOME (cenv,mut = Payable,T,global_nonreentrant_slot,T,mut = View,
+        subst_consts_stmts (module_consts_env tops []) fbody,rt)` by
     (qpat_assum `runtime_fallback_body_start _ _ _ _`
       (mp_tac o REWRITE_RULE [runtimeBodyStartDefsTheory.runtime_fallback_body_start_def]) >>
      rpt strip_tac >> gvs[]) >>
@@ -136,6 +154,11 @@ val registered_lock_body_tac =
   impl_tac >- simp[] >>
   disch_then (qx_choosel_then [`s_lock`,`G_lock`,`tn_lock`]
     (MAP_EVERY ASSUME_TAC o CONJUNCTS)) >>
+  `gas_path unit.cu_context func
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                vs_inst_idx := 0|>) 0 (OK s_lock)` by
+    (qpat_assum `gas_path_mem _ _ _ 0 (OK s_lock)` mp_tac >>
+     metis_tac[gas_path_mem_exec]) >>
   `s_lock.vs_gas_readings = vs.vs_gas_readings /\
     s_lock.vs_code = vs.vs_code /\ s_lock.vs_labels = vs.vs_labels` by simp[] >>
   `mut <> View ==> ~tx.is_static` by
@@ -203,15 +226,24 @@ fun registered_lock_result_tac placement =
   impl_tac >- (asm_rewrite_tac[] >> simp[]) >>
   disch_then (qx_choosel_then [`a`,`s`,`G`,`tn`]
     (MAP_EVERY ASSUME_TAC o CONJUNCTS)) >>
+  `~EXISTS external_has_defaults (FST (classify_functions tops))` by fs[] >>
   drule_all runtime_lock_abort_result_with >>
   disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
   qexistsl_tac [`shadow_unit`,`[]`] >> simp[];
 
 Theorem dispatched_nonreentrant_result[local]:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\ source_typing_ok tops am tx /\
+  supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    ~internal_defaults_msg_gas tops /\ source_typing_ok tops am tx /\
   source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
+  (ctx_has_dalloca unit.cu_context ==>
+    unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254) /\
   outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+  (ctx_has_dalloca unit.cu_context ==>
+    !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+      dalloca_no_wrap inst s) /\
   calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
     SOME (tx.function_name,tx.args) /\
   vyperInterpreter$lookup_function NONE tx.function_name External tops =
@@ -273,6 +305,7 @@ Triviality dispatched_call_readings_from_value_success:
   !tops rpolicy unit shadow_unit am tx ret vs mut nr args fbody.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
@@ -313,11 +346,7 @@ Proof
   reverse (namedCases_on `res` ["u", "e"])
   >- (qexists_tac `[]` >>
       `gas_shadow_context unit.cu_context shadow_unit.cu_context` by
-        (Cases_on `classify_functions tops` >> PairCases_on `r` >>
-         drule supported_program_no_external_defaults >> simp[] >> strip_tac >>
-         drule_at (Pat `classify_functions _ = _`) runtime_gas_shadow_unit_exists >>
-         disch_then (drule_at (Pat `lower_vyper_runtime_unit _ _ = _`)) >>
-         simp[gas_shadow_unit_def]) >>
+        (drule_all legacy_runtime_shadow_context >> simp[]) >>
       conj_tac >- (drule_all external_entry_value_revert_dispatched_with_nr >> simp[]) >>
       `value_transfer_ok tx am.accounts` by fs[initial_venom_state_rel_def] >>
       drule_all external_entry_reject_readings_nr >> simp[]) >>
@@ -329,10 +358,18 @@ Triviality dispatched_call_readings_from_selected_endpoint:
   !tops rpolicy unit shadow_unit am tx ret vs mut args fbody.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    ~internal_defaults_msg_gas tops /\
     runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
     initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     vyperInterpreter$lookup_function NONE tx.function_name External tops =
       SOME (mut,F,args,[],ret,fbody) /\
     (!env es0. tx.function_name <> "__default__" /\
@@ -371,10 +408,18 @@ Theorem dispatched_call_correct_with_readings:
   !tops rpolicy unit shadow_unit am tx ret vs mut nr args fbody.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    ~internal_defaults_msg_gas tops /\
     runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
     initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     vyperInterpreter$lookup_function NONE tx.function_name External tops =
       SOME (mut,nr,args,[],ret,fbody) ==>
     ?marks.
@@ -400,17 +445,26 @@ Proof
     dispatched_call_readings_from_selected_endpoint >>
   disch_then (drule_at (Pat `vyperInterpreter$lookup_function _ _ _ _ = _`)) >>
   disch_then (qspecl_then [`unit`,`am`,`vs`] mp_tac) >>
-  simp[dispatched_entry_endpoint_selected]
+  fs[dispatched_entry_endpoint_selected] >>
+  disch_then (fn result => first_assum (ACCEPT_TAC o MATCH_MP result))
 QED
 
 Theorem dispatched_call_correct:
   !tops rpolicy unit shadow_unit am tx ret vs mut nr args fbody.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    ~internal_defaults_msg_gas tops /\
     runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
     initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     vyperInterpreter$lookup_function NONE tx.function_name External tops =
       SOME (mut,nr,args,[],ret,fbody) ==>
     source_unit_execution_correct tops ret am tx unit vs /\

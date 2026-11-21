@@ -1,6 +1,6 @@
 Theory bodyFullPop
 Ancestors
-  bodyFullTarget bodyFullTargetDefs bodyFullPreds bodySimFull bodyFullOfVV bodyInvNoDalloca
+  bodyFullTarget bodyFullTargetDefs bodyFullPreds bodySimFull bodyFullOfVV
   gasOutcomeFullCompose gasOutcomeFull gasShadowCompile gasShadowState gasShadow
   exprSimPopNestedLocalSource exprSimPopNestedLocalHandoff exprSimPopNestedLocalRun
   popTargetPre exprSimHyps exprSimHypsDefs exprSimSource exprSimPopNestedBase

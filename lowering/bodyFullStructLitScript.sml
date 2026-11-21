@@ -7,7 +7,7 @@
 Theory bodyFullStructLit
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullIfExpReach[qualified,ignore_grammar] bodyInvNoDalloca[qualified,ignore_grammar]
+  bodyFullIfExpReach[qualified,ignore_grammar]
   bodyFullOfVV bodyFullPreds bodySimFull gasOutcomeFullCompose gasContext exprSimDefs
   gasShadowCompile bodyFullStructLitAdd bodyFullStructLitInputs
   bodyFullStructLitBytes bodyFullStructLitZeroStore

@@ -1,6 +1,7 @@
 Theory bodyFullAbiEncodeWordFull
 Ancestors
-  bodySimFull bodyInvNoDalloca bodyFullAbiEncodeAllocOrigin
+  bodySimFull bodyFullAbiEncodeAllocOrigin
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyFullAbiEncodeStore bodyFullAbiEncodeSuffix bodyFullAbiEncodeUniformTranslation
   bodyFullAbiEncodeWordPack
   exprSimAbiEncodeBytesOwnership exprSimAbiEncodeCapacity bodyFullAbiEncodeResultResources
@@ -21,7 +22,6 @@ Theorem abi_encode_word_vv_full_from_packaging:
     ce cx cty (TypeBuiltin ann (AbiEncode F mid) ty [e]) es
 Proof
   strip_tac >> rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `expr_body_pre ce cx env e es` by
     (irule abi_encode_body_arg_pre >> goal_assum (drule_at Any) >> simp[]) >>
   Cases_on `lower_value compile_expr ce (expr_type e) e sa` >>
@@ -304,6 +304,9 @@ Resume abi_encode_word_vv_full_from_packaging[word_outcome]:
     (qpat_assum `!H. stmt_state_rel _ _ _ _ _ ee t ==> _`
        (qspec_then `H` irule) >> first_assum ACCEPT_TAC) >>
   `s0.vs_alloca_next <= packed.vs_alloca_next` by decide_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp packed` by
+    (qpat_assum `stmt_state_rel H ctx func ce cx ee packed`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   reverse conj_tac
   >- (qpat_assum `ty = TupleT [expr_type e]` SUBST_ALL_TAC >>
       qpat_assum `expr_type (TypeBuiltin _ _ _ _) = BaseT _`

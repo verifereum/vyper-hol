@@ -1,7 +1,7 @@
 (* Caller resources at the physical child endpoint and guarded decoder entry. *)
 Theory bodyFullAbiDecodeCallerEntry
 Ancestors
-  bodyFullAbiDecodeInterface bodyInvNoDalloca abiBuiltinDecodeSetup
+  bodyFullAbiDecodeInterface abiBuiltinDecodeSetup
   exprSimAbiDecodeResources exprSimAbiDecodeInputBound
   exprSimAbiDecodeChildBounds exprSimAbiDecodeMinimumLayout abiDecoderLayoutBounds
   representationCleanPtr exprLoweringProps abiArgsLabelBoundary

@@ -14,7 +14,7 @@ Theory vyperTypeContract
 Ancestors
   list rich_list arithmetic finite_map option pair pred_set
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
-  vyperEvent vyperTypeSystem vyperTypeCallGraph vyperABIEntries
+  vyperEvent vyperTypeSystem vyperTypeCallGraph vyperABIEntries constSubstMods
 Libs
   wordsLib
 
@@ -1087,7 +1087,14 @@ Definition check_function_body_def:
       stmts_no_control_escape body /\
       well_typed_exprs (defaults_env env) dflts /\
       EVERY (runtime_constant_expr mods) dflts /\
-      MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args)
+      MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args) /\
+      (* The compiler lowers the constant-substituted body and defaults, so
+         they must type too: a constant name can hide a literal that the raw
+         checks above would treat more laxly. *)
+      IS_SOME (type_stmts env ret
+                 (subst_consts_stmts_mods (consts_env_mods mods) body)) /\
+      well_typed_exprs (defaults_env env)
+        (subst_consts_exprs_mods (consts_env_mods mods) dflts)
 End
 
 Definition check_function_body_in_mode_def:

@@ -2,7 +2,7 @@
 Theory bodyFullBuiltinEnvLength
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullBuiltinEnvLen bodyInvNoDalloca
+  bodyFullBuiltinEnvLen
   bodyFullExprGeneric bodyFullPreds bodyFullGhostFrame gasOutcomeFullCompose
   bodySimFull exprSimHypsDefs vyperInterpreter vyperStorageTrace exprLoweringProps
   exprSimMemDefs exprSimWordArgs loweringPosts loweringSlice

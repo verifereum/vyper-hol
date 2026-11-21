@@ -2,6 +2,7 @@
 Theory bodyMemAssignTopCopyFacts
 Ancestors
   supportedExprTraverse allocLimits allocLimitsProps
+  bodyStorageCases[qualified,ignore_grammar]
   bodyMemAssignTopCopyIndex allocaFootprint[qualified] allocaHistoryFragment[qualified] bodySimStmtFacts exprSimHyps
   vyperTypeEnv vyperStorageLayoutSafety supportedProgram
   supportedTypes supportedExprs supportedStmts supportedStmtTraverse
@@ -19,6 +20,47 @@ Libs
 (* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
 val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
+Theorem topcopy_rhs_pre_supported:
+  !tops ctx cenv cx e env es ret_ty nsid env'.
+    body_inv tops ctx cenv cx /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
+       occurs_abi_decode_target target tops) /\ supported_expr tops e /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) =
+      SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
+    call_evaluation_safe cx
+      (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) ==>
+    expr_body_pre cenv cx env e es
+Proof
+  rpt strip_tac >>
+  drule_all body_inv_stmt_const_name_free >>
+  simp[supported_stmt_expr_exists_def, supported_assignment_exists_def] >>
+  strip_tac >>
+  `well_typed_expr env e` by
+    gvs[type_stmt_def, atarget_accepts_def, AllCaseEqs()] >>
+  drule_then assume_tac supported_expr_no_evm_run >>
+  drule_then assume_tac bodyStorageCasesTheory.supported_expr_main_calls >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    gvs[body_inv_def] >>
+  `cx_tops cx = tops` by
+    (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
+  `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+     is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target)` by
+    fs[body_inv_def] >>
+  irule stmt_expr_body_pre >>
+  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, int_calls_stmt_def,
+      int_calls_atarget_def, int_calls_expr_def, EVERY_CONJ] >>
+  qexists_tac `[]` >> simp[]
+QED
+
 Theorem topcopy_rhs_pre:
   !tops ctx cenv cx e env es ret_ty nsid env'.
     body_stmt_safe tops (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
@@ -34,35 +76,7 @@ Theorem topcopy_rhs_pre:
       (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) ==>
     expr_body_pre cenv cx env e es
 Proof
-  rpt strip_tac >>
-  `well_typed_expr env e` by
-    gvs[type_stmt_def, atarget_accepts_def, AllCaseEqs()] >>
-  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
-    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
-      supported_assignment_exists_def, supported_iterator_exists_def,
-      supported_assert_exists_def, supported_raise_exists_def,
-      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
-      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
-      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
-      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
-  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
-    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
-      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
-      alloc_limits_expr_def]) >>
-  imp_res_tac alloc_limits_expr_not_extcode >>
-  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
-    gvs[body_inv_def] >>
-  `cx_tops cx = tops` by
-    (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
-  `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-     is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target)` by
-    fs[body_inv_def] >>
-  irule_body_pre stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
-      supported_assignment_exists_def, int_calls_stmt_def,
-      int_calls_atarget_def, int_calls_expr_def] >>
-  imp_res_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >> simp[] >>
-  qexists_tac `[]` >> simp[]
+  metis_tac[topcopy_rhs_pre_supported]
 QED
 
 Theorem find_var_decl_storage_some[local]:

@@ -139,23 +139,6 @@ Proof
   simp[external_call_result_rel_def]
 QED
 
-Theorem valued_return_halt_room[local]:
-  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-    (s,G,tn) marks (Halt h,G',tn') ==>
-  (ctx_has_dalloca ctx ==> allocas_below_fmp h)
-Proof
-  qsuff_tac
-    `!cx st marks out. gas_origin_ptr_path cx st marks out ==>
-      case (cx, out) of
-        ((D,lo,explicit,ctx,func,PG), (r,G',tn')) =>
-          !h. r = Halt h /\ ctx_has_dalloca ctx ==> allocas_below_fmp h`
-  >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
-  ho_match_mp_tac fragGasOriginPtrTheory.gas_origin_ptr_path_ind >>
-  simp[] >> rpt strip_tac >> gvs[] >>
-  drule_all bodyFullIntCallReturnHaltTheory.gas_origin_ptr_edge_halt_fmp >>
-  simp[]
-QED
-
 Theorem return_selected_valued_frag_full_core[local]:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
@@ -658,7 +641,7 @@ Resume return_selected_valued_frag_full_core[buffered_finish]:
   simp[fragExecTheory.exit_result_def,stmt_exit_ptr_def,expr_exit_def,halt_exit_def] >>
   reverse conj_tac >-
     (qpat_assum `gas_origin_ptr_path _ _ _ (Halt _,_,_)`
-       (ACCEPT_TAC o MATCH_MP valued_return_halt_room)) >>
+       (ACCEPT_TAC o MATCH_MP bodyFullIntCallReturnHaltTheory.gas_origin_ptr_path_halt_fmp)) >>
   qx_gen_tac `tail` >> suspend "buffered_post"
 QED
 
@@ -1935,7 +1918,7 @@ Resume return_selected_valued_frag_full_core[word_finish]:
     expr_exit_def, halt_exit_def] >>
   reverse conj_tac >-
     (qpat_assum `gas_origin_ptr_path _ _ _ (Halt _,_,_)`
-       (ACCEPT_TAC o MATCH_MP valued_return_halt_room)) >>
+       (ACCEPT_TAC o MATCH_MP bodyFullIntCallReturnHaltTheory.gas_origin_ptr_path_halt_fmp)) >>
   qx_gen_tac `tail` >> suspend "word_post"
 QED
 
@@ -2648,7 +2631,7 @@ Resume return_selected_valued_frag_full_core[raw_finish]:
   simp[NoAsms,fragExecTheory.exit_result_def,stmt_exit_ptr_def,expr_exit_def,halt_exit_def] >>
   reverse conj_tac >-
     (qpat_assum `gas_origin_ptr_path _ _ _ (Halt _,_,_)`
-       (ACCEPT_TAC o MATCH_MP valued_return_halt_room)) >>
+       (ACCEPT_TAC o MATCH_MP bodyFullIntCallReturnHaltTheory.gas_origin_ptr_path_halt_fmp)) >>
   qx_gen_tac `tail` >> suspend "raw_post"
 QED
 

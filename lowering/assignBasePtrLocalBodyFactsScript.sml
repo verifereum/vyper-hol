@@ -5,6 +5,7 @@ Ancestors bodySim bodyExprPreFacts memoryLocalRhsProps exprSimHyps exprSimHypsDe
   supportedStmts supportedExprs vyperTypeSystem vyperTypeEnv vyperTypeCallGraph
   vyperTypeInvariants gasContext finite_map list compileEnv
   bodyInvSplit bodyInvCodeProps bodyInvMetadataProps bodySimModsProps compileUnit alist pair
+  allocLimitsProps
 
 Theorem main_module_code_and_gate[local]:
   contract_inv mods exps ctx cenv cx ==>
@@ -42,14 +43,18 @@ Proof
      Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
      rename1 `FLOOKUP env.var_assignable id = SOME asg` >> Cases_on `asg` >> gvs[]) >>
   drule_then strip_assume_tac supported_expr_body_calls >>
-  drule_all_then assume_tac body_inv_const_name_free_mods >>
+  `~supported_expr_exists (const_name_root_mods mods) e` by
+    (drule_then assume_tac contract_inv_cenv_modules >>
+     drule stmt_exprs_ok_module_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
   drule_then strip_assume_tac main_module_code_and_gate >>
   `byte_widths_expr e /\ alloc_limits_expr cenv e` by
     (fs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
         supported_assignment_exists_def, allocLimitsTheory.alloc_limits_stmt_def] >>
      CCONTR_TAC >> fs[] >>
      qpat_x_assum `~supported_expr_exists (\e. ~is_extcode e /\ _) _` mp_tac >>
-     simp[] >> irule supported_expr_exists_root >> simp[]) >>
+     simp[] >> irule supported_expr_exists_root >>
+     metis_tac[alloc_limits_expr_not_extcode]) >>
   `call_evaluation_safe cx (int_calls_expr e)` by
     fs[int_calls_stmt_def, int_calls_atarget_def, int_calls_expr_def] >>
   `EVERY (\c. ?ts. get_module_code cx (FST c) = SOME ts /\
@@ -91,7 +96,8 @@ Proof
   drule_then assume_tac body_inv_module >>
   `supported_expr tops e` by fs[supported_stmt_def, supported_assignment_def] >>
   `~supported_expr_exists (const_name_root cx) e` by
-    metis_tac[body_inv_const_name_free] >>
+    (drule_all body_inv_stmt_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
   drule_all_then assume_tac expr_sim_inv_no_unallocated_bare_globals >>
   `expr_sim_inv_mods [(NONE,tops)] cenv cx env es` by fs[expr_sim_inv_split_def] >>
   drule_all_then strip_assume_tac

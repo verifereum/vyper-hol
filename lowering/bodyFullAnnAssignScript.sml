@@ -12,7 +12,7 @@ Ancestors
   bodyFullAnnAssignWord bodyFullAnnAssignWidened bodyFullAnnAssignMemoryPost
   bodyFullAnnAssignMemory bodyFullAnnAssignOther bodyFullShared exprSimAggregateLayout typedMemoryCopy
   bodyDeclCopyMemory vyperTypeInvariants allocLimits
-  bodyInvNoDalloca loweringPosts
+  bodyFullIfExpReach bodyFullHashKeccakFixed loweringPosts
   vyperTypeCallGraph supportedExprTraverse
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   bodySimDeclCases bodyExprPreFacts exprSimHyps exprSimSource
@@ -134,7 +134,6 @@ Theorem body_annassign_word_full:
       (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   drule_all annassign_word_full_source >> strip_tac >>
   drule supported_expr_body_calls >> strip_tac >>
   rw[stmt_frag_full_def] >>
@@ -165,7 +164,8 @@ Proof
        (drule_then mp_tac) >> simp[FLOOKUP_DEF]) >>
   `ctx_has_dalloca ctx ==>
     (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s)` by simp[] >>
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s)` by
+    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
   drule_all annassign_word_full_execution_sep >>
   disch_then (qspec_then `RetQ` assume_tac) >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (fn outcome =>
@@ -175,8 +175,11 @@ Proof
           (LIST_CONJ [outcome,frame,sep]))))) >>
   disch_then (fn th => irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
     irule_at Any th) >>
-  simp[] >> rpt strip_tac >>
-  qexists_tac `ce` >> simp[] >> metis_tac[]
+  simp[] >> rpt strip_tac >> qexists_tac `ce` >> simp[] >>
+  conj_tac
+  >- first_assum (ACCEPT_TAC o MATCH_MP
+       bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+  first_assum ACCEPT_TAC
 QED
 
 (* A memory local whose source is stored at its own layout. *)

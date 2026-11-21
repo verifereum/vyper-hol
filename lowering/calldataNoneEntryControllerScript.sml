@@ -1,7 +1,8 @@
 (* The entry controller needs only the installed local decoder alternative. *)
 Theory calldataNoneEntryController
 Ancestors
-  allocaFrontierRoom
+  allocaFrontierRoom entryValueRevertPtr exprLoweringProps
+  moduleLoweringProps[qualified,ignore_grammar]
   calldataNoneEntryAssembly calldataNoneSelectedPrefix calldataNoneRegisterInit
   calldataNoneRegisterFold calldataNoneRegisterOne venomInstIdsProps
   defaultConcreteRegistrationDefs ctorDeployMemoryFrontier allocaFrontierBound
@@ -17,12 +18,15 @@ Theorem none_entry_reject_from_decoder:
     source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
     initial_venom_state_rel tops am tx vs /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     (!fn site ce ty tv last.
       venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
       abi_decoder_coherent ce (type_env tops) ce.ce_struct_fields ty tv /\
       fn_inst_ids_distinct fn /\ ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
-      unit_alloca_budget unit.cu_context < dimword (:256) /\
-      ~ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context < dimword (:256) ==>
       !first t src q p d oid H u.
         compile_abi_decode_to_buf (Var q) src CALLDATALOAD (Lit 0w) (Lit 0w)
           (type_to_abi_dec_info ce.ce_struct_fields ce ty) first = ((),last) /\
@@ -31,6 +35,8 @@ Theorem none_entry_reject_from_decoder:
         abi_decoder_operand_live first.cs_next_var src /\
         abi_decoder_operand_live first.cs_next_var (Var q) /\
         alloca_inv t /\ alloca_frontier_inv unit.cu_context fn site t /\
+        (ctx_has_dalloca unit.cu_context ==> allocas_below_fmp t /\
+          t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp) /\
         (!id. first.cs_next_id <= id ==> FLOOKUP t.vs_allocas id = NONE) /\
         FLOOKUP t.vs_allocas oid = SOME (d,type_memory_size tv) /\
         oid < first.cs_next_id /\ d+type_memory_size tv < dimword (:256) /\
@@ -45,6 +51,8 @@ Theorem none_entry_reject_from_decoder:
           (?v K w. IS_SOME (cd_decode F t.vs_call_ctx.cc_calldata tv (w2n p)) /\
             v.vs_call_ctx = t.vs_call_ctx /\ alloca_inv v /\
             alloca_frontier_inv unit.cu_context fn site v /\
+            (ctx_has_dalloca unit.cu_context ==> allocas_below_fmp v /\
+              v.vs_alloca_next + pending_alloca_size fn v <= w2n v.vs_initial_fmp) /\
             (!id. last.cs_next_id <= id ==>
               FLOOKUP v.vs_allocas id = FLOOKUP t.vs_allocas id) /\
             fresh_vars_wrt last v /\ ~v.vs_halted /\
@@ -86,7 +94,6 @@ Proof
          `key`,`ut`,`iv`,`rt`,`opened`,`checked`,`ce'`,`last`,`fn`,`p`,`G`,`tn`]
         strip_assume_tac) >>
       `fn = func` by fs[] >> qpat_x_assum `fn = func` SUBST_ALL_TAC >>
-      `ctx_has_dalloca unit.cu_context ==> allocas_below_fmp p` by simp[] >>
       qexistsl [`tvs`,`mincd`,`pay`,`opened`,`checked`,`p`,`G`,`tn`] >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
       >- simp[] >> suspend "registration")
@@ -101,8 +108,22 @@ Resume none_entry_reject_from_decoder[registration]:
   drule_all none_selected_registration_inputs >>
   disch_then (qspec_then `site` (map_every assume_tac o CONJUNCTS)) >>
   drule fn_inst_ids_distinct_all_distinct >> strip_tac >>
+  `vars_pc_only vs t` by
+    (drule_all moduleLoweringPropsTheory.vars_pc_only_trans >> simp[]) >>
+  `allocas_below_fmp t` by
+    (drule_all initial_entry_allocas_below_fmp >> simp[]) >>
+  `(ctx_has_dalloca unit.cu_context ==> allocas_below_fmp t /\
+    t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp)` by
+    (qpat_assum `default_registration_resources _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [default_registration_resources_def]) >>
+     strip_tac >> simp[] >>
+     qpat_assum `fmp_room unit.cu_context func t`
+       (mp_tac o REWRITE_RULE [fmp_room_def]) >>
+     simp[] >> decide_tac) >>
   qabbrev_tac `R = \a v (K:(string,num # num) fmap) (w:taint).
     alloca_inv v /\ alloca_frontier_inv unit.cu_context func site v /\
+    (ctx_has_dalloca unit.cu_context ==> allocas_below_fmp v /\
+      v.vs_alloca_next + pending_alloca_size func v <= w2n v.vs_initial_fmp) /\
     (!id e. FLOOKUP v.vs_allocas id = SOME e ==> id < a.cs_next_id) /\
     fresh_vars_wrt a v /\ ~v.vs_halted /\ v.vs_current_bb = a.cs_current_bb /\
     v.vs_inst_idx = LENGTH a.cs_current_insts` >>
