@@ -620,7 +620,7 @@ Theorem extcall_request_post_gas_packing:
   emit_op ADD [ba.buf_operand;Lit 28w] sb3 = (off,sp) /\
   fn_has_code s5 sb1 func /\ fn_has_code sb1 sb2 func /\
   fn_has_code sb2 sb3 func /\ fn_has_code sb3 sp func /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   valid_horizon cx st0 H ke.storage_trace /\
   stmt_state_rel (H0 : (bool # bytes32 # type_value) list # num list) ctx func cenv cx es s0 /\

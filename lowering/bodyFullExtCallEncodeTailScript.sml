@@ -27,6 +27,7 @@ Theorem extcall_tail_add[local]:
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,G',tn')) /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_initial_fmp = s.vs_initial_fmp /\
     t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
     abi_encode_exec_frame func s t /\
     (alloca_inv s /\ alloca_room ctx func s ==> window_phase ctx func a b {} [] s t) /\
@@ -144,7 +145,8 @@ QED
 Theorem extcall_encoded_request_suffix:
   emit_op ADD [alen;Lit 4w] a = (len,b) /\
   emit_op ADD [Var root;Lit 28w] b = (off,c) /\
-  fn_has_code a b fn /\ fn_has_code b c fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code a b fn /\ fn_has_code b c fn /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   eval_operand alen s = SOME (n2w (LENGTH bs)) /\ op_taint tn alen = {} /\
   not_fresh_at a root /\ lookup_var root s = SOME (n2w p) /\
   ptr_covers G tn root s capacity /\ 32 + LENGTH bs <= capacity /\
@@ -175,7 +177,6 @@ Theorem extcall_encoded_request_suffix:
       op_taint tn' (Var z) = op_taint tn (Var z))
 Proof
   strip_tac >> rpt gen_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   drule_all (Q.SPECL [`4`, `LENGTH bs`] extcall_tail_add) >>
   disch_then (qspecl_then [`G`,`PG`]
     (qx_choose_then `y` (qx_choose_then `u`
@@ -188,7 +189,13 @@ Proof
      first_assum ACCEPT_TAC) >>
   `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
   `28 + (4 + LENGTH bs) <= capacity /\ p + 28 < dimword (:256)` by decide_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
+  `allocas_below_fmp u = allocas_below_fmp s` by
+    (qpat_assum `abi_encode_exec_frame fn s u`
+       (assume_tac o cj 2 o REWRITE_RULE [abi_encode_exec_frame_def]) >>
+     simp[allocas_below_fmp_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `allocas_below_fmp u = allocas_below_fmp s` SUBST1_TAC >>
+     first_assum ACCEPT_TAC) >>
   mp_tac (Q.INST [`k` |-> `28`, `n` |-> `4 + LENGTH (bs:word8 list)`, `a` |-> `b`,
     `b` |-> `c`, `dst` |-> `off`, `s` |-> `u`, `G` |-> `Gu`, `tn` |-> `tu`]
     extcall_tail_offset) >>
