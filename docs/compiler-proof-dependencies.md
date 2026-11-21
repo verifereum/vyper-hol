@@ -37,8 +37,9 @@ premise; its proof cases on calldata dispatch and then on the finalizer
 `supported_program tops` the graph starts from is no longer assumed: the proof
 derives it from `source_typing_ok` and the `source_deployment_rel` inside
 `call_state_rel` (`source_typing_ok_supported_program`), and it takes the raw
-source-unit shape from `check_contract` alone
-(`lower_vyper_runtime_unit_checked_source_shape`).
+source-unit shape from successful runtime lowering and `check_contract F`
+(`lower_vyper_runtime_unit_checked_source_shape`), with `unit_defs_reach_uses`
+from the lowering separately.
 
 ```text
 compile_vyper (K SOME) succeeds
@@ -74,7 +75,7 @@ preserves its historical schema.
 
 | Hypothesis | Class | Current producer / absence |
 |---|---|---|
-| `fin IN accepted_finalizers`, `compile_vyper fin policy tops = SOME (deploy_bc,runtime_bc)` | boundary | Caller supplies success; L1 (`compile_vyper_runtime_phases`, `K SOME`) or `compile_vyper_runtime_phases_asm_opt` extracts raw phases and the exact assembled runtime bytes (`assemble prog'` of the optimized `prog'` for `asm_opt_finalizer`). Success already excludes the units the lowering refuses (`lower_vyper_runtime_unit`, `lower_vyper_deploy_unit` and their `_mods` forms): an unfolded `sha256` in an external function's defaults (`external_defaults_no_sha256`), and the `create_from_blueprint` calls that `blueprint_unit_raw_fmp_ok` rejects: a literal code offset out of range, an allocation bound that can reach 2⁶⁴, or, in a unit declaring ABI-dynamic storage or transient state, raw or ABI-dynamic constructor arguments. No universal success producer. |
+| `fin IN accepted_finalizers`, `compile_vyper fin policy tops = SOME (deploy_bc,runtime_bc)` | boundary | Caller supplies success; L1 (`compile_vyper_runtime_phases`, `K SOME`) or `compile_vyper_runtime_phases_asm_opt` extracts raw phases and the exact assembled runtime bytes (`assemble prog'` of the optimized `prog'` for `asm_opt_finalizer`). Success already excludes the units the lowering refuses: the runtime lowering (`lower_vyper_runtime_unit` and its `_mods` form) refuses an unfolded `sha256` in an external function's defaults (`external_defaults_no_sha256`), and both the runtime and the deploy lowering (`lower_vyper_deploy_unit` and its `_mods` form) refuse the `create_from_blueprint` calls that `blueprint_unit_raw_fmp_ok` rejects: a literal code offset out of range, an allocation bound that can reach 2⁶⁴, or, in a unit declaring ABI-dynamic storage or transient state, raw or ABI-dynamic constructor arguments. No universal success producer. |
 | `source_typing_ok tops am tx` | boundary + environmental | `check_contract F` acceptance, `global_cells_typed`, the folded constants inside the target's constant cells (`constants_fold_module … = SOME cenv`, `cenv SUBMAP …`), `machine_well_typed am`, `call_tx_well_typed tx`. With `call_state_rel`'s `source_deployment_rel` it gives `supported_program tops` (`source_typing_ok_supported_program`, through `check_contract_supported_program`), so the whitelist is not a public premise. Checker artifact; partial `load_contract_establishes_checked_contract_runtime_ready`, `load_contract_establishes_machine_well_typed`, `checked_call_external_preserves_machine_well_typed`. No complete arbitrary-environment producer. |
 | `storage_ok H am tx`, `call_within H tops am tx es` | environmental storage horizon | The caller fixes the regions `H`. When calldata dispatch selects a function and the frame is not resource-starved, `call_result_rel H` gives `storage_ok H` again after the call. No producer of `call_within`, and no deployment/transaction producer of `storage_ok`. |
 | `call_state_rel tops runtime_bc am tx es` | environmental | No general producer or satisfiability theorem. L6/L8 **consume**, not produce, it; transaction corollary deferred to Milestone 7. |
@@ -108,8 +109,8 @@ declaration. Generic composition and each L1–L13 have none. See the [Milestone
 
 | ID | Saved export | Consumes / produces | Future owner |
 |---|---|---|---|
-| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` | lowering + `supported_program` + `source_typing_ok` + `source_deployment_rel` + `valid_vyper_call` + `initial_venom_state_rel` + `outcomes_accounts_typed` + two guards for units with `DALLOCA` (allocation budget within the initial FMP, FMP below 2^254; `dalloca_no_wrap` at every reachable instruction) -> terminating `source_unit_execution_correct` | Milestone 6 |
-| S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` | lowering + `check_contract` + `raw_shape_free_program` -> `o1_source_unit_ok`. The tops use `loweringMemCorrect.lower_vyper_runtime_unit_checked_source_shape` instead: `check_contract` alone gives `o1_source_unit_ok`, `unit_entry_no_params` and `unit_fmp_unsealed`, and units outside `raw_shape_free_program` (`raw_call` on `msg.data`, `create_copy_of`, `create_from_blueprint`) rest on three admitted shape lemmas | Milestone 5 |
+| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` | lowering + `supported_program` + `source_typing_ok` + `source_deployment_rel` + `valid_vyper_call` + `initial_venom_state_rel` + `outcomes_accounts_typed` + two guards for units with `DALLOCA` (allocation budget within the initial FMP, FMP below 2^254; `dalloca_no_wrap` at every reachable instruction) -> `source_unit_execution_correct`: a source exit result the raw run matches, or, for a source-exempt run or a storage-invalid gas filling, a focus witness instead | Milestone 6 |
+| S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` | lowering + `check_contract` + `raw_shape_free_program` -> `o1_source_unit_ok`. The call tops use `loweringMemCorrect.lower_vyper_runtime_unit_checked_source_shape` instead: successful runtime lowering and `check_contract F` give `o1_source_unit_ok`, `unit_entry_no_params` and `unit_fmp_unsealed`, and units outside `raw_shape_free_program` (`raw_call` on `msg.data`, `create_copy_of`, `create_from_blueprint`) rest on three admitted shape lemmas. The deploy tops use `ctorDeployShape.checked_lower_vyper_deploy_unit_source_shape`, whose three matching deploy cases are admitted too | Milestone 5 |
 | S3 | `loweringMemCorrect.lower_vyper_runtime_unit_memory_ok` | lowering + initial state + no `DALLOCA` + entry FMP floor + `__entry` lookup and entry label + memory-safe and pointer-safe entry runs at every fuel -> `raw_unit_memory_ok`, no function `fn_eom`, `fixed_region_reserved 0`, pointer discipline and taint bounds | Milestone 5 |
 | S3d | `loweringMemCorrect.lower_vyper_runtime_unit_dload_offset_ok` | lowering + `code_layout_valid` + `__entry` lookup and entry label + memory-safe entry runs at every fuel -> `mem_inv dload_offset_ok` (DLOAD/DLOADBYTES offsets plus the code prefix stay below 2^256) | Milestone 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` | exact O1 success + `o1_source_unit_ok` + `unit_entry_no_params` + `unit_defs_reach_uses` + `unit_fmp_unsealed` + `o1_run_state_ok` (incl. `code_layout_valid`) + reserved intervals well-formed + no function `fn_eom` + `fixed_region_reserved lo` + `dead_wf D` + the output's live EOM at most the initial FMP, itself at most `fmp` -> an input state `vs_in` (`raw_variant`) at which raw memory (`raw_unit_memory_ok`), `ptr_discipline`, `taint_within D` and the DLOAD offset and headroom bounds (`mem_inv dload_offset_ok`, `mem_inv dload_headroom_ok`) give forward simulation `ctx_sim D` and the output's `o1_lowered_inv` | Milestone 3 |
@@ -184,13 +185,15 @@ is proved except for the narrow `GATE_ADMISSION` case lemmas its closure
 reaches, and assumes no whitelist: `deploy_typing_ok_supported_programs` derives
 `supported_program` and `supported_program_deploy` from `deploy_typing_ok` and
 the `layouts_agree` inside `deploy_state_rel`. Its premises are
-`deploy_typing_ok` (both `check_contract` acceptances, `machine_well_typed`,
+`fin IN accepted_finalizers`, `compile_vyper fin policy tops = SOME
+(deploy_bc, runtime_bc)`, `deploy_typing_ok` (both `check_contract` acceptances, `machine_well_typed`,
 `call_tx_well_typed`; pre-constant deployment readiness follows from it,
 `deploy_typing_ok_constants_ready`), `deploy_state_rel` (canonical arguments,
 an uninstalled source target, an empty target account in
 `es.originalAccounts`, among others) and a call trace of fewer than 2⁶⁴
 entries. Storage is not a premise: `deploy_storage_ok` guards each gas
-filling inside `deploy_call_result_rel`. Success
+filling inside `deploy_call_result_rel`. It concludes a `run_call` result that
+is `creation_resource_starved` or satisfies `deploy_call_result_rel`. Success
 compares returned/installed `runtime_bc ++ section` satisfying `immutables_section_rel`,
 accounts modulo target code and dead storage, transient storage modulo dead
 target storage, and logs.

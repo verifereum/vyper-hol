@@ -56,7 +56,7 @@ Their exact premises are in the linked owners and
 
 | Stage | Actual export / owner | Contract | Owner milestone |
 |---|---|---|---|
-| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/loweringRuntimeCorrectScript.sml)) | Raw lowering + `supported_program` + `source_typing_ok` + `source_deployment_rel` + `valid_vyper_call` + `initial_venom_state_rel` + `outcomes_accounts_typed` + `DALLOCA` budget and no-wrap guards -> terminating `source_unit_execution_correct` | 6 |
+| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/loweringRuntimeCorrectScript.sml)) | Raw lowering + `supported_program` + `source_typing_ok` + `source_deployment_rel` + `valid_vyper_call` + `initial_venom_state_rel` + `outcomes_accounts_typed` + `DALLOCA` budget and no-wrap guards -> `source_unit_execution_correct` (a matched source exit result, or a focus witness for an exempt run or storage-invalid gas filling) | 6 |
 | S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` ([source](../lowering/vyperLoweringCorrectScript.sml)) | Lowering + `check_contract` + `raw_shape_free_program` -> `o1_source_unit_ok` | 5 |
 | S3 | `loweringMemCorrect.lower_vyper_runtime_unit_memory_ok` ([source](../lowering/loweringMemCorrectScript.sml)) | Lowering + initial state + no `DALLOCA` + entry FMP floor + `__entry` lookup and entry label + memory-safe and pointer-safe entry runs at every fuel -> `raw_unit_memory_ok`, no function `fn_eom`, `fixed_region_reserved 0`, pointer discipline and taint bounds | 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` ([source](../venom/compiler/o1PipelineCorrectScript.sml)) | Actual O1 success + raw shape (`o1_source_unit_ok`, `unit_entry_no_params`, `unit_defs_reach_uses`, `unit_fmp_unsealed`) + `o1_run_state_ok` + reserved-region/EOM/FMP facts + `dead_wf D` -> an input state at which raw memory, pointer, taint and DLOAD bounds give forward simulation `ctx_sim D` and the output's `o1_lowered_inv` | 3 |
@@ -72,10 +72,12 @@ caller supplies. On the ordinary path they have S5's form and come from
 come from `abort_context_obligations_raw`, and their memory obligations exclude
 the abort prefix (`codegen_memory_obligations_abort`). The S5 export itself is used by the
 gas-sufficiency proofs. S2/S6 produce
-shape. The tops take the raw shape S4/S6 need from `check_contract` alone
-(`lower_vyper_runtime_unit_checked_source_shape`): `raw_shape_free_program`
-units use S2, and the rest (`raw_call` on `msg.data`, `create_copy_of`,
-`create_from_blueprint`) rest on three admitted shape lemmas. On the ordinary path L5 consumes that memory fact; layout or empty
+shape. The call tops take the raw shape S4/S6 need from successful runtime
+lowering and `check_contract F` (`lower_vyper_runtime_unit_checked_source_shape`):
+`raw_shape_free_program` units use S2, and the rest (`raw_call` on `msg.data`,
+`create_copy_of`, `create_from_blueprint`) rest on three admitted shape lemmas.
+The deploy tops use `checked_lower_vyper_deploy_unit_source_shape`, with three
+matching admitted deploy cases. On the ordinary path L5 consumes that memory fact; layout or empty
 entry memory does not manufacture memory safety.
 
 `venomToAsmProps.gen_fn_simulation` is proved (4.2); S7's `codegen_correct`
@@ -92,10 +94,12 @@ and the `source_deployment_rel` inside `call_state_rel`
 `supported_program` and `supported_program_deploy` from `deploy_typing_ok` and
 the `layouts_agree` inside `deploy_state_rel`
 (`deploy_typing_ok_supported_programs`). Compile success already excludes what
-the lowering refuses: an unfolded `sha256` in external defaults, and
-`create_from_blueprint` calls whose allocation can reach 2⁶⁴ or that pass raw
-or ABI-dynamic constructor arguments in a unit with ABI-dynamic storage or
-transient state (`blueprint_unit_raw_fmp_ok`).
+the lowering refuses: an unfolded `sha256` in external defaults (runtime
+lowering, `external_defaults_no_sha256`), and, in both runtime and deploy
+lowering, `create_from_blueprint` calls with a literal code offset out of
+range, an allocation bound that can reach 2⁶⁴, or raw or ABI-dynamic
+constructor arguments in a unit with ABI-dynamic storage or transient state
+(`blueprint_unit_raw_fmp_ok`).
 
 **Named inventory, not forced plan arithmetic:** TASK056's source ledger is
 **130 -> 128**, removing only the local
@@ -217,7 +221,8 @@ included. `gas_readings es` is a separate
 frame-local list for assembly initialization, **not a source gas-number
 oracle**. The observer is total/deterministic; trace decomposition and semantic
 correctness are not proved by totality and remain 2.1 work. CALLCODE is not observed;
-DELEGATECALL and CREATE/CREATE2 are observed but outside S7 shape.
+DELEGATECALL and CREATE/CREATE2 are observed and inside S7's `unit_shape_ok`;
+no correctness of the delegated or created callee is claimed.
 
 **Computed calls:** value zero to addresses 1/2/6/7 uses `precompile_result`
 (ecrecover/SHA256/ecadd/ecmul) for its return data, takes its success from
@@ -248,8 +253,11 @@ The identity case composes the stage bounds S1b
 (`lower_vyper_runtime_unit_run_bounded`), S6b
 (`run_venom_pipeline_run_bounded`) and S7g (`codegen_gas_sufficient`). The deploy twin
 `e2e_deploy_gas_sufficient` uses the proved S1b-d `deploy_unit_run_bounded`,
-the same S6b, and the proved S7g-d `deploy_frame_gas_sufficient`. Its OutOfGas
-conclusion allows oversized deposited code or a reached `RETURNDATACOPY`;
+the same S6b, and the proved S7g-d `deploy_frame_gas_sufficient`. It assumes
+the runtime bytes don't start with `0xEF`. Under `deploy_storage_ok` for every
+gas filling, no exempt source observation and fewer than 2⁶⁴ trace entries on
+the raised-gas run, its OutOfGas conclusion allows oversized deposited code or
+a reached `RETURNDATACOPY`;
 its per-finalizer cases (`e2e_deploy_gas_sufficient_identity`,
 `e2e_deploy_gas_sufficient_asm_opt`) allow the same two alternatives.
 Both companions, like the correctness tops, rest on the narrow
@@ -273,7 +281,10 @@ corollaries remain Milestone 7.
 
 ### Decision ledger D1–D31
 
-This table retains the 2026-10-01 plan's decision keys. “Implemented” means
+This table retains the 2026-10-01 plan's decision keys. Restrictions it
+attributes to the whitelist are the Milestone 1 gate's: the current gate
+accepts what `check_contract` accepts, and what remains is what the
+lowering refuses and the `GATE_ADMISSION` lemmas. “Implemented” means
 actual definitions/statements, **not stage proofs**. “Deviation/limit” is
 explicit; no intended producer is reported as proved merely because it was
 planned. Source owners below are durable; private PLAN line numbers are not.
@@ -286,14 +297,14 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D4 | Compute value-zero precompiles 1/2/6/7's data, take their success from the oracle | `precompile_result`, `take_outcome`, `precompile_call_success`, every request recorded (`record_request`, `call_requests`); helper purity is proved, EVM purity bridge is deferred. | 2.1 |
 | D5 | One evaluator NONE/SOME, not duplicate evaluator or unchecked accounts | Source `evaluation_state.outcomes/requests`, `take_call_outcome` account guard; full triples at call/deploy entry, two-argument initializer retained. Existing storage/type proof guards remain conditional; no universal storage validator. | 6 / 7 |
 | D6 | SOME send requests a real call outcome, not pure transfer | Source Send uses empty-data nonstatic request and requires success; NONE retains concrete transfer behavior. | 6 |
-| D7 | Restrict ExtCall syntax, not reorder source evaluation | `supportedExprs`/`supportedExprForms`: effect-free operands, word arguments/returns, exact interface/count, distinct `value=`/`gas=`/`default_return_value=` operands evaluated in source order (#553); SOME code check follows return-kind policy and `skip_contract_check`. `NoneT` ExtCall is **not admitted**, despite a general helper branch. | 6 |
+| D7 | Restrict ExtCall syntax, not reorder source evaluation | `supportedExprs`/`supportedExprForms`: effect-free operands, word arguments/returns, exact interface/count, distinct `value=`/`gas=`/`default_return_value=` operands evaluated in source order (#553); SOME code check follows return-kind policy and `skip_contract_check`. `NoneT` ExtCall was **not admitted** at Milestone 1; the current gate admits a `NoneT` external return (`supported_external_return_type`). | 6 |
 | D8 | Runtime failure requires Abort/failing frame, not anything/fuel0 | `external_call_result_rel` rejects OK/IntRet and other Errors, relates a failed external call's `RevertData` to a Revert abort, and requires terminating run; `call_result_rel_at` failure clause. TypeError is excluded by typing, not treated as source success. | 6 |
 | D9 | Exact unspecified-behaviour exemptions, not weakened source checks | `unspecified_behaviour_exempt`, `occurs_abi_decode_target` inspect function bodies for dynamic decoding. Exact decode message also admits matching return rejection in such a program; not arbitrary ReturnReject. | 6 |
-| D10 | Typing separate from plain-EVAL syntax | `source_typing_ok` contains checker acceptance, typed constant cells, machine and tx typing; `supported_program` depends on tops alone and is no longer a premise: the tops derive it from the checker acceptance (`check_contract_supported_program`). Partial readiness producers are not the whole premise. | 7 |
+| D10 | Typing separate from plain-EVAL syntax | `source_typing_ok` contains checker acceptance, typed constant cells, machine and tx typing; `supported_program` depends on tops alone and is no longer a premise: the tops derive it from the checker acceptance and `layouts_agree` (`check_contract_supported_program`), which `source_deployment_rel` supplies for calls and `deploy_state_rel` for deployment. Partial readiness producers are not the whole premise. | 7 |
 | D11 | Whitelist, not open-ended exclusions | `supportedProgram` combines headers/names/body predicates; 101 named fixture membership proofs. The whitelist has since been widened to what `check_contract` accepts and is derived, not assumed, by the tops; forms it newly accepts rest on narrow `GATE_ADMISSION` lemmas. No universal compile-success witness. | 6 / 7 |
 | D12 | Ten source/type corrections, not remove fixtures | Invalid EC RuntimeError; Pop length-only storage update; empty codehash zero; decimal bound-before-truncate; bytes->address/decimal/narrow-zero-tail conversions; UnsafeDiv0 zero; minimum decimal Mul; abi_encode size rule. Actual owners `vyperContext`, `vyperState`, `vyperValueOperation`, `vyperTypeSystem`; historical source checkpoint retained. | 6 comparison proof |
 | D13 | Literal endpoint range checks + allocation-budget compiler check | `stmtLowering` tests both literal endpoints; five fixture bounds corrected historically. `vyperCompiler.lowering_context_ok` checks `unit_alloca_budget < dimword(:256)`. This is not a proof that every raw access is valid. | 5 / 6 |
-| D14 | STOP clears data, empty setup_callee accepted, CALL/STATICCALL outcomes | `venomExecSemantics` implemented; DELEGATECALL takes its outcome from the oracle too, but DELEGATECALL/CREATE/CREATE2 stay excluded by `unit_shape_ok`, not oracle-certified. | 2.1 / 4 |
+| D14 | STOP clears data, empty setup_callee accepted, CALL/STATICCALL outcomes | `venomExecSemantics` implemented; DELEGATECALL takes its outcome from the oracle too. DELEGATECALL/CREATE/CREATE2 are inside `unit_shape_ok` (`inst_shape_ok` excludes only `DJMP` and `OFFSET`); the delegated or created callee is not oracle-certified. | 2.1 / 4 |
 | D15 | Exclude static entry, not change write effects | `call_state_rel`/`initial_ctx_rel` nonstatic; outgoing STATICCALL is allowed. No static-entry correctness claim. | 7 generalization |
 | D16 | Runtime immutables without a separate exclusion | The call theorem carries no separate immutable restriction. `call_state_rel` still requires frame code `runtime_bc ++ section` with `immutables_section_rel` for the target's immutables, and the live target account's code to equal the frame code; source installation is exact. Deployment remains separate. | 6 item7 |
 | D17 | Forward success/weak abort transport, not observable_equiv for aborts | `unitTransformDefs.unit_result_rel`: Halt observables; Abort requires only REVERT stays REVERT. Failure returndata/kind/requests may differ. S4 proved, on `ctx_sim`'s `dead_result_rel`, which also lets Halt observables differ at dead bytes. | 3 |
@@ -334,7 +345,8 @@ and is proved (4.2). Existing bridges are not trace-aware S7 proofs.
 S1 is actual `lower_vyper_runtime_unit_correct`, replacing the retired
 `vyper_to_venom_correct`. It consumes `supported_program`, `source_typing_ok`,
 source deployment, exact valid call, `initial_venom_state_rel`, typed outcome
-accounts and, for units with `DALLOCA`, allocation-budget and no-wrap guards. Its existential fuel must give a terminating raw result; runtime
+accounts and, for units with `DALLOCA`, allocation-budget and no-wrap guards. Outside source-exempt runs and storage-invalid gas fillings, where
+it gives a focus witness instead, the raw run must reach the source's exit result; runtime
 failure is Abort, not Error/fuel0. Success relates canonical return bytes and
 whole effects/requests. UNREACHABLE permits ExHalt; dynamic strict decoding
 has the precise D9 exemption. Proving this
@@ -406,8 +418,8 @@ the codegen stage. 2.2 closes the whole path from source to bytecode.
 
 **Owner: Milestone 2.1, consuming S7 / codegenCorrectness.** This replaces the
 old gas-bound/three-case recipe. Any future scoped sublemmas must match the
-actual S7 statement; DELEGATECALL/CREATE are outside `unit_shape_ok`, not missing
-cases of this runtime theorem. No scoped lemma listed here is already exported
+actual S7 statement; DELEGATECALL/CREATE/CREATE2 are inside `unit_shape_ok`, and
+the theorem claims nothing about the delegated or created callee. No scoped lemma listed here is already exported
 or proved. Concrete deferred inputs (PLAN T10.3 / 5.1–5.2 / 6.4):
 
 | Handoff | Actual definitions / reusable input | Deferred contract and consumer |
@@ -575,8 +587,8 @@ Remaining work, roughly in dependency order (all future):
    encoding/lift. Initialize assembly with `gas_readings es` and actual trace
    outcomes; align CALL/STATICCALL requests and complete atomic callee outcomes,
    short writes and static preservation. Lift non-GAS/no-call/single-frame
-   interfaces to the actual S7 frame contract. CREATE is excluded here; source
-   callee equivalence is Milestone7. The gas bound is a
+   interfaces to the actual S7 frame contract. CREATE/CREATE2 are inside
+   `unit_shape_ok`; source callee equivalence is Milestone7. The gas bound is a
    separate proved theorem, S7g `codegen_gas_sufficient`, not required by S7's
    resource disjunction.
 4. **`codegen_correct`**, from the pieces above. Reuse proved
@@ -622,7 +634,8 @@ that accesses avoid them. No safety fact may be fabricated on the exempt path.
 
 **Owner: Milestone 6 / loweringRuntimeCorrect S1 and lowering proof owners.**
 H6-compare below transcribes the construct/failure comparison inputs of PLAN
-§6 into a durable handoff. These are **definition comparisons and conditions**,
+§6 into a durable handoff; conditions it attributes to the whitelist are the
+Milestone 1 gate's (see the decision ledger). These are **definition comparisons and conditions**,
 not proofs of S1 or a claim all inputs compile successfully. Definition owners:
 [source interpreter](../semantics/vyperInterpreterScript.sml),
 [value operations](../semantics/vyperValueOperationScript.sml),
@@ -645,7 +658,7 @@ unit simulation by themselves.
 | Calldata size, `bind_arguments` | CALLDATASIZE minimum, CALLDATALOAD/range checks | Canonical `calldata_encodes`; head sizes and every supported value shape, widths multiples of8. Establish alloca-aware arguments/vars relation. |
 | Successful return / fallthrough | MSTORE/ABI RETURN, STOP/typed INVALID | `tx_return_bytes` handles raw return or `return_bytes` wrapping; typing excludes typed fallthrough. |
 | Integer Add/Sub/Mul/Div/Mod / `evaluate_binop` | `compile_safe_add/sub/mul/div/mod` | Overflow, zero/div-min/-1 and range checks for signed/unsigned widths; prove matched runtime Abort, not merely equality on success. |
-| Exp / `evaluate_binop` | `compile_safe_pow` | Literal base or nonnegative literal exponent as whitelist requires; other cases excluded. |
+| Exp / `evaluate_binop` | `compile_safe_pow` | Literal base or nonnegative literal exponent, as the Milestone 1 whitelist required; the lowering refuses a negative literal exponent (`no_neg_exp_expr`/`no_neg_exp_fn`). |
 | Decimal Add/Sub/Div/Mod/Mul | Safe decimal paths | Include corrected minimum decimal product D12i, zero/overflow and scaling bounds. |
 | UnsafeAdd/Sub/Mul/Div | Word op and wrap/truncate | D12h corrected division-by-zero result0, MIN/-1 wrapping; preserve checked Div distinction. |
 | And/Or/XOr, ShR/ShL, comparisons/Min/Max | Bit ops and `compile_compare` | Unsigned shift count; ShL restricted to256 bits; Eq/NotEq on word types, not hash-compared strings. |
@@ -692,8 +705,9 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    `val_in_memory`. Still to add: full accounts and transient-storage
    equality and a `PtrVar` `__return_pc__`. Every body's locals are
    `PtrVar`s with their own `ALLOCA` (`declare_local`). Default arguments
-   stay at `MemLoc` offsets that `state_rel` does not relate, but they are
-   outside the supported subset (D25).
+   stay at `MemLoc` offsets that `state_rel` does not relate. The current gate
+   admits checked defaults; S1's grouped-default, `msg.gas`-default and
+   constant-name-default branches rest on `GATE_ADMISSION` lemmas.
 2. **Expressions.** Restate the expression lemmas over `run_blocks` in
    `unit.cu_context`, INVOKE-aware, and then prove them: name, binop, neg and
    the others needed by the supported subset. Existing local
