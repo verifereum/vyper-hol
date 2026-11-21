@@ -153,3 +153,16 @@ Proof
       irule shape_base_step_return >> simp[]) >>
   Cases_on `call_ty` >> simp_tac bool_ss [call_type_case_def] >> base_plain_emit_tac
 QED
+
+Theorem compile_raw_call_finish_base_shape_widen_mode:
+  !to_op data_ptr data_len gas_op value_op call_ty max_outsize out_val out_ptr internal.
+    shape_base_mode_step static internal compiler_label
+      (\st. EVERY (plain_operand st)
+        [to_op; data_ptr; data_len; gas_op; value_op; out_val; out_ptr])
+      (compile_raw_call_finish to_op data_ptr data_len gas_op value_op
+        call_ty max_outsize F out_val out_ptr)
+      (\v st. plain_operand st v)
+Proof
+  rpt gen_tac >> irule shape_base_step_static_imp_mode >>
+  irule compile_raw_call_finish_base_shape_widen
+QED

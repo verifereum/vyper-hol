@@ -205,15 +205,16 @@ fun mapping_index_bind_tac selection_cont =
         (mp_then Any MATCH_ACCEPT_TAC bodyFullTargetSubscriptTheory.expr_exit_INR_retype)) >>
   fs[exprSimDefsTheory.halt_exit_def];
 
-fun mapping_selection_tac base_result_typed =
+val mapping_selection_intro_tac =
   qx_genl_tac [`imarks`, `ires`, `fin`, `Gi`, `tni`, `it`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon fin.storage_trace) fin.storage_trace` by
     gvs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   `indexQ (storage_trace_horizon fin.storage_trace) ires fin Gi tni it /\
    ~it.vs_halted /\ fin.gas_obs = []` by metis_tac[] >>
   qpat_x_assum `indexQ _ _ _ _ _ _` mp_tac >>
-  simp[Abbr `indexQ`, NoAsms] >> strip_tac >> gvs[] >>
-  base_result_typed >>
+  simp[Abbr `indexQ`, NoAsms] >> strip_tac >> gvs[];
+
+val mapping_selection_key_tac =
   `expr_type e2 = kt /\ hashmap_key_type kt` by
     metis_tac[mapping_subscript_key_type] >>
   `bind (eval_expr cx e2) (read_result cx)
@@ -460,14 +461,15 @@ Resume subscript_map_map_full[mapping_index]:
 QED
 
 Resume subscript_map_map_full[mapping_selection]:
-  mapping_selection_tac
-    (`kt' = kt /\ vt = HashMapT ikt ivt` by
+  mapping_selection_intro_tac >>
+  `kt' = kt /\ vt = HashMapT ikt ivt` by
       (qpat_assum `eval_expr cx e1 (_ with gas_obs := _) = _`
          (mp_then Any mp_tac expr_map_pre_eval_result) >>
        disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
        simp[] >> strip_tac >>
        first_x_assum (qspec_then `HashMapT kt (HashMapT ikt ivt)` mp_tac) >>
-       simp[vyperPlaceResultTypingTheory.eval_result_typed_mapping])) >>
+       simp[vyperPlaceResultTypingTheory.eval_result_typed_mapping]) >>
+  mapping_selection_key_tac >>
   mapping_suffix_tac >> mapping_frames_tac >> mapping_pure_frame_tac >>
   mapping_map_package_tac
 QED
@@ -521,14 +523,15 @@ Resume subscript_map_full[leaf_index]:
 QED
 
 Resume subscript_map_full[leaf_selection]:
-  mapping_selection_tac
-    (`kt' = kt /\ vt = declared_vt` by
+  mapping_selection_intro_tac >>
+  `kt' = kt /\ vt = declared_vt` by
       (qpat_assum `eval_expr cx e1 (_ with gas_obs := _) = _`
          (mp_then Any mp_tac expr_map_pre_eval_result) >>
        disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
        simp[] >> strip_tac >>
        first_x_assum (qspec_then `HashMapT kt declared_vt` mp_tac) >>
-       simp[vyperPlaceResultTypingTheory.eval_result_typed_mapping])) >>
+       simp[vyperPlaceResultTypingTheory.eval_result_typed_mapping]) >>
+  mapping_selection_key_tac >>
   mapping_suffix_tac >> mapping_frames_tac >> mapping_pure_frame_tac >>
   `~well_typed_expr env e1` by
     metis_tac[vyperTypeExprResultTheory.well_typed_expr_not_hashmap_place] >>

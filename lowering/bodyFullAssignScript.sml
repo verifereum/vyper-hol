@@ -11229,14 +11229,18 @@ Proof
      (qe with vs_inst_idx := q.vs_inst_idx + LENGTH pS) Gf tf` by
     (qpat_assum `!k. inst_seq_ptr _ _ _ _ _ Ge te inc _ Gf tf`
        (qspec_then `q.vs_inst_idx + LENGTH pS` ACCEPT_TAC)) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pS` by
+    (Cases_on `imm` >>
+     simp[NoAsms, Abbr `pS`, Abbr `p5`, Abbr `p4`, Abbr `p3`, Abbr `m1`, Abbr `ld`,
+          Abbr `m2`, Abbr `ad`, Abbr `stores`, mk_inst_def, is_terminator_def]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) inc` by
+    simp[NoAsms, Abbr `inc`, mk_inst_def, is_terminator_def] >>
   `run_inst_seq (pS ++ inc) q = OK (qf with vs_inst_idx := 0) /\
    inst_seq_ptr D lo ctx func PG G tn (pS ++ inc) q Gf tf` by
     (qpat_assum `!xs ys u v H tm K tk. _ ==> _` (qspecl_then [`pS`,`inc`,`qe`,`qf`] mp_tac) >>
      disch_then (drule_at (Pat `inst_seq_ptr _ _ _ _ _ G tn pS _ _ _`) o SPEC_ALL) >>
      disch_then (drule_at (Pat `inst_seq_ptr _ _ _ _ _ Ge te inc _ _ _`) o SPEC_ALL) >>
-     simp[] >> Cases_on `imm` >>
-     simp[Abbr `pS`, Abbr `p5`, Abbr `p4`, Abbr `p3`, Abbr `m1`, Abbr `ld`, Abbr `m2`,
-          Abbr `ad`, Abbr `stores`, Abbr `inc`, mk_inst_def, is_terminator_def]) >>
+     simp[]) >>
   qabbrev_tac `pI = pS ++ inc` >>
   `((qf with vs_inst_idx := 0) with vs_inst_idx := q.vs_inst_idx + LENGTH pI) = qf1` by
     (Cases_on `imm` >>
@@ -11244,10 +11248,7 @@ Proof
           Abbr `m2`, Abbr `ad`, Abbr `stores`, Abbr `inc`, Abbr `ci`, Abbr `qf1`]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pI /\
    EVERY (\i. ~is_terminator i.inst_opcode) setc` by
-    (Cases_on `imm` >>
-     simp[Abbr `pI`, Abbr `pS`, Abbr `p5`, Abbr `p4`, Abbr `p3`, Abbr `m1`, Abbr `ld`,
-          Abbr `m2`, Abbr `ad`, Abbr `stores`, Abbr `inc`, Abbr `setc`, mk_inst_def,
-          is_terminator_def]) >>
+    simp[Abbr `pI`, EVERY_APPEND, Abbr `inc`, Abbr `setc`, mk_inst_def, is_terminator_def] >>
   `run_inst_seq (pI ++ setc) q = OK (qg with vs_inst_idx := 0) /\
    inst_seq_ptr D lo ctx func PG G tn (pI ++ setc) q Gg tg` by
     (conj_tac
@@ -18116,15 +18117,21 @@ fun residual_memory_word_write g =
   (irule gas_outcome_full_post_mono >>
   irule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)
     augAssignFullWritebackTheory.augassign_memory_writeback_full >>
-  goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `store_lays_out _ _ _`)) >>
-  simp[] >>
+  qpat_assum `emit_void MSTORE [FST r;op] su = ((),sb)`
+    (irule_at (Pat `emit_void MSTORE _ _ = _`)) >>
+  qpat_assum `write_place cx (MemoryPlace id path) v ee = (q,r')`
+    (irule_at (Pat `write_place _ _ _ _ = _`)) >>
+  qpat_assum `place_ptr_rel _ _ z (PlaceR (MemoryPlace id path)) w (SOME LocMemory) (Type ty)`
+    (irule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
+  qpat_assum `store_lays_out tu' tu' v`
+    (irule_at (Pat `store_lays_out _ _ _`))) g;
+
+fun residual_memory_word_posts g =
+  (simp[] >>
   qexistsl [`tops`,`tn0`,`sa`,`s0`,`SND (SND r)`,`FST (SND r)`,`lctx`,`es`,
             `env`,`d`,`cenv`,`\H res ee gt r. F`,`G0`] >>
   simp[pairTheory.PAIR] >>
-  (conj_tac >- (residual_word_entry_frame >> gvs[]) >>
+  (conj_tac >- (residual_word_entry_frame >> first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >> qexists `cenv` >> simp[] >>
   first_assum ACCEPT_TAC)) g;
 
@@ -18137,7 +18144,8 @@ QED
 Resume body_assign_other_nonempty_target_full[memory_word]:
   residual_memory_word_setup >>
   residual_memory_word_source >>
-  residual_memory_word_write
+  residual_memory_word_write >>
+  residual_memory_word_posts
 QED
 
 Resume body_assign_other_nonempty_target_full[saved_storage_word]:
@@ -18149,7 +18157,8 @@ QED
 Resume body_assign_other_nonempty_target_full[saved_memory_word]:
   residual_memory_word_setup >>
   residual_memory_word_source >>
-  residual_memory_word_write
+  residual_memory_word_write >>
+  residual_memory_word_posts
 QED
 
 Resume body_assign_other_nonempty_target_full[snapshot_nonword]:

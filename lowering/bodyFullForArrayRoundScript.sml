@@ -1657,11 +1657,20 @@ Resume for_nonslot_array_entry_full[entry_control]:
   qabbrev_tac `dyn = ?cap. bd = Dynamic cap` >>
   qabbrev_tac `writes = if dyn then {idx;invalid;valid} else {idx}` >>
   `!x. not_fresh_at saL x ==> x NOTIN writes` by
-    (Cases_on `bd` >> gvs[Abbr `dyn`, Abbr `writes`] >> metis_tac[]) >>
+    (qpat_assum `EVERY (\p. ~not_fresh_at saL p) [idx;done_var;next_var]` mp_tac >>
+     qpat_assum `(case bd of Fixed _ => T | Dynamic _ => _)` mp_tac >>
+     Cases_on `bd` >> simp[NoAsms, Abbr `dyn`, Abbr `writes`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `!x. len_op = Var x ==> x NOTIN writes` by metis_tac[] >>
   `dyn ==> ALL_DISTINCT [idx;invalid;valid] /\ ((?x. len_op = Var x) \/ (?w. len_op = Lit w))` by
-    (Cases_on `bd` >> gvs[Abbr `dyn`] >> Cases_on `len_op` >>
-     gvs[] >> metis_tac[fragFuelExprHelpersTheory.compile_ptr_load_not_label]) >>
+    (qpat_assum `(case bd of Fixed _ => T | Dynamic _ => _)` mp_tac >>
+     qpat_assum `(case bd of Fixed _ => _ | Dynamic _ => compile_ptr_load _ _ _ _)
+                  sbExpr = (len_op,saL)` mp_tac >>
+     Cases_on `bd` >> simp[NoAsms, Abbr `dyn`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rpt strip_tac >> simp[] >>
+     Cases_on `len_op` >> simp[] >>
+     metis_tac[fragFuelExprHelpersTheory.compile_ptr_load_not_label]) >>
   `a.vs_labels = u.vs_labels` by
     (qpat_assum `a with <|vs_vars := _; vs_allocas := _; vs_alloca_next := _; vs_inst_idx := _|> = u`
        (mp_tac o AP_TERM ``\s:venom_state. s.vs_labels``) >> simp[]) >>
