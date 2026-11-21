@@ -2351,13 +2351,14 @@ Theorem alloca_suffix_acc_all[local]:
   alloca_suffix k a
     (SND (compile_acc cfn cenv e ak a))
 Proof
-  strip_tac >> Cases_on `ak` >>
+  strip_tac >> Cases_on `ak` >> Cases_on `is_self_addr e` >>
   simp[compile_acc_def, alloca_suffix_lower_value,
        alloca_suffix_emit_inst] >>
-  rpt (irule alloca_suffix_pair_bind_floor >>
-       simp[alloca_suffix_emit_op, alloca_suffix_lower_value] >>
-       rpt strip_tac >> simp[alloca_suffix_refl,
-                             alloca_suffix_emit_inst])
+  TRY (rpt (irule alloca_suffix_pair_bind_floor >>
+            simp[alloca_suffix_emit_op, alloca_suffix_lower_value] >>
+            rpt strip_tac >> simp[alloca_suffix_refl,
+                                  alloca_suffix_emit_inst])) >>
+  simp[alloca_suffix_emit_op]
 QED
 
 Theorem alloca_suffix_env_var[local]:
