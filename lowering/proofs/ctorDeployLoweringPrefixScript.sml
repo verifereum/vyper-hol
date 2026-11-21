@@ -2,7 +2,7 @@
 Theory ctorDeployLoweringPrefix
 Ancestors
   ctorDeployLoweringDefs o1PassContract vyperTypeContractSoundness
-  vyperContext e2eDefs vyperInterpreter ctorDeployLoweringCode ctorDeployInitcode deployUnitProducers ctorDeployShape
+  vyperContext e2eDefs vyperInterpreter ctorDeployLoweringCode ctorDeployInitcode deployUnitProducers ctorDeployMemoryRunMemEntryLabel
 
 Theorem deploy_prefix_short_parse:
   parse_code 0 FEMPTY [91w;96w;32w] =
@@ -387,12 +387,7 @@ Theorem deploy_prefix_member_entry_label:
   MEM fn unit.cu_context.ctx_functions ==>
   fn_entry_label fn = SOME fn.fn_name
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all ctorDeployShapeTheory.lower_vyper_deploy_unit_source_unit_ok >>
-  simp[unitShapeDefsTheory.o1_source_unit_ok_def,
-       unitShapeDefsTheory.unit_shape_ok_def,
-       unitShapeDefsTheory.fn_shape_ok_def, listTheory.EVERY_MEM] >>
-  metis_tac[]
+  rpt strip_tac >> drule_all ctor_checked_member_entry_label >> simp[]
 QED
 
 Theorem deploy_prefix_ctor_entry_label:
