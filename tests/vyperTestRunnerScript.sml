@@ -159,11 +159,10 @@ Definition compute_vyper_args_def:
     then let
       abiArgsTup = vyper_abi_dec abiTupTy padded 0;
       vyArgsTup = abi_to_vyper tenv (TupleT vyTys) abiArgsTup;
-      vyArgsTv = evaluate_type tenv (TupleT vyTys);
-      vyArgs = (case OPTION_BIND vyArgsTv
-                  (λtv. OPTION_BIND vyArgsTup (extract_elements tv))
-                  of NONE => [] | SOME ls => ls)
-      in SOME vyArgs else NONE;
+      vyArgsTv = evaluate_type tenv (TupleT vyTys)
+      in OPTION_BIND vyArgsTv
+           (λtv. OPTION_BIND vyArgsTup (extract_elements tv))
+    else NONE;
   in
     (argsOpt, tenv, SND vyTysRet)
 End
@@ -186,6 +185,63 @@ val () = increment_account_nonce_def
   |> SRULE [combinTheory.o_DEF, combinTheory.C_DEF]
   |> cv_auto_trans;
 
+(* The runner's verdict when compute_vyper_args rejects a call's or a
+   deployment's calldata. The interpreter never runs on it, and no other code
+   raises this message. Vyper's entry also reverts on such calldata, so the
+   verdict satisfies an expected failure. *)
+Definition calldata_rejected_msg_def:
+  calldata_rejected_msg = "runner: ABI decoder rejected calldata"
+End
+
+val () = cv_auto_trans calldata_rejected_msg_def;
+
+(* RuntimeError messages that are Vyper's own run-time failures (reverts the
+   language defines), by exact match. Any other RuntimeError is an internal
+   error of the interpreter or the runner and fails a test that expects a
+   failure. Where each is raised: *)
+Definition contract_failure_messages_def:
+  contract_failure_messages = [
+    (* semantics/vyperValueOperationScript.sml *)
+    "bounded_int_op bound"; "bounded_decimal_op"; "Decimal Mul bound";
+    "Exp~"; "Div0"; "Mod0"; "ewv bound"; "ewv neg"; "evaluate_slice range";
+    "convert uint bound"; "convert int flag bound"; "convert BytesV bound";
+    "convert bytes string"; "convert string bytes";
+    "convert string string bound";
+    (* semantics/vyperContextScript.sml *)
+    "AddMod division by zero"; "MulMod division by zero";
+    "evaluate_block_hash"; "evaluate_extract32 start";
+    "evaluate_extract32 bytesM"; "evaluate_extract32 address clamp";
+    (* semantics/vyperABIScript.sml, abi_decode *)
+    "abi_decode invalid"; "abi_decode conversion";
+    (* semantics/vyperStateScript.sml *)
+    "evaluate_subscripts array_index"; "array fixed oob";
+    "array dynamic length oob"; "pop empty storage array";
+    "pop empty memory array"; "append full storage array";
+    (* semantics/vyperCreateScript.sml *)
+    "create source has no deployable code"; "create address collision";
+    (* semantics/vyperInterpreterScript.sml; "call lookup_function" is
+       external dispatch finding no function and no __default__ *)
+    "not Payable"; "no range"; "For too long"; "send failed";
+    "ExtCall target has no code"; "call lookup_function";
+    (* raw_call_evm below: the EVM call reverted *)
+    "raw_call_evm reverted";
+    calldata_rejected_msg]
+End
+
+val () = cv_auto_trans contract_failure_messages_def;
+
+(* Whether an exception satisfies a trace that expects the call or the
+   deployment to fail. *)
+Definition expected_failure_def:
+  expected_failure (AssertException _) = T ∧
+  expected_failure (Error (RevertData _)) = T ∧
+  expected_failure (Error (RuntimeError msg)) =
+    MEM msg contract_failure_messages ∧
+  expected_failure _ = F
+End
+
+val () = cv_auto_trans expected_failure_def;
+
 Definition run_deployment_def:
   run_deployment am dt = let
     sns = compute_selector_names dt.contractAbi;
@@ -194,7 +250,7 @@ Definition run_deployment_def:
     name = find_deploy_function_name ts;
     argTys = find_args_by_name name dt.contractAbi;
     ar = compute_vyper_args all_mods ts Deploy name argTys dt.callData;
-    res = case FST ar of NONE => INR (Error $ RuntimeError "run_deployment args")
+    res = case FST ar of NONE => INR (Error $ RuntimeError calldata_rejected_msg)
           | SOME args => let
     tx = <| sender := dt.deployer
           ; target := dt.deployedAddress
@@ -375,7 +431,7 @@ Definition run_call_def:
     tenv = FST (SND ar);
     retTypes = SND (SND ar);
   in
-    case FST ar of NONE => ((INR (Error $ RuntimeError "run_call args"), am),
+    case FST ar of NONE => ((INR (Error $ RuntimeError calldata_rejected_msg), am),
                             (retTys, (retTypes, (FEMPTY, F))))
   | SOME args => let
     tx = <| sender := ct.sender
@@ -573,8 +629,9 @@ Definition run_trace_def:
                       ((lookup_account dt.deployedAddress am'.accounts)
                         with code := dt.runtimeBytecode)))
               | err => err
-            else if ISR res then INL am
-            else INR (Error $ RuntimeError "deployment success");
+            else (case res of
+                  | INR ex => if expected_failure ex then INL am else INR ex
+                  | INL _ => INR (Error $ RuntimeError "deployment success"));
       res = case res of
               INL am' => INL (increment_account_nonce dt.deployer am')
             | INR e => INR e;
@@ -601,8 +658,9 @@ Definition run_trace_def:
                   (let rr = raw_call_evm am ct in
                   let res = FST rr; am' = SND rr in
                   case res of
-                  | INR ex => if IS_NONE ct.expectedOutput then INL am'
-                              else INR ex
+                  | INR ex =>
+                      if IS_NONE ct.expectedOutput ∧ expected_failure ex
+                      then INL am' else INR ex
                   | INL out =>
                       (case ct.expectedOutput of
                        | NONE => INR (Error $ RuntimeError "error expected")
@@ -614,12 +672,12 @@ Definition run_trace_def:
         call_res = FST cr;
         am = SND call_res in
        case FST call_res
-       of (* TODO(test-semantics): decide whether AssertException should satisfy expected failure traces. *)
+       of
         | INR HaltException =>
             if ct.expectedOutput = SOME [] then INL am
             else INR (Error $ RuntimeError "halt output mismatch")
-       | INR ex => if IS_NONE ct.expectedOutput then INL am
-                   else INR ex
+       | INR ex => if IS_NONE ct.expectedOutput ∧ expected_failure ex
+                   then INL am else INR ex
        | INL v =>
        case ct.expectedOutput
          of NONE => INR (Error $ RuntimeError "error expected")
