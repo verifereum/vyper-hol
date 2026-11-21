@@ -74,6 +74,26 @@ jobs:
           TMPDIR: ${{ runner.temp }}
         run: holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps
 
+      - name: Byte-parity certificate theories are listed for holbuild check
+        run: |
+          # Every built theory that stores a *_matches_python* theorem, however
+          # its script stores it, needs a whole-theory selector in
+          # .github/holbuild-check-targets.txt.
+          certs=$(grep -rlE --include='*Theory.sig' --exclude-dir=.hol \
+                    "^ *val [A-Za-z0-9_']*_matches_python[A-Za-z0-9_']* : thm" .holbuild/obj |
+                  sed 's#.*/##; s#\.sig$##' | sort -u) || true
+          if [ -z "$certs" ]; then
+            echo "Found no built theory storing a *_matches_python* theorem" >&2
+            exit 1
+          fi
+          missing=$(comm -23 <(printf '%s\n' "$certs") \
+                      <(grep -vE '^#|:' .github/holbuild-check-targets.txt | sort -u))
+          if [ -n "$missing" ]; then
+            echo "Add these certificate theories to .github/holbuild-check-targets.txt:" >&2
+            echo "$missing" >&2
+            exit 1
+          fi
+
       - name: Check listed theories and theorems for cheats and axioms
         run: holbuild check $(grep -v '^#' .github/holbuild-check-targets.txt)
 
