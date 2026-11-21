@@ -1,6 +1,6 @@
 Theory exprSimAbiEncodeFinish
 Ancestors
-  abiOperandLiveUpdateProps
+  abiDecoderLoopRegisters
   abiBuiltinEncodeCorrect abiBuiltinEncodeCode abiEncoderSequence
   abiEncoderRegisteredEffect abiDecoderReentry abiDecoderDynamicLoopSetup
   abiEncoderWrites abiEncoderWindowLookup emitHelperProps exprLoweringProps
@@ -65,7 +65,7 @@ Proof
         (conj_tac
          >- (simp[Abbr `prepared`] >>
              pure_rewrite_tac[stringTheory.STRCAT, APPEND] >>
-             simp[abi_encode_live_update_open]) >>
+             simp[abi_decoder_generated_update_operand]) >>
          simp[Abbr `prepared`, word_add_n2w,
            eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
       drule_all abi_encode_store_run_open >> strip_tac >>
@@ -88,7 +88,7 @@ Proof
       rpt strip_tac >>
       simp[Abbr `prepared`] >>
       pure_rewrite_tac[stringTheory.STRCAT, APPEND] >>
-      simp[abi_encode_live_update_open]) >>
+      simp[abi_decoder_generated_update_operand]) >>
   `mid_size = 0` by decide_tac >> gvs[abi_builtin_encode_finish_def] >> strip_tac >>
   drule_all abi_encode_store_run_open >> strip_tac >>
   qexists `mstore p (n2w len) initial` >>

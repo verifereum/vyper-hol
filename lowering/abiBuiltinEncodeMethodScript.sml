@@ -1,6 +1,6 @@
 Theory abiBuiltinEncodeMethod
 Ancestors
-  abiOperandLiveUpdateProps
+  abiDecoderLoopRegisters
   abiDecoderRange abiEncoderWindowLookup abiDecoderArrayHeader venomMemProps context
   abiBuiltinEncodeCode abiBuiltinEncodeCorrect abiBuiltinPrefix abiEncoderWrites
   abiDecoderReentry abiDecoderDynamicLoopSetup abiDecoderGuards abiDecoderFrameCompose
@@ -66,7 +66,7 @@ Proof
        mk_inst_def, w2n_n2w, eval_operand_def, LET_THM, ADD_COMM]) >>
   `!op. abi_decoder_operand_live st.cs_next_var op ==>
     eval_operand op t = eval_operand op s` by
-    (rpt strip_tac >> simp[Abbr `t`, abi_encode_live_update_open] >>
+    (rpt strip_tac >> simp[Abbr `t`, abi_decoder_generated_update_operand] >>
      Cases_on `FLOOKUP s.vs_allocas st.cs_next_id = NONE` >>
      Cases_on `op` >> simp[Abbr `allocated`, abi_builtin_allocate_state_def,
        eval_operand_def, lookup_var_def]) >>
@@ -91,7 +91,7 @@ Proof
     (irule step_ADD >> simp[]) >>
   qexists_tac `update_var (STRING #"%" (toString st.cs_next_var)) (a+b) s` >>
   simp[run_inst_seq_def, abi_decoder_address_frame_def,
-    abi_encode_live_update_open, update_var_def, eval_operand_def,
+    abi_decoder_generated_update_operand, update_var_def, eval_operand_def,
     lookup_var_def, FLOOKUP_UPDATE]
 QED
 

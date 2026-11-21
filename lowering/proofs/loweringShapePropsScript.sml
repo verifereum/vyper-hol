@@ -10934,7 +10934,7 @@ Resume compile_revert_with_custom_error_shape[payload]:
        `\st. plain_operand st buf_alloc.buf_operand` >>
      `!xs (ys : type list) st. EVERY (value_shape_ok st) xs ==>
        EVERY (value_shape_ok st o FST) (ZIP (xs,ys))` by
-       (Induct >> Cases_on `ys` >> simp[ZIP_def]) >>
+       metis_tac[EVERY_FST_ZIP] >>
      simp[stmt_shape_stable_plain, Abbr `buf_frame`, Abbr `args_frame`]) >>
   stmt_bind `\r st. plain_operand st r /\ plain_operand st encoded_len`
     `revert_offset`
@@ -11077,7 +11077,7 @@ Proof
   qmatch_goalsub_abbrev_tac `NULL data_rows` >>
   `!vs (tys : type list) st. EVERY (value_shape_ok st) vs ==>
     EVERY (value_shape_ok st o FST) (ZIP (vs,tys))` by
-    (Induct >> Cases_on `tys` >> simp[ZIP_def]) >>
+    metis_tac[EVERY_FST_ZIP] >>
   qabbrev_tac `data_frame = \st. cenv_shape_ok st cenv /\
                                   EVERY (value_shape_ok st o FST) data_rows` >>
   `shape_stable data_frame` by
