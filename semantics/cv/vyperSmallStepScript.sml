@@ -1,7 +1,7 @@
 Theory vyperSmallStep
 Ancestors
   arithmetic combin pair list While
-  vyperMisc vyperNsidFmap vyperValue vyperContext vyperState vyperCreate vyperInterpreter vyperABI
+  vyperMisc vyperValue vyperContext vyperState vyperCreate vyperInterpreter vyperABI
   vyperCallOutcome[ignore_grammar]
 Libs
   wordsLib
@@ -56,7 +56,6 @@ Datatype:
   | BuiltinK type builtin (type list) eval_continuation
   | SelfCodesizeK type builtin (type list) eval_continuation
   | CodeSliceK type num bool type type (type list) eval_continuation
-  | MembershipK type bool eval_continuation
   | LenK eval_continuation
   | TypeBuiltinK type_builtin type (type list) eval_continuation
   | CallSendK bool eval_continuation
@@ -157,9 +156,6 @@ Definition eval_expr_cps_def:
     (case type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st of
        (INR ex, st) => AK cx8 (ApplyExc ex) st k
      | (INL (), st) => if bt = Len then eval_expr_cps cx8 (HD es) st (LenK k)
-                       else if bt = Bop In ∨ bt = Bop NotIn then
-                         eval_exprs_cps cx8 es st
-                           (MembershipK (expr_type (EL 1 es)) (bt = Bop NotIn) k)
                        else if bt = Env MsgGas then
                          liftk cx8 ApplyTv
                            (do v <- next_gas_reading; return $ Value v od st) k
@@ -413,7 +409,6 @@ Definition apply_exc_def:
   apply_exc cx ex st (BuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (SelfCodesizeK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CodeSliceK _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (MembershipK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (LenK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TypeBuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK _ k) = AK cx (ApplyExc ex) st k ∧
@@ -595,13 +590,6 @@ Definition apply_vals_def:
     apply_vals cx (v::vs) st k ∧
   apply_vals cx vs st (StructLitK ks k) =
     apply_tv cx (Value $ StructV (ZIP (ks, vs))) st k ∧
-  apply_vals cx vs st (MembershipK ty neg k) =
-    liftk cx ApplyTv (do
-      type_check (LENGTH vs = 2) "Membership args";
-      tv <- lift_option_type (evaluate_type (get_tenv cx) ty) "Membership type";
-      v <- lift_sum $ evaluate_membership tv neg (EL 0 vs) (EL 1 vs);
-      return $ Value v
-    od st) k ∧
   apply_vals cx vs st (BuiltinK ty bt tys k) =
     liftk cx ApplyTv (do
       acc <- get_accounts;
@@ -1197,7 +1185,7 @@ Proof
 QED
 
 Theorem ordinary_eval_expr_cps_eq[local]:
-  bt <> Len /\ bt <> Env MsgGas /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+  bt <> Len /\ bt <> Env MsgGas /\
   ~is_self_codesize bt es /\
   ~(?n code_ty addr start len. bt = Slice n /\
     es = [Builtin code_ty (Acc Code) [addr];start;len]) ==>
@@ -1221,7 +1209,7 @@ Proof
 QED
 
 Theorem ordinary_eval_expr_eq[local]:
-  bt <> Len /\ bt <> Env MsgGas /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+  bt <> Len /\ bt <> Env MsgGas /\
   ~is_self_codesize bt es /\
   ~(?n code_ty addr start len. bt = Slice n /\
     es = [Builtin code_ty (Acc Code) [addr];start;len]) ==>
@@ -1322,7 +1310,7 @@ Proof
 QED
 
 Theorem cps_builtin_ordinary[local]:
-  bt <> Len /\ bt <> Env MsgGas /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+  bt <> Len /\ bt <> Env MsgGas /\
   ~is_self_codesize bt es /\
   ~(?n code_ty addr start len. bt = Slice n /\
     es = [Builtin code_ty (Acc Code) [addr];start;len]) /\
@@ -1346,41 +1334,6 @@ Proof
        apply_exc_def, bind_def, ignore_bind_def, liftk1, return_def,
        get_accounts_def] >>
   rpt (CASE_TAC >> simp[return_def])
-QED
-
-Theorem cps_builtin_membership[local]:
-  (bt = Bop In \/ bt = Bop NotIn) /\
-  (!r. type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st = (INL (),r) ==>
-    !s k. cont (eval_exprs_cps cx es s k) =
-      cont (liftk cx ApplyVals (eval_exprs cx es s) k)) ==>
-  cont (eval_expr_cps cx (Builtin ty bt es) st k) =
-  cont (liftk cx ApplyTv (eval_expr cx (Builtin ty bt es) st) k)
-Proof
-  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
-  `bt <> Len` by (strip_tac >> fs[]) >>
-  pure_once_rewrite_tac [eval_expr_cps_def, evaluate_def] >>
-  qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
-  qpat_assum `bt = Bop In \/ bt = Bop NotIn` (fn th => rewrite_tac[th]) >>
-  simp[ignore_bind_def, bind_def] >>
-  Cases_on `type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st` >>
-  Cases_on `q` >> simp[liftk1, bind_def] >>
-  Cases_on `x` >> fs[] >>
-  Cases_on `eval_exprs cx es r` >> Cases_on `q` >>
-  simp[liftk1, bind_def] >>
-  simp[cont_def, Once OWHILE_THM, stepk_def, apply_vals_def,
-       apply_exc_def, bind_def, ignore_bind_def, liftk1, return_def] >>
-  rename1 `eval_exprs cx es _ = (INL vs,r2)` >>
-  Cases_on `type_check (LENGTH vs = 2) "Membership args" r2` >>
-  rename1 `type_check _ _ _ = (tc_res,r3)` >>
-  Cases_on `tc_res` >> simp[] >>
-  Cases_on `lift_option_type (evaluate_type (get_tenv cx) (expr_type (EL 1 es)))
-              "Membership type" r3` >>
-  rename1 `lift_option_type _ _ _ = (ty_res,r4)` >>
-  Cases_on `ty_res` >> simp[] >>
-  qmatch_goalsub_abbrev_tac `lift_sum mres r4` >>
-  Cases_on `lift_sum mres r4` >>
-  rename1 `lift_sum _ _ = (m_res,r5)` >>
-  Cases_on `m_res` >> simp[]
 QED
 
 Theorem eval_cps_aux:
@@ -1882,14 +1835,6 @@ Proof
         gvs[] >> pure_rewrite_tac [GSYM liftk1] >>
         irule cps_builtin_len >> rpt strip_tac >>
         first_x_assum drule_all >> simp[liftk1]) >>
-    Cases_on `bt = Bop In \/ bt = Bop NotIn`
-    >- (rpt (PRED_ASSUM (fn tm => is_forall tm andalso not
-          (can (find_term (fn t => same_const t ``Bop`` )) tm)) kall_tac) >>
-        pure_rewrite_tac [GSYM liftk1] >>
-        irule cps_builtin_membership >> simp[] >> rpt strip_tac >>
-        qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ (_ \/ _) ==> _`
-          (qspecl_then [`st`, `()`, `r`] mp_tac) >>
-        simp[liftk1]) >>
     Cases_on `is_self_codesize bt es`
     >- (pure_rewrite_tac [GSYM liftk1] >>
         irule cps_builtin_self_codesize >>
@@ -2433,15 +2378,3 @@ Proof
   simp[Once OWHILE_THM] >> IF_CASES_TAC >>
   Cases_on `res` >> gvs[] >> simp[fromvalsk_def]
 QED
-
-
-
-
-
-
-
-
-
-(* CV validity only: expression evaluation reaches DoneK.  Registering this
-   precondition does not replace the CPS computation by its big-step result.
-   Keep it after existing translations so their equations are unchanged. *)
