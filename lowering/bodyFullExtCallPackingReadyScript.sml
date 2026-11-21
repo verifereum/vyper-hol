@@ -3,6 +3,7 @@ Ancestors
   bodyFullExtCallPacking bodyFullExtCallEncodeTail bodyFullExtCallSelectorReady
   bodyFullExtCallDirectStart bodyFullExtCallDirectLayout
   bodyFullExtCallDirectEncode bodyFullExtCallDirectRow bodyFullExtCallDirectState
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   localPtrsProps abiEncodeValuesMetadata abiDecodeRanges abiDecoderMembers
   bodyFullIntCallReturnFrame bodyPtrBytestringBuiltinsWindowGhost
   exprLoweringProps exprSimWordArgs wordArgsPtr exprSimProps exprSimExtCallCase
@@ -84,7 +85,7 @@ Theorem extcall_request_packing_ready:
   emit_op ADD [ba.buf_operand;Lit 28w] sf = (off,sp) /\
   fn_has_code se sb func /\ fn_has_code sb sm func /\
   fn_has_code sm sf func /\ fn_has_code sf sp func /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\
   (if abi > cap then abi else cap) + 32 < dimword (:256) /\
   (?H. valid_horizon cx st0 H ee.storage_trace) /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -349,6 +350,12 @@ Resume extcall_request_packing_ready[nonempty]:
   `read_memory (w2n rw+32) (LENGTH bytes) q = bytes` by
     (simp_tac bool_ss [memoryReadPropsTheory.read_memory_eq_mem_bytes_at] >>
      first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp q` by
+    (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx ee q /\ _`
+       (qspec_then `HH` (drule_then (mp_tac o CONJUNCT1))) >>
+     MATCH_ACCEPT_TAC
+       bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   mp_tac (Q.INST [`a` |-> `enc_end`,`b` |-> `sf`,`c` |-> `sp`,
     `p` |-> `w2n (rw:bytes32)`,`root` |-> `r`,`bs` |-> `bytes`,`selector` |-> `bs`,
     `fn` |-> `func`,`capacity` |-> `n`,`s` |-> `q`,`G` |-> `Gq`,`tn` |-> `tq`]
