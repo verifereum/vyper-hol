@@ -6081,6 +6081,8 @@ Proof
     (qx_choose_then `ilen` (qx_choose_then `rt` (qx_choose_then `before`
     (qx_choose_then `old` (qx_choose_then `entry`
     (qx_choose_then `final` strip_assume_tac))))))))))))))) >>
+  qpat_x_assum `set_internal_package_target _ (package_internal_fn _ _ _ _ _ (subst_consts_fn _ _)) = _`
+    (assume_tac o REWRITE_RULE [constSubstTheory.subst_consts_fn_def]) >>
   `nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot` by
     (strip_tac >> drule_all bodySimTheory.body_inv_nonreentrant_slot >> simp[]) >>
   drule_all args_failed_lock_source >> strip_tac >>
@@ -6128,6 +6130,17 @@ Proof
   `fn_has_code lock_start final callee` by metis_tac[fn_has_code_split] >>
   qpat_assum `label = internal_fn_label _ _ _ _`
     (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th])) >>
+  `set_internal_package_target cenv.ce_target
+      (package_internal_fn tops T (K global_nonreentrant_slot) cx.in_deploy
+        (if cx.in_deploy then imm_len tops else 0)
+        (mut,T,rr,name,args,dflts,ret,ss)) =
+    (label,ce,params,has_rb,T,global_nonreentrant_slot,T,mut = View,ctor,ilen,ss,rt)` by
+    (qpat_assum `set_internal_package_target _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[compileVyperTheory.package_internal_fn_def,
+          compileVyperTheory.set_internal_package_target_def,
+          entryDispatchPropsTheory.build_compile_env_subst_consts_stmts] >>
+     Cases_on `cx.in_deploy` >> simp[]) >>
   drule_all intcall_args_capture_materialization_pre >>
   disch_then (qx_choose_then `fixed` (qx_choose_then `Gf`
     (qx_choose_then `tnf` (qx_choose_then `mr` strip_assume_tac)))) >>
@@ -6997,12 +7010,16 @@ Proof
     (qx_choose_then `actual_ilen` (qx_choose_then `actual_rt` (qx_choose_then `before`
     (qx_choose_then `old` (qx_choose_then `entry`
     (qx_choose_then `final` strip_assume_tac))))))))))))))) >>
+  qpat_x_assum `set_internal_package_target _ (package_internal_fn _ _ _ _ _ (subst_consts_fn _ _)) = _`
+    (assume_tac o REWRITE_RULE [constSubstTheory.subst_consts_fn_def]) >>
   `actual_params = params /\ actual_ce.ce_vars = ce.ce_vars` by
     (qpat_assum `set_internal_package_target _ (package_internal_fn _ T _ _ _ _) = _` mp_tac >>
      qpat_assum `set_internal_package_target _ (package_internal_fn _ use_trans _ _ _ _) = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[compileVyperTheory.set_internal_package_target_def, compileVyperTheory.package_internal_fn_def,
-          pairTheory.UNCURRY, compileVyperTheory.update_cenv_nonreentrant_def, compileVyperTheory.build_compile_env_def] >>
+          pairTheory.UNCURRY, compileVyperTheory.update_cenv_nonreentrant_def,
+          entryDispatchPropsTheory.build_compile_env_subst_consts_stmts,
+          compileVyperTheory.build_compile_env_def] >>
      rpt strip_tac >> gvs[]) >>
   `!ps. internal_stack_size actual_ce ps = internal_stack_size ce ps` by
     (Induct >> simp[intCallCalleeTheory.internal_stack_size_def] >> Cases >> simp[intCallCalleeTheory.internal_stack_size_def]) >>
