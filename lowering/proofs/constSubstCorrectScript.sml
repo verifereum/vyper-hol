@@ -3566,6 +3566,9 @@ Resume constant_expr_replay_aux[builtin]:
      rename1 `code_slice_source bt es = SOME operands` >>
      PairCases_on `operands` >>
      gvs[code_slice_source_SOME, constant_expr_def, constant_builtin_def]) >>
+  `~is_self_codesize bt es` by
+    (Cases_on `bt` >> gvs[is_self_codesize_def, constant_builtin_def]) >>
+  asm_simp_tac bool_ss [] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
        lift_sum_def, get_accounts_def, return_def,
        precompile_call_success_def]
@@ -4975,7 +4978,7 @@ Proof
   Cases_on `builtin_args_length_ok Sha256 (LENGTH es)` >> simp[] >>
   Cases_on `q` >> simp[bind_def] >>
   Cases_on `evaluate_builtin cx r.accounts ty Sha256 (MAP expr_type es) x` >>
-  simp[lift_sum_def, bind_def, precompile_call_success_def, check_def,
+  simp[is_self_codesize_def, lift_sum_def, bind_def, precompile_call_success_def, check_def,
        get_accounts_def, assert_def, return_def, raise_def]
 QED
 
@@ -5803,7 +5806,7 @@ Proof
   AP_TERM_TAC >> ABS_TAC >>
   AP_TERM_TAC >> ABS_TAC >>
   Cases_on `evaluate_builtin cx acc ct (Acc Code) [expr_type a] avs` >>
-  simp[FUN_EQ_THM, bind_def, lift_sum_def, return_def, raise_def]
+  simp[FUN_EQ_THM, is_self_codesize_def, bind_def, lift_sum_def, return_def, raise_def]
 QED
 
 Theorem const_subst_code_source[local]:
@@ -6066,7 +6069,16 @@ Proof
       >- (irule const_computations_related_refl >> simp[]) >>
       rpt strip_tac >> BETA_TAC >>
       `s = st` by (gvs[type_check_def, assert_def, return_def, raise_def, AllCaseEqs()]) >>
-      gvs[] >> Cases_on `bi = Len`
+      gvs[] >>
+      `!e. is_self_addr (subst_consts_expr env' e) = is_self_addr e` by
+        metis_tac[const_subst_self_addr] >>
+      `is_self_codesize bi (MAP (subst_consts_expr env') es) =
+       is_self_codesize bi es` by
+        (Cases_on `bi` >> gvs[is_self_codesize_def] >>
+         Cases_on `es` >> gvs[is_self_codesize_def] >>
+         Cases_on `t` >> gvs[] >>
+         metis_tac[]) >>
+      Cases_on `bi = Len`
       >- (gvs[] >> Cases_on `es` >>
           gvs[well_typed_builtin_app_def, well_typed_expr_def] >>
           simp_tac bool_ss [GSYM vyperStateTheory.bind_assoc] >>
@@ -6122,7 +6134,8 @@ Proof
       >- (irule const_computations_related_prefix >> reverse conj_tac
           >- (irule const_computations_related_prefix >> reverse conj_tac
               >- (simp[const_computations_related_eq] >>
-                  irule const_subst_code_source >> metis_tac[]) >>
+                  drule_all const_subst_code_source >>
+                  simp[const_subst_self_addr]) >>
               rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
           rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
       rpt strip_tac >> irule const_computations_related_refl >>
