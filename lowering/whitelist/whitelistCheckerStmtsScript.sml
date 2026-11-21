@@ -248,7 +248,7 @@ QED
 
 (* ===== Logs and reasons ===== *)
 
-Theorem type_stmt_log_supported[local]:
+Theorem type_stmt_log_supported_env[local]:
   checker_env_ok tops env /\ checker_stmt_env_ok tops env /\
   type_stmt env ret (Log id es) = SOME env' ==>
   supported_log tops id es
@@ -388,7 +388,7 @@ Proof
   >~ [`Assign`] >- (simp[supported_stmt_def] >> metis_tac[type_stmt_assign_supported])
   >~ [`AugAssign`] >- metis_tac[type_stmt_augassign_supported]
   >~ [`Append`] >- (simp[supported_stmt_def] >> metis_tac[type_stmt_append_supported])
-  >~ [`Log`] >- (simp[supported_stmt_def] >> metis_tac[type_stmt_log_supported])
+  >~ [`Log`] >- (simp[supported_stmt_def] >> metis_tac[type_stmt_log_supported_env])
   >~ [`AnnAssign`]
   >- (gvs[type_stmt_def, supported_stmt_def, AllCaseEqs()] >>
       metis_tac[checker_supported_expr, checker_env_ok_def,

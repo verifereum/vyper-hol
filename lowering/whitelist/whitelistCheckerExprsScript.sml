@@ -398,7 +398,7 @@ QED
 
 (* ===== Places ===== *)
 
-Theorem check_value_type_subscript[local]:
+Theorem check_value_type_subscript_child[local]:
   check_value_type tenv vt /\ subscript_vtype vt kty = SOME vt' ==>
   check_value_type tenv vt'
 Proof
@@ -509,7 +509,7 @@ Theorem checker_subscript_pure_place[local]:
   supported_pure_expr tops (Subscript ty e1 e2) /\ checker_agg_ok tops ty
 Proof
   strip_tac >> simp[supported_pure_expr_def] >>
-  drule_all subscript_place_vtype >> drule_all check_value_type_subscript >>
+  drule_all subscript_place_vtype >> drule_all check_value_type_subscript_child >>
   rw[check_value_type_def] >>
   metis_tac[assignable_type_supported_place, checker_agg_ok_place]
 QED
@@ -522,7 +522,7 @@ Theorem checker_subscript_place[local]:
   check_value_type (type_env tops) vt'
 Proof
   strip_tac >> simp[supported_pure_expr_def] >>
-  metis_tac[subscript_place_vtype, check_value_type_subscript]
+  metis_tac[subscript_place_vtype, check_value_type_subscript_child]
 QED
 
 Theorem checker_attribute_assignable[local]:
