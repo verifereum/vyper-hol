@@ -558,8 +558,9 @@ Proof
       gvs[] >> irule expr_sim_values_domain >>
       rpt gen_tac >> strip_tac >>
       `ann = BaseT (UintT 256)` by
-        gvs[expr_body_pre_def, well_typed_expr_def,
-            well_typed_builtin_app_def, account_item_type_def] >>
+        (drule expr_body_pre_static_facts >>
+         gvs[well_typed_expr_def, well_typed_builtin_app_def,
+             account_item_type_def]) >>
       gvs[] >>
       `?t. gas_path ctx func s0 0 (OK t) /\
         (!H. valid_horizon cx st0 H es.storage_trace ==>

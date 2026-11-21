@@ -197,7 +197,8 @@ Proof
        MATCH_MP stmt_state_rel_state_rel o CONJUNCT1)) >>
   `LENGTH cx.txn.code < dimword (:256)` by
     (qpat_assum `expr_body_pre _ _ _ _ _` mp_tac >>
-     fs[exprSimHypsDefsTheory.expr_body_pre_def, expr_sim_inv_def,
+     drule expr_body_pre_static_facts >>
+     fs[expr_sim_inv_def,
        vyperTypeInvariantsTheory.context_well_typed_def, wordsTheory.dimword_def]) >>
   `!out. step_inst_base (mk_inst sa.cs_next_id CODESIZE [] [out]) s0 =
       OK (update_var out (n2w (LENGTH cx.txn.code)) s0)` by
