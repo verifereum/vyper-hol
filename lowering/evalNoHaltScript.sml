@@ -541,6 +541,8 @@ Proof
        Cases_on `bt = Len` >> Cases_on `bt = Env MsgGas` >> gvs pending_ss >>
        TRY (Cases_on `code_slice_source bt xs` >> gvs pending_ss >>
          TRY (PairCases_on `x` >> gvs pending_ss)) >>
+       TRY (Cases_on `is_self_codesize bt xs` >>
+         gvs[evaluate_self_codesize_def] >> gvs pending_ss) >>
        TRY staged_pending_ih) >>
   TRY (qpat_x_assum `ignore_bind (update_accounts _) _ _ = (INL (),_)` mp_tac >>
        simp[ignore_bind_def, bind_def, update_accounts_def,

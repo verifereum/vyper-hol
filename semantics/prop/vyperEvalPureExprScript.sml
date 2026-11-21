@@ -618,7 +618,14 @@ Proof
                 metis_tac[eval_exprs_preserves_state] >>
               pop_assum SUBST_ALL_TAC >>
               Cases_on `is_self_codesize bt es`
-              >- (simp[] >>
+              >- (Cases_on `bt` >> gvs[vyperContextTheory.is_self_codesize_def] >>
+                  Cases_on `a` >> gvs[vyperContextTheory.is_self_codesize_def] >>
+                  Cases_on `es` >> gvs[vyperContextTheory.is_self_codesize_def] >>
+                  Cases_on `t` >> gvs[vyperContextTheory.is_self_codesize_def] >>
+                  Cases_on `h` >> gvs[vyperContextTheory.is_self_addr_def] >>
+                  Cases_on `b` >> gvs[vyperContextTheory.is_self_addr_def] >>
+                  Cases_on `l` >> gvs[vyperContextTheory.is_self_addr_def] >>
+                  Cases_on `e` >> gvs[vyperContextTheory.is_self_addr_def] >>
                   fs[vyperStateTheory.get_accounts_def, vyperStateTheory.return_def,
                      vyperStateTheory.bind_def, vyperStateTheory.lift_sum_def,
                      vyperInterpreterTheory.precompile_call_success_def] >>
