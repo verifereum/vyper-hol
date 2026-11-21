@@ -11,6 +11,7 @@ Ancestors
   exprLoweringProps venomExecSemantics venomInstProps
   ctorAbiActualObservations ctorAbiActualWorld abiDecoderReentry
   emitHelper emitHelperProps abiBuiltinEncodeSetup rich_list abiDecoderVarSequence instIdxIndep
+  entrySinkExtraction
 
 Theorem abi_encode_finish_opcodes[local]:
   abi_builtin_encode_finish buf encoded_len mid_size st = ((),final) ==>
@@ -235,36 +236,20 @@ Theorem abi_encode_method_setup_concrete:
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_builtin_encode_method_setup_context >> strip_tac >>
-  drule abi_builtin_encode_allocate_live >> strip_tac >>
-  `st.cs_next_var <= address_st.cs_next_var` by decide_tac >>
-  drule abi_encode_allocate_concrete >> disch_then drule >>
-  disch_then (qspecl_then [`p`, `initial`, `ctx`] mp_tac) >>
-  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-  rename1 `abi_decode_sim ctx func initial addressed` >>
-  drule abi_encode_method_concrete >> disch_then drule >>
-  disch_then (qspecl_then [`p`, `addressed`, `ctx`] mp_tac) >>
-  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-  rename1 `abi_decode_sim ctx func addressed actual` >>
-  `actual.vs_halted = addressed.vs_halted` by simp[] >>
-  `eval_operand (FST ops) actual = SOME (n2w p) /\
-   eval_operand (SND ops) actual = SOME (n2w (p+36))` by
-    (conj_tac >> first_x_assum irule >> asm_rewrite_tac[]) >>
-  `abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id
-    (32+32*word_size (maxlen+4)) p 32 initial actual` by
-    (drule_all abi_builtin_encode_setup_frame_compose >> simp[]) >>
-  `inst_extends st ready` by metis_tac[inst_extends_trans] >>
-  `emitted_insts st ready = emitted_insts st address_st ++ emitted_insts address_st ready` by
-    (irule emitted_insts_append >> fs[inst_extends_def]) >>
-  `?r. run_inst_seq (emitted_insts st ready) initial = OK r /\
-    (r with vs_inst_idx := LENGTH ready.cs_current_insts) = actual` by
-    (asm_rewrite_tac[] >>
-     qpat_x_assum `actual = _` SUBST1_TAC >>
-     irule abi_encode_run_append_normalized >>
-     goal_assum (drule_at Any) >> asm_rewrite_tac[] >> metis_tac[]) >>
-  qexistsl_tac [`r`, `actual`] >> asm_rewrite_tac[] >>
-  conj_tac >- fs[EVERY_APPEND] >>
-  irule abi_decode_sim_trans >> qexists_tac `addressed` >> metis_tac[]
+  drule_all abi_encode_open_method_setup_sequence >> strip_tac >>
+  drule abi_builtin_encode_setup_shape >> strip_tac >>
+  drule abi_builtin_encode_setup_opcodes >> strip_tac >>
+  `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st ready)` by
+    (fs[EVERY_MEM, abi_decoder_reentry_opcode_def] >> metis_tac[]) >>
+  drule_all ctor_actual_sequence_world >> strip_tac >>
+  drule_all ctor_actual_sequence_labels >> strip_tac >>
+  `~actual.vs_halted` by fs[abi_builtin_encode_setup_frame_def] >>
+  drule_all abi_encoder_run_sequence_reach >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
+  qexistsl_tac [`actual`, `actual with vs_inst_idx := LENGTH ready.cs_current_insts`] >>
+  gvs[abi_builtin_encode_setup_frame_def, abi_decode_frame_def, eval_op_inst_idx] >>
+  fs[EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem abi_encode_setup_none_allocate[local]:

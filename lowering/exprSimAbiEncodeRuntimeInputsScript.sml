@@ -1,22 +1,123 @@
 Theory exprSimAbiEncodeRuntimeInputs
 Ancestors
-  exprSimSource exprSimHyps exprSimHypsDefs exprSimDefs
+  exprSimSource exprSimHyps exprSimHypsDefs exprSimDefs exprLowering exprCallBounds
+  vyperInterpreter vyperState vyperContext
+  context builtinAbi exprLoweringProps fragExec exprReasonOperand vyperTypeArgFits
   vyperTypeEvalSoundness vyperTypeExprSoundness vyperTypeInvariants
   vyperTypeSystem supportedExprTraverse supportedProgram vyperAST vyperTypeCallGraph
-  compileEnv allocLimits list abiEncodeArgsCase exprSimAbiEncodeSourceMetadata
+  compileEnv allocLimits list pair abiEncodeArgsCase exprSimAbiEncodeSourceMetadata
   exprSimAbiEncodeArgsPhysicalCapacity
+
+Theorem compile_expr_abi_encode:
+  compile_expr ce cty (TypeBuiltin ann (AbiEncode ensure mid) target args) sa =
+    (\(vs,st). as_ptr_val ann LocMemory
+       (lower_abi_encode (OPTION_MAP bytes_method_id_word mid)
+         (abi_size_bound ce.ce_struct_fields
+           (if LENGTH args = 1 /\ ~ensure then HD (MAP (lowered_value_type ce) args)
+            else TupleT (MAP (lowered_value_type ce) args)))
+         (compile_abi_encode_payload ce (LENGTH args = 1 /\ ~ensure) vs
+           (MAP (lowered_value_type ce) args)) st))
+      (compile_abi_encode_args compile_expr ce args sa)
+Proof
+  simp[compile_expr_type_builtin_dispatch,
+       Once (CONJUNCT2 (CONJUNCT2 compile_expr_raw_def)),
+       compile_type_builtin_dispatch_body_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  AP_TERM_TAC >> AP_THM_TAC >>
+  irule compile_abi_encode_args_callback_cong >>
+  rpt strip_tac >> simp[FUN_EQ_THM, expr_child_callback_def] >> rpt gen_tac >>
+  drule expr_list_member_bound >> simp[]
+QED
+
+Theorem compile_abi_encode_body_layout:
+  compile_expr ce cty (TypeBuiltin ann (AbiEncode ensure mid) target args) sa =
+    (vv,sf) /\ fn_has_code sa sf func ==>
+  ?vs st out.
+    compile_abi_encode_args compile_expr ce args sa = (vs,st) /\
+    lower_abi_encode (OPTION_MAP bytes_method_id_word mid)
+      (abi_size_bound ce.ce_struct_fields
+        (if LENGTH args = 1 /\ ~ensure then lowered_value_type ce (HD args)
+         else TupleT (MAP (lowered_value_type ce) args)))
+      (compile_abi_encode_payload ce (LENGTH args = 1 /\ ~ensure) vs
+        (MAP (lowered_value_type ce) args)) st = (out,sf) /\
+    vv = LocatedValue ann (mk_ptr out LocMemory) /\
+    LENGTH vs = LENGTH args /\ ci_mono sa st /\ ci_mono st sf /\
+    fn_has_code sa st func /\ fn_has_code st sf func
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[compile_expr_abi_encode, LET_THM] >>
+  pairarg_tac >> simp[] >>
+  qmatch_goalsub_abbrev_tac `as_ptr_val ann LocMemory action` >>
+  Cases_on `action` >> simp[as_ptr_val_def] >> strip_tac >> gvs[] >>
+  rename1 `lower_abi_encode _ _ _ st = (out,sf)` >>
+  `ci_mono sa st` by
+    metis_tac[ci_mono_compile_abi_encode_args, cj 1 compile_expr_ci_mono, SND] >>
+  `ci_mono st sf` by
+    metis_tac[ci_mono_lower_abi_encode, ci_mono_compile_abi_encode_payload, SND] >>
+  `fn_has_code sa st func /\ fn_has_code st sf func` by
+    metis_tac[ci_mono_def, fn_has_code_split] >>
+  qexists_tac `out` >> simp[] >>
+  conj_tac >- (Cases_on `args` >> fs[]) >>
+  metis_tac[compile_abi_encode_args_length, FST]
+QED
+
+Theorem compile_abi_encode_word_snapshot:
+  lowered_value_type ce e = expr_type e /\ is_word_type (expr_type e) /\
+  reason_result_shape (expr_type e) loc (FST (compile_expr ce (expr_type e) e sa)) /\
+  lower_value compile_expr ce (expr_type e) e sa = (op,sm) ==>
+  compile_abi_encode_args compile_expr ce [e] sa = ([StackValue (expr_type e) op],sm)
+Proof
+  strip_tac >>
+  Cases_on `compile_expr ce (expr_type e) e sa` >>
+  rename1 `compile_expr _ _ _ _ = (vv,sx)` >>
+  Cases_on `vv` >>
+  gvs[reason_result_shape_def, lower_value_def, compile_abi_encode_args_def,
+      compile_ext_call_args_def, compile_snapshot_vv_def, ext_call_arg_value_def,
+      unwrap_value_def, vv_type_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[vv_type_def, comp_bind_def, comp_return_def]) >> metis_tac[]
+QED
+
+Theorem compile_abi_encode_word_direct:
+  lowered_value_type ce e = expr_type e /\ is_word_type (expr_type e) /\
+  reason_result_shape (expr_type e) loc (FST (compile_expr ce (expr_type e) e sa)) /\
+  lower_value compile_expr ce (expr_type e) e sa = (op,sm) ==>
+  compile_expr ce cty (TypeBuiltin ann (AbiEncode F mid) ty [e]) sa =
+    as_ptr_val ann LocMemory
+      (lower_abi_encode (OPTION_MAP bytes_method_id_word mid)
+        (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
+        (\dst. comp_ignore_bind (emit_void MSTORE [dst;op]) (comp_return (Lit 32w))) sm)
+Proof
+  strip_tac >> drule_all compile_abi_encode_word_snapshot >> strip_tac >>
+  `compile_abi_encode_payload ce T [StackValue (expr_type e) op] [expr_type e] =
+      (\dst. comp_ignore_bind (emit_void MSTORE [dst;op]) (comp_return (Lit 32w)))` by
+    simp[FUN_EQ_THM, compile_abi_encode_payload_def, comp_bind_def,
+         comp_return_def, unwrap_value_def, LET_THM] >>
+  simp[compile_expr_abi_encode, LET_THM]
+QED
+
+Theorem eval_expr_abi_encode_action:
+  1 <= LENGTH args ==>
+  eval_expr cx (TypeBuiltin ann (AbiEncode ensure mid) target args) =
+  bind (eval_exprs cx args)
+    (\vs es. ((case evaluate_type_builtin cx (AbiEncode ensure mid) target (MAP expr_type args) vs of
+      INL w => INL (Value w) | INR err => INR (Error err)),es))
+Proof
+  strip_tac >> rewrite_tac[FUN_EQ_THM] >> gen_tac >>
+  simp[Once evaluate_def, type_check_def, type_builtin_args_length_ok_def,
+    assert_def, ignore_bind_def, bind_def, return_def] >>
+  Cases_on `eval_exprs cx args x` >> Cases_on `q` >>
+  simp[lift_sum_def, bind_def, return_def, raise_def] >>
+  rename1 `eval_exprs cx args x = (INL vs,ee)` >>
+  Cases_on `evaluate_type_builtin cx (AbiEncode ensure mid) target (MAP expr_type args) vs` >>
+  simp[bind_def, return_def, raise_def]
+QED
 
 Theorem abi_encode_body_arg_pre:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
   MEM arg args ==> expr_body_pre ce cx env arg es
 Proof
-  rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
-     byte_widths_expr_def, alloc_limits_expr_def,
-     supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
-  imp_res_tac int_calls_exprs_every_mem >>
-  gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
-  metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
-            alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
+  metis_tac[abi_args_body_pre_arg, expr_body_pre_def]
 QED
 
 Theorem abi_encode_eval_exprs_runtime_typed:

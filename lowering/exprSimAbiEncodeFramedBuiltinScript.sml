@@ -256,16 +256,6 @@ Proof
   simp[DROP_LENGTH_APPEND, mk_inst_def]
 QED
 
-Theorem abi_encode_framed_setup_none_opcodes:
-  abi_builtin_encode_setup NONE maxlen st = (ops,final) ==>
-  EVERY (\i. MEM i.inst_opcode [ALLOCA;ADD;MSTORE]) (emitted_insts st final)
-Proof
-  simp[abi_builtin_encode_setup_allocate, abi_builtin_encode_method_id_def,
-    comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
-  drule abi_encode_framed_allocate_opcodes >> simp[]
-QED
-
 Theorem abi_encode_framed_allocate_reach:
   abi_builtin_encode_allocate outsz data_offset st = (ops,address_st) /\ fn_has_code st address_st func /\
   ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
@@ -324,7 +314,7 @@ Theorem abi_encode_framed_setup_none_reach:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_builtin_encode_setup_shape >> strip_tac >>
-  drule abi_encode_framed_setup_none_opcodes >> strip_tac >>
+  drule abi_builtin_encode_setup_opcodes >> strip_tac >>
   drule_all abi_builtin_encode_setup_none_execute >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st ready) initial = OK encoded` >>
   drule_all abi_encode_setup_sequence_world >> strip_tac >>
@@ -410,23 +400,19 @@ Theorem abi_encode_framed_setup_some_reach:
     actual.vs_labels = initial.vs_labels
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_builtin_encode_method_setup_context >> strip_tac >>
-  drule abi_builtin_encode_allocate_live >> strip_tac >>
-  `address_st.cs_next_var <= limit_st.cs_next_var /\ st.cs_next_var <= address_st.cs_next_var` by decide_tac >>
-  drule_all abi_encode_framed_allocate_reach >>
+  drule_all abi_builtin_encode_method_setup_sequence >> strip_tac >>
+  drule abi_builtin_encode_setup_shape >> strip_tac >>
+  drule abi_builtin_encode_setup_opcodes >> strip_tac >>
+  drule_all abi_encode_setup_sequence_world >> strip_tac >>
+  `actual.vs_labels = initial.vs_labels` by
+    (irule ctor_actual_sequence_labels >> goal_assum (drule_at Any) >>
+     fs[EVERY_MEM] >> rpt strip_tac >> first_x_assum drule >>
+     simp[abi_decoder_reentry_opcode_def] >> metis_tac[]) >>
+  drule_all abi_encode_setup_sequence_frame >> strip_tac >>
+  `~actual.vs_halted` by fs[abi_builtin_encode_setup_frame_def] >>
+  drule_all abi_encoder_run_sequence_reach >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  rename1 `abi_decode_sim ctx func initial addressed` >>
-  drule_all abi_encode_framed_method_reach >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
-  rename1 `abi_decode_sim ctx func addressed actual` >>
-  `actual.vs_halted = addressed.vs_halted` by simp[] >>
-  `eval_operand (FST ops) actual = SOME (n2w p) /\
-   eval_operand (SND ops) actual = SOME (n2w (p+36))` by
-    (conj_tac >> first_x_assum irule >> asm_simp_tac bool_ss []) >>
-  `abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id (32+32*word_size (maxlen+4)) p 32 initial actual` by
-    (drule_all abi_builtin_encode_setup_frame_compose >> simp[]) >>
-  `abi_encode_exec_frame func initial actual` by
-    (irule abi_encode_exec_frame_trans >> qexists_tac `addressed` >> simp[]) >>
-  qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
-  irule abi_decode_sim_trans >> qexists_tac `addressed` >> asm_simp_tac bool_ss []
+  qexists_tac `actual with vs_inst_idx := LENGTH ready.cs_current_insts` >>
+  gvs[abi_builtin_encode_setup_frame_def, abi_decode_frame_def,
+    abi_encode_exec_frame_def, fresh_vars_wrt_def, eval_op_inst_idx] >> metis_tac[]
 QED

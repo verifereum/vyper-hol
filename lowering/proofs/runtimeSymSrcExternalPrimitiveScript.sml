@@ -6,7 +6,7 @@ Ancestors
   runtimeSymSrcEmission runtimeSymSrcInterfaces exprLowering compileEnv emitHelper
   loweringShapeDefs venomInst list stackPlanTypes
 
-Theorem runtime_sym_zip_fst[local]:
+Theorem runtime_sym_zip_fst:
   !xs ys P. EVERY P xs ==> EVERY (\x. P (FST x)) (ZIP (xs,ys))
 Proof
   Induct >> Cases_on `ys` >> simp[ZIP_def]

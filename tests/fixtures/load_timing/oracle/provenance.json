@@ -109,6 +109,10 @@
       "sha256": "f250f2017de5cf9854b471b032aff6a5189973eec3f4f9333ed9552339770cdf"
     },
     {
+      "path": "bytecode/patches/5389-abi-encode-standalone-value.patch",
+      "sha256": "4aa42d5d6b739f80fe17a7637a26de4610d86bd69578f14688276cc4ce697dcc"
+    },
+    {
       "path": "bytecode/patches/local-dft-create-abort.patch",
       "sha256": "0c4a28b798de3df8978a7ca2a1965c107a71f6322fa97c22e6aa7356642a5290"
     }

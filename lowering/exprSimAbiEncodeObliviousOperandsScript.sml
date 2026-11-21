@@ -275,27 +275,20 @@ Proof
 QED
 
 Theorem enc_operand_lower_abi_encode:
-  !ensure mid src info maxlen. enc_nonlabel src ==>
-    enc_operand_action enc_nonlabel (lower_abi_encode ensure mid src info maxlen)
+  !mid src info maxlen. enc_nonlabel src ==>
+    enc_operand_action enc_nonlabel (lower_abi_encode mid maxlen (\dst. compile_abi_encode_to_buf dst src info))
 Proof
-  rpt strip_tac >> Cases_on `mid` >> simp[lower_abi_encode_def]
-  >> irule enc_operand_bind_buffer >> simp[enc_operand_alloc_buffer] >> rpt strip_tac
-  >> irule enc_operand_bind_nonlabel >> simp[enc_operand_action_return] >> rpt strip_tac
-  >> irule enc_operand_bind_nonlabel >> simp[enc_operand_emit_op] >> rpt strip_tac
-  >> simp[enc_operand_bind_nonlabel, enc_operand_action_ignore_bind,
-          enc_operand_action_return, enc_operand_emit_op, enc_operand_emit_void,
-          enc_operand_encoder_mutual]
-  >> (irule enc_operand_action_ignore_bind
-  >> simp[enc_operand_bind_nonlabel, enc_operand_emit_op,
-          enc_operand_emit_void, enc_operand_action_return]
-  >> irule enc_operand_bind_nonlabel >> simp[enc_operand_encoder_mutual] >> rpt strip_tac
-  >> simp[enc_operand_action_ignore_bind, enc_operand_bind_nonlabel,
-          enc_operand_emit_op, enc_operand_emit_void, enc_operand_action_return])
+  rpt strip_tac >> Cases_on `mid` >> simp[lower_abi_encode_def] >>
+  rpt (FIRST [
+    CHANGED_TAC (simp[enc_operand_action_return, enc_operand_alloc_buffer,
+      enc_operand_emit_op, enc_operand_emit_void, enc_operand_encoder_mutual]),
+    irule enc_operand_bind_buffer, irule enc_operand_bind_nonlabel,
+    irule enc_operand_action_ignore_bind, conj_tac, gen_tac, disch_tac])
 QED
 
 Theorem lower_abi_encode_no_block_gas_free:
-  !ensure mid src info maxlen sa out sb.
-    lower_abi_encode ensure mid src info maxlen sa = (out,sb) /\
+  !mid src info maxlen sa out sb.
+    lower_abi_encode mid maxlen (\dst. compile_abi_encode_to_buf dst src info) sa = (out,sb) /\
     (!l. src <> Label l) /\ sa.cs_blocks = sb.cs_blocks ==>
     frag_gas_free sa sb
 Proof

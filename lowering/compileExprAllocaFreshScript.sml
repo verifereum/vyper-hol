@@ -2739,38 +2739,33 @@ Theorem alloca_suffix_abi_encode_args_all[local]:
   !es a. k <= a.cs_next_var ==>
     alloca_suffix k a (SND (compile_abi_encode_args cfn cenv es a))
 Proof
-  strip_tac >> Induct >>
-  simp[compile_abi_encode_args_def, alloca_suffix_return] >>
-  rpt strip_tac >> Cases_on `~is_word_type (expr_type h) /\ exprs_can_mutate cenv es` >>
-  simp[] >>
-  rpt (rpt strip_tac >> simp[] >> irule alloca_suffix_bind_floor >>
-       simp[alloca_suffix_materialize_vv, alloca_suffix_unwrap_value,
-            alloca_suffix_return])
+  simp[compile_abi_encode_args_def, alloca_suffix_ext_call_args]
 QED
 
-Theorem alloca_suffix_store_abi_tuple[local]:
-  !vs cenv buf off k a. k <= a.cs_next_var ==>
-  alloca_suffix k a (SND (compile_store_abi_tuple cenv buf off vs a))
+Theorem alloca_suffix_abi_encode_payload[local]:
+  k <= a.cs_next_var ==>
+  alloca_suffix k a (SND (compile_abi_encode_payload cenv single vs tys dst a))
 Proof
-  Induct >> simp[compile_store_abi_tuple_def, alloca_suffix_return] >>
-  rpt gen_tac >> PairCases_on `h` >> strip_tac >>
-  Cases_on `is_word_type h1` >>
-  simp[compile_store_abi_tuple_def, comp_ignore_bind_def] >>
-  rpt (rpt strip_tac >> simp[] >> irule alloca_suffix_bind_floor >>
-       simp[alloca_suffix_emit_op, alloca_suffix_emit_void,
-            alloca_suffix_copy_memory])
+  strip_tac >> Cases_on `single` >>
+  simp[compile_abi_encode_payload_def, alloca_suffix_abi_encode_values] >>
+  irule alloca_suffix_bind_floor >> simp[alloca_suffix_unwrap_value] >>
+  gen_tac >> Cases_on `is_word_type (HD tys)` >>
+  simp[alloca_suffix_abi_encode_values, cj 2 alloca_suffix_encode_family,
+       comp_ignore_bind_def] >>
+  rpt (rpt strip_tac >> irule alloca_suffix_bind_floor >>
+       simp[alloca_suffix_emit_void, alloca_suffix_return])
 QED
 
 Theorem alloca_suffix_lower_abi_encode[local]:
+  (!dst a. k <= a.cs_next_var ==> alloca_suffix k a (SND (encode dst a))) /\
   k <= a.cs_next_var ==>
-  alloca_suffix k a (SND (lower_abi_encode tup mid src info maxlen a))
+  alloca_suffix k a (SND (lower_abi_encode mid maxlen encode a))
 Proof
   strip_tac >> Cases_on `mid` >>
   simp[lower_abi_encode_def, comp_ignore_bind_def] >>
   rpt (rpt strip_tac >> simp[] >> irule alloca_suffix_bind_floor >>
        simp[alloca_suffix_alloc_buffer, alloca_suffix_return,
-            alloca_suffix_emit_op, alloca_suffix_emit_void,
-            cj 2 alloca_suffix_encode_family])
+            alloca_suffix_emit_op, alloca_suffix_emit_void])
 QED
 
 Theorem alloca_suffix_type_encode_branch[local]:
@@ -2781,17 +2776,14 @@ Theorem alloca_suffix_type_encode_branch[local]:
     (SND (compile_type_builtin_dispatch_body cfn ce vt ty (AbiEncode ensure mid) rt es a))
 Proof
   strip_tac >> simp[compile_type_builtin_dispatch_body_def] >>
-  rpt IF_CASES_TAC >>
   pure_rewrite_tac[oneline as_ptr_val_def, pairTheory.pair_CASE_UNCURRY,
                    combinTheory.C_DEF] >>
   rpt (ho_match_mp_tac alloca_suffix_pair_bind_floor >>
-       simp[alloca_suffix_lower_value, alloca_suffix_unwrap_value,
-            alloca_suffix_alloc_buffer, alloca_suffix_emit_void,
-            alloca_suffix_abi_encode_args_all, alloca_suffix_store_abi_tuple,
+       simp[alloca_suffix_abi_encode_args_all, alloca_suffix_abi_encode_payload,
             alloca_suffix_lower_abi_encode, alloca_suffix_refl] >>
        rpt strip_tac) >>
-  simp[alloca_suffix_lower_value, alloca_suffix_abi_encode_args_all,
-       alloca_suffix_refl]
+  simp[alloca_suffix_abi_encode_args_all, alloca_suffix_abi_encode_payload,
+       alloca_suffix_lower_abi_encode, alloca_suffix_refl]
 QED
 
 Theorem alloca_suffix_lower_abi_decode[local]:

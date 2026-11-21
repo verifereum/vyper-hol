@@ -2,7 +2,7 @@ Theory exprSimAbiEncodeCapacity
 Ancestors
   exprSimAbiEncodeSourceMetadata abiEncodeEndpointMetadata
   createMemoryInterface exprSimHypsDefs exprSimHyps abiBuiltinAllocation words arithmetic
-  exprSimAbiEncodeArgsPhysicalCapacity
+  exprSimAbiEncodeArgsPhysicalCapacity vyperTypeSystem vyperAST vyperState vyperTypeInvariants
 
 Theorem abi_encode_nonword_output_representable:
   expr_body_pre ce cx env
@@ -80,4 +80,50 @@ Proof
   qpat_assum `n <= maxlen` (mp_then Any mp_tac abi_encode_payload_capacity) >>
   disch_then (qspec_then `(case mid of NONE => 0 | SOME _ => 4)` assume_tac) >>
   `32 <= outsz` by simp[] >> gvs[] >> decide_tac
+QED
+
+Theorem abi_encode_nonword_result_type:
+  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid) ty [e]) es ==>
+  ?N. expr_type (TypeBuiltin ann (AbiEncode F mid) ty [e]) =
+        BaseT (BytesT (Dynamic N)) /\
+      ty = TupleT [expr_type e] /\
+      vyper_abi_size_bound (get_tenv cx) (expr_type e) +
+        abi_encode_method_id_size mid <= N
+Proof
+  simp[expr_body_pre_def, well_typed_expr_def, type_builtin_result_ok_def,
+    abi_encode_size_ok_def, expr_type_def] >>
+  strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  gvs[]
+QED
+
+Theorem abi_encode_nonword_result_bound:
+  expr_body_pre ce cx env e es /\
+  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid) ty [e]) es /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+  value_has_type tv v /\
+  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av ==>
+  ?N. expr_type (TypeBuiltin ann (AbiEncode F mid) ty [e]) =
+        BaseT (BytesT (Dynamic N)) /\
+      ty = TupleT [expr_type e] /\
+      LENGTH (abi_encode_method_id_bytes mid ++
+        enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av) <= N
+Proof
+  strip_tac >> drule_all abi_encode_nonword_length_bound >> strip_tac >>
+  drule abi_encode_nonword_result_type >> strip_tac >>
+  `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    metis_tac[exprSimHypsTheory.expr_body_pre_lowered_fits] >>
+  `abi_size_bound ce.ce_struct_fields (lowered_value_type ce e) <=
+   abi_size_bound ce.ce_struct_fields (expr_type e)` by
+    metis_tac[exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_size_bound] >>
+  `?stv. evaluate_type (get_tenv cx) (expr_type e) = SOME stv` by
+    metis_tac[optionTheory.IS_SOME_EXISTS,
+      exprSimHypsTheory.expr_body_pre_type_evaluates] >>
+  drule_all abi_encode_body_evaluated_metadata >> strip_tac >>
+  `abi_size_bound ce.ce_struct_fields (expr_type e) =
+   vyper_abi_size_bound (get_tenv cx) (expr_type e)` by
+    metis_tac[abi_encode_body_evaluated_metadata] >>
+  qexists_tac `N` >> simp[abi_encode_method_id_size_def] >>
+  gvs[abi_encode_method_id_size_def] >> decide_tac
 QED

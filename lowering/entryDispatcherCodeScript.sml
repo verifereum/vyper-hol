@@ -2,7 +2,7 @@ Theory entryDispatcherCode
 Ancestors
   entryBuiltinCode entryAggregateCode entryValueCode entryArithmeticCode entryLocationValueCode
   entryCodePredicate entryContextCodePredicate exprLowering supportedExprForms
-  entryEncoderCode entryDecoderRecursiveCode builtinAbi builtinSimple
+  entryEncoderCode entryDecoderRecursiveCode entryCallCode builtinAbi builtinSimple
 
 Theorem entry_code_comparison_hash[local]:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (compile_bytestring_hash p)
@@ -244,10 +244,11 @@ Proof
 QED
 
 Theorem entry_code_dispatch_abi_encode[local]:
+  (!dst. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (encode dst)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (lower_abi_encode ensure mid src info maxlen)
+    (lower_abi_encode mid maxlen encode)
 Proof
-  Cases_on `mid` >>
+  strip_tac >> Cases_on `mid` >>
   simp[lower_abi_encode_def, compileEnvTheory.comp_ignore_bind_def] >>
   rpt (irule entry_code_bind >> reverse conj_tac
     >- simp[entry_code_alloc_buffer, entry_code_emit_op, entry_code_emit_void,
@@ -257,6 +258,18 @@ Proof
   rpt (irule entry_code_bind >> reverse conj_tac
     >- simp[entry_code_emit_op, entry_code_emit_void] >>
     rpt gen_tac >> BETA_TAC) >> simp[entry_code_emit_void]
+QED
+
+Theorem entry_code_abi_encode_payload[local]:
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_abi_encode_payload cenv single vs tys dst)
+Proof
+  Cases_on `single` >> simp[compile_abi_encode_payload_def,
+    entry_code_abi_encode_values_to_buf] >>
+  irule entry_code_bind >> simp[entry_code_unwrap_value] >> gen_tac >>
+  Cases_on `is_word_type (HD tys)` >>
+  simp[entry_code_encode_to_buf, entry_code_ignore_bind, entry_code_emit_void,
+       entry_code_return]
 QED
 
 Theorem entry_code_dispatch_abi_decode[local]:
@@ -320,8 +333,13 @@ Theorem entry_code_dispatch_type_abi[local]:
 Proof
   strip_tac >>
   `entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (lower_value cfn cenv (expr_type a) a)` by
-    (irule entry_code_lower_value >> simp[]) >>
+    (compile_abi_encode_args cfn cenv [a])` by
+    (simp[compile_abi_encode_args_def] >>
+     irule entry_code_ext_call_args >> simp[]) >>
+  `!mid maxlen single vs tys. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (lower_abi_encode mid maxlen (compile_abi_encode_payload cenv single vs tys))` by
+    (rpt gen_tac >> irule entry_code_dispatch_abi_encode >>
+     simp[entry_code_abi_encode_payload]) >>
   conj_tac >>
   rw[entry_preserves_code_def, compile_type_builtin_dispatch_body_def] >>
   rpt (pairarg_tac >> gvs[]) >>
@@ -332,12 +350,14 @@ Proof
   qpat_x_assum `!et. entry_preserves_code _ (cfn cenv et _)`
     (qspec_then `expr_type a` (fn th =>
       imp_res_tac (SRULE [entry_preserves_code_def] th))) >>
-  qpat_x_assum `entry_preserves_code _ (lower_value _ _ _ _)`
+  qpat_x_assum `entry_preserves_code _ (compile_abi_encode_args _ _ _)`
     (fn th => imp_res_tac (SRULE [entry_preserves_code_def] th)) >>
   map_every (fn th => imp_res_tac (SRULE [entry_preserves_code_def] th))
     [entry_code_unwrap_value, entry_code_alloc_buffer,
      Q.INST [`opc` |-> `MSTORE`] entry_code_emit_void,
-     entry_code_dispatch_abi_encode, entry_code_dispatch_abi_decode] >>
+     entry_code_dispatch_abi_decode] >>
+  qpat_x_assum `!mid maxlen single vs tys. entry_preserves_code _ _`
+    (fn th => imp_res_tac (SRULE [entry_preserves_code_def] th)) >>
   rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[]
 QED
 

@@ -280,22 +280,21 @@ Proof
   irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_emit_op_for]
 QED
 
-(* The encoder antecedent is conjunct 2 of runtimeLabelABI$rb_abi_encode_for. *)
 Theorem rb_lower_abi_encode_for:
-  (!dst src info. (rb_operand_ok_for source_checks) dst /\ (rb_operand_ok_for source_checks) src ==>
-     (rb_step_for source_checks) (rb_operand_ok_for source_checks) (compile_abi_encode_to_buf dst src info)) /\
-  (rb_operand_ok_for source_checks) src_op ==>
-  (rb_step_for source_checks) (rb_operand_ok_for source_checks) (lower_abi_encode ensure_tuple method_id_opt src_op enc_info maxlen)
+  (!dst. rb_operand_ok_for source_checks dst ==>
+    rb_step_for source_checks (rb_operand_ok_for source_checks) (encode dst)) ==>
+  rb_step_for source_checks (rb_operand_ok_for source_checks)
+    (lower_abi_encode method_id_opt maxlen encode)
 Proof
   strip_tac >> pure_rewrite_tac[lower_abi_encode_def, LET_THM] >> BETA_TAC >>
   irule rb_step_bind_for >> qexists_tac `(rb_buffer_ok_for source_checks)` >> BETA_TAC >>
   reverse conj_tac >- simp[rb_compile_alloc_buffer_for] >>
   gen_tac >> simp[rb_buffer_ok_for_def] >> strip_tac >>
   irule rb_bind_return_for >> BETA_TAC >>
-  irule rb_bind_emit_op_for >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> conj_tac
   >- (Cases_on `method_id_opt` >> simp[rb_step_return_for] >>
       irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_emit_void_for]) >>
+  irule rb_bind_emit_op_for >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
   irule rb_step_bind_for >> qexists_tac `(rb_operand_ok_for source_checks)` >> BETA_TAC >>
   reverse conj_tac >- simp[] >>
   gen_tac >> strip_tac >> irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> reverse conj_tac
@@ -583,10 +582,8 @@ Proof
 QED
 
 Theorem rb_lower_abi_encode:
-  (!dst src info. rb_operand_ok dst /\ rb_operand_ok src ==>
-     rb_step rb_operand_ok (compile_abi_encode_to_buf dst src info)) /\
-  rb_operand_ok src_op ==>
-  rb_step rb_operand_ok (lower_abi_encode ensure_tuple method_id_opt src_op enc_info maxlen)
+  (!dst. rb_operand_ok dst ==> rb_step rb_operand_ok (encode dst)) ==>
+  rb_step rb_operand_ok (lower_abi_encode method_id_opt maxlen encode)
 Proof
   ACCEPT_TAC (SIMP_RULE std_ss
     [rb_operand_ok_legacy,

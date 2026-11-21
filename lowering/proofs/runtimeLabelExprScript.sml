@@ -3,7 +3,7 @@ Theory runtimeLabelExpr
 Ancestors
   runtimeLabelExprCallbacks runtimeLabelExprPrimitives runtimeLabelPrimitives
   runtimeLabelBuiltinCore runtimeLabelBuiltinSystem runtimeLabelBuiltinArithmetic runtimeLabelBuiltins runtimeLabelABI runtimeLabelInvariant runtimeLabelValues
-  exprLowering exprCallBounds
+  exprLowering exprLoweringProps exprCallBounds
 
 Theorem rb_as_ptr_val_for[local]:
   (rb_step_for source_checks) (rb_operand_ok_for source_checks) m ==>
@@ -12,6 +12,22 @@ Proof
   simp[rb_step_for_def] >> strip_tac >> gen_tac >> strip_tac >>
   first_x_assum drule >> Cases_on `m st` >>
   simp[as_ptr_val_def, rb_value_ok_for_def, rb_mk_ptr_for]
+QED
+
+Theorem rb_abi_encode_payload_for[local]:
+  rb_env_ok_for source_checks ce /\ EVERY (rb_value_ok_for source_checks) vs /\
+  (single ==> vs <> []) /\ rb_operand_ok_for source_checks dst ==>
+  rb_step_for source_checks (rb_operand_ok_for source_checks)
+    (compile_abi_encode_payload ce single vs tys dst)
+Proof
+  strip_tac >> Cases_on `single` >> simp[compile_abi_encode_payload_def]
+  >- (Cases_on `vs` >> gvs[] >>
+      irule rb_step_bind_for >> qexists_tac `rb_operand_ok_for source_checks` >>
+      simp[rb_unwrap_value_for] >> gen_tac >> strip_tac >>
+      IF_CASES_TAC >> simp[rb_abi_encode_for] >>
+      irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >>
+      simp[rb_emit_void_for, rb_step_return_for]) >>
+  simp[rb_compile_abi_encode_values_to_buf_for, rb_abi_encode_for, rb_every_zip_fst]
 QED
 
 Theorem rb_compile_type_builtin_dispatch_body_for[local]:
@@ -94,9 +110,25 @@ Resume rb_compile_type_builtin_dispatch_body_for[extract]:
   irule rb_as_stack_val_for >> simp[rb_compile_clamp_basetype_for]
 QED
 Resume rb_compile_type_builtin_dispatch_body_for[encode]:
-  Cases_on `LENGTH args = 1 /\ ~b` >> simp[]
-  >- suspend "encode_single"
-  >> suspend "encode_tuple"
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `\vs. EVERY (rb_value_ok_for source_checks) vs /\ LENGTH vs = LENGTH (args:expr list)`
+      (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV
+        (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def))))
+        rb_step_bind_for)))) >> BETA_TAC >>
+  conj_tac
+  >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+      `rb_step_for source_checks (EVERY (rb_value_ok_for source_checks))
+        (compile_abi_encode_args cfn ce args)` by
+        (irule rb_compile_abi_encode_args_for >> simp[]) >>
+      pop_assum mp_tac >> simp[rb_step_for_def] >> strip_tac >> rpt strip_tac >>
+      pairarg_tac >> gvs[] >>
+      first_x_assum (qspec_then `st` mp_tac) >> simp[] >>
+      qspec_then `st` mp_tac (Q.SPECL [`args`, `cfn`, `ce`]
+        compile_abi_encode_args_length) >> simp[]) >>
+  gen_tac >> strip_tac >>
+  irule rb_as_ptr_val_for >> irule rb_lower_abi_encode_for >>
+  rpt strip_tac >> irule rb_abi_encode_payload_for >> simp[] >>
+  Cases_on `vs` >> gvs[]
 QED
 Resume rb_compile_type_builtin_dispatch_body_for[decode]:
   ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
@@ -108,48 +140,6 @@ Resume rb_compile_type_builtin_dispatch_body_for[decode]:
   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
     simp[rb_unwrap_value_for]) >> gen_tac >> strip_tac >>
   irule rb_as_ptr_val_for >> irule rb_lower_abi_decode_for >> simp[rb_abi_decode_for]
-QED
-Resume rb_compile_type_builtin_dispatch_body_for[encode_single]:
-  Cases_on `is_word_type (expr_type (HD args))` >> simp[]
-  >- (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
-        (Q.ISPEC `(rb_operand_ok_for source_checks)` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind_for)))) >> BETA_TAC >>
-      conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
-        simp[rb_lower_value_for]) >> gen_tac >> strip_tac >>
-      ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
-        (Q.ISPEC `(rb_buffer_ok_for source_checks)` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind_for)))) >> BETA_TAC >>
-      conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
-        simp[rb_compile_alloc_buffer_for]) >>
-      gen_tac >> simp[rb_buffer_ok_for_def] >> strip_tac >>
-      ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
-        (Q.ISPEC `K T` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind_for)))) >> BETA_TAC >>
-      conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
-        simp[rb_emit_void_for]) >> gen_tac >>
-      irule rb_as_ptr_val_for >> irule rb_lower_abi_encode_for >> simp[rb_abi_encode_for]) >>
-  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
-    (Q.ISPEC `(rb_value_ok_for source_checks)` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind_for)))) >> BETA_TAC >>
-  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[]) >>
-  gen_tac >> strip_tac >>
-  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
-    (Q.ISPEC `(rb_operand_ok_for source_checks)` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind_for)))) >> BETA_TAC >>
-  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
-    simp[rb_unwrap_value_for]) >> gen_tac >> strip_tac >>
-  irule rb_as_ptr_val_for >> irule rb_lower_abi_encode_for >> simp[rb_abi_encode_for]
-QED
-Resume rb_compile_type_builtin_dispatch_body_for[encode_tuple]:
-  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
-    (Q.ISPEC `EVERY (rb_operand_ok_for source_checks)` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind_for)))) >> BETA_TAC >>
-  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
-    simp[rb_compile_abi_encode_args_for]) >> gen_tac >> strip_tac >>
-  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
-    (Q.ISPEC `(rb_buffer_ok_for source_checks)` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind_for)))) >> BETA_TAC >>
-  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
-    simp[rb_compile_alloc_buffer_for]) >>
-  gen_tac >> simp[rb_buffer_ok_for_def] >> strip_tac >>
-  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
-    (Q.ISPEC `K T` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind_for)))) >> BETA_TAC >>
-  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
-    simp[rb_compile_store_abi_tuple_for, rb_every_zip_fst]) >> gen_tac >>
-  irule rb_as_ptr_val_for >> irule rb_lower_abi_encode_for >> simp[rb_abi_encode_for]
 QED
 Finalise rb_compile_type_builtin_dispatch_body_for
 

@@ -3,16 +3,20 @@ Theory abiBuiltinEncodeContext
 Ancestors
   abiBuiltinEncodeCode abiBuiltinAllocation abiEncoderAppend abiEncoderCounters abiEncoderResultLive
   abiDecoderReentry abiDecoderAppend abiDecoderContract fragExec compileEnv emitHelperProps
-  exprLoweringProps venomInst words list arithmetic
+  exprLoweringProps context emitHelper venomInst words list arithmetic
 
 Theorem abi_builtin_encode_setup_outputs:
   abi_builtin_encode_setup method_id_opt maxlen st = (ops,ready) ==>
-  FST ops = Var (STRING #"%" (toString st.cs_next_var)) /\
-  SND ops = Var (STRING #"%" (toString (st.cs_next_var+1)))
+  FST ops = Var (STRING #"%"
+    (toString st.cs_next_var)) /\
+  SND ops = Var (STRING #"%"
+    (toString (st.cs_next_var + (case method_id_opt of NONE => 1 | SOME _ => 2))))
 Proof
-  strip_tac >> drule abi_builtin_encode_setup_trace >> strip_tac >>
-  drule abi_builtin_alloc_buffer_shape >> strip_tac >>
-  imp_res_tac emitted_insts_emit_op >> gvs[]
+  Cases_on `method_id_opt` >>
+  simp[abi_builtin_encode_setup_def, abi_builtin_encode_method_id_def,
+    compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[]
 QED
 
 Theorem abi_builtin_encode_setup_live:

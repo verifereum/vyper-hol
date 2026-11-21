@@ -695,9 +695,14 @@ Theorem dalloca_windows_abi_encode_args:
   !args. (!ct e. MEM e args ==> preserves_dalloca_windows window (cfn cenv ct e)) ==>
     preserves_dalloca_windows window (compile_abi_encode_args cfn cenv args)
 Proof
-  Induct >> simp[compile_abi_encode_args_def, dalloca_windows_return] >> rpt strip_tac >>
-  windows_tac [dalloca_windows_unwrap_value, dalloca_windows_materialize_vv] >>
-  metis_tac[]
+  simp[compile_abi_encode_args_def, dalloca_windows_ext_call_args]
+QED
+
+Theorem dalloca_windows_abi_encode_payload:
+  preserves_dalloca_windows window (compile_abi_encode_payload cenv single vs tys dst)
+Proof
+  Cases_on `single` >> simp[compile_abi_encode_payload_def] >>
+  windows_tac [dalloca_windows_unwrap_value, dalloca_windows_abi_encode, dalloca_windows_abi_encode_values]
 QED
 
 Theorem dalloca_windows_store_abi_tuple:

@@ -8,15 +8,15 @@ Ancestors
   exprSimAbiEncodeObliviousFacts exprSimAbiEncodeObliviousOperands
 
 Theorem lower_abi_encode_start_oblivious:
-  !ensure mid src info maxlen.
-    frag_start_oblivious (lower_abi_encode ensure mid src info maxlen)
+  !mid src info maxlen.
+    frag_start_oblivious (lower_abi_encode mid maxlen (\dst. compile_abi_encode_to_buf dst src info))
 Proof
   simp[entry_action_oblivious, entry_action_lower_abi_encode]
 QED
 
 Theorem lower_abi_encode_frag_facts:
-  !ensure mid src info maxlen sa out sb.
-    lower_abi_encode ensure mid src info maxlen sa = (out,sb) /\
+  !mid src info maxlen sa out sb.
+    lower_abi_encode mid maxlen (\dst. compile_abi_encode_to_buf dst src info) sa = (out,sb) /\
     (!l. src <> Label l) ==>
     cs_extends sa sb /\ frag_ops_free sa sb /\
     ALL_DISTINCT (MAP (\i. i.inst_id) (frag_code sa sb)) /\

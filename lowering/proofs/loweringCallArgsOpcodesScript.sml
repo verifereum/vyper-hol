@@ -76,6 +76,25 @@ Proof
   simp[UNDISCH opcode_every_snapshot_vv]
 QED
 
+Theorem outcomes_free_abi_encode_args:
+  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
+         opc <> CREATE /\ opc <> CREATE2 /\ opc <> CALL /\ opc <> STATICCALL /\
+         opc <> DELEGATECALL ==> P opc) /\
+  (!e ty st. MEM e es ==> EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (cfn ce ty e st)))) /\
+  EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_abi_encode_args cfn ce es st)))
+Proof
+  simp[compile_abi_encode_args_def] >> strip_tac >>
+  irule opcode_every_ext_call_args_with_snapshot >>
+  asm_rewrite_tac[] >> rpt strip_tac >>
+  irule outcomes_free_snapshot >>
+  simp[SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value,
+       SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_store_memory,
+       outcomes_free_alloc_buffer]
+QED
+
 Theorem opcode_every_ext_call_kwarg:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) /\
