@@ -33,11 +33,28 @@ then compiles each JSON natively, and each contract gets a verdict:
                list is stale (a listed contract no longer mismatches, has
                another outcome, or is gone); fails the check
 
+Each line also gives, without changing the verdict, the program's
+supported_program verdict (sp=T|F, - if not reached), and how the deploy and
+runtime bytes of three compilations compare pairwise (same, deploy, runtime,
+both, or n/a without one of them): the patched pin's, HOL's, and, given
+--stock-python (the Python of the pinned Vyper without the patches, from
+python-o1-bytecode-fixtures --install DIR --stock), the stock pin's of the
+same source at the same settings.  The stock pin lacks the #5248 backport,
+so its memory allocation order, and with it the bytes of a few contracts,
+can change between processes even at a fixed hash seed.  If the stock
+compile fails, its comparisons are n/a; it fails nothing.  With --checker, it also gives
+check_contract's verdict in runtime and deploy mode by the kernel evaluator
+(bytecode/native/check_programs.sml; chk=accept, reject, undecided when the
+evaluator left the result open, frontend when the JSON was not translated,
+error, or - when not compiled), which takes about half a second a contract.
+The report starts with the totals of each, and with --checker a table of
+check_contract's verdicts against the parity verdicts.
+
 Run it with the patched pin's Python and PYTHONHASHSEED=0 (not with -I,
 which ignores PYTHONHASHSEED; -P -s isolate the imports instead):
 
   PYTHONHASHSEED=0 VENV/bin/python -P -s tools/native_export_parity.py \\
-      tests/vyper-test-exports WORKDIR [--report FILE]
+      tests/vyper-test-exports WORKDIR [--report FILE] [--stock-python STOCK/bin/python]
 """
 
 from __future__ import annotations
@@ -45,7 +62,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import json
 import os
@@ -57,6 +74,7 @@ import warnings
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "bytecode/native/bytecode_parity_json.exe"
+CHECKER = ROOT / "bytecode/native/check_programs.sml"
 KNOWN = ROOT / "bytecode/native/export-known-mismatches.txt"
 # The resolved compiler settings of a deployment at the oracle's profile.
 ORACLE_SETTINGS = {"debug": False, "enable_decimals": True, "evm_version": "prague",
@@ -64,6 +82,12 @@ ORACLE_SETTINGS = {"debug": False, "enable_decimals": True, "evm_version": "prag
 OTHER_SEEDS = range(1, 8)
 FAILING = ("mismatch", "error")
 ORDER = FAILING + ("known", "seed", "vyper-error", "rejected", "outside", "match")
+# The three byte comparisons, each of deploy and runtime code, and their results.
+PAIRS = (("stock", "patched"), ("patched", "HOL"), ("stock", "HOL"))
+SAMENESS = ("same", "deploy", "runtime", "both", "n/a")
+# check_contract's verdicts: undecided when the evaluator left the result open,
+# frontend when the JSON was not translated, error for any other failure.
+CHECKS = ("accept", "reject", "undecided", "frontend", "error")
 
 
 @dataclass
@@ -84,6 +108,9 @@ class Verdict:
     contract: Contract
     verdict: str
     detail: str
+    gate: str = "-"  # supported_program: T, F, or - when the runner didn't say
+    checker: str = "-"  # check_contract's verdict (CHECKS), or - when not run
+    bytes: dict[str, str] = field(default_factory=dict)  # "stock/patched": same, ...
 
 
 def collect(exports: Path) -> tuple[list[Contract], Counter]:
@@ -132,6 +159,8 @@ def compile_contract(source: str, path: Path) -> tuple[str, str]:
 def write_fixture(contract: Contract, work: Path) -> str | None:
     """Write <id>.vy, <id>.json and <id>.hex; the Vyper error if it doesn't
     compile."""
+    for suffix in (".json", ".hex"):  # an earlier run's, which this one may not replace
+        (work / (contract.id + suffix)).unlink(missing_ok=True)
     from vyper.exceptions import VyperException
 
     (work / (contract.id + ".vy")).write_text(contract.source)
@@ -144,6 +173,21 @@ def write_fixture(contract: Contract, work: Path) -> str | None:
     (work / (contract.id + ".json")).write_text(frontend)
     (work / (contract.id + ".hex")).write_text(code)
     return None
+
+
+def code(path: Path) -> dict[str, str] | None:
+    """The deploy and runtime hex of a .hex file, or None if there is none."""
+    if not path.exists():
+        return None
+    return dict(line.split("=", 1) for line in path.read_text().split())
+
+
+def sameness(a: dict[str, str] | None, b: dict[str, str] | None) -> str:
+    """Which of deploy and runtime code differ between two compilations."""
+    if a is None or b is None:
+        return "n/a"
+    deploy, runtime = a["deploy"] != b["deploy"], a["runtime"] != b["runtime"]
+    return "both" if deploy and runtime else "deploy" if deploy else "runtime" if runtime else "same"
 
 
 def seed_dependent(contract: Contract, native: Path) -> bool:
@@ -197,16 +241,63 @@ def classify(line: str) -> tuple[str, str, str]:
     return fields[0], "error", detail
 
 
-def check(exports: Path, work: Path, jobs: int) -> tuple[list[Verdict], Counter]:
-    """Each exported contract's verdict, and the deployments left out."""
+def gate(line: str) -> str:
+    """A runner line's supported_program verdict: T, F, or -."""
+    fields = line.split(" ", 1)[1].partition(": ")[0].split()
+    return next((f.removeprefix("sp=") for f in fields if f.startswith("sp=")), "-")
+
+
+def check_kind(reason: str) -> str:
+    """The kind of a check_programs.sml rejection reason (CHECKS)."""
+    if reason.startswith("frontend: "):
+        return "frontend"
+    if "check_contract returned NONE" in reason:
+        return "reject"
+    return "undecided" if "check_contract returned " in reason else "error"
+
+
+def check_contracts(work: Path, ids: list[str]) -> dict[str, str]:
+    """check_contract's verdict on each <id>.json in work, in runtime and
+    deploy mode, by the kernel evaluator (check_programs.sml)."""
+    listing = work / "check-list.txt"
+    listing.write_text("".join(f"{(work / i).resolve()}.json\n" for i in ids))
+    result = subprocess.run(["holbuild", "run", str(CHECKER)], cwd=ROOT, capture_output=True,
+                            stdin=subprocess.DEVNULL, text=True,
+                            env={**os.environ, "CHECK_LIST": str(listing.resolve())})
+    verdicts = {}
+    for line in result.stdout.splitlines():
+        tag, _, rest = line.partition(" ")
+        if tag in ("CHECKED", "CHECKER-REJECT"):
+            path, _, reason = rest.partition(": ")
+            verdicts[Path(path).stem] = "accept" if tag == "CHECKED" else check_kind(reason)
+    if result.returncode != 0 or len(verdicts) != len(ids):
+        raise SystemExit(f"checker gave {len(verdicts)} verdicts for {len(ids)} contracts "
+                         f"(exit {result.returncode}):\n{result.stderr[-2000:]}")
+    return verdicts
+
+
+def compile_all(exports: Path, work: Path, jobs: int) -> tuple[list[Contract], list[str | None], Counter]:
+    """The exported contracts, compiled into work by this Python's Vyper: each
+    one's Vyper error or None, and the deployments left out."""
     contracts, skipped = collect(exports)
     work.mkdir(parents=True, exist_ok=True)
     with ProcessPoolExecutor(jobs) as pool:
         errors = list(pool.map(write_fixture, contracts, [work] * len(contracts)))
+    return contracts, errors, skipped
+
+
+def check(exports: Path, work: Path, jobs: int, stock: Path | None,
+          checker: bool) -> tuple[list[Verdict], Counter]:
+    """Each exported contract's verdict, and the deployments left out.  stock
+    holds the stock pin's compilations, if any; with checker, check_contract's
+    verdict too."""
+    contracts, errors, skipped = compile_all(exports, work, jobs)
     verdicts = [Verdict(c, "vyper-error", e) for c, e in zip(contracts, errors) if e]
     compiled = {c.id: c for c, e in zip(contracts, errors) if not e}
     native = work / "native"
     native.mkdir(exist_ok=True)
+    for c in contracts:
+        (native / (c.id + ".hex")).unlink(missing_ok=True)
     runner = subprocess.run([str(RUNNER), str(work), *sorted(compiled)],
                             capture_output=True, text=True,
                             env={**os.environ, "NATIVE_PARITY_DUMP": str(native)})
@@ -229,11 +320,34 @@ def check(exports: Path, work: Path, jobs: int) -> tuple[list[Verdict], Counter]
             verdict = "seed"
         elif listed:
             verdict, detail = "error", f"listed ({listed.reason}) but {verdict}; remove it from the list"
-        verdicts.append(Verdict(contract, verdict, detail))
+        verdicts.append(Verdict(contract, verdict, detail, gate(line)))
+    checks = check_contracts(work, sorted(compiled)) if checker else {}
+    for v in verdicts:
+        v.checker = checks.get(v.contract.id, "-")
+        codes = {"stock": code(stock / (v.contract.id + ".hex")) if stock else None,
+                 "patched": code(work / (v.contract.id + ".hex")),
+                 "HOL": code(native / (v.contract.id + ".hex"))}
+        v.bytes = {f"{a}/{b}": sameness(codes[a], codes[b]) for a, b in PAIRS}
     for key in sorted(known.keys() - compiled.keys()):
         verdicts.append(Verdict(Contract(key, "-", ""), "error",
                                 "listed but not exported; remove it from the list"))
     return verdicts, skipped
+
+
+def cross_table(verdicts: list[Verdict]) -> list[str]:
+    """Contracts by check_contract's verdict (rows) and the parity verdict
+    (columns), as text."""
+    cols = [k for k in ORDER if any(v.verdict == k for v in verdicts)]
+    cells = Counter((v.checker, v.verdict) for v in verdicts)
+    rows = [c for c in CHECKS + ("-",) if any(v.checker == c for v in verdicts)]
+    width = max(len(c) for c in cols + ["not checked"]) + 1
+    lines = ["check_contract (rows) by parity verdict (columns; match and known are "
+             "inside supported_program, outside is not):",
+             " " * width + "".join(f"{c:>{width}}" for c in cols)]
+    for r in rows:
+        name = "not checked" if r == "-" else r
+        lines.append(f"{name:<{width}}" + "".join(f"{cells[r, c]:>{width}}" for c in cols))
+    return lines
 
 
 def report(verdicts: list[Verdict], skipped: Counter) -> str:
@@ -242,8 +356,23 @@ def report(verdicts: list[Verdict], skipped: Counter) -> str:
     lines = [f"{len(verdicts)} contracts: "
              + ", ".join(f"{counts[k]} {k}" for k in ORDER if counts[k])]
     lines += [f"not compared: {n} {reason}" for reason, n in skipped.most_common()]
+    gates = Counter(v.gate for v in verdicts)
+    lines.append("supported_program: " + ", ".join(
+        f"{gates[g]} {name}" for g, name in (("T", "sp=T"), ("F", "sp=F"), ("-", "not reached"))))
+    checked = any(v.checker != "-" for v in verdicts)
+    if checked:
+        checks = Counter(v.checker for v in verdicts)
+        lines.append("check_contract: " + ", ".join(
+            f"{checks[c]} {c}" for c in CHECKS) + f", {checks['-']} not checked")
+        lines += cross_table(verdicts)
+    for a, b in PAIRS:
+        pair = f"{a}/{b}"
+        same = Counter(v.bytes.get(pair, "n/a") for v in verdicts)
+        lines.append(f"{a} vs {b} bytes: " + ", ".join(f"{same[k]} {k}" for k in SAMENESS))
     for v in sorted(verdicts, key=lambda v: (ORDER.index(v.verdict), v.contract.test)):
-        lines.append(f"{v.verdict:<11} {v.contract.id} {v.contract.test}"
+        extras = " ".join([f"sp={v.gate}"] + ([f"chk={v.checker}"] if checked else [])
+                          + [f"{p}={s}" for p, s in v.bytes.items()])
+        lines.append(f"{v.verdict:<11} {v.contract.id} {extras} {v.contract.test}"
                      + (f": {v.detail}" if v.detail else ""))
     return "\n".join(lines) + "\n"
 
@@ -255,6 +384,14 @@ def main() -> None:
     parser.add_argument("work", type=Path, help="directory for the generated witnesses")
     parser.add_argument("--report", type=Path, help="also write the report here")
     parser.add_argument("--jobs", type=int, default=os.cpu_count())
+    parser.add_argument("--stock-python", type=Path,
+                        help="the Python of the pinned Vyper without the patches, to compare its bytes too")
+    parser.add_argument("--checker", action="store_true",
+                        help="also run check_contract on each contract, by the kernel evaluator")
+    parser.add_argument("--report-only", action="store_true",
+                        help="exit 0 whatever the verdicts, once the report is written")
+    parser.add_argument("--compile-only", action="store_true",
+                        help="only compile the contracts into WORK (how --stock-python is run)")
     args = parser.parse_args()
     if os.environ.get("PYTHONHASHSEED") != "0" or sys.flags.hash_randomization:
         raise SystemExit("run with PYTHONHASHSEED=0, and without -I or -E, which ignore it: "
@@ -263,14 +400,31 @@ def main() -> None:
     pin = (ROOT / "VYPER_PIN").read_text().strip()
     if len(vyper.__commit__) < 8 or not pin.startswith(vyper.__commit__):
         raise SystemExit(f"this Python's Vyper is commit {vyper.__commit__}, not VYPER_PIN {pin}")
+    if args.compile_only:
+        contracts, errors, _ = compile_all(args.exports, args.work, args.jobs)
+        print(f"compiled {sum(e is None for e in errors)} of {len(contracts)} contracts")
+        return
     if not RUNNER.exists():
         raise SystemExit(f"missing {RUNNER}; run tools/build_native_json_parity.py")
-    verdicts, skipped = check(args.exports, args.work, args.jobs)
+    stock = None
+    if args.stock_python:
+        stock = args.work / "stock"
+        try:
+            failure = subprocess.run([str(args.stock_python), "-P", "-s",
+                                      str(Path(__file__).resolve()), str(args.exports), str(stock),
+                                      "--compile-only", "--jobs", str(args.jobs)]).returncode
+        except OSError as e:
+            failure = e
+        if failure:  # the stock comparisons are reported, never a failure
+            print(f"the stock pin's compile failed ({failure}); its comparisons are n/a",
+                  file=sys.stderr)
+            stock = None
+    verdicts, skipped = check(args.exports, args.work, args.jobs, stock, args.checker)
     text = report(verdicts, skipped)
     print(text, end="")
     if args.report:
         args.report.write_text(text)
-    if any(v.verdict in FAILING for v in verdicts):
+    if not args.report_only and any(v.verdict in FAILING for v in verdicts):
         raise SystemExit(1)
 
 

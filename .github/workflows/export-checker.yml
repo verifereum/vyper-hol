@@ -1,0 +1,77 @@
+name: export-checker
+
+# check_contract's verdict, by the kernel evaluator, on every contract the
+# export-parity job compares (tools/native_export_parity.py --checker), beside
+# the parity verdict. The checker takes about half a second a contract, too long
+# for every pull request, so it runs nightly on main. The summary gives the
+# totals and the table of checker verdicts against parity verdicts; the
+# per-contract report is an artefact. No verdict fails it (--report-only); it
+# fails only when the run itself breaks.
+on:
+  schedule:
+    - cron: '7 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export-checker:
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 180
+    # The cache login is a secret of the bazel-cache environment, which every
+    # branch of this repository may deploy to.
+    environment: bazel-cache
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-holbuild-project
+
+      - uses: ./.github/actions/setup-vyper-test-exports
+
+      - name: Configure remote cache
+        uses: ./.github/actions/setup-remote-cache
+        with:
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
+
+      - name: Build schema-2 HOL toolchain
+        run: holbuild buildhol
+
+      - name: Build native JSON bytecode parity runner
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: python3 tools/build_native_json_parity.py
+
+      - name: Install patched pinned Vyper
+        run: |
+          python -m pip install uv==0.10.11
+          pin=$(tr -d '[:space:]' < VYPER_PIN)
+          git clone https://github.com/vyperlang/vyper.git "$RUNNER_TEMP/vyper-pin"
+          git -C "$RUNNER_TEMP/vyper-pin" checkout --detach "$pin"
+          sh bytecode/python-o1-bytecode-fixtures --install "$RUNNER_TEMP/vyper-patched" \
+            --vyper-repo "$RUNNER_TEMP/vyper-pin"
+
+      - name: Check the exported contracts
+        run: |
+          PYTHONHASHSEED=0 "$RUNNER_TEMP/vyper-patched/venv/bin/python" -P -s \
+            tools/native_export_parity.py tests/vyper-test-exports "$RUNNER_TEMP/export-parity" \
+            --report export-checker-report.txt --checker --report-only
+
+      - name: Summarize the report
+        if: ${{ !cancelled() && hashFiles('export-checker-report.txt') != '' }}
+        run: |
+          {
+            echo '```text'
+            grep -v -E '^[a-z-]+ +[0-9a-f]{16} ' export-checker-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the per-contract report
+        if: ${{ !cancelled() && hashFiles('export-checker-report.txt') != '' }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: export-checker-report-${{ github.run_number }}
+          path: export-checker-report.txt
+          retention-days: 30
