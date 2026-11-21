@@ -124,7 +124,7 @@ QED
 Theorem ec_arith_permitted_tail_full:
   (bt = ECAdd \/ bt = ECMul) /\
   a = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
-  vv = LocatedValue a (mk_ptr (Var dst) LocMemory) /\
+  vv = StackValue a (Var dst) /\
   addr = (if bt = ECAdd then 6w else 7w) /\
   an = (if bt = ECAdd then 128w else 96w) /\
   (do gas <- emit_op GAS [];

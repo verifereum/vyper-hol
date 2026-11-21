@@ -748,7 +748,7 @@ Theorem ec_result_pointer_post:
      regions_disjoint (w2n w) 64 b sz) /\
   pure_frame cenv func es sa s0 t ==>
   vv_post H ctx func cenv cx e es sa sb s0 es' (Value (mk_ec_result (x,y)))
-    (FST (as_ptr_val (expr_type e) LocMemory (pop,sb))) t
+    (FST (as_stack_val (expr_type e) (pop,sb))) t
 Proof
   strip_tac >>
   `mem_bytes_at (w2n w) 32 t.vs_memory = word_to_bytes (n2w x:bytes32) T /\
@@ -1621,7 +1621,7 @@ Theorem ec_suffix_pointer_post[local]:
       vv_post H ctx func cenv cx e es sf sb s0
         (SND (take_call_outcome NONE addr payload NONE es))
         (Value (mk_ec_result (x,y)))
-        (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) t
+        (FST (as_stack_val (expr_type e) (res,sb))) t
 Proof
   strip_tac >>
   qpat_x_assum `addr = _` SUBST_ALL_TAC >>
@@ -1728,7 +1728,7 @@ Theorem ec_points_run:
                word_to_bytes (mem_word_at (w2n point+32) s.vs_memory) T ++
                word_to_bytes wscalar T) NONE es))
             (Value (mk_ec_result (x,y)))
-            (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) t
+            (FST (as_stack_val (expr_type e) (res,sb))) t
       else ?t. run_inst_seq (emitted_insts sf sb) s =
         Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t) /\
   (!p1 p2 sf res sb func cenv cx es s point point2 lo v1 v2 e.
@@ -1761,7 +1761,7 @@ Theorem ec_points_run:
                word_to_bytes (mem_word_at (w2n point2) s.vs_memory) T ++
                word_to_bytes (mem_word_at (w2n point2+32) s.vs_memory) T) NONE es))
             (Value (mk_ec_result (x,y)))
-            (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) t
+            (FST (as_stack_val (expr_type e) (res,sb))) t
       else ?t. run_inst_seq (emitted_insts sf sb) s =
         Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) t)
 Proof
@@ -1977,14 +1977,14 @@ Theorem compile_ec_operands:
     lower_value compile_expr cenv (expr_type a) a sa = (p,s1) /\
     lower_value compile_expr cenv (BaseT (UintT 256)) b s1 = (scalar,sm) /\
     compile_ecmul_point p scalar sm = (res,sb) /\
-    vv = FST (as_ptr_val ann LocMemory (res,sb))) /\
+    vv = FST (as_stack_val ann (res,sb))) /\
   (!cenv ty ann a b sa vv sb.
   compile_expr cenv ty (Builtin ann ECAdd [a;b]) sa = (vv,sb) ==>
   ?p q s1 sm res.
     lower_value compile_expr cenv (expr_type a) a sa = (p,s1) /\
     lower_value compile_expr cenv (expr_type b) b s1 = (q,sm) /\
     compile_ecadd_points p q sm = (res,sb) /\
-    vv = FST (as_ptr_val ann LocMemory (res,sb)))
+    vv = FST (as_stack_val ann (res,sb)))
 Proof
   conj_tac >> rpt gen_tac >>
   qmatch_goalsub_abbrev_tac `compile_expr cenv ty (Builtin ann builtin [a;b]) sa` >>
@@ -2095,7 +2095,7 @@ Theorem ec_points_run_disj[local]:
   (?s'. run_inst_seq (emitted_insts sf sb) s = OK s' /\
      ?a. r = INL a /\
        vv_post H ctx func cenv cx e es sf sb s es' a
-         (FST (as_ptr_val (expr_type e) LocMemory (res,sb)))
+         (FST (as_stack_val (expr_type e) (res,sb)))
          (s' with vs_inst_idx := LENGTH sb.cs_current_insts)) \/
   (?b s'. run_inst_seq (emitted_insts sf sb) s = Abort b s' /\
      !n. expr_exit r (Abort b (s' with vs_inst_idx := n)))) /\
@@ -2121,7 +2121,7 @@ Theorem ec_points_run_disj[local]:
   (?s'. run_inst_seq (emitted_insts sf sb) s = OK s' /\
      ?a. r = INL a /\
        vv_post H ctx func cenv cx e es sf sb s es' a
-         (FST (as_ptr_val (expr_type e) LocMemory (res,sb)))
+         (FST (as_stack_val (expr_type e) (res,sb)))
          (s' with vs_inst_idx := LENGTH sb.cs_current_insts)) \/
   (?b s'. run_inst_seq (emitted_insts sf sb) s = Abort b s' /\
      !n. expr_exit r (Abort b (s' with vs_inst_idx := n))))
@@ -2398,7 +2398,7 @@ Theorem ec_points_path[local]:
         (?a. r = INL a /\
            !(H:(bool # bytes32 # type_value) list # num list). valid_horizon cx st0 H es'.storage_trace ==>
              vv_post H ctx func cenv cx e es sf sb s es' a
-               (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) w) /\
+               (FST (as_stack_val (expr_type e) (res,sb))) w) /\
         w.vs_current_bb = sb.cs_current_bb /\
         w.vs_inst_idx = LENGTH sb.cs_current_insts) \/
      (exit_result r' /\ expr_exit r r'))) /\
@@ -2429,7 +2429,7 @@ Theorem ec_points_path[local]:
         (?a. r = INL a /\
            !(H:(bool # bytes32 # type_value) list # num list). valid_horizon cx st0 H es'.storage_trace ==>
              vv_post H ctx func cenv cx e es sf sb s es' a
-               (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) w) /\
+               (FST (as_stack_val (expr_type e) (res,sb))) w) /\
         w.vs_current_bb = sb.cs_current_bb /\
         w.vs_inst_idx = LENGTH sb.cs_current_insts) \/
      (exit_result r' /\ expr_exit r r')))
