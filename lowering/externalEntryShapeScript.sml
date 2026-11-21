@@ -2440,6 +2440,7 @@ Theorem compile_acc_labels:
 Proof
   rpt gen_tac >> disch_tac >> Cases_on `item` >>
   once_rewrite_tac[compile_acc_def] >> simp[lower_value_labels] >>
+  Cases_on `is_self_addr addr_e` >> simp[emit_op_labels] >>
   rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
        simp[lower_value_labels, emit_op_labels, emit_inst_labels]) >>
   simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
