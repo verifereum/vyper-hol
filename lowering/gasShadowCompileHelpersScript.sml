@@ -206,7 +206,7 @@ Proof
    simp[gas_shadow_compiles_emit_op, gas_shadow_compiles_return])
 QED
 
-Theorem gas_shadow_self_addr[local]:
+Theorem gas_shadow_self_addr:
   !e. is_self_addr (gas_shadow_expr e) <=> is_self_addr e
 Proof
   Cases_on `e` >> simp[gas_shadow_expr_def,

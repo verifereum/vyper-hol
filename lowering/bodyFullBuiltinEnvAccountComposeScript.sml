@@ -143,25 +143,6 @@ Proof
   irule (cj 1 gas_origin_ptr_path_rules) >> simp[update_var_def]
 QED
 
-Theorem self_addr_source_all_tails_local[local]:
-  !cx e1 es. is_self_addr e1 ==>
-    eval_expr cx e1 es = return (Value (AddressV cx.txn.target)) es
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `e1` >> gvs[is_self_addr_def] >>
-  Cases_on `b` >> gvs[is_self_addr_def] >>
-  Cases_on `l` >>
-  Cases_on `e` >> gvs[is_self_addr_def] >>
-  simp[exprSimWordArgsTheory.eval_exprs_nil,
-       is_self_addr_def, Once vyperInterpreterTheory.evaluate_def,
-       vyperContextTheory.evaluate_builtin_def,
-       builtin_args_length_ok_def, is_self_codesize_def,
-       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
-       vyperStateTheory.get_accounts_def, vyperStateTheory.lift_sum_def,
-       vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-       vyperStateTheory.return_def]
-QED
-
 Theorem self_codesize_source[local]:
   !cx es tail.
     bind (eval_expr cx
@@ -171,7 +152,7 @@ Theorem self_codesize_source[local]:
     (INL (IntV (&LENGTH cx.txn.code)), es with gas_obs := tail)
 Proof
   rpt gen_tac >>
-  simp[self_addr_source_all_tails_local,
+  simp[self_addr_source_all_tails,
        exprSimWordArgsTheory.eval_exprs_cons_action,
        exprSimWordArgsTheory.eval_exprs_nil,
        Once evaluate_def, type_check_def, assert_def, ignore_bind_def,
@@ -323,19 +304,6 @@ QED
 
 Finalise self_codesize_sim_full
 
-Theorem account_gas_shadow_self_addr[local]:
-  !e. is_self_addr (gas_shadow_expr e) <=> is_self_addr e
-Proof
-  Cases_on `e` >> simp[gas_shadow_expr_def,
-                        vyperContextTheory.is_self_addr_def] >>
-  Cases_on `b` >> simp[gas_shadow_builtin_def,
-                        vyperContextTheory.is_self_addr_def] >>
-  Cases_on `l` >> simp[gas_shadow_expr_def,
-                        vyperContextTheory.is_self_addr_def] >>
-  Cases_on `e` >> simp[gas_shadow_builtin_def,
-                        vyperContextTheory.is_self_addr_def]
-QED
-
 Theorem account_full_from_suffix:
   (!item bs ee cx v x sa op sb func st0 cenv s ctx G tn DF lo d explicit PG.
     item <> Code /\ LENGTH bs = 20 /\ accounts_well_typed ee.accounts /\
@@ -440,7 +408,7 @@ Proof
      simp[builtin_args_length_ok_def]) >>
   `~is_self_codesize (Acc item) [gas_shadow_expr e]` by
     (qpat_x_assum `~is_self_codesize (Acc item) [e]` mp_tac >>
-     simp[is_self_codesize_def, account_gas_shadow_self_addr]) >>
+     simp[is_self_codesize_def, gasShadowCompileHelpersTheory.gas_shadow_self_addr]) >>
   `?xx sm. lower_value compile_expr cenv (BaseT AddressT)
       (gas_shadow_expr e) shadow_sa = (xx,sm) /\
     (case item of

@@ -69,7 +69,7 @@ Proof
        comp_bind_def, is_self_addr_def]
 QED
 
-Theorem self_addr_source_all_tails[local]:
+Theorem self_addr_source_all_tails:
   !cx e1 es. is_self_addr e1 ==>
     eval_expr cx e1 es = return (Value (AddressV cx.txn.target)) es
 Proof
