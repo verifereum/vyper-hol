@@ -380,6 +380,7 @@ QED
 Theorem compile_unop_sim_mem:
   !ctx func cenv cx ty ann bi e1 ty1 f es.
     bi <> Len /\ ~precompile_builtin bi /\ builtin_args_length_ok bi 1 /\
+    ~is_self_codesize bi [e1] /\
     is_word_type ann /\ is_word_type (expr_type e1) /\
     (!sa sb op.
        lower_value compile_expr cenv ty (Builtin ann bi [e1]) sa = (op, sb) ==>
@@ -516,6 +517,7 @@ Proof
     >- simp[]
     >- simp[]
     >- simp[builtin_args_length_ok_def]
+    >- simp[is_self_codesize_def]
     >- simp[]
     >- simp[]
     >- (rpt strip_tac >> drule lower_value_not >> simp[])
