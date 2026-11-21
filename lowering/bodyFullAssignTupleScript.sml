@@ -6427,18 +6427,7 @@ Theorem body_assign_tuple_other_full:
                      ~(?nsid. t = TopLevelNameTarget nsid)) gs /\
     lowered_value_type cenv e = expr_type e /\
     ~(?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
-            EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids) /\
-    ~EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
-                        FLOOKUP env.var_types id = SOME ty /\
-                        0 < type_memory_bytes cenv ty) \/
-               (?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
-                       supported_scalar_target tops nsid) \/
-               (?nsid fld fty.
-                  g = BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld) /\
-                  supported_storage_field_write tops nsid fld /\
-                  type_place_target env
-                    (AttributeTarget (TopLevelNameTarget nsid) fld) =
-                    SOME (Type fty) /\ is_word_type fty)) gs ==>
+            EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids) ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
