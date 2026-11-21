@@ -323,25 +323,6 @@ Proof
   simp[]
 QED
 
-Theorem dalloca_window_id[local]:
-  dalloca_windows (\chunk k. (EL k chunk).inst_id < lo) insts <=>
-  EVERY (\i. i.inst_opcode = DALLOCA ==> i.inst_id < lo) insts
-Proof
-  simp[dalloca_windows_def, EVERY_EL] >> eq_tac >> rpt strip_tac
-  >- (first_x_assum drule_all >> strip_tac >> gvs[EL_APPEND_EQN]) >>
-  qexistsl_tac [`[]`,`insts`,`[]`,`j`] >>
-  simp[] >> metis_tac[]
-QED
-
-Theorem compiler_dalloca_window_id[local]:
-  compiler_dalloca_windows (\chunk k. (EL k chunk).inst_id < lo) st <=>
-  EVERY (\i. i.inst_opcode = DALLOCA ==> i.inst_id < lo) (state_insts st)
-Proof
-  simp[compiler_dalloca_windows_def, dalloca_window_id, state_insts_def,
-       all_blocks_def, EVERY_FLAT, EVERY_MAP, combinTheory.o_DEF, EVERY_MEM,
-       MEM_FLAT, MEM_MAP, MEM_REVERSE] >> metis_tac[]
-QED
-
 Theorem frag_code_in_state_insts[local]:
   MEM i (frag_code sa sb) ==> MEM i (state_insts sb)
 Proof
