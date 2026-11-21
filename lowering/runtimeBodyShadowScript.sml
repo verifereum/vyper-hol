@@ -130,7 +130,8 @@ Theorem runtime_selected_body_shadow_with_shadow_nr:
     supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
     rt = (if ret = NoneT then NONE else SOME ret) /\
     type_stmts env ret fbody = SOME env' ==>
-    ?func shadow_ctx shadow_func cenv' sb shadow_sl shadow_sb shadow_unit.
+    ?func shadow_ctx shadow_func cenv' sb shadow_sl shadow_sb shadow_unit
+     shadow_sa shadow_st'.
       runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
       shadow_ctx = shadow_unit.cu_context /\
       lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
@@ -143,7 +144,11 @@ Theorem runtime_selected_body_shadow_with_shadow_nr:
         (cenv',shadow_sb) /\
       gas_shadow_state sl shadow_sl /\ gas_shadow_state sb shadow_sb /\
       fn_has_code sl sb func /\ fn_has_code sb st' func /\
-      fn_has_code shadow_sl shadow_sb shadow_func
+      fn_has_code shadow_sl shadow_sb shadow_func /\
+      gas_shadow_state sa shadow_sa /\
+      compile_guarded_body cenv nr key ut iv (MAP gas_shadow_stmt fbody) rt
+        shadow_sa = ((), shadow_st') /\
+      fn_has_code shadow_sa shadow_st' shadow_func
 Proof
   rpt gen_tac >> strip_tac >>
   `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
@@ -324,7 +329,8 @@ Proof
        (mp_tac o REWRITE_RULE [EVERY_MEM, combinTheory.o_DEF]) >>
      rename1 `MEM external exts` >>
      disch_then (qspec_then `external` mp_tac) >> simp[]) >>
-  qexistsl_tac [`func'`, `shadow_sl`, `shadow_sb`, `shadow_unit`] >> simp[]
+  qexistsl_tac [`func'`, `shadow_sl`, `shadow_sb`, `shadow_unit`,
+                `shadow_sa`, `shadow_end`] >> simp[]
 QED
 
 Theorem runtime_selected_body_shadow_with_shadow:
@@ -359,7 +365,12 @@ Proof
   mp_tac (Q.SPECL [`tops`,`rpolicy`,`unit`,`lbl`,`ce`,`pos`,`mincd`,`pay`,
     `F`,`key`,`ut`,`iv`,`fbody`,`rt`,`st`,`cenv`,`sa`,`sa`,`st'`,
     `bindings`,`ctx`,`cx`,`env`,`env'`,`ret`] runtime_selected_body_shadow_with_shadow_nr) >>
-  fs[comp_return_def, GSYM EVERY_NOT_EXISTS]
+  fs[comp_return_def, GSYM EVERY_NOT_EXISTS] >>
+  disch_then (qx_choosel_then
+    [`func`, `shadow_func`, `cenv'`, `sb`, `shadow_sa`,
+     `shadow_sb`, `shadow_unit`, `shadow_start`, `shadow_end`] strip_assume_tac) >>
+  qexistsl_tac [`func`, `shadow_func`, `cenv'`, `sb`, `shadow_sa`,
+                `shadow_sb`, `shadow_unit`] >> simp[]
 QED
 
 Theorem runtime_selected_body_shadow:
@@ -455,7 +466,8 @@ Theorem runtime_fallback_body_shadow_with_shadow_nr:
     supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
     rt = (if ret = NoneT then NONE else SOME ret) /\
     type_stmts env ret fbody = SOME env' ==>
-    ?func shadow_ctx shadow_func cenv' sb shadow_sl shadow_sb shadow_unit.
+    ?func shadow_ctx shadow_func cenv' sb shadow_sl shadow_sb shadow_unit
+     shadow_sa shadow_st'.
       runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
       shadow_ctx = shadow_unit.cu_context /\
       lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
@@ -468,7 +480,11 @@ Theorem runtime_fallback_body_shadow_with_shadow_nr:
         (cenv',shadow_sb) /\
       gas_shadow_state sl shadow_sl /\ gas_shadow_state sb shadow_sb /\
       fn_has_code sl sb func /\ fn_has_code sb st' func /\
-      fn_has_code shadow_sl shadow_sb shadow_func
+      fn_has_code shadow_sl shadow_sb shadow_func /\
+      gas_shadow_state sa shadow_sa /\
+      compile_guarded_body cenv nr key ut iv (MAP gas_shadow_stmt fbody) rt
+        shadow_sa = ((), shadow_st') /\
+      fn_has_code shadow_sa shadow_st' shadow_func
 Proof
   rpt gen_tac >> strip_tac >>
   `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
@@ -664,7 +680,8 @@ Proof
        (mp_tac o REWRITE_RULE [EVERY_MEM, combinTheory.o_DEF]) >>
      rename1 `MEM external exts` >>
      disch_then (qspec_then `external` mp_tac) >> simp[]) >>
-  qexistsl_tac [`func'`, `shadow_sl`, `shadow_sb`, `shadow_unit`] >>
+  qexistsl_tac [`func'`, `shadow_sl`, `shadow_sb`, `shadow_unit`,
+                `shadow_st`, `shadow_end`] >>
   simp[]
 QED
 
@@ -699,7 +716,12 @@ Proof
   rpt strip_tac >>
   mp_tac (Q.INST [`nr` |-> `F`, `sl` |-> `sa`] (SPEC_ALL
     runtime_fallback_body_shadow_with_shadow_nr)) >>
-  fs[comp_return_def, GSYM EVERY_NOT_EXISTS]
+  fs[comp_return_def, GSYM EVERY_NOT_EXISTS] >>
+  disch_then (qx_choosel_then
+    [`func`, `shadow_func`, `cenv'`, `sb`, `shadow_sa`,
+     `shadow_sb`, `shadow_unit`, `shadow_start`, `shadow_end`] strip_assume_tac) >>
+  qexistsl_tac [`func`, `shadow_func`, `cenv'`, `sb`, `shadow_sa`,
+                `shadow_sb`, `shadow_unit`] >> simp[]
 QED
 
 (* The body's shadow placement at either entry endpoint: a selected
@@ -719,7 +741,8 @@ Theorem runtime_entry_body_shadow_with_shadow_nr:
     supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
     rt = (if ret = NoneT then NONE else SOME ret) /\
     type_stmts env ret fbody = SOME env' ==>
-    ?func shadow_ctx shadow_func cenv' sb shadow_sl shadow_sb shadow_unit.
+    ?func shadow_ctx shadow_func cenv' sb shadow_sl shadow_sb shadow_unit
+     shadow_sa shadow_st'.
       runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
       shadow_ctx = shadow_unit.cu_context /\
       lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
@@ -732,7 +755,11 @@ Theorem runtime_entry_body_shadow_with_shadow_nr:
         (cenv',shadow_sb) /\
       gas_shadow_state sl shadow_sl /\ gas_shadow_state sb shadow_sb /\
       fn_has_code sl sb func /\ fn_has_code sb st' func /\
-      fn_has_code shadow_sl shadow_sb shadow_func
+      fn_has_code shadow_sl shadow_sb shadow_func /\
+      gas_shadow_state sa shadow_sa /\
+      compile_guarded_body cenv nr key ut iv (MAP gas_shadow_stmt fbody) rt
+        shadow_sa = ((), shadow_st') /\
+      fn_has_code shadow_sa shadow_st' shadow_func
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `runtime_entry_body_start _ _ _ _`

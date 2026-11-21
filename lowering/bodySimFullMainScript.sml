@@ -10,7 +10,7 @@
  *   body_stmts_sim_full -- the statement-list judgment it gives
  *)
 Theory bodySimFullMain
-Ancestors bodyFullShadowBodyInv
+Ancestors bodyFullShadowBodyInv bodyFullRaiseCustomError bodyFullAssertCustomError
   bodyFullCases bodyFullCreateHeld bodyFullIf bodyFullExprStmt bodyFullExits bodyFullPreds bodySimFull gasShadow bodySim supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeCallGraph typedCopyMetadata alist list
   vyperTypeContract[qualified,ignore_grammar]
@@ -113,7 +113,6 @@ fun full_case th =
   irule (SIMP_RULE bool_ss full_case_simps th) >>
   asm_rewrite_tac[] >> metis_tac[];
 
-(* GATE_ADMISSION: missing case, RaiseCustomError body case; owner: gas-shadow/symbolic lane *)
 Theorem body_raise_custom_case_full:
   !cx err.
     (!id positional kwargs tops params es.
@@ -124,10 +123,14 @@ Theorem body_raise_custom_case_full:
        body_exprs_full_ok cx es) ==>
     body_stmt_full_ok cx (Raise (RaiseCustomError err))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[body_stmt_full_ok_def] >> rpt gen_tac >> strip_tac >>
+  match_mp_tac (Q.SPECL [`cx`,`err`,`DF`,`lo`,`d`,`PG`,
+    `tops`,`bindings`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,`cenv`,
+    `env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`] compile_raise_custom_frag_full) >>
+  asm_rewrite_tac[]
 QED
 
-(* GATE_ADMISSION: missing case, AssertCustomError body case; owner: gas-shadow/symbolic lane *)
 Theorem body_assert_custom_case_full:
   !cx e err.
     (!s tv t id positional kwargs tops params es.
@@ -140,7 +143,13 @@ Theorem body_assert_custom_case_full:
     body_expr_full_ok cx e ==>
     body_stmt_full_ok cx (Assert e (AssertCustomError err))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[body_stmt_full_ok_def] >> rpt gen_tac >> strip_tac >>
+  match_mp_tac (Q.SPECL [`cx`,`e`,`err`,`DF`,`lo`,`d`,`PG`,
+    `tops`,`bindings`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,`cenv`,
+    `env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`] compile_assert_custom_frag_full_from_raise) >>
+  asm_rewrite_tac[] >>
+  rpt strip_tac >> irule body_raise_custom_case_full >> metis_tac[]
 QED
 
 Theorem callable_body_loop_calls_ok[local]:

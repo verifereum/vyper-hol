@@ -464,25 +464,24 @@ Theorem supported_selected_external_body:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
   lookup_function NONE tx.function_name External tops =
-    SOME (mut,nr,args,[],ret,fbody) ==>
+    SOME (mut,nr,args,dflts,ret,fbody) ==>
   supported_function_body tops External args
     (subst_consts_stmts (module_consts_env tops []) fbody)
 Proof
   strip_tac >> drule lookup_function_External_cases >> strip_tac
-  >- (`supported_function_body tops External args fbody` by
-        (mp_tac (Q.INST [`vis` |-> `External`, `name` |-> `tx.function_name`,
-           `defaults` |-> `[]:expr list`, `stmts` |-> `fbody`, `rr` |-> `raw`]
-           (SPEC_ALL supported_program_function)) >> simp[]) >>
+  >- (drule_all supported_program_declaration >>
+      simp[supported_declaration_body_def] >> strip_tac >>
       qpat_assum `source_typing_ok tops am tx` (mp_tac o REWRITE_RULE [source_typing_ok_def]) >>
       disch_then (qx_choosel_then [`art`, `A`] strip_assume_tac) >>
       mp_tac (Q.INST
         [`mode` |-> `F`, `layouts` |-> `am.layouts`, `addr` |-> `tx.target`,
-         `vis` |-> `External`, `name` |-> `tx.function_name`, `dflts` |-> `[]:expr list`,
+         `vis` |-> `External`, `name` |-> `tx.function_name`, `dflts` |-> `dflts`,
          `rr` |-> `raw`,
          `ss` |-> `fbody`, `imms` |-> `account_immutables am tx.target`,
          `env` |-> `function_entry_env art [(NONE,tops)] NONE External args`]
         (INST_TYPE [alpha |-> ``:160 word``] (SPEC_ALL checked_const_substituted_function))) >>
       simp[supported_pure_exprs_every]) >>
+  `dflts = []` by (drule vyperReadOnlySyntaxTheory.external_getter_defaults >> simp[]) >>
   metis_tac[supported_selected_external_getter_body]
 QED
 
@@ -593,7 +592,7 @@ Theorem compiled_selected_external_body_typing:
   constants_fold_module [(NONE,tops)] (account_immutables am tx.target)
     NONE tops FEMPTY = SOME A /\
   lookup_function NONE tx.function_name External tops =
-    SOME (mut,nr,args,[],ret,fbody) /\
+    SOME (mut,nr,args,dflts,ret,fbody) /\
   env = function_entry_env art [(NONE,tops)] NONE External args /\
   (!id pt. MEM (id,pt) args ==> FLOOKUP env.var_types id = SOME pt) /\
   type_stmts env ret fbody = SOME env' ==>
@@ -606,13 +605,14 @@ Proof
   >- (`module_allocated am.layouts tx.target NONE tops` by
         (drule check_contract_main_module_allocated >> simp[]) >>
       `check_function_body am.layouts tx.target [(NONE,tops)] art NONE
-         External mut nr args [] ret fbody` by
+         External mut nr args dflts ret fbody` by
         (irule check_contract_runtime_function_body_MEM >> simp[] >>
          qexistsl [`tx.function_name`, `raw`] >> simp[]) >>
       `IS_SOME (type_stmts env ret
          (subst_consts_stmts (module_consts_env tops []) fbody))` by
         gvs[check_function_body_def, consts_env_mods_singleton, subst_consts_mods_singleton] >>
       fs[optionTheory.IS_SOME_EXISTS] >> metis_tac[type_stmts_subst_consts_result]) >>
+  `dflts = []` by (drule vyperReadOnlySyntaxTheory.external_getter_defaults >> simp[]) >>
   Cases_on `ALOOKUP (module_consts_env tops []) tx.function_name`
   >- metis_tac[subst_getter_body_without_replacement] >>
   `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>

@@ -13,10 +13,9 @@ Definition account_code_lengths_ok_def:
     !addr. LENGTH (lookup_account addr accounts).code <= 24576
 End
 
-Theorem runtime_initial_account_codes:
-  source_typing_ok source_tops am tx /\
-  initial_venom_state_rel source_tops am tx vs ==>
-  account_code_lengths_ok vs.vs_accounts
+Theorem initial_account_codes_after_transfer:
+  machine_well_typed am ==>
+  account_code_lengths_ok (accounts_after_transfer tx am.accounts)
 Proof
   strip_tac >>
   `!addr. (accounts_after_transfer tx am.accounts addr).code =
@@ -24,8 +23,7 @@ Proof
     (gen_tac >> rw[accounts_after_transfer_def, lookup_account_def,
                    update_account_def, combinTheory.APPLY_UPDATE_THM] >>
      rpt IF_CASES_TAC >> simp[]) >>
-  gvs[source_typing_ok_def, initial_venom_state_rel_def,
-      account_code_lengths_ok_def, lookup_account_def] >>
+  gvs[account_code_lengths_ok_def, lookup_account_def] >>
   drule machine_well_typed_accounts >>
   simp[accounts_well_typed_def, account_well_typed_def, lookup_account_def] >>
   metis_tac[]
