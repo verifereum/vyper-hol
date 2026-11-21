@@ -307,14 +307,23 @@ Proof
         `shadow_unit.cu_context.ctx_functions`, `"__entry"`] mp_tac) >>
      fs[gas_shadow_context_def]) >>
   `runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit` by
-    (qpat_assum `classify_functions tops = _` mp_tac >>
+    (`~EXISTS external_has_defaults exts` by
+       fs[GSYM EVERY_NOT_EXISTS] >>
+     qpat_x_assum `~EXISTS external_has_defaults exts` mp_tac >>
+     qpat_assum `classify_functions tops = _` mp_tac >>
      qpat_assum `MAP (set_external_package_target _ o _) _ = _` mp_tac >>
      qpat_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = SOME shadow_unit` mp_tac >>
      rpt (qpat_x_assum `Abbrev _` mp_tac) >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      gvs[runtime_gas_shadow_unit_def, markerTheory.Abbrev_def] >>
      pure_rewrite_tac [gas_shadow_external_package_def, GSYM APPEND_ASSOC, APPEND] >>
-     first_assum ACCEPT_TAC) >>
+     Cases_on `EXISTS external_has_defaults exts` >> simp[] >>
+     qpat_x_assum `EXISTS external_has_defaults exts`
+       (strip_assume_tac o REWRITE_RULE [EXISTS_MEM]) >>
+     qpat_x_assum `EVERY ($~ o external_has_defaults) exts`
+       (mp_tac o REWRITE_RULE [EVERY_MEM, combinTheory.o_DEF]) >>
+     rename1 `MEM external exts` >>
+     disch_then (qspec_then `external` mp_tac) >> simp[]) >>
   qexistsl_tac [`func'`, `shadow_sl`, `shadow_sb`, `shadow_unit`] >> simp[]
 QED
 
@@ -637,7 +646,10 @@ Proof
         `shadow_unit.cu_context.ctx_functions`, `"__entry"`] mp_tac) >>
      fs[gas_shadow_context_def]) >>
   `runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit` by
-    (qpat_assum `set_fallback_package_target _ _ = SOME _` mp_tac >>
+    (`~EXISTS external_has_defaults exts` by
+       fs[GSYM EVERY_NOT_EXISTS] >>
+     qpat_x_assum `~EXISTS external_has_defaults exts` mp_tac >>
+     qpat_assum `set_fallback_package_target _ _ = SOME _` mp_tac >>
      qpat_assum `classify_functions tops = _` mp_tac >>
      qpat_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = SOME shadow_unit` mp_tac >>
      rpt (qpat_x_assum `Abbrev _` mp_tac) >>
@@ -645,7 +657,13 @@ Proof
      gvs[runtime_gas_shadow_unit_def, markerTheory.Abbrev_def] >>
      pure_rewrite_tac [gas_shadow_external_package_def,
        gas_shadow_fallback_package_def, GSYM APPEND_ASSOC, APPEND] >>
-     first_assum ACCEPT_TAC) >>
+     Cases_on `EXISTS external_has_defaults exts` >> simp[] >>
+     qpat_x_assum `EXISTS external_has_defaults exts`
+       (strip_assume_tac o REWRITE_RULE [EXISTS_MEM]) >>
+     qpat_x_assum `EVERY ($~ o external_has_defaults) exts`
+       (mp_tac o REWRITE_RULE [EVERY_MEM, combinTheory.o_DEF]) >>
+     rename1 `MEM external exts` >>
+     disch_then (qspec_then `external` mp_tac) >> simp[]) >>
   qexistsl_tac [`func'`, `shadow_sl`, `shadow_sb`, `shadow_unit`] >>
   simp[]
 QED
