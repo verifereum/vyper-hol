@@ -646,9 +646,7 @@ Proof
 QED
 
 Theorem aug_place_supported_storage_kind:
-  body_inv tops ctx cenv cx /\
-  supported_target_info tops bindings t = SOME pt /\
-  (!id. target_root t <> NameTarget id) /\
+  ~immutable_root cx t /\ (!id. target_root t <> NameTarget id) /\
   eval_target_place cx t es = (INL p,st) ==>
   ?tr slot tv. p = StoragePlace tr slot tv
 Proof

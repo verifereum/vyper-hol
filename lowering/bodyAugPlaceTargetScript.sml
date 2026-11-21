@@ -1,8 +1,8 @@
 (*
  * The facts an augmented assignment to a field or element of a place needs
  * from the body simulation's premises (#637): the target's case judgment
- * from body_base_target_ok, its indices' expr_body_pre, that a supported
- * target's root is not an immutable, and what kind of place it evaluates to.
+ * from body_base_target_ok, its indices' expr_body_pre, and the kind of
+ * place a nonimmutable target evaluates to.
  *
  * TOP-LEVEL:
  *   aug_place_body_target_sim — target_sim from body_base_target_ok
@@ -134,6 +134,78 @@ Theorem aug_place_supported_root_not_immutable:
   ~immutable_root cx t
 Proof
   cheat
+QED
+
+Theorem aug_place_supported_immutable_root_decl:
+  body_inv tops ctx cenv cx /\
+  supported_target_info tops bindings t = SOME pt /\
+  immutable_root cx t ==>
+  ?id vis mut ty slot.
+    target_root t = TopLevelNameTarget (NONE,id) /\
+    supported_variable_decl tops (NONE,id) = SOME (vis,mut,ty,slot) /\
+    (mut = Immutable \/ ?e. mut = Constant e)
+Proof
+  strip_tac >>
+  qpat_x_assum `immutable_root cx t`
+    (strip_assume_tac o REWRITE_RULE [immutable_root_def]) >>
+  `supported_place_root tops (src,id)` by metis_tac[aug_place_supported_root] >>
+  drule_then SUBST_ALL_TAC aug_place_supported_root_namespace >>
+  `get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+  `ts = tops` by metis_tac[optionTheory.SOME_11] >> gvs[] >>
+  Cases_on `supported_variable_decl tops (NONE,id)` >-
+    (gvs[supportedExprFormsTheory.supported_place_root_def] >>
+     Cases_on `supported_hashmap_decl tops (NONE,id)` >> gvs[] >>
+     rename1 `SOME decl` >> PairCases_on `decl` >>
+     metis_tac[aug_place_supported_root_decl, optionTheory.IS_SOME_EXISTS, optionTheory.NOT_SOME_NONE]) >>
+  rename1 `SOME decl` >> PairCases_on `decl` >>
+  Cases_on `decl1` >>
+  gvs[supportedExprFormsTheory.supported_place_root_def, supported_immutable_type_def,
+      supported_constant_type_def, AllCaseEqs()] >>
+  metis_tac[aug_place_supported_root_decl, optionTheory.IS_SOME_EXISTS, optionTheory.NOT_SOME_NONE]
+QED
+
+Theorem aug_place_supported_toplevel_mutable:
+  body_inv tops ctx cenv cx /\
+  supported_target_info tops bindings (TopLevelNameTarget nsid) = SOME pt /\
+  expr_sim_inv cenv cx env es /\ target_mutable env (TopLevelNameTarget nsid) ==>
+  ~immutable_root cx (TopLevelNameTarget nsid)
+Proof
+  strip_tac >> strip_tac >>
+  drule_all_then strip_assume_tac aug_place_supported_immutable_root_decl >>
+  gvs[target_root_def] >>
+  drule_then strip_assume_tac bodyStorageMetadataTheory.supported_variable_decl_mem >>
+  `get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+  `bare_globals_complete env.bare_globals cx` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  map_every (fn pat => qpat_assum pat mp_tac)
+    [`get_module_code cx NONE = SOME tops`,
+     `MEM (VariableDecl _ _ _ _ _) tops`,
+     `bare_globals_complete env.bare_globals cx`,
+     `target_mutable env (TopLevelNameTarget (NONE,id))`] >>
+  POP_ASSUM_LIST kall_tac >>
+  simp[bare_globals_complete_def, target_mutable_def] >>
+  metis_tac[optionTheory.NOT_SOME_NONE]
+QED
+
+Theorem aug_place_storage_field_root:
+  body_inv tops ctx cenv cx /\ supported_storage_field_write tops nsid fld ==>
+  ~immutable_root cx (AttributeTarget (TopLevelNameTarget nsid) fld)
+Proof
+  strip_tac >> PairCases_on `nsid` >>
+  `?vis mut sid slot.
+     supported_variable_decl tops (nsid0,nsid1) =
+       SOME (vis,mut,StructT sid,SOME slot) /\ (mut = Storage \/ mut = Transient)` by
+    (fs[supported_storage_field_write_def,
+        supportedExprFormsTheory.supported_storage_fields_def] >>
+     Cases_on `supported_variable_decl tops (nsid0,nsid1)` >> gvs[] >>
+     rename1 `SOME decl` >> PairCases_on `decl` >>
+     Cases_on `decl1` >> Cases_on `decl2` >> Cases_on `decl3` >> gvs[]) >>
+  drule_then strip_assume_tac bodyStorageMetadataTheory.supported_variable_decl_mem >>
+  gvs[] >>
+  `get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+  `IS_SOME (find_var_decl_by_name nsid1 tops)` by
+    (irule aug_place_supported_root_decl >> metis_tac[]) >>
+  fs[immutable_root_def,target_root_def,optionTheory.IS_SOME_EXISTS]
 QED
 
 Theorem aug_place_target_indices_pre:
@@ -386,14 +458,11 @@ Proof
 QED
 
 Theorem aug_place_supported_success_kind:
-  body_inv tops ctx cenv cx /\
-  supported_target_info tops bindings t = SOME pt /\
-  eval_target_place cx t es = (INL p,st) ==>
+  ~immutable_root cx t /\ eval_target_place cx t es = (INL p,st) ==>
   ((?id path. p = MemoryPlace id path) \/
    (?tr slot tv. p = StoragePlace tr slot tv))
 Proof
   rpt strip_tac >> Cases_on `p` >> simp[] >>
-  `~immutable_root cx t` by metis_tac[aug_place_supported_root_not_immutable] >>
   qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
   Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
