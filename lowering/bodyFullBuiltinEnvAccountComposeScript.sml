@@ -13,6 +13,219 @@ Ancestors
 Libs
   pairLib
 
+Theorem self_codesize_lower[local]:
+  !cenv ty e1 sa. is_self_addr e1 ==>
+    lower_value compile_expr cenv ty
+      (Builtin (BaseT (UintT 256)) (Acc Codesize) [e1]) sa =
+    emit_op CODESIZE [] sa
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[Once lower_value_def, comp_bind_def, compile_expr_unary_builtin] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  simp[lower_value_child_call, vyperASTTheory.expr_type_def,
+       listTheory.list_size_def, compile_acc_def,
+       as_stack_val_pair, unwrap_value_def, comp_return_def,
+       comp_bind_def, vyperContextTheory.is_self_addr_def]
+QED
+
+Theorem self_codesize_full_path[local]:
+  lower_value compile_expr cenv ty
+      (Builtin (BaseT (UintT 256)) (Acc Codesize) [e1]) sa = (op,sb) /\
+  is_self_addr e1 /\ fn_has_code sa sb func /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!out. step_inst_base (mk_inst sa.cs_next_id CODESIZE [] [out]) s =
+    OK (update_var out w s)) ==>
+  ?t G' tn'.
+    t = (update_var (STRING #"%" (toString sa.cs_next_var)) w s
+          with vs_inst_idx := SUC s.vs_inst_idx) /\
+    G' = step_prov PG G (mk_inst sa.cs_next_id CODESIZE []
+      [STRING #"%" (toString sa.cs_next_var)])
+      (update_var (STRING #"%" (toString sa.cs_next_var)) w s) /\
+    tn' = step_taint (mk_inst sa.cs_next_id CODESIZE []
+      [STRING #"%" (toString sa.cs_next_var)]) s
+      (update_var (STRING #"%" (toString sa.cs_next_var)) w s) tn /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G',tn')
+Proof
+  strip_tac >>
+  `emit_op CODESIZE [] sa = (op,sb)` by
+    metis_tac[self_codesize_lower] >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+        comp_ignore_bind_def, comp_return_def, emit_def] >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb (LENGTH sa.cs_current_insts) =
+    SOME (mk_inst sa.cs_next_id CODESIZE []
+      [STRING #"%" (toString sa.cs_next_var)])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  qmatch_asmsub_abbrev_tac `get_instruction bb _ = SOME inst` >>
+  gen_tac >>
+  `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+     (OK (update_var (STRING #"%" (toString sa.cs_next_var)) w s
+          with vs_inst_idx := SUC s.vs_inst_idx),
+      step_prov PG G inst (update_var (STRING #"%" (toString sa.cs_next_var)) w s),
+      step_taint inst s (update_var (STRING #"%" (toString sa.cs_next_var)) w s) tn)` by
+    (mp_tac (Q.INST [`i` |-> `inst`,
+        `u` |-> `update_var (STRING #"%" (toString sa.cs_next_var)) w s`]
+        straight_line_origin_ptr_edge) >>
+     simp[Abbr `inst`, mk_inst_def, is_terminator_def,
+          ptr_inst_ok_def, access_ok_def, taint_ok_def,
+          source_memory_write_ranges_def, source_memory_read_ranges_def,
+          inst_mem_below_frontier_def, inst_dload_in_section_def] >>
+     simp[GSYM mk_inst_def, venomExecSemanticsTheory.step_inst_non_invoke,
+          update_var_def]) >>
+  `~(update_var (STRING #"%" (toString sa.cs_next_var)) w s
+       with vs_inst_idx := SUC s.vs_inst_idx).vs_halted` by
+    simp[update_var_def] >>
+  drule (cj 1 gas_origin_ptr_path_rules) >> strip_tac >>
+  drule (cj 2 gas_origin_ptr_path_rules) >>
+  disch_then (qspec_then `[]` mp_tac) >> simp[] >>
+  disch_then irule >>
+  irule (cj 1 gas_origin_ptr_path_rules) >> simp[update_var_def]
+QED
+
+Theorem self_codesize_source[local]:
+  !cx es tail.
+    bind (eval_expr cx
+      (Builtin (BaseT (UintT 256)) (Acc Codesize)
+        [Builtin (BaseT AddressT) (Env SelfAddr) []]))
+      (read_result cx) (es with gas_obs := tail) =
+    (INL (IntV (&LENGTH cx.txn.code)), es with gas_obs := tail)
+Proof
+  rpt gen_tac >>
+  simp[Once evaluate_def, type_check_def, assert_def, ignore_bind_def,
+       bind_def, return_def, lift_sum_def, get_accounts_def,
+       read_result_def, evaluate_builtin_def, is_self_codesize_def,
+       evaluate_self_codesize_def]
+QED
+
+Theorem self_codesize_sim_full[local]:
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty es.
+    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+    expr_body_pre cenv cx env
+      (Builtin (BaseT (UintT 256)) (Acc Codesize)
+        [Builtin (BaseT AddressT) (Env SelfAddr) []]) es ==>
+    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty
+      (Builtin (BaseT (UintT 256)) (Acc Codesize)
+        [Builtin (BaseT AddressT) (Env SelfAddr) []]) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  rw[expr_sim_full_def] >>
+  irule gas_outcome_full_initial_domain >>
+  simp[storage_trace_frame_bind, cj 5 evaluate_storage_trace_frame,
+       storage_trace_frame_read_result] >>
+  strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+    gvs[storage_trace_domain_def] >>
+  `allocas_from lo s0` by metis_tac[ghost_inv_at_def] >>
+  `call_ctx_rel cx.txn s0.vs_call_ctx s0.vs_tx_ctx s0.vs_block_ctx` by
+    metis_tac[stateRelProjTheory.stmt_state_rel_state_rel,
+              stateRelProjTheory.state_rel_call_ctx_rel] >>
+  `s0.vs_code = cx.txn.code` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ _ _ /\ _`
+       (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+     (impl_tac >- simp[]) >>
+     disch_then (ACCEPT_TAC o
+       MATCH_MP (cj 3 (iffLR loweringStateRelDefsTheory.accounts_rel_def)) o
+       MATCH_MP (cj 6 (iffLR loweringStateRelDefsTheory.state_rel_def)) o
+       MATCH_MP stmt_state_rel_state_rel o CONJUNCT1)) >>
+  `LENGTH cx.txn.code < dimword (:256)` by
+    (qpat_assum `expr_sim_inv _ _ _ _` mp_tac >> simp[expr_sim_inv_def,
+      vyperTypeInvariantsTheory.context_well_typed_def, wordsTheory.dimword_def]) >>
+  `!out. step_inst_base (mk_inst sa.cs_next_id CODESIZE [] [out]) s0 =
+      OK (update_var out (n2w (LENGTH cx.txn.code)) s0)` by
+    simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+         venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_read0_def] >>
+  drule_all self_codesize_full_path >>
+  disch_then (qspecl_then [`tn0`, `gas_explicit_sites ctx shadow_ctx`, `PG`, `G0`]
+    strip_assume_tac) >>
+  irule gas_outcome_full_pure >> simp[] >>
+  qexistsl_tac [`G'`, `es`, `INL (IntV (&LENGTH cx.txn.code))`, `t`, `tn'`] >>
+  simp[self_codesize_source] >>
+  qx_gen_tac `H` >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+    (drule_then strip_assume_tac) >>
+  gvs[self_codesize_lower, expr_store_bound_def, expr_type_def,
+      is_word_type_def, update_var_def, alloca_history_def] >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+        comp_ignore_bind_def, comp_return_def, emit_def] >>
+  simp[] >>
+  `!x. not_fresh_at sa x ==> x <> STRING #"%" (toString sa.cs_next_var)` by
+    (simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  conj_tac >- suspend "self_word_post" >>
+  conj_tac >- suspend "self_history" >>
+  suspend "self_ghosts"
+QED
+
+Resume self_codesize_sim_full[self_word_post]:
+  irule expr_post_word_intro >>
+  simp[expr_type_def, is_word_type_def, word_value_def,
+       eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  simp[pure_frame_def] >>
+  conj_tac
+  >- (gvs[storage_well_formed_on_def] >>
+      rpt gen_tac >> Cases_on `b` >>
+      gvs[vyperStorageBackendTheory.get_storage_def] >> metis_tac[]) >>
+  conj_tac
+  >- (irule wb_frame_readonly_tail >>
+      qexistsl_tac [`sa`, `s0`] >>
+      simp[wb_frame_refl, lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
+  `not_local_ptr cenv es.scopes (STRING #"%" (toString sa.cs_next_var))` by
+    (irule fresh_not_local_ptr >> qexists_tac `sa` >> simp[] >> metis_tac[]) >>
+  drule_all stmt_state_rel_update_var >>
+  disch_then (qspec_then `val_to_w256 (IntV (&LENGTH cx.txn.code))` mp_tac) >>
+  simp[update_var_def] >> strip_tac >>
+  `s0 with <|vs_vars := s0.vs_vars |+ (STRING #"%" (toString sa.cs_next_var),
+       val_to_w256 (IntV (&LENGTH cx.txn.code)));
+       vs_inst_idx := SUC (LENGTH sa.cs_current_insts)|> =
+   (s0 with vs_vars := s0.vs_vars |+ (STRING #"%" (toString sa.cs_next_var),
+       val_to_w256 (IntV (&LENGTH cx.txn.code)))) with
+       vs_inst_idx := SUC (LENGTH sa.cs_current_insts)` by simp[] >>
+  metis_tac[stmt_state_rel_inst_idx]
+QED
+
+Resume self_codesize_sim_full[self_history]:
+  fs[alloca_history_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `k < LENGTH sa.cs_current_insts`
+  >- metis_tac[] >>
+  `k = LENGTH sa.cs_current_insts` by decide_tac >> gvs[] >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  first_x_assum (qspec_then `0` mp_tac) >>
+  simp[] >> strip_tac >> gvs[mk_inst_def]
+QED
+
+Resume self_codesize_sim_full[self_ghosts]:
+  reverse conj_tac
+  >- (simp[ptr_val_ok_def, is_word_type_def, ghost_kept_at_def,
+          step_prov_def, out_prov_def, set_prov_def, op_prov_def,
+          mk_inst_def, FLOOKUP_DRESTRICT,
+          step_taint_def, op_taint_def, set_var_taint_def, out_taint_def,
+          FLOOKUP_UPDATE, mem_taint_def, new_site_bytes_def,
+          step_writes_def, source_memory_write_ranges_def,
+          written_taint_def, range_bytes_def] >>
+      rpt conj_tac >> rpt gen_tac >> strip_tac >>
+      gvs[flookup_thm, FLOOKUP_DRESTRICT] >> metis_tac[]) >>
+  irule ghost_inv_at_exterior_frame >>
+  qexistsl_tac [`G0`, `es`, `s0`, `sa`, `tn0`] >>
+  simp[lookup_var_def, FLOOKUP_UPDATE,
+       step_prov_def, out_prov_def, set_prov_def, mk_inst_def,
+       FLOOKUP_DRESTRICT, step_taint_def, op_taint_def,
+       set_var_taint_def, out_taint_def, mem_taint_def,
+       new_site_bytes_def, step_writes_def, source_memory_write_ranges_def,
+       written_taint_def, range_bytes_def, adopt_reset_def,
+       store_taint_def, imm_taint_def] >>
+  simp[pred_setTheory.EXTENSION, flookup_thm] >> metis_tac[]
+QED
+
+Finalise self_codesize_sim_full
+
 Theorem account_full_from_suffix:
   (!item bs ee cx v x sa op sb func st0 cenv s ctx G tn DF lo d explicit PG.
     item <> Code /\ LENGTH bs = 20 /\ accounts_well_typed ee.accounts /\
@@ -68,6 +281,16 @@ Theorem account_full_from_suffix:
       (Builtin (account_item_type item) (Acc item) [e]) es
 Proof
   disch_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `is_self_codesize (Acc item) [e]`
+  >- (`item = Codesize /\
+       ?self_ty. e = Builtin self_ty (Env SelfAddr) []` by
+        (gvs[is_self_codesize_def] >>
+         qexists_tac `self_ty` >>
+         qpat_x_assum `is_self_addr e` mp_tac >>
+         rewrite_tac[is_self_addr_def] >>
+         rpt (CASE_TAC >> fs[]) >> metis_tac[]) >>
+      gvs[] >>
+      irule self_codesize_sim_full >> metis_tac[]) >>
   `expr_body_pre cenv cx env e es` by
     (drule expr_body_pre_builtin_arg >> disch_then irule >>
      gvs[expr_body_pre_def]) >>
