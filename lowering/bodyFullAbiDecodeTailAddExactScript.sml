@@ -93,7 +93,7 @@ Resume abi_decode_tail_ptr_add_joint_exact[effects]:
      simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
        fresh_id_def, emit_def, comp_return_def] >> rpt strip_tac >> gvs[]) >>
   `step_inst_base i s = OK u` by
-    simp[Abbr `i`, Abbr `u`, step_inst_base_def, exec_pure2_def,
+    simp[Abbr `i`, Abbr `u`, step_inst_base_opcode_eqs, exec_pure2_def,
       mk_inst_def, eval_operand_def, word_add_n2w] >>
   `inst_mem_below_frontier i s /\ inst_dload_in_section i s` by
     simp[Abbr `i`, mk_inst_def, inst_mem_below_frontier_def,
@@ -102,7 +102,7 @@ Resume abi_decode_tail_ptr_add_joint_exact[effects]:
     (gen_tac >> simp[ptr_inst_ok_def, Abbr `i`, mk_inst_def, access_ok_def,
       taint_ok_def, source_memory_read_ranges_def, source_memory_write_ranges_def] >>
      conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
-     simp[step_inst_non_invoke, mk_inst_def, step_inst_base_def,
+     simp[step_inst_non_invoke, mk_inst_def, step_inst_base_opcode_eqs,
        exec_pure2_def, eval_operand_def, update_var_def]) >>
   suspend "package"
 QED
