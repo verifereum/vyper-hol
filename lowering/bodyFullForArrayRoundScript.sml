@@ -836,7 +836,7 @@ Resume for_nonslot_array_layout_full_with_increment[prefix_mono]:
     nonslot_mono_cut `compile_expr _ _ _ sa0 = (_,sbExpr)`
       [stmtLoweringMonoTheory.ci_mono_compile_expr_sa] >>
   `ci_mono shadow_sa0 sbExpr'` by
-    nonslot_mono_cut `compile_expr _ _ _ shadow_sa0 = (_,sbExpr')`
+    nonslot_mono_cut `compile_expr _ _ (gas_shadow_expr _) shadow_sa0 = (_,sbExpr')`
       [stmtLoweringMonoTheory.ci_mono_compile_expr_sa] >>
   `ci_mono sbExpr saL` by
     nonslot_mono_cut `_ sbExpr = (len_op,saL)` [nonslot_length_mono] >>
@@ -882,7 +882,7 @@ Resume for_nonslot_array_layout_full_with_increment[body_mono]:
     nonslot_mono_cut `compile_stmts _ _ _ _ sbCopy = (_,sbBody)`
       [stmtLoweringMonoTheory.compile_stmt_ci_mono] >>
   `ci_mono sbCopy' sbBody'` by
-    nonslot_mono_cut `compile_stmts _ _ _ _ sbCopy' = (_,sbBody')`
+    nonslot_mono_cut `compile_stmts _ _ _ (MAP gas_shadow_stmt _) sbCopy' = (_,sbBody')`
       [stmtLoweringMonoTheory.compile_stmt_ci_mono] >>
   `ci_mono sbBody sj` by
     nonslot_mono_cut `emit_jmp_if_not_terminated _ sbBody = (_,sj)`
@@ -979,15 +979,12 @@ Resume for_nonslot_array_layout_full_with_increment[layout_resources]:
      irule ci_mono_trans >> qexists `saCopy` >> simp[]) >>
   `not_fresh_at sbCopy (STRING #"%" (toString saL.cs_next_var))` by
     (irule freshWritesTheory.not_fresh_at_mono >> qexists `saA` >>
-     rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-       qpat_assum `ci_mono saA sbCopy`
-         (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o REWRITE_RULE [ci_mono_def]),
-       simp[not_fresh_at_def]]) >>
+     qpat_assum `ci_mono saA sbCopy` (strip_assume_tac o REWRITE_RULE [ci_mono_def]) >>
+     simp[not_fresh_at_def]) >>
   `local_ptrs_reserved bc sbCopy` by
     (irule nonslot_reserved_extend >> qexistsl [`c`,`fty`,`id`,`saD`,`saL`] >>
-     rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-       qpat_assum `ci_mono saL sbCopy`
-         (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o REWRITE_RULE [ci_mono_def])]) >>
+     qpat_assum `ci_mono saL sbCopy` (strip_assume_tac o REWRITE_RULE [ci_mono_def]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   suspend "witnesses"
 QED
 
@@ -1049,7 +1046,7 @@ QED
 
 Finalise for_nonslot_array_layout_full_with_increment
 
-Theorem for_nonslot_array_layout_full_with_done_age:
+Theorem for_nonslot_array_layout_full_with_done_age[local]:
   expr_type e = ArrayT sty bd /\ c.ce_alloca_locals /\
   local_ptrs_reserved c sa0 /\ gas_shadow_state sa0 shadow_sa0 /\
   compile_stmt c lctx ret_ty (For id fty (Array e) n loop_body) sa0 = ((),sb) /\
@@ -1717,12 +1714,18 @@ Resume for_nonslot_array_entry_full[item_frame]:
     (rpt gen_tac >> irule local_region_lookup_cong >> metis_tac[]) >>
   `!aid row. FLOOKUP u.vs_allocas aid = SOME row ==>
     FLOOKUP s.vs_allocas aid = SOME row` by simp[] >>
+  suspend "item_row_taint"
+QED
+
+Resume for_nonslot_array_entry_full[item_row_taint]:
   `!aid off sz. FLOOKUP u.vs_allocas aid = SOME (off,sz) ==>
       off + sz <= u.vs_alloca_next` by
     (qpat_assum `stmt_state_rel H ctx func c cx em u`
-       (ACCEPT_TAC o REWRITE_RULE [venomMemDefsTheory.alloca_next_valid_def] o
-        cj 2 o REWRITE_RULE [venomMemDefsTheory.alloca_inv_def] o cj 2 o
-        MATCH_MP stateRelProjTheory.stmt_state_rel_local_ptrs_alloca)) >>
+       (mp_then Any strip_assume_tac stateRelProjTheory.stmt_state_rel_local_ptrs_alloca) >>
+     qpat_assum `alloca_inv u`
+       (strip_assume_tac o REWRITE_RULE [venomMemDefsTheory.alloca_inv_def]) >>
+     qpat_assum `alloca_next_valid u`
+       (ACCEPT_TAC o REWRITE_RULE [venomMemDefsTheory.alloca_next_valid_def])) >>
   `!i. i < u.vs_alloca_next ==> (i IN tn.t_mem <=> i IN tu.t_mem)` by
     (rpt strip_tac >>
      qpat_assum `!i. i IN ta.t_mem <=> _` (qspec_then `i` mp_tac) >>
@@ -1755,6 +1758,10 @@ qpat_assum `!i. i < u.vs_alloca_next ==> _`
      qpat_assum `ghost_kept_at lo c es0 sa0 G0 tn0 s0 Gu tu`
        (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
      res_tac) >>
+  suspend "item_separation"
+QED
+
+Resume for_nonslot_array_entry_full[item_separation]:
   `!name b len. local_region c em.scopes s name b len ==>
     w2n dw + capacity <= b \/ b + len <= w2n dw` by
     (rpt strip_tac >>
@@ -1785,19 +1792,33 @@ qpat_assum `!i. i < u.vs_alloca_next ==> _`
     (rpt strip_tac >>
      qpat_assum `!name root sz. FLOOKUP c.ce_vars name = SOME (PtrVar (Var root) sz) ==> _`
        (qspecl_then [`name`,`root`,`sz`] mp_tac) >> simp[]) >>
+  suspend "item_live"
+QED
+
+Resume for_nonslot_array_entry_full[item_live]:
   `loc = LocCode ==> !src name path. rv = PlaceR (ImmutablePlace src name path) ==>
      ?tv root. lookup_immutable cx em src name = SOME (tv,root) /\
                evaluate_subscripts tv root path = INL (ArrayV av)` by
     (rpt strip_tac >> irule (iffLR for_nonslot_read_immutable_path) >> gvs[]) >>
-  pure_rewrite_tac[for_nonslot_live_def,stmtSimPropsTheory.cenv_top_ext_refl] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[] >>
-  rpt strip_tac >>
-  rename1 `FLOOKUP u.vs_allocas aid = SOME (b,len)` >>
-  qpat_assum `!aid off sz. FLOOKUP u.vs_allocas aid = SOME (off,sz) ==> _`
-    (qspecl_then [`aid`,`b`,`len`] (drule_then mp_tac)) >>
-  qpat_assum `u.vs_alloca_next <= i` mp_tac >>
-  qpat_assum `i < b + len` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >> decide_tac
+  `!aid b len i. FLOOKUP u.vs_allocas aid = SOME (b,len) /\
+      aid < sbExpr.cs_next_id /\
+      (!name lb lsz. local_region c em.scopes u name lb lsz ==>
+        b + len <= lb \/ lb + lsz <= b) /\
+      b <= i /\ i < b + len /\ i IN tn.t_mem ==> i IN tu.t_mem` by
+    (rpt strip_tac >>
+     qpat_assum `!aid off sz i. FLOOKUP u.vs_allocas aid = SOME (off,sz) /\
+                               off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tu.t_mem`
+       (drule_all_then ACCEPT_TAC)) >>
+  `~s.vs_halted /\ lo <= s.vs_alloca_next /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+   sbExpr.cs_next_id <= aidItem /\ w2n dw + capacity <= s.vs_alloca_next /\
+   FLOOKUP s.vs_allocas aidItem = SOME (w2n dw,capacity) /\ lookup_var xd s = SOME dw` by
+    simp[] >>
+  `!aid row. FLOOKUP s0.vs_allocas aid = SOME row ==> FLOOKUP s.vs_allocas aid = SOME row` by
+    simp[] >>
+  `!x w. not_fresh_at saL x /\ lookup_var x u = SOME w ==> lookup_var x s = SOME w` by
+    simp[] >>
+  rewrite_tac[for_nonslot_live_def,stmtSimPropsTheory.cenv_top_ext_refl,DROP_0,ZERO_LESS_EQ] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Finalise for_nonslot_array_entry_full
@@ -2882,6 +2903,10 @@ Resume for_nonslot_array_scoped_body_at[uniform_suffix]:
      qpat_assum `for_nonslot_live _ _ _ _ _ _`
        (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_live_def]) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  suspend "suffix_pop_and_land"
+QED
+
+Resume for_nonslot_array_scoped_body_at[suffix_pop_and_land]:
   `?cf. cenv_top_ext bc cf ef.scopes` by
     (qpat_assum `!H. _ ==> Qraw H _ _ _ _ _`
        (qspec_then `storage_trace_horizon ef.storage_trace` mp_tac) >>
@@ -3081,6 +3106,10 @@ Resume for_nonslot_array_scoped_body_at[rebuild_increment_entry]:
     (simp[Abbr `ep`] >> irule bodyFullSharedTheory.ghost_inv_at_pop >>
      conj_tac >- (qexists_tac `sc` >> asm_rewrite_tac[]) >>
      qexists_tac `cpost` >> asm_rewrite_tac[]) >>
+  suspend "increment_operand_frame"
+QED
+
+Resume for_nonslot_array_scoped_body_at[increment_operand_frame]:
   `?marks. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (s,G,tn) marks (OK t,G1,tn1)` by
     (qpat_assum `!H. valid_horizon cx st0 H ef.storage_trace ==> _ /\ _`
@@ -3113,6 +3142,10 @@ Resume for_nonslot_array_scoped_body_at[rebuild_increment_entry]:
      qpat_assum `!x. not_fresh_at sbCopy x ==> FLOOKUP G1 x = _ /\ _`
        (drule_then (fn frame =>
           simp[SIMP_RULE (srw_ss()) [op_taint_def] frame]))) >>
+  suspend "increment_endpoint_frame"
+QED
+
+Resume for_nonslot_array_scoped_body_at[increment_endpoint_frame]:
   `return_buf_frame d c sa0 z` by
     (irule return_buf_frame_frame >> qexistsl [`bc`,`s`,`sa0`] >>
      simp[GSYM AND_IMP_INTRO] >>
@@ -3143,6 +3176,10 @@ Resume for_nonslot_array_scoped_body_at[rebuild_increment_entry]:
                   evaluate_subscripts tv root path = INL (ArrayV av))`
     (map_every assume_tac o CONJUNCTS)
   >- suspend "continue_immutable_observation" >>
+  suspend "increment_live"
+QED
+
+Resume for_nonslot_array_scoped_body_at[increment_live]:
   simp[for_nonslot_live_def, stmtSimPropsTheory.cenv_top_ext_refl,
        vyperFiniteStoragePreservationTheory.storage_well_formed_on_scopes,
        allocas_from_def] >>
@@ -3296,12 +3333,14 @@ Resume for_nonslot_array_scoped_body_at[increment_return_buffer]:
   conj_tac
   >- (qexistsl [`cx`,`env`] >>
       conj_tac
-      >- (qpat_assum `expr_sim_inv c cx env em`
-             (ACCEPT_TAC o cj 2 o REWRITE_RULE [vyperTypeInvariantsTheory.env_consistent_def]
-              o cj 1 o REWRITE_RULE [exprSimHypsDefsTheory.expr_sim_inv_def])) >>
-      qpat_assum `expr_sim_inv c cx env ep`
-        (ACCEPT_TAC o cj 2 o REWRITE_RULE [vyperTypeInvariantsTheory.env_consistent_def]
-         o cj 1 o REWRITE_RULE [exprSimHypsDefsTheory.expr_sim_inv_def])) >>
+      >- (qpat_assum `expr_sim_inv c cx env em` mp_tac >>
+          simp[NoAsms, exprSimHypsDefsTheory.expr_sim_inv_def,
+               vyperTypeInvariantsTheory.env_consistent_def] >>
+          strip_tac >> first_assum ACCEPT_TAC) >>
+      qpat_assum `expr_sim_inv c cx env ep` mp_tac >>
+      simp[NoAsms, exprSimHypsDefsTheory.expr_sim_inv_def,
+           vyperTypeInvariantsTheory.env_consistent_def] >>
+      strip_tac >> first_assum ACCEPT_TAC) >>
   qexistsl [`saL`,`t'`] >> simp[]
 QED
 
@@ -3332,17 +3371,25 @@ Resume for_nonslot_array_scoped_body_at[continue_memory_observation]:
            (mp_tac o SIMP_RULE (srw_ss()) [lookup,read]))) >>
      Cases_on `lookup_scopes name es.scopes` >> simp[NoAsms]) >>
   `name IN FDOM env.var_types` by
-    (qpat_assum `expr_sim_inv c cx env es`
-       (assume_tac o cj 2 o REWRITE_RULE [vyperTypeInvariantsTheory.env_consistent_def]
-        o cj 1 o REWRITE_RULE [exprSimHypsDefsTheory.expr_sim_inv_def]) >>
+    (`env_scopes_consistent env cx es` by
+       (qpat_assum `expr_sim_inv c cx env es` mp_tac >>
+        simp[NoAsms, exprSimHypsDefsTheory.expr_sim_inv_def,
+             vyperTypeInvariantsTheory.env_consistent_def] >>
+        strip_tac >> first_assum ACCEPT_TAC) >>
      qpat_assum `env_scopes_consistent env cx es`
-       (fn inv => qpat_assum `lookup_scopes name es.scopes = SOME entry`
-          (mp_tac o MATCH_MP (cj 3
-            (REWRITE_RULE [vyperTypeInvariantsTheory.env_scopes_consistent_def] inv)))) >>
-     simp[FLOOKUP_DEF]) >>
+       (strip_assume_tac o REWRITE_RULE [vyperTypeInvariantsTheory.env_scopes_consistent_def]) >>
+     qpat_assum `!nm ent. lookup_scopes nm es.scopes = SOME ent ==>
+                   IS_SOME (FLOOKUP env.var_types nm)`
+       (fn scoped => qpat_assum `lookup_scopes name es.scopes = SOME entry`
+          (mp_tac o MATCH_MP scoped)) >>
+     simp[NoAsms,FLOOKUP_DEF]) >>
   `name <> id` by
     (strip_tac >> qpat_assum `name = id` SUBST_ALL_TAC >>
      qpat_assum `id NOTIN FDOM env.var_types` mp_tac >> simp[]) >>
+  suspend "continue_memory_path"
+QED
+
+Resume for_nonslot_array_scoped_body_at[continue_memory_path]:
   `name IN FDOM benv.var_types` by
     (qpat_assum `benv = extend_local env id fty F` SUBST1_TAC >>
      simp[extend_local_def]) >>
@@ -3374,6 +3421,10 @@ Resume for_nonslot_array_scoped_body_at[continue_memory_observation]:
      simp[NoAsms,push_scope_with_var_def,return_def] >>
      disch_then (SUBST1_TAC o SYM) >> simp[Abbr `scope`]) >>
   `name NOTIN FDOM scope` by simp[Abbr `scope`] >>
+  suspend "continue_memory_lookup"
+QED
+
+Resume for_nonslot_array_scoped_body_at[continue_memory_lookup]:
   `OPTION_MAP project (lookup_scopes name ep.scopes) =
     OPTION_MAP project (lookup_scopes name es.scopes)` by
     (qspecl_then [`ef.scopes`,`scope`,`es.scopes`,`name`,`project`,`entry`]
@@ -3449,41 +3500,50 @@ Theorem for_nonslot_array_capture_classify[local]:
 Proof
   strip_tac >>
   Cases_on `?nid. e = TopLevelName (ArrayT et bd) nid`
-  >- (pop_assum (qx_choose_then `nid` SUBST_ALL_TAC) >>
-      PairCases_on `nid` >>
-      `?it. supported_immutable_type tops (nid0,nid1) = SOME it` by
-        (qpat_assum `!nid. _ ==> IS_SOME _` (qspec_then `(nid0,nid1)` mp_tac) >>
-         simp[NoAsms,vyperASTTheory.expr_type_def,optionTheory.IS_SOME_EXISTS]) >>
-      `get_module_code cx NONE = SOME tops` by fs[bodySimTheory.body_inv_def] >>
-      `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-        (drule bodySimTheory.body_inv_modules_aligned >> simp[]) >>
-      drule_all bodyStorageMetadataTheory.supported_immutable_type_find_NONE >>
-      strip_tac >> qpat_x_assum `nid0 = NONE` SUBST_ALL_TAC >>
-      `rv = PlaceR (ImmutablePlace NONE nid1 [])` by
-        (qpat_x_assum `eval_expr _ (TopLevelName _ _) start = _` mp_tac >>
-         Cases_on `ALOOKUP start.immutables cx.txn.target` >>
-         simp[Once evaluate_def,lookup_global_def,bind_def,lift_option_type_def,
-              get_immutables_def,get_address_immutables_def,return_def,raise_def] >>
-         rename1 `ALOOKUP start.immutables cx.txn.target = SOME imms` >>
-         Cases_on `FLOOKUP (get_source_immutables NONE imms) nid1` >>
-         simp[return_def,raise_def]) >>
-      `~cx_const_name cx (NONE,nid1)` by
-        (strip_tac >> drule_all bodySimTheory.body_inv_const_name_not_root >> simp[]) >>
-      `env_context_consistent env cx` by
-        (qpat_assum `expr_sim_inv c cx env em`
-          (ACCEPT_TAC o cj 1 o REWRITE_RULE [vyperTypeInvariantsTheory.env_consistent_def]
-           o cj 1 o REWRITE_RULE [exprSimHypsDefsTheory.expr_sim_inv_def])) >>
-      `bare_globals_complete env.bare_globals cx` by
-        (qpat_assum `env_context_consistent env cx`
-          (ACCEPT_TAC o cj 7 o REWRITE_RULE [vyperTypeInvariantsTheory.env_context_consistent_def])) >>
-      `FLOOKUP env.bare_globals (NONE,nid1) = SOME it` by
-        (qpat_x_assum `supported_immutable_type _ _ = _` mp_tac >>
-         simp[supportedDeclsTheory.supported_immutable_type_def,AllCaseEqs()] >>
-         strip_tac >> gvs[] >> drule bodyStorageMetadataTheory.supported_variable_decl_mem >>
-         strip_tac >> fs[vyperTypeInvariantsTheory.bare_globals_complete_def] >> metis_tac[]) >>
-      drule_all vyperTypeInvariantsTheory.env_context_consistent_bare_global_find_NONE >> strip_tac >>
-      fs[well_typed_iterator_def,Once well_typed_expr_def,vyperASTTheory.expr_type_def] >>
-      simp[] >> qexistsl [`NONE`,`nid1`] >> simp[]) >>
+  >- suspend "bare_root" >>
+  suspend "nested_root"
+QED
+
+Resume for_nonslot_array_capture_classify[bare_root]:
+  pop_assum (qx_choose_then `nid` SUBST_ALL_TAC) >>
+  PairCases_on `nid` >>
+  `?it. supported_immutable_type tops (nid0,nid1) = SOME it` by
+    (qpat_assum `!nid. _ ==> IS_SOME _` (qspec_then `(nid0,nid1)` mp_tac) >>
+     simp[NoAsms,vyperASTTheory.expr_type_def,optionTheory.IS_SOME_EXISTS]) >>
+  `get_module_code cx NONE = SOME tops` by fs[bodySimTheory.body_inv_def] >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    (drule bodySimTheory.body_inv_modules_aligned >> simp[]) >>
+  drule_all bodyStorageMetadataTheory.supported_immutable_type_find_NONE >>
+  strip_tac >> qpat_x_assum `nid0 = NONE` SUBST_ALL_TAC >>
+  `rv = PlaceR (ImmutablePlace NONE nid1 [])` by
+    (qpat_x_assum `eval_expr _ (TopLevelName _ _) start = _` mp_tac >>
+     Cases_on `ALOOKUP start.immutables cx.txn.target` >>
+     simp[Once evaluate_def,lookup_global_def,bind_def,lift_option_type_def,
+          get_immutables_def,get_address_immutables_def,return_def,raise_def] >>
+     rename1 `ALOOKUP start.immutables cx.txn.target = SOME imms` >>
+     Cases_on `FLOOKUP (get_source_immutables NONE imms) nid1` >>
+     simp[return_def,raise_def]) >>
+  `~cx_const_name cx (NONE,nid1)` by
+    (strip_tac >> drule_all bodySimTheory.body_inv_const_name_not_root >> simp[]) >>
+  `env_context_consistent env cx` by
+    (qpat_assum `expr_sim_inv c cx env em` mp_tac >>
+     simp[NoAsms, exprSimHypsDefsTheory.expr_sim_inv_def,
+          vyperTypeInvariantsTheory.env_consistent_def] >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
+  `bare_globals_complete env.bare_globals cx` by
+    (qpat_assum `env_context_consistent env cx`
+      (ACCEPT_TAC o cj 7 o REWRITE_RULE [vyperTypeInvariantsTheory.env_context_consistent_def])) >>
+  `FLOOKUP env.bare_globals (NONE,nid1) = SOME it` by
+    (qpat_x_assum `supported_immutable_type _ _ = _` mp_tac >>
+     simp[supportedDeclsTheory.supported_immutable_type_def,AllCaseEqs()] >>
+     strip_tac >> gvs[] >> drule bodyStorageMetadataTheory.supported_variable_decl_mem >>
+     strip_tac >> fs[vyperTypeInvariantsTheory.bare_globals_complete_def] >> metis_tac[]) >>
+  drule_all vyperTypeInvariantsTheory.env_context_consistent_bare_global_find_NONE >> strip_tac >>
+  fs[well_typed_iterator_def,Once well_typed_expr_def,vyperASTTheory.expr_type_def] >>
+  simp[] >> qexistsl [`NONE`,`nid1`] >> simp[]
+QED
+
+Resume for_nonslot_array_capture_classify[nested_root]:
   `~(?ty nid. e = TopLevelName ty nid)` by
     (strip_tac >> qpat_x_assum `e = TopLevelName _ _` SUBST_ALL_TAC >>
      fs[vyperASTTheory.expr_type_def]) >>
@@ -3502,6 +3562,8 @@ Proof
       Cases_on `vv` >> fs[vv_location_def,is_word_type_def,is_bytestring_type_def]) >>
   fs[] >> Cases_on `vv` >> fs[vv_location_def,vv_place_ptr_def]
 QED
+
+Finalise for_nonslot_array_capture_classify[local]
 
 (* The branch owns the source prefix bind. At its normal continuation the
    canonical prefix capture supplies the representation; only the relation,
@@ -3853,13 +3915,16 @@ Resume for_nonslot_array_round_contracts_at[capture]:
     (`expr_body_pre c cx env e start` by simp[Abbr `start`] >>
      drule_all_then ACCEPT_TAC bodySimStmtFactsTheory.expr_body_pre_eval_result) >>
   `lookup_scopes id em.scopes = NONE` by
-    (namedCases_on `lookup_scopes id em.scopes` ["", "ent"] >> simp[] >>
-     qpat_assum `expr_sim_inv c cx env em`
-       (qspecl_then [`id`,`ent`] mp_tac o cj 4 o REWRITE_RULE
-          [exprSimHypsDefsTheory.expr_sim_inv_def,
-           vyperTypeInvariantsTheory.env_consistent_def,
-           vyperTypeInvariantsTheory.env_scopes_consistent_def]) >>
-     simp[FLOOKUP_DEF]) >>
+    (`env_scopes_consistent env cx em` by
+       (qpat_assum `expr_sim_inv c cx env em` mp_tac >>
+        simp[NoAsms, exprSimHypsDefsTheory.expr_sim_inv_def,
+             vyperTypeInvariantsTheory.env_consistent_def] >>
+        strip_tac >> first_assum ACCEPT_TAC) >>
+     Cases_on `lookup_scopes id em.scopes` >> simp[] >>
+     qpat_assum `env_scopes_consistent env cx em`
+       (strip_assume_tac o REWRITE_RULE [vyperTypeInvariantsTheory.env_scopes_consistent_def]) >>
+     qpat_assum `!nm ent. lookup_scopes nm em.scopes = SOME ent ==> _`
+       (drule_then mp_tac) >> simp[FLOOKUP_DEF]) >>
   `expr_type e = ArrayT fty bd` by metis_tac[] >>
   `local_ptrs_rel func c em.scopes u` by
     (qhdtm_assum `vv_post` (mp_tac o cj 1 o REWRITE_RULE [vv_post_def]) >>
@@ -4040,6 +4105,10 @@ Resume for_nonslot_array_round_contracts_at[cons_body]:
     (qhdtm_assum `for_nonslot_live` (mp_tac o REWRITE_RULE [for_nonslot_live_def]) >>
      simp[NoAsms] >> disch_then (map_every assume_tac o CONJUNCTS) >>
      first_assum ACCEPT_TAC) >>
+  suspend "cons_admissible"
+QED
+
+Resume for_nonslot_array_round_contracts_at[cons_admissible]:
   `gas_admissible (eval_stmts cx loop_body) (stmt_res_ok (InLoop exit incr)) eb` by
     (simp[NoAsms,gasContextTheory.gas_admissible_def] >>
      map_every qx_gen_tac [`gs`,`raw`,`ef`] >> disch_tac >>
@@ -4074,14 +4143,18 @@ Resume for_nonslot_array_round_contracts_at[cons_body]:
     (map_every assume_tac o CONJUNCTS o SIMP_RULE (srw_ss()) [for_nonslot_body_entry_def]) >>
   qhdtm_assum `for_nonslot_layout`
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_layout_def]) >>
+  suspend "cons_static_body"
+QED
+
+Resume for_nonslot_array_round_contracts_at[cons_static_body]:
   qpat_assum `compile_stmts bc _ _ loop_body sbCopy = _`
     (mp_then Any mp_tac bodyFullForRangeTheory.range_body_compiler_pair) >>
   disch_then (qspec_then `shadow_sbCopy` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`bc'`,`shBody`] strip_assume_tac) >>
   `shBody = shadow_sbBody` by
-    (qpat_assum `compile_stmts bc _ _ (MAP gas_shadow_stmt _) shadow_sbCopy = ((),shBody)`
-       (fn th => qpat_assum `compile_stmts bc _ _ (MAP gas_shadow_stmt _) shadow_sbCopy = ((),shadow_sbBody)`
+    (qpat_assum `compile_stmts _ _ _ (MAP gas_shadow_stmt _) shadow_sbCopy = ((),shBody)`
+       (fn th => qpat_assum `compile_stmts _ _ _ (MAP gas_shadow_stmt _) shadow_sbCopy = ((),shadow_sbBody)`
           (mp_tac o REWRITE_RULE [th])) >> simp[]) >>
   qpat_x_assum `shBody = shadow_sbBody` SUBST_ALL_TAC >>
   drule_then strip_assume_tac bodyFullForFactsTheory.type_stmt_for_projection >>
@@ -4102,6 +4175,10 @@ Resume for_nonslot_array_round_contracts_at[cons_body]:
     (qpat_assum `call_evaluation_safe cx (int_calls_stmt _)`
        (mp_tac o REWRITE_RULE [vyperTypeCallGraphTheory.int_calls_stmt_def]) >>
      MATCH_ACCEPT_TAC vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right) >>
+  suspend "cons_body_geometry"
+QED
+
+Resume for_nonslot_array_round_contracts_at[cons_body_geometry]:
   qpat_assum `!H. valid_horizon cx st0 H eb.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
     (assume_tac o (fn th => SIMP_RULE (srw_ss()) [] (cj 3 th))) >>
   `?bb inst. lookup_block incr func.fn_blocks = SOME bb /\
@@ -4133,6 +4210,10 @@ Resume for_nonslot_array_round_contracts_at[cons_body]:
     (irule for_nonslot_copy_open >>
      qexistsl [`addr`,`c`,`Var xd`,`fty`,`loc`,`saCopy`,`stride`,`sty`] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  suspend "cons_scoped_body"
+QED
+
+Resume for_nonslot_array_round_contracts_at[cons_scoped_body]:
   qpat_assum `!H. _ ==> for_nonslot_body_entry _ _ _ _ _ _ _`
     (mp_then Any mp_tac for_nonslot_array_scoped_body_at) >>
   disch_then (drule_at (Pat `frame_ret_ok_full _ _ _ _ _`)) >>
@@ -4232,6 +4313,10 @@ Resume for_nonslot_array_round_contracts_at[cons_compose]:
   conj_tac
   >- (simp[NoAsms, Abbr `head`] >> irule storage_trace_frame_bind_all >>
       simp[NoAsms, storage_trace_frame_read_result, storage_trace_frame_state_updates]) >>
+  suspend "cons_bind_continuation"
+QED
+
+Resume for_nonslot_array_round_contracts_at[cons_bind_continuation]:
   irule gas_outcome_full_pure >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl [`Gf`,`eb`,`INL ()`,`t`,`tnf`] >>
@@ -4255,6 +4340,10 @@ Resume for_nonslot_array_round_contracts_at[cons_compose]:
   irule gas_outcome_full_post_mono >>
   asm "scoped_outcome" (irule_at Any) >> BETA_TAC >>
   reverse conj_tac >- (rpt gen_tac >> disch_tac >> first_assum ACCEPT_TAC) >>
+  suspend "cons_next_suffix"
+QED
+
+Resume for_nonslot_array_round_contracts_at[cons_next_suffix]:
   `SUC k = LENGTH vs - LENGTH rs` by
     (`LENGTH rs = LENGTH vs - SUC k` by
        (qpat_assum `rs = DROP (SUC k) vs` (fn th => simp[NoAsms, th, LENGTH_DROP])) >>
