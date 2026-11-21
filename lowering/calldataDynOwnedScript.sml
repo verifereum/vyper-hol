@@ -167,16 +167,6 @@ Proof
   simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]
 QED
 
-Theorem calldata_update_protected:
-  abi_decoder_operand_live next op ==>
-  eval_operand op (update_var (STRING #"%" (toString next)) w s) = eval_operand op s
-Proof
-  Cases_on `op` >>
-  simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
-       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-  strip_tac >> first_x_assum (qspec_then `next` mp_tac) >> simp[]
-QED
-
 (* Full old-operand frame, including absent old variables, for the actual
    counter allocation and zero store.  No freshness premise is needed. *)
 Theorem calldata_index_init_live_frame:
@@ -191,7 +181,7 @@ Proof
   Cases_on `FLOOKUP s.vs_allocas st.cs_next_id` >>
   gvs[AllCaseEqs()] >> strip_tac >> gvs[] >>
   simp[mstore_def, write_memory_with_expansion_def] >>
-  simp[calldata_update_protected] >>
+  simp[abi_decoder_generated_update_operand] >>
   Cases_on `op` >> simp[eval_operand_def, lookup_var_def]
 QED
 
@@ -213,7 +203,7 @@ Proof
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   simp[Once step_inst_base_def, mk_inst_def, exec_write2_def, eval_operands_def] >>
   strip_tac >> gvs[AllCaseEqs()] >>
-  simp[eval_operand_mstore, calldata_update_protected]
+  simp[eval_operand_mstore, abi_decoder_generated_update_operand]
 QED
 
 Theorem calldata_count_guard_live_frame:
@@ -255,7 +245,7 @@ Proof
   simp[Once step_inst_base_def, mk_inst_def, eval_operands_def,
        eval_operand_def, lookup_var_update_var] >>
   strip_tac >> gvs[AllCaseEqs()] >>
-  simp[calldata_update_protected]
+  simp[abi_decoder_generated_update_operand]
 QED
 
 (* Use the very same successful phase executions for values, safety, and
@@ -565,7 +555,7 @@ Proof
   qexists_tac `t` >> gvs[Abbr `t`] >>
   simp[run_inst_seq_def, eval_operand_def, lookup_var_update_var,
        update_var_def] >>
-  metis_tac[calldata_update_protected, update_var_def]
+  metis_tac[abi_decoder_generated_update_operand, update_var_def]
 QED
 
 Theorem calldata_read_repeat:
@@ -597,7 +587,7 @@ Proof
   qexists_tac `t` >> gvs[Abbr `t`] >>
   simp[run_inst_seq_def, eval_operand_def, lookup_var_update_var,
        update_var_def] >>
-  metis_tac[calldata_update_protected, update_var_def]
+  metis_tac[abi_decoder_generated_update_operand, update_var_def]
 QED
 
 Theorem calldata_indexed_address_repeat:
@@ -1073,7 +1063,7 @@ Proof
     (simp_tac bool_ss [Abbr `t`] >> irule step_MLOAD >> simp[]) >>
   qexists_tac `t` >> gvs[Abbr `t`] >>
   simp[run_inst_seq_def, eval_operand_def, lookup_var_update_var, update_var_def] >>
-  metis_tac[calldata_update_protected, update_var_def]
+  metis_tac[abi_decoder_generated_update_operand, update_var_def]
 QED
 
 Theorem calldata_static_setup_repeat:
@@ -3380,7 +3370,7 @@ Proof
   qexists_tac `t` >> gvs[Abbr `t`] >>
   simp[run_inst_seq_def, eval_operand_def, lookup_var_update_var,
        update_var_def] >>
-  metis_tac[calldata_update_protected, update_var_def]
+  metis_tac[abi_decoder_generated_update_operand, update_var_def]
 QED
 
 Theorem calldata_iszero_repeat:
@@ -3410,7 +3400,7 @@ Proof
   qexists_tac `t` >> gvs[Abbr `t`] >>
   simp[run_inst_seq_def, eval_operand_def, lookup_var_update_var,
        update_var_def] >>
-  metis_tac[calldata_update_protected, update_var_def]
+  metis_tac[abi_decoder_generated_update_operand, update_var_def]
 QED
 
 Theorem calldata_count_guard_repeat_sequence:
