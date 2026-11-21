@@ -1355,10 +1355,10 @@ Resume compiler_builtin_var[len]:
   simp[exprSafeOperandTheory.safe_operand_def]
 QED
 Resume compiler_builtin_var[ecadd]:
-  builtin_ptr_var_tac >> metis_tac[compiler_ec_points_var]
+  builtin_stack_var_tac >> metis_tac[compiler_ec_points_var]
 QED
 Resume compiler_builtin_var[ecmul]:
-  builtin_ptr_var_tac >> metis_tac[compiler_ec_points_var]
+  builtin_stack_var_tac >> metis_tac[compiler_ec_points_var]
 QED
 Resume compiler_builtin_var[uint2str]:
   builtin_ptr_var_tac >> metis_tac[compiler_uint2str_var]
