@@ -3024,23 +3024,6 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-Triviality tuple_immutable_exact_slot_size:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env st ==>
-  !ty tv. evaluate_type (type_env tops) ty = SOME tv ==>
-    type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
-    type_memory_size tv
-Proof
-  strip_tac >>
-  qpat_assum `body_inv _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
-  `get_tenv cx = type_env tops` by
-    simp[get_tenv_def, type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2] >>
-  rpt strip_tac >>
-  qpat_assum `cenv.ce_struct_fields = _` (SUBST1_TAC o SYM) >>
-  rewrite_tac[type_mem_bytes_type_memory_bytes] >>
-  irule expr_sim_inv_memory_size >> simp[] >> metis_tac[]
-QED
-
 Theorem tuple_immutable_slot_span[local]:
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env st /\
   FLOOKUP cenv.ce_module_vars (NONE,id) = SOME (ImmutableLoc off) /\
@@ -3072,7 +3055,7 @@ Proof
   `evaluate_type (type_env tops) ty = SOME tv` by metis_tac[] >>
   `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
    type_memory_size tv` by
-    (drule_all tuple_immutable_exact_slot_size >> simp[]) >>
+    (drule_all immutableDeployAssignFactsTheory.immutable_exact_slot_size >> simp[]) >>
   drule_then assume_tac cx_tops_module >>
   `lo = imm_len tops` by fs[dead_lo_ok_def] >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -3108,7 +3091,7 @@ Proof
   `!tt vv. evaluate_type (type_env tops) tt = SOME vv ==>
      type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) tt =
      type_memory_size vv` by
-    (rpt strip_tac >> drule_all tuple_immutable_exact_slot_size >> simp[]) >>
+    (rpt strip_tac >> drule_all immutableDeployAssignFactsTheory.immutable_exact_slot_size >> simp[]) >>
   gen_tac >> strip_tac >>
   Cases_on `off <= j /\ j < off + type_memory_size tv`
   >- (rewrite_tac[imm_section_dead_def] >>
