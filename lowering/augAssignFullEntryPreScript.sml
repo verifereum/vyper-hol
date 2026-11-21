@@ -5,7 +5,7 @@ Ancestors
   bodySim exprSimHypsDefs targetPlaceSim targetPlaceLive gasContext
   supportedStmts supportedTargets supportedExprTraverse supportedStmtTraverse
   allocLimits allocLimitsProps exprLowering vyperTypeSystem vyperTypeCallGraph
-  vyperTypeCallStackSoundness vyperAST list
+  vyperTypeCallStackSoundness vyperAST list bodyInvExecutionProps
 
 Theorem augassign_entry_rhs_pre:
   body_inv tops ctx cenv cx /\
@@ -27,7 +27,8 @@ Proof
      simp[supported_stmt_expr_exists_def]) >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops /\
    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-     is_dynamic (vyper_to_abi_type (type_env tops) target))` by fs[body_inv_def] >>
+     is_dynamic (vyper_to_abi_type (type_env tops) target))` by
+    metis_tac[body_inv_main_support, body_inv_singleton_abi_types] >>
   `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
   `~is_extcode e` by
     (irule alloc_limits_expr_not_extcode >> qexists_tac `cenv` >>
@@ -60,7 +61,8 @@ Proof
     drule (cj 1 aug_place_typing) >> strip_tac >>
     `supported_program tops /\ get_module_code cx NONE = SOME tops /\
      (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-       is_dynamic (vyper_to_abi_type (type_env tops) target))` by fs[body_inv_def] >>
+       is_dynamic (vyper_to_abi_type (type_env tops) target))` by
+      metis_tac[body_inv_main_support, body_inv_singleton_abi_types] >>
     `alloc_limits_target cenv t` by
       fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
     `EVERY (\e. ~is_extcode e) (target_indices t)` by

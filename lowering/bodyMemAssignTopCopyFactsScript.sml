@@ -1,6 +1,8 @@
 (* Proof-only typing and layout boundaries for aggregate storage assignment. *)
 Theory bodyMemAssignTopCopyFacts
 Ancestors
+  stmtExprAllocationPreProps bodyInvCodeProps compileUnit alist
+  augAssignPtrToplevelMetadata linkedStorageMetadataProps exprBodyPreProps
   supportedExprTraverse allocLimits allocLimitsProps
   bodyStorageCases[qualified,ignore_grammar]
   bodyMemAssignTopCopyIndex allocaFootprint[qualified] allocaHistoryFragment[qualified] bodySimStmtFacts exprSimHyps
@@ -17,8 +19,30 @@ Ancestors
 Libs
   monadsyntax
 
-(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
-val irule_body_pre = bodyConstNameLib.irule_body_pre;
+Theorem topcopy_rhs_pre_supported_mods:
+  contract_inv mods exps ctx cenv cx /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
+     occurs_abi_decode_target target (main_module mods)) /\ supported_expr (main_module mods) e /\
+  expr_sim_inv_mods mods cenv cx env es /\
+  type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) =
+    SOME env' /\
+  stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
+  call_evaluation_safe cx
+    (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) /\
+  ~supported_expr_exists (unallocated_bare_global_root cenv env) e ==>
+  expr_body_pre_mods mods cenv cx env e es
+Proof
+  strip_tac >>
+  drule_then assume_tac contract_inv_cenv_modules >>
+  `well_typed_expr env e` by
+    gvs[type_stmt_def, atarget_accepts_def, AllCaseEqs()] >>
+  mp_tac (Q.INST [`ctx` |-> `ctx`, `exps` |-> `exps`]
+                  stmt_expr_body_pre_main_alloc_mods) >>
+  fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def, supported_assignment_exists_def,
+     alloc_limits_stmt_def, int_calls_stmt_def, int_calls_atarget_def,
+     int_calls_expr_def]
+QED
 
 Theorem topcopy_rhs_pre_supported:
   !tops ctx cenv cx e env es ret_ty nsid env'.
@@ -35,30 +59,13 @@ Theorem topcopy_rhs_pre_supported:
     expr_body_pre cenv cx env e es
 Proof
   rpt strip_tac >>
-  drule_all body_inv_stmt_const_name_free >>
+  mp_tac (Q.INST [`tops` |-> `tops`, `ctx` |-> `ctx`, `s` |-> `Assign (BaseTarget (TopLevelNameTarget nsid)) e`]
+          body_inv_stmt_expr_pre_singleton) >>
   simp[supported_stmt_expr_exists_def, supported_assignment_exists_def] >>
-  strip_tac >>
-  `well_typed_expr env e` by
-    gvs[type_stmt_def, atarget_accepts_def, AllCaseEqs()] >>
-  drule_then assume_tac supported_expr_no_evm_run >>
-  drule_then assume_tac bodyStorageCasesTheory.supported_expr_main_calls >>
-  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
-    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
-      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
-      alloc_limits_expr_def]) >>
-  imp_res_tac alloc_limits_expr_not_extcode >>
-  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
-    gvs[body_inv_def] >>
-  `cx_tops cx = tops` by
-    (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
-  `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-     is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target)` by
-    fs[body_inv_def] >>
-  irule stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
-      supported_assignment_exists_def, int_calls_stmt_def,
-      int_calls_atarget_def, int_calls_expr_def, EVERY_CONJ] >>
-  qexists_tac `[]` >> simp[]
+  disch_then irule >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
+                   `ctx` |-> `ctx`, `ret_ty` |-> `ret_ty`, `env'` |-> `env'`, `nsid` |-> `nsid`] topcopy_rhs_pre_supported_mods) >>
+  simp[main_module_def, ALOOKUP_def]
 QED
 
 Theorem topcopy_rhs_pre:
@@ -79,23 +86,43 @@ Proof
   metis_tac[topcopy_rhs_pre_supported]
 QED
 
-Theorem find_var_decl_storage_some[local]:
-  !ts vis mut id ty init.
-    MEM (VariableDecl vis mut id ty init) ts /\
-    (mut = Storage \/ mut = Transient) ==>
-    find_var_decl_by_name id ts <> NONE
+Theorem topcopy_target_mods:
+  contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
+  supported_variable_decl tops (NONE,id) = SOME (Private,mut,ty,SOME ast_slot) /\
+  (mut = Storage \/ mut = Transient) /\ expr_sim_inv_mods mods cenv cx env es /\
+  type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget (src,id))) e) =
+    SOME env' ==>
+  get_module_code cx src = SOME tops /\
+  cenv.ce_hashmap_info (src,id) = NONE /\
+  cenv.ce_module_var_type (src,id) = SOME ty /\
+  ?tr id_str off tvt.
+    find_var_decl_by_name id tops = SOME (StorageVarDecl tr ty,id_str) /\
+    lookup_var_slot_from_layout cx tr src id_str = SOME off /\
+    evaluate_type (get_tenv cx) ty = SOME tvt
 Proof
-  Induct >> simp[] >> Cases >> rw[find_var_decl_by_name_def] >> metis_tac[]
-QED
-
-Theorem env_assignable_find_NONE[local]:
-  !env cx st src id ty.
-    env_consistent env cx st /\
-    FLOOKUP env.bare_global_assignable (src, id) = SOME ty ==>
-    ?ts. get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = NONE
-Proof
-  rw[env_consistent_def, env_context_consistent_def] >>
-  first_x_assum drule >> strip_tac >> simp[]
+  strip_tac >>
+  drule_then strip_assume_tac supported_variable_decl_mem >>
+  drule_then assume_tac contract_inv_module_codes >>
+  `get_module_code cx src = SOME tops` by simp[] >>
+  drule_all_then strip_assume_tac contract_inv_variable_metadata >>
+  drule_then assume_tac expr_sim_inv_mods_env >>
+  `find_var_decl_by_name id tops <> NONE` by
+    metis_tac[find_var_decl_storage_some] >>
+  `FLOOKUP env.bare_global_assignable (src,id) = NONE` by
+    (Cases_on `FLOOKUP env.bare_global_assignable (src,id)` >> simp[] >>
+     drule_all_then strip_assume_tac augassign_env_assignable_find_none >> gvs[]) >>
+  Cases_on `type_place_target env (TopLevelNameTarget (src,id))` >>
+  gvs[type_stmt_def, atarget_accepts_def] >>
+  rename1 `type_place_target _ _ = SOME vt` >> Cases_on `vt` >> gvs[] >>
+  gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget] >>
+  drule_all vyperTypeEnvTheory.env_consistent_toplevel_storage_static >>
+  strip_tac >> gvs[] >>
+  drule_all_then strip_assume_tac body_inv_storage_var_types_mods >> gvs[] >>
+  qpat_x_assum `IS_SOME (lookup_var_slot_from_layout _ _ _ _)`
+    (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
+  qpat_x_assum `IS_SOME (evaluate_type _ _)`
+    (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
+  metis_tac[]
 QED
 
 Theorem topcopy_target:
@@ -113,32 +140,16 @@ Theorem topcopy_target:
       lookup_var_slot_from_layout cx tr NONE id_str = SOME off /\
       evaluate_type (get_tenv cx) ty = SOME tvt
 Proof
-  rpt gen_tac >> strip_tac >> (
-  drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
-  `get_module_code cx NONE = SOME tops /\
-   ALL_DISTINCT
-     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
-   cenv.ce_hashmap_info = build_hashmap_info tops /\
-   cenv.ce_module_var_type (NONE,id) = build_var_type_map tops (NONE,id)` by
-    fs[body_inv_def] >>
-  drule_all build_maps_variable >> strip_tac >>
-  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
-  `find_var_decl_by_name id tops <> NONE` by
-    metis_tac[find_var_decl_storage_some] >>
-  Cases_on `type_place_target env (TopLevelNameTarget (NONE,id))` >>
-  gvs[type_stmt_def, atarget_accepts_def] >>
-  rename1 `type_place_target _ _ = SOME vt` >> Cases_on `vt` >> gvs[] >>
-  gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
-  >- (drule_all env_assignable_find_NONE >> strip_tac >> gvs[]) >>
-  drule_all vyperTypeEnvTheory.env_consistent_toplevel_storage_static >>
-  strip_tac >> drule find_var_decl_storage_mem >> strip_tac >> gvs[] >>
-  `t = ty` by metis_tac[build_maps_variable, optionTheory.SOME_11] >>
-  gvs[] >>
-  qpat_x_assum `IS_SOME (lookup_var_slot_from_layout _ _ _ _)`
-    (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
-  qpat_x_assum `IS_SOME (evaluate_type _ _)`
-    (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
-  metis_tac[])
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_then (SUBST_ALL_TAC o CONJUNCT1) supported_variable_decl_mem >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  drule_then assume_tac body_inv_contract >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`, `ctx` |-> `ctx`,
+                   `src` |-> `NONE`,
+                   `ret_ty` |-> `ret_ty`, `ast_slot` |-> `ast_slot`,
+                   `mut` |-> `mut`, `env'` |-> `env'`, `e` |-> `e`]
+          topcopy_target_mods) >>
+  fs[ALOOKUP_def, expr_sim_inv_split_def]
 QED
 
 Theorem topcopy_rhs_memory:
@@ -147,24 +158,6 @@ Theorem topcopy_rhs_memory:
   expr_sim_mem ctx func cenv cx (expr_type e) e es
 Proof
   metis_tac[body_expr_mem_ok_def]
-QED
-
-Theorem topcopy_rhs_value_typed:
-  !cenv cx env e es tv gs v es1.
-    expr_body_pre cenv cx env e es /\
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    (do result <- eval_expr cx e; read_result cx result od)
-      (es with gas_obs := gs) = (INL v, es1) ==>
-    value_has_type tv v
-Proof
-  rpt strip_tac >>
-  `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
-  drule_all exprSimSourceTheory.expr_body_pre_eval >> strip_tac >>
-  `env.type_defs = get_tenv cx` by
-    gvs[expr_body_pre_def, expr_sim_inv_def,
-        env_consistent_def, env_context_consistent_def] >>
-  gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def,
-      value_runtime_typed_def]
 QED
 
 Theorem topcopy_memory_size:

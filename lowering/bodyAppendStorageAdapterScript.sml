@@ -1,18 +1,38 @@
 (* Body-side discharge for primitive storage Append. *)
 Theory bodyAppendStorageAdapter
 Ancestors
+  stmtExprAllocationPreProps bodyInvCodeProps compileUnit alist
   supportedExprTraverse supportedExprs loweringPosts exprLowering vyperAST allocLimits allocLimitsProps
   vyperTyping valueEncodingTyping exprSimProps
   stmtSimDefs exprSimSource exprSimHypsDefs
   bodyAppendStorageFacts bodyAppendStorageLayoutFacts bodyExprPreFacts stmtSimAppendStorageCompose
   stmtSimAssignStorageFacts bodySim supportedStmts supportedStmtTraverse
   vyperStorageLayoutSafety vyperTypeSystem vyperTypeValues compileEnv loweringStateRelDefs
-  vyperTypeCallGraph vyperState vyperInterpreter
+  vyperTypeCallGraph vyperTypeCallStackSoundness vyperState vyperInterpreter
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeExprResult
   supportedDecls supportedTypes vyperValue bodyStorageMetadata
   gasOutcome gasStorage gasSummary vyperStorageTrace vyperStorageFootprint
 Libs
   monadsyntax
+
+Theorem body_append_expr_pre_mods:
+  contract_inv mods exps ctx cenv cx /\ supported_expr (main_module mods) e /\
+  expr_sim_inv_mods mods cenv cx env es /\ well_typed_expr env e /\
+  stmt_exprs_ok cenv (Append bt e) /\
+  call_evaluation_safe cx (int_calls_stmt (Append bt e)) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+      (Append bt e) ==> occurs_abi_decode_target target (main_module mods)) /\
+  ~supported_expr_exists (unallocated_bare_global_root cenv env) e ==>
+  expr_body_pre_mods mods cenv cx env e es
+Proof
+  strip_tac >>
+  drule_then assume_tac contract_inv_cenv_modules >>
+  mp_tac (Q.INST [`ctx` |-> `ctx`, `exps` |-> `exps`]
+                  stmt_expr_body_pre_main_alloc_mods) >>
+  fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     alloc_limits_stmt_def, int_calls_stmt_def] >>
+  metis_tac[call_evaluation_safe_append_right]
+QED
 
 Theorem body_append_expr_pre:
   body_stmt_safe tops (Append (TopLevelNameTarget nid) e) /\
@@ -25,22 +45,14 @@ Theorem body_append_expr_pre:
             occurs_abi_decode_target target tops) ==>
   expr_body_pre cenv cx env e es
 Proof
-  strip_tac >>
-  `~supported_expr_exists (const_name_root cx) e` by
-    (drule_all body_inv_stmt_const_name_free >>
-     simp[supported_stmt_expr_exists_def, supported_expr_exists_def]) >>
-  drule supported_expr_body_calls >> strip_tac >>
-  `supported_program tops /\ get_module_code cx NONE = SOME tops /\
-   (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-     is_dynamic (vyper_to_abi_type (type_env tops) target))` by fs[body_inv_def] >>
-  `~is_extcode e` by
-    (irule alloc_limits_expr_not_extcode >> qexists_tac `cenv` >>
-     fs[stmt_exprs_ok_def, alloc_limits_stmt_def]) >>
-  `cx_tops cx = tops` by metis_tac[gasContextTheory.cx_tops_module] >>
-  irule stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
-      supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def] >>
-  qexists_tac `[]` >> simp[]
+  rpt strip_tac >>
+  mp_tac (Q.INST [`tops` |-> `tops`, `ctx` |-> `ctx`, `s` |-> `Append (TopLevelNameTarget nid) e`]
+          body_inv_stmt_expr_pre_singleton) >>
+  simp[supported_stmt_expr_exists_def] >>
+  disch_then irule >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
+                   `ctx` |-> `ctx`, `bt` |-> `TopLevelNameTarget nid`] body_append_expr_pre_mods) >>
+  simp[main_module_def, ALOOKUP_def]
 QED
 
 Theorem append_aggregate_lowered_type:
