@@ -32,7 +32,7 @@ Theory loweringShapeProps
 Ancestors
   listZipProps
   publicGetterProps exprLoweringEquations whitelistS2RawBaseShape builtinCreate builtinSystem
-  exprLoweringProps
+  exprLoweringProps internalBlockPackagingProps
   list rich_list loweringShapeDefs loweringShapeRules compileEnv loweringStateRelDefs context
   emitHelper exprLowering stmtLowering moduleLowering vyperCompiler
   compileVyper constSubst vyperGetter abiEncoder supportedProgram supportedNames
@@ -15500,21 +15500,12 @@ Theorem package_internal_blocks_segments:
             MAP2 (\d seg. mk_internal_function (FST d) seg (FST (SND d))
                             (SND (SND d))) descs segs)
 Proof
-  Induct
-  >- rw[package_internal_blocks_def] >>
-  PairCases >> rw[LIST_REL_CONS1] >>
-  rename1 `internal_segment_ok _ seg` >>
-  rename1 `LIST_REL internal_segment_ok descs ys` >>
-  `?bb tl. seg = bb :: tl` by (Cases_on `seg` >> gvs[internal_segment_ok_def]) >>
-  fs[internal_segment_ok_def] >>
-  `split_blocks_at h0 (entry ++ bb :: (tl ++ FLAT ys)) =
-     SOME (entry, bb :: (tl ++ FLAT ys))`
-    by (irule split_blocks_at_append_delimiter >> gs[]) >>
-  gs[package_internal_blocks_def] >>
-  first_x_assum (qspecl_then [`ys`, `bb :: tl`] mp_tac) >>
-  impl_tac
-  >- (gvs[EVERY_MEM, MEM_MAP, pairTheory.FORALL_PROD, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
-  simp[]
+  rpt strip_tac >>
+  match_mp_tac (Q.SPECL [`descs`, `segs`, `entry`, `compiler_label`]
+    package_internal_blocks_separated_segments) >>
+  asm_rewrite_tac[] >>
+  irule LIST_REL_mono >> goal_assum (drule_at Any) >>
+  simp[pairTheory.FORALL_PROD, internal_segment_ok_def, GSYM MAP_TL, EVERY_MAP]
 QED
 
 (* ===== Runtime lowering ===== *)
