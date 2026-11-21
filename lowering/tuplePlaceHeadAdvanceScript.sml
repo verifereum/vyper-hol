@@ -1,7 +1,8 @@
 (* Structural reconstruction at one chosen store endpoint. *)
 Theory tuplePlaceHeadAdvance
 Ancestors
-  tuplePlaceHead tuplePlacePointerReady tuplePlaceBranchReady freshWrites
+  tuplePlaceHead tuplePlacePointerReady freshWrites
+  tuplePlaceFramedStore tuplePlaceOwnedValueFrame tuplePlaceEqualMemory tuplePlaceBorrowStore
 
 Theorem tuple_place_snapshot_endpoint:
   tuple_place_snapshot cenv cx es lo hi tys ltys ltvs w s /\ hi <= hi' /\
