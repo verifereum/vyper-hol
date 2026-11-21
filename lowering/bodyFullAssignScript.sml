@@ -2018,7 +2018,8 @@ Proof
   `supported_expr tops e` by
     fs[supported_stmt_def, supported_assignment_def] >>
   `~supported_expr_exists (const_name_root cx) e` by
-    (drule_all body_inv_const_name_free >> simp[]) >>
+    (drule_all body_inv_stmt_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
@@ -2539,7 +2540,8 @@ Proof
     (qpat_x_assum `supported_stmt _ _ _` mp_tac >>
      simp[Once supported_stmt_def, supported_assignment_def]) >>
   `~supported_expr_exists (const_name_root cx) e` by
-    (drule_all body_inv_const_name_free >> simp[]) >>
+    (drule_all body_inv_stmt_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `cx_tops cx = tops` by (fs[body_inv_def] >> drule cx_tops_module >> simp[]) >>
   irule stmt_expr_body_pre >>
@@ -7991,7 +7993,8 @@ Proof
      simp[Once supported_stmt_def, supported_assignment_def]) >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `~supported_expr_exists (const_name_root cx) e` by
-    metis_tac[body_inv_const_name_free] >>
+    (drule_all body_inv_stmt_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
   `cx_tops cx = tops` by (fs[body_inv_def] >> drule cx_tops_module >> simp[]) >>
   irule stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
@@ -13957,7 +13960,8 @@ Proof
     (qpat_x_assum `supported_stmt _ _ _` mp_tac >>
      simp[Once supported_stmt_def, supported_assignment_def]) >>
   `~supported_expr_exists (const_name_root cx) e` by
-    (drule_all body_inv_const_name_free >> simp[]) >>
+    (drule_all body_inv_stmt_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `cx_tops cx = tops` by (fs[body_inv_def] >> drule cx_tops_module >> simp[]) >>
   `call_evaluation_safe cx (int_calls_expr e)` by
