@@ -531,7 +531,8 @@ Proof
     metis_tac[immutable_array_guarded_target] >>
   `!src' name' path. pl = ImmutablePlace src' name' path ==>
      (src',name') <> (src,name)` by metis_tac[pairTheory.PAIR_EQ] >>
-  simp[state_rel_frame_result] >> rpt strip_tac >> metis_tac[
-    lookup_immutable_write_other, append_guarded_immutable_frame,
-    pop_place_immutable_other]
+  simp[state_rel_frame_result] >> rpt strip_tac >>
+  imp_res_tac lookup_immutable_write_other >>
+  imp_res_tac append_guarded_immutable_frame >>
+  imp_res_tac pop_place_immutable_other >> gvs[]
 QED
