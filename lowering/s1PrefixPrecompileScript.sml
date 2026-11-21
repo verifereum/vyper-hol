@@ -1,3 +1,4 @@
+(* The ECRecover and Sha256 actions emit only computed outcomes and preserve the request prefix. *)
 Theory s1PrefixPrecompile
 Ancestors
   s1PrefixFrame s1PrefixDefs vyperStorageTrace vyperInterpreter
