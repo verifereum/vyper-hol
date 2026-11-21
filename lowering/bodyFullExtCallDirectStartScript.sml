@@ -7,6 +7,7 @@ Ancestors
   loweringStateRelDefs vyperStorageFootprint context compileEnv fragExec
   fragGasOriginPtr emitHelperProps venomState venomInst ptrDiscipline
   words finite_map pred_set list arithmetic pair
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 (* Nonempty external-call requests use the space after the selector in
    the same allocation. This is the initial frame for every encoder row. *)
@@ -16,7 +17,7 @@ Theorem extcall_direct_request_start:
   emit_op ADD [ba.buf_operand;Lit 32w] sm = (payload,st) /\
   fn_has_code se sb func /\ fn_has_code sb sm func /\ fn_has_code sm st func /\
   fn_inst_ids_distinct func /\ LENGTH selector = 4 /\ 32 <= capacity /\ capacity < dimword (:256) /\
-  local_ptrs_reserved ce se /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved ce se /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   (?H. valid_horizon cx st0 H ee.storage_trace) /\
@@ -66,6 +67,14 @@ Proof
        `n` |-> `n2w capacity`, `out` |-> `ba.buf_operand`, `scopes` |-> `ee.scopes`]
        extcall_direct_alloca_site) >>
      asm_simp_tac (srw_ss()) [] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel hz ctx func ce cx ee s`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
+  `ctx_has_dalloca ctx ==>
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp` by
+    (qpat_assum `stmt_state_rel hz ctx func ce cx ee s`
+       (mp_tac o MATCH_MP stmt_state_rel_fmp_room) >>
+     simp[fmp_room_def] >> rpt strip_tac >> res_tac >> decide_tac) >>
   mp_tac (Q.INST [`sa` |-> `se`, `sc` |-> `sm`, `cenv` |-> `ce`,
     `es` |-> `ee`, `shared` |-> `ba`, `n` |-> `capacity`, `bs` |-> `selector`, `H0` |-> `hz`]
     extcall_direct_request_buffer) >>
@@ -79,6 +88,10 @@ Proof
      qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H _ _ _ _ _ s /\ _`
        (drule_then strip_assume_tac) >>
      metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H _ _ _ _ _ u /\ _`
+       (qspec_then `hz` (drule_then
+         (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o CONJUNCT1)))) >>
   `alloca_inv u /\ alloca_room ctx func u` by
     metis_tac[stmt_state_rel_local_ptrs_alloca,stmt_state_rel_alloca_room] >>
   `emit_op ADD [Var r;Lit 32w] sm = (payload,st)` by
