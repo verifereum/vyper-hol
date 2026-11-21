@@ -10,7 +10,6 @@ Ancestors bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragG
   compileExprAllocaFresh[qualified,ignore_grammar]
   compilerInstructionSuffix[qualified,ignore_grammar]
   abiEncoderProps[qualified,ignore_grammar]
-  runtimeSymSrcClassifiedSource[qualified,ignore_grammar]
   bodyFullIntCallDefs bodyIntCallSeams bodyFullPreds bodySimFull bodyFullUnwrap
   gasOutcomeFull bodyPtrDefs gasShadow gasShadowShape gasContext exprSimHypsDefs
   exprSimIfExpWidenedAdapter exprSimSliceCompose
@@ -244,21 +243,7 @@ Proof
   gvs[EVERY_MAP, combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
 QED
 
-Theorem intcall_args_selected_constants[local]:
-  body_inv tops ctx cenv cx /\
-  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops ==>
-  subst_consts_fn (module_consts_env tops [])
-    (mut,nr,rr,name,args,dflts,ret,ss) = (mut,nr,rr,name,args,dflts,ret,ss)
-Proof
-  strip_tac >>
-  qpat_assum `body_inv _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
-  irule runtimeSymSrcClassifiedSourceTheory.runtime_sym_supported_function_subst >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qexists_tac `Internal` >> simp[]
-QED
-
-(* The compiler table selects exactly the source's omitted-default suffix. *)
+(* The compiler table selects the omitted suffix after constant substitution. *)
 Theorem intcall_args_omitted_defaults:
   body_inv tops ctx cenv cx /\
   lookup_callable_function cx.in_deploy name tops =
@@ -267,7 +252,8 @@ Theorem intcall_args_omitted_defaults:
   LENGTH args - LENGTH dflts <= LENGTH es /\
   LENGTH es <= LENGTH args /\ ~MEM (NONE,name) cx.stk ==>
   omitted_defaults cenv (nsid_to_string (NONE,name)) (LENGTH es) =
-    DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
+    DROP (LENGTH dflts - (LENGTH args - LENGTH es))
+      (subst_consts_exprs (module_consts_env tops []) dflts) /\
   LENGTH (omitted_defaults cenv (nsid_to_string (NONE,name)) (LENGTH es)) =
     LENGTH args - LENGTH es /\
   cenv.ce_func_param_types name =
@@ -286,19 +272,18 @@ Proof
     gvs[supportedProgramTheory.supported_program_def,
         supportedNamesTheory.supported_declaration_names_def,
         supportedDeclsTheory.supported_declaration_headers_def] >>
-  `subst_consts_fn (module_consts_env tops [])
-      (mut,nr,rr,name,args,dflts,ret,ss) = (mut,nr,rr,name,args,dflts,ret,ss)` by
-    (irule intcall_args_selected_constants >> first_assum (irule_at Any) >>
-     qexistsl_tac [`cx`,`ctx`,`cenv`] >> first_assum ACCEPT_TAC) >>
   `cenv.ce_func_param_types name = MAP SND args` by
     (gvs[] >> irule intCallLookupTheory.build_func_param_types_distinct >>
      conj_tac >- simp[] >>
      first_assum (irule_at Any) >> simp[]) >>
-  `MEM (mut,nr,rr,name,args,dflts,ret,ss)
+  qabbrev_tac `compiled_defaults = subst_consts_exprs (module_consts_env tops []) dflts` >>
+  qabbrev_tac `compiled_body = subst_consts_stmts (module_consts_env tops []) ss` >>
+  `MEM (mut,nr,rr,name,args,compiled_defaults,ret,compiled_body)
       (FST (SND (classify_functions tops)))` by
     (simp[loweringShapePropsTheory.MEM_classify_internal] >>
-     qexistsl [`dflts`,`ss`] >> simp[]) >>
-  `ALOOKUP (build_func_defaults tops) name = SOME dflts` by
+     qexistsl [`dflts`,`ss`] >>
+     simp[Abbr `compiled_defaults`, Abbr `compiled_body`, constSubstTheory.subst_consts_fn_def]) >>
+  `ALOOKUP (build_func_defaults tops) name = SOME compiled_defaults` by
     (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
      conj_tac
      >- (drule loweringShapeSourceTheory.supported_names_internal_names_distinct >>
@@ -306,7 +291,8 @@ Proof
               combinTheory.o_DEF, pairTheory.LAMBDA_PROD]) >>
      simp[compileVyperTheory.build_func_defaults_def, MEM_MAP,
           pairTheory.EXISTS_PROD] >> metis_tac[]) >>
-  gvs[omitted_defaults_def, nsid_to_string_def, TAKE_DROP] >>
+  gvs[omitted_defaults_def, nsid_to_string_def, TAKE_DROP,
+      Abbr `compiled_defaults`, loweringShapePropsTheory.subst_consts_exprs_length] >>
   decide_tac
 QED
 
@@ -1154,7 +1140,8 @@ QED
 
 Theorem intcall_args_defaults_alloc:
   body_inv tops ctx cenv cx /\
-  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops ==>
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+  ~supported_exprs_exists (const_name_root cx) dflts ==>
   alloc_limits_exprs (cenv_without_defaults cenv name) dflts
 Proof
   rpt strip_tac >>
@@ -1162,29 +1149,43 @@ Proof
   `supported_pure_exprs tops dflts` by
     (drule_all supportedProgramTheory.supported_program_declaration >>
      simp[supportedProgramTheory.supported_declaration_body_def]) >>
-  `subst_consts_fn (module_consts_env tops [])
-      (mut,nr,rr,name,args,dflts,ret,ss) = (mut,nr,rr,name,args,dflts,ret,ss)` by
-    (irule intcall_args_selected_constants >> first_assum (irule_at Any) >>
-     qexistsl_tac [`cx`,`ctx`,`cenv`] >> first_assum ACCEPT_TAC) >>
-  `MEM (mut,nr,rr,name,args,dflts,ret,ss)
+  `cx_tops cx = tops` by
+    gvs[bodySimTheory.body_inv_def, cx_tops_def, vyperContextTheory.get_module_code_def] >>
+  `const_name_root cx =
+      (\e. ?ty id. e = TopLevelName ty (NONE,id) /\
+                  IS_SOME (ALOOKUP (module_consts_env tops []) id))` by
+    (simp[FUN_EQ_THM] >> gen_tac >> Cases_on `e` >> simp[const_name_root_def] >>
+     rename1 `cx_const_name cx nsid` >> PairCases_on `nsid` >>
+     simp[cx_const_name_def] >>
+     Cases_on `ALOOKUP (module_consts_env tops []) nsid1` >>
+     fs[alistTheory.ALOOKUP_NONE] >>
+     metis_tac[alistTheory.ALOOKUP_NONE, optionTheory.NOT_SOME_NONE]) >>
+  `subst_consts_exprs (module_consts_env tops []) dflts = dflts` by
+    (irule (cj 3 constSubstStmtsPreserveTheory.subst_consts_expr_unchanged) >>
+     qpat_assum `const_name_root cx = _` (once_rewrite_tac o single o SYM) >>
+     first_assum ACCEPT_TAC) >>
+  qabbrev_tac `compiled_body = subst_consts_stmts (module_consts_env tops []) ss` >>
+  `MEM (mut,nr,rr,name,args,dflts,ret,compiled_body)
       (FST (SND (classify_functions tops)))` by
     (simp[loweringShapePropsTheory.MEM_classify_internal] >>
-     qexistsl [`dflts`,`ss`] >> simp[]) >>
+     qexistsl [`dflts`,`ss`] >>
+     simp[Abbr `compiled_body`, constSubstTheory.subst_consts_fn_def]) >>
+  qpat_x_assum `cx_tops cx = tops` kall_tac >>
   qpat_x_assum `body_inv _ _ _ _` mp_tac >>
   simp[bodySimTheory.body_inv_def] >> strip_tac >>
   Cases_on `classify_functions tops` >> rename1 `classify_functions tops = (exts,rest)` >>
   PairCases_on `rest` >>
-  `fn_allocs_ok tops (mut,nr,rr,name,args,dflts,ret,ss)` by
+  `fn_allocs_ok tops (mut,nr,rr,name,args,dflts,ret,compiled_body)` by
     (Cases_on `cx.in_deploy`
      >- (gvs[] >> irule compileVyperTheory.lower_vyper_deploy_unit_allocs_ok >>
          metis_tac[]) >>
      gvs[] >> irule compileVyperTheory.lower_vyper_runtime_unit_allocs_ok >>
      metis_tac[]) >>
   `alloc_limits_exprs
-     (build_compile_env tops Internal mut name args ret ss F) dflts` by
+     (build_compile_env tops Internal mut name args ret compiled_body F) dflts` by
     gvs[compileVyperTheory.fn_allocs_ok_def] >>
   `alloc_limits_exprs (cenv_without_defaults cenv name) dflts =
-   alloc_limits_exprs (build_compile_env tops Internal mut name args ret ss F) dflts` by
+   alloc_limits_exprs (build_compile_env tops Internal mut name args ret compiled_body F) dflts` by
     (irule intcall_args_pure_allocs_frame >>
      gvs[cenv_without_defaults_def, bodySimTheory.cenv_module_pins_def,
          compileVyperTheory.build_compile_env_ce_struct_fields,
@@ -1201,7 +1202,8 @@ Theorem intcall_args_defaults_pre:
   call_evaluation_safe cx
     (int_calls_expr (Call ann (IntCall (NONE,name)) es dflt)) /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
-  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops ==>
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+  ~supported_exprs_exists (const_name_root cx) dflts ==>
   EVERY (\e. expr_body_pre (cenv_without_defaults cenv name)
       (cx with stk updated_by CONS (NONE,name))
       (tenv with current_src := NONE) e ee) (DROP k dflts)
@@ -1252,7 +1254,15 @@ Proof
   drule bodyExprPreFactsTheory.supported_expr_body_calls >> strip_tac >>
   `~supported_expr_exists
       (const_name_root (cx with stk updated_by CONS (NONE,name))) e` by
-    metis_tac[bodySimTheory.body_inv_const_name_free] >>
+    (`cx_tops (cx with stk updated_by CONS (NONE,name)) = cx_tops cx` by
+       simp[NoAsms, cx_tops_def, vyperContextTheory.get_module_code_def] >>
+     `const_name_root (cx with stk updated_by CONS (NONE,name)) = const_name_root cx` by
+       (simp[FUN_EQ_THM] >> gen_tac >> Cases_on `x` >>
+        simp[const_name_root_def, pairTheory.FORALL_PROD] >>
+        rename1 `cx_const_name _ nsid` >> PairCases_on `nsid` >>
+        simp[cx_const_name_def]) >>
+     fs[supportedExprTraverseTheory.supported_exprs_exists_every,
+        listTheory.EVERY_MEM]) >>
   simp[expr_body_pre_def, EVERY_MEM] >> conj_tac
   >- (gvs[EVERY_MEM, vyperContextTheory.get_module_code_def] >>
       rpt strip_tac >> qexists `tops` >> simp[]) >>
