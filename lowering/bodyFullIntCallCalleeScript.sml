@@ -11,7 +11,8 @@ Ancestors bodyFullShadowBodyInv sourceUnitExecution[qualified,ignore_grammar] lo
   vyperStorageFootprint vyperStorageTrace vyperState venomState
   contextRawReachable contextCodegenRel contextCodegenRelProps
   vyperInterpreter gasContext stmtSimDefs exprSimDefs compileEnv
-  bodyFullIntCallDefs bodyFullIntCallByteFrame bodyFullPreds bodyInvNoDalloca
+  bodyFullIntCallDefs bodyFullIntCallByteFrame bodyFullPreds
+  bodyFullIfExpReach[qualified,ignore_grammar] bodyFullHashKeccakFixed[qualified,ignore_grammar]
   ctorDeployLoweringSource nonreentrantEquiv internalReturnMemoryMem
   internalReturnStackAggregate[qualified,ignore_grammar]
   bodyExprPreFacts fragExec intCallCallee stmtSimProps emitHelper context
@@ -763,7 +764,7 @@ QED
 Theorem intcall_callee_setup_capture[local]:
   setup_callee callee argv t = SOME setup ==>
   fresh_vars_wrt entry setup /\ setup.vs_params = argv /\
-  ~setup.vs_halted /\ allocas_from lo setup
+  ~setup.vs_halted /\ allocas_from lo setup /\ setup.vs_allocas = FEMPTY
 Proof
   Cases_on `NULL callee.fn_blocks` >>
   simp[venomExecSemanticsTheory.setup_callee_def] >>
@@ -1470,9 +1471,20 @@ Proof
   simp[bodyPtrDefsTheory.ghost_inv_at_def, bodyPtrDefsTheory.return_buf_ptr_def] >> metis_tac[]
 QED
 
+Theorem intcall_callee_alloca_room[local]:
+  alloca_inv s /\ fmp_room ctx func s ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+   s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp)
+Proof
+  rw[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def,
+     fmp_room_def, ptrDisciplineTheory.allocas_below_fmp_def] >>
+  res_tac >> decide_tac
+QED
+
 Theorem intcall_callee_scratch_joint[local]:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
-  alloca_room ctx func s /\ sa.cs_next_id NOTIN FDOM s.vs_allocas /\
+  alloca_room ctx func s /\ fmp_room ctx func s /\
+  sa.cs_next_id NOTIN FDOM s.vs_allocas /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -1488,7 +1500,7 @@ Theorem intcall_callee_scratch_joint[local]:
     u with <|vs_vars := s.vs_vars; vs_allocas := s.vs_allocas;
              vs_alloca_next := s.vs_alloca_next; vs_inst_idx := s.vs_inst_idx|> = s /\
     allocas_from lo u /\ s.vs_alloca_next <= u.vs_alloca_next /\
-    alloca_room ctx func u /\ ~u.vs_halted /\
+    alloca_room ctx func u /\ fmp_room ctx func u /\ ~u.vs_halted /\
     u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (fresh_vars_wrt sa s ==> fresh_vars_wrt sb u) /\
     (!aid r. FLOOKUP s.vs_allocas aid = SOME r ==> FLOOKUP u.vs_allocas aid = SOME r) /\
@@ -1523,6 +1535,15 @@ Proof
      qspecl_then [`sa.cs_next_id`, `w2n w`, `out`, `s`] mp_tac loweringHaltTheory.step_alloca_fresh >>
      simp[finite_mapTheory.FLOOKUP_DEF, wordsTheory.w2n_lt]) >>
   qabbrev_tac `u = t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  `exec_alloca ins s w = OK t` by
+    simp[Abbr `ins`, Abbr `t`, mk_inst_def,
+         venomExecSemanticsTheory.exec_alloca_def, finite_mapTheory.FLOOKUP_DEF] >>
+  `fmp_room ctx func t` by
+    (irule fmp_room_exec_alloca >> goal_assum (drule_at Any) >>
+     simp[Abbr `ins`, mk_inst_def]) >>
+  `fmp_room ctx func u` by
+    (qspecl_then [`ctx`,`func`,`t`,`u`] mp_tac fmp_room_fields_cong >>
+     simp[Abbr `u`]) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
      (OK u,step_prov PG G ins t,step_taint ins s t tn)` by
     (`emitted_insts sa sb = [ins]` by simp[Abbr `ins`, Abbr `out`, Abbr `w`] >>
@@ -3823,6 +3844,7 @@ Theorem intcall_callee_full:
     MEM func ctx.ctx_functions /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
     (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!H. valid_horizon cx st0 H es1.storage_trace ==>
        intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
@@ -3895,7 +3917,6 @@ Proof
      qpat_assum `new_block label before = (old,entry)`
        (strip_assume_tac o MATCH_MP (SPEC_ALL emitHelperPropsTheory.new_block_props)) >>
      (gvs[])) >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   Cases_on `compile_internal_function_entry ce params has_rb ctor ilen rt entry` >>
   rename1 `_ = (entry_info,prologue)` >>
   `?prologueS.
@@ -4009,7 +4030,7 @@ Proof
      strip_tac >> fs[]) >>
   drule_all intcall_callee_selected_args >> strip_tac >>
   `fresh_vars_wrt entry entered /\ entered.vs_params = argv /\
-   ~entered.vs_halted /\ allocas_from lo entered` by
+   ~entered.vs_halted /\ allocas_from lo entered /\ entered.vs_allocas = FEMPTY` by
     (drule intcall_callee_setup_capture >>
      disch_then (qspecl_then [`lo`, `entry`] mp_tac) >> simp[]) >>
   `(if has_rb then 1 else 0) + LENGTH params <= LENGTH entered.vs_params /\
@@ -4017,8 +4038,13 @@ Proof
     ((qpat_assum `internal_args_rel ce params _ _ _ _ _`
        (mp_tac o REWRITE_RULE [internal_args_rel_def]) >>
      strip_tac >> simp[] >> (gvs[]))) >>
+  `fmp_room ctx callee entered` by
+    (qpat_assum `entered = setup` (rewrite_tac o single) >> first_assum ACCEPT_TAC) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp entered` by
-    (qpat_assum `~ctx_has_dalloca ctx` (simp o single)) >>
+    (qpat_assum `fmp_room ctx callee entered` mp_tac >>
+     qpat_assum `entered.vs_allocas = FEMPTY` (fn empty =>
+       simp[NoAsms, fmp_room_def, ptrDisciplineTheory.allocas_below_fmp_def, empty]) >>
+     metis_tac[]) >>
   drule_all compile_internal_entry_prefix_joint >>
   disch_then (qspecl_then [`tn with t_var := FEMPTY`, `MAP (op_prov G) arg_ops`, `FEMPTY`]
     (qx_choose_then `captured` (qx_choose_then `Gcap`
@@ -4046,7 +4072,16 @@ Proof
      metis_tac[loweringStateRelDefsTheory.fresh_vars_wrt_def, ptrDisciplineTheory.allocas_from_def]) >>
   `cs_extends reserved final /\ fn_has_code capture reserved callee` by
     metis_tac[fn_has_code_split, cs_extends_trans] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp at_capture` by simp[] >>
+  `fmp_room ctx callee at_capture` by
+    (qspecl_then [`ctx`,`callee`,`entered`,`at_capture`] mp_tac fmp_room_fields_cong >>
+     qpat_assum `at_capture = captured with vs_inst_idx := _` (once_rewrite_tac o single) >>
+     qpat_assum `captured = entered with vs_vars := _` (once_rewrite_tac o single) >>
+     simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp at_capture` by
+    (qpat_assum `at_capture = captured with vs_inst_idx := _` (once_rewrite_tac o single) >>
+     qpat_assum `captured = entered with vs_vars := _` (once_rewrite_tac o single) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp entered` mp_tac >>
+     simp[NoAsms, ptrDisciplineTheory.allocas_below_fmp_def] >> metis_tac[]) >>
   drule_all intcall_callee_reserve >>
   disch_then (qspecl_then [`tncap`, `MAP (op_prov G) arg_ops`, `Gcap`] strip_assume_tac) >>
   rename1 `at_reserve = at_capture with <|vs_vars := at_reserve.vs_vars; vs_inst_idx := _|>` >>
@@ -4301,8 +4336,14 @@ Proof
   `materialize_internal_params (ce1 with ce_imm_alloca := entry_info2) caps reserved =
      (entry_info0 with ce_imm_alloca := entry_info2,materialized)` by
     (irule intcall_callee_materialize_imm >> first_assum ACCEPT_TAC) >>
+  `fmp_room ctx callee at_reserve` by
+    (qspecl_then [`ctx`,`callee`,`at_capture`,`at_reserve`] mp_tac fmp_room_fields_cong >>
+     qpat_assum `at_reserve = at_capture with <|vs_vars := _; vs_inst_idx := _|>`
+       (once_rewrite_tac o single) >> simp[]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp at_reserve /\
-    at_reserve.vs_alloca_next + pending_alloca_size callee at_reserve <= w2n at_reserve.vs_initial_fmp` by simp[] >>
+    at_reserve.vs_alloca_next + pending_alloca_size callee at_reserve <= w2n at_reserve.vs_initial_fmp` by
+    (mp_tac (Q.INST [`s` |-> `at_reserve`, `func` |-> `callee`]
+       intcall_callee_alloca_room) >> simp[venomMemProofsTheory.alloca_inv_empty_proof]) >>
   qpat_assum `materialize_internal_params (ce1 with ce_imm_alloca := _) _ _ = _`
     (mp_then (Pos hd) mp_tac materialize_params_full) >>
   disch_then (qspecl_then [`callee`, `penv`, `at_reserve`, `at_reserve.vs_alloca_next`,
@@ -4444,7 +4485,22 @@ Proof
      simp[NoAsms, comp_return_def] >>
      disch_then (rewrite_tac o single o SYM) >> disj2_tac >>
      qexists_tac `type_memory_bytes ce ty` >> goal_assum (drule_at Any)) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp at_mat` by simp[] >>
+  `mat_state.vs_fmp = at_reserve.vs_fmp` by
+    (qpat_assum `mat_frame reserved at_reserve mat_state`
+       (strip_assume_tac o REWRITE_RULE [mat_frame_def]) >>
+     qpat_assum `mat_state = at_reserve with <|vs_vars := _; vs_memory := _;
+        vs_allocas := _; vs_alloca_next := _|>` (once_rewrite_tac o single) >>
+     simp[]) >>
+  `fmp_room ctx callee mat_state` by
+    (irule run_inst_seq_fmp_room >>
+     qexistsl_tac [`DROP (LENGTH reserved.cs_current_insts) materialized.cs_current_insts`,
+                    `at_reserve`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `fmp_room ctx callee at_mat` by
+    (qspecl_then [`ctx`,`callee`,`mat_state`,`at_mat`] mp_tac fmp_room_fields_cong >>
+     simp[Abbr `at_mat`]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp at_mat` by
+    (mp_tac (Q.INST [`s` |-> `at_mat`, `func` |-> `callee`]
+       intcall_callee_alloca_room) >> simp[]) >>
   `?at_pro Gpro tnpro.
      alloca_inv at_pro /\
      (!i w b sz. MEM i (fn_insts callee) /\ i.inst_opcode = ALLOCA /\
@@ -4453,7 +4509,7 @@ Proof
      at_pro with <|vs_vars := at_mat.vs_vars; vs_allocas := at_mat.vs_allocas;
        vs_alloca_next := at_mat.vs_alloca_next; vs_inst_idx := at_mat.vs_inst_idx|> = at_mat /\
      allocas_from lo at_pro /\ at_mat.vs_alloca_next <= at_pro.vs_alloca_next /\
-     alloca_room ctx callee at_pro /\ ~at_pro.vs_halted /\
+     alloca_room ctx callee at_pro /\ fmp_room ctx callee at_pro /\ ~at_pro.vs_halted /\
      at_pro.vs_current_bb = prologue.cs_current_bb /\
      at_pro.vs_inst_idx = LENGTH prologue.cs_current_insts /\
      (fresh_vars_wrt materialized at_mat ==> fresh_vars_wrt prologue at_pro) /\
@@ -4692,14 +4748,6 @@ Proof
      qpat_assum `!D. gas_origin_ptr_path _ _ [] (OK at_pro,Gpro,tnpro)`
        (qspec_then `DF (storage_trace_horizon es1.storage_trace)` (irule_at Any)) >>
      simp[]) >>
-  `fmp_room ctx callee at_pro` by
-    (`MEM callee ctx.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
-     `~EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts callee)` by
-       (strip_tac >> qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
-        rewrite_tac[ptrDisciplineTheory.ctx_has_dalloca_def, Once listTheory.EXISTS_MEM,
-                    boolTheory.NOT_CLAUSES] >>
-        qexists_tac `callee` >> simp[]) >>
-     simp[exprLoweringPropsTheory.fmp_room_def]) >>
   `ret_pc_ok ce1 reserved at_reserve` by
     (simp[loweringPostsTheory.ret_pc_ok_def] >>
      qexists_tac `entered.vs_return_pc_token` >> first_assum ACCEPT_TAC) >>
@@ -4993,7 +5041,9 @@ Proof
   `fn_has_code prologue a callee` by
     (irule fn_has_code_mid >> conj_tac >- first_assum ACCEPT_TAC >>
      qexistsl_tac [`final`,`entry`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp at_pro` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp at_pro` by
+    (mp_tac (Q.INST [`s` |-> `at_pro`, `func` |-> `callee`]
+       intcall_callee_alloca_room) >> simp[]) >>
   `nr ==> ?Gl tnl.
      (!D. inst_seq_ptr D lo ctx callee (MAP (op_prov G) arg_ops)
         Gpro tnpro (emitted_insts prologue a) at_pro Gl tnl) /\
@@ -5358,17 +5408,49 @@ Proof
      qpat_assum `!D. gas_origin_ptr_path _ _ [] (OK at_body,Gl,tnl)`
        (qspec_then `DF Hlock` (irule_at Any)) >>
      simp[]) >>
-  `!fn inst s. frag_reachable ctx callee at_body fn inst s ==> dalloca_no_wrap inst s` by
+  `!i. active_inst callee i entered ==> frag_reachable ctx func s0 callee i entered` by
+    (qx_gen_tac `i` >> disch_tac >>
+     `active_inst func inst t` by
+       (rewrite_tac[active_inst_def] >> qexists_tac `bb` >>
+        qpat_assum `lookup_block t.vs_current_bb func.fn_blocks = SOME bb`
+          (fn th => assume_tac (MATCH_MP lookup_block_MEM th) >>
+                    assume_tac (MATCH_MP lookup_block_label th)) >>
+        simp[] >>
+        qpat_assum `get_instruction bb t.vs_inst_idx = SOME inst` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        Cases_on `t.vs_inst_idx < LENGTH bb.bb_instructions` >>
+        simp[get_instruction_def]) >>
+     `enters_block callee setup entered` by
+       (rewrite_tac[enters_block_def] >> qexistsl_tac [`first`,`phi_state`] >>
+        rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     qspecl_then [`ctx`,`func`,`s0`,`func`,`inst`,`t`,`lbl`,`arg_ops`,
+                   `callee`,`argv`,`setup`,`entered`,`i`]
+       mp_tac (cj 4 frag_reachable_rules) >>
+     impl_tac >-
+       (rpt conj_tac >-
+          (qpat_assum `!i. active_inst func i t ==> frag_reachable ctx func s0 func i t`
+             irule >> first_assum ACCEPT_TAC) >>
+        first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  `!fn inst s. frag_reachable ctx callee entered fn inst s ==> dalloca_no_wrap inst s` by
     (rpt gen_tac >> strip_tac >>
-     drule contextRawReachableTheory.frag_reachable_members >>
-     impl_tac >- first_assum ACCEPT_TAC >>
-     strip_tac >> simp[unitTransformDefsTheory.dalloca_no_wrap_def] >>
-     strip_tac >>
-     `ctx_has_dalloca ctx` by
-       (simp[NoAsms, ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
-        qexists_tac `fn` >> conj_tac >- first_assum ACCEPT_TAC >>
-        rename1 `i.inst_opcode = DALLOCA` >> qexists_tac `i` >>
-        conj_tac >> first_assum ACCEPT_TAC) >> fs[]) >>
+     qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s` irule >>
+     qexists_tac `fn` >>
+     qpat_assum `frag_reachable ctx callee entered fn _ _`
+       (fn reach => qspecl_then [`func`,`s0`] irule (MATCH_MP frag_reachable_trans reach)) >>
+     first_assum ACCEPT_TAC) >>
+  `!fn inst s. frag_reachable ctx callee at_body fn inst s ==> dalloca_no_wrap inst s` by
+    (qpat_assum `!D. gas_origin_ptr_path _ _ [] (OK at_body,Gl,tnl)`
+       (qspec_then `DF Hlock` assume_tac) >>
+     `!bb. MEM bb callee.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+       metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+     qpat_assum `gas_origin_ptr_path _ _ [] (OK at_body,Gl,tnl)` (fn path =>
+       qpat_assum `!bb. MEM bb callee.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0`
+         (fn phi =>
+           qpat_assum `!fn inst s. frag_reachable ctx callee entered fn inst s ==> dalloca_no_wrap inst s`
+             (fn nowrap => ACCEPT_TAC (MATCH_MP
+               bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+               (LIST_CONJ [path,phi,nowrap])))))) >>
   qabbrev_tac `pushed = cx with stk updated_by CONS (NONE,name)` >>
   `!H. valid_horizon pushed st0 H locked.storage_trace ==>
      stmt_state_rel H ctx callee body_ce pushed locked at_body /\
@@ -5600,6 +5682,13 @@ Proof
      (INL (),locked with gas_obs := gs)` by
     (gen_tac >> irule externalCallSelectedTheory.lock_if_nr_with_gas_obs >>
      first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp at_body` by
+    (qpat_assum `!H. valid_horizon cx st0 H locked.storage_trace ==>
+                   stmt_state_rel H ctx callee body_ce cx locked at_body`
+       (qspec_then `Hlock` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (ACCEPT_TAC o MATCH_MP
+       bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   mp_tac (Q.INST [`caller` |-> `cenv`, `ds` |-> `dflts`,
     `H` |-> `storage_trace_horizon es1.storage_trace`, `dret` |-> `ret_dest`,
     `ce2` |-> `entry_info0`, `imm` |-> `entry_info2`, `rpc` |-> `entry_info1`,
@@ -5635,7 +5724,6 @@ Proof
     (pure_rewrite_tac o single o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   impl_tac >-
     (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-     TRY (qpat_assum `~ctx_has_dalloca ctx` (simp o cons NoAsms o single) >> NO_TAC) >>
      simp[NoAsms] >> first_assum ACCEPT_TAC) >>
   strip_tac >>
   `!K. gas_origin_ptr_path (DF K,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
@@ -5916,6 +6004,16 @@ Proof
          qpat_assum `stmt_state_rel H ctx callee body_out _ _ body_state`
            (mp_tac o cj 1 o REWRITE_RULE [stmt_state_rel_def]) >>
          simp[NoAsms, Abbr `pushed`, loweringStateRelDefsTheory.state_rel_gas_obs]) >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp body_state` by
+        (qpat_assum `!H. valid_horizon pushed st0 H ee.storage_trace ==> _ /\ _`
+           (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+         (impl_tac >-
+           (qpat_assum `!K tr. valid_horizon pushed st0 K tr <=> _`
+              (pure_rewrite_tac o single) >> first_assum ACCEPT_TAC)) >>
+         qpat_assum `r = OK body_state` (pure_rewrite_tac o single) >>
+         simp[NoAsms, exit_result_def] >> strip_tac >>
+         qpat_assum `stmt_state_rel _ ctx callee _ _ _ body_state`
+           (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
       mp_tac (Q.INST [`ce` |-> `body_out`, `d` |-> `ret_dest`,
           `es` |-> `es1 with gas_obs := gs`, `locked` |-> `locked with gas_obs := gs`,
           `ee` |-> `ee with gas_obs := []`, `rpc` |-> `x`, `sz` |-> `0`,
@@ -5927,7 +6025,6 @@ Proof
         (pure_rewrite_tac o single o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
       impl_tac >-
         (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-         TRY (qpat_assum `~ctx_has_dalloca ctx` (simp o cons NoAsms o single) >> NO_TAC) >>
          TRY (qpat_assum `body_out.ce_return_pc = body_ce.ce_return_pc`
                 (pure_rewrite_tac o single) >> first_assum ACCEPT_TAC >> NO_TAC) >>
          TRY (qpat_assum `body_out.ce_nonreentrant = body_ce.ce_nonreentrant`
