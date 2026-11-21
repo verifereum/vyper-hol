@@ -211,7 +211,7 @@ Proof
   BasicProvers.TOP_CASE_TAC >> simp[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
 QED
 
-Theorem compile_entry_value_check_ptr_endpoint[local]:
+Theorem compile_entry_value_check_ptr_endpoint_frame[local]:
   compile_entry_checks 4 pay st = ((),st') /\
   (~pay ==> fn_has_code st st' fn) /\
   fresh_vars_wrt st s /\ ~s.vs_halted /\
@@ -256,7 +256,7 @@ Proof
   suspend "iszero"
 QED
 
-Resume compile_entry_value_check_ptr_endpoint[iszero]:
+Resume compile_entry_value_check_ptr_endpoint_frame[iszero]:
   `!fuel. step_inst fuel ctx
     (mk_inst (st.cs_next_id + 1) ISZERO
       [Var (STRING #"%" (toString st.cs_next_var))]
@@ -308,9 +308,9 @@ Resume compile_entry_value_check_ptr_endpoint[iszero]:
   fs[arithmeticTheory.ADD1]
 QED
 
-Finalise compile_entry_value_check_ptr_endpoint
+Finalise compile_entry_value_check_ptr_endpoint_frame
 
-Theorem compile_entry_size_check_ptr_endpoint[local]:
+Theorem compile_entry_size_check_ptr_endpoint_frame[local]:
   compile_entry_checks m T st = ((),st') /\
   (4 < m ==> fn_has_code st st' fn) /\
   fresh_vars_wrt st s /\ ~s.vs_halted /\
@@ -340,7 +340,7 @@ Proof
   rpt strip_tac >> gvs[] >> qexistsl_tac [`s`, `G`, `tn`] >> simp[vars_pc_only_refl, cj 1 gas_path_mem_rules, cj 1 gas_origin_ptr_path_rules]
 QED
 
-Resume compile_entry_size_check_ptr_endpoint[size]:
+Resume compile_entry_size_check_ptr_endpoint_frame[size]:
   `!fuel. step_inst fuel ctx
     (mk_inst st.cs_next_id CALLDATASIZE [] [STRING #"%" (toString st.cs_next_var)]) s =
     OK (update_var (STRING #"%" (toString st.cs_next_var))
@@ -363,7 +363,7 @@ Resume compile_entry_size_check_ptr_endpoint[size]:
   suspend "lt"
 QED
 
-Resume compile_entry_size_check_ptr_endpoint[lt]:
+Resume compile_entry_size_check_ptr_endpoint_frame[lt]:
   `m < dimword (:256)` by decide_tac >>
   `!fuel. step_inst fuel ctx
     (mk_inst (st.cs_next_id + 1) LT
@@ -389,7 +389,7 @@ Resume compile_entry_size_check_ptr_endpoint[lt]:
   suspend "iszero"
 QED
 
-Resume compile_entry_size_check_ptr_endpoint[iszero]:
+Resume compile_entry_size_check_ptr_endpoint_frame[iszero]:
   `!fuel. step_inst fuel ctx
     (mk_inst (st.cs_next_id + 2) ISZERO
       [Var (STRING #"%" (toString (st.cs_next_var + 1)))]
@@ -443,7 +443,62 @@ Resume compile_entry_size_check_ptr_endpoint[iszero]:
   fs[arithmeticTheory.ADD1]
 QED
 
-Finalise compile_entry_size_check_ptr_endpoint
+Finalise compile_entry_size_check_ptr_endpoint_frame
+
+Theorem compile_entry_value_check_ptr_endpoint:
+  compile_entry_checks 4 pay st = ((),st') /\
+  (~pay ==> fn_has_code st st' fn) /\
+  fresh_vars_wrt st s /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  (pay \/ s.vs_call_ctx.cc_callvalue = 0w) ==>
+  ?u G' tn'.
+    gas_path_mem ctx fn s 0 (OK u) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK u,G',tn')) /\
+    vars_pc_only s u /\ fresh_vars_wrt st' u /\ ~u.vs_halted /\
+    u.vs_current_bb = st'.cs_current_bb /\
+    u.vs_inst_idx = LENGTH st'.cs_current_insts /\
+    allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' u) ==>
+         !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  mp_tac (SPEC_ALL compile_entry_value_check_ptr_endpoint_frame) >>
+  asm_rewrite_tac[] >>
+  disch_then (qx_choosel_then [`u`,`G'`,`tn'`] strip_assume_tac) >>
+  qexistsl_tac [`u`,`G'`,`tn'`] >> asm_rewrite_tac[]
+QED
+
+Theorem compile_entry_size_check_ptr_endpoint:
+  compile_entry_checks m T st = ((),st') /\
+  (4 < m ==> fn_has_code st st' fn) /\
+  fresh_vars_wrt st s /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  m <= LENGTH s.vs_call_ctx.cc_calldata /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) ==>
+  ?u G' tn'.
+    gas_path_mem ctx fn s 0 (OK u) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK u,G',tn')) /\
+    vars_pc_only s u /\ fresh_vars_wrt st' u /\ ~u.vs_halted /\
+    u.vs_current_bb = st'.cs_current_bb /\
+    u.vs_inst_idx = LENGTH st'.cs_current_insts /\
+    allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' u) ==>
+         !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  mp_tac (SPEC_ALL compile_entry_size_check_ptr_endpoint_frame) >>
+  asm_rewrite_tac[] >>
+  disch_then (qx_choosel_then [`u`,`G'`,`tn'`] strip_assume_tac) >>
+  qexistsl_tac [`u`,`G'`,`tn'`] >> asm_rewrite_tac[]
+QED
 
 Theorem compile_entry_checks_ptr_endpoint_frame:
   compile_entry_checks m pay st = ((),st') /\ fn_has_code st st' fn /\
@@ -469,14 +524,14 @@ Theorem compile_entry_checks_ptr_endpoint_frame:
          !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
   strip_tac >> drule_all compile_entry_checks_split >> strip_tac >>
-  drule compile_entry_value_check_ptr_endpoint >>
+  drule compile_entry_value_check_ptr_endpoint_frame >>
   disch_then (qspecl_then [`tn`, `s`, `lo`, `fn`, `ctx`, `PG`, `G`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   rename1 `vars_pc_only s s1` >>
   rename1 `tn1.t_mem = tn.t_mem` >>
   rename1 `ptr_safe_run _ _ _ _ _ _ G1 tn1 s1` >>
   `s1.vs_call_ctx = s.vs_call_ctx` by metis_tac[vars_pc_only_fields] >>
-  drule compile_entry_size_check_ptr_endpoint >>
+  drule compile_entry_size_check_ptr_endpoint_frame >>
   disch_then (qspecl_then [`tn1`, `s1`, `lo`, `fn`, `ctx`, `PG`, `G1`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   rename1 `vars_pc_only s1 s2` >>
