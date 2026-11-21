@@ -218,6 +218,7 @@ fun registered_lock_result_tac placement =
   impl_tac >- (asm_rewrite_tac[] >> simp[]) >>
   disch_then (qx_choosel_then [`a`,`s`,`G`,`tn`]
     (MAP_EVERY ASSUME_TAC o CONJUNCTS)) >>
+  `~EXISTS external_has_defaults (FST (classify_functions tops))` by fs[] >>
   drule_all runtime_lock_abort_result_with >>
   disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
   qexistsl_tac [`shadow_unit`,`[]`] >> simp[];
