@@ -153,16 +153,27 @@ Proof
      arg_type_fits (lowered_value_type cenv e) (expr_type e))`
       >- (gvs[] >> irule body_assign_local_memory_full >> metis_tac[]) >>
       gvs[] >> irule body_assign_local_widened_full >> metis_tac[]) >>
-  Cases_on `?nsid. t = TopLevelNameTarget nsid /\
-                   supported_scalar_target tops nsid`
-  >- (gvs[] >> irule body_assign_toplevel_word_full >> metis_tac[]) >>
+  Cases_on `?nsid dty mut slot.
+              t = TopLevelNameTarget nsid /\
+              supported_variable_decl tops nsid = SOME (Private,mut,dty,SOME slot) /\
+              (mut = Storage \/ mut = Transient) /\
+              type_place_target env t = SOME (Type dty) /\
+              is_bytestring_type dty /\ is_bytestring_type (lowered_value_type cenv e)`
+  >- (gvs[] >> drule_all body_inv_stmt_const_name_free >> strip_tac >>
+      irule body_assign_toplevel_bytes_full >> metis_tac[]) >>
   Cases_on `?nsid mut ty slot.
               t = TopLevelNameTarget nsid /\
               supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
               (mut = Storage \/ mut = Transient) /\
               ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
-              0 < type_memory_bytes cenv ty /\ expr_type e = ty`
+              ~is_bytestring_type ty /\
+              0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
+              lowered_value_type cenv e = expr_type e`
   >- (gvs[] >> irule body_assign_toplevel_copy_full >> metis_tac[]) >>
+  Cases_on `?nsid dty. t = TopLevelNameTarget nsid /\
+                       supported_scalar_target tops nsid /\
+                       type_place_target env t = SOME (Type dty) /\ is_word_type dty`
+  >- (gvs[] >> irule body_assign_toplevel_word_full >> metis_tac[]) >>
   Cases_on `?id fld sid fty.
               t = AttributeTarget (NameTarget id) fld /\
               FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -195,7 +206,7 @@ Proof
   >- (gvs[] >> drule_all assign_tuple_locals_bytes_pos >> strip_tac >>
       `EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
                         0 < type_memory_bytes cenv ty) ids` by
-        (fs[EVERY_MEM] >> metis_tac[]) >>
+        (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
       irule body_assign_tuple_locals_full >> metis_tac[]) >>
   Cases_on `EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
                                 FLOOKUP env.var_types id = SOME ty /\
@@ -209,7 +220,29 @@ Proof
                           type_place_target env
                             (AttributeTarget (TopLevelNameTarget nsid) fld) =
                             SOME (Type fty) /\ is_word_type fty)) gs`
-  >- (irule body_assign_tuple_targets_full >> metis_tac[]) >>
+  >- (Cases_on `EXISTS (\g. ?nsid dty mut slot.
+      g = BaseTarget (TopLevelNameTarget nsid) /\
+      supported_scalar_target tops nsid /\
+      type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) /\
+      supported_variable_decl tops nsid = SOME (Private,mut,dty,SOME slot) /\
+      (mut = Storage \/ mut = Transient) /\ is_bytestring_type dty) gs`
+      >- (drule_all body_inv_stmt_const_name_free >> strip_tac >>
+          irule body_assign_tuple_targets_private_bytes_full >> metis_tac[]) >>
+      Cases_on `EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
+                   FLOOKUP env.var_types id = SOME ty /\
+                   0 < type_memory_bytes cenv ty) \/
+                (?nsid dty. g = BaseTarget (TopLevelNameTarget nsid) /\
+                  supported_scalar_target tops nsid /\
+                  type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) /\
+                  is_word_type dty) \/
+                (?nsid fld fty.
+                   g = BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld) /\
+                   supported_storage_field_write tops nsid fld /\
+                   type_place_target env (AttributeTarget (TopLevelNameTarget nsid) fld) =
+                     SOME (Type fty) /\ is_word_type fty)) gs`
+      >- (drule_all body_inv_stmt_const_name_free >> strip_tac >>
+          irule body_assign_tuple_targets_word_full >> metis_tac[]) >>
+      irule body_assign_tuple_targets_full >> metis_tac[]) >>
   irule body_assign_tuple_other_full >> metis_tac[]
 QED
 
