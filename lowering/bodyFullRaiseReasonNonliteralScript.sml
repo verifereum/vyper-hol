@@ -44,6 +44,11 @@ Proof
   `supported_string_reason tops e` by
     gvs[supported_stmt_raise_reason, supported_raise_reason_def] >>
   drule_then strip_assume_tac supported_string_reason_body_calls >>
+  `~is_extcode e` by
+    (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+     qexists_tac `cenv` >>
+     fs[bodySimTheory.stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def,
+          allocLimitsTheory.alloc_limits_raise_def]) >>
   `cx_tops cx = tops` by
     (irule cx_tops_module >> gvs[body_inv_def]) >>
   `~supported_expr_exists (const_name_root cx) e` by

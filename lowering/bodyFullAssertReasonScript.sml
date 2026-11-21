@@ -23,21 +23,61 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem compile_assert_reason_frag_full_from_raise:
+  (!cx e DF lo d PG tops bindings ctx shadow_ctx func
+   shadow_func cenv env env' ret_ty lctx RetQ es.
+    body_expr_full_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (Raise (RaiseReason e)) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (Raise (RaiseReason e)) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Raise (RaiseReason e)) = SOME env' /\
+    stmt_exprs_ok cenv (Raise (RaiseReason e)) /\
+    call_evaluation_safe cx (int_calls_stmt (Raise (RaiseReason e))) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Raise (RaiseReason e)))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason e))))
+      (eval_stmt cx (Raise (RaiseReason e))) es) ==>
+  !cx e se DF lo d PG tops bindings ctx shadow_ctx func
+   shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_full_ok cx se) /\
+    body_expr_full_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (Assert e (AssertReason se)) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (Assert e (AssertReason se)) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assert e (AssertReason se)) = SOME env' /\
+    stmt_exprs_ok cenv (Assert e (AssertReason se)) /\
+    call_evaluation_safe cx (int_calls_stmt (Assert e (AssertReason se))) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assert e (AssertReason se)))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assert e (AssertReason se))))
+      (eval_stmt cx (Assert e (AssertReason se))) es
 Proof
   disch_then (markerLib.mk_asm "producer") >>
   rpt gen_tac >> strip_tac >>
-  `expr_sim_pre cenv cx env e es` by
+  `expr_body_pre cenv cx env e es` by
     (irule assert_reason_condition_source_pre >> metis_tac[]) >>
   `expr_type e = BaseT BoolT` by fs[type_stmt_assert_reason] >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx (BaseT BoolT) e es` by
-    (qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
-     simp[Once body_expr_full_ok_def] >>
-     strip_tac >>
-     qpat_x_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es. _`
-       (irule o cj 1) >>
-     fs[expr_sim_pre_body] >> metis_tac[]) >>
+    (qpat_x_assum `body_expr_full_ok cx e`
+       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `tops`, `ctx`,
+       `shadow_ctx`, `func`, `shadow_func`, `cenv`, `env`, `BaseT BoolT`,
+       `es`] mp_tac) >> simp[]) >>
   rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   fs[gas_shadow_stmt_def, gas_shadow_assert_reason_def] >>
   drule_all compile_assert_reason_layout_full >> strip_tac >> gvs[] >>
@@ -289,52 +329,6 @@ Resume compile_assert_reason_frag_full_from_raise[post]:
 QED
 
 Finalise compile_assert_reason_frag_full_from_raise
-*)
-Theorem compile_assert_reason_frag_full_from_raise:
-  (!cx e DF lo d PG tops bindings ctx shadow_ctx func
-   shadow_func cenv env env' ret_ty lctx RetQ es.
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (Raise (RaiseReason e)) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (Raise (RaiseReason e)) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Raise (RaiseReason e)) = SOME env' /\
-    stmt_exprs_ok cenv (Raise (RaiseReason e)) /\
-    call_evaluation_safe cx (int_calls_stmt (Raise (RaiseReason e))) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Raise (RaiseReason e)))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason e))))
-      (eval_stmt cx (Raise (RaiseReason e))) es) ==>
-  !cx e se DF lo d PG tops bindings ctx shadow_ctx func
-   shadow_func cenv env env' ret_ty lctx RetQ es.
-    (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_full_ok cx se) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (Assert e (AssertReason se)) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (Assert e (AssertReason se)) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Assert e (AssertReason se)) = SOME env' /\
-    stmt_exprs_ok cenv (Assert e (AssertReason se)) /\
-    call_evaluation_safe cx (int_calls_stmt (Assert e (AssertReason se))) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assert e (AssertReason se)))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assert e (AssertReason se))))
-      (eval_stmt cx (Assert e (AssertReason se))) es
-Proof
-  cheat
-QED
 
 Theorem compile_assert_reason_frag_full:
   !cx e se DF lo d PG tops bindings ctx shadow_ctx func
