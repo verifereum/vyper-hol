@@ -8,7 +8,8 @@
 Theory ctorDeployMemoryRunPtrNoCtor
 Ancestors
   ctorDeployDefs ctorDeployMemoryRunMemNoCtor ctorDeployImmBudget
-  ctorDeployShape gasSummary ptrSafeRun ptrDiscipline venomInst
+  ctorDeployShape deployDynamicMemory loweringShapeSource
+  gasSummary ptrSafeRun ptrDiscipline venomInst
   venomExecSemantics venomState codegenRel contextCodegenRel memLocDefs
   o1PassContract o1PipelineCorrect e2eEntry unitTransformDefs
 
@@ -201,7 +202,9 @@ Proof
      simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def,
           init_venom_state_def]) >>
   drule deploy_imm_budget_ok >> strip_tac >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
+  `~deploy_dalloca_form_occurs expr_raw_shape_root tops` by
+    simp[deploy_dalloca_form_occurs_def] >>
+  drule_all deploy_unit_no_dalloca_static >> strip_tac >>
   irule simple_deploy_entry_ptr_safe >>
   simp[]
 QED
