@@ -165,13 +165,11 @@ With `holbuild` v0.14.59 or newer, MLton, and Python 3 on `PATH`:
 ```
 
 The demo builds `tests/.emit/run-test` and compares exact native/HOL encoded
-inputs and results for all nine fixture cases and a passing stdin trace.
-The fixture has five passing cases and four intentional failures (an output
-mismatch, an unexpected revert, a raw deployment whose recorded deployer nonce
-is below the replayed one, and a raw deployment whose address doesn't match
-its recorded deployer nonce).
+inputs and results for all eleven fixture cases and a passing stdin trace.
+The fixture includes intentional output, revert, deployment-nonce, address,
+and state-checkpoint mismatches, plus an agreeing state checkpoint.
 Before writing parity expectations, the kernel smoke requires both prepared
-and replayed case names to equal the nine expected names in order. Missing,
+and replayed case names to equal the expected names in order. Missing,
 extra, duplicate, or reordered cases therefore fail rather than allowing an
 empty or incomplete comparison to pass.
 
@@ -180,6 +178,14 @@ signed 32-bit range using arbitrary-precision integers. Byte decoding preserves
 the pinned importer's bounded, chunk-dependent handling of repeated lowercase
 `0x` prefixes rather than stripping them recursively; AST hex decoding retains
 its separate single-prefix rule.
+
+`state_checkpoint` traces compare complete sparse account balances, nonces,
+runtime code, persistent and transient storage, and ordered committed logs.
+Zero slots equal absent slots; fully empty accounts equal absence. The decoder
+rejects duplicate object members and account/slot keys, out-of-range words,
+malformed addresses, and malformed byte/topic hex. These checks do not add gas
+or temporary-memory coverage; old traces without checkpoints retain only their
+original checks.
 
 ```bash
 # Build only; add --smoke for native/HOL parity checks:

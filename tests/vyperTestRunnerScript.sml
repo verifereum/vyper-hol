@@ -3,6 +3,7 @@ Ancestors
   vyperSmallStepCV
   contractABI vyperABIDecode vyperABI vyperInterpreter vyperSmallStep jsonAST
   jsonToVyper vfmContext vfmExecution vfmTransaction vfmDecreasesGas
+  vyperStateCheckpoint
 Libs
   cv_transLib wordsLib
 
@@ -134,6 +135,7 @@ Datatype:
   | Call call_trace
   | SetBalance address num
   | ClearTransientStorage
+  | StateCheckpoint state_checkpoint
 End
 
 Definition compute_vyper_args_def:
@@ -587,6 +589,10 @@ Definition run_trace_def:
       (snss, res)
    | RawDeployment dt =>
      (snss, run_raw_deployment am dt)
+   | StateCheckpoint cp => (snss,
+       case compare_state_checkpoint am cp of
+       | NONE => INL am
+       | SOME message => INR (Error (RuntimeError message)))
    | ClearTransientStorage => (snss,
        INL (am with tStorage := empty_transient_storage))
    | SetBalance addr bal => (snss,
