@@ -4241,15 +4241,14 @@ Theorem for_storage_array_head_prefix_transport:
       local_region c0 ei.scopes u name b sz <=>
       local_region c0 ei.scopes s name b sz
 Proof
-  rpt gen_tac >> strip_tac >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> rpt gen_tac >> strip_tac >>
   `!x. ~MEM x (if (case bd of Fixed _ => F | Dynamic _ => T) then
                   [dv;ov;tot;ep] else [dv;ov;ep]) ==>
        FLOOKUP Gu x = FLOOKUP G x` by simp[FLOOKUP_DRESTRICT] >>
   `FLOOKUP Gu ep = NONE` by
     (Cases_on `bd` >> simp[FLOOKUP_DRESTRICT]) >>
   drule_all_then strip_assume_tac
-    (BETA_RULE (REWRITE_RULE [LET_THM]
-      for_storage_array_head_prefix_transport_outside)) >>
+    (BETA_RULE for_storage_array_head_prefix_transport_outside) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
