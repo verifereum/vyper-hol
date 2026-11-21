@@ -4,24 +4,14 @@ Ancestors
   loweringShapeDefs loweringShapeRules vyperCompiler list
   entryInternalAppend fragExec
 Libs
-  monadsyntax
+  monadsyntax entryLabelTacticsLib
 
 (* Discharge the label obligations of constructor code using the same
    comp_bind and comp_ignore_bind rules as the runtime body. *)
-fun deploy_labels rws =
-  let
-    val rules = comp_return_labels :: rws
-    val step =
-      FIRST [irule fresh_label_bind_labels,
-             irule new_block_action_labels,
-             irule comp_bind_labels >> conj_tac,
-             irule comp_ignore_bind_labels >> conj_tac,
-             FIRST_ASSUM MATCH_ACCEPT_TAC,
-             disch_tac, IF_CASES_TAC, BasicProvers.TOP_CASE_TAC] >>
-      rpt gen_tac >> PURE_REWRITE_TAC[LET_THM] >> BETA_TAC >> simp rules
-  in
-    rpt gen_tac >> simp rules >> rpt step
-  end
+val (_, deploy_labels) =
+  entryLabelTacticsLib.label_tactics
+    comp_return_labels comp_bind_labels comp_ignore_bind_labels
+    [irule fresh_label_bind_labels, irule new_block_action_labels]
 
 val deploy_label_rules =
   [compile_alloc_buffer_labels, emit_op_labels, emit_void_labels, emit_inst_labels,

@@ -9,7 +9,7 @@ Ancestors
   supportedExprTraverse supportedTargets unitShapeDefs venomInst vyperAST
   cfgNormSim exprCallBounds
 Libs
-  monadsyntax dep_rewrite wordsLib
+  monadsyntax dep_rewrite wordsLib entryLabelTacticsLib
 
 (* Chronological streams retain the first occurrence of an open block. *)
 Theorem cs_extends_block_stream_labels:
@@ -3904,21 +3904,13 @@ QED
 
 (* Statement actions preserve the fresh-label namespace, independently of
    instruction shape or immutable storage layout. *)
-fun stmt_labels_step rws =
-  FIRST [ho_match_mp_tac fresh_label_pair_labels,
-              irule fresh_label_bind_labels,
-              irule new_block_action_labels >>
-                rename1 `isPREFIX "@" lab` >> Cases_on `lab` >> gvs[],
-              irule comp_bind_labels >> conj_tac,
-              irule comp_ignore_bind_labels >> conj_tac,
-              FIRST_ASSUM MATCH_ACCEPT_TAC,
-              disch_tac, IF_CASES_TAC, BasicProvers.TOP_CASE_TAC] >>
-       rpt gen_tac >> PURE_REWRITE_TAC[LET_THM] >> BETA_TAC >>
-       simp (comp_return_labels :: rws);
-
-fun stmt_labels_chain rws =
-  rpt gen_tac >> simp (comp_return_labels :: rws) >>
-  rpt (stmt_labels_step rws);
+val (stmt_labels_step, stmt_labels_chain) =
+  entryLabelTacticsLib.label_tactics
+    comp_return_labels comp_bind_labels comp_ignore_bind_labels
+    [ho_match_mp_tac fresh_label_pair_labels,
+     irule fresh_label_bind_labels,
+     irule new_block_action_labels >>
+       rename1 `isPREFIX "@" lab` >> Cases_on `lab` >> gvs[]];
 
 val stmt_labels_rws =
   [emit_op_labels, emit_void_labels, emit_inst_labels, fresh_var_action_labels,

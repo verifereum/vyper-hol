@@ -2,6 +2,7 @@
  * bulk copy; the complete paired decoder contract for that case. *)
 Theory ctorDeployMemoryRunPtrPrefixCompleteBulk
 Ancestors
+  entryDecoderStateFrame
   loweringStateRelDefs
   compileEnv ctorDeployMemoryRunMemEntryBulk
   ctorDeployMemoryRunPtrPrefixCompleteCopy
@@ -35,7 +36,7 @@ Proof
   gvs[not_fresh_at_def] >> metis_tac[LESS_EQ_ADD]
 QED
 
-val CshiftMode = ``\checked ty tv.
+val CshiftModeWithFmp = ``\frame_fmp checked ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
@@ -85,6 +86,7 @@ val CshiftMode = ``\checked ty tv.
  actual.vs_labels = initial.vs_labels /\ actual.vs_code = initial.vs_code /\
  actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
  actual.vs_block_ctx = initial.vs_block_ctx /\ actual.vs_gas_readings = initial.vs_gas_readings /\
+ (frame_fmp ==> actual.vs_fmp = initial.vs_fmp) /\
  (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
  FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce ty)] /\
  DISJOINT B qt.t_mem /\
@@ -99,6 +101,8 @@ val CshiftMode = ``\checked ty tv.
  (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\
     alloca_history func actual)``;
+val CshiftMode = rhs (concl ((BETA_CONV THENC PURE_REWRITE_CONV [tautLib.TAUT `((F ==> p) /\ q) <=> q`])
+  ``(^CshiftModeWithFmp) F``));
 val CshiftCode = rhs (concl (SIMP_CONV bool_ss [] ``(^CshiftMode) F``));
 
 (* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
@@ -138,10 +142,10 @@ Proof
   suspend "package"
 QED
 *)
-Theorem prefix_bulk_complete_mode_contract:
+Theorem prefix_bulk_complete_mode_contract_fmp:
   ~(is_abi_dynamic ce.ce_struct_fields ty \/
     dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
-  (^CshiftMode) checked (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+  (^CshiftModeWithFmp) frame_fmp checked (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
 Proof
   disch_then (strip_assume_tac o SIMP_RULE bool_ss []) >>
   BETA_TAC >> rpt gen_tac >>
@@ -177,7 +181,7 @@ Proof
   suspend "package"
 QED
 
-Resume prefix_bulk_complete_mode_contract[package]:
+Resume prefix_bulk_complete_mode_contract_fmp[package]:
   rename1 `run_inst_seq (emitted_insts st st') initial = OK t` >>
   drule_all abi_decoder_bulk_pre_facts >>
   simp[abi_decode_load_def, abi_decode_source_def, abi_decoder_prune_vars_def,
@@ -203,7 +207,7 @@ Resume prefix_bulk_complete_mode_contract[package]:
   suspend "finish"
 QED
 
-Resume prefix_bulk_complete_mode_contract[finish]:
+Resume prefix_bulk_complete_mode_contract_fmp[finish]:
   drule_all abi_decoder_bulk_shape >> strip_tac >>
   `frag_exec ctx st st' (\s. s = initial)
     (\s. s = t with vs_inst_idx := LENGTH st'.cs_current_insts) (K F)` by
@@ -261,6 +265,8 @@ Resume prefix_bulk_complete_mode_contract[finish]:
         w2n (t with vs_inst_idx := LENGTH st'.cs_current_insts).vs_initial_fmp)` by
     (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t /\ _`
        (MATCH_ACCEPT_TAC o MATCH_MP prefix_decoder_inst_idx_room)) >>
+  `t.vs_fmp = initial.vs_fmp` by
+    (drule_all entry_decoder_sequence_obs >> simp[entry_decoder_obs_fmp]) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,
     `range_bytes [(d,32+LENGTH vs * type_memory_size tv)]`] >>
   simp[SUBSET_REFL, op_taint_def, Excl "enc_def"] >>
@@ -284,7 +290,16 @@ Resume prefix_bulk_complete_mode_contract[finish]:
   qpat_x_assum `DISJOINT _ qt.t_mem` mp_tac >> simp[]
 QED
 
-Finalise prefix_bulk_complete_mode_contract
+Finalise prefix_bulk_complete_mode_contract_fmp
+
+Theorem prefix_bulk_complete_mode_contract:
+  ~(is_abi_dynamic ce.ce_struct_fields ty \/
+    dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
+  (^CshiftMode) checked (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+Proof
+  mp_tac (Q.INST [`frame_fmp` |-> `F`] prefix_bulk_complete_mode_contract_fmp) >>
+  simp_tac bool_ss []
+QED
 
 
 
