@@ -59,9 +59,11 @@ Proof
      gvs[well_typed_expr_def] >> metis_tac[]) >>
   gvs[compile_builtin_dispatch_body_def, as_ptr_val_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  qmatch_asmsub_abbrev_tac `as_ptr_val _ _ res` >>
+  FIRST [qmatch_asmsub_abbrev_tac `as_stack_val _ res`,
+         qmatch_asmsub_abbrev_tac `as_ptr_val _ _ res`] >>
   Cases_on `res` >>
-  gvs[as_ptr_val_def, contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
+  gvs[as_stack_val_def, as_ptr_val_def,
+      contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
   fs[markerTheory.Abbrev_def] >>
   metis_tac[ec_arith_result_not_label,
             compiler_make_array_result, alloc_buffer_not_label]
