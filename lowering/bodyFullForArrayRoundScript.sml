@@ -2598,7 +2598,7 @@ Theorem for_nonslot_array_scoped_body_full:
   benv = extend_local env id fty F /\ id NOTIN FDOM env.var_types /\
   evaluate_type (get_tenv cx) fty = SOME dtv /\
   iterator_unmodified (Array e) body /\
-  ~supported_stmts_expr_exists expr_internal_call_root body /\
+  (loc = LocCode ==> ~supported_stmts_expr_exists expr_internal_call_root body) /\
   (?bb inst. lookup_block incr func.fn_blocks = SOME bb /\
     get_instruction bb 0 = SOME inst /\ inst.inst_opcode <> PHI) /\
   call_evaluation_safe cx (int_calls_stmts body) /\
@@ -3318,7 +3318,27 @@ QED
 Finalise for_nonslot_array_scoped_body_full
 
 (* Classify the captured result at the actual expression execution. *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem for_nonslot_array_capture_classify[local]:
+  body_inv tops ctx c cx /\ expr_sim_inv c cx env em /\
+  well_typed_iterator env et (Array e) /\ expr_type e = ArrayT et bd /\
+  supported_iterator tops et (Array e) n /\
+  (!nid. e = TopLevelName (expr_type e) nid ==>
+     IS_SOME (supported_immutable_type tops nid)) /\
+  (~(?ty nid. e = TopLevelName ty nid) ==>
+   ((loop_iterator_place e = NONE ==> expr_places e = []) /\
+    !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid)) /\
+  eval_expr cx e start = (INL rv,em) /\
+  vv_place_ptr c cx em u rv vv /\
+  (!v ty p. rv = Value v /\
+    ~is_word_type (post_value_type c e) /\ ~is_bytestring_type (post_value_type c e) /\
+    vv = LocatedValue ty p ==> p.ptr_location = LocMemory) ==>
+  (!name path. rv = PlaceR (MemoryPlace name path) ==>
+    ?tgt. loop_iterator_place e = SOME tgt /\ target_root tgt = NameTarget name) /\
+  (vv_location vv = SOME LocCode ==> ?src name.
+    e = TopLevelName (ArrayT et bd) (src,name) /\
+    rv = PlaceR (ImmutablePlace src name []) /\
+    FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd) /\
+    ~cx_const_name cx (src,name) /\ post_value_type c e = ArrayT et bd)
 Proof
   strip_tac >>
   Cases_on `?nid. e = TopLevelName (ArrayT et bd) nid`
@@ -3352,7 +3372,7 @@ Proof
       `FLOOKUP env.bare_globals (NONE,nid1) = SOME it` by
         (qpat_x_assum `supported_immutable_type _ _ = _` mp_tac >>
          simp[supportedDeclsTheory.supported_immutable_type_def,AllCaseEqs()] >>
-         strip_tac >> drule bodyStorageMetadataTheory.supported_variable_decl_mem >>
+         strip_tac >> gvs[] >> drule bodyStorageMetadataTheory.supported_variable_decl_mem >>
          strip_tac >> fs[vyperTypeInvariantsTheory.bare_globals_complete_def] >> metis_tac[]) >>
       drule_all vyperTypeInvariantsTheory.env_context_consistent_bare_global_find_NONE >> strip_tac >>
       fs[well_typed_iterator_def,Once well_typed_expr_def,vyperASTTheory.expr_type_def] >>
@@ -3360,14 +3380,11 @@ Proof
   `~(?ty nid. e = TopLevelName ty nid)` by
     (strip_tac >> qpat_x_assum `e = TopLevelName _ _` SUBST_ALL_TAC >>
      fs[vyperASTTheory.expr_type_def]) >>
-  `~supported_expr_exists (\x. ?ty c l r. x = IfExp ty c l r) e /\
+  `(loop_iterator_place e = NONE ==> expr_places e = []) /\
    (!tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid)` by
-    (qpat_assum `supported_iterator _ _ _ _` mp_tac >>
-     qpat_assum `~(?ty nid. e = TopLevelName ty nid)` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> Cases_on `e` >>
-     simp[supportedStmtsTheory.supported_iterator_def,targetPlaceSimTheory.place_access_root,
-          supportedExprTraverseTheory.supported_expr_exists_def,vyperTypeContractTheory.loop_iterator_place_def,
-          targetPlaceSimTheory.target_root_def]) >>
+    (qpat_assum `~(?ty nid. e = TopLevelName ty nid) ==> _` (fn guard =>
+         qpat_assum `~(?ty nid. e = TopLevelName ty nid)`
+           (ACCEPT_TAC o MATCH_MP guard))) >>
   `well_typed_expr env e /\ expr_writes_ok (\_. F) e` by fs[well_typed_iterator_def] >>
   drule_all whitelistForIterTheory.memory_iterator_source_classify >> strip_tac
   >- (`?pty pbd. post_value_type c e = ArrayT pty pbd` by
@@ -3378,28 +3395,6 @@ Proof
          Cases_on `post_value_type c e` >> simp[arg_type_fits_def]) >>
       Cases_on `vv` >> fs[vv_location_def,is_word_type_def,is_bytestring_type_def]) >>
   fs[] >> Cases_on `vv` >> fs[vv_location_def,vv_place_ptr_def]
-QED
-*)
-Theorem for_nonslot_array_capture_classify[local]:
-  body_inv tops ctx c cx /\ expr_sim_inv c cx env em /\
-  well_typed_iterator env et (Array e) /\ expr_type e = ArrayT et bd /\
-  supported_iterator tops et (Array e) n /\
-  (!nid. e = TopLevelName (expr_type e) nid ==>
-     IS_SOME (supported_immutable_type tops nid)) /\
-  eval_expr cx e start = (INL rv,em) /\
-  vv_place_ptr c cx em u rv vv /\
-  (!v ty p. rv = Value v /\
-    ~is_word_type (post_value_type c e) /\ ~is_bytestring_type (post_value_type c e) /\
-    vv = LocatedValue ty p ==> p.ptr_location = LocMemory) ==>
-  (!name path. rv = PlaceR (MemoryPlace name path) ==>
-    ?tgt. loop_iterator_place e = SOME tgt /\ target_root tgt = NameTarget name) /\
-  (vv_location vv = SOME LocCode ==> ?src name.
-    e = TopLevelName (ArrayT et bd) (src,name) /\
-    rv = PlaceR (ImmutablePlace src name []) /\
-    FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd) /\
-    ~cx_const_name cx (src,name) /\ post_value_type c e = ArrayT et bd)
-Proof
-  cheat
 QED
 
 (* The branch owns the source prefix bind. At its normal continuation the
@@ -3626,6 +3621,11 @@ Theorem for_nonslot_array_round_contracts:
   stmt_exprs_ok c (For id fty (Array e) n loop_body) /\
   (!nid. e = TopLevelName (expr_type e) nid ==>
      IS_SOME (supported_immutable_type tops nid)) /\
+  (~(?ty nid. e = TopLevelName ty nid) ==>
+   ((loop_iterator_place e = NONE ==> expr_places e = []) /\
+    !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid)) /\
+  ((?ty nid. e = TopLevelName ty nid) ==>
+    ~supported_stmts_expr_exists expr_internal_call_root loop_body) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
       (For id fty (Array e) n loop_body) ==> occurs_abi_decode_target target tops) /\
   call_evaluation_safe cx (int_calls_stmt (For id fty (Array e) n loop_body)) /\
@@ -3931,7 +3931,7 @@ Resume for_nonslot_array_round_contracts[cons]:
   suspend "cons_body"
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Resume for_nonslot_array_round_contracts[cons_body]:
   qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> for_nonslot_live _ _ _ _ _ _`
     (qspec_then `storage_trace_horizon es.storage_trace` (drule_then assume_tac)) >>
   drule_then strip_assume_tac for_nonslot_live_head_index >>
@@ -4070,6 +4070,13 @@ QED
           qpat_assum `vv_location vv = SOME LocCode ==> _` drule >>
           qpat_assum `vv_location vv = SOME LocCode` (fn th => simp[NoAsms,th])) >>
       (all_tac >>> SELECT_LT REFL_TAC)
+      >- (disch_tac >>
+          qpat_assum `(?ty nid. e = TopLevelName ty nid) ==> _` irule >>
+          qpat_assum `vv_location vv = SOME LocCode ==> _` mp_tac >>
+          `vv_location vv = SOME LocCode` by
+            (qpat_assum `loc = (case vv_location vv of NONE => LocMemory | SOME l => l)` mp_tac >>
+             Cases_on `vv_location vv` >> simp[]) >>
+          simp[] >> metis_tac[])
       >- (qexistsl [`bb`,`inst`] >> rpt conj_tac >> first_assum ACCEPT_TAC)
       >- (qpat_assum `same_frame c bc` (mp_then Any assume_tac bodyPtrDefsTheory.same_frame_is_ctor) >>
           qpat_assum `bc.ce_is_ctor = c.ce_is_ctor` (fn eq =>
@@ -4083,9 +4090,6 @@ QED
           qexists `sa0` >> simp[] >> metis_tac[]) >>
       suspend "cons_increment") >>
   suspend "cons_compose"
-*)
-Resume for_nonslot_array_round_contracts[cons_body]:
-  cheat
 QED
 
 Resume for_nonslot_array_round_contracts[cons_increment]:

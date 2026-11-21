@@ -1896,6 +1896,9 @@ Theorem for_nonslot_array_prefix_full:
   well_typed_iterator env elem (Array e) /\ supported_iterator tops elem (Array e) n /\
   (!nid. e = TopLevelName (expr_type e) nid ==>
      IS_SOME (supported_immutable_type tops nid)) /\
+  (~(?ty nid. e = TopLevelName ty nid) ==>
+   ((loop_iterator_place e = NONE ==> expr_places e = []) /\
+    !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid)) /\
   expr_type e = ArrayT elem bd /\
   compile_expr c (expr_type e) e sa = (vv,sb) /\
   compile_expr c (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sb) /\
@@ -2015,7 +2018,7 @@ Proof
   suspend "normal"
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Resume for_nonslot_array_prefix_full[normal]:
   map_every qx_gen_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`u`] >>
   simp[] >> strip_tac >>
   qabbrev_tac `H0 = vyperStorageFootprint$storage_trace_horizon mid.storage_trace` >>
@@ -2107,14 +2110,11 @@ QED
           disch_then strip_assume_tac >> disj2_tac >>
           qexistsl_tac [`nm`, `[]`] >> simp[Once EQ_SYM_EQ]) >>
       `expr_writes_ok (\_. F) e` by fs[well_typed_iterator_def] >>
-      `~supported_expr_exists (\x. ?ty c l r. x = IfExp ty c l r) e /\
+      `(loop_iterator_place e = NONE ==> expr_places e = []) /\
        (!tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid)` by
-        (qpat_assum `supported_iterator _ _ _ _` mp_tac >>
-         qpat_assum `~(?ty nm. e = Name ty nm)` mp_tac >>
-         qpat_assum `~(?ty nid. e = TopLevelName ty nid)` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >>
-         Cases_on `e` >> simp[supportedStmtsTheory.supported_iterator_def,
-                             targetPlaceSimTheory.place_access_root]) >>
+        (qpat_assum `~(?ty nid. e = TopLevelName ty nid) ==> _` (fn guard =>
+         qpat_assum `~(?ty nid. e = TopLevelName ty nid)`
+           (ACCEPT_TAC o MATCH_MP guard))) >>
       drule_all whitelistForIterTheory.memory_iterator_source_classify >>
       strip_tac >> fs[read_result_def, return_def]) >>
   Q.SUBGOAL_THEN
@@ -2170,9 +2170,6 @@ QED
         (qx_choose_then `pet` (qx_choose_then `a`
           (map_every assume_tac o CONJUNCTS)))))))) >>
   suspend "length"
-*)
-Resume for_nonslot_array_prefix_full[normal]:
-  cheat
 QED
 
 Resume for_nonslot_array_prefix_full[iterator_live_induction]:
@@ -2297,14 +2294,11 @@ Resume for_nonslot_array_prefix_full[iterator_live_read]:
      Cases_on `?ty nid. e = TopLevelName ty nid`
      >- (pop_assum (qx_choosel_then [`ty`,`nid`] SUBST_ALL_TAC) >>
          simp[vyperTypeContractTheory.loop_iterator_place_def]) >>
-     `~supported_expr_exists (\x. ?ty c l r. x = IfExp ty c l r) e /\
+     `(loop_iterator_place e = NONE ==> expr_places e = []) /\
       (!tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid)` by
-       (qpat_assum `supported_iterator _ _ _ _` mp_tac >>
-        qpat_assum `~(?ty nm. e = Name ty nm)` mp_tac >>
-        qpat_assum `~(?ty nid. e = TopLevelName ty nid)` mp_tac >>
-        POP_ASSUM_LIST (K all_tac) >>
-        Cases_on `e` >> simp[supportedStmtsTheory.supported_iterator_def,
-                            targetPlaceSimTheory.place_access_root]) >>
+       (qpat_assum `~(?ty nid. e = TopLevelName ty nid) ==> _` (fn guard =>
+         qpat_assum `~(?ty nid. e = TopLevelName ty nid)`
+           (ACCEPT_TAC o MATCH_MP guard))) >>
      qspecl_then [`e`,`cx`,`esx`,`PlaceR (MemoryPlace name path)`,`mid`] mp_tac
        whitelistForIterTheory.memory_iterator_source_classify >>
      simp[optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>

@@ -245,6 +245,31 @@ Proof
   cheat
 QED
 
+Theorem nonslot_iterator_bare_immutable:
+  body_inv tops ctx c cx /\
+  supported_iterator tops typ (Array e) n /\
+  expr_type e = ArrayT typ bd /\
+  ~(?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
+             supported_storage_value tops nid (ArrayT typ bd)) /\
+  ~supported_expr_exists (const_name_root cx) e ==>
+  !nid. e = TopLevelName (expr_type e) nid ==>
+    IS_SOME (supported_immutable_type tops nid)
+Proof
+  strip_tac >>
+  `get_module_code cx NONE = SOME tops` by fs[bodySimTheory.body_inv_def] >>
+  rpt strip_tac >>
+  qpat_assum `e = TopLevelName _ _` SUBST_ALL_TAC >>
+  gvs[supported_iterator_def,vyperASTTheory.expr_type_def] >>
+  PairCases_on `nid` >>
+  gvs[supportedDeclsTheory.supported_constant_type_def, AllCaseEqs(),
+      supportedExprTraverseTheory.supported_expr_exists_def,
+      exprSimHypsDefsTheory.const_name_root_def] >>
+  drule_then strip_assume_tac supported_variable_decl_mem >> gvs[] >>
+  drule_then assume_tac gasContextTheory.cx_tops_module >>
+  fs[exprSimHypsDefsTheory.cx_const_name_def] >>
+  metis_tac[array_constant_name_in_lowering, array_constant_decl_mem, supported_variable_decl_mem]
+QED
+
 Theorem compile_for_nonslot_array_frag_full:
   !cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
@@ -271,6 +296,11 @@ Theorem compile_for_nonslot_array_frag_full:
     type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
     ~supported_expr_exists (const_name_root cx) e /\
     stmt_exprs_ok cenv (For id typ (Array e) n body) /\
+    (~(?ty nid. e = TopLevelName ty nid) ==>
+     ((loop_iterator_place e = NONE ==> expr_places e = []) /\
+      !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid)) /\
+    ((?ty nid. e = TopLevelName ty nid) ==>
+      ~supported_stmts_expr_exists expr_internal_call_root body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n body)) /\
     frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>
@@ -305,17 +335,10 @@ Proof
      simp[bound_length_def]) >>
   `!nid. e = TopLevelName (expr_type e) nid ==>
      IS_SOME (supported_immutable_type tops nid)` by
-    (rpt strip_tac >>
-     qpat_assum `e = TopLevelName _ _` SUBST_ALL_TAC >>
-     gvs[supported_iterator_def,vyperASTTheory.expr_type_def] >>
-     PairCases_on `nid` >>
-     gvs[supportedDeclsTheory.supported_constant_type_def, AllCaseEqs(),
-         supportedExprTraverseTheory.supported_expr_exists_def,
-         exprSimHypsDefsTheory.const_name_root_def] >>
-     drule_then strip_assume_tac supported_variable_decl_mem >> gvs[] >>
-     drule_then assume_tac gasContextTheory.cx_tops_module >>
-     fs[exprSimHypsDefsTheory.cx_const_name_def] >>
-     metis_tac[array_constant_name_in_lowering, array_constant_decl_mem, supported_variable_decl_mem]) >>
+    (MATCH_MP_TAC (Q.INST [`c` |-> `cenv`, `bd` |-> `bd`, `n` |-> `n`,
+                          `ctx` |-> `ctx`, `typ` |-> `typ`]
+                     nonslot_iterator_bare_immutable) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   mp_tac (Q.INST [`c` |-> `cenv`,`sty` |-> `typ`,`fty` |-> `typ`,
       `loop_body` |-> `body'`,`sa0` |-> `sa`,`shadow_sa0` |-> `shadow_sa`]
       bodyFullForArrayRoundTheory.for_nonslot_array_layout_full) >>
