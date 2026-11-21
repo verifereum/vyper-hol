@@ -2,8 +2,9 @@ Theory groupedInternalLabels
 Ancestors
   externalEntryShape loweringShapeRules compileUnit compileVyper vyperCompiler
   moduleLowering compileEnv emitHelper exprLowering loweringShapeDefs list
-  entryInternalAppend fragExec emitHelperProps exprLoweringProps venomInst pair
+  entryInternalAppend entryCompileIntervals fragExec emitHelperProps exprLoweringProps venomInst pair
   abiDecoderCounters externalEntryChecks placeMemoryCodeLayout venomExecSemantics context
+  groupedKeywordDecode
 Libs monadsyntax
 
 fun label_steps rws =
@@ -40,6 +41,34 @@ Proof
   qx_gen_tac `item` >> PairCases_on `item` >> once_rewrite_tac[compile_init_kwargs_def] >>
   label_steps [compile_abi_arg_ptr_guard_labels, CONJUNCT1 compile_abi_decode_labels,
     lower_value_labels, compile_expr_labels, compile_store_bytestring_labels]
+QED
+
+Theorem compile_init_kwargs_supplied_intervals:
+  0 < k /\
+  compile_init_kwargs ce ((name,dst,ty,default_e)::vars) off k hi sa = ((),sb) /\
+  fn_has_code sa sb fn ==>
+  ?src mid first last.
+    compile_getelemptr_abi (Lit 4w) (is_abi_dynamic ce.ce_struct_fields ty)
+      (off - 4) CALLDATALOAD (Lit 0w) (Lit 0w) sa = (src,mid) /\
+    (if is_abi_dynamic ce.ce_struct_fields ty then
+       compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) mid = ((),first)
+     else first = mid) /\
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
+      (type_to_abi_dec_info ce.ce_struct_fields ce ty) first = ((),last) /\
+    compile_init_kwargs ce vars (off + abi_embedded_static_size ce.ce_struct_fields ty)
+      (k - 1) hi last = ((),sb) /\
+    fn_has_code sa mid fn /\ fn_has_code mid first fn /\
+    fn_has_code first last fn /\ fn_has_code last sb fn
+Proof
+  strip_tac >> drule_all compile_init_kwargs_supplied_parts >> strip_tac >>
+  `cs_extends sa mid` by metis_tac[compile_getelemptr_abi_labels, SND] >>
+  `cs_extends mid first` by
+    (Cases_on `is_abi_dynamic ce.ce_struct_fields ty` >> fs[cs_extends_refl] >>
+     metis_tac[compile_abi_arg_ptr_guard_labels, SND]) >>
+  `cs_extends first last` by metis_tac[CONJUNCT1 compile_abi_decode_labels, SND] >>
+  `cs_extends last sb` by metis_tac[group_init_kwarg_labels, SND] >>
+  qexistsl_tac [`src`,`mid`,`first`,`last`] >> simp[] >>
+  metis_tac[fn_has_code_split, cs_extends_trans]
 QED
 
 Theorem group_entry_kwargs_labels[local]:
@@ -275,6 +304,50 @@ Proof
   simp[common_job_labels, fresh_noninternal]
 QED
 
+Theorem compile_external_jobs_append:
+  !left right s.
+    compile_external_jobs (left ++ right) s =
+      compile_external_jobs right (SND (compile_external_jobs left s))
+Proof
+  Induct >- simp[compile_external_jobs_def, comp_return_def] >>
+  Cases_on `h` >> simp[compile_external_jobs_def,
+    comp_ignore_bind_def, comp_bind_def] >>
+  rpt gen_tac >> rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem compile_external_common_job_interval:
+  compile_external_jobs (pre ++ ExternalCommonJob common kwvars::post) sa = ((),sb) /\
+  EVERY group_job_label_ok (pre ++ ExternalCommonJob common kwvars::post) ==>
+  ?start entry cenv registered done.
+    compile_external_jobs pre sa = ((),start) /\
+    new_block common.ec_common_label start = (start.cs_current_bb,entry) /\
+    compile_register_positional_args
+      (compile_register_kwarg_vars common.ec_env kwvars) common.ec_pos_args 4 entry =
+      (cenv,registered) /\
+    compile_guarded_body cenv common.ec_nonreentrant common.ec_nkey
+      common.ec_transient common.ec_view common.ec_body common.ec_return registered =
+      ((),done) /\
+    compile_external_jobs post done = ((),sb) /\
+    cs_extends sa start /\ cs_extends start entry /\ cs_extends entry registered /\
+    cs_extends registered done /\ cs_extends done sb
+Proof
+  strip_tac >>
+  Cases_on `compile_external_jobs pre sa` >>
+  rename1 `compile_external_jobs pre sa = (u,start)` >> Cases_on `u` >>
+  qpat_x_assum `compile_external_jobs (_ ++ _) _ = _` mp_tac >>
+  simp[compile_external_jobs_append, compile_external_jobs_def,
+       compile_common_function_body_def, comp_ignore_bind_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  fs[EVERY_APPEND] >>
+  conj_tac >- fs[new_block_def] >>
+  rpt conj_tac
+  >- metis_tac[group_jobs_labels, SND]
+  >- metis_tac[cs_extends_new_block]
+  >- metis_tac[compile_register_positional_args_labels, SND]
+  >- metis_tac[compile_guarded_body_labels, SND] >>
+  metis_tac[group_jobs_labels, SND]
+QED
+
 Theorem external_groups_labels[local]:
   !groups mid. EVERY group_entry_labels_ok groups ==>
     !s. cs_extends s (SND (compile_external_groups mid groups s)) /\
@@ -493,6 +566,44 @@ Proof
        comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   drule external_groups_jobs >> metis_tac[pairTheory.FST]
+QED
+
+Theorem compile_grouped_runtime_entry_layout:
+  EVERY group_entry_labels_ok groups /\
+  compile_generate_grouped_runtime groups [] fallback sa = ((),se) ==>
+  ?fl sf jobs sd sx sn.
+    fresh_label "fallback" sa = (fl,sf) /\
+    compile_group_dispatch_linear groups fl sf = (jobs,sd) /\
+    compile_external_jobs jobs sd = ((),sx) /\
+    new_block fl sx = (sx.cs_current_bb,sn) /\
+    (case fallback of
+       NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+     | SOME (ce,pay,nr,key,tr,view,stmts,rt) =>
+         compile_fallback_body ce pay nr key tr view stmts rt) sn = ((),se) /\
+    EVERY group_job_label_ok jobs /\
+    cs_extends sf sd /\ cs_extends sd sx /\ cs_extends sx se
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_generate_grouped_runtime _ _ _ _ = _` mp_tac >>
+  simp[compile_generate_grouped_runtime_def, compile_internal_fn_bodies_def,
+       comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  rename1 `fresh_label "fallback" sa = (fl,sf)` >>
+  rename1 `compile_group_dispatch_linear groups fl sf = (jobs,sd)` >>
+  rename1 `compile_external_jobs jobs sd = ((),sx)` >>
+  rename1 `new_block fl sx = (_,sn)` >>
+  drule group_dispatch_job_labels >>
+  disch_then (qspecl_then [`fl`,`sf`] mp_tac) >> simp[] >> strip_tac >>
+  drule group_dispatch_labels >>
+  disch_then (qspecl_then [`fl`,`sf`] mp_tac) >> simp[] >> strip_tac >>
+  drule group_jobs_labels >> disch_then (qspec_then `sd` mp_tac) >>
+  simp[] >> strip_tac >>
+  conj_tac >- fs[new_block_def] >>
+  mp_tac (Q.INST [`lbl` |-> `fl`, `fb` |-> `fallback`]
+    (SPEC_ALL cs_appends_runtime_fallback_suffix)) >>
+  simp_tac bool_ss [cs_appends_def] >>
+  disch_then (qspecl_then [`sx`,`()`,`se`] irule) >>
+  fs[comp_ignore_bind_def, comp_bind_def]
 QED
 
 Theorem grouped_prefix_labels[local]:
