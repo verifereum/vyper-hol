@@ -41,7 +41,6 @@ asmOptMergeJumpdestsTheory
 asmOptPeepholeTheory
 asmOptPruneUnreachableTheory
 asmSpliceTheory
-bodyFullLogTheory:compile_log_frag_full
 bodyMemAssignTopCopyCompilerTheory:topcopy_code_certificate
 bodyMemAssignTopCopyPathsTheory:topcopy_compile_loop_path
 bodyMemAssignTopCopyPathsTheory:topcopy_singleton_path
@@ -1031,4 +1030,4 @@ vyperTypeSoundnessTheory
 vyperTypeStoragePreservationTheory
 deploySymSrcUnitTheory
 runtimeSymSrcUnitTheory
-ownSymSrcUnitTheory
+ownSymSrcUnitTheory:lower_vyper_runtime_unit_sym_src_ok_own
