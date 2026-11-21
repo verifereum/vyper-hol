@@ -184,12 +184,6 @@ Proof
   asm_rewrite_tac [pairTheory.SND, ci_mono_def] >> simp[]
 QED
 
-Theorem custom_error_emit_op_extends[local]:
-  emit_op op ops a = (r,b) ==> cs_extends a b
-Proof
-  metis_tac[cs_appends_emit_helpers, cs_appends_def]
-QED
-
 Theorem compile_raise_custom_layout_full:
   ce.ce_error_info (nsid_to_string id) = SOME params /\
   args = custom_error_exprs (CustomError id pos kw) /\
@@ -263,7 +257,7 @@ Proof
   `cs_extends sa se` by fs[ci_mono_def] >>
   Cases_on `NULL (custom_error_exprs (CustomError id pos kw))` >> gvs[] >>
   imp_res_tac cs_extends_emit_inst >>
-  imp_res_tac custom_error_emit_op_extends >>
+  imp_res_tac (REWRITE_RULE [cs_appends_def] (cj 2 cs_appends_emit_helpers)) >>
   imp_res_tac custom_error_encoder_extends >>
   NTAC 3 (imp_res_tac cs_extends_trans) >>
   `fn_has_code sa se func /\ fn_has_code se sm func /\
