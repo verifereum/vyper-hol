@@ -3,6 +3,7 @@ Ancestors
   externalEntryShape loweringShapeRules compileUnit compileVyper vyperCompiler
   moduleLowering compileEnv emitHelper exprLowering loweringShapeDefs list
   entryInternalAppend fragExec emitHelperProps exprLoweringProps venomInst pair
+  abiDecoderCounters externalEntryChecks placeMemoryCodeLayout context
 Libs monadsyntax
 
 fun label_steps rws =
@@ -126,6 +127,39 @@ Proof
   simp[]
 QED
 
+Theorem lower_kwarg_value_vars_mono[local]:
+  abi_decoder_vars_mono (lower_value compile_expr ce ty e) /\
+  abi_decoder_vars_mono (compile_store_bytestring src dst)
+Proof
+  rewrite_tac[abi_decoder_vars_mono_def] >> conj_tac >> gen_tac
+  >- (`ci_mono st (SND (lower_value compile_expr ce ty e st))` by
+        (irule ci_mono_lower_value_cfn >> simp[compile_expr_ci_mono]) >>
+      gvs[ci_mono_def]) >>
+  `ci_mono st (SND (compile_store_bytestring src dst st))` by
+    irule ci_mono_compile_store_bytestring >>
+  gvs[ci_mono_def]
+QED
+
+Theorem compile_entry_point_kwargs_vars_mono[local]:
+  abi_decoder_vars_mono (compile_entry_point_kwargs ce vars off k label)
+Proof
+  `!vars ce off k (hi:operand). abi_decoder_vars_mono (compile_init_kwargs ce vars off k hi)` by
+    (Induct >> simp[compile_init_kwargs_def, abi_decoder_vars_mono_return] >>
+     qx_gen_tac `item` >> PairCases_on `item` >> simp[compile_init_kwargs_def] >> rpt gen_tac >>
+     Cases_on `k > 0` >> simp[] >>
+     rpt (FIRST [
+       CHANGED_TAC (simp[abi_decoder_vars_mono_prims, lower_kwarg_value_vars_mono,
+         abi_decoder_vars_mono_return, CONJUNCT1 abi_decoder_vars_mono_mutual,
+         compile_abi_arg_ptr_guard_def]),
+       (ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac),
+       (ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac),
+       gen_tac,
+       (IF_CASES_TAC >> simp[])])) >>
+  rewrite_tac[compile_entry_point_kwargs_def] >>
+  irule abi_decoder_vars_mono_ignore_bind >> simp[abi_decoder_vars_mono_prims] >>
+  first_assum MATCH_ACCEPT_TAC
+QED
+
 (* The grouped comparison jumps directly into the selected entry. *)
 Theorem compile_group_entries_cons_layout:
   compile_group_entries mid ((sel,lbl,mincd,k)::entries) common vars off sa =
@@ -134,6 +168,7 @@ Theorem compile_group_entries_cons_layout:
   ?next st checks init done bb.
     compile_group_entries mid entries common vars off st = ((),sb) /\
     fn_has_code st sb fn /\ st.cs_current_bb = next /\ st.cs_current_insts = [] /\
+    sa.cs_next_var < st.cs_next_var /\ sa.cs_next_var < checks.cs_next_var /\
     lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb (LENGTH sa.cs_current_insts) =
       SOME (mk_inst sa.cs_next_id EQ [mid; Lit (n2w sel)]
@@ -173,6 +208,16 @@ Proof
   imp_res_tac new_block_props >>
   imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
   imp_res_tac emit_inst_extends >> imp_res_tac fresh_label_props >>
+  `s1.cs_next_var = sa.cs_next_var + 1` by
+    (drule placeMemoryCodeLayoutTheory.emit_op_next_var >> simp[]) >>
+  `s1.cs_next_var <= s2.cs_next_var /\ s2.cs_next_var <= s3.cs_next_var /\
+   s3.cs_next_var <= checks.cs_next_var /\ done.cs_next_var <= st.cs_next_var /\
+   init.cs_next_var <= done.cs_next_var` by
+    (rpt conj_tac >> fs[GSYM abi_decoder_vars_mono_def,
+       abi_decoder_vars_mono_prims, compile_entry_point_kwargs_vars_mono] >>
+     metis_tac[abi_decoder_vars_mono_prims, compile_entry_point_kwargs_vars_mono,
+       abi_decoder_vars_mono_def, SND]) >>
+  imp_res_tac compile_entry_checks_next_var >>
   fs[same_blocks_def] >>
   qmatch_asmsub_abbrev_tac `lookup_block sa.cs_current_bb fn.fn_blocks = SOME blk` >>
   qexistsl_tac [`st`,`checks`,`init`,`done`] >>
