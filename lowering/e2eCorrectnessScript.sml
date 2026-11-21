@@ -1147,7 +1147,7 @@ Proof
   >- (`prog' = prog` by fs[] >>
       qpat_x_assum `prog' = prog` SUBST_ALL_TAC >>
       `opt_entry_state_own prog prog cplan es = entry_venom_state prog cplan es` by
-        simp[opt_entry_state_own_identity]
+        (simp[opt_entry_state_own_identity]) >>
       pop_assum SUBST_ALL_TAC >>
       `tx with code := (entry_venom_state prog cplan es).vs_code = tx` by
         metis_tac[opt_entry_own_txp_identity, opt_entry_state_own_identity] >>
