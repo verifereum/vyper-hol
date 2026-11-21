@@ -72,6 +72,7 @@ val RegisterDecodeSizesMode = ``\checked.
  actual.vs_code = initial.vs_code /\ actual.vs_outcomes = initial.vs_outcomes /\
  actual.vs_tx_ctx = initial.vs_tx_ctx /\ actual.vs_block_ctx = initial.vs_block_ctx /\
  actual.vs_gas_readings = initial.vs_gas_readings /\
+ actual.vs_fmp = initial.vs_fmp /\
  (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
  FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce ty)] /\ DISJOINT B qt.t_mem /\
  (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
@@ -89,7 +90,7 @@ Theorem prefix_entry_register_decode_sizes_mode:
  !checked. (^RegisterDecodeSizesMode) checked
 Proof
  gen_tac >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
- drule_all (BETA_RULE (SPEC_ALL prefix_entry_register_decode_paired_mode)) >>
+ drule_all (BETA_RULE (SPEC_ALL prefix_entry_register_decode_fmp_frame_paired_mode)) >>
  disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
  disch_then (qx_choose_then `actual` (qx_choose_then `H` (qx_choose_then `qt`
    (qx_choose_then `B` (map_every assume_tac o CONJUNCTS))))) >>
@@ -159,6 +160,7 @@ val RegisterAddressDecodeSizesMode = ``\checked.
  actual.vs_code = initial.vs_code /\ actual.vs_outcomes = initial.vs_outcomes /\
  actual.vs_tx_ctx = initial.vs_tx_ctx /\ actual.vs_block_ctx = initial.vs_block_ctx /\
  actual.vs_gas_readings = initial.vs_gas_readings /\
+ actual.vs_fmp = initial.vs_fmp /\
  (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
  FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce ty)] /\ DISJOINT B qt.t_mem /\
  (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
@@ -217,6 +219,8 @@ Proof
     >- (irule (SRULE [ADD] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_mem_then)) >>
         qexists_tac `prepared` >> simp[]) >>
     metis_tac[]) >>
+ `actual.vs_fmp = initial.vs_fmp` by
+   asm_rewrite_tac[] >>
  qexistsl [`actual`,`H`,`qt`,`B`] >> asm_rewrite_tac[] >>
  conj_tac >- suspend "effect" >>
  conj_tac >- suspend "scratch" >>
@@ -325,6 +329,7 @@ val RegisterOneSlotSizesMode = ``\checked.
     actual.vs_code = initial.vs_code /\ actual.vs_outcomes = initial.vs_outcomes /\
     actual.vs_tx_ctx = initial.vs_tx_ctx /\ actual.vs_block_ctx = initial.vs_block_ctx /\
     actual.vs_gas_readings = initial.vs_gas_readings /\
+    actual.vs_fmp = initial.vs_fmp /\
     (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
     FINITE B /\ B SUBSET range_bytes [(initial.vs_alloca_next,type_memory_bytes ce ty)] /\
     DISJOINT B qt.t_mem /\
@@ -426,6 +431,8 @@ Resume prefix_entry_register_one_slot_sizes_coverage_mode[finish]:
     (strip_tac >> conj_tac
      >- (irule (SRULE [ADD] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_mem_then)) >>
          qexists_tac `a` >> simp[]) >> metis_tac[]) >>
+  `a.vs_fmp = initial.vs_fmp` by simp[update_var_def] >>
+  `actual.vs_fmp = initial.vs_fmp` by asm_rewrite_tac[] >>
   qexistsl [`actual`,`H`,`qt`,`B`] >>
   conj_tac >- asm_rewrite_tac[] >>
   conj_tac >- suspend "slot" >> asm_rewrite_tac[] >>
