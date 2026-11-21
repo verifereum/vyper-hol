@@ -18681,6 +18681,8 @@ Proof
   reverse (Cases_on `?nsid. t = TopLevelNameTarget nsid`)
   >- (drule_all bodySimTheory.body_inv_stmt_const_name_free >> strip_tac >>
       irule body_assign_nested_nonempty_immutable_full >> metis_tac[]) >>
+  qpat_x_assum `?nsid. t = TopLevelNameTarget nsid`
+    (qx_choose_then `root` assume_tac) >>
   irule body_assign_other_immutable_frontier_bind >>
   rpt (CHANGED_TAC (first_assum (irule_at Any))) >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
