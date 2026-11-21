@@ -3,7 +3,8 @@
 Theory e2eWitness
 Ancestors
   e2eWitnessCompute e2eDefs e2eDeployDefs
-  supportedProgram immutableSectionRel alist integer_word option
+  e2eDeployCorrectness[qualified,ignore_grammar]
+  immutableSectionRel alist integer_word option vyperStorageFootprint
   compileVyper e2eProducers e2eCorrectness callTrace frameOutcome
   vyperCalldata vyperInterpreter
 Libs
@@ -13,29 +14,20 @@ val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
   [alistTheory.fmap_to_alist_FEMPTY, integer_wordTheory.i2w_pos])
 
-(* Mirrors the premises of e2e_deploy_correctness and vyper_call_correct_guarded.
-   Both require supported programs and bound the trace length. Calls use
-   calldata dispatch with external lookup.
-   The earlier call_outcomes_ok, 0xEF-prefix and valid_vyper_call premises were
-   dropped from the tops. The result relations carry the finite-storage guards. *)
+(* The shared and frame-specific premises of the deploy and call tops. *)
 Definition vyper_deploy_and_call_premises_def:
   vyper_deploy_and_call_premises fin policy tops deploy_bc runtime_bc
-      am_dep tx_dep es_dep am_call tx_call es_call <=>
+      am_dep tx_dep es_dep am_call tx_call es_call H <=>
     fin IN accepted_finalizers /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\
-    supported_program_deploy tops /\
     deploy_typing_ok tops am_dep tx_dep /\
     deploy_state_rel tops deploy_bc am_dep tx_dep es_dep /\
     LENGTH (call_trace es_dep) < 2 ** 64 /\
     source_typing_ok tops am_call tx_call /\
     call_state_rel tops runtime_bc am_call tx_call es_call /\
     LENGTH (call_trace es_call) < 2 ** 64 /\
-    (!f vals.
-       calldata_dispatch tops tx_call.calldata = SOME (f, vals) ==>
-       ?mut args dflts ret body.
-         vyperInterpreter$lookup_function NONE f External tops =
-           SOME (mut, F, args, dflts, ret, body))
+    storage_ok H am_call tx_call /\
+    call_within H tops am_call tx_call es_call
 End
 
 val p23_check_dep = EVAL ``check_contract T [] 2w [(NONE, p23_tops)]``;
@@ -185,21 +177,8 @@ QED
 val p23_src_call_eval = EVAL
   ``call_external (SOME []) gs p23_am_call p23_call_tx``;
 
-val p23_no_self_code = EVAL ``program_reads_self_code p23_tops``;
-val p23_supported = EVAL ``supported_program p23_tops``;
-val p23_supported_deploy = EVAL ``supported_program_deploy p23_tops``;
-
 val p23_dso_eval = REWRITE_RULE []
   (EVAL ``deploy_storage_ok p23_tops initial_machine_state p23_deploy_tx [] []``);
-
-val p23_call_guard_eval = REWRITE_RULE []
-  (EVAL ``call_storage_ok p23_am_call p23_call_tx [] []``);
-
-val p23_ccf_eval = SIMP_RULE (srw_ss())
-  [supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
-   supportedStmtTraverseTheory.supported_assignment_exists_def,
-   supportedExprTraverseTheory.supported_expr_exists_def,
-   constructor_call_root_def] (EVAL ``constructor_call_free p23_tops``);
 
 Theorem not_starved_on_success:
   ~frame_resource_starved es (INR NONE) es'
@@ -209,12 +188,6 @@ Proof
   (namedCases_on `rest` ["", "parent_frame outer_frames"]
    >- gvs[] >>
    PairCases_on `parent_frame` >> gvs[])
-QED
-
-Theorem p23_call_storage_ok:
-  call_storage_ok p23_am_call p23_call_tx [] []
-Proof
-  simp[p23_call_guard_eval]
 QED
 
 val p23_committed_code_eval = EVAL
@@ -289,12 +262,6 @@ Proof
 QED
 
 
-Theorem p23_constructor_call_free:
-  constructor_call_free p23_tops
-Proof
-  ACCEPT_TAC p23_ccf_eval
-QED
-
 (* ===== Both conclusions on p23, and their guards ===== *)
 
 Theorem p23_deploy_storage_ok:
@@ -357,12 +324,14 @@ Proof
 QED
 
 Theorem p23_call_result:
-  call_result_rel_guarded p23_tops p23_am_call p23_call_tx
+  call_result_rel ([], []) p23_tops p23_am_call p23_call_tx
     p23_es_call (INR NONE) p23_es_call_post
 Proof
-  simp[call_result_rel_guarded_def, p23_call_trace] >>
+  simp[call_result_rel_def, p23_call_trace] >>
   irule gas_readings_rel_empty >>
-  rpt strip_tac >>
+  simp[p23_src_call_eval, storage_ok_def, regions_consistent_def,
+       storage_locks_separated_def, storage_well_formed_on_def] >>
+  gen_tac >>
   simp[call_result_rel_at_def, p23_call_trace, LET_THM] >>
   simp[p23_src_call_eval, effects_agree_def] >> rpt strip_tac >>
   qexists `word_to_bytes (42w:bytes32) T` >>
@@ -388,18 +357,56 @@ Proof
   simp[p23_call_tx_def, vyperContextTheory.empty_call_txn_def]
 QED
 
+Theorem p23_storage_ok[local]:
+  storage_ok ([], []) p23_am_call p23_call_tx
+Proof
+  simp[storage_ok_def, regions_consistent_def, storage_locks_separated_def,
+       storage_well_formed_on_def]
+QED
+
+val p23_storage_trace_eval =
+  EVAL ``source_storage_trace p23_am_call p23_call_tx [] gobs``;
+
+Theorem p23_call_within[local]:
+  call_within ([], []) p23_tops p23_am_call p23_call_tx p23_es_call
+Proof
+  simp[call_within_def, p23_dispatch_eval, p23_dispatched_tx, p23_call_trace] >>
+  simp[p23_storage_trace_eval, storage_observations_ok_def, storage_trace_regions_def,
+       storage_trace_locks_def, storage_roots_fit_def,
+       storage_trace_backends_well_formed_def]
+QED
+
+(* Check the live statements without storing their instances. *)
+local
+  val accepted = prove (``(K SOME) IN accepted_finalizers``,
+    simp[asmOptimizerTheory.accepted_finalizers_def])
+  val dep_bound = prove (``LENGTH (call_trace p23_es_dep) < 2 ** 64``,
+    simp[p23_dep_trace])
+  val call_bound = prove (``LENGTH (call_trace p23_es_call) < 2 ** 64``,
+    simp[p23_call_trace])
+in
+  val _ = MATCH_MP
+    (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `p23_tops`,
+      `p23_deploy_bc`, `p23_runtime_bc`, `initial_machine_state`,
+      `p23_deploy_tx`, `p23_es_dep`] e2eDeployCorrectnessTheory.e2e_deploy_correctness)
+    (LIST_CONJ [accepted, p23_compile, p23_deploy_typing, p23_deploy_state, dep_bound])
+  val _ = MATCH_MP
+    (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `p23_tops`,
+      `p23_deploy_bc`, `p23_runtime_bc`, `p23_am_call`, `p23_call_tx`,
+      `p23_es_call`, `([], [])`] vyper_call_correct)
+    (LIST_CONJ [accepted, p23_compile, p23_source_typing, p23_call_state,
+                call_bound, p23_storage_ok, p23_call_within])
+end
+
 (* ===== The witness ===== *)
 
-(* One closed deploy-then-call run of p23_imm_uint256 in which every
- * premise of both top theorems holds at once, both conclusions hold, the
- * only gas filling that matters ([]: neither run reads GAS) meets both
- * runs' finite-storage guards, and the call returns 42. *)
+(* Neither frame reads gas, and the immutable getter needs no storage regions. *)
 Theorem vyper_deploy_and_call_premises_jointly_satisfiable:
   ?fin policy tops deploy_bc runtime_bc am_dep tx_dep es_dep r_dep es_dep'
-     am_dep' rqs_dep tx_call es_call r_call es_call'.
+     am_dep' rqs_dep tx_call es_call r_call es_call' H.
     vyper_deploy_and_call_premises fin policy tops deploy_bc runtime_bc
       am_dep tx_dep es_dep (next_source_machine am_dep' es_dep')
-      tx_call es_call /\
+      tx_call es_call H /\
     run_call es_dep = SOME (r_dep, es_dep') /\
     ~creation_resource_starved es_dep r_dep es_dep' /\
     gas_readings es_dep = [] /\
@@ -411,9 +418,7 @@ Theorem vyper_deploy_and_call_premises_jointly_satisfiable:
     ~frame_resource_starved es_call r_call es_call' /\
     gas_readings es_call = [] /\
     calldata_dispatch tops tx_call.calldata = SOME (tx_call.function_name, tx_call.args) /\
-    call_storage_ok (next_source_machine am_dep' es_dep') tx_call
-      (MAP SND (call_trace es_call)) [] /\
-    calldata_result_rel_guarded tops (next_source_machine am_dep' es_dep') tx_call
+    calldata_result_rel H tops (next_source_machine am_dep' es_dep') tx_call
       es_call r_call es_call' /\
     FST (call_external (SOME []) [] (next_source_machine am_dep' es_dep')
            tx_call) = INL (IntV 42) /\
@@ -423,18 +428,17 @@ Proof
             `p23_deploy_bc`, `p23_runtime_bc`, `initial_machine_state`,
             `p23_deploy_tx`, `p23_es_dep`, `INR NONE`, `p23_es_dep_post`,
             `p23_am_dep_post`, `[]`, `p23_call_tx`, `p23_es_call`, `INR NONE`,
-            `p23_es_call_post`] >>
+            `p23_es_call_post`, `([], [])`] >>
   REWRITE_TAC [GSYM p23_am_call_def, vyper_deploy_and_call_premises_def,
     p23_compile, p23_deploy_typing, p23_deploy_state, p23_source_typing,
-    p23_call_state, p23_constructor_call_free, p23_deploy_result,
+    p23_call_state, p23_deploy_result,
     p23_dep_run, p23_call_run, p23_dep_trace, p23_call_trace,
     not_starved_on_success, p23_evm_return_42,
-    p23_source_call_42, EQT_ELIM p23_supported, EQT_ELIM p23_supported_deploy,
-    EQF_ELIM p23_no_self_code, listTheory.MAP, p23_load,
-    p23_deploy_storage_ok, p23_call_storage_ok, p23_dispatch_eval] >>
+    p23_source_call_42, listTheory.MAP, p23_load,
+    p23_deploy_storage_ok, p23_storage_ok, p23_call_within, p23_dispatch_eval] >>
   simp[asmOptimizerTheory.accepted_finalizers_def,
-       calldata_result_rel_guarded_def, p23_dispatch_eval, p23_dispatched_tx,
-       p23_call_result, p23_get_lookup_eval,
+       calldata_result_rel_def, p23_dispatch_eval, p23_dispatched_tx,
+       p23_call_result,
        creation_resource_starved_def, frame_outcome_def, p23_es_dep_def] >>
   simp[p23_call_tx_def, vyperContextTheory.empty_call_txn_def]
 QED

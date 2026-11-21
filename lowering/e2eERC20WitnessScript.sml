@@ -2,7 +2,8 @@
 Theory e2eERC20Witness
 Ancestors
   e2eWitnessCompute e2eWitness e2eDefs e2eDeployDefs e2eCorrectness e2eLifecycle
-  e2eERC20Compile supportedProgram alist integer_word
+  e2eDeployCorrectness[qualified,ignore_grammar]
+  e2eERC20Compile alist integer_word vyperStorageFootprint
   vyperInterpreter vyperHashMapStorage vfmCompute
   callTrace frameOutcome asmOptimizer accountsRelProps
 Libs
@@ -189,20 +190,36 @@ Proof
   irule frame_quiet_obs >> ACCEPT_TAC (EQT_ELIM erc20_transfer_quiet)
 QED
 
-val erc20_guards_eval = (REWRITE_CONV [erc20_call_machine] THENC EVAL)
-  ``deploy_storage_ok erc20_tops erc20_initial_machine erc20_deploy_tx [] [] /\
-    call_storage_ok erc20_am_call erc20_transfer_tx [] []``;
+val erc20_deploy_guard_eval =
+  EVAL ``deploy_storage_ok erc20_tops erc20_initial_machine erc20_deploy_tx [] []``;
 
-Theorem erc20_finite_guards:
-  deploy_storage_ok erc20_tops erc20_initial_machine erc20_deploy_tx [] [] /\
-  call_storage_ok erc20_am_call erc20_transfer_tx [] []
+Theorem erc20_deploy_guard[local]:
+  deploy_storage_ok erc20_tops erc20_initial_machine erc20_deploy_tx [] []
 Proof
-  rewrite_tac[erc20_guards_eval] >>
-  rpt conj_tac >> rpt gen_tac >> strip_tac >> gvs[] >> EVAL_TAC
+  rewrite_tac[erc20_deploy_guard_eval] >>
+  rpt gen_tac >> strip_tac >> gvs[] >> EVAL_TAC
 QED
 
 val erc20_recipient_slot_eval = EVAL
   ``hashmap_slot_for 0w (BaseT AddressT) (AddressV 3w)``;
+
+val erc20_horizon =
+  ``([(F, erc20_sender_slot, BaseTV (UintT 256));
+      (F, hashmap_slot_for 0w (BaseT AddressT) (AddressV 3w),
+          BaseTV (UintT 256))], [] : num list)``
+
+Theorem erc20_storage_ok[local]:
+  !am. storage_ok ^erc20_horizon am erc20_transfer_tx
+Proof
+  simp[storage_ok_def, regions_consistent_def, storage_locks_separated_def,
+       storage_well_formed_on_def] >>
+  rw[] >> gvs[] >>
+  rewrite_tac[erc20_sender_slot_def, erc20_recipient_slot_eval] >>
+  EVAL_TAC >>
+  PURE_REWRITE_TAC [GSYM (EVAL ``dimword(:256)``), wordsTheory.n2w_mod,
+                    wordsTheory.n2w_w2n] >>
+  REFL_TAC
+QED
 
 val erc20_balances_eval =
   (REWRITE_CONV [erc20_sender_slot_eval, erc20_recipient_slot_eval] THENC cv_eval)
@@ -280,9 +297,6 @@ Proof
        vyperTypeEntryReadinessTheory.deployment_constants_output_typed_def,
        vyperTypeInvariantsTheory.imms_well_typed_def, erc20_tops_def]
 QED
-
-val erc20_transfer_lookup = EVAL
-  ``vyperInterpreter$lookup_function NONE "transfer" External erc20_tops``;
 
 val erc20_constructor_encoding = EVAL
   ``constructor_args_encode erc20_tops erc20_deploy_tx []``;
@@ -411,12 +425,13 @@ val erc20_transfer_return = EVAL
       (word_to_bytes (1w : bytes32) T)``;
 
 Theorem erc20_call_result:
-  call_result_rel_guarded erc20_tops erc20_am_call erc20_transfer_tx
+  call_result_rel ^erc20_horizon erc20_tops erc20_am_call erc20_transfer_tx
     erc20_es_transfer (INR NONE) erc20_es_transfer_post
 Proof
   assume_tac (EQT_ELIM erc20_transfer_facts) >>
   assume_tac (EQT_ELIM erc20_transfer_source_logs) >>
-  simp[call_result_rel_guarded_def, erc20_transfer_trace, gas_readings_rel_def] >>
+  simp[call_result_rel_def, erc20_transfer_trace, gas_readings_rel_def,
+       erc20_source_transfer, erc20_storage_ok] >>
   qexists `[]` >> simp[] >> rpt strip_tac >>
   simp[call_result_rel_at_def, erc20_transfer_trace,
        erc20_source_transfer, effects_agree_def] >>
@@ -489,12 +504,9 @@ Proof
   rpt gen_tac >> EVAL_TAC >> simp[]
 QED
 
-val erc20_supported = EVAL
-  ``supported_program erc20_tops /\ supported_program_deploy erc20_tops``;
 val erc20_dep_target = EVAL ``erc20_deploy_tx.target``;
 val erc20_transfer_target = EVAL ``erc20_transfer_tx.target``;
 val erc20_transfer_typed = EVAL ``call_tx_well_typed erc20_transfer_tx``;
-val erc20_no_self_code = EVAL ``program_reads_self_code erc20_tops``;
 
 Theorem erc20_deploy_ready:
   call_ready erc20_tops erc20_runtime_bc erc20_am_call 2w
@@ -510,7 +522,7 @@ Proof
      `am'` |-> `erc20_am_dep_post`, `rqs` |-> `[]`, `H` |-> `([], [])`,
      `orc` |-> `SOME []`, `gs` |-> `[]`]
     (INST_TYPE [alpha |-> ``:256``] deploy_establishes_call_ready)) >>
-  simp[erc20_deploy_typing, erc20_deploy_state, EQT_ELIM erc20_supported,
+  simp[erc20_deploy_typing, erc20_deploy_state,
        erc20_dep_run, erc20_dep_target, erc20_load,
        erc20_deploy_result_at, GSYM erc20_am_call_def]
 QED
@@ -529,28 +541,74 @@ Proof
      `orc` |-> `SOME []`, `gobs` |-> `[]`]
     call_preserves_call_ready) >>
   simp[erc20_transfer_target, erc20_deploy_ready,
-       EQT_ELIM erc20_transfer_typed, EQT_ELIM erc20_supported,
+       EQT_ELIM erc20_transfer_typed,
        erc20_call_state, erc20_call_bounds, erc20_transfer_run,
        erc20_source_transfer] >>
   simp[erc20_es_transfer_def, LET_THM, erc20_runtime_bc_def]
 QED
 
-val erc20_constructor_call_free = SIMP_RULE (srw_ss())
-  [supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
-   supportedStmtTraverseTheory.supported_assignment_exists_def,
-   supportedExprTraverseTheory.supported_expr_exists_def,
-   constructor_call_root_def] (EVAL ``constructor_call_free erc20_tops``);
-
 val erc20_transfer_dispatch =
   REWRITE_RULE [GSYM (EVAL ``word_to_bytes (3w : address) T``)]
     (EVAL ``calldata_dispatch erc20_tops erc20_transfer_tx.calldata``);
+
+Theorem erc20_source_typing[local]:
+  source_typing_ok erc20_tops erc20_am_call erc20_transfer_tx
+Proof
+  mp_tac erc20_deploy_ready >>
+  simp[call_ready_def] >>
+  metis_tac[EQT_ELIM erc20_transfer_typed, erc20_transfer_target]
+QED
+
+Theorem erc20_dispatched_tx[local]:
+  erc20_transfer_tx with
+    <| function_name := "transfer"; args := [AddressV 3w; IntV 7] |> =
+    erc20_transfer_tx
+Proof
+  simp[erc20_transfer_tx_def, vyperContextTheory.empty_call_txn_def]
+QED
+
+val erc20_storage_trace_eval = (REWRITE_CONV [erc20_call_machine] THENC EVAL)
+  ``source_storage_trace erc20_am_call erc20_transfer_tx [] gobs``;
+
+Theorem erc20_call_within[local]:
+  call_within ^erc20_horizon erc20_tops erc20_am_call
+    erc20_transfer_tx erc20_es_transfer
+Proof
+  simp[call_within_def, erc20_transfer_dispatch, erc20_dispatched_tx,
+       erc20_transfer_trace] >>
+  rewrite_tac[erc20_storage_trace_eval, erc20_sender_slot_def,
+              erc20_recipient_slot_eval] >>
+  EVAL_TAC
+QED
+
+local
+  val accepted = prove (``(K SOME) IN accepted_finalizers``,
+    simp[accepted_finalizers_def])
+  val dep_bound = prove (``LENGTH (call_trace erc20_es_dep) < 2 ** 64``,
+    simp[erc20_dep_trace])
+  val call_bound = prove (``LENGTH (call_trace erc20_es_transfer) < 2 ** 64``,
+    simp[erc20_transfer_trace])
+in
+  val _ = MATCH_MP
+    (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `erc20_tops`,
+      `erc20_deploy_bc`, `erc20_runtime_bc`, `erc20_initial_machine`,
+      `erc20_deploy_tx`, `erc20_es_dep`] e2eDeployCorrectnessTheory.e2e_deploy_correctness)
+    (LIST_CONJ [accepted, erc20_compile, erc20_deploy_typing,
+                erc20_deploy_state, dep_bound])
+  val _ = MATCH_MP
+    (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `erc20_tops`,
+      `erc20_deploy_bc`, `erc20_runtime_bc`, `erc20_am_call`,
+      `erc20_transfer_tx`, `erc20_es_transfer`, `^erc20_horizon`] vyper_call_correct)
+    (LIST_CONJ [accepted, erc20_compile, erc20_source_typing, erc20_call_state,
+                call_bound, SPEC ``erc20_am_call`` erc20_storage_ok, erc20_call_within])
+end
 
 Theorem erc20_deploy_transfer_lifecycle:
   vyper_deploy_and_call_premises (K SOME) (o1_policy all_capabilities)
     erc20_tops erc20_deploy_bc erc20_runtime_bc
     erc20_initial_machine erc20_deploy_tx erc20_es_dep
     (next_source_machine erc20_am_dep_post erc20_es_dep_post)
-    erc20_transfer_tx erc20_es_transfer /\
+    erc20_transfer_tx erc20_es_transfer ^erc20_horizon /\
   run_call erc20_es_dep = SOME (INR NONE, erc20_es_dep_post) /\
   load_contract (SOME []) [] erc20_initial_machine erc20_deploy_tx
     [(NONE, erc20_tops)] [] = INL (erc20_am_dep_post, []) /\
@@ -564,9 +622,7 @@ Theorem erc20_deploy_transfer_lifecycle:
   gas_readings erc20_es_transfer = [] /\ call_trace erc20_es_transfer = [] /\
   calldata_dispatch erc20_tops erc20_transfer_tx.calldata =
     SOME (erc20_transfer_tx.function_name, erc20_transfer_tx.args) /\
-  call_storage_ok (next_source_machine erc20_am_dep_post erc20_es_dep_post)
-    erc20_transfer_tx [] [] /\
-  calldata_result_rel_guarded erc20_tops
+  calldata_result_rel ^erc20_horizon erc20_tops
     (next_source_machine erc20_am_dep_post erc20_es_dep_post)
     erc20_transfer_tx erc20_es_transfer (INR NONE) erc20_es_transfer_post /\
   call_external (SOME []) []
@@ -581,23 +637,13 @@ Theorem erc20_deploy_transfer_lifecycle:
   call_ready erc20_tops erc20_runtime_bc
     (next_source_machine erc20_am_transfer_post erc20_es_transfer_post) 2w
 Proof
-  `source_typing_ok erc20_tops erc20_am_call erc20_transfer_tx` by
-    (mp_tac erc20_deploy_ready >>
-     simp[call_ready_def] >>
-     metis_tac[EQT_ELIM erc20_transfer_typed, erc20_transfer_target]) >>
-  `erc20_transfer_tx with
-     <| function_name := "transfer"; args := [AddressV 3w; IntV 7] |> =
-     erc20_transfer_tx` by
-    simp[erc20_transfer_tx_def, vyperContextTheory.empty_call_txn_def] >>
   REWRITE_TAC [GSYM erc20_am_call_def, vyper_deploy_and_call_premises_def,
-    erc20_compile, erc20_deploy_typing, erc20_deploy_state,
+    erc20_compile, erc20_deploy_typing, erc20_deploy_state, erc20_source_typing,
     erc20_call_state, erc20_deploy_result, erc20_dep_run, erc20_transfer_run,
     erc20_load, erc20_deploy_ready, erc20_transfer_ready, erc20_source_transfer,
-    erc20_dep_trace, erc20_transfer_trace, EQF_ELIM erc20_no_self_code,
-    erc20_finite_guards, erc20_transfer_balances, erc20_transfer_dispatch] >>
-  asm_simp_tac (srw_ss())
-    [accepted_finalizers_def, erc20_constructor_call_free,
-     EQT_ELIM erc20_supported, erc20_transfer_lookup, calldata_result_rel_guarded_def,
-     erc20_transfer_dispatch, erc20_call_result] >>
+    erc20_dep_trace, erc20_transfer_trace, erc20_deploy_guard, erc20_storage_ok,
+    erc20_call_within, erc20_transfer_balances, erc20_transfer_dispatch] >>
+  simp[accepted_finalizers_def, calldata_result_rel_def, erc20_dispatched_tx,
+       erc20_transfer_dispatch, erc20_call_result] >>
   simp[erc20_transfer_tx_def, vyperContextTheory.empty_call_txn_def]
 QED
