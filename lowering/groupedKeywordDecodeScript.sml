@@ -62,3 +62,30 @@ Proof
   simp[Once compile_init_kwargs_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> fs[]) >> strip_tac >> metis_tac[]
 QED
+
+Theorem compile_create_kwarg_allocas_preserves_specs:
+  !specs ce sa vars sb.
+    compile_create_kwarg_allocas ce specs sa = (vars,sb) ==>
+    MAP (\(name,_,ty,e). (name,ty,e)) vars = specs
+Proof
+  Induct >- simp[compile_create_kwarg_allocas_def, comp_return_def] >>
+  qx_gen_tac `item` >> PairCases_on `item` >> rpt gen_tac >>
+  simp[compile_create_kwarg_allocas_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> fs[]) >> strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem compile_create_kwarg_allocas_env_frame:
+  !specs ce ce' sa.
+    ce'.ce_struct_fields = ce.ce_struct_fields ==>
+    compile_create_kwarg_allocas ce' specs sa =
+    compile_create_kwarg_allocas ce specs sa
+Proof
+  Induct >- simp[compile_create_kwarg_allocas_def] >>
+  qx_gen_tac `item` >> PairCases_on `item` >> rpt gen_tac >> strip_tac >>
+  drule type_memory_bytes_frame >> strip_tac >>
+  simp[compile_create_kwarg_allocas_def] >>
+  `compile_create_kwarg_allocas ce' specs =
+     compile_create_kwarg_allocas ce specs` by metis_tac[FUN_EQ_THM] >>
+  simp[]
+QED
