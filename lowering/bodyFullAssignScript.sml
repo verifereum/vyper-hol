@@ -13,6 +13,7 @@ Ancestors bodyImmutableStoreMemory[qualified,ignore_grammar]
   exprSimLayoutTransport[qualified,ignore_grammar]
   exprSimIfExpWidenedAggregate[qualified,ignore_grammar]
   bodyFullShadowBodyInv bodyFullIfExpReach bodyFullAssignImmutableEmpty
+  immutableWordStorePath[qualified,ignore_grammar]
   bodyFullPreds bodySimFull bodyFullShared gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
@@ -18715,9 +18716,16 @@ Resume body_assign_nested_empty_immutable_full[write]:
   `compile_imm_store_word cenv.ce_imm_alloca (FST tr) (Lit 0w) st = ((),sb)` by
     fs[compile_store_at_loc_def] >>
   `w2n (n2w (off+k) : bytes32) + 32 <= lo` by simp[] >>
-  drule_all (Q.INST [`explicit` |-> `gas_explicit_sites ctx shadow_ctx`, `PG` |-> `PG`]
-    bodyFullAssignImmutableEmptyTheory.immutable_empty_store_path) >>
-  disch_then (qspecl_then [`shadow_ctx`,`PG`] strip_assume_tac) >>
+  mp_tac (Q.INST [`operand` |-> `Lit 0w`, `value` |-> `0w`,
+                  `imm` |-> `cenv.ce_imm_alloca`,
+                  `dst` |-> `FST (tr : operand # data_location option # place_ty option)`,
+                  `a` |-> `n2w (off+k) : bytes32`, `sa` |-> `st`,
+                  `s` |-> `u`, `G` |-> `G1`, `tn` |-> `tn1`,
+                  `explicit` |-> `gas_explicit_sites ctx shadow_ctx`, `PG` |-> `PG`]
+    immutableWordStorePathTheory.immutable_word_store_path_clean) >>
+  `eval_operand (Lit 0w) u = SOME 0w /\ op_taint tn1 (Lit 0w) = {}` by
+    simp[eval_operand_def,op_taint_def] >>
+  impl_tac >- simp[] >> strip_tac >>
   suspend "write_post"
 QED
 
