@@ -791,7 +791,7 @@ Proof
     >- metis_tac[COND_CLAUSES] >> gen_tac >> BETA_TAC >>
     match_mp_tac gas_shadow_compiles_bind >> conj_tac
     >- irule gas_shadow_compiles_unwrap_value >> gen_tac >> BETA_TAC) >>
-   irule gas_shadow_compiles_as_ptr_val >>
+   irule gas_shadow_compiles_as_stack_val >>
    irule gasShadowCompileBuiltinScalarTheory.gas_shadow_compiles_ecadd_points)
 QED
 
@@ -821,7 +821,7 @@ Proof
    >- irule gas_shadow_compiles_unwrap_value >> gen_tac >> BETA_TAC >>
    match_mp_tac gas_shadow_compiles_bind >> conj_tac
    >- metis_tac[COND_CLAUSES] >> gen_tac >> BETA_TAC >>
-   irule gas_shadow_compiles_as_ptr_val >>
+   irule gas_shadow_compiles_as_stack_val >>
    irule gasShadowCompileBuiltinScalarTheory.gas_shadow_compiles_ecmul_point)
 QED
 
