@@ -123,8 +123,10 @@ Resume compile_for_storage_subplace_array_frag_full[storage]:
        (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac >- simp[] >>
-  conj_tac >- (qexistsl [`nid`,`tgt`] >> simp[]) >>
-  conj_tac >- (qexistsl [`se`,`vv`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >-
+    (qexistsl [`se`,`vv`] >> rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+     disj2_tac >> qexistsl [`tgt`,`nid`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >> reverse conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl [`bindings`,`env`,`env'`,`ret_ty`,`sha`,`shadow_func`,`shb`,`tops`,`typ`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
