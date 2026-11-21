@@ -349,6 +349,25 @@ Proof
   metis_tac[well_typed_exprs_raw_shape]
 QED
 
+Theorem checked_deploy_function_raw_shape:
+  !layouts addr tops art vis mut nr rr name args dflts ret source_body.
+  check_contract T layouts addr [(NONE,tops)] = SOME art /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret source_body) tops /\
+  ~supported_stmts_expr_exists expr_raw_shape_root source_body /\
+  ~supported_exprs_exists expr_raw_shape_root dflts ==>
+  ~supported_stmts_expr_exists expr_shape_root source_body /\
+  ~supported_exprs_exists expr_shape_root dflts
+Proof
+  rpt gen_tac >> strip_tac >>
+  `check_function_body layouts addr [(NONE,tops)] art NONE vis mut nr args
+     dflts ret source_body` by
+    (drule check_contract_deploy_function_body_MEM >> simp[] >>
+     disch_then (drule_at (Pat `MEM (FunctionDecl _ _ _ _ _ _ _ _ _) _`)) >>
+     simp[]) >>
+  fs[check_function_body_def, IS_SOME_EXISTS] >>
+  metis_tac[type_stmt_raw_shape, well_typed_expr_raw_shape]
+QED
+
 Theorem check_contract_runtime_bodies_shape_ok:
   check_contract F layouts addr [(NONE, tops)] = SOME art /\
   raw_shape_free_program tops ==>

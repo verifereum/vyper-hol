@@ -30,7 +30,7 @@ Theorem deploy_bc_size_bounded:
     LENGTH deploy_bc < 65536
 Proof
   rpt gen_tac >> PairCases_on `arts` >> strip_tac >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_o1_shape_ok >> strip_tac >>
   drule_all deploy_unit_defs_reach_uses >> strip_tac >>
   `unit_shape_ok arts2.po_unit` by
     (irule run_venom_pipeline_output_shape >>

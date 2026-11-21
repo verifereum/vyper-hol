@@ -822,7 +822,7 @@ Theorem deploy_relocated_data_layout:
         off <= LENGTH (assemble prog') /\ off < dimword(:256)
 Proof
   strip_tac >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_o1_shape_ok >> strip_tac >>
   drule_all deploy_unit_defs_reach_uses >> strip_tac >>
   `lower_vyper_deploy_unit tops rpolicy bytes = SOME dunit /\
    o1PipelineCorrect$o1_pipeline rpolicy dunit = SOME dout /\

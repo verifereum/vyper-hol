@@ -844,6 +844,8 @@ Proof
            deploy_selected_memory_from_no_wrap) >>
          impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[])) >>
          disch_then ACCEPT_TAC) >>
+     `~ctx_has_dalloca dunit.cu_context` by
+       metis_tac[deploy_unit_no_dalloca_static] >>
      metis_tac[deploy_selected_memory]) >>
   `dunit.cu_context.ctx_entry = SOME "__deploy"` by
     (drule lower_vyper_deploy_unit_entry >> simp[]) >>
@@ -896,7 +898,7 @@ Proof
   rpt strip_tac >>
   drule compile_vyper_deploy_phases >> strip_tac >>
   `deploy_source_ok tops am tx` by simp[deploy_source_ok_def] >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_o1_shape_ok >> strip_tac >>
   drule_all deploy_unit_defs_reach_uses >> strip_tac >>
   `o1PipelineCorrect$o1_pipeline rpolicy dunit = SOME dout /\
    codegen_assembly rpolicy dout.po_unit = SOME prog /\
