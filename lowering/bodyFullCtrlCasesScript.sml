@@ -119,6 +119,9 @@ Proof
     (bodyConstNameLib.irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          int_calls_stmt_def, body_inv_def] >>
+     conj_tac >-
+       (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+        qexists_tac `cenv` >> fs[allocLimitsTheory.alloc_limits_stmt_def]) >>
      qexists_tac `[]` >> simp[]) >>
   irule compile_expr_stmt_frag_ok_full >>
   simp[gas_shadow_stmt_compile_expr] >> conj_tac
