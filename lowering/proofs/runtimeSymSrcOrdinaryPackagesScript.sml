@@ -5,7 +5,7 @@ Ancestors
   runtimeSymSrcGetterSource runtimeSymSrcGetterReturn runtimeSymSrcAbiEncode
   runtimeSymSrcInterfaces runtimeSymSrcBlockEmission
   compileVyper moduleLowering compileEnv loweringShapeDefs list
-  vyperTypeContract constSubstCorrect
+  vyperTypeContract constSubstCorrect runtimeSymSrcClassifiedSource
 
 Theorem runtime_sym_external_package_body:
   check_contract mode layouts addr [(NONE,tops)] = SOME art /\
@@ -43,6 +43,9 @@ Proof
       disch_then (qspecl_then [`tops`,
         `args ++ supported_stmts_bindings T fbody ++ supported_stmts_bindings F fbody`] mp_tac) >> simp[] >>
       (impl_tac >- (rpt gen_tac >> first_assum MATCH_ACCEPT_TAC)) >> simp[]) >>
+  `!id e. ALOOKUP (module_consts_env tops []) id = SOME e ==>
+     ~supported_expr_exists is_self_code e` by
+    metis_tac[runtime_sym_checked_constant_replacements] >>
   drule_at (Pat `compile_external_function_body _ _ _ _ _ _ _ _ _ = _`)
     runtime_sym_external_body_raw >>
   simp[] >> disch_then irule >> qexists_tac `tops` >>
@@ -52,6 +55,7 @@ Proof
       drule_at (Pat `public_getter _ = _`) runtime_sym_public_getter_stmts >>
       disch_then (drule_at (Pat `compile_stmts _ _ _ _ _ = _`)) >>
       simp[] >> disch_then irule >>
+      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
       rpt gen_tac >> MATCH_ACCEPT_TAC runtime_sym_abi_encode_to_buf) >>
   first_assum ACCEPT_TAC
 QED
