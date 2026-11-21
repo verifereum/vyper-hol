@@ -6870,12 +6870,15 @@ Proof
         in map_every assume_tac [SRULE [] (CONJUNCT1 guard),CONJUNCT2 guard] end)) >>>
   HEADGOAL (Cases_on `immutable_root cx bt`) >>>
   HEADGOAL (
-    `?nsid. bt = TopLevelNameTarget nsid` by
-      (qpat_assum `~immutable_root cx bt \/ _` (fn guard =>
-         qpat_assum `immutable_root cx bt` (fn root =>
-           ACCEPT_TAC (SIMP_RULE std_ss [root] guard)))) >>
-    drule_all_then (qx_choosel_then [`ns`,`id`] strip_assume_tac)
-      tuple_assign_immutable_toplevel_type) >>>
+    qpat_assum `~immutable_root cx bt \/ _` (fn guard =>
+      qpat_assum `immutable_root cx bt` (fn root =>
+        assume_tac (SIMP_RULE std_ss [root] guard)))) >>>
+  HEADGOAL (sg `?ns id. bt = TopLevelNameTarget (ns,id) /\
+                         IS_SOME (supported_immutable_type tops (ns,id))`) >>>
+  HEADGOAL (
+    irule tuple_assign_immutable_toplevel_type >>
+    rpt (CHANGED_TAC (first_assum (irule_at Any))) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
   HEADGOAL (
     qpat_x_assum `bt = TopLevelNameTarget _` SUBST_ALL_TAC >>
     qpat_x_assum `IS_SOME (supported_immutable_type tops (ns,id))`
@@ -7253,7 +7256,10 @@ Proof
        qexists_tac `sa` >> asm_rewrite_tac[]) >>
     `!i:num. i + SUC k = SUC k + i` by decide_tac >>
     qpat_assum `!i:num. i + SUC k = SUC k + i` (fn th => rewrite_tac[th]) >>
-    rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, ALL_TAC]) >>>
+    rpt conj_tac >> FIRST
+      [first_assum ACCEPT_TAC,
+       qpat_assum `~EXISTS _ todo` (ACCEPT_TAC o SRULE []),
+       ALL_TAC]) >>>
   HEADGOAL (
     qpat_assum `fin.storage_trace = src.storage_trace` (fn tr =>
       qpat_assum `!H. valid_horizon cx st0 H fin.storage_trace ==> _`
@@ -11939,12 +11945,16 @@ Proof
   Cases_on `immutable_root cx head`
   >- (`MEM (BaseTarget head) gs` by metis_tac[listTheory.EL_MEM] >>
       `?nsid. head = TopLevelNameTarget nsid` by
-        (qpat_assum `~EXISTS _ gs` (mp_tac o REWRITE_RULE [listTheory.EXISTS_MEM]) >>
+        (qpat_assum `EVERY ($~ o (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\ _)) gs`
+           (qspec_then `BaseTarget head` mp_tac o REWRITE_RULE [listTheory.EVERY_MEM]) >>
          qpat_assum `MEM (BaseTarget head) gs` mp_tac >>
          qpat_assum `immutable_root cx head` mp_tac >>
-         POP_ASSUM_LIST kall_tac >> metis_tac[]) >>
-      drule_all_then (qx_choosel_then [`ns`,`id`] strip_assume_tac)
-        tuple_assign_immutable_toplevel_type >>
+         POP_ASSUM_LIST kall_tac >> simp[combinTheory.o_DEF] >> metis_tac[]) >>
+      `?ns id. head = TopLevelNameTarget (ns,id) /\
+                IS_SOME (supported_immutable_type tops (ns,id))` by
+        (irule tuple_assign_immutable_toplevel_type >>
+         rpt (CHANGED_TAC (first_assum (irule_at Any))) >>
+         rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `head = TopLevelNameTarget _` SUBST_ALL_TAC >>
   qpat_x_assum `IS_SOME (supported_immutable_type tops (ns,id))`
     (qx_choose_then `dty` assume_tac o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
