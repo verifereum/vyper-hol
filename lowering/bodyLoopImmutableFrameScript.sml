@@ -272,7 +272,7 @@ QED
 
 (* The induction covers calls reached from the iterator body. Each reached
    callee supplies the guard and the call closure for its defaults and body. *)
-Theorem reachable_immutable_array_frame[local]:
+Theorem reachable_guarded_immutable_frame[local]:
   (!sid func ts mut nr args dflts ret bod.
     reached (sid,func) /\ ALOOKUP mods sid = SOME ts /\
     lookup_callable_function deploy func ts = SOME (mut,nr,args,dflts,ret,bod) ==>
@@ -335,7 +335,7 @@ Proof
   ARRAY_CASE_SIMPLE
 QED
 
-Resume reachable_immutable_array_frame[builtin]:
+Resume reachable_guarded_immutable_frame[builtin]:
   ARRAY_CASE
   >- (gvs[type_check_def, assert_def, check_def, return_def, raise_def] >>
       Cases_on `es` >> gvs[builtin_args_length_ok_def, int_calls_expr_def,
@@ -346,7 +346,7 @@ Resume reachable_immutable_array_frame[builtin]:
   array_induction_hypothesis
 QED
 
-Resume reachable_immutable_array_frame[create]:
+Resume reachable_guarded_immutable_frame[create]:
   ARRAY_CASE >>
   all_tac >>~- ([`state_rel_frame _ (eval_create _ _ _ _ _ _ _)`],
     ARRAY_ATOMIC_FRAME) >>
@@ -362,7 +362,7 @@ Resume reachable_immutable_array_frame[create]:
   array_induction_hypothesis
 QED
 
-Resume reachable_immutable_array_frame[rawlog]:
+Resume reachable_guarded_immutable_frame[rawlog]:
   simp_tac bool_ss [Once evaluate_def] >>
   MATCH_MP_TAC state_rel_frame_bind_guarded >> conj_tac >- ARRAY_TRANSITIVITY >>
   conj_tac >- array_induction_hypothesis >>
@@ -376,7 +376,7 @@ Resume reachable_immutable_array_frame[rawlog]:
   fs[]
 QED
 
-Resume reachable_immutable_array_frame[intcall]:
+Resume reachable_guarded_immutable_frame[intcall]:
   simp_tac bool_ss [Once evaluate_def] >>
   ntac 25 ARRAY_STEP >> rpt gen_tac >> strip_tac >>
   simp_tac bool_ss [LET_THM, FST, SND] >>
@@ -426,7 +426,7 @@ Resume reachable_immutable_array_frame[intcall]:
   simp[]
 QED
 
-Finalise reachable_immutable_array_frame
+Finalise reachable_guarded_immutable_frame[local]
 
 Theorem callee_write_ok_global[local]:
   FST (place_access p []) = TopLevelNameTarget nid ==>
@@ -463,7 +463,7 @@ Proof
     (drule callee_write_ok_global >> disch_then SUBST1_TAC >>
      fs[EVERY_MEM] >> metis_tac[loop_iterator_place_in_expr_places]) >>
   `state_rel_frame ^array_relation (eval_stmts cx ss)` by
-    (irule (cj 2 reachable_immutable_array_frame) >>
+    (irule (cj 2 reachable_guarded_immutable_frame) >>
      qexistsl [`cx.txn.target`,`cx.in_deploy`,`[(NONE,tops)]`,`p`,`reached`] >>
      simp[FUN_EQ_THM,get_module_code_def] >>
      reverse conj_tac >- first_assum ACCEPT_TAC >>
@@ -508,6 +508,101 @@ Proof
   simp[lookup_immutable_def]
 QED
 
+(* The original whole-array frame is a specialization at the action's
+   address. Only mutations of other places are permitted by its guard. *)
+val array_cell =
+  ``\cx st. lookup_immutable cx st src name = SOME (ArrayTV elem bound,ArrayV av)``;
+val array_relation = rhs (concl (DEPTH_CONV BETA_CONV
+  ``\s t. ^array_cell cx s ==> ^array_cell cx t``));
+val array_guard = ``callee_write_ok (TopLevelNameTarget (src,name))``;
+val array_code = ``\cx. get_module_code cx = ALOOKUP mods /\ cx.in_deploy = deploy``;
+val array_iterator_writes = ``\it. case it of
+    Array e => expr_writes_ok ^array_guard e
+  | Range lo hi => expr_writes_ok ^array_guard lo /\ expr_writes_ok ^array_guard hi``;
+
+Theorem lookup_immutable_replace_store[local]:
+  lookup_immutable cx (s with immutables := t.immutables) src name =
+  lookup_immutable cx t src name
+Proof
+  simp[lookup_immutable_def]
+QED
+
+Theorem guarded_whole_array_mutations[local]:
+  !cx' target s pl t.
+    cx'.txn.target = cx.txn.target /\ ^array_guard target /\
+    eval_target_place cx' target s = (INL pl,t) /\
+    ^array_cell cx s /\ ^array_cell cx t ==>
+    (!v. state_rel_frame ^array_relation (write_place cx' pl v)) /\
+    (!v. state_rel_frame ^array_relation (append_place cx' pl v)) /\
+    state_rel_frame ^array_relation (pop_place cx' pl)
+Proof
+  BETA_TAC >> rpt gen_tac >> strip_tac >>
+  `!s. lookup_immutable cx s src name = lookup_immutable cx' s src name` by
+    simp[lookup_immutable_def] >>
+  fs[] >> drule_all immutable_array_guarded_target >> strip_tac >>
+  `!src' name' path. pl = ImmutablePlace src' name' path ==>
+     (src',name') <> (src,name)` by metis_tac[pairTheory.PAIR_EQ] >>
+  simp[state_rel_frame_result] >> rpt strip_tac >>
+  imp_res_tac lookup_immutable_write_other >>
+  imp_res_tac append_guarded_immutable_frame >>
+  imp_res_tac pop_place_immutable_other >> gvs[]
+QED
+
+Theorem reachable_immutable_array_frame[local]:
+  (!sid func ts mut nr args dflts ret bod.
+    reached (sid,func) /\ ALOOKUP mods sid = SOME ts /\
+    lookup_callable_function deploy func ts = SOME (mut,nr,args,dflts,ret,bod) ==>
+    EVERY (expr_writes_ok ^array_guard) dflts /\
+    stmts_writes_ok ^array_guard bod /\ EVERY reached (function_int_calls dflts bod)) ==>
+  (!cx s. ^array_code cx /\ EVERY reached (int_calls_stmt s) /\
+          stmt_writes_ok ^array_guard s ==>
+     state_rel_frame ^array_relation (eval_stmt cx s)) /\
+  (!cx ss. ^array_code cx /\ EVERY reached (int_calls_stmts ss) /\
+           stmts_writes_ok ^array_guard ss ==>
+     state_rel_frame ^array_relation (eval_stmts cx ss)) /\
+  (!cx it. ^array_code cx /\ EVERY reached (int_calls_iterator it) /\
+           ^array_iterator_writes it ==>
+     state_rel_frame ^array_relation (eval_iterator cx it)) /\
+  (!cx tyv nm bod vs. ^array_code cx /\ EVERY reached (int_calls_stmts bod) /\
+                     stmts_writes_ok ^array_guard bod ==>
+     state_rel_frame ^array_relation (eval_for cx tyv nm bod vs)) /\
+  (!cx e. ^array_code cx /\ EVERY reached (int_calls_expr e) /\
+          expr_writes_ok ^array_guard e ==>
+     state_rel_frame ^array_relation (eval_expr cx e)) /\
+  (!cx es. ^array_code cx /\ EVERY reached (int_calls_exprs es) /\
+           EVERY (expr_writes_ok ^array_guard) es ==>
+     state_rel_frame ^array_relation (eval_exprs cx es)) /\
+  (!cx t. ^array_code cx /\ EVERY reached (int_calls_target t) /\
+          target_writes_ok ^array_guard t ==>
+     state_rel_frame ^array_relation (eval_base_place cx t)) /\
+  (!cx t. ^array_code cx /\ EVERY reached (int_calls_target t) /\
+          target_writes_ok ^array_guard t ==>
+     state_rel_frame ^array_relation (eval_target_place cx t)) /\
+  (!cx g v. ^array_code cx /\ EVERY reached (int_calls_atarget g) /\
+            atarget_writes_ok ^array_guard g ==>
+     state_rel_frame ^array_relation (assign_tuple_targets cx g v)) /\
+  (!cx gs vs. ^array_code cx /\ EVERY reached (int_calls_atargets gs) /\
+              EVERY (atarget_writes_ok ^array_guard) gs ==>
+     state_rel_frame ^array_relation (assign_tuple_target_list cx gs vs))
+Proof
+  suspend "specialize"
+QED
+
+Resume reachable_immutable_array_frame[specialize]:
+  BETA_TAC >> strip_tac >> rpt conj_tac >> qx_gen_tac `cx` >>
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.INST [`p` |-> `TopLevelNameTarget (src,name)`,
+                  `addr` |-> `cx.txn.target`,
+                  `obs` |-> `\imm. ^array_cell cx (ARB with immutables := imm)`]
+                reachable_guarded_immutable_frame) >>
+  simp[lookup_immutable_replace_store] >>
+  (impl_tac >- (conj_tac >- first_assum ACCEPT_TAC >>
+                MATCH_ACCEPT_TAC (BETA_RULE guarded_whole_array_mutations))) >>
+  strip_tac >> first_assum irule >> simp[]
+QED
+
+Finalise reachable_immutable_array_frame
+
 Theorem for_bare_immutable_array_body_observation:
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
   iterator_unmodified (Array (TopLevelName (ArrayT et bd) (src,name))) ss /\
@@ -517,22 +612,25 @@ Theorem for_bare_immutable_array_body_observation:
   eval_stmts cx ss st = (res,st') ==>
   lookup_immutable cx st' src name = lookup_immutable cx st src name
 Proof
-  rpt strip_tac >> simp[] >>
-  irule (SRULE [evaluate_subscripts_def]
-    (Q.INST [`path` |-> `[]`] for_selected_immutable_body_frame_from_guard)) >>
-  goal_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `stmt_loop_calls_ok _ _`)) >>
-  qexists `TopLevelNameTarget (src,name)` >>
-  simp[loop_iterator_place_def,place_access_def] >>
-  rpt strip_tac >>
-  `!s. lookup_immutable cx' s src name = lookup_immutable cx s src name` by
-    simp[lookup_immutable_def] >>
-  `!path. pl <> ImmutablePlace src name path` by
-    metis_tac[immutable_array_guarded_target] >>
-  `!src' name' path. pl = ImmutablePlace src' name' path ==>
-     (src',name') <> (src,name)` by metis_tac[pairTheory.PAIR_EQ] >>
-  simp[state_rel_frame_result] >> rpt strip_tac >>
-  imp_res_tac lookup_immutable_write_other >>
-  imp_res_tac append_guarded_immutable_frame >>
-  imp_res_tac pop_place_immutable_other >> gvs[]
+  simp[iterator_unmodified_def, expr_places_def, stmt_loop_calls_ok_def,
+       loop_iterator_place_def] >> rpt strip_tac >>
+  drule loop_calls_reachable_writes >> strip_tac >>
+  `callee_write_ok (TopLevelNameTarget (src,name)) =
+   (\w. ~place_contains w (TopLevelNameTarget (src,name)))` by
+    (irule callee_write_ok_global >> simp[place_access_def]) >>
+  `!sid fn ts mut nr args dflts ret body.
+     reached (sid,fn) /\ ALOOKUP [(NONE,tops)] sid = SOME ts /\
+     lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,body) ==>
+     EVERY (expr_writes_ok ^array_guard) dflts /\
+     stmts_writes_ok ^array_guard body /\ EVERY reached (function_int_calls dflts body)` by
+    (rpt gen_tac >>
+     qpat_assum `!sid fn ts deploy mut nr args dflts ret body. _`
+       (MATCH_ACCEPT_TAC o SPEC_ALL)) >>
+  `state_rel_frame
+    (\s t. lookup_immutable cx s src name = SOME (ArrayTV elem arrbound,ArrayV av) ==>
+            lookup_immutable cx t src name = SOME (ArrayTV elem arrbound,ArrayV av))
+    (eval_stmts cx ss)` by
+    (drule_then (irule o cj 2) reachable_immutable_array_frame >>
+     simp[FUN_EQ_THM, get_module_code_def]) >>
+  drule_all state_rel_frame_at >> simp[]
 QED
