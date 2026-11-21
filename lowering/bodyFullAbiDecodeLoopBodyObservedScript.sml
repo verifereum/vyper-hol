@@ -1,5 +1,6 @@
 Theory bodyFullAbiDecodeLoopBodyObserved
 Ancestors
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyFullAbiDecodeLoopPhasesObserved bodyFullAbiDecodeLoopResource
   gasOriginPtrLabels abiDecoderCoherence abiDecoderMemberInfos abiDecoderReentry
   abiDecoderOffset abiEncoder compileEnv venomInst venomExecSemantics venomState
@@ -112,7 +113,10 @@ Proof
   `lookup_var dst s = SOME (n2w d)` by
     (qpat_assum `eval_operand (Var dst) s = SOME (n2w d)` mp_tac >>
      pure_rewrite_tac[eval_operand_def] >> disch_then irule) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es s /\ _`
+       (drule_then (mp_tac o CONJUNCT1)) >>
+     MATCH_ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   mp_tac (Q.INST [
     `sa` |-> `loop_body`, `sb` |-> `child`,
     `live` |-> `(aid,counter,cell,32,mem_bytes_at cell 32 s.vs_memory)::live`,
@@ -366,6 +370,10 @@ Proof
      simp[EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]) >>
   qpat_x_assum `?ci cp. MEM ci (fn_insts fn) /\ _ /\ _ /\ ci.inst_id = aid /\ _`
     (qx_choose_then `ci` (qx_choose_then `counter_owner` strip_assume_tac)) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es t /\ _`
+       (drule_then (mp_tac o CONJUNCT1)) >>
+     MATCH_ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   mp_tac (Q.INST [
     `s` |-> `t`, `G` |-> `G'`, `tn` |-> `tn'`, `sa` |-> `returned`,
     `id` |-> `returned.cs_next_id`, `prefix` |-> `returned.cs_current_insts`,
