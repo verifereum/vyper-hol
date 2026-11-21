@@ -27,7 +27,7 @@ Proof
        combinTheory.APPLY_UPDATE_THM]
 QED
 
-Theorem append_aggregate_header_dead[local]:
+Theorem append_aggregate_header_dead:
   w2n slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword (:256) ==>
   (dead_bytes (update_storage slot h st) (w2n slot)
      (ArrayTV tv (Dynamic cap)) j b <=>
