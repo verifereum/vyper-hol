@@ -1,5 +1,6 @@
 Theory abiBuiltinEncodeMethod
 Ancestors
+  abiOperandLiveUpdateProps
   abiDecoderRange abiEncoderWindowLookup abiDecoderArrayHeader venomMemProps context
   abiBuiltinEncodeCode abiBuiltinEncodeCorrect abiBuiltinPrefix abiEncoderWrites
   abiDecoderReentry abiDecoderDynamicLoopSetup abiDecoderGuards abiDecoderFrameCompose
@@ -42,15 +43,6 @@ Proof
   simp[DROP_LENGTH_APPEND, IS_PREFIX_APPEND, is_terminator_def, mk_inst_def]
 QED
 
-Theorem abi_encode_open_register_preserves[local]:
-  (!op. abi_decoder_operand_live next op ==>
-    eval_operand op (update_var (STRING #"%" (toString next)) w s) = eval_operand op s)
-Proof
-  Cases >> simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
-    update_var_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  metis_tac[LESS_EQ_REFL]
-QED
-
 Theorem abi_encode_open_alloc_buffer:
   compile_alloc_buffer outsz st = (buf,st') /\
   ((FLOOKUP s.vs_allocas st.cs_next_id = NONE /\ p = s.vs_alloca_next) \/
@@ -74,7 +66,7 @@ Proof
        mk_inst_def, w2n_n2w, eval_operand_def, LET_THM, ADD_COMM]) >>
   `!op. abi_decoder_operand_live st.cs_next_var op ==>
     eval_operand op t = eval_operand op s` by
-    (rpt strip_tac >> simp[Abbr `t`, abi_encode_open_register_preserves] >>
+    (rpt strip_tac >> simp[Abbr `t`, abi_encode_live_update_open] >>
      Cases_on `FLOOKUP s.vs_allocas st.cs_next_id = NONE` >>
      Cases_on `op` >> simp[Abbr `allocated`, abi_builtin_allocate_state_def,
        eval_operand_def, lookup_var_def]) >>
@@ -99,7 +91,7 @@ Proof
     (irule step_ADD >> simp[]) >>
   qexists_tac `update_var (STRING #"%" (toString st.cs_next_var)) (a+b) s` >>
   simp[run_inst_seq_def, abi_decoder_address_frame_def,
-    abi_encode_open_register_preserves, update_var_def, eval_operand_def,
+    abi_encode_live_update_open, update_var_def, eval_operand_def,
     lookup_var_def, FLOOKUP_UPDATE]
 QED
 

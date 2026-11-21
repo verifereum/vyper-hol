@@ -1,5 +1,6 @@
 Theory runtimeSymSrcStatements
 Ancestors
+  listZipProps
   runtimeSymSrcStatementAssignFamily
   runtimeSymSrcStatementAssignClosed runtimeSymSrcStatementExitClosed
   runtimeSymSrcStatementLogs runtimeSymSrcExternalArgStaging runtimeSymSrcExternalPrimitive
@@ -80,7 +81,7 @@ Proof
        qpat_assum `!b v info s op s'. _ ==> _`
          (mp_tac o MATCH_MP runtime_sym_abi_encode_values_to_buf) >>
        disch_then (drule_at (Pat `compile_abi_encode_values_to_buf _ _ _ _ = _`)) >>
-       simp[runtime_sym_zip_fst] >> strip_tac) >>
+       simp[SIMP_RULE bool_ss [combinTheory.o_DEF] EVERY_FST_ZIP] >> strip_tac) >>
   qpat_assum `emit_op ADD [_;Lit 28w] _ = _`
     (mp_then Any mp_tac runtime_sym_emit_op) >>
   simp[is_label_operand_def] >> strip_tac >>

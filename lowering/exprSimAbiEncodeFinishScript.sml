@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeFinish
 Ancestors
+  abiOperandLiveUpdateProps
   abiBuiltinEncodeCorrect abiBuiltinEncodeCode abiEncoderSequence
   abiEncoderRegisteredEffect abiDecoderReentry abiDecoderDynamicLoopSetup
   abiEncoderWrites abiEncoderWindowLookup emitHelperProps exprLoweringProps
@@ -30,16 +31,6 @@ Proof
   asm_simp_tac (srw_ss()) [run_inst_seq_def, Once step_inst_base_def,
     exec_pure2_def, bind_outputs_def, mk_inst_def]
 QED
-Theorem abi_encode_live_update_open[local]:
-  abi_decoder_operand_live next op ==>
-  eval_operand op (update_var (STRING #"%" (toString next)) w s) = eval_operand op s
-Proof
-  Cases_on `op` >>
-  simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
-    eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-  metis_tac[arithmeticTheory.LESS_EQ_REFL]
-QED
-
 
 Theorem abi_encode_finish_sequence_open:
   abi_builtin_encode_finish buf encoded_len mid_size st = ((),final) /\

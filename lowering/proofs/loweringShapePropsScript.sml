@@ -30,6 +30,7 @@
  *)
 Theory loweringShapeProps
 Ancestors
+  listZipProps
   publicGetterProps exprLoweringEquations whitelistS2RawBaseShape builtinCreate builtinSystem
   exprLoweringProps
   list rich_list loweringShapeDefs loweringShapeRules compileEnv loweringStateRelDefs context
@@ -7568,13 +7569,6 @@ Proof
   shape_under_tac shape_step_emit_op_plain `C` >> simp[Abbr `C`, Abbr `P`] >> shape_opcode_tac
 QED
 
-Theorem every_value_shape_ok_zip[local]:
-  !xs (ys : type list) st. EVERY (value_shape_ok st) xs ==>
-    EVERY (value_shape_ok st o FST) (ZIP (xs,ys))
-Proof
-  Induct >> Cases_on `ys` >> simp[ZIP_def]
-QED
-
 Theorem compile_abi_encode_payload_shape[local]:
   shape_stable R ==>
   shape_step internal compiler_label
@@ -7601,7 +7595,7 @@ Proof
           simp[Abbr `P`] >> shape_opcode_tac) >>
       shape_under_tac (cj 2 compile_abi_encode_shape_framed) `P` >> simp[Abbr `P`]) >>
   shape_under_tac compile_abi_encode_values_to_buf_shape `R` >>
-  metis_tac[every_value_shape_ok_zip]
+  metis_tac[EVERY_FST_ZIP]
 QED
 
 Theorem compile_external_call_kwargs_shape_under:
@@ -7652,7 +7646,7 @@ Resume compile_external_call_kwargs_shape_under[store_args]:
   match_mp_tac shape_step_bind >> qexists_tac `\v st. B st /\ plain_operand st v` >> conj_tac
   >- (shape_under_tac compile_abi_encode_values_to_buf_shape `B` >>
       rpt strip_tac >> gvs[Abbr `B`, Abbr `P`, Abbr `V`] >>
-      metis_tac[every_value_shape_ok_zip]) >>
+      metis_tac[EVERY_FST_ZIP]) >>
   qx_gen_tac `args_len` >> simp[] >>
   shape_under_tac shape_step_emit_op_plain `B` >> shape_opcode_tac
 QED
