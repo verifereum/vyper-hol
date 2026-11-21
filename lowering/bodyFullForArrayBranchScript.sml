@@ -10,7 +10,7 @@ Ancestors
   bodySimFull bodyFullForFacts bodySim stmtLowering compileEnv emitHelper
   gasShadow supportedStmts exprSimHyps bodyExprPreFacts bodyFullForArray
   bodyFullShared gasOutcomeFullGuarded bodyFullForRounds vyperEvalExprPreservesScopesDom
-  bodyInvNoDalloca contextRawReachable
+  bodyFullIfExpReach contextRawReachable
   supportedExprTraverse[qualified,ignore_grammar]
 
 (* The loop continuation starts at the iterator's own captured endpoint. *)
@@ -31,6 +31,9 @@ Theorem for_nonslot_array_prefix_continue_full:
        (INL vs,em with gas_obs := tail)) /\
     storage_trace_domain cx st0 em.storage_trace /\
     (!H. valid_horizon cx st0 H em.storage_trace ==> P H (INL vs) em Gu tu u) /\
+    (!H. valid_horizon cx st0 H em.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (s,G,tn) marks (OK u,Gu,tu)) /\
     check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" em = (INL (),em) /\
     gas_admissible (eval_for cx tyv id loop_body vs) (stmt_res_ok lctx) em ==>
     gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -55,7 +58,7 @@ Proof
         (eval_for cx tyv id loop_body vs))` by
     simp[Once evaluate_def, lift_option_type_def, bind_return] >>
   pop_assum SUBST_ALL_TAC >>
-  irule gas_outcome_full_bind_all >> BETA_TAC >>
+  irule gas_outcome_full_bind_all_path >> BETA_TAC >>
   conj_tac >-
     (gen_tac >> irule storage_trace_frame_ignore_bind >>
      simp[storage_trace_frame_checks, cj 4 evaluate_storage_trace_frame]) >>
@@ -380,7 +383,8 @@ Proof
        disch_then ACCEPT_TAC) >>
     `valid_horizon cx st0 (storage_trace_horizon em.storage_trace) em.storage_trace` by
       fs[storage_trace_domain_def] >>
-    qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> _`
+    qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==>
+      (?vss rv av xs et. INL vs = INL vss /\ _) /\ _`
       (qspec_then `storage_trace_horizon em.storage_trace` mp_tac) >>
     impl_tac >- first_assum ACCEPT_TAC >>
     disch_then (fn th =>
@@ -393,7 +397,8 @@ Proof
           storage_well_formed_on cx em (FST H) /\
           ghost_inv_at (DF H) lo d cenv cx em Gu tu u` by
       (gen_tac >> strip_tac >>
-       qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> _`
+       qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==>
+         (?vss rv av xs et. INL vs = INL vss /\ _) /\ _`
          (qspec_then `H` (drule_then strip_assume_tac)) >>
        rpt conj_tac >> first_assum ACCEPT_TAC) >>
     `MAP FDOM em.scopes = MAP FDOM es.scopes` by
@@ -416,21 +421,23 @@ Proof
          (qspec_then `storage_trace_horizon em.storage_trace` (drule_then strip_assume_tac)) >>
        drule_all_then ACCEPT_TAC bodyFullSharedTheory.return_buf_sep_locals_kept) >>
     `!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_no_wrap inst t` by
-      (`~ctx_has_dalloca ctx` by
-         (drule bodyInvNoDallocaTheory.body_inv_no_dalloca >> simp[]) >>
-       rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >>
-       disch_then drule >> strip_tac >>
-       qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
-       qpat_assum `MEM fn ctx.ctx_functions` mp_tac >>
-       qpat_assum `MEM inst (fn_insts fn)` mp_tac >>
-       POP_ASSUM_LIST (K ALL_TAC) >>
-       simp[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
-            unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+      (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+         metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+       qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==>
+         gas_origin_ptr_path _ (s0,G0,tn0) marks (OK u,Gu,tu)`
+         (qspec_then `storage_trace_horizon em.storage_trace` mp_tac) >>
+       (impl_tac >- first_assum ACCEPT_TAC) >>
+       disch_then (fn path =>
+         qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0`
+           (fn phi =>
+             qpat_assum `!fn inst t. frag_reachable ctx func s0 fn inst t ==> dalloca_no_wrap inst t`
+               (fn nowrap => ACCEPT_TAC (MATCH_MP
+                 bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+                 (LIST_CONJ [path,phi,nowrap])))))) >>
     mp_tac (Q.INST [`c` |-> `cenv`,`sty` |-> `typ`,`fty` |-> `typ`,
       `loop_body` |-> `body'`,`sa0` |-> `sa`,`shadow_sa0` |-> `shadow_sa`,
       `sa` |-> `saBod`,`es0` |-> `es`,`dtv` |-> `tyv`,`stv` |-> `et`]
-      (INST [mk_var ("cond", ``:string``) |-> ``cond':string``]
-        (SPEC_ALL bodyFullForArrayRoundTheory.for_nonslot_array_round_contracts))) >>
+      (SPEC_ALL bodyFullForArrayRoundTheory.for_nonslot_array_round_contracts)) >>
     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
     disch_then (qx_choosel_then [`s`,`G`,`tn`,`Inv`,`Done`]
       (map_every assume_tac o CONJUNCTS)) >>
