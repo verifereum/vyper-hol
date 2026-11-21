@@ -50,6 +50,7 @@ Ancestors exprSimSubscriptArrayLiveStorageSuffix[qualified,ignore_grammar] exprP
   stmtSimForParts[qualified] vyperInterpreter[qualified] gasContext[qualified] fragGasCopyLoop augAssignPtrScalarSafety augAssignPtrScalarCertificate
   supportedExprForms whitelistVisibility immutableLocationProps
   bodyFullForRounds[qualified] gasExemptCert[qualified] forStorageBodyLand[qualified] forStorageHeadFrame
+  forConsBodyGas
 Libs
   monadsyntax
 
@@ -1218,9 +1219,9 @@ Resume for_storage_array_head_prefix_at_prov[eq]:
   `get_instruction cb s.vs_inst_idx =
      SOME (mk_inst (h-2) EQ [Var idx;lvo] [dv])` by
     simp[venomInstTheory.get_instruction_def] >>
-  drule_at (Pos (el 3)) for_storage_scalar_step_prov >>
+  drule_at (Pos (el 3)) for_storage_scalar_step >>
   disch_then (qspecl_then [`n2w len`,`n2w k`,`0w`] mp_tac) >>
-  simp[eval_operand_def, op_prov_def, set_prov_def,
+  simp[eval_operand_def, op_prov_def,
        venomExecSemanticsTheory.bool_to_word_def] >>
   disch_then irule >> simp[GSYM op_prov_def]
 QED
@@ -1610,39 +1611,14 @@ Resume for_storage_observed_head_from_prefix[activate]:
 QED
 
 Resume for_storage_observed_head_from_prefix[body_gas]:
-  rewrite_tac [gasContextTheory.gas_admissible_def] >>
-  map_every qx_gen_tac [`gs`, `res`, `ef`] >>
-  `EB (ei with gas_obs := []) v with gas_obs := gs = EB (ei with gas_obs := gs) v`
-    by simp[Abbr `EB`] >>
-  qpat_assum `EB _ _ with gas_obs := gs = _` SUBST1_TAC >> disch_tac >>
-  `eval_for cx tyv id stmts (a::rs) (ei with gas_obs := gs) =
-   eval_for cx tyv id stmts (Value v::rs) (ei with gas_obs := gs)` by
-    (`read_result cx (Value v) (ei with gas_obs := gs) =
-        (INL v,ei with gas_obs := gs)` by simp[vyperStateTheory.read_result_def,
-                                              vyperStateTheory.return_def] >>
-     qpat_assum `!tail. read_result cx a _ = _`
-       (qspec_then `gs` (mp_then Any (rewrite_tac o single)
-         vyperInterpreterTheory.eval_for_cons_read)) >>
-     qpat_assum `read_result cx (Value v) _ = _`
-       (mp_then Any (rewrite_tac o single) vyperInterpreterTheory.eval_for_cons_read)) >>
-  Cases_on `eval_for cx tyv id stmts (Value v::rs) (ei with gas_obs := gs)` >>
-  rename1 `_ = (lr,le)` >>
-  `stmt_res_ok lctx lr` by
-    (qpat_assum `gas_admissible _ _ _`
-       (qspecl_then [`gs`,`lr`,`le`] MATCH_MP_TAC o
-        REWRITE_RULE [gasContextTheory.gas_admissible_def]) >>
-     first_assum ACCEPT_TAC) >>
-  qpat_assum `eval_stmts cx stmts (EB _ _) = (res,ef)`
-    (assume_tac o SIMP_RULE (srw_ss()) [Abbr `EB`]) >>
-  drule stmtSimForPartsTheory.eval_for_cons_cases >> simp[] >>
-  strip_tac
-  >- simp[stmt_res_ok_def]
-  >- simp[stmt_res_ok_def]
-  >- (qpat_assum `res = INR BreakException` SUBST1_TAC >> simp[stmt_res_ok_def]) >>
-  qpat_assum `lr = res` (SUBST1_TAC o SYM) >>
-  qpat_assum `stmt_res_ok lctx lr` mp_tac >>
-  simp[NoAsms, stmt_res_ok_def] >>
-  POP_ASSUM_LIST (K (rpt strip_tac >> simp[]))
+  simp[Abbr `EB`] >>
+  irule forConsBodyGasTheory.captured_storage_body_admissible >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`a`, `lctx`, `stmt_res_ok lctx`, `rs`] >>
+  conj_tac >- simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  first_assum ACCEPT_TAC
+
 QED
 
 Resume for_storage_observed_head_from_prefix[execute]:
