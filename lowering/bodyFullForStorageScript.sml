@@ -44,7 +44,7 @@ Ancestors exprSimSubscriptArrayLiveStorageSuffix[qualified,ignore_grammar] exprP
   bodyPtrEnvBuiltinsAllocation storageNormalizationAllocPtr
   bodyFullHashKeccakFixed stmtSimDeclPath exprSimOperands allocaSiteResource
   bodyFullForArray allocationPtr loweringHalt
-  bodyFullForHandlers haltExitProj gasOutcomeFull vyperStorageFootprint
+  bodyFullForHandlers forBodyLandOutcome haltExitProj gasOutcomeFull vyperStorageFootprint
   gasOutcomeInitialObsPtr[qualified] gasStorage[qualified]
   bodyFullIfExpReach[qualified,ignore_grammar]
   stmtSimForParts[qualified] vyperInterpreter[qualified] gasContext[qualified] fragGasCopyLoop augAssignPtrScalarSafety augAssignPtrScalarCertificate
@@ -4300,33 +4300,17 @@ Proof
   disch_then (qspec_then `shadow_sb0` (mp_tac o CONV_RULE (DEPTH_CONV BETA_CONV))) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_tac >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ (eval_stmts _ _) _ Qraw _` >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ (eval_stmts _ _) _ Qraw Rraw` >>
-  (* Choose the suffix endpoint with the raw result still in scope.
-     In particular, the loop handler maps both normal and Continue to INL F. *)
-  qabbrev_tac `Qland = (\H (raw : unit + exception) ef GG tt u.
-    ?sc rest b. ef.scopes = sc::rest /\
-      (case raw of INL () => INL F
-         | INR ex => FST (handle_loop_exception ex ef)) = INL b /\
-      (ef with scopes := rest).gas_obs = [] /\ ~u.vs_halted /\
-      (b ==> Done H (ef with scopes := rest) GG tt u) /\
-      (~b ==> Ready H (a::rs) (ef with scopes := rest) GG tt u))` >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full fp _ _ _ _ (eb,s,G,tn) Qraw Rraw` >>
-  sg `gas_outcome_full fp (cx_tops cx) cx st0 (eval_stmts cx stmts)
-       (eb,s,G,tn) Qland Rraw`
-  >- (qunabbrev_tac `fp` >> irule gas_outcome_full_zero_suffix >>
-      qexists_tac `Qraw` >> conj_tac >- suspend "landing" >>
-      first_assum ACCEPT_TAC) >>
-  suspend "handler"
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ (eval_stmts cx stmts)
+    (eb,s,G,tn) Qraw _` >>
+  qunabbrev_tac `R` >> BETA_TAC >>
+  ho_match_mp_tac for_body_cleanup_from_raw_landing >>
+  conj_tac >- simp[Abbr `eb`] >> conj_tac >- first_assum ACCEPT_TAC >>
+  suspend "raw_landing"
 QED
 
-Resume for_storage_array_body_cleanup_full[landing]:
-  map_every qx_gen_tac [`raw`, `ef`, `G1`, `tn1`, `t`] >> strip_tac >>
-  qexistsl_tac [`if raw = INL () then jump_to incr t else t`, `G1`, `tn1`] >>
-  qx_gen_tac `H` >> strip_tac >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> Qraw H _ _ _ _ _`
-    (qspec_then `H` mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
+Resume for_storage_array_body_cleanup_full[raw_landing]:
+  map_every qx_gen_tac [`H`, `raw`, `ef`, `G1`, `tn1`, `t`] >> strip_tac >>
+  qpat_x_assum `Qraw H raw ef G1 tn1 t` mp_tac >>
   simp[NoAsms, Abbr `Qraw`] >>
   disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 strip_assume_tac
     (CONJUNCTS_THEN2 assume_tac (fn th =>
@@ -4364,71 +4348,7 @@ Resume for_storage_array_body_cleanup_full[landing]:
         `ret_ty`, `s`, `sb0`, `sb1`, `sj`, `tn`, `v`] >>
       qpat_assum `alloca_history func s /\ _` (map_every assume_tac o CONJUNCTS) >>
       rpt (conj_tac >- first_assum ACCEPT_TAC) >> first_assum ACCEPT_TAC) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  simp[NoAsms, Abbr `Qland`] >>
-  qexistsl_tac [`sc`, `rest`, `b`] >>
-  asm_rewrite_tac[]
-QED
-
-Resume for_storage_array_body_cleanup_full[handler]:
-  qunabbrev_tac `fp` >>
-  qpat_assum `gas_outcome_full _ _ _ _ _ _ Qland Rraw`
-    (mp_then (Pat `gas_outcome_full _ _ _ _ _ _ _ _`) mp_tac
-      for_body_cleanup_full) >>
-  (impl_tac >- simp[Abbr `eb`]) >>
-  disch_then (mp_then (Pat `gas_outcome_full _ _ _ _ _ _ _ _`) mp_tac
-    gas_outcome_full_post_mono) >>
-  disch_then irule >>
-  conj_tac >- suspend "normal_post" >> suspend "exit_post"
-QED
-
-Resume for_storage_array_body_cleanup_full[normal_post]:
-  map_every qx_gen_tac [`H`, `out`, `ee`, `G1`, `tn1`, `t`] >> BETA_TAC >>
-  disch_then (qx_choose_then `raw` (qx_choose_then `sc` strip_assume_tac)) >>
-  qpat_x_assum `Qland H raw _ G1 tn1 t` mp_tac >>
-  simp[NoAsms, Abbr `Qland`, evaluation_state_accfupds] >>
-  disch_then (qx_choose_then `b` strip_assume_tac) >>
-  `out = INL b` by
-    (qpat_x_assum `out = _` SUBST1_TAC >>
-     qpat_x_assum `_ = INL b` mp_tac >>
-     Cases_on `raw` >> simp[NoAsms] >>
-     rename1 `handle_loop_exception ex _` >> Cases_on `ex` >>
-     simp[NoAsms, vyperInterpreterTheory.handle_loop_exception_def,
-       return_def, raise_def]) >>
-  (metis_tac[])
-QED
-
-Resume for_storage_array_body_cleanup_full[exit_post]:
-  map_every qx_gen_tac [`H`, `out`, `ee`, `gt`, `r`] >> BETA_TAC >>
-  disch_then (qx_choose_then `raw` (qx_choose_then `sc` strip_assume_tac)) >>
-  sg `?ex. raw = INR ex /\ out = INR ex`
-  >- (qpat_assum `out = _` SUBST1_TAC >>
-      qpat_assum `Rraw H raw _ gt r` mp_tac >>
-      simp[NoAsms, Abbr `Rraw`] >>
-      disch_then (qspec_then `[]` mp_tac o CONJUNCT1) >>
-      Cases_on `raw` >>
-      simp[NoAsms, stmt_exit_ptr_def, oneline exprSimDefsTheory.expr_exit_def] >>
-      rename1 `_ = INR ex` >> Cases_on `ex` >> simp[NoAsms] >>
-      Cases_on `r` >> simp[NoAsms]) >>
-  qexists_tac `ex` >> conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_x_assum `raw = INR ex` SUBST_ALL_TAC >>
-  simp[NoAsms, Abbr `R`] >>
-  qpat_x_assum `Rraw H (INR ex) _ gt r` mp_tac >>
-  qpat_assum `Abbrev (Rraw = _)`
-    (fn th => pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
-  BETA_TAC >>
-  disch_then (mp_tac o MATCH_MP for_full_exit_scopes_gas_obs) >>
-  disch_then (qspecl_then [`ee.scopes`, `ee.gas_obs`] mp_tac) >>
-  `((ee with scopes := sc::ee.scopes) with
-     <|scopes := ee.scopes; gas_obs := ee.gas_obs|>) = ee` by
-    simp[NoAsms, evaluation_state_component_equality] >>
-  pop_assum SUBST1_TAC >>
-  `!tail. (ee with <|scopes := ee.scopes; gas_obs := tail|>) =
-          ee with gas_obs := tail` by
-    simp[NoAsms, evaluation_state_component_equality] >>
-  pop_assum (fn th => pure_rewrite_tac [th]) >>
-  simp[NoAsms, halt_exit_INR_type] >>
-  disch_then (ACCEPT_TAC o CONJUNCT2 o CONJUNCT2)
+  simp[NoAsms] >> qexistsl_tac [`sc`, `rest`, `b`] >> simp[]
 QED
 
 Finalise for_storage_array_body_cleanup_full
