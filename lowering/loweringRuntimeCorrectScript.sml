@@ -551,6 +551,29 @@ val runtime_shadow_body_inv_tac =
                 (LIST_CONJ [MATCH_MP source_typing_ok_vtype_keys_distinct typing,
                             supported, legacy, lowered, shadow])))))));
 
+val runtime_entry_horizon_simp =
+  simp[valid_horizon_def, storage_trace_horizon_def, storage_trace_regions_def,
+       storage_trace_locks_def, regions_consistent_def, storage_locks_separated_def,
+       storage_well_formed_on_def, storage_observations_ok_def, storage_roots_fit_def,
+       storage_trace_backends_well_formed_def, arithmeticTheory.ADD1];
+
+val runtime_empty_trace_tac =
+  `es0.storage_trace = []` by
+    (drule send_call_value_accounts >> simp[initial_state_def]);
+
+val runtime_lock_trace_tac =
+  runtime_empty_trace_tac >>
+  `es_lock.storage_trace = [StorageLock global_nonreentrant_slot]` by
+    (drule_all lock_if_nr_success_trace >> simp[]);
+
+fun runtime_entry_allocas_tac endpoint =
+  qpat_assum `!st0 H. valid_horizon _ _ H ^endpoint ==> _`
+    (qspecl_then [`initial_state am []`, `storage_trace_horizon ^endpoint`] mp_tac) >>
+  impl_tac >- runtime_entry_horizon_simp >>
+  strip_tac >>
+  drule_then match_mp_tac bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >>
+  first_assum ACCEPT_TAC;
+
 val runtime_body_outcome_tac =
   `struct_args_unique tops` by
     (fs[source_typing_ok_def] >> metis_tac[checked_contract_struct_args_unique]) >>
@@ -570,6 +593,8 @@ val runtime_body_outcome_tac =
       >~ [`stmt_res_ok`] >- metis_tac[external_body_source_ok]
       >~ [`dalloca_no_wrap`]
       >- metis_tac[bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap]
+      >~ [`allocas_below_fmp`]
+      >- (runtime_empty_trace_tac >> runtime_entry_allocas_tac ``es0.storage_trace``)
       >~ [`storage_well_formed_on`]
       >- (drule (INST_TYPE [alpha |-> ``:256``] body_start_storage_well_formed) >>
           disch_tac >> fs[valid_horizon_def])
@@ -1424,7 +1449,7 @@ val runtime_locked_body_outcome_tac =
     `unit.cu_context`,
     `initial_evaluation_context am.sources am.layouts tx NONE`,
     `env_t`,`env'`,`ret`] runtime_entry_body_shadow_with_shadow_nr) >>
-  impl_tac >- simp[] >>
+  impl_tac >- (asm_rewrite_tac[] >> simp[]) >>
   disch_then (qx_choosel_then [`func2`,`shadow_ctx`,`shadow_func`,`cenv'`,
     `sb`,`shadow_sl`,`shadow_sb`,`shadow_unit`] strip_assume_tac) >>
   `func2 = func` by gvs[] >>
@@ -1609,6 +1634,8 @@ Proof
       >~ [`stmt_res_ok`] >- metis_tac[external_body_source_ok_nr]
       >~ [`dalloca_no_wrap`]
       >- metis_tac[bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap]
+      >~ [`allocas_below_fmp`]
+      >- (runtime_lock_trace_tac >> runtime_entry_allocas_tac ``es_lock.storage_trace``)
       >> qpat_x_assum `!st0 H. valid_horizon _ _ _ es_lock.storage_trace ==> _`
            drule >> simp[]) >>
   qpat_assum `cx_tops _ = tops` (fn th => REWRITE_TAC [th]) >>
