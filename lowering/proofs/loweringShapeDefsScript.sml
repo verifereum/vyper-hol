@@ -26,16 +26,16 @@
  *                                  labels or "fn_" function entries
  *   label_sfx                    — the fresh_label suffix a label was made
  *                                  with; different suffixes, different labels
- *   lowered_inst_ok              — the per-instruction shape; `internal`
+ *   lowered_inst_mode_ok static              — the per-instruction shape; `internal`
  *                                  selects internal-function or entry code
- *   shape_state, shape_extends   — the state invariant and the append step
- *   shape_step                   — Hoare-style judgment on compile actions
- *   shape_stable                 — a state predicate kept by every append
+ *   shape_state, shape_mode_extends static   — the state invariant and the append step
+ *   shape_mode_step static                   — Hoare-style judgment on compile actions
+ *   shape_mode_stable static                 — a state predicate kept by every append
  *   gas_operand, retpc_operand   — a variable holding a GAS / RETPC_PARAM
  *                                  output (RETPC_PARAM: of the current
  *                                  function's entry block)
  *
- * The rules for shape_step are in loweringShapeRules.
+ * The rules for shape_mode_step static are in loweringShapeRules.
  *)
 Theory loweringShapeDefs
 Ancestors
@@ -180,6 +180,25 @@ Definition lowered_inst_ok_def:
                    ~is_param_opcode inst.inst_opcode)
 End
 
+(* A DALLOCA output is a pointer root. The pointer checker identifies
+   roots via inst_output, so this mode requires a singleton output. *)
+Definition lowered_inst_mode_ok_def:
+  lowered_inst_mode_ok static internal inst <=>
+    raw_opcode_ok inst.inst_opcode /\
+    (inst.inst_opcode = DALLOCA ==> ~static /\ LENGTH inst.inst_outputs = 1) /\
+    inst_shape_ok inst /\
+    inst_jump_labels_ok inst /\
+    (internal ==> ~MEM inst.inst_opcode [STOP; RETURN]) /\
+    (~internal ==> inst.inst_opcode <> RET /\
+                   ~is_param_opcode inst.inst_opcode)
+End
+
+Theorem lowered_inst_mode_ok_static:
+  lowered_inst_mode_ok T = lowered_inst_ok
+Proof
+  simp[FUN_EQ_THM, lowered_inst_mode_ok_def, lowered_inst_ok_def]
+QED
+
 (* ===== Positional certificates for checked calls ===== *)
 
 (* A branch witness must already be closed: besides its predecessor and
@@ -220,6 +239,23 @@ Definition shape_extends_def:
              MEM x inst.inst_outputs ==> ~not_fresh_at st x
 End
 
+Definition shape_mode_extends_def:
+  shape_mode_extends static internal (LP : string -> bool) st st' <=>
+    cs_extends st st' /\ st.cs_next_var <= st'.cs_next_var /\
+    EVERY ((lowered_inst_mode_ok static) internal) (added_insts st st') /\
+    EVERY LP (added_labels st st') /\
+    EVERY (\l. ~internal_label_ok l) (added_labels st st') /\
+    !inst x. MEM inst (added_insts st st') /\
+             MEM inst.inst_opcode [GAS; RETPC_PARAM] /\
+             MEM x inst.inst_outputs ==> ~not_fresh_at st x
+End
+
+Theorem shape_mode_extends_static:
+  shape_mode_extends T = shape_extends
+Proof
+  simp[FUN_EQ_THM, shape_mode_extends_def, shape_extends_def, lowered_inst_mode_ok_static]
+QED
+
 (* The unchecked interval of an atomic call template uses only the base
    invariant.  Full shape_step is restored at the checked endpoint. *)
 Definition shape_base_step_def:
@@ -229,6 +265,19 @@ Definition shape_base_step_def:
       shape_extends internal LP st st' /\ shape_base_state st' /\ Q x st'
 End
 
+Definition shape_base_mode_step_def:
+  shape_base_mode_step static internal LP (P : compile_state -> bool) (m : 'a compiler)
+                  (Q : 'a -> compile_state -> bool) <=>
+    !st x st'. m st = (x, st') /\ P st /\ shape_base_state st ==>
+      shape_mode_extends static internal LP st st' /\ shape_base_state st' /\ Q x st'
+End
+
+Theorem shape_base_mode_step_static:
+  shape_base_mode_step T = shape_base_step
+Proof
+  simp[FUN_EQ_THM, shape_base_mode_step_def, shape_base_step_def, lowered_inst_mode_ok_static, shape_mode_extends_static]
+QED
+
 Definition shape_step_def:
   shape_step internal LP (P : compile_state -> bool) (m : 'a compiler)
              (Q : 'a -> compile_state -> bool) <=>
@@ -236,11 +285,35 @@ Definition shape_step_def:
       shape_extends internal LP st st' /\ shape_state st' /\ Q x st'
 End
 
+Definition shape_mode_step_def:
+  shape_mode_step static internal LP (P : compile_state -> bool) (m : 'a compiler)
+             (Q : 'a -> compile_state -> bool) <=>
+    !st x st'. m st = (x, st') /\ P st /\ shape_state st ==>
+      shape_mode_extends static internal LP st st' /\ shape_state st' /\ Q x st'
+End
+
+Theorem shape_mode_step_static:
+  shape_mode_step T = shape_step
+Proof
+  simp[FUN_EQ_THM, shape_mode_step_def, shape_step_def, lowered_inst_mode_ok_static, shape_mode_extends_static, shape_base_mode_step_static]
+QED
+
 (* A precondition that survives appending code. *)
 Definition shape_stable_def:
   shape_stable (R : compile_state -> bool) <=>
     !internal LP st st'. R st /\ shape_extends internal LP st st' ==> R st'
 End
+
+Definition shape_mode_stable_def:
+  shape_mode_stable static (R : compile_state -> bool) <=>
+    !internal LP st st'. R st /\ shape_mode_extends static internal LP st st' ==> R st'
+End
+
+Theorem shape_mode_stable_static:
+  shape_mode_stable T = shape_stable
+Proof
+  simp[FUN_EQ_THM, shape_mode_stable_def, shape_stable_def, lowered_inst_mode_ok_static, shape_mode_extends_static, shape_base_mode_step_static, shape_mode_step_static]
+QED
 
 (* GAS provenance and the return-PC operand restricted by opaque_insts_ok. *)
 Definition gas_operand_def:
@@ -428,12 +501,12 @@ Proof
   rw[cur_entry_insts_def, state_insts_def] >> metis_tac[fn_entry_insts_mem]
 QED
 
-Theorem cur_entry_insts_mono:
-  !internal LP st st'. shape_extends internal LP st st' ==>
+Theorem cur_entry_insts_mono_mode:
+  !internal LP st st'. shape_mode_extends static internal LP st st' ==>
     !i. MEM i (cur_entry_insts st) ==> MEM i (cur_entry_insts st')
 Proof
   rpt gen_tac >> strip_tac >>
-  fs[shape_extends_def, cs_extends_def] >>
+  fs[shape_mode_extends_def, cs_extends_def] >>
   Cases_on `new = []` >> gvs[] >-
     (simp[cur_entry_insts_def, all_blocks_def] >>
      rpt strip_tac >> irule fn_entry_insts_last_update >>
@@ -478,19 +551,19 @@ Proof
   rw[not_fresh_at_def]
 QED
 
-Theorem shape_extends_refl:
-  !internal LP st. shape_extends internal LP st st
+Theorem shape_extends_refl_mode:
+  !internal LP st. shape_mode_extends static internal LP st st
 Proof
-  simp[shape_extends_def, cs_extends_refl, added_insts_def,
+  simp[shape_mode_extends_def, cs_extends_refl, added_insts_def,
        added_labels_def, DROP_LENGTH_NIL, DROP_LENGTH_TOO_LONG]
 QED
 
-Theorem shape_extends_trans:
+Theorem shape_extends_trans_mode:
   !internal LP st1 st2 st3.
-    shape_extends internal LP st1 st2 /\ shape_extends internal LP st2 st3 ==>
-    shape_extends internal LP st1 st3
+    shape_mode_extends static internal LP st1 st2 /\ shape_mode_extends static internal LP st2 st3 ==>
+    shape_mode_extends static internal LP st1 st3
 Proof
-  rpt gen_tac >> simp[shape_extends_def] >> strip_tac >>
+  rpt gen_tac >> simp[shape_mode_extends_def] >> strip_tac >>
   `cs_extends st1 st3` by metis_tac[cs_extends_trans] >>
   `added_insts st1 st3 = added_insts st1 st2 ++ added_insts st2 st3`
     by (`state_insts st3 = state_insts st1 ++ added_insts st1 st3`
@@ -506,45 +579,45 @@ Proof
   metis_tac[not_fresh_at_mono]
 QED
 
-Theorem plain_operand_mono:
+Theorem plain_operand_mono_mode:
   !internal LP st st' op.
-    shape_extends internal LP st st' /\ plain_operand st op ==>
+    shape_mode_extends static internal LP st st' /\ plain_operand st op ==>
     plain_operand st' op
 Proof
-  rw[plain_operand_def, shape_extends_def] >>
+  rw[plain_operand_def, shape_mode_extends_def] >>
   imp_res_tac state_insts_cs_extends >> gvs[] >>
   gvs[opaque_out_def] >> metis_tac[not_fresh_at_mono]
 QED
 
-Theorem label_or_plain_mono:
+Theorem label_or_plain_mono_mode:
   !internal LP st st' op.
-    shape_extends internal LP st st' /\ label_or_plain st op ==>
+    shape_mode_extends static internal LP st st' /\ label_or_plain st op ==>
     label_or_plain st' op
 Proof
-  rw[label_or_plain_def] >> metis_tac[plain_operand_mono]
+  rw[label_or_plain_def] >> metis_tac[plain_operand_mono_mode]
 QED
 
-Theorem gas_operand_mono:
+Theorem gas_operand_mono_mode:
   !internal LP st st' op.
-    shape_extends internal LP st st' /\ gas_operand st op ==>
+    shape_mode_extends static internal LP st st' /\ gas_operand st op ==>
     gas_operand st' op
 Proof
-  rw[gas_operand_def, shape_extends_def] >>
+  rw[gas_operand_def, shape_mode_extends_def] >>
   imp_res_tac state_insts_cs_extends >> gvs[] >>
   gvs[opaque_out_def] >> metis_tac[not_fresh_at_mono]
 QED
 
-Theorem retpc_operand_mono:
+Theorem retpc_operand_mono_mode:
   !internal LP st st' op.
-    shape_extends internal LP st st' /\ retpc_operand st op ==>
+    shape_mode_extends static internal LP st st' /\ retpc_operand st op ==>
     retpc_operand st' op
 Proof
   rpt gen_tac >> strip_tac >>
-  drule cur_entry_insts_mono >> strip_tac >>
+  drule cur_entry_insts_mono_mode >> strip_tac >>
   gvs[retpc_operand_def] >>
   `opaque_out RETPC_PARAM (cur_entry_insts st') r`
     by (fs[opaque_out_def] >> metis_tac[]) >>
-  fs[shape_extends_def] >>
+  fs[shape_mode_extends_def] >>
   imp_res_tac state_insts_cs_extends >> gvs[] >>
   gvs[opaque_out_def] >> metis_tac[not_fresh_at_mono]
 QED
@@ -568,4 +641,103 @@ Theorem flat_noncompiler_head:
 Proof
   Cases_on `segs` >> simp[] >> strip_tac >>
   Cases_on `h` >> gvs[]
+QED
+
+Theorem shape_extends_static_imp_mode:
+  shape_extends internal LP st st' ==>
+  shape_mode_extends static internal LP st st'
+Proof
+  rw[shape_extends_def, shape_mode_extends_def, EVERY_MEM] >>
+  res_tac >> fs[lowered_inst_ok_def, lowered_inst_mode_ok_def]
+QED
+
+Theorem shape_step_static_imp_mode:
+  shape_step internal LP P m Q ==> shape_mode_step static internal LP P m Q
+Proof
+  simp[shape_step_def, shape_mode_step_def] >>
+  metis_tac[shape_extends_static_imp_mode]
+QED
+
+Theorem shape_base_step_static_imp_mode:
+  shape_base_step internal LP P m Q ==>
+  shape_base_mode_step static internal LP P m Q
+Proof
+  simp[shape_base_step_def, shape_base_mode_step_def] >>
+  metis_tac[shape_extends_static_imp_mode]
+QED
+
+Theorem shape_mode_stable_imp_static:
+  shape_mode_stable static R ==> shape_stable R
+Proof
+  simp[shape_mode_stable_def, shape_stable_def] >>
+  metis_tac[shape_extends_static_imp_mode]
+QED
+
+(* The static shape facts used by the existing clients. *)
+
+Theorem cur_entry_insts_mono:
+  !internal LP st st'. shape_extends internal LP st st' ==>
+    !i. MEM i (cur_entry_insts st) ==> MEM i (cur_entry_insts st')
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_extends_static]
+    (Q.INST [`static` |-> `T`] cur_entry_insts_mono_mode))
+QED
+
+Theorem shape_extends_refl:
+  !internal LP st. shape_extends internal LP st st
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_extends_static]
+    (Q.INST [`static` |-> `T`] shape_extends_refl_mode))
+QED
+
+Theorem shape_extends_trans:
+  !internal LP st1 st2 st3.
+    shape_extends internal LP st1 st2 /\ shape_extends internal LP st2 st3 ==>
+    shape_extends internal LP st1 st3
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_extends_static]
+    (Q.INST [`static` |-> `T`] shape_extends_trans_mode))
+QED
+
+Theorem plain_operand_mono:
+  !internal LP st st' op.
+    shape_extends internal LP st st' /\ plain_operand st op ==>
+    plain_operand st' op
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_extends_static]
+    (Q.INST [`static` |-> `T`] plain_operand_mono_mode))
+QED
+
+Theorem label_or_plain_mono:
+  !internal LP st st' op.
+    shape_extends internal LP st st' /\ label_or_plain st op ==>
+    label_or_plain st' op
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_extends_static]
+    (Q.INST [`static` |-> `T`] label_or_plain_mono_mode))
+QED
+
+Theorem gas_operand_mono:
+  !internal LP st st' op.
+    shape_extends internal LP st st' /\ gas_operand st op ==>
+    gas_operand st' op
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_extends_static]
+    (Q.INST [`static` |-> `T`] gas_operand_mono_mode))
+QED
+
+Theorem retpc_operand_mono:
+  !internal LP st st' op.
+    shape_extends internal LP st st' /\ retpc_operand st op ==>
+    retpc_operand st' op
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_extends_static]
+    (Q.INST [`static` |-> `T`] retpc_operand_mono_mode))
 QED

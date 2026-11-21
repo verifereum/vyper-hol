@@ -39,7 +39,7 @@ Proof
 QED
 
 Theorem inv_forward_process_same[local]:
-  (!cur ft. so_get_stack cfg lr cur ft bb.bb_label = ([],ft)) /\
+  (!lr cur ft. so_get_stack cfg lr cur ft bb.bb_label = ([],ft)) /\
   ((lookup_block bb.bb_label st.dls_blocks = SOME bb /\
     FLOOKUP st.dls_last_order bb.bb_label = NONE) \/
    (lookup_block bb.bb_label st.dls_blocks = SOME (dft_block [] bb) /\
@@ -58,7 +58,7 @@ Proof
 QED
 
 Theorem inv_forward_loop_lookup:
-  (!cur ft. so_get_stack cfg lr cur ft bb.bb_label = ([],ft)) /\
+  (!lr cur ft. so_get_stack cfg lr cur ft bb.bb_label = ([],ft)) /\
   ((lookup_block bb.bb_label st.dls_blocks = SOME bb /\
     FLOOKUP st.dls_last_order bb.bb_label = NONE) \/
    (lookup_block bb.bb_label st.dls_blocks = SOME (dft_block [] bb) /\

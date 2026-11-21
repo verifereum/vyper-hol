@@ -9,7 +9,7 @@ Ancestors
   exprLoweringProps exprSimWordArgs wordArgsPtr exprSimProps exprSimExtCallCase
   emitHelperProps compileEnv fragGasOriginPtrLoop fragGasOriginPtr list pair words
 
-Theorem extcall_packing_observed_domain[local]:
+Theorem extcall_packing_observed_domain:
   valid_horizon cx st H obs ==> storage_trace_domain cx st obs
 Proof
   simp[vyperStorageFootprintTheory.storage_trace_domain_def,
