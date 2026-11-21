@@ -1,6 +1,7 @@
 (* Shifted same-witness array traversal boundaries. *)
 Theory ctorDeployMemoryRunPtrPrefixCompleteArrayRun
 Ancestors
+  entryDecoderStateFrame
   loweringStateRelDefs valueEncodingDefs
   compileEnv valueEncoding entrySinkExtraction fragGasPathMem
   ctorDeployMemoryRunPtrPrefixCompleteArrayIteration
@@ -1015,7 +1016,11 @@ Proof
 QED
 
 
-val FramePathMode = ``\X Y. (^Frame) X Y /\
+val CshiftModeWithFmp = ``\checked ty tv.
+  ^(rand (rator (concl prefix_complete_child_iteration_mode_fmp)))``;
+
+val FramePathModeWithFmp = ``\X Y. (^Frame) X Y /\
+  (frame_fmp ==> (FST Y).vs_fmp = (FST X).vs_fmp) /\
   (checked ==> gas_path_mem ctx func (FST X) 0 (OK (FST Y)) /\
     alloca_history func (FST Y) /\
     !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
@@ -1023,7 +1028,7 @@ val FramePathMode = ``\X Y. (^Frame) X Y /\
       (OK (FST Y),FST (SND Y),FST (SND (SND Y))))``;
 
 Theorem prefix_complete_array_frame_transitive_path_mode[local]:
-  transitive (^FramePathMode)
+  transitive (^FramePathModeWithFmp)
 Proof
   simp_tac bool_ss [transitive_def] >>
   map_every qx_gen_tac [`x`,`y`,`z`] >>
@@ -1041,7 +1046,7 @@ Theorem prefix_complete_array_header_frame_path_mode[local]:
     (FST X).vs_alloca_next + pending_alloca_size func (FST X) <= w2n (FST X).vs_initial_fmp) /\
   (^LoopAtMode) hdr 0 j X ==>
   ?Y. (^LoopAtMode) (if j < LENGTH vs then st.cs_current_bb else exit_lbl) 0 j Y /\
-    (^FramePathMode) X Y /\
+    (^FramePathModeWithFmp) X Y /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp (FST Y) /\
       (FST Y).vs_alloca_next + pending_alloca_size func (FST Y) <= w2n (FST Y).vs_initial_fmp)
 Proof
@@ -1081,7 +1086,7 @@ Theorem prefix_complete_array_terminal_path_mode[local]:
   (ctx_has_dalloca ctx ==> allocas_below_fmp (FST X) /\
     (FST X).vs_alloca_next + pending_alloca_size func (FST X) <= w2n (FST X).vs_initial_fmp) /\
   (^LoopAtMode) hdr 0 (LENGTH vs) X ==>
-  ?Y. (^LoopAtMode) exit_lbl 0 (LENGTH vs) Y /\ (^FramePathMode) X Y /\
+  ?Y. (^LoopAtMode) exit_lbl 0 (LENGTH vs) Y /\ (^FramePathModeWithFmp) X Y /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp (FST Y) /\
       (FST Y).vs_alloca_next + pending_alloca_size func (FST Y) <= w2n (FST Y).vs_initial_fmp)
 Proof
@@ -1115,6 +1120,7 @@ Theorem prefix_complete_array_body_path_mode[local]:
     allocas_from lo prepared /\ lo <= prepared.vs_alloca_next /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp prepared /\
       prepared.vs_alloca_next + pending_alloca_size func prepared <= w2n prepared.vs_initial_fmp) /\
+    prepared.vs_fmp = (FST X).vs_fmp /\
     prepared.vs_memory = (FST X).vs_memory /\
     (^Frame) X (prepared,H,qt,SND (SND (SND X))) /\
     (checked ==> gas_path_mem ctx func (FST X) 0 (OK prepared) /\
@@ -1165,6 +1171,12 @@ Proof
   `X0.vs_inst_idx = LENGTH st.cs_current_insts` by simp[] >>
   drule_all prefix_loop_setup_execution_pair >> simp_tac std_ss [LET_THM] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `abi_decode_sim ctx func X0 prepared` >>
+  `t.vs_fmp = X0.vs_fmp` by
+    (`EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st middle)` by
+       (drule prefix_loop_element_setup_code >> simp[LET_THM] >>
+        strip_tac >> Cases_on `dec_info_needs_offset (type_to_abi_dec_info sf ce ty)` >>
+        gvs[abi_decoder_reentry_opcode_def,mk_inst_def]) >>
+     drule_all entry_decoder_sequence_obs >> simp[entry_decoder_obs_fmp]) >>
   `(checked ==> gas_path_mem ctx func X0 0 (OK prepared) /\
                 alloca_history func prepared /\
                 !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
@@ -1236,13 +1248,13 @@ Proof
   metis_tac[]
 QED
 
-Theorem prefix_complete_array_body_iteration_path_mode[local]:
-  (^CshiftMode) checked ty tv ==>
+Theorem prefix_complete_array_body_iteration_path_mode_fmp[local]:
+  (^CshiftModeWithFmp) checked ty tv ==>
   (^PkMode) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp (FST X) /\
     (FST X).vs_alloca_next + pending_alloca_size func (FST X) <= w2n (FST X).vs_initial_fmp) /\ j < LENGTH vs /\
   (^LoopAtMode) st.cs_current_bb (LENGTH st.cs_current_insts) j X ==>
-  ?Y. (^LoopAtMode) hdr 0 (SUC j) Y /\ (^FramePathMode) X Y /\
+  ?Y. (^LoopAtMode) hdr 0 (SUC j) Y /\ (^FramePathModeWithFmp) X Y /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp (FST Y) /\
       (FST Y).vs_alloca_next + pending_alloca_size func (FST Y) <= w2n (FST Y).vs_initial_fmp)
 Proof
@@ -1303,7 +1315,7 @@ Proof
   `mem_bytes_at (sb + abi_array_child_offset NONE (vyper_to_abi_type env ty) avs j)
     (LENGTH (enc (vyper_to_abi_type env ty) (EL j avs))) prepared.vs_data_section =
     enc (vyper_to_abi_type env ty) (EL j avs)` by simp[Excl "enc_def"] >>
-  asm_x "child" (mp_tac o MATCH_MP (BETA_RULE prefix_complete_child_iteration_mode) o BETA_RULE) >>
+  asm_x "child" (mp_tac o MATCH_MP (BETA_RULE prefix_complete_child_iteration_mode_fmp) o BETA_RULE) >>
   disch_then (fn th =>
     qpat_assum `compile_abi_decode_to_buf (Var child_dst) _ _ _ _ _ middle = _`
       (mp_then Any mp_tac th)) >>
@@ -1369,8 +1381,10 @@ Proof
   strip_tac >> suspend "compose"
 QED
 
-Resume prefix_complete_array_body_iteration_path_mode[compose]:
+Resume prefix_complete_array_body_iteration_path_mode_fmp[compose]:
   pop_assum strip_assume_tac >>
+  `frame_fmp ==> t.vs_fmp = X0.vs_fmp` by
+    (strip_tac >> res_tac >> asm_rewrite_tac[]) >>
   qexists_tac `(t,H',qt',A)` >>
   rule_assum_tac BETA_RULE >>
   rpt (first_x_assum (CONJUNCTS_THEN assume_tac)) >>
@@ -1423,26 +1437,31 @@ Resume prefix_complete_array_body_iteration_path_mode[compose]:
   metis_tac[gas_origin_ptr_path_trans]
 QED
 
-Finalise prefix_complete_array_body_iteration_path_mode
+Finalise prefix_complete_array_body_iteration_path_mode_fmp
+
+Theorem prefix_complete_array_body_iteration_path_mode =
+  prefix_complete_array_body_iteration_path_mode_fmp
+  |> Q.INST [`frame_fmp` |-> `F`]
+  |> PURE_REWRITE_RULE [tautLib.TAUT `((F ==> p) /\ q) <=> q`]
 
 Theorem prefix_complete_array_successor_path_mode[local]:
-  (^CshiftMode) checked ty tv ==>
+  (^CshiftModeWithFmp) checked ty tv ==>
   (^PkMode) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp (FST X) /\
     (FST X).vs_alloca_next + pending_alloca_size func (FST X) <= w2n (FST X).vs_initial_fmp) /\ j < LENGTH vs /\ (^LoopAtMode) hdr 0 j X ==>
-  ?Y. (^LoopAtMode) hdr 0 (SUC j) Y /\ (^FramePathMode) X Y /\
+  ?Y. (^LoopAtMode) hdr 0 (SUC j) Y /\ (^FramePathModeWithFmp) X Y /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp (FST Y) /\
       (FST Y).vs_alloca_next + pending_alloca_size func (FST Y) <= w2n (FST Y).vs_initial_fmp)
 Proof
   disch_then (mk_asm "child") >> strip_tac >>
   drule_all prefix_complete_array_header_frame_path_mode >>
-  disch_then (qspecl_then [`PG`,`Ddead`] mp_tac) >>
+  disch_then (qspecl_then [`frame_fmp`,`PG`,`Ddead`] mp_tac) >>
   asm_rewrite_tac[] >> strip_tac >>
   `st.cs_current_insts = []` by fs[abi_decoder_recursive_loop_compiled_def] >>
-  `?Z. (^LoopAtMode) hdr 0 (SUC j) Z /\ (^FramePathMode) Y Z /\
+  `?Z. (^LoopAtMode) hdr 0 (SUC j) Z /\ (^FramePathModeWithFmp) Y Z /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp (FST Z) /\
       (FST Z).vs_alloca_next + pending_alloca_size func (FST Z) <= w2n (FST Z).vs_initial_fmp)` by
-    (asm_x "child" (irule o MATCH_MP prefix_complete_array_body_iteration_path_mode) >>
+    (asm_x "child" (irule o MATCH_MP prefix_complete_array_body_iteration_path_mode_fmp) >>
      asm_rewrite_tac[LENGTH] >> conj_tac
      >- (qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
            (irule_at Any) >> asm_rewrite_tac[]) >>
@@ -1455,11 +1474,11 @@ Proof
 QED
 
 Theorem prefix_complete_array_finite_path_mode[local]:
-  (^CshiftMode) checked ty tv ==> (^PkMode) ==>
+  (^CshiftModeWithFmp) checked ty tv ==> (^PkMode) ==>
   !n j X. LENGTH vs = j+n /\ (^LoopAtMode) hdr 0 j X /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp (FST X) /\
       (FST X).vs_alloca_next + pending_alloca_size func (FST X) <= w2n (FST X).vs_initial_fmp) ==>
-    ?Y. (^LoopAtMode) exit_lbl 0 (LENGTH vs) Y /\ (^FramePathMode) X Y /\
+    ?Y. (^LoopAtMode) exit_lbl 0 (LENGTH vs) Y /\ (^FramePathModeWithFmp) X Y /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp (FST Y) /\
       (FST Y).vs_alloca_next + pending_alloca_size func (FST Y) <= w2n (FST Y).vs_initial_fmp)
 Proof
@@ -1467,7 +1486,7 @@ Proof
   >- (rpt gen_tac >> pure_rewrite_tac[ADD_0] >> strip_tac >>
       qpat_x_assum `LENGTH vs = j` (SUBST_ALL_TAC o SYM) >>
       drule_all prefix_complete_array_terminal_path_mode >>
-      disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
+      disch_then (qspecl_then [`frame_fmp`,`PG`,`Ddead`] strip_assume_tac) >>
       qexists_tac `Y` >> asm_rewrite_tac[]) >>
   rpt gen_tac >> strip_tac >>
   `j < LENGTH vs` by decide_tac >>
@@ -1481,8 +1500,8 @@ Proof
   qexists_tac `Y` >> asm_rewrite_tac[]
 QED
 
-Theorem prefix_complete_array_prepared_path_mode:
-  (^CshiftMode) checked ty tv ==> (^PkMode) /\
+Theorem prefix_complete_array_prepared_path_mode_fmp:
+  (^CshiftModeWithFmp) checked ty tv ==> (^PkMode) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp prepared /\
     prepared.vs_alloca_next + pending_alloca_size func prepared <= w2n prepared.vs_initial_fmp) /\
   (^LoopAtMode) prepared.vs_current_bb (LENGTH prefix) 0 (prepared,G,tn,B) /\
@@ -1492,7 +1511,7 @@ Theorem prefix_complete_array_prepared_path_mode:
   phi_prefix_length hdr_bb.bb_instructions = 0 ==>
   ?actual H qt A.
     (^LoopAtMode) exit_lbl 0 (LENGTH vs) (actual,H,qt,A) /\
-    (^FramePathMode) (prepared,G,tn,B) (actual,H,qt,A) /\
+    (^FramePathModeWithFmp) (prepared,G,tn,B) (actual,H,qt,A) /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
       actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
     val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d actual.vs_memory /\
@@ -1502,7 +1521,7 @@ Proof
   disch_then (mk_asm "child") >> strip_tac >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp prepared` by metis_tac[] >>
   `(^LoopAtMode) hdr 0 0 (jump_to hdr prepared,G,tn,B) /\
-   (^FramePathMode) (prepared,G,tn,B) (jump_to hdr prepared,G,tn,B)` by
+   (^FramePathModeWithFmp) (prepared,G,tn,B) (jump_to hdr prepared,G,tn,B)` by
     (qpat_x_assum `(^LoopAtMode) _ _ _ _` mp_tac >>
      simp_tac std_ss [] >> strip_tac >>
      `(^Ok) k ctx func site ids D N d
@@ -1552,5 +1571,10 @@ Proof
   simp[val_in_memory_dynarray] >>
   fs[mload_def,mem_word_at_def] >> metis_tac[]
 QED
+
+Theorem prefix_complete_array_prepared_path_mode =
+  prefix_complete_array_prepared_path_mode_fmp
+  |> Q.INST [`frame_fmp` |-> `F`]
+  |> PURE_REWRITE_RULE [tautLib.TAUT `((F ==> p) /\ q) <=> q`]
 
 val _ = export_theory();

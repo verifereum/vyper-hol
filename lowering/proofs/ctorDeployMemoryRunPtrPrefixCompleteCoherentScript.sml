@@ -11,7 +11,7 @@ Ancestors
   exprLowering abiDecoderCoherence
   fragGasOriginPtr
 
-val CshiftMode = ``\checked ty tv.
+val CshiftModeWithFmp = ``\checked ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
@@ -61,6 +61,7 @@ val CshiftMode = ``\checked ty tv.
  actual.vs_labels = initial.vs_labels /\ actual.vs_code = initial.vs_code /\
  actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
  actual.vs_block_ctx = initial.vs_block_ctx /\ actual.vs_gas_readings = initial.vs_gas_readings /\
+ (frame_fmp ==> actual.vs_fmp = initial.vs_fmp) /\
  (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
  FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce ty)] /\
  DISJOINT B qt.t_mem /\
@@ -75,186 +76,90 @@ val CshiftMode = ``\checked ty tv.
  (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
 
-val CshiftCode = rhs (concl (SIMP_CONV bool_ss [] ``(^CshiftMode) F``));
-val CshiftChecked = ``(^CshiftMode) T``;
-
-Theorem prefix_base_complete_code[local]:
-  (^CshiftCode) (BaseT bt) (BaseTV bt)
+Theorem prefix_base_complete_mode_fmp[local]:
+  (^CshiftModeWithFmp) checked (BaseT bt) (BaseTV bt)
 Proof
   `(?clamp. type_to_abi_dec_info sf ce (BaseT bt) = DecPrimWord clamp) \/
    (?n. type_to_abi_dec_info sf ce (BaseT bt) = DecBytestring n)` by
     (Cases_on `bt` >> simp[type_to_abi_dec_info_def] >>
      rename1 `BytesT bound` >> Cases_on `bound` >> simp[type_to_abi_dec_info_def])
-  >- (irule prefix_scalar_complete_code_contract >> goal_assum (drule_at Any)) >>
-  irule prefix_bytestring_complete_code_contract >> goal_assum (drule_at Any)
+  >> BETA_TAC
+  >- (match_mp_tac (BETA_RULE prefix_scalar_complete_mode_contract_fmp) >>
+      goal_assum (drule_at Any)) >>
+  match_mp_tac (BETA_RULE prefix_bytestring_complete_mode_contract_fmp) >>
+  goal_assum (drule_at Any)
 QED
 
-Theorem prefix_flag_complete_code[local]:
-  (^CshiftCode) (FlagT nsid) (FlagTV n)
+Theorem prefix_flag_complete_mode_fmp[local]:
+  (^CshiftModeWithFmp) checked (FlagT nsid) (FlagTV n)
 Proof
-  irule prefix_scalar_complete_code_contract >> simp[Once type_to_abi_dec_info_def]
+  BETA_TAC >> mp_tac (BETA_RULE (Q.INST [`ty` |-> `FlagT nsid`, `tv` |-> `FlagTV n`,
+    `clamp` |-> `if ce.ce_flag_n_members (nsid_to_string nsid) = 256 then NoClamp
+                else IntClamp (ce.ce_flag_n_members (nsid_to_string nsid)) F`]
+    prefix_scalar_complete_mode_contract_fmp)) >>
+  (impl_tac >- simp[Once type_to_abi_dec_info_def]) >>
+  disch_then ACCEPT_TAC
 QED
 
-Theorem prefix_dynamic_complete_code[local]:
-  (^CshiftCode) ty tv ==>
-  (^CshiftCode) (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+Theorem prefix_dynamic_complete_mode_fmp[local]:
+  (^CshiftModeWithFmp) checked ty tv ==>
+  (^CshiftModeWithFmp) checked (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
 Proof
-  strip_tac >>
+  BETA_TAC >> strip_tac >>
   Cases_on `is_abi_dynamic ce.ce_struct_fields ty \/
     dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)`
-  >- (match_mp_tac prefix_dynamic_array_loop_complete_code_contract >> asm_rewrite_tac[]) >>
-  match_mp_tac prefix_bulk_complete_code_contract >> asm_rewrite_tac[]
+  >- (match_mp_tac (BETA_RULE prefix_dynamic_array_loop_complete_mode_contract_fmp) >> asm_rewrite_tac[]) >>
+  match_mp_tac (BETA_RULE prefix_bulk_complete_mode_contract_fmp) >> asm_rewrite_tac[]
 QED
 
-Theorem prefix_array_complete_code[local]:
-  (^CshiftCode) ty tv ==> (^CshiftCode) (ArrayT ty bd) (ArrayTV tv bd)
+Theorem prefix_array_complete_mode_fmp[local]:
+  (^CshiftModeWithFmp) checked ty tv ==> (^CshiftModeWithFmp) checked (ArrayT ty bd) (ArrayTV tv bd)
 Proof
-  Cases_on `bd`
-  >- MATCH_ACCEPT_TAC prefix_fixed_array_complete_code_contract >>
-  MATCH_ACCEPT_TAC prefix_dynamic_complete_code
+  BETA_TAC >> Cases_on `bd`
+  >- MATCH_ACCEPT_TAC (BETA_RULE prefix_fixed_array_complete_mode_contract_fmp) >>
+  MATCH_ACCEPT_TAC (BETA_RULE prefix_dynamic_complete_mode_fmp)
 QED
+
+Theorem prefix_canonical_coherent_complete_mode_fmp:
+  !ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==> (^CshiftModeWithFmp) checked ty tv
+Proof
+  qabbrev_tac `P = \ce env sf. (^CshiftModeWithFmp) checked` >>
+  `!ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==> P ce env sf ty tv` suffices_by
+    simp_tac bool_ss [Abbr `P`] >>
+  ho_match_mp_tac abi_decoder_coherent_ind >>
+  conj_tac
+  >- (rpt gen_tac >> disch_tac >> simp_tac bool_ss [Abbr `P`] >>
+      MATCH_ACCEPT_TAC (BETA_RULE prefix_base_complete_mode_fmp)) >>
+  conj_tac
+  >- (rpt gen_tac >> disch_tac >> simp_tac bool_ss [Abbr `P`] >>
+      MATCH_ACCEPT_TAC (BETA_RULE prefix_flag_complete_mode_fmp)) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
+      match_mp_tac (BETA_RULE prefix_array_complete_mode_fmp) >> first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
+      match_mp_tac (BETA_RULE prefix_tuple_complete_mode_contract_fmp) >> first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
+  match_mp_tac (BETA_RULE prefix_struct_complete_mode_contract_fmp) >> asm_rewrite_tac[]
+QED
+
+val CshiftMode = rhs (concl (PURE_REWRITE_CONV [tautLib.TAUT `((F ==> p) /\ q) <=> q`]
+  (subst [``frame_fmp:bool`` |-> ``F``] CshiftModeWithFmp)));
+val CshiftCode = rhs (concl (SIMP_CONV bool_ss [] ``(^CshiftMode) F``));
+val CshiftChecked = ``(^CshiftMode) T``;
 
 Theorem prefix_canonical_coherent_complete_code:
   !ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==> (^CshiftCode) ty tv
 Proof
-  qabbrev_tac `P = \ce env sf. (^CshiftCode)` >>
-  `!ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==> P ce env sf ty tv` suffices_by
-    simp_tac bool_ss [Abbr `P`] >>
-  ho_match_mp_tac abi_decoder_coherent_ind >>
-  conj_tac
-  >- (rpt gen_tac >> disch_tac >> simp_tac bool_ss [Abbr `P`] >>
-      MATCH_ACCEPT_TAC (BETA_RULE prefix_base_complete_code)) >>
-  conj_tac
-  >- (rpt gen_tac >> disch_tac >> simp_tac bool_ss [Abbr `P`] >>
-      MATCH_ACCEPT_TAC (BETA_RULE prefix_flag_complete_code)) >>
-  conj_tac
-  >- (rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
-      match_mp_tac (BETA_RULE prefix_array_complete_code) >> first_assum ACCEPT_TAC) >>
-  conj_tac
-  >- (rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
-      match_mp_tac (BETA_RULE prefix_tuple_complete_code_contract) >> first_assum ACCEPT_TAC) >>
-  rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
-  match_mp_tac (BETA_RULE prefix_struct_complete_code_contract) >> asm_rewrite_tac[]
+  mp_tac (Q.INST [`frame_fmp` |-> `F`, `checked` |-> `F`]
+    prefix_canonical_coherent_complete_mode_fmp) >>
+  simp_tac bool_ss []
 QED
 
-(* Checked execution and history retained on the same decoder witness. *)
-
-
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
-Proof
-  `(?clamp. type_to_abi_dec_info sf ce (BaseT bt) = DecPrimWord clamp) \/
-   (?n. type_to_abi_dec_info sf ce (BaseT bt) = DecBytestring n)` by
-    (Cases_on `bt` >> simp[type_to_abi_dec_info_def] >>
-     rename1 `BytesT bound` >> Cases_on `bound` >> simp[type_to_abi_dec_info_def])
-  >- (irule prefix_scalar_complete_checked_contract >> goal_assum (drule_at Any)) >>
-  irule prefix_bytestring_complete_checked_contract >> goal_assum (drule_at Any)
-QED
-*)
-Theorem prefix_base_complete_checked[local]:
-  (^CshiftChecked) (BaseT bt) (BaseTV bt)
-Proof
-  `(?clamp. type_to_abi_dec_info sf ce (BaseT bt) = DecPrimWord clamp) \/
-   (?n. type_to_abi_dec_info sf ce (BaseT bt) = DecBytestring n)` by
-    (Cases_on `bt` >> simp[type_to_abi_dec_info_def] >>
-     rename1 `BytesT bound` >> Cases_on `bound` >> simp[type_to_abi_dec_info_def])
-  >- (irule prefix_scalar_complete_checked_contract >> goal_assum (drule_at Any)) >>
-  irule prefix_bytestring_complete_checked_contract >> goal_assum (drule_at Any)
-QED
-
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
-Proof
-  irule prefix_scalar_complete_checked_contract >> simp[Once type_to_abi_dec_info_def]
-QED
-*)
-Theorem prefix_flag_complete_checked[local]:
-  (^CshiftChecked) (FlagT nsid) (FlagTV n)
-Proof
-  irule prefix_scalar_complete_checked_contract >> simp[Once type_to_abi_dec_info_def]
-QED
-
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
-Proof
-  strip_tac >>
-  Cases_on `is_abi_dynamic ce.ce_struct_fields ty \/
-    dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)`
-  >- (BETA_TAC >> rule_assum_tac BETA_RULE >>
-      match_mp_tac (BETA_RULE prefix_dynamic_array_loop_complete_checked_contract) >> asm_rewrite_tac[]) >>
-  match_mp_tac prefix_bulk_complete_checked_contract >> asm_rewrite_tac[]
-QED
-*)
-Theorem prefix_dynamic_complete_checked[local]:
-  (^CshiftChecked) ty tv ==>
-  (^CshiftChecked) (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-Proof
-  strip_tac >>
-  Cases_on `is_abi_dynamic ce.ce_struct_fields ty \/
-    dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)`
-  >- (BETA_TAC >> rule_assum_tac BETA_RULE >>
-      match_mp_tac (BETA_RULE prefix_dynamic_array_loop_complete_checked_contract) >> asm_rewrite_tac[]) >>
-  match_mp_tac prefix_bulk_complete_checked_contract >> asm_rewrite_tac[]
-QED
-
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
-Proof
-  Cases_on `bd`
-  >- MATCH_ACCEPT_TAC prefix_fixed_array_complete_checked_contract >>
-  MATCH_ACCEPT_TAC prefix_dynamic_complete_checked
-QED
-*)
-Theorem prefix_array_complete_checked[local]:
-  (^CshiftChecked) ty tv ==> (^CshiftChecked) (ArrayT ty bd) (ArrayTV tv bd)
-Proof
-  Cases_on `bd`
-  >- MATCH_ACCEPT_TAC prefix_fixed_array_complete_checked_contract >>
-  MATCH_ACCEPT_TAC prefix_dynamic_complete_checked
-QED
-
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
-Proof
-  qabbrev_tac `P = \ce env sf. (^CshiftChecked)` >>
-  `!ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==> P ce env sf ty tv` suffices_by
-    simp_tac bool_ss [Abbr `P`] >>
-  ho_match_mp_tac abi_decoder_coherent_ind >>
-  conj_tac
-  >- (rpt gen_tac >> disch_tac >> simp_tac bool_ss [Abbr `P`] >>
-      MATCH_ACCEPT_TAC (SIMP_RULE bool_ss [] prefix_base_complete_checked)) >>
-  conj_tac
-  >- (rpt gen_tac >> disch_tac >> simp_tac bool_ss [Abbr `P`] >>
-      MATCH_ACCEPT_TAC (SIMP_RULE bool_ss [] prefix_flag_complete_checked)) >>
-  conj_tac
-  >- (rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
-      match_mp_tac (BETA_RULE prefix_array_complete_checked) >> first_assum ACCEPT_TAC) >>
-  conj_tac
-  >- (rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
-      match_mp_tac (BETA_RULE prefix_tuple_complete_checked_contract) >> first_assum ACCEPT_TAC) >>
-  rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
-  match_mp_tac (BETA_RULE prefix_struct_complete_checked_contract) >> asm_rewrite_tac[]
-QED
-*)
 Theorem prefix_canonical_coherent_complete_checked:
   !ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==> (^CshiftChecked) ty tv
 Proof
-  qabbrev_tac `P = \ce env sf. (^CshiftChecked)` >>
-  `!ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==> P ce env sf ty tv` suffices_by
-    simp_tac bool_ss [Abbr `P`] >>
-  ho_match_mp_tac abi_decoder_coherent_ind >>
-  conj_tac
-  >- (rpt gen_tac >> disch_tac >> simp_tac bool_ss [Abbr `P`] >>
-      MATCH_ACCEPT_TAC (SIMP_RULE bool_ss [] prefix_base_complete_checked)) >>
-  conj_tac
-  >- (rpt gen_tac >> disch_tac >> simp_tac bool_ss [Abbr `P`] >>
-      MATCH_ACCEPT_TAC (SIMP_RULE bool_ss [] prefix_flag_complete_checked)) >>
-  conj_tac
-  >- (rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
-      match_mp_tac (BETA_RULE prefix_array_complete_checked) >> first_assum ACCEPT_TAC) >>
-  conj_tac
-  >- (rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
-      match_mp_tac (BETA_RULE prefix_tuple_complete_checked_contract) >> first_assum ACCEPT_TAC) >>
-  rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
-  match_mp_tac (BETA_RULE prefix_struct_complete_checked_contract) >> asm_rewrite_tac[]
+  mp_tac (Q.INST [`frame_fmp` |-> `F`, `checked` |-> `T`]
+    prefix_canonical_coherent_complete_mode_fmp) >>
+  simp_tac bool_ss []
 QED

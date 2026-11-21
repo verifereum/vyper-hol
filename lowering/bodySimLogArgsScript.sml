@@ -3,7 +3,8 @@ Theory bodySimLogArgs
 Ancestors
   allocLimits allocLimitsProps
   exprSimSource bodyExprPreFacts exprSimHypsDefs list bodySim stmtSimLog exprSimHyps
-  bodyStorageCases
+  bodyStorageCases bodyInvSplit bodyInvCodeProps bodyInvExecutionProps
+  bodyInvMetadataProps bodyMainModuleProps compileUnit alist
   compileEnv compileVyper supportedStmts supportedDecls supportedTypes
   supportedExprs supportedExprTraverse supportedStmtTraverse vyperEvent vyperInterpreter
   vyperState vyperTypeSystem supportedProgram supportedNames vyperContext
@@ -42,30 +43,16 @@ Proof
   drule log_type_env_namespace >> simp[]
 QED
 
-Theorem log_type_env_module_exists[local]:
-  !mods src id a.
-    FLOOKUP (type_env_all_modules mods) (src,id) = SOME a ==>
-    ?ts. ALOOKUP mods src = SOME ts
-Proof
-  Induct >> simp[type_env_all_modules_def] >>
-  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
-  simp[type_env_all_modules_def, FLOOKUP_FUNION] >>
-  Cases_on `FLOOKUP (type_env_for_module h0 h1) (src,id)` >>
-  simp[] >> rpt strip_tac
-  >- (Cases_on `h0 = src` >> simp[] >> metis_tac[]) >>
-  drule log_type_env_namespace >> strip_tac >> gvs[]
-QED
-
-Theorem body_log_runtime_struct_namespace:
+Theorem body_log_runtime_struct_namespace[local]:
   !tops ctx cenv cx k a.
     body_inv tops ctx cenv cx /\
     FLOOKUP (get_tenv cx) k = SOME (StructArgs a) ==> FST k = NONE
 Proof
   rpt strip_tac >> PairCases_on `k` >>
-  Cases_on `ALOOKUP cx.sources cx.txn.target` >>
-  gvs[get_tenv_def] >>
-  drule log_type_env_module_exists >> strip_tac >>
-  gvs[body_inv_def, get_module_code_def] >> metis_tac[]
+  drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac contract_inv_type_env >>
+  fs[type_env_all_modules_def, FLOOKUP_FUNION] >>
+  metis_tac[log_type_env_namespace]
 QED
 
 Theorem body_main_type_env_submap:
@@ -202,20 +189,6 @@ Proof
   gvs[supported_place_type_def, DRESTRICT_UNIV]
 QED
 
-Theorem supported_event_nested_abi_types_env[local]:
-  !tys tops cx.
-    get_module_code cx NONE = SOME tops /\
-    EVERY (supported_nested_type supported_event_leaf_type (LENGTH tops) tops) tys ==>
-    vyper_to_abi_types (type_env tops) tys = vyper_to_abi_types (get_tenv cx) tys
-Proof
-  rpt strip_tac >> drule body_main_type_env_submap >> strip_tac >>
-  simp[vyper_to_abi_types_MAP] >> irule MAP_CONG >> rpt strip_tac >>
-  qspecl_then [`supported_event_leaf_type`, `LENGTH tops`, `tops`, `x`]
-    mp_tac supported_nested_abi_env >> simp[] >>
-  disch_then (qspecl_then [`get_tenv cx`, `{}`] mp_tac) >>
-  gvs[EVERY_MEM, DRESTRICT_UNIV]
-QED
-
 Theorem supported_event_fields_some[local]:
   !tops id fields.
     supported_event_fields tops id = SOME fields ==>
@@ -262,28 +235,27 @@ Theorem body_log_aggregate_metadata:
 Proof
   rpt gen_tac >> strip_tac >>
   drule supported_event_fields_some >> strip_tac >> gvs[] >>
+  drule_then strip_assume_tac body_inv_main_support >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac contract_inv_type_env >>
+  `get_tenv cx = type_env tops` by
+    fs[type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2] >>
+  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+   cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE)` by
+    fs[contract_inv_def, build_event_info_mods_singleton,
+       type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2] >>
   `EVERY (\f. if SND f then supported_event_leaf_type (SND (FST f))
               else supported_nested_type supported_event_leaf_type
                      (LENGTH tops) tops (SND (FST f))) fields /\
    LENGTH (FILTER I (MAP SND fields)) <= 3` by
-    (gvs[body_inv_def, supported_program_def,
+    (gvs[supported_program_def,
          supported_declaration_headers_def, EVERY_MEM] >>
      qpat_x_assum `!e. MEM e tops ==> supported_declaration_header _ _` drule >>
      simp[supported_declaration_header_def, EVERY_MEM]) >>
-  `EVERY (supported_nested_type supported_event_leaf_type (LENGTH tops) tops)
-         (MAP (SND o FST) fields)` by
-    (gvs[EVERY_MAP, EVERY_MEM, pairTheory.FORALL_PROD, combinTheory.o_DEF] >>
-     rpt strip_tac >>
-     qpat_x_assum `!a b c. MEM ((a,b),c) fields ==> _` drule >>
-     Cases_on `p_2'` >> simp[] >>
-     simp[Once supported_nested_type_def]) >>
-  `vyper_to_abi_types (type_env tops) (MAP (SND o FST) fields) =
-   vyper_to_abi_types (get_tenv cx) (MAP (SND o FST) fields)` by
-    (irule supported_event_nested_abi_types_env >> gvs[body_inv_def]) >>
   `event_decl_unique name tops` by
-    gvs[body_inv_def, supported_program_def,
+    gvs[supported_program_def,
         supported_declaration_names_def, event_names_unique] >>
-  gvs[body_inv_def, nsid_to_string_def, build_event_info_lookup_event_metadata_in,
+  gvs[nsid_to_string_def, build_event_info_lookup_event_metadata_in,
       lookup_event_metadata_def, get_module_code_def, AllCaseEqs(), event_hash_def]
 QED
 
@@ -323,14 +295,43 @@ Proof
   qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
     SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
       int_calls_stmt_def, listTheory.EVERY_CONJ, GSYM expr_has_evm_run_def]) >>
-  `supported_program tops /\ get_module_code cx NONE = SOME tops /\
-   (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-       is_dynamic (vyper_to_abi_type (type_env tops) target))` by
-    fs[body_inv_def] >>
-  `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
+  drule_then strip_assume_tac body_inv_main_support >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac contract_inv_type_env >>
+  `get_tenv cx = type_env tops` by
+    fs[type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2] >>
   qspecl_then [`cenv`, `cx`, `env`, `e`, `es`, `calls`]
     irule stmt_expr_body_pre >>
   simp[] >> metis_tac[supported_pure_expr_effect_free, no_effect_call_operands]
+QED
+
+Theorem body_log_snapshot_expr_pre_mods:
+  EVERY (\e. ~is_extcode e) args /\
+  contract_inv mods exps ctx cenv cx /\ supported_pure_exprs (main_module mods) args /\
+  well_typed_exprs env args /\
+  ~supported_exprs_exists
+     (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
+  ~supported_exprs_exists (const_name_root_mods mods) args /\
+  call_evaluation_safe cx (int_calls_exprs args) /\
+  (!target. supported_exprs_exists (expr_abi_decode_target_root target) args ==>
+            occurs_abi_decode_target target (main_module mods)) ==>
+  !e st. MEM e args /\ expr_sim_inv_mods mods cenv cx env st /\
+    ~supported_expr_exists (unallocated_bare_global_root cenv env) e ==>
+    expr_body_pre_mods mods cenv cx env e st
+Proof
+  rpt strip_tac >>
+  `supported_pure_expr (main_module mods) e /\ ~is_extcode e /\
+   ~supported_expr_exists (const_name_root_mods mods) e /\
+   ~supported_expr_exists
+     (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+   (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+      occurs_abi_decode_target target (main_module mods))` by
+    (fs[supported_pure_exprs_every, EVERY_MEM, supported_exprs_exists_every,
+        EXISTS_MEM] >> metis_tac[]) >>
+  `supported_expr (main_module mods) e` by simp[supported_expr_def] >>
+  mp_tac (Q.INST [`calls` |-> `[]`, `es` |-> `st`] stmt_expr_body_pre_main_mods) >>
+  simp[] >> metis_tac[well_typed_exprs_member, call_evaluation_safe_exprs_mem]
 QED
 
 Theorem body_log_snapshot_expr_pre:
@@ -347,26 +348,24 @@ Theorem body_log_snapshot_expr_pre:
     expr_body_pre cenv cx env e st
 Proof
   rpt strip_tac >>
-  `supported_pure_expr tops e /\ ~is_extcode e /\
-   ~supported_expr_exists (const_name_root cx) e /\
-   ~supported_expr_exists
-     (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
-   (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
-      occurs_abi_decode_target target tops)` by
-    (fs[supported_pure_exprs_every, EVERY_MEM, supported_exprs_exists_every,
-        EXISTS_MEM] >> metis_tac[]) >>
-  `byte_widths_expr e /\ alloc_limits_expr cenv e` by
-    (CCONTR_TAC >> qpat_x_assum `~supported_expr_exists (\e. ~is_extcode e /\ _) e` mp_tac >>
-     simp[] >> irule supported_expr_exists_root >> metis_tac[]) >>
-  `cx_tops cx = tops /\ supported_program tops /\ get_module_code cx NONE = SOME tops /\
-    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-       is_dynamic (vyper_to_abi_type (type_env tops) target))` by
-    fs[body_inv_def, gasContextTheory.cx_tops_def] >>
-  `~expr_has_evm_run e` by
-    (irule supported_expr_no_evm_run >> simp[supported_expr_def] >> metis_tac[]) >>
-  drule (CONJUNCT1 supported_pure_main_calls) >> strip_tac >>
-  simp[expr_body_pre_def] >> fs[EVERY_MEM] >>
-  metis_tac[well_typed_exprs_member, call_evaluation_safe_exprs_mem]
+  drule_then strip_assume_tac body_inv_main_code >>
+  drule_then assume_tac body_inv_contract >>
+  `~supported_expr_exists (const_name_root cx) e` by
+    (fs[supported_exprs_exists_every, EXISTS_MEM] >> metis_tac[]) >>
+  drule_all_then assume_tac expr_sim_inv_no_unallocated_bare_globals >>
+  `expr_sim_inv_mods [(NONE,tops)] cenv cx env st` by fs[expr_sim_inv_split_def] >>
+  `~supported_exprs_exists (const_name_root_mods [(NONE,tops)]) args` by
+    metis_tac[const_name_root_mods_singleton] >>
+  `expr_body_pre_mods [(NONE,tops)] cenv cx env e st` by
+    (mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`]
+      body_log_snapshot_expr_pre_mods) >>
+     simp[main_module_def, ALOOKUP_def]) >>
+  `supported_pure_expr tops e` by metis_tac[supported_pure_exprs_every, EVERY_MEM] >>
+  drule_then strip_assume_tac (CONJUNCT1 supported_pure_main_calls) >>
+  drule_then assume_tac contract_inv_type_env >>
+  fs[expr_body_pre_split_def, type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2,
+     listTheory.EVERY_CONJ, supported_exprs_exists_every, EXISTS_MEM] >>
+  metis_tac[]
 QED
 
 (* Body safety and root allocation checks give each argument expr_body_pre;
@@ -442,51 +441,68 @@ Proof
   qexists_tac `env` >> simp[]
 QED
 
+Theorem body_log_assignable_abi_plan_mods:
+  expr_sim_inv_mods mods cenv cx env es /\
+  (!k a. FLOOKUP (get_tenv cx) k = SOME (StructArgs a) ==> FST k = NONE) /\
+  assignable_type (get_tenv cx) ty ==>
+  abi_enc_plan (get_tenv cx) ty
+    (type_to_abi_enc_info cenv.ce_struct_fields cenv ty)
+Proof
+  strip_tac >>
+  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+    gvs[expr_sim_inv_mods_def] >>
+  irule type_to_abi_enc_info_plan >> simp[] >>
+  qexists_tac `get_tenv cx` >> simp[] >>
+  rpt strip_tac >> irule typedMemoryCopyTheory.typed_copy_memory_size >>
+  qexists_tac `get_tenv cx` >> gvs[expr_sim_inv_mods_def] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
 Theorem body_log_assignable_abi_plan:
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
   assignable_type (get_tenv cx) ty ==>
   abi_enc_plan (get_tenv cx) ty
     (type_to_abi_enc_info cenv.ce_struct_fields cenv ty)
 Proof
-  strip_tac >>
-  `!k a. FLOOKUP (get_tenv cx) k = SOME (StructArgs a) ==> FST k = NONE` by
-    metis_tac[body_log_runtime_struct_namespace] >>
-  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
-    gvs[expr_sim_inv_def] >>
-  irule type_to_abi_enc_info_plan >> simp[] >>
-  qexists_tac `get_tenv cx` >> simp[] >>
-  metis_tac[expr_sim_inv_memory_size]
+  simp[expr_sim_inv_split_def] >> metis_tac[body_log_runtime_struct_namespace,
+    body_log_assignable_abi_plan_mods]
 QED
 
-Theorem body_log_event_tuple_abi_plan:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+Theorem body_log_event_tuple_abi_plan_mods:
+  contract_inv mods exps ctx cenv cx /\ expr_sim_inv_mods mods cenv cx env es /\
+  (!k a. FLOOKUP (get_tenv cx) k = SOME (StructArgs a) ==> FST k = NONE) /\
   tys <> [] /\
-  EVERY (supported_nested_type supported_event_leaf_type (LENGTH tops) tops) tys /\
+  EVERY (supported_nested_type supported_event_leaf_type (LENGTH (main_module mods)) (main_module mods)) tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME tv ==>
   abi_enc_plan (get_tenv cx) (TupleT tys)
     (type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT tys))
 Proof
-  strip_tac >> irule body_log_assignable_abi_plan >>
-  reverse conj_tac >- metis_tac[] >>
-  `type_env tops SUBMAP get_tenv cx` by
-    (irule body_main_type_env_submap >> gvs[body_inv_def]) >>
-  qspecl_then [`supported_event_leaf_type`, `LENGTH tops`, `tops`, `TupleT tys`]
+  strip_tac >>
+  `assignable_type (get_tenv cx) (TupleT tys)` suffices_by
+    metis_tac[body_log_assignable_abi_plan_mods] >>
+  drule_then assume_tac contract_inv_main_module >>
+  `type_env (main_module mods) SUBMAP get_tenv cx` by
+    metis_tac[body_main_type_env_submap, contract_inv_module_codes] >>
+  qspecl_then [`supported_event_leaf_type`, `LENGTH (main_module mods)`, `main_module mods`, `TupleT tys`]
     mp_tac supported_nested_evaluated_assignable >> simp[] >>
   disch_then (qspecl_then [`get_tenv cx`, `{}`, `tv`] mp_tac) >>
   simp[DRESTRICT_UNIV, Once supported_nested_type_def, NULL_EQ]
 QED
 
-Theorem body_log_actual_tuple_abi_plan:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
-  tys <> [] /\ EVERY (supported_place_type tops) tys /\
+Theorem body_log_actual_tuple_abi_plan_mods:
+  contract_inv mods exps ctx cenv cx /\ expr_sim_inv_mods mods cenv cx env es /\
+  (!k a. FLOOKUP (get_tenv cx) k = SOME (StructArgs a) ==> FST k = NONE) /\
+  tys <> [] /\ EVERY (supported_place_type (main_module mods)) tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME tv ==>
   abi_enc_plan (get_tenv cx) (TupleT tys)
     (type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT tys))
 Proof
-  strip_tac >> irule body_log_assignable_abi_plan >>
-  reverse conj_tac >- metis_tac[] >>
-  `type_env tops SUBMAP get_tenv cx` by
-    (irule body_main_type_env_submap >> gvs[body_inv_def]) >>
+  strip_tac >>
+  `assignable_type (get_tenv cx) (TupleT tys)` suffices_by
+    metis_tac[body_log_assignable_abi_plan_mods] >>
+  drule_then assume_tac contract_inv_main_module >>
+  `type_env (main_module mods) SUBMAP get_tenv cx` by
+    metis_tac[body_main_type_env_submap, contract_inv_module_codes] >>
   `well_formed_type (get_tenv cx) (TupleT tys)` by
     simp[well_formed_type_def] >>
   simp[assignable_type_def] >>
