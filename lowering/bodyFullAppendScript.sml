@@ -605,73 +605,6 @@ Proof
     simp[wordsTheory.word_add_def,wordsTheory.w2n_n2w] >> simp[] >> decide_tac
 QED
 
-Theorem append_subregion_dead_iff[local]:
-  MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\
-  storage_locks_separated (FST H) (SND H) /\
-  storage_subregion root path delta tv /\ start = w2n rootk + delta /\
-  start <= j /\ j < start + type_slot_size tv ==>
-  (storage_dead H tr st j b <=> dead_bytes st start tv j b)
-Proof
-  strip_tac >>
-  drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac >>
-  `w2n rootk <= j /\ j < w2n rootk + type_slot_size root` by decide_tac >>
-  `w2n rootk + type_slot_size root <= dimword (:256) /\
-   !k' tv'. MEM (tr,k',tv') (FST H) /\ (k',tv') <> (rootk,root) ==>
-     ranges_disjoint (w2n rootk) (type_slot_size root) (w2n k') (type_slot_size tv')` by
-    (fs[regions_consistent_def] >> metis_tac[]) >>
-  eq_tac
-  >- (strip_tac >>
-      `storage_read_live H tr st (n2w start) tv` by
-        (irule accountsRelPropsTheory.storage_subregion_read_live >>
-         goal_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
-         qexists_tac `rootk` >>
-         `start < dimword (:256)` by decide_tac >>
-         simp[accountsRelPropsTheory.observed_storage_region_read_live,
-              wordsTheory.w2n_n2w]) >>
-      qpat_x_assum `storage_read_live _ _ _ _ _`
-        (mp_tac o PURE_REWRITE_RULE [storage_read_live_def]) >>
-      disch_then (qspecl_then [`j`,`b`] mp_tac) >>
-      `start < dimword (:256)` by decide_tac >>
-      simp[wordsTheory.w2n_n2w]) >>
-  simp_tac (srw_ss()) [storage_dead_def] >>
-  disch_tac >> conj_tac
-  >- (Cases_on `tr` >> simp[] >> strip_tac >>
-      fs[storage_locks_separated_def] >>
-      first_x_assum (qspecl_then [`rootk`,`root`,`j`] mp_tac) >>
-      simp[vyperStorageFrameTheory.ranges_disjoint_def] >> decide_tac) >>
-  qexistsl_tac [`rootk`,`root`] >> simp[] >>
-  drule placeStoreStorageTheory.place_store_dead_subregion >>
-  disch_then (qspecl_then [`w2n rootk`,`st`,`j`,`b`] mp_tac) >> simp[]
-  >> (gvs[])
-QED
-
-Theorem append_subregion_header_leaf_dead[local]:
-  w2n slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword (:256) ==>
-  (dead_bytes (update_storage slot h st) (w2n slot)
-     (ArrayTV tv (Dynamic cap)) j b <=>
-   dead_bytes st (w2n slot) (ArrayTV tv (Dynamic cap)) j b)
-Proof
-  strip_tac >> simp[Once dead_bytes_def] >>
-  `!i. i < cap ==>
-    (dead_bytes (update_storage slot h st)
-       (w2n slot + 1 + i * type_slot_size tv) tv j b <=>
-     dead_bytes st (w2n slot + 1 + i * type_slot_size tv) tv j b)` by
-    (rpt strip_tac >> irule (cj 1 accountsRelPropsTheory.dead_bytes_frame) >>
-     rpt strip_tac >> simp[vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def] >>
-     `i' < dimword (:256)` by
-       (gvs[type_slot_size_def] >>
-        `i * type_slot_size tv + type_slot_size tv <= cap * type_slot_size tv` by
-          (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
-        decide_tac) >>
-     `n2w i' <> slot` by
-       (strip_tac >> `i' = w2n slot` by metis_tac[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> decide_tac) >>
-     simp[combinTheory.APPLY_UPDATE_THM]) >>
-  pure_rewrite_tac[dead_bytes_def] >>
-  `!i. w2n slot + (i * type_slot_size tv + 1) =
-       w2n slot + 1 + i * type_slot_size tv` by (gen_tac >> decide_tac) >>
-  metis_tac[]
-QED
-
 Theorem append_subregion_header_storage_dead[local]:
   MEM (tr,(rootk:bytes32),root) (FST H) /\ regions_consistent (FST H) /\
   storage_locks_separated (FST H) (SND H) /\
@@ -691,11 +624,11 @@ Proof
          mp_tac (Q.INST [`rootk` |-> `(rootk:bytes32)`, `root` |-> `root`,
            `path` |-> `path`, `delta` |-> `delta`, `tv` |-> `ArrayTV tv (Dynamic cap)`,
            `start` |-> `w2n (slot:bytes32)`, `st` |-> `raw`]
-           append_subregion_dead_iff) >> simp[]) >>
+           bodyFullStoreSlotsStaticTheory.store_slots_subregion_dead_iff) >> simp[]) >>
       simp[] >>
       mp_tac (Q.INST [`slot` |-> `(slot:bytes32)`, `h` |-> `h`,
         `st` |-> `st`, `tv` |-> `tv`, `cap` |-> `cap`, `j` |-> `j`, `b` |-> `b`]
-        append_subregion_header_leaf_dead) >> simp[]) >>
+        appendStorageAggregateRelTheory.append_aggregate_header_dead) >> simp[]) >>
   `!q. ~(w2n rootk + delta <= w2n q /\
       w2n q < w2n rootk + delta + type_slot_size (ArrayTV tv (Dynamic cap))) ==>
      lookup_storage q (update_storage slot h st) = lookup_storage q st` by
@@ -826,7 +759,7 @@ Proof
        `root` |-> `root`,`path` |-> `path ++ [ValueSubscript (IntV (&len))]`,
        `delta` |-> `delta + (1+len*type_slot_size tv)`,`tv` |-> `tv`,
        `start` |-> `w2n (k:bytes32)`,`st` |-> `raw`]
-       append_subregion_dead_iff) >> simp[]) >>
+       bodyFullStoreSlotsStaticTheory.store_slots_subregion_dead_iff) >> simp[]) >>
   simp_tac (srw_ss()) [pred_setTheory.SUBSET_DEF,pairTheory.FORALL_PROD,Once ptrDisciplineTheory.key_update_def] >>
   qx_genl_tac [`q`,`b`] >> strip_tac >>
   qpat_x_assum `!raw j b. storage_dead H tr (update_storage slot h raw) j b <=> _`
