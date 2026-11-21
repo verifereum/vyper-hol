@@ -562,7 +562,9 @@ Proof
      >- (qpat_assum `stmt_state_rel _ _ _ _ _ addr_mid z`
            (ACCEPT_TAC o MATCH_MP (cj 1 accountsRelPropsTheory.state_rel_accounts) o
             MATCH_MP stmt_state_rel_state_rel))
-     >> fs[exprSimHypsDefsTheory.expr_sim_inv_def]) >>
+     >> qpat_assum `expr_sim_inv _ _ _ addr_mid`
+          (strip_assume_tac o REWRITE_RULE [exprSimHypsDefsTheory.expr_sim_inv_def]) >>
+        first_assum ACCEPT_TAC) >>
   `((lookup_account
       (w2w (typed_val_to_w256 (BaseTV AddressT) (BytesV bs))) z.vs_accounts).code =
       (lookup_account (word_of_bytes_be bs) (addr_mid:evaluation_state).accounts).code) /\

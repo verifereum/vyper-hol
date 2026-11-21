@@ -143,9 +143,8 @@ Resume ifexp_expr_full_ok_from_root[arms]:
          (mp_then Any mp_tac exprSimIfExpTheory.ifexp_body_pre_read_typed) >>
        simp[] >> metis_tac[]) >>
    `env.type_defs = get_tenv cx` by
-     fs[exprSimHypsDefsTheory.expr_sim_inv_def,
-        vyperTypeInvariantsTheory.env_consistent_def,
-        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+     (qpat_assum `expr_body_pre _ _ _ e (_ with gas_obs := _)`
+        (ACCEPT_TAC o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_env_type_defs)) >>
    qpat_assum `expr_body_pre _ _ _ e (_ with gas_obs := _)`
      (mp_then Any mp_tac exprSimHypsTheory.memory_rhs_read_post_typed) >>
    disch_then (qspecl_then [`v'`,`es2`] mp_tac) >>
