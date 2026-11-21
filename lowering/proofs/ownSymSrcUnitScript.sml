@@ -70,10 +70,10 @@ Proof
 QED
 
 Theorem lower_vyper_deploy_unit_sym_src_ok_own:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan.
+  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx.
   deploy_phases policy tops (deploy_bc, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
-  supported_program tops /\ supported_program_deploy tops ==>
+  deploy_source_ok tops am tx ==>
   label_flow_own_ok dunit.cu_context /\
   (!fn inst. MEM fn dunit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
              ~MEM (Label "code_end") inst.inst_operands) /\
@@ -87,7 +87,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
     fs[deploy_phases_def] >>
-  `o1_source_unit_ok dunit` by metis_tac[lower_vyper_deploy_unit_source_unit_ok] >>
+  drule_all checked_lower_vyper_deploy_unit_source_shape >> strip_tac >>
   `!fn inst. MEM fn dunit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
        source_inst_ok ({"code_end"},T) inst` by
     (rpt strip_tac >> irule lower_vyper_deploy_unit_label_checks >>

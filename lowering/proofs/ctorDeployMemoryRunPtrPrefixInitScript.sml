@@ -1,7 +1,7 @@
 (* Initialization boundaries independent of constructor decoding. *)
 Theory ctorDeployMemoryRunPtrPrefixInit
 Ancestors
-  ctorDeployDefs ctorDeployLoweringDefs ctorDeployShape
+  ctorDeployDefs ctorDeployLoweringDefs
   o1PassContract e2eEntry ptrDiscipline ptrSafeRun vyperCompiler
   venomState venomInst venomExecSemantics contextCodegenRel unitTransformDefs
   deployUnitProducers o1PipelineCorrect
@@ -24,14 +24,6 @@ Theorem deploy_prefix_normalized_allocations:
 Proof
   strip_tac >> drule deploy_prefix_initial_allocations >>
   simp[allocas_from_def]
-QED
-
-Theorem deploy_prefix_no_dalloca:
-  deploy_phases policy tops (deploy_bc, runtime_bc)
-    (rpolicy, dunit, dout, prog, cplan) /\ deploy_source_ok tops am tx ==>
-  ~ctx_has_dalloca dunit.cu_context
-Proof
-  strip_tac >> drule_all deploy_unit_shape_ok >> simp[]
 QED
 
 val _ = export_theory();

@@ -298,9 +298,10 @@ Proof
      LENGTH vs_out.vs_data_section < dimword (:256) DIV 2` by
     (disch_tac >>
      qspecl_then [`policy`, `tops`, `assemble prog`, `runtime_bc`,
-                   `rpolicy`, `dunit`, `dout`, `prog`, `cplan`] mp_tac
+                   `rpolicy`, `dunit`, `dout`, `prog`, `cplan`,
+                   `am`, `tx with code := vs_out.vs_code`] mp_tac
        lower_vyper_deploy_unit_sym_src_ok_own >>
-     impl_tac >- fs[deploy_source_ok_def] >>
+     impl_tac >- simp[] >>
      strip_tac >> asm_rewrite_tac[]) >>
   `unit_alloca_budget dunit.cu_context +
      32 * ctx_dload_count dunit.cu_context <= w2n fmp` by decide_tac >>
@@ -504,8 +505,10 @@ Proof
     by metis_tac[deploy_own_txp_identity] >>
   drule deploy_raw_fmp_exists >>
   disch_then (qspecl_then [`prog`, `es`] strip_assume_tac) >>
-  drule_all deploy_unit_execution_correct_raw_fmp >>
-  disch_then (qspec_then `fmp` strip_assume_tac) >>
+  qspecl_then [`K SOME`, `policy`, `tops`, `runtime_bc`, `rpolicy`, `dunit`,
+    `dout`, `prog`, `prog`, `cplan`, `am`, `tx`, `es`, `fmp`] mp_tac
+    deploy_unit_execution_correct_selected_raw_fmp >>
+  impl_tac >- simp[] >> strip_tac >>
   qspecl_then [`K SOME`, `policy`, `tops`, `runtime_bc`, `rpolicy`, `dunit`,
                `dout`, `prog`, `prog`, `cplan`, `am`, `tx`, `es`,
                `opt_deploy_entry_state_own prog prog cplan tops es`, `fmp`, `r`, `es'`]
@@ -545,8 +548,8 @@ Proof
   disch_then (qspecl_then [`prog'`, `es`] strip_assume_tac) >>
   qspecl_then [`asm_opt_finalizer`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
     `dunit`, `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`, `fmp`] mp_tac
-    deploy_unit_execution_correct_raw_fmp >>
-  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
+    deploy_unit_execution_correct_selected_raw_fmp >>
+  impl_tac >- simp[] >> strip_tac >>
   qabbrev_tac `vs_out = opt_deploy_entry_state_own prog prog' cplan tops es` >>
   `tx with code := vs_out.vs_code = tx` by
     (simp[Abbr `vs_out`] >> metis_tac[deploy_own_txp_identity]) >>

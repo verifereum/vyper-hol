@@ -78,7 +78,6 @@ Theorem deploy_ctor_body_frag_full:
     deploy_source_ok tops am tx /\
     deploy_state_rel tops (assemble prog') am tx es /\
     call_outcomes_ok am tx vs.vs_outcomes /\
-    gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\

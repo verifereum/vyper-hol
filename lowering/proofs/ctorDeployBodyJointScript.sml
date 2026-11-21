@@ -6,13 +6,11 @@
  * constructor, and when the source fails before the constructor body, the
  * unit's run reads no GAS and the witness is the empty marks.
  *
- * TOP-LEVEL:
- *   deploy_unit_execution_correct_fixed_shadow -- all three arms
- *   deploy_unit_execution_correct_joint -- identity finalizer
+ * The constructor arm starts at the selected raw FMP.
  *)
 Theory ctorDeployBodyJoint
 Ancestors
-  fnPlanPlaceRevertPostamble asmOptimizer
+  fnPlanPlaceRevertPostamble asmOptimizer deployUnitProducers ptrDiscipline
   bodyFullShadowBodyInv
   deployUnitExecution ctorDeployDefs ctorDeployLoweringDefs
   ctorDeployMemoryFrontier ctorDeployMemoryRunMemNoCtor
@@ -28,6 +26,8 @@ Ancestors
   ctorReturnFrame bodyFullShared fragGasEmitCtrl bodyPtrDefs
   ctorDeployLoweringArms gasShadowUnitGuards gasShadowState
   ctorDeployBodySimulation ctorDeployBodyShadow ctorDeployLoweringEntry
+  deployBodyReachability allocaBudgetProps unitTransformDefs contextRawReachable
+  ctorDeployLoweringEntryTransport
   ctorDeployLoweringReturn ctorDeployLoweringHaltCode ctorDeployDead
   bodyInvNoDalloca gasShadowStmtEnv gasOutcomeFull gasOutcomeFullCompose gasStorage gasExemptCert
   fragGasOriginPtr fragGasOriginPtrExec fragExecPtr loweringShapeDefs
@@ -37,7 +37,7 @@ Ancestors
   ctorDeployMemoryRunPtrPrefixInit gasContext
   ctorDeployLoweringFrameRet loweringStateRelDefs
   entryStateRel exprSimDefs loweringHalt vyperTypeDeploymentMachine evalNoHalt
-  codegenRel contextCodegenRel o1PassContract unitTransformDefs
+  codegenRel contextCodegenRel o1PassContract
 
 val _ = Parse.hide "body";
 
@@ -234,7 +234,7 @@ Theorem deploy_prefix_zero_path[local]:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops (assemble prog') am tx es /\
-    gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+    vs.vs_call_ctx.cc_callvalue <> 0w /\ ~vs.vs_halted /\
     classify_functions tops = (exts, ints, fb, SOME cf) /\
     (!mut nr body am_c es0.
        ~deploy_ctor_start tops am tx (mut, nr, body, am_c, es0)) /\
@@ -246,11 +246,6 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all ctor_prefix_rejecting_code >> strip_tac >>
   qmatch_goalsub_abbrev_tac `gas_origin_path _ _ _ _ s0` >>
-  `s0.vs_call_ctx.cc_callvalue <> 0w` by
-    (drule_all ctor_prefix_source_obstruction >>
-     strip_tac >> drule_all ctor_prefix_entry_value >> simp[Abbr `s0`]) >>
-  `~s0.vs_halted` by
-    (drule ctor_prefix_entry_not_halted >> simp[Abbr `s0`]) >>
   `?bb rest j0 j1 j2 v0 v1.
      lookup_block "__deploy" func.fn_blocks = SOME bb /\
      bb.bb_instructions =
@@ -517,14 +512,15 @@ Proof
   gvs[deploy_evaluation_context_def, initial_evaluation_context_def]
 QED
 
-Theorem deploy_ctor_prefix_fail_with:
+Theorem deploy_ctor_prefix_fail_with_fields:
   !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
    exts ints fb cf shadow_ctx fn shadow_func.
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops (assemble prog') am tx es /\
-    gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+    vs.vs_call_ctx.cc_callvalue <> 0w /\ ~vs.vs_halted /\
+    vs.vs_allocas = FEMPTY /\ allocas_below_fmp vs /\
     classify_functions tops = (exts, ints, fb, SOME cf) /\
     (!mut nr body am_c es0.
        ~deploy_ctor_start tops am tx (mut, nr, body, am_c, es0)) /\
@@ -536,7 +532,8 @@ Theorem deploy_ctor_prefix_fail_with:
     deploy_unit_execution_correct_with shadow_ctx [] tops runtime_bc am tx dunit vs
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all deploy_unit_run_entry >> strip_tac >>
+  `dunit.cu_context.ctx_entry = SOME "__deploy"` by
+    metis_tac[deploy_phases_def, deployUnitProducersTheory.lower_vyper_deploy_unit_entry] >>
   drule_all ctor_prefix_task_entry_label >> strip_tac >> gvs[] >>
   drule_all deploy_prefix_trace >> strip_tac >>
   `!marks. ~deploy_source_exempt tops
@@ -556,7 +553,7 @@ Proof
   (conj_tac >- simp[]) >> disj2_tac >> qexists_tac `Abort Revert_abort t` >>
   simp[exit_result_def, deploy_venom_result_rel_def] >>
   (conj_tac >- (EVAL_TAC >> simp[])) >> gen_tac >> strip_tac >>
-  irule deploy_ctor_prefix_fail_run_ptr_safe >> simp[] >> metis_tac[]
+  irule deploy_ctor_prefix_fail_run_ptr_safe_fields >> simp[] >> metis_tac[]
 QED
 
 Theorem deploy_ctor_body_halt_pending:
@@ -600,7 +597,7 @@ Proof
      initial_evaluation_context_def] >> gvs[]
 QED
 
-Theorem deploy_ctor_body_joint_with:
+Theorem deploy_ctor_body_joint_raw_with:
   !policy tops runtime_bc rpolicy dunit dout prog prog' cplan off am tx es vs
    body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final
    func mut nr' body' am_c es0 shadow_ctx shadow_func shadow_sa shadow_sb.
@@ -612,7 +609,13 @@ Theorem deploy_ctor_body_joint_with:
     FLOOKUP (lo_reloc prog prog') "runtime_begin" = SOME off /\
     off < dimword(:256) /\ off <= LENGTH (assemble prog') /\
     DROP off (assemble prog') = runtime_bc /\
-    gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+    raw_variant vs.vs_initial_fmp vs
+      (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+    (ctx_has_dalloca dunit.cu_context ==>
+      imm_len tops + unit_alloca_budget dunit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
+    (ctx_has_dalloca dunit.cu_context ==> !fn inst s.
+      raw_reachable vs dunit.cu_context fn inst s ==> dalloca_no_wrap inst s) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
@@ -630,7 +633,7 @@ Theorem deploy_ctor_body_joint_with:
 Proof
   rpt gen_tac >> strip_tac >>
   `IS_SOME (FLOOKUP (lo_reloc prog prog') "runtime_begin")` by simp[] >>
-  drule_all deploy_ctor_entry_joint >> strip_tac >>
+  drule_all deploy_ctor_entry_joint_raw >> strip_tac >>
   qpat_x_assum `nr' = nr` SUBST_ALL_TAC >>
   `nr = F` by metis_tac[deploy_ctor_not_nonreentrant] >>
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
@@ -654,7 +657,20 @@ Proof
     simp[cx_tops_def, deploy_evaluation_context_def,
          initial_evaluation_context_def, vyperContextTheory.get_module_code_def] >>
   drule_all deploy_ctor_original_entry_shape >> strip_tac >>
-  drule_all deploy_prefix_no_dalloca >> strip_tac >>
+  `!bb label. lookup_block label func.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0` by
+    (rpt strip_tac >> drule_all deploy_ctor_raw_blocks_no_phi >> simp[]) >>
+  qabbrev_tac `entry = vs with <|vs_prev_bb := NONE;
+    vs_current_bb := "__deploy"; vs_inst_idx := 0|>` >>
+  `enters_block func entry entry` by
+    simp[enters_block_def, Abbr `entry`, eval_phis_no_phi, venom_state_fupdfupds] >>
+  `!i. active_inst func i entry ==> raw_reachable vs dunit.cu_context func i entry` by
+    (rpt strip_tac >> irule raw_reachable_entry >> fs[Abbr `entry`]) >>
+  `!i. active_inst func i s0 ==> raw_reachable vs dunit.cu_context func i s0` by
+    (rpt strip_tac >>
+     qpat_assum `gas_path _ _ entry 0 (OK s0)` (fn path =>
+       irule raw_reachable_gas_path >> irule_at Any path >> simp[] >>
+       first_assum ACCEPT_TAC)) >>
   `es0.storage_trace = []` by
     (irule deploy_ctor_start_storage_trace >> gvs[] >> metis_tac[]) >>
   `MEM func dunit.cu_context.ctx_functions /\ fn_inst_ids_distinct func /\
@@ -713,7 +729,8 @@ Proof
   >- (simp[ret_pc_ok_def, return_buf_frame_def, return_buf_sep_def] >> rpt conj_tac
       >- metis_tac[deploy_dead_lo_ok]
       >- fs[return_buf_frame_def]
-      >- (rpt strip_tac >>
+      >- (rpt strip_tac >> Cases_on `ctx_has_dalloca dunit.cu_context`
+          >- (drule_all raw_reachable_through_fragment >> metis_tac[]) >>
           drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
           fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
              unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[])
@@ -968,72 +985,4 @@ Proof
      impl_tac >- (simp[] >> first_assum irule >> first_assum ACCEPT_TAC) >>
      strip_tac >> fs[]) >>
   simp[]
-QED
-
-Theorem deploy_unit_execution_correct_fixed_shadow:
-  !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es.
-    fin IN accepted_finalizers /\
-    fin rpolicy prog = SOME prog' /\
-    deploy_phases policy tops (assemble prog, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_source_ok tops am tx /\
-    deploy_state_rel tops (assemble prog') am tx es ==>
-    ?shadow_ctx. !outs vs.
-      call_outcomes_ok am tx outs /\
-      gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := outs) ==>
-      ?marks. deploy_unit_execution_correct_with shadow_ctx marks
-        tops runtime_bc am tx dunit vs
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all deploy_relocated_data_layout >> strip_tac >>
-  `IS_SOME (FLOOKUP (lo_reloc prog prog') "runtime_begin")` by simp[] >>
-  `?exts ints fb cfo. classify_functions tops = (exts, ints, fb, cfo)` by
-    metis_tac[pairTheory.ABS_PAIR_THM] >>
-  Cases_on `cfo`
-  >- (qexists_tac `dunit.cu_context` >> rpt strip_tac >>
-      `vs.vs_outcomes = outs` by
-        (qpat_assum `gas_variant _ _`
-           (mp_tac o Q.AP_TERM `\s. s.vs_outcomes` o REWRITE_RULE [gas_variant_def]) >>
-         simp[]) >>
-      qpat_x_assum `vs.vs_outcomes = outs` (SUBST_ALL_TAC o SYM) >> qexists_tac `[]` >>
-      irule deploy_no_ctor_correct_with >> metis_tac[]) >>
-  drule_all deploy_ctor_code_exists >> strip_tac >>
-  drule_all deploy_ctor_body_shadow >> strip_tac >>
-  `supported_program tops /\ supported_program_deploy tops` by
-    fs[deploy_source_ok_def] >>
-  drule_all deploy_ctor_original_entry_shape >> strip_tac >>
-  qexists_tac `shadow_ctx` >> rpt strip_tac >>
-  `vs.vs_outcomes = outs` by
-    (qpat_assum `gas_variant _ _`
-       (mp_tac o Q.AP_TERM `\s. s.vs_outcomes` o REWRITE_RULE [gas_variant_def]) >>
-     simp[]) >>
-  qpat_x_assum `vs.vs_outcomes = outs` (SUBST_ALL_TAC o SYM) >>
-  reverse (Cases_on `?mut nr' body' am_c es0.
-    deploy_ctor_start tops am tx (mut, nr', body', am_c, es0)`)
-  >- (fs[] >> qexists_tac `[]` >> irule deploy_ctor_prefix_fail_with >>
-      metis_tac[]) >>
-  pop_assum strip_assume_tac >> irule deploy_ctor_body_joint_with >> metis_tac[]
-QED
-
-Theorem deploy_unit_execution_correct_joint:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es) ==>
-    deploy_unit_execution_correct tops runtime_bc am tx dunit vs
-Proof
-  rpt strip_tac >>
-  `deploy_bc = assemble prog` by fs[deploy_phases_def] >>
-  qpat_x_assum `deploy_bc = _` SUBST_ALL_TAC >>
-  drule_all (Q.SPEC `K SOME` deploy_unit_execution_correct_fixed_shadow |>
-             SIMP_RULE (srw_ss ()) [accepted_finalizers_def]) >>
-  disch_then (qx_choose_then `shadow_ctx` (qspecl_then
-    [`(deploy_entry_state prog cplan tops es).vs_outcomes`, `vs`] mp_tac)) >>
-  impl_tac
-  >- (simp[opt_deploy_entry_state_own_identity] >> drule deploy_state_rel_call_outcomes_ok >>
-      simp[deploy_entry_state_def, entry_venom_state_def]) >>
-  simp[deploy_unit_execution_correct_def, deploy_unit_execution_correct_at_with] >>
-  metis_tac[]
 QED
