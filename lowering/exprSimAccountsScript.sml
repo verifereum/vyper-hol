@@ -35,7 +35,7 @@ Ancestors
   exprSimUnopProps
   exprSimValues
   exprSimSource
-  exprSimHypsDefs
+  exprSimHypsDefs exprBodyPreProps
   loweringPosts
   list rich_list words integer_word byte
   fragExec freshWrites varsExt loweringSlice  exprSimHyps exprSimUnop
