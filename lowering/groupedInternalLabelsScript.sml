@@ -51,6 +51,30 @@ Proof
   simp[compile_entry_point_kwargs_def] >> label_steps [group_init_kwarg_labels]
 QED
 
+Theorem compile_entry_point_kwargs_layout:
+  compile_entry_point_kwargs ce (vars : (string # operand # type # expr) list)
+    off k label sa = ((),sb) /\
+  fn_has_code sa sb fn ==>
+  ?mid.
+    compile_init_kwargs ce vars off k (Lit 0w) sa = ((),mid) /\
+    fn_has_code sa mid fn /\ fn_has_code mid sb fn /\
+    emit_inst JMP [Label label] [] mid = ((),sb)
+Proof
+  simp[compile_entry_point_kwargs_def, comp_bind_def, comp_ignore_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `compile_init_kwargs _ _ _ _ _ sa = (u,mid)` >>
+  Cases_on `u` >> fs[] >>
+  `cs_extends sa mid /\ cs_extends mid sb` by
+    (conj_tac
+     >- (mp_tac (Q.ISPECL [`vars : (string # operand # type # expr) list`,`ce : compile_env`,
+              `off : num`,`k : num`,`Lit 0w : operand`,`sa : compile_state`]
+            group_init_kwarg_labels) >> asm_rewrite_tac[SND] >> simp[]) >>
+     qpat_assum `emit_inst JMP _ _ mid = _`
+       (mp_tac o MATCH_MP emit_inst_extends) >>
+     strip_tac >> simp[cs_extends_def, rich_listTheory.IS_PREFIX_APPEND]) >>
+  metis_tac[fn_has_code_split]
+QED
+
 Theorem selector_chain_labels[local]:
   !sels mid s. cs_extends s (SND (compile_selector_checks mid sels s)) /\
     EVERY (isPREFIX "@") (added_labels s (SND (compile_selector_checks mid sels s)))

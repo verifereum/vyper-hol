@@ -938,4 +938,3 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[fallback]:
 QED
 
 Finalise compile_selector_dispatch_linear_ptr_endpoint
-
