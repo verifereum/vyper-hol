@@ -1,7 +1,7 @@
 Theory exprSimAbiEncodeArgsTupleProbe
 Ancestors
   exprSimAbiEncodeArgsLayoutContracts supportedTypes vyperTypeSystem
-  loweringPosts exprLowering compileEnv finite_map
+  loweringPosts exprLowering compileEnv context finite_map
 
 Definition tuple_narrow_def:
   tuple_narrow = TupleT [BaseT (BytesT (Dynamic 32)); BaseT (BytesT (Dynamic 32))]
@@ -81,10 +81,12 @@ Theorem tuple_singleton_compile:
   cfn ce tuple_wide (Call tuple_wide (IntCall (NONE,"f")) [] NONE) sa =
     (StackValue tuple_narrow op,sb) ==>
   compile_abi_encode_args cfn ce
-    [Call tuple_wide (IntCall (NONE,"f")) [] NONE] sa = ([op],sb)
+    [Call tuple_wide (IntCall (NONE,"f")) [] NONE] sa =
+    ([StackValue tuple_narrow op],sb)
 Proof
-  simp[compile_abi_encode_args_def, expr_can_mutate_def,
-       vyperASTTheory.expr_type_def, unwrap_value_def,
+  simp[compile_abi_encode_args_def, compile_ext_call_args_def,
+       compile_snapshot_vv_def, ext_call_arg_value_def, expr_can_mutate_def,
+       vyperASTTheory.expr_type_def, tuple_narrow_def, vv_type_def, is_word_type_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def]
 QED
 

@@ -30,6 +30,7 @@ Proof
   qpat_x_assum `abi_builtin_encode_method_id NONE _ _ = _`
     (mp_tac o SIMP_RULE (srw_ss()) [abi_builtin_encode_method_id_def, comp_return_def]) >>
   disch_then SUBST_ALL_TAC >> RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >>
+  rename1 `compile_alloc_buffer _ st = (buf,allocated)` >>
   drule abi_builtin_alloc_buffer_shape >> strip_tac >>
   imp_res_tac emitted_insts_emit_op >> imp_res_tac abi_decoder_operand_live_emit >>
   `allocated.cs_next_var <= limit_st.cs_next_var /\ st.cs_next_var <= allocated.cs_next_var`

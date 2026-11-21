@@ -126,6 +126,8 @@ current series contains:
 - `5386-complex-compare-reject.patch`, vyperlang/vyper#5386: `==` and `!=` on
   structs, arrays and tuples are rejected with `TypeMismatch`, as in legacy
   codegen, instead of comparing the operands' memory pointers.
+- `5389-abi-encode-standalone-value.patch`, vyperlang/vyper#5389 (open):
+  `abi_encode(t, ensure_tuple=False)` encodes a tuple as one value.
 - `local-dft-create-abort.patch`, not upstream: makes Python's DFT schedule as
   the HOL pass does where it deliberately departs from upstream:
   `create`/`create2` count as aborts. Its name sorts after the PR files it

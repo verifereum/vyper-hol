@@ -1,6 +1,6 @@
 Theory exprSimAbiEncodeArgsLayoutProbe
 Ancestors
-  exprSimHypsDefs loweringPosts exprLowering compileEnv vyperTypeSystem
+  exprSimHypsDefs loweringPosts exprLowering compileEnv context vyperTypeSystem
   finite_map
 
 Definition layout_narrow_def:
@@ -74,15 +74,16 @@ Proof
   EVAL_TAC >> simp[wordsTheory.dimword_def]
 QED
 
-(* The singleton argument path does not request a layout conversion:
-   a returned stack pointer is passed straight to abi_args_post. *)
+(* The singleton argument path retains the value at its returned layout. *)
 Theorem layout_singleton_compile:
   cfn ce layout_wide (Call layout_wide (IntCall (NONE,"f")) [] NONE) sa =
     (StackValue layout_narrow op,sb) ==>
   compile_abi_encode_args cfn ce
-    [Call layout_wide (IntCall (NONE,"f")) [] NONE] sa = ([op],sb)
+    [Call layout_wide (IntCall (NONE,"f")) [] NONE] sa =
+    ([StackValue layout_narrow op],sb)
 Proof
-  simp[compile_abi_encode_args_def, expr_can_mutate_def,
-       vyperASTTheory.expr_type_def, unwrap_value_def,
+  simp[compile_abi_encode_args_def, compile_ext_call_args_def,
+       compile_snapshot_vv_def, ext_call_arg_value_def, expr_can_mutate_def,
+       vyperASTTheory.expr_type_def, layout_narrow_def, vv_type_def, is_word_type_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def]
 QED

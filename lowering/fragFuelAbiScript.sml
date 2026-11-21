@@ -366,14 +366,11 @@ Theorem fuel_ok_compile_abi_decode_complex_elems =
 (* ===== Builtins: abi_encode, abi_decode ===== *)
 
 Theorem fuel_ok_compile_lower_abi_encode:
-  !ensure_tuple method_id_opt src_op enc_info maxlen Wv E.
-    fuel_ok Wv {} E
-      (lower_abi_encode ensure_tuple method_id_opt src_op enc_info maxlen)
+  (!dst. fuel_ok Wv {} E (encode dst)) ==>
+  fuel_ok Wv {} E (lower_abi_encode method_id_opt maxlen encode)
 Proof
-  Cases_on `method_id_opt` >> simp_tac (srw_ss()) [lower_abi_encode_def] >>
-  rpt gen_tac >>
-  fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void_any,
-             fuel_ok_compile_alloc_buffer, fuel_ok_compile_abi_encode_to_buf] >>
+  strip_tac >> Cases_on `method_id_opt` >> simp_tac (srw_ss()) [lower_abi_encode_def] >>
+  fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void_any, fuel_ok_compile_alloc_buffer] >>
   simp[is_terminator_def]
 QED
 

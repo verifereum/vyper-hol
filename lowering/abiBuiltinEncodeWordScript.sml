@@ -13,11 +13,11 @@ Ancestors
 
 (* The complete ABI encoder extends the compiler fragment and both counters. *)
 Theorem lower_abi_encode_extends:
-  lower_abi_encode ensure method_id_opt src info maxlen st = (out,final) ==>
+  lower_abi_encode method_id_opt maxlen (\dst. compile_abi_encode_to_buf dst src info) st = (out,final) ==>
   cs_extends st final /\ st.cs_next_var <= final.cs_next_var /\
   st.cs_next_id <= final.cs_next_id
 Proof
-  strip_tac >> drule lower_abi_encode_trace >> strip_tac >>
+  strip_tac >> drule lower_abi_encode_trace >> BETA_TAC >> strip_tac >>
   drule abi_builtin_encode_setup_shape >> strip_tac >>
   drule abi_builtin_encode_finish_shape >> strip_tac >>
   drule abi_encoder_counters >> strip_tac >>
@@ -29,125 +29,6 @@ Proof
   `cs_extends st final` by
     (irule cs_extends_trans >> qexists_tac `body_end` >> asm_simp_tac bool_ss []) >>
   Cases_on `method_id_opt` >> asm_simp_tac (srw_ss()) [] >> decide_tac
-QED
-
-(* ===== Code ===== *)
-
-(* Exact compiler traces for all three AbiEncode dispatcher paths. *)
-
-Theorem compile_abi_encode_memory_trace:
-  ~is_word_type (expr_type e) /\
-  cfn ce (expr_type e) e origin = (LocatedValue (expr_type e) srcptr,ready) /\
-  srcptr.ptr_location = LocMemory /\
-  compile_type_builtin_dispatch_body cfn ce vv_ty ty (AbiEncode F method_id) ret_ty [e] origin =
-    (vv,final) ==>
-  ?out. lower_abi_encode F (OPTION_MAP bytes_method_id_word method_id) srcptr.ptr_operand
-      (type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e))
-      (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)) ready = (out,final) /\
-    vv = LocatedValue vv_ty (mk_ptr out LocMemory)
-Proof
-  strip_tac >>
-  gvs[compile_type_builtin_dispatch_body_def, unwrap_value_def, comp_return_def, LET_THM] >>
-  drule as_ptr_val_result >> simp[]
-QED
-
-Theorem compile_abi_encode_word_trace:
-  is_word_type (expr_type e) /\
-  lower_value cfn ce (expr_type e) e origin = (value_op,arg_st) /\
-  compile_type_builtin_dispatch_body cfn ce vv_ty ty (AbiEncode F method_id) ret_ty [e] origin =
-    (vv,final) ==>
-  ?buf allocated staged out.
-    compile_alloc_buffer 32 arg_st = (buf,allocated) /\
-    emit_void MSTORE [buf.buf_operand;value_op] allocated = ((),staged) /\
-    lower_abi_encode F (OPTION_MAP bytes_method_id_word method_id) buf.buf_operand
-      (type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e))
-      (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)) staged = (out,final) /\
-    vv = LocatedValue vv_ty (mk_ptr out LocMemory)
-Proof
-  strip_tac >>
-  gvs[compile_type_builtin_dispatch_body_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  rename1 `compile_alloc_buffer 32 arg_st = (buf,allocated)` >>
-  rename1 `emit_void MSTORE [buf.buf_operand;value_op] allocated = ((),staged)` >>
-  drule as_ptr_val_result >> strip_tac >>
-  rename1 `lower_abi_encode _ _ _ _ _ staged = (out,final)` >>
-  qexists_tac `out` >> simp[]
-QED
-
-Theorem compile_abi_encode_tuple_trace:
-  ~(LENGTH args = 1 /\ ~ensure) /\
-  compile_abi_encode_args cfn ce args origin = (ops,arg_st) /\
-  compile_type_builtin_dispatch_body cfn ce vv_ty ty (AbiEncode ensure method_id) ret_ty args origin =
-    (vv,final) ==>
-  ?buf allocated staged out.
-    compile_alloc_buffer (type_memory_bytes ce (TupleT (MAP (lowered_value_type ce) args))) arg_st = (buf,allocated) /\
-    compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (ops,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
-    lower_abi_encode ensure (OPTION_MAP bytes_method_id_word method_id) buf.buf_operand
-      (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)))
-      (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) staged = (out,final) /\
-    vv = LocatedValue vv_ty (mk_ptr out LocMemory)
-Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `compile_type_builtin_dispatch_body _ _ _ _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac (srw_ss()) [compile_type_builtin_dispatch_body_def, LET_THM] >> strip_tac >>
-  rpt (pairarg_tac >> gvs[]) >>
-  rename1 `compile_alloc_buffer _ arg_st = (buf,allocated)` >>
-  rename1 `compile_store_abi_tuple _ _ _ _ allocated = ((),staged)` >>
-  drule as_ptr_val_result >> strip_tac >>
-  rename1 `lower_abi_encode _ _ _ _ _ staged = (out,final)` >>
-  qexists_tac `out` >> simp[]
-QED
-
-(* ===== Correct ===== *)
-
-(* Compose argument evaluation with the actual singleton memory AbiEncode path.
-   Source conversion and complete memory/resource predicates are explicit. *)
-
-Theorem compile_abi_encode_memory_source:
-  let src_ty = expr_type e in
-  let maxlen = abi_size_bound ce.ce_struct_fields (lowered_value_type ce e) in
-  let bytes = abi_encode_method_id_bytes method_id ++ enc (vyper_to_abi_type (get_tenv cx) src_ty) av in
-  ~is_word_type src_ty /\
-  cfn ce src_ty e origin = (LocatedValue src_ty srcptr,ready) /\ srcptr.ptr_location = LocMemory /\
-  compile_type_builtin_dispatch_body cfn ce vv_ty ty (AbiEncode F method_id) ret_ty [e] origin =
-    (vv,final) /\ fn_has_code ready final func /\
-  (ready.cs_blocks = final.cs_blocks \/
-    !bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>
-      phi_prefix_length bb.bb_instructions = 0) /\
-  well_typed_type_builtin_args (AbiEncode F method_id) (TupleT [src_ty]) [src_ty] /\
-  vyper_to_abi (get_tenv cx) src_ty v = SOME av /\
-  abi_builtin_encode_pre (type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e))
-    (vyper_to_abi_type (get_tenv cx) src_ty) av ready (OPTION_MAP bytes_method_id_word method_id)
-    srcptr.ptr_operand sb source_cap p maxlen first last b cap prepared /\
-  final.cs_next_id <= last /\ final.cs_next_var <= limit_st.cs_next_var /\
-  fresh_vars_wrt limit_st prepared /\ ~prepared.vs_halted /\
-  prepared.vs_current_bb = ready.cs_current_bb /\ prepared.vs_inst_idx = LENGTH ready.cs_current_insts /\
-  abi_decode_sim ctx func initial prepared ==>
-  ?actual. evaluate_type_builtin cx (AbiEncode F method_id) (TupleT [src_ty]) arg_tys [v] = INL (BytesV bytes) /\
-    vv_location vv = SOME LocMemory /\ eval_operand (vv_operand vv) actual = SOME (n2w p) /\
-    val_in_memory (BaseTV (BytesT (Dynamic (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))))
-      (BytesV bytes) p actual.vs_memory /\
-    abi_builtin_encode_effect first last ready final limit_st p
-      (32+32*word_size (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))
-      (case method_id of NONE => 0 | SOME _ => 32) b cap prepared actual /\
-    actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
-    ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
-Proof
-  simp_tac bool_ss [LET_THM] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all compile_abi_encode_memory_trace >> strip_tac >>
-  drule abi_builtin_encode_checked_prefix >> strip_tac >>
-  `evaluate_type_builtin cx (AbiEncode F method_id) (TupleT [expr_type e]) arg_tys [v] =
-    INL (BytesV (abi_encode_method_id_bytes method_id ++
-      enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av))` by
-    (irule abi_builtin_encode_source_single >>
-     rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
-  drule_all lower_abi_encode_run >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
-  qpat_assum `abi_builtin_encode_prefix _ = _` (fn prefix =>
-    RULE_ASSUM_TAC (PURE_REWRITE_RULE [prefix, abi_builtin_encode_store_case])) >>
-  rename1 `abi_decode_sim ctx func prepared actual` >>
-  qexists_tac `actual` >> asm_simp_tac (srw_ss()) [vv_location_def, vv_operand_def, mk_ptr_def] >>
-  irule abi_decode_sim_trans >> qexists_tac `prepared` >> asm_simp_tac bool_ss []
 QED
 
 (* ===== Stage Code ===== *)
@@ -188,7 +69,7 @@ QED
 Theorem abi_builtin_encode_word_context:
   compile_alloc_buffer 32 st = (buf,allocated) /\
   emit_void MSTORE [buf.buf_operand;value_op] allocated = ((),staged) /\
-  lower_abi_encode ensure method_id_opt buf.buf_operand info maxlen staged = (out,final) /\
+  lower_abi_encode method_id_opt maxlen (\dst. compile_abi_encode_to_buf dst buf.buf_operand info) staged = (out,final) /\
   fn_has_code st final func ==>
   fn_has_code st staged func /\ fn_has_code staged final func /\
   staged.cs_next_var <= final.cs_next_var /\ staged.cs_next_id <= final.cs_next_id /\
@@ -337,108 +218,3 @@ QED
 
 (* Source semantics of the actual singleton word AbiEncode dispatcher path.
    Its source memory is established by executing allocation and MSTORE. *)
-
-Theorem compile_abi_encode_word_source:
-  let src_ty = expr_type e in
-  let maxlen = abi_size_bound ce.ce_struct_fields (lowered_value_type ce e) in
-  let at = vyper_to_abi_type (get_tenv cx) src_ty in
-  let bytes = abi_encode_method_id_bytes method_id ++ enc at av in
-  is_word_type src_ty /\
-  type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e) = AbiCopy 32 /\
-  lower_value cfn ce src_ty e origin = (value_op,arg_st) /\
-  compile_type_builtin_dispatch_body cfn ce vv_ty ty (AbiEncode F method_id) ret_ty [e] origin =
-    (vv,final) /\ fn_has_code arg_st final func /\
-  (arg_st.cs_blocks = final.cs_blocks \/
-    !bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>
-      phi_prefix_length bb.bb_instructions = 0) /\
-  well_typed_type_builtin_args (AbiEncode F method_id) (TupleT [src_ty]) [src_ty] /\
-  vyper_to_abi (get_tenv cx) src_ty v = SOME av /\
-  has_type at av /\ ~is_dynamic at /\ static_length at = 32 /\
-  word_to_bytes w T = enc at av /\ LENGTH (enc at av) <= maxlen /\
-  eval_operand value_op prepared = SOME w /\ abi_decoder_operand_live arg_st.cs_next_var value_op /\
-  ((FLOOKUP prepared.vs_allocas arg_st.cs_next_id = NONE /\ sb = prepared.vs_alloca_next) \/
-    FLOOKUP prepared.vs_allocas arg_st.cs_next_id = SOME (sb,32)) /\
-  abi_builtin_encode_resources (arg_st with cs_next_id := arg_st.cs_next_id+2)
-    (OPTION_MAP bytes_method_id_word method_id) sb 32 p maxlen first last b cap
-    (abi_builtin_allocate_state arg_st.cs_next_id 32 prepared) /\
-  final.cs_next_id <= last /\ final.cs_next_var <= limit_st.cs_next_var /\
-  fresh_vars_wrt limit_st prepared /\ ~prepared.vs_halted /\
-  prepared.vs_current_bb = arg_st.cs_current_bb /\ prepared.vs_inst_idx = LENGTH arg_st.cs_current_insts /\
-  abi_decode_sim ctx func initial prepared ==>
-  ?actual. evaluate_type_builtin cx (AbiEncode F method_id) (TupleT [src_ty]) arg_tys [v] = INL (BytesV bytes) /\
-    vv_location vv = SOME LocMemory /\ eval_operand (vv_operand vv) actual = SOME (n2w p) /\
-    mload p actual = n2w (LENGTH bytes) /\ mem_bytes_at (p+32) (LENGTH bytes) actual.vs_memory = bytes /\
-    val_in_memory (BaseTV (BytesT (Dynamic (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))))
-      (BytesV bytes) p actual.vs_memory /\
-    abi_builtin_encode_staged_effect first last arg_st final limit_st sb 32 p
-      (32+32*word_size (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))
-      (case method_id of NONE => 0 | SOME _ => 32) b cap prepared actual /\
-    actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
-    ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
-Proof
-  simp_tac bool_ss [LET_THM] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all compile_abi_encode_word_trace >> strip_tac >>
-  drule_all abi_builtin_encode_word_context >> strip_tac >>
-  `staged.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
-  mp_tac (Q.INST [`st` |-> `arg_st`, `initial` |-> `prepared:venom_state`,
-    `ty` |-> `expr_type e`, `at` |-> `vyper_to_abi_type (get_tenv cx) (expr_type e)`,
-    `method_id_opt` |-> `OPTION_MAP bytes_method_id_word method_id`,
-    `maxlen` |-> `abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)`]
-    (Q.ISPEC `ce.ce_struct_fields` (Q.GEN `sf` abi_builtin_encode_word_prepare))) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  rename1 `abi_decode_sim ctx func prepared staged_state` >>
-  `type_to_abi_enc_info ce.ce_struct_fields ce (expr_type e) = AbiCopy 32` by
-    simp[abi_builtin_encode_word_info] >>
-  drule abi_builtin_encode_checked_prefix >> strip_tac >>
-  `evaluate_type_builtin cx (AbiEncode F method_id) (TupleT [expr_type e]) arg_tys [v] =
-    INL (BytesV (abi_encode_method_id_bytes method_id ++
-      enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av))` by
-    (irule abi_builtin_encode_source_single >>
-     rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
-  `abi_builtin_encode_pre (type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e))
-    (vyper_to_abi_type (get_tenv cx) (expr_type e)) av staged
-    (OPTION_MAP bytes_method_id_word method_id) buf.buf_operand sb 32 p
-    (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)) first last b cap staged_state` by
-    metis_tac [] >>
-  `?actual.
-    eval_operand out actual = SOME (n2w p) /\
-    mload p actual = n2w (LENGTH (abi_builtin_encode_prefix
-      (OPTION_MAP bytes_method_id_word method_id) ++
-      enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av)) /\
-    mem_bytes_at (p+32) (LENGTH (abi_builtin_encode_prefix
-      (OPTION_MAP bytes_method_id_word method_id) ++
-      enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av)) actual.vs_memory =
-      abi_builtin_encode_prefix (OPTION_MAP bytes_method_id_word method_id) ++
-      enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av /\
-    val_in_memory (BaseTV (BytesT (Dynamic
-      (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e) +
-       LENGTH (abi_builtin_encode_prefix (OPTION_MAP bytes_method_id_word method_id))))))
-      (BytesV (abi_builtin_encode_prefix (OPTION_MAP bytes_method_id_word method_id) ++
-        enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av)) p actual.vs_memory /\
-    abi_builtin_encode_effect first last staged final limit_st p
-      (32+32*word_size (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+
-        LENGTH (abi_builtin_encode_prefix (OPTION_MAP bytes_method_id_word method_id))))
-      (case OPTION_MAP bytes_method_id_word method_id of NONE => 0 | SOME _ => 32)
-      b cap staged_state actual /\
-    FLOOKUP actual.vs_allocas staged.cs_next_id = SOME (p,
-      32+32*word_size (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+
-        LENGTH (abi_builtin_encode_prefix (OPTION_MAP bytes_method_id_word method_id)))) /\
-    actual.vs_current_bb = final.cs_current_bb /\
-    actual.vs_inst_idx = LENGTH final.cs_current_insts /\
-    ~actual.vs_halted /\ abi_decode_sim ctx func staged_state actual` by
-    (irule (INST_TYPE [alpha |-> bool, beta |-> ``:string``, gamma |-> ``:num``]
-       lower_abi_encode_run) >>
-     asm_simp_tac bool_ss [] >> metis_tac []) >>
-  qpat_assum `abi_builtin_encode_prefix _ = _` (fn prefix =>
-    RULE_ASSUM_TAC (PURE_REWRITE_RULE [prefix, abi_builtin_encode_store_case])) >>
-  rename1 `abi_decode_sim ctx func staged_state actual` >>
-  `abi_builtin_encode_staged_effect first last arg_st final limit_st sb 32 p
-    (32+32*word_size (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+LENGTH (abi_encode_method_id_bytes method_id)))
-    (case method_id of NONE => 0 | SOME _ => 32) b cap prepared actual` by
-    (irule abi_builtin_encode_producer_compose >>
-     qexistsl_tac [`staged_state`, `staged`] >> asm_simp_tac bool_ss [] >> decide_tac) >>
-  `abi_decode_sim ctx func prepared actual` by
-    (irule abi_decode_sim_trans >> qexists_tac `staged_state` >> asm_simp_tac bool_ss []) >>
-  qexists_tac `actual` >> asm_simp_tac (srw_ss()) [vv_location_def, vv_operand_def, mk_ptr_def] >>
-  irule abi_decode_sim_trans >> qexists_tac `prepared` >> asm_simp_tac bool_ss []
-QED

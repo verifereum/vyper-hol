@@ -533,9 +533,10 @@ Proof
 QED
 
 Theorem deploy_blocks_frame_lower_abi_encode[simp]:
-  deploy_blocks_frame (lower_abi_encode tuple mid src info maxlen)
+  (!dst. deploy_blocks_frame (encode dst)) ==>
+  deploy_blocks_frame (lower_abi_encode mid maxlen encode)
 Proof
-  apply_symbolic_frame symbolic_frame_lower_abi_encode >> simp[]
+  strip_tac >> apply_symbolic_frame symbolic_frame_lower_abi_encode >> simp[]
 QED
 
 Theorem deploy_blocks_frame_lower_abi_decode[simp]:

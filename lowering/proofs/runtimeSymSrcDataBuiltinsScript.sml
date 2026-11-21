@@ -397,8 +397,8 @@ QED
 
 Theorem runtime_data_frame_lower_abi_encode:
   (!n. runtime_data_frame (compile_alloc_buffer n)) /\
-  (!p s i. runtime_data_frame (compile_abi_encode_to_buf p s i)) ==>
-  runtime_data_frame (lower_abi_encode tuple mid src info maxlen)
+  (!dst. runtime_data_frame (encode dst)) ==>
+  runtime_data_frame (lower_abi_encode mid maxlen encode)
 Proof
   strip_tac >> apply_symbolic_frame symbolic_frame_lower_abi_encode >> simp[]
 QED

@@ -96,10 +96,15 @@ Proof
   metis_tac[ADD_COMM]
 QED
 
-Theorem dalloca_windows_lower_abi:
-  preserves_dalloca_windows window (lower_abi_encode ensure mid src enc_info sz) /\
+Theorem dalloca_windows_lower_abi_encode:
+  (!dst. preserves_dalloca_windows window (encode dst)) ==>
+  preserves_dalloca_windows window (lower_abi_encode mid sz encode)
+Proof
+  strip_tac >> Cases_on `mid` >> simp[lower_abi_encode_def] >> windows_tac []
+QED
+
+Theorem dalloca_windows_lower_abi_decode:
   preserves_dalloca_windows window (lower_abi_decode src dec_info lo hi sz)
 Proof
-  Cases_on `mid` >> simp[lower_abi_encode_def, lower_abi_decode_def] >> conj_tac >>
-  windows_tac [dalloca_windows_abi_encode, dalloca_windows_abi_decode]
+  simp[lower_abi_decode_def] >> windows_tac [dalloca_windows_abi_decode]
 QED

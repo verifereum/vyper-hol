@@ -103,10 +103,10 @@ Proof
   rpt strip_tac >> windows_tac [] >> gvs[] >>
   finish_window_state
     (List.concat (map CONJUNCTS
-      [dalloca_windows_base_operations, dalloca_windows_bytes_ops,
-       dalloca_windows_lower_abi]) @
+      [dalloca_windows_base_operations, dalloca_windows_bytes_ops]) @
      [dalloca_windows_convert, dalloca_windows_bytestring_widen_copy,
-      dalloca_windows_store_abi_tuple, dalloca_windows_clamp_basetype]) >>
+      dalloca_windows_lower_abi_encode, dalloca_windows_lower_abi_decode,
+      dalloca_windows_abi_encode_payload, dalloca_windows_clamp_basetype]) >>
   rpt (first_assum irule >> simp[]) >>
   simp[EL_MEM, builtin_operand_members]
 QED

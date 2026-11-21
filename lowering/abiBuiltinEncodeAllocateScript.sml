@@ -19,16 +19,14 @@ Definition abi_builtin_encode_allocate_def:
 End
 
 Theorem abi_builtin_encode_setup_allocate:
-  abi_builtin_encode_setup method_id_opt maxlen =
-    do ops <- abi_builtin_encode_allocate
-         (32+32*word_size (maxlen+(case method_id_opt of NONE => 0 | SOME _ => 4)))
-         (32+(case method_id_opt of NONE => 0 | SOME _ => 4));
-       abi_builtin_encode_method_id method_id_opt (FST ops);
+  abi_builtin_encode_setup NONE maxlen =
+    do ops <- abi_builtin_encode_allocate (32+32*word_size maxlen) 32;
+       abi_builtin_encode_method_id NONE (FST ops);
        return ops
     od
 Proof
-  simp_tac bool_ss [FUN_EQ_THM, abi_builtin_encode_setup_def, abi_builtin_encode_allocate_def,
-    comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
+  simp[FUN_EQ_THM, abi_builtin_encode_setup_def, abi_builtin_encode_allocate_def,
+    abi_builtin_encode_method_id_def, comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
   rpt gen_tac >> rpt (pairarg_tac >> gvs[])
 QED
 
@@ -44,21 +42,6 @@ Proof
   rename1 `compile_alloc_buffer outsz st = (buf,allocated)` >>
   rename1 `emit_op ADD _ allocated = (data_ptr,address_st)` >>
   qexistsl_tac [`buf`, `allocated`, `data_ptr`] >> simp[]
-QED
-
-Theorem abi_builtin_encode_setup_allocate_trace:
-  abi_builtin_encode_setup method_id_opt maxlen st = (ops,ready) ==>
-  ?address_st.
-    abi_builtin_encode_allocate
-      (32+32*word_size (maxlen+(case method_id_opt of NONE => 0 | SOME _ => 4)))
-      (32+(case method_id_opt of NONE => 0 | SOME _ => 4)) st = (ops,address_st) /\
-    abi_builtin_encode_method_id method_id_opt (FST ops) address_st = ((),ready)
-Proof
-  simp_tac bool_ss [abi_builtin_encode_setup_allocate, comp_bind_def, comp_ignore_bind_def,
-    comp_return_def, LET_THM] >> pairarg_tac >> strip_tac >> gvs[] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  rename1 `abi_builtin_encode_allocate _ _ st = (ops,address_st)` >>
-  qexists_tac `address_st` >> simp[]
 QED
 
 Theorem abi_builtin_encode_allocate_shape:

@@ -4,7 +4,7 @@ Ancestors
   runtimeSymSrcDataExprBodies runtimeSymSrcDataExprCallbacks
   runtimeSymSrcDataExprCalls runtimeSymSrcDataExprAddressing
   runtimeSymSrcDataContext runtimeSymSrcDataABI
-  runtimeSymSrcDataBuiltins
+  runtimeSymSrcDataBuiltins runtimeSymSrcDataFrame symbolicSourceCompilerCallFrame
 
 (* Join the implementation libraries at their frame boundary.  These rules
    discharge only local helper premises; no compiler body is unfolded here. *)
@@ -82,6 +82,15 @@ Proof
        runtime_data_frame_array_subscript, runtime_data_frame_dynarray_pop]
 QED
 
+Theorem runtime_data_frame_abi_encode_payload[local]:
+  runtime_data_frame (compile_abi_encode_payload cenv single vs tys dst)
+Proof
+  irule (REWRITE_RULE [symbolic_frame_runtime]
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
+      (Q.GEN `R` symbolic_frame_abi_encode_payload))) >>
+  simp[runtime_data_frame_abi_encode_values_to_buf]
+QED
+
 Theorem runtime_data_frame_type_body_assembled:
   (!t e. runtime_data_frame (cfn cenv t e)) ==>
   runtime_data_frame (compile_type_builtin_dispatch_body cfn cenv vt ty tb rt args)
@@ -90,7 +99,7 @@ Proof
   simp[runtime_data_frame_lower_value, runtime_data_frame_bytestring_widen_copy,
        runtime_data_frame_builtin_empty_complex, runtime_data_frame_lower_abi_encode,
        runtime_data_frame_lower_abi_decode, runtime_data_frame_abi_encode_args,
-       runtime_data_frame_store_abi_tuple]
+       runtime_data_frame_abi_encode_payload]
 QED
 
 Theorem runtime_data_frame_builtin_body_assembled:

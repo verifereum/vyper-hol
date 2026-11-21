@@ -229,7 +229,8 @@ Theorem abi_encode_translated_no_block_run:
   evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\
   vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av /\
-  lower_abi_encode F mid op ei (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
+  lower_abi_encode mid (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
+    (\dst. compile_abi_encode_to_buf dst op ei)
     sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sa.cs_blocks = sb.cs_blocks /\ local_ptrs_reserved ce sa /\
@@ -265,7 +266,7 @@ Theorem abi_encode_translated_no_block_run:
     p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
     actual.vs_alloca_next < dimword (:256)
 Proof
-  strip_tac >> drule lower_abi_encode_trace >> strip_tac >>
+  strip_tac >> drule lower_abi_encode_trace >> BETA_TAC >> strip_tac >>
   drule abi_builtin_encode_setup_shape >> strip_tac >>
   drule abi_encoder_counters >> strip_tac >>
   drule abi_builtin_encode_finish_shape >> strip_tac >>
@@ -296,7 +297,8 @@ Theorem abi_encode_translated_no_block_observer:
   evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\
   vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av /\
-  lower_abi_encode F mid op ei (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
+  lower_abi_encode mid (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
+    (\dst. compile_abi_encode_to_buf dst op ei)
     sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sa.cs_blocks = sb.cs_blocks /\ local_ptrs_reserved ce sa /\

@@ -145,14 +145,13 @@ Proof
 QED
 
 Theorem entry_action_lower_abi_encode:
-  !ensure mid src info maxlen.
-    entry_action (lower_abi_encode ensure mid src info maxlen)
+  !mid src info maxlen.
+    entry_action (lower_abi_encode mid maxlen (\dst. compile_abi_encode_to_buf dst src info))
 Proof
-  rpt gen_tac >> Cases_on `mid`
-  >> simp[lower_abi_encode_def]
-  >> irule entry_action_bind >> simp[entry_action_alloc_buffer] >> gen_tac
-  >> irule entry_action_bind >> simp[entry_action_return] >> gen_tac
-  >> irule entry_action_bind >> simp[entry_action_emit_op] >> gen_tac
-  >> simp[entry_action_bind, entry_action_ignore_bind, entry_action_return,
-          entry_action_emit_op, entry_action_emit_void, entry_action_encoder_mutual]
+  rpt gen_tac >> Cases_on `mid` >>
+  simp[lower_abi_encode_def, comp_ignore_bind_def] >>
+  rpt (FIRST [
+    CHANGED_TAC (simp[entry_action_return, entry_action_alloc_buffer,
+      entry_action_emit_op, entry_action_emit_void, cj 2 entry_action_encoder_mutual]),
+    irule entry_action_bind, conj_tac, gen_tac])
 QED

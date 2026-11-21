@@ -297,16 +297,8 @@ Theorem abi_args_compile_mono:
   !args ce st.
     ci_mono st (SND (compile_abi_encode_args compile_expr ce args st))
 Proof
-  Induct >> rpt gen_tac >> rewrite_tac[exprLoweringTheory.compile_abi_encode_args_def] >>
-  simp[exprLoweringPropsTheory.ci_mono_comp_return] >>
-  ho_match_mp_tac exprLoweringPropsTheory.ci_mono_bind >> conj_tac
-  >- simp[cj 1 exprLoweringPropsTheory.compile_expr_ci_mono] >>
-  rpt strip_tac >> ho_match_mp_tac exprLoweringPropsTheory.ci_mono_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp[exprLoweringPropsTheory.ci_mono_compile_materialize_vv,
-                           exprLoweringPropsTheory.ci_mono_unwrap_value]) >>
-  rpt strip_tac >> ho_match_mp_tac exprLoweringPropsTheory.ci_mono_bind >> conj_tac
-  >- simp[] >>
-  simp[exprLoweringPropsTheory.ci_mono_comp_return]
+  simp[exprLoweringPropsTheory.ci_mono_compile_abi_encode_args,
+       cj 1 exprLoweringPropsTheory.compile_expr_ci_mono]
 QED
 
 Theorem abi_args_location_end_mono:
@@ -617,24 +609,6 @@ Proof
   `expr_val_rel cx (lowered_value_type ce e) v op u` by
     (irule abi_args_captured_value_kept >> metis_tac[]) >>
   irule abi_args_post_cons_frame >> metis_tac[]
-QED
-
-Theorem abi_args_compile_cons:
-  compile_abi_encode_args compile_expr ce (e::args) sa = (ops,sb) <=>
-  ?vv mid op sm tail.
-    compile_expr ce (expr_type e) e sa = (vv,mid) /\
-    (if ~is_word_type (expr_type e) /\ exprs_can_mutate ce args
-     then compile_materialize_vv ce (lowered_value_type ce e) vv mid
-     else unwrap_value ce vv mid) = (op,sm) /\
-    compile_abi_encode_args compile_expr ce args sm = (tail,sb) /\
-    ops = op::tail
-Proof
-  simp[exprLoweringTheory.compile_abi_encode_args_def,
-       comp_bind_def, comp_return_def,
-       pairTheory.pair_case_thm] >>
-  rpt (pairarg_tac >> simp[]) >>
-  Cases_on `~is_word_type (expr_type e) /\ exprs_can_mutate ce args` >>
-  gvs[] >> metis_tac[]
 QED
 
 Theorem abi_args_materialize_not_label:

@@ -34,6 +34,7 @@ Ancestors bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragG
   internalReturnMemoryInputs[qualified,ignore_grammar]
   abiBufferAllocationCode[qualified,ignore_grammar]
   bodyPtrPrecompileBuiltinsAllocationFrame[qualified,ignore_grammar]
+  bodyExprPreFacts[qualified] exprOracleStorageInterfaces[qualified]
 
   venomInst[qualified,ignore_grammar]
   bodyFullIfExpReach[qualified,ignore_grammar]
@@ -1101,6 +1102,21 @@ Proof
   metis_tac[intcall_args_defaults_typing_mutual]
 QED
 
+Theorem intcall_args_no_call_layout[local]:
+  !c e c'. c'.ce_struct_fields = c.ce_struct_fields /\
+    int_calls_expr e = [] ==> lowered_value_type c' e = lowered_value_type c e
+Proof
+  ho_match_mp_tac lowered_value_type_ind >> rpt strip_tac >>
+  gvs[lowered_value_type_def, vyperTypeCallGraphTheory.int_calls_expr_def] >>
+  `!e. MEM e args ==> int_calls_expr e = []` by
+    fs[exprOracleStorageInterfacesTheory.int_calls_exprs_empty_every, EVERY_MEM] >>
+  Cases_on `LENGTH args = 1 /\ ~ensure` >> gvs[]
+  >- (Cases_on `args` >> gvs[]) >>
+  `MAP (lowered_value_type c') args = MAP (lowered_value_type c) args` by
+    (irule MAP_CONG >> rw[] >> metis_tac[]) >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> IF_CASES_TAC >> gvs[]
+QED
+
 (* Pure allocation checks depend on layouts and overlap modules, not locals. *)
 Theorem intcall_args_pure_alloc_mutual[local]:
   (!tops e. supported_pure_expr tops e ==>
@@ -1128,10 +1144,18 @@ Proof
   fs[allocLimitsTheory.alloc_limits_expr_def, allocLimitsTheory.type_alloc_ok_def,
        exprLoweringTheory.copies_subscript_base_def] >>
   drule (cj 2 ctorDeployLoweringFrameSupportTheory.deploy_frame_supported_pure_no_extcode) >>
+  `!e. MEM e es ==> lowered_value_type c' e = lowered_value_type c e` by
+    (rpt strip_tac >> irule intcall_args_no_call_layout >> simp[] >>
+     fs[supportedExprsTheory.supported_pure_exprs_every, EVERY_MEM] >>
+     metis_tac[bodyExprPreFactsTheory.supported_pure_int_calls]) >>
+  `MAP (lowered_value_type c') es = MAP (lowered_value_type c) es` by
+    (irule MAP_CONG >> simp[]) >>
+  `type_alloc_ok c' = type_alloc_ok c` by
+    simp[FUN_EQ_THM, allocLimitsTheory.type_alloc_ok_def] >>
   Cases_on `es` >- simp[allocLimitsTheory.alloc_limits_expr_def] >>
   simp[supportedExprTraverseTheory.supported_expr_exists_def] >> strip_tac >>
   `~is_extcode h` by metis_tac[supportedExprTraverseTheory.supported_expr_exists_root] >>
-  simp[]
+  fs[]
 QED
 
 Theorem intcall_args_pure_allocs_frame:

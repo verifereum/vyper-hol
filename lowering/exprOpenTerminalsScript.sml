@@ -15,8 +15,8 @@ Ancestors
   exprOpenPrimitives builtinAbi abiEncoder compileEnv venomInst context exprLowering emitHelper
 
 Theorem lower_abi_encode_open:
-  !tuple mid src info maxlen sa v sb.
-    lower_abi_encode tuple mid src info maxlen sa = (v,sb) ==>
+  !mid maxlen encode sa v sb.
+    lower_abi_encode mid maxlen encode sa = (v,sb) ==>
     ~block_is_terminated sb
 Proof
   rpt gen_tac >> Cases_on `mid`
