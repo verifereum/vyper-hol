@@ -8,9 +8,8 @@
  * exprSimConvert proves (which rest on the cheated lower_value_word_shape).
  * Struct and array literals store each child with unwrap_value_sim, so
  * they carry exprSimUnwrap's cheated constructor immutable cases.
- * The other conversions, abi_encode and abi_decode are re-exported from
- * their leaf theories (exprSimConvertOther, exprSimAbiEncode,
- * exprSimAbiDecode).
+ * Other conversions and abi_decode are re-exported from their leaf theories
+ * (exprSimConvertOther and exprSimAbiDecode).
  *
  * TOP-LEVEL:
  *   compile_struct_lit_case, compile_make_array_case — StructLit, MakeArray
@@ -31,8 +30,7 @@
  *                           bool to an integer and from an integer to
  *                           bool; compile_convert_other_case for the rest
  *                           (#548)
- *   compile_abi_encode_case, compile_abi_decode_case — abi_encode (#551),
- *                           abi_decode with its validation aborts, row 4
+ *   compile_abi_decode_case — abi_decode with its validation aborts, row 4
  *
  * StructLit, MakeArray and empty(T) of a type that is not a word build
  * their value in a buffer of their own, an ALLOCA of type_memory_bytes
@@ -66,7 +64,6 @@ Theory exprSimAggregates
 Ancestors
   exprSimAggregatesAllocCounted
   exprSimAbiDecode
-  exprSimAbiEncode
   exprSimConvertOther
   exprWordOperand
   exprSimSource
@@ -1157,7 +1154,5 @@ Proof
   >- (gvs[] >> irule compile_convert_word_case >> simp[]) >>
   irule compile_convert_other_case >> metis_tac[]
 QED
-
-Theorem compile_abi_encode_case = exprSimAbiEncodeTheory.compile_abi_encode_case
 
 Theorem compile_abi_decode_case = exprSimAbiDecodeTheory.compile_abi_decode_case

@@ -288,27 +288,19 @@ Proof
 QED
 
 Theorem enc_straight_lower_abi_encode:
-  enc_straight_action (lower_abi_encode ensure mid src info maxlen)
+  enc_straight_action (lower_abi_encode mid maxlen (\dst. compile_abi_encode_to_buf dst src info))
 Proof
-  Cases_on `mid` >> simp[lower_abi_encode_def] >>
-  irule enc_straight_action_bind >> simp[enc_straight_action_alloc_buffer] >> gen_tac >>
-  irule enc_straight_action_bind >> simp[enc_straight_action_return] >> gen_tac >>
-  irule enc_straight_action_bind >> simp[enc_straight_action_emit_op, is_terminator_def] >> gen_tac >>
-  simp[enc_straight_action_bind, enc_straight_action_ignore_bind,
-       enc_straight_action_return, enc_straight_action_emit_op,
-       enc_straight_action_emit_void, enc_straight_encoder_mutual, is_terminator_def] >>
-  irule enc_straight_action_ignore_bind >> conj_tac
-  >- simp[enc_straight_action_bind, enc_straight_action_emit_op,
-          enc_straight_action_emit_void, is_terminator_def] >>
-  irule enc_straight_action_bind >> simp[enc_straight_encoder_mutual] >> gen_tac >>
-  simp[enc_straight_action_ignore_bind, enc_straight_action_bind,
-       enc_straight_action_emit_op, enc_straight_action_emit_void,
-       enc_straight_action_return, is_terminator_def]
+  Cases_on `mid` >> simp[lower_abi_encode_def, comp_ignore_bind_def] >>
+  rpt (FIRST [
+    CHANGED_TAC (simp[enc_straight_action_return, enc_straight_action_alloc_buffer,
+      enc_straight_action_emit_op, enc_straight_action_emit_void,
+      enc_straight_encoder_mutual, is_terminator_def]),
+    irule enc_straight_action_bind, conj_tac, gen_tac])
 QED
 
 Theorem lower_abi_encode_no_blocks_safe:
-  !ensure mid src info maxlen sa out sb.
-    lower_abi_encode ensure mid src info maxlen sa = (out,sb) /\
+  !mid src info maxlen sa out sb.
+    lower_abi_encode mid maxlen (\dst. compile_abi_encode_to_buf dst src info) sa = (out,sb) /\
     sa.cs_blocks = sb.cs_blocks ==>
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
       (emitted_insts sa sb)

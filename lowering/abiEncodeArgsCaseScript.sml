@@ -1,6 +1,6 @@
 Theory abiEncodeArgsCase
 Ancestors
-  abiEncodeArgsSim exprSimHyps exprSimSource exprSimHypsDefs vyperTypeInvariants
+  exprSimHyps exprSimSource exprSimHypsDefs vyperTypeInvariants
   vyperTypeSystem compileEnv arithmetic
 
 Theorem abi_args_fits_memory_bytes:
@@ -57,24 +57,6 @@ Proof
   gvs[wordsTheory.dimword_def] >> decide_tac
 QED
 
-Theorem abi_args_ready_cases:
-  !args.
-  exprs_case nocalls ctx func ce cx args /\
-  EVERY (\e. !es. expr_sim_inv ce cx env es ==>
-    expr_body_pre ce cx env e es /\ (nocalls ==> int_calls_expr e = [])) args ==>
-  abi_args_ready ctx func ce cx (expr_sim_inv ce cx env) args
-Proof
-  Induct >> simp[exprs_case_def, abi_args_ready_def] >> rpt strip_tac
-  >- (gvs[expr_sim_case_def] >> metis_tac[])
-  >- (gvs[expr_vv_case_def] >> metis_tac[])
-  >- metis_tac[expr_body_pre_res_ok]
-  >- metis_tac[abi_args_success_ready]
-  >- metis_tac[abi_args_success_ready]
-  >- (`expr_body_pre ce cx env h es` by metis_tac[] >>
-      drule_all abi_args_success_ready >> simp[]) >>
-  metis_tac[]
-QED
-
 Theorem abi_args_body_pre_arg:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) ty args) es /\
   MEM e args /\ expr_sim_inv ce cx env es' ==>
@@ -89,17 +71,4 @@ Proof
   gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
   metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
             alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
-QED
-
-Theorem abi_args_ready_case:
-  exprs_case nocalls ctx func ce cx args /\
-  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) ty args) es /\
-  (nocalls ==> int_calls_expr (TypeBuiltin ann (AbiEncode ensure mid) ty args) = []) ==>
-  abi_args_ready ctx func ce cx (expr_sim_inv ce cx env) args
-Proof
-  strip_tac >> irule abi_args_ready_cases >>
-  qexists `nocalls` >> simp[listTheory.EVERY_MEM] >> rpt strip_tac
-  >- (irule abi_args_body_pre_arg >> metis_tac[]) >>
-  gvs[vyperTypeCallGraphTheory.int_calls_expr_def] >>
-  metis_tac[int_calls_exprs_mem]
 QED

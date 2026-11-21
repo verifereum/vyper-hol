@@ -14,9 +14,9 @@ Theorem runtime_data_frame_type_builtin_dispatch_body:
   (!v ty. runtime_data_frame (compile_clamp_basetype v ty)) /\
   (!n. runtime_data_frame (compile_alloc_buffer n)) /\
   (!v. runtime_data_frame (unwrap_value cenv v)) /\
-  (!a:bool. !b c d e. runtime_data_frame (builtinAbi$lower_abi_encode a b c d e)) /\
+  (!mid maxlen single vs tys. runtime_data_frame
+    (lower_abi_encode mid maxlen (compile_abi_encode_payload cenv single vs tys))) /\
   (!args. runtime_data_frame (compile_abi_encode_args cfn cenv args)) /\
-  (!buf off vs. runtime_data_frame (compile_store_abi_tuple cenv buf off vs)) /\
   (!a b c d e. runtime_data_frame (lower_abi_decode a b c d e)) ==>
   runtime_data_frame (compile_type_builtin_dispatch_body cfn cenv vv_ty ty tb ret_ty args)
 Proof

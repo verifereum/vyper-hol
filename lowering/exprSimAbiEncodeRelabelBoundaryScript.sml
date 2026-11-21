@@ -54,7 +54,8 @@ Proof
 QED
 
 Theorem abi_encode_lower_phase_code:
-  lower_abi_encode ensure mid src info maxlen sa = (out,sb) /\
+  lower_abi_encode mid maxlen
+    (\dst. compile_abi_encode_to_buf dst src info) sa = (out,sb) /\
   fn_has_code sa sb func ==>
   ?ops ready len body_end.
     abi_builtin_encode_setup mid maxlen sa = (ops,ready) /\
@@ -69,7 +70,7 @@ Theorem abi_encode_lower_phase_code:
     ready.cs_next_var <= body_end.cs_next_var /\
     body_end.cs_next_var <= sb.cs_next_var
 Proof
-  strip_tac >> drule lower_abi_encode_trace >> strip_tac >>
+  strip_tac >> drule lower_abi_encode_trace >> BETA_TAC >> strip_tac >>
   drule_all abi_builtin_encode_code >> strip_tac >>
   qexistsl_tac [`ops`, `ready`, `len`, `body_end`] >> asm_rewrite_tac[]
 QED

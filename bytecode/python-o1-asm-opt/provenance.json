@@ -9,14 +9,14 @@
   },
   "fixtures": {
     "abi_dynamic": {
-      "deploy_sha256": "63653c3615b8bc575e025a24e4c93c849a10eefa6362b9d03f463fc8aa79c470",
-      "runtime_sha256": "42f639aed8e092eede75d99ab1cb2b72171ee363a7ed083e025d0a7d0d58c58a",
+      "deploy_sha256": "3229acd048ebfc7bc098e2e305846e3e9830e1db57276954f75dea2d858b3401",
+      "runtime_sha256": "4b8c5e8082717d29c0c257159a0997714e13a70051be802f532f5e88c1e45bf2",
       "source": "python-o1-no-asm-opt-sources/abi_dynamic.vy",
       "source_sha256": "89725c5a088cd659ef40135815703d8125c3023efd4a94c46b980cd7812e8bca"
     },
     "abi_static": {
-      "deploy_sha256": "61149cf83f42ff9e40134b91b3e764b7c35ce5c4a08c73a97a12bcdac591a6c6",
-      "runtime_sha256": "943082f405d466360dd376867281772ecb0319169119c40a05d72512707cd383",
+      "deploy_sha256": "9646afa0114da4b4c5f731e7ad6a39a9cd49baaaec24bdf3fcc5bbab431aa604",
+      "runtime_sha256": "32009a131d53b27503e1bb4a248bb996445905620e40baeacac52403479ac5dc",
       "source": "python-o1-no-asm-opt-sources/abi_static.vy",
       "source_sha256": "72656d72c65fbd1292a3270c686f6d8ea3a04d35e67049fda0234a21623bc714"
     },

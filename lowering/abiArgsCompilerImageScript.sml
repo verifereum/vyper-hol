@@ -379,7 +379,7 @@ Proof
 QED
 
 Theorem abi_image_abi_encode_not_label:
-  lower_abi_encode ensure mid src info maxlen sa = (op,sb) ==> op <> Label l
+  lower_abi_encode mid maxlen encode sa = (op,sb) ==> op <> Label l
 Proof
   simp[builtinAbiTheory.lower_abi_encode_def, LET_THM,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>

@@ -2151,15 +2151,11 @@ Theorem compile_abi_encode_args_length:
   !es cfn cenv sa.
     LENGTH (FST (compile_abi_encode_args cfn cenv es sa)) = LENGTH es
 Proof
-  Induct >> simp[compile_abi_encode_args_def, comp_return_def,
-                comp_bind_def, LET_THM] >>
-  rpt gen_tac >>
-  Cases_on `cfn cenv (expr_type h) h sa` >> simp[] >>
-  Cases_on `~is_word_type (expr_type h) /\ exprs_can_mutate cenv es` >> simp[] >>
-  pairarg_tac >> asm_simp_tac bool_ss [pairTheory.UNCURRY_DEF] >>
-  pairarg_tac >> asm_simp_tac bool_ss [pairTheory.UNCURRY_DEF] >>
-  first_x_assum (qspecl_then [`cfn`, `cenv`, `cs'`] mp_tac) >>
-  asm_simp_tac (srw_ss()) []
+  simp[compile_abi_encode_args_def] >>
+  Induct >> simp[Once compile_ext_call_args_def, comp_return_def] >>
+  rpt gen_tac >> simp[Once compile_ext_call_args_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[comp_return_def] >>
+  first_x_assum (qspecl_then [`cfn`, `cenv`, `cs''`] mp_tac) >> simp[]
 QED
 
 Theorem ci_mono_compile_multi_exprs:
@@ -3289,21 +3285,6 @@ Proof
   rpt gen_tac >> once_rewrite_tac[exprLoweringTheory.compile_return_value_decode_def] >> BETA_TAC >> rpt (FIRST [irule ci_mono_bind, irule ci_mono_ignore_bind] >> conj_tac >| [rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select], all_tac]) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select]
 QED
 
-(* ABI staging reuses the memory-copy interfaces proved above. *)
-Theorem ci_mono_compile_store_abi_tuple[local]:
-  ∀cenv buf off elems sa.
-    ci_mono sa (SND (compile_store_abi_tuple cenv buf off elems sa))
-Proof
-  ho_match_mp_tac compile_store_abi_tuple_ind >> rpt strip_tac
-  >- simp[compile_store_abi_tuple_def, ci_mono_comp_return]
-  >> rewrite_tac[compile_store_abi_tuple_def] >> BETA_TAC >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac
-  >- simp[ci_mono_emit_op]
-  >> rpt strip_tac >> irule ci_mono_ignore_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp[ci_mono_emit_void, ci_mono_compile_copy_memory])
-  >> rpt strip_tac >> first_x_assum irule
-QED
-
 (* Reuse ci_mono_typed_memory_family and ci_mono_compile_store_memory above
    for both aggregate construction and external-call default materialization. *)
 Theorem ci_mono_compile_multi_vvs:
@@ -4304,16 +4285,26 @@ simp[ci_mono_compile_alloc_buffer, ci_mono_refl])
     simp[ci_mono_emit_inst, ci_mono_comp_return, ci_mono_refl])
 QED
 
-Theorem ci_mono_lower_abi_encode:
-  !ensure mid src info maxlen st.
-    ci_mono st (SND (lower_abi_encode ensure mid src info maxlen st))
+Theorem ci_mono_compile_abi_encode_payload:
+  ci_mono st (SND (compile_abi_encode_payload cenv single vs tys dst st))
 Proof
-  rpt gen_tac >> Cases_on `mid` >>
+  Cases_on `single` >> simp[compile_abi_encode_payload_def, ci_mono_compile_abi_encode_values_to_buf] >>
+  irule ci_mono_bind >> simp[ci_mono_unwrap_value] >>
+  rpt gen_tac >> IF_CASES_TAC >>
+  simp[ci_mono_ignore_bind, ci_mono_emit_void, ci_mono_comp_return,
+       cj 2 ci_mono_compile_abi_encode]
+QED
+
+Theorem ci_mono_lower_abi_encode:
+  (∀dst s. ci_mono s (SND (encode dst s))) ⇒
+  ci_mono st (SND (lower_abi_encode mid maxlen encode st))
+Proof
+  strip_tac >> Cases_on `mid` >>
   simp[builtinAbiTheory.lower_abi_encode_def, LET_THM] >>
   rpt (FIRST [
     CHANGED_TAC (simp[LET_THM, pairTheory.FORALL_PROD, pairTheory.UNCURRY_DEF,
       ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
-      ci_mono_compile_alloc_buffer, cj 2 ci_mono_compile_abi_encode]),
+      ci_mono_compile_alloc_buffer]),
     gen_tac,
     ho_match_mp_tac ci_mono_bind >> conj_tac,
     ho_match_mp_tac ci_mono_ignore_bind >> conj_tac])
@@ -4799,20 +4790,11 @@ Proof
   simp[ci_mono_as_stack_val, ci_mono_compile_clamp_basetype]
 QED
 
-Theorem ci_mono_compile_abi_encode_args[local]:
+Theorem ci_mono_compile_abi_encode_args:
   (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
-  ∀args cenv st. ci_mono st (SND (compile_abi_encode_args f cenv args st))
+  ci_mono st (SND (compile_abi_encode_args f cenv args st))
 Proof
-  strip_tac >> Induct >> rpt gen_tac >>
-  rewrite_tac[compile_abi_encode_args_def] >>
-  simp[ci_mono_comp_return] >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[] >>
-  rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
-  >- (IF_CASES_TAC >>
-      simp[ci_mono_compile_materialize_vv, ci_mono_unwrap_value]) >>
-  rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
-  >- simp[] >>
-  simp[ci_mono_comp_return]
+  simp[compile_abi_encode_args_def, ci_mono_compile_ext_call_args]
 QED
 
 Theorem ci_mono_type_builtin_abi_encode[local]:
@@ -4821,14 +4803,11 @@ Theorem ci_mono_type_builtin_abi_encode[local]:
     (AbiEncode ensure method_id) ret_ty args st))
 Proof
   strip_tac >> simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
-  (* Split singleton/no-wrap from tuple staging, then word from pointer. *)
-  rpt IF_CASES_TAC >>
-  rpt (irule ci_mono_uncurry >> reverse conj_tac
-       >- simp[ci_mono_lower_value_cfn, ci_mono_compile_abi_encode_args,
-               ci_mono_compile_alloc_buffer, ci_mono_compile_store_abi_tuple,
-               ci_mono_emit_void, ci_mono_unwrap_value]
-       >> rpt gen_tac >> BETA_TAC) >>
-  simp[ci_mono_as_ptr_val, ci_mono_lower_abi_encode]
+  irule ci_mono_uncurry >> reverse conj_tac
+  >- simp[ci_mono_compile_abi_encode_args] >>
+  rpt gen_tac >> BETA_TAC >>
+  simp[ci_mono_as_ptr_val] >>
+  simp[ci_mono_lower_abi_encode, ci_mono_compile_abi_encode_payload]
 QED
 
 Theorem ci_mono_type_builtin_abi_decode[local]:
