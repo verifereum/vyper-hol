@@ -14,7 +14,7 @@ Ancestors
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
   bodyFullForFrame bodyFullForHandlers bodyFullForRange bodyFullForStorage
-  bodyFullForArrayBranch
+  bodyFullForArrayBranch bodyStorageMetadata vyperSubscriptOverlap vyperValue vyperTyping
 
 val _ = Parse.hide "body";
 
@@ -83,6 +83,22 @@ Resume compile_for_frag_full[array]:
       conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC (SPEC_ALL stmtSimDefsTheory.alloca_frame_trans)) >>
       conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC (SPEC_ALL bodySimFullTheory.alloca_taint_kept_trans)) >>
       conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC (SPEC_ALL bodyFullForControlTheory.halt_exit_scopes_gas_obs)) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  Cases_on `?sid nid fld itv k atv bd.
+       e = Attribute (ArrayT typ bd) (TopLevelName (StructT sid) nid) fld /\
+       supported_immutable_type tops nid = SOME (StructT sid) /\
+       evaluate_type (get_tenv cx) (StructT sid) = SOME itv /\
+       evaluate_type (get_tenv cx) (ArrayT typ bd) = SOME atv /\
+       mem_path_offset itv [AttrSubscript fld] = SOME (k,atv) /\ 0 < k`
+  >- (`~supported_expr_exists (const_name_root cx) e` by
+        (drule_all bodySimTheory.body_inv_stmt_const_name_free >>
+         simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
+              supportedStmtTraverseTheory.supported_iterator_exists_def]) >>
+      qspecl_then
+        [`cx`,`id`,`typ`,`e`,`n`,`body`,`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,
+         `ctx`,`shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`env'`,`ret_ty`,
+         `lctx`,`RetQ`,`es`] MATCH_MP_TAC
+        bodyFullForArrayBranchTheory.compile_for_immutable_field_array_frag_full >>
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qspecl_then
     [`cx`,`id`,`typ`,`e`,`n`,`body`,`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,

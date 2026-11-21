@@ -1,7 +1,7 @@
 (* Source composition for the non-slot Array branch of For. *)
 Theory bodyFullForArrayBranch
 Ancestors
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv bodyStorageMetadata vyperSubscriptOverlap
   bodyFullForArrayRound gasOutcomeFull gasOutcomeFullCompose gasExemptCert
   gasContext gasSummary stmtSimForRounds stmtSimDefs exprSimDefs bodyPtrDefs
   haltExitProj vyperInterpreter vyperState vyperAST vyperValue
@@ -398,6 +398,51 @@ Proof
   disch_then ACCEPT_TAC
 QED
 *)
+(* GATE_ADMISSION: held, immutable struct-field array iterator at nonzero offset *)
+Theorem compile_for_immutable_field_array_frag_full:
+  !cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
+   shadow_func cenv env env' ret_ty lctx RetQ es.
+    ~(?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
+               supported_storage_value tops nid (ArrayT typ bd)) /\
+    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) /\ eval_iterator cx (Array e) s'3' = (INL vs,t') /\
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
+       (INL x,t'') ==>
+       body_for_full_ok cx tyv id body vs) /\
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_iterator_full_ok cx (Array e)) /\
+    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (For id typ (Array e) n body) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (For id typ (Array e) n body) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
+    stmt_exprs_ok cenv (For id typ (Array e) n body) /\
+    call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n body)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    ~supported_expr_exists (const_name_root cx) e /\
+    (?sid nid fld itv k atv bd.
+       e = Attribute (ArrayT typ bd) (TopLevelName (StructT sid) nid) fld /\
+       supported_immutable_type tops nid = SOME (StructT sid) /\
+       evaluate_type (get_tenv cx) (StructT sid) = SOME itv /\
+       evaluate_type (get_tenv cx) (ArrayT typ bd) = SOME atv /\
+       mem_path_offset itv [AttrSubscript fld] = SOME (k,atv) /\ 0 < k) ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (For id typ (Array e) n body))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n body)))
+      (eval_stmt cx (For id typ (Array e) n body)) es
+Proof
+  cheat
+QED
+
 Theorem compile_for_nonslot_array_frag_full:
   !cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
