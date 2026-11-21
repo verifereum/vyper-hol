@@ -13,6 +13,7 @@ Ancestors
   bodySimFull targetPlaceSimCases targetPlaceSimDefs
   gasShadow gasOutcomeFull loweringPosts exprLowering compileEnv
   ptrDiscipline venomState vyperInterpreter vyperState vyperAST
+  allocLimits vyperFixedShapePath
 
 (* New definition: target_post H (with ghost_inv) says what the target's
    pointer holds, not where it may point, and a fresh pointer derived
@@ -108,6 +109,11 @@ Definition imm_target_place_sim_full_def:
           s0.vs_alloca_next <= t.vs_alloca_next /\
           ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
           target_ptr_ok cenv (PlaceR (ImmutablePlace NONE id path)) r G tn t /\
+          op_prov G (FST r) = NONE /\
+          (!itv iv. ~target_through_dynarray cenv bt /\
+             FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+               | SOME imms => get_source_immutables NONE imms) id = SOME (itv,iv)
+             ==> fixed_shape_path itv path) /\
           ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
         (\H res ee gt q.
           expr_exit res q /\ halt_exit H cx ee res q /\
