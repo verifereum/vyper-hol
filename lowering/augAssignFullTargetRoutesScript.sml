@@ -2,6 +2,7 @@ Theory augAssignFullTargetRoutes
 Ancestors
   bodyAugPlaceTarget supportedStmts supportedTargets supportedTypes
   supportedExprForms supportedDecls bodySim targetPlaceSim list alist
+  exprSimHypsDefs vyperTypeSystem
 
 Theorem augassign_name_target_info:
   supported_stmt tops bindings (AugAssign ty (NameTarget id) bop e) ==>
@@ -43,6 +44,8 @@ QED
 Theorem augassign_other_target_routes:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (AugAssign ty t bop e) /\
+  expr_sim_inv cenv cx env es /\ target_mutable env t /\
+  (immutable_root cx t ==> ?nsid. t = TopLevelNameTarget nsid) /\
   ~(?id. t = NameTarget id) /\
   ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
   ~(?id fld. t = AttributeTarget (NameTarget id) fld) /\
@@ -57,10 +60,8 @@ Proof
   Cases_on `t`
   >- gvs[]
   >- suspend "toplevel"
-  >- (disj1_tac >> metis_tac[aug_place_supported_stmt_target_info,
-                            aug_place_supported_root_not_immutable]) >>
-  disj1_tac >> metis_tac[aug_place_supported_stmt_target_info,
-                        aug_place_supported_root_not_immutable]
+  >- (disj1_tac >> gvs[] >> metis_tac[aug_place_supported_stmt_target_info]) >>
+  disj1_tac >> gvs[] >> metis_tac[aug_place_supported_stmt_target_info]
 QED
 
 Resume augassign_other_target_routes[toplevel]:
@@ -74,7 +75,7 @@ Resume augassign_other_target_routes[toplevel]:
   `?pt. supported_target_info tops bindings (TopLevelNameTarget nsid) = SOME pt` by
     (Cases_on `supported_target_info tops bindings (TopLevelNameTarget nsid)` >>
      gvs[supported_aug_target_def]) >>
-  metis_tac[aug_place_supported_root_not_immutable]
+  metis_tac[aug_place_supported_toplevel_mutable]
 QED
 
 Finalise augassign_other_target_routes
