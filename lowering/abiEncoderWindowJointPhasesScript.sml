@@ -546,7 +546,12 @@ Resume window_array_root_prefix_joint_strong[word_pre]:
    eval_operand src u = SOME (n2w sb) /\
    eval_operand dst u = SOME (n2w d) /\
    sb+32 <= u.vs_alloca_next /\ d+32 <= u.vs_alloca_next` by
-    (fs[window_array_root_def] >> decide_tac) >>
+    (qpat_assum `window_array_root _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ u` mp_tac >>
+     qpat_assum `32 <= cap` mp_tac >>
+     qpat_assum `32 <= LENGTH (enc (Array NONE ty) (ListV avs))` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp_tac bool_ss [window_array_root_def] >> rpt strip_tac >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
   `u.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
   `~u.vs_halted /\ u.vs_current_bb = c1.cs_current_bb /\
    u.vs_inst_idx = LENGTH c1.cs_current_insts` by
