@@ -87,18 +87,7 @@ Proof
   simp[]
 QED
 
-Theorem runtime_sym_runtime_no_codesize:
-  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
-  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
-  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
-  supported_program tops /\ ~program_reads_self_code tops /\
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-  inst.inst_opcode <> CODESIZE
-Proof
-  strip_tac >> drule_all runtime_sym_runtime_insts >>
-  simp[EVERY_MEM, runtime_sym_inst_def] >> metis_tac[]
-QED
+
 
 Theorem runtime_sym_runtime_codecopy_source:
   check_contract mode layouts addr [(NONE,tops)] = SOME art /\
