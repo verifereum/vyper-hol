@@ -78,6 +78,54 @@ Proof
   gen_tac >> ACCEPT_TAC allocation_limit_defaults_return_eval
 QED
 
+(* @external
+   def f(h: bytes32 = sha256(b"x")):
+       pass
+   Python folds the default to a bytes32 literal and so does the frontend,
+   but a raw AST may keep the call. Evaluating it at entry would call the
+   sha256 precompile, which the lowering refuses; the folded default
+   still lowers. *)
+Definition sha256_default_program_def:
+  sha256_default_program =
+    [FunctionDecl External Nonpayable F F "f"
+       [("h", BaseT (BytesT (Fixed 32)))]
+       [Builtin (BaseT (BytesT (Fixed 32))) Sha256
+          [Literal (BaseT (BytesT (Dynamic 1))) (BytesL [120w])]]
+       NoneT [Pass]]
+End
+
+Definition sha256_folded_default_program_def:
+  sha256_folded_default_program =
+    [FunctionDecl External Nonpayable F F "f"
+       [("h", BaseT (BytesT (Fixed 32)))]
+       [Literal (BaseT (BytesT (Fixed 32))) (BytesL (REPLICATE 32 0w))]
+       NoneT [Pass]]
+End
+
+val sha256_default_eval =
+  EVAL ``lower_vyper_runtime_unit sha256_default_program rpolicy``
+
+Theorem sha256_default_rejected:
+  !rpolicy. lower_vyper_runtime_unit sha256_default_program rpolicy = NONE
+Proof
+  gen_tac >> ACCEPT_TAC sha256_default_eval
+QED
+
+val sha256_folded_default_eval =
+  EVAL ``IS_SOME (lower_vyper_runtime_unit sha256_folded_default_program
+    ((ARB : resolved_compiler_policy) with
+       <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+          rpol_final_assembly := FAP_Optimize |>))``
+
+Theorem sha256_folded_default_lowers:
+  IS_SOME (lower_vyper_runtime_unit sha256_folded_default_program
+    ((ARB : resolved_compiler_policy) with
+       <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+          rpol_final_assembly := FAP_Optimize |>))
+Proof
+  ACCEPT_TAC (EQT_ELIM sha256_folded_default_eval)
+QED
+
 val allocation_limit_raise_eval =
   EVAL ``external_return_buffer_ok
            (package_external_fn [] F (K 0)

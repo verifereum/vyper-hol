@@ -793,10 +793,12 @@ Definition lower_vyper_runtime_unit_mods_def:
           (case fb_fn of NONE => [] | SOME sf => [sf]))
     then
       if EXISTS (external_has_defaults o SND) ext_fns then
-        run_grouped_lowering
-          (MAP (package_external_group_unit mods rpolicy.rpol_target
-                                           use_trans nkey_map) ext_fns)
-          runtime_int_fns fallback_fn rpolicy "__entry"
+        if EVERY (external_defaults_no_sha256 o SND) ext_fns then
+          run_grouped_lowering
+            (MAP (package_external_group_unit mods rpolicy.rpol_target
+                                             use_trans nkey_map) ext_fns)
+            runtime_int_fns fallback_fn rpolicy "__entry"
+        else NONE
       else
         run_lowering selectors external_fns runtime_int_fns fallback_fn
           rpolicy 0 0 ([] : dense_bucket list) entry_info "__entry"
