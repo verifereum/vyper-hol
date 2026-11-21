@@ -6,6 +6,19 @@ Ancestors
   runtimeSymSrcContext runtimeSymSrcExternalCalls
   exprLowering compileEnv emitHelper loweringShapeDefs list venomInst stackPlanTypes
 
+Theorem runtime_sym_emit_codesize_result:
+  emit_op CODESIZE [] s = (v,s') ==>
+  EVERY runtime_sym_inst (state_insts s) ==>
+  EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand v
+Proof
+  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
+       fresh_var_def, emit_def, comp_return_def] >> rpt strip_tac >> gvs[] >>
+  simp[state_insts_def, all_blocks_def, MAP_APPEND, FLAT_APPEND,
+       EVERY_APPEND, is_label_operand_def] >>
+  gvs[state_insts_def, all_blocks_def, EVERY_APPEND] >>
+  gvs[runtime_sym_inst_def, mk_inst_def, EVERY_MEM, is_label_operand_def]
+QED
+
 Theorem runtime_sym_acc:
   runtime_sym_lower_value_clause tops ==> runtime_sym_acc_clause tops
 Proof
@@ -24,7 +37,16 @@ Proof
   >~ [`emit_op GT [cs_op; Lit 0w] st2 = (op,s')`] >-
      (dxrule runtime_sym_emit_op_result >> simp[] >> strip_tac >>
       drule runtime_sym_emit_op_result >> simp[is_label_operand_def]) >>
-  drule runtime_sym_emit_op_result >> simp[]
+  all_tac >>> SPLIT_LT 2
+        (ALLGOALS (drule runtime_sym_emit_op_result >> simp[is_label_operand_def]), ALL_LT) >>>
+  SPLIT_LT 1
+        (ALLGOALS (Cases_on `is_self_addr e` >-
+                   (gvs[COND_RAND, AllCaseEqs()] >> qpat_assum `emit_op CODESIZE [] s = (op,s')`
+                    (fn _ => drule runtime_sym_emit_codesize_result) >>
+                    simp[is_label_operand_def]) >>
+                   gvs[COND_RAND, AllCaseEqs()] >> qpat_assum `emit_op EXTCODESIZE [addr_op] st1 = (op,s')`
+                    (fn _ => drule runtime_sym_emit_op_result) >>
+                   simp[is_label_operand_def]), ALL_LT)
 QED
 
 Theorem runtime_sym_call:
