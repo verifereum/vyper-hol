@@ -2425,3 +2425,55 @@ val () = check_accepts "ternary arms not written" false empty_layouts
   (iterable_function (iter_ifexp (iter_name "ys") (iter_name "ys")) xs_write)
 val () = check_accepts "subscripted ternary not written" false empty_layouts
   (iterable_function xss_ifexp_head xs_write)
+
+(* String-literal equality and membership, as the freshness checks of
+   declared names use them. *)
+fun expect_conv conv (tm, expected) = let
+  val th = conv tm
+in
+  if aconv (lhs (concl th)) tm andalso
+     aconv (rhs (concl th)) (if expected then T else F) then ()
+  else raise Fail ("unexpected string conversion result: " ^
+                   thm_to_string th)
+end
+
+fun expect_unchanged conv tm =
+  (conv tm; raise Fail ("expected UNCHANGED on " ^ term_to_string tm))
+  handle UNCHANGED => ()
+
+val () = List.app
+  (expect_conv vyperCheckContractLib.string_literal_eq_conv)
+  [(``"x12" = "x12"``, true), (``"" = ""``, true),
+   (``"x12" = "x13"``, false), (``"x1" = "x12"``, false),
+   (``"x12" = "x1"``, false), (``"" = "a"``, false),
+   (``"a" = ""``, false), (``"amount_in" = "amount_out"``, false)]
+val () = expect_unchanged vyperCheckContractLib.string_literal_eq_conv
+  ``(s : string) = "a"``
+
+val () = List.app
+  (expect_conv vyperCheckContractLib.string_literal_in_conv)
+  [(``"b" IN {"a"; "b"; "c"}``, true), (``"c" IN {"a"; "b"; "c"}``, true),
+   (``"d" IN {"a"; "b"; "c"}``, false), (``"a" IN ({} : string set)``, false),
+   (``"ab" IN {"a"; "abc"}``, false)]
+val () = expect_unchanged vyperCheckContractLib.string_literal_in_conv
+  ``"a" IN {"b"; (s : string)}``
+
+(* The compset reaches the conversions before its generic list rules: a
+   freshness test against 20 names takes about 2,300 primitive inferences
+   with them and about 10,000 without. *)
+val () = let
+  val names = List.tabulate (20, fn i =>
+    stringSyntax.fromMLstring ("x" ^ Int.toString i))
+  val var_types = foldl (fn (name, fm) => ``^fm |+ (^name, 1n)``)
+    ``FEMPTY : string |-> num`` names
+  val () = Count.counting_thms true
+  val meter = Count.mk_meter ()
+  val th = computeLib.CBV_CONV vyperCheckContractLib.check_contract_compset
+    ``"y" IN FDOM ^var_types``
+  val inferences = #prims (Count.read meter)
+  val () = Count.counting_thms false
+in
+  if Feq (rhs (concl th)) andalso inferences < 5000 then ()
+  else raise Fail ("freshness test took " ^ Int.toString inferences ^
+                   " inferences: " ^ thm_to_string th)
+end

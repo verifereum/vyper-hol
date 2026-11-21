@@ -1461,6 +1461,42 @@ Proof
   irule fresh_not_local_ptr >> qexists_tac `sa` >> simp[not_fresh_at_def]
 QED
 
+(* The keyword operands of either raw call are uint256 expressions that satisfy
+   the body precondition from any invariant state. *)
+Theorem raw_call_keywords_pre_for_target:
+  expr_body_pre cenv cx env (Call ann target args dflt) es /\
+  ((target = RawCallTarget flags /\ args = a::d::kws) \/
+   (target = RawCallCalldataTarget flags /\ args = a::kws)) ==>
+  raw_call_kws_ok flags kws /\ LENGTH kws = LENGTH flags.rcf_kws /\
+  EVERY (\e. expr_type e = BaseT (UintT 256) /\
+    !st. expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) kws
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `raw_call_kws_ok flags kws /\ LENGTH kws = LENGTH flags.rcf_kws` by
+    (qpat_assum `expr_body_pre cenv cx env (Call ann target args dflt) es` mp_tac >>
+     qpat_assum `_ \/ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+     gvs[expr_body_pre_def,well_typed_expr_def]) >>
+  drule raw_call_kwargs_types >> strip_tac >>
+  simp[EVERY_MEM] >> qx_gen_tac `e` >> disch_tac >> conj_tac
+  >- fs[EVERY_MEM] >>
+  qx_gen_tac `st` >> disch_tac >>
+  irule expr_body_pre_raw_call_target_arg >> simp[] >>
+  qexistsl [`ann`,`args`,`dflt`,`es`,`flags`,`target`] >> simp[] >>
+  qpat_assum `_ \/ _` strip_assume_tac >> gvs[]
+QED
+
+Theorem raw_call_keywords_pre:
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es ==>
+  raw_call_kws_ok flags kws /\ LENGTH kws = LENGTH flags.rcf_kws /\
+  EVERY (\e. expr_type e = BaseT (UintT 256) /\
+    !st. expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) kws
+Proof
+  strip_tac >>
+  irule raw_call_keywords_pre_for_target >>
+  qexistsl [`a`,`ann`,`a::d::kws`,`d`,`dflt`,`es`,`RawCallTarget flags`] >> simp[]
+QED
+
 Theorem raw_call_keyword_values:
   !ks es vs es'.
     EVERY (\e. expr_type e = BaseT (UintT 256) /\
@@ -1539,14 +1575,8 @@ Theorem raw_call_keywords_decode[local]:
     (flags.rcf_is_static ==> amount = 0) /\
     LENGTH kvs = LENGTH flags.rcf_kws /\ expr_sim_inv cenv cx env es'
 Proof
-  strip_tac >> drule raw_call_pre_flags >> simp[] >> strip_tac >>
-  drule raw_call_kwargs_types >> strip_tac >>
-  `EVERY (\e. expr_type e = BaseT (UintT 256) /\
-    !st. expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) kws` by
-    (simp[EVERY_MEM] >> rpt gen_tac >> strip_tac >> conj_tac
-     >- fs[EVERY_MEM] >> rpt strip_tac >>
-     irule expr_body_pre_raw_call_arg >>
-     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  strip_tac >> drule raw_call_keywords_pre >> strip_tac >>
+  `EVERY (\e. expr_type e = BaseT (UintT 256)) kws` by fs[EVERY_MEM] >>
   drule_all raw_call_keyword_values >> strip_tac >>
   drule_all raw_call_keywords_post >> strip_tac >>
   drule_all raw_call_value_operand >>

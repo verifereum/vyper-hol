@@ -132,7 +132,9 @@ Proof
      simp[dividesTheory.compute_divides, fcpLib.INDEX_CONV ``dimindex(:160)``, EQ_SYM_EQ]) >>
   `EVERY (\e. expr_type e = BaseT (UintT 256) /\
     !st. expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) kws` by
-    fs[EVERY_MEM] >>
+    (mp_tac (Q.INST [`target` |-> `RawCallCalldataTarget flags`, `args` |-> `a::kws`,
+       `ann` |-> `raw_call_return_type flags`, `dflt` |-> `NONE`]
+       raw_call_keywords_pre_for_target) >> simp[]) >>
   drule_all raw_call_keyword_values >> strip_tac >>
   `eval_operand addr t = SOME (w2w target) /\
     LIST_REL (\x v. eval_operand x t = SOME
