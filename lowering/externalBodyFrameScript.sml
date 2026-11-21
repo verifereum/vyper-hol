@@ -802,7 +802,7 @@ QED
    and the single-module fact via body_inv_storage_var_types. *)
 Theorem external_source_body_frame_nr:
   !tops rpolicy unit am tx ret vs mut nr args dflts fbody gs es0 lbl cenv0
-   pos_args min_cds is_payable nkey ut' iv rt cenv.
+   pos_args min_cds is_payable nkey ut iv rt cenv.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
@@ -1107,7 +1107,10 @@ Proof
     `vs`, `mut`, `F`, `args`, `[]`, `fbody`, `es0.gas_obs`, `es0`, `lbl`,
     `cenv0`, `pos_args`, `min_cds`, `is_payable`, `nkey`, `ut'`, `iv`, `rt`,
     `cenv`] external_source_body_frame_nr) >>
-  fs[subst_consts_expr_def, package_external_fn_def, FORALL_AND_THM]
+  qpat_assum `!id ty. MEM (id,ty) args ==> (?p sz. _) /\ _`
+    (assume_tac o SIMP_RULE bool_ss [IMP_CONJ_THM, FORALL_AND_THM]) >>
+  fs[subst_consts_expr_def, package_external_fn_def, FORALL_AND_THM] >>
+  impl_tac >- first_assum ACCEPT_TAC >> simp[]
 QED
 
 Theorem external_body_frame:
