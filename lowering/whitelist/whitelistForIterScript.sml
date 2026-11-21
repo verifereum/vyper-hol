@@ -223,51 +223,40 @@ Proof
   disch_then drule_all >> simp[] >> metis_tac[]
 QED
 
-Theorem loop_iterator_place_in_expr_places[local]:
-  !e p. loop_iterator_place e = SOME p ==> MEM p (expr_places e)
+Theorem conditional_iterator_result_kind[local]:
+  conditional_result cx raw st = (INL rv,ee) ==>
+  (?v. rv = Value v) \/ (?id path. rv = PlaceR (MemoryPlace id path))
 Proof
-  ho_match_mp_tac
-    (vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
-     SIMP_RULE (srw_ss()) []) >>
-  simp[loop_iterator_place_def, expr_places_def, AllCaseEqs(), MEM_MAP] >>
-  metis_tac[]
+  Cases_on `raw`
+  >- (rw[conditional_result_def, return_def] >> metis_tac[])
+  >- (rename1 `PlaceR p` >> Cases_on `p` >>
+      simp[conditional_result_def, bind_def, return_def, raise_def,
+           COND_RATOR, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+      metis_tac[])
+  >- simp[conditional_result_def, raise_def]
 QED
 
 Theorem memory_iterator_source_classify:
   !e cx es rv ee.
-    (loop_iterator_place e = NONE ==> expr_places e = []) /\
     expr_writes_ok (\_. F) e /\
     (!tgt nid. loop_iterator_place e = SOME tgt ==>
        target_root tgt <> TopLevelNameTarget nid) /\
     eval_expr cx e es = (INL rv,ee) ==>
     (?v. rv = Value v) \/
-    (?id path tgt. rv = PlaceR (MemoryPlace id path) /\
-       loop_iterator_place e = SOME tgt /\ target_root tgt = NameTarget id)
+    (?id path. rv = PlaceR (MemoryPlace id path))
 Proof
   ho_match_mp_tac
     (vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
      SIMP_RULE (srw_ss()) []) >>
   rpt conj_tac >> rpt gen_tac >>
-  simp[loop_iterator_place_def, target_root_def, expr_writes_ok_def,
-       expr_places_def, optionTheory.OPTION_MAP_EQ_NONE, MAP_EQ_NIL] >>
+  simp[loop_iterator_place_def, target_root_def, expr_writes_ok_def] >>
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def,
       type_check_def, check_def, assert_def, lift_option_type_def,
       AllCaseEqs()]
-  >~ [`conditional_result`]
-  >- (gvs[switch_BoolV_def, bind_def, raise_def, COND_RATOR, AllCaseEqs()] >>
-      rename1 `conditional_result cx selected ss = (INL rv,ee)` >>
-      rename1 `eval_expr cx arm zs = (INL selected,ss)` >>
-      `!tgt. loop_iterator_place arm <> SOME tgt` by
-        (rpt strip_tac >> drule loop_iterator_place_in_expr_places >> simp[]) >>
-      `?v. selected = Value v` by
-        (qpat_assum `!cx' es' rv' ee'. _ ==>
-              (?v. rv' = Value v) \/
-              (?id path tgt. rv' = PlaceR (MemoryPlace id path) /\
-                             loop_iterator_place arm = SOME tgt /\ _)`
-           (qspecl_then [`cx`,`zs`,`selected`,`ss`] mp_tac) >>
-         simp[]) >>
-      gvs[conditional_result_def, return_def])
+  >~ [`conditional_result _ _ _ = _`]
+  >- (qpat_assum `conditional_result _ _ _ = _`
+        (ACCEPT_TAC o MATCH_MP conditional_iterator_result_kind))
   >~ [`lookup_flag_mem cx ns mid es = (INL rv,ee)`]
   >- (Cases_on `ns` >>
       gvs[lookup_flag_mem_def, option_CASE_rator,
@@ -317,8 +306,8 @@ Proof
             raise_def, COND_RATOR, AllCaseEqs(), UNCURRY, LET_THM] >>
        rw[] >> gvs[])
   >>~- ([`eval_create_operands`],
-       qpat_assum `eval_create_operands _ _ _ _ _ _ _ _ = (INL _,_)`
+       DISJ1_TAC >> qpat_assum `eval_create_operands _ _ _ _ _ _ _ _ = (INL _,_)`
          (ACCEPT_TAC o MATCH_MP vyperLocalAccessFrameTheory.eval_create_operands_success_value)) >>
-  qpat_assum `eval_ext_call _ _ _ _ _ _ _ = (INL _,_)`
+  DISJ1_TAC >> qpat_assum `eval_ext_call _ _ _ _ _ _ _ = (INL _,_)`
     (ACCEPT_TAC o MATCH_MP vyperCallFrameTheory.eval_ext_call_success_value)
 QED
