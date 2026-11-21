@@ -168,6 +168,7 @@ Theorem raw_dynamic_peak_memory_from_history:
   LENGTH vs0.vs_outcomes < 2 ** 64 /\
   LENGTH vs0.vs_call_ctx.cc_calldata < 2 ** 64 /\
   (!entry name lbl entered root h marks q.
+    ctx.ctx_entry = SOME name /\
     lookup_function name ctx.ctx_functions = SOME entry /\
     fn_entry_label entry = SOME lbl /\
     enters_block entry
