@@ -16,8 +16,12 @@ Proof
   Induct
   >- simp[compile_internal_fn_bodies_def, comp_return_def] >>
   gen_tac >> PairCases_on `h` >> rpt strip_tac >>
-  gvs[compile_internal_fn_bodies_def, comp_ignore_bind_def, comp_bind_def] >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  qpat_x_assum `compile_internal_fn_bodies (_::_) _ = _`
+    (assume_tac o PURE_REWRITE_RULE
+      [compile_internal_fn_bodies_def, comp_ignore_bind_def, comp_bind_def]) >>
+  fs[MEM] >>
+  pairarg_tac >> gvs[comp_ignore_bind_def, comp_bind_def] >>
+  pairarg_tac >> gvs[] >>
   `EVERY P (state_insts cs')` by
     (mp_tac (runtime_sym_new_block |> Q.INST [`label` |-> `h0`, `st` |-> `s`]) >> simp[]) >>
   `cs'.cs_current_insts = []` by

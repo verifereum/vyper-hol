@@ -81,14 +81,16 @@ Proof
   `stmt_state_rel hz ctx func ce cx ee u` by
     (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee u /\ _`
        (drule_then (ACCEPT_TAC o cj 1))) >>
-  mp_tac (SIMP_RULE bool_ss [GSYM CONJ_ASSOC] (BETA_RULE (Q.INST
+  assume_tac (Q.INST
     [`dst` |-> `Var payload_var`, `out` |-> `alen`, `s` |-> `u`, `G` |-> `Gu`, `tn` |-> `tu`,
      `owner` |-> `shared`, `b` |-> `pbase`, `cap` |-> `capacity`, `d` |-> `pbase+dst_offset`,
      `P` |-> `\a v Gv tv.
           (track_frame ==> pure_frame ce func ee se u v /\ wb_frame ce ee ee se u v) /\
           abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
             shared pbase capacity root payload_var dst_offset prefix a v Gv tv`]
-    abi_encode_values_execute))) >>
+    abi_encode_values_execute) >>
+  pop_assum (assume_tac o BETA_RULE) >>
+  pop_assum (mp_tac o SIMP_RULE bool_ss [GSYM CONJ_ASSOC]) >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
       >- simp[pure_frame_refl, wb_frame_refl]
