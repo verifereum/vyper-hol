@@ -4305,6 +4305,11 @@ Proof
       stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
       stmt_labels_chain stmt_labels_rws)
   >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      Cases_on `cenv.ce_return_pc` >> Cases_on `cenv.ce_raw_return` >>
+      simp_tac (srw_ss()) [LET_THM] >>
+      Cases_on `~cenv.ce_raw_return /\ ~is_word_type ty /\
+        lowered_value_type cenv e <> ty /\ arg_type_fits (lowered_value_type cenv e) ty` >>
+      simp_tac (srw_ss()) [LET_THM] >>
       stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
       stmt_labels_chain stmt_labels_rws)
   >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
