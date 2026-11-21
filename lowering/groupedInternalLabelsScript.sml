@@ -473,7 +473,7 @@ Theorem compile_group_dispatch_linear_layout:
   fn_has_code st st' fn /\ EVERY group_entry_labels_ok groups ==>
   ?d q r b0 bd br.
     compile_external_groups (Var (STRING #"%" (toString (st.cs_next_var + 4))))
-      groups q = (jobs,r) /\ fn_has_code q r fn /\
+      groups q = (jobs,r) /\ fn_has_code q r fn /\ ci_mono r st' /\
     q.cs_current_bb = d /\ LENGTH q.cs_current_insts = 2 /\
     q.cs_next_var = st.cs_next_var + 5 /\
     lookup_block st.cs_current_bb fn.fn_blocks = SOME b0 /\
@@ -507,6 +507,7 @@ Proof
        comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> fs[]) >> strip_tac >> gvs[] >>
   rename1 `emit_inst JMP _ _ a9 = (_, st')` >>
+  `ci_mono a9 st'` by metis_tac[ci_mono_emit_inst, SND] >>
   rename1 `compile_external_groups _ _ a8 = (_, a9)` >>
   rename1 `emit_op SHR _ a7 = (_, a8)` >>
   rename1 `emit_op CALLDATALOAD _ a6 = (_, a7)` >>

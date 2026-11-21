@@ -374,7 +374,7 @@ Theorem grouped_dispatch_long_prelude:
     s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
   ?mid q r br t G' tn'.
     compile_external_groups (Var mid) groups q = (jobs,r) /\ fn_has_code q r fn /\
-    lookup_block r.cs_current_bb fn.fn_blocks = SOME br /\
+    ci_mono r st' /\ lookup_block r.cs_current_bb fn.fn_blocks = SOME br /\
     get_instruction br (LENGTH r.cs_current_insts) =
       SOME (mk_inst r.cs_next_id JMP [Label fallback] []) /\
     selected_registration_resources ctx fn site lo q t /\
@@ -424,7 +424,7 @@ Theorem grouped_dispatch_short_prelude:
   allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?q r t G' tn'.
     compile_external_groups (Var (STRING #"%" (toString (st.cs_next_var + 4))))
-      groups q = (jobs,r) /\ fn_has_code q r fn /\
+      groups q = (jobs,r) /\ fn_has_code q r fn /\ ci_mono q st' /\
     vars_pc_only s t /\ fresh_vars_wrt q t /\ ~t.vs_halted /\
     t.vs_current_bb = fallback /\ t.vs_inst_idx = 0 /\
     selected_registration_frame s tn t tn' /\ t.vs_memory = s.vs_memory /\
@@ -444,6 +444,8 @@ Proof
   drule_all dispatch_prelude_ptr_endpoint >>
   asm_rewrite_tac[] >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
+  `ci_mono q st'` by
+    metis_tac[ci_mono_trans, compile_external_groups_ci_mono, pairTheory.SND] >>
   qexistsl_tac [`q`,`r`,`t`,`G'`,`tn'`] >>
   asm_rewrite_tac[] >> metis_tac[grouped_entry_frame_vars_pc]
 QED
@@ -511,7 +513,7 @@ Theorem grouped_dispatch_missed_fallback_origin:
   (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
     s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
   ?mid q r t G' tn'.
-    compile_external_groups (Var mid) groups q = (jobs,r) /\
+    compile_external_groups (Var mid) groups q = (jobs,r) /\ ci_mono r sb /\
     fresh_vars_wrt r t /\ ~t.vs_halted /\
     t.vs_current_bb = fallback /\ t.vs_inst_idx = 0 /\
     selected_registration_frame s tn t tn' /\ t.vs_memory = s.vs_memory /\
@@ -669,4 +671,121 @@ Proof
      allocas_non_overlapping_def, alloca_next_valid_def, allocas_from_def,
      alloca_frontier_inv_def, remaining_alloca_budget_def] >>
   rpt strip_tac >> res_tac >> asm_rewrite_tac[]
+QED
+
+(* An unmatched grouped selector can allocate keyword buffers on its way
+   past the other groups. Carry that allocation history into the fallback
+   guard, whose execution changes neither the buffers nor their owners. *)
+Theorem grouped_fallback_checks_pass:
+  compile_group_dispatch_linear groups fallback start = (jobs,dispatch_end) /\
+  fn_has_code start dispatch_end fn /\ EVERY group_entry_labels_ok groups /\
+  ci_mono dispatch_end checks /\ checks.cs_current_bb = fallback /\
+  checks.cs_current_insts = [] /\ lookup_block fallback fn.fn_blocks = SOME target /\
+  compile_entry_checks 4 pay checks = ((),body_start) /\
+  fn_has_code checks body_start fn /\
+  (pay \/ s.vs_call_ctx.cc_callvalue = 0w) /\
+  (4 <= LENGTH s.vs_call_ctx.cc_calldata ==>
+    EVERY (\group. case group of
+      ExternalSingle (sel,lbl,tz) pkg =>
+        calldata_method_id s.vs_call_ctx.cc_calldata <> n2w sel
+    | ExternalDefaults common entries specs _ =>
+        FIND (\(sel,_,_,_). calldata_method_id s.vs_call_ctx.cc_calldata = n2w sel)
+          entries = NONE /\
+        EVERY (\(_,ty,_). type_memory_bytes common.ec_env ty < dimword (:256)) specs)
+      groups) /\
+  (!name bb. lookup_block name fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+  selected_registration_resources ctx fn site lo start s /\ s.vs_allocas = FEMPTY /\
+  fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword (:256) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
+  ?u Gu tnu.
+    selected_registration_resources ctx fn site lo body_start u /\
+    selected_registration_frame s tn u tnu /\ u.vs_memory = s.vs_memory /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+      u.vs_alloca_next + pending_alloca_size fn u <= w2n u.vs_initial_fmp) /\
+    !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK u,Gu,tnu)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `?t Gt tnt.
+    selected_registration_resources ctx fn site lo checks t /\
+    selected_registration_frame s tn t tnt /\ t.vs_memory = s.vs_memory /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+      t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp) /\
+    !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,Gt,tnt)` by
+    (Cases_on `4 <= LENGTH s.vs_call_ctx.cc_calldata`
+     >- (`EVERY (\group. case group of
+            ExternalSingle (sel,lbl,tz) pkg =>
+              calldata_method_id s.vs_call_ctx.cc_calldata <> n2w sel
+          | ExternalDefaults common entries specs _ =>
+              FIND (\(sel,_,_,_). calldata_method_id s.vs_call_ctx.cc_calldata = n2w sel)
+                entries = NONE /\
+              EVERY (\(_,ty,_). type_memory_bytes common.ec_env ty < dimword (:256)) specs)
+            groups` by fs[] >>
+         drule_all grouped_dispatch_missed_fallback_origin >>
+         disch_then (strip_assume_tac o SPEC_ALL) >>
+         rename1 `ci_mono r dispatch_end` >>
+         rename1 `fresh_vars_wrt r t` >>
+         rename1 `selected_registration_frame s tn t tnt` >>
+         `r.cs_next_id <= checks.cs_next_id /\ r.cs_next_var <= checks.cs_next_var` by
+           (fs[ci_mono_def] >> decide_tac) >>
+         `!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < checks.cs_next_id` by
+           (rpt strip_tac >>
+            qpat_assum `!id entry. FLOOKUP t.vs_allocas id = SOME entry ==>
+               id < r.cs_next_id` (drule_then assume_tac) >> decide_tac) >>
+         `fresh_vars_wrt checks t` by
+           (irule emitHelperPropsTheory.fresh_vars_wrt_mono >>
+            qexists_tac `r` >> simp[arithmeticTheory.GREATER_EQ]) >>
+         qexistsl_tac [`t`,`G'`,`tnt`] >>
+         asm_rewrite_tac[selected_registration_resources_def, LENGTH]) >>
+     `LENGTH s.vs_call_ctx.cc_calldata < 4` by decide_tac >>
+     `fresh_vars_wrt start s /\ ~s.vs_halted /\
+       s.vs_current_bb = start.cs_current_bb /\
+       s.vs_inst_idx = LENGTH start.cs_current_insts /\ allocas_from lo s` by
+       fs[selected_registration_resources_def] >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
+     `!bb. lookup_block fallback fn.fn_blocks = SOME bb ==>
+       phi_prefix_length bb.bb_instructions = 0` by metis_tac[] >>
+     drule_all grouped_dispatch_short_prelude >>
+     disch_then (strip_assume_tac o SPEC_ALL) >>
+     rename1 `ci_mono q dispatch_end` >>
+     rename1 `fresh_vars_wrt q t` >>
+     rename1 `selected_registration_frame s tn t tnt` >>
+     `fresh_vars_wrt checks t` by
+       (imp_res_tac ci_mono_trans >> fs[ci_mono_def] >>
+        metis_tac[emitHelperPropsTheory.fresh_vars_wrt_mono, arithmeticTheory.GREATER_EQ]) >>
+     qexistsl_tac [`t`,`G'`,`tnt`] >> asm_rewrite_tac[] >>
+     conj_tac
+     >- (irule grouped_entry_resources_vars_pc >>
+         asm_rewrite_tac[LENGTH] >> qexistsl_tac [`s`,`start`] >> simp[]) >>
+     metis_tac[grouped_registration_vars_pc]) >>
+  rename1 `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,Gt0,tnt)` >>
+  `t.vs_call_ctx = s.vs_call_ctx` by fs[selected_registration_frame_def] >>
+  `(pay \/ t.vs_call_ctx.cc_callvalue = 0w) /\
+    LENGTH t.vs_call_ctx.cc_calldata < dimword (:256)` by simp[] >>
+  mp_tac (Q.INST [`m` |-> `4`, `s` |-> `t`, `sa` |-> `checks`,
+    `sb` |-> `body_start`, `tn` |-> `tnt`, `G` |-> `Gt0`]
+    (SPEC_ALL grouped_default_checks_pass_origin)) >>
+  asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL] >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  rename1 `selected_registration_frame t tnt v tnv` >>
+  `selected_registration_frame s tn v tnv` by
+    (qpat_assum `selected_registration_frame s tn t tnt` mp_tac >>
+     qpat_assum `selected_registration_frame t tnt v tnv` mp_tac >>
+     PURE_REWRITE_TAC [selected_registration_frame_def] >> rpt strip_tac >>
+     asm_rewrite_tac[]) >>
+  qexistsl_tac [`v`,`G'`,`tnv`] >> asm_rewrite_tac[] >>
+  rpt gen_tac >>
+  qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _`
+    (qspecl_then [`D`,`explicit`] assume_tac) >>
+  qpat_assum `!D explicit. gas_origin_ptr_path _ (t,Gt0,tnt) _ _`
+    (qspecl_then [`D`,`explicit`] assume_tac) >>
+  qpat_assum `gas_origin_ptr_path _ (s,G,tn) _ _`
+    (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
+  disch_then (qspecl_then [`t`,`Gt0`,`tnt`,`[]`,`OK v`,`G'`,`tnv`] mp_tac) >>
+  simp[]
 QED
