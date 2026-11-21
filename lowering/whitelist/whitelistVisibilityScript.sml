@@ -235,7 +235,7 @@ Proof
   metis_tac[contract_inv_variable_metadata]
 QED
 
-(* bodyAppendStorageFacts' body_append_runtime_metadata, with
+(* bodyAppendStorageFacts' body_append_runtime_metadata_mods, with
    supported_storage_dynamic_array replaced by a lookup of any
    visibility. *)
 Theorem body_append_runtime_metadata_vis_mods:
