@@ -644,7 +644,7 @@ Proof
   drule fresh_label_output_inj >> simp[]
 QED
 
-Theorem nonslot_shadow_cut[local]:
+Theorem nonslot_shadow_cut:
   gas_shadow_compiles f g ==>
   gas_shadow_state s t /\ f s = (x,u) /\ g t = (y,v) ==>
   x = y /\ gas_shadow_state u v
