@@ -1,7 +1,7 @@
 Theory loweringRuntimeAllocationHistory
 Ancestors
   loweringCallBudgetHistory loweringJointPrefixHistory vyperLoweringCorrect
-  loweringBudgetActualShadow loweringBudgetCompilerCuts
+  loweringBudgetCompilerCuts
   loweringBudgetMarkedResidual loweringBudgetOracleConsumption
   loweringBudgetOraclePrefix loweringBudgetPathDeterminism
   loweringBudgetPrecompilePrefix loweringBudgetResidualArithmetic
