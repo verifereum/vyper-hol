@@ -132,3 +132,35 @@ Proof
   asm_rewrite_tac[] >>
   metis_tac[]
 QED
+
+Theorem grouped_keyword_store_runtime_state:
+  typed_copy_state_frame mid off len t u /\
+  ~ce.ce_is_ctor /\ ce.ce_imm_alloca = NONE /\
+  stmt_state_rel H ctx fn (ce with ce_vars := FEMPTY) cx es t ==>
+  stmt_state_rel H ctx fn (ce with ce_vars := FEMPTY) cx es u
+Proof
+  strip_tac >>
+  fs[typed_copy_state_frame_def, typed_copy_frame_def,
+     venom_state_component_equality] >>
+  `state_rel H fn (ce with ce_vars := FEMPTY) cx es u` by
+    (gvs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def, local_region_def, FLOOKUP_EMPTY,
+       immutables_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
+       contract_storage_def, contract_transient_def, logs_rel_def, LET_THM] >>
+    first_assum ACCEPT_TAC) >>
+  mp_tac (Q.SPECL [`H`,`fn`,`ce with ce_vars := FEMPTY`,`cx`,
+    `es`,`t`,`es`,`u`,`ctx`] stmt_state_rel_allocas_frame) >>
+  simp[immutable_alloca_sep_def, immutable_decl_sep_def, immutable_base_zero_alt] >>
+  metis_tac[]
+QED
+
+Theorem grouped_keyword_store_runtime_ghost:
+  typed_copy_state_frame mid off len t u /\
+  ce.ce_return_pc = NONE /\
+  tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+  ghost_inv_at D 0 NONE (ce with ce_vars := FEMPTY) cx es G tn t ==>
+  ghost_inv_at D 0 NONE (ce with ce_vars := FEMPTY) cx es G' tn' u
+Proof
+  rw[typed_copy_state_frame_def, venom_state_component_equality, ghost_inv_at_def,
+     return_buf_ptr_def, allocas_from_def, stor_taint_ok_at_def, FLOOKUP_EMPTY] >>
+  fs[contract_storage_def, contract_transient_def]
+QED

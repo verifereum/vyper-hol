@@ -331,3 +331,25 @@ Proof
   impl_tac >- (simp[] >> metis_tac[entry_observer_instruction_in_state]) >>
   simp[]
 QED
+
+Theorem grouped_common_body_no_reentry:
+  ce.ce_ctor_exit_label = NONE /\
+  cenv_ptrs_below entry.cs_next_var (compile_register_kwarg_vars ce vars) /\
+  compile_register_positional_args (compile_register_kwarg_vars ce vars)
+    args 4 entry = (registered,sa) /\
+  compile_guarded_body registered nr key tr view stmts rt sa = ((),done) /\
+  fn_has_code entry done fn /\ entry.cs_current_insts = [] /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks done)) /\
+  no_phi_fn fn /\ callees_stable G ctx fn /\
+  s.vs_current_bb = entry.cs_current_bb /\ s.vs_inst_idx = 0 /\
+  gas_path ctx fn s n (OK t) ==>
+  ~MEM t.vs_current_bb (MAP (\bb. bb.bb_label) entry.cs_blocks)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `compile_common_function_body ce args vars nr key tr view stmts rt entry = ((),done)` by
+    simp[compile_common_function_body_def, comp_bind_def] >>
+  drule_all grouped_common_body_fragment >> strip_tac >>
+  `at_point entry s` by simp[at_point_def] >>
+  `block_is_terminated done` by metis_tac[grouped_common_guarded_terminated] >>
+  metis_tac[grouped_entry_terminated_no_reentry]
+QED
