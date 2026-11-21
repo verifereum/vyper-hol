@@ -4,7 +4,7 @@ Ancestors
   bodyFullShadowBodyInv
   ctorDeployLoweringFrame ctorDeployLoweringSourceOk
   ctorDeployMemoryRunPtrFrameRet ctorDeployLoweringDefs ctorReturnFrame
-  bodySimFullMain bodyFullPreds bodySimFull bodyAbiDecodeTarget
+  bodySimFullMain bodyFullPreds bodySimFull bodyAbiDecodeTarget bodyLoopCalls
   e2eDeployDefs ctorDeployDefs compileEnv emitHelper
   vyperStorageLayoutSafety vyperLookupStorage vyperContext
   vyperInterpreter vyperState ctorDeployDeadLoad
@@ -121,6 +121,7 @@ Proof
     (qpat_assum `deploy_ctor_start _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [deploy_ctor_start_def]) >>
      metis_tac[]) >>
+  pop_assum strip_assume_tac >>
   `struct_args_unique tops` by
     metis_tac[deploy_source_ok_struct_args_unique] >>
   `!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
@@ -136,6 +137,18 @@ Proof
      rpt strip_tac >>
      drule_all checked_const_substitution_abi_decode_target >>
      metis_tac[lookup_function_abi_decode_target_occurs]) >>
+  `?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
+    fs[deploy_source_ok_def, deploy_typing_ok_def] >>
+  pop_assum strip_assume_tac >>
+  drule bodyLoopCallsTheory.checked_module_loop_calls_ok >> disch_then assume_tac >>
+  `stmts_loop_calls_ok [(NONE,tops)] body` by
+    (`body = subst_consts_stmts (module_consts_env tops []) source_body` by
+       metis_tac[deploy_ctor_entry_selection_agrees] >>
+     qpat_assum `body = subst_consts_stmts _ source_body` SUBST1_TAC >>
+     `stmts_loop_calls_ok [(NONE,tops)] source_body` by
+       (drule_all_then ACCEPT_TAC bodyLoopCallsTheory.checked_deploy_body_loop_calls_ok) >>
+     drule_all deploy_ctor_constant_cells >> strip_tac >>
+     drule_all_then ACCEPT_TAC bodyLoopCallsTheory.checked_subst_consts_loop_calls_ok) >>
   qspecl_then [`\H. deploy_dead H tops runtime_bc am tx`, `imm_len tops`,
     `NONE`, `[]`, `tops`, `bindings`, `dunit.cu_context`, `shadow_ctx`,
     `func`, `shadow_func`, `cenv`, `deploy_evaluation_context tops am tx`,
@@ -145,7 +158,7 @@ Proof
        (imm_len tops) nr nkey v ee r`, `body`,
     `es0 with outcomes := SOME vs.vs_outcomes`]
     mp_tac body_stmts_sim_full >>
-  impl_tac >- simp[] >>
+  impl_tac >- (simp[] >> first_assum ACCEPT_TAC) >>
   simp[]
 QED
 
