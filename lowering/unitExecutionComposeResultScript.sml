@@ -7,12 +7,12 @@ Theorem unit_execution_compose_result_horizon:
   !(P : 'call_res -> bool) DF E ctx func cx st0 tops
     (source : evaluation_state -> ('body_res + exception) # evaluation_state)
     es0 s0 G0 tn0 Q R vs0 CT REL
-    (EX : ('call_res # 'call_accounts # 'call_requests) -> bool).
+    (EX : ('call_res # 'call_accounts # 'call_requests) -> bool) marks0.
     storage_trace_frame source /\
     storage_trace_domain cx st0 es0.storage_trace /\
     (!H. valid_horizon cx st0 H es0.storage_trace ==>
        gas_origin_ptr_path (DF H, 0, E, ctx, func, [])
-         (vs0, FEMPTY, entry_taint) [] (OK s0, G0, tn0) /\
+         (vs0, FEMPTY, entry_taint) marks0 (OK s0, G0, tn0) /\
        ((!fuel. ptr_safe_run (DF H) 0 fuel ctx func [] G0 tn0 s0) ==>
         !fuel. ptr_safe_blocks (DF H) 0 fuel ctx func [] FEMPTY entry_taint
                  vs0)) /\
@@ -64,7 +64,7 @@ Theorem unit_execution_compose_result_horizon:
                    (CT (gas_explicit marks s0.vs_gas_readings ++ tail)))))) /\
        ?H leaf leaf_pg leaf_g leaf_tn finish.
          gas_origin_ptr_focus (DF H, 0, E, ctx, func, [])
-           (vs0, FEMPTY, entry_taint) marks
+           (vs0, FEMPTY, entry_taint) (marks0 ++ marks)
            (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
       ?res am' rqs obs.
         (!tail. CT (gas_explicit marks s0.vs_gas_readings ++ tail) =
@@ -73,10 +73,10 @@ Theorem unit_execution_compose_result_horizon:
         ((EX (res, am', rqs) /\
           ?H leaf leaf_pg leaf_g leaf_tn finish.
             gas_origin_ptr_focus (DF H, 0, E, ctx, func, [])
-              (vs0, FEMPTY, entry_taint) marks
+              (vs0, FEMPTY, entry_taint) (marks0 ++ marks)
               (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
          (?r. exit_result r /\ storage_trace_domain cx st0 obs /\
-            gas_origin_path T E ctx func vs0 marks r /\
+            gas_origin_path T E ctx func vs0 (marks0 ++ marks) r /\
             !H. valid_horizon cx st0 H obs ==>
               REL H (res, am', rqs) r /\
               !fuel. ptr_safe_blocks (DF H) 0 fuel ctx func [] FEMPTY
@@ -86,7 +86,7 @@ Proof
   drule_at_then (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)
     (Q.ISPECL_THEN
       [`vs0`, `CT`, `\H c r. REL H c r /\ P (FST c)`,
-       `\c. EX c /\ P (FST c)`] mp_tac)
+       `\c. EX c /\ P (FST c)`, `marks0`] mp_tac)
     unit_execution_compose_horizon >>
   simp[] >> impl_tac
   >- (conj_tac >- (rpt strip_tac >> metis_tac[]) >>
@@ -119,12 +119,12 @@ Theorem unit_execution_compose_result:
   !(P : 'call_res -> bool) DF E ctx func cx st0 tops
     (source : evaluation_state -> ('body_res + exception) # evaluation_state)
     es0 s0 G0 tn0 Q R vs0 CT REL
-    (EX : ('call_res # 'call_accounts # 'call_requests) -> bool).
+    (EX : ('call_res # 'call_accounts # 'call_requests) -> bool) marks0.
     storage_trace_frame source /\
     storage_trace_domain cx st0 es0.storage_trace /\
     (!H. valid_horizon cx st0 H es0.storage_trace ==>
        gas_origin_ptr_path (DF H, 0, E, ctx, func, [])
-         (vs0, FEMPTY, entry_taint) [] (OK s0, G0, tn0) /\
+         (vs0, FEMPTY, entry_taint) marks0 (OK s0, G0, tn0) /\
        ((!fuel. ptr_safe_run (DF H) 0 fuel ctx func [] G0 tn0 s0) ==>
         !fuel. ptr_safe_blocks (DF H) 0 fuel ctx func [] FEMPTY entry_taint
                  vs0)) /\
@@ -173,7 +173,7 @@ Theorem unit_execution_compose_result:
                    (CT (gas_explicit marks s0.vs_gas_readings ++ tail)))))) /\
        ?H leaf leaf_pg leaf_g leaf_tn finish.
          gas_origin_ptr_focus (DF H, 0, E, ctx, func, [])
-           (vs0, FEMPTY, entry_taint) marks
+           (vs0, FEMPTY, entry_taint) (marks0 ++ marks)
            (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
       ?res am' rqs obs.
         (!tail. CT (gas_explicit marks s0.vs_gas_readings ++ tail) =
@@ -182,17 +182,17 @@ Theorem unit_execution_compose_result:
         ((EX (res, am', rqs) /\
           ?H leaf leaf_pg leaf_g leaf_tn finish.
             gas_origin_ptr_focus (DF H, 0, E, ctx, func, [])
-              (vs0, FEMPTY, entry_taint) marks
+              (vs0, FEMPTY, entry_taint) (marks0 ++ marks)
               (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
          (?r. exit_result r /\ storage_trace_domain cx st0 obs /\
-            gas_origin_path T E ctx func vs0 marks r /\
+            gas_origin_path T E ctx func vs0 (marks0 ++ marks) r /\
             !H. valid_horizon cx st0 H obs ==>
               REL H (res, am', rqs) r /\
               !fuel. ptr_safe_blocks (DF H) 0 fuel ctx func [] FEMPTY
                        entry_taint vs0))
 Proof
   rpt gen_tac >> strip_tac >>
-  match_mp_tac (Q.SPECL [`P`, `DF`, `E`, `ctx`, `func`, `cx`, `st0`, `tops`, `source`, `es0`, `s0`, `G0`, `tn0`, `Q`, `R`, `vs0`, `CT`, `REL`, `EX`] unit_execution_compose_result_horizon) >>
+  match_mp_tac (Q.SPECL [`P`, `DF`, `E`, `ctx`, `func`, `cx`, `st0`, `tops`, `source`, `es0`, `s0`, `G0`, `tn0`, `Q`, `R`, `vs0`, `CT`, `REL`, `EX`, `marks0`] unit_execution_compose_result_horizon) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   rpt strip_tac >> first_x_assum drule >> simp[]
 QED
