@@ -12303,10 +12303,12 @@ Proof
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`len`,`t_exit`,`G_exit`,`tn_exit`]
     (map_every assume_tac o CONJUNCTS)) >>
-  `((?bs. v = BytesV bs /\ len = LENGTH bs) \/
-    (?str. v = StringV str /\ len = LENGTH str)) /\
-   val_store_size stv v = 32 * (1 + word_size len)` by
-    (`(?n. stv = BaseTV (BytesT (Dynamic n))) \/ (?n. stv = BaseTV (StringT n))` by
+  Q.SUBGOAL_THEN
+    `((?bs. v = BytesV bs /\ len = LENGTH bs) \/
+      (?str. v = StringV str /\ len = LENGTH str)) /\
+     val_store_size stv v = 32 * (1 + word_size len)`
+    (map_every assume_tac o CONJUNCTS)
+  >- (`(?n. stv = BaseTV (BytesT (Dynamic n))) \/ (?n. stv = BaseTV (StringT n))` by
        (match_mp_tac (Q.SPECL [`get_tenv cx`,`sty`,`stv`] bytestring_type_value) >>
         asm_rewrite_tac[]) >>
      qpat_assum `value_has_type stv v` mp_tac >>
@@ -12341,7 +12343,9 @@ Proof
   mp_tac (Q.INST [`n` |-> `1 + word_size len`, `t` |-> `t_exit`,
     `Gf` |-> `G_exit`, `tnf` |-> `tn_exit`, `marks` |-> `[]`]
     body_assign_immutable_bytes_restore) >>
-  impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  impl_tac >-
+    (pure_rewrite_tac[REFL_CLAUSE, boolTheory.AND_CLAUSES] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >>
   `t_exit.vs_allocas = s.vs_allocas /\ t_exit.vs_alloca_next = s.vs_alloca_next /\
    t_exit.vs_fmp = s.vs_fmp /\ t_exit.vs_initial_fmp = s.vs_initial_fmp` by
@@ -12352,13 +12356,17 @@ Proof
      qpat_assum `(t_exit with <|vs_vars := _; vs_current_bb := _;
        vs_prev_bb := _; vs_inst_idx := _|>) = _` mp_tac >>
      simp[venom_state_component_equality]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t_exit` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+       (mp_tac o REWRITE_RULE [allocas_below_fmp_def]) >>
+     simp[allocas_below_fmp_def]) >>
   qexistsl_tac [`t_exit`,`G_exit`,`tn_exit`] >>
   conj_tac
   >- (gen_tac >> disch_tac >> conj_tac
       >- first_assum MATCH_ACCEPT_TAC >>
       qpat_assum `!H. P H ==> stmt_state_rel H _ _ _ _ es' t_exit /\ _`
         (drule_then ACCEPT_TAC)) >>
-  simp[allocas_below_fmp_def]
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem body_assign_immutable_memory_dispatch[local]:
@@ -16609,12 +16617,13 @@ Resume body_assign_nested_empty_immutable_full[write]:
   `off' = off` by metis_tac[optionTheory.SOME_11, compileEnvTheory.var_location_11] >>
   qpat_x_assum `off' = off` SUBST_ALL_TAC >>
   `off + type_memory_size itv <= lo` by
-    (mp_tac (Q.INST [`ce` |-> `cenv`, `es` |-> `mid`,
+    (mp_tac (Q.INST [`ce` |-> `cenv`, `es` |-> `mid`, `tops` |-> `cx_tops cx`,
        `H` |-> `storage_trace_horizon mid.storage_trace`,
        `D` |-> `DF (storage_trace_horizon mid.storage_trace)`, `itv` |-> `itv`]
        (INST_TYPE [alpha |-> ``:256``]
          immutableDeployAssignPathGhostTheory.immutable_assign_section_root)) >>
-     simp[SF CONJ_ss]) >>
+     impl_tac >- simp[] >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
   `off + type_memory_size itv < dimword (:256)` by
     (qpat_assum `!tv. evaluate_type _ _ = SOME tv ==> _`
        (qspec_then `itv` mp_tac) >> simp[]) >>
