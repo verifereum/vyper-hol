@@ -3,7 +3,7 @@ Ancestors
   entryCodeOwnership entryRawFunction moduleLowering compileEnv list pair
   loweringShapeProps loweringShapeDefs loweringShapeRules vyperCompiler venomInst
   entryBodyBoundLabels entryCompileIntervals entryInternalAppend entryLinearAppend
-  entryPrefixRetention fragExec venomExecProofs
+  entryPrefixRetention fragExec venomExecProofs emitHelperProps
   allocaFrontierBound venomWf removeUnusedSsaProofs venomWfProps
 
 Theorem compile_runtime_entry_intervals[local]:
@@ -131,6 +131,37 @@ Proof
   irule MEM_lookup_block >> gvs[]
 QED
 
+Theorem run_lowering_fallback_revert_code:
+  run_lowering sels exts ints NONE rp bc mb db ei "__entry" = SOME u /\
+  EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,ss,rt). jump_label_ok lbl) exts /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
+  lookup_function "__entry" u.cu_context.ctx_functions = SOME efn ==>
+  ?fl sf sd checks se.
+    fresh_label "fallback" (initial_compile_state "__entry") = (fl,sf) /\
+    compile_selector_dispatch_linear (MAP (\(sel,lbl,z). (sel,lbl)) sels)
+      fl sf = ((),sd) /\
+    emit_inst REVERT [Lit 0w; Lit 0w] [] checks = ((),se) /\
+    sf.cs_current_bb = "__entry" /\ sf.cs_current_insts = [] /\
+    sf.cs_next_var = 0 /\ checks.cs_current_bb = fl /\
+    checks.cs_current_insts = [] /\
+    fn_has_code sf sd efn /\ fn_has_code checks se efn
+Proof
+  strip_tac >> drule_all run_lowering_retained_entry >> strip_tac >>
+  drule compile_runtime_entry_intervals >> simp[] >> strip_tac >>
+  gvs[compile_internal_fn_bodies_def, comp_return_def] >>
+  drule (SRULE [cs_appends_def] cs_appends_selector_dispatch_linear) >>
+  strip_tac >>
+  drule (SRULE [cs_appends_def] cs_appends_external_fn_bodies) >> strip_tac >>
+  `cs_extends sx sn` by metis_tac[cs_extends_new_block] >>
+  `cs_extends sn se` by
+    (drule emit_inst_extends >> strip_tac >> simp[cs_extends_def] >>
+     qexists_tac `[]` >> simp[]) >>
+  `fn_has_code sf sd efn /\ fn_has_code sn se efn` by
+    metis_tac[fn_has_code_retained_interval, cs_extends_refl, cs_extends_trans] >>
+  qexistsl_tac [`sf`,`sd`,`sn`,`se`] >>
+  gvs[fresh_label_def, initial_compile_state_def, new_block_def]
+QED
+
 Theorem runtime_selected_entry_code[local]:
   compile_generate_runtime sels exts [] fb Linear bc mb db ei
     (initial_compile_state "__entry") = ((),se) /\
@@ -148,7 +179,8 @@ Theorem runtime_selected_entry_code[local]:
     sd.cs_next_var <= sc.cs_next_var /\
     compile_register_positional_args ce pa 4 sk = (cenv,sa) /\
     compile_guarded_body cenv nr key tr view stmts rt sa = ((),sb) /\
-    fn_has_code sa sb efn
+    fn_has_code sa sb efn /\ fn_has_code sk sa efn /\
+    cs_extends sc sk /\ cs_extends sk sa
 Proof
   strip_tac >> drule compile_runtime_entry_intervals >> strip_tac >>
   gvs[compile_internal_fn_bodies_def, comp_return_def] >>
@@ -162,8 +194,11 @@ Proof
   drule (SRULE [cs_appends_def] cs_appends_runtime_fallback_suffix) >> strip_tac >>
   `cs_extends sd se /\ cs_extends sd' se` by metis_tac[cs_extends_trans] >>
   qexistsl_tac [`fl`, `sf`, `sd`, `sc`, `sd'`, `cenv`, `sb`, `se'`] >> simp[] >>
-  `fn_has_code sf sd efn /\ fn_has_code sc sd' efn /\ fn_has_code sb se' efn` by
-    (metis_tac[fn_has_code_retained_interval, cs_extends_trans]) >>
+  `cs_extends sd' sb` by
+    metis_tac[cs_appends_def, cs_appends_register_positional_args] >>
+  `fn_has_code sf sd efn /\ fn_has_code sc sd' efn /\ fn_has_code sb se' efn /\
+   fn_has_code sd' sb efn` by
+    metis_tac[fn_has_code_retained_interval, cs_extends_trans] >>
   gvs[fresh_label_def, initial_compile_state_def]
 QED
 
@@ -184,7 +219,8 @@ Theorem run_lowering_selected_entry_code:
     sd.cs_next_var <= sc.cs_next_var /\
     compile_register_positional_args ce pa 4 sk = (cenv,sa) /\
     compile_guarded_body cenv nr key tr view stmts rt sa = ((),sb) /\
-    fn_has_code sa sb efn /\ fn_inst_ids_distinct efn
+    fn_has_code sa sb efn /\ fn_has_code sk sa efn /\
+    cs_extends sc sk /\ cs_extends sk sa /\ fn_inst_ids_distinct efn
 Proof
   strip_tac >>
   `fn_inst_ids_distinct efn` by

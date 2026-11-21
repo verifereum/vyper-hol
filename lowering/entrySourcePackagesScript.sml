@@ -25,6 +25,37 @@ Proof
   rewrite_tac[internal_label_ok_def, internal_fn_label_prefix]
 QED
 
+Theorem lower_runtime_default_free_packages:
+  lower_vyper_runtime_unit tops rp = SOME u /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) ==>
+  ?sels exts ints fb ei.
+    run_lowering sels exts ints fb rp 0 0 [] ei "__entry" = SOME u /\
+    sels = build_selectors (type_env tops) (FST (classify_functions tops)) /\
+    exts = MAP (set_external_package_target rp.rpol_target o
+      package_external_fn tops T (K global_nonreentrant_slot))
+      (FST (classify_functions tops)) /\
+    fb = set_fallback_package_target rp.rpol_target
+      (package_fallback_fn tops T (K global_nonreentrant_slot)
+        (FST (SND (SND (classify_functions tops))))) /\
+    EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,ss,rt). jump_label_ok lbl) exts /\
+    EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints)
+Proof
+  strip_tac >>
+  qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
+  simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  rename1 `classify_functions tops = (exts,ints,fb,ctor)` >>
+  simp[] >> strip_tac >>
+  `~EXISTS external_has_defaults exts` by
+    (qpat_assum `~EXISTS external_has_defaults _` mp_tac >>
+     REWRITE_TAC [pairTheory.FST]) >>
+  qpat_x_assum `(if EXISTS external_has_defaults exts then _ else _) = _`
+    mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
+  goal_assum (drule_at Any) >>
+  simp[external_source_package_labels, internal_source_package_labels]
+QED
+
 Theorem selected_external_package_member[local]:
   supported_program tops /\ tx.function_name <> "__default__" /\
   lookup_function NONE tx.function_name External tops =
