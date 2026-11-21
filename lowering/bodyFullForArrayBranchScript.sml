@@ -297,8 +297,7 @@ Theorem compile_for_nonslot_array_frag_full:
     ~supported_expr_exists (const_name_root cx) e /\
     stmt_exprs_ok cenv (For id typ (Array e) n body) /\
     (~(?ty nid. e = TopLevelName ty nid) ==>
-     ((loop_iterator_place e = NONE ==> expr_places e = []) /\
-      !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid)) /\
+     !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
     ((?ty nid. e = TopLevelName ty nid) ==>
       ~supported_stmts_expr_exists expr_internal_call_root body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n body)) /\

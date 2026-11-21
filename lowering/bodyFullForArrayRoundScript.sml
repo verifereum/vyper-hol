@@ -2422,39 +2422,10 @@ Proof
   asm_rewrite_tac[] >> qexists_tac `H` >> asm_rewrite_tac[]
 QED
 
-Theorem memory_iterator_source_path_prefix[local]:
-  !e cx es ee target root attrs pending path.
-    loop_iterator_place e = SOME target /\
-    place_access target pending = (NameTarget root, attrs) /\
-    eval_expr cx e es = (INL (PlaceR (MemoryPlace root path)), ee) ==>
-    ?tail. path ++ MAP AttrSubscript pending = MAP AttrSubscript attrs ++ tail
-Proof
-  ho_match_mp_tac
-    (vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
-     SIMP_RULE (srw_ss()) []) >>
-  rpt conj_tac >> rpt gen_tac >>
-  simp[vyperTypeContractTheory.loop_iterator_place_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[place_access_def, Once evaluate_def, bind_def, ignore_bind_def,
-      get_scopes_def, type_check_def, check_def, assert_def, return_def,
-      raise_def, AllCaseEqs()] >>
-  drule exprSimPropsTheory.select_result_memory_place >>
-  disch_then (qspecl_then [`root`, `path`] mp_tac) >>
-  simp[] >> strip_tac >> gvs[] >>
-  gvs[COND_RATOR, bind_def, return_def, AllCaseEqs()] >>
-  first_x_assum drule_all >> strip_tac >>
-  gvs[MAP]
-QED
-
-Theorem loop_iterator_place_writes_ok[local]:
-  loop_iterator_place e = SOME p /\ iterator_unmodified (Array e) body ==>
+Theorem iterator_place_writes_ok[local]:
+  MEM p (expr_places e) /\ iterator_unmodified (Array e) body ==>
   stmts_writes_ok (\w. ~place_contains w p) body
 Proof
-  `!e p. loop_iterator_place e = SOME p ==> MEM p (expr_places e)` by
-    (ho_match_mp_tac
-       (vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
-        SIMP_RULE (srw_ss()) []) >>
-     simp[vyperTypeContractTheory.loop_iterator_place_def, expr_places_def,
-          AllCaseEqs(), MEM_MAP] >> metis_tac[]) >>
   simp[iterator_unmodified_def, EVERY_MEM] >> metis_tac[]
 QED
 
@@ -2579,10 +2550,9 @@ Theorem for_nonslot_array_scoped_body_full:
   return_buf_sep d bc eb s /\
   storage_trace_domain cx st0 eb.storage_trace /\
   expr_sim_inv c cx env em /\ local_ptrs_rel func c em.scopes u /\
-  well_typed_expr env e /\ expr_type e = ArrayT et bd /\
+  well_typed_expr env e /\ expr_writes_ok (\_. F) e /\
+  expr_type e = ArrayT et bd /\
   (?start. eval_expr cx e start = (INL rv,em)) /\
-  (!name path. rv = PlaceR (MemoryPlace name path) ==>
-    ?place. loop_iterator_place e = SOME place /\ target_root place = NameTarget name) /\
   (loc = LocCode ==> ?src name.
     e = TopLevelName (ArrayT et bd) (src,name) /\
     rv = PlaceR (ImmutablePlace src name []) /\
@@ -3159,20 +3129,10 @@ QED
 
 Resume for_nonslot_array_scoped_body_full[continue_memory_observation]:
   rpt strip_tac >>
-  qpat_assum `!nm p. rv = PlaceR (MemoryPlace nm p) ==>
-        ?bt. loop_iterator_place e = SOME bt /\ target_root bt = NameTarget nm`
-    (qspecl_then [`name`,`path`] (fn shape =>
-       qpat_assum `rv = PlaceR (MemoryPlace name path)`
-         (qx_choose_then `btIter` strip_assume_tac o MP shape))) >>
-  `?attrs. place_access btIter [] = (NameTarget name,attrs)` by
-    (Cases_on `place_access btIter []` >>
-     qpat_assum `target_root btIter = NameTarget name` mp_tac >>
-     qspecl_then [`btIter`,`[]`] mp_tac targetPlaceSimTheory.place_access_root >>
-     simp[]) >>
-  `?suffix. path = MAP AttrSubscript attrs ++ suffix` by
-    (qspecl_then [`e`,`cx`,`start`,`em`,`btIter`,`name`,`attrs`,`[]`,`path`]
-       mp_tac memory_iterator_source_path_prefix >>
-     simp[]) >>
+  qspecl_then [`e`,`cx`,`start`,`em`,`name`,`path`,`[]`] mp_tac
+    eval_iterator_memory_place_access >>
+  impl_tac >- simp[] >>
+  simp[] >> disch_then (qx_choosel_then [`btIter`,`attrs`,`suffix`] strip_assume_tac) >>
   `OPTION_MAP (\entry. (entry.type,evaluate_subscripts entry.type entry.value path))
        (lookup_scopes name es.scopes) =
      OPTION_MAP (\entry. (entry.type,evaluate_subscripts entry.type entry.value path))
@@ -3212,7 +3172,7 @@ Resume for_nonslot_array_scoped_body_full[continue_memory_observation]:
     (qpat_assum `benv = extend_local env id fty F` SUBST1_TAC >>
      irule (cj 1 iterator_typing_extend_fresh) >> simp[]) >>
   `stmts_writes_ok (\w. ~place_contains w btIter) body` by
-    (irule loop_iterator_place_writes_ok >> qexists_tac `e` >> simp[]) >>
+    (irule iterator_place_writes_ok >> qexists_tac `e` >> simp[]) >>
   `MAP (\sc. OPTION_MAP
      (\e. (e.type,evaluate_subscripts e.type e.value (MAP AttrSubscript attrs)))
      (FLOOKUP sc name)) ef.scopes =
@@ -3325,15 +3285,12 @@ Theorem for_nonslot_array_capture_classify[local]:
   (!nid. e = TopLevelName (expr_type e) nid ==>
      IS_SOME (supported_immutable_type tops nid)) /\
   (~(?ty nid. e = TopLevelName ty nid) ==>
-   ((loop_iterator_place e = NONE ==> expr_places e = []) /\
-    !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid)) /\
+   !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
   eval_expr cx e start = (INL rv,em) /\
   vv_place_ptr c cx em u rv vv /\
   (!v ty p. rv = Value v /\
     ~is_word_type (post_value_type c e) /\ ~is_bytestring_type (post_value_type c e) /\
     vv = LocatedValue ty p ==> p.ptr_location = LocMemory) ==>
-  (!name path. rv = PlaceR (MemoryPlace name path) ==>
-    ?tgt. loop_iterator_place e = SOME tgt /\ target_root tgt = NameTarget name) /\
   (vv_location vv = SOME LocCode ==> ?src name.
     e = TopLevelName (ArrayT et bd) (src,name) /\
     rv = PlaceR (ImmutablePlace src name []) /\
@@ -3380,8 +3337,7 @@ Proof
   `~(?ty nid. e = TopLevelName ty nid)` by
     (strip_tac >> qpat_x_assum `e = TopLevelName _ _` SUBST_ALL_TAC >>
      fs[vyperASTTheory.expr_type_def]) >>
-  `(loop_iterator_place e = NONE ==> expr_places e = []) /\
-   (!tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid)` by
+  `!tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid` by
     (qpat_assum `~(?ty nid. e = TopLevelName ty nid) ==> _` (fn guard =>
          qpat_assum `~(?ty nid. e = TopLevelName ty nid)`
            (ACCEPT_TAC o MATCH_MP guard))) >>
@@ -3622,8 +3578,7 @@ Theorem for_nonslot_array_round_contracts:
   (!nid. e = TopLevelName (expr_type e) nid ==>
      IS_SOME (supported_immutable_type tops nid)) /\
   (~(?ty nid. e = TopLevelName ty nid) ==>
-   ((loop_iterator_place e = NONE ==> expr_places e = []) /\
-    !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid)) /\
+   !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
   ((?ty nid. e = TopLevelName ty nid) ==>
     ~supported_stmts_expr_exists expr_internal_call_root loop_body) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -3741,7 +3696,7 @@ Resume for_nonslot_array_round_contracts[capture]:
    local_ptrs_reserved c saL` by
     (qpat_assum `for_nonslot_layout _ _ _ _ _ _ _`
        (mp_tac o REWRITE_RULE [for_nonslot_layout_def]) >> simp[]) >>
-  `sty = fty /\ well_typed_expr env e` by
+  `sty = fty /\ well_typed_expr env e /\ expr_writes_ok (\_. F) e` by
     fs[well_typed_iterator_def] >>
   qpat_x_assum `?obs. !tail. eval_expr _ _ _ = _` (qx_choose_then `obs` assume_tac) >>
   qabbrev_tac `start = es0 with gas_obs := obs ++ em.gas_obs` >>
@@ -3765,17 +3720,14 @@ Resume for_nonslot_array_round_contracts[capture]:
      p.ptr_location = LocMemory)` by
     (rpt strip_tac >> first_x_assum (drule_all_then strip_assume_tac) >> simp[]) >>
   `expr_type e = ArrayT fty bd` by metis_tac[] >>
-  `(!name path. rv = PlaceR (MemoryPlace name path) ==>
-     ?place. loop_iterator_place e = SOME place /\ target_root place = NameTarget name) /\
-   (vv_location vv = SOME LocCode ==> ?src name.
+  `(vv_location vv = SOME LocCode ==> ?src name.
      e = TopLevelName (ArrayT fty bd) (src,name) /\
      rv = PlaceR (ImmutablePlace src name []) /\
      FLOOKUP env.bare_globals (src,name) = SOME (ArrayT fty bd) /\
      ~cx_const_name cx (src,name) /\ post_value_type c e = ArrayT fty bd)` by
-    (irule for_nonslot_array_capture_classify >>
-     (rpt conj_tac >>> SELECT_LT (first_assum ACCEPT_TAC)) >-
-       (qexistsl [`ctx`,`n`,`tops`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     qexistsl [`em`,`start`,`u`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    (mp_tac (Q.INST [`et` |-> `fty`] for_nonslot_array_capture_classify) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   `local_ptrs_rel func c em.scopes u` by
     (qhdtm_assum `vv_post` (mp_tac o cj 1 o REWRITE_RULE [vv_post_def]) >>
      disch_then (ACCEPT_TAC o MATCH_MP (cj 1 stateRelProjTheory.stmt_state_rel_local_ptrs_alloca))) >>
