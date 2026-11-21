@@ -2,12 +2,68 @@
 Theory bodyFullAssignToplevelSetup
 Ancestors
   augAssignPtrToplevelMetadata bodyStorageMetadata bodyExprPreFacts bodySim
-  bodyMemAssignTopCopyFacts supportedDecls
+  supportedDecls bodyInvCodeProps bodyInvMetadataProps
+  bodyMainModuleProps linkedStorageMetadataProps exprBodyPreProps bodyInvSplit alist compileUnit
   exprSimHypsDefs exprSimHyps supportedStmts supportedExprs supportedExprForms
   supportedStmtTraverse supportedExprTraverse vyperTypeEnv vyperTypeInvariants
   vyperTypeSystem vyperTypeContractStaticMaps compileEnv compileVyper
   vyperContext vyperState vyperAST finite_map list
-  exprSimSource vyperTypeCallGraph gasContext
+  exprSimSource vyperTypeCallGraph gasContext allocLimits
+
+Theorem body_assign_toplevel_word_full_setup_mods:
+  contract_inv mods exps ctx cenv cx /\
+  supported_stmt (main_module mods) bindings
+    (Assign (BaseTarget (TopLevelNameTarget (NONE,id))) e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+    (Assign (BaseTarget (TopLevelNameTarget (NONE,id))) e) ==>
+    occurs_abi_decode_target target (main_module mods)) /\
+  expr_sim_inv_mods mods cenv cx env es /\
+  type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget (NONE,id))) e) = SOME env' /\
+  stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget (NONE,id))) e) /\
+  ~supported_expr_exists (unallocated_bare_global_root cenv env) e /\
+  call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget (NONE,id))) e)) /\
+  supported_scalar_target (main_module mods) (NONE,id) /\
+  (?dty. type_place_target env (TopLevelNameTarget (NONE,id)) = SOME (Type dty) /\
+         is_word_type dty) ==>
+  expr_body_pre_mods mods cenv cx env e es /\
+  ?tr slot tvt.
+    get_module_code cx NONE = SOME (main_module mods) /\
+    find_var_decl_by_name id (main_module mods) = SOME (StorageVarDecl tr (expr_type e),id) /\
+    lookup_var_slot_from_layout cx tr NONE id = SOME slot /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+    cenv.ce_hashmap_info (NONE,id) = NONE /\
+    cenv.ce_module_var_type (NONE,id) = SOME (expr_type e) /\
+    is_word_type (expr_type e)
+Proof
+  strip_tac >>
+  `supported_expr (main_module mods) e` by
+    gvs[supported_stmt_def, supported_assignment_def] >>
+  `well_typed_expr env e /\ type_widens_to env.type_defs (expr_type e) dty` by
+    gvs[type_stmt_def, atarget_accepts_def, AllCaseEqs()] >>
+  drule_then assume_tac contract_inv_cenv_modules >>
+  `~supported_expr_exists (const_name_root_mods mods) e` by
+    (drule stmt_exprs_ok_module_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
+  `~is_extcode e` by
+    (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+     qexists_tac `cenv` >> fs[stmt_exprs_ok_def, alloc_limits_stmt_def]) >>
+  conj_tac
+  >- (mp_tac (Q.INST [`calls` |-> `[]`] stmt_expr_body_pre_main_mods) >>
+      fs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, supported_assignment_exists_def,
+         int_calls_stmt_def, int_calls_atarget_def, int_calls_expr_def]) >>
+  drule_then assume_tac contract_inv_main_module >>
+  `get_module_code cx NONE = SOME (main_module mods)` by metis_tac[contract_inv_module_codes] >>
+  drule_then assume_tac expr_sim_inv_mods_env >>
+  `find_var_decl_by_name id (main_module mods) <> NONE` by
+    metis_tac[supported_scalar_target_decl, find_var_decl_storage_some] >>
+  drule_all compileEnvTheory.type_widens_to_word >> strip_tac >>
+  gvs[type_place_target_TopLevelNameTarget]
+  >- (drule_all augassign_env_assignable_find_none >> strip_tac >> gvs[]) >>
+  drule_all env_consistent_toplevel_storage_static >> strip_tac >> gvs[] >>
+  drule_all_then strip_assume_tac body_inv_storage_var_types_mods >>
+  drule find_var_decl_storage_mem >> strip_tac >>
+  gvs[optionTheory.IS_SOME_EXISTS]
+QED
 
 Theorem body_assign_toplevel_word_full_setup:
   body_inv tops ctx cenv cx /\
@@ -33,34 +89,23 @@ Theorem body_assign_toplevel_word_full_setup:
     is_word_type (expr_type e)
 Proof
   Cases_on `nsid` >> rename1 `(src,id)` >> strip_tac >>
-  `supported_expr tops e` by
-    gvs[supported_stmt_def, supported_assignment_def] >>
-  `expr_body_pre cenv cx env e es` by
-    metis_tac[topcopy_rhs_pre_supported] >>
-  `?vis mut decl_ty slot.
-    supported_variable_decl tops (src,id) = SOME (vis,mut,decl_ty,SOME slot) /\
-    (mut = Storage \/ mut = Transient)` by
-    (qpat_assum `supported_scalar_target tops _` mp_tac >>
-     simp[NoAsms,supported_scalar_target_def] >>
-     Cases_on `supported_variable_decl tops (src,id)` >> simp[] >>
-     PairCases_on `x` >> Cases_on `x3` >> Cases_on `x1` >> simp[]) >>
-  drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
-  `get_module_code cx NONE = SOME tops /\
-   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
-   cenv.ce_hashmap_info = build_hashmap_info tops /\
-   cenv.ce_module_var_type (NONE,id) = build_var_type_map tops (NONE,id)` by
-    fs[body_inv_def] >>
-  drule_all build_maps_variable >> strip_tac >>
-  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
-  `find_var_decl_by_name id tops <> NONE` by
-    metis_tac[find_var_decl_storage_some] >>
-  `type_widens_to env.type_defs (expr_type e) dty` by
-    fs[type_stmt_def, atarget_accepts_def, AllCaseEqs()] >>
-  drule_all type_widens_to_word >> strip_tac >>
-  gvs[type_place_target_TopLevelNameTarget] >>
-  TRY (drule_all augassign_env_assignable_find_none >> strip_tac >> gvs[] >> NO_TAC) >>
-  drule_all env_consistent_toplevel_storage_static >> strip_tac >>
-  drule find_var_decl_storage_mem >> strip_tac >> gvs[] >>
-  `decl_ty = expr_type e` by metis_tac[build_maps_variable,optionTheory.SOME_11] >>
-  gvs[optionTheory.IS_SOME_EXISTS]
+  drule_then strip_assume_tac supported_scalar_target_decl >> gvs[] >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  drule_then assume_tac body_inv_contract >>
+  `supported_expr tops e` by fs[supported_stmt_def, supported_assignment_def] >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  `~supported_expr_exists (const_name_root cx) e` by
+    (drule_all body_inv_stmt_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
+  drule_all_then assume_tac expr_sim_inv_no_unallocated_bare_globals >>
+  `expr_sim_inv_mods [(NONE,tops)] cenv cx env es` by fs[expr_sim_inv_split_def] >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`]
+    body_assign_toplevel_word_full_setup_mods) >>
+  impl_tac >- (simp[main_module_def, ALOOKUP_def] >> metis_tac[]) >>
+  simp[main_module_def, ALOOKUP_def] >> strip_tac >>
+  drule_then assume_tac contract_inv_type_env >>
+  fs[expr_body_pre_split_def, vyperContextTheory.type_env_all_modules_def,
+     vyperContextTheory.type_env_def, finite_mapTheory.FUNION_FEMPTY_2,
+     supported_stmt_expr_exists_def, supported_assignment_exists_def] >>
+  metis_tac[]
 QED
