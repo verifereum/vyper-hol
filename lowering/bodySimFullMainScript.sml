@@ -287,70 +287,68 @@ Proof
     (* 39 *) full_case body_send_case_full,
     (* 40 *) full_case body_extcall_case_full,
     (* 41 *)
-      let val simps = full_case_simps in
-        rpt strip_tac >> full_simp_tac bool_ss simps >>
-        irule (SIMP_RULE bool_ss simps body_intcall_case_full) >>
-        asm_rewrite_tac[] >> rpt strip_tac
-        >~ [`body_stmts_full_ok _ _`]
-        >- (`!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-               (!vis mut nr raw fn args dflts ret ss.
-                 MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                 stmts_loop_calls_ok [(NONE,tops)] ss) /\
-               stmts_loop_calls_ok [(NONE,tops)] (SND (SND (SND (SND (SND tup)))))` by
-              (gen_tac >> disch_tac >>
-               qpat_assum `!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==> _`
-                 (qspec_then `tops` mp_tac) >> simp[] >> strip_tac >>
-               conj_tac >- first_assum ACCEPT_TAC >>
-               PairCases_on `tup` >>
-               gvs[vyperTypeEvalProofsTheory.lift_option_type_INL_eq] >>
-               drule_all_then ACCEPT_TAC callable_body_loop_calls_ok) >>
-            rename1 `type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" sRec = (INL xRec,tRec)` >>
-            rename1 `type_check _ "IntCall args length" sLen = (INL xLen,tLen)` >>
-            rename1 `eval_exprs cx es sArgs = (INL vs,tArgs)` >>
-            rename1 `get_scopes sScope = (INL prev,tScope)` >>
-            rename1 `finally _ (set_scopes prev) sDflt = (INL dvs,tDflt)` >>
-            rename1 `lift_option_type (get_module_code _ _) _ sMod = (INL ts,tMod)` >>
-            rename1 `lift_option_type (lookup_callable_function _ _ _) _ sLookup = (INL tup,tLookup)` >>
-            rename1 `lift_option_type (bind_arguments _ _ _) _ sBind = (INL env,tBind)` >>
-            rename1 `lift_option_type (evaluate_type _ _) _ sType = (INL rtv,tType)` >>
-            rename1 `lock_if_nr cx _ _ sLock = (INL xLock,tLock)` >>
-            qpat_x_assum `!s x t sm ts tm su tup tu sl xl tl sa vs ta sc prev tc sd ds td
-                 sb env tb sy rtv ty sk xk tk. _ ==> _ ==> body_stmts_full_ok _ _`
-              (qspecl_then [`sRec`,`xRec`,`tRec`,`sMod`,`ts`,`tMod`,`sLookup`,`tup`,`tLookup`,
-                `sLen`,`xLen`,`tLen`,`sArgs`,`vs`,`tArgs`,`sScope`,`prev`,`tScope`,
-                `sDflt`,`dvs`,`tDflt`,`sBind`,`env`,`tBind`,`sType`,`rtv`,`tType`,
-                `sLock`,`xLock`,`tLock`] mp_tac) >>
-            simp[] >> disch_then irule >> gen_tac >> disch_tac >>
-            qpat_assum `!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==> _`
-              (qspec_then `tops` mp_tac) >> simp[]) >>
-        TRY (fs[] >> NO_TAC) >>
-        TRY (
-          `!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-              !vis mut nr raw fn args dflts ret ss.
-                MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                stmts_loop_calls_ok [(NONE,tops)] ss` by
+      rpt strip_tac >> full_simp_tac bool_ss full_case_simps >>
+      irule (SIMP_RULE bool_ss full_case_simps body_intcall_case_full) >>
+      asm_rewrite_tac[] >> rpt strip_tac
+      >~ [`body_stmts_full_ok _ _`]
+      >- (`!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+             (!vis mut nr raw fn args dflts ret ss.
+               MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+               stmts_loop_calls_ok [(NONE,tops)] ss) /\
+             stmts_loop_calls_ok [(NONE,tops)] (SND (SND (SND (SND (SND tup)))))` by
             (gen_tac >> disch_tac >>
              qpat_assum `!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==> _`
-               (qspec_then `tops` mp_tac) >> simp[]) >>
+               (qspec_then `tops` mp_tac) >> simp[] >> strip_tac >>
+             conj_tac >- first_assum ACCEPT_TAC >>
+             PairCases_on `tup` >>
+             gvs[vyperTypeEvalProofsTheory.lift_option_type_INL_eq] >>
+             drule_all_then ACCEPT_TAC callable_body_loop_calls_ok) >>
           rename1 `type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" sRec = (INL xRec,tRec)` >>
+          rename1 `type_check _ "IntCall args length" sLen = (INL xLen,tLen)` >>
+          rename1 `eval_exprs cx es sArgs = (INL vs,tArgs)` >>
+          rename1 `get_scopes sScope = (INL prev,tScope)` >>
+          rename1 `finally _ (set_scopes prev) sDflt = (INL dvs,tDflt)` >>
           rename1 `lift_option_type (get_module_code _ _) _ sMod = (INL ts,tMod)` >>
           rename1 `lift_option_type (lookup_callable_function _ _ _) _ sLookup = (INL tup,tLookup)` >>
-          rename1 `type_check _ "IntCall args length" sLen = (INL xLen,tLen)` >>
-          FIRST [
-            qpat_x_assum `!s x t sm ts tm su tup tu sl xl tl. _ ==> _ ==> body_exprs_full_ok _ _`
-              (qspecl_then [`sRec`,`xRec`,`tRec`,`sMod`,`ts`,`tMod`,`sLookup`,`tup`,`tLookup`,
-                 `sLen`,`xLen`,`tLen`] mp_tac) >> simp[] >>
-              disch_then irule >> first_assum ACCEPT_TAC,
-            rename1 `eval_exprs cx es sArgs = (INL vs,tArgs)` >>
-            rename1 `get_scopes sScope = (INL prev,tScope)` >>
-            rename1 `set_scopes [FEMPTY] sSet = (INL xSet,tSet)` >>
-            qpat_x_assum `!s x t sm ts tm su tup tu sl xl tl sa vs ta sc prev tc ss xs ts'.
-                   _ ==> _ ==> body_exprs_full_ok _ _`
-              (qspecl_then [`sRec`,`xRec`,`tRec`,`sMod`,`ts`,`tMod`,`sLookup`,`tup`,`tLookup`,
-                 `sLen`,`xLen`,`tLen`,`sArgs`,`vs`,`tArgs`,`sScope`,`prev`,`tScope`,
-                 `sSet`,`xSet`,`tSet`] mp_tac) >> simp[] >>
-              disch_then irule >> first_assum ACCEPT_TAC])
-      end,
+          rename1 `lift_option_type (bind_arguments _ _ _) _ sBind = (INL env,tBind)` >>
+          rename1 `lift_option_type (evaluate_type _ _) _ sType = (INL rtv,tType)` >>
+          rename1 `lock_if_nr cx _ _ sLock = (INL xLock,tLock)` >>
+          qpat_x_assum `!s x t sm ts tm su tup tu sl xl tl sa vs ta sc prev tc sd ds td
+               sb env tb sy rtv ty sk xk tk. _ ==> _ ==> body_stmts_full_ok _ _`
+            (qspecl_then [`sRec`,`xRec`,`tRec`,`sMod`,`ts`,`tMod`,`sLookup`,`tup`,`tLookup`,
+              `sLen`,`xLen`,`tLen`,`sArgs`,`vs`,`tArgs`,`sScope`,`prev`,`tScope`,
+              `sDflt`,`dvs`,`tDflt`,`sBind`,`env`,`tBind`,`sType`,`rtv`,`tType`,
+              `sLock`,`xLock`,`tLock`] mp_tac) >>
+          simp[] >> disch_then irule >> gen_tac >> disch_tac >>
+          qpat_assum `!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==> _`
+            (qspec_then `tops` mp_tac) >> simp[]) >>
+      TRY (fs[] >> NO_TAC) >>
+      TRY (
+        `!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+            !vis mut nr raw fn args dflts ret ss.
+              MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+              stmts_loop_calls_ok [(NONE,tops)] ss` by
+          (gen_tac >> disch_tac >>
+           qpat_assum `!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==> _`
+             (qspec_then `tops` mp_tac) >> simp[]) >>
+        rename1 `type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" sRec = (INL xRec,tRec)` >>
+        rename1 `lift_option_type (get_module_code _ _) _ sMod = (INL ts,tMod)` >>
+        rename1 `lift_option_type (lookup_callable_function _ _ _) _ sLookup = (INL tup,tLookup)` >>
+        rename1 `type_check _ "IntCall args length" sLen = (INL xLen,tLen)` >>
+        FIRST [
+          qpat_x_assum `!s x t sm ts tm su tup tu sl xl tl. _ ==> _ ==> body_exprs_full_ok _ _`
+            (qspecl_then [`sRec`,`xRec`,`tRec`,`sMod`,`ts`,`tMod`,`sLookup`,`tup`,`tLookup`,
+               `sLen`,`xLen`,`tLen`] mp_tac) >> simp[] >>
+            disch_then irule >> first_assum ACCEPT_TAC,
+          rename1 `eval_exprs cx es sArgs = (INL vs,tArgs)` >>
+          rename1 `get_scopes sScope = (INL prev,tScope)` >>
+          rename1 `set_scopes [FEMPTY] sSet = (INL xSet,tSet)` >>
+          qpat_x_assum `!s x t sm ts tm su tup tu sl xl tl sa vs ta sc prev tc ss xs ts'.
+                 _ ==> _ ==> body_exprs_full_ok _ _`
+            (qspecl_then [`sRec`,`xRec`,`tRec`,`sMod`,`ts`,`tMod`,`sLookup`,`tup`,`tLookup`,
+               `sLen`,`xLen`,`tLen`,`sArgs`,`vs`,`tArgs`,`sScope`,`prev`,`tScope`,
+               `sSet`,`xSet`,`tSet`] mp_tac) >> simp[] >>
+            disch_then irule >> first_assum ACCEPT_TAC]),
     (* 42 *) full_case body_raw_call_case_full,
     (* 43 *) full_case body_raw_call_calldata_case_full,
     (* 44 *) full_case body_raw_log_case_full,
