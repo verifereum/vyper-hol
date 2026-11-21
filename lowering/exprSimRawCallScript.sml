@@ -1448,6 +1448,22 @@ Proof
   irule fresh_not_local_ptr >> qexists_tac `sa` >> simp[not_fresh_at_def]
 QED
 
+(* The keyword operands of a typed raw_call are uint256 expressions that satisfy
+   the body precondition from any invariant state. *)
+Theorem raw_call_keywords_pre:
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es ==>
+  raw_call_kws_ok flags kws /\ LENGTH kws = LENGTH flags.rcf_kws /\
+  EVERY (\e. expr_type e = BaseT (UintT 256) /\
+    !st. expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) kws
+Proof
+  strip_tac >> drule raw_call_pre_flags >> simp[] >> strip_tac >>
+  drule raw_call_kwargs_types >> strip_tac >>
+  simp[EVERY_MEM] >> rpt gen_tac >> strip_tac >> conj_tac
+  >- fs[EVERY_MEM] >> rpt strip_tac >>
+  irule expr_body_pre_raw_call_arg >>
+  first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]
+QED
+
 Theorem raw_call_keyword_values[local]:
   !ks es vs es'.
     EVERY (\e. expr_type e = BaseT (UintT 256) /\
@@ -1526,14 +1542,8 @@ Theorem raw_call_keywords_decode[local]:
     (flags.rcf_is_static ==> amount = 0) /\
     LENGTH kvs = LENGTH flags.rcf_kws /\ expr_sim_inv cenv cx env es'
 Proof
-  strip_tac >> drule raw_call_pre_flags >> simp[] >> strip_tac >>
-  drule raw_call_kwargs_types >> strip_tac >>
-  `EVERY (\e. expr_type e = BaseT (UintT 256) /\
-    !st. expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) kws` by
-    (simp[EVERY_MEM] >> rpt gen_tac >> strip_tac >> conj_tac
-     >- fs[EVERY_MEM] >> rpt strip_tac >>
-     irule expr_body_pre_raw_call_arg >>
-     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  strip_tac >> drule raw_call_keywords_pre >> strip_tac >>
+  `EVERY (\e. expr_type e = BaseT (UintT 256)) kws` by fs[EVERY_MEM] >>
   drule_all raw_call_keyword_values >> strip_tac >>
   drule_all raw_call_keywords_post >> strip_tac >>
   drule_all raw_call_value_operand >>

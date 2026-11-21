@@ -35,7 +35,7 @@ Proof
 QED
 
 (* An empty list of marks means no events, not merely all-false marks. *)
-Theorem finite_array_empty_path_explicit[local]:
+Theorem finite_array_empty_path_explicit:
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) st [] out ==>
   gas_origin_ptr_path (D,lo,explicit',ctx,func,PG) st [] out
 Proof

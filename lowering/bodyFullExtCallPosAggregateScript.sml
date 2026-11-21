@@ -139,7 +139,7 @@ QED
 (* The snapshot saves the read value, not the source place.  Retagging
    therefore retains the region/local value witness without retagging a
    memory path in the source store. *)
-Theorem snapshot_bytes_retag[local]:
+Theorem snapshot_bytes_retag:
   expr_body_pre ce cx env e es /\ post_value_type ce e = expr_type e /\
   is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
   eval_expr cx e es = (INL raw,ee) /\ read_result cx raw ee = (INL v,ee) /\
