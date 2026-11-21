@@ -252,7 +252,7 @@ Proof
   gvs[optionTheory.OPTION_MAP_COMPOSE, combinTheory.o_DEF, subst_consts_expr_def]
 QED
 
-Theorem order_custom_error_args_subst[local]:
+Theorem order_custom_error_args_subst:
   order_custom_error_args params
     (CustomError id (subst_consts_exprs E pos) (subst_consts_fields E kw)) =
   OPTION_MAP (subst_consts_exprs E)
