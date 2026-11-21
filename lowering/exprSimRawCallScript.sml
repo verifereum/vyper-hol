@@ -541,13 +541,15 @@ Proof
   simp[expr_body_pre_def, well_typed_expr_def]
 QED
 
-Theorem expr_body_pre_raw_call_arg:
-  !cenv cx env ann flags args dflt e es es'.
-    expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es /\
+Theorem expr_body_pre_raw_call_target_arg:
+  !cenv cx env ann flags target args dflt e es es'.
+    (target = RawCallTarget flags \/ target = RawCallCalldataTarget flags) /\
+    expr_body_pre cenv cx env (Call ann target args dflt) es /\
     MEM e args /\ expr_sim_inv cenv cx env es' ==>
     expr_body_pre cenv cx env e es'
 Proof
-  rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  gvs[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
      byte_widths_expr_def, alloc_limits_expr_def,
      supportedExprTraverseTheory.supported_expr_exists_def,
      supportedExprTraverseTheory.supported_exprs_exists_every, EXISTS_MEM] >>
@@ -555,6 +557,17 @@ Proof
   gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
   metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
             alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
+QED
+
+Theorem expr_body_pre_raw_call_arg:
+  !cenv cx env ann flags args dflt e es es'.
+    expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es /\
+    MEM e args /\ expr_sim_inv cenv cx env es' ==>
+    expr_body_pre cenv cx env e es'
+Proof
+  rpt strip_tac >> irule expr_body_pre_raw_call_target_arg >> simp[] >>
+  qexistsl_tac [`ann`,`args`,`dflt`,`es`,`flags`,`RawCallTarget flags`] >>
+  simp[]
 QED
 
 
@@ -1448,23 +1461,43 @@ Proof
   irule fresh_not_local_ptr >> qexists_tac `sa` >> simp[not_fresh_at_def]
 QED
 
-(* The keyword operands of a typed raw_call are uint256 expressions that satisfy
+(* The keyword operands of either raw call are uint256 expressions that satisfy
    the body precondition from any invariant state. *)
+Theorem raw_call_keywords_pre_for_target:
+  expr_body_pre cenv cx env (Call ann target args dflt) es /\
+  ((target = RawCallTarget flags /\ args = a::d::kws) \/
+   (target = RawCallCalldataTarget flags /\ args = a::kws)) ==>
+  raw_call_kws_ok flags kws /\ LENGTH kws = LENGTH flags.rcf_kws /\
+  EVERY (\e. expr_type e = BaseT (UintT 256) /\
+    !st. expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) kws
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `raw_call_kws_ok flags kws /\ LENGTH kws = LENGTH flags.rcf_kws` by
+    (qpat_assum `expr_body_pre cenv cx env (Call ann target args dflt) es` mp_tac >>
+     qpat_assum `_ \/ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+     gvs[expr_body_pre_def,well_typed_expr_def]) >>
+  drule raw_call_kwargs_types >> strip_tac >>
+  simp[EVERY_MEM] >> qx_gen_tac `e` >> disch_tac >> conj_tac
+  >- fs[EVERY_MEM] >>
+  qx_gen_tac `st` >> disch_tac >>
+  irule expr_body_pre_raw_call_target_arg >> simp[] >>
+  qexistsl [`ann`,`args`,`dflt`,`es`,`flags`,`target`] >> simp[] >>
+  qpat_assum `_ \/ _` strip_assume_tac >> gvs[]
+QED
+
 Theorem raw_call_keywords_pre:
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es ==>
   raw_call_kws_ok flags kws /\ LENGTH kws = LENGTH flags.rcf_kws /\
   EVERY (\e. expr_type e = BaseT (UintT 256) /\
     !st. expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) kws
 Proof
-  strip_tac >> drule raw_call_pre_flags >> simp[] >> strip_tac >>
-  drule raw_call_kwargs_types >> strip_tac >>
-  simp[EVERY_MEM] >> rpt gen_tac >> strip_tac >> conj_tac
-  >- fs[EVERY_MEM] >> rpt strip_tac >>
-  irule expr_body_pre_raw_call_arg >>
-  first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]
+  strip_tac >>
+  irule raw_call_keywords_pre_for_target >>
+  qexistsl [`a`,`ann`,`a::d::kws`,`d`,`dflt`,`es`,`RawCallTarget flags`] >> simp[]
 QED
 
-Theorem raw_call_keyword_values[local]:
+Theorem raw_call_keyword_values:
   !ks es vs es'.
     EVERY (\e. expr_type e = BaseT (UintT 256) /\
       !st. expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) ks /\
@@ -1500,7 +1533,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem raw_call_value_operand[local]:
+Theorem raw_call_value_operand:
   !ks xs vs.
     LIST_REL (\x v. eval_operand x s = SOME
       (typed_val_to_w256 (BaseTV (UintT 256)) v)) xs vs /\
