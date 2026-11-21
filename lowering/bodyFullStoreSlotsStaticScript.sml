@@ -11,6 +11,46 @@ Ancestors
   abiEncoderObserver fragExec
   venomState venomInst compileEnv list rich_list pred_set arithmetic exprSimAbiDecodeSetupObserve
 
+Theorem store_slots_subregion_dead_iff:
+  MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\
+  storage_locks_separated (FST H) (SND H) /\
+  storage_subregion root path delta tv /\ start = w2n rootk + delta /\
+  start <= j /\ j < start + type_slot_size tv ==>
+  (storage_dead H tr st j b <=> dead_bytes st start tv j b)
+Proof
+  strip_tac >>
+  drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac >>
+  `w2n rootk <= j /\ j < w2n rootk + type_slot_size root` by decide_tac >>
+  `w2n rootk + type_slot_size root <= dimword (:256) /\
+   !k' tv'. MEM (tr,k',tv') (FST H) /\ (k',tv') <> (rootk,root) ==>
+     ranges_disjoint (w2n rootk) (type_slot_size root) (w2n k') (type_slot_size tv')` by
+    (fs[vyperStorageFootprintTheory.regions_consistent_def] >> metis_tac[]) >>
+  eq_tac
+  >- (strip_tac >>
+      `storage_read_live H tr st (n2w start) tv` by
+        (irule accountsRelPropsTheory.storage_subregion_read_live >>
+         goal_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
+         qexists_tac `rootk` >>
+         `start < dimword (:256)` by decide_tac >>
+         simp[accountsRelPropsTheory.observed_storage_region_read_live,
+              wordsTheory.w2n_n2w]) >>
+      qpat_x_assum `storage_read_live _ _ _ _ _`
+        (mp_tac o PURE_REWRITE_RULE [loweringStateRelDefsTheory.storage_read_live_def]) >>
+      disch_then (qspecl_then [`j`,`b`] mp_tac) >>
+      `start < dimword (:256)` by decide_tac >>
+      simp[wordsTheory.w2n_n2w]) >>
+  simp_tac (srw_ss()) [loweringStateRelDefsTheory.storage_dead_def] >>
+  disch_tac >> conj_tac
+  >- (Cases_on `tr` >> simp[] >> strip_tac >>
+      fs[vyperStorageFootprintTheory.storage_locks_separated_def] >>
+      first_x_assum (qspecl_then [`rootk`,`root`,`j`] mp_tac) >>
+      simp[vyperStorageFrameTheory.ranges_disjoint_def] >> decide_tac) >>
+  qexistsl_tac [`rootk`,`root`] >> simp[] >>
+  drule placeStoreStorageTheory.place_store_dead_subregion >>
+  disch_then (qspecl_then [`w2n rootk`,`st`,`j`,`b`] mp_tac) >> simp[]
+  >> (gvs[])
+QED
+
 Theorem compile_store_slots_static_origin_ptr_path:
  !cenv tenv ty tv v src dst tr sa sb s sw dw tn G writes func ctx lo explicit PG.
   acyclic_struct_metadata cenv.ce_struct_fields /\

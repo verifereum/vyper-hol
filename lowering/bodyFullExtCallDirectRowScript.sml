@@ -350,6 +350,76 @@ QED
 Theorem abi_encode_saved_row =
   pureFrameLib.drop_frame abi_encode_saved_row_pure
 
+Theorem abi_encode_direct_row:
+  ty = lowered_value_type ce e /\
+  compile_expr ce (expr_type e) e si = (vv,sm) /\
+  compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
+  ((?tag op0. saved = StackValue tag op0) \/
+   (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location = LocMemory) \/
+   (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location <> LocMemory /\
+        ty = expr_type e /\ saved = vv)) /\
+  local_ptrs_reserved ce si /\ sm.cs_next_var <= se.cs_next_var /\ sm.cs_next_id <= se.cs_next_id /\
+  ss.cs_next_var <= se.cs_next_var /\ ss.cs_next_id <= se.cs_next_id /\
+  local_ptrs_reserved ce se /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
+  (~is_word_type ty ==> ~is_word_type (expr_type e)) /\
+  (!l. vv_operand saved <> Label l) /\
+  read_result cx raw ee = (INL v,ee) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ type_memory_bytes ce ty = type_memory_size tv /\
+  type_memory_size tv < 2**64 /\ value_has_type tv v /\
+  vv_holds ce cx ty raw saved ee s /\ vv_at ce cx ty si ss ee raw saved s /\
+  ptr_vv_ok cx ty raw saved ee G tn s /\ vv_store_bound cx ty ty ee raw saved s /\
+  ((case saved of StackValue tag op0 => ~is_word_type ty
+      | LocatedValue tag p => p.ptr_location = LocMemory) ==>
+    ptr_buf_ok ce e (vv_operand saved) G s) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ee s /\ vv_storage_live H cx saved ee s) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. dead_lo_ok H (DF H) lo ce cx) /\
+  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env ee /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  fn_inst_ids_distinct func /\
+  fn_has_code su en func /\
+  compile_abi_encode_value_rows ce (Var dst) cursor h [(saved,ty)] su = ((),en) /\
+  extcall_direct_state ctx func ce cx st0 ee DF lo d se s G tn
+    se.cs_next_id pbase capacity root dst selector su u Gu tu /\
+  abi_encode_values_prefix_at ats avs hl (pbase+32) cursor loc slot i su u Gu tu /\
+  32 <= capacity /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = se.cs_next_id /\
+  inst.inst_outputs = [root] /\ not_local_ptr ce ee.scopes root /\
+  MEM cursor_inst (fn_insts func) /\ cursor_inst.inst_id = loc /\
+  cursor_inst.inst_outputs = [cursor_var] /\ not_local_ptr ce ee.scopes cursor_var /\
+  cursor_inst.inst_opcode = ALLOCA /\ se.cs_next_id < loc /\
+  sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
+  i < LENGTH ats /\ LENGTH ats = LENGTH avs /\ at = EL i ats /\ av = EL i avs /\
+  at = vyper_to_abi_type (get_tenv cx) ty /\ vyper_to_abi (get_tenv cx) ty v = SOME av /\
+  abi_encoder_layout_valid at av /\ LIST_REL abi_encoder_layout_valid (TAKE i ats) (TAKE i avs) /\
+  h = LENGTH (FLAT (abi_tuple_heads hl 0 (TAKE i ats) (TAKE i avs))) /\
+  off = hl + LENGTH (FLAT (abi_tuple_tails (TAKE i ats) (TAKE i avs))) /\
+  h + abi_member_head_size at <= hl /\ off <= capacity-32 /\
+  (is_dynamic at ==> off + LENGTH (enc at av) <= capacity-32) ==>
+  ?z Gz tz.
+    extcall_direct_state ctx func ce cx st0 ee DF lo d se s G tn
+      se.cs_next_id pbase capacity root dst selector en z Gz tz /\
+    abi_encode_values_prefix_at ats avs hl (pbase+32) cursor loc slot (SUC i) en z Gz tz /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK z,Gz,tz)
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_assum `32 <= capacity` (fn cap =>
+    drule_then (fn len =>
+      mp_tac (SIMP_RULE bool_ss [MATCH_MP abi_encode_saved_state_extcall len,cap]
+        (Q.INST [`dst_offset` |-> `32`,`prefix` |-> `selector`,
+          `shared` |-> `se.cs_next_id`]
+          (pureFrameLib.drop_frame abi_encode_saved_row_open_pure))))
+      extcall_direct_state_selector_length) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    disch_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
+QED
+
 Theorem extcall_direct_row:
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\

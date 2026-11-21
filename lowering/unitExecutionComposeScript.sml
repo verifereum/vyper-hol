@@ -1,8 +1,9 @@
 (*
- * A unit's execution from its entry, composed from a zero-GAS pointer path
+ * A unit's execution from its entry, composed from a pointer path
  * from the entry state vs0 to the body's start s0 and the body's
  * gas_outcome_full at s0.  CT is the unit's call as a function of its gas
- * observations; its observations are the source's.  REL and EX say what the
+ * observations after the entry prefix. The target paths include both
+ * the entry's marks and the body's marks.  REL and EX say what the
  * call's result means for the unit (the runtime call's
  * external_call_result_rel and source_exempt, or the deployment's
  * counterparts).
@@ -45,12 +46,11 @@ QED
 
 (* The entry prefix joins a focus from the body start. *)
 Theorem entry_focus_prefix[local]:
-  gas_origin_ptr_path X (s, G, tn) [] (OK s0, G0, tn0) /\
+  gas_origin_ptr_path X (s, G, tn) marks0 (OK s0, G0, tn0) /\
   gas_origin_ptr_focus X (s0, G0, tn0) marks out ==>
-  gas_origin_ptr_focus X (s, G, tn) marks out
+  gas_origin_ptr_focus X (s, G, tn) (marks0 ++ marks) out
 Proof
   PairCases_on `X` >> PairCases_on `out` >> strip_tac >>
-  `marks = [] ++ marks` by simp[] >> pop_assum SUBST1_TAC >>
   irule (cj 2 gas_origin_ptr_focus_rules) >> metis_tac[]
 QED
 
@@ -70,25 +70,25 @@ QED
 (* The entry prefix and a body path from s0 make one memory path from the
    entry. *)
 Theorem entry_path_join[local]:
-  gas_origin_ptr_path (D, lo, E, ctx, func, PG) (s, G, tn) []
+  gas_origin_ptr_path (D, lo, E, ctx, func, PG) (s, G, tn) marks0
     (OK s0, G0, tn0) /\
   gas_origin_ptr_path (D, lo, E, ctx, func, PG) (s0, G0, tn0) marks
     (r, G', tn') ==>
-  gas_origin_ptr_path (D, lo, E, ctx, func, PG) (s, G, tn) marks
+  gas_origin_ptr_path (D, lo, E, ctx, func, PG) (s, G, tn) (marks0 ++ marks)
     (r, G', tn')
 Proof
-  strip_tac >> `marks = [] ++ marks` by simp[] >> pop_assum SUBST1_TAC >>
+  strip_tac >>
   irule gas_origin_ptr_path_append >> metis_tac[]
 QED
 
 (* A final action may extend the observations while preserving their horizons. *)
 Theorem unit_execution_compose_horizon:
-  !DF E ctx func cx st0 tops source es0 s0 G0 tn0 Q R vs0 CT REL EX.
+  !DF E ctx func cx st0 tops source es0 s0 G0 tn0 Q R vs0 CT REL EX marks0.
     storage_trace_frame source /\
     storage_trace_domain cx st0 es0.storage_trace /\
     (!H. valid_horizon cx st0 H es0.storage_trace ==>
        gas_origin_ptr_path (DF H, 0, E, ctx, func, [])
-         (vs0, FEMPTY, entry_taint) [] (OK s0, G0, tn0) /\
+         (vs0, FEMPTY, entry_taint) marks0 (OK s0, G0, tn0) /\
        ((!fuel. ptr_safe_run (DF H) 0 fuel ctx func [] G0 tn0 s0) ==>
         !fuel. ptr_safe_blocks (DF H) 0 fuel ctx func [] FEMPTY entry_taint
                  vs0)) /\
@@ -136,7 +136,7 @@ Theorem unit_execution_compose_horizon:
                    (CT (gas_explicit marks s0.vs_gas_readings ++ tail)))))) /\
        ?H leaf leaf_pg leaf_g leaf_tn finish.
          gas_origin_ptr_focus (DF H, 0, E, ctx, func, [])
-           (vs0, FEMPTY, entry_taint) marks
+           (vs0, FEMPTY, entry_taint) (marks0 ++ marks)
            (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
       ?res am' rqs obs.
         (!tail. CT (gas_explicit marks s0.vs_gas_readings ++ tail) =
@@ -144,10 +144,10 @@ Theorem unit_execution_compose_horizon:
         ((EX (res, am', rqs) /\
           ?H leaf leaf_pg leaf_g leaf_tn finish.
             gas_origin_ptr_focus (DF H, 0, E, ctx, func, [])
-              (vs0, FEMPTY, entry_taint) marks
+              (vs0, FEMPTY, entry_taint) (marks0 ++ marks)
               (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
          (?r. exit_result r /\ storage_trace_domain cx st0 obs /\
-            gas_origin_path T E ctx func vs0 marks r /\
+            gas_origin_path T E ctx func vs0 (marks0 ++ marks) r /\
             !H. valid_horizon cx st0 H obs ==>
               REL H (res, am', rqs) r /\
               !fuel. ptr_safe_blocks (DF H) 0 fuel ctx func [] FEMPTY
@@ -204,7 +204,7 @@ Proof
           >- (`gas_origin_ptr_path (DF H0, 0, E, ctx, func, [])
                  (s0, G0, tn0) marks (r, G', tn')` by metis_tac[] >>
               `gas_origin_ptr_path (DF H0, 0, E, ctx, func, [])
-                 (vs0, FEMPTY, entry_taint) [] (OK s0, G0, tn0)` by
+                 (vs0, FEMPTY, entry_taint) marks0 (OK s0, G0, tn0)` by
                 metis_tac[] >>
               metis_tac[entry_path_join, gas_origin_ptr_path_projections]) >>
           rpt strip_tac
@@ -238,7 +238,7 @@ Proof
          simp[] >> metis_tac[]) >>
       `!H. valid_horizon cx st0 H ee.storage_trace ==>
            ?G'' tn''. gas_origin_ptr_path (DF H, 0, E, ctx, func, [])
-             (vs0, FEMPTY, entry_taint) marks (r', G'', tn'') /\
+             (vs0, FEMPTY, entry_taint) (marks0 ++ marks) (r', G'', tn'') /\
              REL H (cr, am', rqs) r'` by
         (rpt strip_tac >>
          `valid_horizon cx st0 H es0.storage_trace` by metis_tac[] >>
@@ -286,12 +286,12 @@ Proof
 QED
 
 Theorem unit_execution_compose:
-  !DF E ctx func cx st0 tops source es0 s0 G0 tn0 Q R vs0 CT REL EX.
+  !DF E ctx func cx st0 tops source es0 s0 G0 tn0 Q R vs0 CT REL EX marks0.
     storage_trace_frame source /\
     storage_trace_domain cx st0 es0.storage_trace /\
     (!H. valid_horizon cx st0 H es0.storage_trace ==>
        gas_origin_ptr_path (DF H, 0, E, ctx, func, [])
-         (vs0, FEMPTY, entry_taint) [] (OK s0, G0, tn0) /\
+         (vs0, FEMPTY, entry_taint) marks0 (OK s0, G0, tn0) /\
        ((!fuel. ptr_safe_run (DF H) 0 fuel ctx func [] G0 tn0 s0) ==>
         !fuel. ptr_safe_blocks (DF H) 0 fuel ctx func [] FEMPTY entry_taint
                  vs0)) /\
@@ -336,7 +336,7 @@ Theorem unit_execution_compose:
                    (CT (gas_explicit marks s0.vs_gas_readings ++ tail)))))) /\
        ?H leaf leaf_pg leaf_g leaf_tn finish.
          gas_origin_ptr_focus (DF H, 0, E, ctx, func, [])
-           (vs0, FEMPTY, entry_taint) marks
+           (vs0, FEMPTY, entry_taint) (marks0 ++ marks)
            (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
       ?res am' rqs obs.
         (!tail. CT (gas_explicit marks s0.vs_gas_readings ++ tail) =
@@ -344,17 +344,17 @@ Theorem unit_execution_compose:
         ((EX (res, am', rqs) /\
           ?H leaf leaf_pg leaf_g leaf_tn finish.
             gas_origin_ptr_focus (DF H, 0, E, ctx, func, [])
-              (vs0, FEMPTY, entry_taint) marks
+              (vs0, FEMPTY, entry_taint) (marks0 ++ marks)
               (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
          (?r. exit_result r /\ storage_trace_domain cx st0 obs /\
-            gas_origin_path T E ctx func vs0 marks r /\
+            gas_origin_path T E ctx func vs0 (marks0 ++ marks) r /\
             !H. valid_horizon cx st0 H obs ==>
               REL H (res, am', rqs) r /\
               !fuel. ptr_safe_blocks (DF H) 0 fuel ctx func [] FEMPTY
                        entry_taint vs0))
 Proof
   rpt gen_tac >> strip_tac >>
-  match_mp_tac (Q.SPECL [`DF`, `E`, `ctx`, `func`, `cx`, `st0`, `tops`, `source`, `es0`, `s0`, `G0`, `tn0`, `Q`, `R`, `vs0`, `CT`, `REL`, `EX`] unit_execution_compose_horizon) >>
+  match_mp_tac (Q.SPECL [`DF`, `E`, `ctx`, `func`, `cx`, `st0`, `tops`, `source`, `es0`, `s0`, `G0`, `tn0`, `Q`, `R`, `vs0`, `CT`, `REL`, `EX`, `marks0`] unit_execution_compose_horizon) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   rpt strip_tac >> first_x_assum drule >> simp[]
 QED
