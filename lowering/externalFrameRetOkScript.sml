@@ -4,7 +4,8 @@ Theory externalFrameRetOk
 Ancestors
   e2eDefs bodySimFull supportedProgram compileVyper moduleLowering
   vyperInterpreter externalReturnNoneNrFullFrag externalReturnValuedFull
-  externalReturnPackage exprSimHypsDefs vyperState vyperContext vyperTypeCallGraph
+  externalReturnPackage entryStateRel exprSimHypsDefs vyperState vyperContext vyperTypeCallGraph
+  compileEnv
 
 val _ = Parse.hide "body";
 
@@ -13,24 +14,23 @@ val _ = Parse.hide "body";
    Both producers share the selected package and actual return endpoint. *)
 Theorem external_source_frame_ret_ok_full_nr:
   !DF lo d shadow_ctx PG func shadow_func tops rpolicy unit am tx ret
-   mut nr args fbody env lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt
-   st cenv sa.
+   mut nr args dflts fbody lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt
+   cenv.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     lookup_function NONE tx.function_name External tops =
-      SOME (mut, nr, args, [], ret, fbody) /\
+      SOME (mut, nr, args, dflts, ret, fbody) /\
     (nr /\ mut <> View ==> ~tx.is_static) /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
     set_external_package_target rpolicy.rpol_target
       (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, nr, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
-          tx.function_name, args, [], ret, fbody)) =
+          tx.function_name, args, dflts, ret, fbody)) =
       (lbl, cenv0, pos_args, min_cds, is_payable, nr, nkey, ut', iv, fbody,
        rt) /\
-    compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
+    cenv with ce_vars := cenv0.ce_vars = cenv0 ==>
     frame_ret_ok_full (DF, lo, d, unit.cu_context, shadow_ctx, PG, func,
                        shadow_func)
       (initial_evaluation_context am.sources am.layouts tx NONE)
@@ -56,7 +56,8 @@ Proof
       tx.function_name External tops` by
     (drule return_package_target_inversion >> strip_tac >>
      drule return_package_metadata >> strip_tac >>
-     drule return_register_metadata >> strip_tac >>
+     qpat_assum `cenv with ce_vars := _ = cenv0`
+       (strip_assume_tac o SIMP_RULE (srw_ss()) [compile_env_component_equality]) >>
      drule return_same_frame_metadata >> simp[]) >>
   Cases_on `eo` >> simp[]
   >- (mp_tac (Q.INST [`DF` |-> `DF`, `lo` |-> `lo`, `d` |-> `d`,
@@ -70,8 +71,8 @@ Proof
       `lbl` |-> `lbl`, `cenv0` |-> `cenv0`, `pos_args` |-> `pos_args`,
       `min_cds` |-> `min_cds`, `is_payable` |-> `is_payable`,
       `nkey` |-> `nkey`, `iv` |-> `iv`, `rt` |-> `rt`,
-      `off` |-> `4`, `st` |-> `st`, `cenv` |-> `cenv`, `sinit` |-> `sa`,
-      `ce` |-> `cenv'`, `env` |-> `env'`, `lctx` |-> `lctx`, `es` |-> `es`,
+      `dflts` |-> `dflts`, `cenv` |-> `cenv`,
+      `ce` |-> `cenv'`, `env` |-> `env`, `lctx` |-> `lctx`, `es` |-> `es`,
       `cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`] return_selected_none_nr_frag_full) >>
       impl_tac
       >- (simp[initial_evaluation_context_def] >>
@@ -88,8 +89,8 @@ Proof
       `lbl` |-> `lbl`, `cenv0` |-> `cenv0`, `pos_args` |-> `pos_args`,
       `min_cds` |-> `min_cds`, `is_payable` |-> `is_payable`,
       `nkey` |-> `nkey`, `iv` |-> `iv`, `rt` |-> `rt`,
-      `off` |-> `4`, `st` |-> `st`, `cenv` |-> `cenv`, `sinit` |-> `sa`,
-      `ce` |-> `cenv'`, `env` |-> `env'`, `lctx` |-> `lctx`, `es` |-> `es`,
+      `dflts` |-> `dflts`, `cenv` |-> `cenv`,
+      `ce` |-> `cenv'`, `env` |-> `env`, `lctx` |-> `lctx`, `es` |-> `es`,
       `cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`] return_selected_valued_frag_full_nr) >>
   impl_tac
   >- (simp[initial_evaluation_context_def, get_tenv_def] >>
@@ -135,9 +136,12 @@ Proof
      `tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`, `mut`]
     external_source_frame_ret_ok_full_nr)) >>
   disch_then (qspecl_then
-    [`args`, `fbody`, `env`, `lbl`, `cenv0`, `pos_args`, `min_cds`,
-     `is_payable`, `nkey`, `ut'`, `iv`, `rt`, `st`, `cenv`, `sa`] mp_tac) >>
-  simp[unlock_if_nr_def, vyperStateTheory.return_def]
+    [`args`, `[]`, `fbody`, `lbl`, `cenv0`, `pos_args`, `min_cds`,
+     `is_payable`, `nkey`, `ut'`, `iv`, `rt`, `cenv`] mp_tac) >>
+  `cenv with ce_vars := cenv0.ce_vars = cenv0` by
+    (drule compile_register_positional_args_cenv >>
+     simp[compile_env_component_equality]) >>
+  fs[unlock_if_nr_def, vyperStateTheory.return_def, package_external_fn_def]
 QED
 
 Theorem external_frame_ret_ok_full:

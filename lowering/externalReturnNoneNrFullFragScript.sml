@@ -21,13 +21,13 @@ Theorem return_selected_none_nr_frag_full:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   source_typing_ok tops am tx /\
   lookup_function NONE tx.function_name External tops =
-    SOME (mut,nr,args,[],ret,fbody) /\
+    SOME (mut,nr,args,dflts,ret,fbody) /\
   (nr /\ mut <> View ==> ~cx.txn.is_static) /\
   set_external_package_target target
     (package_external_fn tops T (K global_nonreentrant_slot)
-      (mut,nr,rr,tx.function_name,args,[],ret,fbody)) =
+      (mut,nr,rr,tx.function_name,args,dflts,ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut,iv,fbody,rt) /\
-  compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
+  cenv with ce_vars := cenv0.ce_vars = cenv0 /\
   same_frame cenv ce /\ expr_sim_inv ce cx env es /\
   IS_SOME (type_stmt env ret (Return NONE)) /\
   cx.sources = am.sources /\ cx.layouts = am.layouts /\
@@ -47,15 +47,15 @@ Theorem return_selected_none_nr_frag_full:
 Proof
   rpt strip_tac >>
   `ret = NoneT` by gvs[type_stmt_def] >> gvs[] >>
+  qpat_assum `cenv with ce_vars := _ = cenv0`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [compile_env_component_equality]) >>
   `ce.ce_nonreentrant = (nr,global_nonreentrant_slot,T,mut = View) /\
    ~ce.ce_is_ctor /\ ce.ce_return_pc = NONE` by
     (drule return_package_target_inversion >> strip_tac >>
      drule return_package_metadata >> strip_tac >>
-     drule return_register_metadata >> strip_tac >>
      drule return_same_frame_metadata >> gvs[]) >>
   `ce.ce_ctor_exit_label = NONE` by
     (drule return_package_target_inversion >> strip_tac >>
-     drule compile_register_positional_args_cenv >> strip_tac >>
      fs[same_frame_def] >>
      qpat_x_assum `package_external_fn _ _ _ _ = _` mp_tac >>
      simp[package_external_fn_def, update_cenv_nonreentrant_def] >>
@@ -66,13 +66,13 @@ Proof
     (strip_tac >> gvs[] >>
      drule lookup_function_External_cases >> strip_tac
      >- (`function_header_ok External mut T raw tx.function_name
-            args [] NoneT` by metis_tac[source_typing_function_header] >>
+            args dflts NoneT` by metis_tac[source_typing_function_header] >>
          drule function_header_nonreentrant_view >> strip_tac >>
          fs[source_typing_ok_def] >>
          drule check_contract_main_module_allocated >> simp[] >> strip_tac >>
          drule check_contract_runtime_function_body_MEM >>
          disch_then (qspecl_then [`External`, `tops`, `NONE`, `NoneT`, `raw`,
-           `T`, `mut`, `tx.function_name`, `[]`, `fbody`, `args`] mp_tac) >>
+           `T`, `mut`, `tx.function_name`, `dflts`, `fbody`, `args`] mp_tac) >>
          simp[check_function_body_def, global_nonreentrant_slot_def]) >>
      Cases_on `decl` >> gvs[is_public_getter_decl_def] >>
      Cases_on `v` >>

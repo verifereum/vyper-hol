@@ -31,12 +31,13 @@ Proof
 QED
 
 Theorem dalloca_windows_decode_args:
-  !args ce off hi adj. preserves_dalloca_windows window
-    (compile_decode_args ce args off CALLDATALOAD hi adj)
+  !args ce off opc hi adj. opc <> DALLOCA ==>
+    preserves_dalloca_windows window (compile_decode_args ce args off opc hi adj)
 Proof
   Induct >> simp[compile_decode_args_def, dalloca_windows_return] >>
   rpt gen_tac >> PairCases_on `h` >>
-  simp[compile_decode_args_def] >> windows_tac [compile_abi_arg_ptr_guard_def]
+  simp[compile_decode_args_def] >> strip_tac >>
+  windows_tac [compile_abi_arg_ptr_guard_def]
 QED
 
 Theorem dalloca_windows_register_positional_args:
