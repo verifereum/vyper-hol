@@ -81,16 +81,6 @@ Proof
 QED
 
 (* Gas sufficiency for calls compiled with the final assembly optimizer. *)
-Triviality raw_reachable_call_ctx:
-  !v C fn inst s. raw_reachable v C fn inst s ==> s.vs_call_ctx = v.vs_call_ctx
-Proof
-  ho_match_mp_tac raw_reachable_ind >> rpt conj_tac >> rpt strip_tac
-  >- (drule inv_enters_block_call_ctx >> simp[])
-  >- (drule step_inst_ok_preserves_call_ctx >> simp[])
-  >- metis_tac[inv_enters_block_call_ctx, step_inst_ok_preserves_call_ctx] >>
-  metis_tac[inv_enters_block_call_ctx, inv_setup_callee_call_ctx]
-QED
-
 Theorem vyper_call_gas_sufficient_asm_opt:
   !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
@@ -283,7 +273,7 @@ Proof
      Cases_on `tx.is_static` >- metis_tac[] >>
      qpat_x_assum `code_end_offset_ok (\_ _ _ _. _) _` mp_tac >>
      simp_tac bool_ss [code_end_offset_ok_def, in_static_abort_prefix_def] >>
-     metis_tac[raw_reachable_call_ctx]) >>
+     metis_tac[gasFocusReplayExitTheory.replay_exit_raw_call_ctx]) >>
   `o1_lowered_inv out.po_unit.cu_context vs` by
     (Cases_on `tx.is_static`
      >- (qspecl_then [`D`, `0`, `rpolicy`, `unit`, `out`, `vs`, `fmp`]
@@ -491,7 +481,7 @@ Proof
      impl_tac >- simp[Abbr `Du`, taint_within_def] >>
      disch_then (mp_tac o CONJUNCT1) >>
      simp_tac bool_ss [code_end_offset_ok_def, in_static_abort_prefix_def] >>
-     metis_tac[raw_reachable_call_ctx]) >>
+     metis_tac[gasFocusReplayExitTheory.replay_exit_raw_call_ctx]) >>
   drule_all o1_pipeline_memory_obligations_raw >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
   `terminates (run_context efuel dunit.cu_context vs_in)` by

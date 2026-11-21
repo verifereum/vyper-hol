@@ -431,20 +431,30 @@ Theorem lower_vyper_runtime_legacy_packages:
   classify_functions tops = (exts,ints,fb,ctor) /\
   ~EXISTS external_has_defaults exts /\
   lower_vyper_runtime_unit tops rp = SOME unit ==>
-  let sels = build_selectors (type_env tops) exts in
-  let eps = MAP (set_external_package_target rp.rpol_target o
-    package_external_fn tops T (K global_nonreentrant_slot)) exts in
-  let ips = MAP (set_internal_package_target rp.rpol_target o
-    package_internal_fn tops T (K global_nonreentrant_slot) F 0)
-    (order_internals (runtime_internal_order tops ints) ints) in
-  let fall = set_fallback_package_target rp.rpol_target
-    (package_fallback_fn tops T (K global_nonreentrant_slot) fb) in
-  run_lowering sels eps ips fall rp 0 0 [] (build_dense_entry_info sels eps)
+  run_lowering
+    (build_selectors (type_env tops) exts)
+    (MAP (set_external_package_target rp.rpol_target o
+      package_external_fn tops T (K global_nonreentrant_slot)) exts)
+    (MAP (set_internal_package_target rp.rpol_target o
+      package_internal_fn tops T (K global_nonreentrant_slot) F 0)
+      (order_internals (runtime_internal_order tops ints) ints))
+    (set_fallback_package_target rp.rpol_target
+      (package_fallback_fn tops T (K global_nonreentrant_slot) fb))
+    rp 0 0 []
+    (build_dense_entry_info (build_selectors (type_env tops) exts)
+      (MAP (set_external_package_target rp.rpol_target o
+        package_external_fn tops T (K global_nonreentrant_slot)) exts))
     "__entry" = SOME unit /\
-  EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt). jump_label_ok lbl) eps /\
-  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips)
+  EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt). jump_label_ok lbl)
+    (MAP (set_external_package_target rp.rpol_target o
+      package_external_fn tops T (K global_nonreentrant_slot)) exts) /\
+  EVERY (\d. internal_label_ok (FST d))
+    (internal_fn_descriptors
+      (MAP (set_internal_package_target rp.rpol_target o
+        package_internal_fn tops T (K global_nonreentrant_slot) F 0)
+        (order_internals (runtime_internal_order tops ints) ints)))
 Proof
-  strip_tac >> simp_tac std_ss [LET_THM] >> rpt conj_tac
+  strip_tac >> rpt conj_tac
   >- (qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
       simp[lower_vyper_runtime_unit_def, AllCaseEqs()])
   >- (rw[EVERY_MAP, EVERY_MEM] >> PairCases_on `x` >>

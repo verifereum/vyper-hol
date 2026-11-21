@@ -7,46 +7,6 @@ Ancestors entryRejectCode selectedEntryPrefixCode runtimeBodyStartDefs entryChec
   vyperTypeContractSoundness fragExec entryLinearAppend
   entryCompileIntervals
 
-Theorem default_runtime_compile_layout:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\ raw_shape_free_program tops /\
-  check_contract F layouts addr [(NONE,tops)] = SOME art /\
-  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
-  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
-  fn_entry_label efn = SOME elbl ==>
-  ?sels extpkgs fbpkg fallback label_st dispatch_st external_st checks entry_end.
-    sels = build_selectors (type_env tops) (FST (classify_functions tops)) /\
-    extpkgs = MAP (set_external_package_target rpolicy.rpol_target o
-      package_external_fn tops T (K global_nonreentrant_slot))
-      (FST (classify_functions tops)) /\
-    fbpkg = set_fallback_package_target rpolicy.rpol_target
-      (package_fallback_fn tops T (K global_nonreentrant_slot)
-        (FST (SND (SND (classify_functions tops))))) /\
-    EVERY external_fn_shape_ok extpkgs /\
-    fallback_shape_ok fbpkg /\
-    fresh_label "fallback" (initial_compile_state "__entry") = (fallback,label_st) /\
-    compile_selector_dispatch_linear (MAP (\(sel,lbl,z). (sel,lbl)) sels)
-      fallback label_st = ((),dispatch_st) /\
-    compile_external_fn_bodies extpkgs dispatch_st = ((),external_st) /\
-    new_block fallback external_st = (external_st.cs_current_bb,checks) /\
-    (case fbpkg of NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
-      | SOME (ce,pay,nr,key,ut,iv,fbody,rt) =>
-          compile_fallback_body ce pay nr key ut iv fbody rt) checks = ((),entry_end) /\
-    shape_state label_st /\ shape_state dispatch_st /\
-    shape_state external_st /\ shape_state checks /\ shape_state entry_end /\
-    cs_extends label_st dispatch_st /\
-    cs_extends dispatch_st external_st /\ cs_extends external_st checks /\
-    cs_extends checks entry_end /\
-    efn = mk_raw_function "__entry" (all_blocks entry_end) /\
-    ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks entry_end)) /\
-    fn_has_code label_st dispatch_st efn /\
-    fn_has_code dispatch_st external_st efn /\ fn_has_code checks entry_end efn /\
-    label_st.cs_current_bb = elbl /\ label_st.cs_current_insts = [] /\
-    label_st.cs_next_var = 0
-Proof
-  ACCEPT_TAC runtime_linear_compile_layout_static
-QED
-
 Theorem default_fallback_compile_placement:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   ~EXISTS external_has_defaults (FST (classify_functions tops)) /\

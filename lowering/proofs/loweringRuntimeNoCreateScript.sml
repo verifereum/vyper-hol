@@ -35,12 +35,14 @@ Proof
                ~supported_exprs_exists expr_short_builtin_root (SND nd))
      ce.ce_func_defaults` by
     (fs[EVERY_MEM] >> metis_tac[avoids_create_and_short_builtin]) >>
+  `~supported_stmts_expr_exists expr_create_root ss /\
+   ~supported_stmts_expr_exists expr_short_builtin_root ss` by
+    metis_tac[avoids_create_and_short_builtin] >>
   irule (SIMP_RULE (srw_ss()) [] (Q.INST
     [`P` |-> `\opc. opc <> CREATE /\ opc <> CREATE2`,
      `R` |-> `expr_create_root`, `extra_root` |-> `expr_short_builtin_root`]
     compile_stmts_opcode_every_from_expr)) >>
-  rpt conj_tac >> TRY (metis_tac[avoids_create_and_short_builtin]) >>
-  rpt strip_tac >>
+  simp[] >> rpt strip_tac >>
   mp_tac (Q.INST [`P` |-> `\opc. opc <> CREATE /\ opc <> CREATE2`,
                   `R` |-> `expr_create_root`] compile_expr_opcode_every) >>
   simp[] >> metis_tac[]

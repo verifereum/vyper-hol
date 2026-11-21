@@ -14,20 +14,6 @@ Definition create_or_short_builtin_root_def:
     expr_create_root e \/ expr_short_builtin_root e
 End
 
-Theorem well_typed_builtin_app_arity[local]:
-  well_typed_builtin_app ty bi ts ==> builtin_arity bi <= LENGTH ts
-Proof
-  Cases_on `bi` >> rw[well_typed_builtin_app_def, builtin_arity_def] >> gvs[]
-QED
-
-Theorem well_typed_type_builtin_args_arity[local]:
-  well_typed_type_builtin_args tb target ts ==>
-  type_builtin_arity tb <= LENGTH ts
-Proof
-  Cases_on `tb` >>
-  rw[well_typed_type_builtin_args_def, type_builtin_arity_def] >> gvs[]
-QED
-
 Theorem well_typed_expr_no_short_builtin[local]:
   (!env e. well_typed_expr env e ==>
      ~supported_expr_exists expr_short_builtin_root e) /\
