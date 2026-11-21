@@ -59,7 +59,7 @@ Theorem deploy_selected_producer_inputs[local]:
     dunit.cu_context vs
 Proof
   strip_tac >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_o1_shape_ok >> strip_tac >>
   drule_all deploy_unit_defs_reach_uses >> strip_tac >>
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
     fs[deploy_phases_def] >>
@@ -269,7 +269,7 @@ Proof
    codegen_assembly rpolicy dout.po_unit = SOME prog /\
    generate_context_plan dout.po_unit.cu_context = SOME cplan` by
     fs[deploy_phases_def] >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_o1_shape_ok >> strip_tac >>
   drule_all deploy_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   drule_all deploy_focus_frame_inputs >> strip_tac >>

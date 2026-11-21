@@ -234,6 +234,7 @@ Theorem deploy_selected_memory:
   deploy_phases policy tops (deploy_bc, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
   deploy_source_ok tops am tx /\
+  ~ctx_has_dalloca dunit.cu_context /\
   vs.vs_alloca_next = imm_len tops /\
   w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
   code_layout_valid vs /\
@@ -257,7 +258,7 @@ Proof
     fs[deploy_phases_def] >>
   drule lower_vyper_deploy_unit_context_ok >> strip_tac >>
   drule lower_vyper_deploy_unit_entry >> strip_tac >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_o1_shape_ok >> strip_tac >>
   drule deploy_imm_alloca_budget_ok >> strip_tac >>
   `EVERY pre_fmp_ops dunit.cu_context.ctx_functions` by
     (rw[listTheory.EVERY_MEM] >> irule source_pre_fmp_ops >> metis_tac[]) >>
@@ -298,7 +299,7 @@ Theorem deploy_entry_facts[local]:
   vs.vs_initial_fmp = fmp /\ vs.vs_fmp = fmp
 Proof
   strip_tac >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_o1_shape_ok >> strip_tac >>
   drule_all deploy_unit_defs_reach_uses >> strip_tac >>
   `o1PipelineCorrect$o1_pipeline rpolicy dunit = SOME dout /\
    codegen_assembly rpolicy dout.po_unit = SOME prog` by
@@ -396,7 +397,7 @@ Proof
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
     fs[deploy_phases_def] >>
   drule lower_vyper_deploy_unit_context_ok >> strip_tac >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_o1_shape_ok >> strip_tac >>
   qspecl_then [`marks`, `tops`, `runtime_bc`, `am`, `txp`, `dunit`, `vs`, `tail`]
     mp_tac deploy_unit_exit_safe_runs >>
   impl_tac >- gvs[] >> strip_tac >>
@@ -425,6 +426,8 @@ Proof
          TRY (qexistsl_tac [`cplan`, `assemble prog`, `dout`, `policy`,
                              `prog`, `rpolicy`, `runtime_bc`] >> simp[]) >>
          gvs[]) >>
+     `~ctx_has_dalloca dunit.cu_context` by
+       metis_tac[deploy_unit_no_dalloca_static] >>
      metis_tac[deploy_selected_memory]) >>
   `ctx_sim (deploy_dead H tops runtime_bc am txp) dunit.cu_context
      dout.po_unit.cu_context vs vs_out /\

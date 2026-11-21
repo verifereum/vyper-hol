@@ -339,7 +339,7 @@ Proof
   qpat_x_assum `deploy_bc = assemble prog'` SUBST_ALL_TAC >>
   `asm_opt_finalizer IN accepted_finalizers` by simp[accepted_finalizers_def] >>
   `deploy_source_ok tops am tx` by simp[deploy_source_ok_def] >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_o1_shape_ok >> strip_tac >>
   drule_all deploy_unit_defs_reach_uses >> strip_tac >>
   `o1PipelineCorrect$o1_pipeline rpolicy dunit = SOME dout /\
    codegen_assembly rpolicy dout.po_unit = SOME prog /\
