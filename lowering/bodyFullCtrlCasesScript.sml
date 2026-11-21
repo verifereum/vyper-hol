@@ -79,7 +79,7 @@ Proof
          int_calls_assert_reason_def, body_inv_def] >>
      conj_tac >-
        (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
-        qexists_tac `cenv` >> fs[alloc_limits_stmt_def]) >>
+        qexists_tac `cenv` >> fs[allocLimitsTheory.alloc_limits_stmt_def]) >>
      qexists_tac `[]` >> simp[]) >>
   irule compile_assert_frag_full >> simp[] >>
   qpat_x_assum `body_expr_full_ok _ _`
