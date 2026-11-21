@@ -4,7 +4,7 @@ Ancestors
   bodyFullPreds bodyFullOfVV bodyFullExprGeneric bodyFullAllocGeneric
   bodyFullAbiDecodeCallerFull bodyFullAbiDecodeCallerSetupOrigin
   bodyFullAbiDecodeCallerCutEndpoint bodyFullAbiDecodeCallerEntryOrigin
-  bodyInvNoDalloca bodySimFull exprSimAbiDecodeEntryTyping
+  bodySimFull exprSimAbiDecodeEntryTyping
   gasOutcomeFullCompose exprSimHyps exprSimSource exprLowering compileEnv
   exprSimAbiDecodeBodySuccess exprSimAbiDecodeOblivious exprSimAbiDecodeCompose
   exprSimUnwrap exprLoweringProps exprOpenFirstOperand gasShadow gasShadowCompileStmtHelpers
@@ -94,7 +94,6 @@ Theorem abi_decode_singleton_vv_full[local]:
 Proof
   disch_then (CONJUNCTS_THEN2 (mk_asm "guarded")
     (CONJUNCTS_THEN2 (mk_asm "selector") (map_every assume_tac o CONJUNCTS))) >>
-  drule body_inv_no_dalloca >> strip_tac >>
   drule expr_body_pre_type_builtin_head >> strip_tac >>
   `expr_sim_full (DF,lo,delta,ctx,shadow_ctx,PG,func,shadow_func)
        ce cx (expr_type e) e es` by
@@ -238,10 +237,7 @@ Resume abi_decode_singleton_vv_full[continuation]:
      disch_then (qx_choose_then `b` $ qx_choose_then `data_var` $
        qx_choose_then `d` $ mk_asm "entry_origin") >>
      qexistsl [`b`,`data_var`,`d`,`ops`,`ready`] >>
-     conj_asm1_tac >-
-       (qpat_assum `~ctx_has_dalloca ctx`
-          (fn no_dalloca => PURE_REWRITE_TAC [no_dalloca, NOT_CLAUSES, AND_CLAUSES]) >>
-        asm "entry_origin" ACCEPT_TAC) >>
+     conj_asm1_tac >- asm "entry_origin" ACCEPT_TAC >>
      pop_assum (fn entry => asm_x "entry_origin" kall_tac >>
                             mk_asm "entry_origin" entry) >>
      reverse conj_tac >- simp[] >>
@@ -262,10 +258,7 @@ Resume abi_decode_singleton_vv_full[continuation]:
         drule_all_then strip_assume_tac fn_has_code_split) >>
      BETA_TAC >> rpt gen_tac >> disch_tac >>
      pop_assum (CONJUNCTS_THEN2 (mk_asm "setup_success") (mk_asm "ready_origin")) >>
-     qpat_assum `~ctx_has_dalloca ctx` (fn static =>
-       asm_x "entry_origin" (CONJUNCTS_THEN2
-         (mk_asm "setup_pre" o PURE_REWRITE_RULE [static, NOT_CLAUSES, AND_CLAUSES])
-         kall_tac)) >>
+     asm_x "entry_origin" (CONJUNCTS_THEN2 (mk_asm "setup_pre") kall_tac) >>
      asm "setup_pre" (fn pre =>
        qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` (fn code =>
          mp_tac (PART_MATCH (funpow 6 rand o lhand o lhand)
@@ -280,12 +273,11 @@ Resume abi_decode_singleton_vv_full[continuation]:
          (conj_tac >- asm "setup_pre" ACCEPT_TAC >>
            conj_tac >- asm "setup_success" ACCEPT_TAC >> simp[]) >>
         asm "ready_origin" ACCEPT_TAC)) >>
-     qpat_assum `~ctx_has_dalloca ctx` (fn static =>
-       let val rules = [static, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
-       in
-         disch_then (assume_tac o SIMP_RULE (srw_ss()) rules) >>
-         SIMP_TAC (srw_ss()) rules >> pop_assum ACCEPT_TAC
-       end)) >>
+     let val rules = [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+     in
+       disch_then (assume_tac o SIMP_RULE (srw_ss()) rules) >>
+       SIMP_TAC (srw_ss()) rules >> pop_assum ACCEPT_TAC
+     end) >>
   qpat_assum `expr_type e = BaseT _` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
   disch_tac >> irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
   goal_assum (drule_at Any) >>
