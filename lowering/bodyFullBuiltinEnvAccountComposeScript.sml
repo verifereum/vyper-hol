@@ -4,12 +4,15 @@ Ancestors
   bodyFullShadowBodyInv
   bodyFullPreds bodySimFull exprSimAccounts exprSimSource exprSimHypsDefs
   gasOutcomeFullCompose gasOutcomeFull gasExemptCert bodyFullGhostFrame exprSimMemoryStack
-  exprSimWordArgs exprLowering exprLoweringProps builtinSimple
+  exprSimWordArgs exprSimWordBuiltins exprBopLowering exprLowering exprLoweringProps builtinSimple
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
   gasShadowCompileStmtHelpers gasShadowState gasShadow vyperTyping vyperTypeSystem vyperAST
   fragGasSeqPtr emitHelper emitHelperProps compileEnv allocaHistory
   vyperStorageTrace vyperStorageFootprint fragExec exprSimUnopComposeProps
-  vyperContext list bodyFullUnaryValueCompose
+  vyperContext vyperState vyperInterpreter list bodyFullUnaryValueCompose
+  venomInst venomState codegenRel contextCodegenRel unitTransformDefs
+  ptrDiscipline memSafeRun ptrSafeRun fragGasOriginPtr
+  bodyPtrDefs stateRelProj
 Libs
   pairLib
 
@@ -24,10 +27,25 @@ Proof
   simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
        compile_builtin_dispatch_body_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  simp[lower_value_child_call, vyperASTTheory.expr_type_def,
+  simp[exprBopLoweringTheory.lower_value_child_call, vyperASTTheory.expr_type_def,
        listTheory.list_size_def, compile_acc_def,
-       as_stack_val_pair, unwrap_value_def, comp_return_def,
+       exprBopLoweringTheory.as_stack_val_pair, unwrap_value_def, comp_return_def,
        comp_bind_def, vyperContextTheory.is_self_addr_def]
+QED
+
+Theorem self_codesize_ptr_ok[local]:
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  step_inst_base (mk_inst id CODESIZE [] [out]) s = OK (update_var out w s) ==>
+  ptr_inst_ok D lo 0 ctx func G tn (mk_inst id CODESIZE [] [out]) s
+Proof
+  strip_tac >>
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
+       source_memory_write_ranges_def, source_memory_read_ranges_def] >>
+  simp[GSYM mk_inst_def, venomExecSemanticsTheory.step_inst_non_invoke] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def,
+       venomExecSemanticsTheory.exec_read0_def,
+       update_var_def]
 QED
 
 Theorem self_codesize_full_path[local]:
@@ -63,17 +81,53 @@ Proof
     SOME (mk_inst sa.cs_next_id CODESIZE []
       [STRING #"%" (toString sa.cs_next_var)])` by
     (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  qmatch_asmsub_abbrev_tac `get_instruction bb _ = SOME inst` >>
+  qexistsl_tac [`update_var (STRING #"%" (toString sa.cs_next_var)) w s
+                  with vs_inst_idx := SUC s.vs_inst_idx`,
+                `step_prov PG G
+                  (mk_inst sa.cs_next_id CODESIZE []
+                    [STRING #"%" (toString sa.cs_next_var)])
+                  (update_var (STRING #"%" (toString sa.cs_next_var)) w s)`,
+                `step_taint
+                  (mk_inst sa.cs_next_id CODESIZE []
+                    [STRING #"%" (toString sa.cs_next_var)]) s
+                  (update_var (STRING #"%" (toString sa.cs_next_var)) w s) tn`] >>
+  simp[] >>
   gen_tac >>
   `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
      (OK (update_var (STRING #"%" (toString sa.cs_next_var)) w s
           with vs_inst_idx := SUC s.vs_inst_idx),
-      step_prov PG G inst (update_var (STRING #"%" (toString sa.cs_next_var)) w s),
-      step_taint inst s (update_var (STRING #"%" (toString sa.cs_next_var)) w s) tn)` by
-    (mp_tac (Q.INST [`i` |-> `inst`,
+      step_prov PG G (mk_inst sa.cs_next_id CODESIZE []
+        [STRING #"%" (toString sa.cs_next_var)])
+        (update_var (STRING #"%" (toString sa.cs_next_var)) w s),
+      step_taint (mk_inst sa.cs_next_id CODESIZE []
+        [STRING #"%" (toString sa.cs_next_var)]) s
+        (update_var (STRING #"%" (toString sa.cs_next_var)) w s) tn)` by
+    (`step_inst_base (mk_inst sa.cs_next_id CODESIZE []
+         [STRING #"%" (toString sa.cs_next_var)]) s =
+         OK (update_var (STRING #"%" (toString sa.cs_next_var)) w s)` by
+       (qpat_x_assum `!out. step_inst_base _ _ = _`
+          (qspec_then `STRING #"%" (toString sa.cs_next_var)` mp_tac) >> simp[]) >>
+     `ptr_inst_ok D lo 0 ctx func G tn
+        (mk_inst sa.cs_next_id CODESIZE []
+          [STRING #"%" (toString sa.cs_next_var)]) s` by
+       (match_mp_tac (Q.INST [`id` |-> `sa.cs_next_id`,
+                              `out` |-> `STRING #"%" (toString sa.cs_next_var)`]
+                         self_codesize_ptr_ok) >>
+        metis_tac[]) >>
+     `inst_mem_below_frontier
+        (mk_inst sa.cs_next_id CODESIZE []
+          [STRING #"%" (toString sa.cs_next_var)]) s` by
+       simp[inst_mem_below_frontier_def,
+             source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+     `inst_dload_in_section
+        (mk_inst sa.cs_next_id CODESIZE []
+          [STRING #"%" (toString sa.cs_next_var)]) s` by
+       simp[inst_dload_in_section_def] >>
+     mp_tac (Q.INST [`i` |-> `mk_inst sa.cs_next_id CODESIZE []
+                                  [STRING #"%" (toString sa.cs_next_var)]`,
         `u` |-> `update_var (STRING #"%" (toString sa.cs_next_var)) w s`]
         straight_line_origin_ptr_edge) >>
-     simp[Abbr `inst`, mk_inst_def, is_terminator_def,
+     simp[mk_inst_def, is_terminator_def,
           ptr_inst_ok_def, access_ok_def, taint_ok_def,
           source_memory_write_ranges_def, source_memory_read_ranges_def,
           inst_mem_below_frontier_def, inst_dload_in_section_def] >>
@@ -89,6 +143,25 @@ Proof
   irule (cj 1 gas_origin_ptr_path_rules) >> simp[update_var_def]
 QED
 
+Theorem self_addr_source_all_tails_local[local]:
+  !cx e1 es. is_self_addr e1 ==>
+    eval_expr cx e1 es = return (Value (AddressV cx.txn.target)) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `e1` >> gvs[is_self_addr_def] >>
+  Cases_on `b` >> gvs[is_self_addr_def] >>
+  Cases_on `l` >>
+  Cases_on `e` >> gvs[is_self_addr_def] >>
+  simp[exprSimWordArgsTheory.eval_exprs_nil,
+       is_self_addr_def, Once vyperInterpreterTheory.evaluate_def,
+       vyperContextTheory.evaluate_builtin_def,
+       builtin_args_length_ok_def, is_self_codesize_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.get_accounts_def, vyperStateTheory.lift_sum_def,
+       vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.return_def]
+QED
+
 Theorem self_codesize_source[local]:
   !cx es tail.
     bind (eval_expr cx
@@ -98,9 +171,16 @@ Theorem self_codesize_source[local]:
     (INL (IntV (&LENGTH cx.txn.code)), es with gas_obs := tail)
 Proof
   rpt gen_tac >>
-  simp[Once evaluate_def, type_check_def, assert_def, ignore_bind_def,
+  simp[self_addr_source_all_tails_local,
+       exprSimWordArgsTheory.eval_exprs_cons_action,
+       exprSimWordArgsTheory.eval_exprs_nil,
+       Once evaluate_def, type_check_def, assert_def, ignore_bind_def,
        bind_def, return_def, lift_sum_def, get_accounts_def,
-       read_result_def, evaluate_builtin_def, is_self_codesize_def,
+       read_result_def, evaluate_builtin_def, builtin_args_length_ok_def,
+       is_self_codesize_def,
+       vyperStateTheory.bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.lift_sum_def, vyperStateTheory.get_accounts_def,
+       vyperStateTheory.read_result_def, vyperStateTheory.ignore_bind_def,
        evaluate_self_codesize_def]
 QED
 
@@ -127,7 +207,7 @@ Proof
     metis_tac[stateRelProjTheory.stmt_state_rel_state_rel,
               stateRelProjTheory.state_rel_call_ctx_rel] >>
   `s0.vs_code = cx.txn.code` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ _ _ /\ _`
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> _`
        (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
      (impl_tac >- simp[]) >>
      disch_then (ACCEPT_TAC o
@@ -135,12 +215,15 @@ Proof
        MATCH_MP (cj 6 (iffLR loweringStateRelDefsTheory.state_rel_def)) o
        MATCH_MP stmt_state_rel_state_rel o CONJUNCT1)) >>
   `LENGTH cx.txn.code < dimword (:256)` by
-    (qpat_assum `expr_sim_inv _ _ _ _` mp_tac >> simp[expr_sim_inv_def,
-      vyperTypeInvariantsTheory.context_well_typed_def, wordsTheory.dimword_def]) >>
+    (qpat_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+     fs[exprSimHypsDefsTheory.expr_body_pre_def, expr_sim_inv_def,
+       vyperTypeInvariantsTheory.context_well_typed_def, wordsTheory.dimword_def]) >>
   `!out. step_inst_base (mk_inst sa.cs_next_id CODESIZE [] [out]) s0 =
       OK (update_var out (n2w (LENGTH cx.txn.code)) s0)` by
     simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
          venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_read0_def] >>
+  `is_self_addr (Builtin (BaseT AddressT) (Env SelfAddr) [])` by
+    simp[is_self_addr_def] >>
   drule_all self_codesize_full_path >>
   disch_then (qspecl_then [`tn0`, `gas_explicit_sites ctx shadow_ctx`, `PG`, `G0`]
     strip_assume_tac) >>
@@ -150,7 +233,7 @@ Proof
   qx_gen_tac `H` >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
     (drule_then strip_assume_tac) >>
-  gvs[self_codesize_lower, expr_store_bound_def, expr_type_def,
+  gvs[self_codesize_lower, exprSimMemDefsTheory.expr_store_bound_def, expr_type_def,
       is_word_type_def, update_var_def, alloca_history_def] >>
   drule emitted_insts_emit_op >> strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb` by
@@ -158,7 +241,7 @@ Proof
         comp_ignore_bind_def, comp_return_def, emit_def] >>
   simp[] >>
   `!x. not_fresh_at sa x ==> x <> STRING #"%" (toString sa.cs_next_var)` by
-    (simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+    (simp[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
   conj_tac >- suspend "self_word_post" >>
   conj_tac >- suspend "self_history" >>
   suspend "self_ghosts"
@@ -166,19 +249,23 @@ QED
 
 Resume self_codesize_sim_full[self_word_post]:
   irule expr_post_word_intro >>
-  simp[expr_type_def, is_word_type_def, word_value_def,
-       eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  simp[pure_frame_def] >>
+  simp[expr_type_def, is_word_type_def, loweringSliceTheory.word_value_def,
+       valueEncodingTheory.typed_val_to_w256_def,
+       valueEncodingTheory.val_to_w256_def, integer_wordTheory.i2w_def,
+       eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[loweringPostsTheory.pure_frame_def] >>
   conj_tac
-  >- (gvs[storage_well_formed_on_def] >>
+  >- (gvs[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
       rpt gen_tac >> Cases_on `b` >>
-      gvs[vyperStorageBackendTheory.get_storage_def] >> metis_tac[]) >>
+      gvs[vyperStorageBackendTheory.get_storage_def] >>
+      metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_def,
+                vyperStorageBackendTheory.get_storage_def]) >>
   conj_tac
   >- (irule wb_frame_readonly_tail >>
       qexistsl_tac [`sa`, `s0`] >>
-      simp[wb_frame_refl, lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
+      simp[wb_frame_refl, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
   `not_local_ptr cenv es.scopes (STRING #"%" (toString sa.cs_next_var))` by
-    (irule fresh_not_local_ptr >> qexists_tac `sa` >> simp[] >> metis_tac[]) >>
+    (irule exprSimOperandsTheory.fresh_not_local_ptr >> qexists_tac `sa` >> simp[] >> metis_tac[]) >>
   drule_all stmt_state_rel_update_var >>
   disch_then (qspec_then `val_to_w256 (IntV (&LENGTH cx.txn.code))` mp_tac) >>
   simp[update_var_def] >> strip_tac >>
@@ -188,6 +275,8 @@ Resume self_codesize_sim_full[self_word_post]:
    (s0 with vs_vars := s0.vs_vars |+ (STRING #"%" (toString sa.cs_next_var),
        val_to_w256 (IntV (&LENGTH cx.txn.code)))) with
        vs_inst_idx := SUC (LENGTH sa.cs_current_insts)` by simp[] >>
+  `n2w (LENGTH cx.txn.code) = val_to_w256 (IntV (&LENGTH cx.txn.code))` by
+    simp[valueEncodingTheory.val_to_w256_def, integer_wordTheory.i2w_def] >>
   metis_tac[stmt_state_rel_inst_idx]
 QED
 
@@ -203,28 +292,41 @@ QED
 
 Resume self_codesize_sim_full[self_ghosts]:
   reverse conj_tac
-  >- (simp[ptr_val_ok_def, is_word_type_def, ghost_kept_at_def,
-          step_prov_def, out_prov_def, set_prov_def, op_prov_def,
-          mk_inst_def, FLOOKUP_DRESTRICT,
-          step_taint_def, op_taint_def, set_var_taint_def, out_taint_def,
-          FLOOKUP_UPDATE, mem_taint_def, new_site_bytes_def,
-          step_writes_def, source_memory_write_ranges_def,
-          written_taint_def, range_bytes_def] >>
-      rpt conj_tac >> rpt gen_tac >> strip_tac >>
-      gvs[flookup_thm, FLOOKUP_DRESTRICT] >> metis_tac[]) >>
+  >- (qmatch_goalsub_abbrev_tac `ghost_kept_at _ _ _ _ _ _ _ _
+         (step_prov _ _ inst u) (step_taint inst s u tn)` >>
+      `((step_taint inst s u tn).t_mem = tn.t_mem)` by
+        (irule bodyPtrEnvBuiltinsEdgesTheory.step_taint_no_memory_effect >>
+         simp[Abbr `inst`, Abbr `u`, source_memory_write_ranges_def,
+              written_taint_def, mk_inst_def, update_var_def]) >>
+      unabbrev_all_tac >> irule bodyPtrEnvBuiltinsEdgesTheory.single_output_ghost_kept_at >>
+      fs[bodyPtrDefsTheory.ghost_kept_at_def]) >>
   irule ghost_inv_at_exterior_frame >>
   qexistsl_tac [`G0`, `es`, `s0`, `sa`, `tn0`] >>
-  simp[lookup_var_def, FLOOKUP_UPDATE,
+  simp[lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
        step_prov_def, out_prov_def, set_prov_def, mk_inst_def,
-       FLOOKUP_DRESTRICT, step_taint_def, op_taint_def,
+       finite_mapTheory.FLOOKUP_DRESTRICT, step_taint_def, op_taint_def,
        set_var_taint_def, out_taint_def, mem_taint_def,
        new_site_bytes_def, step_writes_def, source_memory_write_ranges_def,
        written_taint_def, range_bytes_def, adopt_reset_def,
        store_taint_def, imm_taint_def] >>
-  simp[pred_setTheory.EXTENSION, flookup_thm] >> metis_tac[]
+  simp[pred_setTheory.EXTENSION, finite_mapTheory.flookup_thm] >>
+  gvs[venom_state_component_equality]
 QED
 
 Finalise self_codesize_sim_full
+
+Theorem account_gas_shadow_self_addr[local]:
+  !e. is_self_addr (gas_shadow_expr e) <=> is_self_addr e
+Proof
+  Cases_on `e` >> simp[gas_shadow_expr_def,
+                        vyperContextTheory.is_self_addr_def] >>
+  Cases_on `b` >> simp[gas_shadow_builtin_def,
+                        vyperContextTheory.is_self_addr_def] >>
+  Cases_on `l` >> simp[gas_shadow_expr_def,
+                        vyperContextTheory.is_self_addr_def] >>
+  Cases_on `e` >> simp[gas_shadow_builtin_def,
+                        vyperContextTheory.is_self_addr_def]
+QED
 
 Theorem account_full_from_suffix:
   (!item bs ee cx v x sa op sb func st0 cenv s ctx G tn DF lo d explicit PG.
@@ -284,12 +386,14 @@ Proof
   Cases_on `is_self_codesize (Acc item) [e]`
   >- (`item = Codesize /\
        ?self_ty. e = Builtin self_ty (Env SelfAddr) []` by
-        (gvs[is_self_codesize_def] >>
-         qexists_tac `self_ty` >>
+        (Cases_on `item` >> gvs[is_self_codesize_def] >>
          qpat_x_assum `is_self_addr e` mp_tac >>
          rewrite_tac[is_self_addr_def] >>
-         rpt (CASE_TAC >> fs[]) >> metis_tac[]) >>
-      gvs[] >>
+         Cases_on `e` >> gvs[is_self_addr_def] >>
+         Cases_on `b` >> gvs[is_self_addr_def] >>
+         Cases_on `l` >> Cases_on `e` >> gvs[is_self_addr_def] >>
+         qexists_tac `t`) >>
+      gvs[account_item_type_def, vyperASTTheory.expr_type_def] >>
       irule self_codesize_sim_full >> metis_tac[]) >>
   `expr_body_pre cenv cx env e es` by
     (drule expr_body_pre_builtin_arg >> disch_then irule >>
@@ -326,6 +430,9 @@ Proof
     (irule unop_operand_admissible >>
      qexistsl_tac [`account_item_type item`, `Acc item`] >>
      simp[builtin_args_length_ok_def]) >>
+  `~is_self_codesize (Acc item) [gas_shadow_expr e]` by
+    (qpat_x_assum `~is_self_codesize (Acc item) [e]` mp_tac >>
+     simp[is_self_codesize_def, account_gas_shadow_self_addr]) >>
   `?xx sm. lower_value compile_expr cenv (BaseT AddressT)
       (gas_shadow_expr e) shadow_sa = (xx,sm) /\
     (case item of
@@ -336,9 +443,12 @@ Proof
                          (\c. emit_op GT [c; Lit 0w])
      | Address => comp_return xx | Code => comp_return xx) sm = (op,shadow_sb)` by
     (irule lower_value_acc >>
-     conj_tac >- simp[] >>
-     qexistsl_tac [`account_item_type item`, `ty`] >>
-     gvs[gas_shadow_expr_def, gas_shadow_builtin_def]) >>
+     conj_tac
+     >- simp[]
+     >- (conj_tac
+         >- simp[]
+         >- (qexistsl_tac [`account_item_type item`, `ty`] >>
+             gvs[gas_shadow_expr_def, gas_shadow_builtin_def]))) >>
   gvs[] >>
   rename1 `lower_value compile_expr cenv (BaseT AddressT)
     (gas_shadow_expr e) shadow_sa = (sx,ss1)` >>

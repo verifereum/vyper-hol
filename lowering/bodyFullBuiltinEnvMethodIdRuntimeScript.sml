@@ -164,7 +164,8 @@ Resume method_id_runtime_joint_outcome_from_suffix[bind_composition]:
       (\v mid. (builtin_result cx mid.accounts ann MethodId [expr_type e] [v],mid))` by
     (mp_tac (Q.INST [`bi` |-> `MethodId`, `ann` |-> `ann`, `e` |-> `e`, `cx` |-> `cx`]
        exprSimUnopComposePropsTheory.eval_expr_unop_action_general) >>
-     simp[builtin_args_length_ok_def, builtin_result_def, exprSimUnopPropsTheory.unop_result_def,
+      simp[builtin_args_length_ok_def, is_self_codesize_def, builtin_result_def,
+           exprSimUnopPropsTheory.unop_result_def,
           vyperInterpreterTheory.precompile_builtin_def]) >>
   pop_assum SUBST1_TAC >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
@@ -380,7 +381,8 @@ Resume method_id_runtime_sim_full_from_suffix[vv_source_transport]:
       (\v mid. (builtin_result cx mid.accounts ann MethodId [expr_type e] [v],mid))` by
     (mp_tac (Q.INST [`bi` |-> `MethodId`, `ann` |-> `ann`, `e` |-> `e`, `cx` |-> `cx`]
        exprSimUnopComposePropsTheory.eval_expr_unop_action_general) >>
-     simp[builtin_args_length_ok_def, builtin_result_def, exprSimUnopPropsTheory.unop_result_def,
+     simp[builtin_args_length_ok_def, is_self_codesize_def, builtin_result_def,
+          exprSimUnopPropsTheory.unop_result_def,
           vyperInterpreterTheory.precompile_builtin_def]) >>
   dxrule_at Any (Q.INST
     [`f` |-> `\res. case res of INL (v:value) => INL (Value v) | INR ex => INR ex`]

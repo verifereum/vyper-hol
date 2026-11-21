@@ -8,7 +8,7 @@ Ancestors
   exprSimHash exprSimHashBoundary exprSimHyps exprSimHypsDefs exprSimSource
   gasShadowCompile gasShadowCompileStmtHelpers gasShadowState gasShadow
   exprLoweringProps exprLowering loweringPosts compileEnv vyperTyping
-  vyperInterpreter vyperState vyperAST vyperTypeSystem
+  vyperInterpreter vyperContext vyperState vyperAST vyperTypeSystem
   stmtSimProps gasExemptCert vyperStorageTrace vyperStorageFootprint
 
 Theorem keccak_vv_sim_full:
