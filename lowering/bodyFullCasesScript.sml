@@ -886,17 +886,21 @@ Proof
   `supported_expr tops e` by gvs[supported_stmt_def] >>
   `~supported_expr_exists (const_name_root cx) e` by
     (drule_all body_inv_stmt_const_name_free >>
-     simp[supported_stmt_expr_exists_def]) >>
+     simp[supported_stmt_expr_exists_def, supported_expr_exists_def]) >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule (Q.SPECL [`cenv`, `cx`, `env`, `e`, `es`, `[]`]
+              stmt_expr_body_pre) >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def,
-         body_inv_def] >>
-     qexists_tac `[]` >> simp[]) >>
+         body_inv_def]
+     >- (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+         qexists_tac `cenv` >>
+         fs[alloc_limits_stmt_def,alloc_limits_expr_def]) >>
+     metis_tac[]) >>
   first_x_assum (qspecl_then [`cenv`, `env`, `lctx`, `SOME e`, `es`] mp_tac) >>
   simp[same_frame_refl] >> disch_then irule >>
   fs[body_expr_full_ok_def] >> metis_tac[]
