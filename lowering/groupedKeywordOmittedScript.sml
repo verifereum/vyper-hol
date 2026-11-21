@@ -4,11 +4,11 @@ Ancestors
   groupedKeywordStore runtimeDefaultExpression exprSimFullBundleProps
   exprOperandVar exprLoweringProps emitHelperProps typedMemoryCopy
   loweringPosts bodyPtrDefs loweringStateRelDefs typedCopyOriginPtrBase
-  bodyPtrMakeArrayCopyStateFrame bodyFullEmptyFrame bodySimFull
+  bodyPtrMakeArrayCopyStateFrame bodyFullEmptyFrame bodySimFull robustCopyTransportPtr
   gasOutcomeFullCompose vyperTypeExprResult vyperTypeExprSoundness
   exprSimSource valueEncodingTyping vyperContext vyperAST vyperTypeContract
   vyperTypeInvariants loweringShapeDefs ptrDiscipline
-  venomState venomMemDefs compileEnv finite_map
+  venomState venomMemDefs compileEnv finite_map arithmetic
 
 Theorem grouped_keyword_omitted_store:
   runtime_constant_expr mods e /\ expr_type e = ty /\
@@ -163,4 +163,35 @@ Proof
   rw[typed_copy_state_frame_def, venom_state_component_equality, ghost_inv_at_def,
      return_buf_ptr_def, allocas_from_def, stor_taint_ok_at_def, FLOOKUP_EMPTY] >>
   fs[contract_storage_def, contract_transient_def]
+QED
+
+Theorem grouped_keyword_store_owner_frame:
+  typed_copy_state_frame mid dst len t u /\
+  alloca_inv t /\ FLOOKUP t.vs_allocas did = SOME (dst,len) /\
+  FLOOKUP t.vs_allocas oid = SOME (b,n) /\ oid <> did /\
+  not_fresh_at mid p /\ lookup_var p t = SOME (n2w b) /\ ptr_covers G tn p t n /\
+  FLOOKUP G' p = FLOOKUP G p /\ op_taint tn' (Var p) = op_taint tn (Var p) /\
+  (!i. i < dst \/ dst + len <= i ==> (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
+  val_wf tv v /\ val_footprint tv v <= n /\
+  (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==> val_in_memory tv v b mem) ==>
+  FLOOKUP u.vs_allocas oid = SOME (b,n) /\
+  lookup_var p u = SOME (n2w b) /\ ptr_covers G' tn' p u n /\
+  (!mem. mem_agree_outside tn'.t_mem u.vs_memory mem ==> val_in_memory tv v b mem)
+Proof
+  strip_tac >>
+  qpat_assum `alloca_inv t`
+    (strip_assume_tac o REWRITE_RULE [alloca_inv_def, allocas_non_overlapping_def]) >>
+  `b + n <= dst \/ dst + len <= b` by metis_tac[ADD_COMM] >>
+  fs[typed_copy_state_frame_def, venom_state_component_equality, typed_copy_frame_def] >>
+  `lookup_var p u = lookup_var p t` by metis_tac[] >>
+  `ptr_covers G' tn' p u n` by fs[ptr_covers_def] >>
+  asm_rewrite_tac[] >>
+  mp_tac (Q.SPECL [`tv`,`v`,`b`,`b`,`n`,`tn.t_mem`,`tn'.t_mem`,
+    `t.vs_memory`,`u.vs_memory`] robust_val_in_memory_decreasing_taint_transport) >>
+  impl_tac >-
+    (asm_rewrite_tac[] >> conj_tac >- metis_tac[] >>
+     rpt strip_tac >>
+     `b+i < dst \/ dst+len <= b+i` by decide_tac >>
+     metis_tac[]) >>
+  simp[]
 QED
