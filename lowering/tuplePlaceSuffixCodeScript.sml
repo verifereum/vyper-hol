@@ -1,7 +1,7 @@
 (* Indexed decomposition of the actual arbitrary-place store suffix. *)
 Theory tuplePlaceSuffixCode
 Ancestors
-  tupleAssignParts tuplePlaceCompilerStep rich_list stmtLowering compileEnv
+  tupleAssignParts rich_list stmtLowering compileEnv
   stmtLoweringMono exprLowering exprLoweringProps fragExec loweringSlice
 
 Theorem tuple_place_suffix_code_parts:

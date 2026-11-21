@@ -117,14 +117,6 @@ Proof
                dalloca_windows_internal_fn_bodies]
 QED
 
-Theorem register_kwarg_vars_defaults[local]:
-  !kwvars ce.
-    (compile_register_kwarg_vars ce kwvars).ce_func_defaults = ce.ce_func_defaults
-Proof
-  Induct >> simp[compile_register_kwarg_vars_def] >>
-  rpt gen_tac >> PairCases_on `h` >> simp[compile_register_kwarg_vars_def]
-QED
-
 Theorem dalloca_windows_common_function_body:
   (!env lc rt. env.ce_func_defaults = ce.ce_func_defaults ==>
      preserves_dalloca_windows window (compile_stmts env lc rt fbody)) ==>

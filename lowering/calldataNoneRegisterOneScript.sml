@@ -1,5 +1,5 @@
 Theory calldataNoneRegisterOne
-Ancestors exprLoweringProps defaultBytesRegistrationPrelude defaultBytesAddressPrelude
+Ancestors decoderOriginAllocationFrame entryArgPtrs list exprLoweringProps defaultBytesRegistrationPrelude defaultBytesAddressPrelude
   registrationGuardRejectOrigin ctorDeployMemoryRunPtrPrefixRegisterAddress
   fragGasOriginPtr loweringShapeDefs loweringStateRelDefs fragExec
   emitHelperProps context compileEnv abiEncoder abiDecoderContract words arithmetic
@@ -19,7 +19,9 @@ Theorem registration_wrapped_prefix_origin:
   (4w + abi_decode_load CALLDATALOAD ((4w+n2w (off-4)):bytes32) s) <+ 4w /\
   cap < dimword (:256) /\ FLOOKUP s.vs_allocas st.cs_next_id = NONE /\
   fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?z H u. z.vs_returndata = [] /\
     !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
@@ -36,8 +38,6 @@ Proof
   qabbrev_tac `u0 = tn with <|t_var := tn.t_var |+ (p,{});
       t_mem := tn.t_mem UNION {j | s.vs_alloca_next <= j /\
                                     j < s.vs_alloca_next+cap}|>` >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
-    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
       (s,G,tn) [] (OK a,G0,u0)` by
     (drule_all default_bytes_alloc_origin >>
@@ -55,7 +55,25 @@ Proof
     (simp[Abbr `a`, update_var_def, allocas_from_def, FLOOKUP_UPDATE] >>
      rpt strip_tac >> Cases_on `st.cs_next_id = aid` >>
      gvs[allocas_from_def] >> metis_tac[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by simp[] >>
+  `cap <= pending_alloca_size fn s` by
+    (qabbrev_tac `i = mk_inst st.cs_next_id ALLOCA [Lit (n2w cap)] [p]` >>
+     `MEM i (fn_insts fn)` by
+       (drule_all entryArgPtrsTheory.entry_alloc_buffer_inst >> simp[Abbr `i`, Abbr `p`]) >>
+     `st.cs_next_id NOTIN FDOM s.vs_allocas` by fs[FLOOKUP_DEF] >>
+     `MEM i (FILTER (\j. j.inst_opcode = ALLOCA /\
+         j.inst_id NOTIN FDOM s.vs_allocas) (fn_insts fn))` by
+       simp[MEM_FILTER, Abbr `i`, venomInstTheory.mk_inst_def] >>
+     mp_tac (Q.ISPECL [`alloca_lit_size`, `i:instruction`,
+       `FILTER (\j. j.inst_opcode = ALLOCA /\
+          j.inst_id NOTIN FDOM s.vs_allocas) (fn_insts fn)`] listTheory.SUM_MAP_MEM_bound) >>
+     simp[Abbr `i`, pending_alloca_size_def, alloca_lit_size_def, venomInstTheory.mk_inst_def, w2n_n2w]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by
+    (strip_tac >>
+     `allocas_below_fmp s /\
+      s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by metis_tac[] >>
+     `s.vs_alloca_next + cap <= w2n s.vs_initial_fmp` by decide_tac >>
+     fs[Abbr `a`, update_var_def, allocas_below_fmp_def, FLOOKUP_UPDATE] >>
+     rpt strip_tac >> Cases_on `aid = st.cs_next_id` >> gvs[] >> metis_tac[]) >>
   drule_all default_bytes_address_joint >>
   disch_then (qspecl_then [`u0`,`PG`,`G0`] strip_assume_tac) >>
   suspend "guard"
@@ -77,7 +95,11 @@ Resume registration_wrapped_prefix_origin[guard]:
      simp[allocas_from_def] >> fs[allocas_from_def] >> metis_tac[]) >>
   `(4w + abi_decode_load CALLDATALOAD ((4w+n2w (off-4)):bytes32) a) <+ 4w` by
     gvs[abi_decode_load_def, abi_decode_source_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (`allocas_below_fmp t <=> allocas_below_fmp a` by
+       (qpat_assum `t = a with <|vs_vars := _; vs_inst_idx := _|>` SUBST1_TAC >>
+        simp[NoAsms, allocas_below_fmp_def]) >>
+     asm_rewrite_tac[]) >>
   `?z H1 u1. z.vs_returndata = [] /\
     !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
       (t,H,u) [] (Abort Revert_abort z,H1,u1)` by
@@ -102,7 +124,9 @@ Theorem none_registration_singleton_wrap[local]:
   (4+delta) MOD dimword (:256) < 4 /\
   cap < dimword (:256) /\ FLOOKUP s.vs_allocas st.cs_next_id = NONE /\
   fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?z H u. z.vs_returndata = [] /\
     !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
@@ -135,7 +159,9 @@ Theorem none_registration_singleton_paths:
   4+ofs+tv_abi_size tv < dimword (:256) /\
   s.vs_call_ctx.cc_calldata = cd /\
   fn_inst_ids_distinct fn /\ ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
-  unit_alloca_budget ctx < dimword (:256) /\ ~ctx_has_dalloca ctx /\
+  unit_alloca_budget ctx < dimword (:256) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
   (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==> id < st.cs_next_id) /\
   fresh_vars_wrt st s /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
@@ -148,6 +174,8 @@ Theorem none_registration_singleton_paths:
      abi_decoder_operand_live first.cs_next_var src /\
      abi_decoder_operand_live first.cs_next_var (Var q) /\
      alloca_inv t /\ alloca_frontier_inv ctx fn site t /\
+     (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+       t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp) /\
      (!id. first.cs_next_id <= id ==> FLOOKUP t.vs_allocas id = NONE) /\
      FLOOKUP t.vs_allocas oid = SOME (d,type_memory_size tv) /\
      oid < first.cs_next_id /\ d+type_memory_size tv < dimword (:256) /\
@@ -162,6 +190,8 @@ Theorem none_registration_singleton_paths:
        (?v K w. IS_SOME (cd_decode F t.vs_call_ctx.cc_calldata tv (w2n p)) /\
          v.vs_call_ctx = t.vs_call_ctx /\ alloca_inv v /\
          alloca_frontier_inv ctx fn site v /\
+         (ctx_has_dalloca ctx ==> allocas_below_fmp v /\
+           v.vs_alloca_next + pending_alloca_size fn v <= w2n v.vs_initial_fmp) /\
          (!id. last.cs_next_id <= id ==>
             FLOOKUP v.vs_allocas id = FLOOKUP t.vs_allocas id) /\
          fresh_vars_wrt last v /\ ~v.vs_halted /\
@@ -175,6 +205,8 @@ Theorem none_registration_singleton_paths:
   (?v H u. IS_SOME (calldata_decode_args cd [tv] ofs) /\
     v.vs_call_ctx.cc_calldata = cd /\ alloca_inv v /\
     alloca_frontier_inv ctx fn site v /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp v /\
+      v.vs_alloca_next + pending_alloca_size fn v <= w2n v.vs_initial_fmp) /\
     (!id entry. FLOOKUP v.vs_allocas id = SOME entry ==> id < last.cs_next_id) /\
     fresh_vars_wrt last v /\ ~v.vs_halted /\ v.vs_current_bb = last.cs_current_bb /\
     v.vs_inst_idx = LENGTH last.cs_current_insts /\
@@ -265,8 +297,6 @@ Resume none_registration_singleton_paths[pass]:
     ?d. entry = (d,type_memory_size tv) /\ d+type_memory_size tv < dimword (:256)` by
     (qpat_assum `FLOOKUP s.vs_allocas st.cs_next_id = NONE` (fn th => simp[NoAsms, th])) >>
   `0 <= s.vs_alloca_next` by simp[] >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp s /\
-    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp)` by simp[] >>
   drule_all (Q.INST [`lo` |-> `0`] entryPtrSeamRegisterTheory.registration_argument_prepare_guarded_joint) >>
   disch_then (qspecl_then [`tn`,`[]`,`G`] strip_assume_tac) >>
   rename1 `lookup_var q t = SOME (n2w d)` >>
@@ -296,6 +326,14 @@ Resume none_registration_singleton_paths[pass]:
     (rewrite_tac[venomStateTheory.eval_operand_def] >> first_assum ACCEPT_TAC) >>
   `compile_abi_decode_to_buf (Var q) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) first = ((),last)` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+    t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK t,H,u)`
+      (qspecl_then [`ARB`,`ARB`] assume_tac) >>
+     strip_tac >>
+     drule_at (Pat `gas_origin_ptr_path _ _ _ _`) decoder_origin_path_room >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   qpat_x_assum `!first t src q p d oid H u. _` (drule_all_then strip_assume_tac)
   >- suspend "child_abort"
   >> suspend "child_ok"

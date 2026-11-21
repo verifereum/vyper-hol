@@ -1,5 +1,7 @@
 Theory bodySimAugPlaceLoad
 Ancestors
+  targetPureSourceFrame vyperLocalAccessFrame
+  vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes vyperPlaceResultTyping
   bodySimAugPlaceLive bodySimAugPlaceScopes supportedTargets
   targetPlaceSim valueEncoding valueEncodingDefs valueEncodingProps
   vyperState vyperValue vyperMisc list pair finite_map words
@@ -48,61 +50,69 @@ Proof
   ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >> simp[]
 QED
 
-val trace_scopes_tac =
-  rpt (qpat_x_assum `_ = _ with storage_trace := _`
-    (fn th => assume_tac (SIMP_RULE (srw_ss()) []
-      (AP_TERM ``\s:evaluation_state. s.scopes`` th)))) >> gvs[];
-
 Theorem aug_place_base_scopes:
   !t tops bindings info cx s r s'.
     supported_target_info tops bindings t = SOME info /\
-    eval_base_place cx t s = (r,s') ==> s'.scopes = s.scopes
+    eval_base_place cx t s = (r,s') ==> MAP FDOM s'.scopes = MAP FDOM s.scopes
 Proof
-  recInduct aug_place_scopes_target_induct >> rpt conj_tac >> rpt gen_tac
-  >- (simp[Once evaluate_def, get_scopes_def, bind_def, ignore_bind_def,
-           type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
-      rpt strip_tac >> gvs[])
-  >- (PairCases_on `nsid` >> simp[Once evaluate_def] >>
-      metis_tac[lookup_global_scopes])
-  >- suspend "subscript"
-  >> suspend "attribute"
+  metis_tac[eval_base_place_preserves_scopes_dom]
 QED
-Resume aug_place_base_scopes[subscript]:
-  rpt strip_tac >>
-  qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  strip_tac >> gvs[supported_target_info_def, AllCaseEqs()] >>
-  imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
-  imp_res_tac aug_place_supported_expr_scopes >> trace_scopes_tac >> metis_tac[]
-QED
-Resume aug_place_base_scopes[attribute]:
-  rpt strip_tac >>
-  qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  strip_tac >> gvs[supported_target_info_def, AllCaseEqs()] >>
-  imp_res_tac extend_place_state >> trace_scopes_tac >> metis_tac[]
-QED
-Finalise aug_place_base_scopes
 
 Theorem aug_place_target_scopes:
   supported_target_info tops bindings t = SOME info /\
-  eval_target_place cx t s = (r,s') ==> s'.scopes = s.scopes
+  eval_target_place cx t s = (r,s') ==> MAP FDOM s'.scopes = MAP FDOM s.scopes
 Proof
-  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
-  imp_res_tac get_place_state >> trace_scopes_tac >> metis_tac[aug_place_base_scopes]
+  metis_tac[eval_target_place_preserves_scopes_dom]
+QED
+
+Theorem aug_place_scope_pop_prior_entry[local]:
+  scope_pop_trace scopes events final /\ lookup_scopes id final = SOME entry ==>
+  ?prior. lookup_scopes id scopes = SOME prior /\
+          entry_pop_trace prior (entry_events id events) entry
+Proof
+  disch_then strip_assume_tac >>
+  `MAP FDOM final = MAP FDOM scopes` by metis_tac[scope_pop_trace_scopes_dom] >>
+  Cases_on `lookup_scopes id scopes`
+  >- metis_tac[lookup_scopes_none_map_fdom, optionTheory.NOT_SOME_NONE] >>
+  metis_tac[scope_pop_trace_lookup, optionTheory.SOME_11]
+QED
+
+Theorem aug_place_entry_pop_step_typed[local]:
+  value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
+  entry_pop_step entry path final ==>
+  value_has_type final.type final.value /\ well_formed_type_value final.type
+Proof
+  simp[entry_pop_step_def] >> rpt strip_tac >> gvs[] >>
+  fs[read_memory_path_def] >>
+  `?ptv. subscripts_type entry.type path = SOME ptv /\
+          value_has_type ptv live` by
+    metis_tac[evaluate_subscripts_declared_type_exists] >>
+  metis_tac[pop_element_preserves_type, assign_subscripts_replace_type_metadata]
+QED
+
+Theorem aug_place_entry_pop_trace_typed[local]:
+  !events entry final.
+    value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
+    entry_pop_trace entry events final ==>
+    value_has_type final.type final.value /\ well_formed_type_value final.type
+Proof
+  Induct >- simp[entry_pop_trace_def] >>
+  gen_tac >> PairCases_on `h` >> simp[entry_pop_trace_def] >>
+  metis_tac[aug_place_entry_pop_step_typed]
 QED
 
 Theorem aug_place_target_entry_typed:
   expr_sim_inv cenv cx env s /\
-  supported_target_info tops bindings t = SOME info /\
   eval_target_place cx t s = (INL p,s') /\
   lookup_scopes id s'.scopes = SOME entry ==>
   value_has_type entry.type entry.value /\ well_formed_type_value entry.type
 Proof
-  rpt strip_tac >>
-  `s'.scopes = s.scopes` by metis_tac[aug_place_target_scopes] >>
-  gvs[expr_sim_inv_def, state_well_typed_def] >>
-  metis_tac[aug_place_lookup_typed]
+  disch_then strip_assume_tac >>
+  `?events. scope_pop_trace s.scopes events s'.scopes` by
+    metis_tac[eval_mutual_scope_pop_effect, scope_pop_effect_def] >>
+  drule_all aug_place_scope_pop_prior_entry >> strip_tac >>
+  fs[expr_sim_inv_def, state_well_typed_def] >>
+  metis_tac[aug_place_lookup_typed, aug_place_entry_pop_trace_typed]
 QED
 
 Theorem aug_place_rhs_entry_typed:
@@ -113,9 +123,16 @@ Theorem aug_place_rhs_entry_typed:
   lookup_scopes id s'.scopes = SOME entry ==>
   value_has_type entry.type entry.value /\ well_formed_type_value entry.type
 Proof
-  rpt strip_tac >>
-  `s'.scopes = st.scopes` by metis_tac[aug_place_supported_expr_scopes] >>
-  gvs[] >> metis_tac[aug_place_target_entry_typed]
+  disch_then strip_assume_tac >>
+  `?before. scope_pop_trace s.scopes before st.scopes` by
+    metis_tac[eval_mutual_scope_pop_effect, scope_pop_effect_def] >>
+  `?after. scope_pop_trace st.scopes after s'.scopes` by
+    metis_tac[eval_mutual_scope_pop_effect, scope_pop_effect_def] >>
+  `scope_pop_trace s.scopes (before ++ after) s'.scopes` by
+    metis_tac[scope_pop_trace_append] >>
+  drule_all aug_place_scope_pop_prior_entry >> strip_tac >>
+  fs[expr_sim_inv_def, state_well_typed_def] >>
+  metis_tac[aug_place_lookup_typed, aug_place_entry_pop_trace_typed]
 QED
 
 Theorem aug_place_fields_project:
@@ -317,9 +334,21 @@ Proof
   metis_tac[optionTheory.SOME_11]
 QED
 
+Theorem aug_place_target_entry_type_agrees:
+  expr_sim_inv cenv cx env s /\ eval_target_place cx t s = (r,s') /\
+  lookup_scopes id s'.scopes = SOME entry /\ cenv.ce_var_type id = SOME ty ==>
+  evaluate_type (get_tenv cx) ty = SOME entry.type
+Proof
+  disch_then strip_assume_tac >>
+  `?events. scope_pop_trace s.scopes events s'.scopes` by
+    metis_tac[eval_mutual_scope_pop_effect, scope_pop_effect_def] >>
+  drule_all aug_place_scope_pop_prior_entry >> strip_tac >>
+  drule entry_pop_trace_metadata >> strip_tac >>
+  metis_tac[aug_place_entry_type_agrees]
+QED
+
 Theorem aug_place_memory_load:
-  expr_sim_inv cenv cx env es /\
-  supported_target_info tops bindings t = SOME info /\
+  target_pre cenv cx env t es /\ type_place_target env t = SOME (Type ty) /\
   eval_target_place cx t es = (INL (MemoryPlace id path),st) /\
   read_place cx (MemoryPlace id path) st = (INL cur,st') /\
   stmt_state_rel H ctx func cenv cx st s /\
@@ -330,11 +359,11 @@ Theorem aug_place_memory_load:
 Proof
   rpt strip_tac >>
   drule_all aug_place_target_memory_live >> strip_tac >>
+  `expr_sim_inv cenv cx env es` by fs[target_pre_def] >>
   `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by
     metis_tac[aug_place_target_entry_typed] >>
-  `st.scopes = es.scopes` by metis_tac[aug_place_target_scopes] >>
   gvs[place_ptr_rel_def] >>
-  `tv0 = entry.type` by metis_tac[aug_place_entry_type_agrees, optionTheory.SOME_11] >>
+  `tv0 = entry.type` by metis_tac[aug_place_target_entry_type_agrees, optionTheory.SOME_11] >>
   gvs[] >>
   `cur = v` by
     gvs[read_place_def, get_scopes_def, bind_def, lift_option_type_def,
@@ -388,22 +417,43 @@ Proof
 QED
 
 Theorem aug_place_rhs_scopes:
-  supported_expr tops e /\
+  supported_expr tops e /\ ~expr_has_effect e /\
   (do tv <- eval_expr cx e; read_result cx tv od) st = (r,st1) ==>
   st1.scopes = st.scopes
 Proof
-  simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
-  imp_res_tac read_result_state >> trace_scopes_tac >>
-  metis_tac[aug_place_supported_expr_scopes]
+  simp[bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> gvs[] >>
+  drule_all targetPureSourceFrameTheory.effect_free_source_projection >>
+  disch_then (mp_tac o AP_TERM ``evaluation_state_scopes``) >> simp[]
 QED
 
 Theorem aug_place_rhs_memory_entry:
-  supported_expr tops e /\
+  ~MEM (WriteAcc (LocalRef id)) (accesses_expr e) /\
   (do tv <- eval_expr cx e; read_result cx tv od) st = (r,st1) /\
   lookup_scopes id st.scopes = SOME entry /\
   evaluate_subscripts entry.type entry.value path = INL old ==>
   lookup_scopes id st1.scopes = SOME entry /\
   evaluate_subscripts entry.type entry.value path = INL old
 Proof
-  rpt strip_tac >> drule_all aug_place_rhs_scopes >> simp[]
+  simp[bind_def, AllCaseEqs()] >> disch_then strip_assume_tac >>
+  imp_res_tac read_result_state >> gvs[] >>
+  metis_tac[eval_expr_unwritten_local]
+QED
+
+Theorem aug_place_rhs_entry_type:
+  bind (eval_expr cx e) (read_result cx) st = (r,st') /\
+  lookup_scopes id st.scopes = SOME entry ==>
+  ?entry'. lookup_scopes id st'.scopes = SOME entry' /\
+           entry'.type = entry.type
+Proof
+  `!res fin. eval_expr cx e st = (res,fin) /\
+     lookup_scopes id st.scopes = SOME entry ==>
+     ?out. lookup_scopes id fin.scopes = SOME out /\ out.type = entry.type` by
+    (rpt strip_tac >>
+     `?events. scope_pop_trace st.scopes events fin.scopes` by
+       metis_tac[eval_mutual_scope_pop_effect, scope_pop_effect_def] >>
+     drule_all scope_pop_trace_lookup >> strip_tac >>
+     drule entry_pop_trace_metadata >> metis_tac[]) >>
+  simp[bind_def, AllCaseEqs()] >> disch_then strip_assume_tac >>
+  imp_res_tac read_result_state >> gvs[] >> metis_tac[]
 QED

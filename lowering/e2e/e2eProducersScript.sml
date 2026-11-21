@@ -233,7 +233,8 @@ Proof
   gvs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
       tx_block_fields_rel_def,
       initial_venom_state_rel_def, entry_venom_state_frame_fields,
-      entry_venom_state_fresh]
+      entry_venom_state_fresh] >>
+  simp[entry_venom_state_def]
 QED
 
 Theorem opt_entry_initial_venom_state_rel_own:

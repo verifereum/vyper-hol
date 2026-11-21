@@ -90,42 +90,13 @@ QED
 Theorem body_inv_const_name_not_root_mods:
   contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
   cx_const_name_mods mods nsid ==>
-  ~supported_place_root (main_module mods) nsid /\
   (!ty. ~supported_storage_value (main_module mods) nsid ty) /\
   supported_immutable_type (main_module mods) nsid = NONE
 Proof
   PairCases_on `nsid` >> Cases_on `nsid0` >> strip_tac
   >- metis_tac[body_inv_const_name_decl_mods, supported_constant_decl_not_root] >>
-  simp[supported_place_root_def, supported_storage_value_def,
+  simp[supported_storage_value_def,
        supported_immutable_type_def, supported_lookup_other_module]
-QED
-
-Theorem body_inv_const_name_root_mods:
-  contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx ==>
-  !x. const_name_root_mods mods x ==>
-    ?ty id. x = TopLevelName ty id /\
-      ~supported_place_root (main_module mods) id /\
-      ~supported_storage_value (main_module mods) id ty /\
-      supported_immutable_type (main_module mods) id = NONE
-Proof
-  rpt strip_tac >> Cases_on `x` >> gvs[const_name_root_mods_def] >>
-  metis_tac[body_inv_const_name_not_root_mods]
-QED
-
-Theorem body_inv_const_name_free_mods:
-  contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
-  supported_expr (main_module mods) e ==>
-  ~supported_expr_exists (const_name_root_mods mods) e
-Proof
-  metis_tac[body_inv_const_name_root_mods, supported_expr_no_name_root]
-QED
-
-Theorem body_inv_target_const_name_free_mods:
-  contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
-  supported_target_info (main_module mods) bindings bt <> NONE ==>
-  ~supported_target_exists (const_name_root_mods mods) bt
-Proof
-  metis_tac[body_inv_const_name_root_mods, CONJUNCT2 supported_target_info_no_name_root]
 QED
 
 Theorem body_inv_immutable_section_layout_mods:

@@ -1,6 +1,7 @@
 (* Append extends the initialized memory prefix at the element stride. *)
 Theory appendMemoryRel
 Ancestors
+  entryDecodeStaticProps
   abiDecoderArrayPrefix abiDecodeStaticProps valueEncodingProps valueEncodingProofs valueEncodingDefs
   placeStore valueEncodingTyping venomState words list arithmetic
   bodySimAugPlaceLoad supportedTypes memoryValueEncoding loweringStateRelDefs
@@ -219,6 +220,25 @@ Proof
 QED
 
 (* The full-word interface is the stride-32 instance of the general layout. *)
+Theorem append_memory_word_layout:
+  stmt_state_rel H ctx func cenv cx es s /\ expr_sim_inv cenv cx env es /\
+  place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) bp (SOME LocMemory)
+    (Type (ArrayT elem (Dynamic cap))) /\
+  lookup_scopes id es.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL (ArrayV (DynArrayV vs)) /\
+  is_word_type elem ==>
+  ?tv. evaluate_type (get_tenv cx) elem = SOME tv /\
+    type_memory_size tv = 32 /\
+    value_has_type (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) /\
+    val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs))
+      (w2n bp) s.vs_memory /\
+    w2n bp + 32*(1+cap) <= s.vs_alloca_next /\ cap < dimword (:256)
+Proof
+  strip_tac >> drule_all append_memory_array_layout_general >> strip_tac >>
+  `type_memory_size tv = 32` by metis_tac[entryDecodeStaticPropsTheory.word_type_memory_size] >>
+  qexists_tac `tv` >> gvs[] >> decide_tac
+QED
+
 Theorem append_memory_array_layout:
   stmt_state_rel H ctx func cenv cx es s /\ expr_sim_inv cenv cx env es /\
   place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) bp (SOME LocMemory)
@@ -233,12 +253,8 @@ Theorem append_memory_array_layout:
       (w2n bp) s.vs_memory /\
     w2n bp + 32*(1+cap) <= s.vs_alloca_next /\ cap < dimword (:256)
 Proof
-  strip_tac >> drule_all append_memory_array_layout_general >> strip_tac >>
-  `type_memory_size tv = 32` by
-    (qpat_x_assum `supported_full_word_type elem` mp_tac >>
-     rw[supported_full_word_type_def] >>
-     fs[vyperValueTheory.evaluate_type_def, valueEncodingTheory.type_memory_size_def]) >>
-  qexists_tac `tv` >> gvs[] >> decide_tac
+  strip_tac >> irule append_memory_word_layout >>
+  fs[supported_full_word_type_def, compileEnvTheory.is_word_type_def] >> metis_tac[]
 QED
 
 (* The declaration witness ties the root's allocation bound to its evaluated

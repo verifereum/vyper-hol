@@ -3,7 +3,7 @@ Ancestors
   bodyFullShadowBodyInv
   haltExitProj
   typeBuiltinPrereqs
-  bodyInvNoDalloca bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
+  bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
   bodyFullIfExpReach[qualified,ignore_grammar] bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyFullPreds bodyFullOfVV bodyFullExprGeneric bodyFullAllocGeneric
   bodyFullExtract32Prepare bodyFullExtract32Suffix bodyFullExtract32SuffixExit

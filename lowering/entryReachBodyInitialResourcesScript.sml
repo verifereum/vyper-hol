@@ -24,8 +24,7 @@ Proof
   simp[] >> metis_tac[alloca_inv_empty, abi_alloca_history_empty]
 QED
 
-(* This applies to the very post-dispatch state exported by
-   external_entry_reaches_checks, without choosing a second endpoint. *)
+(* Initial allocation resources persist across the dispatch prefix. *)
 Theorem entry_checks_start_allocation_resources:
   initial_venom_state_rel tops am tx s /\ vars_pc_only s t ==>
   t.vs_allocas = FEMPTY /\ t.vs_alloca_next = 0 /\

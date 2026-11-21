@@ -6,7 +6,7 @@ Ancestors
   unitMemInv o1PassContract o1RequestContract venomPassSchedule
   o1DftStageSsa dftContractGas unitTransformDefs
 
-Theorem replay_exit_raw_call_ctx[local]:
+Theorem replay_exit_raw_call_ctx:
   !v C fn inst s. raw_reachable v C fn inst s ==> s.vs_call_ctx = v.vs_call_ctx
 Proof
   ho_match_mp_tac raw_reachable_ind >> rpt conj_tac >> rpt strip_tac

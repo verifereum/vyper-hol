@@ -1,6 +1,7 @@
 (* Reindex the immutable store frame at the actual write trace. *)
 Theory augAssignFullImmutableStageFrames
 Ancestors
+  vyperEvalExprPreservesScopesDom
   augAssignFullEntryFrame bodySimAugPlaceScopes stmtSimAugAssign
   vyperStorageFootprint vyperStorageTrace vyperScopePreservation vyperState
   supportedStmts finite_map pred_set list
@@ -58,14 +59,12 @@ Theorem augassign_immutable_staged_store_frame:
       off <= i /\ i < off + sz /\ i IN tnw.t_mem ==> i IN tn0.t_mem)
 Proof
   strip_tac >>
-  `ee.scopes = es0.scopes` by
-    (qpat_assum `vyperState$bind _ _ _ = _`
-       (mp_then (Pat `vyperState$bind _ _ _ = _`) irule
-         vyperScopePreservationTheory.bind_scopes) >>
-     qpat_assum `supported_expr _ _` mp_tac >>
+  `MAP FDOM ee.scopes = MAP FDOM es0.scopes` by
+    (qpat_assum `vyperState$bind _ _ _ = _` mp_tac >>
      POP_ASSUM_LIST kall_tac >>
-     metis_tac[aug_place_supported_expr_scopes, read_result_state]) >>
-  `MAP FDOM ee.scopes = MAP FDOM es0.scopes` by simp[] >>
+     simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+     imp_res_tac read_result_state >> gvs[] >>
+     drule eval_expr_preserves_scopes_dom >> simp[]) >>
   qx_gen_tac `H` >> strip_tac >>
   `valid_horizon cx st0 H ee.storage_trace` by
     (qpat_assum `write_place _ _ _ _ = _` mp_tac >>

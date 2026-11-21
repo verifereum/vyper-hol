@@ -11,7 +11,9 @@ Theorem log_scalar_embedded_bound[local]:
       (if is_abi_dynamic sf ty then abi_size_bound sf ty else 0)
 Proof
   Cases_on `ty` >> simp[supported_scalar_type_def, supported_word_type_def,
-    supported_string_type_def] >>
+    supported_string_type_def, vyper_abi_size_bound_def, vyper_is_dynamic_def,
+    abi_embedded_static_size_def, is_abi_dynamic_def, abi_size_bound_def,
+    abi_static_size_def, ceil32_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
   simp[supported_word_type_def, supported_string_type_def,
     vyper_abi_size_bound_def, vyper_is_dynamic_def,

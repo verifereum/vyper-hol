@@ -6,13 +6,15 @@
 Theory runtimeSymSrcUnit
 Ancestors
   runtimeSymSrcInstructions runtimeSymSrcData o1LabelFlowSourceBoundary
-  e2eProducers codegenSymRel compileVyper runtimeLabelReadiness
+  e2eProducers codegenSymRel compileVyper runtimeLabelReadiness vyperTypeContract constSubstCorrect
 
 (* The runtime unit's source-side static facts: no CODESIZE, CODECOPY only
    from runtime_begin, no code_end label yet, and a byte-only data segment
    (empty under Linear dispatch). *)
 Theorem lower_vyper_runtime_unit_sym_src_ok:
-  !tops rpolicy unit.
+  !tops rpolicy unit mode layouts addr art imms A.
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit ==>

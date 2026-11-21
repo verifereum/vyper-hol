@@ -9,6 +9,7 @@ Ancestors
 
 Theorem none_signature_evaluates:
   supported_program tops /\ source_typing_ok tops am tx /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
   MEM (name,tys) (abi_external_signatures tops) ==>
   ?mut nr rr args ret fbody tvs.
     MEM (mut,nr,rr,name,args,[],ret,fbody) (FST (classify_functions tops)) /\
@@ -24,8 +25,6 @@ Proof
   pop_assum mp_tac >>
   simp[MEM_FLAT, MEM_MAP, PULL_EXISTS, pairTheory.EXISTS_PROD] >>
   rpt strip_tac >>
-  `~EXISTS external_has_defaults (FST (classify_functions tops))` by
-    metis_tac[supported_program_no_external_defaults] >>
   fs[EVERY_MEM, external_has_defaults_def, combinTheory.o_DEF] >>
   suspend "signature"
 QED

@@ -1055,7 +1055,7 @@ val coherent_reject = ``\ce env sf ty tv.
              else TAKE (static_length (vyper_to_abi_type env ty)) (DROP b xs)) /\
     ~(vyper_decode_valid_enc (vyper_to_abi_type env ty) bytes /\
       abi_vyper_admissible env ty (dec (vyper_to_abi_type env ty) bytes)) /\
-    ~ctx_has_dalloca ctx /\ abi_decode_ptr_window G tn s source (n2w B) L /\
+    abi_decode_ptr_window G tn s source (n2w B) L /\
     ptr_covers G tn output s (type_memory_bytes ce ty) /\
     op_prov G b_op = NONE /\ op_prov G hi = NONE /\
     op_taint tn b_op = {} /\ op_taint tn hi = {} /\
@@ -1167,7 +1167,9 @@ Proof
       `^scalar_load_cut` by (rpt gen_tac >> MATCH_ACCEPT_TAC malformed_scalar_load_prefix) >>
       `^count_compare_cut` by (rpt gen_tac >> MATCH_ACCEPT_TAC malformed_count_compare_cut) >>
       `^guard_abort_cut` by (rpt gen_tac >> MATCH_ACCEPT_TAC malformed_guard_abort_joint) >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+        (qhdtm_assum `abi_malformed_entry`
+           (ACCEPT_TAC o MATCH_MP abiMalformedEntryPropsTheory.abi_malformed_entry_allocas_below_fmp)) >>
       mp_tac (Q.INST [`p` |-> `b`, `pos` |-> `b_op`]
         malformed_dynarray_prefix_or_bulk_joint) >>
       ntac 5 (impl_tac >- first_assum ACCEPT_TAC) >>
@@ -1223,7 +1225,6 @@ Theorem abi_malformed_allocated_joint_from_success:
     B L xs p d dstid live ceiling s G tn lo PG.
     abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
       st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s /\
-    ~ctx_has_dalloca ctx /\
     abi_decode_ptr_window G tn s source (n2w B) L /\
     ptr_covers G tn output s (type_memory_bytes ce ty) /\
     op_prov G pos = NONE /\ op_prov G hi = NONE /\
@@ -1270,7 +1271,6 @@ Theorem abi_malformed_allocated_joint_from_success:
       else TAKE (static_length (vyper_to_abi_type env ty)) (DROP p xs)) /\
     ~(vyper_decode_valid_enc (vyper_to_abi_type env ty) bytes /\
       abi_vyper_admissible env ty (dec (vyper_to_abi_type env ty) bytes)) /\
-    ~ctx_has_dalloca ctx /\
     abi_decode_ptr_window G tn s source (n2w B) L /\
     ptr_covers G tn output s (type_memory_bytes ce ty) /\
     op_prov G pos = NONE /\ op_prov G hi = NONE /\

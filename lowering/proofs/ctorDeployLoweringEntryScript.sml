@@ -2,13 +2,14 @@
 Theory ctorDeployLoweringEntry
 Ancestors
   fnPlanPlaceRevertPostamble
-  ctorDeployLoweringDefs o1PassContract stmtSimDefs ctorDeployLoweringEntryFmp
+  ctorDeployLoweringDefs o1PassContract allocaBudgetProps stmtSimDefs ctorDeployLoweringEntryFmp
   ctorDeployLoweringEntryPrefix ctorDeployLoweringEntryBodyResources
   ctorDeployLoweringEntryStatic ctorDeployLoweringEntryStateRel
   exprLoweringProps compileEnv fragGasPath ctorDeployDefs bodyPtrDefs fragGasPathMem
   ctorDeployMemoryRunPtrEntry ctorDeployMemoryRunMemEntryTaskActual
   ptrSafeRun venomExecSemantics fragExec
   fragGasOriginPtr fragGasOriginPtrLoop vyperStorageFootprint
+val _ = Parse.hide "body";
 
 (* The run from the unit's entry, after the payable check, the immutables
    region, the constructor arguments' registration and the lock, reaches
@@ -21,7 +22,7 @@ Ancestors
    registration provenance and empty pointer taint at the same endpoint.
    Complete source argument bounds belong to this entry producer; padded
    decoder reads alone do not establish a source-section memory window. *)
-Theorem deploy_ctor_entry_joint:
+Theorem deploy_ctor_entry_joint_raw:
   !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
    body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func mut nr' body' am_c es0.
     deploy_phases policy tops (assemble prog, runtime_bc)
@@ -29,12 +30,16 @@ Theorem deploy_ctor_entry_joint:
     deploy_source_ok tops am tx /\
     deploy_state_rel tops (assemble prog') am tx es /\
     IS_SOME (FLOOKUP (lo_reloc prog prog') "runtime_begin") /\
-    gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+    raw_variant vs.vs_initial_fmp vs
+      (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+    (ctx_has_dalloca dunit.cu_context ==>
+      imm_len tops + unit_alloca_budget dunit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
     deploy_ctor_start tops am tx (mut, nr', body', am_c, es0) ==>
-    nr' = nr /\ body' = body /\
+    nr' = nr /\ body = subst_consts_stmts (module_consts_env tops []) body' /\
     local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
     ?s0 G0 tn0.
       dunit.cu_context.ctx_entry = SOME "__deploy" /\
@@ -47,6 +52,7 @@ Theorem deploy_ctor_entry_joint:
         (vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
                     vs_inst_idx := 0 |>) 0 (OK s0) /\
       alloca_history func s0 /\
+      (ctx_has_dalloca dunit.cu_context ==> allocas_below_fmp s0) /\
       return_buf_frame NONE cenv sa s0 /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -84,11 +90,18 @@ Proof
   drule_all ctorDeployLoweringEntrySelectionTheory.deploy_ctor_entry_selection_agrees >>
   strip_tac >> gvs[] >>
   `nr = F` by
-    (drule_all (cj 1 deploy_ctor_entry_body_resources) >> simp[]) >>
+    metis_tac[ctorDeployLoweringFrameTheory.deploy_ctor_not_nonreentrant] >>
   drule_all deploy_ctor_body_entry_static >> strip_tac >>
   drule_all deploy_ctor_original_entry_shape >> strip_tac >>
-  drule_all (INST_TYPE [alpha |-> ``:256``]
-    deploy_ptr_entry_prefix_related_checked) >> strip_tac >>
+  gvs[] >>
+  rename1 `deploy_ctor_start tops am tx (mut,F,source_body,am_c,es0)` >>
+  qpat_assum `deploy_ctor_code _ _ _ _ _`
+    (mp_then Any mp_tac (INST_TYPE [alpha |-> ``:256``]
+      deploy_ptr_entry_prefix_related_raw_checked)) >>
+  simp[] >>
+  disch_then (qspecl_then [`vs`, `tx`, `source_body`, `prog'`, `prog`,
+    `policy`, `mut`, `es0`, `es`, `dout`, `cplan`, `am_c`, `am`] mp_tac) >>
+  simp[] >> strip_tac >>
   drule gas_path_mem_exec >> simp[fragExecTheory.exit_result_def] >> strip_tac >> gvs[] >>
   qexistsl [`actual`,`H`,`qt`] >>
   rpt conj_tac

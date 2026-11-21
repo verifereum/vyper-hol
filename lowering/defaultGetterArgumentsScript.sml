@@ -9,14 +9,14 @@ Theorem supported_getter_key_decoder[local]:
   !ty. supported_hashmap_key_type ty ==>
     is_word_type ty \/ is_bytestring_type ty
 Proof
-  Cases >> simp[supported_hashmap_key_type_def, supported_integer_type_def,
-                supported_string_type_def, is_word_type_def,
-                is_bytestring_type_def] >>
+  Cases >> simp[supported_hashmap_key_type_def, supported_scalar_type_def,
+                supported_word_type_def, supported_string_type_def,
+                is_word_type_def, is_bytestring_type_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[supported_integer_type_def, supported_string_type_def,
+  simp[supported_word_type_def, supported_string_type_def,
        is_word_type_def, is_bytestring_type_def] >>
   rename1 `BytesT bd` >> Cases_on `bd` >>
-  simp[supported_integer_type_def, supported_string_type_def,
+  simp[supported_word_type_def, supported_string_type_def,
        is_word_type_def, is_bytestring_type_def]
 QED
 
@@ -37,7 +37,7 @@ Proof
   all_tac >>~- ([`is_ArrayT vt`],
     pairarg_tac >> gvs[] >>
     `supported_hashmap_key_type (BaseT (UintT 256))` by
-      simp[supported_hashmap_key_type_def, supported_integer_type_def,
+      simp[supported_hashmap_key_type_def, supported_scalar_type_def, supported_word_type_def,
            supported_int_width_def] >>
     metis_tac[supported_getter_key_decoder]) >>
   pairarg_tac >> gvs[supported_hashmap_value_def] >>
@@ -59,7 +59,7 @@ Proof
       pairarg_tac >> gvs[] >>
       irule supported_build_getter_argument_types >>
       goal_assum (drule_at Any) >>
-      simp[supported_hashmap_key_type_def, supported_integer_type_def,
+      simp[supported_hashmap_key_type_def, supported_scalar_type_def, supported_word_type_def,
            supported_int_width_def]) >>
   Cases_on `o'` >> gvs[] >> pairarg_tac >> gvs[] >>
   pairarg_tac >> gvs[] >>

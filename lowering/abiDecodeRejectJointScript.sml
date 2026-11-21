@@ -23,7 +23,6 @@ bytes = (if is_dynamic (vyper_to_abi_type env ty) then DROP p xs
   else TAKE (static_length (vyper_to_abi_type env ty)) (DROP p xs)) /\
 ~(vyper_decode_valid_enc (vyper_to_abi_type env ty) bytes /\
   abi_vyper_admissible env ty (dec (vyper_to_abi_type env ty) bytes)) /\
-~ctx_has_dalloca ctx /\
 abi_decode_ptr_window G tn s source (n2w B) L /\
 ptr_covers G tn output s (type_memory_bytes ce ty) /\
 op_prov G pos = NONE /\ op_prov G hi = NONE /\

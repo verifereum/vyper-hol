@@ -3,12 +3,13 @@ Theory bodyFullAnnAssignWidened
 Ancestors
   bodyInvCodeProps bodyInvSplit bodyInvExecutionProps exprBodyPreProps
   assignRelayoutCaller annassignRelayoutSource annassignRelayoutFrag annassignRelayoutPost
+  augAssignFullRhsSaved
   bodySimFull bodyPtrDefs exprSimSource exprSimHypsDefs gasOutcomeFullCompose
   loweringPosts exprLoweringProps exprOperandVar assignBasePtrBoundary
   externalReturnBounds exprSimAggregateChildren representationCleanPtr
   vyperTypeSystem vyperTypeInvariants vyperInterpreter vyperState
   compileEnv venomState venomMemDefs words arithmetic
-  bodyFullShared bodyFullAnnAssignMemoryPost bodyInvNoDalloca bodySim bodyExprPreFacts
+  bodyFullShared bodyFullAnnAssignMemoryPost bodySim bodyExprPreFacts
   stmtSimDeclSource stmtSimDeclCompose stmtSimProps gasOutcomeFullStmts
   gasExemptCert vyperStorageTrace bodyMemoryDefs stmtLoweringMono freshWrites
   emitHelperProps fragExec allocaHistory typedMemoryCopy bodyDeclCopyMemory exprLowering stmtLowering
@@ -180,8 +181,7 @@ Proof
     qpat_assum `return_buf_sep d old es s0` (fn sep =>
       irule (MATCH_MP gas_outcome_full_use_return_buf_allocas
         (CONJ frame sep)))) >>
-  `old.ce_alloca_locals /\ ~ctx_has_dalloca ctx` by
-    (conj_tac >- metis_tac[body_inv_contract, contract_inv_alloca_locals] >> drule body_inv_no_dalloca >> simp[]) >>
+  `old.ce_alloca_locals` by metis_tac[body_inv_contract, contract_inv_alloca_locals] >>
   drule_all annassign_full_prefix_parts >> strip_tac >>
   qpat_x_assum `!sa ce r. declare_local _ _ _ _ = _ ==> _` drule >>
   strip_tac >>
@@ -229,11 +229,7 @@ Resume annassign_widened_full_execution[prefix]:
      `p`,`type_memory_bytes old typ`,`op`,`s0`,`G0`,`tn0`,`lctx`]
     annassign_full_alloc_rhs_prefix) >>
   impl_tac
-  >- (simp[] >> rpt strip_tac >>
-      drule contextRawReachableTheory.frag_reachable_members >>
-      disch_then drule >> strip_tac >>
-      fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
-         unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+  >- (simp[] >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`w`,`entry`,`Ga`,`tna`] strip_assume_tac) >>
   suspend "rhs"
 QED
@@ -277,12 +273,10 @@ Resume annassign_widened_full_execution[source]:
       simp[] >> rpt strip_tac >> Cases_on `res`
       >- (qpat_x_assum `expr_exit (INL _) _` mp_tac >>
           simp_tac (srw_ss()) [exprSimDefsTheory.expr_exit_def]) >>
-      qpat_x_assum `expr_exit _ _` mp_tac >>
-      qpat_x_assum `halt_exit _ _ _ _ _` mp_tac >>
-      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-      simp[bodyPtrDefsTheory.stmt_exit_ptr_def,exprSimDefsTheory.halt_exit_def] >>
-      fs[exprSimDefsTheory.halt_exit_def] >>
-      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      qexists_tac `y` >> simp[NoAsms] >>
+      irule (INST_TYPE [alpha |-> ``:value``]
+        augAssignFullRhsSavedTheory.augassign_expr_exit_to_stmt_exit) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   BETA_TAC >> rpt strip_tac >> suspend "continuation"
 QED
 

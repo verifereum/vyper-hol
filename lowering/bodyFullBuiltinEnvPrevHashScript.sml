@@ -2,7 +2,7 @@
 Theory bodyFullBuiltinEnvPrevHash
 Ancestors
   stateRelProj
-  bodyFullBuiltinEnvPrevHashSeq varsExt vyperState vyperValue bodyInvNoDalloca
+  bodyFullBuiltinEnvPrevHashSeq varsExt vyperState vyperValue
   allocaHistoryFragment valueEncoding valueEncodingProofs exprSimUnopProps
   exprSimWordArgs loweringPosts finite_map exprSimMemDefs bodyPtrDefs vyperStorageBackend
   bodyFullExprGeneric bodyFullGhostFrame bodyFullPreds bodySimFull

@@ -4,7 +4,7 @@ Ancestors
   runtimeSymSrcRuntimeBoundary runtimeSymSrcDynarrayAppend runtimeSymSrcAbiEncode
   runtimeSymSrcTargetDomains runtimeSymSrcModuleArgPreservation
   runtimeSymSrcGeneratorContracts runtimeSymSrcInterfaces runtimeSymSrcContext
-  list supportedStmts supportedExprTraverse
+  list supportedStmts supportedExprTraverse supportedExprs vyperTypeContract constSubstCorrect
 
 Theorem runtime_sym_expr_closed:
   !tops ce ty e. runtime_sym_expr_contract tops compile_expr ce ty e
@@ -54,27 +54,21 @@ Proof
   conj_tac >- metis_tac[runtime_sym_target_ptr_closed] >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
-      mp_tac runtime_sym_generators_target_ptr >>
-      simp[runtime_sym_generators, runtime_sym_target_ptr_clause_def] >>
+      mp_tac runtime_sym_closed_target_ptr >>
+      simp[runtime_sym_target_ptr_clause_def] >>
       disch_then irule >> goal_assum (drule_at Any) >>
       simp[runtime_sym_expr_closed] >>
-      `!bt e. supported_target_pure tops bt /\
-          supported_target_exists (\x. x = e) bt ==>
-          supported_expr tops e \/ supported_place_expr tops e \/
-          supported_effect_place_expr tops e` by
-        (rpt strip_tac >> CCONTR_TAC >>
-         mp_tac (Q.INST [`target` |-> `bt`, `p` |-> `\x. x = e`]
-           supportedTargetsTheory.supported_target_pure_expr_exclusion) >>
-         simp[] >> metis_tac[CONJUNCT1 runtime_sym_pure_occurrence_domain]) >>
       Cases_on `target` >>
-      gvs[supported_append_target_def, supported_expr_exists_def,
-          supportedTargetsTheory.supported_target_pure_def] >>
-      metis_tac[runtime_sym_pure_occurrence_domain]) >>
+      gvs[supported_append_target_def, supported_target_exists_indices,
+          target_indices_def, EVERY_APPEND, EXISTS_APPEND, EVERY_MEM, EXISTS_MEM] >>
+      metis_tac[CONJUNCT1 runtime_sym_pure_occurrence_domain]) >>
   conj_tac >- metis_tac[runtime_sym_dynarray_append] >>
   metis_tac[runtime_sym_abi_encode_to_buf]
 QED
 
 Theorem runtime_sym_runtime_insts:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
@@ -82,8 +76,9 @@ Theorem runtime_sym_runtime_insts:
     EVERY runtime_sym_inst (fn_insts fn)
 Proof
   strip_tac >>
-  qspecl_then [`tops`, `rpolicy`, `unit`] mp_tac
-    (Q.GENL [`tops`, `rpolicy`, `unit`] runtime_sym_runtime_boundary) >>
+  mp_tac (Q.INST [`tops` |-> `tops`, `rpolicy` |-> `rpolicy`, `unit` |-> `unit`,
+    `mode` |-> `mode`, `layouts` |-> `layouts`, `addr` |-> `addr`,
+    `art` |-> `art`, `imms` |-> `imms`, `A` |-> `A`] runtime_sym_runtime_boundary) >>
   simp[runtime_sym_stmts_closed] >>
   impl_tac >-
     (conj_tac >- metis_tac[runtime_sym_alloc_buffer] >>
@@ -93,6 +88,8 @@ Proof
 QED
 
 Theorem runtime_sym_runtime_no_codesize:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -104,6 +101,8 @@ Proof
 QED
 
 Theorem runtime_sym_runtime_codecopy_source:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -116,6 +115,8 @@ Proof
 QED
 
 Theorem runtime_sym_runtime_no_code_end:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\

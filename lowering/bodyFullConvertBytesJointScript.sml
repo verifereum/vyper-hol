@@ -1,7 +1,7 @@
 Theory bodyFullConvertBytesJoint
 Ancestors
   bodyFullShadowBodyInv
-  haltExitProj stateRelProj bodyInvNoDalloca
+  haltExitProj stateRelProj bodyFullHashKeccakFixed
   bodyFullPreds bodySimFull bodyFullConvertChildRead bodyFullPathHistory
   bodyFullConvertCopyRun bodyFullConvertCopyPosts bodyFullConvertEndpointPosts
   bodyFullConvertCastOrigin bodyPtrTypeBuiltinsMemoryInterface
@@ -273,7 +273,6 @@ Theorem convert_bytes_vv_sim_full:
     cenv cx ty (TypeBuiltin ann Convert dst [e]) es
 Proof
   strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   drule expr_body_pre_convert >> strip_tac >> gvs[] >>
   `is_bytestring_type (expr_type e)` by metis_tac[valid_conversion_to_bytestring] >>
   `~is_word_type ann /\ (!n. ann <> FlagT n)` by
@@ -350,12 +349,7 @@ Proof
   (impl_tac >- (simp[] >> metis_tac[])) >>
   disch_then (qspecl_then
     [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`x`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (* Use the carried reachability bound here when this caller is widened. *)
-  (impl_tac >-
-    (simp[] >> rpt strip_tac >>
-     drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
-     fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
-        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[])) >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >>
   strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   `eval_expr cx (TypeBuiltin ann Convert ann [e]) =
@@ -462,6 +456,12 @@ Resume convert_bytes_vv_sim_full[cast]:
   qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ t`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def]) >>
+     qpat_assum `stmt_state_rel _ ctx func cenv cx mid t`
+       (ACCEPT_TAC o MATCH_MP
+         bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `post_value_type cenv e = expr_type e` by simp[] >>
   `ptr_buf_ok cenv e x G1 t` by simp[] >>
   drule convert_memory_operand_resources >>
@@ -572,6 +572,11 @@ Resume convert_bytes_vv_sim_full[cast_success]:
        qpat_x_assum `!w. eval_operand (Var src) t = SOME w ==> ?b sz. _`
          (qspec_then `w` mp_tac) >> simp[] >>
        strip_tac >> qexistsl_tac [`b`,`sz`] >> simp[] >> decide_tac) >>
+    `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by
+      (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ t'`
+         (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
+       first_assum (ACCEPT_TAC o MATCH_MP
+         bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
     gvs[lowered_value_type_def, expr_type_def, contextTheory.vv_location_def,
         contextTheory.vv_operand_def, contextTheory.mk_ptr_def]) >> simp[])
 QED
@@ -696,6 +701,14 @@ Resume convert_bytes_vv_sim_full[widen]:
               exprLoweringPropsTheory.ci_mono_def] >>
   `stmt_state_rel H ctx func cenv cx mid z` by
     (first_assum match_mp_tac >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp q` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx mid z`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     qpat_assum `q = (mcopy _ _ _ z) with vs_inst_idx := _` SUBST1_TAC >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[ptrDisciplineTheory.allocas_below_fmp_def,
+          venomExecSemanticsTheory.mcopy_def, venomStateTheory.write_memory_with_expansion_def] >>
+     metis_tac[]) >>
   `type_memory_size tout <= type_memory_bytes cenv ann` by simp[] >>
   qpat_assum `expr_post H _ _ _ _ e _ _ _ _ _ _ _ _`
     (mp_then Any mp_tac widen_endpoint_ghosts_from_child) >>

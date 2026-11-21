@@ -2,7 +2,7 @@ Theory bodyFullExtCallDirectState
 Ancestors
   bodyFullExtCallDirectPhase bodyFullExtCallDirectUnwrap bodyFullExtCallDirectStart
   abiEncodeValuesPhases abiEncoderWindowPhase
-  abiEncoderWindowContract stateRelProj memoryReadProps
+  abiEncoderWindowContract stateRelProj bodyFullHashKeccakFixed memoryReadProps
   exprLoweringProps exprSimHypsDefs fragGasOriginPtr
   bodyPtrDefs loweringPosts loweringStateRelDefs context compileEnv
   vyperStorageFootprint venomState venomInst ptrDiscipline
@@ -81,9 +81,23 @@ Theorem abi_encode_saved_state_resources:
     shared pbase capacity root dst dst_offset prefix a u Gu tu /\
   (?H. valid_horizon cx st0 H ee.storage_trace) ==>
   alloca_inv u /\ alloca_room ctx func u /\ allocas_from lo u /\ lo <= u.vs_alloca_next /\
-  ~u.vs_halted /\ u.vs_current_bb = a.cs_current_bb /\ u.vs_inst_idx = LENGTH a.cs_current_insts
+  ~u.vs_halted /\ u.vs_current_bb = a.cs_current_bb /\ u.vs_inst_idx = LENGTH a.cs_current_insts /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+  (ctx_has_dalloca ctx ==>
+    u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp)
 Proof
-  simp_tac bool_ss [abi_encode_saved_state_def] >> strip_tac >>
+  simp_tac bool_ss [abi_encode_saved_state_def] >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. valid_horizon cx st0 H ee.storage_trace`
+    (qx_choose_then `hz` assume_tac) >>
+  qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _`
+    (qspec_then `hz` (drule_then strip_assume_tac)) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    metis_tac[stmt_state_rel_allocas_below_fmp] >>
+  `fmp_room ctx func u` by metis_tac[stmt_state_rel_fmp_room] >>
+  `ctx_has_dalloca ctx ==>
+     u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp` by
+    (strip_tac >> fs[fmp_room_def] >> decide_tac) >>
   metis_tac[stmt_state_rel_local_ptrs_alloca, stmt_state_rel_alloca_room, ghost_inv_at_def]
 QED
 

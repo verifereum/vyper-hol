@@ -447,13 +447,14 @@ QED
 
 Theorem stmt_exprs_ok_from_traversal_bounds:
   ~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss /\
+  ~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) ss /\
   alloc_limits_stmts cenv ss /\
   (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
    return_buffer_ok cenv) ==>
   stmts_exprs_ok cenv ss
 Proof
   rw[bodyExprPreFactsTheory.stmts_exprs_ok_thm] >>
-  qpat_x_assum `~supported_stmts_expr_exists _ _` mp_tac >>
+  qpat_x_assum `~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss` mp_tac >>
   `(\e. ~byte_widths_expr e) =
    (\e. (~is_extcode e /\ ~byte_widths_expr e) \/
         (is_extcode e /\ ~byte_widths_expr e))` by

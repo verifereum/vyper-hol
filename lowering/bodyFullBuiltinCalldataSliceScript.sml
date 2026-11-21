@@ -3,7 +3,8 @@ Theory bodyFullBuiltinCalldataSlice
 Ancestors exprSimDefs[qualified,ignore_grammar]
   bodyFullBuiltinBytestringCalldataCase bodyFullBuiltinBytestringCalldataRun
   bodyFullBuiltinBytestringCalldataAbort
-  bodyPtrBytestringBuiltinsExternalSlice bodyFullPreds bodySimFull bodyInvNoDalloca
+  bodyPtrBytestringBuiltinsExternalSlice bodyFullPreds bodySimFull stateRelProj
+  bodyFullHashKeccakFixed
   bodyPtrBytestringBuiltinsWindowGhost wordArgsPtr ptrDiscipline localPtrsProps
   reasonCodeResourcesPtr bodyPtrAttributeFields
   valueEncodingDefs vyperValue vyperTypeInvariants exprSimProps exprSimMemDefs
@@ -29,7 +30,6 @@ Theorem calldata_slice_vv_sim_full:
       cenv cx ty (Builtin ann (CalldataSlice n) args) es
 Proof
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   drule_all calldata_slice_body_operand_full >>
   disch_then (qspecl_then [`shadow_func`,`lo`,`func`,`d`,`PG`,`DF`]
     strip_assume_tac) >> gvs[] >>
@@ -169,6 +169,10 @@ Proof
   `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid t /\
    storage_well_formed_on cx mid (FST (storage_trace_horizon mid.storage_trace))` by
     fs[expr_post_def] >>
+  `ctx_has_dalloca ctx ==>
+    t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp` by
+    (drule stateRelProjTheory.stmt_state_rel_fmp_room >>
+     simp[fmp_room_def] >> decide_tac) >>
   `allocas_from lo t /\ lo <= t.vs_alloca_next` by fs[ghost_inv_at_def] >>
   `context_well_typed cx` by fs[expr_sim_inv_def] >>
   `local_ptrs_reserved cenv sm` by
@@ -424,7 +428,8 @@ Proof
          (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
          disch_then ACCEPT_TAC) >>
       fs[expr_type_def,post_value_type_def,lowered_value_type_def,mk_ptr_def,
-         vv_location_def,is_bytestring_type_def]) >>
+         vv_location_def,is_bytestring_type_def] >>
+      drule_then ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   `alloca_inv t /\ t.vs_call_ctx.cc_calldata = cx.txn.calldata` by
     fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def] >>
   `LENGTH t.vs_call_ctx.cc_calldata < dimword (:256)` by

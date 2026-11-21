@@ -288,11 +288,14 @@ Theorem runtime_sym_bop_selections:
   supported_expr tops (HD args) /\ supported_expr tops (EL 1 args)
 Proof
   namedCases_on `args` ["", "a rest"] >>
-  simp[runtime_sym_builtin_domain, supported_builtin_form_def] >>
+  simp[runtime_sym_builtin_domain, supported_builtin_form_def,
+       vyperContextTheory.builtin_args_length_ok_def] >>
   namedCases_on `rest` ["", "b tail"] >>
-  simp[runtime_sym_builtin_domain, supported_builtin_form_def] >>
+  simp[runtime_sym_builtin_domain, supported_builtin_form_def,
+       vyperContextTheory.builtin_args_length_ok_def] >>
   Cases_on `tail` >>
-  simp[runtime_sym_builtin_domain, supported_builtin_form_def, supported_expr_def]
+  simp[runtime_sym_builtin_domain, supported_builtin_form_def,
+       vyperContextTheory.builtin_args_length_ok_def, supported_expr_def]
 QED
 
 Theorem runtime_sym_convert_selection:

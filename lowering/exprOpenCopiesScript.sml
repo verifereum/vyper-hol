@@ -206,24 +206,6 @@ Proof
   simp[] >> metis_tac[compile_store_memory_typed_open]
 QED
 
-Theorem supported_copy_types_store_path:
-  !dst src.
-    supported_copy_types dst src ==>
-    is_word_type dst \/ is_bytestring_type dst \/ dst = src
-Proof
-  rpt gen_tac >> simp[supported_copy_types_def] >> strip_tac
-  >- simp[]
-  >- metis_tac[supported_word_type_is_word] >>
-  Cases_on `dst` >> Cases_on `src` >>
-  gvs[AllCaseEqs(), is_bytestring_type_def] >>
-  rename1 `is_word_type (BaseT dst_base) \/ _ \/ dst_base = src_base` >>
-  Cases_on `dst_base` >> Cases_on `src_base` >>
-  gvs[AllCaseEqs(), is_bytestring_type_def] >>
-  rename1 `is_word_type (BaseT (BytesT dst_bound)) \/ _ \/ dst_bound = src_bound` >>
-  Cases_on `dst_bound` >> Cases_on `src_bound` >>
-  gvs[is_bytestring_type_def]
-QED
-
 Theorem compile_make_tuple_open:
   !cfn cenv es tys buf off sa r sb.
     acyclic_struct_metadata cenv.ce_struct_fields /\

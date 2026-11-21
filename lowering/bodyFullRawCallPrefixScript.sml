@@ -2,9 +2,9 @@
 Theory bodyFullRawCallPrefix
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullPreds bodySimFull bodyFullWordArgs bodyInvNoDalloca stateRelProj
+  bodyFullPreds bodySimFull bodyFullWordArgs bodyFullIfExpReach stateRelProj
   bodyFullRawCallForcedArgs bodyFullIntCallReturnFrame
-  bodyFullRawCallHeader bodyFullRawCallGas bodyFullRawCallOutbuf
+  bodyFullRawCallHeader bodyFullRawCallGas bodyFullRawCallOutbuf bodyFullHashKeccakFixed
   bodyFullRawCallGeneratedPrefix bodyFullRawCallKwargsBytes bodyFullRawCallKwargsSource
   gasOutcomeFullCompose gasOutcomeFullGuarded exprSimRawCall
   exprSimSource wordArgsPtr gasShadowCompileStmtHelpers gasShadowCompileHelpers
@@ -130,7 +130,6 @@ Theorem raw_call_prefix_prepared_full:
        bind (eval_exprs cx kws) (k av dv)))) (es,s0,G0,tn0) Q R
 Proof
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `?h1. lower_value compile_expr cenv (BaseT AddressT) (gas_shadow_expr a)
        shadow_sa = (addr,h1) /\ gas_shadow_state s1 h1` by
     (mp_tac (Q.INST [`ty` |-> `BaseT AddressT`, `e` |-> `a`]
@@ -306,7 +305,7 @@ Proof
   first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
   qexistsl_tac [`tops`,`shadow_sa`,`h2`,`h1`,`shadow_func`,`sa`,`s2`,`s1`,
                 `dframe`,`data`,`addr`] >>
-  simp[] >>
+  simp[] >> (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac >-
     (qpat_assum `!H exc ee gt r. _ ==> R H _ _ _ _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
@@ -436,15 +435,22 @@ Proof
     (qpat_assum `ci_mono s2 s3` (mp_tac o REWRITE_RULE [ci_mono_def]) >>
      qpat_assum `ci_mono s3 s4` (mp_tac o REWRITE_RULE [ci_mono_def]) >>
      rpt strip_tac >> metis_tac[loweringShapeDefsTheory.not_fresh_at_mono,arithmeticTheory.LESS_EQ_TRANS]) >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[body_inv_no_phi] >>
   `!fn inst u. frag_reachable ctx func t4 fn inst u ==> dalloca_no_wrap inst u` by
-    (rpt strip_tac >>
-     drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
-     qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
-     qpat_assum `MEM fn ctx.ctx_functions` mp_tac >>
-     qpat_assum `MEM inst (fn_insts fn)` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
-          unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+    (qpat_assum `!D. gas_origin_ptr_path _ (tD,GD,tnD) [] (OK t4,G4,tn4)`
+       (qspec_then `DF (storage_trace_horizon esD.storage_trace)` (fn path =>
+        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn phi =>
+        qpat_assum `!fn inst s. frag_reachable ctx func tD fn inst s ==> _`
+          (ACCEPT_TAC o (fn nowrap =>
+            MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+              (LIST_CONJ [path, phi, nowrap]))))))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t4` by
+    (qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx esD t4 /\ _`
+      (qspec_then `storage_trace_horizon esD.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     first_assum (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   mp_tac (Q.SPECL [`kws`,`DF`,`lo`,`dframe`,`ctx`,`shadow_ctx`,`PG`,`tops`,
      `func`,`shadow_func`,`cenv`,`env`,`cx`,`BaseT (UintT 256)`,
      `esD`,`st0`,`s4`,`s5`,`h4`,`h5`,`xs`,`t4`,`G4`,`tn4`]
@@ -890,6 +896,16 @@ Proof
      qpat_assum `s0.vs_alloca_next <= t6.vs_alloca_next` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      metis_tac[bodyMemoryDefsTheory.body_local_region_frontier,arithmeticTheory.LESS_EQ_TRANS]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t6 /\
+    t6.vs_alloca_next + pending_alloca_size func t6 <= w2n t6.vs_initial_fmp` by
+    (strip_tac >>
+     qpat_assum `stmt_state_rel _ ctx func cenv cx esK t6`
+       (fn rel => conj_tac
+          >- (match_mp_tac (MATCH_MP stmt_state_rel_allocas_below_fmp rel) >>
+              first_assum ACCEPT_TAC)
+          >> mp_tac (MATCH_MP stmt_state_rel_fmp_room rel)) >>
+     qpat_assum `ctx_has_dalloca ctx` (fn has =>
+       simp[NoAsms,fmp_room_def,has]) >> decide_tac) >>
   qabbrev_tac `t7 = u with vs_inst_idx := LENGTH s7.cs_current_insts` >>
   mp_tac (Q.INST [`sa` |-> `s6`, `sb` |-> `s7`, `sk` |-> `sa`,
     `es0` |-> `es`, `es` |-> `esK`, `s` |-> `t6`, `d` |-> `dframe`,

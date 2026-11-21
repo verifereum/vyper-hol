@@ -152,20 +152,20 @@ QED
 
 Theorem type_place_expr_not_local[local]:
   !e env vt p root xs.
-    type_place_expr env e = SOME vt /\ loop_iterator_place e = SOME p ==>
+    type_place_expr env e = SOME vt /\ MEM p (expr_places e) ==>
     place_access p [] <> (NameTarget root,xs)
 Proof
   ho_match_mp_tac
     (vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
      SIMP_RULE (srw_ss()) []) >>
-  simp[Once well_typed_expr_def, loop_iterator_place_def, supported_expr_exists_def, place_access_def,
+  simp[Once well_typed_expr_def, expr_places_def, MEM_MAP, place_access_def,
        AllCaseEqs()] >> rpt strip_tac >>
   gvs[Once well_typed_expr_def, place_access_def, AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem typed_expr_access_endpoint[local]:
   !e env p root xs.
-    well_typed_expr env e /\ loop_iterator_place e = SOME p /\
+    well_typed_expr env e /\ MEM p (expr_places e) /\
     place_access p [] = (NameTarget root,xs) ==>
     ?t. FOLDL (\ot a. OPTION_BIND ot (\ty. attribute_type env.type_defs ty a))
           (FLOOKUP env.var_types root) xs = SOME t /\
@@ -177,14 +177,16 @@ Proof
     (vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
      SIMP_RULE (srw_ss()) []) >>
   rpt conj_tac >> rpt gen_tac >>
-  simp[loop_iterator_place_def, supported_expr_exists_def, AllCaseEqs()]
+  simp[expr_places_def, MEM_MAP, AllCaseEqs()]
+  >~ [`well_typed_expr _ (IfExp _ _ _ _)`]
+  >- (rpt strip_tac >> gvs[Once well_typed_expr_def, expr_type_def] >> metis_tac[])
   >- (rpt strip_tac >> gvs[Once well_typed_expr_def, place_access_def,
                           vyperASTTheory.expr_type_def])
   >- (rpt strip_tac >> gvs[place_access_def])
   >- (rpt strip_tac >>
       gvs[Once well_typed_expr_def, place_access_def]
-      >- (qpat_x_assum `!env'. well_typed_expr env' e ==> _`
-            (qspec_then `env` mp_tac) >> simp[] >> strip_tac >>
+      >- (qpat_x_assum `!env' p root xs. well_typed_expr env' e /\ _ ==> _`
+            drule_all >> strip_tac >>
           rename1 `FOLDL _ _ xs = SOME endpoint` >>
           qexists_tac `endpoint` >> simp[] >>
           Cases_on `expr_type e` >> gvs[subscript_type_ok_def, attribute_type_def]) >>
@@ -195,11 +197,17 @@ Proof
   gvs[]
   >- (`~(!ys:string list. ys = [])` by
         (strip_tac >> first_x_assum (qspec_then `[s]` mp_tac) >> simp[]) >>
-      qpat_x_assum `!env'. _` (qspec_then `env` mp_tac) >> simp[] >>
+      qpat_assum `!ys. place_access _ ys = _`
+        (assume_tac o SIMP_RULE (srw_ss()) [] o Q.SPEC `[]`) >>
+      qpat_x_assum `!env' p root xs. well_typed_expr env' e /\ _ ==> _`
+        drule_all >>
       strip_tac >>
       gvs[attribute_type_fold_append, attribute_type_ok_def,
           GSYM SNOC_APPEND, FOLDL_SNOC, vyperASTTheory.expr_type_def]) >>
-  qpat_x_assum `!env'. _` (qspec_then `env` mp_tac) >> simp[] >>
+  qpat_assum `!ys. place_access _ ys = _`
+    (assume_tac o SIMP_RULE (srw_ss()) [] o Q.SPEC `[]`) >>
+  qpat_x_assum `!env' p root xs. well_typed_expr env' e /\ _ ==> _`
+    drule_all >>
   strip_tac
   >- (qpat_x_assum `!ys. place_access _ ys = _`
         (qspec_then `[s]` mp_tac) >>
@@ -256,7 +264,7 @@ QED
 Theorem typed_place_write_separation[local]:
   !env e et bd p root xs envw w vt ws.
     well_typed_expr env e /\ expr_type e = ArrayT et bd /\
-    loop_iterator_place e = SOME p /\ place_access p [] = (NameTarget root,xs) /\
+    MEM p (expr_places e) /\ place_access p [] = (NameTarget root,xs) /\
     type_place_target envw w = SOME vt /\
     envw.type_defs = env.type_defs /\
     FLOOKUP envw.var_types root = FLOOKUP env.var_types root /\
@@ -381,7 +389,7 @@ QED
 Theorem typed_memory_write_attribute_projection[local]:
   !env e et bd p root xs envw w vt cx es path evaluated mid v res es'.
     well_typed_expr env e /\ expr_type e = ArrayT et bd /\
-    loop_iterator_place e = SOME p /\ place_access p [] = (NameTarget root,xs) /\
+    MEM p (expr_places e) /\ place_access p [] = (NameTarget root,xs) /\
     type_place_target envw w = SOME vt /\
     envw.type_defs = env.type_defs /\
     FLOOKUP envw.var_types root = FLOOKUP env.var_types root /\
@@ -546,7 +554,7 @@ QED
 
 Theorem typed_attribute_writes_ok[local]:
   !ref arr_e et bd p root xs env.
-    place_access p [] = (NameTarget root,xs) /\ loop_iterator_place arr_e = SOME p /\
+    place_access p [] = (NameTarget root,xs) /\ MEM p (expr_places arr_e) /\
     well_typed_expr ref arr_e /\ expr_type arr_e = ArrayT et bd /\
     env.type_defs = ref.type_defs /\
     FLOOKUP env.var_types root = FLOOKUP ref.var_types root ==>
@@ -570,7 +578,8 @@ Proof
     (rpt gen_tac >> strip_tac >>
      irule typed_place_write_separation >> simp[] >>
      goal_assum (drule_at (Pat `type_place_target _ _ = _`)) >>
-     goal_assum (drule_at (Pat `well_typed_expr _ _`)) >> simp[]) >>
+     goal_assum (drule_at (Pat `well_typed_expr _ _`)) >> simp[] >>
+     qexists_tac `p` >> simp[]) >>
   rpt conj_tac >- first_assum ACCEPT_TAC >> rpt strip_tac
   >- (drule_then irule (cj 1 writes_ok_typed_mono) >>
       qexists_tac `(\w. ~place_contains w p)` >> simp[] >> metis_tac[])
@@ -582,7 +591,7 @@ QED
 
 Theorem typed_expr_attribute[local]:
   !ref arr_e et bd p root xs env e cx st res st'.
-    place_access p [] = (NameTarget root,xs) /\ loop_iterator_place arr_e = SOME p /\
+    place_access p [] = (NameTarget root,xs) /\ MEM p (expr_places arr_e) /\
     well_typed_expr ref arr_e /\ expr_type arr_e = ArrayT et bd /\
     env.type_defs = ref.type_defs /\
     FLOOKUP env.var_types root = FLOOKUP ref.var_types root /\
@@ -604,7 +613,7 @@ QED
 
 Theorem typed_exprs_attribute[local]:
   !ref arr_e et bd p root xs env es cx st res st'.
-    place_access p [] = (NameTarget root,xs) /\ loop_iterator_place arr_e = SOME p /\
+    place_access p [] = (NameTarget root,xs) /\ MEM p (expr_places arr_e) /\
     well_typed_expr ref arr_e /\ expr_type arr_e = ArrayT et bd /\
     env.type_defs = ref.type_defs /\
     FLOOKUP env.var_types root = FLOOKUP ref.var_types root /\
@@ -626,7 +635,7 @@ QED
 
 Theorem typed_custom_error_attribute[local]:
   !ref arr_e et bd p root xs env err params es cx st res st'.
-    place_access p [] = (NameTarget root,xs) /\ loop_iterator_place arr_e = SOME p /\
+    place_access p [] = (NameTarget root,xs) /\ MEM p (expr_places arr_e) /\
     well_typed_expr ref arr_e /\ expr_type arr_e = ArrayT et bd /\
     env.type_defs = ref.type_defs /\
     FLOOKUP env.var_types root = FLOOKUP ref.var_types root /\
@@ -654,7 +663,7 @@ QED
 
 Theorem typed_target_attribute[local]:
   !ref arr_e et bd p root xs env t vt cx st res st'.
-    place_access p [] = (NameTarget root,xs) /\ loop_iterator_place arr_e = SOME p /\
+    place_access p [] = (NameTarget root,xs) /\ MEM p (expr_places arr_e) /\
     well_typed_expr ref arr_e /\ expr_type arr_e = ArrayT et bd /\
     env.type_defs = ref.type_defs /\
     FLOOKUP env.var_types root = FLOOKUP ref.var_types root /\
@@ -676,7 +685,7 @@ QED
 
 Theorem typed_iterator_attribute[local]:
   !ref arr_e et bd p root xs env typ it cx st res st'.
-    place_access p [] = (NameTarget root,xs) /\ loop_iterator_place arr_e = SOME p /\
+    place_access p [] = (NameTarget root,xs) /\ MEM p (expr_places arr_e) /\
     well_typed_expr ref arr_e /\ expr_type arr_e = ArrayT et bd /\
     env.type_defs = ref.type_defs /\
     FLOOKUP env.var_types root = FLOOKUP ref.var_types root /\
@@ -714,7 +723,7 @@ QED
 
 Theorem typed_target_write_attribute[local]:
   !ref arr_e et bd p root xs env w vt cx v es res es'.
-    place_access p [] = (NameTarget root,xs) /\ loop_iterator_place arr_e = SOME p /\
+    place_access p [] = (NameTarget root,xs) /\ MEM p (expr_places arr_e) /\
     well_typed_expr ref arr_e /\ expr_type arr_e = ArrayT et bd /\
     env.type_defs = ref.type_defs /\
     FLOOKUP env.var_types root = FLOOKUP ref.var_types root /\
@@ -758,7 +767,7 @@ Theorem typed_assignment_attribute_mutual[local]:
   (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
   (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
   (!cx target v. !ref arr_e et bd p root xs env ty es res es'.
-    place_access p [] = (NameTarget root,xs) /\ loop_iterator_place arr_e = SOME p /\
+    place_access p [] = (NameTarget root,xs) /\ MEM p (expr_places arr_e) /\
     well_typed_expr ref arr_e /\ expr_type arr_e = ArrayT et bd /\
     env.type_defs = ref.type_defs /\
     FLOOKUP env.var_types root = FLOOKUP ref.var_types root /\
@@ -773,7 +782,7 @@ Theorem typed_assignment_attribute_mutual[local]:
       (FLOOKUP sc root)) es.scopes /\
     LENGTH es'.scopes = LENGTH es.scopes) /\
   (!cx targets vs. !ref arr_e et bd p root xs env tys es res es'.
-    place_access p [] = (NameTarget root,xs) /\ loop_iterator_place arr_e = SOME p /\
+    place_access p [] = (NameTarget root,xs) /\ MEM p (expr_places arr_e) /\
     well_typed_expr ref arr_e /\ expr_type arr_e = ArrayT et bd /\
     env.type_defs = ref.type_defs /\
     FLOOKUP env.var_types root = FLOOKUP ref.var_types root /\
@@ -852,7 +861,7 @@ QED
 
 Theorem assign_attribute_frame[local]:
   !ref arr_e et bd p root xs env target ty rhs cx es res es'.
-    place_access p [] = (NameTarget root,xs) /\ loop_iterator_place arr_e = SOME p /\
+    place_access p [] = (NameTarget root,xs) /\ MEM p (expr_places arr_e) /\
     well_typed_expr ref arr_e /\ expr_type arr_e = ArrayT et bd /\
     env.type_defs = ref.type_defs /\
     FLOOKUP env.var_types root = FLOOKUP ref.var_types root /\
@@ -908,7 +917,7 @@ QED
 
 Theorem augassign_attribute_frame[local]:
   !ref arr_e et bd p root xs env bt ty bop rhs cx es res es'.
-    place_access p [] = (NameTarget root,xs) /\ loop_iterator_place arr_e = SOME p /\
+    place_access p [] = (NameTarget root,xs) /\ MEM p (expr_places arr_e) /\
     well_typed_expr ref arr_e /\ expr_type arr_e = ArrayT et bd /\
     env.type_defs = ref.type_defs /\
     FLOOKUP env.var_types root = FLOOKUP ref.var_types root /\
@@ -979,7 +988,7 @@ QED
 
 Theorem append_attribute_frame[local]:
   !ref arr_e et bd p root xs env bt vt rhs cx es res es'.
-    place_access p [] = (NameTarget root,xs) /\ loop_iterator_place arr_e = SOME p /\
+    place_access p [] = (NameTarget root,xs) /\ MEM p (expr_places arr_e) /\
     well_typed_expr ref arr_e /\ expr_type arr_e = ArrayT et bd /\
     env.type_defs = ref.type_defs /\
     FLOOKUP env.var_types root = FLOOKUP ref.var_types root /\
@@ -1198,7 +1207,7 @@ QED
 
 Theorem typed_attribute_frames_mutual[local]:
   (!env ret_ty stmt env' ref arr_e et bd p root xs cx es res es'.
-    place_access p [] = (NameTarget root,xs) /\ loop_iterator_place arr_e = SOME p /\
+    place_access p [] = (NameTarget root,xs) /\ MEM p (expr_places arr_e) /\
     well_typed_expr ref arr_e /\ expr_type arr_e = ArrayT et bd /\
     env.type_defs = ref.type_defs /\
     FLOOKUP env.var_types root = FLOOKUP ref.var_types root /\
@@ -1214,7 +1223,7 @@ Theorem typed_attribute_frames_mutual[local]:
       (FLOOKUP sc root)) es.scopes /\
     LENGTH es'.scopes = LENGTH es.scopes) /\
   (!env ret_ty stmts env' ref arr_e et bd p root xs cx es res es'.
-    place_access p [] = (NameTarget root,xs) /\ loop_iterator_place arr_e = SOME p /\
+    place_access p [] = (NameTarget root,xs) /\ MEM p (expr_places arr_e) /\
     well_typed_expr ref arr_e /\ expr_type arr_e = ArrayT et bd /\
     env.type_defs = ref.type_defs /\
     FLOOKUP env.var_types root = FLOOKUP ref.var_types root /\
@@ -1541,7 +1550,7 @@ Finalise typed_attribute_frames_mutual
 Theorem typed_stmts_place_frame:
   type_stmts env ret_ty stmts = SOME env' /\
   well_typed_expr env arr_e /\ expr_type arr_e = ArrayT et bd /\
-  loop_iterator_place arr_e = SOME p /\ place_access p [] = (NameTarget root, attrs) /\
+  MEM p (expr_places arr_e) /\ place_access p [] = (NameTarget root, attrs) /\
   root IN FDOM env.var_types /\
   stmts_writes_ok (\w. ~place_contains w p) stmts /\
   es.scopes <> [] /\ eval_stmts cx stmts es = (res,es') ==>

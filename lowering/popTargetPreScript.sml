@@ -15,7 +15,7 @@ Ancestors
   vyperAST vyperTypeSystem vyperTypeEnv vyperTypeCallGraph
   vyperTypeCallStackSoundness vyperTypeInvariants vyperTypeAssignContext
   supportedExprTraverse supportedProgram allocLimits list exprBodyPreProps
-  targetPlaceLive
+  targetPlaceLive supportedExprs
 
 Theorem target_indices_pre_of_body_mods:
   !bt vt mods cenv cx env.

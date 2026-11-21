@@ -43,88 +43,201 @@ QED
 
 
 Theorem supported_pure_int_calls:
-  !tops e. supported_pure_expr tops e ==> int_calls_expr e = []
+  !tops e. supported_effect_free_expr tops e ==> int_calls_expr e = []
 Proof
   metis_tac[supported_pure_no_internal_call, expr_has_internal_call_def,
             no_internal_call_int_calls]
 QED
 
-(* supported_function_decl finds only the main module's functions. *)
-
-(* A supported expression runs no EVM code, and its internal calls are to
-   internal functions of the main module, as expr_body_pre asks. *)
-(* A supported expression is no bare .code: supported_builtin_form
-   rejects Acc Code. *)
-Theorem supported_expr_not_extcode[local]:
-  !tops e. supported_expr tops e ==> ~is_extcode e
+(* All EVM-running roots are handled by the body simulation. *)
+Theorem stmt_no_evm_run[local]:
+  (!s. ~supported_stmt_expr_exists expr_evm_run_root s) /\
+  (!ss. ~supported_stmts_expr_exists expr_evm_run_root ss)
 Proof
-  rpt gen_tac >> Cases_on `is_extcode e` >> simp[] >>
-  Cases_on `e` >> gvs[exprLoweringTheory.is_extcode_def] >>
-  rename1 `Builtin _ b l` >> Cases_on `b` >>
-  gvs[exprLoweringTheory.is_extcode_def] >>
-  rename1 `Acc a` >> Cases_on `a` >>
-  gvs[exprLoweringTheory.is_extcode_def] >>
-  Cases_on `l` >> gvs[exprLoweringTheory.is_extcode_def] >>
-  rename1 `_ :: tl` >> Cases_on `tl` >>
-  gvs[exprLoweringTheory.is_extcode_def,
-      supportedExprsTheory.supported_expr_def,
-      supportedExprsTheory.supported_pure_expr_def,
-      supportedExprsTheory.supported_effect_expr_def,
-      supportedExprFormsTheory.supported_builtin_form_def]
+  `!p e. p = expr_evm_run_root ==> ~supported_expr_exists p e` by
+    (sg `(!p e. p = expr_evm_run_root ==> ~supported_expr_exists p e) /\
+         (!p t. p = expr_evm_run_root ==> ~supported_target_exists p t) /\
+         (!p es. p = expr_evm_run_root ==> ~supported_exprs_exists p es) /\
+         (!p eo. p = expr_evm_run_root ==> ~supported_opt_exists p eo) /\
+         (!p fes. p = expr_evm_run_root ==> ~supported_fields_exists p fes)`
+     >- (ho_match_mp_tac supported_expr_exists_ind >>
+         rw[supported_expr_exists_def, expr_evm_run_root_def]) >> simp[]) >>
+  `(!p t. p = expr_evm_run_root ==> ~supported_assignment_exists p t) /\
+   (!p ts. p = expr_evm_run_root ==> ~supported_assignments_exists p ts)` by
+    (ho_match_mp_tac supported_assignment_exists_ind >>
+     simp[supported_assignment_exists_def, supported_target_exists_indices] >>
+     fs[EVERY_MEM, combinTheory.o_DEF]) >>
+  `!es. ~supported_exprs_exists expr_evm_run_root es` by
+    (Induct >> simp[supported_expr_exists_def]) >>
+  `!eo. ~supported_opt_exists expr_evm_run_root eo` by
+    (Cases >> simp[supported_expr_exists_def]) >>
+  `!r. ~supported_assert_exists expr_evm_run_root r` by
+    (Cases >> simp[supported_assert_exists_def, EXISTS_MEM]) >>
+  `!r. ~supported_raise_exists expr_evm_run_root r` by
+    (Cases >> simp[supported_raise_exists_def, EXISTS_MEM]) >>
+  `!i. ~supported_iterator_exists expr_evm_run_root i` by
+    (Cases >> simp[supported_iterator_exists_def]) >>
+  sg `(!p s. p = expr_evm_run_root ==> ~supported_stmt_expr_exists p s) /\
+       (!p ss. p = expr_evm_run_root ==> ~supported_stmts_expr_exists p ss)`
+  >- (ho_match_mp_tac supported_stmt_expr_exists_ind >>
+      simp[supported_stmt_expr_exists_def, supported_target_exists_indices,
+           EVERY_MEM, combinTheory.o_DEF, EXISTS_MEM]) >> simp[]
+QED
+
+Theorem supported_string_reason_expr[local]:
+  supported_string_reason tops e ==> supported_expr tops e
+Proof
+  Cases_on `e` >>
+  gvs[supported_string_reason_def, supportedExprsTheory.supported_expr_def] >>
+  rename1 `Literal _ lit` >> Cases_on `lit` >>
+  gvs[supported_string_reason_def, supported_pure_expr_def]
+QED
+
+Theorem supported_base_target_main_calls[local]:
+  (supported_target tops bindings t \/ supported_aug_target tops bindings t) ==>
+  EVERY (\c. FST c = NONE /\
+             IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t)
+Proof
+  Cases_on `t` >>
+  simp[supported_target_def, supported_aug_target_def, int_calls_expr_def] >>
+  strip_tac >> drule supported_target_info_main_calls >>
+  simp[int_calls_expr_def, EVERY_APPEND]
+QED
+
+Theorem supported_assignment_main_calls[local]:
+  supported_assignment tops bindings target e ==>
+  EVERY (\c. FST c = NONE /\
+             IS_SOME (supported_function_decl tops c Internal)) (int_calls_atarget target)
+Proof
+  Cases_on `target` >>
+  simp[supported_assignment_def, int_calls_atarget_def]
+  >- metis_tac[supported_base_target_main_calls] >>
+  strip_tac >> qpat_x_assum `EVERY _ _` mp_tac >>
+  qmatch_goalsub_rename_tac `int_calls_atargets ts` >>
+  Induct_on `ts` >> simp[int_calls_atarget_def] >>
+  Cases_on `h` >> simp[int_calls_atarget_def, EVERY_APPEND] >>
+  metis_tac[supported_base_target_main_calls]
+QED
+
+Theorem supported_append_target_main_calls[local]:
+  supported_append_target tops t ==>
+  EVERY (\c. FST c = NONE /\
+             IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t)
+Proof
+  `!t. int_calls_target t = FLAT (MAP int_calls_expr (target_indices t))` by
+    (measureInduct_on `base_assignment_target_size t` >>
+     Cases_on `t` >> simp[int_calls_expr_def, target_indices_def] >>
+     gvs[vyperASTTheory.expr_size_def]) >>
+  strip_tac >>
+  `EVERY (supported_pure_expr tops) (target_indices t)` by
+    (Cases_on `t` >> gvs[supported_append_target_def, target_indices_def]) >>
+  qpat_x_assum `!t. int_calls_target t = _`
+    (fn th => PURE_ONCE_REWRITE_TAC [th]) >>
+  simp[EVERY_FLAT, EVERY_MAP, EVERY_MEM, combinTheory.o_DEF] >>
+  rpt strip_tac >> fs[EVERY_MEM] >>
+  `supported_pure_expr tops x` by (first_x_assum irule >> simp[]) >>
+  drule (cj 1 supported_pure_main_calls) >>
+  simp[EVERY_MEM] >> disch_then (qspec_then `c` mp_tac) >> simp[]
+QED
+
+Theorem supported_iterator_main_calls[local]:
+  supported_iterator tops ty it bound ==>
+  EVERY (\c. FST c = NONE /\
+             IS_SOME (supported_function_decl tops c Internal)) (int_calls_iterator it)
+Proof
+  Cases_on `it`
+  >- (simp[int_calls_iterator_def] >>
+      qmatch_goalsub_rename_tac `int_calls_expr arr` >> Cases_on `arr`
+      >~ [`Name _ _`]
+      >- simp[int_calls_expr_def]
+      >~ [`TopLevelName _ _`]
+      >- simp[int_calls_expr_def]
+      >> simp[supported_iterator_def] >> metis_tac[supported_expr_main_calls])
+  >> simp[supported_iterator_def, int_calls_iterator_def, EVERY_APPEND] >>
+  qmatch_goalsub_rename_tac
+    `EVERY _ (int_calls_expr lo) /\ EVERY _ (int_calls_expr hi)` >>
+  strip_tac >>
+  `supported_pure_expr tops lo /\ supported_pure_expr tops hi` suffices_by
+    metis_tac[supported_pure_main_calls] >>
+  Cases_on `lo` >> gvs[supported_pure_expr_def] >>
+  rename1 `Literal _ lit` >> Cases_on `lit` >> gvs[supported_pure_expr_def] >>
+  Cases_on `hi` >> gvs[supported_pure_expr_def]
+QED
+
+Theorem supported_reasons_main_calls[local]:
+  (!tops r. supported_assert_reason tops r ==>
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_assert_reason r)) /\
+  (!tops r. supported_raise_reason tops r ==>
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_raise_reason r))
+Proof
+  conj_tac >> rpt gen_tac >> Cases_on `r` >>
+  simp[supported_assert_reason_def, supported_raise_reason_def,
+       int_calls_assert_reason_def, int_calls_raise_reason_def,
+       GSYM supported_pure_exprs_every] >>
+  metis_tac[supported_pure_main_calls, supported_expr_main_calls,
+            supported_string_reason_expr]
+QED
+
+Theorem supported_stmts_main_calls[local]:
+  (!tops bindings s. supported_stmt tops bindings s ==>
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s)) /\
+  (!tops bindings ss. supported_stmts tops bindings ss ==>
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss))
+Proof
+  ho_match_mp_tac supported_stmt_ind >>
+  simp[supported_stmt_def, int_calls_stmt_def, int_calls_expr_def, EVERY_APPEND] >>
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+  imp_res_tac supported_assignment_def >>
+  imp_res_tac supported_log_def >>
+  imp_res_tac supported_pure_main_calls >>
+  imp_res_tac supported_expr_main_calls >>
+  imp_res_tac supported_assignment_main_calls >>
+  imp_res_tac supported_base_target_main_calls >>
+  imp_res_tac supported_append_target_main_calls >>
+  imp_res_tac supported_iterator_main_calls >>
+  imp_res_tac supported_reasons_main_calls >> gvs[]
 QED
 
 Theorem supported_stmt_body_safe:
   supported_stmt tops bindings s ==> body_stmt_safe tops s
 Proof
-  rw[body_stmt_safe_def] >>
-  drule (cj 1 supported_stmts_storage_syntax) >> simp[]
+  simp[body_stmt_safe_def, stmt_no_evm_run] >>
+  metis_tac[supported_stmts_main_calls]
 QED
 
 Theorem supported_stmts_body_safe:
   supported_stmts tops bindings ss ==> body_stmts_safe tops ss
 Proof
-  rw[body_stmts_safe_iff] >>
-  drule (cj 2 supported_stmts_storage_syntax) >> simp[]
+  simp[body_stmts_safe_iff, stmt_no_evm_run] >>
+  metis_tac[supported_stmts_main_calls]
 QED
 
+(* The body expression precondition permits effects in call operands. *)
 Theorem supported_expr_body_calls:
   !tops e. supported_expr tops e ==>
     ~expr_has_evm_run e /\
-    ~supported_expr_exists call_operands_effect_root e /\
     EVERY (\c. FST c = NONE) (int_calls_expr e) /\
     EVERY (\c. IS_SOME (supported_function_decl tops c Internal))
-      (int_calls_expr e) /\
-    ~is_extcode e
+      (int_calls_expr e)
 Proof
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- metis_tac[supported_expr_no_evm_run] >>
-  conj_tac >- metis_tac[supported_expr_no_call_operand_effects] >>
-  PURE_ONCE_REWRITE_TAC[CONJ_ASSOC] >>
-  reverse conj_tac >- metis_tac[supported_expr_not_extcode] >>
+  rpt strip_tac >>
+  imp_res_tac supported_expr_no_evm_run >>
   imp_res_tac supported_expr_main_calls >>
-  gvs[listTheory.EVERY_CONJ]
+  gvs[EVERY_CONJ]
 QED
 
-(* The same for a reason, which may also be a string literal. *)
 Theorem supported_string_reason_body_calls:
   !tops e. supported_string_reason tops e ==>
     ~expr_has_evm_run e /\
-    ~supported_expr_exists call_operands_effect_root e /\
     EVERY (\c. FST c = NONE) (int_calls_expr e) /\
     EVERY (\c. IS_SOME (supported_function_decl tops c Internal))
-      (int_calls_expr e) /\
-    ~is_extcode e
+      (int_calls_expr e)
 Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `?t str. e = Literal t (StringL str)`
-  >- gvs[expr_has_evm_run_def, supported_expr_exists_def,
-         expr_evm_run_root_def, int_calls_expr_def,
-         exprLoweringTheory.is_extcode_def] >>
-  irule supported_expr_body_calls >>
-  simp[supportedExprsTheory.supported_expr_def] >>
-  Cases_on `e` >> gvs[supported_string_reason_def] >>
-  rename1 `Literal _ lit` >> Cases_on `lit` >>
-  gvs[supported_string_reason_def]
+  metis_tac[supported_string_reason_expr, supported_expr_body_calls]
 QED
 
 (* A statement's expression meets expr_body_pre. *)
@@ -135,7 +248,6 @@ Theorem stmt_expr_body_pre:
        (\e. ~is_extcode e /\
              ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
     ~is_extcode e /\
-    ~supported_expr_exists call_operands_effect_root e /\
     ~supported_expr_exists (const_name_root cx) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
@@ -169,7 +281,6 @@ Theorem stmt_expr_body_pre_alloc:
     ~supported_expr_exists (\e. ~is_extcode e /\ ~byte_widths_expr e) e /\
     alloc_limits_expr cenv e /\
     ~is_extcode e /\
-    ~supported_expr_exists call_operands_effect_root e /\
     ~supported_expr_exists (const_name_root cx) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
@@ -304,7 +415,7 @@ Theorem stmt_exprs_ok_agree:
     stmt_exprs_ok c = stmt_exprs_ok cenv
 Proof
   rpt strip_tac >> simp[FUN_EQ_THM, stmt_exprs_ok_def] >>
-  drule (cj 1 alloc_limits_stmt_struct_fields) >> simp[]
+  drule (cj 1 alloc_limits_stmt_struct_fields) >> fs[alloc_env_agree_def]
 QED
 
 Theorem return_buffer_ok_var_type[simp]:
@@ -316,6 +427,7 @@ QED
 
 Theorem decl_var_type_return_fields[simp]:
   !cenv s.
+    (decl_var_type cenv s).ce_modules = cenv.ce_modules /\
     (decl_var_type cenv s).ce_is_external = cenv.ce_is_external /\
     (decl_var_type cenv s).ce_raw_return = cenv.ce_raw_return /\
     return_buffer_ok (decl_var_type cenv s) = return_buffer_ok cenv
@@ -467,7 +579,8 @@ Theorem stmt_exprs_ok_flat:
               ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) s /\
      alloc_limits_stmt cenv s /\
      (stmt_valued_return s /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
-        return_buffer_ok cenv))
+        return_buffer_ok cenv) /\
+     ~supported_stmt_expr_exists (const_name_root_mods cenv.ce_modules) s)
 Proof
   rpt strip_tac >>
   `(\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) =
@@ -486,7 +599,8 @@ Theorem stmts_exprs_ok_thm:
        (\e. ~is_extcode e /\ ~byte_widths_expr e) ss /\
     alloc_limits_stmts cenv ss /\
     (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
-       return_buffer_ok cenv)
+       return_buffer_ok cenv) /\
+    ~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) ss
 Proof
   Induct >>
   simp[stmts_exprs_ok_def, supported_stmt_expr_exists_def, stmt_exprs_ok_def,

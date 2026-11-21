@@ -2,7 +2,7 @@
 Theory ctorCallFreeExpr
 Ancestors
   list pair vyperAST venomInst loweringShapeDefs loweringShapeProps exprLowering
-  exprCallBounds supportedExprTraverse e2eDeployDefs
+  exprCallBounds supportedExprTraverse exprCallbackSupport e2eDeployDefs
   ctorCallFreeRules ctorCallFreeValues ctorCallFreeMemory ctorCallFreeABI
   ctorCallFreeABIEncode ctorCallFreeOps ctorCallFreeCallbacks ctorCallFreeBodies ctorCallFreeMembership
   loweringExtCallOpcodes loweringCallArgsOpcodes loweringCallOpcodes ctorCallFreeExprBody ctorCallFreeBuiltinBody ctorCallFreeTypeBuiltinBody
@@ -13,13 +13,39 @@ val base7_tm = ``!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /
   opc <> RETURNDATACOPY ==> (P:opcode -> bool) opc``;
 fun b7 th = SIMP_RULE (srw_ss()) [ASSUME base7_tm, DISJ_IMP_THM, FORALL_AND_THM] th;
 
+Definition expr_short_builtin_root_def:
+  expr_short_builtin_root e <=>
+    (?ty bi es. e = Builtin ty bi es /\ LENGTH es < builtin_arity bi) \/
+    (?ty tb target es. e = TypeBuiltin ty tb target es /\
+                       LENGTH es < type_builtin_arity tb)
+End
+
+Theorem expr_short_builtin_root_shape[local]:
+  expr_short_builtin_root e ==> expr_shape_root e
+Proof
+  simp[expr_short_builtin_root_def, expr_shape_root_def]
+QED
+
+Theorem no_short_builtin_of_shape[local]:
+  (~supported_expr_exists expr_shape_root e ==>
+   ~supported_expr_exists expr_short_builtin_root e) /\
+  (~supported_target_exists expr_shape_root t ==>
+   ~supported_target_exists expr_short_builtin_root t) /\
+  (~supported_exprs_exists expr_shape_root es ==>
+   ~supported_exprs_exists expr_short_builtin_root es) /\
+  (~supported_fields_exists expr_shape_root fs ==>
+   ~supported_fields_exists expr_short_builtin_root fs)
+Proof
+  metis_tac[supported_expr_exists_mono, expr_short_builtin_root_shape]
+QED
+
 Theorem opcode_defaults_without[local]:
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) ==>
+                 ~supported_exprs_exists expr_short_builtin_root (SND nd)) ce.ce_func_defaults) ==>
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd))
+                 ~supported_exprs_exists expr_short_builtin_root (SND nd))
       (cenv_without_defaults ce name).ce_func_defaults)
 Proof
   simp[cenv_without_defaults_def, EVERY_MEM, MEM_FILTER] >> metis_tac[]
@@ -27,9 +53,9 @@ QED
 
 Theorem opcode_omitted_default_supported[local]:
   EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-               ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults /\
+               ~supported_exprs_exists expr_short_builtin_root (SND nd)) ce.ce_func_defaults /\
   MEM e (omitted_defaults ce name n) ==>
-  ~supported_expr_exists R e /\ ~supported_expr_exists expr_shape_root e
+  ~supported_expr_exists R e /\ ~supported_expr_exists expr_short_builtin_root e
 Proof
   rw[omitted_defaults_def] >>
   Cases_on `ALOOKUP ce.ce_func_defaults name` >> gvs[] >>
@@ -44,7 +70,7 @@ Theorem outcomes_free_expr_child[local]:
   (!e ce ty st. expr_size e + cenv_defaults_size ce < bound ==>
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists expr_short_builtin_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\ ~supported_expr_exists Q e /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
@@ -52,7 +78,7 @@ Theorem outcomes_free_expr_child[local]:
   !e ce ty st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists expr_short_builtin_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\ ~supported_expr_exists Q e /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
@@ -74,19 +100,19 @@ Theorem outcomes_free_builtin_join[local]:
   (!e ce ty st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists expr_short_builtin_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e /\
+    ~supported_expr_exists expr_short_builtin_root e /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (cfn ce ty e st)))) ==>
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists expr_short_builtin_root (SND nd)) ce.ce_func_defaults) /\
   (precompile_builtin bi ==> P STATICCALL) /\
   builtin_arity bi <= LENGTH args /\
   ~supported_exprs_exists R args /\
-  ~supported_exprs_exists expr_shape_root args /\
+  ~supported_exprs_exists expr_short_builtin_root args /\
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_builtin_dispatch_body cfn ce rt ty bi args st)))
@@ -94,7 +120,7 @@ Theorem outcomes_free_builtin_join[local]:
 Proof
   strip_tac >>
   ntac 2 strip_tac >>
-  irule (Q.INST [`root2` |-> `expr_shape_root`] outcomes_free_builtin_dispatch_body) >>
+  irule (Q.INST [`root2` |-> `expr_short_builtin_root`] outcomes_free_builtin_dispatch_body) >>
   simp[(b7 outcomes_free_binop), (b7 outcomes_free_compile_builtin_calldatasize),
     (b7 outcomes_free_compile_env_var), (b7 outcomes_free_alloc_buffer), (b7 outcomes_free_compile_slice_out_buf),
     (b7 outcomes_free_compile_blobhash), (b7 outcomes_free_compile_blockhash), (b7 outcomes_free_compile_builtin_abs),
@@ -125,7 +151,7 @@ Proof
     irule (b7 outcomes_free_multi_exprs) >>
     simp[] >> rpt strip_tac >> first_assum irule >>
     `~supported_expr_exists R (Builtin ann (MakeArray ety bnd) es) /\
-     ~supported_expr_exists expr_shape_root (Builtin ann (MakeArray ety bnd) es)` by
+     ~supported_expr_exists expr_short_builtin_root (Builtin ann (MakeArray ety bnd) es)` by
       metis_tac[supported_exprs_exists_every, EXISTS_MEM] >>
     gvs[supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
     metis_tac[]) >>
@@ -158,18 +184,18 @@ Theorem outcomes_free_type_join[local]:
   (!e ce ty st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists expr_short_builtin_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e /\
+    ~supported_expr_exists expr_short_builtin_root e /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (cfn ce ty e st)))) ==>
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists expr_short_builtin_root (SND nd)) ce.ce_func_defaults) /\
   type_builtin_arity tb <= LENGTH args /\
   ~supported_exprs_exists R args /\
-  ~supported_exprs_exists expr_shape_root args /\
+  ~supported_exprs_exists expr_short_builtin_root args /\
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_type_builtin_dispatch_body cfn ce vt ty tb rt args st)))
@@ -183,7 +209,8 @@ Proof
     (rpt strip_tac >> first_x_assum irule >>
      metis_tac[supported_exprs_exists_every, EXISTS_MEM]) >>
   `P MSTORE` by simp[] >>
-  irule (UNDISCH outcomes_free_type_builtin_dispatch_body) >>
+  irule (Q.INST [`root2` |-> `expr_short_builtin_root`]
+    (UNDISCH outcomes_free_type_builtin_dispatch_body)) >>
   simp[(b7 outcomes_free_unwrap_value), (b7 outcomes_free_alloc_buffer), (b7 outcomes_free_type_convert),
     (b7 outcomes_free_bytestring_widen_copy), (b7 outcomes_free_builtin_empty_complex), (b7 outcomes_free_compile_bytestring_src),
     (b7 outcomes_free_extract32_load), (b7 outcomes_free_clamp_basetype), outcomes_free_abi_encode_builtin,
@@ -201,39 +228,39 @@ Theorem outcomes_free_expr_join[local]:
          opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
          opc <> RETURNDATACOPY ==> P opc) ==>
   (!ann target args d. ~R (Call ann target args d) ==>
-    P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY) ==>
+    ~expr_create_root (Call ann target args d) /\ P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY) ==>
   (
   (!child ce ty st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists expr_short_builtin_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R child /\
-    ~supported_expr_exists expr_shape_root child /\
+    ~supported_expr_exists expr_short_builtin_root child /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (cfn ce ty child st)))) /\
   (!ann bi args st. e = Builtin ann bi args ==>
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists expr_short_builtin_root (SND nd)) ce.ce_func_defaults) /\
     builtin_arity bi <= LENGTH args /\ ~R (Builtin ann bi args) /\
-    ~supported_exprs_exists R args /\ ~supported_exprs_exists expr_shape_root args /\
+    ~supported_exprs_exists R args /\ ~supported_exprs_exists expr_short_builtin_root args /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (bfn ce ann ty bi args st)))) /\
   (!ann tb rty args st. e = TypeBuiltin ann tb rty args ==>
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists expr_short_builtin_root (SND nd)) ce.ce_func_defaults) /\
     type_builtin_arity tb <= LENGTH args /\
-    ~supported_exprs_exists R args /\ ~supported_exprs_exists expr_shape_root args /\
+    ~supported_exprs_exists R args /\ ~supported_exprs_exists expr_short_builtin_root args /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (tfn ce ann ty tb rty args st)))) ==>
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
-  ~supported_expr_exists R e /\ ~supported_expr_exists expr_shape_root e /\
+                 ~supported_exprs_exists expr_short_builtin_root (SND nd)) ce.ce_func_defaults) /\
+  ~supported_expr_exists R e /\ ~supported_expr_exists expr_short_builtin_root e /\
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_expr_body cfn bfn tfn ce ty e st)))
@@ -242,18 +269,18 @@ Proof
   strip_tac >> strip_tac >>
   ntac 2 strip_tac >>
   `!child ty st. ~supported_expr_exists R child /\
-    ~supported_expr_exists expr_shape_root child /\
+    ~supported_expr_exists expr_short_builtin_root child /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (cfn ce ty child st)))` by
     metis_tac[] >>
-  irule (Q.INST [`root2` |-> `expr_shape_root`] outcomes_free_expr_body) >>
+  irule (Q.INST [`root2` |-> `expr_short_builtin_root`] outcomes_free_expr_body) >>
   simp[(b7 outcomes_free_literal_vv), (b7 outcomes_free_name_vv), (b7 outcomes_free_unwrap_value),
     (b7 outcomes_free_alloc_buffer), (b7 outcomes_free_ifexp_arm), (b7 outcomes_free_dynarray_pop),
     every_state_insts_addmod_names, every_state_insts_mulmod_names,
     every_state_insts_powmod256_names, (b7 outcomes_free_compile_addmod), (b7 outcomes_free_compile_mulmod), (b7 outcomes_free_compile_pow_mod256)] >>
   rpt conj_tac >>
   all_tac >~ [`compile_get_target_ptr _ _ _ _ (* sg *)`] >- (rpt gen_tac >> disch_then SUBST_ALL_TAC >> strip_tac >>
-    irule (Q.INST [`R` |-> `R`, `root2` |-> `expr_shape_root`]
+    irule (Q.INST [`R` |-> `R`, `root2` |-> `expr_short_builtin_root`]
       every_state_insts_get_target_ptr) >>
     gvs[supported_expr_exists_def, (b7 outcomes_free_keccak256_key),
       (b7 outcomes_free_mapping_subscript), (b7 outcomes_free_alloc_buffer), opcode_every_emit_op,
@@ -262,7 +289,7 @@ Proof
     rpt gen_tac >> strip_tac >>
     simp[every_state_insts_lower_value, (b7 outcomes_free_unwrap_value)]) >>
   all_tac >~ [`Builtin _ _ _ (* sg *)`] >- (rpt gen_tac >> disch_then SUBST_ALL_TAC >>
-    gvs[supported_expr_exists_def, expr_shape_root_def] >> rpt strip_tac >>
+    gvs[supported_expr_exists_def, expr_short_builtin_root_def] >> rpt strip_tac >>
     first_assum irule >> simp[] >> metis_tac[]) >>
   all_tac >~ [`compile_subscript _ _ _ _ _ _ _ (* sg *)`] >- (rpt gen_tac >> disch_then SUBST_ALL_TAC >> strip_tac >>
     irule every_state_insts_subscript >>
@@ -278,18 +305,17 @@ Proof
       supported_fields_exists_every, EXISTS_MEM] >>
     first_assum irule >> metis_tac[SND]) >>
   all_tac >~ [`TypeBuiltin _ _ _ _ (* sg *)`] >- (rpt gen_tac >> disch_then SUBST_ALL_TAC >>
-    gvs[supported_expr_exists_def, expr_shape_root_def] >>
+    gvs[supported_expr_exists_def, expr_short_builtin_root_def] >>
     rpt strip_tac >> first_assum irule >> simp[] >> metis_tac[]) >>
   all_tac >~ [`compile_call _ _ _ _ _ _ _ _ (* sg *)`] >- (map_every qx_gen_tac [`ann`, `target`, `args`, `d`, `call_st`] >>
     disch_then SUBST_ALL_TAC >> qid_spec_tac `call_st` >>
-    `P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY` by
+    `~expr_create_root (Call ann target args d) /\
+     P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY` by
       metis_tac[supported_expr_exists_root] >>
     `!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
            opc <> CREATE /\ opc <> CREATE2 ==> P opc` by
       (rpt strip_tac >> Cases_on `opc = CALL` >> gvs[] >>
        Cases_on `opc = STATICCALL` >> gvs[] >> Cases_on `opc = DELEGATECALL` >> gvs[]) >>
-    `~expr_shape_root (Call ann target args d)` by
-      metis_tac[supported_expr_exists_root] >>
     ho_match_mp_tac opcode_every_call >> simp[] >> conj_tac
     >- (rpt strip_tac >> first_assum irule >> simp[] >>
         conj_tac >- metis_tac[opcode_defaults_without] >>
@@ -306,37 +332,37 @@ Theorem outcomes_free_compile_expr_mutual[local]:
          opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
          opc <> RETURNDATACOPY ==> P opc) ==>
   (!ann target args d. ~R (Call ann target args d) ==>
-    P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY) ==>
+    ~expr_create_root (Call ann target args d) /\ P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY) ==>
   (!ann bi args. ~R (Builtin ann bi args) /\ precompile_builtin bi ==>
     P STATICCALL) ==>
   (
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists expr_short_builtin_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e /\
+    ~supported_expr_exists expr_short_builtin_root e /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) /\
   (!ce rt ty bi args st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists expr_short_builtin_root (SND nd)) ce.ce_func_defaults) /\
     builtin_arity bi <= LENGTH args /\
     ~R (Builtin rt bi args) /\
     ~supported_exprs_exists R args /\
-    ~supported_exprs_exists expr_shape_root args /\
+    ~supported_exprs_exists expr_short_builtin_root args /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_builtin_dispatch ce rt ty bi args st)))) /\
   (!ce vt ty tb rt args st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists expr_short_builtin_root (SND nd)) ce.ce_func_defaults) /\
     type_builtin_arity tb <= LENGTH args /\
     ~supported_exprs_exists R args /\
-    ~supported_exprs_exists expr_shape_root args /\
+    ~supported_exprs_exists expr_short_builtin_root args /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_type_builtin_dispatch ce vt ty tb rt args st))))
@@ -373,17 +399,17 @@ Theorem outcomes_free_compile_expr:
          opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
          opc <> RETURNDATACOPY ==> P opc) ==>
   (!ann target args d. ~R (Call ann target args d) ==>
-    P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY) ==>
+    ~expr_create_root (Call ann target args d) /\ P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY) ==>
   (!ann bi args. ~R (Builtin ann bi args) /\ precompile_builtin bi ==>
     P STATICCALL) ==>
   (
   !e cenv ret_ty st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd))
+                   ~supported_exprs_exists expr_short_builtin_root (SND nd))
         cenv.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e /\
+    ~supported_expr_exists expr_short_builtin_root e /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr cenv ret_ty e st)))
@@ -398,17 +424,17 @@ Theorem outcomes_free_compile_get_target_ptr:
          opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
          opc <> RETURNDATACOPY ==> P opc) ==>
   (!ann target args d. ~R (Call ann target args d) ==>
-    P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY) ==>
+    ~expr_create_root (Call ann target args d) /\ P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY) ==>
   (!ann bi args. ~R (Builtin ann bi args) /\ precompile_builtin bi ==>
     P STATICCALL) ==>
   (
   !target cenv st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd))
+                   ~supported_exprs_exists expr_short_builtin_root (SND nd))
         cenv.ce_func_defaults) /\
     ~supported_target_exists R target /\
-    ~supported_target_exists expr_shape_root target /\
+    ~supported_target_exists expr_short_builtin_root target /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_get_target_ptr compile_expr cenv target st)))
@@ -416,7 +442,7 @@ Theorem outcomes_free_compile_get_target_ptr:
 Proof
   ntac 3 strip_tac >>
   rpt gen_tac >> strip_tac >>
-  irule (Q.INST [`R` |-> `R`, `root2` |-> `expr_shape_root`]
+  irule (Q.INST [`R` |-> `R`, `root2` |-> `expr_short_builtin_root`]
     every_state_insts_get_target_ptr) >>
   simp[(b7 outcomes_free_keccak256_key), (b7 outcomes_free_mapping_subscript), (b7 outcomes_free_alloc_buffer),
     opcode_every_emit_op, (b7 outcomes_free_array_subscript), (b7 outcomes_free_ptr_load)] >>
@@ -431,15 +457,15 @@ Theorem compile_expr_opcode_every:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (!ann target args d. ~R (Call ann target args d) ==>
-    P INVOKE /\ P RETURNDATACOPY) ==>
+    ~expr_create_root (Call ann target args d) /\ P INVOKE /\ P RETURNDATACOPY) ==>
   (
   !e cenv ret_ty st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd))
+                   ~supported_exprs_exists expr_short_builtin_root (SND nd))
         cenv.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e /\
+    ~supported_expr_exists expr_short_builtin_root e /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr cenv ret_ty e st)))
@@ -447,7 +473,7 @@ Theorem compile_expr_opcode_every:
 Proof
   ntac 2 strip_tac >>
   `!ann target args d. ~R (Call ann target args d) ==>
-    P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY` by
+    ~expr_create_root (Call ann target args d) /\ P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY` by
     (rpt gen_tac >> strip_tac >> first_x_assum drule >> simp[]) >>
   `!ann bi args. ~R (Builtin ann bi args) /\ precompile_builtin bi ==>
     P STATICCALL` by simp[] >>
@@ -465,22 +491,23 @@ Theorem compile_expr_call_free:
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
       (state_insts (SND (compile_expr cenv ret_ty e st)))
 Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`, `R` |-> `expr_call_root`] compile_expr_opcode_every) >> simp[expr_call_root_def]
+  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`, `R` |-> `expr_call_root`] compile_expr_opcode_every) >> simp[expr_call_root_def] >>
+  fs[EVERY_MEM] >> metis_tac[no_short_builtin_of_shape]
 QED
 
 Theorem compile_get_target_ptr_opcode_every:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (!ann target args d. ~R (Call ann target args d) ==>
-    P INVOKE /\ P RETURNDATACOPY) ==>
+    ~expr_create_root (Call ann target args d) /\ P INVOKE /\ P RETURNDATACOPY) ==>
   (
   !target cenv st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd))
+                   ~supported_exprs_exists expr_short_builtin_root (SND nd))
         cenv.ce_func_defaults) /\
     ~supported_target_exists R target /\
-    ~supported_target_exists expr_shape_root target /\
+    ~supported_target_exists expr_short_builtin_root target /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_get_target_ptr compile_expr cenv target st)))
@@ -488,7 +515,7 @@ Theorem compile_get_target_ptr_opcode_every:
 Proof
   ntac 2 strip_tac >>
   `!ann target args d. ~R (Call ann target args d) ==>
-    P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY` by
+    ~expr_create_root (Call ann target args d) /\ P CALL /\ P STATICCALL /\ P DELEGATECALL /\ P INVOKE /\ P RETURNDATACOPY` by
     (rpt gen_tac >> strip_tac >> first_x_assum drule >> simp[]) >>
   `!ann bi args. ~R (Builtin ann bi args) /\ precompile_builtin bi ==>
     P STATICCALL` by simp[] >>
@@ -506,22 +533,23 @@ Theorem compile_get_target_ptr_call_free:
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
       (state_insts (SND (compile_get_target_ptr compile_expr cenv target st)))
 Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`, `R` |-> `expr_call_root`] compile_get_target_ptr_opcode_every) >> simp[expr_call_root_def]
+  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`, `R` |-> `expr_call_root`] compile_get_target_ptr_opcode_every) >> simp[expr_call_root_def] >>
+  fs[EVERY_MEM] >> metis_tac[no_short_builtin_of_shape]
 QED
 
 Theorem compile_multi_exprs_opcode_every:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (!ann target args d. ~R (Call ann target args d) ==>
-    P INVOKE /\ P RETURNDATACOPY) ==>
+    ~expr_create_root (Call ann target args d) /\ P INVOKE /\ P RETURNDATACOPY) ==>
   (
   !es cenv st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd))
+                   ~supported_exprs_exists expr_short_builtin_root (SND nd))
         cenv.ce_func_defaults) /\
     ~supported_exprs_exists R es /\
-    ~supported_exprs_exists expr_shape_root es /\
+    ~supported_exprs_exists expr_short_builtin_root es /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_multi_exprs compile_expr cenv es st)))
@@ -544,22 +572,23 @@ Theorem compile_multi_exprs_call_free:
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
       (state_insts (SND (compile_multi_exprs compile_expr cenv es st)))
 Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`, `R` |-> `expr_call_root`] compile_multi_exprs_opcode_every) >> simp[expr_call_root_def]
+  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`, `R` |-> `expr_call_root`] compile_multi_exprs_opcode_every) >> simp[expr_call_root_def] >>
+  fs[EVERY_MEM] >> metis_tac[no_short_builtin_of_shape]
 QED
 
 Theorem compile_struct_lit_opcode_every:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (!ann target args d. ~R (Call ann target args d) ==>
-    P INVOKE /\ P RETURNDATACOPY) ==>
+    ~expr_create_root (Call ann target args d) /\ P INVOKE /\ P RETURNDATACOPY) ==>
   (
   !fields cenv ty buf off st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd))
+                   ~supported_exprs_exists expr_short_builtin_root (SND nd))
         cenv.ce_func_defaults) /\
     ~supported_fields_exists R fields /\
-    ~supported_fields_exists expr_shape_root fields /\
+    ~supported_fields_exists expr_short_builtin_root fields /\
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_struct_lit compile_expr cenv ty fields buf off st)))
@@ -580,5 +609,6 @@ Theorem compile_struct_lit_call_free:
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
       (state_insts (SND (compile_struct_lit compile_expr cenv ty fields buf off st)))
 Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`, `R` |-> `expr_call_root`] compile_struct_lit_opcode_every) >> simp[expr_call_root_def]
+  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`, `R` |-> `expr_call_root`] compile_struct_lit_opcode_every) >> simp[expr_call_root_def] >>
+  fs[EVERY_MEM] >> metis_tac[no_short_builtin_of_shape]
 QED

@@ -639,16 +639,81 @@ Theorem supported_scalar_type_assignable:
     assignable_type tenv ty
 Proof
   rw[supported_scalar_type_def] >- simp[supported_word_type_assignable] >>
-  Cases_on `ty` >> gvs[supported_string_type_def, assignable_type_def]
+  Cases_on `ty` >> gvs[supported_string_type_def, assignable_type_def] >>
+  Cases_on `b` >> gvs[supported_string_type_def] >>
+  Cases_on `b'` >> gvs[supported_string_type_def]
 QED
 
-(* A supported return type other than NoneT is assignable where it is well
-   formed (as check_toplevel_decl requires of a function's return type) and
-   is not a struct with no fields.  supported_return_type alone does not give
-   it: it bounds neither a bytestring's nor a dynamic array's length, so it
-   admits Bytes[2 ** 256], which does not evaluate; and it admits a struct
-   with no fields, which assignable_type rejects and which neither
-   supported_value_type nor the source checker excludes. *)
+(* Descending through a struct removes that declaration from the typing
+   environment. The remaining declarations still agree with type_env. *)
+Theorem supported_nested_type_assignable[local]:
+  !tenv ty tops fuel.
+    tenv SUBMAP type_env tops /\
+    supported_nested_type supported_scalar_type fuel tops ty /\
+    well_formed_type tenv ty ==>
+    assignable_type tenv ty
+Proof
+  ho_match_mp_tac assignable_type_ind >> rpt conj_tac >> rpt gen_tac
+  >~ [`StructT nsid`]
+  >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
+      qpat_x_assum `supported_nested_type _ _ _ _` mp_tac >>
+      simp[Once supported_nested_type_def, supported_scalar_type_def,
+           supported_word_type_def, supported_string_type_def, AllCaseEqs()] >>
+      Cases_on `supported_struct_fields tops nsid` >> gvs[NULL_EQ] >>
+      strip_tac >> rename1 `supported_struct_fields tops nsid = SOME fields` >>
+      `FLOOKUP tenv nsid = SOME (StructArgs fields)` by
+        (drule supported_struct_fields_type_env >> strip_tac >>
+         Cases_on `FLOOKUP tenv nsid` >>
+         gvs[well_formed_type_def, evaluate_type_def] >>
+         rename1 `FLOOKUP tenv nsid = SOME entry` >> Cases_on `entry` >>
+         gvs[SUBMAP_FLOOKUP_EQN] >>
+         res_tac >> gvs[]) >>
+      simp[assignable_type_def] >>
+      `tenv \\ nsid SUBMAP type_env tops` by
+        (fs[SUBMAP_FLOOKUP_EQN, DOMSUB_FLOOKUP_THM] >> rw[] >>
+         first_x_assum irule >> simp[]) >>
+      `IS_SOME (OPT_MMAP (evaluate_type (tenv \\ nsid)) (MAP SND fields))` by
+        (qpat_x_assum `well_formed_type tenv (StructT nsid)` mp_tac >>
+         simp[well_formed_type_def, evaluate_type_def, evaluate_types_OPT_MMAP] >>
+         Cases_on `OPT_MMAP (evaluate_type (tenv \\ nsid)) (MAP SND fields)` >> simp[]) >>
+      fs[IS_SOME_OPT_MMAP, EVERY_MEM, o_DEF, MEM_MAP, PULL_EXISTS,
+         well_formed_type_def] >>
+      rpt strip_tac >>
+      qpat_x_assum `!x. MEM x fields ==> _` (drule_then irule) >>
+      qexistsl_tac [`fuel - 1`, `tops`] >> simp[])
+  >~ [`TupleT tys`]
+  >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
+      qpat_x_assum `supported_nested_type _ _ _ _` mp_tac >>
+      simp[Once supported_nested_type_def, supported_scalar_type_def,
+           supported_word_type_def, supported_string_type_def] >>
+      strip_tac >> simp[assignable_type_def, GSYM NULL_EQ] >>
+      `IS_SOME (OPT_MMAP (evaluate_type tenv) tys)` by
+        (qpat_x_assum `well_formed_type tenv (TupleT tys)` mp_tac >>
+         simp[well_formed_type_def, evaluate_type_def, evaluate_types_OPT_MMAP] >>
+         Cases_on `OPT_MMAP (evaluate_type tenv) tys` >> simp[]) >>
+      fs[IS_SOME_OPT_MMAP, EVERY_MEM, o_DEF, MEM_MAP, PULL_EXISTS,
+         well_formed_type_def] >>
+      rpt strip_tac >>
+      qpat_x_assum `!ty. MEM ty tys ==> _` (drule_then irule) >>
+      qexistsl_tac [`fuel`, `tops`] >> simp[])
+  >~ [`ArrayT elem bd`]
+  >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
+      `well_formed_type tenv elem` by
+        (Cases_on `evaluate_type tenv elem` >>
+         fs[well_formed_type_def, evaluate_type_def]) >>
+      qpat_x_assum `supported_nested_type _ _ _ _` mp_tac >>
+      Cases_on `bd` >>
+      simp[Once supported_nested_type_def, supported_scalar_type_def,
+           supported_word_type_def, supported_string_type_def,
+           assignable_type_def] >> metis_tac[])
+  >> rpt (gen_tac ORELSE disch_then strip_assume_tac)
+  >> qpat_x_assum `supported_nested_type _ _ _ _` mp_tac
+  >> simp[Once supported_nested_type_def, supported_scalar_type_def,
+          supported_word_type_def, supported_string_type_def, assignable_type_def]
+  >> Cases_on `bt` >> simp[supported_word_type_def, supported_string_type_def]
+  >> Cases_on `b` >> simp[supported_word_type_def, supported_string_type_def]
+QED
+
 Theorem supported_return_type_assignable:
   !tops ret.
     supported_return_type tops ret /\ ret <> NoneT /\
@@ -656,24 +721,6 @@ Theorem supported_return_type_assignable:
     (!id. ret = StructT id ==> supported_struct_fields tops id <> SOME []) ==>
     assignable_type (type_env tops) ret
 Proof
-  rw[supported_return_type_def, supported_value_type_def]
-  >- (irule supported_scalar_type_assignable >> simp[]) >>
-  Cases_on `ret` >> gvs[]
-  >~ [`TupleT ts`]
-  >- (simp[assignable_type_def] >>
-      gvs[well_formed_type_def, evaluate_type_def, AllCaseEqs(),
-          evaluate_types_OPT_MMAP, NULL_EQ] >>
-      `EVERY IS_SOME (MAP (evaluate_type (type_env tops)) ts)` by
-        (simp[GSYM IS_SOME_OPT_MMAP] >>
-         Cases_on `OPT_MMAP (evaluate_type (type_env tops)) ts` >> gvs[]) >>
-      gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> rpt strip_tac >>
-      irule supported_scalar_type_assignable >>
-      gvs[well_formed_type_def])
-  >~ [`ArrayT elem bd`]
-  >- (Cases_on `bd` >> gvs[assignable_type_def, supported_word_type_assignable])
-  >~ [`StructT id`] >>
-  Cases_on `supported_struct_fields tops id` >> gvs[] >>
-  drule supported_struct_fields_type_env >>
-  simp[assignable_type_def] >> strip_tac >>
-  gvs[EVERY_MEM, supported_word_type_assignable]
+  simp[supported_return_type_def, supported_value_type_def, supported_place_type_def] >>
+  metis_tac[supported_nested_type_assignable, SUBMAP_REFL]
 QED

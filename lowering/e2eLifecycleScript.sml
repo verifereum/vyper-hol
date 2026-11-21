@@ -195,8 +195,11 @@ Proof
   strip_tac >>
   gvs[deploy_typing_ok_constants_ready] >>
   `wf_state es /\ layouts_agree tops am tx` by fs[deploy_state_rel_def] >>
+  `am'.sources <> am.sources` by
+    (strip_tac >>
+     `ALOOKUP am.sources tx.target = NONE` by fs[deploy_state_rel_def] >>
+     gvs[deploy_result_rel_def]) >>
   drule_all load_contract_sources_layouts >> strip_tac >>
-  `am'.sources <> am.sources` by gvs[listTheory.CONS_ACYCLIC] >>
   drule_all load_contract_establishes_constants_fold >> strip_tac >>
   `context_well_typed
      (initial_evaluation_context ((tx.target, [(NONE, tops)]) :: am.sources)

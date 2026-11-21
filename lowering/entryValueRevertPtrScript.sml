@@ -76,6 +76,14 @@ Proof
   qexistsl_tac [`min_cds`, `opened`, `checked`] >> gvs[]
 QED
 
+Theorem initial_entry_allocas_below_fmp:
+  initial_venom_state_rel tops am tx vs /\ vars_pc_only vs s ==>
+  allocas_below_fmp s
+Proof
+  simp[initial_venom_state_rel_def, vars_pc_only_def,
+       venom_state_component_equality, allocas_below_fmp_def]
+QED
+
 Theorem initial_entry_dispatch_scalars:
   source_typing_ok tops am tx /\ initial_venom_state_rel tops am tx vs ==>
   fresh_vars_wrt ds

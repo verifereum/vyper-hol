@@ -2,9 +2,9 @@
 Theory dispatchedSelectedPreparation
 Ancestors
   dispatchedSelectedFacts dispatchedSelectedPrefix externalEntryJoint
-  registrationRejectMetadata entryPtrSeamRegister entryReachBodyFmp
+  registrationRejectMetadata entryPtrSeamRegister
   constSubst supportedDecls supportedProgram vyperTypeABI transfer words list
-  entryStateRel vyperLoweringCorrect runtimeExternalPackageCode
+  entryStateRel vyperLoweringCorrect entryRejectCode
   acceptedContextPhi defaultDispatchFacts dispatchedSignatureArgs entryDispatchProps
 
 Theorem selection_type_list_unique[local]:
@@ -21,6 +21,7 @@ Theorem dispatched_selected_registration_preparation_nr:
   !tops rpolicy unit am tx ret vs mut nr args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
@@ -43,7 +44,6 @@ Theorem dispatched_selected_registration_preparation_nr:
       unit.cu_context.ctx_entry = SOME "__entry" /\
       venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
       fn_entry_label efn = SOME "__entry" /\
-      ~ctx_has_dalloca unit.cu_context /\
       set_external_package_target rpolicy.rpol_target
         (package_external_fn tops T (K global_nonreentrant_slot)
           (mut,nr,lookup_raw_return_or_F (NONE:num option)
@@ -112,13 +112,8 @@ Proof
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   rename1 `venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn` >>
   `MEM efn unit.cu_context.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
-  `?elbl. fn_entry_label efn = SOME elbl` by
-    (gvs[vyperCompilerTheory.lowering_context_ok_def, EVERY_MEM, venomWfTheory.fn_has_entry_def] >>
-     `efn.fn_blocks <> []` by metis_tac[] >>
-     Cases_on `efn.fn_blocks` >> gvs[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def]) >>
   `fn_entry_label efn = SOME "__entry"` by
-    (drule_all source_runtime_external_packages >> strip_tac >>
-     gvs[compileEnvTheory.fresh_label_def, vyperCompilerTheory.initial_compile_state_def]) >>
+    (drule_all_then ACCEPT_TAC lower_vyper_runtime_unit_entry_label) >>
   drule_all default_dispatch_raw_cases >>
   disch_then (DISJ_CASES_THEN2 strip_assume_tac strip_assume_tac) >- gvs[] >>
   `MEM (tx.function_name,tys) (abi_external_signatures tops)` by
@@ -134,6 +129,7 @@ Proof
      drule_all_then ACCEPT_TAC lookup_function_external_raw_member) >>
   `4 <= LENGTH vs.vs_call_ctx.cc_calldata` by decide_tac >>
   `4 + SUM (MAP tv_abi_size tvs) <= LENGTH vs.vs_call_ctx.cc_calldata` by decide_tac >>
+  `~EXISTS external_has_defaults (FST (classify_functions tops))` by fs[] >>
   drule_all dispatched_selected_registration_prefix_nr >> strip_tac >>
   rename1 `fn_has_code st sa efn` >>
   rename1 `fn_has_code sa st' efn` >>
@@ -174,7 +170,6 @@ Proof
      qpat_assum `LIST_REL _ args (ZIP _)`
        (qspec_then `i` mp_tac o CONJUNCT2 o REWRITE_RULE [LIST_REL_EL_EQN]) >>
      Cases_on `EL i args` >> simp[]) >>
-  `~ctx_has_dalloca unit.cu_context` by metis_tac[entry_runtime_no_dalloca] >>
   drule_all registration_initial_ptr_resources >>
   disch_then (strip_assume_tac o REWRITE_RULE [FORALL_AND_THM]) >>
   drule_all initial_venom_state_calldata_length >> strip_tac >>

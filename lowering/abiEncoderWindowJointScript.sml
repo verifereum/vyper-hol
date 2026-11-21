@@ -290,7 +290,10 @@ Proof
   `FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en) = []` by
     (qpat_assum `emitted_insts st en = _` (fn th => rewrite_tac[th]) >>
      POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[bytestring_encoder_insts_def, mk_inst_def]) >>
+     simp_tac (bool_ss ++ numSimps.REDUCE_ss)
+       [bytestring_encoder_insts_def, listTheory.FILTER,
+        emitHelperPropsTheory.mk_inst_opcode,
+        venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st en)` by
     (qpat_assum `emitted_insts st en = _` (fn th => rewrite_tac[th]) >>

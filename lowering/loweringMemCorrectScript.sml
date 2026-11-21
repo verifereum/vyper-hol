@@ -20,6 +20,8 @@ Ancestors
   vyperLoweringCorrect vyperCompiler loweringPtrCorrect memSafeRun
   allocaFrontierBound ptrDiscipline lowerDloadDefs contextCodegenRel venomWf
   venomInst unitMemInv unitTransformDefs rawReachableFmp ctxLookupAgree
+  loweringShapeSource supportedStmtTraverse supportedExprTraverse vyperTypeContract
+  vyperAST vyperCalldata unitShapeDefs o1PassContract e2eDefs exprSimHypsDefs list
 
 val _ = Parse.hide "body";
 val _ = Parse.hide "tops";
@@ -34,16 +36,14 @@ val _ = Parse.hide "tops";
    distinct labels, an acyclic reachable call graph, the allocation budget
    below the word size) are lowering_context_ok, which run_lowering checks.
    The other conjuncts come from run_lowering: no eom, and no reserved
-   global region.  No DALLOCA is a premise: the bridge covers only
-   static allocation. The lowering's pointer check excludes the other raw
-   FMP operations, so the free-memory pointer never moves. The entry floor
-   gives the bridge's two pointer facts. *)
-Theorem lower_vyper_runtime_unit_memory_ok:
+   global region. The static wrapper proves the reachability premise from
+   the absence of raw FMP operations and the entry floor. *)
+Theorem lower_vyper_runtime_unit_memory_ok_from_no_wrap:
   !tops rpolicy unit am tx vs fn lbl D.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     initial_venom_state_rel tops am tx vs /\
-    ~ctx_has_dalloca unit.cu_context /\
-    w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
+    (!f inst s. raw_reachable vs unit.cu_context f inst s ==>
+       dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp) /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\
     (!fuel. mem_safe_blocks fuel unit.cu_context fn
@@ -82,6 +82,33 @@ Proof
   `!f inst s. alloca_frontier_inv unit.cu_context f inst s ==>
               s.vs_alloca_next < dimword (:256)` by
     (rpt strip_tac >> drule alloca_frontier_inv_bound >> simp[]) >>
+  drule_all mem_safe_raw_unit_memory_ok >> strip_tac >>
+  drule lower_vyper_runtime_unit_raw_defaults >> strip_tac >>
+  drule_all loweringPtrCorrectTheory.lower_vyper_runtime_unit_ptr_taint >> strip_tac >>
+  simp[fixed_region_reserved_def]
+QED
+
+Theorem lower_vyper_runtime_unit_memory_ok:
+  !tops rpolicy unit am tx vs fn lbl D.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    initial_venom_state_rel tops am tx vs /\
+    ~ctx_has_dalloca unit.cu_context /\
+    w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl /\
+    (!fuel. mem_safe_blocks fuel unit.cu_context fn
+       (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                   vs_inst_idx := 0 |>)) /\
+    (!fuel. ptr_safe_blocks D 0 fuel unit.cu_context fn [] FEMPTY entry_taint
+       (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                   vs_inst_idx := 0 |>))
+    ==> raw_unit_memory_ok unit.cu_context vs /\
+        EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+        fixed_region_reserved 0 unit.cu_context /\
+        ptr_discipline 0 unit.cu_context vs /\
+        taint_within D unit.cu_context vs
+Proof
+  rpt strip_tac >>
   `EVERY no_raw_fmp_ops unit.cu_context.ctx_functions` by
     (drule_all lower_vyper_runtime_unit_fn_ptr_ok >> strip_tac >>
      simp[listTheory.EVERY_MEM, no_raw_fmp_ops_def] >> rpt strip_tac >>
@@ -108,10 +135,158 @@ Proof
      `inst.inst_opcode <> DALLOCA` by
        (strip_tac >> gvs[is_raw_fmp_opcode_def]) >>
      simp[dalloca_no_wrap_def]) >>
-  drule_all mem_safe_raw_unit_memory_ok >> strip_tac >>
+  metis_tac[lower_vyper_runtime_unit_memory_ok_from_no_wrap]
+QED
+
+(* GATE_ADMISSION: missing case, raw_call with msg.data runtime source shape *)
+Theorem lower_vyper_runtime_unit_source_shape_raw_call_calldata:
+  !tops rpolicy unit layouts addr art.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    check_contract F layouts addr [(NONE, tops)] = SOME art /\
+    (?vis mut nr rr name args dflts ret body.
+       MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
+       vis <> Deploy /\
+       (supported_stmts_expr_exists
+          (\e. ?ty f es d. e = Call ty (RawCallCalldataTarget f) es d) body \/
+        EXISTS (supported_expr_exists
+          (\e. ?ty f es d. e = Call ty (RawCallCalldataTarget f) es d)) dflts)) ==>
+    o1_source_unit_ok unit /\ unit_entry_no_params unit
+Proof
+  cheat
+QED
+
+(* GATE_ADMISSION: missing case, create_copy_of runtime source shape *)
+Theorem lower_vyper_runtime_unit_source_shape_create_copy:
+  !tops rpolicy unit layouts addr art.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    check_contract F layouts addr [(NONE, tops)] = SOME art /\
+    (?vis mut nr rr name args dflts ret body.
+       MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
+       vis <> Deploy /\
+       (supported_stmts_expr_exists
+          (\e. ?ty s r ks es d.
+                 e = Call ty (CreateTarget CreateCopyOf s r ks) es d) body \/
+        EXISTS (supported_expr_exists
+          (\e. ?ty s r ks es d.
+                 e = Call ty (CreateTarget CreateCopyOf s r ks) es d)) dflts)) ==>
+    o1_source_unit_ok unit /\ unit_entry_no_params unit
+Proof
+  cheat
+QED
+
+(* GATE_ADMISSION: missing case, create_from_blueprint runtime source shape *)
+Theorem lower_vyper_runtime_unit_source_shape_create_blueprint:
+  !tops rpolicy unit layouts addr art.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    check_contract F layouts addr [(NONE, tops)] = SOME art /\
+    (?vis mut nr rr name args dflts ret body.
+       MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
+       vis <> Deploy /\
+       (supported_stmts_expr_exists
+          (\e. ?ty b s r ks es d.
+                 e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d)
+          body \/
+        EXISTS (supported_expr_exists
+          (\e. ?ty b s r ks es d.
+                 e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d))
+          dflts)) ==>
+    o1_source_unit_ok unit /\ unit_entry_no_params unit
+Proof
+  cheat
+QED
+
+(* GATE_ADMISSION: held, blueprint DALLOCA no-wrap and FMP floor *)
+Theorem lower_vyper_runtime_unit_blueprint_raw_fmp:
+  !tops rpolicy unit layouts addr art.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    check_contract F layouts addr [(NONE, tops)] = SOME art /\
+    (?vis mut nr rr name args dflts ret body.
+       MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
+       vis <> Deploy /\
+       (supported_stmts_expr_exists
+          (\e. ?ty b s r ks es d.
+                 e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d)
+          body \/
+        EXISTS (supported_expr_exists
+          (\e. ?ty b s r ks es d.
+                 e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d))
+          dflts)) ==>
+    (!am tx vi. source_typing_ok tops am tx /\
+      source_deployment_rel tops am tx /\
+      initial_venom_state_rel tops am tx vi /\
+      vi.vs_fmp = vi.vs_initial_fmp /\
+      w2n vi.vs_initial_fmp < 2 ** 254 /\
+      unit_alloca_budget unit.cu_context +
+        32 * ctx_dload_count unit.cu_context <= w2n vi.vs_initial_fmp /\
+      LENGTH vi.vs_outcomes < 2 ** 64 /\
+      outcomes_accounts_typed (SOME vi.vs_outcomes) /\
+      LENGTH vi.vs_call_ctx.cc_calldata < 2 ** 64 ==>
+      !fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp)
+Proof
+  cheat
+QED
+
+Theorem runtime_raw_shape_cases[local]:
+  ~raw_shape_free_program tops ==>
+  (?vis mut nr rr name args dflts ret body.
+     MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
+     vis <> Deploy /\
+     (supported_stmts_expr_exists
+        (\e. ?ty f es d. e = Call ty (RawCallCalldataTarget f) es d) body \/
+      EXISTS (supported_expr_exists
+        (\e. ?ty f es d. e = Call ty (RawCallCalldataTarget f) es d)) dflts)) \/
+  (?vis mut nr rr name args dflts ret body.
+     MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
+     vis <> Deploy /\
+     (supported_stmts_expr_exists
+        (\e. ?ty s r ks es d.
+               e = Call ty (CreateTarget CreateCopyOf s r ks) es d) body \/
+      EXISTS (supported_expr_exists
+        (\e. ?ty s r ks es d.
+               e = Call ty (CreateTarget CreateCopyOf s r ks) es d)) dflts)) \/
+  (?vis mut nr rr name args dflts ret body.
+     MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
+     vis <> Deploy /\
+     (supported_stmts_expr_exists
+        (\e. ?ty b s r ks es d.
+               e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d)
+        body \/
+      EXISTS (supported_expr_exists
+        (\e. ?ty b s r ks es d.
+               e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d))
+        dflts))
+Proof
+  pure_rewrite_tac[raw_shape_free_program_def, EVERY_NOT_EXISTS] >>
+  BETA_TAC >> pure_rewrite_tac[NOT_CLAUSES] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  `expr_raw_shape_root =
+    (\e. (?ty f es d. e = Call ty (RawCallCalldataTarget f) es d) \/
+         ((?ty s r ks es d. e = Call ty (CreateTarget CreateCopyOf s r ks) es d) \/
+          (?ty b s r ks es d.
+             e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d)))` by
+    simp[FUN_EQ_THM, expr_raw_shape_root_def, DISJ_ASSOC] >>
+  pop_assum (fn th => ONCE_REWRITE_TAC [th]) >>
+  simp_tac bool_ss [supported_stmt_expr_exists_disj, supported_expr_exists_disj,
+                    listTheory.EXISTS_MEM, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+  metis_tac[]
+QED
+
+Theorem lower_vyper_runtime_unit_checked_source_shape:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  check_contract F layouts addr [(NONE, tops)] = SOME art ==>
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\ unit_fmp_unsealed unit
+Proof
+  strip_tac >> Cases_on `raw_shape_free_program tops`
+  >- metis_tac[lower_vyper_runtime_unit_source_unit_ok_checked,
+               lower_vyper_runtime_unit_o1_shape_extras] >>
+  drule runtime_raw_shape_cases >>
+  disch_then (DISJ_CASES_THEN2 ASSUME_TAC (DISJ_CASES_THEN ASSUME_TAC)) >>
   drule lower_vyper_runtime_unit_raw_defaults >> strip_tac >>
-  drule_all loweringPtrCorrectTheory.lower_vyper_runtime_unit_ptr_taint >> strip_tac >>
-  simp[fixed_region_reserved_def]
+  FIRST
+    [drule_all lower_vyper_runtime_unit_source_shape_raw_call_calldata,
+     drule_all lower_vyper_runtime_unit_source_shape_create_copy,
+     drule_all lower_vyper_runtime_unit_source_shape_create_blueprint] >> simp[]
 QED
 
 Theorem lower_vyper_runtime_unit_dload_in_section:

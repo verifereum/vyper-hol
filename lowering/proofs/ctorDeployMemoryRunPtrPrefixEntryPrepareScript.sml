@@ -392,6 +392,7 @@ Theorem prefix_entry_prepare_actual_checked:
     (tn = entry_taint ==> qt.t_mem = {} /\ qt.t_stor = {} /\ qt.t_trans = {} /\ qt.t_imm = {}) /\
     t.vs_memory = initial.vs_memory /\ t.vs_allocas = initial.vs_allocas /\
     t.vs_alloca_next = initial.vs_alloca_next /\
+    t.vs_fmp = initial.vs_fmp /\ t.vs_initial_fmp = initial.vs_initial_fmp /\
     t.vs_accounts = initial.vs_accounts /\ t.vs_transient = initial.vs_transient /\
     t.vs_data_section = initial.vs_data_section /\
     t.vs_call_ctx = initial.vs_call_ctx /\ t.vs_labels = initial.vs_labels /\
