@@ -49,7 +49,7 @@ Ancestors exprSimSubscriptArrayLiveStorageSuffix[qualified,ignore_grammar] exprP
   bodyFullIfExpReach[qualified,ignore_grammar]
   stmtSimForParts[qualified] vyperInterpreter[qualified] gasContext[qualified] fragGasCopyLoop augAssignPtrScalarSafety augAssignPtrScalarCertificate
   supportedExprForms whitelistVisibility immutableLocationProps
-  bodyFullForRounds[qualified] gasExemptCert[qualified]
+  bodyFullForRounds[qualified] gasExemptCert[qualified] forStorageHeadFrame
 Libs
   monadsyntax
 
@@ -4483,95 +4483,17 @@ Theorem for_storage_array_head_prefix_transport:
       local_region c0 ei.scopes u name b sz <=>
       local_region c0 ei.scopes s name b sz
 Proof
- rpt gen_tac >>
-  abbrev_lambda_tac "Fr" 5 0 `alloca_history func s /\ _` >>
-  qpat_abbrev_tac `dyn = (case bd of Dynamic _ => T | Fixed _ => F)` >>
-  qpat_abbrev_tac `outs = if dyn then [dv;ov;tot;ep] else [dv;ov;ep]` >>
-  qpat_abbrev_tac `addr = (if dyn then slot+1w else slot)+n2w(k*n)` >>
-  strip_tac >>
- `u.vs_current_bb = sa.cs_current_bb /\
-  u.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~u.vs_halted /\
-  u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
-  u.vs_memory = s.vs_memory /\ u.vs_immutables = s.vs_immutables /\
-  u.vs_call_ctx = s.vs_call_ctx /\ u.vs_accounts = s.vs_accounts /\
-  u.vs_transient = s.vs_transient /\ u.vs_fmp = s.vs_fmp /\
-  u.vs_initial_fmp = s.vs_initial_fmp /\
-  tnu.t_mem = tn.t_mem /\ tnu.t_stor = tn.t_stor /\
-  tnu.t_trans = tn.t_trans /\ tnu.t_imm = tn.t_imm /\
-  u = jump_to bod s with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|> /\
-  eval_operand (Var ep) u = SOME addr /\ FLOOKUP Gu ep = NONE /\
-  op_taint tnu (Var ep) = {} /\
-  (!x. ~MEM x outs ==>
-    lookup_var x u = lookup_var x s /\ FLOOKUP Gu x = FLOOKUP G x /\
-    op_taint tnu (Var x) = op_taint tn (Var x))` by suspend "endpoint" >>
- qpat_x_assum `u = (update_var _ _ _) with vs_inst_idx := _` kall_tac >>
- qpat_x_assum `Gu = DRESTRICT _ _` kall_tac >>
- qpat_x_assum `tnu = tn with t_var := _` kall_tac >>
- `!x. not_fresh_at sa0 x ==>
-    lookup_var x u = lookup_var x s /\ FLOOKUP Gu x = FLOOKUP G x /\
-    op_taint tnu (Var x) = op_taint tn (Var x)` by
-   (rpt strip_tac >> `~MEM x outs` by metis_tac[] >> simp[]) >>
- `!name b sz. local_region c0 ei.scopes u name b sz <=>
-               local_region c0 ei.scopes s name b sz` by
-   (irule exprSimPtrLiteralBufferTheory.literal_ptr_local_region_frame >>
-    qexists_tac `sa0` >> simp[]) >>
- `stmt_state_rel H ctx func c0 cx ei u` by suspend "rel" >>
- `ghost_inv_at D lo d c0 cx ei Gu tnu u` by
-   (irule ghost_inv_at_exterior_frame >>
-    qexistsl [`G`,`ei`,`s`,`sa0`,`tn`] >> simp[]) >>
- `Fr c0 ei u Gu tnu` by suspend "frame" >>
- suspend "post"
+  rpt gen_tac >> strip_tac >>
+  `!x. ~MEM x (if (case bd of Fixed _ => F | Dynamic _ => T) then
+                  [dv;ov;tot;ep] else [dv;ov;ep]) ==>
+       FLOOKUP Gu x = FLOOKUP G x` by simp[FLOOKUP_DRESTRICT] >>
+  `FLOOKUP Gu ep = NONE` by
+    (Cases_on `bd` >> simp[FLOOKUP_DRESTRICT]) >>
+  drule_all_then strip_assume_tac
+    (BETA_RULE (REWRITE_RULE [LET_THM]
+      for_storage_array_head_prefix_transport_outside)) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-
-Resume for_storage_array_head_prefix_transport[endpoint]:
- fs[Abbr `outs`] >> Cases_on `dyn` >>
- gvs[update_var_def, jump_to_def, eval_operand_def, lookup_var_def,
-     op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >> metis_tac[]
-QED
-
-Resume for_storage_array_head_prefix_transport[rel]:
- irule bodyPtrSignedConvertSourceFrameTheory.stmt_state_rel_readonly_vars_pc >>
- qexistsl [`jump_to bod s`,`sa0`] >> simp[stmt_state_rel_jump_to] >>
- simp[jump_to_def, lookup_var_def, GSYM lookup_var_def]
-QED
-
-Resume for_storage_array_head_prefix_transport[frame]:
- qpat_x_assum `Fr c0 ei s G tn` mp_tac >> simp[Abbr `Fr`] >> strip_tac >>
- `alloca_history func u` by
-   (qpat_x_assum `alloca_history func s` mp_tac >>
-    simp[alloca_history_def] >> disch_tac >>
-    qx_gen_tac `j` >> qx_gen_tac `inst` >> strip_tac >>
-    qpat_assum `!i. i < LENGTH sa.cs_current_insts ==>
-        ?a. get_instruction bb i = SOME a /\ a.inst_opcode <> ALLOCA`
-      (qspec_then `j` mp_tac) >>
-    (impl_tac >- simp[]) >> disch_then (qx_choose_then `other` strip_assume_tac) >>
-    `other = inst` by
-      (qpat_x_assum `get_instruction bb j = SOME other` mp_tac >> simp[]) >>
-    gvs[]) >>
- `alloca_frame c0 e0 sa0 s0 c0 ei u` by
-   (qpat_x_assum `alloca_frame c0 e0 sa0 s0 c0 ei s` mp_tac >>
-    simp[alloca_frame_def]) >>
- simp[allocas_below_fmp_def] >> metis_tac[allocas_below_fmp_def]
-QED
-
-Resume for_storage_array_head_prefix_transport[post]:
- `return_buf_frame d c0 sa0 u` by
-   (irule return_buf_frame_frame >> qexistsl [`c0`,`s`,`sa0`] >> simp[] >> metis_tac[]) >>
- `ret_pc_ok c0 sa0 u` by
-   (irule ret_pc_ok_frame >> qexistsl [`c0`,`s`,`sa0`] >> simp[] >> metis_tac[]) >>
- `ptr_covers Gu tnu p u nb` by
-   (irule ptr_covers_lookup_frame >> qexistsl [`G`,`s`,`tn`] >> simp[]) >>
- `allocas_from lo u` by
-   (qpat_x_assum `ghost_inv_at D lo d c0 cx ei Gu tnu u` mp_tac >> simp[ghost_inv_at_def]) >>
- `(ctx_has_dalloca ctx ==> allocas_below_fmp u)` by
-   (qpat_x_assum `Fr c0 ei u Gu tnu` mp_tac >> simp[Abbr `Fr`]) >>
- `u.vs_labels = s.vs_labels` by
-   (qpat_assum `u = jump_to bod s with <|vs_vars := _; vs_inst_idx := _|>`
-      SUBST1_TAC >> simp[jump_to_def]) >>
- simp[] >> Cases_on `lvo` >> gvs[eval_operand_def, op_prov_def, op_taint_def]
-QED
-
-Finalise for_storage_array_head_prefix_transport
 
 (* Read the current captured child, execute the scalar head and copy, and
    register the one selected copy endpoint as the actual body entry. *)
