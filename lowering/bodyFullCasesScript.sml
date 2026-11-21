@@ -32,7 +32,7 @@ Ancestors bodyFullIntCall bodyFullIntCallArgs bodyFullIntCallCallee bodyIntCallS
   supportedExprs supportedStmtTraverse supportedExprTraverse
   msgGasFull exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
   vyperAST vyperInterpreter vyperState vyperValue list
-  selfdestructHalt bodyInvNoDalloca gasOutcomeFullCompose gasExemptOrigin
+  selfdestructHalt bodyInvNoDalloca bodyFullHashKeccakFixed gasOutcomeFullCompose gasExemptOrigin
   exprOperandVar exprCallbackContracts builtinSystem emitHelper allocLimits exprLowering exprLoweringProps gasShadowState compileEnv fragExec fragGasEmitCtrl vfmSameFrame ptrSafeRun ptrDiscipline gasEvents gasCount memSafeRun instMemFrontier venomExecSemantics venomInst venomState unitTransformDefs contextCodegenRel codegenRel bodyPtrDefs rich_list
 Libs
   pairLib
@@ -1023,7 +1023,6 @@ Proof
   disch_then (mk_asm "source_contract") >>
   disch_then (mk_asm "layout_contract") >>
   disch_then (mk_asm "tail_contract") >> rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   asm "source_contract" drule >> strip_tac >> gvs[] >>
   `expr_body_pre cenv cx env e es` by
     (first_x_assum irule >> gvs[expr_body_pre_def]) >>
@@ -1190,7 +1189,11 @@ Resume selfdestruct_expr_full_from_interfaces[normal]:
     fs[expr_post_def, exprLoweringPropsTheory.stmt_state_rel_def,
        loweringStateRelDefsTheory.state_rel_def,
        loweringStateRelDefsTheory.call_ctx_rel_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+     first_assum (ACCEPT_TAC o MATCH_MP
+       bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   asm "tail_contract" drule_all >>
   disch_then (qspecl_then [`lo`, `d`, `cenv`, `cx`, `ee with gas_obs := []`,
     `gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
@@ -1266,6 +1269,15 @@ Resume selfdestruct_expr_full_from_interfaces[halt]:
   qpat_assum `!H. valid_horizon _ _ H _ ==> ?u. _`
     (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `step_inst_base _ t = Halt u` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t` mp_tac >>
+     qpat_assum `eval_operand op' t = SOME _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operands_def] >>
+     rpt (COND_CASES_TAC >> simp[LET_THM]) >>
+     strip_tac >> disch_then (SUBST1_TAC o SYM) >>
+     fs[allocas_below_fmp_def, halt_state_def, set_returndata_def] >> metis_tac[]) >>
   rewrite_tac[gasOutcomeFullTheory.gas_outcome_full_def] >>
   qexists `marks` >> disj2_tac >> disj1_tac >>
   qexistsl [`INR HaltException`,
