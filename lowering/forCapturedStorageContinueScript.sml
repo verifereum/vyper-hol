@@ -50,8 +50,9 @@ Theorem for_captured_storage_continue_full:
   (!H. valid_horizon cx st0 H es.storage_trace ==>
      storage_well_formed_on cx es (FST H)) /\
   alloca_frame c es sa s0 c em u /\
-  loop_iterator_place e = SOME tgt /\ target_root tgt = TopLevelNameTarget nid /\
-  ~(?ty nid. e = TopLevelName ty nid) /\
+  ((?w. vv_operand vv = Lit w) \/
+   (?tgt nid. loop_iterator_place e = SOME tgt /\ target_root tgt = TopLevelNameTarget nid /\
+             ~(?ty i. e = TopLevelName ty i))) /\
   (!vs. (!tail. array_iterator_results cx (expr_type e)
                   (PlaceR (StoragePlace tr slot (ArrayTV tyv bd))) (em with gas_obs := tail) =
                   (INL vs,em with gas_obs := tail)) /\
@@ -103,15 +104,12 @@ Resume for_captured_storage_continue_full[capture]:
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `?p. vv = LocatedValue _ _ /\ _` strip_assume_tac >>
   `loc = slot_loc tr` by fs[vv_location_def] >>
+  drule_all_then (map_every assume_tac o CONJUNCTS) for_captured_storage_code >>
+  qpat_x_assum `?ov tot ep cb bb. _` strip_assume_tac >>
   qabbrev_tac `bop = vv_operand vv` >>
   `!x. bop = Var x ==> not_fresh_at se x` by
     (simp[NoAsms, Abbr `bop`] >> drule_all_then (ACCEPT_TAC o REWRITE_RULE [copy_old_operand_def])
        reasonEndpointResourcesPtrTheory.compile_expr_old_operand) >>
-  drule_all for_captured_storage_code >> simp[NoAsms,LET_THM] >>
-  qpat_assum `Abbrev (bop = _)` (fn th =>
-    disch_then (map_every assume_tac o CONJUNCTS o
-      REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)])) >>
-  qpat_x_assum `?ov tot ep cb bb. _` strip_assume_tac >>
   suspend "initial"
 QED
 
@@ -223,8 +221,9 @@ Resume for_captured_storage_continue_full[rounds]:
       (lvo,idx,cond) (p,dst,nb,sd) (H,k,rs,ee,GG,tt,s)` >>
   qabbrev_tac `Inv = \H rs ee GG tt s. (?k. Live H k rs ee GG tt s) /\
     (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u)` >>
-  qabbrev_tac `Done = for_captured_storage_done (DF,lo,d,ctx,func,cx,c,lctx,sb)
-    (start,sa,s0,G0,tn0)` >>
+  qabbrev_tac `Done = \H ee GG tt t.
+    for_array_loop_post (DF,lo,d,ctx,func) c cx lctx
+      (start,sa,s0,G0,tn0) sb H (INL ()) ee GG tt t` >>
   qabbrev_tac `Round = \a. do v <- read_result cx a;
     push_scope_with_var id tyv v;
     finally (try (do eval_stmts cx loop_body; return F od) handle_loop_exception) pop_scope od` >>
@@ -522,9 +521,8 @@ Resume for_captured_storage_continue_full[cons_stages]:
         POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
      pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `!H. valid_horizon _ _ H ei.storage_trace ==> Live _ _ _ _ _ _ _` mp_tac >>
-  simp[NoAsms,Abbr `Live`,Abbr `Done`,Abbr `Round`,Abbr `Exit`,for_array_loop_exit_def] >> disch_tac >>
-  irule (CONV_RULE (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV]))
-    for_captured_storage_round_from_head) >>
+  simp[NoAsms,Abbr `Live`,Abbr `Done`,Abbr `Round`,Abbr `Exit`] >> disch_tac >>
+  irule for_captured_storage_round_from_head >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac >- (qexists `len - SUC (LENGTH rs)` >> first_assum ACCEPT_TAC) >>
   qpat_assum `cx_tops cx = tops` (rewrite_tac o single) >>
@@ -551,11 +549,15 @@ Resume for_captured_storage_continue_full[head_cut]:
       (Q.SPEC `loop_body` for_captured_storage_head_full))) >>
   impl_keep_tac >- suspend "head_static" >>
   disch_then (irule_at Any o REWRITE_RULE [ETA_AX] o CONJUNCT2) >> BETA_TAC >>
-  reverse conj_tac >- (POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[haltExitProjTheory.halt_exit_INR_type]) >>
+  reverse conj_tac >-
+    (POP_ASSUM_LIST (K ALL_TAC) >> pure_rewrite_tac[for_array_loop_exit_def] >>
+     metis_tac[haltExitProjTheory.halt_exit_INR_type]) >>
   rpt gen_tac >> strip_tac >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   rename [`read_result cx a ei = (INL v,ei)`,`a::rs = DROP k vs`] >> qexistsl [`v`,`k`] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  pure_rewrite_tac[for_captured_storage_round_scope_def,for_captured_storage_round_entry_def] >>
+  qpat_x_assum `ee = (ei with <|scopes := _; gas_obs := []|>)` SUBST_ALL_TAC >>
+  conj_tac >- REFL_TAC >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume for_captured_storage_continue_full[head_static]:
@@ -621,7 +623,7 @@ Resume for_captured_storage_continue_full[finish]:
      BETA_TAC >> conj_tac >-
        (rpt gen_tac >> strip_tac >> qpat_x_assum `res = INL ()` SUBST_ALL_TAC >>
         qpat_x_assum `Done _ _ _ _ _` mp_tac >>
-        simp[NoAsms,Abbr `Done`,for_captured_storage_done_def,for_array_loop_post_def,Abbr `start`] >>
+        simp[NoAsms,Abbr `Done`,for_array_loop_post_def,Abbr `start`] >>
         strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
      simp[NoAsms,Abbr `Exit`] >> rpt strip_tac >>
      qpat_x_assum `res = INR _` SUBST_ALL_TAC >> first_assum ACCEPT_TAC) >>
