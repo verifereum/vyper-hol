@@ -1,7 +1,7 @@
 Theory runtimeSymSrcCreateCalls
 Ancestors
   runtimeSymSrcGeneratorContracts runtimeSymSrcEmission runtimeSymSrcInterfaces
-  runtimeSymSrcCallStaging runtimeSymSrcAbiEncode
+  runtimeSymSrcCallStaging runtimeSymSrcAbiEncode runtimeSymSrcExternalPrimitive
   runtimeSymSrcContext runtimeSymSrcContextTypedBase
   runtimeSymSrcBlockEmission runtimeSymSrcSimpleCalls runtimeSymSrcOpenValues
   runtimeSymSrcContextComplete runtimeSymSrcContextCopy
@@ -152,22 +152,18 @@ Proof
   gvs[]
 QED
 
-Theorem runtime_sym_create_ctor_tuple[local]:
-  (!e t. MEM e args ==> runtime_sym_expr_contract tops cfn ce t e) /\
-  runtime_sym_env tops ce /\ EVERY (supported_pure_expr tops) args /\
-  ~supported_exprs_exists is_self_code args /\ EVERY runtime_sym_inst (state_insts s) /\
-  compile_create_ctor_tuple cfn ce args s = (p,s') ==>
-  EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand p
+Theorem runtime_sym_create_encode_rows[local]:
+  runtime_sym_env tops ce /\ EVERY runtime_sym_value vals /\
+  LENGTH vals = LENGTH tys /\ ~is_label_operand dst /\
+  EVERY runtime_sym_inst (state_insts s) /\
+  compile_abi_encode_values_to_buf ce dst (ZIP (vals,tys)) s = (v,s') ==>
+  EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand v
 Proof
-  simp[compile_create_ctor_tuple_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-  qpat_assum `compile_create_ctor_args _ _ _ _ = _`
-    (mp_then Any mp_tac runtime_sym_create_ctor_args) >>
-  disch_then (qspec_then `tops` mp_tac) >> simp[] >> strip_tac >>
-  create_emit_tac `compile_alloc_buffer _ _ = _` runtime_sym_alloc_buffer >>
-  qpat_assum `compile_extcall_store_values _ _ _ _ _ = _`
-    (mp_then Any mp_tac runtime_sym_extcall_store_values) >>
-  disch_then (qspec_then `tops` mp_tac) >> simp[GSYM EVERY_MAP, MAP_ZIP]
+  strip_tac >>
+  mp_tac (MATCH_MP runtime_sym_abi_encode_values_to_buf
+    (Q.GENL [`dst`,`src`,`info`,`s`,`v`,`s'`] runtime_sym_abi_encode_to_buf)) >>
+  disch_then (drule_at (Pat `compile_abi_encode_values_to_buf _ _ _ _ = _`)) >>
+  simp[GSYM EVERY_MAP, MAP_ZIP]
 QED
 
 Theorem runtime_sym_create_snapshot[local]:
@@ -223,6 +219,12 @@ Proof
     (mp_then Any mp_tac runtime_sym_create_result) >> simp[]
 QED
 
+val create_step_premise_tac =
+  disch_then (fn th =>
+    if boolSyntax.is_imp (concl th) then
+      mp_tac th >> (impl_tac >- metis_tac[]) >> strip_tac
+    else strip_assume_tac th);
+
 Theorem runtime_sym_create_blueprint_args[local]:
   (!e t. MEM e args ==> runtime_sym_expr_contract tops cfn ce t e) /\
   runtime_sym_env tops ce /\ EVERY (supported_pure_expr tops) args /\
@@ -235,14 +237,15 @@ Proof
   TRY (Cases_on `tail_args`) >>
   simp[compile_create_blueprint_args_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[is_label_operand_def] >>
-  TRY (drule_all runtime_sym_call_invalid >> simp[]) >>
-  TRY (qpat_assum `compile_create_ctor_tuple _ _ _ _ = _`
-     (mp_then Any mp_tac runtime_sym_create_ctor_tuple) >>
-   disch_then (qspec_then `tops` mp_tac) >> simp[] >>
-   (TRY (impl_tac >- first_assum ACCEPT_TAC)) >> strip_tac >>
-   create_emit_tac `compile_alloc_buffer _ _ = _` runtime_sym_alloc_buffer >>
-   qpat_assum `compile_abi_encode_to_buf _ _ _ _ = _`
-     (mp_then Any mp_tac runtime_sym_abi_encode_to_buf) >> simp[]) >>
+  TRY (drule_all runtime_sym_call_invalid >> simp[])
+  >>~- ([`compile_create_ctor_args _ _ _ _ = _`],
+    qpat_assum `compile_create_ctor_args _ _ _ _ = _`
+      (mp_then Any mp_tac runtime_sym_create_ctor_args) >>
+    disch_then (qspec_then `tops` mp_tac) >> simp[] >> create_step_premise_tac >>
+    create_emit_tac `compile_alloc_buffer _ _ = _` runtime_sym_alloc_buffer >>
+    qpat_assum `compile_abi_encode_values_to_buf _ _ _ _ = _`
+      (mp_then Any mp_tac runtime_sym_create_encode_rows) >>
+    disch_then (qspec_then `tops` mp_tac) >> simp[]) >>
   `runtime_sym_expr_contract tops cfn ce (expr_type arg) arg` by metis_tac[] >>
   fs[supported_expr_exists_def] >>
   qpat_x_assum `runtime_sym_expr_contract _ _ _ _ _` mp_tac >>
@@ -265,11 +268,6 @@ fun create_when_step pat tac (goal as (assumptions, _)) =
     then tac goal else ALL_TAC goal
   end;
 
-val create_step_premise_tac =
-  disch_then (fn th =>
-    if boolSyntax.is_imp (concl th) then
-      mp_tac th >> (impl_tac >- metis_tac[]) >> strip_tac
-    else strip_assume_tac th);
 
 Theorem runtime_sym_raw_create[local]:
   (!e t. MEM e args ==> runtime_sym_expr_contract tops cfn ce t e) /\
@@ -304,7 +302,7 @@ Proof
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
   strip_tac >> gvs[comp_bind_def, comp_ignore_bind_def] >>
-  TRY (qpat_x_assum `_ (compile_create_ctor_tuple _ _ _ _) = _` mp_tac >>
+  TRY (qpat_x_assum `_ (compile_create_ctor_args _ _ _ _) = _` mp_tac >>
        pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
        pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
        pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
@@ -320,15 +318,17 @@ Proof
   disch_then (qspec_then `tops` mp_tac) >> simp[] >> strip_tac >>
   create_emit_tac `emit_op MLOAD _ _ = _` runtime_sym_emit_op >>
   create_emit_tac `emit_op ADD [_;Lit 32w] _ = _` runtime_sym_emit_op >>
-  create_when_step `compile_create_ctor_tuple _ _ _ _ = _` (
-    qpat_assum `compile_create_ctor_tuple _ _ _ _ = _`
-      (mp_then Any mp_tac runtime_sym_create_ctor_tuple) >>
+  create_when_step `compile_create_ctor_args _ _ _ _ = _` (
+    qpat_assum `compile_create_ctor_args _ _ _ _ = _`
+      (mp_then Any mp_tac runtime_sym_create_ctor_args) >>
     disch_then (qspec_then `tops` mp_tac) >> simp[] >>
     create_step_premise_tac >>
     create_emit_tac `compile_alloc_buffer _ _ = _` runtime_sym_alloc_buffer >>
     create_emit_tac `emit_void MCOPY _ _ = _` runtime_sym_emit_void >>
     create_emit_tac `emit_op ADD [buf.buf_operand;len] _ = _` runtime_sym_emit_op >>
-    create_emit_tac `compile_abi_encode_to_buf _ _ _ _ = _` runtime_sym_abi_encode_to_buf >>
+    qpat_assum `compile_abi_encode_values_to_buf _ _ _ _ = _`
+      (mp_then Any mp_tac runtime_sym_create_encode_rows) >>
+    disch_then (qspec_then `tops` mp_tac) >> simp[] >> strip_tac >>
     create_emit_tac `emit_op ADD [len;args_len] _ = _` runtime_sym_emit_op) >>
   qpat_assum `!e t st op st'. _ ==> _`
     (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >> simp[] >> strip_tac >>
