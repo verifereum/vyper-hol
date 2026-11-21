@@ -5911,7 +5911,7 @@ Proof
        (CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
         simp[compile_acc_def, LET_THM, pairTheory.UNCURRY] >>
         CONV_TAC (DEPTH_CONV ETA_CONV) >>
-        shape_under_tac shape_step_emit_op_plain `R` >> shape_opcode_tac),
+        shape_under_tac shape_step_emit_op_plain_mode `R` >> shape_opcode_tac),
        ALL_TAC]),
     ALL_TAC, ALL_TAC] >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
