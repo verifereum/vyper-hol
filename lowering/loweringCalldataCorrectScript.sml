@@ -8,7 +8,7 @@ Ancestors
   entryJointRevertExit compileVyper fragGasOriginPtr entryDispatchPtr
   loweringRuntimeCorrect supportedProgram entryDispatchProps publicGetterProps
   vyperTypeContractContext nonreentrantEntryEquiv vyperReadOnlySyntax
-  vyperTypeContractGetter vyperTypeContract compileVyper list
+  vyperTypeContractGetter vyperTypeContract list
 
 (* The call a contract makes of raw calldata: the external entry it
    dispatches to and the arguments it decodes (vyperCalldata), including the
