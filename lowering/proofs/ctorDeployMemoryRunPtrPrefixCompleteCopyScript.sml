@@ -236,10 +236,8 @@ Resume prefix_bytestring_complete_mode_contract[package]:
       allocas_below_fmp (t with vs_inst_idx := LENGTH st'.cs_current_insts) /\
       (t with vs_inst_idx := LENGTH st'.cs_current_insts).vs_alloca_next + pending_alloca_size func (t with vs_inst_idx := LENGTH st'.cs_current_insts) <=
         w2n (t with vs_inst_idx := LENGTH st'.cs_current_insts).vs_initial_fmp)` by
-    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t /\ _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp_tac (srw_ss()) [allocas_below_fmp_def,pending_alloca_size_def] >>
-     metis_tac[]) >>
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t /\ _`
+       (MATCH_ACCEPT_TAC o MATCH_MP prefix_decoder_inst_idx_room)) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,
     `range_bytes [(d,type_memory_bytes ce ty)]`] >>
   simp[SUBSET_REFL, op_taint_def] >>
