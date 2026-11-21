@@ -46,7 +46,8 @@ Proof
       drule evaluate_type_empty_context >>
       disch_then (qspec_then `get_tenv cx` assume_tac) >>
       gvs[evaluate_type_def, AllCaseEqs()] >>
-      simp[builtin_args_length_ok_def, evaluate_builtin_def]) >>
+      simp[builtin_args_length_ok_def, evaluate_builtin_def,
+           is_self_codesize_def]) >>
   rpt strip_tac >>
   gvs[eval_pure_expr_def, read_result_def, return_def]
 QED
@@ -101,7 +102,7 @@ Proof
   drule_all pin_literal_trees_pure_EL >> strip_tac >>
   gvs[evaluate_type_def, AllCaseEqs()] >>
   gvs[eval_pure_expr_def, builtin_args_length_ok_def,
-      evaluate_builtin_def] >>
+      evaluate_builtin_def, is_self_codesize_def] >>
   Cases_on `subscript_reads_base cx src index` >>
   simp[read_result_def, return_def, select_result_def,
        evaluate_type_def, bind_def, lift_option_type_def, lift_sum_def,
@@ -156,7 +157,7 @@ Proof
   imp_res_tac evaluate_builtin_closed >>
   unabbrev_all_tac >>
   gvs[eval_pure_expr_def, pin_foldable_builtin_def,
-      builtin_args_length_ok_def] >>
+      builtin_args_length_ok_def, is_self_codesize_def] >>
   qpat_x_assum `MAP expr_type es = _` (mp_tac o AP_TERM ``LENGTH : type list -> num``) >>
   simp[]
 QED
@@ -234,10 +235,11 @@ Proof
         strip_assume_tac pin_fold_builtin_cases
       >- (gvs[] >> drule pin_literal_tree_pure >>
           disch_then (qspecl_then [`st`, `cx`] strip_assume_tac) >>
-          Cases_on `b` >> gvs[pin_literal_tree_def] >>
-          Cases_on `o'` >> gvs[pin_literal_tree_def] >>
+          Cases_on `b` >> gvs[pin_literal_tree_def, vyperContextTheory.is_self_codesize_def] >>
+          Cases_on `o'` >> gvs[pin_literal_tree_def, vyperContextTheory.is_self_codesize_def] >>
           gvs[eval_pure_expr_def, builtin_args_length_ok_def,
-              pin_fold_exprs_types, pin_fold_exprs_length]) >>
+              pin_fold_exprs_types, pin_fold_exprs_length,
+              vyperContextTheory.is_self_codesize_def]) >>
       gvs[pin_literal_tree_def] >>
       qexists_tac `evaluate_literal l` >>
       reverse conj_tac >- simp[eval_pure_expr_def] >>
@@ -495,10 +497,11 @@ Proof
         strip_assume_tac pin_fold_builtin_cases
       >- (gvs[] >> drule pin_literal_tree_pure >>
           disch_then (qspecl_then [`st`, `cx`] strip_assume_tac) >>
-          Cases_on `b` >> gvs[pin_literal_tree_def] >>
-          Cases_on `o'` >> gvs[pin_literal_tree_def] >>
+          Cases_on `b` >> gvs[pin_literal_tree_def, vyperContextTheory.is_self_codesize_def] >>
+          Cases_on `o'` >> gvs[pin_literal_tree_def, vyperContextTheory.is_self_codesize_def] >>
           gvs[eval_pure_expr_def, builtin_args_length_ok_def,
-              origin_fold_values_types, origin_fold_values_length]) >>
+              origin_fold_values_types, origin_fold_values_length,
+              vyperContextTheory.is_self_codesize_def]) >>
       gvs[pin_literal_tree_def] >>
       qexists_tac `evaluate_literal l` >>
       reverse conj_tac >- simp[eval_pure_expr_def] >>
