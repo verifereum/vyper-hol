@@ -153,14 +153,6 @@ Proof
      arg_type_fits (lowered_value_type cenv e) (expr_type e))`
       >- (gvs[] >> irule body_assign_local_memory_full >> metis_tac[]) >>
       gvs[] >> irule body_assign_local_widened_full >> metis_tac[]) >>
-  Cases_on `?nsid dty mut slot.
-              t = TopLevelNameTarget nsid /\
-              supported_variable_decl tops nsid = SOME (Private,mut,dty,SOME slot) /\
-              (mut = Storage \/ mut = Transient) /\
-              type_place_target env t = SOME (Type dty) /\
-              is_bytestring_type dty /\ is_bytestring_type (lowered_value_type cenv e)`
-  >- (gvs[] >> drule_all body_inv_stmt_const_name_free >> strip_tac >>
-      irule body_assign_toplevel_bytes_full >> metis_tac[]) >>
   Cases_on `?nsid mut ty slot.
               t = TopLevelNameTarget nsid /\
               supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
@@ -224,14 +216,7 @@ Proof
                           type_place_target env
                             (AttributeTarget (TopLevelNameTarget nsid) fld) =
                             SOME (Type fty) /\ is_word_type fty)) gs`
-  >- (Cases_on `EXISTS (\g. ?nsid dty mut slot.
-      g = BaseTarget (TopLevelNameTarget nsid) /\
-      supported_scalar_target tops nsid /\
-      type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) /\
-      supported_variable_decl tops nsid = SOME (Private,mut,dty,SOME slot) /\
-      (mut = Storage \/ mut = Transient) /\ is_bytestring_type dty) gs`
-      >- (irule body_assign_tuple_targets_private_bytes_full >> metis_tac[]) >>
-      Cases_on `EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
+  >- (Cases_on `EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
                    FLOOKUP env.var_types id = SOME ty /\
                    0 < type_memory_bytes cenv ty) \/
                 (?nsid dty. g = BaseTarget (TopLevelNameTarget nsid) /\
