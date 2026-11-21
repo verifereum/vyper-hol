@@ -1,5 +1,6 @@
 Theory augAssignFullTargetRoutes
 Ancestors
+  bodyInvCodeProps moduleVariableKeyProps linkedStorageMetadataProps
   bodyAugPlaceTarget supportedStmts supportedTargets supportedTypes
   supportedExprForms supportedDecls bodySim targetPlaceSim list alist
   exprSimHypsDefs vyperTypeSystem
@@ -13,6 +14,30 @@ Proof
   Cases_on `ALOOKUP bindings id` >> simp[]
 QED
 
+Theorem augassign_scalar_target_route_mods:
+  contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
+  supported_scalar_target tops (NONE,id) ==>
+  ?vis ity slot mut.
+    supported_variable_decl tops (NONE,id) = SOME (vis,mut,ity,SOME slot) /\
+    (mut = Storage \/ mut = Transient) /\
+    supported_target_info tops bindings (TopLevelNameTarget (NONE,id)) =
+      SOME (ValPT ity) /\
+    ~immutable_root cx (TopLevelNameTarget (src,id))
+Proof
+  strip_tac >>
+  drule_then assume_tac contract_inv_module_codes >>
+  drule_all_then assume_tac contract_inv_unqualified_variable_keys >>
+  Cases_on `supported_variable_decl tops (NONE,id)` >>
+  gvs[supported_scalar_target_def] >>
+  rename1 `SOME decl` >> PairCases_on `decl` >>
+  Cases_on `decl3` >> Cases_on `decl1` >> gvs[] >>
+  `IS_SOME (find_var_decl_by_name id tops)` by
+    (irule aug_place_supported_root_decl >> metis_tac[]) >>
+  drule_all_then strip_assume_tac aug_place_variable_excludes_hashmap >>
+  gvs[supported_target_info_def, supportedExprFormsTheory.supported_place_root_def,
+      immutable_root_def, target_root_def, optionTheory.IS_SOME_EXISTS]
+QED
+
 Theorem augassign_scalar_target_route:
   body_inv tops ctx cenv cx /\
   supported_scalar_target tops nsid ==>
@@ -23,22 +48,12 @@ Theorem augassign_scalar_target_route:
       SOME (ValPT ity) /\
     ~immutable_root cx (TopLevelNameTarget nsid)
 Proof
-  strip_tac >> PairCases_on `nsid` >>
-  Cases_on `supported_variable_decl tops (nsid0,nsid1)` >>
-  gvs[supported_scalar_target_def] >>
-  rename1 `SOME decl` >> PairCases_on `decl` >>
-  Cases_on `decl3` >> Cases_on `decl1` >> gvs[] >>
-  `supported_place_root tops (nsid0,nsid1)` by
-    fs[supported_place_root_def] >>
-  drule aug_place_supported_root_namespace >> strip_tac >> gvs[] >>
-  `IS_SOME (find_var_decl_by_name nsid1 tops)` by
-    (irule aug_place_supported_root_decl >> metis_tac[]) >>
-  `get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
-  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option))
-                           tops))` by fs[body_inv_def] >>
-  drule_all aug_place_variable_excludes_hashmap >> strip_tac >>
-  gvs[supported_target_info_def, immutable_root_def, target_root_def,
-      optionTheory.IS_SOME_EXISTS]
+  PairCases_on `nsid` >> strip_tac >>
+  drule_then strip_assume_tac supported_scalar_target_decl >>
+  gvs[] >> drule_then assume_tac body_inv_contract >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
+                  `ctx` |-> `ctx`, `src` |-> `NONE`, `id` |-> `nsid1`]
+          augassign_scalar_target_route_mods) >> simp[ALOOKUP_def]
 QED
 
 Theorem augassign_other_target_routes:
