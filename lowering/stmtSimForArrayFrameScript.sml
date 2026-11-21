@@ -112,13 +112,6 @@ Proof
   simp[evaluate_def, bind_def]
 QED
 
-Theorem singleton_expr_scopes[local]:
-  (!r s'. eval_exprs cx [e] s = (r,s') ==> s'.scopes = s.scopes) /\
-  eval_expr cx e s = (r,s') ==> s'.scopes = s.scopes
-Proof
-  strip_tac >> drule eval_exprs_singleton_end_state >> metis_tac[]
-QED
-
 Theorem supported_pure_scopes_mutual:
   (!tops e. supported_effect_free_expr tops e ==>
     !cx es res es'. eval_expr cx e es = (res,es') ==> es'.scopes = es.scopes) /\
@@ -1187,50 +1180,6 @@ Proof
       FULL_SIMP_TAC std_ss [] >>
       first_x_assum drule_all >> simp[]) >>
   qpat_x_assum `!cx tyv id body name es res es'. _` kall_tac >> gvs[]
-QED
-
-Theorem range_iterator_scopes[local]:
-  !cx a b es res es'.
-    (!s r t. eval_expr cx a s = (r,t) ==> t.scopes = s.scopes) /\
-    (!s r t. eval_expr cx b s = (r,t) ==> t.scopes = s.scopes) /\
-    eval_iterator cx (Range a b) es = (res,es') ==>
-    es'.scopes = es.scopes
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
-  imp_res_tac read_result_state >> imp_res_tac lift_sum_state >>
-  gvs[return_def] >> metis_tac[]
-QED
-
-Theorem array_iterator_scopes[local]:
-  !cx e es res es'.
-    (!s r t. eval_expr cx e s = (r,t) ==> t.scopes = s.scopes) /\
-    eval_iterator cx (Array e) es = (res,es') ==>
-    es'.scopes = es.scopes
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
-  imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
-  imp_res_tac array_iterator_results_state >>
-  gvs[return_def] >> metis_tac[]
-QED
-
-Theorem literal_expr_scopes[local]:
-  !cx ty lit es res es'.
-    eval_expr cx (Literal ty lit) es = (res,es') ==> es'.scopes = es.scopes
-Proof
-  simp[Once evaluate_def, return_def] >> rpt strip_tac >> gvs[]
-QED
-
-Theorem name_expr_scopes[local]:
-  !cx ty id es res es'.
-    eval_expr cx (Name ty id) es = (res,es') ==> es'.scopes = es.scopes
-Proof
-  simp[Once evaluate_def, get_scopes_def, type_check_def, assert_def,
-       ignore_bind_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[]
 QED
 
 Theorem balanced_conditional_projection[local]:
