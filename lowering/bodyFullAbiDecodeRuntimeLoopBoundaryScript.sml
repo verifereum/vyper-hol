@@ -1,6 +1,7 @@
 Theory bodyFullAbiDecodeRuntimeLoopBoundary
 Ancestors
   bodyFullAbiDecodeRuntimeLoopSyntax bodyFullAbiDecodeLoopHeaderExact
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   decoderNavigationPtr abiDecoderComposition loweringStateRelDefs
   typedMemoryCopy bodyPtrDefs ptrDiscipline venomInst venomState
   freshWrites list pair arithmetic rich_list
@@ -44,13 +45,16 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `srcbase = w2n input_word` SUBST_ALL_TAC >>
   qpat_x_assum `ip = Var counter` SUBST_ALL_TAC >>
-  `allocas_from lo sin` by
+  `allocas_from lo sin /\ (ctx_has_dalloca ctx ==> allocas_below_fmp sin)` by
     (qpat_assum `?H. V H` (qx_choose_then `hh` assume_tac) >>
      qpat_assum `!H. V H ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
        (qspec_then `hh` (drule_then strip_assume_tac)) >>
      qpat_assum `ghost_inv_at _ lo _ _ _ _ _ _ sin`
        (map_every assume_tac o CONJUNCTS o REWRITE_RULE [ghost_inv_at_def]) >>
-     first_assum ACCEPT_TAC) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_assum `stmt_state_rel hh ctx fn ce cx es sin`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     REWRITE_TAC []) >>
   conj_tac
   >- (rpt strip_tac >> irule decoderNavigationPtrTheory.jump_origin_ptr_path >>
       asm_rewrite_tac[] >>
