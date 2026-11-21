@@ -300,52 +300,6 @@ Proof
   rpt strip_tac >> irule outcomes_free_concat >> simp[DISJ_IMP_THM, FORALL_AND_THM]
 QED
 
-Theorem outcomes_free_abi_encode_args:
-  !es s.
-  (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
-    MLOAD; SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE;
-    TSTORE; CALLDATACOPY] ==> P opc) /\
-  (!e ty st. MEM e es /\ EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce ty e st)))) /\
-  (!ty vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_materialize_vv ce ty vv st)))) /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_abi_encode_args f ce es s)))
-Proof
-  Induct_on `es` >> rpt strip_tac >>
-  fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_abi_encode_args_def, every_state_insts_return] >>
-  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return,
-      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value]),
-    gen_tac, strip_tac, irule every_state_insts_bind,
-    conj_tac, IF_CASES_TAC, first_assum irule]) >> simp[]
-QED
-
-Theorem opcode_every_abi_encode_args:
-  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
-         opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
-  (
-  (!ce ty vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_materialize_vv ce ty vv st)))) ==>
-  (!ce vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (unwrap_value ce vv st)))) ==>
-  !es cfn cenv.
-  (!e ty st. MEM e es ==>
-    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (cfn cenv ty e st)))) ==>
-  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_abi_encode_args cfn cenv es st)))
-  )
-Proof
-  rpt strip_tac >> irule outcomes_free_abi_encode_args >> simp[DISJ_IMP_THM, FORALL_AND_THM]
-QED
-
 Theorem outcomes_free_attribute:
   P ADD /\
   (!st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>

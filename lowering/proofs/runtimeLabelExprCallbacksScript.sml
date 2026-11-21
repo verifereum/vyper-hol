@@ -234,23 +234,6 @@ Proof
   simp[rb_compile_materialize_vv_for, rb_step_return_for, rb_value_ok_for_def, rb_mk_ptr_for]
 QED
 
-Theorem rb_compile_abi_encode_args_for:
-  !es. (rb_env_ok_for source_checks) ce /\
-  (!e. MEM e es ==> (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce (expr_type e) e)) ==>
-  (rb_step_for source_checks) (EVERY (rb_operand_ok_for source_checks)) (compile_abi_encode_args cfn ce es)
-Proof
-  Induct >> simp[compile_abi_encode_args_def, rb_step_return_for] >> rpt strip_tac >>
-  irule rb_step_bind_for >> qexists_tac `(rb_value_ok_for source_checks)` >> BETA_TAC >>
-  reverse conj_tac >- simp[] >> gen_tac >> strip_tac >>
-  irule rb_step_bind_for >> qexists_tac `(rb_operand_ok_for source_checks)` >> BETA_TAC >>
-  reverse conj_tac
-  >- (IF_CASES_TAC >> simp[rb_compile_materialize_vv_for, rb_unwrap_value_for]) >>
-  gen_tac >> strip_tac >>
-  irule rb_step_bind_for >> qexists_tac `EVERY (rb_operand_ok_for source_checks)` >> BETA_TAC >>
-  reverse conj_tac >- (first_x_assum irule >> simp[]) >>
-  simp[rb_step_return_for]
-QED
-
 Theorem rb_compile_subscript_for:
   (rb_env_ok_for source_checks) ce /\ (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce ty be) /\
   (rb_step_for source_checks) (rb_value_ok_for source_checks) (cfn ce (expr_type ie) ie) /\
@@ -326,6 +309,16 @@ Proof
   irule rb_step_bind_for >> qexists_tac `EVERY (rb_value_ok_for source_checks)` >> BETA_TAC >>
   reverse conj_tac >- (first_x_assum irule >> simp[]) >>
   simp[rb_step_return_for]
+QED
+
+Theorem rb_compile_abi_encode_args_for:
+  !es. rb_env_ok_for source_checks ce /\
+  (!e. MEM e es ==> rb_step_for source_checks (rb_value_ok_for source_checks)
+    (cfn ce (expr_type e) e)) ==>
+  rb_step_for source_checks (EVERY (rb_value_ok_for source_checks))
+    (compile_abi_encode_args cfn ce es)
+Proof
+  simp[compile_abi_encode_args_def, rb_compile_ext_call_args_for]
 QED
 
 Theorem rb_compile_ext_call_kwarg_for[local]:
@@ -862,7 +855,7 @@ QED
 Theorem rb_compile_abi_encode_args:
   !es. rb_env_ok ce /\
   (!e. MEM e es ==> rb_step rb_value_ok (cfn ce (expr_type e) e)) ==>
-  rb_step (EVERY rb_operand_ok) (compile_abi_encode_args cfn ce es)
+  rb_step (EVERY rb_value_ok) (compile_abi_encode_args cfn ce es)
 Proof
   ACCEPT_TAC (SIMP_RULE std_ss
     [rb_env_ok_legacy,

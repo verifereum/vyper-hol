@@ -438,28 +438,6 @@ Proof
   FIRST [fa (lv :: base @ helpers)] >> simp[is_terminator_def]
 QED
 
-Theorem fuel_ok_compile_abi_encode_args:
-  !cfn. (!c t e Wv E. fuel_ok Wv {} E (cfn c t e)) ==>
-    !es cenv Wv E. fuel_ok Wv {} E (compile_abi_encode_args cfn cenv es)
-Proof
-  gen_tac >> strip_tac >> Induct >> rpt gen_tac >>
-  simp_tac std_ss [compile_abi_encode_args_def] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  simp[is_terminator_def]
-QED
-
 (* ===== Subscript, attribute, struct literals ===== *)
 
 Theorem fuel_ok_compile_snapshot_vv:
@@ -672,6 +650,15 @@ Theorem fuel_ok_compile_abi_encode_values_to_buf:
 Proof
   simp_tac std_ss [compile_abi_encode_values_to_buf_def] >>
   fa (fuel_ok_compile_abi_encode_value_rows :: base) >>
+  simp[is_terminator_def]
+QED
+
+Theorem fuel_ok_compile_abi_encode_payload:
+  fuel_ok Wv {} E (compile_abi_encode_payload cenv single vs tys dst)
+Proof
+  Cases_on `single` >>
+  simp[compile_abi_encode_payload_def, fuel_ok_compile_abi_encode_values_to_buf] >>
+  fa (fuel_ok_compile_abi_encode_to_buf :: base @ helpers) >>
   simp[is_terminator_def]
 QED
 
@@ -1027,6 +1014,13 @@ Proof
   >- simp[fuel_ok_return] >>
   FIRST [fa (lv :: fuel_ok_compile_snapshot_vv :: base @ helpers)] >>
   simp[is_terminator_def]
+QED
+
+Theorem fuel_ok_compile_abi_encode_args:
+  !cfn. (!c t e Wv E. fuel_ok Wv {} E (cfn c t e)) ==>
+    !es cenv Wv E. fuel_ok Wv {} E (compile_abi_encode_args cfn cenv es)
+Proof
+  simp[compile_abi_encode_args_def, fuel_ok_compile_ext_call_args]
 QED
 
 val extl = [fuel_ok_compile_ext_call_args, fuel_ok_compile_ext_call_kwargs,

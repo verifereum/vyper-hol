@@ -2382,22 +2382,6 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem compile_abi_encode_args_labels:
-  !cfn cenv es s.
-    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
-      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
-    cs_extends s (SND (compile_abi_encode_args cfn cenv es s)) /\
-    EVERY (isPREFIX "@") (added_labels s (SND (compile_abi_encode_args cfn cenv es s)))
-Proof
-  Induct_on `es`
-  >- simp[compile_abi_encode_args_def, comp_return_labels] >>
-  rpt gen_tac >> disch_tac >> once_rewrite_tac[compile_abi_encode_args_def] >>
-  rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
-       TRY IF_CASES_TAC >>
-       simp[comp_return_labels, compile_materialize_vv_labels, unwrap_value_labels]) >>
-  first_x_assum irule >> simp[]
-QED
-
 Theorem compile_concat_labels:
   !cfn cenv es data_ptr infos offset_op s.
     (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
@@ -2473,6 +2457,16 @@ Proof
   rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
        simp[comp_return_labels, compile_snapshot_vv_labels]) >>
   first_x_assum irule >> simp[]
+QED
+
+Theorem compile_abi_encode_args_labels:
+  !cfn cenv es s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_abi_encode_args cfn cenv es s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_abi_encode_args cfn cenv es s)))
+Proof
+  simp[compile_abi_encode_args_def, compile_ext_call_args_labels]
 QED
 
 Theorem compile_make_tuple_labels:
@@ -2874,16 +2868,30 @@ Proof
 QED
 
 Theorem lower_abi_encode_labels:
-  !ensure mid src info maxlen s.
-    cs_extends s (SND (lower_abi_encode ensure mid src info maxlen s)) /\
-    EVERY (isPREFIX "@") (added_labels s (SND (lower_abi_encode ensure mid src info maxlen s)))
+  (!dst s. cs_extends s (SND (encode dst s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (encode dst s)))) ==>
+  cs_extends st (SND (lower_abi_encode mid maxlen encode st)) /\
+  EVERY (isPREFIX "@") (added_labels st (SND (lower_abi_encode mid maxlen encode st)))
 Proof
-  rpt gen_tac >> Cases_on `mid` >>
+  strip_tac >> Cases_on `mid` >>
   simp[builtinAbiTheory.lower_abi_encode_def, LET_THM] >>
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac] >>
        rpt gen_tac >> BETA_TAC >> simp[emit_op_labels, emit_void_labels,
-         comp_return_labels, compile_alloc_buffer_labels, cj 2 compile_abi_encode_labels])
+         comp_return_labels, compile_alloc_buffer_labels])
+QED
+
+Theorem compile_abi_encode_payload_labels:
+  cs_extends st (SND (compile_abi_encode_payload cenv single vs tys dst st)) /\
+  EVERY (isPREFIX "@")
+    (added_labels st (SND (compile_abi_encode_payload cenv single vs tys dst st)))
+Proof
+  Cases_on `single` >>
+  simp[compile_abi_encode_payload_def, compile_abi_encode_values_to_buf_labels] >>
+  irule comp_bind_labels >> reverse conj_tac >- simp[unwrap_value_labels] >>
+  rpt gen_tac >> BETA_TAC >> IF_CASES_TAC >>
+  simp[cj 2 compile_abi_encode_labels] >>
+  irule comp_ignore_bind_labels >> simp[emit_void_labels, comp_return_labels]
 QED
 
 Theorem lower_abi_decode_labels:
@@ -3494,13 +3502,11 @@ Theorem type_builtin_abi_encode_labels:
   EVERY (isPREFIX "@") (added_labels st
     (SND (compile_type_builtin_dispatch_body f cenv vv_ty ty (AbiEncode ensure mid) ret_ty args st)))
 Proof
-  disch_tac >> once_rewrite_tac[compile_type_builtin_dispatch_body_def] >> simp[LET_THM] >>
-  rpt IF_CASES_TAC >>
-  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
-       simp[lower_value_labels, compile_multi_exprs_labels,
-            compile_abi_encode_args_labels, compile_alloc_buffer_labels,
-            compile_store_abi_tuple_labels, emit_void_labels, unwrap_value_labels]) >>
-  irule as_ptr_val_labels >> simp[lower_abi_encode_labels]
+  strip_tac >> simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
+  ho_match_mp_tac pair_case_labels >> conj_tac
+  >- simp[compile_abi_encode_args_labels] >>
+  rpt gen_tac >> irule as_ptr_val_labels >>
+  simp[lower_abi_encode_labels, compile_abi_encode_payload_labels]
 QED
 
 Theorem type_builtin_abi_decode_labels:

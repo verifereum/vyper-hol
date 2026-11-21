@@ -355,12 +355,13 @@ Theorem symbolic_frame_lower_abi_encode:
   (!opc args. symbolic_frame R (emit_op opc args)) /\
   (!opc args. symbolic_frame R (emit_void opc args)) /\
   (!n. symbolic_frame R (compile_alloc_buffer n)) /\
-  (!p s i. symbolic_frame R (compile_abi_encode_to_buf p s i)) ==>
-  symbolic_frame R (lower_abi_encode tuple mid src info maxlen)
+  (!dst. symbolic_frame R (encode dst)) ==>
+  symbolic_frame R (lower_abi_encode mid maxlen encode)
 Proof
   strip_tac >> Cases_on `mid` >>
   simp[lower_abi_encode_def, comp_ignore_bind_def] >>
-  rpt (match_mp_tac symbolic_frame_bind >> conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
+  rpt (FIRST [CHANGED_TAC (simp[]), match_mp_tac symbolic_frame_bind,
+              conj_tac, gen_tac])
 QED
 
 Theorem symbolic_frame_lower_abi_decode:

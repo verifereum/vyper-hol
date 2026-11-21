@@ -120,8 +120,8 @@ Theorem lower_abi_encode_source:
   well_typed_type_builtin_args (AbiEncode ensure method_id) (TupleT tys) tys /\
   LENGTH vs = LENGTH tys /\
   vyper_to_abi (get_tenv cx) enc_ty (abi_builtin_encode_value ensure tys vs) = SOME av /\
-  lower_abi_encode ensure (OPTION_MAP bytes_method_id_word method_id) src
-    (type_to_abi_enc_info ce.ce_struct_fields ce enc_ty) maxlen start = (out,final) /\
+  lower_abi_encode (OPTION_MAP bytes_method_id_word method_id) maxlen
+    (\dst. compile_abi_encode_to_buf dst src (type_to_abi_enc_info ce.ce_struct_fields ce enc_ty)) start = (out,final) /\
   fn_has_code start final func /\
   (start.cs_blocks = final.cs_blocks \/
     !bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>

@@ -1,0 +1,118 @@
+Upstream: https://github.com/vyperlang/vyper/pull/5389
+Status: open
+
+Backport standalone-value dispatch for abi_encode(..., ensure_tuple=False).
+The standalone encoder uses the pin's abi_encode_to_buf signature.
+
+diff --git a/vyper/codegen_venom/abi/__init__.py b/vyper/codegen_venom/abi/__init__.py
+--- a/vyper/codegen_venom/abi/__init__.py
++++ b/vyper/codegen_venom/abi/__init__.py
+@@ -12,6 +12,7 @@
+ )
+ from vyper.codegen_venom.abi.abi_encoder import (
+     abi_encode_to_buf,
++    abi_encode_value_to_buf,
+     abi_encode_values_to_buf,
+     runtime_abi_size_for_encode,
+ )
+@@ -19,6 +20,7 @@
+ __all__ = [
+     "abi_encode_to_buf",
+     "abi_decode_to_buf",
++    "abi_encode_value_to_buf",
+     "abi_encode_values_to_buf",
+     "decode_unbounded_sequence_to_scratch",
+     "runtime_abi_size_for_encode",
+diff --git a/vyper/codegen_venom/abi/abi_encoder.py b/vyper/codegen_venom/abi/abi_encoder.py
+--- a/vyper/codegen_venom/abi/abi_encoder.py
++++ b/vyper/codegen_venom/abi/abi_encoder.py
+@@ -79,19 +79,25 @@
+     return runtime_abi_size_for_arg(ctx, arg_vals[0])
+
+
++def abi_encode_value_to_buf(
++    ctx: VenomCodegenContext, dst: IRVariable, arg_val: VyperValue, encode_type: VyperType
++) -> IROperand:
++    """Encode one value at dst using its own type."""
++    if encode_type._is_prim_word:
++        ctx.store_vyper_value(arg_val, dst, encode_type)
++        return IRLiteral(encode_type.abi_type.static_size())
++
++    src = ctx.unwrap(arg_val)
++    assert isinstance(src, IRVariable)
++    return abi_encode_to_buf(ctx, dst, src, encode_type)
++
++
+ def abi_encode_values_to_buf(
+-    ctx: VenomCodegenContext, dst: IRVariable, arg_vals: list[VyperValue], encode_type: VyperType
++    ctx: VenomCodegenContext, dst: IRVariable, arg_vals: list[VyperValue], encode_type: TupleT
+ ) -> IROperand:
++    """Encode the values as members of encode_type."""
++    assert isinstance(encode_type, TupleT)
+     b = ctx.builder
+-
+-    if not isinstance(encode_type, TupleT):
+-        if encode_type._is_prim_word:
+-            ctx.store_vyper_value(arg_vals[0], dst, encode_type)
+-            return IRLiteral(encode_type.abi_type.static_size())
+-
+-        src = ctx.unwrap(arg_vals[0])
+-        assert isinstance(src, IRVariable)
+-        return abi_encode_to_buf(ctx, dst, src, encode_type)
+
+     dyn_ofst_val = ctx.new_temporary_value(UINT256_T)
+     ctx.ptr_store(dyn_ofst_val.ptr(), IRLiteral(encode_type.abi_type.static_size()))
+diff --git a/vyper/codegen_venom/builtins/abi.py b/vyper/codegen_venom/builtins/abi.py
+--- a/vyper/codegen_venom/builtins/abi.py
++++ b/vyper/codegen_venom/builtins/abi.py
+@@ -14,6 +14,7 @@
+ from vyper.codegen.core import calculate_type_for_external_return
+ from vyper.codegen_venom.abi import (
+     abi_decode_to_buf,
++    abi_encode_value_to_buf,
+     abi_encode_values_to_buf,
+     decode_unbounded_sequence_to_scratch,
+     runtime_abi_size_for_encode,
+@@ -167,10 +168,17 @@
+             )
+         )
+
+-    if len(arg_vals) == 1 and not ensure_tuple:
++    unwrap_single = len(arg_vals) == 1 and not ensure_tuple
++    if unwrap_single:
+         encode_type: VyperType = arg_types[0]
+     else:
+         encode_type = TupleT(tuple(arg_types))
++
++    def encode_args(dst: IRVariable) -> IROperand:
++        if unwrap_single:
++            return abi_encode_value_to_buf(ctx, dst, arg_vals[0], encode_type)
++        assert isinstance(encode_type, TupleT)
++        return abi_encode_values_to_buf(ctx, dst, arg_vals, encode_type)
+
+     if any(type_contains_unbounded_sequence(t) for t in arg_types):
+         encoded_size = runtime_abi_size_for_encode(ctx, arg_vals, encode_type)
+@@ -191,11 +199,8 @@
+             # _build_abi_encoded_bytes zeroes the tail padding instead.
+             ctx.zero_bytestring_padding(buf_ptr, alloc_size)
+
+-        def encode_unbounded(dst: IRVariable) -> IROperand:
+-            return abi_encode_values_to_buf(ctx, dst, arg_vals, encode_type)
+-
+         _build_abi_encoded_bytes(
+-            ctx, buf_ptr, method_id, encode_unbounded, ctx.checked_add, zero_tail_padding=True
++            ctx, buf_ptr, method_id, encode_args, ctx.checked_add, zero_tail_padding=True
+         )
+
+         return ctx.dynamic_memory_value(buf_ptr, node._metadata["type"], annotation="abi_encode")
+@@ -210,9 +215,6 @@
+     buf_val = ctx.new_temporary_value(buf_t)
+     assert isinstance(buf_val.operand, IRVariable)
+
+-    def encode_bounded(dst: IRVariable) -> IROperand:
+-        return abi_encode_values_to_buf(ctx, dst, arg_vals, encode_type)
+-
+-    _build_abi_encoded_bytes(ctx, buf_val.operand, method_id, encode_bounded, b.add)
++    _build_abi_encoded_bytes(ctx, buf_val.operand, method_id, encode_args, b.add)
+
+     return buf_val

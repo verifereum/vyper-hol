@@ -33,6 +33,7 @@ Ancestors bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragG
   internalReturnMemoryInputs[qualified,ignore_grammar]
   abiBufferAllocationCode[qualified,ignore_grammar]
   bodyPtrPrecompileBuiltinsAllocationFrame[qualified,ignore_grammar]
+  bodyExprPreFacts[qualified] exprOracleStorageInterfaces[qualified]
 
   venomInst[qualified,ignore_grammar]
   bodyFullIfExpReach[qualified,ignore_grammar]
@@ -1870,6 +1871,10 @@ Proof
   mp_tac (Q.INST [`c'` |-> `updated`, `c` |-> `original`]
              intcall_args_target_overlap_frame) >>
   simp[] >> strip_tac >>
+  `lowered_value_type updated = lowered_value_type original` by
+    (simp[FUN_EQ_THM] >> metis_tac[allocLimitsPropsTheory.lowered_value_type_struct_fields]) >>
+  `type_alloc_ok updated = type_alloc_ok original` by
+    simp[FUN_EQ_THM, allocLimitsTheory.type_alloc_ok_def] >>
   gvs[allocLimitsTheory.alloc_limits_expr_def, allocLimitsTheory.type_alloc_ok_def,
        exprLoweringTheory.copies_subscript_base_def,
        supportedExprTraverseTheory.supported_expr_exists_def, constSubstCorrectTheory.base_target_root_def] >>

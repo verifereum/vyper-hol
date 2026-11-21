@@ -63,6 +63,18 @@ Proof
   simp[compile_abi_encode_values_to_buf_def] >> frame_tac
 QED
 
+Theorem symbolic_frame_abi_encode_payload:
+  (!opc args. symbolic_frame R (emit_void opc args)) /\
+  (!vv. symbolic_frame R (unwrap_value cenv vv)) /\
+  (!dst src info. symbolic_frame R (compile_abi_encode_to_buf dst src info)) /\
+  (!dst rows. symbolic_frame R (compile_abi_encode_values_to_buf cenv dst rows)) ==>
+  symbolic_frame R (compile_abi_encode_payload cenv single vs tys dst)
+Proof
+  strip_tac >> Cases_on `single` >> simp[compile_abi_encode_payload_def] >>
+  match_mp_tac symbolic_frame_bind >> conj_tac >- simp[] >>
+  gen_tac >> BETA_TAC >> IF_CASES_TAC >> simp[]
+QED
+
 Theorem symbolic_frame_external_call_kwargs:
   (!opc args. symbolic_frame R (emit_op opc args)) /\
   (!opc args. symbolic_frame R (emit_void opc args)) /\
@@ -105,10 +117,9 @@ Theorem symbolic_frame_abi_encode_args:
   !es. (!e. MEM e es ==> symbolic_frame R (cfn cenv (expr_type e) e)) ==>
   symbolic_frame R (compile_abi_encode_args cfn cenv es)
 Proof
-  strip_tac >> Induct >> simp[compile_abi_encode_args_def] >> rpt strip_tac >>
-  match_mp_tac symbolic_frame_bind >> conj_tac >- simp[] >>
-  gen_tac >> BETA_TAC >> match_mp_tac symbolic_frame_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp[]) >> simp[]
+  rpt strip_tac >> simp[compile_abi_encode_args_def] >>
+  irule symbolic_frame_ext_call_args >>
+  simp[symbolic_frame_snapshot_vv]
 QED
 
 Theorem symbolic_frame_ext_call_kwarg:

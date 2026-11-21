@@ -166,7 +166,7 @@ Definition runtime_sym_abi_encode_args_clause_def:
     EVERY runtime_sym_inst (state_insts s) /\
     compile_abi_encode_args cfn ce es s = (ops,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\
-    EVERY (\op. ~is_label_operand op) ops
+    EVERY runtime_sym_value ops
 End
 
 Definition runtime_sym_concat_clause_def:
@@ -361,9 +361,12 @@ End
 
 Definition runtime_sym_abi_clauses_def:
   runtime_sym_abi_clauses tops <=>
-  (!ensure mid src info n s op s'. ~is_label_operand src /\
+  (!mid n encode s op s'.
+     (!dst st len st'. ~is_label_operand dst /\
+        EVERY runtime_sym_inst (state_insts st) /\ encode dst st = (len,st') ==>
+        EVERY runtime_sym_inst (state_insts st') /\ ~is_label_operand len) /\
      EVERY runtime_sym_inst (state_insts s) /\
-     lower_abi_encode (ensure : bool) mid src info n s = (op,s') ==>
+     lower_abi_encode mid n encode s = (op,s') ==>
      EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
   (!src info lo hi size s op s'. ~is_label_operand src /\
      EVERY runtime_sym_inst (state_insts s) /\

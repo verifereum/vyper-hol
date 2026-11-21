@@ -4,7 +4,7 @@ Ancestors
   exprLoweringProps abiEncoderSequence list rich_list
 
 Theorem lower_abi_encode_no_block_prefix:
-  lower_abi_encode ensure mid src info maxlen sa = (out,sb) /\
+  lower_abi_encode mid maxlen (\dst. compile_abi_encode_to_buf dst src info) sa = (out,sb) /\
   sa.cs_blocks = sb.cs_blocks ==>
   sb.cs_current_bb = sa.cs_current_bb /\
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb
@@ -16,7 +16,7 @@ Proof
 QED
 
 Theorem lower_abi_encode_no_block_inst_extends:
-  lower_abi_encode ensure mid src info maxlen sa = (out,sb) /\
+  lower_abi_encode mid maxlen (\dst. compile_abi_encode_to_buf dst src info) sa = (out,sb) /\
   sa.cs_blocks = sb.cs_blocks ==> inst_extends sa sb
 Proof
   strip_tac >> drule_all lower_abi_encode_no_block_prefix >>
@@ -24,7 +24,7 @@ Proof
 QED
 
 Theorem lower_abi_encode_no_block_run_reach:
-  lower_abi_encode ensure mid src info maxlen sa = (out,sb) /\
+  lower_abi_encode mid maxlen (\dst. compile_abi_encode_to_buf dst src info) sa = (out,sb) /\
   sa.cs_blocks = sb.cs_blocks /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts sa sb) /\
