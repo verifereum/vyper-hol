@@ -3536,14 +3536,14 @@ Definition compile_builtin_dispatch_body_def:
           let (p1, st1a) = unwrap_value cenv p1_vv st1 in
           let (p2_vv, st2) = compile_expr cenv p2_ty e_p2 st1a in
           let (p2, st2a) = unwrap_value cenv p2_vv st2 in
-          as_ptr_val ret_ty LocMemory (compile_ecadd_points p1 p2 st2a))
+          as_stack_val ret_ty (compile_ecadd_points p1 p2 st2a))
      | ECMul =>
          (let e_p = HD args in let e_s = EL 1 args in
           let p_ty = expr_type e_p in
           let (p_vv, st1) = compile_expr cenv p_ty e_p st in
           let (p, st1a) = unwrap_value cenv p_vv st1 in
           let (s, st2) = lower_value compile_expr cenv (BaseT (UintT 256)) e_s st1a in
-          as_ptr_val ret_ty LocMemory (compile_ecmul_point p s st2))
+          as_stack_val ret_ty (compile_ecmul_point p s st2))
      | Concat max_len =>
          (let arg_infos = MAP (λe.
             let ety = expr_type e in
