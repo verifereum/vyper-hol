@@ -545,7 +545,7 @@ Theorem reorder_reduce_no_spill_identity:
   (!off. ~MEM (SOSpill off) ops) ==> ops = [] /\ ps1 = ps
 Proof
   Cases_on `dist > 16` >> simp[] >>
-  metis_tac[fnFrameStepsRevertForwardTheory.rf_reduce_spill_free]
+  metis_tac[reorderPreparationPropsTheory.reduce_depth_plan_spill_free]
 QED
 
 Theorem reorder_restore_read_only_kind_replay:

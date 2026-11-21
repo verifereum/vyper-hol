@@ -7,8 +7,6 @@ Ancestors
   codegenRel asmSem planExec spillSim doSwapSim stackOpSim blockSimHelpers
   list rich_list finite_map arithmetic asmIR sorting regularMemorySim
 
-Theorem do_restore_venom_asm_rel_numeric = reorderPreparationTracePropsTheory.do_restore_venom_asm_rel_numeric
-
 Theorem emit_one_input_unspilled_numeric:
   opc <> INVOKE /\
   ~(is_var_operand op /\ IS_SOME (FLOOKUP ps.ps_spilled op)) /\

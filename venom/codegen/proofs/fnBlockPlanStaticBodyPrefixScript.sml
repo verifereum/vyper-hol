@@ -33,7 +33,7 @@ Theorem regional_emit_input_capacity:
 Proof
   strip_tac >>
   Cases_on `emit_input_plan opc operands nl ps` >> simp[] >>
-  irule fnFrameStepsRevertForwardTheory.list_elem_count_dom_length >>
+  irule reorderPreparationInventoryPropsTheory.list_elem_count_dom_length >>
   irule inputMaterialisedTheory.emit_input_plan_materialised >>
   goal_assum (drule_at Any) >> simp[]
 QED

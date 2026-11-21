@@ -955,8 +955,6 @@ Proof
   irule simple_prefix_spill_wf >> simp[]
 QED
 
-Theorem list_elem_count_dom_length = fnPlanLineageReorderTheory.list_elem_count_dom_length
-
 Theorem available_input_plan_length = fnPlanLineageReorderTheory.available_input_plan_length
 
 Theorem available_preparation_prefix_wf:
@@ -1419,8 +1417,6 @@ Proof
   Cases_on `Var x IN FDOM ps1.ps_spilled` >> gvs[] >> decide_tac
 QED
 
-Theorem rf_reduce_spill_free = reorderPreparationPropsTheory.reduce_depth_plan_spill_free
-
 Theorem rf_reorder_one_spill_free[local]:
   !dfg pending idx op ps ops ps' d.
     idx < LENGTH pending /\ LENGTH pending <= LENGTH ps.ps_stack /\
@@ -1441,7 +1437,7 @@ Proof
   pairarg_tac >> simp[] >> strip_tac >>
   `ps2 = ps /\ reduce_ops = []` by
     (Cases_on `d > 16` >> fs[] >>
-     irule rf_reduce_spill_free >>
+     irule reduce_depth_plan_spill_free >>
      reverse conj_tac >- (goal_assum (drule_at Any)) >>
      rpt strip_tac >>
      qpat_x_assum `!off. ~MEM _ ops` (qspec_then `off` mp_tac) >>
@@ -1531,7 +1527,7 @@ Proof
     `\st trace out. (!off. ~MEM (SOSpill off) trace) ==>
       trace = [] /\ out = st`]
     (mp_tac o BETA_RULE) plan_steps_trace_relation >>
-  simp[MEM_APPEND] >> metis_tac[rf_reduce_spill_free]
+  simp[MEM_APPEND] >> metis_tac[reduce_depth_plan_spill_free]
 QED
 
 Theorem rf_reorder_spill_free:
@@ -3055,7 +3051,7 @@ Proof
       >- simp[]
       >- metis_tac[MEM_APPEND]
       >- metis_tac[rf_do_restore_spill_lookup]
-      >- metis_tac[rf_reduce_spill_free]
+      >- metis_tac[reduce_depth_plan_spill_free]
       >- metis_tac[rf_reorder_one_spill_lookup]
       >- first_assum ACCEPT_TAC) >>
   simp[]

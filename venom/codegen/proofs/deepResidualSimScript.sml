@@ -120,7 +120,7 @@ Proof
      (MAPi (\i op. (i,op)) target_ops)` by
     (simp[EVERY_MEM, pairTheory.FORALL_PROD, indexedListsTheory.MEM_MAPi] >>
      rpt strip_tac >> gvs[] >> simp[MEM_EL] >> qexists_tac `p_1` >> simp[]) >>
-  drule reorder_plan_split >> strip_tac >> gvs[EVERY_APPEND] >>
+  drule reorderPreparationPropsTheory.reorder_plan_split >> strip_tac >> gvs[EVERY_APPEND] >>
   drule_all reorder_prepare_residual_budget_wf_marked >> strip_tac >>
   `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
     fs[residual_budget_wf_marked_def] >>
@@ -133,7 +133,7 @@ Proof
         operand_val vs lo op1 = operand_val vs lo at` by metis_tac[] >>
   gvs[execute_plan_append, asm_block_at_append] >>
   qspecl_then [`target_ops`, `ps`, `prep`, `mid`, `lo`, `o2pc`,
-    `prog`, `vs`, `st`] mp_tac reorder_prepass_venom_asm_rel_numeric >>
+    `prog`, `vs`, `st`] mp_tac reorderPreparationTracePropsTheory.reorder_prepass_venom_asm_rel_numeric >>
   simp[execute_plan_append] >> strip_tac >>
   rename1 `venom_asm_rel lo mid vs st1` >>
   `asm_block_at prog st1.as_pc (execute_plan initial_fmp rest)` by simp[] >>

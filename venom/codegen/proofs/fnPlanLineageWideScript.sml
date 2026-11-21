@@ -334,7 +334,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all restore_spilled_plan_distinct_materialised >> strip_tac >>
   conj_tac
-  >- (irule fnPlanLineageInventoryTheory.restore_spilled_plan_bottom_frame >> simp[]) >>
+  >- (irule reorderPreparationFramePropsTheory.restore_spilled_plan_bottom_frame >> simp[]) >>
   irule reorder_plan_wide_materialised_bottom_frame >> simp[]
 QED
 

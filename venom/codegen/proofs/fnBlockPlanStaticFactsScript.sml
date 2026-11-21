@@ -203,7 +203,7 @@ Proof
   `!v. ~MEM v inputs ==> stack_get_depth (Var v) ps.ps_stack = NONE` by
     (rpt strip_tac >> Cases_on `stack_get_depth (Var v) ps.ps_stack` >> simp[] >>
      drule stackModelTheory.stack_get_depth_props >> strip_tac >>
-     drule reorderSimTheory.stack_peek_mem >>
+     drule reorderPreparationInventoryPropsTheory.stack_peek_mem >>
      fs[listTheory.EVERY_MEM, listTheory.MEM_MAP] >> strip_tac >>
      qpat_x_assum `!op. MEM op ps.ps_stack ==> _` drule >> simp[]) >>
   `!layout. popmany_plan (MAP Var (FILTER (\v. ~MEM v inputs) layout)) ps =
