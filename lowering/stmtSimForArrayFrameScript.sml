@@ -846,57 +846,6 @@ Proof
   drule write_immutable_place_scopes >> simp[]
 QED
 
-Theorem supported_simple_target_eval_scopes:
-  !target tops bindings cx es res es'.
-    supported_target tops bindings target /\
-    ~supported_target_exists expr_effect_root target /\
-    eval_base_place cx target es = (res,es') ==> es'.scopes = es.scopes
-Proof
-  Cases_on `target` >>
-  simp[supported_target_def, supported_expr_exists_def] >> rpt strip_tac
-  >~ [`eval_base_place _ (NameTarget _) _ = _`]
-  >- gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
-         type_check_def, assert_def, return_def, raise_def, AllCaseEqs()]
-  >>~- ([`eval_base_place _ (TopLevelNameTarget _) _ = _`],
-      rename1 `eval_base_place cx (TopLevelNameTarget nsid) es = _` >>
-      PairCases_on `nsid` >> gvs[Once evaluate_def] >>
-      metis_tac[lookup_global_scopes])
-  >~ [`eval_base_place _ (SubscriptTarget _ _) _ = _`]
-  >- suspend "subscript"
-  >> suspend "attribute"
-QED
-
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
-  rename1 `eval_base_place cx (SubscriptTarget inner key) es = _` >>
-  Cases_on `inner` >> gvs[] >>
-  rename1 `eval_base_place cx (SubscriptTarget (TopLevelNameTarget nsid) key) es = _` >>
-  PairCases_on `nsid` >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-  imp_res_tac lookup_global_scopes >> imp_res_tac read_result_state >>
-  imp_res_tac extend_place_state >> gvs[] >> trace_scopes_tac >>
-  metis_tac[supported_expr_scopes]
-*)
-Resume supported_simple_target_eval_scopes[subscript]:
-  cheat
-QED
-
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
-  rename1 `eval_base_place cx (AttributeTarget inner fname) es = _` >>
-  Cases_on `inner` >> gvs[] >>
-  rename1 `eval_base_place cx (AttributeTarget (TopLevelNameTarget nsid) fname) es = _` >>
-  PairCases_on `nsid` >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-  imp_res_tac lookup_global_scopes >> imp_res_tac extend_place_state >> gvs[] >>
-  trace_scopes_tac
-*)
-Resume supported_simple_target_eval_scopes[attribute]:
-  cheat
-QED
-
-Finalise supported_simple_target_eval_scopes
-
 Theorem projection_length[local]:
   !a b name.
     MAP (\sc. FLOOKUP sc name) a = MAP (\sc. FLOOKUP sc name) b ==>

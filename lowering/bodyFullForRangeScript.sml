@@ -6494,7 +6494,7 @@ Proof
   suspend "checked"
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Resume compile_for_range_frag_full[checked]:
   let
     fun shadow_edge expr start shadowStart related leftEq shadowRun out mid =
       namedCases_on shadowRun [out ^ " " ^ mid] >>
@@ -6573,13 +6573,15 @@ QED
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[supported_iterator_def, AllCaseEqs()] >>
      Cases_on `e1` >> Cases_on `e2` >> simp[] >>
-     rpt (CASE_TAC >> simp[])) >>
+     simp[supportedExprsTheory.supported_pure_expr_def]) >>
   `cx_tops cx = tops` by
     (irule gasContextTheory.cx_tops_module >>
      qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms, body_inv_def]) >>
   `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
             is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target)` by
     (simp[] >> qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms, body_inv_def]) >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms, body_inv_def]) >>
   let
     fun ready e =
       sg ([QUOTE "!ee. expr_sim_inv cenv cx env ee ==> expr_body_pre cenv cx env "] @
@@ -6587,21 +6589,17 @@ QED
       (qx_gen_tac `ee` >> strip_tac >>
        sg ([QUOTE "supported_expr tops "] @ e) >-
          simp[supportedExprsTheory.supported_expr_def] >>
-       sg ([QUOTE "int_calls_expr "] @ e @ [QUOTE " = []"]) >-
-         (qpat_assum ([QUOTE "supported_pure_expr tops "] @ e)
-           (mp_then Any ACCEPT_TAC supported_pure_int_calls)) >>
        qpat_assum ([QUOTE "supported_expr tops "] @ e)
          (mp_then Any strip_assume_tac supported_expr_body_calls) >>
        sg ([QUOTE "~supported_expr_exists (const_name_root cx) "] @ e) >-
          (drule_all body_inv_stmt_const_name_free >>
           simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
                supportedStmtTraverseTheory.supported_iterator_exists_def]) >>
-       qpat_assum ([QUOTE "int_calls_expr "] @ e @ [QUOTE " = []"])
-         (fn no_calls =>
-           qpat_assum ([QUOTE "call_evaluation_safe cx (int_calls_expr "] @ e @ [QUOTE ")"])
-             (assume_tac o PURE_REWRITE_RULE [no_calls])) >>
+       sg ([QUOTE "~is_extcode "] @ e) >-
+         (qpat_assum ([QUOTE "alloc_limits_expr cenv "] @ e)
+           (mp_then Any ACCEPT_TAC allocLimitsPropsTheory.alloc_limits_expr_not_extcode)) >>
        qspecl_then [`cenv`,`cx`,`env`,e,`ee`,`[]`] mp_tac stmt_expr_body_pre_alloc >>
-       impl_tac >- simp[] >>
+       impl_tac >- (simp[] >> strip_tac >> qexists_tac `tops` >> simp[]) >>
        disch_then ACCEPT_TAC)
   in
     ready `e1` >> ready `e2`
@@ -6645,9 +6643,6 @@ QED
   qpat_x_assum `gas_outcome_full _ _ _ _ (bind (eval_expr cx e1) _) _ Q0 R0` kall_tac >>
   unabbrev_all_tac >>
   suspend "join_endpoints"
-*)
-Resume compile_for_range_frag_full[checked]:
-  cheat
 QED
 
 Resume compile_for_range_frag_full[join_endpoints]:
