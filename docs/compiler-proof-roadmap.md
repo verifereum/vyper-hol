@@ -56,7 +56,7 @@ Their exact premises are in the linked owners and
 
 | Stage | Actual export / owner | Contract | Owner milestone |
 |---|---|---|---|
-| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/loweringRuntimeCorrectScript.sml)) | Raw lowering + `supported_program` + `source_typing_ok` + `source_deployment_rel` + `valid_vyper_call` + `initial_venom_state_rel` + `outcomes_accounts_typed` + `DALLOCA` budget and no-wrap guards -> `source_unit_execution_correct`: for some gas marks, a raw exit related to the source result at every valid storage horizon, or a focus witness when storage is invalid for every gas tail appended to the marks or the source run is the same for every tail and exempt | 6 |
+| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/loweringRuntimeCorrectScript.sml)) | Raw lowering + `supported_program` + `source_typing_ok` + `source_deployment_rel` + `valid_vyper_call` + `initial_venom_state_rel` + `outcomes_accounts_typed` + `DALLOCA` budget and no-wrap guards -> `source_unit_execution_correct`: for some gas marks, a raw exit related to the source result at every valid storage horizon, or a focus witness when storage is invalid for every gas tail appended to the readings the marks select or the source run is the same for every tail and exempt | 6 |
 | S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` ([source](../lowering/vyperLoweringCorrectScript.sml)) | Lowering + `check_contract F` + `raw_shape_free_program` -> `o1_source_unit_ok` | 5 |
 | S3 | `loweringMemCorrect.lower_vyper_runtime_unit_memory_ok` ([source](../lowering/loweringMemCorrectScript.sml)) | Lowering + initial state + no `DALLOCA` + entry FMP floor + `__entry` lookup and entry label + memory-safe and pointer-safe entry runs at every fuel -> `raw_unit_memory_ok`, no function `fn_eom`, `fixed_region_reserved 0`, pointer discipline and taint bounds | 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` ([source](../venom/compiler/o1PipelineCorrectScript.sml)) | Actual O1 success + raw shape (`o1_source_unit_ok`, `unit_entry_no_params`, `unit_defs_reach_uses`, `unit_fmp_unsealed`) + `o1_run_state_ok` + reserved-region/EOM/FMP facts + `dead_wf D` -> an input state at which raw memory, pointer, taint and DLOAD bounds give forward simulation `ctx_sim D` and the output's `o1_lowered_inv` | 3 |
@@ -77,9 +77,9 @@ lowering and `check_contract F` (`lower_vyper_runtime_unit_checked_source_shape`
 `raw_shape_free_program` units use S2's helper
 `lower_vyper_runtime_unit_source_unit_ok_checked` (the S2 export is its
 corollary) with `lower_vyper_runtime_unit_o1_shape_extras`, and the rest (`raw_call` on `msg.data`,
-`create_copy_of`, `create_from_blueprint`) rest on three admitted shape lemmas.
+`create_copy_of`, `create_from_blueprint`) use three proved shape cases.
 The deploy tops use `checked_lower_vyper_deploy_unit_source_shape`, with three
-matching admitted deploy cases. On the ordinary path L5 consumes that memory fact; layout or empty
+matching proved deploy cases. On the ordinary path L5 consumes that memory fact; layout or empty
 entry memory does not manufacture memory safety.
 
 `venomToAsmProps.gen_fn_simulation` is proved (4.2); S7's `codegen_correct`
@@ -351,7 +351,7 @@ and is proved (4.2). Existing bridges are not trace-aware S7 proofs.
 S1 is actual `lower_vyper_runtime_unit_correct`, replacing the retired
 `vyper_to_venom_correct`. It consumes `supported_program`, `source_typing_ok`,
 source deployment, exact valid call, `initial_venom_state_rel`, typed outcome
-accounts and, for units with `DALLOCA`, allocation-budget and no-wrap guards. Unless storage is invalid for every gas tail appended to its gas marks, or
+accounts and, for units with `DALLOCA`, allocation-budget and no-wrap guards. Unless storage is invalid for every gas tail appended to the readings its gas marks select, or
 the source run is the same for every tail and source-exempt (it gives a focus
 witness then), the raw run must reach an exit related to the source result at
 every valid storage horizon; runtime
@@ -611,8 +611,8 @@ Remaining work, roughly in dependency order (all future):
 These producers were ADMITTED statements at Milestone 1; all three are proved now.
 The call tops reach S2's shape through `lower_vyper_runtime_unit_checked_source_shape`
 (successful runtime lowering and `check_contract F`), whose
-non-`raw_shape_free_program` cases rest on three admitted shape lemmas; the
-deploy tops use `deploy_unit_o1_shape_ok`, with three admitted deploy cases.
+non-`raw_shape_free_program` cases are three proved shape lemmas; the deploy
+tops use `deploy_unit_o1_shape_ok`, with three proved deploy cases.
 Units with `DALLOCA` get S3's facts from
 `lower_vyper_runtime_unit_memory_ok_from_no_wrap`.
 Actual memory API is

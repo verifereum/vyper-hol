@@ -171,5 +171,7 @@ Theorem immutable_assign_normalize_prefix:
        FLOOKUP r.vs_allocas aid = SOME entry) /\
     alloca_frame ce es sa s ce es r
 Proof
-  strip_tac >> drule_all immutable_assign_normalize_prefix_frame >> metis_tac[]
+  strip_tac >> drule_all immutable_assign_normalize_prefix_frame >>
+  disch_then (qx_choosel_then [`r`, `pw`] strip_assume_tac) >>
+  qexistsl_tac [`r`, `pw`] >> asm_rewrite_tac[]
 QED

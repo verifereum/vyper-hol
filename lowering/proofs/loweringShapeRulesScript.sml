@@ -1,7 +1,7 @@
 (*
  * Rules for the shape judgment of the raw lowering (S2 of #626).
  *
- * Hoare-style rules for shape_step (loweringShapeDefs): one per way of
+ * Hoare-style rules for shape_mode_step static (loweringShapeDefs): one per way of
  * composing compile actions and one per monad primitive that appends code.
  * The proofs of the generators in loweringShapeProps are built from them.
  *
@@ -22,153 +22,153 @@ Libs
 
 (* ===== Composition rules ===== *)
 
-Theorem shape_step_bind:
+Theorem shape_step_bind_mode:
   !internal LP P m f Q R.
-    shape_step internal LP P m Q /\
-    (!x. shape_step internal LP (Q x) (f x) R) ==>
-    shape_step internal LP P (comp_bind m f) R
+    shape_mode_step static internal LP P m Q /\
+    (!x. shape_mode_step static internal LP (Q x) (f x) R) ==>
+    shape_mode_step static internal LP P (comp_bind m f) R
 Proof
-  rw[shape_step_def, comp_bind_def] >>
+  rw[shape_mode_step_def, comp_bind_def] >>
   Cases_on `m st` >> gvs[] >>
   first_x_assum drule_all >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
-  metis_tac[shape_extends_trans]
+  metis_tac[shape_extends_trans_mode]
 QED
 
-Theorem shape_step_ignore_bind:
+Theorem shape_step_ignore_bind_mode:
   !internal LP P m f Q R.
-    shape_step internal LP P m Q /\
-    (!x. shape_step internal LP (Q x) f R) ==>
-    shape_step internal LP P (comp_ignore_bind m f) R
+    shape_mode_step static internal LP P m Q /\
+    (!x. shape_mode_step static internal LP (Q x) f R) ==>
+    shape_mode_step static internal LP P (comp_ignore_bind m f) R
 Proof
-  rw[comp_ignore_bind_def] >> irule shape_step_bind >> metis_tac[]
+  rw[comp_ignore_bind_def] >> irule shape_step_bind_mode >> metis_tac[]
 QED
 
-Theorem shape_step_return:
+Theorem shape_step_return_mode:
   !internal LP P Q x.
     (!st. P st ==> Q x st) ==>
-    shape_step internal LP P (comp_return x) Q
+    shape_mode_step static internal LP P (comp_return x) Q
 Proof
-  rw[shape_step_def, comp_return_def, shape_extends_refl]
+  rw[shape_mode_step_def, comp_return_def, shape_extends_refl_mode]
 QED
 
-Theorem shape_extends_LP_mono:
+Theorem shape_extends_LP_mono_mode:
   !internal LP LP' st st'.
-    shape_extends internal LP st st' /\ (!l. LP l ==> LP' l) ==>
-    shape_extends internal LP' st st'
+    shape_mode_extends static internal LP st st' /\ (!l. LP l ==> LP' l) ==>
+    shape_mode_extends static internal LP' st st'
 Proof
-  rw[shape_extends_def, EVERY_MEM]
+  rw[shape_mode_extends_def, EVERY_MEM]
 QED
 
-Theorem shape_step_conseq:
+Theorem shape_step_conseq_mode:
   !internal LP LP' P P' m Q Q'.
-    shape_step internal LP P m Q /\ (!st. P' st ==> P st) /\
+    shape_mode_step static internal LP P m Q /\ (!st. P' st ==> P st) /\
     (!x st. Q x st ==> Q' x st) /\ (!l. LP l ==> LP' l) ==>
-    shape_step internal LP' P' m Q'
+    shape_mode_step static internal LP' P' m Q'
 Proof
-  rw[shape_step_def] >> `P st` by res_tac >>
+  rw[shape_mode_step_def] >> `P st` by res_tac >>
   qpat_x_assum `!st x st'. _` drule_all >> strip_tac >>
-  metis_tac[shape_extends_LP_mono]
+  metis_tac[shape_extends_LP_mono_mode]
 QED
 
-Theorem shape_step_comp_get:
+Theorem shape_step_comp_get_mode:
   !internal LP P.
-    shape_step internal LP P comp_get (\x st'. x = st' /\ P st')
+    shape_mode_step static internal LP P comp_get (\x st'. x = st' /\ P st')
 Proof
-  rw[shape_step_def, comp_get_def, shape_extends_refl]
+  rw[shape_mode_step_def, comp_get_def, shape_extends_refl_mode]
 QED
 
-Theorem shape_stable_conj:
-  !R R'. shape_stable R /\ shape_stable R' ==>
-         shape_stable (\st. R st /\ R' st)
+Theorem shape_stable_conj_mode:
+  !R R'. shape_mode_stable static R /\ shape_mode_stable static R' ==>
+         shape_mode_stable static (\st. R st /\ R' st)
 Proof
-  rw[shape_stable_def] >> metis_tac[]
+  rw[shape_mode_stable_def] >> metis_tac[]
 QED
 
-Theorem shape_stable_plain_operands:
-  !ops. shape_stable (\st. EVERY (plain_operand st) ops)
+Theorem shape_stable_plain_operands_mode:
+  !ops. shape_mode_stable static (\st. EVERY (plain_operand st) ops)
 Proof
-  rw[shape_stable_def, EVERY_MEM] >> metis_tac[plain_operand_mono]
+  rw[shape_mode_stable_def, EVERY_MEM] >> metis_tac[plain_operand_mono_mode]
 QED
 
-Theorem shape_stable_label_or_plains:
-  !ops. shape_stable (\st. EVERY (label_or_plain st) ops)
+Theorem shape_stable_label_or_plains_mode:
+  !ops. shape_mode_stable static (\st. EVERY (label_or_plain st) ops)
 Proof
-  rw[shape_stable_def, EVERY_MEM] >> metis_tac[label_or_plain_mono]
+  rw[shape_mode_stable_def, EVERY_MEM] >> metis_tac[label_or_plain_mono_mode]
 QED
 
-Theorem shape_step_frame:
+Theorem shape_step_frame_mode:
   !internal LP P m Q R.
-    shape_step internal LP P m Q /\ shape_stable R ==>
-    shape_step internal LP (\st. R st /\ P st) m (\x st. R st /\ Q x st)
+    shape_mode_step static internal LP P m Q /\ shape_mode_stable static R ==>
+    shape_mode_step static internal LP (\st. R st /\ P st) m (\x st. R st /\ Q x st)
 Proof
-  rw[shape_step_def, shape_stable_def] >> metis_tac[]
+  rw[shape_mode_step_def, shape_mode_stable_def] >> metis_tac[]
 QED
 
 (* Base-state algebra for the unchecked interval of a call template. *)
-Theorem shape_base_step_bind:
+Theorem shape_base_step_bind_mode:
   !internal LP P m f Q R.
-    shape_base_step internal LP P m Q /\
-    (!x. shape_base_step internal LP (Q x) (f x) R) ==>
-    shape_base_step internal LP P (comp_bind m f) R
+    shape_base_mode_step static internal LP P m Q /\
+    (!x. shape_base_mode_step static internal LP (Q x) (f x) R) ==>
+    shape_base_mode_step static internal LP P (comp_bind m f) R
 Proof
-  rw[shape_base_step_def, comp_bind_def] >>
+  rw[shape_base_mode_step_def, comp_bind_def] >>
   Cases_on `m st` >> gvs[] >>
   first_x_assum drule_all >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
-  metis_tac[shape_extends_trans]
+  metis_tac[shape_extends_trans_mode]
 QED
 
-Theorem shape_base_step_ignore_bind:
+Theorem shape_base_step_ignore_bind_mode:
   !internal LP P m f Q R.
-    shape_base_step internal LP P m Q /\
-    (!x. shape_base_step internal LP (Q x) f R) ==>
-    shape_base_step internal LP P (comp_ignore_bind m f) R
+    shape_base_mode_step static internal LP P m Q /\
+    (!x. shape_base_mode_step static internal LP (Q x) f R) ==>
+    shape_base_mode_step static internal LP P (comp_ignore_bind m f) R
 Proof
-  rw[comp_ignore_bind_def] >> irule shape_base_step_bind >> metis_tac[]
+  rw[comp_ignore_bind_def] >> irule shape_base_step_bind_mode >> metis_tac[]
 QED
 
-Theorem shape_base_step_return:
+Theorem shape_base_step_return_mode:
   !internal LP P Q x.
     (!st. P st ==> Q x st) ==>
-    shape_base_step internal LP P (comp_return x) Q
+    shape_base_mode_step static internal LP P (comp_return x) Q
 Proof
-  rw[shape_base_step_def, comp_return_def, shape_extends_refl]
+  rw[shape_base_mode_step_def, comp_return_def, shape_extends_refl_mode]
 QED
 
-Theorem shape_base_step_conseq:
+Theorem shape_base_step_conseq_mode:
   !internal LP LP' P P' m Q Q'.
-    shape_base_step internal LP P m Q /\ (!st. P' st ==> P st) /\
+    shape_base_mode_step static internal LP P m Q /\ (!st. P' st ==> P st) /\
     (!x st. Q x st ==> Q' x st) /\ (!l. LP l ==> LP' l) ==>
-    shape_base_step internal LP' P' m Q'
+    shape_base_mode_step static internal LP' P' m Q'
 Proof
-  rw[shape_base_step_def] >> `P st` by res_tac >>
+  rw[shape_base_mode_step_def] >> `P st` by res_tac >>
   qpat_x_assum `!st x st'. _` drule_all >> strip_tac >>
-  metis_tac[shape_extends_LP_mono]
+  metis_tac[shape_extends_LP_mono_mode]
 QED
 
-Theorem shape_base_step_frame:
+Theorem shape_base_step_frame_mode:
   !internal LP P m Q R.
-    shape_base_step internal LP P m Q /\ shape_stable R ==>
-    shape_base_step internal LP (\st. R st /\ P st) m (\x st. R st /\ Q x st)
+    shape_base_mode_step static internal LP P m Q /\ shape_mode_stable static R ==>
+    shape_base_mode_step static internal LP (\st. R st /\ P st) m (\x st. R st /\ Q x st)
 Proof
-  rw[shape_base_step_def, shape_stable_def] >> metis_tac[]
+  rw[shape_base_mode_step_def, shape_mode_stable_def] >> metis_tac[]
 QED
 
 (* ===== Monad primitives ===== *)
 
-Theorem shape_extends_same_code:
+Theorem shape_extends_same_code_mode:
   !internal LP st st'.
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
     st'.cs_current_insts = st.cs_current_insts /\
     st.cs_next_var <= st'.cs_next_var ==>
-    shape_extends internal LP st st'
+    shape_mode_extends static internal LP st st'
 Proof
   rpt strip_tac >>
   `state_insts st' = state_insts st /\ all_blocks st' = all_blocks st`
     by gs[state_insts_def, all_blocks_def] >>
   `cs_extends st st'` by (irule cs_extends_same_block >> gs[]) >>
-  gs[shape_extends_def, added_insts_def, added_labels_def, DROP_LENGTH_NIL,
+  gs[shape_mode_extends_def, added_insts_def, added_labels_def, DROP_LENGTH_NIL,
      DROP_LENGTH_TOO_LONG]
 QED
 
@@ -198,17 +198,17 @@ Proof
   >> rw[not_fresh_at_def] >> irule fresh_var_distinct >> gs[]
 QED
 
-Theorem shape_step_fresh_var:
+Theorem shape_step_fresh_var_mode:
   !internal LP R.
-    shape_stable R ==>
-    shape_step internal LP R fresh_var
+    shape_mode_stable static R ==>
+    shape_mode_step static internal LP R fresh_var
       (\x st'. R st' /\ plain_operand st' (Var x))
 Proof
-  simp[shape_step_def, fresh_var_def, PULL_FORALL, AND_IMP_INTRO] >>
+  simp[shape_mode_step_def, fresh_var_def, PULL_FORALL, AND_IMP_INTRO] >>
   rpt gen_tac >> strip_tac >>
-  qmatch_goalsub_abbrev_tac `shape_extends _ _ st st1` >>
-  `shape_extends internal LP st st1`
-    by (irule shape_extends_same_code >> simp[Abbr `st1`]) >>
+  qmatch_goalsub_abbrev_tac `shape_mode_extends static _ _ st st1` >>
+  `shape_mode_extends static internal LP st st1`
+    by (irule shape_extends_same_code_mode >> simp[Abbr `st1`]) >>
   `shape_state st1`
     by (irule shape_state_same_code >> qexists_tac `st` >>
         simp[Abbr `st1`]) >>
@@ -216,62 +216,62 @@ Proof
   drule fresh_output_props >> strip_tac >>
   `state_insts st1 = state_insts st`
     by simp[Abbr `st1`, state_insts_def, all_blocks_def] >>
-  `R st1` by metis_tac[shape_stable_def] >>
+  `R st1` by metis_tac[shape_mode_stable_def] >>
   gs[plain_operand_def, stackPlanTypesTheory.is_label_operand_def, shape_state_def, shape_base_state_def,
      opaque_out_def] >>
   metis_tac[]
 QED
 
-Theorem shape_step_fresh_id:
+Theorem shape_step_fresh_id_mode:
   !internal LP R.
-    shape_stable R ==>
-    shape_step internal LP R fresh_id (\x st'. R st')
+    shape_mode_stable static R ==>
+    shape_mode_step static internal LP R fresh_id (\x st'. R st')
 Proof
-  simp[shape_step_def, fresh_id_def, PULL_FORALL, AND_IMP_INTRO] >>
+  simp[shape_mode_step_def, fresh_id_def, PULL_FORALL, AND_IMP_INTRO] >>
   rpt gen_tac >> strip_tac >>
-  qmatch_goalsub_abbrev_tac `shape_extends _ _ st st1` >>
-  `shape_extends internal LP st st1`
-    by (irule shape_extends_same_code >> simp[Abbr `st1`]) >>
+  qmatch_goalsub_abbrev_tac `shape_mode_extends static _ _ st st1` >>
+  `shape_mode_extends static internal LP st st1`
+    by (irule shape_extends_same_code_mode >> simp[Abbr `st1`]) >>
   `shape_state st1`
     by (irule shape_state_same_code >> qexists_tac `st` >>
         simp[Abbr `st1`]) >>
-  metis_tac[shape_stable_def]
+  metis_tac[shape_mode_stable_def]
 QED
 
-Theorem shape_step_fresh_label:
+Theorem shape_step_fresh_label_mode:
   !internal LP R sfx.
-    shape_stable R ==>
-    shape_step internal LP R (fresh_label sfx)
+    shape_mode_stable static R ==>
+    shape_mode_step static internal LP R (fresh_label sfx)
       (\l st'. R st' /\ compiler_label l)
 Proof
-  simp[shape_step_def, PULL_FORALL, AND_IMP_INTRO] >>
+  simp[shape_mode_step_def, PULL_FORALL, AND_IMP_INTRO] >>
   rpt gen_tac >> strip_tac >> gvs[fresh_label_def] >>
-  qmatch_goalsub_abbrev_tac `shape_extends _ _ st st1` >>
-  `shape_extends internal LP st st1`
-    by (irule shape_extends_same_code >> simp[Abbr `st1`]) >>
+  qmatch_goalsub_abbrev_tac `shape_mode_extends static _ _ st st1` >>
+  `shape_mode_extends static internal LP st st1`
+    by (irule shape_extends_same_code_mode >> simp[Abbr `st1`]) >>
   `shape_state st1`
     by (irule shape_state_same_code >> qexists_tac `st` >>
         simp[Abbr `st1`]) >>
   simp[compiler_label_def, fresh_label_output_in_future] >>
-  metis_tac[shape_stable_def]
+  metis_tac[shape_mode_stable_def]
 QED
 
-Theorem shape_step_fresh_label_sfx:
+Theorem shape_step_fresh_label_sfx_mode:
   !internal LP R sfx.
-    shape_stable R ==>
-    shape_step internal LP R (fresh_label sfx)
+    shape_mode_stable static R ==>
+    shape_mode_step static internal LP R (fresh_label sfx)
       (\l st'. R st' /\ compiler_label l /\ label_sfx sfx l)
 Proof
-  simp[shape_step_def, PULL_FORALL, AND_IMP_INTRO] >>
+  simp[shape_mode_step_def, PULL_FORALL, AND_IMP_INTRO] >>
   rpt gen_tac >> strip_tac >> gvs[fresh_label_def] >>
-  qmatch_goalsub_abbrev_tac `shape_extends _ _ st st1` >>
-  `shape_extends internal LP st st1`
-    by (irule shape_extends_same_code >> simp[Abbr `st1`]) >>
+  qmatch_goalsub_abbrev_tac `shape_mode_extends static _ _ st st1` >>
+  `shape_mode_extends static internal LP st st1`
+    by (irule shape_extends_same_code_mode >> simp[Abbr `st1`]) >>
   `shape_state st1`
     by (irule shape_state_same_code >> qexists_tac `st` >>
         simp[Abbr `st1`]) >>
   simp[compiler_label_def, fresh_label_output_in_future, label_sfx_def] >>
-  metis_tac[shape_stable_def]
+  metis_tac[shape_mode_stable_def]
 QED
 
 Theorem label_sfx_distinct:
@@ -314,14 +314,14 @@ Proof
   first_x_assum irule >> goal_assum (drule_at Any) >> metis_tac[]
 QED
 
-Theorem shape_step_new_block:
+Theorem shape_step_new_block_mode:
   !internal LP R lbl.
-    shape_stable R /\ LP lbl /\ ~internal_label_ok lbl ==>
-    shape_step internal LP R (new_block lbl) (\x st'. R st')
+    shape_mode_stable static R /\ LP lbl /\ ~internal_label_ok lbl ==>
+    shape_mode_step static internal LP R (new_block lbl) (\x st'. R st')
 Proof
-  simp[shape_step_def, new_block_def, PULL_FORALL, AND_IMP_INTRO] >>
+  simp[shape_mode_step_def, new_block_def, PULL_FORALL, AND_IMP_INTRO] >>
   rpt gen_tac >> strip_tac >>
-  qmatch_goalsub_abbrev_tac `shape_extends _ _ st st1` >>
+  qmatch_goalsub_abbrev_tac `shape_mode_extends static _ _ st st1` >>
   `new_block lbl st = (st.cs_current_bb, st1)`
     by simp[new_block_def, Abbr `st1`] >>
   drule cs_extends_new_block >> strip_tac >>
@@ -333,12 +333,12 @@ Proof
   `added_labels st st1 = [lbl]`
     by gs[added_labels_def, DROP_LENGTH_MAP_APPEND] >>
   `added_insts st st1 = []` by gs[added_insts_def, DROP_LENGTH_NIL] >>
-  `shape_extends internal LP st st1` by gs[shape_extends_def] >>
+  `shape_mode_extends static internal LP st st1` by gs[shape_mode_extends_def] >>
   `shape_state st1`
     by (gs[shape_state_def, shape_base_state_def] >>
         conj_tac >- (irule rets_scoped_append_empty >> simp[]) >>
         metis_tac[not_fresh_at_mono, arithmeticTheory.LESS_EQ_REFL]) >>
-  metis_tac[shape_stable_def]
+  metis_tac[shape_mode_stable_def]
 QED
 
 Theorem opaque_out_snoc:
@@ -463,9 +463,9 @@ Proof
 QED
 
 (* Appending one instruction to the open block. *)
-Theorem shape_base_append_inst:
+Theorem shape_base_append_inst_mode:
   !internal LP st st' inst.
-    shape_base_state st /\ lowered_inst_ok internal inst /\
+    shape_base_state st /\ lowered_inst_mode_ok static internal inst /\
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
     st'.cs_current_insts = st.cs_current_insts ++ [inst] /\
     st.cs_next_var <= st'.cs_next_var /\
@@ -483,7 +483,7 @@ Theorem shape_base_append_inst:
     (inst.inst_opcode = RET ==>
        ?front x. inst.inst_operands = front ++ [Var x] /\
                  opaque_out RETPC_PARAM (cur_entry_insts st) x) ==>
-    shape_extends internal LP st st' /\ shape_base_state st'
+    shape_mode_extends static internal LP st st' /\ shape_base_state st'
 Proof
   rpt gen_tac >> strip_tac >>
   `state_insts st' = state_insts st ++ [inst]`
@@ -496,7 +496,7 @@ Proof
   qpat_x_assum `shape_base_state st`
     (strip_assume_tac o REWRITE_RULE [shape_base_state_def]) >>
   conj_tac
-  >- (simp[shape_extends_def] >>
+  >- (simp[shape_mode_extends_def] >>
       qpat_assum `added_insts _ _ = _` (fn th => simp[th]) >>
       qpat_assum `added_labels _ _ = _` (fn th => simp[th]) >>
       rpt strip_tac >> gs[]) >>
@@ -532,9 +532,9 @@ Proof
   >> metis_tac[]
 QED
 
-Theorem shape_append_inst:
+Theorem shape_append_inst_mode:
   !internal LP st st' inst.
-    shape_state st /\ lowered_inst_ok internal inst /\
+    shape_state st /\ lowered_inst_mode_ok static internal inst /\
     ~MEM inst.inst_opcode [CALL; STATICCALL] /\
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
     st'.cs_current_insts = st.cs_current_insts ++ [inst] /\
@@ -553,11 +553,11 @@ Theorem shape_append_inst:
     (inst.inst_opcode = RET ==>
        ?front x. inst.inst_operands = front ++ [Var x] /\
                  opaque_out RETPC_PARAM (cur_entry_insts st) x) ==>
-    shape_extends internal LP st st' /\ shape_state st'
+    shape_mode_extends static internal LP st st' /\ shape_state st'
 Proof
   rpt gen_tac >> strip_tac >>
   `shape_base_state st` by gvs[shape_state_def] >>
-  drule_all shape_base_append_inst >>
+  drule_all shape_base_append_inst_mode >>
   disch_then (qspec_then `LP` strip_assume_tac) >>
   `state_insts st' = state_insts st ++ [inst]` by
     gvs[state_insts_def, all_blocks_def] >>
@@ -676,26 +676,26 @@ Proof
   rpt strip_tac >> gvs[shape_state_def, shape_base_state_def, opaque_out_def] >> metis_tac[]
 QED
 
-Theorem shape_step_emit:
+Theorem shape_step_emit_mode:
   !internal LP R inst.
-    shape_stable R /\ lowered_inst_ok internal inst /\
+    shape_mode_stable static R /\ lowered_inst_mode_ok static internal inst /\
     ~MEM inst.inst_opcode [GAS; RETPC_PARAM; RET; CALL; STATICCALL] ==>
-    shape_step internal LP
+    shape_mode_step static internal LP
       (\st. R st /\ EVERY (label_or_plain st) inst.inst_operands /\
             EVERY (plain_operand st) (MAP Var inst.inst_outputs))
       (emit inst) (\x st'. R st')
 Proof
-  simp[shape_step_def, emit_def, PULL_FORALL, AND_IMP_INTRO] >>
+  simp[shape_mode_step_def, emit_def, PULL_FORALL, AND_IMP_INTRO] >>
   rpt gen_tac >> strip_tac >>
-  qmatch_goalsub_abbrev_tac `shape_extends _ _ st st1` >>
+  qmatch_goalsub_abbrev_tac `shape_mode_extends static _ _ st st1` >>
   `inst.inst_opcode <> GAS /\ inst.inst_opcode <> RETPC_PARAM` by gvs[] >>
   qspecl_then [`st`, `st1`, `inst.inst_outputs`] mp_tac plain_outputs_ok >>
   (impl_tac >- simp[Abbr `st1`]) >> strip_tac >>
   drule_all plain_append_ok >> strip_tac >>
-  `shape_extends internal LP st st1 /\ shape_state st1`
-    by (match_mp_tac (Q.SPECL [`internal`, `LP`, `st`, `st1`, `inst`] shape_append_inst) >>
+  `shape_mode_extends static internal LP st st1 /\ shape_state st1`
+    by (match_mp_tac (Q.SPECL [`internal`, `LP`, `st`, `st1`, `inst`] shape_append_inst_mode) >>
         gs[Abbr `st1`]) >>
-  metis_tac[shape_stable_def]
+  metis_tac[shape_mode_stable_def]
 QED
 
 Theorem emit_op_eq:
@@ -749,157 +749,167 @@ Proof
   irule fresh_output_props >> simp[]
 QED
 
-Theorem shape_step_emit_op:
+Theorem shape_step_emit_op_singleton:
   !internal LP R opc ops.
-    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
-    (!id outs. lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
-    shape_step internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
+    shape_mode_stable static R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
+    (!id out. lowered_inst_mode_ok static internal (mk_inst id opc ops [out])) ==>
+    shape_mode_step static internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
       (emit_op opc ops) (\x st'. R st' /\ plain_operand st' x)
 Proof
-  rpt strip_tac >> simp[shape_step_def] >>
+  rpt strip_tac >> simp[shape_mode_step_def] >>
   rpt gen_tac >> strip_tac >>
   drule emit_op_facts >> strip_tac >>
   qabbrev_tac `inst = mk_inst st.cs_next_id opc ops [out]` >>
   `inst.inst_opcode = opc /\ inst.inst_operands = ops /\
-   inst.inst_outputs = [out] /\ lowered_inst_ok internal inst`
+   inst.inst_outputs = [out] /\ lowered_inst_mode_ok static internal inst`
     by fs[Abbr `inst`, mk_inst_def] >>
   `inst.inst_opcode <> GAS /\ inst.inst_opcode <> RETPC_PARAM` by gvs[] >>
   `EVERY (label_or_plain st) inst.inst_operands` by gvs[] >>
   drule_all plain_append_ok >> strip_tac >>
-  `shape_extends internal LP st st' /\ shape_state st'`
-    by (match_mp_tac (Q.SPECL [`internal`, `LP`, `st`, `st'`, `inst`] shape_append_inst) >>
+  `shape_mode_extends static internal LP st st' /\ shape_state st'`
+    by (match_mp_tac (Q.SPECL [`internal`, `LP`, `st`, `st'`, `inst`] shape_append_inst_mode) >>
         gs[]) >>
-  `R st'` by metis_tac[shape_stable_def] >>
+  `R st'` by metis_tac[shape_mode_stable_def] >>
   gvs[] >> match_mp_tac (Q.SPECL [`st`, `st'`, `inst`] fresh_out_plain) >> gs[shape_state_def]
 QED
 
-Theorem shape_step_emit_inst:
+Theorem shape_step_emit_op_mode:
+  !internal LP R opc ops.
+    shape_mode_stable static R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
+    (!id outs. lowered_inst_mode_ok static internal (mk_inst id opc ops outs)) ==>
+    shape_mode_step static internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
+      (emit_op opc ops) (\x st'. R st' /\ plain_operand st' x)
+Proof
+  metis_tac[shape_step_emit_op_singleton]
+QED
+
+Theorem shape_step_emit_inst_mode:
   !internal LP R opc ops outs.
-    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
-    (!id. lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
-    shape_step internal LP
+    shape_mode_stable static R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
+    (!id. lowered_inst_mode_ok static internal (mk_inst id opc ops outs)) ==>
+    shape_mode_step static internal LP
       (\st. R st /\ EVERY (label_or_plain st) ops /\
             EVERY (plain_operand st) (MAP Var outs))
       (emit_inst opc ops outs) (\x st'. R st')
 Proof
-  rpt strip_tac >> simp[shape_step_def, emit_inst_eq] >>
+  rpt strip_tac >> simp[shape_mode_step_def, emit_inst_eq] >>
   rpt gen_tac >> strip_tac >>
-  qmatch_goalsub_abbrev_tac `shape_extends _ _ st st1` >>
+  qmatch_goalsub_abbrev_tac `shape_mode_extends static _ _ st st1` >>
   qabbrev_tac `inst = mk_inst st.cs_next_id opc ops outs` >>
   `inst.inst_opcode = opc /\ inst.inst_operands = ops /\
-   inst.inst_outputs = outs /\ lowered_inst_ok internal inst`
+   inst.inst_outputs = outs /\ lowered_inst_mode_ok static internal inst`
     by fs[Abbr `inst`, mk_inst_def] >>
   qspecl_then [`st`, `st1`, `outs`] mp_tac plain_outputs_ok >>
   (impl_tac >- simp[Abbr `st1`]) >> strip_tac >>
   `inst.inst_opcode <> GAS /\ inst.inst_opcode <> RETPC_PARAM` by gvs[] >>
   `EVERY (label_or_plain st) inst.inst_operands` by gvs[] >>
   drule_all plain_append_ok >> strip_tac >>
-  `shape_extends internal LP st st1 /\ shape_state st1`
-    by (match_mp_tac (Q.SPECL [`internal`, `LP`, `st`, `st1`, `inst`] shape_append_inst) >>
+  `shape_mode_extends static internal LP st st1 /\ shape_state st1`
+    by (match_mp_tac (Q.SPECL [`internal`, `LP`, `st`, `st1`, `inst`] shape_append_inst_mode) >>
         gs[Abbr `st1`]) >>
-  metis_tac[shape_stable_def]
+  metis_tac[shape_mode_stable_def]
 QED
 
-Theorem shape_step_emit_void:
+Theorem shape_step_emit_void_mode:
   !internal LP R opc ops.
-    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
-    (!id. lowered_inst_ok internal (mk_inst id opc ops [])) ==>
-    shape_step internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
+    shape_mode_stable static R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
+    (!id. lowered_inst_mode_ok static internal (mk_inst id opc ops [])) ==>
+    shape_mode_step static internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
       (emit_void opc ops) (\x st'. R st')
 Proof
   rpt strip_tac >>
   `emit_void opc ops = emit_inst opc ops []`
     by simp[FUN_EQ_THM, emit_void_eq, emit_inst_eq] >>
   qspecl_then [`internal`, `LP`, `R`, `opc`, `ops`, `[]`] mp_tac
-    shape_step_emit_inst >>
+    shape_step_emit_inst_mode >>
   simp[]
 QED
 
-Theorem shape_step_fresh_vars:
+Theorem shape_step_fresh_vars_mode:
   !n internal LP R.
-    shape_stable R ==>
-    shape_step internal LP R (fresh_vars n)
+    shape_mode_stable static R ==>
+    shape_mode_step static internal LP R (fresh_vars n)
       (\vs st'. R st' /\ EVERY (plain_operand st') (MAP Var vs))
 Proof
   Induct >> rpt strip_tac >> REWRITE_TAC [fresh_vars_def]
-  >- (irule shape_step_return >> simp[]) >>
-  irule shape_step_bind >>
+  >- (irule shape_step_return_mode >> simp[]) >>
+  irule shape_step_bind_mode >>
   qexists_tac `\x st'. R st' /\ plain_operand st' (Var x)` >>
-  reverse conj_tac >- (irule shape_step_fresh_var >> first_assum ACCEPT_TAC) >>
+  reverse conj_tac >- (irule shape_step_fresh_var_mode >> first_assum ACCEPT_TAC) >>
   qx_gen_tac `v` >> BETA_TAC >>
   first_x_assum (qspecl_then [`internal`, `LP`,
     `\st'. R st' /\ plain_operand st' (Var v)`] mp_tac) >>
   impl_tac
-  >- (fs[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+  >- (fs[shape_mode_stable_def] >> metis_tac[plain_operand_mono_mode]) >>
   disch_then (assume_tac o BETA_RULE) >>
-  irule shape_step_bind >> first_assum (irule_at Any) >>
-  gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]
+  irule shape_step_bind_mode >> first_assum (irule_at Any) >>
+  gen_tac >> BETA_TAC >> irule shape_step_return_mode >> simp[]
 QED
 
 (* Multi-return INVOKE: every output is a plain variable. *)
-Theorem shape_step_emit_multi_op:
+Theorem shape_step_emit_multi_op_mode:
   !internal LP R opc ops n.
-    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
-    (!id outs. lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
-    shape_step internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
+    shape_mode_stable static R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
+    (!id outs. lowered_inst_mode_ok static internal (mk_inst id opc ops outs)) ==>
+    shape_mode_step static internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
       (emit_multi_op opc ops n)
       (\xs st'. R st' /\ EVERY (plain_operand st') xs)
 Proof
   rpt strip_tac >> REWRITE_TAC [emit_multi_op_def] >>
   qspecl_then [`n`, `internal`, `LP`,
     `\st. R st /\ EVERY (label_or_plain st) ops`]
-    mp_tac shape_step_fresh_vars >>
+    mp_tac shape_step_fresh_vars_mode >>
   impl_tac
-  >- (fs[shape_stable_def, EVERY_MEM] >> metis_tac[label_or_plain_mono]) >>
+  >- (fs[shape_mode_stable_def, EVERY_MEM] >> metis_tac[label_or_plain_mono_mode]) >>
   disch_then (assume_tac o BETA_RULE) >>
-  irule shape_step_bind >> first_assum (irule_at Any) >>
+  irule shape_step_bind_mode >> first_assum (irule_at Any) >>
   qx_gen_tac `outs` >> BETA_TAC >>
   qspecl_then [`internal`, `LP`,
     `\st. R st /\ EVERY (plain_operand st) (MAP Var outs)`, `opc`, `ops`,
-    `outs`] mp_tac shape_step_emit_inst >>
+    `outs`] mp_tac shape_step_emit_inst_mode >>
   impl_tac
   >- (rpt conj_tac
-      >- (fs[shape_stable_def, EVERY_MEM] >> metis_tac[plain_operand_mono]) >>
+      >- (fs[shape_mode_stable_def, EVERY_MEM] >> metis_tac[plain_operand_mono_mode]) >>
       gs[]) >>
   disch_then (assume_tac o BETA_RULE) >>
-  irule shape_step_ignore_bind >>
+  irule shape_step_ignore_bind_mode >>
   qexists_tac `\x st'. R st' /\ EVERY (plain_operand st') (MAP Var outs)` >>
   reverse conj_tac
-  >- (irule shape_step_conseq >> first_assum (irule_at Any) >> simp[]) >>
-  gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]
+  >- (irule shape_step_conseq_mode >> first_assum (irule_at Any) >> simp[]) >>
+  gen_tac >> BETA_TAC >> irule shape_step_return_mode >> simp[]
 QED
 
 (* GAS feeds only the gas slot of a call. *)
-Theorem shape_step_emit_op_gas:
+Theorem shape_step_emit_op_gas_mode:
   !internal LP R.
-    shape_stable R ==>
-    shape_step internal LP R (emit_op GAS [])
+    shape_mode_stable static R ==>
+    shape_mode_step static internal LP R (emit_op GAS [])
       (\x st'. R st' /\ gas_operand st' x)
 Proof
-  simp[shape_step_def, PULL_FORALL, AND_IMP_INTRO] >>
+  simp[shape_mode_step_def, PULL_FORALL, AND_IMP_INTRO] >>
   rpt gen_tac >> strip_tac >>
   drule emit_op_facts >> strip_tac >>
   qabbrev_tac `inst = mk_inst st.cs_next_id GAS [] [out]` >>
   `inst.inst_opcode = GAS /\ inst.inst_operands = [] /\
    inst.inst_outputs = [out]`
     by simp[Abbr `inst`, mk_inst_def] >>
-  `lowered_inst_ok internal inst` by (simp[Abbr `inst`] >> EVAL_TAC) >>
-  `shape_extends internal LP st st' /\ shape_state st'`
-    by (match_mp_tac (Q.SPECL [`internal`, `LP`, `st`, `st'`, `inst`] shape_append_inst) >>
+  `lowered_inst_mode_ok static internal inst` by (simp[Abbr `inst`] >> EVAL_TAC) >>
+  `shape_mode_extends static internal LP st st' /\ shape_state st'`
+    by (match_mp_tac (Q.SPECL [`internal`, `LP`, `st`, `st'`, `inst`] shape_append_inst_mode) >>
         gs[]) >>
-  `R st'` by metis_tac[shape_stable_def] >>
+  `R st'` by metis_tac[shape_mode_stable_def] >>
   qspecl_then [`st`, `st'`, `inst`, `out`] mp_tac fresh_out_opaque >>
   gs[gas_operand_def]
 QED
 
-Theorem shape_step_emit_op_gas_plain:
+Theorem shape_step_emit_op_gas_plain_mode:
   !internal LP R.
-    shape_stable R ==>
-    shape_step internal LP R (emit_op GAS [])
+    shape_mode_stable static R ==>
+    shape_mode_step static internal LP R (emit_op GAS [])
       (\x st'. R st' /\ plain_operand st' x)
 Proof
-  rpt strip_tac >> irule shape_step_conseq >>
-  drule shape_step_emit_op_gas >>
+  rpt strip_tac >> irule shape_step_conseq_mode >>
+  drule shape_step_emit_op_gas_mode >>
   disch_then (qspecl_then [`internal`, `LP`] (irule_at Any)) >>
   qexists_tac `LP` >>
   rw[gas_operand_def, plain_operand_def,
@@ -907,14 +917,14 @@ Proof
   gvs[stackPlanTypesTheory.is_label_operand_def]
 QED
 
-Theorem shape_base_emit_op_call:
+Theorem shape_base_emit_op_call_mode:
   !internal LP opc g rest st x st'.
     MEM opc [CALL; STATICCALL; DELEGATECALL] /\
-    (!id outs. lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)) /\
+    (!id outs. lowered_inst_mode_ok static internal (mk_inst id opc (g :: rest) outs)) /\
     (gas_operand st g \/ plain_operand st g) /\
     EVERY (plain_operand st) rest /\ shape_base_state st /\
     emit_op opc (g :: rest) st = (x, st') ==>
-    shape_extends internal LP st st' /\ shape_base_state st' /\
+    shape_mode_extends static internal LP st st' /\ shape_base_state st' /\
     plain_operand st' x
 Proof
   rpt gen_tac >> strip_tac >>
@@ -923,8 +933,8 @@ Proof
   `inst.inst_opcode = opc /\ inst.inst_operands = g :: rest /\
    inst.inst_outputs = [out]`
     by simp[Abbr `inst`, mk_inst_def] >>
-  `lowered_inst_ok internal inst`
-    by (simp[Abbr `inst`] >> qpat_x_assum `!id outs. lowered_inst_ok _ _` MATCH_ACCEPT_TAC) >>
+  `lowered_inst_mode_ok static internal inst`
+    by (simp[Abbr `inst`] >> qpat_x_assum `!id outs. lowered_inst_mode_ok static _ _` MATCH_ACCEPT_TAC) >>
   `inst.inst_opcode <> GAS /\ inst.inst_opcode <> RETPC_PARAM /\
    inst.inst_opcode <> RET`
     by (Cases_on `opc = CALL` >> gvs[]) >>
@@ -933,68 +943,68 @@ Proof
       ~opaque_out RETPC_PARAM (state_insts st ++ [inst]) x)`
     by (match_mp_tac (Q.SPECL [`st`, `g`, `rest`, `inst`] call_append_ok) >>
         ASM_REWRITE_TAC[]) >>
-  `shape_extends internal LP st st' /\ shape_base_state st'`
-    by (match_mp_tac (Q.SPECL [`internal`, `LP`, `st`, `st'`, `inst`] shape_base_append_inst) >>
+  `shape_mode_extends static internal LP st st' /\ shape_base_state st'`
+    by (match_mp_tac (Q.SPECL [`internal`, `LP`, `st`, `st'`, `inst`] shape_base_append_inst_mode) >>
         gs[] >> rpt strip_tac >> res_tac >> gs[]) >>
   gvs[] >> match_mp_tac (Q.SPECL [`st`, `st'`, `inst`] fresh_out_plain) >> gs[]
 QED
 
-Theorem shape_base_emit_inst:
+Theorem shape_base_emit_inst_mode:
   !internal LP opc ops outs st u st'.
     shape_base_state st /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
     EVERY (label_or_plain st) ops /\ EVERY (plain_operand st) (MAP Var outs) /\
-    (!id. lowered_inst_ok internal (mk_inst id opc ops outs)) /\
+    (!id. lowered_inst_mode_ok static internal (mk_inst id opc ops outs)) /\
     emit_inst opc ops outs st = (u, st') ==>
-    shape_extends internal LP st st' /\ shape_base_state st'
+    shape_mode_extends static internal LP st st' /\ shape_base_state st'
 Proof
   rpt gen_tac >> strip_tac >> gvs[emit_inst_eq] >>
-  qmatch_goalsub_abbrev_tac `shape_extends _ _ st st1` >>
+  qmatch_goalsub_abbrev_tac `shape_mode_extends static _ _ st st1` >>
   qabbrev_tac `inst = mk_inst st.cs_next_id opc ops outs` >>
   `inst.inst_opcode = opc /\ inst.inst_operands = ops /\
-   inst.inst_outputs = outs /\ lowered_inst_ok internal inst`
+   inst.inst_outputs = outs /\ lowered_inst_mode_ok static internal inst`
     by gvs[Abbr `inst`, mk_inst_def] >>
   qspecl_then [`st`, `st1`, `outs`] mp_tac plain_outputs_ok >>
   (impl_tac >- simp[Abbr `st1`]) >> strip_tac >>
   `inst.inst_opcode <> GAS /\ inst.inst_opcode <> RETPC_PARAM` by gvs[] >>
   `EVERY (label_or_plain st) inst.inst_operands` by gvs[] >>
   drule_all plain_append_ok >> strip_tac >>
-  match_mp_tac (Q.SPECL [`internal`, `LP`, `st`, `st1`, `inst`] shape_base_append_inst) >>
+  match_mp_tac (Q.SPECL [`internal`, `LP`, `st`, `st1`, `inst`] shape_base_append_inst_mode) >>
   gvs[Abbr `st1`]
 QED
 
-Theorem shape_base_emit_op:
+Theorem shape_base_emit_op_mode:
   !internal LP opc ops st x st'.
     shape_base_state st /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
     EVERY (label_or_plain st) ops /\
-    (!id outs. lowered_inst_ok internal (mk_inst id opc ops outs)) /\
+    (!id outs. lowered_inst_mode_ok static internal (mk_inst id opc ops outs)) /\
     emit_op opc ops st = (x, st') ==>
-    shape_extends internal LP st st' /\ shape_base_state st' /\
+    shape_mode_extends static internal LP st st' /\ shape_base_state st' /\
     plain_operand st' x
 Proof
   rpt gen_tac >> strip_tac >>
   drule emit_op_facts >> strip_tac >>
   qabbrev_tac `inst = mk_inst st.cs_next_id opc ops [out]` >>
   `inst.inst_opcode = opc /\ inst.inst_operands = ops /\
-   inst.inst_outputs = [out] /\ lowered_inst_ok internal inst`
+   inst.inst_outputs = [out] /\ lowered_inst_mode_ok static internal inst`
     by fs[Abbr `inst`, mk_inst_def] >>
   `inst.inst_opcode <> GAS /\ inst.inst_opcode <> RETPC_PARAM` by gvs[] >>
   `EVERY (label_or_plain st) inst.inst_operands` by gvs[] >>
   drule_all plain_append_ok >> strip_tac >>
-  `shape_extends internal LP st st' /\ shape_base_state st'`
-    by (match_mp_tac (Q.SPECL [`internal`, `LP`, `st`, `st'`, `inst`] shape_base_append_inst) >>
+  `shape_mode_extends static internal LP st st' /\ shape_base_state st'`
+    by (match_mp_tac (Q.SPECL [`internal`, `LP`, `st`, `st'`, `inst`] shape_base_append_inst_mode) >>
         gs[]) >>
   gvs[] >> match_mp_tac (Q.SPECL [`st`, `st'`, `inst`] fresh_out_plain) >> gs[]
 QED
 
-Theorem shape_base_new_block:
+Theorem shape_base_new_block_mode:
   !internal LP lbl st u st'.
     shape_base_state st /\ LP lbl /\ ~internal_label_ok lbl /\
     new_block lbl st = (u, st') ==>
-    shape_extends internal LP st st' /\ shape_base_state st'
+    shape_mode_extends static internal LP st st' /\ shape_base_state st'
 Proof
   rpt gen_tac >> strip_tac >>
   drule cs_extends_new_block >> strip_tac >> gvs[new_block_def] >>
-  qmatch_goalsub_abbrev_tac `shape_extends _ _ st st1` >>
+  qmatch_goalsub_abbrev_tac `shape_mode_extends static _ _ st st1` >>
   `all_blocks st1 =
      all_blocks st ++ [<| bb_label := lbl; bb_instructions := [] |>]`
     by simp[Abbr `st1`, all_blocks_def] >>
@@ -1003,81 +1013,81 @@ Proof
   `added_labels st st1 = [lbl]`
     by gs[added_labels_def, DROP_LENGTH_MAP_APPEND] >>
   `added_insts st st1 = []` by gs[added_insts_def, DROP_LENGTH_NIL] >>
-  conj_tac >- gs[shape_extends_def] >>
+  conj_tac >- gs[shape_mode_extends_def] >>
   gs[shape_base_state_def] >>
   conj_tac >- (irule rets_scoped_append_empty >> simp[]) >>
   metis_tac[not_fresh_at_mono, arithmeticTheory.LESS_EQ_REFL]
 QED
 
-Theorem shape_base_step_emit_op_call:
+Theorem shape_base_step_emit_op_call_mode:
   !internal LP R opc g rest.
-    shape_stable R /\ MEM opc [CALL; STATICCALL; DELEGATECALL] /\
-    (!id outs. lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)) ==>
-    shape_base_step internal LP
+    shape_mode_stable static R /\ MEM opc [CALL; STATICCALL; DELEGATECALL] /\
+    (!id outs. lowered_inst_mode_ok static internal (mk_inst id opc (g :: rest) outs)) ==>
+    shape_base_mode_step static internal LP
       (\st. R st /\ (gas_operand st g \/ plain_operand st g) /\
             EVERY (plain_operand st) rest)
       (emit_op opc (g :: rest)) (\x st'. R st' /\ plain_operand st' x)
 Proof
-  rpt gen_tac >> strip_tac >> simp[shape_base_step_def] >>
+  rpt gen_tac >> strip_tac >> simp[shape_base_mode_step_def] >>
   rpt gen_tac >> strip_tac >>
-  `shape_extends internal LP st st' /\ shape_base_state st' /\
+  `shape_mode_extends static internal LP st st' /\ shape_base_state st' /\
    plain_operand st' x` by
-    (irule shape_base_emit_op_call >> simp[] >>
+    (irule shape_base_emit_op_call_mode >> simp[] >>
      qexistsl [`g`, `opc`, `rest`] >> fs[]) >>
-  metis_tac[shape_stable_def]
+  metis_tac[shape_mode_stable_def]
 QED
 
-Theorem shape_base_step_emit_op:
+Theorem shape_base_step_emit_op_mode:
   !internal LP R opc ops.
-    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
-    (!id outs. lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
-    shape_base_step internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
+    shape_mode_stable static R /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
+    (!id outs. lowered_inst_mode_ok static internal (mk_inst id opc ops outs)) ==>
+    shape_base_mode_step static internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
       (emit_op opc ops) (\x st'. R st' /\ plain_operand st' x)
 Proof
-  rpt strip_tac >> rw[shape_base_step_def] >>
-  drule_all shape_base_emit_op >>
+  rpt strip_tac >> rw[shape_base_mode_step_def] >>
+  drule_all shape_base_emit_op_mode >>
   disch_then (qspec_then `LP` strip_assume_tac) >>
-  metis_tac[shape_stable_def]
+  metis_tac[shape_mode_stable_def]
 QED
 
-Theorem shape_base_step_emit_inst:
+Theorem shape_base_step_emit_inst_mode:
   !internal LP R opc ops outs.
-    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
-    (!id. lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
-    shape_base_step internal LP
+    shape_mode_stable static R /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
+    (!id. lowered_inst_mode_ok static internal (mk_inst id opc ops outs)) ==>
+    shape_base_mode_step static internal LP
       (\st. R st /\ EVERY (label_or_plain st) ops /\
             EVERY (plain_operand st) (MAP Var outs))
       (emit_inst opc ops outs) (\x st'. R st')
 Proof
-  rpt strip_tac >> rw[shape_base_step_def] >>
-  drule_all shape_base_emit_inst >>
+  rpt strip_tac >> rw[shape_base_mode_step_def] >>
+  drule_all shape_base_emit_inst_mode >>
   disch_then (qspec_then `LP` strip_assume_tac) >>
-  metis_tac[shape_stable_def]
+  metis_tac[shape_mode_stable_def]
 QED
 
-Theorem shape_base_step_emit_void:
+Theorem shape_base_step_emit_void_mode:
   !internal LP R opc ops.
-    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
-    (!id. lowered_inst_ok internal (mk_inst id opc ops [])) ==>
-    shape_base_step internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
+    shape_mode_stable static R /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
+    (!id. lowered_inst_mode_ok static internal (mk_inst id opc ops [])) ==>
+    shape_base_mode_step static internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
       (emit_void opc ops) (\x st'. R st')
 Proof
   rpt strip_tac >>
   `emit_void opc ops = emit_inst opc ops []`
     by simp[FUN_EQ_THM, emit_void_eq, emit_inst_eq] >>
   qspecl_then [`internal`, `LP`, `R`, `opc`, `ops`, `[]`] mp_tac
-    shape_base_step_emit_inst >>
+    shape_base_step_emit_inst_mode >>
   simp[]
 QED
 
-Theorem shape_base_step_new_block:
+Theorem shape_base_step_new_block_mode:
   !internal LP R lbl.
-    shape_stable R /\ LP lbl /\ ~internal_label_ok lbl ==>
-    shape_base_step internal LP R (new_block lbl) (\x st'. R st')
+    shape_mode_stable static R /\ LP lbl /\ ~internal_label_ok lbl ==>
+    shape_base_mode_step static internal LP R (new_block lbl) (\x st'. R st')
 Proof
-  rpt strip_tac >> rw[shape_base_step_def] >>
-  drule_all shape_base_new_block >> strip_tac >>
-  metis_tac[shape_stable_def]
+  rpt strip_tac >> rw[shape_base_mode_step_def] >>
+  drule_all shape_base_new_block_mode >> strip_tac >>
+  metis_tac[shape_mode_stable_def]
 QED
 
 Theorem shape_base_state_same_code:
@@ -1094,54 +1104,54 @@ Proof
   gs[shape_base_state_def] >> metis_tac[not_fresh_at_mono]
 QED
 
-Theorem shape_base_step_fresh_label:
+Theorem shape_base_step_fresh_label_mode:
   !internal LP R sfx.
-    shape_stable R ==>
-    shape_base_step internal LP R (fresh_label sfx)
+    shape_mode_stable static R ==>
+    shape_base_mode_step static internal LP R (fresh_label sfx)
       (\l st'. R st' /\ compiler_label l)
 Proof
-  simp[shape_base_step_def, PULL_FORALL, AND_IMP_INTRO] >>
+  simp[shape_base_mode_step_def, PULL_FORALL, AND_IMP_INTRO] >>
   rpt gen_tac >> strip_tac >> gvs[fresh_label_def] >>
-  qmatch_goalsub_abbrev_tac `shape_extends _ _ st st1` >>
-  `shape_extends internal LP st st1`
-    by (irule shape_extends_same_code >> simp[Abbr `st1`]) >>
+  qmatch_goalsub_abbrev_tac `shape_mode_extends static _ _ st st1` >>
+  `shape_mode_extends static internal LP st st1`
+    by (irule shape_extends_same_code_mode >> simp[Abbr `st1`]) >>
   `shape_base_state st1`
     by (irule shape_base_state_same_code >> qexists_tac `st` >>
         simp[Abbr `st1`]) >>
   simp[compiler_label_def, fresh_label_output_in_future] >>
-  metis_tac[shape_stable_def]
+  metis_tac[shape_mode_stable_def]
 QED
 
-Theorem shape_base_step_fresh_label_sfx:
+Theorem shape_base_step_fresh_label_sfx_mode:
   !internal LP R sfx.
-    shape_stable R ==>
-    shape_base_step internal LP R (fresh_label sfx)
+    shape_mode_stable static R ==>
+    shape_base_mode_step static internal LP R (fresh_label sfx)
       (\l st'. R st' /\ compiler_label l /\ label_sfx sfx l)
 Proof
-  simp[shape_base_step_def, PULL_FORALL, AND_IMP_INTRO] >>
+  simp[shape_base_mode_step_def, PULL_FORALL, AND_IMP_INTRO] >>
   rpt gen_tac >> strip_tac >> gvs[fresh_label_def] >>
-  qmatch_goalsub_abbrev_tac `shape_extends _ _ st st1` >>
-  `shape_extends internal LP st st1`
-    by (irule shape_extends_same_code >> simp[Abbr `st1`]) >>
+  qmatch_goalsub_abbrev_tac `shape_mode_extends static _ _ st st1` >>
+  `shape_mode_extends static internal LP st st1`
+    by (irule shape_extends_same_code_mode >> simp[Abbr `st1`]) >>
   `shape_base_state st1`
     by (irule shape_base_state_same_code >> qexists_tac `st` >>
         simp[Abbr `st1`]) >>
   simp[compiler_label_def, fresh_label_output_in_future, label_sfx_def] >>
-  metis_tac[shape_stable_def]
+  metis_tac[shape_mode_stable_def]
 QED
 
-Theorem shape_base_step_alloc_buffer_zero:
+Theorem shape_base_step_alloc_buffer_zero_mode:
   !internal LP R.
-    shape_stable R ==>
-    shape_base_step internal LP R (compile_alloc_buffer 0)
+    shape_mode_stable static R ==>
+    shape_base_mode_step static internal LP R (compile_alloc_buffer 0)
       (\buf st. R st /\ plain_operand st buf.buf_operand)
 Proof
   rpt gen_tac >> strip_tac >> simp[compile_alloc_buffer_def] >>
-  irule shape_base_step_bind >>
+  irule shape_base_step_bind_mode >>
   qexists_tac `\op st. R st /\ plain_operand st op` >>
   conj_tac
-  >- (gen_tac >> BETA_TAC >> irule shape_base_step_return >> simp[]) >>
-  irule shape_base_step_conseq >>
+  >- (gen_tac >> BETA_TAC >> irule shape_base_step_return_mode >> simp[]) >>
+  irule shape_base_step_conseq_mode >>
   qexistsl [`LP`, `\st. R st /\ EVERY (label_or_plain st) [Lit 0w]`,
             `\op st. R st /\ plain_operand st op`] >>
   conj_tac >- simp[] >>
@@ -1149,47 +1159,47 @@ Proof
                   stackPlanTypesTheory.is_label_operand_def] >>
   conj_tac >- simp[] >>
   match_mp_tac (BETA_RULE (Q.SPECL [`internal`, `LP`, `R`]
-    shape_base_step_emit_op)) >>
-  simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+    shape_base_step_emit_op_mode)) >>
+  simp[lowered_inst_mode_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
        inst_jump_labels_ok_def, mk_inst_def, label_positions_ok_def,
        is_terminator_def, is_param_opcode_def, is_read0_opcode_def,
        stackPlanTypesTheory.is_label_operand_def]
 QED
 
-Theorem shape_base_step_emit_op_guarded:
+Theorem shape_base_step_emit_op_guarded_mode:
   !internal LP P opc ops.
-    shape_stable P /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
+    shape_mode_stable static P /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
     (!st. P st ==> EVERY (label_or_plain st) ops /\
-      (!id outs. lowered_inst_ok internal (mk_inst id opc ops outs))) ==>
-    shape_base_step internal LP P (emit_op opc ops)
+      (!id outs. lowered_inst_mode_ok static internal (mk_inst id opc ops outs))) ==>
+    shape_base_mode_step static internal LP P (emit_op opc ops)
       (\x st. P st /\ plain_operand st x)
 Proof
-  rpt gen_tac >> strip_tac >> rw[shape_base_step_def] >>
+  rpt gen_tac >> strip_tac >> rw[shape_base_mode_step_def] >>
   first_x_assum (drule_then strip_assume_tac) >>
-  drule_all shape_base_emit_op >>
+  drule_all shape_base_emit_op_mode >>
   disch_then (qspec_then `LP` strip_assume_tac) >>
-  metis_tac[shape_stable_def]
+  metis_tac[shape_mode_stable_def]
 QED
 
-Theorem shape_base_step_emit_inst_guarded:
+Theorem shape_base_step_emit_inst_guarded_mode:
   !internal LP P opc ops outs.
-    shape_stable P /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
+    shape_mode_stable static P /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
     (!st. P st ==> EVERY (label_or_plain st) ops /\
       EVERY (plain_operand st) (MAP Var outs) /\
-      (!id. lowered_inst_ok internal (mk_inst id opc ops outs))) ==>
-    shape_base_step internal LP P (emit_inst opc ops outs) (\x st. P st)
+      (!id. lowered_inst_mode_ok static internal (mk_inst id opc ops outs))) ==>
+    shape_base_mode_step static internal LP P (emit_inst opc ops outs) (\x st. P st)
 Proof
-  rpt gen_tac >> strip_tac >> rw[shape_base_step_def] >>
+  rpt gen_tac >> strip_tac >> rw[shape_base_mode_step_def] >>
   first_x_assum (drule_then strip_assume_tac) >>
-  drule_all shape_base_emit_inst >>
+  drule_all shape_base_emit_inst_mode >>
   disch_then (qspec_then `LP` strip_assume_tac) >>
-  metis_tac[shape_stable_def]
+  metis_tac[shape_mode_stable_def]
 QED
 
-Theorem shape_base_step_extcall_revert:
+Theorem shape_base_step_extcall_revert_mode:
   !internal LP R.
-    shape_stable R ==>
-    shape_base_step internal LP R
+    shape_mode_stable static R ==>
+    shape_base_mode_step static internal LP R
       (do rds <- emit_op RETURNDATASIZE [];
           buf <- compile_alloc_buffer 0;
           emit_void RETURNDATACOPY [buf.buf_operand; Lit 0w; rds];
@@ -1197,33 +1207,33 @@ Theorem shape_base_step_extcall_revert:
        od) (\u st. R st)
 Proof
   rpt gen_tac >> strip_tac >>
-  irule shape_base_step_bind >>
+  irule shape_base_step_bind_mode >>
   qexists_tac `\rds st. R st /\ plain_operand st rds` >>
   reverse conj_tac
-  >- (irule shape_base_step_emit_op_guarded >>
-      simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+  >- (irule shape_base_step_emit_op_guarded_mode >>
+      simp[lowered_inst_mode_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
         mk_inst_def, label_positions_ok_def, inst_jump_labels_ok_def,
         is_terminator_def, is_param_opcode_def, is_read0_opcode_def]) >>
   qx_gen_tac `rds` >> BETA_TAC >>
-  `shape_stable (\st. R st /\ plain_operand st rds)` by
-    (rw[shape_stable_def] >> metis_tac[shape_stable_def, plain_operand_mono]) >>
-  irule shape_base_step_bind >>
+  `shape_mode_stable static (\st. R st /\ plain_operand st rds)` by
+    (rw[shape_mode_stable_def] >> metis_tac[shape_mode_stable_def, plain_operand_mono_mode]) >>
+  irule shape_base_step_bind_mode >>
   qexists_tac `\buf st. (R st /\ plain_operand st rds) /\
                            plain_operand st buf.buf_operand` >>
-  reverse conj_tac >- (ho_match_mp_tac shape_base_step_alloc_buffer_zero >> simp[]) >>
+  reverse conj_tac >- (ho_match_mp_tac shape_base_step_alloc_buffer_zero_mode >> simp[]) >>
   qx_gen_tac `buf` >> BETA_TAC >>
-  `shape_stable (\st. (R st /\ plain_operand st rds) /\
+  `shape_mode_stable static (\st. (R st /\ plain_operand st rds) /\
                        plain_operand st buf.buf_operand)` by
-    (rw[shape_stable_def] >> metis_tac[shape_stable_def, plain_operand_mono]) >>
-  irule shape_base_step_ignore_bind >>
+    (rw[shape_mode_stable_def] >> metis_tac[shape_mode_stable_def, plain_operand_mono_mode]) >>
+  irule shape_base_step_ignore_bind_mode >>
   qexists_tac `\u st. (R st /\ plain_operand st rds) /\
                          plain_operand st buf.buf_operand` >>
   conj_tac >- (gen_tac >> BETA_TAC >>
-    irule shape_base_step_conseq >>
-    irule_at Any shape_base_step_emit_inst_guarded >>
+    irule shape_base_step_conseq_mode >>
+    irule_at Any shape_base_step_emit_inst_guarded_mode >>
     qexistsl [`\st. (R st /\ plain_operand st rds) /\
                        plain_operand st buf.buf_operand`, `LP`] >>
-    simp[label_or_plain_def, lowered_inst_ok_def, raw_opcode_ok_def,
+    simp[label_or_plain_def, lowered_inst_mode_ok_def, raw_opcode_ok_def,
       inst_shape_ok_def, mk_inst_def, label_positions_ok_def,
       inst_jump_labels_ok_def, is_terminator_def, is_param_opcode_def,
       is_read0_opcode_def, stackPlanTypesTheory.is_label_operand_def] >>
@@ -1232,8 +1242,8 @@ Proof
   `emit_void RETURNDATACOPY [buf.buf_operand; Lit 0w; rds] =
    emit_inst RETURNDATACOPY [buf.buf_operand; Lit 0w; rds] []`
     by simp[FUN_EQ_THM, emit_void_eq, emit_inst_eq] >>
-  simp[] >> ho_match_mp_tac shape_base_step_emit_inst_guarded >>
-  simp[label_or_plain_def, plain_operand_def, lowered_inst_ok_def,
+  simp[] >> ho_match_mp_tac shape_base_step_emit_inst_guarded_mode >>
+  simp[label_or_plain_def, plain_operand_def, lowered_inst_mode_ok_def,
     raw_opcode_ok_def, inst_shape_ok_def, mk_inst_def, label_positions_ok_def,
     inst_jump_labels_ok_def, is_terminator_def, is_param_opcode_def,
     is_read0_opcode_def, stackPlanTypesTheory.is_label_operand_def]
@@ -1302,83 +1312,83 @@ Proof
        comp_bind_def, comp_return_def, FUN_EQ_THM]
 QED
 
-Theorem shape_base_step_pure_pre[local]:
+Theorem shape_base_step_pure_pre_mode[local]:
   !internal LP b P m Q.
-    (b ==> shape_base_step internal LP P m Q) ==>
-    shape_base_step internal LP (\st. b /\ P st) m Q
+    (b ==> shape_base_mode_step static internal LP P m Q) ==>
+    shape_base_mode_step static internal LP (\st. b /\ P st) m Q
 Proof
-  rw[shape_base_step_def] >> metis_tac[]
+  rw[shape_base_mode_step_def] >> metis_tac[]
 QED
 
-Theorem shape_base_step_checked_extcall:
+Theorem shape_base_step_checked_extcall_mode:
   !internal LP R opc g rest.
-    shape_stable R /\ MEM opc [CALL; STATICCALL] /\
-    (!id outs. lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)) /\
+    shape_mode_stable static R /\ MEM opc [CALL; STATICCALL] /\
+    (!id outs. lowered_inst_mode_ok static internal (mk_inst id opc (g :: rest) outs)) /\
     (!lbl. compiler_label lbl ==> LP lbl) ==>
-    shape_base_step internal LP
+    shape_base_mode_step static internal LP
       (\st. R st /\ (gas_operand st g \/ plain_operand st g) /\
             EVERY (plain_operand st) rest)
       (checked_extcall opc g rest) (\x st. R st /\ plain_operand st x)
 Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[checked_extcall_grouped] >>
-  irule shape_base_step_bind >>
+  irule shape_base_step_bind_mode >>
   qexists_tac `\success st. R st /\ plain_operand st success` >>
-  reverse conj_tac >- (irule shape_base_step_emit_op_call >> simp[] >> fs[MEM]) >>
+  reverse conj_tac >- (irule shape_base_step_emit_op_call_mode >> simp[] >> fs[MEM]) >>
   qx_gen_tac `success` >> BETA_TAC >>
-  `shape_stable (\st. R st /\ plain_operand st success)` by
-    (rw[shape_stable_def] >> metis_tac[shape_stable_def, plain_operand_mono]) >>
-  irule shape_base_step_bind >>
+  `shape_mode_stable static (\st. R st /\ plain_operand st success)` by
+    (rw[shape_mode_stable_def] >> metis_tac[shape_mode_stable_def, plain_operand_mono_mode]) >>
+  irule shape_base_step_bind_mode >>
   qexists_tac `\fail st. (R st /\ plain_operand st success) /\ compiler_label fail /\
                           label_sfx "extcall_fail" fail` >>
-  reverse conj_tac >- (ho_match_mp_tac shape_base_step_fresh_label_sfx >> simp[]) >>
+  reverse conj_tac >- (ho_match_mp_tac shape_base_step_fresh_label_sfx_mode >> simp[]) >>
   qx_gen_tac `fail_lbl` >> BETA_TAC >>
-  irule shape_base_step_bind >>
+  irule shape_base_step_bind_mode >>
   qexists_tac `\cont st. ((R st /\ plain_operand st success) /\
                           compiler_label fail_lbl /\ label_sfx "extcall_fail" fail_lbl) /\
                          compiler_label cont /\ label_sfx "extcall_cont" cont` >>
-  reverse conj_tac >- (ho_match_mp_tac shape_base_step_fresh_label_sfx >>
-    ho_match_mp_tac shape_stable_conj >> conj_tac >- simp[] >>
-    simp[shape_stable_def]) >>
+  reverse conj_tac >- (ho_match_mp_tac shape_base_step_fresh_label_sfx_mode >>
+    ho_match_mp_tac shape_stable_conj_mode >> conj_tac >- simp[] >>
+    simp[shape_mode_stable_def]) >>
   qx_gen_tac `cont` >> BETA_TAC >> suspend "tail"
 QED
 
-Resume shape_base_step_checked_extcall[tail]:
+Resume shape_base_step_checked_extcall_mode[tail]:
   qpat_x_assum `MEM opc _` kall_tac >>
-  qpat_x_assum `!id outs. lowered_inst_ok _ _` kall_tac >>
-  irule shape_base_step_conseq >>
+  qpat_x_assum `!id outs. lowered_inst_mode_ok static _ _` kall_tac >>
+  irule shape_base_step_conseq_mode >>
   qexistsl [`LP`, `\st. (compiler_label fail_lbl /\ compiler_label cont /\
                           label_sfx "extcall_fail" fail_lbl /\ label_sfx "extcall_cont" cont) /\
                          (R st /\ plain_operand st success)`,
             `\x st. R st /\ plain_operand st x`] >>
   conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
-  ho_match_mp_tac shape_base_step_pure_pre >> strip_tac >>
+  ho_match_mp_tac shape_base_step_pure_pre_mode >> strip_tac >>
   `cont <> fail_lbl` by
     (`"extcall_cont" <> "extcall_fail"` by EVAL_TAC >> metis_tac[label_sfx_distinct]) >>
-  irule shape_base_step_ignore_bind >>
+  irule shape_base_step_ignore_bind_mode >>
   qexists_tac `\u st. R st /\ plain_operand st success` >>
-  reverse conj_tac >- (ho_match_mp_tac shape_base_step_emit_inst_guarded >>
-    simp[label_or_plain_def, lowered_inst_ok_def, raw_opcode_ok_def,
+  reverse conj_tac >- (ho_match_mp_tac shape_base_step_emit_inst_guarded_mode >>
+    simp[label_or_plain_def, lowered_inst_mode_ok_def, raw_opcode_ok_def,
       inst_shape_ok_def, mk_inst_def, label_positions_ok_def,
       inst_jump_labels_ok_def, is_terminator_def, is_param_opcode_def,
       is_read0_opcode_def, stackPlanTypesTheory.is_label_operand_def] >>
     rpt strip_tac >> gvs[plain_operand_def, jump_label_ok_def] >>
     metis_tac[stackPlanTypesTheory.is_label_operand_def]) >>
   gen_tac >> BETA_TAC >>
-  irule shape_base_step_ignore_bind >>
+  irule shape_base_step_ignore_bind_mode >>
   qexists_tac `\u st. R st /\ plain_operand st success` >>
-  reverse conj_tac >- (ho_match_mp_tac shape_base_step_new_block >> simp[]) >>
+  reverse conj_tac >- (ho_match_mp_tac shape_base_step_new_block_mode >> simp[]) >>
   gen_tac >> BETA_TAC >>
-  irule shape_base_step_ignore_bind >>
+  irule shape_base_step_ignore_bind_mode >>
   qexists_tac `\u st. R st /\ plain_operand st success` >>
-  reverse conj_tac >- (ho_match_mp_tac shape_base_step_extcall_revert >> simp[]) >>
+  reverse conj_tac >- (ho_match_mp_tac shape_base_step_extcall_revert_mode >> simp[]) >>
   gen_tac >> BETA_TAC >>
-  irule shape_base_step_ignore_bind >>
+  irule shape_base_step_ignore_bind_mode >>
   qexists_tac `\u st. R st /\ plain_operand st success` >>
-  reverse conj_tac >- (ho_match_mp_tac shape_base_step_new_block >> simp[]) >>
-  gen_tac >> BETA_TAC >> irule shape_base_step_return >> simp[]
+  reverse conj_tac >- (ho_match_mp_tac shape_base_step_new_block_mode >> simp[]) >>
+  gen_tac >> BETA_TAC >> irule shape_base_step_return_mode >> simp[]
 QED
 
-Finalise shape_base_step_checked_extcall
+Finalise shape_base_step_checked_extcall_mode
 
 Theorem checked_extcall_layout:
   checked_extcall opc g rest st = (success, st') ==>
@@ -1405,18 +1415,18 @@ Proof
 QED
 
 
-Theorem shape_step_emit_op_call_branch:
+Theorem shape_step_emit_op_call_branch_mode:
   !internal LP R opc g rest.
-    shape_stable R /\ MEM opc [CALL; STATICCALL] /\
-    (!id outs. lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)) /\
+    shape_mode_stable static R /\ MEM opc [CALL; STATICCALL] /\
+    (!id outs. lowered_inst_mode_ok static internal (mk_inst id opc (g :: rest) outs)) /\
     (!lbl. compiler_label lbl ==> LP lbl) ==>
-    shape_step internal LP
+    shape_mode_step static internal LP
       (\st. R st /\ (gas_operand st g \/ plain_operand st g) /\
             EVERY (plain_operand st) rest)
       (checked_extcall opc g rest) (\x st. R st /\ plain_operand st x)
 Proof
-  rpt gen_tac >> strip_tac >> drule_all shape_base_step_checked_extcall >>
-  simp[shape_base_step_def, shape_step_def, shape_state_def] >>
+  rpt gen_tac >> strip_tac >> drule_all shape_base_step_checked_extcall_mode >>
+  simp[shape_base_mode_step_def, shape_mode_step_def, shape_state_def] >>
   metis_tac[]
 QED
 
@@ -1438,13 +1448,13 @@ Proof
   rewrite_tac[checked_extcall_bind] >> simp[]
 QED
 
-Theorem shape_step_checked_extcall_then:
-  shape_stable B /\ MEM opc [CALL; STATICCALL] /\
+Theorem shape_step_checked_extcall_then_mode:
+  shape_mode_stable static B /\ MEM opc [CALL; STATICCALL] /\
   (!st id outs. B st /\ (gas_operand st g \/ plain_operand st g) /\
        EVERY (plain_operand st) rest ==>
-       lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)) /\
-  shape_step internal compiler_label B k Q ==>
-  shape_step internal compiler_label
+       lowered_inst_mode_ok static internal (mk_inst id opc (g :: rest) outs)) /\
+  shape_mode_step static internal compiler_label B k Q ==>
+  shape_mode_step static internal compiler_label
     (\st. B st /\ (gas_operand st g \/ plain_operand st g) /\
           EVERY (plain_operand st) rest)
     (do success <- emit_op opc (g :: rest);
@@ -1460,27 +1470,27 @@ Theorem shape_step_checked_extcall_then:
         k
      od) Q
 Proof
-  strip_tac >> rewrite_tac[GSYM checked_extcall_then, shape_step_def] >>
+  strip_tac >> rewrite_tac[GSYM checked_extcall_then, shape_mode_step_def] >>
   rpt gen_tac >> strip_tac >>
-  `!id outs. lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)`
+  `!id outs. lowered_inst_mode_ok static internal (mk_inst id opc (g :: rest) outs)`
     by metis_tac[] >>
-  `shape_step internal compiler_label
+  `shape_mode_step static internal compiler_label
      (\st. B st /\ (gas_operand st g \/ plain_operand st g) /\
            EVERY (plain_operand st) rest)
      (comp_bind (checked_extcall opc g rest) (\success. k)) Q` by
-    (irule shape_step_bind >>
+    (irule shape_step_bind_mode >>
      qexists_tac `\v st. B st /\ plain_operand st v` >> reverse conj_tac
-     >- (irule shape_step_emit_op_call_branch >> simp[]) >>
-     gen_tac >> irule shape_step_conseq >>
+     >- (irule shape_step_emit_op_call_branch_mode >> simp[]) >>
+     gen_tac >> irule shape_step_conseq_mode >>
      qexistsl [`compiler_label`, `B`, `Q`] >> simp[]) >>
-  gvs[shape_step_def] >> metis_tac[]
+  gvs[shape_mode_step_def] >> metis_tac[]
 QED
 
-Theorem shape_step_emit_op_call_assert:
+Theorem shape_step_emit_op_call_assert_mode:
   !internal LP R opc g rest.
-    shape_stable R /\ MEM opc [CALL; STATICCALL] /\
-    (!id outs. lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)) ==>
-    shape_step internal LP
+    shape_mode_stable static R /\ MEM opc [CALL; STATICCALL] /\
+    (!id outs. lowered_inst_mode_ok static internal (mk_inst id opc (g :: rest) outs)) ==>
+    shape_mode_step static internal LP
       (\st. R st /\ (gas_operand st g \/ plain_operand st g) /\
             EVERY (plain_operand st) rest)
       (comp_bind (emit_op opc (g :: rest))
@@ -1488,54 +1498,54 @@ Theorem shape_step_emit_op_call_assert:
            (comp_return success)))
       (\x st'. R st' /\ plain_operand st' x)
 Proof
-  rpt strip_tac >> simp[shape_step_def, comp_bind_def, comp_ignore_bind_def,
+  rpt strip_tac >> simp[shape_mode_step_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `emit_op opc (g :: rest) st` >>
   rename1 `emit_op opc (g :: rest) st = (success, mid)` >>
   `shape_base_state st` by gvs[shape_state_def] >>
-  `shape_extends internal LP st mid /\ shape_base_state mid /\
+  `shape_mode_extends static internal LP st mid /\ shape_base_state mid /\
    plain_operand mid success` by
-    (irule shape_base_emit_op_call >> simp[] >>
+    (irule shape_base_emit_op_call_mode >> simp[] >>
      qexistsl [`g`, `opc`, `rest`] >> fs[MEM]) >>
   drule emit_op_facts >> strip_tac >>
   Cases_on `emit_inst ASSERT [success] [] mid` >> gvs[] >>
-  qmatch_goalsub_rename_tac `shape_extends internal LP st last` >>
+  qmatch_goalsub_rename_tac `shape_mode_extends static internal LP st last` >>
   `EVERY (label_or_plain mid) [Var out]` by
     gvs[label_or_plain_def, stackPlanTypesTheory.is_label_operand_def] >>
-  `!id. lowered_inst_ok internal (mk_inst id ASSERT [Var out] [])` by
-    (simp[lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def,
+  `!id. lowered_inst_mode_ok static internal (mk_inst id ASSERT [Var out] [])` by
+    (simp[lowered_inst_mode_ok_def, mk_inst_def, raw_opcode_ok_def,
        inst_shape_ok_def, is_read0_opcode_def, label_positions_ok_def,
        inst_jump_labels_ok_def, is_terminator_def, is_param_opcode_def,
        stackPlanTypesTheory.is_label_operand_def]) >>
   drule_all (SRULE [] (Q.GEN `ops` (Q.SPECL [`internal`, `LP`, `ASSERT`, `ops`, `[]`]
-    shape_base_emit_inst))) >>
+    shape_base_emit_inst_mode))) >>
   disch_then (qspec_then `LP` strip_assume_tac) >>
-  `shape_extends internal LP st last` by metis_tac[shape_extends_trans] >>
-  `R last` by metis_tac[shape_stable_def] >>
-  `plain_operand last (Var out)` by metis_tac[plain_operand_mono, shape_extends_def] >>
+  `shape_mode_extends static internal LP st last` by metis_tac[shape_extends_trans_mode] >>
+  `R last` by metis_tac[shape_mode_stable_def] >>
+  `plain_operand last (Var out)` by metis_tac[plain_operand_mono_mode, shape_mode_extends_def] >>
   simp[shape_state_def]
 QED
 
 (* The return PC exists only in internal-function code. *)
-Theorem shape_step_emit_op_retpc:
+Theorem shape_step_emit_op_retpc_mode:
   !LP R w.
-    shape_stable R ==>
-    shape_step T LP (\st. R st /\ internal_label_ok st.cs_current_bb)
+    shape_mode_stable static R ==>
+    shape_mode_step static T LP (\st. R st /\ internal_label_ok st.cs_current_bb)
       (emit_op RETPC_PARAM [Lit w])
       (\x st'. R st' /\ retpc_operand st' x)
 Proof
-  simp[shape_step_def, PULL_FORALL, AND_IMP_INTRO] >>
+  simp[shape_mode_step_def, PULL_FORALL, AND_IMP_INTRO] >>
   rpt gen_tac >> strip_tac >>
   drule emit_op_facts >> strip_tac >>
   qabbrev_tac `inst = mk_inst st.cs_next_id RETPC_PARAM [Lit w] [out]` >>
   `inst.inst_opcode = RETPC_PARAM /\ inst.inst_operands = [Lit w] /\
    inst.inst_outputs = [out]`
     by simp[Abbr `inst`, mk_inst_def] >>
-  `lowered_inst_ok T inst` by (simp[Abbr `inst`] >> EVAL_TAC) >>
-  `shape_extends T LP st st' /\ shape_state st'`
-    by (match_mp_tac (Q.SPECL [`T`, `LP`, `st`, `st'`, `inst`] shape_append_inst) >>
+  `lowered_inst_mode_ok static T inst` by (simp[Abbr `inst`] >> EVAL_TAC) >>
+  `shape_mode_extends static T LP st st' /\ shape_state st'`
+    by (match_mp_tac (Q.SPECL [`T`, `LP`, `st`, `st'`, `inst`] shape_append_inst_mode) >>
         gs[]) >>
-  `R st'` by metis_tac[shape_stable_def] >>
+  `R st'` by metis_tac[shape_mode_stable_def] >>
   qspecl_then [`st`, `st'`, `inst`, `out`] mp_tac fresh_out_opaque >>
   gs[retpc_operand_def] >> strip_tac >>
   simp[opaque_out_def] >> qexists_tac `inst` >> simp[] >>
@@ -1543,23 +1553,23 @@ Proof
   DEP_REWRITE_TAC[fn_entry_insts_internal_last] >> gs[]
 QED
 
-Theorem shape_step_emit_inst_ret:
+Theorem shape_step_emit_inst_ret_mode:
   !LP R front r.
-    shape_stable R /\
-    (!id. lowered_inst_ok T (mk_inst id RET (front ++ [r]) [])) ==>
-    shape_step T LP
+    shape_mode_stable static R /\
+    (!id. lowered_inst_mode_ok static T (mk_inst id RET (front ++ [r]) [])) ==>
+    shape_mode_step static T LP
       (\st. R st /\ EVERY (plain_operand st) front /\ retpc_operand st r)
       (emit_inst RET (front ++ [r]) []) (\x st'. R st')
 Proof
-  rpt strip_tac >> simp[shape_step_def, emit_inst_eq] >>
+  rpt strip_tac >> simp[shape_mode_step_def, emit_inst_eq] >>
   rpt gen_tac >> strip_tac >>
-  qmatch_goalsub_abbrev_tac `shape_extends _ _ st st1` >>
+  qmatch_goalsub_abbrev_tac `shape_mode_extends static _ _ st st1` >>
   qabbrev_tac `inst = mk_inst st.cs_next_id RET (front ++ [r]) []` >>
   `inst.inst_opcode = RET /\ inst.inst_operands = front ++ [r] /\
    inst.inst_outputs = []`
     by simp[Abbr `inst`, mk_inst_def] >>
-  `lowered_inst_ok T inst`
-    by (simp[Abbr `inst`] >> qpat_x_assum `!id. lowered_inst_ok _ _` MATCH_ACCEPT_TAC) >>
+  `lowered_inst_mode_ok static T inst`
+    by (simp[Abbr `inst`] >> qpat_x_assum `!id. lowered_inst_mode_ok static _ _` MATCH_ACCEPT_TAC) >>
   `(!x. MEM (Var x) inst.inst_operands ==> not_fresh_at st x) /\
    (!x. MEM (Var x) inst.inst_operands ==>
       (opaque_out RETPC_PARAM (state_insts st ++ [inst]) x ==>
@@ -1568,10 +1578,10 @@ Proof
                   ~MEM (Var x) front'))`
     by (match_mp_tac (Q.SPECL [`st`, `front`, `r`, `inst`] ret_append_ok) >>
         ASM_REWRITE_TAC[]) >>
-  `shape_extends T LP st st1 /\ shape_state st1`
-    by (match_mp_tac (Q.SPECL [`T`, `LP`, `st`, `st1`, `inst`] shape_append_inst) >>
+  `shape_mode_extends static T LP st st1 /\ shape_state st1`
+    by (match_mp_tac (Q.SPECL [`T`, `LP`, `st`, `st1`, `inst`] shape_append_inst_mode) >>
         gs[Abbr `st1`, retpc_operand_def] >> rpt strip_tac >> res_tac >> gs[]) >>
-  metis_tac[shape_stable_def]
+  metis_tac[shape_mode_stable_def]
 QED
 
 (* ===== From the invariant to opaque_use_ok ===== *)
@@ -1617,45 +1627,45 @@ Proof
 QED
 
 (* Runtime data labels are legal only in CODECOPY's source position. *)
-Theorem shape_step_emit_runtime_codecopy:
+Theorem shape_step_emit_runtime_codecopy_mode:
   !internal LP R dst sz.
-    shape_stable R ==>
-    shape_step internal LP
+    shape_mode_stable static R ==>
+    shape_mode_step static internal LP
       (\st. R st /\ EVERY (plain_operand st) [dst; sz])
       (emit_void CODECOPY [dst; Label "runtime_begin"; sz])
       (\u st. R st /\ EVERY (plain_operand st) [dst; sz])
 Proof
-  rpt strip_tac >> simp[shape_step_def] >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> simp[shape_mode_step_def] >> rpt gen_tac >> strip_tac >>
   mp_tac (Q.SPECL [`internal`, `LP`,
     `\st. R st /\ EVERY (plain_operand st) [dst; sz]`,
-    `CODECOPY`, `[dst; Label "runtime_begin"; sz]`] shape_step_emit_void) >>
+    `CODECOPY`, `[dst; Label "runtime_begin"; sz]`] shape_step_emit_void_mode) >>
   (impl_tac >-
-    (conj_tac >- simp[shape_stable_conj, shape_stable_plain_operands] >>
-     simp[lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def,
+    (conj_tac >- simp[shape_stable_conj_mode, shape_stable_plain_operands_mode] >>
+     simp[lowered_inst_mode_ok_def, mk_inst_def, raw_opcode_ok_def,
        inst_shape_ok_def, is_read0_opcode_def, label_positions_ok_def,
        inst_jump_labels_ok_def, is_terminator_def, is_param_opcode_def] >>
      gvs[plain_operand_def] >> Cases_on `dst` >> Cases_on `sz` >>
      gvs[stackPlanTypesTheory.is_label_operand_def])) >>
-  simp[shape_step_def] >>
+  simp[shape_mode_step_def] >>
   disch_then (qspecl_then [`st`, `st'`] mp_tac) >>
   simp[label_or_plain_def, stackPlanTypesTheory.is_label_operand_def]
 QED
 
-Theorem shape_step_emit_entry_return:
+Theorem shape_step_emit_entry_return_mode:
   !LP dst sz.
-    shape_step F LP (\st. EVERY (plain_operand st) [dst; sz])
+    shape_mode_step static F LP (\st. EVERY (plain_operand st) [dst; sz])
       (emit_inst RETURN [dst; sz] []) (\u st. T)
 Proof
-  rpt gen_tac >> simp[shape_step_def] >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> simp[shape_mode_step_def] >> rpt gen_tac >> strip_tac >>
   mp_tac (Q.SPECL [`F`, `LP`, `\st. T`, `RETURN`, `[dst; sz]`, `[]`]
-    shape_step_emit_inst) >>
+    shape_step_emit_inst_mode) >>
   (impl_tac >-
-    (simp[shape_stable_def, lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def,
+    (simp[shape_mode_stable_def, lowered_inst_mode_ok_def, mk_inst_def, raw_opcode_ok_def,
        inst_shape_ok_def, is_read0_opcode_def, label_positions_ok_def,
        inst_jump_labels_ok_def, is_terminator_def, is_param_opcode_def] >>
      gvs[plain_operand_def] >> Cases_on `dst` >> Cases_on `sz` >>
      gvs[stackPlanTypesTheory.is_label_operand_def])) >>
-  simp[shape_step_def, label_or_plain_def] >> metis_tac[]
+  simp[shape_mode_step_def, label_or_plain_def] >> metis_tac[]
 QED
 
 Theorem opaque_insts_ok_retpc_shape_ok:
@@ -1706,4 +1716,685 @@ Proof
   `MEM i insts /\ MEM j insts` by metis_tac[] >>
   `i.inst_opcode = RETPC_PARAM` by metis_tac[] >>
   metis_tac[]
+QED
+
+(* The static shape facts used by the existing clients. *)
+
+Theorem shape_step_bind:
+  !internal LP P m f Q R.
+    shape_step internal LP P m Q /\
+    (!x. shape_step internal LP (Q x) (f x) R) ==>
+    shape_step internal LP P (comp_bind m f) R
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static]
+    (Q.INST [`static` |-> `T`] shape_step_bind_mode))
+QED
+
+Theorem shape_step_ignore_bind:
+  !internal LP P m f Q R.
+    shape_step internal LP P m Q /\
+    (!x. shape_step internal LP (Q x) f R) ==>
+    shape_step internal LP P (comp_ignore_bind m f) R
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static]
+    (Q.INST [`static` |-> `T`] shape_step_ignore_bind_mode))
+QED
+
+Theorem shape_step_return:
+  !internal LP P Q x.
+    (!st. P st ==> Q x st) ==>
+    shape_step internal LP P (comp_return x) Q
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static]
+    (Q.INST [`static` |-> `T`] shape_step_return_mode))
+QED
+
+Theorem shape_extends_LP_mono:
+  !internal LP LP' st st'.
+    shape_extends internal LP st st' /\ (!l. LP l ==> LP' l) ==>
+    shape_extends internal LP' st st'
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_extends_static]
+    (Q.INST [`static` |-> `T`] shape_extends_LP_mono_mode))
+QED
+
+Theorem shape_step_conseq:
+  !internal LP LP' P P' m Q Q'.
+    shape_step internal LP P m Q /\ (!st. P' st ==> P st) /\
+    (!x st. Q x st ==> Q' x st) /\ (!l. LP l ==> LP' l) ==>
+    shape_step internal LP' P' m Q'
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static]
+    (Q.INST [`static` |-> `T`] shape_step_conseq_mode))
+QED
+
+Theorem shape_step_comp_get:
+  !internal LP P.
+    shape_step internal LP P comp_get (\x st'. x = st' /\ P st')
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static]
+    (Q.INST [`static` |-> `T`] shape_step_comp_get_mode))
+QED
+
+Theorem shape_stable_conj:
+  !R R'. shape_stable R /\ shape_stable R' ==>
+         shape_stable (\st. R st /\ R' st)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_stable_conj_mode))
+QED
+
+Theorem shape_stable_plain_operands:
+  !ops. shape_stable (\st. EVERY (plain_operand st) ops)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_stable_plain_operands_mode))
+QED
+
+Theorem shape_stable_label_or_plains:
+  !ops. shape_stable (\st. EVERY (label_or_plain st) ops)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_stable_label_or_plains_mode))
+QED
+
+Theorem shape_step_frame:
+  !internal LP P m Q R.
+    shape_step internal LP P m Q /\ shape_stable R ==>
+    shape_step internal LP (\st. R st /\ P st) m (\x st. R st /\ Q x st)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_frame_mode))
+QED
+
+Theorem shape_base_step_bind:
+  !internal LP P m f Q R.
+    shape_base_step internal LP P m Q /\
+    (!x. shape_base_step internal LP (Q x) (f x) R) ==>
+    shape_base_step internal LP P (comp_bind m f) R
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_base_mode_step_static]
+    (Q.INST [`static` |-> `T`] shape_base_step_bind_mode))
+QED
+
+Theorem shape_base_step_ignore_bind:
+  !internal LP P m f Q R.
+    shape_base_step internal LP P m Q /\
+    (!x. shape_base_step internal LP (Q x) f R) ==>
+    shape_base_step internal LP P (comp_ignore_bind m f) R
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_base_mode_step_static]
+    (Q.INST [`static` |-> `T`] shape_base_step_ignore_bind_mode))
+QED
+
+Theorem shape_base_step_return:
+  !internal LP P Q x.
+    (!st. P st ==> Q x st) ==>
+    shape_base_step internal LP P (comp_return x) Q
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_base_mode_step_static]
+    (Q.INST [`static` |-> `T`] shape_base_step_return_mode))
+QED
+
+Theorem shape_base_step_conseq:
+  !internal LP LP' P P' m Q Q'.
+    shape_base_step internal LP P m Q /\ (!st. P' st ==> P st) /\
+    (!x st. Q x st ==> Q' x st) /\ (!l. LP l ==> LP' l) ==>
+    shape_base_step internal LP' P' m Q'
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_base_mode_step_static]
+    (Q.INST [`static` |-> `T`] shape_base_step_conseq_mode))
+QED
+
+Theorem shape_base_step_frame:
+  !internal LP P m Q R.
+    shape_base_step internal LP P m Q /\ shape_stable R ==>
+    shape_base_step internal LP (\st. R st /\ P st) m (\x st. R st /\ Q x st)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_base_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_base_step_frame_mode))
+QED
+
+Theorem shape_extends_same_code:
+  !internal LP st st'.
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    st'.cs_current_insts = st.cs_current_insts /\
+    st.cs_next_var <= st'.cs_next_var ==>
+    shape_extends internal LP st st'
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_extends_static]
+    (Q.INST [`static` |-> `T`] shape_extends_same_code_mode))
+QED
+
+Theorem shape_step_fresh_var:
+  !internal LP R.
+    shape_stable R ==>
+    shape_step internal LP R fresh_var
+      (\x st'. R st' /\ plain_operand st' (Var x))
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_fresh_var_mode))
+QED
+
+Theorem shape_step_fresh_id:
+  !internal LP R.
+    shape_stable R ==>
+    shape_step internal LP R fresh_id (\x st'. R st')
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_fresh_id_mode))
+QED
+
+Theorem shape_step_fresh_label:
+  !internal LP R sfx.
+    shape_stable R ==>
+    shape_step internal LP R (fresh_label sfx)
+      (\l st'. R st' /\ compiler_label l)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_fresh_label_mode))
+QED
+
+Theorem shape_step_fresh_label_sfx:
+  !internal LP R sfx.
+    shape_stable R ==>
+    shape_step internal LP R (fresh_label sfx)
+      (\l st'. R st' /\ compiler_label l /\ label_sfx sfx l)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_fresh_label_sfx_mode))
+QED
+
+Theorem shape_step_new_block:
+  !internal LP R lbl.
+    shape_stable R /\ LP lbl /\ ~internal_label_ok lbl ==>
+    shape_step internal LP R (new_block lbl) (\x st'. R st')
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_new_block_mode))
+QED
+
+Theorem shape_base_append_inst:
+  !internal LP st st' inst.
+    shape_base_state st /\ lowered_inst_ok internal inst /\
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    st'.cs_current_insts = st.cs_current_insts ++ [inst] /\
+    st.cs_next_var <= st'.cs_next_var /\
+    (!x. MEM (Var x) inst.inst_operands ==> not_fresh_at st x) /\
+    (MEM inst.inst_opcode [GAS; RETPC_PARAM] ==>
+       !x. MEM x inst.inst_outputs ==> ~not_fresh_at st x /\ not_fresh_at st' x) /\
+    (!x. MEM x inst.inst_outputs ==>
+       not_fresh_at st' x /\
+       (not_fresh_at st x ==> ~opaque_out RETPC_PARAM (state_insts st) x)) /\
+    (!x. MEM (Var x) inst.inst_operands ==>
+       (opaque_out RETPC_PARAM (state_insts st ++ [inst]) x ==>
+          inst.inst_opcode = RET /\
+          ?front. inst.inst_operands = front ++ [Var x] /\
+                  ~MEM (Var x) front)) /\
+    (inst.inst_opcode = RET ==>
+       ?front x. inst.inst_operands = front ++ [Var x] /\
+                 opaque_out RETPC_PARAM (cur_entry_insts st) x) ==>
+    shape_extends internal LP st st' /\ shape_base_state st'
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_mode_extends_static]
+    (Q.INST [`static` |-> `T`] shape_base_append_inst_mode))
+QED
+
+Theorem shape_append_inst:
+  !internal LP st st' inst.
+    shape_state st /\ lowered_inst_ok internal inst /\
+    ~MEM inst.inst_opcode [CALL; STATICCALL] /\
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    st'.cs_current_insts = st.cs_current_insts ++ [inst] /\
+    st.cs_next_var <= st'.cs_next_var /\
+    (!x. MEM (Var x) inst.inst_operands ==> not_fresh_at st x) /\
+    (MEM inst.inst_opcode [GAS; RETPC_PARAM] ==>
+       !x. MEM x inst.inst_outputs ==> ~not_fresh_at st x /\ not_fresh_at st' x) /\
+    (!x. MEM x inst.inst_outputs ==>
+       not_fresh_at st' x /\
+       (not_fresh_at st x ==> ~opaque_out RETPC_PARAM (state_insts st) x)) /\
+    (!x. MEM (Var x) inst.inst_operands ==>
+       (opaque_out RETPC_PARAM (state_insts st ++ [inst]) x ==>
+          inst.inst_opcode = RET /\
+          ?front. inst.inst_operands = front ++ [Var x] /\
+                  ~MEM (Var x) front)) /\
+    (inst.inst_opcode = RET ==>
+       ?front x. inst.inst_operands = front ++ [Var x] /\
+                 opaque_out RETPC_PARAM (cur_entry_insts st) x) ==>
+    shape_extends internal LP st st' /\ shape_state st'
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_mode_extends_static]
+    (Q.INST [`static` |-> `T`] shape_append_inst_mode))
+QED
+
+Theorem shape_step_emit:
+  !internal LP R inst.
+    shape_stable R /\ lowered_inst_ok internal inst /\
+    ~MEM inst.inst_opcode [GAS; RETPC_PARAM; RET; CALL; STATICCALL] ==>
+    shape_step internal LP
+      (\st. R st /\ EVERY (label_or_plain st) inst.inst_operands /\
+            EVERY (plain_operand st) (MAP Var inst.inst_outputs))
+      (emit inst) (\x st'. R st')
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_emit_mode))
+QED
+
+Theorem shape_step_emit_op:
+  !internal LP R opc ops.
+    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
+    (!id outs. lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
+    shape_step internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
+      (emit_op opc ops) (\x st'. R st' /\ plain_operand st' x)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_emit_op_mode))
+QED
+
+Theorem shape_step_emit_inst:
+  !internal LP R opc ops outs.
+    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
+    (!id. lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
+    shape_step internal LP
+      (\st. R st /\ EVERY (label_or_plain st) ops /\
+            EVERY (plain_operand st) (MAP Var outs))
+      (emit_inst opc ops outs) (\x st'. R st')
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_emit_inst_mode))
+QED
+
+Theorem shape_step_emit_void:
+  !internal LP R opc ops.
+    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
+    (!id. lowered_inst_ok internal (mk_inst id opc ops [])) ==>
+    shape_step internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
+      (emit_void opc ops) (\x st'. R st')
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_emit_void_mode))
+QED
+
+Theorem shape_step_fresh_vars:
+  !n internal LP R.
+    shape_stable R ==>
+    shape_step internal LP R (fresh_vars n)
+      (\vs st'. R st' /\ EVERY (plain_operand st') (MAP Var vs))
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_fresh_vars_mode))
+QED
+
+Theorem shape_step_emit_multi_op:
+  !internal LP R opc ops n.
+    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
+    (!id outs. lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
+    shape_step internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
+      (emit_multi_op opc ops n)
+      (\xs st'. R st' /\ EVERY (plain_operand st') xs)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_emit_multi_op_mode))
+QED
+
+Theorem shape_step_emit_op_gas:
+  !internal LP R.
+    shape_stable R ==>
+    shape_step internal LP R (emit_op GAS [])
+      (\x st'. R st' /\ gas_operand st' x)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_emit_op_gas_mode))
+QED
+
+Theorem shape_step_emit_op_gas_plain:
+  !internal LP R.
+    shape_stable R ==>
+    shape_step internal LP R (emit_op GAS [])
+      (\x st'. R st' /\ plain_operand st' x)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_emit_op_gas_plain_mode))
+QED
+
+Theorem shape_base_emit_op_call:
+  !internal LP opc g rest st x st'.
+    MEM opc [CALL; STATICCALL; DELEGATECALL] /\
+    (!id outs. lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)) /\
+    (gas_operand st g \/ plain_operand st g) /\
+    EVERY (plain_operand st) rest /\ shape_base_state st /\
+    emit_op opc (g :: rest) st = (x, st') ==>
+    shape_extends internal LP st st' /\ shape_base_state st' /\
+    plain_operand st' x
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_mode_extends_static]
+    (Q.INST [`static` |-> `T`] shape_base_emit_op_call_mode))
+QED
+
+Theorem shape_base_emit_inst:
+  !internal LP opc ops outs st u st'.
+    shape_base_state st /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
+    EVERY (label_or_plain st) ops /\ EVERY (plain_operand st) (MAP Var outs) /\
+    (!id. lowered_inst_ok internal (mk_inst id opc ops outs)) /\
+    emit_inst opc ops outs st = (u, st') ==>
+    shape_extends internal LP st st' /\ shape_base_state st'
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_mode_extends_static]
+    (Q.INST [`static` |-> `T`] shape_base_emit_inst_mode))
+QED
+
+Theorem shape_base_emit_op:
+  !internal LP opc ops st x st'.
+    shape_base_state st /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
+    EVERY (label_or_plain st) ops /\
+    (!id outs. lowered_inst_ok internal (mk_inst id opc ops outs)) /\
+    emit_op opc ops st = (x, st') ==>
+    shape_extends internal LP st st' /\ shape_base_state st' /\
+    plain_operand st' x
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_mode_extends_static]
+    (Q.INST [`static` |-> `T`] shape_base_emit_op_mode))
+QED
+
+Theorem shape_base_new_block:
+  !internal LP lbl st u st'.
+    shape_base_state st /\ LP lbl /\ ~internal_label_ok lbl /\
+    new_block lbl st = (u, st') ==>
+    shape_extends internal LP st st' /\ shape_base_state st'
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_extends_static]
+    (Q.INST [`static` |-> `T`] shape_base_new_block_mode))
+QED
+
+Theorem shape_base_step_emit_op_call:
+  !internal LP R opc g rest.
+    shape_stable R /\ MEM opc [CALL; STATICCALL; DELEGATECALL] /\
+    (!id outs. lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)) ==>
+    shape_base_step internal LP
+      (\st. R st /\ (gas_operand st g \/ plain_operand st g) /\
+            EVERY (plain_operand st) rest)
+      (emit_op opc (g :: rest)) (\x st'. R st' /\ plain_operand st' x)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_base_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_base_step_emit_op_call_mode))
+QED
+
+Theorem shape_base_step_emit_op:
+  !internal LP R opc ops.
+    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
+    (!id outs. lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
+    shape_base_step internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
+      (emit_op opc ops) (\x st'. R st' /\ plain_operand st' x)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_base_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_base_step_emit_op_mode))
+QED
+
+Theorem shape_base_step_emit_inst:
+  !internal LP R opc ops outs.
+    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
+    (!id. lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
+    shape_base_step internal LP
+      (\st. R st /\ EVERY (label_or_plain st) ops /\
+            EVERY (plain_operand st) (MAP Var outs))
+      (emit_inst opc ops outs) (\x st'. R st')
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_base_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_base_step_emit_inst_mode))
+QED
+
+Theorem shape_base_step_emit_void:
+  !internal LP R opc ops.
+    shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
+    (!id. lowered_inst_ok internal (mk_inst id opc ops [])) ==>
+    shape_base_step internal LP (\st. R st /\ EVERY (label_or_plain st) ops)
+      (emit_void opc ops) (\x st'. R st')
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_base_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_base_step_emit_void_mode))
+QED
+
+Theorem shape_base_step_new_block:
+  !internal LP R lbl.
+    shape_stable R /\ LP lbl /\ ~internal_label_ok lbl ==>
+    shape_base_step internal LP R (new_block lbl) (\x st'. R st')
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_base_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_base_step_new_block_mode))
+QED
+
+Theorem shape_base_step_fresh_label:
+  !internal LP R sfx.
+    shape_stable R ==>
+    shape_base_step internal LP R (fresh_label sfx)
+      (\l st'. R st' /\ compiler_label l)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_base_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_base_step_fresh_label_mode))
+QED
+
+Theorem shape_base_step_fresh_label_sfx:
+  !internal LP R sfx.
+    shape_stable R ==>
+    shape_base_step internal LP R (fresh_label sfx)
+      (\l st'. R st' /\ compiler_label l /\ label_sfx sfx l)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_base_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_base_step_fresh_label_sfx_mode))
+QED
+
+Theorem shape_base_step_alloc_buffer_zero:
+  !internal LP R.
+    shape_stable R ==>
+    shape_base_step internal LP R (compile_alloc_buffer 0)
+      (\buf st. R st /\ plain_operand st buf.buf_operand)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_base_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_base_step_alloc_buffer_zero_mode))
+QED
+
+Theorem shape_base_step_emit_op_guarded:
+  !internal LP P opc ops.
+    shape_stable P /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
+    (!st. P st ==> EVERY (label_or_plain st) ops /\
+      (!id outs. lowered_inst_ok internal (mk_inst id opc ops outs))) ==>
+    shape_base_step internal LP P (emit_op opc ops)
+      (\x st. P st /\ plain_operand st x)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_base_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_base_step_emit_op_guarded_mode))
+QED
+
+Theorem shape_base_step_emit_inst_guarded:
+  !internal LP P opc ops outs.
+    shape_stable P /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
+    (!st. P st ==> EVERY (label_or_plain st) ops /\
+      EVERY (plain_operand st) (MAP Var outs) /\
+      (!id. lowered_inst_ok internal (mk_inst id opc ops outs))) ==>
+    shape_base_step internal LP P (emit_inst opc ops outs) (\x st. P st)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_base_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_base_step_emit_inst_guarded_mode))
+QED
+
+Theorem shape_base_step_extcall_revert:
+  !internal LP R.
+    shape_stable R ==>
+    shape_base_step internal LP R
+      (do rds <- emit_op RETURNDATASIZE [];
+          buf <- compile_alloc_buffer 0;
+          emit_void RETURNDATACOPY [buf.buf_operand; Lit 0w; rds];
+          emit_inst REVERT [buf.buf_operand; rds] []
+       od) (\u st. R st)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_base_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_base_step_extcall_revert_mode))
+QED
+
+Theorem shape_base_step_checked_extcall:
+  !internal LP R opc g rest.
+    shape_stable R /\ MEM opc [CALL; STATICCALL] /\
+    (!id outs. lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)) /\
+    (!lbl. compiler_label lbl ==> LP lbl) ==>
+    shape_base_step internal LP
+      (\st. R st /\ (gas_operand st g \/ plain_operand st g) /\
+            EVERY (plain_operand st) rest)
+      (checked_extcall opc g rest) (\x st. R st /\ plain_operand st x)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_base_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_base_step_checked_extcall_mode))
+QED
+
+Theorem shape_step_emit_op_call_branch:
+  !internal LP R opc g rest.
+    shape_stable R /\ MEM opc [CALL; STATICCALL] /\
+    (!id outs. lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)) /\
+    (!lbl. compiler_label lbl ==> LP lbl) ==>
+    shape_step internal LP
+      (\st. R st /\ (gas_operand st g \/ plain_operand st g) /\
+            EVERY (plain_operand st) rest)
+      (checked_extcall opc g rest) (\x st. R st /\ plain_operand st x)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_emit_op_call_branch_mode))
+QED
+
+Theorem shape_step_checked_extcall_then:
+  shape_stable B /\ MEM opc [CALL; STATICCALL] /\
+  (!st id outs. B st /\ (gas_operand st g \/ plain_operand st g) /\
+       EVERY (plain_operand st) rest ==>
+       lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)) /\
+  shape_step internal compiler_label B k Q ==>
+  shape_step internal compiler_label
+    (\st. B st /\ (gas_operand st g \/ plain_operand st g) /\
+          EVERY (plain_operand st) rest)
+    (do success <- emit_op opc (g :: rest);
+        fail_lbl <- fresh_label "extcall_fail";
+        cont_lbl <- fresh_label "extcall_cont";
+        emit_inst JNZ [success; Label cont_lbl; Label fail_lbl] [];
+        new_block fail_lbl;
+        rds <- emit_op RETURNDATASIZE [];
+        fail_buf_alloc <- compile_alloc_buffer 0;
+        (do emit_void RETURNDATACOPY [fail_buf_alloc.buf_operand; Lit 0w; rds];
+            emit_inst REVERT [fail_buf_alloc.buf_operand; rds] [] od);
+        new_block cont_lbl;
+        k
+     od) Q
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_checked_extcall_then_mode))
+QED
+
+Theorem shape_step_emit_op_call_assert:
+  !internal LP R opc g rest.
+    shape_stable R /\ MEM opc [CALL; STATICCALL] /\
+    (!id outs. lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)) ==>
+    shape_step internal LP
+      (\st. R st /\ (gas_operand st g \/ plain_operand st g) /\
+            EVERY (plain_operand st) rest)
+      (comp_bind (emit_op opc (g :: rest))
+        (\success. comp_ignore_bind (emit_inst ASSERT [success] [])
+           (comp_return success)))
+      (\x st'. R st' /\ plain_operand st' x)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_emit_op_call_assert_mode))
+QED
+
+Theorem shape_step_emit_op_retpc:
+  !LP R w.
+    shape_stable R ==>
+    shape_step T LP (\st. R st /\ internal_label_ok st.cs_current_bb)
+      (emit_op RETPC_PARAM [Lit w])
+      (\x st'. R st' /\ retpc_operand st' x)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_emit_op_retpc_mode))
+QED
+
+Theorem shape_step_emit_inst_ret:
+  !LP R front r.
+    shape_stable R /\
+    (!id. lowered_inst_ok T (mk_inst id RET (front ++ [r]) [])) ==>
+    shape_step T LP
+      (\st. R st /\ EVERY (plain_operand st) front /\ retpc_operand st r)
+      (emit_inst RET (front ++ [r]) []) (\x st'. R st')
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [lowered_inst_mode_ok_static, shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_emit_inst_ret_mode))
+QED
+
+Theorem shape_step_emit_runtime_codecopy:
+  !internal LP R dst sz.
+    shape_stable R ==>
+    shape_step internal LP
+      (\st. R st /\ EVERY (plain_operand st) [dst; sz])
+      (emit_void CODECOPY [dst; Label "runtime_begin"; sz])
+      (\u st. R st /\ EVERY (plain_operand st) [dst; sz])
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static, shape_mode_stable_static]
+    (Q.INST [`static` |-> `T`] shape_step_emit_runtime_codecopy_mode))
+QED
+
+Theorem shape_step_emit_entry_return:
+  !LP dst sz.
+    shape_step F LP (\st. EVERY (plain_operand st) [dst; sz])
+      (emit_inst RETURN [dst; sz] []) (\u st. T)
+Proof
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static]
+    (Q.INST [`static` |-> `T`] shape_step_emit_entry_return_mode))
 QED
