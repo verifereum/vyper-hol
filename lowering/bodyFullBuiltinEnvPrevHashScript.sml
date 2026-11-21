@@ -52,7 +52,7 @@ Proof
   conj_tac
   >- (simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
-       builtin_args_length_ok_def, read_result_def] >>
+       builtin_args_length_ok_def, read_result_def, is_self_codesize_def] >>
       simp[Once evaluate_def, bind_def, read_result_def, return_def,
        evaluate_builtin_def, tx_env_ok_evaluate_prevhash]) >>
   gen_tac >> strip_tac >>
