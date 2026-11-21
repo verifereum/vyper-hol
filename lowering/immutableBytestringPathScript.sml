@@ -1773,7 +1773,7 @@ Proof
 QED
 
 (* Copy the live bytestring prefix, rounded to whole words. *)
-Theorem body_assign_immutable_bytes_path_copy[local]:
+Theorem body_assign_immutable_bytes_path_copy:
   compile_store_immutable_bytestring imm (Var src) dst sa = ((),sb) /\
   fn_has_code sa sb func /\
   not_fresh_at sa src /\ copy_old_operand sa dst /\

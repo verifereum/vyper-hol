@@ -192,43 +192,6 @@ QED
 
 Finalise immutable_empty_store_ghost
 
-Theorem immutable_root_span:
-  body_inv tops ctx ce cx /\ struct_args_unique tops /\
-  ce.ce_is_ctor /\ dead_lo_ok H D lo ce cx /\
-  FLOOKUP ce.ce_module_vars (NONE,id) = SOME (ImmutableLoc off) /\
-  ce.ce_module_var_type (NONE,id) = SOME ty /\
-  evaluate_type (get_tenv cx) ty = SOME tv ==>
-  off + type_memory_size tv <= lo
-Proof
-  strip_tac >>
-  drule body_inv_immutable_section_layout >>
-  rewrite_tac[immutable_section_layout_def] >> strip_tac >>
-  first_x_assum drule >>
-  disch_then (qx_choosel_then [`pre`,`post`,`vis`,`ty'`,`slot`] strip_assume_tac) >>
-  `MEM (VariableDecl vis Immutable id ty' slot) tops` by simp[] >>
-  qpat_assum `body_inv _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
-  `ty' = ty` by
-    (drule_all build_maps_variable >> strip_tac >>
-     qpat_assum `!i. ce.ce_module_var_type _ = _`
-       (qspec_then `id` mp_tac) >>
-     gvs[optionTheory.SOME_11]) >>
-  qpat_x_assum `ty' = ty` SUBST_ALL_TAC >>
-  `get_tenv cx = type_env tops` by
-    simp[get_tenv_def, type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2] >>
-  `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
-   type_memory_size tv` by metis_tac[imm_frame_size] >>
-  `cx_tops cx = tops` by metis_tac[body_inv_main_code] >>
-  `lo = imm_len tops` by fs[dead_lo_ok_def] >>
-  qpat_assum `lo = imm_len _` SUBST1_TAC >>
-  rewrite_tac[imm_len_def] >>
-  qpat_assum `off = _` SUBST1_TAC >>
-  qpat_assum `type_mem_bytes _ _ = _` (SUBST1_TAC o SYM) >>
-  qpat_assum `tops = _` SUBST1_TAC >>
-  irule (SIMP_RULE (srw_ss()) []
-    (Q.INST [`off` |-> `0`] (SPEC_ALL immutable_declaration_interval_bound)))
-QED
-
 Theorem immutable_empty_path_store_restore:
   stmt_state_rel H ctx func ce cx es s /\ expr_sim_inv ce cx env es /\
   local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\

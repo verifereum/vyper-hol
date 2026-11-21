@@ -9,6 +9,7 @@
 Theory bodyFullAssignTuple
 Ancestors bodyImmutableStoreMemory[qualified,ignore_grammar]
   immutableWordStorePath[qualified,ignore_grammar]
+  immutableDeployAssignPathGhost[qualified,ignore_grammar]
   bodyFullShadowBodyInv bodyStorageCases[qualified,ignore_grammar]
   targetPlaceSimCasesBase[qualified,ignore_grammar]
   vyperEvalExprPreservesScopesDom[qualified,ignore_grammar]
@@ -3069,71 +3070,6 @@ Proof
     (Q.INST [`off` |-> `0`] (SPEC_ALL immutable_declaration_interval_bound)))
 QED
 
-(* A tuple head needs exact sizes at the two declaration occurrences,
-   not uniqueness of the entire struct namespace. *)
-
-Theorem tuple_immutable_section_post[local]:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env st /\
-  tops = pre ++ VariableDecl vis Immutable id ty slot :: post /\
-  evaluate_type (type_env tops) ty = SOME tv /\
-  off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre /\
-  LENGTH sec2 = LENGTH sec1 /\
-  (!j. j < LENGTH sec1 /\ ~(off <= j /\ j < off + type_memory_size tv) ==>
-       EL j sec2 = EL j sec1) /\
-  (!j. j < LENGTH sec1 /\ j IN M1 ==> imm_section_dead tops sec1 j) /\
-  (!j. j < LENGTH sec1 /\ ~(off <= j /\ j < off + type_memory_size tv) /\
-       j IN M2 ==> j IN M1) /\
-  (!j. off <= j /\ j < off + type_memory_size tv /\ j IN M2 ==>
-       mem_dead_bytes sec2 off tv j) ==>
-  !j. j < LENGTH sec2 /\ j IN M2 ==> imm_section_dead tops sec2 j
-Proof
-  strip_tac >>
-  `!tt vv. evaluate_type (type_env tops) tt = SOME vv ==>
-     type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) tt =
-     type_memory_size vv` by
-    (rpt strip_tac >> drule_all immutableDeployAssignFactsTheory.immutable_exact_slot_size >> simp[]) >>
-  gen_tac >> strip_tac >>
-  Cases_on `off <= j /\ j < off + type_memory_size tv`
-  >- (rewrite_tac[imm_section_dead_def] >>
-      qexistsl_tac [`pre`,`vis`,`id`,`ty`,`slot`,`post`,`tv`] >>
-      metis_tac[]) >>
-  `imm_section_dead tops sec1 j` by metis_tac[] >>
-  qpat_x_assum `imm_section_dead tops sec1 j` mp_tac >>
-  rewrite_tac[imm_section_dead_def] >>
-  disch_then (qx_choosel_then [`p`,`vis'`,`id'`,`ty'`,`slot'`,`r`,`tv'`]
-    strip_assume_tac) >>
-  `pre ++ VariableDecl vis Immutable id ty slot :: post =
-   p ++ VariableDecl vis' Immutable id' ty' slot' :: r` by metis_tac[] >>
-  qabbrev_tac `a = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) p` >>
-  `pre <> p` by
-    (strip_tac >>
-     qpat_x_assum `pre = p` SUBST_ALL_TAC >>
-     qpat_x_assum `_ ++ _ = _ ++ _` (strip_assume_tac o SRULE []) >>
-     qpat_x_assum `ty = ty'` (SUBST_ALL_TAC o SYM) >>
-     `tv' = tv` by
-       (qpat_assum `evaluate_type _ _ = SOME tv` (fn th =>
-          qpat_assum `evaluate_type _ _ = SOME tv'` (mp_tac o REWRITE_RULE [th])) >>
-        simp[NoAsms, EQ_SYM_EQ]) >>
-     `off = a` by simp[Abbr `a`] >>
-     drule_then assume_tac (CONJUNCT1 mem_dead_bytes_range) >>
-     qpat_x_assum `tv' = tv` SUBST_ALL_TAC >> decide_tac) >>
-  `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty = type_memory_size tv` by metis_tac[] >>
-  `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty' = type_memory_size tv'` by metis_tac[] >>
-  `off + type_memory_size tv <= a \/ a + type_memory_size tv' <= off` by
-    (drule imm_frame_occurrence_separation >>
-     disch_then (qspec_then `get_struct_fields (make_struct_fields_map tops)` mp_tac) >>
-     simp[Abbr `a`]) >>
-  qexistsl_tac [`p`,`vis'`,`id'`,`ty'`,`slot'`,`r`,`tv'`] >>
-  rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
-  qpat_assum `Abbrev (a = _)`
-    (SUBST1_TAC o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  `mem_dead_bytes sec2 a tv' = mem_dead_bytes sec1 a tv'` suffices_by simp[] >>
-  irule mem_dead_bytes_frame >>
-  reverse conj_tac >- first_assum ACCEPT_TAC >>
-  rpt strip_tac >>
-  first_assum (irule_at (Pos (el 1))) >> decide_tac
-QED
-
 (* Only the access checks: the range's byte and ghost effects come from
    the immutable transfer suppliers. The LocCode destination is a literal. *)
 
@@ -3317,16 +3253,18 @@ Proof
       drule_all tuple_immutable_slot_span >> strip_tac >>
       rpt strip_tac >>
       qpat_x_assum `cx_tops cx = tops` SUBST_ALL_TAC >>
-      irule tuple_immutable_section_post >>
-      simp[valueEncodingPropsTheory.LENGTH_mem_bytes_at] >>
-      reverse conj_tac >- metis_tac[] >>
-      qexistsl_tac [`tn.t_mem`,`tf.t_mem`,`id`,`post`,`pre`,
-                    `mem_bytes_at 0 lo s.vs_memory`,`slot`,`tv`,`ty`,`vis`] >>
-      RULE_ASSUM_TAC (REWRITE_RULE [GSYM listTheory.APPEND_ASSOC,listTheory.APPEND]) >>
-      rewrite_tac[GSYM listTheory.APPEND_ASSOC,listTheory.APPEND] >>
-      qpat_x_assum `tops = _` SUBST_ALL_TAC >>
-      qpat_x_assum `off = _` (SUBST1_TAC o SYM) >>
-      simp[] >> metis_tac[]) >>
+      mp_tac (Q.INST [`lo` |-> `lo`, `tv` |-> `tv`, `name` |-> `id`,
+        `sec1` |-> `mem_bytes_at 0 lo s.vs_memory`,
+        `sec2` |-> `mem_bytes_at 0 lo q.vs_memory`,
+        `M1` |-> `tn.t_mem`, `M2` |-> `tf.t_mem`]
+        immutableDeployAssignPathGhostTheory.immutable_section_replace_exact) >>
+      impl_tac >-
+        (conj_tac >-
+           (rpt strip_tac >>
+            drule_all immutableDeployAssignFactsTheory.immutable_exact_slot_size >> simp[]) >>
+         simp[valueEncodingPropsTheory.LENGTH_mem_bytes_at, SF CONJ_ss] >>
+         rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then (qspec_then `i` mp_tac) >> simp[]) >>
   metis_tac[local_ptrs_reserved_imm_base]
 QED
 
