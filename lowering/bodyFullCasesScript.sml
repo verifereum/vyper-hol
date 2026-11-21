@@ -581,7 +581,11 @@ Proof
            (ACCEPT_TAC o ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM]) >>
       rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
       mp_tac extcall_return_full >>
-      (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC abi_valid_allocated_joint)) >>
+      (impl_tac >- (rpt gen_tac >>
+        disch_then (fn pre =>
+          MATCH_ACCEPT_TAC (MATCH_MP abi_valid_allocated_joint
+            (LIST_CONJ (List.filter (not o can (match_term ``~ctx_has_dalloca ctx``) o concl)
+               (CONJUNCTS pre))))))) >>
       (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC abi_malformed_allocated_joint)) >>
       disch_then (fn th =>
         mp_tac extcall_ready_return_outcome >>

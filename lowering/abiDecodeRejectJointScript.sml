@@ -38,5 +38,9 @@ allocas_from lo s /\ lo <= s.vs_alloca_next /\ alloca_history func s
 Proof
   mp_tac abi_malformed_allocated_joint_from_success >>
   (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC abi_valid_allocated_joint)) >>
-  disch_then MATCH_ACCEPT_TAC
+  disch_then (fn th =>
+    disch_then (fn pre =>
+      MATCH_ACCEPT_TAC (MATCH_MP th
+        (LIST_CONJ (List.filter (not o can (match_term ``~ctx_has_dalloca ctx``) o concl)
+           (CONJUNCTS pre))))))
 QED
