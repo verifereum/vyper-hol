@@ -14,7 +14,7 @@ Ancestors
   vyperContext vyperTypeSystem vyperTypeContract vyperTypeArgFits
   vyperTypeCallGraph exprLowering compileEnv placeTypingProps
   supportedTypes supportedDecls supportedExprForms supportedExprs
-  whitelistCheckerTypes
+  whitelistCheckerTypes supportedGetterProps
 
 (* ===== Types ===== *)
 
@@ -107,15 +107,6 @@ Proof
   Induct >> simp[check_value_type_def, supported_hashmap_value_def,
                   supported_storage_type_def, GSYM supported_place_type_def] >>
   metis_tac[assignable_type_supported_place, checker_hashmap_key_supported]
-QED
-
-Theorem supported_place_type_array_elem[local]:
-  supported_place_type tops (ArrayT elem bd) ==> supported_place_type tops elem
-Proof
-  rw[supported_place_type_def] >> pop_assum mp_tac >>
-  simp[Once supported_nested_type_def, supported_scalar_type_def,
-       supported_word_type_def, supported_string_type_def] >>
-  Cases_on `bd` >> simp[]
 QED
 
 Theorem supported_place_type_tuple_el[local]:
@@ -448,7 +439,7 @@ Proof
      irule place_type_well_typed_on_defined >> simp[] >> metis_tac[]) >>
   simp[supported_subscript_place_def, supported_place_info_def] >>
   Cases_on `expr_type be` >> gvs[subscript_type_ok_def, checker_agg_ok_def]
-  >~ [`ArrayT`] >- metis_tac[supported_place_type_array_elem]
+  >~ [`ArrayT`] >- metis_tac[supported_place_array_element]
   >> Cases_on `key` >> gvs[] >> BasicProvers.EVERY_CASE_TAC >> gvs[] >>
   metis_tac[supported_place_type_tuple_el]
 QED
@@ -557,14 +548,6 @@ Proof
   imp_res_tac well_typed_attribute_field_place >>
   fs[attribute_type_ok_def] >> drule_all checker_attribute_assignable >>
   simp[assignable_type_supported_place, checker_agg_ok_assignable]
-QED
-
-Theorem supported_pure_fields_every[local]:
-  !kes. supported_pure_fields tops kes <=>
-        EVERY (supported_pure_expr tops o SND) kes
-Proof
-  Induct >> simp[supported_pure_expr_def] >> Cases >>
-  simp[supported_pure_expr_def]
 QED
 
 Theorem checker_structlit_pure[local]:

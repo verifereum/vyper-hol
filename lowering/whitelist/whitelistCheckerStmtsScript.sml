@@ -5,8 +5,8 @@
    its variables are among the body's bindings. Range bounds read the
    constant-substituted body, which the checker types as well.
 
-   TOP-LEVEL: checker_stmt_env_ok_def, type_stmts_supported,
-   type_stmts_body_safe. *)
+   TOP-LEVEL: checker_stmt_env_ok_def, type_stmts_supported (body safety
+   follows from supported_stmts_body_safe in bodyExprPreFacts). *)
 Theory whitelistCheckerStmts
 Ancestors
   list pred_set finite_map alist pair vyperAST vyperValue vyperContext vyperTypeSystem
@@ -14,7 +14,7 @@ Ancestors
   vyperTypeContract
   supportedTypes supportedDecls supportedExprForms supportedExprs
   supportedTargets supportedStmtTraverse supportedStmts
-  whitelistCheckerDecls whitelistCheckerExprs
+  whitelistCheckerDecls whitelistCheckerExprs supportedGetterProps
 
 (* ===== The statement environment ===== *)
 
@@ -46,14 +46,6 @@ Proof
   TRY (rename1 `Raise r` >> Cases_on `r`) >>
   TRY (rename1 `Return r` >> Cases_on `r`) >>
   rw[type_stmt_def, AllCaseEqs()]
-QED
-
-Theorem type_stmt_subst_env[local]:
-  type_stmt env ret s = SOME e1 /\
-  type_stmt env ret (subst_consts_stmt E s) = SOME e2 ==> e1 = e2
-Proof
-  rpt strip_tac >> imp_res_tac type_stmt_result_env >>
-  Cases_on `s` >> gvs[subst_consts_stmt_def]
 QED
 
 Theorem type_stmt_checker_envs[local]:
@@ -268,7 +260,7 @@ QED
 
 (* ===== Iterators ===== *)
 
-Theorem type_env_key_main[local]:
+Theorem type_env_key_main:
   !tops id x. FLOOKUP (type_env tops) id = SOME x ==> FST id = NONE
 Proof
   simp[type_env_def] >> Induct >> simp[type_env_for_module_def] >> Cases >>
@@ -459,7 +451,7 @@ Proof
       qpat_x_assum `IS_SOME (type_stmts _ _ _)` mp_tac >>
       simp[type_stmt_def, subst_consts_stmt_def, AllCaseEqs(),
            optionTheory.IS_SOME_EXISTS, PULL_EXISTS] >>
-      rpt strip_tac >> imp_res_tac type_stmt_subst_env >> gvs[] >>
+      rpt strip_tac >> imp_res_tac type_stmt_subst_consts_result >> gvs[] >>
       fs[supported_stmt_def, supported_stmt_bindings_def,
          custom_errors_stmt_ok_def, UNION_SUBSET] >>
       drule_all type_stmt_cons_envs >> strip_tac >> fs[])

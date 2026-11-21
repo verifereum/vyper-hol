@@ -36,7 +36,7 @@ Proof
   metis_tac[supported_full_word_is_word, supported_scalar_type_def]
 QED
 
-Theorem supported_place_array_element[local]:
+Theorem supported_place_array_element:
   supported_place_type tops (ArrayT ty bd) ==> supported_place_type tops ty
 Proof
   Cases_on `bd` >> simp[supported_place_type_def] >>
@@ -561,7 +561,7 @@ Proof
   drule supportedPlaceAssignableTheory.well_formed_array_element >> simp[]
 QED
 
-Theorem type_stmt_subst_consts_result[local]:
+Theorem type_stmt_subst_consts_result:
   type_stmt env ret s = SOME env1 /\
   type_stmt env ret (subst_consts_stmt E s) = SOME env2 ==>
   env1 = env2
