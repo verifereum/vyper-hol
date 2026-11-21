@@ -5,7 +5,7 @@ Ancestors
   loweringShapeProps vyperTypeContractContext vyperTypeContract vyperTypeBindArguments
   publicGetterProps constSubst
   calldataSelectorProps entryDispatchProps mem2varBlockSimHelpers
-  checkedSelectorTableProps dispatchedValueSelection constSubstCorrect
+  checkedSelectorTableProps dispatchedValueSelection constSubstCorrect defaultDispatchFacts
   list rich_list pair words arithmetic
 Libs fcpLib
 
@@ -222,9 +222,9 @@ Theorem grouped_source_signature:
   MEM (name,tys) (abi_external_signatures tops) /\
   vyperInterpreter$lookup_function NONE name External tops =
     SOME (mut,nr,args,dflts,ret,fbody) ==>
-  ?rr pre post prefix k.
+  ?pre post prefix k.
     FST (classify_functions tops) =
-      pre ++ (mut,nr,rr,name,args,
+      pre ++ (mut,nr,lookup_raw_return_or_F (NONE:num option) name External tops,name,args,
         subst_consts_exprs (module_consts_env tops []) dflts,ret,
         subst_consts_stmts (module_consts_env tops []) fbody)::post /\
     MEM (prefix,k) (abi_entries args dflts) /\
@@ -245,7 +245,14 @@ Proof
   strip_tac >> gvs[] >>
   qpat_assum `MEM (mut,nr,rr,name,args,_,ret,_) (FST (classify_functions tops))`
     (strip_assume_tac o REWRITE_RULE [MEM_SPLIT]) >>
-  qexistsl_tac [`rr`,`l1`,`l2`,`prefix`,`k`] >>
+  `lookup_raw_return_or_F (NONE:num option) name External tops = rr` by
+    (drule classify_functions_external_source >> strip_tac >>
+     gvs[constSubstTheory.subst_consts_fn_def]
+     >- drule_all_then ACCEPT_TAC default_decl_raw_return >>
+     `MEM (m',n',rr,name,a',rawdefaults,ret,rawbody) (public_getters tops)` by
+       (simp[MEM_public_getters] >> qexists_tac `top` >> simp[]) >>
+     drule_all_then ACCEPT_TAC default_selected_raw_return) >>
+  qexistsl_tac [`l1`,`l2`,`prefix`,`k`] >>
   gvs[abi_entries_member, constSubstCorrectTheory.subst_consts_exprs_map]
 QED
 
@@ -308,13 +315,19 @@ Theorem grouped_selected_default_entry_shape:
       (ZIP (DROP (LENGTH args - LENGTH dflts) args,
             subst_consts_exprs (module_consts_env tops []) dflts)) /\
     common.ec_payable = (mut = Payable) /\
-    off = min_calldata_size common.ec_env (TAKE (LENGTH args - LENGTH dflts) args) 0
+    off = min_calldata_size common.ec_env (TAKE (LENGTH args - LENGTH dflts) args) 0 /\
+    package_external_group tops target trans keys
+      (mut,nr,lookup_raw_return_or_F (NONE:num option) name External tops,name,args,
+       subst_consts_exprs (module_consts_env tops []) dflts,ret,
+       subst_consts_stmts (module_consts_env tops []) fbody) =
+      ExternalDefaults common entries specs off
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `MEM (name,tys) (abi_external_signatures tops)` by
     metis_tac[venomInstTheory.FIND_MEM] >>
   drule_all grouped_source_signature >>
-  disch_then (qx_choosel_then [`rr`,`before`,`after`,`prefix`,`k`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`before`,`after`,`prefix`,`k`] strip_assume_tac) >>
+  qabbrev_tac `rr = lookup_raw_return_or_F (NONE:num option) name External tops` >>
   qabbrev_tac `spec_defaults = subst_consts_exprs (module_consts_env tops []) dflts` >>
   qabbrev_tac `spec_body = subst_consts_stmts (module_consts_env tops []) fbody` >>
   `spec_defaults <> []` by simp[Abbr `spec_defaults`, constSubstCorrectTheory.subst_consts_exprs_map] >>
@@ -346,5 +359,23 @@ Proof
     min_calldata_size common.ec_env prefix 0,k) entries` by metis_tac[] >>
   drule_all grouped_default_selector_route >> strip_tac >>
   qexistsl_tac [`MAP pack before`,`MAP pack after`,`prefix`,`k`,`common`,`entries`,`specs`,`off`] >>
-  fs[Abbr `spec_defaults`, constSubstCorrectTheory.subst_consts_exprs_map]
+  fs[Abbr `spec_defaults`, Abbr `spec_body`, Abbr `rr`,
+     constSubstCorrectTheory.subst_consts_exprs_map]
+QED
+
+Theorem grouped_package_common_environment:
+  set_external_package_target target (package_external_fn tops trans keys
+      (mut,nr,rr,name,args,dflts,ret,fbody)) =
+    (lbl,ce,pa,z,pay,guarded,key,ut,view,compiled,rt) /\
+  package_external_group tops target trans keys
+      (mut,nr,rr,name,args,dflts,ret,fbody) =
+    ExternalDefaults common entries specs off ==>
+  common.ec_env = ce /\ common.ec_payable = pay /\
+  common.ec_nonreentrant = guarded /\ common.ec_nkey = key /\
+  common.ec_transient = ut /\ common.ec_view = view /\
+  common.ec_body = compiled /\ common.ec_return = rt /\
+  common.ec_pos_args = build_positional_args ce (TAKE (LENGTH args - LENGTH dflts) args)
+Proof
+  Cases_on `dflts` >> simp[package_external_group_def, LET_THM] >>
+  rpt strip_tac >> gvs[]
 QED

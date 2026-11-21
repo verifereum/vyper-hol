@@ -3,7 +3,7 @@ Theory groupedRuntimeBodyCode
 Ancestors
   groupedInternalLabels entryCodeOwnership gasShadowRuntimeBodies gasShadowRuntimeOps
   gasShadowModuleDefs gasShadowState emitHelperProps moduleLowering compileEnv pair list
-  entryRejectCode emitHelper vyperCompiler
+  entryRejectCode entryCompileIntervals fragExec emitHelper vyperCompiler
 
 val shadow_job = ``\job. case job of
   ExternalLegacyJob package => ExternalLegacyJob (gas_shadow_external_package package)
@@ -118,4 +118,83 @@ Proof
   qpat_x_assum `fresh_label _ _ = _` mp_tac >>
   simp[fresh_label_def, initial_compile_state_def] >>
   metis_tac[new_block_props]
+QED
+
+Theorem cs_appends_grouped_jobs[local]:
+  !jobs. cs_appends (compile_external_jobs jobs)
+Proof
+  Induct >> simp[compile_external_jobs_def, cs_appends_return] >>
+  Cases_on `h` >> simp[compile_external_jobs_def] >>
+  irule cs_appends_ignore_bind >> simp[cs_appends_external_fn_bodies, cs_appends_prims] >>
+  irule cs_appends_ignore_bind >> simp[compile_common_function_body_def] >>
+  irule cs_appends_bind >> simp[cs_appends_register_positional_args, cs_appends_guarded_body]
+QED
+
+Theorem grouped_legacy_job_code:
+  compile_external_jobs
+    (pre ++ ExternalLegacyJob (lbl,ce,pa,mc,pay,nr,key,ut,view,ss,rt)::post)
+    sd = ((),sj) /\
+  cs_extends sj se /\
+  (!bb. MEM bb (all_blocks se) ==> lookup_block bb.bb_label fn.fn_blocks = SOME bb) ==>
+  ?checks register body_start done cenv.
+    checks.cs_current_bb = lbl /\ checks.cs_current_insts = [] /\
+    compile_entry_checks mc pay checks = ((),register) /\
+    fn_has_code checks register fn /\
+    compile_register_positional_args ce pa 4 register = (cenv,body_start) /\
+    fn_has_code register body_start fn /\
+    compile_guarded_body cenv nr key ut view ss rt body_start = ((),done) /\
+    fn_has_code body_start done fn /\ cs_extends sd checks
+Proof
+  strip_tac >>
+  Cases_on `compile_external_jobs pre sd` >>
+  Cases_on `q` >>
+  qpat_x_assum `compile_external_jobs (_ ++ _) _ = _` mp_tac >>
+  simp[compile_external_jobs_append, compile_external_jobs_def, comp_ignore_bind_def,
+    comp_bind_def] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  rename1 `compile_external_fn_bodies [_] r = ((),job_end)` >>
+  rename1 `compile_external_jobs pre _ = ((),r)` >>
+  rename1 `cs_extends sj runtime_end` >>
+  rename1 `compile_external_jobs pre dispatch_end = ((),r)` >>
+  `cs_extends dispatch_end r /\ cs_extends job_end sj` by
+    metis_tac[cs_appends_def, cs_appends_grouped_jobs] >>
+  mp_tac (Q.SPECL [`[(lbl,ce,pa,mc,pay,nr,key,ut,view,ss,rt)]`, `r`, `job_end`]
+    (Q.INST [`tr` |-> `ut`, `stmts` |-> `ss`] external_fn_selected_check_intervals)) >>
+  simp[] >>
+  disch_then (qx_choosel_then
+    [`check_state`,`reg_state`,`local_env`,`start_state`,`done_state`] strip_assume_tac) >>
+  `cs_extends reg_state start_state` by
+    metis_tac[cs_appends_def, cs_appends_register_positional_args] >>
+  `cs_extends job_end runtime_end` by metis_tac[cs_extends_trans] >>
+  `cs_extends dispatch_end check_state` by metis_tac[cs_extends_trans] >>
+  qexistsl_tac [`check_state`,`reg_state`,`start_state`,`done_state`,`local_env`] >>
+  asm_rewrite_tac[] >>
+  rpt conj_tac >>
+  irule fn_has_code_retained_interval >> asm_rewrite_tac[] >>
+  qexists_tac `runtime_end` >> asm_rewrite_tac[] >>
+  metis_tac[cs_extends_trans]
+QED
+
+Theorem grouped_fallback_guarded_code:
+  compile_fallback_body ce pay nr key ut view ss rt checks = ((),done) /\
+  fn_has_code checks done fn ==>
+  ?body_start.
+    compile_entry_checks 4 pay checks = ((),body_start) /\
+    compile_guarded_body ce nr key ut view ss rt body_start = ((),done) /\
+    fn_has_code checks body_start fn /\ fn_has_code body_start done fn
+Proof
+  strip_tac >>
+  Cases_on `compile_entry_checks 4 pay checks` >>
+  rename1 `compile_entry_checks 4 pay checks = (result,body_start)` >>
+  Cases_on `result` >>
+  `compile_guarded_body ce nr key ut view ss rt body_start = ((),done)` by
+    (qpat_x_assum `compile_fallback_body _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     qpat_assum `compile_entry_checks _ _ _ = _` mp_tac >>
+     simp[compile_fallback_body_def, compile_entry_checks_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def, ELIM_UNCURRY] >>
+     rpt strip_tac >> gvs[compile_entry_checks_def, comp_bind_def,
+                          comp_ignore_bind_def, comp_return_def, ELIM_UNCURRY]) >>
+  qexists_tac `body_start` >> asm_rewrite_tac[] >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_entry_checks) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_guarded_body) >>
+  metis_tac[fn_has_code_split]
 QED
