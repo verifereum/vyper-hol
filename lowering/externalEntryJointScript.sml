@@ -8,7 +8,7 @@
  *
  * r4: st is pinned by runtime_selected_body_start.
  *
- * Proof: the prefix seam (external_entry_reaches_registration_ptr) runs
+ * Proof: the prefix seam (external_entry_reaches_registration_ptr_nr) runs
  * __entry to the start s1 of argument registration; the registration seam
  * (register_positional_args_ptr) runs s1 to the body start s0.  Both carry
  * the zero-GAS memory-checked path and the joint pointer path, which
@@ -125,6 +125,7 @@ Theorem external_entry_registration_joint:
   !tops rpolicy unit am tx ret vs mut nr args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     tx.function_name <> "__default__" /\
@@ -340,6 +341,7 @@ Theorem external_entry_locked_joint:
   !tops rpolicy unit am tx ret vs mut args fbody env es0 es_lock.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     tx.function_name <> "__default__" /\
@@ -525,6 +527,7 @@ Theorem external_entry_subst_consts_joint:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\

@@ -12,6 +12,7 @@ Theorem dispatched_selected_registration_joint:
   !tops rpolicy unit am tx ret vs mut nr args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
@@ -241,6 +242,7 @@ Theorem dispatched_entry_endpoint_selected:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
