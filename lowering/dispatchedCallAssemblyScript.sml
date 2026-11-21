@@ -141,31 +141,29 @@ val fallback_source_package_tac =
     simp[moduleLoweringTheory.compile_register_positional_args_def, compileEnvTheory.comp_return_def] >>
   drule_then assume_tac fallback_runtime_body_start;
 
-(* The code and source frames are ready before the lock executes. *)
-fun registered_body_endpoint_tac placement =
-  `cenv with ce_vars := cenv0.ce_vars = cenv0` by
-    (drule compile_register_positional_args_cenv >>
-     simp[compile_env_component_equality]) >>
-  drule_all supportedGetterPropsTheory.supported_selected_external_body >> strip_tac >>
-  drule_all external_selected_args_distinct >> strip_tac >>
-  `!id ty. MEM (id,ty) args ==>
-     (?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
-     cenv.ce_var_type id = SOME ty` by
-    (rpt strip_tac
-     >- (irule external_entry_target_param_pointer >>
-         goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[]) >>
-     metis_tac[external_entry_target_param_type]) >>
-  `!id loc. FLOOKUP cenv.ce_vars id = SOME loc ==> MEM id (MAP FST args)` by
-    metis_tac[external_entry_target_declared] >>
+val bound_source_tac =
   drule_all external_entry_bound_no_defaults >> strip_tac >>
   `external_entry_bound tops am tx vs.vs_outcomes es0.gas_obs mut args [] es0` by
     (`es0 with gas_obs := es0.gas_obs = es0` by (Cases_on `es0` >> simp[]) >>
      pop_assum (fn same =>
        qpat_assum `!gx. external_entry_bound _ _ _ _ _ _ _ _ _`
-         (qspec_then `es0.gas_obs` (ACCEPT_TAC o PURE_REWRITE_RULE [same])))) >>
-  drule_all (SIMP_RULE (srw_ss()) [subst_consts_expr_def]
-    (Q.INST [`dflts` |-> `[]:expr list`] (SPEC_ALL external_source_body_frame_nr))) >>
-  strip_tac >>
+         (qspec_then `es0.gas_obs` (ACCEPT_TAC o PURE_REWRITE_RULE [same]))));
+
+fun registered_body_frame_tac (lbl,entry_ce,pos_args,min_cds,payable,rt) =
+  mp_tac (Q.SPECL ([`tops`,`rpolicy`,`unit`,`am`,`tx`,`ret`,`vs`,`mut`,`T`,
+    `args`,`[]`,`fbody`,`es0.gas_obs`,`es0`,lbl,entry_ce,pos_args,min_cds,payable] @
+    [`global_nonreentrant_slot`,`T`,`mut = View`,rt,`cenv`]) external_source_body_frame_nr) >>
+  impl_tac >-
+    (asm_simp_tac (srw_ss()) [subst_consts_expr_def] >>
+     rpt conj_tac >>
+     rpt strip_tac >>
+     qpat_assum `!id ty. MEM (id,ty) args ==> (_ /\ _)`
+       (qspecl_then [`id`,`ty`] mp_tac) >>
+     simp[]) >>
+  strip_tac;
+
+(* The code and source frames are ready before the lock executes. *)
+fun registered_body_shadow_tac placement =
   drule_all nonreentrantEntryPathTheory.guarded_body_code_from_registration >>
   simp[] >>
   disch_then (qx_choosel_then [`sl`,`se`] strip_assume_tac) >>
@@ -173,26 +171,39 @@ fun registered_body_endpoint_tac placement =
   mp_tac (Q.SPECL ([`tops`,`rpolicy`,`unit`] @ placement @
     [`cenv`,`sa`,`sl`,`st'`,`bindings`,`unit.cu_context`,
      `initial_evaluation_context am.sources am.layouts tx NONE`,`env_t`,`env'`,`ret`])
-    runtime_entry_body_shadow_with_shadow_nr) >>
-  impl_tac >- simp[] >>
+    runtime_entry_body_shadow_with_shadow_nr);
+
+fun registered_body_endpoint_tac entry_ce =
   disch_then (qx_choosel_then [`func2`,`shadow_ctx`,`shadow_func`,`cenv'`,
     `sb`,`shadow_sl`,`shadow_sb`,`shadow_unit`,`shadow_sa`,`shadow_end`]
-    strip_assume_tac) >>
-  `func2 = func /\ shadow_ctx = shadow_unit.cu_context` by gvs[] >>
+    strip_assume_tac) >> `func2 = func` by fs[] >>
+  `shadow_ctx = shadow_unit.cu_context` by fs[] >>
+  qpat_x_assum `func2 = func` SUBST_ALL_TAC >>
+  qpat_x_assum `shadow_ctx = shadow_unit.cu_context` SUBST_ALL_TAC >>
   `es0.storage_trace = []` by
-    (drule entryStateRelTheory.send_call_value_accounts >> simp[initial_state_def]) >>
+    (drule entryStateRelTheory.send_call_value_accounts >> simp[vyperInterpreterTheory.initial_state_def]) >>
   `storage_trace_domain
     (initial_evaluation_context am.sources am.layouts tx NONE)
     (initial_state am []) es0.storage_trace` by
     (fs[] >> EVAL_TAC >> simp[]) >>
   `runtime_body_endpoint tops rpolicy unit am tx vs es0 mut T args [] ret
       compiled_body` by
-    (rw[runtime_body_endpoint_def] >>
-     qexistsl_tac [`[]`,`cenv0`,`cenv`,`sa`,`st'`,`func`,`s0`,`G0`,`tn0`,
-       `shadow_unit`,`shadow_func`,`shadow_sa`,`shadow_end`] >>
-     fs[gas_explicit_def] >> rpt conj_tac >>
-     metis_tac[bodyPtrDefsTheory.ghost_inv_cx_dead]) >>
-  drule_all runtime_body_endpoint_correct >> simp[Abbr `compiled_body`];
+    (PURE_REWRITE_TAC [runtime_body_endpoint_def] >>
+     qexistsl_tac ([`[]`,entry_ce] @ [`cenv`,`sa`,`st'`,`func`,`s0`,`G0`,`tn0`,
+       `shadow_unit`,`shadow_func`,`shadow_sa`,`shadow_end`]) >>
+     fs[Abbr `compiled_body`, gas_explicit_def] >> rpt conj_tac >>
+     TRY (qexistsl_tac [`bindings`,`env_t`,`env'`] >> asm_rewrite_tac[] >> NO_TAC) >>
+     gvs[GSYM bodyPtrDefsTheory.ghost_inv_cx_dead] >>
+     rpt strip_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+     qpat_assum `!H. stmt_state_rel H _ _ _ _ _ _ /\ ghost_inv H _ _ _ _ _ _ _`
+       (qspec_then `H` mp_tac) >> simp[]);
+
+val registered_body_result_tac =
+  mp_tac (Q.SPECL [`tops`,`rpolicy`,`unit`,`am`,`tx`,`ret`,`vs`,`mut`,
+    `T`,`args`,`[]`,`fbody`,`es0`] runtime_body_endpoint_correct) >>
+  impl_tac >-
+    (qunabbrev_tac `compiled_body` >> asm_rewrite_tac[]) >>
+  DISCH_THEN ACCEPT_TAC;
 
 Theorem dispatched_nonreentrant_result[local]:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -239,11 +250,26 @@ Proof
       fallback_source_package_tac >>
       qpat_x_assum `rt = if ret = NoneT then NONE else SOME ret` SUBST_ALL_TAC >>
       drule_all entry_path_endpoint_facts >> strip_tac >>
-      qpat_x_assum `?bb. lookup_block _ _ = SOME bb /\ _` strip_assume_tac >>
-      drule_all entry_context_continuation >> strip_tac >>
-      registered_body_endpoint_tac [`"fn___default__"`,`cenv`,`[]`,`4`,
+      mp_tac (Q.SPECL [`unit.cu_context`,`func`,`vs`,`s0`,`bb`]
+        entry_context_continuation) >>
+      impl_tac >- asm_rewrite_tac[] >> strip_tac >>
+      `cenv with ce_vars := cenv.ce_vars = cenv` by simp[compile_env_component_equality] >>
+      `!id ty. MEM (id,ty) args ==>
+         (?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+         cenv.ce_var_type id = SOME ty` by
+        (qpat_assum `args = []` (fn eq => simp_tac (srw_ss()) [eq])) >>
+      `!id loc. FLOOKUP cenv.ce_vars id = SOME loc ==> MEM id (MAP FST args)` by
+        (rpt strip_tac >> drule_all external_entry_target_declared >> simp[]) >>
+      qunabbrev_tac `rr` >>
+      bound_source_tac >>
+      registered_body_frame_tac (`"fn___default__"`,`cenv`,`[]`,`4`,
+        `mut = Payable`,`if ret = NoneT then NONE else SOME ret`) >>
+      registered_body_shadow_tac [`"fn___default__"`,`cenv`,`[]`,`4`,
         `mut = Payable`,`T`,`global_nonreentrant_slot`,`T`,`mut = View`,
-        `compiled_body`,`if ret = NoneT then NONE else SOME ret`,`sa`]) >>
+        `compiled_body`,`if ret = NoneT then NONE else SOME ret`,`sa`] >>
+      impl_tac >- asm_simp_tac bool_ss [Abbr `compiled_body`] >>
+      registered_body_endpoint_tac `cenv` >>
+      registered_body_result_tac) >>
   SUBGOAL_THEN (Term `?ts. FIND (\(name,ts). abi_method_id (type_env tops) name ts =
       cd_selector vs.vs_call_ctx.cc_calldata) (abi_external_signatures tops) =
       SOME (tx.function_name,ts)`) ASSUME_TAC
@@ -263,9 +289,31 @@ Proof
      if ret = NoneT then NONE else SOME ret) st` by
     (pure_rewrite_tac[runtimeBodyStartDefsTheory.runtime_entry_body_start_def] >>
      disj1_tac >> first_assum ACCEPT_TAC) >>
-  registered_body_endpoint_tac [`lbl`,`cenv0`,`pos_args`,`min_cds`,
+  `cenv with ce_vars := cenv0.ce_vars = cenv0` by
+    (drule compile_register_positional_args_cenv >>
+     simp[compile_env_component_equality]) >>
+  drule_all supportedGetterPropsTheory.supported_selected_external_body >> strip_tac >>
+  drule_all external_selected_args_distinct >> strip_tac >>
+  `!id ty. MEM (id,ty) args ==>
+     (?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+     cenv.ce_var_type id = SOME ty` by
+    (rpt strip_tac
+     >- (drule_all external_entry_target_param_pointer >> simp[]) >>
+     drule_all external_entry_target_param_type >> simp[]) >>
+  `!id loc. FLOOKUP cenv.ce_vars id = SOME loc ==> MEM id (MAP FST args)` by
+    (rpt strip_tac >> drule_all external_entry_target_declared >> simp[]) >>
+  bound_source_tac >>
+  registered_body_frame_tac (`lbl`,`cenv0`,`pos_args`,`min_cds`,
+    `is_payable`,`if ret = NoneT then NONE else SOME ret`) >>
+  `~EXISTS external_has_defaults (FST (classify_functions tops))` by
+    (qpat_assum `EVERY _ (FST (classify_functions tops))` mp_tac >>
+     simp_tac (srw_ss()) [listTheory.EXISTS_NOT_EVERY, combinTheory.o_DEF]) >>
+  registered_body_shadow_tac [`lbl`,`cenv0`,`pos_args`,`min_cds`,
     `is_payable`,`T`,`global_nonreentrant_slot`,`T`,`mut = View`,
-    `compiled_body`,`if ret = NoneT then NONE else SOME ret`,`st`]
+    `compiled_body`,`if ret = NoneT then NONE else SOME ret`,`st`] >>
+  impl_tac >- asm_simp_tac bool_ss [Abbr `compiled_body`] >>
+  registered_body_endpoint_tac `cenv0` >>
+  registered_body_result_tac
 QED
 
 Triviality dispatched_call_readings_from_value_success:

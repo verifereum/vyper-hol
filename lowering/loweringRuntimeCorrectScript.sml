@@ -1530,8 +1530,11 @@ Proof
           `unlock_if_nr cx nr (is_view_mut mut) =
            if nr /\ mut <> View then release_nonreentrant_lock cx.txn.target global_nonreentrant_slot
            else vyperState$return ()` by
-            (Cases_on `nr` >> Cases_on `mut = View` >>
-             gvs[unlock_if_nr_def]) >>
+            (Cases_on `nr`
+             >- (qpat_assum `T ==> cx.nonreentrant_slot = _ /\ _`
+                   (strip_assume_tac o SIMP_RULE bool_ss []) >>
+                 asm_simp_tac bool_ss [unlock_if_nr_def, optionTheory.option_case_def]) >>
+             simp_tac bool_ss [unlock_if_nr_def]) >>
           `~lookup_raw_return_or_F (NONE:num option) tx.function_name External tops` by
             metis_tac[source_typing_none_return_plain] >>
           qspecl_then [`H1`,`func`,`cenv'`,`cx`,

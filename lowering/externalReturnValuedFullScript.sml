@@ -253,7 +253,9 @@ Proof
   reverse conj_tac
   >- (irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
       simp[] >> rpt strip_tac >> fs[] >>
-      Cases_on `res` >- fs[expr_exit_def] >>
+      Cases_on `res`
+      >- (qpat_assum `expr_exit (INL _) _` mp_tac >>
+          simp_tac bool_ss [expr_exit_INL]) >>
       fs[stmt_exit_ptr_def, halt_exit_def,
          GSYM (Q.INST_TYPE [`:'a` |-> `:value`] expr_exit_INR_type)] >>
       rpt strip_tac >> gvs[] >>
