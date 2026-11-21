@@ -12,8 +12,10 @@ Ancestors
   valueEncodingProps valueEncodingProofs vyperTypeInvariants vyperPlaceFrames
   compileVyper compileEnv list finite_map alist venomState
 
-Theorem immutable_section_replace:
-  struct_args_unique tops /\
+Theorem immutable_section_replace_exact:
+  (!t u. evaluate_type (type_env tops) t = SOME u ==>
+    type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) t =
+    type_memory_size u) /\
   tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
   evaluate_type (type_env tops) ty = SOME tv /\
   off = compute_immutables_len
@@ -31,21 +33,30 @@ Theorem immutable_section_replace:
 Proof
   strip_tac >> gen_tac >> strip_tac >>
   Cases_on `off <= j /\ j < off + type_memory_size tv`
-  >- metis_tac[imm_frame_restrict] >>
+  >- (rewrite_tac[imm_section_dead_def] >>
+      qexistsl_tac [`pre`,`vis`,`name`,`ty`,`slot`,`post`,`tv`] >>
+      gvs[]) >>
   `imm_section_dead tops sec1 j` by metis_tac[] >>
   qpat_x_assum `imm_section_dead tops sec1 j` mp_tac >>
   rewrite_tac[imm_section_dead_def] >> strip_tac >>
   rename1 `evaluate_type (type_env tops) ty' = SOME tv'` >>
   `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
-     type_memory_size tv` by metis_tac[imm_frame_size] >>
+     type_memory_size tv` by
+    (qpat_assum `!t u. evaluate_type _ t = SOME u ==> _`
+       (qspecl_then [`ty`,`tv`] mp_tac) >> simp[]) >>
   `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty' =
-     type_memory_size tv'` by metis_tac[imm_frame_size] >>
+     type_memory_size tv'` by
+    (qpat_assum `!t u. evaluate_type _ t = SOME u ==> _`
+       (qspecl_then [`ty'`,`tv'`] mp_tac) >> simp[]) >>
   drule (CONJUNCT1 mem_dead_bytes_range) >> strip_tac >>
   `pre ++ VariableDecl vis Immutable name ty slot :: post =
      pre' ++ VariableDecl vis' Immutable name' ty' slot' :: post'`
     by metis_tac[] >>
   drule imm_frame_occurrence_separation >>
   disch_then (qspec_then `get_struct_fields (make_struct_fields_map tops)` mp_tac) >>
+  qpat_assum `type_mem_bytes _ ty = type_memory_size tv` (fn width =>
+    qpat_assum `type_mem_bytes _ ty' = type_memory_size tv'` (fn width' =>
+      pure_rewrite_tac[width,width'])) >>
   strip_tac
   >- (fs[] >> gvs[]) >>
   `mem_dead_bytes sec2
@@ -63,8 +74,36 @@ Proof
   gvs[]
 QED
 
+Theorem immutable_section_replace:
+  struct_args_unique tops /\
+  tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
+  evaluate_type (type_env tops) ty = SOME tv /\
+  off = compute_immutables_len
+          (get_struct_fields (make_struct_fields_map tops)) pre /\
+  LENGTH sec1 = lo /\ LENGTH sec2 = lo /\
+  off + type_memory_size tv <= lo /\
+  (!j. j < lo /\ ~(off <= j /\ j < off + type_memory_size tv) ==>
+       EL j sec2 = EL j sec1) /\
+  (!j. j < lo /\ j IN M1 ==> imm_section_dead tops sec1 j) /\
+  (!j. j < lo /\ ~(off <= j /\ j < off + type_memory_size tv) /\
+       j IN M2 ==> j IN M1) /\
+  (!j. off <= j /\ j < off + type_memory_size tv /\ j IN M2 ==>
+       mem_dead_bytes sec2 off tv j) ==>
+  !j. j < lo /\ j IN M2 ==> imm_section_dead tops sec2 j
+Proof
+  strip_tac >>
+  MATCH_MP_TAC (Q.INST [`tops` |-> `tops`,`lo` |-> `lo`,`pre` |-> `pre`,
+    `vis` |-> `vis`,`name` |-> `name`,`ty` |-> `ty`,`slot` |-> `slot`,
+    `post` |-> `post`,`tv` |-> `tv`,`off` |-> `off`,`sec1` |-> `sec1`,
+    `sec2` |-> `sec2`,`M1` |-> `M1`,`M2` |-> `M2`]
+    immutable_section_replace_exact) >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all_then ACCEPT_TAC imm_frame_size) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
 Theorem immutable_assign_section_root:
-  body_inv tops ctx ce cx /\ struct_args_unique tops /\
+  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env es /\
   ce.ce_is_ctor /\ dead_lo_ok H D lo ce cx /\
   FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
   ce.ce_module_var_type (ce.ce_module,id) = SOME ty /\
@@ -95,8 +134,9 @@ Proof
      simp[] >> gvs[build_maps_variable]) >>
   qpat_x_assum `ity = ty` SUBST_ALL_TAC >>
   `lo = imm_len tops` by metis_tac[dead_lo_ok_def] >>
+  `evaluate_type (type_env tops) ty = SOME itv` by metis_tac[] >>
   `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
-      type_memory_size itv` by metis_tac[imm_frame_size] >>
+      type_memory_size itv` by drule_all_then ACCEPT_TAC immutable_exact_slot_size >>
   `off + type_memory_size itv <= lo` by
     (mp_tac (Q.INST [`off` |-> `0`, `prefix` |-> `pre`, `suffix` |-> `post`,
        `sft` |-> `get_struct_fields (make_struct_fields_map tops)`,
@@ -116,7 +156,7 @@ Proof
 QED
 
 Theorem immutable_path_section_dead:
-  body_inv tops ctx ce cx /\ struct_args_unique tops /\
+  body_inv tops ctx ce cx /\
   stmt_state_rel H ctx func ce cx ee s /\ expr_sim_inv ce cx env ee /\
   ghost_inv_at D lo d ce cx ee G tn s /\ dead_lo_ok H D lo ce cx /\
   ce.ce_is_ctor /\
@@ -136,6 +176,9 @@ Theorem immutable_path_section_dead:
       imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo q.vs_memory) i
 Proof
   strip_tac >> drule_all_then strip_assume_tac immutable_assign_section_root >>
+  `!t u. evaluate_type (type_env tops) t = SOME u ==>
+    type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) t =
+    type_memory_size u` by (rpt strip_tac >> drule_all_then ACCEPT_TAC immutable_exact_slot_size) >>
   drule_then strip_assume_tac mem_path_offset_sound >>
   `?imms old. ALOOKUP ee.immutables cx.txn.target = SOME imms /\
     FLOOKUP (get_source_immutables ce.ce_module imms) id = SOME (itv,old)` by
@@ -197,7 +240,7 @@ Proof
      `j IN tn.t_mem /\ j < lo` by
        (conj_tac >- (first_x_assum irule >> conj_tac
                       >- decide_tac >> first_assum ACCEPT_TAC) >> decide_tac) >>
-     drule_all imm_frame_restrict >> metis_tac[]) >>
+     drule_all imm_frame_restrict_exact >> metis_tac[]) >>
   `off + type_memory_size itv <= LENGTH sec /\ LENGTH sec' = LENGTH sec` by
     metis_tac[] >>
   `!j. off <= j /\ j < off+type_memory_size itv /\ j IN tf.t_mem ==>
@@ -222,12 +265,12 @@ Proof
     `vis` |-> `vis`,`name` |-> `id`,`ty` |-> `ty`,`slot` |-> `slot`,
     `post` |-> `post`,`tv` |-> `itv`,`off` |-> `off`,`sec1` |-> `sec`,
     `sec2` |-> `sec'`,`M1` |-> `tn.t_mem`,`M2` |-> `tf.t_mem`]
-    immutable_section_replace) >>
+    immutable_section_replace_exact) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem immutable_path_store_ghost_inv:
-  body_inv tops ctx ce cx /\ struct_args_unique tops /\
+  body_inv tops ctx ce cx /\
   stmt_state_rel H ctx func ce cx ee s /\ expr_sim_inv ce cx env ee /\
   ghost_inv_at D lo d ce cx ee G tn s /\ dead_lo_ok H D lo ce cx /\
   ce.ce_is_ctor /\ local_ptrs_reserved ce sa /\

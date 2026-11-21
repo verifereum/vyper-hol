@@ -2,7 +2,8 @@
 Theory immutableDeployAssignFacts
 Ancestors
   bodySim exprSimHypsDefs exprLoweringProps loweringPosts
-  exprLowering compileEnv vyperTypeSystem
+  exprLowering compileEnv vyperTypeSystem exprSimHyps compileVyper vyperContext
+  structFieldsProps
 
 Theorem immutable_assign_target_layout:
   expr_sim_inv cenv cx env es /\
@@ -39,4 +40,21 @@ Theorem immutable_assign_declared_region:
 Proof
   simp[stmt_state_rel_def, immutable_alloca_sep_def, immutable_decl_sep_alt] >>
   metis_tac[]
+QED
+
+Theorem immutable_exact_slot_size:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env st ==>
+  !ty tv. evaluate_type (type_env tops) ty = SOME tv ==>
+    type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
+    type_memory_size tv
+Proof
+  strip_tac >>
+  qpat_assum `body_inv _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
+  `get_tenv cx = type_env tops` by
+    simp[get_tenv_def, type_env_all_modules_def, type_env_def] >>
+  rpt strip_tac >>
+  qpat_assum `cenv.ce_struct_fields = _` (SUBST1_TAC o SYM) >>
+  rewrite_tac[type_mem_bytes_type_memory_bytes] >>
+  irule expr_sim_inv_memory_size >> simp[] >> metis_tac[]
 QED
