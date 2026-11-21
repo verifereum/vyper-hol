@@ -120,7 +120,7 @@ Theorem runtime_default_expr_full:
     (\H res ee G tn t.
       expr_sim_full_post (DF,lo,d,ctx,fn) ce cx e (es,sa,sb,s0,op,G0,tn0)
         H res ee G tn t /\
-      ee.scopes = es.scopes /\ expr_sim_inv ce cx env ee /\
+      ~t.vs_halted /\ ee.scopes = es.scopes /\ expr_sim_inv ce cx env ee /\
       !v. res = INL v ==> expr_result_typed env e (Value v))
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))

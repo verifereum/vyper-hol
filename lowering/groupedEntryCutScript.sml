@@ -353,3 +353,37 @@ Proof
   `block_is_terminated done` by metis_tac[grouped_common_guarded_terminated] >>
   metis_tac[grouped_entry_terminated_no_reentry]
 QED
+
+Theorem grouped_entry_initializer_instruction:
+  frag_fuel Wv {} {} sa cut Kb /\ at_point sa s /\ sa.cs_current_insts = [] /\
+  fn_has_code sa cut fn /\ cs_extends sa cut /\
+  ~MEM cut.cs_current_bb (MAP (\bb. bb.bb_label) (emitted_blocks sa cut)) /\
+  emit_inst JMP [Label common] [] cut = ((),term) /\ fn_has_code cut term fn /\
+  no_phi_fn fn /\ callees_stable G ctx fn /\
+  (!z k. z.vs_current_bb = common /\ z.vs_inst_idx = 0 ==>
+    ~gas_path ctx fn z k (OK t)) /\
+  gas_path ctx fn s n (OK u) /\ gas_path_edge ctx fn u m (OK v) /\
+  gas_path ctx fn v p (OK t) /\
+  lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb u.vs_inst_idx = SOME i ==>
+  MEM i (state_insts cut)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!label bb. lookup_block label fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0` by
+    (fs[no_phi_fn_def, EVERY_MEM] >> metis_tac[lookup_block_MEM]) >>
+  `!w z m. at_point cut w /\ gas_path_edge ctx fn w m (OK z) ==>
+    !k. ~gas_path ctx fn z k (OK t)` by
+    (rpt gen_tac >> strip_tac >>
+     drule_all grouped_entry_cut_jumps_common >> metis_tac[]) >>
+  `gas_path ctx fn u (m+p) (OK t)` by metis_tac[gas_path_rules] >>
+  `!w k. at_point cut w /\ gas_path ctx fn w k (OK u) ==> F` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_x_assum `gas_path ctx fn w k (OK u)`
+       (strip_assume_tac o ONCE_REWRITE_RULE [gas_path_cases]) >>
+     gvs[exit_result_def] >>
+     metis_tac[gas_path_then]) >>
+  drule_all grouped_entry_first_cut >>
+  disch_then (qspec_then `id` strip_assume_tac) >>
+  metis_tac[entry_observer_instruction_in_state]
+QED

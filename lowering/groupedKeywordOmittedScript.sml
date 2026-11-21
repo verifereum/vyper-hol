@@ -5,7 +5,7 @@ Ancestors
   exprOperandVar exprLoweringProps emitHelperProps typedMemoryCopy
   loweringPosts bodyPtrDefs loweringStateRelDefs typedCopyOriginPtrBase
   bodyPtrMakeArrayCopyStateFrame bodyFullEmptyFrame bodySimFull robustCopyTransportPtr
-  gasOutcomeFullCompose vyperTypeExprResult vyperTypeExprSoundness
+  gasOutcomeFullCompose bodyFullPathHistory vyperStorageFootprint vyperTypeExprResult vyperTypeExprSoundness
   exprSimSource valueEncodingTyping vyperContext vyperAST vyperTypeContract
   vyperTypeInvariants loweringShapeDefs ptrDiscipline
   venomState venomMemDefs compileEnv finite_map arithmetic
@@ -194,4 +194,92 @@ Proof
      `b+i < dst \/ dst+len <= b+i` by decide_tac >>
      metis_tac[]) >>
   simp[]
+QED
+
+Theorem grouped_keyword_omitted_expression:
+  runtime_constant_expr mods e /\ expr_type e = ty /\
+  body_inv tops ctx (ce with ce_vars := FEMPTY) cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  expr_body_pre (ce with ce_vars := FEMPTY) cx env e es /\
+  expr_sim_full_hypotheses (DF,0,NONE,ctx,shadow_ctx,PG,fn,shadow_fn)
+    (ce with ce_vars := FEMPTY) cx ty e es (st0,sa,mid,sha,shmid,src,s,G,tn) /\
+  (if is_word_type ty then emit_void MSTORE [Var dst;src]
+   else if is_bytestring_type ty then compile_store_bytestring src (Var dst)
+   else emit_void MCOPY [Var dst;src;Lit (n2w (type_memory_bytes ce ty))])
+    mid = ((),last) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ env.type_defs = get_tenv cx /\
+  type_memory_bytes ce ty = type_memory_size tv /\
+  type_memory_size tv + 64 < dimword (:256) /\
+  fn_has_code mid last fn /\
+  ~ce.ce_is_ctor /\ ce.ce_imm_alloca = NONE /\ ce.ce_return_pc = NONE /\
+  not_fresh_at sa dst /\ lookup_var dst s = SOME b /\
+  FLOOKUP s.vs_allocas oid = SOME (w2n b,type_memory_size tv) /\
+  ptr_covers G tn dst s (type_memory_size tv) ==>
+  gas_outcome_full (DF,0,gas_explicit_sites ctx shadow_ctx,ctx,fn,PG)
+    (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)
+    (\H res ee J tz u.
+      ?v. res = INL v /\ value_has_type tv v /\ val_wf tv v /\
+          (!mem. mem_agree_outside tz.t_mem u.vs_memory mem ==>
+            val_in_memory tv v (w2n b) mem) /\
+          lookup_var dst u = SOME b /\ FLOOKUP u.vs_allocas oid =
+            SOME (w2n b,type_memory_size tv) /\
+          ptr_covers J tz dst u (type_memory_size tv) /\
+          stmt_state_rel H ctx fn (ce with ce_vars := FEMPTY) cx ee u /\
+          storage_well_formed_on cx ee (FST H) /\
+          ghost_inv_at (DF H) 0 NONE (ce with ce_vars := FEMPTY) cx ee J tz u /\
+          ee.scopes = es.scopes /\ expr_sim_inv (ce with ce_vars := FEMPTY) cx env ee /\
+          alloca_history fn u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+          u.vs_current_bb = last.cs_current_bb /\
+          u.vs_inst_idx = LENGTH last.cs_current_insts /\ ~u.vs_halted)
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all runtime_default_expr_full >> strip_tac >>
+  irule gas_outcome_full_zero_suffix >> goal_assum (drule_at Any) >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `H0 = storage_trace_horizon ee.storage_trace` >>
+  `valid_horizon cx st0 H0 ee.storage_trace` by
+    fs[Abbr `H0`, storage_trace_domain_def] >>
+  first_assum (drule_then strip_assume_tac) >>
+  fs[expr_sim_full_hypotheses_def] >>
+  `fn_inst_ids_distinct fn` by metis_tac[expr_sim_full_code_fields] >>
+  qpat_assum `expr_sim_full_post _ _ _ _ _ H0 _ _ _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [expr_sim_full_post_def]) >>
+  `expr_result_typed env e (Value v)` by
+    (qpat_assum `!vv. res = INL vv ==> _` (qspec_then `v` match_mp_tac) >>
+     first_assum ACCEPT_TAC) >>
+  qpat_assum `res = INL v` SUBST_ALL_TAC >>
+  mp_tac (Q.INST [`H` |-> `H0`, `v` |-> `v`, `G1` |-> `G1`, `tn1` |-> `tn1`,
+    `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
+    (INST_TYPE [alpha |-> ``:256``] (SPEC_ALL grouped_keyword_omitted_store))) >>
+  impl_tac >-
+    (asm_rewrite_tac[] >> simp[expr_sim_full_post_def] >>
+     qexists_tac `v` >> asm_rewrite_tac[]) >>
+  disch_then (qx_choosel_then [`u`,`J`,`tz`] strip_assume_tac) >>
+  qexistsl_tac [`u`,`J`,`tz`] >> gen_tac >> strip_tac >>
+  conj_tac
+  >- (qpat_assum `!D. gas_origin_ptr_path _ _ [] _`
+        (qspec_then `DF H` ACCEPT_TAC)) >>
+  qexists_tac `v` >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  qpat_assum `expr_sim_full_post _ _ _ _ _ H _ _ _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [expr_sim_full_post_def]) >>
+  qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  `ci_mono sa mid` by metis_tac[ci_mono_lower_value_compile_expr, pairTheory.SND] >>
+  `not_fresh_at mid dst` by
+    (irule not_fresh_at_mono >> qexists_tac `sa` >> fs[ci_mono_def]) >>
+  `FLOOKUP t.vs_allocas oid = SOME (w2n b,type_memory_size tv) /\
+   lookup_var dst t = SOME b` by metis_tac[] >>
+  `alloca_history fn t` by metis_tac[expr_sim_full_endpoint_fields] >>
+  `alloca_inv t` by fs[stmt_state_rel_def] >>
+  `alloca_history fn u` by metis_tac[body_full_path_alloca_history] >>
+  `stmt_state_rel H ctx fn (ce with ce_vars := FEMPTY) cx ee u` by
+    metis_tac[grouped_keyword_store_runtime_state] >>
+  `ghost_inv_at (DF H) 0 NONE (ce with ce_vars := FEMPTY) cx ee J tz u` by
+    metis_tac[grouped_keyword_store_runtime_ghost] >>
+  qpat_assum `typed_copy_state_frame mid _ _ t u`
+    (assume_tac o MATCH_MP typed_copy_state_frame_allocas_below_fmp) >>
+  fs[typed_copy_state_frame_def, venom_state_component_equality]
 QED
