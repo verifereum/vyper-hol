@@ -8513,8 +8513,10 @@ Proof
   qpat_x_assum `MEM bb _` mp_tac >>
   simp[dft_process_one_def, LET_THM] >>
   Cases_on `lookup_block lbl st.dls_blocks` >> simp[] >>
-  TRY (Cases_on `so_analyze_block cfg lr st.dls_from_to lbl x.bb_instructions` >> simp[] >>
-       Cases_on `so_get_stack cfg lr (fn with fn_blocks := st.dls_blocks)
+  TRY (Cases_on `so_analyze_block cfg (liveness_realign lr fn.fn_blocks st.dls_blocks)
+                    st.dls_from_to lbl x.bb_instructions` >> simp[] >>
+       Cases_on `so_get_stack cfg (liveness_realign lr fn.fn_blocks st.dls_blocks)
+                   (fn with fn_blocks := st.dls_blocks)
          (so_record_from_to cfg st.dls_from_to lbl q) lbl` >> simp[] >>
        BasicProvers.TOP_CASE_TAC >> simp[] >>
        gvs[MEM_MAP] >> metis_tac[dft_block_pseudos_prefix] >> NO_TAC) >>
