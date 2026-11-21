@@ -1,7 +1,8 @@
 Theory runtimePeakMemoryBound
 Ancestors
   runtimePeakMemoryPackage runtimePeakMemoryProof runtimePeakMemoryCode
-  runtimePeakMemorySourceGate vyperLoweringCorrect vyperCompiler e2eDefs
+  runtimePeakMemorySourceGate loweringBudgetAccountCodes
+  vyperLoweringCorrect vyperCompiler e2eDefs
   contextCodegenRel contextRawReachable venomLayout venomState venomInst words list
 
 val _ = Parse.hide "body";
@@ -64,8 +65,12 @@ Proof
   `!fn. MEM fn unit.cu_context.ctx_functions ==> ALL_DISTINCT (fn_labels fn)` by
     (drule lower_vyper_runtime_unit_context_entry >>
      simp[lowering_context_ok_def, EVERY_MEM] >> metis_tac[]) >>
-  mp_tac (Q.INST [`source_tops` |-> `tops`]
-    lower_vyper_runtime_unit_dynamic_peak_memory_from_windows) >>
+  `lowering_context_ok unit.cu_context` by
+    metis_tac[lower_vyper_runtime_unit_context_entry] >>
+  `account_code_lengths_ok vs.vs_accounts /\ ~vs.vs_halted` by
+    (fs[source_typing_ok_def, initial_venom_state_rel_def] >>
+     metis_tac[initial_account_codes_after_transfer]) >>
+  mp_tac (Q.INST [`ctx` |-> `unit.cu_context`] raw_dynamic_peak_memory_from_windows) >>
   impl_tac >- (asm_rewrite_tac[] >> metis_tac[active_inst_dalloca_windows]) >>
   simp[]
 QED
