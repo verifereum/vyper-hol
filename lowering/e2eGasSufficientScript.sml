@@ -794,7 +794,7 @@ Proof
   qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
                `dunit`, `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`, `fmp`]
     mp_tac deploy_unit_execution_correct_selected_raw_fmp >>
-  impl_tac >- simp[] >> strip_tac >>
+  impl_tac >- gvs[] >> strip_tac >>
   `?marks. deploy_unit_execution_correct_at marks tops runtime_bc am tx dunit vi`
     by
     (simp[deploy_unit_execution_correct_at_with] >>
