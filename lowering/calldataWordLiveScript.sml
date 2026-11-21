@@ -1,6 +1,7 @@
 (* Reentrant primitive calldata decoding: older operands may be absent. *)
 Theory calldataWordLive
 Ancestors
+  abiDecoderLoopRegisters
   valueEncodingDefs calldataDynOwned calldataWordLeaf abiDecoderClampedWord entryDecodeProps abiEncoder abiDecoderReentry
   abiDecoderGuards abiDecoderRange abiDecoderContract valueEncodingProps safeSequence
   emitHelperProps exprLoweringProps compileEnv emitHelper
@@ -154,7 +155,7 @@ Proof
     OK (update_var (STRING #"%" (toString st.cs_next_var)) extended s)` by
     (simp[Abbr `extended`] >> irule step_SIGNEXTEND >> simp[eval_operand_def]) >>
   `eval_operand op (update_var (STRING #"%" (toString st.cs_next_var)) extended s) = SOME w` by
-    metis_tac[calldata_update_protected] >>
+    metis_tac[abi_decoder_generated_update_operand] >>
   `step_inst_base (mk_inst c1.cs_next_id EQ [op;canonical]
     [STRING #"%" (toString c1.cs_next_var)])
     (update_var (STRING #"%" (toString st.cs_next_var)) extended s) =
