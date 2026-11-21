@@ -72,7 +72,7 @@ Proof
   strip_tac >> gvs[]
 QED
 
-Theorem post_gas_indexed_rows[local]:
+Theorem post_gas_indexed_rows:
   env.type_defs = get_tenv cx /\ expr_sim_inv cenv cx env pos /\
   (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) /\
   LIST_REL (\e v. value_runtime_typed env (lowered_value_type cenv e) v) xs vs /\
