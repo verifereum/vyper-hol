@@ -1,7 +1,7 @@
 (* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
 Theory externalBodyFrame
 Ancestors
-  entryDispatchProps constSubst constSubstStmts constSubstStmtsPreserve
+  entryDispatchProps constSubst constSubstCorrect constSubstStmts constSubstStmtsPreserve
   bodyFullPreds gasContext supportedGetterProps externalRawReturnType
   externalBodyWidths externalBodySupport memoryLocalRhsProps
   stmtSimProps stmtSimDefs exprSimDefs exprSimHypsDefs exprSimHyps
@@ -834,12 +834,18 @@ Proof
   `cx_tops (initial_evaluation_context am.sources am.layouts tx NONE) = tops` by
     simp[cx_tops_def, get_module_code_def, initial_evaluation_context_def,
          ALOOKUP_def] >>
+  `frame_maps env art` by simp[] >>
+  `const_subst_context roots
+      (initial_evaluation_context am.sources am.layouts tx NONE) env
+      (module_consts_env tops []) [(NONE,tops)] art` by
+    (irule const_subst_context_static >> goal_assum (drule_at Any) >>
+     gvs[function_entry_env_def, artifact_env_def,
+         vyperTypeContractContextTheory.FOLDL_extend_local_args_static]) >>
+  `const_cells_agree roots es` by
+    fs[const_cells_agree_def, initial_state_def] >>
   simp[body_const_cells_agree_def] >>
-  qexistsl [`roots`, `art`] >> conj_tac
-  >- (irule const_subst_context_static >> goal_assum (drule_at Any) >>
-      gvs[function_entry_env_def, artifact_env_def,
-          vyperTypeContractContextTheory.FOLDL_extend_local_args_static]) >>
-  fs[constSubstCorrectTheory.const_cells_agree_def, initial_state_def]
+  qexistsl_tac [`roots`, `art`, `account_immutables am tx.target`, `A`] >>
+  simp[initial_evaluation_context_def]
 QED
 
 Theorem external_source_body_frame_nr:

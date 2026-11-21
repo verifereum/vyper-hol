@@ -4087,7 +4087,11 @@ Resume for_storage_array_body_cleanup_full[landing]:
        (qpat_assum `!tail. eval_stmts _ _ (_ with gas_obs := xs ++ tail) = _`
          (qspec_then `[]` ACCEPT_TAC)) >>
      irule body_const_cells_agree_stmts >>
-     goal_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >> simp[]) >>
+     qpat_assum `eval_stmts cx stmts _ = (raw,ef with gas_obs := [])`
+       (irule_at Any) >>
+     qexists_tac `ret_ty` >> simp[] >>
+     qpat_assum `body_const_cells_agree [(NONE,tops)] cx (extend_local env id typ F) eb`
+       (ACCEPT_TAC o REWRITE_RULE [body_const_cells_agree_extend_local])) >>
   `valid_horizon cx st0 H eb.storage_trace` by
     (qpat_assum `!tail. eval_stmts _ _ _ = _`
        (qspec_then `[]` (mp_then (Pat `f st = (res,st')`) mp_tac
@@ -5888,6 +5892,7 @@ Resume for_storage_array_round_full[cleanup_apply]:
     first_assum ACCEPT_TAC) >>
  `eval_operand (Lit slot) z = SOME slot /\ op_taint tt (Lit slot) = {}` by
    simp[NoAsms,eval_operand_def,op_taint_def] >>
+ `body_const_cells_agree [(NONE,tops)] cx env ei` by simp[Abbr `ei`] >>
  qspecl_then
     [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,`PG`,`cx`,`RetQ`,
      `c0`,`e0`,`sa0`,`sb`,`s0`,`G0`,`tn0`,`tr`,`slot`,`dst`,`tyv`,`typ`,

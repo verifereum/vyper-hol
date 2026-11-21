@@ -7019,13 +7019,16 @@ Proof
           (src with gas_obs := tail) = _`
          (qspec_then `[]` mp_tac) >>
        qpat_assum `src with gas_obs := [] = src` (fn th => rewrite_tac[th]) >>
-       qpat_assum `fin with gas_obs := [] = fin` (fn th => rewrite_tac[th])) >>
+       qpat_assum `fin with gas_obs := [] = fin` (fn th => rewrite_tac[th]))) >>>
+  HEADGOAL (
     `body_const_cells_agree [(NONE,tops)] cx env fin` by
       (`writable_atarget env (BaseTarget (TopLevelNameTarget (ns,id)))` by
-         metis_tac[constSubstCorrectTheory.well_typed_atarget_writable] >>
+         qpat_assum `well_typed_atarget env (BaseTarget (TopLevelNameTarget (ns,id))) sty`
+          (ACCEPT_TAC o MATCH_MP constSubstCorrectTheory.well_typed_atarget_writable) >>
        irule body_const_cells_agree_assign_tuple >>
        qpat_assum `assign_tuple_targets cx (BaseTarget (TopLevelNameTarget (ns,id))) vi src = _`
-         (irule_at Any) >> simp[]) >>
+         (irule_at Any) >> simp[])) >>>
+  HEADGOAL (
     `body_tuple_targets_full_ok cx todo vs_tail` by
       (first_x_assum irule >> qexistsl_tac [`src`,`()`,`fin`] >> simp[]) >>
     asm "suffix_ih" (qspecl_then
@@ -7411,8 +7414,11 @@ Proof
   HEADGOAL (
     `bodyFullTargetDefs$target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
        cenv cx env bt src` by
-      (irule bodyFullTargetTheory.body_target_place_sim_full >> simp[] >>
-       qexists_tac `tops` >> conj_tac >> first_assum ACCEPT_TAC)) >>>
+      (qspecl_then [`bt`, `DF`, `lo`, `d`, `PG`, `tops`, `ctx`, `shadow_ctx`,
+          `func`, `shadow_func`, `cenv`, `cx`, `env`, `src`] mp_tac
+         bodyFullTargetTheory.body_target_place_sim_full >>
+       impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+       disch_then ACCEPT_TAC)) >>>
   HEADGOAL (
     qpat_assum `bodyFullTargetDefs$target_place_sim_full _ _ _ _ _ _`
       (mp_tac o REWRITE_RULE [bodyFullTargetDefsTheory.target_place_sim_full_def]) >>

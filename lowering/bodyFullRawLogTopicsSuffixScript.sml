@@ -437,8 +437,9 @@ Resume raw_log_topics_suffix_full_under_compose[return_cons]:
       qpat_assum `tailops = stailops` mp_tac >>
       qpat_assum `expr_type e = _` mp_tac >>
       POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  conj_tac >- (qexists_tac `tops` >> first_assum ACCEPT_TAC) >>
   conj_tac
-  >- (qexistsl_tac [`ann`,`data`,`dflt`,`env`,`n`,`pre`,`tops`] >>
+  >- (qexistsl_tac [`ann`,`data`,`dflt`,`env`,`n`,`pre`] >>
       qpat_assum `topics = _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
   `eval_exprs cx rest (mid with gas_obs := gas_explicit tailmarks u.vs_gas_readings) = (INL vs,ee)` by
     (qpat_assum `!tail. eval_exprs cx rest _ = _` (qspec_then `[]` mp_tac) >>

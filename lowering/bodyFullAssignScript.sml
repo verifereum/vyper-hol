@@ -17889,8 +17889,10 @@ Proof
        qpat_assum `expr_body_pre cenv cx env e es`
          (ACCEPT_TAC o cj 2 o REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def]) >>
      irule body_const_cells_agree_expr_read >>
+     qexistsl_tac [`e`, `INL v`, `es with gas_obs := gas_explicit marks s0.vs_gas_readings`] >>
+     simp[] >>
      qpat_assum `(do pv <- eval_expr cx e; read_result cx pv od) _ = (INL v,mid)`
-       (irule_at Any) >> simp[]) >>
+       (ACCEPT_TAC o CONV_RULE (DEPTH_CONV ETA_CONV))) >>
   `target_pre cenv cx env t mid` by
     (mp_tac body_assign_saved_target_pre >> simp[]) >>
   `target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

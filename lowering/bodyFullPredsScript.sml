@@ -18,12 +18,18 @@ Ancestors bodyFullShadowBodyInv
   constSubstCorrect constSubstStmts vyperCallOutcomeFrame gasContext
   bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   vyperInterpreter vyperTypeSystem vyperState vyperAST list
+  vyperTypeContract vyperTypeConstantFold alist finite_map
 
 val _ = Parse.hide "body";
 
 Definition body_const_cells_agree_def:
   body_const_cells_agree mods cx env es <=>
-    ?roots art.
+    ?roots art imms A.
+      check_contract cx.in_deploy cx.layouts cx.txn.target mods = SOME art /\
+      ALOOKUP cx.sources cx.txn.target = SOME mods /\
+      ALOOKUP mods NONE = SOME (cx_tops cx) /\
+      constants_fold_module mods imms NONE (cx_tops cx) FEMPTY = SOME A /\
+      frame_maps env art /\
       const_subst_context roots cx env (module_consts_env (cx_tops cx) [])
         mods art /\
       const_cells_agree roots es
@@ -57,6 +63,7 @@ Theorem body_const_cells_agree_expr:
   body_const_cells_agree mods cx env st'
 Proof
   rw[body_const_cells_agree_def] >>
+  qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
   metis_tac[const_subst_context_expr_frame]
 QED
 
@@ -66,6 +73,7 @@ Theorem body_const_cells_agree_exprs:
   body_const_cells_agree mods cx env st'
 Proof
   rw[body_const_cells_agree_def] >>
+  qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
   metis_tac[const_subst_context_exprs_frame]
 QED
 
@@ -76,6 +84,7 @@ Theorem body_const_cells_agree_base:
   body_const_cells_agree mods cx env st'
 Proof
   rw[body_const_cells_agree_def] >>
+  qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
   metis_tac[const_subst_context_base_frame]
 QED
 
@@ -85,7 +94,7 @@ Theorem body_const_cells_agree_read:
   body_const_cells_agree mods cx env st'
 Proof
   rw[body_const_cells_agree_def] >>
-  qexistsl_tac [`roots`, `art`] >> simp[] >>
+  qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
   irule protected_cell_frame_cells_agree >>
   qexists_tac `st` >> simp[] >> rpt strip_tac >>
   mp_tac (CONJUNCT1 protected_cell_frame_reads) >>
@@ -111,7 +120,7 @@ Theorem body_const_cells_agree_frame[local]:
   body_const_cells_agree mods cx env st'
 Proof
   rw[body_const_cells_agree_def] >>
-  qexistsl_tac [`roots`, `art`] >> simp[] >>
+  qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
   irule protected_cell_frame_cells_agree >>
   qexists_tac `st` >> simp[] >>
   rpt strip_tac >>
@@ -150,8 +159,11 @@ Proof
   `body_const_cells_agree mods cx env st'` by
     (irule body_const_cells_agree_frame >> qexists_tac `st` >> simp[] >>
      metis_tac[cj 1 checked_protected_cell_frame_mutual, optionTheory.IS_SOME_DEF]) >>
-  fs[body_const_cells_agree_def] >>
-  metis_tac[const_subst_context_type_stmt]
+  qpat_x_assum `body_const_cells_agree mods cx env st'`
+    (strip_assume_tac o REWRITE_RULE [body_const_cells_agree_def]) >>
+  pure_once_rewrite_tac [body_const_cells_agree_def] >>
+  qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
+  metis_tac[const_subst_context_type_stmt, type_stmt_frame_maps]
 QED
 
 Theorem body_const_cells_agree_stmts:
@@ -179,7 +191,7 @@ Theorem body_const_cells_agree_extend_local[simp]:
   body_const_cells_agree mods cx env st
 Proof
   simp[body_const_cells_agree_def] >> EQ_TAC >> strip_tac >>
-  qexistsl_tac [`roots`, `art`] >> simp[] >>
+  qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
   irule const_subst_context_static >>
   first_assum (irule_at Any) >> simp[extend_local_def]
 QED
@@ -189,7 +201,7 @@ Theorem body_const_cells_agree_stk:
   body_const_cells_agree mods (cx with stk := stk) env st
 Proof
   rw[body_const_cells_agree_def, cx_tops_stk] >>
-  qexistsl_tac [`roots`, `art`] >> simp[] >>
+  qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
   irule const_subst_context_stk >> simp[] >>
   qpat_assum `const_subst_context _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [const_subst_context_def]) >>
@@ -201,7 +213,11 @@ Theorem body_const_cells_agree_current_src:
   body_const_cells_agree mods cx (env with current_src := src) st
 Proof
   rw[body_const_cells_agree_def] >>
-  qexistsl_tac [`roots`, `art`] >> simp[] >>
+  qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
+  conj_tac
+  >- (qpat_assum `frame_maps env art`
+        (strip_assume_tac o REWRITE_RULE [frame_maps_def]) >>
+      simp[frame_maps_def]) >>
   irule const_subst_context_static >> qexists_tac `env` >> simp[]
 QED
 

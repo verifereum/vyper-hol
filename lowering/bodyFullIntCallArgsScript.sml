@@ -8918,9 +8918,10 @@ Proof
   `body_const_cells_agree [(NONE,tops)] cxd (tenv with current_src := NONE) ee` by
     (simp[Abbr `cxd`] >>
      irule body_const_cells_agree_current_src >>
-     qpat_assum `body_const_cells_agree [(NONE,tops)] cx tenv ee`
-       (mp_tac o Q.SPEC `(NONE,name)::cx.stk` o MATCH_MP body_const_cells_agree_stk) >>
-     simp[vyperContextTheory.evaluation_context_component_equality]) >>
+     `cx with stk updated_by CONS (NONE,name) = cx with stk := (NONE,name)::cx.stk` by
+       simp[vyperContextTheory.evaluation_context_component_equality] >>
+     pop_assum SUBST1_TAC >>
+     irule body_const_cells_agree_stk >> first_assum ACCEPT_TAC) >>
   `!s res fin. eval_exprs cxd ds s = (res,fin) ==> fin.scopes = s.scopes` by
     (rpt strip_tac >>
      `s with scopes := s.scopes = s` by
@@ -9286,10 +9287,11 @@ Proof
   map_every qx_gen_tac [`dm`,`dvs`,`ed`,`u`,`Gd`,`tnd`] >> strip_tac >>
   `body_const_cells_agree [(NONE,tops)] cxd (tenv with current_src := NONE) ed` by
     (`well_typed_exprs (tenv with current_src := NONE) ds` by
-       (rw[constSubstCorrectTheory.frame_well_typed_exprs_every, EVERY_MEM] >>
-        qpat_assum `EVERY (\e. expr_body_pre (cenv_without_defaults cenv name) cxd
-          (tenv with current_src := NONE) e ee) ds`
-          (drule o REWRITE_RULE [EVERY_MEM]) >> simp[expr_body_pre_def]) >>
+       (qpat_assum `EVERY (\e. expr_body_pre (cenv_without_defaults cenv name) cxd
+          (tenv with current_src := NONE) e ee) ds` mp_tac >>
+        simp[NoAsms, constSubstCorrectTheory.frame_well_typed_exprs_every, EVERY_MEM] >>
+        disch_tac >> rpt strip_tac >>
+        first_x_assum (drule_then (ACCEPT_TAC o cj 2 o REWRITE_RULE [expr_body_pre_def]))) >>
      `body_const_cells_agree [(NONE,tops)] cxd (tenv with current_src := NONE)
         (ed with gas_obs := [])` suffices_by simp[] >>
      irule body_const_cells_agree_exprs >>
@@ -9299,7 +9301,8 @@ Proof
     (qpat_assum `body_const_cells_agree [(NONE,tops)] cxd
         (tenv with current_src := NONE) ed`
        (mp_tac o Q.SPEC `tenv.current_src` o MATCH_MP body_const_cells_agree_current_src) >>
-     simp[] >> disch_then (mp_tac o Q.SPEC `cx.stk` o MATCH_MP body_const_cells_agree_stk) >>
+     simp[] >> disch_then (mp_tac o Q.INST [`stk` |-> `cx.stk`] o
+       MATCH_MP body_const_cells_agree_stk) >>
      simp[Abbr `cxd`, vyperContextTheory.evaluation_context_component_equality]) >>
   `!inst. active_inst func inst u ==> frag_reachable ctx func s0 func inst u` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK entry,Ga,tna)`

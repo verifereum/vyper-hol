@@ -1477,8 +1477,12 @@ Proof
             gasContextTheory.cx_tops_def, get_module_code_def] >>
      drule_all deploy_ctor_body_subst_context >>
      disch_then (qx_choose_then `roots` strip_assume_tac) >>
-     simp[body_const_cells_agree_def] >>
-     qexistsl_tac [`roots`, `deploy_art`] >> simp[]) >>
+     `frame_maps env_t deploy_art` by simp[] >>
+     pure_once_rewrite_tac [body_const_cells_agree_def] >>
+     qexistsl_tac [`roots`, `deploy_art`, `imms`, `A`] >>
+     rpt (conj_tac >- FIRST [first_assum ACCEPT_TAC,
+       simp[deploy_evaluation_context_def, initial_evaluation_context_def]]) >>
+     first_assum ACCEPT_TAC) >>
   qpat_x_assum `env_t = function_entry_env _ _ _ _ _` kall_tac >>
   `~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) compiled_body` by
     (`cenv.ce_modules = [(NONE,tops)]` by fs[body_inv_def, cenv_module_pins_def] >>

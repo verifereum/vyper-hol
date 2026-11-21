@@ -7034,23 +7034,18 @@ fun range_join_init_tac replay scopes immutables =
                   (?rs. res = INL rs /\ _) /\ _`
        (drule_then strip_assume_tac) >> qexists `rs` >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `rs = GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))` by
-    (qpat_assum replay (qspec_then `[]` mp_tac) >>
-     simp[Abbr `init`,get_range_limits_def,lift_sum_def,bind_def,
-          ignore_bind_def,check_def,assert_def,
-          vyperValueTheory.compatible_bound_def,return_def]) >>
-  sg scopes >-
-    (qpat_assum replay (qspec_then `[]`
-       (mp_tac o Q.AP_TERM `(\p. (SND p : evaluation_state).scopes)`)) >>
-     simp[Abbr `init`,get_range_limits_def,lift_sum_def,bind_def,
-          ignore_bind_def,check_def,assert_def,
-          vyperValueTheory.compatible_bound_def,return_def]) >>
-  sg immutables >-
-    (qpat_assum replay (qspec_then `[]`
-       (mp_tac o Q.AP_TERM `(\p. (SND p : evaluation_state).immutables)`)) >>
-     simp[Abbr `init`, get_range_limits_def, lift_sum_def, bind_def,
+  `!st. init st = (INL (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))),st)` by
+    (simp[Abbr `init`, get_range_limits_def, lift_sum_def, bind_def,
           ignore_bind_def, check_def, assert_def,
           vyperValueTheory.compatible_bound_def, return_def]) >>
+  `rs = GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))` by
+    (qpat_assum replay (qspec_then `[]` (mp_tac o Q.AP_TERM `FST`)) >> simp[]) >>
+  sg scopes >-
+    (qpat_assum replay (qspec_then `[]`
+       (mp_tac o Q.AP_TERM `(\p. (SND p : evaluation_state).scopes)`)) >> simp[]) >>
+  sg immutables >-
+    (qpat_assum replay (qspec_then `[]`
+       (mp_tac o Q.AP_TERM `(\p. (SND p : evaluation_state).immutables)`)) >> simp[]) >>
   disj1_tac >> qexists `rs` >> conj_tac >- first_assum ACCEPT_TAC;
 
 val range_init_admissible_tac =
@@ -7120,7 +7115,7 @@ Resume compile_for_range_frag_full[checked_init]:
     (Q.INST [`d` |-> `d`, `cenv` |-> `cenv`, `sa` |-> `st`]
        bodyFullSharedTheory.gas_outcome_full_return_buf_allocas_from) >>
   range_join_init_tac
-    `!tail. _ (mid2 with gas_obs := gas_explicit _ _ ++ tail) =
+    `!tail. init (mid2 with gas_obs := gas_explicit _ _ ++ tail) =
        (res,mid with gas_obs := tail)`
     `mid.scopes = mid2.scopes` `mid.immutables = mid2.immutables` >>
   `body_const_cells_agree [(NONE,tops)] cx env mid` by
@@ -7433,7 +7428,7 @@ Resume compile_for_range_frag_full[literal]:
     (Q.INST [`d` |-> `d`, `cenv` |-> `cenv`, `sa` |-> `sa`]
        bodyFullSharedTheory.gas_outcome_full_return_buf_allocas) >>
   range_join_init_tac
-    `!tail. _ (es with gas_obs := gas_explicit _ _ ++ tail) =
+    `!tail. init (es with gas_obs := gas_explicit _ _ ++ tail) =
        (res,mid with gas_obs := tail)`
     `mid.scopes = es.scopes` `mid.immutables = es.immutables` >>
   `body_const_cells_agree [(NONE,tops)] cx env mid` by

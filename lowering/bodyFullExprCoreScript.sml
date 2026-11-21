@@ -856,12 +856,23 @@ Resume bop_bytes_eq_sim_full[second]:
        simp[expr_body_pre_gas_obs] >>
      drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_eval) >> simp[]) >>
   `expr_body_pre cenv cx env e2 mid` by metis_tac[] >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`well_typed_expr env e1` by
+       qpat_assum `expr_body_pre cenv cx env e1 es`
+         (ACCEPT_TAC o cj 2 o REWRITE_RULE [expr_body_pre_def]) >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `bind (eval_expr cx e1) (read_result cx) _ = (INL v,mid)`
+       (irule_at Any) >> simp[]) >>
   `body_expr_full_ok cx e2` by
     (gnvs[body_exprs_full_ok_def] >>
      metis_tac[eval_expr_read_INL]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e1) e2 mid` by
-    metis_tac[body_expr_full_ok_def] >>
+    (qpat_assum `body_expr_full_ok cx e2`
+      (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_full_ok_def]) >>
+     disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
+         `func`,`shadow_func`,`cenv`,`env`,`expr_type e1`,`mid`] mp_tac) >>
+     simp[]) >>
   `gas_admissible (bind (eval_expr cx e2) (read_result cx)) expr_res_ok mid` by
     (irule expr_body_pre_gas_admissible >> metis_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>

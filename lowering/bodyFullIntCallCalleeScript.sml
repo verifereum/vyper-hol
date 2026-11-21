@@ -2494,16 +2494,21 @@ Proof
   `body_const_cells_agree [(NONE,tops)] cx env es1` by
     (qpat_assum `body_const_cells_agree [(NONE,tops)] cx tenv es1`
        (strip_assume_tac o REWRITE_RULE [body_const_cells_agree_def]) >>
-     simp[body_const_cells_agree_def] >> qexistsl_tac [`roots`,`art`] >>
+     `frame_maps env art` by
+       (qpat_assum `frame_maps tenv art` mp_tac >>
+        simp[constSubstCorrectTheory.frame_maps_def]) >>
+     simp[body_const_cells_agree_def] >>
+     qexistsl_tac [`roots`, `art`, `imms`, `A`] >>
      simp[] >> irule constSubstStmtsTheory.const_subst_context_static >>
      qpat_assum `const_subst_context roots cx tenv _ _ art` (irule_at Any) >> simp[]) >>
   `body_const_cells_agree [(NONE,tops)] (cx with stk updated_by CONS (NONE,name)) env locked` by
-    (irule body_const_cells_agree_stk >>
+    (`cx with stk updated_by CONS (NONE,name) = cx with stk := (NONE,name)::cx.stk` by
+       simp[vyperContextTheory.evaluation_context_component_equality] >>
+     pop_assum SUBST1_TAC >>
+     irule body_const_cells_agree_stk >>
      drule_all intcall_callee_lock_fields >> strip_tac >>
-     qpat_assum `body_const_cells_agree [(NONE,tops)] cx env es1`
-       (mp_tac o REWRITE_RULE [body_const_cells_agree_def,
-          constSubstCorrectTheory.const_cells_agree_def]) >>
-     simp[body_const_cells_agree_def, constSubstCorrectTheory.const_cells_agree_def]) >>
+     irule (iffLR body_const_cells_agree_immutables) >>
+     qexists_tac `es1` >> simp[]) >>
   drule_all intcall_callee_locked_body >> strip_tac >>
   `?bindings. supported_stmts tops bindings ss` by
     (qexists `args ++ supported_stmts_bindings T ss ++ supported_stmts_bindings F ss` >>

@@ -282,6 +282,10 @@ Proof
          pure_rewrite_tac[APPEND_NIL] >>
          CONV_TAC (DEPTH_CONV ETA_CONV) >> disch_then ACCEPT_TAC) >>
       `expr_sim_inv cenv cx env mid` by fs[] >>
+      `expr_body_pre cenv cx env e1 es` by
+        (drule expr_body_pre_builtin_arg >>
+         disch_then (qspecl_then [`e1`, `es`] mp_tac) >>
+         simp[] >> fs[expr_body_pre_def]) >>
       `body_const_cells_agree [(NONE,tops)] cx env mid` by
         (`well_typed_expr env e1` by
            qpat_assum `expr_body_pre cenv cx env e1 es`
