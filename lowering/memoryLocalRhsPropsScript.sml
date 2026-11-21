@@ -166,7 +166,10 @@ Proof
     (irule arithmeticTheory.DIV_LE_MONOTONE >> simp[]) >> gvs[] >> decide_tac
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem supported_tuple_abi_size_bound:
+  !sf tenv t.
+    supported_tuple_type t ==>
+    abi_size_bound sf t = vyper_abi_size_bound tenv t
 Proof
   rpt gen_tac >> Cases_on `t` >> simp[supported_tuple_type_def] >>
   rename1 `EVERY supported_scalar_type ts` >> strip_tac >>
@@ -175,16 +178,11 @@ Proof
      qexists_tac `supported_scalar_type` >> simp[] >>
      Cases >> simp[supported_scalar_type_def, supported_word_type_def,
                    supported_string_type_def] >>
-     simp[abi_caller_abi_bound_base]) >>
+     simp[abi_caller_abi_bound_base, abi_caller_abi_bound_def,
+          is_abi_dynamic_def, abi_size_bound_def, abi_static_size_def,
+          vyper_is_dynamic_def, vyper_abi_size_bound_def, vyper_to_abi_type_def,
+          contractABITheory.is_dynamic_def]) >>
   drule abi_caller_abi_bound_tuple >> simp[abi_caller_abi_bound_def]
-QED
-*)
-Theorem supported_tuple_abi_size_bound:
-  !sf tenv t.
-    supported_tuple_type t ==>
-    abi_size_bound sf t = vyper_abi_size_bound tenv t
-Proof
-  cheat
 QED
 
 Theorem lowered_value_type_memory_bound:
