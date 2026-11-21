@@ -5,7 +5,7 @@ Ancestors
  ctorDeployDefs context ctorDeployLoweringDefs deployUnitProducers ctorDeployMemoryFrontier allocaFrontierRoom
  moduleLoweringProps fragExec venomExecSemantics venomInst venomState
  vyperCompiler compileEnv o1PassContract e2eEntry finite_map list
- ctorDeployLoweringPrefix ctorDeployShape unitShapeDefs compileVyper
+ ctorDeployLoweringPrefix ctorDeployMemoryRunMemEntryLabel acceptedContextPhi compileVyper
  o1ScheduleDecompHelpers ctorDeployInitcode e2eDeployDefs vyperState
  vyperInterpreter vyperContext venomMemDefs allocaBudgetProps
  allocaFrontierBound fcgCorrectnessProof fcgDefs ctorDeployImmBudget
@@ -73,7 +73,6 @@ Theorem deploy_ctor_original_entry_shape:
       phi_prefix_length bb.bb_instructions = 0
 Proof
  rpt gen_tac >> strip_tac >>
- drule_all deploy_prefix_ctor_entry_label >> strip_tac >>
  fs[deploy_ctor_code_def] >>
  drule lower_vyper_deploy_unit_entry >> strip_tac >>
  drule lower_vyper_deploy_unit_context_ok >> strip_tac >>
@@ -81,18 +80,17 @@ Proof
    (fs[lowering_context_ok_def, ctx_fn_names_def] >>
     drule lookup_function_member_iff >>
     disch_then (qspecl_then [`"__deploy"`, `func`] mp_tac) >> simp[]) >>
+ drule_all ctor_checked_entry_label_from_lowering >> strip_tac >>
  drule_all lowered_unit_entry_facts >> strip_tac >>
  simp[] >>
- drule_all lower_vyper_deploy_unit_source_unit_ok >> strip_tac >>
- `EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts func)` by
-   (gvs[o1_source_unit_ok_def, EVERY_MEM] >> metis_tac[]) >>
- gvs[] >>
  rename1 `fn_entry_label f = SOME "__deploy"` >>
  Cases_on `f.fn_blocks` >- gvs[fn_entry_label_def, entry_block_def] >>
- gvs[fn_entry_label_def, entry_block_def] >>
- qexists `h` >> simp[lookup_block_def, FIND_thm] >>
- Cases_on `h.bb_instructions` >> simp[phi_prefix_length_def] >>
- fs[fn_insts_def, fn_insts_blocks_def, raw_opcode_ok_def]
+ fs[fn_entry_label_def, entry_block_def] >>
+ `lookup_block "__deploy" f.fn_blocks = SOME h` by
+   simp[lookup_block_def, FIND_thm] >>
+ qexists `h` >> conj_tac >- fs[lookup_block_def, FIND_thm] >>
+ irule lowering_context_ok_block_phi >>
+ goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem deploy_ctor_start_accepts_value[local]:
