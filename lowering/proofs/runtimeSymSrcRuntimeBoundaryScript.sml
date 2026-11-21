@@ -8,7 +8,7 @@ Ancestors
   runtimeSymSrcOrdinaryPackages loweringShapeProps
   runtimeSymSrcInterfaces loweringPackageInsts
   runtimeSymSrcExpressions runtimeSymSrcPrimitives runtimeSymSrcAbiDecode
-  runtimeSymSrcContextTypedBase stackPlanTypes
+  runtimeSymSrcContextTypedBase stackPlanTypes vyperTypeContract constSubstCorrect
 
 
 Theorem runtime_sym_run_lowering:
@@ -158,6 +158,8 @@ Proof
 QED
 
 Theorem runtime_sym_fallback_classified_body:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   (!bindings ce lc ty ss. runtime_sym_stmts_contract tops bindings compile_stmts ce lc ty ss) /\
@@ -172,73 +174,13 @@ Proof
   >- simp[package_fallback_fn_def, set_fallback_package_target_def] >>
   PairCases_on `x` >> Cases_on `u` >> strip_tac >>
   drule_at (Pat `set_fallback_package_target _ _ = _`) runtime_sym_fallback_package_body >>
-  simp[] >> disch_then irule >> qexists `s` >> simp[]
+  simp[] >> disch_then irule >>
+  rpt (conj_tac >- metis_tac[]) >> qexists `s` >> simp[]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >>
-  Cases_on `classify_functions tops` >> PairCases_on `r` >>
-  rename1 `classify_functions tops = (ext_fns,int_fns,fb_fn,ctor_fn)` >>
-  `~EXISTS external_has_defaults ext_fns` by
-    (drule supported_program_no_external_defaults >> simp[]) >>
-  drule_all lower_vyper_runtime_unit_no_external_defaults >>
-  disch_then (qspec_then `rpolicy` (fn th =>
-    qpat_x_assum `lower_vyper_runtime_unit _ _ = SOME _`
-      (mp_tac o PURE_REWRITE_RULE [th]))) >>
-  simp[bool_case_eq] >> strip_tac >>
-  qabbrev_tac `exts = MAP (set_external_package_target rpolicy.rpol_target o
-    package_external_fn tops T (K global_nonreentrant_slot)) ext_fns` >>
-  qabbrev_tac `ints = MAP (set_internal_package_target rpolicy.rpol_target o
-    package_internal_fn tops T (K global_nonreentrant_slot) F 0)
-      (order_internals (runtime_internal_order tops int_fns) int_fns)` >>
-  `!s u s'. EVERY runtime_sym_inst (state_insts s) /\
-    compile_external_fn_bodies exts s = (u,s') ==>
-    EVERY runtime_sym_inst (state_insts s')` by
-    (match_mp_tac (GEN_ALL runtime_sym_external_classified_bodies) >>
-     qpat_assum `Abbrev (exts = _)`
-       (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     goal_assum (drule_at (Pat `_ = MAP _ _`)) >> simp[] >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     rpt strip_tac >>
-     qpat_assum `!ce args off s u s'. _ ==> _`
-       (drule_at (Pat `compile_decode_args _ _ _ _ _ _ _ = _`)) >> simp[]) >>
-  `!s u s'. EVERY runtime_sym_inst (state_insts s) /\
-    compile_internal_fn_bodies ints s = (u,s') ==>
-    EVERY runtime_sym_inst (state_insts s')` by
-    (match_mp_tac (GEN_ALL runtime_sym_internal_classified_bodies) >>
-     qpat_assum `Abbrev (ints = _)`
-       (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     goal_assum (drule_at (Pat `_ = MAP _ _`)) >>
-     rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-     conj_tac >- simp[MEM_order_internals] >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     reverse conj_tac >- first_assum ACCEPT_TAC >>
-     rpt strip_tac >>
-     qpat_assum `!n s b s'. _ /\ compile_alloc_buffer n s = (b,s') ==> _`
-       (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
-     impl_tac >- first_assum ACCEPT_TAC >>
-     strip_tac >> first_assum ACCEPT_TAC) >>
-  gen_tac >> strip_tac >>
-  drule_at (Pat `run_lowering _ _ _ _ _ _ _ _ _ _ = _`) runtime_sym_run_lowering >>
-  disch_then match_mp_tac >>
-  reverse conj_tac >- first_assum ACCEPT_TAC >>
-  rpt gen_tac >> strip_tac >>
-  drule_at (Pat `compile_generate_runtime _ _ _ _ _ _ _ _ _ _ = _`)
-    runtime_sym_generate_runtime >>
-  disch_then match_mp_tac >>
-  rewrite_tac[runtime_sym_selectors] >>
-  reverse conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  rpt gen_tac >> strip_tac >>
-  irule runtime_sym_fallback_classified_body >>
-  goal_assum (drule_at (Pat `compile_fallback_body _ _ _ _ _ _ _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `supported_program _`)) >> simp[] >>
-  goal_assum (drule_at (Pat `set_fallback_package_target _ _ = _`))
-QED
-*)
 Theorem runtime_sym_runtime_boundary:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   (!bindings ce lc ty ss. runtime_sym_stmts_contract tops bindings compile_stmts ce lc ty ss) /\
   (!n s b s'. EVERY runtime_sym_inst (state_insts s) /\
     compile_alloc_buffer n s = (b,s') ==> EVERY runtime_sym_inst (state_insts s') /\
@@ -255,5 +197,123 @@ Theorem runtime_sym_runtime_boundary:
   !fn. MEM fn unit.cu_context.ctx_functions ==>
     EVERY runtime_sym_inst (fn_insts fn)
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  rename1 `classify_functions tops = (ext_fns,int_fns,fb_fn,ctor_fn)` >>
+  qabbrev_tac `exts = MAP (set_external_package_target rpolicy.rpol_target o
+    package_external_fn tops T (K global_nonreentrant_slot)) ext_fns` >>
+  qabbrev_tac `ints = MAP (set_internal_package_target rpolicy.rpol_target o
+    package_internal_fn tops T (K global_nonreentrant_slot) F 0)
+      (order_internals (runtime_internal_order tops int_fns) int_fns)` >>
+  qabbrev_tac `fb = set_fallback_package_target rpolicy.rpol_target
+    (package_fallback_fn tops T (K global_nonreentrant_slot) fb_fn)` >>
+  `!s u s'. EVERY runtime_sym_inst (state_insts s) /\
+    compile_internal_fn_bodies ints s = (u,s') ==>
+    EVERY runtime_sym_inst (state_insts s')` by
+    (match_mp_tac (Q.INST [`mode` |-> `mode`, `layouts` |-> `layouts`,
+       `addr` |-> `addr`, `art` |-> `art`, `imms` |-> `imms`, `A` |-> `A`,
+       `tops` |-> `tops`, `target` |-> `rpolicy.rpol_target`, `trans` |-> `T`,
+       `keys` |-> `K global_nonreentrant_slot`, `ctor` |-> `F`, `imm` |-> `0`,
+       `sources` |-> `order_internals (runtime_internal_order tops int_fns) int_fns`]
+       runtime_sym_internal_classified_bodies) >>
+     rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+     conj_tac >- simp[MEM_order_internals] >>
+     conj_tac >- simp[Abbr `ints`] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
+     rpt strip_tac >>
+     qpat_assum `!n s b s'. _ /\ compile_alloc_buffer n s = (b,s') ==> _`
+       (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
+  `!ce pay nr key tr view stmts ret s u s'.
+    fb = SOME (ce,pay,nr,key,tr,view,stmts,ret) /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_fallback_body ce pay nr key tr view stmts ret s = (u,s') ==>
+    EVERY runtime_sym_inst (state_insts s')` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `classify_functions tops = _` (fn th =>
+       drule_at (Pat `compile_fallback_body _ _ _ _ _ _ _ _ _ = _`)
+         (SIMP_RULE bool_ss [th, pairTheory.SND, pairTheory.FST]
+           runtime_sym_fallback_classified_body)) >>
+     simp[Abbr `fb`] >> metis_tac[]) >>
+  Cases_on `EXISTS external_has_defaults ext_fns`
+  >- (qabbrev_tac `groups = MAP (package_external_group tops rpolicy.rpol_target
+                                      T (K global_nonreentrant_slot)) ext_fns` >>
+      `run_grouped_lowering groups ints fb rpolicy "__entry" = SOME unit` by
+        (qpat_x_assum `lower_vyper_runtime_unit _ _ = SOME _` mp_tac >>
+         simp[lower_vyper_runtime_unit_def, Abbr `groups`, Abbr `ints`,
+              Abbr `fb`, bool_case_eq]) >>
+      qabbrev_tac `P = \p. !s u s'. EVERY runtime_sym_inst (state_insts s) /\
+                           compile_external_fn_bodies [p] s = (u,s') ==>
+                           EVERY runtime_sym_inst (state_insts s')` >>
+      qabbrev_tac `Q = \c. runtime_sym_env tops c.ec_env /\
+        runtime_sym_label c.ec_common_label /\
+        (?bindings. supported_stmts tops bindings c.ec_body) /\
+        ~supported_stmts_expr_exists is_self_code c.ec_body` >>
+      qabbrev_tac `D = \(n:string,ty:type,e). supported_expr tops e /\
+        ~supported_expr_exists is_self_code e` >>
+      mp_tac (Q.INST [`P` |-> `P`, `Q` |-> `Q`, `D` |-> `D`,
+        `groups` |-> `groups`, `tops` |-> `tops`, `ints` |-> `ints`,
+        `fb` |-> `fb`, `rp` |-> `rpolicy`, `entry` |-> `"__entry"`,
+        `unit` |-> `unit`] runtime_sym_run_grouped_packages) >>
+      asm_rewrite_tac[] >> disch_then match_mp_tac >>
+      conj_tac >- (simp_tac bool_ss [Abbr `P`] >> rpt gen_tac >> strip_tac >>
+        qpat_assum `!s u s'. _ /\ compile_external_fn_bodies [p] s = (u,s') ==> _`
+          (drule_at (Pat `compile_external_fn_bodies _ _ = _`)) >>
+        disch_then match_mp_tac >> first_assum ACCEPT_TAC) >>
+      simp[Abbr `Q`, Abbr `D`, Abbr `groups`, EVERY_MAP, EVERY_MEM] >>
+      gen_tac >> rename1 `MEM src ext_fns` >> PairCases_on `src` >> strip_tac >>
+      Cases_on `src5`
+      >- (simp[package_external_group_no_defaults, runtime_sym_group_def,
+               compute_selector_def, runtime_sym_label_def] >>
+          simp_tac bool_ss [Abbr `P`] >>
+          match_mp_tac (Q.INST [`mode` |-> `mode`, `layouts` |-> `layouts`,
+            `addr` |-> `addr`, `art` |-> `art`, `imms` |-> `imms`, `A` |-> `A`,
+            `tops` |-> `tops`, `target` |-> `rpolicy.rpol_target`, `trans` |-> `T`,
+            `keys` |-> `K global_nonreentrant_slot`,
+            `sources` |-> `[(src0,src1,src2,src3,src4,[],src6,src7)]`]
+            runtime_sym_external_classified_bodies) >>
+          rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+          conj_tac >- simp[] >>
+          conj_tac >- simp[] >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          first_assum ACCEPT_TAC) >>
+      Cases_on `package_external_group tops rpolicy.rpol_target T (K global_nonreentrant_slot)
+                       (src0,src1,src2,src3,src4,h::t,src6,src7)`
+      >- (qpat_x_assum `package_external_group _ _ _ _ _ = _` mp_tac >>
+          simp[package_external_group_def] >> pairarg_tac >> simp[]) >>
+      qpat_assum `classify_functions tops = _` (fn th =>
+        drule_all (SIMP_RULE bool_ss [th, pairTheory.FST]
+          runtime_sym_classified_group_defaults)) >>
+      simp[runtime_sym_group_def]) >>
+  `run_lowering (build_selectors (type_env tops) ext_fns) exts ints fb rpolicy
+      0 0 [] (build_dense_entry_info (build_selectors (type_env tops) ext_fns) exts)
+      "__entry" = SOME unit` by
+    (qpat_x_assum `lower_vyper_runtime_unit _ _ = SOME _` mp_tac >>
+     simp[lower_vyper_runtime_unit_def, Abbr `exts`, Abbr `ints`, Abbr `fb`, bool_case_eq]) >>
+  `!s u s'. EVERY runtime_sym_inst (state_insts s) /\
+    compile_external_fn_bodies exts s = (u,s') ==>
+    EVERY runtime_sym_inst (state_insts s')` by
+    (match_mp_tac (Q.INST [`mode` |-> `mode`, `layouts` |-> `layouts`,
+       `addr` |-> `addr`, `art` |-> `art`, `imms` |-> `imms`, `A` |-> `A`,
+       `tops` |-> `tops`, `target` |-> `rpolicy.rpol_target`, `trans` |-> `T`,
+       `keys` |-> `K global_nonreentrant_slot`, `sources` |-> `ext_fns`]
+       runtime_sym_external_classified_bodies) >>
+     rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+     conj_tac >- simp[] >>
+     conj_tac >- simp[Abbr `exts`] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     first_assum ACCEPT_TAC) >>
+  gen_tac >> strip_tac >>
+  drule_at (Pat `run_lowering _ _ _ _ _ _ _ _ _ _ = _`) runtime_sym_run_lowering >>
+  disch_then match_mp_tac >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `compile_generate_runtime _ _ _ _ _ _ _ _ _ _ = _`)
+    runtime_sym_generate_runtime >>
+  disch_then match_mp_tac >>
+  asm_rewrite_tac[runtime_sym_selectors]
 QED
