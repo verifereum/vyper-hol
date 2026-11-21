@@ -111,6 +111,7 @@ Proof
     irule (cj 4 well_typed_write_roots) >> goal_assum (drule_at Any) >>
     simp[defaults_env_def, function_entry_env_def,
          FOLDL_extend_local_args_static, artifact_env_def]) >>
+  qpat_x_assum `type_stmts _ _ (subst_consts_stmts_mods _ _) = _` kall_tac >>
   drule (CONJUNCT2 type_stmt_write_roots) >>
   disch_then (qspec_then `R` mp_tac) >>
   simp[function_entry_env_def, FOLDL_extend_local_args_static, artifact_env_def]
