@@ -418,8 +418,7 @@ Proof
           qpat_assum `~is_word_type (expr_type e) ==> _` drule >> simp[]) >>
       conj_tac >- first_assum ACCEPT_TAC >>
       conj_tac >- first_assum ACCEPT_TAC >>
-      conj_tac >- (qexists_tac `tops` >> asm_rewrite_tac[]) >>
-      qexists_tac `env` >> asm_rewrite_tac[]) >>
+      qexistsl_tac [`env`, `tops`] >> asm_rewrite_tac[]) >>
   rpt gen_tac >> strip_tac >> gvs[]
 QED
 
@@ -896,9 +895,10 @@ Proof
   >- (qpat_assum `body_exprs_full_ok cx args` (fn args_ok =>
       qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
       qpat_assum `shadow_body_inv tops ctx shadow_ctx` (fn shadow =>
+      qpat_assum `body_const_cells_agree [(NONE,tops)] cx env es` (fn consts =>
       qpat_assum `expr_body_pre cenv cx env _ es` (fn pre =>
         MATCH_ACCEPT_TAC (MATCH_MP bodyFullRawCallTheory.raw_call_expr_vv_full
-          (LIST_CONJ [args_ok,inv,shadow,pre]))))))) >>
+          (LIST_CONJ [args_ok,inv,shadow,consts,pre])))))))) >>
   irule bodyFullOfVVTheory.expr_sim_full_of_vv >> simp[] >>
   conj_tac
   >- (rpt strip_tac >> drule_all expr_body_pre_copy_ok >> simp[]) >>
@@ -1027,6 +1027,7 @@ Theorem selfdestruct_expr_full_from_interfaces:
     cenv env ty es.
     body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Call ann SelfDestructTarget args dflt) es
@@ -1469,6 +1470,7 @@ Theorem selfdestruct_expr_full:
   !cx ann args dflt DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
     body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Call ann SelfDestructTarget args dflt) es
@@ -1564,8 +1566,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   irule bodyFullSubscriptTheory.subscript_expr_full_ok_from_place_base >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qspecl_then [`cx`, `v8`, `e1`, `e2`] ACCEPT_TAC
-    bodyFullSubscriptUnframedArrayTheory.subscript_unframed_array_vv_full
+  MATCH_ACCEPT_TAC bodyFullSubscriptUnframedArrayTheory.subscript_unframed_array_vv_full
 QED
 
 (* Join the TypeBuiltin constructor proofs. *)
