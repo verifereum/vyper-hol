@@ -68,6 +68,9 @@ Theorem runtime_body_grouped_default_readings:
         (ctx_has_dalloca unit.cu_context ==>
           unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
           w2n vs.vs_initial_fmp < 2 ** 254) /\
+        (ctx_has_dalloca unit.cu_context ==>
+          !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+            dalloca_no_wrap inst s) /\
         (valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret \/
          (calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
             SOME (tx.function_name,tx.args) /\
@@ -101,6 +104,9 @@ Theorem runtime_body_internal_default_gas_readings:
         (ctx_has_dalloca unit.cu_context ==>
           unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
           w2n vs.vs_initial_fmp < 2 ** 254) /\
+        (ctx_has_dalloca unit.cu_context ==>
+          !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+            dalloca_no_wrap inst s) /\
         (valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret \/
          (calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
             SOME (tx.function_name,tx.args) /\
