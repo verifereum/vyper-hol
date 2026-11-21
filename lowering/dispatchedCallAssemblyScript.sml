@@ -105,21 +105,20 @@ QED
 (* The source body uses the same package environment as the actual fallback. *)
 val fallback_source_package_tac =
   `vyperInterpreter$lookup_function NONE "__default__" External tops =
-    SOME (mut,T,args,[],ret,fbody)` by fs[] >>
+    SOME (mut,T,args,[],ret,fbody)` by
+    (qpat_assum `tx.function_name = "__default__"` (fn name_eq =>
+       qpat_assum `vyperInterpreter$lookup_function NONE tx.function_name External tops = _`
+         (ACCEPT_TAC o REWRITE_RULE [name_eq]))) >>
   `args = []` by metis_tac[default_fallback_no_args] >>
   drule_all default_fallback_classified >>
   strip_tac >>
   qabbrev_tac `rr = lookup_raw_return_or_F (NONE:num option) "__default__" External tops` >>
-  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
-    metis_tac[entryStateRelTheory.source_typing_ok_external_names_distinct] >>
-  drule_all default_fallback_lookup_decl >> strip_tac >>
-  `subst_consts_stmts (module_consts_env tops []) fbody = fbody` by
-    (drule_all checked_supported_external_subst >>
-     simp[constSubstTheory.subst_consts_fn_def]) >>
   `set_fallback_package_target rpolicy.rpol_target
     (package_fallback_fn tops T (K global_nonreentrant_slot)
-      (SOME (mut,T,rr,"__default__",[],([]:expr list),ret,fbody))) =
-      SOME (cenv,mut = Payable,T,global_nonreentrant_slot,T,mut = View,fbody,rt)` by
+      (SOME (mut,T,rr,"__default__",[],([]:expr list),ret,
+        subst_consts_stmts (module_consts_env tops []) fbody))) =
+      SOME (cenv,mut = Payable,T,global_nonreentrant_slot,T,mut = View,
+        subst_consts_stmts (module_consts_env tops []) fbody,rt)` by
     (qpat_assum `runtime_fallback_body_start _ _ _ _`
       (mp_tac o REWRITE_RULE [runtimeBodyStartDefsTheory.runtime_fallback_body_start_def]) >>
      rpt strip_tac >> gvs[]) >>

@@ -403,7 +403,7 @@ val runtime_body_endpoint_tac =
       `FST (SND (SND (classify_functions tops))) = SOME fb` by
         (qpat_assum `classify_functions tops = _` (fn th => simp[th])) >>
       drule_all classified_fallback_source_alignment_nr >>
-      disch_then (CONJUNCTS_THEN2 SUBST_ALL_TAC assume_tac) >>
+      disch_then SUBST_ALL_TAC >>
       gvs[] >>
       drule_all same_source_fallback_package_environment >>
       disch_then ACCEPT_TAC) >>
