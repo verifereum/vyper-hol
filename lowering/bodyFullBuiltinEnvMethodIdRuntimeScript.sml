@@ -373,7 +373,8 @@ Resume method_id_runtime_sim_full_from_suffix[vv_source_transport]:
      bind (bind (eval_expr cx e) (read_result cx))
       (\v mid. ((case builtin_result cx mid.accounts ann MethodId [expr_type e] [v] of
                   INL r => INL (Value r) | INR ex => INR ex),mid))` by
-    (irule eval_expr_unary_builtin_action >> simp[builtin_args_length_ok_def]) >>
+    (irule eval_expr_unary_builtin_action >>
+     simp[builtin_args_length_ok_def, is_self_codesize_def]) >>
   `bind (eval_expr cx (Builtin ann MethodId [e])) (read_result cx) =
     bind (bind (eval_expr cx e) (read_result cx))
       (\v mid. (builtin_result cx mid.accounts ann MethodId [expr_type e] [v],mid))` by

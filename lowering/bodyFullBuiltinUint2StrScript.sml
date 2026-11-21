@@ -99,7 +99,8 @@ Resume uint2str_builtin_sim_full[compose]:
         (Uint2Str n) [expr_type e] [v] of
           INL r => INL (Value r) | INR ex => INR ex),mid))` by
     (irule eval_expr_unary_builtin_action >>
-     simp[precompile_builtin_def, builtin_args_length_ok_def]) >>
+     simp[precompile_builtin_def, builtin_args_length_ok_def,
+       is_self_codesize_def]) >>
   pop_assum SUBST1_TAC >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   irule gas_outcome_full_bind_all >> rpt conj_tac
