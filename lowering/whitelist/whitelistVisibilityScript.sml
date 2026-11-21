@@ -259,7 +259,7 @@ Proof
   REWRITE_TAC [GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all_then strip_assume_tac storage_binding_mods >>
   `cenv.ce_module_dynarray_capacity (src,id) = dn` by
-    metis_tac[contract_inv_dynarray_capacity] >>
+    metis_tac[body_append_capacity_lookup_mods] >>
   `find_var_decl_by_name id tops <> NONE` by simp[] >>
   drule_all append_typed_storage_target >> strip_tac >> gvs[] >>
   drule_all append_storage_target_eval >> strip_tac >>

@@ -118,7 +118,7 @@ Proof
   drule_all_then strip_assume_tac storage_metadata_unit_lookup >> simp[]
 QED
 
-Theorem contract_inv_dynarray_capacity:
+Theorem body_append_capacity_lookup_mods:
   contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
   supported_variable_decl tops (NONE,id) =
     SOME (vis,mut,ArrayT elem (Dynamic n),slot) ==>

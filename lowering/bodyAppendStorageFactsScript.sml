@@ -70,7 +70,7 @@ Theorem body_append_root_metadata_mods:
   cenv.ce_module_dynarray_capacity (src,id) = n
 Proof
   strip_tac >> drule_then strip_assume_tac supported_variable_decl_mem >>
-  metis_tac[contract_inv_variable_metadata, contract_inv_dynarray_capacity]
+  metis_tac[contract_inv_variable_metadata, body_append_capacity_lookup_mods]
 QED
 
 Theorem body_append_root_metadata:
