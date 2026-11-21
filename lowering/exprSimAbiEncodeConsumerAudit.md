@@ -1,6 +1,8 @@
 # Singleton nonword consumer audit (C1.F.8.3.6.5)
 
-This is a source/signature audit, not a checked theorem or completion claim.
+This historical audit covers the staged lowering that preceded direct-output
+ABI encoding. Source references are to
+[`a33f2544d8`](https://github.com/verifereum/vyper-hol/tree/a33f2544d80af467c7939c23696163fb4c0600bf).
 
 ## Actual branch and substitutions
 
@@ -23,7 +25,7 @@ operand simulation endpoint with the post-unwrap state s.
 
 References to lines 23-43 below mean NonwordCountedScript.sml.
 
-* 23 expr_post: `unwrap_value_marked_read` (exprSimUnwrap:958-977)
+* 23 expr_post: `unwrap_value_marked_read` (exprSimUnwrap:1760)
   gives exactly `expr_post ... e es origin sa s0 ee v op s`, together
   with a marked read_result execution. Its input is the operand vv_post
   at sm. `unwrap_value_path` only handles an already read Value v;
@@ -67,7 +69,7 @@ References to lines 23-43 below mean NonwordCountedScript.sml.
 * 41-43 PHI side condition: not an unwrap conclusion. Need a syntactic
   fact for lower_abi_encode on this branch: either no new blocks,
   nonempty final instructions, or zero PHI prefix at final label in func.
-  lower_abi_encode_frag_facts currently supplies FRONT-label exclusion,
+  The staged suffix facts supplied FRONT-label exclusion,
   which is not by itself the stated PHI condition.
 
 The counted unwrap signatures are overlay admissions owned outside this
@@ -106,10 +108,8 @@ has not closed the original expression-frame requirement.
 
 ## Exact proposed next boundary statement
 
-Rather than attempt the whole source gas_outcome now, the next theorem
-should strengthen the existing `abi_encode_nonword_counted_suffix` IN
-PLACE, keeping EVERY existing premise, with these additional conclusions
-on its already existential actual (retain all current conclusions):
+The proposed strengthening of the staged counted suffix kept every
+existing premise and added these conclusions on the same endpoint:
 
 ```
 (!x w. not_fresh_at origin x /\ lookup_var x s0 = SOME w ==>
