@@ -428,7 +428,7 @@ Proof
     dispatched_call_readings_from_selected_endpoint >>
   disch_then (drule_at (Pat `vyperInterpreter$lookup_function _ _ _ _ = _`)) >>
   disch_then (qspecl_then [`unit`,`am`,`vs`] mp_tac) >>
-  simp[dispatched_entry_endpoint_selected]
+  fs[dispatched_entry_endpoint_selected]
 QED
 
 Theorem dispatched_call_correct:
