@@ -56,6 +56,7 @@
  *)
 Theory whitelistForIter
 Ancestors
+  bodyInvExecutionProps
   vyperTypeContract
   bodyDynArraySource bodySimDeclCases whitelistForIterDynFrag whitelistForIterMem whitelistForIterImmLoop[qualified] whitelistForIterImmSource[qualified]
   exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs list finite_map pair
@@ -179,7 +180,9 @@ Proof
   drule_all array_for_layout_ready >> strip_tac >>
   `name <> id` by metis_tac[optionTheory.NOT_NONE_SOME] >>
   `cenv.ce_alloca_locals /\ supported_program tops /\
-   get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+   get_module_code cx NONE = SOME tops` by
+    (drule_then strip_assume_tac body_inv_main_support >>
+     metis_tac[body_inv_contract, contract_inv_alloca_locals]) >>
   `stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) stmts /\ type_memory_bytes cenv typ < 2 ** 64` by
     fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
        stmts_exprs_ok_thm, alloc_limits_stmt_def, stmt_valued_return_def] >>
