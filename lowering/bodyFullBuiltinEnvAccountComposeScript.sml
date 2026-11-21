@@ -291,26 +291,34 @@ Resume self_codesize_sim_full[self_history]:
 QED
 
 Resume self_codesize_sim_full[self_ghosts]:
-  reverse conj_tac
-  >- (qmatch_goalsub_abbrev_tac `ghost_kept_at _ _ _ _ _ _ _ _
-         (step_prov _ _ inst u) (step_taint inst s u tn)` >>
-      `((step_taint inst s u tn).t_mem = tn.t_mem)` by
-        (irule bodyPtrEnvBuiltinsEdgesTheory.step_taint_no_memory_effect >>
-         simp[Abbr `inst`, Abbr `u`, source_memory_write_ranges_def,
-              written_taint_def, mk_inst_def, update_var_def]) >>
-      unabbrev_all_tac >> irule bodyPtrEnvBuiltinsEdgesTheory.single_output_ghost_kept_at >>
-      fs[bodyPtrDefsTheory.ghost_kept_at_def]) >>
-  irule ghost_inv_at_exterior_frame >>
-  qexistsl_tac [`G0`, `es`, `s0`, `sa`, `tn0`] >>
-  simp[lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
-       step_prov_def, out_prov_def, set_prov_def, mk_inst_def,
-       finite_mapTheory.FLOOKUP_DRESTRICT, step_taint_def, op_taint_def,
-       set_var_taint_def, out_taint_def, mem_taint_def,
-       new_site_bytes_def, step_writes_def, source_memory_write_ranges_def,
-       written_taint_def, range_bytes_def, adopt_reset_def,
-       store_taint_def, imm_taint_def] >>
-  simp[pred_setTheory.EXTENSION, finite_mapTheory.flookup_thm] >>
-  gvs[venom_state_component_equality]
+  conj_tac
+  >- (match_mp_tac ghost_inv_at_exterior_frame >>
+      qexistsl_tac [`es`, `G0`, `tn0`, `s0`, `sa`] >>
+      simp[lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+           step_prov_def, out_prov_def, set_prov_def, mk_inst_def,
+           finite_mapTheory.FLOOKUP_DRESTRICT, step_taint_def, op_taint_def,
+           set_var_taint_def, out_taint_def, mem_taint_def,
+           new_site_bytes_def, step_writes_def, source_memory_write_ranges_def,
+           written_taint_def, range_bytes_def, adopt_reset_def,
+           store_taint_def, imm_taint_def] >>
+      simp[pred_setTheory.EXTENSION, finite_mapTheory.flookup_thm] >>
+      metis_tac[freshWritesTheory.not_fresh_at_mono])
+  >- (conj_tac
+      >- (simp[bodyPtrDefsTheory.ptr_val_ok_def, compileEnvTheory.is_word_type_def,
+               step_prov_def, out_prov_def, set_prov_def, op_prov_def,
+               mk_inst_def, finite_mapTheory.FLOOKUP_DRESTRICT,
+               finite_mapTheory.FDOM_DRESTRICT,
+               step_taint_def, op_taint_def, set_var_taint_def, out_taint_def,
+               finite_mapTheory.FLOOKUP_UPDATE, finite_mapTheory.FLOOKUP_DEF,
+               pred_setTheory.EXTENSION, mem_taint_def, new_site_bytes_def,
+               step_writes_def, source_memory_write_ranges_def,
+               written_taint_def, range_bytes_def])
+      >- (irule bodyPtrEnvBuiltinsEdgesTheory.single_output_ghost_kept_at >>
+          simp[bodyPtrDefsTheory.ghost_kept_at_def,
+               bodyPtrEnvBuiltinsEdgesTheory.step_taint_no_memory_effect,
+               mk_inst_def, source_memory_write_ranges_def,
+               written_taint_def, update_var_def] >>
+          metis_tac[]))
 QED
 
 Finalise self_codesize_sim_full
