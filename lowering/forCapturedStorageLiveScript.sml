@@ -66,12 +66,14 @@ Theorem for_captured_storage_live_child:
     (lvo,idx,cond) (p,dst,nb,sd) (H,k,a::rs,ee,G,tn,s) /\
   valid_horizon cx st0 H ee.storage_trace ==>
   k < len /\ rs = DROP (SUC k) vs /\
-  let child = StoragePlace tr
-      ((case bd of Fixed _ => slot | Dynamic _ => slot + 1w) +
-       n2w (k * type_slot_size tyv)) tyv
-  in a = PlaceR child /\ storage_place_observed H child
+  a = PlaceR (StoragePlace tr
+    ((case bd of Fixed _ => slot | Dynamic _ => slot + 1w) +
+     n2w (k * type_slot_size tyv)) tyv) /\
+  storage_place_observed H (StoragePlace tr
+    ((case bd of Fixed _ => slot | Dynamic _ => slot + 1w) +
+     n2w (k * type_slot_size tyv)) tyv)
 Proof
-  rewrite_tac[for_captured_storage_live_def, LET_THM] >> BETA_TAC >> strip_tac >>
+  rewrite_tac[for_captured_storage_live_def] >> BETA_TAC >> strip_tac >>
   qpat_assum `a::rs = DROP k vs` (strip_assume_tac o MATCH_MP DROP_EQ_CONS o SYM) >>
   `k < len` by
     (qpat_assum `len = LENGTH vs` (rewrite_tac o single) >> first_assum ACCEPT_TAC) >>
