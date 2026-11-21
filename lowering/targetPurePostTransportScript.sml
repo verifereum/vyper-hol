@@ -265,9 +265,11 @@ Proof
 QED
 
 
-Theorem target_saved_post_transport:
+Theorem target_saved_post_transport_frame:
   vv_post H ctx func cenv cx e es sa sm s0 es1 r vv s /\
-  target_post H ctx func cenv cx es1 sm sb s ee pv vt op u /\
+  stmt_state_rel H ctx func cenv cx ee u /\
+  storage_well_formed_on cx ee (FST H) /\
+  wb_frame cenv es1 ee sm s u /\
   ee = es1 with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|> /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!l. vv_operand vv <> Label l) /\
@@ -283,7 +285,7 @@ Proof
   `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
     gvs[vv_post_def, locals_kept_def] >>
   `wb_frame cenv es1 es1 sm s u` by
-    (gvs[target_post_def, wb_frame_def, locals_kept_def, popped_kept_def] >>
+    (gvs[wb_frame_def, locals_kept_def, popped_kept_def] >>
      metis_tac[]) >>
   `!w. eval_operand (vv_operand vv) s = SOME w ==>
         eval_operand (vv_operand vv) u = SOME w` by
@@ -291,20 +293,18 @@ Proof
      qexistsl_tac [`sm`, `s`] >> gvs[wb_frame_def]) >>
   `storage_rel H cx.txn.target es1 u /\
    transient_rel H cx.txn.target es1 u` by
-    (gvs[target_post_def, exprLoweringPropsTheory.stmt_state_rel_def,
+    (gvs[exprLoweringPropsTheory.stmt_state_rel_def,
          state_rel_def, storage_rel_def, transient_rel_def]) >>
   `wb_frame cenv es (es1 with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|>) sa s0 u` by
     (irule wb_frame_trans >> simp[] >> conj_tac >-
       (qexistsl_tac [`es1`, `sm`, `s`] >>
-       gvs[vv_post_def, target_post_def, wb_frame_def] >> metis_tac[]) >>
+       gvs[vv_post_def, wb_frame_def] >> metis_tac[]) >>
      metis_tac[]) >>
   simp[] >>
   gvs[vv_post_def] >>
   simp[SRULE [] target_saved_holds_oracles,
        SRULE [] target_saved_regions_oracles] >>
   rpt conj_tac
-  >- gvs[target_post_def]
-  >- gvs[target_post_def]
   >- (irule target_saved_holds_frame >>
       simp[] >> qexistsl_tac [`H`, `s`, `sa`, `sm`] >> simp[])
   >- (irule (cj 1 target_saved_value_region_frame) >>
@@ -328,4 +328,23 @@ Proof
       conj_tac >- (drule target_saved_operand_exists >> simp[]) >>
       Cases_on `vv` >> gvs[get_storage_def]) >>
   simp[exprSimPropsTheory.locals_kept_refl]
+QED
+
+Theorem target_saved_post_transport:
+  vv_post H ctx func cenv cx e es sa sm s0 es1 r vv s /\
+  target_post H ctx func cenv cx es1 sm sb s ee pv vt op u /\
+  ee = es1 with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg; storage_trace := st|> /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!l. vv_operand vv <> Label l) /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  sm.cs_next_id <= sb.cs_next_id /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  vv_storage_live H cx vv es1 s ==>
+  vv_post H ctx func cenv cx e ee sa sb u ee r vv u /\
+  wb_frame cenv es ee sa s0 u
+Proof
+  strip_tac >> irule target_saved_post_transport_frame >>
+  rpt (CHANGED_TAC (first_assum (irule_at Any))) >>
+  fs[target_post_def,wb_frame_def] >> first_assum ACCEPT_TAC
 QED

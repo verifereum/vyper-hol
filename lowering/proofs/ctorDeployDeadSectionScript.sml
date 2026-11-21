@@ -3,7 +3,7 @@
  *)
 Theory ctorDeployDeadSection
 Ancestors
-  ctorDeployDefs immSectionDead immutableSectionRel immutableValue valueEncoding valueEncodingDefs
+  immSectionDead immutableSectionRel immutableValue valueEncoding valueEncodingDefs
   structFieldsProps entryStateRel list rich_list
 
 Theorem slot_le[local]:

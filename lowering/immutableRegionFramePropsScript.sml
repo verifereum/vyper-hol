@@ -5,7 +5,7 @@ Ancestors
   valueEncodingProps valueEncodingProofs loweringSlice vyperTypeInvariants
   loweringStateRelDefs stateRelProj vyperContext bodyPtrDefs finite_map
 
-Theorem immutable_region_value_layout_mods[local]:
+Theorem immutable_region_value_layout_mods:
   contract_inv mods exps ctx cenv cx /\ expr_sim_inv_mods mods cenv cx env es /\
   cenv.ce_is_ctor /\ dead_lo_ok_mods H D lo cenv cx /\
   FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\

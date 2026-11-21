@@ -1,7 +1,7 @@
 (* imm_section_dead is fixed by the immutables section's live bytes. *)
 Theory ctorDeployDeadSectionFrame
 Ancestors
-  ctorDeployDeadSection ctorDeployDefs immSectionDead immutableSectionRel immutableValue
+  ctorDeployDeadSection immSectionDead immutableSectionRel immutableValue
   immutableEncoding valueEncoding compileVyper structFieldsProps entryStateRel
   valueEncodingDefs
   list rich_list
@@ -67,8 +67,10 @@ Proof
   metis_tac[imm_frame_occurrence_cons]
 QED
 
-Theorem imm_frame_restrict:
-  struct_args_unique tops /\
+Theorem imm_frame_restrict_exact:
+  (!t u. evaluate_type (type_env tops) t = SOME u ==>
+    type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) t =
+    type_memory_size u) /\
   tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
   evaluate_type (type_env tops) ty = SOME tv /\
   off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre /\
@@ -79,10 +81,14 @@ Proof
   >- (rewrite_tac[imm_section_dead_def] >> strip_tac >>
       drule (CONJUNCT1 mem_dead_bytes_range) >> strip_tac >>
       `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
-       type_memory_size tv` by metis_tac[imm_frame_size] >>
+       type_memory_size tv` by
+        (qpat_assum `!t u. evaluate_type _ t = SOME u ==> _`
+           (qspecl_then [`ty`,`tv`] mp_tac) >> simp[]) >>
       rename1 `evaluate_type (type_env tops) ty' = SOME tv'` >>
       `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty' =
-       type_memory_size tv'` by metis_tac[imm_frame_size] >>
+       type_memory_size tv'` by
+        (qpat_assum `!t u. evaluate_type _ t = SOME u ==> _`
+           (qspecl_then [`ty'`,`tv'`] mp_tac) >> simp[]) >>
       `pre ++ VariableDecl vis Immutable name ty slot :: post =
        pre' ++ VariableDecl vis' Immutable name' ty' slot' :: post'`
         by metis_tac[] >>
@@ -96,6 +102,24 @@ Proof
       qpat_x_assum `_ ++ _ = _ ++ _` kall_tac >> gvs[] >> decide_tac) >>
   rewrite_tac[imm_section_dead_def] >> strip_tac >>
   qexistsl_tac [`pre`, `vis`, `name`, `ty`, `slot`, `post`, `tv`] >> gvs[]
+QED
+
+Theorem imm_frame_restrict:
+  struct_args_unique tops /\
+  tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
+  evaluate_type (type_env tops) ty = SOME tv /\
+  off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre /\
+  off <= j /\ j < off + type_memory_size tv ==>
+  (imm_section_dead tops sec j <=> mem_dead_bytes sec off tv j)
+Proof
+  strip_tac >>
+  MATCH_MP_TAC (Q.INST [`tops` |-> `tops`,`pre` |-> `pre`,
+    `vis` |-> `vis`,`name` |-> `name`,`ty` |-> `ty`,`slot` |-> `slot`,
+    `post` |-> `post`,`tv` |-> `tv`,`off` |-> `off`,
+    `sec` |-> `sec`,`j` |-> `j`] imm_frame_restrict_exact) >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all_then ACCEPT_TAC imm_frame_size) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem imm_frame_value:

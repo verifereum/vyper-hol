@@ -112,7 +112,7 @@ Proof
 QED
 
 (* ADD keeps the left operand's provenance when the right is scalar. *)
-Theorem scalar_binop_joint_frame[local]:
+Theorem scalar_binop_joint_frame:
   (opc = ADD /\ w = a + b \/ opc = MUL /\ w = a * b) /\
   emit_op opc [left;right] sa = (Var out,sb) /\ fn_has_code sa sb func /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
