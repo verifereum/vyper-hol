@@ -1148,7 +1148,7 @@ Proof
    bind (bind (eval_expr cx e) (read_result cx))
      (\v es. ((case builtin_result cx es.accounts ann bt [expr_type e] [v] of
                  INL w => INL (Value w) | INR exc => INR exc), es))` by
-    (irule eval_expr_unary_builtin_action >> simp[]) >>
+    (irule eval_expr_unary_builtin_action >> simp[is_self_codesize_def]) >>
   qpat_x_assum `gas_admissible (eval_expr _ _) _ _`
     (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
   asm_rewrite_tac[] >> strip_tac >>
