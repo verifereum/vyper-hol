@@ -175,6 +175,8 @@ Theorem run_lowering_fallback_check_code:
       fl sf = ((),sd) /\
     compile_entry_checks 0 F sc = ((),sk) /\
     sc.cs_current_bb = fl /\ sc.cs_current_insts = [] /\
+    sf.cs_current_bb = "__entry" /\ sf.cs_current_insts = [] /\
+    sf.cs_next_var = 0 /\
     fn_has_code sf sd efn /\ fn_has_code sc sk efn
 Proof
   strip_tac >> drule_all run_lowering_retained_entry >> strip_tac >>
@@ -198,7 +200,7 @@ Proof
   `fn_has_code sf sd efn /\ fn_has_code sn sk efn` by
     metis_tac[fn_has_code_retained_interval, cs_extends_trans] >>
   qexistsl_tac [`sf`, `sd`, `sn`, `sk`] >>
-  gvs[new_block_def]
+  gvs[new_block_def, fresh_label_def, initial_compile_state_def]
 QED
 
 Theorem runtime_selected_entry_code[local]:

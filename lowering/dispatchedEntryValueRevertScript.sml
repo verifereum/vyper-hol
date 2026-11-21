@@ -19,6 +19,7 @@ Theorem external_entry_value_revert_dispatched_nr:
   !tops rpolicy unit am tx ret vs mut nr args fbody env e st.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
@@ -138,6 +139,7 @@ Theorem external_entry_value_revert_dispatched_with_nr:
   !tops rpolicy unit am tx ret vs mut nr args fbody env e st shadow_ctx.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
@@ -253,6 +255,7 @@ Theorem external_entry_value_revert_dispatched:
   !tops rpolicy unit am tx ret vs mut args fbody env e st.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
@@ -277,6 +280,7 @@ Theorem external_entry_value_revert_dispatched_with:
   !tops rpolicy unit am tx ret vs mut args fbody env e st shadow_ctx.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
