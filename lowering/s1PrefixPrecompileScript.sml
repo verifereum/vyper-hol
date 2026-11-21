@@ -1,4 +1,4 @@
-(* The ECRecover and Sha256 actions emit only computed outcomes and preserve the request prefix. *)
+(* ECRecover, Sha256, ECAdd and ECMul actions emit only computed outcomes and preserve the request prefix. *)
 Theory s1PrefixPrecompile
 Ancestors
   s1PrefixFrame s1PrefixDefs vyperStorageTrace vyperInterpreter
@@ -6,7 +6,7 @@ Ancestors
 
 (* The child arguments have already been evaluated at this point. *)
 Theorem precompile_call_success_only_computed_outcomes:
-  (bt = ECRecover \/ bt = Sha256) /\
+  (bt = ECRecover \/ bt = Sha256 \/ bt = ECAdd \/ bt = ECMul) /\
   precompile_call_success bt vs st = (res, st') ==>
   EVERY (\ob. !rq oc. ob = StorageOutcome rq oc ==> computed_precompile rq)
     (DROP (LENGTH st.storage_trace) st'.storage_trace)
@@ -27,7 +27,7 @@ Proof
 QED
 
 Theorem precompile_call_success_prefix:
-  (bt = ECRecover \/ bt = Sha256) /\ ~s.vs_halted ==>
+  (bt = ECRecover \/ bt = Sha256 \/ bt = ECAdd \/ bt = ECMul) /\ ~s.vs_halted ==>
   gas_prefix_full P cx st0 (precompile_call_success bt vs) (es,s,G,tn)
 Proof
   strip_tac >> irule gas_prefix_full_no_outcome >>
