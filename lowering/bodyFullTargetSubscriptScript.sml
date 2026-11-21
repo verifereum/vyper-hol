@@ -9,7 +9,8 @@ Theory bodyFullTargetSubscript
 Ancestors
   bodyFullShadowBodyInv
   bodyFullTargetDefs gasOutcomeFullCompose gasOutcomeFull bodyFullPreds
-  bodySimFull bodyInvNoDalloca contextRawReachable ptrDiscipline unitMemInv
+  bodySimFull bodyFullIfExpReach bodyFullHashKeccakFixed
+  contextRawReachable ptrDiscipline unitMemInv
   targetPlaceSimCasesBase targetPlaceSim targetPlaceSimDefs
   gasShadowCompile gasShadowCompileHelpers gasShadow gasShadowState
   gasExemptCert stmtLoweringMono exprLoweringProps fragExec freshWrites
@@ -21,11 +22,12 @@ Ancestors
 Theorem gas_outcome_full_post_source_exit[local]:
   gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
     (es, s, G, tn) Q R /\
+  (!H res ee G' tn' t. Q H res ee G' tn' t ==> Q' H res ee G' tn' t) /\
   (!H res ee gt r.
      (?st st'. source st = (res, st')) /\ R H res ee gt r ==>
      R' H res ee gt r) ==>
   gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
-    (es, s, G, tn) Q R'
+    (es, s, G, tn) Q' R'
 Proof
   strip_tac >>
   qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _`
@@ -252,7 +254,7 @@ Resume target_subscript_sim_full[base]:
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_asmsub_abbrev_tac
     `gas_outcome_full _ _ _ _ (eval_base_place cx bt) _ childQ childR` >>
-  irule gas_outcome_full_bind_all >>
+  irule gas_outcome_full_bind_all_path >>
   rpt conj_tac
   >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
   >- (rpt strip_tac >> irule gas_exempt_cert_bind_result >>
@@ -284,7 +286,8 @@ Resume target_subscript_sim_full[index]:
   qunabbrev_tac `childQ` >> RULE_ASSUM_TAC BETA_RULE >>
   `valid_horizon cx st0 (storage_trace_horizon mid1.storage_trace)
      mid1.storage_trace` by fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==> _`
+  qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==>
+    (?pv. res = INL pv /\ _) /\ _`
     (qspec_then `storage_trace_horizon mid1.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   qpat_x_assum `res = INL _` SUBST_ALL_TAC >>
@@ -313,12 +316,16 @@ Resume target_subscript_sim_full[index]:
 QED
 
 Resume target_subscript_sim_full[index_run]:
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `!fn inst s. frag_reachable ctx func t1 fn inst s ==>
     dalloca_no_wrap inst s` by
-    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     fs[ctx_has_dalloca_def, unitTransformDefsTheory.dalloca_no_wrap_def, EXISTS_MEM] >>
-     metis_tac[]) >>
+    (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+       metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+     qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==>
+       gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t1,G1,tn1)`
+       (qspec_then `storage_trace_horizon mid1.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     strip_tac >>
+     metis_tac[bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap]) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok mid1` by
     (simp[gas_admissible_def] >> rpt strip_tac >>
      Cases_on `res` >- simp[expr_res_ok_def] >> rename1 `INR ex` >>
@@ -347,7 +354,10 @@ Resume target_subscript_sim_full[index_run]:
       >- metis_tac[not_fresh_at_mono]
       >- metis_tac[not_fresh_at_mono] >>
       gen_tac >> strip_tac >>
-      first_x_assum drule >> simp[target_post_def]) >>
+      qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==>
+        (?pv'. INL pv = INL pv' /\ _) /\ _`
+        (qspec_then `H` (drule_then strip_assume_tac)) >>
+      fs[target_post_def]) >>
   strip_tac >>
   qmatch_asmsub_abbrev_tac
     `gas_outcome_full _ _ _ _ (bind (eval_expr cx e) _) _ idxQ idxR` >>
@@ -447,7 +457,7 @@ Resume target_subscript_sim_full[tail]:
   irule gas_outcome_full_post_source_exit >>
   qpat_x_assum `_ ==> gas_outcome_full _ _ _ _ (extend_place _ _ _) _ _ _`
     (irule_at Any) >>
-  simp[] >> rpt conj_tac
+  BETA_TAC >> simp[] >> rpt conj_tac
   >~ [`gas_admissible (extend_place _ _ _) _ _`]
   >- (simp[gas_admissible_def] >> rpt strip_tac >>
       qpat_x_assum `gas_admissible (bind (eval_base_place _ _) _) _ _`
@@ -470,12 +480,27 @@ Resume target_subscript_sim_full[tail]:
       `valid_horizon cx st0 H mid1.storage_trace` by metis_tac[] >>
       qpat_x_assum `!H. valid_horizon _ _ H mid2.storage_trace ==>
                         valid_horizon _ _ H mid1.storage_trace` kall_tac >>
-      qpat_x_assum `!H. valid_horizon _ _ H mid1.storage_trace ==> _`
+      qpat_x_assum `!H. valid_horizon _ _ H mid1.storage_trace ==>
+        (?pv'. INL pv = INL pv' /\ _) /\ _`
         drule >>
       qpat_x_assum `!H. valid_horizon _ _ H mid2.storage_trace ==> _`
-        drule >> simp[]) >>
-  rpt strip_tac >> simp[halt_exit_def] >>
-  metis_tac[extend_place_nh]
+        drule >> simp[])
+  >- (rpt gen_tac >> disch_then (qx_choose_then `p` strip_assume_tac) >>
+      qexists_tac `p` >> simp[] >>
+      fs[target_post_def, expr_post_def] >>
+      drule_then ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+  rpt gen_tac >> strip_tac >>
+  `res <> INR HaltException` by
+    (disch_then (fn eq =>
+       qpat_assum `extend_place cx pv (ValueSubscript v) _ = _`
+         (mp_tac o REWRITE_RULE [eq])) >>
+     simp[extend_place_nh]) >>
+  `!u. expr_exit res (Halt u) ==> res = INR HaltException` by
+    (POP_ASSUM_LIST (K all_tac) >>
+     gen_tac >> Cases_on `res` >> simp[expr_exit_def] >>
+     Cases_on `y` >> simp[expr_exit_def]) >>
+  simp[halt_exit_def] >>
+  metis_tac[]
 QED
 
 Finalise target_subscript_sim_full

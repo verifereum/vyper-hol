@@ -6,7 +6,7 @@ Ancestors vyperTypeInvariants[qualified,ignore_grammar] bodyPtrDefs[qualified,ig
   gasShadowCompile gasShadowState gasShadow exprSimHypsDefs vyperStorageTrace
   gasExemptCert vyperInterpreter vyperState vyperAST exprLoweringProps
   instIdxIndep fragGasOriginPtrLoop fragExec venomState venomExecSemantics
-  bodyInvNoDalloca contextRawReachable bodyFullSubscriptMappingValue
+  bodyFullIfExpReach bodyFullHashKeccakFixed contextRawReachable bodyFullSubscriptMappingValue
 
 (* The two selections share the base and key evaluation and execute the
    same hash suffix. The continuations differ only in the selected result. *)
@@ -69,7 +69,7 @@ fun mapping_base_tac base_admissible shadow_type index_cont =
     (qpat_assum `~subscript_reads_base _ _ _`
       (mp_then Any mp_tac exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind) >>
      simp[]) >>
-  asm_rewrite_tac[] >> irule gas_outcome_full_bind_all >>
+  asm_rewrite_tac[] >> irule gas_outcome_full_bind_all_path >>
   `!res : eval_result + exception. !r.
      (?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r) <=> expr_exit res r` by
     (Cases >> simp[]) >>
@@ -164,17 +164,20 @@ fun mapping_index_shadow_tac shadow_type =
   `(!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x)` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_no_wrap inst z` by
+    (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+       metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+       gas_origin_ptr_path _ (s0,G0,tn0) marks (OK s,G1,tn1)`
+       (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
+     qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK s,G1,tn1)`
+       (mp_then (Pos hd) mp_tac bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap) >>
+     asm_rewrite_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ e2 _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sm`, `sn`, `shadow_sm`, `shadow_sn`,
                           `key`, `s`, `G1`, `tn1`] mp_tac) >>
-  (impl_tac >-
-    (gvs[] >> rpt strip_tac >>
-     drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
-     drule bodyInvNoDallocaTheory.body_inv_no_dalloca >>
-     simp[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM] >> strip_tac >>
-     `inst.inst_opcode <> DALLOCA` by metis_tac[] >>
-     simp[unitTransformDefsTheory.dalloca_no_wrap_def])) >> strip_tac >>
+  (impl_tac >- (gvs[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ indexQ indexR`;
 
 fun mapping_index_bind_tac selection_cont =
@@ -283,7 +286,6 @@ val mapping_suffix_tac =
      >- (irule exprOperandVarTheory.compile_lower_value_var >>
          qexistsl_tac [`cenv`, `e2`, `key`, `sm`, `expr_type e2`] >> simp[]) >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `allocas_from lo it /\ lo <= it.vs_alloca_next` by
     ((qpat_assum `ghost_inv_at (DF (storage_trace_horizon _)) _ _ _ _ _ _ _ _` mp_tac >>
      simp[bodyPtrDefsTheory.ghost_inv_at_def] >> (metis_tac[bodyPtrDefsTheory.ghost_inv_at_def]))) >>
@@ -401,6 +403,9 @@ val mapping_map_package_tac =
   simp[contextTheory.mk_ptr_def, contextTheory.vv_location_def] >>
   qpat_assum `wb_frame cenv es fin sa s0 u`
     (strip_assume_tac o PURE_REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    first_assum (ACCEPT_TAC o MATCH_MP
+      bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   rpt conj_tac >> first_assum ACCEPT_TAC;
 
 
@@ -593,6 +598,9 @@ Resume subscript_map_full[leaf_selection]:
   `(mk_ptr outop (slot_loc tr)).ptr_location = slot_loc tr /\
    vv_location (LocatedValue ann (mk_ptr outop (slot_loc tr))) = SOME (slot_loc tr)` by
     simp[contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+     first_assum (ACCEPT_TAC o MATCH_MP
+       bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   simp[vyperASTTheory.expr_type_def] >>
   match_mp_tac (Q.INST [`D` |-> `DF H`] subscript_mapping_value_place_post) >>
   qpat_assum `!H. dead_lo_ok H (DF H) lo cenv cx` (qspec_then `H` assume_tac) >>
