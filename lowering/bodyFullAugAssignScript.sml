@@ -8,7 +8,7 @@
  *)
 Theory bodyFullAugAssign
 Ancestors stateFrame[qualified,ignore_grammar] bodyPtrDefs[qualified,ignore_grammar]
-  stateRelProj
+  stateRelProj exprBodyPreProps[qualified,ignore_grammar]
   augAssignFullTargetRoutes augAssignFullEntryPre augAssignFullCodeStages
   augAssignFullBindStages augAssignFullSourceReplay augAssignFullRhsSaved
   augAssignFullLoad augAssignFullImmutableValidLoad augAssignFullImmutableCertificate
@@ -404,7 +404,8 @@ Resume body_augassign_nested_immutable_full[nested_load]:
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
   gvs[finite_mapTheory.FLOOKUP_EMPTY] >>
   rename1 `ALOOKUP st.immutables cx.txn.target = SOME imms` >>
-  `expr_sim_inv cenv cx env st` by fs[expr_body_pre_def] >>
+  `expr_sim_inv cenv cx env st` by
+    metis_tac[exprBodyPrePropsTheory.expr_body_pre_static_facts] >>
   `dead_lo_ok H0 (DF H0) lo cenv cx` by
     (qpat_assum `!H. dead_lo_ok H _ _ _ _` (qspec_then `H0` ACCEPT_TAC)) >>
   drule_all augassign_immutable_path_load_resources >> strip_tac >>

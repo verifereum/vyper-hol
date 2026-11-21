@@ -6,6 +6,7 @@ Ancestors vyperTypeEnv compileEnv targetPlaceSimCasesBase
   supportedStmts supportedTargets supportedExprTraverse supportedStmtTraverse
   allocLimits allocLimitsProps exprLowering vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness vyperAST list bodyInvExecutionProps
+  stmtExprAllocationPreProps compileUnit alist
 
 Theorem augassign_entry_rhs_pre:
   body_inv tops ctx cenv cx /\
@@ -18,26 +19,18 @@ Theorem augassign_entry_rhs_pre:
   call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) ==>
   expr_body_pre cenv cx env e es
 Proof
-  strip_tac >> drule aug_place_typing >> strip_tac >>
-  `supported_expr tops e` by metis_tac[supported_augassign_contract] >>
-  drule supported_expr_main_calls >> simp[EVERY_CONJ] >> strip_tac >>
-  drule supported_expr_no_evm_run >> strip_tac >>
-  `~supported_expr_exists (const_name_root cx) e` by
-    (drule_all body_inv_stmt_const_name_free >>
-     simp[supported_stmt_expr_exists_def]) >>
-  `supported_program tops /\ get_module_code cx NONE = SOME tops /\
-   (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-     is_dynamic (vyper_to_abi_type (type_env tops) target))` by
-    metis_tac[body_inv_main_support, body_inv_singleton_abi_types] >>
-  `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
-  `~is_extcode e` by
-    (irule alloc_limits_expr_not_extcode >> qexists_tac `cenv` >>
-     fs[stmt_exprs_ok_def, alloc_limits_stmt_def]) >>
-  irule stmt_expr_body_pre_alloc >>
-  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-      alloc_limits_stmt_def, int_calls_stmt_def] >>
-  qexists_tac `[]` >> simp[] >>
-  metis_tac[call_evaluation_safe_append_right]
+  rpt strip_tac >>
+  mp_tac (Q.INST [`tops` |-> `tops`, `ctx` |-> `ctx`,
+                   `s` |-> `AugAssign ty t bop e`]
+    body_inv_stmt_expr_pre_singleton) >>
+  simp[supported_stmt_expr_exists_def] >>
+  disch_then irule >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
+                   `ctx` |-> `ctx`, `ty` |-> `ty`, `t` |-> `t`,
+                   `bop` |-> `bop`, `bindings` |-> `bindings`,
+                   `ret_ty` |-> `ret_ty`, `env'` |-> `env'`]
+    augassign_entry_rhs_pre_mods) >>
+  simp[main_module_def, ALOOKUP_def]
 QED
 
 Theorem typed_nested_immutable_root_nonword:
