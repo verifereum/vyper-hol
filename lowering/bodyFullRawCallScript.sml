@@ -188,20 +188,17 @@ Theorem raw_call_continuation_full:
   amount < dimword (:256) /\ flags.rcf_max_outsize < dimword (:256) /\
   expr_sim_inv cenv cx env esK /\ esK.gas_obs = [] /\
   storage_trace_domain cx st0 esK.storage_trace /\
-  (let cap = flags.rcf_max_outsize;
-      round = 32 * ((cap + 31) DIV 32);
-      payload = if cap = 0 then 0 else round + 32;
-      vop = case ext_call_kwarg EKValue flags.rcf_kws xs of
-              NONE => Lit 0w | SOME p => p
-  in
   fn_has_code sa sb func /\ fn_has_code s6 sout func /\ fn_inst_ids_distinct func /\
   ci_mono sa s6 /\ ci_mono s6 s7 /\ ci_mono sout s7 /\ ci_mono sa s7 /\
-  compile_raw_call_outbuf cap s6 = ((ov,op),sout) /\
-  compile_raw_call_finish addr dp len gas vop
+  compile_raw_call_outbuf flags.rcf_max_outsize s6 = ((ov,op),sout) /\
+  compile_raw_call_finish addr dp len gas
+    (case ext_call_kwarg EKValue flags.rcf_kws xs of
+      NONE => Lit 0w | SOME p => p)
     (if flags.rcf_is_delegate then DelegateCall
      else if flags.rcf_is_static then StaticCall else RegularCall)
-    cap flags.rcf_revert_on_failure ov op s7 = (result,sb) /\
-  vv = (if cap = 0 then StackValue (raw_call_return_type flags) result
+    flags.rcf_max_outsize flags.rcf_revert_on_failure ov op s7 = (result,sb) /\
+  vv = (if flags.rcf_max_outsize = 0
+        then StackValue (raw_call_return_type flags) result
         else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)) /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -219,7 +216,8 @@ Theorem raw_call_continuation_full:
   t7.vs_inst_idx = LENGTH s7.cs_current_insts /\ alloca_history func t7 /\
   s0.vs_alloca_next <= t7.vs_alloca_next /\ lo <= t7.vs_alloca_next /\ allocas_from lo t7 /\
   eval_operand addr t7 = SOME (w2w target) /\
-  eval_operand vop t7 = SOME (n2w amount) /\
+  eval_operand (case ext_call_kwarg EKValue flags.rcf_kws xs of
+      NONE => Lit 0w | SOME p => p) t7 = SOME (n2w amount) /\
   eval_operand gas t7 = SOME gw /\
   (!g. OPTION_BIND (ext_call_kwarg EKGas flags.rcf_kws kvs) dest_NumV = SOME g ==>
        g = w2n gw) /\
@@ -232,21 +230,35 @@ Theorem raw_call_continuation_full:
   (!j. ib <= j /\ j < ib + LENGTH bs ==> j NOTIN tn7.t_mem) /\
   (bs <> [] ==> ?p. dp = Var p /\ ptr_covers G7 tn7 p t7 (LENGTH bs)) /\
   eval_operand ov t7 = SOME (n2w ob) /\
-  eval_operand op t7 = SOME (n2w (if cap = 0 then ob else ob + 32)) /\
-  (cap = 0 ==> ov = op) /\ ob + payload < dimword (:256) /\
-  FLOOKUP t7.vs_allocas s6.cs_next_id = SOME (ob,payload) /\
-  op_prov G7 ov = SOME (ob,payload) /\ op_prov G7 op = SOME (ob,payload) /\
+  eval_operand op t7 = SOME (n2w (if flags.rcf_max_outsize = 0 then ob else ob + 32)) /\
+  (flags.rcf_max_outsize = 0 ==> ov = op) /\
+  ob + (if flags.rcf_max_outsize = 0 then 0
+      else 32 * ((flags.rcf_max_outsize + 31) DIV 32) + 32) < dimword (:256) /\
+  FLOOKUP t7.vs_allocas s6.cs_next_id = SOME (ob,(if flags.rcf_max_outsize = 0 then 0
+      else 32 * ((flags.rcf_max_outsize + 31) DIV 32) + 32)) /\
+  op_prov G7 ov = SOME (ob,(if flags.rcf_max_outsize = 0 then 0
+      else 32 * ((flags.rcf_max_outsize + 31) DIV 32) + 32)) /\
+  op_prov G7 op = SOME (ob,(if flags.rcf_max_outsize = 0 then 0
+      else 32 * ((flags.rcf_max_outsize + 31) DIV 32) + 32)) /\
   op_taint tn7 ov = {} /\ op_taint tn7 op = {} /\
   (!name lb sz. local_region cenv esK.scopes t7 name lb sz ==>
-    regions_disjoint ob payload lb sz) /\
+    regions_disjoint ob (if flags.rcf_max_outsize = 0 then 0
+      else 32 * ((flags.rcf_max_outsize + 31) DIV 32) + 32) lb sz) /\
   (cenv.ce_is_ctor ==> !name tv v off.
     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP esK.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
-    regions_disjoint off (type_memory_size tv) ob payload) /\
-  EVERY (\x. op_taint tn7 x = {}) [addr;len;dp;gas;vop] /\
-  EVERY (safe_operand s7) [addr;len;dp;gas;vop;ov;op] /\
-  (!x. MEM (Var x) [addr;len;dp;gas;vop;ov;op] ==> not_fresh_at s7 x))
+    regions_disjoint off (type_memory_size tv) ob (if flags.rcf_max_outsize = 0 then 0
+      else 32 * ((flags.rcf_max_outsize + 31) DIV 32) + 32)) /\
+  EVERY (\x. op_taint tn7 x = {})
+    [addr;len;dp;gas;(case ext_call_kwarg EKValue flags.rcf_kws xs of
+      NONE => Lit 0w | SOME p => p)] /\
+  EVERY (safe_operand s7)
+    [addr;len;dp;gas;(case ext_call_kwarg EKValue flags.rcf_kws xs of
+      NONE => Lit 0w | SOME p => p);ov;op] /\
+  (!x. MEM (Var x)
+    [addr;len;dp;gas;(case ext_call_kwarg EKValue flags.rcf_kws xs of
+      NONE => Lit 0w | SOME p => p);ov;op] ==> not_fresh_at s7 x)
   ==>
   gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     (cx_tops cx) cx st0
@@ -287,7 +299,7 @@ Theorem raw_call_continuation_full:
           (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 
 Proof
-  simp_tac bool_ss [LET_THM] >> BETA_TAC >>
+  simp_tac bool_ss [] >> BETA_TAC >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==>
       stmt_state_rel H ctx func cenv cx esK t7 /\ _`
