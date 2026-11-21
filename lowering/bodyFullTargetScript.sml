@@ -44,7 +44,6 @@ Proof
   irule target_mapping_tail_full >> metis_tac[]
 QED
 
-(* TEMPORARILY CHEATED - publish the induction interface for target consumers. *)
 Theorem body_imm_target_place_sim_full:
   !bt DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env es id.
     body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
@@ -56,7 +55,25 @@ Theorem body_imm_target_place_sim_full:
     imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx env bt es
 Proof
-  cheat
+  recInduct base_assignment_target_induct >> rpt conj_tac >> rpt gen_tac
+  >- simp[target_root_def]
+  >- (rpt strip_tac >> gvs[target_root_def] >>
+      irule immutable_toplevel_target_sim_full >> simp[] >> metis_tac[])
+  >- (strip_tac >> rpt gen_tac >> strip_tac >>
+      `body_base_target_full_ok cx bt /\ target_indices_pre cenv cx env bt` by
+        fs[body_base_target_full_ok_def,target_indices_pre_def] >>
+      `target_root bt = TopLevelNameTarget (NONE,id) /\ immutable_root cx bt` by
+        fs[immutable_root_def,target_root_def] >>
+      match_mp_tac (Q.INST [`id` |-> `id`,`tops` |-> `tops`]
+        immutable_target_subscript_sim_full) >>
+      simp[] >> first_x_assum drule_all >> simp[]) >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `body_base_target_full_ok cx bt /\ target_indices_pre cenv cx env bt` by
+    fs[body_base_target_full_ok_def,target_indices_pre_def] >>
+  `target_root bt = TopLevelNameTarget (NONE,id) /\ immutable_root cx bt` by
+    fs[immutable_root_def,target_root_def] >>
+  irule immutable_target_attribute_sim_full >> simp[] >>
+  first_x_assum drule_all >> simp[]
 QED
 
 Theorem body_target_sim_full:
