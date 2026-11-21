@@ -282,7 +282,7 @@ Resume sym_reduce_depth_plan_frame_sim_width[selected_spill]:
   drule_all planWfTheory.select_spill_candidate_bound >> strip_tac >>
   `cand < LENGTH ps.ps_stack` by decide_tac >>
   drule_all planSpillBoundsTheory.do_spill_at_slots_bounded >> strip_tac >>
-  drule_all generatedReorderSimTheory.do_spill_at_layout_wf >> strip_tac >>
+  drule_all reorderPreparationTracePropsTheory.do_spill_at_layout_wf >> strip_tac >>
   `ps1.ps_alloc.sa_next_offset <= r.sr_spill_end` by
     metis_tac[allocMonoTheory.reduce_depth_plan_next_offset, arithmeticTheory.LESS_EQ_TRANS] >>
   `(!off. MEM (SOSpill off) hops ==> off < dimword(:256)) /\
@@ -1026,7 +1026,7 @@ Proof
   rpt gen_tac >> PairCases_on `h` >>
   ntac 14 (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >>
   disch_then (CONJUNCTS_THEN2 (mk_asm "frame") strip_assume_tac) >>
-  drule reorderStagesTheory.plan_steps_cons_result >> strip_tac >>
+  drule reorderPreparationPropsTheory.plan_steps_cons_result >> strip_tac >>
   qpat_x_assum `ops = _` SUBST_ALL_TAC >>
   asm "frame" (map_every assume_tac o CONJUNCTS o SRULE []) >>
   asm "cons" irule >>

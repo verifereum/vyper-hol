@@ -138,8 +138,6 @@ Proof
   pairarg_tac >> gvs[stack_pop_def, stack_peek_def]
 QED
 
-Theorem reduce_depth_plan_unfixed_hit = reorderPreparationPropsTheory.reduce_depth_plan_unfixed_hit
-
 Theorem reduce_depth_plan_shielded_bottom_frame:
   !fuel targets op f n ps prefix ops qs.
     (~MEM op prefix \/

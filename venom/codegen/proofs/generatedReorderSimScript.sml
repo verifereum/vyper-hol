@@ -6,16 +6,6 @@ Ancestors
   stackPlanOps stackPlanTypes stackModel codegenRel asmSem planExec
   spillSim planWf stackOpSim blockSimHelpers list rich_list finite_map arithmetic
 
-Theorem do_spill_tos_layout_wf = reorderPreparationTracePropsTheory.do_spill_tos_layout_wf
-
-Theorem do_spill_tos_venom_asm_rel_numeric = reorderPreparationTracePropsTheory.do_spill_tos_venom_asm_rel_numeric
-
-Theorem do_spill_at_layout_wf = reorderPreparationTracePropsTheory.do_spill_at_layout_wf
-
-Theorem do_spill_at_venom_asm_rel_numeric = reorderPreparationTracePropsTheory.do_spill_at_venom_asm_rel_numeric
-
-Theorem reduce_depth_plan_venom_asm_rel_numeric = reorderPreparationTracePropsTheory.reduce_depth_plan_venom_asm_rel_numeric
-
 Theorem reorder_restore_venom_asm_rel_numeric:
   (case stack_get_unfixed_depth op f n ps.ps_stack of
      SOME d => ([],ps)
@@ -215,11 +205,11 @@ Resume reorder_one_venom_asm_rel_numeric[after_reduce]:
      Cases_on `stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
        (LENGTH pending) ps.ps_stack` >> simp[] >>
      Cases_on `FLOOKUP ps.ps_spilled op` >> simp[] >>
-     rpt strip_tac >> gvs[] >> metis_tac[do_restore_inventory_subset]) >>
+     rpt strip_tac >> gvs[] >> metis_tac[reorderPreparationInventoryPropsTheory.do_restore_inventory_subset]) >>
   `!at. MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled ==>
         MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled` by
     (Cases_on `dist > 16` >> gvs[] >>
-     metis_tac[reduce_depth_plan_inventory_subset]) >>
+     metis_tac[reorderPreparationInventoryPropsTheory.reduce_depth_plan_inventory_subset]) >>
   `!at. (MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled) /\
         operand_equiv dfg op at ==>
         operand_val vs lo op = operand_val vs lo at` by metis_tac[] >>
@@ -271,7 +261,7 @@ Resume reorder_one_venom_asm_rel_numeric[alias_suffix]:
   goal_assum (drule_at Any) >> simp[] >>
   irule plan_stack_sem_eq_exchange >>
   `MEM (stack_peek (LENGTH pending - (idx + 1)) ps2.ps_stack)
-     ps2.ps_stack` by (irule stack_peek_mem >> decide_tac) >>
+     ps2.ps_stack` by (irule reorderPreparationInventoryPropsTheory.stack_peek_mem >> decide_tac) >>
   simp[] >> metis_tac[]
 QED
 
@@ -332,8 +322,6 @@ Proof
     (irule asm_steps_compose_ok >> qexists `mid` >> asm_rewrite_tac[]) >>
   qexists `final` >> fs[execute_plan_append]
 QED
-
-Theorem reorder_prepass_venom_asm_rel_numeric = reorderPreparationTracePropsTheory.reorder_prepass_venom_asm_rel_numeric
 
 Theorem reorder_plan_venom_asm_rel_numeric:
   !dfg target_ops ps ops ps' base lo o2pc prog vs st.

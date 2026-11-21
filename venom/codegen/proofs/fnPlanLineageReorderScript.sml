@@ -35,9 +35,6 @@ Proof
   Cases_on `alloc_spill_slot ps.ps_alloc` >> gvs[] >> metis_tac[]
 QED
 
-Theorem select_spill_candidate_var_not_pending =
-  reorderPreparationInventoryPropsTheory.select_spill_candidate_var_not_pending
-
 Theorem reduce_depth_plan_inventory_mono:
   !fuel pending target_op f ps ops ps' base x.
     residual_budget_wf base pending ps /\
@@ -379,9 +376,6 @@ Proof
 QED
 
 (* Generic materialisation-to-height boundary, shared by frame and lineage proofs. *)
-Theorem list_elem_count_dom_length =
-  reorderPreparationInventoryPropsTheory.list_elem_count_dom_length
-
 Theorem available_input_plan_length:
   !opc inputs nl ps input_ops ps1.
     emit_input_plan opc inputs nl ps = (input_ops,ps1) /\

@@ -1500,7 +1500,7 @@ Theorem regional_spill_supply_le:
         (if x IN FDOM ps.ps_spilled then 1 else 0)
 Proof
   strip_tac >> drule_all inventory_spill_key >> strip_tac >>
-  drule_all reorderSimTheory.do_spill_at_stack_count >>
+  drule_all reorderPreparationInventoryPropsTheory.do_spill_at_stack_count >>
   disch_then assume_tac >> qx_gen_tac `x` >>
   first_x_assum (qspec_then `x` mp_tac) >>
   simp[finite_mapTheory.FDOM_FUPDATE, rich_listTheory.LIST_ELEM_COUNT_THM] >>

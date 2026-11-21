@@ -754,8 +754,6 @@ Proof
 QED
 
 (* do_spill_at_length: exact length change *)
-Theorem do_spill_at_length_exact = depthReductionLengthPropsTheory.do_spill_at_length_exact
-
 (* select_spill_candidate returns value < target_dist *)
 Theorem select_spill_candidate_lt_dist[local]:
   !stk forbidden target_dist target_len cand.
