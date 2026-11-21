@@ -603,6 +603,7 @@ Theorem deploy_ctor_body_joint_raw_with:
    func mut nr' body' am_c es0 shadow_ctx shadow_func shadow_sa shadow_sb.
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
+    ~internal_defaults_msg_gas tops /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops (assemble prog') am tx es /\
     call_outcomes_ok am tx vs.vs_outcomes /\
@@ -717,11 +718,14 @@ Proof
      qpat_x_assum `!st0 H. valid_horizon _ st0 H _ ==> _`
        (qspecl_then [`initial_state am []`, `H`] mp_tac) >> simp[]) >>
   qspecl_then [`policy`, `tops`, `runtime_bc`, `rpolicy`, `dunit`,
-        `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`, `vs`, `body`, `cenv`, `F`,
+        `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`,
+        `opt_deploy_entry_state_own prog prog' cplan tops es with
+           vs_outcomes := vs.vs_outcomes`, `body`, `cenv`, `F`,
         `nkey`, `ut`, `imm`, `exit_lbl`, `sa`, `sb`, `sj`, `st_exit`,
         `st_exit`, `st_final`, `func`, `mut`, `body'`, `am_c`, `es0`,
         `shadow_ctx`, `shadow_func`] mp_tac deploy_ctor_body_frag_full >>
-  impl_tac >- gvs[] >>
+  impl_tac >- gvs[gas_variant_def, venom_state_fupdfupds] >>
+  simp[] >>
   rewrite_tac[stmt_frag_full_def] >>
   disch_then (qspecl_then [`initial_state am []`, `sa`, `sb`, `shadow_sa`,
     `shadow_sb`, `s0`, `G0`, `tn0`, `cenv'`] mp_tac) >>
