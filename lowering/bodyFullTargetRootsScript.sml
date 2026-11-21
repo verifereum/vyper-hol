@@ -15,6 +15,10 @@ Ancestors
   loweringStateRelDefs loweringPosts exprLowering ptrDiscipline
   vyperTypeEnv vyperTyping vyperTypeSystem vyperPlaceResultTyping
   vyperTypeInvariants vyperInterpreter vyperState venomState
+  bodySim bodyInvCodeProps bodyInvMetadataProps bodySimEntry bodyStorageMetadata
+  bodyAugPlaceTarget constSubstCorrect targetPlaceSimCasesBase
+  vyperTypeConstantCells bodyInvSplit finite_map option alist
+  immutableDeployAssignFacts vyperFixedShapePath allocLimits stmtSimAssignAttr
 
 (* The ghost invariant does not read the gas observations. *)
 Theorem ghost_inv_at_gas_obs[local]:
@@ -161,3 +165,217 @@ Resume target_toplevel_sim_full[mapping]:
 QED
 
 Finalise target_toplevel_sim_full
+
+Theorem base_target_root_eq_target_root[local]:
+  !bt. base_target_root bt = target_root bt
+Proof
+  recInduct base_assignment_target_induct >>
+  simp[base_target_root_def, target_root_def]
+QED
+
+Theorem typed_immutable_target_root:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  immutable_root cx bt /\ IS_SOME (type_place_target env bt) ==>
+  ?id root_ty. target_root bt = TopLevelNameTarget (NONE,id) /\
+    FLOOKUP env.bare_globals (NONE,id) = SOME root_ty /\
+    FLOOKUP env.bare_global_assignable (NONE,id) = SOME root_ty /\
+    cx.in_deploy /\ cenv.ce_is_ctor /\ ~cx_const_name cx (NONE,id)
+Proof
+  strip_tac >> drule type_place_target_root >>
+  simp[base_target_root_eq_target_root] >> strip_tac >>
+  qpat_x_assum `immutable_root _ _`
+    (strip_assume_tac o REWRITE_RULE[immutable_root_def]) >>
+  drule_then (assume_tac o Q.SPEC `src` o
+              MATCH_MP contract_inv_module_codes) body_inv_contract >>
+  Cases_on `src` >> gvs[ALOOKUP_def] >>
+  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  `?ty. FLOOKUP env.bare_global_assignable (NONE,id) = SOME ty` by
+    (Cases_on `type_place_target env (TopLevelNameTarget (NONE,id))` >>
+     gvs[] >> rename1 `type_place_target _ _ = SOME vt` >>
+     Cases_on `vt` >> gvs[type_place_target_TopLevelNameTarget] >>
+     fs[env_consistent_def, env_context_consistent_def]
+     >- (qpat_assum `!src id ty. _ /\ _ ==> ?ts tr id_str.
+             _ /\ find_var_decl_by_name _ _ = SOME (StorageVarDecl _ _,_) /\ _`
+           (drule_all_then strip_assume_tac) >> gvs[]) >>
+     qpat_assum `!src id kt vt. _ ==> ?ts tr id_str.
+          _ /\ find_var_decl_by_name _ _ = SOME (HashMapVarDecl _ _ _,_) /\ _`
+       (drule_all_then strip_assume_tac) >> gvs[]) >>
+  `FLOOKUP env.bare_globals (NONE,id) = SOME ty` by
+    (fs[env_consistent_def, env_context_consistent_def] >>
+     qpat_assum `!src id ty. FLOOKUP env.bare_global_assignable _ = SOME _ ==> _`
+       (drule_all_then strip_assume_tac) >> simp[]) >>
+  `cx.in_deploy` by
+    (Cases_on `cx.in_deploy` >> gs[env_consistent_def, env_context_consistent_def,
+                                  bare_global_assignable_complete_def]) >>
+  `cenv.ce_is_ctor` by metis_tac[body_inv_contract, contract_inv_constructor] >>
+  qexists_tac `ty` >> simp[] >> strip_tac >>
+  drule_all_then strip_assume_tac body_inv_const_name_decl >>
+  drule_then strip_assume_tac supported_variable_decl_mem >>
+  drule_all_then strip_assume_tac env_consistent_bare_global_find_NONE >>
+  gvs[] >>
+  `?vis ty slot. MEM (VariableDecl vis Immutable id ty slot) tops` by
+    (irule bare_global_clause_immutable >> simp[] >>
+     qexistsl [`cx`,`env`,`es`] >> simp[]) >>
+  drule body_inv_modules_aligned >>
+  metis_tac[module_immutable_constant_names_distinct]
+QED
+
+Theorem immutable_toplevel_target_sim_full:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  immutable_root cx (TopLevelNameTarget (NONE,id)) /\ ~cx_const_name cx (NONE,id) ==>
+  imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx env (TopLevelNameTarget (NONE,id)) es
+Proof
+  strip_tac >> simp[imm_target_place_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  `IS_SOME (type_place_target env (TopLevelNameTarget (NONE,id)))` by simp[] >>
+  drule_all_then strip_assume_tac typed_immutable_target_root >>
+  gvs[target_root_def, type_place_target_TopLevelNameTarget] >>
+  drule_all_then (strip_assume_tac o Q.SPEC `compile_expr`)
+    immutable_assign_target_layout >>
+  qpat_x_assum `compile_get_target_ptr _ _ (TopLevelNameTarget _) sa = _` mp_tac >>
+  simp[compile_get_target_ptr_def, comp_return_def] >> strip_tac >> gvs[] >>
+  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  drule_all_then strip_assume_tac env_consistent_bare_global_find_NONE >>
+  drule_all_then strip_assume_tac env_consistent_bare_global_ready_src >>
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >>
+  gvs[get_source_immutables_def] >>
+  Cases_on `FLOOKUP (get_source_immutables NONE x) id` >>
+  gvs[get_source_immutables_def] >>
+  rename1 `_ = SOME entry` >> PairCases_on `entry` >>
+  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  qexistsl_tac [`G0`,`es`,`INL (ImmutablePlace NONE id [])`,`s0`,`tn0`] >>
+  conj_tac >-
+    (simp[Once evaluate_def, bind_def] >>
+     simp[Once evaluate_def, lookup_global_def, get_immutables_def,
+          get_address_immutables_def, get_place_def, bind_def, return_def,
+          lift_option_type_def, lift_sum_def, get_source_immutables_def]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H es.storage_trace ==> _` drule >>
+  strip_tac >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (fs[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
+     rpt strip_tac >> res_tac >>
+     Cases_on `b` >> fs[vyperStorageBackendTheory.get_storage_def]) >>
+  `evaluate_type (get_tenv cx) root_ty = SOME entry0` by
+    (fs[env_consistent_def, env_immutables_consistent_def, get_source_immutables_def] >>
+     metis_tac[]) >>
+  simp[imm_target_post_def, gas_origin_ptr_path_rules, ghost_kept_at_def,
+       ghost_inv_at_gas_obs, target_ptr_ok_def, op_taint_def, op_prov_def,
+       stmt_state_rel_start_gas_obs, eval_operand_def, target_root_def,
+       mem_path_offset_def, evaluate_subscripts_def, get_source_immutables_def,
+       fixed_shape_path_def]
+QED
+
+Theorem immutable_target_place_type:
+  !bt tops ctx cenv cx env es vt.
+    body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+    immutable_root cx bt /\ type_place_target env bt = SOME vt ==>
+    ?ty. vt = Type ty /\ target_place_type cenv bt = SOME (ValPT ty)
+Proof
+  recInduct base_assignment_target_induct >> rpt conj_tac
+  >- simp[immutable_root_def,target_root_def]
+  >- (rpt gen_tac >> strip_tac >>
+      `IS_SOME (type_place_target env (TopLevelNameTarget nsid))` by simp[] >>
+      drule_all_then strip_assume_tac typed_immutable_target_root >>
+      gvs[target_root_def,type_place_target_TopLevelNameTarget] >>
+      `cenv.ce_hashmap_info (NONE,id) = NONE` by fs[expr_sim_inv_def] >>
+      drule_all_then (strip_assume_tac o Q.SPEC `compile_expr`)
+        immutable_assign_target_layout >>
+      simp[target_place_type_def]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `immutable_root cx bt` by fs[immutable_root_def,target_root_def] >>
+  gvs[Once well_typed_expr_def,AllCaseEqs()] >>
+  first_x_assum drule_all >> strip_tac >> gvs[]
+  >- (Cases_on `ty` >> gvs[subscript_vtype_def] >> simp[target_place_type_def]) >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_sim_inv_def,env_consistent_def,env_context_consistent_def] >>
+  Cases_on `tgt_ty` >> gvs[attribute_type_def] >>
+  `attribute_type (get_tenv cx) (StructT p) s = SOME ty` by
+    simp[attribute_type_def] >>
+  drule_all_then strip_assume_tac attribute_type_struct_field >>
+  simp[target_place_type_def]
+QED
+
+Theorem immutable_target_base_place_result:
+  !bt cx es pv ee.
+    immutable_root cx bt /\ eval_base_place cx bt es = (INL pv,ee) ==>
+    ?src id path. pv = PlaceR (ImmutablePlace src id path) /\
+                  target_root bt = TopLevelNameTarget (src,id)
+Proof
+  recInduct base_assignment_target_induct >> rpt conj_tac >> rpt gen_tac
+  >- simp[immutable_root_def, target_root_def]
+  >- (PairCases_on `nsid` >> simp[immutable_root_def, target_root_def] >>
+      rpt strip_tac >>
+      qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, lookup_global_def, bind_def,
+           lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+      rpt strip_tac >>
+      Cases_on `FLOOKUP imms nsid1` >> gvs[return_def, raise_def]) >>
+  rpt strip_tac >>
+  qpat_x_assum `eval_base_place _ _ es = (INL pv,ee)` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  `immutable_root cx bt` by fs[immutable_root_def,target_root_def] >>
+  first_x_assum drule_all >> strip_tac >> gvs[] >>
+  qpat_x_assum `extend_place _ _ _ _ = _` mp_tac >>
+  simp[extend_place_def, extend_memory_place_def, bind_def, ignore_bind_def,
+       return_def, AllCaseEqs(), target_root_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem immutable_target_attribute_source:
+  immutable_root cx bt ==>
+  eval_target_place cx (AttributeTarget bt fld) =
+  bind (eval_target_place cx bt)
+    (\p. bind (extend_place cx (PlaceR p) (AttrSubscript fld)) get_place)
+Proof
+  strip_tac >> simp[FUN_EQ_THM, Once evaluate_def] >> gen_tac >>
+  simp[Once evaluate_def, Once evaluate_def, bind_def] >>
+  Cases_on `eval_base_place cx bt x` >> Cases_on `q` >> simp[] >>
+  drule_all immutable_target_base_place_result >> strip_tac >>
+  simp[get_place_def, return_def]
+QED
+
+Theorem immutable_target_subscript_source:
+  immutable_root cx bt ==>
+  eval_target_place cx (SubscriptTarget bt idx) =
+  bind (eval_target_place cx bt) (\p.
+    bind (eval_expr cx idx) (\raw. bind (read_result cx raw) (\v.
+      bind (extend_place cx (PlaceR p) (ValueSubscript v)) get_place)))
+Proof
+  strip_tac >> simp[FUN_EQ_THM, Once evaluate_def] >> gen_tac >>
+  simp[Once evaluate_def, Once evaluate_def, bind_def] >>
+  Cases_on `eval_base_place cx bt x` >> Cases_on `q` >> simp[] >>
+  drule_all immutable_target_base_place_result >> strip_tac >>
+  simp[get_place_def, return_def] >>
+  Cases_on `eval_expr cx idx r` >> Cases_on `q` >> simp[] >>
+  rename1 `eval_expr cx idx r = (INL raw,ix)` >>
+  Cases_on `read_result cx raw ix` >> Cases_on `q` >> simp[]
+QED
+
+Theorem immutable_target_extend:
+  FLOOKUP (get_source_immutables src imms) id = SOME (itv,iv) /\
+  ALOOKUP es.immutables cx.txn.target = SOME imms /\
+  subscripts_type itv path = SOME ptv /\
+  evaluate_subscripts itv iv path = INL value ==>
+  bind (extend_place cx (PlaceR (ImmutablePlace src id path)) sb) get_place es =
+    ((case evaluate_subscripts ptv value [sb] of
+       INL _ => INL (ImmutablePlace src id (path ++ [sb]))
+     | INR err => INR (Error err)), es)
+Proof
+  strip_tac >> Cases_on `evaluate_subscripts ptv value [sb]` >>
+  simp[extend_place_def, place_type_value_def, read_place_def, get_immutables_def,
+       get_address_immutables_def, extend_memory_place_def, get_place_def,
+       bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
+       return_def, raise_def]
+QED
+
+Theorem immutable_target_fixed_snoc:
+  fixed_shape_path itv path /\ mem_path_offset itv path = SOME (k,tv) /\
+  mem_path_offset itv (path ++ [sb]) = SOME (k',tv') /\
+  (~(?et n. tv = ArrayTV et (Dynamic n))) ==>
+  fixed_shape_path itv (path ++ [sb])
+Proof
+  strip_tac >> imp_res_tac exprSimPropsTheory.mem_path_offset_sound >>
+  fs[fixed_shape_path_append, fixed_shape_path_def,
+       vyperPlaceStatePreservationTheory.subscripts_type_append,
+       subscripts_type_def, AllCaseEqs(), SF CONJ_ss] >> metis_tac[]
+QED
