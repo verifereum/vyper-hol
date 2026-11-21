@@ -36,7 +36,7 @@ Ancestors
   ctorDeployLoweringSource ctorDeployLoweringSourceOk
   ctorDeployMemoryRunPtrPrefixInit gasContext
   ctorDeployLoweringFrameRet loweringStateRelDefs
-  entryStateRel exprSimDefs loweringHalt vyperTypeDeploymentMachine
+  entryStateRel exprSimDefs loweringHalt vyperTypeDeploymentMachine evalNoHalt
   codegenRel contextCodegenRel o1PassContract unitTransformDefs
 
 val _ = Parse.hide "body";
@@ -559,7 +559,6 @@ Proof
   irule deploy_ctor_prefix_fail_run_ptr_safe >> simp[] >> metis_tac[]
 QED
 
-(* GATE_ADMISSION: missing case, constructor SELFDESTRUCT pending deletion; owner: constant-substitution lane *)
 Theorem deploy_ctor_body_halt_pending:
   deploy_source_ok tops am tx /\
   deploy_ctor_start tops am tx (mut,F,raw_body,am_c,es0) /\
@@ -567,7 +566,9 @@ Theorem deploy_ctor_body_halt_pending:
     (es0 with <|outcomes := SOME os; gas_obs := gs|>) = (INR HaltException,ee) ==>
   MEM tx.target ee.pending_deletions
 Proof
-  cheat
+  strip_tac >>
+  drule eval_stmts_halt_pending_deletions >>
+  simp[deploy_evaluation_context_def, vyperInterpreterTheory.initial_evaluation_context_def]
 QED
 
 (* Entry, body and suffix share the body's marks, including its focused arms. *)
