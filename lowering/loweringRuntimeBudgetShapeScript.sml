@@ -1,7 +1,7 @@
 Theory loweringRuntimeBudgetShape
 Ancestors
   loweringCallBudgetHistory entryRuntimeContextCode allocaFrontierBound
-  list rich_list vyperCompiler
+  list rich_list vyperCompiler ptrDiscipline
 
 Theorem budget_context_active_no_dalloca[local]:
   (!f. MEM f ctx.ctx_functions ==>
@@ -35,28 +35,10 @@ Proof
   metis_tac[venomInstTheory.lookup_function_MEM, COND_CLAUSES]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `!f. MEM f unit.cu_context.ctx_functions ==>
-    ~EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts f)` by
-    metis_tac[entry_runtime_context_no_dalloca] >>
-  drule budget_path_context_shape >>
-  disch_then (qspecl_then [`D`, `lo`, `explicit`, `unit.cu_context`] mp_tac) >>
-  (impl_tac >- (gvs[] >> metis_tac[venomInstTheory.lookup_function_MEM])) >>
-  strip_tac >>
-  `!i. active_inst q.bp_fn i q.bp_state ==> i.inst_opcode <> DALLOCA` by
-    metis_tac[budget_context_active_no_dalloca] >>
-  `!n. n < LENGTH h ==> ~lower_event_allocates (EL n h)` by
-    (gvs[FILTER_EQ_NIL, EVERY_MEM] >> metis_tac[EL_MEM]) >>
-  simp[] >> qexists_tac `K 0` >>
-  simp[lower_history_pairs_def, lower_history_current_def] >> metis_tac[]
-QED
-*)
 Theorem supported_runtime_budget_allocation_shape:
   !tops rpolicy unit vs D lo explicit name fn lbl entered p h marks q.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
+    supported_program tops /\ ~ctx_has_dalloca unit.cu_context /\
     unit.cu_context.ctx_entry = SOME name /\
     lookup_function name unit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\
@@ -72,7 +54,20 @@ Theorem supported_runtime_budget_allocation_shape:
       (!n. n < LENGTH h /\ lower_event_allocates (EL n h) ==>
         ?f i s op sz t. lower_alloc_record h n f i s op sz t))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `!f. MEM f unit.cu_context.ctx_functions ==>
+    ~EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts f)` by
+    (fs[ctx_has_dalloca_def, EVERY_MEM] >> first_assum ACCEPT_TAC) >>
+  drule budget_path_context_shape >>
+  disch_then (qspecl_then [`D`, `lo`, `explicit`, `unit.cu_context`] mp_tac) >>
+  (impl_tac >- (gvs[] >> metis_tac[venomInstTheory.lookup_function_MEM])) >>
+  strip_tac >>
+  `!i. active_inst q.bp_fn i q.bp_state ==> i.inst_opcode <> DALLOCA` by
+    metis_tac[budget_context_active_no_dalloca] >>
+  `!n. n < LENGTH h ==> ~lower_event_allocates (EL n h)` by
+    (gvs[FILTER_EQ_NIL, EVERY_MEM] >> metis_tac[EL_MEM]) >>
+  simp[] >> qexists_tac `K 0` >>
+  simp[lower_history_pairs_def, lower_history_current_def] >> metis_tac[]
 QED
 
 Theorem supported_runtime_context_fmp_guards:
