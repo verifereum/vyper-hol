@@ -77,6 +77,9 @@ Proof
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assert_exists_def, int_calls_stmt_def,
          int_calls_assert_reason_def, body_inv_def] >>
+     conj_tac >-
+       (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+        qexists_tac `cenv` >> fs[alloc_limits_stmt_def]) >>
      qexists_tac `[]` >> simp[]) >>
   irule compile_assert_frag_full >> simp[] >>
   qpat_x_assum `body_expr_full_ok _ _`
