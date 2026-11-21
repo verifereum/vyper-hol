@@ -11,7 +11,7 @@
  * start, for any dead-byte bound D.
  *
  * The start state s1 and its ghost (G1, tn1) are what
- * entryPtrSeamPrefix's external_entry_reaches_registration_ptr provides.
+ * entryPtrSeamPrefix's external_entry_reaches_registration_ptr_nr provides.
  *)
 Theory entryPtrSeamRegister
 Ancestors allocaFrontierRoom allocaSiteResource compileAllocaProvenance

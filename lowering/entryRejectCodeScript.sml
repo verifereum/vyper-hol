@@ -215,13 +215,17 @@ Theorem runtime_selected_entry_code[local]:
       fl sf = ((),sd) /\
     compile_entry_checks mc pay sc = ((),sk) /\
     sc.cs_current_bb = lbl /\ sc.cs_current_insts = [] /\
-    sf.cs_current_bb = "__entry" /\ sf.cs_current_insts = [] /\
+    sf.cs_current_bb = "__entry" /\ sf.cs_current_insts = [] /\ sf.cs_next_var = 0 /\
     fn_has_code sf sd efn /\ fn_has_code sc sk efn /\ cs_extends sd sc /\
     sd.cs_next_var <= sc.cs_next_var /\
     compile_register_positional_args ce pa 4 sk = (cenv,sa) /\
     compile_guarded_body cenv nr key tr view stmts rt sa = ((),sb) /\
     fn_has_code sa sb efn /\ fn_has_code sk sa efn /\
-    cs_extends sc sk /\ cs_extends sk sa
+    cs_extends sc sk /\ cs_extends sk sa /\
+    (?pre post before.
+      exts = pre ++ (lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt)::post /\
+      compile_external_fn_bodies pre sd = ((),before) /\
+      new_block lbl before = (before.cs_current_bb,sc))
 Proof
   strip_tac >> drule compile_runtime_entry_intervals >> strip_tac >>
   gvs[compile_internal_fn_bodies_def, comp_return_def] >>
@@ -240,7 +244,8 @@ Proof
   `fn_has_code sf sd efn /\ fn_has_code sc sd' efn /\ fn_has_code sb se' efn /\
    fn_has_code sd' sb efn` by
     metis_tac[fn_has_code_retained_interval, cs_extends_trans] >>
-  gvs[fresh_label_def, initial_compile_state_def]
+  gvs[fresh_label_def, initial_compile_state_def] >>
+  qexistsl_tac [`pre`, `post`, `before`] >> simp[]
 QED
 
 Theorem run_lowering_selected_entry_code:
@@ -255,13 +260,17 @@ Theorem run_lowering_selected_entry_code:
       fl sf = ((),sd) /\
     compile_entry_checks mc pay sc = ((),sk) /\
     sc.cs_current_bb = lbl /\ sc.cs_current_insts = [] /\
-    sf.cs_current_bb = "__entry" /\ sf.cs_current_insts = [] /\
+    sf.cs_current_bb = "__entry" /\ sf.cs_current_insts = [] /\ sf.cs_next_var = 0 /\
     fn_has_code sf sd efn /\ fn_has_code sc sk efn /\ cs_extends sd sc /\
     sd.cs_next_var <= sc.cs_next_var /\
     compile_register_positional_args ce pa 4 sk = (cenv,sa) /\
     compile_guarded_body cenv nr key tr view stmts rt sa = ((),sb) /\
     fn_has_code sa sb efn /\ fn_has_code sk sa efn /\
-    cs_extends sc sk /\ cs_extends sk sa /\ fn_inst_ids_distinct efn
+    cs_extends sc sk /\ cs_extends sk sa /\ fn_inst_ids_distinct efn /\
+    (?pre post before.
+      exts = pre ++ (lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt)::post /\
+      compile_external_fn_bodies pre sd = ((),before) /\
+      new_block lbl before = (before.cs_current_bb,sc))
 Proof
   strip_tac >>
   `fn_inst_ids_distinct efn` by
@@ -272,7 +281,8 @@ Proof
           MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]) >>
   drule_all run_lowering_retained_entry >> strip_tac >>
   drule_all runtime_selected_entry_code >> strip_tac >>
-  qexistsl_tac [`fl`, `sf`, `sd`, `sc`, `sk`, `cenv`, `sa`, `sb`] >> simp[]
+  qexistsl_tac [`fl`, `sf`, `sd`, `sc`, `sk`, `cenv`, `sa`, `sb`] >> simp[] >>
+  qexistsl_tac [`pre`, `post`, `before`] >> simp[]
 QED
 
 Theorem runtime_initial_extends[local]:

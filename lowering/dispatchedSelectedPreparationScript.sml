@@ -21,6 +21,7 @@ Theorem dispatched_selected_registration_preparation_nr:
   !tops rpolicy unit am tx ret vs mut nr args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
@@ -128,6 +129,7 @@ Proof
      drule_all_then ACCEPT_TAC lookup_function_external_raw_member) >>
   `4 <= LENGTH vs.vs_call_ctx.cc_calldata` by decide_tac >>
   `4 + SUM (MAP tv_abi_size tvs) <= LENGTH vs.vs_call_ctx.cc_calldata` by decide_tac >>
+  `~EXISTS external_has_defaults (FST (classify_functions tops))` by fs[] >>
   drule_all dispatched_selected_registration_prefix_nr >> strip_tac >>
   rename1 `fn_has_code st sa efn` >>
   rename1 `fn_has_code sa st' efn` >>
