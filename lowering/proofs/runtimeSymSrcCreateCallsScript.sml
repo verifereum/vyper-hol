@@ -143,6 +143,8 @@ Proof
   pure_rewrite_tac[runtime_sym_expr_contract_def] >>
   disch_then (drule_at (Pat `cfn _ _ _ _ = _`)) >>
   simp[] >> (impl_tac >- gvs[supported_expr_def]) >> strip_tac >>
+  `runtime_sym_value (ext_call_arg_value (lowered_value_type ce e) vv)` by
+    (Cases_on `vv` >> gvs[ext_call_arg_value_def, runtime_sym_value_def]) >>
   qpat_assum `compile_snapshot_vv _ _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_snapshot_vv) >>
   disch_then (qspec_then `tops` mp_tac) >> simp[] >> strip_tac >>
