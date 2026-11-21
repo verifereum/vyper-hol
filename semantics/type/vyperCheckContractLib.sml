@@ -325,9 +325,149 @@ val checker_datatypes =
    ``:vyperContext$call_txn``, ``:'a + 'b``,
    ``:'a list``, ``:'a option``, ``:'a # 'b``]
 
+(* Freshness checks (`id NOTIN FDOM var_types`) compare each declared name
+   with every earlier one. Through the generic rules each comparison walks
+   every character with CONS_11 and ORD/CHR numeral arithmetic. These
+   conversions decide literal string equality at the first differing
+   character, and membership in an INSERT chain of literals one key at a
+   time; they decline everything else. *)
+local
+  val string_ty = stringSyntax.string_ty
+  val char_ty = stringSyntax.char_ty
+  val c = mk_var ("c", char_ty)
+  val c1 = mk_var ("c1", char_ty)
+  val c2 = mk_var ("c2", char_ty)
+  val s = mk_var ("s", string_ty)
+  val s1 = mk_var ("s1", string_ty)
+  val s2 = mk_var ("s2", string_ty)
+  fun cons (h, t) = listSyntax.mk_cons (h, t)
+  (* |- !c s1 s2. (c::s1 = c::s2) <=> (s1 = s2) *)
+  val same_head = GENL [c, s1, s2] (RIGHT_CONV_RULE (REWRITE_CONV [])
+    (PART_MATCH lhs listTheory.CONS_11 (mk_eq (cons (c, s1), cons (c, s2)))))
+  (* |- !c1 c2 s1 s2. ((c1 = c2) <=> F) ==> ((c1::s1 = c2::s2) <=> F) *)
+  val diff_head = let
+    val hyp = mk_eq (mk_eq (c1, c2), F)
+  in
+    GENL [c1, c2, s1, s2] (DISCH hyp
+      (RIGHT_CONV_RULE (REWRITE_CONV [ASSUME hyp])
+        (PART_MATCH lhs listTheory.CONS_11
+          (mk_eq (cons (c1, s1), cons (c2, s2))))))
+  end
+  val cons_nil = GENL [c, s] (EQF_INTRO
+    (PART_MATCH (lhs o dest_neg) listTheory.NOT_CONS_NIL (cons (c, s))))
+  val nil_cons = GENL [c, s] (EQF_INTRO
+    (PART_MATCH (rhs o dest_neg) listTheory.NOT_NIL_CONS (cons (c, s))))
+  val refl = INST_TYPE [alpha |-> string_ty] boolTheory.REFL_CLAUSE
+  (* char_EQ_CONV results, indexed by the two character codes *)
+  val char_cache : thm option Array.array = Array.array (256 * 256, NONE)
+  fun char_ne c1 c2 = let
+    val key = 256 * Char.ord (stringSyntax.fromHOLchar c1) +
+              Char.ord (stringSyntax.fromHOLchar c2)
+  in
+    case Array.sub (char_cache, key) of
+      SOME th => th
+    | NONE => let
+        val th = stringLib.char_EQ_CONV (mk_eq (c1, c2))
+      in Array.update (char_cache, key, SOME th); th end
+  end
+  (* (l = r) <=> F for distinct literals l and r *)
+  fun differ l r =
+    case (Lib.total listSyntax.dest_cons l,
+          Lib.total listSyntax.dest_cons r) of
+      (SOME (c1, t1), SOME (c2, t2)) =>
+        if aconv c1 c2 then TRANS (SPECL [c1, t1, t2] same_head) (differ t1 t2)
+        else MP (SPECL [c1, c2, t1, t2] diff_head) (char_ne c1 c2)
+    | (SOME (c, t), NONE) => SPECL [c, t] cons_nil
+    | (NONE, SOME (c, t)) => SPECL [c, t] nil_cons
+    | (NONE, NONE) => raise UNCHANGED
+  val x = mk_var ("x", string_ty)
+  val k = mk_var ("k", string_ty)
+  val st = mk_var ("st", pred_setSyntax.mk_set_type string_ty)
+  val in_empty = GEN x (EQF_INTRO (ISPEC x pred_setTheory.NOT_IN_EMPTY))
+  val in_head = GENL [x, st] (EQT_INTRO
+    (ISPECL [x, st] pred_setTheory.COMPONENT))
+  val in_insert = ISPECL [x, k, st] pred_setTheory.IN_INSERT
+  (* |- !x k st. (x IN st <=> T) ==> (x IN k INSERT st <=> T) *)
+  val in_tail_t = let
+    val h = mk_eq (pred_setSyntax.mk_in (x, st), T)
+  in
+    GENL [x, k, st] (DISCH h
+      (RIGHT_CONV_RULE (REWRITE_CONV [ASSUME h]) in_insert))
+  end
+  (* |- !x k st. ((x = k) <=> F) ==> (x IN st <=> F) ==>
+                 (x IN k INSERT st <=> F) *)
+  val in_tail_f = let
+    val h1 = mk_eq (mk_eq (x, k), F)
+    val h2 = mk_eq (pred_setSyntax.mk_in (x, st), F)
+  in
+    GENL [x, k, st] (DISCH h1 (DISCH h2
+      (RIGHT_CONV_RULE (REWRITE_CONV [ASSUME h1, ASSUME h2]) in_insert)))
+  end
+  fun member x set =
+    case Lib.total pred_setSyntax.dest_insert set of
+      SOME (k, rest) =>
+        if aconv x k then SPECL [x, rest] in_head
+        else let
+          val th = member x rest
+        in
+          if Teq (rhs (concl th)) then MP (SPECL [x, k, rest] in_tail_t) th
+          else MP (MP (SPECL [x, k, rest] in_tail_f) (differ x k)) th
+        end
+    | NONE => SPEC x in_empty
+  fun literal_chain set =
+    case Lib.total pred_setSyntax.dest_insert set of
+      SOME (k, rest) =>
+        stringSyntax.is_string_literal k andalso literal_chain rest
+    | NONE => pred_setSyntax.is_empty set
+in
+  fun string_literal_eq_conv tm = let
+    val (l, r) = dest_eq tm
+  in
+    if not (stringSyntax.is_string_literal l andalso
+            stringSyntax.is_string_literal r) then raise UNCHANGED
+    else if aconv l r then SPEC l refl
+    else differ l r
+  end
+  fun string_literal_in_conv tm = let
+    val (x, set) = pred_setSyntax.dest_in tm
+  in
+    if stringSyntax.is_string_literal x andalso literal_chain set
+    then member x set else raise UNCHANGED
+  end
+end
+
+(* Every base compset's equality entry already holds the list, int and
+   numeral rules, and computeLib tries an entry's rules and conversions in
+   the order they were added, so a conversion added with add_conv is never
+   reached on strings. Rebuild the entry with the conversion first. Rules
+   compiled before this keep the old entry. *)
+fun add_conv_first (tm, arity, conv) cs = let
+  val {Name, Thy, ...} = dest_thy_const tm
+  val entry =
+    case List.find (fn ((name, thy), _) => name = Name andalso thy = Thy)
+           (computeLib.listItems cs) of
+      SOME (_, transforms) => transforms
+    | NONE => []
+  val rules = List.concat
+    (map (fn clauses.RRules ths => ths | _ => []) entry)
+  val convs = List.mapPartial
+    (fn clauses.Conversion c => SOME c | _ => NONE) entry
+  val general = prim_mk_const {Name = Name, Thy = Thy}
+in
+  computeLib.scrub_const cs general
+  |> computeLib.add_conv (tm, arity, conv)
+  |> computeLib.add_thms rules
+  |> (fn cs => foldl (fn (c, cs) => computeLib.add_conv (general, arity, c) cs)
+                     cs convs)
+end
+
 fun build_checker_base () =
   reduceLib.num_compset
   |> computeLib.copy
+  |> add_conv_first (inst [alpha |-> stringSyntax.string_ty]
+                       boolSyntax.equality, 2, string_literal_eq_conv)
+  |> add_conv_first (inst [alpha |-> stringSyntax.string_ty]
+                       pred_setSyntax.in_tm, 2, string_literal_in_conv)
   |> listSimps.list_rws
   |> pred_setLib.add_pred_set_compset
   (* INSERT_CONV dedups every INSERT node with an IN_CONV over the tail, which
