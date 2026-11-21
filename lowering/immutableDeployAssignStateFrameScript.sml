@@ -45,7 +45,7 @@ Proof
       name = SOME (tv',v') ==>
     ?v0. FLOOKUP (get_source_immutables ce.ce_module mods) name = SOME (tv',v0)` by
     (drule_all_then strip_assume_tac immutable_path_write_source >> gvs[] >>
-     simp[update_immutable_def,get_source_immutables_set_same,FLOOKUP_UPDATE] >>
+     simp[update_immutable_def,vyperTypeInitialStateTheory.get_source_immutables_set_same,FLOOKUP_UPDATE] >>
      rpt gen_tac >> Cases_on `name = id` >> simp[] >> metis_tac[]) >>
   fs[immutable_alloca_sep_def, immutable_decl_sep_def, local_region_def,
      lookup_var_def, local_ptrs_reserved_def] >>
