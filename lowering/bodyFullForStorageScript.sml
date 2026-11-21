@@ -1011,7 +1011,7 @@ Proof
 QED
 
 (* Pure scalar prefix steps have explicit finite ghost updates. *)
-Theorem for_storage_scalar_step[local]:
+Theorem for_storage_scalar_step_prov[local]:
   MEM opc [EQ;MUL;ADD] /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst iid opc [a;b] [out]) /\
@@ -1058,7 +1058,7 @@ Proof
   metis_tac[gas_origin_ptr_path_rules, APPEND]
 QED
 
-Resume for_storage_scalar_step[checks]:
+Resume for_storage_scalar_step_prov[checks]:
   Cases_on `opc = EQ`
   >- (gvs[] >>
       simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
@@ -1071,7 +1071,7 @@ Resume for_storage_scalar_step[checks]:
   irule ptr_inst_ok_copy_arith >> gvs[]
 QED
 
-Resume for_storage_scalar_step[ghosts]:
+Resume for_storage_scalar_step_prov[ghosts]:
   `new_site_bytes s (update_var out w s) = {}` by
     simp[new_site_bytes_def, update_var_def, FLOOKUP_DEF,
          EXTENSION, SF CONJ_ss] >>
@@ -1081,6 +1081,36 @@ Resume for_storage_scalar_step[ghosts]:
        written_taint_def, step_writes_def, store_taint_def, imm_taint_def,
        adopt_reset_def, range_bytes_def, source_memory_write_ranges_def,
        mk_inst_def, taint_component_equality]
+QED
+
+Finalise for_storage_scalar_step_prov[local]
+
+(* The scalar path with no input provenance just clears the output. *)
+Theorem for_storage_scalar_step[local]:
+  MEM opc [EQ;MUL;ADD] /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst iid opc [a;b] [out]) /\
+  eval_operand a s = SOME x /\ eval_operand b s = SOME y /\
+  op_taint tn a = {} /\ op_taint tn b = {} /\
+  op_prov G a = NONE /\ op_prov G b = NONE /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\
+  w = (if opc = EQ then bool_to_word (x=y)
+       else if opc = MUL then x*y else x+y) ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx),
+     DRESTRICT G (COMPL {out}), tn with t_var := tn.t_var |+ (out,{}))
+Proof
+  suspend "specialize"
+QED
+
+Resume for_storage_scalar_step[specialize]:
+  strip_tac >>
+  `set_prov G [out] (if opc = ADD then op_prov G a else NONE) =
+     DRESTRICT G (COMPL {out})` by simp[set_prov_def] >>
+  pop_assum (SUBST1_TAC o SYM) >>
+  irule for_storage_scalar_step_prov >>
+  metis_tac[]
 QED
 
 Finalise for_storage_scalar_step
@@ -1188,7 +1218,7 @@ Resume for_storage_array_head_prefix_at_prov[eq]:
   `get_instruction cb s.vs_inst_idx =
      SOME (mk_inst (h-2) EQ [Var idx;lvo] [dv])` by
     simp[venomInstTheory.get_instruction_def] >>
-  drule_at (Pos (el 3)) for_storage_scalar_step >>
+  drule_at (Pos (el 3)) for_storage_scalar_step_prov >>
   disch_then (qspecl_then [`n2w len`,`n2w k`,`0w`] mp_tac) >>
   simp[eval_operand_def, op_prov_def, set_prov_def,
        venomExecSemanticsTheory.bool_to_word_def] >>
@@ -1244,7 +1274,7 @@ Resume for_storage_array_head_prefix_at_prov[mul]:
   `q.vs_inst_idx = 0` by simp[Abbr `q`, jump_to_def] >>
   rpt gen_tac >>
   simp[Abbr `s2`, Abbr `G2`, Abbr `tn2`] >>
-  drule_at (Pos (el 3)) for_storage_scalar_step >>
+  drule_at (Pos (el 3)) for_storage_scalar_step_prov >>
   disch_then (qspecl_then [`n2w n`,`n2w k`,`n2w(k*n)`] mp_tac) >>
   simp[wordsTheory.word_mul_n2w, set_prov_def] >>
   disch_then irule >>
@@ -1266,7 +1296,7 @@ Resume for_storage_array_head_prefix_at_prov[optional]:
            (qspec_then `1` mp_tac) >> simp[]) >>
       `s2.vs_inst_idx = 1` by simp[Abbr `s2`] >>
       rpt gen_tac >>
-      drule_at (Pos (el 3)) for_storage_scalar_step >>
+      drule_at (Pos (el 3)) for_storage_scalar_step_prov >>
       disch_then (qspecl_then [`n2w(k*n)`,`1w`,`1w+n2w(k*n)`] mp_tac) >>
       simp[set_prov_def, op_prov_def] >> disch_then irule >>
       gvs[Abbr `s2`, Abbr `q`, Abbr `s1`, Abbr `G2`, Abbr `tn2`,
@@ -1296,7 +1326,7 @@ Resume for_storage_array_head_prefix_at_prov[last]:
   rpt gen_tac >>
   simp[Abbr `u`, Abbr `Gu`, Abbr `tnu`] >>
   qpat_x_assum `op_prov G3 base_op = op_prov G base_op` (SUBST1_TAC o SYM) >>
-  drule_at (Pos (el 3)) for_storage_scalar_step >>
+  drule_at (Pos (el 3)) for_storage_scalar_step_prov >>
   disch_then (qspecl_then
     [`(if dyn then 1w else 0w)+n2w(k*n)`,`slot`,
      `(if dyn then slot+1w else slot)+n2w(k*n)`] mp_tac) >>
