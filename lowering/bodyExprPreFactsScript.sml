@@ -241,6 +241,51 @@ Proof
   metis_tac[supported_string_reason_expr, supported_expr_body_calls]
 QED
 
+Theorem main_module_calls_resolve[local]:
+  contract_inv mods exps ctx cenv cx /\
+  EVERY (\c. FST c = NONE /\
+              IS_SOME (supported_function_decl (main_module mods) c Internal)) calls ==>
+  EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                    supported_program tops /\
+                    IS_SOME (supported_function_decl tops (NONE,SND c) Internal)) calls
+Proof
+  strip_tac >>
+  drule_then assume_tac contract_inv_main_module >>
+  `get_module_code cx NONE = SOME (main_module mods)` by
+    metis_tac[contract_inv_module_codes] >>
+  `supported_program (main_module mods)` by metis_tac[contract_inv_supported_module] >>
+  fs[EVERY_MEM, pairTheory.FORALL_PROD] >> rpt gen_tac >> strip_tac >> res_tac >> fs[]
+QED
+
+Theorem supported_stmts_main_calls_mods:
+  contract_inv mods exps ctx cenv cx ==>
+  (!bindings s. supported_stmt (main_module mods) bindings s ==>
+    EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                      supported_program tops /\
+                      IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
+      (int_calls_stmt s)) /\
+  (!bindings ss. supported_stmts (main_module mods) bindings ss ==>
+    EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                      supported_program tops /\
+                      IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
+      (int_calls_stmts ss))
+Proof
+  strip_tac >> conj_tac >> rpt gen_tac >> strip_tac >>
+  metis_tac[supported_stmts_main_calls, main_module_calls_resolve]
+QED
+
+Theorem supported_expr_body_calls_mods:
+  contract_inv mods exps ctx cenv cx /\ supported_expr (main_module mods) e ==>
+  ~expr_has_evm_run e /\
+  EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                    supported_program tops /\
+                    IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
+    (int_calls_expr e)
+Proof
+  strip_tac >> drule_then strip_assume_tac supported_expr_body_calls >>
+  simp[] >> irule main_module_calls_resolve >> simp[EVERY_CONJ] >> metis_tac[]
+QED
+
 (* A statement's expression meets the linked precondition. *)
 Theorem stmt_expr_body_pre_mods:
   !mods cenv cx env e es calls.
@@ -289,17 +334,9 @@ Theorem stmt_expr_body_pre_main_mods:
   expr_body_pre_mods mods cenv cx env e es
 Proof
   strip_tac >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_all_then strip_assume_tac supported_expr_body_calls_mods >>
   drule_then assume_tac contract_inv_main_module >>
-  `get_module_code cx NONE = SOME (main_module mods)` by
-    metis_tac[contract_inv_module_codes] >>
-  `supported_program (main_module mods)` by metis_tac[contract_inv_supported_module] >>
   drule_then assume_tac contract_inv_type_env >>
-  `EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
-                    supported_program tops /\
-                    IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
-     (int_calls_expr e)` by
-    (fs[EVERY_MEM, pairTheory.FORALL_PROD] >> rpt gen_tac >> strip_tac >> res_tac >> fs[]) >>
   qspecl_then [`mods`,`cenv`,`cx`,`env`,`e`,`es`,`calls`] mp_tac
     stmt_expr_body_pre_mods >>
   impl_tac
