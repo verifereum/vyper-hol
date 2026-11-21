@@ -52,14 +52,16 @@ val expected_status =
    ("test_expected_revert",true), ("test_unexpected_revert",false),
    ("test_null_code",true), ("test_raw_without_deployer_nonce",true),
    ("test_raw_deployer_nonce",true), ("test_raw_deployer_nonce_rewind",false),
-   ("test_raw_deployer_nonce_address_mismatch",false)];
+   ("test_raw_deployer_nonce_address_mismatch",false),
+   ("test_internal_error_on_expected_revert",false)];
 val expected_names = List.map #1 expected_status;
-(* Raw-deployment failures must fail for their own reason. *)
+(* These failures must fail for their own reason. *)
 val expected_errors =
   [("test_raw_deployer_nonce_rewind",
     "raw deployment deployer nonce below replay"),
    ("test_raw_deployer_nonce_address_mismatch",
-    "raw deployment address mismatch")];
+    "raw deployment address mismatch"),
+   ("test_internal_error_on_expected_revert", "Name not in scope")];
 val () =
   if List.map #1 prepared = expected_names then ()
   else raise Fail "prepared fixture names differ from expected names or order";

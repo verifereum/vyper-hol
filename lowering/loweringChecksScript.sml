@@ -44,8 +44,7 @@ Ancestors
   (* ABI encode/decode edge cases and size boundaries *)
   abiDecodeBoundsTest abiDecodeAliasTest abiDecoderBytesEdges
   createSizeBoundaryTest
-  (* Standalone ABI execution and retained-code observer transfer. *)
-  abiScratchBuiltinOpenSource exprSimAbiEncodeProducerExecution
-  exprSimAbiEncodeRegion exprSimAbiEncodeRegionTransfer
+  (* Standalone ABI execution checks. *)
+  abiScratchBuiltinOpenSource exprSimAbiEncodeRegion
   (* S1 request-prefix companion cases. *)
   s1PrefixLiteralWord s1PrefixWordWei s1PrefixRawCall

@@ -13,12 +13,6 @@ Libs
   monadsyntax
 
 
-Theorem log_scalar_post_value_type:
-  supported_scalar_type (expr_type e) ==> post_value_type cenv e = expr_type e
-Proof
-  strip_tac >> drule supported_scalar_word_or_bytestring >> strip_tac >> simp[]
-QED
-
 (* ===== Source sequencing ===== *)
 
 Theorem eval_exprs_cons_bind:
@@ -31,25 +25,6 @@ Proof
   Cases_on `raw` >> simp[] >>
   Cases_on `read_result cx x' st1` >> rename1 `_ = (r2, st2)` >>
   Cases_on `r2` >> simp[]
-QED
-
-Theorem ignore_bind_bind_return:
-  ignore_bind (bind a k) (return ()) =
-    bind a (\v. ignore_bind (k v) (return ()))
-Proof
-  simp[FUN_EQ_THM, ignore_bind_def, bind_def] >> gen_tac >>
-  Cases_on `a x` >> rename1 `a x = (r1, st1)` >> Cases_on `r1` >> simp[]
-QED
-
-Theorem stmt_state_rel_any_gas_obs[local]:
-  stmt_state_rel H ctx func cenv cx es s ==>
-  stmt_state_rel H ctx func cenv cx (es with gas_obs := gs) s
-Proof
-  strip_tac >>
-  `s with <|vs_gas_readings := s.vs_gas_readings;
-            vs_inst_idx := s.vs_inst_idx|> = s` by
-    simp[venomStateTheory.venom_state_component_equality] >>
-  metis_tac[msg_gas_state_frame]
 QED
 
 (* The error results the arguments of a log may end in. *)

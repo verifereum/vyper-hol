@@ -605,15 +605,18 @@ Definition evaluate_as_wei_value_def:
           | MEther => 1000000000000000000000000
           | GEther => 1000000000000000000000000000
           | TEther => 1000000000000000000000000000000 in
-  let r = case v of IntV i => i * m
-                  | DecimalV i => (i * m) / decimal_scale
-                  | _ => -1 in
-  if 0 ≤ r then
-    let u = Unsigned 256 in
-    if within_int_bound u r then
-      INL $ IntV r
-    else INR (RuntimeError "ewv bound")
-  else INR (TypeError "ewv neg")
+  let r = case v of IntV i => SOME (i * m)
+                  | DecimalV i => SOME ((i * m) / decimal_scale)
+                  | _ => NONE in
+  case r of
+  | NONE => INR (TypeError "ewv type")
+  | SOME r =>
+    if 0 ≤ r then
+      let u = Unsigned 256 in
+      if within_int_bound u r then
+        INL $ IntV r
+      else INR (RuntimeError "ewv bound")
+    else INR (RuntimeError "ewv neg")
 End
 
 val evaluate_as_wei_value_pre_def =

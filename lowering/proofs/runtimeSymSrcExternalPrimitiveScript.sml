@@ -1,16 +1,11 @@
 Theory runtimeSymSrcExternalPrimitive
 Ancestors
+  listZipProps
   runtimeSymSrcBlockEmission
   runtimeSymSrcCallStaging runtimeSymSrcContextComplete runtimeSymSrcContextCopy
   runtimeSymSrcContext runtimeSymSrcContextTyped abiEncodeValuesCode abiEncoderChildCode
   runtimeSymSrcEmission runtimeSymSrcInterfaces exprLowering compileEnv emitHelper
   loweringShapeDefs venomInst list stackPlanTypes
-
-Theorem runtime_sym_zip_fst:
-  !xs ys P. EVERY P xs ==> EVERY (\x. P (FST x)) (ZIP (xs,ys))
-Proof
-  Induct >> Cases_on `ys` >> simp[ZIP_def]
-QED
 
 Theorem runtime_sym_external_return_cond[local]:
   (!dst src hi info s u s'.
@@ -194,7 +189,7 @@ Resume runtime_sym_external_call_kwargs_cond[encode]:
   simp[comp_bind_def, comp_ignore_bind_def] >>
   ntac 2 (pairarg_tac >> simp[]) >> strip_tac >>
   `EVERY (\x. runtime_sym_value (FST x)) (ZIP (vals,tys))`
-    by (irule runtime_sym_zip_fst >> simp[]) >>
+    by (irule (SIMP_RULE bool_ss [combinTheory.o_DEF] EVERY_FST_ZIP) >> simp[]) >>
   qpat_assum `emit_op ADD [buf_op_alloc.buf_operand; Lit 32w] _ = _`
     (mp_then Any mp_tac runtime_sym_emit_op) >>
   simp[is_label_operand_def] >> strip_tac >>

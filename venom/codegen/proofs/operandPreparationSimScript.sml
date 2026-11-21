@@ -59,7 +59,7 @@ Proof
   `!op. LIST_ELEM_COUNT op operands <= LIST_ELEM_COUNT op mid.ps_stack` by
     (drule_all emit_input_plan_materialised >> simp[]) >>
   `LENGTH operands <= LENGTH mid.ps_stack` by
-    (irule materialised_operands_length >> first_assum ACCEPT_TAC) >>
+    (irule reorderPreparationInventoryPropsTheory.list_elem_count_dom_length >> first_assum ACCEPT_TAC) >>
   `spill_alloc_layout_wf mid.ps_alloc mid.ps_spilled` by
     (drule_all emit_input_plan_layout_wf >> simp[]) >>
   `asm_block_at prog st.as_pc (execute_plan initial_fmp input_ops) /\
@@ -98,7 +98,7 @@ Proof
   `!op. LIST_ELEM_COUNT op operands <= LIST_ELEM_COUNT op mid.ps_stack` by
     (drule_all emit_input_plan_materialised >> simp[]) >>
   `LENGTH operands <= LENGTH mid.ps_stack` by
-    (irule materialised_operands_length >> first_assum ACCEPT_TAC) >>
+    (irule reorderPreparationInventoryPropsTheory.list_elem_count_dom_length >> first_assum ACCEPT_TAC) >>
   `residual_budget_wf alloc_base operands mid` by
     (mp_tac (Q.SPECL [`operands`,`[]`,`alloc_base`,`opc`,`nl`,`ps`,
        `input_ops`,`mid`] emit_input_plan_residual_budget_wf) >>

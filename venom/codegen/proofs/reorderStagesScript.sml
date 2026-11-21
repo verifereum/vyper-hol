@@ -56,9 +56,6 @@ Proof
   Cases_on `fuel` >> simp[reduce_depth_plan_def]
 QED
 
-Theorem reorder_plan_split = reorderPreparationPropsTheory.reorder_plan_split
-Theorem plan_steps_cons_result = reorderPreparationPropsTheory.plan_steps_cons_result
-
 Theorem reorder_one_stages:
   !dfg pending idx op ps.
     reorder_one dfg pending idx op ps =
