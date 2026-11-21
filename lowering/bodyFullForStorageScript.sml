@@ -1,7 +1,7 @@
 (* Compiler geometry, child representation, joint copy and endpoint interpretation
    for storage/transient For iteration. The element copy creates its own CFG. *)
 Theory bodyFullForStorage
-Ancestors exprSimSubscriptArrayLiveStorageSuffix[qualified,ignore_grammar] exprPtrStorageLoad[qualified,ignore_grammar] exprSimConcatResult[qualified,ignore_grammar] exprSimAggregatesAllocCounted[qualified,ignore_grammar] marker[qualified,ignore_grammar] bodySim[qualified,ignore_grammar]
+Ancestors exprSimSubscriptArrayLiveStorageSuffix[qualified,ignore_grammar] exprPtrStorageLoad[qualified,ignore_grammar] exprSimConcatResult[qualified,ignore_grammar] exprSimAggregatesAllocCounted[qualified,ignore_grammar] marker[qualified,ignore_grammar] bodySim
   bodyFullShadowBodyInv
   stmtLowering exprLowering compileEnv context stmtSimProps
   stmtSimForArrayParts stmtLoweringMono copyExecution emitHelper emitHelperProps
@@ -49,7 +49,7 @@ Ancestors exprSimSubscriptArrayLiveStorageSuffix[qualified,ignore_grammar] exprP
   bodyFullIfExpReach[qualified,ignore_grammar]
   stmtSimForParts[qualified] vyperInterpreter[qualified] gasContext[qualified] fragGasCopyLoop augAssignPtrScalarSafety augAssignPtrScalarCertificate
   supportedExprForms whitelistVisibility immutableLocationProps
-  bodyFullForRounds[qualified] gasExemptCert[qualified] forStorageHeadFrame
+  bodyFullForRounds[qualified] gasExemptCert[qualified] forStorageBodyLand[qualified] forStorageHeadFrame
 Libs
   monadsyntax
 
@@ -121,6 +121,10 @@ Proof
        LET_THM, vv_location_def, vv_operand_def, mk_ptr_def,
        is_slot_addressed_def, word_scale_def, bound_length_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  ntac 5 (pairarg_tac >> gvs[]) >>
+  ntac 5 (pairarg_tac >> gvs[]) >>
+  ntac 5 (pairarg_tac >> gvs[]) >>
+  ntac 5 (pairarg_tac >> gvs[]) >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> metis_tac[]
 QED
 
@@ -2920,275 +2924,36 @@ Theorem for_storage_body_post_land_full:
          (if raw = INL () then jump_to incr t else t))
 Proof
   rpt gen_tac >>
-  qpat_abbrev_tac `eb = ei with scopes := (FEMPTY |+ (id, _)) :: ei.scopes` >>
-  qpat_abbrev_tac `explicit = gas_explicit_sites ctx shadow_ctx` >>
-  abbrev_lambda_tac "Fr" 5 0 `alloca_history func s /\ _` >>
-  abbrev_lambda_tac "Ready" 6 2 `k < len /\ _` >>
-  abbrev_lambda_tac "Done" 5 1 `stmt_lands lctx sb (INL ()) t /\ _` >>
-  abbrev_lambda_tac "Qb" 6 1 `stmt_lands (InLoop exit incr) sb1 res t /\ _` >>
-  abbrev_lambda_tac "Keep" 3 0 `lookup_var idx t = lookup_var idx s /\ _` >>
-  strip_tac >> rename1 `value_has_type tyv v` >>
-  rename1 `eval_stmts cx stmts _ = _` >>
-  `ef with gas_obs := [] = ef` by
-    (simp[NoAsms, evaluation_state_component_equality] >>
-     first_assum ACCEPT_TAC) >>
-  `eval_stmts cx stmts (eb with gas_obs := xs) = (raw,ef)` by
-    (qpat_assum `ef with gas_obs := [] = ef` (fn upd =>
-       qpat_assum `!tail. eval_stmts _ _ _ = _`
-         (qspec_then `[]` (ACCEPT_TAC o REWRITE_RULE [APPEND_NIL, upd])))) >>
-  `eval_stmts cx stmts
-     ((ei with gas_obs := xs) with scopes :=
-       (FEMPTY |+ (id, <|assignable := F; type := tyv;
-         value := v; popped := []|>))::(ei with gas_obs := xs).scopes) =
-     (raw,ef)` by
-    (qpat_x_assum `eval_stmts _ _ (eb with gas_obs := xs) = _` mp_tac >>
-     simp[NoAsms, Abbr `eb`, evaluation_state_fupdfupds,
-       evaluation_state_fn_updates]) >>
-  `lookup_scopes id (ei with gas_obs := xs).scopes = NONE` by
-    (pure_rewrite_tac [evaluation_state_accfupds] >>
-     first_assum ACCEPT_TAC) >>
-  drule_all array_body_scope_shape >> strip_tac >>
-  qunabbrev_tac `Qb` >> qunabbrev_tac `Keep` >>
-  RULE_ASSUM_TAC BETA_RULE >>
-  qpat_x_assum `?c3. stmt_lands _ _ _ _ /\ _` strip_assume_tac >>
-  `stmt_state_rel H ctx func c0 cx (ef with scopes := rest) t` by
-    (irule array_body_scope_projection >>
-     conj_tac >- (qexists_tac `sc` >> asm_rewrite_tac[]) >>
-     qexistsl_tac [`bc`, `c3`, `eb with gas_obs := xs`, `raw`, `stmts`] >>
-     asm_rewrite_tac[evaluation_state_accfupds]) >>
-  `cenv_top_ext c0 c3 ef.scopes` by
-    (qpat_assum `eval_stmts _ _ (eb with gas_obs := xs) = _`
-       (mp_tac o MATCH_MP eval_stmts_preserves_scopes_dom) >>
-     simp_tac (srw_ss()) [preserves_scopes_dom_def] >> strip_tac >>
-     irule cenv_top_ext_trans >>
-     qexistsl_tac [`bc`, `eb.scopes`] >> asm_rewrite_tac[]) >>
-  `return_buf_sep d c0 (ef with scopes := rest) t` by
-    (irule return_buf_sep_pop >> qexistsl_tac [`c3`, `sc`] >>
-     `((ef with scopes := rest) with scopes := sc::rest) = ef` by
-       simp[evaluation_state_component_equality] >>
-     asm_rewrite_tac[evaluation_state_accfupds, combinTheory.K_THM] >>
-     qpat_x_assum `cenv_top_ext c0 c3 ef.scopes` mp_tac >>
-     qpat_assum `ef.scopes = sc::rest` (rewrite_tac o single)) >>
-  `ghost_inv_at (DF H) lo d c0 cx (ef with scopes := rest) G1 tn1 t` by
-    (irule ghost_inv_at_pop >>
-     conj_tac >- (qexists_tac `sc` >> asm_rewrite_tac[]) >>
-     qexists_tac `c3` >> asm_rewrite_tac[]) >>
-  `Fr c3 ef t G1 tn1` by
-    (qpat_assum `Abbrev (Fr = _)` (fn ab =>
-       pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] ab]) >>
-     BETA_TAC >> irule for_full_frame_compose >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     goal_assum (drule_at Any) >>
-     qexists_tac `G` >>
-     qpat_assum `Abbrev (Fr = _)` (fn ab =>
-       qpat_assum `Fr bc eb s G tn`
-         (strip_assume_tac o BETA_RULE o
-           PURE_REWRITE_RULE [REWRITE_RULE [markerTheory.Abbrev_def] ab])) >>
-     asm_rewrite_tac[]) >>
-  `Fr c0 (ef with scopes := rest) t G1 tn1` by
-    (qpat_assum `Abbrev (Fr = _)` (fn ab =>
-       (pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] ab] >>
-        qpat_assum `Fr c3 ef t G1 tn1`
-          (strip_assume_tac o BETA_RULE o
-            PURE_REWRITE_RULE [REWRITE_RULE [markerTheory.Abbrev_def] ab]))) >>
-     BETA_TAC >> irule for_full_frame_pop >>
-     goal_assum (drule_at Any) >> asm_rewrite_tac[] >>
-     conj_tac >- (qexists_tac `sc` >> asm_rewrite_tac[]) >>
-     qexists_tac `c3` >> asm_rewrite_tac[] >>
-     metis_tac[for_full_frame_pop]) >>
-  `MAP FDOM ei.scopes = MAP FDOM rest` by
-    (qpat_assum `eval_stmts _ _ (eb with gas_obs := xs) = _`
-       (mp_tac o MATCH_MP eval_stmts_preserves_scopes_dom) >>
-     simp[NoAsms, preserves_scopes_dom_def, Abbr `eb`,
-       evaluation_state_accfupds] >> asm_rewrite_tac[] >> simp[]) >>
-  `lookup_scopes id rest = NONE` by
-    (irule lookup_scopes_none_map_fdom >>
-     qexists_tac `ei.scopes` >> asm_rewrite_tac[]) >>
-  `stmt_state_rel H ctx func c0 cx ei s` by
-    (`ei = eb with scopes := ei.scopes` by
-       simp[NoAsms, Abbr `eb`, evaluation_state_fupdfupds] >>
-     pop_assum SUBST1_TAC >> irule stmt_state_rel_pop_top_ext >>
-     reverse conj_tac >- (qexists_tac `bc` >> asm_rewrite_tac[]) >>
-     simp[NoAsms, Abbr `eb`, evaluation_state_accfupds] >>
-     asm_rewrite_tac[FDOM_FUPDATE, FDOM_FEMPTY, IN_INSERT, NOT_IN_EMPTY]) >>
-  `!name b sz. local_region c0 rest t name b sz ==>
-     w2n dst+nb <= b \/ b+sz <= w2n dst` by
-    (rpt strip_tac >>
-     `local_region c0 ei.scopes s name b sz` by
-       (irule (INST_TYPE [alpha |-> ``:256``] local_region_kept) >>
-        reverse conj_tac >-
-          (qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> first_assum ACCEPT_TAC) >>
-        qexistsl_tac [`ef with scopes := rest`, `t`, `sb0`] >>
-        asm_rewrite_tac[evaluation_state_accfupds] >> simp[]) >>
-     metis_tac[]) >>
-  `ptr_covers G1 tn1 p t nb` by
-    (irule decoderGhostFramePtrTheory.ptr_covers_frame >>
-     qexistsl_tac [`G`, `s`, `tn`] >> asm_rewrite_tac[] >>
-     metis_tac[]) >>
-  `(raw = INL () \/ raw = INR ContinueException) ==>
-     expr_sim_inv c0 cx env (ef with scopes := rest)` by
-    (strip_tac >> irule expr_sim_inv_for_pop >>
-     conj_tac >- (qexists_tac `sc` >> first_assum ACCEPT_TAC) >>
-     goal_assum (drule_at Any) >>
-     asm_rewrite_tac[exprSimHypsDefsTheory.expr_sim_inv_gas_obs] >>
-     metis_tac[]) >>
-  `return_buf_frame d c0 sa0 t /\ ret_pc_ok c0 sa0 t` by
-    (conj_tac >- (irule return_buf_frame_frame >>
-       qexistsl_tac [`c0`, `s`, `sa0`] >>
-       simp[] >> rpt strip_tac >>
-       qpat_assum `!x w. not_fresh_at sb0 x /\ _ ==> _` irule >>
-       asm_rewrite_tac[] >> first_x_assum irule >> first_assum ACCEPT_TAC) >>
-     irule ret_pc_ok_frame >> qexistsl_tac [`c0`, `s`, `sa0`] >>
-     simp[] >> rpt strip_tac >>
-     qpat_assum `!x w. not_fresh_at sb0 x /\ _ ==> _` irule >>
-     asm_rewrite_tac[] >> first_x_assum irule >> first_assum ACCEPT_TAC) >>
-  `MEM (StorageRoot tr off (ArrayTV tyv bd)) ef.storage_trace` by
-    (mp_tac (Q.SPECL [`cx`, `stmts`] (cj 2 evaluate_storage_trace_frame)) >>
-     rewrite_tac[storage_trace_frame_def] >>
-     disch_then (qspecl_then [`eb with gas_obs := xs`,
-       `(eb with gas_obs := xs).storage_trace`] mp_tac) >>
-     simp[NoAsms] >>
-     Cases_on `eval_stmts cx stmts
-       ((eb with gas_obs := xs) with storage_trace := [])` >>
-     simp[NoAsms] >> strip_tac >>
-     pop_assum mp_tac >>
-     RULE_ASSUM_TAC (REWRITE_RULE [evaluation_state_fupdcanon]) >>
-     asm_rewrite_tac[evaluation_state_fupdcanon] >>
-     simp[Abbr `eb`, evaluation_state_accfupds, MEM_APPEND] >>
-     metis_tac[]) >>
-  `storage_well_formed_on cx (ef with scopes := rest) (FST H)` by
-    (`storage_well_formed_on cx (ef with scopes := rest) (FST H) <=>
-       storage_well_formed_on cx ef (FST H)` by
-       (irule storage_well_formed_on_backends >> simp[]) >>
-     asm_rewrite_tac[]) >>
-  `cenv_top_ext c0 c0 rest` by simp[cenv_top_ext_refl] >>
-  Cases_on `raw = INL ()`
-  >- suspend "normal" >>
-  Cases_on `raw = INR BreakException`
-  >- suspend "break" >>
-  suspend "continue"
-QED
-
-Resume for_storage_body_post_land_full[break]:
-  qpat_x_assum `raw = INR BreakException` SUBST_ALL_TAC >>
-  simp[NoAsms, vyperInterpreterTheory.handle_loop_exception_def, return_def] >>
-  qexistsl_tac [`sc`, `rest`] >>
-  asm_rewrite_tac[] >>
-  simp[gas_origin_ptr_path_rules] >>
-  simp[Abbr `Done`] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  RULE_L_ASSUM_TAC
+    (CONJUNCTS o PURE_REWRITE_RULE [evaluation_state_fupdcanon,
+      evaluation_state_accfupds, combinTheory.K_THM] o BETA_RULE) >>
+  rename1 `value_has_type tyv item` >> rename1 `supported_stmts tops bindings stmts` >>
+  mp_tac
+    (forStorageBodyLandTheory.for_storage_body_post_land_at |> SPEC_ALL |>
+     Q.INST [`bop` |-> `Lit slot`, `v` |-> `item`] |>
+     PURE_REWRITE_RULE [LET_THM] |> BETA_RULE |>
+     PURE_REWRITE_RULE [evaluation_state_fupdcanon, evaluation_state_accfupds,
+                        combinTheory.K_THM]) >>
+  impl_tac >-
+    (simp_tac bool_ss [operand_distinct] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`sc`,`rest`,`stop`] strip_assume_tac) >>
+  RULE_ASSUM_TAC
+    (PURE_REWRITE_RULE [evaluation_state_accfupds, combinTheory.K_THM] o
+     CONV_RULE (DEPTH_CONV BETA_CONV)) >>
+  qexistsl [`sc`,`rest`,`stop`] >> BETA_TAC >>
+  pure_rewrite_tac[evaluation_state_accfupds, combinTheory.K_THM] >>
+  ntac 5 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  disch_tac >> qexistsl [`k`,`off`] >>
+  ntac 6 (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac >-
-    (qpat_x_assum `stmt_lands (InLoop _ _) _ _ _` mp_tac >>
-     simp[stmt_lands_def]) >>
-  qpat_assum `return_buf_frame d c0 sa0 t` mp_tac >>
-  Cases_on `d` >- simp[NoAsms, return_buf_frame_def] >>
-  rename1 `return_buf_frame (SOME pair) c0 sb t` >> Cases_on `pair` >>
-  simp[NoAsms, return_buf_frame_def] >>
-  strip_tac >> qexistsl_tac [`x`, `slot_size`] >> asm_rewrite_tac[] >>
-  qpat_assum `!x sz. c0.ce_return_buf = _ ==> not_fresh_at sb x` irule >>
-  qexists_tac `slot_size` >> first_assum ACCEPT_TAC
+    (qpat_assum `ef.storage_trace = ei.storage_trace ++ _` SUBST1_TAC >>
+     simp[MEM_APPEND, NoAsms] >> disj1_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `~stop ==> _` drule >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-
-Resume for_storage_body_post_land_full[continue]:
-  `raw = INR ContinueException` by
-    (qpat_assum `stmt_lands (InLoop _ _) _ _ _`
-       (mp_tac o REWRITE_RULE [stmt_lands_def]) >>
-     asm_rewrite_tac[] >> metis_tac[]) >>
-  pop_assum SUBST_ALL_TAC >>
-  simp[NoAsms, vyperInterpreterTheory.handle_loop_exception_def, return_def] >>
-  qexistsl_tac [`sc`, `rest`] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- (irule (cj 1 gas_origin_ptr_path_rules) >> first_assum ACCEPT_TAC) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qunabbrev_tac `Ready` >> BETA_TAC >> qexistsl_tac [`k`, `off`] >>
-  ntac 4 (conj_tac >- first_assum ACCEPT_TAC) >>
-  qpat_x_assum `vs = GENLIST _ _` kall_tac >>
-  qpat_assum `lookup_var idx t = _ /\ _` strip_assume_tac >>
-  simp[evaluation_state_accfupds, eval_operand_def, op_taint_def] >>
-  conj_tac >-
-    (qpat_assum `stmt_lands (InLoop _ _) _ _ _` mp_tac >>
-     simp[NoAsms, stmt_lands_def]) >>
-  conj_tac >-
-    (qpat_assum `stmt_lands (InLoop _ _) _ _ _` mp_tac >>
-     simp[NoAsms, stmt_lands_def]) >>
-  qpat_assum `!name b sz. local_region c0 rest t name b sz ==> _` mp_tac >>
-  simp[NoAsms, ADD_COMM]
-QED
-
-Resume for_storage_body_post_land_full[normal]:
-  qpat_x_assum `raw = INL ()` SUBST_ALL_TAC >>
-  `~block_is_terminated sb1` by metis_tac[] >>
-  `emit_inst JMP [Label incr] [] sb1 = ((),sj)` by
-    (qpat_assum `emit_jmp_if_not_terminated incr sb1 = _` mp_tac >>
-     simp[NoAsms, emit_jmp_if_not_terminated_def, comp_get_def, comp_bind_def] >>
-     asm_rewrite_tac[]) >>
-  `t.vs_current_bb = sb1.cs_current_bb /\
-   t.vs_inst_idx = LENGTH sb1.cs_current_insts` by
-    (qpat_assum `stmt_lands (InLoop _ _) _ _ _` mp_tac >>
-     simp[NoAsms, stmt_lands_def]) >>
-  `?bb. lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
-    get_instruction bb t.vs_inst_idx =
-      SOME (mk_inst sb1.cs_next_id JMP [Label incr] [])` by
-    (asm_rewrite_tac[] >> irule place_copy_emit_instruction >>
-     qexists_tac `sj` >> asm_rewrite_tac[]) >>
-  `allocas_from lo t` by
-    (qpat_assum `ghost_inv_at _ _ _ c0 _ _ _ _ t` mp_tac >>
-     simp[NoAsms, ghost_inv_at_def]) >>
-  `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (t,G1,tn1) []
-    (OK (jump_to incr t),G1,tn1)` by
-    (irule fragGasOriginPtrLoopTheory.jump_origin_ptr_path >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl_tac [`bb`, `mk_inst sb1.cs_next_id JMP [Label incr] []`] >>
-     asm_rewrite_tac[] >>
-     simp[NoAsms, mk_inst_def, is_terminator_def,
-       unitTransformDefsTheory.inst_mem_below_frontier_def, inst_dload_in_section_def,
-       source_memory_read_ranges_def, source_memory_write_ranges_def,
-       venomExecPropsTheory.step_jmp_behavior] >>
-     simp[ptrSafeRunTheory.ptr_safe_step_def, ptrSafeRunTheory.ptr_inst_ok_def, access_ok_def, taint_ok_def,
-       mk_inst_def, step_inst_non_invoke, venomExecPropsTheory.step_jmp_behavior, jump_to_def,
-       source_memory_write_ranges_def, source_memory_read_ranges_def, op_taint_def]) >>
-  `return_buf_sep d c0 (ef with scopes := rest) (jump_to incr t)` by
-    simp[return_buf_sep_jump] >>
-  `Fr c0 (ef with scopes := rest) (jump_to incr t) G1 tn1` by
-    (qpat_assum `Fr c0 (ef with scopes := rest) t G1 tn1` mp_tac >>
-     simp[NoAsms, Abbr `Fr`] >> strip_tac >>
-     conj_tac >- (irule alloca_history_jump >> simp[jump_to_def] >>
-       qexists_tac `t` >> simp[]) >>
-     `allocas_below_fmp (jump_to incr t) = allocas_below_fmp t` by
-       simp[allocas_below_fmp_def, jump_to_def] >>
-     asm_rewrite_tac[] >>
-     simp[jump_to_def, lookup_var_def] >>
-     irule alloca_frame_same_state >> qexists_tac `t` >>
-     simp[jump_to_def]) >>
-  simp[NoAsms] >> qexistsl_tac [`sc`, `rest`] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- simp[] >>
-  conj_tac >- simp[jump_to_def] >>
-  qunabbrev_tac `Ready` >> BETA_TAC >> qexistsl_tac [`k`, `off`] >>
-  ntac 4 (conj_tac >- first_assum ACCEPT_TAC) >>
-  qpat_x_assum `vs = GENLIST _ _` kall_tac >>
-  qpat_assum `lookup_var idx t = _ /\ _` strip_assume_tac >>
-  simp[evaluation_state_accfupds, stmt_state_rel_jump_to,
-    ghost_inv_at_jump, return_buf_frame_jump_to, ret_pc_ok_jump_to,
-    jump_to_def, lookup_var_def, eval_operand_def, op_taint_def] >>
-  conj_tac >-
-    (irule assignTuplePtrCopyLenTheory.ptr_covers_lookup_frame >>
-     qexistsl_tac [`G1`, `t`, `tn1`] >>
-     simp[NoAsms, lookup_var_def] >> first_assum ACCEPT_TAC) >>
-  rpt gen_tac >>
-  `local_region c0 rest
-    (t with <|vs_prev_bb := SOME sb1.cs_current_bb;
-              vs_current_bb := incr; vs_inst_idx := 0|>) name b sz =
-   local_region c0 rest t name b sz` by
-    (irule local_region_lookup_cong >> simp[lookup_var_def]) >>
-  asm_rewrite_tac[] >>
-  qpat_assum `!name b sz. local_region c0 rest t name b sz ==> _` mp_tac >>
-  simp[NoAsms, ADD_COMM] >> metis_tac[]
-QED
-
-Finalise for_storage_body_post_land_full
 
 (* Live outer locals have bounded, well-formed value footprints. *)
 Theorem for_storage_outer_local_footprint:
