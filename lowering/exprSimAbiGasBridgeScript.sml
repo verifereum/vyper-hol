@@ -78,7 +78,7 @@ Proof
   simp[get_instruction_def, EL_APPEND_EQN]
 QED
 
-Theorem frag_observer_lookup_filter[local]:
+Theorem frag_observer_lookup_filter:
   !blocks lbl bb keep.
     lookup_block lbl blocks = SOME bb /\ keep bb ==>
     lookup_block lbl (FILTER keep blocks) = SOME bb
@@ -560,8 +560,9 @@ Proof
   disch_then (qspec_then `\i. i.inst_id` mp_tac) >> simp[]
 QED
 
-Theorem frag_observer_ids_distinct:
-  fn_has_code sa sb fn /\ frag_gas_free sa sb /\ fn_inst_ids_distinct fn /\
+Theorem frag_observer_ids_distinct_from_labels:
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+  ~MEM sb.cs_current_bb (MAP (\bb. bb.bb_label) (emitted_blocks sa sb)) /\
   (!inst. MEM inst (fn_insts fn) ==> inst.inst_id <> id) ==>
   fn_inst_ids_distinct (frag_observer sa sb fn id)
 Proof
@@ -569,7 +570,7 @@ Proof
   `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
   `~MEM bb (emitted_blocks sa sb)` by
     (drule lookup_block_label >> strip_tac >>
-     fs[frag_gas_free_def, MEM_MAP] >> metis_tac[]) >>
+     fs[MEM_MAP] >> metis_tac[]) >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions ++
      FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions)
        (FILTER (\bb. MEM bb (emitted_blocks sa sb)) fn.fn_blocks)))` by
@@ -586,6 +587,15 @@ Proof
      fs[fn_insts_def, frag_fn_insts_blocks_member] >> metis_tac[]) >>
   fs[fn_inst_ids_distinct_def, frag_observer_def, MAP_APPEND, ALL_DISTINCT_APPEND,
      mk_inst_def] >> metis_tac[]
+QED
+
+Theorem frag_observer_ids_distinct:
+  fn_has_code sa sb fn /\ frag_gas_free sa sb /\ fn_inst_ids_distinct fn /\
+  (!inst. MEM inst (fn_insts fn) ==> inst.inst_id <> id) ==>
+  fn_inst_ids_distinct (frag_observer sa sb fn id)
+Proof
+  strip_tac >> irule frag_observer_ids_distinct_from_labels >>
+  fs[frag_gas_free_def] >> metis_tac[]
 QED
 
 Theorem frag_observer_nonstop_inclusion:

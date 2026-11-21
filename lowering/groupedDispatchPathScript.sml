@@ -1,0 +1,458 @@
+(* Allocation and selector execution through grouped dispatch. *)
+Theory groupedDispatchPath
+Ancestors
+  groupedAllocatorStep groupedEntryResources groupedInternalLabels
+  groupedSelectorPath groupedEntryCounters groupedKeywordAllocas groupedKeywordDecode
+  exprLoweringProps ptrDiscipline fragGasOriginPtr moduleLoweringProps
+  selectedAcceptedFold loweringShapeDefs venomState words list entryPrefixPtr
+  entryDispatchPtr fragExec compileEnv moduleLowering bodyPtrDefs exprSimWordBuiltins
+  defaultEntryPrefix fragGasOriginPtrLoop allocaFrontierBound allocaBudgetProps
+  venomMemDefs loweringStateRelDefs venomInst venomExecSemantics
+
+Theorem grouped_registration_vars_pc[local]:
+  vars_pc_only s t ==>
+  t.vs_initial_fmp = s.vs_initial_fmp /\
+  t.vs_alloca_next = s.vs_alloca_next /\
+  pending_alloca_size fn t = pending_alloca_size fn s /\
+  (allocas_below_fmp t <=> allocas_below_fmp s)
+Proof
+  simp[vars_pc_only_def, venom_state_component_equality,
+       pending_alloca_size_def, allocas_below_fmp_def]
+QED
+
+Theorem grouped_default_group_missed_origin:
+  compile_create_kwarg_allocas common.ec_env specs sa = (vars,sc) /\
+  compile_group_entries (Var mid) entries common vars off sc = ((),sd) /\
+  fn_has_code sa sc fn /\ fn_has_code sc sd fn /\
+  EVERY (\(_,name,_,_). ~internal_label_ok name) entries /\
+  (!name bb. lookup_block name fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  FIND (\(n,_,_,_). m = n2w n) entries = NONE /\
+  selected_registration_resources ctx fn site lo sa s /\
+  fn_inst_ids_distinct fn /\
+  EVERY (\(_,ty,_). type_memory_bytes common.ec_env ty < dimword (:256)) specs /\
+  unit_alloca_budget ctx < dimword (:256) /\
+  not_fresh_at sa mid /\ eval_operand (Var mid) s = SOME m /\
+  op_taint tn (Var mid) = {} /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
+  ?t G' tn'.
+    selected_registration_resources ctx fn site lo sd t /\
+    selected_registration_frame s tn t tn' /\ t.vs_memory = s.vs_memory /\
+    not_fresh_at sd mid /\ eval_operand (Var mid) t = SOME m /\
+    op_taint tn' (Var mid) = {} /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+      t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,G',tn')) /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >>
+  drule_all grouped_dispatch_allocas >>
+  disch_then (qspecl_then [`PG`,`G`,`tn`]
+    (qx_choosel_then [`u`,`Gu`,`tnu`] strip_assume_tac)) >>
+  `ci_mono sa sc /\ ci_mono sc sd` by
+    metis_tac[compile_create_kwarg_allocas_mono, compile_group_entries_ci_mono,
+              pairTheory.SND] >>
+  `eval_operand (Var mid) u = SOME m /\ op_taint tnu (Var mid) = {}` by
+    (first_x_assum (qspec_then `mid` mp_tac) >> fs[eval_operand_def]) >>
+  `fresh_vars_wrt sc u /\ ~u.vs_halted /\ u.vs_current_bb = sc.cs_current_bb /\
+   u.vs_inst_idx = LENGTH sc.cs_current_insts /\ allocas_from lo u` by
+    fs[selected_registration_resources_def] >>
+  mp_tac (Q.SPECL [`entries`,`Var mid`,`common`,`vars`,`off`,`sc`,`sd`,
+    `fn`,`m`,`u`,`ctx`,`PG`,`Gu`,`tnu`,`lo`]
+      compile_group_entries_missed_origin) >>
+  impl_tac >- (asm_rewrite_tac[] >> strip_tac >> res_tac) >>
+  disch_then strip_assume_tac >>
+  rename1 `vars_pc_only u miss` >>
+  rename1 `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (u,Gu,tnu) [] (OK miss,Gmiss,tnmiss)` >>
+  `selected_registration_resources ctx fn site lo sd miss` by
+    (irule grouped_entry_resources_vars_pc >> asm_rewrite_tac[] >>
+     qexistsl_tac [`u`,`sc`] >> fs[ci_mono_def]) >>
+  `selected_registration_frame u tnu miss tnmiss /\ miss.vs_memory = u.vs_memory` by
+    metis_tac[grouped_entry_frame_vars_pc] >>
+  qexistsl_tac [`miss`,`Gmiss`,`tnmiss`] >> asm_rewrite_tac[] >>
+  conj_tac >- fs[selected_registration_frame_def] >>
+  conj_tac >-
+    metis_tac[ci_mono_def, not_fresh_at_mono] >>
+  conj_tac >-
+    metis_tac[grouped_registration_vars_pc] >>
+  conj_tac >-
+    metis_tac[gas_origin_ptr_path_append, listTheory.APPEND_NIL] >>
+  metis_tac[]
+QED
+
+Theorem grouped_single_group_missed_origin[local]:
+  compile_selector_checks (Var mid) [(sel,lbl)] sa = ((),sb) /\
+  fn_has_code sa sb fn /\
+  (!name bb. lookup_block name fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  m <> n2w sel /\ selected_registration_resources ctx fn site lo sa s /\
+  not_fresh_at sa mid /\ eval_operand (Var mid) s = SOME m /\
+  op_taint tn (Var mid) = {} /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
+  ?t G' tn'.
+    selected_registration_resources ctx fn site lo sb t /\
+    selected_registration_frame s tn t tn' /\ t.vs_memory = s.vs_memory /\
+    not_fresh_at sb mid /\ eval_operand (Var mid) t = SOME m /\
+    op_taint tn' (Var mid) = {} /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+      t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,G',tn')) /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >>
+  `ci_mono sa sb` by metis_tac[compile_selector_checks_ci_mono, pairTheory.SND] >>
+  `fresh_vars_wrt sa s /\ ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ allocas_from lo s` by
+    fs[selected_registration_resources_def] >>
+  `?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
+        phi_prefix_length bb.bb_instructions = 0` by
+    (fs[fn_has_code_def] >> metis_tac[]) >>
+  qpat_assum `compile_selector_checks _ _ _ = _`
+    (mp_tac o MATCH_MP (Q.SPECL [`[(sel,lbl)]`,`Var mid`,`sa`,`sb`]
+      compile_selector_checks_ptr_endpoint_frame)) >>
+  disch_then (qspecl_then [`ctx`,`fn`,`s`,`m`,`lo`,`PG`,`G`,`tn`] mp_tac) >>
+  impl_tac >- (asm_simp_tac (srw_ss()) [selector_hit_def] >> strip_tac >> res_tac) >>
+  asm_simp_tac (srw_ss()) [selector_hit_def] >> disch_then strip_assume_tac >>
+  rename1 `vars_pc_only s miss` >>
+  rename1 `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (s,G,tn) [] (OK miss,Gmiss,tnmiss)` >>
+  `selected_registration_resources ctx fn site lo sb miss` by
+    (irule grouped_entry_resources_vars_pc >> asm_rewrite_tac[] >>
+     qexistsl_tac [`s`,`sa`] >> fs[ci_mono_def]) >>
+  qexistsl_tac [`miss`,`Gmiss`,`tnmiss`] >> asm_rewrite_tac[] >>
+  conj_tac >- metis_tac[grouped_entry_frame_vars_pc] >>
+  conj_tac >- metis_tac[grouped_entry_frame_vars_pc] >>
+  conj_tac >- metis_tac[ci_mono_def, not_fresh_at_mono] >>
+  metis_tac[grouped_registration_vars_pc]
+QED
+
+Theorem compile_external_groups_missed_origin:
+  !groups m mid sa sb jobs s G tn.
+    compile_external_groups (Var mid) groups sa = (jobs,sb) /\
+    fn_has_code sa sb fn /\
+    EVERY group_entry_labels_ok groups /\
+    EVERY (\group. case group of
+      ExternalSingle (sel,lbl,tz) pkg => m <> n2w sel
+    | ExternalDefaults common entries specs off =>
+        FIND (\(sel,_,_,_). m = n2w sel) entries = NONE /\
+        EVERY (\(_,ty,_). type_memory_bytes common.ec_env ty < dimword (:256))
+          specs) groups /\
+    (!name bb. lookup_block name fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+    selected_registration_resources ctx fn site lo sa s /\
+    fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword (:256) /\
+    not_fresh_at sa mid /\ eval_operand (Var mid) s = SOME m /\
+    op_taint tn (Var mid) = {} /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+      s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
+    ?t G' tn'.
+      selected_registration_resources ctx fn site lo sb t /\
+      selected_registration_frame s tn t tn' /\ t.vs_memory = s.vs_memory /\
+      not_fresh_at sb mid /\ eval_operand (Var mid) t = SOME m /\
+      op_taint tn' (Var mid) = {} /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+        t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp) /\
+      (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+        (s,G,tn) [] (OK t,G',tn')) /\
+      (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' t) ==>
+        !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  Induct
+  >- (simp[compile_external_groups_def, comp_return_def] >>
+      rpt strip_tac >> qexistsl_tac [`s`,`G`,`tn`] >>
+      `~s.vs_halted` by fs[selected_registration_resources_def] >>
+      asm_rewrite_tac[] >> simp[selected_registration_frame_def, gas_origin_ptr_path_rules]) >>
+  (Cases >|
+   [rename1 `ExternalSingle selector package` >> PairCases_on `selector` >>
+      rpt gen_tac >> simp_tac (srw_ss()) [EVERY_DEF] >> strip_tac >>
+      drule_all compile_external_single_cons_layout >> strip_tac >>
+      drule_all grouped_single_group_missed_origin >>
+      disch_then (qspecl_then [`PG`,`G`] strip_assume_tac),
+    rpt gen_tac >> simp_tac (srw_ss()) [EVERY_DEF, group_entry_labels_ok_def] >>
+      strip_tac >>
+      rename1 `compile_external_groups (Var mid)
+        (ExternalDefaults common entries specs off::groups) sa = _` >>
+      `EVERY group_entry_labels_ok (ExternalDefaults common entries specs off::groups)` by
+        asm_rewrite_tac[EVERY_DEF, group_entry_labels_ok_def] >>
+      drule_all compile_external_defaults_cons_layout >> strip_tac >>
+      drule_all grouped_default_group_missed_origin >>
+      disch_then (qspecl_then [`PG`,`G`] strip_assume_tac)]) >>
+  (rename1 `compile_external_groups (Var mid) groups ss = (rest,sb)` >>
+  rename1 `selected_registration_resources ctx fn site lo ss u` >>
+  rename1 `selected_registration_frame s tn u tnu` >>
+  rename1 `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (s,G,tn) [] (OK u,Gu,tnu)` >>
+  qpat_assum `!m mid sa sb jobs s G tn. _`
+    (qspecl_then [`m`,`mid`,`ss`,`sb`,`rest`,`u`,`Gu`,`tnu`] mp_tac) >>
+  impl_tac >- asm_rewrite_tac[] >>
+  disch_then strip_assume_tac >>
+  rename1 `selected_registration_frame u tnu v tnv` >>
+  rename1 `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (u,Gu,tnu) [] (OK v,Gv,tnv)` >>
+  qexistsl_tac [`v`,`Gv`,`tnv`] >> asm_rewrite_tac[] >>
+  conj_tac >- fs[selected_registration_frame_def] >>
+  conj_tac >- metis_tac[gas_origin_ptr_path_append, listTheory.APPEND_NIL] >>
+  metis_tac[])
+QED
+
+Theorem grouped_default_group_selected_origin:
+  compile_create_kwarg_allocas common.ec_env specs sa = (vars,sc) /\
+  compile_group_entries (Var mid) entries common vars off sc = ((),sd) /\
+  fn_has_code sa sc fn /\ fn_has_code sc sd fn /\
+  EVERY (\(_,name,_,_). ~internal_label_ok name) entries /\
+  (!name bb. lookup_block name fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  FIND (\(n,_,_,_). m = n2w n) entries = SOME (sel,lbl,mincd,k) /\
+  selected_registration_resources ctx fn site lo sa s /\
+  fn_inst_ids_distinct fn /\
+  EVERY (\(_,ty,_). type_memory_bytes common.ec_env ty < dimword (:256)) specs /\
+  unit_alloca_budget ctx < dimword (:256) /\
+  not_fresh_at sa mid /\ eval_operand (Var mid) s = SOME m /\
+  op_taint tn (Var mid) = {} /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
+  ?checks init done t G' tn'.
+    MAP (\(n,_,ty,e). (n,ty,e)) vars = specs /\
+    checks.cs_current_bb = lbl /\ checks.cs_current_insts = [] /\
+    compile_entry_checks mincd common.ec_payable checks = ((),init) /\
+    fn_has_code checks init fn /\
+    compile_entry_point_kwargs common.ec_env vars off k common.ec_common_label init =
+      ((),done) /\ fn_has_code init done fn /\
+    selected_registration_resources ctx fn site lo checks t /\
+    selected_registration_frame s tn t tn' /\ t.vs_memory = s.vs_memory /\
+    (!name op ty e. MEM (name,op,ty,e) vars ==>
+      ?id q base.
+        op = Var q /\ not_fresh_at checks q /\ lookup_var q t = SOME (n2w base) /\
+        MEM (mk_inst id ALLOCA [Lit (n2w (type_memory_bytes common.ec_env ty))] [q])
+          (fn_insts fn) /\
+        FLOOKUP t.vs_allocas id = SOME (base,type_memory_bytes common.ec_env ty) /\
+        id < checks.cs_next_id /\
+        base + type_memory_bytes common.ec_env ty < dimword (:256) /\
+        ptr_covers G' tn' q t (type_memory_bytes common.ec_env ty)) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+      t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,G',tn')) /\
+    (!D. (!fuel. ptr_safe_blocks D lo fuel ctx fn PG G' tn' t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >>
+  drule_all grouped_dispatch_allocas >>
+  disch_then (qspecl_then [`PG`,`G`,`tn`]
+    (qx_choosel_then [`u`,`Gu`,`tnu`] strip_assume_tac)) >>
+  `eval_operand (Var mid) u = SOME m /\ op_taint tnu (Var mid) = {}` by
+    (first_x_assum (qspec_then `mid` mp_tac) >> fs[eval_operand_def]) >>
+  `fresh_vars_wrt sc u /\ ~u.vs_halted /\ u.vs_current_bb = sc.cs_current_bb /\
+   u.vs_inst_idx = LENGTH sc.cs_current_insts /\ allocas_from lo u` by
+    fs[selected_registration_resources_def] >>
+  mp_tac (Q.SPECL [`entries`,`Var mid`,`common`,`vars`,`off`,`sc`,`sd`,
+    `fn`,`m`,`u`,`ctx`,`PG`,`Gu`,`tnu`,`lo`]
+      compile_group_entries_selected_origin) >>
+  impl_tac >- (asm_rewrite_tac[] >> strip_tac >> res_tac) >>
+  disch_then (qspecl_then [`sel`,`lbl`,`mincd`,`k`] mp_tac) >>
+  asm_rewrite_tac[] >> disch_then strip_assume_tac >>
+  rename1 `compile_entry_checks mincd common.ec_payable checks = ((),init)` >>
+  rename1 `compile_entry_point_kwargs _ _ _ _ _ init = ((),done)` >>
+  rename1 `vars_pc_only u hit` >>
+  rename1 `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (u,Gu,tnu) [] (OK hit,Ghit,tnhit)` >>
+  `selected_registration_resources ctx fn site lo checks hit` by
+    (irule grouped_entry_resources_vars_pc >> asm_simp_tac (srw_ss()) [] >>
+     qexistsl_tac [`u`,`sc`] >> asm_rewrite_tac[]) >>
+  `selected_registration_frame u tnu hit tnhit /\ hit.vs_memory = u.vs_memory` by
+    metis_tac[grouped_entry_frame_vars_pc] >>
+  `hit.vs_allocas = u.vs_allocas` by
+    fs[vars_pc_only_def, venom_state_component_equality] >>
+  drule compile_create_kwarg_allocas_preserves_specs >> strip_tac >>
+  qexistsl_tac [`checks`,`init`,`done`,`hit`,`Ghit`,`tnhit`] >>
+  asm_rewrite_tac[] >>
+  conj_tac >- fs[selected_registration_frame_def] >>
+  conj_tac >- suspend "owners" >>
+  conj_tac >- metis_tac[grouped_registration_vars_pc] >>
+  conj_tac >- metis_tac[gas_origin_ptr_path_append, listTheory.APPEND_NIL] >>
+  metis_tac[]
+QED
+
+Resume grouped_default_group_selected_origin[owners]:
+  qx_genl_tac [`name`,`op`,`ty`,`e`] >> strip_tac >>
+  qpat_assum `!name op ty e. MEM _ vars ==> _`
+    (drule_then strip_assume_tac) >>
+  qmatch_asmsub_rename_tac `lookup_var qv u = SOME (n2w addr)` >>
+  qmatch_asmsub_rename_tac `FLOOKUP u.vs_allocas alloc_id = SOME (addr,_)` >>
+  qpat_assum `!p. not_fresh_at sc p ==> lookup_var p hit = _ /\ _`
+    (drule_then strip_assume_tac) >>
+  qexistsl_tac [`alloc_id`,`qv`,`addr`] >> asm_rewrite_tac[] >>
+  rpt conj_tac
+  >- metis_tac[not_fresh_at_mono, arithmeticTheory.LESS_IMP_LESS_OR_EQ]
+  >- fs[selected_registration_resources_def] >>
+  fs[ptr_covers_def]
+QED
+
+Finalise grouped_default_group_selected_origin
+
+Theorem compile_external_groups_selected_default_origin:
+  compile_external_groups (Var mid)
+    (pref ++ ExternalDefaults common entries specs off::rest) sa = (jobs,sb) /\
+  fn_has_code sa sb fn /\
+  EVERY group_entry_labels_ok (pref ++ ExternalDefaults common entries specs off::rest) /\
+  EVERY (\group. case group of
+    ExternalSingle (sel,lbl,tz) pkg => m <> n2w sel
+  | ExternalDefaults comp ens sp _ =>
+      FIND (\(sel,_,_,_). m = n2w sel) ens = NONE /\
+      EVERY (\(_,ty,_). type_memory_bytes comp.ec_env ty < dimword (:256)) sp) pref /\
+  FIND (\(n,_,_,_). m = n2w n) entries = SOME (sel,lbl,mincd,k) /\
+  EVERY (\(_,ty,_). type_memory_bytes common.ec_env ty < dimword (:256)) specs /\
+  (!name bb. lookup_block name fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  selected_registration_resources ctx fn site lo sa s /\
+  fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword (:256) /\
+  not_fresh_at sa mid /\ eval_operand (Var mid) s = SOME m /\
+  op_taint tn (Var mid) = {} /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
+  ?vars checks init done t G' tn'.
+    MEM (ExternalCommonJob common vars) jobs /\
+    MAP (\(n,_,ty,e). (n,ty,e)) vars = specs /\
+    checks.cs_current_bb = lbl /\ checks.cs_current_insts = [] /\
+    compile_entry_checks mincd common.ec_payable checks = ((),init) /\
+    fn_has_code checks init fn /\
+    compile_entry_point_kwargs common.ec_env vars off k common.ec_common_label init =
+      ((),done) /\ fn_has_code init done fn /\
+    selected_registration_resources ctx fn site lo checks t /\
+    selected_registration_frame s tn t tn' /\ t.vs_memory = s.vs_memory /\
+    (!name op ty e. MEM (name,op,ty,e) vars ==>
+      ?id q base.
+        op = Var q /\ not_fresh_at checks q /\ lookup_var q t = SOME (n2w base) /\
+        MEM (mk_inst id ALLOCA [Lit (n2w (type_memory_bytes common.ec_env ty))] [q])
+          (fn_insts fn) /\
+        FLOOKUP t.vs_allocas id = SOME (base,type_memory_bytes common.ec_env ty) /\
+        id < checks.cs_next_id /\
+        base + type_memory_bytes common.ec_env ty < dimword (:256) /\
+        ptr_covers G' tn' q t (type_memory_bytes common.ec_env ty)) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+      t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,G',tn')) /\
+    (!D. (!fuel. ptr_safe_blocks D lo fuel ctx fn PG G' tn' t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all compile_external_groups_append_layout >> strip_tac >>
+  fs[EVERY_APPEND] >>
+  qmatch_asmsub_rename_tac `compile_external_groups (Var mid) pref sa = (prefix_jobs,sc)` >>
+  mp_tac (Q.INST [`ctx` |-> `ctx`, `fn` |-> `fn`, `site` |-> `site`,
+                 `lo` |-> `lo`, `PG` |-> `PG`]
+    (Q.SPECL [`pref`,`m`,`mid`,`sa`,`sc`,`prefix_jobs`,`s`,`G`,`tn`]
+      compile_external_groups_missed_origin)) >>
+  impl_tac >- asm_rewrite_tac[] >>
+  disch_then (qx_choosel_then [`u`,`Gu`,`tnu`] strip_assume_tac) >>
+  `EVERY group_entry_labels_ok (ExternalDefaults common entries specs off::rest)` by
+    asm_rewrite_tac[EVERY_DEF] >>
+  drule_all compile_external_defaults_cons_layout >> strip_tac >>
+  `EVERY (\(_,name,_,_). ~internal_label_ok name) entries` by
+    fs[group_entry_labels_ok_def] >>
+  drule_all grouped_default_group_selected_origin >>
+  disch_then (qspecl_then [`PG`,`Gu`] strip_assume_tac) >>
+  rename1 `compile_entry_point_kwargs common.ec_env vars off k common.ec_common_label init = ((),done)` >>
+  qexistsl_tac [`vars`,`checks`,`init`,`done`,`t`,`G'`,`tn'`] >>
+  asm_rewrite_tac[MEM_APPEND, MEM] >>
+  conj_tac >- fs[selected_registration_frame_def] >>
+  conj_tac >- metis_tac[gas_origin_ptr_path_append, listTheory.APPEND_NIL] >>
+  metis_tac[]
+QED
+
+Theorem grouped_dispatch_long_prelude:
+  compile_group_dispatch_linear groups fallback st = (jobs,st') /\
+  fn_has_code st st' fn /\ EVERY group_entry_labels_ok groups /\
+  4 <= LENGTH s.vs_call_ctx.cc_calldata /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+  selected_registration_resources ctx fn site lo st s /\ s.vs_allocas = FEMPTY /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
+  ?mid q r br t G' tn'.
+    compile_external_groups (Var mid) groups q = (jobs,r) /\ fn_has_code q r fn /\
+    lookup_block r.cs_current_bb fn.fn_blocks = SOME br /\
+    get_instruction br (LENGTH r.cs_current_insts) =
+      SOME (mk_inst r.cs_next_id JMP [Label fallback] []) /\
+    selected_registration_resources ctx fn site lo q t /\
+    selected_registration_frame s tn t tn' /\ t.vs_memory = s.vs_memory /\
+    not_fresh_at q mid /\ eval_operand (Var mid) t =
+      SOME (calldata_method_id s.vs_call_ctx.cc_calldata) /\
+    op_taint tn' (Var mid) = {} /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+      t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,G',tn')) /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all compile_group_dispatch_linear_layout >> strip_tac >>
+  `fresh_vars_wrt st s /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+   s.vs_inst_idx = LENGTH st.cs_current_insts /\ allocas_from lo s` by
+    fs[selected_registration_resources_def] >>
+  `(LENGTH s.vs_call_ctx.cc_calldata < 4 ==>
+     !bb. lookup_block fallback fn.fn_blocks = SOME bb ==>
+       phi_prefix_length bb.bb_instructions = 0)` by fs[arithmeticTheory.NOT_LESS] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
+  drule_all dispatch_prelude_ptr_endpoint >>
+  asm_rewrite_tac[] >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
+  `selected_registration_resources ctx fn site lo q t` by
+    (irule grouped_entry_resources_vars_pc >>
+     asm_rewrite_tac[] >> qexistsl_tac [`s`,`st`] >> asm_rewrite_tac[]) >>
+  qexistsl_tac [`STRING #"%" (toString (st.cs_next_var + 4))`,
+    `q`,`r`,`br`,`t`,`G'`,`tn'`] >>
+  asm_rewrite_tac[] >>
+  conj_tac >- metis_tac[grouped_entry_frame_vars_pc] >>
+  conj_tac >- metis_tac[grouped_entry_frame_vars_pc] >>
+  conj_tac >- metis_tac[fresh_vars_wrt_not_fresh_at, operand_11] >>
+  metis_tac[grouped_registration_vars_pc]
+QED
+
+Theorem grouped_default_checks_pass_origin:
+  compile_entry_checks m pay sa = ((),sb) /\ fn_has_code sa sb fn /\
+  selected_registration_resources ctx fn site lo sa s /\
+  (pay \/ s.vs_call_ctx.cc_callvalue = 0w) /\
+  (m <= 4 \/ m <= LENGTH s.vs_call_ctx.cc_calldata) /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
+  ?t G' tn'.
+    selected_registration_resources ctx fn site lo sb t /\
+    selected_registration_frame s tn t tn' /\ t.vs_memory = s.vs_memory /\
+    t.vs_allocas = s.vs_allocas /\ tn'.t_mem = tn.t_mem /\
+    (!p. not_fresh_at sa p ==> not_fresh_at sb p /\
+      lookup_var p t = lookup_var p s /\ FLOOKUP G' p = FLOOKUP G p /\
+      op_taint tn' (Var p) = op_taint tn (Var p)) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+      t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,G',tn')) /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ci_mono sa sb` by metis_tac[compile_entry_checks_ci_mono, pairTheory.SND] >>
+  `fresh_vars_wrt sa s /\ ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ allocas_from lo s` by
+    fs[selected_registration_resources_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
+  drule_all default_entry_checks_ptr_endpoint_frame >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
+  `selected_registration_resources ctx fn site lo sb u` by
+    (irule grouped_entry_resources_vars_pc >> asm_rewrite_tac[] >>
+     qexistsl_tac [`s`,`sa`] >> fs[ci_mono_def]) >>
+  qexistsl_tac [`u`,`G'`,`tn'`] >> asm_rewrite_tac[] >>
+  rpt conj_tac
+  >- metis_tac[grouped_entry_frame_vars_pc]
+  >- metis_tac[grouped_entry_frame_vars_pc]
+  >- fs[vars_pc_only_def, venom_state_component_equality]
+  >- metis_tac[ci_mono_def, not_fresh_at_mono] >>
+  metis_tac[grouped_registration_vars_pc]
+QED

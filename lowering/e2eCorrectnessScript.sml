@@ -51,6 +51,7 @@ Ancestors
   codegenSymOwnRel callDynamicMemory[qualified,ignore_grammar]
   callRejectMemory stackPlanGen[qualified,ignore_grammar]
 
+val _ = Parse.hide "tops";
 
 (* =====================================================================
    Call-Level Correctness (Main Theorem)

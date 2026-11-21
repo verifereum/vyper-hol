@@ -132,6 +132,28 @@ Proof
   irule MEM_lookup_block >> gvs[]
 QED
 
+Theorem run_grouped_lowering_retained_entry_prefix:
+  run_grouped_lowering groups ips fb rp "__entry" = SOME u /\
+  EVERY group_entry_labels_ok groups /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips) /\
+  lookup_function "__entry" u.cu_context.ctx_functions = SOME efn ==>
+  ?se rest. compile_generate_grouped_runtime groups [] fb
+    (initial_compile_state "__entry") = ((),se) /\
+    efn.fn_blocks = all_blocks se ++ rest
+Proof
+  strip_tac >> drule_all grouped_internal_run_labels >> strip_tac >>
+  qpat_assum `extract_context_with_internals _ _ _ = _`
+    (mp_tac o REWRITE_RULE [extract_context_with_internals_def]) >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  fs[GSYM all_blocks_def] >>
+  `!d. MEM d (internal_fn_descriptors ips) ==>
+    ~MEM (FST d) (MAP (\bb. bb.bb_label) (all_blocks start))` by
+    (simp[MEM_MAP] >> fs[EVERY_MEM] >> metis_tac[]) >>
+  drule internal_fn_bodies_all_blocks_prefix >> strip_tac >>
+  `efn.fn_blocks = entry_blocks` by (drule_all extracted_entry_blocks >> simp[]) >>
+  simp[] >> metis_tac[package_internal_blocks_prefix]
+QED
+
 Theorem run_lowering_fallback_revert_code:
   run_lowering sels exts ints NONE rp bc mb db ei "__entry" = SOME u /\
   EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,ss,rt). jump_label_ok lbl) exts /\

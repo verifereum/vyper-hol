@@ -4,6 +4,7 @@ Ancestors instMemFrontier arithmetic stmtForRangeMemoryParts fragGasOriginPtr fr
   ptrSafeRun ptrDiscipline fragExec venomExecSemantics venomInst venomState
   compileEnv emitHelperProps exprLoweringProps codegenRel list finite_map words
   moduleLoweringProps typedCopyArrayPtr entryDispatchPtr contextCodegenRel
+  loweringStateRelDefs loweringShapeDefs
 
 Theorem checks_joint_edge_path[local]:
   gas_path_mem_edge ctx fn s 0 (OK t) /\
@@ -191,6 +192,25 @@ Proof
   irule below_frontier_no_ranges >> simp[]
 QED
 
+Theorem checks_scalar_keeps_old[local]:
+  not_fresh_at st p /\ st.cs_next_var <= n ==>
+  lookup_var p
+    (update_var (STRING #"%" (toString n)) value s with vs_inst_idx := idx) =
+    lookup_var p s /\
+  FLOOKUP (step_prov PG G (mk_inst id opc ops [STRING #"%" (toString n)])
+    (update_var (STRING #"%" (toString n)) value s)) p = FLOOKUP G p /\
+  op_taint (step_taint (mk_inst id opc ops [STRING #"%" (toString n)]) s
+    (update_var (STRING #"%" (toString n)) value s) tn) (Var p) =
+    op_taint tn (Var p)
+Proof
+  strip_tac >>
+  `p <> STRING #"%" (toString n)` by fs[not_fresh_at_def] >>
+  simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+    step_taint_single_output_preserves_other_operand] >>
+  simp[step_prov_def, mk_inst_def, set_prov_def] >>
+  BasicProvers.TOP_CASE_TAC >> simp[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
+QED
+
 Theorem compile_entry_value_check_ptr_endpoint[local]:
   compile_entry_checks 4 pay st = ((),st') /\
   (~pay ==> fn_has_code st st' fn) /\
@@ -208,6 +228,8 @@ Theorem compile_entry_value_check_ptr_endpoint[local]:
     allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!p. not_fresh_at st p ==> lookup_var p u = lookup_var p s /\
+      FLOOKUP G' p = FLOOKUP G p /\ op_taint tn' (Var p) = op_taint tn (Var p)) /\
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' u) ==>
          !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
@@ -224,6 +246,11 @@ Proof
   (impl_tac >- simp[]) >> strip_tac >>
   rename1 `vars_pc_only s s1` >> rename1 `G1 = step_prov PG G _ _` >>
   rename1 `op_taint tn1 (Var _) = {}` >>
+  `!p. not_fresh_at st p ==> lookup_var p s1 = lookup_var p s /\
+     FLOOKUP G1 p = FLOOKUP G p /\
+     op_taint tn1 (Var p) = op_taint tn (Var p)` by
+    (gen_tac >> disch_tac >> asm_rewrite_tac[] >>
+     irule checks_scalar_keeps_old >> qexists_tac `st` >> simp[]) >>
   qpat_x_assum `s1 = _` kall_tac >> qpat_x_assum `G1 = _` kall_tac >>
   qpat_x_assum `tn1 = _` kall_tac >>
   suspend "iszero"
@@ -244,6 +271,11 @@ Resume compile_entry_value_check_ptr_endpoint[iszero]:
   (impl_tac >- fs[arithmeticTheory.ADD1]) >> strip_tac >>
   rename1 `vars_pc_only s1 s2` >> rename1 `G2 = step_prov PG G1 _ _` >>
   rename1 `op_taint tn2 (Var (STRING #"%" (toString (st.cs_next_var + 1)))) = {}` >>
+  `!p. not_fresh_at st p ==> lookup_var p s2 = lookup_var p s1 /\
+     FLOOKUP G2 p = FLOOKUP G1 p /\
+     op_taint tn2 (Var p) = op_taint tn1 (Var p)` by
+    (gen_tac >> disch_tac >> asm_rewrite_tac[] >>
+     irule checks_scalar_keeps_old >> qexists_tac `st` >> simp[]) >>
   qpat_x_assum `s2 = _` kall_tac >> qpat_x_assum `G2 = _` kall_tac >>
   qpat_x_assum `tn2 = _` kall_tac >>
   `gas_path_mem ctx fn s2 0 (OK (s2 with vs_inst_idx := SUC s2.vs_inst_idx)) /\
@@ -267,7 +299,7 @@ Resume compile_entry_value_check_ptr_endpoint[iszero]:
    (ctx_has_dalloca ctx ==>
     allocas_below_fmp (s2 with vs_inst_idx := SUC s2.vs_inst_idx))` by
     (fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
-  simp[vars_pc_only_inst_idx, control_moves_keep_vars] >>
+  simp[vars_pc_only_inst_idx, control_moves_keep_vars, lookup_var_def] >>
   rpt strip_tac >>
   `ptr_safe_run D lo fuel ctx fn PG G2 tn2 s2` suffices_by metis_tac[] >>
   irule assert_pass_ptr_continuation >> simp[] >>
@@ -296,6 +328,8 @@ Theorem compile_entry_size_check_ptr_endpoint[local]:
     allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!p. not_fresh_at st p ==> lookup_var p u = lookup_var p s /\
+      FLOOKUP G' p = FLOOKUP G p /\ op_taint tn' (Var p) = op_taint tn (Var p)) /\
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' u) ==>
          !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
@@ -319,6 +353,11 @@ Resume compile_entry_size_check_ptr_endpoint[size]:
   (impl_tac >- simp[]) >> strip_tac >>
   rename1 `vars_pc_only s s1` >> rename1 `G1 = step_prov PG G _ _` >>
   rename1 `op_taint tn1 (Var _) = {}` >>
+  `!p. not_fresh_at st p ==> lookup_var p s1 = lookup_var p s /\
+     FLOOKUP G1 p = FLOOKUP G p /\
+     op_taint tn1 (Var p) = op_taint tn (Var p)` by
+    (gen_tac >> disch_tac >> asm_rewrite_tac[] >>
+     irule checks_scalar_keeps_old >> qexists_tac `st` >> simp[]) >>
   qpat_x_assum `s1 = _` kall_tac >> qpat_x_assum `G1 = _` kall_tac >>
   qpat_x_assum `tn1 = _` kall_tac >>
   suspend "lt"
@@ -340,6 +379,11 @@ Resume compile_entry_size_check_ptr_endpoint[lt]:
   (impl_tac >- fs[arithmeticTheory.ADD1, op_taint_def]) >> strip_tac >>
   rename1 `vars_pc_only s1 s2` >> rename1 `G2 = step_prov PG G1 _ _` >>
   rename1 `op_taint tn2 (Var (STRING #"%" (toString (st.cs_next_var + 1)))) = {}` >>
+  `!p. not_fresh_at st p ==> lookup_var p s2 = lookup_var p s1 /\
+     FLOOKUP G2 p = FLOOKUP G1 p /\
+     op_taint tn2 (Var p) = op_taint tn1 (Var p)` by
+    (gen_tac >> disch_tac >> asm_rewrite_tac[] >>
+     irule checks_scalar_keeps_old >> qexists_tac `st` >> simp[]) >>
   qpat_x_assum `s2 = _` kall_tac >> qpat_x_assum `G2 = _` kall_tac >>
   qpat_x_assum `tn2 = _` kall_tac >>
   suspend "iszero"
@@ -360,6 +404,11 @@ Resume compile_entry_size_check_ptr_endpoint[iszero]:
   (impl_tac >- fs[arithmeticTheory.ADD1]) >> strip_tac >>
   rename1 `vars_pc_only s2 s3` >> rename1 `G3 = step_prov PG G2 _ _` >>
   rename1 `op_taint tn3 (Var (STRING #"%" (toString (st.cs_next_var + 2)))) = {}` >>
+  `!p. not_fresh_at st p ==> lookup_var p s3 = lookup_var p s2 /\
+     FLOOKUP G3 p = FLOOKUP G2 p /\
+     op_taint tn3 (Var p) = op_taint tn2 (Var p)` by
+    (gen_tac >> disch_tac >> asm_rewrite_tac[] >>
+     irule checks_scalar_keeps_old >> qexists_tac `st` >> simp[]) >>
   qpat_x_assum `s3 = _` kall_tac >> qpat_x_assum `G3 = _` kall_tac >>
   qpat_x_assum `tn3 = _` kall_tac >>
   `gas_path_mem ctx fn s3 0 (OK (s3 with vs_inst_idx := SUC s3.vs_inst_idx)) /\
@@ -385,7 +434,7 @@ Resume compile_entry_size_check_ptr_endpoint[iszero]:
    (ctx_has_dalloca ctx ==>
     allocas_below_fmp (s3 with vs_inst_idx := SUC s3.vs_inst_idx))` by
     (fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
-  simp[vars_pc_only_inst_idx, control_moves_keep_vars] >>
+  simp[vars_pc_only_inst_idx, control_moves_keep_vars, lookup_var_def] >>
   rpt strip_tac >>
   `ptr_safe_run D lo fuel ctx fn PG G3 tn3 s3` suffices_by metis_tac[] >>
   irule assert_pass_ptr_continuation >> simp[] >>
@@ -395,6 +444,51 @@ Resume compile_entry_size_check_ptr_endpoint[iszero]:
 QED
 
 Finalise compile_entry_size_check_ptr_endpoint
+
+Theorem compile_entry_checks_ptr_endpoint_frame:
+  compile_entry_checks m pay st = ((),st') /\ fn_has_code st st' fn /\
+  fresh_vars_wrt st s /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  (pay \/ s.vs_call_ctx.cc_callvalue = 0w) /\
+  m <= LENGTH s.vs_call_ctx.cc_calldata /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) ==>
+  ?u G' tn'.
+    gas_path_mem ctx fn s 0 (OK u) /\
+    (!D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, fn, PG) (s, G, tn) [] (OK u, G', tn')) /\
+    vars_pc_only s u /\ fresh_vars_wrt st' u /\ ~u.vs_halted /\
+    u.vs_current_bb = st'.cs_current_bb /\
+    u.vs_inst_idx = LENGTH st'.cs_current_insts /\
+    allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!p. not_fresh_at st p ==> lookup_var p u = lookup_var p s /\
+      FLOOKUP G' p = FLOOKUP G p /\ op_taint tn' (Var p) = op_taint tn (Var p)) /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' u) ==>
+         !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all compile_entry_checks_split >> strip_tac >>
+  drule compile_entry_value_check_ptr_endpoint >>
+  disch_then (qspecl_then [`tn`, `s`, `lo`, `fn`, `ctx`, `PG`, `G`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  rename1 `vars_pc_only s s1` >>
+  rename1 `tn1.t_mem = tn.t_mem` >>
+  rename1 `ptr_safe_run _ _ _ _ _ _ G1 tn1 s1` >>
+  `s1.vs_call_ctx = s.vs_call_ctx` by metis_tac[vars_pc_only_fields] >>
+  drule compile_entry_size_check_ptr_endpoint >>
+  disch_then (qspecl_then [`tn1`, `s1`, `lo`, `fn`, `ctx`, `PG`, `G1`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  rename1 `vars_pc_only s1 s2` >>
+  `gas_path_mem ctx fn s 0 (OK s2)` by metis_tac[checks_mem_then] >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK s2,G',tn')` by
+    (irule checks_joint_then >> qexistsl_tac [`G1`, `tn1`, `s1`] >> simp[]) >>
+  qexistsl_tac [`s2`, `G'`, `tn'`] >>
+  `st.cs_next_var <= mid.cs_next_var` by
+    (Cases_on `pay` >> fs[] >>
+     drule_all compile_entry_checks_value_layout >> simp[]) >>
+  simp[] >> metis_tac[vars_pc_only_trans, not_fresh_at_mono]
+QED
 
 Theorem compile_entry_checks_ptr_endpoint:
   compile_entry_checks m pay st = ((),st') /\ fn_has_code st st' fn /\
@@ -417,21 +511,7 @@ Theorem compile_entry_checks_ptr_endpoint:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' u) ==>
          !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all compile_entry_checks_split >> strip_tac >>
-  drule compile_entry_value_check_ptr_endpoint >>
-  disch_then (qspecl_then [`tn`, `s`, `lo`, `fn`, `ctx`, `PG`, `G`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  rename1 `vars_pc_only s s1` >>
-  rename1 `tn1.t_mem = tn.t_mem` >>
-  rename1 `ptr_safe_run _ _ _ _ _ _ G1 tn1 s1` >>
-  `s1.vs_call_ctx = s.vs_call_ctx` by metis_tac[vars_pc_only_fields] >>
-  drule compile_entry_size_check_ptr_endpoint >>
-  disch_then (qspecl_then [`tn1`, `s1`, `lo`, `fn`, `ctx`, `PG`, `G1`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  rename1 `vars_pc_only s1 s2` >>
-  `gas_path_mem ctx fn s 0 (OK s2)` by metis_tac[checks_mem_then] >>
-  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK s2,G',tn')` by
-    (irule checks_joint_then >> qexistsl_tac [`G1`, `tn1`, `s1`] >> simp[]) >>
-  qexistsl_tac [`s2`, `G'`, `tn'`] >>
-  simp[] >> metis_tac[vars_pc_only_trans]
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  mp_tac compile_entry_checks_ptr_endpoint_frame >>
+  asm_rewrite_tac[] >> metis_tac[]
 QED
