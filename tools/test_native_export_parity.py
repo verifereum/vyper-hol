@@ -45,6 +45,7 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(nep.classify("FAIL a 0.1s sp=F: deploy differs"),
                          ("a", "outside", "deploy differs"))
         self.assertEqual(nep.classify("PASS a 0.1s sp=F"), ("a", "outside", "bytes equal"))
+        self.assertEqual(nep.classify("PASS a 0.1s sp=F modules=2"), ("a", "outside", "bytes equal"))
         self.assertEqual(nep.classify("REJECT a 0.1s: frontend"), ("a", "rejected", "frontend"))
         self.assertEqual(nep.classify("FAIL a 0.1s: exception: Bind"),
                          ("a", "error", "exception: Bind"))
@@ -52,6 +53,7 @@ class ClassifyTests(unittest.TestCase):
     def test_gate(self) -> None:
         self.assertEqual(nep.gate("FAIL a 0.1s sp=T: deploy differs"), "T")
         self.assertEqual(nep.gate("PASS a 0.1s sp=F"), "F")
+        self.assertEqual(nep.gate("FAIL a 0.1s sp=F modules=2: deploy differs"), "unit")
         self.assertEqual(nep.gate("REJECT a 0.1s: frontend"), "-")
 
 
@@ -115,7 +117,7 @@ class ReportTests(unittest.TestCase):
 
     def test_totals_and_lines(self) -> None:
         text = nep.report(self.verdicts(), Counter())
-        self.assertIn("supported_program: 1 sp=T, 1 sp=F, 1 not reached\n", text)
+        self.assertIn("supported_program: 1 sp=T, 1 sp=F, 0 units of several modules, 1 not reached\n", text)
         self.assertIn("check_contract: 1 accept, 1 reject, 0 undecided, 0 frontend, 0 error, "
                       "1 not checked\n", text)
         self.assertIn("patched vs HOL bytes: 1 same, 1 deploy, 0 runtime, 0 both, 1 n/a\n", text)

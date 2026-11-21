@@ -4446,7 +4446,12 @@ Proof
   disch_then (qspec_then `ctx` mp_tac) >> simp[] >>
   disch_then (qx_choose_then `endpoint` strip_assume_tac) >>
   qexists_tac `endpoint` >> simp[] >>
-  metis_tac[gas_marked_path_then, ADD_CLAUSES]
+  qpat_assum `gas_marked_path T ctx func s 0 (OK t)`
+    (mp_then Any mp_tac gas_marked_path_then) >>
+  disch_then drule >> simp[] >> strip_tac >>
+  qpat_assum `gas_marked_path T ctx func s 0 (OK r)`
+    (mp_then Any mp_tac gas_marked_path_then) >>
+  disch_then drule >> simp[]
 QED
 
 Theorem place_slots_nondynamic_static_exit_mem_local[local]:

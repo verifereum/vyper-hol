@@ -20,7 +20,8 @@ Ancestors
   vyperLoweringCorrect vyperCompiler loweringPtrCorrect memSafeRun
   allocaFrontierBound ptrDiscipline lowerDloadDefs contextCodegenRel venomWf
   venomInst unitMemInv unitTransformDefs rawReachableFmp ctxLookupAgree
-  loweringShapeSource supportedStmtTraverse supportedExprTraverse vyperTypeContract
+  loweringShapeSource loweringShapeProps loweringUnitEntryShape moduleLowering
+  supportedStmtTraverse supportedExprTraverse vyperTypeContract
   vyperAST vyperCalldata unitShapeDefs o1PassContract e2eDefs exprSimHypsDefs list
 
 val _ = Parse.hide "body";
@@ -138,7 +139,27 @@ Proof
   metis_tac[lower_vyper_runtime_unit_memory_ok_from_no_wrap]
 QED
 
-(* GATE_ADMISSION: missing case, raw_call with msg.data runtime source shape *)
+Theorem lower_vyper_runtime_unit_dynamic_source_unit_shape[local]:
+  !tops rpolicy unit layouts addr art.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    check_contract F layouts addr [(NONE,tops)] = SOME art ==>
+    o1_source_unit_ok unit /\ unit_entry_no_params unit
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  drule (Q.INST [`static` |-> `F`]
+          lower_vyper_runtime_unit_source_unit_ok_shape_with_no_params_mode) >>
+  impl_tac
+  >- (`raw_shape_free_program_mode F tops` by
+        simp[raw_shape_free_program_mode_def, dynamic_raw_expr_shape,
+             dynamic_raw_stmt_shape, EVERY_MEM] >>
+      metis_tac[check_contract_runtime_bodies_shape_ok_mode,
+                check_contract_internal_names_distinct]) >>
+  strip_tac >> simp[] >>
+  irule unit_entry_no_params_from_first >> simp[] >>
+  fs[lowering_context_ok_def, ctx_fn_names_def]
+QED
+
 Theorem lower_vyper_runtime_unit_source_shape_raw_call_calldata:
   !tops rpolicy unit layouts addr art.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -152,10 +173,9 @@ Theorem lower_vyper_runtime_unit_source_shape_raw_call_calldata:
           (\e. ?ty f es d. e = Call ty (RawCallCalldataTarget f) es d)) dflts)) ==>
     o1_source_unit_ok unit /\ unit_entry_no_params unit
 Proof
-  cheat
+  metis_tac[lower_vyper_runtime_unit_dynamic_source_unit_shape]
 QED
 
-(* GATE_ADMISSION: missing case, create_copy_of runtime source shape *)
 Theorem lower_vyper_runtime_unit_source_shape_create_copy:
   !tops rpolicy unit layouts addr art.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -171,10 +191,9 @@ Theorem lower_vyper_runtime_unit_source_shape_create_copy:
                  e = Call ty (CreateTarget CreateCopyOf s r ks) es d)) dflts)) ==>
     o1_source_unit_ok unit /\ unit_entry_no_params unit
 Proof
-  cheat
+  metis_tac[lower_vyper_runtime_unit_dynamic_source_unit_shape]
 QED
 
-(* GATE_ADMISSION: missing case, create_from_blueprint runtime source shape *)
 Theorem lower_vyper_runtime_unit_source_shape_create_blueprint:
   !tops rpolicy unit layouts addr art.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -192,7 +211,7 @@ Theorem lower_vyper_runtime_unit_source_shape_create_blueprint:
           dflts)) ==>
     o1_source_unit_ok unit /\ unit_entry_no_params unit
 Proof
-  cheat
+  metis_tac[lower_vyper_runtime_unit_dynamic_source_unit_shape]
 QED
 
 (* GATE_ADMISSION: held, blueprint DALLOCA no-wrap and FMP floor *)

@@ -10,6 +10,8 @@
  *)
 Theory bodyAugPlaceTarget
 Ancestors
+  bodyInvCodeProps bodyMainModuleProps moduleVariableKeyProps compileUnit alist
+  exprBodyPreProps stmtExprAllocationPreProps
   valueEncodingProps
   targetPlaceLive exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
@@ -108,25 +110,26 @@ Proof
   rpt IF_CASES_TAC >> gvs[] >> metis_tac[]
 QED
 
-Theorem aug_place_supported_immutable_root_decl:
-  body_inv tops ctx cenv cx /\
-  supported_target_info tops bindings t = SOME pt /\
+Theorem aug_place_supported_immutable_root_decl_mods:
+  contract_inv mods exps ctx cenv cx /\
+  supported_target_info (main_module mods) bindings t = SOME pt /\
   immutable_root cx t ==>
   ?id vis mut ty slot.
     target_root t = TopLevelNameTarget (NONE,id) /\
-    supported_variable_decl tops (NONE,id) = SOME (vis,mut,ty,slot) /\
+    supported_variable_decl (main_module mods) (NONE,id) = SOME (vis,mut,ty,slot) /\
     (mut = Immutable \/ ?e. mut = Constant e)
 Proof
   strip_tac >>
+  drule_then assume_tac contract_inv_main_module >>
+  drule_then assume_tac contract_inv_module_codes >>
   qpat_x_assum `immutable_root cx t`
     (strip_assume_tac o REWRITE_RULE [immutable_root_def]) >>
-  `supported_place_root tops (src,id)` by metis_tac[aug_place_supported_root] >>
+  `supported_place_root (main_module mods) (src,id)` by metis_tac[aug_place_supported_root] >>
   drule_then SUBST_ALL_TAC aug_place_supported_root_namespace >>
-  `get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
-  `ts = tops` by metis_tac[optionTheory.SOME_11] >> gvs[] >>
-  Cases_on `supported_variable_decl tops (NONE,id)` >-
+  gvs[] >>
+  Cases_on `supported_variable_decl (main_module mods) (NONE,id)` >-
     (gvs[supportedExprFormsTheory.supported_place_root_def] >>
-     Cases_on `supported_hashmap_decl tops (NONE,id)` >> gvs[] >>
+     Cases_on `supported_hashmap_decl (main_module mods) (NONE,id)` >> gvs[] >>
      rename1 `SOME decl` >> PairCases_on `decl` >>
      metis_tac[aug_place_supported_root_decl, optionTheory.IS_SOME_EXISTS, optionTheory.NOT_SOME_NONE]) >>
   rename1 `SOME decl` >> PairCases_on `decl` >>
@@ -136,22 +139,25 @@ Proof
   metis_tac[aug_place_supported_root_decl, optionTheory.IS_SOME_EXISTS, optionTheory.NOT_SOME_NONE]
 QED
 
-Theorem aug_place_supported_toplevel_mutable:
-  body_inv tops ctx cenv cx /\
-  supported_target_info tops bindings (TopLevelNameTarget nsid) = SOME pt /\
-  expr_sim_inv cenv cx env es /\ target_mutable env (TopLevelNameTarget nsid) ==>
+Theorem aug_place_supported_toplevel_mutable_mods:
+  contract_inv mods exps ctx cenv cx /\
+  supported_target_info (main_module mods) bindings (TopLevelNameTarget nsid) = SOME pt /\
+  expr_sim_inv_mods mods cenv cx env es /\ target_mutable env (TopLevelNameTarget nsid) ==>
   ~immutable_root cx (TopLevelNameTarget nsid)
 Proof
   strip_tac >> strip_tac >>
-  drule_all_then strip_assume_tac aug_place_supported_immutable_root_decl >>
+  drule_then assume_tac contract_inv_main_module >>
+  drule_then assume_tac contract_inv_module_codes >>
+  drule_then assume_tac expr_sim_inv_mods_env >>
+  drule_all_then strip_assume_tac aug_place_supported_immutable_root_decl_mods >>
   gvs[target_root_def] >>
   drule_then strip_assume_tac bodyStorageMetadataTheory.supported_variable_decl_mem >>
-  `get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+  `get_module_code cx NONE = SOME (main_module mods)` by simp[] >>
   `bare_globals_complete env.bare_globals cx` by
-    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+    fs[env_consistent_def, env_context_consistent_def] >>
   map_every (fn pat => qpat_assum pat mp_tac)
-    [`get_module_code cx NONE = SOME tops`,
-     `MEM (VariableDecl _ _ _ _ _) tops`,
+    [`get_module_code cx NONE = SOME (main_module mods)`,
+     `MEM (VariableDecl _ _ _ _ _) (main_module mods)`,
      `bare_globals_complete env.bare_globals cx`,
      `target_mutable env (TopLevelNameTarget (NONE,id))`] >>
   POP_ASSUM_LIST kall_tac >>
@@ -159,25 +165,42 @@ Proof
   metis_tac[optionTheory.NOT_SOME_NONE]
 QED
 
+Theorem aug_place_supported_toplevel_mutable:
+  body_inv tops ctx cenv cx /\
+  supported_target_info tops bindings (TopLevelNameTarget nsid) = SOME pt /\
+  expr_sim_inv cenv cx env es /\ target_mutable env (TopLevelNameTarget nsid) ==>
+  ~immutable_root cx (TopLevelNameTarget nsid)
+Proof
+  strip_tac >> drule_then strip_assume_tac body_inv_main_code >>
+  drule_then assume_tac body_inv_contract >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
+                   `ctx` |-> `ctx`, `bindings` |-> `bindings`, `pt` |-> `pt`,
+                   `env` |-> `env`, `es` |-> `es`] aug_place_supported_toplevel_mutable_mods) >>
+  fs[main_module_def, ALOOKUP_def, expr_sim_inv_split_def]
+QED
+
+Theorem aug_place_storage_field_root_mods:
+  contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
+  supported_storage_field_write tops (NONE,id) fld ==>
+  ~immutable_root cx (AttributeTarget (TopLevelNameTarget (src,id)) fld)
+Proof
+  strip_tac >>
+  drule_then strip_assume_tac supported_storage_field_write_decl >>
+  drule_then assume_tac contract_inv_module_codes >>
+  fs[immutable_root_def, target_root_def]
+QED
+
 Theorem aug_place_storage_field_root:
   body_inv tops ctx cenv cx /\ supported_storage_field_write tops nsid fld ==>
   ~immutable_root cx (AttributeTarget (TopLevelNameTarget nsid) fld)
 Proof
-  strip_tac >> PairCases_on `nsid` >>
-  `?vis mut sid slot.
-     supported_variable_decl tops (nsid0,nsid1) =
-       SOME (vis,mut,StructT sid,SOME slot) /\ (mut = Storage \/ mut = Transient)` by
-    (fs[supported_storage_field_write_def,
-        supportedExprFormsTheory.supported_storage_fields_def] >>
-     Cases_on `supported_variable_decl tops (nsid0,nsid1)` >> gvs[] >>
-     rename1 `SOME decl` >> PairCases_on `decl` >>
-     Cases_on `decl1` >> Cases_on `decl2` >> Cases_on `decl3` >> gvs[]) >>
-  drule_then strip_assume_tac bodyStorageMetadataTheory.supported_variable_decl_mem >>
-  gvs[] >>
-  `get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
-  `IS_SOME (find_var_decl_by_name nsid1 tops)` by
-    (irule aug_place_supported_root_decl >> metis_tac[]) >>
-  fs[immutable_root_def,target_root_def,optionTheory.IS_SOME_EXISTS]
+  PairCases_on `nsid` >> strip_tac >>
+  drule_then strip_assume_tac supported_storage_field_write_decl >> gvs[] >>
+  drule_then assume_tac body_inv_contract >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
+                   `ctx` |-> `ctx`, `tops` |-> `tops`, `src` |-> `NONE`,
+                   `id` |-> `nsid1`]
+          aug_place_storage_field_root_mods) >> simp[ALOOKUP_def]
 QED
 
 Theorem aug_place_target_indices_pre:
@@ -347,29 +370,65 @@ QED
 
 Finalise aug_place_legacy_subscript_info
 
-Theorem aug_place_supported_stmt_target_info:
-  body_inv tops ctx cenv cx /\
-  supported_stmt tops bindings (AugAssign ty t bop e) /\
+Theorem aug_place_supported_stmt_target_info_mods:
+  contract_inv mods exps ctx cenv cx /\
+  supported_stmt (main_module mods) bindings (AugAssign ty t bop e) /\
   ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) ==>
-  ?pt. supported_target_info tops bindings t = SOME pt
+  ?pt. supported_target_info (main_module mods) bindings t = SOME pt
 Proof
   strip_tac >>
-  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-    gvs[body_inv_def] >>
-  `IS_SOME (supported_target_info tops bindings t)` suffices_by
+  drule_then assume_tac contract_inv_main_module >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) (main_module mods)))` by
+    metis_tac[contract_inv_unqualified_variable_keys] >>
+  `IS_SOME (supported_target_info (main_module mods) bindings t)` suffices_by
     metis_tac[optionTheory.IS_SOME_EXISTS] >>
   qpat_x_assum `supported_stmt _ _ _` mp_tac >>
   simp[supportedStmtsTheory.supported_stmt_def] >> strip_tac
   >- (gvs[supportedStmtsTheory.supported_target_def] >>
       Cases_on `bt` >> gvs[] >>
       metis_tac[aug_place_legacy_field_info, aug_place_legacy_subscript_info])
-  >- (Cases_on `supported_target_info tops bindings (AttributeTarget bt fld)` >>
+  >- (Cases_on `supported_target_info (main_module mods) bindings (AttributeTarget bt fld)` >>
       gvs[supported_aug_target_def] >> pairarg_tac >> gvs[])
   >- (gvs[supportedStmtsTheory.supported_target_def] >>
       Cases_on `bt` >> gvs[] >>
       metis_tac[aug_place_legacy_subscript_info])
-  >> Cases_on `supported_target_info tops bindings (SubscriptTarget bt k)` >>
+  >> Cases_on `supported_target_info (main_module mods) bindings (SubscriptTarget bt k)` >>
      gvs[supported_aug_target_def] >> pairarg_tac >> gvs[]
+QED
+
+Theorem aug_place_supported_stmt_target_info:
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (AugAssign ty t bop e) /\
+  ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) ==>
+  ?pt. supported_target_info tops bindings t = SOME pt
+Proof
+  metis_tac[body_inv_contract,
+    SIMP_RULE (srw_ss()) [main_module_def, ALOOKUP_def]
+      (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`]
+        aug_place_supported_stmt_target_info_mods)]
+QED
+
+Theorem augassign_entry_rhs_pre_mods:
+  contract_inv mods exps ctx cenv cx /\
+  supported_stmt (main_module mods) bindings (AugAssign ty t bop e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (AugAssign ty t bop e) ==> occurs_abi_decode_target target (main_module mods)) /\
+  expr_sim_inv_mods mods cenv cx env es /\
+  type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+  stmt_exprs_ok cenv (AugAssign ty t bop e) /\
+  call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
+  ~supported_expr_exists (unallocated_bare_global_root cenv env) e ==>
+  expr_body_pre_mods mods cenv cx env e es
+Proof
+  strip_tac >>
+  drule_then assume_tac contract_inv_cenv_modules >>
+  drule_then strip_assume_tac aug_place_typing >>
+  `supported_expr (main_module mods) e` by metis_tac[supported_augassign_contract] >>
+  mp_tac (Q.INST [`ctx` |-> `ctx`, `exps` |-> `exps`]
+                  stmt_expr_body_pre_main_alloc_mods) >>
+  fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     alloc_limits_stmt_def, int_calls_stmt_def] >>
+  metis_tac[call_evaluation_safe_append_right]
 QED
 
 Theorem aug_place_extend_immutable_origin:
