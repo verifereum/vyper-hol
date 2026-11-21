@@ -4,6 +4,17 @@ Ancestors
   valueEncodingProofs valueEncodingProps valueTypingMemoryProps
   bodyPtrDefs immSectionDead vyperValue list
 
+Theorem immutable_section_byte_window:
+  off + n <= lo ==>
+  mem_bytes_at off n (mem_bytes_at 0 lo mem) = mem_bytes_at off n mem
+Proof
+  strip_tac >>
+  qspecl_then [`0`,`off`,`n`,`lo`,`mem`] mp_tac
+    abiCanonicalHeadSizeTheory.mem_bytes_at_window >>
+  simp[GSYM valueEncodingDefsTheory.mem_bytes_at_bounded,
+       valueEncodingProofsTheory.LENGTH_mem_bytes_at_proof]
+QED
+
 Theorem immutable_prefix_interior_dead:
   off + type_memory_size tv <= lo /\ well_formed_type_value tv /\
   value_has_type tv v /\
@@ -14,10 +25,7 @@ Proof
   strip_tac >>
   `mem_bytes_at off (type_memory_size tv) (mem_bytes_at 0 lo mem) =
    mem_bytes_at off (type_memory_size tv) mem` by
-    (qspecl_then [`0`,`off`,`type_memory_size tv`,`lo`,`mem`] mp_tac
-       abiCanonicalHeadSizeTheory.mem_bytes_at_window >>
-     simp[GSYM valueEncodingDefsTheory.mem_bytes_at_bounded,
-          valueEncodingProofsTheory.LENGTH_mem_bytes_at_proof]) >>
+    (irule immutable_section_byte_window >> simp[]) >>
   `val_wf tv v` by metis_tac[value_has_type_memory_wf] >>
   `!m. mem_agree_outside dirty (mem_bytes_at 0 lo mem) m ==>
        val_in_memory tv v off m` by

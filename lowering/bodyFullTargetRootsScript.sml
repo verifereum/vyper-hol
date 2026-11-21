@@ -239,7 +239,8 @@ Proof
   drule_all_then strip_assume_tac env_consistent_bare_global_ready_src >>
   Cases_on `ALOOKUP es.immutables cx.txn.target` >>
   gvs[get_source_immutables_def] >>
-  Cases_on `FLOOKUP (get_source_immutables NONE x) id` >>
+  rename1 `ALOOKUP es.immutables cx.txn.target = SOME imms` >>
+  Cases_on `FLOOKUP (get_source_immutables NONE imms) id` >>
   gvs[get_source_immutables_def] >>
   rename1 `_ = SOME entry` >> PairCases_on `entry` >>
   irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>

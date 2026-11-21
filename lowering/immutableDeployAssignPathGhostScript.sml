@@ -1,7 +1,7 @@
 (* Restore the ghost invariant after a write to one live immutable path. *)
 Theory immutableDeployAssignPathGhost
 Ancestors
-  immutableDeployAssignMemoryFrame immutableDeployAssignRestore
+  immutableDeployAssignMemoryFrame immutableDeployAssignRestore immutablePrefixDead
   immutableDeployAssignFacts bodyPtrDefs bodySim bodyInvSplit gasContext
   immutableRelation bodyStorageMetadata vyperContext immutableDeployAssignSourceFrame
   stateRelProj valueTypingMemoryProps abiCanonicalHeadSize
@@ -144,15 +144,6 @@ Proof
        immutable_declaration_interval_bound) >>
      simp[GSYM imm_len_def]) >>
   simp[] >> metis_tac[]
-QED
-
-Theorem immutable_section_byte_window[local]:
-  off + n <= lo ==>
-  mem_bytes_at off n (mem_bytes_at 0 lo mem) = mem_bytes_at off n mem
-Proof
-  strip_tac >>
-  qspecl_then [`0`,`off`,`n`,`lo`,`mem`] mp_tac mem_bytes_at_window >>
-  simp[GSYM mem_bytes_at_bounded,LENGTH_mem_bytes_at_proof]
 QED
 
 Theorem immutable_path_section_dead:

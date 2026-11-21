@@ -3038,36 +3038,16 @@ Theorem tuple_immutable_slot_span[local]:
   off + type_memory_size tv <= lo
 Proof
   strip_tac >>
-  drule body_inv_immutable_section_layout >>
-  rewrite_tac[immutable_section_layout_def] >> strip_tac >>
-  first_x_assum drule >>
-  disch_then (qx_choosel_then [`pre`,`post`,`vis`,`ty'`,`slot`] strip_assume_tac) >>
-  `MEM (VariableDecl vis Immutable id ty' slot) tops` by simp[] >>
-  qpat_assum `body_inv _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
-  `ty' = ty` by
-    (drule_all build_maps_variable >> strip_tac >>
-     qpat_assum `!i. cenv.ce_module_var_type _ = _`
-       (qspec_then `id` mp_tac) >>
-     gvs[optionTheory.SOME_11]) >>
-  qpat_x_assum `ty' = ty` SUBST_ALL_TAC >>
-  `get_tenv cx = type_env tops` by
-    simp[get_tenv_def, type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2] >>
-  `evaluate_type (type_env tops) ty = SOME tv` by metis_tac[] >>
-  `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
-   type_memory_size tv` by
-    (drule_all immutableDeployAssignFactsTheory.immutable_exact_slot_size >> simp[]) >>
-  drule_then assume_tac cx_tops_module >>
-  `lo = imm_len tops` by fs[dead_lo_ok_def] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
+  `cenv.ce_module = NONE` by fs[body_inv_def,cenv_module_pins_def] >>
+  `FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
+   cenv.ce_module_var_type (cenv.ce_module,id) = SOME ty` by simp[] >>
+  drule_all_then strip_assume_tac
+    immutableDeployAssignPathGhostTheory.immutable_assign_section_root >>
+  conj_tac >-
+    (qpat_assum `get_tenv cx = type_env tops` (SUBST1_TAC o SYM) >>
+     first_assum ACCEPT_TAC) >>
   conj_tac >- (qexistsl_tac [`pre`,`post`,`vis`,`slot`] >> asm_rewrite_tac[]) >>
-  qpat_assum `lo = imm_len _` SUBST1_TAC >>
-  rewrite_tac[imm_len_def] >>
-  qpat_assum `off = _` SUBST1_TAC >>
-  qpat_assum `type_mem_bytes _ _ = _` (SUBST1_TAC o SYM) >>
-  qpat_assum `tops = _` SUBST1_TAC >>
-  irule (SIMP_RULE (srw_ss()) []
-    (Q.INST [`off` |-> `0`] (SPEC_ALL immutable_declaration_interval_bound)))
+  first_assum ACCEPT_TAC
 QED
 
 (* Only the access checks: the range's byte and ghost effects come from

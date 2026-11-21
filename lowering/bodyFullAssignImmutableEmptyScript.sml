@@ -9,6 +9,7 @@ Ancestors
   bodyFullMemoryFrames bodyPtrBytestringBuiltinsWindowGhost vyperPlaceFrames
   stmtSimAugAssignPlaceMemory vyperPlaceWriteSoundness
   immutableAssignEmpty immutableDeployAssignRestore immutableDeployAssignMemoryFrame
+  immutableCtorWordStoreGhost[qualified,ignore_grammar]
   exprSimProps alist compileEnv exprLoweringProps
   bodySim bodyInvCodeProps bodyStorageMetadata immutableRelation
   ctorDeployDeadSectionFrame compileVyper venomMemProps stateRelProj
@@ -129,68 +130,20 @@ Theorem immutable_empty_store_ghost:
   ghost_inv_at D lo d ce cx ee Gf tf q
 Proof
   strip_tac >>
-  `local_ptrs_rel func ce es.scopes s` by
-    metis_tac[stmt_state_rel_local_ptrs_alloca] >>
-  `!name b len. local_region ce es.scopes s name b len ==>
-     mem_bytes_at b len q.vs_memory = mem_bytes_at b len s.vs_memory` by
-    (rpt strip_tac >> Cases_on `len = 0` >- simp[mem_bytes_at_def] >>
-     `0 < len` by decide_tac >>
-     `lo <= b` by (drule_all body_full_local_region_lower_bound >> simp[]) >>
-     `off+32 <= b` by decide_tac >>
-     simp[] >> irule mstore_mem_bytes_at_disjoint >> gvs[]) >>
-  `!x sz. not_fresh_at sa x /\ ptr_covers G tn x s sz ==>
-     ptr_covers Gf tf x q sz` by
-    (rw[ptr_covers_def] >> metis_tac[]) >>
-  `q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
-   q.vs_call_ctx = s.vs_call_ctx /\ q.vs_allocas = s.vs_allocas /\
-   q.vs_alloca_next = s.vs_alloca_next` by
-    (qpat_x_assum `q with <|vs_vars := _; vs_memory := _;
-       vs_immutables := _; vs_prev_bb := _; vs_current_bb := _;
-       vs_inst_idx := _|> = s` mp_tac >>
-     simp[venom_state_component_equality] >> metis_tac[]) >>
-  fs[ghost_inv_at_def] >> rpt conj_tac
-  >- suspend "locals"
-  >- suspend "return"
-  >- fs[stor_taint_ok_at_def, dead_lo_ok_def]
-  >- (rpt strip_tac >> irule imm_section_dead_mstore_zero >>
-      fs[SUBSET_DEF] >> metis_tac[])
-  >- metis_tac[local_ptrs_reserved_def]
-  >> gvs[allocas_from_def] >> metis_tac[]
+  mp_tac (Q.INST [`word` |-> `0w`]
+    immutableCtorWordStoreGhostTheory.immutable_ctor_word_store_ghost) >>
+  impl_tac >-
+    (simp[] >> rpt strip_tac >>
+     irule imm_section_dead_mstore_zero >>
+     `i IN tn.t_mem` by
+       (qpat_assum `tf.t_mem SUBSET tn.t_mem`
+          (drule_then ACCEPT_TAC o REWRITE_RULE [SUBSET_DEF])) >>
+     qpat_assum `ghost_inv_at _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
+     qpat_assum `!i. i < lo /\ i IN tn.t_mem ==> _`
+       (qspec_then `i` mp_tac) >> simp[]) >>
+  simp[]
 QED
-
-Resume immutable_empty_store_ghost[locals]:
-  rpt gen_tac >> strip_tac >>
-  `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
-  conj_tac >- metis_tac[] >>
-  rpt gen_tac >> strip_tac >>
-  `ptr_covers G tn p s sz` by metis_tac[] >>
-  `?w0. lookup_var p s = SOME w0` by fs[ptr_covers_def] >>
-  `lookup_var p s = SOME w` by metis_tac[] >>
-  `val_wf entry.type entry.value /\ type_memory_size entry.type <= sz` by
-    (fs[local_ptrs_rel_def] >> metis_tac[]) >>
-  `val_footprint entry.type entry.value <= sz` by
-    (drule val_footprint_le >> decide_tac) >>
-  `local_region ce es.scopes s name (w2n w) sz` by
-    (simp[local_region_def] >> metis_tac[]) >>
-  `!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
-    val_in_memory entry.type entry.value (w2n w) m` by metis_tac[] >>
-  `mem_bytes_at (w2n w) sz q.vs_memory =
-   mem_bytes_at (w2n w) sz s.vs_memory` by metis_tac[] >>
-  `!i. w2n w <= i /\ i < w2n w+sz /\ i IN tf.t_mem ==>
-       i IN tn.t_mem` by (fs[SUBSET_DEF] >> metis_tac[]) >>
-  irule robust_val_in_memory_window_transport >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl_tac [`tn.t_mem`,`tf.t_mem`,`sz`,`s.vs_memory`,`q.vs_memory`] >>
-  gvs[] >> metis_tac[]
-QED
-
-Resume immutable_empty_store_ghost[return]:
-  Cases_on `d` >> fs[return_buf_ptr_def] >>
-  rename1 `return_buf_ptr (SOME bc)` >> PairCases_on `bc` >>
-  fs[return_buf_ptr_def] >> metis_tac[]
-QED
-
-Finalise immutable_empty_store_ghost
 
 Theorem immutable_empty_path_store_restore:
   stmt_state_rel H ctx func ce cx es s /\ expr_sim_inv ce cx env es /\
