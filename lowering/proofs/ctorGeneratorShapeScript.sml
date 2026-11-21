@@ -40,30 +40,6 @@ Proof
   strip_tac >> gvs[cenv_shape_mode_ok_def] >> metis_tac[]
 QED
 
-
-
-Theorem deploy_fallthrough_shape_mode[local]:
-  !lbl. jump_label_ok lbl ==>
-    shape_mode_step static F compiler_label (\st. T)
-      (do cs <- comp_get;
-          if block_is_terminated cs then return ()
-          else emit_inst JMP [Label lbl] [] od) (\x st. T)
-Proof
-  rpt strip_tac >>
-  irule shape_step_bind_mode >> qexists_tac `\cs st. T` >>
-  conj_tac
-  >- (gen_tac >> BETA_TAC >> IF_CASES_TAC
-      >- (irule shape_step_return_mode >> simp[]) >>
-      mp_tac (Q.SPECL [`F`, `compiler_label`, `\st. T`,
-        `JMP`, `[Label lbl]`, `[]`] shape_step_emit_inst_mode) >>
-      simp[shape_mode_stable_def, label_or_plain_def,
-           stackPlanTypesTheory.is_label_operand_def, lowered_inst_mode_ok_def,
-           mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def,
-           inst_jump_labels_ok_def, is_terminator_def, is_read0_opcode_def,
-           label_positions_ok_def, operand_case_not_label, is_param_opcode_def]) >>
-  simp[shape_mode_step_def, comp_get_def, shape_extends_refl_mode]
-QED
-
 Theorem deploy_constructor_tail_shape_mode:
   !cenv body imm nr key trans vw runtime_size immutables_len.
     cenv.ce_return_pc = NONE /\

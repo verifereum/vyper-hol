@@ -35,7 +35,7 @@ Ancestors
   emitHelper exprLowering stmtLowering moduleLowering vyperCompiler
   compileVyper constSubst vyperGetter abiEncoder supportedProgram supportedNames
   supportedStmtTraverse supportedExprTraverse supportedTargets unitShapeDefs venomInst vyperAST
-  ptrOkCheck ptrDiscipline pointerClosure o1LowerDloadClosure o1PassContract pred_set
+  ptrOkCheck ptrDiscipline pointerConfinedProps pred_set
 
 (* ===== Side conditions ===== *)
 
@@ -99,12 +99,6 @@ Theorem subst_consts_exprs_length[simp]:
   !es. LENGTH (subst_consts_exprs env es) = LENGTH es
 Proof
   Induct >> simp[subst_consts_expr_def]
-QED
-
-Theorem subst_consts_exprs_null[local]:
-  NULL (subst_consts_exprs env es) <=> NULL es
-Proof
-  Cases_on `es` >> simp[subst_consts_expr_def]
 QED
 
 Theorem subst_consts_expr_shape_mode:
@@ -9948,15 +9942,18 @@ QED
 Theorem compile_raw_call_calldata_finish_shape[local]:
   shape_mode_step F internal compiler_label
     (\st. EVERY (plain_operand st) [addr; gas; value])
-    (\st. let ((out_val,out_ptr),st1) = compile_raw_call_outbuf n st in
-          let ((ptr,len),st2) = compile_msg_data_to_memory st1 in
-          let (op,st3) = compile_raw_call_finish addr ptr len gas value
-                         call_ty n rof out_val out_ptr st2 in
-          if n = 0 then (StackValue ret_ty op, st3)
-          else (LocatedValue ret_ty (mk_ptr op LocMemory), st3))
+    (\st.
+       UNCURRY (\(out_val,out_ptr) st1.
+         UNCURRY (\(ptr,len) st2.
+           UNCURRY (\op st3.
+             if n = 0 then (StackValue ret_ty op, st3)
+             else (LocatedValue ret_ty (mk_ptr op LocMemory), st3))
+             (compile_raw_call_finish addr ptr len gas value
+                call_ty n rof out_val out_ptr st2))
+           (compile_msg_data_to_memory st1))
+         (compile_raw_call_outbuf n st))
     (\v st. value_shape_ok st v)
 Proof
-  simp_tac bool_ss [LET_THM] >>
   irule shape_step_uncurry_mode >>
   qexists_tac `\out st. EVERY (plain_operand st)
       [addr; gas; value; FST out; SND out]` >>
@@ -10047,7 +10044,7 @@ QED
 
 val raw_calldata_finish_tac =
   irule shape_step_conseq_mode >>
-  irule_at Any (SIMP_RULE bool_ss [LET_THM] compile_raw_call_calldata_finish_shape) >>
+  irule_at Any compile_raw_call_calldata_finish_shape >>
   simp[Abbr `KwPre`] >>
   Cases_on `opts0` >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def];
 
@@ -16247,9 +16244,14 @@ Proof
   `inst_output inst = SOME x` by
     gvs[listTheory.LENGTH_EQ_NUM_compute, inst_output_def] >>
   `x IN ptr_roots P fn` by (simp[ptr_roots_def] >> metis_tac[]) >>
-  `x IN fn_pv P fn` by
-    (mp_tac (Q.INST [`roots` |-> `ptr_roots P fn`, `fn` |-> `fn`] pointer_derived_vars_roots) >>
-     simp[FINITE_ptr_roots, SUBSET_DEF, fn_pv_def] >> metis_tac[]) >>
+  `FINITE (ptr_roots P fn)` by
+    (POP_ASSUM_LIST (K ALL_TAC) >> irule SUBSET_FINITE >>
+     qexists_tac `set (FLAT (MAP (\i. i.inst_outputs) (fn_insts fn)))` >>
+     simp[SUBSET_DEF, ptr_roots_def, pointerConfinedDefsTheory.alloca_roots_def,
+          MEM_FLAT, MEM_MAP, PULL_EXISTS] >> rpt strip_tac >>
+     rename1 `inst_output root = SOME _` >>
+     qexists_tac `root` >> simp[] >> gvs[inst_output_def, AllCaseEqs()]) >>
+  `x IN fn_pv P fn` by metis_tac[fn_pv_def, roots_in_pointer_derived_vars] >>
   simp[gas_var_def, retpc_var_def] >>
   metis_tac[pointer_copy_phi_var_excluded, MEM]
 QED
@@ -16748,29 +16750,6 @@ QED
    package_internal_blocks splits the block stream at each internal entry
    label; internal_descriptors_ok keeps those labels apart from
    each other and from every other label. *)
-Theorem unit_entry_no_params_from_first:
-  o1_source_unit_ok unit /\
-  ALL_DISTINCT (MAP (\f. f.fn_name) unit.cu_context.ctx_functions) /\
-  EVERY (\i. ~is_param_opcode i.inst_opcode)
-    (fn_insts (HD unit.cu_context.ctx_functions)) ==>
-  unit_entry_no_params unit
-Proof
-  strip_tac >>
-  `entry_fn_first unit.cu_context` by
-    fs[o1_source_unit_ok_def, unit_shape_ok_def] >>
-  qpat_x_assum `entry_fn_first _`
-    (strip_assume_tac o REWRITE_RULE [entry_fn_first_def]) >>
-  rename1 `_ = efn :: rest` >>
-  qpat_x_assum `_.ctx_functions = _`
-    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >>
-              rewrite_tac [unit_entry_no_params_def, entry_fn_no_params_def, th]) >>
-  qx_gen_tac `g` >> simp_tac std_ss [MEM] >> rpt strip_tac
-  >- fs[] >>
-  `MEM g.fn_name (MAP (\f. f.fn_name) rest)` by
-    (simp[MEM_MAP] >> metis_tac[]) >>
-  gs[]
-QED
-
 Theorem lower_vyper_runtime_unit_source_unit_ok_shape_with_no_params_mode:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
