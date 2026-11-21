@@ -228,6 +228,7 @@ Theorem deploy_gas_link_from_focus[local]:
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_state_rel tops (assemble prog') am tx es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
     vs_out = opt_deploy_entry_state_own prog prog' cplan tops es /\
     deploy_source_ok tops am (tx with code := vs_out.vs_code) /\
     w2n vs_out.vs_initial_fmp <= w2n fmp /\
