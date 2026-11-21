@@ -18532,6 +18532,7 @@ Theorem body_assign_nested_empty_immutable_full:
        body_base_target_full_ok cx t) /\
     body_expr_full_ok cx e /\
     body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
     struct_args_unique tops /\
     supported_stmt tops bindings (Assign (BaseTarget t) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
