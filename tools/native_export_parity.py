@@ -25,8 +25,11 @@ then compiles each JSON natively, and each contract gets a verdict:
                `stuck`; `exception`)
   seed         a mismatch, but Vyper produces HOL's bytes under another
                PYTHONHASHSEED (the compile runs with seed 0)
-  outside      the program is outside supported_program; the detail gives
-               the runner's result, which doesn't fail the check
+  outside      the program is outside supported_program, or is a unit of
+               several modules (an imported stdlib module, or an interface
+               kept for its events), which supported_program and the top
+               theorems do not cover; the detail gives the runner's result,
+               which doesn't fail the check
   rejected     the HOL frontend rejected the program
   vyper-error  the patched pin doesn't compile the source at this profile
   error        the runner gave no supported_program verdict, or the known
@@ -34,7 +37,8 @@ then compiles each JSON natively, and each contract gets a verdict:
                another outcome, or is gone); fails the check
 
 Each line also gives, without changing the verdict, the program's
-supported_program verdict (sp=T|F, - if not reached), and how the deploy and
+supported_program verdict (sp=T|F, sp=unit for a unit of several modules,
+- if not reached), and how the deploy and
 runtime bytes of three compilations compare pairwise (same, deploy, runtime,
 both, or n/a without one of them): the patched pin's, HOL's, and, given
 --stock-python (the Python of the pinned Vyper without the patches, from
@@ -108,7 +112,7 @@ class Verdict:
     contract: Contract
     verdict: str
     detail: str
-    gate: str = "-"  # supported_program: T, F, or - when the runner didn't say
+    gate: str = "-"  # supported_program: T, F, unit (several modules), or - when the runner didn't say
     checker: str = "-"  # check_contract's verdict (CHECKS), or - when not run
     bytes: dict[str, str] = field(default_factory=dict)  # "stock/patched": same, ...
 
@@ -242,8 +246,11 @@ def classify(line: str) -> tuple[str, str, str]:
 
 
 def gate(line: str) -> str:
-    """A runner line's supported_program verdict: T, F, or -."""
+    """A runner line's supported_program verdict: T, F, unit (a unit of
+    several modules, which the runner prints as sp=F modules=N), or -."""
     fields = line.split(" ", 1)[1].partition(": ")[0].split()
+    if any(f.startswith("modules=") for f in fields):
+        return "unit"
     return next((f.removeprefix("sp=") for f in fields if f.startswith("sp=")), "-")
 
 
@@ -358,7 +365,8 @@ def report(verdicts: list[Verdict], skipped: Counter) -> str:
     lines += [f"not compared: {n} {reason}" for reason, n in skipped.most_common()]
     gates = Counter(v.gate for v in verdicts)
     lines.append("supported_program: " + ", ".join(
-        f"{gates[g]} {name}" for g, name in (("T", "sp=T"), ("F", "sp=F"), ("-", "not reached"))))
+        f"{gates[g]} {name}" for g, name in
+        (("T", "sp=T"), ("F", "sp=F"), ("unit", "units of several modules"), ("-", "not reached"))))
     checked = any(v.checker != "-" for v in verdicts)
     if checked:
         checks = Counter(v.checker for v in verdicts)
