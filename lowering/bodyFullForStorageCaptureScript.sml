@@ -205,31 +205,3 @@ Proof
   rpt strip_tac >> simp[Abbr `G1`, Abbr `i`, scalar_step_old_prov] >>
   metis_tac[]
 QED
-
-Theorem for_storage_iterator_dynamic_length_run:
-  compile_ptr_load ctor imm (slot_loc tr) bop sa = (len_op,sb) /\
-  fn_has_code sa sb func /\
-  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  eval_operand bop s = SOME slot /\ op_taint tn bop = {} /\
-  key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
-  (if tr then tload slot s else sload slot s) = n2w len ==>
-  ?out t G1 tn1.
-    len_op = Var out /\
-    t = (update_var out (n2w len) s with vs_inst_idx := SUC s.vs_inst_idx) /\
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G1,tn1) /\
-    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ~t.vs_halted /\ eval_operand len_op t = SOME (n2w len) /\
-    op_taint tn1 len_op = {} /\ op_prov G1 len_op = NONE /\
-    tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\
-    tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
-    (!x. not_fresh_at sa x ==> x <> out) /\
-    (!x. x <> out ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP G1 x = FLOOKUP G x /\ op_taint tn1 (Var x) = op_taint tn (Var x))
-Proof
-  strip_tac >> drule_all for_storage_iterator_dynamic_length_run_uniform >>
-  disch_then (qspecl_then [`explicit`,`PG`,`G`] strip_assume_tac) >>
-  qexistsl [`out`,`t`,`G1`,`tn1`] >> rpt conj_tac >>
-  FIRST [first_assum ACCEPT_TAC, first_assum irule]
-QED
