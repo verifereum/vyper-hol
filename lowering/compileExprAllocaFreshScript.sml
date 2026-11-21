@@ -2909,3 +2909,25 @@ Proof
   fs[EVERY_MEM, not_fresh_at_def] >>
   metis_tac[]
 QED
+
+Theorem lower_value_alloca_ids:
+  ci_mono sa (SND (lower_value compile_expr ce ty e sa)) /\
+  EVERY (\i. i.inst_opcode = ALLOCA ==>
+    i.inst_id < (SND (lower_value compile_expr ce ty e sa)).cs_next_id)
+    (added_insts sa (SND (lower_value compile_expr ce ty e sa)))
+Proof
+  `alloca_suffix sa.cs_next_var sa (SND (lower_value compile_expr ce ty e sa))` by
+    (irule alloca_suffix_lower_value >> simp[alloca_suffix_compile_expr]) >>
+  fs[alloca_suffix_def, EVERY_MEM, frag_ids_def] >> metis_tac[]
+QED
+
+Theorem store_bytestring_alloca_ids:
+  ci_mono sa (SND (compile_store_bytestring src dst sa)) /\
+  EVERY (\i. i.inst_opcode = ALLOCA ==>
+    i.inst_id < (SND (compile_store_bytestring src dst sa)).cs_next_id)
+    (added_insts sa (SND (compile_store_bytestring src dst sa)))
+Proof
+  `alloca_suffix sa.cs_next_var sa (SND (compile_store_bytestring src dst sa))` by
+    simp[alloca_suffix_store_bytestring] >>
+  fs[alloca_suffix_def, EVERY_MEM, frag_ids_def] >> metis_tac[]
+QED

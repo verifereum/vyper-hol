@@ -1,6 +1,6 @@
 (* Source-side preconditions for finite-horizon AugAssign composition. *)
 Theory augAssignFullEntryPre
-Ancestors
+Ancestors vyperTypeEnv compileEnv targetPlaceSimCasesBase
   bodyAugPlaceTarget bodyExprPreFacts bodyStorageCases stmtSimAugAssignPlace stmtSimAugAssignPlaceMemory
   bodySim exprSimHypsDefs targetPlaceSim targetPlaceLive gasContext
   supportedStmts supportedTargets supportedExprTraverse supportedStmtTraverse
@@ -40,7 +40,27 @@ Proof
   metis_tac[call_evaluation_safe_append_right]
 QED
 
-Theorem augassign_entry_target_pre:
+Theorem typed_nested_immutable_root_nonword:
+  !t vt env id root_ty.
+    type_place_target env t = SOME vt /\
+    target_root t = TopLevelNameTarget (NONE,id) /\
+    t <> TopLevelNameTarget (NONE,id) /\
+    FLOOKUP env.bare_global_assignable (NONE,id) = SOME root_ty ==>
+    ~is_word_type root_ty
+Proof
+  ho_match_mp_tac base_assignment_target_induct >>
+  simp[target_root_def,type_place_target_SubscriptTarget,type_place_target_AttributeTarget] >>
+  rpt strip_tac >>
+  Cases_on `t = TopLevelNameTarget (NONE,id)`
+  >- (gvs[type_place_target_TopLevelNameTarget] >>
+      Cases_on `root_ty` >> gvs[subscript_vtype_def,is_word_type_def])
+  >- metis_tac[]
+  >- (gvs[type_place_target_TopLevelNameTarget] >>
+      Cases_on `root_ty` >> gvs[attribute_type_def,is_word_type_def]) >>
+  metis_tac[]
+QED
+
+Theorem augassign_entry_target_indices_pre:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (AugAssign ty t bop e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -48,11 +68,10 @@ Theorem augassign_entry_target_pre:
   expr_sim_inv cenv cx env es /\
   type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
   stmt_exprs_ok cenv (AugAssign ty t bop e) /\
-  call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
-  ~immutable_root cx t ==>
-  target_pre cenv cx env t es
+  call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) ==>
+  target_indices_pre cenv cx env t
 Proof
-  strip_tac >> simp[target_pre_def] >>
+  strip_tac >>
   Cases_on `(?bt fld. t = AttributeTarget bt fld) \/
             (?bt k. t = SubscriptTarget bt k)`
   >- (
@@ -78,4 +97,20 @@ Proof
     simp[optionTheory.IS_SOME_EXISTS] >>
     metis_tac[call_evaluation_safe_append_left]) >>
   Cases_on `t` >> gvs[target_indices_pre_def]
+QED
+
+Theorem augassign_entry_target_pre:
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (AugAssign ty t bop e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (AugAssign ty t bop e) ==> occurs_abi_decode_target target tops) /\
+  expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+  stmt_exprs_ok cenv (AugAssign ty t bop e) /\
+  call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
+  ~immutable_root cx t ==>
+  target_pre cenv cx env t es
+Proof
+  strip_tac >> simp[target_pre_def] >>
+  drule_all augassign_entry_target_indices_pre >> simp[]
 QED

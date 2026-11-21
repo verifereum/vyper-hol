@@ -48,3 +48,4 @@ Ancestors
   abiScratchBuiltinOpenSource exprSimAbiEncodeRegion
   (* S1 request-prefix companion cases. *)
   s1PrefixLiteralWord s1PrefixWordWei s1PrefixRawCall
+  s1PrefixNames s1PrefixBuiltinLeaves s1PrefixPrecompile s1PrefixStmtZero

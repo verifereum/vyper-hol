@@ -1,9 +1,9 @@
 (* Memory and allocation frames for a constructor immutable write. *)
 Theory immutableDeployAssignStateFrame
 Ancestors
-  immutableDeployAssignSourceFrame immutableDeployAssignFacts localPtrsProps
+  immutableDeployAssignMemoryFrame immutableDeployAssignSourceFrame immutableDeployAssignFacts localPtrsProps
   valueEncodingProps exprLoweringProps compileEnv loweringStateRelDefs finite_map vyperPlaceFrames
-  venomState
+  venomState vyperState vyperTypeInitialState
 
 Theorem immutable_store_local_ptrs_frame:
   local_ptrs_rel func ce scopes s /\
@@ -26,14 +26,14 @@ Proof
   simp[] >> rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]
 QED
 
-Theorem immutable_store_alloca_sep_frame:
+Theorem immutable_path_store_alloca_sep_frame:
   immutable_alloca_sep func ce cx es s /\
   local_ptrs_reserved ce sa /\
   (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) /\
   q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next /\
   ALOOKUP es.immutables cx.txn.target = SOME mods /\
   FLOOKUP (get_source_immutables ce.ce_module mods) id = SOME (tv,old) /\
-  write_place cx (ImmutablePlace ce.ce_module id []) v es = (INL (),es') ==>
+  write_place cx (ImmutablePlace ce.ce_module id path) v es = (INL (),es') ==>
   immutable_alloca_sep func ce cx es' q
 Proof
   strip_tac >>
@@ -44,12 +44,23 @@ Proof
        NONE => FEMPTY | SOME imms => get_source_immutables ce.ce_module imms)
       name = SOME (tv',v') ==>
     ?v0. FLOOKUP (get_source_immutables ce.ce_module mods) name = SOME (tv',v0)` by
-    (rpt strip_tac >>
-     drule_all immutable_root_write_lookup >>
-     disch_then (qspec_then `name` mp_tac) >>
-     Cases_on `ALOOKUP es'.immutables cx.txn.target` >>
-     gvs[] >> Cases_on `name = id` >> gvs[] >> metis_tac[]) >>
+    (drule_all_then strip_assume_tac immutable_path_write_source >> gvs[] >>
+     simp[update_immutable_def,get_source_immutables_set_same,FLOOKUP_UPDATE] >>
+     rpt gen_tac >> Cases_on `name = id` >> simp[] >> metis_tac[]) >>
   fs[immutable_alloca_sep_def, immutable_decl_sep_def, local_region_def,
      lookup_var_def, local_ptrs_reserved_def] >>
   metis_tac[]
+QED
+
+Theorem immutable_store_alloca_sep_frame:
+  immutable_alloca_sep func ce cx es s /\
+  local_ptrs_reserved ce sa /\
+  (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) /\
+  q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next /\
+  ALOOKUP es.immutables cx.txn.target = SOME mods /\
+  FLOOKUP (get_source_immutables ce.ce_module mods) id = SOME (tv,old) /\
+  write_place cx (ImmutablePlace ce.ce_module id []) v es = (INL (),es') ==>
+  immutable_alloca_sep func ce cx es' q
+Proof
+  strip_tac >> drule_all immutable_path_store_alloca_sep_frame >> simp[]
 QED

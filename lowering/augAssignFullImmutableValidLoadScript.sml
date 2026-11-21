@@ -152,8 +152,10 @@ Finalise augassign_immutable_load_valid_framed_joint
 
 (* The immutable load may emit an ADD before ILOAD. Use the constructor word
    load facts for its endpoint and lift the sequence at every horizon. *)
-Theorem augassign_ctor_word_load:
-  compile_imm_load_word T imm (Lit a) sa = (op,sb) /\
+Theorem augassign_ctor_word_load_at:
+  compile_imm_load_word T imm arg sa = (op,sb) /\
+  copy_old_operand sa arg /\ eval_operand arg s = SOME a /\
+  op_taint tn arg = {} /\ op_prov G arg = NONE /\
   fn_has_code sa sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   w2n a + 32 <= lo /\ lo <= s.vs_alloca_next /\
@@ -180,12 +182,9 @@ Theorem augassign_ctor_word_load:
       FLOOKUP G1 x = FLOOKUP G x /\ op_taint tn1 (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
-  `copy_old_operand sa (Lit a) /\ eval_operand (Lit a) s = SOME a /\
-    op_taint tn (Lit a) = {} /\ op_prov G (Lit a) = NONE` by
-    simp[copy_old_operand_def, eval_operand_def, op_taint_def, op_prov_def] >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     (irule rest_word_ptr_load_mem_ok >>
-     qexistsl [`a`,`Lit a`,`T`,`imm`,`LocCode`,`op`] >>
+     qexistsl [`a`,`arg`,`T`,`imm`,`LocCode`,`op`] >>
      simp[contextTheory.compile_ptr_load_def] >>
      Cases_on `imm` >> fs[] >> rpt strip_tac >> decide_tac) >>
   drule copy_ctor_load_shape >>
@@ -227,11 +226,46 @@ Proof
          strip_tac >> fs[copy_runtime_frame_def, run_inst_seq_def,
                          step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def] >>
          gvs[state_frame_def, update_var_def]) >>
-     rename1 `compile_imm_load_word T (SOME region) (Lit a) sa = (op,sb)` >>
+     rename1 `compile_imm_load_word T (SOME region) arg sa = (op,sb)` >>
      `eval_operand region s = SOME 0w` by fs[] >>
      drule_all compile_imm_load_word_ctor_execution >>
      strip_tac >> gvs[state_frame_def, update_var_def]) >>
   fs[immutable_copy_read_def, eval_operand_def, lookup_var_def,
      copy_old_operand_def, copy_runtime_frame_def] >>
   Cases_on `op` >> simp[eval_operand_def, lookup_var_def] >> metis_tac[]
+QED
+
+Theorem augassign_ctor_word_load:
+  compile_imm_load_word T imm (Lit a) sa = (op,sb) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  w2n a + 32 <= lo /\ lo <= s.vs_alloca_next /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  (!region. imm = SOME region ==> eval_operand region s = SOME 0w /\
+     copy_old_operand sa region /\ op_taint tn region = {} /\ op_prov G region = NONE) /\
+  mem_word_taint tn.t_mem (w2n a) = {} ==>
+  sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  sa.cs_next_var <= sb.cs_next_var /\
+  EVERY (\i. i.inst_opcode <> ALLOCA) (emitted_insts sa sb) /\
+  ?u G1 tn1.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK u,G1,tn1)) /\
+    eval_operand op u = SOME (mload (w2n a) s) /\
+    op_taint tn1 op = {} /\ op_prov G1 op = NONE /\
+    (!x. op = Var x ==> not_fresh_at sb x) /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    state_frame u = state_frame (s with vs_inst_idx := u.vs_inst_idx) /\
+    tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\
+    tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
+      FLOOKUP G1 x = FLOOKUP G x /\ op_taint tn1 (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  `copy_old_operand sa (Lit a) /\ eval_operand (Lit a) s = SOME a /\
+   op_taint tn (Lit a) = {} /\ op_prov G (Lit a) = NONE` by
+    simp[copy_old_operand_def, eval_operand_def, op_taint_def, op_prov_def] >>
+  drule_all (Q.INST [`arg` |-> `Lit a`] augassign_ctor_word_load_at) >>
+  disch_then (qspecl_then [`explicit`,`PG`] ACCEPT_TAC)
 QED

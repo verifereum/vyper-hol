@@ -6,7 +6,7 @@ Ancestors
   finite_map pred_set list arithmetic
 
 (* Shared suffix: the prefix may be a real target or the identity prefix. *)
-Theorem augassign_prefix_operator_frame[local]:
+Theorem augassign_prefix_operator_frame:
   alloca_frame cenv es0 sa0 s0 cenv st u /\
   (!x z. not_fresh_at sa0 x /\ lookup_var x s0 = SOME z ==>
     lookup_var x u = SOME z) /\

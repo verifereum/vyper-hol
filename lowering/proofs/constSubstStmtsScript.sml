@@ -55,7 +55,7 @@ QED
 
 (* ===== Constant cells across state steps ===== *)
 
-Theorem const_cells_agree_scopes[local]:
+Theorem const_cells_agree_scopes:
   const_cells_agree roots (st with scopes := sc) = const_cells_agree roots st
 Proof
   simp[const_cells_agree_def]
@@ -120,7 +120,7 @@ Proof
   metis_tac[const_subst_context_frames]
 QED
 
-Theorem const_subst_context_tuple_frame[local]:
+Theorem const_subst_context_tuple_frame:
   const_subst_context roots cx env E mods art /\
   writable_atarget env g /\ const_cells_agree roots st /\
   assign_tuple_targets cx g v st = (res,st') ==>

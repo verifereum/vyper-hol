@@ -12,6 +12,9 @@ Ancestors bodyFullShadowBodyInv sourceUnitExecution[qualified,ignore_grammar] lo
   contextRawReachable contextCodegenRel contextCodegenRelProps
   vyperInterpreter gasContext stmtSimDefs exprSimDefs compileEnv
   bodyFullIntCallDefs bodyFullIntCallByteFrame bodyFullPreds
+  bodyInvSplit bodyInvCodeProps bodyInvExecutionProps bodyInvMetadataProps
+  bodyInvIntCallPinsProps contractInvContextProps
+  moduleVariableKeyProps compileUnit bodyFullPostsMods[qualified,ignore_grammar]
   bodyFullIfExpReach[qualified,ignore_grammar] bodyFullHashKeccakFixed[qualified,ignore_grammar]
   ctorDeployLoweringSource nonreentrantEquiv internalReturnMemoryMem
   internalReturnStackAggregate[qualified,ignore_grammar]
@@ -24,6 +27,41 @@ Ancestors bodyFullShadowBodyInv sourceUnitExecution[qualified,ignore_grammar] lo
   intCallMaterializeFull memoryValueEncoding moduleLowering venomInst o1PassContract o1PipelineCompose unitShapeDefs entryStateRel stmtSimReturn stateRelProj
   accountsRelProps[qualified,ignore_grammar] vyperTypeContract vyperTypeInitialState vyperTypeEvalProofs vyperTypeInvariants vyperContext externalBodyFrame vyperTypeValues[qualified] vyperValueOperation[qualified]
 
+Theorem intcall_callee_compile_tables_mods[local]:
+  contract_inv mods exps ctx cenv cx /\ contract_inv mods exps ctx ce cx' /\
+  cx'.in_deploy = cx.in_deploy ==>
+  ce.ce_func_return_type = cenv.ce_func_return_type /\
+  ce.ce_flag_member_id = cenv.ce_flag_member_id /\
+  ce.ce_flag_n_members = cenv.ce_flag_n_members /\
+  ce.ce_method_id = cenv.ce_method_id /\
+  ce.ce_struct_fields = cenv.ce_struct_fields /\
+  ce.ce_hashmap_info = cenv.ce_hashmap_info /\
+  ce.ce_module_var_type = cenv.ce_module_var_type /\
+  ce.ce_module_vars = cenv.ce_module_vars /\
+  ce.ce_modules = cenv.ce_modules /\
+  ce.ce_is_ctor = cenv.ce_is_ctor
+Proof
+  simp[contract_inv_def, cenv_module_pins_mods_def] >> strip_tac >> simp[]
+QED
+
+Theorem intcall_callee_singleton_keys[local]:
+  body_inv tops ctx cenv cx ==>
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))
+Proof
+  strip_tac >> drule bodySimTheory.body_inv_contract >>
+  disch_then (qspecl_then [`NONE`,`tops`] mp_tac o
+    MATCH_MP contract_inv_unqualified_variable_keys) >> simp[]
+QED
+
+Theorem intcall_callee_singleton_frame[local]:
+  body_inv tops ctx cenv cx ==>
+  (cenv.ce_is_ctor <=> cx.in_deploy) /\ cenv_module_pins tops cenv
+Proof
+  strip_tac >> conj_tac
+  >- drule_then (ACCEPT_TAC o MATCH_MP contract_inv_constructor) bodySimTheory.body_inv_contract >>
+  drule_then ACCEPT_TAC intcall_args_body_inv_pins
+QED
+
 Definition intcall_ghost_opcodes_def:
   intcall_ghost_opcodes ctx <=>
     !fn inst. MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) ==>
@@ -35,9 +73,9 @@ Theorem intcall_callee_pre_fmp_context[local]:
 Proof
   strip_tac >>
   `lowering_context_ok ctx` by
-    (fs[bodySimTheory.body_inv_def] >> Cases_on `cx.in_deploy` >> gvs[]
-     >- metis_tac[deployUnitProducersTheory.lower_vyper_deploy_unit_context_ok] >>
-     metis_tac[vyperLoweringCorrectTheory.lower_vyper_runtime_unit_context_entry]) >>
+    (qpat_x_assum `body_inv tops ctx cenv cx`
+       (ACCEPT_TAC o MATCH_MP contract_inv_lowering_context o
+        MATCH_MP bodySimTheory.body_inv_contract)) >>
   fs[vyperCompilerTheory.lowering_context_ok_def] >>
   drule ptrOkCheckTheory.ptr_ok_check_sound >>
   simp[listTheory.EVERY_MEM, intcall_ghost_opcodes_def,
@@ -335,9 +373,13 @@ Theorem intcall_callee_live[local]:
 Proof
   strip_tac >>
   drule stmt_state_rel_vars_rels >> strip_tac >>
-  gvs[bodySimTheory.body_inv_def, bodySimTheory.cenv_module_pins_def,
-      supportedProgramTheory.supported_program_def,
-      context_function_live_def, function_live_def] >>
+  drule_then strip_assume_tac body_inv_main_support >>
+  drule_then assume_tac intcall_callee_singleton_keys >>
+  drule_then strip_assume_tac body_inv_module_locations >>
+  `get_module_code cx NONE = SOME tops` by (drule body_inv_main_code >> simp[]) >>
+  Cases_on `ALOOKUP cx.sources cx.txn.target` >>
+  gvs[supportedProgramTheory.supported_program_def,
+      get_module_code_def, context_function_live_def, function_live_def] >>
   disj1_tac >> simp[module_allocated_def, listTheory.EVERY_MEM] >>
   `!id tr n. FLOOKUP (add_module_var_locations tops FEMPTY) (NONE,id) =
     SOME (if tr then TransientLoc (n2w n) else StorageLoc (n2w n)) ==>
@@ -384,7 +426,7 @@ Proof
     (fn th => map_every STRIP_ASSUME_TAC
       (List.take (CONJUNCTS (REWRITE_RULE [intcall_entry_full_def] th), 8))) >>
   drule_all intcall_callee_live >> strip_tac >>
-  `get_module_code cx NONE = SOME tops` by fs[bodySimTheory.body_inv_def] >>
+  drule_then strip_assume_tac body_inv_main_code >>
   `functions_well_typed cx /\ env_context_consistent tenv cx` by
     fs[exprSimHypsDefsTheory.expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def] >>
   `context_function_live cx (NONE,name)` by simp[] >>
@@ -2314,6 +2356,34 @@ Proof
 QED
 
 (* Updates made by the internal entry do not change module metadata. *)
+Theorem intcall_callee_body_metadata_mods[local]:
+  contract_inv mods exps ctx caller cx /\ ALOOKUP mods src = SOME tops /\
+  (if cx.in_deploy then ?rbc. lower_vyper_deploy_unit_mods mods exps policy rbc = SOME unit
+   else lower_vyper_runtime_unit_mods mods exps policy = SOME unit) /\
+  ctx = unit.cu_context /\
+  body_ce = (build_compile_env_unit mods src Internal mut name args ret ss T) with
+    <|ce_is_ctor := cx.in_deploy; ce_target := policy.rpol_target;
+      ce_raw_return := rr; ce_nonreentrant := nrinfo;
+      ce_vars := vars; ce_return_buf := rb; ce_return_pc := rpc;
+      ce_imm_alloca := imm; ce_alloca_locals := T|> ==>
+  contract_inv mods exps ctx body_ce (cx with stk updated_by CONS (src,name)) /\
+  module_body_inv mods src tops body_ce (cx with stk updated_by CONS (src,name)) /\
+  allocLimitsProps$alloc_env_agree
+    (build_compile_env_unit mods src Internal mut name args ret ss F) body_ce /\
+  body_ce.ce_var_type = (build_compile_env_unit mods src Internal mut name args ret ss T).ce_var_type /\
+  ~body_ce.ce_is_external
+Proof
+  strip_tac >>
+  fs[contract_inv_def, module_body_inv_def, cenv_module_pins_mods_def,
+     allocLimitsPropsTheory.alloc_env_agree_def, get_tenv_stk_irrelevant,
+     build_compile_env_unit_def, pairTheory.ELIM_UNCURRY] >>
+  gvs[immutable_section_layout_mods_def] >>
+  conj_tac >- (rpt strip_tac >> res_tac) >>
+  conj_tac >- (qexistsl [`policy`, `unit`] >> simp[]) >>
+  conj_tac >- (rpt strip_tac >> res_tac) >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+
 Theorem intcall_callee_body_metadata[local]:
   body_inv tops ctx caller cx /\
   (if cx.in_deploy then ?rbc. lower_vyper_deploy_unit tops policy rbc = SOME unit
@@ -2331,10 +2401,14 @@ Theorem intcall_callee_body_metadata[local]:
   ~body_ce.ce_is_external
 Proof
   strip_tac >>
-  fs[bodySimTheory.body_inv_def, bodySimTheory.cenv_module_pins_def,
-     allocLimitsPropsTheory.alloc_env_agree_def, get_module_code_stk_irrelevant,
-     get_tenv_stk_irrelevant, build_compile_env_def, pairTheory.ELIM_UNCURRY] >>
-  metis_tac[]
+  drule_then assume_tac bodySimTheory.body_inv_contract >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`, `src` |-> `NONE`]
+    (SPEC_ALL intcall_callee_body_metadata_mods)) >>
+  simp[NoAsms, lower_vyper_deploy_unit_mods_singleton,
+       lower_vyper_runtime_unit_mods_singleton, build_compile_env_unit_singleton] >>
+  impl_tac >- fs[] >>
+  strip_tac >> simp[bodySimTheory.body_inv_split_def, bodySimTheory.cenv_module_pins_split_def] >>
+  fs[module_body_inv_def, contract_inv_def]
 QED
 
 Theorem intcall_callee_dead_lo[local]:
@@ -2345,10 +2419,18 @@ Proof
        cx_tops_def, get_module_code_stk_irrelevant]
 QED
 
-Theorem intcall_callee_expr_inv[local]:
-  body_inv tops ctx caller cx /\ body_inv tops ctx body_ce (cx with stk updated_by CONS k) /\
-  expr_sim_inv caller cx tenv (es with scopes := prev) /\
-  env_consistent env (cx with stk updated_by CONS k) locked /\
+Theorem module_body_inv_active_module[local]:
+  module_body_inv mods src tops cenv cx ==> cenv.ce_module = src
+Proof
+  simp[module_body_inv_def]
+QED
+
+Theorem intcall_callee_expr_inv_mods[local]:
+  contract_inv mods exps ctx caller cx /\
+  contract_inv mods exps ctx body_ce (cx with stk updated_by CONS (src,name)) /\
+  module_body_inv mods src tops body_ce (cx with stk updated_by CONS (src,name)) /\
+  expr_sim_inv_mods mods caller cx tenv (es with scopes := prev) /\
+  env_consistent env (cx with stk updated_by CONS (src,name)) locked /\
   state_well_typed locked /\ popped_keys_indexed locked.scopes /\
   locked.accounts = es.accounts /\ locked.outcomes = es.outcomes /\
   env.fn_sigs = tenv.fn_sigs /\ env.bare_globals = tenv.bare_globals /\
@@ -2357,9 +2439,12 @@ Theorem intcall_callee_expr_inv[local]:
   (!id ty. FLOOKUP env.var_types id = SOME ty ==>
       ?p sz. FLOOKUP body_ce.ce_vars id = SOME (PtrVar (Var p) sz)) /\
   (!id ty. FLOOKUP env.var_types id = SOME ty ==> body_ce.ce_var_type id = SOME ty) ==>
-  expr_sim_inv body_ce (cx with stk updated_by CONS k) env locked
+  expr_sim_inv_mods mods body_ce (cx with stk updated_by CONS (src,name)) env locked
 Proof
   strip_tac >>
+  drule_then assume_tac module_body_inv_active_module >>
+  `env.current_src = src` by
+    fs[env_consistent_def, env_context_consistent_def, current_module_def] >>
   `body_ce.ce_func_return_type = caller.ce_func_return_type /\
    body_ce.ce_flag_member_id = caller.ce_flag_member_id /\
    body_ce.ce_flag_n_members = caller.ce_flag_n_members /\
@@ -2367,21 +2452,58 @@ Proof
    body_ce.ce_struct_fields = caller.ce_struct_fields /\
    body_ce.ce_hashmap_info = caller.ce_hashmap_info /\
    body_ce.ce_module_var_type = caller.ce_module_var_type /\
-   body_ce.ce_module = caller.ce_module /\
    body_ce.ce_module_vars = caller.ce_module_vars /\
    body_ce.ce_modules = caller.ce_modules /\
    body_ce.ce_is_ctor = caller.ce_is_ctor` by
-    fs[bodySimTheory.body_inv_def, bodySimTheory.cenv_module_pins_def] >>
-  qpat_x_assum `expr_sim_inv _ _ _ _` mp_tac >>
-  simp[exprSimHypsDefsTheory.expr_sim_inv_def,
+    (`(cx with stk updated_by CONS (src,name)).in_deploy = cx.in_deploy` by simp[] >>
+     drule_all intcall_callee_compile_tables_mods >> simp[]) >>
+  qpat_x_assum `expr_sim_inv_mods _ _ _ _ _` mp_tac >>
+  simp[exprSimHypsDefsTheory.expr_sim_inv_mods_def,
        placeTypingPropsTheory.place_map_tables_agree_on_defined_def,
        exprSimHypsDefsTheory.bare_globals_layout_def,
-       exprSimHypsDefsTheory.cx_const_name_def, cx_tops_def,
        get_module_code_stk_irrelevant, get_tenv_stk_irrelevant,
        context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant] >>
   strip_tac >> asm_rewrite_tac[] >> rpt strip_tac >>
-  qpat_assum `!src id ty. _ ==> src = caller.ce_module /\ _`
-    (qspecl_then [`src`,`id`,`ty`] mp_tac) >> simp[]
+  qpat_assum `!sid id ty. _ ==> _ /\ _`
+    (qspecl_then [`sid`,`id`,`ty`] mp_tac) >> simp[]
+QED
+
+Theorem intcall_callee_expr_inv_singleton[local]:
+  body_inv tops ctx caller cx /\ body_inv tops ctx body_ce (cx with stk updated_by CONS (NONE,name)) /\
+  expr_sim_inv caller cx tenv (es with scopes := prev) /\
+  env_consistent env (cx with stk updated_by CONS (NONE,name)) locked /\
+  state_well_typed locked /\ popped_keys_indexed locked.scopes /\
+  locked.accounts = es.accounts /\ locked.outcomes = es.outcomes /\
+  env.fn_sigs = tenv.fn_sigs /\ env.bare_globals = tenv.bare_globals /\
+  env.bare_global_assignable = tenv.bare_global_assignable /\
+  env.toplevel_vtypes = tenv.toplevel_vtypes /\
+  (!id ty. FLOOKUP env.var_types id = SOME ty ==>
+      ?p sz. FLOOKUP body_ce.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+  (!id ty. FLOOKUP env.var_types id = SOME ty ==> body_ce.ce_var_type id = SOME ty) ==>
+  expr_sim_inv body_ce (cx with stk updated_by CONS (NONE,name)) env locked
+Proof
+  strip_tac >>
+  qpat_assum `body_inv tops ctx caller cx` (fn inv =>
+    MAP_EVERY strip_assume_tac
+      [MATCH_MP bodySimTheory.body_inv_contract inv, MATCH_MP body_inv_main_code inv]) >>
+  qpat_assum `body_inv tops ctx body_ce _` (fn inv =>
+    MAP_EVERY assume_tac
+      [MATCH_MP bodySimTheory.body_inv_contract inv, MATCH_MP bodySimTheory.body_inv_module inv]) >>
+  `expr_sim_inv_mods [(NONE,tops)] caller cx tenv (es with scopes := prev)` by
+    fs[exprSimHypsDefsTheory.expr_sim_inv_split_def] >>
+  drule_all intcall_callee_expr_inv_mods >> strip_tac >>
+  `ALOOKUP (cx with stk updated_by CONS (NONE,name)).sources
+     (cx with stk updated_by CONS (NONE,name)).txn.target = SOME [(NONE,tops)]` by
+    (qpat_assum `contract_inv [(NONE,tops)] [] ctx body_ce _`
+       (ACCEPT_TAC o MATCH_MP contract_inv_singleton_source_modules)) >>
+  qpat_assum `contract_inv [(NONE,tops)] [] ctx body_ce _`
+    (assume_tac o MATCH_MP contract_inv_immutable_section_layout) >>
+  `body_ce.ce_module = NONE` by
+    (qpat_assum `body_inv tops ctx body_ce _`
+       (mp_tac o MATCH_MP body_inv_module_locations) >> simp[]) >>
+  drule_all bodyFullPostsModsTheory.expr_sim_inv_mods_singleton >>
+  disch_then (qspecl_then [`locked`, `env`] (fn eq =>
+    qpat_assum `expr_sim_inv_mods _ body_ce _ env locked` (ACCEPT_TAC o EQ_MP eq)))
 QED
 
 (* The compiler's placeholder return type for a void body does not affect
@@ -2453,9 +2575,18 @@ Proof
      irule intcall_callee_body_metadata >> simp[] >> metis_tac[]) >>
   `body_ce.ce_is_ctor = caller.ce_is_ctor /\ supported_program tops /\
     ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-    fs[bodySimTheory.body_inv_def] >>
+    (qpat_assum `body_inv tops ctx caller cx` (fn inv =>
+       MAP_EVERY strip_assume_tac
+         [MATCH_MP body_inv_main_support inv,
+          MATCH_MP intcall_callee_singleton_keys inv,
+          MATCH_MP contract_inv_constructor (MATCH_MP bodySimTheory.body_inv_contract inv)]) >>
+     qpat_assum `body_inv tops ctx body_ce _`
+       (strip_assume_tac o MATCH_MP contract_inv_constructor o
+        MATCH_MP bodySimTheory.body_inv_contract) >>
+     simp[]) >>
   `cx_tops cx = tops` by
-    gvs[bodySimTheory.body_inv_def, cx_tops_def, get_module_code_def] >>
+    (qpat_assum `body_inv tops ctx caller cx`
+       (ACCEPT_TAC o CONJUNCT2 o MATCH_MP body_inv_main_code)) >>
   `subst_consts_fn (module_consts_env tops [])
       (mut,nr,rr,name,args,ds,ret,ss) = (mut,nr,rr,name,args,ds,ret,ss)` by
     (irule intcall_callee_const_free_subst >> qexists_tac `cx` >> simp[]) >>
@@ -2465,7 +2596,12 @@ Proof
      fs[]) >>
   `const_name_root_mods body_ce.ce_modules = const_name_root cx` by
     (`body_ce.ce_modules = caller.ce_modules` by
-       fs[bodySimTheory.body_inv_def, bodySimTheory.cenv_module_pins_def] >>
+       (qpat_assum `body_inv tops ctx caller cx`
+          (assume_tac o MATCH_MP contract_inv_cenv_modules o
+           MATCH_MP bodySimTheory.body_inv_contract) >>
+        qpat_assum `body_inv tops ctx body_ce _`
+          (assume_tac o MATCH_MP contract_inv_cenv_modules o
+           MATCH_MP bodySimTheory.body_inv_contract) >> simp[]) >>
      metis_tac[bodySimTheory.body_inv_const_name_roots]) >>
   `~supported_stmts_expr_exists (const_name_root_mods body_ce.ce_modules) ss` by fs[] >>
   drule_all intcall_callee_body_bounds >> strip_tac >>
@@ -2486,7 +2622,7 @@ Proof
     (fn th => map_every STRIP_ASSUME_TAC
       (List.take (CONJUNCTS (REWRITE_RULE [intcall_entry_full_def] th), 8))) >>
   `expr_sim_inv body_ce (cx with stk updated_by CONS (NONE,name)) env locked` by
-    (irule intcall_callee_expr_inv >>
+    (irule intcall_callee_expr_inv_singleton >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
      TRY (rpt strip_tac >> first_x_assum drule >> simp[] >> NO_TAC) >>
      (metis_tac[])) >>
@@ -2604,7 +2740,8 @@ Proof
     body_ce.ce_is_ctor = caller.ce_is_ctor` by
     (`ds_comp = ds /\ ss_comp = ss` by
        (`cx_tops cx = tops` by
-          fs[bodySimTheory.body_inv_def, cx_tops_def, vyperContextTheory.get_module_code_def] >>
+          (qpat_assum `body_inv tops ctx caller cx`
+             (ACCEPT_TAC o CONJUNCT2 o MATCH_MP body_inv_main_code)) >>
         drule_all intcall_callee_const_free_subst >>
         simp[constSubstTheory.subst_consts_fn_def] >> metis_tac[]) >>
      qpat_x_assum `ds_comp = ds` SUBST_ALL_TAC >>
@@ -2958,7 +3095,12 @@ Proof
     cenv.ce_struct_fields = make_struct_fields_map tops /\
     cx_tops cx = tops /\
     ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-      fs[bodySimTheory.body_inv_def, bodySimTheory.cenv_module_pins_def, cx_tops_module] >>
+    (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+       MAP_EVERY strip_assume_tac
+         [MATCH_MP body_inv_main_code inv, MATCH_MP intcall_callee_singleton_keys inv,
+          MATCH_MP body_inv_module_locations inv, MATCH_MP intcall_args_body_inv_pins inv,
+          MATCH_MP contract_inv_struct_fields (MATCH_MP bodySimTheory.body_inv_contract inv)]) >>
+     fs[bodySimTheory.cenv_module_pins_def, make_struct_fields_map_mods_singleton]) >>
   `cenv.ce_returns_count = 0 /\ cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz)` by
       fs[bodySimTheory.same_frame_def, compile_env_component_equality] >>
   `(cenv.ce_is_ctor ==> !nm io ity itv.
@@ -3485,8 +3627,13 @@ Proof
   once_rewrite_tac[Q.INST [`f1` |-> `func`,`f2` |-> `callee`]
                        stateRelProjTheory.state_rel_scopes_nil_func] >>
   irule exprLoweringPropsTheory.state_rel_cenv_cong >> qexists_tac `ce` >>
-  fs[bodySimTheory.body_inv_def, bodySimTheory.cenv_module_pins_def,
-     vyperStateTheory.lookup_scopes_def]
+  qpat_assum `body_inv tops ctx cenv cx` (strip_assume_tac o MATCH_MP body_inv_module_locations) >>
+  qpat_assum `body_inv tops ctx ce _` (strip_assume_tac o MATCH_MP body_inv_module_locations) >>
+  qpat_assum `body_inv tops ctx cenv cx`
+    (assume_tac o MATCH_MP contract_inv_constructor o MATCH_MP bodySimTheory.body_inv_contract) >>
+  qpat_assum `body_inv tops ctx ce _`
+    (assume_tac o MATCH_MP contract_inv_constructor o MATCH_MP bodySimTheory.body_inv_contract) >>
+  fs[vyperStateTheory.lookup_scopes_def]
 QED
 
 Theorem intcall_callee_exit_assemble[local]:
@@ -3615,6 +3762,25 @@ Proof
   irule stmtSimReturnTheory.state_rel_scopes_nil >> first_assum ACCEPT_TAC
 QED
 
+Theorem intcall_callee_fallthrough_metadata_mods[local]:
+  cenv_top_ext ce ce' scopes /\ contract_inv mods exps ctx ce cx /\
+  module_body_inv mods src tops ce cx ==>
+  contract_inv mods exps ctx ce' cx /\ module_body_inv mods src tops ce' cx /\
+  ce'.ce_return_pc = ce.ce_return_pc /\
+  ce'.ce_nonreentrant = ce.ce_nonreentrant /\
+  ce'.ce_returns_count = ce.ce_returns_count /\
+  ce'.ce_is_ctor = ce.ce_is_ctor
+Proof
+  strip_tac >>
+  drule_then assume_tac bodySimTheory.cenv_top_ext_same_frame >>
+  drule_all body_inv_same_frame_mods >> strip_tac >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `cenv_top_ext ce ce' scopes`
+    (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.cenv_top_ext_def]) >>
+  qpat_assum `ce' with <|ce_vars := _;ce_var_type := _;ce_dynarray_capacity := _|> = ce`
+    (once_rewrite_tac o single o SYM) >> simp[]
+QED
+
 Theorem intcall_callee_fallthrough_metadata[local]:
   cenv_top_ext ce ce' scopes /\ body_inv tops ctx ce cx ==>
   body_inv tops ctx ce' cx /\
@@ -3623,15 +3789,11 @@ Theorem intcall_callee_fallthrough_metadata[local]:
   ce'.ce_returns_count = ce.ce_returns_count /\
   ce'.ce_is_ctor = ce.ce_is_ctor
 Proof
-  rewrite_tac[loweringPostsTheory.cenv_top_ext_def] >> strip_tac >>
-  qpat_assum `ce' with <|ce_vars := _;ce_var_type := _;ce_dynarray_capacity := _|> = ce`
-    (once_rewrite_tac o single o SYM) >>
-  simp[NoAsms] >>
-  qpat_assum `body_inv tops ctx ce cx` mp_tac >>
-  qpat_assum `ce' with <|ce_vars := _;ce_var_type := _;ce_dynarray_capacity := _|> = ce`
-    (once_rewrite_tac o single o SYM) >>
-  simp[bodySimTheory.body_inv_def, bodySimTheory.cenv_module_pins_def] >>
-  strip_tac >> conj_tac >> first_assum ACCEPT_TAC
+  strip_tac >>
+  drule_then assume_tac bodySimTheory.body_inv_contract >>
+  drule_then assume_tac bodySimTheory.body_inv_module >>
+  drule_all intcall_callee_fallthrough_metadata_mods >> strip_tac >> simp[] >>
+  irule body_inv_same_frame >> metis_tac[bodySimTheory.cenv_top_ext_same_frame]
 QED
 
 Theorem intcall_callee_source_frame[local]:
@@ -3787,6 +3949,14 @@ Proof
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[NoAsms]
 QED
 
+Theorem contract_inv_singleton_function_mutability[local]:
+  contract_inv [(NONE,tops)] [] ctx cenv cx /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops ==>
+  function_mutability_ok [(NONE,tops)] vis mut nr dflts ss
+Proof
+  rw[contract_inv_def, optionTheory.FORALL_OPTION] >> res_tac
+QED
+
 Theorem intcall_callee_full:
   !DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
    G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn callee entered rc
@@ -3844,7 +4014,15 @@ Proof
   drule_all intcall_entry_full_fmp_room >> strip_tac >>
   drule_all intcall_callee_invoke_label >> strip_tac >>
   `cenv.ce_is_ctor = cx.in_deploy /\ supported_program tops /\
-    (cx.in_deploy ==> supported_program_deploy tops)` by fs[bodySimTheory.body_inv_def] >>
+    (cx.in_deploy ==> supported_program_deploy tops)` by
+    (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+       let
+         val contract = MATCH_MP bodySimTheory.body_inv_contract inv
+         val modul = MATCH_MP bodySimTheory.body_inv_module inv
+       in
+         ACCEPT_TAC (CONJ (MATCH_MP contract_inv_constructor contract)
+           (MATCH_MP contract_inv_module_gate (CONJ contract modul)))
+       end)) >>
   `lookup_function
      (internal_fn_label (build_func_ids 0 tops name) name (MAP SND args)
         cx.in_deploy) ctx.ctx_functions = SOME callee` by
@@ -4742,7 +4920,7 @@ Proof
         qpat_assum `set_internal_package_target _ (package_internal_fn _ _ _ cx.in_deploy _ _) = _`
           mp_tac >>
         qpat_assum `body_inv tops ctx cenv cx`
-          (mp_tac o SRULE [bodySimTheory.body_inv_def]) >>
+          (mp_tac o MATCH_MP intcall_callee_singleton_frame) >>
         POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
         simp[package_internal_fn_def, set_internal_package_target_def, update_cenv_nonreentrant_def] >>
         strip_tac >>
@@ -4960,10 +5138,10 @@ Proof
      simp[NoAsms, package_internal_fn_def, set_internal_package_target_def]) >>
   `nr ==> view = is_view_mut mut /\ cx.nonreentrant_slot = SOME key` by
     (disch_tac >> conj_tac
-     >- (qpat_assum `body_inv tops ctx cenv cx`
-           (strip_assume_tac o REWRITE_RULE[bodySimTheory.body_inv_def]) >>
-         qpat_assum `!vis mut nr rr fn args dflts ret body. MEM _ tops ==> function_mutability_ok _ _ _ _ _ _`
-           (fn th => drule th) >>
+     >- (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+           qpat_assum `MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops`
+             (fn decl => mp_tac (MATCH_MP contract_inv_singleton_function_mutability
+               (CONJ (MATCH_MP bodySimTheory.body_inv_contract inv) decl)))) >>
          simp[vyperTypeContractTheory.function_mutability_ok_def]) >>
      qpat_assum `key = global_nonreentrant_slot` (rewrite_tac o single) >>
      metis_tac[bodySimTheory.body_inv_nonreentrant_slot]) >>
@@ -5465,8 +5643,7 @@ Proof
        (pure_rewrite_tac o single) >> first_assum ACCEPT_TAC) >>
   `get_module_code cx NONE = SOME tops` by
     (qpat_assum `body_inv tops ctx cenv cx`
-       (strip_assume_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
-     first_assum ACCEPT_TAC) >>
+       (ACCEPT_TAC o CONJUNCT1 o MATCH_MP body_inv_main_code)) >>
   `stmt_state_rel (storage_trace_horizon es1.storage_trace)
        ctx func cenv cx (es1 with scopes := prev) t /\
     expr_sim_inv cenv cx tenv (es1 with scopes := prev) /\
@@ -5517,11 +5694,12 @@ Proof
      simp[NoAsms]) >>
   `body_ce.ce_is_ctor = cenv.ce_is_ctor /\
    body_ce.ce_struct_fields = cenv.ce_struct_fields` by
-    (qpat_assum `body_inv tops ctx body_ce pushed`
-       (strip_assume_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
-     qpat_assum `body_inv tops ctx cenv cx`
-       (strip_assume_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
-     simp[Abbr `pushed`]) >>
+    (qpat_assum `body_inv tops ctx cenv cx`
+       (assume_tac o MATCH_MP bodySimTheory.body_inv_contract) >>
+     qpat_assum `body_inv tops ctx body_ce pushed`
+       (assume_tac o MATCH_MP bodySimTheory.body_inv_contract) >>
+     `pushed.in_deploy = cx.in_deploy` by simp[Abbr `pushed`] >>
+     drule_all intcall_callee_compile_tables_mods >> simp[]) >>
   `!H. dead_lo_ok H (DF H) lo body_ce pushed` by
     (gen_tac >> simp[NoAsms, Abbr `pushed`] >>
      irule intcall_callee_dead_lo >> qexists_tac `cenv` >> simp[]) >>
@@ -5580,8 +5758,7 @@ Proof
      irule memoryLocalRhsPropsTheory.allocation_limit_word_room >>
      `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
        (qpat_assum `body_inv tops ctx cenv cx`
-          (strip_assume_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
-        first_assum ACCEPT_TAC) >>
+          (ACCEPT_TAC o MATCH_MP intcall_callee_singleton_keys)) >>
      `fn_allocs_ok tops (subst_consts_fn (module_consts_env tops [])
        (mut,nr,rr,name,args,dflts,ret,ss))` by
        (irule intcall_callee_allocs >> simp[] >>
@@ -5594,8 +5771,9 @@ Proof
             qexistsl_tac [`cx`,`tenv`,`es1 with scopes := prev`] >> simp[]) >>
         `cenv.ce_struct_fields = (build_compile_env tops Internal mut name args ret ss F).ce_struct_fields` by
           (qpat_assum `body_inv tops ctx cenv cx`
-             (strip_assume_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
-           rewrite_tac[build_compile_env_ce_struct_fields] >> first_assum ACCEPT_TAC) >>
+             (mp_tac o MATCH_MP contract_inv_struct_fields o
+              MATCH_MP bodySimTheory.body_inv_contract) >>
+           simp[build_compile_env_ce_struct_fields, make_struct_fields_map_mods_singleton]) >>
         metis_tac[type_memory_bytes_struct_fields]) >>
      qpat_assum `type_memory_bytes (build_compile_env tops Internal mut name args ret ss F) ret =
           type_memory_size rtv` (once_rewrite_tac o single o SYM) >>
