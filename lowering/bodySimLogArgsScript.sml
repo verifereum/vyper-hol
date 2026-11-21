@@ -334,11 +334,12 @@ Proof
 QED
 
 Theorem body_log_snapshot_expr_pre:
-  EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) args /\
+  EVERY (\e. ~is_extcode e) args /\
   body_inv tops ctx cenv cx /\ supported_pure_exprs tops args /\
   well_typed_exprs env args /\
   ~supported_exprs_exists
      (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
+  ~supported_exprs_exists (const_name_root cx) args /\
   call_evaluation_safe cx (int_calls_exprs args) /\
   (!target. supported_exprs_exists (expr_abi_decode_target_root target) args ==>
             occurs_abi_decode_target target tops) ==>
@@ -346,10 +347,26 @@ Theorem body_log_snapshot_expr_pre:
     expr_body_pre cenv cx env e st
 Proof
   rpt strip_tac >>
-  qspecl_then [`tops`,`ctx`,`cenv`,`cx`,`env`,`e`,`[]`,`st`]
-    match_mp_tac log_arg_body_pre >>
-  fs[supported_pure_exprs_every, EVERY_MEM, supported_exprs_exists_every,
-     EXISTS_MEM] >> metis_tac[well_typed_exprs_member, call_evaluation_safe_exprs_mem]
+  `supported_pure_expr tops e /\ ~is_extcode e /\
+   ~supported_expr_exists (const_name_root cx) e /\
+   ~supported_expr_exists
+     (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+   (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+      occurs_abi_decode_target target tops)` by
+    (fs[supported_pure_exprs_every, EVERY_MEM, supported_exprs_exists_every,
+        EXISTS_MEM] >> metis_tac[]) >>
+  `byte_widths_expr e /\ alloc_limits_expr cenv e` by
+    (CCONTR_TAC >> qpat_x_assum `~supported_expr_exists (\e. ~is_extcode e /\ _) e` mp_tac >>
+     simp[] >> irule supported_expr_exists_root >> metis_tac[]) >>
+  `cx_tops cx = tops /\ supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+       is_dynamic (vyper_to_abi_type (type_env tops) target))` by
+    fs[body_inv_def, gasContextTheory.cx_tops_def] >>
+  `~expr_has_evm_run e` by
+    (irule supported_expr_no_evm_run >> simp[supported_expr_def] >> metis_tac[]) >>
+  drule (CONJUNCT1 supported_pure_main_calls) >> strip_tac >>
+  simp[expr_body_pre_def] >> fs[EVERY_MEM] >>
+  metis_tac[well_typed_exprs_member, call_evaluation_safe_exprs_mem]
 QED
 
 (* Body safety and root allocation checks give each argument expr_body_pre;
