@@ -31,56 +31,6 @@ Proof
   rename1 `BaseT b` >> Cases_on `b` >> simp[well_typed_literal_def]
 QED
 
-Theorem concat_buffer_type_not_word[local]:
-  ~is_word_type (concat_buffer_type ty n)
-Proof
-  simp[exprLoweringTheory.concat_buffer_type_def] >>
-  Cases_on `ty` >> simp[is_word_type_def] >>
-  Cases_on `b` >> simp[is_word_type_def]
-QED
-
-Theorem lowered_value_type_not_call_word[local]:
-  !cenv e. (!a t es d. e <> Call a t es d) /\ ~is_word_type (expr_type e) ==>
-           ~is_word_type (lowered_value_type cenv e)
-Proof
-  ho_match_mp_tac exprLoweringTheory.lowered_value_type_ind >>
-  rw[exprLoweringTheory.lowered_value_type_def, is_word_type_def, expr_type_def,
-     concat_buffer_type_not_word]
-QED
-
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `?n. expr_type e = BaseT (StringT n)` by
-    (Cases_on `?t str. e = Literal t (StringL str)`
-     >- (gvs[well_typed_expr_def, expr_type_def] >>
-         metis_tac[well_typed_literal_string]) >>
-     `case expr_type e of BaseT (StringT _) => T | _ => F` by
-       (Cases_on `e` >> fs[supported_string_reason_def] >>
-        rename1 `Literal _ lit` >> Cases_on `lit` >>
-        fs[supported_string_reason_def]) >>
-     Cases_on `expr_type e` >> fs[] >>
-     rename1 `BaseT b` >> Cases_on `b` >> fs[]) >>
-  `~is_word_type (lowered_value_type cenv e)` by
-    (irule lowered_value_type_not_call_word >>
-     gvs[is_word_type_def] >> rpt strip_tac >>
-     gvs[supported_string_reason_def, supported_pure_expr_def]) >>
-  qspecl_then [`cenv`, `env`, `e`, `n`] mp_tac compile_expr_string_reason >>
-  impl_tac >- (fs[expr_sim_inv_def] >> metis_tac[]) >>
-  fs[reason_covered_def] >> metis_tac[]
-QED
-*)
-Theorem supported_reason_code:
-  !cenv cx env es tops e.
-    expr_sim_inv cenv cx env es /\
-    supported_string_reason tops e /\ well_typed_expr env e /\
-    ~reason_covered cenv e ==>
-    !sa vv sb. compile_expr cenv (expr_type e) e sa = (vv, sb) ==>
-               reason_code_vv vv
-Proof
-  cheat
-QED
-
 Theorem expr_body_pre_eval_result:
   !cenv cx env e es res es'.
     expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
