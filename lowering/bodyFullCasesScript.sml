@@ -628,10 +628,13 @@ Theorem body_for_case_full:
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
        (INL tyv,t) ==>
-       body_iterator_full_ok cx it) ==>
+       body_iterator_full_ok cx it) /\
+    (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+       stmt_loop_calls_ok [(NONE,tops)] (For id typ it n body)) ==>
     body_stmt_full_ok cx (For id typ it n body)
 Proof
   rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by fs[body_inv_def] >>
   irule compile_for_frag_full >> metis_tac[]
 QED
 

@@ -39,7 +39,7 @@ Ancestors
   runtimeFallbackSourceAlignment runtimeFallbackPackageEnvironment
   externalBodyFrame externalFrameRetOk runtimeBodyShadow externalBodySupport
   constSubst constSubstStmtsPreserve
-  externalCallSelected externalBodySourceOk bodySimFullMain bodySimFull
+  externalCallSelected externalBodySourceOk bodySimFullMain bodySimFull bodyLoopCalls
   entryStateRel entryReachBodyFmp entryReachBodyRuntimeResources
   bodyAbiDecodeTarget rawReturnHeader loweringHalt gasContext bodyPtrDefs
   gasOutcomeFull fragGasOriginPtr loweringPosts stmtSimDefs exprSimDefs
@@ -629,6 +629,16 @@ Proof
          `DF`,`lo`,`d`,`PG`,`tops`,`bindings`,`ctx`,`shadow_ctx`,`func`,
          `shadow_func`,`cenv`,`cx`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`ss`,`es`]
        mp_tac runtime_selected_body_internal_constant_defaults >> asm_rewrite_tac[]) >>
+  `?art A. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
+      constants_fold_module [(NONE,tops)] (account_immutables am tx.target)
+        NONE tops FEMPTY = SOME A` by fs[source_typing_ok_def] >>
+  pop_assum strip_assume_tac >>
+  drule bodyLoopCallsTheory.checked_module_loop_calls_ok >> disch_then assume_tac >>
+  `stmts_loop_calls_ok [(NONE,tops)] ss` by
+    (`stmts_loop_calls_ok [(NONE,tops)] fbody` by
+       (drule_all_then ACCEPT_TAC bodyLoopCallsTheory.checked_external_body_loop_calls_ok) >>
+     qpat_assum `ss = subst_consts_stmts _ fbody` SUBST1_TAC >>
+     drule_all_then ACCEPT_TAC bodyLoopCallsTheory.checked_subst_consts_loop_calls_ok) >>
   qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,`ctx`,`shadow_ctx`,
     `func`,`shadow_func`,`cenv`,`cx`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,
     `ss`,`es`] mp_tac body_stmts_sim_full >>
