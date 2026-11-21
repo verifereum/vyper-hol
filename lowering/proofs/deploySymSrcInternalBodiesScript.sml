@@ -2,8 +2,11 @@ Theory deploySymSrcInternalBodies
 Ancestors
   deploySymSrcHistory runtimeSymSrcFunctionLists runtimeSymSrcPackageTransport
   runtimeSymSrcInstructions compileVyper moduleLowering compileEnv loweringShapeDefs list
+  vyperTypeContract constSubstCorrect
 
 Theorem deploy_sym_classified_internal_bodies_cond:
+  check_contract T layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   (!ce bindings body ret params rb nr key tr view ct len s u s'.
