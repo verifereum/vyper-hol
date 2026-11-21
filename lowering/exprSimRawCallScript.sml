@@ -541,13 +541,15 @@ Proof
   simp[expr_body_pre_def, well_typed_expr_def]
 QED
 
-Theorem expr_body_pre_raw_call_arg:
-  !cenv cx env ann flags args dflt e es es'.
-    expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es /\
+Theorem expr_body_pre_raw_call_target_arg:
+  !cenv cx env ann flags target args dflt e es es'.
+    (target = RawCallTarget flags \/ target = RawCallCalldataTarget flags) /\
+    expr_body_pre cenv cx env (Call ann target args dflt) es /\
     MEM e args /\ expr_sim_inv cenv cx env es' ==>
     expr_body_pre cenv cx env e es'
 Proof
-  rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  gvs[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
      byte_widths_expr_def, alloc_limits_expr_def,
      supportedExprTraverseTheory.supported_expr_exists_def,
      supportedExprTraverseTheory.supported_exprs_exists_every, EXISTS_MEM] >>
@@ -555,6 +557,17 @@ Proof
   gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
   metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
             alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
+QED
+
+Theorem expr_body_pre_raw_call_arg:
+  !cenv cx env ann flags args dflt e es es'.
+    expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es /\
+    MEM e args /\ expr_sim_inv cenv cx env es' ==>
+    expr_body_pre cenv cx env e es'
+Proof
+  rpt strip_tac >> irule expr_body_pre_raw_call_target_arg >> simp[] >>
+  qexistsl_tac [`ann`,`args`,`dflt`,`es`,`flags`,`RawCallTarget flags`] >>
+  simp[]
 QED
 
 
@@ -1448,7 +1461,7 @@ Proof
   irule fresh_not_local_ptr >> qexists_tac `sa` >> simp[not_fresh_at_def]
 QED
 
-Theorem raw_call_keyword_values[local]:
+Theorem raw_call_keyword_values:
   !ks es vs es'.
     EVERY (\e. expr_type e = BaseT (UintT 256) /\
       !st. expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) ks /\
@@ -1484,7 +1497,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem raw_call_value_operand[local]:
+Theorem raw_call_value_operand:
   !ks xs vs.
     LIST_REL (\x v. eval_operand x s = SOME
       (typed_val_to_w256 (BaseTV (UintT 256)) v)) xs vs /\

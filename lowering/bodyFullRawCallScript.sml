@@ -6,10 +6,10 @@ Ancestors
   extCallOracleStep oracleCallStepPtr fragGasEmitCtrl instMemFrontier
   venomExecSemantics venomInst venomState words bodyPtrDefs ptrDiscipline
   memLocDefs fragGasOriginPtr fragExec memSafeRun gasEvents gasCount
-  contextCodegenRel codegenRel unitTransformDefs ptrSafeRun
+  contextCodegenRel codegenRel unitTransformDefs ptrSafeRun bodyFullRawCallCall
   exprSimRawCall exprSimHyps exprSimSource
   gasOutcomeFullCompose vyperStorageTrace bodyFullIntCallReturnHalt exprLoweringProps
-  bodyFullHashKeccakFixed
+  bodyFullHashKeccakFixed bodyFullWordArgs
 Libs
   monadsyntax
 
@@ -39,8 +39,7 @@ Theorem raw_call_fetched_early_exit[local]:
      ?p. op = Var p /\ ptr_covers G tn p t (w2n (n2w cap:bytes32))) /\
   EVERY (\op. op_taint tn op = {}) inst.inst_operands /\
   (!j. w2n iw <= j /\ j < w2n iw + w2n nw ==> j NOTIN tn.t_mem) /\
-  (nw = 0w \/ w2n iw + w2n nw <= t.vs_alloca_next) /\
-  (n2w cap = (0w:bytes32) \/ w2n rw + w2n (n2w cap:bytes32) <= t.vs_alloca_next) /\
+  mem_safe_step 0 ctx inst t /\
   allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ ~t.vs_halted /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb t.vs_inst_idx = SOME inst ==>
@@ -103,8 +102,6 @@ Proof
   `inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> GAS /\
    inst_dload_in_section inst t` by
     (Cases_on `call_ty` >> simp[mk_inst_def, inst_dload_in_section_def]) >>
-  `mem_safe_step 0 ctx inst t` by
-    gvs[mem_safe_step_non_invoke, inst_mem_below_frontier_def, w2n_eq_0] >>
   `gas_events_step 0 ctx func.fn_name inst t = [] /\
    gas_count_step 0 ctx inst t = 0` by
     (Cases_on `call_ty` >> simp[mk_inst_def, gas_events_step_def, gas_count_step_def]) >>
@@ -115,7 +112,7 @@ QED
 (* Anchor all inputs of the counted raw call rule before introducing its post. *)
 local
   val rule = SPEC_ALL (INST_TYPE [alpha |-> ``:256``]
-    bodyFullRawCallCallTheory.raw_call_actual_call_full)
+    bodyFullRawCallCallTheory.raw_call_actual_call_mem_safe_full)
   val inputs = strip_conj (fst (dest_imp (concl rule)))
   fun head name tm =
     case total dest_thy_const (#1 (strip_comb tm)) of
@@ -166,7 +163,7 @@ in
              else [gas;addr;dp;len;op;Lit (n2w cap)]) s7 = (ok,sc),
           (if call_ty = DelegateCall then take_delegate_outcome else take_call_outcome)
             gas_cap target
-            (read_memory (w2n (n2w (b + 32) : bytes32)) (w2n (n2w (LENGTH bs) : bytes32)) t7)
+            (read_memory (w2n (n2w ib : bytes32)) (w2n (n2w (LENGTH bs) : bytes32)) t7)
             value_opt esK = (INL (rq,outcome),es1),
           inst = mk_inst s7.cs_next_id (case call_ty of
            RegularCall => CALL | StaticCall => STATICCALL | DelegateCall => DELEGATECALL)
@@ -179,118 +176,145 @@ in
     end
 end
 
-Theorem raw_call_expr_vv_full:
-  body_exprs_full_ok cx args /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
-  expr_vv_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (Call ann (RawCallTarget flags) args dflt) es
+(* After evaluating its input, either lowering uses the same call and result
+   continuation. The input range can come from ALLOCA or DALLOCA. *)
+Theorem raw_call_continuation_full:
+  expr_has_effect e /\ post_value_type cenv e = expr_type e /\
+  lowered_value_type cenv e = expr_type e /\
+  expr_type e = raw_call_return_type flags /\ type_alloc_ok cenv (expr_type e) /\
+  ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
+  (flags.rcf_is_delegate ==> amount = 0) /\
+  (flags.rcf_is_static ==> amount = 0) /\
+  amount < dimword (:256) /\ flags.rcf_max_outsize < dimword (:256) /\
+  expr_sim_inv cenv cx env esK /\ esK.gas_obs = [] /\
+  storage_trace_domain cx st0 esK.storage_trace /\
+  (let cap = flags.rcf_max_outsize;
+      round = 32 * ((cap + 31) DIV 32);
+      payload = if cap = 0 then 0 else round + 32;
+      vop = case ext_call_kwarg EKValue flags.rcf_kws xs of
+              NONE => Lit 0w | SOME p => p
+  in
+  fn_has_code sa sb func /\ fn_has_code s6 sout func /\ fn_inst_ids_distinct func /\
+  ci_mono sa s6 /\ ci_mono s6 s7 /\ ci_mono sout s7 /\ ci_mono sa s7 /\
+  compile_raw_call_outbuf cap s6 = ((ov,op),sout) /\
+  compile_raw_call_finish addr dp len gas vop
+    (if flags.rcf_is_delegate then DelegateCall
+     else if flags.rcf_is_static then StaticCall else RegularCall)
+    cap flags.rcf_revert_on_failure ov op s7 = (result,sb) /\
+  vv = (if cap = 0 then StackValue (raw_call_return_type flags) result
+        else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)) /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. valid_horizon cx st0 H esK.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0) /\
+  (!H. valid_horizon cx st0 H esK.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx esK t7 /\
+    storage_well_formed_on cx esK (FST H) /\
+    ghost_inv_at (DF H) lo dframe cenv cx esK G7 tn7 t7) /\
+  return_buf_frame dframe cenv sa t7 /\
+  wb_frame cenv es esK sa s0 t7 /\ ghost_kept_at lo cenv es sa G0 tn0 s0 G7 tn7 /\
+  ~t7.vs_halted /\ t7.vs_current_bb = s7.cs_current_bb /\
+  t7.vs_inst_idx = LENGTH s7.cs_current_insts /\ alloca_history func t7 /\
+  s0.vs_alloca_next <= t7.vs_alloca_next /\ lo <= t7.vs_alloca_next /\ allocas_from lo t7 /\
+  eval_operand addr t7 = SOME (w2w target) /\
+  eval_operand vop t7 = SOME (n2w amount) /\
+  eval_operand gas t7 = SOME gw /\
+  (!g. OPTION_BIND (ext_call_kwarg EKGas flags.rcf_kws kvs) dest_NumV = SOME g ==>
+       g = w2n gw) /\
+  eval_operand dp t7 = SOME (n2w ib) /\ eval_operand len t7 = SOME (n2w (LENGTH bs)) /\
+  ib < dimword (:256) /\ LENGTH bs < dimword (:256) /\
+  (LENGTH bs = 0 \/ ib + LENGTH bs <= t7.vs_alloca_next \/
+   ctx_has_dalloca ctx /\
+   w2n t7.vs_initial_fmp <= ib /\ ib + LENGTH bs <= w2n t7.vs_fmp) /\
+  read_memory ib (LENGTH bs) t7 = bs /\
+  (!j. ib <= j /\ j < ib + LENGTH bs ==> j NOTIN tn7.t_mem) /\
+  (bs <> [] ==> ?p. dp = Var p /\ ptr_covers G7 tn7 p t7 (LENGTH bs)) /\
+  eval_operand ov t7 = SOME (n2w ob) /\
+  eval_operand op t7 = SOME (n2w (if cap = 0 then ob else ob + 32)) /\
+  (cap = 0 ==> ov = op) /\ ob + payload < dimword (:256) /\
+  FLOOKUP t7.vs_allocas s6.cs_next_id = SOME (ob,payload) /\
+  op_prov G7 ov = SOME (ob,payload) /\ op_prov G7 op = SOME (ob,payload) /\
+  op_taint tn7 ov = {} /\ op_taint tn7 op = {} /\
+  (!name lb sz. local_region cenv esK.scopes t7 name lb sz ==>
+    regions_disjoint ob payload lb sz) /\
+  (cenv.ce_is_ctor ==> !name tv v off.
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP esK.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+    regions_disjoint off (type_memory_size tv) ob payload) /\
+  EVERY (\x. op_taint tn7 x = {}) [addr;len;dp;gas;vop] /\
+  EVERY (safe_operand s7) [addr;len;dp;gas;vop;ov;op] /\
+  (!x. MEM (Var x) [addr;len;dp;gas;vop;ov;op] ==> not_fresh_at s7 x))
+  ==>
+  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    (cx_tops cx) cx st0
+    (eval_raw_call cx flags target bs amount (ext_call_kwarg EKGas flags.rcf_kws kvs))
+    (esK,t7,G7,tn7)
+        (\H res ee G tn t. ?tv. res = INL tv /\
+          vv_post H ctx func cenv cx e es sa sb s0 ee tv vv t /\
+          vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e)
+            ee tv vv t /\
+          t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          alloca_history func t /\
+          (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+          s0.vs_alloca_next <= t.vs_alloca_next /\
+          ghost_inv_at (DF H) lo dframe cenv cx ee G tn t /\
+          ptr_vv_ok cx (post_value_type cenv e) tv vv ee G tn t /\
+          (!v. tv = Value v /\ ~is_word_type (post_value_type cenv e) /\
+               ~is_bytestring_type (post_value_type cenv e) ==>
+               vv_own cenv cx (post_value_type cenv e) sa sb ee (Value v) vv t /\
+               (!t' p. vv = LocatedValue t' p ==>
+                       p.ptr_location = LocMemory)) /\
+          (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+           ?val. read_result cx tv ee = (INL val, ee) /\
+                 !rt w. evaluate_type (get_tenv cx) (post_value_type cenv e) =
+                          SOME rt /\
+                        eval_operand (vv_operand vv) t = SOME w ==>
+                        w2n w + type_memory_size rt <= lo /\
+                        (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
+                               val_in_memory rt val (w2n w) mem)) /\
+          (!t' op. vv = StackValue t' op /\
+                   ~is_word_type (post_value_type cenv e) ==>
+                   ptr_buf_ok cenv e op G t) /\
+          (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
+                  ptr_buf_ok cenv e p.ptr_operand G t) /\
+          ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
+        (\H res ee gt r.
+          expr_exit res r /\ halt_exit H cx ee res r /\
+          (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+
 Proof
+  simp_tac bool_ss [LET_THM] >> BETA_TAC >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule raw_call_pre_operands >> strip_tac >>
-  drule raw_call_pre_flags >> strip_tac >> gvs[] >>
-  rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule compile_expr_raw_call >> strip_tac >>
-  drule raw_call_kwargs_types >> simp[] >> strip_tac >>
-  drule_all raw_call_kwargs_word_args >> strip_tac >>
-  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
-  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
-  qexistsl_tac [`Q`, `\H res ee gt r.
-    (expr_exit res r /\ halt_exit H cx ee res r) /\
-    (ctx_has_dalloca ctx ==> !h. r = Halt h ==> allocas_below_fmp h)`] >>
-  BETA_TAC >> simp[Abbr `R`] >>
-  qunabbrev_tac `Q` >>
-  irule (BETA_RULE (Q.SPEC
-    `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`
-    (Q.GEN `R` gas_outcome_full_halt_room))) >>
-  CONV_TAC (SIMP_CONV bool_ss [raw_call_eval_action]) >>
-  irule (BETA_RULE (Q.ISPEC `\av dv kvs.
-    do
-      type_check (LENGTH (av::dv::kvs) = 2 + LENGTH flags.rcf_kws) "raw_call args";
-      target <- lift_option_type (dest_AddressV av) "raw_call target";
-      data <- lift_option_type (dest_BytesV dv) "raw_call data";
-      amount <- lift_option_type (raw_call_value flags.rcf_kws kvs) "raw_call value";
-      eval_raw_call cx flags target data amount (ext_call_kwarg EKGas flags.rcf_kws kvs)
-    od` (Q.GEN `k` (SPEC_ALL raw_call_prefix_prepared_full)))) >>
-  first_assum (irule_at (Pat `compile_expr _ _ (Call _ _ _ _) _ = _`)) >>
-  first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
-  first_assum (irule_at (Pat `lower_value _ _ _ a _ = _`)) >>
-  first_assum (irule_at (Pat `lower_value _ _ _ d _ = _`)) >>
-  first_assum (irule_at (Pat `emit_op MLOAD _ _ = _`)) >>
-  first_assum (irule_at (Pat `emit_op ADD _ _ = _`)) >>
-  first_assum (irule_at (Pat `compile_ext_call_kwargs _ _ _ _ _ _ = _`)) >>
-  first_assum (irule_at (Pat `lower_word_args _ _ _ _ = _`)) >>
-  first_assum (irule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
-  first_assum (irule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  first_assum (irule_at (Pat `compile_expr _ _ (gas_shadow_expr _) _ = _`)) >>
-  first_assum (irule_at (Pat `return_buf_frame _ _ _ _`)) >>
-  first_assum (irule_at (Pat `body_inv _ _ _ _`)) >>
-  first_assum (irule_at (Pat `gas_shadow_function _ _`)) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
-  >- (rpt gen_tac >> strip_tac >> conj_tac
-      >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
-      metis_tac[haltExitProjTheory.halt_exit_INR_type])
-  >- (rpt gen_tac >> irule storage_trace_frame_ignore_bind >>
-      simp[storage_trace_frame_checks] >>
-      irule storage_trace_frame_bind_all >> simp[storage_trace_frame_lifts] >> gen_tac >>
-      irule storage_trace_frame_bind_all >> simp[storage_trace_frame_lifts] >> gen_tac >>
-      irule storage_trace_frame_bind_all >>
-      simp[storage_trace_frame_lifts,storage_trace_frame_raw_call]) >>
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==> _`
+  qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx esK t7 /\ _`
     (qspec_then `storage_trace_horizon esK.storage_trace` mp_tac) >>
-  impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  impl_tac >-
+    (qpat_assum `storage_trace_domain cx st0 esK.storage_trace` mp_tac >>
+     simp[NoAsms,vyperStorageFootprintTheory.storage_trace_domain_def]) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `stmt_state_rel (storage_trace_horizon esK.storage_trace) ctx func cenv cx es s0` by
+    (qpat_assum `!H. valid_horizon cx st0 H esK.storage_trace ==> stmt_state_rel H ctx func cenv cx es s0`
+       (qspec_then `storage_trace_horizon esK.storage_trace` match_mp_tac) >>
+     qpat_assum `storage_trace_domain cx st0 esK.storage_trace`
+       (ACCEPT_TAC o REWRITE_RULE [vyperStorageFootprintTheory.storage_trace_domain_def])) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t7` by
     (qpat_assum `stmt_state_rel _ ctx func cenv cx esK t7`
        (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   `esK.outcomes = SOME t7.vs_outcomes` by
     (qpat_assum `stmt_state_rel _ _ _ _ _ esK t7`
        (mp_tac o MATCH_MP stateRelProjTheory.stmt_state_rel_state_rel) >>
-     disch_tac >> fs[loweringStateRelDefsTheory.state_rel_def]) >>
-  drule_all raw_call_prefix_source_ready >> strip_tac >>
-  `!e. vyperState$assert T e = vyperState$return ()` by
-    simp[FUN_EQ_THM, vyperStateTheory.assert_def, vyperStateTheory.return_def] >>
-  simp[vyperStateTheory.type_check_def, vyperStateTheory.lift_option_type_def,
-       vyperValueTheory.dest_BytesV_def, vyperStateTheory.bind_return,
-       vyperStateTheory.ignore_bind_def] >>
-  `!todo x y ops. lower_word_args cenv (K (BaseT (UintT 256))) todo x = (ops,y) ==>
-     ci_mono x y` by
-    (POP_ASSUM_LIST (K all_tac) >> Induct >>
-     simp[exprSimWordArgsTheory.lower_word_args_nil,ci_mono_refl] >> rpt gen_tac >>
-     rw[exprSimWordArgsTheory.lower_word_args_cons] >>
-     metis_tac[ci_mono_lower_value_compile_expr,ci_mono_trans,pairTheory.SND]) >>
-  `ci_mono sa s6 /\ ci_mono s6 s7 /\ ci_mono sa s7` by
-    (`ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 s3 /\
-      ci_mono s3 s4 /\ ci_mono s4 s5 /\ ci_mono s5 s6 /\ ci_mono s6 s7` by
-       (rpt conj_tac
-        >- metis_tac[ci_mono_lower_value_compile_expr,pairTheory.SND]
-        >- metis_tac[ci_mono_lower_value_compile_expr,pairTheory.SND]
-        >- metis_tac[ci_mono_emit_op,pairTheory.SND]
-        >- metis_tac[ci_mono_emit_op,pairTheory.SND]
-        >- metis_tac[]
-        >- (qpat_assum `(case go of NONE => emit_op GAS [] s5 | SOME g => (g,s5)) = (gas,s6)` mp_tac >>
-            POP_ASSUM_LIST (K all_tac) >> Cases_on `go` >> simp[] >> strip_tac >>
-            metis_tac[ci_mono_emit_op,pairTheory.SND,ci_mono_refl]) >>
-        metis_tac[ci_mono_compile_raw_call_outbuf,pairTheory.SND]) >>
-     rpt (qhdtm_x_assum `ci_mono` mp_tac) >> POP_ASSUM_LIST (K all_tac) >>
-     metis_tac[ci_mono_trans]) >>
-  qpat_x_assum `vo = _` SUBST_ALL_TAC >>
+     simp[NoAsms,loweringStateRelDefsTheory.state_rel_def]) >>
   qabbrev_tac `vop = case ext_call_kwarg EKValue flags.rcf_kws xs of NONE => Lit 0w | SOME v => v` >>
   qabbrev_tac `stat = flags.rcf_is_static` >>
   qabbrev_tac `delegate = flags.rcf_is_delegate` >>
   qabbrev_tac `call_ty =
     if delegate then DelegateCall else if stat then StaticCall else RegularCall` >>
-  `~(delegate /\ stat)` by
-    fs[Abbr `delegate`, Abbr `stat`, exprSimHypsDefsTheory.expr_body_pre_def,
-       vyperTypeSystemTheory.well_typed_expr_def] >>
-  `delegate ==> amount = 0` by
-    (strip_tac >>
-     `~MEM EKValue flags.rcf_kws` by
-       fs[Abbr `delegate`, vyperTypeSystemTheory.raw_call_kws_ok_def] >>
-     fs[vyperInterpreterTheory.raw_call_value_def,
-        vyperTypeExtCallSoundnessTheory.ext_call_kwarg_not_mem]) >>
+  `~(delegate /\ stat)` by simp[Abbr `delegate`, Abbr `stat`] >>
+  `delegate ==> amount = 0` by simp[Abbr `delegate`] >>
   qabbrev_tac `cap = flags.rcf_max_outsize` >>
   qabbrev_tac `opc = case call_ty of RegularCall => CALL | StaticCall => STATICCALL | DelegateCall => DELEGATECALL` >>
   qabbrev_tac `ops = if call_ty = RegularCall then [gas;addr;vop;dp;len;op;Lit (n2w cap)]
@@ -304,7 +328,8 @@ Proof
   `fn_has_code s7 sc func` by
     (irule fn_has_code_mid >> conj_tac
      >- metis_tac[ci_mono_emit_op, ci_mono_def, pairTheory.SND] >>
-     qexistsl [`sb`,`sa`] >> fs[ci_mono_def]) >>
+     qexistsl [`sb`,`sa`] >> simp[] >>
+     qpat_assum `ci_mono sa s7` (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [ci_mono_def])) >>
   qabbrev_tac `inst = mk_inst s7.cs_next_id opc ops
     [STRING #"%" (toString s7.cs_next_var)]` >>
   `?bb. lookup_block t7.vs_current_bb func.fn_blocks = SOME bb /\
@@ -313,16 +338,23 @@ Proof
      simp[Abbr `inst`] >> metis_tac[]) >>
   `op_taint tn7 (Lit (n2w cap)) = {}` by simp[op_taint_def] >>
   `EVERY (\p. op_taint tn7 p = {}) inst.inst_operands` by
-    (Cases_on `call_ty` >> simp[Abbr `inst`,Abbr `ops`,mk_inst_def]) >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`EVERY _ [addr;len;dp;gas;vop]`,`op_taint tn7 op = _`,
+        `op_taint tn7 (Lit (n2w cap)) = _`] >>
+     Cases_on `call_ty` >>
+     simp[NoAsms, Abbr `inst`,Abbr `ops`,Abbr `opc`,mk_inst_def] >>
+     tautLib.TAUT_TAC) >>
   qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ QS RS` >>
   qabbrev_tac `round = 32 * ((cap + 31) DIV 32)` >>
   qabbrev_tac `ro = if cap = 0 then ob else ob + 32` >>
   `cap <= round` by simp[Abbr `round`,spillSimTheory.n_le_round_up_32] >>
   `ro < dimword (:256)` by
     (qpat_assum `ob + (if cap = 0 then 0 else round + 32) < _` mp_tac >>
-     Cases_on `cap = 0` >> simp[Abbr `ro`]) >>
+     qpat_assum `Abbrev (ro = _)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     Cases_on `cap = 0` >> simp[markerTheory.Abbrev_def] >> decide_tac) >>
   `w2n (n2w ro : bytes32) = ro /\ w2n (n2w cap : bytes32) = cap /\
-   w2n (n2w (b + 32) : bytes32) = b + 32 /\
+   w2n (n2w ib : bytes32) = ib /\
    w2n (n2w (LENGTH bs) : bytes32) = LENGTH bs /\
    w2n (n2w amount : bytes32) = amount` by simp[w2n_n2w] >>
   qpat_assum `stmt_state_rel _ _ _ _ _ esK t7`
@@ -333,18 +365,6 @@ Proof
      `ob + (round + 32) <= t7.vs_alloca_next` by
        (irule allocaSiteResourceTheory.alloca_site_registered_below >>
         simp[] >> qexists `s6.cs_next_id` >> simp[]) >> decide_tac) >>
-  `!j. b + 32 <= j /\ j < b + 32 + LENGTH bs ==> j NOTIN tn7.t_mem` by
-    (qpat_assum `!mem. mem_agree_outside tn7.t_mem t7.vs_memory mem ==> _`
-       (mp_tac o MATCH_MP representationCleanPtrTheory.robust_mem_bytes_at_clean) >>
-     simp[]) >>
-  `(bs <> [] ==> ?p. dp = Var p /\ ptr_covers G7 tn7 p t7 (LENGTH bs))` by
-    (strip_tac >> qpat_assum `bs <> [] ==> _` drule >>
-     qpat_assum `eval_operand dp t7 = _` mp_tac >>
-     qpat_assum `op_taint tn7 dp = _` mp_tac >>
-     qpat_assum `w2n (n2w (b + 32) : bytes32) = _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     Cases_on `dp` >> simp[op_prov_def,eval_operand_def,ptr_covers_def] >>
-     rpt strip_tac >> simp[] >> decide_tac) >>
   `(cap <> 0 ==> ?p. op = Var p /\ ptr_covers G7 tn7 p t7 cap)` by
     (strip_tac >>
      `op_prov G7 op = SOME (ob,round + 32)` by simp[] >>
@@ -358,6 +378,22 @@ Proof
      qpat_assum `ro + cap <= _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      Cases_on `op` >> simp[op_prov_def,eval_operand_def,ptr_covers_def]) >>
+  `mem_safe_step 0 ctx inst t7` by
+    (`source_memory_read_ranges inst t7 = [(ib,LENGTH bs)] /\
+      source_memory_write_ranges inst t7 = [(ro,cap)] /\
+      inst_dload_in_section inst t7 /\ inst.inst_opcode <> INVOKE` by
+       (Cases_on `call_ty` >>
+        simp[Abbr `inst`, Abbr `ops`, Abbr `opc`, mk_inst_def,
+             source_memory_read_ranges_def, source_memory_write_ranges_def,
+             mem_read_ops_def, mem_write_ops_def, memory_range_of_operands_def,
+             eval_operand_def, inst_dload_in_section_def]) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`LENGTH bs = 0 \/ ib + _ <= _ \/ _`, `cap <> 0 ==> ro + cap <= _`,
+        `source_memory_read_ranges inst t7 = _`, `source_memory_write_ranges inst t7 = _`,
+        `inst_dload_in_section inst t7`, `inst.inst_opcode <> INVOKE`] >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[mem_safe_step_non_invoke, inst_mem_below_frontiers_def,
+          inst_mem_below_frontier_def] >> tautLib.TAUT_TAC) >>
   `t7.vs_call_ctx.cc_static = cx.txn.is_static` by
     (qpat_assum `stmt_state_rel _ _ _ _ _ esK t7`
        (mp_tac o MATCH_MP stateRelProjTheory.state_rel_call_ctx_rel o
@@ -371,17 +407,18 @@ Proof
          (INR (Error (RuntimeError err)),esK with gas_obs := tail)` by
         (gen_tac >> Cases_on `cx.txn.is_static /\ amount <> 0`
          >- (simp[Abbr `err`] >> irule raw_call_static_value_abort >>
-             simp[Abbr `stat`, Abbr `delegate`] >>
-             map_every (fn pat => qpat_assum pat mp_tac)
-               [`delegate ==> amount = 0`, `flags.rcf_is_static ==> amount = 0`,
-                `cx.txn.is_static /\ amount <> 0`] >>
+             qpat_assum `delegate ==> amount = 0` mp_tac >>
+             qpat_assum `stat ==> amount = 0` mp_tac >>
+             qpat_assum `cx.txn.is_static /\ amount <> 0` mp_tac >>
+             simp_tac bool_ss [Abbr `stat`, Abbr `delegate`] >>
              POP_ASSUM_LIST (K ALL_TAC) >> tautLib.TAUT_TAC) >>
          simp[Abbr `err`] >>
          irule raw_call_oracle_empty >>
-         simp[Abbr `stat`, Abbr `delegate`] >>
+         qunabbrev_tac `delegate` >> qunabbrev_tac `stat` >>
          qpat_x_assum `~(cx.txn.is_static /\ amount <> 0)` mp_tac >>
          map_every (fn pat => qpat_assum pat mp_tac)
-           [`~(delegate /\ stat)`, `delegate ==> amount = 0`,
+           [`~(flags.rcf_is_delegate /\ flags.rcf_is_static)`,
+            `flags.rcf_is_delegate ==> amount = 0`,
             `flags.rcf_is_static ==> amount = 0`,
             `esK.outcomes = SOME t7.vs_outcomes`,
             `t7.vs_outcomes = [] \/ (cx.txn.is_static /\ amount <> 0)`] >>
@@ -406,17 +443,25 @@ Proof
           else [gas;addr;dp;len;op;Lit (n2w cap)])
          [STRING #"%" (toString s7.cs_next_var)]` by
         simp[Abbr `inst`,Abbr `opc`,Abbr `ops`] >>
-      irule raw_call_fetched_early_exit >>
-      qpat_assum `inst = mk_inst _ _ _ _` (irule_at (Pat `inst = mk_inst _ _ _ _`)) >>
-      qexistsl_tac [`n2w amount`,`n2w ro`,`n2w (LENGTH bs)`,`n2w (b + 32)`,
-                    `gw`,`bb`,`w2w target`] >>
-      FILTER_ASM_REWRITE_TAC (can (match_term ``w2n (n2w _ : bytes32) = _``)) [] >>
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      PURE_ONCE_REWRITE_TAC [GSYM w2n_eq_0] >>
-      FILTER_ASM_REWRITE_TAC (can (match_term ``w2n (n2w _ : bytes32) = _``)) [listTheory.LENGTH_NIL] >>
-      TRY (first_assum ACCEPT_TAC)
-      >- (disj2_tac >> qpat_assum `b + (LENGTH bs + 32) <= _` mp_tac >> decide_tac) >>
-      Cases_on `cap = 0` >> simp[]) >>
+      qmatch_goalsub_abbrev_tac `gas_origin_ptr_path (deadH,_,_,_,_,_) _ _ _` >>
+      mp_tac (Q.INST [`t` |-> `t7`, `G` |-> `G7`, `tn` |-> `tn7`,
+          `D` |-> `deadH`, `explicit` |-> `gas_explicit_sites ctx shadow_ctx`,
+          `value` |-> `vop`, `dl` |-> `len`, `id` |-> `s7.cs_next_id`,
+          `out` |-> `STRING #"%" (toString s7.cs_next_var)`, `vw` |-> `n2w amount`,
+          `rw` |-> `n2w ro`, `nw` |-> `n2w (LENGTH (bs:word8 list))`, `iw` |-> `n2w ib`,
+          `aw` |-> `w2w (target:160 word)`] raw_call_fetched_early_exit) >>
+      impl_tac >-
+        (FILTER_ASM_REWRITE_TAC
+           (can (match_term ``w2n (n2w _ : bytes32) = _``)) [] >>
+         rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+         once_rewrite_tac[GSYM w2n_eq_0] >>
+         FILTER_ASM_REWRITE_TAC
+           (can (match_term ``w2n (n2w _ : bytes32) = _``)) [] >>
+         simp_tac bool_ss [listTheory.LENGTH_NIL] >>
+         TRY (first_assum ACCEPT_TAC) >>
+         TRY (qpat_assum `!j. ib <= j /\ j < _ ==> _` ACCEPT_TAC) >>
+         TRY (qpat_assum `(cap <> 0 ==> _)` ACCEPT_TAC)) >>
+      simp[]) >>
   `(cx.txn.is_static ==> amount = 0) /\ esK.outcomes <> SOME []` by
     (qpat_assum `~(t7.vs_outcomes = [] \/ _)` mp_tac >>
      qpat_assum `esK.outcomes = _` (fn th => rewrite_tac [th]) >>
@@ -435,59 +480,20 @@ Proof
       (qx_choose_then `es2` (map_every assume_tac o CONJUNCTS))))))
   >- (qpat_assum `esK.outcomes <> SOME []` mp_tac >>
       qpat_assum `esK.outcomes = SOME []` (fn th => rewrite_tac [th]) >> simp[]) >>
-  `expr_sim_inv cenv cx env es` by
-    (qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` mp_tac >>
-     simp[NoAsms, exprSimHypsDefsTheory.expr_body_pre_def]) >>
-  `expr_body_pre cenv cx env a (es with gas_obs := gsA)` by
-    (irule expr_body_pre_raw_call_arg >>
-     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
-  `expr_sim_inv cenv cx env esA` by
-    (irule (cj 1 exprSimHashTheory.expr_body_pre_base_result) >>
-     goal_assum (drule_at Any) >> simp[ETA_THM] >>
-     qexists_tac `INL av` >>
-     qpat_assum `bind (eval_expr cx a) (read_result cx) _ = (INL av,esA)` mp_tac >>
-     simp[NoAsms,vyperStateTheory.bind_def]) >>
-  `expr_body_pre cenv cx env d (esA with gas_obs := gsD)` by
-    (irule expr_body_pre_raw_call_arg >>
-     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
-  `expr_sim_inv cenv cx env esD` by
-    (irule (cj 1 exprSimHashTheory.expr_body_pre_base_result) >>
-     goal_assum (drule_at Any) >> simp[ETA_THM] >>
-     qexists_tac `INL (BytesV bs)` >>
-     qpat_assum `bind (eval_expr cx d) (read_result cx) _ = (INL (BytesV bs),esD)` mp_tac >>
-     simp[NoAsms,vyperStateTheory.bind_def]) >>
-  `!p. ext_call_kwarg EKGas flags.rcf_kws xs = SOME p ==> gas = p` by
-    (qpat_assum `go = ext_call_kwarg EKGas flags.rcf_kws xs`
-       (fn th => rewrite_tac [GSYM th]) >>
-     qpat_x_assum `(case go of NONE => emit_op GAS [] s5 | SOME g => (g,s5)) = _` mp_tac >>
-     Cases_on `go` >> simp[]) >>
-  `!g. OPTION_BIND (ext_call_kwarg EKGas flags.rcf_kws kvs) dest_NumV = SOME g ==>
-       g = w2n gw` by
-    (gen_tac >> disch_tac >>
-     irule (INST_TYPE [alpha |-> ``:256``] raw_call_request_gas_at_entry) >>
-     first_assum (irule_at (Pat `eval_exprs _ _ _ = _`)) >>
-     qpat_assum `typed_args_post _ ctx func cenv cx esD s4 t4 esK kws xs kvs tk`
-       (irule_at Any) >>
-     qpat_assum `eval_operand gas t7 = SOME gw`
-       (irule_at (Pat `eval_operand _ _ = _`)) >>
-     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qabbrev_tac `value_opt = if stat \/ cx.txn.is_static then NONE else SOME amount` >>
   qabbrev_tac `gas_cap = OPTION_BIND (ext_call_kwarg EKGas flags.rcf_kws kvs) dest_NumV` >>
-  `read_memory (b + 32) (LENGTH bs) t7 = bs` by
-    simp[memoryReadPropsTheory.read_memory_eq_mem_bytes_at] >>
   `(call_ty = DelegateCall) = flags.rcf_is_delegate` by
     (simp[Abbr `call_ty`, Abbr `delegate`] >>
      Cases_on `flags.rcf_is_delegate` >> Cases_on `stat` >> simp[]) >>
   `(if call_ty = DelegateCall then take_delegate_outcome else take_call_outcome)
      gas_cap target
-     (read_memory (w2n (n2w (b + 32) : bytes32)) (w2n (n2w (LENGTH bs) : bytes32)) t7)
+     (read_memory (w2n (n2w ib : bytes32)) (w2n (n2w (LENGTH bs) : bytes32)) t7)
      value_opt esK = (INL (rq,outcome),es1)` by
     (qpat_assum `(if flags.rcf_is_delegate then _ else _) gas_cap target bs _ esK = _` mp_tac >>
      qpat_assum `(call_ty = DelegateCall) = flags.rcf_is_delegate` (fn kind =>
-     qpat_assum `w2n (n2w (b + 32):bytes32) = b + 32` (fn start =>
+     qpat_assum `w2n (n2w ib:bytes32) = ib` (fn start =>
      qpat_assum `w2n (n2w (LENGTH bs):bytes32) = LENGTH bs` (fn size =>
-     qpat_assum `read_memory (b + 32) (LENGTH bs) t7 = bs` (fn memory =>
+     qpat_assum `read_memory ib (LENGTH bs) t7 = bs` (fn memory =>
        simp[NoAsms, kind, start, size, memory, Abbr `value_opt`, Abbr `stat`]))))) >>
   `(call_ty = StaticCall \/ cx.txn.is_static) = IS_NONE value_opt /\
    w2n (if call_ty = RegularCall then n2w amount else 0w : bytes32) =
@@ -543,10 +549,6 @@ Proof
      qpat_assum `w2n (n2w (LENGTH bs) : bytes32) = LENGTH bs`
        (fn th => rewrite_tac[th, listTheory.LENGTH_NIL]) >>
      first_assum ACCEPT_TAC) >>
-  Q.SUBGOAL_THEN `LENGTH bs = 0 \/ b + 32 + LENGTH bs <= t7.vs_alloca_next` ASSUME_TAC
-  >- (disj2_tac >> qpat_assum `b + (LENGTH bs + 32) <= _` mp_tac >> decide_tac) >>
-  Q.SUBGOAL_THEN `cap = 0 \/ ro + cap <= t7.vs_alloca_next` ASSUME_TAC
-  >- (Cases_on `cap = 0` >> simp[]) >>
   `!H. valid_horizon cx st0 H esK.storage_trace ==>
     ?u. run_inst_seq (emitted_insts s7 sc) t7 = OK u /\
       stmt_state_rel H ctx func cenv cx es2 u /\
@@ -596,7 +598,7 @@ Proof
         simp[storage_trace_frame_raw_call]) >>
      conj_tac >- first_assum ACCEPT_TAC >>
      qpat_assum `!H. valid_horizon cx st0 H esK.storage_trace ==>
-       expr_post H ctx func cenv cx a es sa s1 s0 esA av addr tA /\ _` drule >>
+       stmt_state_rel H ctx func cenv cx esK t7 /\ _` drule >>
      disch_then (map_every assume_tac o CONJUNCTS) >>
      qpat_assum `eval_raw_call _ _ _ _ _ _ esK = _`
        (mp_then (Pat `eval_raw_call _ _ _ _ _ _ _ = _`) mp_tac
@@ -738,7 +740,6 @@ Proof
          simp[NoAsms,Abbr `Gq`,Abbr `tnq`]) >>
      disch_then ACCEPT_TAC) >>
   qabbrev_tac `rev = flags.rcf_revert_on_failure` >>
-  qabbrev_tac `e = Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE` >>
   qabbrev_tac `payload = 32 + ((cap + 31) DIV 32) * 32` >>
   `payload = round + 32` by
     (simp_tac bool_ss [Abbr `payload`,Abbr `round`] >>
@@ -750,7 +751,7 @@ Proof
      disch_then ACCEPT_TAC) >>
   `ci_mono sa sc` by
     (irule ci_mono_trans >> qexists_tac `s7` >> simp[]) >>
-  `fn_has_code s6 s7 func /\ fn_has_code sc sb func` by
+  `fn_has_code sc sb func` by
     (qpat_assum `fn_has_code sa sb func` mp_tac >>
      qpat_assum `cs_extends sc sb` mp_tac >>
      qpat_assum `ci_mono sa s6` mp_tac >>
@@ -759,11 +760,9 @@ Proof
      qpat_assum `ci_mono sa sc` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      rewrite_tac[ci_mono_def] >>
-     rpt (disch_then (map_every assume_tac o CONJUNCTS)) >> conj_tac
-     >- (irule fn_has_code_mid >> simp[] >> qexistsl [`sb`,`sa`] >>
-         metis_tac[compileEnvTheory.cs_extends_trans])
-     >- (irule fn_has_code_mid >> simp[] >> qexistsl [`sb`,`sa`] >>
-         simp[compileEnvTheory.cs_extends_refl])) >>
+     rpt (disch_then (map_every assume_tac o CONJUNCTS)) >>
+     irule fn_has_code_mid >> simp[] >> qexistsl [`sb`,`sa`] >>
+     simp[compileEnvTheory.cs_extends_refl]) >>
   `local_ptrs_reserved cenv s6 /\ local_ptrs_reserved cenv sc` by
     (qpat_assum `local_ptrs_reserved cenv sa` mp_tac >>
      qpat_assum `ci_mono sa s6` mp_tac >>
@@ -772,27 +771,19 @@ Proof
      metis_tac[exprOperandVarTheory.compiler_ci_mono_reserved]) >>
   `compile_raw_call_finish addr dp len gas vop call_ty
       cap rev ov op s7 = (result,sb)` by
-    (qpat_assum `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-     simp[NoAsms,Abbr `call_ty`,Abbr `stat`,Abbr `delegate`,
-          Abbr `cap`,Abbr `rev`,Abbr `vop`] >>
-     Cases_on `ext_call_kwarg EKValue flags.rcf_kws xs` >> simp[]) >>
-  `expr_has_effect e /\ post_value_type cenv e = expr_type e /\
-    lowered_value_type cenv e = expr_type e /\ expr_type e =
+    simp[Abbr `call_ty`,Abbr `stat`,Abbr `delegate`,
+         Abbr `cap`,Abbr `rev`,Abbr `vop`] >>
+  `expr_type e =
       (if cap = 0 then if rev then NoneT else BaseT BoolT
        else if rev then BaseT (BytesT (Dynamic cap))
        else TupleT [BaseT BoolT;BaseT (BytesT (Dynamic cap))])` by
-    (simp_tac bool_ss [Abbr `e`, Abbr `cap`, Abbr `rev`,
-       loweringPostsTheory.expr_has_effect_thm, loweringPostsTheory.post_value_type_def,
-       exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def,
-       vyperTypeSystemTheory.raw_call_return_type_def] >>
-     Cases_on `flags.rcf_max_outsize = 0` >>
-     Cases_on `flags.rcf_revert_on_failure` >> simp[]) >>
+    (Cases_on `flags.rcf_max_outsize = 0` >> Cases_on `flags.rcf_revert_on_failure` >>
+     simp[Abbr `cap`, Abbr `rev`, vyperTypeSystemTheory.raw_call_return_type_def]) >>
   `0 < cap ==> 32 + payload < dimword (:256)` by
     (simp[NoAsms,Abbr `payload`,Abbr `cap`] >> strip_tac >>
      `type_alloc_ok cenv (raw_call_return_type flags)` by
-       (qpat_assum `expr_body_pre cenv cx env e es` mp_tac >>
-        simp[NoAsms,Abbr `e`,exprSimHypsDefsTheory.expr_body_pre_def,
-             allocLimitsTheory.alloc_limits_expr_def]) >>
+       (qpat_assum `expr_type e = raw_call_return_type flags`
+           (fn th => rewrite_tac[GSYM th]) >> first_assum ACCEPT_TAC) >>
      qpat_assum `type_alloc_ok _ (raw_call_return_type flags)` mp_tac >>
      qpat_assum `0 < flags.rcf_max_outsize` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
@@ -888,14 +879,14 @@ Proof
      `?alloc var. MEM alloc (fn_insts func) /\ alloc.inst_opcode = ALLOCA /\
        alloc.inst_outputs = [var] /\ alloc.inst_id = s6.cs_next_id /\
        not_local_ptr cenv es2.scopes var /\ s6.cs_next_id < s7.cs_next_id` by
-       (mp_tac (Q.INST [`sa` |-> `s6`,`sm` |-> `s7`,`scopes` |-> `es2.scopes`,
+       (qpat_assum `ci_mono sout s7` (assume_tac o cj 3 o REWRITE_RULE [ci_mono_def]) >>
+        mp_tac (Q.INST [`sa` |-> `s6`,`sm` |-> `sout`,`scopes` |-> `es2.scopes`,
           `cap` |-> `cap`,`ov` |-> `ov`,`op` |-> `op`]
           exprSimRawCallTheory.raw_call_outbuf_allocation_site) >>
         impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
                      simp[NoAsms,Abbr `cap`] >> first_assum ACCEPT_TAC) >>
-        disch_then ACCEPT_TAC) >>
-     `cap < dimword (:256)` by
-       (simp[NoAsms,wordsTheory.dimword_def] >> first_assum ACCEPT_TAC) >>
+        qpat_assum `sout.cs_next_id <= s7.cs_next_id` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
      `32 + payload < dimword (:256)` by
        (qpat_assum `0 < cap ==> 32 + payload < dimword (:256)` drule >>
         disch_then ACCEPT_TAC) >>
@@ -1050,7 +1041,7 @@ Proof
            else TupleT [BaseT BoolT;BaseT (BytesT (Dynamic cap))])
           (mk_ptr result LocMemory)` by
     (`raw_call_return_type flags = expr_type e` by
-       simp[NoAsms,Abbr `e`,vyperASTTheory.expr_type_def] >>
+       (qpat_assum `expr_type e = raw_call_return_type flags` (ACCEPT_TAC o SYM)) >>
      qpat_assum `expr_type e = if _ then _ else _`
        (fn ty => qpat_assum `raw_call_return_type flags = expr_type e`
          (fn rt => qpat_assum `vv = if _ then _ else _` mp_tac >>
@@ -1144,6 +1135,8 @@ Proof
        (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
      first_assum (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   qexists_tac `Value v` >>
+  qpat_assum `expr_type e = raw_call_return_type flags`
+    (fn th => PURE_REWRITE_TAC[GSYM th]) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   TRY (qpat_assum `vv_location vv <> SOME LocCode` (fn th => simp[NoAsms,th])) >>
   TRY (rpt gen_tac >> strip_tac >>
@@ -1163,3 +1156,213 @@ Proof
   qpat_assum `!t' p. vv = LocatedValue t' p ==> _`
     (drule_then (ACCEPT_TAC o CONJUNCT1))
 QED
+
+Theorem raw_call_expr_vv_full:
+  body_exprs_full_ok cx args /\
+  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
+  expr_vv_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Call ann (RawCallTarget flags) args dflt) es
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule raw_call_pre_operands >> strip_tac >>
+  drule raw_call_pre_flags >> strip_tac >> gvs[] >>
+  rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule compile_expr_raw_call >> strip_tac >>
+  drule raw_call_kwargs_types >> simp[] >> strip_tac >>
+  drule_all raw_call_kwargs_word_args >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
+  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  qexistsl_tac [`Q`, `\H res ee gt r.
+    (expr_exit res r /\ halt_exit H cx ee res r) /\
+    (ctx_has_dalloca ctx ==> !h. r = Halt h ==> allocas_below_fmp h)`] >>
+  BETA_TAC >> simp[Abbr `R`] >>
+  qunabbrev_tac `Q` >>
+  irule (BETA_RULE (Q.SPEC
+    `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`
+    (Q.GEN `R` gas_outcome_full_halt_room))) >>
+  CONV_TAC (SIMP_CONV bool_ss [raw_call_eval_action]) >>
+  irule (BETA_RULE (Q.ISPEC `\av dv kvs.
+    do
+      type_check (LENGTH (av::dv::kvs) = 2 + LENGTH flags.rcf_kws) "raw_call args";
+      target <- lift_option_type (dest_AddressV av) "raw_call target";
+      data <- lift_option_type (dest_BytesV dv) "raw_call data";
+      amount <- lift_option_type (raw_call_value flags.rcf_kws kvs) "raw_call value";
+      eval_raw_call cx flags target data amount (ext_call_kwarg EKGas flags.rcf_kws kvs)
+    od` (Q.GEN `k` (SPEC_ALL raw_call_prefix_prepared_full)))) >>
+  first_assum (irule_at (Pat `compile_expr _ _ (Call _ _ _ _) _ = _`)) >>
+  first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
+  first_assum (irule_at (Pat `lower_value _ _ _ a _ = _`)) >>
+  first_assum (irule_at (Pat `lower_value _ _ _ d _ = _`)) >>
+  first_assum (irule_at (Pat `emit_op MLOAD _ _ = _`)) >>
+  first_assum (irule_at (Pat `emit_op ADD _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_ext_call_kwargs _ _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `lower_word_args _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_expr _ _ (gas_shadow_expr _) _ = _`)) >>
+  first_assum (irule_at (Pat `return_buf_frame _ _ _ _`)) >>
+  first_assum (irule_at (Pat `body_inv _ _ _ _`)) >>
+  first_assum (irule_at (Pat `gas_shadow_function _ _`)) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
+  >- (rpt gen_tac >> strip_tac >> conj_tac
+      >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+      metis_tac[haltExitProjTheory.halt_exit_INR_type])
+  >- (rpt gen_tac >> irule storage_trace_frame_ignore_bind >>
+      simp[storage_trace_frame_checks] >>
+      irule storage_trace_frame_bind_all >> simp[storage_trace_frame_lifts] >> gen_tac >>
+      irule storage_trace_frame_bind_all >> simp[storage_trace_frame_lifts] >> gen_tac >>
+      irule storage_trace_frame_bind_all >>
+      simp[storage_trace_frame_lifts,storage_trace_frame_raw_call]) >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon esK.storage_trace` mp_tac) >>
+  impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t7` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv cx esK t7`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
+  drule_all raw_call_prefix_source_ready >> strip_tac >>
+  `!e. vyperState$assert T e = vyperState$return ()` by
+    simp[FUN_EQ_THM, vyperStateTheory.assert_def, vyperStateTheory.return_def] >>
+  simp[vyperStateTheory.type_check_def, vyperStateTheory.lift_option_type_def,
+       vyperValueTheory.dest_BytesV_def, vyperStateTheory.bind_return,
+       vyperStateTheory.ignore_bind_def] >>
+  `ci_mono sa s6 /\ ci_mono s6 s7 /\ ci_mono sa s7` by
+    (`ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 s3 /\
+      ci_mono s3 s4 /\ ci_mono s4 s5 /\ ci_mono s5 s6 /\ ci_mono s6 s7` by
+       (rpt conj_tac
+        >- metis_tac[ci_mono_lower_value_compile_expr,pairTheory.SND]
+        >- metis_tac[ci_mono_lower_value_compile_expr,pairTheory.SND]
+        >- metis_tac[ci_mono_emit_op,pairTheory.SND]
+        >- metis_tac[ci_mono_emit_op,pairTheory.SND]
+        >- metis_tac[ci_mono_lower_word_args]
+        >- (qpat_assum `(case go of NONE => emit_op GAS [] s5 | SOME g => (g,s5)) = (gas,s6)` mp_tac >>
+            POP_ASSUM_LIST (K all_tac) >> Cases_on `go` >> simp[] >> strip_tac >>
+            metis_tac[ci_mono_emit_op,pairTheory.SND,ci_mono_refl]) >>
+        metis_tac[ci_mono_compile_raw_call_outbuf,pairTheory.SND]) >>
+     rpt (qhdtm_x_assum `ci_mono` mp_tac) >> POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[ci_mono_trans]) >>
+  `expr_sim_inv cenv cx env es` by
+    (qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` mp_tac >>
+     simp[NoAsms, exprSimHypsDefsTheory.expr_body_pre_def]) >>
+  `expr_body_pre cenv cx env a (es with gas_obs := gsA)` by
+    (irule expr_body_pre_raw_call_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  `expr_sim_inv cenv cx env esA` by
+    (irule (cj 1 exprSimHashTheory.expr_body_pre_base_result) >>
+     goal_assum (drule_at Any) >> simp[ETA_THM] >>
+     qexists_tac `INL av` >>
+     qpat_assum `bind (eval_expr cx a) (read_result cx) _ = (INL av,esA)` mp_tac >>
+     simp[NoAsms,vyperStateTheory.bind_def]) >>
+  `expr_body_pre cenv cx env d (esA with gas_obs := gsD)` by
+    (irule expr_body_pre_raw_call_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  `expr_sim_inv cenv cx env esD` by
+    (irule (cj 1 exprSimHashTheory.expr_body_pre_base_result) >>
+     goal_assum (drule_at Any) >> simp[ETA_THM] >>
+     qexists_tac `INL (BytesV bs)` >>
+     qpat_assum `bind (eval_expr cx d) (read_result cx) _ = (INL (BytesV bs),esD)` mp_tac >>
+     simp[NoAsms,vyperStateTheory.bind_def]) >>
+  `!p. ext_call_kwarg EKGas flags.rcf_kws xs = SOME p ==> gas = p` by
+    (qpat_assum `go = ext_call_kwarg EKGas flags.rcf_kws xs`
+       (fn th => rewrite_tac [GSYM th]) >>
+     qpat_x_assum `(case go of NONE => emit_op GAS [] s5 | SOME g => (g,s5)) = _` mp_tac >>
+     Cases_on `go` >> simp[]) >>
+  `!g. OPTION_BIND (ext_call_kwarg EKGas flags.rcf_kws kvs) dest_NumV = SOME g ==>
+       g = w2n gw` by
+    (gen_tac >> disch_tac >>
+     irule (INST_TYPE [alpha |-> ``:256``] raw_call_request_gas_at_entry) >>
+     first_assum (irule_at (Pat `eval_exprs _ _ _ = _`)) >>
+     qpat_assum `typed_args_post _ ctx func cenv cx esD s4 t4 esK kws xs kvs tk`
+       (irule_at Any) >>
+     qpat_assum `eval_operand gas t7 = SOME gw`
+       (irule_at (Pat `eval_operand _ _ = _`)) >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `expr_has_effect (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE) /\
+    post_value_type cenv (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE)
+      = raw_call_return_type flags /\
+    lowered_value_type cenv (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE)
+      = raw_call_return_type flags /\
+    type_alloc_ok cenv (raw_call_return_type flags)` by
+    (simp[NoAsms,loweringPostsTheory.expr_has_effect_thm, loweringPostsTheory.post_value_type_def,
+          exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def] >>
+     qpat_assum `expr_body_pre _ _ _ (Call _ (RawCallTarget _) _ _) _` mp_tac >>
+     simp[NoAsms,exprSimHypsDefsTheory.expr_body_pre_def,allocLimitsTheory.alloc_limits_expr_def]) >>
+  `~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
+    (flags.rcf_is_delegate ==> amount = 0)` by
+    (conj_tac >-
+      (qpat_assum `expr_body_pre _ _ _ (Call _ (RawCallTarget _) _ _) _` mp_tac >>
+       simp[NoAsms,exprSimHypsDefsTheory.expr_body_pre_def,vyperTypeSystemTheory.well_typed_expr_def]) >>
+     strip_tac >>
+     `~MEM EKValue flags.rcf_kws` by
+       (qpat_assum `raw_call_kws_ok flags kws`
+          (strip_assume_tac o REWRITE_RULE [vyperTypeSystemTheory.raw_call_kws_ok_def]) >>
+        qpat_assum `_ \/ _ ==> ~MEM EKValue flags.rcf_kws` irule >>
+        disj1_tac >> first_assum ACCEPT_TAC) >>
+     qpat_assum `~MEM EKValue flags.rcf_kws` (fn th =>
+       qpat_assum `raw_call_value flags.rcf_kws kvs = SOME amount` mp_tac >>
+       simp[NoAsms,vyperInterpreterTheory.raw_call_value_def,
+            MATCH_MP (SPEC_ALL vyperTypeExtCallSoundnessTheory.ext_call_kwarg_not_mem) th] >>
+       disch_then (ACCEPT_TAC o SYM))) >>
+  `fn_has_code s6 s7 func` by
+    (`cs_extends s7 sb` by metis_tac[ci_mono_compile_raw_call_finish,ci_mono_def,pairTheory.SND] >>
+     irule fn_has_code_mid >>
+     conj_tac >-
+       qpat_assum `ci_mono s6 s7` (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [ci_mono_def]) >>
+     qexistsl [`sb`,`sa`] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qpat_assum `ci_mono sa s6` (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [ci_mono_def])) >>
+  `!j. b + 32 <= j /\ j < b + 32 + LENGTH bs ==> j NOTIN tn7.t_mem` by
+    (qpat_assum `!mem. mem_agree_outside tn7.t_mem t7.vs_memory mem ==> _`
+       (mp_tac o MATCH_MP representationCleanPtrTheory.robust_mem_bytes_at_clean) >>
+     simp[]) >>
+  `bs <> [] ==> ?p. dp = Var p /\ ptr_covers G7 tn7 p t7 (LENGTH bs)` by
+    (strip_tac >> qpat_assum `bs <> [] ==> _` drule >>
+     qpat_assum `eval_operand dp t7 = _` mp_tac >>
+     qpat_assum `op_taint tn7 dp = {}` mp_tac >>
+     qpat_assum `b + 32 < _` (mp_tac o REWRITE_RULE [GSYM (EVAL ``dimword (:256)``)]) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `dp` >> simp[op_prov_def,eval_operand_def,ptr_covers_def,w2n_n2w] >>
+     rpt strip_tac >> simp[] >> decide_tac) >>
+  `read_memory (b + 32) (LENGTH bs) t7 = bs` by
+    simp[memoryReadPropsTheory.read_memory_eq_mem_bytes_at] >>
+  qpat_x_assum `vo = _` SUBST_ALL_TAC >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Qout Rout` >>
+  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  qexistsl [`Qout`, `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+    (ctx_has_dalloca ctx ==> !h. r = Halt h ==> allocas_below_fmp h)`] >>
+  BETA_TAC >> simp[Abbr `Rout`,NoAsms] >>
+  qunabbrev_tac `Qout` >>
+  PURE_ONCE_REWRITE_TAC [Q.SPECL [`type_memory_size rt`,`w2n (w:bytes32)`]
+     arithmeticTheory.ADD_COMM] >>
+  mp_tac (REWRITE_RULE [loweringPostsTheory.post_value_type_def]
+    (Q.INST [`e` |-> `Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE`,
+      `vv` |-> `if flags.rcf_max_outsize = 0 then StackValue (raw_call_return_type flags) result
+        else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)`,
+      `ib` |-> `b + 32`, `sout` |-> `s7`] raw_call_continuation_full)) >>
+  (impl_tac >- suspend "continuation") >>
+  disch_then ACCEPT_TAC
+QED
+
+Resume raw_call_expr_vv_full[continuation]:
+  simp[NoAsms,ci_mono_refl,loweringPostsTheory.expr_has_effect_thm,
+       exprLoweringTheory.lowered_value_type_def,vyperASTTheory.expr_type_def] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (rpt strip_tac >>
+       qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+         (drule_then (map_every assume_tac o CONJUNCTS)) >>
+       rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  TRY (qpat_assum `~(flags.rcf_is_delegate /\ flags.rcf_is_static)`
+         (ACCEPT_TAC o REWRITE_RULE [DE_MORGAN_THM])) >>
+  TRY (qpat_assum `amount < dimword (:256)` (ACCEPT_TAC o REWRITE_RULE [EVAL ``dimword (:256)``])) >>
+  TRY (qpat_assum `!g. OPTION_BIND (ext_call_kwarg EKGas _ _) _ = SOME g ==> _`
+         (ACCEPT_TAC o SIMP_RULE (srw_ss()) [])) >>
+  TRY (disj2_tac >> disj1_tac >> first_assum ACCEPT_TAC) >>
+  PURE_ONCE_REWRITE_TAC [Q.SPECL [`LENGTH bs`,`32`] arithmeticTheory.ADD_COMM] >>
+  PURE_REWRITE_TAC [arithmeticTheory.ADD_ASSOC] >>
+  first_assum ACCEPT_TAC
+QED
+
+Finalise raw_call_expr_vv_full
