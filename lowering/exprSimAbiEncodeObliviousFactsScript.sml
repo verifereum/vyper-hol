@@ -164,22 +164,15 @@ Proof
 QED
 
 Theorem code_action_lower_abi_encode:
-  !ensure mid src info maxlen.
-    code_action enc_safe_opcode (lower_abi_encode ensure mid src info maxlen)
+  !mid src info maxlen.
+    code_action enc_safe_opcode (lower_abi_encode mid maxlen (\dst. compile_abi_encode_to_buf dst src info))
 Proof
-  rpt gen_tac >> Cases_on `mid` >> simp[lower_abi_encode_def]
-  >> irule code_action_bind >> simp[code_action_alloc_buffer, enc_safe_opcode_def] >> gen_tac
-  >> irule code_action_bind >> simp[code_action_return] >> gen_tac
-  >> irule code_action_bind >> simp[code_action_emit_op, enc_safe_opcode_def] >> gen_tac
-  >> simp[code_action_bind, code_action_ignore_bind, code_action_return,
-          code_action_emit_op, code_action_emit_void, code_action_encoder_mutual,
-          enc_safe_opcode_def]
-  >> irule code_action_ignore_bind
-  >> conj_tac
-  >- simp[code_action_bind, code_action_emit_op, code_action_emit_void, enc_safe_opcode_def]
-  >> irule code_action_bind >> simp[code_action_encoder_mutual] >> gen_tac
-  >> simp[code_action_ignore_bind, code_action_bind, code_action_emit_op,
-          code_action_emit_void, code_action_return, enc_safe_opcode_def]
+  rpt gen_tac >> Cases_on `mid` >> simp[lower_abi_encode_def, comp_ignore_bind_def] >>
+  rpt (FIRST [
+    CHANGED_TAC (simp[code_action_return, code_action_alloc_buffer,
+      code_action_emit_op, code_action_emit_void, cj 2 code_action_encoder_mutual,
+      enc_safe_opcode_def]),
+    irule code_action_bind, conj_tac, gen_tac])
 QED
 
 Theorem label_action_linear:
@@ -253,20 +246,19 @@ Proof
 QED
 
 Theorem label_action_lower_abi_encode:
-  !ensure mid src info maxlen.
-    label_action (lower_abi_encode ensure mid src info maxlen)
+  !mid src info maxlen.
+    label_action (lower_abi_encode mid maxlen (\dst. compile_abi_encode_to_buf dst src info))
 Proof
-  rpt gen_tac >> Cases_on `mid` >> simp[lower_abi_encode_def]
-  >> irule label_action_bind >> simp[label_action_linear] >> gen_tac
-  >> irule label_action_bind >> simp[label_action_return] >> gen_tac
-  >> irule label_action_bind >> simp[label_action_linear] >> gen_tac
-  >> simp[label_action_bind, label_action_ignore_bind, label_action_return,
-          label_action_linear, label_action_encoder_mutual]
+  rpt gen_tac >> Cases_on `mid` >> simp[lower_abi_encode_def, comp_ignore_bind_def] >>
+  rpt (FIRST [
+    CHANGED_TAC (simp[label_action_return, label_action_linear,
+      cj 2 label_action_encoder_mutual]),
+    irule label_action_bind, conj_tac, gen_tac])
 QED
 
 Theorem lower_abi_encode_structural_facts:
-  !ensure mid src info maxlen sa out sb.
-    lower_abi_encode ensure mid src info maxlen sa = (out,sb) ==>
+  !mid src info maxlen sa out sb.
+    lower_abi_encode mid maxlen (\dst. compile_abi_encode_to_buf dst src info) sa = (out,sb) ==>
     cs_extends sa sb /\ frag_ops_free sa sb /\
     ALL_DISTINCT (MAP (\i. i.inst_id) (frag_code sa sb)) /\
     ~MEM sb.cs_current_bb

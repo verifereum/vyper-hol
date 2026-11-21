@@ -7,7 +7,8 @@ Ancestors
 Theorem abi_tuple_encode_context:
   compile_alloc_buffer n st = (source_buf,allocated) /\
   compile_store_abi_tuple ce source_buf.buf_operand 0 xs allocated = ((),staged) /\
-  lower_abi_encode ensure method_id_opt source_buf.buf_operand info maxlen staged = (out,final) /\
+  lower_abi_encode method_id_opt maxlen
+    (\dst. compile_abi_encode_to_buf dst source_buf.buf_operand info) staged = (out,final) /\
   fn_has_code st final func ==>
   fn_has_code st staged func /\ fn_has_code staged final func /\
   st.cs_next_var <= staged.cs_next_var /\ staged.cs_next_var <= final.cs_next_var /\

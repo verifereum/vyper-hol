@@ -20,9 +20,9 @@ Theorem deploy_blocks_frame_type_builtin_dispatch_body:
   (!a b c. deploy_blocks_frame (compile_extract32_load a b c)) /\
   (!v ty. deploy_blocks_frame (compile_clamp_basetype v ty)) /\
   (!v. deploy_blocks_frame (unwrap_value cenv v)) /\
-  (!a:bool. !b c d e. deploy_blocks_frame (builtinAbi$lower_abi_encode a b c d e)) /\
+  (!mid maxlen single vs tys. deploy_blocks_frame
+    (lower_abi_encode mid maxlen (compile_abi_encode_payload cenv single vs tys))) /\
   (!args. deploy_blocks_frame (compile_abi_encode_args cfn cenv args)) /\
-  (!buf off vs. deploy_blocks_frame (compile_store_abi_tuple cenv buf off vs)) /\
   (!a b c d e. deploy_blocks_frame (lower_abi_decode a b c d e)) ==>
   deploy_blocks_frame (compile_type_builtin_dispatch_body cfn cenv vv_ty ty tb ret_ty args)
 Proof
@@ -271,9 +271,9 @@ Definition deploy_type_lower_contract_def:
   (!a b c. deploy_blocks_frame (compile_extract32_load a b c)) /\
   (!v ty. deploy_blocks_frame (compile_clamp_basetype v ty)) /\
   (!v. deploy_blocks_frame (unwrap_value cenv v)) /\
-  (!a:bool. !b c d e. deploy_blocks_frame (builtinAbi$lower_abi_encode a b c d e)) /\
+  (!mid maxlen single vs tys. deploy_blocks_frame
+    (lower_abi_encode mid maxlen (compile_abi_encode_payload cenv single vs tys))) /\
   (!args. deploy_blocks_frame (compile_abi_encode_args cfn cenv args)) /\
-  (!buf off vs. deploy_blocks_frame (compile_store_abi_tuple cenv buf off vs)) /\
   (!a b c d e. deploy_blocks_frame (lower_abi_decode a b c d e))
 End
 

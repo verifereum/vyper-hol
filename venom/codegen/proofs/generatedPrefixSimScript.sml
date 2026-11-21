@@ -1,34 +1,13 @@
 Theory generatedPrefixSim
 Ancestors
+  reorderPreparationTraceProps
   operandPreparationSim scratchPrefixSim emitInputSim reorderSim allocMono planWf
-  planSpillBounds genericInputReady
+  planSpillBounds genericInputReady reorderPreparationInventoryProps
   stackPlanGen stackPlanOps stackPlanTypes stackModel
   codegenRel asmSem planExec spillSim doSwapSim stackOpSim blockSimHelpers
   list rich_list finite_map arithmetic asmIR sorting regularMemorySim
 
-Theorem do_restore_venom_asm_rel_numeric:
-  do_restore op ps = (ops,ps') /\
-  EVERY (\s. case s of SOSpill off => off < dimword(:256)
-    | SORestore off => off < dimword(:256) | _ => T) ops /\
-  venom_asm_rel lo ps vs st /\
-  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
-  ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
-        venom_asm_rel lo ps' vs st' /\
-        st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops)
-Proof
-  strip_tac >>
-  Cases_on `FLOOKUP ps.ps_spilled op`
-  >- gvs[do_restore_def, execute_plan_def, asm_steps_def] >>
-  rename1 `FLOOKUP ps.ps_spilled op = SOME off` >>
-  gvs[do_restore_def, execute_plan_def, exec_stack_op_def] >>
-  drule_all restore_op_venom_asm_rel >>
-  disch_then (qspec_then `o2pc` strip_assume_tac) >>
-  qexists `st'` >> simp[] >>
-  irule venom_asm_rel_ps_transfer >>
-  qexists `ps with <|ps_stack := stack_push op ps.ps_stack;
-    ps_spilled := ps.ps_spilled \\ op|>` >>
-  simp[free_spill_slot_def]
-QED
+Theorem do_restore_venom_asm_rel_numeric = reorderPreparationTracePropsTheory.do_restore_venom_asm_rel_numeric
 
 Theorem emit_one_input_unspilled_numeric:
   opc <> INVOKE /\
@@ -655,9 +634,15 @@ Theorem reorder_plan_preserves_not_mem_reachable:
     Var y NOTIN FDOM ps'.ps_spilled
 Proof
   rpt gen_tac >> strip_tac >>
+  Cases_on `reorder_prepare_plan pending ps` >>
+  rename1 `reorder_prepare_plan pending ps = (prep,mid)` >>
+  drule_all reorder_prepare_materialised_counts >> strip_tac >>
+  drule reorder_prepare_inventory_subset >> strip_tac >>
+  `~MEM (Var y) mid.ps_stack /\ Var y NOTIN FDOM mid.ps_spilled` by
+    metis_tac[] >>
   `FOLDL (\(ops,ps) (idx,op).
       let (step_ops,ps') = reorder_one dfg pending idx op ps in
-      (ops ++ step_ops,ps')) ([],ps)
+      (ops ++ step_ops,ps')) (prep,mid)
       (MAPi (\i op. (i,op)) pending) = (ops,ps')` by
     (qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
      simp[reorder_plan_def]) >>
@@ -666,7 +651,7 @@ Proof
     (simp[EVERY_MEM, indexedListsTheory.MEM_MAPi] >>
      rpt strip_tac >> gvs[]) >>
   qspecl_then
-    [`MAPi (\i op. (i,op)) pending`, `dfg`, `pending`, `[]`, `ps`,
+    [`MAPi (\i op. (i,op)) pending`, `dfg`, `pending`, `prep`, `mid`,
      `ops`, `ps'`, `y`] mp_tac reorder_fold_preserves_not_mem_reachable >>
   simp[]
 QED

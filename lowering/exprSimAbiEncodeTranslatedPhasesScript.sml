@@ -11,19 +11,6 @@ Ancestors
   exprSimAbiEncodeTranslatedZero exprLoweringProps emitHelperProps
   compileEnv venomState list words emitHelper venomInst rich_list exprLowering context abiEncoderWindow exprSimAbiEncodeEmptySource
 
-Theorem abi_encode_translated_setup_opcodes[local]:
-  abi_builtin_encode_setup mid maxlen st = (ops,ready) ==>
-  EVERY (\i. MEM i.inst_opcode [ALLOCA;ADD;MSTORE]) (emitted_insts st ready)
-Proof
-  Cases_on `mid` >>
-  simp[abi_builtin_encode_setup_def, abi_builtin_encode_method_id_def,
-    compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def,
-    comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  simp[emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>
-  simp[DROP_LENGTH_APPEND, mk_inst_def]
-QED
-
 Theorem abi_encode_translated_concrete_phases:
   abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
   compile_abi_encode_to_buf (SND ops) src ei ready = (len,body_end) /\
@@ -113,7 +100,7 @@ Resume abi_encode_translated_concrete_phases[complex]:
   disch_then (qx_choose_then `setup_raw` (MAP_EVERY assume_tac o CONJUNCTS)) >>
   qmatch_asmsub_abbrev_tac `abi_builtin_encode_setup_frame _ _ _ _ _ initial prepared` >>
   `abi_encode_exec_frame func initial prepared` by
-    (drule abi_encode_translated_setup_opcodes >> strip_tac >>
+    (drule abi_builtin_encode_setup_opcodes >> strip_tac >>
      drule_all abi_encode_setup_sequence_frame >>
      simp_tac bool_ss [Abbr `prepared`, abi_encode_exec_frame_inst_idx]) >>
   `len = Lit 0w /\ body_end = ready` by

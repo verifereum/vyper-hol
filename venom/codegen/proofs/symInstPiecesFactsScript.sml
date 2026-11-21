@@ -254,7 +254,7 @@ Proof
   qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[generate_inst_plan_def, venomInstTheory.is_param_opcode_def, generate_regular_inst_plan_def,
     compute_operands_def, venomInstTheory.python_stack_operands_def, venomInstTheory.ir_specific_operand_order_def,
-    venomEffectsTheory.is_commutative_def, emit_input_plan_def, reorder_plan_def, generate_emit_ops_def,
+    venomEffectsTheory.is_commutative_def, emit_input_plan_def, planWfTheory.reorder_plan_nil, generate_emit_ops_def,
     stack_pop_def] >>
   rpt (pairarg_tac >> gvs[]) >> Cases_on `MEM x nl` >>
   Cases_on `halt` >> gvs[popmany_plan_def] >> metis_tac[]

@@ -1,6 +1,7 @@
 Theory fnLineageInvReplayBoundary
 Ancestors
   inputMaterialised inputPlanSim reduceDepthSim reorderStages
+  reorderPreparationProps reorderPreparationInventoryProps
   fnLineageInvActualReplay fnPlanLineageInventory reorderSim stackPlanGen
   stackPlanTypes stackPlanOps stackModel planWf foldlSim arithmetic list rich_list pred_set
   fnPlanLineageReorder fnPlanLineageSetup genericInputReady
@@ -273,15 +274,44 @@ Theorem reorder_plan_materialised_stack_count_mono:
     LENGTH pending <= 16 /\ LENGTH pending <= LENGTH ps.ps_stack /\
     (!x. MEM x pending ==>
       LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
+    (!op. MEM op pending /\ is_var_operand op ==> op NOTIN FDOM ps.ps_spilled) /\
     reorder_plan dfg pending ps = (ops,qs) ==>
     !x. LIST_ELEM_COUNT x qs.ps_stack <= LIST_ELEM_COUNT x ps.ps_stack
 Proof
   rpt gen_tac >> strip_tac >>
+  drule reorder_plan_split >> strip_tac >>
+  drule_all reorder_prepare_materialised_counts >> strip_tac >>
+  `!x. MEM x pending ==>
+       LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x mid.ps_stack` by
+    (qspecl_then [`pending`, `ps`, `prep`, `mid`] mp_tac
+       reorder_prepare_count_dom >> simp[]) >>
+  `!x. LIST_ELEM_COUNT x mid.ps_stack <= LIST_ELEM_COUNT x ps.ps_stack` by
+    (qspecl_then [`pending`, `ps`, `prep`, `mid`,
+      `\st trace post.
+        (!op. MEM op pending /\ is_var_operand op ==> op NOTIN FDOM st.ps_spilled) ==>
+        (!op. MEM op pending /\ is_var_operand op ==> op NOTIN FDOM post.ps_spilled) /\
+        !x. LIST_ELEM_COUNT x post.ps_stack <= LIST_ELEM_COUNT x st.ps_stack`]
+        (mp_tac o BETA_RULE) reorder_prepare_trace_relation >>
+     impl_tac
+     >- (rpt conj_tac
+         >- simp[]
+         >- metis_tac[LESS_EQ_TRANS]
+         >- (rpt gen_tac >> strip_tac >> strip_tac >>
+             `FLOOKUP st.ps_spilled op = NONE` by (simp[finite_mapTheory.flookup_thm] >> metis_tac[]) >>
+             gvs[do_restore_def])
+         >- (rpt gen_tac >> strip_tac >> strip_tac >> conj_tac
+             >- (rpt strip_tac >>
+                 qspecl_then [`LENGTH st.ps_stack - LENGTH pending`, `pending`,
+                   `op`, `0`, `0`, `st`, `op'`] mp_tac reduce_depth_plan_not_spilled >>
+                 simp[])
+             >> metis_tac[reduce_depth_plan_stack_count_mono])
+         >- first_assum ACCEPT_TAC) >>
+     simp[]) >>
   qspecl_then [`MAPi (\i op. (i,op)) pending`, `0`]
     mp_tac plan_steps_reorder_materialised_stack_count_mono >>
-  disch_then (qspecl_then [`dfg`, `pending`, `ps`, `ops`, `qs`] mp_tac) >>
-  simp[GSYM reorder_plan_eq_plan_steps, indexedListsTheory.LENGTH_MAPi,
-    indexedListsTheory.EL_MAPi]
+  disch_then (qspecl_then [`dfg`, `pending`, `mid`, `rest`, `qs`] mp_tac) >>
+  simp[indexedListsTheory.LENGTH_MAPi, indexedListsTheory.EL_MAPi] >>
+  metis_tac[LESS_EQ_TRANS]
 QED
 
 Theorem emit_reorder_plan_core_stack_live_upper:
@@ -311,6 +341,8 @@ Proof
   `!x. MEM x selected ==>
     LIST_ELEM_COUNT x selected <= LIST_ELEM_COUNT x ps1.ps_stack` by metis_tac[] >>
   `LENGTH selected <= LENGTH ps1.ps_stack /\ LENGTH selected <= 16` by simp[] >>
+  `!op. MEM op selected /\ is_var_operand op ==> op NOTIN FDOM ps1.ps_spilled` by
+    (drule emit_input_plan_vars_not_spilled >> metis_tac[sortingTheory.PERM_MEM_EQ]) >>
   drule_all reorder_plan_materialised_stack_count_mono >> strip_tac >>
   drule_all emit_reorder_plan_core_suffix >> strip_tac >>
   simp[SUBSET_DEF] >> gen_tac >> strip_tac >>

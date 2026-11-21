@@ -4,8 +4,8 @@ Ancestors
   list pair vyperAST venomInst loweringShapeDefs loweringShapeProps exprLowering
   exprCallBounds supportedExprTraverse e2eDeployDefs
   ctorCallFreeRules ctorCallFreeValues ctorCallFreeMemory ctorCallFreeABI
-  ctorCallFreeOps ctorCallFreeCallbacks ctorCallFreeBodies ctorCallFreeMembership
-  loweringCallOpcodes ctorCallFreeExprBody ctorCallFreeBuiltinBody ctorCallFreeTypeBuiltinBody
+  ctorCallFreeABIEncode ctorCallFreeOps ctorCallFreeCallbacks ctorCallFreeBodies ctorCallFreeMembership
+  loweringExtCallOpcodes loweringCallArgsOpcodes loweringCallOpcodes ctorCallFreeExprBody ctorCallFreeBuiltinBody ctorCallFreeTypeBuiltinBody
 
 (* Discharge a precise lemma's opcode facts from the complement-of-seven premise. *)
 val base7_tm = ``!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /\
@@ -133,6 +133,23 @@ Proof
 
 QED
 
+Theorem outcomes_free_abi_encode_builtin[local]:
+  (!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /\
+         opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
+         opc <> RETURNDATACOPY ==> P opc) /\
+  EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (lower_abi_encode mid n (compile_abi_encode_payload ce single vs tys) st)))
+Proof
+  strip_tac >> irule outcomes_free_lower_abi_encode >> simp[] >>
+  Cases_on `single` >> simp[compile_abi_encode_payload_def, b7 outcomes_free_abi_encode_values_to_buf] >>
+  rpt gen_tac >> strip_tac >>
+  irule every_state_insts_bind >> simp[b7 outcomes_free_unwrap_value] >>
+  gen_tac >> IF_CASES_TAC >> simp[b7 (cj 2 outcomes_free_abi_encode)] >>
+  gen_tac >> strip_tac >> irule every_state_insts_ignore_bind >>
+  simp[opcode_every_emit_void, every_state_insts_return]
+QED
+
 Theorem outcomes_free_type_join[local]:
   (!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /\
          opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
@@ -169,9 +186,9 @@ Proof
   irule (UNDISCH outcomes_free_type_builtin_dispatch_body) >>
   simp[(b7 outcomes_free_unwrap_value), (b7 outcomes_free_alloc_buffer), (b7 outcomes_free_type_convert),
     (b7 outcomes_free_bytestring_widen_copy), (b7 outcomes_free_builtin_empty_complex), (b7 outcomes_free_compile_bytestring_src),
-    (b7 outcomes_free_extract32_load), (b7 outcomes_free_clamp_basetype), (b7 outcomes_free_lower_abi_encode),
-    (b7 outcomes_free_lower_abi_decode), (b7 outcomes_free_store_abi_tuple), outcomes_free_materialize_vv, (b7 outcomes_free_store_memory),
-    (b7 outcomes_free_abi_encode_args)] >>
+    (b7 outcomes_free_extract32_load), (b7 outcomes_free_clamp_basetype), outcomes_free_abi_encode_builtin,
+    (b7 outcomes_free_lower_abi_decode), outcomes_free_materialize_vv, (b7 outcomes_free_store_memory),
+    outcomes_free_abi_encode_args] >>
   qexists_tac `R` >> simp[] >> metis_tac[]
 QED
 

@@ -19,7 +19,8 @@ End
 
 Definition encode_probe_result_def:
   encode_probe_result =
-    lower_abi_encode F (SOME 0w) (Lit 4096w) encode_probe_info 4096
+    lower_abi_encode (SOME 0w) 4096
+    (\dst. compile_abi_encode_to_buf dst (Lit 4096w) encode_probe_info)
       encode_probe_start
 End
 

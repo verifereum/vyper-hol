@@ -16,28 +16,15 @@ val abi_preserve_tac =
     irule every_state_insts_ignore_bind, conj_tac, IF_CASES_TAC]);
 
 Theorem outcomes_free_lower_abi_encode:
-  (!opc. MEM opc [ALLOCA; MLOAD; MSTORE; MCOPY; JMP; LT; ISZERO; JNZ;
-    ADD; MUL; AND; NOT] ==> P opc) /\
+  P ALLOCA /\ P ADD /\ P MSTORE /\
+  (!dst st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (encode dst st)))) /\
   EVERY (\i. P i.inst_opcode) (state_insts s) ==>
   EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (lower_abi_encode ensure mid src info sz s)))
+    (state_insts (SND (lower_abi_encode mid sz encode s)))
 Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  Cases_on `mid` >> simp[lower_abi_encode_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[SRULE [DISJ_IMP_THM, FORALL_AND_THM]
-    (cj 2 outcomes_free_abi_encode)]), CHANGED_TAC abi_preserve_tac])
-QED
-
-Theorem opcode_every_lower_abi_encode:
-  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
-         opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
-  (
-  EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (lower_abi_encode ensure mid src info maxlen st)))
-  )
-Proof
-  rpt strip_tac >> irule outcomes_free_lower_abi_encode >> simp[DISJ_IMP_THM, FORALL_AND_THM]
+  strip_tac >> Cases_on `mid` >> simp[lower_abi_encode_def] >>
+  rpt (FIRST [CHANGED_TAC abi_preserve_tac, first_assum irule])
 QED
 
 Theorem outcomes_free_lower_abi_decode:

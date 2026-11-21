@@ -317,7 +317,8 @@ Proof
 QED
 
 Theorem compiler_lower_abi_encode_var:
-  lower_abi_encode ensure mid src info maxlen sa = (op,sb) ==>
+  (!dst s. ci_mono s (SND (encode dst s))) /\
+  lower_abi_encode mid maxlen encode sa = (op,sb) ==>
   !x. op = Var x ==> not_fresh_at sb x
 Proof
   simp[builtinAbiTheory.lower_abi_encode_def, LET_THM,
@@ -329,10 +330,10 @@ Proof
   qexists `sm` >> reverse conj_tac >- metis_tac[] >>
   Cases_on `mid` >> gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  rename1 `compile_abi_encode_to_buf data_ptr src info se = (encoded_len,sf)` >>
+  rename1 `encode data_ptr se = (encoded_len,sf)` >>
   `se.cs_next_var <= sf.cs_next_var` by
-    (qspec_then `se` mp_tac (Q.SPECL [`data_ptr`, `src`, `info`]
-      (cj 2 ci_mono_compile_abi_encode)) >> simp[ci_mono_def]) >>
+    (qpat_x_assum `!dst s. ci_mono s (SND (encode dst s))`
+       (qspecl_then [`data_ptr`, `se`] mp_tac) >> simp[ci_mono_def]) >>
   gvs[emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
       comp_bind_def, comp_ignore_bind_def, comp_return_def]
 QED
@@ -590,16 +591,13 @@ Proof
      gvs[contextTheory.vv_operand_def] >>
      `!x. v = Var x ==> not_fresh_at st1 x` by metis_tac[] >>
      metis_tac[compiler_type_convert_var])
-  >~ [`lower_abi_encode _ _ _ _ _ _`] >-
-    (qmatch_goalsub_rename_tac `if LENGTH args = 1 /\ ~ensure then _ else _` >>
-     Cases_on `LENGTH args = 1 /\ ~ensure` >>
-     Cases_on `is_word_type (expr_type (HD args))` >> simp[] >>
-     rpt (pairarg_tac >> gvs[]) >>
-     qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory result` >>
+  >~ [`lower_abi_encode _ _ _ _`] >-
+    (qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory result` >>
      Cases_on `result` >> gvs[as_ptr_val_def, markerTheory.Abbrev_def] >>
      rpt strip_tac >> gvs[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
-     qpat_x_assum `_ = lower_abi_encode _ _ _ _ _ _` (mp_tac o SYM) >>
-     strip_tac >> drule compiler_lower_abi_encode_var >> simp[])
+     qpat_x_assum `_ = lower_abi_encode _ _ _ _` (mp_tac o SYM) >>
+     strip_tac >> drule_at (Pat `lower_abi_encode _ _ _ _ = _`) compiler_lower_abi_encode_var >>
+     simp[ci_mono_compile_abi_encode_payload])
   >~ [`lower_abi_decode _ _ _ _ _ _`] >-
     (qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory result` >>
      Cases_on `result` >> gvs[as_ptr_val_def, markerTheory.Abbrev_def] >>
@@ -1467,25 +1465,19 @@ Theorem compiler_abi_encode_args_reserved_cong:
   compile_abi_encode_args f ce args sa =
   compile_abi_encode_args g ce args sa
 Proof
-  qid_spec_tac `sa` >> Induct_on `args` >>
-  simp[compile_abi_encode_args_def, comp_return_def] >> rpt strip_tac >>
+  simp[compile_abi_encode_args_def] >> qid_spec_tac `sa` >> Induct_on `args` >>
+  simp[compile_ext_call_args_def, comp_return_def, comp_bind_def] >> rpt strip_tac >>
   `f ce (expr_type h) h sa = g ce (expr_type h) h sa` by simp[] >>
-  simp[comp_bind_def] >> asm_rewrite_tac[] >>
-  Cases_on `g ce (expr_type h) h sa` >> simp[] >>
+  simp[] >> pairarg_tac >> gvs[] >>
   rename1 `g ce (expr_type h) h sa = (vv,sb)` >>
   `local_ptrs_reserved ce sb` by
     (irule compiler_ci_mono_reserved >> qexists `sa` >>
      metis_tac[pairTheory.SND]) >>
-  Cases_on `~is_word_type (expr_type h) /\ exprs_can_mutate ce args` >> simp[]
-  >- (Cases_on `compile_materialize_vv ce (lowered_value_type ce h) vv sb` >> simp[] >>
-      `local_ptrs_reserved ce r` by
-        (irule compiler_ci_mono_reserved >> qexists `sb` >>
-         metis_tac[ci_mono_compile_materialize_vv, pairTheory.SND]) >>
-      simp[]) >>
-  Cases_on `unwrap_value ce vv sb` >> simp[] >>
-  `local_ptrs_reserved ce r` by
+  pairarg_tac >> gvs[] >>
+  rename1 `compile_snapshot_vv _ _ _ sb = (saved,sc)` >>
+  `local_ptrs_reserved ce sc` by
     (irule compiler_ci_mono_reserved >> qexists `sb` >>
-     metis_tac[ci_mono_unwrap_value, pairTheory.SND]) >>
+     metis_tac[ci_mono_compile_snapshot_vv, pairTheory.SND]) >>
   simp[]
 QED
 

@@ -28,7 +28,8 @@ Proof
 QED
 
 Theorem lower_abi_encode_run:
-  lower_abi_encode ensure method_id_opt src (type_to_abi_enc_info sf ce ty) maxlen start = (out,final) /\
+  lower_abi_encode method_id_opt maxlen
+    (\dst. compile_abi_encode_to_buf dst src (type_to_abi_enc_info sf ce ty)) start = (out,final) /\
   fn_has_code start final func /\
   (start.cs_blocks = final.cs_blocks \/
     !bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>

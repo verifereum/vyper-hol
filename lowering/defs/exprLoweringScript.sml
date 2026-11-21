@@ -2537,39 +2537,6 @@ Definition compile_snapshot_vv_def:
     else return vv
 End
 
-(* Capture composites before a later argument can mutate their source.
-   Keep the pinned compiler's tuple staging; this backports the operand
-   preservation fix from Vyper #5127 without changing the encoder API. *)
-Definition compile_abi_encode_args_def:
-  compile_abi_encode_args cfn cenv [] = return ([] : operand list) ∧
-  compile_abi_encode_args cfn cenv (e::es) =
-    do vv <- cfn cenv (expr_type e) e;
-       op <- (if ~is_word_type (expr_type e) ∧ exprs_can_mutate cenv es then
-                compile_materialize_vv cenv (lowered_value_type cenv e) vv
-              else unwrap_value cenv vv);
-       ops <- compile_abi_encode_args cfn cenv es;
-       return (op::ops)
-    od
-End
-
-Theorem compile_abi_encode_args_callback_cong:
-  ∀es. (∀e. MEM e es ⇒ f cenv (expr_type e) e = g cenv (expr_type e) e) ⇒
-    compile_abi_encode_args f cenv es = compile_abi_encode_args g cenv es
-Proof
-  Induct >> simp[compile_abi_encode_args_def] >> rpt strip_tac >> fs[]
-QED
-
-Theorem compile_abi_encode_args_cong[defncong]:
-  cenv = cenv' ∧ es = es' ∧ st = st' ∧
-  (∀a b e s. a = cenv' ∧ b = expr_type e ∧ MEM e es' ⇒
-     f a b e s = g a b e s) ⇒
-  compile_abi_encode_args f cenv es st = compile_abi_encode_args g cenv' es' st'
-Proof
-  rpt strip_tac >> gvs[] >> AP_THM_TAC >>
-  irule compile_abi_encode_args_callback_cong >> simp[FUN_EQ_THM]
-QED
-
-
 (* Whether subscript base_e[idx_e] copies its base before lowering the index:
    the index could resize a dynamic array the base was derived from.
    Mirrors Python: expr.py _lower_array_subscript (overlap) *)
@@ -2658,6 +2625,45 @@ Definition compile_ext_call_args_def:
     od ∧
   compile_ext_call_args cfn cenv kw_es _ _ = comp_return ([] : vyper_value list)
 End
+
+(* Encode a saved value directly for the standalone case, or an ABI tuple
+   of saved values and their physical types for the wrapped case. *)
+Definition compile_abi_encode_payload_def:
+  compile_abi_encode_payload cenv single vals tys dst =
+    if single then
+      do src <- unwrap_value cenv (HD vals);
+         if is_word_type (HD tys) then
+           do emit_void MSTORE [dst; src]; return (Lit 32w) od
+         else
+           compile_abi_encode_to_buf dst src
+             (type_to_abi_enc_info cenv.ce_struct_fields cenv (HD tys))
+      od
+    else compile_abi_encode_values_to_buf cenv dst (ZIP (vals,tys))
+End
+
+(* Lower and snapshot each value before lowering any later operand. *)
+Definition compile_abi_encode_args_def:
+  compile_abi_encode_args cfn cenv es =
+    compile_ext_call_args cfn cenv [] (MAP (lowered_value_type cenv) es) es
+End
+
+Theorem compile_abi_encode_args_callback_cong:
+  ∀es. (∀e. MEM e es ⇒ f cenv (expr_type e) e = g cenv (expr_type e) e) ⇒
+    compile_abi_encode_args f cenv es = compile_abi_encode_args g cenv es
+Proof
+  simp[compile_abi_encode_args_def] >>
+  Induct >> simp[compile_ext_call_args_def] >> rpt strip_tac >> fs[]
+QED
+
+Theorem compile_abi_encode_args_cong[defncong]:
+  cenv = cenv' ∧ es = es' ∧ st = st' ∧
+  (∀a b e s. a = cenv' ∧ b = expr_type e ∧ MEM e es' ⇒
+     f a b e s = g a b e s) ⇒
+  compile_abi_encode_args f cenv es st = compile_abi_encode_args g cenv' es' st'
+Proof
+  rpt strip_tac >> gvs[] >> AP_THM_TAC >>
+  irule compile_abi_encode_args_callback_cong >> simp[FUN_EQ_THM]
+QED
 
 (* Lower one keyword operand of extcall/staticcall: value= and gas= are
    uint256 words; default_return_value= is a word of the return type, or,
@@ -3701,37 +3707,14 @@ Definition compile_type_builtin_dispatch_body_def:
           as_stack_val vv_ty (compile_clamp_basetype raw ret_ty st4))
      | AbiEncode ensure method_id =>
          (let method_id_word = OPTION_MAP bytes_method_id_word method_id in
-          if LENGTH args = 1 ∧ ¬ensure then
-          let e1 = HD args in
-          let src_ty = expr_type e1 in
-          let enc_ty = lowered_value_type cenv e1 in
-          let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
-          let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in
-          if is_word_type src_ty then
-            (* Prim word: stage to temp memory for encoder *)
-            let (v, st1) = lower_value compile_expr cenv src_ty e1 st in
-            let (tmp_alloc, st2) = compile_alloc_buffer 32 st1 in
-            let tmp = tmp_alloc.buf_operand in
-            let (_, st3) = emit_void MSTORE [tmp; v] st2 in
-            as_ptr_val vv_ty LocMemory
-              (lower_abi_encode ensure method_id_word tmp enc_info maxlen st3)
-          else
-            let (src_vv, st1) = compile_expr cenv src_ty e1 st in
-            let (src_op, st2) = unwrap_value cenv src_vv st1 in
-            as_ptr_val vv_ty LocMemory
-              (lower_abi_encode ensure method_id_word src_op enc_info maxlen st2)
-          else
           let arg_tys = MAP (lowered_value_type cenv) args in
-          let enc_ty = TupleT arg_tys in
-          let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
+          let single = (LENGTH args = 1 ∧ ¬ensure) in
+          let enc_ty = if single then HD arg_tys else TupleT arg_tys in
           let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in
           let (vs, st1) = compile_abi_encode_args compile_expr cenv args st in
-          let (tup_alloc, st2) =
-                compile_alloc_buffer (type_memory_bytes cenv enc_ty) st1 in
-          let tup = tup_alloc.buf_operand in
-          let (_, st3) = compile_store_abi_tuple cenv tup 0 (ZIP (vs, arg_tys)) st2 in
           as_ptr_val vv_ty LocMemory
-            (lower_abi_encode ensure method_id_word tup enc_info maxlen st3))
+            (lower_abi_encode method_id_word maxlen
+              (compile_abi_encode_payload cenv single vs arg_tys) st1))
      | AbiDecode unwrap =>
          (let e1 = HD args in
           let (data_vv, st1) = compile_expr cenv (expr_type e1) e1 st in

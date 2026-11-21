@@ -7,15 +7,10 @@
 #   decode-guards  the HOL ABI decoder's bounded-decode guards
 #                  (bytecode/pending-bounded-decode-guards.md)
 #   5127-P4        the unported direct ABI encoder (bytecode/pending-5127-port.md)
-#   spill-scheduling  differences in which operands are spilled during reordering
 # Reasons were attributed from the source's features (folded expressions,
 # and/or chains of 3+ operands, external calls, logs, abi_decode) and the
 # rest by reading the bytecode diff. A contract can have causes beyond the
 # one listed: when its fix lands, the check reports what remains.
-df75ed7e17299152 bytes spill-scheduling  # functional/codegen/features/test_clampers::test_multidimension_array_clamper_passing[-170141183460469231731...
-dd9de3510c170709 bytes spill-scheduling  # functional/codegen/features/test_clampers::test_multidimension_dynarray_clamper_passing[-170141183460469231...
-8bbb6a6a5820957d bytes spill-scheduling  # functional/codegen/types/test_dynamic_array::test_empty_nested_dynarray[DynArray[DynArray[DynArray[uint256,
-5f215568f55fe42e bytes spill-scheduling  # functional/codegen/types/test_lists::test_list_of_nested_struct_arrays
 71ec00225e7afe41 none #1404  # functional/codegen/types/test_array_indexing::test_boundary_access_to_arr
 f9a843aa1f17e882 none #1404  # functional/codegen/types/test_array_indexing::test_boundary_access_to_arr
 d2e914248b13e709 none #1404  # functional/codegen/types/test_array_indexing::test_negative_ix_access_to_large_arr

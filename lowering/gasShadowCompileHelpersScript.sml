@@ -87,17 +87,15 @@ Theorem gas_shadow_compiles_abi_encode_args:
   !es. gas_shadow_compiles (compile_abi_encode_args f cenv es)
     (compile_abi_encode_args g cenv (if sh then MAP gas_shadow_expr es else es))
 Proof
-  strip_tac >> Induct >>
-  simp[compile_abi_encode_args_def, gas_shadow_compiles_return] >>
-  Cases_on `sh` >> gvs[compile_abi_encode_args_def, gas_shadow_expr_can_mutate] >>
-  gen_tac >>
-  (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-   >- metis_tac[COND_CLAUSES] >>
-   gen_tac >> BETA_TAC >> match_mp_tac gas_shadow_compiles_bind >> conj_tac
-   >- (IF_CASES_TAC >>
-       simp[gas_shadow_compiles_materialize_vv, gas_shadow_compiles_unwrap_value]) >>
-   gen_tac >> BETA_TAC >> match_mp_tac gas_shadow_compiles_bind >>
-   simp[gas_shadow_compiles_return])
+  strip_tac >> gen_tac >>
+  `MAP (lowered_value_type cenv) (if sh then MAP gas_shadow_expr es else es) =
+   MAP (lowered_value_type cenv) es` by
+    (Cases_on `sh` >> simp[MAP_MAP_o, MAP_EQ_f, combinTheory.o_DEF]) >>
+  simp[compile_abi_encode_args_def] >>
+  drule gas_shadow_compiles_ext_call_args >>
+  disch_then (qspecl_then [`sh`, `cenv`, `es`, `[]:expr list`,
+                             `MAP (lowered_value_type cenv) es`] mp_tac) >>
+  Cases_on `sh` >> simp[]
 QED
 
 Theorem gas_shadow_compiles_multi_vvs:
