@@ -193,6 +193,10 @@ val args_input = Term `
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
     LENGTH es <= LENGTH args /\
+    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx)
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
+    ~supportedExprTraverse$supported_exprs_exists supportedProgram$expr_msg_gas_root
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
     (!s1 vs t1.
        ~MEM (NONE,name) cx.stk /\
@@ -437,6 +441,10 @@ Theorem intcall_sim_full:
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
+    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx)
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
+    ~supportedExprTraverse$supported_exprs_exists supportedProgram$expr_msg_gas_root
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
     (!s1 vs t1.
        ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,t1) ==>
@@ -530,6 +538,10 @@ Theorem intcall_vv_full:
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
+    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx)
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
+    ~supportedExprTraverse$supported_exprs_exists supportedProgram$expr_msg_gas_root
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
     (!s1 vs t1.
        ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,t1) ==>

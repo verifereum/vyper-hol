@@ -11,7 +11,7 @@
  *)
 Theory bodySimFullMain
 Ancestors bodyFullShadowBodyInv
-  bodyFullCases bodyFullIf bodyFullExprStmt bodyFullExits bodyFullPreds bodySimFull gasShadow bodySim supportedStmts
+  bodyFullCases bodyFullCreateHeld bodyFullIf bodyFullExprStmt bodyFullExits bodyFullPreds bodySimFull gasShadow bodySim supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeCallGraph typedCopyMetadata alist list
 
 val _ = Parse.hide "body";
@@ -19,34 +19,54 @@ val _ = Parse.hide "body";
 val body_ind = evaluate_ind
   |> Q.SPECL [
        `\cx s. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
           body_stmt_full_ok cx s`,
        `\cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
           body_stmts_full_ok cx ss`,
        `\cx it. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
           body_iterator_full_ok cx it`,
        `\cx tyv nm body vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
           body_for_full_ok cx tyv nm body vs`,
        `\cx e. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
           body_expr_full_ok cx e`,
        `\cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
           body_exprs_full_ok cx es`,
        `\cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
           body_base_target_full_ok cx t`,
        `\cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
           body_base_target_full_ok cx t`,
        `\cx g v. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
           body_tuple_target_full_ok cx g v`,
        `\cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
           body_tuple_targets_full_ok cx gs vs`]
   |> CONV_RULE (DEPTH_CONV BETA_CONV);
 
@@ -57,9 +77,84 @@ val full_case_simps =
 fun full_case th =
   rpt strip_tac >> full_simp_tac bool_ss full_case_simps >>
   irule (SIMP_RULE bool_ss full_case_simps th) >>
-  asm_rewrite_tac[];
+  asm_rewrite_tac[] >> metis_tac[];
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+(* GATE_ADMISSION: missing case, RaiseCustomError body case; owner: gas-shadow/symbolic lane *)
+Theorem body_raise_custom_case_full:
+  !cx err.
+    (!id positional kwargs tops params es.
+       err = CustomError id positional kwargs /\
+       get_module_code cx (FST id) = SOME tops /\
+       lookup_custom_error_args_in (SND id) tops = SOME params /\
+       order_custom_error_args params err = SOME es ==>
+       body_exprs_full_ok cx es) ==>
+    body_stmt_full_ok cx (Raise (RaiseCustomError err))
+Proof
+  cheat
+QED
+
+(* GATE_ADMISSION: missing case, AssertCustomError body case; owner: gas-shadow/symbolic lane *)
+Theorem body_assert_custom_case_full:
+  !cx e err.
+    (!s tv t id positional kwargs tops params es.
+       eval_expr cx e s = (INL tv,t) /\
+       err = CustomError id positional kwargs /\
+       get_module_code cx (FST id) = SOME tops /\
+       lookup_custom_error_args_in (SND id) tops = SOME params /\
+       order_custom_error_args params err = SOME es ==>
+       body_exprs_full_ok cx es) /\
+    body_expr_full_ok cx e ==>
+    body_stmt_full_ok cx (Assert e (AssertCustomError err))
+Proof
+  cheat
+QED
+
+Theorem body_sim_full_mutual:
+  (!cx s. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
+    body_stmt_full_ok cx s) /\
+  (!cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
+    body_stmts_full_ok cx ss) /\
+  (!cx it. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
+    body_iterator_full_ok cx it) /\
+  (!cx tyv nm body vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
+    body_for_full_ok cx tyv nm body vs) /\
+  (!cx e. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
+    body_expr_full_ok cx e) /\
+  (!cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
+    body_exprs_full_ok cx es) /\
+  (!cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
+    body_base_target_full_ok cx t) /\
+  (!cx g v. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
+    body_tuple_target_full_ok cx g v) /\
+  (!cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~internal_defaults_const_names tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops) ==>
+    body_tuple_targets_full_ok cx gs vs)
 Proof
   mp_tac body_ind >> impl_tac
   >- (rpt conj_tac >| [
@@ -71,11 +166,11 @@ Proof
     (* 5 *) full_case body_raise_bare_case_full,
     (* 6 *) full_case body_raise_unreachable_case_full,
     (* 7 *) full_case body_raise_reason_case_full,
-    (* 8 *) rpt strip_tac >> rw[body_stmt_full_ok_def, supported_stmt_def, supported_raise_reason_def],
+    (* 8 *) full_case body_raise_custom_case_full,
     (* 9 *) full_case body_assert_case_full,
     (* 10 *) full_case body_assert_unreachable_case_full,
     (* 11 *) full_case body_assert_reason_case_full,
-    (* 12 *) rpt strip_tac >> rw[body_stmt_full_ok_def, supported_stmt_def, supported_assert_reason_def],
+    (* 12 *) full_case body_assert_custom_case_full,
     (* 13 *) full_case body_log_case_full,
     (* 14 *) full_case body_annassign_case_full,
     (* 15 *) full_case body_append_case_full,
@@ -110,10 +205,10 @@ Proof
     (* 44 *) full_case body_raw_log_case_full,
     (* 45 *) full_case body_raw_revert_case_full,
     (* 46 *) full_case body_selfdestruct_case_full,
-    (* 47 *) rw[body_expr_full_ok_def] >>
-             gvs[exprSimHypsDefsTheory.expr_body_pre_def,
-                 supportedExprTraverseTheory.expr_has_evm_run_thm,
-                 supportedExprTraverseTheory.expr_evm_run_root_def],
+    (* CREATE *) rpt gen_tac >> Cases_on `kind` >>
+          rpt strip_tac >> full_simp_tac bool_ss full_case_simps >>
+          metis_tac[create_minimal_proxy_expr_full_ok, create_copy_expr_full_ok,
+            create_blueprint_expr_full_ok, raw_create_expr_full_ok],
     (* 48 *) simp[body_exprs_full_ok_def],
     (* 49 *) rpt strip_tac >> fs[] >> rw[body_exprs_full_ok_def] >> metis_tac[],
     (* 50 *) simp[body_base_target_full_ok_def],
@@ -130,42 +225,12 @@ Proof
   ]) >>
   simp[]
 QED
-*)
-Theorem body_sim_full_mutual:
-  (!cx s. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_stmt_full_ok cx s) /\
-  (!cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_stmts_full_ok cx ss) /\
-  (!cx it. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_iterator_full_ok cx it) /\
-  (!cx tyv nm body vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_for_full_ok cx tyv nm body vs) /\
-  (!cx e. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_expr_full_ok cx e) /\
-  (!cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_exprs_full_ok cx es) /\
-  (!cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_base_target_full_ok cx t) /\
-  (!cx g v. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_tuple_target_full_ok cx g v) /\
-  (!cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops) ==>
-    body_tuple_targets_full_ok cx gs vs)
-Proof
-  cheat
-QED
 
 Theorem body_stmts_sim_full:
   !DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
    ret_ty lctx RetQ ss es.
+    ~internal_defaults_const_names tops /\
+    ~supportedProgram$internal_defaults_msg_gas tops /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\ struct_args_unique tops /\
     supported_stmts tops bindings ss /\
@@ -187,6 +252,8 @@ Theorem body_stmts_sim_full:
 Proof
   rpt strip_tac >>
   `!ts. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,ts)] ==>
-        struct_args_unique ts` by (fs[body_inv_def] >> metis_tac[]) >>
+        struct_args_unique ts /\
+        ~internal_defaults_const_names ts /\
+        ~supportedProgram$internal_defaults_msg_gas ts` by (fs[body_inv_def] >> metis_tac[]) >>
   metis_tac[body_sim_full_mutual, body_stmts_full_ok_def]
 QED

@@ -551,6 +551,105 @@ val runtime_shadow_body_inv_tac =
                 (LIST_CONJ [MATCH_MP source_typing_ok_vtype_keys_distinct typing,
                             supported, legacy, lowered, shadow])))))));
 
+(* GATE_ADMISSION: held, runtime entry with constant-name internal defaults *)
+Theorem runtime_selected_body_internal_constant_defaults:
+  !am tx mut nr args fbody src_env os es0 DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
+   ret_ty lctx RetQ ss es.
+    source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+    internal_defaults_const_names tops /\ ~internal_defaults_msg_gas tops /\
+    cx = initial_evaluation_context am.sources am.layouts tx NONE /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut,nr,args,[],ret_ty,fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME src_env /\
+    send_call_value mut cx
+      (initial_state am [src_env] with
+        <|outcomes := SOME os; requests := []|>) = (INL (),es0) /\
+    lock_if_nr cx nr (is_view_mut mut) es0 = (INL (),es) /\
+    ss = subst_consts_stmts (module_consts_env tops []) fbody /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ struct_args_unique tops /\
+    supported_stmts tops bindings ss /\
+    (!target. supported_stmts_expr_exists
+       (expr_abi_decode_target_root target) ss ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmts env ret_ty ss = SOME env' /\
+    stmts_exprs_ok cenv ss /\
+    call_evaluation_safe cx (int_calls_stmts ss) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmts_env cenv lctx ret_ty ss)
+      (stmts_env cenv lctx ret_ty (MAP gas_shadow_stmt ss))
+      (eval_stmts cx ss) es
+Proof
+  cheat
+QED
+
+Theorem runtime_selected_body_frag_full[local]:
+  !am tx mut nr args fbody src_env os es0 DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
+   ret_ty lctx RetQ ss es.
+    source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+    ~internal_defaults_msg_gas tops /\
+    cx = initial_evaluation_context am.sources am.layouts tx NONE /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut,nr,args,[],ret_ty,fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME src_env /\
+    send_call_value mut cx
+      (initial_state am [src_env] with
+        <|outcomes := SOME os; requests := []|>) = (INL (),es0) /\
+    lock_if_nr cx nr (is_view_mut mut) es0 = (INL (),es) /\
+    ss = subst_consts_stmts (module_consts_env tops []) fbody /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\ struct_args_unique tops /\
+    supported_stmts tops bindings ss /\
+    (!target. supported_stmts_expr_exists
+       (expr_abi_decode_target_root target) ss ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmts env ret_ty ss = SOME env' /\
+    stmts_exprs_ok cenv ss /\
+    call_evaluation_safe cx (int_calls_stmts ss) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmts_env cenv lctx ret_ty ss)
+      (stmts_env cenv lctx ret_ty (MAP gas_shadow_stmt ss))
+      (eval_stmts cx ss) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `internal_defaults_const_names tops`
+  >- (qspecl_then [`am`,`tx`,`mut`,`nr`,`args`,`fbody`,`src_env`,`os`,`es0`,
+         `DF`,`lo`,`d`,`PG`,`tops`,`bindings`,`ctx`,`shadow_ctx`,`func`,
+         `shadow_func`,`cenv`,`cx`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`ss`,`es`]
+       mp_tac runtime_selected_body_internal_constant_defaults >> asm_rewrite_tac[]) >>
+  qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,`ctx`,`shadow_ctx`,
+    `func`,`shadow_func`,`cenv`,`cx`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,
+    `ss`,`es`] mp_tac body_stmts_sim_full >>
+  asm_rewrite_tac[]
+QED
+
+fun runtime_selected_body_frag_tac nr endpoint =
+  qpat_assum `frame_ret_ok_full _ _ _ _ _` (fn frame_th =>
+    let
+      val (_, [frame, cx, retq, cenv, ret]) = strip_comb (concl frame_th)
+      val [df, lo, d, ctx, shadow_ctx, pg, func, shadow_func] =
+        map (fn tm => [ANTIQUOTE tm]) (pairSyntax.strip_pair frame)
+    in
+      qspecl_then
+        [`am`, `tx`, `mut`, nr, `args`, `fbody`, `env`, `vs.vs_outcomes`, `es0`,
+         df, lo, d, pg, `tops`, `bindings`, ctx, shadow_ctx, func, shadow_func,
+         [ANTIQUOTE cenv], [ANTIQUOTE cx], `env_t`, `env'`, [ANTIQUOTE ret],
+         `NoLoop`, [ANTIQUOTE retq], `compiled_body`, endpoint]
+        mp_tac runtime_selected_body_frag_full
+    end) >>
+  impl_tac
+  >- (simp[Abbr `compiled_body`, lock_if_nr_def, return_def] >> metis_tac[]);
+
 val runtime_entry_horizon_simp =
   simp[valid_horizon_def, storage_trace_horizon_def, storage_trace_regions_def,
        storage_trace_locks_def, regions_consistent_def, storage_locks_separated_def,
@@ -578,11 +677,7 @@ val runtime_body_outcome_tac =
   `struct_args_unique tops` by
     (fs[source_typing_ok_def] >> metis_tac[checked_contract_struct_args_unique]) >>
   runtime_shadow_body_inv_tac >>
-  drule_at (Pat `frame_ret_ok_full _ _ _ _ _`) body_stmts_sim_full >>
-  disch_then (qspecl_then [`tops`, `bindings`, `env_t`, `env'`, `NoLoop`,
-                           `compiled_body`, `es0`] mp_tac) >>
-  impl_tac
-  >- (simp[] >> metis_tac[]) >>
+  runtime_selected_body_frag_tac `F` `es0` >>
   disch_then (mp_tac o REWRITE_RULE [stmt_frag_full_def]) >>
   disch_then (qspecl_then [`initial_state am []`, `sa`, `sb`, `shadow_sa`,
                            `shadow_sb`, `s0`, `G0`, `tn0`, `cenv'`] mp_tac) >>
@@ -1619,11 +1714,7 @@ Proof
     qpat_assum `lock_if_nr _ T _ es0 = (INL (),es_lock)` (fn lock =>
       assume_tac (MATCH_MP runtime_locked_well_formed_on (CONJ send lock)))) >>
   runtime_shadow_body_inv_tac >>
-  drule_at (Pat `frame_ret_ok_full _ _ _ _ _`) body_stmts_sim_full >>
-  disch_then (qspecl_then [`tops`, `bindings`, `env_t`, `env'`, `NoLoop`,
-                           `compiled_body`, `es_lock`] mp_tac) >>
-  impl_tac
-  >- (simp[] >> metis_tac[]) >>
+  runtime_selected_body_frag_tac `T` `es_lock` >>
   disch_then (mp_tac o REWRITE_RULE [stmt_frag_full_def]) >>
   disch_then (qspecl_then [`initial_state am []`, `sl`, `sb`, `shadow_sl`,
                            `shadow_sb`, `s0`, `G0`, `tn0`, `cenv'`] mp_tac) >>
