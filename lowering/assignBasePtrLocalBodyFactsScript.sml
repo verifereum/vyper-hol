@@ -5,6 +5,7 @@ Ancestors bodySim bodyExprPreFacts memoryLocalRhsProps exprSimHyps exprSimHypsDe
   supportedStmts supportedExprs vyperTypeSystem vyperTypeEnv vyperTypeCallGraph
   vyperTypeInvariants gasContext finite_map list compileEnv
   bodyInvSplit bodyInvCodeProps bodyInvMetadataProps bodySimModsProps compileUnit alist pair
+  allocLimitsProps
 
 Theorem main_module_code_and_gate[local]:
   contract_inv mods exps ctx cenv cx ==>
@@ -52,7 +53,8 @@ Proof
         supported_assignment_exists_def, allocLimitsTheory.alloc_limits_stmt_def] >>
      CCONTR_TAC >> fs[] >>
      qpat_x_assum `~supported_expr_exists (\e. ~is_extcode e /\ _) _` mp_tac >>
-     simp[] >> irule supported_expr_exists_root >> simp[]) >>
+     simp[] >> irule supported_expr_exists_root >>
+     metis_tac[alloc_limits_expr_not_extcode]) >>
   `call_evaluation_safe cx (int_calls_expr e)` by
     fs[int_calls_stmt_def, int_calls_atarget_def, int_calls_expr_def] >>
   `EVERY (\c. ?ts. get_module_code cx (FST c) = SOME ts /\
