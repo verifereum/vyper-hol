@@ -1,7 +1,7 @@
 (* Static and compiler boundaries for the full Range body case. *)
 Theory bodyFullForRange
 Ancestors exprSimWordArgs[qualified,ignore_grammar] vyperLookup[qualified,ignore_grammar] vyperTypeEnvPreservation[qualified,ignore_grammar] vyperPlaceResultTyping[qualified,ignore_grammar]
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv bodyInvSplit bodyInvExecutionProps bodyInvCodeProps
   bodyFullPreds bodyFullForFacts bodySimDeclCases bodySim bodyExprPreFacts
   stmtSimForParts stmtSimForRange exprLoweringProps freshWrites
   loweringStateRelDefs loweringPosts stmtLowering compileEnv
@@ -72,6 +72,39 @@ QED
 
 (* Static contracts follow the actual declared environment; admissibility
    of old loop-name bindings follows from enclosing typing freshness. *)
+Theorem range_body_static_transport_mods:
+  !mods exps src tops ctx cenv cx bc id typ st st1 body env ret_ty
+    DF lo d shadow_ctx PG func shadow_func RetQ.
+    declare_local cenv id typ st = (bc,st1) /\
+    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
+    contract_inv mods exps ctx cenv cx /\
+    module_body_inv mods src tops cenv cx /\
+    stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) body /\
+    IS_SOME (type_stmts (extend_local env id typ F) ret_ty body) /\
+    frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cx RetQ cenv ret_ty ==>
+    same_frame cenv bc /\
+    contract_inv mods exps ctx bc cx /\
+    module_body_inv mods src tops bc cx /\
+    stmts_exprs_ok bc body /\
+    frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cx RetQ bc ret_ty /\
+    ?body_env'. type_stmts (extend_local env id typ F) ret_ty body = SOME body_env'
+Proof
+  rpt gen_tac >> strip_tac >>
+  `cenv.ce_alloca_locals` by (drule contract_inv_alloca_locals >> simp[]) >>
+  `same_frame cenv bc` by
+    (drule declare_local_same_frame >> simp[]) >>
+  drule_all body_inv_same_frame_mods >> strip_tac >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (drule_all for_declare_stmts_exprs_ok >> simp[]) >>
+  reverse conj_tac >- gvs[optionTheory.IS_SOME_EXISTS] >>
+  qpat_x_assum `frame_ret_ok_full _ _ _ _ _` mp_tac >>
+  simp[bodySimFullTheory.frame_ret_ok_full_def] >>
+  rpt strip_tac >> first_x_assum irule >>
+  metis_tac[same_frame_trans]
+QED
+
 Theorem range_body_static_transport:
   !tops ctx cenv cx bc id typ st st1 body env ret_ty
     DF lo d shadow_ctx PG func shadow_func RetQ.
@@ -90,17 +123,10 @@ Theorem range_body_static_transport:
     ?body_env'. type_stmts (extend_local env id typ F) ret_ty body = SOME body_env'
 Proof
   rpt gen_tac >> strip_tac >>
-  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
-  `same_frame cenv bc` by
-    (drule declare_local_same_frame >> simp[]) >>
-  conj_tac >- simp[] >>
-  conj_tac >- (irule body_inv_same_frame >> metis_tac[]) >>
-  conj_tac >- (drule_all for_declare_stmts_exprs_ok >> simp[]) >>
-  reverse conj_tac >- gvs[optionTheory.IS_SOME_EXISTS] >>
-  qpat_x_assum `frame_ret_ok_full _ _ _ _ _` mp_tac >>
-  simp[bodySimFullTheory.frame_ret_ok_full_def] >>
-  rpt strip_tac >> first_x_assum irule >>
-  metis_tac[same_frame_trans]
+  drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac body_inv_module >>
+  drule_all range_body_static_transport_mods >> strip_tac >>
+  drule_all body_inv_same_frame >> simp[]
 QED
 
 Theorem range_full_body_ih:
@@ -2777,7 +2803,9 @@ Theorem range_full_body_entry:
                vs_inst_idx := 1)
 Proof
   rpt gen_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
-  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
+  `cenv.ce_alloca_locals` by
+    (qpat_assum `body_inv tops ctx cenv cx`
+       (ACCEPT_TAC o MATCH_MP contract_inv_alloca_locals o MATCH_MP body_inv_contract)) >>
   `!c lc s t. compile_stmts c lc ret_ty body s = ((),t) ==> cs_extends s t` by
     metis_tac[cs_mono_def, cj 2 stmtLoweringMonoTheory.compile_stmt_cs_mono] >>
   drule_all range_full_static_pre >> strip_tac >>
@@ -5522,7 +5550,8 @@ Proof
         qpat_assum `return_buf_frame d cenv sb0 s` (fn frame =>
           qpat_assum `return_buf_sep d cenv es s` (fn sep => rewrite_tac [frame,sep]))) >>
      `cenv.ce_alloca_locals` by
-       (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms, body_inv_def]) >>
+       (qpat_assum `body_inv tops ctx cenv cx`
+          (ACCEPT_TAC o MATCH_MP contract_inv_alloca_locals o MATCH_MP body_inv_contract)) >>
      drule_all_then strip_assume_tac stmtSimPropsTheory.declare_local_ptr >>
      `p <> dv` by
        (Cases_on `?a1 m1 a2 m2. e1 = Literal a1 (IntL m1) /\ e2 = Literal a2 (IntL m2)`
@@ -6088,7 +6117,7 @@ Resume range_full_round[backedge]:
      qpat_assum `type_stmt env ret_ty (For _ _ _ _ _) = SOME env'`
        (mp_then Any strip_assume_tac type_stmt_for_projection) >>
      qpat_assum `body_inv tops ctx cenv cx`
-       (strip_assume_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
+       (strip_assume_tac o MATCH_MP body_inv_main_support) >>
      qpat_assum `epH = esH with scopes := _` (SUBST1_TAC o SYM) >>
      asm_rewrite_tac [] >> simp[Abbr `prepop`]) >>
   `lookup_scopes id ee.scopes = NONE` by
@@ -6545,7 +6574,8 @@ Resume compile_for_range_frag_full[checked]:
        (mp_then Any irule compile_stmt_for_range_checked) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `cenv.ce_alloca_locals` by
-    (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms, body_inv_def]) >>
+    (qpat_assum `body_inv tops ctx cenv cx`
+       (ACCEPT_TAC o MATCH_MP contract_inv_alloca_locals o MATCH_MP body_inv_contract)) >>
   `!c lc s t. compile_stmts c lc ret_ty (MAP gas_shadow_stmt body) s = ((),t) ==>
                cs_extends s t` by
     (rpt gen_tac >> strip_tac >>
@@ -6574,13 +6604,19 @@ Resume compile_for_range_frag_full[checked]:
      Cases_on `e1` >> Cases_on `e2` >> simp[] >>
      simp[supportedExprsTheory.supported_pure_expr_def]) >>
   `cx_tops cx = tops` by
-    (irule gasContextTheory.cx_tops_module >>
-     qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms, body_inv_def]) >>
+    (qpat_assum `body_inv tops ctx cenv cx`
+       (ACCEPT_TAC o cj 2 o MATCH_MP body_inv_main_code)) >>
   `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
             is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target)` by
-    (simp[] >> qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms, body_inv_def]) >>
+    (qpat_assum `cx_tops cx = tops` (rewrite_tac o single) >>
+     gen_tac >> disch_tac >>
+     qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+       qpat_assum `is_dynamic (vyper_to_abi_type (get_tenv cx) target)`
+         (fn abi => ACCEPT_TAC
+           (MATCH_MP body_inv_singleton_abi_types (CONJ inv abi))))) >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
-    (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms, body_inv_def]) >>
+    (qpat_assum `body_inv tops ctx cenv cx`
+       (ACCEPT_TAC o MATCH_MP body_inv_main_support)) >>
   let
     fun ready e =
       sg ([QUOTE "!ee. expr_sim_inv cenv cx env ee ==> expr_body_pre cenv cx env "] @
