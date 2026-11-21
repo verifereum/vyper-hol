@@ -9,7 +9,7 @@ Ancestors
   vyperStorageFootprint vyperState vyperAST compileEnv list sum
 
 Theorem word_wei_sim_prefix:
-  (!e. expr_body_pre cenv cx env e es ==>
+  (!e. MEM e args /\ expr_body_pre cenv cx env e es ==>
        expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
          cenv cx (expr_type e) e es /\
        expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -40,11 +40,15 @@ Proof
   `fn_has_code shadow_sa sh1 shadow_func` by metis_tac[fn_has_code_split] >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     metis_tac[expr_body_pre_gas_admissible] >>
-  qpat_x_assum `expr_sim_full _ _ _ _ e es`
-    (drule_all o REWRITE_RULE[expr_sim_full_def]) >>
+  qpat_assum `expr_type e = BaseT (UintT _)` (fn child_type =>
+    qpat_x_assum `expr_sim_full _ _ _ _ e es`
+      (drule_all o REWRITE_RULE[expr_sim_full_def] o
+       ONCE_REWRITE_RULE[GSYM child_type])) >>
   strip_tac >>
-  qpat_x_assum `expr_sim_prefix _ _ _ _ e es`
-    (drule_all o REWRITE_RULE[expr_sim_prefix_def, expr_sim_full_pre_def]) >>
+  qpat_assum `expr_type e = BaseT (UintT _)` (fn child_type =>
+    qpat_x_assum `expr_sim_prefix _ _ _ _ e es`
+      (drule_all o REWRITE_RULE[expr_sim_prefix_def, expr_sim_full_pre_def] o
+       ONCE_REWRITE_RULE[GSYM child_type])) >>
   strip_tac >>
   `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
      (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
