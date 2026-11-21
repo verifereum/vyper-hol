@@ -19,6 +19,7 @@ Theorem external_lookup_body_typing:
   ?art env_t env'.
     check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
     checked_contract_runtime_ready art [(NONE,tops)] am tx /\
+    env_t = function_entry_env art [(NONE,tops)] NONE External args /\
     env_t.current_src = NONE /\
     env_t.type_defs = get_tenv
       (initial_evaluation_context am.sources am.layouts tx NONE) /\
@@ -53,19 +54,29 @@ Proof
     (drule check_contract_main_module_allocated >> simp[]) >>
   `External <> Deploy` by simp[] >>
   `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
-  drule checked_function_body_typing_package >>
-  simp[] >> disch_then drule >> simp[] >>
-  strip_tac >>
-  qexistsl [`env_body`, `env_after`] >> simp[] >>
-  conj_tac >- metis_tac[] >>
   `check_function_body am.layouts tx.target [(NONE,tops)] art NONE
      External mut nr args [] ret fbody` by
     (irule check_contract_runtime_function_body_MEM >> simp[] >>
      qexistsl [`tx.function_name`, `raw`] >> simp[]) >>
-  conj_tac >- gvs[check_function_body_def] >>
-  conj_tac >- gvs[check_function_body_def] >>
-  drule checked_explicit_external_body_call_evaluation_safe >>
-  simp[] >> disch_then drule >> simp[]
+  `get_tenv (initial_evaluation_context am.sources am.layouts tx NONE) =
+     type_env_all_modules [(NONE,tops)]` by
+    simp[get_tenv_def, initial_evaluation_context_def] >>
+  qpat_assum `check_function_body _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o SIMP_RULE std_ss
+      [check_function_body_def, LET_THM, optionTheory.IS_SOME_EXISTS, params_ok_def]) >>
+  `call_evaluation_safe (initial_evaluation_context am.sources am.layouts tx NONE)
+      (int_calls_stmts fbody)` by
+    (drule checked_explicit_external_body_call_evaluation_safe >>
+     simp[] >> disch_then drule >> simp[]) >>
+  `?env_after. type_stmts (function_entry_env art [(NONE,tops)] NONE External args)
+      ret fbody = SOME env_after` by metis_tac[] >>
+  pop_assum strip_assume_tac >>
+  qexists_tac `env_after` >>
+  simp[] >> simp[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static] >>
+  rpt strip_tac >>
+  FIRST [drule_all FOLDL_extend_local_args_formal_lookup >> simp[] >> NO_TAC,
+         drule_all FOLDL_extend_local_args_var_types_range >> simp[] >> NO_TAC,
+         drule_all FOLDL_extend_local_args_var_assignable_range >> simp[] >> metis_tac[]]
   ) >>
   `ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
    layouts_agree tops am tx` by fs[source_deployment_rel_def] >>
@@ -97,8 +108,7 @@ Proof
        checked_contract_call_evaluation_safe_singleton) >>
      qexistsl [`art`, `am.layouts`, `[(NONE,tops)]`] >>
      simp[initial_evaluation_context_def, calls_follow_call_graph_def]) >>
-  qexistsl [`function_entry_env art [(NONE,tops)] NONE External args`,
-            `env_after`] >>
+  qexists_tac `env_after` >>
   gvs[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static,
        get_tenv_def, initial_evaluation_context_def,
        stmt_no_control_escape_def, stmt_no_fallthrough_def] >>
@@ -135,8 +145,8 @@ Theorem external_selected_body_typing:
       (initial_evaluation_context am.sources am.layouts tx NONE)
       (int_calls_stmts fbody)
 Proof
-  strip_tac >> drule_all external_lookup_body_typing >>
-  disch_then ACCEPT_TAC
+  strip_tac >> drule_all external_lookup_body_typing >> strip_tac >>
+  qexistsl [`art`, `env_t`, `env'`] >> simp[] >> metis_tac[]
 QED
 
 Theorem external_send_call_value_frame:
@@ -265,6 +275,7 @@ Proof
   rename1 `classify_functions tops = (exts,tail)` >> PairCases_on `tail` >>
   drule_all lower_vyper_runtime_unit_consts_guard >> strip_tac >>
   drule_all external_lookup_body_typing >> strip_tac >>
+  qpat_x_assum `env_t = function_entry_env _ _ _ _ _` kall_tac >>
   drule source_typing_ok_consts_ready >> strip_tac >> gvs[] >>
   `ALOOKUP am.sources tx.target = SOME [(NONE,tops)]` by
     fs[source_deployment_rel_def] >>
