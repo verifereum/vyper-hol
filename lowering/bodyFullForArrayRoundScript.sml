@@ -18,7 +18,7 @@ Ancestors gasContext[qualified,ignore_grammar] bodyFullShared[qualified,ignore_g
   exprPtrUnwrapCode exprSimProps bodyFullHashKeccakFixed
   bodyExprPreFacts gasOriginPtrLabels
   gasOutcomeFullCompose gasOutcomeFullStmts bodyFullForHandlers haltExitProj
-  vyperStorageTrace gasExemptCert bodyLoopImmutableFrame forNonslotSelectedLive
+  vyperStorageTrace gasExemptCert bodyLoopImmutableFrame forNonslotSelectedLive forConsBodyGas
   vyperTypeContract[qualified,ignore_grammar]
 Libs
   monadsyntax
@@ -4366,28 +4366,14 @@ QED
 
 Resume for_nonslot_array_round_contracts_at[cons_admissible]:
   `gas_admissible (eval_stmts cx loop_body) (stmt_res_ok (InLoop exit incr)) eb` by
-    (simp[NoAsms,gasContextTheory.gas_admissible_def] >>
-     map_every qx_gen_tac [`gs`,`raw`,`ef`] >> disch_tac >>
-     namedCases_on `eval_for cx dtv id loop_body (Value v::rs) (es with gas_obs := gs)`
-       ["lr le"] >>
-     `stmt_res_ok lctx lr` by
-       (qpat_assum `gas_admissible (eval_for _ _ _ _ _) _ es`
-          (qspecl_then [`gs`,`lr`,`le`] mp_tac o
-           REWRITE_RULE [gasContextTheory.gas_admissible_def]) >>
-        qpat_assum `a = Value v` SUBST1_TAC >>
-        qpat_assum `eval_for cx dtv id loop_body _ _ = (lr,le)`
-          (fn th => simp[NoAsms,th])) >>
-     `lookup_scopes id (es with gas_obs := gs).scopes = NONE` by simp[] >>
-     drule_all stmtSimForPartsTheory.eval_for_cons_cases >>
-     qpat_assum `eb = _` (fn th => simp[NoAsms,Abbr `sc`,th]) >>
-     qpat_assum `eval_stmts cx loop_body (eb with gas_obs := gs) = _`
-       (fn th => qpat_assum `eb = _` (fn eq =>
-          simp[NoAsms,SIMP_RULE (srw_ss()) [Abbr `sc`,eq] th])) >>
-     strip_tac >> simp[stmt_res_ok_def] >>
-     qpat_assum `stmt_res_ok lctx lr` mp_tac >>
-     qpat_assum `lr = raw` SUBST1_TAC >>
-     qpat_assum `raw = INR _` SUBST1_TAC >>
-     simp[stmt_res_ok_def, IgnAsm `loc = _`, IgnAsm `vs = _`]) >>
+    (`!res. stmt_res_ok lctx res ==> stmt_res_ok lctx res` by simp[] >>
+     `es with <|scopes := sc :: es.scopes; gas_obs := []|> = eb with gas_obs := []` by
+       (qpat_assum `eb = _` SUBST1_TAC >> simp[evaluation_state_component_equality]) >>
+     qunabbrev_tac `sc` >>
+     drule_all forConsBodyGasTheory.captured_storage_body_admissible >>
+     disch_then (qspecl_then [`incr`,`exit`] mp_tac) >>
+     qpat_assum `_ = eb with gas_obs := []` (pure_rewrite_tac o single) >>
+     simp[NoAsms,gasContextTheory.gas_admissible_gas_obs]) >>
   `storage_trace_domain cx st0 eb.storage_trace` by simp[] >>
   `valid_horizon cx st0 (storage_trace_horizon eb.storage_trace) eb.storage_trace` by simp[] >>
   qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
