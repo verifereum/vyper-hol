@@ -83,12 +83,6 @@ Proof
   Induct >> simp[subst_consts_expr_def]
 QED
 
-Theorem subst_consts_exprs_null[local]:
-  NULL (subst_consts_exprs env es) <=> NULL es
-Proof
-  Cases_on `es` >> simp[subst_consts_expr_def]
-QED
-
 Theorem subst_consts_expr_shape:
   (!env e.
     (!id r. ALOOKUP env id = SOME r ==>
