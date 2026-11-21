@@ -240,14 +240,6 @@ Proof
   metis_tac[abi_encoder_input_open, abi_encoder_open_input_window]
 QED
 
-Theorem abi_window_setup_zero_probe[local]:
-  32+32*word_size 0 = 32 /\
-  64 <= 32+32*word_size (0+4) /\
-  (!p. p+32 = dimword (:256) ==> ~(p+32 < dimword (:256)))
-Proof
-  simp[abi_builtin_rounded_capacity_checks]
-QED
-
 Theorem abi_window_allocate_opcodes[local]:
   abi_builtin_encode_allocate outsz data_offset st = (ops,address_st) ==>
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st address_st)
@@ -467,11 +459,4 @@ Theorem abi_window_fresh_vars_fields:
   fresh_vars_wrt limit_st t
 Proof
   simp[fresh_vars_wrt_def]
-QED
-
-Theorem abi_window_empty_sequence_fresh[local]:
-  run_inst_seq [] s = OK t /\ fresh_vars_wrt limit_st s ==>
-  fresh_vars_wrt limit_st t
-Proof
-  simp[run_inst_seq_def] >> metis_tac[]
 QED

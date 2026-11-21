@@ -139,8 +139,8 @@ QED
    No-block route: same phase composition target; count with the original
    abi_decode_sim_gas_path and the no-block observer, not a relabeled start.
    Its observer hypothesis has neither fn_name agreement nor no-INVOKE.
-   Existing abi_encode_nonword_no_block_observer uses straight-line execution;
-   a framed no-block consumer must retain that concrete sequence witness.
+   A framed no-block consumer must retain the concrete straight-line
+   execution witness.
    Do not instantiate the singleton transfer theorem below at an arbitrary
    no-block observer without proving its no-INVOKE premise.
 *)
