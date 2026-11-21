@@ -7,17 +7,7 @@ Ancestors
   supportedStmtTraverse allocLimits allocLimitsProps exprLowering
   vyperTypeSystem vyperTypeCallGraph vyperTypeCallStackSoundness
   vyperExprEffects vyperAST list popTargetPre vyperTypeEnv vyperTypeInvariants
-  compileEnv finite_map
-
-Theorem append_full_word_source_rigid[local]:
-  !tenv t u.
-    supported_full_word_type t /\ type_widens_to tenv t u ==> u = t
-Proof
-  rw[supported_full_word_type_def, type_widens_to_def] >>
-  Cases_on `u` >> gvs[arg_type_fits_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >> gvs[arg_type_fits_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >> gvs[arg_type_fits_def]
-QED
+  compileEnv finite_map typedMemoryCopy
 
 Theorem append_target_indices_pure:
   !bt. ~supported_target_exists (\e. ~pure_expr e) bt ==>
@@ -130,8 +120,8 @@ QED
 
 Finalise body_append_typed_pre
 
-Theorem body_append_resolved_pre:
-  supported_full_word_type (expr_type e) /\
+Theorem body_append_word_pre:
+  is_word_type (expr_type e) /\
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Append bt e) /\
   ~(?id. bt = TopLevelNameTarget id) /\
@@ -147,7 +137,26 @@ Theorem body_append_resolved_pre:
 Proof
   strip_tac >>
   drule_all body_append_typed_pre >> strip_tac >>
-  metis_tac[append_full_word_source_rigid]
+  metis_tac[typedMemoryCopyTheory.return_source_word_widens_eq]
+QED
+
+Theorem body_append_resolved_pre:
+  supported_full_word_type (expr_type e) /\
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (Append bt e) /\
+  ~(?id. bt = TopLevelNameTarget id) /\
+  expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (Append bt e) = SOME env' /\
+  stmt_exprs_ok cenv (Append bt e) /\
+  call_evaluation_safe cx (int_calls_stmt (Append bt e)) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (Append bt e) ==> occurs_abi_decode_target target tops) ==>
+  target_pre cenv cx env bt es /\ expr_body_pre cenv cx env e es /\
+  ?cap. type_place_target env bt =
+    SOME (Type (ArrayT (expr_type e) (Dynamic cap)))
+Proof
+  strip_tac >> irule body_append_word_pre >>
+  fs[supported_full_word_type_def, is_word_type_def] >> metis_tac[]
 QED
 
 Theorem append_resolved_rhs_body_pre:
