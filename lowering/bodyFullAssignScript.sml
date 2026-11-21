@@ -3018,9 +3018,17 @@ Proof
   >- metis_tac[] >>
   `cx_tops cx = tops` by (irule cx_tops_module >> fs[body_inv_def]) >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx (expr_type e) e es` by metis_tac[body_expr_full_ok_def] >>
+      cenv cx (expr_type e) e es` by
+    (qpat_assum `body_expr_full_ok cx e`
+       (mp_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     strip_tac >>
+     qpat_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+          _ ==> expr_sim_full _ _ _ _ _ _ /\ expr_vv_sim_full _ _ _ _ _ _`
+       (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
+         `func`,`shadow_func`,`cenv`,`env`,`expr_type e`,`es`] mp_tac) >>
+     simp[]) >>
   drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >>
-  `cenv.ce_var_type id = SOME ty` by metis_tac[expr_sim_inv_def] >>
+  `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
   `env.type_defs = get_tenv cx` by
     fs[expr_sim_inv_def,env_consistent_def,env_context_consistent_def] >>
   drule post_type_evaluates >> disch_then (qx_choose_then `rty` assume_tac) >>
@@ -3288,14 +3296,16 @@ Resume body_assign_local_memory_nonempty_full[staged]:
   `!j path entry t0. MemoryPlace id [] = MemoryPlace j path /\
      lookup_scopes j mid.scopes = SOME entry /\ cenv.ce_var_type j = SOME t0 ==>
      evaluate_type (get_tenv cx) t0 = SOME entry.type` by simp[] >>
-  drule_then
-    (drule_at_then (Pat `stmt_state_rel _ _ _ _ _ _ _`)
-      (drule_at_then (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)
-        (drule_at_then (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)
-          (drule_at_then (Pat `write_place _ _ _ _ = _`) mp_tac))))
-    (Q.INST [`explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
-       body_assign_memory_place_joint) >>
-  disch_then (qspecl_then [`sw`,`stv`,`shadow_ctx`,`env`,`dw`,`dtv`,`PG`] mp_tac) >>
+  mp_tac (Q.INST
+    [`xd` |-> `p`, `loc` |-> `SOME LocMemory`, `dty` |-> `ty`,
+     `sty` |-> `lowered_value_type cenv e`, `bytes` |-> `type_memory_bytes cenv ty`,
+     `sa` |-> `sB`, `start` |-> `sa`, `s` |-> `u`, `ee` |-> `mid`,
+     `H0` |-> `storage_trace_horizon mid.storage_trace`,
+     `G` |-> `Gi`, `tn` |-> `ti`,
+     `D0` |-> `DF (storage_trace_horizon mid.storage_trace)`, `d0` |-> `d`,
+     `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
+    (Q.INST [`p` |-> `MemoryPlace id []`]
+       (horizonTypeLib.at_horizon_named "H0" body_assign_memory_place_joint))) >>
   impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >>
   strip_tac >> qexistsl_tac [`t`,`Gf`,`tf`] >> simp[] >>
   gen_tac >> strip_tac >>
