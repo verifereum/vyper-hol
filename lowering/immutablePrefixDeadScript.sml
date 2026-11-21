@@ -14,9 +14,10 @@ Proof
   strip_tac >>
   `mem_bytes_at off (type_memory_size tv) (mem_bytes_at 0 lo mem) =
    mem_bytes_at off (type_memory_size tv) mem` by
-    (simp[LIST_EQ_REWRITE,LENGTH_mem_bytes_at] >> rpt strip_tac >>
-     `off + x < lo` by decide_tac >>
-     simp[EL_mem_bytes_at,LENGTH_mem_bytes_at]) >>
+    (qspecl_then [`0`,`off`,`type_memory_size tv`,`lo`,`mem`] mp_tac
+       abiCanonicalHeadSizeTheory.mem_bytes_at_window >>
+     simp[GSYM valueEncodingDefsTheory.mem_bytes_at_bounded,
+          valueEncodingProofsTheory.LENGTH_mem_bytes_at_proof]) >>
   `val_wf tv v` by metis_tac[value_has_type_memory_wf] >>
   `!m. mem_agree_outside dirty (mem_bytes_at 0 lo mem) m ==>
        val_in_memory tv v off m` by

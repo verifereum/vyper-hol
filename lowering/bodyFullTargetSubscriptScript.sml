@@ -591,7 +591,8 @@ Proof
   strip_tac >> simp[imm_target_place_sim_full_def] >> rpt gen_tac >> strip_tac >>
   qpat_assum `type_place_target _ (SubscriptTarget _ _) = _`
     (strip_assume_tac o REWRITE_RULE [type_place_target_SubscriptTarget]) >>
-  qspecl_then [`bt`,`tops`,`ctx`,`cenv`,`cx`,`env`,`es`,`vt'`] mp_tac
+  rename1 `type_place_target _ bt = SOME child_vt` >>
+  qspecl_then [`bt`,`tops`,`ctx`,`cenv`,`cx`,`env`,`es`,`child_vt`] mp_tac
     immutable_target_place_type >>
   (impl_tac >- simp[]) >>
   disch_then (qx_choose_then `bty` strip_assume_tac) >> gvs[] >>

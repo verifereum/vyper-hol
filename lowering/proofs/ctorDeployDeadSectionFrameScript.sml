@@ -1,7 +1,7 @@
 (* imm_section_dead is fixed by the immutables section's live bytes. *)
 Theory ctorDeployDeadSectionFrame
 Ancestors
-  ctorDeployDeadSection ctorDeployDefs immSectionDead immutableSectionRel immutableValue
+  ctorDeployDeadSection immSectionDead immutableSectionRel immutableValue
   immutableEncoding valueEncoding compileVyper structFieldsProps entryStateRel
   valueEncodingDefs
   list rich_list
