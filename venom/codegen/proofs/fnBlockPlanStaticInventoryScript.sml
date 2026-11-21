@@ -2406,14 +2406,6 @@ Proof
 QED
 
 
-Theorem inventory_selected_not_target[local]:
-  select_spill_candidate stk targets dist n = SOME cand ==>
-  ~MEM (stack_peek cand stk) targets
-Proof
-  simp[select_spill_candidate_def, LET_THM] >> strip_tac >>
-  drule FIND_SOME_MEM >> simp[]
-QED
-
 Theorem inventory_spill_key:
   d < LENGTH ps.ps_stack /\ do_spill_at d ps = (ops,qs) ==>
   ?off. qs.ps_spilled = ps.ps_spilled |+ (stack_peek d ps.ps_stack,off)
@@ -2444,7 +2436,7 @@ Proof
     (drule stack_get_unfixed_depth_bound >> decide_tac) >>
   `cand < LENGTH ps.ps_stack` by
     metis_tac[select_spill_candidate_bound] >>
-  drule inventory_selected_not_target >> strip_tac >>
+  drule select_spill_candidate_not_pending >> strip_tac >>
   Cases_on `do_spill_at cand ps` >> gvs[] >>
   rename1 `do_spill_at cand ps = (spill_ops,mid)` >>
   drule_all inventory_spill_key >> strip_tac >>

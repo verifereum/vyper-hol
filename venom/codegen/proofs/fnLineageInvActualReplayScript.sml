@@ -38,9 +38,6 @@ Proof
   drule_all do_swap_bottom_frame >> simp[]
 QED
 
-Theorem restore_spilled_plan_bottom_frame =
-  reorderPreparationFramePropsTheory.restore_spilled_plan_bottom_frame
-
 Theorem generate_emit_ops_stack_update:
   !inst tc ps stk.
     generate_emit_ops inst tc (ps with ps_stack := stk) =

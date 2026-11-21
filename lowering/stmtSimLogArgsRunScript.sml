@@ -41,17 +41,6 @@ Proof
   Cases_on `a x` >> rename1 `a x = (r1, st1)` >> Cases_on `r1` >> simp[]
 QED
 
-Theorem stmt_state_rel_any_gas_obs[local]:
-  stmt_state_rel H ctx func cenv cx es s ==>
-  stmt_state_rel H ctx func cenv cx (es with gas_obs := gs) s
-Proof
-  strip_tac >>
-  `s with <|vs_gas_readings := s.vs_gas_readings;
-            vs_inst_idx := s.vs_inst_idx|> = s` by
-    simp[venomStateTheory.venom_state_component_equality] >>
-  metis_tac[msg_gas_state_frame]
-QED
-
 (* The error results the arguments of a log may end in. *)
 Definition log_args_res_ok_def:
   log_args_res_ok (r : value list + exception) <=>

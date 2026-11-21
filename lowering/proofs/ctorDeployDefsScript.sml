@@ -192,51 +192,6 @@ Proof
   gvs[deploy_state_rel_def]
 QED
 
-(* Substitution may insert expressions at names, and folding may replace a
-   SHA of a literal. Neither transformation erases a code accessor. *)
-Theorem fold_const_builtin_code_accessor[local]:
-  supported_expr_exists (\e. ?t xs. e = Builtin t (Acc Code) xs)
-    (fold_const_builtin ty bi es) <=>
-  supported_expr_exists (\e. ?t xs. e = Builtin t (Acc Code) xs)
-    (Builtin ty bi es)
-Proof
-  Cases_on `bi` >>
-  simp[constSubstTheory.fold_const_builtin_def, supported_expr_exists_def] >>
-  Cases_on `es` >> simp[supported_expr_exists_def] >>
-  Cases_on `t` >> simp[supported_expr_exists_def] >>
-  Cases_on `h` >> simp[supported_expr_exists_def] >>
-  rename1 `Literal aty l` >> Cases_on `l` >>
-  simp[supported_expr_exists_def]
-QED
-
-Theorem folded_subst_code_accessor[local]:
-  (!env e.
-    supported_expr_exists (\x. ?t es. x = Builtin t (Acc Code) es) e ==>
-    supported_expr_exists (\x. ?t es. x = Builtin t (Acc Code) es)
-      (fold_const_expr (subst_consts_expr env e))) /\
-  (!env t.
-    supported_target_exists (\x. ?ty es. x = Builtin ty (Acc Code) es) t ==>
-    supported_target_exists (\x. ?ty es. x = Builtin ty (Acc Code) es)
-      (fold_const_btarget (subst_consts_btarget env t))) /\
-  (!env es.
-    supported_exprs_exists (\x. ?t xs. x = Builtin t (Acc Code) xs) es ==>
-    supported_exprs_exists (\x. ?t xs. x = Builtin t (Acc Code) xs)
-      (fold_const_exprs (subst_consts_exprs env es))) /\
-  (!env d.
-    supported_opt_exists (\x. ?t es. x = Builtin t (Acc Code) es) d ==>
-    supported_opt_exists (\x. ?t es. x = Builtin t (Acc Code) es)
-      (fold_const_opt (subst_consts_opt env d))) /\
-  (!env fs.
-    supported_fields_exists (\x. ?t es. x = Builtin t (Acc Code) es) fs ==>
-    supported_fields_exists (\x. ?t es. x = Builtin t (Acc Code) es)
-      (fold_const_fields (subst_consts_fields env fs)))
-Proof
-  ho_match_mp_tac constSubstTheory.subst_consts_expr_ind >>
-  rw[constSubstTheory.subst_consts_expr_def,
-     constSubstTheory.fold_const_expr_def, fold_const_builtin_code_accessor,
-     supported_expr_exists_def] >> metis_tac[]
-QED
-
 (* The source-side hypotheses of e2e_deploy_correctness that hold at every
    gas filling; the finite storage guard deploy_storage_ok depends on the
    filling, so the unit theorem states it per filling. *)
