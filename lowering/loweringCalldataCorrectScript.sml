@@ -364,28 +364,3 @@ Proof
   first_x_assum (drule_then assume_tac) >>
   drule_all lower_vyper_runtime_unit_memory_ok >> simp[]
 QED
-
-(* DLOAD offsets stay within the data section, at the marks of S1's
-   certificate as in lower_vyper_runtime_unit_memory_ok_dispatched. *)
-Theorem lower_vyper_runtime_unit_dload_offset_ok_dispatched:
-  !marks tops rpolicy unit am tx ret vs.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    code_layout_valid vs /\
-    ~ctx_has_dalloca unit.cu_context /\
-    source_unit_execution_correct_at marks tops ret am tx unit vs /\
-    call_storage_ok am tx vs.vs_outcomes
-      (gas_explicit marks vs.vs_gas_readings) /\
-    ~source_exempt tops
-      (call_external (SOME vs.vs_outcomes)
-         (gas_explicit marks vs.vs_gas_readings) am tx)
-    ==> mem_inv dload_offset_ok unit.cu_context vs /\
-        mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
-                                 s.vs_code = vs.vs_code /\
-                                 s.vs_data_section = vs.vs_data_section)
-          unit.cu_context vs
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all source_unit_exit_safe_runs >> strip_tac >>
-  metis_tac[lower_vyper_runtime_unit_dload_offset_ok,
-            lower_vyper_runtime_unit_dload_in_section]
-QED

@@ -1,6 +1,7 @@
 (* Builtin and expression-helper operand exclusion boundaries. *)
 Theory runtimeLabelBuiltins
 Ancestors
+  listZipProps
   runtimeLabelExprCallbacks runtimeLabelExprPrimitives runtimeLabelBuiltinCore runtimeLabelBuiltinSystem runtimeLabelBuiltinArithmetic
   runtimeLabelPrimitives runtimeLabelValues runtimeLabelInvariant builtinBytes context compileEnv
   emitHelper venomInst list builtinSimple builtinSystem builtinMath builtinHashing
@@ -631,7 +632,7 @@ Resume rb_compile_call_external_for[gas]:
     (Q.ISPEC `(rb_operand_ok_for source_checks)` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind_for)))) >> BETA_TAC >>
   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
     irule rb_compile_external_call_kwargs_for >>
-    simp[rb_every_zip_fst] >> Cases_on `x0` >> gvs[]) >>
+    simp[EVERY_FST_ZIP] >> Cases_on `x0` >> gvs[]) >>
   gen_tac >> strip_tac >> Cases_on `rty = NoneT` >> simp[] >>
   (pure_rewrite_tac[GSYM comp_return_def] >>
    CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>

@@ -67,9 +67,6 @@ Proof
   metis_tac[runtime_sym_unwrap_value]
 QED
 
-Theorem runtime_sym_closed_abi_encode_args =
-  runtimeSymSrcOpenListsTheory.runtime_sym_abi_encode_args
-
 Theorem runtime_sym_closed_call:
   runtime_sym_call_clause tops
 Proof
@@ -87,7 +84,7 @@ Proof
        runtime_sym_closed_subscript, runtime_sym_attribute,
        runtime_sym_closed_target_ptr, runtime_sym_multi_vvs,
        runtime_sym_closed_make_tuple, runtime_sym_closed_struct_lit,
-       runtime_sym_closed_make_array_elems, runtime_sym_closed_abi_encode_args,
+       runtime_sym_closed_make_array_elems, runtimeSymSrcOpenListsTheory.runtime_sym_abi_encode_args,
        runtime_sym_closed_call, runtime_sym_context_contracts,
        runtime_sym_expr_primitives, runtime_sym_math,
        runtime_sym_simple_contract, runtimeSymSrcBuiltinMiscTheory.runtime_sym_misc_clauses,

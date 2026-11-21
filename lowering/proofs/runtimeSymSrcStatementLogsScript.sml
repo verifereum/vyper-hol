@@ -1,5 +1,6 @@
 Theory runtimeSymSrcStatementLogs
 Ancestors
+  listZipProps
   runtimeSymSrcInterfaces runtimeSymSrcEmission runtimeSymSrcContext runtimeSymSrcContextComplete
   runtimeSymSrcExternalArgStaging runtimeSymSrcExternalPrimitive
   eventLoweringStructure stmtLowering compileEnv context venomInst stackPlanTypes
@@ -50,7 +51,7 @@ Proof
      fs[supported_stmt_def, supported_log_def, supported_pure_exprs_every]) >>
   `!vs (tys : type list). EVERY runtime_sym_value vs ==>
       EVERY (runtime_sym_value o FST) (ZIP (vs,tys))` by
-    (Induct >> gen_tac >> Cases_on `tys` >> simp[ZIP_def]) >>
+    metis_tac[EVERY_FST_ZIP] >>
   `EVERY (runtime_sym_value o FST)
       (FST (split_log_ops (ZIP (saved,MAP (lowered_value_type ce) args)) x2)) /\
    EVERY (runtime_sym_value o FST)

@@ -77,12 +77,12 @@ Proof
        >> gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_return]
 QED
 
-Theorem gas_shadow_compiles_stage_intcall_args:
+Theorem gas_shadow_compiles_stage_intcall_args_env:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   !es flags tys.
     gas_shadow_compiles (compile_stage_intcall_args f cenv es flags tys)
-      (compile_stage_intcall_args g cenv
+      (compile_stage_intcall_args g (gas_shadow_env sd cenv)
          (if sh then MAP gas_shadow_expr es else es) flags tys)
 Proof
   disch_then (fn th => assume_tac
@@ -104,3 +104,7 @@ Proof
        gen_tac >> BETA_TAC) >>
   simp[gas_shadow_compiles_return]
 QED
+
+Theorem gas_shadow_compiles_stage_intcall_args =
+  REWRITE_RULE [gas_shadow_env_F]
+    (Q.INST [`sd` |-> `F`] gas_shadow_compiles_stage_intcall_args_env)

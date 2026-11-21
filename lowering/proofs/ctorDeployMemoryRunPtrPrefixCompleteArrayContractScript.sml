@@ -39,6 +39,9 @@ val Ok = ``\k ctx func site ids D N d outsz next limit_st
 val CshiftMode = ``\checked ty tv.
   ^(rand (rator (concl prefix_complete_array_initial_exit_pair_mode_exact)))``;
 
+val CshiftModeWithFmp = ``\checked ty tv.
+  ^(rand (rator (concl prefix_complete_array_initial_exit_pair_mode_exact_fmp)))``;
+
 val CshiftCode = rhs (concl (SIMP_CONV bool_ss [] ``(^CshiftMode) F``));
 
 (* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
@@ -49,7 +52,7 @@ Proof
 QED
 *)
 Theorem prefix_complete_array_exit_staged_mode[local]:
- (^CshiftMode) checked ty tv ==>
+ (^CshiftModeWithFmp) checked ty tv ==>
  abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var slot_var) src (Var dst_var)
    DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id ==>
  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) ==>
@@ -114,21 +117,22 @@ Theorem prefix_complete_array_exit_staged_mode[local]:
    (!x. abi_decoder_older_vars st.cs_next_var x ==>
      FLOOKUP Hout x = FLOOKUP G x /\ op_taint qout (Var x) = op_taint tn (Var x)) /\
    (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
+   (frame_fmp ==> actual.vs_fmp = initial.vs_fmp) /\
    actual.vs_code = initial.vs_code /\ actual.vs_gas_readings = initial.vs_gas_readings /\
    actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
    actual.vs_block_ctx = initial.vs_block_ctx /\ abi_decode_sim ctx func initial actual /\
    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG Hout qout actual) ==>
      !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)
 Proof
- disch_then (mp_tac o MATCH_MP (BETA_RULE prefix_complete_array_initial_exit_pair_mode_exact) o BETA_RULE) >>
+ disch_then (mp_tac o MATCH_MP (BETA_RULE prefix_complete_array_initial_exit_pair_mode_exact_fmp) o BETA_RULE) >>
  rpt strip_tac >> BETA_TAC >> first_x_assum irule >> asm_rewrite_tac[]
 QED
 
-Theorem prefix_dynamic_array_loop_complete_mode_contract:
- (^CshiftMode) checked ty tv /\
+Theorem prefix_dynamic_array_loop_complete_mode_contract_fmp:
+ (^CshiftModeWithFmp) checked ty tv /\
  (is_abi_dynamic ce.ce_struct_fields ty \/
    dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
- (^CshiftMode) checked (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+ (^CshiftModeWithFmp) checked (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
 Proof
  disch_then (CONJUNCTS_THEN2 (mk_asm "child") assume_tac) >>
  simp_tac bool_ss [] >> rpt gen_tac >>
@@ -214,6 +218,13 @@ Proof
  qpat_x_assum `!x. abi_decoder_older_vars _ x ==> lookup_var x actual = _` mp_tac >>
  simp[abi_decoder_older_vars_def]
 QED
+
+
+
+Theorem prefix_dynamic_array_loop_complete_mode_contract =
+  prefix_dynamic_array_loop_complete_mode_contract_fmp
+  |> Q.INST [`frame_fmp` |-> `F`]
+  |> PURE_REWRITE_RULE [tautLib.TAUT `((F ==> p) /\ q) <=> q`]
 
 Theorem prefix_dynamic_array_loop_complete_code_contract:
  (^CshiftCode) ty tv /\
