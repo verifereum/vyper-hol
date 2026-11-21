@@ -905,7 +905,7 @@ QED
 
 Triviality deploy_runtime_snapshot_slice:
   deploy_state_rel tops (assemble prog') am tx es /\
-  gas_variant vs
+  raw_variant vs.vs_initial_fmp vs
     (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
   FLOOKUP (lo_reloc prog prog') "runtime_begin" = SOME off /\
   off < dimword(:256) /\ off <= LENGTH (assemble prog') /\
@@ -918,7 +918,7 @@ Proof
   strip_tac >>
   `snap.vs_code = (FST (HD es.contexts)).msgParams.code /\
    FLOOKUP snap.vs_labels "runtime_begin" = SOME (n2w off)` by
-    (qpat_assum `gas_variant _ _` (mp_tac o PURE_REWRITE_RULE [gas_variant_def]) >>
+    (qpat_assum `raw_variant _ _ _` (mp_tac o PURE_REWRITE_RULE [raw_variant_def, gas_variant_def]) >>
      disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_code,s.vs_labels)`) >>
      simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
           entry_venom_state_frame_fields] >>
@@ -984,7 +984,8 @@ Theorem deploy_ctor_return:
     FLOOKUP (lo_reloc prog prog') "runtime_begin" = SOME off /\
     off < dimword(:256) /\ off <= LENGTH (assemble prog') /\
     DROP off (assemble prog') = runtime_bc /\
-    gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+    raw_variant vs.vs_initial_fmp vs
+      (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
@@ -1027,7 +1028,7 @@ Proof
   qpat_x_assum `deploy_phases _ _ _ _` kall_tac >>
   qpat_x_assum `deploy_source_ok _ _ _` kall_tac >>
   qpat_x_assum `deploy_state_rel _ _ _ _ _` kall_tac >>
-  qpat_x_assum `gas_variant _ _` kall_tac >>
+  qpat_x_assum `raw_variant _ _ _` kall_tac >>
   qpat_x_assum `deploy_ctor_code _ _ _ _ _` kall_tac >>
   qpat_x_assum `deploy_ctor_start _ _ _ _` kall_tac >>
   qpat_x_assum `eval_stmts _ _ _ = _` kall_tac >>

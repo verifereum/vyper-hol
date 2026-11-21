@@ -1,13 +1,7 @@
-(* Structural producers on the raw deployment unit that run_venom_pipeline_correct
- * consumes (the deploy counterparts of lower_vyper_runtime_unit_source_unit_ok,
- * _o1_shape_extras, _global_reserved and the eom/fixed-region facts).
- * TOP-LEVEL: deploy_unit_shape_ok (a piece of e2e_deploy_correctness).
- * Helpers: classify_functions_ctor_mem, lower_vyper_deploy_unit_source_unit_ok,
- * lower_vyper_deploy_unit_o1_shape_extras, lower_vyper_deploy_unit_eom_none,
- * o1_pipeline_global_reserved, generate_context_plan_reserved_wf.
- * The reservation's size is not bounded by the lowering; its well-formedness
- * comes from codegen's context plan (max_live_eom checks it), which sees the
- * same reservation since every O1 pass keeps ctx_global_reserved.
+(* Source shape and reservation facts for deploy_unit_o1_shape_ok.
+ * Static lowering proves its shape directly. The three dynamic forms use
+ * their source-shape certificates. The O1 passes preserve the reservation,
+ * and the generated context plan checks that it is well formed.
  *)
 Theory ctorDeployShape
 Ancestors
@@ -18,7 +12,7 @@ Ancestors
   venomPipelineRunner venomFnScheduleRunner venomFnScheduleRunnerProps
   ctorGeneratorShape loweringShapeDefs moduleLowering compileEnv context
   emitHelper venomInst ptrDiscipline deployDynamicMemory
-  e2eDeployDefs vyperTypeContract constSubst supportedExprTraverse alist
+  e2eDeployDefs vyperTypeContract constSubst supportedStmtTraverse supportedExprTraverse alist
 
 (* ===== The constructor's source ===== *)
 
@@ -30,63 +24,6 @@ Theorem build_compile_env_non_internal_no_return_pc[local]:
 Proof
   rpt strip_tac >> simp[build_compile_env_def] >>
   rpt (pairarg_tac >> gvs[])
-QED
-
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  rpt gen_tac >> PairCases_on `cf` >> strip_tac >>
-  drule classify_functions_ctor_mem >> strip_tac >>
-  gvs[constSubstTheory.subst_consts_fn_def] >>
-  drule_all supported_program_deploy_function >> strip_tac >>
-  `~supported_stmts_expr_exists expr_shape_root
-      (subst_consts_stmts (module_consts_env tops []) raw_body)` by
-    (irule (cj 2 subst_consts_stmt_shape) >> conj_tac
-     >- metis_tac[supported_program_const_replacement_shape] >>
-     metis_tac[supported_function_body_shape]) >>
-  gvs[package_constructor_def, set_constructor_package_target_def,
-      update_cenv_nonreentrant_def, build_compile_env_non_internal_no_return_pc] >>
-  simp[cenv_static_ok_def] >>
-  imp_res_tac supported_program_runtime_bodies_shape_ok >>
-  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
-  metis_tac[build_compile_env_static, cenv_static_ok_def]
-QED
-*)
-Theorem package_constructor_shape_ok:
-  !tops use_trans nkey_map target cf cenv args pay nr nkey trans body ret.
-    supported_program tops /\ supported_program_deploy tops /\
-    SND (SND (SND (classify_functions tops))) = SOME cf /\
-    set_constructor_package_target target
-      (package_constructor tops use_trans nkey_map cf) =
-      (cenv, args, pay, nr, nkey, trans, body, ret) ==>
-    cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
-    ~supported_stmts_expr_exists expr_shape_root body
-Proof
-  cheat
-QED
-
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  rpt gen_tac >> PairCases_on `src` >> strip_tac >>
-  `~supported_stmts_expr_exists expr_shape_root src7` by
-    (drule supported_program_runtime_bodies_shape_ok >>
-     simp[runtime_bodies_shape_ok_def] >> metis_tac[]) >>
-  simp[package_internal_fn_def, set_internal_package_target_def,
-       update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
-       cenv_static_ok_def] >>
-  imp_res_tac supported_program_runtime_bodies_shape_ok >>
-  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
-  metis_tac[build_compile_env_static, cenv_static_ok_def]
-QED
-*)
-Theorem package_internal_fn_ctor_shape_ok:
-  !tops use_trans nkey_map imm target src.
-    supported_program tops /\
-    MEM src (FST (SND (classify_functions tops))) ==>
-    internal_fn_shape_ok
-      (set_internal_package_target target
-         (package_internal_fn tops use_trans nkey_map T imm src))
-Proof
-  cheat
 QED
 
 Theorem deploy_classified_static_body[local]:
@@ -235,53 +172,6 @@ Proof
   gvs[lowered_inst_ok_def]
 QED
 
-(* The facts of the unpacked lower_vyper_deploy_unit that
-   run_deploy_lowering_source_unit_ok asks for. *)
-Theorem lower_vyper_deploy_unit_run[local]:
-  !tops rpolicy runtime_bc unit.
-    lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
-    supported_program tops /\ supported_program_deploy tops ==>
-    ?has_constructor imm args ctor_internal_fns cenv body pay nr nkey trans.
-      run_deploy_lowering has_constructor rpolicy runtime_bc imm args 0
-        ctor_internal_fns cenv body pay nr nkey trans "__deploy" = SOME unit /\
-      (has_constructor ==>
-        cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
-        ~supported_stmts_expr_exists expr_shape_root body) /\
-      (~has_constructor ==> ctor_internal_fns = []) /\
-      EVERY internal_fn_shape_ok ctor_internal_fns /\
-      EVERY (\d. internal_label_ok (FST d))
-        (internal_fn_descriptors ctor_internal_fns) /\
-      ALL_DISTINCT (MAP FST (internal_fn_descriptors ctor_internal_fns))
-Proof
-  rpt gen_tac >> simp[lower_vyper_deploy_unit_def] >>
-  pairarg_tac >> simp[] >>
-  pairarg_tac >> simp[] >> rpt strip_tac >>
-  first_x_assum (irule_at Any) >>
-  Cases_on `ctor_fn` >> gvs[internal_fn_descriptors_def] >>
-  rename1 `classify_functions tops = (ext_fns, int_fns, fb_fn, SOME cf)` >>
-  `SND (SND (SND (classify_functions tops))) = SOME cf` by simp[] >>
-  drule_all package_constructor_shape_ok >> strip_tac >> simp[] >>
-  `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
-                   (FST (SND (classify_functions tops))))`
-    by metis_tac[classified_internal_names_distinct,
-                 supported_program_internal_names] >>
-  qspecl_then [`tops`, `T`] mp_tac internal_descriptors_ok >>
-  impl_tac >- simp[] >> simp[] >> strip_tac >>
-  `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops T)
-     (order_internals (deploy_internal_order (SOME cf) int_fns) int_fns)))`
-    by (`PERM (MAP FST (MAP (source_internal_fn_descriptor tops T)
-                (order_internals (deploy_internal_order (SOME cf) int_fns) int_fns)))
-              (MAP FST (MAP (source_internal_fn_descriptor tops T) int_fns))`
-          by (irule sortingTheory.PERM_MAP >> irule sortingTheory.PERM_MAP >>
-              simp[PERM_order_deploy_internals]) >>
-        drule sortingTheory.ALL_DISTINCT_PERM >> simp[]) >>
-  gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
-     internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP] >>
-  simp[EVERY_MEM] >> rpt strip_tac
-  >- (irule package_internal_fn_ctor_shape_ok >> gs[]) >>
-  fs[EVERY_MEM]
-QED
-
 Theorem lower_vyper_deploy_unit_run_static[local]:
   !tops rpolicy runtime_bc unit am tx.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
@@ -357,28 +247,6 @@ Proof
   simp[deploy_phases_def] >> metis_tac[lower_vyper_deploy_unit_no_dalloca_static]
 QED
 
-Theorem lower_vyper_deploy_unit_source_unit_ok:
-  !tops rpolicy runtime_bc unit.
-    lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
-    supported_program tops /\ supported_program_deploy tops ==>
-    o1_source_unit_ok unit
-Proof
-  rpt strip_tac >> drule_all lower_vyper_deploy_unit_run >> strip_tac >>
-  drule run_deploy_lowering_source_unit_ok >> impl_tac >- simp[] >> simp[]
-QED
-
-(* The lowered deploy unit has no DALLOCA. *)
-Theorem lower_vyper_deploy_unit_no_dalloca:
-  !tops rpolicy runtime_bc unit.
-    lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
-    supported_program tops /\ supported_program_deploy tops ==>
-    ~ctx_has_dalloca unit.cu_context
-Proof
-  rpt gen_tac >> strip_tac >> irule every_no_dalloca >>
-  drule_all lower_vyper_deploy_unit_run >> strip_tac >>
-  drule run_deploy_lowering_source_unit_ok >> impl_tac >- simp[] >> simp[]
-QED
-
 Theorem run_deploy_lowering_raw_defaults[local]:
   run_deploy_lowering has_constructor rpolicy runtime_bc immutables_len
     constructor_args data_size ctor_internal_fns cenv stmts is_payable
@@ -407,19 +275,17 @@ Proof
   drule run_deploy_lowering_raw_defaults >> simp[]
 QED
 
-(* The entry function is the unit's first (entry_fn_first) and names are
-   distinct (lowering_context_ok), so it is the only one the entry names. *)
-Theorem lower_vyper_deploy_unit_o1_shape_extras:
-  !tops rpolicy runtime_bc unit.
+Theorem lower_vyper_deploy_unit_o1_shape_extras_static[local]:
+  !tops rpolicy runtime_bc unit am tx.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
-    supported_program tops /\ supported_program_deploy tops ==>
-    unit_entry_no_params unit /\ unit_fmp_unsealed unit
+    deploy_source_ok tops am tx /\
+    ~deploy_dalloca_form_occurs expr_raw_shape_root tops ==>
+    o1_source_unit_ok unit /\ unit_entry_no_params unit
 Proof
   rpt gen_tac >> strip_tac >>
-  reverse conj_tac >- metis_tac[lower_vyper_deploy_unit_eom_none] >>
-  drule_all lower_vyper_deploy_unit_run >> strip_tac >>
+  drule_all lower_vyper_deploy_unit_run_static >> strip_tac >>
   drule_all run_deploy_lowering_entry_no_params >> strip_tac >>
-  drule_all run_deploy_lowering_source_unit_ok >> strip_tac >>
+  drule_all run_deploy_lowering_source_unit_ok >> strip_tac >> simp[] >>
   `entry_fn_first unit.cu_context` by
     fs[o1_source_unit_ok_def, unit_shape_ok_def] >>
   `ALL_DISTINCT (MAP (\f. f.fn_name) unit.cu_context.ctx_functions)` by
@@ -436,6 +302,71 @@ Proof
   `MEM g.fn_name (MAP (\f. f.fn_name) rest)` by
     (simp[MEM_MAP] >> metis_tac[]) >>
   gs[]
+QED
+
+(* GATE_ADMISSION: missing case, raw_call with msg.data deploy source shape; owner: e2e lane *)
+Theorem lower_vyper_deploy_unit_source_shape_raw_call_calldata:
+  !tops rpolicy runtime_bc dunit layouts addr art.
+    lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
+    check_contract T layouts addr [(NONE, tops)] = SOME art /\
+    deploy_dalloca_form_occurs
+      (\e. ?ty f es d. e = Call ty (RawCallCalldataTarget f) es d) tops ==>
+    o1_source_unit_ok dunit /\ unit_entry_no_params dunit
+Proof
+  cheat
+QED
+
+(* GATE_ADMISSION: missing case, create_copy_of deploy source shape; owner: e2e lane *)
+Theorem lower_vyper_deploy_unit_source_shape_create_copy:
+  !tops rpolicy runtime_bc dunit layouts addr art.
+    lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
+    check_contract T layouts addr [(NONE, tops)] = SOME art /\
+    deploy_dalloca_form_occurs
+      (\e. ?ty s r ks es d. e = Call ty (CreateTarget CreateCopyOf s r ks) es d) tops ==>
+    o1_source_unit_ok dunit /\ unit_entry_no_params dunit
+Proof
+  cheat
+QED
+
+(* GATE_ADMISSION: missing case, create_from_blueprint deploy source shape; owner: e2e lane *)
+Theorem lower_vyper_deploy_unit_source_shape_create_blueprint:
+  !tops rpolicy runtime_bc dunit layouts addr art.
+    lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
+    check_contract T layouts addr [(NONE, tops)] = SOME art /\
+    deploy_dalloca_form_occurs
+      (\e. ?ty b s r ks es d.
+          e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d) tops ==>
+    o1_source_unit_ok dunit /\ unit_entry_no_params dunit
+Proof
+  cheat
+QED
+
+Theorem checked_lower_vyper_deploy_unit_source_shape:
+  !tops rpolicy runtime_bc dunit am tx.
+    lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
+    deploy_source_ok tops am tx ==>
+    o1_source_unit_ok dunit /\ unit_entry_no_params dunit
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `deploy_dalloca_form_occurs expr_raw_shape_root tops`
+  >- (fs[deploy_source_ok_def, deploy_typing_ok_def] >>
+      `expr_raw_shape_root =
+        (\e. (?ty f es d. e = Call ty (RawCallCalldataTarget f) es d) \/
+             ((?ty s r ks es d. e = Call ty (CreateTarget CreateCopyOf s r ks) es d) \/
+              (?ty b s r ks es d.
+                 e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d)))` by
+        simp[FUN_EQ_THM, expr_raw_shape_root_def, DISJ_ASSOC] >>
+      `!R S. deploy_dalloca_form_occurs (\e. R e \/ S e) tops <=>
+              deploy_dalloca_form_occurs R tops \/ deploy_dalloca_form_occurs S tops` by
+        (simp[deploy_dalloca_form_occurs_def, supported_stmt_expr_exists_disj,
+              supported_expr_exists_disj, EXISTS_MEM] >> metis_tac[]) >>
+      qpat_x_assum `deploy_dalloca_form_occurs expr_raw_shape_root _` mp_tac >>
+      qpat_assum `expr_raw_shape_root = _` (fn th => PURE_REWRITE_TAC [th]) >>
+      simp[] >> strip_tac >>
+      metis_tac[lower_vyper_deploy_unit_source_shape_raw_call_calldata,
+                lower_vyper_deploy_unit_source_shape_create_copy,
+                lower_vyper_deploy_unit_source_shape_create_blueprint]) >>
+  metis_tac[lower_vyper_deploy_unit_o1_shape_extras_static]
 QED
 
 (* ===== The reservation ===== *)
@@ -511,36 +442,9 @@ Theorem deploy_unit_o1_shape_ok:
     fixed_region_reserved (imm_len tops) dunit.cu_context /\
     reserved_intervals_wf dunit.cu_context.ctx_global_reserved
 Proof
-  rpt gen_tac >> simp[deploy_phases_def, deploy_source_ok_def] >>
+  rpt gen_tac >> simp[deploy_phases_def] >>
   strip_tac >>
-  drule_all lower_vyper_deploy_unit_source_unit_ok >> strip_tac >>
-  drule_all lower_vyper_deploy_unit_o1_shape_extras >> strip_tac >>
-  drule lower_vyper_deploy_unit_eom_none >> strip_tac >>
-  `fixed_region_reserved (imm_len tops) dunit.cu_context` by
-    (drule lower_vyper_deploy_unit_global_reserved >>
-     rw[fixed_region_reserved_def, imm_len_def] >> gvs[]) >>
-  simp[] >>
-  drule o1_pipeline_global_reserved >> strip_tac >>
-  drule generate_context_plan_reserved_wf >> gvs[]
-QED
-
-Theorem deploy_unit_shape_ok:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_source_ok tops am tx
-    ==>
-    o1_source_unit_ok dunit /\ ~ctx_has_dalloca dunit.cu_context /\
-    unit_entry_no_params dunit /\ unit_fmp_unsealed dunit /\
-    EVERY (\fn. fn.fn_eom = NONE) dunit.cu_context.ctx_functions /\
-    fixed_region_reserved (imm_len tops) dunit.cu_context /\
-    reserved_intervals_wf dunit.cu_context.ctx_global_reserved
-Proof
-  rpt gen_tac >> simp[deploy_phases_def, deploy_source_ok_def] >>
-  strip_tac >>
-  drule_all lower_vyper_deploy_unit_source_unit_ok >> strip_tac >>
-  drule_all lower_vyper_deploy_unit_no_dalloca >> strip_tac >>
-  drule_all lower_vyper_deploy_unit_o1_shape_extras >> strip_tac >>
+  drule_all checked_lower_vyper_deploy_unit_source_shape >> strip_tac >>
   drule lower_vyper_deploy_unit_eom_none >> strip_tac >>
   `fixed_region_reserved (imm_len tops) dunit.cu_context` by
     (drule lower_vyper_deploy_unit_global_reserved >>

@@ -793,7 +793,7 @@ Proof
   `lowering_context_ok dunit.cu_context` by metis_tac[deploy_unit_context_ok] >>
   qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
                `dunit`, `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`, `fmp`]
-    mp_tac deploy_unit_execution_correct_raw_fmp >>
+    mp_tac deploy_unit_execution_correct_selected_raw_fmp >>
   impl_tac >- simp[] >> strip_tac >>
   `?marks. deploy_unit_execution_correct_at marks tops runtime_bc am tx dunit vi`
     by

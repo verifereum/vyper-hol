@@ -1,7 +1,7 @@
 (* The bad-storage and exempt arms of deploy_unit_execution_correct_at
  * (deployUnitExecution) at the joint body induction's marks: the body's
  * gas_outcome_full arm at the body start (s0, G0, tn0), prefixed with
- * deploy_ctor_entry_joint's zero-mark entry path, and the constructor body's
+ * deploy_ctor_entry_joint_raw's zero-mark entry path, and the constructor body's
  * run carried through load_contract_trace.
  * TOP-LEVEL: deploy_ctor_bad_storage_arm, deploy_ctor_exempt_arm,
  * deploy_ctor_source_trace.
@@ -391,7 +391,6 @@ Theorem deploy_ctor_bad_storage_arm:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops (assemble prog') am tx es /\
-    gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
@@ -470,7 +469,6 @@ Theorem deploy_ctor_exempt_arm:
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops (assemble prog') am tx es /\
-    gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
