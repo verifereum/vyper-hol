@@ -1,7 +1,7 @@
 Theory fnBlockPlanStaticBalance
 Ancestors
   stackPlanGen stackPlanOps stackPlanTypes stackModel asmIR integer prefixExec planWf
-  cleanOpsSim fnAliasStep fnFrameBoundaryGenRet fnPlanPrefix
+  reorderPreparationProps fnPlanLineageReorder cleanOpsSim fnAliasStep fnFrameBoundaryGenRet fnPlanPrefix
 
 (* Physical planner bookkeeping; SOEmit is deliberately opaque. *)
 Definition stack_op_weight_def:
@@ -395,30 +395,16 @@ Proof
   metis_tac[do_swap_no_push_var, listTheory.MEM_APPEND]
 QED
 
-Theorem reorder_fold_no_push_var[local]:
-  !xs acc_ops ps ops qs.
-  FOLDL (\(ops, ps) (idx, op).
-    (\(step_ops, ps'). (ops ++ step_ops, ps'))
-      (reorder_one dfg target_ops idx op ps)) (acc_ops, ps) xs =
-    (ops, qs) /\ ~MEM (SOPush (Var v)) acc_ops ==>
-  ~MEM (SOPush (Var v)) ops
-Proof
-  Induct >> rpt gen_tac >- (simp[] >> rpt strip_tac >> gvs[]) >>
-  rename1 `FOLDL _ _ (item::xs)` >>
-  PairCases_on `item` >> simp[] >>
-  rename1 `reorder_one dfg target_ops idx op ps` >>
-  Cases_on `reorder_one dfg target_ops idx op ps` >> simp[] >> strip_tac >>
-  qmatch_asmsub_rename_tac `reorder_one _ _ _ _ _ = (step_ops, next_ps)` >>
-  first_x_assum (qspec_then `acc_ops ++ step_ops` mp_tac) >> simp[] >>
-  disch_then drule >> drule reorder_one_no_push_var >> simp[]
-QED
-
 Theorem reorder_plan_no_push_var:
   reorder_plan dfg target_ops ps = (ops, qs) ==>
   !v. ~MEM (SOPush (Var v)) ops
 Proof
-  simp[reorder_plan_def] >> strip_tac >> rpt gen_tac >>
-  drule reorder_fold_no_push_var >> simp[]
+  strip_tac >> gen_tac >>
+  qspecl_then [`dfg`, `target_ops`, `ps`, `ops`, `qs`,
+    `\(st : plan_state) trace (post : plan_state). ~MEM (SOPush (Var v)) trace`]
+    mp_tac reorder_plan_trace_relation >>
+  simp[] >> metis_tac[do_restore_no_push_var, reduce_depth_plan_no_push_var,
+                     reorder_one_no_push_var]
 QED
 
 Theorem spill_fold_trace_weight[local]:
@@ -544,30 +530,22 @@ Proof
   intLib.ARITH_TAC
 QED
 
-Theorem reorder_fold_signed_balance[local]:
-  !items acc_ops ps ops qs.
-    FOLDL (\(ops, ps) (idx, op).
-      let (step_ops, next_ps) = reorder_one dfg target_ops idx op ps in
-      (ops ++ step_ops, next_ps)) (acc_ops, ps) items = (ops, qs) ==>
-    &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) +
-      trace_weight ops - trace_weight acc_ops
-Proof
-  Induct >> rpt gen_tac
-  >- (simp[] >> rpt strip_tac >> gvs[] >> intLib.ARITH_TAC) >>
-  rename1 `FOLDL _ _ (item::items)` >> PairCases_on `item` >>
-  simp[LET_THM] >> pairarg_tac >> simp[] >> strip_tac >>
-  RULE_ASSUM_TAC (REWRITE_RULE [LET_THM]) >>
-  first_x_assum drule >> strip_tac >>
-  drule reorder_one_signed_balance >> strip_tac >>
-  gvs[trace_weight_append] >> intLib.ARITH_TAC
-QED
-
 Theorem reorder_plan_signed_balance:
   reorder_plan dfg target_ops ps = (ops, qs) ==>
   &(LENGTH qs.ps_stack) = (&(LENGTH ps.ps_stack):int) + trace_weight ops
 Proof
-  simp[reorder_plan_def] >> strip_tac >>
-  drule (SRULE [LET_THM] reorder_fold_signed_balance) >> simp[trace_weight_def]
+  strip_tac >>
+  qspecl_then [`dfg`, `target_ops`, `ps`, `ops`, `qs`,
+    `\(st : plan_state) trace (post : plan_state).
+       &(LENGTH post.ps_stack) = (&(LENGTH st.ps_stack):int) + trace_weight trace`]
+    mp_tac reorder_plan_trace_relation >>
+  simp[trace_weight_append, trace_weight_def] >>
+  (impl_tac >-
+    (rpt conj_tac
+     >- (rpt gen_tac >> strip_tac >> intLib.ARITH_TAC)
+     >- metis_tac[do_restore_signed_balance]
+     >- metis_tac[reduce_depth_plan_signed_balance]
+     >- metis_tac[reorder_one_signed_balance])) >> simp[]
 QED
 
 Theorem optimistic_swap_plan_signed_balance:
@@ -800,31 +778,12 @@ Definition source_topics_def:
     else 0
 End
 
-Theorem reorder_fold_length_floor[local]:
-  !items acc ps ops qs.
-  EVERY (\(idx,op). idx < LENGTH target) items /\
-  LENGTH target <= LENGTH ps.ps_stack /\
-  FOLDL (\(ops,ps) (idx,op).
-    let (step,qs) = reorder_one dfg target idx op ps in
-    (ops ++ step,qs)) (acc,ps) items = (ops,qs) ==>
-  LENGTH target <= LENGTH qs.ps_stack
-Proof
-  Induct >> simp[] >> rpt gen_tac >>
-  PairCases_on `h` >> simp[] >>
-  pairarg_tac >> simp[] >> strip_tac >>
-  drule_all reorder_one_length_floor >> strip_tac >>
-  first_x_assum irule >> simp[LET_THM] >> metis_tac[]
-QED
-
 Theorem reorder_plan_length_floor:
   LENGTH target <= LENGTH ps.ps_stack /\
   reorder_plan dfg target ps = (ops,qs) ==>
   LENGTH target <= LENGTH qs.ps_stack
 Proof
-  simp[reorder_plan_def] >> strip_tac >>
-  irule reorder_fold_length_floor >> simp[LET_THM] >>
-  goal_assum (drule_at Any) >>
-  simp[listTheory.EVERY_MEM, pairTheory.FORALL_PROD, indexedListsTheory.MEM_MAPi]
+  metis_tac[reorder_plan_target_length]
 QED
 
 Theorem selected_reorder_signed_balance[local]:
@@ -948,10 +907,10 @@ Proof
   strip_tac >>
   qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[generate_regular_inst_plan_def, LET_THM, compute_operands_def,
-       get_non_label_operands_def, emit_input_plan_def, reorder_plan_def,
+       get_non_label_operands_def, emit_input_plan_def, reorder_plan_nil,
        generate_emit_ops_def, venom_to_evm_name_def, stack_pop_def] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[release_dead_spills_stack] >>
-  drule (SRULE [LET_THM, reorder_plan_def] jmp_join_signed_balance) >>
+  drule (SRULE [LET_THM] jmp_join_signed_balance) >>
   simp[regular_correction_def, source_topics_def, trace_weight_append,
        trace_weight_def, stack_op_weight_def, compute_operands_def,
        get_non_label_operands_def, generate_emit_ops_def, venom_to_evm_name_def] >>

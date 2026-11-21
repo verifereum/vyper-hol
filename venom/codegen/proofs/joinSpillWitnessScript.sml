@@ -12,13 +12,16 @@
 Theory joinSpillWitness
 Ancestors
   stackPlanGen planExec asmSem venomExecSemantics venomState venomInst fnPlanLineageReplay
-Libs finite_mapLib wordsLib
+Libs finite_mapLib sortingLib wordsLib
 
 val () = computeLib.upd_compset add_finite_map_compset;
+val () = computeLib.upd_compset sortingLib.add_sorting_compset;
 val () = computeLib.upd_compset
   (computeLib.add_thms [alistTheory.fmap_to_alist_FEMPTY,
      finite_mapTheory.DRESTRICT_FUPDATE, finite_mapTheory.DRESTRICT_FEMPTY,
-     pred_setTheory.IN_COMPL, pred_setTheory.IN_SING,
+     pred_setTheory.IN_APP,
+     REWRITE_RULE [pred_setTheory.IN_APP] pred_setTheory.IN_COMPL,
+     REWRITE_RULE [pred_setTheory.IN_APP] pred_setTheory.IN_SING,
      byteTheory.set_byte_bit_field_insert]);
 
 Definition jp_vars_def:
@@ -94,49 +97,7 @@ Definition jp_venom_result_def:
     | Error e => ("error: " ++ e, [])
 End
 
-(* EVAL cannot compute fmap_to_alist of a non-empty map, so
-   release_dead_spills sticks whenever something is spilled.  When every
-   spilled key is live, the release is the identity; this conversion proves
-   that side condition and fails (leaving the term stuck) otherwise. *)
 Theorem jp_release_live = fnPlanLineageReplayTheory.release_dead_spills_live_domain
-
-val release_count = ref 0;
-fun release_conv tm =
-  let
-    val (_, args) = strip_comb tm
-    val th = SPECL args jp_release_live
-    val hyp = fst (dest_imp (concl th))
-    val hth = EQT_ELIM
-      ((SIMP_CONV (srw_ss())
-          [finite_mapTheory.FDOM_FUPDATE, finite_mapTheory.FDOM_FEMPTY,
-           boolTheory.DISJ_IMP_THM, boolTheory.FORALL_AND_THM] THENC EVAL) hyp)
-  in release_count := !release_count + 1; MP th hth end;
-
-(* Compsets keep references to the clauses of constants already used in
-   other rules, so scrubbing release_dead_spills does not stop it unfolding.
-   Instead keep it opaque with RESTR_EVAL_CONV and discharge each concrete
-   occurrence with jp_release_live, repeating until nothing changes. *)
-val rel_c = ``stackPlanOps$release_dead_spills``;
-fun release_conv1 tm =
-  if same_const (fst (strip_comb tm)) rel_c andalso
-     length (snd (strip_comb tm)) = 2
-  then release_conv tm else raise UNCHANGED;
-fun plan_eval tm =
-  let
-    fun loop th n =
-      let
-        val t = rhs (concl th)
-        val th2 = (TOP_DEPTH_CONV release_conv1 THENC
-                   computeLib.RESTR_EVAL_CONV [rel_c]) t
-      in
-        if n > 300 orelse aconv (rhs (concl th2)) t then th
-        else loop (TRANS th th2) (n + 1)
-      end
-    val th = loop (computeLib.RESTR_EVAL_CONV [rel_c] tm) 0
-  in
-    if can (find_term (same_const rel_c)) (rhs (concl th)) then th
-    else CONV_RULE (RAND_CONV EVAL) th
-  end;
 
 val pr = fn th => print ("\n" ^ thm_to_string th ^ "\n");
 fun timed name f x =
@@ -145,12 +106,16 @@ fun timed name f x =
   in print ("\n[" ^ name ^ ": " ^
        Real.toString (Time.toReal (Timer.checkRealTimer t)) ^ "s]\n"); r end;
 
+(* Spill release now scans the allocator's occupied offset range, so
+   kernel evaluation can execute it along with the rest of the planner. *)
+val plan_eval =
+  computeLib.CBV_CONV
+    (computeLib.set_skip (computeLib.the_compset ()) boolSyntax.conditional (SOME 1));
+
 val plan_th = timed "plan" plan_eval ``OPTION_MAP (\cp. (cp.cp_initial_fmp,
                        context_plan_ops cp)) (generate_context_plan jp_ctx)``;
 val () = pr plan_th;
-val () = print ("\nrelease_conv fired " ^ Int.toString (!release_count) ^ " times\n");
-val () = if can (find_term (same_const rel_c)) (rhs (concl plan_th)) orelse
-            not (optionSyntax.is_some (rhs (concl plan_th)))
+val () = if not (optionSyntax.is_some (rhs (concl plan_th)))
          then raise Fail "plan did not evaluate to a concrete SOME" else ();
 
 val asm_th = timed "asm" EVAL ``OPTION_MAP (\(fmp,ops). execute_plan fmp ops)

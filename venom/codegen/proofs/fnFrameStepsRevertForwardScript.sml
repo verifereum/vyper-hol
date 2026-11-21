@@ -1,6 +1,7 @@
 (* Structural boundaries for revert forwarding. *)
 Theory fnFrameStepsRevertForward
 Ancestors
+  reorderPreparationProps reorderPreparationInventoryProps
   singleInputSim contextCodegenRel dfgDefs list dfgAnalysisProps allocaRemapSSA venomWf
   stackPlanGen venomExecProofs frameRel
   frameViewFacts instSimHelpers emitSim venomExecSemantics venomInst
@@ -772,29 +773,17 @@ Proof
   strip_tac >> gvs[]
 QED
 
-Theorem reorder_fold_enclosed[local]:
-  !items ops ps.
-    EVERY simple_or_spill ops ==>
-    EVERY simple_or_spill (FST
-      (FOLDL (\(ops,ps) (idx,op).
-        (\(step_ops,ps'). (ops ++ step_ops,ps'))
-          (reorder_one dfg targets idx op ps)) (ops,ps) items))
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  PairCases_on `h` >> simp[] >> pairarg_tac >> simp[] >>
-  first_x_assum irule >> simp[] >>
-  drule reorder_one_enclosed >> simp[]
-QED
-
 Theorem reorder_plan_enclosed:
   !dfg targets ps ops ps'.
     reorder_plan dfg targets ps = (ops,ps') ==>
     EVERY simple_or_spill ops
 Proof
   rpt gen_tac >> strip_tac >>
-  mp_tac (Q.SPECL [`MAPi (\i op. (i,op)) targets`, `[]`, `ps`]
-    reorder_fold_enclosed) >>
-  gvs[stackPlanOpsTheory.reorder_plan_def]
+  qspecl_then [`dfg`, `targets`, `ps`, `ops`, `ps'`,
+    `\_ trace _. EVERY simple_or_spill trace`]
+    (mp_tac o BETA_RULE) reorder_plan_trace_relation >>
+  simp[EVERY_APPEND] >>
+  metis_tac[do_restore_enclosed, reduce_depth_plan_enclosed, reorder_one_enclosed]
 QED
 
 Theorem popmany_fold_enclosed[local]:
@@ -893,6 +882,36 @@ Proof
   simp[]
 QED
 
+Theorem restore_spilled_plan_without_restores[local]:
+  !targets ps ops post.
+    restore_spilled_plan targets ps = (ops,post) /\
+    (!off. ~MEM (SORestore off) ops) ==>
+    !op. MEM op targets ==> op NOTIN FDOM ps.ps_spilled
+Proof
+  Induct >> simp[restore_spilled_plan_def] >> rpt gen_tac >>
+  Cases_on `FLOOKUP ps.ps_spilled h` >> simp[do_restore_def]
+  >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      first_x_assum drule >> fs[finite_mapTheory.FLOOKUP_DEF] >> metis_tac[]) >>
+  pairarg_tac >> simp[] >>
+  disch_then (CONJUNCTS_THEN2 strip_assume_tac (qspec_then `x` mp_tac)) >>
+  qpat_x_assum `_ = ops` (SUBST_ALL_TAC o SYM) >> simp[]
+QED
+
+Theorem reorder_without_restores[local]:
+  !dfg targets ps ops post.
+    reorder_plan dfg targets ps = (ops,post) /\
+    (!off. ~MEM (SORestore off) ops) ==>
+    !op. MEM op targets /\ is_var_operand op ==> op NOTIN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule reorder_plan_split >> strip_tac >>
+  drule reorder_prepare_plan_split >> strip_tac >>
+  `!off. ~MEM (SORestore off) restore_ops` by fs[MEM_APPEND] >>
+  qspecl_then [`FILTER is_var_operand targets`, `ps`, `restore_ops`, `restored`]
+    mp_tac restore_spilled_plan_without_restores >>
+  simp[MEM_FILTER]
+QED
+
 Theorem spill_free_preparation_value_replay:
   emit_input_plan opc inputs nl ps = (input_ops,ps1) /\
   reorder_plan dfg targets ps1 = (reorder_ops,ps2) /\
@@ -918,6 +937,9 @@ Proof
   `EVERY is_simple_stack_op (input_ops ++ reorder_ops)` by
     (metis_tac[spill_free_preparation_simple]) >>
   fs[EVERY_APPEND] >>
+  `!op. MEM op targets /\ is_var_operand op ==> op NOTIN FDOM ps1.ps_spilled` by
+    (qspecl_then [`dfg`, `targets`, `ps1`, `reorder_ops`, `ps2`]
+       mp_tac reorder_without_restores >> simp[] >> metis_tac[]) >>
   `prefix_spill_wf initial_fmp lo input_ops ps` by
     (irule simple_prefix_spill_wf >> simp[]) >>
   `plan_stack_sem_eq lo vs
@@ -1247,11 +1269,7 @@ Theorem rf_reorder_inventory_subset:
     MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
 Proof
   strip_tac >>
-  match_mp_tac rf_reorder_steps_inventory_subset >>
-  qexistsl_tac [`MAPi (\i op. (i,op)) inputs`, `ops`, `inputs`, `dfg`] >>
-  simp[GSYM reorder_plan_eq_plan_steps] >>
-  simp[EVERY_EL, indexedListsTheory.LENGTH_MAPi, indexedListsTheory.EL_MAPi,
-    EL_MEM]
+  metis_tac[fnPlanLineageInventoryTheory.reorder_plan_inventory_subset_nb]
 QED
 
 Theorem rf_inventory_inv_preparation:
@@ -1401,27 +1419,7 @@ Proof
   Cases_on `Var x IN FDOM ps1.ps_spilled` >> gvs[] >> decide_tac
 QED
 
-Theorem rf_reduce_spill_free:
-  !fuel pending op f n ps ops ps'.
-    reduce_depth_plan fuel pending op f n ps = (ops,ps') /\
-    (!off. ~MEM (SOSpill off) ops) ==> ps' = ps /\ ops = []
-Proof
-  Induct >> simp[Once reduce_depth_plan_def] >> rpt gen_tac >>
-  IF_CASES_TAC >> simp[] >>
-  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[] >>
-  rename1 `stack_get_unfixed_depth _ _ _ _ = SOME dist` >>
-  Cases_on `dist <= 16` >> simp[] >>
-  Cases_on `select_spill_candidate ps.ps_stack pending dist n` >> simp[] >>
-  rename1 `select_spill_candidate _ _ _ _ = SOME cand` >>
-  Cases_on `do_spill_at cand ps` >> rename1 `do_spill_at _ _ = (sops,ps_mid)` >>
-  Cases_on `reduce_depth_plan fuel pending op f n ps_mid` >>
-  simp[MEM_APPEND] >> strip_tac >>
-  qpat_x_assum `do_spill_at _ _ = _`
-    (mp_tac o PURE_REWRITE_RULE [do_spill_at_def, do_spill_tos_def]) >>
-  Cases_on `alloc_spill_slot ps.ps_alloc` >>
-  Cases_on `cand = 0` >> simp[] >> strip_tac >> gvs[] >>
-  metis_tac[]
-QED
+Theorem rf_reduce_spill_free = reorderPreparationPropsTheory.reduce_depth_plan_spill_free
 
 Theorem rf_reorder_one_spill_free[local]:
   !dfg pending idx op ps ops ps' d.
@@ -1516,22 +1514,46 @@ Proof
   metis_tac[]
 QED
 
+Theorem rf_reorder_prepare_spill_free[local]:
+  !targets ps ops post.
+    (!op. MEM op targets /\ is_var_operand op ==> op NOTIN FDOM ps.ps_spilled) /\
+    reorder_prepare_plan targets ps = (ops,post) /\
+    (!off. ~MEM (SOSpill off) ops) ==> ops = [] /\ post = ps
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule reorder_prepare_plan_split >> strip_tac >>
+  `restore_spilled_plan (FILTER is_var_operand targets) ps = ([],ps)` by
+    (irule restore_spilled_plan_absent >> simp[MEM_FILTER]) >>
+  gvs[] >>
+  qspecl_then [`ordered`,
+    `\op st. reduce_depth_plan (LENGTH st.ps_stack - LENGTH targets)
+      targets op 0 0 st`, `ps`, `ops`, `post`,
+    `\st trace out. (!off. ~MEM (SOSpill off) trace) ==>
+      trace = [] /\ out = st`]
+    (mp_tac o BETA_RULE) plan_steps_trace_relation >>
+  simp[MEM_APPEND] >> metis_tac[rf_reduce_spill_free]
+QED
+
 Theorem rf_reorder_spill_free:
   !dfg pending ps ops ps'.
     LENGTH pending <= 16 /\ LENGTH pending <= LENGTH ps.ps_stack /\
     (!x. LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
+    (!op. MEM op pending /\ is_var_operand op ==> op NOTIN FDOM ps.ps_spilled) /\
     reorder_plan dfg pending ps = (ops,ps') /\
     (!off. ~MEM (SOSpill off) ops) ==>
     ps'.ps_spilled = ps.ps_spilled /\
     (!x. LIST_ELEM_COUNT x ps'.ps_stack = LIST_ELEM_COUNT x ps.ps_stack)
 Proof
   rpt gen_tac >> strip_tac >>
+  drule reorder_plan_split >> strip_tac >>
+  `prep = [] /\ mid = ps` by
+    (qspecl_then [`pending`, `ps`, `prep`, `mid`] mp_tac rf_reorder_prepare_spill_free >>
+     metis_tac[MEM_APPEND]) >>
+  gvs[] >>
   qspecl_then [`MAPi (\i op. (i,op)) pending`, `0`]
     mp_tac rf_reorder_steps_spill_free >>
-  disch_then (qspecl_then [`dfg`, `pending`, `ps`, `ops`, `ps'`] mp_tac) >>
-  simp[reorder_plan_eq_plan_steps, indexedListsTheory.LENGTH_MAPi,
-       indexedListsTheory.EL_MAPi] >>
-  metis_tac[reorder_plan_eq_plan_steps]
+  disch_then (qspecl_then [`dfg`, `pending`, `mid`, `ops`, `ps'`] mp_tac) >>
+  simp[indexedListsTheory.LENGTH_MAPi, indexedListsTheory.EL_MAPi]
 QED
 
 Theorem rf_release_live_owned:
@@ -1585,6 +1607,7 @@ Proof
     (drule_all emit_input_plan_materialised >> simp[]) >>
   `LENGTH inputs <= LENGTH ps1.ps_stack` by
     (irule list_elem_count_dom_length >> simp[]) >>
+  drule emit_input_plan_vars_not_spilled >> strip_tac >>
   `ps2.ps_spilled = ps1.ps_spilled /\
    (!at. LIST_ELEM_COUNT at ps2.ps_stack = LIST_ELEM_COUNT at ps1.ps_stack)` by
     (drule_at (Pat `reorder_plan _ _ _ = _`) rf_reorder_spill_free >>
@@ -3016,31 +3039,26 @@ Proof
   TRY (drule (REWRITE_RULE [AND_IMP_INTRO] rf_do_restore_spill_lookup) >> simp[] >> NO_TAC)
 QED
 
-Theorem rf_reorder_steps_spill_lookup[local]:
-  !items ps ops ps'.
-  plan_steps (\(idx,op) p. reorder_one dfg targets idx op p)
-    items ps = (ops,ps') /\
-  (!off. ~MEM (SOSpill off) ops) /\
-  FLOOKUP ps'.ps_spilled x = SOME off ==>
-  FLOOKUP ps.ps_spilled x = SOME off
-Proof
-  Induct >- simp[foldlSimTheory.plan_steps_def] >>
-  rpt gen_tac >> strip_tac >>
-  drule plan_steps_cons_result >> strip_tac >>
-  first_x_assum (drule_at (Pos hd)) >>
-  simp[] >> strip_tac >> gvs[MEM_APPEND] >>
-  PairCases_on `h` >> gvs[] >>
-  drule (REWRITE_RULE [AND_IMP_INTRO] rf_reorder_one_spill_lookup) >> simp[]
-QED
-
 Theorem rf_reorder_plan_spill_lookup:
   reorder_plan dfg targets ps = (ops,ps') /\
   (!off. ~MEM (SOSpill off) ops) /\
   FLOOKUP ps'.ps_spilled x = SOME off ==>
   FLOOKUP ps.ps_spilled x = SOME off
 Proof
-  rewrite_tac[reorder_plan_eq_plan_steps] >>
-  metis_tac[rf_reorder_steps_spill_lookup]
+  strip_tac >>
+  qspecl_then [`dfg`, `targets`, `ps`, `ops`, `ps'`,
+    `\st trace post. (!off'. ~MEM (SOSpill off') trace) /\
+       FLOOKUP post.ps_spilled x = SOME off ==> FLOOKUP st.ps_spilled x = SOME off`]
+    (mp_tac o BETA_RULE) reorder_plan_trace_relation >>
+  impl_tac
+  >- (rpt conj_tac
+      >- simp[]
+      >- metis_tac[MEM_APPEND]
+      >- metis_tac[rf_do_restore_spill_lookup]
+      >- metis_tac[rf_reduce_spill_free]
+      >- metis_tac[rf_reorder_one_spill_lookup]
+      >- first_assum ACCEPT_TAC) >>
+  simp[]
 QED
 
 Theorem rf_optimistic_spilled:

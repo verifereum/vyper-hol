@@ -11,6 +11,7 @@
 
 Theory genBlockSim
 Ancestors
+  reorderPreparationProps fnPlanLineageReorder
   venomFnInstsProofs operandInventory codegenReadyCompute regularEmitSim regularPlanSim preparedPrefixSim generatedPrefixSim generatedReorderSim regularMemorySim regularPostfixSim reorderSpillFresh prefixSpillReplay deepDupCallerSim blockSimHelpers stackOpSim stackOpAsmSim planWf prefixExec prefixSim mixedPrefixSim planSim asmSem planExec codegenRel asmIR stackPlanGen stackPlanTypes stackModel stackPlanOps venomExecSemantics venomInstProofs1 venomState venomInst venomWf venomEffects list rich_list arithmetic indexedLists instSimHelpers opcodeClass strongPrefixSim reorderSim emitInputSim planAlign doSwapSim emitSim asmOpSim spillSim allocMono cleanOpsSim planSpillBounds contextCodegenRelProps
   asmRunBounded
   doDupModel doDupCorrect emitOperandSim singleInputSim inputPlanSim inputMaterialised reduceDepthSim reorderCheckedSim operandPreparationSim spillPlanSim spillWordBounds memoryReadRel logEmitSim
@@ -2060,23 +2061,18 @@ QED
 
 Finalise emit_one_input_on_stack;
 
-Theorem assert_reorder_one[local]:
-  !dfg op ps rops p2.
-    reorder_plan dfg [op] ps = (rops,p2) ==>
-    reorder_one dfg [op] 0 op ps = (rops,p2)
-Proof
-  rpt gen_tac >>
-  simp[reorder_plan_def, MAPi_def, MAPi_ACC_def, LET_THM] >>
-  Cases_on `reorder_one dfg [op] 0 op ps` >> simp[]
-QED
-
 Theorem assert_reorder_spill_wf[local]:
   !dfg op ps rops p2 lo d.
     reorder_plan dfg [op] ps = (rops,p2) /\
+    (~is_var_operand op \/ FLOOKUP ps.ps_spilled op = NONE) /\
     stack_get_depth op ps.ps_stack = SOME d /\ d <= 15 ==>
     prefix_spill_wf initial_fmp lo rops ps
 Proof
-  rpt gen_tac >> strip_tac >> drule assert_reorder_one >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `d <= 16` by decide_tac >>
+  `reorder_one dfg [op] 0 op ps = (rops,p2)` by
+    metis_tac[reorder_plan_single_shallow] >>
+  pop_assum mp_tac >>
   simp[reorder_one_def, LET_THM, stack_get_unfixed_depth_empty_window,
        do_swap_def, prefix_spill_wf_def, spill_op_wf_def] >>
   rpt IF_CASES_TAC >> strip_tac >>
@@ -2086,6 +2082,7 @@ QED
 Theorem assert_reorder_full_rel[local]:
   !dfg op ps rops p2 lo vs st o2pc prog suffix d.
     reorder_plan dfg [op] ps = (rops,p2) /\
+    (~is_var_operand op \/ FLOOKUP ps.ps_spilled op = NONE) /\
     stack_get_depth op ps.ps_stack = SOME d /\ d <= 15 /\
     op <> dead_stack_marker /\
     (!at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
@@ -2103,7 +2100,7 @@ Theorem assert_reorder_full_rel[local]:
       st2.as_stack <> [] /\
       operand_val vs lo op = SOME (HD st2.as_stack)
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `1 <= LENGTH ps.ps_stack` by
     (drule stack_get_depth_bound >> simp[]) >>
   `prefix_wf lo (LENGTH ps.ps_stack) rops` by
@@ -2117,7 +2114,7 @@ Proof
   drule_all mixed_prefix_venom_asm_rel >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
   `reorder_one dfg [op] 0 op ps = (rops,p2)` by
-    metis_tac[assert_reorder_one] >>
+    (`d <= 16` by decide_tac >> metis_tac[reorder_plan_single_shallow]) >>
   `plan_stack_sem_eq lo vs
       (apply_prefix_ops initial_fmp lo rops ps).ps_stack p2.ps_stack /\
    (apply_prefix_ops initial_fmp lo rops ps).ps_spilled = p2.ps_spilled /\
@@ -2199,6 +2196,7 @@ Proof
     operand_val vs lo op = operand_val vs lo at` by
     (drule_at (Pat `emit_input_plan _ _ _ _ = _`)
        emit_input_plan_inventory_subset >> simp[] >> metis_tac[]) >>
+  drule emit_single_input_not_spilled >> disch_tac >>
   drule_all assert_reorder_full_rel >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
   qexistsl_tac [`st2`, `TL st2.as_stack`] >>
@@ -2229,9 +2227,9 @@ Proof
     mp_tac (delet reorder_plan_wf_len) >> simp[] >> strip_tac >>
   `prefix_wf lo (LENGTH ps.ps_stack) (inp ++ reo)` by
     (irule prefix_wf_append >> simp[]) >>
-  drule_all assert_reorder_one >> strip_tac >>
-  qspecl_then [`dfg`, `[op]`, `0`, `op`, `p1`, `lo`]
-    mp_tac (delet reorder_one_wf_len) >> simp[] >> strip_tac >>
+  `1 <= LENGTH p2.ps_stack` by
+    (qspecl_then [`dfg`, `[op]`, `p1`, `reo`, `p2`]
+       mp_tac reorder_plan_target_length >> simp[]) >>
   simp[prefix_end_len_append] >>
   metis_tac[prefix_wf_every_prefix_op]
 QED
@@ -2276,6 +2274,9 @@ Proof
     (drule_at (Pat `emit_one_input _ _ _ _ = _`)
        emit_one_input_inventory_subset >> metis_tac[]) >>
   drule emit_one_input_on_stack >> simp[] >> strip_tac >>
+  `~is_var_operand op \/ FLOOKUP p1.ps_spilled op = NONE` by
+    (qspecl_then [`ASSERT`, `nl`, `op`, `ps`] mp_tac emit_one_input_var_not_spilled >>
+     simp[finite_mapTheory.flookup_thm] >> metis_tac[]) >>
   irule reorder_single_op_val_on_tos >> simp[] >>
   qexistsl [`dfg`, `initial_fmp`, `p1`] >>
   goal_assum (drule_at (Pat `reorder_plan _ _ _ = _`)) >> simp[] >>
@@ -2588,7 +2589,11 @@ Proof
   `plan_stack_sem_eq lo vs
     (apply_prefix_ops initial_fmp lo rops
       (apply_prefix_ops initial_fmp lo iops ps)).ps_stack rps.ps_stack` by
-    (irule reorder_plan_materialised_stack_value_replay >> metis_tac[]) >>
+    (drule emit_input_plan_vars_not_spilled >> disch_tac >>
+     qspecl_then [`dfg`, `inputs`, `ips`, `rops`, `rps`,
+       `apply_prefix_ops initial_fmp lo iops ps`, `lo`, `vs`]
+       mp_tac reorder_plan_materialised_stack_value_replay >>
+     simp[] >> metis_tac[]) >>
   `plan_stack_rel lo vs rps.ps_stack mid.as_stack` by
     (irule plan_stack_rel_sem_eq >>
      qexists_tac `(apply_prefix_ops initial_fmp lo rops
@@ -3394,7 +3399,7 @@ Resume gen_inst_abort_sim_reloc[prefix_wf]:
 QED
 
 (* hd_zero: cond_op value (0w) is at HD of asm stack after prefix.
-   Uses emit_one_input alignment + reorder_single_op_val_on_tos_deep. *)
+   Uses input alignment and the singleton reorder value theorem. *)
 Resume gen_inst_abort_sim_reloc[hd_zero]:
   (* emit_input_plan for single operand = emit_one_input *)
   `emit_one_input ASSERT_UNREACHABLE next_liveness cond_op ps =
@@ -3449,16 +3454,11 @@ Resume gen_inst_abort_sim_reloc[main]:
           Q.EXISTS_TAC `d` >> simp[] >>
           first_x_assum match_mp_tac >> simp[])
       >> (disj2_tac >> simp[]))) >> strip_tac >>
-  (* nonempty via reorder_one_wf_len + length chain *)
+  `~is_var_operand cond_op \/ FLOOKUP ps1.ps_spilled cond_op = NONE` by
+    metis_tac[emit_single_input_not_spilled] >>
   `st_mid.as_stack <> []` by (
-    `reorder_one dfg [cond_op] 0 cond_op ps1 = (reorder_ops, ps4)` by (
-      qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
-      simp[reorder_plan_def, combinTheory.o_DEF,
-           indexedListsTheory.MAPi_def, LET_THM] >>
-      pairarg_tac >> simp[]) >>
     `1 <= LENGTH ps4.ps_stack` by (
-      qspecl_then [`dfg`, `[cond_op]`, `0`, `cond_op`, `ps1`,
-        `label_offsets`] mp_tac (delet reorder_one_wf_len) >>
+      drule_at (Pat `reorder_plan _ _ _ = _`) reorder_plan_target_length >>
       simp[]) >>
     `LENGTH st_mid.as_stack = LENGTH ps4.ps_stack` by (
       qpat_x_assum `LENGTH st_mid.as_stack = _` mp_tac >>
@@ -3480,17 +3480,9 @@ Resume gen_inst_abort_sim_reloc[main]:
     (drule_at (Pat `emit_one_input _ _ _ _ = _`)
        emit_one_input_inventory_subset >> metis_tac[]) >>
   `operand_val vs label_offsets cond_op = SOME (HD st_mid.as_stack)` by (
-    match_mp_tac reorder_single_op_val_on_tos >>
-    Q.EXISTS_TAC `dfg` >> Q.EXISTS_TAC `ps1` >>
-    Q.EXISTS_TAC `reorder_ops` >> Q.EXISTS_TAC `ps4` >>
-    rpt conj_tac
-    >- first_assum ACCEPT_TAC
-    >- (Q.EXISTS_TAC `d` >> simp[])
-    >- gs[]
-    >- first_assum ACCEPT_TAC
-    >- simp[]
-    >- metis_tac[]
-    >> metis_tac[]) >>
+    qspecl_then [`dfg`, `cond_op`, `ps1`, `reorder_ops`, `ps4`,
+                 `label_offsets`, `vs`, `st_mid.as_stack`]
+      mp_tac reorder_single_op_val_on_tos >> simp[] >> metis_tac[]) >>
   (* conclude *)
   gvs[]
 QED
@@ -3511,17 +3503,8 @@ Resume gen_inst_abort_sim_reloc[as_stack_decompose]:
     qspecl_then [`dfg`, `[cond_op]`, `ps1`, `label_offsets`]
       mp_tac (delet reorder_plan_wf_len) >>
     simp[]) >>
-  (* 1 <= LENGTH ps4.ps_stack via reorder_one_wf_len *)
-  `1 <= LENGTH ps4.ps_stack` by (
-    `reorder_one dfg [cond_op] 0 cond_op ps1 = (reorder_ops, ps4)` by (
-      qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
-      simp[reorder_plan_def, combinTheory.o_DEF,
-           indexedListsTheory.MAPi_def, LET_THM] >>
-      pairarg_tac >> simp[]) >>
-    qspecl_then [`dfg`, `[cond_op]`, `0`, `cond_op`, `ps1`,
-      `label_offsets`]
-      mp_tac (delet reorder_one_wf_len) >>
-    simp[]) >>
+  `1 <= LENGTH ps4.ps_stack` by
+    (drule_at (Pat `reorder_plan _ _ _ = _`) reorder_plan_target_length >> simp[]) >>
   (* Chain: LENGTH st_mid.as_stack = LENGTH ps4.ps_stack *)
   `LENGTH st_mid.as_stack = LENGTH ps4.ps_stack` by
     fs[prefix_end_len_append] >>
@@ -3761,6 +3744,7 @@ QED
 
 Theorem assign_singleton_reorder_shallow[local]:
   !dfg op ps d.
+    (~is_var_operand op \/ FLOOKUP ps.ps_spilled op = NONE) /\
     stack_get_depth op ps.ps_stack = SOME d /\ d <= 16 ==>
     reorder_plan dfg [op] ps =
       if d = 0 then ([], ps)
@@ -3769,10 +3753,11 @@ Theorem assign_singleton_reorder_shallow[local]:
           stack_poke 0 op (stack_poke d (stack_peek 0 ps.ps_stack) ps.ps_stack))
       else ([SOSwap d], ps with ps_stack := stack_swap d ps.ps_stack)
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule stack_get_depth_props >> strip_tac >>
-  simp[reorder_plan_def, indexedListsTheory.MAPi_def, FOLDL,
-       reorder_one_def, stack_get_unfixed_depth_def] >>
+  `reorder_plan dfg [op] ps = reorder_one dfg [op] 0 op ps` by
+    metis_tac[reorder_plan_single_shallow] >>
+  simp[reorder_one_def, stack_get_unfixed_depth_def] >>
   Cases_on `d = 0` >- gvs[] >>
   `0 < LENGTH ps.ps_stack` by decide_tac >>
   simp[do_swap_def] >>
@@ -3781,6 +3766,7 @@ QED
 
 Theorem assign_singleton_reorder_sim[local]:
   !dfg op ps d rops ps' lo vs st o2pc prog.
+    (~is_var_operand op \/ FLOOKUP ps.ps_spilled op = NONE) /\
     stack_get_depth op ps.ps_stack = SOME d /\ d <= 16 /\
     reorder_plan dfg [op] ps = (rops, ps') /\
     op <> dead_stack_marker /\
@@ -3795,10 +3781,9 @@ Theorem assign_singleton_reorder_sim[local]:
           venom_asm_rel lo ps' vs st' /\
           st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp rops)
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `reorder_one dfg [op] 0 op ps = (rops, ps')` by
-    (gvs[reorder_plan_def, indexedListsTheory.MAPi_def, FOLDL] >>
-     Cases_on `reorder_one dfg [op] 0 op ps` >> gvs[]) >>
+    metis_tac[reorder_plan_single_shallow] >>
   `prefix_wf lo (LENGTH ps.ps_stack) rops /\
    prefix_spill_wf initial_fmp lo rops ps /\ EVERY is_prefix_op rops` by
     (drule stack_get_depth_props >> strip_tac >>
@@ -3842,26 +3827,15 @@ Proof
   `residual_budget_wf spill_base [op] ps1` by
     (gvs[emit_input_plan_one] >>
      drule_all emit_one_input_residual_budget_wf >> simp[]) >>
-  `reorder_one dfg [op] 0 op ps1 = (rops, ps4)` by
-    (gvs[reorder_plan_def, indexedListsTheory.MAPi_def, FOLDL] >>
-     Cases_on `reorder_one dfg [op] 0 op ps1` >> gvs[]) >>
-  `residual_budget_wf spill_base [op] ps4 /\ 1 <= LENGTH ps4.ps_stack` by
-    (irule (SIMP_RULE (srw_ss()) []
-       (Q.SPECL [`dfg`, `[op]`, `0`, `op`]
-         reorder_one_residual_budget_wf)) >>
-     goal_assum $ drule_at Any >> simp[]) >>
-  `stack_peek 0 ps4.ps_stack = op` by
-    (irule (SIMP_RULE (srw_ss()) [stack_get_unfixed_depth_def]
-       (Q.SPECL [`dfg`, `[op]`, `0`, `op`] reorder_one_places)) >>
-     qexistsl_tac [`dfg`, `rops`, `ps1`] >> simp[]) >>
-  `plan_state_residual_wf spill_base [op] 0 ps4` by
-    (irule residual_budget_wf_to_residual >> simp[]) >>
+  `MEM op ps1.ps_stack` by
+    (drule stack_get_depth_props >> metis_tac[stack_peek_mem]) >>
+  `!x. LIST_ELEM_COUNT x [op] <= LIST_ELEM_COUNT x ps1.ps_stack` by
+    (gen_tac >> Cases_on `x = op` >> gvs[LIST_ELEM_COUNT_THM, GSYM LIST_ELEM_COUNT_MEM]) >>
   `plan_state_residual_wf spill_base [op] 1 ps4` by
-    (irule (SIMP_RULE (srw_ss()) []
-       (Q.SPECL [`spill_base`, `[op]`, `0`, `ps4`]
-         plan_state_residual_wf_fix_next)) >> simp[]) >>
-  drule (SIMP_RULE (srw_ss()) []
-    (Q.SPECL [`spill_base`, `[op]`] plan_state_residual_wf_pop)) >>
+    (qspecl_then [`spill_base`, `[op]`, `dfg`, `ps1`, `rops`, `ps4`]
+       mp_tac reorder_plan_materialised_arranged >> simp[] >>
+     metis_tac[]) >>
+  mp_tac (Q.SPECL [`spill_base`, `[op]`, `ps4`] plan_state_residual_wf_pop) >>
   simp[generated_plan_state_wf_def]
 QED
 
@@ -4572,11 +4546,11 @@ Proof
        (Q.SPECL [`dfg`, `[op]`] reorder_plan_preserves_not_mem_reachable)) >>
      disch_then drule_all >> simp[]) >>
   `stack_peek 0 ps4.ps_stack = op` by
-    (irule (SIMP_RULE (srw_ss()) [stack_get_unfixed_depth_def]
-       (Q.SPECL [`dfg`, `[op]`, `0`, `op`] reorder_one_places)) >>
-     qexistsl_tac [`dfg`, `rops`, `ps1`] >>
-     gvs[reorder_plan_def, indexedListsTheory.MAPi_def, FOLDL] >>
-     Cases_on `reorder_one dfg [op] 0 op ps1` >> gvs[]) >>
+    (drule_at (Pat `reorder_plan _ _ _ = _`) reorder_single_op_at_tos >>
+     impl_tac >- metis_tac[] >>
+     strip_tac >>
+     qspec_then `ps4.ps_stack` mp_tac LAST_EL >>
+     simp[stack_peek_def, arithmeticTheory.PRE_SUB1]) >>
   conj_tac
   >- (`generated_plan_state_wf spill_base
         (ps4 with ps_stack := stack_pop 1 ps4.ps_stack)` by
@@ -4641,6 +4615,7 @@ Proof
     operand_val vs lo op = operand_val vs lo at` by
     (drule_at (Pat `emit_input_plan _ _ _ _ = _`)
        emit_input_plan_inventory_subset >> simp[] >> metis_tac[]) >>
+  drule emit_single_input_not_spilled >> disch_tac >>
   drule_all assign_singleton_reorder_sim >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
   rename1 `venom_asm_rel lo ps4 vs st4` >>
@@ -6399,75 +6374,13 @@ Proof
   rpt strip_tac >>
   `residual_budget_wf spill_base [h;h'] ps1` by
     metis_tac[bump_emit_input_plan_residual_budget_wf] >>
-  qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
-  simp[reorder_plan_def, indexedListsTheory.MAPi_def,
-       indexedListsTheory.MAPi_ACC_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  `plan_state_residual_wf spill_base [h;h'] 0 ps1` by
-    (irule residual_budget_wf_to_residual >> simp[]) >>
-  `?d0. stack_get_unfixed_depth h 1 2 ps1.ps_stack = SOME d0` by
-    (qspecl_then [`spill_base`, `[h;h']`, `0`, `ps1`]
-       mp_tac materialised_pending_next_on_stack >> simp[]) >>
-  rename1 `stack_get_unfixed_depth h 1 2 ps1.ps_stack = SOME d0` >>
-  `residual_budget_wf spill_base [h;h'] ps' /\
-   2 <= LENGTH ps'.ps_stack` by
-    (qspecl_then [`dfg`, `[h;h']`, `0`, `h`, `ps1`, `ops`, `ps'`,
-       `spill_base`] mp_tac reorder_one_residual_budget_wf >> simp[]) >>
-  `!op. LIST_ELEM_COUNT op [h;h'] <=
-        LIST_ELEM_COUNT op ps'.ps_stack` by
-    (gen_tac >> Cases_on `MEM op [h;h']`
-     >- (qspecl_then [`dfg`, `[h;h']`, `0`, `h`, `ps1`, `ops`, `ps'`,
-           `spill_base`, `d0`] mp_tac reorder_one_materialised_counts >>
-         simp[] >> disch_then (qspec_then `op` mp_tac) >> strip_tac >>
-         qpat_assum `!x. LIST_ELEM_COUNT x [h; h'] <= _`
-           (qspec_then `op` assume_tac) >>
-         qpat_x_assum `MEM op [h; h']` mp_tac >> simp[] >> metis_tac[])
-     >> `LIST_ELEM_COUNT op [h;h'] = 0` by
-          (Cases_on `h = op` >> Cases_on `h' = op` >>
-           gvs[LIST_ELEM_COUNT_THM]) >> decide_tac) >>
-  `stack_peek 1 ps'.ps_stack = h` by
-    (qspecl_then [`dfg`, `[h;h']`, `0`, `h`, `ps1`, `ops`, `ps'`]
-       mp_tac reorder_one_places >> simp[]) >>
-  `plan_state_residual_wf spill_base [h;h'] 0 ps'` by
-    (irule residual_budget_wf_to_residual >> simp[]) >>
-  `plan_state_residual_wf spill_base [h;h'] 1 ps'` by
-    (qspecl_then [`spill_base`, `[h;h']`, `0`, `ps'`]
-       mp_tac plan_state_residual_wf_fix_next >> simp[]) >>
-  `?d1. stack_get_unfixed_depth h' 0 2 ps'.ps_stack = SOME d1` by
-    (qspecl_then [`spill_base`, `[h;h']`, `1`, `ps'`]
-       mp_tac materialised_pending_next_on_stack >> simp[]) >>
-  rename1 `stack_get_unfixed_depth h' 0 2 ps'.ps_stack = SOME d1` >>
-  `residual_budget_wf spill_base [h;h'] ps'' /\
-   2 <= LENGTH ps''.ps_stack` by
-    (qspecl_then [`dfg`, `[h;h']`, `1`, `h'`, `ps'`, `step_ops`, `ps''`,
-       `spill_base`] mp_tac reorder_one_residual_budget_wf >> simp[]) >>
-  `stack_peek 0 ps''.ps_stack = h'` by
-    (qspecl_then [`dfg`, `[h;h']`, `1`, `h'`, `ps'`, `step_ops`, `ps''`]
-       mp_tac reorder_one_places >> simp[]) >>
-  `stack_peek 1 ps''.ps_stack = h` by
-    (qspecl_then [`dfg`, `[h;h']`, `1`, `h'`, `ps'`, `step_ops`, `ps''`,
-       `0`, `d1`] mp_tac reorder_one_preserves_fixed >> simp[]) >>
-  `plan_state_residual_wf spill_base [h;h'] 0 ps''` by
-    (irule residual_budget_wf_to_residual >> simp[]) >>
-  `plan_state_residual_wf spill_base [h;h'] 1 ps''` by
-    (qspecl_then [`spill_base`, `[h;h']`, `0`, `ps''`]
-       mp_tac plan_state_residual_wf_fix_next >> simp[]) >>
-  `plan_state_residual_wf spill_base [h;h'] 2 ps''` by
-    (qspecl_then [`spill_base`, `[h;h']`, `1`, `ps''`]
-       mp_tac plan_state_residual_wf_fix_next >> simp[]) >>
-  `ps''.ps_stack =
-     stack_pop (LENGTH [h;h']) ps''.ps_stack ++ [h;h']` by
-    (irule fixed_suffix_decompose >> simp[] >>
-     gen_tac >> strip_tac >>
-     `i = 0 \/ i = 1` by decide_tac >> gvs[]) >>
-  `plan_slots_bounded spill_base
-       (ps'' with ps_stack := stack_pop 2 ps''.ps_stack) /\
-   spill_alloc_layout_wf ps''.ps_alloc ps''.ps_spilled /\
-   ALL_DISTINCT (stack_pop 2 ps''.ps_stack) /\
-   DISJOINT (set (stack_pop 2 ps''.ps_stack)) (FDOM ps''.ps_spilled)` by
-    (qspecl_then [`spill_base`, `[h;h']`, `ps''`]
-       mp_tac plan_state_residual_wf_pop >> simp[]) >>
-  gvs[generated_plan_state_wf_def]
+  `plan_state_residual_wf spill_base [h;h'] 2 ps4 /\
+   ps4.ps_stack = stack_pop 2 ps4.ps_stack ++ [h;h']` by
+    (qspecl_then [`spill_base`, `[h;h']`, `dfg`, `ps1`, `rops`, `ps4`]
+       mp_tac reorder_plan_materialised_arranged >> simp[] >>
+     metis_tac[]) >>
+  mp_tac (Q.SPECL [`spill_base`, `[h;h']`, `ps4`] plan_state_residual_wf_pop) >>
+  simp[generated_plan_state_wf_def]
 QED
 Theorem bump_apply_prefix_ops_ext_relevant[local]:
   !ops lo ps1 ps2.

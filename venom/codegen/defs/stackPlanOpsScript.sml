@@ -277,13 +277,37 @@ Definition reorder_one_def:
               (restore_ops ++ reduce_ops ++ swap1_ops ++ swap2_ops, ps4)
 End
 
-(* Reorder stack to match target_ops layout *)
+(* Restore targets, then reduce depth before any target slot is fixed. *)
+Definition reorder_prepare_plan_def:
+  reorder_prepare_plan targets ps =
+    let (restore_ops, restored) =
+      restore_spilled_plan (FILTER is_var_operand targets) ps in
+    let depth = (\op. case stack_get_depth op restored.ps_stack of
+                       NONE => 0 | SOME d => d) in
+    (* A wide incomplete layout has no materialised window to protect. *)
+    let ordered =
+      if LENGTH targets <= 17 \/
+         EVERY (\op. LIST_ELEM_COUNT op targets <=
+                    LIST_ELEM_COUNT op restored.ps_stack) targets
+      then QSORT (\a b. depth b <= depth a) targets
+      else [] in
+    let (spill_ops, prepared) =
+      FOLDL (\(ops,st) op.
+        let (step,st') =
+          reduce_depth_plan (LENGTH st.ps_stack - LENGTH targets)
+            targets op 0 0 st in
+        (ops ++ step,st')) ([] : stack_op list,restored) ordered in
+    (restore_ops ++ spill_ops,prepared)
+End
+
+(* Reorder the prepared stack to match the target layout. *)
 Definition reorder_plan_def:
   reorder_plan dfg target_ops ps =
-    FOLDL (λ(ops, ps) (idx, op).
-      let (step_ops, ps') = reorder_one dfg target_ops idx op ps in
-      (ops ++ step_ops, ps'))
-    ([] : stack_op list, ps) (MAPi (λi op. (i, op)) target_ops)
+    let (prep_ops, prepared) = reorder_prepare_plan target_ops ps in
+    FOLDL (\(ops,ps) (idx,op).
+      let (step_ops,ps') = reorder_one dfg target_ops idx op ps in
+      (ops ++ step_ops,ps'))
+    (prep_ops,prepared) (MAPi (\i op. (i,op)) target_ops)
 End
 
 (* Cost metric for dry-run comparison *)

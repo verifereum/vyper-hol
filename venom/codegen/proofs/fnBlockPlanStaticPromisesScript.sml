@@ -1,7 +1,7 @@
 Theory fnBlockPlanStaticPromises
 Ancestors
   fnPlanLineage fnBlockPlanStaticInventory fnBlockPlanStaticRetRegion
-  stackPlanOps stackPlanGen stackPlanTypes list
+  reorderPreparationProps stackPlanOps stackPlanGen stackPlanTypes list
 
 Theorem promise_do_dup[local]:
   !d ps. (SND (do_dup d ps)).ps_cleanup_promised = ps.ps_cleanup_promised
@@ -66,24 +66,29 @@ Proof
   metis_tac[inventory_do_swap_promised, pairTheory.SND]
 QED
 
-Theorem promise_reorder_fold[local]:
-  !items ops ps.
-  (SND (FOLDL (\(ops,ps) (idx,op).
-    let (step_ops,qs) = reorder_one dfg targets idx op ps in
-    (ops ++ step_ops,qs)) (ops,ps) items)).ps_cleanup_promised =
-  ps.ps_cleanup_promised
-Proof
-  Induct >> simp[LET_THM] >> rpt gen_tac >>
-  RULE_ASSUM_TAC (REWRITE_RULE [LET_THM]) >>
-  PairCases_on `h` >> simp[] >> pairarg_tac >> simp[] >>
-  metis_tac[promise_reorder_one, pairTheory.SND]
-QED
-
 Theorem promise_reorder[local]:
   !dfg targets ps. (SND (reorder_plan dfg targets ps)).ps_cleanup_promised =
   ps.ps_cleanup_promised
 Proof
-  simp[reorder_plan_def, LET_THM, SRULE [LET_THM] promise_reorder_fold]
+  rpt gen_tac >> Cases_on `reorder_plan dfg targets ps` >> simp[] >>
+  qspecl_then [`dfg`, `targets`, `ps`, `q`, `r`,
+    `\(st : plan_state) (ops : stack_op list) (post : plan_state).
+      post.ps_cleanup_promised = st.ps_cleanup_promised`]
+    (mp_tac o BETA_RULE) reorder_plan_trace_relation >>
+  impl_tac
+  >- (rpt conj_tac
+      >- simp[]
+      >- metis_tac[]
+      >- (rpt gen_tac >> strip_tac >>
+          qspecl_then [`op`, `st`] mp_tac promise_do_restore >> simp[])
+      >- (rpt gen_tac >> strip_tac >>
+          qspecl_then [`LENGTH st.ps_stack - LENGTH targets`, `targets`, `op`,
+            `0`, `0`, `st`] mp_tac promise_reduce_depth >> simp[])
+      >- (rpt gen_tac >> strip_tac >>
+          qspecl_then [`dfg`, `targets`, `idx`, `op`, `st`] mp_tac promise_reorder_one >>
+          simp[])
+      >- first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem promise_emit_one_input[local]:
