@@ -357,9 +357,9 @@ Proof
   rpt strip_tac >>
   gvs[compile_builtin_dispatch_body_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >>
-  qmatch_asmsub_abbrev_tac `as_ptr_val _ _ res` >>
+  qmatch_asmsub_abbrev_tac `as_stack_val _ res` >>
   Cases_on `res` >>
-  gvs[as_ptr_val_def, vv_operand_def, mk_ptr_def, markerTheory.Abbrev_def] >>
+  gvs[as_stack_val_def, vv_operand_def, markerTheory.Abbrev_def] >>
   metis_tac[ec_arith_result_not_label]
 QED
 

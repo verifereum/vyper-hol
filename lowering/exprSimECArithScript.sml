@@ -110,9 +110,11 @@ Proof
      gvs[well_typed_expr_def] >> metis_tac[]) >>
   gvs[compile_builtin_dispatch_body_def, as_ptr_val_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  qmatch_asmsub_abbrev_tac `as_ptr_val _ _ res` >>
+  FIRST [qmatch_asmsub_abbrev_tac `as_stack_val _ res`,
+         qmatch_asmsub_abbrev_tac `as_ptr_val _ _ res`] >>
   Cases_on `res` >>
-  gvs[as_ptr_val_def, contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
+  gvs[as_stack_val_def, as_ptr_val_def,
+      contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
   fs[markerTheory.Abbrev_def] >>
   metis_tac[ec_arith_result_not_label,
             compiler_make_array_result, alloc_buffer_not_label]
@@ -759,8 +761,8 @@ Proof
    mem_word_at (w2n w+32) t.vs_memory = n2w y` by
     gvs[mem_bytes_at_word_eq] >>
   drule_all ec_result_memory >> strip_tac >>
-  simp[exprLoweringTheory.as_ptr_val_def, contextTheory.mk_ptr_def,
-       vv_post_def, vv_holds_def, vv_at_def,
+  simp[exprLoweringTheory.as_stack_val_def, vv_place_ptr_def,
+       vv_post_def, vv_holds_def, vv_at_def, expr_val_rel_def, expr_val_at_def,
        vyperStateTheory.read_result_def, vyperStateTheory.return_def,
        evaluate_type_def, is_word_type_def, ec_result_val_wf,
        type_slot_size_def, wordsTheory.dimword_def, ec_point_footprint] >>
@@ -1926,7 +1928,7 @@ Resume ec_points_run[suffix]:
        vv_post H ctx func cenv cx e es sf sb s
          (SND (take_call_outcome NONE addr payload NONE es))
          (Value (mk_ec_result (r0,r1)))
-         (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) t` by
+         (FST (as_stack_val (expr_type e) (res,sb))) t` by
     (irule ec_suffix_pointer_post >> simp[] >>
      goal_assum (drule_at (Pat `(_ : operand # compile_state) = _`)) >> simp[] >>
      qexists_tac `aid` >> simp[] >>
@@ -1997,8 +1999,8 @@ Proof
   simp[Abbr `builtin`, Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
        compile_builtin_dispatch_body_def, lower_value_def, comp_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  qmatch_asmsub_abbrev_tac `as_ptr_val ann LocMemory result` >>
-  Cases_on `result` >> gvs[as_ptr_val_def]
+  qmatch_asmsub_abbrev_tac `as_stack_val ann result` >>
+  Cases_on `result` >> gvs[as_stack_val_def]
 QED
 
 Theorem ec_point_pointer_bound:
@@ -2351,7 +2353,7 @@ fun ec_path_tac run_th =
     `\w. ?a. r = INL a /\
        !(H:(bool # bytes32 # type_value) list # num list). valid_horizon cx st0 H es'.storage_trace ==>
          vv_post H ctx func cenv cx e es sf sb s es' a
-           (FST (as_ptr_val (expr_type e) LocMemory (res,sb))) w`,
+           (FST (as_stack_val (expr_type e) (res,sb))) w`,
     `expr_exit r`] mp_tac run_inst_seq_gas_path >>
   BETA_TAC >> reverse impl_tac >- (disch_then ACCEPT_TAC) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
@@ -2743,7 +2745,7 @@ Proof
   imp_res_tac ec_pre_types >> gvs[] >>
   rewrite_tac[expr_vv_sim_def] >> rpt strip_tac >>
   imp_res_tac compile_ec_operands >>
-  rename1 `vv = FST (as_ptr_val _ LocMemory (result_ptr,sb))` >>
+  rename1 `vv = FST (as_stack_val _ (result_ptr,sb))` >>
   `cs_extends sm sb` by
     (imp_res_tac ec_points_code_shape >>
      simp[cs_extends_def] >> qexists_tac `[]` >>
