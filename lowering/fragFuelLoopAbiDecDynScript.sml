@@ -3180,7 +3180,7 @@ Proof
        listTheory.FIND_thm]
 QED
 
-Theorem abi_dyn_observer_no_phi[local]:
+Theorem abi_dyn_observer_no_phi:
   !sa sb fn id. fn_has_code sa sb fn /\ no_phi_fn fn ==>
     no_phi_fn (frag_observer sa sb fn id)
 Proof

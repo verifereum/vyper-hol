@@ -5,7 +5,8 @@ Ancestors
   entryExternalParameterAdmissibility entryStateRel entryDecodePlanProps entryDispatchProps
   registrationSizeAdmissibility dispatchedValueSelection constSubst
   abiCallerBuiltinInput abiDecoderCoherence calldataSourceSize
-  vyperTypeSystem vyperTypeContract vyperTypeContractContext
+  vyperTypeSystem vyperTypeContract vyperTypeContractContext vyperTypeContractGetter
+  vyperContext e2eDefs finite_map
   compileVyper compileEnv moduleLowering supportedProgram list rich_list words
   vyperMisc vyperTypeArgFits
 
@@ -22,11 +23,34 @@ QED
 
 (* Allocation bounds depend on classified argument layout, not the package's
    raw-return flag. Keep that flag independent for the lookup corollary. *)
-Theorem registration_reject_member_package_inputs[local]:
+Theorem checked_external_parameter_types[local]:
+  !tops am tx name mut nr args rawdefaults ret fbody.
+    supported_declaration_headers tops /\ source_typing_ok tops am tx /\
+    lookup_function NONE name External tops =
+      SOME (mut,nr,args,rawdefaults,ret,fbody) ==>
+    params_ok (type_env tops) args
+Proof
+  rpt strip_tac >> drule lookup_function_External_cases >> strip_tac
+  >- (fs[source_typing_ok_def] >>
+      drule check_contract_main_module_allocated >> simp[] >> strip_tac >>
+      drule check_contract_runtime_function_body_MEM >>
+      disch_then (qspecl_then [`External`, `tops`, `NONE`, `ret`, `raw`, `nr`,
+        `mut`, `name`, `rawdefaults`, `fbody`, `args`] mp_tac) >>
+      simp[check_function_body_def, type_env_all_modules_def, type_env_def,
+           FUNION_FEMPTY_2]) >>
+  fs[source_typing_ok_def] >>
+  `module_allocated am.layouts tx.target NONE tops` by
+    (drule check_contract_main_module_allocated >> simp[]) >>
+  `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
+  drule_all checked_public_getter_params_ok >>
+  simp[type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2]
+QED
+
+Theorem registration_reject_member_package_inputs_with_defaults[local]:
   lower_vyper_runtime_unit tops policy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
-  MEM (mut,nr,rawret,name,args,[],ret,compiled_body) (FST (classify_functions tops)) /\
-  lookup_function NONE name External tops = SOME (mut,nr,args,[],ret,rawbody) /\
+  MEM (mut,nr,rawret,name,args,dflts,ret,compiled_body) (FST (classify_functions tops)) /\
+  lookup_function NONE name External tops = SOME (mut,nr,args,rawdefaults,ret,rawbody) /\
   set_external_package_target policy.rpol_target
     (package_external_fn tops ut nk (mut,nr,rr,name,args,[],ret,fbody)) =
     (lbl,ce,pos,mincd,pay,nr',key,ut',iv,fbody',rt) ==>
@@ -41,7 +65,7 @@ Theorem registration_reject_member_package_inputs[local]:
 Proof
   strip_tac >>
   `supported_declaration_headers tops` by fs[supported_program_def] >>
-  drule_all source_typing_ok_external_params_ok >> strip_tac >>
+  drule_all checked_external_parameter_types >> strip_tac >>
   `ALL_DISTINCT (MAP FST args)` by fs[params_ok_def] >>
   `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
     metis_tac[source_typing_ok_type_def_keys_distinct] >>
@@ -67,21 +91,21 @@ Proof
   suspend "parameters"
 QED
 
-Resume registration_reject_member_package_inputs[evaluate]:
+Resume registration_reject_member_package_inputs_with_defaults[evaluate]:
   irule well_formed_types_evaluate >>
   gvs[params_ok_def, EVERY_MAP, EVERY_MEM, pairTheory.FORALL_PROD] >>
   metis_tac[assignable_type_well_formed]
 QED
-Resume registration_reject_member_package_inputs[raw_package]:
+Resume registration_reject_member_package_inputs_with_defaults[raw_package]:
   Cases_on `package_external_fn tops ut nk (mut,nr,rr,name,args,[],ret,fbody)` >>
   PairCases_on `r` >> gvs[set_external_package_target_def]
 QED
-Resume registration_reject_member_package_inputs[opt_mmap]:
+Resume registration_reject_member_package_inputs_with_defaults[opt_mmap]:
   simp[OPT_MMAP_SOME_IFF, EVERY_MAP, EVERY_EL, LIST_EQ_REWRITE] >>
   fs[LIST_REL_EL_EQN, EL_MAP] >> rpt strip_tac >>
   first_x_assum (drule_then assume_tac) >> gvs[]
 QED
-Resume registration_reject_member_package_inputs[coherent]:
+Resume registration_reject_member_package_inputs_with_defaults[coherent]:
   `ce.ce_struct_fields =
      (build_compile_env tops External mut name args ret fbody ut).ce_struct_fields /\
    ce.ce_flag_n_members =
@@ -103,7 +127,7 @@ Resume registration_reject_member_package_inputs[coherent]:
   qexists_tac `build_compile_env tops External mut name args ret fbody ut` >>
   gvs[] >> irule abi_caller_coherent >> metis_tac[]
 QED
-Resume registration_reject_member_package_inputs[head_eq]:
+Resume registration_reject_member_package_inputs_with_defaults[head_eq]:
   `mincd = 4 + SUM (MAP (\(nm,ty).
       abi_embedded_static_size ce.ce_struct_fields ty) args)` by
     (Cases_on `ret = NoneT` >>
@@ -117,10 +141,10 @@ Resume registration_reject_member_package_inputs[head_eq]:
     (qspec_then `x` mp_tac) >> simp[] >> strip_tac >>
   drule calldata_coherent_embedded_size >> gvs[EL_MAP]
 QED
-Resume registration_reject_member_package_inputs[head_bound]:
+Resume registration_reject_member_package_inputs_with_defaults[head_bound]:
   Cases_on `classify_functions tops` >> rename1 `classify_functions tops = (exts,more)` >>
   PairCases_on `more` >>
-  `fn_allocs_ok tops (mut,nr,rawret,name,args,[],ret,compiled_body)` by
+  `fn_allocs_ok tops (mut,nr,rawret,name,args,dflts,ret,compiled_body)` by
     (irule lower_vyper_runtime_unit_allocs_ok >> fs[] >> metis_tac[]) >>
   `ce.ce_struct_fields = make_struct_fields_map tops` by
     (Cases_on `ret = NoneT` >>
@@ -139,10 +163,10 @@ Resume registration_reject_member_package_inputs[head_bound]:
   gvs[fn_allocs_ok_def, build_compile_env_ce_struct_fields, dimword_def] >>
   decide_tac
 QED
-Resume registration_reject_member_package_inputs[parameters]:
+Resume registration_reject_member_package_inputs_with_defaults[parameters]:
   Cases_on `classify_functions tops` >> rename1 `classify_functions tops = (exts,more)` >>
   PairCases_on `more` >>
-  `fn_allocs_ok tops (mut,nr,rawret,name,args,[],ret,compiled_body)` by
+  `fn_allocs_ok tops (mut,nr,rawret,name,args,dflts,ret,compiled_body)` by
     (irule lower_vyper_runtime_unit_allocs_ok >> fs[] >> metis_tac[]) >>
   fs[LIST_REL_EL_EQN] >>
   rpt strip_tac >> simp[EL_ZIP, EL_MAP] >>
@@ -165,7 +189,30 @@ Resume registration_reject_member_package_inputs[parameters]:
      goal_assum (drule_at Any) >> simp[] >> metis_tac[EL_MEM]) >>
   gvs[var_location_memory_size_def, dimword_def]
 QED
-Finalise registration_reject_member_package_inputs
+Finalise registration_reject_member_package_inputs_with_defaults
+
+Theorem registration_reject_member_package_inputs:
+  lower_vyper_runtime_unit tops policy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  MEM (mut,nr,rawret,name,args,[],ret,compiled_body) (FST (classify_functions tops)) /\
+  lookup_function NONE name External tops = SOME (mut,nr,args,[],ret,rawbody) /\
+  set_external_package_target policy.rpol_target
+    (package_external_fn tops ut nk (mut,nr,rr,name,args,[],ret,fbody)) =
+    (lbl,ce,pos,mincd,pay,nr',key,ut',iv,fbody',rt) ==>
+  ALL_DISTINCT (MAP FST args) /\ pos = build_positional_args ce args /\
+  ?tvs. OPT_MMAP (evaluate_type (type_env tops)) (MAP SND args) = SOME tvs /\
+    mincd = 4 + SUM (MAP tv_abi_size tvs) /\ mincd < dimword (:256) /\
+    LIST_REL (\(argname,ty) (ty',tv). ty = ty' /\
+      abi_decoder_coherent ce (type_env tops) ce.ce_struct_fields ty tv /\
+      (?loc. FLOOKUP ce.ce_vars argname = SOME loc /\
+        var_location_memory_size loc = SOME (type_memory_size tv)) /\
+      type_memory_size tv < dimword (:256)) args (ZIP (MAP SND args,tvs))
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`dflts` |-> `[]:expr list`, `rawdefaults` |-> `[]:expr list`]
+    (SPEC_ALL registration_reject_member_package_inputs_with_defaults)) >>
+  asm_rewrite_tac[]
+QED
 
 Theorem registration_reject_classified_package_inputs:
   lower_vyper_runtime_unit tops policy = SOME unit /\
@@ -189,6 +236,29 @@ Proof
   drule_all classified_external_source_lookup >> strip_tac >>
   irule registration_reject_member_package_inputs >>
   Cases_on `rawdefaults` >> gvs[subst_consts_expr_def] >> metis_tac[]
+QED
+
+Theorem registration_reject_classified_defaults_metadata:
+  lower_vyper_runtime_unit tops policy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  MEM (mut,nr,rr,name,args,dflts,ret,fbody) (FST (classify_functions tops)) /\
+  set_external_package_target policy.rpol_target
+    (package_external_fn tops ut nk (mut,nr,rr,name,args,[],ret,fbody)) =
+    (lbl,ce,pos,mincd,pay,nr',key,ut',iv,fbody',rt) ==>
+  ALL_DISTINCT (MAP FST args) /\ pos = build_positional_args ce args /\
+  ?tvs. OPT_MMAP (evaluate_type (type_env tops)) (MAP SND args) = SOME tvs /\
+    mincd = 4 + SUM (MAP tv_abi_size tvs) /\ mincd < dimword (:256) /\
+    LIST_REL (\(argname,ty) (ty',tv). ty = ty' /\
+      abi_decoder_coherent ce (type_env tops) ce.ce_struct_fields ty tv /\
+      (?loc. FLOOKUP ce.ce_vars argname = SOME loc /\
+        var_location_memory_size loc = SOME (type_memory_size tv)) /\
+      type_memory_size tv < dimword (:256)) args (ZIP (MAP SND args,tvs))
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_external_names_distinct] >>
+  drule_all classified_external_source_lookup >> strip_tac >>
+  irule registration_reject_member_package_inputs_with_defaults >> metis_tac[]
 QED
 
 Theorem registration_reject_package_inputs:
