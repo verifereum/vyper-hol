@@ -160,7 +160,7 @@ Proof
   qpat_x_assum `!ce off sz st. _` irule >> simp[]
 QED
 
-Theorem register_constructor_args_defaults[local]:
+Theorem register_constructor_args_defaults:
   !args cenv off sz st.
     (FST (compile_register_constructor_args cenv args off sz st)).ce_func_defaults =
     cenv.ce_func_defaults
