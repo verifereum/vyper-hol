@@ -16735,7 +16735,7 @@ Resume body_assign_nested_empty_immutable_full[write_post]:
            qexistsl_tac [`cenv`,`dty`,`env`] >> simp[]) >>
         simp[bind_def]) >>
      metis_tac[gas_admissible_result]) >>
-  drule_all bodyFullAssignImmutableEmptyTheory.immutable_nested_write_as_root >>
+  drule_all immutable_augassign_path_write_source >>
   strip_tac >> gvs[] >>
   `!tail. write_place cx (ImmutablePlace NONE id path) (default_value dtv)
       (mid with gas_obs := tail) = (INL (),ff with gas_obs := tail)` by

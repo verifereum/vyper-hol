@@ -192,31 +192,6 @@ QED
 
 Finalise immutable_empty_store_ghost
 
-Theorem immutable_nested_write_as_root:
-  ALOOKUP es.immutables cx.txn.target = SOME imms /\
-  FLOOKUP (get_source_immutables src imms) id = SOME (itv,iv) /\
-  evaluate_subscripts itv iv path = INL old /\
-  write_place cx (ImmutablePlace src id path) v es = (wr,ee) /\
-  stmt_res_ok lctx wr ==>
-  wr = INL () /\
-  ?new. assign_subscripts itv iv path (Replace v) = INL new /\
-        write_place cx (ImmutablePlace src id []) new es = (INL (),ee)
-Proof
-  strip_tac >>
-  `get_immutables cx src es = (INL (get_source_immutables src imms),es)` by
-    simp[get_immutables_def, get_address_immutables_def,
-         lift_option_type_def, bind_def, vyperStateTheory.return_def] >>
-  qpat_x_assum `write_place _ _ _ _ = _` mp_tac >>
-  simp[write_place_def, bind_def, lift_option_type_def, lift_sum_def,
-       vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
-  Cases_on `assign_subscripts itv iv path (Replace v)` >>
-  simp[assign_subscripts_def, lift_sum_def, vyperStateTheory.return_def,
-       vyperStateTheory.raise_def]
-  >- (strip_tac >> drule_all set_immutable_success_from_get >> simp[]) >>
-  strip_tac >> drule_all aug_place_replace_read_error >>
-  strip_tac >> gvs[stmt_res_ok_def]
-QED
-
 Theorem immutable_root_span:
   body_inv tops ctx ce cx /\ struct_args_unique tops /\
   ce.ce_is_ctor /\ dead_lo_ok H D lo ce cx /\
