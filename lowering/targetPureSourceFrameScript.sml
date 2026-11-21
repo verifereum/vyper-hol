@@ -126,9 +126,10 @@ Resume effect_free_source_mutual[builtin_ordinary]:
            a with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>` mp_tac) >>
   simp[] >>
   (impl_tac >- (rpt conj_tac >> rpt strip_tac >>
-    gvs[code_slice_source_SOME, supported_expr_exists_def, expr_effect_root_def] >>
+    gvs[code_slice_source_SOME, is_self_codesize_def,
+        supported_expr_exists_def, expr_effect_root_def] >>
     metis_tac[])) >>
-  simp[evaluation_state_component_equality]
+  imp_res_tac if_lift_sum_state >> simp[evaluation_state_component_equality]
 QED
 
 Finalise effect_free_source_mutual[local]
