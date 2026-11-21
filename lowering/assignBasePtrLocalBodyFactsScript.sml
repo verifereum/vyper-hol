@@ -42,9 +42,16 @@ Proof
      Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
      rename1 `FLOOKUP env.var_assignable id = SOME asg` >> Cases_on `asg` >> gvs[]) >>
   drule_then strip_assume_tac supported_expr_body_calls >>
-  drule_all_then assume_tac body_inv_const_name_free_mods >>
+  `~supported_expr_exists (const_name_root_mods mods) e` by
+    (drule_then assume_tac contract_inv_cenv_modules >>
+     drule_then mp_tac stmt_exprs_ok_module_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
   drule_then strip_assume_tac main_module_code_and_gate >>
-  `byte_widths_expr e /\ alloc_limits_expr cenv e` by
+  `alloc_limits_expr cenv e` by
+    fs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def] >>
+  `~is_extcode e` by
+    (drule_then ACCEPT_TAC allocLimitsPropsTheory.alloc_limits_expr_not_extcode) >>
+  `byte_widths_expr e` by
     (fs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
         supported_assignment_exists_def, allocLimitsTheory.alloc_limits_stmt_def] >>
      CCONTR_TAC >> fs[] >>
@@ -91,7 +98,8 @@ Proof
   drule_then assume_tac body_inv_module >>
   `supported_expr tops e` by fs[supported_stmt_def, supported_assignment_def] >>
   `~supported_expr_exists (const_name_root cx) e` by
-    metis_tac[body_inv_const_name_free] >>
+    (drule_all body_inv_stmt_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
   drule_all_then assume_tac expr_sim_inv_no_unallocated_bare_globals >>
   `expr_sim_inv_mods [(NONE,tops)] cenv cx env es` by fs[expr_sim_inv_split_def] >>
   drule_all_then strip_assume_tac
