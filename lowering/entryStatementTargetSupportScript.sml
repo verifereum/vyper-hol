@@ -23,7 +23,11 @@ Theorem supported_target_index:
   supported_target tops bindings bt /\ MEM e (target_indices bt) ==>
   supported_expr tops e
 Proof
-  cheat
+  Cases_on `bt` >>
+  strip_tac >>
+  fs[supported_target_def, optionTheory.IS_SOME_EXISTS] >>
+  TRY (fs[supportedExprsTheory.target_indices_def] >> NO_TAC) >>
+  metis_tac[supported_target_info_index]
 QED
 
 Theorem supported_assignment_tuple_index:
