@@ -103,7 +103,6 @@ QED
 
 Theorem aug_place_target_entry_typed:
   expr_sim_inv cenv cx env s /\
-  supported_target_info tops bindings t = SOME info /\
   eval_target_place cx t s = (INL p,s') /\
   lookup_scopes id s'.scopes = SOME entry ==>
   value_has_type entry.type entry.value /\ well_formed_type_value entry.type
@@ -349,8 +348,7 @@ Proof
 QED
 
 Theorem aug_place_memory_load:
-  expr_sim_inv cenv cx env es /\
-  supported_target_info tops bindings t = SOME info /\
+  target_pre cenv cx env t es /\ type_place_target env t = SOME (Type ty) /\
   eval_target_place cx t es = (INL (MemoryPlace id path),st) /\
   read_place cx (MemoryPlace id path) st = (INL cur,st') /\
   stmt_state_rel H ctx func cenv cx st s /\
@@ -361,6 +359,7 @@ Theorem aug_place_memory_load:
 Proof
   rpt strip_tac >>
   drule_all aug_place_target_memory_live >> strip_tac >>
+  `expr_sim_inv cenv cx env es` by fs[target_pre_def] >>
   `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by
     metis_tac[aug_place_target_entry_typed] >>
   gvs[place_ptr_rel_def] >>
