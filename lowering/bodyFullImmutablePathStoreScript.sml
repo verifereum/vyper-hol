@@ -10,7 +10,7 @@ Ancestors
   exprSimCopy wordLoadStorePtr venomMemProofs calldataTypedRobustPtr
   fragGasOriginPtrExec fragGasOriginPtrDead immutableCopyWordsPath immutableDeployOperandTransfer
   venomMemProps exprLowering localValueStoreProps
-  compileEnv bodyMemoryDefs words arithmetic exprSimProps ptrDiscipline loweringStateRelDefs
+  compileEnv bodyMemoryDefs words arithmetic exprSimProps ptrDiscipline loweringStateRelDefs stateRelProj
   robustCopyTransportPtr valueEncodingProps valueTypingMemoryProps assignTuplePtrStoreWord
   bodySimAugPlaceLoad exprSimPopNestedLocalSource exprSimSubscriptArrayLiveImmutableView
   exprSimHypsDefs vyperTypeSystem vyperTypeInvariants vyperTargetPlaceWrite
@@ -37,6 +37,22 @@ Definition immutable_path_store_post_def:
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts
 End
+
+Theorem immutable_path_store_base_operand:
+  stmt_state_rel H ctx func ce cx ee s /\ ghost_inv_at D lo d ce cx ee G tn s /\
+  local_ptrs_reserved ce sa /\ lo <> 0 ==>
+  !base. ce.ce_imm_alloca = SOME base ==> eval_operand base s = SOME 0w /\
+    copy_old_operand sa base /\ op_taint tn base = {} /\ op_prov G base = NONE
+Proof
+  strip_tac >>
+  drule_then (assume_tac o REWRITE_RULE [immutable_base_zero_def])
+    stmt_state_rel_immutable_base_zero >>
+  `!x. ce.ce_imm_alloca = SOME (Var x) ==>
+       FLOOKUP G x = NONE /\ op_taint tn (Var x) = {}` by
+    fs[ghost_inv_at_def] >>
+  Cases >> simp[copy_old_operand_def,op_prov_def] >>
+  simp[op_taint_def] >> metis_tac[local_ptrs_reserved_imm_base,op_taint_def]
+QED
 
 Theorem immutable_path_store_word:
   compile_assign_value ce dst LocCode op T loc ty sty bytes sa = ((),sb) /\
