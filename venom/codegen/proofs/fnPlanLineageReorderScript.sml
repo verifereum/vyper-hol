@@ -6,7 +6,7 @@
  *)
 
 Theory fnPlanLineageReorder
-Ancestors reduceDepthSim
+Ancestors reduceDepthSim reorderPreparationProps reorderPreparationInventoryProps
   inputMaterialised reorderStages
   reorderSim
   foldlSim doSwapSim spillSim instSimHelpers strongPrefixSim planSpillBounds dfgDefs
@@ -35,16 +35,8 @@ Proof
   Cases_on `alloc_spill_slot ps.ps_alloc` >> gvs[] >> metis_tac[]
 QED
 
-Theorem select_spill_candidate_var_not_pending:
-  !stk pending target_dist target_len cand.
-    select_spill_candidate stk pending target_dist target_len = SOME cand ==>
-    ~MEM (stack_peek cand stk) pending /\
-    is_var_operand (stack_peek cand stk)
-Proof
-  rpt gen_tac >> strip_tac >>
-  fs[select_spill_candidate_def, LET_THM] >>
-  imp_res_tac FIND_SOME_MEM >> gvs[]
-QED
+Theorem select_spill_candidate_var_not_pending =
+  reorderPreparationInventoryPropsTheory.select_spill_candidate_var_not_pending
 
 Theorem reduce_depth_plan_inventory_mono:
   !fuel pending target_op f ps ops ps' base x.
@@ -250,10 +242,10 @@ Theorem reorder_plan_target_length:
     reorder_plan dfg targets ps = (ops,qs) ==>
     LENGTH targets <= LENGTH qs.ps_stack
 Proof
-  rpt gen_tac >> simp[reorder_plan_def] >> strip_tac >>
-  irule reorder_fold_target_length >>
-  qexistsl [`[]`, `dfg`, `MAPi (\i op. (i,op)) targets`, `ops`, `ps`] >>
-  simp[]
+  rpt gen_tac >> simp[reorder_plan_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  drule_all reorder_prepare_materialised_counts >> strip_tac >>
+  drule_all reorder_fold_target_length >> simp[]
 QED
 
 Theorem reduce_depth_plan_not_spilled:
@@ -324,19 +316,21 @@ Theorem reorder_plan_pending_not_spilled:
     MEM y pending /\ y NOTIN FDOM ps.ps_spilled ==>
     y NOTIN FDOM (SND (reorder_plan dfg pending ps)).ps_spilled
 Proof
-  rpt gen_tac >> strip_tac >>
-  rewrite_tac[reorder_plan_def] >>
-  `!xs acc. y NOTIN FDOM (SND acc).ps_spilled ==>
-    y NOTIN FDOM (SND (FOLDL
-      (\(ops,ps) (idx,op).
-        let (step_ops,ps') = reorder_one dfg pending idx op ps in
-        (ops ++ step_ops,ps')) acc xs)).ps_spilled` suffices_by
-    (disch_then irule >> simp[]) >>
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  PairCases_on `acc` >> PairCases_on `h` >> simp[LET_THM] >>
-  pairarg_tac >> gvs[LET_THM] >> first_x_assum irule >> simp[] >>
-  drule_all reorder_one_pending_not_spilled >>
-  disch_then (qspecl_then [`dfg`, `h0`, `h1`] mp_tac) >> simp[]
+  rpt gen_tac >> strip_tac >> Cases_on `reorder_plan dfg pending ps` >>
+  simp[] >>
+  qspecl_then [`dfg`, `pending`, `ps`, `q`, `r`,
+    `\(st : plan_state) (trace : stack_op list) (post : plan_state).
+       y NOTIN FDOM st.ps_spilled ==> y NOTIN FDOM post.ps_spilled`]
+    mp_tac reorder_plan_trace_relation >>
+  simp[] >> impl_tac
+  >- (rpt conj_tac >> rpt gen_tac >> strip_tac
+      >- (qspecl_then [`op`, `st`, `y`] mp_tac do_restore_preserves_not_spilled >>
+          simp[])
+      >- (qspecl_then [`LENGTH st.ps_stack - LENGTH pending`, `pending`, `op`,
+            `0`, `0`, `st`, `y`] mp_tac reduce_depth_plan_not_spilled >> simp[])
+      >> (qspecl_then [`dfg`, `pending`, `idx`, `op`, `st`, `y`]
+           mp_tac reorder_one_pending_not_spilled >> simp[])) >>
+  simp[]
 QED
 
 Theorem plan_steps_reorder_inventory_mono[local]:
@@ -375,30 +369,18 @@ Theorem reorder_plan_inventory_mono:
        LIST_ELEM_COUNT x qs.ps_stack +
        (if x IN FDOM qs.ps_spilled then 1 else 0))
 Proof
-  rpt gen_tac >> strip_tac >> irule plan_steps_reorder_inventory_mono >>
-  simp[] >> qexistsl_tac [`dfg`, `MAPi (\i op. (i,op)) pending`, `ops`] >>
-  simp[GSYM reorder_plan_eq_plan_steps, EVERY_EL,
-       indexedListsTheory.EL_MAPi, indexedListsTheory.LENGTH_MAPi]
+  rpt gen_tac >> strip_tac >>
+  drule reorder_plan_split >> strip_tac >>
+  drule_all reorder_prepare_keeps_budget >> strip_tac >>
+  qspecl_then [`MAPi (\i op. (i,op)) pending`, `dfg`, `pending`,
+    `mid`, `rest`, `qs`, `base'`] mp_tac plan_steps_reorder_inventory_mono >>
+  simp[EVERY_EL, indexedListsTheory.EL_MAPi, indexedListsTheory.LENGTH_MAPi] >>
+  rpt strip_tac >> simp[] >> metis_tac[LESS_EQ_TRANS]
 QED
 
 (* Generic materialisation-to-height boundary, shared by frame and lineage proofs. *)
-Theorem list_elem_count_dom_length:
-  !xs ys. (!x. LIST_ELEM_COUNT x xs <= LIST_ELEM_COUNT x ys) ==>
-    LENGTH xs <= LENGTH ys
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  `MEM h ys` by
-    (first_x_assum (qspec_then `h` mp_tac) >>
-     Cases_on `MEM h ys` >> simp[LIST_ELEM_COUNT_THM] >>
-     gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
-  qpat_x_assum `MEM h ys` mp_tac >>
-  rewrite_tac[listTheory.MEM_SPLIT] >> strip_tac >> gvs[] >>
-  `!x. LIST_ELEM_COUNT x xs <= LIST_ELEM_COUNT x (l1 ++ l2)` by
-    (gen_tac >> first_x_assum (qspec_then `x` mp_tac) >>
-     simp[LIST_ELEM_COUNT_DEF, FILTER_APPEND] >>
-     Cases_on `h = x` >> simp[] >> decide_tac) >>
-  first_x_assum drule >> simp[]
-QED
+Theorem list_elem_count_dom_length =
+  reorderPreparationInventoryPropsTheory.list_elem_count_dom_length
 
 Theorem available_input_plan_length:
   !opc inputs nl ps input_ops ps1.
@@ -507,42 +489,52 @@ Proof
   simp[] >> simp[MAX_DEF] >> decide_tac
 QED
 
-Theorem reorder_fold_length_bound[local]:
-  !items dfg targets acc ps ops qs bound.
-    EVERY (\(idx,op). idx < LENGTH targets /\ MEM op targets) items /\
-    (!x. MEM x targets ==> x NOTIN FDOM ps.ps_spilled) /\
-    LENGTH targets <= bound /\ LENGTH ps.ps_stack <= bound /\
-    FOLDL (\(ops,ps) (idx,op).
-      (\(step_ops,ps'). (ops ++ step_ops,ps'))
-        (reorder_one dfg targets idx op ps)) (acc,ps) items = (ops,qs) ==>
-    LENGTH qs.ps_stack <= bound
-Proof
-  Induct >- (simp[] >> rpt strip_tac >> gvs[]) >>
-  rpt gen_tac >> simp[] >> strip_tac >> PairCases_on `h` >> gvs[] >>
-  Cases_on `reorder_one dfg targets h0 h1 ps` >> gvs[] >>
-  `LENGTH r.ps_stack <= MAX (LENGTH targets) (LENGTH ps.ps_stack)` by
-    (drule_all reorder_one_length_envelope >> simp[]) >>
-  `!x. MEM x targets ==> x NOTIN FDOM r.ps_spilled` by
-    (gen_tac >> disch_tac >>
-     `x NOTIN FDOM ps.ps_spilled` by simp[] >>
-     drule_all reorder_one_pending_not_spilled >>
-     disch_then (qspecl_then [`dfg`, `h0`, `h1`] mp_tac) >> simp[]) >>
-  first_x_assum irule >>
-  qexistsl [`acc ++ q`, `dfg`, `ops`, `r`, `targets`] >>
-  simp[] >> gvs[MAX_DEF]
-QED
-
 Theorem reorder_plan_length_envelope:
   !dfg targets ps ops qs.
     (!x. MEM x targets ==> x NOTIN FDOM ps.ps_spilled) /\
     reorder_plan dfg targets ps = (ops,qs) ==>
     LENGTH qs.ps_stack <= MAX (LENGTH targets) (LENGTH ps.ps_stack)
 Proof
-  rpt gen_tac >> pure_rewrite_tac[reorder_plan_def, LET_THM] >> strip_tac >>
-  irule reorder_fold_length_bound >>
-  qexistsl [`[]`, `dfg`, `MAPi (\i op. (i,op)) targets`, `ops`, `ps`, `targets`] >>
-  simp[listTheory.EVERY_EL, indexedListsTheory.LENGTH_MAPi,
-       indexedListsTheory.EL_MAPi, listTheory.EL_MEM]
+  rpt gen_tac >> strip_tac >>
+  drule reorder_plan_split >> strip_tac >>
+  qabbrev_tac `limit = MAX (LENGTH targets) (LENGTH ps.ps_stack)` >>
+  `LENGTH targets <= limit /\ LENGTH ps.ps_stack <= limit` by simp[Abbr `limit`] >>
+  qabbrev_tac `bounded = (\(st : plan_state).
+    (!x. MEM x targets ==> x NOTIN FDOM st.ps_spilled) /\
+    LENGTH st.ps_stack <= limit)` >>
+  `bounded mid` by
+    (qspecl_then [`targets`, `ps`, `prep`, `mid`, `bounded`]
+       mp_tac reorder_prepare_preserves >>
+     simp[Abbr `bounded`] >> impl_tac
+     >- (conj_tac
+         >- (rpt gen_tac >> strip_tac >>
+             `FLOOKUP start.ps_spilled op = NONE` by
+                (simp[flookup_thm] >> metis_tac[]) >>
+             gvs[do_restore_def]) >>
+         rpt gen_tac >> strip_tac >>
+         rename1 `reduce_depth_plan _ _ _ _ _ start = (_,post)` >>
+         `LENGTH post.ps_stack <= LENGTH start.ps_stack` by
+           (drule reduce_depth_plan_length_upper >> simp[]) >>
+         conj_tac >- (rpt strip_tac >>
+           qspecl_then [`LENGTH start.ps_stack - LENGTH targets`, `targets`, `op`,
+             `0`, `0`, `start`, `x`] mp_tac reduce_depth_plan_not_spilled >>
+           simp[]) >> decide_tac) >>
+     simp[]) >>
+  qspecl_then [`MAPi (\i op. (i,op)) targets`,
+    `\(idx,op) st. reorder_one dfg targets idx op st`, `mid`, `rest`, `qs`, `bounded`]
+    mp_tac plan_steps_preserves >>
+  simp[Abbr `bounded`, pairTheory.FORALL_PROD, indexedListsTheory.MEM_MAPi] >>
+  impl_tac
+  >- (rpt gen_tac >> strip_tac >> gvs[] >>
+      rename1 `reorder_one dfg targets idx (EL idx targets) st = (_,post)` >>
+      `MEM (EL idx targets) targets` by simp[EL_MEM] >>
+      drule_all reorder_one_length_envelope >> strip_tac >>
+      conj_tac
+      >- (rpt strip_tac >>
+          qspecl_then [`dfg`, `targets`, `idx`, `EL idx targets`, `st`, `x`]
+            mp_tac reorder_one_pending_not_spilled >> simp[]) >>
+      gvs[MAX_DEF] >> decide_tac) >>
+  simp[]
 QED
 
 Theorem reorder_plan_short_residual_empty:

@@ -1,5 +1,6 @@
 Theory fnPlanLineageEntryProduction
 Ancestors
+  reorderPreparationInventoryProps reorderPreparationProps
   fnPlanLineageWide fnPlanLineagePhiInputExclusion fnPlanLineagePhiLiveBudget
   fnPlanLineageLiveness fnPlanLineageJoinEntry fnPlanLineageNativeResources fnPlanLineageNativeOrigins
   fnPlanLineageCallers fnPlanLineageSetup fnPlanLineagePath fnPlanLineageSuffix fnPlanLineagePrefix
@@ -495,18 +496,6 @@ Proof
   simp[stackPlanTypesTheory.plan_state_component_equality]
 QED
 
-Theorem repeated18_reorder_plan_probe:
-  !dfg ps.
-    reorder_plan dfg (REPLICATE 18 (Var "x"))
-      (ps with ps_stack := REPLICATE 18 (Var "x")) =
-    ([], ps with ps_stack := REPLICATE 18 (Var "x"))
-Proof
-  rpt gen_tac >>
-  rewrite_tac[stackPlanOpsTheory.reorder_plan_def] >>
-  CONV_TAC (LAND_CONV (RAND_CONV EVAL)) >>
-  simp[repeated18_reorder_one_probe]
-QED
-
 Theorem short_bulk_swap_homogeneous_probe[local]:
   !ps.
     HD ([] : operand list) = Var "x" /\
@@ -516,6 +505,34 @@ Theorem short_bulk_swap_homogeneous_probe[local]:
 Proof
   rpt strip_tac >> simp[short_bulk_swap_stack_probe] >> EVAL_TAC
 QED
+
+Theorem short_full_reorder_prepare[local]:
+  !ps.
+    reorder_prepare_plan (REPLICATE 18 (Var "x"))
+      (ps with <|ps_stack := [Var "x"]; ps_spilled := FEMPTY|>) =
+    ([],ps with <|ps_stack := [Var "x"]; ps_spilled := FEMPTY|>)
+Proof
+  gen_tac >> irule reorder_prepare_noop >> simp[]
+QED
+
+Theorem short_full_reorder_steps[local]:
+  !dfg ps.
+    reorder_plan dfg (REPLICATE 18 (Var "x"))
+      (ps with <|ps_stack := [Var "x"]; ps_spilled := FEMPTY|>) =
+    plan_steps (\(idx,op) st. reorder_one dfg (REPLICATE 18 (Var "x")) idx op st)
+      (MAPi (\i op. (i,op)) (REPLICATE 18 (Var "x")))
+      (ps with <|ps_stack := [Var "x"]; ps_spilled := FEMPTY|>)
+Proof
+  rpt gen_tac >>
+  Cases_on `reorder_plan dfg (REPLICATE 18 (Var "x"))
+    (ps with <|ps_stack := [Var "x"]; ps_spilled := FEMPTY|>)` >>
+  drule reorder_plan_split >> simp[short_full_reorder_prepare] >>
+  rpt strip_tac >> gvs[]
+QED
+
+val repeated18_indices =
+  (REWR_CONV indexedListsTheory.MAPi_compute THENC EVAL)
+    ``MAPi (\i op. (i,op)) (REPLICATE 18 (Var "x"))``;
 
 (* Conditional reduced-state diagnostic only: no claim that these unspecified
    reads equal x, nor that this state occurs in a ready function. *)
@@ -528,18 +545,30 @@ Theorem short_full_reorder_homogeneous_probe:
       REPLICATE 18 (Var "x")
 Proof
   rpt gen_tac >> strip_tac >>
-  rewrite_tac[stackPlanOpsTheory.reorder_plan_def] >>
-  CONV_TAC (LAND_CONV (RAND_CONV (RAND_CONV (RAND_CONV EVAL)))) >>
+  rewrite_tac[stackPlanOpsTheory.reorder_plan_def, short_full_reorder_prepare,
+              LET_THM, pairTheory.UNCURRY_DEF, APPEND_NIL, BETA_THM, repeated18_indices] >>
   pure_once_rewrite_tac[FOLDL] >>
   CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
-  pure_rewrite_tac[LET_THM] >> pairarg_tac >> simp_tac (srw_ss()) [] >>
+  pure_rewrite_tac[LET_THM] >>
+  Cases_on `reorder_one dfg (REPLICATE 18 (Var "x")) 0 (Var "x")
+    (ps with <|ps_stack := [Var "x"]; ps_spilled := FEMPTY|>)` >>
+  rename1 `reorder_one _ _ _ _ _ = (step_ops,ps')` >>
+  simp_tac (srw_ss()) [] >>
   `ps'.ps_stack = REPLICATE 18 (Var "x")` by
     (qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
      disch_then (mp_tac o AP_TERM ``SND : stack_op list # plan_state -> plan_state``) >>
      simp[short_reorder_capacity_probe] >> strip_tac >> gvs[] >>
      qspec_then `ps with ps_spilled := FEMPTY` mp_tac
        short_bulk_swap_homogeneous_probe >> simp[]) >>
-  simp[repeated18_reorder_one_probe]
+  qpat_assum `ps'.ps_stack = _` (fn stk =>
+    let
+      val fixed = Q.SPECL [`dfg`, `ps'`] repeated18_reorder_one_probe
+      fun step i =
+        let
+          val th = SPEC (numSyntax.term_of_int i) fixed
+          val (_,index_ok) = dest_conj (fst (dest_imp (concl th)))
+        in MATCH_MP th (CONJ stk (EQT_ELIM (EVAL index_ok))) end
+    in asm_rewrite_tac (map step (List.tabulate (17, fn i => i + 1))) end)
 QED
 
 Theorem short_full_reorder_conditional_guard_probe:
@@ -564,8 +593,8 @@ Theorem short_full_reorder_count_probe[local]:
     LIST_ELEM_COUNT (Var "x")
       (SND (do_swap 17 (ps with <|ps_stack := [Var "x"]; ps_spilled := FEMPTY|>))).ps_stack
 Proof
-  rpt gen_tac >> rewrite_tac[reorderStagesTheory.reorder_plan_eq_plan_steps] >>
-  CONV_TAC (LAND_CONV (RAND_CONV (RAND_CONV (RATOR_CONV (RAND_CONV EVAL))))) >>
+  rpt gen_tac >> rewrite_tac[short_full_reorder_steps] >>
+  pure_rewrite_tac[repeated18_indices] >>
   pure_once_rewrite_tac[foldlSimTheory.plan_steps_def] >>
   CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
   pure_rewrite_tac[LET_THM] >> pairarg_tac >>

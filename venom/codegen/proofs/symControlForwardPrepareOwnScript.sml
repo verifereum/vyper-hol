@@ -7,7 +7,7 @@ Ancestors
   asmSymSem frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
   dfgDefs symPlannerSim symShuffleSim asmSymPc codegenEncodingWf
-  spillPlanSim reorderStages inputMaterialised reduceDepthSim mixedPrefixSim
+  spillPlanSim reorderStages reorderPreparationProps inputMaterialised reduceDepthSim mixedPrefixSim
   symFrameControlFacts
 
 val control_bridge_core_tm = let
@@ -166,12 +166,20 @@ Theorem reorder_plan_spill_free_kind_replay_conditional:
   LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack
 Proof
-  disch_then (fn bundle => let
-    val steps_rule = MP (SPEC_ALL reorder_steps_spill_free_kind_replay_conditional) bundle
-  in
-    rewrite_tac[reorderStagesTheory.reorder_plan_eq_plan_steps] >>
-    metis_tac[steps_rule]
-  end)
+  disch_then (fn bundle =>
+    assume_tac (MP (SPEC_ALL reorder_steps_spill_free_kind_replay_conditional) bundle)) >>
+  strip_tac >> drule reorder_plan_split >> strip_tac >>
+  `prep = [] /\ mid = ps` by
+    (qspecl_then [`pending`, `ps`, `prep`, `mid`] mp_tac reorder_prepare_trace_empty >>
+     simp[] >> metis_tac[listTheory.MEM_APPEND]) >>
+  qpat_x_assum `mid = ps` SUBST_ALL_TAC >>
+  qpat_x_assum `ops = prep ++ rest` SUBST_ALL_TAC >>
+  gvs[] >>
+  qpat_x_assum `!items ps qs ops ps' pending fn ret fmp lo.
+    plan_steps _ _ _ = _ /\ _ ==> _`
+    (qspecl_then [`MAPi (\i op. (i,op)) pending`, `ps`, `qs`, `rest`, `ps'`,
+       `pending`, `fn`, `ret`, `fmp`, `lo`] mp_tac) >>
+  simp[]
 QED
 
 Theorem sym_spill_free_stack_only_prefix_sim:

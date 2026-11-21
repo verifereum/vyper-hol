@@ -218,11 +218,32 @@ Proof
   metis_tac[reorder_fold_preserves, reorder_one_admin]
 QED
 
+Theorem reorder_prepare_fold_admin[local]:
+  !items targets acc ps ops post.
+    EVERY plan_admin_op acc /\
+    FOLDL (\(ops,st) op.
+      (\(step,st'). (ops ++ step,st'))
+        (reduce_depth_plan (LENGTH st.ps_stack - LENGTH targets)
+          targets op 0 0 st)) (acc,ps) items = (ops,post) ==>
+    EVERY plan_admin_op ops
+Proof
+  Induct >> simp[] >> rpt gen_tac >> pairarg_tac >> simp[] >> strip_tac >>
+  first_x_assum (qspecl_then
+    [`targets`, `acc ++ step'`, `st'`, `ops`, `post`] mp_tac) >>
+  simp[LET_THM] >> metis_tac[reduce_depth_plan_admin]
+QED
+
 Theorem reorder_plan_admin:
   reorder_plan dfg target_ops ps = (ops, ps') ==> EVERY plan_admin_op ops
 Proof
-  simp[reorder_plan_def] >> strip_tac >>
-  drule reorder_fold_admin >> simp[]
+  simp[reorder_plan_def] >> pairarg_tac >> simp[] >> strip_tac >>
+  drule reorder_fold_admin >> simp[] >> disch_then irule >>
+  qpat_x_assum `reorder_prepare_plan _ _ = _` mp_tac >>
+  simp[reorder_prepare_plan_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  drule restore_spilled_plan_admin >> simp[] >> strip_tac >>
+  drule_at (Pat `FOLDL _ _ _ = _`) (SRULE [LET_THM] reorder_prepare_fold_admin) >>
+  simp[]
 QED
 
 Theorem emit_one_input_admin:

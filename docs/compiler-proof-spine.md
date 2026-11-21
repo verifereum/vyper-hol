@@ -77,7 +77,9 @@ and `vyper_call_correct_asm_opt` by finalizer; deployment in
 - Contracts: `codegenCorrectness.codegen_correct` (identity finalizer),
   `codegenAsmOpt.codegen_correct_asm_opt` (assembly optimizer)
 - Hypotheses crossing the boundary:
-- Producers:
+- Producers for reorder preparation: `reorderPreparationProps`,
+  `reorderPreparationInventoryProps`, `reorderPreparationFrameProps` and
+  `reorderPreparationTraceProps`.
 
 ## Deployment
 
