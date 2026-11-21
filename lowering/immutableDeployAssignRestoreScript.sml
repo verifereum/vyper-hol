@@ -7,32 +7,6 @@ Ancestors
   venomState finite_map alist valueEncodingProps vyperTypeInvariants placeMemoryPathRebuild
   exprSimSubscriptArrayLiveImmutableView vyperTypeInitialState loweringPosts
 
-Theorem immutable_path_store_alloca_sep_frame[local]:
-  immutable_alloca_sep func ce cx es s /\
-  local_ptrs_reserved ce sa /\
-  (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) /\
-  q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next /\
-  ALOOKUP es.immutables cx.txn.target = SOME mods /\
-  FLOOKUP (get_source_immutables ce.ce_module mods) id = SOME (tv,old) /\
-  write_place cx (ImmutablePlace ce.ce_module id path) v es = (INL (),es') ==>
-  immutable_alloca_sep func ce cx es' q
-Proof
-  strip_tac >>
-  `es'.scopes = es.scopes` by
-    (drule write_immutable_place_frame >> strip_tac >> simp[]) >>
-  `!name tv' v'.
-    FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of
-       NONE => FEMPTY | SOME imms => get_source_immutables ce.ce_module imms)
-      name = SOME (tv',v') ==>
-    ?v0. FLOOKUP (get_source_immutables ce.ce_module mods) name = SOME (tv',v0)` by
-    (drule_all_then strip_assume_tac immutable_path_write_source >> gvs[] >>
-     simp[update_immutable_def,get_source_immutables_set_same,FLOOKUP_UPDATE] >>
-     rpt gen_tac >> Cases_on `name = id` >> simp[] >> metis_tac[]) >>
-  fs[immutable_alloca_sep_def, immutable_decl_sep_def, local_region_def,
-     lookup_var_def, local_ptrs_reserved_def] >>
-  metis_tac[]
-QED
-
 Theorem immutable_store_stmt_state_rel_frame[local]:
   stmt_state_rel H ctx func ce cx es s /\ expr_sim_inv ce cx env es /\
   local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\ src = ce.ce_module /\

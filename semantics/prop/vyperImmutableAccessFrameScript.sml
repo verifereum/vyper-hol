@@ -1712,13 +1712,15 @@ Theorem eval_expr_immutable_access_frame:
 Proof
   rpt strip_tac >>
   `^callable_closed cx (expr_accesses mods e) (reached_functions mods e)` by
-    (BETA_TAC >> rpt gen_tac >> strip_tac >>
+    (BETA_TAC >>
+     qx_genl_tac [`src1`,`fn`,`ts`,`mut`,`nr`,`args`,`dflts`,`ret`,`body1`] >>
+     strip_tac >>
      first_x_assum drule_all >>
      disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
      conj_tac >- metis_tac[reached_function_write_accesses] >>
-     gen_tac >> disch_tac >>
-     mp_tac (Q.SPECL [`src'`,`fn`,`mods`,`e`,`ts`,
-       `cx.in_deploy`,`mut`,`nr`,`args`,`dflts`,`ret`,`body'`,`c`]
+     qx_gen_tac `c` >> disch_tac >>
+     mp_tac (Q.SPECL [`src1`,`fn`,`mods`,`e`,`ts`,
+       `cx.in_deploy`,`mut`,`nr`,`args`,`dflts`,`ret`,`body1`,`c`]
        reached_callable_calls) >> asm_rewrite_tac[]) >>
   `^safe_accesses (expr_accesses mods e) (reached_functions mods e)
     (accesses_expr e) (int_calls_expr e)` by
