@@ -11,7 +11,7 @@ Ancestors
   gasShadowState fragExec stmtSimProps haltExitProj vyperStorageTrace
   vyperContext vyperInterpreter vyperState vyperAST
   vyperStorageFootprint exprSimHypsDefs vyperTypeExprResult vyperTypeExprSoundness
-  vyperTypeInvariants vyperTyping
+  vyperTypeInvariants vyperTyping bodyInvCodeProps exprBodyPreProps
 
 (* Retain the two closed producer propositions at the checked caller boundary. *)
 local
@@ -181,8 +181,7 @@ Resume abi_decode_singleton_vv_full[continuation]:
   `?bs. v = BytesV bs` by
     (`env.type_defs = get_tenv cx` by
        (qpat_assum `expr_body_pre _ _ _ e _`
-          (ACCEPT_TAC o MATCH_MP abi_decode_inv_type_env o
-           CONJUNCT1 o REWRITE_RULE [expr_body_pre_def])) >>
+          (ACCEPT_TAC o MATCH_MP expr_body_pre_env_type_defs)) >>
      qpat_assum `evaluate_type _ (expr_type e) = SOME _` (fn ty_th =>
        qpat_assum `env.type_defs = get_tenv cx` (fn env_th =>
          qpat_x_assum `expr_result_typed _ _ _` (fn res_th =>
@@ -208,9 +207,7 @@ Resume abi_decode_singleton_vv_full[continuation]:
      conj_tac >- ACCEPT_TAC (BETA_RULE abi_decode_endpoint_producer_checked) >>
      conj_tac >-
        (`cx_tops cx = tops` by
-          (irule gasContextTheory.cx_tops_module >>
-           qpat_assum `body_inv _ _ _ _`
-             (mp_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >> simp[NoAsms]) >>
+          (drule_then (ACCEPT_TAC o cj 2) body_inv_main_code) >>
         simp[] >> rpt strip_tac >>
         qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post H _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
           (drule_then strip_assume_tac)) >>
@@ -307,7 +304,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>
   qpat_assum `expr_body_pre _ _ _ _ _`
-    (strip_assume_tac o SIMP_RULE (srw_ss()) [expr_body_pre_def]) >>
+    (strip_assume_tac o MATCH_MP expr_body_pre_static_facts) >>
   drule abi_decode_parent_type >> strip_tac >> gvs[] >>
   `body_exprs_full_ok cx [e]` by
     (first_x_assum irule >>
