@@ -77,9 +77,9 @@ lowering and `check_contract F` (`lower_vyper_runtime_unit_checked_source_shape`
 `raw_shape_free_program` units use S2's helper
 `lower_vyper_runtime_unit_source_unit_ok_checked` (the S2 export is its
 corollary) with `lower_vyper_runtime_unit_o1_shape_extras`, and the rest (`raw_call` on `msg.data`,
-`create_copy_of`, `create_from_blueprint`) rest on three admitted shape lemmas.
+`create_copy_of`, `create_from_blueprint`) use three proved shape cases.
 The deploy tops use `checked_lower_vyper_deploy_unit_source_shape`, with three
-matching admitted deploy cases. On the ordinary path L5 consumes that memory fact; layout or empty
+matching proved deploy cases. On the ordinary path L5 consumes that memory fact; layout or empty
 entry memory does not manufacture memory safety.
 
 `venomToAsmProps.gen_fn_simulation` is proved (4.2); S7's `codegen_correct`
@@ -611,8 +611,8 @@ Remaining work, roughly in dependency order (all future):
 These producers were ADMITTED statements at Milestone 1; all three are proved now.
 The call tops reach S2's shape through `lower_vyper_runtime_unit_checked_source_shape`
 (successful runtime lowering and `check_contract F`), whose
-non-`raw_shape_free_program` cases rest on three admitted shape lemmas; the
-deploy tops use `deploy_unit_o1_shape_ok`, with three admitted deploy cases.
+non-`raw_shape_free_program` cases are three proved shape lemmas; the deploy
+tops use `deploy_unit_o1_shape_ok`, with three proved deploy cases.
 Units with `DALLOCA` get S3's facts from
 `lower_vyper_runtime_unit_memory_ok_from_no_wrap`.
 Actual memory API is
