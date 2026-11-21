@@ -3,7 +3,7 @@ Theory groupedRegistrationCounters
 Ancestors
   fragGasPath fragExec loweringStateRelDefs
   venomExecSemantics venomExecProofs venomMemProofs venomInstProofs
-  venomInst venomState finite_map list
+  venomInst venomState finite_map list relation
 
 Theorem grouped_registration_alloca_bound_step[local]:
   step_inst fuel ctx inst s = OK t /\ inst.inst_opcode <> INVOKE /\
@@ -80,6 +80,34 @@ Proof
   >- fs[jump_to_def, fresh_vars_wrt_def] >>
   qpat_x_assum `OK t = step_inst fuel ctx inst s`
     (fn eq => fs[GSYM eq, exit_result_def])
+QED
+
+Theorem grouped_registration_bounds_rtc:
+  !ctx fn st region s t.
+    RTC (\u v. region u /\ ?k. gas_path_edge ctx fn u k (OK v)) s t /\
+    (!u bb i. region u /\ lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb u.vs_inst_idx = SOME i ==>
+      i.inst_opcode <> INVOKE /\ (i.inst_opcode = ALLOCA ==> i.inst_id < st.cs_next_id) /\
+      EVERY (not_fresh_at st) i.inst_outputs) /\
+    (!name bb. lookup_block name fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+    fresh_vars_wrt st s /\
+    (!id pair. FLOOKUP s.vs_allocas id = SOME pair ==> id < st.cs_next_id) ==>
+    fresh_vars_wrt st t /\
+    (!id pair. FLOOKUP t.vs_allocas id = SOME pair ==> id < st.cs_next_id)
+Proof
+  rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `fresh_vars_wrt st s` mp_tac >>
+  qpat_x_assum `!id pair. FLOOKUP s.vs_allocas id = SOME pair ==> _` mp_tac >>
+  qpat_x_assum `RTC _ s t` mp_tac >>
+  MAP_EVERY qid_spec_tac [`t`,`s`] >>
+  ho_match_mp_tac RTC_INDUCT >> simp[] >> rpt strip_tac >>
+  `fresh_vars_wrt st s'' /\
+    (!id pair. FLOOKUP s''.vs_allocas id = SOME pair ==> id < st.cs_next_id)` by
+    (irule grouped_registration_bounds_edge >>
+     qexistsl_tac [`ctx`,`fn`,`k`,`s`] >> simp[] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem grouped_registration_scope_endpoint[local]:
