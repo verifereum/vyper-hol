@@ -137,7 +137,7 @@ QED
 
 (* The dynamic array's header load can follow any expression operand. The
    instruction has no storage effect and preserves all earlier variables. *)
-Theorem for_storage_iterator_dynamic_length_run:
+Theorem for_storage_iterator_dynamic_length_run_uniform:
   compile_ptr_load ctor imm (slot_loc tr) bop sa = (len_op,sb) /\
   fn_has_code sa sb func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -149,7 +149,7 @@ Theorem for_storage_iterator_dynamic_length_run:
   ?out t G1 tn1.
     len_op = Var out /\
     t = (update_var out (n2w len) s with vs_inst_idx := SUC s.vs_inst_idx) /\
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G1,tn1) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G1,tn1)) /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ~t.vs_halted /\ eval_operand len_op t = SOME (n2w len) /\
     op_taint tn1 len_op = {} /\ op_prov G1 len_op = NONE /\
@@ -173,20 +173,24 @@ Proof
   `step_inst_base i s = OK u` by
     (Cases_on `tr` >>
      gvs[Abbr `i`, Abbr `u`, step_inst_base_opcode_eqs, exec_read1_def]) >>
-  `ptr_inst_ok D lo 0 ctx func G tn i s` by
-    (simp[Abbr `i`] >> irule ptr_inst_ok_slot_load >> Cases_on `tr` >> fs[]) >>
+  `!D. ptr_inst_ok D lo 0 ctx func G tn i s` by
+    (gen_tac >> simp[Abbr `i`] >> irule ptr_inst_ok_slot_load >> Cases_on `tr` >> fs[]) >>
   `inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
    i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\ i.inst_opcode <> GAS` by
     (Cases_on `tr` >>
      simp[Abbr `i`, mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
           inst_dload_in_section_def, source_memory_read_ranges_def,
           source_memory_write_ranges_def]) >>
-  `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G1,tn1)` by
-    (drule_all straight_line_origin_ptr_edge >>
+  `!D. gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G1,tn1)` by
+    (gen_tac >>
+     qpat_assum `!D. ptr_inst_ok D _ _ _ _ _ _ _ _` (qspec_then `D` assume_tac) >>
+     drule_all straight_line_origin_ptr_edge >>
      simp[Abbr `t`, Abbr `G1`, Abbr `tn1`]) >>
   `~t.vs_halted` by simp[Abbr `t`, Abbr `u`, update_var_def] >>
-  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G1,tn1)` by
-    (drule (cj 2 gas_origin_ptr_path_rules) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G1,tn1)` by
+    (gen_tac >>
+     qpat_assum `!D. gas_origin_ptr_edge _ _ _ _` (qspec_then `D` assume_tac) >>
+     drule (cj 2 gas_origin_ptr_path_rules) >>
      disch_then (qspecl_then [`[]`, `OK t`, `G1`, `tn1`] mp_tac) >>
      simp[cj 1 gas_origin_ptr_path_rules]) >>
   `tn1 = tn with t_var := tn.t_var |+ (tmp,{})` by
@@ -200,4 +204,32 @@ Proof
        op_taint_def, op_prov_def, FLOOKUP_UPDATE] >>
   rpt strip_tac >> simp[Abbr `G1`, Abbr `i`, scalar_step_old_prov] >>
   metis_tac[]
+QED
+
+Theorem for_storage_iterator_dynamic_length_run:
+  compile_ptr_load ctor imm (slot_loc tr) bop sa = (len_op,sb) /\
+  fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  eval_operand bop s = SOME slot /\ op_taint tn bop = {} /\
+  key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
+  (if tr then tload slot s else sload slot s) = n2w len ==>
+  ?out t G1 tn1.
+    len_op = Var out /\
+    t = (update_var out (n2w len) s with vs_inst_idx := SUC s.vs_inst_idx) /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G1,tn1) /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ~t.vs_halted /\ eval_operand len_op t = SOME (n2w len) /\
+    op_taint tn1 len_op = {} /\ op_prov G1 len_op = NONE /\
+    tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\
+    tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> x <> out) /\
+    (!x. x <> out ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP G1 x = FLOOKUP G x /\ op_taint tn1 (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule_all for_storage_iterator_dynamic_length_run_uniform >>
+  disch_then (qspecl_then [`explicit`,`PG`,`G`] strip_assume_tac) >>
+  qexistsl [`out`,`t`,`G1`,`tn1`] >> rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC, first_assum irule]
 QED

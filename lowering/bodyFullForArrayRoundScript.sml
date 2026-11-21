@@ -1240,7 +1240,7 @@ QED
 
 Finalise for_nonslot_array_nil_separated
 
-Theorem for_nonslot_entry_control[local]:
+Theorem for_nonslot_entry_control:
   ~(s.vs_halted) /\ allocas_from lo s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
