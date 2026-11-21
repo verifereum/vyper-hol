@@ -108,34 +108,6 @@ Proof
   rpt IF_CASES_TAC >> gvs[] >> metis_tac[]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >> simp[immutable_root_def] >> rpt strip_tac >>
-  `supported_place_root tops (src,id)` by metis_tac[aug_place_supported_root] >>
-  drule aug_place_supported_root_namespace >> strip_tac >> gvs[] >>
-  `ts = tops` by gvs[body_inv_def, vyperContextTheory.get_module_code_def] >>
-  gvs[] >>
-  `IS_SOME (find_var_decl_by_name id tops)` suffices_by simp[] >>
-  irule aug_place_supported_root_decl >>
-  gvs[supportedExprFormsTheory.supported_place_root_def] >>
-  Cases_on `supported_variable_decl tops (NONE,id)`
-  >- (gvs[] >> Cases_on `supported_hashmap_decl tops (NONE,id)` >> gvs[] >>
-      rename1 `supported_hashmap_decl tops (NONE,id) = SOME mdecl` >>
-      PairCases_on `mdecl` >> simp[]) >>
-  rename1 `supported_variable_decl tops (NONE,id) = SOME vdecl` >>
-  PairCases_on `vdecl` >> gvs[] >>
-  Cases_on `vdecl1` >> Cases_on `vdecl3` >> gvs[] >>
-  Cases_on `vdecl0` >> gvs[] >> metis_tac[]
-QED
-*)
-Theorem aug_place_supported_root_not_immutable:
-  body_inv tops ctx cenv cx /\
-  supported_target_info tops bindings t = SOME pt ==>
-  ~immutable_root cx t
-Proof
-  cheat
-QED
-
 Theorem aug_place_supported_immutable_root_decl:
   body_inv tops ctx cenv cx /\
   supported_target_info tops bindings t = SOME pt /\

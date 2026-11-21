@@ -6357,6 +6357,51 @@ Proof
   gvs[supported_target_def, supportedExprTraverseTheory.supported_expr_exists_def, int_calls_expr_def]
 QED
 
+Theorem tuple_assign_immutable_toplevel_type[local]:
+  body_inv tops ctx cenv cx /\ supported_target tops bindings bt /\
+  immutable_root cx bt /\ (?nsid. bt = TopLevelNameTarget nsid) ==>
+  ?ns id. bt = TopLevelNameTarget (ns,id) /\
+    IS_SOME (supported_immutable_type tops (ns,id))
+Proof
+  strip_tac >> gvs[] >> PairCases_on `nsid` >>
+  `~supported_scalar_target tops (nsid0,nsid1)` by
+    metis_tac[augAssignFullTargetRoutesTheory.augassign_scalar_target_route] >>
+  fs[supportedStmtsTheory.supported_target_def]
+QED
+
+(* GATE_ADMISSION: missing case, nested immutable tuple assignment; owner: body place lane *)
+Theorem body_assign_tuple_nested_immutable_full:
+  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
+    body_expr_full_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
+    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
+                    ~(?nsid. t = TopLevelNameTarget nsid)) gs ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
+Proof
+  cheat
+QED
+
 Theorem body_assign_tuple_other_full:
   !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
@@ -6378,6 +6423,8 @@ Theorem body_assign_tuple_other_full:
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
     frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
+    ~EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
+                     ~(?nsid. t = TopLevelNameTarget nsid)) gs /\
     lowered_value_type cenv e = expr_type e /\
     ~(?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
             EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids) /\
@@ -6660,6 +6707,8 @@ Proof
     EVERY (\g. case g of BaseTarget bt =>
       supported_target tops bindings bt /\ target_indices_pre cenv cx env bt
       | TupleTarget ts => F) todo /\
+    ~EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
+                     ~(?nsid. t = TopLevelNameTarget nsid)) todo /\
     body_tuple_targets_full_ok cx todo vs1 /\
     expr_sim_inv cenv cx env src /\ src with gas_obs := [] = src /\
     gas_admissible (assign_tuple_target_list cx todo vs1) (stmt_res_ok lctx) src /\
@@ -6814,27 +6863,14 @@ Proof
     rename1 `op0 = Var xmem` >>
     qpat_assum `body_tuple_targets_full_ok cx (BaseTarget bt::todo) (vi::vs_tail)`
       (strip_assume_tac o REWRITE_RULE [body_tuple_target_full_ok_def])) >>>
-  HEADGOAL (Cases_on `immutable_root cx bt`) >>>
-  HEADGOAL (sg `?ns id. bt = TopLevelNameTarget (ns,id) /\
-                         IS_SOME (supported_immutable_type tops (ns,id))`) >>>
   HEADGOAL (
-    `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-      (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms,body_inv_def]) >>
-    map_every (fn pat => qpat_assum pat mp_tac)
-      [`ALL_DISTINCT (FLAT _)`, `body_inv tops ctx cenv cx`,
-       `immutable_root cx bt`, `supported_target tops bindings bt`] >>
-    POP_ASSUM_LIST kall_tac >>
-    namedCases_on `bt` ["name", "nsid", "b key", "b fld"] >>
-    simp[supportedStmtsTheory.supported_target_def]) >>>
-  HEADGOAL (simp[targetPlaceSimTheory.immutable_root_def,targetPlaceSimTheory.target_root_def]) >>>
-  HEADGOAL (PairCases_on `nsid` >> simp[] >> rpt strip_tac >>
-    metis_tac[augAssignFullTargetRoutesTheory.augassign_scalar_target_route]) >>>
-  HEADGOAL (Cases_on `b` >> simp[] >> rpt strip_tac >>
-    metis_tac[bodyAugPlaceTargetTheory.aug_place_legacy_subscript_info,
-      bodyAugPlaceTargetTheory.aug_place_supported_root_not_immutable, optionTheory.IS_SOME_EXISTS]) >>>
-  HEADGOAL (Cases_on `b` >> simp[] >> rpt strip_tac >>
-    metis_tac[bodyAugPlaceTargetTheory.aug_place_legacy_field_info,
-      bodyAugPlaceTargetTheory.aug_place_supported_root_not_immutable, optionTheory.IS_SOME_EXISTS]) >>>
+    qpat_x_assum `~EXISTS _ (BaseTarget bt::todo)` mp_tac >>
+    simp[NoAsms,listTheory.EXISTS_DEF] >> strip_tac) >>>
+  HEADGOAL (Cases_on `immutable_root cx bt`) >>>
+  HEADGOAL (
+    `?nsid. bt = TopLevelNameTarget nsid` by metis_tac[] >>
+    drule_all_then (qx_choosel_then [`ns`,`id`] strip_assume_tac)
+      tuple_assign_immutable_toplevel_type) >>>
   HEADGOAL (
     qpat_x_assum `bt = TopLevelNameTarget _` SUBST_ALL_TAC >>
     qpat_x_assum `IS_SOME (supported_immutable_type tops (ns,id))`
@@ -11121,6 +11157,8 @@ Theorem body_assign_tuple_widened_full:
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
     frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
+    ~EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
+                     ~(?nsid. t = TopLevelNameTarget nsid)) gs /\
     lowered_value_type cenv e <> expr_type e ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
@@ -11894,25 +11932,12 @@ Proof
   `value_has_type (EL i dtvs) (EL i vs)` by
     (drule_all vyperTypeArgFitsTheory.type_widens_to_value_has_type >> simp[]) >>
   Cases_on `immutable_root cx head`
-  >- (`?ns id. head = TopLevelNameTarget (ns,id) /\
-            IS_SOME (supported_immutable_type tops (ns,id))` by
-    (`ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-       (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms,body_inv_def]) >>
-     map_every (fn pat => qpat_assum pat mp_tac)
-       [`ALL_DISTINCT (FLAT _)`,`body_inv tops ctx cenv cx`,
-        `immutable_root cx head`,`supported_target tops bindings head`] >>
-     POP_ASSUM_LIST kall_tac >>
-     namedCases_on `head` ["name","nsid","bt key","bt fld"] >>
-     simp[supportedStmtsTheory.supported_target_def]
-     >- simp[targetPlaceSimTheory.immutable_root_def,targetPlaceSimTheory.target_root_def]
-     >- (PairCases_on `nsid` >> simp[] >> rpt strip_tac >>
-         metis_tac[augAssignFullTargetRoutesTheory.augassign_scalar_target_route])
-     >- (Cases_on `bt` >> simp[] >> rpt strip_tac >>
-         metis_tac[bodyAugPlaceTargetTheory.aug_place_legacy_subscript_info,
-           bodyAugPlaceTargetTheory.aug_place_supported_root_not_immutable,optionTheory.IS_SOME_EXISTS]) >>
-     Cases_on `bt` >> simp[] >> rpt strip_tac >>
-     metis_tac[bodyAugPlaceTargetTheory.aug_place_legacy_field_info,
-       bodyAugPlaceTargetTheory.aug_place_supported_root_not_immutable,optionTheory.IS_SOME_EXISTS]) >>
+  >- (`MEM (BaseTarget head) gs` by metis_tac[listTheory.EL_MEM] >>
+      `?nsid. head = TopLevelNameTarget nsid` by
+        (qpat_assum `~EXISTS _ gs` (mp_tac o REWRITE_RULE [listTheory.EXISTS_MEM]) >>
+         metis_tac[]) >>
+      drule_all_then (qx_choosel_then [`ns`,`id`] strip_assume_tac)
+        tuple_assign_immutable_toplevel_type >>
   qpat_x_assum `head = TopLevelNameTarget _` SUBST_ALL_TAC >>
   qpat_x_assum `IS_SOME (supported_immutable_type tops (ns,id))`
     (qx_choose_then `dty` assume_tac o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
