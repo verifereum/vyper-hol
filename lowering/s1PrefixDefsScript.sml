@@ -266,7 +266,7 @@ Definition frame_ret_ok_prefix_def:
 End
 
 Definition unit_prefix_cert_def:
-  unit_prefix_cert shadow_ctx (tops : toplevel list) am tx unit vs <=>
+  unit_prefix_cert shadow_ctx tops am tx unit vs <=>
     ?func marks.
       unit.cu_context.ctx_entry = SOME "__entry" /\
       lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
