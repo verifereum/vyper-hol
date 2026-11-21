@@ -26,6 +26,7 @@ Ancestors
   loweringPosts exprLoweringProps vyperStorageFootprint ptrSafeRun
   ptrDiscipline bodyPtrDefs runtimeBodyStartDefs fragGasOriginPtr
   entryPtrSeamPrefix entryPtrSeamRegister externalEntryChecks entryStateRel
+  entryRejectCode acceptedContextPhi
   sourceEntrySelection
   bodyMemAggregatePath fragGasPathFrameMem venomMemProofs
   moduleLoweringProps vyperCompiler nonreentrantEntryPath externalReturnPackage entryDispatchProps
@@ -47,27 +48,14 @@ Theorem runtime_entry_function_no_phi_nr:
     phi_prefix_length bb.bb_instructions = 0
 Proof
   strip_tac >>
-  drule_all lookup_function_external_raw_member >>
-  simp[constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def] >>
-  strip_tac >>
-  `?cenv pos_args min_cds is_payable nkey ut iv rt.
-     set_external_package_target rpolicy.rpol_target
-       (package_external_fn tops T (K global_nonreentrant_slot)
-         (mut,nr,lookup_raw_return_or_F (NONE:num option) name External tops,
-          name,args,([]:expr list),ret,
-          subst_consts_stmts (module_consts_env tops []) fbody)) =
-     ("fn_" ++ name,cenv,pos_args,min_cds,is_payable,nr,nkey,ut,iv,
-      subst_consts_stmts (module_consts_env tops []) fbody,rt)` by
-    simp[package_external_fn_def, set_external_package_target_def, LET_THM] >>
-  pop_assum strip_assume_tac >>
-  drule_all source_runtime_entry_checks_code >> strip_tac >>
-  `sa.cs_current_bb = "__entry" /\ sa.cs_current_insts = []` by
-    (qpat_x_assum `fresh_label _ _ = _` mp_tac >>
-     simp[fresh_label_def, initial_compile_state_def, LET_THM] >>
-     strip_tac >> gvs[]) >>
-  drule_all linear_dispatch_entry_no_phi >> strip_tac >>
-  simp[] >> qexists_tac `bb` >>
-  gvs[fn_entry_label_def, entry_block_def, listTheory.NULL_EQ]
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_entry_label >> strip_tac >>
+  `?bb. lookup_block "__entry" fn.fn_blocks = SOME bb` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[fn_entry_label_def, entry_block_def, lookup_block_def, listTheory.FIND_thm]) >>
+  drule_all lowering_context_ok_block_phi >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`fn`, `bb`] >> simp[]
 QED
 
 Theorem runtime_entry_function_no_phi:
