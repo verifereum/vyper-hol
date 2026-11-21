@@ -139,7 +139,9 @@ Proof
     metis_tac[gas_shadow_step, gas_shadow_compiles_new_block] >>
   `gas_shadow_state last slast` by
     (fs[stmt_env_raise_custom] >>
-     metis_tac[gas_shadow_step, gas_shadow_compile_revert_with_custom_error]) >>
+     metis_tac[gas_shadow_step,
+       REWRITE_RULE [gasShadowCompileBaseTheory.gas_shadow_env_F]
+         (Q.INST [`sd` |-> `F`] gas_shadow_compile_revert_with_custom_error)]) >>
   mp_tac (Q.INST [`cenv` |-> `ce`, `x5` |-> `s4.cs_current_bb`,
     `x7` |-> `last.cs_current_bb`] assert_custom_compiler_code) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -171,8 +173,10 @@ Theorem custom_error_compile_args_shadow[local]:
     (compile_ext_call_args compile_expr ce [] tys args)
     (compile_ext_call_args compile_expr ce [] tys (MAP gas_shadow_expr args))
 Proof
-  mp_tac (Q.INST [`sh` |-> `T`, `cenv` |-> `ce`]
-    (MATCH_MP gas_shadow_compiles_ext_call_args (cj 1 gas_shadow_compile_expr))) >>
+  mp_tac (REWRITE_RULE [gasShadowCompileBaseTheory.gas_shadow_env_F]
+    (Q.INST [`sd` |-> `F`, `sh` |-> `T`, `cenv` |-> `ce`]
+      (MATCH_MP gas_shadow_compiles_ext_call_args
+        (cj 1 gas_shadow_compile_expr_env)))) >>
   disch_then (qspecl_then [`args`,`[]`,`tys`] mp_tac) >> simp[]
 QED
 
