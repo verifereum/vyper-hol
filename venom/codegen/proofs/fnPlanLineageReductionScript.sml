@@ -14,7 +14,7 @@ Proof
   rpt strip_tac >>
   drule stack_get_unfixed_depth_bound >> strip_tac >>
   `1 <= LENGTH ps.ps_stack` by decide_tac >>
-  drule do_spill_at_length_exact >>
+  drule depthReductionLengthPropsTheory.do_spill_at_length_exact >>
   disch_then (qspec_then `cand` mp_tac) >> simp[]
 QED
 

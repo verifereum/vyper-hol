@@ -1,5 +1,5 @@
 (* Stack copies established by input emission, including repeated operands.
-   TOP-LEVEL: emit_input_plan_materialised, materialised_operands_length.
+   TOP-LEVEL: emit_input_plan_materialised.
    Helpers separate variable restoration from non-variable pushes. *)
 Theory inputMaterialised
 Ancestors
@@ -115,25 +115,4 @@ Proof
   mp_tac (Q.SPECL [`operands`,`opc`,`nl`,`ps`,`ops`,`post`,`op`]
     emit_input_plan_nonvar_counts) >>
   (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >> decide_tac
-QED
-
-Theorem materialised_operands_length:
-  !(operands:'a list) stack.
-    (!op. LIST_ELEM_COUNT op operands <= LIST_ELEM_COUNT op stack) ==>
-    LENGTH operands <= LENGTH stack
-Proof
-  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
-  `MEM h stack` by
-    (qpat_assum `!op. LIST_ELEM_COUNT op (h::operands) <= _`
-       (qspec_then `h` assume_tac) >>
-     fs[LIST_ELEM_COUNT_THM, GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
-  qpat_assum `MEM h stack` (mp_tac o REWRITE_RULE [MEM_SPLIT]) >>
-  disch_then (qx_choose_then `front` (qx_choose_then `back` strip_assume_tac)) >>
-  gvs[] >>
-  `!op. LIST_ELEM_COUNT op operands <= LIST_ELEM_COUNT op (front ++ back)` by
-    (qx_gen_tac `op` >> qpat_assum `!op. LIST_ELEM_COUNT op (h::operands) <= _`
-       (qspec_then `op` assume_tac) >>
-     Cases_on `h = op` >> fs[LIST_ELEM_COUNT_THM] >> decide_tac) >>
-  first_x_assum (qspec_then `front ++ back` mp_tac) >>
-  asm_simp_tac (srw_ss()) [] >> decide_tac
 QED

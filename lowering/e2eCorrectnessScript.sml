@@ -2438,31 +2438,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem raw_variant_revert_facts:
-  !tops rpolicy unit am tx vs vi.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\ source_typing_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
-    initial_venom_state_rel tops am tx vs /\
-    ~ctx_has_dalloca unit.cu_context /\ code_layout_valid vs /\
-    vs.vs_fmp = vs.vs_initial_fmp /\ raw_variant vs.vs_initial_fmp vi vs ==>
-    raw_unit_memory_ok unit.cu_context vi /\
-    ptr_discipline 0 unit.cu_context vi /\
-    mem_inv dload_offset_ok unit.cu_context vi /\
-    mem_inv dload_headroom_ok unit.cu_context vi /\
-    mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
-                              s.vs_code = vi.vs_code /\
-                              s.vs_data_section = vi.vs_data_section)
-      unit.cu_context vi /\
-    ?fuel s. run_context fuel unit.cu_context vi = Abort Revert_abort s /\
-             s.vs_returndata = []
-Proof
-  rpt gen_tac >> strip_tac >>
-  qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `vi`, `vs.vs_initial_fmp`]
-    mp_tac raw_variant_revert_facts_fmp >> simp[]
-QED
-
 (* Keep the source unit's empty revert through the pipeline, with enough
    room for the generated frame's static layout. *)
 Theorem o1_pipeline_reverts_empty:
