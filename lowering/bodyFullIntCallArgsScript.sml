@@ -35,6 +35,10 @@ Ancestors bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragG
   abiBufferAllocationCode[qualified,ignore_grammar]
   bodyPtrPrecompileBuiltinsAllocationFrame[qualified,ignore_grammar]
   bodyExprPreFacts[qualified] exprOracleStorageInterfaces[qualified]
+  bodyInvSplit[qualified] bodyInvCodeProps[qualified]
+  bodyInvExecutionProps[qualified] bodyInvMetadataProps[qualified]
+  exprBodyPreProps[qualified]
+  compileUnit intCallAllocationProps[qualified]
 
   venomInst[qualified,ignore_grammar]
   bodyFullIfExpReach[qualified,ignore_grammar]
@@ -52,6 +56,85 @@ Ancestors bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragG
   ctorDeployLoweringSource[qualified,ignore_grammar] fragGasPathMem[qualified,ignore_grammar]
 
 val _ = Parse.hide "body";
+
+Theorem intcall_args_body_inv_struct_fields[local]:
+  body_inv tops ctx cenv cx ==>
+  cenv.ce_struct_fields = make_struct_fields_map tops
+Proof
+  disch_then (mp_tac o MATCH_MP bodySimTheory.body_inv_contract) >>
+  disch_then (mp_tac o MATCH_MP bodyInvCodePropsTheory.contract_inv_struct_fields) >>
+  simp[compileUnitTheory.make_struct_fields_map_mods_singleton]
+QED
+
+Theorem intcall_args_body_inv_constructor[local]:
+  body_inv tops ctx cenv cx ==> cx.in_deploy = cenv.ce_is_ctor
+Proof
+  disch_then (mp_tac o MATCH_MP bodySimTheory.body_inv_contract) >>
+  disch_then (mp_tac o MATCH_MP bodyInvMetadataPropsTheory.contract_inv_constructor) >>
+  simp[EQ_SYM_EQ]
+QED
+
+Theorem intcall_args_body_inv_function_tables[local]:
+  body_inv tops ctx cenv cx ==>
+  cenv.ce_func_ids = build_func_ids 0 tops /\
+  cenv.ce_func_param_types = build_func_param_types tops /\
+  cenv.ce_func_info = build_func_info (get_struct_fields (make_struct_fields_map tops)) tops /\
+  (!name. ~MEM (NONE,name) cx.stk ==>
+    ALOOKUP cenv.ce_func_defaults name = ALOOKUP (build_func_defaults tops) name)
+Proof
+  disch_then (mp_tac o MATCH_MP bodySimTheory.body_inv_contract) >>
+  simp[bodyInvSplitTheory.contract_inv_def,
+       compileUnitTheory.build_func_ids_mods_singleton,
+       compileUnitTheory.build_func_param_types_mods_singleton,
+       compileUnitTheory.build_func_info_mods_singleton,
+       compileUnitTheory.make_struct_fields_map_mods_singleton,
+       compileUnitTheory.build_func_defaults_mods_singleton, nsid_to_string_def]
+QED
+
+Theorem intcall_args_body_inv_lowering[local]:
+  body_inv tops ctx cenv cx ==>
+  ?rpolicy unit.
+    (if cx.in_deploy then
+      ?rbc. lower_vyper_deploy_unit tops rpolicy rbc = SOME unit
+     else lower_vyper_runtime_unit tops rpolicy = SOME unit) /\
+    ctx = unit.cu_context
+Proof
+  disch_then (mp_tac o MATCH_MP bodySimTheory.body_inv_contract) >>
+  simp[bodyInvSplitTheory.contract_inv_def,
+       lower_vyper_deploy_unit_mods_singleton,
+       lower_vyper_runtime_unit_mods_singleton] >>
+  strip_tac >>
+  rename1 `cenv.ce_target = rpolicy.rpol_target` >>
+  rename1 `ctx = unit.cu_context` >>
+  qexistsl_tac [`rpolicy`,`unit`] >> simp[]
+QED
+
+Theorem intcall_args_body_inv_pins[local]:
+  body_inv tops ctx cenv cx ==> cenv_module_pins tops cenv
+Proof
+  simp[bodySimTheory.body_inv_split_def]
+QED
+
+Theorem intcall_args_pre_inv[local]:
+  expr_body_pre cenv cx tenv e es ==> expr_sim_inv cenv cx tenv es
+Proof
+  simp[expr_body_pre_split_def]
+QED
+
+Theorem intcall_args_pre_well_typed[local]:
+  expr_body_pre cenv cx tenv e es ==> well_typed_expr tenv e
+Proof
+  simp[expr_body_pre_split_def, expr_body_pre_mods_def]
+QED
+
+Theorem intcall_args_pre_state[local]:
+  expr_body_pre cenv cx tenv e es /\
+  expr_sim_inv cenv cx tenv ee ==>
+  expr_body_pre cenv cx tenv e ee
+Proof
+  simp[expr_body_pre_split_def, expr_body_pre_mods_def, expr_sim_inv_split_def] >>
+  rpt strip_tac >> res_tac
+QED
 
 (* The allocation made between the two unwrap ownership intervals cannot
    own the source.  A local source is separated by the allocation's local
@@ -210,43 +293,61 @@ Proof
   Cases_on `flag` >> simp[compile_stage_intcall_args_def]
 QED
 
-Theorem intcall_args_parameter_allocation_bounds_defaults:
-  body_inv tops ctx cenv cx /\
-  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops ==>
-  EVERY (\ty. type_memory_bytes cenv ty < 2 ** 64) (MAP SND args)
+Theorem intcall_args_allocation_bounds_mods[local]:
+  contract_inv mods exps ctx cenv cx /\
+  MEM (src,(mut,nr,rr,name,args,dflts,ret,ss))
+    (FST (SND (classify_functions_unit mods exps))) ==>
+  EVERY (\ty. type_memory_bytes cenv ty < 2 ** 64) (MAP SND args) /\
+  type_memory_bytes cenv ret < 2 ** 64
 Proof
-  rpt strip_tac >>
+  strip_tac >>
+  drule_all_then assume_tac intCallAllocationPropsTheory.contract_inv_internal_allocs >>
+  drule_then assume_tac bodyInvCodePropsTheory.contract_inv_struct_fields >>
+  rename1 `cenv.ce_struct_fields = make_struct_fields_map_mods mods` >>
+  qabbrev_tac `fn_env = build_compile_env_unit mods src Internal mut name args ret ss F` >>
+  `fn_env.ce_struct_fields = cenv.ce_struct_fields` by
+    (simp[Abbr `fn_env`, compileUnitTheory.build_compile_env_unit_def] >>
+     rpt (pairarg_tac >> simp[])) >>
+  `type_memory_bytes fn_env = type_memory_bytes cenv` by
+    simp[compileEnvTheory.type_memory_bytes_frame] >>
+  fs[compileUnitTheory.fn_allocs_ok_unit_def, GSYM markerTheory.Abbrev_def, EVERY_MAP,
+     combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
+QED
+
+Theorem intcall_args_classified_singleton[local]:
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops ==>
+  MEM (NONE,subst_consts_fn (module_consts_env tops [])
+       (mut,nr,rr,name,args,dflts,ret,ss))
+    (FST (SND (classify_functions_unit [(NONE,tops)] [])))
+Proof
+  strip_tac >>
   `MEM (subst_consts_fn (module_consts_env tops [])
-      (mut,nr,rr,name,args,dflts,ret,ss))
-      (FST (SND (classify_functions tops)))` by
+     (mut,nr,rr,name,args,dflts,ret,ss))
+     (FST (SND (classify_functions tops)))` by
     (simp[constSubstTheory.subst_consts_fn_def,
           loweringShapePropsTheory.MEM_classify_internal] >>
      qexistsl [`dflts`,`ss`] >> simp[]) >>
-  qpat_x_assum `body_inv _ _ _ _` mp_tac >>
-  simp[bodySimTheory.body_inv_def] >> strip_tac >>
-  Cases_on `classify_functions tops` >> rename1 `classify_functions tops = (exts,rest)` >>
-  PairCases_on `rest` >>
-  `fn_allocs_ok tops (subst_consts_fn (module_consts_env tops [])
-      (mut,nr,rr,name,args,dflts,ret,ss))` by
-    (Cases_on `cx.in_deploy`
-     >- (gvs[] >> irule compileVyperTheory.lower_vyper_deploy_unit_allocs_ok >>
-         metis_tac[]) >>
-     gvs[] >> irule compileVyperTheory.lower_vyper_runtime_unit_allocs_ok >>
-     metis_tac[]) >>
-  qpat_x_assum `fn_allocs_ok _ _` mp_tac >>
-  simp[constSubstTheory.subst_consts_fn_def, compileVyperTheory.fn_allocs_ok_def] >>
+  Cases_on `classify_functions tops` >>
+  rename1 `classify_functions tops = (exts,rest)` >> PairCases_on `rest` >>
+  fs[classify_functions_unit_singleton, MEM_MAP] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem intcall_args_allocation_bounds[local]:
+  body_inv tops ctx cenv cx /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops ==>
+  EVERY (\ty. type_memory_bytes cenv ty < 2 ** 64) (MAP SND args) /\
+  type_memory_bytes cenv ret < 2 ** 64
+Proof
   strip_tac >>
-  `type_memory_bytes
-     (build_compile_env tops Internal mut name args ret
-       (subst_consts_stmts (module_consts_env tops []) ss) F) =
-     type_memory_bytes cenv` by
-    (irule compileEnvTheory.type_memory_bytes_frame >>
-     simp[compileVyperTheory.build_compile_env_ce_struct_fields]) >>
-  gvs[EVERY_MAP, combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
+  drule_then assume_tac bodySimTheory.body_inv_contract >>
+  drule_then assume_tac intcall_args_classified_singleton >>
+  pop_assum (assume_tac o REWRITE_RULE [constSubstTheory.subst_consts_fn_def]) >>
+  drule_all intcall_args_allocation_bounds_mods >> simp[]
 QED
 
 (* The compiler table selects the omitted suffix after constant substitution. *)
-Theorem intcall_args_omitted_defaults:
+Theorem intcall_args_omitted_defaults[local]:
   body_inv tops ctx cenv cx /\
   lookup_callable_function cx.in_deploy name tops =
     SOME (mut,nr,args,dflts,ret,ss) /\
@@ -265,10 +366,8 @@ Theorem intcall_args_omitted_defaults:
     LENGTH args - LENGTH es
 Proof
   strip_tac >>
-  `supported_program tops /\
-   cenv.ce_func_param_types = build_func_param_types tops /\
-   ALOOKUP cenv.ce_func_defaults name = ALOOKUP (build_func_defaults tops) name`
-    by gvs[bodySimTheory.body_inv_def] >>
+  drule_then strip_assume_tac bodyInvExecutionPropsTheory.body_inv_main_support >>
+  drule_then strip_assume_tac intcall_args_body_inv_function_tables >>
   `ALL_DISTINCT (supported_function_names tops) /\
    EVERY (supported_declaration_header tops) tops` by
     gvs[supportedProgramTheory.supported_program_def,
@@ -1612,9 +1711,8 @@ Proof
   simp[bind_def, push_function_def, return_def]
 QED
 
-Theorem intcall_args_aggregate_physical_type:
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx tenv e esi /\
+Theorem intcall_args_aggregate_physical_type_mods[local]:
+  expr_body_pre_mods mods cenv cx tenv e esi /\
   compile_expr cenv (expr_type e) e si = (vv,sm) /\
   ~is_word_type dty /\ ~is_bytestring_type dty /\
   type_widens_to (get_tenv cx) (expr_type e) dty ==>
@@ -1624,7 +1722,8 @@ Proof
   `well_typed_expr tenv e /\
    (!id t. FLOOKUP tenv.var_types id = SOME t ==>
      ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz))` by
-    metis_tac[expr_body_pre_def, expr_sim_inv_def] >>
+    (fs[expr_body_pre_mods_def, expr_sim_inv_mods_def] >>
+     rpt strip_tac >> first_assum (irule_at Any) >> simp[]) >>
   `vv_type vv = expr_type e \/ vv_type vv = lowered_value_type cenv e` by
     (drule_all compile_expr_reason_uniform >>
      simp[reason_uniform_shape_def] >> strip_tac >>
@@ -1673,11 +1772,13 @@ Theorem intcall_args_defaults_body_inv[local]:
   body_inv tops ctx (cenv_without_defaults ce name)
     (cx with stk updated_by CONS (NONE,name))
 Proof
-  simp[bodySimTheory.body_inv_def, cenv_without_defaults_def,
-       bodySimTheory.cenv_module_pins_def,
-       vyperContextTheory.get_module_code_def,
-       vyperContextTheory.get_tenv_def, alistTheory.ALOOKUP_FILTER] >>
-  rpt strip_tac >> simp[] >> metis_tac[]
+  simp[bodySimTheory.body_inv_split_def,
+       bodyInvSplitTheory.contract_inv_def, bodyInvSplitTheory.module_body_inv_def,
+       bodySimTheory.cenv_module_pins_split_def, bodyInvSplitTheory.cenv_module_pins_mods_def,
+       bodyInvSplitTheory.immutable_section_layout_mods_def,
+       cenv_without_defaults_def, vyperContextTheory.get_tenv_def,
+       alistTheory.ALOOKUP_def, alistTheory.ALOOKUP_FILTER, nsid_to_string_def] >>
+  rpt strip_tac >> gvs[] >> res_tac >> fs[]
 QED
 
 Theorem intcall_args_defaults_inv[local]:
@@ -1737,39 +1838,56 @@ Proof
   strip_tac >> conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem intcall_args_defaults_typed_empty[local]:
-  body_inv tops ctx cenv cx /\
-  expr_sim_inv cenv cx tenv ee /\
-  well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt) /\
+Theorem intcall_args_defaults_typed_mods[local]:
+  contract_inv mods exps ctx cenv cx /\
+  ALOOKUP mods src = SOME tops /\
+  expr_sim_inv_mods mods cenv cx tenv ee /\
+  well_typed_expr tenv (Call ann (IntCall (src,name)) es dflt) /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) ==>
-  well_typed_exprs (defaults_env (tenv with current_src := NONE)) dflts
+  well_typed_exprs (defaults_env (tenv with current_src := src)) dflts /\
+  well_typed_exprs (tenv with current_src := src) dflts
 Proof
-  rpt strip_tac >>
+  strip_tac >>
   `functions_well_typed cx /\ env_consistent tenv cx ee` by
-    gvs[expr_sim_inv_def] >>
-  `get_module_code cx NONE = SOME tops` by gvs[bodySimTheory.body_inv_def] >>
-  `IS_SOME (FLOOKUP tenv.fn_sigs (NONE,name))` by
+    fs[expr_sim_inv_mods_def] >>
+  `get_module_code cx src = SOME tops` by
+    (drule_then (qspec_then `src` mp_tac) bodyInvCodePropsTheory.contract_inv_module_codes >>
+     simp[]) >>
+  `IS_SOME (FLOOKUP tenv.fn_sigs (src,name))` by
     (qpat_x_assum `well_typed_expr _ (Call _ _ _ _)` mp_tac >>
      simp[Once well_typed_expr_def] >> metis_tac[optionTheory.IS_SOME_DEF]) >>
   drule_all vyperTypeEvalProofsTheory.callable_body_typing_from_env_consistent >>
   strip_tac >>
   `tenv.type_defs = get_tenv cx` by
-    gvs[vyperTypeInvariantsTheory.env_consistent_def,
-        vyperTypeInvariantsTheory.env_context_consistent_def] >>
-  drule (cj 4 vyperTypeContractContextTheory.well_typed_static_maps_transfer) >>
-  disch_then (qspec_then `defaults_env (tenv with current_src := NONE)` mp_tac) >>
-  simp[defaults_env_def]
+    (irule vyperTypeEvalCaseProofsTheory.env_consistent_type_defs_get_tenv >>
+     goal_assum (drule_at Any)) >>
+  `well_typed_exprs (defaults_env (tenv with current_src := src)) dflts` by
+    (drule (cj 4 vyperTypeContractContextTheory.well_typed_static_maps_transfer) >>
+     disch_then (qspec_then `defaults_env (tenv with current_src := src)` mp_tac) >>
+     simp[defaults_env_def]) >>
+  simp[] >>
+  irule (cj 4 intcall_args_defaults_typing_mutual) >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem intcall_args_defaults_typed:
+Theorem intcall_args_defaults_typed[local]:
   body_inv tops ctx cenv cx /\
   expr_sim_inv cenv cx tenv ee /\
   well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt) /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) ==>
+  well_typed_exprs (defaults_env (tenv with current_src := NONE)) dflts /\
   well_typed_exprs (tenv with current_src := NONE) dflts
 Proof
-  strip_tac >> drule_all intcall_args_defaults_typed_empty >>
-  metis_tac[cj 4 intcall_args_defaults_typing_mutual]
+  strip_tac >>
+  drule_then assume_tac bodySimTheory.body_inv_contract >>
+  drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
+  `expr_sim_inv_mods [(NONE,tops)] cenv cx tenv ee` by
+    fs[expr_sim_inv_split_def] >>
+  irule intcall_args_defaults_typed_mods >>
+  qpat_assum `expr_sim_inv_mods [(NONE,tops)] cenv cx tenv ee` (irule_at Any) >>
+  qexistsl_tac [`tops`,`ss`,`ret`,`nr`,`name`,`mut`,`[]`,`es`,
+                 `dflt`,`ctx`,`args`,`ann`] >>
+  simp[alistTheory.ALOOKUP_def]
 QED
 
 val local_default_pop =
@@ -1893,29 +2011,63 @@ Proof
   irule (cj 3 intcall_args_pure_alloc_mutual) >> simp[]
 QED
 
+Theorem intcall_args_default_substitution_mods[local]:
+  ~supported_exprs_exists (const_name_root_mods [(NONE,main_module mods)]) ds ==>
+  subst_consts_exprs (module_consts_env (main_module mods) []) ds = ds
+Proof
+  strip_tac >>
+  `const_name_root_mods [(NONE,main_module mods)] =
+      (\e. ?ty id. e = TopLevelName ty (NONE,id) /\
+                  IS_SOME (ALOOKUP (module_consts_env (main_module mods) []) id))` by
+    (simp[FUN_EQ_THM] >> gen_tac >> Cases_on `e` >> simp[const_name_root_mods_def] >>
+     rename1 `cx_const_name_mods _ nsid` >> PairCases_on `nsid` >>
+     simp[cx_const_name_mods_def, alistTheory.ALOOKUP_def] >>
+     Cases_on `ALOOKUP (module_consts_env (main_module mods) []) nsid1` >>
+     fs[alistTheory.ALOOKUP_NONE] >>
+     metis_tac[alistTheory.ALOOKUP_NONE, optionTheory.NOT_SOME_NONE]) >>
+  irule (cj 3 constSubstStmtsPreserveTheory.subst_consts_expr_unchanged) >>
+  qpat_assum `const_name_root_mods _ = _` (once_rewrite_tac o single o SYM) >>
+  first_assum ACCEPT_TAC
+QED
+
 Theorem intcall_args_default_substitution[local]:
   body_inv tops ctx cenv cx /\
   ~supported_exprs_exists (const_name_root cx) ds ==>
   subst_consts_exprs (module_consts_env tops []) ds = ds
 Proof
   strip_tac >>
-  `cx_tops cx = tops` by
-    gvs[bodySimTheory.body_inv_def, cx_tops_def, vyperContextTheory.get_module_code_def] >>
-  `const_name_root cx =
-      (\e. ?ty id. e = TopLevelName ty (NONE,id) /\
-                  IS_SOME (ALOOKUP (module_consts_env tops []) id))` by
-    (simp[FUN_EQ_THM] >> gen_tac >> Cases_on `e` >> simp[const_name_root_def] >>
-     rename1 `cx_const_name cx nsid` >> PairCases_on `nsid` >>
-     simp[cx_const_name_def] >>
-     Cases_on `ALOOKUP (module_consts_env tops []) nsid1` >>
-     fs[alistTheory.ALOOKUP_NONE] >>
-     metis_tac[alistTheory.ALOOKUP_NONE, optionTheory.NOT_SOME_NONE]) >>
-  irule (cj 3 constSubstStmtsPreserveTheory.subst_consts_expr_unchanged) >>
-  qpat_assum `const_name_root cx = _` (once_rewrite_tac o single o SYM) >>
-  first_assum ACCEPT_TAC
+  drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`] intcall_args_default_substitution_mods) >>
+  fs[main_module_def, alistTheory.ALOOKUP_def, GSYM const_name_root_mods_singleton]
 QED
 
-Theorem intcall_args_defaults_alloc:
+Theorem intcall_args_defaults_alloc_mods[local]:
+  contract_inv mods exps ctx cenv cx /\
+  MEM (src,(mut,nr,rr,name,args,defaults,ret,ss))
+    (FST (SND (classify_functions_unit mods exps))) /\
+  well_typed_exprs (defaults_env env) (DROP k defaults) ==>
+  alloc_limits_exprs (cenv_without_defaults cenv key) (DROP k defaults)
+Proof
+  strip_tac >>
+  drule_all_then assume_tac intCallAllocationPropsTheory.contract_inv_internal_allocs >>
+  qabbrev_tac `fn_env = build_compile_env_unit mods src Internal mut name args ret ss F` >>
+  `alloc_limits_exprs fn_env defaults` by
+    fs[fn_allocs_ok_unit_def, GSYM markerTheory.Abbrev_def] >>
+  `!ds skipped. alloc_limits_exprs fn_env ds ==> alloc_limits_exprs fn_env (DROP skipped ds)` by
+    (Induct >> simp[allocLimitsTheory.alloc_limits_expr_def] >>
+     gen_tac >> qx_gen_tac `skipped` >> Cases_on `skipped` >>
+     fs[allocLimitsTheory.alloc_limits_expr_def]) >>
+  `alloc_limits_exprs (cenv_without_defaults cenv key) (DROP k defaults) =
+   alloc_limits_exprs fn_env (DROP k defaults)` suffices_by
+    (disch_then SUBST1_TAC >> simp[]) >>
+  irule intcall_args_pure_allocs_frame >>
+  fs[bodyInvSplitTheory.contract_inv_def, bodyInvSplitTheory.cenv_module_pins_mods_def,
+     cenv_without_defaults_def, Abbr `fn_env`, build_compile_env_unit_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  first_assum (irule_at Any)
+QED
+
+Theorem intcall_args_defaults_alloc[local]:
   body_inv tops ctx cenv cx /\
   well_typed_exprs (defaults_env env) dflts /\
   MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
@@ -1923,60 +2075,25 @@ Theorem intcall_args_defaults_alloc:
   alloc_limits_exprs (cenv_without_defaults cenv name) (DROP k dflts)
 Proof
   strip_tac >>
-  `well_typed_exprs (defaults_env env) (DROP k dflts)` by
-    metis_tac[vyperTypeEvalProofsTheory.well_typed_exprs_DROP] >>
-  qabbrev_tac `compiled_defaults = subst_consts_exprs (module_consts_env tops []) dflts` >>
-  `DROP k compiled_defaults = DROP k dflts` by
+  drule_then assume_tac bodySimTheory.body_inv_contract >>
+  drule_then (assume_tac o REWRITE_RULE [constSubstTheory.subst_consts_fn_def])
+    intcall_args_classified_singleton >>
+  `DROP k (subst_consts_exprs (module_consts_env tops []) dflts) = DROP k dflts` by
     (drule_all intcall_args_default_substitution >>
-     simp[Abbr `compiled_defaults`, constSubstCorrectTheory.subst_consts_exprs_map,
-          listTheory.MAP_DROP]) >>
-  qabbrev_tac `compiled_body = subst_consts_stmts (module_consts_env tops []) ss` >>
-  `MEM (mut,nr,rr,name,args,compiled_defaults,ret,compiled_body)
-      (FST (SND (classify_functions tops)))` by
-    (simp[loweringShapePropsTheory.MEM_classify_internal] >>
-     qexistsl [`dflts`,`ss`] >>
-     simp[Abbr `compiled_defaults`, Abbr `compiled_body`,
-          constSubstTheory.subst_consts_fn_def]) >>
-  qpat_x_assum `body_inv _ _ _ _` mp_tac >>
-  simp[bodySimTheory.body_inv_def] >> strip_tac >>
-  Cases_on `classify_functions tops` >> rename1 `classify_functions tops = (exts,rest)` >>
-  PairCases_on `rest` >>
-  `fn_allocs_ok tops (mut,nr,rr,name,args,compiled_defaults,ret,compiled_body)` by
-    (Cases_on `cx.in_deploy`
-     >- (gvs[] >> irule compileVyperTheory.lower_vyper_deploy_unit_allocs_ok >>
-         metis_tac[]) >>
-     gvs[] >> irule compileVyperTheory.lower_vyper_runtime_unit_allocs_ok >>
-     metis_tac[]) >>
-  `alloc_limits_exprs
-     (build_compile_env tops Internal mut name args ret compiled_body F) compiled_defaults` by
-    gvs[compileVyperTheory.fn_allocs_ok_def] >>
-  `!c xs n. alloc_limits_exprs c xs ==> alloc_limits_exprs c (DROP n xs)` by
-    (gen_tac >> Induct >> simp[allocLimitsTheory.alloc_limits_expr_def] >>
-     rpt gen_tac >> Cases_on `n` >>
-     fs[allocLimitsTheory.alloc_limits_expr_def]) >>
-  `alloc_limits_exprs
-     (build_compile_env tops Internal mut name args ret compiled_body F)
-     (DROP k dflts)` by metis_tac[] >>
-  `alloc_limits_exprs (cenv_without_defaults cenv name) (DROP k dflts) =
-   alloc_limits_exprs (build_compile_env tops Internal mut name args ret compiled_body F)
-     (DROP k dflts)` by
-    (irule intcall_args_pure_allocs_frame >>
-     map_every (fn premise => qpat_assum premise mp_tac)
-       [`cenv.ce_struct_fields = make_struct_fields_map tops`,
-        `cenv.ce_func_return_type = build_func_return_type tops`,
-        `cenv.ce_hashmap_info = build_hashmap_info tops`,
-        `cenv_module_pins tops cenv`,
-        `well_typed_exprs (defaults_env env) (DROP k dflts)`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[cenv_without_defaults_def, bodySimTheory.cenv_module_pins_def,
-          compileVyperTheory.build_compile_env_def] >>
-     rpt (pairarg_tac >> fs[]) >>
-     rpt strip_tac >> metis_tac[]) >>
-  simp[]
+     simp[constSubstCorrectTheory.subst_consts_exprs_map, listTheory.MAP_DROP]) >>
+  `well_typed_exprs (defaults_env env)
+      (DROP k (subst_consts_exprs (module_consts_env tops []) dflts))` by
+    simp[vyperTypeEvalProofsTheory.well_typed_exprs_DROP] >>
+  qpat_assum `DROP k (subst_consts_exprs _ _) = DROP k dflts`
+    (fn th => once_rewrite_tac [GSYM th]) >>
+  irule intcall_args_defaults_alloc_mods >>
+  qpat_assum `MEM (NONE,_) (FST (SND (classify_functions_unit _ _)))` (irule_at Any) >>
+  qpat_assum `contract_inv [(NONE,tops)] [] ctx cenv cx` (irule_at Any) >>
+  qexists_tac `env` >> simp[]
 QED
 
 (* Prepare defaults in caller scopes at the supplied-argument endpoint. *)
-Theorem intcall_args_defaults_pre:
+Theorem intcall_args_defaults_pre[local]:
   body_inv tops ctx cenv cx /\
   expr_sim_inv cenv cx tenv ee /\
   well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt) /\
@@ -1990,15 +2107,9 @@ Theorem intcall_args_defaults_pre:
       (tenv with current_src := NONE) e ee) (DROP k dflts)
 Proof
   rpt strip_tac >>
-  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
-    gvs[bodySimTheory.body_inv_def] >>
-  `cx_tops cx = tops` by
-    gvs[bodySimTheory.body_inv_def, gasContextTheory.cx_tops_def,
-        vyperContextTheory.get_module_code_def] >>
-  `well_typed_exprs (tenv with current_src := NONE) dflts` by
-    metis_tac[intcall_args_defaults_typed] >>
-  `well_typed_exprs (defaults_env (tenv with current_src := NONE)) dflts` by
-    (drule_all intcall_args_defaults_typed_empty >> simp[NoAsms]) >>
+  drule_then strip_assume_tac bodyInvExecutionPropsTheory.body_inv_main_support >>
+  drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
+  drule_all_then strip_assume_tac intcall_args_defaults_typed >>
   `alloc_limits_exprs (cenv_without_defaults cenv name) (DROP k dflts)` by
     (drule_all intcall_args_defaults_alloc >> simp[NoAsms]) >>
   `expr_sim_inv (cenv_without_defaults cenv name)
@@ -2034,7 +2145,7 @@ Proof
      >- metis_tac[logArgumentTypeEvalTheory.consistent_variable_type_well_formed] >>
      gvs[vyperTypeInvariantsTheory.env_consistent_def,
          vyperTypeInvariantsTheory.env_context_consistent_def]) >>
-  drule bodyExprPreFactsTheory.supported_expr_body_calls >> strip_tac >>
+  drule_then strip_assume_tac bodyExprPreFactsTheory.supported_expr_body_calls >>
   `~supported_expr_exists
       (const_name_root (cx with stk updated_by CONS (NONE,name))) e` by
     (`cx_tops (cx with stk updated_by CONS (NONE,name)) = cx_tops cx` by
@@ -2046,22 +2157,46 @@ Proof
         simp[cx_const_name_def]) >>
      fs[supportedExprTraverseTheory.supported_exprs_exists_every,
         listTheory.EVERY_MEM]) >>
-  simp[expr_body_pre_def, EVERY_MEM] >> conj_tac
-  >- (gvs[EVERY_MEM, vyperContextTheory.get_module_code_def] >>
-      rpt strip_tac >> qexists `tops` >> simp[]) >>
-  conj_tac
-  >- (`cx_tops (cx with stk updated_by CONS (NONE,name)) = tops` by
-        gvs[bodySimTheory.body_inv_def, gasContextTheory.cx_tops_def,
-            vyperContextTheory.get_module_code_def] >>
-      simp[supportedProgramTheory.occurs_abi_decode_target_def, EXISTS_MEM] >>
-      rpt strip_tac >>
-      qexists `FunctionDecl Internal mut nr rr name args dflts ret ss` >>
-      simp[supportedProgramTheory.declaration_abi_decode_target_def,
-           supportedExprTraverseTheory.supported_exprs_exists_every, EXISTS_MEM] >>
-      metis_tac[]) >>
-  qpat_x_assum `body_inv tops ctx cenv cx` mp_tac >>
-  simp[bodySimTheory.body_inv_def, gasContextTheory.cx_tops_def,
-       vyperContextTheory.get_tenv_def, vyperContextTheory.get_module_code_def]
+  `cx_tops (cx with stk updated_by CONS (NONE,name)) = tops` by
+    (drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >> simp[]) >>
+  `expr_sim_inv_mods [(NONE,tops)] (cenv_without_defaults cenv name)
+       (cx with stk updated_by CONS (NONE,name))
+       (tenv with current_src := NONE) ee` by
+    fs[expr_sim_inv_split_def] >>
+  `~supported_expr_exists (unallocated_bare_global_root
+       (cenv_without_defaults cenv name) (tenv with current_src := NONE)) e` by
+    (irule expr_sim_inv_no_unallocated_bare_globals >>
+     qexistsl_tac [`cx with stk updated_by CONS (NONE,name)`, `ee`] >>
+     simp[]) >>
+  `!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+       occurs_abi_decode_target target tops` by
+    (simp[supportedProgramTheory.occurs_abi_decode_target_def, EXISTS_MEM] >>
+     rpt strip_tac >>
+     qexists `FunctionDecl Internal mut nr rr name args dflts ret ss` >>
+     simp[supportedProgramTheory.declaration_abi_decode_target_def,
+          supportedExprTraverseTheory.supported_exprs_exists_every, EXISTS_MEM] >>
+     metis_tac[]) >>
+  `get_tenv (cx with stk updated_by CONS (NONE,name)) = get_tenv cx` by
+    simp[vyperContextTheory.get_tenv_def] >>
+  `get_tenv cx = type_env_all_modules [(NONE,tops)]` by
+    (qpat_assum `body_inv tops ctx cenv cx`
+       (ACCEPT_TAC o MATCH_MP bodyInvMetadataPropsTheory.contract_inv_type_env o
+        MATCH_MP bodySimTheory.body_inv_contract)) >>
+  `get_module_code (cx with stk updated_by CONS (NONE,name)) NONE =
+     get_module_code cx NONE` by
+    simp[NoAsms, vyperContextTheory.get_module_code_def] >>
+  `EVERY (\c. ?ts. get_module_code (cx with stk updated_by CONS (NONE,name))
+                         (FST c) = SOME ts /\
+                    supported_program ts /\
+                    IS_SOME (supported_function_decl ts (NONE,SND c) Internal))
+     (int_calls_expr e)` by
+    (fs[EVERY_MEM] >> qx_gen_tac `call` >> strip_tac >>
+     `FST call = NONE` by res_tac >>
+     `(NONE,SND call) = call` by (Cases_on `call` >> fs[]) >>
+     simp[] >> res_tac) >>
+  fs[expr_body_pre_split_def, expr_body_pre_mods_def, GSYM const_name_root_mods_singleton,
+     vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
+     finite_mapTheory.FUNION_FEMPTY_2]
 QED
 
 Theorem intcall_args_defaults_ih:
@@ -2701,10 +2836,11 @@ Proof
      `expr_body_pre cenv cx tenv e esi` by fs[] >>
      drule_all exprSimSourceTheory.expr_body_pre_eval >> strip_tac >>
      conj_tac >- simp[] >>
-     fs[EVERY_MEM, expr_body_pre_def] >>
+     fs[EVERY_MEM] >>
      qx_gen_tac `arg` >> strip_tac >>
-     qpat_x_assum `!e'. MEM e' es ==> _`
-       (qspec_then `arg` mp_tac) >> simp[]) >>
+     irule intcall_args_pre_state >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists_tac `esi` >> simp[] >> res_tac) >>
   namedCases_on `flags` ["", "flag flags1"] >- fs[] >>
   namedCases_on `dtys` ["", "dty dtys1"] >- fs[] >>
   Cases_on `flag`
@@ -3137,8 +3273,10 @@ Proof
         (qpat_assum `EVERY (\e. expr_body_pre cenv cx tenv e esi) _` mp_tac >>
          qpat_assum `expr_sim_inv cenv cx tenv mid` mp_tac >>
          POP_ASSUM_LIST (K all_tac) >>
-         simp[EVERY_MEM, exprSimHypsDefsTheory.expr_body_pre_def] >>
-         metis_tac[]) >>
+         simp[EVERY_MEM] >> rpt strip_tac >>
+         irule intcall_args_pre_state >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         qexists_tac `esi` >> simp[] >> res_tac) >>
       conj_tac >- fs[] >>
       conj_tac >-
         (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
@@ -3724,8 +3862,9 @@ Proof
     (drule aggregateEvaluatedLayoutTheory.body_post_type_allocation_bound >> simp[]) >>
   `is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)` by
     (`expr_sim_inv cenv cx tenv esi /\ well_typed_expr tenv e` by
-       (qpat_assum `expr_body_pre cenv cx tenv e esi` mp_tac >>
-        simp[NoAsms,exprSimHypsDefsTheory.expr_body_pre_def]) >>
+       (qpat_assum `expr_body_pre cenv cx tenv e esi` (fn pre =>
+          ACCEPT_TAC (CONJ (MATCH_MP intcall_args_pre_inv pre)
+            (MATCH_MP intcall_args_pre_well_typed pre)))) >>
      drule_all exprSimHypsTheory.post_value_type_widens >>
      POP_ASSUM_LIST (K all_tac) >>
      simp[vyperTypeSystemTheory.type_widens_to_def] >>
@@ -4450,7 +4589,10 @@ Proof
            (qpat_assum `EVERY (\e. expr_body_pre cenv cx tenv e esi) _` mp_tac >>
             qpat_assum `expr_sim_inv cenv cx tenv mid` mp_tac >>
             POP_ASSUM_LIST (K all_tac) >>
-            simp[EVERY_MEM, exprSimHypsDefsTheory.expr_body_pre_def] >> metis_tac[]) >>
+            simp[EVERY_MEM] >> rpt strip_tac >>
+            irule intcall_args_pre_state >>
+            conj_tac >- first_assum ACCEPT_TAC >>
+            qexists_tac `esi` >> simp[] >> res_tac) >>
          conj_tac >-
            (qpat_assum `ptr_covers aG atn aq at _` mp_tac >>
             POP_ASSUM_LIST (K all_tac) >> simp[bodyPtrDefsTheory.ptr_covers_def]) >>
@@ -5206,8 +5348,8 @@ Proof
         cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
        (qpat_assum `expr_body_pre cenv cx tenv e esi` mp_tac >>
         POP_ASSUM_LIST (K all_tac) >>
-        simp[exprSimHypsDefsTheory.expr_body_pre_def,
-          exprSimHypsDefsTheory.expr_sim_inv_def,
+        disch_then (strip_assume_tac o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+        fs[exprSimHypsDefsTheory.expr_sim_inv_def,
           vyperTypeInvariantsTheory.env_consistent_def,
           vyperTypeInvariantsTheory.env_context_consistent_def]) >>
      drule exprSimIfExpCompatTheory.ifexp_lowered_type_classify >>
@@ -5228,8 +5370,8 @@ Proof
     (drule exprSimSourceTheory.expr_body_pre_var_types_well_formed >>
      qpat_assum `expr_body_pre cenv cx tenv e esi` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
-     simp[exprSimHypsDefsTheory.expr_body_pre_def,
-       exprSimHypsDefsTheory.expr_sim_inv_def,
+     disch_then (strip_assume_tac o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     fs[exprSimHypsDefsTheory.expr_sim_inv_def,
        vyperTypeInvariantsTheory.env_consistent_def,
        vyperTypeInvariantsTheory.env_context_consistent_def] >>
      rpt strip_tac >>
@@ -5324,9 +5466,9 @@ Proof
          POP_ASSUM_LIST (K all_tac) >>
          simp[exprLoweringPropsTheory.ci_mono_def]) >>
       `acyclic_struct_metadata cenv.ce_struct_fields` by
-        (qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >>
-         rw[bodySimTheory.body_inv_def]) >>
+        (qpat_assum `body_inv tops ctx cenv cx`
+           (ACCEPT_TAC o MATCH_MP bodyInvCodePropsTheory.contract_inv_acyclic_struct_metadata o
+            MATCH_MP bodySimTheory.body_inv_contract)) >>
       `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
        (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
          ALL_DISTINCT (MAP FST fields) /\
@@ -5810,8 +5952,10 @@ Proof
   `cenv.ce_func_ids = build_func_ids 0 tops /\
    cenv.ce_is_ctor = cx.in_deploy /\
    cenv.ce_func_param_types name = MAP SND args` by
-    (qpat_assum `body_inv _ _ _ _` (mp_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
-     strip_tac >> simp[] >>
+    (drule_then strip_assume_tac intcall_args_body_inv_function_tables >>
+     drule_then assume_tac intcall_args_body_inv_constructor >>
+     drule_then strip_assume_tac bodyInvExecutionPropsTheory.body_inv_main_support >>
+     simp[] >>
      irule intCallLookupTheory.build_func_param_types_distinct >>
      simp[] >> first_assum (irule_at Any) >>
      fs[supportedProgramTheory.supported_program_def,
@@ -5942,8 +6086,14 @@ Theorem intcall_args_selected_head[local]:
     internal_fn_label (build_func_ids 0 tops name) name (MAP SND args) cx.in_deploy
 Proof
   strip_tac >>
-  qpat_x_assum `body_inv _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
+  drule_then strip_assume_tac intcall_args_body_inv_lowering >>
+  `cx.in_deploy ==> IS_SOME (SND (SND (SND (classify_functions tops))))` by
+    (qpat_assum `body_inv tops ctx cenv cx`
+       (mp_tac o MATCH_MP bodySimTheory.body_inv_contract) >>
+     simp[bodyInvSplitTheory.contract_inv_def] >>
+     Cases_on `classify_functions tops` >>
+     rename1 `classify_functions tops = packages` >> PairCases_on `packages` >>
+     simp[classify_functions_unit_singleton]) >>
   Cases_on `cx.in_deploy` >> fs[]
   >- (Cases_on `classify_functions tops` >>
       rename1 `classify_functions tops = packages` >> PairCases_on `packages` >>
@@ -6937,7 +7087,7 @@ Proof
    cs_extends fix_end final /\ cs_extends cap_end final /\ cs_extends entry fix_end` by
     metis_tac[cs_extends_trans] >>
   `cx.in_deploy = cenv.ce_is_ctor` by
-    (qhdtm_assum `body_inv` (mp_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >> simp[]) >>
+    (drule_then ACCEPT_TAC intcall_args_body_inv_constructor) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
     (qhdtm_assum `intcall_entry_full`
        (ACCEPT_TAC o MATCH_MP
@@ -8145,11 +8295,12 @@ Theorem intcall_args_full:
         (es0, s0, G0, tn0) Q R
 Proof
   rpt strip_tac >>
-  `get_module_code cx NONE = SOME tops` by gvs[bodySimTheory.body_inv_def] >>
+  drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
   `call_evaluation_safe cx ((NONE,name)::int_calls_exprs es)` by
     (qpat_assum `expr_body_pre _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE
-         [expr_body_pre_def, vyperTypeCallGraphTheory.int_calls_expr_def]) >>
+         [expr_body_pre_split_def, expr_body_pre_mods_def,
+          vyperTypeCallGraphTheory.int_calls_expr_def]) >>
      first_assum ACCEPT_TAC) >>
   drule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_target_not_mem >>
   strip_tac >>
@@ -8160,8 +8311,6 @@ Proof
      mp_tac (Q.SPECL [`omitted`, `0`]
        gasShadowShapeTheory.omitted_defaults_gas_shadow_id) >>
      simp[Abbr `omitted`]) >>
-  `cx_tops cx = tops` by
-    gvs[bodySimTheory.body_inv_def, cx_tops_def, vyperContextTheory.get_module_code_def] >>
   `DROP (LENGTH dflts - (LENGTH args - LENGTH es))
       (subst_consts_exprs (module_consts_env tops []) dflts) =
     DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts` by
@@ -8363,12 +8512,11 @@ Proof
           loweringShapePropsTheory.MEM_supported_function_names] >>
      rpt strip_tac >> gvs[] >>
      `name <> s` by metis_tac[] >> Cases_on `f = External` >> simp[]) >>
-  `ALL_DISTINCT (supported_function_names tops) /\
-   cenv.ce_func_info =
-     build_func_info (get_struct_fields (make_struct_fields_map tops)) tops` by
-    ((qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
-     simp[bodySimTheory.body_inv_def, supportedProgramTheory.supported_program_def,
-          supportedNamesTheory.supported_declaration_names_def] >> (metis_tac[bodySimTheory.body_inv_def, supportedProgramTheory.supported_program_def, supportedNamesTheory.supported_declaration_names_def]))) >>
+  drule_then strip_assume_tac bodyInvExecutionPropsTheory.body_inv_main_support >>
+  drule_then strip_assume_tac intcall_args_body_inv_function_tables >>
+  `ALL_DISTINCT (supported_function_names tops)` by
+    fs[supportedProgramTheory.supported_program_def,
+       supportedNamesTheory.supported_declaration_names_def] >>
   `cenv.ce_func_info (nsid_to_string (NONE,name)) =
     compute_func_info
       (\n. MAP (FST o SND) (get_struct_fields (make_struct_fields_map tops) n))
@@ -8402,7 +8550,7 @@ Proof
       (sup_ops,sh_st2a)` by simp[] >>
   `expr_sim_inv cenv cx tenv es0` by
     (qpat_assum `expr_body_pre _ _ _ _ _`
-       (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [expr_body_pre_def])) >>
+       (ACCEPT_TAC o MATCH_MP intcall_args_pre_inv)) >>
   `env_consistent tenv cx es0` by
     (qpat_assum `expr_sim_inv cenv cx tenv es0`
        (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [expr_sim_inv_def])) >>
@@ -8417,7 +8565,7 @@ Proof
        qpat_assum `tenv.type_defs = get_tenv cx`
          (fn defs => simp[NoAsms, lookup, defs]))) >>
   `EVERY (\t. type_memory_bytes cenv t < 2 ** 64) (MAP SND args)` by
-    (irule intcall_args_parameter_allocation_bounds_defaults >>
+    (irule (cj 1 intcall_args_allocation_bounds) >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
   `!ts n i. i < LENGTH ts /\ EL i (compute_pass_via_stack ts n) ==>
       is_word_type (EL i ts)` by
@@ -8452,41 +8600,14 @@ Proof
   impl_tac >- first_assum ACCEPT_TAC >>
   strip_tac >>
   `type_memory_bytes cenv ret < 2 ** 64` by
-    (qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
-     qpat_assum `MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     `MEM (subst_consts_fn (module_consts_env tops [])
-        (mut,nr,rr,name,args,dflts,ret,ss))
-        (FST (SND (classify_functions tops)))` by
-       (simp[constSubstTheory.subst_consts_fn_def,
-             loweringShapePropsTheory.MEM_classify_internal] >>
-        qexistsl [`dflts`,`ss`] >> simp[]) >>
-     qpat_x_assum `body_inv _ _ _ _` mp_tac >>
-     simp[bodySimTheory.body_inv_def] >> strip_tac >>
-     Cases_on `classify_functions tops` >> rename1 `classify_functions tops = (exts,rest)` >>
-     PairCases_on `rest` >>
-     `fn_allocs_ok tops (subst_consts_fn (module_consts_env tops [])
-         (mut,nr,rr,name,args,dflts,ret,ss))` by
-       (Cases_on `cx.in_deploy`
-        >- (gvs[] >> irule compileVyperTheory.lower_vyper_deploy_unit_allocs_ok >>
-            metis_tac[]) >>
-        gvs[] >> irule compileVyperTheory.lower_vyper_runtime_unit_allocs_ok >>
-        metis_tac[]) >>
-     qpat_x_assum `fn_allocs_ok _ _` mp_tac >>
-     simp[constSubstTheory.subst_consts_fn_def, compileVyperTheory.fn_allocs_ok_def] >>
-     `type_memory_bytes
-       (build_compile_env tops Internal mut name args ret
-         (subst_consts_stmts (module_consts_env tops []) ss) F) =
-      type_memory_bytes cenv` by
-       (irule compileEnvTheory.type_memory_bytes_frame >>
-        simp[compileVyperTheory.build_compile_env_ce_struct_fields]) >> simp[]) >>
+    (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+       qpat_assum `MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops`
+         (ACCEPT_TAC o CONJUNCT2 o MATCH_MP intcall_args_allocation_bounds o CONJ inv))) >>
   `rc' <= 2 /\ rbs < 2 ** 64` by
     (qpat_assum `cenv.ce_func_info _ = compute_func_info _ _ _ _` mp_tac >>
      qpat_assum `cenv.ce_func_info _ = (rc',rbs,pvs)` SUBST1_TAC >>
      qpat_assum `type_memory_bytes cenv ret < 2 ** 64` mp_tac >>
-     `cenv.ce_struct_fields = make_struct_fields_map tops` by
-       (qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
-        simp[NoAsms,bodySimTheory.body_inv_def]) >>
+     drule_then assume_tac intcall_args_body_inv_struct_fields >>
      qpat_assum `cenv.ce_struct_fields = _` (SUBST1_TAC o SYM) >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[structFieldsPropsTheory.type_mem_bytes_type_memory_bytes,
@@ -8732,8 +8853,8 @@ Proof
           Once supportedExprTraverseTheory.expr_has_evm_run_thm,
           supportedExprTraverseTheory.supported_expr_exists_def,
           supportedExprTraverseTheory.supported_exprs_exists_every] o
-       REWRITE_RULE [expr_body_pre_def]) >>
-     simp[listTheory.EVERY_MEM, expr_body_pre_def] >>
+       REWRITE_RULE [expr_body_pre_split_def, expr_body_pre_mods_def]) >>
+     simp[listTheory.EVERY_MEM, expr_body_pre_split_def, expr_body_pre_mods_def] >>
      qx_gen_tac `e` >> disch_tac >>
      `call_evaluation_safe cx (int_calls_exprs es)` by
        (irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono >>
@@ -8783,10 +8904,12 @@ Proof
            storage_trace_frame_acquire_lock, storage_trace_frame_release_lock,
            storage_trace_frame_check_not_static,
            cj 2 evaluate_storage_trace_frame, cj 6 evaluate_storage_trace_frame])
-  >- (rpt strip_tac >> irule intcall_args_aggregate_physical_type >>
-      qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
-      qexistsl_tac [`tenv`,`cm`,`ci`,`ee`,`dty`] >>
-      rpt conj_tac >> first_assum ACCEPT_TAC)
+  >- (rpt strip_tac >> irule intcall_args_aggregate_physical_type_mods >>
+      qpat_assum `body_inv tops ctx cenv cx`
+        (mp_then Any (drule_then (irule_at Any))
+          exprBodyPrePropsTheory.body_inv_expr_body_pre_mods) >>
+      qpat_assum `compile_expr cenv (expr_type e) e ci = (_,cm)` (irule_at Any) >>
+      qexists_tac `dty` >> simp[])
   >> TRY (qunabbrev_tac `supplied_tail` >>
       qpat_assum `gas_admissible (bind (eval_exprs cx es) _) P es0` mp_tac >>
       POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> NO_TAC)
@@ -8847,7 +8970,7 @@ Proof
      simp[intcall_args_stmt_state_rel_push]) >>
   `well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt)` by
     (qpat_assum `expr_body_pre cenv cx tenv (Call _ _ _ _) es0`
-       (ACCEPT_TAC o cj 2 o REWRITE_RULE [expr_body_pre_def])) >>
+       (ACCEPT_TAC o MATCH_MP intcall_args_pre_well_typed)) >>
   `IS_SOME (FLOOKUP tenv.fn_sigs (NONE,name))` by
     (qpat_assum `well_typed_expr tenv (Call _ _ _ _)` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
@@ -8868,9 +8991,6 @@ Proof
      simp[defaults_env_def]) >>
   `supported_pure_exprs tops ds` by
     (qpat_assum `ds = DROP _ dflts` SUBST1_TAC >>
-     `supported_program tops` by
-       (qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
-        POP_ASSUM_LIST (K ALL_TAC) >> simp[bodySimTheory.body_inv_def]) >>
      `supported_pure_exprs tops dflts` by
        (drule_all supportedProgramTheory.supported_program_declaration >>
         simp[supportedProgramTheory.supported_declaration_body_def]) >>
@@ -9219,8 +9339,10 @@ Proof
        qpat_assum `LENGTH pvs = LENGTH args` mp_tac >>
        POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> NO_TAC) >>
   TRY (qmatch_goalsub_rename_tac `vv_type _ = lowered_value_type _ _` >>
-       rpt strip_tac >> irule intcall_args_aggregate_physical_type >>
-       qpat_assum `body_inv tops ctx (cenv_without_defaults cenv name) cxd` (irule_at Any) >>
+       rpt strip_tac >> irule intcall_args_aggregate_physical_type_mods >>
+       qpat_assum `body_inv tops ctx (cenv_without_defaults cenv name) cxd`
+         (mp_then Any (drule_then (irule_at Any))
+           exprBodyPrePropsTheory.body_inv_expr_body_pre_mods) >>
        rpt (first_assum (irule_at Any)) >> NO_TAC) >>
   TRY (qpat_assum `!sc s n b k. local_region (cenv_without_defaults cenv name) sc s n b k <=> _`
          (fn th => pure_rewrite_tac [th, listTheory.APPEND]) >>
@@ -9915,9 +10037,7 @@ Proof
             simp[NoAsms,compileVyperTheory.package_internal_fn_def,
                  compileVyperTheory.set_internal_package_target_def] >> strip_tac >>
             rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE first_assum (ACCEPT_TAC o SYM))) >>
-         `cenv.ce_func_ids = build_func_ids 0 tops` by
-           (qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
-            simp[NoAsms,bodySimTheory.body_inv_def]) >>
+         drule_then (assume_tac o cj 1) intcall_args_body_inv_function_tables >>
          `lbl' = lbl` by
            (qpat_assum `lbl' = internal_fn_label _ _ _ _` SUBST1_TAC >>
             qunabbrev_tac `lbl` >>
@@ -9937,7 +10057,7 @@ Proof
             simp[NoAsms,compute_func_info_def]) >>
          `has_rb <=> rc' = 0 /\ 0 < rbs` by
            (`cenv.ce_struct_fields = make_struct_fields_map tops` by
-              (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms,bodySimTheory.body_inv_def]) >>
+              (drule_then ACCEPT_TAC intcall_args_body_inv_struct_fields) >>
             qpat_assum `has_rb = _` SUBST1_TAC >>
             qpat_assum `rc' = returns_stack_count _ _` (SUBST1_TAC o SYM) >>
             irule (cj 1 args_return_buffer_geometry) >>
@@ -9953,10 +10073,11 @@ Proof
                  compileVyperTheory.set_internal_package_target_def,
                  compileVyperTheory.update_cenv_nonreentrant_def] >> strip_tac >>
             qpat_assum `_ = ce` (SUBST1_TAC o SYM) >>
-            simp[NoAsms,bodySimTheory.body_inv_def,bodySimTheory.cenv_module_pins_def,
+            disch_then (fn inv => map_every (fn th => assume_tac (MATCH_MP th inv))
+              [intcall_args_body_inv_pins, intcall_args_body_inv_constructor]) >>
+            fs[bodySimTheory.cenv_module_pins_def,
                  immutableLocationPropsTheory.build_compile_env_module_vars,
                  compileVyperTheory.build_compile_env_def] >>
-            strip_tac >> reverse conj_tac >- metis_tac[] >>
             rpt (pairarg_tac >> simp[])) >>
          `ce.ce_is_ctor ==> IS_SOME (FLOOKUP u.vs_labels "runtime_begin")` by
            (qpat_assum `stmt_state_rel H ctx func cenv cx ed u`
@@ -10000,7 +10121,7 @@ Proof
             simp[NoAsms,compute_func_info_def] >> strip_tac >> simp[]) >>
          `ALL_DISTINCT (MAP FST args)` by
            (`supported_program tops` by
-              (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms,bodySimTheory.body_inv_def]) >>
+              (drule_then ACCEPT_TAC (cj 1 bodyInvExecutionPropsTheory.body_inv_main_support)) >>
             qpat_assum `MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops`
               (mp_then Any mp_tac supportedProgramTheory.supported_program_function) >>
             simp[] >> metis_tac[supportedProgramTheory.supported_function_body_binding_contract]) >>
@@ -10043,7 +10164,7 @@ Proof
                     compileEnvTheory.LENGTH_compute_pass_via_stack]) >>
             simp[listTheory.EL_APPEND_EQN]) >>
          `cenv.ce_struct_fields = make_struct_fields_map tops` by
-           (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms,bodySimTheory.body_inv_def]) >>
+           (drule_then ACCEPT_TAC intcall_args_body_inv_struct_fields) >>
          `!i. i < LENGTH params ==>
             ?off tv.
               evaluate_type (get_tenv cx) (SND (EL i args)) = SOME tv /\
@@ -10237,7 +10358,7 @@ Proof
          `MEM ii (fn_insts func)` by
            (drule_all fragFuelTheory.lookup_block_get_instruction_fn_insts >> simp[]) >>
          `cx.in_deploy = cenv.ce_is_ctor` by
-           (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms,bodySimTheory.body_inv_def]) >>
+           (drule_then ACCEPT_TAC intcall_args_body_inv_constructor) >>
          `lbl = internal_fn_label (build_func_ids 0 tops name) name (MAP SND args)
                  cx.in_deploy` by
            (qpat_assum `lbl' = internal_fn_label _ _ _ _` mp_tac >>
@@ -10647,7 +10768,7 @@ Proof
              `rbuf = rb` by (first_assum irule >> first_assum ACCEPT_TAC) >>
              qpat_x_assum `rbuf = rb` SUBST_ALL_TAC >>
              `cenv.ce_struct_fields = make_struct_fields_map tops` by
-               (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms,bodySimTheory.body_inv_def]) >>
+               (drule_then ACCEPT_TAC intcall_args_body_inv_struct_fields) >>
              `rbs = type_memory_size rtv` by
                (irule (cj 2 args_return_buffer_geometry) >>
                 conj_tac >- first_assum ACCEPT_TAC >>
@@ -10669,9 +10790,10 @@ Proof
              qpat_assum `b + buf_n <= u.vs_alloca_next` mp_tac >>
              POP_ASSUM_LIST (K ALL_TAC) >> decide_tac)
          >- (`lowering_context_ok ctx` by
-               (qpat_assum `body_inv _ _ _ _` mp_tac >>
+               (qpat_assum `body_inv _ _ _ _`
+                  (mp_tac o MATCH_MP intcall_args_body_inv_lowering) >>
                 POP_ASSUM_LIST (K ALL_TAC) >>
-                rw[bodySimTheory.body_inv_def] >> Cases_on `cx.in_deploy` >> gvs[] >>
+                strip_tac >> Cases_on `cx.in_deploy` >> gvs[] >>
                 metis_tac[vyperLoweringCorrectTheory.lower_vyper_runtime_unit_context_entry,
                           deployUnitProducersTheory.lower_vyper_deploy_unit_context_ok]) >>
              drule_all args_enter_invoke >> strip_tac >> goal_assum (drule_at Any)) >>
