@@ -451,6 +451,10 @@ Proof
        qpat_assum `!tail. eval_target_place _ _ _ = _`
          (qspec_then `[]` (ACCEPT_TAC o REWRITE_RULE [APPEND_NIL,upd])))) >>
   qmatch_asmsub_abbrev_tac `eval_target_place cx t (es with gas_obs := reads) = (INL p,st)` >>
+  `body_const_cells_agree [(NONE,tops)] cx env st` by
+    (irule body_const_cells_agree_target >>
+     qpat_assum `eval_target_place cx t (es with gas_obs := reads) = (INL p,st)`
+       (irule_at Any) >> simp[]) >>
   `!id path. p = MemoryPlace id path ==>
     ?entry v. lookup_scopes id st.scopes = SOME entry /\
       evaluate_subscripts entry.type entry.value path = INL v` by
