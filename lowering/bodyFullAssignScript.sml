@@ -3983,7 +3983,7 @@ Proof
   gvs[]
 QED
 
-Theorem body_assign_attribute_storage_origin[local]:
+Theorem body_assign_attribute_storage_origin:
   compile_attribute f cenv rt ty obj fld sa = (LocatedValue t p,sb) /\
   p.ptr_location <> LocMemory ==>
   t = rt /\
@@ -3995,7 +3995,7 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem body_assign_subscript_storage_origin[local]:
+Theorem body_assign_subscript_storage_origin:
   compile_subscript f cenv rt ty obj idx sa = (LocatedValue t p,sb) /\
   p.ptr_location <> LocMemory ==>
   t = rt /\ ~copies_subscript_base cenv obj idx /\
@@ -4102,7 +4102,7 @@ Proof
        return_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
 
-Theorem body_assign_storage_base_result[local]:
+Theorem body_assign_storage_base_result:
   body_inv tops ctx cenv cx /\
   (case e of TopLevelName _ _ => T | Pop _ _ => T | _ => F) /\
   compile_expr cenv ty e sa = (LocatedValue t p,sb) /\
@@ -4227,7 +4227,7 @@ QED
 
 Finalise body_assign_storage_expr_cases
 
-Theorem body_assign_select_nonvalue[local]:
+Theorem body_assign_select_nonvalue:
   (!v. raw <> Value v) /\
   select_result cx ty raw sub st = (INL out,st') ==>
   !v. out <> Value v
