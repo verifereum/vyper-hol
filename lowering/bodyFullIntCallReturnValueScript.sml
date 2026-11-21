@@ -5,6 +5,7 @@ Ancestors context[qualified,ignore_grammar]
   fragGasOriginPtrInvoke intCallResultFull
   vyperInterpreter vyperState vyperAST vyperTyping bodyFullIntCallReturnTyping
   valueEncodingProofs valueCopyBytes exprLoweringProps
+  bodyInvCodeProps exprBodyPreProps compileUnit alist
 
 Theorem fresh_vars_arity_code[local]:
   !n sa xs sb. fresh_vars n sa = (xs,sb) ==>
@@ -135,6 +136,23 @@ Proof
  metis_tac[intcall_entry_invoke_continuation]
 QED
 
+Theorem intcall_return_type_facts_mods:
+ contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
+ expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (src,name)) es dflt) es0 /\
+ lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
+ evaluate_type (get_tenv cx) ret = SOME rtv /\ safe_cast rtv v = SOME v ==>
+ cenv.ce_func_return_type (nsid_to_string (src,name)) = ret /\
+ evaluate_type (get_tenv cx) ret = SOME rtv /\ value_has_type rtv v /\
+ type_widens_to (get_tenv cx) ret ann /\
+ cenv.ce_struct_fields = make_struct_fields_map_mods mods
+Proof
+ strip_tac >>
+ drule_all_then strip_assume_tac intcall_declared_return_type_mods >>
+ drule_then assume_tac contract_inv_struct_fields >>
+ drule_then assume_tac safe_cast_result_well_typed >>
+ simp[]
+QED
+
 Theorem intcall_return_type_facts:
  !tops ctx func cenv cx tenv ann name es dflt es0 sa sm vv s0
   DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn v.
@@ -148,16 +166,18 @@ Theorem intcall_return_type_facts:
  type_widens_to (get_tenv cx) ret ann /\
  cenv.ce_struct_fields = make_struct_fields_map tops
 Proof
- rpt gen_tac >> strip_tac >>
+ rpt strip_tac >>
  `evaluate_type (get_tenv cx) ret = SOME rtv /\
   ?dflts. lookup_callable_function cx.in_deploy name tops =
     SOME (mut,nr,args,dflts,ret,ss)` by
    (qhdtm_assum `intcall_entry_full` mp_tac >>
     pure_rewrite_tac[intcall_entry_full_def] >> metis_tac[]) >>
- drule_all intcall_declared_return_type >> strip_tac >>
- simp[] >> conj_tac
- >- (drule safe_cast_result_well_typed >> simp[]) >>
- fs[bodySimTheory.body_inv_def]
+ drule_all_then strip_assume_tac body_inv_expr_body_pre_mods >>
+ drule_then assume_tac bodySimTheory.body_inv_contract >>
+ drule_all_then strip_assume_tac
+   (REWRITE_RULE [ALOOKUP_def] (Q.INST [`mods` |-> `[(NONE,tops)]`,
+     `src` |-> `NONE`] intcall_return_type_facts_mods)) >>
+ simp[make_struct_fields_map_mods_singleton]
 QED
 
 
@@ -198,7 +218,7 @@ Proof
     (\n. MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields n)) ret` by simp[] >>
  `~is_bytestring_type ret` by suspend "not_bytes" >>
  `type_memory_size rtv = 32 * nret` by
-   (`expr_sim_inv cenv cx tenv es0` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+   (`expr_sim_inv cenv cx tenv es0` by metis_tac[expr_body_pre_static_facts] >>
     `type_memory_bytes cenv ret = type_memory_size rtv` by
       metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
     drule_all returns_stack_extent >> pure_asm_rewrite_tac[] >>
@@ -303,8 +323,8 @@ Resume intcall_return_register_value_certificate[robust]:
 QED
 Resume intcall_return_register_value_certificate[abi_shape]:
  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
-   gvs[exprSimHypsDefsTheory.expr_body_pre_def,
-       exprSimHypsDefsTheory.expr_sim_inv_def] >>
+   (drule_then strip_assume_tac expr_body_pre_static_facts >>
+    fs[exprSimHypsDefsTheory.expr_sim_inv_def]) >>
  Cases_on `is_word_type ret`
  >- (disj1_tac >> metis_tac[]) >>
  Cases_on `ret` >>

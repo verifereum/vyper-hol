@@ -10,7 +10,7 @@ Ancestors
   supportedDecls compileVyper constSubst compileEnv vyperTypeEnv vyperTypeContract
   vyperContext vyperInterpreter vyperState vyperTypeInvariants exprSimHyps
   exprSimHypsDefs vyperTypeSystem
-  bodySim list finite_map pair
+  bodySim bodyInvSplit bodyInvCodeProps bodyInvModuleProps compileUnit alist list finite_map pair
 
 (* ===== Storage variables and hashmaps of any visibility ===== *)
 
@@ -217,12 +217,156 @@ QED
 
 (* ===== The S1 lemmas whose statements name Private ===== *)
 
+Theorem storage_metadata_other_source[local]:
+  !tops src key id vmap hmap tail.
+    src <> key ==>
+    build_var_type_map_src src tops vmap (key,id) = vmap (key,id) /\
+    build_hashmap_info_src src tops hmap (key,id) = hmap (key,id) /\
+    build_dynarray_capacity (collect_module_vars_src src tops ++ tail) (key,id) =
+      build_dynarray_capacity tail (key,id)
+Proof
+  Induct >> simp[build_var_type_map_src_def, build_hashmap_info_src_def,
+                 collect_module_vars_src_def] >>
+  Cases >> simp[build_var_type_map_src_def, build_hashmap_info_src_def,
+                collect_module_vars_src_def, build_dynarray_capacity_def] >>
+  rw[] >> Cases_on `dynarray_capacity_of_type t` >> simp[]
+QED
+
+Theorem storage_metadata_absent_source[local]:
+  !mods src id.
+    ALOOKUP mods src = NONE ==>
+    build_hashmap_info_mods mods (src,id) = NONE /\
+    build_dynarray_capacity (collect_module_vars_mods mods) (src,id) = 0
+Proof
+  Induct >> simp[build_hashmap_info_mods_def, collect_module_vars_mods_def,
+                 build_dynarray_capacity_def] >>
+  PairCases >> rw[build_hashmap_info_mods_def, collect_module_vars_mods_def] >>
+  drule_then (fn th => simp[th]) storage_metadata_other_source
+QED
+
+Theorem storage_metadata_source_lookup[local]:
+  !tops src id vm hm.
+    build_var_type_map_src src tops vm (src,id) =
+      (case build_var_type_map tops (NONE,id) of
+         NONE => vm (src,id) | SOME ty => SOME ty) /\
+    build_hashmap_info_src src tops hm (src,id) =
+      (case build_hashmap_info tops (NONE,id) of
+         NONE => hm (src,id) | SOME info => SOME info)
+Proof
+  Induct >> simp[build_var_type_map_src_def, build_var_type_map_def,
+                 build_hashmap_info_src_def, build_hashmap_info_def] >>
+  Cases >> simp[build_var_type_map_src_def, build_var_type_map_def,
+                build_hashmap_info_src_def, build_hashmap_info_def] >>
+  rw[]
+QED
+
+Theorem storage_capacity_source_lookup[local]:
+  !tops src id vis mut elem n slot tail.
+    supported_variable_decl tops (NONE,id) =
+      SOME (vis,mut,ArrayT elem (Dynamic n),slot) ==>
+    build_dynarray_capacity (collect_module_vars_src src tops ++ tail) (src,id) = n
+Proof
+  Induct >> simp[supported_variable_decl_def] >>
+  Cases >>
+  simp[supported_variable_decl_def, collect_module_vars_src_def,
+       build_dynarray_capacity_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), dynarray_capacity_of_type_def] >>
+  first_x_assum drule >> simp[] >>
+  CASE_TAC >> simp[] >> metis_tac[]
+QED
+
+Theorem storage_metadata_unit_lookup[local]:
+  !mods src tops id ty.
+    ALL_DISTINCT (MAP FST mods) /\ ALOOKUP mods src = SOME tops /\
+    build_var_type_map tops (NONE,id) = SOME ty /\
+    build_hashmap_info tops (NONE,id) = NONE ==>
+    build_var_type_map_mods mods (src,id) = SOME ty /\
+    build_hashmap_info_mods mods (src,id) = NONE
+Proof
+  Induct >> simp[] >> PairCases >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h0 = src` >>
+  gvs[build_var_type_map_mods_def, build_hashmap_info_mods_def]
+  >- (simp[storage_metadata_source_lookup] >>
+      irule (cj 1 storage_metadata_absent_source) >> simp[ALOOKUP_NONE]) >>
+  drule_then (fn th => simp[th]) storage_metadata_other_source >>
+  metis_tac[]
+QED
+
+Theorem storage_capacity_unit_lookup[local]:
+  !mods src tops id vis mut elem n slot.
+    ALOOKUP mods src = SOME tops /\
+    supported_variable_decl tops (NONE,id) =
+      SOME (vis,mut,ArrayT elem (Dynamic n),slot) ==>
+    build_dynarray_capacity (collect_module_vars_mods mods) (src,id) = n
+Proof
+  Induct >> simp[] >> PairCases >>
+  rw[collect_module_vars_mods_def] >>
+  metis_tac[storage_capacity_source_lookup, storage_metadata_other_source]
+QED
+
+Theorem variable_keys_requalify[local]:
+  !tops (src:num option).
+    FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops) =
+    MAP (\(key,id). (NONE,id))
+      (FLAT (MAP (toplevel_vtype_keys_toplevel src) tops))
+Proof
+  Induct >> simp[] >> Cases >>
+  simp[toplevel_vtype_keys_toplevel_def]
+QED
+
+Theorem variable_keys_have_source[local]:
+  !tops src key id.
+    MEM (key,id) (FLAT (MAP (toplevel_vtype_keys_toplevel src) tops)) ==> key = src
+Proof
+  Induct >> simp[] >> Cases >> simp[toplevel_vtype_keys_toplevel_def] >>
+  metis_tac[]
+QED
+
+Theorem contract_inv_storage_metadata[local]:
+  contract_inv mods exps ctx cenv cx ==>
+  ALL_DISTINCT (MAP FST mods) /\
+  (!src tops. ALOOKUP mods src = SOME tops ==>
+     ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) tops))) /\
+  cenv.ce_module_var_type = build_var_type_map_mods mods /\
+  cenv.ce_hashmap_info = build_hashmap_info_mods mods /\
+  cenv.ce_module_dynarray_capacity =
+    build_dynarray_capacity (collect_module_vars_mods mods)
+Proof
+  simp[contract_inv_def, cenv_module_pins_mods_def] >> metis_tac[]
+QED
+
+Theorem storage_binding_mods[local]:
+  contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
+  supported_variable_decl tops (NONE,id) = SOME (vis,mut,ty,SOME slot) /\
+  (mut = Storage \/ mut = Transient) ==>
+  get_module_code cx src = SOME tops /\
+  find_var_decl_by_name id tops = SOME (StorageVarDecl (mut = Transient) ty,id) /\
+  cenv.ce_module_var_type (src,id) = SOME ty /\ cenv.ce_hashmap_info (src,id) = NONE
+Proof
+  REWRITE_TAC [GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_then (assume_tac o Q.SPEC `src`) contract_inv_module_codes >>
+  drule_then strip_assume_tac contract_inv_storage_metadata >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops))` by
+    (
+     qpat_assum `!s ts. ALOOKUP mods s = SOME ts ==> _` (drule_then strip_assume_tac) >>
+     simp[] >>
+     ONCE_REWRITE_TAC [Q.SPECL [`tops`,`src`] variable_keys_requalify] >>
+     irule ALL_DISTINCT_MAP_INJ >> simp[pairTheory.FORALL_PROD] >>
+     metis_tac[variable_keys_have_source]) >>
+  mp_tac (Q.SPECL [`tops`,`NONE`,`id`,`vis`,`mut`,`ty`,`slot`]
+            supported_variable_decl_storage_binding) >>
+  impl_tac >- simp[] >> strip_tac >>
+  mp_tac (Q.SPECL [`mods`,`src`,`tops`,`id`,`ty`] storage_metadata_unit_lookup) >>
+  simp[]
+QED
+
 (* bodyAppendStorageFacts' body_append_runtime_metadata, with
    supported_storage_dynamic_array replaced by a lookup of any
    visibility. *)
-Theorem body_append_runtime_metadata_vis:
-  body_inv tops ctx cenv cx /\
-  supported_variable_decl tops (src,id) =
+Theorem body_append_runtime_metadata_vis_mods:
+  contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
+  supported_variable_decl tops (NONE,id) =
     SOME (vis, mut, ArrayT delem (Dynamic dn), SOME dslot) /\
   (mut = Storage \/ mut = Transient) /\ supported_full_word_type delem /\
   env_consistent env cx es /\
@@ -238,13 +382,11 @@ Theorem body_append_runtime_metadata_vis:
       (INL (StoragePlace tr (n2w slot) tv),
        es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tv])
 Proof
-  strip_tac >>
-  `ALL_DISTINCT
-     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
-   get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
-  drule supported_variable_decl_storage_binding >> disch_then drule >>
-  (impl_tac >- fs[]) >> strip_tac >> gvs[] >>
-  drule_all body_append_root_metadata >> strip_tac >>
+  REWRITE_TAC [GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all_then strip_assume_tac storage_binding_mods >>
+  drule_then strip_assume_tac contract_inv_storage_metadata >>
+  `cenv.ce_module_dynarray_capacity (src,id) = dn` by
+    (drule_all_then assume_tac storage_capacity_unit_lookup >> simp[]) >>
   `find_var_decl_by_name id tops <> NONE` by simp[] >>
   drule_all append_typed_storage_target >> strip_tac >> gvs[] >>
   drule_all append_storage_target_eval >> strip_tac >>
@@ -252,12 +394,12 @@ Proof
 QED
 
 (* bodyAppendStorageFacts' body_append_target_bounds, likewise. *)
-Theorem body_append_target_bounds_vis:
-  body_inv tops ctx cenv cx /\
-  supported_variable_decl tops (src,id) =
+Theorem body_append_target_bounds_vis_mods:
+  contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
+  supported_variable_decl tops (NONE,id) =
     SOME (vis, mut, ArrayT delem (Dynamic dn), SOME dslot) /\
   (mut = Storage \/ mut = Transient) /\ supported_full_word_type delem /\
-  expr_sim_inv cenv cx env es /\
+  env_consistent env cx es /\
   type_stmt env ret_ty (Append (TopLevelNameTarget (src,id)) e) = SOME env' ==>
   ?elem n tr key slot tv.
     supported_full_word_type elem /\ 0 < n /\ n + 1 < dimword(:256) /\
@@ -273,8 +415,7 @@ Theorem body_append_target_bounds_vis:
 Proof
   REWRITE_TAC [GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule append_typing_target >> strip_tac >>
-  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
-  drule_all body_append_runtime_metadata_vis >> strip_tac >> gvs[] >>
+  drule_all body_append_runtime_metadata_vis_mods >> strip_tac >> gvs[] >>
   `env.type_defs = get_tenv cx` by
     fs[env_consistent_def, env_context_consistent_def] >>
   `assignable_type env.type_defs
@@ -286,32 +427,25 @@ QED
 
 (* bodySimStmtCases' body_assign_copy_target, with the Private lookup
    replaced by a lookup of any visibility. *)
-Theorem body_assign_copy_target_vis:
-  !tops ctx cenv cx src id vis mut ty ast_slot env es ret_ty e env'.
-    body_inv tops ctx cenv cx /\
-    supported_variable_decl tops (src,id) = SOME (vis,mut,ty,SOME ast_slot) /\
-    (mut = Storage \/ mut = Transient) /\ expr_sim_inv cenv cx env es /\
+Theorem body_assign_copy_target_vis_mods:
+  !mods exps tops ctx cenv cx src id vis mut ty ast_slot env es ret_ty e env'.
+    contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
+    supported_variable_decl tops (NONE,id) = SOME (vis,mut,ty,SOME ast_slot) /\
+    (mut = Storage \/ mut = Transient) /\ env_consistent env cx es /\
     type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget (src,id))) e) =
       SOME env' ==>
-    src = NONE /\ get_module_code cx NONE = SOME tops /\
-    cenv.ce_hashmap_info (NONE,id) = NONE /\
-    cenv.ce_module_var_type (NONE,id) = SOME ty /\
+    get_module_code cx src = SOME tops /\
+    cenv.ce_hashmap_info (src,id) = NONE /\
+    cenv.ce_module_var_type (src,id) = SOME ty /\
     ?tr id_str off tvt.
       find_var_decl_by_name id tops = SOME (StorageVarDecl tr ty,id_str) /\
-      lookup_var_slot_from_layout cx tr NONE id_str = SOME off /\
+      lookup_var_slot_from_layout cx tr src id_str = SOME off /\
       evaluate_type (get_tenv cx) ty = SOME tvt
 Proof
-  rpt gen_tac >> strip_tac >> (
-  `ALL_DISTINCT
-     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
-   get_module_code cx NONE = SOME tops /\
-   cenv.ce_hashmap_info = build_hashmap_info tops /\
-   cenv.ce_module_var_type (NONE,id) = build_var_type_map tops (NONE,id)` by
-    fs[body_inv_def] >>
-  drule supported_variable_decl_storage_binding >> disch_then drule >>
-  (impl_tac >- fs[]) >> strip_tac >> gvs[] >>
-  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
-  Cases_on `type_place_target env (TopLevelNameTarget (NONE,id))` >>
+  rpt gen_tac >> REWRITE_TAC [GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all_then strip_assume_tac storage_binding_mods >>
+  qpat_x_assum `mut = Storage \/ mut = Transient` kall_tac >>
+  Cases_on `type_place_target env (TopLevelNameTarget (src,id))` >>
   gvs[type_stmt_def, atarget_accepts_def] >>
   rename1 `type_place_target _ _ = SOME vt` >> Cases_on `vt` >> gvs[] >>
   gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
@@ -319,7 +453,7 @@ Proof
       first_x_assum drule >> strip_tac >> gvs[]) >>
   drule_all vyperTypeEnvTheory.env_consistent_toplevel_storage_static >>
   strip_tac >> gvs[] >>
-  gvs[optionTheory.IS_SOME_EXISTS])
+  gvs[optionTheory.IS_SOME_EXISTS]
 QED
 
 (* ===== FlagDecl and ErrorDecl entries ===== *)
