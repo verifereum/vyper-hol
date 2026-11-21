@@ -3,7 +3,8 @@ Theory immutableDeployAssignMemoryFrame
 Ancestors
   immutableDeployAssignSourceFrame immutableDeployAssignFacts exprSimHypsDefs
   compileEnv loweringStateRelDefs valueEncodingProps valueTypingMemoryProps vyperTypeEnv
-  vyperTypeInvariants vyperState finite_map
+  vyperTypeInvariants vyperState finite_map placeMemoryPathRebuild
+  immutableDeployAssignAdmissible immutableValue
 
 Theorem immutable_store_immutables_frame:
   immutables_rel ce cx.txn.target ce.ce_module ce.ce_is_ctor es s /\
@@ -59,4 +60,44 @@ Proof
   `mem_bytes_at byte_offset (type_memory_size tv') q.vs_memory =
    mem_bytes_at byte_offset (type_memory_size tv') s.vs_memory` by metis_tac[] >>
   metis_tac[val_in_memory_mem_agree, arithmeticTheory.LESS_EQ_REFL]
+QED
+
+(* TEMPORARILY CHEATED - publish the nested write interface for its consumers. *)
+Theorem immutable_value_bytes_rel_replace_path:
+  well_formed_type_value itv /\ value_has_type itv old /\
+  value_has_type ptv v /\ mem_path_offset itv path = SOME (k,ptv) /\
+  assign_subscripts itv old path (Replace v) = INL new /\
+  val_in_memory itv old off mem /\
+  val_in_memory ptv v (off+k) mem' /\
+  (!b n. off <= b /\ b+n <= off+type_memory_size itv /\
+    (b+n <= off+k \/ off+k+type_memory_size ptv <= b) ==>
+    mem_bytes_at b n mem' = mem_bytes_at b n mem) ==>
+  immutable_value_admissible itv new /\
+  val_in_memory itv new off mem' /\
+  immutable_value_bytes_rel itv new
+    (mem_bytes_at off (type_memory_size itv) mem')
+Proof
+  cheat
+QED
+
+(* TEMPORARILY CHEATED - publish the nested write interface for its consumers. *)
+Theorem immutable_path_write_immutables_rel:
+  immutables_rel ce cx.txn.target src T es s /\
+  ALOOKUP es.immutables cx.txn.target = SOME imms /\
+  FLOOKUP (get_source_immutables src imms) id = SOME (itv,old) /\
+  FLOOKUP ce.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+  well_formed_type_value itv /\ value_has_type itv old /\
+  write_place cx (ImmutablePlace src id path) v es = (INL (),es') /\
+  mem_path_offset itv path = SOME (k,ptv) /\
+  value_has_type ptv v /\ val_in_memory ptv v (off+k) mem' /\
+  (!b n. regions_disjoint b n (off+k) (type_memory_size ptv) ==>
+    mem_bytes_at b n mem' = mem_bytes_at b n s.vs_memory) /\
+  (!name at ot ov.
+     name <> id /\
+     FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc at) /\
+     FLOOKUP (get_source_immutables src imms) name = SOME (ot,ov) ==>
+     regions_disjoint at (type_memory_size ot) (off+k) (type_memory_size ptv)) ==>
+  immutables_rel ce cx.txn.target src T es' (s with vs_memory := mem')
+Proof
+  cheat
 QED

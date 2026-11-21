@@ -44,6 +44,21 @@ Proof
   irule target_mapping_tail_full >> metis_tac[]
 QED
 
+(* TEMPORARILY CHEATED - publish the induction interface for target consumers. *)
+Theorem body_imm_target_place_sim_full:
+  !bt DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env es id.
+    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+    body_base_target_full_ok cx bt /\
+    expr_sim_inv cenv cx env es /\ target_indices_pre cenv cx env bt /\
+    cx.in_deploy /\ immutable_root cx bt /\
+    target_root bt = TopLevelNameTarget (NONE,id) /\
+    ~cx_const_name cx (NONE,id) ==>
+    imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx env bt es
+Proof
+  cheat
+QED
+
 Theorem body_target_sim_full:
   !bt DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env es.
     body_inv tops ctx cenv cx /\
