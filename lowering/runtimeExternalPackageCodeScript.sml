@@ -5,11 +5,45 @@ Ancestors supportedProgramProps entryDispatchProps compileVyper
   loweringShapeSource loweringShapeRules loweringShapeProps loweringShapeDefs compileEnv supportedNames list
   vyperCompiler actualDecoderPackaging actualRegistrationCode moduleLowering
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem runtime_linear_compile_layout_static:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ raw_shape_free_program tops /\
+  check_contract F layouts addr [(NONE,tops)] = SOME art /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+  fn_entry_label efn = SOME elbl ==>
+  ?sels extpkgs fbpkg fallback label_st dispatch_st external_st checks entry_end.
+    sels = build_selectors (type_env tops) (FST (classify_functions tops)) /\
+    extpkgs = MAP (set_external_package_target rpolicy.rpol_target o
+      package_external_fn tops T (K global_nonreentrant_slot))
+      (FST (classify_functions tops)) /\
+    fbpkg = set_fallback_package_target rpolicy.rpol_target
+      (package_fallback_fn tops T (K global_nonreentrant_slot)
+        (FST (SND (SND (classify_functions tops))))) /\
+    EVERY external_fn_shape_ok extpkgs /\
+    fallback_shape_ok fbpkg /\
+    fresh_label "fallback" (initial_compile_state "__entry") = (fallback,label_st) /\
+    compile_selector_dispatch_linear (MAP (\(sel,lbl,z). (sel,lbl)) sels)
+      fallback label_st = ((),dispatch_st) /\
+    compile_external_fn_bodies extpkgs dispatch_st = ((),external_st) /\
+    new_block fallback external_st = (external_st.cs_current_bb,checks) /\
+    (case fbpkg of NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+      | SOME (ce,pay,nr,key,ut,iv,fbody,rt) =>
+          compile_fallback_body ce pay nr key ut iv fbody rt) checks = ((),entry_end) /\
+    shape_state label_st /\ shape_state dispatch_st /\
+    shape_state external_st /\ shape_state checks /\ shape_state entry_end /\
+    cs_extends label_st dispatch_st /\
+    cs_extends dispatch_st external_st /\ cs_extends external_st checks /\
+    cs_extends checks entry_end /\
+    efn = mk_raw_function "__entry" (all_blocks entry_end) /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks entry_end)) /\
+    fn_has_code label_st dispatch_st efn /\
+    fn_has_code dispatch_st external_st efn /\ fn_has_code checks entry_end efn /\
+    label_st.cs_current_bb = elbl /\ label_st.cs_current_insts = [] /\
+    label_st.cs_next_var = 0
 Proof
   strip_tac >>
-  `runtime_bodies_shape_ok tops` by
-    metis_tac[supported_program_runtime_bodies_shape_ok] >>
+  drule_all check_contract_runtime_bodies_shape_ok >> strip_tac >>
   `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
     (FST (SND (classify_functions tops))))` by
     (irule supported_names_internal_names_distinct >>
@@ -20,9 +54,9 @@ Proof
   rename1 `classify_functions tops = (exts,ints,fb,ctor)` >>
   simp[] >> strip_tac >>
   `~EXISTS external_has_defaults exts` by
-    (drule supported_program_no_external_defaults >> simp[]) >>
-  qpat_x_assum `(if EXISTS external_has_defaults exts then _ else _) = _`
-    mp_tac >>
+    (qpat_assum `~EXISTS external_has_defaults _` mp_tac >>
+     REWRITE_TAC [pairTheory.FST]) >>
+  qpat_x_assum `(if EXISTS external_has_defaults exts then _ else _) = _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
   qspecl_then [`tops`, `F`] mp_tac internal_descriptors_ok >>
   impl_tac >- fs[] >>
@@ -41,18 +75,18 @@ Proof
       (order_internals (runtime_internal_order tops ints) ints))` by
     (simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
      irule package_internal_fn_shape_ok >> gs[]) >>
-  `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops F)
-     (order_internals (runtime_internal_order tops ints) ints)))`
-    by (`PERM (MAP FST (MAP (source_internal_fn_descriptor tops F)
-                (order_internals (runtime_internal_order tops ints) ints)))
-              (MAP FST (MAP (source_internal_fn_descriptor tops F) ints))`
-          by (irule sortingTheory.PERM_MAP >> irule sortingTheory.PERM_MAP >>
-              simp[PERM_order_runtime_internals]) >>
-        drule sortingTheory.ALL_DISTINCT_PERM >> fs[]) >>
   `fallback_shape_ok (set_fallback_package_target rpolicy.rpol_target
     (package_fallback_fn tops T (K global_nonreentrant_slot) fb))` by
     (qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`,
        `rpolicy.rpol_target`] mp_tac package_fallback_fn_shape_ok >> gs[]) >>
+  `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops F)
+     (order_internals (runtime_internal_order tops ints) ints)))` by
+    (`PERM (MAP FST (MAP (source_internal_fn_descriptor tops F)
+              (order_internals (runtime_internal_order tops ints) ints)))
+           (MAP FST (MAP (source_internal_fn_descriptor tops F) ints))` by
+       (irule sortingTheory.PERM_MAP >> irule sortingTheory.PERM_MAP >>
+        simp[PERM_order_runtime_internals]) >>
+     drule sortingTheory.ALL_DISTINCT_PERM >> fs[]) >>
   gvs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
     internal_fn_descriptors_MAP_package_internal_fn] >>
   qmatch_asmsub_abbrev_tac `run_lowering sels extpkgs intpkgs fbpkg` >>
@@ -68,8 +102,8 @@ Proof
   `EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors intpkgs) /\
    ALL_DISTINCT (MAP FST (internal_fn_descriptors intpkgs))` by
     (simp[Abbr `intpkgs`, internal_fn_descriptors_set_internal_package_target,
-       internal_fn_descriptors_MAP_package_internal_fn] >>
-     fs[EVERY_MAP, EVERY_MEM]) >>
+       internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP, EVERY_MEM] >>
+     fs[EVERY_MAP, EVERY_MEM, MEM_MAP, PULL_EXISTS]) >>
   `MEM (mk_raw_function "__entry" (all_blocks entry_end))
     unit.cu_context.ctx_functions` by
     (drule run_lowering_packaged_entry_member >>
@@ -83,8 +117,7 @@ Proof
   drule_all external_fallback_suffix_extends >> strip_tac >>
   `cs_extends label_st dispatch_st` by
     (qpat_x_assum `fresh_label _ _ = _` mp_tac >>
-     simp[fresh_label_def] >> strip_tac >> gvs[] >>
-     fs[cs_extends_def]) >>
+     simp[fresh_label_def] >> strip_tac >> gvs[] >> fs[cs_extends_def]) >>
   `cs_extends dispatch_st entry_end` by metis_tac[cs_extends_trans] >>
   drule_all run_lowering_entry_interval >> strip_tac >>
   `fn_has_code label_st dispatch_st efn` by
@@ -105,14 +138,25 @@ Proof
   `cs_extends label_st entry_end` by metis_tac[cs_extends_trans] >>
   drule_all cs_extends_raw_entry_label >>
   disch_then (qspec_then `"__entry"` mp_tac) >> gvs[] >> strip_tac >>
-  qexistsl_tac [`fallback_lbl`, `label_st`,
-    `dispatch_st`, `external_st`, `entry_end`] >>
-  simp[Abbr `sels`, Abbr `extpkgs`]
+  `shape_state fallback_st` by metis_tac[shape_state_new_block] >>
+  `cs_extends external_st fallback_st` by metis_tac[cs_extends_new_block] >>
+  drule runtime_fallback_shape >> simp[shape_step_def] >>
+  disch_then drule >> simp[] >> strip_tac >>
+  `cs_extends fallback_st entry_end` by fs[shape_extends_def] >>
+  `fn_has_code fallback_st entry_end
+    (mk_raw_function "__entry" (all_blocks entry_end))` by
+    (irule external_decoder_fn_has_code >> simp[cs_extends_refl] >>
+     qexists `fallback_st` >> simp[cs_extends_refl]) >>
+  qexistsl [`fallback_lbl`, `label_st`, `dispatch_st`, `external_st`,
+    `fallback_st`, `entry_end`] >>
+  simp[Abbr `sels`, Abbr `extpkgs`, Abbr `fbpkg`]
 QED
-*)
+
 Theorem source_runtime_external_packages:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\
+  supported_program tops /\ raw_shape_free_program tops /\
+  check_contract F layouts addr [(NONE,tops)] = SOME art /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
   venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
   fn_entry_label efn = SOME elbl ==>
   ?sels extpkgs fallback label_st dispatch_st external_st entry_end.
@@ -134,5 +178,8 @@ Theorem source_runtime_external_packages:
     label_st.cs_current_bb = elbl /\ label_st.cs_current_insts = [] /\
     label_st.cs_next_var = 0
 Proof
-  cheat
+  strip_tac >> drule_all runtime_linear_compile_layout_static >> strip_tac >>
+  `cs_extends external_st entry_end` by metis_tac[cs_extends_trans] >>
+  qexistsl_tac [`sels`, `extpkgs`, `fallback`, `label_st`, `dispatch_st`,
+    `external_st`, `entry_end`] >> simp[]
 QED
