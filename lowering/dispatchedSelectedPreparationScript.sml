@@ -4,7 +4,7 @@ Ancestors
   dispatchedSelectedFacts dispatchedSelectedPrefix externalEntryJoint
   registrationRejectMetadata entryPtrSeamRegister
   constSubst supportedDecls supportedProgram vyperTypeABI transfer words list
-  entryStateRel vyperLoweringCorrect runtimeExternalPackageCode
+  entryStateRel vyperLoweringCorrect entryRejectCode
   acceptedContextPhi defaultDispatchFacts dispatchedSignatureArgs entryDispatchProps
 
 Theorem selection_type_list_unique[local]:
@@ -111,13 +111,8 @@ Proof
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   rename1 `venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn` >>
   `MEM efn unit.cu_context.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
-  `?elbl. fn_entry_label efn = SOME elbl` by
-    (gvs[vyperCompilerTheory.lowering_context_ok_def, EVERY_MEM, venomWfTheory.fn_has_entry_def] >>
-     `efn.fn_blocks <> []` by metis_tac[] >>
-     Cases_on `efn.fn_blocks` >> gvs[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def]) >>
   `fn_entry_label efn = SOME "__entry"` by
-    (drule_all source_runtime_external_packages >> strip_tac >>
-     gvs[compileEnvTheory.fresh_label_def, vyperCompilerTheory.initial_compile_state_def]) >>
+    (drule_all_then ACCEPT_TAC lower_vyper_runtime_unit_entry_label) >>
   drule_all default_dispatch_raw_cases >>
   disch_then (DISJ_CASES_THEN2 strip_assume_tac strip_assume_tac) >- gvs[] >>
   `MEM (tx.function_name,tys) (abi_external_signatures tops)` by

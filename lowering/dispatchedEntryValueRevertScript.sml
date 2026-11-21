@@ -12,7 +12,7 @@ Ancestors
   vyperInterpreter dispatchedValueSource dispatchedValuePrefix
   dispatchedValueSelection dispatchedValueEntry dispatchedValueFallback
   entryStateRel gasShadowUnit gasShadowState
-  venomInst vyperCompiler list runtimeExternalPackageCode compileEnv emitHelper
+  venomInst vyperCompiler list entryRejectCode compileEnv emitHelper
   entryValueRevertPtr e2eDefs venomWf moduleLoweringProps
 
 Theorem external_entry_value_revert_dispatched_nr:
@@ -39,13 +39,8 @@ Proof
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   rename1 `venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn` >>
   `MEM fn unit.cu_context.ctx_functions` by metis_tac[lookup_function_MEM] >>
-  `?elbl. fn_entry_label fn = SOME elbl` by
-    (gvs[lowering_context_ok_def, EVERY_MEM, fn_has_entry_def] >>
-     `fn.fn_blocks <> []` by metis_tac[] >>
-     Cases_on `fn.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def]) >>
   `fn_entry_label fn = SOME "__entry"` by
-    (drule_all source_runtime_external_packages >> strip_tac >>
-     gvs[fresh_label_def, initial_compile_state_def]) >>
+    (drule_all_then ACCEPT_TAC lower_vyper_runtime_unit_entry_label) >>
   drule_all initial_entry_rejected_value >> strip_tac >>
   `value_transfer_ok tx am.accounts` by gvs[initial_venom_state_rel_def] >>
   drule_all source_dispatched_value_reject_trace_nr >> strip_tac >>
@@ -167,13 +162,8 @@ Proof
   `?shadow_fn. MEM shadow_fn shadow_ctx.ctx_functions /\
       gas_shadow_function fn shadow_fn` by
     (fs[gas_shadow_context_def] >> metis_tac[LIST_REL_MEM_IMP]) >>
-  `?elbl. fn_entry_label fn = SOME elbl` by
-    (gvs[lowering_context_ok_def, EVERY_MEM, fn_has_entry_def] >>
-     `fn.fn_blocks <> []` by metis_tac[] >>
-     Cases_on `fn.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def]) >>
   `fn_entry_label fn = SOME "__entry"` by
-    (drule_all source_runtime_external_packages >> strip_tac >>
-     gvs[fresh_label_def, initial_compile_state_def]) >>
+    (drule_all_then ACCEPT_TAC lower_vyper_runtime_unit_entry_label) >>
   drule_all initial_entry_rejected_value >> strip_tac >>
   `value_transfer_ok tx am.accounts` by gvs[initial_venom_state_rel_def] >>
   drule_all source_dispatched_value_reject_trace_nr >> strip_tac >>

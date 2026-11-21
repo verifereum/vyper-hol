@@ -2,6 +2,7 @@ Theory groupedInternalLabels
 Ancestors
   externalEntryShape loweringShapeRules compileUnit compileVyper vyperCompiler
   moduleLowering compileEnv emitHelper exprLowering loweringShapeDefs list
+  entryInternalAppend fragExec
 Libs monadsyntax
 
 fun label_steps rws =
@@ -283,6 +284,19 @@ Proof
   simp[compile_generate_grouped_runtime_def, LET_THM, compile_internal_fn_bodies_def,
        comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem compile_grouped_runtime_extends:
+  EVERY group_entry_labels_ok groups /\
+  compile_generate_grouped_runtime groups ips fb start = ((),final) ==>
+  cs_extends start final
+Proof
+  strip_tac >>
+  drule grouped_prefix_labels >>
+  disch_then (qspecl_then [`fb`, `start`] strip_assume_tac) >>
+  qpat_x_assum `compile_generate_grouped_runtime _ _ _ _ = _`
+    (assume_tac o ONCE_REWRITE_RULE [compile_grouped_internal_suffix]) >>
+  metis_tac[cs_appends_internal_fn_bodies, cs_appends_def, cs_extends_trans]
 QED
 
 Theorem grouped_internal_run_labels:
