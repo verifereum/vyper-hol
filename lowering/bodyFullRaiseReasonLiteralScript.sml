@@ -1,7 +1,7 @@
 (* Literal RaiseReason over one joint finite-horizon execution. *)
 Theory bodyFullRaiseReasonLiteral
 Ancestors
-  stateRelProj
+  stateRelProj bodyInvCodeProps bodyInvMetadataProps exprBodyPreProps
   bodyFullRaiseReasonLiteralEntry bodyFullRaiseReasonLiteralEncoder
   bodyFullPreds bodySimFull bodyFullShared bodyInvNoDalloca reasonCompilerProps reasonSourceProps
   reasonResourcesPtr reasonTypingProps gasOutcomeFullCompose gasOutcomeFull
@@ -39,18 +39,21 @@ Proof
   `supported_string_reason tops (Literal (BaseT (StringT ml)) (StringL str))` by
     gvs[supported_stmt_raise_reason, supported_raise_reason_def] >>
   drule_then strip_assume_tac supported_string_reason_body_calls >>
-  `cx_tops cx = tops` by
-    (irule cx_tops_module >> gvs[body_inv_def]) >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  drule_then assume_tac body_inv_contract >>
+  `get_tenv cx = type_env tops` by
+    (drule_then assume_tac contract_inv_type_env >>
+     fs[vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
+        finite_mapTheory.FUNION_FEMPTY_2]) >>
   `expr_body_pre cenv cx env (Literal (BaseT (StringT ml)) (StringL str)) es` by
     (irule stmt_expr_body_pre >>
      gvs[type_stmt_raise_reason, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_raise_exists_def, int_calls_stmt_def,
-         int_calls_raise_reason_def, body_inv_def] >>
-     conj_tac
-     >- simp[supported_expr_exists_def, const_name_root_def] >>
-     qexists_tac `[]` >> simp[]) >>
+         int_calls_raise_reason_def] >>
+     simp[supported_expr_exists_def, const_name_root_def, int_calls_expr_def] >>
+     metis_tac[]) >>
   `type_alloc_ok cenv (BaseT (StringT ml))` by
-    metis_tac[expr_body_pre_def, alloc_limits_expr_type_alloc_ok, expr_type_def] >>
+    metis_tac[expr_body_pre_static_facts, alloc_limits_expr_type_alloc_ok, expr_type_def] >>
   `64 + type_memory_bytes cenv (BaseT (StringT ml)) < dimword(:256)` by
     metis_tac[reason_encoder_allocation_limit] >>
   pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>

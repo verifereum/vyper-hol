@@ -11,6 +11,7 @@ Ancestors
   ctorDeployDeadSectionRel ctorDeployDeadSectionFrame immSectionDead
   gasContext valueEncodingProps abiCanonicalHeadSize bodyFullOperandSnapshot
   bodyFullAbiEncodeBorrowed context
+  bodyInvCodeProps bodyFullShadowBodyInv immutableRegionFrameProps
 
 Theorem extcall_saved_physical_store_bound:
   read_result cx raw ee = (INL v,ee) /\
@@ -446,148 +447,33 @@ Proof
   qexistsl_tac [`name`,`off`,`itv`,`iv`,`k`] >> simp[]
 QED
 
-Theorem saved_ctor_immutable_layout[local]:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env entry /\
-  cenv.ce_is_ctor /\ dead_lo_ok H D lo cenv cx /\
-  FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
-  ALOOKUP entry.immutables cx.txn.target = SOME imms /\
-  FLOOKUP (get_source_immutables cenv.ce_module imms) name = SOME (itv,iv) ==>
-  cx_tops cx = tops /\ get_tenv cx = type_env tops /\
-  off + type_memory_size itv <= lo /\
-  ?pre post vis ty slot.
-    tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
-    off = compute_immutables_len
-      (get_struct_fields (make_struct_fields_map tops)) pre /\
-    evaluate_type (get_tenv cx) ty = SOME itv /\
-    type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
-      type_memory_size itv
-Proof
-  strip_tac >>
-  `cenv.ce_module = NONE /\ get_module_code cx NONE = SOME tops /\
-   cenv.ce_struct_fields = make_struct_fields_map tops /\
-   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
-    fs[body_inv_def, cenv_module_pins_def] >>
-  `cx_tops cx = tops` by simp[cx_tops_def] >>
-  `get_tenv cx = type_env tops` by
-    simp[get_tenv_def, type_env_all_modules_def, type_env_def] >>
-  `FLOOKUP cenv.ce_module_vars (NONE,name) = SOME (ImmutableLoc off)` by fs[] >>
-  drule body_inv_immutable_section_layout >> simp[immutable_section_layout_def] >>
-  disch_then (drule_then strip_assume_tac) >>
-  `FLOOKUP env.bare_globals (NONE,name) = SOME ty` by
-    (fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def,
-        bare_globals_complete_def] >> metis_tac[listTheory.MEM_APPEND,listTheory.MEM]) >>
-  `evaluate_type (get_tenv cx) ty = SOME itv` by
-    (fs[expr_sim_inv_def, env_consistent_def, env_immutables_consistent_def] >>
-     metis_tac[]) >>
-  `type_memory_bytes cenv ty = type_memory_size itv` by
-    (irule typed_copy_memory_size >> qexists_tac `get_tenv cx` >>
-     fs[expr_sim_inv_def] >> metis_tac[]) >>
-  `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
-     type_memory_size itv` by metis_tac[type_mem_bytes_type_memory_bytes] >>
-  `lo = imm_len tops` by fs[dead_lo_ok_def] >>
-  simp[] >> conj_tac
-  >- (qpat_x_assum `lo = _` SUBST1_TAC >> simp[imm_len_def] >>
-      qpat_assum `tops = _` (fn th => once_rewrite_tac[th]) >>
-      simp[compileVyperTheory.compute_immutables_len_append,
-           compileVyperTheory.compute_immutables_len_def] >> gvs[]) >>
-  qexistsl_tac [`pre`,`post`,`vis`,`ty`,`slot`] >> gvs[]
-QED
-
-(* Restrict section deadness to the declaration that owns this byte. *)
-
-Theorem saved_ctor_dead_byte[local]:
-  get_tenv cx = type_env tops /\
-  cenv.ce_struct_fields = make_struct_fields_map tops /\
-  expr_sim_inv cenv cx env entry /\
-  tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
-  evaluate_type (get_tenv cx) ty = SOME itv /\
-  off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre /\
-  type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
-    type_memory_size itv /\
-  off <= j /\ j < off + type_memory_size itv /\ imm_section_dead tops sec j ==>
-  mem_dead_bytes sec off itv j
-Proof
-  strip_tac >>
-  qpat_x_assum `imm_section_dead _ _ _`
-    (strip_assume_tac o REWRITE_RULE [imm_section_dead_def]) >>
-  rename1 `evaluate_type (type_env tops) ty2 = SOME tv2` >>
-  `type_memory_bytes cenv ty2 = type_memory_size tv2` by
-    (irule typed_copy_memory_size >> qexists_tac `get_tenv cx` >>
-     fs[expr_sim_inv_def] >> metis_tac[]) >>
-  `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty2 =
-     type_memory_size tv2` by metis_tac[type_mem_bytes_type_memory_bytes] >>
-  drule (CONJUNCT1 ctorDeployDeadSectionTheory.mem_dead_bytes_range) >> strip_tac >>
-  `pre ++ VariableDecl vis Immutable name ty slot :: post =
-   pre' ++ VariableDecl vis' Immutable name' ty2 slot' :: post'` by metis_tac[] >>
-  drule imm_frame_occurrence_separation >>
-  disch_then (qspec_then `get_struct_fields (make_struct_fields_map tops)` mp_tac) >>
-  strip_tac
-  >- (fs[] >> gvs[]) >>
-  ntac 2 (qpat_x_assum `tops = _` kall_tac) >>
-  qpat_x_assum `_ ++ _ = _ ++ _` kall_tac >> gvs[] >> decide_tac
-QED
-
-Theorem saved_ctor_root_read[local]:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env entry /\
-  cenv.ce_is_ctor /\ dead_lo_ok H D lo cenv cx /\
-  ee.immutables = entry.immutables /\ stmt_state_rel H ctx func cenv cx ee u /\
-  ghost_inv_at D lo d cenv cx ee G tn u /\
-  FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
-  ALOOKUP ee.immutables cx.txn.target = SOME imms /\
-  FLOOKUP (get_source_immutables cenv.ce_module imms) name = SOME (itv,iv) ==>
-  off + type_memory_size itv <= lo /\
-  !mem. mem_agree_outside tn.t_mem u.vs_memory mem ==>
-        val_in_memory itv iv off mem
-Proof
-  strip_tac >>
-  `ALOOKUP entry.immutables cx.txn.target = SOME imms` by gvs[] >>
-  drule_all saved_ctor_immutable_layout >> strip_tac >>
-  `cenv.ce_struct_fields = make_struct_fields_map tops` by fs[body_inv_def] >>
-  drule stmt_state_rel_state_rel >>
-  disch_then (mp_tac o MATCH_MP state_rel_immutables_rel) >> strip_tac >>
-  `immutable_value_admissible itv iv /\ val_in_memory itv iv off u.vs_memory` by
-    (qpat_assum `immutables_rel _ _ _ _ _ _`
-       (mp_tac o REWRITE_RULE [loweringStateRelDefsTheory.immutables_rel_def]) >>
-     simp[IgnAsm `tops = _`, IgnAsm `off = _`, IgnAsm `ee.immutables = _`] >>
-     metis_tac[]) >>
-  `val_wf itv iv` by metis_tac[loweringSliceTheory.immutable_admissible_val_wf] >>
-  `well_formed_type_value itv` by
-    metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
-  `!m. mem_bytes_at off (type_memory_size itv) (mem_bytes_at 0 lo m) =
-       mem_bytes_at off (type_memory_size itv) m` by
-    (gen_tac >> simp[valueEncodingDefsTheory.mem_bytes_at_bounded,
-                     mem_bytes_at_window, IgnAsm `off = _`, IgnAsm `tops = _`]) >>
-  conj_tac >- first_assum ACCEPT_TAC >> gen_tac >> strip_tac >>
-  `val_in_memory itv iv off (mem_bytes_at 0 lo u.vs_memory)` by
-    (irule val_in_memory_mem_agree >>
-     simp[IgnAsm `off = _`, IgnAsm `tops = _`] >>
-     qexistsl_tac [`type_memory_size itv`,`u.vs_memory`] >>
-     simp[IgnAsm `off = _`, IgnAsm `tops = _`]) >>
-  `val_in_memory itv iv off (mem_bytes_at 0 lo mem)` suffices_by
-    (strip_tac >> irule val_in_memory_mem_agree >>
-     simp[IgnAsm `off = _`, IgnAsm `tops = _`] >>
-     qexistsl_tac [`type_memory_size itv`,`mem_bytes_at 0 lo mem`] >>
-     simp[IgnAsm `off = _`, IgnAsm `tops = _`]) >>
-  irule section_value_memory_frame >>
-  simp[IgnAsm `off = _`, IgnAsm `tops = _`] >>
-  qexists_tac `mem_bytes_at 0 lo u.vs_memory` >>
-  simp[IgnAsm `off = _`, IgnAsm `tops = _`] >> rpt strip_tac >>
-  `j < lo` by decide_tac >>
-  `j NOTIN tn.t_mem` by
-    (strip_tac >>
-     `imm_section_dead tops (mem_bytes_at 0 lo u.vs_memory) j` by
-       (qpat_assum `ghost_inv_at _ _ _ _ _ _ _ _ _`
-          (mp_tac o REWRITE_RULE [ghost_inv_at_def]) >>
-        simp[IgnAsm `tops = _`, IgnAsm `off = _`] >> metis_tac[]) >>
-     drule_all saved_ctor_dead_byte >>
-     simp[IgnAsm `tops = _`, IgnAsm `off = _`]) >>
-  `mem_bytes_at j 1 u.vs_memory = mem_bytes_at j 1 mem` by fs[mem_agree_outside_def] >>
-  pop_assum (mp_tac o Q.AP_TERM `EL 0`) >>
-  simp[valueEncodingProofsTheory.EL_mem_bytes_at, IgnAsm `off = _`, IgnAsm `tops = _`]
-QED
-
 (* Apply this at the same endpoint as extcall_request_saved_code_endpoint.
    The robust read is reconstructed from that state's own immutables and ghost. *)
+Theorem extcall_request_saved_ctor_read_mods:
+  contract_inv mods exps ctx cenv cx /\ expr_sim_inv_mods mods cenv cx env entry /\
+  cenv.ce_is_ctor /\ p.ptr_location = LocCode /\ dead_lo_ok_mods H D lo cenv cx /\
+  ee.immutables = entry.immutables /\ stmt_state_rel H ctx func cenv cx ee u /\
+  ghost_inv_at_mods D lo d cenv cx ee G tn u /\
+  (?raw. read_result cx raw ee = (INL v,ee) /\
+     vv_holds cenv cx ty raw (LocatedValue ty p) ee u) ==>
+  !rt w. evaluate_type (get_tenv cx) ty = SOME rt /\
+         eval_operand p.ptr_operand u = SOME w ==>
+    w2n w + type_memory_size rt <= lo /\
+    (!mem. mem_agree_outside tn.t_mem u.vs_memory mem ==>
+           val_in_memory rt v (w2n w) mem)
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[loweringPostsTheory.vv_holds_def, loweringPostsTheory.immutable_holds_def] >>
+  Cases_on `ALOOKUP entry.immutables cx.txn.target` >> gvs[] >>
+  rename1 `ALOOKUP entry.immutables cx.txn.target = SOME imms` >>
+  `ALOOKUP ee.immutables cx.txn.target = SOME imms` by metis_tac[] >>
+  drule_all immutable_ctor_frame_mods >> strip_tac >>
+  qpat_x_assum `sub_layout _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.sub_layout_def]) >>
+  `off + k < dimword (:256)` by decide_tac >>
+  simp[arithmeticTheory.LESS_MOD] >>
+  rpt strip_tac >> metis_tac[arithmeticTheory.ADD_COMM]
+QED
 
 Theorem extcall_request_saved_ctor_read:
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env entry /\
@@ -602,15 +488,14 @@ Theorem extcall_request_saved_ctor_read:
     (!mem. mem_agree_outside tn.t_mem u.vs_memory mem ==>
            val_in_memory rt v (w2n w) mem)
 Proof
-  strip_tac >> rpt gen_tac >> strip_tac >>
-  gvs[loweringPostsTheory.vv_holds_def, loweringPostsTheory.immutable_holds_def] >>
-  Cases_on `ALOOKUP entry.immutables cx.txn.target` >> gvs[] >>
-  rename1 `ALOOKUP entry.immutables cx.txn.target = SOME imms` >>
-  `ALOOKUP ee.immutables cx.txn.target = SOME imms` by metis_tac[] >>
-  drule_all saved_ctor_root_read >> strip_tac >>
-  qpat_x_assum `sub_layout _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.sub_layout_def]) >>
-  `off + k < dimword (:256)` by decide_tac >>
-  simp[arithmeticTheory.LESS_MOD] >>
-  rpt strip_tac >> metis_tac[arithmeticTheory.ADD_COMM]
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac contract_inv_cenv_modules >>
+  fs[expr_sim_inv_split_def, GSYM dead_lo_ok_mods_singleton,
+     GSYM ghost_inv_at_mods_singleton] >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`]
+            extcall_request_saved_ctor_read_mods) >>
+  simp[] >> impl_tac >- (qexists_tac `raw` >> simp[]) >>
+  disch_then ACCEPT_TAC
 QED

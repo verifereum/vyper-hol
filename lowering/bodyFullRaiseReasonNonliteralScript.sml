@@ -1,7 +1,7 @@
 (* Nonliteral RaiseReason over the joint finite-horizon judgment. *)
 Theory bodyFullRaiseReasonNonliteral
 Ancestors
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv bodyInvCodeProps bodyInvMetadataProps exprBodyPreProps
   stateRelProj
   bodyFullRaiseReasonContinuation bodyFullPreds bodySimFull bodyFullShared bodyInvNoDalloca
   reasonCompilerProps reasonSourceProps gasShadowCompileStmtHelpers
@@ -44,8 +44,14 @@ Proof
   `supported_string_reason tops e` by
     gvs[supported_stmt_raise_reason, supported_raise_reason_def] >>
   drule_then strip_assume_tac supported_string_reason_body_calls >>
-  `cx_tops cx = tops` by
-    (irule cx_tops_module >> gvs[body_inv_def]) >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac body_inv_module >>
+  drule_all_then strip_assume_tac bodyInvSplitTheory.contract_inv_module_gate >>
+  `get_tenv cx = type_env tops` by
+    (drule_then assume_tac contract_inv_type_env >>
+     fs[vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
+        finite_mapTheory.FUNION_FEMPTY_2]) >>
   `~supported_expr_exists (const_name_root cx) e` by
     (drule body_inv_const_name_root >> strip_tac >>
      drule_all supportedNameRootTheory.supported_string_reason_no_name_root >> simp[]) >>
@@ -53,7 +59,7 @@ Proof
     (irule stmt_expr_body_pre >>
      gvs[type_stmt_raise_reason, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_raise_exists_def, int_calls_stmt_def,
-         int_calls_raise_reason_def, body_inv_def] >>
+         int_calls_raise_reason_def] >>
      qexists_tac `[]` >> simp[]) >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx (expr_type e) e es` by
@@ -151,7 +157,7 @@ Resume compile_raise_reason_nonliteral_frag_full[normal]:
      simp[] >> disch_then irule >>
      qexistsl_tac [`storage_trace_horizon mid.storage_trace`,`e`] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `well_typed_expr env e` by fs[expr_body_pre_def] >>
+  `well_typed_expr env e` by metis_tac[expr_body_pre_static_facts] >>
   drule_all reasonSourcePropsTheory.supported_reason_string_type >>
   disch_then (qx_choose_then `cap` assume_tac) >>
   `post_value_type cenv e = expr_type e` by
@@ -171,7 +177,7 @@ Resume compile_raise_reason_nonliteral_frag_full[normal]:
      type_memory_bytes cenv (post_value_type cenv e) = type_memory_size rt /\
      type_memory_size rt < 2**64` by metis_tac[body_post_type_allocation_bound] >>
   `type_alloc_ok cenv (BaseT (StringT cap))` by
-    metis_tac[expr_body_pre_def, alloc_limits_expr_type_alloc_ok] >>
+    metis_tac[expr_body_pre_static_facts, alloc_limits_expr_type_alloc_ok] >>
   `64 + type_memory_bytes cenv (BaseT (StringT cap)) < dimword(:256)` by
     metis_tac[reason_encoder_allocation_limit] >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by

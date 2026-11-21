@@ -8,24 +8,6 @@ Ancestors
   stmtSimLogDataRun abiEncoderCounters abiDecoderReentry abiEncoderAppend
   loweringHalt vyperABI contractABI abiBuiltinAllocation
 
-Theorem log_scalar_source_args_event[local]:
-  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
-    ?aty tv. supported_scalar_type aty /\
-      log_arg_rel ce cx sa sm es s (FST arg,aty) v /\
-      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
-      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
-      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs ==>
-  LIST_REL (\arg v. supported_event_leaf_type (SND arg) /\
-    ?aty tv. supported_event_leaf_type aty /\
-      log_arg_rel ce cx sa sm es s (FST arg,aty) v /\
-      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
-      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
-      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs
-Proof
-  strip_tac >> irule LIST_REL_mono >> goal_assum (drule_at Any) >>
-  simp[supportedTypesTheory.supported_event_leaf_type_def] >> metis_tac[]
-QED
-
 Theorem log_emit_continuation:
   ~cx.txn.is_static /\
   emit_inst LOG
