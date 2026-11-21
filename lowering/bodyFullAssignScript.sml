@@ -18696,41 +18696,6 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-(* GATE_ADMISSION: held, private storage/transient bytestring assignment *)
-Theorem body_assign_toplevel_bytes_full:
-  !cx nsid e dty mut slot DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
-    (!s'' pv t' s'3' v t''.
-       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
-       body_base_target_full_ok cx (TopLevelNameTarget nsid)) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
-    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-       (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\
-    ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) = SOME env' /\
-    stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
-    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty /\
-    supported_variable_decl tops nsid = SOME (Private,mut,dty,SOME slot) /\
-    (mut = Storage \/ mut = Transient) /\
-    type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) /\
-    is_bytestring_type dty /\ is_bytestring_type (lowered_value_type cenv e) /\
-    ~supported_stmt_expr_exists (const_name_root cx) (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)))
-      (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) es
-Proof
-  cheat
-QED
-
 (* A static aggregate storage or transient variable. *)
 Theorem body_assign_toplevel_copy_full:
   !cx nsid mut ty slot e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
