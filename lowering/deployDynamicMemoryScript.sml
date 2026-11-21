@@ -1,6 +1,7 @@
 Theory deployDynamicMemory
 Ancestors
-  deployPeakMemoryBound deployPeakMemoryHeaders ctorDeployDefs e2eDeployDefs e2eDefs asmOptimizer
+  deployPeakMemoryBound[ignore_grammar] deployPeakMemoryHeaders ctorDeployDefs
+  e2eDeployDefs e2eDefs asmOptimizer
   compileVyper supportedStmtTraverse supportedExprTraverse vyperAST
   contextRawReachable unitTransformDefs unitShapeDefs lowerDloadDefs
   venomInst venomState venomLayout exprSimHypsDefs fmpLowerSequenceExec
