@@ -9,7 +9,7 @@ Ancestors
   supportedStmtTraverse supportedStmts vyperAST vyperState
   vyperTypeSystem vyperTypeCallGraph vyperTypeCallStackSoundness supportedExprs
   stmtSimDeclStore vyperTypeEvalSoundness vyperTypeInvariants exprReasonOperand
-  compileVyper supportedTypes stmtSimAssignAttr memoryLocalRhsProps
+  compileVyper supportedTypes supportedDecls stmtSimAssignAttr memoryLocalRhsProps
   exprOpenMain gasContext exprLowering vyperCompiler
   option tupleTargetStoreProps vyperTypeEnv accountsRelProps
   exprSimUnwrap exprSimFieldLayout exprSimAttributeFields vyperPlaceResultTyping
@@ -262,44 +262,42 @@ Proof
   metis_tac[allocation_limit_word_room]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem body_tuple_target_toplevel_aligned:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+  supported_scalar_target tops nsid /\ is_word_type ty /\
+  type_place_target env (TopLevelNameTarget nsid) = SOME (Type ty) /\
+  evaluate_type (get_tenv cx) ty = SOME tv ==>
+  tuple_target_aligned cenv cx (BaseTarget (TopLevelNameTarget nsid)) ty tv
 Proof
-  Cases_on `nsid` >> rename1 `(src, id)` >> rpt strip_tac >>
-  drule supported_scalar_target_decl >> strip_tac >> gvs[] >>
-  rename1 `is_word_type declared_ty` >>
+  Cases_on `nsid` >> rename1 `(src,id)` >> strip_tac >>
+  `?vis mut dty slot.
+    supported_variable_decl tops (src,id) = SOME (vis,mut,dty,SOME slot) /\
+    (mut = Storage \/ mut = Transient)` by
+    (qpat_assum `supported_scalar_target tops _` mp_tac >>
+     simp[NoAsms,supported_scalar_target_def] >>
+     Cases_on `supported_variable_decl tops (src,id)` >> simp[] >> PairCases_on `x` >>
+     Cases_on `x3` >> Cases_on `x1` >> simp[]) >>
+  drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
   `get_module_code cx NONE = SOME tops /\
-   ALL_DISTINCT
-     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
+   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
    cenv.ce_hashmap_info = build_hashmap_info tops /\
    cenv.ce_module_var_type (NONE, id) = build_var_type_map tops (NONE, id)` by
     fs[body_inv_def] >>
   drule_all build_maps_variable >> strip_tac >>
   `env_consistent env cx es` by fs[expr_sim_inv_def] >>
-  gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
-  >- (drule_all env_assignable_find_NONE >> strip_tac >> gvs[]) >>
+  `find_var_decl_by_name id tops <> NONE` by
+    metis_tac[find_var_decl_storage_some] >>
+  gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget] >>
+  TRY (drule_all env_assignable_find_NONE >> strip_tac >> gvs[] >> NO_TAC) >>
   drule_all vyperTypeEnvTheory.env_consistent_toplevel_storage_static >>
   strip_tac >> drule find_var_decl_storage_mem >> strip_tac >> gvs[] >>
-  `declared_ty = ty` by metis_tac[build_maps_variable, optionTheory.SOME_11] >>
+  `dty = ty` by metis_tac[build_maps_variable,optionTheory.SOME_11] >>
   gvs[] >>
   qpat_x_assum `IS_SOME (lookup_var_slot_from_layout _ _ _ _)`
     (strip_assume_tac o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
   drule_all exprSimTopLevelPropsTheory.toplevel_storage_ce_vars >> strip_tac >>
-  simp[tupleTargetStorePropsTheory.tuple_target_aligned_toplevel] >>
-  rpt strip_tac >> irule accountsRelPropsTheory.storage_dead_update_word_region >>
-  qexistsl_tac [`NONE`, `id`, `[]`, `tv`] >>
-  simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
-  metis_tac[exprSimUnwrapTheory.word_type_slot_size]
-QED
-*)
-Theorem body_tuple_target_toplevel_aligned:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
-  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
-  supported_scalar_target tops nsid /\
-  type_place_target env (TopLevelNameTarget nsid) = SOME (Type ty) /\
-  evaluate_type (get_tenv cx) ty = SOME tv ==>
-  tuple_target_aligned cenv cx (BaseTarget (TopLevelNameTarget nsid)) ty tv
-Proof
-  cheat
+  simp[tupleTargetStorePropsTheory.tuple_target_aligned_toplevel]
 QED
 
 Theorem body_tuple_target_field_aligned:
@@ -358,8 +356,10 @@ Theorem body_tuple_target_ready:
   ((?id lty. g = BaseTarget (NameTarget id) /\
             FLOOKUP env.var_types id = SOME lty /\
             0 < type_memory_bytes cenv lty) \/
-   (?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
-           supported_scalar_target tops nsid) \/
+   (?nsid dty. g = BaseTarget (TopLevelNameTarget nsid) /\
+               supported_scalar_target tops nsid /\
+               type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) /\
+               is_word_type dty) \/
    (?nsid fld fty.
       g = BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld) /\
       supported_storage_field_write tops nsid fld /\
@@ -378,9 +378,6 @@ Proof
   >- (irule body_tuple_target_local_layout >>
       simp[well_typed_atarget_def, well_typed_target_def] >> metis_tac[])
   >- (irule body_tuple_target_toplevel_aligned >> metis_tac[])
-  >- (drule_all body_tuple_target_toplevel_aligned >>
-      Cases_on `nsid` >>
-      simp[tupleTargetStorePropsTheory.tuple_target_aligned_toplevel])
   >- simp[tupleTargetStorePropsTheory.tuple_target_layout_def]
   >- (irule body_tuple_target_field_aligned >> metis_tac[])
   >> simp[tupleTargetStorePropsTheory.tuple_target_layout_def]
