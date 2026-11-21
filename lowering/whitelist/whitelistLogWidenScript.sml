@@ -86,17 +86,6 @@ Proof
   logWidenTacticsLib.topics_eq event_leaf_arg_compatible
 QED
 
-Theorem compatible_topics_eq[local]:
-  !tys atys flags vals.
-    EVERY supported_scalar_type tys /\ LIST_REL event_arg_compatible tys atys ==>
-    encode_indexed_event_topics flags atys vals =
-    encode_indexed_event_topics flags tys vals
-Proof
-  rpt gen_tac >> strip_tac >>
-  irule event_leaf_compatible_topics_eq >>
-  simp[EVERY_MEM, supported_event_leaf_type_def] >> metis_tac[EVERY_MEM]
-QED
-
 Theorem compatible_non_indexed:
   !flags tys atys.
     EVERY P tys /\ LIST_REL event_arg_compatible tys atys ==>
@@ -117,16 +106,6 @@ Theorem event_leaf_compatible_abi_eq:
     vyper_to_abi_list tenv atys vals = vyper_to_abi_list tenv tys vals
 Proof
   logWidenTacticsLib.abi_eq event_leaf_arg_compatible
-QED
-
-Theorem compatible_abi_eq[local]:
-  !tys atys vals.
-    EVERY supported_scalar_type tys /\ LIST_REL event_arg_compatible tys atys ==>
-    vyper_to_abi_types tenv atys = vyper_to_abi_types tenv tys /\
-    vyper_to_abi_list tenv atys vals = vyper_to_abi_list tenv tys vals
-Proof
-  rpt gen_tac >> strip_tac >> irule event_leaf_compatible_abi_eq >>
-  simp[EVERY_MEM, supported_event_leaf_type_def] >> metis_tac[EVERY_MEM]
 QED
 
 (* log_source_event_encoded with the metadata at the field types tys and
