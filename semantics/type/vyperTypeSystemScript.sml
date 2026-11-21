@@ -957,8 +957,11 @@ Definition well_typed_expr_def:
           | TopLevelNameTarget nsid =>
               IS_NONE (FLOOKUP env.bare_global_assignable nsid)
           | _ => T)) /\
+  (* drv is always NONE; well_typed_opt stays so the definition (and its
+     induction theorem) keeps well_typed_opt in the mutual recursion. *)
   well_typed_expr env (Call ty (IntCall (src_id_opt, fn_name)) args drv) =
-    (well_typed_exprs env args /\ drv = NONE /\ well_formed_type env.type_defs ty /\
+    (well_typed_exprs env args /\ drv = NONE /\ well_typed_opt env drv /\
+     well_formed_type env.type_defs ty /\
      ?sig. FLOOKUP env.fn_sigs (src_id_opt, fn_name) = SOME sig /\
        type_widens_to env.type_defs sig.ret_ty ty /\
        LENGTH args <= LENGTH sig.param_types /\
