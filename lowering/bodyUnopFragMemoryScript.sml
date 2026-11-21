@@ -377,7 +377,7 @@ Proof
 QED
 
 (* compile_unop_sim (exprSimUnopCompose) for expr_sim_mem. *)
-Theorem compile_unop_sim_mem:
+Theorem compile_unop_sim_mem[local]:
   !ctx func cenv cx ty ann bi e1 ty1 f es.
     bi <> Len /\ ~precompile_builtin bi /\ builtin_args_length_ok bi 1 /\
     ~is_self_codesize bi [e1] /\
