@@ -12357,9 +12357,10 @@ Proof
        vs_prev_bb := _; vs_inst_idx := _|>) = _` mp_tac >>
      simp[venom_state_component_equality]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t_exit` by
-    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
-       (mp_tac o REWRITE_RULE [allocas_below_fmp_def]) >>
-     simp[allocas_below_fmp_def]) >>
+    (disch_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+       (drule_then (strip_assume_tac o REWRITE_RULE [allocas_below_fmp_def])) >>
+     rewrite_tac[allocas_below_fmp_def] >> asm_rewrite_tac[]) >>
   qexistsl_tac [`t_exit`,`G_exit`,`tn_exit`] >>
   conj_tac
   >- (gen_tac >> disch_tac >> conj_tac
