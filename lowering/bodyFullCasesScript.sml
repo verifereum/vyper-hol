@@ -410,7 +410,16 @@ Proof
   ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
       irule word_builtin_sim_full >>
-      metis_tac[expr_vv_sim_stack_full, post_value_type_word]) >>
+      conj_tac
+      >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+          irule expr_vv_sim_stack_full >>
+          rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+          Cases_on `is_word_type (expr_type e)` >- simp[] >>
+          qpat_assum `~is_word_type (expr_type e) ==> _` drule >> simp[]) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- (qexists_tac `tops` >> asm_rewrite_tac[]) >>
+      qexists_tac `env` >> asm_rewrite_tac[]) >>
   rpt gen_tac >> strip_tac >> gvs[]
 QED
 
