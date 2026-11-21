@@ -77,44 +77,56 @@ Theorem for_captured_storage_code:
     (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
     (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\
   not_fresh_at sa done_var /\ loc = slot_loc tr /\
-  loop_iterator_place e = SOME tgt /\ target_root tgt = TopLevelNameTarget nid /\
-  ~(?ty nid. e = TopLevelName ty nid) ==>
-  let bop = vv_operand vv; h = sa.cs_next_id;
-      dyn = case bd of Fixed _ => F | Dynamic _ => T in
-    (!lbl. bop <> Label lbl) /\
+  ((?w. vv_operand vv = Lit w) \/
+   (?tgt nid. loop_iterator_place e = SOME tgt /\ target_root tgt = TopLevelNameTarget nid /\
+             ~(?ty i. e = TopLevelName ty i))) ==>
+    (!lbl. vv_operand vv <> Label lbl) /\
     (case bd of Fixed cnt => len_op = Lit (n2w cnt) /\ saL = sbExpr
      | Dynamic _ => compile_ptr_load c.ce_is_ctor c.ce_imm_alloca (slot_loc tr)
-                   bop sbExpr = (len_op,saL)) /\
+                   (vv_operand vv) sbExpr = (len_op,saL)) /\
     stride = elem_size_in_location c (slot_loc tr) sty /\
     ?ov tot ep cb bb.
-      off_op = Var ov /\ sum_op = Var (if dyn then tot else ov) /\ addr = Var ep /\
+      off_op = Var ov /\
+      sum_op = Var (if (case bd of Fixed _ => F | Dynamic _ => T) then tot else ov) /\
+      addr = Var ep /\
       lookup_block cond func.fn_blocks = SOME cb /\
       cb.bb_instructions =
-        [mk_inst (h - 2) EQ [Var idx;len_op] [done_var];
-         mk_inst (h - 1) JNZ [Var done_var;Label exit;Label bod] []] /\
+        [mk_inst (sa.cs_next_id - 2) EQ [Var idx;len_op] [done_var];
+         mk_inst (sa.cs_next_id - 1) JNZ [Var done_var;Label exit;Label bod] []] /\
       lookup_block bod func.fn_blocks = SOME bb /\ saCopy.cs_current_bb = bod /\
       saCopy.cs_current_insts =
-        [mk_inst h MUL [Var idx; Lit (n2w stride)] [ov]] ++
-        (if dyn then [mk_inst (h + 1) ADD [Lit 1w;Var ov] [tot]] else []) ++
-        [mk_inst (h + if dyn then 2 else 1) ADD [bop;Var (if dyn then tot else ov)] [ep]] /\
+        [mk_inst sa.cs_next_id MUL [Var idx; Lit (n2w stride)] [ov]] ++
+        (if (case bd of Fixed _ => F | Dynamic _ => T) then
+           [mk_inst (sa.cs_next_id + 1) ADD [Lit 1w;Var ov] [tot]] else []) ++
+        [mk_inst (sa.cs_next_id + if (case bd of Fixed _ => F | Dynamic _ => T) then 2 else 1)
+           ADD [vv_operand vv;Var (if (case bd of Fixed _ => F | Dynamic _ => T) then tot else ov)]
+           [ep]] /\
       (!j. j < LENGTH saCopy.cs_current_insts ==>
            get_instruction bb j = SOME (fEL saCopy.cs_current_insts j)) /\
-      let outs = if dyn then [done_var;ov;tot;ep] else [done_var;ov;ep] in
-        ALL_DISTINCT outs /\ ~MEM idx outs /\ ~MEM xd outs /\
-        (!x. len_op = Var x \/ bop = Var x ==> ~MEM x outs) /\
-        (!x. MEM x outs ==> ~not_fresh_at sa0 x) /\
-        compile_slot_to_memory (Var ep) (Var xd) stride (slot_loc tr) saCopy =
-          (slot_copy_body saCopy,sbCopy) /\
-        sbCopy = slot_copy_final saCopy (Var ep) (Var xd) stride
-                   (if tr then TLOAD else SLOAD) /\
-        slot_copy_external saCopy (Var ep)
+      ALL_DISTINCT (if (case bd of Fixed _ => F | Dynamic _ => T) then [done_var;ov;tot;ep]
+                    else [done_var;ov;ep]) /\
+      ~MEM idx (if (case bd of Fixed _ => F | Dynamic _ => T) then [done_var;ov;tot;ep]
+                else [done_var;ov;ep]) /\
+      ~MEM xd (if (case bd of Fixed _ => F | Dynamic _ => T) then [done_var;ov;tot;ep]
+               else [done_var;ov;ep]) /\
+      (!x. len_op = Var x \/ vv_operand vv = Var x ==>
+           ~MEM x (if (case bd of Fixed _ => F | Dynamic _ => T) then [done_var;ov;tot;ep]
+                   else [done_var;ov;ep])) /\
+      (!x. MEM x (if (case bd of Fixed _ => F | Dynamic _ => T) then [done_var;ov;tot;ep]
+                  else [done_var;ov;ep]) ==> ~not_fresh_at sa0 x) /\
+      compile_slot_to_memory (Var ep) (Var xd) stride (slot_loc tr) saCopy =
+        (slot_copy_body saCopy,sbCopy) /\
+      sbCopy = slot_copy_final saCopy (Var ep) (Var xd) stride (if tr then TLOAD else SLOAD) /\
+      slot_copy_external saCopy (Var ep)
 Proof
-  strip_tac >> qpat_x_assum `loc = slot_loc tr` SUBST_ALL_TAC >>
+  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `loc = slot_loc tr` SUBST_ALL_TAC >>
   qpat_x_assum `for_nonslot_layout _ _ _ _ _ _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [for_nonslot_layout_def, LET_THM]) >>
   qpat_x_assum `slot_loc tr = _` kall_tac >>
-  pure_rewrite_tac [LET_THM] >> BETA_TAC >>
-  conj_tac >- (irule nested_iterator_operand_not_label >> metis_tac[]) >>
+  conj_tac >-
+    (qpat_x_assum `(?w. vv_operand vv = Lit w) \/ _` strip_assume_tac >- simp[] >>
+     irule nested_iterator_operand_not_label >> metis_tac[]) >>
   conj_tac >- (Cases_on `bd` >> gvs[comp_return_def]) >>
   conj_tac >- simp[] >>
   `word_scale (slot_loc tr) = 1 /\ is_slot_addressed (slot_loc tr)` by
