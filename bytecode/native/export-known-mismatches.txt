@@ -177,9 +177,7 @@ bebf96127d573fa5 bytes 5127-P4  # functional/builtins/codegen/test_as_wei_value:
 0372d53e4597c2e3 bytes decode-guards  # functional/builtins/codegen/test_create_functions::test_create_minimal_proxy_to_call
 e064ae12b2669043 bytes decode-guards  # functional/builtins/codegen/test_create_functions::test_minimal_proxy_exception
 a06ee089505e4d5e bytes 5127-P8  # functional/builtins/codegen/test_create_functions::test_raw_create_double_eval
-3e011a451104a858 bytes 5127-P4  # functional/builtins/codegen/test_ec::test_ecadd_evaluation_order
 87b32d4bf2c46e39 bytes decode-guards  # functional/builtins/codegen/test_ec::test_ecadd_ext_call
-d9ca3777eb5793a0 bytes 5127-P4  # functional/builtins/codegen/test_ec::test_ecmul_evaluation_order
 0bec9a21125a4c15 bytes 5127-P4  # functional/builtins/codegen/test_ec::test_ecmul_ext_call
 db2de8141f588053 bytes decode-guards  # functional/builtins/codegen/test_empty::test_empty_as_func_arg[\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01...
 a264423eba2b1ac2 bytes decode-guards  # functional/builtins/codegen/test_empty::test_empty_as_func_arg[empty(Bytes[65])-\x01\x01\x01\x01\x01\x01\x0...
