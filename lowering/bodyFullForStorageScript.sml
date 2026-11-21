@@ -3529,6 +3529,241 @@ Finalise for_storage_scalar_step
 
 (* Code geometry is explicit: this boundary neither assumes a body frame
    callback nor fixes the dead policy of a scalar storage address. *)
+Theorem for_storage_array_head_prefix_at:
+  lookup_block cond func.fn_blocks = SOME cb /\
+  cb.bb_instructions =
+  [mk_inst (h - 2) EQ [Var idx; lvo] [dv];
+   mk_inst (h - 1) JNZ [Var dv; Label exit; Label bod] []] /\
+  lookup_block bod func.fn_blocks = SOME bb /\ sa.cs_current_bb = bod /\
+  sa.cs_current_insts =
+  [mk_inst h MUL [Var idx; Lit (n2w n)] [ov]] ++
+  (if case bd of Fixed v => F | Dynamic v1 => T then
+     [mk_inst (h + 1) ADD [Lit 1w; Var ov] [tot]]
+   else []) ++
+  [mk_inst (h + if case bd of Fixed v => F | Dynamic v1 => T then 2 else 1) ADD
+     [base_op;
+      Var (if (case bd of Fixed v => F | Dynamic v1 => T) then tot else ov)]
+     [ep]] /\
+  (!j. j < LENGTH sa.cs_current_insts ==>
+       get_instruction bb j = SOME (fEL sa.cs_current_insts j)) /\
+  ALL_DISTINCT
+    (if (case bd of Fixed v => F | Dynamic v1 => T) then [dv; ov; tot; ep]
+     else [dv; ov; ep]) /\
+  ~MEM idx
+    (if (case bd of Fixed v => F | Dynamic v1 => T) then [dv; ov; tot; ep]
+     else [dv; ov; ep]) /\
+  ~MEM p
+    (if (case bd of Fixed v => F | Dynamic v1 => T) then [dv; ov; tot; ep]
+     else [dv; ov; ep]) /\
+  (!x. lvo = Var x ==>
+       ~MEM x
+         (if (case bd of Fixed v => F | Dynamic v1 => T) then [dv; ov; tot; ep]
+          else [dv; ov; ep])) /\ s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\
+  ~s.vs_halted /\ lookup_var idx s = SOME (n2w k) /\ k < len /\
+  len < 2 ** 256 /\ FLOOKUP G idx = NONE /\ op_taint tn (Var idx) = {} /\
+  eval_operand lvo s = SOME (n2w len) /\ op_prov G lvo = NONE /\
+  op_taint tn lvo = {} /\
+  eval_operand base_op s = SOME slot /\ op_prov G base_op = NONE /\
+  op_taint tn base_op = {} /\
+  (!x. base_op = Var x ==>
+     ~MEM x (if (case bd of Fixed _ => F | Dynamic _ => T)
+             then [dv; ov; tot; ep] else [dv; ov; ep])) /\
+  allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  ?u Gu tnu.
+    (!D explicit.
+       gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+         (OK u,Gu,tnu)) /\
+    u =
+    update_var ep
+      ((if case bd of Fixed v => F | Dynamic v1 => T then slot + 1w else slot) +
+       n2w (k * n))
+      (if (case bd of Fixed v => F | Dynamic v1 => T) then
+         update_var tot (1w + n2w (k * n))
+           (update_var ov (n2w (k * n)) (jump_to bod (update_var dv 0w s)))
+       else update_var ov (n2w (k * n)) (jump_to bod (update_var dv 0w s))) with
+    vs_inst_idx := LENGTH sa.cs_current_insts /\
+    Gu =
+    DRESTRICT G
+      (COMPL
+         (set
+            (if (case bd of Fixed v => F | Dynamic v1 => T) then
+               [dv; ov; tot; ep]
+             else [dv; ov; ep]))) /\
+    tnu =
+    tn with
+    t_var :=
+      FOLDL (\m x. fmupdate x {} m) tn.t_var
+        (if (case bd of Fixed v => F | Dynamic v1 => T) then [dv; ov; tot; ep]
+         else [dv; ov; ep]) /\ u.vs_current_bb = sa.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~u.vs_halted /\
+    eval_operand (Var ep) u =
+    SOME
+      ((if case bd of Fixed v => F | Dynamic v1 => T then slot + 1w else slot) +
+       n2w (k * n)) /\ FLOOKUP Gu ep = NONE /\ op_taint tnu (Var ep) = {} /\
+    (!x. ~MEM x
+           (if (case bd of Fixed v => F | Dynamic v1 => T) then
+              [dv; ov; tot; ep]
+            else [dv; ov; ep]) ==>
+         lookup_var x u = lookup_var x s /\ FLOOKUP Gu x = FLOOKUP G x /\
+         op_taint tnu (Var x) = op_taint tn (Var x)) /\ allocas_from lo u /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u)
+Proof
+  pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>
+  `n2w k <> (n2w len : bytes32)` by
+    (`k < 2**256` by decide_tac >>
+     gvs[wordsTheory.n2w_11, wordsTheory.dimword_def] >>
+     simp[LESS_MOD] >> decide_tac) >>
+  qabbrev_tac `s1 = update_var dv 0w s with vs_inst_idx := 1` >>
+  qabbrev_tac `G1 = DRESTRICT G (COMPL {dv})` >>
+  qabbrev_tac `tn1 = tn with t_var := tn.t_var |+ (dv,{})` >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+     (s,G,tn) [] (OK s1,G1,tn1)` by suspend "eq" >>
+  qabbrev_tac `q = jump_to bod s1` >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+     (s1,G1,tn1) [] (OK q,G1,tn1)` by suspend "branch" >>
+  suspend "address"
+QED
+
+Resume for_storage_array_head_prefix_at[eq]:
+  rpt gen_tac >>
+  simp[Abbr `s1`, Abbr `G1`, Abbr `tn1`] >>
+  `get_instruction cb s.vs_inst_idx =
+     SOME (mk_inst (h-2) EQ [Var idx;lvo] [dv])` by
+    simp[venomInstTheory.get_instruction_def] >>
+  drule_at (Pos (el 3)) for_storage_scalar_step >>
+  disch_then (qspecl_then [`n2w len`,`n2w k`,`0w`] mp_tac) >>
+  simp[eval_operand_def, op_prov_def, venomExecSemanticsTheory.bool_to_word_def] >>
+  disch_then irule >> simp[GSYM op_prov_def]
+QED
+
+Resume for_storage_array_head_prefix_at[branch]:
+  rpt gen_tac >>
+  `lookup_block s1.vs_current_bb func.fn_blocks = SOME cb /\
+   get_instruction cb s1.vs_inst_idx =
+     SOME (mk_inst (h-1) JNZ [Var dv;Label exit;Label bod] []) /\
+   eval_operand (Var dv) s1 = SOME 0w /\ op_taint tn1 (Var dv) = {} /\
+   ~s1.vs_halted /\ allocas_from lo s1 /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp s1)` by
+    (simp[Abbr `s1`, Abbr `tn1`, venomInstTheory.get_instruction_def,
+          update_var_def, eval_operand_def, lookup_var_def, op_taint_def,
+          FLOOKUP_UPDATE, allocas_from_def, allocas_below_fmp_def] >>
+     gvs[allocas_from_def, allocas_below_fmp_def]) >>
+  drule_all decoderNavigationPtrTheory.jnz_origin_ptr_path >>
+  disch_then (qspecl_then [`explicit`,`PG`,`G1`,`D`] mp_tac) >>
+  simp[Abbr `q`]
+QED
+
+Resume for_storage_array_head_prefix_at[address]:
+  qabbrev_tac `dyn = (case bd of Dynamic _ => T | Fixed _ => F)` >>
+  qabbrev_tac `s2 = update_var ov (n2w(k*n)) q with vs_inst_idx := 1` >>
+  qabbrev_tac `G2 = DRESTRICT G1 (COMPL {ov})` >>
+  qabbrev_tac `tn2 = tn1 with t_var := tn1.t_var |+ (ov,{})` >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+     (q,G1,tn1) [] (OK s2,G2,tn2)` by suspend "mul" >>
+  qabbrev_tac `s3 = if dyn then
+    update_var tot (1w+n2w(k*n)) s2 with vs_inst_idx := 2 else s2` >>
+  qabbrev_tac `G3 = if dyn then DRESTRICT G2 (COMPL {tot}) else G2` >>
+  qabbrev_tac `tn3 = if dyn then tn2 with t_var := tn2.t_var |+ (tot,{}) else tn2` >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+     (s2,G2,tn2) [] (OK s3,G3,tn3)` by suspend "optional" >>
+  qabbrev_tac `u = update_var ep ((if dyn then slot+1w else slot)+n2w(k*n)) s3
+    with vs_inst_idx := LENGTH sa.cs_current_insts` >>
+  qabbrev_tac `Gu = DRESTRICT G3 (COMPL {ep})` >>
+  qabbrev_tac `tnu = tn3 with t_var := tn3.t_var |+ (ep,{})` >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+     (s3,G3,tn3) [] (OK u,Gu,tnu)` by suspend "last" >>
+  qexistsl_tac [`u`,`Gu`,`tnu`] >>
+  conj_tac >- metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans] >>
+  suspend "endpoint"
+QED
+
+Resume for_storage_array_head_prefix_at[mul]:
+  `get_instruction bb q.vs_inst_idx =
+    SOME (mk_inst h MUL [Var idx;Lit (n2w n)] [ov])` by
+    (simp[Abbr `q`, Abbr `s1`, jump_to_def] >>
+     first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `q.vs_inst_idx = 0` by simp[Abbr `q`, jump_to_def] >>
+  rpt gen_tac >>
+  simp[Abbr `s2`, Abbr `G2`, Abbr `tn2`] >>
+  drule_at (Pos (el 3)) for_storage_scalar_step >>
+  disch_then (qspecl_then [`n2w n`,`n2w k`,`n2w(k*n)`] mp_tac) >>
+  simp[wordsTheory.word_mul_n2w] >>
+  disch_then irule >>
+  Cases_on `dyn` >>
+  gvs[allocas_from_def, allocas_below_fmp_def, op_taint_def,
+    Abbr `q`, Abbr `s1`, Abbr `G1`, Abbr `tn1`,
+    eval_operand_def, lookup_var_def, update_var_def, jump_to_def,
+    op_prov_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
+Resume for_storage_array_head_prefix_at[optional]:
+  Cases_on `dyn`
+  >- (gvs[Abbr `s3`, Abbr `G3`, Abbr `tn3`] >>
+      `get_instruction bb s2.vs_inst_idx =
+        SOME (mk_inst (h+1) ADD [Lit 1w;Var ov] [tot])` by
+        (simp[Abbr `s2`] >>
+         qpat_x_assum `!j. _ ==> get_instruction bb j = _`
+           (qspec_then `1` mp_tac) >> simp[]) >>
+      `s2.vs_inst_idx = 1` by simp[Abbr `s2`] >>
+      rpt gen_tac >>
+      drule_at (Pos (el 3)) for_storage_scalar_step >>
+      disch_then (qspecl_then [`n2w(k*n)`,`1w`,`1w+n2w(k*n)`] mp_tac) >>
+      simp[] >> disch_then irule >>
+      gvs[Abbr `s2`, Abbr `q`, Abbr `s1`, Abbr `G2`, Abbr `tn2`,
+        eval_operand_def, lookup_var_def, update_var_def, jump_to_def,
+        op_taint_def, op_prov_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
+        allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
+  simp[Abbr `s3`, Abbr `G3`, Abbr `tn3`] >> rpt gen_tac >>
+  irule (cj 1 gas_origin_ptr_path_rules) >>
+  simp[Abbr `s2`, Abbr `q`, Abbr `s1`, update_var_def, jump_to_def]
+QED
+
+Resume for_storage_array_head_prefix_at[last]:
+  rpt (qpat_x_assum `!D explicit. gas_origin_ptr_path _ _ _ _` kall_tac) >>
+  `s3.vs_inst_idx = (if dyn then 2 else 1) /\
+   LENGTH sa.cs_current_insts = SUC s3.vs_inst_idx /\
+   get_instruction bb s3.vs_inst_idx = SOME
+     (mk_inst (h+(if dyn then 2 else 1)) ADD
+       [base_op;Var (if dyn then tot else ov)] [ep])` by
+    (Cases_on `dyn` >>
+     simp[Abbr `s3`, Abbr `s2`] >>
+     qpat_x_assum `!j. _ ==> get_instruction bb j = _`
+       (qspec_then `if dyn then 2 else 1` mp_tac) >> gvs[]) >>
+  rpt gen_tac >>
+  simp[Abbr `u`, Abbr `Gu`, Abbr `tnu`] >>
+  drule_at (Pos (el 3)) for_storage_scalar_step >>
+  disch_then (qspecl_then
+    [`(if dyn then 1w else 0w)+n2w(k*n)`,`slot`,
+     `(if dyn then slot+1w else slot)+n2w(k*n)`] mp_tac) >>
+  Cases_on `dyn` >> simp[wordsTheory.WORD_ADD_ASSOC, wordsTheory.WORD_ADD_0] >>
+  disch_then irule >>
+  Cases_on `base_op` >>
+  gvs[Abbr `s3`, Abbr `s2`, Abbr `q`, Abbr `s1`,
+    Abbr `G3`, Abbr `G2`, Abbr `G1`, Abbr `tn3`, Abbr `tn2`, Abbr `tn1`,
+    eval_operand_def, lookup_var_def, update_var_def, jump_to_def,
+    op_taint_def, op_prov_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
+    allocas_from_def, allocas_below_fmp_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Resume for_storage_array_head_prefix_at[endpoint]:
+  rpt (qpat_x_assum `!D explicit. gas_origin_ptr_path _ _ _ _` kall_tac) >>
+  Cases_on `dyn` >>
+  gvs[Abbr `u`, Abbr `Gu`, Abbr `tnu`, Abbr `s3`, Abbr `s2`,
+    Abbr `q`, Abbr `s1`, Abbr `G3`, Abbr `G2`, Abbr `G1`,
+    Abbr `tn3`, Abbr `tn2`, Abbr `tn1`,
+    update_var_def, jump_to_def, eval_operand_def, lookup_var_def,
+    op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
+    allocas_from_def, allocas_below_fmp_def] >>
+  (conj_tac
+   >- (AP_TERM_TAC >> simp[EXTENSION] >> metis_tac[]) >>
+   rpt strip_tac >> gvs[] >> metis_tac[])
+QED
+
+Finalise for_storage_array_head_prefix_at
+
 Theorem for_storage_array_head_prefix:
   lookup_block cond func.fn_blocks = SOME cb /\
   cb.bb_instructions =
@@ -3603,159 +3838,10 @@ Theorem for_storage_array_head_prefix:
          op_taint tnu (Var x) = op_taint tn (Var x)) /\ allocas_from lo u /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp u)
 Proof
-  pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>
-  `n2w k <> (n2w len : bytes32)` by
-    (`k < 2**256` by decide_tac >>
-     gvs[wordsTheory.n2w_11, wordsTheory.dimword_def] >>
-     simp[LESS_MOD] >> decide_tac) >>
-  qabbrev_tac `s1 = update_var dv 0w s with vs_inst_idx := 1` >>
-  qabbrev_tac `G1 = DRESTRICT G (COMPL {dv})` >>
-  qabbrev_tac `tn1 = tn with t_var := tn.t_var |+ (dv,{})` >>
-  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-     (s,G,tn) [] (OK s1,G1,tn1)` by suspend "eq" >>
-  qabbrev_tac `q = jump_to bod s1` >>
-  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-     (s1,G1,tn1) [] (OK q,G1,tn1)` by suspend "branch" >>
-  suspend "address"
+  strip_tac >>
+  MATCH_MP_TAC (Q.INST [`base_op` |-> `Lit slot`] for_storage_array_head_prefix_at) >>
+  asm_rewrite_tac[] >> simp[op_taint_def, op_prov_def, cj 1 eval_operand_def]
 QED
-
-Resume for_storage_array_head_prefix[eq]:
-  rpt gen_tac >>
-  simp[Abbr `s1`, Abbr `G1`, Abbr `tn1`] >>
-  `get_instruction cb s.vs_inst_idx =
-     SOME (mk_inst (h-2) EQ [Var idx;lvo] [dv])` by
-    simp[venomInstTheory.get_instruction_def] >>
-  drule_at (Pos (el 3)) for_storage_scalar_step >>
-  disch_then (qspecl_then [`n2w len`,`n2w k`,`0w`] mp_tac) >>
-  simp[eval_operand_def, op_prov_def, venomExecSemanticsTheory.bool_to_word_def] >>
-  disch_then irule >> simp[GSYM op_prov_def]
-QED
-
-Resume for_storage_array_head_prefix[branch]:
-  rpt gen_tac >>
-  `lookup_block s1.vs_current_bb func.fn_blocks = SOME cb /\
-   get_instruction cb s1.vs_inst_idx =
-     SOME (mk_inst (h-1) JNZ [Var dv;Label exit;Label bod] []) /\
-   eval_operand (Var dv) s1 = SOME 0w /\ op_taint tn1 (Var dv) = {} /\
-   ~s1.vs_halted /\ allocas_from lo s1 /\
-   (ctx_has_dalloca ctx ==> allocas_below_fmp s1)` by
-    (simp[Abbr `s1`, Abbr `tn1`, venomInstTheory.get_instruction_def,
-          update_var_def, eval_operand_def, lookup_var_def, op_taint_def,
-          FLOOKUP_UPDATE, allocas_from_def, allocas_below_fmp_def] >>
-     gvs[allocas_from_def, allocas_below_fmp_def]) >>
-  drule_all decoderNavigationPtrTheory.jnz_origin_ptr_path >>
-  disch_then (qspecl_then [`explicit`,`PG`,`G1`,`D`] mp_tac) >>
-  simp[Abbr `q`]
-QED
-
-Resume for_storage_array_head_prefix[address]:
-  qabbrev_tac `dyn = (case bd of Dynamic _ => T | Fixed _ => F)` >>
-  qabbrev_tac `s2 = update_var ov (n2w(k*n)) q with vs_inst_idx := 1` >>
-  qabbrev_tac `G2 = DRESTRICT G1 (COMPL {ov})` >>
-  qabbrev_tac `tn2 = tn1 with t_var := tn1.t_var |+ (ov,{})` >>
-  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-     (q,G1,tn1) [] (OK s2,G2,tn2)` by suspend "mul" >>
-  qabbrev_tac `s3 = if dyn then
-    update_var tot (1w+n2w(k*n)) s2 with vs_inst_idx := 2 else s2` >>
-  qabbrev_tac `G3 = if dyn then DRESTRICT G2 (COMPL {tot}) else G2` >>
-  qabbrev_tac `tn3 = if dyn then tn2 with t_var := tn2.t_var |+ (tot,{}) else tn2` >>
-  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-     (s2,G2,tn2) [] (OK s3,G3,tn3)` by suspend "optional" >>
-  qabbrev_tac `u = update_var ep ((if dyn then slot+1w else slot)+n2w(k*n)) s3
-    with vs_inst_idx := LENGTH sa.cs_current_insts` >>
-  qabbrev_tac `Gu = DRESTRICT G3 (COMPL {ep})` >>
-  qabbrev_tac `tnu = tn3 with t_var := tn3.t_var |+ (ep,{})` >>
-  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-     (s3,G3,tn3) [] (OK u,Gu,tnu)` by suspend "last" >>
-  qexistsl_tac [`u`,`Gu`,`tnu`] >>
-  conj_tac >- metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans] >>
-  suspend "endpoint"
-QED
-
-Resume for_storage_array_head_prefix[mul]:
-  `get_instruction bb q.vs_inst_idx =
-    SOME (mk_inst h MUL [Var idx;Lit (n2w n)] [ov])` by
-    (simp[Abbr `q`, Abbr `s1`, jump_to_def] >>
-     first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `q.vs_inst_idx = 0` by simp[Abbr `q`, jump_to_def] >>
-  rpt gen_tac >>
-  simp[Abbr `s2`, Abbr `G2`, Abbr `tn2`] >>
-  drule_at (Pos (el 3)) for_storage_scalar_step >>
-  disch_then (qspecl_then [`n2w n`,`n2w k`,`n2w(k*n)`] mp_tac) >>
-  simp[wordsTheory.word_mul_n2w] >>
-  disch_then irule >>
-  Cases_on `dyn` >>
-  gvs[allocas_from_def, allocas_below_fmp_def, op_taint_def,
-    Abbr `q`, Abbr `s1`, Abbr `G1`, Abbr `tn1`,
-    eval_operand_def, lookup_var_def, update_var_def, jump_to_def,
-    op_prov_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
-  metis_tac[]
-QED
-
-Resume for_storage_array_head_prefix[optional]:
-  Cases_on `dyn`
-  >- (gvs[Abbr `s3`, Abbr `G3`, Abbr `tn3`] >>
-      `get_instruction bb s2.vs_inst_idx =
-        SOME (mk_inst (h+1) ADD [Lit 1w;Var ov] [tot])` by
-        (simp[Abbr `s2`] >>
-         qpat_x_assum `!j. _ ==> get_instruction bb j = _`
-           (qspec_then `1` mp_tac) >> simp[]) >>
-      `s2.vs_inst_idx = 1` by simp[Abbr `s2`] >>
-      rpt gen_tac >>
-      drule_at (Pos (el 3)) for_storage_scalar_step >>
-      disch_then (qspecl_then [`n2w(k*n)`,`1w`,`1w+n2w(k*n)`] mp_tac) >>
-      simp[] >> disch_then irule >>
-      gvs[Abbr `s2`, Abbr `q`, Abbr `s1`, Abbr `G2`, Abbr `tn2`,
-        eval_operand_def, lookup_var_def, update_var_def, jump_to_def,
-        op_taint_def, op_prov_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
-        allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
-  simp[Abbr `s3`, Abbr `G3`, Abbr `tn3`] >> rpt gen_tac >>
-  irule (cj 1 gas_origin_ptr_path_rules) >>
-  simp[Abbr `s2`, Abbr `q`, Abbr `s1`, update_var_def, jump_to_def]
-QED
-
-Resume for_storage_array_head_prefix[last]:
-  rpt (qpat_x_assum `!D explicit. gas_origin_ptr_path _ _ _ _` kall_tac) >>
-  `s3.vs_inst_idx = (if dyn then 2 else 1) /\
-   LENGTH sa.cs_current_insts = SUC s3.vs_inst_idx /\
-   get_instruction bb s3.vs_inst_idx = SOME
-     (mk_inst (h+(if dyn then 2 else 1)) ADD
-       [Lit slot;Var (if dyn then tot else ov)] [ep])` by
-    (Cases_on `dyn` >>
-     simp[Abbr `s3`, Abbr `s2`] >>
-     qpat_x_assum `!j. _ ==> get_instruction bb j = _`
-       (qspec_then `if dyn then 2 else 1` mp_tac) >> gvs[]) >>
-  rpt gen_tac >>
-  simp[Abbr `u`, Abbr `Gu`, Abbr `tnu`] >>
-  drule_at (Pos (el 3)) for_storage_scalar_step >>
-  disch_then (qspecl_then
-    [`(if dyn then 1w else 0w)+n2w(k*n)`,`slot`,
-     `(if dyn then slot+1w else slot)+n2w(k*n)`] mp_tac) >>
-  Cases_on `dyn` >> simp[wordsTheory.WORD_ADD_ASSOC, wordsTheory.WORD_ADD_0] >>
-  disch_then irule >>
-  gvs[Abbr `s3`, Abbr `s2`, Abbr `q`, Abbr `s1`,
-    Abbr `G3`, Abbr `G2`, Abbr `tn3`, Abbr `tn2`,
-    eval_operand_def, lookup_var_def, update_var_def, jump_to_def,
-    op_taint_def, op_prov_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
-    allocas_from_def, allocas_below_fmp_def] >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
-QED
-
-Resume for_storage_array_head_prefix[endpoint]:
-  rpt (qpat_x_assum `!D explicit. gas_origin_ptr_path _ _ _ _` kall_tac) >>
-  Cases_on `dyn` >>
-  gvs[Abbr `u`, Abbr `Gu`, Abbr `tnu`, Abbr `s3`, Abbr `s2`,
-    Abbr `q`, Abbr `s1`, Abbr `G3`, Abbr `G2`, Abbr `G1`,
-    Abbr `tn3`, Abbr `tn2`, Abbr `tn1`,
-    update_var_def, jump_to_def, eval_operand_def, lookup_var_def,
-    op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
-    allocas_from_def, allocas_below_fmp_def] >>
-  (conj_tac
-   >- (AP_TERM_TAC >> simp[EXTENSION] >> metis_tac[]) >>
-   rpt strip_tac >> gvs[] >> metis_tac[])
-QED
-
-Finalise for_storage_array_head_prefix
 
 (* Execute and pop the real body scope, then land before the increment or
    at the loop exit. The allocation frame stays anchored at the For entry. *)
