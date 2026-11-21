@@ -317,6 +317,8 @@ Resume grouped_keyword_decode_supplied[finish]:
 QED
 
 (* The decoder's scratch allocations are newer than every completed owner. *)
+Finalise grouped_keyword_decode_supplied
+
 Theorem grouped_keyword_decode_owner_frame:
   alloca_inv t /\
   FLOOKUP t.vs_allocas oid = SOME (b,n) /\
