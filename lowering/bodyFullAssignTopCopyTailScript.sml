@@ -189,41 +189,6 @@ Proof
   simp[] >> qexistsl_tac [`tv`,`v`] >> simp[]
 QED
 
-Theorem assign_slots_subregion_dead_iff[local]:
-  MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\
-  storage_locks_separated (FST H) (SND H) /\
-  storage_subregion root path delta tv /\ start = w2n rootk + delta /\
-  start <= j /\ j < start + type_slot_size tv ==>
-  (storage_dead H tr st j b <=> dead_bytes st start tv j b)
-Proof
-  strip_tac >>
-  drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac >>
-  `w2n rootk <= j /\ j < w2n rootk + type_slot_size root` by decide_tac >>
-  `w2n rootk + type_slot_size root <= dimword (:256) /\
-   !k' tv'. MEM (tr,k',tv') (FST H) /\ (k',tv') <> (rootk,root) ==>
-     ranges_disjoint (w2n rootk) (type_slot_size root) (w2n k') (type_slot_size tv')` by
-    (fs[regions_consistent_def] >> metis_tac[]) >>
-  simp_tac (srw_ss()) [storage_dead_def] >> eq_tac
-  >- (strip_tac >> rename1 `dead_bytes st (w2n k2) tv2 j b` >>
-      `k2 = rootk /\ tv2 = root` by
-        (Cases_on `(k2,tv2) = (rootk,root)` >> fs[] >>
-         drule (cj 1 dead_bytes_range) >> strip_tac >>
-         qpat_x_assum `!k' tv'. MEM _ _ /\ _ ==> ranges_disjoint (w2n rootk) _ _ _`
-           (qspecl_then [`k2`,`tv2`] mp_tac) >>
-         simp[vyperStorageFrameTheory.ranges_disjoint_def] >> (gvs[])) >>
-      gvs[] >> drule storage_subregion_dead_bytes >>
-      disch_then (qspecl_then [`st`,`w2n k2`,`j`,`b`] mp_tac) >> simp[]) >>
-  disch_tac >> conj_tac
-  >- (Cases_on `tr` >> simp[] >> strip_tac >>
-      fs[storage_locks_separated_def] >>
-      first_x_assum (qspecl_then [`rootk`,`root`,`j`] mp_tac) >>
-      simp[vyperStorageFrameTheory.ranges_disjoint_def] >> decide_tac) >>
-  qexistsl_tac [`rootk`,`root`] >> simp[] >>
-  drule place_store_dead_subregion >>
-  disch_then (qspecl_then [`w2n rootk`,`st`,`j`,`b`] mp_tac) >> simp[]
-  >> (gvs[])
-QED
-
 Theorem assign_slots_sparse_taint[local]:
   MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\
   storage_locks_separated (FST H) (SND H) /\
@@ -267,12 +232,12 @@ Resume assign_slots_sparse_taint[inside]:
      qpat_x_assum `!j. MEM j ks ==> k <> _` (qspec_then `i` mp_tac) >>
      simp[]) >>
   `b < 32 /\ dead_bytes st start tv (start+i) b` by
-    (`dead_bytes st start tv (w2n k) b` by metis_tac[assign_slots_subregion_dead_iff] >>
+    (`dead_bytes st start tv (w2n k) b` by metis_tac[bodyFullStoreSlotsStaticTheory.store_slots_subregion_dead_iff] >>
      drule (cj 1 dead_bytes_range) >> simp[] >>
-     gvs[assign_slots_subregion_dead_iff, cj 1 dead_bytes_range]) >>
+     gvs[bodyFullStoreSlotsStaticTheory.store_slots_subregion_dead_iff, cj 1 dead_bytes_range]) >>
   `dead_bytes (apply_writes (n2w start) writes st) start tv (start+i) b` by
     metis_tac[placeStoreSlotsTheory.place_store_unwritten_live_preserved] >>
-  metis_tac[assign_slots_subregion_dead_iff]
+  metis_tac[bodyFullStoreSlotsStaticTheory.store_slots_subregion_dead_iff]
 QED
 
 Resume assign_slots_sparse_taint[outside]:
@@ -297,7 +262,7 @@ Resume assign_slots_sparse_taint[written]:
      (metis_tac[])) >>
   `w2n k = start+j` by metis_tac[] >>
   `start <= w2n k /\ w2n k < start + type_slot_size tv` by decide_tac >>
-  metis_tac[assign_slots_subregion_dead_iff]
+  metis_tac[bodyFullStoreSlotsStaticTheory.store_slots_subregion_dead_iff]
 QED
 
 Finalise assign_slots_sparse_taint

@@ -17,7 +17,7 @@ Theorem ecadd_staging_full:
   lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa = (x,shadow_s1) /\
   lower_value compile_expr cenv (expr_type e2) (gas_shadow_expr e2) shadow_s1 = (y,shadow_s2) /\
   (if bt = ECAdd then compile_ecadd_points x y s2 else compile_ecmul_point x y s2) = (res,sb) /\
-  vv = FST (as_ptr_val a LocMemory (res,sb)) /\
+  vv = FST (as_stack_val a (res,sb)) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state s1 shadow_s1 /\
   gas_shadow_state s2 shadow_s2 /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\

@@ -1,6 +1,7 @@
 Theory deployDynamicMemory
 Ancestors
-  deployPeakMemoryHeaders ctorDeployDefs e2eDeployDefs e2eDefs asmOptimizer
+  deployPeakMemoryBound[ignore_grammar] deployPeakMemoryHeaders ctorDeployDefs
+  e2eDeployDefs e2eDefs asmOptimizer
   compileVyper supportedStmtTraverse supportedExprTraverse vyperAST
   contextRawReachable unitTransformDefs unitShapeDefs lowerDloadDefs
   venomInst venomState venomLayout exprSimHypsDefs fmpLowerSequenceExec
@@ -25,7 +26,60 @@ Definition deploy_dalloca_form_occurs_def:
        EXISTS (supported_expr_exists form) dflts)
 End
 
-(* GATE_ADMISSION: held, deployment DALLOCA peak memory for raw call calldata *)
+Theorem deploy_raw_fmp_without_blueprint[local]:
+  !policy tops runtime_bc rpolicy dunit dout prog prog' cplan
+   am tx es vs vi (fmp:bytes32).
+    deploy_phases policy tops (assemble prog, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    deploy_typing_ok tops am tx /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    IS_SOME (SND (SND (SND (classify_functions tops)))) /\
+    ~deploy_dalloca_form_occurs
+      (\e. ?ty b s r ks es d.
+            e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d) tops /\
+    vs = opt_deploy_entry_state_own prog prog' cplan tops es /\
+    vs.vs_fmp = vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+    imm_len tops + unit_alloca_budget dunit.cu_context +
+      32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
+    raw_variant fmp vi vs /\
+    LENGTH vi.vs_outcomes < 2 ** 64 /\
+    outcomes_accounts_typed (SOME vi.vs_outcomes) /\
+    LENGTH vi.vs_call_ctx.cc_calldata < 2 ** 64 ==>
+    !fn inst s. raw_reachable vi dunit.cu_context fn inst s ==>
+      s.vs_initial_fmp = fmp /\
+      w2n s.vs_initial_fmp <= w2n s.vs_fmp /\ dalloca_no_wrap inst s /\
+      fmp_frontier_rel (w2n vs.vs_initial_fmp) (w2n fmp)
+        (w2n vs.vs_initial_fmp + (w2n s.vs_fmp - w2n fmp)) s.vs_fmp /\
+      (inst.inst_opcode = DALLOCA ==>
+        w2n s.vs_fmp <= w2n fmp + 2 ** 64 * 2 ** 64)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
+    fs[deploy_phases_def] >>
+  `~vs.vs_halted /\ vs.vs_accounts = accounts_after_transfer tx am.accounts` by
+    fs[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
+       entry_venom_state_def, init_venom_state_def, deploy_state_rel_def] >>
+  `!vis mut nr rr name args dflts ret body.
+      MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
+      (vis = Deploy \/ vis = Internal) ==>
+      ~supported_stmts_expr_exists
+        (\e. ?ty b s r ks es d.
+          e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d) body /\
+      EVERY (\d0. ~supported_expr_exists
+        (\e. ?ty b s r ks es d.
+          e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d) d0)
+        dflts` by
+    (qpat_x_assum `~deploy_dalloca_form_occurs _ _` mp_tac >>
+     asm_rewrite_tac [deploy_dalloca_form_occurs_def, EVERY_NOT_EXISTS] >>
+     simp[] >> metis_tac[]) >>
+  qspecl_then [`tops`, `rpolicy`, `runtime_bc`, `dunit`,
+    `w2n vs.vs_initial_fmp`, `am`, `tx`, `fmp`, `vs`, `vi`]
+    mp_tac lower_vyper_deploy_unit_dynamic_peak_memory_from_unit >>
+  impl_tac >- (asm_rewrite_tac[] >> simp[]) >>
+  simp[dalloca_no_wrap_def] >> metis_tac[]
+QED
+
 Theorem lower_vyper_deploy_unit_raw_fmp_raw_call_calldata:
   !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan
    am tx es vs vi (fmp:bytes32).
@@ -59,10 +113,15 @@ Theorem lower_vyper_deploy_unit_raw_fmp_raw_call_calldata:
       (inst.inst_opcode = DALLOCA ==>
         w2n s.vs_fmp <= w2n fmp + 2 ** 64 * 2 ** 64)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `IS_SOME (SND (SND (SND (classify_functions tops))))` by
+    fs[deploy_dalloca_form_occurs_def] >>
+  qspecl_then [`policy`, `tops`, `runtime_bc`, `rpolicy`, `dunit`, `dout`,
+    `prog`, `prog'`, `cplan`, `am`, `tx`, `es`, `vs`, `vi`, `fmp`]
+    mp_tac deploy_raw_fmp_without_blueprint >>
+  impl_tac >- asm_rewrite_tac[] >> simp[]
 QED
 
-(* GATE_ADMISSION: held, deployment DALLOCA peak memory for create copy *)
 Theorem lower_vyper_deploy_unit_raw_fmp_create_copy:
   !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan
    am tx es vs vi (fmp:bytes32).
@@ -94,7 +153,13 @@ Theorem lower_vyper_deploy_unit_raw_fmp_create_copy:
       (inst.inst_opcode = DALLOCA ==>
         w2n s.vs_fmp <= w2n fmp + 2 ** 64 * 2 ** 64)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `IS_SOME (SND (SND (SND (classify_functions tops))))` by
+    fs[deploy_dalloca_form_occurs_def] >>
+  qspecl_then [`policy`, `tops`, `runtime_bc`, `rpolicy`, `dunit`, `dout`,
+    `prog`, `prog'`, `cplan`, `am`, `tx`, `es`, `vs`, `vi`, `fmp`]
+    mp_tac deploy_raw_fmp_without_blueprint >>
+  impl_tac >- asm_rewrite_tac[] >> simp[]
 QED
 
 (* GATE_ADMISSION: held, deployment DALLOCA peak memory for create blueprint *)

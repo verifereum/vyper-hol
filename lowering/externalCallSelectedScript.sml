@@ -6,8 +6,6 @@
  * TOP-LEVEL:
  *   call_external_selected_body, call_external_selected_body_gas -- the
  *     source runs the selected body, at any gas observations
- *   send_call_value_with_scopes, send_call_value_with_gas_obs -- moving
- *     the value ignores scopes and gas observations
  *   type_stmts_none_valued_return -- a body typed at NoneT has no valued
  *     return
  *   guarded_body_code, guarded_body_stmts_env -- the guarded body's code
@@ -15,46 +13,13 @@
 
 Theory externalCallSelected
 Ancestors
-  vyperState vyperContext vyperInterpreter vyperTypeSystem
+  externalEntryBound vyperState vyperContext vyperInterpreter vyperTypeSystem
   vyperTypeSelectedEntrySoundness vyperTypeExternalCallMachine nonreentrantEquiv
   e2eDefs supportedStmts vyperStorageFootprint
   compileEnv compileVyper stmtLowering stmtLoweringMono moduleLowering
   fragExec loweringPosts stmtSimProps bodySim stmtsEnvRetTy
 
 val _ = Parse.hide "body";
-
-(* send_call_value reads and writes only accounts, so it runs the same
-   under any scopes. *)
-Theorem send_call_value_with_scopes:
-  !mut cx s r s'.
-    send_call_value mut cx s = (r, s') ==>
-    s'.scopes = s.scopes /\
-    !sc. send_call_value mut cx (s with scopes := sc) =
-         (r, s' with scopes := sc)
-Proof
-  rw[send_call_value_def, transfer_value_def, vyperStateTheory.bind_def,
-     vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
-     vyperStateTheory.assert_def, vyperStateTheory.return_def,
-     vyperStateTheory.raise_def, vyperStateTheory.get_accounts_def,
-     vyperStateTheory.update_accounts_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-(* Likewise under any gas observations. *)
-Theorem send_call_value_with_gas_obs:
-  !mut cx s r s'.
-    send_call_value mut cx s = (r, s') ==>
-    s'.gas_obs = s.gas_obs /\
-    !gs. send_call_value mut cx (s with gas_obs := gs) =
-         (r, s' with gas_obs := gs)
-Proof
-  rw[send_call_value_def, transfer_value_def, vyperStateTheory.bind_def,
-     vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
-     vyperStateTheory.assert_def, vyperStateTheory.return_def,
-     vyperStateTheory.raise_def, vyperStateTheory.get_accounts_def,
-     vyperStateTheory.update_accounts_def] >>
-  gvs[AllCaseEqs()]
-QED
 
 (* call_external_body sets the scopes before it reads them. *)
 Theorem call_external_body_scopes[local]:
@@ -351,39 +316,75 @@ Proof
   Cases_on `safe_cast tv value` >> simp[]
 QED
 
+(* Unfold selection through the successful transfer, defaults and binding. *)
+fun selected_bound_trace_tac gobs =
+  qpat_x_assum `external_entry_bound _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [external_entry_bound_def]) >>
+  `LENGTH tx.args + LENGTH dflt_vs = LENGTH args` by
+    (drule vyperCallTheory.bind_arguments_length >> simp[]) >>
+  `LENGTH dflt_vs =
+    LENGTH dflts - (LENGTH dflts - (LENGTH args - LENGTH tx.args))` by
+    (drule eval_external_defaults_length >> simp[]) >>
+  `~(LENGTH tx.args > LENGTH args \/
+       LENGTH args - LENGTH tx.args > LENGTH dflts)` by decide_tac >>
+  qpat_x_assum `source_deployment_rel _ _ _`
+    (strip_assume_tac o REWRITE_RULE [source_deployment_rel_def]) >>
+  `type_env_all_modules [(NONE, tops)] = type_env tops` by
+    simp[type_env_all_modules_def, type_env_def] >>
+  simp[call_external_trace_def, find_function_module_def,
+       lookup_exported_function_def, get_self_code_def, get_module_code_def,
+       initial_evaluation_context_def, Excl "unlock_if_nr_def"] >>
+  qmatch_goalsub_abbrev_tac `call_external_function_trace _ _ am cx` >>
+  `cx = initial_evaluation_context am.sources am.layouts tx NONE` by
+    simp[Abbr `cx`, initial_evaluation_context_def] >>
+  `~cx.in_deploy` by simp[Abbr `cx`] >>
+  qpat_x_assum `cx = initial_evaluation_context _ _ _ _` SUBST_ALL_TAC >>
+  (Q.SPECL [gobs, `os`, `am`] (Q.prove
+     (`!obs os am. initial_state am [FEMPTY] with
+        <|outcomes := SOME os; requests := []; gas_obs := obs; storage_trace := []|> =
+      initial_state am [FEMPTY] with
+        <|outcomes := SOME os; requests := []; gas_obs := obs|>`,
+      simp[initial_state_def])) |> assume_tac) >>
+  qpat_x_assum `_ = s2 with scopes := _` (ASSUME_TAC o SYM) >>
+  qpat_x_assum `Abbrev _` kall_tac >>
+  pure_rewrite_tac [call_external_function_trace_def, LET_THM] >>
+  asm_simp_tac std_ss [] >>
+  asm_simp_tac std_ss [vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+    vyperStateTheory.set_scopes_def, vyperStateTheory.return_def,
+    optionTheory.option_case_def, sumTheory.sum_case_def,
+    pairTheory.pair_case_thm, pairTheory.UNCURRY];
+
 Theorem call_external_selected_lock_failure:
-  !tops am tx ret mut nr args fbody env orc gobs es0 exn es_lock.
+  !tops am tx ret mut nr args dflts fbody os prefix es0 exn es_abort.
     source_deployment_rel tops am tx /\
     lookup_function NONE tx.function_name External tops =
-      SOME (mut, nr, args, [], ret, fbody) /\
-    LENGTH tx.args = LENGTH args /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with <| outcomes := orc; requests := [] |>) =
-      (INL (), es0) /\
+      SOME (mut,nr,args,dflts,ret,fbody) /\
+    (!gx. external_entry_bound tops am tx os (prefix ++ gx) mut args dflts
+      (es0 with gas_obs := gx)) /\
     lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
-      nr (is_view_mut mut) (es0 with gas_obs := gobs) = (INR exn, es_lock)
-    ==>
-    call_external_trace orc gobs am tx =
-      (INR exn, am, es_lock.requests, es_lock.storage_trace)
+      nr (is_view_mut mut) es0 = (INR exn,es_abort) ==>
+    !gx. call_external_trace (SOME os) (prefix ++ gx) am tx =
+      (INR exn,am,es_abort.requests,es_abort.storage_trace)
 Proof
-  selected_external_trace_tac >>
-  drule (REWRITE_RULE [GSYM lock_if_nr_def] call_lock_action_error) >>
-  strip_tac >>
-  gvs[Abbr `cx`, initial_evaluation_context_def, Excl "lock_if_nr_def"]
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  qpat_x_assum `!gx. external_entry_bound _ _ _ _ _ _ _ _ _`
+    (qspec_then `gx` assume_tac) >>
+  `lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+    nr (is_view_mut mut) (es0 with gas_obs := gx) =
+    (INR exn,es_abort with gas_obs := gx)` by
+    (drule lock_if_nr_with_gas_obs >> disch_then (qspec_then `gx` ACCEPT_TAC)) >>
+  qpat_assum `lock_if_nr _ _ _ es0 = _`
+    (strip_assume_tac o MATCH_MP (REWRITE_RULE [GSYM lock_if_nr_def] call_lock_action_error)) >>
+  selected_bound_trace_tac `prefix ++ gx` >> simp[]
 QED
 
 Theorem selected_call_trace_result_nr:
-  !tops am tx ret mut nr args fbody env os gx es0 es_lock res ee eu.
+  !tops am tx ret mut nr args dflts fbody os prefix gx es0 es_lock res ee eu.
     source_deployment_rel tops am tx /\
     lookup_function NONE tx.function_name External tops =
-      SOME (mut,nr,args,[],ret,fbody) /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with
-         <|outcomes := SOME os; requests := []|>) = (INL (),es0) /\
+      SOME (mut,nr,args,dflts,ret,fbody) /\
+    external_entry_bound tops am tx os (prefix ++ gx) mut args dflts
+      (es0 with gas_obs := gx) /\
     lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
       nr (is_view_mut mut) es0 = (INL (),es_lock) /\
     eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
@@ -391,7 +392,7 @@ Theorem selected_call_trace_result_nr:
     unlock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
       nr (is_view_mut mut) ee = (INL (),eu) ==>
     ?r am' rqs obs.
-      call_external_trace (SOME os) gx am tx = (r,am',rqs,obs) /\
+      call_external_trace (SOME os) (prefix ++ gx) am tx = (r,am',rqs,obs) /\
       ((res = INL () \/ (?v. res = INR (ReturnException v))) ==>
         obs = eu.storage_trace) /\
       (~(res = INL () \/ (?v. res = INR (ReturnException v))) ==>
@@ -418,52 +419,28 @@ Theorem selected_call_trace_result_nr:
         r = INR e /\ am' = am /\ rqs = ee.requests)
 Proof
   rpt gen_tac >> strip_tac >>
-  `LENGTH tx.args = LENGTH args` by
-    (drule vyperCallTheory.bind_arguments_length >> simp[]) >>
-  `es0.scopes = [env]` by
-    (drule send_call_value_with_scopes >> simp[initial_state_def]) >>
-  `(es0 with gas_obs := gx).scopes = [env]` by simp[] >>
   `lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
     nr (is_view_mut mut) (es0 with gas_obs := gx) =
     (INL (),es_lock with gas_obs := gx)` by
-    (drule lock_if_nr_with_gas_obs >> simp[]) >>
-  drule_all call_external_selected_body_trace >> strip_tac >>
-  drule call_external_trace_result >> strip_tac >>
-  drule_all call_external_selected_body_gas >>
-  disch_then (qspec_then `gx` assume_tac) >>
-  qspecl_then [`am`, `initial_evaluation_context am.sources am.layouts tx NONE`,
-               `nr`, `mut`, `type_env tops`, `env`, `fbody`, `ret`,
-               `es0 with gas_obs := gx`, `es_lock with gas_obs := gx`,
-               `res`, `ee`, `eu`] mp_tac call_external_body_run_nr >>
-  impl_tac >- simp[Excl "lock_if_nr_def", Excl "unlock_if_nr_def"] >>
-  strip_tac >>
-  qexistsl_tac [`r`,`am'`,`rqs`,
-    `(if res = INL () \/ (?v. res = INR (ReturnException v))
-      then eu else ee).storage_trace`] >>
-  simp[Excl "unlock_if_nr_def"] >>
-  rpt conj_tac
-  >- (strip_tac >> gvs[])
-  >- (rpt gen_tac >> strip_tac >>
-      qpat_x_assum `!v. res = INR (ReturnException v) ==> _`
-        (qspec_then `v` mp_tac) >>
-      gvs[] >> strip_tac >> gvs[] >> BasicProvers.EVERY_CASE_TAC >> gvs[])
-  >- (strip_tac >> gvs[]) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!e. res = INR e /\ _ ==> _` (qspec_then `e` mp_tac) >>
-  simp[] >> strip_tac >> Cases_on `e` >> gvs[]
+    (drule lock_if_nr_with_gas_obs >> disch_then (qspec_then `gx` ACCEPT_TAC)) >>
+  selected_bound_trace_tac `prefix ++ gx` >>
+  Cases_on `res` >> simp[Excl "unlock_if_nr_def"] >>
+  rename1 `eval_stmts _ _ _ = (INR exc, _)` >>
+  Cases_on `exc` >> simp[Excl "unlock_if_nr_def"] >>
+  Cases_on `evaluate_type (type_env tops) ret` >> simp[] >>
+  rename1 `evaluate_type (type_env tops) ret = SOME tv` >>
+  rename1 `eval_stmts _ _ _ = (INR (ReturnException value), _)` >>
+  Cases_on `safe_cast tv value` >> simp[]
 QED
 
 (* An unread gas tail changes neither the source result nor its final trace. *)
 Theorem selected_call_trace_gas_cong_nr:
-  !tops am tx ret mut nr args fbody env os g1 g2 es0 es_lock res ee o1 o2.
+  !tops am tx ret mut nr args dflts fbody os prefix g1 g2 es0 es_lock res ee o1 o2.
     source_deployment_rel tops am tx /\
     lookup_function NONE tx.function_name External tops =
-      SOME (mut,nr,args,[],ret,fbody) /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with
-         <|outcomes := SOME os; requests := []|>) = (INL (),es0) /\
+      SOME (mut,nr,args,dflts,ret,fbody) /\
+    (!gx. external_entry_bound tops am tx os (prefix ++ gx) mut args dflts
+      (es0 with gas_obs := gx)) /\
     lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
       nr (is_view_mut mut) es0 = (INL (),es_lock) /\
     (nr /\ ~is_view_mut mut ==>
@@ -473,8 +450,8 @@ Theorem selected_call_trace_gas_cong_nr:
       fbody (es_lock with gas_obs := g1) = (res,ee with gas_obs := o1) /\
     eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
       fbody (es_lock with gas_obs := g2) = (res,ee with gas_obs := o2) ==>
-    call_external_trace (SOME os) g1 am tx =
-      call_external_trace (SOME os) g2 am tx
+    call_external_trace (SOME os) (prefix ++ g1) am tx =
+      call_external_trace (SOME os) (prefix ++ g2) am tx
 Proof
   rpt gen_tac >> strip_tac >>
   `?eu. unlock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
@@ -487,12 +464,12 @@ Proof
      `~nr \/ is_view_mut mut` by metis_tac[] >>
      gvs[unlock_if_nr_def, vyperStateTheory.return_def]) >>
   drule unlock_if_nr_with_gas_obs >> strip_tac >>
-  qspecl_then [`tops`, `am`, `tx`, `ret`, `mut`, `nr`, `args`, `fbody`,
-               `env`, `os`, `g1`, `es0`, `es_lock`, `res`,
+  qspecl_then [`tops`, `am`, `tx`, `ret`, `mut`, `nr`, `args`, `dflts`, `fbody`,
+               `os`, `prefix`, `g1`, `es0`, `es_lock`, `res`,
                `ee with gas_obs := o1`, `eu with gas_obs := o1`] mp_tac
     selected_call_trace_result_nr >>
-  qspecl_then [`tops`, `am`, `tx`, `ret`, `mut`, `nr`, `args`, `fbody`,
-               `env`, `os`, `g2`, `es0`, `es_lock`, `res`,
+  qspecl_then [`tops`, `am`, `tx`, `ret`, `mut`, `nr`, `args`, `dflts`, `fbody`,
+               `os`, `prefix`, `g2`, `es0`, `es_lock`, `res`,
                `ee with gas_obs := o2`, `eu with gas_obs := o2`] mp_tac
     selected_call_trace_result_nr >>
   impl_tac >- simp[Excl "unlock_if_nr_def"] >>

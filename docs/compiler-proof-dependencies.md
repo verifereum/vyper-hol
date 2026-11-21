@@ -31,9 +31,20 @@ and exact bytecode equality are not semantic stage correctness.
 ## Exact O1 runtime dependency graph
 
 This is the Milestone 1 graph, for the identity finalizer `K SOME`. Today's
-`vyper_call_correct` has eight public premises (table below); its proof cases
-on calldata dispatch and then on the finalizer (`vyper_call_correct_guarded`,
-`vyper_call_correct_dispatched`).
+`vyper_call_correct` has seven public premises (table below) and no whitelist
+premise; its proof cases on calldata dispatch and then on the finalizer
+(`vyper_call_correct_guarded`, `vyper_call_correct_dispatched`). The
+`supported_program tops` the graph starts from is no longer assumed: the proof
+derives it from `source_typing_ok` and the `source_deployment_rel` inside
+`call_state_rel` (`source_typing_ok_supported_program`), and it takes the raw
+source-unit shape from successful runtime lowering and `check_contract F`
+(`lower_vyper_runtime_unit_checked_source_shape`), with `unit_defs_reach_uses`
+from the lowering separately; the graph's `supported_program -> S2` edge and
+its single S3 edge are Milestone 1's. Units with `DALLOCA` get S3's memory
+facts from `lower_vyper_runtime_unit_memory_ok_from_no_wrap` instead, which
+replaces S3's no-`DALLOCA` and entry-FMP premises by no-wrap and FMP-floor
+facts at every reachable instruction. The deploy tops take their shape from
+`deploy_unit_o1_shape_ok`.
 
 ```text
 compile_vyper (K SOME) succeeds
@@ -69,9 +80,8 @@ preserves its historical schema.
 
 | Hypothesis | Class | Current producer / absence |
 |---|---|---|
-| `fin IN accepted_finalizers`, `compile_vyper fin policy tops = SOME (deploy_bc,runtime_bc)` | boundary | Caller supplies success; L1 (`compile_vyper_runtime_phases`, `K SOME`) or `compile_vyper_runtime_phases_asm_opt` extracts raw phases and the exact assembled runtime bytes (`assemble prog'` of the optimized `prog'` for `asm_opt_finalizer`). No universal success producer. |
-| `supported_program tops` | computational boundary | Plain EVAL on concrete `tops`; exact whitelist on `tops` alone. No universal membership, typing or semantic correctness producer. |
-| `source_typing_ok tops am tx` | boundary + environmental | Checker artifact; partial `load_contract_establishes_checked_contract_runtime_ready`, `load_contract_establishes_machine_well_typed`, `checked_call_external_preserves_machine_well_typed`. No complete arbitrary-environment producer. |
+| `fin IN accepted_finalizers`, `compile_vyper fin policy tops = SOME (deploy_bc,runtime_bc)` | boundary | Caller supplies success; L1 (`compile_vyper_runtime_phases`, `K SOME`) or `compile_vyper_runtime_phases_asm_opt` extracts raw phases and the exact assembled runtime bytes (`assemble prog'` of the optimized `prog'` for `asm_opt_finalizer`). Success already excludes the units the lowering refuses: the runtime lowering (`lower_vyper_runtime_unit` and its `_mods` form) refuses an unfolded `sha256` in an external function's defaults (`external_defaults_no_sha256`), and both the runtime and the deploy lowering (`lower_vyper_deploy_unit` and its `_mods` form) refuse the `create_from_blueprint` calls that `blueprint_unit_raw_fmp_ok` rejects: a code offset that folds to an integer literal outside the two allowed word ranges (`blueprint_offset_fold_ok`), an allocation bound that can reach 2⁶⁴, or, in a unit declaring ABI-dynamic storage or transient state or a mapping (nested ones included) with an ABI-dynamic value, raw or ABI-dynamic constructor arguments. No universal success producer. |
+| `source_typing_ok tops am tx` | boundary + environmental | `check_contract F` acceptance, `global_cells_typed`, the folded constants inside the target's constant cells (`constants_fold_module … = SOME cenv`, `cenv SUBMAP …`), `machine_well_typed am`, `call_tx_well_typed tx`. With `call_state_rel`'s `source_deployment_rel` it gives `supported_program tops` (`source_typing_ok_supported_program`, through `check_contract_supported_program`), so the whitelist is not a public premise. Checker artifact; partial `load_contract_establishes_checked_contract_runtime_ready`, `load_contract_establishes_machine_well_typed`, `checked_call_external_preserves_machine_well_typed`. No complete arbitrary-environment producer. |
 | `storage_ok H am tx`, `call_within H tops am tx es` | environmental storage horizon | The caller fixes the regions `H`. When calldata dispatch selects a function and the frame is not resource-starved, `call_result_rel H` gives `storage_ok H` again after the call. No producer of `call_within`, and no deployment/transaction producer of `storage_ok`. |
 | `call_state_rel tops runtime_bc am tx es` | environmental | No general producer or satisfiability theorem. L6/L8 **consume**, not produce, it; transaction corollary deferred to Milestone 7. |
 | `LENGTH (call_trace es) < 2 ** 64` | environmental call-count bound | No producer. The frame's observed calls, computed precompiles included, number fewer than `2 ** 64`. |
@@ -95,19 +105,23 @@ the regions and backends observed for the chosen gas readings.
 
 ## S1–S7: stage producers
 
-Every row is proved: `holbuild check` reports each export below clean, with
-no admission in its closure. S1 is proved from the entry bridge, the joint
-body simulation (`bodySimFullMain.body_stmts_sim_full`) and the halt bridge. Generic composition and each L1–L13 have none. See the [Milestone 1 source owners and receipt](compiler-proof-status-2026-10-09.md#built-logical-admission-path).
+`holbuild check` reports the numbered S2–S7 exports below clean, with no
+admission in their closure; the checked shape wrappers the S2 row names reach
+admitted lemmas. S1's own proof is complete: it is proved from the entry bridge, the joint
+body simulation (`bodySimFullMain.body_stmts_sim_full`) and the halt bridge,
+but its closure reaches the narrow case lemmas still admitted for the forms the
+widened whitelist newly accepts; each is marked `GATE_ADMISSION` at its
+declaration. Generic composition and each L1–L13 have none. See the [Milestone 1 source owners and receipt](compiler-proof-status-2026-10-09.md#built-logical-admission-path).
 
 | ID | Saved export | Consumes / produces | Future owner |
 |---|---|---|---|
-| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` | raw lowering, boundary/entry facts -> terminating source-unit execution | Milestone 6 |
-| S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` | lowering + supported syntax -> `o1_source_unit_ok` | Milestone 5 |
+| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` | lowering + `supported_program` + `source_typing_ok` + `source_deployment_rel` + `valid_vyper_call` + `initial_venom_state_rel` + `outcomes_accounts_typed` + two guards for units with `DALLOCA` (allocation budget within the initial FMP, FMP below 2^254; `dalloca_no_wrap` at every reachable instruction) -> `source_unit_execution_correct`: for some gas marks, a raw exit related to the source result at every valid storage horizon; or a focus witness instead when storage is invalid for every gas tail appended to the marks, or when the source run is the same for every tail and source-exempt | Milestone 6 |
+| S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` | lowering + `check_contract F` + `raw_shape_free_program` -> `o1_source_unit_ok`. The call tops use `loweringMemCorrect.lower_vyper_runtime_unit_checked_source_shape` instead: successful runtime lowering and `check_contract F` give `o1_source_unit_ok`, `unit_entry_no_params` and `unit_fmp_unsealed`, and units outside `raw_shape_free_program` (`raw_call` on `msg.data`, `create_copy_of`, `create_from_blueprint`) rest on three admitted shape lemmas. The deploy tops use `ctorDeployShape.checked_lower_vyper_deploy_unit_source_shape`, whose three matching deploy cases are admitted too | Milestone 5 |
 | S3 | `loweringMemCorrect.lower_vyper_runtime_unit_memory_ok` | lowering + initial state + no `DALLOCA` + entry FMP floor + `__entry` lookup and entry label + memory-safe and pointer-safe entry runs at every fuel -> `raw_unit_memory_ok`, no function `fn_eom`, `fixed_region_reserved 0`, pointer discipline and taint bounds | Milestone 5 |
-| S3d | `loweringMemCorrect.lower_vyper_runtime_unit_dload_offset_ok` | S1 boundary + `code_layout_valid` + non-exemption -> `mem_inv dload_offset_ok` (DLOAD/DLOADBYTES offsets plus the code prefix stay below 2^256) | Milestone 5 |
-| S4 | `o1PipelineCorrect.run_venom_pipeline_correct` | exact O1 success, raw shape/entry/memory, `o1_run_state_ok` (incl. `code_layout_valid`), DLOAD offset bound (`mem_inv dload_offset_ok`) -> forward simulation up to any well-formed dead-byte set `D` (`ctx_sim D`, `dead_wf D`) | Milestone 3 |
+| S3d | `loweringMemCorrect.lower_vyper_runtime_unit_dload_offset_ok` | lowering + `code_layout_valid` + `__entry` lookup and entry label + memory-safe entry runs at every fuel -> `mem_inv dload_offset_ok` (DLOAD/DLOADBYTES offsets plus the code prefix stay below 2^256) | Milestone 5 |
+| S4 | `o1PipelineCorrect.run_venom_pipeline_correct` | exact O1 success + `o1_source_unit_ok` + `unit_entry_no_params` + `unit_defs_reach_uses` + `unit_fmp_unsealed` + `o1_run_state_ok` (incl. `code_layout_valid`) + reserved intervals well-formed + no function `fn_eom` + `fixed_region_reserved lo` + `dead_wf D` + the output's live EOM at most the initial FMP, itself at most `fmp` -> an input state `vs_in` (`raw_variant`) at which raw memory (`raw_unit_memory_ok`), `ptr_discipline`, `taint_within D` and the DLOAD offset and headroom bounds (`mem_inv dload_offset_ok`, `mem_inv dload_headroom_ok`) give forward simulation `ctx_sim D` and the output's `o1_lowered_inv` | Milestone 3 |
 | S5 | `o1PipelineCorrect.o1_pipeline_memory_obligations` | generated plan for the O1 output, `o1_lowered_inv` of the output, matching initial FMP -> existential `Inv` with output memory obligations/reachability | Milestone 5 |
-| S6 | `o1PipelineCorrect.run_venom_pipeline_output_shape` | exact O1 + raw source-unit shape -> output `unit_shape_ok` | Milestone 3 |
+| S6 | `o1PipelineCorrect.run_venom_pipeline_output_shape` | exact O1 + `o1_source_unit_ok` + `unit_entry_no_params` + `unit_defs_reach_uses` + `unit_fmp_unsealed` -> output `unit_shape_ok` | Milestone 3 |
 | S7 | `codegenCorrectness.codegen_correct` | assembly/plan, context/reachability, shape and initial relation -> run_call/frame/resource correspondence | Milestones 2.1 and 4 |
 
 Pipeline result transport is success-observable preserving, forward and
@@ -132,7 +146,8 @@ They are separately saved Hyp0/no-axiom/no-admission objects. In particular:
   it is not a derivation of that relation for arbitrary EVM runs.
 - `e2eCorrectness.e2e_vyper_to_evm` is clean generic composition with explicit
   stage contracts; at Milestone 1, `vyper_call_correct` closed them with
-  admitted S1–S7. All seven are proved now.
+  admitted S1–S7. All seven are proved now; S1's closure reaches the narrow
+  `GATE_ADMISSION` case lemmas.
 
 TASK056 full saved logical closures: top378/generic30 recorded nodes, no legacy,
 deployment or function-simulation dependencies. Source admission count is
@@ -170,14 +185,28 @@ producers remain Milestone 7 work.
 
 ## Deployment, function simulation and retired contracts
 
-`e2eDeployCorrectness.e2e_deploy_correctness` is a meaningful, proved single-frame
-creation statement (Milestone 6 item7), not the old proved `T` placeholder.
-It requires canonical arguments, actual deployment
-typing/storage/pre-constant readiness, an uninstalled source target and an empty
-target account in `es.originalAccounts`; success
-compares returned/installed `runtime_bc ++ section` satisfying `immutables_section_rel`,
-accounts modulo target code and dead storage, transient storage modulo dead
-target storage, and logs.
+`e2eDeployCorrectness.e2e_deploy_correctness` is a meaningful single-frame
+creation statement (Milestone 6 item7), not the old proved `T` placeholder. It
+is proved except for the narrow `GATE_ADMISSION` case lemmas its closure
+reaches, and assumes no whitelist: `deploy_typing_ok_supported_programs` derives
+`supported_program` and `supported_program_deploy` from `deploy_typing_ok` and
+the `layouts_agree` inside `deploy_state_rel`. Its premises are
+`fin IN accepted_finalizers`, `compile_vyper fin policy tops = SOME
+(deploy_bc, runtime_bc)`, `deploy_typing_ok` (both `check_contract` acceptances, `machine_well_typed`,
+`call_tx_well_typed`; pre-constant deployment readiness follows from it,
+`deploy_typing_ok_constants_ready`), `deploy_state_rel` (canonical arguments,
+an uninstalled source target, an empty target account in
+`es.originalAccounts`, among others) and a call trace of fewer than 2⁶⁴
+entries. Storage is not a premise: `deploy_storage_ok` guards each gas
+filling inside `deploy_call_result_rel`. It concludes a `run_call` result that
+is `creation_resource_starved` or satisfies `deploy_call_result_rel`. Success
+compares, when the source installs the target, returned/installed
+`runtime_bc ++ section` satisfying `immutables_section_rel`; in both the
+installation and the self-destruct case it compares accounts after pending
+deletions modulo dead storage (with the target's code masked to the source's
+on installation; a self-destructed target has empty code and a pending
+deletion), transient storage modulo dead target storage, logs,
+and the outgoing call requests with `call_requests es` (`request_agree`).
 `venomToAsmProps.gen_fn_simulation` (Milestone 4.2, with internal-return/frame
 relations) is proved, and S7's `codegen_correct` uses it. The deployment
 theorem is **off the runtime call path**.

@@ -112,10 +112,8 @@ Proof
   metis_tac[]
 QED
 
-Theorem runtime_shadow_body_inv:
-  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
-  supported_program tops /\
-  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+Theorem runtime_grouped_shadow_body_inv_fixed[local]:
+  EXISTS external_has_defaults (FST (classify_functions tops)) /\
   lower_vyper_runtime_unit tops rp = SOME unit /\
   runtime_gas_shadow_unit tops rp = SOME shadow_unit ==>
   shadow_body_inv tops unit.cu_context shadow_unit.cu_context
@@ -124,7 +122,75 @@ Proof
   Cases_on `classify_functions tops` >>
   rename1 `classify_functions tops = packages` >> PairCases_on `packages` >>
   rename1 `classify_functions tops = (exts,ints,fb,ctor_src)` >>
-  `~EXISTS external_has_defaults exts` by fs[] >>
+  `EXISTS external_has_defaults exts` by fs[] >>
+  `gas_shadow_unit unit shadow_unit` by
+    (drule_all runtime_gas_shadow_unit_exists >> simp[]) >>
+  qpat_assum `lower_vyper_runtime_unit _ _ = _`
+    (mp_tac o REWRITE_RULE [lower_vyper_runtime_unit_def]) >>
+  simp[AllCaseEqs()] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `run_grouped_lowering groups ips fall rp "__entry"` >>
+  `EVERY group_entry_labels_ok groups` by
+    simp[Abbr `groups`, EVERY_MAP, package_external_group_labels] >>
+  qpat_x_assum `runtime_gas_shadow_unit _ _ = _` mp_tac >>
+  simp[runtime_gas_shadow_unit_def, Abbr `groups`, Abbr `ips`, Abbr `fall`] >>
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac
+    `run_grouped_lowering shadow_groups (MAP gas_shadow_internal_package ips)
+      (OPTION_MAP gas_shadow_fallback_package fall) rp "__entry"` >>
+  `EVERY group_entry_labels_ok shadow_groups` by
+    (fs[Abbr `shadow_groups`, EVERY_MAP, EVERY_MEM] >>
+     rpt strip_tac >> rename1 `MEM external exts` >>
+     `group_entry_labels_ok
+       (package_external_group tops rp.rpol_target T (K global_nonreentrant_slot) external)` by
+       simp[package_external_group_labels] >>
+     Cases_on `package_external_group tops rp.rpol_target T (K global_nonreentrant_slot) external` >>
+     gvs[group_entry_labels_ok_def] >>
+     rename1 `~internal_label_ok (FST (gas_shadow_external_package pkg))` >>
+     PairCases_on `pkg` >> fs[gas_shadow_external_package_def]) >>
+  qpat_assum `run_grouped_lowering groups ips fall _ _ = _`
+    (mp_then Any mp_tac grouped_internal_run_labels) >> simp[] >> strip_tac >>
+  qpat_assum `run_grouped_lowering shadow_groups _ _ _ _ = _`
+    (mp_then Any mp_tac grouped_internal_run_labels) >> simp[] >> strip_tac >>
+  rename1 `compile_internal_fn_bodies ips start = ((),run_end)` >>
+  rename1 `compile_internal_fn_bodies (MAP gas_shadow_internal_package ips)
+    startS = ((),run_endS)` >>
+  `gas_shadow_state start startS` by
+    (qspecl_then [`MAP (package_external_group tops rp.rpol_target
+                        T (K global_nonreentrant_slot)) exts`, `[]`, `fall`]
+       mp_tac gas_shadow_compile_generate_grouped_runtime >>
+     qpat_assum `Abbrev (shadow_groups = _)` (fn th =>
+       simp[gas_shadow_compiles_def, GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
+     disch_then (qspecl_then [`initial_compile_state "__entry"`,
+       `initial_compile_state "__entry"`] mp_tac) >>
+     simp[gas_shadow_state_refl]) >>
+  rename1 `extract_context_with_internals "__entry" _ run_endS =
+    SOME (shadow_unit.cu_context,shadow_data)` >>
+  mp_tac (Q.INST [`is_ctor` |-> `F`, `name` |-> `"__entry"`, `raw` |-> `unit.cu_context`,
+    `rawS` |-> `shadow_unit.cu_context`, `dataS` |-> `shadow_data`,
+    `srcs` |-> `order_internals (runtime_internal_order tops ints) ints`]
+    shadow_body_inv_from_internal_runs) >>
+  fs[Abbr `ips`, PERM_order_runtime_internals, gas_shadow_unit_def]
+QED
+
+Theorem runtime_shadow_body_inv:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+  supported_program tops /\
+  lower_vyper_runtime_unit tops rp = SOME unit /\
+  runtime_gas_shadow_unit tops rp = SOME shadow_unit ==>
+  shadow_body_inv tops unit.cu_context shadow_unit.cu_context
+Proof
+  strip_tac >>
+  Cases_on `classify_functions tops` >>
+  rename1 `classify_functions tops = packages` >> PairCases_on `packages` >>
+  rename1 `classify_functions tops = (exts,ints,fb,ctor_src)` >>
+  Cases_on `EXISTS external_has_defaults exts`
+  >- (irule runtime_grouped_shadow_body_inv_fixed >> simp[] >> metis_tac[]) >>
+  `~EXISTS external_has_defaults (FST (classify_functions tops))` by
+    (qpat_assum `classify_functions tops = _`
+       (fn classify => PURE_REWRITE_TAC [classify, pairTheory.FST]) >>
+     first_assum ACCEPT_TAC) >>
+  `gas_shadow_unit unit shadow_unit` by
+    (drule_all runtime_gas_shadow_unit_exists >> simp[]) >>
   qpat_assum `lower_vyper_runtime_unit _ _ = _`
     (mp_tac o REWRITE_RULE [lower_vyper_runtime_unit_def]) >>
   simp[AllCaseEqs()] >> strip_tac >>
@@ -167,9 +233,7 @@ Proof
      disch_then (qspecl_then [`initial_compile_state "__entry"`,
        `initial_compile_state "__entry"`] mp_tac) >> simp[gas_shadow_state_refl]) >>
   `gas_shadow_context unit.cu_context shadow_unit.cu_context` by
-    (mp_tac (Q.SPECL [`sels`, `packs`, `ips`, `fall`, `rp`, `0`, `0`, `[]`, `info`,
-       `"__entry"`] gas_shadow_run_lowering) >>
-     simp[optionTheory.OPTREL_def, gas_shadow_unit_def]) >>
+    fs[gas_shadow_unit_def] >>
   rename1 `extract_context_with_internals "__entry" _ run_endS =
     SOME (shadow_unit.cu_context,shadow_data)` >>
   mp_tac (Q.INST [`is_ctor` |-> `F`, `name` |-> `"__entry"`, `raw` |-> `unit.cu_context`,
@@ -179,8 +243,6 @@ Proof
   simp[Abbr `ips`, PERM_order_runtime_internals]
 QED
 
-(* Grouped defaults compile to the same kind of internal suffix. Pair the
-   actual grouped runs, including the code for omitted arguments. *)
 Theorem runtime_grouped_shadow_body_inv:
   EXISTS external_has_defaults (FST (classify_functions tops)) /\
   lower_vyper_runtime_unit tops rp = SOME unit ==>
@@ -190,52 +252,12 @@ Proof
   strip_tac >>
   Cases_on `classify_functions tops` >>
   rename1 `classify_functions tops = packages` >> PairCases_on `packages` >>
-  rename1 `classify_functions tops = (exts,ints,fb,ctor_src)` >>
-  `EXISTS external_has_defaults exts` by fs[] >>
-  qpat_assum `lower_vyper_runtime_unit _ _ = _`
-    (mp_tac o REWRITE_RULE [lower_vyper_runtime_unit_def]) >>
-  simp[AllCaseEqs()] >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `run_grouped_lowering groups ips fall rp "__entry"` >>
-  `EVERY group_entry_labels_ok groups` by
-    simp[Abbr `groups`, EVERY_MAP, package_external_group_labels] >>
-  qspecl_then [`groups`, `ips`, `fall`, `rp`, `"__entry"`] mp_tac
-    gas_shadow_run_grouped_lowering >>
-  simp[optionTheory.OPTREL_def] >>
-  qmatch_goalsub_abbrev_tac
-    `run_grouped_lowering shadow_groups (MAP gas_shadow_internal_package ips)
-      (OPTION_MAP gas_shadow_fallback_package fall) rp "__entry"` >>
-  Cases_on `run_grouped_lowering shadow_groups (MAP gas_shadow_internal_package ips)
-    (OPTION_MAP gas_shadow_fallback_package fall) rp "__entry"` >>
-  simp[] >> strip_tac >>
-  rename1 `gas_shadow_unit unit shadow_unit` >>
-  `EVERY group_entry_labels_ok shadow_groups` by
-    (fs[Abbr `shadow_groups`, EVERY_MAP, EVERY_MEM] >>
-     rpt strip_tac >> res_tac >> Cases_on `group` >> gvs[group_entry_labels_ok_def] >>
-     rename1 `~internal_label_ok (FST (gas_shadow_external_package pkg))` >>
-     PairCases_on `pkg` >> fs[gas_shadow_external_package_def]) >>
-  qpat_assum `run_grouped_lowering groups ips fall _ _ = _`
-    (mp_then Any mp_tac grouped_internal_run_labels) >> simp[] >> strip_tac >>
-  qpat_assum `run_grouped_lowering shadow_groups _ _ _ _ = _`
-    (mp_then Any mp_tac grouped_internal_run_labels) >> simp[] >> strip_tac >>
-  rename1 `compile_internal_fn_bodies ips start = ((),run_end)` >>
-  rename1 `compile_internal_fn_bodies (MAP gas_shadow_internal_package ips)
-    startS = ((),run_endS)` >>
-  `gas_shadow_state start startS` by
-    (qspecl_then [`groups`, `[]`, `fall`] mp_tac
-       gas_shadow_compile_generate_grouped_runtime >>
-     qpat_assum `Abbrev (shadow_groups = _)` (fn th =>
-       simp[gas_shadow_compiles_def, GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
-     disch_then (qspecl_then [`initial_compile_state "__entry"`,
-       `initial_compile_state "__entry"`] mp_tac) >>
-     simp[gas_shadow_state_refl]) >>
-  rename1 `extract_context_with_internals "__entry" _ run_endS =
-    SOME (shadow_unit.cu_context,shadow_data)` >>
-  qexists_tac `shadow_unit` >> simp[] >>
-  mp_tac (Q.INST [`is_ctor` |-> `F`, `name` |-> `"__entry"`, `raw` |-> `unit.cu_context`,
-    `rawS` |-> `shadow_unit.cu_context`, `dataS` |-> `shadow_data`,
-    `srcs` |-> `order_internals (runtime_internal_order tops ints) ints`]
-    shadow_body_inv_from_internal_runs) >>
-  fs[Abbr `ips`, PERM_order_runtime_internals, gas_shadow_unit_def]
+  drule_all runtime_gas_shadow_unit_exists >> strip_tac >>
+  qexists_tac `shadow_unit` >> asm_rewrite_tac[] >>
+  mp_tac (Q.INST [`tops` |-> `tops`, `rp` |-> `rp`, `unit` |-> `unit`,
+                  `shadow_unit` |-> `shadow_unit`]
+    runtime_grouped_shadow_body_inv_fixed) >>
+  fs[]
 QED
 
 Theorem deploy_shadow_body_inv:
