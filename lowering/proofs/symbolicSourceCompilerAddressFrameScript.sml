@@ -46,13 +46,13 @@ Theorem symbolic_frame_get_target_ptr:
 Proof
   strip_tac >> ho_match_mp_tac base_assignment_target_induct >>
   rpt conj_tac
-  >- (gen_tac >> simp[target_indices_def, compile_get_target_ptr_def] >>
+  >- (gen_tac >> simp[supportedExprsTheory.target_indices_def, compile_get_target_ptr_def] >>
       namedCases_on `FLOOKUP cenv.ce_vars id` ["", "binding"] >> simp[] >>
       Cases_on `binding` >> simp[])
-  >- (gen_tac >> simp[target_indices_def, compile_get_target_ptr_def] >>
+  >- (gen_tac >> simp[supportedExprsTheory.target_indices_def, compile_get_target_ptr_def] >>
       namedCases_on `FLOOKUP cenv.ce_module_vars nsid` ["", "binding"] >> simp[] >>
       Cases_on `binding` >> simp[])
-  >- (simp[target_indices_def, compile_get_target_ptr_def] >>
+  >- (simp[supportedExprsTheory.target_indices_def, compile_get_target_ptr_def] >>
       rpt strip_tac >> match_mp_tac symbolic_frame_bind >> conj_tac
       >- (first_x_assum irule >> simp[]) >>
       gen_tac >> BETA_TAC >>
@@ -62,7 +62,7 @@ Proof
       rpt (match_mp_tac symbolic_frame_bind >> conj_tac
            >- simp[symbolic_frame_lower_value] >> gen_tac >> BETA_TAC) >>
       rpt IF_CASES_TAC >> simp[]) >>
-  simp[target_indices_def, compile_get_target_ptr_def]
+  simp[supportedExprsTheory.target_indices_def, compile_get_target_ptr_def]
 QED
 
 Theorem symbolic_frame_subscript:

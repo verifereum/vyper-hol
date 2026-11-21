@@ -353,7 +353,8 @@ Resume compile_make_array_vv_case[tuple]:
   `!e. MEM e args /\ nocalls ==> int_calls_expr e = []` by metis_tac[] >>
   `compatible_bound bnd (LENGTH args)` by
     gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def,
-      vyperTypeSystemTheory.well_typed_builtin_app_def] >>
+      vyperTypeSystemTheory.well_typed_builtin_app_def,
+      vyperValueTheory.compatible_bound_def] >>
 
   `ci_mono sa sm` by metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND] >>
   `ci_mono sm sb` by

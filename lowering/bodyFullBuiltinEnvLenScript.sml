@@ -2,7 +2,7 @@
 Theory bodyFullBuiltinEnvLen
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullBuiltinEnvLenCompose bodyFullBuiltinEnvLenSuffix bodyInvNoDalloca
+  bodyFullBuiltinEnvLenCompose bodyFullBuiltinEnvLenSuffix
   bodyFullExprGeneric bodyFullPreds bodyFullGhostFrame gasOutcomeFullCompose
   gasShadowCompileStmtHelpers exprSimLen exprSimSource exprSimWordArgs
   fragGasSeqPtr fragGasOriginPtr emitHelperProps allocaHistory

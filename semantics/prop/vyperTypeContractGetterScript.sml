@@ -1013,7 +1013,8 @@ Proof
       gvs[is_ArrayT_def, ArrayT_type_def, check_value_type_def,
           assignable_type_def, well_formed_type_def, evaluate_type_def]) >>
   first_x_assum irule >> gvs[check_value_type_def] >>
-  Cases_on `typ` >> gvs[hashmap_key_type_def, assignable_type_def]
+  Cases_on `typ` >> gvs[hashmap_key_type_def, assignable_type_def] >>
+  rename1 `BaseT b` >> Cases_on `b` >> gvs[hashmap_key_type_def]
 QED
 
 Theorem function_entry_env_args_lookup_package[local]:
@@ -1213,7 +1214,9 @@ Proof
   `assignable_type (type_env_all_modules mods) kt /\
    check_value_type (type_env_all_modules mods) vt` by
     (gvs[check_toplevel_decl_def] >>
-     Cases_on `kt` >> gvs[hashmap_key_type_def, assignable_type_def]) >>
+     Cases_on `kt` >> gvs[hashmap_key_type_def, assignable_type_def] >>
+     rename1 `key_base <> BytesT (Fixed 0)` >> Cases_on `key_base` >>
+     gvs[hashmap_key_type_def]) >>
   drule_all build_getter_args_assignable >>
       simp[combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
 QED

@@ -19,7 +19,7 @@ Ancestors
   contextCodegenRel valueEncodingProps memLocDefs immutableWordExecution stmtAppendStorageRunPtr
   gasOutcomeFullCompose gasExemptCert haltExitProj vyperStorageTrace
   exprSimSubscriptArraySource exprSimSubscriptArrayOrigin
-  targetSubscriptMemory stmtSimForArrayFrame vyperLocalAccessFrame
+  targetSubscriptMemory stmtSimForArrayFrame vyperLocalAccessFrame exprSimIfExp[qualified,ignore_grammar]
 
 (* The bytestring copy uses the padded live footprint, not the capacity of
    either type. The path and representation refer to the same raw run. *)
@@ -1889,6 +1889,95 @@ Proof
   qexists_tac `DLOAD` >> simp[] >> decide_tac
 QED
 
+(* The selected memory arm belongs to the set framed by iterator_unmodified. *)
+Theorem eval_iterator_memory_place_access:
+  !e cx es ee root path pending.
+    expr_writes_ok (\_. F) e /\
+    eval_expr cx e es = (INL (PlaceR (MemoryPlace root path)),ee) ==>
+    ?target attrs tail.
+      MEM target (expr_places e) /\
+      place_access target pending = (NameTarget root,attrs) /\
+      path ++ MAP AttrSubscript pending = MAP AttrSubscript attrs ++ tail
+Proof
+  ho_match_mp_tac
+    (vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
+     SIMP_RULE (srw_ss()) []) >>
+  rpt conj_tac >> rpt gen_tac >>
+  simp[expr_writes_ok_def] >> rpt strip_tac
+  >~ [`eval_expr _ (Name _ _) _ = _`]
+  >- (qpat_x_assum `eval_expr _ (Name _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, get_scopes_def, type_check_def, assert_def,
+           bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs(),
+           expr_places_def, place_access_def] >>
+      strip_tac >> gvs[])
+  >~ [`eval_expr _ (TopLevelName _ _) _ = _`]
+  >- (rename1 `eval_expr _ (TopLevelName _ nid) _ = _` >> PairCases_on `nid` >>
+      qpat_x_assum `eval_expr _ (TopLevelName _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, vyperLocalAccessFrameTheory.lookup_global_not_memory])
+  >~ [`eval_expr _ (IfExp _ _ _ _) _ = _`]
+  >- (qpat_x_assum `eval_expr _ (IfExp _ _ _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, switch_BoolV_def, bind_def, return_def,
+           raise_def, COND_RATOR, AllCaseEqs()] >>
+      strip_tac >> gvs[] >>
+      drule exprSimIfExpTheory.ifexp_conditional_result_shape >> simp[] >> strip_tac >> gvs[] >>
+      rename1 `eval_expr cx arm zs = (INL (PlaceR (MemoryPlace root path)),ws)` >>
+      qpat_assum `!cx es ee root path pending. eval_expr cx arm es = _ ==> _`
+        (qspecl_then [`cx`,`zs`,`ws`,`root`,`path`,`pending`] mp_tac) >>
+      simp[] >> strip_tac >>
+      qexistsl [`target`,`attrs`,`tail`] >> simp[expr_places_def])
+  >~ [`eval_expr _ (Subscript _ _ _) _ = _`]
+  >- (qpat_x_assum `eval_expr _ (Subscript _ _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, return_def, COND_RATOR, AllCaseEqs()] >>
+      strip_tac >> gvs[] >>
+      drule exprSimPropsTheory.select_result_memory_place >>
+      disch_then (qspecl_then [`root`,`path`] mp_tac) >>
+      simp[] >> strip_tac >> gvs[] >>
+      rename1 `eval_expr _ obj _ = (INL (PlaceR (MemoryPlace _ path0)),bs)` >>
+      qpat_assum `!cx es ee root path pending. eval_expr cx obj es = _ ==> _`
+        (qspecl_then [`cx`,`es`,`bs`,`root`,`path0`,`[]`] mp_tac) >>
+      simp[] >> strip_tac >>
+      rename1 `select_result _ (expr_type obj) _ (ValueSubscript v) _ = _` >>
+      qexistsl [`SubscriptTarget target e'`,`attrs`,
+                `tail ++ [ValueSubscript v] ++ MAP AttrSubscript pending`] >>
+      simp[expr_places_def, place_access_def, MEM_MAP] >> metis_tac[])
+  >~ [`eval_expr _ (Attribute _ _ _) _ = _`]
+  >- (qpat_x_assum `eval_expr _ (Attribute _ _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+      strip_tac >> gvs[] >>
+      drule exprSimPropsTheory.select_result_memory_place >>
+      disch_then (qspecl_then [`root`,`path`] mp_tac) >>
+      simp[] >> strip_tac >> gvs[] >>
+      rename1 `eval_expr _ obj _ = (INL (PlaceR (MemoryPlace _ path0)),bs)` >>
+      rename1 `select_result cx _ _ (AttrSubscript fld) _ = _` >>
+      qpat_assum `!cx es ee root path pending. eval_expr cx obj es = _ ==> _`
+        (qspecl_then [`cx`,`es`,`bs`,`root`,`path0`,`fld::pending`] mp_tac) >>
+      simp[] >> strip_tac >>
+      qexistsl [`AttributeTarget target fld`,`attrs`,`tail`] >>
+      simp[expr_places_def, place_access_def, MEM_MAP] >> metis_tac[]) >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+      type_check_def, check_def, assert_def, lift_option_type_def, AllCaseEqs()]
+  >~ [`lookup_flag_mem cx ns mid es = _`]
+  >- (Cases_on `ns` >>
+      gvs[lookup_flag_mem_def, vyperMiscTheory.option_CASE_rator, return_def, raise_def, AllCaseEqs()])
+  >~ [`eval_expr cx (StructLit ty ns fields) es = _`]
+  >- (Cases_on `ns` >> gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()]) >>
+  rename1 `eval_expr cx (Call ty target args drv) es = _` >>
+  Cases_on `target` >>
+  TRY (rename1 `IntCall fid` >> Cases_on `fid`) >>
+  TRY (rename1 `CreateTarget kind _ _ _` >> Cases_on `kind`) >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+      type_check_def, check_def, assert_def, lift_option_type_def, raise_def, AllCaseEqs()]
+  >>~- ([`eval_send`], drule exprSimSendTheory.eval_send_value >> simp[])
+  >>~- ([`eval_raw_call`],
+       qpat_x_assum `eval_raw_call _ _ _ _ _ _ _ = _` mp_tac >>
+       POP_ASSUM_LIST (K all_tac) >>
+       simp[eval_raw_call_def, bind_def, ignore_bind_def, return_def,
+            raise_def, COND_RATOR, AllCaseEqs(), pairTheory.UNCURRY, LET_THM] >> rw[] >> gvs[])
+  >>~- ([`eval_create_operands`],
+       drule vyperLocalAccessFrameTheory.eval_create_operands_success_value >> simp[]) >>
+  drule vyperCallFrameTheory.eval_ext_call_success_value >> simp[]
+QED
+
 (* Non-slot iterator evaluation and its actual conditional length slice. *)
 Theorem for_nonslot_array_prefix_full:
   body_iterator_full_ok cx (Array e) /\
@@ -1896,6 +1985,8 @@ Theorem for_nonslot_array_prefix_full:
   well_typed_iterator env elem (Array e) /\ supported_iterator tops elem (Array e) n /\
   (!nid. e = TopLevelName (expr_type e) nid ==>
      IS_SOME (supported_immutable_type tops nid)) /\
+  (~(?ty nid. e = TopLevelName ty nid) ==>
+   !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
   expr_type e = ArrayT elem bd /\
   compile_expr c (expr_type e) e sa = (vv,sb) /\
   compile_expr c (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sb) /\
@@ -2107,19 +2198,15 @@ Resume for_nonslot_array_prefix_full[normal]:
           disch_then strip_assume_tac >> disj2_tac >>
           qexistsl_tac [`nm`, `[]`] >> simp[Once EQ_SYM_EQ]) >>
       `expr_writes_ok (\_. F) e` by fs[well_typed_iterator_def] >>
-      `~supported_expr_exists (\x. ?ty c l r. x = IfExp ty c l r) e /\
-       (!tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid)` by
-        (qpat_assum `supported_iterator _ _ _ _` mp_tac >>
-         qpat_assum `~(?ty nm. e = Name ty nm)` mp_tac >>
-         qpat_assum `~(?ty nid. e = TopLevelName ty nid)` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >>
-         Cases_on `e` >> simp[supportedStmtsTheory.supported_iterator_def,
-                             targetPlaceSimTheory.place_access_root]) >>
+      `!tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid` by
+        (qpat_assum `~(?ty nid. e = TopLevelName ty nid) ==> _` (fn guard =>
+         qpat_assum `~(?ty nid. e = TopLevelName ty nid)`
+           (ACCEPT_TAC o MATCH_MP guard))) >>
       drule_all whitelistForIterTheory.memory_iterator_source_classify >>
       strip_tac >> fs[read_result_def, return_def]) >>
   Q.SUBGOAL_THEN
     `!a ctx0 en zs name path ze.
-      IS_SOME (loop_iterator_place a) /\ well_typed_expr en a /\
+      well_typed_expr en a /\
       expr_writes_ok (\_. F) a /\
       eval_expr ctx0 a zs = (INL (PlaceR (MemoryPlace name path)),ze) ==>
       ?entry v. lookup_scopes name ze.scopes = SOME entry /\
@@ -2175,8 +2262,7 @@ QED
 Resume for_nonslot_array_prefix_full[iterator_live_induction]:
   POP_ASSUM_LIST (K all_tac) >>
   completeInduct_on `expr_size a` >>
-  Cases_on `a` >> simp[vyperTypeContractTheory.loop_iterator_place_def] >>
-  rpt strip_tac
+  Cases_on `a` >> simp[] >> rpt strip_tac
   >~ [`eval_expr _ (Name _ _) _ = _`]
   >- (qpat_x_assum `eval_expr _ (Name _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, get_scopes_def, type_check_def, assert_def,
@@ -2189,8 +2275,13 @@ Resume for_nonslot_array_prefix_full[iterator_live_induction]:
       qpat_x_assum `eval_expr _ (TopLevelName _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, vyperLocalAccessFrameTheory.lookup_global_not_memory])
   >~ [`eval_expr _ (Subscript _ _ _) _ = _`]
-  >- suspend "iterator_live_subscript" >>
-  suspend "iterator_live_attribute"
+  >- suspend "iterator_live_subscript"
+  >~ [`eval_expr _ (Attribute _ _ _) _ = _`]
+  >- suspend "iterator_live_attribute"
+  >~ [`eval_expr _ (IfExp _ _ _ _) _ = _`]
+  >- suspend "iterator_live_conditional" >>
+  drule_at (Pat `eval_expr _ _ _ = _`) eval_iterator_memory_place_access >>
+  simp[vyperTypeSystemTheory.expr_places_def]
 QED
 
 Resume for_nonslot_array_prefix_full[iterator_live_subscript]:
@@ -2210,8 +2301,6 @@ Resume for_nonslot_array_prefix_full[iterator_live_subscript_frame]:
   rename1 `read_result ctx0 idx zk = (INL kv,zr)` >>
   `zr = zk` by (drule read_result_state >> simp[]) >>
   qpat_x_assum `zr = zk` SUBST_ALL_TAC >>
-  `IS_SOME (loop_iterator_place obj)` by
-    (Cases_on `loop_iterator_place obj` >> fs[]) >>
   `well_typed_expr en obj /\ well_typed_expr en key` by
     (qpat_assum `well_typed_expr en (Subscript ann obj key)` mp_tac >>
      simp[Once well_typed_expr_def, NoAsms] >> rpt strip_tac >>
@@ -2259,8 +2348,6 @@ QED
 
 Resume for_nonslot_array_prefix_full[iterator_live_attribute_base]:
   rename1 `eval_expr ctx0 obj zs = (INL (PlaceR (MemoryPlace name path0)),zm)` >>
-  `IS_SOME (loop_iterator_place obj)` by
-    (Cases_on `loop_iterator_place obj` >> fs[]) >>
   `well_typed_expr en obj` by
     (qpat_assum `well_typed_expr en (Attribute ann obj attrId)` mp_tac >>
      simp[Once well_typed_expr_def,NoAsms]) >>
@@ -2287,25 +2374,7 @@ Resume for_nonslot_array_prefix_full[iterator_live_read]:
   `well_typed_expr env e /\ expr_writes_ok (\_. F) e` by
     (qpat_assum `well_typed_iterator env elem (Array e)` mp_tac >>
      simp[well_typed_iterator_def, NoAsms]) >>
-  `IS_SOME (loop_iterator_place e)` by
-    (Cases_on `?ty nm. e = Name ty nm`
-     >- (pop_assum (qx_choosel_then [`ty`,`nm`] SUBST_ALL_TAC) >>
-         simp[vyperTypeContractTheory.loop_iterator_place_def]) >>
-     Cases_on `?ty nid. e = TopLevelName ty nid`
-     >- (pop_assum (qx_choosel_then [`ty`,`nid`] SUBST_ALL_TAC) >>
-         simp[vyperTypeContractTheory.loop_iterator_place_def]) >>
-     `~supported_expr_exists (\x. ?ty c l r. x = IfExp ty c l r) e /\
-      (!tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid)` by
-       (qpat_assum `supported_iterator _ _ _ _` mp_tac >>
-        qpat_assum `~(?ty nm. e = Name ty nm)` mp_tac >>
-        qpat_assum `~(?ty nid. e = TopLevelName ty nid)` mp_tac >>
-        POP_ASSUM_LIST (K all_tac) >>
-        Cases_on `e` >> simp[supportedStmtsTheory.supported_iterator_def,
-                            targetPlaceSimTheory.place_access_root]) >>
-     qspecl_then [`e`,`cx`,`esx`,`PlaceR (MemoryPlace name path)`,`mid`] mp_tac
-       whitelistForIterTheory.memory_iterator_source_classify >>
-     simp[optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
-  qpat_assum `!a ctx0 en zs name path ze. IS_SOME (loop_iterator_place a) /\ _ ==> _`
+  qpat_assum `!a ctx0 en zs name path ze. well_typed_expr en a /\ _ ==> _`
     (qspecl_then [`e`,`cx`,`env`,`esx`,`name`,`path`,`mid`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`en0`,`v0`] (map_every assume_tac o CONJUNCTS)) >>
@@ -2315,6 +2384,25 @@ Resume for_nonslot_array_prefix_full[iterator_live_read]:
   simp[read_result_def, read_place_def, read_memory_path_def, get_scopes_def, bind_def,
        lift_option_type_def, lift_sum_def, return_def, raise_def] >>
   metis_tac[]
+QED
+
+Resume for_nonslot_array_prefix_full[iterator_live_conditional]:
+  rename1 `eval_expr ctx0 (IfExp ann cond yes no) zs = _` >>
+  `well_typed_expr en yes /\ well_typed_expr en no` by
+    (qpat_assum `well_typed_expr en (IfExp ann cond yes no)` mp_tac >>
+     simp[Once well_typed_expr_def, NoAsms]) >>
+  qpat_x_assum `expr_writes_ok _ (IfExp ann cond yes no)`
+    (strip_assume_tac o REWRITE_RULE [expr_writes_ok_def]) >>
+  qpat_x_assum `eval_expr ctx0 (IfExp ann cond yes no) zs = _` mp_tac >>
+  simp[Once evaluate_def, switch_BoolV_def, bind_def, return_def,
+       raise_def, COND_RATOR, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  imp_res_tac vyperStatePreservationTheory.conditional_result_state >> gvs[] >>
+  drule exprSimIfExpTheory.ifexp_conditional_result_shape >> simp[] >> strip_tac >> gvs[] >>
+  rename1 `eval_expr ctx0 arm ms = (INL (PlaceR (MemoryPlace name path)),ze)` >>
+  qpat_assum `!m. m < _ ==> _` (qspec_then `expr_size arm` mp_tac) >>
+  (impl_tac >- decide_tac) >>
+  disch_then (qspec_then `arm` mp_tac) >> simp[NoAsms] >>
+  disch_then (qspecl_then [`ctx0`,`en`,`ms`,`name`,`path`,`ze`] mp_tac) >> simp[]
 QED
 
 Resume for_nonslot_array_prefix_full[length]:

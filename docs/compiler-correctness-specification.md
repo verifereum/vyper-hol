@@ -57,20 +57,13 @@ or check and is easy to miss:
   an instance of `e2e_deploy_correctness`. The source models such a creation on
   the caller's side, through `eval_create` and the call-outcome oracle, but no
   current theorem covers that caller (next item).
-- **A caller that creates contracts or makes a delegate `raw_call` is not
-  covered.** `vyper_call_correct` assumes `supported_program tops`, whose
-  function-body check `supported_function_body` (`lowering/proofs/supported/`)
-  keeps both out: `supported_stmts` admits no `create_*` or `raw_call` at all,
-  and `body_stmts_safe` separately rejects every `expr_evm_run_root` expression,
-  which includes every `create_*` call. The source semantics already models
-  both on the caller's side through the call-outcome oracle (`eval_create`,
-  `eval_raw_call`); these `supported_program` checks are what keep such bodies
-  outside the theorem.
-  `e2e_deploy_correctness` also requires `supported_program tops` and
-  `supported_program_deploy tops`. It covers constructors that make supported
-  external calls, including calls to the computed precompiles.
-  `supported_program_deploy` applies the same body checks to constructors,
-  excluding `create_*` and `raw_call`.
+- **No whitelist premise.** None of the four top theorems assumes
+  `supported_program` or `supported_program_deploy`. Each derives them from
+  the checker acceptance in `source_typing_ok` or `deploy_typing_ok` and the
+  layouts that `call_state_rel` or `deploy_state_rel` fix, through
+  `check_contract_supported_program` and
+  `check_contract_supported_program_deploy`
+  (`lowering/whitelist/whitelistCheckerGateScript.sml`).
 - **Initcode is the deploy bytecode followed by the canonical constructor
   arguments.** `deploy_state_rel` requires
   `ctxt.msgParams.code = deploy_bc ++ args_bytes` and
@@ -186,7 +179,6 @@ storage backends the source adopts from external call outcomes.
   !fin policy tops deploy_bc runtime_bc am tx es H.
     fin IN accepted_finalizers /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     LENGTH (call_trace es) < 2 ** 64 /\

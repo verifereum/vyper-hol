@@ -5,7 +5,7 @@ Ancestors
   entryChecksLayout entryChecksPassPtr
   fragGasOriginPtr fragGasOrigin fragGasPathPtr gasEvents gasCount memSafeRun instMemFrontier
   loweringStateRelDefs ptrDiscipline ptrSafeRun actualEntryAllocationFrame
-  moduleLoweringProps entryReachBodyFmp
+  moduleLoweringProps
   sourceUnitExecution gasShadowRunLowering gasShadowUnitGuards gasShadowUnit
   gasShadowModuleDefs vyperCall
   list pair fragExec
@@ -97,7 +97,8 @@ QED
 
 Theorem external_value_reject_dispatch[local]:
   lower_vyper_runtime_unit tops rp = SOME unit /\
-  supported_program tops /\ source_typing_ok tops am tx /\
+  supported_program tops /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\ source_typing_ok tops am tx /\
   tx.function_name <> "__default__" /\
     LENGTH tx.args = LENGTH args /\
     calldata_encodes (type_env tops) tx.function_name (MAP SND args)
@@ -128,7 +129,6 @@ Theorem external_value_reject_dispatch[local]:
       (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>))
 Proof
   strip_tac >>
-  drule_all entry_runtime_no_dalloca >> strip_tac >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   drule_all entry_value_reject_callvalue >> strip_tac >>
   drule_all lower_runtime_named_source_packages >> strip_tac >>
@@ -144,6 +144,9 @@ Proof
      gvs[get_instruction_def, phi_prefix_length_def]) >>
   qabbrev_tac `ss = vs with <|vs_prev_bb := NONE;
     vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
+  `allocas_below_fmp ss` by
+    (irule initial_entry_allocas_below_fmp >>
+     goal_assum (drule_at Any) >> simp[Abbr `ss`, vars_pc_only_def]) >>
   `fresh_vars_wrt sf ss /\ ~ss.vs_halted /\ allocas_from 0 ss /\
    LENGTH ss.vs_call_ctx.cc_calldata < dimword (:256)` by
     (drule_all initial_entry_dispatch_scalars >>
@@ -165,6 +168,11 @@ Proof
     (drule vars_pc_only_allocas >>
      drule vars_pc_only_fields >> simp[Abbr `ss`] >>
      fs[allocas_from_def] >> metis_tac[]) >>
+  `vars_pc_only vs tt` by
+    (irule vars_pc_only_trans >> qexists_tac `ss` >>
+     conj_tac >- simp[Abbr `ss`, vars_pc_only_def] >> simp[]) >>
+  `allocas_below_fmp tt` by
+    (drule initial_entry_allocas_below_fmp >> disch_then irule >> simp[]) >>
   drule_all entryDispatchPtrTheory.compile_selector_dispatch_linear_layout >> strip_tac >>
   qexistsl_tac [`fn`, `sc`, `sk`, `mc`, `tt`, `G'`, `tn'`] >>
   simp[block_is_terminated_def, Abbr `ss`] >>
@@ -266,7 +274,8 @@ QED
 
 Theorem external_value_reject_target[local]:
   lower_vyper_runtime_unit tops rp = SOME unit /\
-  supported_program tops /\ source_typing_ok tops am tx /\
+  supported_program tops /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\ source_typing_ok tops am tx /\
   tx.function_name <> "__default__" /\
     LENGTH tx.args = LENGTH args /\
     calldata_encodes (type_env tops) tx.function_name (MAP SND args)
@@ -303,6 +312,7 @@ Theorem external_entry_value_revert_nr:
   !tops rpolicy unit am tx ret vs mut nr args fbody env e st.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     tx.function_name <> "__default__" /\
@@ -378,6 +388,7 @@ Theorem external_entry_value_revert:
   !tops rpolicy unit am tx ret vs mut args fbody env e st.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\

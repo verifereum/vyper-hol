@@ -47,19 +47,19 @@ Theorem outcomes_free_tuple_unpack_from_expr[local]:
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists extra_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) ==>
+                 ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) ==>
   !ty stage targets src st.
   ~supported_assignments_exists R targets /\
-  ~supported_assignments_exists expr_shape_root targets ==>
+  ~supported_assignments_exists extra_root targets ==>
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_tuple_unpack ce ty stage targets src st)))
@@ -82,18 +82,18 @@ Theorem outcomes_free_stmt_annassign:
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists extra_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty id vt e.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_stmt_expr_exists R (AnnAssign id vt e) /\
-  ~supported_stmt_expr_exists expr_shape_root (AnnAssign id vt e) ==>
+  ~supported_stmt_expr_exists extra_root (AnnAssign id vt e) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_stmt ce lc ty (AnnAssign id vt e) st)))
@@ -125,18 +125,18 @@ Theorem opcode_every_stmt_annassign:
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists extra_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty id vt e.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_stmt_expr_exists R (AnnAssign id vt e) /\
-  ~supported_stmt_expr_exists expr_shape_root (AnnAssign id vt e) ==>
+  ~supported_stmt_expr_exists extra_root (AnnAssign id vt e) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_stmt ce lc ty (AnnAssign id vt e) st)))
@@ -153,18 +153,18 @@ Theorem outcomes_free_stmt_assign_base:
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists extra_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty bt e.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_stmt_expr_exists R (Assign (BaseTarget bt) e) /\
-  ~supported_stmt_expr_exists expr_shape_root (Assign (BaseTarget bt) e) ==>
+  ~supported_stmt_expr_exists extra_root (Assign (BaseTarget bt) e) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_stmt ce lc ty (Assign (BaseTarget bt) e) st)))
@@ -194,18 +194,18 @@ Theorem opcode_every_stmt_assign_base:
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists extra_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty bt e.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_stmt_expr_exists R (Assign (BaseTarget bt) e) /\
-  ~supported_stmt_expr_exists expr_shape_root (Assign (BaseTarget bt) e) ==>
+  ~supported_stmt_expr_exists extra_root (Assign (BaseTarget bt) e) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_stmt ce lc ty (Assign (BaseTarget bt) e) st)))
@@ -222,18 +222,18 @@ Theorem outcomes_free_stmt_assign_tuple:
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists extra_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty targets e.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_stmt_expr_exists R (Assign (TupleTarget targets) e) /\
-  ~supported_stmt_expr_exists expr_shape_root (Assign (TupleTarget targets) e) ==>
+  ~supported_stmt_expr_exists extra_root (Assign (TupleTarget targets) e) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_stmt ce lc ty (Assign (TupleTarget targets) e) st)))
@@ -255,18 +255,18 @@ Theorem opcode_every_stmt_assign_tuple:
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists extra_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty targets e.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_stmt_expr_exists R (Assign (TupleTarget targets) e) /\
-  ~supported_stmt_expr_exists expr_shape_root (Assign (TupleTarget targets) e) ==>
+  ~supported_stmt_expr_exists extra_root (Assign (TupleTarget targets) e) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_stmt ce lc ty (Assign (TupleTarget targets) e) st)))
@@ -283,18 +283,18 @@ Theorem outcomes_free_stmt_augassign:
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists extra_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty vt bt bop e.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_stmt_expr_exists R (AugAssign vt bt bop e) /\
-  ~supported_stmt_expr_exists expr_shape_root (AugAssign vt bt bop e) ==>
+  ~supported_stmt_expr_exists extra_root (AugAssign vt bt bop e) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_stmt ce lc ty (AugAssign vt bt bop e) st)))
@@ -330,18 +330,18 @@ Theorem opcode_every_stmt_augassign:
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists extra_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty vt bt bop e.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_stmt_expr_exists R (AugAssign vt bt bop e) /\
-  ~supported_stmt_expr_exists expr_shape_root (AugAssign vt bt bop e) ==>
+  ~supported_stmt_expr_exists extra_root (AugAssign vt bt bop e) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_stmt ce lc ty (AugAssign vt bt bop e) st)))
@@ -358,18 +358,18 @@ Theorem outcomes_free_stmt_append:
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists extra_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty target e.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_stmt_expr_exists R (Append target e) /\
-  ~supported_stmt_expr_exists expr_shape_root (Append target e) ==>
+  ~supported_stmt_expr_exists extra_root (Append target e) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_stmt ce lc ty (Append target e) st)))
@@ -402,18 +402,18 @@ Theorem opcode_every_stmt_append:
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists extra_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty target e.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_stmt_expr_exists R (Append target e) /\
-  ~supported_stmt_expr_exists expr_shape_root (Append target e) ==>
+  ~supported_stmt_expr_exists extra_root (Append target e) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_stmt ce lc ty (Append target e) st)))

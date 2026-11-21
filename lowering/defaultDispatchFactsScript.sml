@@ -2,7 +2,7 @@
 Theory defaultDispatchFacts
 Ancestors runtimeBodyStartDefs checkedSelectorTableProps entryStateRel
   vyperCalldata compileVyper vyperABIEntries publicGetterProps list entryDispatchProps
-  defaultDispatchRouting defaultDispatchPlacement constSubst constSubstStmtsPreserve
+  defaultDispatchRouting defaultDispatchPlacement constSubst
   supportedDecls loweringShapeSource
    calldataSourceSize exprLowering compileEnv
   externalEntryChecks entryExternalPackageCoherence entryParameterAdmissibility abiDecoderCoherence vyperTypeContractStaticMaps e2eDefs
@@ -190,21 +190,6 @@ Proof
   simp[vyperTypeContractTheory.external_name_keys_toplevel_def]
 QED
 
-Theorem checked_supported_external_subst:
-  supported_program tops /\ source_typing_ok tops am tx /\
-  MEM (FunctionDecl External mut nr rr name args ds ret fbody) tops ==>
-  subst_consts_fn (module_consts_env tops [])
-    (mut,nr,rr,name,args,ds,ret,fbody) = (mut,nr,rr,name,args,ds,ret,fbody)
-Proof
-  rpt strip_tac >> fs[source_typing_ok_def] >>
-  qpat_x_assum `check_contract F _ _ _ = SOME _`
-    (mp_tac o MATCH_MP
-      (REWRITE_RULE [GSYM AND_IMP_INTRO]
-        (Q.INST [`vis` |-> `External`, `defaults` |-> `ds`]
-          checked_supported_function_subst))) >>
-  simp[]
-QED
-
 Theorem default_selected_raw_return:
   ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
   MEM (mut,nr,rr,name,args,(ds:expr list),ret,fbody) (public_getters tops) ==>
@@ -252,7 +237,8 @@ Theorem default_fallback_classified:
     SOME (mut,nr,args,[],ret,fbody) ==>
   FST (SND (SND (classify_functions tops))) =
     SOME (mut,nr,lookup_raw_return_or_F (NONE:num option) "__default__" External tops,
-      "__default__",args,([]:expr list),ret,fbody)
+      "__default__",args,([]:expr list),ret,
+      subst_consts_stmts (module_consts_env tops []) fbody)
 Proof
   strip_tac >>
   `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
@@ -261,21 +247,14 @@ Proof
   drule_all default_decl_no_getter >> strip_tac >>
   drule_all lookup_function_default >>
   disch_then (qspec_then `NONE` mp_tac) >> simp[] >> strip_tac >>
-  qpat_assum `FST (SND (SND (classify_functions tops))) = _`
-    (mp_tac o SIMP_RULE std_ss
+  qpat_x_assum `FST (SND (SND (classify_functions tops))) = _`
+    (assume_tac o PURE_REWRITE_RULE
       [constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def]) >>
-  disch_tac >>
   drule loweringShapePropsTheory.classify_functions_fallback_mem >> strip_tac >>
-  `lookup_raw_return_or_F (NONE:num option) "__default__" External tops = rr` by
-    (fs[constSubstTheory.subst_consts_fn_def] >>
-     metis_tac[default_decl_raw_return]) >>
-  `subst_consts_stmts (module_consts_env tops []) fbody = fbody` by
-    metis_tac[REWRITE_RULE [constSubstTheory.subst_consts_fn_def, pairTheory.PAIR_EQ]
-      checked_supported_external_subst] >>
-  gvs[] >>
-  qspecl_then [`tops`, `mut`, `nr`, `rr'`, `"__default__"`, `args`,
-    `rawdefaults`, `ret`, `rawbody`] mp_tac default_decl_raw_return >>
-  simp[constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def]
+  drule_at (Pat `MEM (FunctionDecl _ _ _ _ _ _ rawdefaults _ rawbody) _`)
+    default_decl_raw_return >>
+  disch_then drule >> disch_then (fn th => REWRITE_TAC [th]) >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem default_dispatch_source_cases:
@@ -297,7 +276,8 @@ Theorem default_dispatch_source_cases:
     EXISTS is_default_decl tops /\
     FST (SND (SND (classify_functions tops))) =
       SOME (mut,F,lookup_raw_return_or_F (NONE:num option) "__default__" External tops,
-        "__default__",[],([]:expr list),ret,fbody) /\
+        "__default__",[],([]:expr list),ret,
+        subst_consts_stmts (module_consts_env tops []) fbody) /\
     (LENGTH cd < 4 \/
      FIND (\(n,ts). abi_method_id (type_env tops) n ts = cd_selector cd)
        (abi_external_signatures tops) = NONE))
@@ -442,6 +422,7 @@ QED
 Theorem default_dispatch_cases:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
   tx.function_name = "__default__" /\
   calldata_dispatch tops cd = SOME (tx.function_name,vals) /\
   vyperInterpreter$lookup_function NONE tx.function_name External tops =
@@ -467,8 +448,6 @@ Theorem default_dispatch_cases:
     compile_entry_checks mc pay checks = ((),st) /\
     compile_register_positional_args ce pa 4 st = (ce',body_st) /\
     compile_guarded_body ce' F key ut iv (subst_consts_stmts (module_consts_env tops []) fbody) rt body_st = ((),st') /\
-    shape_state label_st /\ shape_state dispatch_st /\ shape_state checks /\
-    shape_state st /\ shape_state body_st /\ shape_state st' /\
     cs_extends label_st dispatch_st /\ cs_extends dispatch_st checks /\
     cs_extends checks st /\ cs_extends st body_st /\ cs_extends body_st st' /\
     fn_has_code label_st dispatch_st func /\ fn_has_code checks st func /\
@@ -552,16 +531,16 @@ Proof
       gvs[] >> disj1_tac >> qexistsl [`pre`, `post`] >> simp[]) >>
   qpat_assum `tx.function_name = _` SUBST_ALL_TAC >>
   fs[] >>
-  `subst_consts_stmts (module_consts_env tops []) fbody = fbody` by
-    (drule_all default_fallback_lookup_decl >> strip_tac >>
-     drule_all checked_supported_external_subst >>
-     simp[constSubstTheory.subst_consts_fn_def]) >>
-  gvs[] >> drule_all default_empty_package_return_layout >> strip_tac >>
+  qpat_assum `set_external_package_target _ _ =
+    (_,_,_,_,_,_,_,_,_,subst_consts_stmts _ _,_)`
+    (strip_assume_tac o MATCH_MP default_empty_package_return_layout) >>
   `set_fallback_package_target rpolicy.rpol_target
     (package_fallback_fn tops T (K global_nonreentrant_slot)
       (FST (SND (SND (classify_functions tops))))) =
-    SOME (ce_fb,pay,F,key,ut,iv,fbody,rt)` by metis_tac[] >>
-  drule_all (INST_TYPE [alpha |-> ``:string``] default_fallback_compile_placement) >>
+    SOME (ce_fb,pay,F,key,ut,iv,subst_consts_stmts (module_consts_env tops []) fbody,rt)` by
+    metis_tac[] >>
+  drule_all (SIMP_RULE std_ss [listTheory.NOT_EXISTS]
+    (INST_TYPE [alpha |-> ``:string``] default_fallback_compile_placement)) >>
   disch_then (qspec_then `("fn___default__":string)` strip_assume_tac) >>
   `linear_dispatch_target cd
     (MAP (\(sel,lbl,z). (sel,lbl))
@@ -570,7 +549,5 @@ Proof
   qexistsl [`ce_fb`, `fallback`, `label_st`, `dispatch_st`,
     `opened`, `checks`, `st`, `ce_fb`, `st`, `st'`] >>
   gvs[compileEnvTheory.cs_extends_refl] >>
-  (conj_tac >- (irule compileEnvTheory.cs_extends_trans >>
-     qexists_tac `opened` >> simp[]) >>
-   fs[runtime_fallback_body_start_def] >> metis_tac[])
+  fs[runtime_fallback_body_start_def] >> metis_tac[]
 QED

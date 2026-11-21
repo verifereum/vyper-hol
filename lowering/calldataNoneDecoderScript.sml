@@ -10,7 +10,7 @@ Ancestors
   abiDecoderDynarrayPrefix abiDecoderContract abiEncoderExitPhi abiDecoderBytesEdges
   calldataRegistration exprSimAbiDecodePhiBoundary compileEnv emitHelper
   vyperCalldata ptrDiscipline abiDecoderCoherence words venomState
-  rich_list list option arithmetic pred_set
+  rich_list list option arithmetic pred_set decoderOriginAllocationFrame
 
 val decode_history = ``\st last fn s.
   !id q k. st.cs_next_id <= id /\ id < last.cs_next_id /\

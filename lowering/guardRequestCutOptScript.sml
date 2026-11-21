@@ -6,7 +6,7 @@
  *)
 Theory guardRequestCutOpt
 Ancestors
-  guardRequestCutIdentity fnFrameRequestPrefixOpt fnFrameSymbolicPrefix
+  guardRequestCutIdentity loweringMemCorrect fnFrameRequestPrefixOpt fnFrameSymbolicPrefix
   jointRequestCut frameJointTransition asmOptimizer
   codegenSymRel codegenEntrySim e2eOptEntry e2eProducers e2eEntry e2eDefs
   e2eRequestCutDefs runtimeSymSrcUnit o1LabelFlowCompose o1PassLift
@@ -98,16 +98,11 @@ Theorem codegen_request_cut_outcome_opt_own:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `LENGTH t.vs_requests = k` (SUBST_ALL_TAC o SYM) >>
-  drule supported_program_raw_shape_free_program >> strip_tac >>
   `?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art` by
     fs[source_typing_ok_def] >>
-  drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
-  drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_checked_source_shape >> strip_tac >>
   drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
-  `~ctx_has_dalloca unit.cu_context` by
-    (irule every_no_dalloca >>
-     drule_all lower_vyper_runtime_unit_no_dalloca_checked >> simp[]) >>
   `codegen_context_obligations (\_ _ _ _. F) out.po_unit.cu_context cplan` by
     (irule o1_pipeline_codegen_obligations >>
      simp[codegen_memory_obligations_def] >> metis_tac[]) >>

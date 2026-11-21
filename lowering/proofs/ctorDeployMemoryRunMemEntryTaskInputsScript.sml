@@ -30,12 +30,11 @@ Theorem ctor_task_start_source:
     SOME (fmut,fnr,rr,fname,fargs,dflts,ret,fbody) /\
   fname = "__init__" /\ tx.function_name = "__init__" /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) ==>
-  fmut = mut /\ fnr = nr /\ dflts = [] /\ ret = NoneT /\ fbody = stmts
+  fmut = mut /\ fnr = nr /\ dflts = [] /\ ret = NoneT /\ fbody = subst_consts_stmts (module_consts_env tops []) stmts
 Proof
   strip_tac >>
   qpat_assum `deploy_ctor_start _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [deploy_ctor_start_def]) >>
-  drule_all deploy_supported_constructor_subst >> strip_tac >>
   qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac
     classify_functions_ctor_lookup >> simp[] >> strip_tac >>
   gvs[subst_consts_fn_def, subst_consts_expr_def]
@@ -147,7 +146,7 @@ Theorem ctor_task_aligned_inputs:
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) ==>
   fname = "__init__" /\ fmut = mut /\ fnr = nr /\ nr = F /\
-  dflts = [] /\ ret = NoneT /\ fbody = stmts /\
+  dflts = [] /\ ret = NoneT /\ fbody = subst_consts_stmts (module_consts_env tops []) stmts /\
   fn_allocs_ok tops (fmut,fnr,rr,fname,fargs,dflts,ret,fbody) /\
   EVERY (supported_value_type tops) (MAP SND fargs) /\
   ALL_DISTINCT (MAP FST fargs) /\
@@ -173,7 +172,7 @@ Proof
   qpat_assum `deploy_ctor_start _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [deploy_ctor_start_def]) >>
   `vyperInterpreter$lookup_function NONE fname Deploy tops =
-    SOME (fmut,fnr,fargs,dflts,ret,fbody)` by
+    SOME (fmut,fnr,fargs,dflts,ret,stmts)` by
     (qspecl_then [`tops`, `NONE`, `fname`] mp_tac
        classify_functions_ctor_lookup >> simp[] >> strip_tac >>
      gvs[subst_consts_fn_def]) >>
@@ -223,7 +222,7 @@ Theorem ctor_task_actual_encoded_inputs:
   gas_variant vs (deploy_entry_state prog cplan tops es) /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) ==>
   fname = "__init__" /\ fmut = mut /\ fnr = nr /\ nr = F /\
-  dflts = [] /\ ret = NoneT /\ fbody = stmts /\
+  dflts = [] /\ ret = NoneT /\ fbody = subst_consts_stmts (module_consts_env tops []) stmts /\
   fn_allocs_ok tops (fmut,fnr,rr,fname,fargs,dflts,ret,fbody) /\
   EVERY (supported_value_type tops) (MAP SND fargs) /\
   ALL_DISTINCT (MAP FST fargs) /\

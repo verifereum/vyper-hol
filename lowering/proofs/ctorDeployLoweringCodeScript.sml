@@ -8,6 +8,7 @@ Ancestors
   loweringShapeDefs supportedProgram loweringShapeSource
   ctorDeployLoweringCodeShape loweringShapeRules list ctorUnitShape
   allocaFrontierBound venomInst venomWf venomExecProps fragExec rich_list
+  ctorDeployEntryLabels internalBlockPackagingProps bodyFullShadowInternalCode
 
 Theorem deploy_internal_package_shape:
   !tops use_trans nkey_map target is_ctor immutables_len src.
@@ -20,7 +21,6 @@ Proof
   rpt gen_tac >> PairCases_on `src` >> strip_tac >>
   `~supported_stmts_expr_exists expr_shape_root src7` by
     (gs[runtime_bodies_shape_ok_def] >> metis_tac[]) >>
-  imp_res_tac supported_program_runtime_bodies_shape_ok >>
   imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   drule_then (qspecl_then [`Internal`, `src0`, `src3`, `src4`, `src6`, `src7`, `use_trans`]
     (strip_assume_tac o SRULE [cenv_static_ok_def])) build_compile_env_static >>
@@ -34,21 +34,6 @@ Theorem deploy_build_env_no_return_pc:
     (build_compile_env tops Deploy mut fname args ret body ut).ce_return_pc = NONE
 Proof
   rpt gen_tac >> simp[build_compile_env_def] >> rpt (pairarg_tac >> gvs[])
-QED
-
-Theorem deploy_constructor_package_shape:
-  !tops exts ints fb cf target cenv args pay nr key ut body ret am tx.
-    deploy_source_ok tops am tx /\
-    classify_functions tops = (exts,ints,fb,SOME cf) /\
-    set_constructor_package_target target
-      (package_constructor tops T (K global_nonreentrant_slot) cf) =
-      (cenv,args,pay,nr,key,ut,body,ret) ==>
-    cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
-    ~supported_stmts_expr_exists expr_shape_root body
-Proof
-  rpt gen_tac >> strip_tac >>
-  `SND (SND (SND (classify_functions tops))) = SOME cf` by simp[] >>
-  fs[deploy_source_ok_def] >> metis_tac[package_constructor_shape_ok]
 QED
 
 (* Vyper rejects view and pure constructors, so the lock flag the
@@ -78,19 +63,16 @@ Proof
     update_cenv_nonreentrant_def]
 QED
 
-Theorem deploy_internal_package_certificates:
+Theorem deploy_internal_package_labels:
   !tops target ut key is_ctor cap srcs ifns.
     supported_program tops /\
     PERM srcs (FST (SND (classify_functions tops))) /\
     ifns = MAP (set_internal_package_target target o
       package_internal_fn tops ut key is_ctor cap) srcs ==>
-    EVERY internal_fn_shape_ok ifns /\
     EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ifns) /\
     ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns))
 Proof
   rpt gen_tac >> strip_tac >>
-  `runtime_bodies_shape_ok tops` by
-    metis_tac[supported_program_runtime_bodies_shape_ok] >>
   drule supported_program_internal_names >> strip_tac >>
   drule classified_internal_names_distinct >> strip_tac >>
   drule internal_descriptors_ok >>
@@ -104,49 +86,37 @@ Proof
   drule sortingTheory.ALL_DISTINCT_PERM >> strip_tac >>
   gvs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
     internal_fn_descriptors_MAP_package_internal_fn] >>
-  fs[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
-  irule deploy_internal_package_shape >> simp[]
+  fs[EVERY_MAP, EVERY_MEM] >> metis_tac[]
 QED
 
-Theorem deploy_internal_body_certificates:
-  !tops target ut key is_ctor cap srcs ifns st_final post.
-    supported_program tops /\
-    PERM srcs (FST (SND (classify_functions tops))) /\
-    ifns = MAP (set_internal_package_target target o
-      package_internal_fn tops ut key is_ctor cap) srcs /\
-    shape_state st_final /\
-    compile_internal_fn_bodies ifns st_final = ((),post) ==>
-    ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns)) /\
-    ?segs. all_blocks post = all_blocks st_final ++ FLAT segs /\
-      LIST_REL internal_segment_ok (internal_fn_descriptors ifns) segs
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all deploy_internal_package_certificates >> strip_tac >>
-  drule_all compile_internal_fn_bodies_shape >> simp[]
-QED
-
-Theorem deploy_ctor_packaged_entry:
+Theorem deploy_ctor_packaged_entry_by_labels:
   !ifns st_final post ctx data.
     compile_internal_fn_bodies ifns st_final = ((),post) /\
-    shape_state st_final /\ EVERY internal_fn_shape_ok ifns /\
+    EVERY (\bb. ~internal_label_ok bb.bb_label) (all_blocks st_final) /\
     EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ifns) /\
     ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns)) /\
-    all_blocks st_final <> [] /\
-    (HD (all_blocks st_final)).bb_label = "__deploy" /\
-    EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) (all_blocks st_final))) /\
     extract_context_with_internals "__deploy" ifns post = SOME (ctx,data) ==>
     MEM (mk_raw_function "__deploy" (all_blocks st_final)) ctx.ctx_functions
 Proof
   rpt gen_tac >> strip_tac >>
-  `EVERY (\d. ~compiler_label (FST d) /\
-    ~MEM (FST d) (MAP (\bb. bb.bb_label) (all_blocks st_final)))
-    (internal_fn_descriptors ifns)` by
-    (fs[EVERY_MEM] >> gen_tac >> strip_tac >>
-     irule deploy_internal_label_separate >> simp[EVERY_MEM]) >>
-  drule_all compile_internal_fn_bodies_shape >> strip_tac >>
-  drule_all package_internal_blocks_segments >> strip_tac >>
-  gvs[extract_context_with_internals_def, GSYM all_blocks_def,
-    mk_venom_context_def]
+  drule bodyFullShadowInternalCodeTheory.compile_internal_labels >>
+  strip_tac >>
+  `EVERY (\d. ~isPREFIX "@" (FST d) /\
+              ~MEM (FST d) (MAP (\bb. bb.bb_label) (all_blocks st_final)))
+      (internal_fn_descriptors ifns)` by
+    (rewrite_tac[EVERY_MEM] >> qx_gen_tac `d` >> BETA_TAC >> strip_tac >>
+     `internal_label_ok (FST d)` by fs[EVERY_MEM] >>
+     conj_tac
+     >- (qpat_x_assum `internal_label_ok (FST d)` mp_tac >>
+         rewrite_tac[internal_label_ok_def, IS_PREFIX_APPEND] >>
+         strip_tac >> simp[]) >>
+     simp[MEM_MAP] >> qx_gen_tac `entry_bb` >> rpt strip_tac >>
+     qpat_assum `EVERY (\bb. ~internal_label_ok bb.bb_label) _`
+       (mp_tac o SIMP_RULE bool_ss [EVERY_MEM]) >>
+     disch_then (qspec_then `entry_bb` mp_tac) >> gvs[]) >>
+  drule_all (Q.SPECL [`internal_fn_descriptors ifns`, `segments`, `all_blocks st_final`,
+    `isPREFIX "@"`] package_internal_blocks_separated_segments) >> strip_tac >>
+  gvs[extract_context_with_internals_def, GSYM all_blocks_def, mk_venom_context_def]
 QED
 
 Theorem ctor_code_block_inst_ids[local]:
@@ -208,7 +178,7 @@ Proof
   metis_tac[fn_has_code_split, cs_extends_trans]
 QED
 
-Theorem ctor_lock_flag_select[local]:
+Theorem ctor_lock_flag_select:
   !p f. (\(a:bool,b:num,c:bool,d:bool). f d) p = f (SND (SND (SND p)))
 Proof
   PairCases >> simp[]
@@ -309,35 +279,20 @@ Proof
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
     fs[deploy_phases_def] >>
   drule_all deploy_ctor_lowering_trace >> strip_tac >>
-  drule_all deploy_constructor_package_shape >> strip_tac >>
   drule_all deploy_constructor_package_not_view >> strip_tac >>
-  qpat_x_assum `cenv0.ce_nonreentrant = _` (fn th =>
-    RULE_ASSUM_TAC (PURE_REWRITE_RULE [th, pairTheory.SND])) >>
+  qpat_assum `cenv0.ce_nonreentrant = _` (fn th =>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE [th, pairTheory.SND]) >> assume_tac th) >>
   drule_all ctor_code_setup_extension >> strip_tac >>
   drule_all ctor_code_tail_extensions >> strip_tac >>
-  rename1 `~supported_stmts_expr_exists expr_shape_root ss` >>
-  `(do (if ~pay then
-           do cv <- emit_op CALLVALUE []; v <- emit_op ISZERO [cv];
-              emit_void ASSERT [v] od else return ());
-        imm <- (if imm_len tops > 0 then
-                  do p <- compile_fixed_region_with_id (imm_len tops);
-                     return (SND p).buf_operand od else return (Lit 0w));
-        ce <- compile_register_constructor_args
-          (cenv0 with ce_imm_alloca :=
-            (if imm_len tops > 0 then SOME imm else NONE)) pos_args 0 0;
-        (if nr then compile_nonreentrant_lock nkey ut F else return ());
-        lbl <- fresh_label "ctor_exit";
-        compile_stmts (ce with ce_ctor_exit_label := SOME lbl) NoLoop NoneT ss;
-        cs <- comp_get;
-        (if block_is_terminated cs then return () else emit_inst JMP [Label lbl] []);
-        new_block lbl;
-        (if nr then compile_nonreentrant_unlock nkey ut F else return ());
-        compile_constructor_epilogue (LENGTH runtime_bc) (imm_len tops) imm od)
-      (initial_compile_state "__deploy") = ((),st_final)` by
-    (rewrite_tac[ctor_code_cond_not] >>
-     simp[comp_ignore_bind_def, comp_bind_def, comp_get_def]) >>
-  drule_all ctor_code_prefix_certificates >> strip_tac >>
-  qpat_x_assum `comp_ignore_bind _ _ (initial_compile_state "__deploy") = _` kall_tac >>
+  rename1 `set_constructor_package_target _ _ = (cenv0,pos_args,pay,nr,nkey,ut,ss,_)` >>
+  `compile_generate_deploy T (LENGTH runtime_bc) (imm_len tops) pos_args 0 []
+    cenv0 ss pay nr nkey ut (initial_compile_state "__deploy") = ((),st_final)` by
+    (PURE_REWRITE_TAC [compile_generate_deploy_def, COND_CLAUSES,
+       ctor_code_cond_not, ctor_lock_flag_select] >>
+     simp_tac bool_ss [comp_ignore_bind_def, comp_bind_def, comp_get_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[]) >>
+     gvs[compile_internal_fn_bodies_def, comp_return_def]) >>
+  drule deploy_entry_blocks_not_internal >> strip_tac >>
   `supported_program tops` by fs[deploy_source_ok_def] >>
   qmatch_asmsub_abbrev_tac `compile_internal_fn_bodies ifns st_final` >>
   `ifns = MAP (set_internal_package_target rpolicy.rpol_target o
@@ -347,8 +302,8 @@ Proof
   `PERM (order_internals (deploy_internal_order (SOME cf) ints) ints)
       (FST (SND (classify_functions tops)))` by
     simp[PERM_order_deploy_internals] >>
-  drule_all deploy_internal_package_certificates >> strip_tac >>
-  drule_all deploy_ctor_packaged_entry >> strip_tac >>
+  drule_all deploy_internal_package_labels >> strip_tac >>
+  drule_all deploy_ctor_packaged_entry_by_labels >> strip_tac >>
   drule_all deploy_ctor_member_certificates >> strip_tac >>
   `fn_has_code (initial_compile_state "__deploy") sa
       (mk_raw_function "__deploy" (all_blocks st_final)) /\

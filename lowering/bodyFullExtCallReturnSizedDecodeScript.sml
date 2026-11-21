@@ -13,7 +13,6 @@ Theorem extcall_return_sized_decode:
     B L xs p d dstid live ceiling s G tn lo PG.
     abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
       st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s /\
-    ~ctx_has_dalloca ctx /\
     abi_decode_ptr_window G tn s source (n2w B) L /\
     ptr_covers G tn output s (type_memory_bytes ce ty) /\
     op_prov G pos = NONE /\ op_prov G hi = NONE /\
@@ -61,7 +60,6 @@ Theorem extcall_return_sized_decode:
       else TAKE (static_length (vyper_to_abi_type env ty)) (DROP p xs)) /\
     ~(vyper_decode_valid_enc (vyper_to_abi_type env ty) bytes /\
       abi_vyper_admissible env ty (dec (vyper_to_abi_type env ty) bytes)) /\
-    ~ctx_has_dalloca ctx /\
     abi_decode_ptr_window G tn s source (n2w B) L /\
     ptr_covers G tn output s (type_memory_bytes ce ty) /\
     op_prov G pos = NONE /\ op_prov G hi = NONE /\
@@ -83,7 +81,7 @@ Theorem extcall_return_sized_decode:
   compile_abi_decode_to_buf (Var output) (Lit 0w) MLOAD (Var source) hi
     (type_to_abi_dec_info cenv.ce_struct_fields cenv (if needs_external_call_wrap ret_type then TupleT
       [ret_type] else ret_type)) hs = ((),de) /\
-  fn_has_code hs de func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code hs de func /\ fn_inst_ids_distinct func /\
   valid_horizon cx st0 H0 ee.storage_trace /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
     abi_malformed_entry H ctx func cenv cx ee hs (abi_malformed_scratch_sites hs de func) dstid live

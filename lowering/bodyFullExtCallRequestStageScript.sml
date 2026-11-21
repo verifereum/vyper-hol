@@ -1,5 +1,7 @@
 Theory bodyFullExtCallRequestStage
 Ancestors
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
+  bodyFullIntCallReturnHalt[qualified,ignore_grammar]
   bodyFullShadowBodyInv
   bodyFullExtCallAddressOwnedPrefix bodyFullExtCallKeywordList
   bodyFullExtCallRequestPostGasPacking bodyFullExtCallRequestPackingContinuation
@@ -149,7 +151,8 @@ Theorem extcall_request_full:
   MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
@@ -301,11 +304,6 @@ Proof
      rpt (qpat_x_assum `!_. _` kall_tac) >>
      metis_tac[compileEnvTheory.cs_extends_refl, compileEnvTheory.cs_extends_trans]) >>
   simp[exprSimExtCallCaseTheory.eval_extcall_stages, GSYM arithmeticTheory.ADD1] >>
-  `!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z` by
-    (rpt strip_tac >> drule_all contextRawReachableTheory.frag_reachable_members >>
-     strip_tac >> fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
-     `inst.inst_opcode <> DALLOCA` by metis_tac[] >>
-     simp[unitTransformDefsTheory.dalloca_no_wrap_def]) >>
   irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
   qexistsl [`Q`,`\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
         (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)`] >>
@@ -376,6 +374,13 @@ Proof
   qpat_assum `compile_ext_call_kwargs _ _ rt opts kw_es s2 = _` (irule_at Any) >>
   qexistsl [`tops`,`shadow_s3`,`shadow_s2`,`shadow_func`,`env`,`d`] >>
   asm_rewrite_tac[] >> simp[NoAsms] >>
+  conj_tac
+  >- (qpat_assum `storage_trace_domain cx st0 ee.storage_trace`
+         (assume_tac o REWRITE_RULE [vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+      qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+          stmt_state_rel _ _ _ _ _ ee u /\ _`
+        (drule_then (ACCEPT_TAC o MATCH_MP
+          bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o CONJUNCT1))) >>
   conj_tac
   >- (gen_tac >> disch_tac >>
       qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
@@ -724,8 +729,13 @@ Proof
      simp[Abbr `source_gas`])) >>
   disch_then (mk_asm "packed") >>
   irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
-  qexistsl [`Q`,`\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`] >>
-  simp[] >>
+  qexistsl [`Q`,`\H res ee gt r.
+    (expr_exit res r /\ halt_exit H cx ee res r) /\
+    (ctx_has_dalloca ctx ==> !h. r = Halt h ==> allocas_below_fmp h)`] >>
+  BETA_TAC >> simp[] >>
+  irule (BETA_RULE (Q.SPEC
+    `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`
+    (Q.GEN `R` bodyFullIntCallReturnHaltTheory.gas_outcome_full_halt_room))) >>
   irule extcall_packed_exit_replay >>
   mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM]
     (Q.INST [`addr` |-> `ao`, `value` |-> `value_op`,

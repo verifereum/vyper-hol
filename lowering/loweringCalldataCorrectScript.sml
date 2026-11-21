@@ -5,6 +5,11 @@ Ancestors
   sourceUnitExitSafe ptrDiscipline vyperCalldata
   dispatchedCallAssembly dispatchedSelectedEndpoint gasShadowRunLowering
   loweringShapeProps calldataNoneEntryController calldataNoneDecoder acceptedContextPhi
+  entryJointRevertExit compileVyper fragGasOriginPtr entryDispatchPtr
+  loweringRuntimeCorrect supportedProgram entryDispatchProps publicGetterProps
+  vyperTypeContractContext nonreentrantEntryEquiv vyperReadOnlySyntax
+  vyperTypeContractGetter vyperTypeContract list
+  callDynamicMemory[qualified,ignore_grammar] o1PassContract lowerDloadDefs
 
 (* The call a contract makes of raw calldata: the external entry it
    dispatches to and the arguments it decodes (vyperCalldata), including the
@@ -17,58 +22,86 @@ Definition dispatched_vyper_call_def:
         SOME (mut, nr, args, dflts, ret, body)
 End
 
-(* A supported program declares no default arguments, so every external
-   entry it exposes (functions and public getters) has none. *)
-Theorem supported_program_external_dflts_nil:
-  !tops f mut nr args dflts ret body.
-    supported_program tops /\
-    vyperInterpreter$lookup_function NONE f External tops =
-      SOME (mut, nr, args, dflts, ret, body) ==>
-    dflts = []
+(* The legacy dispatcher exposes only empty default lists. The checker
+   rules out parameters and therefore defaults on the fallback. *)
+Triviality selected_legacy_defaults_nil[local]:
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+  source_typing_ok tops am tx /\
+  vyperInterpreter$lookup_function NONE name External tops =
+    SOME (mut,nr,args,dflts,ret,fbody) ==>
+  dflts = []
 Proof
-  rpt strip_tac >>
-  drule vyperTypeContractGetterTheory.lookup_function_External_cases >>
-  strip_tac
-  >- (drule_all supportedProgramTheory.supported_program_declaration >>
-      simp[supportedDeclsTheory.supported_function_header_contract,
-           listTheory.NULL_EQ]) >>
-  Cases_on `decl` >>
-  gvs[vyperTypeContractGetterTheory.external_getter_tuple_def,
-      AllCaseEqs()] >>
-  Cases_on `v` >>
-  gvs[vyperTypeContractGetterTheory.external_getter_tuple_def,
-      vyperGetterTheory.getter_def, AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[])
+  strip_tac >> Cases_on `name = "__default__"`
+  >- (gvs[] >> drule lookup_function_External_cases >> strip_tac
+      >- (`function_header_ok External mut nr raw "__default__" args dflts ret`
+            by metis_tac[source_typing_function_header] >>
+          drule supportedNamesTheory.supported_fallback_no_arguments >> strip_tac >>
+          gvs[source_typing_ok_def] >>
+          `module_allocated am.layouts tx.target NONE tops` by
+            (drule check_contract_main_module_allocated >> simp[]) >>
+          `check_function_body am.layouts tx.target [(NONE,tops)] art NONE
+             External mut nr [] dflts ret fbody` by
+            (irule check_contract_runtime_function_body_MEM >>
+             simp[] >> qexistsl_tac [`"__default__"`, `raw`] >> simp[]) >>
+          fs[check_function_body_def]) >>
+      metis_tac[external_getter_defaults]) >>
+  drule_all lookup_function_external_member >> strip_tac >>
+  qpat_x_assum `~EXISTS external_has_defaults _` mp_tac >>
+  simp[EVERY_MEM] >> disch_then
+    (qspec_then `subst_consts_fn (module_consts_env tops [])
+      (mut,nr,rr,name,args,dflts,ret,fbody)` mp_tac) >>
+  Cases_on `dflts` >>
+  simp[constSubstTheory.subst_consts_fn_def, external_has_defaults_def,
+       constSubstTheory.subst_consts_expr_def]
 QED
 
-(* S1 *)
-Theorem lower_vyper_runtime_unit_correct_dispatched:
-  !tops rpolicy unit am tx ret vs.
+Triviality runtime_dispatched_readings_certificate[local]:
+  !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    dispatched_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\
-    outcomes_accounts_typed (SOME vs.vs_outcomes)
-    ==>
-    source_unit_execution_correct tops ret am tx unit vs
+    supported_program tops ==>
+    ?shadow_unit. !am tx ret vs.
+      source_typing_ok tops am tx /\
+      source_deployment_rel tops am tx /\
+      dispatched_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+      initial_venom_state_rel tops am tx vs /\
+      outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+      (ctx_has_dalloca unit.cu_context ==>
+        !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+          dalloca_no_wrap inst s) /\
+      (ctx_has_dalloca unit.cu_context ==>
+        unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+        w2n vs.vs_initial_fmp < 2 ** 254) ==>
+      ?marks.
+        source_unit_execution_correct_with shadow_unit.cu_context marks
+          tops ret am tx unit vs /\
+        ((?tail. call_storage_ok am tx vs.vs_outcomes
+           (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
+         !tail. FST (call_external (SOME vs.vs_outcomes)
+           (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
+           INR (Error (RuntimeError "msg.gas: no gas reading")))
 Proof
-  rpt gen_tac >> strip_tac >>
-  `?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit` by
+  rpt gen_tac >> strip_tac >> Cases_on `internal_defaults_msg_gas tops`
+  >- (drule_all runtime_body_internal_default_gas_readings >>
+      disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
+      qexists_tac `shadow_unit` >> rpt gen_tac >> strip_tac >>
+      first_x_assum (qspecl_then [`am`, `tx`, `ret`, `vs`] mp_tac) >>
+      fs[dispatched_vyper_call_def] >> metis_tac[]) >>
+  Cases_on `EXISTS external_has_defaults (FST (classify_functions tops))`
+  >- (drule_all runtime_body_grouped_default_readings >>
+      disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
+      qexists_tac `shadow_unit` >> rpt gen_tac >> strip_tac >>
+      first_x_assum (qspecl_then [`am`, `tx`, `ret`, `vs`] mp_tac) >>
+      fs[dispatched_vyper_call_def] >> metis_tac[]) >>
+  `?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+                gas_shadow_unit unit shadow_unit` by
     (Cases_on `classify_functions tops` >> PairCases_on `r` >>
-     drule supported_program_no_external_defaults >> simp[] >> strip_tac >>
-     drule_at (Pat `classify_functions _ = _`) runtime_gas_shadow_unit_exists >>
-     disch_then (drule_at (Pat `lower_vyper_runtime_unit _ _ = _`)) >>
-     simp[] >> strip_tac >> qexists_tac `shadow_unit` >> simp[]) >>
+     irule runtime_gas_shadow_unit_exists >> fs[]) >>
+  pop_assum strip_assume_tac >>
+  qexists_tac `shadow_unit` >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `dispatched_vyper_call _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [dispatched_vyper_call_def]) >>
-  drule_all_then SUBST_ALL_TAC supported_program_external_dflts_nil >>
-  drule_at (Pat `runtime_gas_shadow_unit _ _ = _`)
-    (cj 1 dispatched_call_correct) >>
-  disch_then (drule_at (Pat `vyperInterpreter$lookup_function _ _ _ _ = _`)) >>
-  disch_then (qspecl_then [`unit`, `am`, `vs`] mp_tac) >>
-  simp[]
+  drule_all_then SUBST_ALL_TAC selected_legacy_defaults_nil >>
+  drule_all dispatched_call_correct_with_readings >> simp[]
 QED
 
 Theorem lower_vyper_runtime_unit_correct_dispatched_readings_available:
@@ -79,7 +112,13 @@ Theorem lower_vyper_runtime_unit_correct_dispatched_readings_available:
     source_deployment_rel tops am tx /\
     dispatched_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    outcomes_accounts_typed (SOME vs.vs_outcomes)
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s)
     ==>
 
     ?marks.
@@ -93,26 +132,17 @@ Theorem lower_vyper_runtime_unit_correct_dispatched_readings_available:
          INR (Error (RuntimeError "msg.gas: no gas reading")))
 Proof
   rpt gen_tac >> strip_tac >>
-  `?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit` by
-    (Cases_on `classify_functions tops` >> PairCases_on `r` >>
-     drule supported_program_no_external_defaults >> simp[] >> strip_tac >>
-     drule_at (Pat `classify_functions _ = _`) runtime_gas_shadow_unit_exists >>
-     disch_then (drule_at (Pat `lower_vyper_runtime_unit _ _ = _`)) >>
-     simp[] >> strip_tac >> qexists_tac `shadow_unit` >> simp[]) >>
-  qpat_x_assum `dispatched_vyper_call _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [dispatched_vyper_call_def]) >>
-  drule_all_then SUBST_ALL_TAC supported_program_external_dflts_nil >>
-  drule_at (Pat `runtime_gas_shadow_unit _ _ = _`)
-    dispatched_call_correct_with_readings >>
-  disch_then (drule_at (Pat `vyperInterpreter$lookup_function _ _ _ _ = _`)) >>
-  disch_then (qspecl_then [`unit`, `am`, `vs`] mp_tac) >>
-  simp[] >> strip_tac >>
-  qexists_tac `marks` >>
+  drule_all runtime_dispatched_readings_certificate >>
+  disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
+  first_x_assum (qspecl_then [`am`, `tx`, `ret`, `vs`] mp_tac) >>
+  qpat_assum `ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s` (fn th => rewrite_tac[th]) >>
+  simp[] >> strip_tac >> qexists_tac `marks` >>
   metis_tac[source_unit_execution_correct_at_def]
 QED
 
-(* The dispatched-calldata unit theorem with a shadow context fixed by
-   the program before the call, at the raw unit's own free-memory pointer. *)
+(* The shadow context is fixed by the program before choosing a call. *)
 Theorem lower_vyper_runtime_unit_correct_dispatched_with:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -134,34 +164,44 @@ Theorem lower_vyper_runtime_unit_correct_dispatched_with:
           tops ret am tx unit vs
 Proof
   rpt gen_tac >> strip_tac >>
-  `?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit` by
-    (Cases_on `classify_functions tops` >> PairCases_on `r` >>
-     drule supported_program_no_external_defaults >> simp[] >> strip_tac >>
-     drule_at (Pat `classify_functions _ = _`) runtime_gas_shadow_unit_exists >>
-     disch_then (drule_at (Pat `lower_vyper_runtime_unit _ _ = _`)) >>
-     simp[] >> strip_tac >> qexists_tac `shadow_unit` >> simp[]) >>
+  drule_all runtime_dispatched_readings_certificate >>
+  disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
   qexists_tac `shadow_unit.cu_context` >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `dispatched_vyper_call _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [dispatched_vyper_call_def]) >>
-  drule_all_then SUBST_ALL_TAC supported_program_external_dflts_nil >>
-  drule_at (Pat `runtime_gas_shadow_unit _ _ = _`)
-    (cj 2 dispatched_call_correct) >>
-  disch_then (drule_at (Pat `vyperInterpreter$lookup_function _ _ _ _ = _`)) >>
-  disch_then (qspecl_then [`unit`, `am`, `vs`] mp_tac) >>
-  simp[]
+  `raw_variant vs.vs_initial_fmp vs vs` by
+    simp[raw_variant_def, gas_variant_def, venomStateTheory.venom_state_component_equality] >>
+  `!fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+      dalloca_no_wrap inst s` by
+    (qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `vs.vs_initial_fmp`, `vs`]
+       mp_tac callDynamicMemoryTheory.call_raw_variant_no_wrap >>
+     impl_tac >- simp[] >> metis_tac[]) >>
+  `(ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s)` by (strip_tac >> first_assum ACCEPT_TAC) >>
+  `(ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254)` by (strip_tac >> conj_tac >> decide_tac) >>
+  qpat_assum `!am tx ret vs. _ ==> ?marks. _`
+    (qspecl_then [`am`, `tx`, `ret`, `vs`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choose_then `marks` strip_assume_tac) >>
+  qexists_tac `marks` >> first_assum ACCEPT_TAC
 QED
 
 (* S1, calldata that dispatches to nothing: no fallback, a short head, or a
    failed decode.  The entry reverts with empty returndata before any
    function body runs. *)
-Theorem lower_vyper_runtime_unit_reverts:
+Theorem lower_vyper_runtime_unit_reverts_legacy[local]:
   !tops rpolicy unit am tx vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
-    initial_venom_state_rel tops am tx vs
+    initial_venom_state_rel tops am tx vs /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254)
     ==>
     ?func s G' tn'.
       unit.cu_context.ctx_entry = SOME "__entry" /\
@@ -205,7 +245,86 @@ Proof
   metis_tac[]
 QED
 
-(* S3 at the marks of S1's certificate (lower_vyper_runtime_unit_correct_dispatched),
+(* GATE_ADMISSION: held, external defaults on the reject path *)
+Theorem grouped_runtime_unit_reject_origin:
+  !tops rpolicy unit am tx vs.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\ source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
+    initial_venom_state_rel tops am tx vs /\
+    EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      vs.vs_fmp = vs.vs_initial_fmp /\
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) ==>
+    ?func s G' tn' marks.
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      fn_entry_label func = SOME "__entry" /\
+      s.vs_returndata = [] /\
+      entry_prov func
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                    vs_inst_idx := 0|>) FEMPTY = FEMPTY /\
+      entry_taint_vars func
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                    vs_inst_idx := 0|>) entry_taint = entry_taint /\
+      (!D. gas_origin_ptr_path (D,0,EMPTY,unit.cu_context,func,[])
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                    vs_inst_idx := 0|>,FEMPTY,entry_taint)
+        marks (Abort Revert_abort s,G',tn'))
+Proof
+  cheat
+QED
+
+Theorem lower_vyper_runtime_unit_reverts:
+  !tops rpolicy unit am tx vs.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
+    initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254)
+    ==>
+    ?func s G' tn' n.
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      fn_entry_label func = SOME "__entry" /\
+      s.vs_returndata = [] /\
+      (?fuel. run_context fuel unit.cu_context vs = Abort Revert_abort s) /\
+      gas_path_mem unit.cu_context func
+        (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                    vs_inst_idx := 0 |>) n (Abort Revert_abort s) /\
+      (!D. gas_path_ptr D 0 unit.cu_context func [] FEMPTY entry_taint
+             (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                         vs_inst_idx := 0 |>) n G' tn' (Abort Revert_abort s)) /\
+      (!D fuel. ptr_safe_blocks D 0 fuel unit.cu_context func [] FEMPTY entry_taint
+                  (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                              vs_inst_idx := 0 |>))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `vs.vs_fmp = vs.vs_initial_fmp` by fs[initial_venom_state_rel_def] >>
+  Cases_on `EXISTS external_has_defaults (FST (classify_functions tops))`
+  >- (qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`] mp_tac
+        grouped_runtime_unit_reject_origin >>
+      impl_tac >- (asm_rewrite_tac[] >> metis_tac[]) >>
+      disch_then (qx_choosel_then [`func`, `s`, `G'`, `tn'`, `marks`] strip_assume_tac) >>
+      qspecl_then [`unit.cu_context`, `func`, `vs`, `s`, `G'`, `tn'`, `marks`]
+        mp_tac entry_joint_revert_exit >>
+      impl_tac >- asm_rewrite_tac[] >> strip_tac >>
+      qexistsl [`func`, `s`, `G'`, `tn'`, `LENGTH marks`] >>
+      asm_rewrite_tac[] >> metis_tac[]) >>
+  qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`] mp_tac
+    lower_vyper_runtime_unit_reverts_legacy >>
+  impl_tac >- asm_rewrite_tac[] >>
+  disch_then (qx_choosel_then [`func`, `s`, `G'`, `tn'`] strip_assume_tac) >>
+  qexistsl [`func`, `s`, `G'`, `tn'`, `0`] >> asm_rewrite_tac[] >> metis_tac[]
+QED
+
+(* S3 at the marks of S1's certificate (lower_vyper_runtime_unit_correct_dispatched_with),
    where the storage guards hold and the source call is not exempt: its exit
    arm gives the memory-safe run from the entry and, at every valid horizon
    of the source trace, the pointer-safe run at that horizon's dead set. *)
@@ -257,9 +376,9 @@ Theorem lower_vyper_runtime_unit_reverts_memory_ok:
     w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
     fn_entry_label func = SOME "__entry" /\
-    gas_path_mem unit.cu_context func
+    (?n. gas_path_mem unit.cu_context func
       (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                  vs_inst_idx := 0 |>) 0 (Abort Revert_abort s) /\
+                  vs_inst_idx := 0 |>) n (Abort Revert_abort s)) /\
     (!D fuel. ptr_safe_blocks D 0 fuel unit.cu_context func [] FEMPTY
                 entry_taint
                 (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";

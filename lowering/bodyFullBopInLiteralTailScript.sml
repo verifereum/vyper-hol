@@ -1,5 +1,6 @@
 Theory bodyFullBopInLiteralTail
 Ancestors
+  bodyFullHashKeccakFixed
   bodyPtrBopInLiteralTyped bodyPtrBopInScalarTransport bodyPtrBopInLiteralRun
   fragGasCopyLoop fragGasSeqPtr gasOutcomeFullCompose bodySimFull
   varsExt freshWrites instIdxIndep fragExecMem instMemFrontier memSafeRun
@@ -275,7 +276,8 @@ Theorem bop_in_literal_continuation_full_exit:
         es sa sb s0 ee v op z /\
       expr_store_bound cx (BaseT BoolT) v op z /\
       z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      alloca_history func z /\ s0.vs_alloca_next <= z.vs_alloca_next /\
+      alloca_history func z /\ (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
+      s0.vs_alloca_next <= z.vs_alloca_next /\
       ghost_inv_at (DF H) lo d cenv cx ee G tn z /\
       ptr_val_ok cx (BaseT BoolT) v op G tn z /\
       (~is_word_type (BaseT BoolT) ==>
@@ -331,6 +333,10 @@ Proof
      qpat_x_assum `isPREFIX (_ ++ _) _`
        (strip_assume_tac o REWRITE_RULE [rich_listTheory.IS_PREFIX_APPEND]) >>
      simp[DROP_APPEND, rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[APPEND_ASSOC]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
+    first_assum (ACCEPT_TAC o MATCH_MP
+      bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+      CONJUNCT1 o REWRITE_RULE [expr_post_def]) >>
   gvs[is_word_type_def] >> gvs[Abbr `z`]
 QED
 
@@ -379,5 +385,7 @@ Theorem bop_in_literal_continuation_full:
     (\H res ee gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  irule bop_in_literal_continuation_full_exit >> metis_tac[]
+  qpat_assum `~ctx_has_dalloca ctx`
+    (fn static => irule (SIMP_RULE bool_ss [static]
+      (SPEC_ALL bop_in_literal_continuation_full_exit))) >> metis_tac[]
 QED

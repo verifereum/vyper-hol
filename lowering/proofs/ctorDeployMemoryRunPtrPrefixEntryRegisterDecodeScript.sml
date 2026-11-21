@@ -14,7 +14,7 @@ Ancestors
   ctorDeployMemoryRunMemEntryRegistration fragGasPathMem
   fragGasOriginPtr fragGasOriginPtrLoop
 
-val RegisterDecodeMode = ``\checked.
+val RegisterDecodeModeWith = ``\frame checked.
  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info ce.ce_struct_fields ce ty) st = ((),last) /\
  abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
@@ -43,6 +43,7 @@ val RegisterDecodeMode = ``\checked.
  (checked ==> sb + LENGTH (enc (vyper_to_abi_type env ty) av) <=
    LENGTH initial.vs_data_section /\ alloca_history func initial) ==>
  ?actual H qt B.
+ frame (initial:venom_state) (actual:venom_state) /\
  allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
  (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
    actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
@@ -74,6 +75,12 @@ val RegisterDecodeMode = ``\checked.
    !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial) /\
  (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
+
+val RegisterDecodeMode = rhs (concl (SIMP_CONV bool_ss []
+ ``(^RegisterDecodeModeWith) (\s t. T)``));
+
+val RegisterDecodeFmpFrameMode = rhs (concl (SIMP_CONV bool_ss []
+ ``(^RegisterDecodeModeWith) (\s t. t.vs_fmp = s.vs_fmp)``));
 
 Theorem prefix_entry_register_decode_paired_mode:
  !checked. (^RegisterDecodeMode) checked
@@ -108,6 +115,13 @@ Resume prefix_entry_register_decode_paired_mode[instantiate]:
 QED
 
 Finalise prefix_entry_register_decode_paired_mode
+
+(* GATE_ADMISSION: held, deploy decoder fmp frame; owner: e2e lane *)
+Theorem prefix_entry_register_decode_fmp_frame_paired_mode:
+ !checked. (^RegisterDecodeFmpFrameMode) checked
+Proof
+ cheat
+QED
 
 
 

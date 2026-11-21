@@ -29,6 +29,7 @@ Theorem compile_external_return_word_joint:
     ss.vs_immutables = s.vs_immutables /\
     ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
     ss.vs_pending_deletions = s.vs_pending_deletions /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\
     !D. stor_taint_ok_at D tn s ==>
       gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
         (s,G,tn) [] (Halt ss,G',tn')
@@ -100,6 +101,11 @@ Proof
     (irule arithmeticTheory.LESS_MOD >> asm_rewrite_tac[]) >>
   `step_inst_base j s1 = OK v` by suspend "store" >>
   `step_inst_base k s2 = Halt ss` by suspend "halt" >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ss` by
+    (`allocas_below_fmp ss <=> allocas_below_fmp s2` by
+       simp[NoAsms, Abbr `ss`, halt_state_def,
+            set_returndata_def, allocas_below_fmp_def] >>
+     asm_rewrite_tac[]) >>
   qexistsl_tac [`ss`, `G2`, `tn2`] >>
   `(!D. stor_taint_ok_at D tn s ==>
       gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
@@ -307,6 +313,7 @@ Theorem compile_external_return_word_unlock_joint:
     ss.vs_immutables = s.vs_immutables /\
     ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
     ss.vs_pending_deletions = s.vs_pending_deletions /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\
     !H.
       dead_lo_ok H (DF H) lo cenv cx /\ stor_taint_ok_at (DF H) tn s ==>
       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
@@ -377,7 +384,7 @@ Proof
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`ss`, `G1`, `tn1`] strip_assume_tac) >>
   qexistsl_tac [`ss`, `G1`, `tn1`] >>
-  ntac 7 (conj_tac >- asm_rewrite_tac[]) >>
+  ntac 8 (conj_tac >- asm_rewrite_tac[]) >>
   gen_tac >> strip_tac >>
   `stor_taint_ok_at (DF H) tn' u` by
     (irule optional_transient_unlock_stor_taint >> metis_tac[]) >>

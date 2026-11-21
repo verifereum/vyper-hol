@@ -23,19 +23,3 @@ Proof
   Induct >> simp[] >> Cases >> rw[find_var_decl_by_name_def] >> metis_tac[]
 QED
 
-Theorem augassign_supported_scalar_target_decl:
-  !tops src id.
-    supported_scalar_target tops (src,id) ==>
-    src = NONE /\ find_var_decl_by_name id tops <> NONE /\
-    ?vis mut ty slot. MEM (VariableDecl vis mut id ty slot) tops /\ is_word_type ty
-Proof
-  rpt gen_tac >> simp[supported_scalar_target_def] >>
-  Cases_on `supported_variable_decl tops (src,id)` >> simp[] >>
-  rename1 `SOME x` >> PairCases_on `x` >>
-  Cases_on `x0` >> Cases_on `x1` >> Cases_on `x3` >> simp[] >> strip_tac >>
-  drule supported_variable_decl_mem >> strip_tac >>
-  `find_var_decl_by_name id tops <> NONE` by
-    metis_tac[augassign_find_var_decl_storage_some] >>
-  gvs[supported_full_word_type_def] >> first_assum (irule_at Any) >>
-  simp[is_word_type_def]
-QED

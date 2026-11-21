@@ -1,7 +1,7 @@
 Theory bodyFullBuiltinEnvHashCompose
 Ancestors
   bodyFullShadowBodyInv bodyFullHashKeccakFixed[qualified,ignore_grammar]
- bodyFullPreds bodySimFull gasOutcomeFullCompose bodyFullGhostFrame bodyInvNoDalloca
+ bodyFullPreds bodySimFull gasOutcomeFullCompose bodyFullGhostFrame
  gasShadowCompileStmtHelpers gasShadowState exprSimSource exprSimHypsDefs
  exprSimWordBuiltins exprSimUnopComposeProps exprSimUnopProps exprUnopSimDefs exprSimWordArgs exprSimProps exprSimOperands
  exprLoweringProps exprLowering exprBopLowering loweringPosts valueEncoding

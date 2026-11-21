@@ -3,7 +3,7 @@ Theory bodyFullRaiseReasonLiteral
 Ancestors
   stateRelProj bodyInvCodeProps bodyInvMetadataProps exprBodyPreProps
   bodyFullRaiseReasonLiteralEntry bodyFullRaiseReasonLiteralEncoder
-  bodyFullPreds bodySimFull bodyFullShared bodyInvNoDalloca reasonCompilerProps reasonSourceProps
+  bodyFullPreds bodySimFull bodyFullShared reasonCompilerProps reasonSourceProps
   reasonResourcesPtr reasonTypingProps gasOutcomeFullCompose gasOutcomeFull
   bodyExprPreFacts exprSimHypsDefs bodySim supportedStmtTraverse supportedExprTraverse
   supportedStmts vyperTypeSystem exprSimHyps allocLimitsProps
@@ -49,7 +49,9 @@ Proof
     (irule stmt_expr_body_pre >>
      gvs[type_stmt_raise_reason, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_raise_exists_def, int_calls_stmt_def,
-         int_calls_raise_reason_def] >>
+         int_calls_raise_reason_def, int_calls_expr_def,
+         exprLoweringTheory.is_extcode_def, expr_has_evm_run_def,
+         supported_expr_exists_def, expr_evm_run_root_def] >>
      simp[supported_expr_exists_def, const_name_root_def, int_calls_expr_def] >>
      metis_tac[]) >>
   `type_alloc_ok cenv (BaseT (StringT ml))` by
@@ -73,7 +75,6 @@ Resume compile_raise_reason_literal_frag_full[domain]:
   drule literal_reason_source_resources >> strip_tac >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
     metis_tac[ret_pc_ok_def] >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   drule_all reason_literal_message_full_entry >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`]
     strip_assume_tac) >>

@@ -1,28 +1,17 @@
-(* S2 from the type checker: a checked contract lowers to an O1 source unit
-   once it avoids raw_call and creation. The checker allows these;
-   the unit shape rejects delegate or calldata raw_call,
-   and the body-shape proof has no case for plain raw_call or creation yet.
-   TOP-LEVEL: lower_vyper_runtime_unit_source_unit_ok_checked,
-   supported_program_raw_shape_free_program,
-   supported_names_internal_names_distinct. *)
+(* S2 for checked runtime units without source calls that emit DALLOCA. *)
 Theory loweringShapeSource
 Ancestors
   list alist option loweringShapeProps vyperTypeSystem vyperTypeContract
   vyperTypeContractContext supportedProgram supportedExprTraverse
   supportedStmtTraverse compileVyper constSubst constSubstCorrect vyperAST supportedNames
 
-(* The shape roots the type checker doesn't exclude: expr_shape_root less its
-   builtin arity cases. The checker accepts selfdestruct, which the unit
-   shape rejects. The unit shape rejects creation,
-   delegate raw_call (DELEGATECALL) and the calldata form (DALLOCA); a plain
-   raw_call passes it, but the body-shape proof has no case for it yet. *)
 Definition expr_raw_shape_root_def:
   expr_raw_shape_root e <=>
-    (?ty flags es d. e = Call ty (RawCallTarget flags) es d) \/
     (?ty flags es d. e = Call ty (RawCallCalldataTarget flags) es d) \/
-    (?ty es d. e = Call ty SelfDestructTarget es d) \/
-    (?ty kind salted rof order es d.
-       e = Call ty (CreateTarget kind salted rof order) es d)
+    (?ty salted rof order es d.
+       e = Call ty (CreateTarget CreateCopyOf salted rof order) es d) \/
+    (?ty blueprint salted rof order es d.
+       e = Call ty (CreateTarget (CreateFromBlueprint blueprint) salted rof order) es d)
 End
 
 Definition raw_shape_free_program_def:
@@ -86,13 +75,13 @@ QED
 
 (* ===== Typing gives builtin arity ===== *)
 
-Theorem well_typed_builtin_app_arity[local]:
+Theorem well_typed_builtin_app_arity:
   well_typed_builtin_app ty bi ts ==> builtin_arity bi <= LENGTH ts
 Proof
   Cases_on `bi` >> rw[well_typed_builtin_app_def, builtin_arity_def] >> gvs[]
 QED
 
-Theorem well_typed_type_builtin_args_arity[local]:
+Theorem well_typed_type_builtin_args_arity:
   well_typed_type_builtin_args tb target ts ==>
   type_builtin_arity tb <= LENGTH ts
 Proof
@@ -360,6 +349,25 @@ Proof
   metis_tac[well_typed_exprs_raw_shape]
 QED
 
+Theorem checked_deploy_function_raw_shape:
+  !layouts addr tops art vis mut nr rr name args dflts ret source_body.
+  check_contract T layouts addr [(NONE,tops)] = SOME art /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret source_body) tops /\
+  ~supported_stmts_expr_exists expr_raw_shape_root source_body /\
+  ~supported_exprs_exists expr_raw_shape_root dflts ==>
+  ~supported_stmts_expr_exists expr_shape_root source_body /\
+  ~supported_exprs_exists expr_shape_root dflts
+Proof
+  rpt gen_tac >> strip_tac >>
+  `check_function_body layouts addr [(NONE,tops)] art NONE vis mut nr args
+     dflts ret source_body` by
+    (drule check_contract_deploy_function_body_MEM >> simp[] >>
+     disch_then (drule_at (Pat `MEM (FunctionDecl _ _ _ _ _ _ _ _ _) _`)) >>
+     simp[]) >>
+  fs[check_function_body_def, IS_SOME_EXISTS] >>
+  metis_tac[type_stmt_raw_shape, well_typed_expr_raw_shape]
+QED
+
 Theorem check_contract_runtime_bodies_shape_ok:
   check_contract F layouts addr [(NONE, tops)] = SOME art /\
   raw_shape_free_program tops ==>
@@ -511,32 +519,6 @@ Proof
   rw[supported_stmt_expr_exists_def] >>
   metis_tac[supported_expr_exists_mono, supported_assignment_exists_mono,
             supported_stmt_parts_exists_mono]
-QED
-
-Theorem supported_program_raw_shape_free_program:
-  !tops. supported_program tops ==> raw_shape_free_program tops
-Proof
-  rpt gen_tac >> strip_tac >> REWRITE_TAC [raw_shape_free_program_def] >>
-  rpt gen_tac >> strip_tac >>
-  rename1 `MEM (FunctionDecl vis mut nr rr name args dflts ret stmts) tops` >>
-  `~supported_stmts_expr_exists expr_shape_root stmts` by
-    (drule_all supported_program_function >> strip_tac >>
-     drule supported_function_body_shape >> simp[]) >>
-  `EVERY (\e. ~supported_expr_exists expr_shape_root e) dflts` by
-    (drule_all supported_program_defaults >>
-     rw[EVERY_MEM, supported_default_expression_def] >>
-     metis_tac[supported_expr_shape]) >>
-  conj_tac
-  >- (strip_tac >>
-      qpat_x_assum `~supported_stmts_expr_exists expr_shape_root _` mp_tac >>
-      simp[] >> irule (CONJUNCT2 supported_stmt_expr_exists_mono) >>
-      first_x_assum (irule_at Any) >>
-      simp[expr_raw_shape_root_def, expr_shape_root_def] >> metis_tac[]) >>
-  fs[EVERY_MEM] >> rpt strip_tac >>
-  qpat_x_assum `!e. MEM e dflts ==> _` drule >> simp[] >>
-  irule (CONJUNCT1 supported_expr_exists_mono) >>
-  first_x_assum (irule_at Any) >>
-  simp[expr_raw_shape_root_def, expr_shape_root_def] >> metis_tac[]
 QED
 
 Theorem subst_consts_fn_names:

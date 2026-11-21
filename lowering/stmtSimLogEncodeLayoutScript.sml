@@ -1,6 +1,6 @@
 Theory stmtSimLogEncodeLayout
 Ancestors
-  stmtSimLogDataInput abiBuiltinEncodeWord supportedTypes exprLowering
+  stmtSimLogDataInput stmtSimLogTopics abiBuiltinEncodeWord supportedTypes exprLowering
   compileEnv list typedCopyMetadata abiEncoderMembersInput abiEncoderTuple
   abiEncoderMembersDefs abiEncoderOpenPrefix abiCanonicalWindows abiDecodeRanges contractABI
 
@@ -12,17 +12,16 @@ Theorem log_scalar_enc_info_selected:
   supported_scalar_type ty ==>
   log_scalar_enc_info (type_to_abi_enc_info sf ce ty)
 Proof
-  strip_tac >> Cases_on `supported_word_type ty`
-  >- (drule supported_word_type_is_word >> strip_tac >>
-      drule abi_builtin_encode_word_info >>
+  strip_tac >> Cases_on `is_word_type ty`
+  >- (drule abi_builtin_encode_word_info >>
       simp[log_scalar_enc_info_def]) >>
-  `supported_string_type ty` by gvs[supported_scalar_type_def] >>
-  Cases_on `ty` >> gvs[supported_string_type_def] >>
+  drule supported_scalar_word_or_bytestring >> strip_tac >> gvs[] >>
+  Cases_on `ty` >> gvs[is_bytestring_type_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
-  gvs[supported_string_type_def, type_to_abi_enc_info_def,
+  gvs[is_bytestring_type_def, type_to_abi_enc_info_def,
       log_scalar_enc_info_def] >>
   rename1 `BytesT bound` >> Cases_on `bound` >>
-  gvs[supported_string_type_def, type_to_abi_enc_info_def,
+  gvs[is_bytestring_type_def, type_to_abi_enc_info_def,
       log_scalar_enc_info_def]
 QED
 

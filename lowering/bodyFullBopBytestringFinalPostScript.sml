@@ -1,6 +1,7 @@
 Theory bodyFullBopBytestringFinalPost
 Ancestors
   bodyFullBopBytestringPost bodyFullBopBytestringDigest bodyFullGhostFrame
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyPtrSignedConvertSourceFrame bodyFullUnwrapRun wordArgsPtr
   bodySimFull exprBopDigestProps bodyPtrDefs loweringStateRelDefs
   exprBopSimProps exprLoweringProps loweringPosts exprSimMemDefs compileEnv vyperAST
@@ -44,7 +45,9 @@ Theorem bop_bytestring_final_post:
     es sa sb s0 ee (BoolV b) op ss /\
   expr_store_bound cx (expr_type (Builtin (BaseT BoolT) (Bop bop) [e1;e2])) (BoolV b) op ss /\
   ss.vs_current_bb = sb.cs_current_bb /\ ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
-  alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next /\
+  alloca_history func ss /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\
+  s0.vs_alloca_next <= ss.vs_alloca_next /\
   ghost_inv_at D lo d cenv cx ee Gf tnf ss /\
   ptr_val_ok cx (post_value_type cenv (Builtin (BaseT BoolT) (Bop bop) [e1;e2]))
     (BoolV b) op Gf tnf ss /\
@@ -60,6 +63,8 @@ Proof
   `stmt_state_rel H ctx func cenv cx ee ss` by
     (irule stmt_state_rel_readonly_vars_pc >> qexistsl_tac [`u`, `s2`] >>
      simp[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ss` by
+    (drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> simp[]) >>
   `ss.vs_memory = u.vs_memory /\ ss.vs_allocas = u.vs_allocas /\
    ss.vs_alloca_next = u.vs_alloca_next /\ ss.vs_call_ctx = u.vs_call_ctx /\
    ss.vs_accounts = u.vs_accounts /\ ss.vs_transient = u.vs_transient /\

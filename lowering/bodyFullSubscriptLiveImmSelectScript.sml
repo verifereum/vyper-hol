@@ -17,7 +17,7 @@ Ancestors
   bodyFullSubscriptArrayCodeOps bodyFullSubscriptArrayCodeBounds
   bodyPtrSignedConvertSourceFrame exprSimSubscriptArrayEndpoint
   exprSimSubscriptArrayCompose bodyFullGhostFrame bodyFullPathHistory
-  targetSubscriptMemory bodyInvNoDalloca vyperStorageFootprint
+  targetSubscriptMemory vyperStorageFootprint
   exprSimSubscriptArraySuffix gasOutcomeFullCompose compileEnv bodyPtrDefs
   freshWrites wordArgsPtr gasSummary fragExec exprSimMemDefs venomState
 

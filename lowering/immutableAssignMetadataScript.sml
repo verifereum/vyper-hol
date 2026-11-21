@@ -15,14 +15,9 @@ Theorem immutable_assign_bare_global_mods:
 Proof
   strip_tac >>
   qpat_x_assum `supported_immutable_type _ _ = _` mp_tac >>
-  simp[supported_immutable_type_def] >>
-  Cases_on `supported_variable_decl tops (NONE,id)` >> simp[] >>
-  rename1 `_ = SOME decl` >> PairCases_on `decl` >>
-  Cases_on `decl0` >> Cases_on `decl1` >> Cases_on `decl3` >>
-  simp[] >> strip_tac >> gvs[] >>
-  drule_then strip_assume_tac supported_variable_decl_mem >> gvs[] >>
-  conj_tac
-  >- (drule_then assume_tac contract_inv_constructor >> simp[]) >>
+  simp[supported_immutable_type_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule_then strip_assume_tac supported_variable_decl_mem >>
+  drule_then assume_tac contract_inv_constructor >> gvs[] >>
   drule_all immutable_decl_bare_global_mods >> simp[]
 QED
 

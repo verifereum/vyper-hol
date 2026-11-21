@@ -1,6 +1,7 @@
 (* Compose the request-ready external call with its counted return. *)
 Theory bodyFullExtCallReadyReturn
 Ancestors
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyFullExtCallCallStage exprSimExtCallCase exprSimHypsDefs loweringPosts
   exprLowering compileEnv context venomState venomInst vyperInterpreter vyperState
   bodyPtrDefs loweringStateRelDefs[qualified,ignore_grammar] fragGasOriginPtr
@@ -47,7 +48,7 @@ Theorem extcall_ready_return_outcome:
           else LocatedValue ann (mk_ptr result_op LocMemory)) /\
     fn_has_code sr sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    MEM func ctx.ctx_functions /\ ~ctx_has_dalloca ctx /\
+    MEM func ctx.ctx_functions /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
             not_fresh_at sa x) /\
@@ -175,7 +176,7 @@ Theorem extcall_ready_return_outcome:
          (emit_void RETURNDATACOPY [fail_buf.buf_operand;Lit 0w;rds])
        (comp_ignore_bind (emit_inst REVERT [fail_buf.buf_operand;rds] [])
          (new_block cont_lbl)))))))))) sp = (u,sr) /\
-  fn_has_code sp sr func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sp sr func /\ fn_inst_ids_distinct func /\
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr value gas buf off len cap target value_opt calldata has_default
     default_op default_ty default_opt ee s /\
@@ -303,7 +304,9 @@ Proof
       goal_assum (drule_at (Pat `res_f = INL _`)) >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
       >- (rewrite_tac [post_value_type_def] >> first_assum ACCEPT_TAC)
-      >- qpat_assum `~ctx_has_dalloca ctx` (simp_tac bool_ss o single) >>
+      >- first_assum (ACCEPT_TAC o MATCH_MP
+        bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+        CONJUNCT1 o REWRITE_RULE [vv_post_def]) >>
       rpt gen_tac >> disch_tac >> conj_tac >- first_assum ACCEPT_TAC >>
       qpat_assum `vv = _` SUBST1_TAC >> POP_ASSUM_LIST kall_tac >>
       Cases_on `ret_type = NoneT` >> simp[mk_ptr_def]) >>

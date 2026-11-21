@@ -7,7 +7,7 @@ Ancestors
   venomExecSemantics venomState venomInst finite_map list
 
 Theorem entry_joint_revert_exit:
-  !ctx func vs s G' tn'.
+  !ctx func vs s G' tn' marks.
     ctx.ctx_entry = SOME "__entry" /\
     lookup_function "__entry" ctx.ctx_functions = SOME func /\
     fn_entry_label func = SOME "__entry" /\
@@ -17,18 +17,18 @@ Theorem entry_joint_revert_exit:
     entry_taint_vars func
       (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
                   vs_inst_idx := 0 |>) entry_taint = entry_taint /\
-    (!D explicit.
-      gas_origin_ptr_path (D,0,explicit,ctx,func,[])
+    (!D.
+      gas_origin_ptr_path (D,0,EMPTY,ctx,func,[])
         (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                    vs_inst_idx := 0 |>, FEMPTY, entry_taint) []
+                    vs_inst_idx := 0 |>, FEMPTY, entry_taint) marks
         (Abort Revert_abort s,G',tn')) ==>
     (?fuel. run_context fuel ctx vs = Abort Revert_abort s) /\
     gas_path_mem ctx func
       (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                  vs_inst_idx := 0 |>) 0 (Abort Revert_abort s) /\
+                  vs_inst_idx := 0 |>) (LENGTH marks) (Abort Revert_abort s) /\
     (!D. gas_path_ptr D 0 ctx func [] FEMPTY entry_taint
       (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                  vs_inst_idx := 0 |>) 0 G' tn' (Abort Revert_abort s)) /\
+                  vs_inst_idx := 0 |>) (LENGTH marks) G' tn' (Abort Revert_abort s)) /\
     (!D fuel. ptr_safe_blocks D 0 fuel ctx func [] FEMPTY entry_taint
       (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
                   vs_inst_idx := 0 |>))
@@ -38,11 +38,11 @@ Proof
   `!D. ?fuel. run_from fuel ctx func vs0 = Abort Revert_abort s /\
        ptr_safe_run D 0 fuel ctx func [] FEMPTY entry_taint vs0` by
     (gen_tac >>
-     first_x_assum (qspecl_then [`D`, `EMPTY`] mp_tac) >>
+     first_x_assum (qspec_then `D` mp_tac) >>
      disch_then (mp_tac o MATCH_MP gas_origin_ptr_path_exec) >>
      simp[exit_result_def] >> metis_tac[]) >>
-  `gas_origin_path T EMPTY ctx func vs0 [] (Abort Revert_abort s) /\
-   !D. gas_path_ptr D 0 ctx func [] FEMPTY entry_taint vs0 0 G' tn'
+  `gas_origin_path T EMPTY ctx func vs0 marks (Abort Revert_abort s) /\
+   !D. gas_path_ptr D 0 ctx func [] FEMPTY entry_taint vs0 (LENGTH marks) G' tn'
          (Abort Revert_abort s)` by
     (conj_tac >>
      metis_tac[gas_origin_ptr_path_projections, LENGTH]) >>

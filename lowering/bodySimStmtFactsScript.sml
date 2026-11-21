@@ -9,7 +9,7 @@ Ancestors
   supportedStmtTraverse supportedStmts vyperAST vyperState
   vyperTypeSystem vyperTypeCallGraph vyperTypeCallStackSoundness supportedExprs
   stmtSimDeclStore vyperTypeEvalSoundness vyperTypeInvariants exprReasonOperand
-  compileVyper supportedTypes stmtSimAssignAttr memoryLocalRhsProps
+  compileVyper supportedTypes supportedDecls stmtSimAssignAttr memoryLocalRhsProps
   exprOpenMain gasContext exprLowering vyperCompiler
   option tupleTargetStoreProps vyperTypeEnv accountsRelProps
   exprSimUnwrap exprSimFieldLayout exprSimAttributeFields vyperPlaceResultTyping
@@ -29,51 +29,6 @@ Theorem well_typed_literal_string[local]:
 Proof
   Cases >> simp[well_typed_literal_def] >>
   rename1 `BaseT b` >> Cases_on `b` >> simp[well_typed_literal_def]
-QED
-
-Theorem concat_buffer_type_not_word[local]:
-  ~is_word_type (concat_buffer_type ty n)
-Proof
-  simp[exprLoweringTheory.concat_buffer_type_def] >>
-  Cases_on `ty` >> simp[is_word_type_def] >>
-  Cases_on `b` >> simp[is_word_type_def]
-QED
-
-Theorem lowered_value_type_not_call_word[local]:
-  !cenv e. (!a t es d. e <> Call a t es d) /\ ~is_word_type (expr_type e) ==>
-           ~is_word_type (lowered_value_type cenv e)
-Proof
-  ho_match_mp_tac exprLoweringTheory.lowered_value_type_ind >>
-  rw[exprLoweringTheory.lowered_value_type_def, is_word_type_def, expr_type_def,
-     concat_buffer_type_not_word]
-QED
-
-Theorem supported_reason_code:
-  !cenv cx env es tops e.
-    expr_sim_inv cenv cx env es /\
-    supported_string_reason tops e /\ well_typed_expr env e /\
-    ~reason_covered cenv e ==>
-    !sa vv sb. compile_expr cenv (expr_type e) e sa = (vv, sb) ==>
-               reason_code_vv vv
-Proof
-  rpt gen_tac >> strip_tac >>
-  `?n. expr_type e = BaseT (StringT n)` by
-    (Cases_on `?t str. e = Literal t (StringL str)`
-     >- (gvs[well_typed_expr_def, expr_type_def] >>
-         metis_tac[well_typed_literal_string]) >>
-     `case expr_type e of BaseT (StringT _) => T | _ => F` by
-       (Cases_on `e` >> fs[supported_string_reason_def] >>
-        rename1 `Literal _ lit` >> Cases_on `lit` >>
-        fs[supported_string_reason_def]) >>
-     Cases_on `expr_type e` >> fs[] >>
-     rename1 `BaseT b` >> Cases_on `b` >> fs[]) >>
-  `~is_word_type (lowered_value_type cenv e)` by
-    (irule lowered_value_type_not_call_word >>
-     gvs[is_word_type_def] >> rpt strip_tac >>
-     gvs[supported_string_reason_def, supported_pure_expr_def]) >>
-  qspecl_then [`cenv`, `env`, `e`, `n`] mp_tac compile_expr_string_reason >>
-  impl_tac >- (fs[expr_sim_inv_def] >> metis_tac[]) >>
-  fs[reason_covered_def] >> metis_tac[]
 QED
 
 Theorem expr_body_pre_eval_result:
@@ -130,47 +85,6 @@ Proof
   first_x_assum drule >> strip_tac >> simp[]
 QED
 
-Theorem supported_scalar_target_decl:
-  !tops src id.
-    supported_scalar_target tops (src, id) ==>
-    src = NONE /\ find_var_decl_by_name id tops <> NONE /\
-    ?vis mut ty slot. MEM (VariableDecl vis mut id ty slot) tops /\
-                      is_word_type ty
-Proof
-  rpt gen_tac >> simp[supported_scalar_target_def] >>
-  Cases_on `supported_variable_decl tops (src, id)` >> simp[] >>
-  rename1 `SOME x` >> PairCases_on `x` >>
-  Cases_on `x0` >> Cases_on `x1` >> Cases_on `x3` >> simp[] >> strip_tac >>
-  drule supported_variable_decl_mem >> strip_tac >>
-  `find_var_decl_by_name id tops <> NONE` by
-    metis_tac[find_var_decl_storage_some] >>
-  gvs[supported_full_word_type_def] >> first_assum (irule_at Any) >>
-  simp[is_word_type_def]
-QED
-
-Theorem topcopy_not_bytestring:
-  !tops t. supported_storage_type tops t ==> ~is_bytestring_type t
-Proof
-  Cases_on `t` >> simp[is_bytestring_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[is_bytestring_type_def, supportedTypesTheory.supported_storage_type_def,
-       Once supportedTypesTheory.supported_nested_type_def,
-       supportedTypesTheory.supported_full_word_type_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  simp[is_bytestring_type_def, supportedTypesTheory.supported_storage_type_def,
-       Once supportedTypesTheory.supported_nested_type_def,
-       supportedTypesTheory.supported_full_word_type_def]
-QED
-
-Theorem topcopy_no_length_word:
-  !tops t. supported_storage_type tops t /\
-    (!elem n. t <> ArrayT elem (Dynamic n)) ==> ~has_length_word t
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule topcopy_not_bytestring >>
-  Cases_on `t` >> simp[has_length_word_def, is_bytestring_type_def] >>
-  Cases_on `b` >> gvs[has_length_word_def, is_bytestring_type_def]
-QED
 
 Theorem body_inv_mcopy:
   !tops ctx cenv cx. body_inv tops ctx cenv cx ==> cenv.ce_target CapMcopy
@@ -301,36 +215,39 @@ QED
 Theorem body_tuple_target_toplevel_aligned:
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
   storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
-  supported_scalar_target tops nsid /\
+  supported_scalar_target tops nsid /\ is_word_type ty /\
   type_place_target env (TopLevelNameTarget nsid) = SOME (Type ty) /\
   evaluate_type (get_tenv cx) ty = SOME tv ==>
   tuple_target_aligned cenv cx (BaseTarget (TopLevelNameTarget nsid)) ty tv
 Proof
-  Cases_on `nsid` >> rename1 `(src, id)` >> rpt strip_tac >>
-  drule supported_scalar_target_decl >> strip_tac >> gvs[] >>
-  rename1 `is_word_type declared_ty` >>
+  Cases_on `nsid` >> rename1 `(src,id)` >> strip_tac >>
+  `?vis mut dty slot.
+    supported_variable_decl tops (src,id) = SOME (vis,mut,dty,SOME slot) /\
+    (mut = Storage \/ mut = Transient)` by
+    (qpat_assum `supported_scalar_target tops _` mp_tac >>
+     simp[NoAsms,supported_scalar_target_def] >>
+     Cases_on `supported_variable_decl tops (src,id)` >> simp[] >> PairCases_on `x` >>
+     Cases_on `x3` >> Cases_on `x1` >> simp[]) >>
+  drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
   `get_module_code cx NONE = SOME tops /\
-   ALL_DISTINCT
-     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
+   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
    cenv.ce_hashmap_info = build_hashmap_info tops /\
    cenv.ce_module_var_type (NONE, id) = build_var_type_map tops (NONE, id)` by
     fs[body_inv_def] >>
   drule_all build_maps_variable >> strip_tac >>
   `env_consistent env cx es` by fs[expr_sim_inv_def] >>
-  gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
-  >- (drule_all env_assignable_find_NONE >> strip_tac >> gvs[]) >>
+  `find_var_decl_by_name id tops <> NONE` by
+    metis_tac[find_var_decl_storage_some] >>
+  gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget] >>
+  TRY (drule_all env_assignable_find_NONE >> strip_tac >> gvs[] >> NO_TAC) >>
   drule_all vyperTypeEnvTheory.env_consistent_toplevel_storage_static >>
   strip_tac >> drule find_var_decl_storage_mem >> strip_tac >> gvs[] >>
-  `declared_ty = ty` by metis_tac[build_maps_variable, optionTheory.SOME_11] >>
+  `dty = ty` by metis_tac[build_maps_variable,optionTheory.SOME_11] >>
   gvs[] >>
   qpat_x_assum `IS_SOME (lookup_var_slot_from_layout _ _ _ _)`
     (strip_assume_tac o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
   drule_all exprSimTopLevelPropsTheory.toplevel_storage_ce_vars >> strip_tac >>
-  simp[tupleTargetStorePropsTheory.tuple_target_aligned_toplevel] >>
-  rpt strip_tac >> irule accountsRelPropsTheory.storage_dead_update_word_region >>
-  qexistsl_tac [`NONE`, `id`, `[]`, `tv`] >>
-  simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
-  metis_tac[exprSimUnwrapTheory.word_type_slot_size]
+  simp[tupleTargetStorePropsTheory.tuple_target_aligned_toplevel]
 QED
 
 Theorem body_tuple_target_field_aligned:
@@ -389,8 +306,10 @@ Theorem body_tuple_target_ready:
   ((?id lty. g = BaseTarget (NameTarget id) /\
             FLOOKUP env.var_types id = SOME lty /\
             0 < type_memory_bytes cenv lty) \/
-   (?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
-           supported_scalar_target tops nsid) \/
+   (?nsid dty. g = BaseTarget (TopLevelNameTarget nsid) /\
+               supported_scalar_target tops nsid /\
+               type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) /\
+               is_word_type dty) \/
    (?nsid fld fty.
       g = BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld) /\
       supported_storage_field_write tops nsid fld /\
@@ -409,9 +328,6 @@ Proof
   >- (irule body_tuple_target_local_layout >>
       simp[well_typed_atarget_def, well_typed_target_def] >> metis_tac[])
   >- (irule body_tuple_target_toplevel_aligned >> metis_tac[])
-  >- (drule_all body_tuple_target_toplevel_aligned >>
-      Cases_on `nsid` >>
-      simp[tupleTargetStorePropsTheory.tuple_target_aligned_toplevel])
   >- simp[tupleTargetStorePropsTheory.tuple_target_layout_def]
   >- (irule body_tuple_target_field_aligned >> metis_tac[])
   >> simp[tupleTargetStorePropsTheory.tuple_target_layout_def]

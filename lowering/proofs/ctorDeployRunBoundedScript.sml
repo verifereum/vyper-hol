@@ -20,6 +20,7 @@
 
 Theory ctorDeployRunBounded
 Ancestors
+  ctorDeployEntryLabels
   fragFuel fragFuelContextBase fragFuelContext fragFuelPackage moduleLowering
   emitHelper context venomInst ctxLookupAgree compileEnv compileVyper
   vyperCompiler ctorDeployDefs ctorGeneratorShape loweringShapeDefs
@@ -447,10 +448,10 @@ Theorem deploy_ctor_fns_fuel_stable:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all deploy_ctor_lowering_trace >> strip_tac >>
-  drule_all deploy_constructor_package_shape >> strip_tac >>
+  rename1 `set_constructor_package_target _ _ = (cenv0,pos_args,pay,nr,nkey,ut,body',_)` >>
   drule_all deploy_constructor_package_not_view >> strip_tac >>
   qpat_x_assum `cenv0.ce_nonreentrant = _` (fn th =>
-    RULE_ASSUM_TAC (PURE_REWRITE_RULE [th, pairTheory.SND])) >>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE [th, pairTheory.SND]) >> assume_tac th) >>
   (* the four segments deploy_ctor_entry_fuel takes *)
   `!n. cenv_ptrs_below n cenv0` by
     metis_tac[package_constructor_cenv_ptrs_below] >>
@@ -495,28 +496,14 @@ Proof
                   `st_pay`, `st1`, `st2`, `st3`, `sa`, `sb`, `sj`, `st_exit`,
                   `st_epilogue`, `st_final`] mp_tac deploy_ctor_entry_fuel >>
      simp[]) >>
-  (* the shape facts extract_context_fuel_stable takes *)
-  `(do (if ~pay then
-           do cv <- emit_op CALLVALUE []; v <- emit_op ISZERO [cv];
-              emit_void ASSERT [v] od else return ());
-        imm <- (if imm_len tops > 0 then
-                  do p <- compile_fixed_region_with_id (imm_len tops);
-                     return (SND p).buf_operand od else return (Lit 0w));
-        ce <- compile_register_constructor_args
-          (cenv0 with ce_imm_alloca :=
-            (if imm_len tops > 0 then SOME imm else NONE)) pos_args 0 0;
-        (if nr then compile_nonreentrant_lock nkey ut F else return ());
-        lbl <- fresh_label "ctor_exit";
-        compile_stmts (ce with ce_ctor_exit_label := SOME lbl) NoLoop NoneT body';
-        cs <- comp_get;
-        (if block_is_terminated cs then return () else emit_inst JMP [Label lbl] []);
-        new_block lbl;
-        (if nr then compile_nonreentrant_unlock nkey ut F else return ());
-        compile_constructor_epilogue (LENGTH runtime_bc) (imm_len tops) imm od)
-      (initial_compile_state "__deploy") = ((),st_final)` by
-    (rewrite_tac[ctor_code_cond_not] >>
-     simp[comp_ignore_bind_def, comp_bind_def, comp_get_def]) >>
-  drule_all ctor_code_prefix_certificates >> strip_tac >>
+  `compile_generate_deploy T (LENGTH runtime_bc) (imm_len tops) pos_args 0 []
+    cenv0 body' pay nr nkey ut (initial_compile_state "__deploy") = ((),st_final)` by
+    (PURE_REWRITE_TAC [compile_generate_deploy_def, COND_CLAUSES,
+       ctor_code_cond_not, ctor_lock_flag_select] >>
+     simp_tac bool_ss [comp_ignore_bind_def, comp_bind_def, comp_get_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[]) >>
+     gvs[compile_internal_fn_bodies_def, comp_return_def]) >>
+  drule deploy_entry_blocks_not_internal >> strip_tac >>
   `supported_program tops` by fs[deploy_source_ok_def] >>
   qmatch_asmsub_abbrev_tac `compile_internal_fn_bodies ifns st_final` >>
   `ifns = MAP (set_internal_package_target rpolicy.rpol_target o
@@ -526,17 +513,17 @@ Proof
   `PERM (order_internals (deploy_internal_order (SOME cf) ints) ints)
       (FST (SND (classify_functions tops)))` by
     simp[PERM_order_deploy_internals] >>
-  drule_all deploy_internal_package_certificates >> strip_tac >>
+  drule_all deploy_internal_package_labels >> strip_tac >>
   qpat_x_assum `ifns = _` kall_tac >>
-  `EVERY (\d. ~compiler_label (FST d) /\
+  `EVERY (\d. internal_label_ok (FST d) /\
               ~MEM (FST d) (MAP (\bb. bb.bb_label) (all_blocks st_final)))
      (internal_fn_descriptors ifns)` by
-    (irule listTheory.EVERY_MONOTONIC >>
-     qexists_tac `\d. internal_label_ok (FST d)` >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     gen_tac >> BETA_TAC >> strip_tac >>
-     irule deploy_internal_label_separate >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    (rewrite_tac[EVERY_MEM] >> qx_gen_tac `d` >> BETA_TAC >> strip_tac >>
+     `internal_label_ok (FST d)` by fs[EVERY_MEM] >>
+     simp[MEM_MAP] >> qx_gen_tac `entry_bb` >> rpt strip_tac >>
+     qpat_assum `EVERY (\bb. ~internal_label_ok bb.bb_label) _`
+       (mp_tac o SIMP_RULE bool_ss [EVERY_MEM]) >>
+     disch_then (qspec_then `entry_bb` mp_tac) >> gvs[]) >>
   `EVERY (\fn. ALL_DISTINCT (fn_labels fn)) ctx.ctx_functions` by
     (qpat_x_assum `lowering_context_ok _` mp_tac >>
      simp_tac (srw_ss()) [lowering_context_ok_def,
@@ -557,7 +544,7 @@ Proof
                        (imm_len tops))
                  (order_internals (deploy_internal_order (SOME cf) ints) ints)`,
                `()`, `st_final`, `()`, `post`,
-               `ctx`, `data`, `UNIV`] mp_tac extract_context_fuel_stable >>
+               `ctx`, `data`, `UNIV`] mp_tac extract_context_fuel_stable_from_labels >>
   impl_tac >- (
     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
     simp[next_stable_def, package_internal_fns_fuel]) >>

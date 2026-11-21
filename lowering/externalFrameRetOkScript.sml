@@ -5,7 +5,6 @@ Ancestors
   e2eDefs bodySimFull supportedProgram compileVyper moduleLowering
   vyperInterpreter externalReturnNoneNrFullFrag externalReturnValuedFull
   externalReturnPackage exprSimHypsDefs vyperState vyperContext vyperTypeCallGraph
-  entryReachBodyFmp
 
 val _ = Parse.hide "body";
 
@@ -48,8 +47,6 @@ Theorem external_source_frame_ret_ok_full_nr:
       cenv ret
 Proof
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca unit.cu_context` by
-    metis_tac[entry_runtime_no_dalloca] >>
   drule source_deployment_context >> strip_tac >>
   simp_tac std_ss [frame_ret_ok_full_def] >> rpt gen_tac >> strip_tac >>
   `ut' = T` by

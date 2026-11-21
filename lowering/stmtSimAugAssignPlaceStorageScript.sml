@@ -12,6 +12,7 @@
  *)
 Theory stmtSimAugAssignPlaceStorage
 Ancestors
+  targetPureSourceFrame vyperStorageBackend exprOracleStorageInterfaces
   valueEncodingProps
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage vyperScopePreservation stmtSimForArrayFrame
@@ -438,145 +439,31 @@ Proof
 QED
 
 Theorem aug_place_pure_storage_mutual:
-  (!tops e. supported_pure_expr tops e ==>
+  (!tops e. supported_pure_expr tops e /\ ~expr_has_effect e ==>
     !cx s r s' tr. eval_expr cx e s = (r,s') ==>
       get_storage cx s' tr = get_storage cx s tr) /\
-  (!tops es. supported_pure_exprs tops es ==>
+  (!tops es. supported_pure_exprs tops es /\ ~supported_exprs_exists expr_effect_root es ==>
     !cx s r s' tr. eval_exprs cx es s = (r,s') ==>
       get_storage cx s' tr = get_storage cx s tr) /\
-  (!tops fs. supported_pure_fields tops fs ==>
+  (!tops fs. supported_pure_fields tops fs /\ ~supported_fields_exists expr_effect_root fs ==>
     !cx s r s' tr. eval_exprs cx (MAP SND fs) s = (r,s') ==>
       get_storage cx s' tr = get_storage cx s tr) /\
-  (!tops e. supported_place_expr tops e ==>
+  (!tops e. supported_place_expr tops e /\ ~expr_has_effect e ==>
     !cx s r s' tr. eval_expr cx e s = (r,s') ==>
       get_storage cx s' tr = get_storage cx s tr)
 Proof
-  ho_match_mp_tac supported_pure_expr_ind >>
-  simp[supported_pure_expr_def] >>
-  rpt conj_tac >> rpt gen_tac >> rpt strip_tac
-  >~ [`eval_expr cx (Name ty name) s = (r,s')`]
-  >- (`pure_expr (Name ty name)` by simp[pure_expr_def] >>
-      drule_all eval_expr_preserves_state >>
-      disch_then (fn th => once_rewrite_tac [th]) >> simp[])
-  >~ [`eval_expr cx (Literal ty lit) s = (r,s')`]
-  >- (gvs[evaluate_def, return_def])
-  >~ [`eval_expr cx (TopLevelName ty id) s = (r,s')`]
-  >- (`pure_expr (TopLevelName ty id)` by simp[pure_expr_def] >>
-      drule_all eval_expr_preserves_state >>
-      disch_then (fn th => once_rewrite_tac [th]) >> simp[])
-  >~ [`eval_expr cx (FlagMember _ _ _) s = (r,s')`]
-  >- (gvs[Once evaluate_def] >>
-      drule vyperStatePreservationTheory.lookup_flag_mem_state >> simp[])
-  >~ [`eval_expr cx (IfExp ty e e' e'') s = (r,s')`]
-  >- (gvs[evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >>
-     imp_res_tac read_result_state >> imp_res_tac vyperStatePreservationTheory.conditional_result_state >>
-     gvs[return_def, raise_def] >>
-     rpt (CHANGED_TAC (gvs[AllCaseEqs(), COND_RATOR, raise_def])) >>
-     qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
-       (drule_then assume_tac) >>
-     first_x_assum (drule_then assume_tac) >> simp[])
-  >~ [`eval_expr cx (TopLevelName ty id) s = (r,s')`]
-  >- (`pure_expr (TopLevelName ty id)` by simp[pure_expr_def] >>
-      drule_all eval_expr_preserves_state >>
-      disch_then (fn th => once_rewrite_tac [th]) >> simp[])
-  >~ [`eval_expr cx (StructLit ty id fs) s = (r,s')`]
-  >- (PairCases_on `id` >> gvs[evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-      metis_tac[])
-  >~ [`eval_expr cx (Subscript ty e e') s = (r,s')`]
-  >- (Cases_on `subscript_reads_base cx e e'` >>
-      gvs[evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-      imp_res_tac read_result_state >>
-      imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
-      qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
-        (drule_then assume_tac) >>
-      first_x_assum (drule_then assume_tac) >> simp[] >>
-      qpat_assum `_ = _ with storage_trace := _`
-        (fn th => once_rewrite_tac [th]) >> simp[])
-  >~ [`eval_expr cx (Attribute ty e fld) s = (r,s')`]
-  >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
-      imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
-      first_x_assum (drule_then assume_tac) >> simp[] >>
-      qpat_assum `_ = _ with storage_trace := _`
-        (fn th => once_rewrite_tac [th]) >> simp[])
-  >~ [`eval_expr cx (Builtin ty blt es) s = (r,s')`]
-  >- (`code_slice_source blt es = NONE` by
-        (Cases_on `code_slice_source blt es` >> simp[] >>
-         rename1 `SOME p` >> PairCases_on `p` >>
-         gvs[code_slice_source_SOME,
-             supportedExprFormsTheory.supported_builtin_form_def]) >>
-      Cases_on `blt = Len`
-      >- (gvs[] >> Cases_on `es` >>
-          gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
-          rename1 `supported_pure_exprs tops (h::t)` >> Cases_on `t` >>
-          gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
-          `!cx s r s' tr. eval_expr cx h s = (r,s') ==>
-             get_storage cx s' tr = get_storage cx s tr` by
-            (rpt strip_tac >> irule aug_place_singleton_storage >>
-             goal_assum (drule_at Any) >> metis_tac[]) >>
-          gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
-              assert_def, return_def, raise_def, AllCaseEqs()] >>
-          imp_res_tac vyperStatePreservationTheory.result_array_length_state >>
-          gvs[] >> first_x_assum (drule_then assume_tac) >> simp[])
-      >> Cases_on `blt = Env MsgGas`
-      >- (Cases_on `es` >> gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
-          gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
-              assert_def, return_def, raise_def, AllCaseEqs()] >>
-          imp_res_tac vyperStatePreservationTheory.next_gas_reading_state >>
-          Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def])
-      >> gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
-             assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
-             lift_option_type_def, vyperMiscTheory.option_CASE_rator,
-             AllCaseEqs()] >>
-      gvs[vyperMiscTheory.sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac aug_place_precompile_storage >>
-      gvs[return_def, raise_def] >>
-      metis_tac[])
-  >~ [`eval_expr cx (TypeBuiltin ty blt target es) s = (r,s')`]
-  >- (gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
-          assert_def, return_def, raise_def, lift_sum_def, AllCaseEqs()] >>
-      gvs[vyperMiscTheory.sum_CASE_rator, AllCaseEqs(), return_def, raise_def, ETA_THM] >>
-      first_x_assum (drule_then assume_tac) >> simp[])
-  >~ [`eval_exprs cx (e::es) s = (r,s')`]
-  >- (gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-      imp_res_tac read_result_state >> gvs[] >>
-      qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
-        (drule_then assume_tac) >>
-      first_x_assum (drule_then assume_tac) >> simp[])
-  >~ [`eval_exprs cx (e::es) s = (r,s')`]
-  >- (gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-      imp_res_tac read_result_state >> gvs[] >>
-      qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
-        (drule_then assume_tac) >>
-      first_x_assum (drule_then assume_tac) >> simp[])
-  >~ [`eval_expr cx (Name ty name) s = (r,s')`]
-  >- (`pure_expr (Name ty name)` by simp[pure_expr_def] >>
-      drule_all eval_expr_preserves_state >>
-      disch_then (fn th => once_rewrite_tac [th]) >> simp[])
-  >~ [`eval_expr cx (TopLevelName ty id) s = (r,s')`]
-  >- (`pure_expr (TopLevelName ty id)` by simp[pure_expr_def] >>
-      drule_all eval_expr_preserves_state >>
-      disch_then (fn th => once_rewrite_tac [th]) >> simp[])
-  >~ [`eval_expr cx (Subscript ty e e') s = (r,s')`]
-  >- (Cases_on `subscript_reads_base cx e e'` >>
-      gvs[evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-      imp_res_tac read_result_state >>
-      imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
-      qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
-        (drule_then assume_tac) >>
-      first_x_assum (drule_then assume_tac) >> simp[] >>
-      qpat_assum `_ = _ with storage_trace := _`
-        (fn th => once_rewrite_tac [th]) >> simp[])
-  >~ [`eval_expr cx (Attribute ty e fld) s = (r,s')`]
-  >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
-      imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
-      first_x_assum (drule_then assume_tac) >> simp[] >>
-      qpat_assum `_ = _ with storage_trace := _`
-        (fn th => once_rewrite_tac [th]) >> simp[])
-  >> gvs[evaluate_def, return_def]
+  rpt conj_tac >> rpt gen_tac >> strip_tac >> rpt strip_tac >>
+  TRY (qpat_assum `~supported_fields_exists _ _`
+    (mp_tac o REWRITE_RULE [supported_fields_exists_not_every]) >>
+    simp[GSYM supported_exprs_exists_not_every, EVERY_MAP] >> strip_tac) >>
+  FIRST [drule_all effect_free_source_projection,
+         drule_all effect_free_sources_projection] >>
+  disch_then (mp_tac o AP_TERM ``\es:evaluation_state. get_storage cx es tr``) >>
+  Cases_on `tr` >> simp[get_storage_def]
 QED
 
 Theorem aug_place_pure_eval_storage:
-  supported_pure_expr tops e /\ eval_expr cx e s = (r,s') ==>
+  supported_pure_expr tops e /\ ~expr_has_effect e /\ eval_expr cx e s = (r,s') ==>
   get_storage cx s' tr = get_storage cx s tr
 Proof
   metis_tac[aug_place_pure_storage_mutual]
@@ -590,7 +477,7 @@ QED
 
 Theorem aug_place_pure_base_storage:
   !t tops cx s r s' tr.
-    EVERY (supported_pure_expr tops) (target_indices t) /\
+    EVERY (\e. supported_pure_expr tops e /\ ~expr_has_effect e) (target_indices t) /\
     eval_base_place cx t s = (r,s') ==>
     get_storage cx s' tr = get_storage cx s tr
 Proof
@@ -759,9 +646,7 @@ Proof
 QED
 
 Theorem aug_place_supported_storage_kind:
-  body_inv tops ctx cenv cx /\
-  supported_target_info tops bindings t = SOME pt /\
-  (!id. target_root t <> NameTarget id) /\
+  ~immutable_root cx t /\ (!id. target_root t <> NameTarget id) /\
   eval_target_place cx t es = (INL p,st) ==>
   ?tr slot tv. p = StoragePlace tr slot tv
 Proof

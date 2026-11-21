@@ -389,6 +389,7 @@ Theorem external_body_support_bounds_from_allocs[local]:
   (!n ty. FLOOKUP env.var_types n = SOME ty ==> MEM (n,ty) args) /\
   EVERY (\(n,ty). assignable_type env.type_defs ty) args /\
   type_stmts env ret ss = SOME env' /\
+  ~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) ss /\
   (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
    return_buffer_ok cenv) ==>
   locals_alloc_ok cenv env /\ stmts_exprs_ok cenv ss /\
@@ -407,34 +408,6 @@ Proof
       simp[EVERY_MEM] >>
       disch_then (qspec_then `(id,ty)` mp_tac) >> simp[]) >>
   gvs[supported_function_body_def] >> metis_tac[]
-QED
-
-Theorem external_body_support_bounds:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\ source_typing_ok tops am tx /\
-  MEM (FunctionDecl External mut nr rr name args defaults ret ss) tops /\
-  cenv.ce_struct_fields = make_struct_fields_map tops /\
-  cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
-  alloc_env_agree (build_compile_env tops Internal mut name args ret ss F)
-    cenv /\
-  env_context_consistent env cx /\
-  (!n ty. FLOOKUP env.var_types n = SOME ty ==> MEM (n,ty) args) /\
-  EVERY (\(n,ty). assignable_type env.type_defs ty) args /\
-  type_stmts env ret ss = SOME env' /\
-  (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
-   return_buffer_ok cenv) ==>
-  locals_alloc_ok cenv env /\ stmts_exprs_ok cenv ss /\
-  ?bindings. supported_stmts tops bindings ss
-Proof
-  strip_tac >>
-  `subst_consts_fn (module_consts_env tops [])
-     (mut,nr,rr,name,args,defaults,ret,ss) = (mut,nr,rr,name,args,defaults,ret,ss)` by
-    (fs[source_typing_ok_def] >>
-     metis_tac[checked_supported_function_subst, vyperASTTheory.function_visibility_distinct]) >>
-  drule_all supported_external_allocs_ok >> strip_tac >> gvs[] >>
-  drule_at (Pat `MEM (FunctionDecl _ _ _ _ _ _ _ _ _) _`)
-    supported_program_function >> simp[] >> strip_tac >>
-  drule_all external_body_support_bounds_from_allocs >> simp[]
 QED
 
 Theorem external_bind_arguments_popped:
@@ -877,16 +850,20 @@ Theorem external_source_body_frame_nr:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all external_package_body_inv >> strip_tac >> simp[] >>
-  drule_all external_lookup_body_typing >> strip_tac >>
+  drule_all external_lookup_body_typing_canonical >> strip_tac >>
   `?A. constants_fold_module [(NONE,tops)] (account_immutables am tx.target)
           NONE tops FEMPTY = SOME A` by fs[source_typing_ok_def] >>
   pop_assum strip_assume_tac >>
   `env_t.type_defs = type_env_all_modules [(NONE,tops)]` by
     fs[checked_contract_runtime_ready_def, get_tenv_def, initial_evaluation_context_def] >>
-  `type_stmts env_t ret (subst_consts_stmts (module_consts_env tops []) fbody) =
-     SOME env'` by
-    (irule compiled_selected_external_body_typing >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `!id ty. MEM (id,ty) args ==> FLOOKUP env_t.var_types id = SOME ty` by metis_tac[] >>
+  `?env_compiled.
+     type_stmts env_t ret (subst_consts_stmts (module_consts_env tops []) fbody) =
+       SOME env_compiled` by
+    (drule_all compiled_selected_external_body_typing >>
+     metis_tac[optionTheory.IS_SOME_EXISTS]) >>
+  pop_assum strip_assume_tac >>
+  qpat_x_assum `env_t = function_entry_env _ _ _ _ _` kall_tac >>
   `int_calls_stmts (subst_consts_stmts (module_consts_env tops []) fbody) =
      int_calls_stmts fbody` by
     (irule (INST_TYPE [alpha |-> ``:160 word``] checked_const_substitution_int_calls) >>
@@ -946,11 +923,17 @@ Proof
      Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
      qexists `rr` >> irule lower_vyper_runtime_unit_allocs_ok >>
      metis_tac[]) >>
+  `~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules)
+     (subst_consts_stmts (module_consts_env tops []) fbody)` by
+    (`cenv.ce_modules = [(NONE,tops)]` by fs[body_inv_def, cenv_module_pins_def] >>
+     simp[] >>
+     irule (INST_TYPE [alpha |-> ``:160 word``]
+       checked_const_substitution_const_name_free) >>
+     metis_tac[]) >>
   drule_all external_body_support_bounds_from_allocs >> strip_tac >>
-  qexistsl [`bindings`, `env_t`, `env'`] >> simp[] >>
-  reverse conj_tac
-  >- (irule external_entry_target_locals_declared >>
-      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
+  `ce_locals_declared cenv env_t` by
+    (drule_all external_entry_target_locals_declared >> simp[]) >>
+  qexistsl [`bindings`, `env_t`, `env_compiled`] >> simp[] >>
   simp[expr_sim_inv_def] >> rpt conj_tac
   >- (rpt strip_tac >> irule external_entry_target_param_pointer >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[])

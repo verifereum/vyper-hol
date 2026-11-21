@@ -233,7 +233,7 @@ Resume entry_code_get_target_ptr[topname]:
 QED
 
 Resume entry_code_get_target_ptr[attribute]:
-  rpt strip_tac >> gvs[target_indices_def] >>
+  rpt strip_tac >> gvs[supportedExprsTheory.target_indices_def] >>
   simp[compile_get_target_ptr_def] >> irule entry_code_bind >>
   reverse conj_tac >- simp[] >>
   rpt gen_tac >> BETA_TAC >> irule entry_code_bind >>
@@ -241,7 +241,7 @@ Resume entry_code_get_target_ptr[attribute]:
 QED
 
 Resume entry_code_get_target_ptr[subscript]:
-  rpt strip_tac >> gvs[target_indices_def] >>
+  rpt strip_tac >> gvs[supportedExprsTheory.target_indices_def] >>
   simp[compile_get_target_ptr_def] >> irule entry_code_bind >>
   reverse conj_tac >- simp[] >> rpt gen_tac >> BETA_TAC >>
   qabbrev_tac `desc = SND (SND x)` >>
