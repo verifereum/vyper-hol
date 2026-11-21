@@ -11,19 +11,6 @@ Definition blueprint_create_root_def:
       e = Call ty (CreateTarget (CreateFromBlueprint raw) salted rof order) es d
 End
 
-Theorem constant_expr_blueprint_free[local]:
-  (!e. constant_expr mods e ==> ~supported_expr_exists blueprint_create_root e) /\
-  (!es. EVERY (constant_expr mods) es ==>
-    ~supported_exprs_exists blueprint_create_root es) /\
-  (!fs. EVERY (constant_expr mods) (MAP SND fs) ==>
-    ~supported_fields_exists blueprint_create_root fs)
-Proof
-  ho_match_mp_tac const_local_refs_ind >>
-  simp[constant_expr_def, supported_expr_exists_def, blueprint_create_root_def] >>
-  rpt strip_tac >> gvs[GSYM EVERY_NOT_EXISTS, combinTheory.o_DEF, SF ETA_ss] >>
-  gvs[EXISTS_MEM, EVERY_MEM] >> res_tac
-QED
-
 Theorem subst_consts_expr_blueprint_free[local]:
   (!env e.
     (!id r. ALOOKUP env id = SOME r ==>
@@ -129,20 +116,20 @@ Proof
 QED
 
 Theorem module_consts_env_blueprint_free:
-  source_typing_ok source_tops am tx /\
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\
   ALOOKUP (module_consts_env source_tops []) id = SOME r ==>
   ~supported_expr_exists blueprint_create_root r
 Proof
+  `!e. blueprint_create_root e ==> expr_shape_root e` by
+    (simp[blueprint_create_root_def, expr_shape_root_def] >> metis_tac[]) >>
   strip_tac >>
-  qpat_x_assum `source_typing_ok _ _ _`
-    (strip_assume_tac o REWRITE_RULE [source_typing_ok_def]) >>
   `ALOOKUP [(NONE:num option,source_tops)] NONE = SOME source_tops` by simp[] >>
-  drule_all checked_module_consts_env_replacement >> strip_tac >>
-  metis_tac[CONJUNCT1 constant_expr_blueprint_free]
+  drule_all checked_module_consts_env_replacement_shape >>
+  metis_tac[cj 1 supported_expr_exists_mono]
 QED
 
 Theorem subst_consts_fn_blueprint_free:
-  source_typing_ok source_tops am tx /\
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\
   ~supported_stmts_expr_exists blueprint_create_root stmts /\
   EVERY (\d. ~supported_expr_exists blueprint_create_root d) dflts ==>
   ~supported_stmts_expr_exists blueprint_create_root
@@ -181,7 +168,7 @@ Proof
 QED
 
 Theorem classify_external_blueprint_free:
-  source_typing_ok source_tops am tx /\ runtime_blueprint_free source_tops /\
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\ runtime_blueprint_free source_tops /\
   MEM (mut,nr,rr,name,args,dflts,ret,stmts)
       (FST (classify_functions source_tops)) ==>
   ~supported_stmts_expr_exists blueprint_create_root stmts /\
@@ -194,7 +181,10 @@ Proof
 QED
 
 Theorem classify_internal_blueprint_free:
-  source_typing_ok source_tops am tx /\ runtime_blueprint_free source_tops /\
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\ (!mut nr rr name args ds ret ss.
+    MEM (FunctionDecl Internal mut nr rr name args ds ret ss) source_tops ==>
+    ~supported_stmts_expr_exists blueprint_create_root ss /\
+    EVERY (\d. ~supported_expr_exists blueprint_create_root d) ds) /\
   MEM (mut,nr,rr,name,args,dflts,ret,stmts)
       (FST (SND (classify_functions source_tops))) ==>
   ~supported_stmts_expr_exists blueprint_create_root stmts /\
@@ -202,11 +192,11 @@ Theorem classify_internal_blueprint_free:
 Proof
   strip_tac >> drule (iffLR (SPEC_ALL MEM_classify_internal)) >> strip_tac >>
   gvs[subst_consts_fn_def] >> irule (GEN_ALL subst_consts_fn_blueprint_free) >>
-  fs[runtime_blueprint_free_def] >> metis_tac[function_visibility_distinct]
+  asm_rewrite_tac[] >> metis_tac[]
 QED
 
 Theorem classify_fallback_blueprint_free:
-  source_typing_ok source_tops am tx /\ runtime_blueprint_free source_tops /\
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\ runtime_blueprint_free source_tops /\
   FST (SND (SND (classify_functions source_tops))) =
     SOME (mut,nr,rr,name,args,dflts,ret,stmts) ==>
   ~supported_stmts_expr_exists blueprint_create_root stmts /\
@@ -218,7 +208,10 @@ Proof
 QED
 
 Theorem build_func_defaults_blueprint_free:
-  source_typing_ok source_tops am tx /\ runtime_blueprint_free source_tops ==>
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\ (!mut nr rr name args ds ret ss.
+    MEM (FunctionDecl Internal mut nr rr name args ds ret ss) source_tops ==>
+    ~supported_stmts_expr_exists blueprint_create_root ss /\
+    EVERY (\d. ~supported_expr_exists blueprint_create_root d) ds) ==>
   EVERY (EVERY (\d. ~supported_expr_exists blueprint_create_root d) o SND)
     (build_func_defaults source_tops)
 Proof
@@ -234,7 +227,10 @@ Definition compile_env_blueprint_free_def:
 End
 
 Theorem build_compile_env_blueprint_free:
-  source_typing_ok source_tops am tx /\ runtime_blueprint_free source_tops ==>
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\ (!mut nr rr name args ds ret ss.
+    MEM (FunctionDecl Internal mut nr rr name args ds ret ss) source_tops ==>
+    ~supported_stmts_expr_exists blueprint_create_root ss /\
+    EVERY (\d. ~supported_expr_exists blueprint_create_root d) ds) ==>
   compile_env_blueprint_free
     (build_compile_env source_tops vis mut name args ret stmts ut)
 Proof

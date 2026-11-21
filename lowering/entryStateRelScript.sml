@@ -496,6 +496,40 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
+(* Keyword buffers are registered before positional arguments. *)
+Theorem compile_register_kwarg_vars_cenv:
+  !kwvars cenv.
+    (compile_register_kwarg_vars cenv kwvars) with ce_vars := cenv.ce_vars =
+      cenv /\
+    !name.
+      FLOOKUP (compile_register_kwarg_vars cenv kwvars).ce_vars name =
+      case ALOOKUP
+          (MAP (\(id,op,ty,e). (id,PtrVar op (type_memory_bytes cenv ty)))
+            (REVERSE kwvars)) name of
+        SOME loc => SOME loc
+      | NONE => FLOOKUP cenv.ce_vars name
+Proof
+  Induct >> simp[compile_register_kwarg_vars_def] >>
+  gen_tac >> PairCases_on `h` >> gen_tac >>
+  first_x_assum (qspec_then
+    `cenv with ce_vars := cenv.ce_vars |+ (h0,PtrVar h1 (type_memory_bytes cenv h2))`
+    strip_assume_tac) >>
+  simp[compile_register_kwarg_vars_def] >>
+  conj_tac
+  >- (qpat_assum `_ with ce_vars := _ = _`
+        (mp_tac o AP_TERM ``\ce:compile_env. ce with ce_vars := cenv.ce_vars``) >>
+      simp[]) >>
+  `type_memory_bytes
+      (cenv with ce_vars := cenv.ce_vars |+ (h0,PtrVar h1 (type_memory_bytes cenv h2))) =
+    type_memory_bytes cenv` by (irule type_memory_bytes_frame >> simp[]) >>
+  simp[ALOOKUP_APPEND, FLOOKUP_UPDATE] >>
+  gen_tac >>
+  Cases_on `ALOOKUP
+    (MAP (\(id,op,ty,e). (id,PtrVar op (type_memory_bytes cenv ty))) (REVERSE kwvars))
+    name` >>
+  Cases_on `h0 = name` >> simp[]
+QED
+
 (* compile_register_positional_args rebinds only the parameters, each to a
    pointer. *)
 Theorem compile_register_positional_args_cenv:
@@ -558,10 +592,10 @@ QED
 (* The source typing check gives the parameters distinct names and
    assignable types. *)
 Theorem source_typing_ok_params_ok:
-  !tops am tx mut nr fargs ret fbody.
+  !tops am tx mut nr fargs dflts ret fbody.
     supported_declaration_headers tops /\ source_typing_ok tops am tx /\
     lookup_function NONE tx.function_name External tops =
-      SOME (mut, nr, fargs, [], ret, fbody) ==>
+      SOME (mut, nr, fargs, dflts, ret, fbody) ==>
     params_ok (type_env tops) fargs
 Proof
   rpt strip_tac >> drule lookup_function_External_cases >> strip_tac
@@ -569,7 +603,7 @@ Proof
       drule check_contract_main_module_allocated >> simp[] >> strip_tac >>
       drule check_contract_runtime_function_body_MEM >>
       disch_then (qspecl_then [`External`, `tops`, `NONE`, `ret`, `raw`, `nr`,
-        `mut`, `tx.function_name`, `[]`, `fbody`, `fargs`] mp_tac) >>
+        `mut`, `tx.function_name`, `dflts`, `fbody`, `fargs`] mp_tac) >>
       simp[check_function_body_def, type_env_all_modules_one]) >>
   fs[source_typing_ok_def] >>
   `module_allocated am.layouts tx.target NONE tops` by

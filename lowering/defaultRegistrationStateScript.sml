@@ -3,7 +3,8 @@
    the same caller-chosen endpoint, before any horizon is introduced. *)
 Theory defaultRegistrationState
 Ancestors entryStateRel calldataRegistrationLocals bodyPtrDefs
-  exprLoweringProps abiAllocationHistory externalCallSelected memoryValueEncoding
+  exprLoweringProps abiAllocationHistory externalCallSelected externalEntryBound
+  memoryValueEncoding
   valueEncodingProps venomMemProofs loweringPosts loweringStateRelDefs
   exprSimMemoryTransport ptrSafeRun ptrDiscipline list valueEncodingProofs
   vyperState vyperInterpreter

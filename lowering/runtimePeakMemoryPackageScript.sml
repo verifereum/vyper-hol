@@ -4,10 +4,10 @@ Ancestors
   runtimePeakMemoryRuntime runtimePeakMemoryStmt runtimePeakMemoryExprDispatch
   runtimePeakMemoryCode runtimePeakMemorySourceGate runtimePeakMemoryArity
   supportedExprTraverse supportedStmtTraverse compileVyper compileEnv
-  vyperCompiler moduleLowering venomInst e2eDefs list arithmetic
+  vyperCompiler moduleLowering venomInst e2eDefs vyperTypeContract vyperAST list arithmetic
 
 
-Theorem dalloca_windows_packaged_stmts[local]:
+Theorem dalloca_windows_packaged_stmts:
   compile_env_blueprint_free ce /\ compile_env_builtin_arity ce /\
   ~supported_stmts_expr_exists blueprint_create_root fbody /\
   ~supported_stmts_expr_exists short_builtin_args fbody /\
@@ -21,8 +21,18 @@ Proof
   fs[compile_env_blueprint_free_def, compile_env_builtin_arity_def]
 QED
 
+Theorem runtime_blueprint_free_internal[local]:
+  runtime_blueprint_free source_tops ==>
+  !mut nr rr name args ds ret ss.
+    MEM (FunctionDecl Internal mut nr rr name args ds ret ss) source_tops ==>
+    ~supported_stmts_expr_exists blueprint_create_root ss /\
+    EVERY (\d. ~supported_expr_exists blueprint_create_root d) ds
+Proof
+  simp[runtime_blueprint_free_def] >> metis_tac[function_visibility_distinct]
+QED
+
 Theorem dalloca_windows_external_env[local]:
-  source_typing_ok source_tops am tx /\ runtime_blueprint_free source_tops ==>
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\ runtime_blueprint_free source_tops ==>
   compile_env_blueprint_free
     (FST (SND (set_external_package_target target
                 (package_external_fn source_tops tr keys (mut,nr,rr,name,args,ds,ret,fbody))))) /\
@@ -31,6 +41,7 @@ Theorem dalloca_windows_external_env[local]:
                 (package_external_fn source_tops tr keys (mut,nr,rr,name,args,ds,ret,fbody)))))
 Proof
   strip_tac >>
+  drule runtime_blueprint_free_internal >> strip_tac >>
   `compile_env_blueprint_free
      (build_compile_env source_tops External mut name args ret fbody tr)` by
     metis_tac[build_compile_env_blueprint_free] >>
@@ -57,7 +68,7 @@ Proof
 QED
 
 Theorem dalloca_windows_packaged_externals[local]:
-  source_typing_ok source_tops am tx /\ runtime_blueprint_free source_tops ==>
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\ runtime_blueprint_free source_tops ==>
   EVERY (runtime_external_package_windows
           (\chunk k. raw_call_dalloca_chunk chunk k \/ create_copy_dalloca_chunk chunk k))
     (MAP (set_external_package_target target o package_external_fn source_tops tr keys)
@@ -80,7 +91,7 @@ Proof
 QED
 
 Theorem dalloca_windows_packaged_groups[local]:
-  source_typing_ok source_tops am tx /\ runtime_blueprint_free source_tops ==>
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\ runtime_blueprint_free source_tops ==>
   EVERY (runtime_external_group_windows
           (\chunk k. raw_call_dalloca_chunk chunk k \/ create_copy_dalloca_chunk chunk k))
     (MAP (package_external_group source_tops target tr keys) (FST (classify_functions source_tops)))
@@ -108,18 +119,22 @@ Proof
   metis_tac[group_spec_default_mem]
 QED
 
-Theorem dalloca_windows_packaged_internals[local]:
-  source_typing_ok source_tops am tx /\ runtime_blueprint_free source_tops ==>
+Theorem dalloca_windows_packaged_internals:
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\
+  (!mut nr rr name args ds ret ss.
+    MEM (FunctionDecl Internal mut nr rr name args ds ret ss) source_tops ==>
+    ~supported_stmts_expr_exists blueprint_create_root ss /\
+    EVERY (\d. ~supported_expr_exists blueprint_create_root d) ds) ==>
   EVERY (\(lbl,ce,ps,buf,nr,key,ut,vw,ctor,im,fbody,rt).
     preserves_dalloca_windows
       (\chunk k. raw_call_dalloca_chunk chunk k \/ create_copy_dalloca_chunk chunk k)
       (compile_internal_function ce ps buf nr key ut vw ctor im fbody rt))
-    (MAP (set_internal_package_target target o package_internal_fn source_tops tr keys F 0)
+    (MAP (set_internal_package_target target o package_internal_fn source_tops tr keys ctor_mode ilen)
       (order_internals order (FST (SND (classify_functions source_tops)))))
 Proof
   strip_tac >> simp[EVERY_MAP, EVERY_MEM, combinTheory.o_DEF, MEM_order_internals] >>
   qx_gen_tac `e` >> PairCases_on `e` >> strip_tac >>
-  imp_res_tac classify_internal_blueprint_free >>
+  drule_all classify_internal_blueprint_free >> strip_tac >>
   imp_res_tac classify_internal_builtin_arity >>
   imp_res_tac build_compile_env_blueprint_free >>
   imp_res_tac build_compile_env_builtin_arity >>
@@ -132,7 +147,7 @@ Proof
 QED
 
 Theorem dalloca_windows_packaged_fallback[local]:
-  source_typing_ok source_tops am tx /\ runtime_blueprint_free source_tops ==>
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\ runtime_blueprint_free source_tops ==>
   (case set_fallback_package_target target
      (package_fallback_fn source_tops tr keys (FST (SND (SND (classify_functions source_tops))))) of
      NONE => T
@@ -141,7 +156,9 @@ Theorem dalloca_windows_packaged_fallback[local]:
        (\chunk k. raw_call_dalloca_chunk chunk k \/ create_copy_dalloca_chunk chunk k)
        (compile_fallback_body ce pay nr key ut vw fbody rt))
 Proof
-  strip_tac >> Cases_on `FST (SND (SND (classify_functions source_tops)))`
+  strip_tac >>
+  drule runtime_blueprint_free_internal >> strip_tac >>
+  Cases_on `FST (SND (SND (classify_functions source_tops)))`
   >- simp[package_fallback_fn_def, set_fallback_package_target_def] >>
   rename1 `SOME src` >> PairCases_on `src` >>
   imp_res_tac classify_fallback_blueprint_free >>
@@ -199,6 +216,8 @@ Theorem lower_vyper_runtime_unit_dalloca_windows:
                                 create_copy_dalloca_chunk chunk k) bb.bb_instructions
 Proof
   strip_tac >>
+  fs[source_typing_ok_def] >>
+  drule runtime_blueprint_free_internal >> strip_tac >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
   simp[lower_vyper_runtime_unit_def] >> pairarg_tac >> gvs[AllCaseEqs()] >>
   rpt strip_tac >>
@@ -218,6 +237,7 @@ Proof
      all_tac >~ [`order_internals _ _`] >-
        (drule_all (Q.INST [`tr` |-> `T`, `target` |-> `policy.rpol_target`,
           `keys` |-> `K global_nonreentrant_slot`,
+          `ctor_mode` |-> `F`, `ilen` |-> `0`,
           `order` |-> `runtime_internal_order source_tops (FST (SND (classify_functions source_tops)))`]
           dalloca_windows_packaged_internals) >>
         qpat_assum `classify_functions _ = _` (fn eq =>

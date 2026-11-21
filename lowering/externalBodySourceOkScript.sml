@@ -2,7 +2,7 @@
 Theory externalBodySourceOk
 Ancestors
   stmtSimDefs list pair e2eDefs supportedProgram
-  externalBodySupport vyperTypeInvariants vyperTypeStmtSoundness
+  externalBodySupport externalEntryBound vyperTypeInvariants vyperTypeStmtSoundness
   vyperTypeEvalSoundness vyperTypeExprSoundness
   vyperInterpreter vyperState vyperContext evalNoHalt
   vyperTypeEvalProofs nonreentrantEquiv
@@ -10,17 +10,12 @@ Ancestors
 val _ = Parse.hide "body";
 
 Theorem external_body_source_ok_nr:
-  !tops am tx ret vs mut nr args fbody env es0 es_lock gs res es'.
+  !tops am tx ret os mut nr args dflts fbody gs0 es0 es_lock gs res es'.
     supported_program tops /\ source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     lookup_function NONE tx.function_name External tops =
-      SOME (mut, nr, args, [], ret, fbody) /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with
-         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
-      (INL (), es0) /\
+      SOME (mut, nr, args, dflts, ret, fbody) /\
+    external_entry_bound tops am tx os gs0 mut args dflts es0 /\
     lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
       nr (is_view_mut mut) es0 = (INL (), es_lock) /\
     eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
@@ -29,8 +24,7 @@ Theorem external_body_source_ok_nr:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all external_lookup_body_typing >> strip_tac >>
-  `machine_well_typed am` by gvs[source_typing_ok_def] >>
-  drule_all external_body_prefix_state >> strip_tac >>
+  drule_all external_entry_bound_source_frame >> strip_tac >>
   drule_all external_selected_env_consistent >> strip_tac >>
   drule_all external_source_context_typed >> strip_tac >>
   qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx NONE` >>
@@ -77,8 +71,15 @@ Theorem external_body_source_ok:
     stmt_res_ok NoLoop res /\ (res = INL () ==> ret = NoneT)
 Proof
   rpt strip_tac >>
-  mp_tac (Q.SPECL [`tops`, `am`, `tx`, `ret`, `vs`, `mut`, `F`,
-    `args`, `fbody`, `env`, `es0`, `es0`, `gs`, `res`, `es'`]
+  drule_all external_entry_bound_no_defaults >>
+  disch_then (qspec_then `es0.gas_obs` assume_tac) >>
+  `es0 with gas_obs := es0.gas_obs = es0` by
+    simp[evaluation_state_component_equality] >>
+  qpat_x_assum `es0 with gas_obs := _ = es0` (fn th =>
+    qpat_x_assum `external_entry_bound _ _ _ _ _ _ _ _ _`
+      (assume_tac o REWRITE_RULE [th])) >>
+  mp_tac (Q.SPECL [`tops`, `am`, `tx`, `ret`, `vs.vs_outcomes`, `mut`, `F`,
+    `args`, `[]`, `fbody`, `es0.gas_obs`, `es0`, `es0`, `gs`, `res`, `es'`]
     external_body_source_ok_nr) >>
   simp[lock_if_nr_def, vyperStateTheory.return_def]
 QED
