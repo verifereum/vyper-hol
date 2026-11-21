@@ -6864,11 +6864,16 @@ Proof
     qpat_assum `body_tuple_targets_full_ok cx (BaseTarget bt::todo) (vi::vs_tail)`
       (strip_assume_tac o REWRITE_RULE [body_tuple_target_full_ok_def])) >>>
   HEADGOAL (
-    qpat_x_assum `~EXISTS _ (BaseTarget bt::todo)` mp_tac >>
-    simp[NoAsms,listTheory.EXISTS_DEF] >> strip_tac) >>>
+    qpat_x_assum `~EXISTS _ (BaseTarget bt::todo)`
+      (fn th =>
+        let val guard = REWRITE_RULE [listTheory.EXISTS_DEF,DE_MORGAN_THM] th
+        in map_every assume_tac [SRULE [] (CONJUNCT1 guard),CONJUNCT2 guard] end)) >>>
   HEADGOAL (Cases_on `immutable_root cx bt`) >>>
   HEADGOAL (
-    `?nsid. bt = TopLevelNameTarget nsid` by metis_tac[] >>
+    `?nsid. bt = TopLevelNameTarget nsid` by
+      (qpat_assum `~immutable_root cx bt \/ _` (fn guard =>
+         qpat_assum `immutable_root cx bt` (fn root =>
+           ACCEPT_TAC (SIMP_RULE std_ss [root] guard)))) >>
     drule_all_then (qx_choosel_then [`ns`,`id`] strip_assume_tac)
       tuple_assign_immutable_toplevel_type) >>>
   HEADGOAL (
@@ -11935,7 +11940,9 @@ Proof
   >- (`MEM (BaseTarget head) gs` by metis_tac[listTheory.EL_MEM] >>
       `?nsid. head = TopLevelNameTarget nsid` by
         (qpat_assum `~EXISTS _ gs` (mp_tac o REWRITE_RULE [listTheory.EXISTS_MEM]) >>
-         metis_tac[]) >>
+         qpat_assum `MEM (BaseTarget head) gs` mp_tac >>
+         qpat_assum `immutable_root cx head` mp_tac >>
+         POP_ASSUM_LIST kall_tac >> metis_tac[]) >>
       drule_all_then (qx_choosel_then [`ns`,`id`] strip_assume_tac)
         tuple_assign_immutable_toplevel_type >>
   qpat_x_assum `head = TopLevelNameTarget _` SUBST_ALL_TAC >>
