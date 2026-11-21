@@ -32,7 +32,7 @@ Ancestors bodyFullIntCall bodyFullIntCallArgs bodyFullIntCallCallee bodyIntCallS
   supportedExprs supportedStmtTraverse supportedExprTraverse
   msgGasFull exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
   vyperAST vyperInterpreter vyperState vyperValue list
-  selfdestructHalt bodyInvNoDalloca bodyFullHashKeccakFixed gasOutcomeFullCompose gasExemptOrigin
+  selfdestructHalt bodyFullHashKeccakFixed gasOutcomeFullCompose gasExemptOrigin
   exprOperandVar exprCallbackContracts builtinSystem emitHelper allocLimits exprLowering exprLoweringProps gasShadowState compileEnv fragExec fragGasEmitCtrl vfmSameFrame ptrSafeRun ptrDiscipline gasEvents gasCount memSafeRun instMemFrontier venomExecSemantics venomInst venomState unitTransformDefs contextCodegenRel codegenRel bodyPtrDefs rich_list
 Libs
   pairLib
@@ -575,14 +575,19 @@ Proof
   irule extcall_body_full_ok_of_vv >> rpt gen_tac >> strip_tac >>
   `acyclic_struct_metadata cenv.ce_struct_fields` by
     fs[bodySimTheory.body_inv_def] >>
-  drule_then assume_tac body_inv_no_dalloca >>
   rewrite_tac [expr_vv_sim_full_def] >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  MATCH_MP_TAC (Q.INST [`Q'` |-> `Q`,
-    `R` |-> `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`]
-    gas_outcome_full_post_mono) >>
-  BETA_TAC >> conj_tac
-  >- (ho_match_mp_tac (GEN_ALL (SIMP_RULE bool_ss [LET_THM] extcall_request_full)) >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
+  irule gas_outcome_full_post_mono >>
+  qexistsl_tac [`Q`, `\H res ee gt r.
+    (expr_exit res r /\ halt_exit H cx ee res r) /\
+    (ctx_has_dalloca ctx ==> !h. r = Halt h ==> allocas_below_fmp h)`] >>
+  BETA_TAC >> simp[Abbr `R`] >>
+  qunabbrev_tac `Q` >>
+  irule (BETA_RULE (Q.SPEC
+        `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`
+        (Q.GEN `R` bodyFullIntCallReturnHaltTheory.gas_outcome_full_halt_room))) >>
+      ho_match_mp_tac (GEN_ALL (SIMP_RULE bool_ss [LET_THM] extcall_request_full)) >>
       rpt (goal_assum (drule_at Any)) >>
       conj_tac
       >- qpat_assum `!st target mid src vs ee. _ ==>
@@ -590,11 +595,7 @@ Proof
            (ACCEPT_TAC o ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM]) >>
       rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
       mp_tac extcall_return_full >>
-      (impl_tac >- (rpt gen_tac >>
-        disch_then (fn pre =>
-          MATCH_ACCEPT_TAC (MATCH_MP abi_valid_allocated_joint
-            (LIST_CONJ (List.filter (not o can (match_term ``~ctx_has_dalloca ctx``) o concl)
-               (CONJUNCTS pre))))))) >>
+      (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC abi_valid_allocated_joint)) >>
       (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC abi_malformed_allocated_joint)) >>
       disch_then (fn th =>
         mp_tac extcall_ready_return_outcome >>
@@ -609,8 +610,7 @@ Proof
       simp[LENGTH_APPEND] >>
       qhdtm_assum `extcall_request_ready` (irule_at Any) >>
       rpt (goal_assum (drule_at Any)) >>
-      fs[]) >>
-  simp[]
+      fs[]
 QED
 
 (* The joint twin of body_for_case_ptr_at (bodyPtrCtrlCases),
