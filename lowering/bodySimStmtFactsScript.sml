@@ -135,20 +135,6 @@ Proof
   first_x_assum drule >> strip_tac >> simp[]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule topcopy_not_bytestring >>
-  Cases_on `t` >> simp[has_length_word_def, is_bytestring_type_def] >>
-  Cases_on `b` >> gvs[has_length_word_def, is_bytestring_type_def]
-QED
-*)
-Theorem topcopy_no_length_word:
-  !tops t. supported_storage_type tops t /\
-    (!elem n. t <> ArrayT elem (Dynamic n)) ==> ~has_length_word t
-Proof
-  cheat
-QED
 
 Theorem body_inv_mcopy:
   !tops ctx cenv cx. body_inv tops ctx cenv cx ==> cenv.ce_target CapMcopy
