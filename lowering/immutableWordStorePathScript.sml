@@ -8,64 +8,6 @@ Ancestors
   loweringStateRelDefs bodyPtrDefs ptrDiscipline context list finite_map compileEnv
   stmtReasonLitFragMemory fragGasOriginPtrDead arithmetic
 
-(* The segment overwrites an emitted temporary if it was already bound.
-   Only the compiler's live names, not the entire register domain, matter. *)
-Theorem immutable_word_store_segment:
-  compile_imm_store_word imm dst v sa = ((),sb) /\
-  copy_old_operand sa v /\ eval_operand v s = SOME value /\
-  eval_operand dst s = SOME a /\ op_taint tn dst = {} /\ op_prov G dst = NONE /\
-  w2n a + 32 <= lo /\
-  (!base. imm = SOME base ==> eval_operand base s = SOME 0w /\
-     op_taint tn base = {} /\ op_prov G base = NONE) /\
-  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
-  ?Gf tf u.
-    run_inst_seq (emitted_insts sa sb) s = OK u /\ same_blocks sa sb /\
-    (!k. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb)
-      (s with vs_inst_idx := k) Gf tf) /\
-    EVERY (\i. MEM i.inst_opcode [ADD; ISTORE]) (emitted_insts sa sb) /\
-    tf.t_mem = (tn.t_mem DIFF {j | w2n a <= j /\ j < w2n a + 32}) UNION
-      {w2n a + k | k IN op_taint tn v} /\
-    tf.t_imm = key_update tn.t_imm (w2n a) (op_taint tn v) /\
-    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
-    (!p. not_fresh_at sa p ==> FLOOKUP Gf p = FLOOKUP G p /\
-      op_taint tf (Var p) = op_taint tn (Var p)) /\
-    allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
-    (!p n. not_fresh_at sa p /\ ptr_covers G tn p s n ==>
-      ptr_covers Gf tf p u n)
-Proof
-  strip_tac >>
-  `same_blocks sa sb` by
-    (Cases_on `imm` >>
-     gvs[compile_imm_store_word_def, emitHelperTheory.emit_op_def,
-         emitHelperTheory.emit_void_def, fresh_id_def, fresh_var_def, emit_def,
-         comp_bind_def, comp_ignore_bind_def, comp_return_def, same_blocks_def]) >>
-  namedCases_on `imm` ["", "reg"]
-  >- (fs[compile_imm_store_word_def] >>
-      drule emitted_insts_emit_void >> strip_tac >>
-      qspecl_then [`dst`, `v`, `a`, `value`, `D`, `fn`, `PG`] mp_tac
-        (Q.GENL [`arg`, `v`, `a`, `value`, `D`, `fn`, `PG`]
-           (Q.INST [`id` |-> `sa.cs_next_id`] ctor_istore_segment)) >>
-      (impl_tac >- simp[]) >>
-      disch_then strip_assume_tac >>
-      qexistsl_tac [`Gf`,`tnf`,`t`] >> gvs[mk_inst_def]) >>
-  drule compile_imm_store_word_result >> strip_tac >>
-  `emitted_insts sa sb =
-     [mk_inst sa.cs_next_id ADD [reg; dst] ["%" ++ toString sa.cs_next_var];
-      mk_inst (sa.cs_next_id + 1) ISTORE
-        [Var ("%" ++ toString sa.cs_next_var); v] []]` by
-    simp[emitted_insts_def, DROP_APPEND] >>
-  `!p. not_fresh_at sa p ==> p <> STRING #"%" (toString sa.cs_next_var)` by
-    simp[not_fresh_at_def] >>
-  `!x. v = Var x ==> x <> STRING #"%" (toString sa.cs_next_var)` by
-    (rpt strip_tac >> gvs[copy_old_operand_def, not_fresh_at_def]) >>
-  `eval_operand reg s = SOME 0w /\ op_taint tn reg = {} /\ op_prov G reg = NONE` by fs[] >>
-  mp_tac (Q.INST [`P` |-> `not_fresh_at sa`, `id` |-> `sa.cs_next_id`,
-                 `tmp` |-> `STRING #"%" (toString sa.cs_next_var)`,
-                 `region` |-> `reg`] ctor_word_store_seq) >>
-  (impl_tac >- fs[copy_old_operand_def, not_fresh_at_def]) >> disch_then strip_assume_tac >>
-  qexistsl_tac [`Gf`,`tnf`,`t`] >> gvs[mk_inst_def]
-QED
-
 Theorem immutable_word_store_path_with_execution[local]:
   compile_imm_store_word imm dst v sa = ((),sb) /\
   copy_old_operand sa v /\ eval_operand v s = SOME value /\

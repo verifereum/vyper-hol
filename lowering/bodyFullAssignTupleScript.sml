@@ -3513,7 +3513,7 @@ Proof
   `eval_operand (Lit (a+n2w off)) r = SOME (a+n2w off) /\
    op_taint tf (Lit (a+n2w off)) = {} /\ op_prov Gf (Lit (a+n2w off)) = NONE` by
     simp[eval_operand_def,op_taint_def,op_prov_def] >>
-  drule_all immutableWordStorePathTheory.immutable_word_store_segment >>
+  drule_all exprPtrCtorImmStoreTheory.immutable_word_store_segment >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts sr sb) r = OK t` >>
   `sb.cs_current_insts = sr.cs_current_insts ++ emitted_insts sr sb` by

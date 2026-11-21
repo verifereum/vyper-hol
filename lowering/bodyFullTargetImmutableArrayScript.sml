@@ -7,25 +7,12 @@ Ancestors
   exprSimSubscriptArraySuffix exprSimSubscriptArraySource exprSimArrayIndex
   exprSimProps exprSimHypsDefs loweringStateRelDefs vyperValue vyperInterpreter
   fragGasOriginPtr fragExec venomInst context gasContext exprLowering emitHelper exprSimCopy
-  bodyFullExtCallPosTransport targetSubscriptMemory
+  bodyFullExtCallPosTransport targetSubscriptMemory exprOperandVar[qualified,ignore_grammar]
   gasOutcomeFull gasOutcomeFullCompose gasSummary exprSimDefs bodyPtrDefs loweringPosts compileEnv
   exprLoweringProps emitHelperProps freshWrites typedCopyOriginPtrBase
   ptrDiscipline vyperArray vyperTypeValues vyperValueOperation vyperTyping
   vyperFixedShapePath vyperPlaceResultTyping vyperState vyperStorageFootprint valueEncoding
   valueEncodingProps exprSimFieldLayout vyperAST venomState list finite_map words
-
-Theorem immutable_target_array_destination[local]:
-  compile_array_subscript arg iop dyn cnt ws esz sgn loader sa = (dst,sb) ==>
-  !x. dst = Var x ==> not_fresh_at sb x
-Proof
-  simp[compile_array_subscript_split,comp_bind_def,comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> simp[]) >> rpt strip_tac >> gvs[] >>
-  qpat_x_assum `array_elem_ptr _ _ _ _ _ _ = _` mp_tac >>
-  simp[array_elem_ptr_def,comp_bind_def,comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  gvs[not_fresh_at_def,ASCIInumbersTheory.toString_11]
-QED
 
 Theorem immutable_target_array_tail:
   body_inv tops ctx cenv cx /\ cenv.ce_is_ctor /\ cenv.ce_module = NONE /\
@@ -198,7 +185,8 @@ Resume immutable_target_array_tail[in_range]:
        `value` |-> `ArrayV av`, `sb` |-> `ValueSubscript (IntV i)`]
        immutable_target_extend) >>
      gvs[]) >>
-  drule_then assume_tac immutable_target_array_destination >>
+  drule_then assume_tac
+    (CONJUNCT2 (CONJUNCT2 exprOperandVarTheory.compiler_subscript_ops_var)) >>
   irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`Gf`,`ee`,`INL (ImmutablePlace NONE id (path ++ [ValueSubscript (IntV i)]))`,
     `q`,`tnf`] >> simp[] >>
