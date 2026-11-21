@@ -18,7 +18,8 @@ Ancestors gasContext[qualified,ignore_grammar] bodyFullShared[qualified,ignore_g
   exprPtrUnwrapCode exprSimProps bodyFullHashKeccakFixed
   bodyExprPreFacts gasOriginPtrLabels
   gasOutcomeFullCompose gasOutcomeFullStmts bodyFullForHandlers haltExitProj
-  vyperStorageTrace gasExemptCert
+  vyperStorageTrace gasExemptCert bodyLoopImmutableFrame
+  vyperTypeContract[qualified,ignore_grammar]
 Libs
   monadsyntax
 
@@ -2568,7 +2569,7 @@ Theorem for_nonslot_array_scoped_body_full:
   benv = extend_local env id fty F /\ id NOTIN FDOM env.var_types /\
   evaluate_type (get_tenv cx) fty = SOME dtv /\
   iterator_unmodified (Array e) body /\
-  (loc = LocCode ==> ~supported_stmts_expr_exists expr_internal_call_root body) /\
+  (?limit. stmt_loop_calls_ok [(NONE,tops)] (For id fty (Array e) limit body)) /\
   (?bb inst. lookup_block incr func.fn_blocks = SOME bb /\
     get_instruction bb 0 = SOME inst /\ inst.inst_opcode <> PHI) /\
   call_evaluation_safe cx (int_calls_stmts body) /\
@@ -3226,38 +3227,55 @@ Resume for_nonslot_array_scoped_body_full[continue_immutable_observation]:
   Cases_on `loc = LocCode` >> simp[] >>
   qpat_assum `loc = LocCode ==> ?src name. _`
     (drule_then (qx_choosel_then [`src`,`name`] strip_assume_tac)) >>
-  `lookup_immutable cx ep src name = lookup_immutable cx es src name` by
-    (`env_context_consistent benv cx` by
-     (qpat_assum `expr_sim_inv bc cx benv eb`
-       (ACCEPT_TAC o cj 1 o REWRITE_RULE [vyperTypeInvariantsTheory.env_consistent_def]
-        o cj 1 o REWRITE_RULE [exprSimHypsDefsTheory.expr_sim_inv_def])) >>
-   `FLOOKUP benv.bare_globals (src,name) = SOME (ArrayT et bd)` by
-     (qpat_assum `benv = extend_local env id fty F` SUBST1_TAC >>
-      simp[extend_local_def]) >>
-   `lookup_immutable cx ef src name =
-    lookup_immutable cx (eb with gas_obs := obs) src name` by
-     (qpat_assum `eval_stmts cx body (eb with gas_obs := obs) = (raw,ef)`
-       (mp_then (Pat `eval_stmts _ _ _ = _`) mp_tac
-          whitelistForIterImmFrameTheory.immutable_array_body_observation) >>
-      disch_then (drule_at (Pat `type_stmts _ _ _ = _`)) >>
-      disch_then (drule_at (Pat `FLOOKUP _ _ = _`)) >>
-      qpat_assum `e = TopLevelName (ArrayT et bd) (src,name)` (fn shape =>
-        qpat_assum `iterator_unmodified (Array e) body` (fn unmodified =>
-          simp[REWRITE_RULE [shape] unmodified]))) >>
-   `eb.immutables = es.immutables` by
-     (qpat_assum `push_scope_with_var id dtv v es = (INL (),eb)` mp_tac >>
-      simp[NoAsms,push_scope_with_var_def,return_def] >>
-      disch_then (SUBST1_TAC o SYM) >> simp[]) >>
-   simp[NoAsms, Abbr `ep`,vyperBareGlobalNameTheory.lookup_immutable_def] >>
-   qpat_assum `eb.immutables = es.immutables` (fn imms =>
-     qpat_assum `lookup_immutable cx ef src name = _`
-       (ACCEPT_TAC o SIMP_RULE (srw_ss())
-         [vyperBareGlobalNameTheory.lookup_immutable_def,imms]))) >>
   `lookup_immutable cx es src name = lookup_immutable cx em src name` by
     (qpat_assum `loc = LocCode ==> !src name path.
         rv = PlaceR (ImmutablePlace src name path) ==> _`
       (drule_then (qspecl_then [`src`,`name`,`[]`] mp_tac)) >>
      simp[]) >>
+  `lookup_immutable cx ep src name = lookup_immutable cx es src name` by
+    (`?elem arr. lookup_immutable cx em src name = SOME (ArrayTV elem bd,ArrayV arr)` by
+      (qpat_assum `expr_sim_inv c cx env em` (fn inv =>
+       qpat_assum `FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd)` (fn typ =>
+       qpat_assum `~cx_const_name cx (src,name)` (fn noconst =>
+         mp_tac (MATCH_MP whitelistForIterImmSourceTheory.immutable_array_source_ready
+           (LIST_CONJ [inv,typ,noconst]))))) >>
+       disch_then (qx_choosel_then [`off`,`ts`,`imms`,`root_tv`,`root_arr`]
+         strip_assume_tac) >>
+       qpat_assum `evaluate_type (get_tenv cx) (ArrayT et bd) = SOME root_tv`
+         (strip_assume_tac o MATCH_MP vyperTypeValuesTheory.evaluate_type_ArrayT_cases) >>
+       qpat_x_assum `root_tv = ArrayTV _ _` SUBST_ALL_TAC >>
+       qpat_assum `FLOOKUP (get_source_immutables src imms) name = SOME (ArrayTV _ _,ArrayV _)`
+         (fn lookup => qpat_assum `ALOOKUP em.immutables cx.txn.target = SOME imms`
+           (fn account => simp[NoAsms,vyperBareGlobalNameTheory.lookup_immutable_def,account,lookup]))) >>
+   `eb.immutables = es.immutables` by
+     (qpat_assum `push_scope_with_var id dtv v es = (INL (),eb)` mp_tac >>
+      simp[NoAsms,push_scope_with_var_def,return_def] >>
+      disch_then (SUBST1_TAC o SYM) >> simp[]) >>
+   `lookup_immutable cx (eb with gas_obs := obs) src name =
+    lookup_immutable cx em src name` by
+     fs[vyperBareGlobalNameTheory.lookup_immutable_def] >>
+   `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
+     fs[bodySimTheory.body_inv_def] >>
+   `lookup_immutable cx (eb with gas_obs := obs) src name =
+       SOME (ArrayTV elem bd,ArrayV arr)` by simp[] >>
+   `stmt_loop_calls_ok [(NONE,tops)]
+       (For id et (Array (TopLevelName (ArrayT et bd) (src,name))) limit body)` by
+     (qpat_assum `e = TopLevelName (ArrayT et bd) (src,name)` (fn shape =>
+       qpat_assum `stmt_loop_calls_ok [(NONE,tops)] (For id fty (Array e) limit body)`
+         (mp_tac o ONCE_REWRITE_RULE [shape])) >>
+      simp[NoAsms,vyperTypeContractTheory.stmt_loop_calls_ok_def]) >>
+   `iterator_unmodified (Array (TopLevelName (ArrayT et bd) (src,name))) body` by
+     (qpat_assum `e = TopLevelName (ArrayT et bd) (src,name)` (fn shape =>
+       qpat_assum `iterator_unmodified (Array e) body`
+         (ACCEPT_TAC o ONCE_REWRITE_RULE [shape]))) >>
+   `lookup_immutable cx ef src name =
+    lookup_immutable cx (eb with gas_obs := obs) src name` by
+     drule_all_then ACCEPT_TAC bodyLoopImmutableFrameTheory.for_bare_immutable_array_body_observation >>
+   simp[NoAsms, Abbr `ep`,vyperBareGlobalNameTheory.lookup_immutable_def] >>
+   qpat_assum `eb.immutables = es.immutables` (fn imms =>
+     qpat_assum `lookup_immutable cx ef src name = _`
+       (ACCEPT_TAC o SIMP_RULE (srw_ss())
+         [vyperBareGlobalNameTheory.lookup_immutable_def,imms]))) >>
   `lookup_immutable cx ep src name = lookup_immutable cx em src name` by
     (qpat_assum `lookup_immutable cx ep src name = lookup_immutable cx es src name` (fn frame =>
       qpat_assum `lookup_immutable cx es src name = lookup_immutable cx em src name`
@@ -3579,8 +3597,7 @@ Theorem for_nonslot_array_round_contracts:
      IS_SOME (supported_immutable_type tops nid)) /\
   (~(?ty nid. e = TopLevelName ty nid) ==>
    !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
-  ((?ty nid. e = TopLevelName ty nid) ==>
-    ~supported_stmts_expr_exists expr_internal_call_root loop_body) /\
+  stmt_loop_calls_ok [(NONE,tops)] (For id fty (Array e) n loop_body) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
       (For id fty (Array e) n loop_body) ==> occurs_abi_decode_target target tops) /\
   call_evaluation_safe cx (int_calls_stmt (For id fty (Array e) n loop_body)) /\
@@ -4022,13 +4039,7 @@ Resume for_nonslot_array_round_contracts[cons_body]:
           qpat_assum `vv_location vv = SOME LocCode ==> _` drule >>
           qpat_assum `vv_location vv = SOME LocCode` (fn th => simp[NoAsms,th])) >>
       (all_tac >>> SELECT_LT REFL_TAC)
-      >- (disch_tac >>
-          qpat_assum `(?ty nid. e = TopLevelName ty nid) ==> _` irule >>
-          qpat_assum `vv_location vv = SOME LocCode ==> _` mp_tac >>
-          `vv_location vv = SOME LocCode` by
-            (qpat_assum `loc = (case vv_location vv of NONE => LocMemory | SOME l => l)` mp_tac >>
-             Cases_on `vv_location vv` >> simp[]) >>
-          simp[] >> metis_tac[])
+      >- (qexists_tac `n` >> first_assum ACCEPT_TAC)
       >- (qexistsl [`bb`,`inst`] >> rpt conj_tac >> first_assum ACCEPT_TAC)
       >- (qpat_assum `same_frame c bc` (mp_then Any assume_tac bodyPtrDefsTheory.same_frame_is_ctor) >>
           qpat_assum `bc.ce_is_ctor = c.ce_is_ctor` (fn eq =>
