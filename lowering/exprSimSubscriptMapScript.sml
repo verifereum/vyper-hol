@@ -18,7 +18,7 @@ Ancestors
   exprSimTopLevelProps compileEnv loweringStateRelDefs finite_map
   fragGasPath fragGasMode vyperInterpreter
   vyperTypeEnv vyperStoragePlaceProvenance exprLoweringProps
-  exprSimSubscriptArraySource
+  exprSimSubscriptArraySource exprBodyPreProps
   gasOutcome loweringPosts context venomState stmtSimProps
   gasStorage vyperStorageTrace vyperStorageFootprint aggregateCountedOutcome
 Libs
@@ -329,6 +329,21 @@ Proof
   simp[Once supported_expr_exists_def]
 QED
 
+Theorem expr_subscript_pre_index_mods:
+  !mods cenv cx env ann obj idx es es'.
+    (expr_body_pre_mods mods cenv cx env (Subscript ann obj idx) es \/
+     expr_map_pre_mods mods cenv cx env (Subscript ann obj idx) es) /\
+    expr_sim_inv_mods mods cenv cx env es' ==>
+    expr_body_pre_mods mods cenv cx env idx es'
+Proof
+  rpt gen_tac >>
+  simp[expr_body_pre_mods_def, expr_map_pre_mods_def, well_typed_expr_def,
+       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
+       expr_has_evm_run_thm, EVERY_APPEND, supported_expr_exists_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), supported_expr_exists_def] >>
+  metis_tac[call_evaluation_safe_append_right]
+QED
+
 Theorem expr_subscript_pre_index:
   !cenv cx env ann obj idx es es'.
     (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
@@ -336,12 +351,14 @@ Theorem expr_subscript_pre_index:
     expr_sim_inv cenv cx env es' ==>
     expr_body_pre cenv cx env idx es'
 Proof
-  rpt gen_tac >>
-  simp[expr_body_pre_def, expr_map_pre_def, well_typed_expr_def,
-       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
-       expr_has_evm_run_thm, EVERY_APPEND, supported_expr_exists_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs(), supported_expr_exists_def] >>
-  metis_tac[call_evaluation_safe_append_right]
+  rpt gen_tac >> strip_tac >>
+  `expr_body_pre_mods [(NONE,cx_tops cx)] cenv cx env idx es'` by
+    (irule expr_subscript_pre_index_mods >>
+     fs[expr_body_pre_split_def, expr_map_pre_split_def, expr_sim_inv_split_def] >>
+     qexistsl_tac [`ann`, `es`, `obj`] >> simp[]) >>
+  fs[expr_body_pre_split_def, expr_map_pre_split_def, int_calls_expr_def,
+     EVERY_APPEND, Once supported_expr_exists_def] >>
+  metis_tac[]
 QED
 
 Theorem expr_body_pre_map_subscript_base:
@@ -354,15 +371,15 @@ Proof
   `place_map_tables_agree_on_defined cenv env /\
    (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
               cenv.ce_hashmap_info nsid = NONE)` by
-    gvs[expr_body_pre_def, expr_sim_inv_def] >>
-  gvs[expr_body_pre_def, Once well_typed_expr_def,
+    gvs[expr_body_pre_split_def, expr_sim_inv_def] >>
+  gvs[expr_body_pre_split_def, expr_body_pre_mods_def, Once well_typed_expr_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
       expr_has_evm_run_thm, EVERY_APPEND]
   >- (drule_all place_type_well_typed_on_defined >> simp[]) >>
   drule_all place_type_checked_place_on_defined >> strip_tac >>
   rename1 `type_place_expr env obj = SOME bty` >>
   Cases_on `bty` >> gvs[value_type_place_def] >>
-  simp[expr_map_pre_def] >>
+  simp[expr_map_pre_split_def, expr_map_pre_mods_def] >>
   gvs[supported_expr_exists_def] >>
   metis_tac[call_evaluation_safe_append_left]
 QED
@@ -484,7 +501,7 @@ Proof
   `expr_map_pre cenv cx env obj es` by
     metis_tac[expr_body_pre_map_subscript_base, expr_map_pre_subscript_base] >>
   drule_all expr_map_pre_checked_type >> strip_tac >>
-  gvs[expr_body_pre_def, expr_map_pre_def, Once well_typed_expr_def,
+  gvs[expr_body_pre_split_def, expr_body_pre_mods_def, expr_map_pre_def, Once well_typed_expr_def,
       subscript_vtype_def, AllCaseEqs()] >>
   `place_map_tables_agree_on_defined cenv env /\
    (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
@@ -597,7 +614,7 @@ Proof
   Cases_on `vt`
   >- (rename1 `MapPT kt (Type leaf)` >>
       `ann = leaf /\ well_formed_type env.type_defs leaf` by
-        (gvs[expr_body_pre_def, expr_map_pre_def, well_typed_expr_def,
+        (gvs[expr_body_pre_split_def, expr_body_pre_mods_def, expr_map_pre_def, well_typed_expr_def,
              subscript_vtype_def, AllCaseEqs()]) >>
       gvs[well_formed_type_def, optionTheory.IS_SOME_EXISTS] >>
       rename1 `evaluate_type (get_tenv cx) leaf = SOME leaf_tv` >>
@@ -1206,7 +1223,7 @@ Proof
     (metis_tac[well_typed_expr_not_hashmap_place]) >>
   `vt = Type ann` by
     (qpat_x_assum `expr_body_pre _ _ _ (Subscript _ _ _) _` mp_tac >>
-     simp[expr_body_pre_def, Once well_typed_expr_def] >>
+     simp[expr_body_pre_split_def, expr_body_pre_mods_def, Once well_typed_expr_def] >>
      Cases_on `vt` >> simp[subscript_vtype_def, AllCaseEqs()]) >>
   `tp = ann` by
     (drule_all compile_expr_mapping_subscript_parts >>
