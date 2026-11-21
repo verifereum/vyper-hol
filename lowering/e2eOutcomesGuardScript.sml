@@ -11,7 +11,7 @@ Ancestors
   guardTerminalBackend guardSourceAlignment asmOptimizer asmOptNonemptyFinalizer
   vfmAccountDeletion e2eEntry
   vyperCallFiniteStorageSupport guardRequestCutAlignment loweringCalldataCorrect
-  callRawVariant sourceUnitExecution vyperLoweringCorrect gasSummary
+  callRawVariant callDynamicMemory[qualified,ignore_grammar] sourceUnitExecution vyperLoweringCorrect gasSummary
   stackPlanGen
   vfmDecreasesGas relation pair arithmetic list
   gasFocusPacketPipelineStages requestCutSelectedReplay
@@ -767,6 +767,18 @@ Proof
          o1_initial_state_ok_def, init_venom_state_def] >>
   `initial_venom_state_rel tops am txp vs0` by
     metis_tac[opt_entry_initial_venom_state_rel_own] >>
+  `source_typing_ok tops am txp` by
+    metis_tac[opt_entry_own_txp_identity] >>
+  `LENGTH (call_trace es) < 2 ** 64` by fs[vyper_call_staging_def] >>
+  `ctx_has_dalloca unit.cu_context ==>
+    !vi fn inst s. raw_variant fmp vi vs0 /\
+      raw_reachable vi unit.cu_context fn inst s ==>
+      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+    (mp_tac (Q.SPECL [`T`, `tops`, `rpolicy`, `unit`, `am`, `tx`, `txp`,
+                      `assemble prog'`, `es`, `prog`, `prog'`, `cplan`,
+                      `vs0`, `fmp`] callDynamicMemoryTheory.call_entry_raw_no_wrap) >>
+     simp_tac bool_ss [COND_CLAUSES] >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> metis_tac[]) >>
   drule_all guard_source_marks >>
   disch_then (qx_choose_then `shadow_ctx` assume_tac) >>
   qpat_assum `!vs. raw_variant fmp vs vs0 ==> _` (fn th =>
@@ -779,7 +791,7 @@ Proof
         (INST [mk_var ("prefix_ok", type_of prefix) |-> prefix]
           (Q.INST [`tx` |-> `txp`] call_marked_focus_family)))
     end) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >> metis_tac[]) >>
   disch_then (qx_choose_then `markf` assume_tac) >>
   `fn_entry_label func = SOME "__entry"` by
     (qpat_assum `!gs. source_unit_execution_correct_with _ _ _ _ _ _ _ _ /\ _`
