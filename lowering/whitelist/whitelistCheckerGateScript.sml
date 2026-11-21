@@ -401,7 +401,7 @@ Triviality checked_body_supported:
   IS_SOME (type_stmts env ret
     (subst_consts_stmts (module_consts_env tops []) fbody)) /\
   custom_errors_stmts_ok [(NONE, tops)] fbody ==>
-  supported_function_body tops vis args fbody
+  supported_function_body tops (vis:function_visibility) args fbody
 Proof
   strip_tac >> drule (cj 2 type_stmt_bindings_fresh) >> strip_tac >>
   `supported_stmts tops (args ++ supported_stmts_bindings T fbody ++
@@ -472,6 +472,118 @@ QED
 
 (* ===== Deployment gate ===== *)
 
+Triviality checked_no_self_call:
+  check_contract mode layouts addr mods = SOME art ==>
+  ~MEM (k,k) (contract_call_edges mods)
+Proof
+  strip_tac >> drule checked_contract_call_graph_irreflexive >>
+  rw[relationTheory.irreflexive_def] >> strip_tac >>
+  first_x_assum (qspec_then `k` mp_tac) >> simp[] >>
+  irule relationTheory.TC_SUBSET >> fs[call_edge_rel_def]
+QED
+
+(* A constructor calls only internal functions: its own signature is the
+   only other one in the deploy artifact, and calling it is a self-edge. *)
+Triviality checked_deploy_callee_internal:
+  check_contract T layouts addr [(NONE, tops)] = SOME art /\
+  MEM (FunctionDecl Deploy mut nr rr name args dflts ret fbody) tops /\
+  MEM c (int_calls_stmts fbody) /\ FLOOKUP art.cta_fn_sigs c = SOME sig ==>
+  IS_SOME (supported_function_decl tops c Internal)
+Proof
+  strip_tac >> drule check_contract_artifact_fields >> strip_tac >>
+  gvs[FLOOKUP_DRESTRICT_SOME] >> PairCases_on `c` >>
+  drule_all build_contract_type_artifact_fn_sigs_declared_sound >>
+  strip_tac >> gvs[] >> Cases_on `vis` >> gvs[include_fn_sig_def]
+  >~ [`MEM (FunctionDecl Internal _ _ _ _ _ _ _ _) _`]
+  >- metis_tac[supported_function_decl_internal_MEM] >>
+  `MEM ((NONE,name),(NONE,c1)) (contract_call_edges [(NONE:num option, tops)])` by
+    (irule contract_call_edges_function >> simp[function_int_calls_def] >>
+     metis_tac[]) >>
+  `name = c1` by (imp_res_tac checked_single_decl_any >>
+                  gvs[check_toplevel_decl_def, function_header_ok_def]) >>
+  gvs[] >> drule checked_no_self_call >>
+  disch_then (qspec_then `(NONE,c1)` mp_tac) >> fs[]
+QED
+
+Triviality checked_deploy_calls_internal:
+  check_contract T layouts addr [(NONE, tops)] = SOME art /\
+  MEM (FunctionDecl Deploy mut nr rr name args dflts ret fbody) tops /\
+  type_stmts (function_entry_env art [(NONE, tops)] NONE vis args) rt fbody =
+    SOME env' ==>
+  set (int_calls_stmts fbody) SUBSET
+    {k | IS_SOME (supported_function_decl tops k Internal)}
+Proof
+  strip_tac >> drule (cj 2 type_stmt_int_calls_fn_sigs) >>
+  rw[EVERY_MEM, SUBSET_DEF, function_entry_env_fn_sigs] >>
+  metis_tac[checked_deploy_callee_internal, flookup_thm]
+QED
+
+(* Substituting constants adds no internal call. *)
+Triviality checked_subst_int_calls:
+  check_contract mode layouts addr [(NONE, tops)] = SOME art ==>
+  int_calls_stmts (subst_consts_stmts (module_consts_env tops []) ss) =
+  int_calls_stmts ss
+Proof
+  strip_tac >> irule (cj 2 subst_consts_stmt_int_calls) >> rpt strip_tac >>
+  `ALOOKUP [(NONE, tops)] (NONE:num option) = SOME tops` by simp[] >>
+  drule_all checked_module_consts_env_replacement_constant >>
+  metis_tac[constant_expr_no_internal_calls]
+QED
+
+(* The entry environment with its signatures cut to the internal ones. *)
+Triviality checked_deploy_entry_env_ok:
+  check_contract T am.layouts tx.target [(NONE, tops)] = SOME art /\
+  layouts_agree tops am tx /\
+  EVERY (\(_,ty). assignable_type (type_env tops) ty) args ==>
+  checker_env_ok tops (function_entry_env art [(NONE, tops)] NONE vis args with
+    fn_sigs := DRESTRICT (function_entry_env art [(NONE, tops)] NONE vis args).fn_sigs
+                 {k | IS_SOME (supported_function_decl tops k Internal)}) /\
+  checker_stmt_env_ok tops (function_entry_env art [(NONE, tops)] NONE vis args with
+    fn_sigs := DRESTRICT (function_entry_env art [(NONE, tops)] NONE vis args).fn_sigs
+                 {k | IS_SOME (supported_function_decl tops k Internal)}) /\
+  FDOM (function_entry_env art [(NONE, tops)] NONE vis args).var_types =
+    set (MAP FST args)
+Proof
+  strip_tac >> simp[function_entry_env_fn_sigs, function_entry_env_var_types_fdom] >>
+  `function_entry_env art [(NONE, tops)] NONE vis args with
+     fn_sigs := DRESTRICT art.cta_fn_sigs
+                  {k | IS_SOME (supported_function_decl tops k Internal)} =
+   FOLDL (\env (id,ty). extend_local env id ty (vis = Internal))
+     (artifact_env art [(NONE, tops)] NONE with
+        <| fn_sigs := DRESTRICT art.cta_fn_sigs
+                        {k | IS_SOME (supported_function_decl tops k Internal)};
+           bare_global_assignable := art.cta_bare_global_assignable |>) args`
+    by simp[function_entry_env_def, artifact_env_def, foldl_extend_local_fn_sigs] >>
+  pop_assum SUBST1_TAC >> irule checked_entry_env_ok >>
+  simp[FLOOKUP_DRESTRICT] >> metis_tac[]
+QED
+
+(* checked_body_supported, after cutting the signatures to a set holding
+   every internal callee. *)
+Triviality checked_body_supported_restrict:
+  checker_env_ok tops (env with fn_sigs := DRESTRICT env.fn_sigs ks) /\
+  checker_stmt_env_ok tops (env with fn_sigs := DRESTRICT env.fn_sigs ks) /\
+  FDOM env.var_types = set (MAP FST args) /\
+  set (int_calls_stmts fbody) SUBSET ks /\
+  int_calls_stmts (subst_consts_stmts (module_consts_env tops []) fbody) =
+    int_calls_stmts fbody /\
+  ALL_DISTINCT (MAP FST args) /\
+  type_stmts env ret fbody = SOME env' /\
+  type_stmts env ret (subst_consts_stmts (module_consts_env tops []) fbody) =
+    SOME env'' /\
+  custom_errors_stmts_ok [(NONE, tops)] fbody ==>
+  supported_function_body tops (vis:function_visibility) args fbody
+Proof
+  strip_tac >>
+  `type_stmts (env with fn_sigs := DRESTRICT env.fn_sigs ks) ret fbody =
+     SOME (env' with fn_sigs := DRESTRICT env'.fn_sigs ks) /\
+   IS_SOME (type_stmts (env with fn_sigs := DRESTRICT env.fn_sigs ks) ret
+     (subst_consts_stmts (module_consts_env tops []) fbody)) /\
+   FDOM (env with fn_sigs := DRESTRICT env.fn_sigs ks).var_types =
+     set (MAP FST args)` by fs[cj 2 type_stmt_fn_sigs_restrict] >>
+  drule_all checked_body_supported >> simp[]
+QED
+
 Theorem check_contract_deploy_function_body:
   check_contract T am.layouts tx.target [(NONE, tops)] = SOME art /\
   layouts_agree tops am tx /\
@@ -479,7 +591,21 @@ Theorem check_contract_deploy_function_body:
   EVERY (supported_value_type tops o SND) args /\
   supported_function_body tops Deploy args fbody
 Proof
-  cheat
+  strip_tac >>
+  `ALOOKUP [(NONE, tops)] (NONE:num option) = SOME tops` by simp[] >>
+  drule_all check_contract_deploy_function_body_MEM >>
+  simp[check_function_body_def, params_ok_def, consts_env_mods_singleton,
+       subst_consts_mods_singleton, type_env_all_modules_def, FUNION_FEMPTY_2,
+       GSYM type_env_def, optionTheory.IS_SOME_EXISTS] >>
+  strip_tac >>
+  drule_all checked_deploy_calls_internal >> strip_tac >>
+  drule_all checked_deploy_entry_env_ok >>
+  disch_then (qspec_then `Deploy` strip_assume_tac) >>
+  drule checked_subst_int_calls >> disch_then (qspec_then `fbody` assume_tac) >>
+  drule_all checked_body_supported_restrict >>
+  disch_then (qspec_then `Deploy` assume_tac) >> simp[] >>
+  fs[EVERY_MEM, FORALL_PROD, supported_value_type_def] >>
+  metis_tac[assignable_type_supported_place]
 QED
 
 (* TOP-LEVEL *)
