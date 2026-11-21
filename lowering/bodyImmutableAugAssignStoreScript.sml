@@ -6,7 +6,7 @@ Ancestors
   localPtrsProps vyperState vyperInterpreter vyperValueOperation
   finite_map alist list vyperValue vyperTyping valueEncoding
   vyperTypeInitialState loweringSlice valueMemoryTransport venomMemProps
-  exprSimProps
+  exprSimProps stmtSimAugAssignPlaceMemory stmtSimDefs vyperPlaceWriteSoundness
 
 Theorem immutable_augassign_write_source:
   ALOOKUP st.immutables cx.txn.target = SOME imms /\
@@ -205,4 +205,29 @@ Proof
        alloca_room_def, fmp_room_def,
        pending_alloca_size_def, immutable_base_zero_def] >>
   rpt conj_tac >> fs[]
+QED
+
+
+Theorem immutable_augassign_path_write_source:
+  ALOOKUP es.immutables cx.txn.target = SOME imms /\
+  FLOOKUP (get_source_immutables src imms) id = SOME (itv,old) /\
+  evaluate_subscripts itv old path = INL cur /\
+  write_place cx (ImmutablePlace src id path) v es = (wr,ee) /\
+  stmt_res_ok lctx wr ==>
+  wr = INL () /\
+  ?new. assign_subscripts itv old path (Replace v) = INL new /\
+        write_place cx (ImmutablePlace src id []) new es = (INL (),ee)
+Proof
+  strip_tac >>
+  `get_immutables cx src es = (INL (get_source_immutables src imms),es)` by
+    simp[get_immutables_def,get_address_immutables_def,
+         lift_option_type_def,bind_def,return_def] >>
+  qpat_x_assum `write_place _ _ _ _ = _` mp_tac >>
+  simp[write_place_def,bind_def,lift_option_type_def,lift_sum_def,return_def,raise_def] >>
+  Cases_on `assign_subscripts itv old path (Replace v)` >>
+  simp[lift_sum_def,return_def,raise_def]
+  >- (strip_tac >> drule_all set_immutable_success_from_get >>
+      simp[assign_subscripts_def,lift_sum_def,return_def]) >>
+  strip_tac >> drule_all aug_place_replace_read_error >>
+  strip_tac >> gvs[stmt_res_ok_def]
 QED

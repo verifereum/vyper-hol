@@ -24,7 +24,7 @@ Ancestors bodyImmutableStoreMemory[qualified,ignore_grammar]
   assignTuplePtrLoadStep tupleTypedLoad bodyFullGhostFrame valueEncodingProofs
   augAssignFullStore assignTuplePtrStorage stmtSimAssignStorage vfmState exprLoweringProps
   tupleTargetStoreRun bodyFullMemoryStore stateRelProj wordLoadStorePtr memoryPlaceStorePost
-  haltExitProj immutableRepSensitivity immutableBytestringRuntime[qualified,ignore_grammar] assignTuplePtrStoreWord stmtSimDeclStore vyperTypeArgFits instMemFrontier
+  haltExitProj immutablePrefixDead immutableRepSensitivity immutableBytestringRuntime[qualified,ignore_grammar] assignTuplePtrStoreWord stmtSimDeclStore vyperTypeArgFits instMemFrontier
   tupleTargetStoreProps vyperLookup stmtSimAssignStorageFacts stmtSimDefs exprSimDefs fragGasOriginPtr loweringSlice
   bodyExprPreFacts supportedNameRoot exprSimBufferStore[qualified,ignore_grammar] immutableDeployAssignFacts[qualified,ignore_grammar] bodyImmutableAugAssignStore[qualified,ignore_grammar] immutableDeployAssignStateFrame[qualified,ignore_grammar] exprSimLiteralBuffer[qualified,ignore_grammar] exprSimAbiEncodeStateTransport[qualified,ignore_grammar] exprSimAggregateLoops[qualified,ignore_grammar] vyperTypeContract[qualified,ignore_grammar] supportedProgram[qualified,ignore_grammar] exprSimHyps structFieldsProps immutableRelation gasContext allocLimitsProps supportedStmtTraverse
   vyperTypeCallGraph vyperTypeCallStackSoundness gasShadowCompileStmtHelpers
@@ -3931,36 +3931,6 @@ Proof
 QED
 
 (* A typed slot below lo has the same byte window in the section prefix. *)
-Theorem tuple_immutable_prefix_interior_dead[local]:
-  off + type_memory_size tv <= lo /\ well_formed_type_value tv /\
-  value_has_type tv vi /\
-  (!m. mem_agree_outside dirty mem m ==> val_in_memory tv vi off m) /\
-  off <= i /\ i < off + type_memory_size tv /\ i IN dirty ==>
-  mem_dead_bytes (mem_bytes_at 0 lo mem) off tv i
-Proof
-  strip_tac >>
-  `mem_bytes_at off (type_memory_size tv) (mem_bytes_at 0 lo mem) =
-   mem_bytes_at off (type_memory_size tv) mem` by
-    (simp[LIST_EQ_REWRITE,valueEncodingPropsTheory.LENGTH_mem_bytes_at] >>
-     rpt strip_tac >>
-     `off + x < lo` by decide_tac >>
-     simp[valueEncodingProofsTheory.EL_mem_bytes_at,
-          valueEncodingPropsTheory.LENGTH_mem_bytes_at]) >>
-  `val_wf tv vi` by metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
-  `!m. mem_agree_outside dirty (mem_bytes_at 0 lo mem) m ==>
-       val_in_memory tv vi off m` by
-    (rpt strip_tac >> irule robustCopyTransportPtrTheory.robust_val_in_memory_copy_transport >>
-     simp[] >> qexistsl_tac [`mem`,`mem_bytes_at 0 lo mem`,`type_memory_size tv`,
-                             `off`,`dirty`,`dirty`] >>
-     simp[exprSimPropsTheory.val_footprint_le]) >>
-  `!j. j < type_memory_size tv /\ off+j IN dirty ==>
-       mem_dead_bytes (mem_bytes_at 0 lo mem) off tv (off+j)` by
-    (mp_tac (Q.SPECL [`tv`,`vi`,`off`,`mem_bytes_at 0 lo mem`,`dirty`]
-       immutableRepSensitivityTheory.body_assign_immutable_rep_sensitivity) >> simp[]) >>
-  `i - off < type_memory_size tv /\ off + (i - off) = i` by decide_tac >>
-  first_x_assum (qspec_then `i - off` mp_tac) >> simp[]
-QED
-
 (* Statement transport and the copied representation use the very endpoint
    selected by the annotated fixed-size suffix, before any deadness proof. *)
 
@@ -4048,7 +4018,7 @@ Proof
   `!i. off <= i /\ i < off + type_memory_size tv /\ i IN tf.t_mem ==>
       mem_dead_bytes (mem_bytes_at 0 lo u.vs_memory) off tv i` by
     (`well_formed_type_value tv` by metis_tac[evaluate_type_well_formed_type_value] >>
-     rpt strip_tac >> irule tuple_immutable_prefix_interior_dead >>
+     rpt strip_tac >> irule immutable_prefix_interior_dead >>
      simp[] >> qexistsl_tac [`tf.t_mem`,`vi`] >> simp[]) >>
   `ce.ce_module = NONE` by fs[body_inv_def,cenv_module_pins_def] >>
   `fin.scopes = st.scopes` by
@@ -6024,7 +5994,7 @@ Resume tuple_immutable_runtime_bytes_joint[ghost_post]:
   `!i. off <= i /\ i < off + type_memory_size dtv /\ i IN tf.t_mem ==>
       mem_dead_bytes (mem_bytes_at 0 lo q.vs_memory) off dtv i` by
     (`well_formed_type_value dtv` by metis_tac[evaluate_type_well_formed_type_value] >>
-     rpt strip_tac >> irule tuple_immutable_prefix_interior_dead >>
+     rpt strip_tac >> irule immutable_prefix_interior_dead >>
      simp[] >> qexistsl_tac [`tf.t_mem`,`vi`] >> simp[]) >>
   rpt gen_tac >> strip_tac >>
   qpat_assum `stmt_state_rel H ctx fn ce cx st s`

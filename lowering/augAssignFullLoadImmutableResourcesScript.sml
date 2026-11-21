@@ -10,6 +10,8 @@ Ancestors
   venomExecSemantics venomInstProofs venomInst venomState
   supportedDecls supportedTypes supportedExprTraverse
   vyperTypeEnv vyperTypeSystem vyperTypeCallGraph allocLimits
+  immutableRegionFrameProps vyperPlaceStatePreservation
+  targetSubscriptMemory bodyFullShadowBodyInv bodySim bodyInvCodeProps
   vyperState compileEnv finite_map words pred_set list arithmetic
 
 val load_steps = LIST_CONJ (List.filter (fn th =>
@@ -91,3 +93,55 @@ Resume augassign_immutable_load_resources[finish]:
 QED
 
 Finalise augassign_immutable_load_resources
+
+Theorem augassign_immutable_path_load_resources:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  cenv.ce_is_ctor /\ dead_lo_ok H D lo cenv cx /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv_at D lo d cenv cx es G tn s /\
+  FLOOKUP cenv.ce_module_vars (NONE,id) = SOME (ImmutableLoc off) /\
+  ALOOKUP es.immutables cx.txn.target = SOME imms /\
+  FLOOKUP (get_source_immutables NONE imms) id = SOME (itv,iv) /\
+  mem_path_offset itv path = SOME (k,ptv) /\ evaluate_subscripts itv iv path = INL v /\
+  evaluate_type (get_tenv cx) ty = SOME ptv /\ is_word_type ty ==>
+  off+k+32 <= lo /\ w2n (n2w (off+k) : bytes32) = off+k /\
+  value_has_type ptv v /\ mload (off+k) s = typed_val_to_w256 ptv v /\
+  mem_word_taint tn.t_mem (off+k) = {}
+Proof
+  strip_tac >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  drule_then strip_assume_tac body_inv_module_locations >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac contract_inv_cenv_modules >>
+  `state_well_typed es` by fs[expr_sim_inv_def] >>
+  drule_all state_well_typed_immutables_ALOOKUP >> strip_tac >>
+  drule_all imms_well_typed_get_source_immutables >> strip_tac >>
+  drule mem_path_offset_sound >> strip_tac >>
+  `value_has_type ptv v` by (drule_all evaluate_subscripts_type >> simp[]) >>
+  `off + type_memory_size itv <= lo /\
+   !mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory itv iv off mem` by
+    (mp_tac (Q.INST [`entry` |-> `es`,`mods` |-> `[(NONE,tops)]`,`exps` |-> `[]`,
+                      `rt` |-> `itv`,`v` |-> `iv`]
+       immutable_ctor_frame_mods) >>
+     fs[expr_sim_inv_split_def, GSYM dead_lo_ok_mods_singleton,
+        GSYM ghost_inv_at_mods_singleton]) >>
+  `type_memory_size ptv = 32` by metis_tac[word_tv_memory_size] >>
+  `off+k+32 <= lo` by decide_tac >>
+  `off+k < dimword (:256)` by
+    (drule_then assume_tac stmt_state_rel_alloca_room >> drule alloca_room_next_lt >>
+     fs[ghost_inv_at_def] >> decide_tac) >>
+  `!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory ptv v (off+k) m` by
+    (rpt strip_tac >> irule (Q.SPECL [`path`,`itv`,`iv`,`v`,`off`,`m`,`k`,`ptv`]
+       mem_path_offset_current_value) >>
+     qexistsl_tac [`itv`,`iv`,`path`] >> simp[]) >>
+  drule_all (Q.INST [`a` |-> `off+k`,`tv` |-> `ptv`,`v` |-> `v`]
+    robust_typed_word_clean) >> strip_tac >>
+  `mload (off+k) s = typed_val_to_w256 ptv v` by
+    (qpat_assum `!m. _ ==> mem_word_at _ _ = _` (qspec_then `s.vs_memory` mp_tac) >>
+     simp_tac bool_ss [mem_agree_outside_def,mem_word_at_eq_mload]) >>
+  `mem_word_taint tn.t_mem (off+k) = {}` by
+    (simp[mem_word_taint_def, EXTENSION] >> qx_gen_tac `i` >>
+     Cases_on `i < 32` >> simp[] >>
+     qpat_assum `!j. off+k <= j /\ j < off+k+32 ==> _` irule >>
+     decide_tac) >>
+  simp[w2n_n2w]
+QED
