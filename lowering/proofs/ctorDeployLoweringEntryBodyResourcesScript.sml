@@ -119,6 +119,8 @@ Proof
  drule (deploy_ctor_entry_before_register_gas_path |> SPEC_ALL |>
    Q.INST [`cap` |-> `imm_len tops`, `is_payable` |-> `mut = Payable`] |> GEN_ALL |> SRULE []) >>
  disch_then drule_all >> strip_tac >>
+ drule_all deploy_ctor_entry_data_section >> strip_tac >>
+ `constructor_args_encode tops tx t.vs_data_section` by simp[] >>
  drule (ctorDeployLoweringEntryInputsTheory.deploy_ctor_decoder_inputs |> INST_TYPE [``:'a`` |-> ``:expr``] |> SPEC_ALL |>
    Q.INST [`ce0` |-> `ce_pack with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)`,
            `imm_opt` |-> `if imm_len tops > 0 then SOME imm else NONE`] |>
@@ -447,7 +449,6 @@ Theorem deploy_ctor_entry_body_resources_gas_path:
  abi_encoder_registered_effect (frag_ids st1 st2) [] initial actual /\
  vars_pc_only vs initial /\ initial.vs_memory = vs.vs_memory /\
  alloca_inv actual /\ alloca_room unit.cu_context func actual /\
- fmp_room unit.cu_context func actual /\
  immutables_rel cenv tx.target NONE T es0 actual /\
  immutable_alloca_sep func cenv (deploy_evaluation_context tops am tx) es0 actual /\
  immutable_base_zero cenv actual /\
@@ -487,7 +488,6 @@ Proof
  `alloca_room unit.cu_context func actual` by
    (irule deploy_ctor_frontier_alloca_room >>
     qexistsl [`imm_len tops`, `ARB:instruction`] >> simp[]) >>
- `fmp_room unit.cu_context func actual` by metis_tac[deploy_ctor_entry_fmp_room] >>
  simp[] >> qexistsl [`ce1`, `st1`, `st2`, `fargs`, `initial`, `actual`] >>
  asm_rewrite_tac[]
 QED
@@ -511,7 +511,6 @@ Theorem deploy_ctor_entry_body_resources:
  abi_encoder_registered_effect (frag_ids st1 st2) [] initial actual /\
  vars_pc_only vs initial /\ initial.vs_memory = vs.vs_memory /\
  alloca_inv actual /\ alloca_room unit.cu_context func actual /\
- fmp_room unit.cu_context func actual /\
  immutables_rel cenv tx.target NONE T es0 actual /\
  immutable_alloca_sep func cenv (deploy_evaluation_context tops am tx) es0 actual /\
  immutable_base_zero cenv actual /\

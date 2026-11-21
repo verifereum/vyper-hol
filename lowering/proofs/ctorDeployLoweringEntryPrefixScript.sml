@@ -43,6 +43,21 @@ Proof
  simp[fresh_vars_wrt_def, initial_compile_state_def, lookup_var_def]
 QED
 
+Theorem deploy_ctor_raw_variant_from_gas_variant:
+  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
+  raw_variant (opt_deploy_entry_state_own prog prog' cplan tops es).vs_initial_fmp vs
+    (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes)
+Proof
+  strip_tac >> simp[raw_variant_def] >>
+  `(opt_deploy_entry_state_own prog prog' cplan tops es) with
+      <|vs_fmp := (opt_deploy_entry_state_own prog prog' cplan tops es).vs_initial_fmp;
+        vs_initial_fmp := (opt_deploy_entry_state_own prog prog' cplan tops es).vs_initial_fmp|> =
+    opt_deploy_entry_state_own prog prog' cplan tops es` by
+    simp[venom_state_component_equality, opt_deploy_entry_state_own_def,
+         opt_entry_state_own_def, entry_venom_state_def] >>
+  gvs[venom_state_fupdfupds]
+QED
+
 Theorem deploy_ctor_original_entry_shape:
  !tops rp runtime unit body ce nr key ut imm lbl sa sb sj se sp sf func.
  supported_program tops /\ supported_program_deploy tops /\

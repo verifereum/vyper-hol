@@ -41,7 +41,7 @@ Ancestors
   ctorDeployMemoryRunPtrPrefixEntrySemantic ctorDeployLoweringEntryImmutableMemory ctorDeployLoweringNoCtor
   valueEncoding codegenRel ctorDeployMemoryRunMemEntryTaskBound
   bodyPtrDefs ctorDeployMemoryRunMemEntryBoundary calldataRegistrationLocals
-  fragGasOriginPtr
+  fragGasOriginPtr decoderOriginAllocationFrame ptrDiscipline
 
 val _ = Parse.hide "body";
 
@@ -52,7 +52,8 @@ Theorem deploy_ptr_entry_normalized:
     (rp,unit,dout,prog,cplan) /\
   deploy_source_ok tops am tx /\
   deploy_state_rel tops (assemble prog') am tx es /\
-  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+  raw_variant vs.vs_initial_fmp vs
+    (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
   deploy_ctor_code tops rp runtime_bc unit
     (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
   lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn /\
@@ -81,11 +82,17 @@ Proof
   `imm_len tops + unit_alloca_budget unit.cu_context < dimword (:256)` by
     (drule deploy_imm_budget_ok >> decide_tac) >>
   `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
-    (qpat_assum `gas_variant _ _` mp_tac >>
-     rewrite_tac[gas_variant_def] >> strip_tac >>
+    (qpat_assum `raw_variant _ _ _` mp_tac >>
+     rewrite_tac[raw_variant_def, gas_variant_def] >> strip_tac >>
      pop_assum (mp_tac o Q.AP_TERM `\s. (s.vs_vars,s.vs_halted)`) >>
      simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def, init_venom_state_def]) >>
-  drule deploy_prefix_normalized_allocations >> simp[] >> strip_tac >>
+  `vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = imm_len tops` by
+    (qpat_assum `raw_variant _ _ _`
+       (mp_tac o REWRITE_RULE [raw_variant_def, gas_variant_def]) >>
+     disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_allocas, s.vs_alloca_next)`) >>
+     simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
+          entry_venom_state_def, init_venom_state_def]) >>
+  simp[allocas_from_def] >>
   simp[fresh_vars_wrt_def, initial_compile_state_def, lookup_var_def] >>
   rpt strip_tac >> drule_all deploy_ctor_raw_blocks_no_phi >> simp[]
 QED
@@ -121,7 +128,15 @@ Proof
   qpat_x_assum `deploy_bc = _` SUBST_ALL_TAC >>
   `gas_variant vs (opt_deploy_entry_state_own prog prog cplan tops es
       with vs_outcomes := vs.vs_outcomes)` by simp[opt_deploy_entry_state_own_identity] >>
-  drule_all deploy_ptr_entry_normalized >> simp[]
+  `vs.vs_initial_fmp = (opt_deploy_entry_state_own prog prog cplan tops es).vs_initial_fmp` by
+    (qpat_assum `gas_variant _ (opt_deploy_entry_state_own _ _ _ _ es with vs_outcomes := _)`
+       (mp_tac o Q.AP_TERM `\s. s.vs_initial_fmp` o REWRITE_RULE [gas_variant_def]) >> simp[]) >>
+  drule deploy_ctor_raw_variant_from_gas_variant >> simp[] >>
+  strip_tac >>
+  `raw_variant vs.vs_initial_fmp vs (opt_deploy_entry_state_own prog prog cplan tops es
+      with vs_outcomes := vs.vs_outcomes)` by asm_rewrite_tac[] >>
+  drule_all deploy_ptr_entry_normalized >> strip_tac >>
+  gvs[initial_compile_state_def] >> first_assum ACCEPT_TAC
 QED
 
 (* A successfully started deployment cannot enable the constructor lock.
@@ -224,13 +239,18 @@ QED
 val SourceEntryMode = ``\checked.
   deploy_phases policy tops (assemble prog,runtime_bc) (rp,unit,dout,prog,cplan) /\
   deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
-  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+  raw_variant vs.vs_initial_fmp vs
+    (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+  (ctx_has_dalloca unit.cu_context ==>
+    imm_len tops + unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254) /\
   deploy_ctor_code tops rp runtime_bc unit
     (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
   deploy_ctor_start tops am tx (mut,nr,source_body,am_c,es0) /\
   lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME lbl ==>
   ?actual H qt scope fargs ce0.
+    (checked ==> fmp_room unit.cu_context func actual) /\
     (checked ==> !D explicit. gas_origin_ptr_path (D, (imm_len tops), explicit, unit.cu_context, func, []) ((vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>), FEMPTY, entry_taint) [] (OK actual, H, qt)) /\
     (checked ==>
       gas_path_mem unit.cu_context func
@@ -300,28 +320,25 @@ Proof
   Q.SUBGOAL_THEN `is_payable \/ initial.vs_call_ctx.cc_callvalue = 0w` assume_tac
   >- (Cases_on `is_payable` >> simp[] >>
       `vs.vs_call_ctx = (opt_deploy_entry_state_own prog prog' cplan tops es).vs_call_ctx` by
-        (qpat_x_assum `gas_variant _ _` (mp_tac o REWRITE_RULE [gas_variant_def]) >>
+        (qpat_x_assum `raw_variant _ _ _` (mp_tac o REWRITE_RULE [raw_variant_def, gas_variant_def]) >>
          disch_then (mp_tac o Q.AP_TERM `\s. s.vs_call_ctx`) >> simp[]) >>
       qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
       simp_tac std_ss [deploy_state_rel_def] >> strip_tac >>
       simp[Abbr `initial`, opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def] >> gvs[]) >>
   `supported_program tops /\ supported_program_deploy tops` by fs[deploy_source_ok_def] >>
-  `!s. fmp_room unit.cu_context fn s` by
-    (drule_at (Pat `deploy_ctor_code _ _ _ _ _`) deploy_ctor_entry_fmp_room >>
-     simp[deploy_source_ok_def]) >>
+  `vs.vs_fmp = vs.vs_initial_fmp` by
+    (qpat_assum `raw_variant _ _ _`
+       (mp_tac o REWRITE_RULE [raw_variant_def, gas_variant_def]) >>
+     disch_then (mp_tac o Q.AP_TERM `\s. s.vs_fmp`) >> simp[]) >>
   `ctx_has_dalloca unit.cu_context ==> allocas_below_fmp initial` by
-    (strip_tac >>
-     qpat_assum `ctx_has_dalloca unit.cu_context` (fn dynamic =>
-       qpat_assum `!s. fmp_room _ _ s`
-         (qspec_then `initial` (strip_assume_tac o SIMP_RULE bool_ss [fmp_room_def,dynamic]))) >>
-     simp[ptrDisciplineTheory.allocas_below_fmp_def]) >>
+    (strip_tac >> simp[ptrDisciplineTheory.allocas_below_fmp_def, Abbr `initial`]) >>
   drule_all prefix_entry_prepare_actual_checked >>
   disch_then (qspecl_then [`entry_taint`, `[]`, `FEMPTY`,
     `deploy_dead (HS0:(bool # bytes32 # type_value) list # num list)
       tops runtime_bc am tx`] strip_assume_tac) >>
   qpat_x_assum `is_payable \/ tx.value = 0` kall_tac >>
   qpat_x_assum `is_payable \/ initial.vs_call_ctx.cc_callvalue = 0w` kall_tac >>
-  drule_all deploy_ctor_entry_data_section >> strip_tac >>
+  drule_all deploy_ctor_entry_data_section_raw >> strip_tac >>
   `constructor_args_encode tops tx initial.vs_data_section` by simp[Abbr `initial`] >>
   drule_all ctorDeployLoweringEntryInputsTheory.deploy_ctor_common_source_witness >> strip_tac >>
   qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac classify_functions_ctor_lookup >>
@@ -333,6 +350,7 @@ Proof
     fs[set_constructor_package_target_def, package_constructor_def] >>
   gvs[] >>
   `t.vs_data_section = vs.vs_data_section` by fs[Abbr `initial`] >>
+  `constructor_args_encode tops tx t.vs_data_section` by simp[] >>
   drule (ctorDeployLoweringEntryInputsTheory.deploy_ctor_decoder_inputs |> INST_TYPE [``:'a`` |-> ``:expr``] |> SPEC_ALL |>
     Q.INST [`ce0` |-> `ce_pack with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)`,
             `imm_opt` |-> `if imm_len tops > 0 then SOME imm else NONE`] |> GEN_ALL |> SRULE []) >>
@@ -361,10 +379,10 @@ Proof
   `ctx_has_dalloca unit.cu_context ==> allocas_below_fmp t /\
     t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp` by
     (strip_tac >>
-     qpat_assum `ctx_has_dalloca unit.cu_context` (fn dynamic =>
-       qpat_assum `!s. fmp_room _ _ s`
-         (qspec_then `t` (strip_assume_tac o SIMP_RULE bool_ss [fmp_room_def,dynamic]))) >>
-     simp[ptrDisciplineTheory.allocas_below_fmp_def] >> decide_tac) >>
+     mp_tac (Q.INST [`k` |-> `imm_len tops`, `ctx` |-> `unit.cu_context`,
+       `func` |-> `fn`, `site` |-> `ARB:instruction`, `s` |-> `t`]
+       deploy_entry_frontier_allocas_below_fmp) >>
+     fs[Abbr `initial`]) >>
   drule (deploy_ptr_entry_register_prepared_origins_coverage_mode |> Q.SPEC `T` |>
     SIMP_RULE bool_ss [] |> SPEC_ALL |>
     Q.INST [`ce0` |-> `cenv0 with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)`] |>
@@ -390,9 +408,9 @@ Proof
     (rpt strip_tac >>
      `read_byte a end_state.vs_memory = read_byte a t.vs_memory` by metis_tac[] >>
      simp[Abbr `initial`] >>
-     qpat_assum `gas_variant _ _` mp_tac >>
+     qpat_assum `raw_variant _ _ _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
-     rewrite_tac[gas_variant_def] >> strip_tac >>
+     rewrite_tac[raw_variant_def, gas_variant_def] >> strip_tac >>
      pop_assum (mp_tac o Q.AP_TERM `\s. s.vs_memory`) >>
      simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def, init_venom_state_def,
        codegenRelTheory.read_byte_def]) >>
@@ -407,11 +425,22 @@ Proof
        (cenv0 with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE))
        (SND (EL j args))`] >>
      fs[local_region_def]) >>
+  `checked ==> fmp_room unit.cu_context fn end_state` by
+    (strip_tac >>
+     `fn_inst_ids_distinct fn` by fs[deploy_ctor_code_def] >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ (t,H,qt) _ _`
+       (qspecl_then [`deploy_dead HS0 tops runtime_bc am tx`, `{}`] assume_tac) >>
+     drule_all decoder_origin_path_allocation_frame >> strip_tac >>
+     mp_tac (Q.INST [`k` |-> `imm_len tops`, `ctx` |-> `unit.cu_context`,
+       `func` |-> `fn`, `site` |-> `ARB:instruction`, `s` |-> `end_state`]
+       deploy_entry_frontier_fmp_room) >>
+     fs[Abbr `initial`]) >>
   qexistsl [`end_state`, `end_G`, `end_taint`, `scope'`, `args`,
     `cenv0 with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)`] >>
   `local_ptrs_rel fn (cenv1 with ce_ctor_exit_label := SOME exit) [scope'] end_state` by
     (qpat_x_assum `local_ptrs_rel fn cenv1 _ end_state` mp_tac >>
      simp[local_ptrs_rel_def, local_region_def]) >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
   (conj_tac >- (strip_tac >> simp[Abbr `initial`] >>
     metis_tac[gas_origin_ptr_path_trans])) >>
   (conj_tac >- (strip_tac >> conj_tac
@@ -434,7 +463,11 @@ Proof
   (conj_tac >- (rpt gen_tac >> strip_tac >>
     qpat_assum `!inst b sz n. _` irule >> goal_assum (drule_at Any) >> simp[])) >>
   simp[Abbr `initial`] >>
-  conj_tac >- metis_tac[abiDecoderLoopTheory.abi_decode_sim_trans] >>
+  conj_tac >-
+    (qpat_assum `t.vs_data_section = vs.vs_data_section` mp_tac >>
+     qpat_assum `t.vs_data_section = enc _ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[] >> metis_tac[]) >>
+  conj_tac >- (irule abiDecoderLoopTheory.abi_decode_sim_trans >> qexists_tac `t` >> fs[]) >>
   `!x. imm = Var x ==> not_fresh_at st1 x` by
     (rpt strip_tac >> gvs[eval_operand_def] >>
      fs[fresh_vars_wrt_def, not_fresh_at_def, lookup_var_def, FLOOKUP_DEF] >>
@@ -470,11 +503,15 @@ Proof
 QED
 
 
-Theorem deploy_ptr_entry_prefix_related_checked:
+Theorem deploy_ptr_entry_prefix_related_raw_checked:
   deploy_phases policy tops (assemble prog,runtime_bc) (rp,unit,dout,prog,cplan) /\
   deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
   IS_SOME (FLOOKUP (lo_reloc prog prog') "runtime_begin") /\
-  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+  raw_variant vs.vs_initial_fmp vs
+    (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+  (ctx_has_dalloca unit.cu_context ==>
+    imm_len tops + unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254) /\
   deploy_ctor_code tops rp runtime_bc unit
     (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
   deploy_ctor_start tops am tx (mut,nr,source_body,am_c,es0) /\
@@ -575,8 +612,6 @@ Proof
     (irule deploy_ctor_frontier_alloca_room >>
      qexistsl [`imm_len tops`,`mk_inst 0 STOP [] []`] >> simp[] >>
      drule deploy_imm_budget_ok >> simp[]) >>
-  `fmp_room unit.cu_context func actual` by
-    (drule_all deploy_ctor_entry_fmp_room >> simp[]) >>
   `!HS. ghost_inv_at (deploy_dead HS tops runtime_bc am tx) (imm_len tops) NONE ce
       (deploy_evaluation_context tops am tx)
       (es0 with outcomes := SOME vs.vs_outcomes) H qt actual` by
@@ -607,6 +642,53 @@ Proof
     (drule ctor_checked_code_return_buf >> simp[loweringPostsTheory.return_buf_frame_def]) >>
   qexistsl [`actual`,`H`,`qt`] >> simp[] >> qx_gen_tac `HS` >>
   simp[stmt_state_rel_def] >> first_assum ACCEPT_TAC
+QED
+
+Theorem deploy_ptr_entry_prefix_related_checked:
+  deploy_phases policy tops (assemble prog,runtime_bc) (rp,unit,dout,prog,cplan) /\
+  deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
+  IS_SOME (FLOOKUP (lo_reloc prog prog') "runtime_begin") /\
+  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+  deploy_ctor_code tops rp runtime_bc unit
+    (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
+  deploy_ctor_start tops am tx (mut,nr,source_body,am_c,es0) /\
+  lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn /\
+  fn_entry_label fn = SOME lbl ==>
+  ?actual H qt.
+    (!D explicit. gas_origin_ptr_path (D, (imm_len tops), explicit, unit.cu_context, func, []) ((vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>), FEMPTY, entry_taint) [] (OK actual, H, qt)) /\
+    gas_path_mem unit.cu_context func
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) 0 (OK actual) /\
+    alloca_history func actual /\
+    actual.vs_code = vs.vs_code /\ actual.vs_labels = vs.vs_labels /\
+    return_buf_frame NONE ce sa actual /\
+    ~actual.vs_halted /\ actual.vs_current_bb = sa.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    actual.vs_gas_readings = vs.vs_gas_readings /\
+    !HS.
+      ghost_inv_at (deploy_dead HS tops runtime_bc am tx) (imm_len tops) NONE ce
+        (deploy_evaluation_context tops am tx)
+        (es0 with outcomes := SOME vs.vs_outcomes) H qt actual /\
+      stmt_state_rel HS unit.cu_context func ce (deploy_evaluation_context tops am tx)
+        (es0 with outcomes := SOME vs.vs_outcomes) actual /\
+      deploy_ptr_inv HS tops runtime_bc am tx imm H qt actual /\
+      ((!fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
+          fuel unit.cu_context func [] H qt actual) ==>
+        !fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
+          fuel unit.cu_context func [] FEMPTY entry_taint
+          (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>))
+Proof
+  strip_tac >>
+  `vs.vs_initial_fmp = (opt_deploy_entry_state_own prog prog' cplan tops es).vs_initial_fmp` by
+    (qpat_assum `gas_variant _ _`
+       (mp_tac o Q.AP_TERM `\s. s.vs_initial_fmp` o REWRITE_RULE [gas_variant_def]) >> simp[]) >>
+  drule deploy_ctor_raw_variant_from_gas_variant >> strip_tac >>
+  `raw_variant vs.vs_initial_fmp vs (opt_deploy_entry_state_own prog prog' cplan tops es
+      with vs_outcomes := vs.vs_outcomes)` by asm_rewrite_tac[] >>
+  `~ctx_has_dalloca unit.cu_context` by metis_tac[deploy_prefix_no_dalloca] >>
+  `ctx_has_dalloca unit.cu_context ==>
+    imm_len tops + unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254` by simp[] >>
+  drule_all deploy_ptr_entry_prefix_related_raw_checked >> simp[]
 QED
 
 Theorem deploy_ptr_entry_prefix_related_checked_canonical:

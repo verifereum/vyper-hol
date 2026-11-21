@@ -23,7 +23,8 @@ Theorem deploy_ptr_entry_actual_state_rel:
   !tops bc am tx es vs prog prog' cp rp runtime unit body ce nr key ut imm exit
     sa sb sj se sp sf func mut source_body am_c es0 args scope actual.
   deploy_source_ok tops am tx /\ deploy_state_rel tops bc am tx es /\
-  gas_variant vs (opt_deploy_entry_state_own prog prog' cp tops es with vs_outcomes := vs.vs_outcomes) /\
+  raw_variant vs.vs_initial_fmp vs
+    (opt_deploy_entry_state_own prog prog' cp tops es with vs_outcomes := vs.vs_outcomes) /\
   deploy_ctor_code tops rp runtime unit
     (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
   deploy_ctor_start tops am tx (mut,F,source_body,am_c,es0) /\
@@ -47,8 +48,8 @@ Proof
   drule_all deploy_ptr_entry_source_accounts >> strip_tac >>
   gvs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
       logs_rel_def, deploy_evaluation_context_def, initial_evaluation_context_def] >>
-  qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
-  rewrite_tac[gas_variant_def] >>
+  qpat_x_assum `raw_variant _ _ _`
+    (mp_tac o REWRITE_RULE [raw_variant_def, gas_variant_def]) >>
   disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_accounts,s.vs_transient,s.vs_logs,
     s.vs_call_ctx,s.vs_tx_ctx,s.vs_block_ctx,s.vs_requests,s.vs_pending_deletions,
     s.vs_code)`) >>

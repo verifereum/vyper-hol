@@ -161,12 +161,11 @@ Proof
 QED
 
 Theorem deploy_ctor_decoder_inputs:
- !policy tops runtime_bc rp unit dout prog prog' cplan am tx es vs
+ !policy tops runtime_bc rp unit dout prog prog' cplan am tx es
  body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0
  exts ints fb rr fargs ce_pack pos_args imm_opt ce0 initial.
  deploy_phases policy tops (assemble prog,runtime_bc) (rp,unit,dout,prog,cplan) /\
  deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
- gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\
@@ -177,7 +176,7 @@ Theorem deploy_ctor_decoder_inputs:
      (mut,nr,rr,"__init__",fargs,[],NoneT,body)) =
    (ce_pack,pos_args,mut = Payable,nr,key,ut,body,NoneT) /\
  ce0 = (ce_pack with ce_imm_alloca := imm_opt) /\
- initial.vs_data_section = vs.vs_data_section ==>
+ constructor_args_encode tops tx initial.vs_data_section ==>
  nr = F /\ nr' = nr /\ body = subst_consts_stmts (module_consts_env tops []) body' /\
  pos_args = build_positional_args ce0 fargs /\
  ALL_DISTINCT (MAP FST fargs) /\
@@ -207,8 +206,6 @@ Proof
  rpt gen_tac >> strip_tac >>
  `supported_program tops` by fs[deploy_source_ok_def] >>
  drule_all deploy_ctor_entry_selection_agrees >> strip_tac >> gvs[] >>
- drule_all deploy_ctor_entry_data_section >> strip_tac >>
- `constructor_args_encode tops tx initial.vs_data_section` by metis_tac[] >>
  drule_all deploy_ctor_common_source_witness >> strip_tac >>
  qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac classify_functions_ctor_lookup >>
  simp[] >> strip_tac >>
@@ -239,7 +236,9 @@ Proof
    deploy_ctor_target_bound_source_inputs >>
  simp_tac bool_ss [combinTheory.K_THM] >> disch_then drule_all >> strip_tac >>
  drule_all deploy_ctor_bound_decoder_metadata >> strip_tac >>
- drule_all deploy_ctor_entry_data_size >> strip_tac >>
+ `LENGTH initial.vs_data_section < dimword (:256)` by
+   (drule_all constructor_args_size_bounded >>
+    CONV_TAC (DEPTH_CONV wordsLib.SIZES_CONV) >> simp[]) >>
  gvs[mem_bytes_at_def, TAKE_LENGTH_APPEND] >> qexists `avs` >> simp[]
 QED
 
@@ -292,5 +291,7 @@ Proof
   qpat_x_assum `deploy_bc = _` SUBST_ALL_TAC >>
   `gas_variant vs (opt_deploy_entry_state_own prog prog cplan tops es
       with vs_outcomes := vs.vs_outcomes)` by simp[opt_deploy_entry_state_own_identity] >>
+  drule_all deploy_ctor_entry_data_section >> strip_tac >>
+  `constructor_args_encode tops tx initial.vs_data_section` by simp[] >>
   drule_all deploy_ctor_decoder_inputs >> simp[]
 QED
