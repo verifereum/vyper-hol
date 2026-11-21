@@ -34,6 +34,7 @@ Ancestors
   ptrDiscipline lowerDloadDefs e2eComposition sourceUnitExitSafe
   sourceUnitExecution exprSimHypsDefs
   o1PipelineCorrect o1PipelineCompose o1PassContract contextCodegenRel
+  o1CreateSizeTransport[qualified,ignore_grammar]
   o1StaticPipelineCorrect runtimeLabelReadiness
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeProps loweringShapeSource passSimulationDefs contextCodegenRel
