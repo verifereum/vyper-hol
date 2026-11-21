@@ -97,7 +97,8 @@ QED
 
 Theorem external_value_reject_dispatch[local]:
   lower_vyper_runtime_unit tops rp = SOME unit /\
-  supported_program tops /\ source_typing_ok tops am tx /\
+  supported_program tops /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\ source_typing_ok tops am tx /\
   tx.function_name <> "__default__" /\
     LENGTH tx.args = LENGTH args /\
     calldata_encodes (type_env tops) tx.function_name (MAP SND args)
@@ -273,7 +274,8 @@ QED
 
 Theorem external_value_reject_target[local]:
   lower_vyper_runtime_unit tops rp = SOME unit /\
-  supported_program tops /\ source_typing_ok tops am tx /\
+  supported_program tops /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\ source_typing_ok tops am tx /\
   tx.function_name <> "__default__" /\
     LENGTH tx.args = LENGTH args /\
     calldata_encodes (type_env tops) tx.function_name (MAP SND args)
@@ -310,6 +312,7 @@ Theorem external_entry_value_revert_nr:
   !tops rpolicy unit am tx ret vs mut nr args fbody env e st.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     tx.function_name <> "__default__" /\
@@ -385,6 +388,7 @@ Theorem external_entry_value_revert:
   !tops rpolicy unit am tx ret vs mut args fbody env e st.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
