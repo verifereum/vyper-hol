@@ -137,7 +137,7 @@ Proof
   strip_tac >> simp[] >> metis_tac[]
 QED
 
-Theorem getter_hashmap_member_lookup[local]:
+Theorem getter_hashmap_member_lookup:
   !ts vis tr id kt vt slot.
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) ts)) /\
   MEM (HashMapDecl vis tr id kt vt slot) ts ==>
@@ -163,7 +163,7 @@ Proof
   disch_then (qspec_then `NONE` mp_tac) >> simp[]
 QED
 
-Theorem getter_hashmap_excludes_variable[local]:
+Theorem getter_hashmap_excludes_variable:
   !ts vis tr id kt vt slot.
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) ts)) /\
   MEM (HashMapDecl vis tr id kt vt slot) ts ==>

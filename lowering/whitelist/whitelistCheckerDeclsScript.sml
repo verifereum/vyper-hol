@@ -66,7 +66,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem check_contract_single_body[local]:
+Theorem check_contract_single_body:
   check_contract F layouts addr [(NONE, tops)] = SOME art /\
   MEM (FunctionDecl vis mut nr rr name args dflts ret fbody) tops /\
   vis <> Deploy ==>
@@ -557,7 +557,7 @@ Proof
   rpt (qpat_x_assum `(if _ then _ else _) = _` mp_tac) >> rw[] >> gvs[]
 QED
 
-Theorem supported_event_fields_event_keys[local]:
+Theorem supported_event_fields_event_keys:
   !tops name fields.
     ALL_DISTINCT (FLAT (MAP (event_keys_toplevel (NONE:num option)) tops)) /\
     MEM (EventDecl name fields) tops ==>
