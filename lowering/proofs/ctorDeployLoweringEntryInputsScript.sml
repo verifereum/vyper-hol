@@ -178,7 +178,7 @@ Theorem deploy_ctor_decoder_inputs:
    (ce_pack,pos_args,mut = Payable,nr,key,ut,body,NoneT) /\
  ce0 = (ce_pack with ce_imm_alloca := imm_opt) /\
  initial.vs_data_section = vs.vs_data_section ==>
- nr = F /\ nr' = nr /\ body' = body /\
+ nr = F /\ nr' = nr /\ body = subst_consts_stmts (module_consts_env tops []) body' /\
  pos_args = build_positional_args ce0 fargs /\
  ALL_DISTINCT (MAP FST fargs) /\
  EVERY (\a. ?off. FLOOKUP ce0.ce_vars (FST a) =
@@ -212,9 +212,8 @@ Proof
  drule_all deploy_ctor_common_source_witness >> strip_tac >>
  qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac classify_functions_ctor_lookup >>
  simp[] >> strip_tac >>
- `subst_consts_stmts (module_consts_env tops []) body' = body'` by
-   metis_tac[deploy_supported_constructor_subst] >>
  gvs[constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def] >> gvs[] >>
+ qmatch_asmsub_rename_tac `subst_consts_stmts (module_consts_env tops []) source_body` >>
  `supported_program tops /\ supported_program_deploy tops /\ ?art.
    check_contract T am.layouts tx.target [(NONE,tops)] = SOME art` by
    fs[deploy_source_ok_def, deploy_typing_ok_constants_ready] >>
@@ -223,7 +222,7 @@ Proof
    fs[set_constructor_package_target_def, package_constructor_def] >>
  fs[] >>
  qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`, `mut`, `F`, `rr`,
-   `"__init__"`, `args`, `[]`, `NoneT`, `body'`, `rp.rpol_target`, `ce_pack`,
+   `"__init__"`, `args`, `[]`, `NoneT`, `subst_consts_stmts (module_consts_env tops []) source_body`, `rp.rpol_target`, `ce_pack`,
    `pos_args`, `imm_opt`, `ce_pack with ce_imm_alloca := imm_opt`] mp_tac
    deploy_ctor_target_package_layout >>
  simp[] >> strip_tac >>
@@ -235,7 +234,7 @@ Proof
     < dimword(:256)) args` by
    (irule deploy_ctor_argument_bounds_transport >> qexists `cenv` >> simp[]) >>
  qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`, `mut`, `F`, `rr`,
-   `"__init__"`, `args`, `[]`, `NoneT`, `body'`, `rp.rpol_target`, `ce_pack`,
+   `"__init__"`, `args`, `[]`, `NoneT`, `subst_consts_stmts (module_consts_env tops []) source_body`, `rp.rpol_target`, `ce_pack`,
    `pos_args`, `imm_opt`, `ce_pack with ce_imm_alloca := imm_opt`] mp_tac
    deploy_ctor_target_bound_source_inputs >>
  simp_tac bool_ss [combinTheory.K_THM] >> disch_then drule_all >> strip_tac >>
@@ -262,7 +261,7 @@ Theorem deploy_ctor_decoder_inputs_canonical:
    (ce_pack,pos_args,mut = Payable,nr,key,ut,body,NoneT) /\
  ce0 = (ce_pack with ce_imm_alloca := imm_opt) /\
  initial.vs_data_section = vs.vs_data_section ==>
- nr = F /\ nr' = nr /\ body' = body /\
+ nr = F /\ nr' = nr /\ body = subst_consts_stmts (module_consts_env tops []) body' /\
  pos_args = build_positional_args ce0 fargs /\
  ALL_DISTINCT (MAP FST fargs) /\
  EVERY (\a. ?off. FLOOKUP ce0.ce_vars (FST a) =

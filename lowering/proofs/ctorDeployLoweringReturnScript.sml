@@ -518,15 +518,15 @@ Proof
 QED
 
 Theorem deploy_ctor_immutable_section[local]:
-  !tops am tx deploy_bc es mut nr body am_c es0 gs outcomes res st
+  !tops am tx deploy_bc es mut nr body source_body am_c es0 gs outcomes res st
    rpolicy runtime_bc dunit cenv nkey ut imm exit_lbl sa sb sj st_exit
    st_epilogue st_final func before.
   deploy_source_ok tops am tx /\
   deploy_state_rel tops deploy_bc am tx es /\
-  deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
+  deploy_ctor_start tops am tx (mut,nr,source_body,am_c,es0) /\
   deploy_ctor_code tops rpolicy runtime_bc dunit
     (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,st_epilogue,st_final,func) /\
-  eval_stmts (deploy_evaluation_context tops am tx) body
+  eval_stmts (deploy_evaluation_context tops am tx) source_body
     (es0 with <|gas_obs := gs; outcomes := SOME outcomes|>) = (res,st) /\
   (res = INL () \/ res = INR (ReturnException NoneV)) /\
   immutables_rel cenv tx.target NONE T (st with scopes := []) before ==>
@@ -976,7 +976,7 @@ QED
    source's accounts, transient storage and logs. *)
 Theorem deploy_ctor_return:
   !policy tops runtime_bc rpolicy dunit dout prog prog' cplan off am tx es vs
-   body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func mut am_c es0 gs res st final H.
+   body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func mut source_body am_c es0 gs res st final H.
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
@@ -988,8 +988,8 @@ Theorem deploy_ctor_return:
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
-    deploy_ctor_start tops am tx (mut, nr, body, am_c, es0) /\
-    eval_stmts (deploy_evaluation_context tops am tx) body
+    deploy_ctor_start tops am tx (mut, nr, source_body, am_c, es0) /\
+    eval_stmts (deploy_evaluation_context tops am tx) source_body
       (es0 with <| gas_obs := gs; outcomes := SOME vs.vs_outcomes |>) =
       (res, st) /\
     (res = INL () \/ res = INR (ReturnException NoneV)) /\
