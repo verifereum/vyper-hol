@@ -1,6 +1,8 @@
 (* Body inputs shared by local, subscript and attribute Append simulations. *)
 Theory bodyAppendResolvedPre
 Ancestors
+  bodyInvExecutionProps bodyInvCodeProps bodyAppendStorageAdapter
+  stmtExprAllocationPreProps compileUnit alist
   bodyAugPlaceTarget bodySimAugPlaceLoad bodyAppendStorageFacts bodyExprPreFacts bodyStorageCases
   bodySim exprSimHypsDefs targetPlaceSim targetPlaceLive gasContext
   supportedTypes supportedStmts supportedTargets supportedExprs supportedExprTraverse
@@ -76,13 +78,11 @@ Proof
   drule_then assume_tac supported_stmt_body_safe >>
   drule_all body_inv_stmt_const_name_free >>
   simp[supported_stmt_expr_exists_def] >> strip_tac >>
-  `supported_program tops /\ get_module_code cx NONE = SOME tops /\
-   (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-     is_dynamic (vyper_to_abi_type (type_env tops) target))` by fs[body_inv_def] >>
-  `~is_extcode e` by
-    (irule alloc_limits_expr_not_extcode >> qexists_tac `cenv` >>
-     fs[stmt_exprs_ok_def, alloc_limits_stmt_def]) >>
-  `cx_tops cx = tops` by metis_tac[gasContextTheory.cx_tops_module] >>
+  drule_then strip_assume_tac body_inv_main_support >>
+  `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+     is_dynamic (vyper_to_abi_type (type_env tops) target)` by
+    metis_tac[body_inv_singleton_abi_types] >>
+  drule_then strip_assume_tac body_inv_main_code >>
   conj_tac >- suspend "target" >>
   suspend "rhs"
 QED
@@ -112,10 +112,13 @@ Resume body_append_typed_pre[target]:
 QED
 
 Resume body_append_typed_pre[rhs]:
-  irule stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
-  qexists_tac `[]` >> simp[] >>
-  metis_tac[call_evaluation_safe_append_right]
+  mp_tac (Q.INST [`tops` |-> `tops`, `ctx` |-> `ctx`, `s` |-> `Append bt e`]
+          body_inv_stmt_expr_pre_singleton) >>
+  simp[supported_stmt_expr_exists_def] >>
+  disch_then irule >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
+                   `ctx` |-> `ctx`, `bt` |-> `bt`] body_append_expr_pre_mods) >>
+  simp[main_module_def, ALOOKUP_def]
 QED
 
 Finalise body_append_typed_pre
@@ -164,9 +167,7 @@ Theorem append_resolved_rhs_body_pre:
   eval_target_place cx bt es = (INL p,ee) ==>
   expr_body_pre cenv cx env e ee
 Proof
-  rpt strip_tac >>
-  `expr_sim_inv cenv cx env es /\ target_indices_pre cenv cx env bt` by
-    fs[expr_body_pre_def, target_pre_def] >>
-  drule_all aug_place_target_inv >>
-  fs[expr_body_pre_def]
+  simp[expr_body_pre_split_def, target_pre_def] >> strip_tac >>
+  drule_all_then assume_tac aug_place_target_inv >>
+  fs[expr_body_pre_mods_def, expr_sim_inv_split_def] >> first_assum ACCEPT_TAC
 QED
