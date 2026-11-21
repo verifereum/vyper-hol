@@ -80,7 +80,7 @@ Proof
                   is_contiguous_top_def, QSORT_DEF, PARTITION_DEF, PART_DEF] >> simp[]) >>
          drule popmany_singleton_stack_projection >> simp[] >> strip_tac >>
          gvs[] >> rpt strip_tac >>
-         irule reorderSimTheory.stack_swap_mem_subset >>
+         irule reorderPreparationInventoryPropsTheory.stack_swap_mem_subset >>
          metis_tac[MEM_TAKE, stack_pop_def]) >>
       rpt strip_tac >>
       `MEM op st.ps_stack` by metis_tac[] >>

@@ -78,9 +78,10 @@ Proof
      Cases_on `t` >> gvs[flip_operands_def] >>
      Cases_on `t'` >> gvs[flip_operands_def] >>
      Cases_on `(EL q xs).inst_opcode` >>
+     qpat_x_assum `is_flippable _` mp_tac >>
+     simp_tac (srw_ss()) [is_flippable_def,is_commutative_def,is_comparator_def] >>
      gvs[dftGasInvCrossingProbeTheory.inv_memory_observation_def,is_fallible_def,
-         opcode_fail_class_def,is_flippable_def,is_commutative_def,is_comparator_def,
-         flip_comparison_opcode_def]) >>
+         opcode_fail_class_def,is_comparator_def,flip_comparison_opcode_def]) >>
   ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
   `EL q xs = EL pos ys` by simp[] >>
   qpat_assum `inst = EL pos ys` SUBST_ALL_TAC >>

@@ -17,7 +17,7 @@ Proof
   drule select_spill_candidate_var_not_pending >> strip_tac >>
   `1 <= LENGTH stk` by (Cases_on `stk` >> gvs[]) >>
   drule_all planWfTheory.select_spill_candidate_bound >> strip_tac >>
-  drule reorderSimTheory.stack_peek_mem >> strip_tac >>
+  drule reorderPreparationInventoryPropsTheory.stack_peek_mem >> strip_tac >>
   metis_tac[]
 QED
 
@@ -95,7 +95,7 @@ Proof
   `stack_get_unfixed_depth op (LENGTH targets - 1 - idx) (LENGTH targets) core = SOME d` by
     (qpat_x_assum `stack_get_unfixed_depth _ _ _ _ = SOME _` mp_tac >>
      asm_rewrite_tac[] >>
-     simp[stack_get_unfixed_depth_bottom_excluded, MEM_REPLICATE]) >>
+     simp[reorderPreparationFramePropsTheory.stack_get_unfixed_depth_bottom_excluded, MEM_REPLICATE]) >>
   `d < LENGTH core` by metis_tac[stack_get_unfixed_depth_bound] >>
   `stack_peek d core = op` by metis_tac[stack_get_unfixed_depth_peek] >>
   `LENGTH targets < idx + (LENGTH ps.ps_stack + 1)` by simp[] >>
