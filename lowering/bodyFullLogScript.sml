@@ -12,7 +12,7 @@ Theory bodyFullLog
 Ancestors exprSimAggregateNestedStore[qualified,ignore_grammar]
   bodyFullPreds bodySimFull bodyFullShared gasShadow bodySim exprSimHypsDefs supportedStmts arithmetic
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
-  bodyExprPreFacts allocLimits allocLimitsProps exprSimSource vyperTypeCallGraph
+  bodyExprPreFacts exprBodyPreProps bodyInvCodeProps allocLimits allocLimitsProps exprSimSource vyperTypeCallGraph
   bodyFullLogScalarTopics bodyFullLogSuffix bodyFullHashKeccakFixed supportedStmtTraverse
   bodySimLogArgs stmtSimLogTrace exprSimHyps whitelistLogWiden
   supportedExprs supportedExprTraverse
@@ -204,7 +204,9 @@ Proof
      fs[LIST_REL_EL_EQN, EVERY_EL, well_formed_type_def] >>
      metis_tac[optionTheory.IS_SOME_EXISTS]) >>
   `type_env tops SUBMAP get_tenv cx` by
-    (irule body_main_type_env_submap >> fs[body_inv_def]) >>
+    (irule body_main_type_env_submap >>
+     qpat_assum `body_inv tops ctx cenv cx`
+       (ACCEPT_TAC o cj 1 o MATCH_MP body_inv_main_code)) >>
   `EVERY (assignable_type (get_tenv cx)) decl` by
     (`EVERY (supported_nested_type supported_event_leaf_type (LENGTH tops) tops) decl` by
        simp[Abbr `decl`] >>
@@ -247,7 +249,7 @@ Proof
          (qx_choose_then `tv` strip_assume_tac o REWRITE_RULE [value_runtime_typed_def]) >>
       `evaluate_type (get_tenv cx) ty = SOME tv` by metis_tac[] >>
       `type_memory_bytes cenv ty = type_memory_size tv` by
-        metis_tac[expr_sim_inv_memory_size, cj 1 expr_body_pre_def] >>
+        metis_tac[expr_sim_inv_memory_size, expr_body_pre_static_facts] >>
       qexists_tac `tv` >> simp[] >> Cases_on `is_word_type ty` >>
       fs[type_alloc_ok_def, cj 3 word_type_dec_sizes] >> decide_tac) >>
   `!l. vv_operand vv <> Label l` by metis_tac[assign_place_operand_not_label] >>

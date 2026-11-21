@@ -167,7 +167,7 @@ Proof
   first_x_assum (qspec_then `obj` mp_tac) >> simp[expr_size_def] >> metis_tac[]
 QED
 
-Theorem constant_decl_mem_consts[local]:
+Theorem constant_decl_mem_consts:
   !tops acc id. constant_decl id tops ==>
     MEM id (MAP FST (module_consts_env tops acc))
 Proof
@@ -229,7 +229,7 @@ Proof
   metis_tac[externalBodyFrameTheory.supported_function_names_mem]
 QED
 
-Theorem immutable_index_callable_closed_mods[local]:
+Theorem immutable_index_callable_closed_mods:
   !mods exps ctx cenv cx src ts fn mut nr args dflts ret body.
   contract_inv mods exps ctx cenv cx /\ get_module_code cx src = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,body) ==>
@@ -267,6 +267,64 @@ Proof
   qexistsl [`idx`, `env`, `mods`, `res`] >> simp[] >>
   rpt strip_tac >> drule_all_then strip_assume_tac immutable_index_callable_closed_mods >>
   simp[]
+QED
+
+(* An index following a dynamic ancestor must leave that ancestor live. *)
+Theorem immutable_target_index_frame:
+  body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env idx es /\
+  target_root bt = TopLevelNameTarget (NONE,id) /\ ~cx_const_name cx (NONE,id) /\
+  target_through_dynarray cenv bt /\ ~target_subscript_overlap cenv bt idx /\
+  eval_expr cx idx es = (res,ee) ==>
+  FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
+    NONE => FEMPTY | SOME imms => get_source_immutables NONE imms) id =
+  FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+    NONE => FEMPTY | SOME imms => get_source_immutables NONE imms) id
+Proof
+  strip_tac >> drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac contract_inv_cenv_modules >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  `~constant_decl id tops` by
+    (fs[cx_const_name_def] >> metis_tac[constant_decl_mem_consts]) >>
+  `MEM (StateRef (NONE,id)) (nonconstant_reads cenv.ce_modules
+      (expr_accesses cenv.ce_modules (target_to_expr bt)))` by
+    (irule target_root_state_nonconstant_read >> simp[]) >>
+  drule_all_then strip_assume_tac target_subscript_overlap_unwritten >>
+  irule eval_expr_unwritten_immutable >>
+  fs[expr_body_pre_def, expr_sim_inv_def] >>
+  qexistsl [`idx`,`env`,`[(NONE,tops)]`,`res`] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule_all_then ACCEPT_TAC immutable_index_callable_closed_mods) >>
+  gvs[]
+QED
+
+Theorem immutable_target_path_after_index:
+  body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env idx es /\
+  target_root bt = TopLevelNameTarget (NONE,id) /\ ~cx_const_name cx (NONE,id) /\
+  ~target_subscript_overlap cenv bt idx /\
+  eval_expr cx idx es = (res,ee) /\
+  FLOOKUP env.bare_globals (NONE,id) = SOME root_ty /\
+  evaluate_type (get_tenv cx) root_ty = SOME itv /\
+  FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+    NONE => FEMPTY | SOME imms => get_source_immutables NONE imms) id = SOME (itv,old) /\
+  evaluate_subscripts itv old path = INL v /\
+  (~target_through_dynarray cenv bt ==> fixed_shape_path itv path) ==>
+  expr_sim_inv cenv cx env ee /\
+  ?current a.
+    FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
+      NONE => FEMPTY | SOME imms => get_source_immutables NONE imms) id =
+      SOME (itv,current) /\
+    evaluate_subscripts itv current path = INL a
+Proof
+  strip_tac >> drule_all_then strip_assume_tac expr_body_pre_eval_result >> simp[] >>
+  Cases_on `target_through_dynarray cenv bt`
+  >- (drule_all_then assume_tac immutable_target_index_frame >>
+      qexistsl [`old`,`v`] >> simp[]) >>
+  `fixed_shape_path itv path` by simp[] >>
+  drule_all_then strip_assume_tac live_immutable_root_current >>
+  drule_all_then strip_assume_tac current_immutable_fixed_path_live >>
+  metis_tac[]
 QED
 
 Theorem immutable_typed_path[local]:
@@ -759,7 +817,7 @@ QED
 
 (* The length read, bounds check and address arithmetic form one no-mark
    path.  The abort branch stops before executing the address arithmetic. *)
-Theorem live_code_select_joint[local]:
+Theorem live_code_select_joint:
   compile_array_subscript arg idx dyn (if dyn then 0 else cnt) 32 esz sgn
     (compile_ptr_load ctor imm LocCode) sa = (dst,sb) /\
   fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
@@ -873,7 +931,7 @@ Resume live_code_select_joint[out_of_range]:
 QED
 Finalise live_code_select_joint
 
-Theorem current_immutable_dynamic_header[local]:
+Theorem current_immutable_dynamic_header:
   stmt_state_rel H ctx func cenv cx fin s /\
   immutable_holds cenv cx (ArrayT et (Dynamic cap)) raw w fin s /\
   evaluate_type (get_tenv cx) et = SOME etv /\
