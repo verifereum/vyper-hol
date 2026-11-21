@@ -3,9 +3,34 @@ Theory bodyFullRawCallCallOrigin
 Ancestors
   oracleCallStepPtr fragGasSeqPtr bodyPtrDefs venomState ptrDiscipline
   ptrSafeRun contextCodegenRel codegenRel memLocDefs venomInst memSafeRun
-  venomExecSemantics venomInstProps fragGasOriginPtr
+  venomExecSemantics venomInstProps fragGasOriginPtr fragGasOrigin gasEvents
 
-Theorem raw_call_step_origin_full:
+(* CALL and CALLDATACOPY use the same memory-safe edge for DALLOCA ranges. *)
+Theorem non_gas_mem_safe_origin_ptr_edge:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\ ~is_terminator i.inst_opcode /\
+  mem_safe_step 0 ctx i s /\
+  ptr_inst_ok D lo 0 ctx func G tn i s /\
+  step_inst_base i s = OK u ==>
+  gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G i u, step_taint i s u tn)
+Proof
+  strip_tac >>
+  `step_inst 0 ctx i s = OK u` by simp[step_inst_non_invoke] >>
+  `u.vs_halted = s.vs_halted` by
+    (qpat_assum `step_inst 0 ctx i s = OK u` (fn run =>
+     qpat_assum `~is_terminator i.inst_opcode` (fn ordinary =>
+       ACCEPT_TAC (MATCH_MP step_preserves_halted (CONJ run ordinary))))) >>
+  PURE_REWRITE_TAC[gas_origin_ptr_edge_def] >> conj_tac
+  >- (rewrite_tac[gas_origin_edge_def] >> conj_tac >- simp[] >>
+      qexistsl_tac [`0`, `bb`, `i`, `OK u`] >> simp[gas_events_step_def]) >>
+  drule_all straight_line_ptr_edge >> simp[]
+QED
+
+Theorem raw_call_step_mem_safe_origin_full:
   ((inst.inst_opcode = CALL /\
     inst.inst_operands = [gas_op;to_op;val_op;dp;dl;op;rz]) \/
    (inst.inst_opcode = STATICCALL /\
@@ -18,7 +43,7 @@ Theorem raw_call_step_origin_full:
   (!j. w2n ao <= j /\ j < w2n ao + w2n az ==> j NOTIN tn.t_mem) /\
   allocas_from lo s /\ stor_taint_ok_at D tn s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  inst_mem_below_frontier inst s /\
+  mem_safe_step 0 ctx inst s /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   step_inst_base inst s = OK u ==>
@@ -48,7 +73,7 @@ Proof
   `inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
    inst.inst_opcode <> GAS /\ inst_dload_in_section inst s` by
     simp[is_terminator_def, inst_dload_in_section_def] >>
-  drule_all straight_line_origin_ptr_edge >> simp[] >> strip_tac >>
+  drule_all non_gas_mem_safe_origin_ptr_edge >> simp[] >> strip_tac >>
   `step_inst 0 ctx inst s = OK u` by simp[step_inst_non_invoke] >>
   `~u.vs_halted` by metis_tac[step_preserves_halted] >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
@@ -60,7 +85,34 @@ Proof
   metis_tac[gas_origin_ptr_path_rules, listTheory.APPEND]
 QED
 
-Theorem raw_delegate_call_step_origin_full:
+Theorem raw_call_step_origin_full:
+  ((inst.inst_opcode = CALL /\
+    inst.inst_operands = [gas_op;to_op;val_op;dp;dl;op;rz]) \/
+   (inst.inst_opcode = STATICCALL /\
+    inst.inst_operands = [gas_op;to_op;dp;dl;op;rz])) /\
+  eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\
+  eval_operand op s = SOME ro /\ eval_operand rz s = SOME rn /\
+  (az <> 0w ==> ?p. dp = Var p /\ ptr_covers G tn p s (w2n az)) /\
+  (rn <> 0w ==> ?p. op = Var p /\ ptr_covers G tn p s (w2n rn)) /\
+  EVERY (\p. op_taint tn p = {}) inst.inst_operands /\
+  (!j. w2n ao <= j /\ j < w2n ao + w2n az ==> j NOTIN tn.t_mem) /\
+  allocas_from lo s /\ stor_taint_ok_at D tn s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  inst_mem_below_frontier inst s /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  step_inst_base inst s = OK u ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G inst u, step_taint inst s u tn)
+Proof
+  strip_tac >>
+  `inst.inst_opcode <> INVOKE` by fs[] >>
+  `mem_safe_step 0 ctx inst s` by simp[mem_safe_step_non_invoke] >>
+  mp_tac raw_call_step_mem_safe_origin_full >> simp[]
+QED
+
+Theorem raw_delegate_call_step_mem_safe_origin_full:
   inst.inst_opcode = DELEGATECALL /\
   inst.inst_operands = [gas_op;to_op;dp;dl;op;rz] /\
   eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\
@@ -71,7 +123,7 @@ Theorem raw_delegate_call_step_origin_full:
   (!j. w2n ao <= j /\ j < w2n ao + w2n az ==> j NOTIN tn.t_mem) /\
   allocas_from lo s /\ stor_taint_ok_at D tn s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  inst_mem_below_frontier inst s /\
+  mem_safe_step 0 ctx inst s /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   step_inst_base inst s = OK u ==>
@@ -105,7 +157,7 @@ Proof
   `inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
    inst.inst_opcode <> GAS /\ inst_dload_in_section inst s` by
     simp[is_terminator_def, inst_dload_in_section_def] >>
-  drule_all straight_line_origin_ptr_edge >> simp[] >> strip_tac >>
+  drule_all non_gas_mem_safe_origin_ptr_edge >> simp[] >> strip_tac >>
   `~u.vs_halted` by metis_tac[step_preserves_halted] >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
     (u with vs_inst_idx := SUC s.vs_inst_idx,
@@ -114,4 +166,29 @@ Proof
      step_prov PG G inst u, step_taint inst s u tn)` by
     (irule (cj 1 gas_origin_ptr_path_rules) >> simp[]) >>
   metis_tac[gas_origin_ptr_path_rules, listTheory.APPEND]
+QED
+
+Theorem raw_delegate_call_step_origin_full:
+  inst.inst_opcode = DELEGATECALL /\
+  inst.inst_operands = [gas_op;to_op;dp;dl;op;rz] /\
+  eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\
+  eval_operand op s = SOME ro /\ eval_operand rz s = SOME rn /\
+  (az <> 0w ==> ?p. dp = Var p /\ ptr_covers G tn p s (w2n az)) /\
+  (rn <> 0w ==> ?p. op = Var p /\ ptr_covers G tn p s (w2n rn)) /\
+  EVERY (\p. op_taint tn p = {}) inst.inst_operands /\
+  (!j. w2n ao <= j /\ j < w2n ao + w2n az ==> j NOTIN tn.t_mem) /\
+  allocas_from lo s /\ stor_taint_ok_at D tn s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  inst_mem_below_frontier inst s /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  step_inst_base inst s = OK u ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G inst u, step_taint inst s u tn)
+Proof
+  strip_tac >>
+  `inst.inst_opcode <> INVOKE` by fs[] >>
+  `mem_safe_step 0 ctx inst s` by simp[mem_safe_step_non_invoke] >>
+  mp_tac raw_delegate_call_step_mem_safe_origin_full >> simp[]
 QED

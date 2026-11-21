@@ -6,7 +6,7 @@ Ancestors
 
 (* The selected word is already at the call cursor; the list relation
    packages source uint256 range and operand preservation together. *)
-Theorem raw_call_selected_gas_word[local]:
+Theorem raw_call_selected_gas_word:
   !ks xs vs v.
     LIST_REL (\x v. ?w. eval_operand x t = SOME w /\
                         dest_NumV v = SOME (w2n w)) xs vs /\

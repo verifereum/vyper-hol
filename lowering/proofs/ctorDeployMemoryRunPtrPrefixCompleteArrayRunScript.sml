@@ -1439,11 +1439,6 @@ QED
 
 Finalise prefix_complete_array_body_iteration_path_mode_fmp
 
-Theorem prefix_complete_array_body_iteration_path_mode =
-  prefix_complete_array_body_iteration_path_mode_fmp
-  |> Q.INST [`frame_fmp` |-> `F`]
-  |> PURE_REWRITE_RULE [tautLib.TAUT `((F ==> p) /\ q) <=> q`]
-
 Theorem prefix_complete_array_successor_path_mode[local]:
   (^CshiftModeWithFmp) checked ty tv ==>
   (^PkMode) /\

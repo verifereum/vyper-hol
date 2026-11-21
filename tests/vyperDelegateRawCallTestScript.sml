@@ -3,7 +3,8 @@
 Theory vyperDelegateRawCallTest
 Ancestors
   vyperSmallStepCV
-  vyperSmallStep[ignore_grammar] vyperInterpreter
+  vyperSmallStep[ignore_grammar] vyperInterpreter extCallOracle
+  vyperCallOutcome[ignore_grammar]
   vfmExecution[ignore_grammar] vfmState[ignore_grammar]
   vyperState vyperContext vyperAST vyperValue vyperTypeSystem
   list option pair finite_map words vfmTypes
@@ -291,6 +292,47 @@ Theorem raw_call_gas_operand_limits_and_precedes_call:
                  [Literal (BaseT (UintT 256)) (IntL 1);
                   Literal (BaseT (UintT 256)) (IntL 0)]) =
     (INR (Error (RuntimeError "Div0")), 99w)
+Proof
+  CONV_TAC cv_eval
+QED
+
+(* Oracle mode: the request records the gas= operand as its cap (none
+   without the keyword), with the delegate kind for a delegate raw_call. *)
+Definition oracle_gas_flags_def:
+  oracle_gas_flags delegate has_gas =
+    <|rcf_max_outsize := 0; rcf_is_delegate := delegate;
+      rcf_is_static := F; rcf_revert_on_failure := F;
+      rcf_kws := if has_gas then [EKGas] else []|>
+End
+val () = cv_auto_trans oracle_gas_flags_def;
+
+Definition oracle_gas_expression_def:
+  oracle_gas_expression delegate gas =
+    let flags = oracle_gas_flags delegate (IS_SOME gas) in
+    Call (raw_call_return_type flags) (RawCallTarget flags)
+      ([Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [42w]));
+        Literal (BaseT (BytesT (Dynamic 5))) (BytesL [1w;2w;3w;4w;99w])] ++
+       (case gas of NONE => []
+        | SOME g => [Literal (BaseT (UintT 256)) (IntL g)])) NONE
+End
+val () = cv_auto_trans oracle_gas_expression_def;
+
+Definition oracle_gas_requests_def:
+  oracle_gas_requests delegate gas =
+    let st = delegate_state delegate_success_code with outcomes :=
+      SOME [failed_outcome (vyperCallOutcome$call_outcome_request 42w [] NONE empty_state)] in
+    let r = vyperSmallStep$fromtvk (vyperSmallStep$cont
+      (vyperSmallStep$eval_expr_cps delegate_context
+        (oracle_gas_expression delegate gas) st vyperSmallStep$DoneK)) in
+    MAP (\rq. (rq.cr_kind, rq.cr_gas)) (SND r).requests
+End
+val () = cv_auto_trans oracle_gas_requests_def;
+
+Theorem oracle_raw_call_records_gas_cap:
+  oracle_gas_requests F (SOME 50000) = [(MessageCall, SOME 50000)] /\
+  oracle_gas_requests T (SOME 50000) = [(DelegateMessageCall, SOME 50000)] /\
+  oracle_gas_requests F NONE = [(MessageCall, NONE)] /\
+  oracle_gas_requests T NONE = [(DelegateMessageCall, NONE)]
 Proof
   CONV_TAC cv_eval
 QED

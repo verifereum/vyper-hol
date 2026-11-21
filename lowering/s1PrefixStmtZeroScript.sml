@@ -1,3 +1,4 @@
+(* Request-prefix lemmas for Pass and the empty statement list. *)
 Theory s1PrefixStmtZero
 Ancestors
   s1PrefixFrame s1PrefixDefs vyperStorageTrace vyperInterpreter

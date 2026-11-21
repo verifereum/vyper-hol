@@ -1,3 +1,4 @@
+(* Request-prefix lemmas for Env reads, CalldataLen, bad arity, literal MethodId and type bounds. *)
 Theory s1PrefixBuiltinLeaves
 Ancestors
   s1PrefixFrame s1PrefixDefs exprSimCalldata exprSimHash exprBodyPreProps

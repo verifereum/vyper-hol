@@ -1,3 +1,4 @@
+(* Request-prefix lemmas for local and top-level name lookup in value and VV form. *)
 Theory s1PrefixNames
 Ancestors
   s1PrefixFrame s1PrefixDefs vyperStorageTrace vyperInterpreter

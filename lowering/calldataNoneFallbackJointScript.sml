@@ -8,7 +8,7 @@ Ancestors entryDispatchRevert entrySourcePackages entryRejectCode defaultDispatc
   venomExecSemantics venomWf ptrSafeRun ptrDiscipline fragGasOriginPtr
   list pair finite_map
 
-Theorem absent_default_fold[local]:
+Theorem absent_default_fold:
   !tops. ~EXISTS is_default_decl tops ==>
     FST (SND (SND (FOLDR classify_function ([],[],NONE,NONE) tops))) = NONE
 Proof

@@ -49,7 +49,7 @@ Ancestors
   oracleExecProps gasFocusStaticPrefixDriver words arithmetic sorting
   ownSymSrcUnit codegenLabelDisciplined fnPlanPlaceRevertPostamble
   codegenSymOwnRel callDynamicMemory[qualified,ignore_grammar]
-  callRejectMemory stackPlanGen[qualified,ignore_grammar]
+  callRejectMemory[qualified,ignore_grammar] stackPlanGen[qualified,ignore_grammar]
 
 
 (* =====================================================================

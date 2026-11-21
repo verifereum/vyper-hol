@@ -15,6 +15,53 @@ Ancestors
   venomState venomInst venomExecSemantics finite_map words list rich_list
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
+Theorem raw_call_outbuf_separated:
+  compile_raw_call_outbuf cap sa = ((ov,op),sb) /\
+  fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  FLOOKUP s.vs_allocas sa.cs_next_id = SOME (ob,payload) ==>
+  (!name lb sz. local_region cenv es.scopes s name lb sz ==>
+     regions_disjoint ob payload lb sz) /\
+  (cenv.ce_is_ctor ==> !name tv v off.
+     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+     regions_disjoint off (type_memory_size tv) ob payload)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `?ai q. MEM ai (fn_insts func) /\ ai.inst_opcode = ALLOCA /\
+     ai.inst_outputs = [q] /\ ai.inst_id = sa.cs_next_id /\
+     not_local_ptr cenv es.scopes q` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`compile_raw_call_outbuf cap sa = _`, `fn_has_code sa sb func`,
+        `local_ptrs_reserved cenv sa`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     Cases_on `cap = 0`
+     >- (fs[compile_raw_call_outbuf_def, comp_bind_def, comp_return_def] >>
+         pairarg_tac >> gvs[comp_bind_def, comp_return_def] >>
+         drule_all buffer_alloc_code >> strip_tac >>
+         goal_assum (drule_at Any) >> simp[mk_inst_def] >>
+         irule exprSimOperandsTheory.fresh_not_local_ptr >>
+         qexists_tac `sa` >> simp[not_fresh_at_def]) >>
+     `0 < cap` by decide_tac >>
+     drule_all exprSimRawCallTheory.raw_call_outbuf_allocation_site >> metis_tac[]) >>
+  conj_tac
+  >- (qpat_assum `stmt_state_rel _ _ _ _ _ es s`
+        (mp_tac o MATCH_MP stmt_state_rel_local_ptrs_alloca) >>
+      map_every (fn pat => qpat_assum pat mp_tac)
+        [`MEM ai (fn_insts func)`, `ai.inst_outputs = [q]`,
+         `not_local_ptr cenv es.scopes q`, `ai.inst_id = sa.cs_next_id`,
+         `FLOOKUP s.vs_allocas sa.cs_next_id = _`, `fn_inst_ids_distinct func`] >>
+      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+      irule localPtrsPropsTheory.local_ptrs_rel_alloca_disjoint >> metis_tac[]) >>
+  qpat_assum `stmt_state_rel _ _ _ _ _ es s`
+    (mp_tac o REWRITE_RULE [stmt_state_rel_def,immutable_alloca_sep_def]) >>
+  map_every (fn pat => qpat_assum pat mp_tac)
+    [`MEM ai (fn_insts func)`, `ai.inst_opcode = ALLOCA`,
+     `ai.inst_id = sa.cs_next_id`, `FLOOKUP s.vs_allocas sa.cs_next_id = _`] >>
+  POP_ASSUM_LIST (K all_tac) >> metis_tac[]
+QED
+
 Theorem raw_call_outbuf_joint:
   compile_raw_call_outbuf M sa = ((ov,op),sb) /\
   n = (if M = 0 then 0 else ((M+31) DIV 32)*32+32) /\
