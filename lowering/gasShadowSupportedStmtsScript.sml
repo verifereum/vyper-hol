@@ -3,7 +3,7 @@ Theory gasShadowSupportedStmts
 Ancestors
   gasShadowShape supportedStmts supportedStmtTraverse supportedExprTraverse
   supportedTargets supportedExprs supportedExprForms gasShadowSupportedExpr
-  gasShadow vyperExprEffects vyperAST vyperTypeContract list pair combin
+  gasShadow vyperExprEffects vyperAST vyperTypeContract constSubst list pair combin
 
 Theorem shadow_target_info[local]:
   (!tops e. supported_expr tops e ==> supported_expr tops (gas_shadow_expr e)) ==>
@@ -141,7 +141,8 @@ Proof
   qpat_assum `!tops e. _` (qspecl_then [`tops`, `b`] assume_tac) >>
   qpat_x_assum `!tops e. _` kall_tac >>
   Cases_on `a` >> Cases_on `b` >>
-  gvs[gas_shadow_iterator_def, gas_shadow_expr_def, supported_iterator_def] >>
+  gvs[gas_shadow_iterator_def, gas_shadow_expr_def, supported_iterator_def,
+      subst_consts_expr_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
