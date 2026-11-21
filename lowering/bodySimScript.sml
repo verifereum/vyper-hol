@@ -344,39 +344,11 @@ QED
 
 Theorem body_inv_const_name_not_root:
   body_inv tops ctx cenv cx /\ cx_const_name cx nsid ==>
-  ~supported_place_root tops nsid /\
   (!ty. ~supported_storage_value tops nsid ty) /\
   supported_immutable_type tops nsid = NONE
 Proof
   metis_tac[body_inv_contract, body_inv_module, body_inv_main_module,
     cx_const_name_split_def, body_inv_const_name_not_root_mods]
-QED
-
-Theorem body_inv_const_name_root:
-  body_inv tops ctx cenv cx ==>
-  !x. const_name_root cx x ==>
-    ?ty id. x = TopLevelName ty id /\
-      ~supported_place_root tops id /\ ~supported_storage_value tops id ty /\
-      supported_immutable_type tops id = NONE
-Proof
-  metis_tac[body_inv_contract, body_inv_module, body_inv_main_module,
-    const_name_root_mods_singleton, body_inv_const_name_root_mods]
-QED
-
-Theorem body_inv_const_name_free:
-  body_inv tops ctx cenv cx /\ supported_expr tops e ==>
-  ~supported_expr_exists (const_name_root cx) e
-Proof
-  metis_tac[body_inv_contract, body_inv_module, body_inv_main_module,
-    const_name_root_mods_singleton, body_inv_const_name_free_mods]
-QED
-
-Theorem body_inv_target_const_name_free:
-  body_inv tops ctx cenv cx /\ supported_target_info tops bindings bt <> NONE ==>
-  ~supported_target_exists (const_name_root cx) bt
-Proof
-  metis_tac[body_inv_contract, body_inv_module, body_inv_main_module,
-    const_name_root_mods_singleton, body_inv_target_const_name_free_mods]
 QED
 
 (* The compile env's modules are the source's, the main module alone, whose

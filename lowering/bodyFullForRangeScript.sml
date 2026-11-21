@@ -6600,9 +6600,9 @@ QED
        qpat_assum ([QUOTE "supported_expr tops "] @ e)
          (mp_then Any strip_assume_tac supported_expr_body_calls) >>
        sg ([QUOTE "~supported_expr_exists (const_name_root cx) "] @ e) >-
-         (qpat_assum `body_inv tops ctx cenv cx`
-           (mp_then Any mp_tac body_inv_const_name_free) >>
-          disch_then (qspec_then e irule) >> first_assum ACCEPT_TAC) >>
+         (drule_all body_inv_stmt_const_name_free >>
+          simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
+               supportedStmtTraverseTheory.supported_iterator_exists_def]) >>
        qpat_assum ([QUOTE "int_calls_expr "] @ e @ [QUOTE " = []"])
          (fn no_calls =>
            qpat_assum ([QUOTE "call_evaluation_safe cx (int_calls_expr "] @ e @ [QUOTE ")"])
