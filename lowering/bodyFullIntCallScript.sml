@@ -275,6 +275,8 @@ val callee_input = Term `
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx) dflts /\
+    ~supportedStmtTraverse$supported_stmts_expr_exists (const_name_root cx) ss /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
     LENGTH es <= LENGTH args /\
     ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
@@ -362,6 +364,8 @@ Theorem intcall_callee_premise[local]:
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx) dflts /\
+    ~supportedStmtTraverse$supported_stmts_expr_exists (const_name_root cx) ss /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
     (!s1 vs t1 sd dvs td penv rtv.
        ~MEM (NONE,name) cx.stk /\
@@ -443,6 +447,8 @@ Theorem intcall_sim_full:
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx) dflts /\
+    ~supportedStmtTraverse$supported_stmts_expr_exists (const_name_root cx) ss /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
     ~supportedExprTraverse$supported_exprs_exists (const_name_root cx)
       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
@@ -540,6 +546,8 @@ Theorem intcall_vv_full:
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx) dflts /\
+    ~supportedStmtTraverse$supported_stmts_expr_exists (const_name_root cx) ss /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
     ~supportedExprTraverse$supported_exprs_exists (const_name_root cx)
       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
