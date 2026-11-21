@@ -1,7 +1,7 @@
 (* Static and compiler boundaries for the full Range body case. *)
 Theory bodyFullForRange
 Ancestors exprSimWordArgs[qualified,ignore_grammar] vyperLookup[qualified,ignore_grammar] vyperTypeEnvPreservation[qualified,ignore_grammar] vyperPlaceResultTyping[qualified,ignore_grammar]
-  bodyFullShadowBodyInv bodyInvSplit bodyInvExecutionProps bodyInvCodeProps
+  bodyFullShadowBodyInv bodyInvSplit bodyInvExecutionProps bodyInvCodeProps forConsBodyGas[qualified,ignore_grammar]
   bodyFullPreds bodyFullForFacts bodySimDeclCases bodySim bodyExprPreFacts
   stmtSimForParts stmtSimForRange exprLoweringProps freshWrites
   loweringStateRelDefs loweringPosts stmtLowering compileEnv
@@ -252,14 +252,9 @@ Proof
   `k < N /\ 0 < N` by gvs[] >>
   drule_all range_full_body_ih >> strip_tac >>
   gvs[optionTheory.IS_SOME_EXISTS] >>
-  simp[gasContextTheory.gas_admissible_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `eval_for cx tyv id body (Value (IntV (n1 + &k))::rs)
-    (es with gas_obs := gs)` >> rename1 `_ = (lr, le)` >>
-  `stmt_res_ok lctx lr` by
-    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
-     simp[gasContextTheory.gas_admissible_def] >> metis_tac[]) >>
-  drule eval_for_cons_cases >> simp[] >> strip_tac >>
-  gvs[] >> metis_tac[stmt_res_ok_def]
+  irule forConsBodyGasTheory.captured_storage_body_admissible >>
+  simp[] >> qexistsl [`Value (IntV (n1 + &k))`, `lctx`, `stmt_res_ok lctx`, `rs`] >>
+  simp[read_result_def, return_def]
 QED
 
 (* Enriched elimination interfaces for the two actual compiler shapes. The

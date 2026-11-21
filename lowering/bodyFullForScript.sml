@@ -13,7 +13,7 @@ Ancestors
   bodyFullForControl bodyFullForRounds stateRelProj haltExitProj
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
-  bodyFullForFrame bodyFullForHandlers bodyFullForRange bodyFullForStorage
+  bodyFullForFrame bodyFullForHandlers bodyFullForRange bodyFullForStorageRoute
   bodyFullForArrayBranch bodyFullForIteratorRoot bodyFullForIteratorHeld
   bodyStorageMetadata vyperSubscriptOverlap vyperValue vyperTyping
   vyperTypeContract[qualified,ignore_grammar]
@@ -82,7 +82,7 @@ Resume compile_for_frag_full[array]:
         [`cx`,`id`,`typ`,`bd`,`nid`,`n`,`body`,`DF`,`lo`,`d`,`PG`,`tops`,
          `bindings`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`env'`,
          `ret_ty`,`lctx`,`RetQ`,`es`] MATCH_MP_TAC
-        bodyFullForStorageTheory.compile_for_storage_array_frag_full >>
+        bodyFullForStorageRouteTheory.compile_for_storage_array_frag_full >>
       conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC (SPEC_ALL stmtSimDefsTheory.alloca_frame_trans)) >>
       conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC (SPEC_ALL bodySimFullTheory.alloca_taint_kept_trans)) >>
       conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC (SPEC_ALL bodyFullForControlTheory.halt_exit_scopes_gas_obs)) >>

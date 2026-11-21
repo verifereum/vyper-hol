@@ -18,7 +18,7 @@ Ancestors
   stmtSimProps
   stmtSimDefs
   loweringPosts
-   stmtSimForParts stmtSimDeclStore
+   stmtSimForParts stmtSimDeclStore forConsBodyGas
   list rich_list finite_map pred_set
   fragExec localPtrsProps  loweringSlice
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
@@ -312,14 +312,8 @@ Theorem for_body_gas_admissible[local]:
                   gas_obs := [] |>)
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[gas_admissible_def] >> rpt gen_tac >> strip_tac >>
-  rename1 `eval_stmts cx stmts _ = (res, ee)` >>
-  Cases_on `eval_for cx tyv id stmts (Value v::vs) (es with gas_obs := gs)` >>
-  rename1 `_ = (lr, le)` >>
-  `stmt_res_ok lctx lr` by
-    (gvs[gas_admissible_def] >> metis_tac[]) >>
-  drule eval_for_cons_cases >> simp[] >> strip_tac >>
-  gvs[] >> metis_tac[stmt_res_ok_def]
+  drule forConsBodyGasTheory.captured_storage_body_admissible >>
+  simp[read_result_def,return_def] >> metis_tac[]
 QED
 
 Theorem for_round_preserves[local]:

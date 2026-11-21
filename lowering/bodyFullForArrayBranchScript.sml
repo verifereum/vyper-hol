@@ -10,7 +10,7 @@ Ancestors
   bodySimFull bodyFullForFacts bodySim stmtLowering compileEnv emitHelper
   gasShadow supportedStmts exprSimHyps bodyExprPreFacts bodyFullForArray
   bodyFullShared gasOutcomeFullGuarded bodyFullForRounds vyperEvalExprPreservesScopesDom
-  bodyFullIfExpReach contextRawReachable
+  bodyFullIfExpReach contextRawReachable bodyFullForArrayPreparedCut
   supportedExprTraverse[qualified,ignore_grammar]
   vyperTypeContract[qualified,ignore_grammar]
 
@@ -478,4 +478,102 @@ Proof
     qpat_assum `ctx_has_dalloca ctx ==> !t. _ ==> allocas_below_fmp t` mp_tac >>
     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   disch_then ACCEPT_TAC
+QED
+
+(* Bind the two array-loop implementations at the same expression cut. *)
+Theorem for_array_expr_cut_frag_full:
+  !cx id typ e n loop_body DF lo d PG tops bindings ctx shadow_ctx func
+   shadow_func cenv env env' ret_ty lctx RetQ es.
+  (!tenv s'' tyv t s'3' vs t' s'4' x t''.
+     tenv = get_tenv cx /\
+     lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' = (INL tyv,t) /\
+     eval_iterator cx (Array e) s'3' = (INL vs,t') /\
+     check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' = (INL x,t'') ==>
+     body_for_full_ok cx tyv id loop_body vs) /\
+  (!tenv s'' tyv t.
+     tenv = get_tenv cx /\
+     lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' = (INL tyv,t) ==>
+     body_iterator_full_ok cx (Array e)) /\
+  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  supported_stmt tops bindings (For id typ (Array e) n loop_body) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+      (For id typ (Array e) n loop_body) ==> occurs_abi_decode_target target tops) /\
+  expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\ locals_alloc_ok cenv env /\
+  type_stmt env ret_ty (For id typ (Array e) n loop_body) = SOME env' /\
+  ~supported_expr_exists (const_name_root cx) e /\
+  stmt_exprs_ok cenv (For id typ (Array e) n loop_body) /\
+  call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n loop_body)) /\
+  frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ cenv ret_ty /\
+  ~(?ty nid. e = TopLevelName ty nid) /\
+  (!st0 sa sb sha shb s0 G0 tn0 vv se she bd tyv marks rv em G tn u.
+     compile_stmt cenv lctx ret_ty (For id typ (Array e) n loop_body) sa = ((),sb) /\
+     compile_stmt cenv lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body))
+       sha = ((),shb) /\
+     compile_expr cenv (expr_type e) e sa = (vv,se) /\
+     compile_expr cenv (expr_type e) (gas_shadow_expr e) sha = (vv,she) /\
+     gas_shadow_state sa sha /\ gas_shadow_state se she /\ gas_shadow_state sb shb /\
+     gas_shadow_context ctx shadow_ctx /\ gas_shadow_function func shadow_func /\
+     ctx_inst_ids_distinct ctx /\ fn_inst_ids_distinct func /\
+     MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
+     fn_has_code sa sb func /\ fn_has_code sha shb shadow_func /\
+     fn_has_code sa se func /\ fn_has_code sha she shadow_func /\
+     ci_mono sa se /\ ci_mono se sb /\
+     cenv.ce_alloca_locals /\ local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
+     ret_pc_ok cenv sa s0 /\ return_buf_frame d cenv sa s0 /\ return_buf_sep d cenv es s0 /\
+     expr_type e = ArrayT typ bd /\ bound_length bd = n /\
+     evaluate_type (get_tenv cx) typ = SOME tyv /\
+     expr_body_pre cenv cx env e es /\
+     (!tail. eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+                             (INL rv,em with gas_obs := tail)) /\
+     storage_trace_domain cx st0 em.storage_trace /\
+     (!H. valid_horizon cx st0 H em.storage_trace ==>
+        for_array_expr_endpoint (DF,lo,d,ctx,func) cenv cx e (es,sa,s0,G0,tn0)
+          (vv,se) H rv em G tn u) /\
+     (!H. valid_horizon cx st0 H em.storage_trace ==>
+        gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+          (s0,G0,tn0) marks (OK u,G,tn)) /\
+     (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0 /\ storage_well_formed_on cx es (FST H) /\
+       ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
+     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+     (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_no_wrap inst t) /\
+     return_buf_frame d cenv se u /\ return_buf_sep d cenv em u /\
+     alloca_frame cenv es sa s0 cenv em u /\
+     gas_admissible
+       (bind (array_iterator_results cx (expr_type e) rv)
+         (\vs. ignore_bind (check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long")
+                          (eval_for cx tyv id loop_body vs))) (stmt_res_ok lctx) em /\
+     (!vs. (!tail. array_iterator_results cx (expr_type e) rv (em with gas_obs := tail) =
+                     (INL vs,em with gas_obs := tail)) /\
+            check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" em = (INL (),em) ==>
+            body_for_full_ok cx tyv id loop_body vs /\
+            gas_admissible (eval_for cx tyv id loop_body vs) (stmt_res_ok lctx) em) ==>
+     gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+       (cx_tops cx) cx st0
+       (bind (array_iterator_results cx (expr_type e) rv)
+         (\vs. ignore_bind (check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long")
+                          (eval_for cx tyv id loop_body vs)))
+       (em,u,G,tn) (for_array_loop_post (DF,lo,d,ctx,func) cenv cx lctx (es,sa,s0,G0,tn0) sb)
+       (for_array_loop_exit ctx cx RetQ)) ==>
+  stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx lctx RetQ cenv
+    (stmt_env cenv lctx ret_ty (For id typ (Array e) n loop_body))
+    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body)))
+    (eval_stmt cx (For id typ (Array e) n loop_body)) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  `expr_body_pre cenv cx env e es` by
+    (drule_then strip_assume_tac type_stmt_for_projection >>
+     drule_then strip_assume_tac supported_stmt_for_projection >>
+     `?bd. expr_type e = ArrayT typ bd` by
+       (drule_then strip_assume_tac vyperTypeSystemTheory.type_stmt_for_array_bound >>
+        simp[]) >>
+     `!nid. e = TopLevelName (expr_type e) nid ==>
+        IS_SOME (supported_immutable_type tops nid)` by metis_tac[] >>
+     irule nonslot_iterator_expr_pre >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl [`bd`,`ctx`,`id`,`loop_body`,`n`,`tops`,`typ`] >> simp[]) >>
+  irule for_array_prepared_expr_cut_frag_full >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (qexists_tac `tops` >> simp[]) >>
+  qexistsl [`env`,`env'`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
