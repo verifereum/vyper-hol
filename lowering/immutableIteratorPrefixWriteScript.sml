@@ -159,14 +159,27 @@ Theorem immutable_guarded_prefix_mutation:
   place_access p [] = (TopLevelNameTarget (src,name),attrs) /\
   callee_write_ok p target /\
   eval_target_place cx target s = (INL pl,mid) ==>
-  (let R = \es es'.
+  state_rel_frame
+    (\es es'.
       (?old. lookup_immutable cx es src name = SOME (tv,old) /\
              evaluate_subscripts tv old (MAP AttrSubscript attrs) = INL (ArrayV av)) ==>
       (?root. lookup_immutable cx es' src name = SOME (tv,root) /\
-              evaluate_subscripts tv root (MAP AttrSubscript attrs) = INL (ArrayV av))
-   in state_rel_frame R (write_place cx pl v) /\
-      state_rel_frame R (append_place cx pl v) /\
-      state_rel_frame R (pop_place cx pl))
+              evaluate_subscripts tv root (MAP AttrSubscript attrs) = INL (ArrayV av)))
+    (write_place cx pl v) /\
+  state_rel_frame
+    (\es es'.
+      (?old. lookup_immutable cx es src name = SOME (tv,old) /\
+             evaluate_subscripts tv old (MAP AttrSubscript attrs) = INL (ArrayV av)) ==>
+      (?root. lookup_immutable cx es' src name = SOME (tv,root) /\
+              evaluate_subscripts tv root (MAP AttrSubscript attrs) = INL (ArrayV av)))
+    (append_place cx pl v) /\
+  state_rel_frame
+    (\es es'.
+      (?old. lookup_immutable cx es src name = SOME (tv,old) /\
+             evaluate_subscripts tv old (MAP AttrSubscript attrs) = INL (ArrayV av)) ==>
+      (?root. lookup_immutable cx es' src name = SOME (tv,root) /\
+              evaluate_subscripts tv root (MAP AttrSubscript attrs) = INL (ArrayV av)))
+    (pop_place cx pl)
 Proof
   strip_tac >> Cases_on `?path. pl = ImmutablePlace src name path`
   >- (gvs[] >> drule eval_immutable_target_attribute_prefix >> strip_tac >>

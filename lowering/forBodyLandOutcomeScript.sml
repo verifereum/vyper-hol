@@ -16,15 +16,17 @@ Theorem for_body_cleanup_from_raw_landing:
        !u. r = Halt u \/ (?ir. r = IntRet ir u) ==> allocas_below_fmp u)) /\
   (!H raw ef G1 tn1 t.
     valid_horizon cx st0 H ef.storage_trace /\ Qraw H raw ef G1 tn1 t ==>
-    let u = if raw = INL () then jump_to incr t else t in
     ?sc rest b. ef.scopes = sc::rest /\
       (case raw of INL () => INL F
          | INR ex => FST (handle_loop_exception ex ef)) = INL b /\
       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
-        (t,G1,tn1) [] (OK u,G1,tn1) /\
-      (ef with scopes := rest).gas_obs = [] /\ ~u.vs_halted /\
-      (b ==> Done H (ef with scopes := rest) G1 tn1 u) /\
-      (~b ==> Again H (ef with scopes := rest) G1 tn1 u)) ==>
+        (t,G1,tn1) [] (OK (if raw = INL () then jump_to incr t else t),G1,tn1) /\
+      (ef with scopes := rest).gas_obs = [] /\
+      ~(if raw = INL () then jump_to incr t else t).vs_halted /\
+      (b ==> Done H (ef with scopes := rest) G1 tn1
+               (if raw = INL () then jump_to incr t else t)) /\
+      (~b ==> Again H (ef with scopes := rest) G1 tn1
+                (if raw = INL () then jump_to incr t else t))) ==>
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
     (finally (try (do eval_stmts cx stmts; return F od)
                   handle_loop_exception) pop_scope) (eb,s,G,tn)
