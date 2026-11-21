@@ -15,6 +15,7 @@
  *)
 Theory bodyFullCtrlCases
 Ancestors
+  bodyInvExecutionProps
   bodyFullPreds bodyFullExits bodyFullIf bodyFullExprStmt bodyFullStmtsCons
   bodyFullIfExpReach
   bodySimFull bodyExprPreFacts exprOpenMain exprSimSource
@@ -69,14 +70,15 @@ Proof
   `supported_expr tops e` by gvs[supported_stmt_def, supported_expr_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
-    gvs[body_inv_def] >>
+    metis_tac[body_inv_main_support] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `well_typed_expr env e /\ expr_type e = BaseT BoolT` by gvs[type_stmt_def] >>
   `expr_body_pre cenv cx env e es` by
     (bodyConstNameLib.irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assert_exists_def, int_calls_stmt_def,
-         int_calls_assert_reason_def, body_inv_def] >>
+         int_calls_assert_reason_def] >>
+     conj_tac >- metis_tac[body_inv_singleton_abi_types] >>
      qexists_tac `[]` >> simp[]) >>
   irule compile_assert_frag_full >> simp[] >>
   qpat_x_assum `body_expr_full_ok _ _`
@@ -109,13 +111,14 @@ Proof
   `supported_expr tops e` by gvs[supported_stmt_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
-    gvs[body_inv_def] >>
+    metis_tac[body_inv_main_support] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `well_typed_expr env e` by gvs[type_stmt_def] >>
   `expr_body_pre cenv cx env e es` by
     (bodyConstNameLib.irule_body_pre stmt_expr_body_pre >>
      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
-         int_calls_stmt_def, body_inv_def] >>
+         int_calls_stmt_def] >>
+     conj_tac >- metis_tac[body_inv_singleton_abi_types] >>
      qexists_tac `[]` >> simp[]) >>
   irule compile_expr_stmt_frag_ok_full >>
   simp[gas_shadow_stmt_compile_expr] >> conj_tac
@@ -167,10 +170,11 @@ Proof
   `supported_expr tops e` by simp[supported_expr_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
-    gvs[body_inv_def] >>
+    metis_tac[body_inv_main_support] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
-    (bodyConstNameLib.irule_body_pre stmt_expr_body_pre_alloc >> gvs[body_inv_def] >>
+    (bodyConstNameLib.irule_body_pre stmt_expr_body_pre_alloc >> simp[] >>
+     conj_tac >- metis_tac[body_inv_singleton_abi_types] >>
      qexists_tac `int_calls_stmts ss1 ++ int_calls_stmts ss2` >> simp[]) >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
      cenv cx (BaseT BoolT) e es` by
@@ -247,7 +251,10 @@ Proof
   `stmts_exprs_ok c = stmts_exprs_ok (decl_var_type cenv s)` by
     metis_tac[stmt_env_stmts_exprs_ok] >>
   `expr_sim_inv c cx env1 es1` by
-    (irule expr_sim_inv_stmt >> fs[body_inv_def] >>
+    (drule_then strip_assume_tac body_inv_main_support >>
+     drule_then assume_tac body_inv_contract >>
+     drule_then assume_tac contract_inv_alloca_locals >>
+     irule expr_sim_inv_stmt >> simp[] >>
      metis_tac[expr_sim_inv_gas_obs, call_evaluation_safe_append_left]) >>
   `ce_locals_declared c env1` by metis_tac[ce_locals_declared_stmt] >>
   `locals_alloc_ok c env1` by metis_tac[locals_alloc_ok_stmt] >>

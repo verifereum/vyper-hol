@@ -1,16 +1,17 @@
 (* Input domain for the positioned LocCode element copy of a For loop. *)
 Theory bodyFullForImmutableElementInput
 Ancestors
-  bodyFullForFacts bodySimDeclCases bodySim supportedStmts vyperAST
+  compileUnit exprSimHypsDefs typedMemoryCopy
+  bodyFullForFacts supportedStmts vyperAST
   vyperTypeValues memoryValueAbiStatic vyperValueOperation vyperTyping exprSimHyps compileEnv
   whitelistForIterImmCopy exprSimCopy exprSimBopRestWordLoadSafety allocaSiteResource
   loweringPosts exprLoweringProps loweringStateRelDefs bodyPtrDefs
   ptrDiscipline venomMemDefs venomState valueEncoding valueEncodingProps
   valueEncodingTyping abiDecodeStaticProps arithmetic words list finite_map
 
-Theorem for_immutable_element_copy_input:
-  supported_stmt tops bindings (For id fty (Array e) n loop_body) /\
-  body_inv tops ctx c cx /\ expr_sim_inv c cx env es /\
+Theorem for_immutable_element_copy_input_mods:
+  supported_stmt (main_module mods) bindings (For id fty (Array e) n loop_body) /\
+  expr_sim_inv_mods mods c cx env es /\ post_value_type c e = expr_type e /\
   arr_ty = expr_type e /\
   arr_elem_ty = (case arr_ty of ArrayT et _ => et | _ => fty) /\
   evaluate_type (get_tenv cx) arr_ty = SOME (ArrayTV tv bd) /\
@@ -58,14 +59,11 @@ Proof
     (qpat_assum `supported_iterator _ _ (Array _) _` mp_tac >>
      Cases_on `e` >> fs[supported_iterator_def, expr_type_def] >>
      Cases_on `bd` >> gvs[]) >>
-  `post_value_type c e = expr_type e` by
-    (irule post_value_type_declared_return >> qexists_tac `tops` >>
-     `supported_program tops /\ c.ce_func_return_type = build_func_return_type tops` by
-       fs[body_inv_def] >> simp[] >>
-     rpt gen_tac >> disch_then SUBST_ALL_TAC >>
-     qpat_x_assum `supported_iterator _ _ (Array _) _` mp_tac >>
-     simp[supported_iterator_def]) >>
-  `immutable_holds c cx (ArrayT fty bd) rv bw es s` by fs[] >>
+  `immutable_holds c cx (ArrayT fty bd) rv bw es s` by
+    (qpat_assum `immutable_holds _ _ (post_value_type _ _) _ _ _ _` mp_tac >>
+     qpat_assum `post_value_type c e = expr_type e` (fn post =>
+       qpat_assum `expr_type e = ArrayT et bd` (fn ty =>
+         qpat_assum `et = fty` (fn elem => simp[post,ty,elem,NoAsms])))) >>
   `value_has_type (ArrayTV tv bd) (ArrayV av) /\
    w2n bw + type_memory_size (ArrayTV tv bd) < dimword (:256)` by
     (qpat_assum `immutable_holds _ _ (ArrayT _ _) _ _ _ _`
@@ -83,7 +81,8 @@ Proof
   qpat_x_assum `k < LENGTH (MAP _ _)`
     (assume_tac o REWRITE_RULE [LENGTH_MAP]) >>
   `type_memory_bytes c fty = type_memory_size tv` by
-    metis_tac[expr_sim_inv_memory_size] >>
+    (irule typed_copy_memory_size >> qexists_tac `get_tenv cx` >>
+     fs[expr_sim_inv_mods_def] >> metis_tac[]) >>
   `bytes = type_memory_size tv` by
     simp[elem_size_in_location_def, is_slot_addressed_def] >>
   `immutable_holds c cx fty (Value (EL k (array_elements (ArrayTV tv bd) av)))
@@ -109,7 +108,7 @@ Proof
   suspend "copy_domain"
 QED
 
-Resume for_immutable_element_copy_input[copy_domain]:
+Resume for_immutable_element_copy_input_mods[copy_domain]:
   `w2n bw + type_memory_size (ArrayTV tv bd) <=
     (if c.ce_is_ctor then s.vs_alloca_next else LENGTH s.vs_data_section)` by
     (irule rest_word_immutable_region_bound >> metis_tac[]) >>
@@ -173,4 +172,4 @@ Resume for_immutable_element_copy_input[copy_domain]:
   fs[EL_MAP, eval_operand_def, copy_old_operand_def, value_has_type_val_wf]
 QED
 
-Finalise for_immutable_element_copy_input
+Finalise for_immutable_element_copy_input_mods
