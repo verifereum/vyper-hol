@@ -595,6 +595,27 @@ Datatype:
   |>
 End
 
+(* Python's StackOrderAnalysis reads an instruction's liveness by the
+   instruction object, as computed before scheduling, while lr is keyed by
+   (label, index) in fn's original blocks.  Re-key each current block's
+   entries by inst_id so a scheduled block reads every instruction's
+   original liveness. *)
+Definition liveness_realign_def:
+  liveness_realign (lr : string list df_state) orig_blocks cur_blocks =
+    lr with ds_inst := FOLDL (λm bb.
+      case lookup_block bb.bb_label orig_blocks of
+        NONE => m
+      | SOME ob =>
+          FOLDL (λm (i, inst).
+            case INDEX_FIND 0 (λx. x.inst_id = inst.inst_id)
+                   ob.bb_instructions of
+              NONE => m
+            | SOME (j, _) =>
+                m |+ ((bb.bb_label, i), live_vars_at lr bb.bb_label j))
+          m (MAPi (λi inst. (i, inst)) bb.bb_instructions))
+      lr.ds_inst cur_blocks
+End
+
 (* Process one block in the worklist: analyze, check convergence, schedule.
    Returns (updated_state, converged, preds_to_add).
    Python: body of while loop in run_pass *)
@@ -603,19 +624,20 @@ Definition dft_process_one_def:
     (* Use current (possibly scheduled) blocks, not original fn.fn_blocks.
        Python modifies bb.instructions in-place during the loop. *)
     let cur_fn = fn with fn_blocks := st.dls_blocks in
+    let lr' = liveness_realign lr fn.fn_blocks st.dls_blocks in
     (* Python: self.stack_order.analyze_bb(bb)
        This records from_to for (pred, bb) edges *)
     case lookup_block lbl st.dls_blocks of
       NONE => (st, T, [])  (* block not found: treat as converged *)
     | SOME bb =>
         let (needed, _) =
-          so_analyze_block cfg lr st.dls_from_to lbl bb.bb_instructions in
+          so_analyze_block cfg lr' st.dls_from_to lbl bb.bb_instructions in
         let from_to' =
           so_record_from_to cfg st.dls_from_to lbl needed in
         (* Python: order = self.stack_order.get_stack(bb)
            Uses cur_fn so successors are looked up from current blocks *)
         let (order, from_to'') =
-          so_get_stack cfg lr cur_fn from_to' lbl in
+          so_get_stack cfg lr' cur_fn from_to' lbl in
         (* Python: if bb in last_order and last_order[bb] == order: break *)
         let converged =
           case FLOOKUP st.dls_last_order lbl of
