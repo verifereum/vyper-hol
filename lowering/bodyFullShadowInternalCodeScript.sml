@@ -107,7 +107,7 @@ Proof
   simp[internal_fn_descriptors_def]
 QED
 
-Theorem compile_internal_labels[local]:
+Theorem compile_internal_labels:
   compile_internal_fn_bodies packages start = (u,final) ==>
   ?segments.
     all_blocks final = all_blocks start ++ FLAT segments /\
