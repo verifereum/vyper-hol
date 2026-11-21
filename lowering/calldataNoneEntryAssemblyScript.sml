@@ -13,6 +13,7 @@ Theorem none_entry_reject_from_selected:
     supported_program tops /\ source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     unit.cu_context.ctx_entry = SOME "__entry" /\
     venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
     (!name tys.

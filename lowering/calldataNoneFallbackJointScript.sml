@@ -1,6 +1,6 @@
 (* Absent-default selector routing shares a single terminating certificate. *)
 Theory calldataNoneFallbackJoint
-Ancestors entryDispatchRevert defaultDispatchPlacement defaultDispatchRouting
+Ancestors entryDispatchRevert entrySourcePackages entryRejectCode defaultDispatchRouting
   entryValueRevertPtr vyperLoweringCorrect vyperCompiler
   entryDispatchProps entryDispatchPtr compileVyper vyperCalldata
   loweringShapeProps loweringShapeDefs moduleLowering moduleLoweringProps
@@ -27,6 +27,7 @@ Theorem none_fallback_entry_joint:
     supported_program tops /\ source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
     ~EXISTS is_default_decl tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     (LENGTH vs.vs_call_ctx.cc_calldata < 4 \/
      FIND (\(name,tys). abi_method_id (type_env tops) name tys =
        cd_selector vs.vs_call_ctx.cc_calldata) (abi_external_signatures tops) = NONE) ==>
@@ -50,26 +51,16 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   rename1 `venomInst$lookup_function "__entry" _ = SOME func` >>
-  `?elbl. fn_entry_label func = SOME elbl` by
-    (drule venomInstTheory.lookup_function_MEM >> strip_tac >>
-     gvs[lowering_context_ok_def, EVERY_MEM] >>
-     qpat_x_assum `!fn. MEM fn _ ==> ALL_DISTINCT _ /\ fn_has_entry fn` drule >>
-     simp[fn_has_entry_def, fn_entry_label_def, entry_block_def] >>
-     Cases_on `func.fn_blocks` >> simp[]) >>
-  drule_all default_runtime_compile_layout >> strip_tac >>
+  drule_all lower_runtime_default_free_packages >> strip_tac >>
+  drule_all run_lowering_entry_label >> strip_tac >>
   `FST (SND (SND (classify_functions tops))) = NONE` by
     (drule absent_default_fold >>
      simp[classify_functions_def] >> rpt (pairarg_tac >> gvs[])) >>
-  `fbpkg = NONE` by simp[package_fallback_fn_def, set_fallback_package_target_def] >>
-  `emit_inst REVERT [Lit 0w; Lit 0w] [] checks = ((),entry_end)` by
-    (qpat_x_assum `(case fbpkg of NONE => _ | SOME _ => _) checks = _` mp_tac >>
-     simp[]) >>
-  `checks.cs_current_bb = fallback /\ checks.cs_current_insts = []` by
-    (qpat_x_assum `new_block _ _ = _` mp_tac >>
-     simp[new_block_def] >> strip_tac >> gvs[]) >>
-  `elbl = "__entry"` by
-    (qpat_x_assum `fresh_label _ _ = _` mp_tac >>
-     simp[fresh_label_def, initial_compile_state_def] >> strip_tac >> gvs[]) >>
+  `fb = NONE` by simp[package_fallback_fn_def, set_fallback_package_target_def] >>
+  qpat_x_assum `fb = NONE` SUBST_ALL_TAC >>
+  drule_all run_lowering_fallback_revert_code >>
+  disch_then (qx_choosel_then [`fallback`, `label_st`, `dispatch_st`,
+       `checks`, `entry_end`] strip_assume_tac) >>
   qabbrev_tac `ss = vs with <|vs_prev_bb := NONE;
     vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
   `allocas_below_fmp ss` by

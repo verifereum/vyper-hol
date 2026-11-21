@@ -1,7 +1,7 @@
 (* Route a raw selector hit to the installed checks for that package. *)
 Theory calldataNoneSelectedPrefix
 Ancestors
-  calldataNoneMetadata defaultDispatchPlacement defaultDispatchRouting
+  calldataNoneMetadata entrySourcePackages entryRejectCode defaultDispatchRouting
   entryPrefixPtr entryValueRevertPtr entryReachBodyFmp acceptedContextPhi
   vyperLoweringCorrect vyperCompiler venomInstIdsProps fragExec
   fragGasOriginPtr ptrDiscipline moduleLoweringProps emitHelperProps
@@ -45,7 +45,6 @@ Theorem none_selected_check_prefix:
     compile_register_positional_args ce pos 4 checked = (ce',last) /\
     fn_has_code opened checked func /\ fn_has_code checked last func /\
     cs_extends opened checked /\ cs_extends checked last /\
-    shape_state opened /\ shape_state checked /\ shape_state last /\
     opened.cs_current_bb = "fn_" ++ name /\ opened.cs_current_insts = [] /\
     ~block_is_terminated opened /\
     unit.cu_context.ctx_entry = SOME "__entry" /\
@@ -86,21 +85,10 @@ Proof
        checkedSelectorTablePropsTheory.check_contract_selectors_distinct) >> simp[]) >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   rename1 `venomInst$lookup_function "__entry" _ = SOME func` >>
-  `?elbl. fn_entry_label func = SOME elbl` by
-    (drule venomInstTheory.lookup_function_MEM >> strip_tac >>
-     gvs[lowering_context_ok_def, EVERY_MEM] >>
-     qpat_x_assum `!fn. MEM fn _ ==> ALL_DISTINCT _ /\ fn_has_entry fn` drule >>
-     simp[fn_has_entry_def, fn_entry_label_def, entry_block_def] >>
-     Cases_on `func.fn_blocks` >> simp[]) >>
-  `fn_inst_ids_distinct func` by
-    (`ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts func))` by
-       metis_tac[venomInstTheory.lookup_function_MEM, ctx_inst_ids_distinct_fn,
-                 lowering_context_ok_static_integrity] >>
-     gvs[fn_inst_ids_distinct_def, fn_insts_def, fn_insts_blocks_map_id]) >>
-  drule_all default_runtime_compile_layout >> strip_tac >>
-  `elbl = "__entry"` by
-    (qpat_x_assum `fresh_label _ _ = _` mp_tac >>
-     simp[fresh_label_def, initial_compile_state_def] >> strip_tac >> gvs[]) >>
+  drule_all lower_runtime_default_free_packages >>
+  disch_then (qx_choosel_then [`sels`, `extpkgs`, `intpkgs`, `fbpkg`, `ei`]
+       strip_assume_tac) >>
+  drule_all run_lowering_entry_label >> strip_tac >>
   `MEM (set_external_package_target rpolicy.rpol_target
       (package_external_fn tops T (K context$global_nonreentrant_slot)
         (mut,nr,rr,name,args,([] : vyperAST$expr list),ret,fbody))) extpkgs` by
@@ -119,7 +107,6 @@ Proof
   qpat_x_assum `lbl = _` SUBST_ALL_TAC >>
   qpat_x_assum `nr' = nr` SUBST_ALL_TAC >>
   qpat_x_assum `pbody = fbody` SUBST_ALL_TAC >>
-  qpat_x_assum `elbl = _` SUBST_ALL_TAC >>
   qpat_x_assum `tys = _` SUBST_ALL_TAC >>
   drule_all none_selected_package_metadata >> strip_tac >>
   suspend "placement"
@@ -131,31 +118,14 @@ Resume none_selected_check_prefix[lookup]:
 QED
 
 Resume none_selected_check_prefix[placement]:
-  qpat_x_assum `MEM ("fn_" ++ name,_,_,_,_,_,_,_,_,_,_) extpkgs` mp_tac >>
-  rewrite_tac[MEM_SPLIT] >>
-  disch_then (qx_choosel_then [`pre`,`post`] SUBST_ALL_TAC) >>
-  drule_all external_selected_check_interval >> strip_tac >>
-  `external_fn_shape_ok ("fn_" ++ name,ce,pos,mincd,pay,nr,key,ut,iv,fbody,rt)` by
-    fs[EVERY_APPEND] >>
-  fs[external_fn_shape_ok_def] >>
-  drule_all external_function_registration_boundary >>
-  disch_then (qx_choosel_then [`registered_env`,`registered`] strip_assume_tac) >>
-  drule register_positional_args_suffix_extends >> strip_tac >>
-  `cs_extends after external_st` by
-    (drule_all compile_external_function_body_shape >>
-     simp[shape_step_def] >> disch_then drule >> simp[] >> strip_tac >>
-     irule (cj 2 external_bodies_run_shape) >>
-     simp[] >> qexists_tac `post` >> simp[]) >>
-  `fn_has_code opened checked func /\ fn_has_code checked registered func` by
-    (conj_tac >> irule fn_has_code_mid >>
-     simp[] >> qexistsl_tac [`external_st`,`dispatch_st`] >>
-     simp[] >> metis_tac[cs_extends_trans]) >>
-  qpat_assum `new_block _ before = (_,opened)`
-    (strip_assume_tac o MATCH_MP new_block_props) >>
-  `dispatch_st.cs_next_var <= opened.cs_next_var` by
-    (qspec_then `pre` mp_tac compile_external_fn_bodies_shape >>
-     simp[shape_step_def] >> disch_then drule >>
-     simp[shape_extends_def]) >>
+  drule_all run_lowering_selected_entry_code >>
+  disch_then (qx_choosel_then [`fallback`, `label_st`, `dispatch_st`,
+       `opened`, `checked`, `registered_env`, `registered`, `body_end`]
+       strip_assume_tac) >>
+  `label_st.cs_next_var = 0` by
+    (qpat_assum `fresh_label _ _ = _`
+       (mp_tac o AP_TERM ``\p : string # compile_state. (SND p).cs_next_var``) >>
+     simp[NoAsms, fresh_label_def, initial_compile_state_def]) >>
   suspend "execution"
 QED
 
@@ -204,14 +174,11 @@ Resume none_selected_check_prefix[execution]:
      gvs[get_instruction_def, mk_inst_def, phi_prefix_length_def,
        entry_prov_def, entry_taint_vars_def, phis_prov_def, phis_taint_def,
        Abbr `ss`]) >>
-  qexistsl_tac [`rr`,`ce`,`pay`,`key`,`ut`,`iv`,`rt`,`opened`,`checked`,
-    `registered_env`,`registered`,`t`,`dispatch_prov`,`dispatch_taint`] >>
+  qexistsl_tac [`mut`,`nr`,`rr`,`args`,`ret`,`fbody`,`tvs`,`ce`,`pos`,
+    `mincd`,`pay`,`key`,`ut`,`iv`,`rt`,`opened`,`checked`,
+    `registered_env`,`registered`,`func`,`t`,`dispatch_prov`,`dispatch_taint`] >>
+  asm "compiled_body" (fn th => simp[th]) >>
   gvs[block_is_terminated_def, Abbr `ss`, entry_taint_def] >>
-  asm "compiled_body" (fn th => PURE_REWRITE_TAC [GSYM th]) >>
-  conj_tac
-  >- (qpat_assum `MEM (mut,nr,rr,name,args,[],ret,fbody) _`
-        (mp_tac o ONCE_REWRITE_RULE [MEM_SPLIT]) >>
-      simp[NoAsms]) >>
-  first_assum ACCEPT_TAC
+  metis_tac[]
 QED
 Finalise none_selected_check_prefix
