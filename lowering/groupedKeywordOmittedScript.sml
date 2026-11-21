@@ -1,7 +1,7 @@
 (* Store the value of an omitted keyword in its entry allocation. *)
 Theory groupedKeywordOmitted
 Ancestors
-  groupedKeywordStore runtimeDefaultExpression exprSimFullBundleProps
+  groupedKeywordStore groupedKeywordOwners runtimeDefaultExpression exprSimFullBundleProps
   exprOperandVar exprLoweringProps emitHelperProps typedMemoryCopy
   loweringPosts bodyPtrDefs loweringStateRelDefs typedCopyOriginPtrBase
   bodyPtrMakeArrayCopyStateFrame bodyFullEmptyFrame bodySimFull robustCopyTransportPtr
@@ -223,6 +223,19 @@ Theorem grouped_keyword_omitted_expression:
           lookup_var dst u = SOME b /\ FLOOKUP u.vs_allocas oid =
             SOME (w2n b,type_memory_size tv) /\
           ptr_covers J tz dst u (type_memory_size tv) /\
+          (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+            FLOOKUP u.vs_allocas aid = SOME entry) /\
+          (!p w. not_fresh_at sa p /\ lookup_var p s = SOME w ==>
+            lookup_var p u = SOME w /\ FLOOKUP J p = FLOOKUP G p /\
+            op_taint tz (Var p) = op_taint tn (Var p)) /\
+          (!aid p old_base n otv x. aid <> oid /\ aid < sa.cs_next_id /\
+            FLOOKUP s.vs_allocas aid = SOME (old_base,n) /\
+            not_fresh_at sa p /\ lookup_var p s = SOME (n2w old_base) /\
+            ptr_covers G tn p s n /\ val_wf otv x /\ val_footprint otv x <= n /\
+            (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+              val_in_memory otv x old_base mem) ==>
+            !mem. mem_agree_outside tz.t_mem u.vs_memory mem ==>
+              val_in_memory otv x old_base mem) /\
           stmt_state_rel H ctx fn (ce with ce_vars := FEMPTY) cx ee u /\
           storage_well_formed_on cx ee (FST H) /\
           ghost_inv_at (DF H) 0 NONE (ce with ce_vars := FEMPTY) cx ee J tz u /\
@@ -267,6 +280,8 @@ Proof
     (strip_assume_tac o SIMP_RULE (srw_ss()) [expr_sim_full_post_def]) >>
   qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  qpat_assum `ghost_kept_at 0 _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
   `ci_mono sa mid` by metis_tac[ci_mono_lower_value_compile_expr, pairTheory.SND] >>
   `not_fresh_at mid dst` by
     (irule not_fresh_at_mono >> qexists_tac `sa` >> fs[ci_mono_def]) >>
@@ -281,5 +296,49 @@ Proof
     metis_tac[grouped_keyword_store_runtime_ghost] >>
   qpat_assum `typed_copy_state_frame mid _ _ t u`
     (assume_tac o MATCH_MP typed_copy_state_frame_allocas_below_fmp) >>
-  fs[typed_copy_state_frame_def, venom_state_component_equality]
+  `!p. not_fresh_at sa p ==> not_fresh_at mid p` by
+    (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >>
+     fs[ci_mono_def]) >>
+  `!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP u.vs_allocas aid = SOME entry` by
+    (fs[typed_copy_state_frame_def, venom_state_component_equality]) >>
+  `!p w. not_fresh_at sa p /\ lookup_var p s = SOME w ==>
+    lookup_var p u = SOME w /\ FLOOKUP J p = FLOOKUP G p /\
+    op_taint tz (Var p) = op_taint tn (Var p)` by
+    (qpat_assum `typed_copy_state_frame mid _ _ t u`
+       (strip_assume_tac o REWRITE_RULE[typed_copy_state_frame_def]) >>
+     rpt gen_tac >> strip_tac >>
+     `not_fresh_at mid p` by (first_assum irule >> simp[]) >>
+     rpt conj_tac
+     >- (qpat_assum `!x. not_fresh_at mid x ==> lookup_var x u = _`
+           (qspec_then `p` (drule_then SUBST1_TAC)) >>
+         first_assum irule >> simp[])
+     >- (qpat_assum `!x. not_fresh_at mid x ==> FLOOKUP J x = _ /\ _`
+           (qspec_then `p` (drule_then strip_assume_tac)) >> simp[])
+     >- (qpat_assum `!x. not_fresh_at mid x ==> FLOOKUP J x = _ /\ _`
+           (qspec_then `p` (drule_then strip_assume_tac)) >> simp[])) >>
+  `lookup_var dst u = SOME b` by
+    (qpat_assum `!p w. not_fresh_at sa p /\ lookup_var p s = SOME w ==> _`
+       (qspecl_then [`dst`,`b`] mp_tac) >> simp[]) >>
+  `FLOOKUP u.vs_allocas oid = SOME (w2n b,type_memory_size tv)` by
+    (qpat_assum `!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==> _`
+       (qspecl_then [`oid`,`(w2n b,type_memory_size tv)`] mp_tac) >> simp[]) >>
+  asm_rewrite_tac[] >> qx_genl_tac [`aid`,`p`,`old_base`,`n`,`otv`,`x`] >> strip_tac >>
+      `FLOOKUP t.vs_allocas aid = SOME (old_base,n) /\
+       lookup_var p t = SOME (n2w old_base) /\ ptr_covers G1 tn1 p t n /\
+       (!mem. mem_agree_outside tn1.t_mem t.vs_memory mem ==>
+         val_in_memory otv x old_base mem)` by
+        (mp_tac (Q.INST [`oid` |-> `aid`, `b` |-> `old_base:num`, `tv` |-> `otv`,
+            `sb` |-> `mid`, `op` |-> `src`, `lo` |-> `0:num`]
+          (INST_TYPE [alpha |-> ``:256``] (SPEC_ALL grouped_keyword_expr_owner_frame))) >>
+         asm_rewrite_tac[] >> simp[]) >>
+      `not_fresh_at mid p` by (first_assum irule >> simp[]) >>
+      qpat_assum `!p. not_fresh_at mid p ==> FLOOKUP J p = _ /\ _`
+        (qspec_then `p` (drule_then strip_assume_tac)) >>
+      mp_tac (INST [``dst:num`` |-> ``w2n (b:256 word)``]
+        (Q.INST [`oid` |-> `aid`, `did` |-> `oid`, `b` |-> `old_base:num`,
+        `len` |-> `type_memory_size tv`, `G` |-> `G1`,
+        `tn` |-> `tn1`, `G'` |-> `J`, `tn'` |-> `tz`, `tv` |-> `otv`,
+        `v` |-> `x`] (SPEC_ALL grouped_keyword_store_owner_frame))) >>
+      asm_rewrite_tac[] >> simp[]
 QED
