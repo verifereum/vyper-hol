@@ -1846,8 +1846,21 @@ Definition blueprint_offset_fold_ok_def:
     | _ => T
 End
 
+(* The most bytes compile_create_blueprint_args can put after the code: the
+   raw_args buffer's bound, or the ABI bound of the constructor arguments. *)
+Definition blueprint_args_size_bound_def:
+  blueprint_args_size_bound sfields raw_args args =
+    if raw_args then
+      (case args of
+         [a] => vyperTypeSystem$bytelike_type_bound (expr_type a)
+       | _ => 0)
+    else abi_size_bound sfields (TupleT (MAP expr_type args))
+End
+
 (* The operands of a blueprint call, as compile_create_call splits them:
-   [target; value] ++ [salt]? ++ [code_offset] ++ ctor_args. *)
+   [target; value] ++ [salt]? ++ [code_offset] ++ ctor_args.  The code size
+   that passes the blueprint checks is at most 24576 + 2 ** 32, so the
+   size bound keeps every blueprint DALLOCA below 2 ** 64 bytes. *)
 Definition blueprint_call_raw_fmp_ok_def:
   blueprint_call_raw_fmp_ok sfields has_unval_dyn raw_args has_salt es =
     case es of
@@ -1856,6 +1869,8 @@ Definition blueprint_call_raw_fmp_ok_def:
         else
           let suffix = if has_salt then TL rest else rest in
           blueprint_offset_fold_ok (HD suffix) /\
+          blueprint_args_size_bound sfields raw_args (TL suffix) +
+            2 ** 32 + 24576 < 2 ** 64 /\
           (has_unval_dyn ==>
            ~raw_args /\
            ~EXISTS (is_abi_dynamic sfields o expr_type) (TL suffix))
