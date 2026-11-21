@@ -779,7 +779,7 @@ Proof
   metis_tac[freshWritesTheory.not_fresh_at_mono]
 QED
 
-Theorem for_nonslot_array_layout_full_with_done_age:
+Theorem for_nonslot_array_layout_full_with_increment:
   expr_type e = ArrayT sty bd /\ c.ce_alloca_locals /\
   local_ptrs_reserved c sa0 /\ gas_shadow_state sa0 shadow_sa0 /\
   compile_stmt c lctx ret_ty (For id fty (Array e) n loop_body) sa0 = ((),sb) /\
@@ -794,7 +794,8 @@ Theorem for_nonslot_array_layout_full_with_done_age:
       (bc,saD,saA,xd,capacity,aidItem)
       (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
       (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
-      (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\ not_fresh_at sa done_var
+      (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\ not_fresh_at sa done_var /\
+      next_var = STRING #"%" (toString sj.cs_next_var)
 Proof
   strip_tac >> drule_all nonslot_for_compiler_cuts >> strip_tac >>
   gvs[gasShadowTheory.gas_shadow_stmt_def,gasShadowTheory.gas_shadow_iterator_def] >>
@@ -827,6 +828,10 @@ Proof
     (strip_assume_tac o MATCH_MP stmtSimForArrayPartsTheory.compile_for_array_suffix) >>
   qpat_assum `_ sj' = ((),shadow_sb)`
     (strip_assume_tac o MATCH_MP stmtSimForArrayPartsTheory.compile_for_array_suffix) >>
+  suspend "prefix_mono"
+QED
+
+Resume for_nonslot_array_layout_full_with_increment[prefix_mono]:
   `ci_mono sa0 sbExpr` by
     nonslot_mono_cut `compile_expr _ _ _ sa0 = (_,sbExpr)`
       [stmtLoweringMonoTheory.ci_mono_compile_expr_sa] >>
@@ -855,6 +860,10 @@ Proof
   `ci_mono saA' sa'` by
     (simp[ci_mono_def] >> irule stmtSimForArrayPartsTheory.array_prefix_extends >>
      simp[]) >>
+  suspend "body_mono"
+QED
+
+Resume for_nonslot_array_layout_full_with_increment[body_mono]:
   `ci_mono sa sm` by nonslot_mono_cut `emit_op MUL _ sa = (off_op,sm)` [ci_mono_emit_op] >>
   `ci_mono sa' sm'` by nonslot_mono_cut `emit_op MUL _ sa' = (off_op,sm')` [ci_mono_emit_op] >>
   `ci_mono sm sn` by nonslot_mono_cut `_ sm = (sum_op,sn)` [nonslot_header_mono] >>
@@ -883,6 +892,10 @@ Proof
       [stmtLoweringMonoTheory.ci_mono_stmt_helpers] >>
   `ci_mono sj sb` by simp[ci_mono_def] >>
   `ci_mono sj' shadow_sb` by simp[ci_mono_def] >>
+  suspend "composed_cuts"
+QED
+
+Resume for_nonslot_array_layout_full_with_increment[composed_cuts]:
   (* Compose only the cuts used in the public layout. *)
   `ci_mono sa0 saL` by (irule ci_mono_trans >> qexists `sbExpr` >> simp[]) >>
   `ci_mono saL saA` by (irule ci_mono_trans >> qexists `saD` >> simp[]) >>
@@ -925,6 +938,10 @@ Proof
      irule ci_mono_trans >> qexists `saCopy'` >> conj_tac >- simp[] >>
      irule ci_mono_trans >> qexists `sbCopy'` >> conj_tac >- simp[] >>
      irule ci_mono_trans >> qexists `sbBody'` >> simp[]) >>
+  suspend "layout_resources"
+QED
+
+Resume for_nonslot_array_layout_full_with_increment[layout_resources]:
   `fn_has_code sa0 sbExpr func` by nonslot_code_cut `sa0` `sb` >>
   `fn_has_code shadow_sa0 sbExpr' shadow_func` by nonslot_code_cut `shadow_sa0` `shadow_sb` >>
   `fn_has_code sbExpr saL func` by nonslot_code_cut `sa0` `sb` >>
@@ -971,11 +988,15 @@ Proof
      rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
        qpat_assum `ci_mono saL sbCopy`
          (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o REWRITE_RULE [ci_mono_def])]) >>
+  suspend "witnesses"
+QED
+
+Resume for_nonslot_array_layout_full_with_increment[witnesses]:
   qexistsl [`vv`,`sbExpr`,`sbExpr'`,
     `case vv_location vv of NONE => LocMemory | SOME l => l`, `len_op`,`saL`,
     `bc`,`saD`,`saA`,`STRING #"%" (toString saL.cs_next_var)`,
     `type_memory_bytes c fty`,`saL.cs_next_id`,
-    `entry`,`cond`,`bod`,`incr`,`exit`,`idx`,`invalid`,`valid`,`done_var`,`nv`,`sa`,
+    `entry`,`cond`,`bod`,`incr`,`exit`,`idx`,`invalid`,`valid`,`done_var`,`sa`,
     `elem_size_in_location c (case vv_location vv of NONE => LocMemory | SOME l => l) sty`,
     `off_op`,`sm`,`sum_op`,`sn`,`addr`,`saCopy`,`sbCopy`,`sbBody`,`sj`,`sbCopy'`,`sbBody'`] >>
   qpat_x_assum `idx = STRING #"%" (toString saA'.cs_next_var)` kall_tac >>
@@ -1006,6 +1027,10 @@ Proof
   `not_fresh_at sa done_var` by
     (qpat_assum `done_var = STRING #"%" (toString (sa.cs_next_var - 1))` mp_tac >>
      simp[not_fresh_at_def, ASCIInumbersTheory.toString_11] >> decide_tac) >>
+  suspend "geometry"
+QED
+
+Resume for_nonslot_array_layout_full_with_increment[geometry]:
   simp[for_nonslot_layout_def, DISJ_IMP_THM, FORALL_AND_THM, listTheory.APPEND_ASSOC] >>
   conj_tac >-
     (qpat_x_assum `lookup_block saA.cs_current_bb func.fn_blocks = _` mp_tac >>
@@ -1020,6 +1045,28 @@ Proof
   POP_ASSUM_LIST (K all_tac) >>
   Cases_on `bd` >> simp[not_fresh_at_def, ASCIInumbersTheory.toString_11] >>
   decide_tac
+QED
+
+Finalise for_nonslot_array_layout_full_with_increment
+
+Theorem for_nonslot_array_layout_full_with_done_age:
+  expr_type e = ArrayT sty bd /\ c.ce_alloca_locals /\
+  local_ptrs_reserved c sa0 /\ gas_shadow_state sa0 shadow_sa0 /\
+  compile_stmt c lctx ret_ty (For id fty (Array e) n loop_body) sa0 = ((),sb) /\
+  compile_stmt c lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
+    shadow_sa0 = ((),shadow_sb) /\
+  fn_has_code sa0 sb func /\ fn_has_code shadow_sa0 shadow_sb shadow_func ==>
+  ?vv sbExpr shadow_sbExpr loc len_op saL bc saD saA xd capacity aidItem
+   entry cond bod incr exit idx invalid valid done_var next_var
+   sa stride off_op sm sum_op sn addr saCopy sbCopy sbBody sj shadow_sbCopy shadow_sbBody.
+    for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
+      (sa0,vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL)
+      (bc,saD,saA,xd,capacity,aidItem)
+      (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
+      (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
+      (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\ not_fresh_at sa done_var
+Proof
+  strip_tac >> drule_all for_nonslot_array_layout_full_with_increment >> metis_tac[]
 QED
 
 Theorem for_nonslot_array_layout_full:
@@ -1042,7 +1089,7 @@ Proof
   strip_tac >> drule_all for_nonslot_array_layout_full_with_done_age >> metis_tac[]
 QED
 
-Theorem for_nonslot_increment_slice[local]:
+Theorem for_nonslot_increment_slice:
   lookup_block incr func.fn_blocks = SOME
     <|bb_label := incr;
       bb_instructions := [mk_inst sj.cs_next_id ADD [Var idx;Lit 1w] [out];
