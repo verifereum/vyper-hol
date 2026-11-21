@@ -318,7 +318,7 @@ Proof
      impl_tac >- metis_tac[] >>
      Cases_on `stack_get_depth op ps.ps_stack` >> simp[FLOOKUP_DEF]
      >- (IF_CASES_TAC >> simp[]) >>
-     drule stack_get_depth_props >> metis_tac[stack_peek_mem]) >>
+     drule stack_get_depth_props >> metis_tac[reorderPreparationInventoryPropsTheory.stack_peek_mem]) >>
   `!target_ops. inst.inst_opcode = JMP /\
      join_target_ops liveness fn bb_label inst = SOME target_ops ==>
      pending_inventory_wf target_ops ps` by
