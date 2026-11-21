@@ -14,7 +14,8 @@ Ancestors
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
   bodyFullForFrame bodyFullForHandlers bodyFullForRange bodyFullForStorage
-  bodyFullForArrayBranch bodyStorageMetadata vyperSubscriptOverlap vyperValue vyperTyping
+  bodyFullForArrayBranch bodyFullForIteratorRoot bodyFullForIteratorHeld
+  bodyStorageMetadata vyperSubscriptOverlap vyperValue vyperTyping
   vyperTypeContract[qualified,ignore_grammar]
 
 val _ = Parse.hide "body";
@@ -102,12 +103,39 @@ Resume compile_for_frag_full[array]:
          `lctx`,`RetQ`,`es`] MATCH_MP_TAC
         bodyFullForArrayBranchTheory.compile_for_immutable_field_array_frag_full >>
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  Cases_on `~(?ty nid. e = TopLevelName ty nid) /\
+      (?tgt nid. loop_iterator_place e = SOME tgt /\ target_root tgt = TopLevelNameTarget nid)`
+  >- (pop_assum strip_assume_tac >> suspend "nested_array") >>
+  `~(?ty nid. e = TopLevelName ty nid) ==>
+    !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid` by
+    metis_tac[] >>
   qspecl_then
     [`cx`,`id`,`typ`,`e`,`n`,`body`,`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,
      `ctx`,`shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`env'`,`ret_ty`,
      `lctx`,`RetQ`,`es`] MATCH_MP_TAC
     bodyFullForArrayBranchTheory.compile_for_nonslot_array_frag_full >>
   rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume compile_for_frag_full[nested_array]:
+  `supported_expr tops e` by
+    (drule_then strip_assume_tac bodyFullForFactsTheory.supported_stmt_for_projection >>
+     Cases_on `e` >> gvs[supportedStmtsTheory.supported_iterator_def,
+                           vyperTypeContractTheory.loop_iterator_place_def,
+                           targetPlaceSimTheory.target_root_def]) >>
+  drule_all_then strip_assume_tac bodyFullForIteratorRootTheory.supported_nested_iterator_root_kind
+  >- (qspecl_then
+        [`cx`,`id`,`typ`,`e`,`n`,`body`,`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,
+         `ctx`,`shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`]
+        MATCH_MP_TAC bodyFullForIteratorHeldTheory.compile_for_immutable_subplace_array_frag_full >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      qexistsl [`tgt`,`nid`] >> simp[]) >>
+  qspecl_then
+    [`cx`,`id`,`typ`,`e`,`n`,`body`,`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,
+     `ctx`,`shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`]
+    MATCH_MP_TAC bodyFullForIteratorHeldTheory.compile_for_storage_subplace_array_frag_full >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qexistsl [`tgt`,`nid`] >> simp[] >> metis_tac[]
 QED
 
 Finalise compile_for_frag_full
