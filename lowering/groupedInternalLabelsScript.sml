@@ -2,7 +2,7 @@ Theory groupedInternalLabels
 Ancestors
   externalEntryShape loweringShapeRules compileUnit compileVyper vyperCompiler
   moduleLowering compileEnv emitHelper exprLowering loweringShapeDefs list
-  entryInternalAppend fragExec
+  entryInternalAppend fragExec emitHelperProps exprLoweringProps venomInst pair
 Libs monadsyntax
 
 fun label_steps rws =
@@ -124,6 +124,59 @@ Proof
   irule comp_ignore_bind_labels >> conj_tac
   >- (gen_tac >> irule new_block_action_labels >> simp[]) >>
   simp[]
+QED
+
+(* The grouped comparison jumps directly into the selected entry. *)
+Theorem compile_group_entries_cons_layout:
+  compile_group_entries mid ((sel,lbl,mincd,k)::entries) common vars off sa =
+    ((),sb) /\ fn_has_code sa sb fn /\
+  EVERY (\(_,name,_,_). ~internal_label_ok name) entries ==>
+  ?next st checks init done bb.
+    compile_group_entries mid entries common vars off st = ((),sb) /\
+    fn_has_code st sb fn /\ st.cs_current_bb = next /\ st.cs_current_insts = [] /\
+    lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb (LENGTH sa.cs_current_insts) =
+      SOME (mk_inst sa.cs_next_id EQ [mid; Lit (n2w sel)]
+        [STRING #"%" (toString sa.cs_next_var)]) /\
+    get_instruction bb (SUC (LENGTH sa.cs_current_insts)) =
+      SOME (mk_inst (sa.cs_next_id + 1) JNZ
+        [Var (STRING #"%" (toString sa.cs_next_var)); Label lbl; Label next] []) /\
+    checks.cs_current_bb = lbl /\ checks.cs_current_insts = [] /\
+    compile_entry_checks mincd common.ec_payable checks = ((),init) /\
+    fn_has_code checks init fn /\
+    compile_entry_point_kwargs common.ec_env vars off k common.ec_common_label init =
+      ((),done) /\ fn_has_code init done fn
+Proof
+  simp[compile_group_entries_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> fs[]) >> strip_tac >>
+  rename1 `emit_op EQ _ sa = (_,s1)` >>
+  rename1 `fresh_label "next" s1 = (next,s2)` >>
+  rename1 `emit_inst JNZ _ _ s2 = (_,s3)` >>
+  rename1 `new_block lbl s3 = (_,checks)` >>
+  rename1 `compile_entry_checks _ _ checks = (_,init)` >>
+  rename1 `compile_entry_point_kwargs _ _ _ _ _ init = (_,done)` >>
+  rename1 `new_block next done = (_,st)` >>
+  `cs_extends sa s1 /\ cs_extends s1 s2 /\ cs_extends s2 s3 /\
+   cs_extends s3 checks /\ cs_extends done st` by
+    (rpt conj_tac >> metis_tac[cs_appends_def, cs_appends_prims,
+      cs_appends_emit_helpers]) >>
+  `cs_extends checks init` by
+    metis_tac[compile_entry_checks_labels, SND] >>
+  `cs_extends init done` by
+    metis_tac[group_entry_kwargs_labels, SND] >>
+  `cs_extends st sb` by
+    metis_tac[group_entry_labels, SND] >>
+  `fn_has_code s3 checks fn /\ fn_has_code checks init fn /\
+    fn_has_code init done fn /\ fn_has_code st sb fn` by
+    (rpt conj_tac >> metis_tac[fn_has_code_mid, cs_extends_trans, cs_extends_refl]) >>
+  drule_all fn_has_code_new_block >> strip_tac >>
+  imp_res_tac new_block_props >>
+  imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
+  imp_res_tac emit_inst_extends >> imp_res_tac fresh_label_props >>
+  fs[same_blocks_def] >>
+  qmatch_asmsub_abbrev_tac `lookup_block sa.cs_current_bb fn.fn_blocks = SOME blk` >>
+  qexistsl_tac [`st`,`checks`,`init`,`done`] >>
+  simp[Abbr `blk`, get_instruction_def, EL_APPEND_EQN, arithmeticTheory.ADD1]
 QED
 
 Theorem common_job_labels[local]:

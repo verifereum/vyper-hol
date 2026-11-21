@@ -929,16 +929,14 @@ Proof
   drule_all external_body_support_bounds_from_allocs >> strip_tac >>
   `ce_locals_declared cenv env_t` by
     (rw[ce_locals_declared_def] >>
-     qpat_assum `!id loc. FLOOKUP cenv.ce_vars id = SOME loc ==> _` drule >>
-     simp[MEM_MAP, PULL_EXISTS] >> strip_tac >> PairCases_on `y` >> gvs[] >>
-     qpat_assum `!id ty. MEM (id,ty) args ==> FLOOKUP env_t.var_types id = SOME ty`
-       drule >> simp[FLOOKUP_DEF]) >>
+     qpat_assum `!id loc. FLOOKUP cenv.ce_vars id = SOME loc ==> MEM id (MAP FST args)`
+       (fn declared => qpat_assum `FLOOKUP cenv.ce_vars n = SOME l`
+         (mp_tac o MATCH_MP declared)) >>
+     qpat_assum `!id ty. MEM (id,ty) args ==> FLOOKUP env_t.var_types id = SOME ty` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[MEM_MAP,pairTheory.EXISTS_PROD,FLOOKUP_DEF] >> metis_tac[]) >>
   qexistsl [`bindings`, `env_t`, `env_compiled`] >> simp[] >>
   simp[expr_sim_inv_def] >> rpt conj_tac
-  >- (rpt strip_tac >>
-      qpat_assum `!n ty. FLOOKUP env_t.var_types n = SOME ty ==> _` drule >>
-      qpat_assum `!id ty. MEM (id,ty) args ==> (?p sz. _) /\ _`
-        (fn params => disch_then (mp_tac o MATCH_MP params)) >> simp[])
   >- (rpt strip_tac >>
       qpat_assum `!n ty. FLOOKUP env_t.var_types n = SOME ty ==> _` drule >>
       qpat_assum `!id ty. MEM (id,ty) args ==> (?p sz. _) /\ _`
@@ -983,8 +981,8 @@ Proof
       first_x_assum drule_all >> simp[])
   >- (simp[] >> irule external_bind_arguments_popped >> goal_assum (drule_at Any))
   >- (rpt strip_tac >>
-      qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty /\ _ ==> _`
-        drule >> simp[]) >>
+      qpat_assum `env_t.bare_globals = art.cta_bare_globals` (SUBST_ALL_TAC o SYM) >>
+      first_x_assum drule >> simp[]) >>
   simp[bare_globals_layout_def] >> rpt conj_tac
   >~ [`ALOOKUP cenv.ce_modules`] >- metis_tac[body_inv_modules_aligned]
   >~ [`ALL_DISTINCT (MAP FST cenv.ce_modules)`]
@@ -1039,7 +1037,9 @@ Proof
     (qpat_assum `body_inv _ _ _ _`
        (strip_assume_tac o SIMP_RULE std_ss [body_inv_def]) >>
      conj_tac >> first_assum ACCEPT_TAC) >>
-  gvs[] >> irule cenv_module_pins_immutables_disjoint >> metis_tac[]
+  gvs[] >> irule cenv_module_pins_immutables_disjoint >>
+  qexistsl [`cenv`, `initial_evaluation_context am.sources am.layouts tx NONE`,
+            `id1`, `id2`, `tops`, `ty1`, `ty2`] >> simp[]
 QED
 
 Theorem external_source_body_frame:
@@ -1086,9 +1086,10 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all external_entry_bound_no_defaults >> strip_tac >>
   `external_entry_bound tops am tx vs.vs_outcomes es0.gas_obs mut args [] es0` by
-    (qpat_assum `!gx. external_entry_bound _ _ _ _ _ _ _ _ _`
-       (qspec_then `es0.gas_obs` mp_tac) >>
-     simp[evaluation_state_component_equality]) >>
+    (`es0 with gas_obs := es0.gas_obs = es0` by (Cases_on `es0` >> simp[]) >>
+     pop_assum (fn same =>
+       qpat_assum `!gx. external_entry_bound _ _ _ _ _ _ _ _ _`
+         (qspec_then `es0.gas_obs` (ACCEPT_TAC o PURE_REWRITE_RULE [same])))) >>
   `cenv with ce_vars := cenv0.ce_vars = cenv0` by
     (drule compile_register_positional_args_cenv >> simp[compile_env_component_equality]) >>
   drule_all supported_selected_external_body >> strip_tac >>
@@ -1106,7 +1107,7 @@ Proof
     `vs`, `mut`, `F`, `args`, `[]`, `fbody`, `es0.gas_obs`, `es0`, `lbl`,
     `cenv0`, `pos_args`, `min_cds`, `is_payable`, `nkey`, `ut'`, `iv`, `rt`,
     `cenv`] external_source_body_frame_nr) >>
-  simp[subst_consts_exprs_def]
+  fs[subst_consts_expr_def, package_external_fn_def, FORALL_AND_THM]
 QED
 
 Theorem external_body_frame:
