@@ -5,7 +5,9 @@ Ancestors
   tuplePlaceSnapshot tuplePlaceSource supportedTargets bodySimAugPlaceScopes
   vyperPlaceFrames vyperInterpreter vyperState vyperMisc vyperValue
   vyperScopePreservation vyperPlaceStatePreservation exprSimSource loweringPosts
-  targetPlaceLive
+  targetPlaceLive vyperTypeSystem vyperTypeEnv vyperSubscriptOverlap vyperAST
+  vyperLocalAccessFrame vyperValueOperation finite_map list pair
+  exprSimAttributeFields exprSimHypsDefs valueEncoding valueEncodingDefs
 
 Theorem tuple_place_supported_target_scopes:
   !bt tops cx es res ee.
@@ -152,3 +154,81 @@ QED
    common-endpoint obligation is solved. No universal separation or store
    contract is certified by this diagnostic, and no root premise is changed.
 *)
+
+Theorem typed_expr_tuple_local_no_write[local]:
+  (!env e. well_typed_expr env e ==> !id tys.
+    FLOOKUP env.var_types id = SOME (TupleT tys) ==>
+    ~MEM (WriteAcc (LocalRef id)) (accesses_expr e)) /\
+  (!env e vt. type_place_expr env e = SOME vt ==> !id tys.
+    FLOOKUP env.var_types id = SOME (TupleT tys) ==>
+    ~MEM (WriteAcc (LocalRef id)) (accesses_expr e)) /\
+  (!env t vt. type_place_target env t = SOME vt ==> !id tys.
+    FLOOKUP env.var_types id = SOME (TupleT tys) /\
+    MEM (WriteAcc (LocalRef id)) (accesses_target t) ==>
+    t = NameTarget id /\ vt = Type (TupleT tys)) /\
+  (!env es. well_typed_exprs env es ==> !id tys.
+    FLOOKUP env.var_types id = SOME (TupleT tys) ==>
+    ~MEM (WriteAcc (LocalRef id)) (accesses_exprs es)) /\
+  (!env eo. well_typed_opt env eo ==> !id tys.
+    FLOOKUP env.var_types id = SOME (TupleT tys) ==>
+    ~MEM (WriteAcc (LocalRef id)) (accesses_opt eo)) /\
+  (!env es. well_typed_named_exprs env es ==> !id tys.
+    FLOOKUP env.var_types id = SOME (TupleT tys) ==>
+    ~MEM (WriteAcc (LocalRef id)) (accesses_named_exprs es))
+Proof
+  ho_match_mp_tac well_typed_expr_ind >> rpt strip_tac >>
+  gvs[well_typed_expr_def, accesses_expr_def, AllCaseEqs()] >>
+  TRY (qmatch_asmsub_rename_tac `risky_builtin bi` >>
+       Cases_on `risky_builtin bi` >> gvs[]) >>
+  TRY (qmatch_asmsub_rename_tac `risky_call_target call` >>
+       Cases_on `risky_call_target call` >> gvs[]) >>
+  res_tac >> gvs[subscript_vtype_def, attribute_type_def]
+QED
+
+Theorem typed_tuple_local_target_entry:
+  !t env vt cx es p ee id tys.
+    type_place_target env t = SOME vt /\
+    FLOOKUP env.var_types id = SOME (TupleT tys) /\
+    eval_base_place cx t es = (INL p,ee) ==>
+    lookup_scopes id ee.scopes = lookup_scopes id es.scopes
+Proof
+  measureInduct_on `base_assignment_target_size t` >> Cases_on `t` >> rpt gen_tac
+  >- (simp[Once evaluate_def, bind_def, get_scopes_def, type_check_def,
+           assert_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[])
+  >- (PairCases_on `p` >> simp[Once evaluate_def] >> metis_tac[lookup_global_scopes])
+  >- (qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >> simp[expr_size_def] >>
+      strip_tac >> rpt strip_tac >> fs[type_place_target_SubscriptTarget] >>
+      qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      strip_tac >> gvs[] >> imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
+      imp_res_tac (cj 1 typed_expr_tuple_local_no_write) >>
+      imp_res_tac eval_expr_unwritten_local >>
+      qpat_x_assum `ee = _` SUBST1_TAC >> simp[] >>
+      first_x_assum drule_all >> simp[])
+  >- (qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >> simp[expr_size_def] >>
+      strip_tac >> rpt strip_tac >> fs[type_place_target_AttributeTarget] >>
+      qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      strip_tac >> gvs[] >> imp_res_tac extend_place_state >>
+      qpat_x_assum `ee = _` SUBST1_TAC >> simp[] >>
+      first_x_assum drule_all >> simp[])
+QED
+
+Theorem tuple_borrow_no_array_headers_frame:
+  !H ctx func cenv cx env es sa sb s0 ee pv vt r s id b sz off tvs.
+  expr_sim_inv cenv cx env es /\
+  target_post H ctx func cenv cx es sa sb s0 ee pv vt r s /\
+  local_region cenv es.scopes s0 id b sz /\
+  b <= off /\ off + type_memory_size (TupleTV tvs) <= b + sz /\
+  local_path_at cenv cx id (off-b) (TupleTV tvs) /\
+  dynarray_free (TupleTV tvs) ==>
+  mem_bytes_at off (type_memory_size (TupleTV tvs)) s.vs_memory =
+  mem_bytes_at off (type_memory_size (TupleTV tvs)) s0.vs_memory
+Proof
+  rpt gen_tac >> strip_tac >> fs[target_post_def] >>
+  qpat_x_assum `locals_kept _ _ _ _ _`
+    (mp_tac o CONJUNCT1 o REWRITE_RULE [locals_kept_def]) >>
+  disch_then irule >> qexistsl_tac [`b`,`id`,`sz`] >> simp[] >>
+  rpt strip_tac >> drule_all local_path_at_dynarray_apart >> decide_tac
+QED
