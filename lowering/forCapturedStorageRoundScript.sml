@@ -10,31 +10,7 @@ Ancestors
   freshWrites loweringPosts stmtLowering bodyFullIfExpReach
   allocaSiteResource stateRelProj localPtrsProps bodyMemBopRestWordPath
   exprSimHypsDefs vyperTypeStatePreservation vyperStorageTrace vyperInterpreter
-  bodySim gasExplicitSites
-
-Definition for_captured_storage_done_def:
-  for_captured_storage_done (DF,lo,d,ctx,func,cx,c0,lctx,sb)
-    (e0,sa0,s0,G0,tn0) H ee G tn t <=>
-    (?c. stmt_lands lctx sb (INL ()) t /\ ~t.vs_halted /\
-         ~block_is_terminated sb /\ c = c0 /\ cenv_top_ext c0 c ee.scopes /\
-         stmt_state_rel H ctx func c cx ee t /\
-         storage_well_formed_on cx ee (FST H) /\
-         return_buf_frame d c sb t /\ return_buf_sep d c ee t /\
-         ghost_inv_at (DF H) lo d c cx ee G tn t /\
-         alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-         s0.vs_alloca_next <= t.vs_alloca_next /\
-         (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==>
-           lookup_var x t = SOME w) /\
-         (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
-         (!x. not_fresh_at sa0 x ==> FLOOKUP G x = FLOOKUP G0 x /\
-           op_taint tn (Var x) = op_taint tn0 (Var x)) /\
-         alloca_frame c0 e0 sa0 s0 c ee t /\
-         (!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\
-           aid < sa0.cs_next_id /\
-           (!name b n. local_region c0 e0.scopes s0 name b n ==>
-             off + sz <= b \/ b + n <= off) /\
-           off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem))
-End
+  bodySim gasExplicitSites bodyFullForExprCut
 
 Theorem for_captured_storage_nil_full:
   local_ptrs_reserved c0 sa0 /\
@@ -51,11 +27,13 @@ Theorem for_captured_storage_nil_full:
       (lvo,idx,cond) (p,dst,nb,sd) (H,k,[],es,G,tn,s)) ==>
   ?t G1 tn1. !H. valid_horizon cx st0 H es.storage_trace ==>
     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G1,tn1) /\
-    for_captured_storage_done (DF,lo,d,ctx,func,cx,c0,lctx,sb)
-      (e0,sa0,s0,G0,tn0) H (es with gas_obs := []) G1 tn1 t
+    for_array_loop_post (DF,lo,d,ctx,func) c0 cx lctx (e0,sa0,s0,G0,tn0)
+      sb H (INL ()) (es with gas_obs := []) G1 tn1 t
 Proof
-  strip_tac >> rewrite_tac[for_captured_storage_done_def] >>
-  irule (BETA_RULE for_storage_array_nil_core) >>
+  strip_tac >>
+  simp[for_array_loop_post_def, AC CONJ_ASSOC CONJ_COMM] >>
+  irule (SIMP_RULE (srw_ss()) [AC CONJ_ASSOC CONJ_COMM]
+    (BETA_RULE for_storage_array_nil_core)) >>
   simp[] >> qexistsl [`bb`,`bod`,`cond`,`dv`,`eid`,`idx`,`len`,`lvo`] >> simp[] >>
   qx_gen_tac `H` >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ _ _ ==> _` drule >>
@@ -64,7 +42,9 @@ Proof
     (qpat_assum `[] = DROP k vs` (mp_tac o SYM) >>
      rewrite_tac[DROP_EQ_NIL] >> decide_tac) >>
   qpat_x_assum `k = len` SUBST_ALL_TAC >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  qpat_assum `!aid off sz i. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _`
+    mp_tac >> simp[NoAsms, AC CONJ_ASSOC CONJ_COMM]
 QED
 
 (* The increment has only two output registers. The body has already returned
@@ -224,13 +204,19 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
+Definition for_captured_storage_round_scope_def:
+  for_captured_storage_round_scope id tyv ei v =
+    ei with scopes :=
+      (FEMPTY |+ (id,<|assignable := F; type := tyv; value := v; popped := []|>)) :: ei.scopes
+End
+
 (* Recover the outer-scope resources at the actual scoped entry, not at the
    earlier scalar or expression endpoint. *)
 Theorem for_captured_storage_outer_entry[local]:
-  let ent = <|assignable := F; type := tyv; value := v; popped := []|> in
-  let eb = ei with scopes := (FEMPTY |+ (id,ent)) :: ei.scopes in
-  expr_sim_inv bc cx (extend_local env id typ F) eb /\
-  stmt_state_rel H ctx func bc cx eb z /\ cenv_top_ext c0 bc eb.scopes /\
+  expr_sim_inv bc cx (extend_local env id typ F)
+    (for_captured_storage_round_scope id tyv ei v) /\
+  stmt_state_rel H ctx func bc cx (for_captured_storage_round_scope id tyv ei v) z /\
+  cenv_top_ext c0 bc (for_captured_storage_round_scope id tyv ei v).scopes /\
   lookup_scopes id ei.scopes = NONE /\
   ret_pc_ok bc sb0 z /\ return_buf_frame d bc sb0 z /\
   (!x sz. c0.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x) /\
@@ -243,7 +229,7 @@ Theorem for_captured_storage_outer_entry[local]:
   (!name b sz. local_region c0 ei.scopes z name b sz ==>
    w2n dst + nb <= b \/ b + sz <= w2n dst)
 Proof
-  simp[LET_THM] >> strip_tac >>
+  pure_rewrite_tac[for_captured_storage_round_scope_def] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `expr_sim_inv bc cx _ eb` >>
   `state_well_typed eb` by fs[expr_sim_inv_def] >>
   `value_has_type tyv v` by
@@ -271,52 +257,39 @@ Proof
   simp[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
-(* Run one nonempty round. The scalar/copy stage supplies the scoped body
-   endpoint; cleanup and the backedge both use that endpoint's live data. *)
-Theorem for_captured_storage_round_from_head:
-  let explicit = gas_explicit_sites ctx shadow_ctx in
-  let EB = \ei v. ei with scopes :=
-    (FEMPTY |+ (id,<|assignable := F; type := tyv; value := v; popped := []|>)) :: ei.scopes in
-  let Fr = \c ee z GG tt.
+(* The scalar/copy endpoint supplies the resources for the scoped body. *)
+Definition for_captured_storage_round_entry_def:
+  for_captured_storage_round_entry (DF,lo,d,ctx,func) (cx,c0,bc,env,sb0,stmts)
+    (e0,sa0,s0,G0,tn0) (idx,p,dst,lvo,len,inst,nb) (H,eb,j,z,GG,tt) <=>
+    expr_sim_inv bc cx env eb /\
+    ce_locals_declared bc env /\ locals_alloc_ok bc env /\
+    cenv_top_ext c0 bc eb.scopes /\ stmt_state_rel H ctx func bc cx eb z /\
+    storage_well_formed_on cx eb (FST H) /\
+    ghost_inv_at (DF H) lo d bc cx eb GG tt z /\
+    ret_pc_ok bc sb0 z /\ return_buf_frame d bc sb0 z /\ return_buf_sep d bc eb z /\
     alloca_history func z /\ (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
     s0.vs_alloca_next <= z.vs_alloca_next /\
     (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==> lookup_var x z = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP z.vs_allocas aid = SOME b) /\
     (!x. not_fresh_at sa0 x ==> FLOOKUP GG x = FLOOKUP G0 x /\
                                 op_taint tt (Var x) = op_taint tn0 (Var x)) /\
-    alloca_frame c0 e0 sa0 s0 c ee z /\
+    alloca_frame c0 e0 sa0 s0 bc eb z /\
     (!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa0.cs_next_id /\
       (!name b sz'. local_region c0 e0.scopes s0 name b sz' ==>
                     off + sz <= b \/ b + sz' <= off) /\
-      off <= i /\ i < off + sz /\ i IN tt.t_mem ==> i IN tn0.t_mem) in
-  let Entry = \H ei v j z GG tt.
-    expr_sim_inv bc cx (extend_local env id typ F) (EB ei v) /\
-    ce_locals_declared bc (extend_local env id typ F) /\
-    locals_alloc_ok bc (extend_local env id typ F) /\
-    cenv_top_ext c0 bc (EB ei v).scopes /\
-    stmt_state_rel H ctx func bc cx (EB ei v) z /\
-    storage_well_formed_on cx (EB ei v) (FST H) /\
-    ghost_inv_at (DF H) lo d bc cx (EB ei v) GG tt z /\
-    ret_pc_ok bc sb0 z /\ return_buf_frame d bc sb0 z /\
-    return_buf_sep d bc (EB ei v) z /\ Fr bc (EB ei v) z GG tt /\
+      off <= i /\ i < off + sz /\ i IN tt.t_mem ==> i IN tn0.t_mem) /\
     ~z.vs_halted /\ z.vs_current_bb = sb0.cs_current_bb /\
     z.vs_inst_idx = LENGTH sb0.cs_current_insts /\
     lookup_var idx z = SOME (n2w j) /\ FLOOKUP GG idx = NONE /\
     op_taint tt (Var idx) = {} /\ lookup_var p z = SOME dst /\
-    eval_operand lvo z = SOME (n2w len) /\ op_prov GG lvo = NONE /\
-    op_taint tt lvo = {} /\
+    eval_operand lvo z = SOME (n2w len) /\ op_prov GG lvo = NONE /\ op_taint tt lvo = {} /\
     FLOOKUP z.vs_allocas inst.inst_id = SOME (w2n dst,nb) /\ ptr_covers GG tt p z nb /\
-    body_stmts_full_ok cx stmts in
-  let Live = \lab H j xs ee GG tt z.
-    for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
-      (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
-      (lvo,idx,lab) (p,dst,nb,sd) (H,j,xs,ee,GG,tt,z) in
-  let Done = for_captured_storage_done (DF,lo,d,ctx,func,cx,c0,lctx,sb)
-               (e0,sa0,s0,G0,tn0) in
-  let R = \H ex ee gt r.
-    (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt r) /\
-    halt_exit H cx ee (INR ex) r /\
-    (ctx_has_dalloca ctx ==> !u. r = Halt u \/ (?ir. r = IntRet ir u) ==> allocas_below_fmp u) in
+    body_stmts_full_ok cx stmts
+End
+
+(* Run one nonempty round. Cleanup and the backedge both use the actual
+   scoped body endpoint, not the earlier scalar or expression endpoint. *)
+Theorem for_captured_storage_round_from_head:
   body_inv (cx_tops cx) ctx bc cx /\ shadow_body_inv (cx_tops cx) ctx shadow_ctx /\
   supported_program (cx_tops cx) /\ get_module_code cx NONE = SOME (cx_tops cx) /\
   supported_stmts (cx_tops cx) bindings stmts /\
@@ -352,26 +325,36 @@ Theorem for_captured_storage_round_from_head:
   not_fresh_at si idx /\ p <> idx /\ p <> out /\
   (!x. lvo = Var x ==> x <> idx /\ x <> out) /\ (!x. bop = Var x ==> x <> idx /\ x <> out) /\
   ~s.vs_halted /\ (!f inst u. frag_reachable ctx func s f inst u ==> dalloca_no_wrap inst u) /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==> Live cond H k (a::rs) es G tn s) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+      (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
+      (lvo,idx,cond) (p,dst,nb,sd) (H,k,a::rs,es,G,tn,s)) /\
   gas_admissible (eval_for cx tyv id stmts (a::rs)) (stmt_res_ok lctx) es /\
   (storage_trace_domain cx st0 es.storage_trace ==>
-    gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
       (bind (read_result cx a) (push_scope_with_var id tyv)) (es,s,G,tn)
       (\H res eb GG tt z. res = INL () /\ eb.gas_obs = [] /\
-        ?v j. eb = EB (es with gas_obs := []) v /\ read_result cx a es = (INL v,es) /\
-          Entry H (es with gas_obs := []) v j z GG tt /\
+        ?v j. eb = for_captured_storage_round_scope id tyv (es with gas_obs := []) v /\
+          read_result cx a es = (INL v,es) /\
+          for_captured_storage_round_entry (DF,lo,d,ctx,func)
+            (cx,c0,bc,extend_local env id typ F,sb0,stmts) (e0,sa0,s0,G0,tn0)
+            (idx,p,dst,lvo,len,inst,nb) (H,eb,j,z,GG,tt) /\
           eval_operand bop z = SOME slot /\ op_taint tt bop = {} /\ a::rs = DROP j vs)
-      (\H res ee gt r. ?ex. res = INR ex /\ R H ex ee gt r)) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+      (\H res ee gt r. ?ex. res = INR ex /\ for_array_loop_exit ctx cx RetQ H (INR ex) ee gt r)) ==>
+  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
     (bind (read_result cx a) (\v. ignore_bind (push_scope_with_var id tyv v)
       (finally (try (ignore_bind (eval_stmts cx stmts) (return F)) handle_loop_exception) pop_scope)))
     (es,s,G,tn)
     (\H res ee GG tt z. ee.gas_obs = [] /\ ~z.vs_halted /\
-      ?b. res = INL b /\ (b ==> Done H ee GG tt z) /\
-        (~b ==> ?j. Live cond H j rs ee GG tt z))
-    (\H res ee gt r. ?ex. res = INR ex /\ R H ex ee gt r)
+      ?b. res = INL b /\
+        (b ==> for_array_loop_post (DF,lo,d,ctx,func) c0 cx lctx
+          (e0,sa0,s0,G0,tn0) sb H (INL ()) ee GG tt z) /\
+        (~b ==> ?j. for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+          (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
+          (lvo,idx,cond) (p,dst,nb,sd) (H,j,rs,ee,GG,tt,z)))
+    (\H res ee gt r. ?ex. res = INR ex /\ for_array_loop_exit ctx cx RetQ H (INR ex) ee gt r)
 Proof
-  BasicProvers.LET_ELIM_TAC >>
+  pure_rewrite_tac[for_array_loop_exit_def] >> strip_tac >>
   irule gas_outcome_full_initial_domain >>
   conj_tac >- (irule storage_trace_frame_bind_all >> simp[storage_trace_frame_read_result] >>
     gen_tac >> irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_state_updates] >>
@@ -381,10 +364,14 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >> disch_tac >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[body_inv_no_phi] >>
-  qunabbrev_tac `Live` >> BETA_TAC >> RULE_ASSUM_TAC BETA_RULE >>
-  ho_match_mp_tac (Q.INST [`ok` |-> `stmt_res_ok lctx`]
+  ho_match_mp_tac (BETA_RULE (Q.INST [`ok` |-> `stmt_res_ok lctx`,
+    `Entry` |-> `\H ei v j z GG tt.
+      for_captured_storage_round_entry (DF,lo,d,ctx,func)
+        (cx,c0,bc,extend_local env id typ F,sb0,stmts) (e0,sa0,s0,G0,tn0)
+        (idx,p,dst,lvo,len,inst,nb)
+        (H,for_captured_storage_round_scope id tyv ei v,j,z,GG,tt)`]
     (CONV_RULE (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV]))
-      for_captured_storage_cons_from_stages)) >>
+      for_captured_storage_cons_from_stages))) >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac >- simp[] >>
   conj_tac >- suspend "head" >>
@@ -401,25 +388,35 @@ Resume for_captured_storage_round_from_head[head]:
   irule gas_outcome_full_post_mono >>
   qpat_assum `storage_trace_domain _ _ _ ==> gas_outcome_full _ _ _ _ _ _ _ _` drule >>
   disch_then (irule_at Any) >> reverse conj_tac >- simp[] >>
-  rpt gen_tac >> BETA_TAC >> disch_then strip_assume_tac >> simp[] >>
+  rpt gen_tac >> BETA_TAC >> disch_then strip_assume_tac >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   rename1 `a::rs = DROP j vs` >>
   rename1 `read_result cx a es = (INL v,es)` >>
   `j = k` by
     (qpat_assum `a::rs = DROP j vs` (mp_tac o AP_TERM ``LENGTH : eval_result list -> num``) >>
      qpat_assum `a::rs = DROP k vs` (mp_tac o AP_TERM ``LENGTH : eval_result list -> num``) >>
      simp[NoAsms,LENGTH_DROP] >> decide_tac) >>
-  qpat_x_assum `j = k` SUBST_ALL_TAC >> simp[Abbr `EB`,evaluation_state_fupdfupds]
+  qpat_x_assum `j = k` SUBST_ALL_TAC >>
+  qexists `v` >>
+  qpat_assum `ee = for_captured_storage_round_scope _ _ _ _`
+    (fn th => simp[NoAsms,GSYM th] >>
+      conj_tac >- (pure_rewrite_tac[th,for_captured_storage_round_scope_def] >>
+        simp[NoAsms,evaluation_state_fupdfupds])) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume for_captured_storage_round_from_head[body]:
   map_every qx_gen_tac [`v`,`eb`,`GG`,`tt`,`z`] >> strip_tac >>
-  `eb.storage_trace = es.storage_trace` by simp[] >>
-  `EB (es with gas_obs := []) v = eb` by simp[Abbr `EB`,evaluation_state_fupdfupds] >>
+  `for_captured_storage_round_scope id tyv (es with gas_obs := []) v = eb` by
+    simp[for_captured_storage_round_scope_def,evaluation_state_fupdfupds] >>
+  `eb.storage_trace = es.storage_trace` by simp[for_captured_storage_round_scope_def] >>
   qabbrev_tac `H0 = storage_trace_horizon eb.storage_trace` >>
   `valid_horizon cx st0 H0 eb.storage_trace` by simp[Abbr `H0`,GSYM storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H eb.storage_trace ==> Entry H _ _ _ _ _ _`
+  qpat_assum `!H. valid_horizon _ _ H eb.storage_trace ==>
+     for_captured_storage_round_entry _ _ _ _ _`
     (qspec_then `H0` (drule_then mp_tac)) >>
-  qpat_assum `EB _ _ = eb` (fn th => simp[NoAsms,Abbr `Entry`,Abbr `Fr`,th]) >>
+  qpat_assum `for_captured_storage_round_scope _ _ _ _ = eb`
+    (fn th => simp[NoAsms,th,for_captured_storage_round_entry_def]) >>
   strip_tac >> suspend "invoke"
 QED
 
@@ -435,7 +432,8 @@ QED
 Resume for_captured_storage_round_from_head[invoke]:
   qabbrev_tac `ei = es with gas_obs := []` >>
   `eb = ei with scopes := (FEMPTY |+ (id,<|assignable := F; type := tyv; value := v; popped := []|>))::ei.scopes` by
-    (qpat_assum `EB ei v = eb` mp_tac >> simp[NoAsms,Abbr `EB`]) >>
+    (qpat_assum `for_captured_storage_round_scope _ _ _ _ = eb` mp_tac >>
+     simp[for_captured_storage_round_scope_def,Abbr `ei`]) >>
   qpat_assum `eb = ei with scopes := _` (fn eq =>
     qpat_assum `expr_sim_inv bc cx _ eb` (assume_tac o PURE_REWRITE_RULE[eq])) >>
   RULE_ASSUM_TAC BETA_RULE >>
@@ -443,9 +441,11 @@ Resume for_captured_storage_round_from_head[invoke]:
      stmt_state_rel H ctx func bc cx eb z /\ storage_well_formed_on cx eb (FST H) /\
      ghost_inv_at (DF H) lo d bc cx eb GG tt z` by
     (qx_gen_tac `H` >> disch_tac >>
-     qpat_assum `!H. valid_horizon _ _ H eb.storage_trace ==> _`
-       (qspec_then `H` (drule_then strip_assume_tac)) >>
-     qpat_assum `EB ei v = eb` (fn eq => fs[eq])) >>
+     qpat_assum `!H. valid_horizon _ _ H eb.storage_trace ==>
+       for_captured_storage_round_entry _ _ _ _ _`
+       (qspec_then `H` (drule_then mp_tac)) >>
+     qpat_assum `for_captured_storage_round_scope _ _ _ _ = eb`
+       (fn eq => simp[NoAsms,eq,for_captured_storage_round_entry_def])) >>
   qpat_assum `frame_ret_ok_full _ _ _ _ _`
     (mp_then (Pat `frame_ret_ok_full _ _ _ _ _`) mp_tac (BETA_RULE for_storage_body_invoke_full)) >>
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
@@ -465,8 +465,9 @@ Resume for_captured_storage_round_from_head[invoke]:
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ (eval_stmts cx stmts)
     (eb,z,GG,tt) Qraw _` >>
-  map_every qunabbrev_tac [`explicit`,`R`] >> BETA_TAC >>
-  ho_match_mp_tac (CONV_RULE (REDEPTH_CONV BETA_CONV) for_body_cleanup_from_raw_landing) >>
+  ho_match_mp_tac
+    (CONV_RULE (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV]))
+      for_body_cleanup_from_raw_landing) >>
   conj_tac >- (qpat_assum `eb = ei with scopes := _` SUBST1_TAC >> simp[]) >>
   conj_tac >- first_assum ACCEPT_TAC >> suspend "raw_land"
 QED
@@ -504,7 +505,7 @@ Resume for_captured_storage_round_from_head[land_at]:
     w2n dst + nb <= z.vs_alloca_next /\
     (!name b sz. local_region c0 ei.scopes z name b sz ==>
        w2n dst + nb <= b \/ b + sz <= w2n dst)` by
-    (MATCH_MP_TAC (CONV_RULE (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV]))
+    (MATCH_MP_TAC (REWRITE_RULE [for_captured_storage_round_scope_def]
        (INST_TYPE [alpha |-> ``:256``] for_captured_storage_outer_entry)) >>
      qpat_assum `eb = ei with scopes := _` (fn eq => pure_rewrite_tac[GSYM eq]) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -536,8 +537,9 @@ Resume for_captured_storage_round_from_head[pack_landing]:
   conj_tac
   >- (disch_tac >> qpat_assum `b ==> ?c. stmt_lands _ _ _ _ /\ P c`
        (drule_then (qx_choose_then `c` strip_assume_tac)) >>
-      qunabbrev_tac `Done` >> pure_rewrite_tac[for_captured_storage_done_def] >>
-      qexists `c` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      qpat_x_assum `c = c0` SUBST_ALL_TAC >>
+      simp_tac bool_ss [for_array_loop_post_def] >>
+      rpt (conj_tac >- first_assum ACCEPT_TAC) >> first_assum ACCEPT_TAC) >>
   disch_tac >>
   qpat_x_assum `~b ==> _` (drule_then strip_assume_tac) >>
   suspend "pack_live"
