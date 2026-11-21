@@ -1285,6 +1285,9 @@ Proof
            (qpat_assum `_ ==> ~program_reads_self_code tops` mp_tac >> simp[]) >>
          `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
            metis_tac[entryStateRelTheory.source_typing_ok_vtype_keys_distinct] >>
+         `?A. constants_fold_module [(NONE,tops)]
+                (account_immutables am txp.target) NONE tops FEMPTY = SOME A` by
+           metis_tac[source_typing_ok_def] >>
          drule_all lower_vyper_runtime_unit_sym_src_ok >> strip_tac >>
          drule_all o1_pipeline_sym_unit_static_ok >> strip_tac >>
          drule_all gasFocusOptLabelFlowTheory.focus_opt_label_flow >> strip_tac >>
