@@ -116,6 +116,7 @@ Theorem deploy_raw_fmp_focus_mask_entry:
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_state_rel tops (assemble prog') am tx es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
     vs_out = opt_deploy_entry_state_own prog prog' cplan tops es /\
     deploy_source_ok tops am (tx with code := vs_out.vs_code) /\
     w2n vs_out.vs_initial_fmp <= w2n fmp /\
@@ -172,6 +173,5 @@ Proof
   drule_at (Pat `deploy_unit_execution_correct_with _ _ _ _ _ _ _ _`)
     deploy_certificate_raw_entry_boundary >>
   simp[] >> disch_then irule >> simp[] >>
-  conj_tac >- (qexists_tac `fmp` >> gvs[]) >>
-  metis_tac[]
+  rpt conj_tac >> TRY (qexists_tac `fmp`) >> fs[] >> metis_tac[]
 QED

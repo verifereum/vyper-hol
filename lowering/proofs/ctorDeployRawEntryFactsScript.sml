@@ -19,12 +19,11 @@ Theorem deploy_raw_entry_context_facts:
     dunit.cu_context.ctx_functions /\
   reserved_intervals_wf dunit.cu_context.ctx_global_reserved /\
   EVERY (\f. f.fn_eom = NONE) dunit.cu_context.ctx_functions /\
-  ~ctx_has_dalloca dunit.cu_context /\
   fmp_free_ctx dunit.cu_context /\
   fixed_region_reserved (imm_len tops) dunit.cu_context
 Proof
   strip_tac >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_o1_shape_ok >> strip_tac >>
   `lowering_context_ok dunit.cu_context` by
     (irule lower_vyper_deploy_unit_context_ok >>
      fs[deploy_phases_def] >> metis_tac[]) >>
@@ -38,7 +37,10 @@ Theorem deploy_raw_entry_mem_inv:
   deploy_phases policy tops (deploy_bc, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
   deploy_source_ok tops am tx /\
-  vs.vs_alloca_next = imm_len tops ==>
+  vs.vs_alloca_next = imm_len tops /\
+  (ctx_has_dalloca dunit.cu_context ==>
+   imm_len tops + unit_alloca_budget dunit.cu_context +
+     32 * ctx_dload_count dunit.cu_context <= w2n vs.vs_initial_fmp) ==>
   mem_inv dload_headroom_ok dunit.cu_context vs
 Proof
   strip_tac >>
@@ -47,8 +49,9 @@ Proof
   `dunit.cu_context.ctx_entry = SOME "__deploy" /\
    ?fn. lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME fn` by
     (irule lower_vyper_deploy_unit_entry >> fs[deploy_phases_def] >> metis_tac[]) >>
-  irule lowered_unit_dload_headroom_ok_from >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  qspecl_then [`imm_len tops`, `dunit.cu_context`, `"__deploy"`, `fn`, `vs`]
+    mp_tac lowered_unit_dload_headroom_ok_from >>
+  asm_rewrite_tac[]
 QED
 
 Theorem deploy_raw_entry_no_phi:
