@@ -1,6 +1,6 @@
 (* The positional and supplied keyword parts share the calldata head. *)
 Theory groupedKeywordDecode
-Ancestors moduleLowering abiEncoder compileEnv vyperCalldata list arithmetic
+Ancestors moduleLowering abiEncoder compileEnv emitHelper exprLowering vyperCalldata list arithmetic
 
 Theorem calldata_decode_args_split:
   !pos kw vals cd off.
@@ -47,4 +47,18 @@ Proof
        comp_return_def] >>
   fs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> fs[]) >> metis_tac[]
+QED
+
+Theorem compile_init_kwargs_omitted_parts:
+  compile_init_kwargs ce ((name,dst,ty,default_e)::vars) off 0 hi sa = ((),sb) ==>
+  ?value mid last.
+    lower_value compile_expr ce ty default_e sa = (value,mid) /\
+    (if is_word_type ty then emit_void MSTORE [dst; value]
+     else if is_bytestring_type ty then compile_store_bytestring value dst
+     else emit_void MCOPY [dst; value; Lit (n2w (type_memory_bytes ce ty))]) mid =
+    ((),last) /\
+    compile_init_kwargs ce vars off 0 hi last = ((),sb)
+Proof
+  simp[Once compile_init_kwargs_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> fs[]) >> strip_tac >> metis_tac[]
 QED
