@@ -4,6 +4,7 @@ Ancestors
   compileEnv loweringStateRelDefs supportedNames loweringShapeProps
   vyperInterpreter vyperTypeContractStaticMaps stmtSimReturn exprSimHyps
   vyperValue vyperTyping valueEncoding
+  bodySim bodyInvSplit bodyInvCodeProps compileUnit
 
 Theorem build_func_info_distinct[local]:
   !tops sft vis mut nr rr name args dflts ret stmts.
@@ -103,13 +104,15 @@ Theorem callable_func_info_in_env:
       ret (type_memory_bytes cenv ret) (MAP SND args)
 Proof
   strip_tac >>
-  `ALL_DISTINCT (supported_function_names tops) /\
-   cenv.ce_struct_fields = make_struct_fields_map tops /\
-   cenv.ce_func_info = build_func_info (get_struct_fields (make_struct_fields_map tops)) tops` by
-    (qhdtm_assum `body_inv` mp_tac >>
-     pure_rewrite_tac [bodySimTheory.body_inv_def] >>
-     metis_tac[supportedProgramTheory.supported_program_def,
-               supportedNamesTheory.supported_declaration_names_unique]) >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac body_inv_module >>
+  drule_all_then strip_assume_tac contract_inv_module_gate >>
+  `ALL_DISTINCT (supported_function_names tops)` by
+    fs[supportedProgramTheory.supported_program_def, supported_declaration_names_def] >>
+  `cenv.ce_func_info = build_func_info (get_struct_fields cenv.ce_struct_fields) tops` by
+    (qpat_assum `contract_inv _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [contract_inv_def]) >>
+     fs[build_func_info_mods_singleton]) >>
   drule_all callable_func_info >>
   disch_then (qspec_then `get_struct_fields cenv.ce_struct_fields` mp_tac) >>
   simp[nsid_to_string_def, type_mem_bytes_type_memory_bytes]
