@@ -1,7 +1,7 @@
 (* Allocation framing for non-slot For element preparation. *)
 Theory bodyFullForArray
 Ancestors
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv bodyInvCodeProps exprBodyPreProps
   whitelistForIterImmCopy whitelistForIterImmLoop stmtSimForArrayLoop
   bodyFullUnwrapCodeCtorRun bodyFullUnwrapCodeRuntimeRun fragGasOriginPtr
   ptrDiscipline allocationPtr context arithmetic pred_set
@@ -541,8 +541,8 @@ Proof
       (qx_choose_then `av` (qx_choose_then `xs` strip_assume_tac))) >>
   `type_widens_to env.type_defs (post_value_type c e) (ArrayT ty bd)` by
     (qpat_assum `expr_type e = _` (SUBST1_TAC o SYM) >>
-     irule post_value_type_widens >> fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
-     qexistsl_tac [`cx`, `es0`] >> simp[]) >>
+     drule_then strip_assume_tac expr_body_pre_static_facts >>
+     drule_all post_value_type_widens >> simp[]) >>
   `?pty pbd. post_value_type c e = ArrayT pty pbd /\
      (case bd of Fixed n => pbd = Fixed n | Dynamic n => ?m. pbd = Dynamic m /\ m <= n)` by
     (qpat_x_assum `type_widens_to _ _ _` mp_tac >> simp[type_widens_to_def] >>
@@ -2146,8 +2146,9 @@ Resume for_nonslot_array_prefix_full[normal]:
   `?pty pbd. post_value_type c e = ArrayT pty pbd` by
     (`type_widens_to env.type_defs (post_value_type c e) (ArrayT elem bd)` by
        (qpat_assum `expr_type e = _` (SUBST1_TAC o SYM) >>
-        irule post_value_type_widens >> fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
-        qexistsl_tac [`cx`, `esx`] >> simp[]) >>
+        qpat_assum `expr_body_pre c cx env e esx`
+          (strip_assume_tac o MATCH_MP expr_body_pre_static_facts) >>
+        drule_all post_value_type_widens >> simp[]) >>
      qpat_x_assum `type_widens_to _ _ _` mp_tac >> simp[type_widens_to_def] >>
      Cases_on `post_value_type c e` >> simp[arg_type_fits_def]) >>
   `~is_word_type (post_value_type c e) /\ ~is_bytestring_type (post_value_type c e)` by
@@ -2162,14 +2163,14 @@ Resume for_nonslot_array_prefix_full[normal]:
           `?ity. supported_immutable_type tops (nid0,nid1) = SOME ity` by
             (qpat_assum `!nid. _ ==> IS_SOME _` (qspec_then `(nid0,nid1)` mp_tac) >>
              simp[NoAsms, vyperASTTheory.expr_type_def, optionTheory.IS_SOME_EXISTS]) >>
-          `expr_sim_inv c cx env es` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+          `expr_sim_inv c cx env es` by metis_tac[expr_body_pre_static_facts] >>
           drule_all exprOpenMainTheory.supported_immutable_bound >> strip_tac >>
           `loc = LocCode` by
             (drule exprSimTopLevelImmutableTheory.compile_toplevel_immutable_ptr >>
              disch_then (qspecl_then [`expr_type (TopLevelName ty (nid0,nid1))`,`sa`,`ty`] assume_tac) >>
              qpat_assum `compile_expr _ _ _ _ = (vv,sb)` mp_tac >>
              simp[] >> strip_tac >> gvs[vv_location_def, mk_ptr_def]) >>
-          `get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+          `get_module_code cx NONE = SOME tops` by metis_tac[body_inv_main_code] >>
           drule body_inv_modules_aligned >> strip_tac >>
           `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by metis_tac[] >>
           drule_all bodyStorageMetadataTheory.supported_immutable_type_find_NONE >> strip_tac >>

@@ -11,6 +11,7 @@ Ancestors bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragG
   compilerInstructionSuffix[qualified,ignore_grammar]
   abiEncoderProps[qualified,ignore_grammar]
   bodyFullIntCallDefs bodyFullIntCallByteFrame[qualified,ignore_grammar]
+  bodyInvIntCallPinsProps
   bodyIntCallSeams bodyFullPreds bodySimFull bodyFullUnwrap
   gasOutcomeFull bodyPtrDefs gasShadow gasShadowShape gasContext exprSimHypsDefs
   exprSimIfExpWidenedAdapter exprSimSliceCompose
@@ -107,12 +108,6 @@ Proof
   rename1 `cenv.ce_target = rpolicy.rpol_target` >>
   rename1 `ctx = unit.cu_context` >>
   qexistsl_tac [`rpolicy`,`unit`] >> simp[]
-QED
-
-Theorem intcall_args_body_inv_pins[local]:
-  body_inv tops ctx cenv cx ==> cenv_module_pins tops cenv
-Proof
-  simp[bodySimTheory.body_inv_split_def]
 QED
 
 Theorem intcall_args_pre_state[local]:

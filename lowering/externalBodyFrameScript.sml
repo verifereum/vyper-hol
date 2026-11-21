@@ -7,6 +7,7 @@ Ancestors
   loweringPosts
   list pair finite_map alist arithmetic combin integer option pred_set rich_list
   fragExec bodySim bodySimEntry bodySimStmtFacts
+  bodyInvSplit bodyInvCodeProps bodyInvExecutionProps bodyInvIntCallPinsProps compileUnit
   loweringHalt stmtLoweringMono exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering exprLowering
   e2eDefs supportedProgram supportedProgramProps supportedDecls supportedNames
@@ -791,6 +792,22 @@ Proof
 QED
 
 
+Theorem external_body_inv_source[local]:
+  body_inv tops ctx cenv cx ==>
+  !src ts. get_module_code cx src = SOME ts ==> src = NONE /\ ts = tops
+Proof
+  strip_tac >> drule body_inv_contract >>
+  disch_then (fn th => GEN_TAC >> Cases_on `src` >>
+    simp[MATCH_MP contract_inv_module_codes th, ALOOKUP_def])
+QED
+
+Theorem contract_inv_event_info[local]:
+  contract_inv mods exps ctx cenv cx ==>
+  cenv.ce_event_info = build_event_info_mods (type_env_all_modules mods) mods (K NONE)
+Proof
+  simp[contract_inv_def]
+QED
+
 (* At the start of the selected function's body, the
    premises of body_stmts_sim other than the frame's returns: the frame is
    the lowered program's (body_inv), the body is supported and typed at
@@ -902,7 +919,15 @@ Proof
      ASM_REWRITE_TAC []) >>
   `cenv.ce_struct_fields = make_struct_fields_map tops /\
    cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE)` by
-    gvs[body_inv_def] >>
+    (qpat_assum `body_inv tops _ cenv _` (fn inv =>
+       let
+         val contract = MATCH_MP body_inv_contract inv
+       in
+         mp_tac (CONJ (MATCH_MP contract_inv_struct_fields contract)
+                      (MATCH_MP contract_inv_event_info contract))
+       end) >>
+     simp[make_struct_fields_map_mods_singleton, build_event_info_mods_singleton,
+          type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2]) >>
   `env_context_consistent env_t
      (initial_evaluation_context am.sources am.layouts tx NONE)` by
     gvs[env_consistent_def] >>
@@ -921,7 +946,9 @@ Proof
      metis_tac[]) >>
   `~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules)
      (subst_consts_stmts (module_consts_env tops []) fbody)` by
-    (`cenv.ce_modules = [(NONE,tops)]` by fs[body_inv_def, cenv_module_pins_def] >>
+    (`cenv.ce_modules = [(NONE,tops)]` by
+       (qpat_assum `body_inv tops _ cenv _`
+          (ACCEPT_TAC o MATCH_MP contract_inv_cenv_modules o MATCH_MP body_inv_contract)) >>
      simp[] >>
      irule (INST_TYPE [alpha |-> ``:160 word``]
        checked_const_substitution_const_name_free) >>
@@ -947,23 +974,18 @@ Proof
                 `art.cta_fn_sigs`, `tops`] >> simp[] >>
       qpat_assum `env_consistent _ _ _` (strip_assume_tac o
         SIMP_RULE std_ss [env_consistent_def, env_context_consistent_def]) >>
-      qpat_assum `body_inv _ _ _ _`
-        (strip_assume_tac o SIMP_RULE std_ss [body_inv_def]) >>
       rpt conj_tac
-      >- (rpt gen_tac >> strip_tac >>
-          `src = NONE` by res_tac >>
-          qpat_x_assum `src = NONE` SUBST_ALL_TAC >>
-          qpat_assum `get_module_code (initial_evaluation_context _ _ _ _) NONE =
-                      SOME tops` mp_tac >>
-          qpat_x_assum `get_module_code (initial_evaluation_context _ _ _ _) NONE =
-                        SOME ts` (fn th => rewrite_tac[th]) >>
-          simp_tac (srw_ss()) [])
+      >- (qpat_assum `body_inv tops _ cenv _`
+            (ACCEPT_TAC o MATCH_MP external_body_inv_source))
       >- simp_tac (srw_ss()) [initial_evaluation_context_def]
-      >- first_assum ACCEPT_TAC >>
+      >- (qpat_assum `body_inv tops _ cenv _`
+            (mp_tac o MATCH_MP contract_inv_return_types o MATCH_MP body_inv_contract) >>
+          simp[build_func_return_type_mods_singleton]) >>
       qpat_x_assum `env_t.fn_sigs = art.cta_fn_sigs` (SUBST_ALL_TAC o SYM) >>
       first_assum ACCEPT_TAC)
   >- (rpt strip_tac >> irule external_source_flag_member_id >>
-      gvs[body_inv_def] >> metis_tac[source_typing_ok_type_def_keys_distinct])
+      drule_then assume_tac intcall_args_body_inv_pins >>
+      metis_tac[source_typing_ok_type_def_keys_distinct])
   >- gvs[dec_cenv_agrees_def]
   >- (drule_all external_package_method_id >> simp[])
   >- gvs[dec_cenv_agrees_def]
@@ -973,9 +995,8 @@ Proof
   >- (`!src ts. get_module_code
          (initial_evaluation_context am.sources am.layouts tx NONE) src =
          SOME ts ==> src = NONE` by
-        (qpat_assum `body_inv _ _ _ _`
-           (strip_assume_tac o SIMP_RULE std_ss [body_inv_def]) >>
-         first_assum ACCEPT_TAC) >>
+        (qpat_assum `body_inv tops _ cenv _`
+           (mp_tac o MATCH_MP external_body_inv_source) >> metis_tac[]) >>
       drule body_inv_storage_var_types >> disch_then drule >>
       strip_tac >> rpt gen_tac >> strip_tac >>
       first_x_assum drule_all >> simp[])
@@ -990,26 +1011,20 @@ Proof
   >~ [`ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel _) _))`]
   >- metis_tac[body_inv_modules_aligned]
   >- (rpt strip_tac >>
-      `cenv_module_pins tops cenv` by
-        (qpat_assum `body_inv _ _ _ _`
-           (strip_assume_tac o SIMP_RULE std_ss [body_inv_def]) >>
-         first_assum ACCEPT_TAC) >>
+      drule_then strip_assume_tac body_inv_module_locations >>
       `get_module_code (initial_evaluation_context am.sources am.layouts tx NONE)
          NONE = SOME tops` by
-        (qpat_assum `body_inv _ _ _ _`
-           (strip_assume_tac o SIMP_RULE std_ss [body_inv_def]) >>
-         first_assum ACCEPT_TAC) >>
+        (drule body_inv_main_code >> simp[]) >>
       `bare_globals_complete env_t.bare_globals
          (initial_evaluation_context am.sources am.layouts tx NONE)` by
         fs[env_context_consistent_def] >>
-      fs[cenv_module_pins_def] >>
-      drule add_immutable_locations_cases >> strip_tac
+      fs[] >> drule add_immutable_locations_cases >> strip_tac
       >- (drule add_module_var_locations_FLOOKUP >> simp[]) >>
       gvs[bare_globals_complete_def] >> metis_tac[])
   >- (rpt strip_tac >>
-      qpat_assum `body_inv _ _ _ _`
-        (strip_assume_tac o SIMP_RULE std_ss [body_inv_def]) >>
-      first_assum ACCEPT_TAC)
+      qpat_assum `body_inv tops _ cenv _`
+        (ACCEPT_TAC o MATCH_MP bodyInvMetadataPropsTheory.contract_inv_constructor o
+         MATCH_MP body_inv_contract))
   >- (rpt strip_tac >>
       `FLOOKUP env_t.bare_globals (src,id) = SOME ty` by simp[] >>
       drule_all body_inv_bare_global_type >> simp[]) >>
@@ -1034,9 +1049,14 @@ Proof
   `cenv_module_pins tops cenv /\
    ALL_DISTINCT
      (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops))` by
-    (qpat_assum `body_inv _ _ _ _`
-       (strip_assume_tac o SIMP_RULE std_ss [body_inv_def]) >>
-     conj_tac >> first_assum ACCEPT_TAC) >>
+    (qpat_assum `body_inv tops _ cenv _` (fn inv =>
+       let
+         val contract = MATCH_MP body_inv_contract inv
+         val modul = MATCH_MP body_inv_module inv
+       in
+         ACCEPT_TAC (CONJ (MATCH_MP intcall_args_body_inv_pins inv)
+           (MATCH_MP contract_inv_module_distinct_keys (CONJ contract modul)))
+       end)) >>
   gvs[] >> irule cenv_module_pins_immutables_disjoint >>
   qexistsl [`cenv`, `initial_evaluation_context am.sources am.layouts tx NONE`,
             `id1`, `id2`, `tops`, `ty1`, `ty2`] >> simp[]
