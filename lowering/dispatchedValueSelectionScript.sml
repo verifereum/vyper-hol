@@ -17,24 +17,8 @@ Proof
   simp[external_has_defaults_def, listTheory.NULL_EQ] >> rpt strip_tac >> simp[]
 QED
 
-(* SCRATCH SEQ-8389 caller split: the deleted bridge
-   supported_program_no_external_defaults is false once External defaults are
-   admitted.  The no-defaults branch keeps the old proof, the bridge's drule
-   replaced by the case hypothesis; the defaults branch is admitted. *)
-Theorem source_signature_table_new_branch[local]:
-  supported_program tops /\
-  EXISTS external_has_defaults (FST (classify_functions tops)) ==>
-  !name tys.
-    MEM (name,tys) (abi_external_signatures tops) <=>
-    MEM (name,tys)
-      (MAP (\(mut,nr,rr,n,args,ds,ret,body). (n,MAP SND args))
-        (FST (classify_functions tops)))
-Proof
-  cheat
-QED
-
 Theorem source_signature_table[local]:
-  supported_program tops ==>
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) ==>
   !name tys.
     MEM (name,tys) (abi_external_signatures tops) <=>
     MEM (name,tys)
@@ -42,13 +26,11 @@ Theorem source_signature_table[local]:
         (FST (classify_functions tops)))
 Proof
   strip_tac >> rpt gen_tac >>
-  reverse (Cases_on `EXISTS external_has_defaults (FST (classify_functions tops))`)
-  >- (qpat_x_assum `~EXISTS _ _` (mp_tac o MATCH_MP signatures_without_defaults) >>
-      rewrite_tac[classify_external_signatures] >> strip_tac >>
-      mp_tac (MATCH_MP sortingTheory.PERM_MEM_EQ abi_signature_partition) >>
-      disch_then (qspec_then `(name,tys)` mp_tac) >>
-      asm_rewrite_tac[] >> metis_tac[]) >>
-  metis_tac[source_signature_table_new_branch]
+  qpat_x_assum `~EXISTS _ _` (mp_tac o MATCH_MP signatures_without_defaults) >>
+  rewrite_tac[classify_external_signatures] >> strip_tac >>
+  mp_tac (MATCH_MP sortingTheory.PERM_MEM_EQ abi_signature_partition) >>
+  disch_then (qspec_then `(name,tys)` mp_tac) >>
+  asm_rewrite_tac[] >> metis_tac[]
 QED
 
 Theorem table_no_hit[local]:
@@ -137,6 +119,7 @@ QED
 
 Theorem signature_hit_entry[local]:
   supported_program tops /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
   ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
   4 <= LENGTH cd /\
   FIND (\(n,tys). abi_method_id (type_env tops) n tys = cd_selector cd)
@@ -182,6 +165,7 @@ QED
 
 Theorem source_dispatched_linear_target_nr:
   supported_program tops /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
   ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
   calldata_dispatch tops cd = SOME (name,vals) /\
   vyperInterpreter$lookup_function NONE name External tops =
@@ -220,37 +204,14 @@ Proof
         (Induct >> simp[listTheory.FIND_thm] >> PairCases >>
          Cases_on `abi_method_id (type_env tops) h0 h1 = cd_selector cd` >>
          simp[] >> metis_tac[]) >>
-      drule source_signature_table >> strip_tac >> metis_tac[]) >>
+      drule (SIMP_RULE (srw_ss ()) [] source_signature_table) >>
+      strip_tac >> metis_tac[]) >>
   PairCases_on `x` >>
   gvs[calldata_dispatch_def, AllCaseEqs()] >>
   disj1_tac >> `4 <= LENGTH cd` by decide_tac >>
-  drule_all signature_hit_entry >> simp[] >> metis_tac[]
+  drule_all (SIMP_RULE (srw_ss ()) [] signature_hit_entry) >> simp[] >> metis_tac[]
 QED
 
-Theorem source_dispatched_linear_target:
-  supported_program tops /\
-  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
-  calldata_dispatch tops cd = SOME (name,vals) /\
-  vyperInterpreter$lookup_function NONE name External tops =
-    SOME (mut,F,args,[],ret,fbody) ==>
-  (?rr. MEM (mut,F,rr,name,args,[],ret,
-        subst_consts_stmts (module_consts_env tops []) fbody) (FST (classify_functions tops)) /\
-    !fb. linear_dispatch_target cd
-      (MAP (\(sel,lbl,z). (sel,lbl))
-        (build_selectors (type_env tops) (FST (classify_functions tops)))) fb =
-      "fn_" ++ name) \/
-  (name = "__default__" /\ EXISTS is_default_decl tops /\
-    (?rr. FST (SND (SND (classify_functions tops))) =
-      SOME (mut,F,rr,name,args,[],ret,
-        subst_consts_stmts (module_consts_env tops []) fbody)) /\
-    !fb. linear_dispatch_target cd
-      (MAP (\(sel,lbl,z). (sel,lbl))
-        (build_selectors (type_env tops) (FST (classify_functions tops)))) fb = fb)
-Proof
-  MATCH_ACCEPT_TAC (Q.INST [`nr` |-> `F`] (SPEC_ALL source_dispatched_linear_target_nr))
-QED
-
-(* A successful dispatch names an external declaration or its getter. *)
 Theorem calldata_dispatch_has_source_entry:
   supported_program tops /\
   ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
@@ -270,10 +231,17 @@ Proof
   gvs[calldata_dispatch_def, AllCaseEqs()] >>
   `MEM (name,x1) (abi_external_signatures tops)` by
     metis_tac[venomInstTheory.FIND_MEM] >>
-  qpat_x_assum `MEM _ (abi_external_signatures _)` mp_tac >>
-  drule source_signature_table >>
-  disch_then (qspecl_then [`name`,`x1`] (fn th => REWRITE_TAC [th])) >>
-  simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+  `MEM (name,x1) (FLAT (MAP (\(m,n,r,a,params,ds,t,b).
+      abi_function_signatures a params ds) (FST (classify_functions tops))))` by
+    (rewrite_tac[classify_external_signatures] >>
+     mp_tac (MATCH_MP sortingTheory.PERM_MEM_EQ abi_signature_partition) >>
+     disch_then (qspec_then `(name,x1)` mp_tac) >> simp[]) >>
+  pop_assum mp_tac >>
+  simp[listTheory.MEM_FLAT, listTheory.MEM_MAP, pairTheory.EXISTS_PROD, abi_function_signatures_def] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `MEM (name,x1) (MAP _ _)` mp_tac >>
+  simp_tac std_ss [listTheory.MEM_MAP, pairTheory.ELIM_UNCURRY,
+                   pairTheory.PAIR_EQ] >>
   strip_tac >> gvs[] >>
   drule_all classified_external_source_lookup >> simp[] >> metis_tac[]
 QED
