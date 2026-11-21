@@ -9298,12 +9298,16 @@ Proof
      qpat_assum `!tail. eval_exprs cxd ds _ = _`
        (qspec_then `[]` (irule_at Any)) >> simp[]) >>
   `body_const_cells_agree [(NONE,tops)] cx tenv ed` by
-    (qpat_assum `body_const_cells_agree [(NONE,tops)] cxd
+    (`(tenv with current_src := NONE) with current_src := tenv.current_src = tenv` by
+       simp[NoAsms, vyperTypeSystemTheory.typing_env_component_equality] >>
+     `cxd with stk := cx.stk = cx` by
+       simp[NoAsms, Abbr `cxd`, vyperContextTheory.evaluation_context_component_equality] >>
+     qpat_assum `body_const_cells_agree [(NONE,tops)] cxd
         (tenv with current_src := NONE) ed`
-       (mp_tac o Q.SPEC `tenv.current_src` o MATCH_MP body_const_cells_agree_current_src) >>
-     simp[] >> disch_then (mp_tac o Q.INST [`stk` |-> `cx.stk`] o
-       MATCH_MP body_const_cells_agree_stk) >>
-     simp[Abbr `cxd`, vyperContextTheory.evaluation_context_component_equality]) >>
+       (mp_tac o Q.INST [`stk` |-> `cx.stk`] o
+        MATCH_MP body_const_cells_agree_stk o
+        Q.INST [`src` |-> `tenv.current_src`] o MATCH_MP body_const_cells_agree_current_src) >>
+     simp[]) >>
   `!inst. active_inst func inst u ==> frag_reachable ctx func s0 func inst u` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK entry,Ga,tna)`
        (qspec_then `DF (storage_trace_horizon ed.storage_trace)` assume_tac) >>
