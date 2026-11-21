@@ -143,12 +143,12 @@ Theorem return_selected_valued_frag_full_core[local]:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
   lookup_function NONE tx.function_name External tops =
-    SOME (mut,nr,args,[],ret,fbody) /\
+    SOME (mut,nr,args,dflts,ret,fbody) /\
   set_external_package_target target
     (package_external_fn tops ut nkey_map
-      (mut,nr,rr,tx.function_name,args,[],ret,fbody)) =
+      (mut,nr,rr,tx.function_name,args,dflts,ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut,iv,fbody,rt) /\
-  compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
+  cenv with ce_vars := cenv0.ce_vars = cenv0 /\
   same_frame cenv ce /\
   cx = initial_evaluation_context am.sources am.layouts tx NONE /\
   get_tenv cx = type_env tops /\
@@ -181,7 +181,8 @@ Proof
   strip_tac >>
   drule return_package_target_inversion >> strip_tac >>
   drule return_package_metadata >> strip_tac >>
-  drule return_register_metadata >> strip_tac >>
+  qpat_assum `cenv with ce_vars := _ = cenv0`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [compile_env_component_equality]) >>
   drule return_same_frame_metadata >> strip_tac >>
   `ce.ce_raw_return = rr /\
    ce.ce_struct_fields = make_struct_fields_map tops /\
@@ -962,8 +963,17 @@ Resume return_selected_valued_frag_full_core[buffered_source_plan]:
   `abi_encoder_admissible abi_ce.ce_ret_enc_info` by
     (Cases_on `physical_ty = ret`
      >- (simp[Abbr `abi_ce`] >>
-         drule_all externalReturnZeroLayoutTheory.external_package_return_encoder >>
-         disch_then SUBST1_TAC >>
+         `ce.ce_ret_enc_info =
+           (update_cenv_ret_abi
+             ((build_compile_env tops External mut tx.function_name args ret fbody ut)
+               with ce_raw_return := rr) ret).ce_ret_enc_info` by
+           (map_every (fn pat => qpat_assum pat mp_tac)
+              [`ce.ce_ret_enc_info = cenv.ce_ret_enc_info`,
+               `cenv.ce_ret_enc_info = cenv0.ce_ret_enc_info`,
+               `cenv0 = cenv0' with ce_target := target`,
+               `cenv0'.ce_ret_enc_info = _`, `ret <> NoneT`] >>
+            POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+         pop_assum SUBST1_TAC >>
          simp[externalReturnWindowResourcesTheory.return_plan_encoder_admissible]) >>
      simp[Abbr `abi_ce`, externalReturnWindowResourcesTheory.return_plan_encoder_admissible]) >>
   `abi_enc_plan (type_env tops)
@@ -2708,22 +2718,34 @@ Theorem return_selected_valued_frag_full:
     (eval_stmt cx (Return (SOME e))) es
 Proof
   strip_tac >>
-  mp_tac (Q.INST [`nr` |-> `F`]
-    (SPEC_ALL return_selected_valued_frag_full_core)) >>
-  impl_tac >- simp[] >>
-  simp[unlock_if_nr_def,vyperStateTheory.return_def]
+  `cenv with ce_vars := cenv0.ce_vars = cenv0` by
+    (drule entryStateRelTheory.compile_register_positional_args_cenv >> simp[compile_env_component_equality]) >>
+  mp_tac (SIMP_RULE (srw_ss()) [unlock_if_nr_def,vyperStateTheory.return_def]
+    (Q.INST [`nr` |-> `F`, `dflts` |-> `[]:expr list`, `rpolicy` |-> `rpolicy`,
+      `unit` |-> `unit`, `mut` |-> `mut`, `args` |-> `args`, `fbody` |-> `fbody`,
+      `target` |-> `target`, `ut` |-> `ut`, `nkey_map` |-> `nkey_map`, `rr` |-> `rr`,
+      `lbl` |-> `lbl`, `cenv0` |-> `cenv0`, `pos_args` |-> `pos_args`,
+      `min_cds` |-> `min_cds`, `is_payable` |-> `is_payable`, `nkey` |-> `nkey`,
+      `iv` |-> `iv`, `rt` |-> `rt`, `cenv` |-> `cenv`, `env` |-> `env`,
+      `tops` |-> `tops`, `am` |-> `am`, `tx` |-> `tx`, `ret` |-> `ret`,
+      `DF` |-> `DF`, `lo` |-> `lo`, `d` |-> `d`, `ctx` |-> `ctx`,
+      `shadow_ctx` |-> `shadow_ctx`, `PG` |-> `PG`, `func` |-> `func`,
+      `shadow_func` |-> `shadow_func`, `cx` |-> `cx`, `lctx` |-> `lctx`,
+      `ce` |-> `ce`, `e` |-> `e`, `es` |-> `es`]
+      (SPEC_ALL return_selected_valued_frag_full_core))) >>
+  fs[compileVyperTheory.package_external_fn_def]
 QED
 
 Theorem return_selected_valued_frag_full_nr:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
   lookup_function NONE tx.function_name External tops =
-    SOME (mut,nr,args,[],ret,fbody) /\
+    SOME (mut,nr,args,dflts,ret,fbody) /\
   set_external_package_target target
     (package_external_fn tops T (K global_nonreentrant_slot)
-      (mut,nr,rr,tx.function_name,args,[],ret,fbody)) =
+      (mut,nr,rr,tx.function_name,args,dflts,ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut,iv,fbody,rt) /\
-  compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
+  cenv with ce_vars := cenv0.ce_vars = cenv0 /\
   same_frame cenv ce /\
   cx = initial_evaluation_context am.sources am.layouts tx NONE /\
   get_tenv cx = type_env tops /\

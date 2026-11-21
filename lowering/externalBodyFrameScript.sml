@@ -1,7 +1,7 @@
 (* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
 Theory externalBodyFrame
 Ancestors
-  entryDispatchProps constSubst constSubstStmtsPreserve supportedGetterProps externalRawReturnType
+  entryDispatchProps constSubst constSubstStmtsPreserve supportedGetterProps externalRawReturnType externalReturnPackage externalEntryBound
   externalBodyWidths externalBodySupport memoryLocalRhsProps
   stmtSimProps stmtSimDefs exprSimDefs exprSimHypsDefs exprSimHyps
   loweringPosts
@@ -304,16 +304,20 @@ Proof
   simp[REVERSE_APPEND, ALOOKUP_APPEND]
 QED
 
+val external_package_ce_vars_tac =
+  `cenv = cenv0 with ce_vars := cenv.ce_vars` by
+    fs[compile_env_component_equality];
+
 Theorem external_package_registered_hashmap_info:
   set_external_package_target target
     (package_external_fn tops use_trans nkey_map
       (mut,nr,rr,fname,args,dflts,ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,nr',nkey,ut',iv,fbody',rt) /\
-  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
+  cenv with ce_vars := cenv0.ce_vars = cenv0 ==>
   cenv.ce_hashmap_info = build_hashmap_info tops
 Proof
   strip_tac >>
-  drule compile_register_positional_args_cenv >> strip_tac >>
+  external_package_ce_vars_tac >>
   qpat_x_assum `cenv = _` SUBST1_TAC >>
   gvs[package_external_fn_def, set_external_package_target_def] >>
   Cases_on `ret = NoneT` >>
@@ -363,14 +367,14 @@ QED
 Theorem external_package_alloc_env_agree:
   set_external_package_target target
     (package_external_fn tops T (K global_nonreentrant_slot)
-      (mut,nr,rr,fname,args,[],ret,fbody)) =
+      (mut,nr,rr,fname,args,dflts,ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,fbody,rt) /\
-  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
+  cenv with ce_vars := cenv0.ce_vars = cenv0 ==>
   alloc_env_agree (build_compile_env tops Internal mut fname args ret fbody F)
     cenv
 Proof
   strip_tac >>
-  drule compile_register_positional_args_cenv >> strip_tac >>
+  external_package_ce_vars_tac >>
   qpat_x_assum `cenv = _` SUBST1_TAC >>
   gvs[set_external_package_target_def, package_external_fn_def] >>
   simp[alloc_env_agree_def] >>
@@ -429,7 +433,7 @@ QED
 Theorem external_selected_args_distinct:
   supported_program tops /\ source_typing_ok tops am tx /\
   lookup_function NONE tx.function_name External tops =
-    SOME (mut,nr,args,[],ret,fbody) ==>
+    SOME (mut,nr,args,dflts,ret,fbody) ==>
   ALL_DISTINCT (MAP FST args)
 Proof
   strip_tac >>
@@ -443,9 +447,9 @@ Theorem external_package_body_inv:
   source_deployment_rel tops am tx /\
   set_external_package_target rpolicy.rpol_target
     (package_external_fn tops T (K global_nonreentrant_slot)
-      (mut,nr,rr,tx.function_name,args,[],ret,fbody)) =
+      (mut,nr,rr,tx.function_name,args,dflts,ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,fbody,rt) /\
-  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
+  cenv with ce_vars := cenv0.ce_vars = cenv0 ==>
   body_inv tops unit.cu_context cenv
     (initial_evaluation_context am.sources am.layouts tx NONE) /\
   cenv.ce_return_pc = NONE
@@ -459,7 +463,7 @@ Proof
   `acyclic_struct_metadata (make_struct_fields_map tops)` by
     (gvs[source_typing_ok_def] >>
      drule_all supported_checked_struct_metadata_acyclic >> simp[]) >>
-  drule compile_register_positional_args_cenv >> strip_tac >>
+  external_package_ce_vars_tac >>
   qpat_x_assum `cenv = _` SUBST1_TAC >>
   `ALL_DISTINCT
      (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
@@ -487,19 +491,19 @@ Theorem external_package_dec_metadata:
   source_deployment_rel tops am tx /\
   set_external_package_target target
     (package_external_fn tops T (K global_nonreentrant_slot)
-      (mut,nr,rr,tx.function_name,args,[],ret,fbody)) =
+      (mut,nr,rr,tx.function_name,args,dflts,ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,fbody,rt) /\
-  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
+  cenv with ce_vars := cenv0.ce_vars = cenv0 ==>
   dec_cenv_agrees cenv
     (get_tenv (initial_evaluation_context am.sources am.layouts tx NONE))
 Proof
   strip_tac >>
   `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))`
     by metis_tac[source_typing_ok_type_def_keys_distinct] >>
-  drule compile_register_positional_args_cenv >> strip_tac >>
+  external_package_ce_vars_tac >>
   qpat_x_assum `cenv = _` SUBST1_TAC >>
   Cases_on `package_external_fn tops T (K global_nonreentrant_slot)
-    (mut,nr,rr,tx.function_name,args,[],ret,fbody)` >>
+    (mut,nr,rr,tx.function_name,args,dflts,ret,fbody)` >>
   PairCases_on `r` >> gvs[set_external_package_target_def] >>
   drule_all package_external_fn_dec_cenv_agrees >> strip_tac >>
   gvs[dec_cenv_agrees_def, source_deployment_rel_def,
@@ -549,9 +553,9 @@ Theorem external_package_struct_fields:
   source_deployment_rel tops am tx /\
   set_external_package_target target
     (package_external_fn tops T (K global_nonreentrant_slot)
-      (mut,nr,rr,tx.function_name,args,[],ret,fbody)) =
+      (mut,nr,rr,tx.function_name,args,dflts,ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,fbody,rt) /\
-  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+  cenv with ce_vars := cenv0.ce_vars = cenv0 /\
   FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
   ALL_DISTINCT (MAP FST fields) /\
   EVERY (\(fname,fty,sz). !tv.
@@ -570,7 +574,7 @@ Proof
     (rpt strip_tac >> gvs[source_typing_ok_def] >>
      drule check_contract_struct_fields_distinct >>
      simp[] >> disch_then drule >> simp[]) >>
-  drule compile_register_positional_args_cenv >> strip_tac >>
+  external_package_ce_vars_tac >>
   qpat_x_assum `cenv = _` SUBST_ALL_TAC >>
   gvs[set_external_package_target_def, package_external_fn_def] >>
   Cases_on `ret = NoneT` >>
@@ -588,9 +592,9 @@ Theorem external_package_method_id:
   source_deployment_rel tops am tx /\
   set_external_package_target target
     (package_external_fn tops T (K global_nonreentrant_slot)
-      (mut,nr,rr,tx.function_name,args,[],ret,fbody)) =
+      (mut,nr,rr,tx.function_name,args,dflts,ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,fbody,rt) /\
-  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
+  cenv with ce_vars := cenv0.ce_vars = cenv0 ==>
   !fname tys.
     cenv.ce_method_id fname tys =
     w2n (calldata_method_id
@@ -600,7 +604,7 @@ Theorem external_package_method_id:
                               tx NONE)) tys)))
 Proof
   strip_tac >>
-  drule compile_register_positional_args_cenv >> strip_tac >>
+  external_package_ce_vars_tac >>
   qpat_x_assum `cenv = _` SUBST1_TAC >>
   gvs[set_external_package_target_def, package_external_fn_def] >>
   rw[update_cenv_nonreentrant_def, update_cenv_ret_abi_def] >>
@@ -613,9 +617,9 @@ QED
 Theorem external_package_global_maps:
   set_external_package_target target
     (package_external_fn tops T (K global_nonreentrant_slot)
-      (mut,nr,rr,tx.function_name,args,[],ret,fbody)) =
+      (mut,nr,rr,tx.function_name,args,dflts,ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,fbody,rt) /\
-  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+  cenv with ce_vars := cenv0.ce_vars = cenv0 /\
   check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
   env_t.toplevel_vtypes = art.cta_toplevel_vtypes /\
   env_t.bare_globals = art.cta_bare_globals ==>
@@ -641,9 +645,9 @@ Theorem external_package_bare_globals:
     (initial_evaluation_context am.sources am.layouts tx NONE) es0 /\
   set_external_package_target target
     (package_external_fn tops T (K global_nonreentrant_slot)
-      (mut,nr,rr,tx.function_name,args,[],ret,fbody)) =
+      (mut,nr,rr,tx.function_name,args,dflts,ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut',iv,fbody,rt) /\
-  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
+  cenv with ce_vars := cenv0.ce_vars = cenv0 ==>
   !src id ty. FLOOKUP env_t.bare_globals (src,id) = SOME ty /\
     (~cx_const_name (initial_evaluation_context am.sources am.layouts tx NONE)
        (src,id) \/
@@ -688,7 +692,7 @@ Proof
      first_x_assum irule >>
      gvs[account_immutables_def, initial_evaluation_context_def] >>
      metis_tac[]) >>
-  drule compile_register_positional_args_cenv >> strip_tac >>
+  external_package_ce_vars_tac >>
   gvs[package_external_fn_def, set_external_package_target_def] >>
   Cases_on `ret = NoneT` >>
   gvs[update_cenv_nonreentrant_def, update_cenv_ret_abi_def] >>
@@ -696,52 +700,34 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-(* package_external_fn reads the defaults only through their number, so
-   the type of an empty default list does not matter. *)
-Theorem set_external_package_target_dflts[local]:
-  set_external_package_target target
-    (package_external_fn tops use_trans nkeys
-      (mut,nr,rr,name,args,d1,ret,body)) = X ==>
-  !d2. LENGTH d1 = LENGTH d2 ==>
-    set_external_package_target target
-      (package_external_fn tops use_trans nkeys
-        (mut,nr,rr,name,args,d2,ret,body)) = X
-Proof
-  rpt strip_tac >> qpat_x_assum `_ = X` (SUBST1_TAC o SYM) >>
-  simp[package_external_fn_def]
-QED
-
 Theorem external_source_return_buffer_ok:
-  !tops rpolicy unit tx ret mut nr args fbody lbl cenv0 pos_args
-   min_cds is_payable nkey ut iv rt st cenv sa.
+  !tops rpolicy unit tx ret mut nr args dflts fbody lbl cenv0 pos_args
+   min_cds is_payable nkey ut iv rt cenv.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     lookup_function NONE tx.function_name External tops =
-      SOME (mut,nr,args,[],ret,fbody) /\
+      SOME (mut,nr,args,dflts,ret,fbody) /\
     set_external_package_target rpolicy.rpol_target
       (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,nr,lookup_raw_return_or_F (NONE : num option)
-          tx.function_name External tops,tx.function_name,args,[],ret,
+          tx.function_name External tops,tx.function_name,args,subst_consts_exprs (module_consts_env tops []) dflts,ret,
          subst_consts_stmts (module_consts_env tops []) fbody)) =
       (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut,iv,subst_consts_stmts (module_consts_env tops []) fbody,rt) /\
-    compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
+    cenv with ce_vars := cenv0.ce_vars = cenv0 ==>
     (stmts_valued_return (subst_consts_stmts (module_consts_env tops []) fbody) /\ cenv.ce_is_external /\
      ~cenv.ce_raw_return ==> return_buffer_ok cenv)
 Proof
   rpt gen_tac >> strip_tac >> strip_tac >>
-  qpat_x_assum `set_external_package_target _ _ = _`
-    (fn th => mp_tac (Q.ISPEC `[]:expr list`
-       (MATCH_MP set_external_package_target_dflts th))) >>
-  simp[] >> strip_tac >>
   `EVERY (supported_declaration_header tops) tops` by
     gvs[supported_program_def, supported_declaration_headers_def] >>
-  `same_frame cenv cenv` by simp[] >>
   `~lookup_raw_return_or_F (NONE:num option) tx.function_name External tops` by
-    (drule_all external_package_raw_flag >> simp[]) >>
+    (drule return_package_target_inversion >> strip_tac >>
+     drule return_package_metadata >> strip_tac >>
+     fs[compile_env_component_equality]) >>
   `external_return_buffer_ok
      (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut,iv,subst_consts_stmts (module_consts_env tops []) fbody,rt)` by
     (drule lookup_function_external_raw_cases >> strip_tac
-     >- (`MEM (FunctionDecl External mut nr F tx.function_name args [] ret fbody)
+     >- (`MEM (FunctionDecl External mut nr F tx.function_name args dflts ret fbody)
             tops` by gvs[lookup_raw_return_or_F_def] >>
          Cases_on `classify_functions tops` >> PairCases_on `r` >>
          drule_all supported_external_classification >>
@@ -754,6 +740,8 @@ Proof
                  external_return_buffer_ok_def]) >>
          drule_all lower_vyper_runtime_unit_return_buffer_ok >>
          gvs[lookup_raw_return_or_F_def]) >>
+     `dflts = []` by (drule vyperReadOnlySyntaxTheory.external_getter_defaults >> simp[]) >>
+     gvs[subst_consts_expr_def] >>
      `public_getter decl =
         SOME (mut,nr,F,tx.function_name,args,([]:expr list),ret,fbody)` by
        fs[public_getter_source_tuple] >>
@@ -769,7 +757,7 @@ Proof
      gvs[lookup_raw_return_or_F_def]) >>
   drule package_external_fn_return_buffer_ok >>
   disch_then drule >> strip_tac >>
-  drule compile_register_positional_args_cenv >> strip_tac >>
+  external_package_ce_vars_tac >>
   `~cenv0.ce_raw_return` by gvs[compile_env_component_equality] >>
   qpat_x_assum `cenv = _` (fn th => once_rewrite_tac [th]) >>
   gvs[return_buffer_ok_def]
@@ -793,7 +781,13 @@ Theorem external_selected_return_buffer_ok:
     (stmts_valued_return (subst_consts_stmts (module_consts_env tops []) fbody) /\ cenv.ce_is_external /\
      ~cenv.ce_raw_return ==> return_buffer_ok cenv)
 Proof
-  rpt strip_tac >> drule_all external_source_return_buffer_ok >> simp[]
+  rpt gen_tac >> strip_tac >>
+  `cenv with ce_vars := cenv0.ce_vars = cenv0` by
+    (drule compile_register_positional_args_cenv >> simp[compile_env_component_equality]) >>
+  qspecl_then [`tops`,`rpolicy`,`unit`,`tx`,`ret`,`mut`,`F`,`args`,`[]:expr list`,
+    `fbody`,`lbl`,`cenv0`,`pos_args`,`min_cds`,`is_payable`,`nkey`,`ut`,`iv`,`rt`,`cenv`]
+    mp_tac external_source_return_buffer_ok >>
+  fs[subst_consts_expr_def,package_external_fn_def]
 QED
 
 
@@ -807,40 +801,36 @@ QED
    its declared module type and no hash-map info) follows from body_inv
    and the single-module fact via body_inv_storage_var_types. *)
 Theorem external_source_body_frame_nr:
-  !tops rpolicy unit am tx ret vs mut nr args fbody env es0 es_lock lbl cenv0 pos_args
-   min_cds is_payable nkey ut' iv rt st cenv sa.
+  !tops rpolicy unit am tx ret vs mut nr args dflts fbody gs es0 lbl cenv0
+   pos_args min_cds is_payable nkey ut' iv rt cenv.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_deployment_rel tops am tx /\
+    source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
     initial_venom_state_rel tops am tx vs /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     lookup_function NONE tx.function_name External tops =
-      SOME (mut, nr, args, [], ret, fbody) /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with
-         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
-      (INL (), es0) /\
-    lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
-      nr (is_view_mut mut) es0 = (INL (), es_lock) /\
+      SOME (mut,nr,args,dflts,ret,fbody) /\
+    external_entry_bound tops am tx vs.vs_outcomes gs mut args dflts es0 /\
     set_external_package_target rpolicy.rpol_target
       (package_external_fn tops T (K global_nonreentrant_slot)
-         (mut, nr, lookup_raw_return_or_F (NONE : num option)
-                     tx.function_name External tops,
-          tx.function_name, args, [], ret,
+         (mut,nr,lookup_raw_return_or_F (NONE:num option)
+            tx.function_name External tops,
+          tx.function_name,args,subst_consts_exprs (module_consts_env tops []) dflts,ret,
           subst_consts_stmts (module_consts_env tops []) fbody)) =
-      (lbl, cenv0, pos_args, min_cds, is_payable, nr, nkey, ut', iv, subst_consts_stmts (module_consts_env tops []) fbody,
-       rt) /\
-    compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
+      (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut,iv,
+       subst_consts_stmts (module_consts_env tops []) fbody,rt) /\
+    cenv with ce_vars := cenv0.ce_vars = cenv0 /\
+    (!id ty. MEM (id,ty) args ==>
+       (?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+       cenv.ce_var_type id = SOME ty) /\
+    (!id loc. FLOOKUP cenv.ce_vars id = SOME loc ==> MEM id (MAP FST args)) ==>
     body_inv tops unit.cu_context cenv
       (initial_evaluation_context am.sources am.layouts tx NONE) /\
     cenv.ce_return_pc = NONE /\
     ?bindings env_t env'.
       supported_stmts tops bindings (subst_consts_stmts (module_consts_env tops []) fbody) /\
       expr_sim_inv cenv
-        (initial_evaluation_context am.sources am.layouts tx NONE) env_t es_lock /\
+        (initial_evaluation_context am.sources am.layouts tx NONE) env_t es0 /\
       ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
       type_stmts env_t ret (subst_consts_stmts (module_consts_env tops []) fbody) = SOME env' /\
       stmts_exprs_ok cenv (subst_consts_stmts (module_consts_env tops []) fbody) /\
@@ -870,25 +860,30 @@ Proof
      qexistsl [`A`, `tx.target`, `art`, `account_immutables am tx.target`,
        `am.layouts`, `F`, `[(NONE,tops)]`] >> simp[]) >>
   `machine_well_typed am` by gvs[source_typing_ok_def] >>
-  drule_all external_body_prefix_state >> strip_tac >>
-  drule external_body_lock_frame >> strip_tac >>
-  `es_lock.scopes = [env] /\ es_lock.immutables = am.immutables` by simp[] >>
-  `state_well_typed es_lock /\ accounts_well_typed es_lock.accounts` by
-    gvs[state_well_typed_def] >>
+  drule_all external_entry_bound_source_frame >> strip_tac >>
   drule_all external_selected_env_consistent >> strip_tac >>
-  `es0.outcomes = SOME vs.vs_outcomes` by
-    (drule external_send_call_value_frame >>
-     simp[evaluation_state_component_equality, initial_state_def]) >>
-  `outcomes_accounts_typed es_lock.outcomes /\ IS_SOME es_lock.outcomes` by fs[] >>
+  `outcomes_accounts_typed es0.outcomes /\ IS_SOME es0.outcomes` by
+    (qpat_assum `outcome_suffix _ _`
+       (strip_assume_tac o SIMP_RULE (srw_ss())
+         [vyperEvalOutcomeSuffixTheory.outcome_suffix_def]) >>
+     qpat_assum `es0.outcomes = SOME _` (fn th => PURE_ONCE_REWRITE_TAC [th]) >>
+     qpat_assum `outcomes_accounts_typed (SOME vs.vs_outcomes)` mp_tac >>
+     qpat_assum `vs.vs_outcomes = _ ++ _` (fn th => PURE_ONCE_REWRITE_TAC [th]) >>
+     simp[outcomes_accounts_typed_def, EVERY_APPEND]) >>
   drule_all external_source_context_typed >> strip_tac >>
   drule_all external_package_dec_metadata >> strip_tac >>
   drule_all external_package_global_maps >> strip_tac >>
-  drule external_package_bare_globals >>
-  disch_then (drule_at (Pat `initial_venom_state_rel _ _ _ _`)) >>
-  disch_then (drule_at (Pat `env_consistent _ _ _`)) >>
-  disch_then (drule_at (Pat `set_external_package_target _ _ = _`)) >>
-  disch_then (drule_at (Pat `compile_register_positional_args _ _ _ _ = _`)) >>
-  simp[] >> strip_tac >>
+  mp_tac (Q.INST [`tops` |-> `tops`, `rpolicy` |-> `rpolicy`, `unit` |-> `unit`,
+    `am` |-> `am`, `tx` |-> `tx`, `vs` |-> `vs`, `es0` |-> `es0`, `env_t` |-> `env_t`,
+    `target` |-> `rpolicy.rpol_target`, `rr` |-> `lookup_raw_return_or_F (NONE:num option)
+      tx.function_name External tops`, `mut` |-> `mut`, `nr` |-> `nr`,
+    `dflts` |-> `subst_consts_exprs (module_consts_env tops []) dflts`,
+    `fbody` |-> `subst_consts_stmts (module_consts_env tops []) fbody`,
+    `args` |-> `args`, `ret` |-> `ret`, `lbl` |-> `lbl`, `cenv0` |-> `cenv0`,
+    `pos_args` |-> `pos_args`, `min_cds` |-> `min_cds`, `is_payable` |-> `is_payable`,
+    `nkey` |-> `nkey`, `iv` |-> `iv`, `ut'` |-> `ut`, `rt` |-> `rt`, `cenv` |-> `cenv`]
+    (INST_TYPE [alpha |-> ``:expr``] (SPEC_ALL external_package_bare_globals))) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   `supported_function_body tops External args
      (subst_consts_stmts (module_consts_env tops []) fbody)` by
     metis_tac[supported_selected_external_body] >>
@@ -917,7 +912,8 @@ Proof
      rpt (disch_then drule) >> simp[]) >>
   drule_all external_package_alloc_env_agree >> strip_tac >>
   `?rr:bool. fn_allocs_ok tops
-     (mut,nr,rr,tx.function_name,args,[],ret,subst_consts_stmts (module_consts_env tops []) fbody)` by
+     (mut,nr,rr,tx.function_name,args,subst_consts_exprs (module_consts_env tops []) dflts,
+      ret,subst_consts_stmts (module_consts_env tops []) fbody)` by
     (drule lookup_function_external_classified >>
      simp[subst_consts_fn_def, subst_consts_expr_def] >> strip_tac >>
      Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
@@ -932,13 +928,21 @@ Proof
      metis_tac[]) >>
   drule_all external_body_support_bounds_from_allocs >> strip_tac >>
   `ce_locals_declared cenv env_t` by
-    (drule_all external_entry_target_locals_declared >> simp[]) >>
+    (rw[ce_locals_declared_def] >>
+     qpat_assum `!id loc. FLOOKUP cenv.ce_vars id = SOME loc ==> _` drule >>
+     simp[MEM_MAP, PULL_EXISTS] >> strip_tac >> PairCases_on `y` >> gvs[] >>
+     qpat_assum `!id ty. MEM (id,ty) args ==> FLOOKUP env_t.var_types id = SOME ty`
+       drule >> simp[FLOOKUP_DEF]) >>
   qexistsl [`bindings`, `env_t`, `env_compiled`] >> simp[] >>
   simp[expr_sim_inv_def] >> rpt conj_tac
-  >- (rpt strip_tac >> irule external_entry_target_param_pointer >>
-      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[])
-  >- (rpt strip_tac >> irule external_entry_target_param_type >>
-      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[])
+  >- (rpt strip_tac >>
+      qpat_assum `!n ty. FLOOKUP env_t.var_types n = SOME ty ==> _` drule >>
+      qpat_assum `!id ty. MEM (id,ty) args ==> (?p sz. _) /\ _`
+        (fn params => disch_then (mp_tac o MATCH_MP params)) >> simp[])
+  >- (rpt strip_tac >>
+      qpat_assum `!n ty. FLOOKUP env_t.var_types n = SOME ty ==> _` drule >>
+      qpat_assum `!id ty. MEM (id,ty) args ==> (?p sz. _) /\ _`
+        (fn params => disch_then (mp_tac o MATCH_MP params)) >> simp[])
   >- (rpt strip_tac >>
       irule external_signature_return >>
       qexistsl [`initial_evaluation_context am.sources am.layouts tx NONE`,
@@ -1079,12 +1083,30 @@ Theorem external_source_body_frame:
         (initial_evaluation_context am.sources am.layouts tx NONE)
         (int_calls_stmts (subst_consts_stmts (module_consts_env tops []) fbody))
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule_all external_entry_bound_no_defaults >> strip_tac >>
+  `external_entry_bound tops am tx vs.vs_outcomes es0.gas_obs mut args [] es0` by
+    (qpat_assum `!gx. external_entry_bound _ _ _ _ _ _ _ _ _`
+       (qspec_then `es0.gas_obs` mp_tac) >>
+     simp[evaluation_state_component_equality]) >>
+  `cenv with ce_vars := cenv0.ce_vars = cenv0` by
+    (drule compile_register_positional_args_cenv >> simp[compile_env_component_equality]) >>
+  drule_all supported_selected_external_body >> strip_tac >>
+  drule_all external_selected_args_distinct >> strip_tac >>
+  `!id ty. MEM (id,ty) args ==>
+    (?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+    cenv.ce_var_type id = SOME ty` by
+    (rpt strip_tac
+     >- (irule external_entry_target_param_pointer >>
+         goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[]) >>
+     metis_tac[external_entry_target_param_type]) >>
+  `!id loc. FLOOKUP cenv.ce_vars id = SOME loc ==> MEM id (MAP FST args)` by
+    metis_tac[external_entry_target_declared] >>
   mp_tac (Q.SPECL [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`,
-    `vs`, `mut`, `F`, `args`, `fbody`, `env`, `es0`, `es0`, `lbl`,
+    `vs`, `mut`, `F`, `args`, `[]`, `fbody`, `es0.gas_obs`, `es0`, `lbl`,
     `cenv0`, `pos_args`, `min_cds`, `is_payable`, `nkey`, `ut'`, `iv`, `rt`,
-    `st`, `cenv`, `sa`] external_source_body_frame_nr) >>
-  simp[lock_if_nr_def, vyperStateTheory.return_def]
+    `cenv`] external_source_body_frame_nr) >>
+  simp[subst_consts_exprs_def]
 QED
 
 Theorem external_body_frame:

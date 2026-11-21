@@ -5,7 +5,7 @@ Ancestors
   loweringRuntimeCorrect gasShadowRunLowering loweringShapeProps
   gasShadowUnit sourceUnitExecution dispatchedSelectedEndpoint
   defaultDispatchFacts externalReturnPackage runtimeFallbackPackageEnvironment
-  externalEntryValueRevert vyperLoweringCorrect fragGasPathMem
+  externalEntryValueRevert externalEntryBound vyperLoweringCorrect fragGasPathMem gasSummary
 
 Triviality legacy_runtime_shadow_context[local]:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -148,10 +148,11 @@ val registered_lock_body_tac =
     [`ctx` |-> `unit.cu_context`,
      `cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`,
      `nkey` |-> `global_nonreentrant_slot`,
+     `marks0` |-> `[]:bool list`, `explicit` |-> `EMPTY`,
      `ss` |-> `vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
                          vs_inst_idx := 0|>`]
     (SPEC_ALL externalEntryJointTheory.selected_entry_after_lock)) >>
-  impl_tac >- simp[] >>
+  simp[] >> impl_tac >- simp[] >>
   disch_then (qx_choosel_then [`s_lock`,`G_lock`,`tn_lock`]
     (MAP_EVERY ASSUME_TAC o CONJUNCTS)) >>
   `gas_path unit.cu_context func
@@ -194,7 +195,8 @@ val registered_lock_body_tac =
     (rpt gen_tac >> disch_tac >>
      qpat_assum `!st0 H. valid_horizon _ _ _ es_lock.storage_trace ==> _`
        (qspecl_then [`st0`,`H`] mp_tac) >>
-     simp[GSYM bodyPtrDefsTheory.ghost_inv_cx_dead]);
+     simp[GSYM bodyPtrDefsTheory.ghost_inv_cx_dead] >>
+     metis_tac[gas_origin_ptr_path_empty_sites]);
 
 fun registered_lock_result_tac placement =
   drule_all externalEntryJointTheory.selected_nonreentrant_lock_metadata >>
@@ -220,16 +222,35 @@ fun registered_lock_result_tac placement =
      `ss` |-> `vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
                          vs_inst_idx := 0|>`,
      `es_abort` |-> `es_lock`,
+     `marks0` |-> `[]:bool list`, `explicit` |-> `EMPTY`,
      `fbody` |-> `subst_consts_stmts (module_consts_env tops []) fbody`,
      `rt` |-> `if ret = NoneT then NONE else SOME ret`]
     (SPEC_ALL externalEntryJointTheory.external_entry_abort_from_registration)) >>
-  impl_tac >- (asm_rewrite_tac[] >> simp[]) >>
+  simp[] >> impl_tac >- simp[] >>
   disch_then (qx_choosel_then [`a`,`s`,`G`,`tn`]
     (MAP_EVERY ASSUME_TAC o CONJUNCTS)) >>
-  `~EXISTS external_has_defaults (FST (classify_functions tops))` by fs[] >>
-  drule_all runtime_lock_abort_result_with >>
-  disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
-  qexistsl_tac [`shadow_unit`,`[]`] >> simp[];
+  `?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+                gas_shadow_unit unit shadow_unit` by
+    (Cases_on `classify_functions tops` >> PairCases_on `r` >>
+     irule runtime_gas_shadow_unit_exists >> fs[]) >>
+  pop_assum strip_assume_tac >>
+  `gas_shadow_context unit.cu_context shadow_unit.cu_context` by
+    fs[gas_shadow_unit_def] >>
+  drule_all external_entry_bound_no_defaults >> strip_tac >>
+  qabbrev_tac `entry = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                                 vs_inst_idx := 0|>` >>
+  `!D. gas_origin_ptr_path
+    (D,0,gas_explicit_sites unit.cu_context shadow_unit.cu_context,
+     unit.cu_context,func,[]) (entry,FEMPTY,entry_taint) [] (OK s0,G0,tn0)` by
+    (unabbrev_all_tac >> metis_tac[gas_origin_ptr_path_empty_sites]) >>
+  `!D. gas_origin_ptr_path
+    (D,0,gas_explicit_sites unit.cu_context shadow_unit.cu_context,
+     unit.cu_context,func,[]) (entry,FEMPTY,entry_taint) [] (Abort a s,G,tn)` by
+    (unabbrev_all_tac >> metis_tac[gas_origin_ptr_path_empty_sites]) >>
+  qunabbrev_tac `entry` >>
+  drule_all (SIMP_RULE (srw_ss()) [gas_explicit_def]
+    (Q.INST [`marks0` |-> `[]:bool list`] runtime_lock_abort_result_with)) >>
+  strip_tac >> qexistsl_tac [`shadow_unit`,`[]`] >> simp[gas_explicit_def];
 
 Theorem dispatched_nonreentrant_result[local]:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
