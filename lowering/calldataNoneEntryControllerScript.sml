@@ -2,6 +2,7 @@
 Theory calldataNoneEntryController
 Ancestors
   allocaFrontierRoom entryValueRevertPtr exprLoweringProps
+  moduleLoweringProps[qualified,ignore_grammar]
   calldataNoneEntryAssembly calldataNoneSelectedPrefix calldataNoneRegisterInit
   calldataNoneRegisterFold calldataNoneRegisterOne venomInstIdsProps
   defaultConcreteRegistrationDefs ctorDeployMemoryFrontier allocaFrontierBound
@@ -17,6 +18,7 @@ Theorem none_entry_reject_from_decoder:
     source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
     initial_venom_state_rel tops am tx vs /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     (ctx_has_dalloca unit.cu_context ==>
       unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
       w2n vs.vs_initial_fmp < 2 ** 254) /\
@@ -92,8 +94,6 @@ Proof
          `key`,`ut`,`iv`,`rt`,`opened`,`checked`,`ce'`,`last`,`fn`,`p`,`G`,`tn`]
         strip_assume_tac) >>
       `fn = func` by fs[] >> qpat_x_assum `fn = func` SUBST_ALL_TAC >>
-      `ctx_has_dalloca unit.cu_context ==> allocas_below_fmp p` by
-        (drule initial_entry_allocas_below_fmp >> disch_then drule >> simp[]) >>
       qexistsl [`tvs`,`mincd`,`pay`,`opened`,`checked`,`p`,`G`,`tn`] >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
       >- simp[] >> suspend "registration")
@@ -108,18 +108,18 @@ Resume none_entry_reject_from_decoder[registration]:
   drule_all none_selected_registration_inputs >>
   disch_then (qspec_then `site` (map_every assume_tac o CONJUNCTS)) >>
   drule fn_inst_ids_distinct_all_distinct >> strip_tac >>
+  `vars_pc_only vs t` by
+    (drule_all moduleLoweringPropsTheory.vars_pc_only_trans >> simp[]) >>
+  `allocas_below_fmp t` by
+    (drule_all initial_entry_allocas_below_fmp >> simp[]) >>
   `(ctx_has_dalloca unit.cu_context ==> allocas_below_fmp t /\
     t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp)` by
     (qpat_assum `default_registration_resources _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [default_registration_resources_def]) >>
-     strip_tac >>
+     strip_tac >> simp[] >>
      qpat_assum `fmp_room unit.cu_context func t`
        (mp_tac o REWRITE_RULE [fmp_room_def]) >>
-     simp[] >> strip_tac >>
-     qpat_assum `alloca_inv t`
-       (strip_assume_tac o REWRITE_RULE [venomMemDefsTheory.alloca_inv_def,
-          venomMemDefsTheory.alloca_next_valid_def]) >>
-     simp[allocas_below_fmp_def] >> rpt strip_tac >> res_tac >> decide_tac) >>
+     simp[] >> decide_tac) >>
   qabbrev_tac `R = \a v (K:(string,num # num) fmap) (w:taint).
     alloca_inv v /\ alloca_frontier_inv unit.cu_context func site v /\
     (ctx_has_dalloca unit.cu_context ==> allocas_below_fmp v /\
