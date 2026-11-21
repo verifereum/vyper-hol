@@ -47,3 +47,5 @@ Ancestors
   (* Standalone ABI execution and retained-code observer transfer. *)
   abiScratchBuiltinOpenSource exprSimAbiEncodeProducerExecution
   exprSimAbiEncodeRegion exprSimAbiEncodeRegionTransfer
+  (* S1 request-prefix companion cases. *)
+  s1PrefixLiteralWord s1PrefixWordWei s1PrefixRawCall
