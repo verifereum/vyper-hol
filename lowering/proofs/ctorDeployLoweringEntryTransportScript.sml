@@ -62,6 +62,21 @@ Proof
  strip_tac >> gvs[]
 QED
 
+Theorem deploy_ctor_entry_data_section_raw:
+ deploy_state_rel tops (assemble prog') am tx es /\
+ raw_variant fmp vs (opt_deploy_entry_state_own prog prog' cplan tops es
+                   with vs_outcomes := vs.vs_outcomes) ==>
+ constructor_args_encode tops tx vs.vs_data_section
+Proof
+ strip_tac >>
+ qpat_x_assum `raw_variant _ _ _` (mp_tac o PURE_REWRITE_RULE [raw_variant_def, gas_variant_def]) >>
+ disch_then (mp_tac o Q.AP_TERM `\s. s.vs_data_section`) >>
+ simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
+      entry_venom_state_frame_fields] >>
+ fs[deploy_state_rel_def, DROP_LENGTH_APPEND] >>
+ strip_tac >> gvs[]
+QED
+
 Theorem deploy_ctor_prefix_data_bytes:
  !tops tx vs initial.
  constructor_args_encode tops tx vs.vs_data_section /\
