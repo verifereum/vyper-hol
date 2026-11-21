@@ -385,7 +385,7 @@ The result relation ties source gas observations to the frame's EVM gas readings
   transaction entry/storage and callee-outcome producers remain Milestone 7
   obligations; selected boundary regressions do not discharge them.
 
-The proved `e2e_deploy_correctness` covers fresh single-frame creation with
+`e2e_deploy_correctness` covers fresh single-frame creation with
 canonical constructor arguments, deployment typing, an uninstalled source
 target and an empty target account in `es.originalAccounts`. It requires fewer
 than 2⁶⁴ entries in the creation frame's call trace. Source reads of `self.code`

@@ -1037,8 +1037,8 @@ Resume runtime_sym_builtin_body[ecadd]:
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
   Cases_on `compile_ecadd_points p1 p2 st2a` >>
-  simp[as_ptr_val_def] >> strip_tac >>
-  qpat_x_assum `LocatedValue _ _ = _` (SUBST_ALL_TAC o SYM) >>
+  simp[as_stack_val_def] >> strip_tac >>
+  qpat_x_assum `StackValue _ _ = _` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `r = s'` (SUBST_ALL_TAC o SYM) >>
   `EVERY runtime_sym_inst (state_insts st1) /\ runtime_sym_value p1_vv` by
     (qpat_assum `!e t s v s'. _ /\ _ /\ cfn _ _ _ _ = _ ==> _` irule >> simp[] >> metis_tac[]) >>
@@ -1055,7 +1055,7 @@ Resume runtime_sym_builtin_body[ecadd]:
   qpat_x_assum `!e t s op s'. _ /\ _ /\ lower_value _ _ _ _ _ = _ ==> _` kall_tac >>
   qpat_x_assum `!e t. expr_size e < _ ==> _` kall_tac >>
   qpat_assum `!p q s op s'. _` (drule_at_then (Pat `compile_ecadd_points _ _ _ = _`) mp_tac) >>
-  simp[runtime_sym_value_def, mk_ptr_def]
+  simp[runtime_sym_value_def]
 QED
 Resume runtime_sym_builtin_body[ecmul]:
   drule runtime_sym_builtin_callback >> simp[] >> strip_tac >>
@@ -1076,8 +1076,8 @@ Resume runtime_sym_builtin_body[ecmul]:
   simp[compile_builtin_dispatch_body_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
   Cases_on `compile_ecmul_point p s'' st2` >>
-  simp[as_ptr_val_def] >> strip_tac >>
-  qpat_x_assum `LocatedValue _ _ = _` (SUBST_ALL_TAC o SYM) >>
+  simp[as_stack_val_def] >> strip_tac >>
+  qpat_x_assum `StackValue _ _ = _` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `r = s'` (SUBST_ALL_TAC o SYM) >>
   `EVERY runtime_sym_inst (state_insts st1) /\ runtime_sym_value p_vv` by
     (qpat_assum `!e t s v s'. _ /\ _ /\ cfn _ _ _ _ = _ ==> _` irule >> simp[] >> metis_tac[]) >>
@@ -1090,7 +1090,7 @@ Resume runtime_sym_builtin_body[ecmul]:
   qpat_x_assum `!e t s op s'. _ /\ _ /\ lower_value _ _ _ _ _ = _ ==> _` kall_tac >>
   qpat_x_assum `!e t. expr_size e < _ ==> _` kall_tac >>
   qpat_assum `!p q s op s'. _` (drule_at_then (Pat `compile_ecmul_point _ _ _ = _`) mp_tac) >>
-  simp[runtime_sym_value_def, mk_ptr_def]
+  simp[runtime_sym_value_def]
 QED
 Resume runtime_sym_builtin_body[uint2str]:
   `LENGTH args = 1` by

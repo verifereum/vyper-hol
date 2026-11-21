@@ -124,7 +124,7 @@ QED
 Theorem ec_arith_permitted_tail_full:
   (bt = ECAdd \/ bt = ECMul) /\
   a = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
-  vv = LocatedValue a (mk_ptr (Var dst) LocMemory) /\
+  vv = StackValue a (Var dst) /\
   addr = (if bt = ECAdd then 6w else 7w) /\
   an = (if bt = ECAdd then 128w else 96w) /\
   (do gas <- emit_op GAS [];
@@ -551,8 +551,8 @@ Resume ec_arith_permitted_tail_full[success_vv]:
      es2 s2 sb t2 ee (Value (mk_ec_result (rx,ry))) vv ec_tail_end` by
     (qpat_assum `vv_post H _ _ _ _ _ es2 s2 sb t2 ee _ _ ec_tail_end` mp_tac >>
      qpat_assum `a = ArrayT (BaseT (UintT 256)) (Fixed 2)` (fn annotation =>
-       qpat_assum `vv = LocatedValue a (mk_ptr (Var dst) LocMemory)`
-         (fn value => simp[NoAsms, annotation, value, exprLoweringTheory.as_ptr_val_def]))) >>
+       qpat_assum `vv = StackValue a (Var dst)`
+         (fn value => simp[NoAsms, annotation, value, exprLoweringTheory.as_stack_val_def]))) >>
   `vv_post H ctx func cenv cx (Builtin a bt [e1;e2])
      es1 s1 sb t1 ee (Value (mk_ec_result (rx,ry))) vv ec_tail_end` by
     (mp_tac (Q.INST [`es` |-> `es1`, `sa` |-> `s1`, `s0` |-> `t1`,
@@ -606,26 +606,22 @@ Resume ec_arith_permitted_tail_full[success_owned]:
     (qpat_assum `a = ArrayT (BaseT (UintT 256)) (Fixed 2)` (fn annotation =>
        simp[NoAsms, annotation, evaluate_type_def, type_slot_size_def,
          wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``])) >>
-  `eval_operand (mk_ptr (Var dst) LocMemory).ptr_operand ec_tail_end = SOME wo` by
-    (simp[NoAsms, contextTheory.mk_ptr_def] >> first_assum ACCEPT_TAC) >>
   `w2n wo + 64 <= ec_tail_end.vs_alloca_next` by simp[] >>
   `vv_store_bound cx a a ee (Value (mk_ec_result (rx,ry))) vv ec_tail_end` by
-    (mp_tac (Q.INST [`e` |-> `Builtin a bt [e1;e2]`, `es'` |-> `ee`,
-       `tv` |-> `Value (mk_ec_result (rx,ry))`, `vt` |-> `a`,
-       `p` |-> `mk_ptr (Var dst) LocMemory`, `t` |-> `ec_tail_end`,
-       `ftv` |-> `ArrayTV (BaseTV (UintT 256)) (Fixed 2)`, `fw` |-> `wo`]
-       (INST_TYPE [alpha |-> ``:256``] vv_store_bound_capacity)) >>
-     (impl_tac >- (simp[NoAsms, expr_type_def, type_memory_size_def] >>
-       rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE
-         (qpat_assum `vv = LocatedValue a (mk_ptr (Var dst) LocMemory)`
-           (fn value => pure_rewrite_tac [GSYM value]) >> first_assum ACCEPT_TAC)))) >>
-     simp[NoAsms, expr_type_def] >> disch_then (fn bound =>
-       qpat_assum `vv = LocatedValue a (mk_ptr (Var dst) LocMemory)`
-         (fn value => ACCEPT_TAC (PURE_REWRITE_RULE [GSYM value] bound)))) >>
+    (qpat_assum `vv = StackValue a _` (pure_rewrite_tac o single) >>
+     qpat_assum `a = ArrayT _ _` (fn annotation =>
+       qpat_assum `evaluate_type (get_tenv cx) a = SOME _` (fn ty_eq =>
+         simp[NoAsms, annotation, PURE_REWRITE_RULE [annotation] ty_eq,
+              vv_store_bound_def, is_word_type_def, read_result_def, return_def,
+              mk_ec_result_def, val_store_size_def, type_memory_size_def])) >>
+     qpat_assum `eval_operand (Var dst) ec_tail_end = SOME wo`
+       (fn eval => simp[NoAsms, eval]) >> first_assum ACCEPT_TAC) >>
   `vv_own cenv cx a sa sb ee (Value (mk_ec_result (rx,ry))) vv ec_tail_end` by
-    (qpat_assum `vv = LocatedValue a _` (pure_rewrite_tac o single) >>
-     qpat_assum `evaluate_type (get_tenv cx) a = SOME _` (fn ty_eq =>
-       simp[NoAsms, vv_own_def, contextTheory.mk_ptr_def, read_result_def, return_def, ty_eq]) >>
+    (qpat_assum `vv = StackValue a _` (pure_rewrite_tac o single) >>
+     qpat_assum `a = ArrayT _ _` (fn annotation =>
+       qpat_assum `evaluate_type (get_tenv cx) a = SOME _` (fn ty_eq =>
+         simp[NoAsms, annotation, PURE_REWRITE_RULE [annotation] ty_eq,
+              vv_own_def, expr_val_own_def, is_word_type_def, read_result_def, return_def])) >>
      qexists_tac `wo` >> conj_tac >- first_assum ACCEPT_TAC >>
      disj1_tac >> qexistsl [`out_alloc.cs_next_id`,`w2n wo`,`64`] >>
      simp[NoAsms, mk_ec_result_def, val_footprint_def, type_memory_size_def] >>
@@ -635,17 +631,12 @@ Resume ec_arith_permitted_tail_full[success_owned]:
   qpat_assum `lowered_value_type cenv (Builtin a bt [e1;e2]) = a`
     (fn ty_eq => pure_rewrite_tac [expr_type_def,ty_eq]) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qpat_assum `vv = LocatedValue a _` (pure_rewrite_tac o single) >>
-  qpat_assum `a = ArrayT _ _` (pure_rewrite_tac o single) >>
-  TRY (first_assum ACCEPT_TAC) >>
-  simp[NoAsms, contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
-  TRY (first_assum (ACCEPT_TAC o SIMP_RULE (srw_ss())
-    [exprLoweringTheory.as_ptr_val_def,contextTheory.mk_ptr_def])) >>
-  strip_tac >>
-  qpat_assum `vv_own cenv cx a sa sb ee _ vv ec_tail_end` (fn own =>
-    qpat_assum `vv = LocatedValue a _` (fn value =>
-      qpat_assum `a = ArrayT _ _` (fn annotation =>
-        ACCEPT_TAC (SIMP_RULE (srw_ss()) [value,annotation,contextTheory.mk_ptr_def] own))))
+  qpat_assum `vv = StackValue a _` (fn value =>
+    qpat_assum `a = ArrayT _ _` (fn annotation =>
+      simp[NoAsms, value, annotation, contextTheory.vv_location_def,
+           is_word_type_def, is_bytestring_type_def] >>
+      first_assum (ACCEPT_TAC o SIMP_RULE (srw_ss())
+        [value, annotation, exprLoweringTheory.as_stack_val_def])))
 QED
 
 Finalise ec_arith_permitted_tail_full

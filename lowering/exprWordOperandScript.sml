@@ -24,7 +24,7 @@
 
 Theory exprWordOperand
 Ancestors
-  exprSafeOperand exprSafeOperandBuiltins
+  exprSafeOperand exprSafeOperandBuiltins exprOperandVar
   exprLoweringProps freshWrites compileEnv emitHelper context
   exprLowering exprCallBounds vyperTypeSystem vyperValue vyperAST vyperTypeBuiltins
   builtinSimple builtinMath builtinHashing builtinMisc builtinBytes builtinSystem
@@ -264,7 +264,15 @@ Theorem word_builtin_located:
 Proof
   strip_tac >> gvs[compile_builtin_dispatch_body_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs(), word_result_ok_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
+  rpt (pairarg_tac >> gvs[])
+  >~ [`as_stack_val _ (compile_ecadd_points _ _ _) = _`] >-
+    (irule as_stack_val_word_result_ok >> goal_assum (drule_at Any) >>
+     simp[safe_operand_def] >>
+     metis_tac[cj 1 compiler_ec_points_var, cj 1 ec_arith_result_not_label])
+  >~ [`as_stack_val _ (compile_ecmul_point _ _ _) = _`] >-
+    (irule as_stack_val_word_result_ok >> goal_assum (drule_at Any) >>
+     simp[safe_operand_def] >>
+     metis_tac[cj 2 compiler_ec_points_var, cj 2 ec_arith_result_not_label]) >>
   metis_tac[as_ptr_val_word_result_ok]
 QED
 
