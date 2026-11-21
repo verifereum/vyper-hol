@@ -66,10 +66,10 @@ live topics across the encoder's cursor and payload writes.
 
 ## Compiler fixtures
 
-The `abi-codegen` corpus contains twelve pinned-Python source, AST and bytecode
+The `abi-codegen` corpus contains thirteen pinned-Python source, AST and bytecode
 fixtures. Its provenance is reproduced by
 `bytecode/python-o1-bytecode-fixtures --check --vyper-repo PATH`.
-The ABI parity theories compare compiler output with those bytecode fixtures;
-this is finite differential evidence, not a universal compiler equivalence
-theorem. See [compiler-definition-parity.md](compiler-definition-parity.md) for
-the repository pin and compiler boundary.
+The [native parity runner](../bytecode/native/README.md) compares the
+compiler's deployment and runtime bytecode against these oracles. See
+[compiler-definition-parity.md](compiler-definition-parity.md) for the
+repository pin and compiler boundary.

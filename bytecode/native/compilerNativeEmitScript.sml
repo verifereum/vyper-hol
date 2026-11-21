@@ -161,7 +161,8 @@ fun program_term "EMPTY" = ``[] : toplevel list``
 val suite_fixtures = [
   ("abi-codegen", [
     "arr_dyn_of_fixed", "arr_string_arg", "arr_string_ret", "arr_struct_noclamp",
-    "dec_bytes_unwrapT", "dec_uint_unwrapT", "enc_ensT_bytes", "enc_multi",
+    "dec_bytes_unwrapT", "dec_uint_unwrapT", "enc_ensF_dynamic_tuple",
+    "enc_ensT_bytes", "enc_multi",
     "flag256_arg", "flag256_array_arg", "st_string_field_arg", "tup_string_arg"]),
   ("builtin-forms", [
     "ceil_dec", "concat_bytes2", "concat_bytesn", "concat_one_bytes_arg",
