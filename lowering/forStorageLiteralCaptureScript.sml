@@ -2,6 +2,8 @@
    operand and a root observation, before the iterator reads its length. *)
 Theory forStorageLiteralCapture
 Ancestors
+  bodyInvCodeProps moduleVariableKeyProps
+  bodyStorageMetadata
   bodySim exprBodyPreProps exprSimHypsDefs exprSimTopLevelProps stateRelProj
   gasOutcomeFull whitelistVisibility supportedExprForms
   vyperTypeEnv vyperTypeInvariants vyperTypeGlobalLookupSoundness vyperTypeValues
@@ -9,20 +11,43 @@ Ancestors
   vyperLookupStorage vyperAST vyperValue
   exprLowering loweringStateRelDefs context compileEnv venomInst finite_map list
 
+Theorem literal_storage_decl_mods[local]:
+  contract_inv mods exps ctx c cx /\ ALOOKUP mods src = SOME tops /\
+  supported_storage_value tops (NONE,name) ty ==>
+  ?tr. get_module_code cx src = SOME tops /\
+       find_var_decl_by_name name tops = SOME (StorageVarDecl tr ty,name)
+Proof
+  strip_tac >>
+  drule_then (assume_tac o Q.SPEC `src`) contract_inv_module_codes >>
+  drule_all_then assume_tac contract_inv_unqualified_variable_keys >>
+  qpat_x_assum `supported_storage_value _ _ _` mp_tac >>
+  simp[supported_storage_value_def] >>
+  Cases_on `supported_variable_decl tops (NONE,name)` >> simp[] >>
+  rename1 `supported_variable_decl _ _ = SOME info` >>
+  PairCases_on `info` >> Cases_on `info1` >> Cases_on `info3` >> simp[] >>
+  strip_tac >>
+  drule supported_variable_decl_storage_binding >> disch_then drule >>
+  simp[] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
 Theorem literal_storage_decl[local]:
   body_inv tops ctx c cx /\ supported_storage_value tops nid ty ==>
   ?tr name. nid = (NONE,name) /\ get_module_code cx NONE = SOME tops /\
     find_var_decl_by_name name tops = SOME (StorageVarDecl tr ty,name)
 Proof
-  PairCases_on `nid` >>
-  simp[supported_storage_value_def] >>
-  Cases_on `supported_variable_decl tops (nid0,nid1)` >> simp[] >>
-  rename1 `supported_variable_decl _ _ = SOME info` >>
-  PairCases_on `info` >> Cases_on `info1` >> Cases_on `info3` >> simp[] >>
-  strip_tac >> qpat_assum `body_inv _ _ _ _`
-    (mp_tac o REWRITE_RULE [body_inv_def]) >> strip_tac >>
-  drule supported_variable_decl_storage_binding >> disch_then drule >>
-  simp[] >> strip_tac >> gvs[] >> metis_tac[]
+  strip_tac >>
+  `?name. nid = (NONE,name)` by
+    (PairCases_on `nid` >>
+     Cases_on `supported_variable_decl tops (nid0,nid1)` >>
+     gvs[supported_storage_value_def] >>
+     rename1 `supported_variable_decl _ _ = SOME info` >>
+     PairCases_on `info` >> drule_then (ACCEPT_TAC o CONJUNCT1)
+       supported_variable_decl_mem) >>
+  gvs[] >> drule_then assume_tac body_inv_contract >>
+  drule_all_then strip_assume_tac (SIMP_RULE (srw_ss()) [alistTheory.ALOOKUP_def]
+    (Q.INST [`mods` |-> `[(NONE,tops)]`, `src` |-> `NONE`]
+      literal_storage_decl_mods)) >>
+  metis_tac[]
 QED
 
 Theorem for_storage_literal_capture:

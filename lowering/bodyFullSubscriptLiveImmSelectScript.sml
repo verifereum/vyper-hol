@@ -1,6 +1,7 @@
 (* Selecting a subplace from the current immutable representation. *)
 Theory bodyFullSubscriptLiveImmSelect
 Ancestors
+  exprBodyPreCallSafetyProps exprBodyPreTypingProps
   bodyInvCodeProps bodyInvSplit bodyInvExecutionProps exprBodyPreProps alist
   bodyFullExtCallPosTransport bodySimFull loweringPosts
   exprSimSubscriptArrayLiveImmutableSuffix exprSimSubscriptArrayLiveImmutableView
@@ -270,6 +271,30 @@ Proof
 QED
 
 (* An index following a dynamic ancestor must leave that ancestor live. *)
+Theorem immutable_target_index_frame_mods:
+  contract_inv mods exps ctx cenv cx /\ expr_body_pre_mods mods cenv cx env idx es /\
+  target_root bt = TopLevelNameTarget (src,id) /\ ~cx_const_name_mods mods (src,id) /\
+  target_through_dynarray cenv bt /\ ~target_subscript_overlap cenv bt idx /\
+  eval_expr cx idx es = (res,ee) ==>
+  FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
+    NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
+  FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+    NONE => FEMPTY | SOME imms => get_source_immutables src imms) id
+Proof
+  strip_tac >> drule_then assume_tac contract_inv_cenv_modules >>
+  `MEM (StateRef (src,id)) (nonconstant_reads cenv.ce_modules
+      (expr_accesses cenv.ce_modules (target_to_expr bt)))` by
+    (irule target_root_state_nonconstant_read >>
+     fs[cx_const_name_mods_def] >> metis_tac[constant_decl_mem_consts]) >>
+  drule_all_then strip_assume_tac target_subscript_overlap_unwritten >>
+  drule_then strip_assume_tac expr_body_pre_mods_runtime_typing >>
+  drule_then assume_tac expr_body_pre_mods_call_evaluation_safe >>
+  gvs[vyperTypeExprSoundnessTheory.runtime_consistent_def] >>
+  irule eval_expr_unwritten_immutable >> simp[] >>
+  qexistsl [`idx`,`env`,`cenv.ce_modules`,`res`] >> simp[] >>
+  rpt gen_tac >> strip_tac >> drule_all_then ACCEPT_TAC immutable_index_callable_closed_mods
+QED
+
 Theorem immutable_target_index_frame:
   body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env idx es /\
   target_root bt = TopLevelNameTarget (NONE,id) /\ ~cx_const_name cx (NONE,id) /\
@@ -280,23 +305,12 @@ Theorem immutable_target_index_frame:
   FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
     NONE => FEMPTY | SOME imms => get_source_immutables NONE imms) id
 Proof
-  strip_tac >> drule_then assume_tac body_inv_contract >>
-  drule_then assume_tac contract_inv_cenv_modules >>
-  drule_then strip_assume_tac body_inv_main_code >>
-  `~constant_decl id tops` by
-    (fs[cx_const_name_def] >> metis_tac[constant_decl_mem_consts]) >>
-  `MEM (StateRef (NONE,id)) (nonconstant_reads cenv.ce_modules
-      (expr_accesses cenv.ce_modules (target_to_expr bt)))` by
-    (irule target_root_state_nonconstant_read >> simp[]) >>
-  drule_all_then strip_assume_tac target_subscript_overlap_unwritten >>
-  irule eval_expr_unwritten_immutable >>
-  fs[expr_body_pre_def, expr_sim_inv_def] >>
-  qexistsl [`idx`,`env`,`[(NONE,tops)]`,`res`] >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  conj_tac
-  >- (rpt gen_tac >> strip_tac >>
-      drule_all_then ACCEPT_TAC immutable_index_callable_closed_mods) >>
-  gvs[]
+  strip_tac >> drule_then strip_assume_tac body_inv_main_code >>
+  drule_then assume_tac body_inv_contract >>
+  drule_all_then assume_tac body_inv_expr_body_pre_mods >>
+  irule immutable_target_index_frame_mods >>
+  qexistsl [`bt`,`cenv`,`ctx`,`env`,`[]`,`idx`,`[(NONE,tops)]`,`res`] >>
+  fs[cx_const_name_split_def]
 QED
 
 Theorem immutable_target_path_after_index:

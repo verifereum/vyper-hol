@@ -1,11 +1,15 @@
 (* Classify the result captured by a nested global For iterator. *)
 Theory forNestedArrayCapture
 Ancestors
-  bodySim bodyStorageMetadata whitelistVisibility targetPlaceSim
+  bodyInvCodeProps exprBodyPreCallSafetyProps exprBodyPreTypingProps moduleVariableKeyProps alist
+  vyperTypeEvalSoundness vyperTypeExprSoundness
+  vyperTypeInvariants
+  bodySim bodyStorageMetadata supportedDecls whitelistVisibility targetPlaceSim
   exprSimSource exprBodyPreProps vyperPlaceResultTyping vyperPlaceTyping
   vyperStoragePlaceProvenance vyperBareGlobalName vyperTypeValues vyperTyping
   vyperInterpreter vyperState vyperAST vyperTypeSystem list
   vyperTypeContract[qualified,ignore_grammar]
+Libs monadsyntax
 
 Theorem subscript_capture_step[local]:
   eval_expr cx (Subscript ann obj idx) es = (INL r,ee) ==>
@@ -179,19 +183,32 @@ Proof
   gvs[Once evaluate_subscripts_def, AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem array_capture_typed[local]:
-  expr_body_pre cenv cx env e es /\ expr_type e = ArrayT ty bd /\
+Theorem array_capture_typed_mods[local]:
+  expr_body_pre_mods mods cenv cx env e es /\ expr_type e = ArrayT ty bd /\
   eval_expr cx e es = (INL r,ee) ==>
   ?elem. evaluate_type (get_tenv cx) ty = SOME elem /\
     evaluate_type env.type_defs (ArrayT ty bd) = SOME (ArrayTV elem bd) /\
     eval_result_typed (env,cx,ee) r (Type (ArrayT ty bd)) /\
     !v. read_result cx r ee = (INL v,ee) ==> ?av. v = ArrayV av
 Proof
-  strip_tac >> drule_all expr_body_pre_runtime_typed >> strip_tac >>
-  drule expr_body_pre_env_type_defs >> strip_tac >> gvs[] >>
-  drule evaluate_type_ArrayT_cases >> strip_tac >> gvs[] >>
+  strip_tac >> drule_then strip_assume_tac expr_body_pre_mods_runtime_typing >>
+  drule_then assume_tac expr_body_pre_mods_call_evaluation_safe >>
+  fs[runtime_consistent_def] >>
+  `env.type_defs = get_tenv cx` by
+    fs[env_consistent_def, env_context_consistent_def] >>
+  `eval_result_typed (env,cx,ee) r (Type (ArrayT ty bd))` by
+    (qspecl_then [`cx`,`e`] (mp_tac o CONJUNCT1)
+       (cj 5 eval_scc_type_sound_mutual) >>
+     disch_then (qspecl_then [`env`,`es`,`INL r`,`ee`] mp_tac) >> simp[]) >>
+  `?tv. evaluate_type (get_tenv cx) (ArrayT ty bd) = SOME tv` by
+    (Cases_on `r` >> gvs[eval_result_typed_def]) >>
+  drule_then strip_assume_tac evaluate_type_ArrayT_cases >> gvs[] >>
   rpt strip_tac >>
-  first_x_assum drule >> Cases_on `v` >> simp[value_has_type_inv]
+  `(do result <- eval_expr cx e; read_result cx result od) es = (INL v,ee)` by
+    simp[bind_def] >>
+  drule_at (Pat `bind _ _ _ = _`) eval_expr_read_type_sound >>
+  disch_then (qspec_then `env` mp_tac) >>
+  Cases_on `v` >> gvs[value_runtime_typed_def, value_has_type_inv]
 QED
 
 (* Reading an immutable place is reading its root and then the path. *)
@@ -214,6 +231,54 @@ QED
 (* A type-correct capture is either a copied array or a location in the
    declared root's region. In the immutable case the exposed prefix ends
    just before the first index (or at the array itself). *)
+Theorem nested_array_capture_cases_mods:
+  contract_inv mods exps ctx cenv cx /\ expr_body_pre_mods mods cenv cx env e es /\
+  expr_type e = ArrayT ty bd /\
+  loop_iterator_place e = SOME tgt /\ target_root tgt = TopLevelNameTarget (src,name) /\
+  eval_expr cx e es = (INL r,ee) ==>
+  ?elem. evaluate_type (get_tenv cx) ty = SOME elem /\
+    !tops. ALOOKUP mods src = SOME tops ==>
+    ((((?vis kind rt slot. supported_variable_decl tops (NONE,name) = SOME (vis,kind,rt,SOME slot) /\
+                           (kind = Storage \/ kind = Transient)) \/
+      (?vis tr kt vt slot. supported_hashmap_decl tops (NONE,name) = SOME (vis,tr,kt,vt,SOME slot))) ==>
+      (?av. r = Value (ArrayV av)) \/
+      (?tr loc. r = PlaceR (StoragePlace tr loc (ArrayTV elem bd)))) /\
+    (IS_SOME (supported_immutable_type tops (NONE,name)) ==>
+      (?av. r = Value (ArrayV av)) \/
+      ?path attrs tail rt rv av pav.
+        r = PlaceR (ImmutablePlace src name path) /\
+        runtime_place_typed cx ee (ImmutablePlace src name path) (ArrayTV elem bd) /\
+        place_access tgt [] = (TopLevelNameTarget (src,name),attrs) /\
+        path = MAP AttrSubscript attrs ++ tail /\
+        lookup_immutable cx ee src name = SOME (rt,rv) /\
+        evaluate_subscripts rt rv (MAP AttrSubscript attrs) = INL (ArrayV pav) /\
+        evaluate_subscripts rt rv path = INL (ArrayV av)))
+Proof
+  strip_tac >> drule_all array_capture_typed_mods >> strip_tac >>
+  qexists_tac `elem` >> simp[] >> gen_tac >> strip_tac >>
+  drule_then (assume_tac o Q.SPEC `src`) contract_inv_module_codes >>
+  drule_all_then assume_tac contract_inv_unqualified_variable_keys >>
+  `get_module_code cx src = SOME tops` by simp[] >>
+  conj_tac
+  >- (strip_tac >>
+      `?decl key. find_var_decl_by_name name tops = SOME (decl,key)` by
+        metis_tac[supported_variable_decl_storage_binding,
+                  supported_hashmap_decl_storage_binding] >>
+      drule_all nested_slot_capture >> strip_tac >>
+      gvs[vyperTypeInvariantsTheory.eval_result_typed_def, read_result_def, return_def]) >>
+  simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+  drule_all supported_immutable_type_find_NONE >> strip_tac >>
+  drule_all nested_immutable_capture >> strip_tac
+  >- gvs[read_result_def, return_def] >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] (iffRL read_result_immutable_place)) >>
+  strip_tac >>
+  qpat_x_assum `r = PlaceR _` SUBST_ALL_TAC >>
+  qpat_x_assum `!v. read_result _ _ _ = _ ==> _` drule >> strip_tac >>
+  `?pav. evaluate_subscripts tv a (MAP AttrSubscript attrs) = INL (ArrayV pav)` by
+    (irule iterator_attr_prefix_array >> metis_tac[]) >>
+  disj2_tac >> qexistsl [`attrs`,`tail`,`tv`,`a`] >> gvs[] >> metis_tac[]
+QED
+
 Theorem nested_array_capture_cases:
   body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
   expr_type e = ArrayT ty bd /\
@@ -236,27 +301,14 @@ Theorem nested_array_capture_cases:
         evaluate_subscripts rt rv (MAP AttrSubscript attrs) = INL (ArrayV pav) /\
         evaluate_subscripts rt rv path = INL (ArrayV av))
 Proof
-  strip_tac >> PairCases_on `nid` >>
-  drule_all array_capture_typed >> strip_tac >>
-  `get_module_code cx NONE = SOME tops /\
-   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-    fs[body_inv_def] >>
-  qexists_tac `elem` >> simp[] >> conj_tac
-  >- (strip_tac >>
-      `nid0 = NONE /\ ?decl key. find_var_decl_by_name nid1 tops = SOME (decl,key)` by
-        metis_tac[supported_variable_decl_storage_binding,
-                  supported_hashmap_decl_storage_binding] >>
-      gvs[] >> drule_all nested_slot_capture >> strip_tac >>
-      gvs[vyperTypeInvariantsTheory.eval_result_typed_def, read_result_def, return_def]) >>
-  simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
-  drule_all supported_immutable_type_find_NONE >> strip_tac >> gvs[] >>
-  drule_all nested_immutable_capture >> strip_tac
-  >- gvs[read_result_def, return_def] >>
-  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] (iffRL read_result_immutable_place)) >>
-  strip_tac >>
-  qpat_x_assum `r = PlaceR _` SUBST_ALL_TAC >>
-  qpat_x_assum `!v. read_result _ _ _ = _ ==> _` drule >> strip_tac >>
-  `?pav. evaluate_subscripts tv a (MAP AttrSubscript attrs) = INL (ArrayV pav)` by
-    (irule iterator_attr_prefix_array >> metis_tac[]) >>
-  disj2_tac >> qexistsl [`attrs`,`tail`,`tv`,`a`] >> gvs[] >> metis_tac[]
+  strip_tac >> drule_then assume_tac body_inv_contract >>
+  drule_all_then assume_tac body_inv_expr_body_pre_mods >>
+  PairCases_on `nid` >>
+  drule_all_then (qx_choose_then `elem` strip_assume_tac)
+    nested_array_capture_cases_mods >>
+  qexists_tac `elem` >> simp[] >>
+  Cases_on `nid0`
+  >- (first_x_assum (qspec_then `tops` mp_tac) >> simp[ALOOKUP_def] >> metis_tac[]) >>
+  Cases_on `tops` >> simp[supported_variable_decl_def, supported_hashmap_decl_def,
+                          supported_immutable_type_def]
 QED

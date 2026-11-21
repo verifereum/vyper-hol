@@ -1,6 +1,7 @@
 (* Compose an array For from a prepared iterator expression and its continuation. *)
 Theory bodyFullForArrayPreparedCut
 Ancestors
+  bodyInvExecutionProps
   bodyFullForExprCut bodyFullForArray bodyFullForFacts bodyFullShadowBodyInv
   bodyFullIfExpReach bodyFullShared bodySimFull bodySim
   gasOutcomeFull gasOutcomeFullCompose gasContext stmtSimForRounds stmtSimDefs
@@ -90,7 +91,9 @@ Proof
     (qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _` mp_tac >>
      simp[gas_shadow_stmt_def,stmt_env_def,declare_stmt_local_def,
           comp_bind_def,comp_ignore_bind_def,comp_return_def] >> pairarg_tac >> simp[]) >>
-  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
+  `cenv.ce_alloca_locals` by
+    (drule_then (MATCH_ACCEPT_TAC o MATCH_MP contract_inv_alloca_locals)
+       body_inv_contract) >>
   drule_then strip_assume_tac type_stmt_for_projection >>
   `?bd. expr_type e = ArrayT typ bd /\ bound_length bd = n` by
     (drule_then strip_assume_tac type_stmt_for_array_bound >> simp[]) >>
