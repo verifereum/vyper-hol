@@ -1,9 +1,8 @@
 (*
  * What expr_accesses says about the running contract's immutables at run
- * time: an expression with no risky call (no external call, send,
- * raw_call, create or call-family builtin, in it or in an internal
- * function it reaches) changes the immutable id of module src only if its
- * accesses write StateRef (src,id).
+ * time: an expression changes the immutable id of module src only if its
+ * accesses write StateRef (src,id). The modeled call outcomes preserve
+ * immutables, including for external calls and precompiles.
  *
  * The function premise ties the accesses analysis to the code that runs,
  * as in vyperStorageAccessFrame: an internal call the expression reaches
@@ -12,7 +11,7 @@
  * synthesizes).
  *
  * TOP-LEVEL:
- *   eval_expr_unwritten_immutable
+ *   eval_expr_immutable_access_frame, eval_expr_unwritten_immutable
  *)
 
 Theory vyperImmutableAccessFrame
@@ -22,7 +21,8 @@ Ancestors
   vyperTypeInvariants vyperTypeCallStackSoundness vyperTypeCallGraphSoundness
   vyperTypeCallGraph list alist finite_map
   vyperTypeInitialState vyperPlaceFrames vyperImmutablesPreservation
-  vyperStatePreservation vyperStorageBackend
+  vyperStatePreservation vyperStorageBackend vyperCallOutcomeFrame
+  vyperCreate vyperCreateFrame vyperScopePreservation
 
 (* Why it holds (a reader may ignore this): immutables change only through
    an ImmutablePlace written by Assign, AugAssign, Append or Pop (inside an
@@ -192,7 +192,7 @@ QED
 val allowed_writes = ``\A xs. !ns.
   MEM (WriteAcc (StateRef ns)) xs ==> MEM (WriteAcc (StateRef ns)) A``;
 val safe_accesses = ``\A (R:(num option # string) list) xs cs.
-  ^allowed_writes A xs /\ ~MEM RiskyAcc xs /\
+  ^allowed_writes A xs /\
   (!c. MEM c cs ==> MEM c R)``;
 val callable_closed = ``\cx A R.
   !src fn ts mut nr args dflts ret body.
@@ -435,13 +435,78 @@ Proof
   metis_tac[]
 QED
 
-Theorem evaluate_immutable_risky_cases[local]:
+Theorem immutable_safe_accesses_every[local]:
+  !es. ^safe_accesses A R (accesses_exprs es) (int_calls_exprs es) <=>
+    EVERY (\e. ^safe_accesses A R (accesses_expr e) (int_calls_expr e)) es
+Proof
+  Induct >> simp[accesses_expr_def, int_calls_expr_def, MEM_APPEND,
+                 DISJ_IMP_THM, FORALL_AND_THM] >> metis_tac[]
+QED
+
+Theorem evaluate_immutable_single_call_args[local]:
   ^(list_mk_conj (map immutable_constructor_case
-    ["Send","ExtCall","RawCallTarget","RawCallCalldataTarget","CreateTarget"]))
+    ["Send","RawCallTarget","RawCallCalldataTarget"]))
 Proof
   rpt conj_tac >> BETA_TAC >> rpt strip_tac >>
-  qpat_x_assum `~MEM RiskyAcc (accesses_expr _)` mp_tac >>
-  simp[accesses_expr_def, risky_call_target_def]
+  gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
+      ignore_bind_def, return_def, raise_def, AllCaseEqs(),
+      accesses_expr_def, risky_call_target_def, int_calls_expr_def] >>
+  imp_res_tac lift_option_type_state >>
+  imp_res_tac eval_send_preserves_non_accounts >>
+  imp_res_tac eval_raw_call_preserves_non_accounts >> gvs[] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+
+Theorem evaluate_immutable_extcall_case[local]:
+  ^(immutable_constructor_case "ExtCall")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  fs[accesses_expr_def, risky_call_target_def, int_calls_expr_def] >>
+  `^safe_accesses A R (accesses_exprs es) (int_calls_exprs es)` by
+    (BETA_TAC >> fs[MEM_APPEND]) >>
+  pop_assum (assume_tac o REWRITE_RULE [immutable_safe_accesses_every]) >>
+  qpat_x_assum `eval_expr _ (Call _ (ExtCall _ _ _ _) _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac eval_ext_call_preserves_non_accounts >> gvs[] >>
+  TRY (qpat_x_assum `!s v t s' vs t'.
+      eval_exprs cx (TAKE 1 es) s = (INL v,t) /\
+      eval_exprs cx (TAKE _ (DROP 1 es)) s' = (INL vs,t') ==> _`
+    (fn ih =>
+      qpat_assum `eval_exprs cx (TAKE 1 es) st = (INL _,_)` (fn target =>
+      qpat_assum `eval_exprs cx (TAKE _ (DROP 1 es)) _ = (INL _,_)` (fn args =>
+        assume_tac (MATCH_MP ih (CONJ target args)))))) >>
+  TRY (qpat_x_assum `!s v t. eval_exprs cx (TAKE 1 es) s = (INL v,t) ==> _`
+    (drule_then assume_tac)) >>
+  rpt (qpat_x_assum `!A R s r t. _` (qspecl_then [`A`,`R`] mp_tac) >>
+    simp[BETA_RULE immutable_safe_accesses_every, rich_listTheory.EVERY_TAKE,
+         rich_listTheory.EVERY_DROP] >> disch_then (drule_all_then strip_assume_tac)) >>
+  qpat_x_assum `!src fn ts mut nr args ds rt body. _` kall_tac >>
+  metis_tac[]
+QED
+
+Theorem evaluate_immutable_create_case[local]:
+  ^(immutable_constructor_case "CreateTarget")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  fs[accesses_expr_def, risky_call_target_def, int_calls_expr_def] >>
+  `^safe_accesses A R (accesses_exprs es) (int_calls_exprs es)` by
+    (BETA_TAC >> fs[MEM_APPEND]) >>
+  pop_assum (assume_tac o REWRITE_RULE [immutable_safe_accesses_every]) >>
+  `EVERY (\e. ^safe_accesses A R (accesses_expr e) (int_calls_expr e))
+     (create_operand_order kind has_salt es)` by
+    (Cases_on `kind` >> Cases_on `es` >>
+     gvs[create_operand_order_def, rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP] >>
+     rename1 `create_operand_order RawCreate _ (operand::rest)` >>
+     Cases_on `rest` >>
+     gvs[create_operand_order_def, rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP]) >>
+  qpat_x_assum `eval_expr _ (Call _ (CreateTarget _ _ _ _) _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), eval_create_operands_def] >> strip_tac >>
+  Cases_on `kind` >> gvs[bind_def, AllCaseEqs()] >>
+  imp_res_tac check_create_blueprint_result_state >>
+  imp_res_tac eval_create_preserves_scopes_immutables >> gvs[] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[BETA_RULE immutable_safe_accesses_every] >> disch_then drule_all >> simp[]
 QED
 
 Theorem evaluate_immutable_struct_case[local]:
@@ -888,7 +953,7 @@ Theorem immutable_callable_safe[local]:
 Proof
   BETA_TAC >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `!src fn ts mut nr args dflts ret body. _` drule_all >>
-  simp[function_int_calls_def, safe_accesses_append]
+  simp[function_int_calls_def, MEM_APPEND, DISJ_IMP_THM, FORALL_AND_THM]
 QED
 
 (* Wrapper rules retain the effects of failed computations as well. *)
@@ -1372,10 +1437,7 @@ Proof
            (cx with stk := CONS (src,fn) cx.stk)` by
             simp[evaluation_context_component_equality] >>
           `^callable_closed (cx with stk updated_by CONS (src,fn)) A R` by
-            (BETA_TAC >> asm_rewrite_tac[] >>
-             rewrite_tac[BETA_RULE callable_closed_stk] >>
-             qpat_x_assum `!src fn ts mut nr args dflts ret body. _` mp_tac >>
-             simp[]) >>
+            (BETA_TAC >> fs[get_module_code_def] >> first_assum ACCEPT_TAC) >>
           asm_x "defaults_ih" mp_tac >> simp[] >>
           disch_then drule >> simp[] >>
           disch_then (mk_asm "defaults_frame") >>
@@ -1629,8 +1691,44 @@ Proof
     evaluate_immutable_atarget_tuple_case, evaluate_immutable_atargets_nil_case,
     evaluate_immutable_atargets_cons_case, evaluate_immutable_atargets_length_case,
     evaluate_immutable_atargets_length_other_case,
-    evaluate_immutable_intcall_ind_bridge] @
-    map (ACCEPT_TAC o BETA_RULE) (CONJUNCTS evaluate_immutable_risky_cases))
+    evaluate_immutable_intcall_ind_bridge, evaluate_immutable_extcall_case,
+    evaluate_immutable_create_case] @
+    map (ACCEPT_TAC o BETA_RULE) (CONJUNCTS evaluate_immutable_single_call_args))
+QED
+
+Theorem eval_expr_immutable_access_frame:
+  !cx e st res st' mods src id.
+    eval_expr cx e st = (res,st') /\
+    (!src fn ts mut nr args dflts ret body.
+       MEM (src,fn) (reached_functions mods e) /\
+       get_module_code cx src = SOME ts /\
+       lookup_callable_function cx.in_deploy fn ts =
+         SOME (mut,nr,args,dflts,ret,body) ==>
+       ALOOKUP mods src = SOME ts /\
+       (find_function fn ts = SOME (dflts,body) \/
+        (dflts = [] /\ body = []))) /\
+    ~MEM (WriteAcc (StateRef (src,id))) (expr_accesses mods e) ==>
+    ^immutable_observation cx src id st' = ^immutable_observation cx src id st
+Proof
+  rpt strip_tac >>
+  `^callable_closed cx (expr_accesses mods e) (reached_functions mods e)` by
+    (BETA_TAC >> rpt gen_tac >> strip_tac >>
+     first_x_assum drule_all >>
+     disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+     conj_tac >- metis_tac[reached_function_write_accesses] >>
+     gen_tac >> disch_tac >>
+     mp_tac (Q.SPECL [`src'`,`fn`,`mods`,`e`,`ts`,
+       `cx.in_deploy`,`mut`,`nr`,`args`,`dflts`,`ret`,`body'`,`c`]
+       reached_callable_calls) >> asm_rewrite_tac[]) >>
+  `^safe_accesses (expr_accesses mods e) (reached_functions mods e)
+    (accesses_expr e) (int_calls_expr e)` by
+    (BETA_TAC >> metis_tac[direct_expr_accesses,direct_function_reached]) >>
+  qspecl_then [`cx`,`e`] (mp_tac o BETA_RULE)
+    (cj 5 evaluate_immutable_frame_untyped) >>
+  disch_then (qspecl_then [`expr_accesses mods e`,
+    `reached_functions mods e`,`st`,`res`,`st'`] mp_tac) >>
+  gvs[] >> disch_then drule >>
+  disch_then (qspecl_then [`src`,`id`] mp_tac) >> simp[]
 QED
 
 Theorem eval_expr_unwritten_immutable:
@@ -1657,13 +1755,5 @@ Theorem eval_expr_unwritten_immutable:
                NONE => FEMPTY
              | SOME imms => get_source_immutables src imms) id
 Proof
-  rpt strip_tac >>
-  drule_all callable_closed_initial >> strip_tac >>
-  drule safe_accesses_expr_initial >> strip_tac >>
-  qspecl_then [`cx`,`e`] (mp_tac o BETA_RULE)
-    (cj 5 evaluate_immutable_frame_untyped) >>
-  disch_then (qspecl_then [`expr_accesses mods e`,
-    `reached_functions mods e`,`st`,`res`,`st'`] mp_tac) >>
-  gvs[] >> disch_then drule >>
-  disch_then (qspecl_then [`src`,`id`] mp_tac) >> simp[]
+  metis_tac[BETA_RULE eval_expr_immutable_access_frame]
 QED
