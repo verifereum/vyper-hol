@@ -4,7 +4,8 @@ Ancestors
   runtimeSymSrcGeneratorContracts runtimeSymSrcEmission exprCallBounds
   supportedExprTraverse supportedExprForms supportedExprs exprLowering
   context compileEnv venomInst memoryValueDefs typedCopyDomain list memLocDefs
-  builtinMisc builtinBytes builtinSimple emitHelper loweringShapeDefs exprLoweringProps[qualified]
+  exprLoweringProps
+  builtinMisc builtinBytes builtinSimple emitHelper loweringShapeDefs
   runtimeSymSrcBuiltinByteSimple runtimeSymSrcBuiltinData runtimeSymSrcBinops
   runtimeSymSrcContextComplete runtimeSymSrcAbiEncode runtimeSymSrcExternalPrimitive
 
@@ -100,7 +101,9 @@ Resume runtime_sym_type_builtin_body[extract32]:
      EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op` by
     (rpt gen_tac >> strip_tac >> drule runtime_sym_generators_lower_value >>
      simp[runtime_sym_lower_value_clause_def] >> strip_tac >> first_x_assum irule >>
-     gvs[supported_expr_def, supported_exprs_exists_every] >> metis_tac[]) >>
+     goal_assum (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+     gvs[supported_exprs_exists_every] >>
+     simp[supportedExprsTheory.supported_expr_def]) >>
   qpat_x_assum `compile_type_builtin_dispatch_body _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[NoAsms, compile_type_builtin_dispatch_body_def] >>
   rpt (pairarg_tac >> simp[]) >>
@@ -189,9 +192,9 @@ Resume runtime_sym_type_builtin_body[encode]:
   Cases_on `vs` >> gvs[] >> qexists_tac `tops` >> first_assum ACCEPT_TAC
 QED
 Resume runtime_sym_type_builtin_body[decode]:
-  `?e. args = [e] /\ ~unwrap` by
+  `?e. args = [e]` by
     (Cases_on `args` >> gvs[runtime_sym_type_builtin_domain, supported_type_builtin_form_def] >>
-     Cases_on `t` >> Cases_on `unwrap` >>
+     Cases_on `t` >>
      gvs[runtime_sym_type_builtin_domain, supported_type_builtin_form_def]) >>
   gvs[] >>
   drule runtime_sym_generators_context >>
@@ -216,7 +219,8 @@ Resume runtime_sym_type_builtin_body[decode]:
      disj1_tac >> first_assum ACCEPT_TAC) >>
   `~supported_expr_exists is_self_code e` by fs[supported_exprs_exists_every] >>
   `EVERY runtime_sym_inst (state_insts st1) /\ runtime_sym_value data_vv` by
-    (first_x_assum (drule_at_then (Pat `cfn _ _ _ _ = _`) mp_tac) >> simp[]) >>
+    (first_x_assum (drule_at_then (Pat `cfn _ _ _ _ = _`) mp_tac) >>
+     simp[] >> gvs[supported_exprs_exists_every, supportedExprsTheory.supported_expr_def]) >>
   first_x_assum (drule_all_then strip_assume_tac) >>
   first_x_assum (drule_all_then strip_assume_tac) >>
   simp[runtime_sym_value_def, mk_ptr_def]

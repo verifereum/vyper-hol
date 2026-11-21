@@ -7,7 +7,7 @@ Theory ctorDeployBodyShadow
 Ancestors
   bodyFullShadowBodyInvLowering
   ctorDeployLoweringCode ctorDeployLoweringCodeShape ctorDeployLoweringDefs
-  ctorDeployDefs
+  ctorDeployDefs ctorDeployEntryLabels
   gasShadowDeployRunner gasShadowShape gasShadowCompileStmt
   gasShadowInternal gasShadowUnitExtract gasShadowUnitGuards
   gasShadowModuleDefs gasShadowState gasShadowUnit gasShadow
@@ -104,10 +104,8 @@ QED
    - gas_shadow_compile_stmt pairs the actual body end sb with the shadow
      one; compile_stmt_cs_mono and the tail extensions give cs_extends on
      the shadow side unconditionally.
-   - Pinning the shadow __deploy blocks to all_blocks of the shadow final
-     state goes through the shape facts (ctor_code_prefix_certificates,
-     deploy_ctor_packaged_entry), which hold of the shadow packages by
-     gasShadowShape. *)
+   - Entry blocks and internal delimiters have distinct labels, so
+     packaging preserves the shadow constructor's emitted blocks. *)
 Theorem deploy_ctor_body_shadow:
   !tops am tx rpolicy runtime_bc dunit body cenv nr nkey ut imm exit_lbl
    sa sb sj st_exit st_epilogue st_final func.
@@ -130,20 +128,18 @@ Proof
   simp[deploy_ctor_code_def] >> strip_tac >>
   rename1 `set_constructor_package_target _ _ =
     (cenv0,pos_args,pay,nr,nkey,ut,body,ret)` >>
-  drule_all deploy_constructor_package_shape >> strip_tac >>
   drule_all deploy_constructor_package_not_view >> strip_tac >>
   `supported_program tops` by fs[deploy_source_ok_def] >>
   qabbrev_tac `ifns = MAP (set_internal_package_target rpolicy.rpol_target o
       package_internal_fn tops T (K global_nonreentrant_slot) T
         (imm_len tops))
       (order_internals (deploy_internal_order (SOME cf) ints) ints)` >>
-  `EVERY internal_fn_shape_ok ifns /\
-   EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ifns) /\
+  `EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ifns) /\
    ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns))` by
     (qspecl_then [`tops`, `rpolicy.rpol_target`, `T`,
        `K global_nonreentrant_slot`, `T`, `imm_len tops`,
        `order_internals (deploy_internal_order (SOME cf) ints) ints`, `ifns`]
-       mp_tac deploy_internal_package_certificates >>
+       mp_tac deploy_internal_package_labels >>
      simp[Abbr `ifns`, PERM_order_deploy_internals]) >>
   `run_deploy_lowering T rpolicy runtime_bc (imm_len tops) pos_args 0 ifns
      cenv0 body pay nr nkey ut "__deploy" = SOME dunit` by
@@ -182,36 +178,17 @@ Proof
      disch_then (qspecl_then [`cenv1 with ce_ctor_exit_label := SOME exit_lbl`,
        `NoLoop`, `NoneT`, `body`, `sa`, `sa`] mp_tac) >>
      simp[gas_shadow_state_refl]) >>
-  (* shapes of the shadow constructor code *)
-  `~supported_stmts_expr_exists expr_shape_root (MAP gas_shadow_stmt body)` by
-    simp[gas_shadow_shape_stmts_exists] >>
   rename1 `compile_constructor_epilogue _ _ _ _ = ((),t_final)` >>
-  `(do (if ~pay then
-           do cv <- emit_op CALLVALUE []; v <- emit_op ISZERO [cv];
-              emit_void ASSERT [v] od else return ());
-        imm <- (if imm_len tops > 0 then
-                  do p <- compile_fixed_region_with_id (imm_len tops);
-                     return (SND p).buf_operand od else return (Lit 0w));
-        ce <- compile_register_constructor_args
-          (cenv0 with ce_imm_alloca :=
-            (if imm_len tops > 0 then SOME imm else NONE)) pos_args 0 0;
-        (if nr then compile_nonreentrant_lock nkey ut F else return ());
-        lbl <- fresh_label "ctor_exit";
-        compile_stmts (ce with ce_ctor_exit_label := SOME lbl) NoLoop NoneT
-          (MAP gas_shadow_stmt body);
-        cs <- comp_get;
-        (if block_is_terminated cs then return ()
-         else emit_inst JMP [Label lbl] []);
-        new_block lbl;
-        (if nr then compile_nonreentrant_unlock nkey ut F else return ());
-        compile_constructor_epilogue (LENGTH runtime_bc) (imm_len tops) imm od)
+  `compile_generate_deploy T (LENGTH runtime_bc) (imm_len tops) pos_args 0 []
+    cenv0 (MAP gas_shadow_stmt body) pay nr nkey ut
       (initial_compile_state "__deploy") = ((),t_final)` by
-    (rewrite_tac[ctor_code_cond_not] >>
-     simp[comp_ignore_bind_def, comp_bind_def, comp_get_def]) >>
-  drule_all ctor_code_prefix_certificates >> strip_tac >>
-  `EVERY internal_fn_shape_ok (MAP gas_shadow_internal_package ifns)` by
-    fs[EVERY_MAP, EVERY_MEM, gas_shadow_internal_fn_shape_ok] >>
-  drule_at (Pos last) deploy_ctor_packaged_entry >> simp[] >>
+    (PURE_REWRITE_TAC [compile_generate_deploy_def, COND_CLAUSES,
+       ctor_code_cond_not, ctor_lock_flag_select] >>
+     simp_tac bool_ss [comp_ignore_bind_def, comp_bind_def, comp_get_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[]) >>
+     gvs[compile_internal_fn_bodies_def, comp_return_def]) >>
+  drule deploy_entry_blocks_not_internal >> strip_tac >>
+  drule_at (Pos last) deploy_ctor_packaged_entry_by_labels >> simp[] >>
   disch_then (qspec_then `t_final` mp_tac) >> simp[] >> strip_tac >>
   drule_all deploy_ctor_member_certificates >> strip_tac >>
   (* the shadow code extends through the constructor tail *)

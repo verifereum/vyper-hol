@@ -3,7 +3,7 @@ Theory runtimePeakMemoryExprDispatch
 Ancestors
   runtimePeakMemoryExpr runtimePeakMemoryArity runtimePeakMemorySourceGate runtimePeakMemoryBuiltins
   runtimePeakMemoryAbi runtimePeakMemoryCode exprLowering exprCallBounds
-  exprCallbackContracts exprSimHypsDefs loweringCallOpcodes loweringShapeProps supportedExprTraverse vyperAST
+  exprCallbackContracts exprSimHypsDefs exprCallbackSupport loweringShapeProps supportedExprTraverse vyperAST
   builtinSimple compileEnv context emitHelper venomInst list arithmetic
 
 fun windows_tac thms =

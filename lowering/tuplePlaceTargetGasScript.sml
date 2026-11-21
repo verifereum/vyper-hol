@@ -3,7 +3,7 @@ Theory tuplePlaceTargetGas
 Ancestors
   tuplePlaceSourceHead exprSimHypsDefs gasContext targetPlaceSimCases
   vyperTypeEvalSoundness vyperTypeExprSoundness vyperExprNoControl
-  targetPlaceSim exprSimSource supportedExprTraverse vyperTypeCallGraph
+  targetPlaceSim exprSimSource supportedExprs supportedExprTraverse vyperTypeCallGraph
   targetPlaceLive targetPlaceSimCasesBase exprBodyPreProps bodyInvSplit bodyInvCodeProps vyperAST list alist
 
 (* The static part of each index's expr_body_pre, collected over the

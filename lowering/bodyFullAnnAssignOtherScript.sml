@@ -2,7 +2,8 @@
 Theory bodyFullAnnAssignOther
 Ancestors
   bodySim bodySimFull bodyFullPreds bodyFullAllocaFresh bodyFullUnwrap
-  bodyFullShared bodyFullAnnAssignMemoryPost bodyInvNoDalloca gasOutcomeFullCompose
+  bodyFullShared bodyFullAnnAssignMemoryPost gasOutcomeFullCompose
+  augAssignFullRhsSaved
   stmtSimDeclSource gasOutcomeFullStmts gasExemptCert vyperStorageTrace
   stmtLoweringMono allocLimits exprSimAggregateLayout bodyDeclCopyMemory
   annassignRelayoutSource memoryLocalRhsProps exprSimHyps exprSimHypsDefs
@@ -123,8 +124,6 @@ Theorem annassign_other_typed_full_execution:
     (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `~ctx_has_dalloca ctx` by
-    (drule body_inv_no_dalloca >> simp[]) >>
   `cenv.ce_alloca_locals` by
     (qpat_assum `body_inv tops ctx cenv cx`
        (strip_assume_tac o PURE_REWRITE_RULE [body_inv_def]) >>
@@ -206,8 +205,10 @@ Resume annassign_other_typed_full_execution[compose]:
   simp[] >> rpt strip_tac >> Cases_on `res`
   >- (qpat_x_assum `childR _ (INL _) _ _ _` mp_tac >>
       simp[Abbr `childR`, exprSimDefsTheory.expr_exit_def, NoAsms]) >>
-  fs[Abbr `childR`, stmt_exit_ptr_def, exprSimDefsTheory.halt_exit_def] >>
-  gvs[stmtSimPropsTheory.expr_exit_INR_type])
+  fs[Abbr `childR`] >>
+  irule (INST_TYPE [alpha |-> ``:value``]
+    augAssignFullRhsSavedTheory.augassign_expr_exit_to_stmt_exit) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC)
 QED
 
 Resume annassign_other_typed_full_execution[continuation]:

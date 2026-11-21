@@ -15,9 +15,7 @@ Definition supported_function_body_def:
     in ALL_DISTINCT (MAP FST args) /\
        EVERY (\n. ~MEM n (MAP FST args)) (MAP FST locals ++ MAP FST loops) /\
        supported_stmts tops bindings body /\
-       body_stmts_safe tops body /\
-       (vis = Internal ==>
-         ~supported_stmts_expr_exists expr_internal_call_root body)
+       body_stmts_safe tops body
 End
 
 Definition expr_msg_gas_root_def:
@@ -25,13 +23,20 @@ Definition expr_msg_gas_root_def:
   expr_msg_gas_root _ = F
 End
 
+Definition internal_defaults_msg_gas_def:
+  internal_defaults_msg_gas tops <=>
+    EXISTS (\top. case top of
+      FunctionDecl Internal _ _ _ _ _ defaults _ _ =>
+        EXISTS (supported_expr_exists expr_msg_gas_root) defaults
+    | _ => F) tops
+End
+
 (* Omitted defaults are lowered from the same expressions in both compiler
    runs. They must be invariant under the explicit gas-read shadowing. *)
 Definition supported_default_expression_def:
   supported_default_expression tops e <=>
     supported_expr tops e /\
-    ~supported_expr_exists expr_nonmain_type_root e /\
-    ~supported_expr_exists expr_msg_gas_root e
+    ~supported_expr_exists expr_nonmain_type_root e
 End
 
 (* The source-shape restriction on internal names. supported_declaration_names
@@ -178,7 +183,7 @@ Theorem supported_program_defaults:
     EVERY (supported_default_expression tops) defaults
 Proof
   strip_tac >> drule_all supported_program_declaration >>
-  Cases_on `vis = Internal` >>
+  Cases_on `vis = Deploy` >>
   simp[supported_declaration_header_def, supported_declaration_body_def, NULL_EQ]
 QED
 
@@ -187,13 +192,6 @@ Theorem supported_program_internal_names:
     ALL_DISTINCT (supported_internal_function_names tops)
 Proof
   simp[supported_program_def]
-QED
-
-Theorem supported_internal_body_contract:
-  supported_function_body tops Internal args stmts ==>
-    ~supported_stmts_expr_exists expr_internal_call_root stmts
-Proof
-  simp[supported_function_body_def]
 QED
 
 Theorem supported_function_body_binding_contract:

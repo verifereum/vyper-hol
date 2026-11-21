@@ -1,7 +1,7 @@
 (* Concat on the joint finite-horizon body contract. *)
 Theory bodyFullBuiltinConcat
 Ancestors exprSimDefs[qualified,ignore_grammar] stmtSimProps[qualified,ignore_grammar]
-  bodyFullBuiltinConcatLoop bodyFullBuiltinConcatFrame bodyFullOfVV bodyInvNoDalloca
+  bodyFullBuiltinConcatLoop bodyFullBuiltinConcatFrame bodyFullOfVV
   bodyFullHashKeccakFixed[qualified,ignore_grammar] bodyFullIfExpReach[qualified,ignore_grammar]
   bodyFullPreds bodySimFull gasOutcomeFullCompose gasOutcomeFullGuarded
   exprSimConcatResult exprSimConcatSource exprSimHyps exprSimSource

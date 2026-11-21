@@ -23,7 +23,7 @@ QED
 
 Theorem load_contract_singleton_tenv:
   load_contract orc gobs am tx [(NONE,tops)] [] = INL (am',rqs) /\
-  supported_program tops /\ supported_program_deploy tops ==>
+  am'.sources <> am.sources ==>
   get_tenv (initial_evaluation_context am'.sources am'.layouts tx NONE) =
     type_env tops
 Proof
@@ -37,6 +37,7 @@ Theorem load_contract_immutables_typed:
   !tops am tx orc gobs am' rqs pre vis name ty slot post tv v.
     deploy_source_ok tops am tx /\
     load_contract orc gobs am tx [(NONE, tops)] [] = INL (am', rqs) /\
+    am'.sources <> am.sources /\
     tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
     FLOOKUP (get_source_immutables NONE (account_immutables am' tx.target))
       name = SOME (tv,v) ==>
@@ -45,12 +46,6 @@ Proof
   rpt strip_tac >>
   `MEM (VariableDecl vis Immutable name ty slot) tops` by simp[] >>
   qpat_x_assum `tops = _` kall_tac >>
-  `supported_program tops` by
-    (qpat_x_assum `deploy_source_ok _ _ _` mp_tac >>
-     simp[deploy_source_ok_def]) >>
-  `supported_program_deploy tops` by
-    (qpat_x_assum `deploy_source_ok _ _ _` mp_tac >>
-     simp[deploy_source_ok_def]) >>
   `?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
     metis_tac[deploy_source_ok_def, deploy_typing_ok_constants_ready] >>
   drule_all load_contract_sources_layouts >> strip_tac >>

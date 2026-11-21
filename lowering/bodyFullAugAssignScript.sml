@@ -15,9 +15,9 @@ Ancestors stateFrame[qualified,ignore_grammar] bodyPtrDefs[qualified,ignore_gram
   augAssignFullStageFrames augAssignFullImmutableStageFrames augAssignFullWriteback
   augAssignFullOperandReady augAssignFullOperatorSource
   augAssignFullCurrentSource augAssignFullOperator bodyFullBuiltinWordPowCompose
-  bodyInvNoDalloca exprSimSource targetPlaceSim
+  exprSimSource targetPlaceSim
   bodyFullTarget bodyFullTargetDefs bodyPtrPopTargetFragTransport
-  stmtSimAugAssignPlace stmtSimAugAssignPlaceMemory stmtSimProps loweringPosts
+  stmtSimAugAssignPlace stmtSimAugAssignPlaceMemory stmtSimProps loweringPosts allocLimits
   gasContext targetPlaceSimCases stmtSimDefs vyperExprNoControl
   tuplePlaceHeadGas gasOutcomeFullGuarded
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
@@ -221,6 +221,46 @@ Proof
   suspend "use_ordinary"
 QED
 
+(* GATE_ADMISSION: held, nested immutable augmented assignment *)
+Theorem body_augassign_nested_immutable_full:
+  !cx aty bop t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
+       eval_target_place cx t s'' = (INL p,t') /\
+       read_place cx p s'3' = (INL cur,t'') /\
+       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_full_ok cx e) /\
+    body_base_target_full_ok cx t /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
+    supported_stmt tops bindings (AugAssign aty t bop e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (AugAssign aty t bop e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (AugAssign aty t bop e) = SOME env' /\
+    stmt_exprs_ok cenv (AugAssign aty t bop e) /\
+    call_evaluation_safe cx (int_calls_stmt (AugAssign aty t bop e)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    ~(?id. t = NameTarget id) /\
+    ~(?nsid. t = TopLevelNameTarget nsid /\
+             supported_scalar_target tops nsid) /\
+    ~(?id fld. t = AttributeTarget (NameTarget id) fld) /\
+    ~(?nsid fld. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
+                 supported_storage_field_write tops nsid fld) /\
+    immutable_root cx t /\ ~(?nsid. t = TopLevelNameTarget nsid) /\
+    ~supported_stmt_expr_exists (const_name_root cx) (AugAssign aty t bop e) ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (AugAssign aty t bop e))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty t bop e)))
+      (eval_stmt cx (AugAssign aty t bop e)) es
+Proof
+  cheat
+QED
+
 (* Every other base target. *)
 Theorem body_augassign_other_full:
   !cx aty bop t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
@@ -257,6 +297,14 @@ Theorem body_augassign_other_full:
       (eval_stmt cx (AugAssign aty t bop e)) es
 Proof
   rpt gen_tac >> strip_tac >>
+  Cases_on `immutable_root cx t /\ ~(?nsid. t = TopLevelNameTarget nsid)`
+  >- (drule_all bodySimTheory.body_inv_stmt_const_name_free >> strip_tac >>
+      irule body_augassign_nested_immutable_full >> metis_tac[]) >>
+  `target_mutable env t` by
+    (qpat_assum `type_stmt _ _ _ = _` mp_tac >>
+     simp[NoAsms, Once type_stmt_def, AllCaseEqs()]) >>
+  `immutable_root cx t ==> ?nsid. t = TopLevelNameTarget nsid` by
+    metis_tac[] >>
   drule_all augassign_other_target_routes >>
   disch_then (DISJ_CASES_THEN STRIP_ASSUME_TAC)
   >- suspend "ordinary" >>
@@ -396,6 +444,10 @@ Proof
        qpat_assum `!tail. eval_target_place _ _ _ = _`
          (qspec_then `[]` (ACCEPT_TAC o REWRITE_RULE [APPEND_NIL,upd])))) >>
   qmatch_asmsub_abbrev_tac `eval_target_place cx t (es with gas_obs := reads) = (INL p,st)` >>
+  `!id path. p = MemoryPlace id path ==>
+    ?entry v. lookup_scopes id st.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value path = INL v` by
+    fs[Abbr `targetQ`] >>
   `!H. valid_horizon cx st0 H st.storage_trace ==>
      target_post H ctx func cenv cx es sa ca s0 st (PlaceR p) (Type aty) r v /\
      target_ptr_ok cenv (PlaceR p) r Gtarget tnt v /\
@@ -860,6 +912,10 @@ Resume augassign_ordinary_full[ordinary_memory_write]:
       (INL cur,st with gas_obs := rhsReads) /\
    place_type_value cx (MemoryPlace id path) (st with gas_obs := rhsReads) =
       (INL ptv,st with gas_obs := rhsReads)` by simp[] >>
+  `~aug_assign_overlap cenv t e` by fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  `target_pre cenv cx env t (es with gas_obs := reads ++ rhsReads)` by
+    (pure_rewrite_tac[targetSubscriptSplitTheory.target_subscript_pre_gas_obs] >>
+     first_assum ACCEPT_TAC) >>
   drule_all (REWRITE_RULE [ETA_AX] augassign_memory_current_source_ready) >>
   strip_tac >>
   `stmt_res_ok lctx wr` by
@@ -925,7 +981,7 @@ Resume body_augassign_local_full[use_ordinary]:
   rpt gen_tac >> strip_tac >>
   drule_then strip_assume_tac augassign_name_target_info >>
   `~immutable_root cx (NameTarget id)` by
-    metis_tac[bodyAugPlaceTargetTheory.aug_place_supported_root_not_immutable] >>
+    simp[immutable_root_def,target_root_def] >>
   irule augassign_ordinary_full >>
   qpat_assum `supported_stmt _ _ _` (irule_at Any) >>
   qpat_assum `type_stmt _ _ _ = _` (irule_at Any) >>
@@ -953,7 +1009,7 @@ Resume body_augassign_attr_local_full[use_ordinary]:
      qpat_assum `supported_stmt _ _ _` (irule_at Any) >>
      qpat_assum `body_inv _ _ _ _` (irule_at Any) >> simp[]) >>
   `~immutable_root cx (AttributeTarget (NameTarget id) fld)` by
-    metis_tac[bodyAugPlaceTargetTheory.aug_place_supported_root_not_immutable] >>
+    simp[immutable_root_def,target_root_def] >>
   irule augassign_ordinary_full >>
   qpat_assum `supported_stmt _ _ _` (irule_at Any) >>
   qpat_assum `type_stmt _ _ _ = _` (irule_at Any) >>
@@ -970,7 +1026,7 @@ Resume body_augassign_attr_storage_full[use_ordinary]:
      qpat_assum `supported_stmt _ _ _` (irule_at Any) >>
      qpat_assum `body_inv _ _ _ _` (irule_at Any) >> simp[]) >>
   `~immutable_root cx (AttributeTarget (TopLevelNameTarget nsid) fld)` by
-    metis_tac[bodyAugPlaceTargetTheory.aug_place_supported_root_not_immutable] >>
+    metis_tac[bodyAugPlaceTargetTheory.aug_place_storage_field_root] >>
   irule augassign_ordinary_full >>
   qpat_assum `supported_stmt _ _ _` (irule_at Any) >>
   qpat_assum `type_stmt _ _ _ = _` (irule_at Any) >>

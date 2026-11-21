@@ -3,27 +3,13 @@ Theory bodyFullBuiltinWordPowCompose
 Ancestors
   bodyFullShadowBodyInv
   bodyFullPreds bodySimFull bodyFullShared gasOutcomeFullCompose
-  bodyInvNoDalloca contextRawReachable unitMemInv bodyFullIfExpReach
+  contextRawReachable unitMemInv bodyFullIfExpReach
   exprSimWordBuiltins exprSimSource gasShadowCompileStmtHelpers
   fragGasSeqPtr bodyFullGhostFrame bodyFullBuiltinWordPowPost wordArgsPtr
   gasExemptCert vyperStorageTrace exprSimWordArgs exprLoweringProps
   exprSimHypsDefs exprLowering vyperAST vyperTypeSystem list finite_map words
 
 val _ = Parse.hide "body";
-
-Theorem pow_compose_reachable_no_wrap:
-  body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions ==>
-  !t fn inst u. frag_reachable ctx func t fn inst u ==>
-    dalloca_no_wrap inst u
-Proof
-  rpt strip_tac >>
-  drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
-  drule bodyInvNoDallocaTheory.body_inv_no_dalloca >>
-  simp[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM] >>
-  strip_tac >>
-  `inst.inst_opcode <> DALLOCA` by metis_tac[] >>
-  simp[unitTransformDefsTheory.dalloca_no_wrap_def]
-QED
 
 Theorem pow_mod256_sim_full_from_suffix:
   (!DF lo explicit ctx func PG d cenv cx st0 ee sm sb x y op t G1 tn1 ann ts (va:bytes32) (vb:bytes32).

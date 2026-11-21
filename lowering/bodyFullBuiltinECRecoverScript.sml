@@ -2,7 +2,7 @@
 Theory bodyFullBuiltinECRecover
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullExprGeneric bodyFullPreds bodySimFull bodyInvNoDalloca
+  bodyFullExprGeneric bodyFullPreds bodySimFull
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyFullBuiltinPrecompileRecoveryArgs bodyFullBuiltinPrecompileRecoveryBuffers
   bodyFullBuiltinPrecompileSuffixSuccess bodyFullBuiltinPrecompileSuffixAbort

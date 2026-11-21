@@ -1,7 +1,7 @@
 (* A halting callee inherits the allocation bound of its terminal step. *)
 Theory bodyFullIntCallReturnHalt
 Ancestors
-  fragGasOriginPtr ptrSafeRun ptrDiscipline ptrDisciplineEmptyTaint opcodeClass
+  gasOutcomeFull fragGasOriginPtr ptrSafeRun ptrDiscipline ptrDisciplineEmptyTaint opcodeClass
   fnFrameBoundaryInvoke venomExecSemantics venomExecProofs venomInstProofs
 
 Theorem noninvoke_halt_initial_fmp[local]:
@@ -109,4 +109,40 @@ Proof
   TRY (drule_all terminator_ok_not_halted >> strip_tac >> gvs[] >> NO_TAC) >>
   drule (cj 1 ptr_safe_halt_fmp) >>
   disch_then (qspec_then `h` match_mp_tac) >> metis_tac[]
+QED
+
+Theorem gas_origin_ptr_path_halt_fmp:
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (s,G,tn) marks (Halt h,G',tn') ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp h)
+Proof
+  qsuff_tac
+    `!cx st marks out. gas_origin_ptr_path cx st marks out ==>
+      case (cx, out) of
+        ((D,lo,explicit,ctx,func,PG), (r,G',tn')) =>
+          !h. r = Halt h /\ ctx_has_dalloca ctx ==> allocas_below_fmp h`
+  >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  ho_match_mp_tac fragGasOriginPtrTheory.gas_origin_ptr_path_ind >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  drule_all gas_origin_ptr_edge_halt_fmp >>
+  simp[]
+QED
+
+Theorem gas_outcome_full_halt_room:
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0 source
+    (es,s,G,tn) Q R ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0 source
+    (es,s,G,tn) Q
+    (\H res ee gt r. R H res ee gt r /\
+      (ctx_has_dalloca ctx ==> !h. r = Halt h ==> allocas_below_fmp h))
+Proof
+  rw[gas_outcome_full_def] >> qexists_tac `marks`
+  >- metis_tac[]
+  >- (disj2_tac >> disj1_tac >>
+      qexistsl [`res`, `ee`, `r`, `G'`, `tn'`] >> simp[] >>
+      rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[] >>
+      strip_tac >> disj2_tac >>
+      rpt strip_tac >> gvs[] >>
+      drule gas_origin_ptr_path_halt_fmp >> simp[]) >>
+  metis_tac[]
 QED

@@ -63,7 +63,8 @@ Theorem supported_immutable_type_find_NONE:
     src = NONE /\ find_var_decl_by_name id tops = NONE
 Proof
   rpt gen_tac >> simp[supported_immutable_type_def, AllCaseEqs()] >>
-  strip_tac >> drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
+  strip_tac >> gvs[] >>
+  drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
   metis_tac[find_var_decl_immutable_NONE]
 QED
 

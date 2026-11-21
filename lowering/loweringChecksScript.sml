@@ -38,7 +38,6 @@ Ancestors
   vyperMembershipParityTest vyperMembershipMatrixTest
   (* more interface contracts on concrete inputs; raw RETURN's copy *)
   e2eBoundaryTest groupedDispatchProps rawReturnCopy
-  entryPackagedRuntimeCode
   (* compiled creation code and events *)
   vyperCreateMemoryTest vyperEventForwardStruct vyperEventArgumentLifetime
   abiEmptyLogPath bodyFullLog

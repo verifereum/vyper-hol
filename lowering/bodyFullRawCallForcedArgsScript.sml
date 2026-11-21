@@ -3,7 +3,7 @@
 Theory bodyFullRawCallForcedArgs
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullPreds bodyInvNoDalloca exprSimRawCall exprSimSource
+  bodyFullPreds bodyFullIfExpReach exprSimRawCall exprSimSource
   gasOutcomeFullCompose gasExemptCert vyperStorageTrace vyperStorageFootprint
   gasShadowState bodyMemoryDefs contextRawReachable ptrDiscipline unitTransformDefs
   stmtSimProps vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants
@@ -32,6 +32,8 @@ Theorem raw_call_forced_args_full:
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   return_buf_frame dframe cenv sa s0 /\ alloca_history func s0 /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s0 /\
     storage_well_formed_on cx es (FST H) /\
@@ -48,6 +50,7 @@ Theorem raw_call_forced_args_full:
     esA.gas_obs = [] /\ esD.gas_obs = [] /\
     body_exprs_full_ok cx kws /\ expr_sim_inv cenv cx env esD /\
     storage_trace_domain cx st0 esD.storage_trace /\
+    (!fn inst s. frag_reachable ctx func tD fn inst s ==> dalloca_no_wrap inst s) /\
     (!H. valid_horizon cx st0 H esD.storage_trace ==>
       expr_post H ctx func cenv cx a es sa s1 s0 esA av addr tA /\
       expr_store_bound cx (post_value_type cenv a) av addr tA /\
@@ -78,12 +81,8 @@ Theorem raw_call_forced_args_full:
     (es,s0,G0,tn0) Q R
 Proof
   strip_tac >>
-  drule body_inv_no_dalloca >> strip_tac >>
-  `!start fn inst s. frag_reachable ctx func start fn inst s ==>
-    dalloca_no_wrap inst s` by
-    (rpt strip_tac >> drule frag_reachable_members >> disch_then drule >>
-     strip_tac >> fs[ctx_has_dalloca_def, EXISTS_MEM, dalloca_no_wrap_def] >>
-     metis_tac[]) >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[body_inv_no_phi] >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   `expr_body_pre cenv cx env a es` by
     (irule expr_body_pre_raw_call_arg >>
@@ -113,7 +112,7 @@ Proof
       (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e x G t) /\
       ghost_kept_at lo cenv ei ca Gi tni t0 G tn) /\
     ~t.vs_halted /\ ee.gas_obs = [])` >>
-  irule gas_outcome_full_bind_all >> rpt conj_tac
+  irule gas_outcome_full_bind_all_path >> rpt conj_tac
   >~ [`gas_marked_exec _ _ _ _ _ _ _`]
   >- (POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
       irule gas_exempt_cert_bind_value >>
@@ -137,7 +136,17 @@ Proof
   qx_genl_tac [`marksA`,`resA`,`esA`,`GA`,`tnA`,`tA`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon esA.storage_trace)
      esA.storage_trace` by fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H esA.storage_trace ==> _`
+  `!fn inst s. frag_reachable ctx func tA fn inst s ==> dalloca_no_wrap inst s` by
+    (qpat_assum `!H. valid_horizon _ _ H esA.storage_trace ==>
+       gas_origin_ptr_path _ (s0,G0,tn0) marksA (OK tA,GA,tnA)`
+       (qspec_then `storage_trace_horizon esA.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> disch_then (fn path =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn phi =>
+       qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _`
+         (ACCEPT_TAC o (fn nowrap =>
+           MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+             (LIST_CONJ [path, phi, nowrap])))))) >>
+  qpat_assum `!H. valid_horizon _ _ H esA.storage_trace ==> _ _ esA GA tnA tA`
     (qspec_then `storage_trace_horizon esA.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   qpat_assum `Abbrev (P = _)`
@@ -179,7 +188,7 @@ Proof
     stmt_state_rel H ctx func cenv cx esA tA /\
     storage_well_formed_on cx esA (FST H) /\
     ghost_inv_at (DF H) lo dframe cenv cx esA GA tnA tA` by
-    (qpat_assum `!H. valid_horizon _ _ H esA.storage_trace ==> _` mp_tac >>
+    (qpat_assum `!H. valid_horizon _ _ H esA.storage_trace ==> _ _ esA GA tnA tA` mp_tac >>
      simp[Abbr `P`,NoAsms] >> POP_ASSUM_LIST (K all_tac) >>
      rpt strip_tac >> first_x_assum drule >> simp[expr_post_def]) >>
   `gas_admissible (bind (eval_expr cx d) (read_result cx)) expr_res_ok esA` by
@@ -189,7 +198,7 @@ Proof
   disch_then (qspecl_then [`st0`,`s1`,`s2`,`shadow_s1`,`shadow_s2`,
                            `data`,`tA`,`GA`,`tnA`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
-  irule gas_outcome_full_bind_all >> rpt conj_tac
+  irule gas_outcome_full_bind_all_path >> rpt conj_tac
   >~ [`gas_marked_exec _ _ _ _ _ _ _`]
   >- (POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
       irule gas_exempt_cert_bind_value >>
@@ -212,7 +221,17 @@ Proof
   qx_genl_tac [`marksD`,`resD`,`esD`,`GD`,`tnD`,`tD`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon esD.storage_trace)
      esD.storage_trace` by fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==> _`
+  `!fn inst s. frag_reachable ctx func tD fn inst s ==> dalloca_no_wrap inst s` by
+    (qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==>
+       gas_origin_ptr_path _ (tA,GA,tnA) marksD (OK tD,GD,tnD)`
+       (qspec_then `storage_trace_horizon esD.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> disch_then (fn path =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn phi =>
+       qpat_assum `!fn inst s. frag_reachable ctx func tA fn inst s ==> _`
+         (ACCEPT_TAC o (fn nowrap =>
+           MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+             (LIST_CONJ [path, phi, nowrap])))))) >>
+  qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==> _ _ esD GD tnD tD`
     (qspec_then `storage_trace_horizon esD.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   simp[Abbr `P`,NoAsms] >> strip_tac >>
@@ -251,7 +270,7 @@ Proof
      irule storage_trace_frame_bind_all >>
      simp[cj 5 evaluate_storage_trace_frame,storage_trace_frame_read_result]) >>
   qpat_x_assum `!gsA av esA tA GA tnA gsD bs esD tD GD tnD. _` irule >>
-  simp[] >>
+  simp[] >> (conj_tac >- first_assum ACCEPT_TAC) >>
   qexistsl [`GA`,`esA`,`gasSummary$gas_explicit marksA s0.vs_gas_readings`,
             `gasSummary$gas_explicit marksD tA.vs_gas_readings`,`tA`,`tnA`] >>
   simp[] >> qx_gen_tac `H` >> disch_tac >>

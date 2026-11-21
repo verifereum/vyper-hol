@@ -17,7 +17,7 @@ Proof
   strip_tac >>
   drule aug_place_typing >> strip_tac >>
   qpat_x_assum `supported_immutable_type _ _ = _` mp_tac >>
-  simp[supported_immutable_type_def, AllCaseEqs()] >> strip_tac >>
+  simp[supported_immutable_type_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
   drule_then strip_assume_tac supported_variable_decl_mem >> gvs[] >>
   `get_module_code cx src = SOME tops` by metis_tac[contract_inv_module_codes] >>
   drule_then assume_tac expr_sim_inv_mods_env >>

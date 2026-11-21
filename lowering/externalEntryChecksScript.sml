@@ -1,8 +1,4 @@
-(* The entry of the lowered runtime unit up to the selected external
-   function's entry checks: from the initial state, the selector dispatch
-   reaches the start of compile_entry_checks for the function the source
-   selects (external_entry_reaches_checks), for the s1-entry-return
-   pieces. *)
+(* Selector dispatch and runtime entry-check facts. *)
 Theory externalEntryChecks
 Ancestors
   externalEntryShape
@@ -900,68 +896,6 @@ Proof
   irule ALL_DISTINCT_MAP_INJ >> simp[]
 QED
 
-Theorem source_runtime_entry_checks_code:
-  !tops rpolicy unit mut nr rr name args dflts ret fbody
-   lbl ce pos_args min_cds pay nr' key ut iv rt.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
-    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
-    MEM (mut,nr,rr,name,args,dflts,ret,fbody) (FST (classify_functions tops)) /\
-    set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops T (K global_nonreentrant_slot)
-        (mut,nr,rr,name,args,dflts,ret,fbody)) =
-      (lbl,ce,pos_args,min_cds,pay,nr',key,ut,iv,fbody,rt) ==>
-    ?func fb sa sd st st'.
-      unit.cu_context.ctx_entry = SOME "__entry" /\
-      venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
-      func.fn_blocks <> [] /\ (HD func.fn_blocks).bb_label = "__entry" /\
-      fresh_label "fallback" (initial_compile_state "__entry") = (fb,sa) /\
-      compile_selector_dispatch_linear
-        (MAP (\(sel,lbl,z). (sel,lbl))
-          (build_selectors (type_env tops) (FST (classify_functions tops))))
-        fb sa = ((),sd) /\ fn_has_code sa sd func /\
-      compile_entry_checks min_cds pay st = ((),st') /\ fn_has_code st st' func /\
-      st.cs_current_bb = lbl /\ st.cs_current_insts = [] /\
-      sd.cs_next_var <= st.cs_next_var
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule classified_external_labels_distinct >> disch_tac >>
-  qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
-  simp[lower_vyper_runtime_unit_def] >>
-  Cases_on `classify_functions tops` >> PairCases_on `r` >>
-  rename1 `classify_functions tops = (exts,ints,fallback,ctor)` >>
-  simp[] >> strip_tac >>
-  `~EXISTS external_has_defaults exts` by
-    (drule loweringShapePropsTheory.supported_program_no_external_defaults >>
-     qpat_assum `classify_functions tops = _` (fn th => simp[th])) >>
-  qpat_x_assum `(if EXISTS external_has_defaults exts then _ else _) = _`
-    mp_tac >>
-  asm_rewrite_tac[] >> strip_tac >>
-  `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl)
-     (build_selectors (type_env tops) exts)` by
-    simp[loweringShapePropsTheory.build_selectors_fn_labels] >>
-  qmatch_asmsub_abbrev_tac `run_lowering selectors packages internal_fns fallback_fn` >>
-  `EVERY (\p. isPREFIX "fn_" (FST p)) packages` by
-    (simp[Abbr `packages`, EVERY_MAP, EVERY_MEM, FORALL_PROD,
-          set_external_package_target_def, package_external_fn_def, LET_THM]) >>
-  `ALL_DISTINCT (MAP FST packages)` by
-    (gvs[Abbr `packages`, MAP_MAP_o, combinTheory.o_DEF,
-         pairTheory.LAMBDA_PROD, set_external_package_target_def,
-         package_external_fn_def, LET_THM]) >>
-  `EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internal_fns)` by
-    (simp_tac std_ss [Abbr `internal_fns`, GSYM MAP_MAP_o,
-          internal_fn_descriptors_set_internal_package_target,
-          internal_fn_descriptors_MAP_package_internal_fn] >>
-     simp_tac std_ss [EVERY_MAP, EVERY_MEM, FORALL_PROD,
-          source_internal_fn_descriptor_def, LET_THM] >>
-     rewrite_tac[loweringShapeDefsTheory.internal_label_ok_def,
-                 internal_fn_label_prefix]) >>
-  `MEM (lbl,ce,pos_args,min_cds,pay,nr',key,ut,iv,fbody,rt) packages` by
-    (simp[Abbr `packages`, MEM_MAP] >> fs[] >>
-     goal_assum (drule_at Any) >> simp[]) >>
-  drule_all run_lowering_entry_checks_code_labels >>
-  simp[Abbr `selectors`]
-QED
-
 Theorem linear_dispatch_entry_no_phi:
   !selectors fallback sa sd func.
     compile_selector_dispatch_linear selectors fallback sa = ((),sd) /\
@@ -1079,62 +1013,3 @@ Proof
   irule entry_context_continuation >> simp[] >>
   qexistsl_tac [`bb`, `fuel`, `tt`] >> gvs[Abbr `ss`]
 QED
-
-Theorem external_entry_reaches_checks:
-  !tops rpolicy unit am tx ret vs mut args fbody.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) ==>
-    ?rr lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st st' func
-     s0.
-      set_external_package_target rpolicy.rpol_target
-        (package_external_fn tops T (K global_nonreentrant_slot)
-           (mut, F, rr, tx.function_name, args, ([] : expr list), ret,
-            subst_consts_stmts (module_consts_env tops []) fbody)) =
-        (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv,
-         subst_consts_stmts (module_consts_env tops []) fbody, rt) /\
-      compile_entry_checks min_cds is_payable st = ((), st') /\
-      fn_has_code st st' func /\
-      vars_pc_only vs s0 /\ fresh_vars_wrt st s0 /\ ~s0.vs_halted /\
-      s0.vs_current_bb = st.cs_current_bb /\
-      s0.vs_inst_idx = LENGTH st.cs_current_insts /\
-      !fuel r. run_from fuel unit.cu_context func s0 = r /\
-               (!e. r <> Error e) ==>
-               ?fuel'. run_context fuel' unit.cu_context vs = r
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all selected_external_dispatch >> strip_tac >>
-  qspecl_then [`tops`, `rpolicy.rpol_target`, `mut`, `rr`,
-               `tx.function_name`, `args`, `ret`,
-               `subst_consts_stmts (module_consts_env tops []) fbody`]
-    strip_assume_tac selected_external_package >>
-  drule entryStateRelTheory.source_typing_ok_external_names_distinct >> strip_tac >>
-  drule_all source_runtime_entry_checks_code >> strip_tac >>
-  `fn_entry_label func = SOME "__entry"` by
-    simp[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def,
-         listTheory.NULL_EQ] >>
-  `LENGTH vs.vs_call_ctx.cc_calldata < dimword (:256)` by
-    (drule_all initial_venom_state_calldata_length >> simp[]) >>
-  `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
-    fs[initial_venom_state_rel_def] >>
-  `EVERY (\(sel,lbl). sel < 2 ** 32)
-     (MAP (\(sel,lbl,z). (sel,lbl))
-       (build_selectors (type_env tops) (FST (classify_functions tops))))` by
-    simp[linear_selectors_lt] >>
-  `linear_dispatch_target vs.vs_call_ctx.cc_calldata
-     (MAP (\(sel,lbl,z). (sel,lbl))
-       (build_selectors (type_env tops) (FST (classify_functions tops)))) fb =
-     st.cs_current_bb` by simp[] >>
-  drule_all linear_dispatch_context_reaches >> strip_tac >>
-  qexistsl_tac [`rr`, `"fn_" ++ tx.function_name`, `cenv`, `pos_args`,
-                `min_cds`, `is_payable`, `nkey`, `ut`, `iv`, `rt`,
-                `st`, `st'`, `func`, `s0`] >> simp[] >>
-  rpt strip_tac >> first_x_assum irule >> simp[] >>
-  qexists_tac `fuel` >> simp[]
-QED
-

@@ -32,7 +32,7 @@ Ancestors bodyFullIntCall bodyFullIntCallArgs bodyFullIntCallCallee bodyIntCallS
   supportedExprs supportedStmtTraverse supportedExprTraverse
   msgGasFull exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
   vyperAST vyperInterpreter vyperState vyperValue list
-  selfdestructHalt bodyInvNoDalloca gasOutcomeFullCompose gasExemptOrigin
+  selfdestructHalt bodyFullHashKeccakFixed gasOutcomeFullCompose gasExemptOrigin
   exprOperandVar exprCallbackContracts builtinSystem emitHelper allocLimits exprLowering exprLoweringProps gasShadowState compileEnv fragExec fragGasEmitCtrl vfmSameFrame ptrSafeRun ptrDiscipline gasEvents gasCount memSafeRun instMemFrontier venomExecSemantics venomInst venomState unitTransformDefs contextCodegenRel codegenRel bodyPtrDefs rich_list
 Libs
   pairLib
@@ -153,16 +153,27 @@ Proof
      arg_type_fits (lowered_value_type cenv e) (expr_type e))`
       >- (gvs[] >> irule body_assign_local_memory_full >> metis_tac[]) >>
       gvs[] >> irule body_assign_local_widened_full >> metis_tac[]) >>
-  Cases_on `?nsid. t = TopLevelNameTarget nsid /\
-                   supported_scalar_target tops nsid`
-  >- (gvs[] >> irule body_assign_toplevel_word_full >> metis_tac[]) >>
+  Cases_on `?nsid dty mut slot.
+              t = TopLevelNameTarget nsid /\
+              supported_variable_decl tops nsid = SOME (Private,mut,dty,SOME slot) /\
+              (mut = Storage \/ mut = Transient) /\
+              type_place_target env t = SOME (Type dty) /\
+              is_bytestring_type dty /\ is_bytestring_type (lowered_value_type cenv e)`
+  >- (gvs[] >> drule_all body_inv_stmt_const_name_free >> strip_tac >>
+      irule body_assign_toplevel_bytes_full >> metis_tac[]) >>
   Cases_on `?nsid mut ty slot.
               t = TopLevelNameTarget nsid /\
               supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
               (mut = Storage \/ mut = Transient) /\
               ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
-              0 < type_memory_bytes cenv ty /\ expr_type e = ty`
+              ~is_bytestring_type ty /\
+              0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
+              lowered_value_type cenv e = expr_type e`
   >- (gvs[] >> irule body_assign_toplevel_copy_full >> metis_tac[]) >>
+  Cases_on `?nsid dty. t = TopLevelNameTarget nsid /\
+                       supported_scalar_target tops nsid /\
+                       type_place_target env t = SOME (Type dty) /\ is_word_type dty`
+  >- (gvs[] >> irule body_assign_toplevel_word_full >> metis_tac[]) >>
   Cases_on `?id fld sid fty.
               t = AttributeTarget (NameTarget id) fld /\
               FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -188,6 +199,10 @@ Theorem body_assign_tuple_case_full:
     body_stmt_full_ok cx (Assign (TupleTarget gs) e)
 Proof
   rw[body_stmt_full_ok_def] >>
+  drule_all body_inv_stmt_const_name_free >> strip_tac >>
+  Cases_on `EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
+                    ~(?nsid. t = TopLevelNameTarget nsid)) gs`
+  >- (irule body_assign_tuple_nested_immutable_full >> metis_tac[]) >>
   reverse (Cases_on `lowered_value_type cenv e = expr_type e`)
   >- (irule body_assign_tuple_widened_full >> metis_tac[]) >>
   Cases_on `?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
@@ -195,7 +210,7 @@ Proof
   >- (gvs[] >> drule_all assign_tuple_locals_bytes_pos >> strip_tac >>
       `EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
                         0 < type_memory_bytes cenv ty) ids` by
-        (fs[EVERY_MEM] >> metis_tac[]) >>
+        (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
       irule body_assign_tuple_locals_full >> metis_tac[]) >>
   Cases_on `EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
                                 FLOOKUP env.var_types id = SOME ty /\
@@ -209,7 +224,27 @@ Proof
                           type_place_target env
                             (AttributeTarget (TopLevelNameTarget nsid) fld) =
                             SOME (Type fty) /\ is_word_type fty)) gs`
-  >- (irule body_assign_tuple_targets_full >> metis_tac[]) >>
+  >- (Cases_on `EXISTS (\g. ?nsid dty mut slot.
+      g = BaseTarget (TopLevelNameTarget nsid) /\
+      supported_scalar_target tops nsid /\
+      type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) /\
+      supported_variable_decl tops nsid = SOME (Private,mut,dty,SOME slot) /\
+      (mut = Storage \/ mut = Transient) /\ is_bytestring_type dty) gs`
+      >- (irule body_assign_tuple_targets_private_bytes_full >> metis_tac[]) >>
+      Cases_on `EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
+                   FLOOKUP env.var_types id = SOME ty /\
+                   0 < type_memory_bytes cenv ty) \/
+                (?nsid dty. g = BaseTarget (TopLevelNameTarget nsid) /\
+                  supported_scalar_target tops nsid /\
+                  type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) /\
+                  is_word_type dty) \/
+                (?nsid fld fty.
+                   g = BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld) /\
+                   supported_storage_field_write tops nsid fld /\
+                   type_place_target env (AttributeTarget (TopLevelNameTarget nsid) fld) =
+                     SOME (Type fty) /\ is_word_type fty)) gs`
+      >- (irule body_assign_tuple_targets_word_full >> metis_tac[]) >>
+      irule body_assign_tuple_other_full >> metis_tac[]) >>
   irule body_assign_tuple_other_full >> metis_tac[]
 QED
 
@@ -375,7 +410,16 @@ Proof
   ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
       irule word_builtin_sim_full >>
-      metis_tac[expr_vv_sim_stack_full, post_value_type_word]) >>
+      conj_tac
+      >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+          irule expr_vv_sim_stack_full >>
+          rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+          Cases_on `is_word_type (expr_type e)` >- simp[] >>
+          qpat_assum `~is_word_type (expr_type e) ==> _` drule >> simp[]) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- (qexists_tac `tops` >> asm_rewrite_tac[]) >>
+      qexists_tac `env` >> asm_rewrite_tac[]) >>
   rpt gen_tac >> strip_tac >> gvs[]
 QED
 
@@ -531,14 +575,19 @@ Proof
   irule extcall_body_full_ok_of_vv >> rpt gen_tac >> strip_tac >>
   `acyclic_struct_metadata cenv.ce_struct_fields` by
     fs[bodySimTheory.body_inv_def] >>
-  drule_then assume_tac body_inv_no_dalloca >>
   rewrite_tac [expr_vv_sim_full_def] >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  MATCH_MP_TAC (Q.INST [`Q'` |-> `Q`,
-    `R` |-> `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`]
-    gas_outcome_full_post_mono) >>
-  BETA_TAC >> conj_tac
-  >- (ho_match_mp_tac (GEN_ALL (SIMP_RULE bool_ss [LET_THM] extcall_request_full)) >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
+  irule gas_outcome_full_post_mono >>
+  qexistsl_tac [`Q`, `\H res ee gt r.
+    (expr_exit res r /\ halt_exit H cx ee res r) /\
+    (ctx_has_dalloca ctx ==> !h. r = Halt h ==> allocas_below_fmp h)`] >>
+  BETA_TAC >> simp[Abbr `R`] >>
+  qunabbrev_tac `Q` >>
+  irule (BETA_RULE (Q.SPEC
+        `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`
+        (Q.GEN `R` bodyFullIntCallReturnHaltTheory.gas_outcome_full_halt_room))) >>
+      ho_match_mp_tac (GEN_ALL (SIMP_RULE bool_ss [LET_THM] extcall_request_full)) >>
       rpt (goal_assum (drule_at Any)) >>
       conj_tac
       >- qpat_assum `!st target mid src vs ee. _ ==>
@@ -561,8 +610,7 @@ Proof
       simp[LENGTH_APPEND] >>
       qhdtm_assum `extcall_request_ready` (irule_at Any) >>
       rpt (goal_assum (drule_at Any)) >>
-      fs[]) >>
-  simp[]
+      fs[]
 QED
 
 (* The joint twin of body_for_case_ptr_at (bodyPtrCtrlCases),
@@ -580,10 +628,13 @@ Theorem body_for_case_full:
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
        (INL tyv,t) ==>
-       body_iterator_full_ok cx it) ==>
+       body_iterator_full_ok cx it) /\
+    (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+       stmt_loop_calls_ok [(NONE,tops)] (For id typ it n body)) ==>
     body_stmt_full_ok cx (For id typ it n body)
 Proof
   rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by fs[body_inv_def] >>
   irule compile_for_frag_full >> metis_tac[]
 QED
 
@@ -628,8 +679,43 @@ fun apply_case_lift lift =
     disch_then ACCEPT_TAC
   end;
 
+Definition internal_defaults_const_names_def:
+  internal_defaults_const_names tops <=>
+    EXISTS (\top. case top of
+      FunctionDecl Internal _ _ _ _ _ dflts _ ss =>
+        supported_exprs_exists (const_name_root_mods [(NONE,tops)]) dflts \/
+        supported_stmts_expr_exists (const_name_root_mods [(NONE,tops)]) ss
+    | _ => F) tops
+End
+
+Theorem body_intcall_plain_defaults[local]:
+  MEM (FunctionDecl Internal mut nr rr fn args dflts ret ss) tops /\
+  cx_tops cx = tops /\
+  ~internal_defaults_const_names tops /\ ~internal_defaults_msg_gas tops ==>
+  ~supported_exprs_exists (const_name_root cx) dflts /\
+  ~supported_stmts_expr_exists (const_name_root cx) ss /\
+  ~supported_exprs_exists expr_msg_gas_root (DROP n dflts)
+Proof
+  strip_tac >>
+  `const_name_root_mods [(NONE,tops)] = const_name_root cx` by
+    metis_tac[const_name_root_mods_singleton] >>
+  `~supported_exprs_exists (const_name_root cx) dflts /\
+    ~supported_stmts_expr_exists (const_name_root cx) ss` by
+    (qpat_x_assum `~internal_defaults_const_names tops` mp_tac >>
+     simp[internal_defaults_const_names_def, EXISTS_MEM] >>
+     disch_then (qspec_then `FunctionDecl Internal mut nr rr fn args dflts ret ss`
+       mp_tac) >> simp[]) >>
+  simp[] >> irule bodyStorageCasesTheory.supported_exprs_exists_DROP >>
+  qpat_x_assum `~internal_defaults_msg_gas tops` mp_tac >>
+  simp[supportedProgramTheory.internal_defaults_msg_gas_def, EXISTS_MEM] >>
+  disch_then (qspec_then `FunctionDecl Internal mut nr rr fn args dflts ret ss`
+    mp_tac) >> simp[supported_exprs_exists_every, EVERY_MEM] >> metis_tac[]
+QED
+
 Theorem body_intcall_case_full:
   !cx v16 src_id_opt fn es v17.
+    (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+       ~internal_defaults_const_names tops /\ ~internal_defaults_msg_gas tops) /\
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
          ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
          t'5' s'8' dflt_vs t'6' all_tenv s'9' env t'7' s'10' rtv
@@ -700,6 +786,20 @@ Proof
   ONCE_REWRITE_TAC[body_expr_full_ok_def] >> simp[] >>
   rpt gen_tac >> strip_tac >>
   drule_all body_intcall_source_selection >> strip_tac >>
+  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+    cx_tops cx = tops` by
+    (drule bodyInvCodePropsTheory.body_inv_main_code >> strip_tac >>
+     fs[body_inv_def]) >>
+  qpat_assum `!ts. ALOOKUP _ _ = SOME _ ==> _` (drule_then strip_assume_tac) >>
+  `~supported_exprs_exists (const_name_root cx) dflts /\
+    ~supported_stmts_expr_exists (const_name_root cx) ss /\
+    ~supported_exprs_exists expr_msg_gas_root
+        (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)` by
+    (drule_all body_intcall_plain_defaults >> simp[]) >>
+  `~supported_exprs_exists (const_name_root cx)
+        (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)` by
+    (irule bodyStorageCasesTheory.supported_exprs_exists_DROP >>
+     first_assum ACCEPT_TAC) >>
   `~MEM (src_id_opt,fn) cx.stk ==> body_exprs_full_ok cx es` by
     (strip_tac >> drule intcall_results_full_ih >> disch_then drule_all >>
      simp[]) >>
@@ -850,17 +950,22 @@ Proof
   rw[body_stmt_full_ok_def, frame_ret_ok_full_def, gas_shadow_stmt_def] >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
   `~supported_expr_exists (const_name_root cx) e` by
-    (drule_all body_inv_const_name_free >> simp[]) >>
+    (drule_all body_inv_stmt_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_expr_exists_def]) >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule (Q.SPECL [`cenv`, `cx`, `env`, `e`, `es`, `[]`]
+              stmt_expr_body_pre) >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def,
-         body_inv_def] >>
-     qexists_tac `[]` >> simp[]) >>
+         body_inv_def]
+     >- (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+         qexists_tac `cenv` >>
+         fs[alloc_limits_stmt_def,alloc_limits_expr_def]) >>
+     metis_tac[]) >>
   first_x_assum (qspecl_then [`cenv`, `env`, `lctx`, `SOME e`, `es`] mp_tac) >>
   simp[same_frame_refl] >> disch_then irule >>
   fs[body_expr_full_ok_def] >> metis_tac[]
@@ -929,7 +1034,6 @@ Proof
   disch_then (mk_asm "source_contract") >>
   disch_then (mk_asm "layout_contract") >>
   disch_then (mk_asm "tail_contract") >> rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   asm "source_contract" drule >> strip_tac >> gvs[] >>
   `expr_body_pre cenv cx env e es` by
     (first_x_assum irule >> gvs[expr_body_pre_def]) >>
@@ -1096,7 +1200,11 @@ Resume selfdestruct_expr_full_from_interfaces[normal]:
     fs[expr_post_def, exprLoweringPropsTheory.stmt_state_rel_def,
        loweringStateRelDefsTheory.state_rel_def,
        loweringStateRelDefsTheory.call_ctx_rel_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+     first_assum (ACCEPT_TAC o MATCH_MP
+       bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   asm "tail_contract" drule_all >>
   disch_then (qspecl_then [`lo`, `d`, `cenv`, `cx`, `ee with gas_obs := []`,
     `gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
@@ -1172,6 +1280,15 @@ Resume selfdestruct_expr_full_from_interfaces[halt]:
   qpat_assum `!H. valid_horizon _ _ H _ ==> ?u. _`
     (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `step_inst_base _ t = Halt u` mp_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t` mp_tac >>
+     qpat_assum `eval_operand op' t = SOME _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operands_def] >>
+     rpt (COND_CASES_TAC >> simp[LET_THM]) >>
+     strip_tac >> disch_then (SUBST1_TAC o SYM) >>
+     fs[allocas_below_fmp_def, halt_state_def, set_returndata_def] >> metis_tac[]) >>
   rewrite_tac[gasOutcomeFullTheory.gas_outcome_full_def] >>
   qexists `marks` >> disj2_tac >> disj1_tac >>
   qexistsl [`INR HaltException`,

@@ -11,14 +11,15 @@ Ancestors
   vyperLoweringCorrect sourceUnitExecution vyperCalldata supportedProgram
   vyperInterpreter dispatchedValueSource dispatchedValuePrefix
   dispatchedValueSelection dispatchedValueEntry dispatchedValueFallback
-  entryStateRel entryReachBodyFmp gasShadowUnit gasShadowState
-  venomInst vyperCompiler list runtimeExternalPackageCode compileEnv emitHelper
-  entryValueRevertPtr e2eDefs venomWf
+  entryStateRel gasShadowUnit gasShadowState
+  venomInst vyperCompiler list entryRejectCode compileEnv emitHelper
+  entryValueRevertPtr e2eDefs venomWf moduleLoweringProps
 
 Theorem external_entry_value_revert_dispatched_nr:
   !tops rpolicy unit am tx ret vs mut nr args fbody env e st.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
@@ -39,13 +40,8 @@ Proof
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   rename1 `venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn` >>
   `MEM fn unit.cu_context.ctx_functions` by metis_tac[lookup_function_MEM] >>
-  `?elbl. fn_entry_label fn = SOME elbl` by
-    (gvs[lowering_context_ok_def, EVERY_MEM, fn_has_entry_def] >>
-     `fn.fn_blocks <> []` by metis_tac[] >>
-     Cases_on `fn.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def]) >>
   `fn_entry_label fn = SOME "__entry"` by
-    (drule_all source_runtime_external_packages >> strip_tac >>
-     gvs[fresh_label_def, initial_compile_state_def]) >>
+    (drule_all_then ACCEPT_TAC lower_vyper_runtime_unit_entry_label) >>
   drule_all initial_entry_rejected_value >> strip_tac >>
   `value_transfer_ok tx am.accounts` by gvs[initial_venom_state_rel_def] >>
   drule_all source_dispatched_value_reject_trace_nr >> strip_tac >>
@@ -64,9 +60,11 @@ Proof
       (MAP (\(sel,lbl,z). (sel,lbl))
         (build_selectors (type_env tops) (FST (classify_functions tops)))) fb` by
     suspend "installed_checks" >>
-  `~ctx_has_dalloca unit.cu_context` by metis_tac[entry_runtime_no_dalloca] >>
   qabbrev_tac `ss = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
                             vs_inst_idx := 0|>` >>
+  `allocas_below_fmp ss` by
+    (irule initial_entry_allocas_below_fmp >>
+     goal_assum (drule_at Any) >> simp[Abbr `ss`, vars_pc_only_def]) >>
   `fresh_vars_wrt ds ss /\ ~ss.vs_halted /\ allocas_from 0 ss /\
    LENGTH ss.vs_call_ctx.cc_calldata < dimword (:256)` by
     (drule_all initial_entry_dispatch_scalars >>
@@ -141,6 +139,7 @@ Theorem external_entry_value_revert_dispatched_with_nr:
   !tops rpolicy unit am tx ret vs mut nr args fbody env e st shadow_ctx.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
@@ -165,13 +164,8 @@ Proof
   `?shadow_fn. MEM shadow_fn shadow_ctx.ctx_functions /\
       gas_shadow_function fn shadow_fn` by
     (fs[gas_shadow_context_def] >> metis_tac[LIST_REL_MEM_IMP]) >>
-  `?elbl. fn_entry_label fn = SOME elbl` by
-    (gvs[lowering_context_ok_def, EVERY_MEM, fn_has_entry_def] >>
-     `fn.fn_blocks <> []` by metis_tac[] >>
-     Cases_on `fn.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def]) >>
   `fn_entry_label fn = SOME "__entry"` by
-    (drule_all source_runtime_external_packages >> strip_tac >>
-     gvs[fresh_label_def, initial_compile_state_def]) >>
+    (drule_all_then ACCEPT_TAC lower_vyper_runtime_unit_entry_label) >>
   drule_all initial_entry_rejected_value >> strip_tac >>
   `value_transfer_ok tx am.accounts` by gvs[initial_venom_state_rel_def] >>
   drule_all source_dispatched_value_reject_trace_nr >> strip_tac >>
@@ -190,9 +184,11 @@ Proof
       (MAP (\(sel,lbl,z). (sel,lbl))
         (build_selectors (type_env tops) (FST (classify_functions tops)))) fb` by
     suspend "installed_checks" >>
-  `~ctx_has_dalloca unit.cu_context` by metis_tac[entry_runtime_no_dalloca] >>
   qabbrev_tac `ss = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
                             vs_inst_idx := 0|>` >>
+  `allocas_below_fmp ss` by
+    (irule initial_entry_allocas_below_fmp >>
+     goal_assum (drule_at Any) >> simp[Abbr `ss`, vars_pc_only_def]) >>
   `fresh_vars_wrt ds ss /\ ~ss.vs_halted /\ allocas_from 0 ss /\
    LENGTH ss.vs_call_ctx.cc_calldata < dimword (:256)` by
     (drule_all initial_entry_dispatch_scalars >>
@@ -259,6 +255,7 @@ Theorem external_entry_value_revert_dispatched:
   !tops rpolicy unit am tx ret vs mut args fbody env e st.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
@@ -283,6 +280,7 @@ Theorem external_entry_value_revert_dispatched_with:
   !tops rpolicy unit am tx ret vs mut args fbody env e st shadow_ctx.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata =

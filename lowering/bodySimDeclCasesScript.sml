@@ -138,6 +138,9 @@ Theorem body_annassign_rhs_pre:
     expr_body_pre cenv cx env e es
 Proof
   rpt strip_tac >>
+  drule_all body_inv_stmt_const_name_free >>
+  simp[supported_stmt_expr_exists_def, supported_assignment_exists_def] >>
+  strip_tac >>
   qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
     SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, supported_iterator_exists_def,
@@ -152,10 +155,9 @@ Proof
       alloc_limits_expr_def]) >>
   imp_res_tac alloc_limits_expr_not_extcode >>
   `cx_tops cx = tops` by (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
-  irule_body_pre stmt_expr_body_pre >>
+  irule stmt_expr_body_pre >>
   gvs[body_inv_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       int_calls_stmt_def] >>
-  imp_res_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >> simp[] >>
   qexists_tac `[]` >> simp[]
 QED
 
@@ -954,6 +956,10 @@ Theorem body_for_range:
 Proof
   rpt strip_tac >>
   imp_res_tac body_stmt_safe_for_body >> gvs[] >>
+  `~supported_expr_exists (const_name_root cx) e1 /\
+   ~supported_expr_exists (const_name_root cx) e2` by
+    (drule_all body_inv_stmt_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_iterator_exists_def]) >>
   Cases_on `?a1 n1 a2 n2. e1 = Literal a1 (IntL n1) /\ e2 = Literal a2 (IntL n2)`
   >- (gvs[] >> irule body_for_range_lit >> simp[] >> metis_tac[]) >>
   drule (range_tuple_forall body_range_typing) >>
@@ -1012,18 +1018,16 @@ Proof
       alloc_limits_expr_def]) >>
   imp_res_tac alloc_limits_expr_not_extcode >>
   `expr_body_pre cenv cx env e1 es` by
-    (irule_body_pre stmt_expr_body_pre_alloc >>
+    (irule stmt_expr_body_pre_alloc >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def,
          allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_iterator_def] >>
-     imp_res_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >> simp[] >>
      qexists_tac `int_calls_expr e2 ++ int_calls_stmts body'` >> simp[]) >>
   `!ei. expr_sim_inv cenv cx env ei ==> expr_body_pre cenv cx env e2 ei` by
-    (rpt strip_tac >> irule_body_pre stmt_expr_body_pre_alloc >>
+    (rpt strip_tac >> irule stmt_expr_body_pre_alloc >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def,
          allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_iterator_def] >>
-     imp_res_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >> simp[] >>
      qexists_tac `int_calls_stmts body'` >>
      metis_tac[call_evaluation_safe_append_right, listTheory.APPEND_ASSOC]) >>
   `expr_sim ctx func cenv cx typ e1 es` by
@@ -1153,7 +1157,6 @@ Theorem array_for_source_ready[local]:
     iterator_unmodified (Array (Name (ArrayT typ (Fixed n)) name)) stmts /\
     type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
     supported_stmts tops bindings stmts /\
-    ~supported_stmts_expr_exists expr_internal_call_root stmts /\
     lookup_scopes name es.scopes = SOME entry /\
     evaluate_type (get_tenv cx) typ = SOME tv /\
     entry.type = ArrayTV tv (Fixed n) /\
@@ -1304,11 +1307,6 @@ Theorem array_body_result_ok:
     !ex inc. stmt_res_ok (InLoop ex inc) r
 Proof
   rpt gen_tac >> strip_tac >>
-  `r <> INR HaltException` by
-    (imp_res_tac (cj 2 supported_stmts_storage_syntax) >>
-     `!st st'. eval_stmts cx stmts st <> (INR HaltException, st')` by
-       (rpt gen_tac >> irule (cj 4 eval_no_halt) >> metis_tac[]) >>
-     strip_tac >> gvs[] >> metis_tac[]) >>
   rule_assum_tac (REWRITE_RULE [scopes_CONS_updated]) >>
   `env_consistent (extend_local env id typ F) cx
      (ei with scopes updated_by
@@ -1340,7 +1338,6 @@ Theorem array_body_direct_snapshot:
     FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\ name <> id /\
     type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
     iterator_unmodified (Array (Name aty name)) stmts /\
-    ~supported_stmts_expr_exists expr_internal_call_root stmts /\
     lookup_scopes name ei.scopes = SOME entry /\
     eval_stmts cx stmts
       (ei with scopes :=
@@ -1373,7 +1370,6 @@ Theorem array_body_scope_callback:
     supported_stmts tops bindings stmts /\
     FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\ name <> id /\
     iterator_unmodified (Array (Name aty name)) stmts /\
-    ~supported_stmts_expr_exists expr_internal_call_root stmts /\
     lookup_scopes name ei.scopes = SOME entry /\
     lookup_scopes id ei.scopes = NONE /\
     eval_stmts cx stmts

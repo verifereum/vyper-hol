@@ -2,6 +2,8 @@ Theory bodyFullAbiEncodeWordPack
 Ancestors
   bodyFullAbiEncodeAllocOrigin bodyFullAbiEncodeSetupTail bodyFullAbiEncodeSuffix
   bodyFullAbiEncodeFinish bodyFullAbiEncodeCopy
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
+  typedCopyOriginPtrBase[qualified,ignore_grammar]
   exprSimProps bodyFullAllocaFresh
   abiBuiltinAllocation entryDecodeStructure reasonCopySourcePtr decoderGhostFramePtr
   typedMemoryCopy valueEncodingProofs allocaHistory wordArgsPtr bodyMemoryDefs tupleMemoryFrame
@@ -17,7 +19,7 @@ Theorem abi_encode_word_pack_origin:
   lower_abi_encode mid 32
     (\dst. comp_ignore_bind (emit_void MSTORE [dst;value]) (comp_return (Lit 32w)))
     st = (out,final) /\
-  fn_has_code st final func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st final func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ local_ptrs_reserved ce origin /\ cs_extends origin st /\
   origin.cs_next_var <= st.cs_next_var /\ origin.cs_next_id <= st.cs_next_id /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x) /\
@@ -91,6 +93,9 @@ Proof
   `stmt_state_rel H0 ctx func ce cx ee allocated_s` by
     (qpat_assum `!H'. stmt_state_rel H' ctx func ce cx ee s ==> _`
       (qspec_then `H0` mp_tac) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp allocated_s` by
+    (qpat_assum `stmt_state_rel H0 ctx func ce cx ee allocated_s`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `alloca_inv allocated_s` by metis_tac[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca] >>
   `lo <= w2n w` by
     (fs[allocas_from_def] >> metis_tac[]) >>
@@ -186,6 +191,10 @@ Proof
   qpat_x_assum `data_ptr = Var dp` SUBST_ALL_TAC >>
   `lookup_var dp ready_s = SOME (n2w d)` by fs[eval_operand_def] >>
   `ready_s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ready_s` by
+    (qpat_assum `typed_copy_state_frame _ _ _ allocated_s ready_s`
+      (rewrite_tac o single o MATCH_MP typedCopyOriginPtrBaseTheory.typed_copy_state_frame_allocas_below_fmp) >>
+     first_assum ACCEPT_TAC) >>
   drule_all bodyPtrMakeArrayPrimitiveInstallTheory.emit_void_fetch_boundary >> strip_tac >>
   qabbrev_tac `i = mk_inst ready.cs_next_id MSTORE [Var dp;value] []` >>
   qabbrev_tac `u = mstore d word ready_s` >>
@@ -200,6 +209,10 @@ Proof
     (simp_tac (srw_ss()) [Abbr `copied`] >>
      qpat_assum `saved = _` SUBST1_TAC >>
      simp[NoAsms, typedMemoryCopyTheory.typed_copy_mstore_state_frame]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp copied` by
+    (qpat_assum `typed_copy_state_frame ready d 32 ready_s copied`
+      (rewrite_tac o single o MATCH_MP typedCopyOriginPtrBaseTheory.typed_copy_state_frame_allocas_below_fmp) >>
+     first_assum ACCEPT_TAC) >>
   `copied.vs_allocas = ready_s.vs_allocas /\ copied.vs_alloca_next = ready_s.vs_alloca_next /\
    (!x. lookup_var x copied = lookup_var x ready_s)` by
     simp[Abbr `copied`, Abbr `u`, mstore_def, write_memory_with_expansion_def, lookup_var_def] >>

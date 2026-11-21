@@ -193,6 +193,10 @@ val args_input = Term `
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
     LENGTH es <= LENGTH args /\
+    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx)
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
+    ~supportedExprTraverse$supported_exprs_exists supportedProgram$expr_msg_gas_root
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
     (!s1 vs t1.
        ~MEM (NONE,name) cx.stk /\
@@ -247,6 +251,7 @@ val args_input = Term `
             intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name
               es sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv
               es1 t G tn) /\
+         (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
          (?H. valid_horizon cx st0 H es1.storage_trace) /\
          gas_admissible (bind (intcall_rest cx name mut nr ss prev rtv) f)
            P es1 ==>
@@ -270,6 +275,8 @@ val callee_input = Term `
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx) dflts /\
+    ~supportedStmtTraverse$supported_stmts_expr_exists (const_name_root cx) ss /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
     LENGTH es <= LENGTH args /\
     ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
@@ -278,6 +285,7 @@ val callee_input = Term `
     MEM func ctx.ctx_functions /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
     (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!H. valid_horizon cx st0 H es1.storage_trace ==>
        intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
@@ -356,6 +364,8 @@ Theorem intcall_callee_premise[local]:
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx) dflts /\
+    ~supportedStmtTraverse$supported_stmts_expr_exists (const_name_root cx) ss /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
     (!s1 vs t1 sd dvs td penv rtv.
        ~MEM (NONE,name) cx.stk /\
@@ -372,6 +382,7 @@ Theorem intcall_callee_premise[local]:
     MEM func ctx.ctx_functions /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
     (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!H. valid_horizon cx st0 H es1.storage_trace ==>
        intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
@@ -436,7 +447,13 @@ Theorem intcall_sim_full:
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx) dflts /\
+    ~supportedStmtTraverse$supported_stmts_expr_exists (const_name_root cx) ss /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
+    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx)
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
+    ~supportedExprTraverse$supported_exprs_exists supportedProgram$expr_msg_gas_root
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
     (!s1 vs t1.
        ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,t1) ==>
@@ -529,7 +546,13 @@ Theorem intcall_vv_full:
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx) dflts /\
+    ~supportedStmtTraverse$supported_stmts_expr_exists (const_name_root cx) ss /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
+    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx)
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
+    ~supportedExprTraverse$supported_exprs_exists supportedProgram$expr_msg_gas_root
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
     (!s1 vs t1.
        ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,t1) ==>

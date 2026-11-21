@@ -80,12 +80,7 @@ Proof
      Cases_on `EL n args` >> gvs[] >>
      metis_tac[pairTheory.SND]) >>
   gvs[] >> drule_all default_dispatch_source_cases >>
-  strip_tac >> gvs[LENGTH_DROP] >>
-  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
-    metis_tac[source_typing_ok_external_names_distinct] >>
-  drule_all default_fallback_lookup_decl >> strip_tac >>
-  drule_all checked_supported_external_subst >>
-  simp[subst_consts_fn_def, pairTheory.PAIR_EQ] >> metis_tac[]
+  strip_tac >> gvs[LENGTH_DROP]
 QED
 
 Theorem default_entry_package_preparation:

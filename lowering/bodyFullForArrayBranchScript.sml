@@ -1,7 +1,7 @@
 (* Source composition for the non-slot Array branch of For. *)
 Theory bodyFullForArrayBranch
 Ancestors
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv constSubst bodyStorageMetadata vyperSubscriptOverlap
   bodyFullForArrayRound gasOutcomeFull gasOutcomeFullCompose gasExemptCert
   gasContext gasSummary stmtSimForRounds stmtSimDefs exprSimDefs bodyPtrDefs
   haltExitProj vyperInterpreter vyperState vyperAST vyperValue
@@ -10,7 +10,9 @@ Ancestors
   bodySimFull bodyFullForFacts bodySim stmtLowering compileEnv emitHelper
   gasShadow supportedStmts exprSimHyps bodyExprPreFacts bodyFullForArray
   bodyFullShared gasOutcomeFullGuarded bodyFullForRounds vyperEvalExprPreservesScopesDom
-  bodyInvNoDalloca contextRawReachable
+  bodyFullIfExpReach contextRawReachable
+  supportedExprTraverse[qualified,ignore_grammar]
+  vyperTypeContract[qualified,ignore_grammar]
 
 (* The loop continuation starts at the iterator's own captured endpoint. *)
 Theorem for_nonslot_array_prefix_continue_full:
@@ -30,6 +32,9 @@ Theorem for_nonslot_array_prefix_continue_full:
        (INL vs,em with gas_obs := tail)) /\
     storage_trace_domain cx st0 em.storage_trace /\
     (!H. valid_horizon cx st0 H em.storage_trace ==> P H (INL vs) em Gu tu u) /\
+    (!H. valid_horizon cx st0 H em.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (s,G,tn) marks (OK u,Gu,tu)) /\
     check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" em = (INL (),em) /\
     gas_admissible (eval_for cx tyv id loop_body vs) (stmt_res_ok lctx) em ==>
     gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -54,7 +59,7 @@ Proof
         (eval_for cx tyv id loop_body vs))` by
     simp[Once evaluate_def, lift_option_type_def, bind_return] >>
   pop_assum SUBST_ALL_TAC >>
-  irule gas_outcome_full_bind_all >> BETA_TAC >>
+  irule gas_outcome_full_bind_all_path >> BETA_TAC >>
   conj_tac >-
     (gen_tac >> irule storage_trace_frame_ignore_bind >>
      simp[storage_trace_frame_checks, cj 4 evaluate_storage_trace_frame]) >>
@@ -109,6 +114,10 @@ Theorem nonslot_iterator_expr_pre[local]:
   expr_body_pre c cx env e es
 Proof
   strip_tac >>
+  `~supported_expr_exists (const_name_root cx) e` by
+    (drule_all bodySimTheory.body_inv_stmt_const_name_free >>
+     simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
+          supportedStmtTraverseTheory.supported_iterator_exists_def]) >>
   `cx_tops cx = tops` by
     (irule gasContextTheory.cx_tops_module >>
      qpat_assum `body_inv tops ctx c cx` mp_tac >> simp[NoAsms,body_inv_def]) >>
@@ -118,7 +127,6 @@ Proof
     (qpat_assum `body_inv tops ctx c cx` mp_tac >> simp[NoAsms,body_inv_def]) >>
   `well_typed_expr env e` by fs[vyperTypeSystemTheory.well_typed_iterator_def] >>
   `~expr_has_evm_run e /\
-   ~supported_expr_exists call_operands_effect_root e /\
    EVERY (\c. FST c = NONE) (int_calls_expr e) /\
    EVERY (\c. IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) /\
    ~is_extcode e /\ ~supported_expr_exists (const_name_root cx) e` suffices_by
@@ -152,34 +160,70 @@ Proof
     (qpat_assum `supported_iterator tops typ (Array e) n` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `e` >> simp[supported_iterator_def]) >>
   FIRST [
-       (drule_all_then assume_tac bodySimTheory.body_inv_const_name_free >>
-        drule_then strip_assume_tac bodyExprPreFactsTheory.supported_expr_body_calls >>
-        rpt conj_tac >> first_assum ACCEPT_TAC),
+       (drule_then assume_tac supportedExprTraverseTheory.supported_expr_no_evm_run >>
+        drule_then assume_tac bodyStorageCasesTheory.supported_expr_main_calls >>
+        `~is_extcode e` by
+          (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+           qexists_tac `c` >>
+           fs[stmt_exprs_ok_def,allocLimitsTheory.alloc_limits_stmt_def,
+              allocLimitsTheory.alloc_limits_iterator_def]) >>
+        fs[EVERY_CONJ]),
        (qpat_assum `e = Name _ _` SUBST_ALL_TAC >>
         simp[cj 1 supportedExprTraverseTheory.expr_has_evm_run_thm,
              supportedExprTraverseTheory.supported_expr_exists_def,
-             supportedExprTraverseTheory.call_operands_effect_root_def,
              vyperTypeCallGraphTheory.int_calls_expr_def,
              exprSimHypsDefsTheory.const_name_root_def,exprLoweringTheory.is_extcode_def]),
-       (rename1 `e = TopLevelName ty nid` >>
-        `IS_SOME (supported_immutable_type tops nid)` by
-          (qpat_assum `!nid. e = TopLevelName (expr_type e) nid ==> _`
-             (qspec_then `nid` mp_tac) >>
-           qpat_assum `e = TopLevelName ty nid` (fn th =>
-             rewrite_tac[th,vyperASTTheory.expr_type_def]) >> simp[]) >>
-        `~cx_const_name cx nid` by
-          (strip_tac >>
-           mp_tac (Q.INST [`nsid` |-> `nid`,`cenv` |-> `c`]
-             bodySimTheory.body_inv_const_name_not_root) >>
-           impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
-           strip_tac >> fs[]) >>
-        qpat_assum `e = TopLevelName _ _` SUBST_ALL_TAC >>
-        simp[cj 3 supportedExprTraverseTheory.expr_has_evm_run_thm,
-             supportedExprTraverseTheory.supported_expr_exists_def,
-             supportedExprTraverseTheory.call_operands_effect_root_def,
-             vyperTypeCallGraphTheory.int_calls_expr_def,
-             exprSimHypsDefsTheory.const_name_root_def,exprLoweringTheory.is_extcode_def])
+       (qpat_assum `e = TopLevelName _ _` SUBST_ALL_TAC >>
+        fs[cj 3 supportedExprTraverseTheory.expr_has_evm_run_thm,
+           supportedExprTraverseTheory.supported_expr_exists_def,
+           vyperTypeCallGraphTheory.int_calls_expr_def,exprLoweringTheory.is_extcode_def])
   ]
+QED
+
+Theorem array_constant_decl_mem[local]:
+  !tops id. constant_decl id tops <=>
+    ?vis init ty slot. MEM (VariableDecl vis (Constant init) id ty slot) tops
+Proof
+  Induct >> simp[constant_decl_def] >>
+  Cases_on `h` >> simp[constant_decl_def] >>
+  rename1 `VariableDecl vis mut name ty slot` >>
+  Cases_on `mut` >> simp[constant_decl_def] >> metis_tac[]
+QED
+
+Theorem array_constant_name_in_lowering[local]:
+  !tops acc name. constant_decl name tops ==>
+    MEM name (MAP FST (module_consts_env tops acc))
+Proof
+  recInduct module_consts_env_ind >>
+  simp[constant_decl_def, module_consts_env_def] >> rpt strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `module_consts_env rest acc'` >>
+  qspecl_then [`rest`, `acc'`] strip_assume_tac module_consts_env_acc_prefix >>
+  simp[Abbr `acc'`]
+QED
+
+Theorem nonslot_iterator_bare_immutable:
+  body_inv tops ctx c cx /\
+  supported_iterator tops typ (Array e) n /\
+  expr_type e = ArrayT typ bd /\
+  ~(?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
+             supported_storage_value tops nid (ArrayT typ bd)) /\
+  ~supported_expr_exists (const_name_root cx) e ==>
+  !nid. e = TopLevelName (expr_type e) nid ==>
+    IS_SOME (supported_immutable_type tops nid)
+Proof
+  strip_tac >>
+  `get_module_code cx NONE = SOME tops` by fs[bodySimTheory.body_inv_def] >>
+  rpt strip_tac >>
+  qpat_assum `e = TopLevelName _ _` SUBST_ALL_TAC >>
+  gvs[supported_iterator_def,vyperASTTheory.expr_type_def] >>
+  PairCases_on `nid` >>
+  gvs[supportedDeclsTheory.supported_constant_type_def, AllCaseEqs(),
+      supportedExprTraverseTheory.supported_expr_exists_def,
+      exprSimHypsDefsTheory.const_name_root_def] >>
+  drule_then strip_assume_tac supported_variable_decl_mem >> gvs[] >>
+  drule_then assume_tac gasContextTheory.cx_tops_module >>
+  fs[exprSimHypsDefsTheory.cx_const_name_def] >>
+  metis_tac[array_constant_name_in_lowering, array_constant_decl_mem, supported_variable_decl_mem]
 QED
 
 Theorem compile_for_nonslot_array_frag_full:
@@ -206,7 +250,11 @@ Theorem compile_for_nonslot_array_frag_full:
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
+    ~supported_expr_exists (const_name_root cx) e /\
     stmt_exprs_ok cenv (For id typ (Array e) n body) /\
+    (~(?ty nid. e = TopLevelName ty nid) ==>
+     !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
+    stmt_loop_calls_ok [(NONE,tops)] (For id typ (Array e) n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n body)) /\
     frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>
@@ -241,9 +289,10 @@ Proof
      simp[bound_length_def]) >>
   `!nid. e = TopLevelName (expr_type e) nid ==>
      IS_SOME (supported_immutable_type tops nid)` by
-    (rpt strip_tac >>
-     qpat_assum `e = TopLevelName _ _` SUBST_ALL_TAC >>
-     gvs[supported_iterator_def,vyperASTTheory.expr_type_def]) >>
+    (MATCH_MP_TAC (Q.INST [`c` |-> `cenv`, `bd` |-> `bd`, `n` |-> `n`,
+                          `ctx` |-> `ctx`, `typ` |-> `typ`]
+                     nonslot_iterator_bare_immutable) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   mp_tac (Q.INST [`c` |-> `cenv`,`sty` |-> `typ`,`fty` |-> `typ`,
       `loop_body` |-> `body'`,`sa0` |-> `sa`,`shadow_sa0` |-> `shadow_sa`]
       bodyFullForArrayRoundTheory.for_nonslot_array_layout_full) >>
@@ -311,7 +360,8 @@ Proof
        disch_then ACCEPT_TAC) >>
     `valid_horizon cx st0 (storage_trace_horizon em.storage_trace) em.storage_trace` by
       fs[storage_trace_domain_def] >>
-    qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> _`
+    qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==>
+      (?vss rv av xs et. INL vs = INL vss /\ _) /\ _`
       (qspec_then `storage_trace_horizon em.storage_trace` mp_tac) >>
     impl_tac >- first_assum ACCEPT_TAC >>
     disch_then (fn th =>
@@ -324,7 +374,8 @@ Proof
           storage_well_formed_on cx em (FST H) /\
           ghost_inv_at (DF H) lo d cenv cx em Gu tu u` by
       (gen_tac >> strip_tac >>
-       qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> _`
+       qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==>
+         (?vss rv av xs et. INL vs = INL vss /\ _) /\ _`
          (qspec_then `H` (drule_then strip_assume_tac)) >>
        rpt conj_tac >> first_assum ACCEPT_TAC) >>
     `MAP FDOM em.scopes = MAP FDOM es.scopes` by
@@ -347,21 +398,23 @@ Proof
          (qspec_then `storage_trace_horizon em.storage_trace` (drule_then strip_assume_tac)) >>
        drule_all_then ACCEPT_TAC bodyFullSharedTheory.return_buf_sep_locals_kept) >>
     `!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_no_wrap inst t` by
-      (`~ctx_has_dalloca ctx` by
-         (drule bodyInvNoDallocaTheory.body_inv_no_dalloca >> simp[]) >>
-       rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >>
-       disch_then drule >> strip_tac >>
-       qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
-       qpat_assum `MEM fn ctx.ctx_functions` mp_tac >>
-       qpat_assum `MEM inst (fn_insts fn)` mp_tac >>
-       POP_ASSUM_LIST (K ALL_TAC) >>
-       simp[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
-            unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+      (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+         metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+       qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==>
+         gas_origin_ptr_path _ (s0,G0,tn0) marks (OK u,Gu,tu)`
+         (qspec_then `storage_trace_horizon em.storage_trace` mp_tac) >>
+       (impl_tac >- first_assum ACCEPT_TAC) >>
+       disch_then (fn path =>
+         qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0`
+           (fn phi =>
+             qpat_assum `!fn inst t. frag_reachable ctx func s0 fn inst t ==> dalloca_no_wrap inst t`
+               (fn nowrap => ACCEPT_TAC (MATCH_MP
+                 bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+                 (LIST_CONJ [path,phi,nowrap])))))) >>
     mp_tac (Q.INST [`c` |-> `cenv`,`sty` |-> `typ`,`fty` |-> `typ`,
       `loop_body` |-> `body'`,`sa0` |-> `sa`,`shadow_sa0` |-> `shadow_sa`,
       `sa` |-> `saBod`,`es0` |-> `es`,`dtv` |-> `tyv`,`stv` |-> `et`]
-      (INST [mk_var ("cond", ``:string``) |-> ``cond':string``]
-        (SPEC_ALL bodyFullForArrayRoundTheory.for_nonslot_array_round_contracts))) >>
+      (SPEC_ALL bodyFullForArrayRoundTheory.for_nonslot_array_round_contracts)) >>
     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
     disch_then (qx_choosel_then [`s`,`G`,`tn`,`Inv`,`Done`]
       (map_every assume_tac o CONJUNCTS)) >>

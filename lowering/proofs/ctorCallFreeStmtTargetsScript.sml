@@ -19,18 +19,18 @@ Theorem outcomes_free_get_target_ptr:
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists extra_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !target ce.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_target_exists R target /\
-  ~supported_target_exists expr_shape_root target ==>
+  ~supported_target_exists extra_root target ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_get_target_ptr compile_expr ce target st)))
@@ -54,18 +54,18 @@ Theorem opcode_every_get_target_ptr:
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists extra_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !target ce.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_target_exists R target /\
-  ~supported_target_exists expr_shape_root target ==>
+  ~supported_target_exists extra_root target ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_get_target_ptr compile_expr ce target st)))
@@ -78,7 +78,7 @@ Theorem outcomes_free_tuple_store_all:
   P INVALID ==>
   (
   (!bt st. ~supported_target_exists R bt /\
-    ~supported_target_exists expr_shape_root bt ==>
+    ~supported_target_exists extra_root bt ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_get_target_ptr compile_expr ce bt st)))) /\
@@ -92,7 +92,7 @@ Theorem outcomes_free_tuple_store_all:
       (state_insts (SND (compile_store_at_loc ce.ce_imm_alloca dst value loc st)))) ==>
   !tys targets vals st.
   ~supported_assignments_exists R targets /\
-  ~supported_assignments_exists expr_shape_root targets ==>
+  ~supported_assignments_exists extra_root targets ==>
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_tuple_store_all ce tys targets vals st)))
@@ -115,7 +115,7 @@ Theorem opcode_every_tuple_store_all:
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (
   (!bt st. ~supported_target_exists R bt /\
-    ~supported_target_exists expr_shape_root bt ==>
+    ~supported_target_exists extra_root bt ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_get_target_ptr compile_expr ce bt st)))) /\
@@ -129,7 +129,7 @@ Theorem opcode_every_tuple_store_all:
       (state_insts (SND (compile_store_at_loc ce.ce_imm_alloca dst value loc st)))) ==>
   !tys targets vals st.
   ~supported_assignments_exists R targets /\
-  ~supported_assignments_exists expr_shape_root targets ==>
+  ~supported_assignments_exists extra_root targets ==>
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_tuple_store_all ce tys targets vals st)))
@@ -147,13 +147,13 @@ Theorem outcomes_free_tuple_unpack:
       (state_insts (SND (compile_tuple_load_all ce src tys off st)))) /\
   (!tys targets vals st.
     ~supported_assignments_exists R targets /\
-    ~supported_assignments_exists expr_shape_root targets ==>
+    ~supported_assignments_exists extra_root targets ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_tuple_store_all ce tys targets vals st)))) ==>
   !ty stage targets src st.
   ~supported_assignments_exists R targets /\
-  ~supported_assignments_exists expr_shape_root targets ==>
+  ~supported_assignments_exists extra_root targets ==>
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_tuple_unpack ce ty stage targets src st)))
@@ -179,13 +179,13 @@ Theorem opcode_every_tuple_unpack:
       (state_insts (SND (compile_tuple_load_all ce src tys off st)))) /\
   (!tys targets vals st.
     ~supported_assignments_exists R targets /\
-    ~supported_assignments_exists expr_shape_root targets ==>
+    ~supported_assignments_exists extra_root targets ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_tuple_store_all ce tys targets vals st)))) ==>
   !ty stage targets src st.
   ~supported_assignments_exists R targets /\
-  ~supported_assignments_exists expr_shape_root targets ==>
+  ~supported_assignments_exists extra_root targets ==>
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_tuple_unpack ce ty stage targets src st)))

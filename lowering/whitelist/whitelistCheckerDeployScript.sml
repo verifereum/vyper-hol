@@ -67,7 +67,8 @@ Theorem check_contract_deploy_body_bindings_not_args:
 Proof
   strip_tac >> drule_all check_contract_deploy_body >>
   simp[check_function_body_def, IS_SOME_EXISTS] >> strip_tac >>
-  drule (CONJUNCT2 type_stmt_bindings_fresh) >>
+  qpat_x_assum `type_stmts _ _ fbody = _`
+    (mp_tac o MATCH_MP (CONJUNCT2 type_stmt_bindings_fresh)) >>
   simp[function_entry_env_var_types_fdom]
 QED
 

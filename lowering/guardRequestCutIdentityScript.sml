@@ -14,7 +14,7 @@ Ancestors
   frameOriginReachable frameOriginHistory
   concretizePtrCoverageStaticMemReachability
   callTrace unitTransformDefs o1PipelineCorrect venomExecSemantics
-  stackPlanGen vyperLoweringCorrect loweringShapeSource contextRawReachable
+  stackPlanGen vyperLoweringCorrect loweringMemCorrect contextRawReachable
   venomWf list rich_list words arithmetic
 
 (* A configuration of a trace that ends at a call step: it is
@@ -116,11 +116,9 @@ Theorem codegen_request_cut_outcome_identity:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `LENGTH t.vs_requests = k` (SUBST_ALL_TAC o SYM) >>
-  drule supported_program_raw_shape_free_program >> strip_tac >>
   `?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art` by
     fs[source_typing_ok_def] >>
-  drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
-  drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_checked_source_shape >> strip_tac >>
   drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   `codegen_context_obligations (\_ _ _ _. F) out.po_unit.cu_context cplan` by

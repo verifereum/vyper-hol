@@ -28,27 +28,30 @@
  *)
 Theory e2eGasSufficient
 Ancestors
-  e2eDefs e2eProducers e2eEntry unitTransformDefs ctorDeployNoCreate
+  e2eDefs e2eProducers e2eEntry e2eOptEntry unitTransformDefs ctorDeployNoCreate
+  stackPlanGen[qualified,ignore_grammar] loweringCreateSource
+  contextRawReachable venomLayout ctorCallFreeExpr
   ptrDiscipline lowerDloadDefs e2eComposition sourceUnitExitSafe
   sourceUnitExecution exprSimHypsDefs
   o1PipelineCorrect o1PipelineCompose o1PassContract contextCodegenRel
   o1StaticPipelineCorrect runtimeLabelReadiness
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
-  loweringShapeProps loweringShapeSource passSimulationDefs
+  loweringShapeProps loweringShapeSource passSimulationDefs contextCodegenRel
   codegenCorrectness immutableCodeLayout frameOutcome frameGas
   venomRunBounded unitMemInv o1OpcodeAbsence
   loweringRuntimeNoCreate venomPipelineDriverProps fragFuelUnit
   e2eCorrectness loweringCalldataCorrect dispatchedValueSelection callPremiseDispatch entryStateRel
-  callRawVariant
+  callRawVariant callDynamicMemory[qualified,ignore_grammar] vyperTypeContract
   asmOptimizer callTrace
-  e2eDeployCorrectness e2eDeployAtMarks e2eDeployDefs ctorDeployDefs ctorDeployBodyJoint
+  e2eDeployCorrectness e2eDeployAtMarks e2eDeployDefs e2eDeployRawFmp ctorDeployDefs ctorDeployBodyJoint
   ctorDeployFrame ctorDeployShape ctorDeployDefsReach ctorDeployInitcode
   ctorDeployEntry ctorDeployDead ctorDeployRunBounded ctorDeployImmBudget
-  ctorDeployMemoryFrontier deployUnitExecution deployUnitExitSafe
-  ctorDeployLoweringSource
+  ctorDeployMemoryFrontier deployUnitExecution deployUnitExitSafe deployUnitProducers o1SafeUpto
+  ctorDeployLoweringSource deployDynamicMemory
   vfmExecution vfmExecutionProp vfmContext list rich_list pair
 
 val _ = Parse.hide "tops";
+val _ = Parse.hide "body";
 
 (* ===== Entry facts preserved by add_frame_gas ===== *)
 
@@ -174,12 +177,82 @@ Definition deploy_gas_source_exempt_def:
     src = INR (Error (RuntimeError "create initcode too large"))
 End
 
+(* GATE_ADMISSION: held, creation body case; create size at the call entry *)
+Theorem call_entry_reachable_create_size_ok:
+  !own fin tops rpolicy unit out prog prog' cplan am tx es vs.
+    fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+    (own <=> fin = asm_opt_finalizer) /\
+    supported_program tops /\ source_typing_ok tops am tx /\
+    EXISTS (top_body_has expr_create_root) tops /\
+    (?es0 g. call_state_rel tops (assemble prog') am tx es0 /\
+             es = add_frame_gas g es0) /\
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    codegen_assembly rpolicy out.po_unit = SOME prog /\
+    generate_context_plan out.po_unit.cu_context = SOME cplan /\
+    vs = (if own then opt_entry_state_own prog prog' cplan es
+          else opt_entry_state prog prog' cplan es) /\
+    (!f vals. calldata_dispatch tops tx.calldata = SOME (f,vals) ==>
+      (!obs. call_storage_ok am (tx with <|function_name := f; args := vals|>)
+        (MAP SND (call_trace es)) obs) /\
+      (!obs. ~gas_source_exempt tops (tx with <|function_name := f; args := vals|>)
+        (call_external (SOME (MAP SND (call_trace es))) obs am
+          (tx with <|function_name := f; args := vals|>))) /\
+      LENGTH (call_trace es) < 2 ** 64) ==>
+    mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
+      out.po_unit.cu_context vs
+Proof
+  cheat
+QED
+
+(* GATE_ADMISSION: held, creation body case; create size at the deploy entry *)
+Theorem deploy_entry_reachable_create_size_ok:
+  !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs.
+    fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+    deploy_phases policy tops (assemble prog, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    deploy_source_ok tops am tx /\
+    deploy_dalloca_form_occurs expr_create_root tops /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    vs = opt_deploy_entry_state_own prog prog' cplan tops es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
+    (!obs. deploy_storage_ok tops am tx (MAP SND (call_trace es)) obs) /\
+    (!obs. ~deploy_gas_source_exempt tops
+      (load_contract (SOME (MAP SND (call_trace es))) obs am tx [(NONE,tops)] [])) ==>
+    mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
+      dout.po_unit.cu_context vs
+Proof
+  cheat
+QED
+
+Theorem opt_entry_state_identity_add_frame_gas:
+  !tops am tx prog cp es g.
+    call_state_rel tops (assemble prog) am tx es ==>
+    opt_entry_state prog prog cp (add_frame_gas g es) =
+    entry_venom_state prog cp (add_frame_gas g es)
+Proof
+  rpt strip_tac >>
+  `(FST (HD (add_frame_gas g es).contexts)).msgParams.code =
+     (FST (HD es.contexts)).msgParams.code` by
+    (Cases_on `es.contexts` >- simp[add_frame_gas_def] >>
+     PairCases_on `h` >> drule add_frame_gas_contexts >>
+     disch_then (qspec_then `g` mp_tac) >> simp[]) >>
+  qspecl_then [`tops`, `am`, `tx`, `prog`, `cp'`, `es`]
+    mp_tac opt_entry_state_identity >>
+  simp[] >>
+  simp[opt_entry_state_def, entry_venom_state_add_frame_gas,
+       venomStateTheory.venom_state_component_equality] >>
+  metis_tac[opt_entry_state_identity, opt_entry_state_def,
+            venomStateTheory.venom_state_component_equality]
+QED
+
 (* CREATE and CREATE2 are absent from the lowered unit, so the size
    invariant holds for every entry state. *)
 Theorem deploy_entry_create_size_ok:
   deploy_phases policy tops (deploy_bc, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
-  deploy_source_ok tops am tx ==>
+  deploy_source_ok tops am tx /\
+  ~deploy_dalloca_form_occurs expr_create_root tops ==>
   mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
     dout.po_unit.cu_context vs
 Proof
@@ -262,19 +335,32 @@ QED
 
 (* ===== The call cases ===== *)
 
-(* The runtime unit S7g runs reaches no oversized CREATE.
-   supported_program's body_stmt_safe excludes CreateTarget, so the lowering
-   emits no CREATE or CREATE2 and O1 keeps them absent; the premise then
-   holds at every state. *)
+(* With no creation forms, lowering and O1 both preserve opcode absence. *)
 Theorem o1_runtime_unit_create_size_ok:
-  !tops rpolicy unit out vs.
-    supported_program tops /\
+  !tops rpolicy unit out vs am tx.
+    source_typing_ok tops am tx /\
+    ~EXISTS (top_body_has expr_create_root) tops /\
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out
     ==>
     mem_inv (\ctx fn inst s. inst_create_size_ok inst s) out.po_unit.cu_context vs
 Proof
-  rpt strip_tac >> match_mp_tac mem_inv_create_size_ok_no_create >>
+  rpt strip_tac >>
+  `?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
+    fs[source_typing_ok_def] >>
+  `!vis mut nr rr name args dflts ret body.
+    MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops ==>
+      ~supported_stmts_expr_exists expr_create_root body /\
+      ~EXISTS (supported_expr_exists expr_create_root) dflts` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `~EXISTS (top_body_has expr_create_root) tops` mp_tac >>
+     simp[EXISTS_MEM, EVERY_MEM] >>
+     disch_then (qspec_then `FunctionDecl vis mut nr rr name args dflts ret body` mp_tac) >>
+     simp[top_body_has_def, EVERY_MEM, combinTheory.o_DEF]) >>
+  `runtime_bodies_avoid_create tops` by
+    (drule_all (INST_TYPE [alpha |-> ``:160 word``]
+       check_contract_runtime_bodies_avoid_create) >> simp[]) >>
+  match_mp_tac mem_inv_create_size_ok_no_create >>
   conj_tac
   >- (qpat_x_assum `o1PipelineCorrect$o1_pipeline _ _ = _` mp_tac >>
       simp[o1PipelineCorrectTheory.o1_pipeline_def] >>
@@ -322,15 +408,21 @@ QED
 (* Dispatch rejection provides the raw facts directly. On a selected call
    they come from the execution certificate at its own gas marks. *)
 Theorem call_gas_raw_variant_facts:
-  !tops rpolicy unit am tx vs vi fuel.
+  !tops rpolicy unit am tx vs vi fuel fmp.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\ source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     initial_venom_state_rel tops am tx vs /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
-    ~ctx_has_dalloca unit.cu_context /\ o1_source_unit_ok unit /\
-    code_layout_valid vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
-    raw_variant vs.vs_initial_fmp vi vs /\
+    vs.vs_fmp = vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp <= w2n fmp /\
+    (!f vals. calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
+       LENGTH vs.vs_outcomes < 2 ** 64 /\ LENGTH tx.calldata < 2 ** 64) /\
+    o1_source_unit_ok unit /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context +
+        32 * ctx_dload_count unit.cu_context <= w2n fmp /\ w2n fmp < 2 ** 254) /\
+    code_layout_valid vs /\ raw_variant fmp vi vs /\
     (!n s. terminates (run_context n unit.cu_context s) ==>
            terminates (run_context fuel unit.cu_context s)) /\
     (!f vals. calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
@@ -358,8 +450,8 @@ Proof
     fs[initial_venom_state_rel_def, venom_env_rel_def,
        loweringStateRelDefsTheory.call_ctx_rel_def] >>
   Cases_on `calldata_dispatch tops tx.calldata`
-  >- (qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `vi`]
-        mp_tac raw_variant_revert_facts >>
+  >- (qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `vi`, `fmp`]
+        mp_tac raw_variant_revert_facts_fmp >>
       simp[] >> strip_tac >>
       rename1 `run_context n unit.cu_context vi = Abort Revert_abort _` >>
       `terminates (run_context n unit.cu_context vi)` by
@@ -369,15 +461,19 @@ Proof
   rename1 `_ = SOME fv` >> PairCases_on `fv` >>
   drule source_typing_ok_external_names_distinct >> strip_tac >>
   drule_all_then strip_assume_tac calldata_dispatch_has_source_entry >>
-  qpat_x_assum `!f vals. SOME (fv0, fv1) = SOME (f, vals) ==> _`
+  `LENGTH vs.vs_outcomes < 2 ** 64 /\ LENGTH tx.calldata < 2 ** 64` by
+    metis_tac[] >>
+  qpat_x_assum `!f vals. SOME (fv0, fv1) = SOME (f, vals) ==>
+     (!obs. call_storage_ok _ _ _ _) /\ _`
     (qspecl_then [`fv0`, `fv1`] mp_tac) >> simp[] >> strip_tac >>
   qabbrev_tac `td = tx with <| function_name := fv0; args := fv1 |>` >>
-  `gas_variant vi vs` by metis_tac[raw_variant_gas_variant] >>
   `initial_venom_state_rel tops am tx vi` by
     metis_tac[raw_variant_initial_venom_state_rel] >>
   `vi.vs_outcomes = vs.vs_outcomes /\ vi.vs_call_ctx = vs.vs_call_ctx` by
-    metis_tac[gas_variant_outcomes, gas_variant_call_ctx] >>
-  `code_layout_valid vi` by metis_tac[gas_variant_code_layout_valid] >>
+    metis_tac[raw_variant_outcomes, raw_variant_call_ctx] >>
+  `code_layout_valid vi /\ vi.vs_fmp = fmp /\ vi.vs_initial_fmp = fmp` by
+    (fs[raw_variant_def, gas_variant_def, code_layout_valid_def,
+        venomStateTheory.venom_state_component_equality] >> metis_tac[]) >>
   `dispatched_vyper_call tops td vi.vs_call_ctx.cc_calldata ret` by
     (simp[Abbr`td`, dispatched_vyper_call_def] >> metis_tac[]) >>
   `source_typing_ok tops am td` by
@@ -387,6 +483,19 @@ Proof
   `initial_venom_state_rel tops am td vi` by
     simp[Abbr`td`, initial_venom_state_rel_dispatch] >>
   `outcomes_accounts_typed (SOME vi.vs_outcomes)` by fs[] >>
+  `ctx_has_dalloca unit.cu_context ==>
+    unit_alloca_budget unit.cu_context <= w2n vi.vs_initial_fmp /\
+    w2n vi.vs_initial_fmp < 2 ** 254` by
+    (strip_tac >> fs[] >> decide_tac) >>
+  `ctx_has_dalloca unit.cu_context ==>
+    !fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
+      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+    (strip_tac >>
+     qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `fmp`, `vi`]
+       mp_tac callDynamicMemoryTheory.call_raw_variant_no_wrap >> gvs[]) >>
+  `ctx_has_dalloca unit.cu_context ==>
+    !fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
+      dalloca_no_wrap inst s` by metis_tac[] >>
   drule_all lower_vyper_runtime_unit_correct_dispatched_readings_available >>
   disch_then (qx_choose_then `marks` strip_assume_tac) >>
   qabbrev_tac `obs = gas_explicit marks vi.vs_gas_readings` >>
@@ -420,11 +529,15 @@ Proof
   qspecl_then [`marks`, `tops`, `ret`, `am`, `td`, `unit`, `vi`, `rpolicy`]
     mp_tac source_unit_exit_safe_runs >>
   impl_tac >- simp[] >> strip_tac >>
-  `vi.vs_fmp = vi.vs_initial_fmp` by
-    fs[raw_variant_def, gas_variant_def,
-       venomStateTheory.venom_state_component_equality] >>
   `w2n vi.vs_initial_fmp <= w2n vi.vs_fmp` by simp[] >>
-  drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
+  `raw_unit_memory_ok unit.cu_context vi /\ ptr_discipline 0 unit.cu_context vi` by
+    (Cases_on `ctx_has_dalloca unit.cu_context`
+     >- (`!fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
+            dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+           (qpat_assum `ctx_has_dalloca unit.cu_context ==>
+              !fn inst s. _ ==> _ /\ _` mp_tac >> simp[]) >>
+         drule_all lower_vyper_runtime_unit_memory_ok_from_no_wrap >> simp[]) >>
+     drule_all lower_vyper_runtime_unit_memory_ok >> simp[]) >>
   `mem_inv dload_offset_ok unit.cu_context vi` by
     (irule lower_vyper_runtime_unit_dload_offset_ok >> metis_tac[]) >>
   `mem_inv dload_headroom_ok unit.cu_context vi` by
@@ -489,18 +602,13 @@ Proof
   drule compile_vyper_runtime_phases >> strip_tac >>
   rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
   qpat_x_assum `runtime_bc = assemble _` SUBST_ALL_TAC >>
-  drule supported_program_raw_shape_free_program >> strip_tac >>
   `?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art` by
     metis_tac[source_typing_ok_def] >>
-  drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
-  drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_checked_source_shape >> strip_tac >>
   drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   `source_deployment_rel tops am tx` by fs[call_state_rel_def, frame_fresh_def,
                                            frame_tx_rel_def, world_rel_def] >>
-  `~ctx_has_dalloca unit.cu_context` by
-    (irule every_no_dalloca >>
-     drule_all lower_vyper_runtime_unit_no_dalloca_checked >> simp[]) >>
   `EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
    fixed_region_reserved 0 unit.cu_context` by
     (drule lower_vyper_runtime_unit_raw_defaults >>
@@ -517,9 +625,6 @@ Proof
   qspecl_then [`rpolicy`, `out.po_unit`, `cplan`, `prog`, `fuel'`, `M`]
     mp_tac codegen_gas_sufficient >>
   impl_tac >- simp[] >> disch_then (qx_choose_then `g` assume_tac) >>
-  `!vs. mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
-          out.po_unit.cu_context vs` by
-    metis_tac[o1_runtime_unit_create_size_ok] >>
   qexists_tac `g` >> rpt strip_tac >>
   drule call_state_rel_add_frame_gas_raises >>
   disch_then (qspec_then `g'` (fn th => PURE_REWRITE_TAC [th])) >>
@@ -547,6 +652,24 @@ Proof
   `o1_initial_state_ok vs /\ code_layout_valid vs` by fs[Abbr`vs`] >>
   `vs.vs_fmp = vs.vs_initial_fmp` by
     simp[Abbr`vs`, entry_venom_state_def] >>
+  `K SOME <> asm_opt_finalizer` by
+    (strip_tac >>
+     qpat_x_assum `K SOME = asm_opt_finalizer`
+       (fn th => mp_tac (Q.AP_THM
+         (Q.AP_THM th `rpolicy with rpol_final_assembly := FAP_Optimize`)
+         `[AsmOp "STOP"; AsmOp "STOP"]`)) >>
+     EVAL_TAC) >>
+  `mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
+      out.po_unit.cu_context vs` by
+    (Cases_on `EXISTS (top_body_has expr_create_root) tops`
+     >- (qspecl_then [`F`, `K SOME`, `tops`, `rpolicy`, `unit`, `out`,
+                      `prog`, `prog`, `cplan`, `am`, `tx`,
+                      `add_frame_gas g' es`, `vs`]
+           mp_tac call_entry_reachable_create_size_ok >>
+         impl_tac >- (simp[accepted_finalizers_def, Abbr `vs`] >>
+                      metis_tac[opt_entry_state_identity_add_frame_gas]) >>
+         simp[]) >>
+     metis_tac[o1_runtime_unit_create_size_ok]) >>
   `!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
      ~MEM (Label "runtime_begin") inst.inst_operands` by
     metis_tac[lower_vyper_runtime_unit_no_runtime_begin] >>
@@ -564,7 +687,25 @@ Proof
             (tx with <| function_name := f; args := vals |>)))` by
     simp[] >>
   `outcomes_accounts_typed (SOME vs.vs_outcomes)` by simp[] >>
-  `!vi. raw_variant vs.vs_initial_fmp vi vs ==>
+  `!f vals. calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
+     LENGTH vs.vs_outcomes < 2 ** 64 /\ LENGTH tx.calldata < 2 ** 64` by
+    (rpt gen_tac >> strip_tac >> conj_tac
+     >- (qpat_assum `!f vals. calldata_dispatch tops tx.calldata = SOME (f,vals) ==>
+          _ /\ _ /\ LENGTH (call_trace (add_frame_gas _ _)) < _`
+           (qspecl_then [`f`,`vals`] (fn branch =>
+              qpat_assum `calldata_dispatch tops tx.calldata = SOME (f,vals)`
+                (assume_tac o cj 3 o MATCH_MP branch))) >>
+         fs[]) >>
+     drule callDynamicMemoryTheory.call_state_rel_calldata_bound >> simp[]) >>
+  `cplan.cp_initial_fmp < 2 ** 254` by
+    (fs[stackPlanGenTheory.generate_context_plan_def] >>
+     drule stackPlanGenTheory.generate_context_plan_with_headroom >> simp[]) >>
+  `w2n vs.vs_initial_fmp < 2 ** 254` by
+    (fs[wordsTheory.w2n_n2w, wordsTheory.dimword_def, venomLayoutTheory.dimindex_256] >>
+     decide_tac) >>
+  drule callDynamicMemoryTheory.call_source_raw_fmp >>
+  disch_then (qspec_then `vs.vs_initial_fmp` strip_assume_tac) >>
+  `!vi. raw_variant fmp vi vs ==>
         raw_unit_memory_ok unit.cu_context vi /\
         ptr_discipline 0 unit.cu_context vi /\
         taint_within D unit.cu_context vi /\
@@ -575,13 +716,13 @@ Proof
          ~(!n. terminates (run_context n unit.cu_context vi) ==>
                ?u. run_context n unit.cu_context vi = Abort ExHalt_abort u))` by
     (gen_tac >> strip_tac >>
-     qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `vi`, `fuel`]
+     qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `vi`, `fuel`, `fmp`]
        mp_tac call_gas_raw_variant_facts >>
-     impl_tac >- (rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
+     impl_tac >- (simp[] >> rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
      simp[Abbr`D`, taint_within_def]) >>
   `venom_run_bounded fuel' M out.po_unit.cu_context vs` by
     (qpat_x_assum `!D vs fmp. _ ==> venom_run_bounded _ _ _ _`
-       (qspecl_then [`D`, `vs`, `vs.vs_initial_fmp`] mp_tac) >>
+       (qspecl_then [`D`, `vs`, `fmp`] mp_tac) >>
      impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
   (* S4's input state, for the codegen obligations *)
   `!eom. max_live_eom out.po_unit.cu_context = SOME eom ==>
@@ -590,7 +731,7 @@ Proof
   `o1_lowered_inv out.po_unit.cu_context vs` by
     (Cases_on `tx.is_static`
      >- (qspecl_then [`D`, `0`, `rpolicy`, `unit`, `out`, `vs`,
-                      `vs.vs_initial_fmp`] mp_tac
+                      `fmp`] mp_tac
            run_venom_pipeline_correct_static_abort >>
          impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
          qpat_assum `!vi. raw_variant _ vi vs ==> _`
@@ -603,7 +744,7 @@ Proof
         simp[initial_venom_state_rel_def, venom_env_rel_def,
              loweringStateRelDefsTheory.call_ctx_rel_def, o1_run_state_ok_def]) >>
      qspecl_then [`D`, `0`, `rpolicy`, `unit`, `out`, `vs`,
-                  `vs.vs_initial_fmp`] mp_tac run_venom_pipeline_correct >>
+                  `fmp`] mp_tac run_venom_pipeline_correct >>
      impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
      qpat_x_assum `_ ==> ctx_sim _ _ _ _ _ /\ _` mp_tac >>
      impl_tac >- metis_tac[] >> simp[]) >>
@@ -617,85 +758,124 @@ QED
 
 (* ===== The deployment cases ===== *)
 
-(* One gas variant of the creation frame's entry state, under the top's
-   finite storage guard and non-exemption: the unit's certificate at its
-   own marks is on its exit arm, which gives the S3 facts S4 and S6b ask
-   for (through ctorDeployMemoryFrontier's bridges), the pointer taint
-   within the dead set of the run's observed horizon H, and the unit's
-   result there. *)
-Theorem deploy_variant_exit_facts[local]:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vi.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
+(* The source result and memory facts at a raw constructor entry. *)
+Theorem deploy_gas_raw_variant_facts:
+  !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs vi fmp.
+    deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
+    fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
     deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vi (deploy_entry_state prog cplan tops es) /\
-    code_layout_valid vi /\
-    (!gs. deploy_storage_ok tops am tx (MAP SND (call_trace es)) gs) /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    vs = opt_deploy_entry_state_own prog prog' cplan tops es /\
+    vs.vs_alloca_next = imm_len tops /\ code_layout_valid vs /\
+    LENGTH (call_trace es) < 2 ** 64 /\
+    w2n vs.vs_initial_fmp <= w2n fmp /\ w2n fmp < 2 ** 254 /\
+    imm_len tops + unit_alloca_budget dunit.cu_context +
+      32 * ctx_dload_count dunit.cu_context <= w2n fmp /\
+    raw_variant fmp vi vs /\
+    (!gs. deploy_storage_ok tops am tx vs.vs_outcomes gs) /\
     (!obs. ~deploy_source_exempt tops
-       (load_contract (SOME vi.vs_outcomes) obs am tx [(NONE, tops)] []))
+       (load_contract (SOME vs.vs_outcomes) obs am tx [(NONE,tops)] []))
     ==>
-    ?(H : (bool # bytes32 # type_value) list # num list) gobs efuel.
-      raw_unit_memory_ok dunit.cu_context vi /\
-      ptr_discipline (imm_len tops) dunit.cu_context vi /\
-      taint_within (deploy_dead H tops runtime_bc am tx) dunit.cu_context vi /\
-      mem_inv dload_offset_ok dunit.cu_context vi /\
-      mem_inv dload_headroom_ok dunit.cu_context vi /\
-      deploy_venom_result_rel H tops runtime_bc tx
-        (load_contract (SOME vi.vs_outcomes) gobs am tx [(NONE, tops)] [])
-        (run_context efuel dunit.cu_context vi)
+      ?(H : (bool # bytes32 # type_value) list # num list) obs efuel.
+        raw_unit_memory_ok dunit.cu_context vi /\
+        ptr_discipline (imm_len tops) dunit.cu_context vi /\
+        taint_within (deploy_dead H tops runtime_bc am tx) dunit.cu_context vi /\
+        mem_inv dload_offset_ok dunit.cu_context vi /\
+        mem_inv dload_headroom_ok dunit.cu_context vi /\
+        mem_inv (\c f inst s. inst_dload_in_section inst s /\
+                             s.vs_code = vi.vs_code /\
+                             s.vs_data_section = vi.vs_data_section)
+          dunit.cu_context vi /\
+        deploy_venom_result_rel H tops runtime_bc tx
+          (load_contract (SOME vs.vs_outcomes) obs am tx [(NONE,tops)] [])
+          (run_context efuel dunit.cu_context vi)
 Proof
   rpt gen_tac >> strip_tac >>
-  `gas_variant vi
-      (deploy_entry_state prog cplan tops es with vs_outcomes := vi.vs_outcomes)` by
-    fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
-  drule_all deploy_unit_run_entry_canonical >> strip_tac >>
-  qpat_x_assum
-    `gas_variant vi (deploy_entry_state prog cplan tops es with vs_outcomes := vi.vs_outcomes)`
-    kall_tac >>
-  drule deploy_imm_alloca_budget_ok >> strip_tac >>
-  `EVERY pre_fmp_ops dunit.cu_context.ctx_functions` by
-    (rw[EVERY_MEM] >> irule source_pre_fmp_ops >>
-     metis_tac[deploy_unit_shape_ok]) >>
-  `vi.vs_initial_fmp = vi.vs_fmp` by
-    (qpat_x_assum `gas_variant _ _` mp_tac >> simp[gas_variant_def] >>
-     disch_then (mp_tac o AP_TERM
-       ``\s:venom_state. s.vs_initial_fmp = s.vs_fmp``) >>
-     simp[deploy_entry_state_def, entry_venom_state_def]) >>
-  `~ctx_has_dalloca dunit.cu_context` by
-    metis_tac[deploy_unit_shape_ok] >>
-  `tx.function_name = "__init__"` by fs[deploy_state_rel_def] >>
-  `vi.vs_outcomes = MAP SND (call_trace es)` by
-    (drule gas_variant_outcomes >>
-     simp[deploy_entry_state_def, entry_venom_state_def]) >>
-  `deploy_unit_execution_correct tops runtime_bc am tx dunit vi` by
-    (irule deploy_unit_execution_correct_joint >> metis_tac[]) >>
-  pop_assum (qx_choose_then `marks` assume_tac o
-             REWRITE_RULE [deploy_unit_execution_correct_def]) >>
+  `vi.vs_outcomes = vs.vs_outcomes` by metis_tac[raw_variant_outcomes] >>
+  `code_layout_valid vi /\ vi.vs_alloca_next = imm_len tops /\
+    vi.vs_initial_fmp = fmp /\ vi.vs_fmp = fmp` by
+    (fs[raw_variant_def, gas_variant_def, code_layout_valid_def,
+        venomStateTheory.venom_state_component_equality] >> metis_tac[]) >>
+  `deploy_typing_ok tops am tx` by fs[deploy_source_ok_def] >>
+  `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
+    fs[deploy_phases_def] >>
+  `lowering_context_ok dunit.cu_context` by metis_tac[deploy_unit_context_ok] >>
+  qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
+               `dunit`, `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`, `fmp`]
+    mp_tac deploy_unit_execution_correct_selected_raw_fmp >>
+  impl_tac >- gvs[] >> strip_tac >>
+  `?marks. deploy_unit_execution_correct_at marks tops runtime_bc am tx dunit vi`
+    by
+    (simp[deploy_unit_execution_correct_at_with] >>
+     qpat_x_assum `!vs. raw_variant _ vs _ ==> _` (qspec_then `vi` mp_tac) >>
+     impl_tac >- metis_tac[] >> metis_tac[]) >>
   qspecl_then [`marks`, `tops`, `runtime_bc`, `am`, `tx`, `dunit`, `vi`, `[]`]
     mp_tac deploy_unit_exit_safe_runs >>
   REWRITE_TAC [APPEND_NIL] >>
-  qabbrev_tac `gobs = gas_explicit marks vi.vs_gas_readings` >>
-  impl_tac >- (rpt conj_tac >> fs[]) >>
-  disch_then (qx_choosel_then [`func`, `efuel`] strip_assume_tac) >>
-  qabbrev_tac `H = storage_trace_horizon
-                     (deploy_storage_trace (SOME vi.vs_outcomes) gobs am tx tops)` >>
-  `func = fn /\ lbl = "__deploy"` by gvs[] >> gvs[] >>
-  qexistsl_tac [`H`, `gobs`, `efuel`] >> gvs[] >>
-  rpt conj_tac
-  >- (qspecl_then [`imm_len tops`, `dunit.cu_context`, `"__deploy"`, `fn`,
-                   `"__deploy"`, `vi`] mp_tac lowered_unit_raw_memory_ok_from >>
-      simp[] >> disch_then irule >> decide_tac)
-  >- (qspecl_then [`deploy_dead H tops runtime_bc am tx`, `imm_len tops`,
-                   `dunit.cu_context`, `"__deploy"`, `fn`, `"__deploy"`, `vi`]
-        mp_tac lowered_unit_ptr_taint >> simp[])
-  >- (qspecl_then [`deploy_dead H tops runtime_bc am tx`, `imm_len tops`,
-                   `dunit.cu_context`, `"__deploy"`, `fn`, `"__deploy"`, `vi`]
-        mp_tac lowered_unit_ptr_taint >> simp[])
-  >- (irule lowered_unit_dload_offset_ok >> metis_tac[])
-  >> qspecl_then [`imm_len tops`, `dunit.cu_context`, `"__deploy"`, `fn`, `vi`]
-       mp_tac lowered_unit_dload_headroom_ok_from >>
-  impl_tac >- (simp[] >> decide_tac) >> simp[]
+  qabbrev_tac `obs = gas_explicit marks vi.vs_gas_readings` >>
+  `deploy_storage_ok tops am tx vi.vs_outcomes obs` by
+    (qpat_assum `vi.vs_outcomes = vs.vs_outcomes`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     qpat_assum `!gs. deploy_storage_ok tops am tx _ gs`
+       (qspec_then `obs` ACCEPT_TAC)) >>
+  `~deploy_source_exempt tops
+      (load_contract (SOME vi.vs_outcomes) obs am tx [(NONE,tops)] [])` by
+    metis_tac[] >>
+  impl_tac >- (rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
+  strip_tac >>
+  rename1 `deploy_venom_result_rel _ _ _ _ _ (run_context vf _ vi)` >>
+  `?(H : (bool # bytes32 # type_value) list # num list).
+      (!fuel. ptr_safe_blocks (deploy_dead H tops runtime_bc am tx)
+         (imm_len tops) fuel dunit.cu_context func [] FEMPTY entry_taint
+         (vi with <|vs_prev_bb := NONE; vs_current_bb := "__deploy"; vs_inst_idx := 0|>)) /\
+      deploy_venom_result_rel H tops runtime_bc tx
+        (load_contract (SOME vi.vs_outcomes) obs am tx [(NONE,tops)] [])
+        (run_context vf dunit.cu_context vi)` by
+    (qexists_tac `storage_trace_horizon
+       (deploy_storage_trace (SOME vi.vs_outcomes) obs am tx tops)` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `w2n vi.vs_initial_fmp <= w2n vi.vs_fmp` by simp[] >>
+  `raw_unit_memory_ok dunit.cu_context vi /\
+   ptr_discipline (imm_len tops) dunit.cu_context vi /\
+   taint_within (deploy_dead
+     (H : (bool # bytes32 # type_value) list # num list) tops runtime_bc am tx)
+     dunit.cu_context vi /\
+   mem_inv dload_offset_ok dunit.cu_context vi /\
+   mem_inv dload_headroom_ok dunit.cu_context vi` by
+    (Cases_on `deploy_dalloca_form_occurs loweringShapeSource$expr_raw_shape_root tops`
+     >- (`!fn inst s. raw_reachable vi dunit.cu_context fn inst s ==>
+            dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+           (qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
+                        `dunit`, `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`,
+                        `es`, `vs`, `vi`, `fmp`] mp_tac deploy_entry_raw_no_wrap >>
+            simp[]) >>
+         mp_tac (Q.INST [`vs` |-> `vi`,
+                            `D` |-> `deploy_dead
+                              (H : (bool # bytes32 # type_value) list # num list)
+                              tops runtime_bc (am:abstract_machine) tx`,
+                            `deploy_bc` |-> `assemble prog`]
+           deploy_selected_memory_from_no_wrap) >>
+         impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[])) >>
+         disch_then ACCEPT_TAC) >>
+     `~ctx_has_dalloca dunit.cu_context` by
+       metis_tac[deploy_unit_no_dalloca_static] >>
+     metis_tac[deploy_selected_memory]) >>
+  `dunit.cu_context.ctx_entry = SOME "__deploy"` by
+    (drule lower_vyper_deploy_unit_entry >> simp[]) >>
+  `mem_inv (\c f inst s. inst_dload_in_section inst s /\
+                        s.vs_code = vi.vs_code /\
+                        s.vs_data_section = vi.vs_data_section)
+     dunit.cu_context vi` by
+    (simp[mem_inv_raw_reachable] >> rpt strip_tac >>
+     drule raw_reachable_code_data >> strip_tac >>
+     simp[] >> irule lowered_unit_dload_in_section >>
+     metis_tac[]) >>
+  qpat_assum `vi.vs_outcomes = vs.vs_outcomes`
+    (fn th => qpat_x_assum `deploy_venom_result_rel H _ _ _ _ _`
+       (assume_tac o REWRITE_RULE [th])) >>
+  qexistsl_tac [`H`, `obs`, `vf`] >> rpt conj_tac >>
+  FIRST_ASSUM ACCEPT_TAC
 QED
 
 (* e2e_deploy_correctness's hypotheses.  The constructor run's finite
@@ -732,7 +912,7 @@ Proof
   rpt strip_tac >>
   drule compile_vyper_deploy_phases >> strip_tac >>
   `deploy_source_ok tops am tx` by simp[deploy_source_ok_def] >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_o1_shape_ok >> strip_tac >>
   drule_all deploy_unit_defs_reach_uses >> strip_tac >>
   `o1PipelineCorrect$o1_pipeline rpolicy dunit = SOME dout /\
    codegen_assembly rpolicy dout.po_unit = SOME prog /\
@@ -751,7 +931,7 @@ Proof
   drule_all run_context_uniform_fuel >>
   disch_then (qx_choose_then `fuel` assume_tac) >>
   qspecl_then [`imm_len tops`, `rpolicy`, `dunit`, `dout`, `cplan`, `fuel`]
-    mp_tac run_venom_pipeline_run_bounded >>
+    mp_tac run_venom_pipeline_run_bounded_raw >>
   impl_tac >- simp[] >>
   disch_then (qx_choosel_then [`fuel'`, `M`] assume_tac) >>
   qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `rpolicy`, `dunit`,
@@ -787,68 +967,83 @@ Proof
        mp_tac deploy_txp_identity >> simp[]) >>
   `mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
       dout.po_unit.cu_context vs` by
-    (drule_all deploy_entry_create_size_ok >> simp[]) >>
+    (Cases_on `deploy_dalloca_form_occurs expr_create_root tops`
+     >- (qspecl_then [`K SOME`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
+                      `dunit`, `dout`, `prog`, `prog`, `cplan`, `am`, `tx`,
+                      `add_frame_gas g' es`, `vs`]
+           mp_tac deploy_entry_reachable_create_size_ok >>
+         fs[Abbr `vs`, opt_deploy_entry_state_own_identity]) >>
+     drule_all deploy_entry_create_size_ok >> simp[]) >>
   qabbrev_tac `Du = <| d_stor := K (K UNIV); d_trans := K (K UNIV);
                        d_imm := K UNIV; d_ret := K UNIV |>` >>
   `dead_wf Du` by simp[Abbr`Du`, dead_wf_def] >>
-  (* every gas variant of vs: its own exit arm *)
-  `!vi. gas_variant vi vs ==>
-        ?(H : (bool # bytes32 # type_value) list # num list) gobs efuel.
-          raw_unit_memory_ok dunit.cu_context vi /\
-          ptr_discipline (imm_len tops) dunit.cu_context vi /\
-          taint_within (deploy_dead H tops runtime_bc am tx)
-            dunit.cu_context vi /\
-          mem_inv dload_offset_ok dunit.cu_context vi /\
-          mem_inv dload_headroom_ok dunit.cu_context vi /\
-          deploy_venom_result_rel H tops runtime_bc tx
-            (load_contract (SOME vs.vs_outcomes) gobs am tx [(NONE, tops)] [])
-            (run_context efuel dunit.cu_context vi)` by
-    (rpt strip_tac >>
-     `code_layout_valid vi` by
-       (irule gas_variant_code_layout_valid >> qexists_tac `vs` >>
-        fs[o1_run_state_ok_def]) >>
-     `vi.vs_outcomes = vs.vs_outcomes` by metis_tac[gas_variant_outcomes] >>
-     qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `rpolicy`,
-                  `dunit`, `dout`, `prog`, `cplan`, `am`, `tx`,
-                  `add_frame_gas g' es`, `vi`] mp_tac deploy_variant_exit_facts >>
-     impl_tac >- fs[Abbr `vs`, deploy_gas_source_exempt_def] >>
+  `vs = opt_deploy_entry_state_own prog prog cplan tops (add_frame_gas g' es)` by
+    metis_tac[opt_deploy_entry_state_own_identity] >>
+  `vs.vs_alloca_next = imm_len tops` by
+    simp[Abbr `vs`, deploy_entry_state_def, opt_deploy_entry_state_own_def,
+         opt_entry_state_own_def, entry_venom_state_def] >>
+  qspecl_then [`policy`, `tops`, `runtime_bc`, `rpolicy`, `dunit`, `dout`,
+               `prog`, `prog`, `cplan`, `add_frame_gas g' es`] mp_tac
+    deploy_raw_fmp_exists >>
+  impl_tac >- fs[] >> disch_then (qx_choose_then `fmp` strip_assume_tac) >>
+  `w2n vs.vs_initial_fmp <= w2n fmp` by
+    (qpat_assum `vs = opt_deploy_entry_state_own _ _ _ _ _` SUBST1_TAC >>
+     FIRST_ASSUM ACCEPT_TAC) >>
+  `cplan.cp_initial_fmp MOD dimword (:256) <= w2n fmp` by
+    (qpat_assum `w2n vs.vs_initial_fmp <= w2n fmp` mp_tac >>
+     qpat_assum `vs.vs_initial_fmp = _`
+       (fn th => PURE_REWRITE_TAC [th, wordsTheory.w2n_n2w]) >>
      simp[]) >>
-  `!vi. gas_variant vi vs ==>
-        terminates (run_context fuel dunit.cu_context vi)` by
-    (rpt strip_tac >>
-     qpat_x_assum `!vi. gas_variant vi vs ==> ?H gobs efuel. _` drule >>
-     strip_tac >>
-     qpat_x_assum `!s f. terminates _ ==> _` irule >> qexists_tac `efuel` >>
-     metis_tac[deploy_venom_result_rel_terminates]) >>
-  `venom_run_bounded fuel' M dout.po_unit.cu_context vs` by
-    (qpat_x_assum `!D vs. _ ==> venom_run_bounded _ _ _ _` irule >>
-     simp[] >> qexists_tac `Du` >> simp[] >> rpt strip_tac >>
-     TRY (simp[Abbr`Du`, taint_within_def] >> NO_TAC) >>
+  `!vi. raw_variant fmp vi vs ==>
+      ?(H : (bool # bytes32 # type_value) list # num list) obs efuel.
+        raw_unit_memory_ok dunit.cu_context vi /\
+        ptr_discipline (imm_len tops) dunit.cu_context vi /\
+        taint_within (deploy_dead H tops runtime_bc am tx) dunit.cu_context vi /\
+        mem_inv dload_offset_ok dunit.cu_context vi /\
+        mem_inv dload_headroom_ok dunit.cu_context vi /\
+        mem_inv (\c f inst s. inst_dload_in_section inst s /\
+                             s.vs_code = vi.vs_code /\
+                             s.vs_data_section = vi.vs_data_section)
+          dunit.cu_context vi /\
+        deploy_venom_result_rel H tops runtime_bc tx
+          (load_contract (SOME vs.vs_outcomes) obs am tx [(NONE,tops)] [])
+          (run_context efuel dunit.cu_context vi)` by
+    (gen_tac >> strip_tac >>
+     qspecl_then [`K SOME`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
+                  `dunit`, `dout`, `prog`, `prog`, `cplan`, `am`, `tx`,
+                  `add_frame_gas g' es`, `vs`, `vi`, `fmp`]
+       mp_tac deploy_gas_raw_variant_facts >>
+     impl_tac >-
+       fs[deploy_gas_source_exempt_def, o1_run_state_ok_def,
+          wordsTheory.w2n_n2w] >>
      metis_tac[]) >>
+  `venom_run_bounded fuel' M dout.po_unit.cu_context vs` by
+    (qpat_x_assum `!D vs fmp. _ ==> venom_run_bounded _ _ _ _`
+       (qspecl_then [`Du`, `vs`, `fmp`] mp_tac) >>
+     impl_tac >- (simp[] >> gen_tac >> strip_tac >>
+       qpat_assum `!vi. raw_variant _ vi vs ==> _`
+         (qspec_then `vs_in` mp_tac) >>
+       impl_tac >- metis_tac[] >> strip_tac >>
+       `terminates (run_context fuel dunit.cu_context vs_in)` by
+         (qpat_x_assum `!s f. terminates _ ==> _` irule >>
+          metis_tac[deploy_venom_result_rel_terminates]) >>
+       simp[Abbr `Du`, taint_within_def]) >> simp[]) >>
   (* S4's input state, picked before its dead set *)
   `!eom. max_live_eom dout.po_unit.cu_context = SOME eom ==>
          eom <= w2n vs.vs_initial_fmp` by
     metis_tac[generate_context_plan_eom_room] >>
   qspecl_then [`imm_len tops`, `rpolicy`, `dunit`, `dout`, `vs`,
-               `vs.vs_initial_fmp`] mp_tac
-    run_venom_pipeline_correct_all_dead >>
+               `fmp`] mp_tac run_venom_pipeline_correct_all_dead >>
   impl_tac >- simp[] >> strip_tac >>
-  `gas_variant vs_in vs` by
-    metis_tac[raw_variant_gas_variant, o1_run_state_ok_def] >>
-  `?(H : (bool # bytes32 # type_value) list # num list) gobs efuel.
-     raw_unit_memory_ok dunit.cu_context vs_in /\
-     ptr_discipline (imm_len tops) dunit.cu_context vs_in /\
-     taint_within (deploy_dead H tops runtime_bc am tx) dunit.cu_context vs_in /\
-     mem_inv dload_offset_ok dunit.cu_context vs_in /\
-     mem_inv dload_headroom_ok dunit.cu_context vs_in /\
-     deploy_venom_result_rel H tops runtime_bc tx
-       (load_contract (SOME vs.vs_outcomes) gobs am tx [(NONE, tops)] [])
-       (run_context efuel dunit.cu_context vs_in)` by metis_tac[] >>
+  qpat_assum `!vi. raw_variant _ vi vs ==> _`
+    (qspec_then `vs_in` mp_tac) >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choosel_then [`H`, `gobs`, `efuel`] strip_assume_tac) >>
   qabbrev_tac `D = deploy_dead H tops runtime_bc am tx` >>
   `dead_wf D` by simp[Abbr`D`, deploy_dead_wf] >>
   `ctx_sim D dunit.cu_context dout.po_unit.cu_context vs_in vs /\
    o1_lowered_inv dout.po_unit.cu_context vs` by metis_tac[] >>
-  drule_all o1_pipeline_memory_obligations >> strip_tac >>
+  drule_all o1_pipeline_memory_obligations_raw >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
   `!obs. ~deploy_source_exempt tops
      (load_contract (SOME vs.vs_outcomes) obs am tx [(NONE, tops)] [])`
@@ -867,15 +1062,15 @@ Proof
                `run_context efuel dunit.cu_context vs_in`,
                `run_context vfuel dout.po_unit.cu_context vs`] mp_tac
     deploy_venom_result_rel_dead >>
-  impl_tac >- fs[Abbr`D`] >> strip_tac >>
+  impl_tac >- fs[Abbr`D`, deploy_state_rel_def] >> strip_tac >>
   qpat_x_assum `!g' am tx es Inv. _`
-    (qspecl_then [`g'`, `am`, `tx`, `es`, `Inv`] mp_tac) >>
+    (qspecl_then [`g'`, `am`, `tx`, `es`, `raw_reachable vs`] mp_tac) >>
   impl_tac
   >- (fs[Abbr `vs`] >>
       qexistsl_tac [`H`,
         `load_contract (SOME (deploy_entry_state prog cplan tops (add_frame_gas g' es)).vs_outcomes)
            gobs am tx [(NONE, tops)] []`, `vfuel`] >>
-      conj_tac >> first_assum ACCEPT_TAC) >>
+      metis_tac[]) >>
   simp[]
 QED
 

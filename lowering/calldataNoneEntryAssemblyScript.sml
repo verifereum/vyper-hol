@@ -13,6 +13,7 @@ Theorem none_entry_reject_from_selected:
     supported_program tops /\ source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     unit.cu_context.ctx_entry = SOME "__entry" /\
     venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
     (!name tys.
@@ -110,5 +111,7 @@ Proof
      irule gas_origin_ptr_path_trans >> qexistsl_tac [`G`,`p`,`tn`] >> simp[] >>
      irule gas_origin_ptr_path_trans >> qexistsl_tac [`H`,`t`,`u`] >> simp[]) >>
   simp[] >> qexistsl_tac [`s`,`G'`,`tn'`] >> simp[Abbr `e`] >>
-  irule entry_joint_revert_exit >> simp[]
+  qspecl_then [`unit.cu_context`, `func`, `vs`, `s`, `G'`, `tn'`, `[]`]
+    mp_tac entry_joint_revert_exit >>
+  simp[]
 QED

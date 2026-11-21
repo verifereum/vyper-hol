@@ -5,8 +5,11 @@ Ancestors
   runtimeSymSrcGetterSource runtimeSymSrcGetterReturn runtimeSymSrcAbiEncode
   runtimeSymSrcInterfaces runtimeSymSrcBlockEmission
   compileVyper moduleLowering compileEnv loweringShapeDefs list
+  vyperTypeContract constSubstCorrect runtimeSymSrcClassifiedSource
 
 Theorem runtime_sym_external_package_body:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   MEM (mut,nr,rr,name,args,defaults,ret,fbody) (FST (classify_functions tops)) /\
@@ -40,6 +43,9 @@ Proof
       disch_then (qspecl_then [`tops`,
         `args ++ supported_stmts_bindings T fbody ++ supported_stmts_bindings F fbody`] mp_tac) >> simp[] >>
       (impl_tac >- (rpt gen_tac >> first_assum MATCH_ACCEPT_TAC)) >> simp[]) >>
+  `!id e. ALOOKUP (module_consts_env tops []) id = SOME e ==>
+     ~supported_expr_exists is_self_code e` by
+    metis_tac[runtime_sym_checked_constant_replacements] >>
   drule_at (Pat `compile_external_function_body _ _ _ _ _ _ _ _ _ = _`)
     runtime_sym_external_body_raw >>
   simp[] >> disch_then irule >> qexists_tac `tops` >>
@@ -49,11 +55,14 @@ Proof
       drule_at (Pat `public_getter _ = _`) runtime_sym_public_getter_stmts >>
       disch_then (drule_at (Pat `compile_stmts _ _ _ _ _ = _`)) >>
       simp[] >> disch_then irule >>
+      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
       rpt gen_tac >> MATCH_ACCEPT_TAC runtime_sym_abi_encode_to_buf) >>
   first_assum ACCEPT_TAC
 QED
 
 Theorem runtime_sym_internal_package_body:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   MEM (mut,nr,rr,name,args,defaults,ret,fbody) (FST (SND (classify_functions tops))) /\
@@ -81,6 +90,8 @@ Proof
 QED
 
 Theorem runtime_sym_fallback_package_body:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   FST (SND (SND (classify_functions tops))) =
@@ -104,6 +115,8 @@ Proof
 QED
 
 Theorem runtime_sym_external_classified_bodies:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   (!src. MEM src sources ==> MEM src (FST (classify_functions tops))) /\
@@ -128,12 +141,15 @@ Proof
   qpat_x_assum `(_,_,_,_,_,_,_,_,_,_,_) = _` (assume_tac o SYM) >>
   rpt strip_tac >>
   drule_at (Pat `set_external_package_target _ _ = _`) runtime_sym_external_package_body >>
+  disch_then (qspecl_then [`()`, `s'`, `s`, `mode`, `layouts`, `imms`, `art`, `addr`, `A`] mp_tac) >>
   simp[] >> disch_then irule >> conj_tac
   >- (rpt gen_tac >> first_assum MATCH_ACCEPT_TAC) >>
-  conj_tac >- metis_tac[] >> qexists `s` >> simp[]
+  first_assum MATCH_ACCEPT_TAC
 QED
 
 Theorem runtime_sym_internal_classified_bodies:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   (!src. MEM src sources ==> MEM src (FST (SND (classify_functions tops)))) /\
@@ -152,7 +168,8 @@ Proof
   rpt gen_tac >> strip_tac >> gvs[MEM_MAP] >> PairCases_on `y` >> gvs[] >>
   qpat_x_assum `(_,_,_,_,_,_,_,_,_,_,_,_) = _` (assume_tac o SYM) >>
   drule_at (Pat `set_internal_package_target _ _ = _`) runtime_sym_internal_package_body >>
+  disch_then (qspecl_then [`()`, `s'`, `s`, `mode`, `layouts`, `imms`, `art`, `addr`, `A`] mp_tac) >>
   simp[] >> disch_then irule >> conj_tac
   >- (rpt gen_tac >> first_assum MATCH_ACCEPT_TAC) >>
-  conj_tac >- metis_tac[] >> qexists `s` >> simp[]
+  first_assum MATCH_ACCEPT_TAC
 QED

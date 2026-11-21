@@ -83,7 +83,7 @@ Theorem raw_log_accepts_literal_empty_topics:
          data] NONE)
 Proof
   simp[well_typed_expr_def, well_typed_builtin_app_def, expr_type_def,
-       well_formed_type_def, evaluate_type_def, compatible_bound_def,
+       assignable_type_def, well_formed_type_def, evaluate_type_def, compatible_bound_def,
        bound_at_most_def, builtin_operands_ok_def, slice_operands_ok_def,
        type_slot_size_def] >>
   simp_tac (srw_ss() ++ wordsLib.SIZES_ss) []
@@ -102,7 +102,7 @@ Theorem raw_log_accepts_literal_nonempty_topics:
          Name (BaseT (BytesT (Dynamic 1))) "data"] NONE)
 Proof
   simp[well_typed_expr_def, well_typed_builtin_app_def, expr_type_def,
-       well_formed_type_def, evaluate_type_def, compatible_bound_def,
+       assignable_type_def, well_formed_type_def, evaluate_type_def, compatible_bound_def,
        bound_at_most_def, FLOOKUP_UPDATE, builtin_operands_ok_def,
        slice_operands_ok_def, type_slot_size_def] >> simp_tac (srw_ss() ++ wordsLib.SIZES_ss) []
 QED

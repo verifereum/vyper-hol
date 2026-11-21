@@ -65,6 +65,7 @@ val PreparedOriginsMode = ``\checked.
     actual.vs_code = t.vs_code /\ actual.vs_outcomes = t.vs_outcomes /\
     actual.vs_tx_ctx = t.vs_tx_ctx /\ actual.vs_block_ctx = t.vs_block_ctx /\
     actual.vs_gas_readings = t.vs_gas_readings /\
+    actual.vs_fmp = t.vs_fmp /\
     (!a. a < imm_len tops ==> read_byte a actual.vs_memory = read_byte a t.vs_memory) /\
     qt.t_mem SUBSET (tn.t_mem UNION
       {j | t.vs_alloca_next <= j /\ j < actual.vs_alloca_next}) /\

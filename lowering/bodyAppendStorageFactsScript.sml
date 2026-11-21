@@ -24,22 +24,6 @@ Proof
   gvs[Once alloc_limits_expr_def, type_alloc_ok_def, expr_type_def]
 QED
 
-Theorem supported_append_storage_decl:
-  supported_storage_dynamic_array tops nid ==>
-  ?elem n slot mut.
-    supported_variable_decl tops nid =
-      SOME (Private, mut, ArrayT elem (Dynamic n), SOME slot) /\
-    (mut = Storage \/ mut = Transient) /\ supported_full_word_type elem
-Proof
-  simp[supported_storage_dynamic_array_def] >>
-  Cases_on `supported_variable_decl tops nid` >> simp[] >>
-  rename1 `SOME x` >> PairCases_on `x` >>
-  Cases_on `x0` >> Cases_on `x1` >> Cases_on `x2` >>
-  Cases_on `x3` >> simp[] >>
-  rename1 `ArrayT elem bd` >> Cases_on `bd` >> simp[] >>
-  metis_tac[]
-QED
-
 Theorem supported_append_element_layout:
   supported_full_word_type elem ==>
   is_word_type elem /\
@@ -139,13 +123,27 @@ Proof
   gvs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]
 QED
 
+Theorem supported_append_storage_decl:
+  supported_storage_dynamic_array tops nid ==>
+  ?vis mut elem n slot.
+    supported_variable_decl tops nid =
+      SOME (vis,mut,ArrayT elem (Dynamic n),SOME slot) /\
+    (mut = Storage \/ mut = Transient) /\ supported_storage_type tops elem
+Proof
+  Cases_on `supported_variable_decl tops nid` >>
+  simp[supported_storage_dynamic_array_def] >>
+  PairCases_on `x` >> Cases_on `x1` >> Cases_on `x2` >> Cases_on `x3` >>
+  gvs[supported_storage_dynamic_array_def] >>
+  rename1 `ArrayT elem bd` >> Cases_on `bd` >> gvs[] >> metis_tac[]
+QED
+
 Theorem body_append_runtime_metadata:
   body_inv tops ctx cenv cx /\
   supported_storage_dynamic_array tops (src,id) /\
   env_consistent env cx es /\
   type_place_target env (TopLevelNameTarget (src,id)) = SOME (Type ty) ==>
   ?elem n tr key slot tv.
-    ty = ArrayT elem (Dynamic n) /\ supported_full_word_type elem /\
+    ty = ArrayT elem (Dynamic n) /\
     cenv.ce_module_var_type (src,id) = SOME ty /\
     cenv.ce_module_dynarray_capacity (src,id) = n /\
     find_var_decl_by_name id tops = SOME (StorageVarDecl tr ty,key) /\
@@ -170,8 +168,7 @@ Proof
   drule_all build_maps_variable >> strip_tac >>
   `ty = ArrayT elem (Dynamic n)` by
     (fs[body_inv_def] >> metis_tac[optionTheory.SOME_11]) >>
-  gvs[] >> drule_all append_storage_target_eval >>
-  metis_tac[]
+  gvs[] >> drule_all append_storage_target_eval >> metis_tac[]
 QED
 
 Theorem append_storage_compiler_location:
@@ -199,77 +196,9 @@ Proof
   simp[Once type_stmt_def, AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem body_append_target_bounds:
-  body_inv tops ctx cenv cx /\
-  supported_storage_dynamic_array tops (src,id) /\
-  expr_sim_inv cenv cx env es /\
-  type_stmt env ret_ty (Append (TopLevelNameTarget (src,id)) e) = SOME env' ==>
-  ?elem n tr key slot tv.
-    supported_full_word_type elem /\ 0 < n /\ n + 1 < dimword(:256) /\
-    cenv.ce_module_var_type (src,id) = SOME (ArrayT elem (Dynamic n)) /\
-    cenv.ce_module_dynarray_capacity (src,id) = n /\
-    find_var_decl_by_name id tops =
-      SOME (StorageVarDecl tr (ArrayT elem (Dynamic n)),key) /\
-    lookup_var_slot_from_layout cx tr src key = SOME slot /\
-    evaluate_type (get_tenv cx) (ArrayT elem (Dynamic n)) = SOME tv /\
-    eval_target_place cx (TopLevelNameTarget (src,id)) es =
-      (INL (StoragePlace tr (n2w slot) tv),
-       es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tv])
-Proof
-  strip_tac >> drule append_typing_target >> strip_tac >>
-  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
-  drule_all body_append_runtime_metadata >> strip_tac >> gvs[] >>
-  `env.type_defs = get_tenv cx` by
-    fs[env_consistent_def, env_context_consistent_def] >>
-  `assignable_type env.type_defs
-     (ArrayT elem (Dynamic (cenv.ce_module_dynarray_capacity (src,id))))` by
-    simp[assignable_type_def, well_formed_type_def] >>
-  drule_all append_capacity_word_bound >> strip_tac >>
-  metis_tac[]
-QED
-
 (* A word type takes no wider type (type_widens_to). *)
 Theorem type_widens_to_word:
   !tenv t u. type_widens_to tenv t u /\ is_word_type u ==> t = u
 Proof
   metis_tac[compileEnvTheory.type_widens_to_word]
-QED
-
-Theorem append_narrow_annotation:
-  supported_stmt tops bindings (Append (TopLevelNameTarget nid) e) /\
-  supported_variable_decl tops nid =
-    SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) /\
-  ~supported_full_word_type elem ==> expr_type e = elem
-Proof
-  strip_tac >>
-  `~supported_storage_dynamic_array tops nid` by
-    (strip_tac >> drule supported_append_storage_decl >> strip_tac >> gvs[]) >>
-  gvs[supported_stmt_def]
-QED
-
-Theorem append_storage_element_domain:
-  body_inv tops ctx cenv cx /\
-  supported_variable_decl tops nid =
-    SOME (vis,mut,ArrayT elem (Dynamic dn),SOME slot) /\
-  (mut = Storage \/ mut = Transient) ==>
-  supported_storage_type tops elem /\ ~is_bytestring_type elem /\
-  (~supported_full_word_type elem ==> ~is_word_type elem)
-Proof
-  Cases_on `nid` >> strip_tac >>
-  drule supported_variable_decl_mem >> strip_tac >>
-  `supported_program tops` by fs[body_inv_def] >>
-  drule_all supported_program_declaration >> strip_tac >>
-  `supported_storage_type tops elem` by
-    (Cases_on `vis` >>
-     gvs[supported_declaration_header_def, supported_storage_array_depth]) >>
-  simp[] >> conj_tac >- (Cases_on `elem` >> simp[is_bytestring_type_def] >>
-      rename1 `BaseT bt` >> Cases_on `bt` >>
-      gvs[is_bytestring_type_def, supported_storage_type_def,
-           Once supported_nested_type_def, supported_full_word_type_def] >>
-      rename1 `BytesT bd` >> Cases_on `bd` >>
-      gvs[is_bytestring_type_def, supported_storage_type_def,
-           Once supported_nested_type_def, supported_full_word_type_def]) >>
-  Cases_on `elem` >>
-  gvs[supported_storage_type_def, Once supported_nested_type_def,
-      supported_full_word_type_def, is_word_type_def, is_bytestring_type_def]
 QED

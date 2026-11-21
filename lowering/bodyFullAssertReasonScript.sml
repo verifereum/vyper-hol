@@ -68,17 +68,16 @@ Theorem compile_assert_reason_frag_full_from_raise:
 Proof
   disch_then (markerLib.mk_asm "producer") >>
   rpt gen_tac >> strip_tac >>
-  `expr_sim_pre cenv cx env e es` by
+  `expr_body_pre cenv cx env e es` by
     (irule assert_reason_condition_source_pre >> metis_tac[]) >>
   `expr_type e = BaseT BoolT` by fs[type_stmt_assert_reason] >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx (BaseT BoolT) e es` by
-    (qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
-     simp[Once body_expr_full_ok_def] >>
-     strip_tac >>
-     qpat_x_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es. _`
-       (irule o cj 1) >>
-     fs[expr_sim_pre_body] >> metis_tac[]) >>
+    (qpat_x_assum `body_expr_full_ok cx e`
+       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `tops`, `ctx`,
+       `shadow_ctx`, `func`, `shadow_func`, `cenv`, `env`, `BaseT BoolT`,
+       `es`] mp_tac) >> simp[]) >>
   rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   fs[gas_shadow_stmt_def, gas_shadow_assert_reason_def] >>
   drule_all compile_assert_reason_layout_full >> strip_tac >> gvs[] >>

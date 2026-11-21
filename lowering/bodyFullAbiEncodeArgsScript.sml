@@ -1,7 +1,8 @@
 Theory bodyFullAbiEncodeArgs
 Ancestors
   bodyFullShadowBodyInv bodyFullExtCallPosList
-  bodyFullPreds bodySimFull bodyInvNoDalloca
+  bodyFullPreds bodySimFull
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   exprSimAbiEncodeRuntimeInputs abiEncodeArgsCase abiEncodeEndpointMetadata
   stmtSimProps[qualified,ignore_grammar]
   abiBuiltinEncodeCode abiBuiltinEncodeMethod abiBuiltinEncodeAllocate bodyFullAbiEncodeSetupTail
@@ -70,7 +71,6 @@ Theorem abi_encode_vv_full_from_packaging:
     ce cx cty (TypeBuiltin ann (AbiEncode ensure mid) target args) es
 Proof
   strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `1 <= LENGTH args` by
     (Cases_on `args` >> simp[] >>
      `well_typed_expr env (TypeBuiltin ann (AbiEncode ensure mid) target [])`
@@ -192,6 +192,9 @@ Resume abi_encode_vv_full_from_packaging[payload]:
      qpat_assum `u with <| vs_vars := _; vs_allocas := _; vs_alloca_next := _; vs_inst_idx := _ |> = t`
        (SUBST1_TAC o SYM) >> simp[]) >>
   `stmt_state_rel H0 ctx func ce cx mid' u` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `stmt_state_rel H0 ctx func ce cx mid' u`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `local_ptrs_rel func ce mid'.scopes u` by metis_tac[stmt_state_rel_local_ptrs_alloca] >>
   `ci_mono st allocated /\ ci_mono method_st ready` by
     metis_tac[ci_mono_compile_alloc_buffer, ci_mono_emit_op, SND] >>
@@ -1013,6 +1016,17 @@ Resume abi_encode_vv_full_from_packaging[standalone_open_input]:
 QED
 
 Resume abi_encode_vv_full_from_packaging[standalone_window_premises]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z /\
+    z.vs_alloca_next + pending_alloca_size func z <= w2n z.vs_initial_fmp` by
+    (strip_tac >> conj_tac
+     >- (qpat_assum `stmt_state_rel H0 ctx func ce cx mid' z`
+           (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+         qpat_assum `ctx_has_dalloca ctx` (rewrite_tac o single))
+     >> qpat_assum `stmt_state_rel H0 ctx func ce cx mid' z`
+          (mp_tac o REWRITE_RULE [fmp_room_def] o MATCH_MP stmt_state_rel_fmp_room) >>
+     qpat_assum `ctx_has_dalloca ctx` (rewrite_tac o single) >>
+     disch_then (mp_tac o CONJUNCT1) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
   qpat_assum `enc at rv = bytes` SUBST1_TAC >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >>
   TRY (simp_tac bool_ss [abi_encoder_translation_admissible] >> NO_TAC)
@@ -1119,10 +1133,10 @@ Resume abi_encode_vv_full_from_packaging[finish_payload]:
   qpat_assum `abi_encode_saved_state ctx func ce cx st0 mid' DF lo d st t G1 tn1
     st.cs_next_id p N root dp (32+k) prefix body_end q Gq tq`
     (strip_assume_tac o REWRITE_RULE [abi_encode_saved_state_def]) >>
-  `local_ptrs_rel func ce mid'.scopes q` by
+  `stmt_state_rel H0 ctx func ce cx mid' q` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H ctx func ce cx mid' q /\ _`
-       (qspec_then `H0` (drule_then (assume_tac o cj 1))) >>
-     metis_tac[stmt_state_rel_local_ptrs_alloca]) >>
+       (qspec_then `H0` (drule_then (ACCEPT_TAC o cj 1)))) >>
+  `local_ptrs_rel func ce mid'.scopes q` by metis_tac[stmt_state_rel_local_ptrs_alloca] >>
   `p+N <= q.vs_alloca_next /\ 32+LENGTH (prefix ++ bytes) <= N` by
     (conj_tac >- metis_tac[alloca_site_registered_below] >>
      simp[LENGTH_APPEND] >>
@@ -1138,7 +1152,9 @@ Resume abi_encode_vv_full_from_packaging[finish_payload]:
      conj_tac >> (first_assum ACCEPT_TAC ORELSE decide_tac)) >>
   `!name b sz. local_region ce mid'.scopes q name b sz ==> regions_disjoint p N b sz`
     by suspend "finish_local_separation" >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp q` by asm_rewrite_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp q` by
+    (qpat_assum `stmt_state_rel H0 ctx func ce cx mid' q`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `p+32 <= q.vs_alloca_next` by decide_tac >>
   drule_all (Q.INST [`explicit` |-> `gas_explicit_sites ctx shadow_ctx`,
                      `PG` |-> `PG`] abi_encode_finish_origin) >>
@@ -1382,6 +1398,9 @@ Resume abi_encode_vv_full_from_packaging[finish_post]:
   qx_gen_tac `H` >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H ctx func ce cx mid' actual /\ _`
     (qspec_then `H` (drule_then strip_assume_tac)) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp actual` by
+    (qpat_assum `stmt_state_rel H ctx func ce cx mid' actual`
+      (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `stmt_state_rel H ctx func ce cx (mid' with gas_obs := []) actual /\
     storage_well_formed_on cx (mid' with gas_obs := []) (FST H) /\
     ghost_inv_at (DF H) lo d ce cx (mid' with gas_obs := []) Gf tf actual` by

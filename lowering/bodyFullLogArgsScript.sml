@@ -367,7 +367,8 @@ Theorem compile_log_eval_all_full_store_bound_halt:
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
         (cx_tops cx) cx st0 (eval_exprs cx args) (es, s0, G0, tn0)
         (log_full_post DF lo d ctx func cenv cx es sa sb s0 G0 tn0 args ops)
-        (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
+        (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+          (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
   rpt gen_tac >> strip_tac >> Induct
   >- (rpt gen_tac >> strip_tac >> gvs[compile_log_eval_all_nil] >>
@@ -463,10 +464,11 @@ Resume compile_log_eval_all_full_store_bound_halt[cons]:
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ pathQ headR` (irule_at Any) >>
   conj_tac >- simp[] >>
-  (* The former weaker error projection closed with
-     metis_tac[expr_exit_INR_type]; retain both error facts here. *)
   rpt strip_tac >> Cases_on `res` >> fs[Abbr `headR`, expr_exit_def] >>
-  conj_tac >- metis_tac[expr_exit_INR_type] >> gvs[halt_exit_def]
+  rpt conj_tac
+  >- metis_tac[expr_exit_INR_type]
+  >- fs[halt_exit_def] >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume compile_log_eval_all_full_store_bound_halt[tail]:
@@ -564,7 +566,8 @@ Resume compile_log_eval_all_full_store_bound_halt[ih]:
      (\H res ee G tn u.
         log_full_post DF lo d ctx func cenv cx mid sm sb t G1 tn1 args ys
           H res ee G tn u /\ valid_horizon cx st0 H mid.storage_trace)
-     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)` by
+     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+          (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))` by
     (irule gas_outcome_full_post_source >>
      first_assum (irule_at Any) >> simp[] >> rpt strip_tac >>
      first_x_assum (qspec_then `[]` assume_tac) >> fs[] >>

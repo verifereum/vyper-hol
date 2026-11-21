@@ -20,13 +20,18 @@ Theorem augassign_entry_rhs_pre:
 Proof
   strip_tac >> drule aug_place_typing >> strip_tac >>
   `supported_expr tops e` by metis_tac[supported_augassign_contract] >>
-  drule supported_expr_body_calls >> strip_tac >>
+  drule supported_expr_main_calls >> simp[EVERY_CONJ] >> strip_tac >>
+  drule supported_expr_no_evm_run >> strip_tac >>
   `~supported_expr_exists (const_name_root cx) e` by
-    metis_tac[body_inv_const_name_free] >>
+    (drule_all body_inv_stmt_const_name_free >>
+     simp[supported_stmt_expr_exists_def]) >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops /\
    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
      is_dynamic (vyper_to_abi_type (type_env tops) target))` by fs[body_inv_def] >>
   `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
+  `~is_extcode e` by
+    (irule alloc_limits_expr_not_extcode >> qexists_tac `cenv` >>
+     fs[stmt_exprs_ok_def, alloc_limits_stmt_def]) >>
   irule stmt_expr_body_pre_alloc >>
   gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
       alloc_limits_stmt_def, int_calls_stmt_def] >>
@@ -53,8 +58,6 @@ Proof
     `?pt. supported_target_info tops bindings t = SOME pt` by
       metis_tac[aug_place_supported_stmt_target_info] >>
     drule (cj 1 aug_place_typing) >> strip_tac >>
-    `body_stmt_safe tops (AugAssign ty t bop e)` by
-      metis_tac[supported_stmt_body_safe] >>
     `supported_program tops /\ get_module_code cx NONE = SOME tops /\
      (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
        is_dynamic (vyper_to_abi_type (type_env tops) target))` by fs[body_inv_def] >>
@@ -62,13 +65,11 @@ Proof
       fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
     `EVERY (\e. ~is_extcode e) (target_indices t)` by
       metis_tac[alloc_limits_target_indices_not_extcode] >>
-    qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
-      SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
-        int_calls_stmt_def, EVERY_APPEND, DE_MORGAN_THM]) >>
+    mp_tac (Q.SPECL [`tops`, `bindings`, `t`] supported_target_info_main_calls) >>
+    simp[] >> strip_tac >>
     `~supported_target_exists (const_name_root cx) t` by
-      metis_tac[body_inv_target_const_name_free, optionTheory.NOT_SOME_NONE] >>
-    `~supported_target_exists call_operands_effect_root t` by
-      metis_tac[supported_target_info_storage_syntax, optionTheory.IS_SOME_EXISTS] >>
+      (drule_all body_inv_stmt_const_name_free >>
+       simp[supported_stmt_expr_exists_def]) >>
     irule aug_place_target_indices_pre >>
     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
         alloc_limits_stmt_def, int_calls_stmt_def] >>

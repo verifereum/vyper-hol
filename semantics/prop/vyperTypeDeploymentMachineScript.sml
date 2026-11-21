@@ -84,6 +84,7 @@ Theorem checked_constructor_body_typing_package:
   ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE fn Deploy ts = SOME (mut,nr,args,dflts,ret,body) ==>
   ?env_body env_after.
+    env_body = function_entry_env art mods NONE Deploy args /\
     env_body.current_src = NONE /\
     env_body.type_defs = type_env_all_modules mods /\
     env_body.fn_sigs = art.cta_fn_sigs /\
@@ -102,12 +103,11 @@ Theorem checked_constructor_body_typing_package:
 Proof
   strip_tac >>
   drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[]
-  >- (qexistsl [`artifact_env art mods NONE`, `artifact_env art mods NONE`] >>
-      simp[artifact_env_def, Once type_stmt_def]) >>
+  >- (qexists_tac `artifact_env art mods NONE` >>
+      simp[function_entry_env_def, artifact_env_def, Once type_stmt_def]) >>
   `check_function_body layouts addr mods art NONE Deploy mut nr args dflts ret body` by
     (irule check_contract_deploy_function_body_MEM >> metis_tac[]) >>
   gvs[check_function_body_def, optionTheory.IS_SOME_EXISTS] >>
-  qexistsl [`function_entry_env art mods NONE Deploy args`, `x'`] >>
   gvs[function_entry_env_def, artifact_env_def,
       FOLDL_extend_local_args_static, params_ok_def] >>
   rpt conj_tac >>

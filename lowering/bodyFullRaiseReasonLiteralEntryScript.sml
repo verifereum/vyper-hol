@@ -14,7 +14,7 @@ Theorem reason_literal_entry_source_family:
   compile_bytelike_literal (MAP (n2w o ORD) str) ml sa = (buf,sb) /\
   expr_body_pre cenv cx env (Literal (BaseT (StringT ml)) (StringL str)) es /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\
   32+32*word_size ml < dimword (:256) /\
   storage_trace_domain cx st0 es.storage_trace /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
@@ -119,7 +119,7 @@ Theorem reason_literal_message_full_entry:
   compile_bytelike_literal (MAP (n2w o ORD) str) ml sa = (buf,sb) /\
   expr_body_pre cenv cx env (Literal (BaseT (StringT ml)) (StringL str)) es /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\
   32+32*word_size ml < dimword (:256) /\
   storage_trace_domain cx st0 es.storage_trace /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>

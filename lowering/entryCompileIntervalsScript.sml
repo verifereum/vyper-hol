@@ -209,7 +209,11 @@ Theorem external_fn_selected_check_intervals:
       sa.cs_next_var <= sc.cs_next_var /\
       compile_register_positional_args ce pa 4 sd = (cenv,sb) /\
       compile_guarded_body cenv nr key tr view stmts rt sb = ((),se) /\
-      cs_extends sb se /\ cs_extends se sx
+      cs_extends sb se /\ cs_extends se sx /\
+      (?pre post before.
+        fns = pre ++ (lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt)::post /\
+        compile_external_fn_bodies pre sa = ((),before) /\
+        new_block lbl before = (before.cs_current_bb,sc))
 Proof
   Induct >> simp[compile_external_fn_bodies_def] >>
   gen_tac >> PairCases_on `h` >> rpt gen_tac >>
@@ -227,9 +231,19 @@ Proof
       drule (SRULE [cs_appends_def] cs_appends_guarded_body) >> strip_tac >>
       qexistsl_tac [`cs'`, `cs''`] >> simp[] >>
       rpt (goal_assum (drule_at Any)) >>
-      gvs[new_block_def] >> metis_tac[cs_extends_trans]) >>
+      gvs[new_block_def] >>
+      reverse (rpt conj_tac)
+      >- (qexistsl_tac [`[]`, `fns`, `sa`] >>
+          gvs[compile_external_fn_bodies_def, comp_return_def, new_block_def]) >>
+      metis_tac[cs_extends_trans]) >>
   first_x_assum drule >> strip_tac >>
   qexistsl_tac [`sc`, `sd`, `cenv`, `sb`, `se`] >> simp[] >>
+  reverse (rpt conj_tac)
+  >- (rename1 `compile_external_fn_bodies pre _ = ((),before)` >>
+      qexistsl_tac [`(h0,h1,h2,h3,h4,h5,h6,h7,h8,h9,h10)::pre`,
+                    `post`, `before`] >>
+      simp[compile_external_fn_bodies_def, comp_ignore_bind_def, comp_bind_def] >>
+      rpt (pairarg_tac >> gvs[])) >>
   metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]
 QED
 

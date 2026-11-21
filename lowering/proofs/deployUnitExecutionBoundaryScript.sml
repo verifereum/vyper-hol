@@ -2,6 +2,8 @@
 Theory deployUnitExecutionBoundary
 Ancestors
   deployUnitExecution deployUnitExitSafe ctorDeployRawEntryFacts ctorDeployDead
+  deployDynamicMemory loweringShapeSource[qualified] ctorDeployShape
+  contextRawReachable callTrace
   ctorDeployImmBudget ctorDeployMemoryFrontier fragGasOriginEvents fragGasOriginPtr
   fragGasOriginPtrSafeUpto o1SafeUpto unitMemInv o1PassContract
   ctorDeployDefs e2eDeployDefs e2eEntry venomInstProofs venomInst venomState
@@ -15,6 +17,7 @@ Theorem deploy_certificate_raw_entry_boundary:
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_state_rel tops (assemble prog') am tx es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
     vs_out = opt_deploy_entry_state_own prog prog' cplan tops es /\
     deploy_source_ok tops am (tx with code := vs_out.vs_code) /\
     w2n vs_out.vs_initial_fmp <= w2n fmp /\
@@ -44,8 +47,30 @@ Proof
   `v.vs_alloca_next = imm_len tops /\
    v.vs_gas_readings = gs /\ v.vs_initial_fmp = v.vs_fmp` by
     simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def] >>
+  `raw_variant fmp v vs_out` by
+    (qpat_assum `v = _` SUBST1_TAC >>
+     simp[raw_variant_def, gas_variant_def, venom_state_fupdfupds,
+          venom_state_component_equality]) >>
+  `v.vs_initial_fmp = fmp` by
+    (qpat_assum `v = _` SUBST1_TAC >> simp[venom_state_accfupds]) >>
   `mem_inv dload_headroom_ok dunit.cu_context v` by
     (irule deploy_raw_entry_mem_inv >> metis_tac[]) >>
+  `deploy_dalloca_form_occurs loweringShapeSource$expr_raw_shape_root tops ==>
+    !fn inst s. raw_reachable v dunit.cu_context fn inst s ==>
+      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+    (strip_tac >>
+     `tx with code := vs_out.vs_code = tx` by metis_tac[deploy_own_txp_identity] >>
+     `deploy_typing_ok tops am tx` by fs[deploy_source_ok_def] >>
+     qspecl_then [`fin`,`policy`,`tops`,`runtime_bc`,`rpolicy`,`dunit`,`dout`,
+       `prog`,`prog'`,`cplan`,`am`,`tx`,`es`,`vs_out`,`v`,`fmp`]
+       mp_tac deploy_entry_raw_no_wrap >>
+     impl_tac >- metis_tac[] >> disch_then ACCEPT_TAC) >>
+  `ctx_has_dalloca dunit.cu_context ==>
+    !fn inst s. raw_reachable v dunit.cu_context fn inst s ==> dalloca_no_wrap inst s` by
+    (strip_tac >>
+     `deploy_dalloca_form_occurs loweringShapeSource$expr_raw_shape_root tops` by
+       metis_tac[deploy_unit_no_dalloca_static] >>
+     metis_tac[]) >>
   `code_layout_valid v` by
     (`tx with code := vs_out.vs_code = tx` by
        (qpat_assum `vs_out = _` (fn th => rewrite_tac [th]) >>
@@ -77,7 +102,10 @@ Resume deploy_certificate_raw_entry_boundary[focus]:
   `o1_safe_upto (deploy_dead H tops runtime_bc am (tx with code := vs_out.vs_code))
      (imm_len tops) (MIN (LENGTH marks) (LENGTH v.vs_gas_readings))
      dunit.cu_context v` by
-    (irule gas_origin_ptr_focus_o1_safe_upto >> simp[] >> metis_tac[]) >>
+    (irule gas_origin_ptr_focus_o1_safe_upto >> simp[] >> rpt conj_tac
+     >- first_assum ACCEPT_TAC
+     >- (qexists `\nm. set (ctx_ptr_param_list dunit.cu_context nm)` >> simp[]) >>
+     metis_tac[]) >>
   `!fn inst s. raw_reachable v dunit.cu_context fn inst s /\
      gas_cut (MIN (LENGTH marks) (LENGTH v.vs_gas_readings)) v s ==>
      inst_dload_in_section inst s` by
@@ -98,7 +126,11 @@ Resume deploy_certificate_raw_entry_boundary[exit]:
   `EVERY pre_fmp_ops dunit.cu_context.ctx_functions` by
     gvs[fmp_free_ctx_def, EVERY_MEM] >>
   `raw_unit_memory_ok dunit.cu_context v` by
-    (irule lowered_unit_raw_memory_ok_from >>
+    (Cases_on `deploy_dalloca_form_occurs loweringShapeSource$expr_raw_shape_root tops`
+     >- (irule lowered_unit_raw_memory_ok_from_no_wrap >>
+         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     `~ctx_has_dalloca dunit.cu_context` by metis_tac[deploy_unit_no_dalloca_static] >>
+     irule lowered_unit_raw_memory_ok_from >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   `mem_inv raw_mem_ok dunit.cu_context v` by
     (qpat_x_assum `raw_unit_memory_ok _ _` mp_tac >>

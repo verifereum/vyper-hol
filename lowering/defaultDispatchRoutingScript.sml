@@ -31,19 +31,23 @@ Proof
 QED
 
 Theorem default_classified_signature[local]:
-  MEM (mut,nr,rr,name,args,([]:expr list),ret,fbody)
+  MEM (mut,nr,rr,name,args,dflts,ret,fbody)
     (FST (classify_functions tops)) ==>
   MEM (name,MAP SND args) (abi_external_signatures tops)
 Proof
   strip_tac >>
+  `MEM (name,MAP SND args) (abi_function_signatures name args dflts)` by
+    (simp[abi_function_signatures_def, MEM_MAP] >>
+     qexists_tac `(args,LENGTH dflts)` >>
+     simp[abi_entries_member] >>
+     irule (GSYM TAKE_LENGTH_TOO_LONG) >> decide_tac) >>
   `MEM (name,MAP SND args)
      (FLAT (MAP (\(mut,nr,rr,name,args,dflts,ret,stmts).
        abi_function_signatures name args dflts)
        (FST (classify_functions tops))))` by
     (simp[MEM_FLAT, MEM_MAP] >>
-     qexists_tac `abi_function_signatures name args ([]:expr list)` >>
-     simp[vyperABIEntriesTheory.abi_function_signatures_no_defaults] >>
-     goal_assum (drule_at Any) >> simp[]) >>
+     qexists_tac `abi_function_signatures name args dflts` >>
+     simp[] >> goal_assum (drule_at Any) >> simp[]) >>
   pop_assum mp_tac >> rewrite_tac[classify_external_signatures, MEM_APPEND] >>
   simp[abi_external_signatures_def] >>
   metis_tac[mem_flat_map_filter]
@@ -64,11 +68,6 @@ Proof
   gvs[] >> rpt gen_tac >> strip_tac >>
   gvs[MEM_MAP, pairTheory.EXISTS_PROD] >>
   drule build_selectors_mem_inv >> strip_tac >>
-  `dflts = []` by
-    (drule loweringShapePropsTheory.supported_program_no_external_defaults >>
-     simp[EVERY_MEM, combinTheory.o_DEF] >> strip_tac >>
-     first_x_assum drule >>
-     simp[compileVyperTheory.external_has_defaults_def, NULL_EQ]) >> gvs[] >>
   drule default_classified_signature >> strip_tac >>
   gvs[compute_selector_method_id,
     selectorDispatchTheory.calldata_hits_selector_def, GSYM cd_selector_method_id] >>

@@ -112,7 +112,7 @@ Definition well_typed_literal_def:
   well_typed_literal (BaseT AddressT) (BytesL bs) =
     (LENGTH bs = 20) /\
   well_typed_literal (BaseT (BytesT bd)) (BytesL bs) =
-    compatible_bound bd (LENGTH bs) /\
+    (bd <> Fixed 0 /\ compatible_bound bd (LENGTH bs)) /\
   well_typed_literal (BaseT (BytesT (Dynamic n))) (HexBytesL bs) =
     compatible_bound (Dynamic n) (LENGTH bs) /\
   well_typed_literal _ _ = F
@@ -394,7 +394,7 @@ Definition well_typed_builtin_app_def:
           LENGTH (num_to_dec_string (2 ** k - 1)) <= n)) /\
   well_typed_builtin_app ty (MakeArray NONE bd) ts =
     ((?tys. ty = TupleT tys /\ arg_types_fit ts tys) /\
-     compatible_bound bd (LENGTH ts)) /\
+     bd = Fixed (LENGTH ts)) /\
   well_typed_builtin_app ty (MakeArray (SOME elem_ty) bd) ts =
     (ty = ArrayT elem_ty bd /\ compatible_bound bd (LENGTH ts) /\
      EVERY (\t. arg_type_fits t elem_ty) ts) /\
@@ -442,7 +442,8 @@ Definition well_formed_type_def:
 End
 
 Definition assignable_type_def:
-  assignable_type tenv (BaseT bt) = well_formed_type tenv (BaseT bt) /\
+  assignable_type tenv (BaseT bt) =
+    (well_formed_type tenv (BaseT bt) /\ bt <> BytesT (Fixed 0)) /\
   assignable_type tenv (TupleT tys) =
     (tys <> [] /\ well_formed_type tenv (TupleT tys) /\
      EVERY (assignable_type tenv) tys) /\
@@ -554,7 +555,7 @@ Definition hashmap_key_type_def:
   hashmap_key_type (BaseT DecimalT) = T /\
   hashmap_key_type (BaseT BoolT) = T /\
   hashmap_key_type (BaseT AddressT) = T /\
-  hashmap_key_type (BaseT (BytesT _)) = T /\
+  hashmap_key_type (BaseT (BytesT bd)) = (bd <> Fixed 0) /\
   hashmap_key_type (BaseT (StringT _)) = T /\
   hashmap_key_type (FlagT _) = T /\
   hashmap_key_type _ = F
@@ -664,8 +665,8 @@ Definition valid_conversion_def:
   valid_conversion (BaseT AddressT) (BaseT BoolT) = T /\
   valid_conversion (BaseT BoolT) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT BoolT) (BaseT (UintT _)) = T /\
-  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Fixed k))) = (m <> k) /\
-  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Fixed m))) = (n <= m) /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Fixed k))) = (0 < k /\ m <> k) /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Fixed m))) = (0 < m /\ n <= m) /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic k))) = (k < n) /\
   valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (UintT _)) = (n <= 32) /\
@@ -708,7 +709,7 @@ Definition valid_conversion_def:
 End
 
 Definition extract32_result_base_ok_def:
-  extract32_result_base_ok (BytesT (Fixed n)) = T /\
+  extract32_result_base_ok (BytesT (Fixed n)) = (0 < n) /\
   extract32_result_base_ok (UintT n) = T /\
   extract32_result_base_ok (IntT n) = T /\
   extract32_result_base_ok AddressT = T /\
@@ -750,7 +751,9 @@ Definition type_builtin_result_ok_def:
   type_builtin_result_ok tenv (AbiEncode ensure method_id) result_ty target_ty arg_tys =
     (?n. result_ty = BaseT (BytesT (Dynamic n)) ∧ target_ty = TupleT arg_tys ∧
          abi_encode_size_ok tenv ensure target_ty method_id n) ∧
-  type_builtin_result_ok tenv Empty result_ty target_ty arg_tys = (result_ty = target_ty) ∧
+  (* As in Vyper, empty's argument is a value type: never None or (). *)
+  type_builtin_result_ok tenv Empty result_ty target_ty arg_tys =
+    (result_ty = target_ty /\ assignable_type tenv target_ty) ∧
   type_builtin_result_ok tenv MaxValue result_ty target_ty arg_tys = (result_ty = target_ty) ∧
   type_builtin_result_ok tenv MinValue result_ty target_ty arg_tys = (result_ty = target_ty) ∧
   type_builtin_result_ok tenv Epsilon result_ty target_ty arg_tys = (result_ty = target_ty) ∧
@@ -939,7 +942,10 @@ Definition well_typed_expr_def:
   well_typed_expr env (Builtin ty blt es) =
     (well_typed_exprs env es /\ well_typed_builtin_app ty blt (MAP expr_type es) /\
      slice_operands_ok blt es /\ builtin_operands_ok ty blt es /\
-     well_formed_type env.type_defs ty) /\
+     well_formed_type env.type_defs ty /\
+     (* As in Vyper, a list literal has a value type: no empty tuple and no
+        None-typed element. *)
+     (case blt of MakeArray _ _ => assignable_type env.type_defs ty | _ => T)) /\
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\ well_formed_type env.type_defs ty /\
      type_builtin_result_ok env.type_defs tb ty target_ty (MAP expr_type es) /\
@@ -951,8 +957,11 @@ Definition well_typed_expr_def:
           | TopLevelNameTarget nsid =>
               IS_NONE (FLOOKUP env.bare_global_assignable nsid)
           | _ => T)) /\
+  (* drv is always NONE; well_typed_opt stays so the definition (and its
+     induction theorem) keeps well_typed_opt in the mutual recursion. *)
   well_typed_expr env (Call ty (IntCall (src_id_opt, fn_name)) args drv) =
-    (well_typed_exprs env args /\ well_typed_opt env drv /\ well_formed_type env.type_defs ty /\
+    (well_typed_exprs env args /\ drv = NONE /\ well_typed_opt env drv /\
+     well_formed_type env.type_defs ty /\
      ?sig. FLOOKUP env.fn_sigs (src_id_opt, fn_name) = SOME sig /\
        type_widens_to env.type_defs sig.ret_ty ty /\
        LENGTH args <= LENGTH sig.param_types /\

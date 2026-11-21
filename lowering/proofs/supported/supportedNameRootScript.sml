@@ -6,6 +6,13 @@ Ancestors
   supportedExprs supportedExprForms supportedDecls vyperTypeContract
   vyperTypeConstantCells constSubst vyperAST list alist
 
+Theorem supported_constant_type_place_root[local]:
+  supported_constant_type tops id = SOME ty ==> supported_place_root tops id
+Proof
+  simp[supported_constant_type_def, supported_place_root_def, AllCaseEqs()] >>
+  rw[] >> simp[]
+QED
+
 (* p marks top-level names that are neither storage, immutable nor a place
    root; supported_pure_expr and supported_place_expr admit no such name. *)
 Theorem supported_pure_no_name_root:
@@ -32,7 +39,10 @@ Theorem supported_pure_no_name_root:
 Proof
   ho_match_mp_tac supported_pure_expr_ind >>
   rw[supported_pure_expr_def, supported_expr_exists_def] >>
-  rpt strip_tac >> res_tac >> gvs[]
+  rpt strip_tac >> res_tac >> gvs[] >>
+  imp_res_tac supported_constant_type_place_root >>
+  gvs[supported_target_exists_indices, EXISTS_MEM, EVERY_MEM] >>
+  Cases_on `default` >> gvs[supported_expr_exists_def] >> metis_tac[]
 QED
 
 Theorem supported_effect_no_name_root:
@@ -50,7 +60,10 @@ Proof
   ho_match_mp_tac supported_effect_expr_ind >>
   rw[supported_effect_expr_def, supported_expr_exists_def] >>
   imp_res_tac supported_pure_no_name_root >>
-  rpt strip_tac >> res_tac >> gvs[]
+  rpt strip_tac >> res_tac >> gvs[] >>
+  gvs[supported_target_exists_indices, EXISTS_MEM, EVERY_MEM] >>
+  TRY (Cases_on `default`) >> gvs[supported_expr_exists_def] >>
+  metis_tac[supported_pure_no_name_root]
 QED
 
 Theorem supported_expr_no_name_root:
@@ -86,11 +99,15 @@ Theorem supported_target_no_name_root[local]:
      supported_immutable_type tops id = NONE) ==>
   ~supported_target_exists p target
 Proof
-  Cases_on `target` >>
-  simp[supported_target_def, supported_expr_exists_def] >>
-  qmatch_goalsub_rename_tac `supported_target_exists p parent` >>
-  Cases_on `parent` >> simp[supported_expr_exists_def] >>
-  metis_tac[supported_expr_no_name_root]
+  strip_tac >>
+  `!t. IS_SOME (supported_target_info tops bindings t) ==>
+       ~supported_target_exists p t` by
+    (rpt strip_tac >>
+     qspecl_then [`t`, `tops`, `bindings`] mp_tac
+       (cj 2 supported_target_info_no_name_root) >>
+     gvs[optionTheory.IS_SOME_EXISTS]) >>
+  Cases_on `target` >> gvs[supported_target_def, supported_expr_exists_def] >>
+  res_tac >> gvs[supported_expr_exists_def]
 QED
 
 Theorem supported_assignment_no_name_root[local]:
@@ -155,7 +172,7 @@ Proof
       Cases_on `(?t v. e = Name t v) \/ (?t nid. e = TopLevelName t nid)`
       >- (pop_assum strip_assume_tac >>
           gvs[supported_expr_exists_def] >> strip_tac >> res_tac >> gvs[] >>
-          Cases_on `t` >> gvs[]) >>
+          Cases_on `t` >> gvs[] >> imp_res_tac supported_constant_type_place_root) >>
       `supported_expr tops e` by (Cases_on `e` >> gvs[]) >>
       metis_tac[supported_expr_no_name_root]) >>
   strip_tac >> drule supported_range_bounds >> strip_tac >>
@@ -186,19 +203,22 @@ Proof
       qexistsl [`bindings`, `tops`] >> simp[])
   >~ [`supported_append_target tops target`]
   >- (Cases_on `target` >> gvs[supported_append_target_def,
-                                supported_target_pure_def,
                                 supported_expr_exists_def] >>
-      metis_tac[supported_pure_no_name_root,
-                supported_target_pure_expr_exclusion])
+      gvs[supported_target_exists_indices, target_indices_def,
+          EVERY_MEM, EXISTS_MEM] >>
+      metis_tac[supported_pure_no_name_root])
   >~ [`supported_assert_exists p reason`]
   >- (Cases_on `reason` >>
-      gvs[supported_assert_reason_def, supported_assert_exists_def] >>
+      gvs[supported_assert_reason_def, supported_assert_exists_def,
+          EVERY_MEM, EXISTS_MEM] >>
       metis_tac[supported_string_reason_no_name_root,
                 supported_pure_no_name_root])
   >~ [`supported_raise_exists p reason`]
   >- (Cases_on `reason` >>
-      gvs[supported_raise_reason_def, supported_raise_exists_def] >>
-      metis_tac[supported_string_reason_no_name_root])
+      gvs[supported_raise_reason_def, supported_raise_exists_def,
+          EVERY_MEM, EXISTS_MEM] >>
+      metis_tac[supported_string_reason_no_name_root,
+                supported_pure_no_name_root])
   >~ [`supported_log tops id es`]
   >- (gvs[supported_log_def] >> metis_tac[supported_pure_no_name_root])
   >> rpt strip_tac >>
@@ -212,15 +232,14 @@ QED
 
 (* ===== Constant declarations ===== *)
 
-(* A constant is neither a place root, storage nor an immutable. *)
+(* A constant is neither storage nor an immutable. *)
 Theorem supported_constant_decl_not_root:
   supported_variable_decl tops id = SOME (vis,Constant c,ty,slot) ==>
-  ~supported_place_root tops id /\ ~supported_storage_value tops id ty' /\
+  ~supported_storage_value tops id ty' /\
   supported_immutable_type tops id = NONE
 Proof
   Cases_on `vis` >> Cases_on `slot` >>
-  simp[supported_place_root_def, supported_storage_value_def,
-       supported_immutable_type_def]
+  simp[supported_storage_value_def, supported_immutable_type_def]
 QED
 
 Theorem supported_variable_decl_distinct_mem:

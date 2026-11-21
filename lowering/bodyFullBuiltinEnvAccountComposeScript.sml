@@ -4,7 +4,7 @@ Ancestors
   bodyFullShadowBodyInv
   bodyFullPreds bodySimFull exprSimAccounts exprSimSource exprSimHypsDefs
   gasOutcomeFullCompose gasOutcomeFull gasExemptCert bodyFullGhostFrame exprSimMemoryStack
-  exprSimWordArgs exprLowering exprLoweringProps builtinSimple bodyInvNoDalloca
+  exprSimWordArgs exprLowering exprLoweringProps builtinSimple
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
   gasShadowCompileStmtHelpers gasShadowState gasShadow vyperTyping vyperTypeSystem vyperAST
   fragGasSeqPtr emitHelper emitHelperProps compileEnv allocaHistory

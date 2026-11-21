@@ -103,7 +103,8 @@ Proof
   disch_then drule_all >>
   simp[check_function_body_def, optionTheory.IS_SOME_EXISTS] >> strip_tac >>
   (conj_tac >- metis_tac[type_stmt_builtin_arity] >>
-   drule (cj 4 well_typed_expr_builtin_arity) >>
+   qpat_x_assum `well_typed_exprs _ dflts`
+     (mp_tac o MATCH_MP (cj 4 well_typed_expr_builtin_arity)) >>
    simp[supported_exprs_exists_every, GSYM EVERY_NOT_EXISTS, combinTheory.o_DEF])
 QED
 
