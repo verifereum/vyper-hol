@@ -31,7 +31,7 @@
  *)
 Theory loweringShapeProps
 Ancestors
-  publicGetterProps exprLoweringEquations
+  publicGetterProps exprLoweringEquations runtimeLabelExprCallbacks
   list rich_list loweringShapeDefs loweringShapeRules compileEnv loweringStateRelDefs context
   emitHelper exprLowering stmtLowering moduleLowering vyperCompiler
   compileVyper constSubst vyperGetter abiEncoder supportedProgram supportedNames
@@ -10185,7 +10185,7 @@ Proof
   qmatch_goalsub_abbrev_tac `NULL data_rows` >>
   `!vs (tys : type list) st. EVERY (value_shape_ok st) vs ==>
     EVERY (value_shape_ok st o FST) (ZIP (vs,tys))` by
-    (Induct >> Cases_on `tys` >> simp[ZIP_def]) >>
+    simp[rb_every_zip_fst] >>
   qabbrev_tac `data_frame = \st. cenv_shape_ok st cenv /\
                                   EVERY (value_shape_ok st o FST) data_rows` >>
   `shape_stable data_frame` by

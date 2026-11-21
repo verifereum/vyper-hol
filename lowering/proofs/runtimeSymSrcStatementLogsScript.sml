@@ -1,7 +1,7 @@
 Theory runtimeSymSrcStatementLogs
 Ancestors
   runtimeSymSrcInterfaces runtimeSymSrcEmission runtimeSymSrcContext runtimeSymSrcContextComplete
-  runtimeSymSrcExternalArgStaging runtimeSymSrcExternalPrimitive
+  runtimeSymSrcExternalArgStaging runtimeSymSrcExternalPrimitive runtimeLabelExprCallbacks
   eventLoweringStructure stmtLowering compileEnv context venomInst stackPlanTypes
   list rich_list supportedStmts supportedStmtTraverse supportedExprs
   supportedExprTraverse
@@ -48,14 +48,11 @@ Proof
      conj_tac >- fs[supported_stmt_expr_exists_def] >>
      qexists_tac `tops` >>
      fs[supported_stmt_def, supported_log_def, supported_pure_exprs_every]) >>
-  `!vs (tys : type list). EVERY runtime_sym_value vs ==>
-      EVERY (runtime_sym_value o FST) (ZIP (vs,tys))` by
-    (Induct >> gen_tac >> Cases_on `tys` >> simp[ZIP_def]) >>
   `EVERY (runtime_sym_value o FST)
       (FST (split_log_ops (ZIP (saved,MAP (lowered_value_type ce) args)) x2)) /\
    EVERY (runtime_sym_value o FST)
       (SND (split_log_ops (ZIP (saved,MAP (lowered_value_type ce) args)) x2))` by
-    (irule every_split_log_ops >> simp[]) >>
+    (irule every_split_log_ops >> simp[rb_every_zip_fst]) >>
   drule_all runtime_sym_log_saved_topics >> strip_tac
   >- (irule runtime_sym_emit_inst >> goal_assum (drule_at Any) >> qexists `0` >>
       goal_assum (drule_at Any) >> irule runtime_sym_ordinary_inst >>
