@@ -394,7 +394,7 @@ Definition well_typed_builtin_app_def:
           LENGTH (num_to_dec_string (2 ** k - 1)) <= n)) /\
   well_typed_builtin_app ty (MakeArray NONE bd) ts =
     ((?tys. ty = TupleT tys /\ arg_types_fit ts tys) /\
-     compatible_bound bd (LENGTH ts)) /\
+     bd = Fixed (LENGTH ts)) /\
   well_typed_builtin_app ty (MakeArray (SOME elem_ty) bd) ts =
     (ty = ArrayT elem_ty bd /\ compatible_bound bd (LENGTH ts) /\
      EVERY (\t. arg_type_fits t elem_ty) ts) /\
