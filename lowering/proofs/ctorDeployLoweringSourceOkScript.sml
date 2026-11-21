@@ -47,7 +47,13 @@ Proof
 QED
 
 (* The constructor body never ends in a break or a continue. *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem deploy_ctor_body_source_ok:
+  !tops am tx mut nr body am_c es0 gs oc res ee.
+    deploy_source_ok tops am tx /\ tx.function_name = "__init__" /\
+    deploy_ctor_start tops am tx (mut, nr, body, am_c, es0) /\
+    eval_stmts (deploy_evaluation_context tops am tx) body
+      (es0 with <| gas_obs := gs; outcomes := oc |>) = (res, ee) ==>
+    stmt_res_ok NoLoop res
 Proof
   rpt gen_tac >> pure_rewrite_tac[deploy_source_ok_def, deploy_ctor_start_def] >>
   strip_tac >>
@@ -64,16 +70,6 @@ Proof
      qexistsl_tac [`am`, `args`, `deploy_art`, `[]`, `[]`, `imms`, `NoneT`,
                    `runtime_art`, `tops`, `tx`, `tx.args`] >>
      simp[]) >>
-  `res <> INR HaltException` by
-    (strip_tac >> gvs[] >>
-     rename1 `lookup_function NONE _ Deploy tops = SOME (_,_,_,_,_,cbody)` >>
-     `get_module_code (deploy_evaluation_context tops am tx) NONE = SOME tops` by
-       simp[deploy_evaluation_context_def, vyperInterpreterTheory.initial_evaluation_context_def,
-            vyperContextTheory.get_module_code_def] >>
-     `!st st'. eval_stmts (deploy_evaluation_context tops am tx) cbody st <>
-               (INR HaltException, st')` by
-       (rpt gen_tac >> irule deploy_body_no_halt >> metis_tac[]) >>
-     metis_tac[]) >>
   Cases_on `res` >> simp[stmt_res_ok_def] >>
   rename1 `INR exc` >>
   `exc <> BreakException /\ exc <> ContinueException` by
@@ -81,15 +77,4 @@ Proof
      rpt (first_assum (irule_at Any)) >> simp[]) >>
   Cases_on `exc` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_eval_def, vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
   rename1 `INR (Error err)` >> Cases_on `err` >> gvs[]
-QED
-*)
-Theorem deploy_ctor_body_source_ok:
-  !tops am tx mut nr body am_c es0 gs oc res ee.
-    deploy_source_ok tops am tx /\ tx.function_name = "__init__" /\
-    deploy_ctor_start tops am tx (mut, nr, body, am_c, es0) /\
-    eval_stmts (deploy_evaluation_context tops am tx) body
-      (es0 with <| gas_obs := gs; outcomes := oc |>) = (res, ee) ==>
-    stmt_res_ok NoLoop res
-Proof
-  cheat
 QED
