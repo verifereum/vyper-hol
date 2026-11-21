@@ -49,9 +49,9 @@ Proof
   simp[EVERY_MEM] >> disch_then
     (qspec_then `subst_consts_fn (module_consts_env tops [])
       (mut,nr,rr,name,args,dflts,ret,fbody)` mp_tac) >>
+  Cases_on `dflts` >>
   simp[constSubstTheory.subst_consts_fn_def, external_has_defaults_def,
-       loweringShapePropsTheory.subst_consts_exprs_length,
-       NULL_LENGTH, LENGTH_NIL]
+       constSubstTheory.subst_consts_expr_def]
 QED
 
 Triviality runtime_dispatched_readings_certificate[local]:
