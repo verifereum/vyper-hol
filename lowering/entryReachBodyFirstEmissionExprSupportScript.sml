@@ -1656,6 +1656,14 @@ Theorem first_emission_acc[local]:
      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
   strip_tac >> gen_tac >> Cases_on `item`
+  >~ [`compile_acc cfn ce e Codesize`]
+  >- (rewrite_tac[compile_acc_def] >> Cases_on `is_self_addr e`
+      >- (simp[] >> rpt strip_tac >> drule_at Any
+           (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[])
+      >- (simp[] >> ho_match_mp_tac first_emission_pair_let >>
+          (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> simp[]) >> gen_tac) >>
+          rpt strip_tac >> drule_at Any
+            (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]))
   >~ [`compile_acc cfn ce e Address`]
   >- (rewrite_tac[compile_acc_def] >> ho_match_mp_tac first_emission_lower_value >> simp[])
   >~ [`compile_acc cfn ce e Code`]
