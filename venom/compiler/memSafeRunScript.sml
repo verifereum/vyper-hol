@@ -5,7 +5,7 @@
  * s executes, in callee frames too, reads and writes within the ALLOCA
  * frontier or, in contexts with DALLOCA, within the two allocation regions,
  * and reads the data section only from offsets within it
- * (inst_dload_in_section).
+ * (inst_dload_in_section). Each DALLOCA also has a non-wrapping extent.
  * The check follows the runner's own recursion (step_inst, exec_block,
  * run_blocks), so it sees exactly the instructions the run executes, in
  * the states it executes them in.
@@ -90,6 +90,7 @@ Definition mem_safe_defs:
     (inst_mem_below_frontier inst s \/
      (ctx_has_dalloca ctx /\ inst_mem_below_frontiers inst s)) /\
     inst_dload_in_section inst s /\
+    (ctx_has_dalloca ctx ==> dalloca_no_wrap inst s) /\
     if inst.inst_opcode = INVOKE then
       case decode_invoke inst of
         NONE => T
@@ -200,7 +201,8 @@ Theorem mem_safe_step_non_invoke:
     (mem_safe_step fuel ctx inst s <=>
      (inst_mem_below_frontier inst s \/
       (ctx_has_dalloca ctx /\ inst_mem_below_frontiers inst s)) /\
-     inst_dload_in_section inst s)
+     inst_dload_in_section inst s /\
+     (ctx_has_dalloca ctx ==> dalloca_no_wrap inst s))
 Proof
   rw[Once mem_safe_step_def]
 QED
@@ -217,7 +219,7 @@ Theorem mem_safe_step_invoke:
       (ctx_has_dalloca ctx /\ inst_mem_below_frontiers inst s)) /\
      mem_safe_blocks fuel ctx callee cs)
 Proof
-  rw[Once mem_safe_step_def]
+  rw[Once mem_safe_step_def, dalloca_no_wrap_def]
 QED
 
 Theorem mem_safe_block_step:
