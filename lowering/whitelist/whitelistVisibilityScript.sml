@@ -6,7 +6,7 @@
 
 Theory whitelistVisibility
 Ancestors
-  moduleVariableKeyProps
+  moduleVariableKeyProps linkedStorageMetadataProps
   bodyAppendStorageFacts entryStateRel bodyStorageMetadata exprOpenCases
   supportedDecls compileVyper constSubst compileEnv vyperTypeEnv vyperTypeContract
   vyperContext vyperInterpreter vyperState vyperTypeInvariants exprSimHyps
@@ -218,107 +218,6 @@ QED
 
 (* ===== The S1 lemmas whose statements name Private ===== *)
 
-Theorem storage_metadata_other_source[local]:
-  !tops src key id vmap hmap tail.
-    src <> key ==>
-    build_var_type_map_src src tops vmap (key,id) = vmap (key,id) /\
-    build_hashmap_info_src src tops hmap (key,id) = hmap (key,id) /\
-    build_dynarray_capacity (collect_module_vars_src src tops ++ tail) (key,id) =
-      build_dynarray_capacity tail (key,id)
-Proof
-  Induct >> simp[build_var_type_map_src_def, build_hashmap_info_src_def,
-                 collect_module_vars_src_def] >>
-  Cases >> simp[build_var_type_map_src_def, build_hashmap_info_src_def,
-                collect_module_vars_src_def, build_dynarray_capacity_def] >>
-  rw[] >> Cases_on `dynarray_capacity_of_type t` >> simp[]
-QED
-
-Theorem storage_metadata_absent_source[local]:
-  !mods src id.
-    ALOOKUP mods src = NONE ==>
-    build_hashmap_info_mods mods (src,id) = NONE /\
-    build_dynarray_capacity (collect_module_vars_mods mods) (src,id) = 0
-Proof
-  Induct >> simp[build_hashmap_info_mods_def, collect_module_vars_mods_def,
-                 build_dynarray_capacity_def] >>
-  PairCases >> rw[build_hashmap_info_mods_def, collect_module_vars_mods_def] >>
-  drule_then (fn th => simp[th]) storage_metadata_other_source
-QED
-
-Theorem storage_metadata_source_lookup[local]:
-  !tops src id vm hm.
-    build_var_type_map_src src tops vm (src,id) =
-      (case build_var_type_map tops (NONE,id) of
-         NONE => vm (src,id) | SOME ty => SOME ty) /\
-    build_hashmap_info_src src tops hm (src,id) =
-      (case build_hashmap_info tops (NONE,id) of
-         NONE => hm (src,id) | SOME info => SOME info)
-Proof
-  Induct >> simp[build_var_type_map_src_def, build_var_type_map_def,
-                 build_hashmap_info_src_def, build_hashmap_info_def] >>
-  Cases >> simp[build_var_type_map_src_def, build_var_type_map_def,
-                build_hashmap_info_src_def, build_hashmap_info_def] >>
-  rw[]
-QED
-
-Theorem storage_capacity_source_lookup[local]:
-  !tops src id vis mut elem n slot tail.
-    supported_variable_decl tops (NONE,id) =
-      SOME (vis,mut,ArrayT elem (Dynamic n),slot) ==>
-    build_dynarray_capacity (collect_module_vars_src src tops ++ tail) (src,id) = n
-Proof
-  Induct >> simp[supported_variable_decl_def] >>
-  Cases >>
-  simp[supported_variable_decl_def, collect_module_vars_src_def,
-       build_dynarray_capacity_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs(), dynarray_capacity_of_type_def] >>
-  first_x_assum drule >> simp[] >>
-  CASE_TAC >> simp[] >> metis_tac[]
-QED
-
-Theorem storage_metadata_unit_lookup[local]:
-  !mods src tops id ty.
-    ALL_DISTINCT (MAP FST mods) /\ ALOOKUP mods src = SOME tops /\
-    build_var_type_map tops (NONE,id) = SOME ty /\
-    build_hashmap_info tops (NONE,id) = NONE ==>
-    build_var_type_map_mods mods (src,id) = SOME ty /\
-    build_hashmap_info_mods mods (src,id) = NONE
-Proof
-  Induct >> simp[] >> PairCases >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `h0 = src` >>
-  gvs[build_var_type_map_mods_def, build_hashmap_info_mods_def]
-  >- (simp[storage_metadata_source_lookup] >>
-      irule (cj 1 storage_metadata_absent_source) >> simp[ALOOKUP_NONE]) >>
-  drule_then (fn th => simp[th]) storage_metadata_other_source >>
-  metis_tac[]
-QED
-
-Theorem storage_capacity_unit_lookup[local]:
-  !mods src tops id vis mut elem n slot.
-    ALOOKUP mods src = SOME tops /\
-    supported_variable_decl tops (NONE,id) =
-      SOME (vis,mut,ArrayT elem (Dynamic n),slot) ==>
-    build_dynarray_capacity (collect_module_vars_mods mods) (src,id) = n
-Proof
-  Induct >> simp[] >> PairCases >>
-  rw[collect_module_vars_mods_def] >>
-  metis_tac[storage_capacity_source_lookup, storage_metadata_other_source]
-QED
-
-Theorem contract_inv_storage_metadata[local]:
-  contract_inv mods exps ctx cenv cx ==>
-  ALL_DISTINCT (MAP FST mods) /\
-  (!src tops. ALOOKUP mods src = SOME tops ==>
-     ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) tops))) /\
-  cenv.ce_module_var_type = build_var_type_map_mods mods /\
-  cenv.ce_hashmap_info = build_hashmap_info_mods mods /\
-  cenv.ce_module_dynarray_capacity =
-    build_dynarray_capacity (collect_module_vars_mods mods)
-Proof
-  simp[contract_inv_def, cenv_module_pins_mods_def] >> metis_tac[]
-QED
-
 Theorem storage_binding_mods[local]:
   contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
   supported_variable_decl tops (NONE,id) = SOME (vis,mut,ty,SOME slot) /\
@@ -329,14 +228,11 @@ Theorem storage_binding_mods[local]:
 Proof
   REWRITE_TAC [GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_then (assume_tac o Q.SPEC `src`) contract_inv_module_codes >>
-  drule_then strip_assume_tac contract_inv_storage_metadata >>
   `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
     metis_tac[contract_inv_unqualified_variable_keys] >>
-  mp_tac (Q.SPECL [`tops`,`NONE`,`id`,`vis`,`mut`,`ty`,`slot`]
-            supported_variable_decl_storage_binding) >>
-  impl_tac >- simp[] >> strip_tac >>
-  mp_tac (Q.SPECL [`mods`,`src`,`tops`,`id`,`ty`] storage_metadata_unit_lookup) >>
-  simp[]
+  drule_all_then strip_assume_tac supported_variable_decl_storage_binding >>
+  drule_then strip_assume_tac supported_variable_decl_mem >> simp[] >>
+  metis_tac[contract_inv_variable_metadata]
 QED
 
 (* bodyAppendStorageFacts' body_append_runtime_metadata, with
@@ -362,9 +258,8 @@ Theorem body_append_runtime_metadata_vis_mods:
 Proof
   REWRITE_TAC [GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all_then strip_assume_tac storage_binding_mods >>
-  drule_then strip_assume_tac contract_inv_storage_metadata >>
   `cenv.ce_module_dynarray_capacity (src,id) = dn` by
-    (drule_all_then assume_tac storage_capacity_unit_lookup >> simp[]) >>
+    metis_tac[contract_inv_dynarray_capacity] >>
   `find_var_decl_by_name id tops <> NONE` by simp[] >>
   drule_all append_typed_storage_target >> strip_tac >> gvs[] >>
   drule_all append_storage_target_eval >> strip_tac >>

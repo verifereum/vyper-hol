@@ -1,7 +1,8 @@
 (* Shared expression-call and body-precondition boundaries. *)
 Theory bodyExprPreFacts
 Ancestors
-  bodyStorageCases
+  bodyStorageCases bodyInvariantFrameProps bodyInvCodeProps bodyInvMetadataProps
+  bodyMainModuleProps bodyInvExecutionProps alist compileUnit
   exprSimSource bodySim allocLimitsProps stmtLowering stmtLoweringMono
   fragExec stmtSimProps
   loweringPosts supportedStmtTraverse vyperCallOutcomeStorage vyperTypeExprSoundness
@@ -240,6 +241,74 @@ Proof
   metis_tac[supported_string_reason_expr, supported_expr_body_calls]
 QED
 
+(* A statement's expression meets the linked precondition. *)
+Theorem stmt_expr_body_pre_mods:
+  !mods cenv cx env e es calls.
+    expr_sim_inv_mods mods cenv cx env es /\ well_typed_expr env e /\
+    ~supported_expr_exists
+       (\e. ~is_extcode e /\
+             ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+    ~is_extcode e /\
+    ~supported_expr_exists (const_name_root_mods mods) e /\
+    ~supported_expr_exists (unallocated_bare_global_root cenv env) e /\
+    call_evaluation_safe cx (int_calls_expr e ++ calls) /\
+    ~expr_has_evm_run e /\
+    EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                      supported_program tops /\
+                      IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
+      (int_calls_expr e) /\
+    (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+       EXISTS (occurs_abi_decode_target target o SND) mods) /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+       is_dynamic (vyper_to_abi_type (type_env_all_modules mods) target)) ==>
+    expr_body_pre_mods mods cenv cx env e es
+Proof
+  rpt gen_tac >> strip_tac >>
+  `byte_widths_expr e /\ alloc_limits_expr cenv e` by
+    (CCONTR_TAC >>
+     qpat_x_assum `~supported_expr_exists (\e. ~is_extcode e /\ _) _` mp_tac >>
+     simp[] >> irule supported_expr_exists_root >> metis_tac[]) >>
+  `call_evaluation_safe cx (int_calls_expr e)` by
+    metis_tac[call_evaluation_safe_append_left] >>
+  simp[expr_body_pre_mods_def]
+QED
+
+Theorem stmt_expr_body_pre_main_mods:
+  contract_inv mods exps ctx cenv cx /\
+  supported_expr (main_module mods) e /\
+  expr_sim_inv_mods mods cenv cx env es /\ well_typed_expr env e /\
+  ~supported_expr_exists
+     (\e. ~is_extcode e /\
+           ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+  ~is_extcode e /\
+  ~supported_expr_exists (const_name_root_mods mods) e /\
+  ~supported_expr_exists (unallocated_bare_global_root cenv env) e /\
+  call_evaluation_safe cx (int_calls_expr e ++ calls) /\
+  (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+     occurs_abi_decode_target target (main_module mods)) ==>
+  expr_body_pre_mods mods cenv cx env e es
+Proof
+  strip_tac >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac contract_inv_main_module >>
+  `get_module_code cx NONE = SOME (main_module mods)` by
+    metis_tac[contract_inv_module_codes] >>
+  `supported_program (main_module mods)` by metis_tac[contract_inv_supported_module] >>
+  drule_then assume_tac contract_inv_type_env >>
+  `EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                    supported_program tops /\
+                    IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
+     (int_calls_expr e)` by
+    (fs[EVERY_MEM, pairTheory.FORALL_PROD] >> rpt gen_tac >> strip_tac >> res_tac >> fs[]) >>
+  qspecl_then [`mods`,`cenv`,`cx`,`env`,`e`,`es`,`calls`] mp_tac
+    stmt_expr_body_pre_mods >>
+  impl_tac
+  >- (simp[EXISTS_MEM] >> rpt strip_tac >>
+      qexists_tac `(NONE,main_module mods)` >> simp[] >>
+      metis_tac[ALOOKUP_MEM]) >>
+  simp[]
+QED
+
 (* A statement's expression meets expr_body_pre. *)
 Theorem stmt_expr_body_pre:
   !cenv cx env e es calls.
@@ -263,14 +332,20 @@ Theorem stmt_expr_body_pre:
     expr_body_pre cenv cx env e es
 Proof
   rpt gen_tac >> strip_tac >>
-  `byte_widths_expr e /\ alloc_limits_expr cenv e` by
-    (CCONTR_TAC >>
-     qpat_x_assum `~supported_expr_exists (\e. ~is_extcode e /\ _) _` mp_tac >>
-     simp[] >> irule supported_expr_exists_root >> metis_tac[]) >>
-  `call_evaluation_safe cx (int_calls_expr e)` by
-    metis_tac[call_evaluation_safe_append_left] >>
-  simp[expr_body_pre_def] >>
-  Cases_on `int_calls_expr e` >> gvs[listTheory.EVERY_MEM] >> metis_tac[]
+  `EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                    supported_program tops /\
+                    IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
+     (int_calls_expr e)` by
+    (Cases_on `int_calls_expr e` >- simp[] >>
+     PairCases_on `h` >> gvs[EVERY_MEM, pairTheory.FORALL_PROD] >>
+     rpt gen_tac >> strip_tac >> res_tac >> gvs[]) >>
+  simp[expr_body_pre_split_def] >>
+  drule_all_then assume_tac expr_sim_inv_no_unallocated_bare_globals >>
+  qspecl_then [`[(NONE,cx_tops cx)]`,`cenv`,`cx`,`env`,`e`,`es`,`calls`] mp_tac
+    stmt_expr_body_pre_mods >>
+  fs[expr_sim_inv_split_def, const_name_root_mods_singleton,
+     vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
+     FUNION_FEMPTY_2]
 QED
 
 (* The same, from byte_widths_expr of every node and alloc_limits_expr of
@@ -357,15 +432,21 @@ Proof
   rw[same_frame_def] >> qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]
 QED
 
+Theorem body_inv_same_frame_mods:
+  contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
+  same_frame cenv c ==>
+  contract_inv mods exps ctx c cx /\ module_body_inv mods src tops c cx
+Proof
+  strip_tac >> drule_then (fn th => simp[th]) body_invariants_same_frame
+QED
+
 Theorem body_inv_same_frame:
   !tops ctx cenv c cx.
     body_inv tops ctx cenv cx /\ same_frame cenv c ==>
     body_inv tops ctx c cx
 Proof
-  rpt strip_tac >>
-  fs[body_inv_def, cenv_module_pins_def, same_frame_def,
-     compile_env_component_equality] >>
-  metis_tac[]
+  simp[body_inv_split_def] >> rpt gen_tac >> strip_tac >>
+  drule_then (fn th => simp[th]) body_invariants_same_frame
 QED
 
 Theorem frame_ret_ok_same_frame:
