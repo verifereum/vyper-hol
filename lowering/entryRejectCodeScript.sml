@@ -163,6 +163,44 @@ Proof
   gvs[fresh_label_def, initial_compile_state_def, new_block_def]
 QED
 
+Theorem run_lowering_fallback_check_code:
+  run_lowering sels exts ints (SOME (ce,F,nr,key,tr,view,stmts,rt))
+    rp bc mb db ei "__entry" = SOME u /\
+  EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,ss,rt). jump_label_ok lbl) exts /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
+  lookup_function "__entry" u.cu_context.ctx_functions = SOME efn ==>
+  ?fl sf sd sc sk.
+    fresh_label "fallback" (initial_compile_state "__entry") = (fl,sf) /\
+    compile_selector_dispatch_linear (MAP (\(sel,lbl,z). (sel,lbl)) sels)
+      fl sf = ((),sd) /\
+    compile_entry_checks 0 F sc = ((),sk) /\
+    sc.cs_current_bb = fl /\ sc.cs_current_insts = [] /\
+    fn_has_code sf sd efn /\ fn_has_code sc sk efn
+Proof
+  strip_tac >> drule_all run_lowering_retained_entry >> strip_tac >>
+  drule compile_runtime_entry_intervals >> simp[] >> strip_tac >>
+  gvs[compile_internal_fn_bodies_def, comp_return_def] >>
+  Cases_on `compile_entry_checks 0 F sn` >>
+  rename1 `compile_entry_checks 0 F sn = (res,sk)` >> Cases_on `res` >>
+  `compile_guarded_body ce nr key tr view stmts rt sk = ((),se)` by
+    (qpat_x_assum `compile_fallback_body _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     qpat_assum `compile_entry_checks _ _ _ = _` mp_tac >>
+     simp[compile_fallback_body_def, compile_entry_checks_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def, ELIM_UNCURRY] >>
+     strip_tac >>
+     gvs[compile_entry_checks_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def, ELIM_UNCURRY]) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_selector_dispatch_linear) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_external_fn_bodies) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_entry_checks) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_guarded_body) >>
+  `cs_extends sx sn` by metis_tac[cs_extends_new_block] >>
+  `fn_has_code sf sd efn /\ fn_has_code sn sk efn` by
+    metis_tac[fn_has_code_retained_interval, cs_extends_trans] >>
+  qexistsl_tac [`sf`, `sd`, `sn`, `sk`] >>
+  gvs[new_block_def]
+QED
+
 Theorem runtime_selected_entry_code[local]:
   compile_generate_runtime sels exts [] fb Linear bc mb db ei
     (initial_compile_state "__entry") = ((),se) /\
@@ -296,6 +334,20 @@ Proof
   drule_all_then ACCEPT_TAC extracted_runtime_entry_label
 QED
 
+Theorem lowered_internal_package_labels[local]:
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors
+    (MAP (set_internal_package_target target o
+       package_internal_fn tops T (K global_nonreentrant_slot) F 0) fs))
+Proof
+  simp_tac pure_ss [GSYM MAP_MAP_o,
+    internal_fn_descriptors_set_internal_package_target,
+    internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP] >>
+  simp_tac pure_ss [EVERY_MEM] >>
+  qx_gen_tac `source` >> PairCases_on `source` >>
+  simp_tac std_ss [source_internal_fn_descriptor_def, LET_THM, FST,
+       internal_label_ok_def, internal_fn_label_prefix]
+QED
+
 Theorem lower_vyper_runtime_unit_entry_label:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn ==>
@@ -311,14 +363,7 @@ Proof
      package_internal_fn tops T (K global_nonreentrant_slot) F 0)
     (order_internals (runtime_internal_order tops ints) ints)` >>
   `EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips)` by
-    (simp_tac pure_ss [Abbr `ips`, GSYM MAP_MAP_o,
-       internal_fn_descriptors_set_internal_package_target,
-       internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP] >>
-     simp_tac pure_ss [EVERY_MEM] >>
-     qx_gen_tac `f` >> PairCases_on `f` >>
-     simp_tac std_ss [source_internal_fn_descriptor_def, LET_THM, FST,
-          internal_label_ok_def,
-          internal_fn_label_prefix]) >>
+    simp[Abbr `ips`, lowered_internal_package_labels] >>
   Cases_on `EXISTS external_has_defaults exts` >> simp[AllCaseEqs()] >> strip_tac
   >- (qpat_x_assum `run_grouped_lowering _ _ _ _ _ = _` mp_tac >>
       simp[run_grouped_lowering_def] >> strip_tac >> pairarg_tac >>
@@ -330,4 +375,32 @@ Proof
       drule_all compile_grouped_runtime_extends >> strip_tac >>
       drule_all_then ACCEPT_TAC extracted_runtime_entry_label) >>
   drule_all_then ACCEPT_TAC run_lowering_entry_label
+QED
+
+(* These are the packages passed to the ordinary dispatcher. Their delimiters
+   suffice to retain the installed code even when a body emits DALLOCA. *)
+Theorem lower_vyper_runtime_legacy_packages:
+  classify_functions tops = (exts,ints,fb,ctor) /\
+  ~EXISTS external_has_defaults exts /\
+  lower_vyper_runtime_unit tops rp = SOME unit ==>
+  let sels = build_selectors (type_env tops) exts in
+  let eps = MAP (set_external_package_target rp.rpol_target o
+    package_external_fn tops T (K global_nonreentrant_slot)) exts in
+  let ips = MAP (set_internal_package_target rp.rpol_target o
+    package_internal_fn tops T (K global_nonreentrant_slot) F 0)
+    (order_internals (runtime_internal_order tops ints) ints) in
+  let fall = set_fallback_package_target rp.rpol_target
+    (package_fallback_fn tops T (K global_nonreentrant_slot) fb) in
+  run_lowering sels eps ips fall rp 0 0 [] (build_dense_entry_info sels eps)
+    "__entry" = SOME unit /\
+  EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt). jump_label_ok lbl) eps /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips)
+Proof
+  strip_tac >> simp_tac std_ss [LET_THM] >> rpt conj_tac
+  >- (qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
+      simp[lower_vyper_runtime_unit_def, AllCaseEqs()])
+  >- (rw[EVERY_MAP, EVERY_MEM] >> PairCases_on `x` >>
+      simp[package_external_fn_def, set_external_package_target_def,
+           jump_label_ok_def]) >>
+  simp[lowered_internal_package_labels]
 QED
