@@ -15,6 +15,7 @@
  *)
 Theory bodyFullCtrlCases
 Ancestors
+  bodyInvExecutionProps
   bodyFullPreds bodyFullExits bodyFullIf bodyFullExprStmt bodyFullStmtsCons
   bodyFullIfExpReach
   bodySimFull bodyExprPreFacts exprOpenMain exprSimSource
@@ -67,24 +68,30 @@ Proof
   rpt gen_tac >> strip_tac >>
   rw[body_stmt_full_ok_def, gas_shadow_stmt_def, gas_shadow_assert_reason_def] >>
   `supported_expr tops e` by gvs[supported_stmt_def, supported_expr_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
-  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
-    gvs[body_inv_def] >>
-  `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `well_typed_expr env e /\ expr_type e = BaseT BoolT` by gvs[type_stmt_def] >>
+  qpat_assum `body_inv tops ctx cenv cx`
+    (assume_tac o MATCH_MP bodyInvCodePropsTheory.contract_inv_cenv_modules
+      o MATCH_MP body_inv_contract) >>
   `expr_body_pre cenv cx env e es` by
-    (bodyConstNameLib.irule_body_pre stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
-         supported_assert_exists_def, int_calls_stmt_def,
-         int_calls_assert_reason_def, body_inv_def] >>
-     conj_tac >-
+    (qpat_assum `stmt_exprs_ok cenv (Assert e _)` (fn ok =>
+       mp_tac (INST [Term `s:stmt` |-> rand (concl ok)]
+         (Q.INST [`tops` |-> `tops`, `ctx` |-> `ctx`]
+           stmtExprAllocationPrePropsTheory.body_inv_stmt_expr_pre_singleton))) >>
+     simp[supported_stmt_expr_exists_def, supported_assert_exists_def, int_calls_stmt_def, int_calls_assert_reason_def] >>
+     disch_then irule >>
+     `~is_extcode e` by
        (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
-        qexists_tac `cenv` >> fs[allocLimitsTheory.alloc_limits_stmt_def]) >>
-     qexists_tac `[]` >> simp[]) >>
+        qexists_tac `cenv` >> fs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def]) >>
+     mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`, `calls` |-> `[]`]
+              stmt_expr_body_pre_main_mods) >>
+     gvs[compileUnitTheory.main_module_def, alistTheory.ALOOKUP_def,
+         stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
+         supported_assert_exists_def, int_calls_stmt_def, int_calls_assert_reason_def]) >>
   irule compile_assert_frag_full >> simp[] >>
   qpat_x_assum `body_expr_full_ok _ _`
-    (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_full_ok_def]) >>
-  disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `tops`, `ctx`, `shadow_ctx`,
+    (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+  qpat_x_assum `!DF lo d PG tops ctx sc f sf cenv env ty es.
+    _ ==> expr_sim_full _ cenv cx ty e es /\ _` (qspecl_then [`DF`, `lo`, `d`, `PG`, `tops`, `ctx`, `shadow_ctx`,
     `func`, `shadow_func`, `cenv`, `env`, `BaseT BoolT`, `es`] mp_tac) >>
   simp[]
 QED
@@ -110,27 +117,32 @@ Proof
   rpt gen_tac >> strip_tac >>
   rw[body_stmt_full_ok_def, gas_shadow_stmt_def] >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
-  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
-    gvs[body_inv_def] >>
-  `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `well_typed_expr env e` by gvs[type_stmt_def] >>
+  qpat_assum `body_inv tops ctx cenv cx`
+    (assume_tac o MATCH_MP bodyInvCodePropsTheory.contract_inv_cenv_modules
+      o MATCH_MP body_inv_contract) >>
   `expr_body_pre cenv cx env e es` by
-    (bodyConstNameLib.irule_body_pre stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
-         int_calls_stmt_def, body_inv_def] >>
-     conj_tac >-
+    (mp_tac (Q.INST [`tops` |-> `tops`, `ctx` |-> `ctx`,
+                     `s` |-> `Expr e`]
+             stmtExprAllocationPrePropsTheory.body_inv_stmt_expr_pre_singleton) >>
+     simp[supported_stmt_expr_exists_def, int_calls_stmt_def] >>
+     disch_then irule >>
+     `~is_extcode e` by
        (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
-        qexists_tac `cenv` >> fs[allocLimitsTheory.alloc_limits_stmt_def]) >>
-     qexists_tac `[]` >> simp[]) >>
+        qexists_tac `cenv` >> fs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def]) >>
+     mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`, `calls` |-> `[]`]
+              stmt_expr_body_pre_main_mods) >>
+     gvs[compileUnitTheory.main_module_def, alistTheory.ALOOKUP_def,
+         stmt_exprs_ok_flat, supported_stmt_expr_exists_def, int_calls_stmt_def]) >>
   irule compile_expr_stmt_frag_ok_full >>
   simp[gas_shadow_stmt_compile_expr] >> conj_tac
   >- (rpt strip_tac >>
       `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
       metis_tac[compile_expr_open_general]) >>
   qpat_x_assum `body_expr_full_ok _ _`
-    (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_full_ok_def]) >>
-  disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `tops`, `ctx`, `shadow_ctx`,
+    (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+  qpat_x_assum `!DF lo d PG tops ctx sc f sf cenv env ty es.
+    _ ==> expr_sim_full _ cenv cx ty e es /\ _` (qspecl_then [`DF`, `lo`, `d`, `PG`, `tops`, `ctx`, `shadow_ctx`,
     `func`, `shadow_func`, `cenv`, `env`, `expr_type e`, `es`] mp_tac) >>
   simp[]
 QED
@@ -165,25 +177,38 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[Once body_stmt_full_ok_def, gas_shadow_stmt_def] >>
   rpt gen_tac >> strip_tac >>
+  qpat_assum `body_inv tops ctx cenv cx`
+    (assume_tac o MATCH_MP bodyInvCodePropsTheory.contract_inv_cenv_modules
+      o MATCH_MP body_inv_contract) >>
+  `expr_body_pre cenv cx env e es` by
+    (mp_tac (Q.INST [`tops` |-> `tops`, `ctx` |-> `ctx`,
+                     `s` |-> `If e ss1 ss2`]
+              stmtExprAllocationPrePropsTheory.body_inv_stmt_expr_pre_singleton) >>
+     simp[supported_stmt_expr_exists_def] >>
+     disch_then irule >>
+     `supported_expr tops e /\ well_typed_expr env e` by
+       fs[supported_stmt_def, supported_expr_def, type_stmt_def, optionTheory.IS_SOME_EXISTS] >>
+     `alloc_limits_expr cenv e` by
+       fs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def] >>
+     drule_then assume_tac allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+     drule_then assume_tac (cj 1 allocLimitsPropsTheory.alloc_limits_expr_exists) >>
+     mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
+                      `calls` |-> `int_calls_stmts ss1 ++ int_calls_stmts ss2`]
+              stmt_expr_body_pre_main_mods) >>
+     gvs[compileUnitTheory.main_module_def, alistTheory.ALOOKUP_def,
+         stmt_exprs_ok_def, supported_stmt_expr_exists_def, int_calls_stmt_def,
+         DE_MORGAN_THM, LEFT_AND_OVER_OR, supported_expr_exists_disj]) >>
   qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
     SIMP_RULE std_ss [stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def,
       supported_stmt_expr_exists_def, DE_MORGAN_THM]) >>
   gvs[type_stmt_def, supported_stmt_def, int_calls_stmt_def,
       supported_stmt_expr_exists_def, optionTheory.IS_SOME_EXISTS] >>
-  `supported_expr tops e` by simp[supported_expr_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
-  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
-    gvs[body_inv_def] >>
-  `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
-  `expr_body_pre cenv cx env e es` by
-    (bodyConstNameLib.irule_body_pre stmt_expr_body_pre_alloc >> gvs[body_inv_def] >>
-     conj_tac >- drule_then ACCEPT_TAC allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
-     qexists_tac `int_calls_stmts ss1 ++ int_calls_stmts ss2` >> simp[]) >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
      cenv cx (BaseT BoolT) e es` by
     (qpat_x_assum `body_expr_full_ok _ _`
-       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `tops`, `ctx`,
+       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     qpat_x_assum `!DF lo d PG tops ctx sc f sf cenv env ty es.
+       _ ==> expr_sim_full _ cenv cx ty e es /\ _` (qspecl_then [`DF`, `lo`, `d`, `PG`, `tops`, `ctx`,
        `shadow_ctx`, `func`, `shadow_func`, `cenv`, `env`, `BaseT BoolT`,
        `es`] mp_tac) >> simp[]) >>
   `ctx_has_dalloca ctx /\ MEM func ctx.ctx_functions ==>
@@ -254,7 +279,11 @@ Proof
   `stmts_exprs_ok c = stmts_exprs_ok (decl_var_type cenv s)` by
     metis_tac[stmt_env_stmts_exprs_ok] >>
   `expr_sim_inv c cx env1 es1` by
-    (irule expr_sim_inv_stmt >> fs[body_inv_def] >>
+    (qpat_assum `body_inv tops ctx cenv cx`
+       (strip_assume_tac o MATCH_MP body_inv_main_support) >>
+     qpat_assum `body_inv tops ctx cenv cx`
+       (assume_tac o MATCH_MP contract_inv_alloca_locals o MATCH_MP body_inv_contract) >>
+     irule expr_sim_inv_stmt >> simp[] >>
      metis_tac[expr_sim_inv_gas_obs, call_evaluation_safe_append_left]) >>
   `ce_locals_declared c env1` by metis_tac[ce_locals_declared_stmt] >>
   `locals_alloc_ok c env1` by metis_tac[locals_alloc_ok_stmt] >>
