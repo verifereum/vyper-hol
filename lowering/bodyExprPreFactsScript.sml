@@ -110,8 +110,8 @@ Theorem supported_assignment_main_calls[local]:
              IS_SOME (supported_function_decl tops c Internal)) (int_calls_atarget target)
 Proof
   Cases_on `target` >>
-  simp[supported_assignment_def, int_calls_atarget_def] >>
-  TRY (metis_tac[supported_base_target_main_calls]) >>
+  simp[supported_assignment_def, int_calls_atarget_def]
+  >- metis_tac[supported_base_target_main_calls] >>
   strip_tac >> qpat_x_assum `EVERY _ _` mp_tac >>
   qmatch_goalsub_rename_tac `int_calls_atargets ts` >>
   Induct_on `ts` >> simp[int_calls_atarget_def] >>

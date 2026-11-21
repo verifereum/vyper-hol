@@ -369,8 +369,8 @@ Proof
   >- (rpt gen_tac >> strip_tac >>
       drule classify_functions_external_source >>
       disch_then (qx_choosel_then [`rawdefaults`, `rawbody`] strip_assume_tac) >>
-      fs[subst_consts_fn_def] >>
-      TRY (metis_tac[function_visibility_distinct] >> NO_TAC) >>
+      fs[subst_consts_fn_def]
+      >- metis_tac[function_visibility_distinct] >>
       imp_res_tac public_getter_defaults_nil >> fs[]) >>
   rpt gen_tac >> strip_tac
   >- (drule classify_functions_external_source >> strip_tac >>
