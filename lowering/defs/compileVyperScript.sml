@@ -1811,6 +1811,191 @@ Proof
        reach_internals_distinct]
 QED
 
+(* ===== Blueprint dynamic-allocation refusal ===== *)
+
+(* A create_from_blueprint sizes its DALLOCA from the blueprint's code size
+   and from the length word of its dynamic constructor arguments (or of its
+   raw_args buffer).  Nothing validates a dynamic length word read from
+   storage or transient storage, so a unit that declares such a variable
+   and passes dynamic arguments to a blueprint is refused, as is a folded
+   literal code_offset whose signed size check
+   (compile_create_blueprint_check) lets a size above 2 ** 32 through. *)
+
+Definition hashmap_has_dynamic_value_def:
+  hashmap_has_dynamic_value sfields (Type vt) = is_abi_dynamic sfields vt /\
+  hashmap_has_dynamic_value sfields (HashMapT _ vt) =
+    hashmap_has_dynamic_value sfields vt
+End
+
+Definition decl_has_unvalidated_dynamic_def:
+  decl_has_unvalidated_dynamic sfields (VariableDecl _ Storage _ ty _) =
+    is_abi_dynamic sfields ty /\
+  decl_has_unvalidated_dynamic sfields (VariableDecl _ Transient _ ty _) =
+    is_abi_dynamic sfields ty /\
+  decl_has_unvalidated_dynamic sfields (HashMapDecl _ _ _ _ vt _) =
+    hashmap_has_dynamic_value sfields vt /\
+  decl_has_unvalidated_dynamic sfields _ = F
+End
+
+Definition blueprint_offset_fold_ok_def:
+  blueprint_offset_fold_ok offset_e =
+    case origin_fold_value offset_e of
+      Literal _ (IntL i) =>
+        w2n (i2w i : bytes32) <= 2 ** 255 \/
+        2 ** 256 - 2 ** 32 <= w2n (i2w i : bytes32)
+    | _ => T
+End
+
+(* The most bytes compile_create_blueprint_args can put after the code: the
+   raw_args buffer's bound, or the ABI bound of the constructor arguments. *)
+Definition blueprint_args_size_bound_def:
+  blueprint_args_size_bound sfields raw_args args =
+    if raw_args then
+      (case args of
+         [a] => vyperTypeSystem$bytelike_type_bound (expr_type a)
+       | _ => 0)
+    else abi_size_bound sfields (TupleT (MAP expr_type args))
+End
+
+(* The operands of a blueprint call, as compile_create_call splits them:
+   [target; value] ++ [salt]? ++ [code_offset] ++ ctor_args.  The code size
+   that passes the blueprint checks is at most 24576 + 2 ** 32, so the
+   size bound keeps every blueprint DALLOCA below 2 ** 64 bytes. *)
+Definition blueprint_call_raw_fmp_ok_def:
+  blueprint_call_raw_fmp_ok sfields has_unval_dyn raw_args has_salt es =
+    case es of
+      _::_::rest =>
+        if LENGTH rest < (if has_salt then 1 else 0) + 1 then T
+        else
+          let suffix = if has_salt then TL rest else rest in
+          blueprint_offset_fold_ok (HD suffix) /\
+          blueprint_args_size_bound sfields raw_args (TL suffix) +
+            2 ** 32 + 24576 < 2 ** 64 /\
+          (has_unval_dyn ==>
+           ~raw_args /\
+           ~EXISTS (is_abi_dynamic sfields o expr_type) (TL suffix))
+    | _ => T
+End
+
+Definition blueprint_expr_raw_fmp_ok_def:
+  blueprint_expr_raw_fmp_ok sf hud (Name ty id) = T /\
+  blueprint_expr_raw_fmp_ok sf hud (TopLevelName ty ns) = T /\
+  blueprint_expr_raw_fmp_ok sf hud (FlagMember ty ns id) = T /\
+  blueprint_expr_raw_fmp_ok sf hud (Literal ty l) = T /\
+  blueprint_expr_raw_fmp_ok sf hud (IfExp ty a b c) =
+    (blueprint_expr_raw_fmp_ok sf hud a /\ blueprint_expr_raw_fmp_ok sf hud b /\
+     blueprint_expr_raw_fmp_ok sf hud c) /\
+  blueprint_expr_raw_fmp_ok sf hud (StructLit ty ns fs) =
+    blueprint_fields_raw_fmp_ok sf hud fs /\
+  blueprint_expr_raw_fmp_ok sf hud (Subscript ty a b) =
+    (blueprint_expr_raw_fmp_ok sf hud a /\ blueprint_expr_raw_fmp_ok sf hud b) /\
+  blueprint_expr_raw_fmp_ok sf hud (Attribute ty a id) =
+    blueprint_expr_raw_fmp_ok sf hud a /\
+  blueprint_expr_raw_fmp_ok sf hud (Builtin ty bi es) =
+    blueprint_exprs_raw_fmp_ok sf hud es /\
+  blueprint_expr_raw_fmp_ok sf hud (TypeBuiltin ty bi t es) =
+    blueprint_exprs_raw_fmp_ok sf hud es /\
+  blueprint_expr_raw_fmp_ok sf hud (Pop ty tgt) =
+    blueprint_btarget_raw_fmp_ok sf hud tgt /\
+  blueprint_expr_raw_fmp_ok sf hud (Call ty ct es d) =
+    ((case ct of
+        CreateTarget (CreateFromBlueprint raw_args) has_salt _ _ =>
+          blueprint_call_raw_fmp_ok sf hud raw_args has_salt es
+      | _ => T) /\
+     blueprint_exprs_raw_fmp_ok sf hud es /\ blueprint_opt_raw_fmp_ok sf hud d) /\
+  blueprint_btarget_raw_fmp_ok sf hud (NameTarget id) = T /\
+  blueprint_btarget_raw_fmp_ok sf hud (TopLevelNameTarget ns) = T /\
+  blueprint_btarget_raw_fmp_ok sf hud (SubscriptTarget tgt e) =
+    (blueprint_btarget_raw_fmp_ok sf hud tgt /\ blueprint_expr_raw_fmp_ok sf hud e) /\
+  blueprint_btarget_raw_fmp_ok sf hud (AttributeTarget tgt id) =
+    blueprint_btarget_raw_fmp_ok sf hud tgt /\
+  blueprint_exprs_raw_fmp_ok sf hud [] = T /\
+  blueprint_exprs_raw_fmp_ok sf hud (e::es) =
+    (blueprint_expr_raw_fmp_ok sf hud e /\ blueprint_exprs_raw_fmp_ok sf hud es) /\
+  blueprint_opt_raw_fmp_ok sf hud NONE = T /\
+  blueprint_opt_raw_fmp_ok sf hud (SOME e) = blueprint_expr_raw_fmp_ok sf hud e /\
+  blueprint_fields_raw_fmp_ok sf hud [] = T /\
+  blueprint_fields_raw_fmp_ok sf hud ((id,e)::fs) =
+    (blueprint_expr_raw_fmp_ok sf hud e /\ blueprint_fields_raw_fmp_ok sf hud fs)
+Termination
+  WF_REL_TAC `measure (\x. case x of
+      INL (_,_,e) => expr_size e
+    | INR (INL (_,_,t)) => base_assignment_target_size t
+    | INR (INR (INL (_,_,es))) => list_size expr_size es
+    | INR (INR (INR (INL (_,_,opt)))) => option_size expr_size opt
+    | INR (INR (INR (INR (_,_,fs)))) =>
+        list_size (pair_size (list_size char_size) expr_size) fs)` >>
+  simp[vyperASTTheory.expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
+       bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
+       listTheory.list_size_map, SF ETA_ss]
+End
+
+Definition blueprint_target_raw_fmp_ok_def:
+  blueprint_target_raw_fmp_ok sf hud (BaseTarget tgt) =
+    blueprint_btarget_raw_fmp_ok sf hud tgt /\
+  blueprint_target_raw_fmp_ok sf hud (TupleTarget ts) =
+    blueprint_targets_raw_fmp_ok sf hud ts /\
+  blueprint_targets_raw_fmp_ok sf hud [] = T /\
+  blueprint_targets_raw_fmp_ok sf hud (t::ts) =
+    (blueprint_target_raw_fmp_ok sf hud t /\ blueprint_targets_raw_fmp_ok sf hud ts)
+End
+
+Definition blueprint_stmt_raw_fmp_ok_def:
+  blueprint_stmt_raw_fmp_ok sf hud Pass = T /\
+  blueprint_stmt_raw_fmp_ok sf hud Continue = T /\
+  blueprint_stmt_raw_fmp_ok sf hud Break = T /\
+  blueprint_stmt_raw_fmp_ok sf hud (Expr e) = blueprint_expr_raw_fmp_ok sf hud e /\
+  blueprint_stmt_raw_fmp_ok sf hud (For id ty it n body) =
+    ((case it of
+        Array e => blueprint_expr_raw_fmp_ok sf hud e
+      | Range a b =>
+          (blueprint_expr_raw_fmp_ok sf hud a /\ blueprint_expr_raw_fmp_ok sf hud b)) /\
+     blueprint_stmts_raw_fmp_ok sf hud body) /\
+  blueprint_stmt_raw_fmp_ok sf hud (If e a b) =
+    (blueprint_expr_raw_fmp_ok sf hud e /\ blueprint_stmts_raw_fmp_ok sf hud a /\
+     blueprint_stmts_raw_fmp_ok sf hud b) /\
+  blueprint_stmt_raw_fmp_ok sf hud (Assert e r) =
+    (blueprint_expr_raw_fmp_ok sf hud e /\
+     case r of
+       AssertReason e' => blueprint_expr_raw_fmp_ok sf hud e'
+     | AssertCustomError (CustomError ns es fs) =>
+         (blueprint_exprs_raw_fmp_ok sf hud es /\ blueprint_fields_raw_fmp_ok sf hud fs)
+     | _ => T) /\
+  blueprint_stmt_raw_fmp_ok sf hud (Log ns es) = blueprint_exprs_raw_fmp_ok sf hud es /\
+  blueprint_stmt_raw_fmp_ok sf hud (Raise r) =
+    (case r of
+       RaiseReason e => blueprint_expr_raw_fmp_ok sf hud e
+     | RaiseCustomError (CustomError ns es fs) =>
+         (blueprint_exprs_raw_fmp_ok sf hud es /\ blueprint_fields_raw_fmp_ok sf hud fs)
+     | _ => T) /\
+  blueprint_stmt_raw_fmp_ok sf hud (Return e) = blueprint_opt_raw_fmp_ok sf hud e /\
+  blueprint_stmt_raw_fmp_ok sf hud (Assign t e) =
+    (blueprint_target_raw_fmp_ok sf hud t /\ blueprint_expr_raw_fmp_ok sf hud e) /\
+  blueprint_stmt_raw_fmp_ok sf hud (AugAssign ty t bi e) =
+    (blueprint_btarget_raw_fmp_ok sf hud t /\ blueprint_expr_raw_fmp_ok sf hud e) /\
+  blueprint_stmt_raw_fmp_ok sf hud (Append t e) =
+    (blueprint_btarget_raw_fmp_ok sf hud t /\ blueprint_expr_raw_fmp_ok sf hud e) /\
+  blueprint_stmt_raw_fmp_ok sf hud (AnnAssign id ty e) =
+    blueprint_expr_raw_fmp_ok sf hud e /\
+  blueprint_stmts_raw_fmp_ok sf hud [] = T /\
+  blueprint_stmts_raw_fmp_ok sf hud (s::ss) =
+    (blueprint_stmt_raw_fmp_ok sf hud s /\ blueprint_stmts_raw_fmp_ok sf hud ss)
+End
+
+Definition blueprint_fn_raw_fmp_ok_def:
+  blueprint_fn_raw_fmp_ok sf hud (mut,nr,rr,id,args,dflts,ret,body) =
+    (blueprint_exprs_raw_fmp_ok sf hud dflts /\ blueprint_stmts_raw_fmp_ok sf hud body)
+End
+
+(* The refusal guard of a unit: its declarations decls, the functions fns it
+   lowers. *)
+Definition blueprint_unit_raw_fmp_ok_def:
+  blueprint_unit_raw_fmp_ok sfields decls fns =
+    EVERY (blueprint_fn_raw_fmp_ok sfields
+             (EXISTS (decl_has_unvalidated_dynamic sfields) decls)) fns
+End
+
 (* ===== Policy-driven complete-unit lowering ===== *)
 
 (* Package runtime metadata from source, but keep the raw lowering result atomic.
@@ -1849,6 +2034,8 @@ Definition lower_vyper_runtime_unit_def:
        EVERY (no_sha256_expr o SND) (module_consts_env tops []) ∧
        EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) ∧
        EVERY no_neg_exp_fn
+         (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f])) ∧
+       blueprint_unit_raw_fmp_ok (make_struct_fields_map tops) tops
          (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f]))
     then
       if EXISTS external_has_defaults ext_fns then
@@ -1899,6 +2086,8 @@ Theorem lower_vyper_runtime_unit_no_external_defaults:
        EVERY (no_sha256_expr o SND) (module_consts_env tops []) ∧
        EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) ∧
        EVERY no_neg_exp_fn
+         (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f])) ∧
+       blueprint_unit_raw_fmp_ok (make_struct_fields_map tops) tops
          (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f]))
     then
       run_lowering
@@ -1998,6 +2187,8 @@ Definition lower_vyper_deploy_unit_def:
        ¬EVERY (no_sha256_expr o SND) (module_consts_env tops []) ∨
        ¬EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) ∨
        ¬EVERY no_neg_exp_fn
+          (int_fns ++ (case ctor_fn of NONE => [] | SOME f => [f])) ∨
+       ¬blueprint_unit_raw_fmp_ok sft tops
           (int_fns ++ (case ctor_fn of NONE => [] | SOME f => [f])) ∨
        ¬ctor_named_init ctor_fn
     then NONE else

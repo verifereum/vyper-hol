@@ -91,18 +91,6 @@ Resume compile_for_frag_full[array]:
     (drule_all bodySimTheory.body_inv_stmt_const_name_free >>
      simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
           supportedStmtTraverseTheory.supported_iterator_exists_def]) >>
-  Cases_on `?sid nid fld itv k atv bd.
-       e = Attribute (ArrayT typ bd) (TopLevelName (StructT sid) nid) fld /\
-       supported_immutable_type tops nid = SOME (StructT sid) /\
-       evaluate_type (get_tenv cx) (StructT sid) = SOME itv /\
-       evaluate_type (get_tenv cx) (ArrayT typ bd) = SOME atv /\
-       mem_path_offset itv [AttrSubscript fld] = SOME (k,atv) /\ 0 < k`
-  >- (qspecl_then
-        [`cx`,`id`,`typ`,`e`,`n`,`body`,`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,
-         `ctx`,`shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`env'`,`ret_ty`,
-         `lctx`,`RetQ`,`es`] MATCH_MP_TAC
-        bodyFullForArrayBranchTheory.compile_for_immutable_field_array_frag_full >>
-      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   Cases_on `~(?ty nid. e = TopLevelName ty nid) /\
       (?tgt nid. loop_iterator_place e = SOME tgt /\ target_root tgt = TopLevelNameTarget nid)`
   >- (pop_assum strip_assume_tac >> suspend "nested_array") >>
