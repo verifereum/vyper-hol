@@ -21,6 +21,16 @@ Proof
   fs[compile_env_blueprint_free_def, compile_env_builtin_arity_def]
 QED
 
+Theorem runtime_blueprint_free_internal[local]:
+  runtime_blueprint_free source_tops ==>
+  !mut nr rr name args ds ret ss.
+    MEM (FunctionDecl Internal mut nr rr name args ds ret ss) source_tops ==>
+    ~supported_stmts_expr_exists blueprint_create_root ss /\
+    EVERY (\d. ~supported_expr_exists blueprint_create_root d) ds
+Proof
+  simp[runtime_blueprint_free_def] >> metis_tac[function_visibility_distinct]
+QED
+
 Theorem dalloca_windows_external_env[local]:
   check_contract F layouts addr [(NONE, source_tops)] = SOME art /\ runtime_blueprint_free source_tops ==>
   compile_env_blueprint_free
@@ -31,11 +41,7 @@ Theorem dalloca_windows_external_env[local]:
                 (package_external_fn source_tops tr keys (mut,nr,rr,name,args,ds,ret,fbody)))))
 Proof
   strip_tac >>
-  `!mut nr rr name args ds ret ss.
-    MEM (FunctionDecl Internal mut nr rr name args ds ret ss) source_tops ==>
-    ~supported_stmts_expr_exists blueprint_create_root ss /\
-    EVERY (\d. ~supported_expr_exists blueprint_create_root d) ds` by
-      (fs[runtime_blueprint_free_def] >> metis_tac[function_visibility_distinct]) >>
+  drule runtime_blueprint_free_internal >> strip_tac >>
   `compile_env_blueprint_free
      (build_compile_env source_tops External mut name args ret fbody tr)` by
     metis_tac[build_compile_env_blueprint_free] >>
@@ -151,11 +157,7 @@ Theorem dalloca_windows_packaged_fallback[local]:
        (compile_fallback_body ce pay nr key ut vw fbody rt))
 Proof
   strip_tac >>
-  `!mut nr rr name args ds ret ss.
-    MEM (FunctionDecl Internal mut nr rr name args ds ret ss) source_tops ==>
-    ~supported_stmts_expr_exists blueprint_create_root ss /\
-    EVERY (\d. ~supported_expr_exists blueprint_create_root d) ds` by
-      (fs[runtime_blueprint_free_def] >> metis_tac[function_visibility_distinct]) >>
+  drule runtime_blueprint_free_internal >> strip_tac >>
   Cases_on `FST (SND (SND (classify_functions source_tops)))`
   >- simp[package_fallback_fn_def, set_fallback_package_target_def] >>
   rename1 `SOME src` >> PairCases_on `src` >>
@@ -215,11 +217,7 @@ Theorem lower_vyper_runtime_unit_dalloca_windows:
 Proof
   strip_tac >>
   fs[source_typing_ok_def] >>
-  `!mut nr rr name args ds ret ss.
-    MEM (FunctionDecl Internal mut nr rr name args ds ret ss) source_tops ==>
-    ~supported_stmts_expr_exists blueprint_create_root ss /\
-    EVERY (\d. ~supported_expr_exists blueprint_create_root d) ds` by
-      (fs[runtime_blueprint_free_def] >> metis_tac[function_visibility_distinct]) >>
+  drule runtime_blueprint_free_internal >> strip_tac >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
   simp[lower_vyper_runtime_unit_def] >> pairarg_tac >> gvs[AllCaseEqs()] >>
   rpt strip_tac >>
