@@ -11,7 +11,39 @@ Ancestors
 Theorem for_storage_array_head_prefix_transport_outside:
   !H D lo d ctx func cx c0 e0 sa0 s0 G0 tn0 ei s G tn u Gu tnu bd dv ov tot ep
       slot k n sa bod bb idx p dst nb lvo len.
-    let Fr = (\c ee s G tn.
+    u = (update_var ep
+           ((if (case bd of Fixed _ => F | Dynamic _ => T) then slot + 1w else slot) +
+            n2w (k*n))
+           (if (case bd of Fixed _ => F | Dynamic _ => T)
+            then update_var tot (1w + n2w (k*n))
+              (update_var ov (n2w (k*n)) (jump_to bod (update_var dv 0w s)))
+            else update_var ov (n2w (k*n)) (jump_to bod (update_var dv 0w s))))
+           with vs_inst_idx := LENGTH sa.cs_current_insts /\
+    (!x. ~MEM x (if (case bd of Fixed _ => F | Dynamic _ => T)
+                 then [dv;ov;tot;ep] else [dv;ov;ep]) ==> FLOOKUP Gu x = FLOOKUP G x) /\
+    tnu = (tn with t_var := FOLDL (\m x. fmupdate x {} m) tn.t_var
+      (if (case bd of Fixed _ => F | Dynamic _ => T) then [dv;ov;tot;ep] else [dv;ov;ep])) /\
+    lookup_block bod func.fn_blocks = SOME bb /\
+    (!j. j < LENGTH sa.cs_current_insts ==>
+         ?inst. get_instruction bb j = SOME inst /\ inst.inst_opcode <> ALLOCA) /\
+    ALL_DISTINCT
+      (if (case bd of Fixed _ => F | Dynamic _ => T) then [dv;ov;tot;ep] else [dv;ov;ep]) /\
+    (!x. MEM x (if (case bd of Fixed _ => F | Dynamic _ => T)
+                then [dv;ov;tot;ep] else [dv;ov;ep]) ==> ~not_fresh_at sa0 x) /\
+    ~MEM idx (if (case bd of Fixed _ => F | Dynamic _ => T)
+              then [dv;ov;tot;ep] else [dv;ov;ep]) /\
+    ~MEM p (if (case bd of Fixed _ => F | Dynamic _ => T)
+            then [dv;ov;tot;ep] else [dv;ov;ep]) /\
+    (!x. lvo = Var x ==> ~MEM x (if (case bd of Fixed _ => F | Dynamic _ => T)
+                                 then [dv;ov;tot;ep] else [dv;ov;ep])) /\
+    sa.cs_current_bb = bod /\ ~s.vs_halted /\
+    local_ptrs_reserved c0 sa0 /\
+    (!x cap. c0.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa0 x) /\
+    (!x cap. c0.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa0 x) /\
+    stmt_state_rel H ctx func c0 cx ei s /\
+    storage_well_formed_on cx ei (FST H) /\
+    ghost_inv_at D lo d c0 cx ei G tn s /\
+    (\c ee s G tn.
       alloca_history func s /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
       s0.vs_alloca_next <= s.vs_alloca_next /\
@@ -27,32 +59,8 @@ Theorem for_storage_array_head_prefix_transport_outside:
         FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa0.cs_next_id /\
         (!name b sz'. local_region c0 e0.scopes s0 name b sz' ==>
                       off + sz <= b \/ b + sz' <= off) /\
-        off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem) in
-    let dyn = (case bd of Fixed _ => F | Dynamic _ => T) in
-    let outs = if dyn then [dv;ov;tot;ep] else [dv;ov;ep] in
-    let addr = (if dyn then slot + 1w else slot) + n2w (k*n) in
-    u = (update_var ep addr
-           (if dyn then update_var tot (1w + n2w (k*n))
-              (update_var ov (n2w (k*n)) (jump_to bod (update_var dv 0w s)))
-            else update_var ov (n2w (k*n)) (jump_to bod (update_var dv 0w s))))
-           with vs_inst_idx := LENGTH sa.cs_current_insts /\
-    (!x. ~MEM x outs ==> FLOOKUP Gu x = FLOOKUP G x) /\
-    tnu = (tn with t_var := FOLDL (\m x. fmupdate x {} m) tn.t_var outs) /\
-    lookup_block bod func.fn_blocks = SOME bb /\
-    (!j. j < LENGTH sa.cs_current_insts ==>
-         ?inst. get_instruction bb j = SOME inst /\ inst.inst_opcode <> ALLOCA) /\
-    ALL_DISTINCT outs /\
-    (!x. MEM x outs ==> ~not_fresh_at sa0 x) /\
-    ~MEM idx outs /\ ~MEM p outs /\
-    (!x. lvo = Var x ==> ~MEM x outs) /\
-    sa.cs_current_bb = bod /\ ~s.vs_halted /\
-    local_ptrs_reserved c0 sa0 /\
-    (!x cap. c0.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa0 x) /\
-    (!x cap. c0.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa0 x) /\
-    stmt_state_rel H ctx func c0 cx ei s /\
-    storage_well_formed_on cx ei (FST H) /\
-    ghost_inv_at D lo d c0 cx ei G tn s /\
-    Fr c0 ei s G tn /\ return_buf_frame d c0 sa0 s /\ ret_pc_ok c0 sa0 s /\
+        off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem)
+      c0 ei s G tn /\ return_buf_frame d c0 sa0 s /\ ret_pc_ok c0 sa0 s /\
     lookup_var idx s = SOME (n2w k) /\ FLOOKUP G idx = NONE /\
     op_taint tn (Var idx) = {} /\ lookup_var p s = SOME dst /\
     ptr_covers G tn p s nb /\ eval_operand lvo s = SOME (n2w len) /\
@@ -60,7 +68,24 @@ Theorem for_storage_array_head_prefix_transport_outside:
     stmt_state_rel H ctx func c0 cx ei u /\
     storage_well_formed_on cx ei (FST H) /\
     ghost_inv_at D lo d c0 cx ei Gu tnu u /\
-    Fr c0 ei u Gu tnu /\ return_buf_frame d c0 sa0 u /\ ret_pc_ok c0 sa0 u /\
+    (\c ee s G tn.
+      alloca_history func s /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+      s0.vs_alloca_next <= s.vs_alloca_next /\
+      (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==>
+             lookup_var x s = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+               FLOOKUP s.vs_allocas aid = SOME b) /\
+      (!x. not_fresh_at sa0 x ==>
+           FLOOKUP G x = FLOOKUP G0 x /\
+           op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+      alloca_frame c0 e0 sa0 s0 c ee s /\
+      !aid off sz i.
+        FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa0.cs_next_id /\
+        (!name b sz'. local_region c0 e0.scopes s0 name b sz' ==>
+                      off + sz <= b \/ b + sz' <= off) /\
+        off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem)
+      c0 ei u Gu tnu /\ return_buf_frame d c0 sa0 u /\ ret_pc_ok c0 sa0 u /\
     u.vs_current_bb = sa.cs_current_bb /\
     u.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~u.vs_halted /\
     allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
@@ -68,21 +93,24 @@ Theorem for_storage_array_head_prefix_transport_outside:
     op_taint tnu (Var idx) = {} /\ eval_operand lvo u = SOME (n2w len) /\
     op_prov Gu lvo = NONE /\ op_taint tnu lvo = {} /\
     lookup_var p u = SOME dst /\ ptr_covers Gu tnu p u nb /\
-    eval_operand (Var ep) u = SOME addr /\ op_taint tnu (Var ep) = {} /\
+    eval_operand (Var ep) u = SOME
+      ((if (case bd of Fixed _ => F | Dynamic _ => T) then slot + 1w else slot) +
+       n2w (k*n)) /\ op_taint tnu (Var ep) = {} /\
     u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
     u.vs_memory = s.vs_memory /\ u.vs_immutables = s.vs_immutables /\
     tnu.t_mem = tn.t_mem /\
     (!name b sz. local_region c0 ei.scopes u name b sz <=>
                  local_region c0 ei.scopes s name b sz) /\
-    !x. ~MEM x outs ==>
+    !x. ~MEM x (if (case bd of Fixed _ => F | Dynamic _ => T)
+                then [dv;ov;tot;ep] else [dv;ov;ep]) ==>
         lookup_var x u = lookup_var x s /\ FLOOKUP Gu x = FLOOKUP G x /\
         op_taint tnu (Var x) = op_taint tn (Var x)
 Proof
   rpt gen_tac >>
-  SIMP_TAC pureSimps.pure_ss
-    [combinTheory.LET_FORALL_ELIM, combinTheory.S_ABS_R,
-     combinTheory.o_ABS_R, combinTheory.o_THM, combinTheory.C_THM] >>
-  ntac 4 (gen_tac >> disch_tac) >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `Fr c0 ei u Gu tnu` >>
+  qmatch_goalsub_abbrev_tac `eval_operand (Var ep) u = SOME addr` >>
+  qmatch_goalsub_abbrev_tac `ALL_DISTINCT outs` >>
+  qabbrev_tac `dyn = case bd of Fixed _ => F | Dynamic _ => T` >> strip_tac >>
   `u.vs_current_bb = sa.cs_current_bb /\
    u.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~u.vs_halted /\
    u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
