@@ -15,7 +15,7 @@ Theorem grouped_comparison_origin_path:
   ~s.vs_halted /\ eval_operand mid s = SOME m /\ op_taint tn mid = {} /\
   allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?t G' tn'.
-    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
     vars_pc_only s t /\ t.vs_current_bb = (if m = n2w sel then yes else no) /\
     t.vs_inst_idx = 0 /\
     (!sa sb. fresh_vars_wrt sa s /\ sa.cs_next_var < sb.cs_next_var /\
@@ -38,9 +38,9 @@ Proof
   `step_inst 0 ctx i s = OK u` by
     simp[Abbr `i`, Abbr `u`, Abbr `v`, step_inst_non_invoke, mk_inst_def,
          step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def] >>
-  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
      (OK s1,G1,tn1)` by
-    (gen_tac >> simp[Abbr `s1`] >> irule step_origin_ptr_path >>
+    (rpt gen_tac >> simp[Abbr `s1`] >> irule step_origin_ptr_path >>
      simp[] >>
      `ptr_safe_step D lo 0 ctx func PG G tn i s` by
        (simp[Abbr `i`] >> irule ptr_safe_dispatch_scalar_step >>
@@ -58,9 +58,9 @@ Proof
     (fs[Abbr `s1`, Abbr `u`, update_var_def, eval_operand_def, lookup_var_def,
         FLOOKUP_UPDATE, allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
   qabbrev_tac `lbl = if m = n2w sel then yes else no` >>
-  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s1,G1,tn1) []
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s1,G1,tn1) []
      (OK (jump_to lbl s1),G1,tn1)` by
-    (gen_tac >> mp_tac (Q.INST [`s` |-> `s1`, `G` |-> `G1`, `tn` |-> `tn1`,
+    (rpt gen_tac >> mp_tac (Q.INST [`s` |-> `s1`, `G` |-> `G1`, `tn` |-> `tn1`,
        `cond` |-> `Var out`, `l1` |-> `yes`, `l2` |-> `no`,
        `w` |-> `v`, `iid` |-> `id'`, `bb` |-> `bb`] jnz_origin_ptr_path) >>
      simp[Abbr `lbl`, Abbr `v`, bool_to_word_def]) >>
@@ -94,7 +94,9 @@ Proof
      irule fresh_vars_wrt_advance >>
      qexistsl_tac [`sa.cs_next_var`, `sa`] >> simp[]) >>
   qexistsl [`jump_to lbl s1`,`G1`,`tn1`] >>
-  conj_tac >- metis_tac[gas_origin_ptr_path_trans] >>
+  conj_tac >-
+    (rpt gen_tac >> irule gas_origin_ptr_path_trans >>
+     qexistsl_tac [`G1`, `s1`, `tn1`] >> simp[]) >>
   rpt conj_tac >> (TRY (first_assum ACCEPT_TAC)) >>
   simp[vars_pc_only_def, Abbr `s1`, Abbr `u`, jump_to_def, update_var_def,
        venom_state_component_equality, Abbr `G1`, Abbr `tn1`, Abbr `i`,
