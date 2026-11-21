@@ -46,7 +46,7 @@ Ancestors exprSimSubscriptArrayLiveStorageSuffix[qualified,ignore_grammar] exprP
   bodyFullForArray allocationPtr loweringHalt
   bodyFullForHandlers haltExitProj gasOutcomeFull vyperStorageFootprint
   gasOutcomeInitialObsPtr[qualified] gasStorage[qualified]
-  bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
+  bodyFullIfExpReach[qualified,ignore_grammar]
   stmtSimForParts[qualified] vyperInterpreter[qualified] gasContext[qualified] fragGasCopyLoop augAssignPtrScalarSafety augAssignPtrScalarCertificate
   supportedExprForms whitelistVisibility immutableLocationProps
   bodyFullForRounds[qualified] gasExemptCert[qualified]
@@ -1914,7 +1914,7 @@ Resume for_storage_array_entry_full[entry_run]:
   simp[FLOOKUP_UPDATE, w2n_n2w, dimword_def, LESS_MOD, bool_to_word_def, NOT_LESS]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Resume for_storage_array_entry_full[entry_ghost]:
   `!i s u tn. scalar_shape i /\ step_inst_base i s = OK u ==>
      step_taint i s u tn = tn with t_var :=
        set_var_taint tn.t_var i.inst_outputs (out_taint tn i s)` by
@@ -2030,9 +2030,6 @@ QED
        Excl "step_taint_inst_idx_right", step_prov_def, set_prov_def,
        out_prov_def, first_prov_def, op_prov_def, FLOOKUP_DRESTRICT] >>
   simp[inst_seq_ptr_def, pred_setTheory.INTER_ASSOC, DRESTRICT_UNIV])
-*)
-Resume for_storage_array_entry_full[entry_ghost]:
-  cheat
 QED
 Resume for_storage_array_entry_full[entry_mem]:
   irule run_inst_seq_mem_ok_every >>
@@ -5414,6 +5411,7 @@ Theorem for_storage_array_round_full:
     !(a :eval_result) (rs :eval_result list) (es :evaluation_state)
         (s :venom_state) (G :string |-> num # num) (tn :taint).
       ~s.vs_halted /\
+      (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u) /\
       (!(H :(bool # 256 word # type_value) list # num list).
          valid_horizon cx st0 H es.storage_trace ==>
          (\(H :(bool # 256 word # type_value) list # num list)
@@ -5712,7 +5710,7 @@ Resume for_storage_array_round_full[compose]:
 QED
 
 Resume for_storage_array_round_full[bind_head]:
- qunabbrev_tac `X` >> irule gas_outcome_full_bind_all >>
+ qunabbrev_tac `X` >> irule gas_outcome_full_bind_all_path >>
  simp[] >>
  conj_tac >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_unit >>
               qexistsl [`mid`,`t`] >> simp[]) >>
@@ -5736,7 +5734,8 @@ Resume for_storage_array_round_full[head_continue]:
  qabbrev_tac `Hm = storage_trace_horizon mid.storage_trace` >>
  `valid_horizon cx st0 Hm mid.storage_trace` by
    simp[Abbr `Hm`, GSYM storage_trace_domain_def] >>
- qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+ qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+              _ /\ _ /\ (?v k. _ /\ _ /\ _ /\ Entry H _ v k z GG tt)`
    (qspec_then `Hm` mp_tac) >>
  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
  rename1 `read_result cx a es = (INL value,es)` >>
@@ -5751,7 +5750,8 @@ Resume for_storage_array_round_full[head_continue]:
  sg `!H. valid_horizon cx st0 H mid.storage_trace ==>
       Entry H (es with gas_obs := []) value k z GG tt`
  >- (qx_gen_tac `H` >> disch_tac >>
-     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+              _ /\ _ /\ (?v k. _ /\ _ /\ _ /\ Entry H _ v k z GG tt)`
        (qspec_then `H` mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
      rename1 `Entry H _ value' k' z GG tt` >>
@@ -5816,7 +5816,16 @@ Resume for_storage_array_round_full[cleanup_packet]:
  qabbrev_tac `eb = EB ei value` >>
  simp[NoAsms,Abbr `Qmid`,Abbr `clean`] >>
  sg `!f inst u. frag_reachable ctx func z f inst u ==> dalloca_no_wrap inst u`
- >- metis_tac[bodyFullBuiltinWordPowComposeTheory.pow_compose_reachable_no_wrap] >>
+ >- (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+       (qpat_assum `body_inv tops ctx bc cx` (fn inv =>
+          qpat_assum `MEM func ctx.ctx_functions` (fn member =>
+            ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi
+              (CONJ inv member))))) >>
+     qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
+                  gas_origin_ptr_path _ (s,G,tn) _ (OK z,GG,tt)`
+       (qspec_then `Hm` (drule_then
+         (mp_then (Pos hd) mp_tac bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap))) >>
+     asm_rewrite_tac []) >>
  `ei.scopes = es.scopes /\ ei.storage_trace = es.storage_trace` by
    simp[Abbr `ei`] >>
  `expr_sim_inv c0 cx env ei` suffices_by (strip_tac >> suspend "cleanup_apply") >>
@@ -6833,6 +6842,11 @@ Proof
     finally (try (do eval_stmts cx body'; return F od)
                  handle_loop_exception) pop_scope od)` >>
   qabbrev_tac `next = (\rs b. if b then return () else eval_for cx elem_tv id body' rs)` >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+       qpat_assum `MEM func ctx.ctx_functions` (fn member =>
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi
+           (CONJ inv member))))) >>
   sg `gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
        (eval_for cx elem_tv id body' vs) (ee,t,G1,tn1)
        (\H res ei G tn u. res = INL () /\ Done H ei G tn u)
@@ -6851,7 +6865,10 @@ Resume compile_for_storage_array_frag_full[rounds]:
           (strip_assume_tac o BETA_RULE o
            REWRITE_RULE [REWRITE_RULE [markerTheory.Abbrev_def] inv])) >>
       first_assum ACCEPT_TAC) >>
-  qexistsl [`Inv dst`, `next`, `stmt_res_ok lctx`, `round`] >>
+  qexistsl [`\H rs ei G tn s. Inv dst H rs ei G tn s /\
+              (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u)`,
+            `next`, `stmt_res_ok lctx`, `round`] >>
+  BETA_TAC >>
   conj_tac >- suspend "round_cons" >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_bool >>
@@ -6864,16 +6881,24 @@ Resume compile_for_storage_array_frag_full[rounds]:
   conj_tac
   >- (qx_gen_tac `H` >> strip_tac >>
       qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _ /\ Inv dst H vs ee G1 tn1 t`
-        (qspec_then `H` (drule_then strip_assume_tac)) >> first_assum ACCEPT_TAC) >>
+        (qspec_then `H` (drule_then strip_assume_tac)) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) [] (OK t,G1,tn1)`
+        (mp_then (Pos hd) mp_tac bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap) >>
+      asm_rewrite_tac []) >>
   qpat_x_assum `gas_admissible (eval_stmt _ _) _ es` mp_tac >>
   simp[gasContextTheory.gas_admissible_def]
 QED
 
 Resume compile_for_storage_array_frag_full[round_nil]:
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> Inv dst H [] _ _ _ _ /\ _`
+    (strip_assume_tac o SIMP_RULE bool_ss [IMP_CONJ_THM, FORALL_AND_THM]) >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> Inv dst H [] _ _ _ _` mp_tac >>
   map_every (fn q => qpat_assum q
     (fn th => pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]))
       [`Abbrev (Inv = _)`, `Abbrev (Done = _)`, `Abbrev (Fr = _)`] >>
-  BETA_TAC >> rpt gen_tac >> strip_tac >>
+  BETA_TAC >> strip_tac >>
   irule (CONV_RULE (REDEPTH_CONV (REWR_CONV LET_THM ORELSEC BETA_CONV))
     for_storage_array_nil_full) >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -6904,11 +6929,55 @@ Resume compile_for_storage_array_frag_full[round_nil]:
 QED
 
 Resume compile_for_storage_array_frag_full[round_cons]:
+  rpt gen_tac >> strip_tac >>
+  irule gas_outcome_full_initial_domain >>
+  conj_tac
+  >- (simp[Abbr `round`] >>
+      irule storage_trace_frame_bind_all >>
+      simp[storage_trace_frame_read_result, storage_trace_frame_ignore_bind,
+           storage_trace_frame_state_updates, storage_trace_frame_finally,
+           storage_trace_frame_try, storage_trace_frame_return,
+           storage_trace_frame_loop_handler, storage_trace_frame_pop_scope,
+           evaluate_storage_trace_frame]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >>
+  rename1 `!H. valid_horizon cx st0 H ei.storage_trace ==>
+               Inv dst H (a::rs) ei g tn s /\ _` >>
+  qpat_assum `!H. valid_horizon cx st0 H ei.storage_trace ==>
+                 Inv dst H (a::rs) ei g tn s /\ _`
+    (strip_assume_tac o SIMP_RULE bool_ss [IMP_CONJ_THM, FORALL_AND_THM]) >>
+  `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u` by
+    (qpat_assum `!H. valid_horizon cx st0 H ei.storage_trace ==>
+                   !fn inst u. frag_reachable ctx func s fn inst u ==> _`
+       (qspec_then `storage_trace_horizon ei.storage_trace` mp_tac) >>
+     simp[GSYM storage_trace_domain_def]) >>
+  irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
+  qexists_tac `\H res ee G1 tn1 t.
+    ee.gas_obs = [] /\ ~t.vs_halted /\
+    ?b. res = INL b /\ (b ==> Done H ee G1 tn1 t) /\
+        (~b ==> Inv dst H rs ee G1 tn1 t)` >>
+  BETA_TAC >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+      rename1 `_ = INL b` >> qexists_tac `b` >>
+      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+      strip_tac >> conj_tac
+      >- (qpat_assum `~b ==> Inv dst _ _ _ _ _ _` irule >>
+          first_assum ACCEPT_TAC) >>
+      qpat_assum `gas_origin_ptr_path _ (s,g,tn) _ (OK _,_,_)`
+        (mp_then (Pos hd) mp_tac bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap) >>
+      asm_rewrite_tac []) >>
+  suspend "round_outcome"
+QED
+
+Resume compile_for_storage_array_frag_full[round_outcome]:
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> Inv dst H (_::_) _ _ _ _` mp_tac >>
   map_every (fn q => qpat_assum q
     (fn th => pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]))
       [`Abbrev (round = _)`, `Abbrev (Inv = _)`, `Abbrev (Done = _)`,
        `Abbrev (R = _)`, `Abbrev (Fr = _)`, `Abbrev (explicit = _)`] >>
-  BETA_TAC >> rpt gen_tac >> strip_tac >>
+  BETA_TAC >> strip_tac >>
   irule (CONV_RULE (REDEPTH_CONV (REWR_CONV LET_THM ORELSEC BETA_CONV))
     for_storage_array_round_full) >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
@@ -6945,7 +7014,7 @@ Resume compile_for_storage_array_frag_full[round_cons]:
   suspend "round_packet"
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
+Resume compile_for_storage_array_frag_full[round_packet]:
   `compile_stmt cenv lctx ret_ty
      (For id typ (Array (TopLevelName (ArrayT typ bd) nid)) n
        (MAP gas_shadow_stmt body')) shadow_sa = ((),shadow_sb)` by
@@ -7322,7 +7391,7 @@ QED
     (qpat_assum `body_inv tops ctx cenv cx`
        (mp_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >> simp[]) >>
   `supported_stmts tops bindings body'` by
-    (drule_then (ACCEPT_TAC o CONJUNCT1) supportedStmtsTheory.supported_loop_body_contract) >>
+    (drule_then ACCEPT_TAC supportedStmtsTheory.supported_loop_body_contract) >>
   `stmts_exprs_ok bc body'` by
     (drule_then assume_tac bodySimDeclCasesTheory.body_for_exprs_ok >>
      drule_all_then ACCEPT_TAC bodyExprPreFactsTheory.for_declare_stmts_exprs_ok) >>
@@ -7507,6 +7576,8 @@ QED
      qpat_assum `not_fresh_at sd x` mp_tac >>
      qpat_assum `MEM x headOut` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  rename1 `gas_admissible (eval_for cx elem_tv id body' (a'::rs'))
+                          (stmt_res_ok lctx) head_es` >>
   namedCases_on `compile_expr cenv (ArrayT typ bd) (TopLevelName (ArrayT typ bd) nid) sa`
     ["iterPlace iterEnd"] >>
   qspecl_then [`DF`,`lo`,`d`,`ctx`,`func`,`cx`,`RetQ`,`lctx`,`cenv`,`es`,`sa`,`s0`,`G0`,`tn0`,
@@ -7522,13 +7593,13 @@ QED
      qpat_assum `Abbrev (headOut = _)`
        (fn th => rewrite_tac[GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
      first_assum ACCEPT_TAC) >>
-  disch_then (qspecl_then [`a'`,`rs'`,`ei`,`s''`,`G'`,`tn'`] mp_tac) >>
+  disch_then (qspecl_then [`a'`,`rs'`,`head_es`,`s''`,`G`,`tn'`] mp_tac) >>
   BETA_TAC >>
   impl_tac >-
     (rpt (conj_tac >- first_assum ACCEPT_TAC) >>
      reverse conj_tac >- first_assum ACCEPT_TAC >>
      qx_gen_tac `H` >> disch_tac >>
-     qpat_assum `!H. valid_horizon cx st0 H ei.storage_trace ==> ?k off. _`
+     qpat_assum `!H. valid_horizon cx st0 H head_es.storage_trace ==> ?k off. _`
        (qspec_then `H` mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >>
      qpat_assum `Abbrev (Fr = _)` (fn th =>
@@ -7551,7 +7622,7 @@ QED
      simp[NoAsms] >>> SELECT_LT_THEN (first_assum ACCEPT_TAC) ALL_TAC) >>
   disch_then (strip_assume_tac o CONJUNCT2) >>
   qpat_x_assum `gas_outcome_full _ _ _ _
-    (bind (read_result cx a') _) (ei,s'',G',tn') _ _`
+    (bind (read_result cx a') _) (head_es,s'',G,tn') _ _`
     (mp_then Any irule gas_outcome_full_post_mono o PURE_REWRITE_RULE [ETA_THM]) >>
   reverse conj_tac >- simp[Abbr `R`] >>
   BETA_TAC >> rpt gen_tac >>
@@ -7592,32 +7663,32 @@ QED
       qpat_assum `stmt_state_rel H ctx func bc cx _ t'`
         (strip_assume_tac o SIMP_RULE (srw_ss()) [] o
          MATCH_MP stateRelProjTheory.stmt_state_rel_local_ptrs_alloca) >>
-      qmatch_asmsub_abbrev_tac `local_ptrs_rel func bc (pushed::ei.scopes) t'` >>
-      `lookup_scopes id ei.scopes = NONE` by
-        (qpat_assum `!H. valid_horizon cx st0 H ei.storage_trace ==> ?k off. _`
-          (qspec_then `storage_trace_horizon ei.storage_trace` mp_tac) >>
-         impl_tac >- (qpat_assum `storage_trace_domain cx st0 ei.storage_trace`
+      qmatch_asmsub_abbrev_tac `local_ptrs_rel func bc (pushed::head_es.scopes) t'` >>
+      `lookup_scopes id head_es.scopes = NONE` by
+        (qpat_assum `!H. valid_horizon cx st0 H head_es.storage_trace ==> ?k off. _`
+          (qspec_then `storage_trace_horizon head_es.storage_trace` mp_tac) >>
+         impl_tac >- (qpat_assum `storage_trace_domain cx st0 head_es.storage_trace`
            (mp_tac o REWRITE_RULE [storage_trace_domain_def]) >> simp[NoAsms]) >>
          disch_then strip_assume_tac >> first_assum ACCEPT_TAC) >>
-      qpat_x_assum `local_region cenv ei.scopes t' nm bOld szOld`
+      qpat_x_assum `local_region cenv head_es.scopes t' nm bOld szOld`
         (strip_assume_tac o REWRITE_RULE [local_region_def]) >>
       `nm <> id` by
         (disch_then SUBST_ALL_TAC >>
-         qpat_x_assum `lookup_scopes id ei.scopes = SOME _` mp_tac >>
-         qpat_x_assum `lookup_scopes id ei.scopes = NONE` (fn th => simp[NoAsms,th])) >>
+         qpat_x_assum `lookup_scopes id head_es.scopes = SOME _` mp_tac >>
+         qpat_x_assum `lookup_scopes id head_es.scopes = NONE` (fn th => simp[NoAsms,th])) >>
       `id <> nm` by (qpat_assum `nm <> id` mp_tac >> simp[NoAsms,EQ_SYM_EQ]) >>
       `FLOOKUP bc.ce_vars nm = FLOOKUP cenv.ce_vars nm` by
         (qpat_assum `!n. n <> id ==> FLOOKUP bc.ce_vars n = _` irule >> simp[]) >>
-      `local_region bc (pushed::ei.scopes) t' nm bOld szOld` by
+      `local_region bc (pushed::head_es.scopes) t' nm bOld szOld` by
         (simp[local_region_def,vyperStateTheory.lookup_scopes_def,Abbr `pushed`,FLOOKUP_UPDATE] >>
          goal_assum $ drule_at (Pat `lookup_scopes nm _ = SOME _`) >>
          goal_assum $ drule_at (Pat `FLOOKUP cenv.ce_vars nm = SOME _`) >> simp[]) >>
-      `local_region bc (pushed::ei.scopes) t' id (w2n dst) nb` by
+      `local_region bc (pushed::head_es.scopes) t' id (w2n dst) nb` by
         (rewrite_tac[local_region_def] >>
          qexistsl [`THE (FLOOKUP pushed id)`,`p`,`dst`] >>
          conj_tac >- simp[NoAsms,vyperStateTheory.lookup_scopes_def,Abbr `pushed`,FLOOKUP_UPDATE] >>
          rewrite_tac[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-      qpat_assum `local_ptrs_rel func bc (pushed::ei.scopes) t'`
+      qpat_assum `local_ptrs_rel func bc (pushed::head_es.scopes) t'`
         (qspecl_then [`id`,`nm`,`w2n dst`,`nb`,`bOld`,`szOld`] mp_tac o
          CONJUNCT2 o REWRITE_RULE [local_ptrs_rel_def]) >>
       impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -7631,9 +7702,6 @@ QED
   conj_tac >- first_assum ACCEPT_TAC >> qexists_tac `w` >>
   qpat_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> _`
     (irule o SPEC_ALL) >> simp[]
-*)
-Resume compile_for_storage_array_frag_full[round_packet]:
-  cheat
 QED
 
 Resume compile_for_storage_array_frag_full[prefix]:
