@@ -167,7 +167,7 @@ Proof
   first_x_assum (qspec_then `obj` mp_tac) >> simp[expr_size_def] >> metis_tac[]
 QED
 
-Theorem constant_decl_mem_consts[local]:
+Theorem constant_decl_mem_consts:
   !tops acc id. constant_decl id tops ==>
     MEM id (MAP FST (module_consts_env tops acc))
 Proof
@@ -229,7 +229,7 @@ Proof
   metis_tac[externalBodyFrameTheory.supported_function_names_mem]
 QED
 
-Theorem immutable_index_callable_closed_mods[local]:
+Theorem immutable_index_callable_closed_mods:
   !mods exps ctx cenv cx src ts fn mut nr args dflts ret body.
   contract_inv mods exps ctx cenv cx /\ get_module_code cx src = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,body) ==>
