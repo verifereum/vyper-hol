@@ -9773,134 +9773,39 @@ Proof
   stmt_frame_emit `\st. plain_operand st src_op`
 QED
 
-Theorem stmt_stable_fst_operands[local]:
-  !xs. shape_stable (\st. EVERY (\p. plain_operand st (FST p)) xs)
+Theorem stmt_stable_saved_values[local]:
+  !rows. shape_stable (\st. EVERY (value_shape_ok st o FST) rows)
 Proof
-  gen_tac >> mp_tac (Q.SPEC `MAP FST xs` shape_stable_plain_operands) >>
-  simp[EVERY_MAP, combinTheory.o_DEF]
+  gen_tac >> simp[shape_stable_def, EVERY_MEM] >> rpt strip_tac >>
+  mp_tac (Q.SPEC `FST (e : vyper_value # 'a)` value_shape_ok_stable) >>
+  simp[shape_stable_def] >> metis_tac[]
 QED
 
-Theorem compile_log_save_arg_shape[local]:
-  shape_step internal compiler_label
-    (\st. cenv_shape_ok st cenv /\ plain_operand st arg_op)
-    (compile_log_save_arg cenv src_ty arg_op es)
-    (\v st. cenv_shape_ok st cenv /\ plain_operand st v)
-Proof
-  simp[compile_log_save_arg_def] >> IF_CASES_TAC
-  >- (irule shape_step_return >> simp[]) >>
-  irule shape_step_conseq >>
-  qexistsl_tac [`compiler_label`,
-    `\st. cenv_shape_ok st cenv /\ cenv_shape_ok st cenv /\
-          value_shape_ok st (StackValue src_ty arg_op)`,
-    `\v st. cenv_shape_ok st cenv /\ cenv_shape_ok st cenv /\ plain_operand st v`] >>
-  rpt conj_tac >>
-  TRY (irule (BETA_RULE (Q.INST [`R` |-> `\st. cenv_shape_ok st cenv`]
-                  compile_materialize_vv_shape_under)) >>
-       simp[cenv_shape_ok_stable] >> NO_TAC) >>
-  simp[value_shape_ok_def]
-QED
-
-Theorem compile_log_eval_all_shape[local]:
-  !es cenv internal.
-    ~supported_exprs_exists expr_shape_root es ==>
-    shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
-      (compile_log_eval_all cenv es)
-      (\ops st. EVERY (\p. plain_operand st (FST p)) ops)
-Proof
-  Induct >> simp[supported_expr_exists_def, compile_log_eval_all_def]
-  >- (rpt gen_tac >> irule shape_step_return >> simp[]) >>
-  rpt strip_tac >> irule shape_step_bind >>
-  qexists_tac `\op st. plain_operand st op /\ cenv_shape_ok st cenv` >>
-  conj_tac
-  >- (qx_gen_tac `arg_op` >> BETA_TAC >> irule shape_step_bind >>
-      qexists_tac `\saved st. cenv_shape_ok st cenv /\ plain_operand st saved` >>
-      conj_tac
-      >- (qx_gen_tac `saved` >> BETA_TAC >> irule shape_step_bind >>
-          qexists_tac `\ops st. EVERY (\p. plain_operand st (FST p)) ops /\
-                               plain_operand st saved` >>
-          conj_tac
-          >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
-          ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
-          simp[stmt_shape_stable_plain] >> first_x_assum irule >> simp[]) >>
-      irule shape_step_conseq >>
-      qexistsl_tac [`compiler_label`,
-        `\st. cenv_shape_ok st cenv /\ plain_operand st arg_op`,
-        `\saved st. cenv_shape_ok st cenv /\ plain_operand st saved`] >>
-      simp[compile_log_save_arg_shape]) >>
-  ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
-  simp[cenv_shape_ok_stable] >> irule lower_value_shape >> simp[]
-QED
-
-Theorem split_log_ops_plain[local]:
-  !ops flags st.
-    EVERY (\p. plain_operand st (FST p)) ops ==>
-    EVERY (\p. plain_operand st (FST p)) (FST (split_log_ops ops flags)) /\
-    EVERY (\p. plain_operand st (FST p)) (SND (split_log_ops ops flags))
-Proof
-  Induct >- (Cases >> simp[split_log_ops_def]) >>
-  qx_gen_tac `arg_pair` >> rpt gen_tac >> PairCases_on `arg_pair` >>
-  Cases_on `flags` >- simp[split_log_ops_def] >>
-  rename1 `split_log_ops _ (flag::flags)` >> Cases_on `flag` >>
-  simp[split_log_ops_def] >> rpt strip_tac >> pairarg_tac >> gvs[] >>
-  first_x_assum drule >> disch_then (qspec_then `flags` mp_tac) >> simp[]
-QED
-
-Theorem compile_log_topic_ops_shape[local]:
-  !ops internal.
+Theorem compile_log_saved_topics_shape[local]:
+  !rows internal cenv.
     shape_step internal compiler_label
-      (\st. EVERY (\p. plain_operand st (FST p)) ops)
-      (compile_log_topic_ops ops) (\xs st. EVERY (plain_operand st) xs)
+      (\st. cenv_shape_ok st cenv /\ EVERY (value_shape_ok st o FST) rows)
+      (compile_log_saved_topics cenv rows) (\xs st. EVERY (plain_operand st) xs)
 Proof
-  Induct >- (simp[compile_log_topic_ops_def] >> gen_tac >>
-             irule shape_step_return >> simp[]) >>
-  rpt gen_tac >> simp[compile_log_topic_ops_def] >> irule shape_step_bind >>
-  qexists_tac `\op st. plain_operand st op /\
-                      EVERY (\p. plain_operand st (FST p)) ops` >>
-  conj_tac
-  >- (qx_gen_tac `topic_op` >> BETA_TAC >> irule shape_step_bind >>
-      qexists_tac `\xs st. EVERY (plain_operand st) xs /\ plain_operand st topic_op` >>
-      conj_tac
-      >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
-      ho_match_mp_tac stmt_shape_frame >>
-      qexists_tac `\st. EVERY (\p. plain_operand st (FST p)) ops` >>
-      simp[stmt_shape_stable_plain] >> first_x_assum irule) >>
-  ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. plain_operand st (FST h)` >>
-  simp[stmt_stable_fst_operands] >> irule compile_encode_log_topic_shape
-QED
-
-Theorem compile_log_store_data_shape[local]:
-  !ops cenv arg_types buf_op offset internal.
-    shape_step internal compiler_label
-      (\st. EVERY (\p. plain_operand st (FST p)) ops /\ plain_operand st buf_op)
-      (compile_log_store_data cenv ops arg_types buf_op offset) (\u st. T)
-Proof
-  Induct
-  >- (rpt gen_tac >> Cases_on `arg_types` >> simp[compile_log_store_data_def]
-      >- (irule shape_step_return >> simp[]) >> stmt_plain_void_drop) >>
-  rpt gen_tac >> Cases_on `arg_types` >> simp[compile_log_store_data_def]
-  >- (stmt_drop (ho_match_mp_tac stmt_shape_emit_void >>
-       simp[shape_stable_conj, stmt_stable_fst_operands, stmt_shape_stable_plain,
-            label_or_plain_def] >> stmt_shape_emit_simp)) >>
-  irule shape_step_bind >>
-  qexists_tac `\dst st. plain_operand st dst /\
-    (plain_operand st (FST h) /\
-     (EVERY (\p. plain_operand st (FST p)) ops /\ plain_operand st buf_op))` >>
-  conj_tac
-  >- (qx_gen_tac `dst_op` >> BETA_TAC >> irule shape_step_ignore_bind >>
-      qexists_tac `\u st. T /\
-        (EVERY (\p. plain_operand st (FST p)) ops /\ plain_operand st buf_op)` >>
-      conj_tac
-      >- (gen_tac >> BETA_TAC >> irule shape_step_conseq >>
-          qexistsl_tac [`compiler_label`,
-            `\st. EVERY (\p. plain_operand st (FST p)) ops /\ plain_operand st buf_op`,
-            `\u st. T`] >> simp[] >> first_x_assum irule) >>
-      ho_match_mp_tac stmt_shape_frame >>
-      qexists_tac `\st. plain_operand st dst_op /\ plain_operand st (FST h)` >>
-      simp[stmt_stable_fst_operands, stmt_shape_stable_plain, shape_stable_conj] >>
-      irule compile_store_memory_shape) >>
-  ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. plain_operand st buf_op` >>
-  simp[stmt_stable_fst_operands, stmt_shape_stable_plain, shape_stable_conj] >>
-  stmt_plain_emit
+  Induct >> rpt gen_tac
+  >- (simp[compile_log_saved_topics_def] >> irule shape_step_return >> simp[]) >>
+  PairCases_on `h` >> simp[compile_log_saved_topics_def] >>
+  qabbrev_tac `tail = \st. cenv_shape_ok st cenv /\ EVERY (value_shape_ok st o FST) rows` >>
+  `shape_stable tail` by
+    simp[Abbr `tail`, shape_stable_conj, cenv_shape_ok_stable, stmt_stable_saved_values] >>
+  stmt_bind `\op st. plain_operand st op /\ tail st` `op`
+    (irule shape_step_frame_from >> irule_at Any unwrap_value_shape >>
+     qexists_tac `tail` >> asm_rewrite_tac [] >> simp[Abbr `tail`, CONJ_ASSOC] >>
+     metis_tac[]) >>
+  stmt_bind `\topic st. plain_operand st topic /\ tail st` `topic`
+    (irule shape_step_frame_from >> irule_at Any compile_encode_log_topic_shape >>
+     qexists_tac `tail` >> simp[]) >>
+  stmt_bind `\xs st. EVERY (plain_operand st) xs /\ plain_operand st topic` `topics`
+    (irule shape_step_frame_from >>
+     qpat_assum `!internal cenv. shape_step _ _ _ _ _` (irule_at Any) >>
+     qexists_tac `\st. plain_operand st topic` >>
+     simp[stmt_shape_stable_plain, Abbr `tail`]) >>
+  irule shape_step_return >> simp[]
 QED
 
 Theorem compile_reason_message_shape[local]:
@@ -10273,22 +10178,22 @@ Proof
        simp[cenv_shape_ok_stable] >> stmt_shape_emit_simp)) >>
   rename1 `SOME event_info` >> PairCases_on `event_info` >>
   simp[stmt_return_bind] >>
-  stmt_bind `\ops st. EVERY (\p. plain_operand st (FST p)) ops` `ops`
-    (irule compile_log_eval_all_shape >> simp[]) >>
-  qmatch_goalsub_abbrev_tac `compile_log_topic_ops topics` >>
-  qmatch_goalsub_abbrev_tac `NULL data_ops` >>
-  irule shape_step_conseq >>
-  qexistsl_tac [`compiler_label`,
-    `\st. EVERY (\p. plain_operand st (FST p)) topics /\
-          EVERY (\p. plain_operand st (FST p)) data_ops`, `\u st. T`] >>
-  simp [] >>
-  conj_tac >- (simp[Abbr `topics`, Abbr `data_ops`] >>
-                metis_tac[split_log_ops_plain]) >>
-  stmt_bind `\topic_ops st. EVERY (plain_operand st) topic_ops /\
-      EVERY (\p. plain_operand st (FST p)) data_ops` `topic_ops`
-    (ho_match_mp_tac stmt_shape_frame >>
-     qexists_tac `\st. EVERY (\p. plain_operand st (FST p)) topics` >>
-     simp[stmt_stable_fst_operands, compile_log_topic_ops_shape]) >>
+  stmt_bind `\vs st. cenv_shape_ok st cenv /\ EVERY (value_shape_ok st) vs` `saved`
+    (shape_under_tac compile_ext_call_args_shape `\st. cenv_shape_ok st cenv` >>
+     simp[cenv_shape_ok_stable, supported_exprs_exists_every, cj 1 compile_expr_shape]) >>
+  qmatch_goalsub_abbrev_tac `compile_log_saved_topics cenv topics` >>
+  qmatch_goalsub_abbrev_tac `NULL data_rows` >>
+  `!vs (tys : type list) st. EVERY (value_shape_ok st) vs ==>
+    EVERY (value_shape_ok st o FST) (ZIP (vs,tys))` by
+    (Induct >> Cases_on `tys` >> simp[ZIP_def]) >>
+  qabbrev_tac `data_frame = \st. cenv_shape_ok st cenv /\
+                                  EVERY (value_shape_ok st o FST) data_rows` >>
+  `shape_stable data_frame` by
+    simp[Abbr `data_frame`, shape_stable_conj, cenv_shape_ok_stable, stmt_stable_saved_values] >>
+  stmt_bind `\xs st. EVERY (plain_operand st) xs /\ data_frame st` `topic_ops`
+    (irule shape_step_frame_from >> irule_at Any compile_log_saved_topics_shape >>
+     qexists_tac `data_frame` >> simp[Abbr `data_frame`] >>
+     simp[Abbr `topics`, Abbr `data_rows`] >> metis_tac[every_split_log_ops]) >>
   IF_CASES_TAC
   >- (irule shape_step_conseq >>
       qexistsl_tac [`compiler_label`,
@@ -10302,37 +10207,24 @@ Proof
 QED
 
 Resume compile_log_shape[data]:
-  stmt_bind `\buf st. plain_operand st buf.buf_operand /\
-    (EVERY (plain_operand st) topic_ops /\
-     EVERY (\p. plain_operand st (FST p)) data_ops)` `buf`
-    (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. T` >>
-     simp[shape_stable_conj, shape_stable_plain_operands, stmt_stable_fst_operands,
-          compile_alloc_buffer_shape]) >>
-  stmt_sequence `\u st. T /\ (EVERY (plain_operand st) topic_ops /\
-                                 plain_operand st buf.buf_operand)`
-    (ho_match_mp_tac stmt_shape_frame >>
-     qexists_tac `\st. EVERY (\p. plain_operand st (FST p)) data_ops /\
-                       plain_operand st buf.buf_operand` >>
-     simp[shape_stable_conj, shape_stable_plain_operands, stmt_shape_stable_plain,
-          compile_log_store_data_shape]) >>
-  stmt_bind `\abi st. plain_operand st abi.buf_operand /\
-    (EVERY (plain_operand st) topic_ops /\ plain_operand st buf.buf_operand)` `abi`
-    (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. T` >>
-     simp[shape_stable_conj, shape_stable_plain_operands, stmt_shape_stable_plain,
-          compile_alloc_buffer_shape]) >>
-  stmt_bind `\len st. plain_operand st len /\
-    (EVERY (plain_operand st) topic_ops /\ plain_operand st abi.buf_operand)` `len`
-    (ho_match_mp_tac stmt_shape_frame >>
-     qexists_tac `\st. plain_operand st abi.buf_operand /\ plain_operand st buf.buf_operand` >>
-     simp[shape_stable_conj, shape_stable_plain_operands, stmt_shape_stable_plain,
-          cj 2 compile_abi_encode_shape]) >>
+  qabbrev_tac `topic_frame = \st. EVERY (plain_operand st) topic_ops` >>
+  `shape_stable topic_frame` by simp[Abbr `topic_frame`, shape_stable_plain_operands] >>
+  stmt_bind `\buf st. topic_frame st /\ data_frame st /\ plain_operand st buf.buf_operand`
+    `buf`
+    (shape_under_tac compile_alloc_buffer_shape_framed
+       `\st. topic_frame st /\ data_frame st` >> simp[shape_stable_conj]) >>
+  stmt_bind `\len st. (topic_frame st /\ plain_operand st buf.buf_operand) /\ plain_operand st len`
+    `len`
+    (shape_under_tac compile_abi_encode_values_to_buf_shape
+       `\st. topic_frame st /\ plain_operand st buf.buf_operand` >>
+     simp[Abbr `data_frame`, shape_stable_conj, stmt_shape_stable_plain]) >>
   irule shape_step_conseq >>
   qexistsl_tac [`compiler_label`,
     `\st. EVERY (plain_operand st)
       (Lit (n2w (SUC (LENGTH topic_ops))) ::
-       (REVERSE topic_ops ++ [Lit (n2w event_info0)] ++ [len; abi.buf_operand]))`,
+       (REVERSE topic_ops ++ [Lit (n2w event_info0)] ++ [len; buf.buf_operand]))`,
     `\u st. T`] >>
-  simp[stmt_log_emit_shape, EVERY_REVERSE, plain_operand_def,
+  simp[Abbr `topic_frame`, stmt_log_emit_shape, EVERY_REVERSE, plain_operand_def,
        stackPlanTypesTheory.is_label_operand_def]
 QED
 

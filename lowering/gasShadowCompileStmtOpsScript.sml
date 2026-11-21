@@ -11,6 +11,16 @@ Proof
     gas_shadow_compiles_return, gas_shadow_compiles_encode_log_topic]
 QED
 
+Theorem gas_shadow_compiles_log_saved_topics:
+  !topics. gas_shadow_compiles (compile_log_saved_topics cenv topics)
+    (compile_log_saved_topics cenv topics)
+Proof
+  Induct >> rpt gen_tac >> TRY (PairCases_on `h`) >>
+  simp[compile_log_saved_topics_def, gas_shadow_compiles_bind,
+       gas_shadow_compiles_return, gas_shadow_compiles_unwrap_value,
+       gas_shadow_compiles_encode_log_topic]
+QED
+
 Theorem gas_shadow_compiles_log_store_data:
   !ops tys buf off. gas_shadow_compiles (compile_log_store_data cenv ops tys buf off)
     (compile_log_store_data cenv ops tys buf off)

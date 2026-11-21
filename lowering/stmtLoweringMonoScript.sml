@@ -22,7 +22,7 @@
 Theory stmtLoweringMono
 Ancestors
   fragExec exprLoweringProps stmtLowering exprLowering context compileEnv
-  abiEncoder emitHelper
+  abiEncoder emitHelper eventLoweringStructure
 
 (* ===== The helpers of compile_stmt ===== *)
 
@@ -315,8 +315,10 @@ val stmt_ci_tac =
            ci_mono_stmt_helpers :: ci_mono_compile_get_target_ptr ::
            ci_mono_custom_error :: ci_mono_stmt_rws)
   in
-    rpt gen_tac >> simp[Once compile_stmt_def] >> chain >>
-    simp[pairTheory.ELIM_UNCURRY] >> chain
+    rpt gen_tac >>
+    (MATCH_ACCEPT_TAC compile_log_stmt_ci_mono ORELSE
+     (simp[Once compile_stmt_def] >> chain >>
+      simp[pairTheory.ELIM_UNCURRY] >> chain))
   end;
 
 val loop_ci_tac = RULE_ASSUM_TAC (SIMP_RULE bool_ss []) >> stmt_ci_tac;

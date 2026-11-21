@@ -12,13 +12,15 @@ Proof
   rpt (irule entry_code_bind >> simp[entry_code_emit_op] >> rpt gen_tac)
 QED
 
-Theorem entry_code_log_topic_ops:
-  !ops. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_log_topic_ops ops)
+Theorem entry_code_log_saved_topics:
+  !ops cenv. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_log_saved_topics cenv ops)
 Proof
-  Induct >> simp[compile_log_topic_ops_def, entry_code_return] >> rpt gen_tac >>
+  Induct >> rpt gen_tac >> TRY (PairCases_on `h`) >>
+  simp[compile_log_saved_topics_def, entry_code_return] >>
   rpt (irule entry_code_bind >> reverse conj_tac
-    >- simp[entry_code_encode_log_topic] >> rpt gen_tac >> BETA_TAC) >>
+    >- simp[entry_code_unwrap_value, entry_code_encode_log_topic] >>
+    rpt gen_tac >> BETA_TAC) >>
   simp[entry_code_return]
 QED
 

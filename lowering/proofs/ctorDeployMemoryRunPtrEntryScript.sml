@@ -69,7 +69,6 @@ Theorem deploy_ptr_entry_normalized:
      (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>).vs_alloca_next = imm_len tops /\
      allocas_from (imm_len tops)
        (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) /\
-     ~ctx_has_dalloca unit.cu_context /\
      imm_len tops + unit_alloca_budget unit.cu_context < dimword (:256) /\
      (!bb label. lookup_block label func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0)
@@ -79,7 +78,6 @@ Proof
     fs[deploy_source_ok_def] >>
   drule_all ctorDeployMemoryRunMemEntryBoundaryTheory.ctor_checked_code_lookup_identity >> strip_tac >> gvs[] >>
   drule_all deploy_prefix_ctor_entry_label >> strip_tac >> gvs[] >>
-  drule_all deploy_prefix_no_dalloca >> strip_tac >>
   `imm_len tops + unit_alloca_budget unit.cu_context < dimword (:256)` by
     (drule deploy_imm_budget_ok >> decide_tac) >>
   `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
@@ -114,7 +112,6 @@ Theorem deploy_ptr_entry_normalized_canonical:
      (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>).vs_alloca_next = imm_len tops /\
      allocas_from (imm_len tops)
        (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) /\
-     ~ctx_has_dalloca unit.cu_context /\
      imm_len tops + unit_alloca_budget unit.cu_context < dimword (:256) /\
      (!bb label. lookup_block label func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0)
@@ -306,7 +303,16 @@ Proof
       qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
       simp_tac std_ss [deploy_state_rel_def] >> strip_tac >>
       simp[Abbr `initial`, opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def] >> gvs[]) >>
-  `ctx_has_dalloca unit.cu_context ==> allocas_below_fmp initial` by simp[] >>
+  `supported_program tops /\ supported_program_deploy tops` by fs[deploy_source_ok_def] >>
+  `!s. fmp_room unit.cu_context fn s` by
+    (drule_at (Pat `deploy_ctor_code _ _ _ _ _`) deploy_ctor_entry_fmp_room >>
+     simp[deploy_source_ok_def]) >>
+  `ctx_has_dalloca unit.cu_context ==> allocas_below_fmp initial` by
+    (strip_tac >>
+     qpat_assum `ctx_has_dalloca unit.cu_context` (fn dynamic =>
+       qpat_assum `!s. fmp_room _ _ s`
+         (qspec_then `initial` (strip_assume_tac o SIMP_RULE bool_ss [fmp_room_def,dynamic]))) >>
+     simp[ptrDisciplineTheory.allocas_below_fmp_def]) >>
   drule_all prefix_entry_prepare_actual_checked >>
   disch_then (qspecl_then [`entry_taint`, `[]`, `FEMPTY`,
     `deploy_dead (HS0:(bool # bytes32 # type_value) list # num list)
@@ -352,6 +358,13 @@ Proof
     (irule allocaHistoryTheory.alloca_history_empty >> asm_rewrite_tac[] >>
      simp[Abbr `initial`, initial_compile_state_def]) >>
   `alloca_history fn t` by metis_tac[] >>
+  `ctx_has_dalloca unit.cu_context ==> allocas_below_fmp t /\
+    t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp` by
+    (strip_tac >>
+     qpat_assum `ctx_has_dalloca unit.cu_context` (fn dynamic =>
+       qpat_assum `!s. fmp_room _ _ s`
+         (qspec_then `t` (strip_assume_tac o SIMP_RULE bool_ss [fmp_room_def,dynamic]))) >>
+     simp[ptrDisciplineTheory.allocas_below_fmp_def] >> decide_tac) >>
   drule (deploy_ptr_entry_register_prepared_origins_coverage_mode |> Q.SPEC `T` |>
     SIMP_RULE bool_ss [] |> SPEC_ALL |>
     Q.INST [`ce0` |-> `cenv0 with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)`] |>
