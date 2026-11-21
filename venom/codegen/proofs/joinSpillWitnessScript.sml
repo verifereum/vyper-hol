@@ -97,8 +97,6 @@ Definition jp_venom_result_def:
     | Error e => ("error: " ++ e, [])
 End
 
-Theorem jp_release_live = fnPlanLineageReplayTheory.release_dead_spills_live_domain
-
 val pr = fn th => print ("\n" ^ thm_to_string th ^ "\n");
 fun timed name f x =
   let val t = Timer.startRealTimer ()

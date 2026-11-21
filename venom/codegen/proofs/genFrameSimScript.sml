@@ -176,7 +176,7 @@ Proof
    asm_block_at prog (st.as_pc + LENGTH (execute_plan initial_fmp ops1))
      (execute_plan initial_fmp ops2)` by
     fs[execute_plan_append, asm_block_at_append] >>
-  drule_all (GEN_ALL do_restore_venom_asm_rel_numeric) >>
+  drule_all (GEN_ALL reorderPreparationTracePropsTheory.do_restore_venom_asm_rel_numeric) >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
   rename1 `venom_asm_rel lo ps1 vs st1` >>
   first_x_assum (qspecl_then [`ps1`, `ops2`, `ps2`, `lo`, `o2pc`, `prog`,

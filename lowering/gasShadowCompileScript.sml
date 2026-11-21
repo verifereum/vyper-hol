@@ -9,22 +9,22 @@ Theorem gas_shadow_compile_bounded[local]:
   !n.
   (!cenv ty e shadow. 2 * (expr_size e + cenv_defaults_size cenv) + 2 <= n ==>
     gas_shadow_compiles (compile_expr cenv ty e)
-      (compile_expr cenv ty (if shadow then gas_shadow_expr e else e))) /\
+      (compile_expr (gas_shadow_env sd cenv) ty (if shadow then gas_shadow_expr e else e))) /\
   (!cenv ret_ty ty bi args shadow. 2 * (list_size expr_size args + cenv_defaults_size cenv) + 1 <= n ==>
     gas_shadow_compiles (compile_builtin_dispatch cenv ret_ty ty bi args)
-      (compile_builtin_dispatch cenv ret_ty ty
+      (compile_builtin_dispatch (gas_shadow_env sd cenv) ret_ty ty
         (if shadow then gas_shadow_builtin bi else bi)
         (if shadow then MAP gas_shadow_expr args else args))) /\
   (!cenv vv_ty ty tb ret_ty args shadow. 2 * (list_size expr_size args + cenv_defaults_size cenv) + 1 <= n ==>
     gas_shadow_compiles (compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty args)
-      (compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty
+      (compile_type_builtin_dispatch (gas_shadow_env sd cenv) vv_ty ty tb ret_ty
         (if shadow then MAP gas_shadow_expr args else args)))
 Proof
   completeInduct_on `n` >>
   `!bound. 2 * bound + 1 <= n ==>
     !cenv ty e shadow.
       gas_shadow_compiles (expr_child_callback bound compile_expr cenv ty e)
-        (expr_child_callback bound compile_expr cenv ty
+        (expr_child_callback bound compile_expr (gas_shadow_env sd cenv) ty
           (if shadow then gas_shadow_expr e else e))`
     by (rpt strip_tac >> irule gas_shadow_compiles_expr_child >>
         map_every qx_gen_tac [`child_env`, `child_ty`, `child_e`, `mode`] >> strip_tac >>
@@ -34,7 +34,7 @@ Proof
   `!bound. 2 * bound + 1 <= n ==>
     !cenv ret_ty ty bi args shadow.
       gas_shadow_compiles (builtin_child_callback bound compile_builtin_dispatch cenv ret_ty ty bi args)
-        (builtin_child_callback bound compile_builtin_dispatch cenv ret_ty ty
+        (builtin_child_callback bound compile_builtin_dispatch (gas_shadow_env sd cenv) ret_ty ty
           (if shadow then gas_shadow_builtin bi else bi)
           (if shadow then MAP gas_shadow_expr args else args))`
     by (rpt strip_tac >> irule gas_shadow_compiles_builtin_child >>
@@ -45,7 +45,7 @@ Proof
   `!bound. 2 * bound + 1 <= n ==>
     !cenv vv_ty ty tb ret_ty args shadow.
       gas_shadow_compiles (type_child_callback bound compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty args)
-        (type_child_callback bound compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty
+        (type_child_callback bound compile_type_builtin_dispatch (gas_shadow_env sd cenv) vv_ty ty tb ret_ty
           (if shadow then MAP gas_shadow_expr args else args))`
     by (rpt strip_tac >> irule gas_shadow_compiles_type_child >>
         map_every qx_gen_tac [`ce`, `vt`, `ct`, `cb`, `rt`, `es`, `mode`] >> strip_tac >>
@@ -84,19 +84,19 @@ QED
 (* The identity alternative also covers arbitrary expressions returned by
    total HD/EL selectors on malformed argument lists. Both executions then
    compile the same arbitrary expression under the same size guard. *)
-Theorem gas_shadow_compile_expr:
+Theorem gas_shadow_compile_expr_env:
   (!cenv ty e shadow.
      gas_shadow_compiles (compile_expr cenv ty e)
-       (compile_expr cenv ty (if shadow then gas_shadow_expr e else e))) /\
+       (compile_expr (gas_shadow_env sd cenv) ty (if shadow then gas_shadow_expr e else e))) /\
   (!cenv ret_ty ty bi args shadow.
      gas_shadow_compiles (compile_builtin_dispatch cenv ret_ty ty bi args)
-       (compile_builtin_dispatch cenv ret_ty ty
+       (compile_builtin_dispatch (gas_shadow_env sd cenv) ret_ty ty
          (if shadow then gas_shadow_builtin bi else bi)
          (if shadow then MAP gas_shadow_expr args else args))) /\
   (!cenv vv_ty ty tb ret_ty args shadow.
      gas_shadow_compiles
        (compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty args)
-       (compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty
+       (compile_type_builtin_dispatch (gas_shadow_env sd cenv) vv_ty ty tb ret_ty
          (if shadow then MAP gas_shadow_expr args else args)))
 Proof
   conj_tac
@@ -111,3 +111,6 @@ Proof
   qspec_then `2 * (list_size expr_size args + cenv_defaults_size cenv) + 1` mp_tac gas_shadow_compile_bounded >>
   simp[] >> metis_tac[]
 QED
+
+Theorem gas_shadow_compile_expr =
+  REWRITE_RULE [gasShadowCompileBaseTheory.gas_shadow_env_F] (Q.INST [`sd` |-> `F`] gas_shadow_compile_expr_env)

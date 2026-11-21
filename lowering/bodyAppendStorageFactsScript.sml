@@ -6,6 +6,7 @@ Ancestors
   vyperState bodyStorageMetadata exprOpenCases vyperTypeEnv
   exprSimHypsDefs finite_map vyperTypeInvariants
   supportedStmts supportedProgram
+  alist bodyInvCodeProps linkedStorageMetadataProps
 
 Theorem body_append_element_alloc_bound:
   stmt_exprs_ok cenv (Append target e) ==>
@@ -45,33 +46,6 @@ Proof
       type_slot_size_def, bound_length_def]
 QED
 
-Theorem supported_append_capacity_lookup:
-  !tops src id vis mut elem n slot.
-    supported_variable_decl tops (src,id) =
-      SOME (vis,mut,ArrayT elem (Dynamic n),slot) ==>
-    src = NONE /\
-    build_dynarray_capacity (collect_module_vars tops) (NONE,id) = n
-Proof
-  Induct >> simp[supported_variable_decl_def] >>
-  Cases >>
-  simp[supported_variable_decl_def, collect_module_vars_def,
-       build_dynarray_capacity_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs(), dynarray_capacity_of_type_def] >>
-  first_x_assum drule >> strip_tac >> simp[] >>
-  CASE_TAC >> simp[] >> metis_tac[]
-QED
-
-Theorem body_append_capacity_lookup:
-  body_inv tops ctx cenv cx /\
-  supported_variable_decl tops nid =
-    SOME (vis,mut,ArrayT elem (Dynamic n),slot) ==>
-  cenv.ce_module_dynarray_capacity nid = n
-Proof
-  Cases_on `nid` >> strip_tac >>
-  drule supported_append_capacity_lookup >> strip_tac >>
-  gvs[body_inv_def]
-QED
-
 Theorem append_storage_target_eval:
   get_module_code cx src = SOME tops /\
   find_var_decl_by_name id tops = SOME (StorageVarDecl tr ty,key) /\
@@ -87,6 +61,18 @@ Proof
        record_storage_event_def, return_def, get_place_def, LET_THM]
 QED
 
+Theorem body_append_root_metadata_mods:
+  contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
+  supported_variable_decl tops (NONE,id) =
+    SOME (vis,mut,ArrayT elem (Dynamic n),slot) ==>
+  cenv.ce_module_var_type (src,id) = SOME (ArrayT elem (Dynamic n)) /\
+  cenv.ce_hashmap_info (src,id) = NONE /\
+  cenv.ce_module_dynarray_capacity (src,id) = n
+Proof
+  strip_tac >> drule_then strip_assume_tac supported_variable_decl_mem >>
+  metis_tac[contract_inv_variable_metadata, body_append_capacity_lookup_mods]
+QED
+
 Theorem body_append_root_metadata:
   body_inv tops ctx cenv cx /\
   supported_variable_decl tops nid =
@@ -96,13 +82,11 @@ Theorem body_append_root_metadata:
   cenv.ce_module_dynarray_capacity nid = n
 Proof
   Cases_on `nid` >> strip_tac >>
-  drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
-  `ALL_DISTINCT
-     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops))`
-    by fs[body_inv_def] >>
-  drule_all build_maps_variable >> strip_tac >>
-  drule_all body_append_capacity_lookup >>
-  fs[body_inv_def]
+  drule_then strip_assume_tac supported_variable_decl_mem >> gvs[] >>
+  drule_then assume_tac body_inv_contract >>
+  metis_tac[SIMP_RULE (srw_ss()) [ALOOKUP_def]
+    (Q.INST [`mods` |-> `[(NONE,tops)]`, `src` |-> `NONE`]
+      body_append_root_metadata_mods)]
 QED
 
 Theorem append_typed_storage_target:
@@ -137,9 +121,9 @@ Proof
   rename1 `ArrayT elem bd` >> Cases_on `bd` >> gvs[] >> metis_tac[]
 QED
 
-Theorem body_append_runtime_metadata:
-  body_inv tops ctx cenv cx /\
-  supported_storage_dynamic_array tops (src,id) /\
+Theorem body_append_runtime_metadata_mods:
+  contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
+  supported_storage_dynamic_array tops (NONE,id) /\
   env_consistent env cx es /\
   type_place_target env (TopLevelNameTarget (src,id)) = SOME (Type ty) ==>
   ?elem n tr key slot tv.
@@ -153,22 +137,18 @@ Theorem body_append_runtime_metadata:
       (INL (StoragePlace tr (n2w slot) tv),
        es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tv])
 Proof
-  strip_tac >>
-  drule supported_append_storage_decl >> strip_tac >>
-  drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
-  drule_all body_append_root_metadata >> strip_tac >>
+  REWRITE_TAC [GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_then strip_assume_tac supported_append_storage_decl >>
+  drule_all_then strip_assume_tac body_append_root_metadata_mods >>
+  `get_module_code cx src = SOME tops` by metis_tac[contract_inv_module_codes] >>
+  drule_then strip_assume_tac supported_variable_decl_mem >>
   drule supported_variable_decl_runtime_lookup >> simp[] >> strip_tac >>
-  `get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
   `find_var_decl_by_name id tops <> NONE` by simp[] >>
-  drule_all append_typed_storage_target >> strip_tac >>
-  drule find_var_decl_storage_mem >> strip_tac >>
-  `ALL_DISTINCT
-     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops))`
-    by fs[body_inv_def] >>
-  drule_all build_maps_variable >> strip_tac >>
-  `ty = ArrayT elem (Dynamic n)` by
-    (fs[body_inv_def] >> metis_tac[optionTheory.SOME_11]) >>
-  gvs[] >> drule_all append_storage_target_eval >> metis_tac[]
+  drule_all_then strip_assume_tac append_typed_storage_target >>
+  drule_then strip_assume_tac find_var_decl_storage_mem >>
+  drule_all_then strip_assume_tac contract_inv_variable_metadata >>
+  `ty = ArrayT elem (Dynamic n)` by metis_tac[optionTheory.SOME_11] >>
+  gvs[] >> drule_all_then strip_assume_tac append_storage_target_eval >> simp[]
 QED
 
 Theorem append_storage_compiler_location:

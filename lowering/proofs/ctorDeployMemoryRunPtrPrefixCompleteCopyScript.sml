@@ -1,6 +1,7 @@
 (* Exact frames for the concrete bytestring decoder sequence. *)
 Theory ctorDeployMemoryRunPtrPrefixCompleteCopy
 Ancestors
+  entryDecoderStateFrame
   loweringStateRelDefs valueEncodingDefs
   compileEnv valueEncoding ctorDeployMemoryRunMemEntryBytes
   ctorDeployMemoryRunPtrPrefixCompleteCode ctorDeployMemoryRunPtrPrefixCanonicalFloor
@@ -44,7 +45,7 @@ Proof
 QED
 
 
-val CshiftCodeEvidence = ``\checked ty tv.
+val CshiftCodeEvidenceWithFmp = ``\frame_fmp checked ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
@@ -94,6 +95,7 @@ val CshiftCodeEvidence = ``\checked ty tv.
  actual.vs_labels = initial.vs_labels /\ actual.vs_code = initial.vs_code /\
  actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
  actual.vs_block_ctx = initial.vs_block_ctx /\ actual.vs_gas_readings = initial.vs_gas_readings /\
+ (frame_fmp ==> actual.vs_fmp = initial.vs_fmp) /\
  (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
  FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce ty)] /\
  DISJOINT B qt.t_mem /\
@@ -108,6 +110,8 @@ val CshiftCodeEvidence = ``\checked ty tv.
  (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\
     alloca_history func actual)``;
+val CshiftCodeEvidence = rhs (concl ((BETA_CONV THENC PURE_REWRITE_CONV [tautLib.TAUT `((F ==> p) /\ q) <=> q`])
+  ``(^CshiftCodeEvidenceWithFmp) F``));
 val CshiftCode = rhs (concl (SIMP_CONV bool_ss [] ``(^CshiftCodeEvidence) F``));
 
 (* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
@@ -132,8 +136,8 @@ Proof
   suspend "package"
 QED
 *)
-Theorem prefix_bytestring_complete_mode_contract:
-  type_to_abi_dec_info sf ce ty = DecBytestring n ==> (^CshiftCodeEvidence) checked ty tv
+Theorem prefix_bytestring_complete_mode_contract_fmp:
+  type_to_abi_dec_info sf ce ty = DecBytestring n ==> (^CshiftCodeEvidenceWithFmp) frame_fmp checked ty tv
 Proof
   strip_tac >> BETA_TAC >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -154,7 +158,7 @@ Proof
   suspend "package"
 QED
 
-Resume prefix_bytestring_complete_mode_contract[package]:
+Resume prefix_bytestring_complete_mode_contract_fmp[package]:
   rename1 `run_inst_seq (emitted_insts st st') initial = OK t` >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_bytes_shape >> strip_tac >>
@@ -238,6 +242,8 @@ Resume prefix_bytestring_complete_mode_contract[package]:
         w2n (t with vs_inst_idx := LENGTH st'.cs_current_insts).vs_initial_fmp)` by
     (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t /\ _`
        (MATCH_ACCEPT_TAC o MATCH_MP prefix_decoder_inst_idx_room)) >>
+  `t.vs_fmp = initial.vs_fmp` by
+    (drule_all entry_decoder_sequence_obs >> simp[entry_decoder_obs_fmp]) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,
     `range_bytes [(d,type_memory_bytes ce ty)]`] >>
   simp[SUBSET_REFL, op_taint_def] >>
@@ -261,7 +267,14 @@ Resume prefix_bytestring_complete_mode_contract[package]:
   qpat_x_assum `DISJOINT _ qt.t_mem` mp_tac >> simp[]
 QED
 
-Finalise prefix_bytestring_complete_mode_contract
+Finalise prefix_bytestring_complete_mode_contract_fmp
+
+Theorem prefix_bytestring_complete_mode_contract:
+  type_to_abi_dec_info sf ce ty = DecBytestring n ==> (^CshiftCodeEvidence) checked ty tv
+Proof
+  mp_tac (Q.INST [`frame_fmp` |-> `F`] prefix_bytestring_complete_mode_contract_fmp) >>
+  simp_tac bool_ss []
+QED
 
 
 
