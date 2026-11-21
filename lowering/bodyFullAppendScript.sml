@@ -33,24 +33,6 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem array_set_index_indexed_error[local]:
-  !tv av i x vj err.
-    array_index tv av i = SOME x /\ array_set_index tv av i vj = INR err ==>
-    ?msg. err = TypeError msg
-Proof
-  rpt gen_tac >>
-  simp[vyperValueOperationTheory.array_index_def,
-       vyperValueOperationTheory.array_set_index_def, LET_THM] >>
-  Cases_on `0 <= i` >> simp[] >>
-  Cases_on `av`
-  >~ [`DynArrayV l`]
-  >- (simp[listTheory.oEL_THM] >> Cases_on `Num i < LENGTH l` >> simp[])
-  >~ [`TupleV l`] >- simp[] >>
-  Cases_on `tv` >> simp[] >>
-  Cases_on `b` >> simp[] >>
-  rename1 `Num i < n` >> Cases_on `Num i < n` >> simp[]
-QED
-
 (* Staging ends before the storage guard; it needs no static/no-dalloca
    restriction.  The allocation/copy compiler cut is kept explicit. *)
 Theorem append_storage_aggregate_stage_ready[local]:
