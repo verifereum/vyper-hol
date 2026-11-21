@@ -3,42 +3,7 @@ Ancestors
   forCapturedStorageLive gasOutcomeFullCompose gasOutcomeFull gasContext
   gasExemptCert bodyFullIfExpReach exprSimMemorySource stmtSimForParts
   stmtSimDefs fragExec fragGasOriginPtr vyperStorageTrace vyperStorageFootprint
-  vyperInterpreter vyperState finite_map
-
-(* The admission check for the whole remaining loop implies the corresponding
-   check for the first loop body, at the scope produced by the selected read. *)
-Theorem captured_storage_body_admissible[local]:
-  gas_admissible (eval_for cx tyv id stmts (a::rs)) ok es /\
-  (!res. ok res ==> stmt_res_ok lctx res) /\
-  lookup_scopes id es.scopes = NONE /\ read_result cx a es = (INL v,es) ==>
-  gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop exit incr))
-    (es with <| scopes :=
-      (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)) :: es.scopes;
-      gas_obs := [] |>)
-Proof
-  strip_tac >> simp[gas_admissible_def] >> rpt gen_tac >> strip_tac >>
-  rename1 `eval_stmts cx stmts _ = (raw,ef)` >>
-  `read_result cx a (es with gas_obs := gs) = (INL v,es with gas_obs := gs)` by
-    (drule exprSimMemorySourceTheory.read_result_gas_obs >> simp[]) >>
-  `eval_for cx tyv id stmts (a::rs) (es with gas_obs := gs) =
-   eval_for cx tyv id stmts (Value v::rs) (es with gas_obs := gs)` by
-    (qpat_assum `read_result cx a (es with gas_obs := gs) = _`
-       (mp_then Any (rewrite_tac o single) vyperInterpreterTheory.eval_for_cons_read) >>
-     `read_result cx (Value v) (es with gas_obs := gs) = (INL v,es with gas_obs := gs)` by
-       simp[read_result_def,return_def] >>
-     qpat_assum `read_result cx (Value v) _ = _`
-       (mp_then Any (rewrite_tac o single) vyperInterpreterTheory.eval_for_cons_read)) >>
-  Cases_on `eval_for cx tyv id stmts (Value v::rs) (es with gas_obs := gs)` >>
-  rename1 `eval_for cx tyv id stmts (Value v::rs) _ = (lr,le)` >>
-  `stmt_res_ok lctx lr` by
-    (first_x_assum irule >>
-     qpat_assum `gas_admissible _ _ _`
-       (qspecl_then [`gs`,`lr`,`le`] mp_tac o REWRITE_RULE[gas_admissible_def]) >> simp[]) >>
-  qpat_assum `eval_for cx tyv id stmts (Value v::rs) _ = (lr,le)`
-    (mp_then Any mp_tac stmtSimForPartsTheory.eval_for_cons_cases) >>
-  simp[] >> strip_tac >> gvs[] >>
-  qpat_x_assum `stmt_res_ok lctx _` mp_tac >> simp[stmt_res_ok_def]
-QED
+  vyperInterpreter vyperState finite_map forConsBodyGas
 
 (* The head and cleanup run on the same endpoint. Only a continuing cleanup
    executes the (zero-GAS-mark) increment, with its original index. *)
@@ -187,7 +152,7 @@ Resume for_captured_storage_cons_from_stages[body_entry]:
      (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> disch_then ACCEPT_TAC) >>
   `gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop exit incr)) mid` by
     (qpat_assum `mid = es with <| scopes := _; gas_obs := [] |>` SUBST1_TAC >>
-     drule_all captured_storage_body_admissible >> simp[]) >>
+     drule_all forConsBodyGasTheory.captured_storage_body_admissible >> simp[]) >>
   qpat_assum `!v eb G1 tn1 z. _ ==> gas_outcome_full _ _ _ _ clean _ _ _`
     (qspecl_then [`v`,`mid`,`G1`,`tn1`,`t`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_then ACCEPT_TAC
