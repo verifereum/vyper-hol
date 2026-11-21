@@ -20,9 +20,10 @@
 Theory e2eDeployAtMarks
 Ancestors
   codegenLabelDisciplined fnPlanPlaceRevertPostamble finite_map
-  ownSymSrcUnit o1LabelFlowOwnCompose codegenSymOwnRel ctorDeployRawEntryFacts
+  ownSymSrcUnit gasFocusOptLabelFlow[qualified,ignore_grammar] codegenSymOwnRel ctorDeployRawEntryFacts
   e2eDeployDefs e2eDefs ctorDeployDefs deployUnitExecution deployUnitExitSafe
   ctorDeployMemoryFrontier ctorDeployImmBudget ctorDeployInitcode
+  deployDynamicMemory loweringShapeSource[qualified]
   ctorDeployEntry ctorDeployShape ctorDeployDefsReach ctorDeployDead
   ctorDeployLoweringSource
   ctorDeployFrame compileVyper codegen e2eProducers e2eComposition e2eEntry
@@ -178,6 +179,57 @@ QED
 
 (* The bridges at the deployment entry: the S4 memory facts of vs from its
    memory-safe and pointer-safe runs from "__deploy". *)
+Theorem deploy_selected_memory_from_no_wrap:
+  deploy_phases policy tops (deploy_bc, runtime_bc)
+    (rpolicy, dunit, dout, prog, cplan) /\
+  vs.vs_alloca_next = imm_len tops /\
+  (!f inst s. raw_reachable vs dunit.cu_context f inst s ==>
+     dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp) /\
+  (ctx_has_dalloca dunit.cu_context ==>
+     imm_len tops + unit_alloca_budget dunit.cu_context +
+       32 * ctx_dload_count dunit.cu_context <= w2n vs.vs_initial_fmp) /\
+  code_layout_valid vs /\
+  lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME func /\
+  fn_entry_label func = SOME "__deploy" /\
+  (!fuel. mem_safe_blocks fuel dunit.cu_context func
+     (vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
+                 vs_inst_idx := 0 |>)) /\
+  (!fuel. ptr_safe_blocks D (imm_len tops) fuel dunit.cu_context func [] FEMPTY
+     entry_taint
+     (vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
+                 vs_inst_idx := 0 |>)) ==>
+  raw_unit_memory_ok dunit.cu_context vs /\
+  ptr_discipline (imm_len tops) dunit.cu_context vs /\
+  taint_within D dunit.cu_context vs /\
+  mem_inv dload_offset_ok dunit.cu_context vs /\
+  mem_inv dload_headroom_ok dunit.cu_context vs
+Proof
+  strip_tac >>
+  `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
+    fs[deploy_phases_def] >>
+  drule lower_vyper_deploy_unit_context_ok >> strip_tac >>
+  drule lower_vyper_deploy_unit_entry >> strip_tac >>
+  drule deploy_imm_alloca_budget_ok >> strip_tac >>
+  `imm_len tops + unit_alloca_budget dunit.cu_context < dimword (:256)` by
+    decide_tac >>
+  rpt conj_tac
+  >- (qspecl_then [`imm_len tops`, `dunit.cu_context`, `"__deploy"`, `func`,
+                   `"__deploy"`, `vs`] mp_tac lowered_unit_raw_memory_ok_from_no_wrap >>
+      impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> simp[])
+  >- (qspecl_then [`D`, `imm_len tops`, `dunit.cu_context`, `"__deploy"`,
+                   `func`, `"__deploy"`, `vs`] mp_tac lowered_unit_ptr_taint >>
+      impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> simp[])
+  >- (qspecl_then [`D`, `imm_len tops`, `dunit.cu_context`, `"__deploy"`,
+                   `func`, `"__deploy"`, `vs`] mp_tac lowered_unit_ptr_taint >>
+      impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> simp[])
+  >- (qspecl_then [`dunit.cu_context`, `"__deploy"`, `func`, `"__deploy"`,
+                   `vs`] mp_tac lowered_unit_dload_offset_ok >>
+      impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> simp[]) >>
+  qspecl_then [`imm_len tops`, `dunit.cu_context`, `"__deploy"`, `func`, `vs`]
+    mp_tac lowered_unit_dload_headroom_ok_from >>
+  impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> simp[]
+QED
+
 Theorem deploy_selected_memory:
   deploy_phases policy tops (deploy_bc, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
@@ -352,7 +404,28 @@ Proof
     (deploy_storage_trace (SOME vs.vs_outcomes)
        (gas_explicit marks vs.vs_gas_readings ++ tail) am txp tops)` >>
   `w2n vs.vs_initial_fmp <= w2n vs.vs_fmp` by simp[] >>
-  drule_all deploy_selected_memory >> strip_tac >>
+  `raw_unit_memory_ok dunit.cu_context vs /\
+   ptr_discipline (imm_len tops) dunit.cu_context vs /\
+   taint_within (deploy_dead H tops runtime_bc am txp) dunit.cu_context vs /\
+   mem_inv dload_offset_ok dunit.cu_context vs /\
+   mem_inv dload_headroom_ok dunit.cu_context vs` by
+    (Cases_on `deploy_dalloca_form_occurs loweringShapeSource$expr_raw_shape_root tops`
+     >- (`txp = tx` by metis_tac[deploy_own_txp_identity] >>
+         `deploy_typing_ok tops am tx` by fs[deploy_source_ok_def] >>
+         `!fn inst s. raw_reachable vs dunit.cu_context fn inst s ==>
+           dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+           (qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
+                        `dunit`, `dout`, `prog`, `prog'`, `cplan`,
+                        `am`, `tx`, `es`, `vs_out`, `vs`, `fmp`]
+             mp_tac deploy_entry_raw_no_wrap >>
+            impl_tac >- simp[] >> disch_then ACCEPT_TAC) >>
+         irule deploy_selected_memory_from_no_wrap >>
+         rpt conj_tac >>
+         TRY (first_assum ACCEPT_TAC) >>
+         TRY (qexistsl_tac [`cplan`, `assemble prog`, `dout`, `policy`,
+                             `prog`, `rpolicy`, `runtime_bc`] >> simp[]) >>
+         gvs[]) >>
+     metis_tac[deploy_selected_memory]) >>
   `ctx_sim (deploy_dead H tops runtime_bc am txp) dunit.cu_context
      dout.po_unit.cu_context vs vs_out /\
    (fin = asm_opt_finalizer ==>
@@ -404,7 +477,7 @@ Proof
      `supported_program tops /\ supported_program_deploy tops` by fs[deploy_source_ok_def] >>
      drule_all lower_vyper_deploy_unit_sym_src_ok_own >> strip_tac >>
      drule_all deploy_unit_defs_reach_uses >> strip_tac >>
-     drule_all o1_pipeline_own_label_flow >> strip_tac >>
+     drule_all gasFocusOptLabelFlowTheory.focus_opt_label_flow_own >> strip_tac >>
      drule_all o1_pipeline_sym_unit_static_ok >> strip_tac >>
      `assemble prog' <> []` by
        (irule codegen_assembly_finalizer_nonempty >> metis_tac[]) >>

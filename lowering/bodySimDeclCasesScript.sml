@@ -125,9 +125,22 @@ QED
 
 (* ===== AnnAssign ===== *)
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem body_annassign_rhs_pre:
+  !cenv cx env e es tops id typ ctx.
+    body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    body_stmt_safe tops (AnnAssign id typ e) /\
+    stmt_exprs_ok cenv (AnnAssign id typ e) /\
+    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) ==>
+    expr_body_pre cenv cx env e es
 Proof
   rpt strip_tac >>
+  drule_all body_inv_stmt_const_name_free >>
+  simp[supported_stmt_expr_exists_def, supported_assignment_exists_def] >>
+  strip_tac >>
   qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
     SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, supported_iterator_exists_def,
@@ -142,26 +155,10 @@ Proof
       alloc_limits_expr_def]) >>
   imp_res_tac alloc_limits_expr_not_extcode >>
   `cx_tops cx = tops` by (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
-  irule_body_pre stmt_expr_body_pre >>
+  irule stmt_expr_body_pre >>
   gvs[body_inv_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       int_calls_stmt_def] >>
-  imp_res_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >> simp[] >>
   qexists_tac `[]` >> simp[]
-QED
-*)
-Theorem body_annassign_rhs_pre:
-  !cenv cx env e es tops id typ ctx.
-    body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-    body_stmt_safe tops (AnnAssign id typ e) /\
-    stmt_exprs_ok cenv (AnnAssign id typ e) /\
-    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) ==>
-    expr_body_pre cenv cx env e es
-Proof
-  cheat
 QED
 
 (* A declaration of a word type: stmtSimDecl's
@@ -926,10 +923,43 @@ fun range_tuple_forall th =
    source integer literals. Array iteration remains a separate residual.
    body_for_ok supplies a body judgment only for a successfully checked,
    nonempty iterator; rejecting and empty ranges need no body judgment. *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem body_for_range:
+  !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
+   es res es'.
+    body_stmt_safe tops (For id typ it n body) /\
+    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
+       (INL x,t'') ==>
+       body_for_ok cx tyv id body vs) /\
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_iterator_ok cx it) /\
+    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (For id typ it n body) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (For id typ it n body) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (For id typ it n body) = SOME env' /\
+    stmt_exprs_ok cenv (For id typ it n body) /\
+    call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    (?e1 e2. it = Range e1 e2) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (For id typ it n body))
+      (eval_stmt cx (For id typ it n body)) es
 Proof
   rpt strip_tac >>
   imp_res_tac body_stmt_safe_for_body >> gvs[] >>
+  `~supported_expr_exists (const_name_root cx) e1 /\
+   ~supported_expr_exists (const_name_root cx) e2` by
+    (drule_all body_inv_stmt_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_iterator_exists_def]) >>
   Cases_on `?a1 n1 a2 n2. e1 = Literal a1 (IntL n1) /\ e2 = Literal a2 (IntL n2)`
   >- (gvs[] >> irule body_for_range_lit >> simp[] >> metis_tac[]) >>
   drule (range_tuple_forall body_range_typing) >>
@@ -988,18 +1018,16 @@ Proof
       alloc_limits_expr_def]) >>
   imp_res_tac alloc_limits_expr_not_extcode >>
   `expr_body_pre cenv cx env e1 es` by
-    (irule_body_pre stmt_expr_body_pre_alloc >>
+    (irule stmt_expr_body_pre_alloc >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def,
          allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_iterator_def] >>
-     imp_res_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >> simp[] >>
      qexists_tac `int_calls_expr e2 ++ int_calls_stmts body'` >> simp[]) >>
   `!ei. expr_sim_inv cenv cx env ei ==> expr_body_pre cenv cx env e2 ei` by
-    (rpt strip_tac >> irule_body_pre stmt_expr_body_pre_alloc >>
+    (rpt strip_tac >> irule stmt_expr_body_pre_alloc >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def,
          allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_iterator_def] >>
-     imp_res_tac supportedExprTraverseTheory.supported_expr_no_call_operand_effects >> simp[] >>
      qexists_tac `int_calls_stmts body'` >>
      metis_tac[call_evaluation_safe_append_right, listTheory.APPEND_ASSOC]) >>
   `expr_sim ctx func cenv cx typ e1 es` by
@@ -1093,40 +1121,6 @@ Resume body_for_range[pop]:
 QED
 
 Finalise body_for_range
-*)
-Theorem body_for_range:
-  !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
-   es res es'.
-    body_stmt_safe tops (For id typ it n body) /\
-    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
-       (INL x,t'') ==>
-       body_for_ok cx tyv id body vs) /\
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_iterator_ok cx it) /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (For id typ it n body) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (For id typ it n body) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (For id typ it n body) = SOME env' /\
-    stmt_exprs_ok cenv (For id typ it n body) /\
-    call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    (?e1 e2. it = Range e1 e2) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (For id typ it n body))
-      (eval_stmt cx (For id typ it n body)) es
-Proof
-  cheat
-QED
 
 (* A loop over an array (#637 for, #559): the iterable is a variable
    holding a fixed array of the loop variable's type (supported_iterator),
@@ -1145,7 +1139,36 @@ QED
    is MLOAD/MSTORE for a word and compile_store_memory at one type
    otherwise (compile_store_memory_run).  m < 2 ** 256, since evaluate_type
    bounds the array's size. *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem array_for_source_ready[local]:
+  (!tenv s tyv t s3 vs t3 s4 x t4.
+    tenv = get_tenv cx /\
+    lift_option_type (evaluate_type tenv typ) "For evaluate_type" s = (INL tyv,t) /\
+    eval_iterator cx (Array e) s3 = (INL vs,t3) /\
+    check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s4 = (INL x,t4)
+    ==> body_for_ok cx tyv id stmts vs) /\
+  supported_stmt tops bindings (For id typ (Array e) n stmts) /\
+  expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+  type_stmt env ret_ty (For id typ (Array e) n stmts) = SOME env' /\
+  e = Name (ArrayT typ (Fixed n)) arr ==>
+  ?name env_b entry tv ptr sz al vs.
+    e = Name (ArrayT typ (Fixed n)) name /\ env' = env /\
+    well_typed_expr env (Name (ArrayT typ (Fixed n)) name) /\
+    id NOTIN FDOM env.var_types /\
+    iterator_unmodified (Array (Name (ArrayT typ (Fixed n)) name)) stmts /\
+    type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
+    supported_stmts tops bindings stmts /\
+    lookup_scopes name es.scopes = SOME entry /\
+    evaluate_type (get_tenv cx) typ = SOME tv /\
+    entry.type = ArrayTV tv (Fixed n) /\
+    value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
+    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var ptr) sz) /\
+    cenv.ce_var_type name = SOME (ArrayT typ (Fixed n)) /\
+    0 < n /\ n < dimword (:256) /\ entry.value = ArrayV (SArrayV al) /\
+    vs = array_elements (ArrayTV tv (Fixed n)) (SArrayV al) /\ LENGTH vs = n /\
+    (!gs. eval_iterator cx (Array (Name (ArrayT typ (Fixed n)) name))
+            (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) /\
+    body_stmts_ok cx stmts /\
+    FLOOKUP cenv.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE
 Proof
   strip_tac >> drule_all array_for_hypotheses >> strip_tac >> gvs[] >>
   drule_all array_name_local_binding >> strip_tac >>
@@ -1184,41 +1207,6 @@ Proof
   qexistsl_tac [`entry`, `tv`] >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
   qexists_tac `al` >> fs[Abbr `vs`]
-QED
-*)
-Theorem array_for_source_ready[local]:
-  (!tenv s tyv t s3 vs t3 s4 x t4.
-    tenv = get_tenv cx /\
-    lift_option_type (evaluate_type tenv typ) "For evaluate_type" s = (INL tyv,t) /\
-    eval_iterator cx (Array e) s3 = (INL vs,t3) /\
-    check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s4 = (INL x,t4)
-    ==> body_for_ok cx tyv id stmts vs) /\
-  supported_stmt tops bindings (For id typ (Array e) n stmts) /\
-  expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-  type_stmt env ret_ty (For id typ (Array e) n stmts) = SOME env' /\
-  e = Name (ArrayT typ (Fixed n)) arr ==>
-  ?name env_b entry tv ptr sz al vs.
-    e = Name (ArrayT typ (Fixed n)) name /\ env' = env /\
-    well_typed_expr env (Name (ArrayT typ (Fixed n)) name) /\
-    id NOTIN FDOM env.var_types /\
-    iterator_unmodified (Array (Name (ArrayT typ (Fixed n)) name)) stmts /\
-    type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
-    supported_stmts tops bindings stmts /\
-    ~supported_stmts_expr_exists expr_internal_call_root stmts /\
-    lookup_scopes name es.scopes = SOME entry /\
-    evaluate_type (get_tenv cx) typ = SOME tv /\
-    entry.type = ArrayTV tv (Fixed n) /\
-    value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
-    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var ptr) sz) /\
-    cenv.ce_var_type name = SOME (ArrayT typ (Fixed n)) /\
-    0 < n /\ n < dimword (:256) /\ entry.value = ArrayV (SArrayV al) /\
-    vs = array_elements (ArrayTV tv (Fixed n)) (SArrayV al) /\ LENGTH vs = n /\
-    (!gs. eval_iterator cx (Array (Name (ArrayT typ (Fixed n)) name))
-            (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) /\
-    body_stmts_ok cx stmts /\
-    FLOOKUP cenv.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE
-Proof
-  cheat
 QED
 
 Theorem array_for_layout_ready:
@@ -1304,14 +1292,21 @@ Proof
   disch_then (qspec_then `x` mp_tac) >> simp[]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem array_body_result_ok:
+  !cx stmts cenv env ei id typ tv v ret_ty env_b r ef tops bindings.
+    expr_sim_inv cenv cx env ei /\ id NOTIN FDOM env.var_types /\
+    evaluate_type (get_tenv cx) typ = SOME tv /\ value_has_type tv v /\
+    type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
+    call_evaluation_safe cx (int_calls_stmts stmts) /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    supported_stmts tops bindings stmts /\
+    eval_stmts cx stmts
+      (ei with scopes :=
+        (FEMPTY |+ (id, <|assignable := F; type := tv; value := v;
+                          popped := []|>)) :: ei.scopes) = (r,ef) ==>
+    !ex inc. stmt_res_ok (InLoop ex inc) r
 Proof
   rpt gen_tac >> strip_tac >>
-  `r <> INR HaltException` by
-    (imp_res_tac (cj 2 supported_stmts_storage_syntax) >>
-     `!st st'. eval_stmts cx stmts st <> (INR HaltException, st')` by
-       (rpt gen_tac >> irule (cj 4 eval_no_halt) >> metis_tac[]) >>
-     strip_tac >> gvs[] >> metis_tac[]) >>
   rule_assum_tac (REWRITE_RULE [scopes_CONS_updated]) >>
   `env_consistent (extend_local env id typ F) cx
      (ei with scopes updated_by
@@ -1335,23 +1330,6 @@ Proof
   rename1 `Error er` >> Cases_on `er` >>
   gvs[stmtSimDefsTheory.stmt_res_ok_def, no_type_error_result_def]
 QED
-*)
-Theorem array_body_result_ok:
-  !cx stmts cenv env ei id typ tv v ret_ty env_b r ef tops bindings.
-    expr_sim_inv cenv cx env ei /\ id NOTIN FDOM env.var_types /\
-    evaluate_type (get_tenv cx) typ = SOME tv /\ value_has_type tv v /\
-    type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
-    call_evaluation_safe cx (int_calls_stmts stmts) /\
-    supported_program tops /\ get_module_code cx NONE = SOME tops /\
-    supported_stmts tops bindings stmts /\
-    eval_stmts cx stmts
-      (ei with scopes :=
-        (FEMPTY |+ (id, <|assignable := F; type := tv; value := v;
-                          popped := []|>)) :: ei.scopes) = (r,ef) ==>
-    !ex inc. stmt_res_ok (InLoop ex inc) r
-Proof
-  cheat
-QED
 
 Theorem array_body_direct_snapshot:
   !tops bindings stmts env id typ name elem bound ret_ty env_b aty
@@ -1360,7 +1338,6 @@ Theorem array_body_direct_snapshot:
     FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\ name <> id /\
     type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
     iterator_unmodified (Array (Name aty name)) stmts /\
-    ~supported_stmts_expr_exists expr_internal_call_root stmts /\
     lookup_scopes name ei.scopes = SOME entry /\
     eval_stmts cx stmts
       (ei with scopes :=
@@ -1393,7 +1370,6 @@ Theorem array_body_scope_callback:
     supported_stmts tops bindings stmts /\
     FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\ name <> id /\
     iterator_unmodified (Array (Name aty name)) stmts /\
-    ~supported_stmts_expr_exists expr_internal_call_root stmts /\
     lookup_scopes name ei.scopes = SOME entry /\
     lookup_scopes id ei.scopes = NONE /\
     eval_stmts cx stmts

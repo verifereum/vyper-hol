@@ -134,7 +134,36 @@ QED
 
 (* Finite projections at exactly the enclosing For; no source invariant is
    strengthened here. Endpoint support remains in its literal/checked gate. *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem range_full_static_pre:
+  supported_stmt tops bindings (For id typ (Range e1 e2) n body) /\
+  type_stmt env ret_ty (For id typ (Range e1 e2) n body) = SOME env' /\
+  stmt_exprs_ok cenv (For id typ (Range e1 e2) n body) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (For id typ (Range e1 e2) n body) ==> occurs_abi_decode_target target tops) /\
+  call_evaluation_safe cx (int_calls_stmt (For id typ (Range e1 e2) n body)) ==>
+  env' = env /\ assignable_type env.type_defs typ /\ is_int_type typ /\
+  well_typed_expr env e1 /\ well_typed_expr env e2 /\
+  expr_type e1 = typ /\ expr_type e2 = typ /\
+  expr_writes_ok (\_. F) e1 /\ expr_writes_ok (\_. F) e2 /\
+  expr_static_calls e1 /\ expr_static_calls e2 /\
+  id NOTIN FDOM env.var_types /\
+  IS_SOME (type_stmts (extend_local env id typ F) ret_ty body) /\
+  supported_type_namespace typ /\ supported_iterator tops typ (Range e1 e2) n /\
+  supported_stmts tops bindings body /\
+  stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) body /\
+  type_memory_bytes cenv typ < 2 ** 64 /\
+  alloc_limits_expr cenv e1 /\ alloc_limits_expr cenv e2 /\
+  ~supported_expr_exists (\e. ~is_extcode e /\ ~byte_widths_expr e) e1 /\
+  ~supported_expr_exists (\e. ~is_extcode e /\ ~byte_widths_expr e) e2 /\
+  (!target. supported_expr_exists (expr_abi_decode_target_root target) e1 ==>
+      occurs_abi_decode_target target tops) /\
+  (!target. supported_expr_exists (expr_abi_decode_target_root target) e2 ==>
+      occurs_abi_decode_target target tops) /\
+  (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
+      occurs_abi_decode_target target tops) /\
+  call_evaluation_safe cx (int_calls_expr e1) /\
+  call_evaluation_safe cx (int_calls_expr e2) /\
+  call_evaluation_safe cx (int_calls_stmts body)
 Proof
   strip_tac >>
   drule type_stmt_for_projection >> strip_tac >>
@@ -152,41 +181,6 @@ Proof
   imp_res_tac call_evaluation_safe_append_right >>
   gvs[supported_stmt_expr_exists_def, supported_iterator_exists_def] >>
   metis_tac[call_evaluation_safe_append_left]
-QED
-*)
-Theorem range_full_static_pre:
-  supported_stmt tops bindings (For id typ (Range e1 e2) n body) /\
-  type_stmt env ret_ty (For id typ (Range e1 e2) n body) = SOME env' /\
-  stmt_exprs_ok cenv (For id typ (Range e1 e2) n body) /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-     (For id typ (Range e1 e2) n body) ==> occurs_abi_decode_target target tops) /\
-  call_evaluation_safe cx (int_calls_stmt (For id typ (Range e1 e2) n body)) ==>
-  env' = env /\ assignable_type env.type_defs typ /\ is_int_type typ /\
-  well_typed_expr env e1 /\ well_typed_expr env e2 /\
-  expr_type e1 = typ /\ expr_type e2 = typ /\
-  expr_writes_ok (\_. F) e1 /\ expr_writes_ok (\_. F) e2 /\
-  expr_static_calls e1 /\ expr_static_calls e2 /\
-  id NOTIN FDOM env.var_types /\
-  IS_SOME (type_stmts (extend_local env id typ F) ret_ty body) /\
-  supported_type_namespace typ /\ supported_iterator tops typ (Range e1 e2) n /\
-  supported_stmts tops bindings body /\
-  ~supported_stmts_expr_exists expr_internal_call_root body /\
-  stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) body /\
-  type_memory_bytes cenv typ < 2 ** 64 /\
-  alloc_limits_expr cenv e1 /\ alloc_limits_expr cenv e2 /\
-  ~supported_expr_exists (\e. ~is_extcode e /\ ~byte_widths_expr e) e1 /\
-  ~supported_expr_exists (\e. ~is_extcode e /\ ~byte_widths_expr e) e2 /\
-  (!target. supported_expr_exists (expr_abi_decode_target_root target) e1 ==>
-      occurs_abi_decode_target target tops) /\
-  (!target. supported_expr_exists (expr_abi_decode_target_root target) e2 ==>
-      occurs_abi_decode_target target tops) /\
-  (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
-      occurs_abi_decode_target target tops) /\
-  call_evaluation_safe cx (int_calls_expr e1) /\
-  call_evaluation_safe cx (int_calls_expr e2) /\
-  call_evaluation_safe cx (int_calls_stmts body)
-Proof
-  cheat
 QED
 
 (* The original iterator supplies the body IH; the current cons call supplies
@@ -215,7 +209,6 @@ Theorem range_cons_source_pre:
                   SOME body_env') /\
     id NOTIN FDOM env.var_types /\
     supported_stmts tops bindings body /\
-    ~supported_stmts_expr_exists expr_internal_call_root body /\
     stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) body /\
     (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target)
        body ==> occurs_abi_decode_target target tops) /\

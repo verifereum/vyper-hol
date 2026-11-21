@@ -9,20 +9,6 @@ Ancestors
   ctorDeployLoweringCodeShape loweringShapeRules list ctorUnitShape
   allocaFrontierBound venomInst venomWf venomExecProps fragExec rich_list
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  rpt gen_tac >> PairCases_on `src` >> strip_tac >>
-  `~supported_stmts_expr_exists expr_shape_root src7` by
-    (gs[runtime_bodies_shape_ok_def] >> metis_tac[]) >>
-  imp_res_tac supported_program_runtime_bodies_shape_ok >>
-  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
-  drule_then (qspecl_then [`Internal`, `src0`, `src3`, `src4`, `src6`, `src7`, `use_trans`]
-    (strip_assume_tac o SRULE [cenv_static_ok_def])) build_compile_env_static >>
-  simp[package_internal_fn_def, set_internal_package_target_def,
-    update_cenv_nonreentrant_def, internal_fn_shape_ok_def, cenv_static_ok_def] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-*)
 Theorem deploy_internal_package_shape:
   !tops use_trans nkey_map target is_ctor immutables_len src.
     runtime_bodies_shape_ok tops /\
@@ -31,7 +17,15 @@ Theorem deploy_internal_package_shape:
       (set_internal_package_target target
         (package_internal_fn tops use_trans nkey_map is_ctor immutables_len src))
 Proof
-  cheat
+  rpt gen_tac >> PairCases_on `src` >> strip_tac >>
+  `~supported_stmts_expr_exists expr_shape_root src7` by
+    (gs[runtime_bodies_shape_ok_def] >> metis_tac[]) >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
+  drule_then (qspecl_then [`Internal`, `src0`, `src3`, `src4`, `src6`, `src7`, `use_trans`]
+    (strip_assume_tac o SRULE [cenv_static_ok_def])) build_compile_env_static >>
+  simp[package_internal_fn_def, set_internal_package_target_def,
+    update_cenv_nonreentrant_def, internal_fn_shape_ok_def, cenv_static_ok_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem deploy_build_env_no_return_pc:

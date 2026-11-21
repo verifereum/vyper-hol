@@ -23,26 +23,24 @@ Ancestors bodyFullShadowBodyInv sourceUnitExecution[qualified,ignore_grammar] lo
   intCallMaterializeFull memoryValueEncoding moduleLowering venomInst o1PassContract o1PipelineCompose unitShapeDefs entryStateRel stmtSimReturn stateRelProj
   accountsRelProps[qualified,ignore_grammar] vyperTypeContract vyperTypeInitialState vyperTypeEvalProofs vyperTypeInvariants vyperContext externalBodyFrame vyperTypeValues[qualified] vyperValueOperation[qualified]
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  rw[bodySimTheory.body_inv_def, listTheory.EVERY_MEM] >>
-  rename1 `MEM f unit.cu_context.ctx_functions` >>
-  `o1_source_unit_ok unit` by
-    (Cases_on `cx.in_deploy` >> gvs[]
-     >- metis_tac[ctorDeployShapeTheory.lower_vyper_deploy_unit_source_unit_ok] >>
-     irule loweringShapePropsTheory.lower_vyper_runtime_unit_source_unit_ok_shape >>
-     goal_assum (drule_at Any) >> conj_tac
-     >- (irule loweringShapeSourceTheory.supported_names_internal_names_distinct >>
-         fs[supportedProgramTheory.supported_program_def,
-            supportedNamesTheory.supported_declaration_names_def]) >>
-     metis_tac[loweringShapePropsTheory.supported_program_runtime_bodies_shape_ok]) >>
-  metis_tac[source_pre_fmp_ops]
-QED
-*)
+Definition intcall_ghost_opcodes_def:
+  intcall_ghost_opcodes ctx <=>
+    !fn inst. MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) ==>
+      inst.inst_opcode <> SETFMP /\ inst.inst_opcode <> DRET
+End
+
 Theorem intcall_callee_pre_fmp_context[local]:
-  body_inv tops ctx cenv cx ==> EVERY pre_fmp_ops ctx.ctx_functions
+  body_inv tops ctx cenv cx ==> intcall_ghost_opcodes ctx
 Proof
-  cheat
+  strip_tac >>
+  `lowering_context_ok ctx` by
+    (fs[bodySimTheory.body_inv_def] >> Cases_on `cx.in_deploy` >> gvs[]
+     >- metis_tac[deployUnitProducersTheory.lower_vyper_deploy_unit_context_ok] >>
+     metis_tac[vyperLoweringCorrectTheory.lower_vyper_runtime_unit_context_entry]) >>
+  fs[vyperCompilerTheory.lowering_context_ok_def] >>
+  drule ptrOkCheckTheory.ptr_ok_check_sound >>
+  simp[listTheory.EVERY_MEM, intcall_ghost_opcodes_def,
+       ptrDisciplineTheory.fn_ptr_ok_def] >> metis_tac[]
 QED
 
 Theorem intcall_callee_src_storage_trace_frame[local]:
@@ -2549,7 +2547,7 @@ Proof
 QED
 
 Theorem intcall_ghost_current_opcode[local]:
-  EVERY pre_fmp_ops ctx.ctx_functions /\
+  intcall_ghost_opcodes ctx /\
   MEM func ctx.ctx_functions /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst ==>
   inst.inst_opcode <> SETFMP /\ inst.inst_opcode <> DRET
@@ -2558,8 +2556,7 @@ Proof
   `MEM inst (fn_insts func)` by
     (simp[fn_insts_def] >> irule venomFnInstsProofsTheory.mem_fn_insts_blocks >>
      qexists_tac `bb` >> gvs[get_instruction_def] >> metis_tac[lookup_block_MEM, listTheory.EL_MEM]) >>
-  fs[listTheory.EVERY_MEM, o1PassContractTheory.pre_fmp_ops_def,
-     o1PassContractTheory.pre_fmp_opcode_def] >>
+  fs[intcall_ghost_opcodes_def] >>
   metis_tac[]
 QED
 
@@ -2597,7 +2594,7 @@ Theorem intcall_callee_protected_ghost_run_rules:
     ptr_byte_frame_inv (ctx,x) G s /\ lo <= x /\
     (!b sz. MEM (SOME (b,sz)) PG ==> x < b \/ b + sz <= x) /\
     (!v. op_taint tn (Var v) SUBSET count 32) /\ x NOTIN tn.t_mem /\
-    EVERY pre_fmp_ops ctx.ctx_functions /\
+    intcall_ghost_opcodes ctx /\
     (inst.inst_opcode = DALLOCA ==> ctx_has_dalloca ctx) /\ inst.inst_opcode <> SETFMP /\ inst.inst_opcode <> DRET /\
     ptr_safe_step D lo fuel ctx func PG G tn inst s /\
     ~in_revert_forward func s /\ ~is_terminator inst.inst_opcode /\
@@ -2609,7 +2606,7 @@ Theorem intcall_callee_protected_ghost_run_rules:
     ptr_byte_frame_inv (ctx,x) G s /\ lo <= x /\
     (!b sz. MEM (SOME (b,sz)) PG ==> x < b \/ b + sz <= x) /\
     (!v. op_taint tn (Var v) SUBSET count 32) /\ x NOTIN tn.t_mem /\
-    EVERY pre_fmp_ops ctx.ctx_functions /\
+    intcall_ghost_opcodes ctx /\
     MEM func ctx.ctx_functions /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     ptr_safe_block D lo fuel ctx func PG G tn bb s /\
     block_run fuel ctx func bb s = IntRet ir t ==>
@@ -2618,7 +2615,7 @@ Theorem intcall_callee_protected_ghost_run_rules:
     ptr_byte_frame_inv (ctx,x) G s /\ lo <= x /\
     (!b sz. MEM (SOME (b,sz)) PG ==> x < b \/ b + sz <= x) /\
     (!v. op_taint tn (Var v) SUBSET count 32) /\ x NOTIN tn.t_mem /\
-    EVERY pre_fmp_ops ctx.ctx_functions /\
+    intcall_ghost_opcodes ctx /\
     MEM func ctx.ctx_functions /\ ptr_safe_blocks D lo fuel ctx func PG G tn s /\
     run_blocks fuel ctx func s = IntRet ir t ==>
     x NOTIN (SND (ghost_blocks fuel ctx func PG G tn s)).t_mem)

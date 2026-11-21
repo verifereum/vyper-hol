@@ -147,6 +147,17 @@ Proof
 QED
 
 
+Theorem effect_free_sources_projection:
+  !cx es s result s'.
+    ~supported_exprs_exists expr_effect_root es /\
+    eval_exprs cx es s = (result,s') ==>
+    s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+    s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>
+Proof
+  metis_tac[cj 6 effect_free_source_mutual]
+QED
+
+
 Theorem target_pure_source_mutual:
   (!tops e. supported_effect_free_expr tops e ==>
     !cx s r s'. eval_expr cx e s = (r,s') ==>
@@ -180,7 +191,12 @@ Proof
   simp[]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem target_pure_base_source_projection:
+  !bt tops cx s r s'.
+    supported_target_pure tops bt /\ ~supported_target_exists expr_effect_root bt /\
+    eval_base_place cx bt s = (r,s') ==>
+      s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+      s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
   rpt gen_tac
@@ -188,7 +204,8 @@ Proof
   >- (PairCases_on `p` >> simp[supported_target_pure_def, Once evaluate_def] >>
       rpt strip_tac >> drule lookup_global_state >> strip_tac >>
       gvs[evaluation_state_component_equality]) >>
-  simp[supported_target_pure_def, Once evaluate_def] >> rpt strip_tac
+  simp[supported_target_pure_def, supported_expr_exists_def,
+       Once evaluate_def] >> rpt strip_tac
   >- (gvs[bind_def, get_scopes_def, type_check_def, assert_def,
           ignore_bind_def, return_def, raise_def, AllCaseEqs()]) >>
   gvs[bind_def, AllCaseEqs()] >>
@@ -197,19 +214,8 @@ Proof
   imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
   gvs[raise_def] >>
   first_x_assum (drule_all_then assume_tac) >>
-  gvs[evaluation_state_component_equality] >>
-  drule (cj 1 target_pure_source_mutual) >>
-  disch_then drule >> simp[evaluation_state_component_equality]
-QED
-*)
-Theorem target_pure_base_source_projection:
-  !bt tops cx s r s'.
-    supported_target_pure tops bt /\ ~supported_target_exists expr_effect_root bt /\
-    eval_base_place cx bt s = (r,s') ==>
-      s' with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
-      s with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>
-Proof
-  cheat
+  imp_res_tac (REWRITE_RULE [expr_has_effect_def] effect_free_source_projection) >>
+  gvs[evaluation_state_component_equality]
 QED
 
 Theorem target_pure_base_source_frame:

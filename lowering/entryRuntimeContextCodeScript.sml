@@ -16,18 +16,3 @@ Proof
   drule_all lower_vyper_runtime_unit_no_dalloca >>
   simp[EVERY_MEM, EXISTS_MEM] >> metis_tac[]
 QED
-
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >> irule context_without_dalloca_fmp_room >> simp[] >>
-  qpat_x_assum `MEM func _` kall_tac >>
-  gen_tac >> strip_tac >> drule_all entry_runtime_context_no_dalloca >> simp[]
-QED
-*)
-Theorem entry_runtime_context_fmp_room:
-  supported_program tops /\ lower_vyper_runtime_unit tops pol = SOME unit /\
-  MEM func unit.cu_context.ctx_functions ==>
-  fmp_room unit.cu_context func s
-Proof
-  cheat
-QED

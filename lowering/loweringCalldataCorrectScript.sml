@@ -5,6 +5,7 @@ Ancestors
   sourceUnitExitSafe ptrDiscipline vyperCalldata
   dispatchedCallAssembly dispatchedSelectedEndpoint gasShadowRunLowering
   loweringShapeProps calldataNoneEntryController calldataNoneDecoder acceptedContextPhi
+  entryJointRevertExit compileVyper fragGasOriginPtr entryDispatchPtr
 
 (* The call a contract makes of raw calldata: the external entry it
    dispatches to and the arguments it decodes (vyperCalldata), including the
@@ -147,14 +148,18 @@ QED
 (* S1, calldata that dispatches to nothing: no fallback, a short head, or a
    failed decode.  The entry reverts with empty returndata before any
    function body runs. *)
-Theorem lower_vyper_runtime_unit_reverts:
+Theorem lower_vyper_runtime_unit_reverts_legacy[local]:
   !tops rpolicy unit am tx vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
-    initial_venom_state_rel tops am tx vs
+    initial_venom_state_rel tops am tx vs /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254)
     ==>
     ?func s G' tn'.
       unit.cu_context.ctx_entry = SOME "__entry" /\
@@ -196,6 +201,85 @@ Proof
      qpat_assum `!id. first.cs_next_id <= id ==> _`
        (drule_then (fs o single)))) >>
   metis_tac[]
+QED
+
+(* GATE_ADMISSION: held, external defaults on the reject path *)
+Theorem grouped_runtime_unit_reject_origin:
+  !tops rpolicy unit am tx vs.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\ source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
+    initial_venom_state_rel tops am tx vs /\
+    EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      vs.vs_fmp = vs.vs_initial_fmp /\
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) ==>
+    ?func s G' tn' marks.
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      fn_entry_label func = SOME "__entry" /\
+      s.vs_returndata = [] /\
+      entry_prov func
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                    vs_inst_idx := 0|>) FEMPTY = FEMPTY /\
+      entry_taint_vars func
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                    vs_inst_idx := 0|>) entry_taint = entry_taint /\
+      (!D. gas_origin_ptr_path (D,0,EMPTY,unit.cu_context,func,[])
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                    vs_inst_idx := 0|>,FEMPTY,entry_taint)
+        marks (Abort Revert_abort s,G',tn'))
+Proof
+  cheat
+QED
+
+Theorem lower_vyper_runtime_unit_reverts:
+  !tops rpolicy unit am tx vs.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
+    initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254)
+    ==>
+    ?func s G' tn' n.
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      fn_entry_label func = SOME "__entry" /\
+      s.vs_returndata = [] /\
+      (?fuel. run_context fuel unit.cu_context vs = Abort Revert_abort s) /\
+      gas_path_mem unit.cu_context func
+        (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                    vs_inst_idx := 0 |>) n (Abort Revert_abort s) /\
+      (!D. gas_path_ptr D 0 unit.cu_context func [] FEMPTY entry_taint
+             (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                         vs_inst_idx := 0 |>) n G' tn' (Abort Revert_abort s)) /\
+      (!D fuel. ptr_safe_blocks D 0 fuel unit.cu_context func [] FEMPTY entry_taint
+                  (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                              vs_inst_idx := 0 |>))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `vs.vs_fmp = vs.vs_initial_fmp` by fs[initial_venom_state_rel_def] >>
+  Cases_on `EXISTS external_has_defaults (FST (classify_functions tops))`
+  >- (qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`] mp_tac
+        grouped_runtime_unit_reject_origin >>
+      impl_tac >- (asm_rewrite_tac[] >> metis_tac[]) >>
+      disch_then (qx_choosel_then [`func`, `s`, `G'`, `tn'`, `marks`] strip_assume_tac) >>
+      qspecl_then [`unit.cu_context`, `func`, `vs`, `s`, `G'`, `tn'`, `marks`]
+        mp_tac entry_joint_revert_exit >>
+      impl_tac >- asm_rewrite_tac[] >> strip_tac >>
+      qexistsl [`func`, `s`, `G'`, `tn'`, `LENGTH marks`] >>
+      asm_rewrite_tac[] >> metis_tac[]) >>
+  qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`] mp_tac
+    lower_vyper_runtime_unit_reverts_legacy >>
+  impl_tac >- asm_rewrite_tac[] >>
+  disch_then (qx_choosel_then [`func`, `s`, `G'`, `tn'`] strip_assume_tac) >>
+  qexistsl [`func`, `s`, `G'`, `tn'`, `0`] >> asm_rewrite_tac[] >> metis_tac[]
 QED
 
 (* S3 at the marks of S1's certificate (lower_vyper_runtime_unit_correct_dispatched),
@@ -250,9 +334,9 @@ Theorem lower_vyper_runtime_unit_reverts_memory_ok:
     w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
     fn_entry_label func = SOME "__entry" /\
-    gas_path_mem unit.cu_context func
+    (?n. gas_path_mem unit.cu_context func
       (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                  vs_inst_idx := 0 |>) 0 (Abort Revert_abort s) /\
+                  vs_inst_idx := 0 |>) n (Abort Revert_abort s)) /\
     (!D fuel. ptr_safe_blocks D 0 fuel unit.cu_context func [] FEMPTY
                 entry_taint
                 (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";

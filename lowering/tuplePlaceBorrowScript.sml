@@ -1,12 +1,17 @@
 (* Borrowed tuple bytes: pointer evaluation is distinct from writes. *)
 Theory tuplePlaceBorrow
 Ancestors
+  supportedExprTraverse
   tuplePlaceSnapshot tuplePlaceSource supportedTargets bodySimAugPlaceScopes
   vyperPlaceFrames vyperInterpreter vyperState vyperMisc vyperValue
   vyperScopePreservation vyperPlaceStatePreservation exprSimSource loweringPosts
   targetPlaceLive
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem tuple_place_supported_target_scopes:
+  !bt tops cx es res ee.
+    EVERY (supported_expr tops) (target_indices bt) /\
+    EVERY (\e. ~supported_expr_exists expr_effect_root e) (target_indices bt) /\
+    eval_base_place cx bt es = (res,ee) ==> ee.scopes = es.scopes
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >> rpt gen_tac
   >- (simp[Once evaluate_def, get_scopes_def, bind_def, ignore_bind_def,
@@ -20,7 +25,9 @@ Proof
       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
       strip_tac >> gvs[supportedExprsTheory.target_indices_def] >>
       imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
-      imp_res_tac aug_place_supported_expr_scopes >>
+      imp_res_tac (REWRITE_RULE [expr_has_effect_def]
+        targetPureSourceFrameTheory.effect_free_source_projection) >>
+      fs[evaluation_state_component_equality] >>
       rpt (qpat_x_assum `_ = _ with storage_trace := _` (fn th => ONCE_REWRITE_TAC [th])) >>
       gvs[] >> metis_tac[])
   >> (qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
@@ -31,15 +38,6 @@ Proof
       imp_res_tac extend_place_state >>
       rpt (qpat_x_assum `_ = _ with storage_trace := _` (fn th => ONCE_REWRITE_TAC [th])) >>
       gvs[] >> metis_tac[])
-QED
-*)
-Theorem tuple_place_supported_target_scopes:
-  !bt tops cx es res ee.
-    EVERY (supported_expr tops) (target_indices bt) /\
-    EVERY (\e. ~supported_expr_exists expr_effect_root e) (target_indices bt) /\
-    eval_base_place cx bt es = (res,ee) ==> ee.scopes = es.scopes
-Proof
-  cheat
 QED
 
 (* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)

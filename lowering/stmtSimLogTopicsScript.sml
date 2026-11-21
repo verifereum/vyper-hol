@@ -9,6 +9,20 @@ Ancestors
   venomInst freshWrites words string finite_map list ASCIInumbers supportedTypes
   vyperTyping vyperValue exprSimLiteralBuffer byte exprSimOps
 
+Theorem supported_scalar_word_or_bytestring:
+  supported_scalar_type ty ==> is_word_type ty \/ is_bytestring_type ty
+Proof
+  Cases_on `ty` >>
+  simp[supported_scalar_type_def, supported_word_type_def,
+       supported_string_type_def, is_word_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[supported_word_type_def, supported_string_type_def,
+       is_word_type_def, is_bytestring_type_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[supported_word_type_def, supported_string_type_def,
+       is_word_type_def, is_bytestring_type_def]
+QED
+
 Theorem split_log_ops_select:
   !xs flags. LENGTH flags = LENGTH xs ==>
     FST (split_log_ops xs flags) =

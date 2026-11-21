@@ -67,7 +67,7 @@ QED
 Theorem run_venom_pipeline_fuel:
   !D lo rpolicy unit out vs_out fmp.
     o1_pipeline rpolicy unit = SOME out /\
-    o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+    o1_source_unit_ok unit /\
     unit_entry_no_params unit /\
     unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
@@ -89,12 +89,6 @@ Theorem run_venom_pipeline_fuel:
 Proof
   rpt strip_tac >>
   `fmp_free_ctx unit.cu_context` by (irule source_fmp_free >> fs[]) >>
-  `EVERY pre_fmp_ops unit.cu_context.ctx_functions /\
-   ~ctx_has_dalloca unit.cu_context` by
-    (simp[EVERY_MEM] >>
-     metis_tac[source_pre_fmp_ops]) >>
-  (* At an input state whose free-memory pointer is its initial one, no
-     reachable state moves it: the raw phase's FMP facts hold. *)
   `!vi. vi.vs_fmp = vi.vs_initial_fmp /\
         raw_unit_memory_ok unit.cu_context vi /\
         ptr_discipline lo unit.cu_context vi /\
@@ -104,15 +98,8 @@ Proof
         o1_pre_walk_inv D unit.cu_context vi` by
     (rpt strip_tac >>
      `mem_inv raw_mem_ok unit.cu_context vi` by
-       (simp[raw_unit_memory_ok_mem_inv] >> rpt gen_tac >> strip_tac >>
-        drule raw_reachable_fmp_fixed >> simp[] >> strip_tac >>
-        drule raw_reachable_initial_fmp >> strip_tac >>
-        `inst.inst_opcode <> DALLOCA` by
-          (`EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)` by
-             (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >>
-              metis_tac[]) >>
-           imp_res_tac EVERY_active_inst >> gvs[]) >>
-        simp[dalloca_no_wrap_def]) >>
+       (qpat_x_assum `raw_unit_memory_ok _ _` mp_tac >>
+        simp[raw_unit_memory_ok_def, mem_inv_def, raw_mem_ok_def]) >>
      `o1_src_inv D unit.cu_context vi` by
        (fs[o1_src_inv_def] >> metis_tac[]) >>
      irule o1_source_pre_walk_inv >> simp[]) >>
@@ -140,7 +127,7 @@ QED
 Theorem run_venom_pipeline_correct:
   !D lo rpolicy unit out vs_out fmp.
     o1_pipeline rpolicy unit = SOME out /\
-    o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
+    o1_source_unit_ok unit /\
     unit_entry_no_params unit /\
     unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\

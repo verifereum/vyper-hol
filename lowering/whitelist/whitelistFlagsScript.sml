@@ -95,25 +95,28 @@ Proof
   gvs[supported_word_type_def, evaluate_type_def]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  rw[supported_scalar_type_def] >> TRY (metis_tac[word_or_flag_assignable]) >>
-  Cases_on `ty` >> gvs[supported_string_type_def, assignable_type_def]
-QED
-*)
 Theorem scalar_or_flag_assignable:
   !tenv ty.
     (supported_scalar_type ty \/ ?n. ty = FlagT n) /\
     well_formed_type tenv ty ==>
     assignable_type tenv ty
 Proof
-  cheat
+  rw[supported_scalar_type_def] >> TRY (metis_tac[word_or_flag_assignable]) >>
+  Cases_on `ty` >>
+  gvs[supported_string_type_def, assignable_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  gvs[supported_string_type_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >> gvs[supported_string_type_def]
 QED
 
 (* ===== Storage type fit ===== *)
 
 (* A flag fits only itself: arg_type_fits falls through to equality. *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem storage_scalar_fit_equal_flag:
+  !tops fuel t u.
+    (supported_scalar_type t \/ ?n. t = FlagT n) /\
+    supported_nested_type supported_full_word_type fuel tops u /\
+    arg_type_fits t u ==> t = u
 Proof
   rpt gen_tac >> Cases_on `?n. t = FlagT n`
   >- (gvs[] >> Cases_on `u` >> simp[arg_type_fits_def]) >>
@@ -132,15 +135,6 @@ Proof
   rpt strip_tac >> gvs[] >>
   TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
   gvs[arg_type_fits_def, supported_word_type_def, supported_string_type_def]
-QED
-*)
-Theorem storage_scalar_fit_equal_flag:
-  !tops fuel t u.
-    (supported_scalar_type t \/ ?n. t = FlagT n) /\
-    supported_nested_type supported_full_word_type fuel tops u /\
-    arg_type_fits t u ==> t = u
-Proof
-  cheat
 QED
 
 Theorem storage_scalars_fit_equal_flag:

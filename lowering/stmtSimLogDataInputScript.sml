@@ -55,12 +55,41 @@ Proof
   metis_tac[]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem log_flag_memory_input[local]:
+  evaluate_type env (FlagT id) = SOME tv /\
+  value_has_type tv v /\ val_in_memory tv v p mem ==>
+  ?av. vyper_to_abi env (FlagT id) v = SOME av /\
+    abi_encoder_input (type_to_abi_enc_info sf ce (FlagT id))
+      (vyper_to_abi_type env (FlagT id)) av p
+      (type_memory_bytes ce (FlagT id)) mem
+Proof
+  strip_tac >>
+  `is_word_type (FlagT id)` by simp[is_word_type_def] >>
+  drule_all val_in_memory_word >> strip_tac >>
+  drule_all (cj 1 vyperTypeABITheory.vyper_to_abi_total) >> strip_tac >>
+  drule_all vyper_to_abi_word_enc >> strip_tac >>
+  qpat_x_assum `evaluate_type _ _ = _` mp_tac >>
+  rw[Once evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `v` >> gvs[value_has_type_def, Once vyper_to_abi_def] >>
+  `n < 2 ** 256` by
+    (`2 ** m <= 2 ** 256` by (irule EXP_BASE_LEQ_MONO_IMP >> simp[]) >>
+     metis_tac[LESS_LESS_EQ_TRANS]) >>
+  gvs[Once type_to_abi_enc_info_def, type_memory_bytes_def,
+      abi_encoder_input_copy_iff, mem_bytes_at_word_eq, valid_int_bound_def]
+QED
+
+Theorem log_scalar_memory_input:
+  supported_scalar_type ty /\ evaluate_type env ty = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\ val_in_memory tv v p mem /\
+  type_memory_bytes ce ty < dimword (:256) ==>
+  ?av. vyper_to_abi env ty v = SOME av /\
+    abi_encoder_input (type_to_abi_enc_info sf ce ty)
+      (vyper_to_abi_type env ty) av p (type_memory_bytes ce ty) mem
 Proof
   rpt strip_tac >> Cases_on `supported_word_type ty`
   >- (drule_all log_word_memory_input >> simp[]) >>
-  `supported_string_type ty` by gvs[supported_scalar_type_def] >>
-  Cases_on `ty` >> gvs[supported_string_type_def] >>
+  Cases_on `ty` >> gvs[supported_scalar_type_def, supported_string_type_def]
+  >~ [`FlagT _`] >- (drule_all log_flag_memory_input >> simp[]) >>
   rename1 `BaseT bt` >> Cases_on `bt` >> gvs[supported_string_type_def]
   >~ [`BytesT bound`] >- (Cases_on `bound` >>
       gvs[supported_string_type_def, evaluate_type_def, AllCaseEqs()] >>
@@ -75,22 +104,18 @@ Proof
   simp[type_memory_bytes_def, type_memory_size_def,
        vfmConstantsTheory.word_size_def, vyperMiscTheory.n2w_o_ORD_def]
 QED
-*)
-Theorem log_scalar_memory_input:
-  supported_scalar_type ty /\ evaluate_type env ty = SOME tv /\
-  value_has_type tv v /\ val_wf tv v /\ val_in_memory tv v p mem /\
-  type_memory_bytes ce ty < dimword (:256) ==>
-  ?av. vyper_to_abi env ty v = SOME av /\
-    abi_encoder_input (type_to_abi_enc_info sf ce ty)
-      (vyper_to_abi_type env ty) av p (type_memory_bytes ce ty) mem
-Proof
-  cheat
-QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem log_scalar_abi_metadata:
+  supported_scalar_type ty ==>
+  is_abi_dynamic sf ty = is_dynamic (vyper_to_abi_type env ty) /\
+  abi_embedded_static_size sf ty = abi_member_head_size (vyper_to_abi_type env ty) /\
+  (~is_dynamic (vyper_to_abi_type env ty) ==>
+    static_length (vyper_to_abi_type env ty) = type_memory_bytes ce ty)
 Proof
   Cases_on `ty` >> simp[supported_scalar_type_def, supported_word_type_def,
-    supported_string_type_def] >>
+    supported_string_type_def, is_abi_dynamic_def, abi_embedded_static_size_def,
+    abi_static_size_def, abi_member_head_size_def, vyper_to_abi_type_def,
+    is_dynamic_def, static_length_def, type_memory_bytes_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
   simp[supported_word_type_def, supported_string_type_def,
     is_abi_dynamic_def, abi_embedded_static_size_def, abi_static_size_def,
@@ -102,16 +127,6 @@ Proof
     abi_member_head_size_def, vyper_to_abi_type_def, vyper_base_to_abi_type_def,
     is_dynamic_def, static_length_def, type_memory_bytes_def] >>
   rpt strip_tac >> gvs[]
-QED
-*)
-Theorem log_scalar_abi_metadata:
-  supported_scalar_type ty ==>
-  is_abi_dynamic sf ty = is_dynamic (vyper_to_abi_type env ty) /\
-  abi_embedded_static_size sf ty = abi_member_head_size (vyper_to_abi_type env ty) /\
-  (~is_dynamic (vyper_to_abi_type env ty) ==>
-    static_length (vyper_to_abi_type env ty) = type_memory_bytes ce ty)
-Proof
-  cheat
 QED
 
 Theorem log_data_layout_inputs:
@@ -207,20 +222,15 @@ Proof
   gvs[dimword_def]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem log_scalar_memory_positive[local]:
+  supported_scalar_type ty ==> 0 < type_memory_bytes ce ty
 Proof
   Cases_on `ty` >> simp[supported_scalar_type_def, supported_word_type_def,
-    supported_string_type_def] >>
+    supported_string_type_def, type_memory_bytes_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
   simp[supported_word_type_def, supported_string_type_def, type_memory_bytes_def] >>
   rename1 `BytesT bound` >> Cases_on `bound` >>
   simp[supported_word_type_def, supported_string_type_def, type_memory_bytes_def]
-QED
-*)
-Theorem log_scalar_memory_positive[local]:
-  supported_scalar_type ty ==> 0 < type_memory_bytes ce ty
-Proof
-  cheat
 QED
 
 Theorem log_tuple_length_bound[local]:

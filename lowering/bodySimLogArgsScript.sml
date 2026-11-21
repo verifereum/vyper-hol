@@ -3,6 +3,7 @@ Theory bodySimLogArgs
 Ancestors
   allocLimits allocLimitsProps
   exprSimSource bodyExprPreFacts exprSimHypsDefs list bodySim stmtSimLog exprSimHyps
+  bodyStorageCases
   compileEnv compileVyper supportedStmts supportedDecls supportedTypes
   supportedExprs supportedExprTraverse supportedStmtTraverse vyperEvent vyperInterpreter
   vyperState vyperTypeSystem supportedProgram supportedNames vyperContext
@@ -11,9 +12,6 @@ Ancestors
   vyperValue valueEncodingProps placeMemoryTypeInterfaces structFieldsProps exprSimProps arithmetic
   aggregateEvaluatedLayout valueCopyBytes vyperEventArgCompat
   vyperTypeExprResult retAbiPlanProps abiDecoderMembers finite_map pred_set
-
-(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
-val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
 (* Expression readiness comes directly from exprSimSource; the statement
    dispatcher is not needed here. *)
@@ -306,7 +304,20 @@ QED
 
 (* ===== The arguments ===== *)
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem log_arg_body_pre[local]:
+  !tops ctx cenv cx env e calls es.
+    body_stmt_safe tops (Expr e) /\ ~is_extcode e /\
+    body_inv tops ctx cenv cx /\ supported_effect_free_expr tops e /\
+    ~supported_expr_exists (const_name_root cx) e /\
+    well_typed_expr env e /\
+    ~supported_expr_exists
+       (\e. ~is_extcode e /\
+            ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+    call_evaluation_safe cx (int_calls_expr e ++ calls) /\
+    (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+              occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es ==>
+    expr_body_pre cenv cx env e es
 Proof
   rpt strip_tac >>
   qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
@@ -318,25 +329,8 @@ Proof
     fs[body_inv_def] >>
   `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
   qspecl_then [`cenv`, `cx`, `env`, `e`, `es`, `calls`]
-    irule_body_pre stmt_expr_body_pre >>
+    irule stmt_expr_body_pre >>
   simp[] >> metis_tac[supported_pure_expr_effect_free, no_effect_call_operands]
-QED
-*)
-Theorem log_arg_body_pre[local]:
-  !tops ctx cenv cx env e calls es.
-    body_stmt_safe tops (Expr e) /\ ~is_extcode e /\
-    body_inv tops ctx cenv cx /\ supported_pure_expr tops e /\
-    well_typed_expr env e /\
-    ~supported_expr_exists
-       (\e. ~is_extcode e /\
-            ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
-    call_evaluation_safe cx (int_calls_expr e ++ calls) /\
-    (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
-              occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es ==>
-    expr_body_pre cenv cx env e es
-Proof
-  cheat
 QED
 
 Theorem body_log_snapshot_expr_pre:
@@ -364,7 +358,8 @@ Theorem body_log_args_ready:
   !tops ctx func cenv cx env args.
     EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) args /\
     body_inv tops ctx cenv cx /\ body_exprs_ok cx args /\
-    supported_pure_exprs tops args /\ well_typed_exprs env args /\
+    supported_effect_free_exprs tops args /\ well_typed_exprs env args /\
+    ~supported_exprs_exists (const_name_root cx) args /\
     ~supported_exprs_exists
        (\e. ~is_extcode e /\
             ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
@@ -375,12 +370,14 @@ Theorem body_log_args_ready:
 Proof
   Induct_on `args` >> simp[log_args_ready_def] >>
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `supported_pure_exprs _ _` (strip_assume_tac o
-    SIMP_RULE std_ss [Once supported_pure_expr_def]) >>
+  qpat_x_assum `supported_effect_free_exprs _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [Once supported_effect_free_expr_def]) >>
+  qpat_x_assum `~supported_exprs_exists (const_name_root _) _`
+    (strip_assume_tac o SIMP_RULE std_ss [Once supported_expr_exists_def, DE_MORGAN_THM]) >>
   qpat_x_assum `well_typed_exprs _ _` (strip_assume_tac o
     SIMP_RULE std_ss [Once well_typed_expr_def]) >>
-  qpat_x_assum `~supported_exprs_exists _ _` (strip_assume_tac o
-    SIMP_RULE std_ss [Once supported_expr_exists_def, DE_MORGAN_THM]) >>
+  qpat_x_assum `~supported_exprs_exists (\e. ~is_extcode e /\ _) (h::args)`
+    (strip_assume_tac o SIMP_RULE std_ss [Once supported_expr_exists_def, DE_MORGAN_THM]) >>
   qpat_x_assum `call_evaluation_safe _ _` (assume_tac o
     SIMP_RULE std_ss [Once int_calls_expr_def]) >>
   qpat_x_assum `!target. supported_exprs_exists _ _ ==> _` (strip_assume_tac o
@@ -405,37 +402,27 @@ QED
 
 (* Supported pure expressions make no calls and pop nothing, so none can
    mutate memory or storage. *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem supported_effect_free_expr_no_mutate:
+  (!tops e. supported_effect_free_expr tops e ==> ~expr_can_mutate cenv e) /\
+  (!tops es. supported_effect_free_exprs tops es ==> ~exprs_can_mutate cenv es) /\
+  (!tops fs. supported_effect_free_fields tops fs ==> ~named_exprs_can_mutate cenv fs) /\
+  (!tops e. supported_effect_free_place_expr tops e ==> ~expr_can_mutate cenv e)
 Proof
-  ho_match_mp_tac supported_pure_expr_ind >>
-  rw[supported_pure_expr_def, expr_can_mutate_def] >>
-  gvs[supported_pure_expr_def, expr_can_mutate_def]
-QED
-*)
-Theorem supported_pure_expr_no_mutate:
-  (!tops e. supported_pure_expr tops e ==> ~expr_can_mutate cenv e) /\
-  (!tops es. supported_pure_exprs tops es ==> ~exprs_can_mutate cenv es) /\
-  (!tops fs. supported_pure_fields tops fs ==> ~named_exprs_can_mutate cenv fs) /\
-  (!tops e. supported_place_expr tops e ==> ~expr_can_mutate cenv e)
-Proof
-  cheat
+  ho_match_mp_tac supported_effect_free_expr_ind >>
+  rw[supported_effect_free_expr_def, expr_can_mutate_def] >>
+  gvs[supported_effect_free_expr_def, expr_can_mutate_def]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  Induct >> simp[] >> rpt gen_tac >>
-  simp[Once supported_pure_expr_def, Once well_typed_expr_def] >> strip_tac >>
-  irule lowered_value_type_bytestring_iff >> conj_tac
-  >- (rpt gen_tac >> strip_tac >> gvs[supported_pure_expr_def]) >>
-  qexists_tac `env` >> simp[]
-QED
-*)
-Theorem supported_pure_exprs_bytestring_iff:
-  !es. supported_pure_exprs tops es /\ well_typed_exprs env es ==>
+Theorem supported_effect_free_exprs_bytestring_iff:
+  !es. supported_effect_free_exprs tops es /\ well_typed_exprs env es ==>
     EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
                is_bytestring_type (expr_type e)) es
 Proof
-  cheat
+  Induct >> simp[] >> rpt gen_tac >>
+  simp[Once supported_effect_free_expr_def, Once well_typed_expr_def] >> strip_tac >>
+  irule lowered_value_type_bytestring_iff >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> gvs[supported_effect_free_expr_def]) >>
+  qexists_tac `env` >> simp[]
 QED
 
 Theorem body_log_assignable_abi_plan:

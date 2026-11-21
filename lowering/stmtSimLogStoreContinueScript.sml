@@ -51,11 +51,14 @@ Proof
   simp[abi_footprint_disjoint_def] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem log_store_scalar_safe[local]:
+  supported_scalar_type ty /\ compile_store_memory ce src dst ty ty st = ((),final) ==>
+  inst_extends st final /\ same_blocks st final /\
+  EVERY (\i. log_encode_safe_opcode i.inst_opcode) (emitted_insts st final)
 Proof
   rpt strip_tac >>
   `is_word_type ty \/ is_bytestring_type ty` by
-    (drule log_scalar_topic_shape >>
+    (drule supported_scalar_word_or_bytestring >>
      Cases_on `is_bytestring_type ty` >> simp[]) >>
   Cases_on `is_word_type ty` >>
   qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _` mp_tac >>
@@ -66,14 +69,6 @@ Proof
   simp[same_blocks_def, inst_extends_def, emitted_insts_def] >>
   pure_rewrite_tac [GSYM APPEND_ASSOC] >>
   simp[DROP_LENGTH_APPEND, IS_PREFIX_APPEND, log_encode_safe_opcode_def, mk_inst_def]
-QED
-*)
-Theorem log_store_scalar_safe[local]:
-  supported_scalar_type ty /\ compile_store_memory ce src dst ty ty st = ((),final) ==>
-  inst_extends st final /\ same_blocks st final /\
-  EVERY (\i. log_encode_safe_opcode i.inst_opcode) (emitted_insts st final)
-Proof
-  cheat
 QED
 
 Theorem log_store_data_safe:

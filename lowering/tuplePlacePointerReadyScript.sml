@@ -1,6 +1,7 @@
 (* Probe the proposed semantic-purity adapter before using same-state geometry. *)
 Theory tuplePlacePointerReady
 Ancestors
+  vyperEvalExprPreservesScopesDom
   supportedTargets targetPlaceLive vyperPureExpr tuplePlaceReachable tuplePlaceHead
   bodySimAugPlaceStore tupleMemoryLayout tuplePlaceZero tuplePlaceBounds
   aggregateEvaluatedLayout bodyMemoryDefs
@@ -61,15 +62,6 @@ Proof
 QED
 
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >>
-  drule_all tuplePlaceBorrowTheory.tuple_place_supported_target_scopes >> strip_tac >>
-  drule tuplePlaceSnapshotTheory.tuple_place_target_frame >> strip_tac >>
-  `MAP FDOM es.scopes = MAP FDOM ee.scopes` by simp[] >>
-  drule_all wordArgsPtrTheory.wb_frame_local_regions >> metis_tac[]
-QED
-*)
 Theorem tuple_place_pointer_local_regions:
   stmt_state_rel H0 ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sp /\
   EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
@@ -77,7 +69,10 @@ Theorem tuple_place_pointer_local_regions:
   (!n b sz. local_region cenv ee.scopes s n b sz <=>
             local_region cenv es.scopes s0 n b sz)
 Proof
-  cheat
+  strip_tac >>
+  drule eval_base_place_preserves_scopes_dom >> strip_tac >>
+  drule tuplePlaceSnapshotTheory.tuple_place_target_frame >> strip_tac >>
+  drule_all wordArgsPtrTheory.wb_frame_local_regions >> metis_tac[]
 QED
 
 Theorem tuple_place_pointer_snapshot:

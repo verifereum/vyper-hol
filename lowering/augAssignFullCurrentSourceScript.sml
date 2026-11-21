@@ -2,43 +2,18 @@
    The saved current value is not identified with a refreshed immutable value. *)
 Theory augAssignFullCurrentSource
 Ancestors
+  targetLocalLive stmtSimForArrayFrame targetPlaceSim exprSimHypsDefs
   stmtSimAugAssignPlaceMemory bodyImmutableAugAssignFacts bodySimStmtFacts
   bodySimAugPlaceLoad bodySimAugPlaceLive bodySimAugPlaceScopes
   vyperStorageTrace vyperStoragePlaceRegion exprSimSource
   supportedStmts vyperState list
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >>
-  `stc = st /\ stt = st` by
-    metis_tac[read_place_state, place_type_value_state] >> gvs[] >>
-  `expr_sim_inv cenv cx env ee` by
-    metis_tac[bodySimStmtFactsTheory.expr_body_pre_eval] >>
-  drule_all aug_place_rhs_memory_live >> strip_tac >>
-  `supported_expr tops e` by
-    metis_tac[supported_augassign_contract] >>
-  `ee.scopes = st.scopes` by
-    (qpat_x_assum `bind _ _ _ = _` mp_tac >>
-     simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
-     metis_tac[aug_place_supported_expr_scopes, read_result_state]) >>
-  `subscripts_type entry.type path = SOME ptv` by
-    (qpat_x_assum `place_type_value _ _ _ = _` mp_tac >>
-     gvs[place_type_value_def, get_scopes_def, bind_def,
-         lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
-     Cases_on `subscripts_type entry.type path` >>
-     simp[return_def, raise_def]) >>
-  simp[] >>
-  metis_tac[aug_place_store_entry_types]
-QED
-*)
 Theorem augassign_memory_current_source_ready:
-  expr_body_pre cenv cx env e st /\
-  supported_stmt tops bindings (AugAssign ty bt bop e) /\
-  supported_target_info tops bindings bt = SOME info /\
+  target_pre cenv cx env bt es /\ type_place_target env bt = SOME (Type ty) /\
+  ~aug_assign_overlap cenv bt e /\ expr_body_pre cenv cx env e st /\
   eval_target_place cx bt es = (INL (MemoryPlace id path),st) /\
-  read_place cx (MemoryPlace id path) st = (INL cur,stc) /\
-  place_type_value cx (MemoryPlace id path) stc = (INL ptv,stt) /\
-  bind (eval_expr cx e) (read_result cx) stt = (INL rhs,ee) ==>
+  place_type_value cx (MemoryPlace id path) st = (INL ptv,st) /\
+  bind (eval_expr cx e) (read_result cx) st = (INL rhs,ee) ==>
   expr_sim_inv cenv cx env ee /\
   ?entry old. lookup_scopes id ee.scopes = SOME entry /\
     evaluate_subscripts entry.type entry.value path = INL old /\
@@ -46,7 +21,23 @@ Theorem augassign_memory_current_source_ready:
     (!t0. cenv.ce_var_type id = SOME t0 ==>
       evaluate_type (get_tenv cx) t0 = SOME entry.type)
 Proof
-  cheat
+  strip_tac >>
+  `expr_sim_inv cenv cx env ee` by metis_tac[expr_body_pre_eval] >>
+  `expr_sim_inv cenv cx env st` by fs[expr_body_pre_def] >>
+  `?entry. lookup_scopes id st.scopes = SOME entry /\
+           subscripts_type entry.type path = SOME ptv` by
+    (qpat_x_assum `place_type_value _ _ _ = _` mp_tac >>
+     Cases_on `lookup_scopes id st.scopes` >>
+     simp[place_type_value_def, get_scopes_def, bind_def, lift_option_type_def,
+          return_def, raise_def] >>
+     rename1 `lookup_scopes id st.scopes = SOME entry` >>
+     Cases_on `subscripts_type entry.type path` >>
+     simp[bind_def, return_def, raise_def]) >>
+  `target_root bt = NameTarget id` by
+    metis_tac[eval_target_place_memory_root, place_access_root] >>
+  drule_all local_target_live >> strip_tac >>
+  drule_all aug_place_rhs_memory_live >> strip_tac >>
+  simp[] >> metis_tac[aug_place_store_entry_types]
 QED
 
 Theorem augassign_immutable_current_source_ready:

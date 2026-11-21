@@ -4,6 +4,7 @@ Ancestors
   runtimeSymSrcGeneratorContracts runtimeSymSrcEmission exprCallBounds
   supportedExprTraverse supportedExprForms supportedExprs exprLowering
   context compileEnv venomInst memoryValueDefs typedCopyDomain list memLocDefs
+  exprLoweringProps
   builtinMisc builtinBytes builtinSimple emitHelper loweringShapeDefs
   runtimeSymSrcBuiltinByteSimple runtimeSymSrcBuiltinData runtimeSymSrcBinops
 
@@ -76,7 +77,9 @@ Resume runtime_sym_type_builtin_body[extract32]:
      EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op` by
     (rpt gen_tac >> strip_tac >> drule runtime_sym_generators_lower_value >>
      simp[runtime_sym_lower_value_clause_def] >> strip_tac >> first_x_assum irule >>
-     gvs[supported_expr_def, supported_exprs_exists_every] >> metis_tac[]) >>
+     goal_assum (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+     gvs[supported_exprs_exists_every] >>
+     simp[supportedExprsTheory.supported_expr_def]) >>
   qpat_x_assum `compile_type_builtin_dispatch_body _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[NoAsms, compile_type_builtin_dispatch_body_def] >>
   rpt (pairarg_tac >> simp[]) >>
@@ -138,33 +141,39 @@ Resume runtime_sym_type_builtin_body[convert]:
   first_x_assum (drule_all_then strip_assume_tac) >>
   simp[runtime_sym_value_def, mk_ptr_def, is_label_operand_def]
 QED
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
-  `?e bytes. args = [e] /\ ~ensure /\ mid = SOME bytes` by
-    (Cases_on `args` >> gvs[runtime_sym_type_builtin_domain, supported_type_builtin_form_def] >>
-     Cases_on `t` >> Cases_on `ensure` >> Cases_on `mid` >>
-     gvs[runtime_sym_type_builtin_domain, supported_type_builtin_form_def]) >>
-  gvs[] >>
+Resume runtime_sym_type_builtin_body[encode]:
   drule runtime_sym_generators_context >>
   disch_then (strip_assume_tac o SRULE [runtime_sym_context_clauses_def]) >>
   drule runtime_sym_generators_abi >>
-  disch_then (assume_tac o cj 1 o SRULE [runtime_sym_abi_clauses_def]) >>
-  `runtime_sym_expr_contract tops cfn ce (expr_type e) e` by simp[] >>
-  qpat_x_assum `runtime_sym_expr_contract _ _ _ _ _` mp_tac >>
-  disch_then (assume_tac o SRULE [runtime_sym_expr_contract_def]) >>
+  disch_then (strip_assume_tac o SRULE [runtime_sym_abi_clauses_def]) >>
   qpat_x_assum `compile_type_builtin_dispatch_body _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[NoAsms, compile_type_builtin_dispatch_body_def] >>
-  IF_CASES_TAC >> pure_asm_rewrite_tac[]
-  >- suspend "encode_word"
-  >> suspend "encode_memory"
-*)
-Resume runtime_sym_type_builtin_body[encode]:
-  cheat
+  Cases_on `LENGTH args = 1 /\ ~ensure`
+  >- (qpat_assum `LENGTH args = 1 /\ ~ensure` (fn th => simp[NoAsms, th]) >>
+      `?e. args = [e]` by
+        (qpat_assum `LENGTH args = 1 /\ ~ensure` mp_tac >>
+         Cases_on `args` >> simp[NoAsms]) >>
+      qpat_x_assum `LENGTH args = 1 /\ ~ensure` strip_assume_tac >>
+      qpat_x_assum `args = [_]` SUBST_ALL_TAC >> simp[NoAsms] >>
+      `supported_pure_expr tops e` by
+        (qpat_assum `EVERY (supported_pure_expr tops) [e]` mp_tac >> simp[NoAsms]) >>
+      `runtime_sym_expr_contract tops cfn ce (expr_type e) e` by
+        (first_x_assum irule >> simp[]) >>
+      qpat_x_assum `runtime_sym_expr_contract _ _ _ _ _`
+        (assume_tac o SRULE [runtime_sym_expr_contract_def]) >>
+      Cases_on `is_word_type (expr_type e)`
+      >- (qpat_assum `is_word_type (expr_type e)` (fn th => simp[NoAsms, th]) >>
+          suspend "encode_word") >>
+      qpat_assum `~is_word_type (expr_type e)` (fn th => simp[NoAsms, th]) >>
+      suspend "encode_memory") >>
+  qpat_assum `~(LENGTH args = 1 /\ ~ensure)` (fn th => simp[NoAsms, th]) >>
+  suspend "encode_tuple"
 QED
 
 Resume runtime_sym_type_builtin_body[encode_word]:
   `supported_expr tops e` by
     (qpat_assum `supported_pure_expr tops e` mp_tac >>
-     simp[NoAsms, supported_expr_def]) >>
+     simp[NoAsms, supportedExprsTheory.supported_expr_def]) >>
   `~supported_expr_exists is_self_code e` by
     (qpat_assum `~supported_exprs_exists is_self_code [e]` mp_tac >>
      simp[NoAsms, supported_exprs_exists_every]) >>
@@ -196,27 +205,71 @@ QED
 Resume runtime_sym_type_builtin_body[encode_memory]:
   `supported_expr tops e` by
     (qpat_assum `supported_pure_expr tops e` mp_tac >>
-     simp[NoAsms, supported_expr_def]) >>
+     simp[NoAsms, supportedExprsTheory.supported_expr_def]) >>
   `~supported_expr_exists is_self_code e` by
     (qpat_assum `~supported_exprs_exists is_self_code [e]` mp_tac >>
      simp[NoAsms, supported_exprs_exists_every]) >>
-  pairarg_tac >> first_assum (fn th => simp[NoAsms, th]) >>
-  pairarg_tac >> first_assum (fn th => simp[NoAsms, th]) >>
+  pairarg_tac >> qpat_assum `cfn _ _ _ _ = _` (fn th => simp[NoAsms, th]) >>
+  pairarg_tac >> qpat_assum `unwrap_value _ _ _ = _` (fn th => simp[NoAsms, th]) >>
   qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory encoded_pair` >>
   Cases_on `encoded_pair` >> simp[NoAsms, as_ptr_val_def] >>
   disch_then (CONJUNCTS_THEN2 (SUBST_ALL_TAC o SYM) (SUBST_ALL_TAC o SYM)) >>
   qpat_x_assum `Abbrev _` (assume_tac o SYM o SRULE [markerTheory.Abbrev_def]) >>
   `EVERY runtime_sym_inst (state_insts st1) /\ runtime_sym_value src_vv` by
     (first_x_assum (drule_at_then (Pat `cfn _ _ _ _ = _`) mp_tac) >>
-     simp[]) >>
+     impl_tac >-
+       (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, disj1_tac >> first_assum ACCEPT_TAC]) >>
+     simp[NoAsms]) >>
   first_x_assum (drule_all_then strip_assume_tac) >>
   first_x_assum (drule_all_then strip_assume_tac) >>
-  simp[runtime_sym_value_def, mk_ptr_def]
+  simp[NoAsms, runtime_sym_value_def, mk_ptr_def] >>
+  conj_tac >> first_assum ACCEPT_TAC
 QED
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8389 gate widening census (never lands)
-  `?e. args = [e] /\ ~unwrap` by
+Resume runtime_sym_type_builtin_body[encode_tuple]:
+  drule runtime_sym_generators_abi_encode_args >>
+  disch_then (assume_tac o SRULE [runtime_sym_abi_encode_args_clause_def]) >>
+  pairarg_tac >>
+  qpat_assum `compile_abi_encode_args _ _ _ _ = _` (fn th => simp[NoAsms, th]) >>
+  pairarg_tac >>
+  qpat_assum `compile_alloc_buffer _ _ = _` (fn th => simp[NoAsms, th]) >>
+  pairarg_tac >>
+  qpat_assum `compile_store_abi_tuple _ _ _ _ _ = _` (fn th => simp[NoAsms, th]) >>
+  qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory encoded_pair` >>
+  Cases_on `encoded_pair` >> simp[NoAsms, as_ptr_val_def] >>
+  disch_then (CONJUNCTS_THEN2 (SUBST_ALL_TAC o SYM) (SUBST_ALL_TAC o SYM)) >>
+  qpat_x_assum `Abbrev _` (assume_tac o SYM o SRULE [markerTheory.Abbrev_def]) >>
+  `EVERY runtime_sym_inst (state_insts st1) /\
+   EVERY (\op. ~is_label_operand op) vs` by
+    (first_x_assum (drule_at_then (Pat `compile_abi_encode_args _ _ _ _ = _`) mp_tac) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     simp[NoAsms]) >>
+  `LENGTH vs = LENGTH args` by
+    (qpat_assum `compile_abi_encode_args _ _ _ _ = _` (fn th =>
+       qspecl_then [`args`, `cfn`, `ce`, `s`] mp_tac compile_abi_encode_args_length >>
+       simp[NoAsms, th])) >>
+  `MAP FST (ZIP (vs,MAP (lowered_value_type ce) args)) = vs` by
+    (qpat_assum `LENGTH vs = LENGTH args` (fn th => simp[NoAsms, MAP_ZIP, th])) >>
+  `EVERY (\v. ~is_label_operand (FST v)) (ZIP (vs,MAP (lowered_value_type ce) args))` by
+    (qpat_assum `MAP FST (ZIP _) = vs` (fn projection =>
+       qpat_assum `EVERY _ vs` (fn ops =>
+         mp_tac (SUBS [SYM projection] ops))) >>
+     simp[NoAsms, EVERY_MAP]) >>
+  first_assum (drule_at_then (Pat `compile_alloc_buffer _ _ = _`) mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  rename1 `compile_store_abi_tuple _ _ _ _ _ = (u,st3)` >>
+  Cases_on `u` >>
+  first_assum (drule_at_then (Pat `compile_store_abi_tuple _ _ _ _ _ = _`) mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  first_assum (drule_at_then (Pat `lower_abi_encode _ _ _ _ _ _ = _`) mp_tac) >>
+  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  simp[NoAsms, runtime_sym_value_def, mk_ptr_def] >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume runtime_sym_type_builtin_body[decode]:
+  `?e. args = [e]` by
     (Cases_on `args` >> gvs[runtime_sym_type_builtin_domain, supported_type_builtin_form_def] >>
-     Cases_on `t` >> Cases_on `unwrap` >>
+     Cases_on `t` >>
      gvs[runtime_sym_type_builtin_domain, supported_type_builtin_form_def]) >>
   gvs[] >>
   drule runtime_sym_generators_context >>
@@ -238,12 +291,9 @@ QED
   qpat_x_assum `Abbrev _` (assume_tac o SYM o SRULE [markerTheory.Abbrev_def]) >>
   `EVERY runtime_sym_inst (state_insts st1) /\ runtime_sym_value data_vv` by
     (first_x_assum (drule_at_then (Pat `cfn _ _ _ _ = _`) mp_tac) >>
-     simp[] >> gvs[supported_exprs_exists_every, supported_expr_def]) >>
+     simp[] >> gvs[supported_exprs_exists_every, supportedExprsTheory.supported_expr_def]) >>
   first_x_assum (drule_all_then strip_assume_tac) >>
   first_x_assum (drule_all_then strip_assume_tac) >>
   simp[runtime_sym_value_def, mk_ptr_def]
-*)
-Resume runtime_sym_type_builtin_body[decode]:
-  cheat
 QED
 Finalise runtime_sym_type_builtin_body

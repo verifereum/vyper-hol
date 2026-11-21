@@ -132,7 +132,6 @@ Theorem stmt_expr_body_pre:
        (\e. ~is_extcode e /\
              ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
     ~is_extcode e /\
-    ~supported_expr_exists call_operands_effect_root e /\
     ~supported_expr_exists (const_name_root cx) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
@@ -166,7 +165,6 @@ Theorem stmt_expr_body_pre_alloc:
     ~supported_expr_exists (\e. ~is_extcode e /\ ~byte_widths_expr e) e /\
     alloc_limits_expr cenv e /\
     ~is_extcode e /\
-    ~supported_expr_exists call_operands_effect_root e /\
     ~supported_expr_exists (const_name_root cx) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
@@ -301,7 +299,7 @@ Theorem stmt_exprs_ok_agree:
     stmt_exprs_ok c = stmt_exprs_ok cenv
 Proof
   rpt strip_tac >> simp[FUN_EQ_THM, stmt_exprs_ok_def] >>
-  drule (cj 1 alloc_limits_stmt_struct_fields) >> simp[]
+  drule (cj 1 alloc_limits_stmt_struct_fields) >> fs[alloc_env_agree_def]
 QED
 
 Theorem return_buffer_ok_var_type[simp]:
@@ -313,6 +311,7 @@ QED
 
 Theorem decl_var_type_return_fields[simp]:
   !cenv s.
+    (decl_var_type cenv s).ce_modules = cenv.ce_modules /\
     (decl_var_type cenv s).ce_is_external = cenv.ce_is_external /\
     (decl_var_type cenv s).ce_raw_return = cenv.ce_raw_return /\
     return_buffer_ok (decl_var_type cenv s) = return_buffer_ok cenv
@@ -464,7 +463,8 @@ Theorem stmt_exprs_ok_flat:
               ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) s /\
      alloc_limits_stmt cenv s /\
      (stmt_valued_return s /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
-        return_buffer_ok cenv))
+        return_buffer_ok cenv) /\
+     ~supported_stmt_expr_exists (const_name_root_mods cenv.ce_modules) s)
 Proof
   rpt strip_tac >>
   `(\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) =
@@ -483,7 +483,8 @@ Theorem stmts_exprs_ok_thm:
        (\e. ~is_extcode e /\ ~byte_widths_expr e) ss /\
     alloc_limits_stmts cenv ss /\
     (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
-       return_buffer_ok cenv)
+       return_buffer_ok cenv) /\
+    ~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) ss
 Proof
   Induct >>
   simp[stmts_exprs_ok_def, supported_stmt_expr_exists_def, stmt_exprs_ok_def,

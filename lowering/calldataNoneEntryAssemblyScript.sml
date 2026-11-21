@@ -110,5 +110,7 @@ Proof
      irule gas_origin_ptr_path_trans >> qexistsl_tac [`G`,`p`,`tn`] >> simp[] >>
      irule gas_origin_ptr_path_trans >> qexistsl_tac [`H`,`t`,`u`] >> simp[]) >>
   simp[] >> qexistsl_tac [`s`,`G'`,`tn'`] >> simp[Abbr `e`] >>
-  irule entry_joint_revert_exit >> simp[]
+  qspecl_then [`unit.cu_context`, `func`, `vs`, `s`, `G'`, `tn'`, `[]`]
+    mp_tac entry_joint_revert_exit >>
+  simp[]
 QED

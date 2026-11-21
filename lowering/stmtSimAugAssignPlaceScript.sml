@@ -34,31 +34,6 @@ Ancestors
 Libs
   monadsyntax
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  simp[supported_expr_def, supported_pure_expr_def,
-       supported_effect_expr_def]
-QED
-*)
-Theorem aug_place_local_pop_index_unsupported:
-  !tops ty ety id key.
-    ~supported_expr tops (Subscript ty (Pop ety (NameTarget id)) key)
-Proof
-  cheat
-QED
-
-Theorem aug_place_nested_pop_target_unsupported:
-  !tops bindings ty ety id outer inner bop rhs.
-    ~supported_stmt tops bindings
-      (AugAssign ty
-        (SubscriptTarget (SubscriptTarget (NameTarget id) outer)
-          (Subscript ty (Pop ety (NameTarget id)) inner)) bop rhs)
-Proof
-  simp[supported_stmt_def, supported_aug_target_def,
-       supportedTargetsTheory.supported_target_info_def, aug_place_local_pop_index_unsupported,
-       supported_target_def]
-QED
-
 Theorem aug_place_read_memory_current:
   !entry path v.
     evaluate_subscripts entry.type entry.value path = INL v ==>

@@ -132,6 +132,9 @@ Theorem external_entry_registration_joint:
     calldata_encodes (type_env tops) tx.function_name (MAP SND args)
       tx.args vs.vs_call_ctx.cc_calldata /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, nr, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -344,6 +347,9 @@ Theorem external_entry_locked_joint:
     calldata_encodes (type_env tops) tx.function_name (MAP SND args)
       tx.args vs.vs_call_ctx.cc_calldata /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut,T,args,[],ret,fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -424,7 +430,6 @@ Theorem external_entry_locked_joint:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all selected_nonreentrant_lock_metadata >> strip_tac >>
-  drule_all registration_supported_no_dalloca >> strip_tac >>
   drule_all external_entry_registration_joint >>
   disch_then (qx_choosel_then
     [`pbody`,`lbl`,`cenv0`,`pos_args`,`min_cds`,`is_payable`,`nkey`,`ut'`,
@@ -524,6 +529,9 @@ Theorem external_entry_subst_consts_joint:
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\

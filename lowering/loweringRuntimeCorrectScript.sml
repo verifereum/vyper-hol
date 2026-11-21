@@ -403,7 +403,7 @@ val runtime_body_endpoint_tac =
       `FST (SND (SND (classify_functions tops))) = SOME fb` by
         (qpat_assum `classify_functions tops = _` (fn th => simp[th])) >>
       drule_all classified_fallback_source_alignment_nr >>
-      disch_then (CONJUNCTS_THEN2 SUBST_ALL_TAC assume_tac) >>
+      disch_then SUBST_ALL_TAC >>
       gvs[] >>
       drule_all same_source_fallback_package_environment >>
       disch_then ACCEPT_TAC) >>
@@ -470,8 +470,6 @@ val runtime_body_shadow_tac =
          initial_evaluation_context_def]) >>
   `~cenv.ce_is_ctor` by
     gvs[bodySimTheory.body_inv_def, initial_evaluation_context_def] >>
-  `~ctx_has_dalloca unit.cu_context` by
-    metis_tac[entry_runtime_no_dalloca] >>
   `ctx_inst_ids_distinct unit.cu_context` by
     (drule_all caller_runtime_entry_integrity >> simp[]);
 
@@ -870,6 +868,9 @@ Theorem lower_vyper_runtime_unit_body_joint_with_shadow:
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
@@ -897,6 +898,9 @@ Theorem lower_vyper_runtime_unit_body_joint:
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
@@ -1155,6 +1159,9 @@ Theorem lower_vyper_runtime_unit_correct:
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) ==>
     source_unit_execution_correct tops ret am tx unit vs
 Proof
@@ -1189,6 +1196,9 @@ Theorem lower_vyper_runtime_unit_run_bounded:
     ?fuel. !vs.
       valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
       initial_venom_state_rel tops am tx vs /\
+      (ctx_has_dalloca unit.cu_context ==>
+        unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+        w2n vs.vs_initial_fmp < 2 ** 254) /\
       outcomes_accounts_typed (SOME vs.vs_outcomes) /\
       (!marks.
          call_storage_ok am tx vs.vs_outcomes
@@ -1223,7 +1233,7 @@ Proof
   qpat_x_assum `lookup_block _ func.fn_blocks = SOME bb`
     (assume_tac o SIMP_RULE (srw_ss()) []) >>
   `phi_prefix_length bb.bb_instructions = 0`
-    by metis_tac[lower_vyper_runtime_unit_block_phi, entry_runtime_no_dalloca] >>
+    by metis_tac[lower_vyper_runtime_unit_block_phi] >>
   qexists_tac `SUC fuel` >>
   qspecl_then [`SUC fuel`, `unit.cu_context`, `vs`, `"__entry"`, `fn`,
                `"__entry"`] mp_tac run_context_run_blocks >>
@@ -1331,8 +1341,6 @@ val runtime_locked_return_frame_tac =
          initial_evaluation_context_def]) >>
   `~cenv.ce_is_ctor` by
     gvs[bodySimTheory.body_inv_def, initial_evaluation_context_def] >>
-  `~ctx_has_dalloca unit.cu_context` by
-    metis_tac[entry_runtime_no_dalloca] >>
   `ctx_inst_ids_distinct unit.cu_context` by
     (drule_all caller_runtime_entry_integrity >> simp[]) >>
   `struct_args_unique tops` by
@@ -1690,6 +1698,9 @@ Theorem lower_vyper_runtime_unit_correct_readings_available:
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) ==>
     ?marks.
       source_unit_execution_correct_at marks tops ret am tx unit vs /\

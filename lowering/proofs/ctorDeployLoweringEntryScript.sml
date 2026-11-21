@@ -34,7 +34,7 @@ Theorem deploy_ctor_entry_joint:
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
     deploy_ctor_start tops am tx (mut, nr', body', am_c, es0) ==>
-    nr' = nr /\ body' = body /\
+    nr' = nr /\ body = subst_consts_stmts (module_consts_env tops []) body' /\
     local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
     ?s0 G0 tn0.
       dunit.cu_context.ctx_entry = SOME "__deploy" /\
