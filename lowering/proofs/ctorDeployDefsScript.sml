@@ -237,26 +237,6 @@ Proof
      supported_expr_exists_def] >> metis_tac[]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >>
-  drule_then assume_tac (cj 1 supported_pure_no_code_accessor) >>
-  `!x. is_self_code x ==> ?t es. x = Builtin t (Acc Code) es` by
-    (recInduct is_self_code_ind >> simp[is_self_code_def]) >>
-  spose_not_then assume_tac >>
-  qpat_x_assum `~supported_expr_exists _ _` mp_tac >>
-  simp[] >>
-  irule (BETA_RULE (Q.SPECL [`is_self_code`, `e`,
-    `\x. ?t es. x = Builtin t (Acc Code) es`] (cj 1 supported_expr_exists_mono))) >>
-  simp[]
-QED
-*)
-Theorem supported_pure_expr_no_self_code:
-  supported_pure_expr tops e ==> ~supported_expr_exists is_self_code e
-Proof
-  cheat
-QED
-
 (* The source-side hypotheses of e2e_deploy_correctness that hold at every
    gas filling; the finite storage guard deploy_storage_ok depends on the
    filling, so the unit theorem states it per filling. *)
