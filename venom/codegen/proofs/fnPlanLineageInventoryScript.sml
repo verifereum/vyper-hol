@@ -1750,7 +1750,7 @@ QED
    do_spill_at_suffix_stack frames the prefix but does not erase its keys.
    Hence a no-stale premise must be produced before spilling, not inferred
    from membership in the new spill map. The exported, strengthened
-   reorderSim.select_spill_candidate_not_pending protects exact pending
+   reorderPreparationInventoryProps.select_spill_candidate_not_pending protects exact pending
    keys (including duplicates), and its stack-count theorems account for
    exactly one removed occurrence. emit_input_plan_cons is the existing
    general pending-use transition, with operand_vars rest ++ next_liveness.
@@ -2109,15 +2109,6 @@ Proof
   gvs[] >> qexists_tac `core_state.ps_stack` >> simp[]
 QED
 
-
-(* The frame facts are also used for the preparation pass. *)
-Theorem stack_get_unfixed_depth_suffix_hit = reorderPreparationFramePropsTheory.stack_get_unfixed_depth_suffix_hit
-Theorem stack_get_unfixed_depth_bottom_excluded = reorderPreparationFramePropsTheory.stack_get_unfixed_depth_bottom_excluded
-Theorem select_spill_candidate_bottom_frame = reorderPreparationFramePropsTheory.select_spill_candidate_bottom_frame
-Theorem do_restore_bottom_frame = reorderPreparationFramePropsTheory.do_restore_bottom_frame
-Theorem restore_spilled_plan_bottom_frame = reorderPreparationFramePropsTheory.restore_spilled_plan_bottom_frame
-Theorem do_spill_at_bottom_frame = reorderPreparationFramePropsTheory.do_spill_at_bottom_frame
-
 Theorem do_swap_bottom_frame:
   !d ps prefix ops qs.
     d < LENGTH ps.ps_stack /\ do_swap d ps = (ops,qs) ==>
@@ -2131,12 +2122,6 @@ Proof
   simp[] >> strip_tac >>
   gvs[stackPlanTypesTheory.plan_state_component_equality]
 QED
-
-Theorem reduce_depth_plan_unfixed_hit = reorderPreparationFramePropsTheory.reduce_depth_plan_unfixed_hit
-Theorem reduce_depth_plan_shielded_bottom_frame = reorderPreparationFramePropsTheory.reduce_depth_plan_shielded_bottom_frame
-Theorem reduce_depth_plan_bottom_frame = reorderPreparationFramePropsTheory.reduce_depth_plan_bottom_frame
-Theorem reduce_depth_plan_height_shielded_bottom_frame = reorderPreparationFramePropsTheory.reduce_depth_plan_height_shielded_bottom_frame
-Theorem reduce_depth_plan_height_bottom_frame = reorderPreparationFramePropsTheory.reduce_depth_plan_height_bottom_frame
 
 Theorem stack_poke_bottom_extension:
   !d x prefix core. d < LENGTH core ==>
@@ -5035,8 +5020,6 @@ Proof
   decide_tac
 QED
 
-(* Exact copy of reorderSim.stack_pop_one_elem_count (local there).
-   Kept here to avoid importing frame-level simulation theories. *)
 Theorem pop_unique_operand:
   !x ps d.
     stack_get_depth x ps.ps_stack = SOME d /\

@@ -24,13 +24,6 @@ Definition reason_covered_def:
                 reason_storage_vv vv)
 End
 
-Theorem well_typed_literal_string[local]:
-  !ty s. well_typed_literal ty (StringL s) ==> ?n. ty = BaseT (StringT n)
-Proof
-  Cases >> simp[well_typed_literal_def] >>
-  rename1 `BaseT b` >> Cases_on `b` >> simp[well_typed_literal_def]
-QED
-
 Theorem expr_body_pre_eval_result:
   !cenv cx env e es res es'.
     expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>

@@ -365,55 +365,6 @@ Proof
   drule_all lower_vyper_runtime_unit_memory_ok >> simp[]
 QED
 
-(* S3, calldata that dispatches to nothing, from the revert run of
-   lower_vyper_runtime_unit_reverts: a memory path from the entry to the
-   revert, and the pointer-safe run at every dead set. *)
-Theorem lower_vyper_runtime_unit_reverts_memory_ok:
-  !tops rpolicy unit am tx vs func s.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    initial_venom_state_rel tops am tx vs /\
-    ~ctx_has_dalloca unit.cu_context /\
-    w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
-    lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
-    fn_entry_label func = SOME "__entry" /\
-    (?n. gas_path_mem unit.cu_context func
-      (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                  vs_inst_idx := 0 |>) n (Abort Revert_abort s)) /\
-    (!D fuel. ptr_safe_blocks D 0 fuel unit.cu_context func [] FEMPTY
-                entry_taint
-                (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                            vs_inst_idx := 0 |>))
-    ==> raw_unit_memory_ok unit.cu_context vs /\
-        EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
-        fixed_region_reserved 0 unit.cu_context /\
-        ptr_discipline 0 unit.cu_context vs /\
-        ?D. dead_wf D /\ taint_within D unit.cu_context vs /\
-        (code_layout_valid vs ==> mem_inv dload_offset_ok unit.cu_context vs) /\
-        (code_layout_valid vs ==>
-         mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
-                                  s.vs_code = vs.vs_code /\
-                                  s.vs_data_section = vs.vs_data_section)
-           unit.cu_context vs)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `!fuel. mem_safe_blocks fuel unit.cu_context func
-            (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                        vs_inst_idx := 0 |>)` by
-    (irule lower_vyper_runtime_unit_exit_mem_safe_blocks >> simp[] >>
-     metis_tac[fragExecTheory.exit_result_def]) >>
-  qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `func`,
-               `"__entry"`,
-               `<| d_stor := (\a st. {}); d_trans := (\a st. {});
-                   d_imm := K {}; d_ret := K {} |>`] mp_tac
-    lower_vyper_runtime_unit_memory_ok >>
-  impl_tac >- simp[] >> strip_tac >> simp[] >>
-  qexists_tac `<| d_stor := (\a st. {}); d_trans := (\a st. {});
-                 d_imm := K {}; d_ret := K {} |>` >>
-  simp[dead_wf_def] >>
-  metis_tac[lower_vyper_runtime_unit_dload_offset_ok,
-            lower_vyper_runtime_unit_dload_in_section]
-QED
-
 (* DLOAD offsets stay within the data section, at the marks of S1's
    certificate as in lower_vyper_runtime_unit_memory_ok_dispatched. *)
 Theorem lower_vyper_runtime_unit_dload_offset_ok_dispatched:

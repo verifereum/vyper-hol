@@ -3670,7 +3670,7 @@ Proof
   simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
     emitHelperPropsTheory.slot_copy_operand_update] >>
   Cases_on `tr` >>
-  simp[Once run_inst_seq_def, step_inst_base_def, exec_write2_def,
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
     eval_operands_def, emitHelperPropsTheory.slot_copy_operand_update,
     place_store_update_static] >>
   qmatch_goalsub_abbrev_tac `run_inst_seq _ post` >>

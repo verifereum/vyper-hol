@@ -66,7 +66,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `dist < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_bound] >>
   `1 <= LENGTH ps.ps_stack` by decide_tac >>
-  `MEM op ps.ps_stack` by metis_tac[stack_get_depth_props, stack_peek_mem] >>
+  `MEM op ps.ps_stack` by metis_tac[stack_get_depth_props, reorderPreparationInventoryPropsTheory.stack_peek_mem] >>
   `!x. LIST_ELEM_COUNT x [op] <= LIST_ELEM_COUNT x ps.ps_stack` by
     (gen_tac >> Cases_on `x = op` >>
      gvs[LIST_ELEM_COUNT_THM, GSYM LIST_ELEM_COUNT_MEM]) >>

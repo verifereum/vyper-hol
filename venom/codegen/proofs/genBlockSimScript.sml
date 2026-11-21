@@ -3828,7 +3828,7 @@ Proof
     (gvs[emit_input_plan_one] >>
      drule_all emit_one_input_residual_budget_wf >> simp[]) >>
   `MEM op ps1.ps_stack` by
-    (drule stack_get_depth_props >> metis_tac[stack_peek_mem]) >>
+    (drule stack_get_depth_props >> metis_tac[reorderPreparationInventoryPropsTheory.stack_peek_mem]) >>
   `!x. LIST_ELEM_COUNT x [op] <= LIST_ELEM_COUNT x ps1.ps_stack` by
     (gen_tac >> Cases_on `x = op` >> gvs[LIST_ELEM_COUNT_THM, GSYM LIST_ELEM_COUNT_MEM]) >>
   `plan_state_residual_wf spill_base [op] 1 ps4` by
