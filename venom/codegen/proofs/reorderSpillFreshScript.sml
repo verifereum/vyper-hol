@@ -1,6 +1,7 @@
 (* Temporary reorder spill slots are fresh for the incoming planner map. *)
 Theory reorderSpillFresh
-Ancestors reorderSim reduceDepthSim doSwapSim planWf prefixSpillReplay stackPlanGen stackPlanOps
+Ancestors reorderPreparationProps reorderPreparationInventoryProps fnPlanLineageReorder
+          foldlSim indexedLists reorderSim reduceDepthSim doSwapSim planWf prefixSpillReplay stackPlanGen stackPlanOps
           stackPlanTypes stackModel finite_map list rich_list pred_set arithmetic
 Libs BasicProvers
 
@@ -163,6 +164,42 @@ Proof
   simp[]
 QED
 
+Theorem reorder_prepare_spills_fresh_frame[local]:
+  !targets ps ops post fm.
+    reorder_prepare_plan targets ps = (ops,post) /\
+    spill_alloc_layout_wf ps.ps_alloc fm /\
+    (!x. MEM x targets /\ is_var_operand x ==> x NOTIN FDOM ps.ps_spilled) ==>
+    EVERY (spill_fresh_for fm) ops /\
+    spill_alloc_layout_wf post.ps_alloc fm /\
+    (!x. MEM x targets /\ is_var_operand x ==> x NOTIN FDOM post.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`targets`, `ps`, `ops`, `post`,
+    `\st trace out.
+       spill_alloc_layout_wf st.ps_alloc fm /\
+       (!x. MEM x targets /\ is_var_operand x ==> x NOTIN FDOM st.ps_spilled) ==>
+       EVERY (spill_fresh_for fm) trace /\
+       spill_alloc_layout_wf out.ps_alloc fm /\
+       (!x. MEM x targets /\ is_var_operand x ==> x NOTIN FDOM out.ps_spilled)`]
+    (mp_tac o BETA_RULE) reorder_prepare_trace_relation >>
+  impl_tac
+  >- (rpt conj_tac
+      >- (simp[] >> gen_tac >> disch_then (ACCEPT_TAC o CONJUNCT2))
+      >- metis_tac[EVERY_APPEND]
+      >- (rpt gen_tac >> strip_tac >> strip_tac >>
+          `FLOOKUP st.ps_spilled op = NONE` by
+            (fs[flookup_thm] >> metis_tac[]) >>
+          gvs[do_restore_def] >> first_assum ACCEPT_TAC)
+      >- (rpt gen_tac >> strip_tac >> strip_tac >>
+          drule_all reduce_depth_plan_spills_fresh_frame >> strip_tac >> simp[] >>
+          rpt gen_tac >> strip_tac >>
+          qspecl_then [`LENGTH st.ps_stack - LENGTH targets`, `targets`,
+            `op`, `0`, `0`, `st`, `x`] mp_tac reduce_depth_plan_not_spilled >>
+          simp[] >> metis_tac[])
+      >- first_assum ACCEPT_TAC) >>
+  simp[]
+QED
+
 Theorem reorder_plan_exact_two_spills_fresh:
   !base dfg h h' ps ops ps'.
     exact_two_planner_ready base h h' ps /\
@@ -170,41 +207,59 @@ Theorem reorder_plan_exact_two_spills_fresh:
     EVERY (spill_fresh_for ps.ps_spilled) ops
 Proof
   rpt gen_tac >> strip_tac >>
-  `plan_state_residual_wf base' [h;h'] 0 ps` by
-    fs[exact_two_planner_ready_def, residual_budget_wf_def,
-       plan_state_residual_wf_def] >>
-  `?d. stack_get_unfixed_depth h 1 2 ps.ps_stack = SOME d` by
-    (qspecl_then [`base'`, `[h;h']`, `0`, `ps`]
+  drule reorder_plan_split >> strip_tac >>
+  rename1 `reorder_prepare_plan [h;h'] ps = (prep,start)` >>
+  fs[exact_two_planner_ready_def] >>
+  qspecl_then [`base'`, `[h;h']`, `ps`, `prep`, `start`] mp_tac
+    reorder_prepare_keeps_budget >> simp[] >> strip_tac >>
+  qspecl_then [`[h;h']`, `ps`, `prep`, `start`] mp_tac
+    reorder_prepare_materialised_counts >> simp[] >> strip_tac >>
+  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by fs[residual_budget_wf_def] >>
+  qspecl_then [`[h;h']`, `ps`, `prep`, `start`, `ps.ps_spilled`]
+    mp_tac reorder_prepare_spills_fresh_frame >> simp[] >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >>
+  `!x. MEM x [h;h'] ==> LIST_ELEM_COUNT x [h;h'] <= LIST_ELEM_COUNT x start.ps_stack` by
+    (qspecl_then [`[h;h']`, `ps`, `prep`, `start`] mp_tac
+       reorder_prepare_count_dom >> simp[] >> metis_tac[]) >>
+  `exact_two_planner_ready base' h h' start` by
+    (simp[exact_two_planner_ready_def] >> conj_tac >-
+     (gen_tac >> Cases_on `MEM x [h;h']` >- metis_tac[] >>
+      fs[LIST_ELEM_COUNT_DEF]) >>
+     first_assum ACCEPT_TAC) >>
+  `plan_state_residual_wf base' [h;h'] 0 start` by
+    fs[residual_budget_wf_def, plan_state_residual_wf_def] >>
+  `?d. stack_get_unfixed_depth h 1 2 start.ps_stack = SOME d` by
+    (qspecl_then [`base'`, `[h;h']`, `0`, `start`]
        mp_tac materialised_pending_next_on_stack >>
      simp[] >> fs[exact_two_planner_ready_def]) >>
-  qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
-  simp[reorder_plan_def, indexedListsTheory.MAPi_def,
-       indexedListsTheory.MAPi_ACC_def, LET_THM] >>
+  qpat_x_assum `plan_steps _ _ _ = _` mp_tac >>
+  simp[MAPi_def, MAPi_ACC_def, plan_steps_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  `exact_two_planner_ready base' h h' ps''` by
-    (qspecl_then [`dfg`, `base'`, `h`, `h'`, `0`, `h`, `ps`, `ops'`, `ps''`]
+  `exact_two_planner_ready base' h h' ps1` by
+    (qspecl_then [`dfg`, `base'`, `h`, `h'`, `0`, `h`, `start`, `step_ops`, `ps1`]
        mp_tac reorder_one_exact_two_planner_ready >> simp[]) >>
-  `EVERY (spill_fresh_for ps.ps_spilled) ops' /\
-   spill_alloc_layout_wf ps''.ps_alloc ps.ps_spilled` by
-    (qspecl_then [`dfg`, `[h;h']`, `0`, `h`, `ps`, `d`,
-       `ps.ps_spilled`, `ops'`, `ps''`]
+  `EVERY (spill_fresh_for ps.ps_spilled) step_ops /\
+   spill_alloc_layout_wf ps1.ps_alloc ps.ps_spilled` by
+    (qspecl_then [`dfg`, `[h;h']`, `0`, `h`, `start`, `d`,
+       `ps.ps_spilled`, `step_ops`, `ps1`]
        mp_tac reorder_one_existing_spills_fresh_frame >>
-     simp[] >> fs[exact_two_planner_ready_def, residual_budget_wf_def]) >>
-  `stack_peek 1 ps''.ps_stack = h` by
-    (qspecl_then [`dfg`, `[h;h']`, `0`, `h`, `ps`, `ops'`, `ps''`]
+     simp[]) >>
+  `stack_peek 1 ps1.ps_stack = h` by
+    (qspecl_then [`dfg`, `[h;h']`, `0`, `h`, `start`, `step_ops`, `ps1`]
        mp_tac reorder_one_places >> simp[] >>
      fs[exact_two_planner_ready_def] >> metis_tac[]) >>
-  `plan_state_residual_wf base' [h;h'] 1 ps''` by
+  `plan_state_residual_wf base' [h;h'] 1 ps1` by
     (fs[exact_two_planner_ready_def, residual_budget_wf_def,
        plan_state_residual_wf_def] >>
      rpt strip_tac >> `i = 0` by decide_tac >> simp[]) >>
-  `?d'. stack_get_unfixed_depth h' 0 2 ps''.ps_stack = SOME d'` by
-    (qspecl_then [`base'`, `[h;h']`, `1`, `ps''`]
+  `?d'. stack_get_unfixed_depth h' 0 2 ps1.ps_stack = SOME d'` by
+    (qspecl_then [`base'`, `[h;h']`, `1`, `ps1`]
        mp_tac materialised_pending_next_on_stack >>
      simp[] >> fs[exact_two_planner_ready_def]) >>
-  `EVERY (spill_fresh_for ps.ps_spilled) step_ops` by
-    (qspecl_then [`dfg`, `[h;h']`, `1`, `h'`, `ps''`, `d'`,
-       `ps.ps_spilled`, `step_ops`, `ps'`]
+  `EVERY (spill_fresh_for ps.ps_spilled) rest_ops` by
+    (qspecl_then [`dfg`, `[h;h']`, `1`, `h'`, `ps1`, `d'`,
+       `ps.ps_spilled`, `rest_ops`, `ps'`]
        mp_tac reorder_one_existing_spills_fresh_frame >>
      simp[] >> fs[exact_two_planner_ready_def]) >>
   simp[]

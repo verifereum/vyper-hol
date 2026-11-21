@@ -1,6 +1,7 @@
 Theory fnBlockPlanStaticRegion
 Ancestors
   dfHelperProofs inputMaterialised reduceDepthSim reorderStages
+  reorderPreparationProps reorderPreparationInventoryProps fnPlanLineageInventory
   fnBlockPlanStaticDfsTrace fnBlockPlanStaticPromises fnBlockPlanStaticInventory fnPlanLineage fnPlanLineageJoin
   planWfMarked fnLineageInv fnPlanPrefix list stackPlanGen fnFrameBoundaryGenRet codegenReadyCompute
   fnBlockPlanStaticOffsetLive livenessProofs livenessTransferProofs venomWf venomExecProofs rich_list
@@ -2027,8 +2028,12 @@ Proof
     metis_tac[reorder_plan_materialised_order] >>
   `LENGTH pending <= LENGTH arranged.ps_stack` by
     (irule reorder_plan_materialised_length_floor >> metis_tac[]) >>
+  `Var v NOTIN FDOM mid.ps_spilled` by fs[is_var_operand_def] >>
   `LIST_ELEM_COUNT (Var v) arranged.ps_stack = LIST_ELEM_COUNT (Var v) mid.ps_stack` by
-    metis_tac[reorder_plan_materialised_counts] >>
+    (qspecl_then [`dfg`, `pending`, `mid`, `rops`, `arranged`] mp_tac
+       reorder_plan_materialised_counts >>
+     impl_tac >- simp[] >>
+     disch_then (qspec_then `Var v` mp_tac) >> simp[]) >>
   `arranged.ps_stack = stack_pop (LENGTH pending) arranged.ps_stack ++ pending` by
     (irule fixed_suffix_decompose >> simp[]) >>
   `LIST_ELEM_COUNT (Var v) arranged.ps_stack =
@@ -2256,11 +2261,34 @@ Theorem regional_reorder_materialised_ownership:
   (MEM op mid.ps_stack \/ op IN FDOM mid.ps_spilled) ==>
   MEM op arranged.ps_stack \/ op IN FDOM arranged.ps_spilled
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `EVERY (\(idx,x). idx < LENGTH pending) (MAPi (\i x. (i,x)) pending)` by
     simp[EVERY_EL, indexedListsTheory.LENGTH_MAPi, indexedListsTheory.EL_MAPi] >>
-  gvs[reorder_plan_eq_plan_steps] >>
-  drule_all regional_reorder_steps_ownership >> metis_tac[]
+  drule reorder_plan_split >> strip_tac >>
+  rename1 `reorder_prepare_plan pending mid = (prep,prepared)` >>
+  `LENGTH pending <= LENGTH prepared.ps_stack` by
+    (drule_all reorder_prepare_materialised_counts >> simp[]) >>
+  qspecl_then [`pending`, `mid`, `prep`, `prepared`,
+    `\st trace out. MEM op st.ps_stack \/ op IN FDOM st.ps_spilled ==>
+                    MEM op out.ps_stack \/ op IN FDOM out.ps_spilled`]
+    (mp_tac o BETA_RULE) reorder_prepare_trace_relation >>
+  impl_tac
+  >- (rpt conj_tac
+      >- simp[]
+      >- metis_tac[]
+      >- (rpt gen_tac >> strip_tac >>
+          drule regional_restore_ownership >>
+          disch_then (qspec_then `op` ACCEPT_TAC))
+      >- metis_tac[reduce_depth_plan_available_preserved, SND]
+      >- first_assum ACCEPT_TAC) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then assume_tac >>
+  qspecl_then [`MAPi (\i x. (i,x)) pending`, `prepared`, `rest`, `arranged`,
+    `pending`, `dfg`] mp_tac regional_reorder_steps_ownership >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qspec_then `op` mp_tac o CONJUNCT2) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem regional_live_ownership_residual:

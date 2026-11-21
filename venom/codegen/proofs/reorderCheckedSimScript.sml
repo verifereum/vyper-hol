@@ -2,7 +2,7 @@
    Helpers: restore and finish phases preserve the actual planner state. *)
 Theory reorderCheckedSim
 Ancestors
-  reorderStages reorderPlaceSim reduceDepthSim spillPlanSim doSwapSim
+  reorderStages reorderPreparationProps reorderPreparationInventoryProps reorderPlaceSim reduceDepthSim spillPlanSim doSwapSim
   stackPlanOps stackPlanTypes stackPlanGen stackModel planWf dfgDefs
   codegenRel asmSem planExec stackOpSim blockSimHelpers
   foldlSim indexedLists list rich_list arithmetic finite_map
@@ -236,6 +236,47 @@ Proof
     ADD_ASSOC] >> asm_simp_tac (srw_ss()) [] >> decide_tac
 QED
 
+Theorem reorder_plan_prepare_checked_sim[local]:
+  !targets ps ops post initial_fmp lo o2pc prog vs st.
+    reorder_prepare_plan targets ps = (ops,post) /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!bytes. MEM (AsmPush bytes) prog ==> LENGTH bytes <= 32) /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st =
+      AsmOK st' /\ venom_asm_rel lo post vs st' /\
+      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      spill_alloc_layout_wf post.ps_alloc post.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule reorder_prepare_plan_split >> strip_tac >> gvs[] >>
+  sg `step_sim_ok_inv initial_fmp (\s:plan_state. spill_alloc_layout_wf s.ps_alloc s.ps_spilled) do_restore lo o2pc prog vs`
+  >- (simp[step_sim_ok_inv_def] >>
+      rpt gen_tac >> strip_tac >>
+      drule_all do_restore_checked_sim >>
+      disch_then (qspec_then `o2pc` strip_assume_tac) >>
+      goal_assum (drule_at Any) >> simp[] >>
+      irule do_restore_layout_wf >> metis_tac[]) >>
+  gvs[execute_plan_append, asm_block_at_append] >>
+  qspecl_then [`FILTER is_var_operand targets`, `do_restore`, `lo`, `o2pc`,
+    `prog`, `vs`, `ps`, `restore_ops`, `restored`, `st`, `\s:plan_state. spill_alloc_layout_wf s.ps_alloc s.ps_spilled`]
+    mp_tac plan_steps_sim_inv >>
+  simp[GSYM restore_spilled_plan_steps] >> strip_tac >>
+  rename1 `venom_asm_rel lo restored vs mid` >>
+  qabbrev_tac `reduce_one = (\op st. reduce_depth_plan
+     (LENGTH st.ps_stack - LENGTH targets) targets op 0 0 st)` >>
+  `step_sim_ok_inv initial_fmp (\s:plan_state. spill_alloc_layout_wf s.ps_alloc s.ps_spilled) reduce_one lo o2pc prog vs` by
+    (simp[step_sim_ok_inv_def, Abbr `reduce_one`] >>
+     rpt gen_tac >> strip_tac >> drule_all reduce_depth_plan_sim >>
+     disch_then (qspec_then `o2pc` strip_assume_tac) >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  qspecl_then [`ordered`, `reduce_one`, `lo`, `o2pc`, `prog`, `vs`,
+    `restored`, `spill_ops`, `post`, `mid`, `\s:plan_state. spill_alloc_layout_wf s.ps_alloc s.ps_spilled`] mp_tac plan_steps_sim_inv >>
+  simp[] >> strip_tac >> rename1 `venom_asm_rel lo post vs final` >>
+  qexists_tac `final` >> simp[] >>
+  asm_simp_tac std_ss [asm_steps_add, ADD_ASSOC] >> simp[]
+QED
+
 Theorem reorder_plan_checked_sim:
   !dfg pending ps ops post initial_fmp lo o2pc prog vs st.
     (!op. MEM op pending ==> op <> dead_stack_marker /\
@@ -260,10 +301,18 @@ Proof
     (simp[EVERY_MEM, pairTheory.FORALL_PROD, MEM_MAPi] >>
      qx_gen_tac `idx` >> strip_tac >>
      simp[MEM_EL] >> qexists_tac `idx` >> simp[]) >>
-  mp_tac (Q.SPECL [`MAPi (\i op. (i,op)) (pending:operand list)`,`dfg`,
-    `pending`,`ps`,`ops`,`post`,`initial_fmp`,`lo`,`o2pc`,`prog`,`vs`,`st`]
-    reorder_steps_checked_sim) >>
-  (impl_tac >- (asm_simp_tac (srw_ss()) [GSYM reorder_plan_eq_plan_steps] >>
-    rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-      gen_tac >> strip_tac >> CCONTR_TAC >> gvs[]])) >> simp_tac bool_ss []
+  drule reorder_plan_split >> strip_tac >> gvs[] >>
+  drule_all reorder_prepare_materialised_counts >> strip_tac >>
+  gvs[execute_plan_append, asm_block_at_append] >>
+  drule_all reorder_plan_prepare_checked_sim >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  rename1 `venom_asm_rel lo mid vs start` >>
+  `asm_block_at prog start.as_pc (execute_plan initial_fmp rest)` by simp[] >>
+  qspecl_then [`MAPi (\i op. (i,op)) pending`, `dfg`, `pending`, `mid`,
+    `rest`, `post`, `initial_fmp`, `lo`, `o2pc`, `prog`, `vs`, `start`]
+    mp_tac reorder_steps_checked_sim >>
+  simp[] >> strip_tac >>
+  rename1 `venom_asm_rel lo post vs final` >>
+  qexists_tac `final` >>
+  asm_simp_tac std_ss [asm_steps_add, ADD_ASSOC] >> simp[]
 QED

@@ -219,6 +219,59 @@ Proof
   rpt gen_tac >> simp[do_swap_cleanup_update, pairTheory.UNCURRY_VAR]
 QED
 
+
+Theorem foldl_reorder_cleanup_update[local]:
+  !items step U acc ps.
+    (!item st. step item (U st) = (FST (step item st), U (SND (step item st)))) ==>
+    FOLDL (\(ops,st) item.
+      (\(code,out). (ops ++ code,out)) (step item st)) (acc,U ps) items =
+    (FST (FOLDL (\(ops,st) item.
+      (\(code,out). (ops ++ code,out)) (step item st)) (acc,ps) items),
+     U (SND (FOLDL (\(ops,st) item.
+      (\(code,out). (ops ++ code,out)) (step item st)) (acc,ps) items)))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `step h ps` >> gvs[] >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem reorder_prepare_state_update:
+  !targets ps (U:plan_state -> plan_state).
+    (!st. (U st).ps_stack = st.ps_stack) /\
+    (!st. restore_spilled_plan (FILTER is_var_operand targets) (U st) =
+      (FST (restore_spilled_plan (FILTER is_var_operand targets) st),
+       U (SND (restore_spilled_plan (FILTER is_var_operand targets) st)))) /\
+    (!st op fuel. reduce_depth_plan fuel targets op 0 0 (U st) =
+      (FST (reduce_depth_plan fuel targets op 0 0 st),
+       U (SND (reduce_depth_plan fuel targets op 0 0 st)))) ==>
+    reorder_prepare_plan targets (U ps) =
+      (FST (reorder_prepare_plan targets ps),
+       U (SND (reorder_prepare_plan targets ps)))
+Proof
+  rpt gen_tac >> strip_tac >> simp[reorder_prepare_plan_def] >>
+  Cases_on `restore_spilled_plan (FILTER is_var_operand targets) ps` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `FOLDL _ _ ordered` >>
+  qspecl_then [`ordered`,
+    `\op st. reduce_depth_plan (LENGTH st.ps_stack - LENGTH targets) targets op 0 0 st`,
+    `U`, `[]:stack_op list`, `r`] mp_tac foldl_reorder_cleanup_update >>
+  simp[] >> rpt (pairarg_tac >> simp[]) >> simp[]
+QED
+
+Theorem reorder_prepare_cleanup_update[local]:
+  !targets ps h g b.
+    reorder_prepare_plan targets (ps with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>) =
+    (FST (reorder_prepare_plan targets ps),
+     SND (reorder_prepare_plan targets ps) with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>)
+Proof
+  rpt gen_tac >>
+  irule (BETA_RULE (Q.SPECL [`targets`, `ps`, `\s:plan_state. s with
+    <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>`]
+    reorder_prepare_state_update)) >>
+  simp[restore_spilled_plan_cleanup_update, reduce_depth_plan_cleanup_update]
+QED
+
 Theorem reorder_plan_cleanup_update:
   !dfg targets ps h g b.
     reorder_plan dfg targets (ps with
@@ -226,13 +279,14 @@ Theorem reorder_plan_cleanup_update:
     (FST (reorder_plan dfg targets ps), SND (reorder_plan dfg targets ps) with
       <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>)
 Proof
-  rpt gen_tac >> simp[reorder_plan_def] >>
+  rpt gen_tac >> simp[reorder_plan_def, reorder_prepare_cleanup_update] >>
+  Cases_on `reorder_prepare_plan targets ps` >> simp[] >>
   qspec_tac (`MAPi (\i op. (i,op)) targets`, `items`) >>
-  qspec_tac (`[]:stack_op list`, `ops`) >> qid_spec_tac `ps` >>
+  qid_spec_tac `q` >> qid_spec_tac `r` >>
   Induct_on `items` >- simp[] >>
   rpt gen_tac >> PairCases_on `h'` >>
   simp[reorder_one_cleanup_update] >>
-  Cases_on `reorder_one dfg targets h'0 h'1 ps` >>
+  Cases_on `reorder_one dfg targets h'0 h'1 r` >>
   simp[pairTheory.UNCURRY_VAR]
 QED
 

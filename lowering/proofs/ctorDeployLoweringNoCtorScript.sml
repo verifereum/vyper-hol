@@ -787,12 +787,44 @@ Proof
   strip_tac >> gvs[] >> EVAL_TAC
 QED
 
+Theorem reorder_prepare_shallow_empty_spills[local]:
+  !targets ps.
+    LENGTH ps.ps_stack <= 17 /\ ps.ps_spilled = FEMPTY ==>
+    reorder_prepare_plan targets ps = ([],ps)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `reorder_prepare_plan targets ps` >>
+  drule reorderPreparationPropsTheory.reorder_prepare_plan_split >>
+  strip_tac >>
+  `restore_spilled_plan (FILTER is_var_operand targets) ps = ([],ps)` by
+    (irule reorderPreparationPropsTheory.restore_spilled_plan_absent >> simp[]) >>
+  gvs[] >>
+  `!items. plan_steps (\op st.
+      reduce_depth_plan (LENGTH st.ps_stack - LENGTH targets)
+        targets op 0 0 st) items ps = ([],ps)` by
+    (Induct >- simp[foldlSimTheory.plan_steps_def] >>
+     gen_tac >>
+     `reduce_depth_plan (LENGTH ps.ps_stack - LENGTH targets)
+        targets h 0 0 ps = ([],ps)` by
+       (Cases_on `stack_get_depth h ps.ps_stack`
+        >- simp[reorderStagesTheory.reduce_depth_plan_missing,
+                stackModelTheory.stack_get_unfixed_depth_empty_window] >>
+        drule stackModelTheory.stack_get_depth_bound >> strip_tac >>
+        irule planWfTheory.reduce_depth_plan_le_16 >>
+        simp[stackModelTheory.stack_get_unfixed_depth_empty_window] >>
+        goal_assum (first_assum o mp_then Any mp_tac) >>
+        decide_tac) >>
+     simp[Once foldlSimTheory.plan_steps_def]) >>
+  gvs[]
+QED
+
 Theorem no_ctor_singleton_reorder:
   ps.ps_stack = [Lit n] /\ ps.ps_spilled = FEMPTY ==>
   stackPlanOps$reorder_plan dfg [Lit n] ps = ([],ps)
 Proof
   strip_tac >>
-  simp[stackPlanOpsTheory.reorder_plan_def,
+  simp[reorder_prepare_shallow_empty_spills,
+       stackPlanOpsTheory.reorder_plan_def,
        stackPlanOpsTheory.reorder_one_def,
        stackModelTheory.stack_get_unfixed_depth_def,
        stackModelTheory.stack_get_depth_def,
@@ -832,7 +864,8 @@ Theorem no_ctor_pair_reorder:
   stackPlanOps$reorder_plan dfg [Lit n] ps = ([],ps)
 Proof
   strip_tac >>
-  simp[stackPlanOpsTheory.reorder_plan_def,
+  simp[reorder_prepare_shallow_empty_spills,
+       stackPlanOpsTheory.reorder_plan_def,
        stackPlanOpsTheory.reorder_one_def,
        stackModelTheory.stack_get_unfixed_depth_def,
        stackModelTheory.stack_get_depth_def,
@@ -879,7 +912,8 @@ Theorem no_ctor_dup_reorder:
   stackPlanOps$reorder_plan dfg [Var v] ps = ([],ps)
 Proof
   strip_tac >>
-  simp[stackPlanOpsTheory.reorder_plan_def,
+  simp[reorder_prepare_shallow_empty_spills,
+       stackPlanOpsTheory.reorder_plan_def,
        stackPlanOpsTheory.reorder_one_def,
        stackModelTheory.stack_get_unfixed_depth_def,
        stackModelTheory.stack_get_depth_def,
@@ -919,13 +953,17 @@ Proof
   simp[no_ctor_dup_reorder] >> EVAL_TAC >> simp[]
 QED
 
-Theorem no_ctor_reorder_three:
+Theorem no_ctor_reorder_three[local]:
+  reorder_prepare_plan [a;b;c] ps = ([],ps) ==>
   stackPlanOps$reorder_plan dfg [a;b;c] ps =
-  let (ops0,ps0) = stackPlanOps$reorder_one dfg [a;b;c] 0 a ps in
-  let (ops1,ps1) = stackPlanOps$reorder_one dfg [a;b;c] 1 b ps0 in
-  let (ops2,ps2) = stackPlanOps$reorder_one dfg [a;b;c] 2 c ps1 in
-  (ops0 ++ ops1 ++ ops2,ps2)
+  (\(ops0,ps0).
+    (\(ops1,ps1).
+      (\(ops2,ps2). (ops0 ++ ops1 ++ ops2,ps2))
+        (stackPlanOps$reorder_one dfg [a;b;c] 2 c ps1))
+      (stackPlanOps$reorder_one dfg [a;b;c] 1 b ps0))
+    (stackPlanOps$reorder_one dfg [a;b;c] 0 a ps)
 Proof
+  strip_tac >>
   Cases_on `stackPlanOps$reorder_one dfg [a;b;c] 0 a ps` >>
   rename1 `_ = (ops0,ps0)` >>
   Cases_on `stackPlanOps$reorder_one dfg [a;b;c] 1 b ps0` >>
@@ -1021,6 +1059,9 @@ Theorem no_ctor_codecopy_reorder:
                                     Label "runtime_begin"; Var "formal_var_1"])
 Proof
   strip_tac >>
+  `reorder_prepare_plan [Var "formal_var_0"; Label "runtime_begin";
+      Var "formal_var_1"] ps = ([],ps)` by
+    (irule reorder_prepare_shallow_empty_spills >> gvs[]) >>
   simp[no_ctor_reorder_three, no_ctor_codecopy_reorder_first_equal,
        no_ctor_codecopy_reorder_first_distinct, no_ctor_codecopy_reorder_second,
        no_ctor_codecopy_reorder_third]
@@ -1104,7 +1145,8 @@ Theorem no_ctor_final_assign_reorder:
   ([],ps with ps_stack := [Var "formal_var_2"; Var "%0"])
 Proof
   strip_tac >>
-  simp[stackPlanOpsTheory.reorder_plan_def, stackPlanOpsTheory.reorder_one_def,
+  simp[reorder_prepare_shallow_empty_spills,
+       stackPlanOpsTheory.reorder_plan_def, stackPlanOpsTheory.reorder_one_def,
        stackModelTheory.stack_get_unfixed_depth_def,
        stackModelTheory.stack_get_depth_def, stackModelTheory.stack_find_def,
        stackModelTheory.stack_peek_def, stackModelTheory.stack_poke_def] >>
@@ -1149,7 +1191,8 @@ Theorem no_ctor_return_reorder:
   ([],ps)
 Proof
   strip_tac >>
-  simp[stackPlanOpsTheory.reorder_plan_def, stackPlanOpsTheory.reorder_one_def,
+  simp[reorder_prepare_shallow_empty_spills,
+       stackPlanOpsTheory.reorder_plan_def, stackPlanOpsTheory.reorder_one_def,
        stackModelTheory.stack_get_unfixed_depth_def,
        stackModelTheory.stack_get_depth_def, stackModelTheory.stack_find_def,
        stackModelTheory.stack_peek_def, listTheory.FIND_thm]

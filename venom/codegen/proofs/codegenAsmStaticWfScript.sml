@@ -289,8 +289,18 @@ QED
 Theorem reorder_plan_no_ref:
   reorder_plan dfg target_ops ps = (ops, ps') ==> !l. ~plan_ref l ops
 Proof
-  rw[reorder_plan_def] >>
-  drule reorder_fold_no_ref >> simp[plan_ref_nil]
+  simp[reorder_plan_def] >> pairarg_tac >> simp[] >> strip_tac >>
+  gen_tac >> drule reorder_fold_no_ref >> simp[] >> disch_then irule >>
+  qpat_x_assum `reorder_prepare_plan _ _ = _` mp_tac >>
+  simp[reorder_prepare_plan_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  strip_tac >> gvs[plan_ref_append] >>
+  conj_tac >- metis_tac[restore_spilled_plan_no_ref] >>
+  drule_at Any plan_ref_free_foldl >>
+  simp[pairTheory.FORALL_PROD, plan_ref_nil] >>
+  disch_then irule >> rpt strip_tac >>
+  pairarg_tac >> gvs[plan_ref_append] >>
+  metis_tac[reduce_depth_plan_no_ref]
 QED
 
 Theorem popmany_swap_accumulate_no_ref:
