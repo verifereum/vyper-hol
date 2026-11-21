@@ -487,6 +487,7 @@ Proof
     >- simp[]
     >- simp[]
     >- simp[builtin_args_length_ok_def]
+    >- simp[vyperContextTheory.is_self_codesize_def]
     >- simp[is_word_type_def]
     >- simp[is_word_type_def]
     >- (rpt strip_tac >> drule lower_value_blockhash >> simp[])
@@ -605,6 +606,7 @@ Proof
     >- simp[]
     >- simp[]
     >- simp[builtin_args_length_ok_def]
+    >- simp[vyperContextTheory.is_self_codesize_def]
     >- simp[is_word_type_def]
     >- simp[is_word_type_def]
     >- (rpt strip_tac >> drule lower_value_blobhash >> simp[])
