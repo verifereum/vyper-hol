@@ -508,7 +508,7 @@ Proof
                `run_context efuel dunit.cu_context vs_in`,
                `run_context vfuel dout.po_unit.cu_context vs`] mp_tac
     deploy_venom_result_rel_dead >>
-  impl_tac >- fs[Abbr`D`] >> strip_tac >>
+  impl_tac >- fs[Abbr`D`, deploy_state_rel_def] >> strip_tac >>
   qabbrev_tac `sh = shadow_root eg` >>
   `!s op r s'. frame_inst_at sh s op /\ step_inst op s = (r, s') /\
                LENGTH s'.contexts = LENGTH s.contexts ==>

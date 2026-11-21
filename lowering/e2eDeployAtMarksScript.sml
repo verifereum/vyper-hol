@@ -451,7 +451,7 @@ Proof
                `run_context fuel dunit.cu_context vs`,
                `run_context fuel' dout.po_unit.cu_context vs_out`] mp_tac
     deploy_venom_result_rel_dead >>
-  impl_tac >- gvs[] >> strip_tac >>
+  impl_tac >- gvs[deploy_state_rel_def] >> strip_tac >>
   `vs_out.vs_initial_fmp = n2w cplan.cp_initial_fmp` by
     fs[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def] >>
   `o1PipelineCorrect$o1_pipeline rpolicy dunit = SOME dout /\
