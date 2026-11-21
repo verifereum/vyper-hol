@@ -2727,7 +2727,7 @@ Resume ctor_bytes_precompile_dispatch_first_emission[add]:
   >- metis_tac[] >>
   gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
   >- metis_tac[ctor_unwrap_value_first_emission] >>
-  gen_tac >> ho_match_mp_tac first_emission_as_ptr_val >>
+  gen_tac >> ho_match_mp_tac ctor_as_stack_val_first_emission >>
   ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
   drule ctor_ecadd_points_first_emission_strong >> simp[]
 QED
@@ -2741,7 +2741,7 @@ Resume ctor_bytes_precompile_dispatch_first_emission[mul]:
   >- metis_tac[ctor_unwrap_value_first_emission] >>
   gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
   >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
-  gen_tac >> ho_match_mp_tac first_emission_as_ptr_val >>
+  gen_tac >> ho_match_mp_tac ctor_as_stack_val_first_emission >>
   ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
   drule ctor_ecmul_point_first_emission_strong >> simp[]
 QED

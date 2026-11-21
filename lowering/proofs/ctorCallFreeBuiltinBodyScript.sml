@@ -73,21 +73,6 @@ Proof
       outcomes_free_alloc_buffer, every_state_insts_return])])
 QED
 
-Theorem outcomes_free_ec_ptr[local]:
-  P ALLOCA /\ P MSTORE /\ P ADD /\ P MLOAD /\ P GAS /\ P STATICCALL /\ P ASSERT ==>
-  (
-  (!t l p1 p2 st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode) (state_insts (SND (as_ptr_val t l (compile_ecadd_points p1 p2 st))))) /\
-  (!t l p s st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode) (state_insts (SND (as_ptr_val t l (compile_ecmul_point p s st)))))
-  )
-Proof
-  disch_tac >>
-  rpt strip_tac >> qmatch_goalsub_abbrev_tac `as_ptr_val t l r` >>
-  Cases_on `r` >> simp[as_ptr_val_def] >>
-  fs[markerTheory.Abbrev_def] >> metis_tac[pairTheory.SND, (UNDISCH outcomes_free_precompiles)]
-QED
-
 local
   val precompile_facts = LIST_CONJ (map ASSUME [``P ALLOCA:bool``, ``P MSTORE:bool``,
     ``P ADD:bool``, ``P MLOAD:bool``, ``P GAS:bool``, ``P STATICCALL:bool``,
@@ -399,8 +384,7 @@ local
     pairTheory.UNCURRY] >> rpt strip_tac >>
   rpt (FIRST [IF_CASES_TAC, CASE_TAC]) >> simp[as_stack_val_pair] >>
   rpt (FIRST [MAP_FIRST irule
-    (CONJUNCTS (MP outcomes_free_precompiles precompile_facts) @
-     CONJUNCTS (MP outcomes_free_ec_ptr precompile_facts)),
+    (CONJUNCTS (MP outcomes_free_precompiles precompile_facts)),
     first_assum irule])
 ) g
 

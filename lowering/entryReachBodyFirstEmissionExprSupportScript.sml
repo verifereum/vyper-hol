@@ -2018,11 +2018,9 @@ Resume first_emission_builtin_ec[add]:
     >- metis_tac[] >> gen_tac >>
     ho_match_mp_tac first_emission_pair_let >> conj_tac
     >- metis_tac[first_emission_unwrap_value] >> gen_tac) >>
-  qspecl_then [`compile_ecadd_points p1 p2`, `p1`, `p2`] mp_tac first_emission_ec >>
-  simp[] >> strip_tac >> rpt gen_tac >>
-  rename1 `compile_ecadd_points p1 p2 st` >>
-  Cases_on `compile_ecadd_points p1 p2 st` >>
-  simp[as_ptr_val_def] >> strip_tac >> gvs[] >> metis_tac[]
+  ho_match_mp_tac first_emission_as_stack_val >>
+  ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_ec >> simp[SF ETA_ss] >> metis_tac[]
 QED
 
 Resume first_emission_builtin_ec[mul]:
@@ -2032,11 +2030,9 @@ Resume first_emission_builtin_ec[mul]:
   (conj_tac >- metis_tac[first_emission_unwrap_value] >> gen_tac) >>
   ho_match_mp_tac first_emission_pair_let >>
   (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac) >>
-  qspecl_then [`compile_ecmul_point p s`, `p`, `s`] mp_tac first_emission_ec >>
-  simp[] >> strip_tac >> rpt gen_tac >>
-  rename1 `compile_ecmul_point p s st` >>
-  Cases_on `compile_ecmul_point p s st` >>
-  simp[as_ptr_val_def] >> strip_tac >> gvs[] >> metis_tac[]
+  ho_match_mp_tac first_emission_as_stack_val >>
+  ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_ec >> simp[SF ETA_ss] >> metis_tac[]
 QED
 
 Finalise first_emission_builtin_ec
