@@ -31,9 +31,10 @@ Proof
   simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
        storage_trace_frame_read_result] >>
   rpt gen_tac >>
-  Cases_on `eval_expr cx (Builtin ann (Env item) []) (es with gas_obs := gobs)` >>
+  namedCases_on `eval_expr cx (Builtin ann (Env item) []) (es with gas_obs := gobs)`
+    ["env_result eval_state"] >>
   drule_all_then SUBST_ALL_TAC env_read_eval_state >>
-  Cases_on `q` >> simp[bind_def] >> rw[] >> simp[] >>
+  Cases_on `env_result` >> simp[bind_def] >> rw[] >> simp[] >>
   drule_then SUBST_ALL_TAC read_result_state >> simp[]
 QED
 
