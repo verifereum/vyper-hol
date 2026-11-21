@@ -3,7 +3,8 @@ Ancestors
   ctorDeployMemoryRunMemEntryBoundary ctorGeneratorShape vyperCompiler
   loweringShapeProps loweringShapeDefs venomInst list
   loweringShapeSource supportedProgram supportedNames compileVyper
-  ctorDeployDefs e2eDeployDefs context ctorDeployShape compileEnv
+  ctorDeployDefs e2eDeployDefs context ctorDeployLoweringCode compileEnv
+  ctorDeployEntryLabels
 
 Theorem ctor_checked_package_head:
   !ds bb bs p fs.
@@ -17,27 +18,20 @@ Proof
 QED
 
 Theorem ctor_checked_run_entry_label:
-  !has_constructor rpolicy runtime_bc imm args data_size internals cenv body
+  !has_constructor rpolicy runtime_bc imm args data_size internals cenv ss
    pay nr nkey trans u fn.
   run_deploy_lowering has_constructor rpolicy runtime_bc imm args data_size
-    internals cenv body pay nr nkey trans "__deploy" = SOME u /\
-  (has_constructor ==>
-    cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
-    ~supported_stmts_expr_exists expr_shape_root body /\
-    EVERY internal_fn_shape_ok internals /\
-    EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internals)) /\
+    internals cenv ss pay nr nkey trans "__deploy" = SOME u /\
   ~MEM "__deploy" (MAP FST (internal_fn_descriptors internals)) /\
   lookup_function "__deploy" u.cu_context.ctx_functions = SOME fn ==>
   fn_entry_label fn = SOME "__deploy"
 Proof
   rpt gen_tac >> strip_tac >>
-  rename1 `~supported_stmts_expr_exists expr_shape_root ss` >>
   Cases_on `compile_generate_deploy has_constructor (LENGTH runtime_bc)
     imm args data_size internals cenv ss pay nr nkey trans
     (initial_compile_state "__deploy")` >>
   rename1 `_ = (x, st1)` >> Cases_on `x` >>
-  drule_all compile_generate_deploy_shape >> strip_tac >>
-  Cases_on `entry_blocks` >> gvs[] >>
+  drule compile_deploy_first_block >> strip_tac >>
   qpat_x_assum `run_deploy_lowering _ _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[run_deploy_lowering_def, extract_context_with_internals_def,
        GSYM all_blocks_def] >>
@@ -55,31 +49,31 @@ Theorem ctor_checked_source_run:
     ?has_constructor imm args internals cenv ss pay nr nkey trans.
       run_deploy_lowering has_constructor rpolicy runtime_bc imm args 0
         internals cenv ss pay nr nkey trans "__deploy" = SOME unit /\
-      (has_constructor ==>
-        cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
-        ~supported_stmts_expr_exists expr_shape_root ss) /\
-      (~has_constructor ==> internals = []) /\
-      EVERY internal_fn_shape_ok internals /\
       EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internals)
 Proof
   rpt gen_tac >> simp[lower_vyper_deploy_unit_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> rpt strip_tac >>
   first_x_assum (irule_at Any) >>
   Cases_on `ctor_fn` >> gvs[internal_fn_descriptors_def] >>
-  rename1 `classify_functions tops = (ext_fns, int_fns, fb_fn, SOME cf)` >>
-  `SND (SND (SND (classify_functions tops))) = SOME cf` by simp[] >>
-  drule_all package_constructor_shape_ok >> strip_tac >> simp[] >>
-  `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
-                   (FST (SND (classify_functions tops))))`
-    by metis_tac[supported_names_internal_names_distinct,
-                 supported_program_names, supported_declaration_names_unique] >>
-  qspecl_then [`tops`, `T`] mp_tac internal_descriptors_ok >>
-  (impl_tac >- simp[]) >> simp[] >> strip_tac >>
-  gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
-     internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP] >>
-  simp[EVERY_MEM] >> rpt strip_tac
-  >- (irule package_internal_fn_ctor_shape_ok >> gs[]) >>
-  fs[EVERY_MEM]
+  rename1 `classify_functions tops = (exts, ints, fb, SOME cf)` >>
+  qmatch_goalsub_abbrev_tac `internal_fn_descriptors packages` >>
+  qspecl_then [`tops`, `rpolicy.rpol_target`, `T`, `K global_nonreentrant_slot`,
+    `T`, `imm_len tops`, `order_internals (deploy_internal_order (SOME cf) ints) ints`,
+    `packages`] mp_tac deploy_internal_package_labels >>
+  simp[Abbr `packages`, PERM_order_deploy_internals, GSYM immSectionDeadTheory.imm_len_def]
+QED
+
+Theorem ctor_checked_entry_label_from_lowering:
+  lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
+  supported_program tops /\ supported_program_deploy tops /\
+  lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME fn ==>
+  fn_entry_label fn = SOME "__deploy"
+Proof
+  strip_tac >> drule_all ctor_checked_source_run >> strip_tac >>
+  `~MEM "__deploy" (MAP FST (internal_fn_descriptors internals))` by
+    (gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> rpt strip_tac >>
+     res_tac >> gvs[internal_label_ok_def]) >>
+  drule ctor_checked_run_entry_label >> simp[]
 QED
 
 Theorem ctor_checked_deploy_entry_label:
@@ -89,11 +83,7 @@ Theorem ctor_checked_deploy_entry_label:
   lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME lbl ==> lbl = "__deploy"
 Proof
-  rpt strip_tac >> drule_all ctor_checked_source_run >> strip_tac >>
-  `~MEM "__deploy" (MAP FST (internal_fn_descriptors internals))` by
-    (gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> rpt strip_tac >>
-     res_tac >> gvs[internal_label_ok_def]) >>
-  drule ctor_checked_run_entry_label >> simp[]
+  rpt strip_tac >> drule_all ctor_checked_entry_label_from_lowering >> simp[]
 QED
 
 Theorem ctor_checked_task_entry_cursor:

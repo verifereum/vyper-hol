@@ -2,6 +2,7 @@ Theory ctorDeployEntryLabels
 Ancestors
   externalEntryShape compileVyper moduleLowering compileEnv
   loweringShapeDefs loweringShapeRules vyperCompiler list
+  entryInternalAppend fragExec
 Libs
   monadsyntax
 
@@ -74,4 +75,55 @@ Proof
   `MEM candidate.bb_label (MAP (\b. b.bb_label) tail)` by
     (simp[MEM_MAP] >> metis_tac[]) >>
   res_tac >> Cases_on `candidate.bb_label` >> gvs[]
+QED
+
+Theorem compile_deploy_internal_suffix:
+  compile_generate_deploy T code_size cap args data_size ips ce ss pay nr key trans st =
+  compile_internal_fn_bodies ips
+    (SND (compile_generate_deploy T code_size cap args data_size [] ce ss pay nr key trans st))
+Proof
+  simp[compile_generate_deploy_def, LET_THM, compile_internal_fn_bodies_def,
+       comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem compile_simple_deploy_entry_labels[local]:
+  !code_size cap args data_size ce ss pay nr key trans s.
+    cs_extends s
+      (SND (compile_generate_deploy F code_size cap args data_size [] ce ss
+             pay nr key trans s)) /\
+    EVERY (isPREFIX "@")
+      (added_labels s
+        (SND (compile_generate_deploy F code_size cap args data_size [] ce ss
+               pay nr key trans s)))
+Proof
+  rpt gen_tac >>
+  once_rewrite_tac[compile_generate_deploy_def] >>
+  deploy_labels (compile_simple_deploy_def :: deploy_label_rules)
+QED
+
+Theorem compile_deploy_first_block:
+  compile_generate_deploy has sz cap args data_size ifns ce stmts pay nr key trans
+    (initial_compile_state "__deploy") = ((),final) ==>
+  ?bb rest. all_blocks final = bb::rest /\ bb.bb_label = "__deploy"
+Proof
+  strip_tac >>
+  `cs_extends (initial_compile_state "__deploy") final` by
+    (reverse (Cases_on `has`)
+     >- (qpat_assum `compile_generate_deploy F _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+         pure_rewrite_tac[compile_generate_deploy_def, COND_CLAUSES] >>
+         strip_tac >>
+         mp_tac (Q.SPECL [`sz`, `cap`, `args`, `data_size`, `ce`, `stmts`,
+           `pay`, `nr`, `key`, `trans`, `initial_compile_state "__deploy"`]
+           compile_simple_deploy_entry_labels) >>
+         pure_rewrite_tac[compile_generate_deploy_def, COND_CLAUSES] >> simp[]) >>
+     qpat_assum `compile_generate_deploy T _ _ _ _ _ _ _ _ _ _ _ _ = _`
+       (mp_tac o ONCE_REWRITE_RULE [compile_deploy_internal_suffix]) >> strip_tac >>
+     drule (SRULE [cs_appends_def] cs_appends_internal_fn_bodies) >>
+     strip_tac >>
+     irule cs_extends_trans >> goal_assum (drule_at Any) >>
+     simp[compile_deploy_entry_labels]) >>
+  drule cs_extends_block_stream_labels >>
+  simp[initial_compile_state_def] >> strip_tac >>
+  qexistsl [`bb`, `tail`] >> simp[]
 QED
