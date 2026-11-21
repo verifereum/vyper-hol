@@ -2397,10 +2397,10 @@ Proof
   qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vi`]
     mp_tac lower_vyper_runtime_unit_reverts >>
   impl_tac >- simp[] >>
-  disch_then (qx_choosel_then [`func`, `s`, `G'`, `tn'`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`func`, `s`, `G'`, `tn'`, `n`] strip_assume_tac) >>
   qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vi`, `func`, `s`]
     mp_tac lower_vyper_runtime_unit_reverts_memory_ok >>
-  impl_tac >- simp[] >> strip_tac >>
+  impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
   `mem_inv dload_headroom_ok unit.cu_context vi` by
     (irule lower_vyper_runtime_unit_dload_headroom_ok >> metis_tac[]) >>
   metis_tac[]
