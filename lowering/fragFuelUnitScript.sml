@@ -23,6 +23,7 @@ Ancestors
   compileVyper vyperCompiler moduleLowering loweringShapeProps loweringShapeDefs
   supportedProgram supportedNames loweringShapeSource fragFuelExpr compileEnv
   crossBlockSimProofs passSimulationDefs venomExecSemantics finite_map list
+  entryBodyBoundLabels boundLabelRules rich_list
 
 (* ===== From per-function stability to one fuel for every run ===== *)
 
@@ -131,9 +132,10 @@ QED
 Theorem generated_ctx_fns_stable:
   !prefix ifns P0 Wv mid r st1 ctx data.
     prefix (initial_compile_state "__entry") = ((), mid) /\
-    shape_step F jump_label_ok (\st. T) prefix (\u st. T) /\
+    EVERY (\l. l = "__entry" \/ jump_label_ok l)
+      (MAP (\bb. bb.bb_label)
+        (all_blocks (SND (prefix (initial_compile_state "__entry"))))) /\
     fuel_okS P0 Wv {} {} prefix /\ P0 (initial_compile_state "__entry") /\
-    EVERY internal_fn_shape_ok ifns /\
     EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ifns) /\
     ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns)) /\
     EVERY (\(fn_lbl, cenv, params, has_ret_buf, is_nr, nkey, use_trans,
@@ -149,26 +151,17 @@ Theorem generated_ctx_fns_stable:
          ?Kf. !G. callees_stable G ctx fn ==> fuel_stable (G + Kf) ctx fn
 Proof
   rpt gen_tac >> strip_tac >>
-  `shape_extends F jump_label_ok (initial_compile_state "__entry") mid /\
-   shape_state mid` by
-    (qpat_x_assum `shape_step _ _ _ prefix _` mp_tac >>
-     simp[shape_step_def] >> disch_then drule >>
-     simp[shape_state_initial_compile_state]) >>
-  drule initial_entry_blocks_shape >> strip_tac >>
-  `!d. MEM d (internal_fn_descriptors ifns) ==> internal_label_ok (FST d)` by
-    fs[EVERY_MEM] >>
-  `EVERY (\d. ~compiler_label (FST d) /\
-              ~MEM (FST d) (MAP (\bb. bb.bb_label) (all_blocks mid)))
+  `EVERY (\d. internal_label_ok (FST d) /\
+               ~MEM (FST d) (MAP (\bb. bb.bb_label) (all_blocks mid)))
      (internal_fn_descriptors ifns)` by
-    (simp[EVERY_MEM] >> gen_tac >> strip_tac >>
-     first_x_assum drule >> strip_tac >>
-     qspecl_then [`FST d`, `all_blocks mid`] mp_tac
-       internal_name_not_entry_label >> simp[]) >>
+    (gvs[EVERY_MEM] >> rpt strip_tac >> res_tac >>
+     `FST d <> "__entry"` by (strip_tac >> gvs[internal_label_ok_def]) >>
+     metis_tac[jump_label_ok_names]) >>
   `EVERY (\fn. ALL_DISTINCT (fn_labels fn)) ctx.ctx_functions` by
     fs[lowering_context_ok_def, EVERY_MEM] >>
   qspecl_then [`prefix`, `P0`, `\st. T`, `"__entry"`, `ifns`, `()`, `mid`,
                `r`, `st1`, `ctx`, `data`, `Wv`] mp_tac
-    extract_context_fuel_stable >>
+    extract_context_fuel_stable_from_labels >>
   impl_tac >- simp[next_stable_def] >> simp[]
 QED
 
@@ -179,9 +172,10 @@ Theorem split_unit_fns_stable:
     comp_ignore_bind (prefix : unit compiler)
       (comp_bind (compile_internal_fn_bodies ifns) (\x. comp_return ()))
       (initial_compile_state "__entry") = ((), st1) /\
-    shape_step F jump_label_ok (\st. T) prefix (\u st. T) /\
+    EVERY (\l. l = "__entry" \/ jump_label_ok l)
+      (MAP (\bb. bb.bb_label)
+        (all_blocks (SND (prefix (initial_compile_state "__entry"))))) /\
     fuel_okS (\st. T) UNIV {} {} prefix /\
-    EVERY internal_fn_shape_ok ifns /\
     EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ifns) /\
     ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns)) /\
     EVERY (\(fn_lbl, cenv, params, has_ret_buf, is_nr, nkey, use_trans,
@@ -208,11 +202,38 @@ QED
 
 (* ===== The lowered runtime unit ===== *)
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem empty_internal_suffix_state[local]:
+  !prefix : unit compiler. !st.
+    SND (comp_ignore_bind prefix
+      (comp_bind (compile_internal_fn_bodies []) (\x. comp_return ())) st) =
+    SND (prefix st)
+Proof
+  simp[compile_internal_fn_bodies_def, comp_ignore_bind_def, comp_bind_def,
+       comp_return_def, pairTheory.ELIM_UNCURRY]
+QED
+
+Theorem package_external_group_labels_ok[local]:
+  !tops target use_trans nkeys src.
+    external_group_labels_ok (\l. l = "__entry" \/ jump_label_ok l)
+      (package_external_group tops target use_trans nkeys src)
+Proof
+  rpt gen_tac >> PairCases_on `src` >> simp[package_external_group_def] >>
+  IF_CASES_TAC >>
+  simp[external_group_labels_ok_def, package_external_fn_def,
+       set_external_package_target_def, jump_label_ok_def, IS_PREFIX_APPEND,
+       external_common_label_def] >>
+  simp[EVERY_MAP, EVERY_MEM, pairTheory.FORALL_PROD, external_prefix_label_def,
+       compute_selector_def, IS_PREFIX_APPEND]
+QED
+
+Theorem lower_vyper_runtime_unit_fns_stable:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops ==>
+    !fn. MEM fn unit.cu_context.ctx_functions ==>
+         ?Kf. !G. callees_stable G unit.cu_context fn ==>
+                  fuel_stable (G + Kf) unit.cu_context fn
 Proof
   rpt gen_tac >> strip_tac >>
-  `runtime_bodies_shape_ok tops` by
-    metis_tac[supported_program_runtime_bodies_shape_ok] >>
   `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
                    (FST (SND (classify_functions tops))))` by
     (irule supported_names_internal_names_distinct >>
@@ -224,64 +245,17 @@ Proof
   qpat_assum `classify_functions tops = _`
     (fn th => REWRITE_TAC [th, pairTheory.FST, pairTheory.SND]) >>
   strip_tac >>
-  `EVERY (\(sel, lbl, z). isPREFIX "fn_" lbl)
-     (build_selectors (type_env tops) exts)`
-    by REWRITE_TAC [build_selectors_fn_labels] >>
-  `!x. MEM x exts ==>
-       external_fn_shape_ok
-         (set_external_package_target rpolicy.rpol_target
-            (package_external_fn tops T (K global_nonreentrant_slot) x))`
-    by (rpt strip_tac >> irule package_external_fn_shape_ok >> gs[]) >>
-  `!x. MEM x exts ==>
-       external_group_shape_ok
-         (package_external_group tops rpolicy.rpol_target T
-           (K global_nonreentrant_slot) x)`
-    by (rpt strip_tac >> irule package_external_group_shape_ok >> gs[]) >>
-  `!x. MEM x ints ==>
-       internal_fn_shape_ok
-         (set_internal_package_target rpolicy.rpol_target
-            (package_internal_fn tops T (K global_nonreentrant_slot) F 0 x))`
-    by (rpt strip_tac >> irule package_internal_fn_shape_ok >> gs[]) >>
-  `fallback_shape_ok
-     (set_fallback_package_target rpolicy.rpol_target
-        (package_fallback_fn tops T (K global_nonreentrant_slot) fb))`
-    by (qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`,
-                     `rpolicy.rpol_target`] mp_tac package_fallback_fn_shape_ok >>
-        gs[]) >>
-  `shape_step F jump_label_ok (\st. T)
-     (do fallback_lbl <- fresh_label "fallback";
-        compile_selector_dispatch_linear
-          (MAP (\(sel, lbl, z). (sel, lbl))
-             (build_selectors (type_env tops) exts)) fallback_lbl;
-        compile_external_fn_bodies
-          (MAP (set_external_package_target rpolicy.rpol_target o
-                package_external_fn tops T (K global_nonreentrant_slot)) exts);
-        new_block fallback_lbl;
-        (case set_fallback_package_target rpolicy.rpol_target
-              (package_fallback_fn tops T (K global_nonreentrant_slot) fb) of
-           NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
-         | SOME (fb_cenv, fb_pay, fb_nr, fb_key, fb_trans, fb_view, fb_body,
-                 fb_ty) =>
-             compile_fallback_body fb_cenv fb_pay fb_nr fb_key fb_trans
-               fb_view fb_body fb_ty)
-      od) (\x st. T)` by
-    (irule runtime_entry_prefix_shape >> simp[EVERY_MAP, EVERY_MEM]) >>
-  `shape_step F jump_label_ok (\st. T)
-     (do fallback_lbl <- fresh_label "fallback";
-        jobs <- compile_group_dispatch_linear
-                  (MAP (package_external_group tops rpolicy.rpol_target T
-                          (K global_nonreentrant_slot)) exts) fallback_lbl;
-        compile_external_jobs jobs;
-        new_block fallback_lbl;
-        (case set_fallback_package_target rpolicy.rpol_target
-              (package_fallback_fn tops T (K global_nonreentrant_slot) fb) of
-           NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
-         | SOME (fb_cenv, fb_pay, fb_nr, fb_key, fb_trans, fb_view, fb_body,
-                 fb_ty) =>
-             compile_fallback_body fb_cenv fb_pay fb_nr fb_key fb_trans
-               fb_view fb_body fb_ty)
-      od) (\u st. T)` by
-    (irule grouped_runtime_entry_prefix_shape >> simp[EVERY_MAP, EVERY_MEM]) >>
+  `EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,ss,rt).
+      lbl = "__entry" \/ jump_label_ok lbl)
+    (MAP (set_external_package_target rpolicy.rpol_target o
+           package_external_fn tops T (K global_nonreentrant_slot)) exts)` by
+    (simp[EVERY_MAP, EVERY_MEM] >> gen_tac >> PairCases_on `x` >>
+     simp[package_external_fn_def, set_external_package_target_def,
+          jump_label_ok_def, IS_PREFIX_APPEND]) >>
+  `EVERY (external_group_labels_ok (\l. l = "__entry" \/ jump_label_ok l))
+    (MAP (package_external_group tops rpolicy.rpol_target T
+          (K global_nonreentrant_slot)) exts)` by
+    (simp[EVERY_MAP, EVERY_MEM] >> metis_tac[package_external_group_labels_ok]) >>
   qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`,
                `F`, `0`, `rpolicy.rpol_target`,
                `order_internals (runtime_internal_order tops ints) ints`]
@@ -321,6 +295,18 @@ Proof
         (first_x_assum irule >>
          qexistsl_tac [`exts`, `fb`, `K global_nonreentrant_slot`,
                        `rpolicy.rpol_target`, `tops`, `T`] >> simp[]) >>
+      `EVERY (\l. l = "__entry" \/ jump_label_ok l)
+         (MAP (\bb. bb.bb_label) (all_blocks
+           (SND (compile_generate_grouped_runtime
+             (MAP (package_external_group tops rpolicy.rpol_target T
+                    (K global_nonreentrant_slot)) exts) []
+             (set_fallback_package_target rpolicy.rpol_target
+               (package_fallback_fn tops T (K global_nonreentrant_slot) fb))
+             (initial_compile_state "__entry")))))` by
+        (irule bound_labels_runtime_grouped_no_internals >>
+         simp[jump_label_ok_def, initial_compile_state_def, all_blocks_def]) >>
+      pop_assum (assume_tac o REWRITE_RULE
+        [compile_generate_grouped_runtime_split, empty_internal_suffix_state]) >>
       drule split_unit_fns_stable >>
       disch_then (qspecl_then [`ctx`, `data`] assume_tac) >>
       rpt strip_tac >> first_x_assum irule >> rpt conj_tac >>
@@ -359,20 +345,24 @@ Proof
     (first_x_assum irule >>
      qexistsl_tac [`exts`, `fb`, `K global_nonreentrant_slot`, `type_env tops`,
                    `rpolicy.rpol_target`, `tops`, `T`] >> simp[]) >>
+  `EVERY (\l. l = "__entry" \/ jump_label_ok l)
+     (MAP (\bb. bb.bb_label) (all_blocks
+       (SND (compile_generate_runtime (build_selectors (type_env tops) exts)
+         (MAP (set_external_package_target rpolicy.rpol_target o
+               package_external_fn tops T (K global_nonreentrant_slot)) exts)
+         []
+         (set_fallback_package_target rpolicy.rpol_target
+           (package_fallback_fn tops T (K global_nonreentrant_slot) fb))
+         Linear bc mb db ei (initial_compile_state "__entry")))))` by
+    (irule bound_labels_runtime_linear_no_internals >>
+     simp[initial_compile_state_def, all_blocks_def] >>
+     simp[jump_label_ok_def]) >>
+  pop_assum (assume_tac o REWRITE_RULE
+    [compile_generate_runtime_linear_split, empty_internal_suffix_state]) >>
   drule split_unit_fns_stable >>
   disch_then (qspecl_then [`ctx`, `data`] assume_tac) >>
   rpt strip_tac >> first_x_assum irule >> rpt conj_tac >>
   gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
      internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP, EVERY_MEM] >>
   fs[MEM_MAP, PULL_EXISTS]
-QED
-*)
-Theorem lower_vyper_runtime_unit_fns_stable:
-  !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops ==>
-    !fn. MEM fn unit.cu_context.ctx_functions ==>
-         ?Kf. !G. callees_stable G unit.cu_context fn ==>
-                  fuel_stable (G + Kf) unit.cu_context fn
-Proof
-  cheat
 QED
