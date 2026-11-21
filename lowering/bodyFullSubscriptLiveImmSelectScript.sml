@@ -269,6 +269,36 @@ Proof
   simp[]
 QED
 
+(* An index following a dynamic ancestor must leave that ancestor live. *)
+Theorem immutable_target_index_frame:
+  body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env idx es /\
+  target_root bt = TopLevelNameTarget (NONE,id) /\ ~cx_const_name cx (NONE,id) /\
+  target_through_dynarray cenv bt /\ ~target_subscript_overlap cenv bt idx /\
+  eval_expr cx idx es = (res,ee) ==>
+  FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
+    NONE => FEMPTY | SOME imms => get_source_immutables NONE imms) id =
+  FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+    NONE => FEMPTY | SOME imms => get_source_immutables NONE imms) id
+Proof
+  strip_tac >> drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac contract_inv_cenv_modules >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  `~constant_decl id tops` by
+    (fs[cx_const_name_def] >> metis_tac[constant_decl_mem_consts]) >>
+  `MEM (StateRef (NONE,id)) (nonconstant_reads cenv.ce_modules
+      (expr_accesses cenv.ce_modules (target_to_expr bt)))` by
+    (irule target_root_state_nonconstant_read >> simp[]) >>
+  drule_all_then strip_assume_tac target_subscript_overlap_unwritten >>
+  irule eval_expr_unwritten_immutable >>
+  fs[expr_body_pre_def, expr_sim_inv_def] >>
+  qexistsl [`idx`,`env`,`[(NONE,tops)]`,`res`] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule_all_then ACCEPT_TAC immutable_index_callable_closed_mods) >>
+  gvs[]
+QED
+
 Theorem immutable_typed_path[local]:
   env_consistent env cx s /\
   eval_result_typed (env,cx,s) (PlaceR (ImmutablePlace src id path)) vt /\

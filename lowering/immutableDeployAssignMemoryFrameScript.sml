@@ -4,7 +4,8 @@ Ancestors
   immutableDeployAssignSourceFrame immutableDeployAssignFacts exprSimHypsDefs
   compileEnv loweringStateRelDefs valueEncodingProps valueTypingMemoryProps vyperTypeEnv
   vyperTypeInvariants vyperState finite_map placeMemoryPathRebuild
-  immutableDeployAssignAdmissible immutableValue
+  immutableDeployAssignAdmissible immutableDeployAssignBytes immutableValue loweringSlice
+  vyperTypeInitialState alist valueMemoryTransport
 
 Theorem immutable_store_immutables_frame:
   immutables_rel ce cx.txn.target ce.ce_module ce.ce_is_ctor es s /\
@@ -62,7 +63,6 @@ Proof
   metis_tac[val_in_memory_mem_agree, arithmeticTheory.LESS_EQ_REFL]
 QED
 
-(* TEMPORARILY CHEATED - publish the nested write interface for its consumers. *)
 Theorem immutable_value_bytes_rel_replace_path:
   well_formed_type_value itv /\ value_has_type itv old /\
   value_has_type ptv v /\ mem_path_offset itv path = SOME (k,ptv) /\
@@ -77,10 +77,40 @@ Theorem immutable_value_bytes_rel_replace_path:
   immutable_value_bytes_rel itv new
     (mem_bytes_at off (type_memory_size itv) mem')
 Proof
-  cheat
+  strip_tac >>
+  drule_then strip_assume_tac exprSimPropsTheory.mem_path_offset_sound >>
+  `value_has_type itv new` by
+    (irule assign_subscripts_type_path_preserves_type >> simp[] >>
+     qexistsl [`old`,`path`,`ptv`,`v`] >> simp[]) >>
+  `val_in_memory itv new off mem'` by
+    (irule typed_memory_replace_path_frame >> simp[] >>
+     qexistsl [`old`,`k`,`mem`,`path`,`ptv`,`v`] >>
+     `k + off = off + k` by decide_tac >>
+     `k + (off + type_memory_size ptv) = off + k + type_memory_size ptv`
+       by decide_tac >>
+     asm_rewrite_tac[]) >>
+  `immutable_value_admissible itv new` by
+    (irule typed_immutable_admissible >> simp[]) >>
+  simp[immutable_memory_bytes]
 QED
 
-(* TEMPORARILY CHEATED - publish the nested write interface for its consumers. *)
+Theorem immutable_path_write_source[local]:
+  ALOOKUP es.immutables cx.txn.target = SOME imms /\
+  FLOOKUP (get_source_immutables src imms) id = SOME (itv,old) /\
+  write_place cx (ImmutablePlace src id path) v es = (INL (),es') ==>
+  ?new. assign_subscripts itv old path (Replace v) = INL new /\
+        es' = es with immutables :=
+          (cx.txn.target,update_immutable src id itv new imms)::
+          ADELKEY cx.txn.target es.immutables
+Proof
+  strip_tac >>
+  Cases_on `assign_subscripts itv old path (Replace v)` >>
+  gvs[write_place_def, get_immutables_def, get_address_immutables_def,
+       bind_def, return_def, raise_def, lift_option_type_def, lift_sum_def,
+       set_immutable_def, set_address_immutables_def, update_immutable_def,
+       evaluation_state_component_equality]
+QED
+
 Theorem immutable_path_write_immutables_rel:
   immutables_rel ce cx.txn.target src T es s /\
   ALOOKUP es.immutables cx.txn.target = SOME imms /\
@@ -99,5 +129,30 @@ Theorem immutable_path_write_immutables_rel:
      regions_disjoint at (type_memory_size ot) (off+k) (type_memory_size ptv)) ==>
   immutables_rel ce cx.txn.target src T es' (s with vs_memory := mem')
 Proof
-  cheat
+  strip_tac >> drule_all_then strip_assume_tac immutable_path_write_source >>
+  gvs[] >>
+  qpat_x_assum `immutables_rel _ _ _ T _ _` mp_tac >>
+  simp[immutables_rel_def, update_immutable_def,
+       get_source_immutables_set_same, FLOOKUP_UPDATE] >>
+  strip_tac >> rpt gen_tac >>
+  Cases_on `name = id` >> simp[] >> strip_tac >> gvs[]
+  >- (first_x_assum drule_all >> strip_tac >>
+      irule immutable_value_bytes_rel_replace_path >>
+      rpt (CHANGED_TAC (first_assum (irule_at Any))) >>
+      simp[] >>
+      rpt strip_tac >>
+      qpat_assum `!b n. regions_disjoint _ _ _ _ ==> _` irule >>
+      simp[regions_disjoint_def]) >>
+  `regions_disjoint byte_offset (type_memory_size tv) (k+off)
+      (type_memory_size ptv)` by
+    (qpat_assum `!name at ot ov. name <> id /\ _ ==> _`
+       (drule_all_then ACCEPT_TAC)) >>
+  `mem_bytes_at byte_offset (type_memory_size tv) mem' =
+   mem_bytes_at byte_offset (type_memory_size tv) s.vs_memory` by
+    (qpat_assum `!b n. regions_disjoint _ _ _ _ ==> _`
+       (drule_then ACCEPT_TAC)) >>
+  qpat_assum `!name tv v' byte_offset. _ ==> immutable_value_admissible _ _ /\ _`
+    (drule_all_then strip_assume_tac) >> simp[] >>
+  irule val_in_memory_transport >> simp[immutable_admissible_val_wf] >>
+  qexistsl_tac [`s.vs_memory`,`byte_offset`] >> simp[]
 QED
