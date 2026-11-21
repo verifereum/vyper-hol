@@ -1541,6 +1541,15 @@ Definition external_has_defaults_def:
   external_has_defaults (mut,nr,rr,fname,fargs,dflts,ret,body) = ~NULL dflts
 End
 
+(* The frontend folds a sha256 whose arguments are literal values
+   (make_builtin_call). A default that keeps the call would run the
+   precompile in the entry code, before the arguments are decoded, so such
+   units are refused. *)
+Definition external_defaults_no_sha256_def:
+  external_defaults_no_sha256 (mut,nr,rr,fname,fargs,dflts,ret,body) =
+    no_sha256_exprs dflts
+End
+
 Theorem package_external_group_no_defaults:
   !tops target use_trans nkeys mut nr rr fname fargs ret body.
   package_external_group tops target use_trans nkeys
@@ -1843,10 +1852,12 @@ Definition lower_vyper_runtime_unit_def:
          (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f]))
     then
       if EXISTS external_has_defaults ext_fns then
-        run_grouped_lowering
-          (MAP (package_external_group tops rpolicy.rpol_target
-                                      use_trans nkey_map) ext_fns)
-          runtime_int_fns fallback_fn rpolicy "__entry"
+        if EVERY external_defaults_no_sha256 ext_fns then
+          run_grouped_lowering
+            (MAP (package_external_group tops rpolicy.rpol_target
+                                        use_trans nkey_map) ext_fns)
+            runtime_int_fns fallback_fn rpolicy "__entry"
+        else NONE
       else
         run_lowering selectors external_fns runtime_int_fns fallback_fn
           rpolicy 0 0 ([] : dense_bucket list) entry_info "__entry"
