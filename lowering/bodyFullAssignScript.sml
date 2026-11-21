@@ -1813,26 +1813,6 @@ QED
 
 Finalise body_assign_toplevel_copy_after_rhs_frame
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >>
-  `supported_expr tops e` by
-    gvs[Once supported_stmt_def, supported_assignment_def] >>
-  `supported_storage_type tops ty` by
-    (drule supported_variable_decl_mem >> strip_tac >>
-     `supported_declaration_headers tops` by
-       fs[body_inv_def, supported_program_def] >>
-     fs[supported_declaration_headers_def, EVERY_MEM] >>
-     Cases_on `mut` >> gvs[supported_storage_header_contract,
-       supported_transient_header_contract] >>
-     metis_tac[supported_storage_header_contract, supported_transient_header_contract]) >>
-  `body_stmt_safe tops (Assign (BaseTarget (TopLevelNameTarget (src,id))) e)` by
-    metis_tac[supported_stmt_body_safe] >>
-  `expr_body_pre cenv cx env e es` by metis_tac[topcopy_rhs_pre] >>
-  simp[] >>
-  metis_tac[topcopy_not_bytestring, topcopy_no_length_word]
-QED
-*)
 Theorem body_assign_topcopy_frontend[local]:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget (src,id))) e) /\
@@ -1846,11 +1826,18 @@ Theorem body_assign_topcopy_frontend[local]:
     (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget (src,id))) e)) /\
   supported_variable_decl tops (src,id) = SOME (Private, mut, ty, SOME ast_slot) /\
   (mut = Storage \/ mut = Transient) /\
-  (!elem n. ty <> ArrayT elem (Dynamic n)) /\ expr_type e = ty ==>
+  ~is_bytestring_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+  expr_type e = ty ==>
   expr_body_pre cenv cx env e es /\
   ~is_bytestring_type ty /\ ~has_length_word ty
 Proof
-  cheat
+  strip_tac >>
+  `supported_expr tops e` by
+    gvs[Once supported_stmt_def, supported_assignment_def] >>
+  `expr_body_pre cenv cx env e es` by
+    metis_tac[topcopy_rhs_pre_supported] >>
+  Cases_on `ty` >> gvs[has_length_word_def] >>
+  rename1 `ArrayT _ bd` >> Cases_on `bd` >> gvs[has_length_word_def]
 QED
 
 Theorem body_assign_topcopy_slots_code[local]:
@@ -1898,7 +1885,7 @@ Theorem body_assign_toplevel_copy_entry[local]:
     (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) /\
   supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME ast_slot) /\
   (mut = Storage \/ mut = Transient) /\ ~is_word_type ty /\
-  (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+  ~is_bytestring_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
   0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
   lowered_value_type cenv e = expr_type e /\
   stmt_state_rel H ctx func cenv cx es s0 /\
@@ -18612,13 +18599,12 @@ Theorem body_assign_toplevel_copy_full:
     call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) /\
     frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
-    ~supported_scalar_target tops nsid /\
     supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
     (mut = Storage \/ mut = Transient) /\
     ~is_word_type ty /\
-    (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+    ~is_bytestring_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
     0 < type_memory_bytes cenv ty /\
-    expr_type e = ty ==>
+    expr_type e = ty /\ lowered_value_type cenv e = expr_type e ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
@@ -18626,10 +18612,6 @@ Theorem body_assign_toplevel_copy_full:
       (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  reverse (Cases_on `lowered_value_type cenv e = expr_type e`)
-  >- (irule body_assign_other_full >> simp[] >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl_tac [`bindings`, `env`, `env'`, `tops`] >> gvs[]) >>
   rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   irule gas_outcome_full_initial_domain >>
   conj_tac >- simp[evaluate_storage_trace_frame] >>
