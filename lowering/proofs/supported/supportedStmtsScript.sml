@@ -130,7 +130,14 @@ Definition supported_iterator_def:
     (case (a,b) of
        (Literal _ (IntL start), Literal _ (IntL range_end)) =>
          supported_integer_type ty /\ start <= range_end /\ n = Num (range_end - start)
-     | _ => supported_pure_expr tops a /\ supported_pure_expr tops b /\ 0 < n) /\
+     | _ => supported_pure_expr tops a /\ supported_pure_expr tops b /\ 0 < n /\
+            (* Lowering sees the constant-substituted endpoints. *)
+            (case (subst_consts_expr (module_consts_env tops []) a,
+                   subst_consts_expr (module_consts_env tops []) b) of
+               (Literal _ (IntL start), Literal _ (IntL range_end)) =>
+                 supported_integer_type ty /\ start <= range_end /\
+                 n = Num (range_end - start)
+             | _ => T)) /\
   supported_iterator tops ty (Array e) n =
     (case e of
        Name (ArrayT elem (Fixed m)) name => elem = ty /\ n = m
