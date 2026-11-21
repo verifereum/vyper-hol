@@ -28,6 +28,7 @@ Theorem raw_log_topics_full:
        (compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr xs))) /\
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env
     (Call ann RawLog
       [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
