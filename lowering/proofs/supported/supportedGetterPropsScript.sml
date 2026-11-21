@@ -6,7 +6,8 @@ Ancestors
   supportedNames supportedTypes supportedPlaceAssignable supportedStmts supportedStmtTraverse supportedExprTraverse
   e2eDefs vyperTypeContractGetter vyperTypeContractContext bodyStorageMetadata
   compileEnv exprLowering vyperGetter vyperInterpreter list pair finite_map
-  placeTypingBuildProps bodyStorageCases constSubstCorrect constSubst constSubstStmtsPreserve
+  placeTypingBuildProps bodyStorageCases constSubstCorrect constSubst constSubstMods
+  constSubstStmtsPreserve
   vyperTypeContractStaticMaps vyperTypeConstantFold vyperTypeSystem vyperAST
   vyperValue vyperContext compileVyper alist vyperTypeContract vyperTypeCallGraph
 
@@ -356,24 +357,15 @@ Proof
   simp[subst_consts_expr_def, subst_consts_stmt_def]
 QED
 
-(* Visibility changes getter generation; ordinary source lookup uses the
-   visibility-independent find_var_decl_by_name. A getter is a Return of a
-   top-level read or a subscript chain, with distinct generated argument names. *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem supported_selected_external_getter_body[local]:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  MEM decl tops /\ is_public_getter_decl tx.function_name decl /\
+  external_getter_tuple NONE decl = SOME (mut,nr,args,[],ret,fbody) ==>
+  supported_function_body tops External args
+    (subst_consts_stmts (module_consts_env tops []) fbody)
 Proof
-  strip_tac >> drule lookup_function_External_cases >> strip_tac
-  >- (drule_all supported_program_declaration >>
-      simp[supported_declaration_body_def] >> strip_tac >>
-      `subst_consts_fn (module_consts_env tops [])
-         (mut,nr,raw,tx.function_name,args,[]:expr list,ret,fbody) =
-         (mut,nr,raw,tx.function_name,args,[]:expr list,ret,fbody)` by
-        (fs[source_typing_ok_def] >>
-         irule (INST_TYPE [alpha |-> ``:160 word``] checked_supported_function_subst) >>
-         simp[] >>
-         conj_tac
-         >- (qexistsl [`tx.target`, `art`, `am.layouts`, `F`] >> simp[]) >>
-         qexists_tac `External` >> simp[]) >>
-      gvs[subst_consts_fn_def, subst_consts_expr_def]) >>
+  strip_tac >>
   drule_all supported_program_declaration >> strip_tac >>
   `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
     (qpat_x_assum `source_typing_ok _ _ _` mp_tac >>
@@ -421,8 +413,8 @@ Proof
       drule_all build_maps_variable >> strip_tac >>
       Cases_on `v` >> Cases_on `v0` >> Cases_on `o'` >>
       gvs[is_public_getter_decl_def, external_getter_tuple_def] >>
-      `supported_place_type tops t` by metis_tac[supported_storage_place] >>
-      `supported_type_namespace t` by metis_tac[supported_place_namespace] >>
+      `supported_place_type tops t` by
+        metis_tac[supported_storage_place, supported_value_type_def] >>
       `supported_place_type tops (BaseT (UintT 256))` by
         simp[supported_place_type_def, Once supported_nested_type_def,
              supported_scalar_type_def, supported_word_type_def, supported_int_width_def] >>
@@ -436,19 +428,17 @@ Proof
            (impl_tac >-
              (simp[supported_pure_expr_def, supported_place_root_def,
                    supported_subscript_place_def, supported_place_info_def,
-                   place_type_def, supported_storage_value_def,
-                   supportedExprTraverseTheory.supported_expr_exists_def,
-                   expr_nonmain_type_root_def, vyperASTTheory.expr_type_def,
+                   place_type_def, supported_storage_value_def, supported_value_type_def,
+                   int_calls_expr_def,
                    supported_hashmap_value_def] >>
               Cases_on `b'` >> gvs[supported_storage_array_depth] >>
-              metis_tac[supported_storage_place, supported_place_namespace])) >>
+              metis_tac[supported_storage_place])) >>
            strip_tac >> simp[EVERY_MAP] >>
            metis_tac[supported_getter_return_body]) >>
        simp[] >> irule supported_getter_return_body >>
        simp[supported_pure_expr_def, supported_storage_value_def,
-            supportedExprTraverseTheory.supported_expr_exists_def,
-            expr_nonmain_type_root_def, vyperASTTheory.expr_type_def] >>
-       metis_tac[supported_storage_place, supported_place_namespace])) >>
+            supported_immutable_type_def, int_calls_expr_def] >>
+       metis_tac[supported_storage_place])) >>
   drule_all getter_hashmap_member_lookup >> strip_tac >>
   drule_all getter_hashmap_excludes_variable >> strip_tac >>
   Cases_on `v` >> Cases_on `o'` >>
@@ -460,20 +450,16 @@ Proof
   (impl_tac >-
     (simp[supported_pure_expr_def, supported_place_root_def,
           supported_subscript_place_def, supported_place_info_def,
-          place_type_def, supportedExprTraverseTheory.supported_expr_exists_def,
-          expr_nonmain_type_root_def, vyperASTTheory.expr_type_def] >>
-     simp[supported_place_type_def, Once supported_nested_type_def,
-          supported_scalar_type_def, supported_word_type_def] >>
-     Cases_on `t` >> gvs[supported_hashmap_key_type_def,
-       supported_integer_type_def, supported_string_type_def,
-       supported_word_type_def, supported_type_namespace_def] >>
-     rename1 `BaseT bt` >> Cases_on `bt` >>
-     gvs[supported_integer_type_def, supported_string_type_def,
-         supported_word_type_def])) >>
+          place_type_def, int_calls_expr_def] >>
+     fs[supported_place_type_def, Once supported_nested_type_def,
+        supported_hashmap_key_type_def])) >>
   strip_tac >> simp[EVERY_MAP] >>
   metis_tac[supported_getter_return_body]
 QED
-*)
+
+(* Visibility changes getter generation; ordinary source lookup uses the
+   visibility-independent find_var_decl_by_name. A getter is a Return of a
+   top-level read or a subscript chain, with distinct generated argument names. *)
 Theorem supported_selected_external_body:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
@@ -482,7 +468,22 @@ Theorem supported_selected_external_body:
   supported_function_body tops External args
     (subst_consts_stmts (module_consts_env tops []) fbody)
 Proof
-  cheat
+  strip_tac >> drule lookup_function_External_cases >> strip_tac
+  >- (`supported_function_body tops External args fbody` by
+        (mp_tac (Q.INST [`vis` |-> `External`, `name` |-> `tx.function_name`,
+           `defaults` |-> `[]:expr list`, `stmts` |-> `fbody`, `rr` |-> `raw`]
+           (SPEC_ALL supported_program_function)) >> simp[]) >>
+      qpat_assum `source_typing_ok tops am tx` (mp_tac o REWRITE_RULE [source_typing_ok_def]) >>
+      disch_then (qx_choosel_then [`art`, `A`] strip_assume_tac) >>
+      mp_tac (Q.INST
+        [`mode` |-> `F`, `layouts` |-> `am.layouts`, `addr` |-> `tx.target`,
+         `vis` |-> `External`, `name` |-> `tx.function_name`, `dflts` |-> `[]:expr list`,
+         `rr` |-> `raw`,
+         `ss` |-> `fbody`, `imms` |-> `account_immutables am tx.target`,
+         `env` |-> `function_entry_env art [(NONE,tops)] NONE External args`]
+        (INST_TYPE [alpha |-> ``:160 word``] (SPEC_ALL checked_const_substituted_function))) >>
+      simp[supported_pure_exprs_every]) >>
+  metis_tac[supported_selected_external_getter_body]
 QED
 
 Theorem closed_constant_typing[local]:
@@ -560,6 +561,31 @@ Proof
   drule supportedPlaceAssignableTheory.well_formed_array_element >> simp[]
 QED
 
+Theorem type_stmt_subst_consts_result[local]:
+  type_stmt env ret s = SOME env1 /\
+  type_stmt env ret (subst_consts_stmt E s) = SOME env2 ==>
+  env1 = env2
+Proof
+  Cases_on `s` >>
+  TRY (rename1 `Return opt` >> Cases_on `opt`) >>
+  TRY (rename1 `Raise reason` >> Cases_on `reason`) >>
+  TRY (rename1 `Assert e reason` >> Cases_on `reason`) >>
+  rw[subst_consts_stmt_def, subst_consts_expr_def, subst_consts_areason_def,
+     subst_consts_rreason_def, type_stmt_def, AllCaseEqs()]
+QED
+
+Theorem type_stmts_subst_consts_result[local]:
+  !ss env ret E env1 env2.
+    type_stmts env ret ss = SOME env1 /\
+    type_stmts env ret (subst_consts_stmts E ss) = SOME env2 ==>
+    env1 = env2
+Proof
+  Induct >> simp[subst_consts_stmt_def, type_stmt_def, AllCaseEqs()] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all type_stmt_subst_consts_result >> strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
 Theorem compiled_selected_external_body_typing:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
@@ -568,21 +594,25 @@ Theorem compiled_selected_external_body_typing:
     NONE tops FEMPTY = SOME A /\
   lookup_function NONE tx.function_name External tops =
     SOME (mut,nr,args,[],ret,fbody) /\
-  env.type_defs = type_env_all_modules [(NONE,tops)] /\
+  env = function_entry_env art [(NONE,tops)] NONE External args /\
   (!id pt. MEM (id,pt) args ==> FLOOKUP env.var_types id = SOME pt) /\
   type_stmts env ret fbody = SOME env' ==>
   type_stmts env ret (subst_consts_stmts (module_consts_env tops []) fbody) = SOME env'
 Proof
-  strip_tac >> drule lookup_function_External_cases >> strip_tac
-  >- (`subst_consts_fn (module_consts_env tops [])
-        (mut,nr,raw,tx.function_name,args,[]:expr list,ret,fbody) =
-        (mut,nr,raw,tx.function_name,args,[]:expr list,ret,fbody)` by
-        (irule (INST_TYPE [alpha |-> ``:160 word``] checked_supported_function_subst) >>
-         simp[] >>
-         conj_tac
-         >- (qexistsl [`tx.target`, `art`, `am.layouts`, `F`] >> simp[]) >>
-         qexists_tac `External` >> simp[]) >>
-      gvs[subst_consts_fn_def, subst_consts_expr_def]) >>
+  strip_tac >>
+  `env.type_defs = type_env_all_modules [(NONE,tops)]` by
+    simp[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static] >>
+  drule lookup_function_External_cases >> strip_tac
+  >- (`module_allocated am.layouts tx.target NONE tops` by
+        (drule check_contract_main_module_allocated >> simp[]) >>
+      `check_function_body am.layouts tx.target [(NONE,tops)] art NONE
+         External mut nr args [] ret fbody` by
+        (irule check_contract_runtime_function_body_MEM >> simp[] >>
+         qexistsl [`tx.function_name`, `raw`] >> simp[]) >>
+      `IS_SOME (type_stmts env ret
+         (subst_consts_stmts (module_consts_env tops []) fbody))` by
+        gvs[check_function_body_def, consts_env_mods_singleton, subst_consts_mods_singleton] >>
+      fs[optionTheory.IS_SOME_EXISTS] >> metis_tac[type_stmts_subst_consts_result]) >>
   Cases_on `ALOOKUP (module_consts_env tops []) tx.function_name`
   >- metis_tac[subst_getter_body_without_replacement] >>
   `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
