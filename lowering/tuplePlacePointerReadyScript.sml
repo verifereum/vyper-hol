@@ -61,7 +61,6 @@ Proof
   gvs[]
 QED
 
-
 Theorem tuple_place_pointer_local_regions:
   stmt_state_rel H0 ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sp /\
   EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
@@ -98,47 +97,6 @@ Proof
       fs[loweringPostsTheory.target_post_def] >> metis_tac[]) >>
   disj2_tac >> disj2_tac >> disj2_tac >>
   qexistsl [`n`, `b`, `sz`] >> simp[]
-QED
-
-Theorem tuple_place_pointer_pending_memory:
-  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
-  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
-  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
-  i <= j /\ j < LENGTH ltys /\ ~is_word_type (EL j ltys) ==>
-  val_in_memory (EL j ltvs) (EL j vs)
-    (w2n w + SUM (MAP type_memory_size (TAKE j ltvs))) s.vs_memory
-Proof
-  strip_tac >> fs[tuple_place_head_def] >>
-  `val_in_memory (EL j ltvs) (EL j vs)
-    (w2n w + SUM (MAP type_memory_size (TAKE j ltvs))) s0.vs_memory` by
-    simp[] >>
-  `val_wf (EL j ltvs) (EL j vs)` by
-    (irule aug_place_tuple_wf_project >>
-     gvs[vyperTypeDefaultsTheory.values_have_types_LIST_REL, listTheory.LIST_REL_EL_EQN] >>
-     metis_tac[]) >>
-  `SUM (MAP type_memory_size (TAKE j ltvs)) + type_memory_size (EL j ltvs)
-     <= type_memory_size_list ltvs` by
-    (simp[valueEncodingProofsTheory.type_memory_size_list_sum] >>
-     irule tuple_element_interval >> simp[]) >>
-  `mem_bytes_at (w2n w) (type_memory_size_list ltvs) s.vs_memory =
-   mem_bytes_at (w2n w) (type_memory_size_list ltvs) s0.vs_memory` by
-    (fs[tuplePlacePrefixCertTheory.tuple_place_snapshot_def]
-     >- gvs[listTheory.EVERY_EL]
-     >- simp[valueEncodingDefsTheory.mem_bytes_at_def]
-     >- (drule_all tuplePlaceSnapshotTheory.tuple_place_target_allocation >>
-         strip_tac >> drule valueEncodingPropsTheory.mem_bytes_at_translated_window >>
-         disch_then (qspecl_then [`w2n w-b`, `type_memory_size_list ltvs`] mp_tac) >>
-         simp[]) >>
-     drule_all tuplePlaceBorrowTheory.tuple_place_supported_target_borrow_bytes >>
-     strip_tac >> drule valueEncodingPropsTheory.mem_bytes_at_translated_window >>
-     disch_then (qspecl_then [`w2n w-b`, `type_memory_size_list ltvs`] mp_tac) >>
-     simp[]) >>
-  irule valueEncodingPropsTheory.val_in_memory_mem_agree >>
-  conj_tac >- simp[] >> qexistsl [`type_memory_size (EL j ltvs)`, `s0.vs_memory`] >> simp[] >>
-  drule valueEncodingPropsTheory.mem_bytes_at_translated_window >>
-  disch_then (qspecl_then
-    [`SUM (MAP type_memory_size (TAKE j ltvs))`, `type_memory_size (EL j ltvs)`]
-    mp_tac) >> simp[]
 QED
 
 Theorem tuple_place_index_fit:
@@ -270,30 +228,6 @@ Proof
 QED
 
 (* Reassemble the value relation after pointer evaluation, at its actual endpoint. *)
-Theorem tuple_place_pointer_value_rel:
-  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
-  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
-  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
-  evaluate_type (get_tenv cx) (EL i ltys) = SOME (EL i ltvs) /\
-  i < LENGTH ltys ==>
-  expr_val_rel cx (EL i ltys) (EL i vs) (EL i elems) s
-Proof
-  strip_tac >>
-  `?v. eval_operand (EL i elems) s = SOME v /\
-    if is_word_type (EL i ltys) then
-      v = typed_val_to_w256 (EL i ltvs) (EL i vs)
-    else w2n v = w2n w + SUM (MAP type_memory_size (TAKE i ltvs))` by
-    (irule tuple_place_head_pointer_operands >>
-     qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-     simp[] >> goal_assum (drule_at Any)) >>
-  simp[loweringPostsTheory.expr_val_rel_def] >>
-  Cases_on `is_word_type (EL i ltys)` >- gvs[] >>
-  gvs[] >> once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
-  irule tuple_place_pointer_pending_memory >>
-  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  simp[] >> goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
-QED
 
 Theorem tuple_place_pointer_source_facts:
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
