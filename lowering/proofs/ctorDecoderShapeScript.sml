@@ -5,6 +5,25 @@ Ancestors
   list loweringShapeDefs loweringShapeRules loweringShapeProps
   abiEncoder unitShapeDefs venomInst
 
+Theorem compile_abi_decode_dload_shape_mode:
+  (!dst src base hi info.
+    shape_mode_step static F compiler_label (\st. EVERY (plain_operand st) [dst; src; base; hi])
+      (compile_abi_decode_to_buf dst src DLOAD base hi info) (\x st. T)) /\
+  (!dst src base hi elems ao vo.
+    shape_mode_step static F compiler_label (\st. EVERY (plain_operand st) [dst; src; base; hi])
+      (compile_abi_decode_complex_elems dst src DLOAD base hi elems ao vo) (\x st. T)) /\
+  (!dst src base hi ei asz msz ip cnt.
+    shape_mode_step static F compiler_label
+      (\st. EVERY (plain_operand st) [dst; src; base; hi; ip; cnt])
+      (compile_abi_decode_dyn_loop dst src DLOAD base hi ei asz msz ip cnt) (\x st. T))
+Proof
+  rpt conj_tac >> rpt gen_tac >> irule shape_step_conseq_mode >>
+  map_every (fn i => TRY (irule_at Any (cj i compile_abi_decode_shape_supported_mode))) [1, 2, 3] >>
+  qexists_tac `\st. T` >> simp[shape_mode_stable_def]
+QED
+
+(* The static shape facts used by the existing clients. *)
+
 Theorem compile_abi_decode_dload_shape:
   (!dst src base hi info.
     shape_step F compiler_label (\st. EVERY (plain_operand st) [dst; src; base; hi])
@@ -17,7 +36,7 @@ Theorem compile_abi_decode_dload_shape:
       (\st. EVERY (plain_operand st) [dst; src; base; hi; ip; cnt])
       (compile_abi_decode_dyn_loop dst src DLOAD base hi ei asz msz ip cnt) (\x st. T))
 Proof
-  rpt conj_tac >> rpt gen_tac >> irule shape_step_conseq >>
-  map_every (fn i => TRY (irule_at Any (cj i compile_abi_decode_shape_supported))) [1, 2, 3] >>
-  qexists_tac `\st. T` >> simp[shape_stable_def]
+  ACCEPT_TAC (PURE_REWRITE_RULE
+    [shape_mode_step_static]
+    (Q.INST [`static` |-> `T`] compile_abi_decode_dload_shape_mode))
 QED

@@ -406,9 +406,11 @@ Proof
   `emit_op ADD [Var input;src] sb = (addr,sc)` by
     gvs[abiEncoderTheory.compile_abi_dec_addr_def] >>
   `sb.cs_next_var <= sd.cs_next_var /\ not_fresh_at sb idx` by
-    gvs[abiEncoderTheory.compile_abi_dec_addr_def, emit_op_def, emit_inst_def,
-        comp_bind_def, comp_ignore_bind_def, fresh_var_def, fresh_id_def,
-        emit_def, comp_return_def, not_fresh_at_def] >>
+    (qpat_assum `emit_op MLOAD _ sa = _` mp_tac >>
+     qpat_assum `emit_op ADD _ sb = _` mp_tac >>
+     qpat_assum `emit_op MLOAD _ sc = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[emit_op_eq, not_fresh_at_def] >> rpt strip_tac >> gvs[]) >>
   `!x. not_fresh_at sb x ==> not_fresh_at sd x` by
     (qpat_x_assum `sb.cs_next_var <= sd.cs_next_var` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
