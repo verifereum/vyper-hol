@@ -21,7 +21,7 @@
 Theory whitelistCheckerGate
 Ancestors
   list alist vyperAST vyperTypeSystem vyperTypeContract vyperTypeContractContext
-  e2eDefs
+  e2eDefs e2eDeployDefs
   supportedTypes supportedDecls supportedNames supportedExprs supportedStmts
   supportedStmtTraverse supportedProgram
   whitelistCheckerDecls whitelistCheckerDeploy whitelistCheckerTypes
@@ -129,4 +129,25 @@ Proof
   Cases_on `tl` >> simp[supported_deploy_declaration_def] >>
   rename1 `FunctionDecl vis` >> Cases_on `vis` >> simp[] >>
   metis_tac[check_contract_deploy_function_body]
+QED
+
+(* ===== The gate from the top theorems' typing premises ===== *)
+
+(* TOP-LEVEL *)
+Theorem source_typing_ok_supported_program:
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx ==>
+  supported_program tops
+Proof
+  rw[source_typing_ok_def, source_deployment_rel_def] >>
+  metis_tac[check_contract_supported_program]
+QED
+
+(* TOP-LEVEL *)
+Theorem deploy_typing_ok_supported_programs:
+  deploy_typing_ok tops am tx /\ layouts_agree tops am tx ==>
+  supported_program tops /\ supported_program_deploy tops
+Proof
+  rw[deploy_typing_ok_def] >>
+  metis_tac[check_contract_supported_program,
+            check_contract_supported_program_deploy]
 QED

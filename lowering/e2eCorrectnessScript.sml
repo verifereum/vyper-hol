@@ -23,6 +23,7 @@ Ancestors
   codegenCorrectness immutableCodeLayout asmOptimizer codegenEncodingWf
   spillWordBounds
   sourceUnitExecution gasSummary supportedProgram callTrace frameOutcome
+  whitelistCheckerGate
   stateEquiv stateEquivProps
   venomExecSemantics
   vyperABI
@@ -3009,7 +3010,6 @@ Theorem vyper_call_correct:
   !fin policy tops deploy_bc runtime_bc am tx es H.
     fin IN accepted_finalizers /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     LENGTH (call_trace es) < 2 ** 64 /\
@@ -3022,6 +3022,9 @@ Theorem vyper_call_correct:
        calldata_result_rel H tops am tx es r es')
 Proof
   rpt gen_tac >> strip_tac >>
+  `supported_program tops` by (
+    irule source_typing_ok_supported_program >>
+    fs[e2eDefsTheory.call_state_rel_def] >> metis_tac[]) >>
   drule_all vyper_call_correct_guarded >>
   disch_then (qx_choose_then `r` (qx_choose_then `es'` strip_assume_tac)) >>
   qexistsl_tac [`r`, `es'`] >> asm_rewrite_tac[] >>

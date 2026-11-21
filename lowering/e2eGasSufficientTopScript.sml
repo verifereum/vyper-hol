@@ -17,7 +17,7 @@ Ancestors
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeSource runtimeLabelReadiness runtimeSymSrcUnit fragFuelUnit
   e2eDeployRawFmp e2eDeployAtMarks e2eDeployDefs deploySymSrcUnit
-  ctorDeployDefs ctorDeployDefsReach ctorDeployRawEntryFacts
+  ctorDeployDefs ctorDeployDefsReach ctorDeployRawEntryFacts whitelistCheckerGate
   ctorDeployFrame ctorDeployShape ctorDeployDead ctorDeployRunBounded
   ctorDeployInitcodeAsm ctorDeployMemoryFrontier ctorDeployLoweringSource
   deployUnitProducers deployUnitExecution deployUnitExitSafe
@@ -545,7 +545,6 @@ Theorem vyper_call_gas_sufficient:
   !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\
     source_typing_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es
     ==>
@@ -567,6 +566,9 @@ Theorem vyper_call_gas_sufficient:
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
   rpt gen_tac >> strip_tac >>
+  `supported_program tops` by (
+    irule source_typing_ok_supported_program >>
+    fs[e2eDefsTheory.call_state_rel_def] >> metis_tac[]) >>
   `?g. !g'.
      g <= g' /\
      (!f vals.
@@ -606,7 +608,6 @@ Theorem e2e_deploy_gas_sufficient:
   !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\ supported_program_deploy tops /\
     deploy_typing_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     ~(?t. runtime_bc = 0xEFw :: t)
@@ -626,6 +627,9 @@ Theorem e2e_deploy_gas_sufficient:
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
   rpt gen_tac >> strip_tac >>
+  `supported_program tops /\ supported_program_deploy tops` by (
+    irule deploy_typing_ok_supported_programs >>
+    fs[deploy_state_rel_def] >> metis_tac[]) >>
   `?g. !g'.
      g <= g' /\
      LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64 /\

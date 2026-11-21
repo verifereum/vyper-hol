@@ -6,7 +6,7 @@ Theory e2eDeployCorrectness
 Ancestors
   ownSymSrcUnit codegenLabelDisciplined fnPlanPlaceRevertPostamble
   codegenSymOwnRel
-  e2eDeployAtMarks e2eDeployRawFmp e2eDeployDefs ctorDeployDefs
+  e2eDeployAtMarks e2eDeployRawFmp e2eDeployDefs ctorDeployDefs whitelistCheckerGate
   ctorDeployInitcode ctorDeployEntry ctorDeployShape ctorDeployDefsReach
   deployUnitExecution ctorDeployBodyJoint ctorDeployDead ctorDeployFrame
   compileVyper compilePhasesProps codegen e2eProducers e2eComposition
@@ -574,7 +574,6 @@ Theorem e2e_deploy_correctness:
   !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\ supported_program_deploy tops /\
     deploy_typing_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     LENGTH (call_trace es) < 2 ** 64
@@ -585,6 +584,9 @@ Theorem e2e_deploy_correctness:
        deploy_call_result_rel tops runtime_bc am tx es r es')
 Proof
   rpt gen_tac >> strip_tac >>
+  `supported_program tops /\ supported_program_deploy tops` by (
+    irule deploy_typing_ok_supported_programs >>
+    fs[deploy_state_rel_def] >> metis_tac[]) >>
   `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
   pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
   >- (drule_all e2e_deploy_correctness_identity >> simp[])
@@ -603,7 +605,6 @@ val _ =
     val expected = ``!fin policy tops deploy_bc runtime_bc am tx es.
       fin IN accepted_finalizers /\
       compile_vyper fin policy tops = SOME (deploy_bc,runtime_bc) /\
-      supported_program tops /\ supported_program_deploy tops /\
       deploy_typing_ok tops am tx /\
       deploy_state_rel tops deploy_bc am tx es /\
       LENGTH (call_trace es) < 2 ** 64 ==>
