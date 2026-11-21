@@ -2,7 +2,8 @@
 Theory groupedEntryCut
 Ancestors
   fragFuelConfinement fragObserverCodeProps exprSimAbiGasBridge groupedRegistrationCounters
-  fragFuel fragExec fragGasPath venomInst venomExecSemantics venomState
+  fragFuel fragExec fragGasPath loweringShapeDefs compileEnv
+  venomInst venomExecSemantics venomState
   venomExecProofs list rich_list relation
 
 Theorem entry_observer_preserves_execution_hyps[local]:
@@ -105,4 +106,71 @@ Proof
   >- (asm_rewrite_tac[frag_observer_cut_lookup, frag_observer_cut_instruction] >>
       metis_tac[entry_observer_matches_before_cut, entry_observer_first_exit]) >>
   simp[]
+QED
+
+Theorem grouped_entry_terminated_cut_no_edge:
+  fn_has_code sa sb fn /\ block_is_terminated sb /\
+  (!label bb. lookup_block label fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  gas_path_edge ctx fn s k (OK t) ==>
+  ~at_point sb t
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all grouped_registration_edge_pc >> strip_tac >>
+  strip_tac >>
+  Cases_on `sb.cs_current_insts` >> gvs[block_is_terminated_def, at_point_def] >>
+  Cases_on `is_terminator i.inst_opcode` >> gvs[] >>
+  `?rest. bb.bb_instructions = (h::t') ++ rest` by
+    (fs[fn_has_code_def, IS_PREFIX_APPEND] >> metis_tac[]) >>
+  qpat_x_assum `LENGTH t' = s.vs_inst_idx` (assume_tac o SYM) >>
+  `LENGTH t' < LENGTH (h::t') /\ LENGTH t' < LENGTH ((h::t') ++ rest)` by
+    (simp[LENGTH_APPEND] >> fs[] >> decide_tac) >>
+  `i = EL (LENGTH t') (h::t')` by
+    (qpat_x_assum `get_instruction bb _ = SOME i` mp_tac >>
+     pure_rewrite_tac [get_instruction_def] >>
+     asm_rewrite_tac [EL_APPEND_EQN, optionTheory.SOME_11] >>
+     metis_tac[]) >>
+  `LAST (h::t') = EL (LENGTH t') (h::t')` by simp[LAST_EL] >>
+  metis_tac[]
+QED
+
+Theorem grouped_entry_cut_avoids_prior_labels:
+  cs_extends sa sb /\ ALL_DISTINCT (MAP (\b. b.bb_label) (all_blocks sb)) /\
+  MEM s.vs_current_bb (MAP (\b. b.bb_label) sa.cs_blocks) ==>
+  ~(^before_cut sa sb fn id s)
+Proof
+  simp[] >> strip_tac >>
+  qpat_x_assum `cs_extends sa sb` (strip_assume_tac o REWRITE_RULE [cs_extends_def]) >>
+  drule emitted_blocks_append >> strip_tac >>
+  `~MEM s.vs_current_bb (sb.cs_current_bb :: MAP (\b. b.bb_label) new)` by
+    (fs[all_blocks_def, REVERSE_APPEND, MAP_REVERSE, ALL_DISTINCT_APPEND,
+        ALL_DISTINCT_REVERSE, MAP_APPEND] >> metis_tac[MEM_MAP, MEM_REVERSE]) >>
+  Cases_on `lookup_block s.vs_current_bb (frag_observer sa sb fn id).fn_blocks` >>
+  gvs[] >> drule frag_observer_lookup_cases >> rw[] >> fs[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem grouped_entry_terminated_no_reentry:
+  frag_fuel Wv {} {} sa sb Kb /\ at_point sa s /\ sa.cs_current_insts = [] /\
+  fn_has_code sa sb fn /\ cs_extends sa sb /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks sb)) /\
+  block_is_terminated sb /\ no_phi_fn fn /\ callees_stable G ctx fn /\
+  gas_path ctx fn s n (OK t) ==>
+  ~MEM t.vs_current_bb (MAP (\bb. bb.bb_label) sa.cs_blocks)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!label bb. lookup_block label fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0` by
+    (fs[no_phi_fn_def, EVERY_MEM] >> metis_tac[lookup_block_MEM]) >>
+  `~MEM sb.cs_current_bb (MAP (\bb. bb.bb_label) (emitted_blocks sa sb))` by
+    (qpat_assum `cs_extends sa sb`
+       (strip_assume_tac o REWRITE_RULE [cs_extends_def]) >>
+     drule emitted_blocks_append >> strip_tac >>
+     fs[all_blocks_def, REVERSE_APPEND, MAP_REVERSE, MAP_APPEND,
+        ALL_DISTINCT_APPEND, MEM_REVERSE]) >>
+  drule_all grouped_entry_first_cut >>
+  disch_then (qspec_then `id` mp_tac) >> strip_tac
+  >- (Cases_on `sb.cs_current_insts` >>
+      gvs[block_is_terminated_def, at_point_def]) >>
+  metis_tac[grouped_entry_cut_avoids_prior_labels,
+            grouped_entry_terminated_cut_no_edge]
 QED

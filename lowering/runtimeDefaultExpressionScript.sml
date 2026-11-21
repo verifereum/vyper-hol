@@ -4,7 +4,8 @@ Ancestors
   bodyFullCases bodyFullPreds whitelistCheckerConsts vyperTypeContract
   exprCallBounds exprLowering exprSimSource exprSimFullBundleProps
   gasOutcomeFullCompose abiEncodeArgsScopes vyperScopePreservation
-  bodySimFull vyperInterpreter vyperState vyperAST vyperContext arithmetic list pair
+  bodySimFull targetPureSourceFrame supportedExprTraverse
+  vyperInterpreter vyperState vyperAST vyperContext arithmetic list pair
 
 Theorem every_body_expr_full_ok[local]:
   EVERY (body_expr_full_ok cx) es ==> body_exprs_full_ok cx es
@@ -73,6 +74,38 @@ Proof
   asm_rewrite_tac[] >>
   qpat_assum `!e. _ /\ (MEM e l ==> _)` (qspec_then `e` mp_tac) >>
   simp[] >> metis_tac[constant_expr_runtime_constant]
+QED
+
+Theorem runtime_constant_expr_effect_free[local]:
+  runtime_constant_expr mods e ==> ~expr_has_effect e
+Proof
+  `(!p e. p = expr_effect_root /\ runtime_constant_expr mods e ==>
+     ~supported_expr_exists p e) /\
+   (!p t. p = expr_effect_root /\ F ==> ~supported_target_exists p t) /\
+   (!p es. p = expr_effect_root /\ EVERY (runtime_constant_expr mods) es ==>
+     ~supported_exprs_exists p es) /\
+   (!p opt. p = expr_effect_root /\ F ==> ~supported_opt_exists p opt) /\
+   (!p fs. p = expr_effect_root /\ EVERY (runtime_constant_expr mods) (MAP SND fs) ==>
+     ~supported_fields_exists p fs)` suffices_by
+    metis_tac[expr_has_effect_def] >>
+  ho_match_mp_tac supported_expr_exists_ind >>
+  rw[runtime_constant_expr_def, supported_expr_exists_def, expr_effect_root_def] >>
+  fs[EVERY_MEM] >> metis_tac[constant_expr_runtime_constant]
+QED
+
+Theorem runtime_default_eval_frame:
+  runtime_constant_expr mods e /\
+  bind (eval_expr cx e) (read_result cx) es = (res,ee) ==>
+  ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|> =
+  es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>
+Proof
+  strip_tac >>
+  `~expr_has_effect e` by metis_tac[runtime_constant_expr_effect_free] >>
+  Cases_on `eval_expr cx e es` >>
+  rename1 `eval_expr cx e es = (er,rt)` >>
+  drule_all effect_free_source_projection >> strip_tac >>
+  Cases_on `er` >> fs[bind_def] >>
+  metis_tac[read_result_state]
 QED
 
 Theorem runtime_default_expr_full:
