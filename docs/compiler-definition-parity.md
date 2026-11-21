@@ -283,7 +283,7 @@ currently supported HOL input subset.
 |---|---|---|
 | selectors | fixed-width Keccak helpers in `selectorDispatchScript.sml` | `vyper.utils.method_id` / Keccak-256 |
 | locals and loops | `declare_local`, `declare_stmt_local`, `compile_stmt` | `Context.new_variable`, statement range/iteration lowering |
-| event encoding | `compile_log_store_data`, `Log` lowering | `abi_encoder.py`, `VenomBuilder.log` |
+| event encoding | `compile_log_saved_topics`, `compile_abi_encode_values_to_buf`, `Log` lowering | `abi_encoder.py`, `VenomBuilder.log` |
 | PHI liveness | `build_phi_maps`, `input_vars_from`, `liveness_analyze` | `LivenessAnalysis.input_vars_from` |
 | repeated SSA | `select_current_live_in`, `simplify_current_phi*` | `MakeSSA.run_pass`, `_remove_degenerate_phis` |
 | unused-variable removal | current-PHI input protection and fixed-point cleanup | `RemoveUnusedVariablesPass` and DFG maintenance |

@@ -17,37 +17,6 @@ Definition log_eval_view_def:
            ys xs
 End
 
-Theorem compile_log_eval_all_code:
-  cenv.ce_event_info (nsid_to_string id) = SOME info /\
-  compile_log_eval_all cenv args sa = (ops,sm) /\
-  compile_stmt cenv lctx ty (Log id args) sa = ((),sb) /\
-  fn_has_code sa sb func ==>
-  cs_extends sa sm /\ cs_extends sm sb /\
-  fn_has_code sa sm func /\ fn_has_code sm sb func
-Proof
-  strip_tac >> PairCases_on `info` >>
-  `ci_mono sa sm` by
-    (mp_tac (Q.SPECL [`cenv`, `args`, `sa`] compile_log_eval_all_ci_mono) >>
-     simp[]) >>
-  `ci_mono sm sb` by
-    (qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
-     simp_tac bool_ss [Once compile_stmt_def, LET_THM] >>
-     asm_simp_tac (srw_ss()) [LET_THM] >>
-     rewrite_tac[Once comp_bind_def] >>
-     asm_simp_tac (srw_ss()) [LET_THM] >>
-     disch_then (fn th => SUBST1_TAC
-       (SYM (SIMP_RULE (srw_ss()) [] (Q.AP_TERM `SND` th)))) >>
-     rpt (FIRST
-       [CHANGED_TAC (asm_simp_tac (srw_ss())
-          [ci_mono_comp_return, ci_mono_emit_inst,
-           ci_mono_compile_alloc_buffer, ci_mono_compile_abi_encode,
-           compile_log_topic_ops_ci_mono, compile_log_store_data_ci_mono]),
-        ho_match_mp_tac ci_mono_bind >> conj_tac >> rpt gen_tac,
-        ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >> rpt gen_tac,
-        IF_CASES_TAC])) >>
-  fs[ci_mono_def] >> metis_tac[fn_has_code_split]
-QED
-
 Theorem split_log_ops_view:
   !ys xs flags.
     LIST_REL (\y x. FST y = FST x /\
@@ -82,94 +51,6 @@ Proof
          compile_store_memory cenv v d ty (SND h')` by
     (rw[compile_store_memory_def] >> gvs[]) >>
   first_x_assum (qspecl_then [`t`, `t'`] mp_tac) >> simp[]
-QED
-
-Theorem compile_log_empty_trace:
-  cenv.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
-  log_eval_view cenv args sa xs sm /\
-  compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (topics,st) /\
-  SND (split_log_ops xs flags) = [] ==>
-  (compile_stmt cenv lctx ty (Log id args) sa = ((),sb) <=>
-   emit_inst LOG
-     (Lit (n2w (LENGTH (Lit (n2w h)::topics))) ::
-       REVERSE (Lit (n2w h)::topics) ++ [Lit 0w; Lit 0w]) [] st = ((),sb))
-Proof
-  strip_tac >> gvs[log_eval_view_def] >>
-  drule split_log_ops_view >> disch_then (qspec_then `flags` strip_assume_tac) >>
-  gvs[] >> simp[Once compile_stmt_def, comp_bind_def, comp_return_def]
-QED
-
-Theorem compile_log_data_trace_declared:
-  cenv.ce_event_info (nsid_to_string id) = SOME (h,dtys,flags) /\
-  compile_log_eval_all cenv args sa = (ys,sm) /\
-  compile_log_topic_ops (FST (split_log_ops ys flags)) sm = (topics,st) /\
-  SND (split_log_ops ys flags) = data_ops /\ data_ops <> [] ==>
-  (compile_stmt cenv lctx ty (Log id args) sa = ((),sb) <=>
-   ?src s1 s2 dst s3 len s4.
-     compile_alloc_buffer
-       (MAX 32 (SUM (MAP (type_memory_bytes cenv)
-         (log_non_indexed_types flags dtys)))) st = (src,s1) /\
-     compile_log_store_data cenv data_ops (log_non_indexed_types flags dtys)
-       src.buf_operand 0 s1 = ((),s2) /\
-     compile_alloc_buffer
-       (MAX 32 (abi_size_bound cenv.ce_struct_fields
-         (TupleT (log_non_indexed_types flags dtys)))) s2 = (dst,s3) /\
-     compile_abi_encode_to_buf dst.buf_operand src.buf_operand
-       (type_to_abi_enc_info cenv.ce_struct_fields cenv
-         (TupleT (log_non_indexed_types flags dtys))) s3 = (len,s4) /\
-     emit_inst LOG
-       (Lit (n2w (LENGTH (Lit (n2w h)::topics))) ::
-         REVERSE (Lit (n2w h)::topics) ++ [len;dst.buf_operand]) [] s4 = ((),sb))
-Proof
-  strip_tac >>
-  simp[Once compile_stmt_def, NULL_EQ, comp_bind_def, comp_return_def,
-       comp_ignore_bind_def] >> rpt (pairarg_tac >> gvs[])
-QED
-
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >> gvs[log_eval_view_def] >>
-  drule split_log_ops_view >> disch_then (qspec_then `flags` strip_assume_tac) >>
-  `log_non_indexed_types flags (MAP SND xs) = MAP SND (SND (split_log_ops xs flags))` by
-    simp[split_log_ops_data_types] >>
-  `EVERY (\t. is_word_type t \/ is_bytestring_type t)
-     (MAP SND (SND (split_log_ops xs flags)))` by
-    (`EVERY (supported_scalar_type o SND) (SND (split_log_ops xs flags))` by
-       (irule log_split_data_every >> simp[]) >>
-     gvs[EVERY_MAP, EVERY_MEM] >> metis_tac[log_scalar_topic_shape]) >>
-  `!buf off. compile_log_store_data cenv (SND (split_log_ops ys flags))
-       (MAP SND (SND (split_log_ops xs flags))) buf off =
-     compile_log_store_data cenv (SND (split_log_ops xs flags))
-       (MAP SND (SND (split_log_ops xs flags))) buf off` by
-    (rpt gen_tac >> irule compile_log_store_data_view >> simp[]) >>
-  `SND (split_log_ops ys flags) <> []` by (strip_tac >> gvs[]) >>
-  simp[Once compile_stmt_def, NULL_EQ, comp_bind_def, comp_return_def,
-    comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> simp[]
-QED
-*)
-Theorem compile_log_data_trace:
-  cenv.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
-  log_eval_view cenv args sa xs sm /\
-  EVERY (supported_scalar_type o SND) xs /\ LENGTH flags = LENGTH xs /\
-  compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (topics,st) /\
-  SND (split_log_ops xs flags) = data_ops /\ data_ops <> [] ==>
-  (compile_stmt cenv lctx ty (Log id args) sa = ((),sb) <=>
-   ?src s1 s2 dst s3 len s4.
-     compile_alloc_buffer
-       (MAX 32 (SUM (MAP (type_memory_bytes cenv) (MAP SND data_ops)))) st = (src,s1) /\
-     compile_log_store_data cenv data_ops (MAP SND data_ops) src.buf_operand 0 s1 = ((),s2) /\
-     compile_alloc_buffer
-       (MAX 32 (abi_size_bound cenv.ce_struct_fields (TupleT (MAP SND data_ops))))
-       s2 = (dst,s3) /\
-     compile_abi_encode_to_buf dst.buf_operand src.buf_operand
-       (type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT (MAP SND data_ops)))
-       s3 = (len,s4) /\
-     emit_inst LOG
-       (Lit (n2w (LENGTH (Lit (n2w h)::topics))) ::
-         REVERSE (Lit (n2w h)::topics) ++ [len;dst.buf_operand]) [] s4 = ((),sb))
-Proof
-  cheat
 QED
 
 Theorem log_buffer_trace_code:

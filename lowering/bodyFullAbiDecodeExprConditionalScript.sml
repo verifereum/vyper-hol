@@ -265,7 +265,10 @@ Resume abi_decode_singleton_vv_full[continuation]:
         drule_all_then strip_assume_tac fn_has_code_split) >>
      BETA_TAC >> rpt gen_tac >> disch_tac >>
      pop_assum (CONJUNCTS_THEN2 (mk_asm "setup_success") (mk_asm "ready_origin")) >>
-     asm_x "entry_origin" (CONJUNCTS_THEN2 (mk_asm "setup_pre") kall_tac) >>
+     qpat_assum `~ctx_has_dalloca ctx` (fn static =>
+       asm_x "entry_origin" (CONJUNCTS_THEN2
+         (mk_asm "setup_pre" o PURE_REWRITE_RULE [static, NOT_CLAUSES, AND_CLAUSES])
+         kall_tac)) >>
      asm "setup_pre" (fn pre =>
        qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` (fn code =>
          mp_tac (PART_MATCH (funpow 6 rand o lhand o lhand)
@@ -280,11 +283,12 @@ Resume abi_decode_singleton_vv_full[continuation]:
          (conj_tac >- asm "setup_pre" ACCEPT_TAC >>
            conj_tac >- asm "setup_success" ACCEPT_TAC >> simp[]) >>
         asm "ready_origin" ACCEPT_TAC)) >>
-     let val rules = [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
-     in
-       disch_then (assume_tac o SIMP_RULE (srw_ss()) rules) >>
-       SIMP_TAC (srw_ss()) rules >> pop_assum ACCEPT_TAC
-     end) >>
+     qpat_assum `~ctx_has_dalloca ctx` (fn static =>
+       let val rules = [static, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+       in
+         disch_then (assume_tac o SIMP_RULE (srw_ss()) rules) >>
+         SIMP_TAC (srw_ss()) rules >> pop_assum ACCEPT_TAC
+       end)) >>
   qpat_assum `expr_type e = BaseT _` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
   disch_tac >> irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
   goal_assum (drule_at Any) >>

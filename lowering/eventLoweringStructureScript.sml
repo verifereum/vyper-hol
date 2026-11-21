@@ -3,7 +3,8 @@
    These certificates do not assume expression execution or payload framing. *)
 Theory eventLoweringStructure
 Ancestors
-  stmtLowering exprLowering exprLoweringProps compileEnv context list rich_list
+  stmtLowering exprLowering exprLoweringProps compileEnv context fragExec list rich_list
+Libs pairLib
 
 Theorem compile_log_save_arg_identity:
   !cenv src_ty op args cs.
@@ -114,6 +115,35 @@ Proof
   log_structure_tac (compile_encode_log_topic_ci_mono :: log_structure_rules)
 QED
 
+Theorem compile_log_saved_topics_ci_mono:
+  !topics cenv cs. ci_mono cs (SND (compile_log_saved_topics cenv topics cs))
+Proof
+  Induct >> rpt gen_tac >> TRY (PairCases_on `h`) >>
+  simp_tac (srw_ss()) [Once compile_log_saved_topics_def] >>
+  log_structure_tac (ci_mono_unwrap_value ::
+    compile_encode_log_topic_ci_mono :: log_structure_rules)
+QED
+
+Theorem compile_log_saved_topics_cons:
+  compile_log_saved_topics cenv (row::rows) sa = (ops,sb) <=>
+  ?op sm rest.
+    compile_log_saved_topics cenv [row] sa = ([op],sm) /\
+    compile_log_saved_topics cenv rows sm = (rest,sb) /\ ops = op::rest
+Proof
+  PairCases_on `row` >>
+  simp[compile_log_saved_topics_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+QED
+
+Theorem compile_log_saved_topic_cut:
+  compile_log_saved_topics cenv [(saved,flag)] sa = ([op],sb) <=>
+  ?src su. unwrap_value cenv saved sa = (src,su) /\
+    compile_encode_log_topic src flag su = (op,sb)
+Proof
+  simp[compile_log_saved_topics_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+QED
+
 Theorem compile_log_store_data_ci_mono:
   !cenv ops types buf offset cs.
     ci_mono cs (SND (compile_log_store_data cenv ops types buf offset cs))
@@ -157,9 +187,11 @@ Proof
   >- simp[Once compile_stmt_def, LET_THM, ci_mono_emit_inst] >>
   rename1 `cenv.ce_event_info (nsid_to_string event_id) = SOME info` >>
   PairCases_on `info` >>
-  simp_tac (srw_ss()) [Once compile_stmt_def, LET_THM] >>
-  log_structure_tac (compile_log_topic_ops_ci_mono ::
-    compile_log_store_data_ci_mono :: log_structure_rules)
+  asm_simp_tac (srw_ss()) [Once compile_stmt_def, LET_THM] >>
+  log_structure_tac
+    (compile_log_saved_topics_ci_mono ::
+     ci_mono_compile_abi_encode_values_to_buf :: log_structure_rules) >>
+  irule ci_mono_compile_ext_call_args >> simp[cj 1 compile_expr_ci_mono]
 QED
 
 Theorem compile_log_stmt_extends_insts:
@@ -175,4 +207,69 @@ Proof
   `isPREFIX cs.cs_current_insts cs'.cs_current_insts` by
     gvs[ci_mono_def, same_blocks_def, cs_extends_def, APPEND_EQ_SELF] >>
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
+QED
+
+Theorem compile_log_stmt_trace:
+  cenv.ce_event_info (nsid_to_string id) = SOME (hash,declared,flags) /\
+  compile_stmt cenv lctx ty (Log id args) sa = ((),sf) ==>
+  ?saved sm topics st.
+    compile_ext_call_args compile_expr cenv [] (MAP (lowered_value_type cenv) args)
+      args sa = (saved,sm) /\
+    compile_log_saved_topics cenv
+      (FST (split_log_ops (ZIP (saved,MAP (lowered_value_type cenv) args)) flags)) sm =
+      (topics,st) /\
+    ((SND (split_log_ops (ZIP (saved,MAP (lowered_value_type cenv) args)) flags) = [] /\
+      emit_inst LOG
+        ((Lit (n2w (SUC (LENGTH topics))) :: REVERSE topics ++ [Lit (n2w hash)]) ++
+         [Lit 0w; Lit 0w]) [] st = ((),sf)) \/
+     (SND (split_log_ops (ZIP (saved,MAP (lowered_value_type cenv) args)) flags) <> [] /\
+      ?buf sb len se.
+        compile_alloc_buffer
+          (abi_size_bound cenv.ce_struct_fields
+            (TupleT (MAP SND
+              (SND (split_log_ops (ZIP (saved,MAP (lowered_value_type cenv) args)) flags))))) st =
+          (buf,sb) /\
+        compile_abi_encode_values_to_buf cenv buf.buf_operand
+          (SND (split_log_ops (ZIP (saved,MAP (lowered_value_type cenv) args)) flags)) sb = (len,se) /\
+        emit_inst LOG
+          ((Lit (n2w (SUC (LENGTH topics))) :: REVERSE topics ++ [Lit (n2w hash)]) ++
+           [len; buf.buf_operand]) [] se = ((),sf)))
+Proof
+  strip_tac >> qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_stmt_def, comp_bind_def, comp_return_def] >>
+  qabbrev_tac `arg_types = MAP (lowered_value_type cenv) args` >>
+  Cases_on `compile_ext_call_args compile_expr cenv [] arg_types args sa` >>
+  rename1 `_ = (saved,sm)` >>
+  Cases_on `split_log_ops (ZIP (saved,arg_types)) flags` >>
+  rename1 `_ = (topic_rows,data_rows)` >> simp[] >>
+  Cases_on `compile_log_saved_topics cenv topic_rows sm` >>
+  rename1 `_ = (topics,st)` >> simp[] >>
+  Cases_on `data_rows` >> simp[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[comp_bind_def, comp_return_def]) >> strip_tac >>
+  qexistsl_tac [`saved`,`sm`,`topics`,`st`] >> simp[] >> metis_tac[]
+QED
+
+Theorem compile_log_stmt_snapshot_code:
+  cenv.ce_event_info (nsid_to_string id) = SOME (hash,declared,flags) /\
+  compile_ext_call_args compile_expr cenv [] (MAP (lowered_value_type cenv) args)
+    args sa = (saved,sm) /\
+  compile_stmt cenv lctx ty (Log id args) sa = ((),sf) /\ fn_has_code sa sf fn ==>
+  cs_extends sa sm /\ cs_extends sm sf /\ fn_has_code sa sm fn /\ fn_has_code sm sf fn
+Proof
+  strip_tac >>
+  `ci_mono sa sm` by
+    (qpat_assum `compile_ext_call_args _ _ _ _ _ sa = _`
+       (fn eq => SUBST1_TAC (SYM (SIMP_RULE (srw_ss()) [] (Q.AP_TERM `SND` eq)))) >>
+     irule ci_mono_compile_ext_call_args >> simp[cj 1 compile_expr_ci_mono]) >>
+  `ci_mono sm sf` by
+    (qpat_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
+     simp_tac bool_ss [Once compile_stmt_def, LET_THM] >>
+     asm_simp_tac (srw_ss()) [LET_THM] >> rewrite_tac[Once comp_bind_def] >>
+     asm_simp_tac (srw_ss()) [LET_THM, pairTheory.UNCURRY] >>
+     disch_then (fn th => SUBST1_TAC
+       (SYM (SIMP_RULE (srw_ss()) [] (Q.AP_TERM `SND` th)))) >>
+     log_structure_tac
+       (compile_log_saved_topics_ci_mono ::
+        ci_mono_compile_abi_encode_values_to_buf :: log_structure_rules)) >>
+  fs[ci_mono_def] >> metis_tac[fn_has_code_split]
 QED

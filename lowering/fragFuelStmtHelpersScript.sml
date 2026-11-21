@@ -70,6 +70,16 @@ Proof
     fuel_auto [ih, fuel_ok_context_misc])
 QED
 
+Theorem fuel_ok_compile_log_saved_topics:
+  !topics cenv Wv E. fuel_ok Wv {} E (compile_log_saved_topics cenv topics)
+Proof
+  Induct >> rpt gen_tac
+  >- simp[compile_log_saved_topics_def, fuel_ok_return] >>
+  PairCases_on `h` >> simp_tac std_ss [compile_log_saved_topics_def] >>
+  first_x_assum (fn ih =>
+    fuel_auto [ih, fuel_ok_unwrap_value, fuel_ok_context_misc])
+QED
+
 Theorem fuel_ok_compile_log_store_data:
   !cenv ops tys buf off Wv E.
     fuel_ok Wv {} E (compile_log_store_data cenv ops tys buf off)

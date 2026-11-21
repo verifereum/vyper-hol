@@ -45,7 +45,8 @@ Definition log_pop_cenv_def:
 End
 
 Definition log_pop_compiled_def:
-  log_pop_compiled = compile_log_eval_all log_pop_cenv log_pop_args
+  log_pop_compiled = compile_ext_call_args compile_expr log_pop_cenv []
+    (MAP (lowered_value_type log_pop_cenv) log_pop_args) log_pop_args
     (initial_compile_state "entry")
 End
 
@@ -64,8 +65,8 @@ Theorem log_pop_compiled_arguments:
        (OPTION_MAP (\ptr. (mload (w2n ptr) out,
                           mload (w2n ptr + 32) out,
                           mload (w2n ptr + 64) out))
-          (eval_operand (FST (HD (FST log_pop_compiled))) out),
-        eval_operand (FST (EL 1 (FST log_pop_compiled))) out,
+          (eval_operand (vv_operand (HD (FST log_pop_compiled))) out),
+        eval_operand (vv_operand (EL 1 (FST log_pop_compiled))) out,
         mload 256 out)
    | _ => (NONE,NONE,0w)) = (SOME (2w,1w,2w),SOME 2w,1w)
 Proof
