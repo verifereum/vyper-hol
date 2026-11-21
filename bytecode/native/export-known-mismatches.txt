@@ -7,6 +7,12 @@
 #   decode-guards  the HOL ABI decoder's bounded-decode guards
 #                  (bytecode/pending-bounded-decode-guards.md)
 #   5127-P4        the unported direct ABI encoder (bytecode/pending-5127-port.md)
+#   5127-P8        raw_create snapshotting its initcode in a fixed Bytes[49152]
+#                  buffer where the pin sizes it by the argument
+#   map-key-copy   the pin copies a bytestring map key before hashing it; the
+#                  HOL lowering hashes it in place (shorter code)
+#   const-list-in  `x in CONST_LIST` lowered over the substituted list literal
+#                  where the pin reads the constant array
 # Reasons were attributed from the source's features (folded expressions,
 # and/or chains of 3+ operands, external calls, logs, abi_decode) and the
 # rest by reading the bytecode diff. A contract can have causes beyond the
@@ -103,3 +109,144 @@ f1763e7310560b5e bytes decode-guards  # functional/codegen/features/test_assignm
 8b916b035ccb9592 bytes decode-guards  # functional/codegen/test_interfaces::test_self_interface_via_calldata
 f37c861c5f2ffafe bytes decode-guards  # functional/codegen/types/test_array_indexing::test_array_index_overlap_extcall2
 73ec3b3f35a1c2d7 bytes decode-guards  # functional/codegen/types/test_string::test_tuple_return_external_contract_call_string
+# Covered once the supported_program premise left the top theorems; their
+# HOL bytes are unchanged by that.
+b3b2bc12ab2d2608 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_annassign
+df17d14aaa06635d bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_arithmetic_overflow
+11752a0d39595427 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_bytearray_clamp
+55bccdda753ae1ae bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_child_head_points_to_parent
+90c6a55f6036003d bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_complex
+dc8ea5635c966509 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_complex_arithmetic_overflow
+27a0f798ff7d4502 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_complex_empty_dynarray
+96534d5a4bc13003 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_conditional[123-(uint256)-123]
+69e54fe684bd29a7 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_double[True-arg0-expected0-64-uint256-uint256-...
+47f17ae2375cdad4 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_double[True-arg1-expected1-64-address-int128-(...
+6249a4462ca92b50 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_double[True-arg2-expected2-128-String[5]-addre...
+1b1ab8e881b80e5e bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_double[True-arg3-expected3-128-uint256-Bytes[3...
+ee648c6aa70e5218 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_dynarray_complex2
+ad2c9e6d351e6dbe bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_dynarray_complex_insufficient_data
+00bd76384cabc9b1 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_empty_toplevel_dynarray
+73a0864a6af69629 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_extcall_array_oob
+aaf730ea447a370e bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_extcall_array_oob_with_truncate
+0e3ea25f50fe8b8d bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_extcall_complex_empty_dynarray
+8d1e87d21223aa20 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_extcall_complex_empty_dynarray2
+90b91b54d55364bb bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_extcall_empty_array
+959f2033b3781249 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_extcall_zero_len_array2
+735f4c1aee65c911 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_folded_unwrap_tuple_kwarg
+98724e3a9abfd45d bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_head_pointing_outside_buffer
+c2b2792e4742b920 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_head_roundtrip
+3909e3a4222c59a3 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_invalid_toplevel_dynarray_head
+7793510eb1cc71b4 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_max_size
+e5493c06062b54f1 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_merge_head_and_length
+325bc016359a2461 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_nested_dynarray2[False-args0]
+c8f7aa6e81903f8e bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_nested_dynarray2[True-args0]
+409a58613d8cf398 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_nested_dynarray[False-args0]
+42922105190cba7f bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_nested_dynarray[True-args0]
+93831da595d132b1 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_nonstrict_head
+62c5da1429bfe2a2 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_nonstrict_head_oob
+533d6db295ea9f57 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_nonstrict_head_oob2
+3ca67277d995418c bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_private_dynarray
+e5261dfda502468e bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_private_nested_dynarray
+cc2cdd182ee74bf4 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_return
+639ca4bad95fcfdf bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_runtimesz_oob
+2e7ba06efbfd4c77 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_runtimesz_oob2
+59256c1620c9817e bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_single[123-32-uint256-(uint256)-True]
+49e1caf397d824e2 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_single[123-32-uint256-uint256-False]
+5a1cc0660b8c8770 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_single[expected4-96-uint256[3]-uint256[3]-False]
+db90a13c4489bab6 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_single[expected5-96-uint256[3]-(uint256[3])-True]
+a4ec296805c456b7 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_single[expected6-128-DynArray[uint256, 3]-uint...
+93b84a10633ff0a3 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_single[expected7-160-DynArray[uint256, 3]-(uin...
+a7112236e91684b4 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_single[vyper-64-String[5]-string-False]
+751b54664bbad73a bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_single[vyper-96-String[5]-(string)-True]
+40d56d0970cdd548 bytes 5127-P4  # functional/builtins/codegen/test_abi_decode::test_abi_decode_storage_bytes
+d882c1c465ed3d6c bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_top_level_head_oob
+dd036cbbf10e26ab bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_clamper[\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\...
+379ce1438ca4d950 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_clamper_dynamic[Bytes[5]-\x01\x01\x01\x01\x01\x01\x01\x01...
+3791800382b40fad bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_clamper_dynamic[DynArray[uint256, 3]-\x01\x01\x01\x01\x01...
+ad4ce37eca411703 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_clamper_dynamic_tuple[Bytes[5]-address--ExecutionReverted-]
+e99d938d6d6edd2d bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_clamper_dynamic_tuple[DynArray[uint256, 3]-uint256--Execu...
+6d170cd6c213d915 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_clamper_nested_bytes
+634d11c7534b6a1b bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_clamper_nested_uint8
+397435b13950b754 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_nested_invalid_dynarray_head
+e14feb61f1714157 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_side_effects_evaluation
+380050c04532b681 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_static_outer_type_invalid_heads
+d813771de948d76d bytes 5127-P4+decode-guards  # functional/builtins/codegen/test_abi_encode::test_side_effects_evaluation
+6560691001ed2a50 bytes 5127-P4  # functional/builtins/codegen/test_addmod::test_uint256_addmod_ext_call
+bebf96127d573fa5 bytes 5127-P4  # functional/builtins/codegen/test_as_wei_value::test_ext_call
+362566d5e1609944 bytes 5127-P4  # functional/builtins/codegen/test_ceil::test_ceil_ext_call
+0372d53e4597c2e3 bytes decode-guards  # functional/builtins/codegen/test_create_functions::test_create_minimal_proxy_to_call
+e064ae12b2669043 bytes decode-guards  # functional/builtins/codegen/test_create_functions::test_minimal_proxy_exception
+a06ee089505e4d5e bytes 5127-P8  # functional/builtins/codegen/test_create_functions::test_raw_create_double_eval
+3e011a451104a858 bytes 5127-P4  # functional/builtins/codegen/test_ec::test_ecadd_evaluation_order
+87b32d4bf2c46e39 bytes decode-guards  # functional/builtins/codegen/test_ec::test_ecadd_ext_call
+d9ca3777eb5793a0 bytes 5127-P4  # functional/builtins/codegen/test_ec::test_ecmul_evaluation_order
+0bec9a21125a4c15 bytes 5127-P4  # functional/builtins/codegen/test_ec::test_ecmul_ext_call
+db2de8141f588053 bytes decode-guards  # functional/builtins/codegen/test_empty::test_empty_as_func_arg[\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01...
+a264423eba2b1ac2 bytes decode-guards  # functional/builtins/codegen/test_empty::test_empty_as_func_arg[empty(Bytes[65])-\x01\x01\x01\x01\x01\x01\x0...
+7679d16d262b8854 bytes decode-guards  # functional/builtins/codegen/test_empty::test_empty_as_func_arg[empty(Bytes[65])-hello-expected0]
+554aeaddcfcf3900 bytes decode-guards  # functional/builtins/codegen/test_empty::test_empty_as_func_arg[hello-empty(Bytes[33])-expected1]
+6e7783d7fe864c26 bytes decode-guards  # functional/builtins/codegen/test_extract32::test_extract32_order_of_eval_extcall
+cddb7e478585bc2e bytes 5127-P4  # functional/builtins/codegen/test_floor::test_floor_ext_call
+6bd1ea2015fcb0b0 bytes 5127-P4  # functional/builtins/codegen/test_mulmod::test_uint256_mulmod_ext_call
+cf647c0c78a11f21 bytes decode-guards  # functional/builtins/codegen/test_raw_call::test_forward_calldata
+77cc992d98bde65d bytes decode-guards  # functional/builtins/codegen/test_slice::test_slice_order_of_eval
+5c16ac6e65fc4f37 bytes decode-guards  # functional/builtins/codegen/test_slice::test_slice_order_of_eval2
+1c7bf4ae2861aca2 bytes 5127-P4+decode-guards  # functional/codegen/calling_convention/test_erc20_abi::erc20_caller
+135b5bad12680e4f bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_address_can_returned_from_contract...
+ef874334bb403538 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_complex_external_contract_call_dec...
+b143aed85f47bc65 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_constant_nested_struct_return_exte...
+5a33d4531fa37b76 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_constant_nested_struct_return_exte...
+8c80ecd04deb8edc bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_constant_nested_struct_return_exte...
+1ff8f167fb4f7a55 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_constant_nested_struct_return_exte...
+05da7acf2831668b bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_constant_nested_struct_return_exte...
+654e5bf425935a4b bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_constant_struct_return_external_co...
+99e2107b1af6ad08 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_constant_struct_return_external_co...
+e7ed2aebe68d8b46 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_constant_struct_return_external_co...
+ecfa883ea20d9c0f bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_contract_address_evaluation
+d3c5185c1028a5b8 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_dynamically_sized_struct_external_...
+8fca90e3c67f4b59 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_dynamically_sized_struct_external_...
+6ad9a51f89ffe3df bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_dynamically_sized_struct_member_ex...
+4c7331bee1a0896f bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_dynamically_sized_struct_member_ex...
+17d65a904cf579f3 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_external_call_kwarg_source_order
+1dad0eaef2814d83 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_external_call_with_gas
+e0e185b95fc2f10b bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_external_contract_call_declaration...
+4bb3ec31976a4127 bytes 5127-P4  # functional/codegen/calling_convention/test_external_contract_calls::test_external_contract_call_declaration...
+0358921ec8b7ab80 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_external_contract_calls_with_multi...
+f33ed51e3598c51d bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_external_contract_calls_with_multi...
+3c470d12f6da6e21 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_external_with_payable_value
+9154728c80aa7e43 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_make_setter_external_call
+f2c8a38bda32b060 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_make_setter_staticcall
+471c84098532bae8 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_skip_contract_check
+f352d059bf576524 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_struct_return_external_contract_ca...
+ad91d4a914cb36e1 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_struct_return_external_contract_ca...
+0f057a706e7bf5d6 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_struct_return_external_contract_ca...
+bd68e9a1085dfd41 bytes 5127-P4  # functional/codegen/calling_convention/test_modifiable_external_contract_calls::test_external_contract_call_...
+1f6afbb9226e71ec bytes 5127-P4  # functional/codegen/calling_convention/test_modifiable_external_contract_calls::test_external_contract_call_...
+7e8a8ae41326c37f bytes 5127-P4  # functional/codegen/calling_convention/test_modifiable_external_contract_calls::test_multiple_contract_state...
+948e9aa346d20e09 bytes 5127-P4  # functional/codegen/calling_convention/test_modifiable_external_contract_calls::test_multiple_contract_state...
+33902d270500f157 bytes decode-guards  # functional/codegen/calling_convention/test_return::test_external_call_in_return_single_struct
+0ade1da6b782e00c bytes decode-guards  # functional/codegen/calling_convention/test_return::test_external_call_in_return_struct
+90ccb2bfdecc3676 bytes decode-guards  # functional/codegen/calling_convention/test_return::test_nested_external_call_in_return_single_struct
+c87a8a3838459296 bytes decode-guards  # functional/codegen/calling_convention/test_return::test_nested_external_call_in_return_struct
+b40db517797a4ebc bytes decode-guards  # functional/codegen/calling_convention/test_return::test_string_inside_single_struct[a]
+0db8e3e80ae0eebc bytes decode-guards  # functional/codegen/calling_convention/test_return::test_string_inside_struct[a]
+acbe9dbde44b2195 bytes decode-guards  # functional/codegen/features/decorators/test_nonreentrant::test_multi_function_nonreentrant
+c85fd2480b6b37bf bytes decode-guards  # functional/codegen/features/decorators/test_raw_return::test_raw_return_zero_bytes
+0720ffc524ac64e2 bytes decode-guards  # functional/codegen/features/test_assert::test_assert_staticcall
+dba5cc3ba73c95eb bytes map-key-copy  # functional/codegen/features/test_bytes_map_keys::test_bytes_key_storage
+7972b2b989bfb396 bytes map-key-copy  # functional/codegen/features/test_bytes_map_keys::test_struct_bytes_key_storage
+3ad42e85d3270903 bytes decode-guards  # functional/codegen/features/test_transient::test_nested_dynarray_transient
+d3490afdfdeef5c0 bytes 5127-P4  # functional/codegen/features/test_transient::test_view_function_transient
+a8eb4dbb2dbfb1ab bytes decode-guards  # functional/codegen/test_interfaces::test_external_interface_bytes_clampers
+1ad4fe9161d524c5 bytes decode-guards  # functional/codegen/test_interfaces::test_external_interface_int_clampers[int128]
+103948e59cfac6a4 bytes decode-guards  # functional/codegen/test_interfaces::test_external_interface_int_clampers[uint8]
+a9459af86c6d2514 bytes decode-guards  # functional/codegen/test_interfaces::test_self_interface_via_storage
+bf39909ef4af8dfb bytes const-list-in  # functional/codegen/types/numbers/test_constants::test_constant_lists
+f866e6311be54e83 bytes decode-guards  # functional/codegen/types/test_array_indexing::test_array_index_overlap_extcall
+28c14c4bb8d9039d bytes #556  # functional/codegen/types/test_dynamic_array::test_member_in_updated_nested_list
+fc55f5601f0ac4cf bytes decode-guards  # functional/codegen/types/test_dynamic_array::test_venom_external_call_dynarray_bytes_elem_size_mismatch
+8f151f76b1449108 bytes decode-guards  # functional/codegen/vyper_hol_regression/abi/test_dynamic_padding::test_nonzero_dynamic_padding_does_not_cha...
+4ce2f31caef7eb87 bytes decode-guards  # functional/codegen/vyper_hol_regression/abi/test_returndata_padding::test_external_call_ignores_dynamic_pad...
+9fc477309e9b77d6 bytes decode-guards  # functional/codegen/vyper_hol_regression/abi/test_returndata_padding::test_external_call_ignores_dynamic_pad...
+d2322cb5f88b4a36 bytes decode-guards  # functional/syntax/test_return_tuple::test_external_call_in_return_tuple
+edee6067ac50f50e bytes decode-guards  # functional/syntax/test_return_tuple::test_nested_external_call_in_return_tuple
