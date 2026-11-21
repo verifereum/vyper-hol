@@ -46,7 +46,7 @@ Proof
       metis_tac[external_getter_defaults]) >>
   drule_all lookup_function_external_member >> strip_tac >>
   qpat_x_assum `~EXISTS external_has_defaults _` mp_tac >>
-  simp[EXISTS_MEM] >> disch_then
+  simp[EVERY_MEM] >> disch_then
     (qspec_then `subst_consts_fn (module_consts_env tops [])
       (mut,nr,rr,name,args,dflts,ret,fbody)` mp_tac) >>
   simp[constSubstTheory.subst_consts_fn_def, external_has_defaults_def,
