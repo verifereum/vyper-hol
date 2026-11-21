@@ -9,6 +9,9 @@
 Theory bodyFullAppend
 Ancestors
   bodyFullShadowBodyInv bodyFullMemoryStore bodyFullMemorySameTypeStore
+  bodySimStmtFacts[qualified,ignore_grammar]
+  bodyInvCodeProps[qualified,ignore_grammar] exprBodyPreProps[qualified,ignore_grammar]
+  exprBodyPreCallSafetyProps[qualified,ignore_grammar]
   bodyFullStructLitPhysical immutableDeployAssignRanges
   placeMemoryTypeInterfaces
   bodyFullStoreSlotsPath bodyFullStoreSlotsStatic
@@ -4161,7 +4164,7 @@ Resume body_append_local_nonword_frag_full[rhs_success]:
   `target_mutable env (NameTarget id)` by
     (qpat_x_assum `type_stmt _ _ (Append _ _) = _` mp_tac >>
      simp[Once vyperTypeSystemTheory.type_stmt_def, AllCaseEqs()]) >>
-  `cx_tops cx = tops` by fs[body_inv_def, gasContextTheory.cx_tops_def] >>
+  `cx_tops cx = tops` by metis_tac[bodyInvCodePropsTheory.body_inv_main_code] >>
   `body_inv (cx_tops cx) ctx cenv cx` by asm_rewrite_tac[] >>
   qpat_assum `!H. dead_lo_ok H (DF H) lo cenv cx`
     (qspec_then `storage_trace_horizon mid'.storage_trace` assume_tac) >>
@@ -4536,9 +4539,19 @@ Proof
     bodyPtrDefsTheory.ptr_val_ok_def]
 QED
 
-Theorem append_nested_memory_rhs_view[local]:
-  body_inv tops ctx cenv cx /\ dead_lo_ok H D lo cenv cx /\
-  expr_body_pre cenv cx env e (mid with gas_obs := gs) /\
+Theorem append_rhs_scope_facts_mods[local]:
+  expr_body_pre_mods mods cenv cx env e (mid with gas_obs := gs) ==>
+  state_well_typed mid /\ state_well_typed (mid with gas_obs := gs) /\
+  popped_keys_indexed mid.scopes /\ functions_well_typed cx /\
+  context_well_typed cx /\ accounts_well_typed mid.accounts /\
+  env_consistent env cx (mid with gas_obs := gs) /\ well_typed_expr env e
+Proof
+  simp[expr_body_pre_mods_def, expr_sim_inv_mods_def]
+QED
+
+Theorem append_nested_memory_rhs_view_mods[local]:
+  expr_body_pre_mods mods cenv cx env e (mid with gas_obs := gs) /\
+  (0 < sz ==> lo <= w2n basew) /\
   bind (eval_expr cx e) (read_result cx) (mid with gas_obs := gs) =
     (INL v,fin) /\
   expr_post H ctx func cenv cx e mid sp sm s fin v vop u /\
@@ -4563,13 +4576,8 @@ Theorem append_nested_memory_rhs_view[local]:
       val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) (w2n bp) mem
 Proof
   strip_tac >>
-  `expr_sim_inv cenv cx env mid` by fs[expr_body_pre_def] >>
-  `state_well_typed mid /\ state_well_typed (mid with gas_obs := gs) /\
-   popped_keys_indexed mid.scopes /\ functions_well_typed cx /\
-   context_well_typed cx /\ accounts_well_typed mid.accounts /\
-   env_consistent env cx (mid with gas_obs := gs) /\ well_typed_expr env e /\
-   call_evaluation_safe cx (int_calls_expr e)` by
-    fs[expr_body_pre_def,expr_sim_inv_def] >>
+  drule_then strip_assume_tac append_rhs_scope_facts_mods >>
+  drule_then assume_tac exprBodyPreCallSafetyPropsTheory.expr_body_pre_mods_call_evaluation_safe >>
   qpat_assum `bind _ _ _ = (INL v,fin)`
     (mp_then Any mp_tac vyperStatePreservationTheory.bind_split) >>
   simp[sumTheory.sum_distinct] >> strip_tac >>
@@ -4594,8 +4602,8 @@ Proof
   drule_then strip_assume_tac vyperPlaceResultTypingTheory.entry_pop_trace_metadata >>
   drule_all_then assume_tac vyperPlaceResultTypingTheory.entry_events_valid >>
   `state_well_typed fin` by
-    (drule_all (SRULE [SF ETA_ss] exprSimSourceTheory.expr_body_pre_eval) >>
-     simp[expr_sim_inv_def]) >>
+    (drule_all (SRULE [SF ETA_ss] bodySimStmtFactsTheory.expr_body_pre_eval_mods) >>
+     simp[expr_sim_inv_mods_def]) >>
   `value_has_type initial.type initial.value /\ well_formed_type_value initial.type /\
    value_has_type entry'.type entry'.value` by
     metis_tac[vyperTypeStatePreservationTheory.lookup_scopes_state_well_typed_value_has_type,
@@ -4645,16 +4653,14 @@ Proof
      qpat_assum `ghost_kept_at lo cenv mid sp G tn s Gf tf` (irule_at Any) >>
      simp[wordArgsPtrTheory.ghost_kept_at_refl] >> fs[]) >>
   `0 < sz` by (fs[valueEncodingTheory.type_memory_size_def] >> decide_tac) >>
-  `lo <= w2n basew` by
-    (irule bodyFullMemoryFramesTheory.body_full_local_region_lower_bound >>
-     qpat_assum `local_region cenv mid.scopes s id (w2n basew) sz` (irule_at Any) >>
-     qpat_assum `stmt_state_rel H ctx func cenv cx mid s` (irule_at Any) >>
-     qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
-     qpat_assum `dead_lo_ok H D lo cenv cx` (irule_at Any) >>
-     qpat_assum `expr_sim_inv cenv cx env mid` (irule_at Any) >> simp[]) >>
-  Cases_on `v1` >> fs[vyperTypingTheory.value_has_type_def] >>
-  rename1 `ArrayV arr` >> Cases_on `arr` >> fs[vyperTypingTheory.value_has_type_def] >>
-  qexists_tac `l` >> simp[] >>
+  `lo <= w2n basew` by metis_tac[] >>
+  `?values. v1 = ArrayV (DynArrayV values)` by
+    (qpat_assum `value_has_type (ArrayTV tv (Dynamic cap)) v1` mp_tac >>
+     Cases_on `v1` >> simp[NoAsms,vyperTypingTheory.value_has_type_def] >>
+     rename1 `ArrayV arr` >> Cases_on `arr` >>
+     simp[NoAsms,vyperTypingTheory.value_has_type_def]) >>
+  qpat_x_assum `v1 = ArrayV (DynArrayV values)` SUBST_ALL_TAC >>
+  qexists_tac `values` >> simp[] >>
   conj_tac >-
     (Cases_on `read_memory_path entry' path` >>
      qpat_x_assum `read_result cx (PlaceR (MemoryPlace id path)) fin = _` mp_tac >>
@@ -5154,7 +5160,7 @@ Resume body_append_nested_frag_full[resolve_pointer]:
      qpat_assum `target_ptr_ok _ (PlaceR p) _ _ _ target_state` (irule_at Any) >>
      fs[ghost_kept_at_def,ptrDisciplineTheory.op_prov_def] >>
      metis_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def]) >>
-  `cx_tops cx = tops` by fs[body_inv_def,gasContextTheory.cx_tops_def] >>
+  `cx_tops cx = tops` by metis_tac[bodyInvCodePropsTheory.body_inv_main_code] >>
   `body_inv (cx_tops cx) ctx cenv cx` by asm_rewrite_tac[] >>
   `?tv. evaluate_type (get_tenv cx) elem = SOME tv` by
     (qpat_assum `place_ptr_rel _ _ u (PlaceR p) _ _ _` mp_tac >>
@@ -5205,7 +5211,9 @@ Resume body_append_nested_frag_full[memory]:
     RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM eq]) >> assume_tac eq) >>
   rename1 `lookup_scopes id mid.scopes = SOME initial` >>
   rename1 `evaluate_subscripts initial.type initial.value path = INL old` >>
-  `expr_sim_inv cenv cx env mid` by fs[expr_body_pre_def] >>
+  `expr_sim_inv cenv cx env mid` by
+    metis_tac[exprBodyPrePropsTheory.expr_body_pre_static_facts,
+              exprSimHypsDefsTheory.expr_sim_inv_gas_obs] >>
   `initial.type = root_tv` by
     (qpat_assum `lookup_scopes id mid.scopes = SOME initial` (fn entry =>
        qpat_assum `cenv.ce_var_type id = SOME root_ty` (fn ty =>
@@ -5251,11 +5259,28 @@ Resume body_append_nested_frag_full[memory_view]:
       lo <= w2n addr /\ w2n addr + 32 + cap * type_memory_size tv <= u.vs_alloca_next /\
       (!mem. mem_agree_outside trhs.t_mem u.vs_memory mem ==>
         val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) (w2n addr) mem)` by
-    (irule (INST_TYPE [alpha |-> ``:256``] append_nested_memory_rhs_view) >>
+    (`expr_body_pre_mods [(NONE,tops)] cenv cx env e
+        (mid with gas_obs := gas_in.gas_obs)` by
+       metis_tac[exprBodyPrePropsTheory.body_inv_expr_body_pre_mods,
+                 exprSimSourceTheory.expr_body_pre_gas_obs] >>
+     `0 < root_size ==> lo <= w2n root_word` by
+       (`local_region cenv mid.scopes target_state id (w2n root_word) root_size` by
+          simp[local_region_def] >>
+        strip_tac >>
+        mp_tac (Q.INST [`D` |-> `DF H`, `H` |-> `H`,
+          `b` |-> `w2n (root_word:256 word)`,
+          `cenv` |-> `cenv`,
+          `ctx` |-> `ctx`, `cx` |-> `cx`, `env` |-> `env`, `es0` |-> `mid`,
+          `es` |-> `mid`, `func` |-> `func`, `id` |-> `id`, `n` |-> `root_size`,
+          `s` |-> `target_state`, `tops` |-> `tops`]
+          (INST_TYPE [alpha |-> ``:256``]
+            (SPEC_ALL bodyFullMemoryFramesTheory.body_full_local_region_lower_bound))) >>
+        impl_tac >- simp[] >> disch_then ACCEPT_TAC) >>
+     irule (INST_TYPE [alpha |-> ``:256``] append_nested_memory_rhs_view_mods) >>
      conj_tac >- (qexists_tac `old` >> first_assum ACCEPT_TAC) >>
      qexistsl_tac [`DF H`,`Gm`,`Gr`,`H`,`root_word`,`cenv`,`ctx`,`cx`,`d`,`e`,
-       `env`,`func`,`gas_in.gas_obs`,`delta`,`mid`,`root_var`,`target_state`,
-       `sm`,`sp`,`root_size`,`tm`,`tops`,`v`,`vop`] >>
+       `env`,`func`,`gas_in.gas_obs`,`delta`,`mid`,`[(NONE,tops)]`,`root_var`,`target_state`,
+       `sm`,`sp`,`root_size`,`tm`,`v`,`vop`] >>
      simp[exprSimSourceTheory.expr_body_pre_gas_obs] >>
      rpt (conj_tac >- first_assum ACCEPT_TAC) >> first_assum ACCEPT_TAC) >>
   suspend "memory_bounds"
@@ -6060,7 +6085,7 @@ Resume body_append_storage_word_frag_full[after_root]:
     metis_tac[stateRelProjTheory.stmt_state_rel_vars_rels] >>
   `get_module_code cx nid0 = SOME tops` by
     (drule bodyStorageMetadataTheory.supported_variable_decl_mem >>
-     strip_tac >> fs[body_inv_def]) >>
+     strip_tac >> metis_tac[bodyInvCodePropsTheory.body_inv_main_code]) >>
   drule_all bodyAppendStorageFactsTheory.append_storage_compiler_location >> strip_tac >>
   `supported_pure_expr tops e` by
     (qpat_assum `supported_stmt _ _ _`
@@ -6336,7 +6361,7 @@ Resume body_append_storage_word_frag_full[word_operand]:
      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
      simp[venomStateTheory.eval_operand_def,ptrDisciplineTheory.op_taint_def] >>
      qexists_tac `env` >>
-     `cx_tops cx = tops` by fs[body_inv_def,gasContextTheory.cx_tops_def] >> simp[]) >>
+     `cx_tops cx = tops` by metis_tac[bodyInvCodePropsTheory.body_inv_main_code] >> simp[]) >>
   rpt gen_tac >> disch_then (qx_choose_then `cenvf` strip_assume_tac) >>
   qexists_tac `cenvf` >> simp[] >>
   conj_tac >-
@@ -6478,7 +6503,7 @@ Resume body_append_storage_aggregate_frag_full[after_root]:
     metis_tac[stateRelProjTheory.stmt_state_rel_vars_rels] >>
   `get_module_code cx nid0 = SOME tops` by
     (drule bodyStorageMetadataTheory.supported_variable_decl_mem >>
-     strip_tac >> fs[body_inv_def]) >>
+     strip_tac >> metis_tac[bodyInvCodePropsTheory.body_inv_main_code]) >>
   drule_all bodyAppendStorageFactsTheory.append_storage_compiler_location >> strip_tac >>
   `supported_pure_expr tops e` by
     (qpat_assum `supported_stmt _ _ _`

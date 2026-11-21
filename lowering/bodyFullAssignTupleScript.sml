@@ -11,6 +11,10 @@ Ancestors bodyImmutableStoreMemory[qualified,ignore_grammar]
   immutableWordStorePath[qualified,ignore_grammar]
   immutableDeployAssignPathGhost[qualified,ignore_grammar]
   bodyFullShadowBodyInv bodyStorageCases[qualified,ignore_grammar]
+  immutableRegionWriteProps[qualified,ignore_grammar]
+  bodyInvCodeProps[qualified,ignore_grammar]
+  bodyInvExecutionProps[qualified,ignore_grammar] exprBodyPreProps[qualified,ignore_grammar]
+  stmtExprAllocationPreProps[qualified,ignore_grammar] compileUnit alist
   targetPlaceSimCasesBase[qualified,ignore_grammar]
   vyperEvalExprPreservesScopesDom[qualified,ignore_grammar]
   supportedExprTraverse[qualified,ignore_grammar]
@@ -77,6 +81,55 @@ Theorem supported_stmt_assigntuple[local]:
     supported_assignment tops bindings (TupleTarget gs) e
 Proof
   simp_tac bool_ss [Once supported_stmt_def]
+QED
+
+Theorem tuple_assignment_rhs_pre_mods[local]:
+  contract_inv mods exps ctx cenv cx /\
+  supported_stmt (main_module mods) bindings (Assign (TupleTarget gs) e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (Assign (TupleTarget gs) e) ==> occurs_abi_decode_target target (main_module mods)) /\
+  expr_sim_inv_mods mods cenv cx env es /\
+  type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+  stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+  call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+  ~supported_expr_exists (unallocated_bare_global_root cenv env) e ==>
+  expr_body_pre_mods mods cenv cx env e es
+Proof
+  strip_tac >>
+  drule_then assume_tac bodyInvCodePropsTheory.contract_inv_cenv_modules >>
+  `supported_expr (main_module mods) e` by
+    fs[supported_stmt_assigntuple, Once supported_assignment_def] >>
+  `well_typed_expr env e` by gvs[type_stmt_assigntuple] >>
+  mp_tac (Q.INST [`ctx` |-> `ctx`, `exps` |-> `exps`]
+    stmtExprAllocationPrePropsTheory.stmt_expr_body_pre_main_alloc_mods) >>
+  fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     supported_assignment_exists_def, allocLimitsTheory.alloc_limits_stmt_def,
+     int_calls_stmt_def] >>
+  metis_tac[call_evaluation_safe_append_right]
+QED
+
+Theorem tuple_assignment_rhs_pre[local]:
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (Assign (TupleTarget gs) e) ==> occurs_abi_decode_target target tops) /\
+  expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+  stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+  call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) ==>
+  expr_body_pre cenv cx env e es
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`tops` |-> `tops`, `ctx` |-> `ctx`,
+                   `s` |-> `Assign (TupleTarget gs) e`]
+    stmtExprAllocationPrePropsTheory.body_inv_stmt_expr_pre_singleton) >>
+  simp[supported_stmt_expr_exists_def, supported_assignment_exists_def] >>
+  disch_then irule >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
+                   `ctx` |-> `ctx`, `bindings` |-> `bindings`, `gs` |-> `gs`,
+                   `ret_ty` |-> `ret_ty`, `env'` |-> `env'`]
+    tuple_assignment_rhs_pre_mods) >>
+  simp[main_module_def, ALOOKUP_def]
 QED
 
 (* A local copy preserves the disjoint snapshot used by later tuple targets. *)
@@ -2257,26 +2310,15 @@ Proof
   `supported_program tops /\ get_module_code cx NONE = SOME tops /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
        is_dynamic (vyper_to_abi_type (type_env tops) target))` by
-    fs[body_inv_def] >>
+    metis_tac[bodyInvExecutionPropsTheory.body_inv_main_support,
+                 bodyInvExecutionPropsTheory.body_inv_singleton_abi_types] >>
   drule_then assume_tac gasContextTheory.cx_tops_module >>
   `expr_body_pre cenv cx env e es` by
-    (`supportedExprs$supported_expr tops e` by
-       gvs[supported_stmt_def, supported_assignment_def] >>
-     drule_then assume_tac supportedExprTraverseTheory.supported_expr_no_evm_run >>
-     drule_then assume_tac bodyStorageCasesTheory.supported_expr_main_calls >>
-     irule bodyExprPreFactsTheory.stmt_expr_body_pre >>
-     fs[bodyExprPreFactsTheory.stmt_exprs_ok_flat,
-        supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
-        vyperTypeCallGraphTheory.int_calls_stmt_def, EVERY_CONJ, DE_MORGAN_THM] >>
-     conj_tac >- (fs[allocLimitsTheory.alloc_limits_stmt_def] >>
-                  drule_then ACCEPT_TAC allocLimitsPropsTheory.alloc_limits_expr_not_extcode) >>
-     qexists_tac `[]` >> simp[] >>
-     drule_then ACCEPT_TAC vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right) >>
+    (drule_all tuple_assignment_rhs_pre >> simp[]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx (TupleT tys) e es` by
-    (qpat_assum `body_expr_full_ok cx e`
-       (mp_tac o CONJUNCT1 o PURE_ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then drule_all >> simp[]) >>
+    (qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
+     simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
   rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `(EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy)` by simp[] >>
@@ -2754,7 +2796,8 @@ Proof
       (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at ss x)` by
        (conj_tac >> rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
         qexists `sl` >> simp[]) >>
-     `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
+     `acyclic_struct_metadata cenv.ce_struct_fields` by
+       metis_tac[body_inv_contract, bodyInvCodePropsTheory.contract_inv_acyclic_struct_metadata] >>
      qpat_assum `expr_sim_inv cenv cx env es`
        (strip_assume_tac o PURE_REWRITE_RULE [expr_sim_inv_def]) >>
      simp[] >>
@@ -3031,22 +3074,17 @@ Theorem tuple_immutable_slot_span[local]:
   cenv.ce_module_var_type (NONE,id) = SOME ty /\
   cenv.ce_is_ctor /\ dead_lo_ok H D lo cenv cx /\
   evaluate_type (get_tenv cx) ty = SOME tv ==>
-  evaluate_type (type_env tops) ty = SOME tv /\
-  (?pre post vis slot.
-     tops = pre ++ VariableDecl vis Immutable id ty slot :: post /\
-     off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre) /\
   off + type_memory_size tv <= lo
 Proof
   strip_tac >>
-  `cenv.ce_module = NONE` by fs[body_inv_def,cenv_module_pins_def] >>
-  `FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
-   cenv.ce_module_var_type (cenv.ce_module,id) = SOME ty` by simp[] >>
-  drule_all_then strip_assume_tac
-    immutableDeployAssignPathGhostTheory.immutable_assign_section_root >>
-  conj_tac >-
-    (qpat_assum `get_tenv cx = type_env tops` (SUBST1_TAC o SYM) >>
-     first_assum ACCEPT_TAC) >>
-  conj_tac >- (qexistsl_tac [`pre`,`post`,`vis`,`slot`] >> asm_rewrite_tac[]) >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
+  `cenv.ce_modules = [(NONE,tops)]` by
+    metis_tac[bodyInvCodePropsTheory.contract_inv_cenv_modules] >>
+  `expr_sim_inv_mods [(NONE,tops)] cenv cx env st` by
+    fs[expr_sim_inv_split_def] >>
+  `dead_lo_ok_mods H D lo cenv cx` by metis_tac[dead_lo_ok_mods_singleton] >>
+  drule_all_then strip_assume_tac immutableRegionWritePropsTheory.immutable_slot_span_mods >>
   first_assum ACCEPT_TAC
 QED
 
@@ -3158,12 +3196,12 @@ QED
 (* The byte and taint frame restores the boundary for all three LocCode
    suffixes, independently of how the bytes inside the slot were produced. *)
 
-Theorem tuple_immutable_suffix_ghost_post[local]:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env st /\
-  stmt_state_rel H ctx func cenv cx st s /\ ghost_inv_at D lo d cenv cx st G tn s /\
-  dead_lo_ok H D lo cenv cx /\ cenv.ce_is_ctor /\
-  FLOOKUP cenv.ce_module_vars (NONE,id) = SOME (ImmutableLoc off) /\
-  cenv.ce_module_var_type (NONE,id) = SOME ty /\
+Theorem tuple_immutable_suffix_ghost_post_mods[local]:
+  contract_inv mods exps ctx cenv cx /\ expr_sim_inv_mods mods cenv cx env st /\
+  stmt_state_rel H ctx func cenv cx st s /\ ghost_inv_at_mods D lo d cenv cx st G tn s /\
+  dead_lo_ok_mods H D lo cenv cx /\ cenv.ce_is_ctor /\
+  FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
+  cenv.ce_module_var_type (cenv.ce_module,id) = SOME ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ st'.scopes = st.scopes /\
   local_ptrs_reserved cenv sa /\
   (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
@@ -3178,20 +3216,17 @@ Theorem tuple_immutable_suffix_ghost_post[local]:
   (!i. ~(off <= i /\ i < off + type_memory_size tv) /\ i IN tf.t_mem ==> i IN tn.t_mem) /\
   (!i. off <= i /\ i < off + type_memory_size tv /\ i IN tf.t_mem ==>
        mem_dead_bytes (mem_bytes_at 0 lo q.vs_memory) off tv i) ==>
-  ghost_inv_at D lo d cenv cx st' Gf tf q
+  ghost_inv_at_mods D lo d cenv cx st' Gf tf q
 Proof
   strip_tac >>
-  `cx_tops cx = tops` by (irule cx_tops_module >> fs[body_inv_def]) >>
-  `cenv.ce_module = NONE` by fs[body_inv_def, cenv_module_pins_def] >>
-  `FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
-   cenv.ce_module_var_type (cenv.ce_module,id) = SOME ty` by simp[] >>
+  drule_all_then strip_assume_tac immutableRegionWritePropsTheory.immutable_slot_span_mods >>
   drule_all immutableDeployAssignFactsTheory.immutable_assign_declared_region >> strip_tac >>
   drule_then strip_assume_tac stateRelProjTheory.stmt_state_rel_local_ptrs_alloca >>
-  qpat_assum `ghost_inv_at _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
+  qpat_assum `ghost_inv_at_mods _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [ghost_inv_at_mods_def]) >>
   `!p n. not_fresh_at sa p /\ ptr_covers G tn p s n ==> ptr_covers Gf tf p q n` by
     (rpt strip_tac >> fs[ptr_covers_def] >> metis_tac[]) >>
-  simp[ghost_inv_at_def] >> conj_tac
+  simp[ghost_inv_at_mods_def] >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
       `not_fresh_at sa p` by metis_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
       `ptr_covers G tn p s sz /\
@@ -3221,7 +3256,7 @@ Proof
   >- (Cases_on `d` >> fs[return_buf_ptr_def] >>
       rename1 `return_buf_ptr (SOME r) _ _ _ _` >> PairCases_on `r` >>
       fs[return_buf_ptr_def] >> metis_tac[]) >>
-  conj_tac >- gs[stor_taint_ok_at_def,dead_lo_ok_def] >>
+  conj_tac >- gs[stor_taint_ok_at_def,dead_lo_ok_mods_def] >>
   conj_tac
   >- (`!j. j < lo /\ ~(off <= j /\ j < off + type_memory_size tv) ==>
           EL j (mem_bytes_at 0 lo q.vs_memory) = EL j (mem_bytes_at 0 lo s.vs_memory)` by
@@ -3230,22 +3265,60 @@ Proof
          qpat_assum `mem_bytes_at j 1 _ = _`
            (mp_tac o AP_TERM ``EL 0 : byte list -> byte``) >>
          simp[valueEncodingProofsTheory.EL_mem_bytes_at]) >>
-      drule_all tuple_immutable_slot_span >> strip_tac >>
-      rpt strip_tac >>
-      qpat_x_assum `cx_tops cx = tops` SUBST_ALL_TAC >>
-      mp_tac (Q.INST [`lo` |-> `lo`, `tv` |-> `tv`, `name` |-> `id`,
-        `sec1` |-> `mem_bytes_at 0 lo s.vs_memory`,
+      mp_tac (Q.INST [`ctx` |-> `ctx`, `env` |-> `env`, `es` |-> `st`,
+        `exps` |-> `exps`, `mods` |-> `mods`, `src` |-> `cenv.ce_module`,
+        `id` |-> `id`, `off` |-> `off`, `ty` |-> `ty`, `tv` |-> `tv`,
+        `lo` |-> `lo`, `sec1` |-> `mem_bytes_at 0 lo s.vs_memory`,
         `sec2` |-> `mem_bytes_at 0 lo q.vs_memory`,
         `M1` |-> `tn.t_mem`, `M2` |-> `tf.t_mem`]
-        immutableDeployAssignPathGhostTheory.immutable_section_replace_exact) >>
-      impl_tac >-
-        (conj_tac >-
-           (rpt strip_tac >>
-            drule_all immutableDeployAssignFactsTheory.immutable_exact_slot_size >> simp[]) >>
-         simp[valueEncodingPropsTheory.LENGTH_mem_bytes_at, SF CONJ_ss] >>
-         rpt conj_tac >> first_assum ACCEPT_TAC) >>
-      disch_then (qspec_then `i` mp_tac) >> simp[]) >>
+        immutableRegionWritePropsTheory.immutable_section_replace_mods) >>
+      impl_tac >- (simp[valueEncodingPropsTheory.LENGTH_mem_bytes_at] >>
+                    rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then ACCEPT_TAC) >>
   metis_tac[local_ptrs_reserved_imm_base]
+QED
+
+Theorem tuple_immutable_suffix_ghost_post[local]:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env st /\
+  stmt_state_rel H ctx func cenv cx st s /\ ghost_inv_at D lo d cenv cx st G tn s /\
+  dead_lo_ok H D lo cenv cx /\ cenv.ce_is_ctor /\
+  FLOOKUP cenv.ce_module_vars (NONE,id) = SOME (ImmutableLoc off) /\
+  cenv.ce_module_var_type (NONE,id) = SOME ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ st'.scopes = st.scopes /\
+  local_ptrs_reserved cenv sa /\
+  (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s /\
+        FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+  q.vs_call_ctx = s.vs_call_ctx /\ q.vs_accounts = s.vs_accounts /\
+  q.vs_transient = s.vs_transient /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+  allocas_from lo q /\ lo <= q.vs_alloca_next /\
+  (!i. ~(off <= i /\ i < off + type_memory_size tv) ==>
+       mem_bytes_at i 1 q.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
+  (!i. ~(off <= i /\ i < off + type_memory_size tv) /\ i IN tf.t_mem ==> i IN tn.t_mem) /\
+  (!i. off <= i /\ i < off + type_memory_size tv /\ i IN tf.t_mem ==>
+       mem_dead_bytes (mem_bytes_at 0 lo q.vs_memory) off tv i) ==>
+  ghost_inv_at D lo d cenv cx st' Gf tf q
+Proof
+  strip_tac >>
+  drule_then assume_tac body_inv_contract >>
+  `cx_tops cx = tops` by metis_tac[bodyInvCodePropsTheory.body_inv_main_code] >>
+  `cenv.ce_module = NONE` by metis_tac[bodyInvCodePropsTheory.body_inv_module_locations] >>
+  `cenv.ce_modules = [(NONE,tops)]` by
+    metis_tac[bodyInvCodePropsTheory.contract_inv_cenv_modules] >>
+  `expr_sim_inv_mods [(NONE,tops)] cenv cx env st` by
+    fs[expr_sim_inv_split_def] >>
+  `dead_lo_ok_mods H D lo cenv cx` by metis_tac[dead_lo_ok_mods_singleton] >>
+  `ghost_inv_at_mods D lo d cenv cx st G tn s` by metis_tac[ghost_inv_at_mods_singleton] >>
+  `ghost_inv_at_mods D lo d cenv cx st' Gf tf q` suffices_by
+    metis_tac[ghost_inv_at_mods_singleton] >>
+  mp_tac (Q.INST [`ctx` |-> `ctx`, `env` |-> `env`, `exps` |-> `[]`,
+    `func` |-> `func`, `G` |-> `G`, `H` |-> `H`, `id` |-> `id`,
+    `mods` |-> `[(NONE,tops)]`, `off` |-> `off`, `s` |-> `s`, `sa` |-> `sa`,
+    `st` |-> `st`, `tn` |-> `tn`, `ty` |-> `ty`, `tv` |-> `tv`]
+    (SPEC_ALL tuple_immutable_suffix_ghost_post_mods)) >>
+  impl_tac >- simp[] >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem tuple_immutable_word_head_joint[local]:
@@ -3297,7 +3370,7 @@ Proof
   drule_all immutableAssignMetadataTheory.immutable_target_place_state >> strip_tac >>
   drule_all immutableDeployAssignFactsTheory.immutable_assign_target_layout >>
   disch_then (strip_assume_tac o SPEC_ALL) >>
-  `ce.ce_module = NONE` by fs[body_inv_def,cenv_module_pins_def] >>
+  `ce.ce_module = NONE` by metis_tac[bodyInvCodePropsTheory.body_inv_module_locations] >>
   qpat_x_assum `src = ce.ce_module` SUBST_ALL_TAC >>
   `FLOOKUP ce.ce_module_vars (NONE,id) = SOME (ImmutableLoc off) /\
    ce.ce_module_var_type (NONE,id) = SOME ty` by metis_tac[] >>
@@ -3820,7 +3893,7 @@ Proof
     (`well_formed_type_value tv` by metis_tac[evaluate_type_well_formed_type_value] >>
      rpt strip_tac >> irule immutable_prefix_interior_dead >>
      simp[] >> qexistsl_tac [`tf.t_mem`,`vi`] >> simp[]) >>
-  `ce.ce_module = NONE` by fs[body_inv_def,cenv_module_pins_def] >>
+  `ce.ce_module = NONE` by metis_tac[bodyInvCodePropsTheory.body_inv_module_locations] >>
   `fin.scopes = st.scopes` by
     (drule vyperPlaceFramesTheory.write_immutable_place_frame >>
      disch_then strip_assume_tac >> simp[]) >>
@@ -5786,7 +5859,7 @@ Resume tuple_immutable_runtime_bytes_joint[stmt_post]:
 QED
 
 Resume tuple_immutable_runtime_bytes_joint[ghost_post]:
-  `ce.ce_module = NONE` by fs[body_inv_def,cenv_module_pins_def] >>
+  `ce.ce_module = NONE` by metis_tac[bodyInvCodePropsTheory.body_inv_module_locations] >>
   `fin.scopes = st.scopes` by metis_tac[vyperPlaceFramesTheory.write_immutable_place_scopes] >>
   `!i. ~(off <= i /\ i < off + type_memory_size dtv) ==>
       mem_bytes_at i 1 q.vs_memory = mem_bytes_at i 1 s.vs_memory` by
@@ -6227,27 +6300,7 @@ Proof
          fragGasModeTheory.gas_marked_path_def, typed_copy_state_frame_def,
          typed_copy_frame_def, venom_state_component_equality] >> gvs[]) >>
   `expr_body_pre cenv cx env e es` by
-    (drule_then strip_assume_tac supported_expr_body_calls >>
-     `~supported_expr_exists (const_name_root cx) e` by
-       fs[supported_stmt_expr_exists_def] >>
-     `supported_program tops /\ get_module_code cx NONE = SOME tops /\
-      (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-        is_dynamic (vyper_to_abi_type (type_env tops) target))` by
-       gvs[body_inv_def] >>
-     `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
-     `~is_extcode e` by
-       (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
-        qexists_tac `cenv` >>
-        fs[stmt_exprs_ok_def,allocLimitsTheory.alloc_limits_stmt_def]) >>
-     irule stmt_expr_body_pre_alloc >>
-     simp[] >> conj_tac
-     >- gvs[supported_stmt_expr_exists_def] >>
-     conj_tac >- gvs[stmt_exprs_ok_def,supported_stmt_expr_exists_def] >>
-     conj_tac >- gvs[stmt_exprs_ok_def,allocLimitsTheory.alloc_limits_stmt_def] >>
-     qexists_tac `[]` >> simp[] >>
-     qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
-     simp[int_calls_stmt_def] >>
-     metis_tac[call_evaluation_safe_append_right]) >>
+    (drule_all tuple_assignment_rhs_pre >> simp[]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e) e es` by
     (qpat_x_assum `body_expr_full_ok _ _` mp_tac >>
@@ -6311,8 +6364,8 @@ Proof
       (map_every assume_tac o CONJUNCTS))) >>>
   HEADGOAL (
     `svv = shadow_vv /\ ssc = shadow_sc` by
-      (qpat_assum `compile_expr cenv _ (gas_shadow_expr e) shadow_sa = (shadow_vv,shadow_sc)` mp_tac >>
-       qpat_assum `compile_expr cenv _ (gas_shadow_expr e) shadow_sa = (svv,ssc)`
+      (qpat_assum `compile_expr _ _ (gas_shadow_expr e) shadow_sa = (shadow_vv,shadow_sc)` mp_tac >>
+       qpat_assum `compile_expr _ _ (gas_shadow_expr e) shadow_sa = (svv,ssc)`
          (fn eq => simp[NoAsms,eq]))) >>>
   HEADGOAL (
     `shadow_vv = vv` by
@@ -6645,9 +6698,12 @@ Proof
       (qx_choosel_then [`imm_vis`,`imm_slot`] assume_tac o
        MATCH_MP tuple_immutable_declaration_witness)) >>>
   HEADGOAL (
-    drule_then strip_assume_tac bodyStorageMetadataTheory.supported_variable_decl_mem >>
+    drule_then strip_assume_tac bodyStorageMetadataTheory.supported_variable_decl_mem) >>>
+  HEADGOAL (
     `get_module_code cx NONE = SOME tops` by
-      (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms,body_inv_def]) >>
+      (qpat_assum `body_inv tops ctx cenv cx`
+        (ACCEPT_TAC o cj 1 o MATCH_MP bodyInvCodePropsTheory.body_inv_main_code))) >>>
+  HEADGOAL (
     `env_context_consistent env cx` by
       (qpat_assum `expr_sim_inv cenv cx env src` mp_tac >>
        simp[NoAsms,expr_sim_inv_def,vyperTypeInvariantsTheory.env_consistent_def]) >>
@@ -9610,9 +9666,8 @@ Proof
      `supported_program tops /\ get_module_code cx NONE = SOME tops /\
        (!a. is_dynamic (vyper_to_abi_type (get_tenv cx) a) ==>
             is_dynamic (vyper_to_abi_type (type_env tops) a))` by
-       (qpat_assum `body_inv tops ctx cenv cx`
-          (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
-        rpt conj_tac >> first_assum ACCEPT_TAC) >>
+       metis_tac[bodyInvExecutionPropsTheory.body_inv_main_support,
+                 bodyInvExecutionPropsTheory.body_inv_singleton_abi_types] >>
      `cx_tops cx = tops` by
        (qpat_assum `get_module_code cx NONE = SOME tops`
           (ACCEPT_TAC o MATCH_MP cx_tops_module))) >>>
@@ -10893,30 +10948,7 @@ Theorem body_assign_tuple_widened_full:
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_body_pre cenv cx env e es` by
-    (`supported_expr tops e` by
-       gvs[supported_stmt_assigntuple,supported_assignment_def] >>
-     `well_typed_expr env e` by gvs[type_stmt_assigntuple] >>
-     drule_then strip_assume_tac supported_expr_body_calls >>
-     `~supported_expr_exists (const_name_root cx) e` by
-       fs[supported_stmt_expr_exists_def] >>
-     `supported_program tops /\ get_module_code cx NONE = SOME tops /\
-      (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-        is_dynamic (vyper_to_abi_type (type_env tops) target))` by
-       gvs[body_inv_def] >>
-     `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
-     `~is_extcode e` by
-       (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
-        qexists_tac `cenv` >>
-        fs[stmt_exprs_ok_def,allocLimitsTheory.alloc_limits_stmt_def]) >>
-     irule stmt_expr_body_pre_alloc >>
-     simp[] >> conj_tac
-     >- gvs[supported_stmt_expr_exists_def] >>
-     conj_tac >- gvs[stmt_exprs_ok_def,supported_stmt_expr_exists_def] >>
-     conj_tac >- gvs[stmt_exprs_ok_def,allocLimitsTheory.alloc_limits_stmt_def] >>
-     qexists_tac `[]` >> simp[] >>
-     qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
-     simp[int_calls_stmt_def] >>
-     metis_tac[call_evaluation_safe_append_right]) >>
+    (drule_all tuple_assignment_rhs_pre >> simp[]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e) e es` by
     (qpat_x_assum `body_expr_full_ok _ _` mp_tac >>
@@ -11046,11 +11078,10 @@ Proof
     (drule expr_body_pre_var_types_well_formed >> strip_tac >>
      `well_typed_expr env e /\
       sfields_tenv_consistent cenv.ce_struct_fields env.type_defs` by
-       (qpat_assum `expr_body_pre cenv cx env e es`
-          (mp_tac o REWRITE_RULE [expr_body_pre_def,expr_sim_inv_def,
-            vyperTypeInvariantsTheory.env_consistent_def,
-            vyperTypeInvariantsTheory.env_context_consistent_def]) >>
-        simp[NoAsms] >> strip_tac >> asm_rewrite_tac[]) >>
+       (drule_then strip_assume_tac exprBodyPrePropsTheory.expr_body_pre_static_facts >>
+        `env.type_defs = get_tenv cx` by
+          metis_tac[exprBodyPrePropsTheory.expr_body_pre_env_type_defs] >>
+        fs[expr_sim_inv_def]) >>
      `!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
        cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty` by
        gvs[expr_sim_inv_def] >>
@@ -11260,7 +11291,8 @@ Proof
      qexists_tac `head` >> asm_simp_tac bool_ss [well_typed_target_def] >>
      `supported_program tops /\ get_module_code cx NONE = SOME tops /\
        (!a. is_dynamic (vyper_to_abi_type (get_tenv cx) a) ==>
-            is_dynamic (vyper_to_abi_type (type_env tops) a))` by fs[body_inv_def] >>
+            is_dynamic (vyper_to_abi_type (type_env tops) a))` by metis_tac[bodyInvExecutionPropsTheory.body_inv_main_support,
+                 bodyInvExecutionPropsTheory.body_inv_singleton_abi_types] >>
      `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
      `~supported_target_exists (const_name_root cx) head` by
        metis_tac[] >>
@@ -11691,7 +11723,8 @@ Proof
      MATCH_MP tuple_immutable_declaration_witness) >>
   drule_then strip_assume_tac bodyStorageMetadataTheory.supported_variable_decl_mem >>
   `get_module_code cx NONE = SOME tops` by
-    (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms,body_inv_def]) >>
+    (qpat_assum `body_inv tops ctx cenv cx`
+      (ACCEPT_TAC o cj 1 o MATCH_MP bodyInvCodePropsTheory.body_inv_main_code)) >>
   `env_context_consistent env cx` by
     (qpat_assum `expr_sim_inv cenv cx env src` mp_tac >>
      simp[NoAsms,expr_sim_inv_def,vyperTypeInvariantsTheory.env_consistent_def]) >>
