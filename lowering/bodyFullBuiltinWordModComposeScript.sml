@@ -233,6 +233,7 @@ Proof
       qpat_x_assum `gas_outcome_full _ _ _ _ _ _ firstQ firstR` kall_tac >>
       unabbrev_all_tac >>
       simp[exprSimWordArgsTheory.eval_expr_builtin_action,
+           vyperContextTheory.is_self_codesize_def,
            vyperInterpreterTheory.precompile_builtin_def,
            vyperInterpreterTheory.code_slice_source_def,
            vyperContextTheory.builtin_args_length_ok_def,
