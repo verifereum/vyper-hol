@@ -1,7 +1,8 @@
 (* The deployment unit's source-side static facts, for the asm_opt_finalizer
  * case of e2e_deploy_correctness (used by e2eDeployCorrectness).
  *
- * TOP-LEVEL: lower_vyper_deploy_unit_sym_src_ok.
+ * The unit-level deployment source facts are consumed by the deploy
+ * correctness proofs.
  *)
 Theory deploySymSrcUnit
 Ancestors

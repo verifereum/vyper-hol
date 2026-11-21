@@ -1,7 +1,8 @@
 (* The runtime unit's source-side static facts, for the optimizer case of
    the top theorems (consumed by e2eAsmOpt).
 
-   TOP-LEVEL: lower_vyper_runtime_unit_sym_src_ok.
+   The unit-level runtime source facts are consumed by the runtime
+   correctness proofs.
  *)
 Theory runtimeSymSrcUnit
 Ancestors
