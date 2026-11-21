@@ -259,9 +259,6 @@ val mapping_selection_key_tac =
   `expr_store_bound cx kt v key it` by metis_tac[] >>
   drule_all mapping_index_key_input >> strip_tac;
 
-fun mapping_selection_tac base_result_typed =
-  mapping_selection_intro_tac >> base_result_typed >> mapping_selection_key_tac;
-
 val mapping_suffix_tac =
   `!z. p.ptr_operand = Var z ==> not_fresh_at sm z` by
     (qpat_assum `compile_expr _ _ e1 _ = _`
@@ -464,14 +461,15 @@ Resume subscript_map_map_full[mapping_index]:
 QED
 
 Resume subscript_map_map_full[mapping_selection]:
-  mapping_selection_tac
-    (`kt' = kt /\ vt = HashMapT ikt ivt` by
+  mapping_selection_intro_tac >>
+  `kt' = kt /\ vt = HashMapT ikt ivt` by
       (qpat_assum `eval_expr cx e1 (_ with gas_obs := _) = _`
          (mp_then Any mp_tac expr_map_pre_eval_result) >>
        disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
        simp[] >> strip_tac >>
        first_x_assum (qspec_then `HashMapT kt (HashMapT ikt ivt)` mp_tac) >>
-       simp[vyperPlaceResultTypingTheory.eval_result_typed_mapping])) >>
+       simp[vyperPlaceResultTypingTheory.eval_result_typed_mapping]) >>
+  mapping_selection_key_tac >>
   mapping_suffix_tac >> mapping_frames_tac >> mapping_pure_frame_tac >>
   mapping_map_package_tac
 QED

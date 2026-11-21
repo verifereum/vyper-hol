@@ -263,7 +263,10 @@ Proof
         `INL (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))`,`z`,`tm`] >>
       simp[builtin_result_def,vyperContextTheory.evaluate_builtin_def,
            evaluate_calldata_slice_uint,GSYM dimword_def] >>
-      conj_tac >- (Cases_on `2 ** 256 <= a+n` >> gvs[dimword_def]) >>
+      conj_tac
+      >- (qpat_assum `a+n < dimword (:256) /\ a+n <= LENGTH cx.txn.calldata`
+            (mp_tac o CONJUNCT1) >>
+          simp[NoAsms, dimword_def, GSYM NOT_LESS]) >>
       qx_gen_tac `H` >> strip_tac >>
       qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
