@@ -104,13 +104,6 @@ Proof
   preserve [UNDISCH opcode_every_entry_checks]
 QED
 
-Theorem register_kwarg_vars_defaults:
-  !vars ce. (compile_register_kwarg_vars ce vars).ce_func_defaults = ce.ce_func_defaults
-Proof
-  Induct >> simp[compile_register_kwarg_vars_def] >>
-  qx_gen_tac `v` >> PairCases_on `v` >> simp[compile_register_kwarg_vars_def]
-QED
-
 Theorem opcode_every_common_body:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>

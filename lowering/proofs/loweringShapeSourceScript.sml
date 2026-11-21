@@ -75,13 +75,13 @@ QED
 
 (* ===== Typing gives builtin arity ===== *)
 
-Theorem well_typed_builtin_app_arity[local]:
+Theorem well_typed_builtin_app_arity:
   well_typed_builtin_app ty bi ts ==> builtin_arity bi <= LENGTH ts
 Proof
   Cases_on `bi` >> rw[well_typed_builtin_app_def, builtin_arity_def] >> gvs[]
 QED
 
-Theorem well_typed_type_builtin_args_arity[local]:
+Theorem well_typed_type_builtin_args_arity:
   well_typed_type_builtin_args tb target ts ==>
   type_builtin_arity tb <= LENGTH ts
 Proof

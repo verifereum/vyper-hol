@@ -173,9 +173,7 @@ Proof
   Cases_on `FST (SND (SND (classify_functions tops)))`
   >- simp[package_fallback_fn_def, set_fallback_package_target_def] >>
   PairCases_on `x` >> Cases_on `u` >> strip_tac >>
-  drule_at (Pat `set_fallback_package_target _ _ = _`) runtime_sym_fallback_package_body >>
-  simp[] >> disch_then irule >>
-  rpt (conj_tac >- metis_tac[]) >> qexists `s` >> simp[]
+  drule_all_then ACCEPT_TAC runtime_sym_fallback_package_body
 QED
 
 Theorem runtime_sym_runtime_boundary:

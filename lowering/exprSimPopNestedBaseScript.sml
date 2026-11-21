@@ -430,15 +430,6 @@ Proof
   asm_rewrite_tac[]
 QED
 
-Theorem nested_pop_index_size:
-  !bt e. MEM e (target_indices bt) ==> expr_size e < base_assignment_target_size bt
-Proof
-  measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
-  simp[supportedExprsTheory.target_indices_def, expr_size_def] >> rpt strip_tac >>
-  first_x_assum (qspec_then `b` mp_tac) >> simp[expr_size_def] >>
-  strip_tac >> res_tac >> decide_tac
-QED
-
 Theorem nested_pop_target_guard_erasure:
   compile_get_target_ptr
     (expr_child_callback (expr_size (Pop ann bt) + cenv_defaults_size cenv) f) cenv bt =
@@ -446,7 +437,7 @@ Theorem nested_pop_target_guard_erasure:
 Proof
   irule nested_pop_target_callback_cong >> rpt strip_tac >>
   irule exprCallBoundsTheory.expr_child_callback_valid >>
-  drule nested_pop_index_size >> simp[expr_size_def] >> decide_tac
+  drule supportedExprsTheory.target_indices_size >> simp[expr_size_def] >> decide_tac
 QED
 
 Theorem nested_pop_compile_eq:
@@ -467,7 +458,7 @@ Proof
        compile_get_target_ptr compile_expr cenv bt` by
     (rpt strip_tac >> irule nested_pop_target_callback_cong >> rpt strip_tac >>
      irule exprCallBoundsTheory.expr_child_callback_valid >>
-     drule nested_pop_index_size >> simp[] >> decide_tac) >>
+     drule supportedExprsTheory.target_indices_size >> simp[] >> decide_tac) >>
   simp[]
 QED
 

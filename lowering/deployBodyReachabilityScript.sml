@@ -4,16 +4,6 @@ Ancestors
   venomExecSemantics venomExecProofs venomInst venomInstProofs venomState list
   cfgNormSim[qualified]
 
-Theorem get_instruction_active_inst[local]:
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME inst ==>
-  active_inst fn inst s
-Proof
-  strip_tac >> simp[active_inst_def] >> qexists `bb` >>
-  drule lookup_block_MEM >> drule lookup_block_label >>
-  fs[get_instruction_def] >> metis_tac[]
-QED
-
 Theorem raw_reachable_gas_edge[local]:
   gas_path_edge ctx fn s n (OK t) /\
   (!bb lbl. lookup_block lbl fn.fn_blocks = SOME bb ==>
@@ -26,7 +16,7 @@ Proof
   TRY (qpat_assum `exit_result _` mp_tac >>
        qpat_assum `OK _ = step_inst _ _ _ _` (SUBST1_TAC o GSYM) >>
        simp[exit_result_def] >> NO_TAC) >>
-  `active_inst fn inst s` by metis_tac[get_instruction_active_inst] >>
+  `active_inst fn inst s` by metis_tac[contextCodegenRelPropsTheory.lookup_instruction_active] >>
   `raw_reachable entry ctx fn inst s` by metis_tac[]
   >- metis_tac[raw_reachable_next]
   >- (`enters_block fn t' (entered with vs_inst_idx := phi_prefix_length target.bb_instructions)` by

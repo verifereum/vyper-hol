@@ -167,15 +167,6 @@ Proof
   simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def, init_venom_state_def]
 QED
 
-Theorem ctor_prefix_lowered_entry_label:
-  lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
-  supported_program tops /\ supported_program_deploy tops /\
-  lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME fn ==>
-  fn_entry_label fn = SOME "__deploy"
-Proof
-  metis_tac[ctor_checked_entry_label_from_lowering]
-QED
-
 Theorem ctor_prefix_task_entry_label:
   deploy_phases policy tops (deploy_bc,runtime_bc)
     (rpolicy,dunit,dout,prog,cplan) /\ deploy_source_ok tops am tx /\
@@ -187,5 +178,5 @@ Proof
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
    supported_program tops /\ supported_program_deploy tops` by
     fs[deploy_phases_def, deploy_source_ok_def] >>
-  drule_all ctor_prefix_lowered_entry_label >> simp[]
+  drule_all ctor_checked_entry_label_from_lowering >> simp[]
 QED

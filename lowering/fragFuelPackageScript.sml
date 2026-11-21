@@ -130,14 +130,6 @@ Proof
   gvs[internal_segment_labels_def, new_block_def, all_blocks_def, MAP_MAP_o]
 QED
 
-Theorem generated_label_not_internal[local]:
-  !l. isPREFIX "@" l ==> ~internal_label_ok l
-Proof
-  gen_tac >>
-  disch_then (strip_assume_tac o REWRITE_RULE [rich_listTheory.IS_PREFIX_APPEND]) >>
-  pop_assum SUBST_ALL_TAC >> simp[internal_label_ok_def]
-QED
-
 Theorem package_internal_blocks_segment_labels:
   !descs segs entry.
     LIST_REL internal_segment_labels descs segs /\
@@ -163,7 +155,7 @@ Proof
   first_x_assum (qspecl_then [`ys`, `bb :: tl`] mp_tac) >>
   impl_tac
   >- (gvs[EVERY_MEM, MEM_MAP, pairTheory.FORALL_PROD, pairTheory.EXISTS_PROD] >>
-      metis_tac[SIMP_RULE (srw_ss()) [] generated_label_not_internal]) >>
+      metis_tac[SIMP_RULE (srw_ss()) [] groupedInternalLabelsTheory.fresh_noninternal]) >>
   simp[]
 QED
 

@@ -32,16 +32,6 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
-Theorem compile_deploy_internal_suffix[local]:
-  compile_generate_deploy T code_size cap args data_size ips ce ss pay nr key trans st =
-  compile_internal_fn_bodies ips
-    (SND (compile_generate_deploy T code_size cap args data_size [] ce ss pay nr key trans st))
-Proof
-  simp[compile_generate_deploy_def, LET_THM, compile_internal_fn_bodies_def,
-       comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[])
-QED
-
 Theorem internal_fn_label_mode[local]:
   internal_fn_label id fname tys mode = internal_fn_label id' fname' tys' mode' ==>
   mode = mode'

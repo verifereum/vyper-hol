@@ -193,10 +193,11 @@ Theorem call_entry_reachable_create_size_ok:
     vs = (if own then opt_entry_state_own prog prog' cplan es
           else opt_entry_state prog prog' cplan es) /\
     (!f vals. calldata_dispatch tops tx.calldata = SOME (f,vals) ==>
-      let td = tx with <|function_name := f; args := vals|> in
-      (!obs. call_storage_ok am td (MAP SND (call_trace es)) obs) /\
-      (!obs. ~gas_source_exempt tops td
-        (call_external (SOME (MAP SND (call_trace es))) obs am td)) /\
+      (!obs. call_storage_ok am (tx with <|function_name := f; args := vals|>)
+        (MAP SND (call_trace es)) obs) /\
+      (!obs. ~gas_source_exempt tops (tx with <|function_name := f; args := vals|>)
+        (call_external (SOME (MAP SND (call_trace es))) obs am
+          (tx with <|function_name := f; args := vals|>))) /\
       LENGTH (call_trace es) < 2 ** 64) ==>
     mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
       out.po_unit.cu_context vs

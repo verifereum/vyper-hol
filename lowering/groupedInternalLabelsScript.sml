@@ -72,7 +72,7 @@ Definition group_job_label_ok_def[local]:
   (group_job_label_ok (ExternalCommonJob common vars) <=> ~internal_label_ok common.ec_common_label)
 End
 
-Theorem fresh_noninternal[local]:
+Theorem fresh_noninternal:
   !lbl. isPREFIX "@" lbl ==> ~internal_label_ok lbl
 Proof
   Cases >> simp[internal_label_ok_def]
@@ -212,7 +212,7 @@ Proof
   simp[emit_inst_labels, comp_return_labels]
 QED
 
-Theorem group_dispatch_jobs[local]:
+Theorem group_dispatch_job_labels[local]:
   !groups fb s. EVERY group_entry_labels_ok groups ==>
     EVERY group_job_label_ok (FST (compile_group_dispatch_linear groups fb s))
 Proof
@@ -236,7 +236,7 @@ Proof
   disch_tac >> BETA_TAC >>
   Cases_on `compile_group_dispatch_linear groups lbl s` >>
   rename1 `compile_group_dispatch_linear groups lbl s = (jobs,st)` >>
-  drule group_dispatch_jobs >>
+  drule group_dispatch_job_labels >>
   disch_then (qspecl_then [`lbl`, `s`] mp_tac) >> simp[] >> strip_tac >>
   drule group_dispatch_labels >>
   disch_then (qspecl_then [`lbl`, `s`] mp_tac) >> simp[] >> strip_tac >>

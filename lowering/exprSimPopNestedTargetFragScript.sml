@@ -31,7 +31,7 @@ Proof
   `target_case T ctx func cenv cx bt` by
     (irule target_case_all >> irule target_idx_case_ok >>
      rw[] >> fs[expr_sim_below_def] >> first_x_assum irule >>
-     imp_res_tac nested_pop_index_size >> simp[expr_size_def]) >>
+     imp_res_tac supportedExprsTheory.target_indices_size >> simp[expr_size_def]) >>
   fs[target_case_def] >> first_x_assum irule >>
   simp[] >> irule target_pre_of_pop >> simp[] >>
   qexists_tac `ann` >>

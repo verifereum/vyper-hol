@@ -110,6 +110,14 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> simp[]
 QED
 
+Theorem register_kwarg_vars_defaults:
+  !kwvars ce.
+    (compile_register_kwarg_vars ce kwvars).ce_func_defaults = ce.ce_func_defaults
+Proof
+  Induct >> simp[compile_register_kwarg_vars_def] >>
+  rpt gen_tac >> PairCases_on `h` >> simp[compile_register_kwarg_vars_def]
+QED
+
 Theorem materialize_internal_params_defaults:
   !params ce st.
     (FST (materialize_internal_params ce params st)).ce_func_defaults =
