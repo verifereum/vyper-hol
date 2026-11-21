@@ -253,16 +253,6 @@ Proof
   metis_tac[subst_consts_expr_builtin_arity]
 QED
 
-Theorem runtime_source_function_builtin_arity[local]:
-  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\
-  MEM (FunctionDecl vis mut nr rr name args dflts ret stmts) source_tops /\
-  vis <> Deploy ==>
-  ~supported_stmts_expr_exists short_builtin_args stmts /\
-  EVERY (\d. ~supported_expr_exists short_builtin_args d) dflts
-Proof
-  metis_tac[checked_source_builtin_arity]
-QED
-
 Theorem public_getter_builtin_arity[local]:
   public_getter top = SOME (mut,nr,rr,name,args,dflts,ret,stmts) ==>
   ~supported_stmts_expr_exists short_builtin_args stmts /\
@@ -282,7 +272,7 @@ Theorem classify_external_builtin_arity:
 Proof
   strip_tac >> drule classify_functions_external_source >> strip_tac >>
   gvs[subst_consts_fn_def] >> irule (GEN_ALL subst_checked_fn_builtin_arity) >>
-  metis_tac[runtime_source_function_builtin_arity, public_getter_builtin_arity,
+  metis_tac[checked_source_builtin_arity, public_getter_builtin_arity,
             function_visibility_distinct]
 QED
 
@@ -295,7 +285,7 @@ Theorem classify_internal_builtin_arity:
 Proof
   strip_tac >> drule (iffLR (SPEC_ALL MEM_classify_internal)) >> strip_tac >>
   gvs[subst_consts_fn_def] >> irule (GEN_ALL subst_checked_fn_builtin_arity) >>
-  metis_tac[runtime_source_function_builtin_arity, function_visibility_distinct]
+  metis_tac[checked_source_builtin_arity, function_visibility_distinct]
 QED
 
 Theorem classify_fallback_builtin_arity:
@@ -307,7 +297,7 @@ Theorem classify_fallback_builtin_arity:
 Proof
   strip_tac >> drule classify_functions_fallback_mem >> strip_tac >>
   gvs[subst_consts_fn_def] >> irule (GEN_ALL subst_checked_fn_builtin_arity) >>
-  metis_tac[runtime_source_function_builtin_arity, function_visibility_distinct]
+  metis_tac[checked_source_builtin_arity, function_visibility_distinct]
 QED
 
 Definition compile_env_builtin_arity_def:
