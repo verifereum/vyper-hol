@@ -316,53 +316,6 @@ Proof
           subst_consts_expr_unchanged, subst_consts_error_unchanged])
 QED
 
-(* ===== P1: a supported body is unchanged when every substituted name is a
-   constant declaration ===== *)
-
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >> irule (cj 2 subst_consts_stmt_unchanged) >>
-  drule_then irule (cj 2 supported_stmts_no_name_root) >>
-  rpt strip_tac >> gvs[] >>
-  first_x_assum drule >> strip_tac >>
-  drule supported_constant_decl_not_root >> simp[]
-QED
-*)
-Theorem subst_consts_supported_stmts_unchanged:
-  (!id. IS_SOME (ALOOKUP E id) ==>
-     ?vis c ty slot.
-       supported_variable_decl tops (NONE,id) = SOME (vis,Constant c,ty,slot)) /\
-  supported_stmts tops bindings ss ==>
-  subst_consts_stmts E ss = ss
-Proof
-  cheat
-QED
-
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >> simp[subst_consts_fn_def] >>
-  conj_tac
-  >- (irule (cj 3 subst_consts_expr_unchanged) >>
-      drule_then irule (cj 2 supported_pure_no_name_root) >>
-      rpt strip_tac >> gvs[] >>
-      first_x_assum drule >> strip_tac >>
-      drule supported_constant_decl_not_root >> simp[]) >>
-  fs[supported_function_body_def] >>
-  metis_tac[subst_consts_supported_stmts_unchanged]
-QED
-*)
-Theorem subst_consts_supported_fn_unchanged:
-  (!id. IS_SOME (ALOOKUP E id) ==>
-     ?vis c ty slot.
-       supported_variable_decl tops (NONE,id) = SOME (vis,Constant c,ty,slot)) /\
-  supported_pure_exprs tops defaults /\
-  supported_function_body tops vis args fbody ==>
-  subst_consts_fn E (mut,nr,rr,name,args,defaults,ret,fbody) =
-    (mut,nr,rr,name,args,defaults,ret,fbody)
-Proof
-  cheat
-QED
-
 (* ===== P1's premise at entry: every substituted name is a constant ===== *)
 
 Theorem checked_module_consts_env_names_constant:
@@ -380,30 +333,6 @@ Proof
   drule distinct_module_consts_env_names_constant >> disch_then irule >>
   spose_not_then assume_tac >> gvs[GSYM ALOOKUP_NONE]
 QED
-
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  strip_tac >>
-  `!id. IS_SOME (ALOOKUP (module_consts_env tops []) id) ==>
-    ?v c ty slot.
-      supported_variable_decl tops (NONE,id) = SOME (v,Constant c,ty,slot)` by
-    (drule checked_module_consts_env_names_constant >> simp[]) >>
-  drule_all supported_program_declaration >>
-  simp[supported_declaration_body_def] >> strip_tac >>
-  irule subst_consts_supported_fn_unchanged >> metis_tac[]
-QED
-*)
-Theorem checked_supported_function_subst:
-  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
-  supported_program tops /\ vis <> Deploy /\
-  MEM (FunctionDecl vis mut nr rr name args defaults ret fbody) tops ==>
-  subst_consts_fn (module_consts_env tops [])
-    (mut,nr,rr,name,args,defaults,ret,fbody) =
-    (mut,nr,rr,name,args,defaults,ret,fbody)
-Proof
-  cheat
-QED
-
 
 Theorem closed_constant_no_const_name[local]:
   (!e. constant_expr [(NONE,tops)] e /\ const_local_refs e = [] ==>
