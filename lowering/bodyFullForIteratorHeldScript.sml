@@ -1,6 +1,6 @@
 Theory bodyFullForIteratorHeld
 Ancestors
-  bodyFullForArrayBranch
+  bodyFullForArrayBranch forNestedArrayCapture[qualified,ignore_grammar]
   vyperTypeContract[qualified,ignore_grammar]
 
 (* GATE_ADMISSION: missing case, array iterator through a nested storage or transient place; owner: body place lane *)

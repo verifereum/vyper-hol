@@ -761,7 +761,7 @@ Proof
   metis_tac[freshWritesTheory.not_fresh_at_mono]
 QED
 
-Theorem for_nonslot_array_layout_full:
+Theorem for_nonslot_array_layout_full_with_done_age:
   expr_type e = ArrayT sty bd /\ c.ce_alloca_locals /\
   local_ptrs_reserved c sa0 /\ gas_shadow_state sa0 shadow_sa0 /\
   compile_stmt c lctx ret_ty (For id fty (Array e) n loop_body) sa0 = ((),sb) /\
@@ -776,7 +776,7 @@ Theorem for_nonslot_array_layout_full:
       (bc,saD,saA,xd,capacity,aidItem)
       (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
       (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
-      (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody)
+      (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\ not_fresh_at sa done_var
 Proof
   strip_tac >> drule_all nonslot_for_compiler_cuts >> strip_tac >>
   gvs[gasShadowTheory.gas_shadow_stmt_def,gasShadowTheory.gas_shadow_iterator_def] >>
@@ -985,6 +985,9 @@ Proof
      >- (strip_tac >> gvs[]) >>
      disch_then (mp_tac o MATCH_MP exprSafeOperandTheory.compile_ptr_load_safe_operand) >>
      simp[exprSafeOperandTheory.safe_operand_def]) >>
+  `not_fresh_at sa done_var` by
+    (qpat_assum `done_var = STRING #"%" (toString (sa.cs_next_var - 1))` mp_tac >>
+     simp[not_fresh_at_def, ASCIInumbersTheory.toString_11] >> decide_tac) >>
   simp[for_nonslot_layout_def, DISJ_IMP_THM, FORALL_AND_THM, listTheory.APPEND_ASSOC] >>
   conj_tac >-
     (qpat_x_assum `lookup_block saA.cs_current_bb func.fn_blocks = _` mp_tac >>
@@ -999,6 +1002,26 @@ Proof
   POP_ASSUM_LIST (K all_tac) >>
   Cases_on `bd` >> simp[not_fresh_at_def, ASCIInumbersTheory.toString_11] >>
   decide_tac
+QED
+
+Theorem for_nonslot_array_layout_full:
+  expr_type e = ArrayT sty bd /\ c.ce_alloca_locals /\
+  local_ptrs_reserved c sa0 /\ gas_shadow_state sa0 shadow_sa0 /\
+  compile_stmt c lctx ret_ty (For id fty (Array e) n loop_body) sa0 = ((),sb) /\
+  compile_stmt c lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
+    shadow_sa0 = ((),shadow_sb) /\
+  fn_has_code sa0 sb func /\ fn_has_code shadow_sa0 shadow_sb shadow_func ==>
+  ?vv sbExpr shadow_sbExpr loc len_op saL bc saD saA xd capacity aidItem
+   entry cond bod incr exit idx invalid valid done_var next_var
+   sa stride off_op sm sum_op sn addr saCopy sbCopy sbBody sj shadow_sbCopy shadow_sbBody.
+    for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
+      (sa0,vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL)
+      (bc,saD,saA,xd,capacity,aidItem)
+      (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
+      (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
+      (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody)
+Proof
+  strip_tac >> drule_all for_nonslot_array_layout_full_with_done_age >> metis_tac[]
 QED
 
 Theorem for_nonslot_increment_slice[local]:
