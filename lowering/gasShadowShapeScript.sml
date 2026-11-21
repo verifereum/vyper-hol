@@ -25,23 +25,16 @@ Proof
   TRY COND_CASES_TAC >> gvs[] >> metis_tac[]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  rpt strip_tac >>
-  irule LIST_EQ >> simp[EL_MAP] >> rpt strip_tac >>
-  irule supported_default_expression_gas_shadow >>
-  qexists_tac `tops` >>
-  gvs[EVERY_MEM] >>
-  first_x_assum irule >>
-  irule (Q.SPECL [`dflts`,`k`,`EL x (DROP k dflts)`] MEM_DROP_IMP) >>
-  irule EL_MEM >> simp[]
-QED
-*)
 Theorem omitted_defaults_gas_shadow_id:
-  !tops dflts k. EVERY (supported_default_expression tops) dflts ==>
+  !dflts k. ~supported_exprs_exists expr_msg_gas_root dflts ==>
     MAP gas_shadow_expr (DROP k dflts) = DROP k dflts
 Proof
-  cheat
+  rpt strip_tac >>
+  sg `MAP gas_shadow_expr dflts = dflts`
+  >- (irule (cj 3 gas_shadow_identity_without_msg_gas) >>
+      qexists_tac `expr_msg_gas_root` >>
+      simp[expr_msg_gas_root_def]) >>
+  simp[MAP_DROP]
 QED
 
 Theorem gas_shadow_expr_shape_root:
