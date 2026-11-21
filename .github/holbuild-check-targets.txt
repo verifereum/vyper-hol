@@ -1030,4 +1030,4 @@ vyperTypeSoundnessTheory
 vyperTypeStoragePreservationTheory
 deploySymSrcUnitTheory
 runtimeSymSrcUnitTheory
-ownSymSrcUnitTheory:lower_vyper_runtime_unit_sym_src_ok_own
+ownSymSrcUnitTheory
