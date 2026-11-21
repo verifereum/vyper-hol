@@ -459,14 +459,14 @@ QED
 
 (* ===== Expression cases ===== *)
 
-Theorem checker_env_bare_toplevel[local]:
+Theorem checker_env_bare_toplevel:
   checker_env_ok tops env /\ FLOOKUP env.bare_globals k = SOME ty ==>
   FLOOKUP env.toplevel_vtypes k = SOME (Type ty)
 Proof
   rw[checker_env_ok_def]
 QED
 
-Theorem checker_toplevel_name_place[local]:
+Theorem checker_toplevel_name_place:
   checker_env_ok tops env /\ FLOOKUP env.toplevel_vtypes k = SOME vt ==>
   supported_place_root tops k /\ check_value_type (type_env tops) vt
 Proof
