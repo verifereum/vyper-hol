@@ -1429,11 +1429,23 @@ Resume for_nonslot_array_entry_full[entry_control]:
   qabbrev_tac `dyn = ?cap. bd = Dynamic cap` >>
   qabbrev_tac `writes = if dyn then {idx;invalid;valid} else {idx}` >>
   `!x. not_fresh_at saL x ==> x NOTIN writes` by
-    (Cases_on `bd` >> gvs[Abbr `dyn`, Abbr `writes`] >> metis_tac[]) >>
+    (qpat_assum `EVERY _ [idx;done_var;next_var]` mp_tac >>
+     qpat_assum `case bd of Fixed _ => T
+       | Dynamic _ => EVERY _ [invalid;valid] /\ _` mp_tac >>
+     simp[NoAsms, Abbr `dyn`, Abbr `writes`] >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `bd` >> simp[] >> metis_tac[]) >>
   `!x. len_op = Var x ==> x NOTIN writes` by metis_tac[] >>
   `dyn ==> ALL_DISTINCT [idx;invalid;valid] /\ ((?x. len_op = Var x) \/ (?w. len_op = Lit w))` by
-    (Cases_on `bd` >> gvs[Abbr `dyn`] >> Cases_on `len_op` >>
-     gvs[] >> metis_tac[fragFuelExprHelpersTheory.compile_ptr_load_not_label]) >>
+    (qpat_assum `case bd of Fixed _ => T
+       | Dynamic _ => EVERY _ [invalid;valid] /\ _` mp_tac >>
+     qpat_assum `(case bd of Fixed _ => _
+       | Dynamic _ => compile_ptr_load _ _ _ _) _ = (len_op,saL)` mp_tac >>
+     simp[NoAsms, Abbr `dyn`] >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `bd` >> simp[] >> rpt strip_tac >>
+     Cases_on `len_op` >> fs[] >>
+     metis_tac[fragFuelExprHelpersTheory.compile_ptr_load_not_label]) >>
   `a.vs_labels = u.vs_labels` by
     (qpat_assum `a with <|vs_vars := _; vs_allocas := _; vs_alloca_next := _; vs_inst_idx := _|> = u`
        (mp_tac o AP_TERM ``\s:venom_state. s.vs_labels``) >> simp[]) >>
@@ -2858,8 +2870,13 @@ QED
 Resume for_nonslot_array_scoped_body_full[continue_live_frame]:
   `body_const_cells_agree [(NONE,tops)] cx benv ef` by
     (irule body_const_cells_agree_stmts >>
-     goal_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >> simp[]) >>
-  `body_const_cells_agree [(NONE,tops)] cx env ep` by fs[Abbr `ep`] >>
+     qpat_assum `eval_stmts cx body (eb with gas_obs := obs) = (raw,ef)`
+       (irule_at Any) >>
+     qexists_tac `ret_ty` >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env ep` by
+    (qpat_assum `body_const_cells_agree [(NONE,tops)] cx benv ef` mp_tac >>
+     qpat_assum `benv = extend_local env id fty F` (fn eq =>
+       simp[NoAsms, eq, Abbr `ep`])) >>
   `ep.storage_trace = ef.storage_trace` by simp[Abbr `ep`] >>
   `!H. valid_horizon cx st0 H ep.storage_trace ==>
       for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
@@ -3110,6 +3127,9 @@ Resume for_nonslot_array_scoped_body_full[increment_return_buffer]:
   qpat_assum `for_nonslot_live _ _ _ _ _ (H,SUC k,rs,ep,c,ep,G',tn',t')`
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE[for_nonslot_live_def]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac >-
+    (qpat_assum `body_const_cells_agree [(NONE,tops)] cx env ep` mp_tac >>
+     simp[NoAsms, Abbr `ep`]) >>
   irule bodyFullSharedTheory.return_buf_sep_transport >>
   conj_tac
   >- (qpat_assum `gas_origin_ptr_path _ (z,FST _,SND _) [] (OK t',G',tn')`
@@ -3890,7 +3910,8 @@ Resume for_nonslot_array_round_contracts[cons]:
   qabbrev_tac `k = LENGTH vs - LENGTH (a::rs)` >>
   `body_const_cells_agree [(NONE,tops)] cx env es` by
     (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> Inv H (a::rs) es J tz z`
-       (drule_then (mp_tac o SIMP_RULE (srw_ss()) [Abbr `Inv`])) >> simp[]) >>
+       (qspec_then `storage_trace_horizon es.storage_trace` (drule_then mp_tac)) >>
+     simp[NoAsms, Abbr `Inv`] >> strip_tac >> first_assum ACCEPT_TAC) >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
        z.vs_current_bb = cond /\ z.vs_inst_idx = 0 /\
        return_buf_sep d c es z /\ Live H k (a::rs) es J tz z` by
