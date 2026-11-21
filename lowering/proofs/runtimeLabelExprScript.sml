@@ -1,6 +1,7 @@
 (* Expression compilation preserves reserved-operand exclusion. *)
 Theory runtimeLabelExpr
 Ancestors
+  listZipProps
   runtimeLabelExprCallbacks runtimeLabelExprPrimitives runtimeLabelPrimitives
   runtimeLabelBuiltinCore runtimeLabelBuiltinSystem runtimeLabelBuiltinArithmetic runtimeLabelBuiltins runtimeLabelABI runtimeLabelInvariant runtimeLabelValues
   exprLowering exprLoweringProps exprCallBounds
@@ -27,7 +28,7 @@ Proof
       IF_CASES_TAC >> simp[rb_abi_encode_for] >>
       irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >>
       simp[rb_emit_void_for, rb_step_return_for]) >>
-  simp[rb_compile_abi_encode_values_to_buf_for, rb_abi_encode_for, rb_every_zip_fst]
+  simp[rb_compile_abi_encode_values_to_buf_for, rb_abi_encode_for, EVERY_FST_ZIP]
 QED
 
 Theorem rb_compile_type_builtin_dispatch_body_for[local]:
@@ -297,7 +298,7 @@ Resume rb_compile_builtin_dispatch_body_for[ecadd]:
   ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
     (Q.ISPEC `(rb_operand_ok_for source_checks)` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind_for)))) >> BETA_TAC >>
   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_unwrap_value_for]) >>
-  gen_tac >> strip_tac >> irule rb_as_ptr_val_for >> simp[rb_compile_ecadd_points_for]
+  gen_tac >> strip_tac >> irule rb_as_stack_val_for >> simp[rb_compile_ecadd_points_for]
 QED
 Resume rb_compile_builtin_dispatch_body_for[ecmul]:
   ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
@@ -308,7 +309,7 @@ Resume rb_compile_builtin_dispatch_body_for[ecmul]:
     (Q.ISPEC `(rb_operand_ok_for source_checks)` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind_for)))) >> BETA_TAC >>
     (conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_unwrap_value_for, rb_lower_value_for])) >>
     gen_tac >> strip_tac) >>
-  irule rb_as_ptr_val_for >> simp[rb_compile_ecmul_point_for]
+  irule rb_as_stack_val_for >> simp[rb_compile_ecmul_point_for]
 QED
 Resume rb_compile_builtin_dispatch_body_for[keccak]:
   Cases_on `is_bytestring_type (expr_type (HD args))` >> simp[] >>

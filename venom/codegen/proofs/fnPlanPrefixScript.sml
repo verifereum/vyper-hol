@@ -487,7 +487,7 @@ Proof
   `stack_peek 0 (stack_swap d ps.ps_stack) = v` by
     (simp[stackModelTheory.stack_peek_def, stackModelTheory.stack_swap_def,
           listTheory.EL_LUPDATE] >> gvs[stackModelTheory.stack_peek_def]) >>
-  qspecl_then [`x`, `stack_swap d ps.ps_stack`] mp_tac reorderSimTheory.stack_pop_one_elem_count >>
+  qspecl_then [`x`, `stack_swap d ps.ps_stack`] mp_tac reorderPreparationInventoryPropsTheory.stack_pop_one_elem_count >>
   simp[phi_popmany_singleton_stack] >>
   `stack_swap d ps.ps_stack <> []` by
     (strip_tac >>

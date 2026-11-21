@@ -2,6 +2,7 @@
    kept from the theories the trunk prune removed. *)
 Theory decoderCalldataShell
 Ancestors
+  abiDecoderLoopRegisters
   physicalArrayInitSequence abiDecoderRange
   actualAllocExec fragExecMem allocaFrontierBound allocaBudgetProps
   abiDecoderIndexInit abiDecoderContract compileEnv emitHelper venomState
@@ -500,7 +501,7 @@ Proof
   Cases_on `FLOOKUP s.vs_allocas st.cs_next_id` >>
   gvs[AllCaseEqs()] >> strip_tac >> gvs[] >>
   simp[mstore_def, write_memory_with_expansion_def] >>
-  simp[calldata_update_protected] >>
+  simp[abi_decoder_generated_update_operand] >>
   Cases_on `op` >> simp[eval_operand_def, lookup_var_def]
 QED
 
@@ -645,7 +646,7 @@ Proof
     (simp_tac bool_ss [Abbr `t`] >> irule step_MLOAD >> simp[]) >>
   qexists_tac `t` >> gvs[Abbr `t`] >>
   simp[run_inst_seq_def, eval_operand_def, lookup_var_update_var, update_var_def] >>
-  metis_tac[calldata_update_protected, update_var_def]
+  metis_tac[abi_decoder_generated_update_operand, update_var_def]
 QED
 
 
@@ -948,7 +949,7 @@ Proof
   qexists_tac `t` >> gvs[Abbr `t`] >>
   simp[run_inst_seq_def, eval_operand_def, lookup_var_update_var,
        update_var_def] >>
-  metis_tac[calldata_update_protected, update_var_def]
+  metis_tac[abi_decoder_generated_update_operand, update_var_def]
 QED
 
 
@@ -973,7 +974,7 @@ Proof
   qexists_tac `t` >> gvs[Abbr `t`] >>
   simp[run_inst_seq_def, eval_operand_def, lookup_var_update_var,
        update_var_def] >>
-  metis_tac[calldata_update_protected, update_var_def]
+  metis_tac[abi_decoder_generated_update_operand, update_var_def]
 QED
 
 

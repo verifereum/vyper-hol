@@ -238,7 +238,7 @@ Finalise prefix_complete_backedge_support_mode
 
 
 
-val CshiftMode = ``\checked ty tv.
+val CshiftModeWithFmp = ``\checked ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
@@ -289,6 +289,7 @@ val CshiftMode = ``\checked ty tv.
  actual.vs_labels = initial.vs_labels /\ actual.vs_code = initial.vs_code /\
  actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
  actual.vs_block_ctx = initial.vs_block_ctx /\ actual.vs_gas_readings = initial.vs_gas_readings /\
+ (frame_fmp ==> actual.vs_fmp = initial.vs_fmp) /\
  (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
  FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce ty)] /\
  DISJOINT B qt.t_mem /\
@@ -391,8 +392,8 @@ Proof
  asm_x "child" kall_tac >> strip_tac >> suspend "compose"
 QED
 *)
-Theorem prefix_complete_child_iteration_mode:
- (^CshiftMode) checked ty tv ==>
+Theorem prefix_complete_child_iteration_mode_fmp:
+ (^CshiftModeWithFmp) checked ty tv ==>
  !middle end_st child_dst child_src prepared ctx func site limit_st
   sb d D N ids root_di av vs j next slot_id slot initial outsz
   G tn b sz dst slot_var iv nv id hdr bb hdr_bb prefix B header Ddead lo PG.
@@ -472,6 +473,7 @@ Theorem prefix_complete_child_iteration_mode:
  (!a. a IN B ==> mem_bytes_at a 1 t.vs_memory = mem_bytes_at a 1 prepared.vs_memory) /\
  (!mem. (!a. a IN A ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 t.vs_memory) ==>
    mem_bytes_at d 32 mem = header /\ elems_in_memory (TAKE (SUC j) vs) (d+32) tv mem) /\
+ (frame_fmp ==> t.vs_fmp = prepared.vs_fmp) /\
  t.vs_code = prepared.vs_code /\ t.vs_gas_readings = prepared.vs_gas_readings /\
  t.vs_outcomes = prepared.vs_outcomes /\ t.vs_tx_ctx = prepared.vs_tx_ctx /\
  t.vs_block_ctx = prepared.vs_block_ctx /\
@@ -508,7 +510,7 @@ Proof
  asm_x "child" kall_tac >> strip_tac >> suspend "compose"
 QED
 
-Resume prefix_complete_child_iteration_mode[compose]:
+Resume prefix_complete_child_iteration_mode_fmp[compose]:
  `SUC j*type_memory_size tv <= LENGTH vs*type_memory_size tv` by
    simp[LE_MULT_RCANCEL] >>
  `d+32+j*type_memory_size tv+type_memory_size tv <= d+outsz /\
@@ -535,7 +537,7 @@ Resume prefix_complete_child_iteration_mode[compose]:
  strip_tac >> suspend "backedge"
 QED
 
-Resume prefix_complete_child_iteration_mode[backedge]:
+Resume prefix_complete_child_iteration_mode_fmp[backedge]:
  `ctx_has_dalloca ctx ==> allocas_below_fmp actual` by (strip_tac >> fs[]) >>
  `FLOOKUP H slot_var = SOME (slot,32) /\ FLOOKUP H dst = SOME (b,sz) /\
   op_taint qt (Var slot_var) = {} /\ op_taint qt (Var iv) = {} /\
@@ -563,11 +565,13 @@ Resume prefix_complete_child_iteration_mode[backedge]:
  strip_tac >> suspend "finish"
 QED
 
-Resume prefix_complete_child_iteration_mode[finish]:
+Resume prefix_complete_child_iteration_mode_fmp[finish]:
  `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
    t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp` by
    (strip_tac >> fs[allocas_below_fmp_def,exprLoweringPropsTheory.pending_alloca_size_def] >>
     first_assum ACCEPT_TAC) >>
+ `frame_fmp ==> t.vs_fmp = prepared.vs_fmp` by
+   (strip_tac >> res_tac >> asm_rewrite_tac[]) >>
  rule_assum_tac BETA_RULE >>
  qexistsl [`t`,`H'`,`qt'`,`B UNION B'`] >>
  conj_tac >- (rpt strip_tac >> metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans]) >>
@@ -601,4 +605,9 @@ Resume prefix_complete_child_iteration_mode[finish]:
  metis_tac[]
 QED
 
-Finalise prefix_complete_child_iteration_mode
+Finalise prefix_complete_child_iteration_mode_fmp
+
+Theorem prefix_complete_child_iteration_mode =
+  prefix_complete_child_iteration_mode_fmp
+  |> Q.INST [`frame_fmp` |-> `F`]
+  |> PURE_REWRITE_RULE [tautLib.TAUT `((F ==> p) /\ q) <=> q`]

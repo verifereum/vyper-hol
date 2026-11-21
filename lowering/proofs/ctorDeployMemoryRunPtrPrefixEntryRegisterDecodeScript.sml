@@ -82,8 +82,9 @@ val RegisterDecodeMode = rhs (concl (SIMP_CONV bool_ss []
 val RegisterDecodeFmpFrameMode = rhs (concl (SIMP_CONV bool_ss []
  ``(^RegisterDecodeModeWith) (\s t. t.vs_fmp = s.vs_fmp)``));
 
-Theorem prefix_entry_register_decode_paired_mode:
- !checked. (^RegisterDecodeMode) checked
+Theorem prefix_entry_register_decode_mode_fmp[local]:
+ !checked. (^RegisterDecodeModeWith)
+   (\s t. frame_fmp ==> t.vs_fmp = s.vs_fmp) checked
 Proof
  gen_tac >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
  `st.cs_next_var <= last.cs_next_var` by
@@ -93,37 +94,32 @@ Proof
  `ctor_actual_scratch func (frag_ids st last) 0 initial.vs_alloca_next initial` by
    (simp_tac bool_ss [ctor_actual_scratch_def, frag_ids_def, GSPECIFICATION] >>
     rpt strip_tac >> res_tac >> gvs[]) >>
- Cases_on `checked`
- >- (drule (BETA_RULE prefix_canonical_coherent_complete_checked) >> suspend "instantiate") >>
- drule (BETA_RULE prefix_canonical_coherent_complete_code) >> suspend "instantiate"
-QED
-
-Resume prefix_entry_register_decode_paired_mode[instantiate]:
- markerLib.RESUME_TAC >>
- qpat_x_assum `_ ==> _ /\ alloca_history _ _` (strip_assume_tac o SRULE []) >> disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
- disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
- disch_then (drule_at (Pat `eval_operand (Var dst) initial = _`)) >>
- disch_then (drule_at (Pat `fresh_vars_wrt last initial`)) >>
- simp_tac bool_ss [LESS_EQ_REFL, SUBSET_REFL] >>
- disch_then (qspecl_then [`k`,`ctx`,`func`,`site`,`sb`] mp_tac) >>
- disch_then (qspecl_then [`0`,`initial.vs_alloca_next`,`frag_ids st last`] mp_tac) >>
- simp_tac bool_ss [ADD, ZERO_LESS_EQ, SUBSET_REFL, LESS_EQ_REFL] >>
- disch_then drule_all >>
- disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
- qexistsl [`actual`,`H`,`qt`,`B`] >> asm_rewrite_tac[] >>
+ mp_tac (BETA_RULE (Q.SPECL [`ce`,`env`,`ce.ce_struct_fields`,`ty`,`tv`]
+   prefix_canonical_coherent_complete_mode_fmp)) >>
+ impl_tac >- first_assum ACCEPT_TAC >>
+ disch_then (qspecl_then
+   [`dst`,`src`,`st`,`last`,`ctx`,`func`,`site`,`initial`,`last`,`sb`,`d`,
+    `0`,`initial.vs_alloca_next`,`frag_ids st last`,`av`,`v`,
+    `type_to_abi_dec_info ce.ce_struct_fields ce ty`,`G`,`tn`,`b`,`sz`,`D`,`lo`,`PG`]
+   mp_tac) >>
+ (impl_tac >- asm_rewrite_tac[ADD,ZERO_LESS_EQ,SUBSET_REFL,LESS_EQ_REFL]) >>
+ strip_tac >> qexistsl [`actual`,`H`,`qt`,`B`] >> BETA_TAC >> fs[ADD] >>
  metis_tac[]
 QED
 
-Finalise prefix_entry_register_decode_paired_mode
+Theorem prefix_entry_register_decode_paired_mode:
+ !checked. (^RegisterDecodeMode) checked
+Proof
+  mp_tac (Q.INST [`frame_fmp` |-> `F`] prefix_entry_register_decode_mode_fmp) >>
+  simp_tac bool_ss []
+QED
 
-(* GATE_ADMISSION: held, deploy decoder fmp frame; owner: e2e lane *)
 Theorem prefix_entry_register_decode_fmp_frame_paired_mode:
  !checked. (^RegisterDecodeFmpFrameMode) checked
 Proof
- cheat
+  mp_tac (Q.INST [`frame_fmp` |-> `T`] prefix_entry_register_decode_mode_fmp) >>
+  simp_tac bool_ss []
 QED
-
-
 
 Theorem prefix_entry_register_address_decode_paired_mode:
  !checked ptr.

@@ -739,7 +739,7 @@ Theorem plan_steps_reorder_next_offset_cons[local]:
   plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) (item::items) ps = (ops,out) ==>
   ps.ps_alloc.sa_next_offset <= out.ps_alloc.sa_next_offset
 Proof
-  strip_tac >> drule_then strip_assume_tac reorderStagesTheory.plan_steps_cons_result >>
+  strip_tac >> drule_then strip_assume_tac reorderPreparationPropsTheory.plan_steps_cons_result >>
   metis_tac[reorder_step_next_offset_trans]
 QED
 
@@ -881,7 +881,7 @@ Theorem sym_reorder_fold_cons[local]:
       FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   disch_tac >> rpt gen_tac >> strip_tac >>
-  drule_then strip_assume_tac reorderStagesTheory.plan_steps_cons_result >>
+  drule_then strip_assume_tac reorderPreparationPropsTheory.plan_steps_cons_result >>
   qpat_x_assum `EVERY _ (_::_)`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [EVERY_DEF]) >>
   qpat_x_assum `(\(idx,op) ps. _) _ _ = _`

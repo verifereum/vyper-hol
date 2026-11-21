@@ -3018,9 +3018,17 @@ Proof
   >- metis_tac[] >>
   `cx_tops cx = tops` by (irule cx_tops_module >> fs[body_inv_def]) >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx (expr_type e) e es` by metis_tac[body_expr_full_ok_def] >>
+      cenv cx (expr_type e) e es` by
+    (qpat_assum `body_expr_full_ok cx e`
+       (mp_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     strip_tac >>
+     qpat_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+          _ ==> expr_sim_full _ _ _ _ _ _ /\ expr_vv_sim_full _ _ _ _ _ _`
+       (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
+         `func`,`shadow_func`,`cenv`,`env`,`expr_type e`,`es`] mp_tac) >>
+     simp[]) >>
   drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >>
-  `cenv.ce_var_type id = SOME ty` by metis_tac[expr_sim_inv_def] >>
+  `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
   `env.type_defs = get_tenv cx` by
     fs[expr_sim_inv_def,env_consistent_def,env_context_consistent_def] >>
   drule post_type_evaluates >> disch_then (qx_choose_then `rty` assume_tac) >>
@@ -3288,14 +3296,16 @@ Resume body_assign_local_memory_nonempty_full[staged]:
   `!j path entry t0. MemoryPlace id [] = MemoryPlace j path /\
      lookup_scopes j mid.scopes = SOME entry /\ cenv.ce_var_type j = SOME t0 ==>
      evaluate_type (get_tenv cx) t0 = SOME entry.type` by simp[] >>
-  drule_then
-    (drule_at_then (Pat `stmt_state_rel _ _ _ _ _ _ _`)
-      (drule_at_then (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)
-        (drule_at_then (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)
-          (drule_at_then (Pat `write_place _ _ _ _ = _`) mp_tac))))
-    (Q.INST [`explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
-       body_assign_memory_place_joint) >>
-  disch_then (qspecl_then [`sw`,`stv`,`shadow_ctx`,`env`,`dw`,`dtv`,`PG`] mp_tac) >>
+  mp_tac (Q.INST
+    [`xd` |-> `p`, `loc` |-> `SOME LocMemory`, `dty` |-> `ty`,
+     `sty` |-> `lowered_value_type cenv e`, `bytes` |-> `type_memory_bytes cenv ty`,
+     `sa` |-> `sB`, `start` |-> `sa`, `s` |-> `u`, `ee` |-> `mid`,
+     `H0` |-> `storage_trace_horizon mid.storage_trace`,
+     `G` |-> `Gi`, `tn` |-> `ti`,
+     `D0` |-> `DF (storage_trace_horizon mid.storage_trace)`, `d0` |-> `d`,
+     `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
+    (Q.INST [`p` |-> `MemoryPlace id []`]
+       (horizonTypeLib.at_horizon_named "H0" body_assign_memory_place_joint))) >>
   impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >>
   strip_tac >> qexistsl_tac [`t`,`Gf`,`tf`] >> simp[] >>
   gen_tac >> strip_tac >>
@@ -18106,15 +18116,21 @@ fun residual_memory_word_write g =
   (irule gas_outcome_full_post_mono >>
   irule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)
     augAssignFullWritebackTheory.augassign_memory_writeback_full >>
-  goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `store_lays_out _ _ _`)) >>
-  simp[] >>
+  qpat_assum `emit_void MSTORE [FST r;op] su = ((),sb)`
+    (irule_at (Pat `emit_void MSTORE _ _ = _`)) >>
+  qpat_assum `write_place cx (MemoryPlace id path) v ee = (q,r')`
+    (irule_at (Pat `write_place _ _ _ _ = _`)) >>
+  qpat_assum `place_ptr_rel _ _ z (PlaceR (MemoryPlace id path)) w (SOME LocMemory) (Type ty)`
+    (irule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
+  qpat_assum `store_lays_out tu' tu' v`
+    (irule_at (Pat `store_lays_out _ _ _`))) g;
+
+fun residual_memory_word_posts g =
+  (simp[] >>
   qexistsl [`tops`,`tn0`,`sa`,`s0`,`SND (SND r)`,`FST (SND r)`,`lctx`,`es`,
             `env`,`d`,`cenv`,`\H res ee gt r. F`,`G0`] >>
   simp[pairTheory.PAIR] >>
-  (conj_tac >- (residual_word_entry_frame >> gvs[]) >>
+  (conj_tac >- (residual_word_entry_frame >> first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >> qexists `cenv` >> simp[] >>
   first_assum ACCEPT_TAC)) g;
 
@@ -18127,7 +18143,8 @@ QED
 Resume body_assign_other_nonempty_target_full[memory_word]:
   residual_memory_word_setup >>
   residual_memory_word_source >>
-  residual_memory_word_write
+  residual_memory_word_write >>
+  residual_memory_word_posts
 QED
 
 Resume body_assign_other_nonempty_target_full[saved_storage_word]:
@@ -18139,7 +18156,8 @@ QED
 Resume body_assign_other_nonempty_target_full[saved_memory_word]:
   residual_memory_word_setup >>
   residual_memory_word_source >>
-  residual_memory_word_write
+  residual_memory_word_write >>
+  residual_memory_word_posts
 QED
 
 Resume body_assign_other_nonempty_target_full[snapshot_nonword]:
@@ -18695,41 +18713,6 @@ Proof
     shadow_sa = (op,shadow_su)` (irule_at Any) >>
   qexistsl [`su`, `shadow_sb`, `shadow_func`, `marks`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
-(* GATE_ADMISSION: held, private storage/transient bytestring assignment *)
-Theorem body_assign_toplevel_bytes_full:
-  !cx nsid e dty mut slot DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
-    (!s'' pv t' s'3' v t''.
-       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
-       body_base_target_full_ok cx (TopLevelNameTarget nsid)) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
-    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-       (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\
-    ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) = SOME env' /\
-    stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
-    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty /\
-    supported_variable_decl tops nsid = SOME (Private,mut,dty,SOME slot) /\
-    (mut = Storage \/ mut = Transient) /\
-    type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) /\
-    is_bytestring_type dty /\ is_bytestring_type (lowered_value_type cenv e) /\
-    ~supported_stmt_expr_exists (const_name_root cx) (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)))
-      (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) es
-Proof
-  cheat
 QED
 
 (* A static aggregate storage or transient variable. *)
