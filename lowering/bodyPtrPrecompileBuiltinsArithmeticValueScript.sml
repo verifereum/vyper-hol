@@ -122,7 +122,7 @@ Proof
   qexists `tn` >> simp[]
 QED
 
-(* The memory-place returned by as_ptr_val uses the same pointer obligation
+(* The pointer carried by the stack value uses the same obligation
    already established for the non-word value. *)
 Theorem ec_result_pointer_vv_ok:
   ptr_val_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) v op G tn s ==>
@@ -130,8 +130,7 @@ Theorem ec_result_pointer_vv_ok:
     (FST (as_stack_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) (op,sb)))
     es G tn s
 Proof
-  simp[ptr_val_ok_def, ptr_vv_ok_def, as_ptr_val_def,
-       contextTheory.mk_ptr_def, evaluate_type_def, is_word_type_def,
+  simp[ptr_vv_ok_def, as_stack_val_def,
        vyperStateTheory.read_result_def, vyperStateTheory.return_def]
 QED
 
