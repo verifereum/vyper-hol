@@ -253,3 +253,35 @@ Theorem runtime_sym_supported_function_subst:
 Proof
   cheat
 QED
+
+Theorem runtime_sym_checked_function_subst:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
+  supported_program tops /\
+  (vis = Deploy ==> mode /\ supported_program_deploy tops) /\
+  MEM (FunctionDecl vis mut nr rr name args defaults ret body) tops /\
+  ~supported_exprs_exists is_self_code defaults /\
+  ~supported_stmts_expr_exists is_self_code body ==>
+  supported_function_body tops vis args (subst_consts_stmts (module_consts_env tops []) body) /\
+  supported_pure_exprs tops (subst_consts_exprs (module_consts_env tops []) defaults) /\
+  ~supported_exprs_exists is_self_code (subst_consts_exprs (module_consts_env tops []) defaults) /\
+  ~supported_stmts_expr_exists is_self_code (subst_consts_stmts (module_consts_env tops []) body)
+Proof
+  strip_tac >>
+  `supported_function_body tops vis args body` by
+    (Cases_on `vis = Deploy` >> gvs[] >>
+     metis_tac[supported_program_function, supported_program_deploy_function]) >>
+  `supported_pure_exprs tops defaults` by
+    (drule_all supported_program_declaration >> Cases_on `vis = Deploy` >>
+     simp[supported_declaration_header_def, supported_declaration_body_def, NULL_EQ,
+          supported_pure_exprs_every]) >>
+  mp_tac (Q.INST [`dflts` |-> `defaults`, `ss` |-> `body`,
+    `env` |-> `function_entry_env art [(NONE,tops)] NONE vis args`]
+    checked_const_substituted_function) >>
+  (impl_tac >- (asm_rewrite_tac[] >> metis_tac[])) >>
+  strip_tac >>
+  `!id r. ALOOKUP (module_consts_env tops []) id = SOME r ==>
+    ~supported_expr_exists is_self_code r /\ !ty. r <> Builtin ty (Env SelfAddr) []` by
+    metis_tac[runtime_sym_checked_constant_replacements] >>
+  drule_all runtime_sym_subst_function_exclusions >> simp[]
+QED
