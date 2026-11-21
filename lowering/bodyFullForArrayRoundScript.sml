@@ -18,7 +18,8 @@ Ancestors gasContext[qualified,ignore_grammar] bodyFullShared[qualified,ignore_g
   exprPtrUnwrapCode exprSimProps bodyFullHashKeccakFixed
   bodyExprPreFacts gasOriginPtrLabels
   gasOutcomeFullCompose gasOutcomeFullStmts bodyFullForHandlers haltExitProj
-  vyperStorageTrace gasExemptCert bodyLoopImmutableFrame forNonslotSelectedLive forConsBodyGas
+  vyperStorageTrace gasExemptCert bodyLoopImmutableFrame forConsBodyGas
+  forNestedArrayCapture[qualified,ignore_grammar]
   vyperTypeContract[qualified,ignore_grammar]
 Libs
   monadsyntax
@@ -161,7 +162,8 @@ Definition for_nonslot_live_def:
       immutable_holds c cx (post_value_type c e) (Value (ArrayV av)) bw es s) /\
     (loc = LocCode ==> !src name path.
       rv = PlaceR (ImmutablePlace src name path) ==>
-      lookup_immutable cx es src name = lookup_immutable cx em src name) /\
+      ?tv root. lookup_immutable cx es src name = SOME (tv,root) /\
+                evaluate_subscripts tv root path = INL (ArrayV av)) /\
     eval_operand (vv_operand vv) u = SOME bw /\
     eval_operand (vv_operand vv) s = SOME bw /\
     op_prov G (vv_operand vv) = op_prov Gu (vv_operand vv) /\
@@ -233,101 +235,6 @@ Definition for_nonslot_body_entry_def:
     t.vs_current_bb = sbCopy.cs_current_bb /\ t.vs_inst_idx = LENGTH sbCopy.cs_current_insts
 End
 
-(* The legacy packet adds root equality to the selected packet. *)
-Theorem for_nonslot_live_selected_iff[local]:
-  for_nonslot_live (D,lo,d,ctx,func,cx,c,id,env,loop_body) original
-    (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-    operands item (H,k,rs,es,cc,ee,G,tn,s) <=>
-  for_nonslot_selected_live (D,lo,d,ctx,func,cx,c,id,env,loop_body) original
-    (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-    operands item (H,k,rs,es,cc,ee,G,tn,s) /\
-  (loc = LocCode ==> !src name path.
-     rv = PlaceR (ImmutablePlace src name path) ==>
-     lookup_immutable cx es src name = lookup_immutable cx em src name)
-Proof
-  PairCases_on `original` >> PairCases_on `operands` >> PairCases_on `item` >>
-  rewrite_tac[for_nonslot_live_def,for_nonslot_selected_live_def] >>
-  eq_tac >> DISCH_THEN (map_every assume_tac o CONJUNCTS)
-  >- (`loc = LocCode ==> !src name path. rv = PlaceR (ImmutablePlace src name path) ==>
-        ?tv root. lookup_immutable cx es src name = SOME (tv,root) /\
-                  evaluate_subscripts tv root path = INL (ArrayV av)` by
-       (rpt strip_tac >>
-        qpat_assum `loc = LocCode ==> !src name path. _`
-          (drule_then (qspecl_then [`src`,`name`,`path`] mp_tac)) >>
-        (impl_tac >- first_assum ACCEPT_TAC) >>
-        disch_then SUBST1_TAC >> irule (iffLR for_nonslot_read_immutable_path) >>
-        qpat_assum `rv = PlaceR _` (once_rewrite_tac o single o SYM) >>
-        first_assum ACCEPT_TAC) >>
-      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
-Theorem for_nonslot_body_entry_selected_iff[local]:
-  for_nonslot_body_entry (D,lo,d,ctx,func,cx,c,id,env,loop_body) original
-    (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-    operands (xd,dw,capacity,aidItem) (bc,benv,sbCopy,dtv,v)
-    (H,k,rs,es,eb,G,tn,t) <=>
-  for_nonslot_selected_body_entry (D,lo,d,ctx,func,cx,c,id,env,loop_body) original
-    (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-    operands (xd,dw,capacity,aidItem) (bc,benv,sbCopy,dtv,v)
-    (H,k,rs,es,eb,G,tn,t) /\
-  (loc = LocCode ==> !src name path.
-     rv = PlaceR (ImmutablePlace src name path) ==>
-     lookup_immutable cx es src name = lookup_immutable cx em src name)
-Proof
-  rewrite_tac[for_nonslot_body_entry_def,for_nonslot_selected_body_entry_def,
-              for_nonslot_live_selected_iff] >>
-  eq_tac >> DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
-Theorem for_nonslot_live_bare_iff[local]:
-  (loc = LocCode ==> ?src name.
-    e = TopLevelName (ArrayT et bd) (src,name) /\
-    rv = PlaceR (ImmutablePlace src name []) /\
-    FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd) /\
-    ~cx_const_name cx (src,name) /\
-    vv_location vv = SOME LocCode /\ post_value_type c e = ArrayT et bd) /\
-  expr_sim_inv c cx env em ==>
-  !D lo d ctx func id loop_body original sbExpr saL stv vs av xs u Gu tu
-    operands item H k rs es cc ee G tn s.
-  (for_nonslot_live (D,lo,d,ctx,func,cx,c,id,env,loop_body) original
-    (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-    operands item (H,k,rs,es,cc,ee,G,tn,s) <=>
-   for_nonslot_selected_live (D,lo,d,ctx,func,cx,c,id,env,loop_body) original
-    (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-    operands item (H,k,rs,es,cc,ee,G,tn,s))
-Proof
-  strip_tac >> rpt gen_tac >> rewrite_tac[for_nonslot_live_selected_iff] >>
-  eq_tac >- simp[] >> disch_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-  disch_tac >> rpt gen_tac >> disch_tac >>
-  qpat_assum `loc = LocCode ==> ?src name. _`
-    (drule_then (qx_choosel_then [`root_src`,`root_name`] strip_assume_tac)) >>
-  `path = [] /\ src = root_src /\ name = root_name` by gvs[] >>
-  gvs[] >> PairCases_on `original` >> PairCases_on `operands` >> PairCases_on `item` >>
-  drule_then (irule o MP_CANON) for_nonslot_selected_live_bare_root >>
-  simp[] >> qexistsl [`bd`,`et`] >> simp[]
-QED
-
-Theorem for_nonslot_selected_live_head_index[local]:
-  for_nonslot_selected_live params original
-    (e, sbExpr, saL, loc, vv, bd, stv, vs, rv, av, xs, em, u, Gu, tu)
-    operands item (H, k, a::rs, es, cc, ee, G, tn, s) ==>
-  k = LENGTH vs - LENGTH (a::rs) /\ k < LENGTH vs /\
-  a = EL k vs /\ rs = DROP (SUC k) vs
-Proof
-  PairCases_on `params` >> PairCases_on `original` >>
-  PairCases_on `operands` >> PairCases_on `item` >> strip_tac >>
-  qpat_x_assum `for_nonslot_selected_live _ _ _ _ _ _`
-    (fn th => let val fields = REWRITE_RULE [for_nonslot_selected_live_def] th
-              in map_every assume_tac [cj 1 fields, cj 2 fields] end) >>
-  conj_tac >-
-    (qpat_assum `a::rs = DROP k vs`
-       (mp_tac o AP_TERM ``LENGTH : eval_result list -> num``) >>
-     simp[] >> decide_tac) >>
-  metis_tac[DROP_EQ_CONS]
-QED
-
 Theorem for_nonslot_live_head_index:
   for_nonslot_live params original
     (e, sbExpr, saL, loc, vv, bd, stv, vs, rv, av, xs, em, u, Gu, tu)
@@ -335,8 +242,16 @@ Theorem for_nonslot_live_head_index:
   k = LENGTH vs - LENGTH (a::rs) /\ k < LENGTH vs /\
   a = EL k vs /\ rs = DROP (SUC k) vs
 Proof
-  PairCases_on `params` >> rewrite_tac[for_nonslot_live_selected_iff] >>
-  strip_tac >> drule_then ACCEPT_TAC for_nonslot_selected_live_head_index
+  PairCases_on `params` >> PairCases_on `original` >>
+  PairCases_on `operands` >> PairCases_on `item` >> strip_tac >>
+  qpat_x_assum `for_nonslot_live _ _ _ _ _ _`
+    (fn th => let val fields = REWRITE_RULE [for_nonslot_live_def] th
+              in map_every assume_tac [cj 1 fields, cj 2 fields] end) >>
+  conj_tac >-
+    (qpat_assum `a::rs = DROP k vs`
+       (mp_tac o AP_TERM ``LENGTH : eval_result list -> num``) >>
+     simp[] >> decide_tac) >>
+  metis_tac[DROP_EQ_CONS]
 QED
 
 (* The false condition arm has a fixed endpoint and only writes done_var. *)
@@ -492,7 +407,7 @@ Theorem for_nonslot_array_body_invoke[local]:
    original captured operands item bc benv sbCopy dtv v k a rs es eb G tn s
    tops bindings env' ret_ty st0 exit incr bc' sbBody shadow_sbCopy shadow_sbBody.
   (!H. valid_horizon cx st0 H eb.storage_trace ==>
-    for_nonslot_selected_body_entry (DF H,lo,d,ctx,func,cx,c,id,env,body)
+    for_nonslot_body_entry (DF H,lo,d,ctx,func,cx,c,id,env,body)
       original captured operands item (bc,benv,sbCopy,dtv,v)
       (H,k,a::rs,es,eb,G,tn,s)) /\
   return_buf_sep d bc eb s /\
@@ -551,21 +466,21 @@ Proof
     stmt_state_rel H ctx func bc cx eb s /\ storage_well_formed_on cx eb (FST H) /\
     ghost_inv_at (DF H) lo d bc cx eb G tn s` by
     (rpt gen_tac >> strip_tac >>
-     qpat_assum `!H. _ ==> for_nonslot_selected_body_entry _ _ _ _ _ _ _`
+     qpat_assum `!H. _ ==> for_nonslot_body_entry _ _ _ _ _ _ _`
        (qspec_then `H` drule) >>
      disch_then (map_every assume_tac o CONJUNCTS o
-       REWRITE_RULE [for_nonslot_selected_body_entry_def, for_nonslot_selected_live_def]) >>
+       REWRITE_RULE [for_nonslot_body_entry_def, for_nonslot_live_def]) >>
      asm_rewrite_tac[]) >>
   `return_buf_frame d bc sbCopy s /\ ret_pc_ok bc sbCopy s /\
    alloca_history func s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
    (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u) /\
    ~s.vs_halted /\ s.vs_current_bb = sbCopy.cs_current_bb /\
    s.vs_inst_idx = LENGTH sbCopy.cs_current_insts` by
-    (qpat_x_assum `!H. _ ==> for_nonslot_selected_body_entry _ _ _ _ _ _ _`
+    (qpat_x_assum `!H. _ ==> for_nonslot_body_entry _ _ _ _ _ _ _`
        (qspec_then `storage_trace_horizon eb.storage_trace`
          (drule o REWRITE_RULE [GSYM storage_trace_domain_def])) >>
      disch_then (map_every assume_tac o CONJUNCTS o
-       REWRITE_RULE [for_nonslot_selected_body_entry_def, for_nonslot_selected_live_def]) >>
+       REWRITE_RULE [for_nonslot_body_entry_def, for_nonslot_live_def]) >>
      asm_rewrite_tac[]) >>
   qpat_x_assum `body_stmts_full_ok _ _`
     (mp_tac o REWRITE_RULE [body_stmts_full_ok_def]) >>
@@ -1175,196 +1090,6 @@ Proof
      fn_has_code_def, emitted_blocks_def, arithmeticTheory.ADD_ASSOC]
 QED
 
-Theorem for_nonslot_selected_array_nil[local]:
-  !DF lo d ctx func cx c id env loop_body es0 sa0 s0 G0 tn0
-   captured len_op idx bw item lctx sb explicit PG st0 tyv ok
-   cond bod exit eid jid dv.
-  local_ptrs_reserved c sa0 /\ ~not_fresh_at sa0 dv /\
-  (!x sz. c.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x) /\
-  sa0.cs_next_var <= sb.cs_next_var /\
-  sb.cs_current_bb = exit /\ sb.cs_current_insts = [] /\
-  lookup_block cond func.fn_blocks = SOME
-    <|bb_label := cond; bb_instructions :=
-      [mk_inst eid EQ [Var idx;len_op] [dv];
-       mk_inst jid JNZ [Var dv;Label exit;Label bod] []]|> ==>
-  !es s G tn.
-    ~s.vs_halted /\ storage_trace_domain cx st0 es.storage_trace /\
-    (!H. valid_horizon cx st0 H es.storage_trace ==>
-      ?k. s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\
-        for_nonslot_selected_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
-          (es0,sa0,s0,G0,tn0) captured (len_op,idx,bw) item
-          (H,k,[],es,c,es,G,tn,s)) /\
-    gas_admissible (eval_for cx tyv id loop_body []) ok es ==>
-    ?t G1 tn1. !H. valid_horizon cx st0 H es.storage_trace ==>
-      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G1,tn1) /\
-      stmt_lands lctx sb (INL ()) t /\ ~t.vs_halted /\ ~block_is_terminated sb /\
-      cenv_top_ext c c (es with gas_obs := []).scopes /\
-      stmt_state_rel H ctx func c cx (es with gas_obs := []) t /\
-      storage_well_formed_on cx (es with gas_obs := []) (FST H) /\
-      return_buf_frame d c sb t /\
-      ghost_inv_at (DF H) lo d c cx (es with gas_obs := []) G1 tn1 t /\
-      alloca_history func t /\
-      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-      s0.vs_alloca_next <= t.vs_alloca_next /\
-      (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==>
-        lookup_var x t = SOME w) /\
-      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
-      (!x. not_fresh_at sa0 x ==>
-        FLOOKUP G1 x = FLOOKUP G0 x /\ op_taint tn1 (Var x) = op_taint tn0 (Var x)) /\
-      alloca_frame c es0 sa0 s0 c (es with gas_obs := []) t /\
-      (!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\
-        aid < sa0.cs_next_id /\
-        (!name b len. local_region c es0.scopes s0 name b len ==>
-          off + sz <= b \/ b + len <= off) /\
-        off <= i /\ i < off + sz /\ i IN tn1.t_mem ==> i IN tn0.t_mem) /\
-      (return_buf_sep d c es s ==> return_buf_sep d c (es with gas_obs := []) t)
-Proof
-  rpt strip_tac >>
-  qabbrev_tac `ins = mk_inst eid EQ [Var idx;len_op] [dv]` >>
-  qabbrev_tac `su = update_var dv 1w s` >>
-  qabbrev_tac `t = jump_to exit su` >>
-  qabbrev_tac `G1 = step_prov PG G ins su` >>
-  qabbrev_tac `tn1 = step_taint ins s su tn` >>
-  qexistsl [`t`, `G1`, `tn1`] >> qx_gen_tac `H` >> disch_tac >>
-  qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _` drule >>
-  strip_tac >>
-  PairCases_on `captured` >> PairCases_on `item` >>
-  qpat_x_assum `for_nonslot_selected_live _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[for_nonslot_selected_live_def] >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  rename1 `[] = DROP k vs` >>
-  `k = LENGTH vs` by
-    (qpat_assum `[] = DROP k vs`
-       (mp_tac o AP_TERM ``LENGTH : eval_result list -> num``) >>
-     qpat_assum `k <= LENGTH vs` mp_tac >> simp[NoAsms] >> decide_tac) >>
-  qpat_x_assum `k = LENGTH vs` SUBST_ALL_TAC >>
-  `tn1 = tn with t_var := tn.t_var |+ (dv,{})` by
-    simp[Abbr `tn1`, Abbr `ins`, Abbr `su`, membership_scalar_ghost_frame] >>
-  conj_tac >- suspend "nil_path" >>
-  suspend "nil_post"
-QED
-
-Resume for_nonslot_selected_array_nil[nil_path]:
-  `step_inst_base ins s = OK su` by
-    simp[Abbr `ins`, Abbr `su`, step_inst_base_opcode_eqs,
-         eval_operand_def, exec_pure2_def, bool_to_word_def] >>
-  `ptr_inst_ok (DF H) lo 0 ctx func G tn ins s` by suspend "compare_checks" >>
-  qabbrev_tac `v = su with vs_inst_idx := SUC s.vs_inst_idx` >>
-  `gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK v,G1,tn1)` by
-    (drule_at (Pat `ptr_inst_ok _ _ _ _ _ _ _ _ _`) straight_line_origin_ptr_edge >>
-     simp[Abbr `ins`, Abbr `v`, Abbr `G1`, Abbr `tn1`, get_instruction_def,
-          mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
-          inst_dload_in_section_def, source_memory_read_ranges_def,
-          source_memory_write_ranges_def] >>
-     disch_then (qspecl_then [`explicit`, `PG`] mp_tac) >>
-     fs[mk_inst_def]) >>
-  `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (v,G1,tn1) [] (OK t,G1,tn1)` by
-    suspend "nil_branch" >>
-  drule (cj 2 gas_origin_ptr_path_rules) >> disch_then drule >> simp[]
-QED
-
-Resume for_nonslot_selected_array_nil[compare_checks]:
-  simp[Abbr `ins`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
-       source_memory_write_ranges_def, source_memory_read_ranges_def, mk_inst_def] >>
-  simp[GSYM mk_inst_def, step_inst_non_invoke, Abbr `su`, update_var_def] >>
-  rpt strip_tac
-  >- (qpat_x_assum `FLOOKUP G idx = NONE` mp_tac >> simp[FLOOKUP_DEF])
-  >- (qpat_x_assum `op_prov G len_op = NONE` mp_tac >>
-      simp[op_prov_def, FLOOKUP_DEF]) >>
-  Cases_on `op = Var idx` >> Cases_on `op = len_op` >> fs[]
-QED
-
-Resume for_nonslot_selected_array_nil[nil_branch]:
-  `lookup_block v.vs_current_bb func.fn_blocks = SOME
-     <|bb_label := cond; bb_instructions :=
-       [ins; mk_inst jid JNZ [Var dv;Label exit;Label bod] []]|> /\
-   get_instruction <|bb_label := cond; bb_instructions :=
-       [ins; mk_inst jid JNZ [Var dv;Label exit;Label bod] []]|>
-      v.vs_inst_idx = SOME (mk_inst jid JNZ [Var dv;Label exit;Label bod] []) /\
-   ~v.vs_halted /\ eval_operand (Var dv) v = SOME 1w /\
-   op_taint tn1 (Var dv) = {} /\ allocas_from lo v /\
-   (ctx_has_dalloca ctx ==> allocas_below_fmp v)` by
-    simp[Abbr `v`, Abbr `su`, get_instruction_def, update_var_def,
-         eval_operand_def, lookup_var_def, allocas_from_def,
-         allocas_below_fmp_def, op_taint_def, FLOOKUP_UPDATE] >>
-  drule_all decoderNavigationPtrTheory.jnz_origin_ptr_path >>
-  simp[Abbr `v`, Abbr `t`, jump_to_def]
-QED
-
-Resume for_nonslot_selected_array_nil[nil_post]:
-  `not_local_ptr c es.scopes dv` by (irule fresh_not_local_ptr >> metis_tac[]) >>
-  `tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\
-   tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
-   (!x. x <> dv ==> FLOOKUP G1 x = FLOOKUP G x /\
-      op_taint tn1 (Var x) = op_taint tn (Var x))` by
-    simp[Abbr `G1`, Abbr `tn1`, Abbr `t`, Abbr `ins`, Abbr `su`,
-         SRULE [] copy_eq_jump_frames] >>
-  `!x. not_fresh_at sa0 x ==> lookup_var x t = lookup_var x s /\
-       FLOOKUP G1 x = FLOOKUP G x /\ op_taint tn1 (Var x) = op_taint tn (Var x)` by
-    (rpt strip_tac >> `x <> dv` by metis_tac[] >>
-     simp[Abbr `t`, Abbr `su`, lookup_var_def, update_var_def, jump_to_def,
-          FLOOKUP_UPDATE] >> metis_tac[]) >>
-  `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
-   t.vs_alloca_next = s.vs_alloca_next /\ t.vs_inst_idx = 0 /\
-   t.vs_current_bb = sb.cs_current_bb /\ ~t.vs_halted /\
-   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
-   t.vs_transient = s.vs_transient /\ t.vs_immutables = s.vs_immutables` by
-    simp[Abbr `t`, Abbr `su`, jump_to_def, update_var_def] >>
-  qpat_x_assum `tn1 = tn with t_var := _` kall_tac >>
-  `stmt_state_rel H ctx func c cx es t` by
-    (simp[Abbr `t`, Abbr `su`, stmt_state_rel_jump_to] >>
-     irule stmt_state_rel_update_var >> simp[]) >>
-  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
-    (irule (iffRL vyperStorageFootprintTheory.storage_well_formed_on_backends) >>
-     qexists `es` >> simp[]) >>
-  suspend "nil_exit_frame"
-QED
-
-Resume for_nonslot_selected_array_nil[nil_exit_frame]:
-  `return_buf_frame d c sb t` by
-    (irule return_buf_frame_frame >>
-     goal_assum (drule_at (Pat `return_buf_frame _ _ _ _`)) >>
-     simp[] >> metis_tac[]) >>
-  `!x sz. c.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x` by
-    (qpat_assum `ret_pc_ok _ _ _` (mp_tac o REWRITE_RULE [ret_pc_ok_def]) >>
-     metis_tac[]) >>
-  `ghost_inv_at (DF H) lo d c cx (es with gas_obs := []) G1 tn1 t` by
-    (irule ghost_inv_at_exterior_frame >>
-     goal_assum (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
-     qexists `sa0` >> simp[]) >>
-  `alloca_frame c es0 sa0 s0 c es su` by
-    (simp[Abbr `su`] >> irule alloca_frame_update_var >> simp[]) >>
-  `alloca_frame c es0 sa0 s0 c es t` by
-    (irule alloca_frame_same_state >>
-     qexists `su` >> simp[Abbr `t`, Abbr `su`, jump_to_def, update_var_def]) >>
-  `alloca_history func t` by
-    (irule alloca_history_jump >> simp[] >> qexists `s` >> simp[]) >>
-  `allocas_below_fmp t = allocas_below_fmp s` by
-    simp[Abbr `t`, Abbr `su`, allocas_below_fmp_def, jump_to_def, update_var_def] >>
-  `return_buf_sep d c es s ==> return_buf_sep d c (es with gas_obs := []) t` by
-    (strip_tac >>
-     qpat_assum `stmt_state_rel H ctx func c cx es s`
-       (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule
-         bodyFullSharedTheory.return_buf_sep_locals_kept) >>
-     conj_tac
-     >- (Cases_on `d` >> simp[] >> rename1 `SOME buf` >> PairCases_on `buf` >>
-         fs[return_buf_sep_def, allocas_from_def] >> first_assum ACCEPT_TAC) >>
-     simp[] >> qexists `sa0` >> simp[] >> rpt strip_tac >>
-     qpat_assum `!x. not_fresh_at sa0 x ==> lookup_var x t = _ /\ _` drule >> simp[]) >>
-  simp[stmt_lands_def, block_is_terminated_def] >>
-  first_assum ACCEPT_TAC
-QED
-
-Finalise for_nonslot_selected_array_nil[local]
-
-Theorem for_nonslot_live_selected[local]:
-  for_nonslot_live params original captured operands item live ==>
-  for_nonslot_selected_live params original captured operands item live
-Proof
-  PairCases_on `params` >> PairCases_on `captured` >> PairCases_on `live` >>
-  simp[for_nonslot_live_selected_iff]
-QED
-
 Theorem for_nonslot_array_nil_separated[local]:
   !DF lo d ctx func cx c id env body es0 sa0 s0 G0 tn0
    captured len_op idx bw item lctx sb explicit PG st0 tyv ok
@@ -1409,26 +1134,141 @@ Theorem for_nonslot_array_nil_separated[local]:
         off <= i /\ i < off + sz /\ i IN tn1.t_mem ==> i IN tn0.t_mem) /\
       (return_buf_sep d c es s ==> return_buf_sep d c (es with gas_obs := []) t)
 Proof
-  map_every qx_gen_tac [`DF`,`lo`,`d`,`ctx`,`func`,`cx`,`c`,`id`,`env`,`loop_body`] >>
-  rpt gen_tac >> DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  mp_tac (SPEC_ALL for_nonslot_selected_array_nil) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_tac >> rpt gen_tac >> DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  first_x_assum (qspecl_then [`es`,`s`,`G`,`tn`] mp_tac) >>
-  suspend "selected_packet"
+  rpt strip_tac >>
+  qabbrev_tac `ins = mk_inst eid EQ [Var idx;len_op] [dv]` >>
+  qabbrev_tac `su = update_var dv 1w s` >>
+  qabbrev_tac `t = jump_to exit su` >>
+  qabbrev_tac `G1 = step_prov PG G ins su` >>
+  qabbrev_tac `tn1 = step_taint ins s su tn` >>
+  qexistsl [`t`, `G1`, `tn1`] >> qx_gen_tac `H` >> disch_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _` drule >>
+  strip_tac >>
+  PairCases_on `captured` >> PairCases_on `item` >>
+  qpat_x_assum `for_nonslot_live _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[for_nonslot_live_def] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  rename1 `[] = DROP k vs` >>
+  `k = LENGTH vs` by
+    (qpat_assum `[] = DROP k vs`
+       (mp_tac o AP_TERM ``LENGTH : eval_result list -> num``) >>
+     qpat_assum `k <= LENGTH vs` mp_tac >> simp[NoAsms] >> decide_tac) >>
+  qpat_x_assum `k = LENGTH vs` SUBST_ALL_TAC >>
+  `tn1 = tn with t_var := tn.t_var |+ (dv,{})` by
+    simp[Abbr `tn1`, Abbr `ins`, Abbr `su`, membership_scalar_ghost_frame] >>
+  conj_tac >- suspend "nil_path" >>
+  suspend "nil_post"
 QED
 
-Resume for_nonslot_array_nil_separated[selected_packet]:
-  (impl_tac >- (rpt conj_tac >>> SELECT_LT (first_assum ACCEPT_TAC) >>
-    qx_gen_tac `H` >> disch_tac >>
-    qpat_assum `!H. _ ==> ?k. _` (drule_then strip_assume_tac) >>
-    qexists `k` >> simp[] >> drule_then ACCEPT_TAC for_nonslot_live_selected)) >>
-  disch_then ACCEPT_TAC
+Resume for_nonslot_array_nil_separated[nil_path]:
+  `step_inst_base ins s = OK su` by
+    simp[Abbr `ins`, Abbr `su`, step_inst_base_opcode_eqs,
+         eval_operand_def, exec_pure2_def, bool_to_word_def] >>
+  `ptr_inst_ok (DF H) lo 0 ctx func G tn ins s` by suspend "compare_checks" >>
+  qabbrev_tac `v = su with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK v,G1,tn1)` by
+    (drule_at (Pat `ptr_inst_ok _ _ _ _ _ _ _ _ _`) straight_line_origin_ptr_edge >>
+     simp[Abbr `ins`, Abbr `v`, Abbr `G1`, Abbr `tn1`, get_instruction_def,
+          mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
+          inst_dload_in_section_def, source_memory_read_ranges_def,
+          source_memory_write_ranges_def] >>
+     disch_then (qspecl_then [`explicit`, `PG`] mp_tac) >>
+     fs[mk_inst_def]) >>
+  `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (v,G1,tn1) [] (OK t,G1,tn1)` by
+    suspend "nil_branch" >>
+  drule (cj 2 gas_origin_ptr_path_rules) >> disch_then drule >> simp[]
+QED
+
+Resume for_nonslot_array_nil_separated[compare_checks]:
+  simp[Abbr `ins`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+       source_memory_write_ranges_def, source_memory_read_ranges_def, mk_inst_def] >>
+  simp[GSYM mk_inst_def, step_inst_non_invoke, Abbr `su`, update_var_def] >>
+  rpt strip_tac
+  >- (qpat_x_assum `FLOOKUP G idx = NONE` mp_tac >> simp[FLOOKUP_DEF])
+  >- (qpat_x_assum `op_prov G len_op = NONE` mp_tac >>
+      simp[op_prov_def, FLOOKUP_DEF]) >>
+  Cases_on `op = Var idx` >> Cases_on `op = len_op` >> fs[]
+QED
+
+Resume for_nonslot_array_nil_separated[nil_branch]:
+  `lookup_block v.vs_current_bb func.fn_blocks = SOME
+     <|bb_label := cond; bb_instructions :=
+       [ins; mk_inst jid JNZ [Var dv;Label exit;Label bod] []]|> /\
+   get_instruction <|bb_label := cond; bb_instructions :=
+       [ins; mk_inst jid JNZ [Var dv;Label exit;Label bod] []]|>
+      v.vs_inst_idx = SOME (mk_inst jid JNZ [Var dv;Label exit;Label bod] []) /\
+   ~v.vs_halted /\ eval_operand (Var dv) v = SOME 1w /\
+   op_taint tn1 (Var dv) = {} /\ allocas_from lo v /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp v)` by
+    simp[Abbr `v`, Abbr `su`, get_instruction_def, update_var_def,
+         eval_operand_def, lookup_var_def, allocas_from_def,
+         allocas_below_fmp_def, op_taint_def, FLOOKUP_UPDATE] >>
+  drule_all decoderNavigationPtrTheory.jnz_origin_ptr_path >>
+  simp[Abbr `v`, Abbr `t`, jump_to_def]
+QED
+
+Resume for_nonslot_array_nil_separated[nil_post]:
+  `not_local_ptr c es.scopes dv` by (irule fresh_not_local_ptr >> metis_tac[]) >>
+  `tn1.t_mem = tn.t_mem /\ tn1.t_stor = tn.t_stor /\
+   tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
+   (!x. x <> dv ==> FLOOKUP G1 x = FLOOKUP G x /\
+      op_taint tn1 (Var x) = op_taint tn (Var x))` by
+    simp[Abbr `G1`, Abbr `tn1`, Abbr `t`, Abbr `ins`, Abbr `su`,
+         SRULE [] copy_eq_jump_frames] >>
+  `!x. not_fresh_at sa0 x ==> lookup_var x t = lookup_var x s /\
+       FLOOKUP G1 x = FLOOKUP G x /\ op_taint tn1 (Var x) = op_taint tn (Var x)` by
+    (rpt strip_tac >> `x <> dv` by metis_tac[] >>
+     simp[Abbr `t`, Abbr `su`, lookup_var_def, update_var_def, jump_to_def,
+          FLOOKUP_UPDATE] >> metis_tac[]) >>
+  `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+   t.vs_alloca_next = s.vs_alloca_next /\ t.vs_inst_idx = 0 /\
+   t.vs_current_bb = sb.cs_current_bb /\ ~t.vs_halted /\
+   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
+   t.vs_transient = s.vs_transient /\ t.vs_immutables = s.vs_immutables` by
+    simp[Abbr `t`, Abbr `su`, jump_to_def, update_var_def] >>
+  qpat_x_assum `tn1 = tn with t_var := _` kall_tac >>
+  `stmt_state_rel H ctx func c cx es t` by
+    (simp[Abbr `t`, Abbr `su`, stmt_state_rel_jump_to] >>
+     irule stmt_state_rel_update_var >> simp[]) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (irule (iffRL vyperStorageFootprintTheory.storage_well_formed_on_backends) >>
+     qexists `es` >> simp[]) >>
+  `return_buf_frame d c sb t` by
+    (irule return_buf_frame_frame >>
+     goal_assum (drule_at (Pat `return_buf_frame _ _ _ _`)) >>
+     simp[] >> metis_tac[]) >>
+  `!x sz. c.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x` by
+    (qpat_assum `ret_pc_ok _ _ _` (mp_tac o REWRITE_RULE [ret_pc_ok_def]) >>
+     metis_tac[]) >>
+  `ghost_inv_at (DF H) lo d c cx (es with gas_obs := []) G1 tn1 t` by
+    (irule ghost_inv_at_exterior_frame >>
+     goal_assum (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
+     qexists `sa0` >> simp[]) >>
+  `alloca_frame c es0 sa0 s0 c es su` by
+    (simp[Abbr `su`] >> irule alloca_frame_update_var >> simp[]) >>
+  `alloca_frame c es0 sa0 s0 c es t` by
+    (irule alloca_frame_same_state >>
+     qexists `su` >> simp[Abbr `t`, Abbr `su`, jump_to_def, update_var_def]) >>
+  `alloca_history func t` by
+    (irule alloca_history_jump >> simp[] >> qexists `s` >> simp[]) >>
+  `allocas_below_fmp t = allocas_below_fmp s` by
+    simp[Abbr `t`, Abbr `su`, allocas_below_fmp_def, jump_to_def, update_var_def] >>
+  `return_buf_sep d c es s ==> return_buf_sep d c (es with gas_obs := []) t` by
+    (strip_tac >>
+     qpat_assum `stmt_state_rel H ctx func c cx es s`
+       (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule
+         bodyFullSharedTheory.return_buf_sep_locals_kept) >>
+     conj_tac
+     >- (Cases_on `d` >> simp[] >> rename1 `SOME buf` >> PairCases_on `buf` >>
+         fs[return_buf_sep_def, allocas_from_def] >> first_assum ACCEPT_TAC) >>
+     simp[] >> qexists `sa0` >> simp[] >> rpt strip_tac >>
+     qpat_assum `!x. not_fresh_at sa0 x ==> lookup_var x t = _ /\ _` drule >> simp[]) >>
+  simp[stmt_lands_def, block_is_terminated_def] >>
+  first_assum ACCEPT_TAC
 QED
 
 Finalise for_nonslot_array_nil_separated
 
-Theorem for_nonslot_entry_control[local]:
+Theorem for_nonslot_entry_control:
   ~(s.vs_halted) /\ allocas_from lo s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -1688,10 +1528,6 @@ Resume for_nonslot_array_entry_full[entry_control]:
     (qpat_assum `!op. _ ==> eval_operand op a = _ /\ _`
        (qspec_then `len_op` mp_tac) >>
      (impl_tac >- metis_tac[]) >> strip_tac >> asm_rewrite_tac[]) >>
-  suspend "run_entry_control"
-QED
-
-Resume for_nonslot_array_entry_full[run_entry_control]:
   `?s G tn.
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (a,Ga,ta) [] (OK s,G,tn)) /\
     s = jump_to cond
@@ -1737,10 +1573,6 @@ Resume for_nonslot_array_entry_full[run_entry_control]:
      qpat_assum `!p. p NOTIN writes ==> lookup_var p s = _ /\ _`
        (qspec_then `x` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >>
      simp[]) >>
-  suspend "entry_lookup_frames"
-QED
-
-Resume for_nonslot_array_entry_full[entry_lookup_frames]:
   `!x. not_fresh_at sa0 x ==>
        lookup_var x s = lookup_var x u /\ FLOOKUP G x = FLOOKUP Gu x /\
        op_taint tn (Var x) = op_taint tu (Var x)` by
@@ -1775,10 +1607,6 @@ Resume for_nonslot_array_entry_full[entry_lookup_frames]:
        (Cases_on `vv` >> fs[vv_location_def,vv_operand_def] >>
         drule_all exprPtrUnwrapCodeTheory.vv_post_code_source >> simp[] >> metis_tac[]) >>
      metis_tac[exprSimPropsTheory.immutable_holds_memory_cong]) >>
-  suspend "entry_live_frames"
-QED
-
-Resume for_nonslot_array_entry_full[entry_live_frames]:
   `!op. (!p. op = Var p ==> not_fresh_at saL p) ==>
      eval_operand op s = eval_operand op u /\
      op_prov G op = op_prov Gu op /\ op_taint tn op = op_taint tu op` by
@@ -1961,6 +1789,10 @@ Resume for_nonslot_array_entry_full[item_separation]:
 QED
 
 Resume for_nonslot_array_entry_full[item_live]:
+  `loc = LocCode ==> !src name path. rv = PlaceR (ImmutablePlace src name path) ==>
+     ?tv root. lookup_immutable cx em src name = SOME (tv,root) /\
+               evaluate_subscripts tv root path = INL (ArrayV av)` by
+    (rpt strip_tac >> irule (iffLR forNestedArrayCaptureTheory.read_result_immutable_place) >> gvs[]) >>
   `!aid b len i. FLOOKUP u.vs_allocas aid = SOME (b,len) /\
       aid < sbExpr.cs_next_id /\
       (!name lb lsz. local_region c em.scopes u name lb lsz ==>
@@ -1978,8 +1810,7 @@ Resume for_nonslot_array_entry_full[item_live]:
     simp[] >>
   `!x w. not_fresh_at saL x /\ lookup_var x u = SOME w ==> lookup_var x s = SOME w` by
     simp[] >>
-  rewrite_tac[for_nonslot_live_def,stmtSimPropsTheory.cenv_top_ext_refl,DROP_0,ZERO_LESS_EQ,
-              REFL_CLAUSE,IMP_CLAUSES,FORALL_SIMP] >>
+  rewrite_tac[for_nonslot_live_def,stmtSimPropsTheory.cenv_top_ext_refl,DROP_0,ZERO_LESS_EQ] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
@@ -2039,7 +1870,7 @@ Proof
 QED
 
 (* Execute the nonempty test and the actual indexed copy before calling the body. *)
-Theorem for_nonslot_selected_array_head:
+Theorem for_nonslot_array_head_full:
   for_nonslot_layout (c, id, fty, e, sty, bd, ret_ty, loop_body)
     (func, shadow_func)
     (sa0, vv, sbExpr, shadow_sa0, shadow_sbExpr, loc, len_op, saL)
@@ -2057,7 +1888,7 @@ Theorem for_nonslot_selected_array_head:
   return_buf_sep d c es s /\
   s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
-    for_nonslot_selected_live (DF H, lo, d, ctx, func, cx, c, id, env, loop_body)
+    for_nonslot_live (DF H, lo, d, ctx, func, cx, c, id, env, loop_body)
       (es0, sa0, s0, G0, tn0)
       (e, sbExpr, saL, loc, vv, bd, stv, vs, rv, av, xs, em, u, Gu, tu)
       (len_op, idx, bw) (xd, dw, capacity, aidItem)
@@ -2069,7 +1900,7 @@ Theorem for_nonslot_selected_array_head:
     !H. valid_horizon cx st0 H es.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
       return_buf_sep d bc eb t /\
-      for_nonslot_selected_body_entry (DF H, lo, d, ctx, func, cx, c, id, env, loop_body)
+      for_nonslot_body_entry (DF H, lo, d, ctx, func, cx, c, id, env, loop_body)
         (es0, sa0, s0, G0, tn0)
         (e, sbExpr, saL, loc, vv, bd, stv, vs, rv, av, xs, em, u, Gu, tu)
         (len_op, idx, bw) (xd, dw, capacity, aidItem)
@@ -2081,11 +1912,11 @@ Proof
     fs[Abbr `H0`, storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
     (drule_then assume_tac) >>
-  drule for_nonslot_selected_live_head_index >> strip_tac >>
+  drule for_nonslot_live_head_index >> strip_tac >>
   qpat_x_assum `k = LENGTH vs - _` kall_tac >>
   qpat_x_assum `a = EL k vs` (mk_asm "head") >>
-  qpat_x_assum `for_nonslot_selected_live _ _ _ _ _ _`
-    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_selected_live_def]) >>
+  qpat_x_assum `for_nonslot_live _ _ _ _ _ _`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_live_def]) >>
   qpat_x_assum `for_nonslot_layout _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_layout_def]) >>
   `LENGTH vs < dimword (:256)` by
@@ -2116,10 +1947,6 @@ Proof
     (irule return_buf_frame_frame >> qexistsl [`c`,`s`,`sa0`] >> simp[]) >>
   `ret_pc_ok c saL s` by
     (irule stmtSimPropsTheory.ret_pc_ok_frame >> qexistsl [`c`,`s`,`sa0`] >> simp[]) >>
-  suspend "head_test_frames"
-QED
-
-Resume for_nonslot_selected_array_head[head_test_frames]:
   drule_all for_nonslot_head_test_frame >>
   disch_then (qspec_then `bod` mp_tac) >>
   pure_rewrite_tac [LET_THM] >> BETA_TAC >>
@@ -2136,7 +1963,7 @@ Resume for_nonslot_selected_array_head[head_test_frames]:
      qpat_x_assum `ghost_inv_at (DF H0) _ _ _ _ _ G tn s` kall_tac >>
      qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
        (qspec_then `H` (drule_then
-         (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_selected_live_def]))) >>
+         (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_live_def]))) >>
      drule_all for_nonslot_head_test_frame >>
      disch_then (qspec_then `bod` mp_tac) >>
      simp[Abbr `p`, Abbr `Gp`, Abbr `tnp`]) >>
@@ -2161,10 +1988,6 @@ Resume for_nonslot_selected_array_head[head_test_frames]:
      qexists_tac `saL` >> simp[] >>
      qpat_assum `ret_pc_ok c saL p`
        (qspecl_then [`x`,`sz`] mp_tac o REWRITE_RULE [ret_pc_ok_def]) >> simp[]) >>
-  suspend "prepare_item_copy"
-QED
-
-Resume for_nonslot_selected_array_head[prepare_item_copy]:
   `capacity = type_memory_size dtv` by
     (simp[] >> irule expr_sim_inv_memory_size >> qexistsl [`cx`,`env`,`es`] >> simp[]) >>
   `!name root sz. FLOOKUP c.ce_vars name = SOME (PtrVar (Var root) sz) ==>
@@ -2207,10 +2030,6 @@ Resume for_nonslot_selected_array_head[prepare_item_copy]:
          (ACCEPT_TAC o REWRITE_RULE[alloca_frame_def]) >>
      conj_tac >> qpat_assum `alloca_frame c es0 sa0 s0 c es s`
        (ACCEPT_TAC o REWRITE_RULE[alloca_frame_def])) >>
-  suspend "run_item_copy"
-QED
-
-Resume for_nonslot_selected_array_head[run_item_copy]:
   mp_tac (Q.INST [`s` |-> `p`, `G` |-> `Gp`, `tn` |-> `tnp`,
      `offOp` |-> `off_op`, `sumOp` |-> `sum_op`,
      `dyn` |-> `(case bd of Fixed _ => F | Dynamic _ => T)`]
@@ -2229,12 +2048,12 @@ Resume for_nonslot_selected_array_head[run_item_copy]:
      simp[] >> disch_then irule >> simp[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- suspend "body_entry_separation" >>
-  rewrite_tac[for_nonslot_selected_body_entry_def] >>
+  rewrite_tac[for_nonslot_body_entry_def] >>
   conj_tac >- suspend "capture_frames" >>
   suspend "push_body_scope"
 QED
 
-Resume for_nonslot_selected_array_head[prepare_inputs]:
+Resume for_nonslot_array_head_full[prepare_inputs]:
   simp[exprSimPropsTheory.immutable_holds_memory_cong] >>
      rpt conj_tac
      >- (qpat_assum `loc = _` (pure_rewrite_tac o single o SYM) >>
@@ -2265,7 +2084,7 @@ Resume for_nonslot_selected_array_head[prepare_inputs]:
         fs[allocas_below_fmp_def]
 QED
 
-Resume for_nonslot_selected_array_head[body_entry_separation]:
+Resume for_nonslot_array_head_full[body_entry_separation]:
   qpat_assum `stmt_state_rel H0 ctx func c cx es s`
     (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule
        bodyFullSharedTheory.return_buf_sep_allocated_local) >>
@@ -2297,7 +2116,7 @@ Resume for_nonslot_selected_array_head[body_entry_separation]:
   first_assum ACCEPT_TAC
 QED
 
-Resume for_nonslot_selected_array_head[capture_frames]:
+Resume for_nonslot_array_head_full[capture_frames]:
   `!x. not_fresh_at saL x ==> lookup_var x t = lookup_var x s /\
      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tnf (Var x) = op_taint tn (Var x)` by
     (rpt strip_tac >>
@@ -2337,10 +2156,6 @@ Resume for_nonslot_selected_array_head[capture_frames]:
        (irule o cj 1) >>
      qpat_assum `!name root sz. FLOOKUP c.ce_vars name = _ ==> _`
        (drule_then ACCEPT_TAC)) >>
-  suspend "capture_scope_frame"
-QED
-
-Resume for_nonslot_selected_array_head[capture_scope_frame]:
   `eb.scopes =
       (FEMPTY |+ (id,<|assignable := F; type := dtv; value := v; popped := []|>))
         :: es.scopes` by
@@ -2372,10 +2187,6 @@ Resume for_nonslot_selected_array_head[capture_scope_frame]:
      metis_tac[stmtSimPropsTheory.cenv_top_ext_return_pc]) >>
   `!fn inst q. frag_reachable ctx func t fn inst q ==> dalloca_no_wrap inst q` by
     suspend "body_position_reachable" >>
-  suspend "capture_region_frames"
-QED
-
-Resume for_nonslot_selected_array_head[capture_region_frames]:
   `!name b len. local_region bc eb.scopes t name b len ==>
      (b = w2n dw /\ len = capacity) \/ local_region c es.scopes p name b len` by
     (rpt gen_tac >>
@@ -2412,10 +2223,6 @@ Resume for_nonslot_selected_array_head[capture_region_frames]:
     (qpat_assum `stmt_state_rel H0 ctx func c cx es s`
        (mp_tac o MATCH_MP stateRelProjTheory.stmt_state_rel_local_ptrs_alloca) >>
      simp[venomMemDefsTheory.alloca_inv_def]) >>
-  suspend "capture_allocation_frames"
-QED
-
-Resume for_nonslot_selected_array_head[capture_allocation_frames]:
   `!aid off sz. FLOOKUP u.vs_allocas aid = SOME (off,sz) /\ aid < sbExpr.cs_next_id ==>
     off + sz <= w2n dw \/ w2n dw + capacity <= off` by
     (rpt gen_tac >> strip_tac >>
@@ -2438,9 +2245,9 @@ Resume for_nonslot_selected_array_head[capture_allocation_frames]:
      qpat_assum `loc = LocCode ==> immutable_holds _ _ _ _ _ _ s`
        (ACCEPT_TAC o REWRITE_RULE [immutable_holds_def])) >>
   qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==>
-    for_nonslot_selected_live _ _ _ _ _ _`
+    for_nonslot_live _ _ _ _ _ _`
     (qspec_then `H` (drule_then
-      (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_selected_live_def]))) >>
+      (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_live_def]))) >>
   qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func bc cx eb t /\ _`
     (qspec_then `H` (drule_then (map_every assume_tac o CONJUNCTS))) >>
@@ -2454,12 +2261,11 @@ Resume for_nonslot_selected_array_head[capture_allocation_frames]:
        (drule_then (rewrite_tac o single o cj 1)) >>
      qpat_assum `!x w. not_fresh_at saL x /\ lookup_var x u = SOME w ==> lookup_var x s = _`
        (drule_all_then ACCEPT_TAC)) >>
-  suspend "pack_capture_frames"
-QED
-
-Resume for_nonslot_selected_array_head[pack_capture_frames]:
-  pure_rewrite_tac[for_nonslot_selected_live_def] >>
-  rpt conj_tac >> asm_rewrite_tac[]
+  pure_rewrite_tac[for_nonslot_live_def] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (qpat_assum `!v. rv = Value v /\ _ ==> vv_own _ _ _ _ _ _ _ _ _ /\ _`
+         (fn own => simp[NoAsms, own])) >>
+  TRY (first_assum (ACCEPT_TAC o GSYM))
   >~ [`!name path root sz w. rv = PlaceR (MemoryPlace name path) /\ FLOOKUP c.ce_vars name = SOME (PtrVar (Var root) sz) /\ lookup_var root u = SOME w ==> lookup_var root t = SOME w`]
   >- (rpt strip_tac >>
       `not_fresh_at saL root` by
@@ -2471,12 +2277,13 @@ Resume for_nonslot_selected_array_head[pack_capture_frames]:
         (drule_all_then ACCEPT_TAC))
   >> qpat_assum `!name b z. local_region c es.scopes t name b z <=> _`
        (once_rewrite_tac o single) >>
-  qpat_assum `!name b len. local_region c es.scopes s name b len ==> _` mp_tac >>
-  simp[arithmeticTheory.ADD_COMM]
+  qspecl_then [`capacity`,`w2n dw`] (once_rewrite_tac o single)
+    arithmeticTheory.ADD_COMM >>
+  first_assum ACCEPT_TAC
 QED
 
 
-Resume for_nonslot_selected_array_head[body_position_reachable]:
+Resume for_nonslot_array_head_full[body_position_reachable]:
   `~block_is_terminated saCopy` by
     (drule exprOpenPrimitivesTheory.emit_op_nonterminator_open >> simp[is_terminator_def]) >>
   `acyclic_struct_metadata c.ce_struct_fields` by fs[bodySimTheory.body_inv_def] >>
@@ -2499,7 +2306,7 @@ Resume for_nonslot_selected_array_head[body_position_reachable]:
   drule contextRawReachableTheory.frag_reachable_trans >> metis_tac[]
 QED
 
-Resume for_nonslot_selected_array_head[capture_copy_frame]:
+Resume for_nonslot_array_head_full[capture_copy_frame]:
   rewrite_tac[alloca_frame_def] >> rpt gen_tac >> strip_tac >>
   Q_TAC (fn tm => SUBGOAL_THEN tm ASSUME_TAC)
     `off + sz <= w2n dw \/ w2n dw + capacity <= off`
@@ -2527,7 +2334,7 @@ Resume for_nonslot_selected_array_head[capture_copy_frame]:
   qpat_assum `!n b sz'. local_region c es.scopes p n b sz' ==> _` (drule_then ACCEPT_TAC)
 QED
 
-Resume for_nonslot_selected_array_head[capture_copy_taint]:
+Resume for_nonslot_array_head_full[capture_copy_taint]:
   rpt gen_tac >> strip_tac >>
   Q_TAC (fn tm => SUBGOAL_THEN tm ASSUME_TAC)
     `off + sz <= w2n dw \/ w2n dw + capacity <= off`
@@ -2545,7 +2352,7 @@ Resume for_nonslot_selected_array_head[capture_copy_taint]:
   simp[] >> disch_then irule >> first_assum ACCEPT_TAC
 QED
 
-Resume for_nonslot_selected_array_head[push_body_scope]:
+Resume for_nonslot_array_head_full[push_body_scope]:
   drule bodyFullForFactsTheory.type_stmt_for_projection >> strip_tac >>
   `eb =
       es with scopes :=
@@ -2556,7 +2363,7 @@ Resume for_nonslot_selected_array_head[push_body_scope]:
      disch_then (SUBST1_TAC o SYM) >> simp[evaluation_state_component_equality]) >>
   `expr_sim_inv bc cx (extend_local env id fty F) eb` by
     (simp[] >> irule bodyExprPreFactsTheory.expr_sim_inv_for_scope >>
-     rpt conj_tac >> asm_rewrite_tac[] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
      qexistsl [`c`,`saL`,`saD`] >> rpt conj_tac >>
      first_assum ACCEPT_TAC) >>
   `ce_locals_declared bc (extend_local env id fty F)` by
@@ -2577,10 +2384,6 @@ Resume for_nonslot_selected_array_head[push_body_scope]:
      qpat_assum `k < LENGTH vs` mp_tac >>
      qpat_assum `vs = MAP Value xs` (once_rewrite_tac o single) >>
      Cases_on `xs` >> simp[read_result_def,return_def]) >>
-  suspend "body_entry_frames"
-QED
-
-Resume for_nonslot_selected_array_head[body_entry_frames]:
   `saL.cs_next_var <= sbCopy.cs_next_var` by
     (map_every (fn q => qpat_assum q mp_tac)
        [`saL.cs_next_var <= sa.cs_next_var`,
@@ -2605,59 +2408,7 @@ Resume for_nonslot_selected_array_head[body_entry_frames]:
   qexistsl [`c`,`p`,`saL`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Finalise for_nonslot_selected_array_head[local]
-
-Theorem for_nonslot_array_head_full:
-  for_nonslot_layout (c, id, fty, e, sty, bd, ret_ty, loop_body)
-    (func, shadow_func)
-    (sa0, vv, sbExpr, shadow_sa0, shadow_sbExpr, loc, len_op, saL)
-    (bc, saD, saA, xd, capacity, aidItem)
-    (entry, cond, bod, incr, exit, idx, invalid, valid, done_var, next_var)
-    (sa, stride, off_op, sm, sum_op, sn, addr, saCopy, sbCopy)
-    (sbBody, sj, sb, shadow_sbCopy, shadow_sbBody) /\
-  body_inv tops ctx c cx /\ c.ce_alloca_locals /\ fn_inst_ids_distinct func /\
-  supported_stmt tops bindings (For id fty (Array e) bound loop_body) /\
-  type_stmt env ret_ty (For id fty (Array e) bound loop_body) = SOME env' /\
-  stmt_exprs_ok c (For id fty (Array e) bound loop_body) /\
-  evaluate_type (get_tenv cx) fty = SOME dtv /\
-  body_for_full_ok cx dtv id loop_body vs /\
-  storage_trace_domain cx st0 es.storage_trace /\
-  return_buf_sep d c es s /\
-  s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-    for_nonslot_live (DF H, lo, d, ctx, func, cx, c, id, env, loop_body)
-      (es0, sa0, s0, G0, tn0)
-      (e, sbExpr, saL, loc, vv, bd, stv, vs, rv, av, xs, em, u, Gu, tu)
-      (len_op, idx, bw) (xd, dw, capacity, aidItem)
-      (H, k, a::rs, es, c, es, G, tn, s)) ==>
-  ?v eb t Gf tnf.
-    read_result cx a es = (INL v,es) /\
-    push_scope_with_var id dtv v es = (INL (),eb) /\
-    value_has_type dtv v /\ val_wf dtv v /\
-    !H. valid_horizon cx st0 H es.storage_trace ==>
-      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
-      return_buf_sep d bc eb t /\
-      for_nonslot_body_entry (DF H, lo, d, ctx, func, cx, c, id, env, loop_body)
-        (es0, sa0, s0, G0, tn0)
-        (e, sbExpr, saL, loc, vv, bd, stv, vs, rv, av, xs, em, u, Gu, tu)
-        (len_op, idx, bw) (xd, dw, capacity, aidItem)
-        (bc, extend_local env id fty F, sbCopy, dtv, v) (H, k, a::rs, es, eb, Gf, tnf, t)
-Proof
-  rewrite_tac[for_nonslot_live_selected_iff,for_nonslot_body_entry_selected_iff] >>
-  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `!H. _ ==> for_nonslot_selected_live _ _ _ _ _ _ /\ _`
-    (map_every assume_tac o CONJUNCTS o
-     SIMP_RULE bool_ss [IMP_CONJ_THM,FORALL_AND_THM]) >>
-  mp_tac (SPEC_ALL for_nonslot_selected_array_head) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (qx_choosel_then [`v`,`eb`,`t`,`Gf`,`tnf`] strip_assume_tac) >>
-  qexistsl [`v`,`eb`,`t`,`Gf`,`tnf`] >>
-  simp[] >> qx_gen_tac `H` >> disch_tac >>
-  qpat_assum `!H. _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
-    (drule_then (map_every assume_tac o CONJUNCTS)) >>
-  qpat_assum `!H. _ ==> loc = LocCode ==> _` (drule_then assume_tac) >>
-  simp[]
-QED
+Finalise for_nonslot_array_head_full
 
 (* The raw normal post has already run the required machine suffix.  Pop
    only the source scope, without losing the raw nonlocal exit witness. *)
@@ -2804,11 +2555,10 @@ Proof
   simp[NoAsms, well_typed_expr_def, extend_local_def] >>
   rpt strip_tac >>
   gvs[well_typed_expr_def, extend_local_def, FLOOKUP_UPDATE, AllCaseEqs()] >>
-  fs[FLOOKUP_DEF]
-  >~ [`subscript_base_type_exact _ _ \/ _`]
-  >- (disj1_tac >> irule subscript_base_type_exact_transfer >>
-      qexists_tac `env` >> simp[] >> metis_tac[])
-  >> metis_tac[]
+  fs[FLOOKUP_DEF] >>
+  TRY (disj1_tac >> irule subscript_base_type_exact_transfer >>
+       qexists_tac `env` >> simp[]) >>
+  metis_tac[]
 QED
 
 Theorem for_nonslot_array_projection_suffix[local]:
@@ -2919,6 +2669,25 @@ Definition for_nonslot_code_frame_def:
         immutable_holds c cx (post_value_type c e) (Value (ArrayV av)) bw ep z)
 End
 
+Theorem for_nonslot_bare_immutable_lookup[local]:
+  expr_sim_inv c cx env es /\
+  FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd) /\
+  ~cx_const_name cx (src,name) /\
+  read_result cx (PlaceR (ImmutablePlace src name [])) es = (INL (ArrayV av),es) ==>
+  ?tv. evaluate_type (get_tenv cx) (ArrayT et bd) = SOME tv /\
+       lookup_immutable cx es src name = SOME (tv,ArrayV av)
+Proof
+  strip_tac >>
+  drule_all whitelistForIterImmSourceTheory.immutable_array_source_ready >>
+  strip_tac >>
+  qpat_x_assum `src = c.ce_module` kall_tac >>
+  `lookup_immutable cx es src name = SOME (atv,ArrayV av')` by
+    simp[vyperBareGlobalNameTheory.lookup_immutable_def] >>
+  qpat_assum `read_result _ (PlaceR _) _ = _`
+    (mp_tac o REWRITE_RULE [forNestedArrayCaptureTheory.read_result_immutable_place]) >>
+  simp[evaluate_subscripts_def]
+QED
+
 Theorem for_nonslot_code_frame_bare[local]:
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
   iterator_unmodified (Array e) body /\
@@ -2962,7 +2731,7 @@ Proof
   `lookup_immutable cx ep src name = lookup_immutable cx ef src name` by
     (qpat_assum `ep.immutables = ef.immutables` (fn eq =>
        simp[NoAsms,vyperBareGlobalNameTheory.lookup_immutable_def,eq])) >>
-  conj_tac >- (simp[for_nonslot_read_immutable_path,evaluate_subscripts_def] >> metis_tac[]) >>
+  conj_tac >- (simp[forNestedArrayCaptureTheory.read_result_immutable_place,evaluate_subscripts_def] >> metis_tac[]) >>
   irule for_nonslot_selected_immutable_holds >>
   qexistsl [`em`,`env`,`name`,`src`,`u`,`vv`] >> simp[]
 QED
@@ -2970,7 +2739,7 @@ QED
 (* Finish the prepared round with one target suffix for all storage horizons. *)
 Theorem for_nonslot_array_scoped_body_at[local]:
   (!H. valid_horizon cx st0 H eb.storage_trace ==>
-    for_nonslot_selected_body_entry (DF H,lo,d,ctx,func,cx,c,id,env,body)
+    for_nonslot_body_entry (DF H,lo,d,ctx,func,cx,c,id,env,body)
       (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
       (len_op,idx,bw) (xd,dw,capacity,aidItem) (bc,benv,sbCopy,dtv,v)
       (H,k,a::rs,es,eb,G,tn,s)) /\
@@ -3015,14 +2784,14 @@ Theorem for_nonslot_array_scoped_body_at[local]:
   (!p. vv_operand vv = Var p \/ len_op = Var p ==> not_fresh_at saL p) /\
   (!z J tz. z.vs_current_bb = incr /\ z.vs_inst_idx = 0 /\
     (!H. valid_horizon cx st0 H tz.storage_trace ==>
-      for_nonslot_selected_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
+      for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
         (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
         (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,a::rs,tz,c,tz,FST J,SND J,z)) ==>
     ?t Gf tf. !H. valid_horizon cx st0 H tz.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
         (z,FST J,SND J) [] (OK t,Gf,tf) /\
       t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
-      for_nonslot_selected_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
+      for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
         (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
         (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,SUC k,rs,tz,c,tz,Gf,tf,t)) ==>
   gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -3046,7 +2815,7 @@ Theorem for_nonslot_array_scoped_body_at[local]:
               off+sz <= base \/ base+len <= off) /\
             off <= i /\ i < off+sz /\ i IN tt.t_mem ==> i IN tn0.t_mem)) /\
         (~b ==> t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
-          for_nonslot_selected_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
+          for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
             (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
             (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,SUC k,rs,ef,c,ef,GG,tt,t)))
     (\H out ef gt r. ?ex. out = INR ex /\
@@ -3056,7 +2825,7 @@ Theorem for_nonslot_array_scoped_body_at[local]:
         allocas_below_fmp z))
 Proof
   strip_tac >>
-  qpat_assum `!H. _ ==> for_nonslot_selected_body_entry _ _ _ _ _ _ _`
+  qpat_assum `!H. _ ==> for_nonslot_body_entry _ _ _ _ _ _ _`
     (mp_then Any mp_tac for_nonslot_array_body_invoke) >>
   disch_then (drule_at (Pat `frame_ret_ok_full _ _ _ _ _`)) >>
   disch_then (fn th => qpat_assum `stmts_env bc _ ret_ty body sbCopy = _`
@@ -3072,10 +2841,10 @@ QED
 
 Resume for_nonslot_array_scoped_body_at[scoped_suffix]:
   `eb.scopes <> []` by
-    (qpat_assum `!H. _ ==> for_nonslot_selected_body_entry _ _ _ _ _ _ _`
+    (qpat_assum `!H. _ ==> for_nonslot_body_entry _ _ _ _ _ _ _`
        (qspec_then `storage_trace_horizon eb.storage_trace` mp_tac) >>
      impl_tac >- fs[storage_trace_domain_def] >>
-     simp[for_nonslot_selected_body_entry_def] >> strip_tac >>
+     simp[for_nonslot_body_entry_def] >> strip_tac >>
      gvs[push_scope_with_var_def, return_def]) >>
   qunabbrev_tac `fp` >> ho_match_mp_tac for_nonslot_body_handle >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -3120,12 +2889,12 @@ Resume for_nonslot_array_scoped_body_at[uniform_suffix]:
     cenv_top_ext c bc eb.scopes` by
     (`valid_horizon cx st0 (storage_trace_horizon ef.storage_trace) eb.storage_trace` by
        metis_tac[] >>
-     qpat_assum `!H. _ ==> for_nonslot_selected_body_entry _ _ _ _ _ _ _`
+     qpat_assum `!H. _ ==> for_nonslot_body_entry _ _ _ _ _ _ _`
        (qspec_then `storage_trace_horizon ef.storage_trace` mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >>
-     disch_then (strip_assume_tac o REWRITE_RULE [for_nonslot_selected_body_entry_def]) >>
-     qpat_assum `for_nonslot_selected_live _ _ _ _ _ _`
-       (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_selected_live_def]) >>
+     disch_then (strip_assume_tac o REWRITE_RULE [for_nonslot_body_entry_def]) >>
+     qpat_assum `for_nonslot_live _ _ _ _ _ _`
+       (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_live_def]) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   suspend "suffix_pop_and_land"
 QED
@@ -3198,11 +2967,11 @@ Resume for_nonslot_array_scoped_body_at[break_suffix]:
      qpat_assum `ef.scopes = sc::rest` (once_rewrite_tac o single o SYM) >>
      simp[evaluation_state_component_equality]) >>
   `valid_horizon cx st0 H eb.storage_trace` by simp[] >>
-  qpat_assum `!H. _ ==> for_nonslot_selected_body_entry _ _ _ _ _ _ _`
+  qpat_assum `!H. _ ==> for_nonslot_body_entry _ _ _ _ _ _ _`
     (qspec_then `H` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   disch_then (fn th => map_every assume_tac
-    (CONJUNCTS (REWRITE_RULE [for_nonslot_selected_body_entry_def, for_nonslot_selected_live_def] th))) >>
+    (CONJUNCTS (REWRITE_RULE [for_nonslot_body_entry_def, for_nonslot_live_def] th))) >>
   suspend "break_exit_frame"
 QED
 
@@ -3280,7 +3049,7 @@ QED
 Resume for_nonslot_array_scoped_body_at[continue_live_frame]:
   `ep.storage_trace = ef.storage_trace` by simp[Abbr `ep`] >>
   `!H. valid_horizon cx st0 H ep.storage_trace ==>
-      for_nonslot_selected_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
+      for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
         (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
         (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,a::rs,ep,c,ep,G1,tn1,z)` by
     suspend "rebuild_increment_entry" >>
@@ -3313,11 +3082,11 @@ Resume for_nonslot_array_scoped_body_at[rebuild_increment_entry]:
   qunabbrev_tac `Qraw` >> BETA_TAC >>
   (impl_tac >- simp[]) >>
   disch_then (CONJUNCTS_THEN2 (qx_choose_then `cpost` strip_assume_tac) kall_tac) >>
-  qpat_assum `!H. _ ==> for_nonslot_selected_body_entry _ _ _ _ _ _ _`
+  qpat_assum `!H. _ ==> for_nonslot_body_entry _ _ _ _ _ _ _`
     (qspec_then `H` mp_tac) >>
   (impl_tac >- simp[]) >>
   disch_then (fn th => map_every assume_tac
-    (CONJUNCTS (REWRITE_RULE [for_nonslot_selected_body_entry_def, for_nonslot_selected_live_def] th))) >>
+    (CONJUNCTS (REWRITE_RULE [for_nonslot_body_entry_def, for_nonslot_live_def] th))) >>
   `cenv_top_ext c cpost ef.scopes` by
     (irule stmtSimPropsTheory.cenv_top_ext_trans >>
      qexistsl [`bc`,`eb.scopes`] >> asm_rewrite_tac[] >>
@@ -3404,7 +3173,7 @@ Resume for_nonslot_array_scoped_body_at[increment_endpoint_frame]:
 QED
 
 Resume for_nonslot_array_scoped_body_at[increment_live]:
-  simp[for_nonslot_selected_live_def, stmtSimPropsTheory.cenv_top_ext_refl,
+  simp[for_nonslot_live_def, stmtSimPropsTheory.cenv_top_ext_refl,
        vyperFiniteStoragePreservationTheory.storage_well_formed_on_scopes,
        allocas_from_def] >>
   rpt conj_tac
@@ -3534,12 +3303,12 @@ QED
 
 Resume for_nonslot_array_scoped_body_at[increment_return_buffer]:
   qpat_assum `!HH. valid_horizon cx st0 HH ep.storage_trace ==>
-      for_nonslot_selected_live _ _ _ _ _ _`
+      for_nonslot_live _ _ _ _ _ _`
     (qspec_then `H` mp_tac) >>
   (impl_tac >- simp[]) >>
-  disch_then (map_every assume_tac o CONJUNCTS o REWRITE_RULE[for_nonslot_selected_live_def]) >>
-  qpat_assum `for_nonslot_selected_live _ _ _ _ _ (H,SUC k,rs,ep,c,ep,G',tn',t')`
-    (map_every assume_tac o CONJUNCTS o REWRITE_RULE[for_nonslot_selected_live_def]) >>
+  disch_then (map_every assume_tac o CONJUNCTS o REWRITE_RULE[for_nonslot_live_def]) >>
+  qpat_assum `for_nonslot_live _ _ _ _ _ (H,SUC k,rs,ep,c,ep,G',tn',t')`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE[for_nonslot_live_def]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   irule bodyFullSharedTheory.return_buf_sep_transport >>
   conj_tac
@@ -3683,7 +3452,7 @@ Resume for_nonslot_array_scoped_body_at[continue_immutable_observation]:
   disch_then (qx_choosel_then [`src`,`name`,`path`] strip_assume_tac) >>
   `read_result cx rv es = (INL (ArrayV av),es)` by
     (qpat_assum `rv = PlaceR _` SUBST1_TAC >>
-     irule (iffRL for_nonslot_read_immutable_path) >>
+     irule (iffRL forNestedArrayCaptureTheory.read_result_immutable_place) >>
      qpat_assum `loc = LocCode ==> !src name path. _`
        (drule_then (qspecl_then [`src`,`name`,`path`] mp_tac)) >> simp[]) >>
   `vv_place_ptr c cx em u rv vv` by fs[vv_post_def] >>
@@ -3695,7 +3464,7 @@ Resume for_nonslot_array_scoped_body_at[continue_immutable_observation]:
             _ ==> read_result cx rv ep = _ /\ immutable_holds _ _ _ _ _ ep z`
     (drule_all_then strip_assume_tac) >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  rpt strip_tac >> irule (iffLR for_nonslot_read_immutable_path) >>
+  rpt strip_tac >> irule (iffLR forNestedArrayCaptureTheory.read_result_immutable_place) >>
   qpat_assum `rv = PlaceR _` (once_rewrite_tac o single o SYM) >>
   first_assum ACCEPT_TAC
 QED
@@ -3846,10 +3615,6 @@ Proof
     (qpat_assum `s1 = _` SUBST1_TAC >>
      simp_tac (srw_ss()) [allocas_from_def,allocas_below_fmp_def,update_var_def] >>
      metis_tac[allocas_from_def,allocas_below_fmp_def]) >>
-  suspend "execute_increment"
-QED
-
-Resume for_nonslot_actual_increment_path[execute_increment]:
   drule_all typedCopyOriginPtrBaseTheory.typed_copy_origin_ptr_assign_path >>
   disch_then (qspecl_then [`explicit`,`PG`,`D`]
     (qx_choosel_then [`s2`,`G2`,`tn2`] strip_assume_tac)) >>
@@ -3880,11 +3645,9 @@ Resume for_nonslot_actual_increment_path[execute_increment]:
   simp[NoAsms] >> disch_then (drule_then mp_tac) >> simp[]
 QED
 
-
-Finalise for_nonslot_actual_increment_path[local]
 (* The increment runner gives the path; only its endpoint and reachability
    matter to the live packet.  Neither register write touches an old local. *)
-Theorem for_nonslot_selected_increment_live[local]:
+Theorem for_nonslot_actual_increment_live[local]:
   (?bb inst. lookup_block cond func.fn_blocks = SOME bb /\
      get_instruction bb 0 = SOME inst /\ inst.inst_opcode <> PHI) /\
   sa0.cs_next_var <= saL.cs_next_var /\
@@ -3892,14 +3655,14 @@ Theorem for_nonslot_selected_increment_live[local]:
   local_ptrs_reserved c saL /\ xd <> idx /\ xd <> out /\
   (!p. vv_operand vv = Var p \/ len_op = Var p ==> not_fresh_at saL p) /\
   body_stmts_full_ok cx loop_body /\
-  for_nonslot_selected_live (D,lo,d,ctx,func,cx,c,id,env,loop_body)
+  for_nonslot_live (D,lo,d,ctx,func,cx,c,id,env,loop_body)
     (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
     (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,a::rs,es,c,es,G,tn,s) /\
   t = jump_to cond (update_var idx (n2w (SUC k)) (update_var out (n2w (SUC k)) s)) /\
   Gf = DRESTRICT (DRESTRICT G (COMPL {out})) (COMPL {idx}) /\
   tnf = (tn with t_var := (tn.t_var |+ (out,{})) |+ (idx,{})) /\
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) ==>
-  for_nonslot_selected_live (D,lo,d,ctx,func,cx,c,id,env,loop_body)
+  for_nonslot_live (D,lo,d,ctx,func,cx,c,id,env,loop_body)
     (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
     (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,SUC k,rs,es,c,es,Gf,tnf,t)
 Proof
@@ -3924,11 +3687,11 @@ Proof
   suspend "increment_machine_frame"
 QED
 
-Resume for_nonslot_selected_increment_live[increment_machine_frame]:
-  drule_then strip_assume_tac for_nonslot_selected_live_head_index >>
+Resume for_nonslot_actual_increment_live[increment_machine_frame]:
+  drule_then strip_assume_tac for_nonslot_live_head_index >>
   qpat_x_assum `k = LENGTH vs - _` kall_tac >>
-  qhdtm_x_assum `for_nonslot_selected_live`
-    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_selected_live_def]) >>
+  qhdtm_x_assum `for_nonslot_live`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_live_def]) >>
   `stmt_state_rel H ctx func c cx es t` by
     (qpat_assum `t = jump_to _ _` SUBST1_TAC >> simp[stmt_state_rel_jump_to] >>
      rpt (irule stmt_state_rel_update_var >> simp[])) >>
@@ -3965,7 +3728,7 @@ Resume for_nonslot_selected_increment_live[increment_machine_frame]:
   suspend "increment_live_tail"
 QED
 
-Resume for_nonslot_selected_increment_live[increment_live_tail]:
+Resume for_nonslot_actual_increment_live[increment_live_tail]:
   `!i. active_inst func i t ==> frag_reachable ctx func s func i t` by
     (drule fragGasOriginPtrTheory.gas_origin_ptr_path_projections >> strip_tac >>
      drule bodyFullIfExpReachTheory.ifexp_ptr_path_reachable >>
@@ -3988,7 +3751,7 @@ Resume for_nonslot_selected_increment_live[increment_live_tail]:
     immutable_holds c cx (post_value_type c e) (Value (ArrayV av)) bw es t` by
     (qpat_assum `loc = LocCode ==> immutable_holds c cx _ _ bw es s` mp_tac >>
      simp[NoAsms, loweringPostsTheory.immutable_holds_def] >> simp[]) >>
-  simp[for_nonslot_selected_live_def,GSYM ADD1,allocas_from_def] >>
+  simp[for_nonslot_live_def,GSYM ADD1,allocas_from_def] >>
   conj_tac >- fs[] >>
   conj_tac >- fs[allocas_from_def] >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -4001,40 +3764,6 @@ Resume for_nonslot_selected_increment_live[increment_live_tail]:
   rpt strip_tac >>
   qpat_assum `!name b len. local_region c es.scopes s name b len ==> _`
     drule >> decide_tac
-QED
-
-Finalise for_nonslot_selected_increment_live[local]
-
-Theorem for_nonslot_actual_increment_live[local]:
-  (?bb inst. lookup_block cond func.fn_blocks = SOME bb /\
-     get_instruction bb 0 = SOME inst /\ inst.inst_opcode <> PHI) /\
-  sa0.cs_next_var <= saL.cs_next_var /\
-  ~not_fresh_at saL idx /\ ~not_fresh_at saL out /\
-  local_ptrs_reserved c saL /\ xd <> idx /\ xd <> out /\
-  (!p. vv_operand vv = Var p \/ len_op = Var p ==> not_fresh_at saL p) /\
-  body_stmts_full_ok cx loop_body /\
-  for_nonslot_live (D,lo,d,ctx,func,cx,c,id,env,loop_body)
-    (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-    (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,a::rs,es,c,es,G,tn,s) /\
-  t = jump_to cond (update_var idx (n2w (SUC k)) (update_var out (n2w (SUC k)) s)) /\
-  Gf = DRESTRICT (DRESTRICT G (COMPL {out})) (COMPL {idx}) /\
-  tnf = (tn with t_var := (tn.t_var |+ (out,{})) |+ (idx,{})) /\
-  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) ==>
-  for_nonslot_live (D,lo,d,ctx,func,cx,c,id,env,loop_body)
-    (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-    (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,SUC k,rs,es,c,es,Gf,tnf,t)
-Proof
-  pure_rewrite_tac[for_nonslot_live_selected_iff] >>
-  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  conj_tac
-  >- (mp_tac (SPEC_ALL for_nonslot_selected_increment_live) >>
-      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-      disch_then ACCEPT_TAC) >>
-  suspend "same_source"
-QED
-
-Resume for_nonslot_actual_increment_live[same_source]:
-  first_assum ACCEPT_TAC
 QED
 
 Finalise for_nonslot_actual_increment_live
@@ -4203,20 +3932,19 @@ Resume for_nonslot_array_round_contracts_at[entry]:
      (!H. valid_horizon cx st0 H em.storage_trace ==>
        gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
          (u,Gu,tu) [] (OK s,G,tn) /\
-       for_nonslot_selected_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
+       for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
          (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
          (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,0,vs,em,c,em,G,tn,s))` by
-    (irule (REWRITE_RULE [for_nonslot_live_selected_iff,REFL_CLAUSE,IMP_CLAUSES,
-                          FORALL_SIMP,AND_CLAUSES] for_nonslot_array_entry_full) >>
+    (irule for_nonslot_array_entry_full >>
      qpat_assum `for_nonslot_layout _ _ _ _ _ _ _` (irule_at Any) >> simp[] >>
      qexists `n` >> simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `valid_horizon cx st0 (storage_trace_horizon em.storage_trace) em.storage_trace` by
     fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> _ /\ for_nonslot_selected_live _ _ _ _ _ _`
+  qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> _ /\ for_nonslot_live _ _ _ _ _ _`
     (drule_then (map_every assume_tac o CONJUNCTS)) >>
   `~s.vs_halted /\
    (!x w. not_fresh_at saL x /\ lookup_var x u = SOME w ==> lookup_var x s = SOME w)` by
-    (qhdtm_assum `for_nonslot_selected_live` (mp_tac o REWRITE_RULE [for_nonslot_selected_live_def]) >>
+    (qhdtm_assum `for_nonslot_live` (mp_tac o REWRITE_RULE [for_nonslot_live_def]) >>
      disch_then (map_every assume_tac o CONJUNCTS) >> conj_tac >> first_assum ACCEPT_TAC) >>
   `return_buf_sep d c em s` by
     (`return_buf_frame d c sa0 u` by
@@ -4235,7 +3963,7 @@ QED
 
 Resume for_nonslot_array_round_contracts_at[round_packets]:
   qabbrev_tac `Live = \H k rs es J tz z.
-    for_nonslot_selected_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
+    for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
       (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
       (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,rs,es,c,es,J,tz,z)` >>
   qabbrev_tac `Inv = \H rs es J tz z.
@@ -4261,7 +3989,7 @@ Resume for_nonslot_array_round_contracts_at[round_packets]:
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >-
     (qx_gen_tac `H` >> disch_tac >>
-     qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> _ /\ for_nonslot_selected_live _ _ _ _ _ _`
+     qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> _ /\ for_nonslot_live _ _ _ _ _ _`
        (drule_then (map_every assume_tac o CONJUNCTS)) >>
      simp[Abbr `Inv`, Abbr `Live`, IgnAsm `loc = _`, IgnAsm `vs = _`]) >>
   conj_tac >- suspend "cons" >>
@@ -4281,7 +4009,7 @@ Resume for_nonslot_array_round_contracts_at[nil]:
      simp[Abbr `Inv`] >> metis_tac[]) >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
     ?k. z.vs_current_bb = cond /\ z.vs_inst_idx = 0 /\
-      for_nonslot_selected_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
+      for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
         (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
         (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,[],es,c,es,J,tz,z)` by
     (gen_tac >> disch_tac >>
@@ -4293,7 +4021,7 @@ Resume for_nonslot_array_round_contracts_at[nil]:
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_layout_def]) >>
   `sa0.cs_next_var <= sb.cs_next_var /\ ~not_fresh_at sa0 done_var` by
     (fs[ci_mono_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  drule_all for_nonslot_selected_array_nil >>
+  drule_all for_nonslot_array_nil_separated >>
   disch_then (qspecl_then [`lctx`,`gas_explicit_sites ctx shadow_ctx`,`PG`] strip_assume_tac) >>
   rename1 `gas_origin_ptr_path _ _ _ (OK t,G1,tn1) /\ _` >>
   qexistsl [`t`,`G1`,`tn1`] >> gen_tac >> disch_tac >>
@@ -4333,23 +4061,23 @@ Resume for_nonslot_array_round_contracts_at[cons]:
   qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> z.vs_current_bb = _ /\ _`
     (qspec_then `storage_trace_horizon es.storage_trace` (drule_then strip_assume_tac)) >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
-    for_nonslot_selected_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
+    for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
       (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
       (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,a::rs,es,c,es,J,tz,z)` by
     (qx_gen_tac `H` >> disch_tac >>
      qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> z.vs_current_bb = _ /\ _`
        (qspec_then `H` (drule_then mp_tac)) >> simp[NoAsms, Abbr `Live`] >>
      strip_tac >> first_assum ACCEPT_TAC) >>
-  drule_all for_nonslot_selected_array_head >>
+  drule_all for_nonslot_array_head_full >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`]
     (qx_choosel_then [`v`,`eb`,`t`,`Gf`,`tnf`] strip_assume_tac)) >>
   suspend "cons_body"
 QED
 
 Resume for_nonslot_array_round_contracts_at[cons_body]:
-  qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> for_nonslot_selected_live _ _ _ _ _ _`
+  qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> for_nonslot_live _ _ _ _ _ _`
     (qspec_then `storage_trace_horizon es.storage_trace` (drule_then assume_tac)) >>
-  drule_then strip_assume_tac for_nonslot_selected_live_head_index >>
+  drule_then strip_assume_tac for_nonslot_live_head_index >>
   `a = Value v` by
     (`?w. a = Value w` by
        (qpat_assum `a = EL k vs` SUBST1_TAC >>
@@ -4367,7 +4095,7 @@ Resume for_nonslot_array_round_contracts_at[cons_body]:
   `eb.storage_trace = es.storage_trace` by
     (qpat_assum `eb = _` SUBST1_TAC >> simp[]) >>
   `lookup_scopes id es.scopes = NONE` by
-    (qhdtm_assum `for_nonslot_selected_live` (mp_tac o REWRITE_RULE [for_nonslot_selected_live_def]) >>
+    (qhdtm_assum `for_nonslot_live` (mp_tac o REWRITE_RULE [for_nonslot_live_def]) >>
      simp[NoAsms] >> disch_then (map_every assume_tac o CONJUNCTS) >>
      first_assum ACCEPT_TAC) >>
   suspend "cons_admissible"
@@ -4390,8 +4118,8 @@ Resume for_nonslot_array_round_contracts_at[cons_admissible]:
       (assume_tac o (fn eq => REWRITE_RULE [GSYM eq] th))) >>
   qpat_assum `!H. valid_horizon cx st0 H eb.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
     (qspec_then `storage_trace_horizon eb.storage_trace` (drule_then strip_assume_tac)) >>
-  qhdtm_assum `for_nonslot_selected_body_entry`
-    (map_every assume_tac o CONJUNCTS o SIMP_RULE (srw_ss()) [for_nonslot_selected_body_entry_def]) >>
+  qhdtm_assum `for_nonslot_body_entry`
+    (map_every assume_tac o CONJUNCTS o SIMP_RULE (srw_ss()) [for_nonslot_body_entry_def]) >>
   qhdtm_assum `for_nonslot_layout`
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_layout_def]) >>
   suspend "cons_static_body"
@@ -4465,7 +4193,7 @@ Resume for_nonslot_array_round_contracts_at[cons_body_geometry]:
 QED
 
 Resume for_nonslot_array_round_contracts_at[cons_scoped_body]:
-  qpat_assum `!H. _ ==> for_nonslot_selected_body_entry _ _ _ _ _ _ _`
+  qpat_assum `!H. _ ==> for_nonslot_body_entry _ _ _ _ _ _ _`
     (mp_then Any mp_tac for_nonslot_array_scoped_body_at) >>
   disch_then (drule_at (Pat `frame_ret_ok_full _ _ _ _ _`)) >>
   disch_then (fn th => qpat_assum `stmts_env bc _ ret_ty loop_body sbCopy = _`
@@ -4503,7 +4231,7 @@ Resume for_nonslot_array_round_contracts_at[cons_increment]:
   qabbrev_tac `Gq = DRESTRICT (DRESTRICT JG0 (COMPL {next_var})) (COMPL {idx})` >>
   qabbrev_tac `tq = JG1 with t_var := (JG1.t_var |+ (next_var,{})) |+ (idx,{})` >>
   qexistsl [`q`,`Gq`,`tq`] >> qx_gen_tac `H` >> disch_tac >>
-  qpat_assum `!H. valid_horizon cx st0 H ef.storage_trace ==> for_nonslot_selected_live _ _ _ _ _ _`
+  qpat_assum `!H. valid_horizon cx st0 H ef.storage_trace ==> for_nonslot_live _ _ _ _ _ _`
     (qspec_then `H` (drule_then assume_tac)) >>
   `~not_fresh_at saL idx /\ ~not_fresh_at saL next_var /\ xd <> idx /\ xd <> next_var` by
     (qpat_assum `EVERY _ [idx;done_var;next_var]` mp_tac >>
@@ -4514,8 +4242,8 @@ Resume for_nonslot_array_round_contracts_at[cons_increment]:
     (qpat_assum `lookup_block cond func.fn_blocks = _`
       (fn th => simp[NoAsms,th,get_instruction_def,mk_inst_def])) >>
   conj_asm1_tac >-
-    (qpat_assum `for_nonslot_selected_live _ _ _ _ _ (H,k,a::rs,ef,_,_,_,_,iz)`
-      (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_selected_live_def]) >>
+    (qpat_assum `for_nonslot_live _ _ _ _ _ (H,k,a::rs,ef,_,_,_,_,iz)`
+      (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_live_def]) >>
      `n2w (SUC k) = (n2w k + 1w):256 word` by
        simp[NoAsms,ADD1,wordsTheory.word_add_n2w] >>
      map_every qunabbrev_tac [`q`,`Gq`,`tq`] >>
@@ -4527,7 +4255,7 @@ Resume for_nonslot_array_round_contracts_at[cons_increment]:
      >> simp[op_prov_def]) >>
   conj_tac >- simp[NoAsms,Abbr `q`,jump_to_def] >>
   conj_tac >- simp[NoAsms,Abbr `q`,jump_to_def] >>
-  irule for_nonslot_selected_increment_live >>
+  irule for_nonslot_actual_increment_live >>
   (rpt conj_tac >>> SELECT_LT (first_assum ACCEPT_TAC)) >>
   qexistsl [`JG0`,`PG`,`a`,`cond`,`gas_explicit_sites ctx shadow_ctx`,`next_var`,`iz`,`JG1`] >>
   conj_tac >- (qexistsl [`bb'`,`inst'`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -4713,11 +4441,6 @@ Proof
      qpat_assum `?limit. stmt_loop_calls_ok _ _`
        (qx_choose_then `limit` assume_tac) >>
      simp[] >> qexistsl [`fty`,`limit`] >> simp[]) >>
-  drule_all_then (fn rw => rule_assum_tac (PURE_REWRITE_RULE [rw]) >> pure_rewrite_tac[rw])
-    for_nonslot_live_bare_iff >>
-  qpat_x_assum `!H. _ ==> for_nonslot_body_entry _ _ _ _ _ _ _`
-    (assume_tac o CONJUNCT1 o
-     SIMP_RULE bool_ss [for_nonslot_body_entry_selected_iff,IMP_CONJ_THM,FORALL_AND_THM]) >>
   mp_tac (SPEC_ALL for_nonslot_array_scoped_body_at) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then ACCEPT_TAC

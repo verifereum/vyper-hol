@@ -194,17 +194,23 @@ Proof
   first_x_assum drule >> Cases_on `v` >> simp[value_has_type_inv]
 QED
 
-Theorem captured_immutable_read[local]:
-  lookup_immutable cx st src name = SOME (tv,a) /\
-  evaluate_subscripts tv a path = INL v ==>
-  read_result cx (PlaceR (ImmutablePlace src name path)) st = (INL v,st)
+(* Reading an immutable place is reading its root and then the path. *)
+Theorem read_result_immutable_place:
+  read_result cx (PlaceR (ImmutablePlace src name path)) es = (INL v,es) <=>
+  ?tv root. lookup_immutable cx es src name = SOME (tv,root) /\
+            evaluate_subscripts tv root path = INL v
 Proof
-  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
-  simp[lookup_immutable_def, read_result_def, read_place_def, get_immutables_def,
-       get_address_immutables_def, bind_def, return_def, raise_def,
-       lift_option_type_def, lift_sum_def]
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >>
+  simp[read_result_def, read_place_def, get_immutables_def,
+       get_address_immutables_def, lookup_immutable_def,
+       bind_def, lift_option_type_def, lift_sum_def, return_def, raise_def] >>
+  rename1 `ALOOKUP es.immutables cx.txn.target = SOME imms` >>
+  Cases_on `FLOOKUP (get_source_immutables src imms) name` >>
+  simp[AllCaseEqs(), return_def, raise_def] >>
+  rename1 `FLOOKUP (get_source_immutables src imms) name = SOME tvroot` >>
+  PairCases_on `tvroot` >>
+  Cases_on `evaluate_subscripts tvroot0 tvroot1 path` >> simp[return_def,raise_def]
 QED
-
 (* A type-correct capture is either a copied array or a location in the
    declared root's region. In the immutable case the exposed prefix ends
    just before the first index (or at the array itself). *)
@@ -246,7 +252,8 @@ Proof
   drule_all supported_immutable_type_find_NONE >> strip_tac >> gvs[] >>
   drule_all nested_immutable_capture >> strip_tac
   >- gvs[read_result_def, return_def] >>
-  drule_all captured_immutable_read >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] (iffRL read_result_immutable_place)) >>
+  strip_tac >>
   qpat_x_assum `r = PlaceR _` SUBST_ALL_TAC >>
   qpat_x_assum `!v. read_result _ _ _ = _ ==> _` drule >> strip_tac >>
   `?pav. evaluate_subscripts tv a (MAP AttrSubscript attrs) = INL (ArrayV pav)` by
