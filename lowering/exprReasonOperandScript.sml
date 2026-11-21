@@ -561,9 +561,11 @@ Proof
   >~ [`LocatedValue _ (base_ptr _)`] >-
     (gvs[reason_result_shape_def, base_ptr_def] >>
      metis_tac[reason_alloc_operand]) >>
-  qpat_x_assum `as_ptr_val _ _ _ = _` mp_tac >>
-  qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory res` >>
-  Cases_on `res` >> gvs[as_ptr_val_def, markerTheory.Abbrev_def] >>
+  FIRST [qpat_x_assum `as_ptr_val _ _ _ = _` mp_tac,
+         qpat_x_assum `as_stack_val _ _ = _` mp_tac] >>
+  FIRST [qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory res`,
+         qmatch_goalsub_abbrev_tac `as_stack_val vt res`] >>
+  Cases_on `res` >> gvs[as_ptr_val_def, as_stack_val_def, markerTheory.Abbrev_def] >>
   strip_tac >> gvs[reason_result_shape_def, mk_ptr_def] >>
   metis_tac[reason_slice_adhoc, reason_slice_out_buf, reason_slice_data,
             reason_ec_points, reason_uint2str]
