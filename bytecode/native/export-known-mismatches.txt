@@ -6,7 +6,6 @@
 # A reason is an issue (#543), or several joined by +:
 #   decode-guards  the HOL ABI decoder's bounded-decode guards
 #                  (bytecode/pending-bounded-decode-guards.md)
-#   5127-P4        the unported direct ABI encoder (bytecode/pending-5127-port.md)
 #   5127-P8        raw_create snapshotting its initcode in a fixed Bytes[49152]
 #                  buffer where the pin sizes it by the argument
 #   map-key-copy   the pin copies a bytestring map key before hashing it; the
