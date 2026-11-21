@@ -1360,14 +1360,18 @@ Proof
      (qe with vs_inst_idx := q.vs_inst_idx + LENGTH pS) Gf tf` by
     (qpat_assum `!k. inst_seq_ptr _ _ _ _ _ Ge te inc _ Gf tf`
        (qspec_then `q.vs_inst_idx + LENGTH pS` ACCEPT_TAC)) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pS` by
+    (Cases_on `imm` >>
+     simp[NoAsms, Abbr `pS`, Abbr `p5`, Abbr `p4`, Abbr `p3`, Abbr `m1`, Abbr `ld`,
+          Abbr `m2`, Abbr `ad`, Abbr `stores`, mk_inst_def, is_terminator_def]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) inc` by
+    simp[NoAsms, Abbr `inc`, mk_inst_def, is_terminator_def] >>
   `run_inst_seq (pS ++ inc) q = OK (qf with vs_inst_idx := 0) /\
    inst_seq_ptr D lo ctx func PG G tn (pS ++ inc) q Gf tf` by
     (qpat_assum `!xs ys u v H tm K tk. _ ==> _` (qspecl_then [`pS`,`inc`,`qe`,`qf`] mp_tac) >>
      disch_then (drule_at (Pat `inst_seq_ptr _ _ _ _ _ G tn pS _ _ _`) o SPEC_ALL) >>
      disch_then (drule_at (Pat `inst_seq_ptr _ _ _ _ _ Ge te inc _ _ _`) o SPEC_ALL) >>
-     simp[] >> Cases_on `imm` >>
-     simp[Abbr `pS`, Abbr `p5`, Abbr `p4`, Abbr `p3`, Abbr `m1`, Abbr `ld`, Abbr `m2`,
-          Abbr `ad`, Abbr `stores`, Abbr `inc`, mk_inst_def, is_terminator_def]) >>
+     simp[]) >>
   qabbrev_tac `pI = pS ++ inc` >>
   `((qf with vs_inst_idx := 0) with vs_inst_idx := q.vs_inst_idx + LENGTH pI) = qf1` by
     (Cases_on `imm` >>
@@ -1375,10 +1379,7 @@ Proof
           Abbr `m2`, Abbr `ad`, Abbr `stores`, Abbr `inc`, Abbr `ci`, Abbr `qf1`]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pI /\
    EVERY (\i. ~is_terminator i.inst_opcode) setc` by
-    (Cases_on `imm` >>
-     simp[Abbr `pI`, Abbr `pS`, Abbr `p5`, Abbr `p4`, Abbr `p3`, Abbr `m1`, Abbr `ld`,
-          Abbr `m2`, Abbr `ad`, Abbr `stores`, Abbr `inc`, Abbr `setc`, mk_inst_def,
-          is_terminator_def]) >>
+    simp[Abbr `pI`, EVERY_APPEND, Abbr `inc`, Abbr `setc`, mk_inst_def, is_terminator_def] >>
   `run_inst_seq (pI ++ setc) q = OK (qg with vs_inst_idx := 0) /\
    inst_seq_ptr D lo ctx func PG G tn (pI ++ setc) q Gg tg` by
     (conj_tac
