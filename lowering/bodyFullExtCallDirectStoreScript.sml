@@ -19,7 +19,7 @@ Theorem abi_encode_saved_store_static:
   local_ptrs_reserved ce se /\ fn_inst_ids_distinct func /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
-  ~ctx_has_dalloca ctx /\ shared <> loc /\
+  shared <> loc /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = shared /\
   inst.inst_outputs = [root] /\ not_local_ptr ce ee.scopes root /\
   abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) cursor loc slot i a u Gu tu /\
@@ -98,6 +98,7 @@ Proof
     `d` |-> `pbase+dst_offset+h`,`sb` |-> `w2n (w:bytes32)`,`bs` |-> `enc at av`]
     abi_encode_values_static_store) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    TRY (asm_rewrite_tac[IMP_CONJ_THM] >> NO_TAC) >>
     qpat_assum `at = vyper_to_abi_type (get_tenv cx) ty` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
     qpat_assum `LENGTH (enc at av) = hs` (fn th => PURE_REWRITE_TAC [th]) >>
     asm_rewrite_tac[]) >>
@@ -176,7 +177,7 @@ Theorem abi_encode_saved_store_dynamic:
   local_ptrs_reserved ce se /\ fn_inst_ids_distinct func /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
-  ~ctx_has_dalloca ctx /\ shared <> loc /\
+  shared <> loc /\
   MEM cursor_inst (fn_insts func) /\ cursor_inst.inst_opcode = ALLOCA /\
   cursor_inst.inst_id = loc /\ cursor_inst.inst_outputs = [cursor_var] /\
   not_local_ptr ce ee.scopes cursor_var /\ se.cs_next_id <= loc /\
@@ -256,6 +257,7 @@ Proof
     `cap` |-> `val_footprint tv v`,`bs` |-> `enc at av`]
     abi_encode_values_dynamic_prefix) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    TRY (asm_rewrite_tac[IMP_CONJ_THM] >> NO_TAC) >>
     TRY (simp_tac (srw_ss()) [ptr_covers_def]) >> TRY decide_tac >> metis_tac[]) >>
   disch_then (qx_choosel_then [`z`,`Gz`,`tz`] strip_assume_tac) >>
   qabbrev_tac `sites = loc INSERT window_alloca_sites func (frag_ids a mid)` >>

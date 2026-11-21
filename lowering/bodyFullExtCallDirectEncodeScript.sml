@@ -16,7 +16,6 @@ Theorem abi_encode_saved_values_execute:
   local_ptrs_reserved ce se /\ fn_inst_ids_distinct func /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
-  ~ctx_has_dalloca ctx /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = shared /\
   inst.inst_outputs = [root] /\ not_local_ptr ce ee.scopes root /\
   compile_abi_encode_values_to_buf ce (Var payload_var) rows st = (alen,en) /\ fn_has_code st en func /\

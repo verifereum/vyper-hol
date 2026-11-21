@@ -41,7 +41,7 @@ Theorem abi_encode_saved_row:
   (!H. dead_lo_ok H (DF H) lo ce cx) /\
   body_inv tops ctx ce cx /\ expr_sim_inv ce cx env ee /\
   storage_trace_domain cx st0 ee.storage_trace /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\
   fn_has_code su en func /\
   compile_abi_encode_value_rows ce (Var dst) cursor h [(saved,ty)] su = ((),en) /\
   abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn

@@ -13,7 +13,7 @@ Ancestors exprSimAggregateNestedStore[qualified,ignore_grammar]
   bodyFullPreds bodySimFull bodyFullShared gasShadow bodySim exprSimHypsDefs supportedStmts arithmetic
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
   bodyExprPreFacts allocLimits allocLimitsProps exprSimSource vyperTypeCallGraph
-  bodyFullLogScalarTopics bodyFullLogSuffix supportedStmtTraverse
+  bodyFullLogScalarTopics bodyFullLogSuffix bodyFullHashKeccakFixed supportedStmtTraverse
   bodySimLogArgs stmtSimLogTrace exprSimHyps whitelistLogWiden
   supportedExprs supportedExprTraverse
   vyperTypeCallStackSoundness vyperTypeExprSoundness vyperTypeInvariants
@@ -444,7 +444,7 @@ QED
 
 Theorem log_data_buffer[local]:
   compile_alloc_buffer n a = (buf,b) /\ n < dimword (:256) /\ fn_has_code a b func /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv a /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv a /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
   alloca_history func s /\ ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
@@ -474,7 +474,9 @@ Proof
   qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
     (qspec_then `hz` (drule_then strip_assume_tac)) >>
   `allocas_from lo s /\ lo <= s.vs_alloca_next` by fs[ghost_inv_at_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel hz ctx func cenv cx es s`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   drule_all (INST_TYPE [``:'b`` |-> ``:256``] (SPEC_ALL alloc_buffer_origin_ptr_path_exact)) >>
   disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`]
     (qx_choosel_then [`p`,`w`,`u`,`Gu`,`tu`] strip_assume_tac)) >>
@@ -646,7 +648,7 @@ Theorem log_full_emit_outcome[local]:
   (!i. w2n off <= i /\ i < w2n off + w2n len ==> i NOTIN tu.t_mem) /\
   (w2n len = 0 \/ w2n off + w2n len <= u.vs_alloca_next) /\
   fn_has_code send sb func /\ fn_inst_ids_distinct func /\
-  ~ctx_has_dalloca ctx /\ ~u.vs_halted /\ ~t.vs_halted /\
+  ~u.vs_halted /\ ~t.vs_halted /\
   u.vs_current_bb = send.cs_current_bb /\ u.vs_inst_idx = LENGTH send.cs_current_insts /\
   (?H. valid_horizon cx st0 H mid.storage_trace) /\
   (!H. valid_horizon cx st0 H mid.storage_trace ==>
@@ -695,6 +697,9 @@ Proof
        (mp_tac o MATCH_MP state_rel_call_ctx_rel o MATCH_MP stmt_state_rel_state_rel) >>
      simp[call_ctx_rel_def]) >>
   `allocas_from lo u /\ lo <= u.vs_alloca_next` by metis_tac[ghost_inv_at_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `stmt_state_rel hz ctx func ce cx mid u`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   Cases_on `cx.txn.is_static`
   >- (`!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) []
           (Abort ExHalt_abort (halt_state (set_returndata [] u)),Gu,tu)` by
@@ -758,6 +763,9 @@ Proof
     (simp[Abbr `done_es`, Abbr `fin`, stmt_state_rel_inst_idx, stmt_state_rel_gas_obs] >>
      irule (horizonTypeLib.at_horizon_named "H" log_append_stmt_state_rel) >>
      first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp fin` by
+    (qpat_assum `stmt_state_rel H ctx func ce cx (done_es with gas_obs := []) fin`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   `storage_well_formed_on cx (done_es with gas_obs := []) (FST H)` by
     (`storage_well_formed_on cx (done_es with gas_obs := []) (FST H) <=>
       storage_well_formed_on cx mid (FST H)` by
@@ -935,7 +943,6 @@ Theorem compile_log_frag_full:
       (eval_stmt cx (Log id args)) es
 Proof
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `supported_log tops id args` by
     (qpat_assum `supported_stmt tops bindings (Log id args)` mp_tac >>
      simp_tac bool_ss [supported_stmt_def]) >>
@@ -952,12 +959,12 @@ Proof
   `!name ty. FLOOKUP env.var_types name = SOME ty ==>
      ?p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz)` by
     fs[expr_sim_inv_def] >>
-  `supported_stmt tops [] (Log id args)` by simp[supported_stmt_def] >>
-  `body_stmt_safe tops (Log id args)` by metis_tac[supported_stmt_body_safe] >>
-  `EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) args` by
-    (fs[body_stmt_safe_log_args, EVERY_CONJ] >>
-     rw[EVERY_MEM] >> irule alloc_limits_expr_not_extcode >>
+  `EVERY (\e. ~is_extcode e) args` by
+    (rw[EVERY_MEM] >> irule alloc_limits_expr_not_extcode >>
      metis_tac[exprSimSourceTheory.alloc_limits_exprs_mem]) >>
+  `~supported_exprs_exists (const_name_root cx) args` by
+    (fs[supported_pure_exprs_every, supported_exprs_exists_every, EVERY_MEM, EXISTS_MEM] >>
+     metis_tac[body_inv_const_name_free, supportedExprsTheory.supported_expr_def]) >>
   `~supported_exprs_exists
       (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
    call_evaluation_safe cx (int_calls_exprs args) /\
@@ -1032,7 +1039,8 @@ Proof
           conj_tac >- simp[] >> simp[Abbr `captureR`] >>
           rpt strip_tac >> Cases_on `res` >- fs[expr_exit_def] >>
           simp[stmt_exit_ptr_def] >>
-          gvs[stmtSimPropsTheory.expr_exit_INR_type, halt_exit_def]) >>
+          gvs[stmtSimPropsTheory.expr_exit_INR_type, halt_exit_def] >>
+          rpt strip_tac >> gvs[] >> fs[expr_exit_def]) >>
       suspend "selected_capture") >>
   irule gas_outcome_full_bad_intro >>
   qexistsl_tac [`storage_trace_horizon es.storage_trace`, `func`, `G0`,
@@ -1380,9 +1388,8 @@ Resume compile_log_frag_full[empty_data]:
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[] >>
      qexists_tac `storage_trace_horizon mid.storage_trace` >> first_assum ACCEPT_TAC) >>
   disch_then (fn outcome =>
-    qpat_assum `~ctx_has_dalloca ctx` (fn no_dalloca =>
-      simp_tac bool_ss [ADD_COMM] >>
-      ACCEPT_TAC (SIMP_RULE bool_ss [no_dalloca, ADD_COMM] outcome)))
+    simp_tac bool_ss [ADD_COMM] >>
+    ACCEPT_TAC (SIMP_RULE bool_ss [ADD_COMM] outcome))
 QED
 
 Resume compile_log_frag_full[direct_data]:
@@ -1661,9 +1668,8 @@ Resume compile_log_frag_full[direct_rows]:
      qpat_assum `!j. w2n w + 0 <= j /\ _ ==> _`
        (ACCEPT_TAC o PURE_REWRITE_RULE [ADD_0])) >>
   disch_then (fn outcome =>
-    qpat_assum `~ctx_has_dalloca ctx` (fn no_dalloca =>
-      simp_tac bool_ss [ADD_COMM] >>
-      ACCEPT_TAC (SIMP_RULE bool_ss [no_dalloca, ADD_COMM] outcome)))
+    simp_tac bool_ss [ADD_COMM] >>
+    ACCEPT_TAC (SIMP_RULE bool_ss [ADD_COMM] outcome))
 QED
 Finalise compile_log_frag_full
 

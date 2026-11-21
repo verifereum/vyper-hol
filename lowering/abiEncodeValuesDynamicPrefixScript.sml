@@ -32,7 +32,8 @@ Theorem abi_encode_values_dynamic_prefix:
   ptr_covers G tn head s 32 /\ ptr_covers G tn dest s (LENGTH bs) /\
   fn_has_code st mid func /\ fn_has_code mid en func /\ fn_inst_ids_distinct func /\
   alloca_inv s /\ alloca_room ctx func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
   (0 < cap ==> sb + cap <= s.vs_alloca_next /\
     venomMemDefs$regions_disjoint (sb,cap) (d+off,LENGTH bs) /\
     ?p. src = Var p /\ ptr_covers G tn p s cap) /\

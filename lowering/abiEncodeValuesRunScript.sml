@@ -36,7 +36,7 @@ End
    materialization rule for a singleton at the original argument index. *)
 Theorem abi_encode_values_execute:
   compile_abi_encode_values_to_buf ce dst rows st = (out,en) /\
-  fn_has_code st en func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st en func /\ fn_inst_ids_distinct func /\
   LIST_REL (\row at. abi_embedded_static_size ce.ce_struct_fields (SND row) =
     abi_member_head_size at) rows ats /\ LIST_REL abi_encoder_layout_valid ats avs /\
   hl = head_lengths ats 0 /\ bytes = enc (Tuple ats) (ListV avs) /\
@@ -45,7 +45,10 @@ Theorem abi_encode_values_execute:
   (!a u Gu tu. P a u Gu tu ==>
     alloca_inv u /\ alloca_room ctx func u /\ allocas_from lo u /\ lo <= u.vs_alloca_next /\
     ~u.vs_halted /\ u.vs_current_bb = a.cs_current_bb /\
-    u.vs_inst_idx = LENGTH a.cs_current_insts) /\
+    u.vs_inst_idx = LENGTH a.cs_current_insts /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+    (ctx_has_dalloca ctx ==>
+      u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp)) /\
   (!p n. FLOOKUP s.vs_allocas st.cs_next_id = SOME (p,n) ==> n = 32) /\
   (!a c ids u Gu tu v Gv tv.
     P a u Gu tu /\ ci_mono a c /\ window_phase ctx func a c ids [] u v /\
@@ -105,7 +108,7 @@ Proof
           impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
             >- (qpat_assum `abi_static_size _ _ = hl` (fn th =>
                   qpat_assum `emit_void MSTORE _ a = _` (ACCEPT_TAC o REWRITE_RULE [th])))
-            >> asm_rewrite_tac[]) >>
+            >> asm_rewrite_tac[IMP_CONJ_THM]) >>
           disch_then (qx_choosel_then [`v`,`slot`,`p`,`Gv`,`tv`] strip_assume_tac) >>
           `P b' v Gv tv` by
             (qpat_assum `!a c ids u Gu tu v Gv tv. P a u Gu tu /\ _ ==> P c v Gv tv`

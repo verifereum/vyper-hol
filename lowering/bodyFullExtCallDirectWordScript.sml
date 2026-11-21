@@ -45,7 +45,7 @@ Theorem abi_encode_saved_word_row:
   local_ptrs_reserved ce se /\ fn_inst_ids_distinct func /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
-  ~ctx_has_dalloca ctx /\ shared <> loc /\
+  shared <> loc /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = shared /\
   inst.inst_outputs = [root] /\ not_local_ptr ce ee.scopes root /\
   compile_abi_encode_value_rows ce (Var dst) cursor h [(StackValue tag src,ty)] a = ((),c) /\
