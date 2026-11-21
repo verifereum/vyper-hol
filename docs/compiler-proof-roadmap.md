@@ -56,8 +56,8 @@ Their exact premises are in the linked owners and
 
 | Stage | Actual export / owner | Contract | Owner milestone |
 |---|---|---|---|
-| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/loweringRuntimeCorrectScript.sml)) | Raw lowering + `supported_program` + `source_typing_ok` + `source_deployment_rel` + `valid_vyper_call` + `initial_venom_state_rel` + `outcomes_accounts_typed` + `DALLOCA` budget and no-wrap guards -> `source_unit_execution_correct` (a raw exit related to the source result, or a focus witness when storage is invalid for every gas tail or the source run is exempt) | 6 |
-| S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` ([source](../lowering/vyperLoweringCorrectScript.sml)) | Lowering + `check_contract` + `raw_shape_free_program` -> `o1_source_unit_ok` | 5 |
+| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/loweringRuntimeCorrectScript.sml)) | Raw lowering + `supported_program` + `source_typing_ok` + `source_deployment_rel` + `valid_vyper_call` + `initial_venom_state_rel` + `outcomes_accounts_typed` + `DALLOCA` budget and no-wrap guards -> `source_unit_execution_correct`: for some gas marks, a raw exit related to the source result at every valid storage horizon, or a focus witness when storage is invalid for every gas tail appended to the marks or the source run is the same for every tail and exempt | 6 |
+| S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` ([source](../lowering/vyperLoweringCorrectScript.sml)) | Lowering + `check_contract F` + `raw_shape_free_program` -> `o1_source_unit_ok` | 5 |
 | S3 | `loweringMemCorrect.lower_vyper_runtime_unit_memory_ok` ([source](../lowering/loweringMemCorrectScript.sml)) | Lowering + initial state + no `DALLOCA` + entry FMP floor + `__entry` lookup and entry label + memory-safe and pointer-safe entry runs at every fuel -> `raw_unit_memory_ok`, no function `fn_eom`, `fixed_region_reserved 0`, pointer discipline and taint bounds | 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` ([source](../venom/compiler/o1PipelineCorrectScript.sml)) | Actual O1 success + raw shape (`o1_source_unit_ok`, `unit_entry_no_params`, `unit_defs_reach_uses`, `unit_fmp_unsealed`) + `o1_run_state_ok` + reserved-region/EOM/FMP facts + `dead_wf D` -> an input state at which raw memory, pointer, taint and DLOAD bounds give forward simulation `ctx_sim D` and the output's `o1_lowered_inv` | 3 |
 | S5 | `o1PipelineCorrect.o1_pipeline_memory_obligations` (same owner) | Generated plan for the O1 output + `o1_lowered_inv` of the output + matching initial FMP -> **one existential `Inv`** with output memory obligations/reachability | 5 |
@@ -74,7 +74,9 @@ the abort prefix (`codegen_memory_obligations_abort`). The S5 export itself is u
 gas-sufficiency proofs. S2/S6 produce
 shape. The call tops take the raw shape S4/S6 need from successful runtime
 lowering and `check_contract F` (`lower_vyper_runtime_unit_checked_source_shape`):
-`raw_shape_free_program` units use S2, and the rest (`raw_call` on `msg.data`,
+`raw_shape_free_program` units use S2's helper
+`lower_vyper_runtime_unit_source_unit_ok_checked` (the S2 export is its
+corollary) with `lower_vyper_runtime_unit_o1_shape_extras`, and the rest (`raw_call` on `msg.data`,
 `create_copy_of`, `create_from_blueprint`) rest on three admitted shape lemmas.
 The deploy tops use `checked_lower_vyper_deploy_unit_source_shape`, with three
 matching admitted deploy cases. On the ordinary path L5 consumes that memory fact; layout or empty
@@ -257,7 +259,8 @@ The identity case composes the stage bounds S1b
 (`deploy_unit_fns_fuel_stable` with `run_context_uniform_fuel`),
 `run_venom_pipeline_run_bounded_raw` and the proved S7g-d
 `deploy_frame_gas_sufficient`. It assumes the runtime bytes don't start with
-`0xEF`, which `compile_vyper_runtime_not_ef` derives from compile success. Under `deploy_storage_ok` for every
+`0xEF`, which `compile_vyper_runtime_not_ef` derives from compile success with
+an accepted finalizer. Under `deploy_storage_ok` for every
 gas filling, no exempt source observation and fewer than 2⁶⁴ trace entries on
 the raised-gas run, its OutOfGas conclusion allows oversized deposited code or
 a reached `RETURNDATACOPY`;
