@@ -2,7 +2,7 @@ Theory runtimeSymSrcStatements
 Ancestors
   runtimeSymSrcStatementAssignFamily
   runtimeSymSrcStatementAssignClosed runtimeSymSrcStatementExitClosed
-  runtimeSymSrcStatementLogs
+  runtimeSymSrcStatementLogs runtimeSymSrcExternalArgStaging runtimeSymSrcExternalPrimitive
   runtimeSymSrcStatementReasons runtimeSymSrcGeneratorContracts
   runtimeSymSrcStatementControl runtimeSymSrcStatementRange
   runtimeSymSrcStatementControlComplete runtimeSymSrcContextComplete
@@ -47,39 +47,6 @@ Proof
   irule runtime_sym_stmts_cons >> simp[] >> metis_tac[]
 QED
 
-Theorem runtime_sym_custom_error_store_args[local]:
-  !args tys ce dst off s u s'.
-    (!e t. MEM e args ==> runtime_sym_expr_contract tops compile_expr ce t e) /\
-    runtime_sym_env tops ce /\ EVERY (supported_pure_expr tops) args /\
-    ~supported_exprs_exists is_self_code args /\ ~is_label_operand dst /\
-    EVERY runtime_sym_inst (state_insts s) /\
-    compile_custom_error_store_args ce args tys dst off s = (u,s') ==>
-    EVERY runtime_sym_inst (state_insts s')
-Proof
-  Induct >> Cases_on `tys` >>
-  simp[compile_custom_error_store_args_def, comp_return_def,
-    comp_bind_def, comp_ignore_bind_def] >>
-  rpt gen_tac >> rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-  rename1 `compile_expr ce (expr_type arg) arg s = _` >>
-  `supported_expr tops arg /\ ~supported_expr_exists is_self_code arg` by
-    gvs[supported_expr_def, supported_exprs_exists_every] >>
-  `runtime_sym_expr_contract tops compile_expr ce (expr_type arg) arg` by
-    (qpat_assum `!e t. _ ==> runtime_sym_expr_contract _ _ _ _ _` irule >> simp[]) >>
-  qpat_x_assum `runtime_sym_expr_contract tops compile_expr ce _ _`
-    (mp_tac o Q.SPEC `s` o REWRITE_RULE [runtime_sym_expr_contract_def]) >>
-  simp[] >> strip_tac >>
-  qpat_x_assum `(if off = 0 then _ else _) _ = _` mp_tac >>
-  Cases_on `off = 0` >> simp[comp_return_def] >> strip_tac >> gvs[] >>
-  TRY (qpat_assum `emit_op ADD _ _ = _`
-         (mp_then Any mp_tac runtime_sym_emit_op) >>
-       simp[is_label_operand_def] >> strip_tac) >>
-  drule_all runtime_sym_unwrap_value >> strip_tac >>
-  drule_all runtime_sym_store_memory >> strip_tac >>
-  qpat_assum `!tys ce dst off s s'. _ ==> _`
-    (drule_at (Pat `compile_custom_error_store_args _ _ _ _ _ _ = _`)) >>
-  fs[supported_exprs_exists_every] >> metis_tac[]
-QED
-
 Theorem runtime_sym_custom_error[local]:
   (!b v info s op s'. ~is_label_operand b /\ ~is_label_operand v /\
     EVERY runtime_sym_inst (state_insts s) /\
@@ -99,9 +66,7 @@ Proof
        comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[]
   >- metis_tac[runtime_sym_call_invalid] >>
-  drule_all runtime_sym_alloc_buffer >> strip_tac >>
-  qpat_assum `compile_custom_error_store_args _ _ _ _ _ _ = _`
-    (mp_then Any mp_tac runtime_sym_custom_error_store_args) >>
+  drule_at (Pat `compile_ext_call_args _ _ _ _ _ _ = _`) runtime_sym_ext_call_args >>
   disch_then (qspec_then `tops` mp_tac) >> simp[] >> strip_tac >>
   drule_all runtime_sym_alloc_buffer >> strip_tac >>
   qpat_assum `emit_void MSTORE _ _ = _` (mp_then Any mp_tac runtime_sym_emit_void) >>
@@ -113,8 +78,9 @@ Proof
          (mp_then Any mp_tac runtime_sym_emit_op) >>
        simp[is_label_operand_def] >> strip_tac >>
        qpat_assum `!b v info s op s'. _ ==> _`
-         (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)) >>
-       simp[] >> strip_tac) >>
+         (mp_tac o MATCH_MP runtime_sym_abi_encode_values_to_buf) >>
+       disch_then (drule_at (Pat `compile_abi_encode_values_to_buf _ _ _ _ = _`)) >>
+       simp[runtime_sym_zip_fst] >> strip_tac) >>
   qpat_assum `emit_op ADD [_;Lit 28w] _ = _`
     (mp_then Any mp_tac runtime_sym_emit_op) >>
   simp[is_label_operand_def] >> strip_tac >>
