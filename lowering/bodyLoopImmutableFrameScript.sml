@@ -126,20 +126,27 @@ Proof
   gvs[callee_write_ok_def, place_contains_def, place_access_def]
 QED
 
-(* Only the captured array cell must survive, including on error exits. *)
-val array_cell =
-  ``\cx st. lookup_immutable cx st src name = SOME (ArrayTV elem bound,ArrayV av)``;
+(* A relation on observations of the immutable store, not a frame on
+   the whole store. It need only preserve the observation when it holds. *)
+val array_cell = ``\(st:evaluation_state). obs st.immutables : bool``;
 val array_relation = rhs (concl (DEPTH_CONV BETA_CONV
-  ``\s t. ^array_cell cx s ==> ^array_cell cx t``));
+  ``\s t. ^array_cell s ==> ^array_cell t``));
 val array_frame_result = BETA_RULE
   (ISPEC array_relation (Q.GEN `R` state_rel_frame_result));
+val array_guard = ``callee_write_ok p``;
+val array_mutations = ``\(addr:address). !cx target s pl t.
+    cx.txn.target = addr /\ ^array_guard target /\
+    eval_target_place cx target s = (INL pl,t) /\
+    ^array_cell s /\ ^array_cell t ==>
+    (!v. state_rel_frame ^array_relation (write_place cx pl v)) /\
+    (!v. state_rel_frame ^array_relation (append_place cx pl v)) /\
+    state_rel_frame ^array_relation (pop_place cx pl)``;
 
 Theorem guarded_array_target_bind[local]:
   state_rel_frame ^array_relation (eval_target_place cx target) /\
-  callee_write_ok (TopLevelNameTarget (src,name)) target /\
-  (!s p t. eval_target_place cx target s = (INL p,t) ==>
-        (!path. p <> ImmutablePlace src name path) ==>
-        state_rel_frame ^array_relation (next p)) ==>
+  (!s pl t. eval_target_place cx target s = (INL pl,t) /\
+            ^array_cell s /\ ^array_cell t ==>
+            state_rel_frame ^array_relation (next pl)) ==>
   state_rel_frame ^array_relation (bind (eval_target_place cx target) next)
 Proof
   simp[array_frame_result, bind_def] >> rpt strip_tac >>
@@ -148,26 +155,9 @@ Proof
   Cases_on `answer` >> gvs[] >>
   qpat_assum `!st res st'. eval_target_place cx target st = _ ==> _`
     (drule_then drule) >> strip_tac
-  >- (rename1 `eval_target_place cx target st = (INL pl,mid)` >>
-      `!path. pl <> ImmutablePlace src name path` by
-        metis_tac[immutable_array_guarded_target] >>
-      qpat_x_assum `!s p t. eval_target_place _ _ _ = _ ==> _`
-        (drule_then (drule_then drule)) >> simp[]) >>
+  >- (qpat_x_assum `!s pl t. eval_target_place _ _ _ = _ /\ _ ==> _`
+        drule >> simp[] >> disch_then (drule_all_then ACCEPT_TAC)) >>
   first_assum ACCEPT_TAC
-QED
-
-Theorem array_mutation_frames[local]:
-  (!path. pl <> ImmutablePlace src name path) ==>
-  state_rel_frame ^array_relation (write_place cx pl value) /\
-  state_rel_frame ^array_relation (append_place cx pl value) /\
-  state_rel_frame ^array_relation (pop_place cx pl)
-Proof
-  strip_tac >> simp[array_frame_result] >>
-  `!src' name' path. pl = ImmutablePlace src' name' path ==>
-     (src',name') <> (src,name)` by metis_tac[pairTheory.PAIR_EQ] >>
-  rpt conj_tac >> rpt strip_tac >> metis_tac[
-    lookup_immutable_write_other, append_guarded_immutable_frame,
-    pop_place_immutable_other]
 QED
 
 val array_net =
@@ -182,7 +172,7 @@ val array_net =
       machine_frame_array_iterator_results]
     fun leaf th = (subst [``machine_frame`` |-> array_relation] (concl th),
       irule state_rel_frame_machine >> conj_tac
-      >- simp[machine_frame_def, lookup_immutable_def] >> MATCH_ACCEPT_TAC th)
+      >- simp[machine_frame_def] >> MATCH_ACCEPT_TAC th)
   in evalWalkLib.walk_net
     (map SPEC_ALL [state_rel_frame_bind_guarded, state_rel_frame_try,
       state_rel_frame_finally, state_rel_frame_finally_unless_halt])
@@ -207,27 +197,24 @@ val array_syntax = [int_calls_expr_def, int_calls_stmt_def, int_calls_iterator_d
 val ARRAY_TRANSITIVITY =
   qmatch_goalsub_abbrev_tac `!s t u. P s t /\ P t u ==> P s u` >>
   simp[Abbr `P`];
-val ARRAY_ATOMIC =
-  FIRST (map (fn n => irule (cj n array_mutation_frames) >>
-    first_assum MATCH_ACCEPT_TAC) [1,2,3]);
-val ARRAY_STEP =
-  FIRST [
-    MATCH_MP_TAC guarded_array_target_bind >>
-      conj_tac >- (first_assum MATCH_ACCEPT_TAC ORELSE array_induction_hypothesis) >>
-      conj_tac >- first_assum MATCH_ACCEPT_TAC >> rpt strip_tac,
-    evalWalkLib.STEP
-      {net = array_net, at = RAND_CONV,
-       unfolds = [switch_BoolV_def, ignore_bind_def, check_not_static_def,
-         vyperCreateTheory.eval_create_operands_def],
-       intros = [ARRAY_TRANSITIVITY, CONV_TAC (HO_REWR_CONV FORALL_PROD),
-         gen_tac, strip_tac, conj_tac, CONV_TAC (RAND_CONV ETA_CONV)],
-       fallbacks = [array_induction_hypothesis,
-         evalWalkLib.NORMALISE_IH_TAC array_induction_hypothesis,
-         ARRAY_ATOMIC]}];
+val ARRAY_TARGET =
+  conj_tac >- array_induction_hypothesis >>
+  BETA_TAC >> rpt strip_tac >>
+  qpat_assum `!cx target s pl t. _ /\ _ /\ eval_target_place cx target s = _ /\ _ ==> _`
+    (drule_at_then (Pat `eval_target_place _ _ _ = _`) mp_tac) >>
+  simp[] >> strip_tac;
+val ARRAY_STEP = IF (MATCH_MP_TAC guarded_array_target_bind) ARRAY_TARGET
+  (evalWalkLib.STEP
+    {net = array_net, at = RAND_CONV,
+     unfolds = [switch_BoolV_def, ignore_bind_def, check_not_static_def,
+       vyperCreateTheory.eval_create_operands_def],
+     intros = [ARRAY_TRANSITIVITY, CONV_TAC (HO_REWR_CONV FORALL_PROD),
+       gen_tac, strip_tac, conj_tac, CONV_TAC (RAND_CONV ETA_CONV)],
+     fallbacks = [array_induction_hypothesis,
+       evalWalkLib.NORMALISE_IH_TAC array_induction_hypothesis]});
 val ARRAY_CASE = evalWalkLib.EVAL_CASE all_tac ARRAY_STEP;
-val array_guard = ``callee_write_ok (TopLevelNameTarget (src,name))``;
 val ARRAY_ATOMIC_FRAME = simp_tac (srw_ss()) [array_frame_result,
-  lookup_immutable_def, return_def, raise_def, push_log_def, update_accounts_def,
+  return_def, raise_def, push_log_def, update_accounts_def,
   update_pending_deletions_def] >> rpt strip_tac >> gvs[] >>
   metis_tac[eval_ext_call_preserves_non_accounts, eval_raw_call_preserves_non_accounts,
     eval_send_preserves_non_accounts, eval_create_preserves_scopes_immutables,
@@ -252,13 +239,36 @@ fun ARRAY_EXPR_CHUNK (g as (_,w)) =
            (fs[body_exprs_main_calls_every] >> conj_tac >>
             rpt (FIRST [irule EVERY_TAKE, irule EVERY_DROP]) >> first_assum ACCEPT_TAC) >>
          array_induction_hypothesis) g
-      else NO_TAC g
-  | _ => NO_TAC g;
+      else ARRAY_ATOMIC_FRAME g
+  | _ => ARRAY_ATOMIC_FRAME g;
 
-val array_code = ``\cx. get_module_code cx = ALOOKUP mods /\ cx.in_deploy = deploy``;
+val array_code = ``\cx. get_module_code cx = ALOOKUP mods /\
+                        cx.in_deploy = deploy /\ cx.txn.target = addr``;
 val array_iterator_writes = ``\it. case it of
     Array e => expr_writes_ok ^array_guard e
   | Range lo hi => expr_writes_ok ^array_guard lo /\ expr_writes_ok ^array_guard hi``;
+
+Theorem reached_callable_guards[local]:
+  (!sid func ts mut nr args dflts ret bod.
+    reached (sid,func) /\ ALOOKUP mods sid = SOME ts /\
+    lookup_callable_function deploy func ts = SOME (mut,nr,args,dflts,ret,bod) ==>
+    EVERY (expr_writes_ok ^array_guard) dflts /\
+    stmts_writes_ok ^array_guard bod /\ EVERY reached (function_int_calls dflts bod)) /\
+  ^array_code cx /\ reached (sid,func) /\
+  lift_option_type (get_module_code cx sid) msg s = (INL ts,t) /\
+  lift_option_type (lookup_callable_function cx.in_deploy func ts) msg' s' =
+    (INL (mut,nr,args,dflts,ret,bod),t') ==>
+  EVERY (expr_writes_ok ^array_guard) dflts /\ stmts_writes_ok ^array_guard bod /\
+  EVERY reached (int_calls_exprs dflts) /\ EVERY reached (int_calls_stmts bod)
+Proof
+  simp[vyperTypeEvalProofsTheory.lift_option_type_INL_eq,
+       function_int_calls_def, EVERY_APPEND] >> rpt strip_tac >>
+  qpat_x_assum `get_module_code cx sid = SOME ts` mp_tac >>
+  qpat_x_assum `lookup_callable_function cx.in_deploy _ _ = _` mp_tac >>
+  simp[] >> rpt strip_tac >>
+  qpat_assum `!sid func ts mut nr args dflts ret bod. _`
+    (drule_all_then strip_assume_tac) >> first_assum ACCEPT_TAC
+QED
 
 (* The induction covers calls reached from the iterator body. Each reached
    callee supplies the guard and the call closure for its defaults and body. *)
@@ -267,7 +277,8 @@ Theorem reachable_immutable_array_frame[local]:
     reached (sid,func) /\ ALOOKUP mods sid = SOME ts /\
     lookup_callable_function deploy func ts = SOME (mut,nr,args,dflts,ret,bod) ==>
     EVERY (expr_writes_ok ^array_guard) dflts /\
-    stmts_writes_ok ^array_guard bod /\ EVERY reached (function_int_calls dflts bod)) ==>
+    stmts_writes_ok ^array_guard bod /\ EVERY reached (function_int_calls dflts bod)) /\
+  ^array_mutations addr ==>
   (!cx s. ^array_code cx /\ EVERY reached (int_calls_stmt s) /\
           stmt_writes_ok ^array_guard s ==>
      state_rel_frame ^array_relation (eval_stmt cx s)) /\
@@ -307,69 +318,21 @@ Proof
   >~ [`eval_expr _ (Builtin _ _ _)`] >- suspend "builtin"
   >~ [`eval_expr _ (Call _ (CreateTarget _ _ _ _) _ _)`] >- suspend "create"
   >~ [`eval_expr _ (Call _ RawLog _ _)`] >- suspend "rawlog"
-  >~ [`eval_stmt _ Pass`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ Continue`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ Break`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ (Return NONE)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ (Return (SOME _))`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ (Raise RaiseBare)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ (Raise RaiseUnreachable)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ (Raise (RaiseReason _))`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ (Assert _ AssertBare)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ (Assert _ AssertUnreachable)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ (Assert _ (AssertReason _))`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ (Raise (RaiseCustomError _))`]
-  >- ARRAY_CUSTOM
-  >~ [`eval_stmt _ (Assert _ (AssertCustomError _))`]
-  >- ARRAY_CUSTOM
-  >~ [`eval_stmts _ []`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmts _ (_::_)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_exprs _ []`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_exprs _ (_::_)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_expr _ (Literal _ _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_expr _ (Name _ _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_expr _ (TopLevelName _ _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_expr _ (FlagMember _ _ _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_expr _ (IfExp _ _ _ _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_expr _ (Subscript _ _ _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_expr _ (Attribute _ _ _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ (Expr _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ (AnnAssign _ _ _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ (If _ _ _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_iterator _ (Array _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_iterator _ (Range _ _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_for _ _ _ _ []`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_for _ _ _ _ (_::_)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ (For _ _ _ _ _)`] >- ARRAY_CASE_SIMPLE
+  >~ [`eval_stmt _ (Raise (RaiseCustomError _))`] >- ARRAY_CUSTOM
+  >~ [`eval_stmt _ (Assert _ (AssertCustomError _))`] >- ARRAY_CUSTOM
   >~ [`eval_expr _ (StructLit _ _ _)`] >- (fs[SF ETA_ss] >> ARRAY_CASE_SIMPLE)
-  >~ [`eval_stmt _ (Assign (TupleTarget _) _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`assign_tuple_targets _ (TupleTarget _) _`] >- ARRAY_CASE_SIMPLE
-  >~ [`assign_tuple_target_list _ [] []`] >- ARRAY_CASE_SIMPLE
-  >~ [`assign_tuple_target_list _ (_::_) (_::_)`] >- ARRAY_CASE_SIMPLE
-  >~ [`assign_tuple_target_list _ _ _`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ (Log _ _)`] >- (ARRAY_CASE >> ARRAY_ATOMIC_FRAME)
   >~ [`eval_expr _ (TypeBuiltin _ _ _ _)`] >- (fs[SF ETA_ss] >> ARRAY_CASE_SIMPLE)
+  >~ [`eval_stmt _ (Log _ _)`] >- (ARRAY_CASE >> ARRAY_ATOMIC_FRAME)
   >~ [`eval_expr _ (Call _ (Send _) _ _)`] >- (ARRAY_CASE >> ARRAY_ATOMIC_FRAME)
   >~ [`eval_expr _ (Call _ (ExtCall _ _ _ _) _ _)`]
-  >- (ARRAY_CASE >> FIRST [ARRAY_EXPR_CHUNK, ARRAY_ATOMIC_FRAME])
+  >- (ARRAY_CASE >> ARRAY_EXPR_CHUNK)
   >~ [`eval_expr _ (Call _ (RawCallTarget _) _ _)`]
   >- (ARRAY_CASE >> ARRAY_ATOMIC_FRAME)
   >~ [`eval_expr _ (Call _ (RawCallCalldataTarget _) _ _)`]
   >- (ARRAY_CASE >> ARRAY_ATOMIC_FRAME)
   >~ [`eval_expr _ (Call _ SelfDestructTarget _ _)`]
-  >- (ARRAY_CASE >> ARRAY_ATOMIC_FRAME)
-  >~ [`eval_expr _ (Call _ RawRevert _ _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ (Assign (BaseTarget _) _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ (AugAssign _ _ _ _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`assign_tuple_targets _ (BaseTarget _) _`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_expr _ (Pop _ _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_stmt _ (Append _ _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_base_place _ (NameTarget _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_base_place _ (TopLevelNameTarget _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_base_place _ (AttributeTarget _ _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_base_place _ (SubscriptTarget _ _)`] >- ARRAY_CASE_SIMPLE
-  >~ [`eval_target_place _ _`] >- ARRAY_CASE_SIMPLE
-  >~ [`assign_tuple_target_list _ (_::_) []`] >- ARRAY_CASE_SIMPLE
+  >- (ARRAY_CASE >> ARRAY_ATOMIC_FRAME) >>
+  ARRAY_CASE_SIMPLE
 QED
 
 Resume reachable_immutable_array_frame[builtin]:
@@ -410,54 +373,29 @@ Resume reachable_immutable_array_frame[rawlog]:
   rpt strip_tac >>
   Cases_on `dest_ArrayV (HD v)` >> gvs[return_def, raise_def] >>
   Cases_on `dest_BytesV (EL 1 v)` >> gvs[return_def, raise_def] >>
-  fs[lookup_immutable_def]
+  fs[]
 QED
 
 Resume reachable_immutable_array_frame[intcall]:
   simp_tac bool_ss [Once evaluate_def] >>
-  ntac 5 ARRAY_STEP >> ntac 5 ARRAY_STEP >>
-  ntac 5 ARRAY_STEP >> ntac 5 ARRAY_STEP >>
-  ntac 5 ARRAY_STEP >>
-  rpt gen_tac >> strip_tac >>
+  ntac 25 ARRAY_STEP >> rpt gen_tac >> strip_tac >>
   simp_tac bool_ss [LET_THM, FST, SND] >>
   rename1 `INL (imut,inr,iargs,idflts,iretty,ibody)` >>
-  qmatch_asmsub_rename_tac `get_module_code cx sid` >>
-  qmatch_asmsub_rename_tac `lookup_callable_function cx.in_deploy func ts` >>
-  `get_module_code cx sid = SOME ts` by
-    (qpat_x_assum `lift_option_type (get_module_code _ _) _ _ = _` mp_tac >>
-     simp[vyperTypeEvalProofsTheory.lift_option_type_INL_eq]) >>
-  `lookup_callable_function cx.in_deploy func ts =
-     SOME (imut,inr,iargs,idflts,iretty,ibody)` by
-    (qpat_x_assum `lift_option_type (lookup_callable_function _ _ _) _ _ = _` mp_tac >>
-     simp[vyperTypeEvalProofsTheory.lift_option_type_INL_eq]) >>
-  `ALOOKUP mods sid = SOME ts /\
-   lookup_callable_function deploy func ts = SOME (imut,inr,iargs,idflts,iretty,ibody)` by
-    (conj_tac
-     >- (qpat_assum `get_module_code cx = ALOOKUP mods`
-           (fn eq => qpat_assum `get_module_code cx sid = SOME ts`
-             (ACCEPT_TAC o REWRITE_RULE [eq])))
-     >> qpat_assum `cx.in_deploy <=> deploy`
-          (fn eq => qpat_assum `lookup_callable_function cx.in_deploy func ts = _`
-            (ACCEPT_TAC o REWRITE_RULE [eq]))) >>
-  `EVERY (expr_writes_ok ^array_guard) idflts /\ stmts_writes_ok ^array_guard ibody /\
-   EVERY reached (int_calls_exprs idflts) /\ EVERY reached (int_calls_stmts ibody)` by
-    (qpat_assum `!sid func ts mut nr args dflts ret bod. _`
-      (qspecl_then [`sid`,`func`,`ts`,`imut`,`inr`,`iargs`,`idflts`,`iretty`,`ibody`] mp_tac) >>
-     fs[function_int_calls_def, EVERY_APPEND]) >>
+  drule_all_then strip_assume_tac (BETA_RULE reached_callable_guards) >>
   `!n. EVERY (expr_writes_ok ^array_guard) (DROP n idflts) /\
        EVERY reached (int_calls_exprs (DROP n idflts))` by
     simp[EVERY_DROP, int_calls_exprs_DROP_EVERY] >>
   ntac 5 ARRAY_STEP >>
   strip_tac >> ARRAY_STEP >>
   ARRAY_STEP >- ARRAY_TRANSITIVITY
-  >- (fs[type_check_def, assert_def, return_def, raise_def] >>
+  >- (gvs[type_check_def, assert_def, return_def, raise_def] >>
       array_induction_hypothesis) >>
-  ntac 5 ARRAY_STEP >> ntac 5 ARRAY_STEP >>
-  ntac 5 ARRAY_STEP >> ntac 3 ARRAY_STEP
-  >- (rpt strip_tac >> fs[array_code_stk] >>
-      simp_tac (srw_ss()) [lookup_immutable_def] >>
+  ntac 18 ARRAY_STEP
+  >- (rpt strip_tac >>
+      gvs[array_code_stk,vyperTypeEvalProofsTheory.lift_option_type_INL_eq,
+          type_check_def,assert_def,return_def,raise_def] >>
       evalWalkLib.FORWARD_IH_TAC
-        {normalise = SIMP_RULE (srw_ss()) (lookup_immutable_def::array_context_simps)}) >>
+        {normalise = SIMP_RULE (srw_ss()) array_context_simps}) >>
   rpt (CHANGED_TAC ARRAY_STEP) >>
   simp_tac bool_ss [lock_if_nr_def, unlock_if_nr_def]
   >- (POP_ASSUM_LIST (K all_tac) >>
@@ -472,24 +410,103 @@ Resume reachable_immutable_array_frame[intcall]:
       gvs[is_view_mut_def, ignore_bind_def, bind_def, check_not_static_def,
           type_check_def, assert_def, check_def, return_def, raise_def,
           AllCaseEqs()] >>
-      strip_tac >> simp[lookup_immutable_def])
+      strip_tac >> simp[])
   >~ [`state_rel_frame _ (eval_stmts _ _)`]
   >- (qmatch_asmsub_rename_tac `push_function (sid,func) env cx ps = (INL cxf,pt)` >>
       `cxf = cx with stk updated_by CONS (sid,func)` by
         (qpat_x_assum `push_function _ _ _ _ = _` mp_tac >> simp[push_function_def, return_def]) >>
       gvs[array_code_stk] >>
-      simp_tac (srw_ss()) [lookup_immutable_def] >>
       evalWalkLib.FORWARD_IH_TAC
-        {normalise = SIMP_RULE (srw_ss()) (lookup_immutable_def::array_context_simps)}) >>
+        {normalise = SIMP_RULE (srw_ss()) array_context_simps}) >>
   POP_ASSUM_LIST (K all_tac) >>
   simp[array_frame_result] >> rpt gen_tac >> strip_tac >>
   Cases_on `inr /\ imut <> View /\ imut <> Pure` >>
   Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
   drule vyperStatePreservationTheory.release_nonreentrant_lock_immutables >>
-  simp[lookup_immutable_def]
+  simp[]
 QED
 
 Finalise reachable_immutable_array_frame
+
+Theorem callee_write_ok_global[local]:
+  FST (place_access p []) = TopLevelNameTarget nid ==>
+  callee_write_ok p = (\w. ~place_contains w p)
+Proof
+  simp[FUN_EQ_THM, callee_write_ok_def] >> strip_tac >> gen_tac >>
+  Cases_on `FST (place_access w [])` >> simp[place_contains_def]
+QED
+
+Theorem loop_iterator_place_in_expr_places[local]:
+  !e p. loop_iterator_place e = SOME p ==> MEM p (expr_places e)
+Proof
+  measureInduct_on `expr_size e` >>
+  Cases_on `e` >> simp[loop_iterator_place_def,expr_places_def,AllCaseEqs(),MEM_MAP] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem guarded_immutable_body_observation[local]:
+  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+  loop_iterator_place e = SOME p /\
+  FST (place_access p []) = TopLevelNameTarget nid /\
+  iterator_unmodified (Array e) ss /\
+  stmt_loop_calls_ok [(NONE,tops)] (For id et (Array e) bound ss) /\
+  ^array_mutations cx.txn.target /\ ^array_cell st /\
+  eval_stmts cx ss st = (res,st') ==>
+  ^array_cell st'
+Proof
+  BETA_TAC >>
+  simp[iterator_unmodified_def, stmt_loop_calls_ok_def] >> rpt strip_tac >>
+  qpat_x_assum `case loop_iterator_place e of NONE => T | SOME _ => _` mp_tac >>
+  simp[] >> strip_tac >> drule loop_calls_reachable_writes >> strip_tac >>
+  `stmts_writes_ok (callee_write_ok p) ss` by
+    (drule callee_write_ok_global >> disch_then SUBST1_TAC >>
+     fs[EVERY_MEM] >> metis_tac[loop_iterator_place_in_expr_places]) >>
+  `state_rel_frame ^array_relation (eval_stmts cx ss)` by
+    (irule (cj 2 reachable_immutable_array_frame) >>
+     qexistsl [`cx.txn.target`,`cx.in_deploy`,`[(NONE,tops)]`,`p`,`reached`] >>
+     simp[FUN_EQ_THM,get_module_code_def] >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
+     rpt strip_tac >>
+     qpat_assum `!sid fn ts deploy mut nr args dflts ret body. _`
+       (drule_at_then (Pat `lookup_callable_function _ _ _ = _`) mp_tac) >>
+     simp[]) >>
+  drule_all state_rel_frame_at >> simp[]
+QED
+
+val selected_cell = ``\s. ?v. lookup_immutable cx s src name = SOME (root_ty,v) /\
+                          evaluate_subscripts root_ty v path = INL selected``;
+val selected_relation = rhs (concl (DEPTH_CONV BETA_CONV
+  ``\s t. ^selected_cell s ==> ^selected_cell t``));
+
+(* The guarded mutation rule sees the target's actual success. Its frame is
+   transported to the eventual mutation, even across RHS evaluation. *)
+Theorem for_selected_immutable_body_frame_from_guard:
+  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+  loop_iterator_place e = SOME p /\
+  FST (place_access p []) = TopLevelNameTarget (src,name) /\
+  iterator_unmodified (Array e) ss /\
+  stmt_loop_calls_ok [(NONE,tops)] (For id et (Array e) bound ss) /\
+  (!cx' target s pl t.
+      cx'.txn.target = cx.txn.target /\ callee_write_ok p target /\
+      eval_target_place cx' target s = (INL pl,t) /\
+      (?v. lookup_immutable cx s src name = SOME (root_ty,v) /\
+           evaluate_subscripts root_ty v path = INL selected) /\
+      (?v. lookup_immutable cx t src name = SOME (root_ty,v) /\
+           evaluate_subscripts root_ty v path = INL selected) ==>
+      (!v. state_rel_frame ^selected_relation (write_place cx' pl v)) /\
+      (!v. state_rel_frame ^selected_relation (append_place cx' pl v)) /\
+      state_rel_frame ^selected_relation (pop_place cx' pl)) /\
+  (?v. lookup_immutable cx st src name = SOME (root_ty,v) /\
+       evaluate_subscripts root_ty v path = INL selected) /\
+  eval_stmts cx ss st = (res,st') ==>
+  ?v. lookup_immutable cx st' src name = SOME (root_ty,v) /\
+      evaluate_subscripts root_ty v path = INL selected
+Proof
+  mp_tac (Q.INST [`obs` |-> `\imm. ^selected_cell (st with immutables := imm)`,
+                  `nid` |-> `(src,name)`] guarded_immutable_body_observation) >>
+  simp[lookup_immutable_def]
+QED
 
 Theorem for_bare_immutable_array_body_observation:
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
@@ -500,26 +517,21 @@ Theorem for_bare_immutable_array_body_observation:
   eval_stmts cx ss st = (res,st') ==>
   lookup_immutable cx st' src name = lookup_immutable cx st src name
 Proof
-  simp[iterator_unmodified_def, expr_places_def, stmt_loop_calls_ok_def,
-       loop_iterator_place_def] >> rpt strip_tac >>
-  drule loop_calls_reachable_writes >> strip_tac >>
-  `callee_write_ok (TopLevelNameTarget (src,name)) =
-   (\w. ~place_contains w (TopLevelNameTarget (src,name)))` by
-    (simp[FUN_EQ_THM, callee_write_ok_def] >> gen_tac >>
-     Cases_on `FST (place_access w [])` >> simp[place_contains_def, place_access_def]) >>
-  `!sid fn ts mut nr args dflts ret body.
-     reached (sid,fn) /\ ALOOKUP [(NONE,tops)] sid = SOME ts /\
-     lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,body) ==>
-     EVERY (expr_writes_ok ^array_guard) dflts /\
-     stmts_writes_ok ^array_guard body /\ EVERY reached (function_int_calls dflts body)` by
-    (rpt gen_tac >>
-     qpat_assum `!sid fn ts deploy mut nr args dflts ret body. _`
-       (MATCH_ACCEPT_TAC o SPEC_ALL)) >>
-  `state_rel_frame
-    (\s t. lookup_immutable cx s src name = SOME (ArrayTV elem arrbound,ArrayV av) ==>
-            lookup_immutable cx t src name = SOME (ArrayTV elem arrbound,ArrayV av))
-    (eval_stmts cx ss)` by
-    (drule_then (irule o cj 2) reachable_immutable_array_frame >>
-     simp[FUN_EQ_THM, get_module_code_def]) >>
-  drule_all state_rel_frame_at >> simp[]
+  rpt strip_tac >> simp[] >>
+  irule (SRULE [evaluate_subscripts_def]
+    (Q.INST [`path` |-> `[]`] for_selected_immutable_body_frame_from_guard)) >>
+  goal_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `stmt_loop_calls_ok _ _`)) >>
+  qexists `TopLevelNameTarget (src,name)` >>
+  simp[loop_iterator_place_def,place_access_def] >>
+  rpt strip_tac >>
+  `!s. lookup_immutable cx' s src name = lookup_immutable cx s src name` by
+    simp[lookup_immutable_def] >>
+  `!path. pl <> ImmutablePlace src name path` by
+    metis_tac[immutable_array_guarded_target] >>
+  `!src' name' path. pl = ImmutablePlace src' name' path ==>
+     (src',name') <> (src,name)` by metis_tac[pairTheory.PAIR_EQ] >>
+  simp[state_rel_frame_result] >> rpt strip_tac >> metis_tac[
+    lookup_immutable_write_other, append_guarded_immutable_frame,
+    pop_place_immutable_other]
 QED
