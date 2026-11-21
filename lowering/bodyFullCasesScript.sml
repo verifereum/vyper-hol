@@ -199,6 +199,7 @@ Theorem body_assign_tuple_case_full:
     body_stmt_full_ok cx (Assign (TupleTarget gs) e)
 Proof
   rw[body_stmt_full_ok_def] >>
+  drule_all body_inv_stmt_const_name_free >> strip_tac >>
   reverse (Cases_on `lowered_value_type cenv e = expr_type e`)
   >- (irule body_assign_tuple_widened_full >> metis_tac[]) >>
   Cases_on `?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
@@ -226,8 +227,7 @@ Proof
       type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) /\
       supported_variable_decl tops nsid = SOME (Private,mut,dty,SOME slot) /\
       (mut = Storage \/ mut = Transient) /\ is_bytestring_type dty) gs`
-      >- (drule_all body_inv_stmt_const_name_free >> strip_tac >>
-          irule body_assign_tuple_targets_private_bytes_full >> metis_tac[]) >>
+      >- (irule body_assign_tuple_targets_private_bytes_full >> metis_tac[]) >>
       Cases_on `EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
                    FLOOKUP env.var_types id = SOME ty /\
                    0 < type_memory_bytes cenv ty) \/
@@ -240,9 +240,8 @@ Proof
                    supported_storage_field_write tops nsid fld /\
                    type_place_target env (AttributeTarget (TopLevelNameTarget nsid) fld) =
                      SOME (Type fty) /\ is_word_type fty)) gs`
-      >- (drule_all body_inv_stmt_const_name_free >> strip_tac >>
-          irule body_assign_tuple_targets_word_full >> metis_tac[]) >>
-      irule body_assign_tuple_targets_full >> metis_tac[]) >>
+      >- (irule body_assign_tuple_targets_word_full >> metis_tac[]) >>
+      irule body_assign_tuple_other_full >> metis_tac[]) >>
   irule body_assign_tuple_other_full >> metis_tac[]
 QED
 

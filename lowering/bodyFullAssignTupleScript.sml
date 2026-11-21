@@ -9,6 +9,8 @@
 Theory bodyFullAssignTuple
 Ancestors bodyImmutableStoreMemory[qualified,ignore_grammar]
   bodyFullShadowBodyInv bodyStorageCases[qualified,ignore_grammar]
+  targetPlaceSimCasesBase[qualified,ignore_grammar]
+  vyperEvalExprPreservesScopesDom[qualified,ignore_grammar]
   supportedExprTraverse[qualified,ignore_grammar]
   placeMemoryCopyEffect[qualified,ignore_grammar] immSectionDead compileVyper bodyStorageMetadata ctorDeployDeadSectionFrame ctorDeployDeadSection pred_set immutableCopyExecution immutableDeployOperandTransfer fragGasSeqPtr stmtReasonLitFragMemory immutableWordExecution fragExecMem memSafeRun venomExecSemantics exprSimCopy venomInst unitTransformDefs codegenRel contextCodegenRel bodyPtrBopInRepresentation immutableAssignCompose immutableDeployAssignBytes immutableDeployAssignAdmissible valueEncodingProps venomMemProps vyperTypeValues typedCopyOriginPtr placeStoreDynPrepare bodyMemBopRestWordPath allocaSiteResource exprSimPtrLiteralBuffer exprSimAlloc exprOperandVar fragGasMode fragGasOrigin[qualified,ignore_grammar]
   words[qualified,ignore_grammar] bodyFullPreds bodySimFull bodyFullShared gasShadow bodySim exprSimHypsDefs supportedStmts
@@ -854,6 +856,74 @@ QED
 Finalise body_assign_tuple_nonlocal_write_ready[local]
 
 (* A successful nonlocal head observes its root before the joint slot store. *)
+(* GATE_ADMISSION: held, nested borrowed tuple containing dynamic arrays *)
+Theorem tuple_place_nested_dynamic_borrow_target_frame:
+  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx env bt es n b sz off tvs
+   st0 ty sa sb shadow_sa shadow_sb r s0 G0 tn0.
+      target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+        cenv cx env bt es /\
+      target_pre cenv cx env bt es /\
+      local_region cenv es.scopes s0 n b sz /\
+      b <= off /\ off + type_memory_size (TupleTV tvs) <= b + sz /\
+      local_path_at cenv cx n (off - b) (TupleTV tvs) /\
+      ~dynarray_free (TupleTV tvs) /\
+      (!tys. FLOOKUP env.var_types n <> SOME (TupleT tys)) /\
+      EXISTS (supported_expr_exists expr_effect_root) (target_indices bt) /\
+      type_place_target env bt = SOME (Type ty) /\
+      compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
+      compile_get_target_ptr compile_expr cenv (gas_shadow_target bt)
+        shadow_sa = (r, shadow_sb) /\
+      gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
+      gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+      gas_shadow_function func shadow_func /\
+      MEM func ctx.ctx_functions /\
+      MEM shadow_func shadow_ctx.ctx_functions /\
+      fn_has_code sa sb func /\
+      fn_has_code shadow_sa shadow_sb shadow_func /\
+      fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+      (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+      (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
+      (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
+      gas_admissible (eval_target_place cx bt) target_place_res_ok es /\
+      return_buf_frame d cenv sa s0 /\
+      alloca_history func s0 /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 /\
+        storage_well_formed_on cx es (FST H) /\
+        ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
+      s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_outcome_full
+        (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
+        (cx_tops cx) cx st0 (eval_target_place cx bt) (es, s0, G0, tn0)
+        (\H res ee G tn t. ?p. res = INL p /\
+          target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type ty)
+            r t /\
+          (!id path. p = MemoryPlace id path ==>
+             ?entry v. lookup_scopes id ee.scopes = SOME entry /\
+                       evaluate_subscripts entry.type entry.value path =
+                         INL v) /\
+          mem_bytes_at off (type_memory_size (TupleTV tvs)) t.vs_memory =
+            mem_bytes_at off (type_memory_size (TupleTV tvs)) s0.vs_memory /\
+          t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          alloca_history func t /\
+          (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+          s0.vs_alloca_next <= t.vs_alloca_next /\
+          ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
+          target_ptr_ok cenv (PlaceR p) r G tn t /\
+          ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
+        (\H res ee gt q.
+          expr_exit res q /\ halt_exit H cx ee res q /\
+          (ctx_has_dalloca ctx ==> !s. q = Halt s ==> allocas_below_fmp s))
+Proof
+  cheat
+QED
+
 Theorem body_assign_tuple_nonlocal_head_full_path:
   compile_tuple_store_all cenv [ty] [g] [op] sa = ((),sb) /\
   assign_tuple_targets cx g v es = (INL (),es') /\
@@ -7089,8 +7159,83 @@ Proof
   metis_tac[]
 QED
 
+Theorem tuple_immutable_declaration_witness[local]:
+  supported_immutable_type tops nsid = SOME dty ==>
+  ?vis slot. supported_variable_decl tops nsid = SOME (vis,Immutable,dty,slot)
+Proof
+  Cases_on `supported_variable_decl tops nsid` >>
+  simp[supportedDeclsTheory.supported_immutable_type_def] >>
+  PairCases_on `x` >> Cases_on `x1` >>
+  simp[supportedDeclsTheory.supported_immutable_type_def]
+QED
+
 (* Any other target list. *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem tuple_assign_target_widths[local]:
+  !t. alloc_limits_target cenv t /\
+      ~supported_target_exists (\e. ~is_extcode e /\ ~byte_widths_expr e) t ==>
+      byte_widths_target t
+Proof
+  recInduct targetPlaceSimCasesBaseTheory.base_assignment_target_induct >>
+  simp[byte_widths_expr_def, allocLimitsTheory.alloc_limits_expr_def,
+       supportedExprTraverseTheory.supported_expr_exists_def] >>
+  rpt strip_tac >> CCONTR_TAC >>
+  qpat_x_assum `~supported_expr_exists _ e` mp_tac >> simp[] >>
+  irule supportedExprTraverseTheory.supported_expr_exists_root >>
+  metis_tac[allocLimitsPropsTheory.alloc_limits_expr_not_extcode]
+QED
+
+Theorem tuple_assign_target_supported_calls[local]:
+  supported_target tops bindings t ==>
+  ~supported_target_exists expr_evm_run_root t /\
+  EVERY (\c. FST c = NONE /\
+             IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t)
+Proof
+  mp_tac (Q.SPECL [`tops`, `bindings`, `t`]
+    bodyStorageCasesTheory.supported_target_info_main_calls) >>
+  Cases_on `t` >>
+  gvs[supported_target_def, supportedExprTraverseTheory.supported_expr_exists_def, int_calls_expr_def]
+QED
+
+Theorem body_assign_tuple_other_full:
+  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
+    body_expr_full_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
+    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    lowered_value_type cenv e = expr_type e /\
+    ~(?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
+            EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids) /\
+    ~EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
+                        FLOOKUP env.var_types id = SOME ty /\
+                        0 < type_memory_bytes cenv ty) \/
+               (?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
+                       supported_scalar_target tops nsid) \/
+               (?nsid fld fty.
+                  g = BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld) /\
+                  supported_storage_field_write tops nsid fld /\
+                  type_place_target env
+                    (AttributeTarget (TopLevelNameTarget nsid) fld) =
+                    SOME (Type fty) /\ is_word_type fty)) gs ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
   drule tuple_targets_typing >> strip_tac >>
@@ -7122,8 +7267,7 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac supported_expr_body_calls >>
      `~supported_expr_exists (const_name_root cx) e` by
-       (irule supported_expr_no_name_root >>
-        metis_tac[body_inv_const_name_root]) >>
+       fs[supported_stmt_expr_exists_def] >>
      `supported_program tops /\ get_module_code cx NONE = SOME tops /\
       (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
         is_dynamic (vyper_to_abi_type (type_env tops) target))` by
@@ -7534,10 +7678,9 @@ Proof
     `type_place_target env (TopLevelNameTarget (ns,id)) = SOME (Type sty)` by
       (qpat_assum `well_typed_atarget env _ sty` mp_tac >>
        simp[NoAsms,well_typed_atarget_def,well_typed_target_def]) >>
-    `supported_variable_decl tops (ns,id) = SOME (Private,Immutable,dty,NONE)` by
-      (qpat_assum `supported_immutable_type _ _ = SOME _` mp_tac >>
-       simp[NoAsms,supportedDeclsTheory.supported_immutable_type_def,AllCaseEqs()] >>
-       strip_tac >> gvs[])) >>>
+    qpat_assum `supported_immutable_type tops (ns,id) = SOME dty`
+      (qx_choosel_then [`imm_vis`,`imm_slot`] assume_tac o
+       MATCH_MP tuple_immutable_declaration_witness)) >>>
   HEADGOAL (
     drule_then strip_assume_tac bodyStorageMetadataTheory.supported_variable_decl_mem >>
     `get_module_code cx NONE = SOME tops` by
@@ -7551,7 +7694,7 @@ Proof
     `FLOOKUP env.bare_globals (ns,id) = SOME dty` by
       (qpat_assum `bare_globals_complete _ _`
         (mp_tac o REWRITE_RULE [vyperTypeInvariantsTheory.bare_globals_complete_def]) >>
-       disch_then (qspecl_then [`ns`,`tops`,`Private`,`Immutable`,`id`,`dty`,`NONE`] mp_tac) >>
+       disch_then (qspecl_then [`ns`,`tops`,`imm_vis`,`Immutable`,`id`,`dty`,`imm_slot`] mp_tac) >>
        simp[]) >>
     `FLOOKUP env.bare_global_assignable (ns,id) = SOME sty` by
       (qpat_assum `type_place_target env _ = SOME (Type sty)` mp_tac >>
@@ -7561,7 +7704,7 @@ Proof
       (qpat_assum `bare_global_assignable_complete _ _`
         (mp_tac o REWRITE_RULE [vyperTypeInvariantsTheory.bare_global_assignable_complete_def]) >>
        Cases_on `cx.in_deploy` >> simp[]
-       >- (disch_then (qspecl_then [`ns`,`tops`,`Private`,`id`,`dty`,`NONE`] mp_tac) >>
+       >- (disch_then (qspecl_then [`ns`,`tops`,`imm_vis`,`id`,`dty`,`imm_slot`] mp_tac) >>
            simp[] >> metis_tac[]) >>
        strip_tac >> gvs[])) >>>
   HEADGOAL (qpat_x_assum `dty = sty` SUBST_ALL_TAC) >>>
@@ -8047,7 +8190,7 @@ Proof
       (irule bodyFullTargetTheory.body_target_place_sim_full >> simp[] >>
        qexists_tac `tops` >> conj_tac >> first_assum ACCEPT_TAC)) >>>
   HEADGOAL (
-    qpat_x_assum `bodyFullTargetDefs$target_place_sim_full _ _ _ _ _ _`
+    qpat_assum `bodyFullTargetDefs$target_place_sim_full _ _ _ _ _ _`
       (mp_tac o REWRITE_RULE [bodyFullTargetDefsTheory.target_place_sim_full_def]) >>
     disch_then (qspecl_then [`st0`,`sty`,`cur`,`target_cs`,`shadow_cur`,
       `shadow_target_cs`,`target_r`,`u`,`Gu`,`tu`] mp_tac)) >>>
@@ -8055,6 +8198,46 @@ Proof
   HEADGOAL (
     qmatch_asmsub_abbrev_tac
       `gas_outcome_full _ _ _ _ (eval_target_place cx bt) _ targetQ targetR` >>
+    qabbrev_tac `nested_borrow =
+      ?n b sz. local_region cenv src.scopes u n b sz /\
+        b <= p /\ p + type_memory_size (TupleTV tvs) <= b + sz /\
+        local_path_at cenv cx n (p-b) (TupleTV tvs) /\
+        ~dynarray_free (TupleTV tvs) /\
+        (!tys. FLOOKUP env.var_types n <> SOME (TupleT tys)) /\
+        EXISTS (supported_expr_exists expr_effect_root) (target_indices bt)`) >>>
+  HEADGOAL (sg `gas_outcome_full
+    (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    (cx_tops cx) cx st0 (eval_target_place cx bt) (src,u,Gu,tu)
+    (\H res mid G tn m. targetQ H res mid G tn m /\
+      (nested_borrow ==> mem_bytes_at p (type_memory_size_list tvs) m.vs_memory =
+        mem_bytes_at p (type_memory_size_list tvs) u.vs_memory))
+    targetR`) >>>
+  HEADGOAL (Cases_on
+    `?n b sz. local_region cenv src.scopes u n b sz /\
+      b <= p /\ p + type_memory_size (TupleTV tvs) <= b + sz /\
+      local_path_at cenv cx n (p-b) (TupleTV tvs) /\
+      ~dynarray_free (TupleTV tvs) /\
+      (!tys. FLOOKUP env.var_types n <> SOME (TupleT tys)) /\
+      EXISTS (supported_expr_exists expr_effect_root) (target_indices bt)`) >>>
+  HEADGOAL (pop_assum (qx_choosel_then [`n`,`b`,`sz`]
+          (map_every assume_tac o CONJUNCTS)) >>
+        qspecl_then
+          [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`PG`,`func`,`shadow_func`,
+           `cenv`,`cx`,`env`,`bt`,`src`,`n`,`b`,`sz`,`p`,`tvs`,`st0`,
+           `sty`,`cur`,`target_cs`,`shadow_cur`,`shadow_target_cs`,`target_r`,
+           `u`,`Gu`,`tu`] mp_tac tuple_place_nested_dynamic_borrow_target_frame) >>>
+  HEADGOAL (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (strip_tac >> irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+        qpat_assum `gas_outcome_full _ _ _ _ (eval_target_place cx bt) _
+          (\H res ee G tn t. ?p. res = INL p /\ _) _` (irule_at Any)) >>>
+  HEADGOAL (simp[Abbr `targetQ`,Abbr `targetR`,valueEncodingTheory.type_memory_size_def]) >>>
+  HEADGOAL (
+    rpt gen_tac >> disch_then (qx_choose_then `pl` (map_every assume_tac o CONJUNCTS)) >>
+    simp[] >> qexists_tac `pl` >> simp[]) >>>
+  HEADGOAL (irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+    qpat_assum `gas_outcome_full _ _ _ _ (eval_target_place cx bt) _ targetQ targetR`
+      (irule_at Any) >> simp[Abbr `nested_borrow`]) >>>
+  HEADGOAL (
     qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ suffixQ suffixR` >>
     `assign_tuple_target_list cx (BaseTarget bt::todo) (vi::vs_tail) =
        bind (eval_target_place cx bt) (\p. bind (write_place cx p vi)
@@ -8075,9 +8258,12 @@ Proof
   HEADGOAL (conj_tac >- simp[NoAsms,cj 8 vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>>
   HEADGOAL (
     qexists_tac `\H res mid G tnt v. targetQ H res mid G tnt v /\
+      (nested_borrow ==> mem_bytes_at p (type_memory_size_list tvs) v.vs_memory =
+        mem_bytes_at p (type_memory_size_list tvs) u.vs_memory) /\
       mid.gas_obs = [] /\ ~v.vs_halted` >> BETA_TAC >> reverse conj_tac) >>>
   HEADGOAL (irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
-    qpat_assum `gas_outcome_full _ _ _ _ _ _ targetQ targetR` (irule_at Any) >>
+    qpat_assum `gas_outcome_full _ _ _ _ (eval_target_place cx bt) _
+      (\H res mid G tn m. targetQ H res mid G tn m /\ _) targetR` (irule_at Any) >>
     simp[NoAsms,Abbr `targetR`,Abbr `suffixR`]) >>>
   HEADGOAL (rpt gen_tac >> strip_tac >> Cases_on `res`
     >- (qpat_x_assum `expr_exit _ _` mp_tac >> simp[NoAsms,exprSimDefsTheory.expr_exit_def])) >>>
@@ -8138,8 +8324,9 @@ Proof
     `EVERY (supported_expr tops) (target_indices bt)` by
       (simp[NoAsms,EVERY_MEM] >> rpt strip_tac >>
        drule_all entryStatementTargetSupportTheory.supported_target_index >> simp[]) >>
-    drule_all tuplePlaceBorrowTheory.tuple_place_supported_target_scopes >>
-    simp[NoAsms] >> disch_tac) >>>
+    `MAP FDOM src.scopes = MAP FDOM mid.scopes` by
+      (drule vyperEvalExprPreservesScopesDomTheory.eval_base_place_preserves_scopes_dom >>
+       simp[])) >>>
   HEADGOAL (
     qpat_assum `target_post _ ctx func cenv cx src cur target_cs u mid _ _ _ m`
       (strip_assume_tac o REWRITE_RULE [target_post_def]) >>
@@ -8193,18 +8380,55 @@ Proof
     rpt strip_tac >>
     qpat_assum `!aid off sz i. FLOOKUP u.vs_allocas aid = _ /\ _ ==> i IN tu.t_mem`
       (qspecl_then [`aid`,`b`,`sz`,`i`] MATCH_MP_TAC) >> rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (conj_tac) >>>
+  HEADGOAL (ASM_CASES_TAC ``nested_borrow:bool``
+    >- (qpat_assum `nested_borrow ==> _` MATCH_MP_TAC >> first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (ASM_CASES_TAC ``dynarray_free (TupleTV tvs)``) >>>
   HEADGOAL (
-    qpat_assum `!b sz. b <= p /\ _ ==> _` (qspecl_then [`b`,`sz`] MATCH_MP_TAC) >>
-    conj_tac >- first_assum ACCEPT_TAC >>
-    conj_tac >- first_assum ACCEPT_TAC >> conj_tac) >>>
+    qspecl_then [`storage_trace_horizon mid.storage_trace`,`ctx`,`func`,`cenv`,
+      `cx`,`env`,`src`,`cur`,`target_cs`,`u`,`mid`,`PlaceR place`,`Type sty`,
+      `target_r`,`m`,`n`,`b`,`sz`,`p`,`tvs`] MATCH_MP_TAC
+      (REWRITE_RULE [valueEncodingTheory.type_memory_size_def]
+        tuplePlaceBorrowTheory.tuple_borrow_no_array_headers_frame) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
   HEADGOAL (
-    `lookup_scopes n mid.scopes = lookup_scopes n src.scopes` by
-      (qpat_assum `mid.scopes = src.scopes` SUBST1_TAC >> REFL_TAC) >>
-    drule_all tuplePlaceSnapshotTheory.tuple_place_target_unchanged_local >> disch_then ACCEPT_TAC) >>>
+    sg `lookup_scopes n mid.scopes = lookup_scopes n src.scopes`) >>>
+  HEADGOAL (
+    Cases_on `EVERY (\e. ~supported_expr_exists expr_effect_root e) (target_indices bt)`
+    >- (drule_all tuplePlaceBorrowTheory.tuple_place_supported_target_scopes >> simp[])) >>>
+  HEADGOAL (
+    `EXISTS (supported_expr_exists expr_effect_root) (target_indices bt)` by
+      (rewrite_tac[listTheory.EXISTS_NOT_EVERY] >> first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (sg `?tys. FLOOKUP env.var_types n = SOME (TupleT tys)`) >>>
+  HEADGOAL (CCONTR_TAC >> sg `nested_borrow:bool`) >>>
+  HEADGOAL (
+    simp[NoAsms,Abbr `nested_borrow`,valueEncodingTheory.type_memory_size_def] >>
+    qexistsl_tac [`n`,`b`,`sz`] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    qpat_assum `~(?tys. FLOOKUP env.var_types n = SOME (TupleT tys))` mp_tac >>
+    simp[NoAsms]) >>>
+  HEADGOAL (qpat_assum `~nested_borrow` mp_tac >> asm_rewrite_tac[]) >>>
+  HEADGOAL (
+    rename1 `FLOOKUP env.var_types n = SOME (TupleT root_tys)` >>
+    qspecl_then [`bt`,`env`,`Type sty`,`cx`,
+      `src with gas_obs := gas_explicit target_marks u.vs_gas_readings`,
+      `PlaceR place`,`mid`,`n`,`root_tys`] mp_tac
+      tuplePlaceBorrowTheory.typed_tuple_local_target_entry >>
+    (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+    simp[NoAsms]) >>>
+  HEADGOAL (
+    `mem_bytes_at b sz m.vs_memory = mem_bytes_at b sz u.vs_memory` by
+      (drule_all tuplePlaceSnapshotTheory.tuple_place_target_unchanged_local >> simp[]) >>
+    `b + (p-b) = p` by decide_tac >>
+    qspecl_then [`b`,`b`,`sz`,`m.vs_memory`,`u.vs_memory`,
+      `p-b`,`type_memory_size_list tvs`] mp_tac
+      valueEncodingPropsTheory.mem_bytes_at_translated_window >>
+    (impl_tac >- (conj_tac >- first_assum ACCEPT_TAC >> decide_tac)) >>
+    asm_rewrite_tac []) >>>
   HEADGOAL (
     rpt strip_tac >>
     qpat_assum `!n b sz i. local_region _ _ _ _ _ _ /\ _ ==> i IN tu.t_mem`
-      (qspecl_then [`n`,`b`,`sz`,`i`] MATCH_MP_TAC) >> rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+      (qspecl_then [`n`,`b`,`sz`,`i`] MATCH_MP_TAC) >>
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>>
   HEADGOAL (sg `!mem. mem_agree_outside tmid.t_mem m.vs_memory mem ==>
        val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) p mem`) >>>
   HEADGOAL (
@@ -9101,7 +9325,7 @@ Proof
       (INST_TYPE [alpha |-> ``:256``] stmtSimDefsTheory.alloca_frame_of_mem_frame)) >>
     rpt conj_tac >>
     FIRST [first_assum ACCEPT_TAC,
-      qpat_assum `mid.scopes = src.scopes` (fn eq => simp[NoAsms,eq])]) >>>
+      qpat_assum `MAP FDOM src.scopes = MAP FDOM mid.scopes` (fn eq => simp[NoAsms,eq])]) >>>
   HEADGOAL (
     qpat_assum `!H. valid_horizon cx st0 H fin.storage_trace ==>
       stmt_state_rel H ctx func cenv cx fin q /\ _`
@@ -9955,7 +10179,7 @@ Proof
       (INST_TYPE [alpha |-> ``:256``] stmtSimDefsTheory.alloca_frame_of_mem_frame)) >>
     rpt conj_tac >>
     FIRST [first_assum ACCEPT_TAC,
-      qpat_assum `mid.scopes = src.scopes` (fn eq => simp[NoAsms,eq])]) >>>
+      qpat_assum `MAP FDOM src.scopes = MAP FDOM mid.scopes` (fn eq => simp[NoAsms,eq])]) >>>
   HEADGOAL (sg `alloca_frame cenv es sa s0 cenv mid m`) >>>
   HEADGOAL (
     irule stmtSimDefsTheory.alloca_frame_trans >>
@@ -10432,40 +10656,39 @@ Proof
           (ACCEPT_TAC o MATCH_MP cx_tops_module))) >>>
   HEADGOAL (
      `~supported_target_exists (const_name_root cx) head` by
-       (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
-        qpat_assum `supported_stmt tops bindings (Assign (TupleTarget gs) e)`
-          (fn supported =>
-           assume_tac (MATCH_MP
-             (MATCH_MP (cj 1 supported_stmts_no_name_root) supported)
-             (MATCH_MP body_inv_const_name_root inv)))) >>
-        qpat_assum `!p. supported_target_exists p head ==> _`
+       (qpat_assum `!p. supported_target_exists p head ==> _`
           (qspec_then `const_name_root cx` mp_tac) >>
         simp[])) >>>
   HEADGOAL (
      `~supported_target_exists (\x. ~is_extcode x /\ ~byte_widths_expr x) head` by
        (qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o REWRITE_RULE [stmt_exprs_ok_def]) >>
-        metis_tac[]) >>
-     drule_then strip_assume_tac bodyStorageCasesTheory.supported_target_storage_syntax >>
-     irule popTargetPreTheory.target_indices_pre_of_body >>
-     simp[]) >>>
+        metis_tac[])) >>>
+  HEADGOAL (drule_then strip_assume_tac tuple_assign_target_supported_calls) >>>
+  HEADGOAL (sg `byte_widths_target head`) >>>
+  HEADGOAL (irule tuple_assign_target_widths >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    qexists_tac `cenv` >> first_assum ACCEPT_TAC) >>>
   HEADGOAL (
-     `~supported_target_exists is_extcode head` by
-       metis_tac[ctorDeployLoweringFrameSupportTheory.deploy_frame_supported_target_no_extcode] >>
-     qpat_assum `supported_target tops bindings head` mp_tac >>
-     qpat_assum `~supported_target_exists (\x. ~is_extcode x /\ _) head` mp_tac >>
-     qpat_assum `~supported_target_exists is_extcode head` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     Cases_on `head` >> gvs[byte_widths_expr_def,supported_target_def,
-       supportedExprTraverseTheory.supported_expr_exists_def,AllCaseEqs()] >>
-     rpt strip_tac
-     >~ [`byte_widths_expr x`]
-     >- (rename1 `byte_widths_expr x` >>
-         `~is_extcode x` by metis_tac[supportedExprTraverseTheory.supported_expr_exists_root] >>
-         spose_not_then assume_tac >>
-         qpat_x_assum `~supported_expr_exists (\y. ~is_extcode y /\ _) x`
-           (irule o NOT_ELIM) >>
-         irule supportedExprTraverseTheory.supported_expr_exists_root >> simp[]) >>
-     rename1 `byte_widths_target b` >> Cases_on `b` >> gvs[byte_widths_expr_def]) >>>
+    qspecl_then [`head`,`Type (EL i tys)`,`cenv`,`cx`,`env`] MATCH_MP_TAC
+      popTargetPreTheory.target_indices_pre_of_body >>
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (rewrite_tac[EVERY_MEM] >> qx_gen_tac `callee` >> disch_tac >> BETA_TAC) >>>
+  HEADGOAL (sg `FST callee = NONE /\
+    IS_SOME (supported_function_decl tops callee Internal)`) >>>
+  HEADGOAL (
+    qpat_assum `EVERY (\c. FST c = NONE /\ IS_SOME _) (int_calls_target head)`
+      (qspec_then `callee` mp_tac o REWRITE_RULE [EVERY_MEM]) >> BETA_TAC >>
+    (impl_tac >- first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC) >>>
+  HEADGOAL (conj_tac >- first_assum ACCEPT_TAC >>
+    qexists_tac `tops` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    qpat_assum `cx_tops cx = tops` (fn th => rewrite_tac[th]) >>
+    map_every (fn pat => qpat_assum pat mp_tac)
+      [`!p. supported_target_exists p head ==> _`,
+       `!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+          (Assign (TupleTarget gs) e) ==> _`] >>
+    POP_ASSUM_LIST kall_tac >> metis_tac[]) >>>
+  HEADGOAL (asm_rewrite_tac[]) >>>
   HEADGOAL (
     `EVERY (\g. case g of BaseTarget bt => supported_target tops bindings bt /\
             target_indices_pre cenv cx env bt | TupleTarget ts => F) gs` by
@@ -11645,49 +11868,6 @@ Proof
   HEADGOAL (first_assum ACCEPT_TAC) >>>
   HEADGOAL (first_assum ACCEPT_TAC)
 QED
-*)
-Theorem body_assign_tuple_other_full:
-  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
-    (!s'' tv t s'3' v t'.
-       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
-       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
-    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-       (Assign (TupleTarget gs) e) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\
-    ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
-    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
-    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty /\
-    lowered_value_type cenv e = expr_type e /\
-    ~(?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
-            EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids) /\
-    ~EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
-                        FLOOKUP env.var_types id = SOME ty /\
-                        0 < type_memory_bytes cenv ty) \/
-               (?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
-                       supported_scalar_target tops nsid) \/
-               (?nsid fld fty.
-                  g = BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld) /\
-                  supported_storage_field_write tops nsid fld /\
-                  type_place_target env
-                    (AttributeTarget (TopLevelNameTarget nsid) fld) =
-                    SOME (Type fty) /\ is_word_type fty)) gs ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
-      (eval_stmt cx (Assign (TupleTarget gs) e)) es
-Proof
-  cheat
-QED
 
 Theorem tuple_widened_storage_alloc_bound[local]:
   !tys gs i.
@@ -11705,7 +11885,83 @@ Proof
   simp[allocLimitsTheory.tuple_assign_alloc_ok_def] >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+(* GATE_ADMISSION: held, private storage/transient bytestring tuple member *)
+Theorem body_assign_tuple_targets_private_bytes_full:
+  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
+    body_expr_full_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
+    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    lowered_value_type cenv e = expr_type e /\
+    EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
+                        FLOOKUP env.var_types id = SOME ty /\
+                        0 < type_memory_bytes cenv ty) \/
+               (?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
+                       supported_scalar_target tops nsid) \/
+               (?nsid fld fty.
+                  g = BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld) /\
+                  supported_storage_field_write tops nsid fld /\
+                  type_place_target env
+                    (AttributeTarget (TopLevelNameTarget nsid) fld) =
+                    SOME (Type fty) /\ is_word_type fty)) gs /\
+    EXISTS (\g. ?nsid dty mut slot.
+      g = BaseTarget (TopLevelNameTarget nsid) /\
+      supported_scalar_target tops nsid /\
+      type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) /\
+      supported_variable_decl tops nsid = SOME (Private,mut,dty,SOME slot) /\
+      (mut = Storage \/ mut = Transient) /\
+      is_bytestring_type dty) gs ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
+Proof
+  cheat
+QED
+
+Theorem body_assign_tuple_widened_full:
+  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
+    body_expr_full_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
+    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    lowered_value_type cenv e <> expr_type e ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_body_pre cenv cx env e es` by
@@ -11714,8 +11970,7 @@ Proof
      `well_typed_expr env e` by gvs[type_stmt_assigntuple] >>
      drule_then strip_assume_tac supported_expr_body_calls >>
      `~supported_expr_exists (const_name_root cx) e` by
-       (irule supported_expr_no_name_root >>
-        metis_tac[body_inv_const_name_root]) >>
+       fs[supported_stmt_expr_exists_def] >>
      `supported_program tops /\ get_module_code cx NONE = SOME tops /\
       (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
         is_dynamic (vyper_to_abi_type (type_env tops) target))` by
@@ -12071,32 +12326,31 @@ Proof
             is_dynamic (vyper_to_abi_type (type_env tops) a))` by fs[body_inv_def] >>
      `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
      `~supported_target_exists (const_name_root cx) head` by
-       (`~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e)` by
-          metis_tac[cj 1 supported_stmts_no_name_root,body_inv_const_name_root] >>
-        metis_tac[]) >>
+       metis_tac[] >>
      `~supported_target_exists (\x. ~is_extcode x /\ ~byte_widths_expr x) head` by
        (qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o REWRITE_RULE [stmt_exprs_ok_def]) >>
         metis_tac[]) >>
-     drule_then strip_assume_tac bodyStorageCasesTheory.supported_target_storage_syntax >>
-     irule popTargetPreTheory.target_indices_pre_of_body >>
-     simp[] >>
-     `~supported_target_exists is_extcode head` by
-       metis_tac[ctorDeployLoweringFrameSupportTheory.deploy_frame_supported_target_no_extcode] >>
-     qpat_assum `supported_target tops bindings head` mp_tac >>
-     qpat_assum `~supported_target_exists (\x. ~is_extcode x /\ _) head` mp_tac >>
-     qpat_assum `~supported_target_exists is_extcode head` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     Cases_on `head` >> gvs[byte_widths_expr_def,supported_target_def,
-       supportedExprTraverseTheory.supported_expr_exists_def,AllCaseEqs()] >>
-     rpt strip_tac
-     >~ [`byte_widths_expr x`]
-     >- (rename1 `byte_widths_expr x` >>
-         `~is_extcode x` by metis_tac[supportedExprTraverseTheory.supported_expr_exists_root] >>
-         spose_not_then assume_tac >>
-         qpat_x_assum `~supported_expr_exists (\y. ~is_extcode y /\ _) x`
-           (irule o NOT_ELIM) >>
-         irule supportedExprTraverseTheory.supported_expr_exists_root >> simp[]) >>
-     rename1 `byte_widths_target b` >> Cases_on `b` >> gvs[byte_widths_expr_def]) >>
+     drule_then strip_assume_tac tuple_assign_target_supported_calls >>
+     `byte_widths_target head` by
+       (irule tuple_assign_target_widths >> conj_tac >- first_assum ACCEPT_TAC >>
+        qexists_tac `cenv` >> first_assum ACCEPT_TAC) >>
+     qspecl_then [`head`,`Type (EL i dtys)`,`cenv`,`cx`,`env`] MATCH_MP_TAC
+       popTargetPreTheory.target_indices_pre_of_body >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+     >- (rewrite_tac[EVERY_MEM] >> qx_gen_tac `callee` >> disch_tac >> BETA_TAC >>
+         `FST callee = NONE /\ IS_SOME (supported_function_decl tops callee Internal)` by
+           (qpat_assum `EVERY (\c. FST c = NONE /\ IS_SOME _) (int_calls_target head)`
+              (qspec_then `callee` mp_tac o REWRITE_RULE [EVERY_MEM]) >> BETA_TAC >>
+            (impl_tac >- first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC) >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         qexists_tac `tops` >> rpt conj_tac >> first_assum ACCEPT_TAC)
+     >- (qpat_assum `cx_tops cx = tops` (fn th => rewrite_tac[th]) >>
+         map_every (fn pat => qpat_assum pat mp_tac)
+           [`!p. supported_target_exists p head ==> _`,
+            `!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+               (Assign (TupleTarget gs) e) ==> _`] >>
+         POP_ASSUM_LIST kall_tac >> metis_tac[]) >>
+     asm_rewrite_tac[]) >>
   `!i src. i < LENGTH gs /\ expr_sim_inv cenv cx env src /\
       body_tuple_targets_full_ok cx (DROP i gs) (DROP i vs) ==>
       ?head. EL i gs = BaseTarget head /\ supported_target tops bindings head /\
@@ -12493,10 +12747,9 @@ Proof
   qpat_x_assum `head = TopLevelNameTarget _` SUBST_ALL_TAC >>
   qpat_x_assum `IS_SOME (supported_immutable_type tops (ns,id))`
     (qx_choose_then `dty` assume_tac o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
-  `supported_variable_decl tops (ns,id) = SOME (Private,Immutable,dty,NONE)` by
-    (qpat_assum `supported_immutable_type tops (ns,id) = SOME dty` mp_tac >>
-     simp[NoAsms,supportedDeclsTheory.supported_immutable_type_def,AllCaseEqs()] >>
-     strip_tac >> gvs[]) >>
+  qpat_assum `supported_immutable_type tops (ns,id) = SOME dty`
+    (qx_choosel_then [`imm_vis`,`imm_slot`] assume_tac o
+     MATCH_MP tuple_immutable_declaration_witness) >>
   drule_then strip_assume_tac bodyStorageMetadataTheory.supported_variable_decl_mem >>
   `get_module_code cx NONE = SOME tops` by
     (qpat_assum `body_inv tops ctx cenv cx` mp_tac >> simp[NoAsms,body_inv_def]) >>
@@ -12508,7 +12761,7 @@ Proof
   `FLOOKUP env.bare_globals (ns,id) = SOME dty` by
     (qpat_assum `bare_globals_complete _ _`
        (mp_tac o REWRITE_RULE [vyperTypeInvariantsTheory.bare_globals_complete_def]) >>
-     disch_then (qspecl_then [`ns`,`tops`,`Private`,`Immutable`,`id`,`dty`,`NONE`] mp_tac) >>
+     disch_then (qspecl_then [`ns`,`tops`,`imm_vis`,`Immutable`,`id`,`dty`,`imm_slot`] mp_tac) >>
      simp[]) >>
   `FLOOKUP env.bare_global_assignable (ns,id) = SOME (EL i dtys)` by
     (qpat_assum `well_typed_target env (TopLevelNameTarget (ns,id)) (EL i dtys)` mp_tac >>
@@ -12517,7 +12770,7 @@ Proof
     (qpat_assum `bare_global_assignable_complete _ _`
        (mp_tac o REWRITE_RULE [vyperTypeInvariantsTheory.bare_global_assignable_complete_def]) >>
      Cases_on `cx.in_deploy` >> simp[]
-     >- (disch_then (qspecl_then [`ns`,`tops`,`Private`,`id`,`dty`,`NONE`] mp_tac) >>
+     >- (disch_then (qspecl_then [`ns`,`tops`,`imm_vis`,`id`,`dty`,`imm_slot`] mp_tac) >>
          simp[] >> metis_tac[]) >>
      strip_tac >> gvs[]) >>
   qpat_x_assum `dty = EL i dtys` SUBST_ALL_TAC >>
@@ -15588,84 +15841,4 @@ Proof
               (drule_then (ACCEPT_TAC o CONJUNCT2))) >>
         asm "write_continue" (qspecl_then [`q`,`Gq`,`tq`] match_mp_tac) >>
         pure_asm_rewrite_tac[] >> simp[NoAsms]))
-QED
-*)
-(* GATE_ADMISSION: held, private storage/transient bytestring tuple member *)
-Theorem body_assign_tuple_targets_private_bytes_full:
-  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
-    (!s'' tv t s'3' v t'.
-       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
-       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
-    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-       (Assign (TupleTarget gs) e) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\
-    ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
-    ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
-    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
-    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty /\
-    lowered_value_type cenv e = expr_type e /\
-    EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
-                        FLOOKUP env.var_types id = SOME ty /\
-                        0 < type_memory_bytes cenv ty) \/
-               (?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
-                       supported_scalar_target tops nsid) \/
-               (?nsid fld fty.
-                  g = BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld) /\
-                  supported_storage_field_write tops nsid fld /\
-                  type_place_target env
-                    (AttributeTarget (TopLevelNameTarget nsid) fld) =
-                    SOME (Type fty) /\ is_word_type fty)) gs /\
-    EXISTS (\g. ?nsid dty mut slot.
-      g = BaseTarget (TopLevelNameTarget nsid) /\
-      supported_scalar_target tops nsid /\
-      type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) /\
-      supported_variable_decl tops nsid = SOME (Private,mut,dty,SOME slot) /\
-      (mut = Storage \/ mut = Transient) /\
-      is_bytestring_type dty) gs ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
-      (eval_stmt cx (Assign (TupleTarget gs) e)) es
-Proof
-  cheat
-QED
-
-Theorem body_assign_tuple_widened_full:
-  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
-    (!s'' tv t s'3' v t'.
-       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
-       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
-    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-       (Assign (TupleTarget gs) e) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\
-    ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
-    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
-    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty /\
-    lowered_value_type cenv e <> expr_type e ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
-      (eval_stmt cx (Assign (TupleTarget gs) e)) es
-Proof
-  cheat
 QED
