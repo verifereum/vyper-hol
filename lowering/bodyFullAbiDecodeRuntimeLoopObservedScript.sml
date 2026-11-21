@@ -1,6 +1,8 @@
 (* Observed runtime iteration, conditional on the shared typed Body interface. *)
 Theory bodyFullAbiDecodeRuntimeLoopObserved
-Ancestors fragExec[qualified,ignore_grammar] venomInst[qualified,ignore_grammar] rich_list[qualified,ignore_grammar]
+Ancestors
+  bodyFullAbiDecodeOwnedStateProps[qualified,ignore_grammar]
+  fragExec[qualified,ignore_grammar] venomInst[qualified,ignore_grammar] rich_list[qualified,ignore_grammar]
   bodyFullAbiDecodeRuntimeLoopBoundary bodyFullAbiDecodeRuntimeLoopHeaderFrame
   bodyFullAbiDecodeAge[qualified]
   bodyFullAbiDecodeLoopObservedSyntax bodyFullAbiDecodeLoopIterateObserved
@@ -168,7 +170,11 @@ Resume abi_decode_dyn_loop_word_frame_split_entry[header]:
   pop_assum (map_every assume_tac o CONJUNCTS o BETA_RULE) >>
   `s.vs_current_bb = sa.cs_current_bb` by
     (qpat_assum `sa.cs_current_bb = hdr` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `?H. V H` mp_tac >>
+     qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es s /\ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[bodyFullAbiDecodeOwnedStatePropsTheory.owned_decoder_allocas_below_fmp]) >>
   mp_tac (abi_decode_loop_header_observed |> SPEC_ALL |>
     Q.INST [`j` |-> `k`, `idx` |-> `header_idx`, `sf` |-> `header_sf`,
             `exit_lbl` |-> `SND (SND (labels:string # string # string))`,

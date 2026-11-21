@@ -8,6 +8,7 @@ Ancestors
   compileEnv exprLowering context bodyPtrDefs ptrDiscipline contractABI
   vyperABI vyperValue vyperTyping venomState venomMemDefs
   words finite_map pred_set arithmetic list pair
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 Libs pureFrameLib
 
 Theorem extcall_direct_word_source:
@@ -46,7 +47,7 @@ Theorem abi_encode_saved_word_row_pure:
   local_ptrs_reserved ce se /\ fn_inst_ids_distinct func /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
-  ~ctx_has_dalloca ctx /\ shared <> loc /\
+  shared <> loc /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = shared /\
   inst.inst_outputs = [root] /\ not_local_ptr ce ee.scopes root /\
   compile_abi_encode_value_rows ce (Var dst) cursor h [(StackValue tag src,ty)] a = ((),c) /\
@@ -73,6 +74,11 @@ Proof
   drule_all abi_encode_saved_state_resources >> strip_tac >>
   qpat_assum `abi_encode_saved_state _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [abi_encode_saved_state_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `?H. valid_horizon cx st0 H ee.storage_trace`
+       (qx_choose_then `hz` assume_tac) >>
+     qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H _ _ _ _ _ u /\ _`
+       (drule_then (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o CONJUNCT1))) >>
   `abi_member_head_size at = 32` by
     metis_tac[abi_encode_translated_head, entryDecodeStaticPropsTheory.word_type_dec_sizes] >>
   `pbase + capacity <= u.vs_alloca_next` by
@@ -111,7 +117,7 @@ Theorem extcall_direct_word_row:
   local_ptrs_reserved ce se /\ fn_inst_ids_distinct func /\ 32 <= capacity /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
-  ~ctx_has_dalloca ctx /\ shared <> loc /\
+  shared <> loc /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = shared /\
   inst.inst_outputs = [root] /\ not_local_ptr ce ee.scopes root /\
   compile_abi_encode_value_rows ce (Var dst) cursor h [(StackValue tag src,ty)] a = ((),c) /\

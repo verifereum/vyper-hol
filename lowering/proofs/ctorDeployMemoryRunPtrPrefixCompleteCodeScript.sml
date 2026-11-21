@@ -47,6 +47,17 @@ Proof
   fs[pending_alloca_size_def]
 QED
 
+Theorem prefix_decoder_inst_idx_room:
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+   s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp (s with vs_inst_idx := idx) /\
+   (s with vs_inst_idx := idx).vs_alloca_next +
+     pending_alloca_size func (s with vs_inst_idx := idx) <=
+     w2n (s with vs_inst_idx := idx).vs_initial_fmp)
+Proof
+  simp[allocas_below_fmp_def, pending_alloca_size_def] >> metis_tac[]
+QED
+
 Theorem prefix_scalar_sequence_code:
   compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
   run_inst_seq (emitted_insts st st') s = OK t ==>
@@ -457,10 +468,8 @@ Proof
      fs[EVERY_CONJ]) >>
   `(ctx_has_dalloca ctx ==> allocas_below_fmp (actual with vs_inst_idx := LENGTH st'.cs_current_insts) /\
    (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_alloca_next + pending_alloca_size func (actual with vs_inst_idx := LENGTH st'.cs_current_insts) <= w2n (actual with vs_inst_idx := LENGTH st'.cs_current_insts).vs_initial_fmp)` by
-    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp actual /\ _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp_tac (srw_ss()) [allocas_below_fmp_def,pending_alloca_size_def] >>
-     metis_tac[]) >>
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp actual /\ _`
+       (MATCH_ACCEPT_TAC o MATCH_MP prefix_decoder_inst_idx_room)) >>
   `checked ==> gas_path_mem ctx func initial 0
       (OK (actual with vs_inst_idx := LENGTH st'.cs_current_insts)) /\
       alloca_history func (actual with vs_inst_idx := LENGTH st'.cs_current_insts)` by
@@ -645,11 +654,9 @@ Proof
      fs[Abbr `prepared`, EVERY_CONJ]) >>
   `(ctx_has_dalloca ctx ==> allocas_below_fmp prepared /\
    prepared.vs_alloca_next + pending_alloca_size func prepared <= w2n prepared.vs_initial_fmp)` by
-    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t /\ _` mp_tac >>
-     qunabbrev_tac `prepared` >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp_tac (srw_ss()) [allocas_below_fmp_def,pending_alloca_size_def] >>
-     metis_tac[]) >>
+    (qunabbrev_tac `prepared` >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t /\ _`
+       (MATCH_ACCEPT_TAC o MATCH_MP prefix_decoder_inst_idx_room)) >>
   `abi_decode_sim ctx func initial prepared /\
    abi_encoder_registered_effect {} [] initial prepared` by
     (qunabbrev_tac `prepared` >>

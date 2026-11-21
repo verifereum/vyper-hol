@@ -6,6 +6,7 @@ Ancestors
   stateRelProj bodyPtrDefs loweringPosts loweringStateRelDefs fragGasOriginPtr fragExec
   abiEncoderWindowPhase exprLowering compileEnv context contractABI
   venomState venomInst finite_map pred_set list arithmetic pair words
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 (* The cursor site is distinct from the request allocation and is the
    only allocation touched by the loop's initialization and finish. *)
@@ -17,7 +18,6 @@ Theorem abi_encode_saved_values_execute_with_frame[local]:
   local_ptrs_reserved ce se /\ fn_inst_ids_distinct func /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
-  ~ctx_has_dalloca ctx /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = shared /\
   inst.inst_outputs = [root] /\ not_local_ptr ce ee.scopes root /\
   compile_abi_encode_values_to_buf ce (Var payload_var) rows st = (alen,en) /\ fn_has_code st en func /\
@@ -92,7 +92,22 @@ Proof
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
       >- simp[pure_frame_refl, wb_frame_refl]
-      >- (rpt gen_tac >> disch_tac >> metis_tac[abi_encode_saved_state_resources])
+      >- (MAP_EVERY qx_gen_tac [`a`,`v`,`Gv`,`tv`] >>
+          disch_then (CONJUNCTS_THEN2 kall_tac assume_tac) >>
+          drule_all abi_encode_saved_state_resources >> strip_tac >>
+          `stmt_state_rel hz ctx func ce cx ee v` by
+            (qpat_assum
+               `abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
+                  shared pbase capacity root payload_var dst_offset prefix a v Gv tv`
+               (strip_assume_tac o REWRITE_RULE [abi_encode_saved_state_def]) >>
+             qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
+                               stmt_state_rel H ctx func ce cx ee v /\ _`
+               (drule_then (ACCEPT_TAC o cj 1))) >>
+          `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
+            (drule_then ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+          qpat_assum `stmt_state_rel hz ctx func ce cx ee v`
+            (assume_tac o MATCH_MP stmt_state_rel_fmp_room) >>
+          asm_rewrite_tac[] >> strip_tac >> fs[fmp_room_def] >> decide_tac)
       >- (rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
           `!aid. aid IN ids ==> aid = st.cs_next_id` by
             (qpat_assum `ids SUBSET {st.cs_next_id}`
@@ -157,7 +172,6 @@ Theorem extcall_direct_values_execute:
   local_ptrs_reserved ce se /\ fn_inst_ids_distinct func /\ 32 <= capacity /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
-  ~ctx_has_dalloca ctx /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = shared /\
   inst.inst_outputs = [root] /\ not_local_ptr ce ee.scopes root /\
   compile_abi_encode_values_to_buf ce (Var payload_var) rows st = (alen,en) /\ fn_has_code st en func /\

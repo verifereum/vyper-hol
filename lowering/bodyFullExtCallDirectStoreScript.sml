@@ -10,6 +10,7 @@ Ancestors
   compileEnv exprLowering exprLoweringProps context contractABI
   valueEncodingDefs vyperValue vyperTyping vyperABI
   venomState venomInst venomMemDefs finite_map pred_set list arithmetic pair words
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 Libs horizonTypeLib pureFrameLib
 
 Theorem abi_encode_saved_store_static_pure:
@@ -20,7 +21,7 @@ Theorem abi_encode_saved_store_static_pure:
   local_ptrs_reserved ce se /\ fn_inst_ids_distinct func /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
-  ~ctx_has_dalloca ctx /\ shared <> loc /\
+  shared <> loc /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = shared /\
   inst.inst_outputs = [root] /\ not_local_ptr ce ee.scopes root /\
   abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) cursor loc slot i a u Gu tu /\
@@ -54,6 +55,12 @@ Proof
     (qx_choose_then `hz` assume_tac) >>
   qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H _ _ _ _ _ u /\ _`
     (drule_then strip_assume_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+    u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp` by
+    (`ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+       (drule_then ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     drule stmt_state_rel_fmp_room >> strip_tac >> strip_tac >>
+     fs[fmp_room_def] >> decide_tac) >>
   qpat_x_assum `?first last. expr_val_at _ _ _ _ _ _ _ _ _ /\ _`
     (qx_choosel_then [`first`,`last`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
   `hl <= off /\ dst_offset+h+hs <= capacity` by decide_tac >>
@@ -139,7 +146,7 @@ Theorem extcall_direct_store_static:
   local_ptrs_reserved ce se /\ fn_inst_ids_distinct func /\ 32 <= capacity /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
-  ~ctx_has_dalloca ctx /\ shared <> loc /\
+  shared <> loc /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = shared /\
   inst.inst_outputs = [root] /\ not_local_ptr ce ee.scopes root /\
   abi_encode_values_prefix_at ats avs hl (pbase+32) cursor loc slot i a u Gu tu /\
@@ -183,7 +190,7 @@ Theorem abi_encode_saved_store_dynamic_input_pure:
   local_ptrs_reserved ce se /\ fn_inst_ids_distinct func /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
-  ~ctx_has_dalloca ctx /\ shared <> loc /\
+  shared <> loc /\
   MEM cursor_inst (fn_insts func) /\ cursor_inst.inst_opcode = ALLOCA /\
   cursor_inst.inst_id = loc /\ cursor_inst.inst_outputs = [cursor_var] /\
   not_local_ptr ce ee.scopes cursor_var /\ se.cs_next_id <= loc /\
@@ -233,6 +240,12 @@ Proof
     (qx_choose_then `hz` assume_tac) >>
   qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H _ _ _ _ _ u /\ _`
     (drule_then strip_assume_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+    u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp` by
+    (`ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+       (drule_then ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     drule stmt_state_rel_fmp_room >> strip_tac >> strip_tac >>
+     fs[fmp_room_def] >> decide_tac) >>
   qpat_x_assum `?first last. expr_val_at _ _ _ _ _ _ _ _ _ /\ _`
     (qx_choosel_then [`first`,`last`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
   `local_ptrs_reserved ce a` by metis_tac[local_ptrs_reserved_next_var] >>
@@ -331,7 +344,7 @@ Theorem abi_encode_saved_store_dynamic_pure:
   local_ptrs_reserved ce se /\ fn_inst_ids_distinct func /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
-  ~ctx_has_dalloca ctx /\ shared <> loc /\
+  shared <> loc /\
   MEM cursor_inst (fn_insts func) /\ cursor_inst.inst_opcode = ALLOCA /\
   cursor_inst.inst_id = loc /\ cursor_inst.inst_outputs = [cursor_var] /\
   not_local_ptr ce ee.scopes cursor_var /\ se.cs_next_id <= loc /\
@@ -390,7 +403,7 @@ Theorem extcall_direct_store_dynamic:
   local_ptrs_reserved ce se /\ fn_inst_ids_distinct func /\ 32 <= capacity /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
-  ~ctx_has_dalloca ctx /\ shared <> loc /\
+  shared <> loc /\
   MEM cursor_inst (fn_insts func) /\ cursor_inst.inst_opcode = ALLOCA /\
   cursor_inst.inst_id = loc /\ cursor_inst.inst_outputs = [cursor_var] /\
   not_local_ptr ce ee.scopes cursor_var /\ se.cs_next_id <= loc /\

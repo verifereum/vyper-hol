@@ -134,7 +134,7 @@ fun mk_body_observed_statement guarded_plus completed_robust =
   asz = abi_embedded_static_size ce.ce_struct_fields ty /\
   msz = type_memory_size tv /\ n < dimword (:256) /\ hi <> Lit 0w /\
   w2n input_word+LENGTH input_bytes < dimword (:256) /\
-  (?H. V H) /\ ~ctx_has_dalloca ctx /\ fn_inst_ids_distinct fn /\
+  (?H. V H) /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce anchor /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
