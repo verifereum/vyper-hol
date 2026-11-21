@@ -5905,7 +5905,13 @@ Theorem compile_acc_shape_mode:
   shape_mode_step static internal compiler_label (\st. R st /\ cenv_shape_mode_ok static st cenv)
     (compile_acc cfn cenv addr_e acc) (\v st. R st /\ plain_operand st v)
 Proof
-  strip_tac >> Cases_on `acc` >>
+  strip_tac >> Cases_on `acc` THENL [
+    ALL_TAC, ALL_TAC,
+    (Cases_on `is_self_addr addr_e` THENL [
+       (simp[compile_acc_def, LET_THM, pairTheory.UNCURRY] >>
+        shape_under_tac shape_step_emit_op_plain `R` >> shape_opcode_tac),
+       ALL_TAC]),
+    ALL_TAC, ALL_TAC] >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_acc_def] >> CONV_TAC (DEPTH_CONV ETA_CONV)
   >~ [`shape_mode_step static _ _ _ (lower_value _ _ _ _) _`]
