@@ -12,6 +12,7 @@ Ancestors
   compileEnv exprLowering context bodyPtrDefs loweringPosts loweringStateRelDefs ptrDiscipline
   contractABI vyperABI vyperValue vyperTyping venomState venomInst
   finite_map pred_set list arithmetic pair words
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 Libs pureFrameLib
 
 Theorem abi_encode_values_translated_window_input[local]:
@@ -61,7 +62,7 @@ Theorem abi_encode_saved_row_open_pure:
   (!H. dead_lo_ok H (DF H) lo ce cx) /\
   body_inv tops ctx ce cx /\ expr_sim_inv ce cx env ee /\
   storage_trace_domain cx st0 ee.storage_trace /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\
   fn_has_code su en func /\
   compile_abi_encode_value_rows ce (Var dst) cursor h [(saved,ty)] su = ((),en) /\
   abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
@@ -97,6 +98,8 @@ Proof
   `stmt_state_rel hz ctx func ce cx ee u` by
     (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee u /\ _`
        (drule_then (ACCEPT_TAC o cj 1))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (drule_then ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s` by
     (gen_tac >> disch_tac >> first_assum (drule_then (ACCEPT_TAC o cj 1))) >>
   `hl <= off /\ pbase+dst_offset+h <= pbase+capacity /\ pbase+dst_offset+off <= pbase+capacity` by decide_tac >>
@@ -308,7 +311,7 @@ Theorem abi_encode_saved_row_pure:
   (!H. dead_lo_ok H (DF H) lo ce cx) /\
   body_inv tops ctx ce cx /\ expr_sim_inv ce cx env ee /\
   storage_trace_domain cx st0 ee.storage_trace /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\
   fn_has_code su en func /\
   compile_abi_encode_value_rows ce (Var dst) cursor h [(saved,ty)] su = ((),en) /\
   abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
@@ -376,7 +379,7 @@ Theorem extcall_direct_row:
   (!H. dead_lo_ok H (DF H) lo ce cx) /\
   body_inv tops ctx ce cx /\ expr_sim_inv ce cx env ee /\
   storage_trace_domain cx st0 ee.storage_trace /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\
   fn_has_code su en func /\
   compile_abi_encode_value_rows ce (Var dst) cursor h [(saved,ty)] su = ((),en) /\
   extcall_direct_state ctx func ce cx st0 ee DF lo d se s G tn
