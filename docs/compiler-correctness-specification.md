@@ -55,8 +55,10 @@ or check and is easy to miss:
   (`lowering/e2eDeployDefsScript.sml`) requires `es.contexts = [(ctxt, rb)]`. A
   creation frame running under a caller (CREATE or CREATE2 from a factory) is not
   an instance of `e2e_deploy_correctness`. The source models such a creation on
-  the caller's side, through `eval_create` and the call-outcome oracle, but no
-  current theorem covers that caller (next item).
+  the caller's side, through `eval_create` and the call-outcome oracle, and
+  `vyper_call_correct` covers that caller: with no whitelist premise (next
+  item), a calling body may create contracts or make a delegate `raw_call`, and
+  the theorem takes the result of either from the call-outcome oracle.
 - **No whitelist premise.** None of the four top theorems assumes
   `supported_program` or `supported_program_deploy`. Each derives them from
   the checker acceptance in `source_typing_ok` or `deploy_typing_ok` and the
@@ -315,10 +317,11 @@ when exhausted; assembly also uses frame-local EVM gas readings. There is **no c
 gas-reading correspondence** and no source `msg.gas` guarantee. For `gas=`, the
 theorem relates only the operand: where requests are compared (success or halt),
 `request_agree` requires `r1.cr_gas = SOME g ==> r2.cr_gas = SOME g` of every
-compared request. Among the call forms `supported_program` admits (`extcall`,
-`staticcall` and `send`), a call with an explicit source `gas=` value therefore
-forwards exactly that gas operand on its CALL or STATICCALL, and a `send` without
-`gas=` records 0, so its operand must be 0. The operand of any other call without `gas=` is unconstrained,
+compared request. Among the call forms the theorem covers (`extcall`,
+`staticcall`, `send` and `raw_call`, delegate form included), a call with an
+explicit source `gas=` value therefore forwards exactly that gas operand on its
+CALL, STATICCALL or DELEGATECALL, and a `send` without `gas=` records 0, so its
+operand must be 0. The operand of any other call without `gas=` is unconstrained,
 creations and the precompile builtins record none, and the gas the callee
 actually receives is not related.
 The result relation ties source gas observations to the frame's EVM gas readings only through `gas_readings_rel (gas_readings es)`: it fixes some slots of the source's gas observations so that the fixed (`SOME`) slots together with the unused readings are a permutation of `gas_readings es`, and the result must hold for every value in an unfixed (`NONE`) slot and every appended tail, which the EVM readings do not constrain. The old
@@ -364,8 +367,11 @@ The result relation ties source gas observations to the frame's EVM gas readings
   every gas filling of its outcomes, no exempt source observation
   (`~gas_source_exempt`) and fewer than 2⁶⁴ entries. The identity
   case composes proved lowering, O1 fuel/memory and codegen gas bounds. The
-  assembly-optimizer case is proved too, so no admitted theorem lies under
-  the general companion. The deploy companion `e2e_deploy_gas_sufficient`
+  assembly-optimizer case is proved from the same stages. Like the other top
+  theorems, the general companion rests on the narrow case lemmas still
+  admitted after the whitelist premise was removed. Each is marked
+  `GATE_ADMISSION` at its declaration, and every admitted statement under the
+  companion is one of them. The deploy companion `e2e_deploy_gas_sufficient`
   similarly composes proved stage bounds; with enough added gas, and under
   its source-exemption, storage and trace-length (fewer than 2⁶⁴ entries)
   conditions on that raised-gas run, OutOfGas implies that the code to deposit
@@ -432,7 +438,7 @@ The final statements will need explicit assumptions concerning at least:
 
 Phase 2 must distinguish genuine environment assumptions from compiler invariants that earlier stages are responsible for proving.
 
-The executions the current theorems do not cover at all (proxy and delegated frames whose executing bytecode differs from the target's code, nested creation frames, callers that create, non-canonical initcode) are listed in [Executions outside the current theorems](#executions-outside-the-current-theorems).
+The executions the current theorems do not cover at all (proxy and delegated frames whose executing bytecode differs from the target's code, nested creation frames, non-canonical initcode) are listed in [Executions outside the current theorems](#executions-outside-the-current-theorems).
 
 ## Planned theorem family
 
