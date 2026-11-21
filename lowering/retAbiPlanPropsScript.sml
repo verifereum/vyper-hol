@@ -633,18 +633,15 @@ Proof
   simp[supported_word_type_def, evaluate_type_def]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  rw[supported_scalar_type_def] >- simp[supported_word_type_assignable] >>
-  Cases_on `ty` >> gvs[supported_string_type_def, assignable_type_def]
-QED
-*)
 Theorem supported_scalar_type_assignable:
   !tenv ty.
     supported_scalar_type ty /\ well_formed_type tenv ty ==>
     assignable_type tenv ty
 Proof
-  cheat
+  rw[supported_scalar_type_def] >- simp[supported_word_type_assignable] >>
+  Cases_on `ty` >> gvs[supported_string_type_def, assignable_type_def] >>
+  Cases_on `b` >> gvs[supported_string_type_def] >>
+  Cases_on `b'` >> gvs[supported_string_type_def]
 QED
 
 (* A supported return type other than NoneT is assignable where it is well
