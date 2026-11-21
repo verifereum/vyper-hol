@@ -1,7 +1,7 @@
 (* Route P uses the left outcome's control flow and the companion's sites. *)
 Theory s1PrefixCompose
 Ancestors
-  s1PrefixDefs s1PrefixProps
+  s1PrefixDefs s1PrefixProps s1PrefixFrame
   bodyFullExtCallPackingReady gasOutcomeFull gasExemptCert
   gasStorage gasSummary gasSummaryCompose fragGasOriginPtr fragGasOrigin
   fragGasMode fragGasPath fragGasPathMem fragExec
@@ -198,9 +198,18 @@ Resume gas_prefix_full_bind[bad]:
       bind_bad_trace_site_tac `gas_bad_storage_at _ _ source _ _ (marks ++ l)`) >>
   qexists_tac `left_marks ++ l` >> conj_tac
   >- metis_tac[] >>
-  qpat_x_assum `!tail res ee obs_pre rq outcome sfx H. _`
-    (qspec_then `l` assume_tac o
-     MATCH_MP (GEN_ALL (SIMP_RULE (srw_ss()) [] gas_prefix_claims_extend))) >>
+  qpat_x_assum `!tail res ee obs_pre rq outcome sfx H. _` (fn claims =>
+    let
+      val (tail, body) = dest_forall (concl claims)
+      val gas = ``gas_explicit left_marks s.vs_gas_readings ++ ^tail``
+      val observations = genvar (type_of gas)
+      val predicate = mk_abs (observations, subst [gas |-> observations] body)
+      val extension =
+        Q.SPECL [`^predicate`, `left_marks`, `s.vs_gas_readings`, `l`]
+          gas_prefix_claims_extend
+    in
+      assume_tac (MATCH_MP (BETA_RULE extension) claims)
+    end) >>
   bind_bad_trace_site_tac `gas_bad_storage_at _ _ source _ _ (left_marks ++ l)`
 QED
 
@@ -331,6 +340,40 @@ Resume gas_prefix_full_bind[success]:
 QED
 
 Finalise gas_prefix_full_bind
+
+Theorem gas_prefix_full_bind_no_outcome:
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0 source
+    (es,s,G,tn) Q1 R1 /\
+  (!H res ee gt r. R1 H res ee gt r ==> ISR res) /\
+  gas_prefix_full (DF,lo,explicit,ctx,func,PG) cx st0 source (es,s,G,tn) /\
+  (!H v mid G1 tn1 t. Q1 H (INL v) mid G1 tn1 t ==> ~t.vs_halted) /\
+  storage_trace_frame source /\ (!v. storage_trace_frame (next v)) /\
+  requests_outcomes_frame source /\
+  (!v st gobs res ee. next v (st with gas_obs := gobs) = (res,ee) ==>
+     EVERY (\ob. !rq oc. ob = StorageOutcome rq oc ==> computed_precompile rq)
+       (DROP (LENGTH st.storage_trace) ee.storage_trace)) ==>
+  gas_prefix_full (DF,lo,explicit,ctx,func,PG) cx st0 (bind source next) (es,s,G,tn)
+Proof
+  strip_tac >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ Q1 R1`
+    (mp_then Any irule gas_prefix_full_bind) >>
+  simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `~t.vs_halted` by
+        (`valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+            mid.storage_trace` by fs[storage_trace_domain_def] >>
+         qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
+           (qspec_then `storage_trace_horizon mid.storage_trace`
+             (drule_then assume_tac)) >>
+         qpat_assum `!H v mid G1 tn1 t. Q1 H (INL v) mid G1 tn1 t ==> ~t.vs_halted`
+           (qspecl_then
+             [`storage_trace_horizon mid.storage_trace`,`v`,`mid`,`G1`,`tn1`,`t`]
+             (drule_then ACCEPT_TAC))) >>
+      irule gas_prefix_full_no_outcome >> simp[] >>
+      rpt gen_tac >> strip_tac >>
+      first_x_assum drule >> simp[]) >>
+  first_assum ACCEPT_TAC
+QED
 
 Theorem gas_prefix_full_ignore_bind:
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0 source

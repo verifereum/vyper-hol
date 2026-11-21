@@ -1,103 +1,11 @@
 (* The raw call's own instruction supplies the request site before adoption. *)
 Theory s1PrefixRawCall
 Ancestors
-  s1PrefixDefs bodyFullRawCallCall gasOutcomeFull exprLoweringProps
+  s1PrefixDefs s1PrefixProps bodyFullRawCallCall gasOutcomeFull exprLoweringProps
   loweringStateRelDefs fragGasOriginPtr fragExec contextCodegenRelProps
   ptrSafeRun memSafeRun bodyPtrDefs venomInst venomExecSemantics emitHelperProps
   vyperCallOutcomeProps vyperCallOutcome vyperState extCallOracle
   e2eRequestCutDefs vyperStorageFootprint gasSummary list rich_list arithmetic option
-
-Triviality take_request_gas_obs:
-  take_request_outcome rq (es with gas_obs := readings) =
-    (FST (take_request_outcome rq es),
-     SND (take_request_outcome rq es) with gas_obs := readings)
-Proof
-  Cases_on `es.outcomes` >> simp[take_request_outcome_def] >>
-  rename1 `es.outcomes = SOME os` >> Cases_on `os` >> simp[] >>
-  pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[]
-QED
-
-Triviality take_delegate_gas_obs:
-  take_delegate_outcome gas_cap target calldata value (es with gas_obs := readings) =
-    (FST (take_delegate_outcome gas_cap target calldata value es),
-     SND (take_delegate_outcome gas_cap target calldata value es) with gas_obs := readings)
-Proof
-  PURE_REWRITE_TAC[take_delegate_outcome_def, delegate_outcome_request_def,
-                   call_outcome_request_def] >>
-  simp[take_request_gas_obs]
-QED
-
-Triviality observed_take_at_start:
-  take_request_outcome rq0 es = (INL (rq,outcome),es1) /\
-  es1.storage_trace = obs_pre ++ StorageOutcome request observed :: sfx /\
-  LENGTH es.storage_trace <= LENGTH obs_pre ==>
-  obs_pre = es.storage_trace /\ request = rq /\ observed = outcome
-Proof
-  strip_tac >>
-  drule take_request_outcome_success >> strip_tac >>
-  `es.storage_trace ++ [StorageOutcome rq outcome] =
-    obs_pre ++ StorageOutcome request observed :: sfx` by gvs[] >>
-  qpat_x_assum `es.storage_trace ++ [_] = _` mp_tac >>
-  simp[APPEND_EQ_APPEND] >> strip_tac >> gvs[] >>
-  Cases_on `l` >> gvs[]
-QED
-
-Triviality call_step_checks:
-  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),G',tn') /\
-  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME inst /\
-  MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL] ==>
-  ptr_inst_ok D lo 0 ctx func G tn inst s /\ mem_safe_step 0 ctx inst s
-Proof
-  strip_tac >>
-  qpat_x_assum `gas_origin_ptr_path _ _ _ _` mp_tac >>
-  simp[Once gas_origin_ptr_path_cases, exit_result_def] >> strip_tac
-  >- (qpat_x_assum `_ = s`
-        (mp_tac o Q.AP_TERM `\t. t.vs_inst_idx`) >> simp[]) >>
-  drule gas_origin_ptr_edge_common_fuel >>
-  disch_then (CONJUNCTS_THEN2 assume_tac
-    (qx_choose_then `fuel` (qx_choose_then `edge_bb` (qx_choose_then `edge_inst`
-     (qx_choose_then `step_result` (map_every assume_tac o CONJUNCTS)))))) >>
-  `edge_bb = bb /\ edge_inst = inst` by metis_tac[SOME_11] >>
-  fs[is_terminator_def] >>
-  `inst.inst_opcode <> INVOKE /\ ~revert_forward_at bb s.vs_inst_idx` by
-    (fs[] >> rpt strip_tac >> drule_all revert_forward_at_opcode >> fs[]) >>
-  `mem_safe_step fuel ctx inst s` by metis_tac[] >>
-  (conj_tac
-   >- metis_tac[ptr_safe_step_inst_ok, ptr_inst_ok_fuel] >>
-   fs[mem_safe_step_non_invoke])
-QED
-
-Triviality ordinary_request_index:
-  stmt_state_rel H ctx func cenv cx es s /\
-  stmt_state_rel H ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
-  take_request_outcome rq0 es = (INL (rq,outcome),es1) /\
-  ~computed_precompile rq /\ LENGTH es.requests = k ==>
-  LENGTH s.vs_requests = k /\ k < LENGTH u.vs_requests /\
-  request_agree H cx.txn.target rq (EL k u.vs_requests) /\
-  outcome = (if s.vs_outcomes = [] then failed_outcome rq else HD s.vs_outcomes)
-Proof
-  strip_tac >>
-  drule take_request_outcome_success >> strip_tac >>
-  ` (SND (adopt_call_outcome rq outcome es1)).requests = es1.requests` by
-    (Cases_on `adopt_call_outcome rq outcome es1` >>
-     rename1 `adopt_call_outcome rq outcome es1 = (answer,adopted)` >>
-     drule adopt_call_outcome_frame >> strip_tac >>
-     qpat_x_assum `adopted = _` (mp_tac o Q.AP_TERM `\st. st.requests`) >> simp[]) >>
-  fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
-  `LENGTH s.vs_requests = LENGTH es.requests` by metis_tac[LIST_REL_LENGTH] >>
-  `LIST_REL (request_agree H cx.txn.target) (es.requests ++ [rq]) u.vs_requests` by
-    gvs[record_request_def] >>
-  `LENGTH u.vs_requests = SUC (LENGTH es.requests) /\
-   request_agree H cx.txn.target rq (EL (LENGTH es.requests) u.vs_requests)` by
-    (qpat_assum `LIST_REL _ (es.requests ++ [rq]) _` mp_tac >>
-     rewrite_tac[LIST_REL_EL_EQN] >>
-     disch_then (CONJUNCTS_THEN2 assume_tac
-       (qspec_then `LENGTH es.requests` mp_tac)) >>
-     fs[EL_APPEND_EQN, ADD1]) >>
-  Cases_on `s.vs_outcomes` >> gvs[take_outcome_ordinary, take_outcome_exhausted]
-QED
 
 Theorem raw_call_actual_call_prefix:
   emit_op (case call_ty of

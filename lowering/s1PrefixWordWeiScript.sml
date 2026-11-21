@@ -1,13 +1,12 @@
 (* AsWeiValue composes the child's companion with a request-free suffix. *)
 Theory s1PrefixWordWei
 Ancestors
-  s1PrefixCompose s1PrefixDefs s1PrefixFrame s1PrefixProps
+  s1PrefixCompose s1PrefixDefs s1PrefixProps
   bodyFullBuiltinWordWeiPrefix exprBodyPreProps bodyFullPreds bodySimFull
   exprSimSource exprSimDefs exprSimWordBuiltins exprSimUnopProps
   exprLoweringProps gasOutcomeFullCompose gasContext gasExplicitSites gasShadowCompileStmtHelpers
   fragExec exprSimHypsDefs vyperInterpreter vyperStorageTrace
-  vyperStorageFootprint vyperState vyperAST vyperCallOutcomeFrame
-  vyperStatePreservation compileEnv list sum
+  vyperStorageFootprint vyperState vyperAST compileEnv list sum
 
 Theorem word_wei_sim_prefix:
   (!e. expr_body_pre cenv cx env e es ==>
@@ -55,21 +54,9 @@ Proof
      simp[] >> rpt strip_tac >> Cases_on `res` >> fs[expr_exit_def]) >>
   rewrite_tac[as_wei_value_source_bind] >>
   qpat_x_assum `gas_outcome_full _ _ _ _ _ _ (\H res ee G tn t. ~t.vs_halted) _`
-    (mp_then Any irule gas_prefix_full_bind) >>
-  simp[] >> rpt conj_tac
-  >~ [`storage_trace_frame (bind _ _)`]
-  >- simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
-          storage_trace_frame_read_result]
-  >~ [`storage_trace_frame _`]
-  >- simp[storage_trace_frame_def]
-  >~ [`requests_outcomes_frame _`]
-  >- (irule requests_outcomes_frame_bind_all >>
-      simp[evaluate_requests_outcomes_frame, requests_outcomes_frame_def,
-           state_rel_frame_result] >>
-      rpt strip_tac >> drule read_result_state >> simp[])
-  >> rpt strip_tac >> irule gas_prefix_full_no_outcome >>
-  simp[storage_trace_frame_def] >>
-  qpat_x_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> ~t.vs_halted`
-    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-  simp[GSYM storage_trace_domain_def]
+    (mp_then Any irule gas_prefix_full_bind_no_outcome) >>
+  simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+       storage_trace_frame_read_result, requests_outcomes_frame_bind_all,
+       evaluate_requests_outcomes_frame, requests_outcomes_frame_read_result] >>
+  simp[storage_trace_frame_def]
 QED
