@@ -535,7 +535,13 @@ Proof
      `inst.inst_id IN frag_ids ready body_end` by simp[] >>
      drule abi_encode_compiled_scratch_site >>
      disch_then drule >> simp[] >> strip_tac >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qpat_assum `!scopes i func' earlier ce'. _ ==> ?q.
+       i.inst_operands = [Lit 32w] /\ i.inst_outputs = [q] /\ not_local_ptr ce' scopes q`
+       (qspecl_then [`vs.scopes`, `inst`, `func`, `st`, `ce`] mp_tac) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then (qx_choose_then `q` strip_assume_tac) >>
+     qexists_tac `q` >> asm_rewrite_tac[]) >>
   `!name entry lp sz inst.
     lookup_scopes name vs.scopes = SOME entry /\
     FLOOKUP ce.ce_vars name = SOME(PtrVar (Var lp) sz) /\
