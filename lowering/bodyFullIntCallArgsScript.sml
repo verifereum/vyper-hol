@@ -1066,12 +1066,12 @@ Proof
   strip_tac >> conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem intcall_args_defaults_typed:
+Theorem intcall_args_defaults_typed_empty[local]:
   body_inv tops ctx cenv cx /\
   expr_sim_inv cenv cx tenv ee /\
   well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt) /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) ==>
-  well_typed_exprs (tenv with current_src := NONE) dflts
+  well_typed_exprs (defaults_env (tenv with current_src := NONE)) dflts
 Proof
   rpt strip_tac >>
   `functions_well_typed cx /\ env_consistent tenv cx ee` by
@@ -1085,61 +1085,142 @@ Proof
   `tenv.type_defs = get_tenv cx` by
     gvs[vyperTypeInvariantsTheory.env_consistent_def,
         vyperTypeInvariantsTheory.env_context_consistent_def] >>
-  `well_typed_exprs (defaults_env (tenv with current_src := NONE)) dflts` by
-    (drule (cj 4 vyperTypeContractContextTheory.well_typed_static_maps_transfer) >>
-     disch_then (qspec_then `defaults_env (tenv with current_src := NONE)` mp_tac) >>
-     simp[defaults_env_def]) >>
-  metis_tac[intcall_args_defaults_typing_mutual]
+  drule (cj 4 vyperTypeContractContextTheory.well_typed_static_maps_transfer) >>
+  disch_then (qspec_then `defaults_env (tenv with current_src := NONE)` mp_tac) >>
+  simp[defaults_env_def]
 QED
 
-(* Pure allocation checks depend on layouts and overlap modules, not locals. *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Theorem intcall_args_defaults_typed:
+  body_inv tops ctx cenv cx /\
+  expr_sim_inv cenv cx tenv ee /\
+  well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt) /\
+  lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) ==>
+  well_typed_exprs (tenv with current_src := NONE) dflts
 Proof
-  ho_match_mp_tac supportedExprsTheory.supported_pure_expr_ind >>
-  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
-  gvs[supportedExprsTheory.supported_pure_expr_def] >>
-  drule compileEnvTheory.type_memory_bytes_frame >> strip_tac >>
-  rpt (first_x_assum (qspecl_then [`c`,`c'`] assume_tac)) >>
-  fs[allocLimitsTheory.alloc_limits_expr_def, allocLimitsTheory.type_alloc_ok_def,
-       exprLoweringTheory.copies_subscript_base_def] >>
-  drule (cj 2 ctorDeployLoweringFrameSupportTheory.deploy_frame_supported_pure_no_extcode) >>
-  Cases_on `es` >- simp[allocLimitsTheory.alloc_limits_expr_def] >>
-  simp[supportedExprTraverseTheory.supported_expr_exists_def] >> strip_tac >>
-  `~is_extcode h` by metis_tac[supportedExprTraverseTheory.supported_expr_exists_root] >>
-  simp[]
+  strip_tac >> drule_all intcall_args_defaults_typed_empty >>
+  metis_tac[cj 4 intcall_args_defaults_typing_mutual]
 QED
-*)
-Theorem intcall_args_pure_alloc_mutual[local]:
-  (!tops e. supported_pure_expr tops e ==>
-    !c c'. c'.ce_struct_fields = c.ce_struct_fields /\
-      c'.ce_modules = c.ce_modules ==>
-      (alloc_limits_expr c' e = alloc_limits_expr c e)) /\
-  (!tops es. supported_pure_exprs tops es ==>
-    !c c'. c'.ce_struct_fields = c.ce_struct_fields /\
-      c'.ce_modules = c.ce_modules ==>
-      (alloc_limits_exprs c' es = alloc_limits_exprs c es)) /\
-  (!tops fields. supported_pure_fields tops fields ==>
-    !c c'. c'.ce_struct_fields = c.ce_struct_fields /\
-      c'.ce_modules = c.ce_modules ==>
-      (alloc_limits_named_exprs c' fields = alloc_limits_named_exprs c fields)) /\
-  (!tops e. supported_place_expr tops e ==>
-    !c c'. c'.ce_struct_fields = c.ce_struct_fields /\
-      c'.ce_modules = c.ce_modules ==>
-      (alloc_limits_expr c' e = alloc_limits_expr c e))
+
+val local_default_pop =
+  ``\e. ?ty bt id. e = Pop ty bt /\ base_target_root bt = NameTarget id``;
+
+Theorem intcall_args_typed_no_local_pop[local]:
+  (!env e. well_typed_expr env e ==> env.var_types = FEMPTY ==>
+     ~supported_expr_exists ^local_default_pop e) /\
+  (!env e vt. type_place_expr env e = SOME vt ==> env.var_types = FEMPTY ==>
+     ~supported_expr_exists ^local_default_pop e) /\
+  (!env bt vt. type_place_target env bt = SOME vt ==> env.var_types = FEMPTY ==>
+     ~supported_target_exists ^local_default_pop bt) /\
+  (!env es. well_typed_exprs env es ==> env.var_types = FEMPTY ==>
+     ~supported_exprs_exists ^local_default_pop es) /\
+  (!env opt. well_typed_opt env opt ==> env.var_types = FEMPTY ==>
+     ~supported_opt_exists ^local_default_pop opt) /\
+  (!env kes. well_typed_named_exprs env kes ==> env.var_types = FEMPTY ==>
+     ~supported_fields_exists ^local_default_pop kes)
 Proof
-  cheat
+  ho_match_mp_tac well_typed_expr_ind >> rpt conj_tac >> rpt gen_tac >>
+  rpt strip_tac >>
+  gvs[well_typed_expr_def, supportedExprTraverseTheory.supported_expr_exists_def, AllCaseEqs()] >>
+  rpt (qpat_x_assum `_ \/ _` strip_assume_tac) >>
+  res_tac >> gvs[] >>
+  `IS_SOME (type_place_target env bt)` by simp[] >>
+  drule constSubstCorrectTheory.type_place_target_root >>
+  gvs[optionTheory.IS_SOME_EXISTS, Once well_typed_expr_def]
+QED
+
+Theorem intcall_args_target_overlap_frame[local]:
+  c'.ce_struct_fields = c.ce_struct_fields /\
+  c'.ce_modules = c.ce_modules /\
+  c'.ce_hashmap_info = c.ce_hashmap_info /\
+  c'.ce_module_var_type = c.ce_module_var_type ==>
+  !bt idx. (!id. base_target_root bt <> NameTarget id) ==>
+      target_subscript_overlap c' bt idx = target_subscript_overlap c bt idx
+Proof
+  strip_tac >>
+  `!bt. (!id. base_target_root bt <> NameTarget id) ==>
+      target_place_type c' bt = target_place_type c bt` by
+    (recInduct constSubstCorrectTheory.base_target_root_ind >>
+     simp[constSubstCorrectTheory.base_target_root_def,
+                    allocLimitsTheory.target_place_type_def]) >>
+  `!bt. (!id. base_target_root bt <> NameTarget id) ==>
+      target_through_dynarray c' bt = target_through_dynarray c bt` by
+    (recInduct constSubstCorrectTheory.base_target_root_ind >>
+     simp[constSubstCorrectTheory.base_target_root_def,
+                    allocLimitsTheory.target_through_dynarray_def]) >>
+  simp[allocLimitsTheory.target_subscript_overlap_def]
+QED
+
+Theorem intcall_args_extcode_no_local_pop[local]:
+  !es. es <> [] /\ is_extcode (HD es) /\
+       ~supported_exprs_exists ^local_default_pop es ==>
+       ~supported_exprs_exists ^local_default_pop (extcode_addr_expr (HD es) :: TL es)
+Proof
+  Cases >> simp[] >> rename1 `is_extcode h` >>
+  Cases_on `h` >> simp[exprLoweringTheory.is_extcode_def] >>
+  rename1 `Builtin _ b l` >> Cases_on `b` >>
+  simp[exprLoweringTheory.is_extcode_def] >>
+  rename1 `Acc a` >> Cases_on `a` >>
+  simp[exprLoweringTheory.is_extcode_def] >>
+  Cases_on `l` >> simp[exprLoweringTheory.is_extcode_def] >>
+  rename1 `_ :: tl` >> Cases_on `tl` >>
+  simp[exprLoweringTheory.is_extcode_def, exprLoweringTheory.extcode_addr_expr_def,
+       supportedExprTraverseTheory.supported_expr_exists_def]
+QED
+
+val default_alloc_fields =
+  ``c'.ce_struct_fields = c.ce_struct_fields /\
+    c'.ce_func_return_type = c.ce_func_return_type /\
+    c'.ce_modules = c.ce_modules /\
+    c'.ce_hashmap_info = c.ce_hashmap_info /\
+    c'.ce_module_var_type = c.ce_module_var_type /\
+    c'.ce_module_vars = c.ce_module_vars``;
+
+Theorem intcall_args_pure_alloc_mutual[local]:
+  (!c e c'. ^default_alloc_fields ==>
+         ~supported_expr_exists ^local_default_pop e ==>
+         alloc_limits_expr c' e = alloc_limits_expr c e) /\
+  (!c bt c'. ^default_alloc_fields ==>
+         (!id. base_target_root bt <> NameTarget id) /\
+         ~supported_target_exists ^local_default_pop bt ==>
+         alloc_limits_target c' bt = alloc_limits_target c bt) /\
+  (!c es c'. ^default_alloc_fields ==>
+         ~supported_exprs_exists ^local_default_pop es ==>
+         alloc_limits_exprs c' es = alloc_limits_exprs c es) /\
+  (!c de c'. ^default_alloc_fields ==>
+         ~supported_opt_exists ^local_default_pop de ==>
+         alloc_limits_opt c' de = alloc_limits_opt c de) /\
+  (!c kes c'. ^default_alloc_fields ==>
+         ~supported_fields_exists ^local_default_pop kes ==>
+         alloc_limits_named_exprs c' kes = alloc_limits_named_exprs c kes)
+Proof
+  ho_match_mp_tac allocLimitsTheory.alloc_limits_expr_ind >>
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+  drule compileEnvTheory.type_memory_bytes_frame >> strip_tac >>
+  drule allocLimitsPropsTheory.ext_call_alloc_ok_struct_fields >> strip_tac >>
+  qmatch_asmsub_rename_tac `updated.ce_struct_fields = original.ce_struct_fields` >>
+  mp_tac (Q.INST [`c'` |-> `updated`, `c` |-> `original`]
+             intcall_args_target_overlap_frame) >>
+  simp[] >> strip_tac >>
+  gvs[allocLimitsTheory.alloc_limits_expr_def, allocLimitsTheory.type_alloc_ok_def,
+       exprLoweringTheory.copies_subscript_base_def,
+       supportedExprTraverseTheory.supported_expr_exists_def, constSubstCorrectTheory.base_target_root_def] >>
+  TRY COND_CASES_TAC >> gvs[] >>
+  metis_tac[intcall_args_extcode_no_local_pop]
 QED
 
 Theorem intcall_args_pure_allocs_frame:
-  supported_pure_exprs tops ds /\ c'.ce_struct_fields = c.ce_struct_fields /\
-  c'.ce_modules = c.ce_modules ==>
-  (alloc_limits_exprs c' ds = alloc_limits_exprs c ds)
+  ^default_alloc_fields /\ well_typed_exprs (defaults_env env) ds ==>
+  alloc_limits_exprs c' ds = alloc_limits_exprs c ds
 Proof
-  metis_tac[intcall_args_pure_alloc_mutual]
+  strip_tac >>
+  drule (cj 4 intcall_args_typed_no_local_pop) >>
+  simp[defaults_env_def] >> strip_tac >>
+  irule (cj 3 intcall_args_pure_alloc_mutual) >> simp[]
 QED
 
 Theorem intcall_args_defaults_alloc:
   body_inv tops ctx cenv cx /\
+  well_typed_exprs (defaults_env env) dflts /\
   MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
   ~supported_exprs_exists (const_name_root cx) dflts ==>
   alloc_limits_exprs (cenv_without_defaults cenv name) dflts
@@ -1188,9 +1269,9 @@ Proof
    alloc_limits_exprs (build_compile_env tops Internal mut name args ret compiled_body F) dflts` by
     (irule intcall_args_pure_allocs_frame >>
      gvs[cenv_without_defaults_def, bodySimTheory.cenv_module_pins_def,
-         compileVyperTheory.build_compile_env_ce_struct_fields,
-         compileVyperTheory.build_compile_env_ce_modules] >>
-     qexists `tops` >> simp[]) >>
+         compileVyperTheory.build_compile_env_def] >>
+     rpt (pairarg_tac >> gvs[]) >>
+     qexists `env` >> simp[]) >>
   simp[]
 QED
 
@@ -1216,8 +1297,10 @@ Proof
         vyperContextTheory.get_module_code_def] >>
   `well_typed_exprs (tenv with current_src := NONE) dflts` by
     metis_tac[intcall_args_defaults_typed] >>
+  `well_typed_exprs (defaults_env (tenv with current_src := NONE)) dflts` by
+    (drule_all intcall_args_defaults_typed_empty >> simp[NoAsms]) >>
   `alloc_limits_exprs (cenv_without_defaults cenv name) dflts` by
-    metis_tac[intcall_args_defaults_alloc] >>
+    (drule_all intcall_args_defaults_alloc >> simp[NoAsms]) >>
   `expr_sim_inv (cenv_without_defaults cenv name)
      (cx with stk updated_by CONS (NONE,name))
      (tenv with current_src := NONE) ee` by
