@@ -1,10 +1,12 @@
 Theory e2eNonreentrantWitness
 Ancestors
-  e2eWitnessCompute e2eDefs e2eDeployDefs
-  supportedProgram immutableSectionRel alist integer_word option
+  e2eWitnessCompute e2eDefs e2eDeployDefs e2eCorrectness
+  e2eDeployCorrectness[qualified,ignore_grammar]
+  immutableSectionRel alist integer_word option vyperStorageFootprint
   compileVyper e2eProducers vfmRunCall callTrace
   vyperCalldata vyperInterpreter
-  e2eGasSufficient frameGas callTraceEntryProvenance callTraceRootMetadata
+  e2eGasSufficient e2eGasSufficientTop[qualified,ignore_grammar]
+  frameGas callTraceEntryProvenance callTraceRootMetadata
 Libs
   finite_mapLib computeLib wordsLib intReduce cv_transLib
 
@@ -16,8 +18,8 @@ val () = computeLib.upd_compset (computeLib.add_thms
 (* This fixture uses ordinary function declarations for both getters.
    Both getters meet the call correctness and outer gas-sufficiency premises
    after the same optimized deployment. The ordinary getter also satisfies
-   valid_vyper_call. The trace and storage facts here hold at the fixture's
-   gas limits. The gas theorems' guards at arbitrary added gas need a
+   valid_vyper_call. The storage horizons cover every source gas filling.
+   The call gas theorem's guards at arbitrary added frame gas need a
    separate proof. *)
 local
   val tops = ``
@@ -92,16 +94,6 @@ local
   val dep_tx_eval = EVAL tx_dep
   val check_dep = EVAL ``check_contract T (^am_dep).layouts 2w [(NONE,^tops)]``
   val check_run = EVAL ``check_contract F (^am_dep).layouts 2w [(NONE,^tops)]``
-  val compile_guards = map EVAL [
-    ``program_reads_self_code ^tops``,
-    ``supported_program ^tops``,
-    ``supported_program_deploy ^tops``,
-    ``~(?t. ^runtime_bc = 0xEFw :: t)``]
-  val ctor_free = SIMP_RULE (srw_ss())
-    [supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
-     supportedStmtTraverseTheory.supported_assignment_exists_def,
-     supportedExprTraverseTheory.supported_expr_exists_def,
-     constructor_call_root_def] (EVAL ``constructor_call_free ^tops``)
   val ctor_encoding = EVAL ``constructor_args_encode ^tops ^tx_dep []``
   val dep_env = EVAL ``tx_block_fields_rel ^tx_dep p23_tx_params``
 
@@ -248,10 +240,67 @@ Proof
        selectorDispatchTheory.calldata_encodes_def, get_calldata_encodes]
 QED
 
+  val get_horizon = ``([] : (bool # bytes32 # type_value) list, [] : num list)``
+  val locked_horizon =
+    ``([] : (bool # bytes32 # type_value) list, [context$global_nonreentrant_slot])``
+
+  fun trace_bound es trace =
+    prove (``LENGTH (call_trace ^es) < 2 ** 64``, simp[trace])
+
+  fun call_storage_facts (horizon, tx, es, trace) =
+    let
+      val dispatch = EVAL ``calldata_dispatch ^tops (^tx).calldata``
+      val storage = prove (``storage_ok ^horizon ^am_call ^tx``,
+        simp[storage_ok_def, regions_consistent_def, storage_locks_separated_def,
+             storage_well_formed_on_def])
+      val within = prove (``call_within ^horizon ^tops ^am_call ^tx ^es``,
+        simp[call_within_def, dispatch, trace] >> gen_tac >> EVAL_TAC)
+    in
+      [trace_bound es trace, storage, within]
+    end
+
+  val get_storage =
+    call_storage_facts (get_horizon, get_tx, get_es, get_trace)
+  val locked_storage =
+    call_storage_facts (locked_horizon, locked_tx, locked_es, locked_trace)
+  val dep_bound = trace_bound es_dep dep_trace
+
+  val accepted = prove (``asm_opt_finalizer IN accepted_finalizers``,
+    simp[asmOptimizerTheory.accepted_finalizers_def])
+  val runtime_not_ef = prove (``~(?t. ^runtime_bc = 0xEFw :: t)``, simp[])
+  val compiler_args =
+    [``asm_opt_finalizer``, ``o1_policy all_capabilities``, tops, deploy_bc, runtime_bc]
+  val common_premises = [accepted, compile]
+  val deploy_args = compiler_args @ [am_dep, tx_dep, es_dep]
+  val deploy_premises =
+    common_premises @ [optimized_getters_deploy_typing, optimized_getters_deploy_state]
+
+  val _ = MATCH_MP
+    (SPECL deploy_args e2eDeployCorrectnessTheory.e2e_deploy_correctness)
+    (LIST_CONJ (deploy_premises @ [dep_bound]))
+  val _ = MATCH_MP
+    (SPECL deploy_args e2eGasSufficientTopTheory.e2e_deploy_gas_sufficient)
+    (LIST_CONJ (deploy_premises @ [runtime_not_ef]))
+
+  fun check_call (horizon, tx, es, entry_facts, storage_facts) =
+    let
+      val args = compiler_args @ [am_call, tx, es]
+      val premises = common_premises @ entry_facts
+      val _ = MATCH_MP (SPECL (args @ [horizon]) vyper_call_correct)
+        (LIST_CONJ (premises @ storage_facts))
+      val _ = MATCH_MP
+        (SPECL args e2eGasSufficientTopTheory.vyper_call_gas_sufficient)
+        (LIST_CONJ premises)
+    in
+      ()
+    end
+  val () = check_call (get_horizon, get_tx, get_es, get_facts, get_storage)
+  val () = check_call (locked_horizon, locked_tx, locked_es, locked_facts, locked_storage)
+
   val witnesses = [
     ``o1_policy all_capabilities``, tops, deploy_bc, runtime_bc, am_dep,
     tx_dep, es_dep, es_dep_post, am_dep_post, get_tx, get_es, get_post,
-    locked_tx, locked_es, locked_post]
+    locked_tx, locked_es, locked_post, get_horizon, locked_horizon]
   val call_facts = map EVAL [
     ``calldata_dispatch ^tops (^get_tx).calldata =
       SOME ((^get_tx).function_name, (^get_tx).args)``,
@@ -262,59 +311,58 @@ QED
     ``FST (call_external (SOME []) [] ^am_call ^locked_tx) = INL (IntV 43)``,
     ``(FST (HD (^get_post).contexts)).returnData = word_to_bytes (42w : bytes32) T``,
     ``(FST (HD (^locked_post).contexts)).returnData = word_to_bytes (43w : bytes32) T``]
-  val storage_guards = map (REWRITE_RULE [] o EVAL) [
-    ``deploy_storage_ok ^tops ^am_dep ^tx_dep [] []``,
-    ``call_storage_ok ^am_call ^get_tx [] []``,
-    ``call_storage_ok ^am_call ^locked_tx [] []``]
+  val deploy_guard = REWRITE_RULE [] (EVAL
+    ``deploy_storage_ok ^tops ^am_dep ^tx_dep [] []``)
 in
 
 Theorem asm_opt_nonreentrant_deploy_and_call_premises_jointly_satisfiable:
   ?policy tops deploy_bc runtime_bc am_dep tx_dep es_dep es_dep'
-     am_dep' tx_get es_get es_get' tx_locked es_locked es_locked'.
+     am_dep' tx_get es_get es_get' tx_locked es_locked es_locked' H_get H_locked.
     asm_opt_finalizer IN accepted_finalizers /\
-    ~program_reads_self_code tops /\
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc,runtime_bc) /\
-    supported_program tops /\ supported_program_deploy tops /\
-    constructor_call_free tops /\ ~(?t. runtime_bc = 0xEFw :: t) /\
     deploy_typing_ok tops am_dep tx_dep /\
     deploy_state_rel tops deploy_bc am_dep tx_dep es_dep /\
+    LENGTH (call_trace es_dep) < 2 ** 64 /\
     run_call es_dep = SOME (INR NONE,es_dep') /\
     call_trace es_dep = [] /\ gas_readings es_dep = [] /\
     deploy_storage_ok tops am_dep tx_dep [] [] /\
     load_contract (SOME []) [] am_dep tx_dep [(NONE,tops)] [] = INL (am_dep',[]) /\
     source_typing_ok tops (next_source_machine am_dep' es_dep') tx_get /\
     call_state_rel tops runtime_bc (next_source_machine am_dep' es_dep') tx_get es_get /\
+    LENGTH (call_trace es_get) < 2 ** 64 /\
+    storage_ok H_get (next_source_machine am_dep' es_dep') tx_get /\
+    call_within H_get tops (next_source_machine am_dep' es_dep') tx_get es_get /\
     e2eDefs$valid_vyper_call tops tx_get
       (buffer_to_list (FST (HD es_get.contexts)).msgParams.data) (BaseT (UintT 256)) /\
     calldata_dispatch tops tx_get.calldata =
       SOME (tx_get.function_name,tx_get.args) /\
     call_trace es_get = [] /\ gas_readings es_get = [] /\
-    call_storage_ok (next_source_machine am_dep' es_dep') tx_get [] [] /\
     run_call es_get = SOME (INR NONE,es_get') /\
     FST (call_external (SOME []) [] (next_source_machine am_dep' es_dep') tx_get) =
       INL (IntV 42) /\
     (FST (HD es_get'.contexts)).returnData = word_to_bytes (42w : bytes32) T /\
     source_typing_ok tops (next_source_machine am_dep' es_dep') tx_locked /\
     call_state_rel tops runtime_bc (next_source_machine am_dep' es_dep') tx_locked es_locked /\
+    LENGTH (call_trace es_locked) < 2 ** 64 /\
+    storage_ok H_locked (next_source_machine am_dep' es_dep') tx_locked /\
+    call_within H_locked tops (next_source_machine am_dep' es_dep') tx_locked es_locked /\
     calldata_dispatch tops tx_locked.calldata =
       SOME (tx_locked.function_name,tx_locked.args) /\
     (?mut args dflts ret body.
       vyperInterpreter$lookup_function NONE tx_locked.function_name External tops =
         SOME (mut,T,args,dflts,ret,body)) /\
     call_trace es_locked = [] /\ gas_readings es_locked = [] /\
-    call_storage_ok (next_source_machine am_dep' es_dep') tx_locked [] [] /\
     run_call es_locked = SOME (INR NONE,es_locked') /\
     FST (call_external (SOME []) [] (next_source_machine am_dep' es_dep') tx_locked) =
       INL (IntV 43) /\
     (FST (HD es_locked'.contexts)).returnData = word_to_bytes (43w : bytes32) T
 Proof
   MAP_EVERY exists_tac witnesses >>
-  rewrite_tac ([compile,
-         ctor_free, optimized_getters_deploy_typing, optimized_getters_deploy_state,
+  rewrite_tac (deploy_premises @ [dep_bound, deploy_guard,
          dep_run, dep_trace, load, get_trace, get_run, optimized_getter_valid,
          locked_trace, locked_run] @
-        compile_guards @ get_facts @ locked_facts @ call_facts @ storage_guards) >>
-  simp[asmOptimizerTheory.accepted_finalizers_def]
+        get_facts @ locked_facts @ get_storage @ locked_storage @ call_facts) >>
+  simp[]
 QED
 
 local
@@ -347,9 +395,7 @@ in
 Theorem asm_opt_nonreentrant_call_gas_sufficiency_nonvacuity:
   ?policy tops deploy_bc runtime_bc am tx_get es_get tx_locked es_locked.
     asm_opt_finalizer IN accepted_finalizers /\
-    ~program_reads_self_code tops /\
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc,runtime_bc) /\
-    supported_program tops /\
     source_typing_ok tops am tx_get /\ call_state_rel tops runtime_bc am tx_get es_get /\
     source_typing_ok tops am tx_locked /\ call_state_rel tops runtime_bc am tx_locked es_locked /\
     calldata_dispatch tops tx_get.calldata = SOME ("get",[]) /\
@@ -400,8 +446,8 @@ Proof
   MAP_EVERY exists_tac
     [``o1_policy all_capabilities``, tops, deploy_bc, runtime_bc, am_call,
      get_tx, get_es, locked_tx, locked_es] >>
-  rewrite_tac ([compile] @ compile_guards @ get_facts @ locked_facts @ dispatch_facts) >>
-  simp[asmOptimizerTheory.accepted_finalizers_def] >>
+  rewrite_tac (common_premises @ get_facts @ locked_facts @ dispatch_facts) >>
+  simp[] >>
   rpt gen_tac >> strip_tac >>
   gvs (dispatch_facts @ gas_source_facts @ [gas_source_exempt_def, source_exempt_def])
 QED
