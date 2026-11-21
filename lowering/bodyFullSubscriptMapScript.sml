@@ -236,8 +236,9 @@ val mapping_selection_key_tac =
           vyperTypeExprSoundnessTheory.value_runtime_typed_def,
           vyperTypeInvariantsTheory.value_result_typed_def] >>
      `env.type_defs = get_tenv cx` by
-       gvs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
-           vyperTypeInvariantsTheory.env_context_consistent_def] >> metis_tac[]) >>
+       (qpat_assum `expr_body_pre _ _ _ e2 (_ with gas_obs := _)`
+          (ACCEPT_TAC o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_env_type_defs)) >>
+     metis_tac[]) >>
   `post_value_type cenv e2 = kt` by
     (`is_word_type kt \/ is_bytestring_type kt` by
        (qpat_assum `hashmap_key_type kt` mp_tac >>
@@ -258,9 +259,6 @@ val mapping_selection_key_tac =
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   `expr_store_bound cx kt v key it` by metis_tac[] >>
   drule_all mapping_index_key_input >> strip_tac;
-
-fun mapping_selection_tac base_result_typed =
-  mapping_selection_intro_tac >> base_result_typed >> mapping_selection_key_tac;
 
 val mapping_suffix_tac =
   `!z. p.ptr_operand = Var z ==> not_fresh_at sm z` by
@@ -464,14 +462,15 @@ Resume subscript_map_map_full[mapping_index]:
 QED
 
 Resume subscript_map_map_full[mapping_selection]:
-  mapping_selection_tac
-    (`kt' = kt /\ vt = HashMapT ikt ivt` by
-      (qpat_assum `eval_expr cx e1 (_ with gas_obs := _) = _`
-         (mp_then Any mp_tac expr_map_pre_eval_result) >>
-       disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
-       simp[] >> strip_tac >>
-       first_x_assum (qspec_then `HashMapT kt (HashMapT ikt ivt)` mp_tac) >>
-       simp[vyperPlaceResultTypingTheory.eval_result_typed_mapping])) >>
+  mapping_selection_intro_tac >>
+  `kt' = kt /\ vt = HashMapT ikt ivt` by
+    (qpat_assum `eval_expr cx e1 (_ with gas_obs := _) = _`
+       (mp_then Any mp_tac expr_map_pre_eval_result) >>
+     disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
+     simp[] >> strip_tac >>
+     first_x_assum (qspec_then `HashMapT kt (HashMapT ikt ivt)` mp_tac) >>
+     simp[vyperPlaceResultTypingTheory.eval_result_typed_mapping]) >>
+  mapping_selection_key_tac >>
   mapping_suffix_tac >> mapping_frames_tac >> mapping_pure_frame_tac >>
   mapping_map_package_tac
 QED
