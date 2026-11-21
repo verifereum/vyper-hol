@@ -18,6 +18,7 @@ Ancestors bodyImmutableStoreMemory[qualified,ignore_grammar]
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
   bodyFullAssignAttrStorage bodyExprPreFacts bodyStorageMetadata
   bodyFullAssignToplevelSetup bodyFullAssignToplevelTail bodyFullAssignTopCopyTail
+  augAssignFullTargetRoutes[qualified,ignore_grammar]
   bodyFullAssignToplevelCode bodyFullAssignToplevelSource exprSimSliceCompose
   gasOutcomeFullCompose exprSimTopLevelProps vyperStorageFootprint
   vyperStorageTrace exprLoweringProps loweringStateRelDefs
@@ -1535,14 +1536,16 @@ Theorem body_assign_toplevel_word_full:
     call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) /\
     frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
-    supported_scalar_target tops nsid ==>
+    supported_scalar_target tops nsid /\
+    (?dty. type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) /\
+           is_word_type dty) ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
       (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)))
       (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) es
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all body_assign_toplevel_word_full_setup >> strip_tac >> gvs[] >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e) e es` by metis_tac[body_expr_full_ok_def] >>
@@ -8162,12 +8165,15 @@ Theorem body_assign_other_empty_target_full[local]:
               (expr_type e = ty \/ lowered_value_type cenv e = ty \/
                is_bytestring_type ty \/
                has_length_word (expr_type e) /\ is_empty_value_expr e)) /\
-    ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
+    ~(?nsid dty. t = TopLevelNameTarget nsid /\
+          supported_scalar_target tops nsid /\
+          type_place_target env t = SOME (Type dty) /\ is_word_type dty) /\
     ~(?nsid mut ty slot.
         t = TopLevelNameTarget nsid /\
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
         ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+        ~is_bytestring_type ty /\
         0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
         lowered_value_type cenv e = expr_type e) /\
     ~(?id fld sid fty.
@@ -8876,12 +8882,15 @@ Theorem body_assign_other_empty_immutable_full[local]:
               (expr_type e = ty \/ lowered_value_type cenv e = ty \/
                is_bytestring_type ty \/
                has_length_word (expr_type e) /\ is_empty_value_expr e)) /\
-    ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
+    ~(?nsid dty. t = TopLevelNameTarget nsid /\
+          supported_scalar_target tops nsid /\
+          type_place_target env t = SOME (Type dty) /\ is_word_type dty) /\
     ~(?nsid mut ty slot.
         t = TopLevelNameTarget nsid /\
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
         ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+        ~is_bytestring_type ty /\
         0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
         lowered_value_type cenv e = expr_type e) /\
     ~(?id fld sid fty.
@@ -8939,12 +8948,15 @@ Theorem body_assign_other_immutable_frontier_bind[local]:
               (expr_type e = ty \/ lowered_value_type cenv e = ty \/
                is_bytestring_type ty \/
                has_length_word (expr_type e) /\ is_empty_value_expr e)) /\
-    ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
+    ~(?nsid dty. t = TopLevelNameTarget nsid /\
+          supported_scalar_target tops nsid /\
+          type_place_target env t = SOME (Type dty) /\ is_word_type dty) /\
     ~(?nsid mut ty slot.
         t = TopLevelNameTarget nsid /\
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
         ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+        ~is_bytestring_type ty /\
         0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
         lowered_value_type cenv e = expr_type e) /\
     ~(?id fld sid fty.
@@ -9067,6 +9079,9 @@ Theorem body_assign_other_immutable_frontier_bind[local]:
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid)` by
+    (rpt strip_tac >> gvs[] >>
+     drule_all augAssignFullTargetRoutesTheory.augassign_scalar_target_route >> simp[]) >>
   drule_all_then strip_assume_tac body_assign_immutable_supported >>
   qpat_x_assum `t = TopLevelNameTarget _` SUBST_ALL_TAC >>
   rename1 `supported_immutable_type tops nsid = SOME ity` >>
@@ -13021,12 +13036,15 @@ Theorem body_assign_other_immutable_word_write_full[local]:
               (expr_type e = ty \/ lowered_value_type cenv e = ty \/
                is_bytestring_type ty \/
                has_length_word (expr_type e) /\ is_empty_value_expr e)) /\
-    ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
+    ~(?nsid dty. t = TopLevelNameTarget nsid /\
+          supported_scalar_target tops nsid /\
+          type_place_target env t = SOME (Type dty) /\ is_word_type dty) /\
     ~(?nsid mut ty slot.
         t = TopLevelNameTarget nsid /\
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
         ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+        ~is_bytestring_type ty /\
         0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
         lowered_value_type cenv e = expr_type e) /\
     ~(?id fld sid fty.
@@ -13337,24 +13355,6 @@ Proof
   simp[Once type_stmt_def, atarget_accepts_def] >>
   Cases_on `type_place_target env t` >> simp[] >>
   rename1 `_ = SOME vt` >> Cases_on `vt` >> simp[] >> strip_tac >> gvs[]
-QED
-
-Theorem body_assign_saved_target_info[local]:
-  body_inv tops ctx cenv cx /\
-  supported_stmt tops bindings (Assign (BaseTarget t) e) /\
-  ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) ==>
-  IS_SOME (supported_target_info tops bindings t)
-Proof
-  strip_tac >>
-  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-    fs[body_inv_def] >>
-  qpat_x_assum `supported_stmt _ _ _` mp_tac >>
-  simp[Once supported_stmt_def, supported_assignment_def] >>
-  Cases_on `supported_target_info tops bindings t` >> simp[] >>
-  gvs[supported_target_def] >> Cases_on `bt` >> gvs[] >>
-  spose_not_then strip_assume_tac >>
-  FIRST [drule_all aug_place_legacy_field_info, drule_all aug_place_legacy_subscript_info] >>
-  simp[] >> qexists `bindings` >> simp[]
 QED
 
 Theorem body_assign_saved_target_pre[local]:
@@ -14015,12 +14015,15 @@ Theorem body_assign_other_value_rhs_bind[local]:
               (expr_type e = ty \/ lowered_value_type cenv e = ty \/
                is_bytestring_type ty \/
                has_length_word (expr_type e) /\ is_empty_value_expr e)) /\
-    ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
+    ~(?nsid dty. t = TopLevelNameTarget nsid /\
+          supported_scalar_target tops nsid /\
+          type_place_target env t = SOME (Type dty) /\ is_word_type dty) /\
     ~(?nsid mut ty slot.
         t = TopLevelNameTarget nsid /\
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
         ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+        ~is_bytestring_type ty /\
         0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
         lowered_value_type cenv e = expr_type e) /\
     ~(?id fld sid fty.
@@ -14989,12 +14992,15 @@ Theorem body_assign_other_immutable_nonword_write_full[local]:
               (expr_type e = ty \/ lowered_value_type cenv e = ty \/
                is_bytestring_type ty \/
                has_length_word (expr_type e) /\ is_empty_value_expr e)) /\
-    ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
+    ~(?nsid dty. t = TopLevelNameTarget nsid /\
+          supported_scalar_target tops nsid /\
+          type_place_target env t = SOME (Type dty) /\ is_word_type dty) /\
     ~(?nsid mut ty slot.
         t = TopLevelNameTarget nsid /\
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
         ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+        ~is_bytestring_type ty /\
         0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
         lowered_value_type cenv e = expr_type e) /\
     ~(?id fld sid fty.
@@ -17788,12 +17794,15 @@ Theorem body_assign_other_nonempty_target_full[local]:
               (expr_type e = ty \/ lowered_value_type cenv e = ty \/
                is_bytestring_type ty \/
                has_length_word (expr_type e) /\ is_empty_value_expr e)) /\
-    ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
+    ~(?nsid dty. t = TopLevelNameTarget nsid /\
+          supported_scalar_target tops nsid /\
+          type_place_target env t = SOME (Type dty) /\ is_word_type dty) /\
     ~(?nsid mut ty slot.
         t = TopLevelNameTarget nsid /\
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
         ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+        ~is_bytestring_type ty /\
         0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
         lowered_value_type cenv e = expr_type e) /\
     ~(?id fld sid fty.
@@ -18062,7 +18071,7 @@ fun residual_storage_word_posts g =
      first_assum ACCEPT_TAC) >>
    rpt gen_tac >> strip_tac >> res_tac) g;
 
-fun residual_memory_word g =
+fun residual_memory_word_setup g =
   (rename1 `write_place cx (MemoryPlace id path) v` >>
   `emit_void MSTORE [FST r;op] su = ((),sb)` by
     (qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ su = ((),sb)` mp_tac >>
@@ -18085,8 +18094,10 @@ fun residual_memory_word g =
     (drule tuplePlaceSourceHeadTheory.tuple_place_target_base_inversion >> strip_tac >>
      drule_all eval_base_place_sim_inv >> simp[]) >>
   `store_lays_out tu' tu' v` by
-    (drule_all store_lays_out_typed >> simp[]) >>
-  Cases_on `write_place cx (MemoryPlace id path) v ee` >>
+    (drule_all store_lays_out_typed >> simp[])) g;
+
+fun residual_memory_word_source g =
+  (Cases_on `write_place cx (MemoryPlace id path) v ee` >>
   drule_then assume_tac tuplePlaceStepTheory.write_place_storage_trace >>
   `stmt_res_ok lctx q` by
     (qpat_assum `gas_admissible (eval_stmt _ _) _ _`
@@ -18094,8 +18105,10 @@ fun residual_memory_word g =
      qexistsl [`r'`,`gas_explicit marks s0.vs_gas_readings ++ target_gas`] >>
      simp[Once evaluate_def,bind_def]) >>
   qpat_assum `!i xs. MemoryPlace id path = MemoryPlace i xs ==> _`
-    (qspecl_then [`id`,`path`] (strip_assume_tac o REWRITE_RULE [])) >>
-  irule gas_outcome_full_post_mono >>
+    (qspecl_then [`id`,`path`] (strip_assume_tac o REWRITE_RULE []))) g;
+
+fun residual_memory_word_write g =
+  (irule gas_outcome_full_post_mono >>
   irule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)
     augAssignFullWritebackTheory.augassign_memory_writeback_full >>
   goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
@@ -18117,7 +18130,9 @@ Resume body_assign_other_nonempty_target_full[storage_word]:
 QED
 
 Resume body_assign_other_nonempty_target_full[memory_word]:
-  residual_memory_word
+  residual_memory_word_setup >>
+  residual_memory_word_source >>
+  residual_memory_word_write
 QED
 
 Resume body_assign_other_nonempty_target_full[saved_storage_word]:
@@ -18127,7 +18142,9 @@ Resume body_assign_other_nonempty_target_full[saved_storage_word]:
 QED
 
 Resume body_assign_other_nonempty_target_full[saved_memory_word]:
-  residual_memory_word
+  residual_memory_word_setup >>
+  residual_memory_word_source >>
+  residual_memory_word_write
 QED
 
 Resume body_assign_other_nonempty_target_full[snapshot_nonword]:
@@ -18494,13 +18511,14 @@ QED
 Finalise body_assign_other_nonempty_target_full[local]
 
 (* Every other base target: subscripts, nested attributes, immutables. *)
-Theorem body_assign_other_full:
+(* GATE_ADMISSION: held, nested immutable empty-value assignment *)
+Theorem body_assign_nested_empty_immutable_full:
   !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok cx t) /\
     body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+    body_inv tops ctx cenv cx /\
     struct_args_unique tops /\
     supported_stmt tops bindings (Assign (BaseTarget t) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -18537,6 +18555,65 @@ Theorem body_assign_other_full:
     ~(?nsid fld fty.
         t = AttributeTarget (TopLevelNameTarget nsid) fld /\
         supported_storage_field_write tops nsid fld /\
+        type_place_target env t = SOME (Type fty) /\ is_word_type fty) /\
+    has_length_word (expr_type e) /\ is_empty_value_expr e /\ immutable_root cx t /\
+    ~supported_stmt_expr_exists (const_name_root cx) (Assign (BaseTarget t) e) /\
+    ~(?nsid. t = TopLevelNameTarget nsid) ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
+      (eval_stmt cx (Assign (BaseTarget t) e)) es
+Proof
+  cheat
+QED
+
+Theorem body_assign_other_full:
+  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_full_ok cx t) /\
+    body_expr_full_ok cx e /\
+    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+    struct_args_unique tops /\
+    supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (BaseTarget t) e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
+              is_word_type ty) /\
+    ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
+              ~is_word_type ty /\
+              (expr_type e = ty \/ lowered_value_type cenv e = ty \/
+               is_bytestring_type ty \/
+               has_length_word (expr_type e) /\ is_empty_value_expr e)) /\
+    ~(?nsid dty. t = TopLevelNameTarget nsid /\
+          supported_scalar_target tops nsid /\
+          type_place_target env t = SOME (Type dty) /\ is_word_type dty) /\
+    ~(?nsid mut ty slot.
+        t = TopLevelNameTarget nsid /\
+        supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
+        (mut = Storage \/ mut = Transient) /\
+        ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+        ~is_bytestring_type ty /\
+        0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
+        lowered_value_type cenv e = expr_type e) /\
+    ~(?id fld sid fty.
+        t = AttributeTarget (NameTarget id) fld /\
+        FLOOKUP env.var_types id = SOME (StructT sid) /\
+        attribute_type env.type_defs (StructT sid) fld = SOME fty /\
+        is_word_type fty) /\
+    ~(?nsid fld fty.
+        t = AttributeTarget (TopLevelNameTarget nsid) fld /\
+        supported_storage_field_write tops nsid fld /\
         type_place_target env t = SOME (Type fty) /\ is_word_type fty) ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
@@ -18548,9 +18625,16 @@ Proof
   Cases_on `has_length_word (expr_type e) /\ is_empty_value_expr e`
   >- (qpat_x_assum `has_length_word _ /\ is_empty_value_expr _` strip_assume_tac >>
       Cases_on `immutable_root cx t`
-      >- (irule body_assign_other_empty_immutable_full >>
-          rpt (CHANGED_TAC (first_assum (irule_at Any))) >>
-          rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      >- (Cases_on `?nsid. t = TopLevelNameTarget nsid`
+          >- (irule body_assign_other_empty_immutable_full >>
+              rpt (CHANGED_TAC (first_assum (irule_at Any))) >>
+              rpt conj_tac >> first_assum ACCEPT_TAC) >>
+          drule_all bodySimTheory.body_inv_stmt_const_name_free >> strip_tac >>
+          qspecl_then
+            [`cx`,`t`,`e`,`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,`ctx`,
+             `shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`env'`,`ret_ty`,
+             `lctx`,`RetQ`,`es`] MATCH_MP_TAC body_assign_nested_empty_immutable_full >>
+          rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE metis_tac[])) >>
       irule body_assign_other_empty_target_full >>
       rpt (CHANGED_TAC (first_assum (irule_at Any))) >>
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -18575,6 +18659,41 @@ Proof
     shadow_sa = (op,shadow_su)` (irule_at Any) >>
   qexistsl [`su`, `shadow_sb`, `shadow_func`, `marks`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+(* GATE_ADMISSION: held, private storage/transient bytestring assignment *)
+Theorem body_assign_toplevel_bytes_full:
+  !cx nsid e dty mut slot DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_full_ok cx (TopLevelNameTarget nsid)) /\
+    body_expr_full_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
+    supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    supported_variable_decl tops nsid = SOME (Private,mut,dty,SOME slot) /\
+    (mut = Storage \/ mut = Transient) /\
+    type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) /\
+    is_bytestring_type dty /\ is_bytestring_type (lowered_value_type cenv e) /\
+    ~supported_stmt_expr_exists (const_name_root cx) (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)))
+      (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) es
+Proof
+  cheat
 QED
 
 (* A static aggregate storage or transient variable. *)
