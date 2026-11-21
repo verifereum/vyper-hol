@@ -7,6 +7,20 @@ Ancestors
   defaultDispatchFacts externalReturnPackage runtimeFallbackPackageEnvironment
   externalEntryValueRevert vyperLoweringCorrect
 
+Triviality legacy_runtime_shadow_context[local]:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+  runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit ==>
+  gas_shadow_context unit.cu_context shadow_unit.cu_context
+Proof
+  strip_tac >>
+  `?shadow. runtime_gas_shadow_unit tops rpolicy = SOME shadow /\
+            gas_shadow_unit unit shadow` by
+    (Cases_on `classify_functions tops` >> PairCases_on `r` >>
+     irule runtime_gas_shadow_unit_exists >> fs[]) >>
+  gvs[gas_shadow_unit_def]
+QED
+
 Theorem dispatched_call_correct_from_value_success:
   !tops rpolicy unit shadow_unit am tx ret vs mut nr args fbody.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -41,8 +55,7 @@ Proof
   reverse (namedCases_on `res` ["u", "e"])
   >- (qexists_tac `[]` >>
       `gas_shadow_context unit.cu_context shadow_unit.cu_context` by
-        (Cases_on `classify_functions tops` >> PairCases_on `r` >>
-         drule_all runtime_gas_shadow_unit_exists >> fs[gas_shadow_unit_def]) >>
+        (drule_all legacy_runtime_shadow_context >> simp[]) >>
       drule_all external_entry_value_revert_dispatched_with_nr >> simp[]) >>
   Cases_on `u` >>
   qpat_x_assum `!env es0. _` (qspecl_then [`env`, `es0`] mp_tac) >> simp[]
@@ -321,8 +334,7 @@ Proof
   reverse (namedCases_on `res` ["u", "e"])
   >- (qexists_tac `[]` >>
       `gas_shadow_context unit.cu_context shadow_unit.cu_context` by
-        (Cases_on `classify_functions tops` >> PairCases_on `r` >>
-         drule_all runtime_gas_shadow_unit_exists >> fs[gas_shadow_unit_def]) >>
+        (drule_all legacy_runtime_shadow_context >> simp[]) >>
       conj_tac >- (drule_all external_entry_value_revert_dispatched_with_nr >> simp[]) >>
       `value_transfer_ok tx am.accounts` by fs[initial_venom_state_rel_def] >>
       drule_all external_entry_reject_readings_nr >> simp[]) >>
