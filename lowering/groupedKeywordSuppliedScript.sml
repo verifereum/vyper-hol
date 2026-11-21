@@ -8,7 +8,7 @@ Ancestors
   moduleLoweringProps fragGasOriginPtr appendStorageGhostPtr fragExec
   ptrDiscipline ptrSafeRun bodyPtrDefs loweringStateRelDefs valueEncoding vyperCalldata
   venomState emitHelperProps exprLoweringProps loweringShapeDefs compileEnv
-  finite_map words arithmetic pair robustCopyTransportPtr venomMemDefs
+  finite_map words arithmetic pair robustCopyTransportPtr venomMemDefs venomInstIdsProps
 
 Theorem grouped_keyword_decode_supplied:
   0 < k /\
@@ -32,7 +32,14 @@ Theorem grouped_keyword_decode_supplied:
     s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?first last t G' tn' sc.
+  ?src mid first last t G' tn' sc.
+    compile_getelemptr_abi (Lit 4w) (is_abi_dynamic ce.ce_struct_fields ty)
+      (4+off-4) CALLDATALOAD (Lit 0w) (Lit 0w) sa = (src,mid) /\
+    (if is_abi_dynamic ce.ce_struct_fields ty then
+       compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) mid = ((),first)
+     else first = mid) /\
+    compile_abi_decode_to_buf (Var dst) src CALLDATALOAD (Lit 0w) (Lit 0w)
+      (type_to_abi_dec_info ce.ce_struct_fields ce ty) first = ((),last) /\
     compile_init_kwargs ce vars
       (4+off+abi_embedded_static_size ce.ce_struct_fields ty)
       (k - 1) hi last = ((),sb) /\
@@ -48,6 +55,12 @@ Theorem grouped_keyword_decode_supplied:
     s.vs_alloca_next <= t.vs_alloca_next /\
     (!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < last.cs_next_id) /\
     (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==> FLOOKUP t.vs_allocas id = SOME entry) /\
+    ((!inst w b n. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+       inst.inst_operands = [Lit w] /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n) ==>
+       n = w2n w) ==>
+     !inst w b n. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+       inst.inst_operands = [Lit w] /\ FLOOKUP t.vs_allocas inst.inst_id = SOME (b,n) ==>
+       n = w2n w) /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
       t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp) /\
     value_has_type tv x /\ val_wf tv x /\ ptr_covers G' tn' dst t (type_memory_size tv) /\
@@ -312,7 +325,39 @@ Resume grouped_keyword_decode_supplied[finish]:
          qpat_assum `!label bb. lookup_block label _ = _ ==> _`
            (qspecl_then [`lbl`,`bb`] (drule_then ACCEPT_TAC))) >>
      qexistsl_tac [`G'`,`K F`,`t`,`tn'`] >> asm_rewrite_tac[]) >>
-  qexistsl_tac [`first`,`last`,`t`,`G'`,`tn'`,`sc`] >>
+  `(!inst w b n. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+       inst.inst_operands = [Lit w] /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n) ==>
+       n = w2n w) ==>
+     !inst w b n. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+       inst.inst_operands = [Lit w] /\ FLOOKUP t.vs_allocas inst.inst_id = SOME (b,n) ==>
+       n = w2n w` by
+    (strip_tac >> rpt gen_tac >> strip_tac >>
+     Cases_on `inst.inst_id < first.cs_next_id \/ last.cs_next_id <= inst.inst_id`
+     >- (qpat_assum `!id. id < first.cs_next_id \/ _ ==> _`
+           (qspec_then `inst.inst_id` (drule_then assume_tac)) >>
+         `FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n)` by
+           metis_tac[] >>
+         MAP_EVERY (fn pat => qpat_assum pat mp_tac)
+           [`!i w b n. MEM i (fn_insts fn) /\ _ /\ _ /\
+               FLOOKUP s.vs_allocas i.inst_id = _ ==> _`,
+            `MEM inst (fn_insts fn)`,`inst.inst_opcode = ALLOCA`,
+            `inst.inst_operands = [Lit w]`,`FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n)`] >>
+         POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+     `first.cs_next_id <= inst.inst_id /\ inst.inst_id < last.cs_next_id` by decide_tac >>
+     qpat_assum `!id q k. first.cs_next_id <= id /\ id < last.cs_next_id /\
+         FLOOKUP t.vs_allocas id = SOME (q,k) ==> _`
+       (qspecl_then [`inst.inst_id`,`b`,`n`] mp_tac) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     strip_tac >>
+     rename1 `witness.inst_id = inst.inst_id` >>
+     `witness = inst` by metis_tac[venomInstIdsPropsTheory.fn_inst_ids_distinct_inj] >>
+     MAP_EVERY (fn pat => qpat_assum pat mp_tac)
+       [`n = 32`,`inst.inst_operands = [Lit w]`,`witness.inst_operands = [Lit 32w]`,
+        `witness = inst`] >>
+     POP_ASSUM_LIST (K all_tac) >> simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]) >>
+  qexistsl_tac [`src`,`mid`,`first`,`last`,`t`,`G'`,`tn'`,`sc`] >>
+  asm_rewrite_tac[] >>
+  qpat_assum `dyn = tv_abi_dynamic tv` (pure_once_rewrite_tac o single o GSYM) >>
   asm_rewrite_tac[]
 QED
 

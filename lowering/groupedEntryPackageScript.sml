@@ -379,3 +379,11 @@ Proof
   Cases_on `dflts` >> simp[package_external_group_def, LET_THM] >>
   rpt strip_tac >> gvs[]
 QED
+
+Theorem grouped_package_external_defaults:
+  package_external_fn tops trans keys
+    (mut,nr,rr,name,args,subst_consts_exprs (module_consts_env tops []) dflts,ret,fbody) =
+  package_external_fn tops trans keys (mut,nr,rr,name,args,dflts,ret,fbody)
+Proof
+  simp[package_external_fn_def, constSubstCorrectTheory.subst_consts_exprs_map]
+QED
