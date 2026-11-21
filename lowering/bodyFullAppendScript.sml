@@ -5023,3 +5023,32 @@ Resume body_append_storage_word_frag_full[word_operand]:
 QED
 
 Finalise body_append_storage_word_frag_full
+
+(* GATE_ADMISSION: missing case, storage flat-copy Append; owner: log lane *)
+Theorem body_append_storage_flat_copy_frag_full:
+  !cx nid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
+    env env' ret_ty lctx RetQ es elem cap.
+  (!s p t. eval_target_place cx (TopLevelNameTarget nid) s = (INL p,t) ==>
+     body_expr_full_ok cx e) /\
+  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  supported_stmt tops bindings (Append (TopLevelNameTarget nid) e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (Append (TopLevelNameTarget nid) e) ==> occurs_abi_decode_target target tops) /\
+  expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+  locals_alloc_ok cenv env /\
+  type_stmt env ret_ty (Append (TopLevelNameTarget nid) e) = SOME env' /\
+  type_place_target env (TopLevelNameTarget nid) = SOME (Type (ArrayT elem (Dynamic cap))) /\
+  ~is_word_type elem /\ ~is_bytestring_type elem /\
+  (elem = lowered_value_type cenv e \/
+   tuple_memory_layout_eq elem (lowered_value_type cenv e)) /\
+  stmt_exprs_ok cenv (Append (TopLevelNameTarget nid) e) /\
+  call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget nid) e)) /\
+  frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ cenv ret_ty ==>
+  stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cx lctx RetQ cenv
+    (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget nid) e))
+    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
+    (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
+Proof
+  cheat
+QED
