@@ -5,6 +5,7 @@ Ancestors
   entryBodyBoundLabels entryCompileIntervals entryInternalAppend entryLinearAppend
   entryPrefixRetention fragExec venomExecProofs emitHelperProps
   allocaFrontierBound venomWf removeUnusedSsaProofs venomWfProps
+  groupedInternalLabels compileVyper
 
 Theorem compile_runtime_entry_intervals[local]:
   compile_generate_runtime sels exts ints fb Linear buckets meta dense info sa =
@@ -253,36 +254,32 @@ Proof
   metis_tac[cs_extends_trans]
 QED
 
-Theorem runtime_first_block[local]:
-  compile_generate_runtime sels exts ints fb Linear bc mb db ei
-    (initial_compile_state "__entry") = ((),sz) ==>
-  ?bb rest. all_blocks sz = bb::rest /\ bb.bb_label = "__entry"
-Proof
-  strip_tac >> drule runtime_initial_extends >> strip_tac >>
-  `MAP (\bb. bb.bb_label) (all_blocks (initial_compile_state "__entry")) =
-    ["__entry"]` by simp[initial_compile_state_def, all_blocks_def] >>
-  drule block_labels_cs_extends >> asm_rewrite_tac[] >> strip_tac >>
-  Cases_on `all_blocks sz` >> gvs[]
-QED
-
-Theorem runtime_packaged_first_block[local]:
-  compile_generate_runtime sels exts ints fb Linear bc mb db ei
-    (initial_compile_state "__entry") = ((),sz) /\
+Theorem extracted_runtime_entry_label[local]:
+  cs_extends (initial_compile_state "__entry") final /\
   EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
-  package_internal_blocks (internal_fn_descriptors ints) (all_blocks sz) =
-    SOME (eb,fs) ==>
-  ?bb rest. eb = bb::rest /\ bb.bb_label = "__entry"
+  extract_context_with_internals "__entry" ints final = SOME (ctx,data) /\
+  lookup_function "__entry" ctx.ctx_functions = SOME efn ==>
+  fn_entry_label efn = SOME "__entry"
 Proof
-  strip_tac >> drule runtime_first_block >> strip_tac >>
+  strip_tac >>
+  `?bb rest. all_blocks final = bb::rest /\ bb.bb_label = "__entry"` by
+    (`MAP (\bb. bb.bb_label) (all_blocks (initial_compile_state "__entry")) =
+        ["__entry"]` by simp[initial_compile_state_def, all_blocks_def] >>
+     drule block_labels_cs_extends >> asm_rewrite_tac[] >> strip_tac >>
+     Cases_on `all_blocks final` >> gvs[]) >>
+  Cases_on `package_internal_blocks (internal_fn_descriptors ints) (all_blocks final)`
+  >- gvs[extract_context_with_internals_def, GSYM all_blocks_def] >>
+  rename1 `package_internal_blocks _ _ = SOME p` >> PairCases_on `p` >>
   `!d. MEM d (internal_fn_descriptors ints) ==>
     ~MEM (FST d) (MAP (\b. b.bb_label) [bb])` by
     (gvs[EVERY_MEM] >> rpt strip_tac >>
      `internal_label_ok (FST d)` by metis_tac[] >>
      gvs[internal_label_ok_def]) >>
-  `?tail. eb = [bb] ++ tail` by
-    (irule package_internal_blocks_prefix >> simp[] >>
-     qexistsl_tac [`internal_fn_descriptors ints`, `fs`, `rest`] >> gvs[]) >>
-  gvs[]
+  `?tail. p0 = [bb] ++ tail` by
+    (irule package_internal_blocks_prefix >>
+     qexistsl_tac [`internal_fn_descriptors ints`, `p1`, `rest`] >> gvs[]) >>
+  drule_all extracted_entry_blocks >>
+  strip_tac >> gvs[fn_entry_label_def, entry_block_def]
 QED
 
 Theorem run_lowering_entry_label:
@@ -295,10 +292,42 @@ Proof
   qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[run_lowering_def] >> strip_tac >> pairarg_tac >>
   gvs[AllCaseEqs(), lowering_policy_ok_def] >>
-  qpat_assum `extract_context_with_internals _ _ _ = _`
-    (mp_tac o REWRITE_RULE [extract_context_with_internals_def]) >>
-  strip_tac >> gvs[AllCaseEqs()] >> fs[GSYM all_blocks_def] >>
-  drule_all runtime_packaged_first_block >> strip_tac >>
-  drule_all extracted_entry_blocks >>
-  simp[fn_entry_label_def, entry_block_def] >> strip_tac >> simp[]
+  drule runtime_initial_extends >> strip_tac >>
+  drule_all_then ACCEPT_TAC extracted_runtime_entry_label
+QED
+
+Theorem lower_vyper_runtime_unit_entry_label:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn ==>
+  fn_entry_label efn = SOME "__entry"
+Proof
+  strip_tac >>
+  qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
+  simp_tac std_ss [lower_vyper_runtime_unit_def, LET_THM] >>
+  pairarg_tac >> asm_simp_tac std_ss [LET_THM] >>
+  rename1 `classify_functions tops = (exts,ints,fb,ctor)` >>
+  qabbrev_tac `ips = MAP
+    (set_internal_package_target rpolicy.rpol_target o
+     package_internal_fn tops T (K global_nonreentrant_slot) F 0)
+    (order_internals (runtime_internal_order tops ints) ints)` >>
+  `EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips)` by
+    (simp_tac pure_ss [Abbr `ips`, GSYM MAP_MAP_o,
+       internal_fn_descriptors_set_internal_package_target,
+       internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP] >>
+     simp_tac pure_ss [EVERY_MEM] >>
+     qx_gen_tac `f` >> PairCases_on `f` >>
+     simp_tac std_ss [source_internal_fn_descriptor_def, LET_THM, FST,
+          internal_label_ok_def,
+          internal_fn_label_prefix]) >>
+  Cases_on `EXISTS external_has_defaults exts` >> simp[AllCaseEqs()] >> strip_tac
+  >- (qpat_x_assum `run_grouped_lowering _ _ _ _ _ = _` mp_tac >>
+      simp[run_grouped_lowering_def] >> strip_tac >> pairarg_tac >>
+      gvs[AllCaseEqs()] >>
+      `EVERY group_entry_labels_ok
+        (MAP (package_external_group tops rpolicy.rpol_target T
+          (K global_nonreentrant_slot)) exts)` by
+        simp[EVERY_MAP, EVERY_MEM, package_external_group_labels] >>
+      drule_all compile_grouped_runtime_extends >> strip_tac >>
+      drule_all_then ACCEPT_TAC extracted_runtime_entry_label) >>
+  drule_all_then ACCEPT_TAC run_lowering_entry_label
 QED
