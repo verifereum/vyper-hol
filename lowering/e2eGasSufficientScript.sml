@@ -482,6 +482,10 @@ Proof
   `initial_venom_state_rel tops am td vi` by
     simp[Abbr`td`, initial_venom_state_rel_dispatch] >>
   `outcomes_accounts_typed (SOME vi.vs_outcomes)` by fs[] >>
+  `ctx_has_dalloca unit.cu_context ==>
+    unit_alloca_budget unit.cu_context <= w2n vi.vs_initial_fmp /\
+    w2n vi.vs_initial_fmp < 2 ** 254` by
+    (strip_tac >> fs[] >> decide_tac) >>
   drule_all lower_vyper_runtime_unit_correct_dispatched_readings_available >>
   disch_then (qx_choose_then `marks` strip_assume_tac) >>
   qabbrev_tac `obs = gas_explicit marks vi.vs_gas_readings` >>
