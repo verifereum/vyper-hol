@@ -31,6 +31,12 @@ Proof
   rpt strip_tac >> rpt IF_CASES_TAC >>
   simp[deploy_blocks_frame_equation,
        oneline as_stack_val_def, oneline as_ptr_val_def] >>
+  TRY pairarg_tac >>
+  gvs[deploy_blocks_frame_equation,
+      oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()] >>
+  TRY pairarg_tac >>
+  gvs[deploy_blocks_frame_equation,
+      oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()] >>
   rpt (pairarg_tac >> gvs[deploy_blocks_frame_equation,
        oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()]) >>
   Cases_on `ret_ty` >> gvs[deploy_blocks_frame_equation,

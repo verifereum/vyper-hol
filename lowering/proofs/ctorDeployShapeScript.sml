@@ -7,10 +7,12 @@ Theory ctorDeployShape
 Ancestors
   list ctorDeployDefs immSectionDead o1PassContract unitShapeDefs staticLayoutDefs
   ctorUnitShape deployUnitProducers loweringShapeProps loweringShapeSource
+  loweringUnitEntryShape
   supportedProgram supportedNames compileVyper vyperCompiler
   o1PipelineCorrect o1ComposeSupport fcgPruning stackPlanGen
   venomPipelineRunner venomFnScheduleRunner venomFnScheduleRunnerProps
   ctorGeneratorShape loweringShapeDefs moduleLowering compileEnv context
+  whitelistCheckerDeploy
   emitHelper venomInst ptrDiscipline deployDynamicMemory
   e2eDeployDefs vyperTypeContract constSubst supportedStmtTraverse supportedExprTraverse alist
 
@@ -26,54 +28,96 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
-Theorem deploy_classified_static_body[local]:
+Theorem deploy_classified_body_mode[local]:
   !layouts addr tops art mut nr rr name args dflts ret body.
     check_contract T layouts addr [(NONE,tops)] = SOME art /\
-    ~deploy_dalloca_form_occurs expr_raw_shape_root tops /\
+    ~deploy_dalloca_form_occurs (expr_raw_shape_root_mode static) tops /\
     IS_SOME (SND (SND (SND (classify_functions tops)))) /\
     (MEM (mut,nr,rr,name,args,dflts,ret,body) (FST (SND (classify_functions tops))) \/
      SND (SND (SND (classify_functions tops))) =
        SOME (mut,nr,rr,name,args,dflts,ret,body)) ==>
-    ~supported_stmts_expr_exists expr_shape_root body /\
-    ~supported_exprs_exists expr_shape_root dflts
+    ~supported_stmts_expr_exists (expr_shape_root_mode static) body /\
+    ~supported_exprs_exists (expr_shape_root_mode static) dflts
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `!id r. ALOOKUP (module_consts_env tops []) id = SOME r ==>
-     ~supported_expr_exists expr_shape_root r` by
-    metis_tac[checked_module_consts_env_replacement_shape, ALOOKUP_def] >>
+     ~supported_expr_exists (expr_shape_root_mode static) r` by
+    metis_tac[checked_module_consts_env_replacement_shape_mode, ALOOKUP_def] >>
   `!v m n r nm a ds ty b.
     MEM (FunctionDecl v m n r nm a ds ty b) tops /\
     (v = Deploy \/ v = Internal) ==>
-    ~supported_stmts_expr_exists expr_shape_root b /\
-    ~supported_exprs_exists expr_shape_root ds` by
+    ~supported_stmts_expr_exists (expr_shape_root_mode static) b /\
+    ~supported_exprs_exists (expr_shape_root_mode static) ds` by
     (rpt gen_tac >> strip_tac >>
-     `~supported_stmts_expr_exists expr_raw_shape_root b /\
-      ~supported_exprs_exists expr_raw_shape_root ds` by
+     `~supported_stmts_expr_exists (expr_raw_shape_root_mode static) b /\
+      ~supported_exprs_exists (expr_raw_shape_root_mode static) ds` by
        (fs[deploy_dalloca_form_occurs_def, supported_exprs_exists_every,
            EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
-     metis_tac[checked_deploy_function_raw_shape]) >>
+     metis_tac[checked_deploy_function_raw_shape_mode]) >>
   qpat_x_assum `MEM _ _ \/ _ = SOME _` strip_assume_tac
   >- (gvs[MEM_classify_internal, subst_consts_fn_def] >>
       conj_tac
-      >- (irule (cj 2 subst_consts_stmt_shape) >> simp[] >> metis_tac[]) >>
-      irule (cj 3 subst_consts_expr_shape) >> simp[] >> metis_tac[]) >>
+      >- (irule (cj 2 subst_consts_stmt_shape_mode) >> simp[] >> metis_tac[]) >>
+      irule (cj 3 subst_consts_expr_shape_mode) >> simp[] >> metis_tac[]) >>
   drule classify_functions_ctor_mem >> strip_tac >>
   gvs[subst_consts_fn_def] >>
   conj_tac
-  >- (irule (cj 2 subst_consts_stmt_shape) >> simp[] >> metis_tac[]) >>
-  irule (cj 3 subst_consts_expr_shape) >> simp[] >> metis_tac[]
+  >- (irule (cj 2 subst_consts_stmt_shape_mode) >> simp[] >> metis_tac[]) >>
+  irule (cj 3 subst_consts_expr_shape_mode) >> simp[] >> metis_tac[]
 QED
 
-Theorem deploy_classified_static_defaults[local]:
+Theorem deploy_classified_defaults_mode[local]:
   check_contract T layouts addr [(NONE,tops)] = SOME art /\
-  ~deploy_dalloca_form_occurs expr_raw_shape_root tops /\
+  ~deploy_dalloca_form_occurs (expr_raw_shape_root_mode static) tops /\
   IS_SOME (SND (SND (SND (classify_functions tops)))) ==>
-  EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd))
+  EVERY (\nd. ~supported_exprs_exists (expr_shape_root_mode static) (SND nd))
     (build_func_defaults tops)
 Proof
   rw[build_func_defaults_def, EVERY_MEM] >>
   gvs[MEM_MAP] >> PairCases_on `y` >> gvs[] >>
-  metis_tac[deploy_classified_static_body]
+  metis_tac[deploy_classified_body_mode]
+QED
+
+Theorem package_constructor_shape_ok_mode[local]:
+  !tops layouts addr art use_trans nkey_map target cf cenv args pay nr nkey trans body ret.
+    check_contract T layouts addr [(NONE,tops)] = SOME art /\
+    ~deploy_dalloca_form_occurs (expr_raw_shape_root_mode static) tops /\
+    SND (SND (SND (classify_functions tops))) = SOME cf /\
+    set_constructor_package_target target
+      (package_constructor tops use_trans nkey_map cf) =
+      (cenv, args, pay, nr, nkey, trans, body, ret) ==>
+    cenv_static_mode_ok static cenv /\ cenv.ce_return_pc = NONE /\
+    ~supported_stmts_expr_exists (expr_shape_root_mode static) body
+Proof
+  rpt gen_tac >> PairCases_on `cf` >> strip_tac >>
+  `IS_SOME (SND (SND (SND (classify_functions tops))))` by simp[] >>
+  drule_all deploy_classified_defaults_mode >> strip_tac >>
+  `~supported_stmts_expr_exists (expr_shape_root_mode static) cf7` by
+    metis_tac[deploy_classified_body_mode] >>
+  gvs[package_constructor_def, set_constructor_package_target_def,
+      update_cenv_nonreentrant_def, build_compile_env_non_internal_no_return_pc] >>
+  simp[cenv_static_mode_ok_def] >>
+  metis_tac[build_compile_env_static_mode, cenv_static_mode_ok_def]
+QED
+
+Theorem package_internal_fn_ctor_shape_ok_mode[local]:
+  !tops layouts addr art use_trans nkey_map imm target src.
+    check_contract T layouts addr [(NONE,tops)] = SOME art /\
+    ~deploy_dalloca_form_occurs (expr_raw_shape_root_mode static) tops /\
+    IS_SOME (SND (SND (SND (classify_functions tops)))) /\
+    MEM src (FST (SND (classify_functions tops))) ==>
+    internal_fn_shape_mode_ok static
+      (set_internal_package_target target
+         (package_internal_fn tops use_trans nkey_map T imm src))
+Proof
+  rpt gen_tac >> PairCases_on `src` >> strip_tac >>
+  drule_all deploy_classified_defaults_mode >> strip_tac >>
+  `~supported_stmts_expr_exists (expr_shape_root_mode static) src7` by
+    metis_tac[deploy_classified_body_mode] >>
+  simp[package_internal_fn_def, set_internal_package_target_def,
+       update_cenv_nonreentrant_def, internal_fn_shape_mode_ok_def,
+       cenv_static_mode_ok_def] >>
+  metis_tac[build_compile_env_static_mode, cenv_static_mode_ok_def]
 QED
 
 Theorem package_constructor_shape_ok_static:
@@ -87,15 +131,12 @@ Theorem package_constructor_shape_ok_static:
     cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
     ~supported_stmts_expr_exists expr_shape_root body
 Proof
-  rpt gen_tac >> PairCases_on `cf` >> strip_tac >>
-  `IS_SOME (SND (SND (SND (classify_functions tops))))` by simp[] >>
-  drule_all deploy_classified_static_defaults >> strip_tac >>
-  `~supported_stmts_expr_exists expr_shape_root cf7` by
-    metis_tac[deploy_classified_static_body] >>
-  gvs[package_constructor_def, set_constructor_package_target_def,
-      update_cenv_nonreentrant_def, build_compile_env_non_internal_no_return_pc] >>
-  simp[cenv_static_ok_def] >>
-  metis_tac[build_compile_env_static, cenv_static_ok_def]
+  rpt gen_tac >> strip_tac >>
+  drule_all (SIMP_RULE (srw_ss())
+    [expr_raw_shape_root_mode_static, cenv_static_mode_ok_static,
+     expr_shape_root_mode_static]
+    (Q.INST [`static` |-> `T`] package_constructor_shape_ok_mode)) >>
+  simp[]
 QED
 
 Theorem package_internal_fn_ctor_shape_ok_static:
@@ -108,14 +149,11 @@ Theorem package_internal_fn_ctor_shape_ok_static:
       (set_internal_package_target target
          (package_internal_fn tops use_trans nkey_map T imm src))
 Proof
-  rpt gen_tac >> PairCases_on `src` >> strip_tac >>
-  drule_all deploy_classified_static_defaults >> strip_tac >>
-  `~supported_stmts_expr_exists expr_shape_root src7` by
-    metis_tac[deploy_classified_static_body] >>
-  simp[package_internal_fn_def, set_internal_package_target_def,
-       update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
-       cenv_static_ok_def] >>
-  metis_tac[build_compile_env_static, cenv_static_ok_def]
+  rpt gen_tac >> strip_tac >>
+  drule_all (SIMP_RULE (srw_ss())
+    [expr_raw_shape_root_mode_static, internal_fn_shape_mode_ok_static]
+    (Q.INST [`static` |-> `T`] package_internal_fn_ctor_shape_ok_mode)) >>
+  simp[]
 QED
 
 (* ===== The lowered unit ===== *)
@@ -172,6 +210,75 @@ Proof
   gvs[lowered_inst_ok_def]
 QED
 
+Theorem checked_deploy_internal_function_names[local]:
+  check_contract T layouts addr [(NONE,tops)] = SOME art ==>
+  ALL_DISTINCT (supported_internal_function_names tops)
+Proof
+  strip_tac >>
+  drule (Q.INST [`vis` |-> `Internal`]
+    check_contract_deploy_function_names_same_vis_distinct) >>
+  `!ts. supported_internal_function_names ts =
+        supported_function_names
+          (FILTER (\t. ?m nr rr n a d r b.
+                     t = FunctionDecl Internal m nr rr n a d r b) ts)`
+    suffices_by simp[] >>
+  Induct >> simp[supported_internal_function_names_def,
+                 supported_function_names_def] >>
+  Cases >> simp[supported_function_names_def] >> rw[] >>
+  gvs[supported_function_names_def] >>
+  rename1 `vis <> Internal` >> Cases_on `vis` >> gvs[]
+QED
+
+Theorem lower_vyper_deploy_unit_run_mode[local]:
+  !tops rpolicy runtime_bc unit layouts addr art.
+    lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
+    check_contract T layouts addr [(NONE,tops)] = SOME art /\
+    ~deploy_dalloca_form_occurs (expr_raw_shape_root_mode static) tops ==>
+    ?has_constructor imm args ctor_internal_fns cenv body pay nr nkey trans.
+      run_deploy_lowering has_constructor rpolicy runtime_bc imm args 0
+        ctor_internal_fns cenv body pay nr nkey trans "__deploy" = SOME unit /\
+      (has_constructor ==>
+        cenv_static_mode_ok static cenv /\ cenv.ce_return_pc = NONE /\
+        ~supported_stmts_expr_exists (expr_shape_root_mode static) body) /\
+      (~has_constructor ==> ctor_internal_fns = []) /\
+      EVERY (internal_fn_shape_mode_ok static) ctor_internal_fns /\
+      EVERY (\d. internal_label_ok (FST d))
+        (internal_fn_descriptors ctor_internal_fns) /\
+      ALL_DISTINCT (MAP FST (internal_fn_descriptors ctor_internal_fns))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `lower_vyper_deploy_unit _ _ _ = _` mp_tac >>
+  simp[lower_vyper_deploy_unit_def] >>
+  pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >> rpt strip_tac >>
+  first_x_assum (irule_at Any) >>
+  Cases_on `ctor_fn` >> gvs[internal_fn_descriptors_def] >>
+  rename1 `classify_functions tops = (ext_fns, int_fns, fb_fn, SOME cf)` >>
+  `SND (SND (SND (classify_functions tops))) = SOME cf` by simp[] >>
+  drule_all package_constructor_shape_ok_mode >> strip_tac >> simp[] >>
+  `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
+                   (FST (SND (classify_functions tops))))`
+    by metis_tac[classified_internal_names_distinct,
+                 checked_deploy_internal_function_names] >>
+  qspecl_then [`tops`, `T`] mp_tac internal_descriptors_ok >>
+  impl_tac >- simp[] >> simp[] >> strip_tac >>
+  `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops T)
+     (order_internals (deploy_internal_order (SOME cf) int_fns) int_fns)))`
+    by (`PERM (MAP FST (MAP (source_internal_fn_descriptor tops T)
+                (order_internals (deploy_internal_order (SOME cf) int_fns) int_fns)))
+              (MAP FST (MAP (source_internal_fn_descriptor tops T) int_fns))`
+          by (irule sortingTheory.PERM_MAP >> irule sortingTheory.PERM_MAP >>
+              simp[PERM_order_deploy_internals]) >>
+        drule sortingTheory.ALL_DISTINCT_PERM >> simp[]) >>
+  gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
+     internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP] >>
+  simp[EVERY_MEM] >> rpt strip_tac
+  >- (irule package_internal_fn_ctor_shape_ok_mode >>
+      gs[] >> qexistsl_tac [`addr`, `art`, `layouts`] >>
+      first_assum ACCEPT_TAC) >>
+  fs[EVERY_MEM]
+QED
+
 Theorem lower_vyper_deploy_unit_run_static[local]:
   !tops rpolicy runtime_bc unit am tx.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
@@ -192,37 +299,11 @@ Proof
   rpt gen_tac >> strip_tac >>
   `?art. check_contract T am.layouts tx.target [(NONE,tops)] = SOME art` by
     fs[deploy_source_ok_def, deploy_typing_ok_def] >>
-  `supported_program tops` by fs[deploy_source_ok_def] >>
-  qpat_x_assum `lower_vyper_deploy_unit _ _ _ = _` mp_tac >>
-  simp[lower_vyper_deploy_unit_def] >>
-  pairarg_tac >> simp[] >>
-  pairarg_tac >> simp[] >> rpt strip_tac >>
-  first_x_assum (irule_at Any) >>
-  Cases_on `ctor_fn` >> gvs[internal_fn_descriptors_def] >>
-  rename1 `classify_functions tops = (ext_fns, int_fns, fb_fn, SOME cf)` >>
-  `SND (SND (SND (classify_functions tops))) = SOME cf` by simp[] >>
-  drule_all package_constructor_shape_ok_static >> strip_tac >> simp[] >>
-  `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
-                   (FST (SND (classify_functions tops))))`
-    by metis_tac[classified_internal_names_distinct,
-                 supported_program_internal_names] >>
-  qspecl_then [`tops`, `T`] mp_tac internal_descriptors_ok >>
-  impl_tac >- simp[] >> simp[] >> strip_tac >>
-  `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops T)
-     (order_internals (deploy_internal_order (SOME cf) int_fns) int_fns)))`
-    by (`PERM (MAP FST (MAP (source_internal_fn_descriptor tops T)
-                (order_internals (deploy_internal_order (SOME cf) int_fns) int_fns)))
-              (MAP FST (MAP (source_internal_fn_descriptor tops T) int_fns))`
-          by (irule sortingTheory.PERM_MAP >> irule sortingTheory.PERM_MAP >>
-              simp[PERM_order_deploy_internals]) >>
-        drule sortingTheory.ALL_DISTINCT_PERM >> simp[]) >>
-  gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
-     internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP] >>
-  simp[EVERY_MEM] >> rpt strip_tac
-  >- (irule package_internal_fn_ctor_shape_ok_static >>
-      gs[] >> qexistsl_tac [`tx.target`, `art`, `am.layouts`] >>
-      first_assum ACCEPT_TAC) >>
-  fs[EVERY_MEM]
+  drule_all (SIMP_RULE (srw_ss())
+    [expr_raw_shape_root_mode_static, cenv_static_mode_ok_static,
+     expr_shape_root_mode_static, internal_fn_shape_mode_ok_static]
+    (Q.INST [`static` |-> `T`] lower_vyper_deploy_unit_run_mode)) >>
+  simp[]
 QED
 
 Theorem lower_vyper_deploy_unit_no_dalloca_static:
@@ -286,25 +367,30 @@ Proof
   drule_all lower_vyper_deploy_unit_run_static >> strip_tac >>
   drule_all run_deploy_lowering_entry_no_params >> strip_tac >>
   drule_all run_deploy_lowering_source_unit_ok >> strip_tac >> simp[] >>
-  `entry_fn_first unit.cu_context` by
-    fs[o1_source_unit_ok_def, unit_shape_ok_def] >>
-  `ALL_DISTINCT (MAP (\f. f.fn_name) unit.cu_context.ctx_functions)` by
-    (drule lower_vyper_deploy_unit_context_ok >>
-     simp[lowering_context_ok_def, ctx_fn_names_def]) >>
-  qpat_x_assum `entry_fn_first _`
-    (strip_assume_tac o REWRITE_RULE [entry_fn_first_def]) >>
-  rename1 `_ = efn :: rest` >>
-  qpat_x_assum `_.ctx_functions = _`
-    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >>
-              rewrite_tac [unit_entry_no_params_def, entry_fn_no_params_def, th]) >>
-  qx_gen_tac `g` >> simp_tac std_ss [MEM] >> rpt strip_tac
-  >- fs[] >>
-  `MEM g.fn_name (MAP (\f. f.fn_name) rest)` by
-    (simp[MEM_MAP] >> metis_tac[]) >>
-  gs[]
+  irule unit_entry_no_params_from_first >> simp[] >>
+  drule lower_vyper_deploy_unit_context_ok >>
+  simp[lowering_context_ok_def, ctx_fn_names_def]
 QED
 
-(* GATE_ADMISSION: missing case, raw_call with msg.data deploy source shape; owner: e2e lane *)
+Theorem lower_vyper_deploy_unit_dynamic_source_unit_shape[local]:
+  !tops rpolicy runtime_bc unit layouts addr art.
+    lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
+    check_contract T layouts addr [(NONE,tops)] = SOME art ==>
+    o1_source_unit_ok unit /\ unit_entry_no_params unit
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~deploy_dalloca_form_occurs (expr_raw_shape_root_mode F) tops` by
+    simp[deploy_dalloca_form_occurs_def, dynamic_raw_expr_shape,
+         dynamic_raw_stmt_shape, EXISTS_MEM] >>
+  drule_all (Q.INST [`static` |-> `F`] lower_vyper_deploy_unit_run_mode) >>
+  strip_tac >>
+  drule_all (Q.INST [`static` |-> `F`] run_deploy_lowering_source_unit_ok_mode) >>
+  simp[] >> strip_tac >>
+  irule unit_entry_no_params_from_first >> simp[] >>
+  drule lower_vyper_deploy_unit_context_ok >>
+  simp[lowering_context_ok_def, ctx_fn_names_def]
+QED
+
 Theorem lower_vyper_deploy_unit_source_shape_raw_call_calldata:
   !tops rpolicy runtime_bc dunit layouts addr art.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
@@ -313,10 +399,9 @@ Theorem lower_vyper_deploy_unit_source_shape_raw_call_calldata:
       (\e. ?ty f es d. e = Call ty (RawCallCalldataTarget f) es d) tops ==>
     o1_source_unit_ok dunit /\ unit_entry_no_params dunit
 Proof
-  cheat
+  metis_tac[lower_vyper_deploy_unit_dynamic_source_unit_shape]
 QED
 
-(* GATE_ADMISSION: missing case, create_copy_of deploy source shape; owner: e2e lane *)
 Theorem lower_vyper_deploy_unit_source_shape_create_copy:
   !tops rpolicy runtime_bc dunit layouts addr art.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
@@ -325,10 +410,9 @@ Theorem lower_vyper_deploy_unit_source_shape_create_copy:
       (\e. ?ty s r ks es d. e = Call ty (CreateTarget CreateCopyOf s r ks) es d) tops ==>
     o1_source_unit_ok dunit /\ unit_entry_no_params dunit
 Proof
-  cheat
+  metis_tac[lower_vyper_deploy_unit_dynamic_source_unit_shape]
 QED
 
-(* GATE_ADMISSION: missing case, create_from_blueprint deploy source shape; owner: e2e lane *)
 Theorem lower_vyper_deploy_unit_source_shape_create_blueprint:
   !tops rpolicy runtime_bc dunit layouts addr art.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
@@ -338,7 +422,7 @@ Theorem lower_vyper_deploy_unit_source_shape_create_blueprint:
           e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d) tops ==>
     o1_source_unit_ok dunit /\ unit_entry_no_params dunit
 Proof
-  cheat
+  metis_tac[lower_vyper_deploy_unit_dynamic_source_unit_shape]
 QED
 
 Theorem checked_lower_vyper_deploy_unit_source_shape:

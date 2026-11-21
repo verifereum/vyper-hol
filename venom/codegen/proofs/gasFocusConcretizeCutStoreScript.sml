@@ -35,7 +35,9 @@ Theorem ptr_focus_store_ok[local]:
              else istore (w2n x) y s))
 Proof
   simp[listTheory.MEM] >> strip_tac >>
-  simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()] >>
+  simp[step_inst_non_invoke] >>
+  simp[step_inst_base_opcode_eqs] >>
+  simp[exec_write2_def, AllCaseEqs()] >>
   metis_tac[]
 QED
 
