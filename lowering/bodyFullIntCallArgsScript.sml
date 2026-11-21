@@ -115,18 +115,6 @@ Proof
   simp[bodySimTheory.body_inv_split_def]
 QED
 
-Theorem intcall_args_pre_inv[local]:
-  expr_body_pre cenv cx tenv e es ==> expr_sim_inv cenv cx tenv es
-Proof
-  simp[expr_body_pre_split_def]
-QED
-
-Theorem intcall_args_pre_well_typed[local]:
-  expr_body_pre cenv cx tenv e es ==> well_typed_expr tenv e
-Proof
-  simp[expr_body_pre_split_def, expr_body_pre_mods_def]
-QED
-
 Theorem intcall_args_pre_state[local]:
   expr_body_pre cenv cx tenv e es /\
   expr_sim_inv cenv cx tenv ee ==>
@@ -3862,9 +3850,9 @@ Proof
     (drule aggregateEvaluatedLayoutTheory.body_post_type_allocation_bound >> simp[]) >>
   `is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)` by
     (`expr_sim_inv cenv cx tenv esi /\ well_typed_expr tenv e` by
-       (qpat_assum `expr_body_pre cenv cx tenv e esi` (fn pre =>
-          ACCEPT_TAC (CONJ (MATCH_MP intcall_args_pre_inv pre)
-            (MATCH_MP intcall_args_pre_well_typed pre)))) >>
+       (qpat_assum `expr_body_pre cenv cx tenv e esi`
+          (strip_assume_tac o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+        conj_tac >> first_assum ACCEPT_TAC) >>
      drule_all exprSimHypsTheory.post_value_type_widens >>
      POP_ASSUM_LIST (K all_tac) >>
      simp[vyperTypeSystemTheory.type_widens_to_def] >>
@@ -6087,16 +6075,13 @@ Theorem intcall_args_selected_head[local]:
 Proof
   strip_tac >>
   drule_then strip_assume_tac intcall_args_body_inv_lowering >>
-  `cx.in_deploy ==> IS_SOME (SND (SND (SND (classify_functions tops))))` by
-    (qpat_assum `body_inv tops ctx cenv cx`
-       (mp_tac o MATCH_MP bodySimTheory.body_inv_contract) >>
-     simp[bodyInvSplitTheory.contract_inv_def] >>
-     Cases_on `classify_functions tops` >>
-     rename1 `classify_functions tops = packages` >> PairCases_on `packages` >>
-     simp[classify_functions_unit_singleton]) >>
   Cases_on `cx.in_deploy` >> fs[]
   >- (Cases_on `classify_functions tops` >>
       rename1 `classify_functions tops = packages` >> PairCases_on `packages` >>
+      `IS_SOME packages3` by
+        (qpat_assum `body_inv tops _ cenv cx`
+           (mp_tac o MATCH_MP bodySimTheory.body_inv_contract) >>
+         simp[bodyInvSplitTheory.contract_inv_def, classify_functions_unit_singleton]) >>
       Cases_on `packages3` >> fs[] >>
       drule_all ctorDeployLoweringCodeTheory.deploy_ctor_lowering_trace >>
       strip_tac >>
@@ -8550,7 +8535,8 @@ Proof
       (sup_ops,sh_st2a)` by simp[] >>
   `expr_sim_inv cenv cx tenv es0` by
     (qpat_assum `expr_body_pre _ _ _ _ _`
-       (ACCEPT_TAC o MATCH_MP intcall_args_pre_inv)) >>
+       (ACCEPT_TAC o CONJUNCT1 o
+        MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts)) >>
   `env_consistent tenv cx es0` by
     (qpat_assum `expr_sim_inv cenv cx tenv es0`
        (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [expr_sim_inv_def])) >>
@@ -8970,7 +8956,8 @@ Proof
      simp[intcall_args_stmt_state_rel_push]) >>
   `well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt)` by
     (qpat_assum `expr_body_pre cenv cx tenv (Call _ _ _ _) es0`
-       (ACCEPT_TAC o MATCH_MP intcall_args_pre_well_typed)) >>
+       (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o
+        MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts)) >>
   `IS_SOME (FLOOKUP tenv.fn_sigs (NONE,name))` by
     (qpat_assum `well_typed_expr tenv (Call _ _ _ _)` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
