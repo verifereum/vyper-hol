@@ -7,13 +7,15 @@ Theory deploySymSrcUnit
 Ancestors
   deploySymSrcInstructions deploySymSrcData deploySymSrcHistory
   o1LabelFlowSourceBoundary ctorDeployDefs deployEntryLayout
-  e2eProducers codegenSymRel compileVyper list context
+  e2eProducers codegenSymRel compileVyper list context vyperTypeContract constSubstCorrect
 
 (* The deployment unit's source-side static facts: no CODESIZE, CODECOPY
    only from runtime_begin, no code_end label yet, a byte-only data segment,
    and runtime_begin among its headers. *)
 Theorem lower_vyper_deploy_unit_sym_src_ok:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan.
+  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan layouts addr art imms A.
+  check_contract T layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   deploy_phases policy tops (deploy_bc, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\

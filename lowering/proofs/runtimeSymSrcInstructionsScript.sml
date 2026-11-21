@@ -4,7 +4,7 @@ Ancestors
   runtimeSymSrcRuntimeBoundary runtimeSymSrcDynarrayAppend runtimeSymSrcAbiEncode
   runtimeSymSrcTargetDomains runtimeSymSrcModuleArgPreservation
   runtimeSymSrcGeneratorContracts runtimeSymSrcInterfaces runtimeSymSrcContext
-  list supportedStmts supportedExprTraverse supportedExprs
+  list supportedStmts supportedExprTraverse supportedExprs vyperTypeContract constSubstCorrect
 
 Theorem runtime_sym_expr_closed:
   !tops ce ty e. runtime_sym_expr_contract tops compile_expr ce ty e
@@ -67,6 +67,8 @@ Proof
 QED
 
 Theorem runtime_sym_runtime_insts:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
@@ -74,8 +76,9 @@ Theorem runtime_sym_runtime_insts:
     EVERY runtime_sym_inst (fn_insts fn)
 Proof
   strip_tac >>
-  qspecl_then [`tops`, `rpolicy`, `unit`] mp_tac
-    (Q.GENL [`tops`, `rpolicy`, `unit`] runtime_sym_runtime_boundary) >>
+  mp_tac (Q.INST [`tops` |-> `tops`, `rpolicy` |-> `rpolicy`, `unit` |-> `unit`,
+    `mode` |-> `mode`, `layouts` |-> `layouts`, `addr` |-> `addr`,
+    `art` |-> `art`, `imms` |-> `imms`, `A` |-> `A`] runtime_sym_runtime_boundary) >>
   simp[runtime_sym_stmts_closed] >>
   impl_tac >-
     (conj_tac >- metis_tac[runtime_sym_alloc_buffer] >>
@@ -85,6 +88,8 @@ Proof
 QED
 
 Theorem runtime_sym_runtime_no_codesize:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -96,6 +101,8 @@ Proof
 QED
 
 Theorem runtime_sym_runtime_codecopy_source:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -108,6 +115,8 @@ Proof
 QED
 
 Theorem runtime_sym_runtime_no_code_end:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\ ~program_reads_self_code tops /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
