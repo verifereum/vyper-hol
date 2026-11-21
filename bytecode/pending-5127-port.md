@@ -46,8 +46,6 @@ P2 is ported. These still differ from the oracle with it:
 
 - `abi-codegen/enc_multi`
 - `external-entries/base_dom1`
-- `main/event_log`
-- `main/mixed_event_log`
 - `memory-stores/enc_in_assign`
 - `raw-system/rr03_abi`
 
@@ -63,7 +61,6 @@ P2 is ported. These still differ from the oracle with it:
 - `abi-codegen/enc_ensT_bytes`
 - `main/abi_dynamic`
 - `main/abi_static`
-- `main/mixed_event_types`
 
 ## Constant folding (#543), not #5127
 

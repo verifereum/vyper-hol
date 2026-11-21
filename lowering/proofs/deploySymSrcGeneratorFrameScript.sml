@@ -76,8 +76,6 @@ val _ = augment_srw_ss [rewrites [
   deploy_blocks_frame_internal_return, deploy_blocks_frame_external_return,
   deploy_blocks_frame_internal_return_from_env,
   deploy_blocks_frame_revert_with_reason, deploy_blocks_frame_reason_message,
-  deploy_blocks_frame_log_save_arg, deploy_blocks_frame_log_eval_all,
-  deploy_blocks_frame_log_topic_ops, deploy_blocks_frame_log_store_data,
   deploy_blocks_frame_tuple_load_all, deploy_blocks_frame_store_at_loc,
   deploy_blocks_frame_assign_value, deploy_blocks_frame_tuple_store_all,
   deploy_blocks_frame_tuple_unpack, deploy_blocks_frame_iter_elem_copy]];

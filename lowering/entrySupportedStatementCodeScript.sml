@@ -3,7 +3,7 @@ Ancestors
   entryStatementStoreCode entryStatementDiagnosticCode entryStatementLoopCode
   entryStatementTargetSupport entryReturnCode entryExpressionCode
   entryCodePredicate entryContextCodePredicate entryAggregateCode entryValueCode entryLocationValueCode
-  entryArithmeticCode entryTypedCopyCode entryEncoderCode
+  entryArithmeticCode entryTypedCopyCode entryEncoderCode entryCallCode
   stmtLowering exprLowering compileEnv supportedStmts supportedExprs list
 
 Theorem entry_code_annassign[local]:
@@ -242,13 +242,13 @@ Proof
   BasicProvers.TOP_CASE_TAC >> simp[entry_code_emit_inst] >>
   PairCases_on `x` >> simp[] >>
   rpt (irule entry_code_bind >> reverse conj_tac
-    >- (simp[entry_code_return, entry_code_log_topic_ops] >>
-        irule entry_code_log_eval_all >> simp[]) >>
+    >- (simp[entry_code_return, entry_code_log_saved_topics] >>
+        irule entry_code_ext_call_args >> simp[]) >>
     rpt gen_tac >> BETA_TAC) >>
   IF_CASES_TAC >> simp[entry_code_emit_inst] >>
   rpt (irule entry_code_bind >> reverse conj_tac
     >- simp[entry_code_alloc_buffer, entry_code_return,
-            entry_code_log_store_data, entry_code_encode_to_buf] >>
+            entry_code_abi_encode_values_to_buf] >>
     rpt gen_tac >> BETA_TAC) >> simp[entry_code_emit_inst]
 QED
 
