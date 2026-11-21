@@ -9,12 +9,12 @@ Ancestors
 Theorem type_builtin_member_callback[local]:
   (!e ety st. expr_size e < list_size expr_size args /\
       ~supported_expr_exists R e /\
-      ~supported_expr_exists expr_shape_root e ==>
+      ~supported_expr_exists root2 e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (cfn cenv ety e st)))) /\
   ~supported_exprs_exists R args /\
-  ~supported_exprs_exists expr_shape_root args ==>
+  ~supported_exprs_exists root2 args ==>
   !e ety st. MEM e args ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
@@ -154,7 +154,7 @@ Theorem outcomes_free_type_builtin_dispatch_body:
   !args cfn cenv vv_ty ty tb ret_ty.
   (!e ety st. expr_size e < list_size expr_size args /\
       ~supported_expr_exists R e /\
-      ~supported_expr_exists expr_shape_root e ==>
+      ~supported_expr_exists root2 e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (cfn cenv ety e st)))) /\
@@ -163,7 +163,7 @@ Theorem outcomes_free_type_builtin_dispatch_body:
       (state_insts (SND (compile_abi_encode_args cfn cenv args st)))) /\
   type_builtin_arity tb <= LENGTH args /\
   ~supported_exprs_exists R args /\
-  ~supported_exprs_exists expr_shape_root args ==>
+  ~supported_exprs_exists root2 args ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_type_builtin_dispatch_body cfn cenv vv_ty ty tb ret_ty args st)))
@@ -261,13 +261,13 @@ Theorem opcode_every_type_builtin_dispatch_body:
   !args cfn cenv vv_ty ty tb ret_ty.
   (!e ety st. expr_size e < list_size expr_size args /\
       ~supported_expr_exists R e /\
-      ~supported_expr_exists expr_shape_root e ==>
+      ~supported_expr_exists root2 e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (cfn cenv ety e st)))) /\
   type_builtin_arity tb <= LENGTH args /\
   ~supported_exprs_exists R args /\
-  ~supported_exprs_exists expr_shape_root args ==>
+  ~supported_exprs_exists root2 args ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_type_builtin_dispatch_body cfn cenv vv_ty ty tb ret_ty args st)))
@@ -277,5 +277,6 @@ Proof
   `P MSTORE` by simp[] >>
   member_callback_tac >>
   rpt strip_tac >> irule outcomes_free_type_builtin_dispatch_body >>
-  simp[UNDISCH opcode_every_abi_encode_args] >> qexists_tac `R` >> simp[]
+  simp[UNDISCH opcode_every_abi_encode_args] >>
+  qexists_tac `R` >> qexists_tac `root2` >> simp[]
 QED

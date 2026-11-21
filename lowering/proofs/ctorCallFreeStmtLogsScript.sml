@@ -139,18 +139,18 @@ Theorem outcomes_free_log_eval_all:
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists extra_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !es ce st.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
   EVERY (\e. ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e) es ==>
+    ~supported_expr_exists extra_root e) es ==>
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_log_eval_all ce es st)))
@@ -178,18 +178,18 @@ Theorem opcode_every_log_eval_all:
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists extra_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !es ce st.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
   EVERY (\e. ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e) es ==>
+    ~supported_expr_exists extra_root e) es ==>
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_log_eval_all ce es st)))
@@ -218,18 +218,18 @@ Theorem outcomes_free_reason_message:
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists extra_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !e ce st.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_expr_exists R e /\
-  ~supported_expr_exists expr_shape_root e ==>
+  ~supported_expr_exists extra_root e ==>
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_reason_message ce e st)))
@@ -248,18 +248,18 @@ Theorem opcode_every_reason_message:
   (!ce ty e st.
     (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
       EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                   ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                   ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
     ~supported_expr_exists R e /\
-    ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists extra_root e ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !e ce st.
   (!ann id args d. ~R (Call ann (IntCall id) args d) ==>
     EVERY (\nd. ~supported_exprs_exists R (SND nd) /\
-                 ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults) /\
+                 ~supported_exprs_exists extra_root (SND nd)) ce.ce_func_defaults) /\
   ~supported_expr_exists R e /\
-  ~supported_expr_exists expr_shape_root e ==>
+  ~supported_expr_exists extra_root e ==>
   EVERY (\i. P i.inst_opcode) (state_insts st) ==>
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_reason_message ce e st)))

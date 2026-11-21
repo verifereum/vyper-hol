@@ -5,12 +5,37 @@ Ancestors
   venomInst list pair supportedStmtTraverse
   ctorCallFreeRules ctorCallFreeValues ctorCallFreeStmtReturns loweringFunctionOpcodes
 
-Theorem every_state_insts_defaults_bind[local]:
-  (!st. EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd))
+
+Definition package_body_avoids_def:
+  package_body_avoids root ce body <=>
+    EVERY (\nd. ~supported_exprs_exists root (SND nd)) ce.ce_func_defaults /\
+    ~supported_stmts_expr_exists root body
+End
+
+Definition external_package_avoids_def:
+  external_package_avoids root
+    (label, ce, args, min_cds, payable, nr, nkey, trans, view, body, ty) <=>
+    package_body_avoids root ce body
+End
+
+Definition internal_package_avoids_def:
+  internal_package_avoids root
+    (label, ce, params, ret_buf, nr, nkey, trans, view, ctor, imm, body, ty) <=>
+    package_body_avoids root ce body
+End
+
+Definition fallback_package_avoids_def:
+  fallback_package_avoids root NONE = T /\
+  fallback_package_avoids root (SOME (ce, payable, nr, nkey, trans, view, body, ty)) =
+    package_body_avoids root ce body
+End
+
+Theorem every_state_insts_defaults_bind:
+  (!st. EVERY (\nd. ~supported_exprs_exists root (SND nd))
       (FST (m st)).ce_func_defaults) /\
   (!st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (m st)))) /\
-  (!ce st. EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
+  (!ce st. EVERY (\nd. ~supported_exprs_exists root (SND nd)) ce.ce_func_defaults ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce st)))) ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -102,10 +127,10 @@ Theorem opcode_every_guarded_body:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (!ce ty st.
-    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
+    EVERY (\nd. ~supported_exprs_exists root (SND nd)) ce.ce_func_defaults ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_stmts ce NoLoop ty fbody st)))) ==>
-  EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
+  EVERY (\nd. ~supported_exprs_exists root (SND nd)) ce.ce_func_defaults ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_guarded_body ce nr key trans view fbody ret st)))
 Proof
@@ -119,10 +144,10 @@ Theorem opcode_every_external_function_body:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (!ce ty st.
-    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
+    EVERY (\nd. ~supported_exprs_exists root (SND nd)) ce.ce_func_defaults ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_stmts ce NoLoop ty fbody st)))) ==>
-  EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
+  EVERY (\nd. ~supported_exprs_exists root (SND nd)) ce.ce_func_defaults ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_external_function_body ce args nr key trans view fbody ret st)))
 Proof
@@ -130,33 +155,37 @@ Proof
   strip_tac >> strip_tac >> simp[compile_external_function_body_def] >>
   preserve [register_positional_args_defaults,
     UNDISCH opcode_every_register_positional_args,
-    UNDISCH opcode_every_guarded_body]
+    UNDISCH opcode_every_guarded_body] >>
+  rpt strip_tac >> irule (UNDISCH opcode_every_guarded_body) >>
+  TRY (qexists_tac `root`) >> simp[] >> metis_tac[]
 QED
 
 Theorem opcode_every_fallback_body:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (!ce ty st.
-    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
+    EVERY (\nd. ~supported_exprs_exists root (SND nd)) ce.ce_func_defaults ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_stmts ce NoLoop ty fbody st)))) ==>
-  EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
+  EVERY (\nd. ~supported_exprs_exists root (SND nd)) ce.ce_func_defaults ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_fallback_body ce pay nr key trans view fbody ret st)))
 Proof
   strip_tac >>
   strip_tac >> strip_tac >> simp[compile_fallback_body_def] >>
-  preserve [UNDISCH opcode_every_guarded_body]
+  preserve [UNDISCH opcode_every_guarded_body] >>
+  rpt strip_tac >> irule (UNDISCH opcode_every_guarded_body) >>
+  TRY (qexists_tac `root`) >> simp[] >> metis_tac[]
 QED
 
 Theorem opcode_every_internal_function:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (!ce ty st.
-    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
+    EVERY (\nd. ~supported_exprs_exists root (SND nd)) ce.ce_func_defaults ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_stmts ce NoLoop ty fbody st)))) ==>
-  EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
+  EVERY (\nd. ~supported_exprs_exists root (SND nd)) ce.ce_func_defaults ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_internal_function ce params rb nr key trans view ctor imm fbody ret st)))
 Proof
@@ -187,39 +216,43 @@ Theorem opcode_every_external_fn_bodies:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (!ce ty ss st.
-    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
-    ~supported_stmts_expr_exists expr_shape_root ss ==>
+    EVERY (\nd. ~supported_exprs_exists root (SND nd)) ce.ce_func_defaults ==>
+    ~supported_stmts_expr_exists root ss ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_stmts ce NoLoop ty ss st)))) ==>
-  !fns. EVERY external_fn_shape_ok fns ==>
+  !fns. EVERY (external_package_avoids root) fns ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_external_fn_bodies fns st)))
 Proof
   strip_tac >>
   strip_tac >> Induct >> simp[compile_external_fn_bodies_def, every_state_insts_return] >>
   qx_gen_tac `fn` >> PairCases_on `fn` >>
-  simp[external_fn_shape_ok_def, cenv_static_ok_def] >> strip_tac >>
+  simp[external_package_avoids_def, package_body_avoids_def] >> strip_tac >>
   simp[compile_external_fn_bodies_def] >>
   preserve [UNDISCH opcode_every_entry_checks,
-    UNDISCH opcode_every_external_function_body]
+    UNDISCH opcode_every_external_function_body] >>
+  rpt strip_tac >> irule (UNDISCH opcode_every_external_function_body) >>
+  TRY (qexists_tac `root`) >> simp[] >> metis_tac[]
 QED
 
 Theorem opcode_every_internal_fn_bodies:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (!ce ty ss st.
-    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
-    ~supported_stmts_expr_exists expr_shape_root ss ==>
+    EVERY (\nd. ~supported_exprs_exists root (SND nd)) ce.ce_func_defaults ==>
+    ~supported_stmts_expr_exists root ss ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_stmts ce NoLoop ty ss st)))) ==>
-  !fns. EVERY internal_fn_shape_ok fns ==>
+  !fns. EVERY (internal_package_avoids root) fns ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_internal_fn_bodies fns st)))
 Proof
   strip_tac >>
   strip_tac >> Induct >> simp[compile_internal_fn_bodies_def, every_state_insts_return] >>
   qx_gen_tac `fn` >> PairCases_on `fn` >>
-  simp[internal_fn_shape_ok_def, cenv_static_ok_def] >> strip_tac >>
+  simp[internal_package_avoids_def, package_body_avoids_def] >> strip_tac >>
   simp[compile_internal_fn_bodies_def] >>
-  preserve [UNDISCH opcode_every_internal_function]
+  preserve [UNDISCH opcode_every_internal_function] >>
+  rpt strip_tac >> irule (UNDISCH opcode_every_internal_function) >>
+  TRY (qexists_tac `root`) >> simp[] >> metis_tac[]
 QED
 
 Theorem opcode_every_selector_checks:
@@ -249,11 +282,11 @@ Theorem opcode_every_generate_runtime_linear:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
   (!ce ty ss st.
-    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd)) ce.ce_func_defaults ==>
-    ~supported_stmts_expr_exists expr_shape_root ss ==>
+    EVERY (\nd. ~supported_exprs_exists root (SND nd)) ce.ce_func_defaults ==>
+    ~supported_stmts_expr_exists root ss ==>
     EVERY (\i. P i.inst_opcode) (state_insts st) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_stmts ce NoLoop ty ss st)))) /\
-  EVERY external_fn_shape_ok exts /\ EVERY internal_fn_shape_ok ints /\
-  fallback_shape_ok fb ==>
+  EVERY (external_package_avoids root) exts /\ EVERY (internal_package_avoids root) ints /\
+  (fallback_package_avoids root) fb ==>
   !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_generate_runtime sels exts ints fb Linear buckets metadata dense info st)))
 Proof
@@ -262,9 +295,13 @@ Proof
   preserve [UNDISCH opcode_every_selector_dispatch_linear,
     UNDISCH opcode_every_external_fn_bodies,
     UNDISCH opcode_every_internal_fn_bodies,
-    UNDISCH opcode_every_fallback_body, fallback_shape_ok_def, cenv_static_ok_def] >>
-  gvs[fallback_shape_ok_def, cenv_static_ok_def] >> qid_spec_tac `st` >>
-  simp[UNDISCH opcode_every_fallback_body]
+    UNDISCH opcode_every_fallback_body, fallback_package_avoids_def, package_body_avoids_def] >>
+  rpt strip_tac >>
+  FIRST [irule (UNDISCH opcode_every_external_fn_bodies),
+         irule (UNDISCH opcode_every_internal_fn_bodies),
+         irule (UNDISCH opcode_every_fallback_body)] >>
+  TRY (qexists_tac `root`) >>
+  gvs[fallback_package_avoids_def, package_body_avoids_def] >> metis_tac[]
 QED
 
 end
