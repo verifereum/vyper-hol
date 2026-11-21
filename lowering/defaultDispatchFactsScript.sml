@@ -422,6 +422,7 @@ QED
 Theorem default_dispatch_cases:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
   tx.function_name = "__default__" /\
   calldata_dispatch tops cd = SOME (tx.function_name,vals) /\
   vyperInterpreter$lookup_function NONE tx.function_name External tops =
@@ -447,8 +448,6 @@ Theorem default_dispatch_cases:
     compile_entry_checks mc pay checks = ((),st) /\
     compile_register_positional_args ce pa 4 st = (ce',body_st) /\
     compile_guarded_body ce' F key ut iv (subst_consts_stmts (module_consts_env tops []) fbody) rt body_st = ((),st') /\
-    shape_state label_st /\ shape_state dispatch_st /\ shape_state checks /\
-    shape_state st /\ shape_state body_st /\ shape_state st' /\
     cs_extends label_st dispatch_st /\ cs_extends dispatch_st checks /\
     cs_extends checks st /\ cs_extends st body_st /\ cs_extends body_st st' /\
     fn_has_code label_st dispatch_st func /\ fn_has_code checks st func /\
@@ -540,7 +539,8 @@ Proof
       (FST (SND (SND (classify_functions tops))))) =
     SOME (ce_fb,pay,F,key,ut,iv,subst_consts_stmts (module_consts_env tops []) fbody,rt)` by
     metis_tac[] >>
-  drule_all (INST_TYPE [alpha |-> ``:string``] default_fallback_compile_placement) >>
+  drule_all (SIMP_RULE std_ss [listTheory.NOT_EXISTS]
+    (INST_TYPE [alpha |-> ``:string``] default_fallback_compile_placement)) >>
   disch_then (qspec_then `("fn___default__":string)` strip_assume_tac) >>
   `linear_dispatch_target cd
     (MAP (\(sel,lbl,z). (sel,lbl))
@@ -549,7 +549,5 @@ Proof
   qexistsl [`ce_fb`, `fallback`, `label_st`, `dispatch_st`,
     `opened`, `checks`, `st`, `ce_fb`, `st`, `st'`] >>
   gvs[compileEnvTheory.cs_extends_refl] >>
-  (conj_tac >- (irule compileEnvTheory.cs_extends_trans >>
-     qexists_tac `opened` >> simp[]) >>
-   fs[runtime_fallback_body_start_def] >> metis_tac[])
+  fs[runtime_fallback_body_start_def] >> metis_tac[]
 QED

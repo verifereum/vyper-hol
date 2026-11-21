@@ -163,6 +163,59 @@ Proof
   gvs[fresh_label_def, initial_compile_state_def, new_block_def]
 QED
 
+(* The emitted fallback interval includes the payable check and the body. *)
+Theorem run_lowering_fallback_interval_code:
+  run_lowering sels exts ints (SOME (ce,pay,nr,key,tr,view,stmts,rt))
+    rp bc mb db ei "__entry" = SOME u /\
+  EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,ss,rt). jump_label_ok lbl) exts /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
+  lookup_function "__entry" u.cu_context.ctx_functions = SOME efn ==>
+  ?fl sf sd opened checks st se.
+    fresh_label "fallback" (initial_compile_state "__entry") = (fl,sf) /\
+    compile_selector_dispatch_linear (MAP (\(sel,lbl,z). (sel,lbl)) sels)
+      fl sf = ((),sd) /\
+    compile_external_fn_bodies exts sd = ((),opened) /\
+    new_block fl opened = (opened.cs_current_bb,checks) /\
+    compile_entry_checks 4 pay checks = ((),st) /\
+    compile_guarded_body ce nr key tr view stmts rt st = ((),se) /\
+    cs_extends sf sd /\ cs_extends sd checks /\
+    cs_extends checks st /\ cs_extends st se /\
+    fn_has_code sf sd efn /\ fn_has_code checks st efn /\
+    fn_has_code st se efn /\ checks.cs_current_insts = [] /\
+    sf.cs_current_bb = "__entry" /\ sf.cs_current_insts = [] /\
+    sf.cs_next_var = 0
+Proof
+  strip_tac >> drule_all run_lowering_retained_entry >> strip_tac >>
+  drule compile_runtime_entry_intervals >> simp[] >> strip_tac >>
+  gvs[compile_internal_fn_bodies_def, comp_return_def] >>
+  Cases_on `compile_entry_checks 4 pay sn` >>
+  rename1 `compile_entry_checks 4 pay sn = (res,sk)` >> Cases_on `res` >>
+  `compile_guarded_body ce nr key tr view stmts rt sk = ((),se)` by
+    (qpat_x_assum `compile_fallback_body _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     qpat_assum `compile_entry_checks _ _ _ = _` mp_tac >>
+     simp[compile_fallback_body_def, compile_entry_checks_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def, ELIM_UNCURRY] >>
+     strip_tac >>
+     gvs[compile_entry_checks_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def, ELIM_UNCURRY]) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_selector_dispatch_linear) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_external_fn_bodies) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_entry_checks) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_guarded_body) >>
+  `cs_extends sx sn` by metis_tac[cs_extends_new_block] >>
+  `cs_extends sd sn /\ cs_extends sn se` by
+    metis_tac[cs_extends_trans] >>
+  `cs_extends sd se` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sf sd efn /\ fn_has_code sn sk efn /\
+   fn_has_code sk se efn` by
+    (rpt conj_tac >> irule fn_has_code_retained_interval >>
+     simp[cs_extends_refl] >> qexists `se` >> simp[cs_extends_refl]) >>
+  `sn.cs_current_insts = []` by
+    (drule new_block_props >> simp[]) >>
+  qexistsl [`fl`, `sf`, `sd`, `sx`, `sn`, `sk`, `se`] >>
+  gvs[fresh_label_def, initial_compile_state_def]
+QED
+
 Theorem run_lowering_fallback_check_code:
   run_lowering sels exts ints (SOME (ce,F,nr,key,tr,view,stmts,rt))
     rp bc mb db ei "__entry" = SOME u /\
@@ -179,28 +232,11 @@ Theorem run_lowering_fallback_check_code:
     sf.cs_next_var = 0 /\
     fn_has_code sf sd efn /\ fn_has_code sc sk efn
 Proof
-  strip_tac >> drule_all run_lowering_retained_entry >> strip_tac >>
-  drule compile_runtime_entry_intervals >> simp[] >> strip_tac >>
-  gvs[compile_internal_fn_bodies_def, comp_return_def] >>
-  Cases_on `compile_entry_checks 0 F sn` >>
-  rename1 `compile_entry_checks 0 F sn = (res,sk)` >> Cases_on `res` >>
-  `compile_guarded_body ce nr key tr view stmts rt sk = ((),se)` by
-    (qpat_x_assum `compile_fallback_body _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-     qpat_assum `compile_entry_checks _ _ _ = _` mp_tac >>
-     simp[compile_fallback_body_def, compile_entry_checks_def,
-          comp_bind_def, comp_ignore_bind_def, comp_return_def, ELIM_UNCURRY] >>
-     strip_tac >>
-     gvs[compile_entry_checks_def, comp_bind_def, comp_ignore_bind_def,
-         comp_return_def, ELIM_UNCURRY]) >>
-  imp_res_tac (SRULE [cs_appends_def] cs_appends_selector_dispatch_linear) >>
-  imp_res_tac (SRULE [cs_appends_def] cs_appends_external_fn_bodies) >>
-  imp_res_tac (SRULE [cs_appends_def] cs_appends_entry_checks) >>
-  imp_res_tac (SRULE [cs_appends_def] cs_appends_guarded_body) >>
-  `cs_extends sx sn` by metis_tac[cs_extends_new_block] >>
-  `fn_has_code sf sd efn /\ fn_has_code sn sk efn` by
-    metis_tac[fn_has_code_retained_interval, cs_extends_trans] >>
-  qexistsl_tac [`sf`, `sd`, `sn`, `sk`] >>
-  gvs[new_block_def, fresh_label_def, initial_compile_state_def]
+  strip_tac >> drule_all run_lowering_fallback_interval_code >> strip_tac >>
+  drule new_block_props >> strip_tac >>
+  `compile_entry_checks 0 F checks = ((),st)` by
+    fs[compile_entry_checks_def] >>
+  qexistsl [`fl`, `sf`, `sd`, `checks`, `st`] >> simp[]
 QED
 
 Theorem runtime_selected_entry_code[local]:
