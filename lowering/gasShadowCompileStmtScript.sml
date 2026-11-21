@@ -4,26 +4,26 @@ Ancestors
   gasShadow gasShadowState gasShadowCompile gasShadowCompileStmtCases
   gasShadowCompileStmtBase stmtLowering vyperAST list
 
-Theorem gas_shadow_compile_stmt:
+Theorem gas_shadow_compile_stmt_env:
   (!cenv lctx ty stmt.
     gas_shadow_compiles (compile_stmt cenv lctx ty stmt)
-      (compile_stmt cenv lctx ty (gas_shadow_stmt stmt))) /\
+      (compile_stmt (gas_shadow_env sd cenv) lctx ty (gas_shadow_stmt stmt))) /\
   (!cenv lctx ty stmts.
     gas_shadow_compiles (compile_stmts cenv lctx ty stmts)
-      (compile_stmts cenv lctx ty (MAP gas_shadow_stmt stmts)))
+      (compile_stmts (gas_shadow_env sd cenv) lctx ty (MAP gas_shadow_stmt stmts)))
 Proof
   `(!stmt cenv lctx ty.
       gas_shadow_compiles (compile_stmt cenv lctx ty stmt)
-        (compile_stmt cenv lctx ty (gas_shadow_stmt stmt))) /\
+        (compile_stmt (gas_shadow_env sd cenv) lctx ty (gas_shadow_stmt stmt))) /\
    (!stmts cenv lctx ty.
       gas_shadow_compiles (compile_stmts cenv lctx ty stmts)
-        (compile_stmts cenv lctx ty (MAP gas_shadow_stmt stmts)))`
+        (compile_stmts (gas_shadow_env sd cenv) lctx ty (MAP gas_shadow_stmt stmts)))`
     suffices_by metis_tac[] >>
   ho_match_mp_tac (legacyInduction.mutual_ind_from_ops stmt_induction) >>
   rpt conj_tac >>
   simp[gas_shadow_stmt_pass, gas_shadow_stmt_continue, gas_shadow_stmt_break,
        gas_shadow_stmt_expr, gas_shadow_stmt_assert, gas_shadow_stmt_log,
-       gas_shadow_stmt_raise, gas_shadow_stmt_augassign, gas_shadow_stmt_append,
+       gas_shadow_stmt_raise_env, gas_shadow_stmt_augassign, gas_shadow_stmt_append,
        gas_shadow_stmt_annassign] >>
   rpt strip_tac >>
   simp[gas_shadow_stmt_if, gas_shadow_stmts_cons]
@@ -37,4 +37,8 @@ Proof
   >- simp[compile_stmt_def, gas_shadow_compiles_return] >>
   irule (SRULE [] gas_shadow_stmts_cons) >> simp[]
 QED
+
+(* The same-environment forms. *)
+Theorem gas_shadow_compile_stmt =
+  REWRITE_RULE [gasShadowCompileBaseTheory.gas_shadow_env_F] (Q.INST [`sd` |-> `F`] gas_shadow_compile_stmt_env)
 
