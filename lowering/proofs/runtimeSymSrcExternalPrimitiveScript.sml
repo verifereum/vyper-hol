@@ -103,7 +103,7 @@ Proof
   first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
-Theorem runtime_sym_abi_encode_values_to_buf[local]:
+Theorem runtime_sym_abi_encode_values_to_buf:
   (!dst src info s v s'.
     ~is_label_operand dst /\ ~is_label_operand src /\
     EVERY runtime_sym_inst (state_insts s) /\

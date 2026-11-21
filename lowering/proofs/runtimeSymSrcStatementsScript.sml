@@ -2,6 +2,7 @@ Theory runtimeSymSrcStatements
 Ancestors
   runtimeSymSrcStatementAssignFamily
   runtimeSymSrcStatementAssignClosed runtimeSymSrcStatementExitClosed
+  runtimeSymSrcStatementLogs
   runtimeSymSrcStatementReasons runtimeSymSrcGeneratorContracts
   runtimeSymSrcStatementControl runtimeSymSrcStatementRange
   runtimeSymSrcStatementControlComplete runtimeSymSrcContextComplete
@@ -77,7 +78,7 @@ Proof
       irule runtime_sym_stmts_from_members >> metis_tac[])
   >> qpat_x_assum `!cfn ce ty e s op s'. _` kall_tac
   >- suspend "assert"
-  >- (rpt gen_tac >> match_mp_tac runtime_sym_log_closed >> conj_tac
+  >- (rpt gen_tac >> match_mp_tac runtime_sym_stmt_log >> conj_tac
       >- simp[] >> first_assum MATCH_ACCEPT_TAC)
   >- (gen_tac >> Cases_on `r` >>
       simp[runtime_sym_stmt_raise_bare, runtime_sym_stmt_raise_unreachable,

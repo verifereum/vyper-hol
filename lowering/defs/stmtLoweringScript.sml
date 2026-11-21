@@ -19,7 +19,7 @@ Theory stmtLowering
 Ancestors
   exprLowering context compileEnv venomInst abiEncoder dretShapeDefs vyperExprEffects
 Libs
-  monadsyntax
+  monadsyntax pairLib
 
 (* ===== Target Compilation ===== *)
 
@@ -64,8 +64,8 @@ End
 (* Split already-evaluated operands into indexed topics and non-indexed data.
    indexed_flags: bool list parallel to evaluated ops. *)
 Definition split_log_ops_def:
-  split_log_ops [] [] = ([] : (operand # bool) list,
-                          [] : (operand # type) list) ∧
+  split_log_ops [] [] = ([] : ('a # bool) list,
+                          [] : ('a # type) list) ∧
   split_log_ops ((op, ty) :: rest) (T :: flags) =
     (let (topics, data) = split_log_ops rest flags in
      let is_bs = is_bytestring_type ty in
@@ -75,6 +75,16 @@ Definition split_log_ops_def:
      (topics, (op, ty) :: data)) ∧
   split_log_ops _ _ = ([], [])
 End
+
+Theorem every_split_log_ops:
+  !ops flags P. EVERY (P o FST) ops ==>
+    EVERY (P o FST) (FST (split_log_ops ops flags)) /\
+    EVERY (P o FST) (SND (split_log_ops ops flags))
+Proof
+  recInduct split_log_ops_ind >>
+  simp[split_log_ops_def] >> rpt strip_tac >>
+  pairarg_tac >> gvs[] >> metis_tac[]
+QED
 
 (* Hash indexed topic operands (bytestrings need keccak256).
    Input: list of (operand, is_bytestring) *)
@@ -87,6 +97,18 @@ Definition compile_log_topic_ops_def:
     od
 Termination
   WF_REL_TAC `measure (λops. LENGTH ops)`
+End
+
+(* Read each saved topic at its physical layout, after all arguments have
+   been captured. Hash a bytestring before reading the next topic. *)
+Definition compile_log_saved_topics_def:
+  compile_log_saved_topics cenv [] = return ([] : operand list) ∧
+  compile_log_saved_topics cenv ((vv,is_bs) :: rest) =
+    do op <- unwrap_value cenv vv;
+       topic <- compile_encode_log_topic op is_bs;
+       topics <- compile_log_saved_topics cenv rest;
+       return (topic :: topics)
+    od
 End
 
 (* Store already-evaluated data operands into the declared field layouts.
@@ -954,45 +976,32 @@ Definition compile_stmt_def:
        return ()
     od ∧
 
-  (* Log: event emission with indexed topics + ABI-encoded data.
-     Mirrors Python: vyper/codegen_venom/stmt.py:lower_Log.
-     CRITICAL: evaluate ALL args in AST order first (for side-effect ordering),
-     then split into indexed (topics) and non-indexed (data).
-     1. Evaluate all args in AST order
-     2. Split evaluated ops into topics and data
-     3. Hash bytestring topics
-     4. Store data to buffer, ABI-encode
-     5. Emit LOG *)
+  (* Snapshot in AST order before reading topics or writing the ABI data.
+     Mirrors Python: vyper/codegen_venom/stmt.py:lower_Log. *)
   compile_stmt cenv lctx ty (Log event_id args) =
     (let event_name = nsid_to_string event_id in
      case cenv.ce_event_info event_name of
        NONE => emit_inst INVALID [] []
-     | SOME (event_hash_value, arg_types, indexed_flags) =>
-         do eval_ops <- compile_log_eval_all cenv args;
-            log_split <- return (split_log_ops eval_ops indexed_flags);
+     | SOME (event_hash_value, _, indexed_flags) =>
+         let arg_types = MAP (lowered_value_type cenv) args in
+         do saved <- compile_ext_call_args compile_expr cenv [] arg_types args;
+            log_split <- return (split_log_ops (ZIP (saved,arg_types)) indexed_flags);
             raw_topics <- return (FST log_split);
-            data_ops <- return (SND log_split);
-            topic_ops <- compile_log_topic_ops raw_topics;
+            data_rows <- return (SND log_split);
+            topic_ops <- compile_log_saved_topics cenv raw_topics;
             all_topics <- return (Lit (n2w event_hash_value) :: topic_ops);
             n_topics <- return (LENGTH all_topics);
-            if NULL data_ops then
+            if NULL data_rows then
               (* Python builder.log stores LOG operands in physical stack
                  order: topic_count, reversed topics, size, offset. *)
               emit_inst (LOG : opcode)
                 (Lit (n2w n_topics) :: REVERSE all_topics ++ [Lit 0w; Lit 0w]) []
             else
-              let data_types = log_non_indexed_types indexed_flags arg_types in
-              let data_tuple_t = TupleT data_types in
-              let data_mem_size = SUM (MAP (type_memory_bytes cenv) data_types) in
-              do data_buf_alloc <- compile_alloc_buffer (MAX 32 data_mem_size);
-                 data_buf <- return data_buf_alloc.buf_operand;
-                 compile_log_store_data cenv data_ops data_types data_buf 0;
-                 abi_size <- return (abi_size_bound cenv.ce_struct_fields data_tuple_t);
-                 data_enc_info <- return (type_to_abi_enc_info cenv.ce_struct_fields cenv data_tuple_t);
-                 abi_buf_alloc <- compile_alloc_buffer (MAX 32 abi_size);
+              do abi_buf_alloc <- compile_alloc_buffer
+                   (abi_size_bound cenv.ce_struct_fields (TupleT (MAP SND data_rows)));
                  abi_buf <- return abi_buf_alloc.buf_operand;
                  encoded_len <-
-                   compile_abi_encode_to_buf abi_buf data_buf data_enc_info;
+                   compile_abi_encode_values_to_buf cenv abi_buf data_rows;
                  emit_inst (LOG : opcode)
                    (Lit (n2w n_topics) :: REVERSE all_topics ++
                       [encoded_len; abi_buf]) []

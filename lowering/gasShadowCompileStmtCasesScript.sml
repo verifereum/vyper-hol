@@ -3,7 +3,7 @@ Theory gasShadowCompileStmtCases
 Ancestors
   gasShadowCompileStmtHelpers gasShadowCompileStmtOps gasShadowCompileStmtBase
   gasShadowCompilePure gasShadowCompileConvert gasShadowCompileContext gasShadowCompileAbi gasShadowCompileArith gasShadowCompileCallSupport
-  gasShadowCompileLiteral gasShadowCompileHelpers
+  gasShadowCompileLiteral gasShadowCompileHelpers gasShadowCompileExternal
   gasShadow gasShadowState stmtLowering compileEnv
   exprLowering vyperAST list
 
@@ -104,22 +104,39 @@ Proof
   simp[gas_shadow_compile_reason_message, gas_shadow_compiles_revert_with_reason]
 QED
 
+Theorem gas_shadow_log_snapshots:
+  gas_shadow_compiles
+    (compile_ext_call_args compile_expr cenv [] (MAP (lowered_value_type cenv) args) args)
+    (compile_ext_call_args compile_expr cenv []
+      (MAP (lowered_value_type cenv) (MAP gas_shadow_expr args)) (MAP gas_shadow_expr args))
+Proof
+  mp_tac (Q.INST [`sh` |-> `T`]
+    (MATCH_MP gas_shadow_compiles_ext_call_args
+      (cj 1 gasShadowCompileTheory.gas_shadow_compile_expr))) >>
+  simp[MAP_MAP_o, combinTheory.o_DEF, SF ETA_ss] >>
+  disch_then (qspecl_then [`args`, `[]`, `MAP (lowered_value_type cenv) args`] mp_tac) >>
+  simp[]
+QED
+
 Theorem gas_shadow_stmt_log:
   gas_shadow_compiles (compile_stmt cenv lctx ty (Log id args))
     (compile_stmt cenv lctx ty (gas_shadow_stmt (Log id args)))
 Proof
-  simp[gas_shadow_stmt_def, compile_stmt_def] >>
+  simp[gas_shadow_stmt_def, compile_stmt_def,
+       MAP_MAP_o, combinTheory.o_DEF, SF ETA_ss] >>
   Cases_on `cenv.ce_event_info (nsid_to_string id)`
   >- simp[gas_shadow_compiles_emit_inst] >>
   rename1 `SOME info` >> PairCases_on `info` >> simp[] >>
+  match_mp_tac gas_shadow_compiles_bind >> conj_tac
+  >- (mp_tac gas_shadow_log_snapshots >> simp[MAP_MAP_o, combinTheory.o_DEF, SF ETA_ss]) >>
+  gen_tac >> BETA_TAC >>
   rpt (ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- simp[gas_shadow_compile_log_eval_all, gas_shadow_compiles_return,
-               gas_shadow_compiles_log_topic_ops] >> gen_tac) >>
+       >- simp[gas_shadow_compiles_return, gas_shadow_compiles_log_saved_topics] >>
+       gen_tac) >>
   IF_CASES_TAC >> simp[gas_shadow_compiles_emit_inst, comp_ignore_bind_def] >>
   rpt (ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_return,
-               gas_shadow_compiles_log_store_data,
-               gas_shadow_compiles_abi_encode_to_buf] >> gen_tac) >>
+               gas_shadow_compiles_abi_encode_values_to_buf] >> gen_tac) >>
   simp[gas_shadow_compiles_emit_inst]
 QED
 

@@ -49,9 +49,26 @@ Theorem rb_split_log_ops_for:
   EVERY ((rb_operand_ok_for source_checks) o FST) (FST (split_log_ops ops flags)) /\
   EVERY ((rb_operand_ok_for source_checks) o FST) (SND (split_log_ops ops flags))
 Proof
-  recInduct split_log_ops_ind >>
-  simp[split_log_ops_def] >> rpt strip_tac >>
-  pairarg_tac >> gvs[] >> metis_tac[]
+  metis_tac[every_split_log_ops]
+QED
+
+Theorem rb_compile_log_saved_topics_for:
+  !ops ce. rb_env_ok_for source_checks ce /\
+    EVERY (rb_value_ok_for source_checks o FST) ops ==>
+    rb_step_for source_checks (EVERY (rb_operand_ok_for source_checks))
+      (compile_log_saved_topics ce ops)
+Proof
+  Induct >> rpt gen_tac >> TRY (PairCases_on `h`) >>
+  simp[compile_log_saved_topics_def, rb_step_return_for] >>
+  rpt strip_tac >>
+  irule rb_step_bind_for >> qexists_tac `rb_operand_ok_for source_checks` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_unwrap_value_for] >>
+  gen_tac >> strip_tac >>
+  irule rb_step_bind_for >> qexists_tac `rb_operand_ok_for source_checks` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_encode_log_topic_for] >>
+  gen_tac >> strip_tac >>
+  irule rb_step_bind_for >> qexists_tac `EVERY (rb_operand_ok_for source_checks)` >> BETA_TAC >>
+  simp[rb_step_return_for]
 QED
 
 Theorem rb_compile_log_store_data_for:
