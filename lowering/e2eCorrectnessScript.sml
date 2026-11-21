@@ -991,8 +991,7 @@ Triviality vyper_call_at_marks_by_entry:
     codegen_assembly rpolicy out.po_unit = SOME prog /\
     generate_context_plan out.po_unit.cu_context = SOME cp /\
     fin rpolicy prog = SOME prog' /\
-    vs0 = (if T then opt_entry_state_own prog prog' cp es
-           else opt_entry_state prog prog' cp es) /\
+    vs0 = opt_entry_state_own prog prog' cp es /\
     txp = tx with code := vs0.vs_code /\
     w2n vs0.vs_initial_fmp <= w2n fmp /\
     w2n fmp < 2 ** 254 /\
@@ -1052,8 +1051,7 @@ Proof
   `run_venom_pipeline (K T) (K T) (K T) rpolicy o1_pipeline_spec unit = SOME out`
     by fs[o1PipelineCorrectTheory.o1_pipeline_def] >>
   `code_layout_valid vs0` by
-    (Cases_on `T` >> fs[] >>
-     metis_tac[opt_entry_code_layout_valid, opt_entry_code_layout_valid_own]) >>
+    metis_tac[opt_entry_code_layout_valid_own] >>
   `vs.vs_outcomes = MAP SND (call_trace es) /\
    code_layout_valid vs /\ vs.vs_initial_fmp = fmp /\ vs.vs_fmp = fmp` by
     (`code_layout_valid vs` by
@@ -1067,12 +1065,10 @@ Proof
      simp[raw_variant_def, gas_variant_def] >>
      disch_then (mp_tac o Q.AP_TERM
        `\s:venom_state. (s.vs_outcomes, s.vs_initial_fmp, s.vs_fmp)`) >>
-     Cases_on `T` >>
-     fs[opt_entry_state_def, opt_entry_state_own_def, entry_venom_state_def] >>
+     fs[opt_entry_state_own_def, entry_venom_state_def] >>
      metis_tac[]) >>
   `initial_venom_state_rel tops am txp vs0` by
-    (Cases_on `T` >> fs[] >>
-     metis_tac[opt_entry_initial_venom_state_rel, opt_entry_initial_venom_state_rel_own]) >>
+    metis_tac[opt_entry_initial_venom_state_rel_own] >>
   `initial_venom_state_rel tops am txp vs` by
     metis_tac[raw_variant_initial_venom_state_rel] >>
   `!fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
@@ -1142,8 +1138,7 @@ Proof
      impl_tac >- (gvs[] >> metis_tac[]) >>
      simp[lowered_mem_fact_def]) >>
   `vs0.vs_initial_fmp = n2w cplan.cp_initial_fmp` by
-    (Cases_on `T` >> fs[opt_entry_state_def, opt_entry_state_own_def,
-                           entry_venom_state_def]) >>
+    fs[opt_entry_state_own_def, entry_venom_state_def] >>
   qspec_then `tops` mp_tac
     (Q.INST [`mem_ok` |-> `K T`, `calling_ok` |-> `K T`, `post_ok` |-> `K T`]
       runtime_codegen_compute_labels_bound) >>
@@ -1151,10 +1146,8 @@ Proof
   Cases_on `fin = K SOME`
   >- (`prog' = prog` by fs[] >>
       qpat_x_assum `prog' = prog` SUBST_ALL_TAC >>
-      `(if T then opt_entry_state_own prog prog cplan es
-         else opt_entry_state prog prog cplan es) = entry_venom_state prog cplan es` by
-        (Cases_on `T` >> simp[opt_entry_state_own_identity] >>
-         metis_tac[opt_entry_state_identity]) >>
+      `opt_entry_state_own prog prog cplan es = entry_venom_state prog cplan es` by
+        simp[opt_entry_state_own_identity]
       pop_assum SUBST_ALL_TAC >>
       `tx with code := (entry_venom_state prog cplan es).vs_code = tx` by
         metis_tac[opt_entry_own_txp_identity, opt_entry_state_own_identity] >>
