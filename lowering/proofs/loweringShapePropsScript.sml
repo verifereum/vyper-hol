@@ -8979,7 +8979,7 @@ val shape_dispatch_ecadd_tac =
     (simp[Abbr `AFrame`] >> ho_match_mp_tac shape_stable_conj_mode >> simp[cenv_shape_ok_stable_mode] >>
      mp_tac (Q.SPEC `[va]` shape_stable_plain_operands_mode) >> simp[]) >>
   shape_dispatch_raw_child_tac `AFrame` `vb` (simp[Abbr `AFrame`]) >>
-  irule shape_step_as_memory_val_mode >> shape_under_tac compile_ecadd_points_shape_mode `\st. T` >>
+  irule shape_step_as_stack_val_mode >> shape_under_tac compile_ecadd_points_shape_mode `\st. T` >>
   simp[shape_mode_stable_def, Abbr `AFrame`]
 ;
 val shape_dispatch_ecmul_tac =
@@ -8996,7 +8996,7 @@ val shape_dispatch_ecmul_tac =
     (simp[Abbr `AFrame`] >> ho_match_mp_tac shape_stable_conj_mode >> simp[cenv_shape_ok_stable_mode] >>
      mp_tac (Q.SPEC `[va]` shape_stable_plain_operands_mode) >> simp[]) >>
   shape_dispatch_lower_tac `AFrame` `vb` (simp[Abbr `AFrame`]) >>
-  irule shape_step_as_memory_val_mode >> shape_under_tac compile_ecmul_point_shape_mode `\st. T` >>
+  irule shape_step_as_stack_val_mode >> shape_under_tac compile_ecmul_point_shape_mode `\st. T` >>
   simp[shape_mode_stable_def, Abbr `AFrame`]
 ;
 (* Instantiate the case-valued computation before matching its continuation. *)

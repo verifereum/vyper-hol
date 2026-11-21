@@ -122,16 +122,15 @@ Proof
   qexists `tn` >> simp[]
 QED
 
-(* The memory-place returned by as_ptr_val uses the same pointer obligation
+(* The pointer carried by the stack value uses the same obligation
    already established for the non-word value. *)
 Theorem ec_result_pointer_vv_ok:
   ptr_val_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) v op G tn s ==>
   ptr_vv_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) (Value v)
-    (FST (as_ptr_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) LocMemory (op,sb)))
+    (FST (as_stack_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) (op,sb)))
     es G tn s
 Proof
-  simp[ptr_val_ok_def, ptr_vv_ok_def, as_ptr_val_def,
-       contextTheory.mk_ptr_def, evaluate_type_def, is_word_type_def,
+  simp[ptr_vv_ok_def, as_stack_val_def,
        vyperStateTheory.read_result_def, vyperStateTheory.return_def]
 QED
 
@@ -154,9 +153,9 @@ Theorem ec_builtin_result_posts:
   ptr_buf_ok cenv (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) bt args) (Var dst) G t /\
   vv_post H ctx fn cenv cx (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) bt args)
     es sa sb s0 es' (Value (mk_ec_result (x,y)))
-    (FST (as_ptr_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) LocMemory (Var dst,sb))) t /\
+    (FST (as_stack_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) (Var dst,sb))) t /\
   ptr_vv_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) (Value (mk_ec_result (x,y)))
-    (FST (as_ptr_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) LocMemory (Var dst,sb))) es' G tn t
+    (FST (as_stack_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) (Var dst,sb))) es' G tn t
 Proof
   strip_tac >> drule ec_result_word_contents >> strip_tac >>
   `ptr_val_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2))
