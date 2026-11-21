@@ -8,7 +8,8 @@ Ancestors
   memLocDefs fragGasOriginPtr fragExec memSafeRun gasEvents gasCount
   contextCodegenRel codegenRel unitTransformDefs ptrSafeRun
   exprSimRawCall exprSimHyps exprSimSource
-  gasOutcomeFullCompose vyperStorageTrace bodyInvNoDalloca exprLoweringProps
+  gasOutcomeFullCompose vyperStorageTrace bodyFullIntCallReturnHalt exprLoweringProps
+  bodyFullHashKeccakFixed
 Libs
   monadsyntax
 
@@ -156,8 +157,6 @@ in
              FILTER_ASM_REWRITE_TAC (can (match_term ``w2n (n2w _ : bytes32) = _``))
                [EVAL ``dimword (:256)``] >>
              (first_assum ACCEPT_TAC ORELSE
-               (rename1 `ctx_has_dalloca ctx ==> allocas_below_fmp t7` >>
-                qpat_assum `~ctx_has_dalloca ctx` (fn th => rewrite_tac[th])) ORELSE
                goal_term (fn tm => FAIL_TAC (term_to_string tm))))) >>
           disch_then (finish o BETA_RULE o REWRITE_RULE [LET_THM])
         end)
@@ -195,7 +194,16 @@ Proof
   drule compile_expr_raw_call >> strip_tac >>
   drule raw_call_kwargs_types >> simp[] >> strip_tac >>
   drule_all raw_call_kwargs_word_args >> strip_tac >>
-  `~ctx_has_dalloca ctx` by (drule body_inv_no_dalloca >> simp[]) >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
+  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  qexistsl_tac [`Q`, `\H res ee gt r.
+    (expr_exit res r /\ halt_exit H cx ee res r) /\
+    (ctx_has_dalloca ctx ==> !h. r = Halt h ==> allocas_below_fmp h)`] >>
+  BETA_TAC >> simp[Abbr `R`] >>
+  qunabbrev_tac `Q` >>
+  irule (BETA_RULE (Q.SPEC
+    `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`
+    (Q.GEN `R` gas_outcome_full_halt_room))) >>
   CONV_TAC (SIMP_CONV bool_ss [raw_call_eval_action]) >>
   irule (BETA_RULE (Q.ISPEC `\av dv kvs.
     do
@@ -234,6 +242,9 @@ Proof
     (qspec_then `storage_trace_horizon esK.storage_trace` mp_tac) >>
   impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t7` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv cx esK t7`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   `esK.outcomes = SOME t7.vs_outcomes` by
     (qpat_assum `stmt_state_rel _ _ _ _ _ esK t7`
        (mp_tac o MATCH_MP stateRelProjTheory.stmt_state_rel_state_rel) >>
@@ -395,7 +406,6 @@ Proof
           else [gas;addr;dp;len;op;Lit (n2w cap)])
          [STRING #"%" (toString s7.cs_next_var)]` by
         simp[Abbr `inst`,Abbr `opc`,Abbr `ops`] >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp t7` by simp[] >>
       irule raw_call_fetched_early_exit >>
       qpat_assum `inst = mk_inst _ _ _ _` (irule_at (Pat `inst = mk_inst _ _ _ _`)) >>
       qexistsl_tac [`n2w amount`,`n2w ro`,`n2w (LENGTH bs)`,`n2w (b + 32)`,
@@ -959,7 +969,15 @@ Proof
      qpat_assum `v = u` (fn th => rewrite_tac[GSYM th]) >>
      first_assum ACCEPT_TAC) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp q /\
-    q.vs_alloca_next + pending_alloca_size func q <= w2n q.vs_initial_fmp` by simp[] >>
+    q.vs_alloca_next + pending_alloca_size func q <= w2n q.vs_initial_fmp` by
+    (strip_tac >>
+     qpat_assum `stmt_state_rel (storage_trace_horizon esK.storage_trace) ctx func cenv cx es2 q`
+       (fn rel => conj_tac
+          >- (match_mp_tac (MATCH_MP stmt_state_rel_allocas_below_fmp rel) >>
+              first_assum ACCEPT_TAC)
+          >> mp_tac (MATCH_MP stateRelProjTheory.stmt_state_rel_fmp_room rel)) >>
+     qpat_assum `ctx_has_dalloca ctx` (fn has =>
+       simp[NoAsms,fmp_room_def,has]) >> decide_tac) >>
   mp_tac (SIMP_RULE bool_ss [LET_THM]
     (Q.INST [`n` |-> `cap`,`rev` |-> `rev`,`call_ty` |-> `call_ty`,
       `success` |-> `outcome.co_success`,`s` |-> `q`,
@@ -1058,9 +1076,8 @@ Proof
        (fn flag => qpat_assum `rev /\ ~outcome.co_success`
          (fn failed => rewrite_tac[flag,CONJUNCT1 failed,CONJUNCT2 failed])) >>
      qpat_assum `r = Abort Revert_abort z` (fn run =>
-       qpat_assum `~ctx_has_dalloca ctx` (fn nd =>
-         simp[NoAsms,Abbr `RS`,exit_result_def,exprSimDefsTheory.expr_exit_def,
-              exprSimDefsTheory.halt_exit_def,run,nd]))) >>
+       simp[NoAsms,Abbr `RS`,exit_result_def,exprSimDefsTheory.expr_exit_def,
+            exprSimDefsTheory.halt_exit_def,run])) >>
   FILTER_ASM_REWRITE_TAC (can (match_term ``~(rev /\ ~outcome.co_success)``)) [] >>
   disch_then (qx_choose_then `z` (map_every assume_tac o CONJUNCTS)) >>
   disj1_tac >>
@@ -1122,9 +1139,12 @@ Proof
        mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> disch_then (fn th => rewrite_tac[th]) >>
      Cases_on `cap = 0` >> simp[contextTheory.mk_ptr_def,contextTheory.vv_location_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
+    (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ z`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
+     first_assum (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   qexists_tac `Value v` >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (qpat_assum `~ctx_has_dalloca ctx` (fn th => simp[NoAsms,th])) >>
   TRY (qpat_assum `vv_location vv <> SOME LocCode` (fn th => simp[NoAsms,th])) >>
   TRY (rpt gen_tac >> strip_tac >>
        qpat_assum `!t' p. vv = StackValue t' p ==> _`
