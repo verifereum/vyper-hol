@@ -36,7 +36,7 @@ Definition for_nonslot_layout_def:
     (sbBody, sj, sb, shadow_sbCopy, shadow_sbBody) <=>
     expr_type e = ArrayT sty bd /\
     compile_expr c (expr_type e) e sa0 = (vv,sbExpr) /\
-    compile_expr c (expr_type e) (gas_shadow_expr e) shadow_sa0 =
+    compile_expr (gas_shadow_env T c) (expr_type e) (gas_shadow_expr e) shadow_sa0 =
       (vv,shadow_sbExpr) /\
     gas_shadow_state sa0 shadow_sa0 /\ gas_shadow_state sbExpr shadow_sbExpr /\
     fn_has_code sa0 sbExpr func /\ fn_has_code shadow_sa0 shadow_sbExpr shadow_func /\
@@ -82,7 +82,8 @@ Definition for_nonslot_layout_def:
       saCopy = ((),sbCopy) /\
     fn_has_code sa saCopy func /\ fn_has_code saCopy sbCopy func /\
     compile_stmts bc (InLoop exit incr) ret_ty loop_body sbCopy = ((),sbBody) /\
-    compile_stmts bc (InLoop exit incr) ret_ty (MAP gas_shadow_stmt loop_body)
+    compile_stmts (gas_shadow_env T bc) (InLoop exit incr) ret_ty
+      (MAP gas_shadow_stmt loop_body)
       shadow_sbCopy = ((),shadow_sbBody) /\
     gas_shadow_state sbCopy shadow_sbCopy /\ gas_shadow_state sbBody shadow_sbBody /\
     fn_has_code sbCopy sbBody func /\ fn_has_code shadow_sbCopy shadow_sbBody shadow_func /\

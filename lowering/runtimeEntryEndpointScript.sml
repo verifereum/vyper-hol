@@ -142,8 +142,8 @@ Definition runtime_body_endpoint_def:
       MEM func unit.cu_context.ctx_functions /\
       MEM shadow_func shadow_unit.cu_context.ctx_functions /\
       gas_shadow_state sa shadow_sa /\
-      compile_guarded_body cenv nr global_nonreentrant_slot T (mut = View)
-        (MAP gas_shadow_stmt fbody) (if ret = NoneT then NONE else SOME ret)
+      compile_guarded_body (gas_shadow_env T cenv) nr global_nonreentrant_slot T
+        (mut = View) (MAP gas_shadow_stmt fbody) (if ret = NoneT then NONE else SOME ret)
         shadow_sa = ((), shadow_st') /\
       fn_has_code shadow_sa shadow_st' shadow_func /\
       (* run: the entry reaches s0 at sa *)

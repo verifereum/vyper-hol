@@ -261,7 +261,8 @@ Definition frame_ret_ok_prefix_def:
       stmt_frag_prefix (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cx lctx RetQ cenv'
         (stmt_env cenv' lctx ret_ty (Return eo))
-        (stmt_env cenv' lctx ret_ty (Return (OPTION_MAP gas_shadow_expr eo)))
+        (stmt_env (gas_shadow_env T cenv') lctx ret_ty
+          (Return (OPTION_MAP gas_shadow_expr eo)))
         (eval_stmt cx (Return eo)) es
 End
 

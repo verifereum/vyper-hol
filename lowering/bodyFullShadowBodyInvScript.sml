@@ -1,6 +1,6 @@
 Theory bodyFullShadowBodyInv
 Ancestors
-  gasShadowUnit gasShadowState gasShadow compileVyper vyperCompiler compileEnv
+  gasShadowUnit gasShadowState gasShadow gasShadowCompileBase compileVyper vyperCompiler compileEnv
   moduleLowering fragExec venomInst venomWf vyperAST bodySim list
   bodyInvSplit compileUnit constSubst constSubstMods bodyPtrDefs gasContext ptrDiscipline ptrSafeRun
   loweringStateRelDefs venomState vyperState vyperContext
@@ -42,8 +42,9 @@ Definition shadow_body_inv_mods_def[nocompute]:
         MEM sf shadow_ctx.ctx_functions /\
         gas_shadow_function callee sf /\
         new_block label beforeS = (oldS,entryS) /\
-        compile_internal_function ce params has_rb nr' key trans view ctor ilen
-          (MAP gas_shadow_stmt compiled_ss) rt entryS = ((),finalS) /\
+        compile_internal_function (gas_shadow_env T ce) params has_rb nr' key
+          trans view ctor ilen (MAP gas_shadow_stmt compiled_ss) rt entryS =
+          ((),finalS) /\
         gas_shadow_state entry entryS /\
         gas_shadow_state final finalS /\
         fn_has_code entryS finalS sf
@@ -89,8 +90,9 @@ Theorem shadow_body_inv_def:
         MEM sf shadow_ctx.ctx_functions /\
         gas_shadow_function callee sf /\
         new_block label beforeS = (oldS,entryS) /\
-        compile_internal_function ce params has_rb nr' key trans view ctor ilen
-          (MAP gas_shadow_stmt compiled_ss) rt entryS = ((),finalS) /\
+        compile_internal_function (gas_shadow_env T ce) params has_rb nr' key
+          trans view ctor ilen (MAP gas_shadow_stmt compiled_ss) rt entryS =
+          ((),finalS) /\
         gas_shadow_state entry entryS /\
         gas_shadow_state final finalS /\
         fn_has_code entryS finalS sf
@@ -138,8 +140,9 @@ Theorem shadow_body_inv_callee_code:
       MEM sf shadow_ctx.ctx_functions /\
       gas_shadow_function callee sf /\
       new_block label beforeS = (oldS,entryS) /\
-      compile_internal_function ce params has_rb nr' key trans view ctor ilen
-        (MAP gas_shadow_stmt compiled_ss) rt entryS = ((),finalS) /\
+      compile_internal_function (gas_shadow_env T ce) params has_rb nr' key
+        trans view ctor ilen (MAP gas_shadow_stmt compiled_ss) rt entryS =
+        ((),finalS) /\
       gas_shadow_state entry entryS /\
       gas_shadow_state final finalS /\
       fn_has_code entryS finalS sf
