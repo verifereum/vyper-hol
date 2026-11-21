@@ -859,7 +859,7 @@ Proof
        irule vyperArithTheory.lt_dimword_256 >> qexists `64` >>
        qpat_assum `MAX _ _ + 32 < 2**64` mp_tac >>
        simp[NoAsms, arithmeticTheory.MAX_DEF] >> decide_tac)
-  >> TRY (FIRST_PROVE [simp[NoAsms, Abbr `ptys`]])
+  >> simp[NoAsms, Abbr `ptys`]
   >- (mp_tac (Q.INST [`pos` |-> `mid`, `se` |-> `s5`, `ee` |-> `ke`,
                        `t` |-> `zg`, `G` |-> `Gg`, `tn` |-> `tng`]
                post_gas_indexed_rows) >>
