@@ -795,9 +795,9 @@ QED
 Triviality request_frame_send:
   requests_outcomes_frame (eval_send cx gas vs)
 Proof
-  Cases_on `vs` >> simp[eval_send_def]
+  namedCases_on `vs` ["", "target args"] >> simp[eval_send_def]
   >- rpt REQUEST_PRIMITIVE_STEP >>
-  Cases_on `t` >> simp[eval_send_def] >> rpt REQUEST_PRIMITIVE_STEP
+  Cases_on `args` >> simp[eval_send_def] >> rpt REQUEST_PRIMITIVE_STEP
 QED
 
 Triviality request_frame_create_oracle:
@@ -812,10 +812,12 @@ Proof
     metis_tac[requests_outcomes_frame_result, request_frame_take_create] >>
   pure_rewrite_tac[create_oracle_result_def] >> qpat_assum `Abbrev (kind = _)`
     (fn th => simp [GSYM (REWRITE_RULE[markerTheory.Abbrev_def] th)]) >>
-  Cases_on `res` >> gvs[] >>
-  PairCases_on `x` >> simp[] >>
-  Cases_on `adopt_call_outcome x0 x1 mid` >>
-  `LENGTH r.requests = recorded_outcomes_count r.storage_trace` by
+  namedCases_on `res` ["taken", "error"] >> gvs[] >>
+  PairCases_on `taken` >>
+  rename1 `take_create_outcome _ _ _ _ = (INL (request,outcome),mid)` >> simp[] >>
+  Cases_on `adopt_call_outcome request outcome mid` >>
+  rename1 `adopt_call_outcome request outcome mid = (answer,adopted)` >>
+  `LENGTH adopted.requests = recorded_outcomes_count adopted.storage_trace` by
     metis_tac[requests_outcomes_frame_result, request_frame_adopt] >>
   rw[]
 QED
