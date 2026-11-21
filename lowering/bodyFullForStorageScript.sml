@@ -5726,6 +5726,7 @@ QED
 Resume for_storage_array_round_full[compose]:
  qabbrev_tac `Qmid = (\H (res:bool + exception) ee G1 tn1 t.
     ee.gas_obs = [] /\ ~t.vs_halted /\
+    body_const_cells_agree [(NONE,tops)] cx env ee /\
     ?b. res = INL b /\ (b ==> Done H ee G1 tn1 t) /\
       (~b ==> Ready H (a::rs) ee G1 tn1 t))` >>
  irule gas_outcome_full_zero_suffix >> qexists_tac `Qmid` >>
@@ -6949,7 +6950,11 @@ Resume compile_for_storage_array_frag_full[round_nil]:
             `stmt_res_ok lctx`, `p`, `sd`, `slot`, `tr`, `typ`, `elem_tv`, `vs`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (Cases_on `bd` >> simp[not_fresh_at_def]) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (qx_gen_tac `H` >> disch_tac >>
+      qpat_assum `!H. valid_horizon cx st0 H es'.storage_trace ==>
+        body_const_cells_agree [(NONE,tops)] cx env es' /\ _`
+        (drule_then (ACCEPT_TAC o CONJUNCT2))) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- simp[Abbr `cb`, get_instruction_def] >>
   conj_tac
@@ -7004,15 +7009,25 @@ QED
 
 Resume compile_for_storage_array_frag_full[round_outcome]:
   `body_const_cells_agree [(NONE,tops)] cx env ei` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==> Inv dst H (_::_) _ _ _ _`
+    (qpat_assum `!H. valid_horizon cx st0 H ei.storage_trace ==>
+         Inv dst H (a::rs) ei g tn s`
        (qspec_then `storage_trace_horizon ei.storage_trace` mp_tac) >>
-     simp[Abbr `Inv`, GSYM storage_trace_domain_def]) >>
+     impl_tac
+     >- (pure_rewrite_tac [GSYM storage_trace_domain_def] >> first_assum ACCEPT_TAC) >>
+     simp[NoAsms, Abbr `Inv`]) >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> Inv dst H (_::_) _ _ _ _` mp_tac >>
   map_every (fn q => qpat_assum q
     (fn th => pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]))
       [`Abbrev (round = _)`, `Abbrev (Inv = _)`, `Abbrev (Done = _)`,
        `Abbrev (R = _)`, `Abbrev (Fr = _)`, `Abbrev (explicit = _)`] >>
   BETA_TAC >> strip_tac >>
+  `!obs_ok running cells (res:bool + exception) done ready.
+     (obs_ok /\ running /\ cells /\
+      (?b. res = INL b /\ (b ==> done) /\ (~b ==> cells /\ ready))) <=>
+     (obs_ok /\ running /\ cells /\
+      (?b. res = INL b /\ (b ==> done) /\ (~b ==> ready)))` by
+    (POP_ASSUM_LIST kall_tac >> metis_tac[]) >>
+  pop_assum (fn th => PURE_ONCE_REWRITE_TAC [th]) >>
   irule (CONV_RULE (REDEPTH_CONV (REWR_CONV LET_THM ORELSEC BETA_CONV))
     for_storage_array_round_full) >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
@@ -7031,21 +7046,33 @@ Resume compile_for_storage_array_frag_full[round_outcome]:
       qpat_assum `lvo = (_ : operand)` SUBST1_TAC >> simp[]) >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac >- simp[block_is_terminated_def] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (gen_tac >> strip_tac >>
+      qpat_assum `!target. supported_stmt_expr_exists _ (For _ _ _ _ body') ==> _`
+        irule >>
+      simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def]) >>
   conj_tac >- simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- simp[not_fresh_at_def] >>
   conj_tac
-  >- (irule vyperArithTheory.lt_dimword_256 >> qexists_tac `256` >>
-      conj_tac >- (irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
-                   qexists_tac `bound_length bd` >>
-                   conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  >- (qpat_assum `body_inv tops ctx cenv cx`
+        (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [bodySimTheory.body_inv_def])) >>
+  conj_tac
+  >- qpat_assum `sb.cs_current_insts = []`
+       (fn th => simp[NoAsms, block_is_terminated_def, th]) >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac
-  >- (qpat_assum `call_evaluation_safe cx (int_calls_stmt (For _ _ _ _ _))`
-        (ACCEPT_TAC o MATCH_MP vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right o
-         REWRITE_RULE [vyperTypeCallGraphTheory.int_calls_stmt_def])) >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  >- (qpat_assum `p = STRING _ _` (fn p_eq =>
+       qpat_assum `idx = STRING _ _` (fn idx_eq =>
+         simp[NoAsms, p_eq, idx_eq, ASCIInumbersTheory.toString_inj]))) >>
+  rpt (conj_tac >- FIRST
+    [first_assum ACCEPT_TAC,
+     qmatch_goalsub_abbrev_tac `~not_fresh_at sa idx` >>
+       qpat_assum `idx = STRING _ _` (fn idx_eq =>
+         qpat_assum `sa.cs_next_var <= sd.cs_next_var` mp_tac >>
+         simp[NoAsms, idx_eq, not_fresh_at_def] >> decide_tac),
+     qpat_assum `call_evaluation_safe cx (int_calls_stmt (For _ _ _ _ _))`
+       (ACCEPT_TAC o MATCH_MP vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right o
+        REWRITE_RULE [vyperTypeCallGraphTheory.int_calls_stmt_def])]) >>
   suspend "round_packet"
 QED
 
@@ -7446,9 +7473,20 @@ Resume compile_for_storage_array_frag_full[round_packet]:
      goal_assum $ drule_at Any >> simp[]) >>
   qpat_assum `IS_SOME (type_stmts _ _ _)`
     (qx_choose_then `envBody` assume_tac o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
-  qexistsl_tac [`bc`,`bcFinal`,`bindings`,`envBody`,`exit`,`incr`,`stmt_res_ok lctx`,`outA`,
+  conj_tac
+  >- (irule vyperArithTheory.lt_dimword_256 >> qexists_tac `256` >>
+      conj_tac >- (irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
+                   qexists_tac `bound_length bd` >>
+                   conj_tac >> first_assum ACCEPT_TAC) >> simp[NoAsms]) >>
+  rpt (conj_tac >- FIRST
+    [first_assum ACCEPT_TAC,
+     qpat_assum `call_evaluation_safe cx (int_calls_stmt (For _ _ _ _ _))`
+       (ACCEPT_TAC o MATCH_MP vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right o
+        REWRITE_RULE [vyperTypeCallGraphTheory.int_calls_stmt_def]),
+     qexists_tac `bindings` >> first_assum ACCEPT_TAC]) >>
+  qexistsl_tac [`bc`,`bcFinal`,`envBody`,`exit`,`incr`,`stmt_res_ok lctx`,`outA`,
     `ret_ty`,`copyA`,`bodyA`,`shadow_func`,`copyS`,`bodyS`,
-    `siA`,`jumpA`,`addA`,`skA`,`slA`,`tops`] >>
+    `siA`,`jumpA`,`addA`,`skA`,`slA`] >>
   simp[block_is_terminated_def, IgnAsm `copyA = slot_copy_final _ _ _ _ _`] >>
   rpt gen_tac >> strip_tac >>
   `stride = type_slot_size elem_tv` by
