@@ -2509,44 +2509,6 @@ Proof
   >> (gvs[])
 QED
 
-(* GATE_ADMISSION: held, internal callee with constant names *)
-Theorem intcall_callee_locked_body_frag_constants:
-  body_inv tops ctx caller cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,ds,ret,ss) /\
-  MEM (FunctionDecl Internal mut nr rr name args ds ret ss) tops /\
-  (supported_exprs_exists (const_name_root cx) ds \/
-   supported_stmts_expr_exists (const_name_root cx) ss) /\
-  ds_comp = subst_consts_exprs (module_consts_env tops []) ds /\
-  ss_comp = subst_consts_stmts (module_consts_env tops []) ss /\
-  intcall_entry_full (DF,lo,d) H tops ctx func caller cx tenv name es sa sb vv
-    s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
-  ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-    body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss) /\
-  lock_if_nr cx nr (is_view_mut mut) es1 = (INL (),locked) /\
-  (if cx.in_deploy then ?rbc. lower_vyper_deploy_unit tops policy rbc = SOME unit
-   else lower_vyper_runtime_unit tops policy = SOME unit) /\
-  ctx = unit.cu_context /\
-  set_internal_package_target policy.rpol_target
-    (package_internal_fn tops T (K global_nonreentrant_slot) cx.in_deploy ilen
-      (mut,nr,rr,name,args,ds_comp,ret,ss_comp)) =
-    (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen',ss',rt) /\
-  compile_internal_entry_prefix ce params has_rb entry = ((ce1,caps,rpc),capture) /\
-  materialize_internal_params ce1 caps reserved = (ce2,materialized) /\
-  body_ce = ce2 with <|ce_imm_alloca := imm; ce_alloca_locals := T|> /\
-  frame_ret_ok_full (DF,lo,dret,ctx,shadow_ctx,PG,callee,sf)
-    (cx with stk updated_by CONS (NONE,name)) RetQ body_ce ret ==>
-    stmt_frag_full (DF,lo,dret,ctx,shadow_ctx,PG,callee,sf)
-      (cx with stk updated_by CONS (NONE,name)) NoLoop RetQ body_ce
-      (stmts_env body_ce NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty) ss_comp)
-      (stmts_env body_ce NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty) (MAP gas_shadow_stmt ss_comp))
-      (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) locked /\
-    gas_admissible (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) (stmt_res_ok NoLoop) locked /\
-    body_ce.ce_is_ctor = caller.ce_is_ctor
-Proof
-  cheat
-QED
-
 (* Apply the checked paired body fragments at the successful lock landing.
    RetQ is supplied by the caller of this lemma, not chosen by the body. *)
 Theorem intcall_callee_locked_body_outcome[local]:
@@ -2554,6 +2516,8 @@ Theorem intcall_callee_locked_body_outcome[local]:
   shadow_body_inv tops ctx shadow_ctx /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,ds,ret,ss) /\
   MEM (FunctionDecl Internal mut nr rr name args ds ret ss) tops /\
+  ~supported_exprs_exists (const_name_root cx) ds /\
+  ~supported_stmts_expr_exists (const_name_root cx) ss /\
   ds_comp = subst_consts_exprs (module_consts_env tops []) ds /\
   ss_comp = subst_consts_stmts (module_consts_env tops []) ss /\
   intcall_entry_full (DF,lo,d) H tops ctx func caller cx tenv name es sa sb vv
@@ -2638,11 +2602,7 @@ Proof
     gas_admissible (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss)
       (stmt_res_ok NoLoop) locked /\
     body_ce.ce_is_ctor = caller.ce_is_ctor` by
-    (Cases_on `supported_exprs_exists (const_name_root cx) ds \/
-                supported_stmts_expr_exists (const_name_root cx) ss`
-     >- (drule_all intcall_callee_locked_body_frag_constants >> simp[NoAsms]) >>
-     qpat_x_assum `~(_ \/ _)` (strip_assume_tac o REWRITE_RULE [DE_MORGAN_THM]) >>
-     `ds_comp = ds /\ ss_comp = ss` by
+    (`ds_comp = ds /\ ss_comp = ss` by
        (`cx_tops cx = tops` by
           fs[bodySimTheory.body_inv_def, cx_tops_def, vyperContextTheory.get_module_code_def] >>
         drule_all intcall_callee_const_free_subst >>
@@ -3836,6 +3796,8 @@ Theorem intcall_callee_full:
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx) dflts /\
+    ~supportedStmtTraverse$supported_stmts_expr_exists (const_name_root cx) ss /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
     LENGTH es <= LENGTH args /\
     ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
