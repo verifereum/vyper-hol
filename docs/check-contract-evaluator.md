@@ -146,6 +146,21 @@ Every step is the checker's own evaluation, so the result is the same
 `check_contract_def` equation, reached with fewer reductions. A caller that
 supplies its own conversion to `check_contract_with` bypasses staging.
 
+## String names
+
+Each declared local is checked fresh against the names declared before it
+(`id ∉ FDOM var_types`). The generic list rules compare two names character
+by character through `CONS_11` and numeral arithmetic on character codes,
+for every earlier name. `check_contract_compset` instead tries two
+conversions first: `string_literal_eq_conv` decides an equality of string
+literals at the first character where they differ, and
+`string_literal_in_conv` decides membership of a string literal in an
+`INSERT` chain of literals one key at a time. Both decline any other term,
+so the generic rules still handle it. The check stays quadratic in the
+number of locals (each test needs one disequality per earlier name), with
+about a fourteenth of the inferences: 1600 locals took 3.0G inferences
+without the conversions and 210M with them.
+
 ## Constant initializers
 
 `check_contract` evaluates every constant initializer, through
