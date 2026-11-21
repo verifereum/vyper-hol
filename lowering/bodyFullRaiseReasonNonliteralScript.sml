@@ -53,8 +53,8 @@ Proof
      fs[vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
         finite_mapTheory.FUNION_FEMPTY_2]) >>
   `~supported_expr_exists (const_name_root cx) e` by
-    (drule body_inv_const_name_root >> strip_tac >>
-     drule_all supportedNameRootTheory.supported_string_reason_no_name_root >> simp[]) >>
+    (drule_all body_inv_stmt_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_raise_exists_def]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
      gvs[type_stmt_raise_reason, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,

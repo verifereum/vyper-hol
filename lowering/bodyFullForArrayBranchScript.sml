@@ -151,9 +151,12 @@ Proof
   `supported_expr tops e \/ (?ty name. e = Name ty name) \/ (?ty nid. e = TopLevelName ty nid)` by
     (qpat_assum `supported_iterator tops typ (Array e) n` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `e` >> simp[supported_iterator_def]) >>
+  `~supported_expr_exists (const_name_root cx) e` by
+    (drule_all bodySimTheory.body_inv_stmt_const_name_free >>
+     simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
+          supportedStmtTraverseTheory.supported_iterator_exists_def]) >>
   FIRST [
-       (drule_all_then assume_tac bodySimTheory.body_inv_const_name_free >>
-        drule_then strip_assume_tac bodyExprPreFactsTheory.supported_expr_body_calls >>
+       (drule_then strip_assume_tac bodyExprPreFactsTheory.supported_expr_body_calls >>
         rpt conj_tac >> first_assum ACCEPT_TAC),
        (qpat_assum `e = Name _ _` SUBST_ALL_TAC >>
         simp[cj 1 supportedExprTraverseTheory.expr_has_evm_run_thm,
