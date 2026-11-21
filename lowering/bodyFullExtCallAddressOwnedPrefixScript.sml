@@ -4,8 +4,8 @@ Ancestors
   bodyFullExtCallTargetOutcome bodyFullExtCallPosList
   gasOutcomeFull gasOutcomeFullCompose gasExemptCert vyperStorageTrace vyperStorageFootprint
   exprSimDefs bodyFullIfExpReach
-  exprSimSource exprSafeOperand exprSimWordArgs exprLoweringProps stmtSimProps
-  bodySimFull compileEnv loweringPosts vyperInterpreter wordArgsPtr
+  exprSimHypsDefs exprSimSource exprSafeOperand exprSimWordArgs exprLoweringProps stmtSimProps
+  bodyFullPreds bodySimFull compileEnv loweringPosts vyperInterpreter wordArgsPtr
   evalNoHalt supportedExprTraverse vyperTypeCallGraph list
 
 (* At each bind, expose that the producer's cut has consumed its observations. *)

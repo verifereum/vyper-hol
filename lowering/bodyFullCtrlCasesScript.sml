@@ -264,7 +264,9 @@ Proof
     (irule expr_sim_inv_stmt >> fs[body_inv_def] >>
      metis_tac[expr_sim_inv_gas_obs, call_evaluation_safe_append_left]) >>
   `body_const_cells_agree [(NONE,tops)] cx env1 es1` by
-    (drule_all body_const_cells_agree_stmt >> simp[]) >>
+    (irule body_const_cells_agree_stmt >>
+     goal_assum (drule_at (Pat `eval_stmt _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `type_stmt _ _ _ = _`)) >> simp[]) >>
   `ce_locals_declared c env1` by metis_tac[ce_locals_declared_stmt] >>
   `locals_alloc_ok c env1` by metis_tac[locals_alloc_ok_stmt] >>
   `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>

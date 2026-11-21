@@ -20,7 +20,5 @@ Proof
     metis_tac[expr_body_pre_lowered_fits, arg_type_fits_word_type] >>
   `body_exprs_full_ok cx [e]` by simp[body_exprs_full_ok_def] >>
   irule abi_encode_vv_full_from_packaging >> simp[] >>
-  conj_tac
-  >- (qexists_tac `tops` >> asm_rewrite_tac[]) >>
-  qexists_tac `env` >> asm_rewrite_tac[]
+  qexistsl_tac [`env`, `tops`] >> asm_rewrite_tac[]
 QED

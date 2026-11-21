@@ -249,7 +249,7 @@ Proof
      conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
      conj_tac >- (rpt strip_tac >>
        qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _` drule >>
-       simp[] >> metis_tac[expr_post_def]) >>
+       simp[expr_post_def]) >>
      conj_tac >-
        (qexistsl_tac [`shadow_func`, `shadow_s1`] >> asm_rewrite_tac[] >>
         rpt strip_tac >>
