@@ -285,8 +285,8 @@ QED
 Theorem runtime_sym_bytestring_hash_arg[local]:
   (case bytestring_literal_hash e of
      SOME h => (Lit h,s)
-   | NONE => let (p,st) = lower_value cfn ce (ety:type) e s in
-             compile_bytestring_hash p st) = (v,s') ==>
+   | NONE => (\(p,st). compile_bytestring_hash p st)
+               (lower_value cfn ce (ety:type) e s)) = (v,s') ==>
   (!st op st'. EVERY runtime_sym_inst (state_insts st) /\
     lower_value cfn ce ety e st = (op,st') ==>
     EVERY runtime_sym_inst (state_insts st') /\ ~is_label_operand op) /\
@@ -294,7 +294,7 @@ Theorem runtime_sym_bytestring_hash_arg[local]:
   EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand v
 Proof
   Cases_on `bytestring_literal_hash e` >> simp[]
-  >- (pairarg_tac >> simp[] >> ntac 2 strip_tac >>
+  >- (Cases_on `lower_value cfn ce ety e s` >> simp[] >> ntac 2 strip_tac >>
       first_x_assum (drule_at_then (Pat `lower_value _ _ _ _ _ = _`) mp_tac) >>
       simp[] >> strip_tac >> drule_all runtime_sym_bytestring_hash >> simp[]) >>
   ntac 2 strip_tac >> gvs[is_label_operand_def]
