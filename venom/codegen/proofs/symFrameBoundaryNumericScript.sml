@@ -848,7 +848,7 @@ Theorem pop_steps_alloc_mono_cons:
       ps.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset
 Proof
   rpt gen_tac >> disch_tac >> rpt gen_tac >> disch_tac >>
-  drule reorderStagesTheory.plan_steps_cons_result >> strip_tac >>
+  drule reorderPreparationPropsTheory.plan_steps_cons_result >> strip_tac >>
   drule pop_one_step_alloc_mono >> first_x_assum drule >>
   rpt strip_tac >> gvs[] >> decide_tac
 QED
@@ -957,7 +957,7 @@ Theorem sym_pop_steps_cons_numeric:
       (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   gen_tac >> disch_tac >> rpt gen_tac >> strip_tac >>
-  drule reorderStagesTheory.plan_steps_cons_result >> strip_tac >> gvs[] >>
+  drule reorderPreparationPropsTheory.plan_steps_cons_result >> strip_tac >> gvs[] >>
   drule_all pop_one_step_layout >> strip_tac >>
   drule pop_steps_alloc_mono >> strip_tac >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >> irule sym_numeric_seq >>
@@ -1840,7 +1840,7 @@ Theorem pop_steps_layout:
 Proof
   Induct >- simp[foldlSimTheory.plan_steps_def] >>
   rpt gen_tac >> strip_tac >>
-  drule reorderStagesTheory.plan_steps_cons_result >> strip_tac >> gvs[] >>
+  drule reorderPreparationPropsTheory.plan_steps_cons_result >> strip_tac >> gvs[] >>
   metis_tac[pop_one_step_layout]
 QED
 

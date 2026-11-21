@@ -1,6 +1,7 @@
 (* Liveness-only execution boundaries for positional calldata registration. *)
 Theory calldataRegistrationExec
 Ancestors
+  abiDecoderLoopRegisters
   valueEncodingDefs loweringStateRelDefs calldataRegistration abiDecoderReentryAddress fragExecMem actualAllocExec
   venomExecProofs emitHelperProps exprLoweringProps finite_map words
   abiDecoderReentry venomState venomExecSemantics abiDecoderContract
@@ -57,7 +58,7 @@ Proof
   >- (simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
        ASCIInumbersTheory.toString_inj]) >>
   gen_tac >> strip_tac >>
-  drule calldata_update_protected >>
+  drule abi_decoder_generated_update_operand >>
   disch_then (qspecl_then [`w`,`s`] mp_tac) >> Cases_on `op` >>
   simp[eval_operand_def, lookup_var_def, update_var_def])
 QED
@@ -370,7 +371,7 @@ Proof
   strip_tac >>
   `abi_decoder_operand_live (n + 1) op` by
     (irule abi_decoder_operand_live_mono >> qexists_tac `n` >> simp[]) >>
-  simp[calldataDynOwnedTheory.calldata_update_protected]
+  simp[abi_decoder_generated_update_operand]
 QED
 
 (* Alloca invariants read only the allocas and their frontier. *)

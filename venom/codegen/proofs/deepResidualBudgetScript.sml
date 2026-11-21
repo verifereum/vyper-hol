@@ -333,7 +333,7 @@ Proof
   fs[residual_budget_wf_marked_def] >>
   `plan_slots_bounded sb ps'` by metis_tac[do_spill_at_slots_bounded] >>
   `spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled` by
-    metis_tac[do_spill_at_layout_wf] >>
+    metis_tac[reorderPreparationTracePropsTheory.do_spill_at_layout_wf] >>
   `dead_stack_marker <> v` by metis_tac[] >>
   `!x. LIST_ELEM_COUNT x ps'.ps_stack <= LIST_ELEM_COUNT x ps.ps_stack` by
     (gen_tac >> qpat_assum `!x. _ + _ = _` (qspec_then `x` mp_tac) >>
@@ -949,7 +949,7 @@ Proof
   Cases_on `d <= 16`
   >- (qpat_x_assum `do_swap _ _ = _` mp_tac >>
       simp[do_swap_def] >> Cases_on `d = 0` >> simp[] >>
-      strip_tac >> gvs[] >> metis_tac[reorderSimTheory.stack_swap_mem_subset]) >>
+      strip_tac >> gvs[] >> metis_tac[reorderPreparationInventoryPropsTheory.stack_swap_mem_subset]) >>
   metis_tac[reorderSimTheory.do_swap_inventory_subset]
 QED
 
@@ -1055,7 +1055,7 @@ Proof
          (drule reduce_depth_plan_target_len_floor >> fs[]) >>
        `asm_block_at prog mid.as_pc (execute_plan initial_fmp reduce_ops)` by
          metis_tac[ADD_COMM] >>
-       drule_all reduce_depth_plan_venom_asm_rel_numeric >>
+       drule_all reorderPreparationTracePropsTheory.reduce_depth_plan_venom_asm_rel_numeric >>
        disch_then (qspec_then `o2pc` strip_assume_tac) >>
        rename1 `venom_asm_rel lo ps2 vs final` >> simp[] >> qexists `final` >>
        simp[] >> once_rewrite_tac[ADD_COMM] >>

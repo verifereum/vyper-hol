@@ -2239,7 +2239,7 @@ Theorem sym_reduce_depth_mid_ready[local]:
   r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
   qs.ps_alloc.sa_next_offset <= r.sr_spill_end
 Proof
-  metis_tac[do_spill_at_layout_wf, do_spill_at_spill_base,
+  metis_tac[reorderPreparationTracePropsTheory.do_spill_at_layout_wf, do_spill_at_spill_base,
     reduce_depth_plan_next_offset, arithmeticTheory.LESS_EQ_TRANS]
 QED
 

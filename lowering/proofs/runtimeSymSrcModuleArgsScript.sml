@@ -149,7 +149,7 @@ Proof
   `EVERY runtime_sym_inst (state_insts cs'')` by
     (qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
      IF_CASES_TAC
-     >- (simp[] >> strip_tac >> drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_emit_void >>
+     >- (strip_tac >> drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_emit_void >>
          simp[NoAsms] >> disch_then irule >> asm_rewrite_tac[]) >>
      IF_CASES_TAC >- (simp[] >> metis_tac[]) >>
      simp[] >> strip_tac >> drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_emit_void >>

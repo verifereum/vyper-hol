@@ -21,13 +21,8 @@ Proof
   Cases_on `a` >>
   gvs[passSharedDefsTheory.lit_eq_def] >>
   Cases_on `c = 0w` >> gvs[] >>
-  Cases_on `inst` >> gvs[] >>
-  qpat_x_assum `step_inst_base _ s = OK t` mp_tac >>
-  asm_simp_tac (srw_ss()) [Once step_inst_base_def] >>
-  gvs[exec_pure2_def, exec_pure1_def, eval_operand_def,
-      AllCaseEqs()] >> strip_tac >>
-  asm_simp_tac (srw_ss()) [Once step_inst_base_def] >>
-  gvs[exec_pure1_def, wordsTheory.SHIFT_ZERO]
+  gvs[step_inst_base_opcode_eqs] >>
+  gvs[exec_pure2_def, eval_operand_def, AllCaseEqs()]
 QED
 
 

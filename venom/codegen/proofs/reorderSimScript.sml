@@ -598,12 +598,6 @@ Proof
   gvs[residual_budget_wf_def]
 QED
 
-Theorem stack_pop_one_elem_count = reorderPreparationInventoryPropsTheory.stack_pop_one_elem_count
-
-Theorem do_spill_at_stack_count = reorderPreparationInventoryPropsTheory.do_spill_at_stack_count
-
-Theorem do_spill_at_other_stack_count = reorderPreparationInventoryPropsTheory.do_spill_at_other_stack_count
-
 Theorem do_spill_at_multiplicity_layout[local]:
   !d ps ops ps'.
     spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
@@ -1256,8 +1250,6 @@ Proof
   rename1 `venom_asm_rel lo ps2 vs st2` >> qexists_tac `st2` >>
   asm_rewrite_tac[LENGTH_APPEND, asm_steps_add] >> simp[]
 QED
-
-Theorem stack_peek_mem = reorderPreparationInventoryPropsTheory.stack_peek_mem
 
 Theorem reorder_finish_venom_asm_rel_addresses[local]:
   !dfg op f n ps ops ps' lo o2pc prog vs st.
@@ -3197,14 +3189,6 @@ Proof
 QED
 
 (* Backward inventory boundaries: no planner operand is manufactured. *)
-Theorem do_restore_inventory_subset = reorderPreparationInventoryPropsTheory.do_restore_inventory_subset
-
-Theorem stack_swap_mem_subset = reorderPreparationInventoryPropsTheory.stack_swap_mem_subset
-
-Theorem do_spill_at_inventory_subset = reorderPreparationInventoryPropsTheory.do_spill_at_inventory_subset
-
-Theorem reduce_depth_plan_inventory_subset = reorderPreparationInventoryPropsTheory.reduce_depth_plan_inventory_subset
-
 Theorem do_swap_inventory_subset:
   !d ps ops ps'.
     d < LENGTH ps.ps_stack /\ do_swap d ps = (ops,ps') ==>

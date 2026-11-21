@@ -1,6 +1,7 @@
 (* Expression compilation preserves reserved-operand exclusion. *)
 Theory runtimeLabelExpr
 Ancestors
+  listZipProps
   runtimeLabelExprCallbacks runtimeLabelExprPrimitives runtimeLabelPrimitives
   runtimeLabelBuiltinCore runtimeLabelBuiltinSystem runtimeLabelBuiltinArithmetic runtimeLabelBuiltins runtimeLabelABI runtimeLabelInvariant runtimeLabelValues
   exprLowering exprLoweringProps exprCallBounds
@@ -27,7 +28,7 @@ Proof
       IF_CASES_TAC >> simp[rb_abi_encode_for] >>
       irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >>
       simp[rb_emit_void_for, rb_step_return_for]) >>
-  simp[rb_compile_abi_encode_values_to_buf_for, rb_abi_encode_for, rb_every_zip_fst]
+  simp[rb_compile_abi_encode_values_to_buf_for, rb_abi_encode_for, EVERY_FST_ZIP]
 QED
 
 Theorem rb_compile_type_builtin_dispatch_body_for[local]:
