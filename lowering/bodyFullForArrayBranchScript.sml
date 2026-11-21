@@ -12,6 +12,7 @@ Ancestors
   bodyFullShared gasOutcomeFullGuarded bodyFullForRounds vyperEvalExprPreservesScopesDom
   bodyFullIfExpReach contextRawReachable
   supportedExprTraverse[qualified,ignore_grammar]
+  vyperTypeContract[qualified,ignore_grammar]
 
 (* The loop continuation starts at the iterator's own captured endpoint. *)
 Theorem for_nonslot_array_prefix_continue_full:
@@ -298,8 +299,7 @@ Theorem compile_for_nonslot_array_frag_full:
     stmt_exprs_ok cenv (For id typ (Array e) n body) /\
     (~(?ty nid. e = TopLevelName ty nid) ==>
      !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
-    ((?ty nid. e = TopLevelName ty nid) ==>
-      ~supported_stmts_expr_exists expr_internal_call_root body) /\
+    stmt_loop_calls_ok [(NONE,tops)] (For id typ (Array e) n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n body)) /\
     frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>
