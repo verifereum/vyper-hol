@@ -4,7 +4,8 @@ Ancestors
   allocaBudgetProps venomMemDefs ptrDiscipline venomState finite_map arithmetic
   entryValueRevertPtr entryPtrSeamRegister e2eDefs vyperCompiler
   allocaFrontierRoom loweringStateRelDefs venomInst venomWf venomInstIdsProps words
-  vyperLoweringCorrect
+  vyperLoweringCorrect decoderOriginAllocationFrame
+  fragGasOriginPtr fragGasPathPtr fragGasPath exprLoweringProps
 
 Theorem grouped_entry_resources_vars_pc:
   selected_registration_resources ctx fn site lo sa s /\
@@ -72,4 +73,29 @@ Theorem grouped_entry_frame_vars_pc:
   selected_registration_frame s tn t u /\ t.vs_memory = s.vs_memory
 Proof
   simp[vars_pc_only_def, venom_state_component_equality, selected_registration_frame_def]
+QED
+
+Theorem grouped_entry_resources_path:
+  gas_origin_ptr_path (D,0,explicit,ctx,fn,PG) (s,G,tn) marks (OK t,H,u) /\
+  selected_registration_resources ctx fn site 0 sa s /\
+  stmt_state_rel horizon ctx fn ce cx ee t /\
+  fn_inst_ids_distinct fn /\
+  t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  fresh_vars_wrt sb t /\
+  (!id pair. FLOOKUP t.vs_allocas id = SOME pair ==> id < sb.cs_next_id) ==>
+  selected_registration_resources ctx fn site 0 sb t
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all decoder_origin_path_allocation_frame >> strip_tac >>
+  drule gas_origin_ptr_path_projections >> strip_tac >>
+  drule gas_path_ptr_erase >> disch_tac >>
+  drule gas_path_normal >> strip_tac >>
+  qpat_x_assum `selected_registration_resources _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [selected_registration_resources_def]) >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def]) >>
+  simp[selected_registration_resources_def, allocas_from_def] >>
+  qpat_x_assum `alloca_frontier_inv _ _ _ _` mp_tac >>
+  simp[alloca_frontier_inv_def, GSYM deploy_ctor_pending_alloca_eq] >>
+  rpt strip_tac >> res_tac
 QED

@@ -6228,8 +6228,9 @@ Proof
   qexistsl [`t with vs_inst_idx := LENGTH sb.cs_current_insts`, `G'`, `tn'`] >>
   simp[loweringStateRelDefsTheory.fresh_vars_wrt_def, venomStateTheory.lookup_var_def] >>
   rpt conj_tac
-  >- fs[loweringStateRelDefsTheory.fresh_vars_wrt_def]
+  >~ [`t.vs_current_bb = sa.cs_current_bb`]
   >- (qpat_assum `t = s with vs_vars := _` SUBST1_TAC >> simp[])
+  >~ [`(t with vs_inst_idx := _) = _`]
   >- (qpat_assum `t = s with vs_vars := _` SUBST1_TAC >> simp[NoAsms])
   >- (rpt strip_tac >>
       `ss' = t` by

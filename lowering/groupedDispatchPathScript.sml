@@ -580,3 +580,93 @@ Proof
      allocas_from_def, alloca_frontier_inv_def, remaining_alloca_budget_def] >>
   metis_tac[]
 QED
+
+Theorem compile_external_groups_selected_single_origin:
+  compile_external_groups (Var mid)
+    (pref ++ ExternalSingle (sel,lbl,mincd) pkg::rest) sa = (jobs,sb) /\
+  fn_has_code sa sb fn /\
+  EVERY group_entry_labels_ok (pref ++ ExternalSingle (sel,lbl,mincd) pkg::rest) /\
+  EVERY (\group. case group of
+    ExternalSingle (n,_,_) pack => m <> n2w n
+  | ExternalDefaults common entries specs _ =>
+      FIND (\(n,_,_,_). m = n2w n) entries = NONE /\
+      EVERY (\(_,ty,_). type_memory_bytes common.ec_env ty < dimword (:256)) specs) pref /\
+  m = n2w sel /\
+  (!name bb. lookup_block name fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  selected_registration_resources ctx fn site lo sa s /\
+  fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword (:256) /\
+  not_fresh_at sa mid /\ eval_operand (Var mid) s = SOME m /\
+  op_taint tn (Var mid) = {} /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
+  ?prefix_jobs sc sd t G' tn'.
+    MEM (ExternalLegacyJob pkg) jobs /\
+    compile_external_groups (Var mid) pref sa = (prefix_jobs,sc) /\
+    compile_selector_checks (Var mid) [(sel,lbl)] sc = ((),sd) /\
+    t.vs_current_bb = lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+    (!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < sc.cs_next_id) /\
+    (!inst w b n. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_operands = [Lit w] /\
+      FLOOKUP t.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w) /\
+    alloca_inv t /\ alloca_frontier_inv ctx fn site t /\
+    allocas_from lo t /\ lo <= t.vs_alloca_next /\ fresh_vars_wrt sd t /\
+    selected_registration_frame s tn t tn' /\ t.vs_memory = s.vs_memory /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+      t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,G',tn')) /\
+    (!D. (!fuel. ptr_safe_blocks D lo fuel ctx fn PG G' tn' t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all compile_external_groups_append_layout >> strip_tac >>
+  full_simp_tac bool_ss [EVERY_APPEND, EVERY_DEF] >>
+  qmatch_asmsub_rename_tac `compile_external_groups (Var mid) pref sa = (prefix_jobs,sc)` >>
+  mp_tac (Q.INST [`ctx` |-> `ctx`, `fn` |-> `fn`, `site` |-> `site`,
+                 `lo` |-> `lo`, `PG` |-> `PG`]
+    (Q.SPECL [`pref`,`m`,`mid`,`sa`,`sc`,`prefix_jobs`,`s`,`G`,`tn`]
+      compile_external_groups_missed_origin)) >>
+  impl_tac >- asm_rewrite_tac[] >>
+  disch_then (qx_choosel_then [`u`,`Gu`,`tnu`] strip_assume_tac) >>
+  drule_all compile_external_single_cons_layout >> strip_tac >>
+  rename1 `compile_selector_checks (Var mid) [(sel,lbl)] sc = ((),sd)` >>
+  `fresh_vars_wrt sc u /\ ~u.vs_halted /\ u.vs_current_bb = sc.cs_current_bb /\
+   u.vs_inst_idx = LENGTH sc.cs_current_insts /\ allocas_from lo u` by
+    fs[selected_registration_resources_def] >>
+  `?bb. lookup_block sd.cs_current_bb fn.fn_blocks = SOME bb /\
+        phi_prefix_length bb.bb_instructions = 0` by
+    (fs[fn_has_code_def] >> metis_tac[]) >>
+  qpat_assum `compile_selector_checks (Var mid) [(sel,lbl)] sc = ((),sd)`
+    (mp_tac o MATCH_MP (Q.SPECL [`[(sel,lbl)]`,`Var mid`,`sc`,`sd`]
+      compile_selector_checks_ptr_endpoint)) >>
+  disch_then (qspecl_then [`ctx`,`fn`,`u`,`m`,`lo`,`PG`,`Gu`,`tnu`] mp_tac) >>
+  impl_tac >- (asm_simp_tac (srw_ss()) [selector_hit_def] >> metis_tac[]) >>
+  asm_simp_tac (srw_ss()) [selector_hit_def] >> disch_then strip_assume_tac >>
+  rename1 `vars_pc_only u t` >>
+  rename1 `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (u,Gu,tnu) [] (OK t,G',tn')` >>
+  `selected_registration_frame u tnu t tn' /\ t.vs_memory = u.vs_memory` by
+    metis_tac[grouped_entry_frame_vars_pc] >>
+  `selected_registration_frame s tn t tn'` by
+    (qpat_assum `selected_registration_frame s tn u tnu`
+       (strip_assume_tac o REWRITE_RULE [selected_registration_frame_def]) >>
+     qpat_assum `selected_registration_frame u tnu t tn'`
+       (strip_assume_tac o REWRITE_RULE [selected_registration_frame_def]) >>
+     asm_simp_tac (srw_ss()) [selected_registration_frame_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+      t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp` by
+    metis_tac[grouped_registration_vars_pc] >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,G',tn')` by
+    metis_tac[gas_origin_ptr_path_append, listTheory.APPEND_NIL] >>
+  `!D. (!fuel. ptr_safe_blocks D lo fuel ctx fn PG G' tn' t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s` by metis_tac[] >>
+  qexistsl_tac [`t`,`G'`,`tn'`] >>
+  asm_rewrite_tac[MEM_APPEND, MEM] >>
+  `t.vs_allocas = u.vs_allocas /\ t.vs_alloca_next = u.vs_alloca_next` by
+    fs[vars_pc_only_def, venom_state_component_equality] >>
+  fs[selected_registration_resources_def, alloca_inv_def,
+     allocas_non_overlapping_def, alloca_next_valid_def, allocas_from_def,
+     alloca_frontier_inv_def, remaining_alloca_budget_def] >>
+  rpt strip_tac >> res_tac >> asm_rewrite_tac[]
+QED
