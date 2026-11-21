@@ -6267,7 +6267,12 @@ Resume body_assign_immutable_bytes_restore[section]:
   `(?cap. dtv = BaseTV (BytesT (Dynamic cap))) \/
    (?cap. dtv = BaseTV (StringT cap))` by metis_tac[bytestring_type_value] >> (
   `mem_word_at off t.vs_memory = n2w len` by
-    (gvs[val_in_memory_def] >> metis_tac[]) >>
+    (qpat_assum `val_in_memory dtv _ off t.vs_memory` mp_tac >>
+     qpat_assum `dtv = BaseTV _` mp_tac >>
+     qpat_assum `v = _` mp_tac >>
+     qpat_assum `len = LENGTH _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[val_in_memory_def]) >>
   `mem_word_at off (mem_bytes_at 0 lo t.vs_memory) = n2w len` by
     (`off + 32 <= lo` by decide_tac >>
      `mem_bytes_at off 32 (mem_bytes_at 0 lo t.vs_memory) =
@@ -18112,21 +18117,25 @@ fun residual_memory_word_source g =
   qpat_assum `!i xs. MemoryPlace id path = MemoryPlace i xs ==> _`
     (qspecl_then [`id`,`path`] (strip_assume_tac o REWRITE_RULE []))) g;
 
-fun residual_memory_word_write g =
+fun residual_memory_word_apply g =
   (irule gas_outcome_full_post_mono >>
-  irule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)
-    augAssignFullWritebackTheory.augassign_memory_writeback_full >>
-  goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `store_lays_out _ _ _`)) >>
-  simp[] >>
-  qexistsl [`tops`,`tn0`,`sa`,`s0`,`SND (SND r)`,`FST (SND r)`,`lctx`,`es`,
-            `env`,`d`,`cenv`,`\H res ee gt r. F`,`G0`] >>
-  simp[pairTheory.PAIR] >>
-  (conj_tac >- (residual_word_entry_frame >> gvs[]) >>
-  rpt gen_tac >> strip_tac >> qexists `cenv` >> simp[] >>
-  first_assum ACCEPT_TAC)) g;
+   irule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)
+     augAssignFullWritebackTheory.augassign_memory_writeback_full) g;
+
+fun residual_memory_word_anchor g =
+  (goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
+   goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
+   goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
+   goal_assum (drule_at (Pat `store_lays_out _ _ _`)) >> simp[]) g;
+
+fun residual_memory_word_witnesses g =
+  (qexistsl [`tops`,`tn0`,`sa`,`s0`,`SND (SND r)`,`FST (SND r)`,`lctx`,`es`,
+             `env`,`d`,`cenv`,`\H res ee gt r. F`,`G0`] >>
+   simp[pairTheory.PAIR]) g;
+
+fun residual_memory_word_post g =
+  (rpt gen_tac >> strip_tac >> qexists `cenv` >> simp[] >>
+   first_assum ACCEPT_TAC) g;
 
 Resume body_assign_other_nonempty_target_full[storage_word]:
   residual_storage_word >>
@@ -18137,7 +18146,11 @@ QED
 Resume body_assign_other_nonempty_target_full[memory_word]:
   residual_memory_word_setup >>
   residual_memory_word_source >>
-  residual_memory_word_write
+  residual_memory_word_apply >>
+  residual_memory_word_anchor >>
+  residual_memory_word_witnesses >>
+  (conj_tac >- (residual_word_entry_frame >> gvs[])) >>
+  residual_memory_word_post
 QED
 
 Resume body_assign_other_nonempty_target_full[saved_storage_word]:
@@ -18149,7 +18162,11 @@ QED
 Resume body_assign_other_nonempty_target_full[saved_memory_word]:
   residual_memory_word_setup >>
   residual_memory_word_source >>
-  residual_memory_word_write
+  residual_memory_word_apply >>
+  residual_memory_word_anchor >>
+  residual_memory_word_witnesses >>
+  (conj_tac >- (residual_word_entry_frame >> gvs[])) >>
+  residual_memory_word_post
 QED
 
 Resume body_assign_other_nonempty_target_full[snapshot_nonword]:
