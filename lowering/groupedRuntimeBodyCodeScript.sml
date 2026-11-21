@@ -3,6 +3,7 @@ Theory groupedRuntimeBodyCode
 Ancestors
   groupedInternalLabels entryCodeOwnership gasShadowRuntimeBodies gasShadowRuntimeOps
   gasShadowModuleDefs gasShadowState emitHelperProps moduleLowering compileEnv pair list
+  entryRejectCode emitHelper vyperCompiler
 
 val shadow_job = ``\job. case job of
   ExternalLegacyJob package => ExternalLegacyJob (gas_shadow_external_package package)
@@ -84,4 +85,37 @@ Proof
   >- (simp[] >> qexists_tac `se` >> simp[] >> metis_tac[cs_extends_trans])
   >- (simp[] >> qexists_tac `shadow_se` >> simp[] >> metis_tac[cs_extends_trans])
   >> simp[] >> qexists_tac `shadow_se` >> simp[] >> metis_tac[cs_extends_trans]
+QED
+
+Theorem run_grouped_lowering_dispatch_code:
+  run_grouped_lowering groups ips fb rp "__entry" = SOME unit /\
+  EVERY group_entry_labels_ok groups /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips) /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn ==>
+  ?sf fallback jobs sd sx sn se.
+    sf.cs_current_bb = "__entry" /\ sf.cs_current_insts = [] /\
+    sf.cs_next_var = 0 /\ sf.cs_next_id = 0 /\
+    compile_group_dispatch_linear groups fallback sf = (jobs,sd) /\
+    fn_has_code sf sd fn /\
+    compile_external_jobs jobs sd = ((),sx) /\
+    new_block fallback sx = (sx.cs_current_bb,sn) /\
+    sn.cs_current_bb = fallback /\ sn.cs_current_insts = [] /\
+    (case fb of
+       NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+     | SOME (ce,pay,nr,key,tr,view,stmts,rt) =>
+         compile_fallback_body ce pay nr key tr view stmts rt) sn = ((),se) /\
+    fn_has_code sn se fn /\
+    EVERY group_job_label_ok jobs /\ cs_extends sx se /\
+    (!bb. MEM bb (all_blocks se) ==>
+       lookup_block bb.bb_label fn.fn_blocks = SOME bb)
+Proof
+  strip_tac >> drule_all run_grouped_lowering_retained_entry >> strip_tac >>
+  drule_all compile_grouped_runtime_entry_layout >> strip_tac >>
+  `fn_has_code sf sd fn` by metis_tac[fn_has_code_retained_interval, cs_extends_trans] >>
+  `fn_has_code sn se fn` by metis_tac[fn_has_code_endpoint_coverage] >>
+  qexistsl_tac [`sf`,`fl`,`jobs`,`sd`,`sx`,`sn`,`se`] >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `fresh_label _ _ = _` mp_tac >>
+  simp[fresh_label_def, initial_compile_state_def] >>
+  metis_tac[new_block_props]
 QED

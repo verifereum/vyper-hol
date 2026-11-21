@@ -4,7 +4,7 @@ Ancestors
   moduleLowering compileEnv emitHelper exprLowering loweringShapeDefs list
   entryInternalAppend entryCompileIntervals fragExec emitHelperProps exprLoweringProps venomInst pair
   abiDecoderCounters externalEntryChecks placeMemoryCodeLayout venomExecSemantics context
-  groupedKeywordDecode
+  groupedKeywordDecode groupedEntryCounters
 Libs monadsyntax
 
 fun label_steps rws =
@@ -250,6 +250,7 @@ Theorem compile_group_entries_cons_layout:
     compile_group_entries mid entries common vars off st = ((),sb) /\
     fn_has_code st sb fn /\ st.cs_current_bb = next /\ st.cs_current_insts = [] /\
     sa.cs_next_var < st.cs_next_var /\ sa.cs_next_var < checks.cs_next_var /\
+    sa.cs_next_id <= st.cs_next_id /\ sa.cs_next_id <= checks.cs_next_id /\
     lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb (LENGTH sa.cs_current_insts) =
       SOME (mk_inst sa.cs_next_id EQ [mid; Lit (n2w sel)]
@@ -298,6 +299,12 @@ Proof
        abi_decoder_vars_mono_prims, compile_entry_point_kwargs_vars_mono] >>
      metis_tac[abi_decoder_vars_mono_prims, compile_entry_point_kwargs_vars_mono,
        abi_decoder_vars_mono_def, SND]) >>
+  `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 s3 /\
+    ci_mono s3 checks /\ ci_mono checks init /\ ci_mono init done /\ ci_mono done st` by
+    (rpt conj_tac >> metis_tac[ci_mono_emit_op, ci_mono_fresh_label, ci_mono_emit_inst,
+       ci_mono_new_block, compile_entry_checks_ci_mono, compile_entry_point_kwargs_ci_mono, SND]) >>
+  `sa.cs_next_id <= st.cs_next_id /\ sa.cs_next_id <= checks.cs_next_id` by
+    fs[ci_mono_def] >>
   imp_res_tac compile_entry_checks_next_var >>
   fs[same_blocks_def] >>
   qmatch_asmsub_abbrev_tac `lookup_block sa.cs_current_bb fn.fn_blocks = SOME blk` >>
@@ -740,4 +747,25 @@ Proof
   once_rewrite_tac[compile_grouped_internal_suffix] >>
   simp[AllCaseEqs()] >> strip_tac >>
   qexists_tac `data` >> gvs[]
+QED
+
+Theorem compile_external_groups_append_layout:
+  compile_external_groups mid (pref ++ rest) sa = (jobs,sb) /\
+  fn_has_code sa sb fn ==>
+  ?pref_jobs tail_jobs sc.
+    compile_external_groups mid pref sa = (pref_jobs,sc) /\
+    fn_has_code sa sc fn /\
+    compile_external_groups mid rest sc = (tail_jobs,sb) /\
+    fn_has_code sc sb fn /\
+    jobs = pref_jobs ++ tail_jobs
+Proof
+  strip_tac >>
+  Cases_on `compile_external_groups mid pref sa` >>
+  rename1 `compile_external_groups mid pref sa = (pref_jobs,sc)` >>
+  Cases_on `compile_external_groups mid rest sc` >>
+  rename1 `compile_external_groups mid rest sc = (tail_jobs,last)` >>
+  drule_all compile_external_groups_append >> strip_tac >> gvs[] >>
+  `ci_mono sa sc /\ ci_mono sc last` by
+    metis_tac[compile_external_groups_ci_mono, pairTheory.SND] >>
+  fs[ci_mono_def] >> metis_tac[fn_has_code_split]
 QED

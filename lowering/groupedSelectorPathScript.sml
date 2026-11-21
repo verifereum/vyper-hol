@@ -32,6 +32,8 @@ Theorem compile_group_entries_selected_origin:
       FIND (\(n,_,_,_). m = n2w n) entries = SOME (sel,lbl,mincd,k) ==>
       ?checks init done t G' tn'.
         checks.cs_current_bb = lbl /\ checks.cs_current_insts = [] /\
+        sa.cs_next_id <= checks.cs_next_id /\
+        sa.cs_next_var < checks.cs_next_var /\
         compile_entry_checks mincd common.ec_payable checks = ((),init) /\
         fn_has_code checks init fn /\
         compile_entry_point_kwargs common.ec_env vars off k common.ec_common_label init =
@@ -112,6 +114,8 @@ Resume compile_group_entries_selected_origin[next]:
   disch_then (qspecl_then [`sel`,`lbl`,`mincd`,`k`] mp_tac) >> simp[] >>
   disch_then (qx_choosel_then [`checks'`,`init'`,`done'`,`t`,`G'`,`tn'`]
     strip_assume_tac) >>
+  `sa.cs_next_var < checks'.cs_next_var` by
+    metis_tac[arithmeticTheory.LESS_TRANS] >>
   qexistsl_tac [`checks'`,`init'`,`done'`,`t`,`G'`,`tn'`] >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
     (s,G,tn) [] (OK t,G',tn')` by metis_tac[gas_origin_ptr_path_append, APPEND] >>

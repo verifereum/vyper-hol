@@ -25,6 +25,8 @@ Theorem default_entry_checks_ptr_endpoint:
     allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!p. not_fresh_at st p ==> lookup_var p u = lookup_var p s /\
+      FLOOKUP G' p = FLOOKUP G p /\ op_taint tn' (Var p) = op_taint tn (Var p)) /\
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' u) ==>
          !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
