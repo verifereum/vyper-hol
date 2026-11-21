@@ -6,6 +6,8 @@ Ancestors
   allocaFrontierRoom loweringStateRelDefs venomInst venomWf venomInstIdsProps words
   vyperLoweringCorrect decoderOriginAllocationFrame
   fragGasOriginPtr fragGasPathPtr fragGasPath exprLoweringProps
+  fragGasMode fragGasPathMem fragGasPathFrameMem bodyFullPathHistory allocaHistory
+  gasPathPtrExec entryDispatchPtr externalEntryChecks fragGasOrigin fragExec venomMemProofs gasCount
 
 Theorem grouped_entry_resources_vars_pc:
   selected_registration_resources ctx fn site lo sa s /\
@@ -98,4 +100,53 @@ Proof
   qpat_x_assum `alloca_frontier_inv _ _ _ _` mp_tac >>
   simp[alloca_frontier_inv_def, GSYM deploy_ctor_pending_alloca_eq] >>
   rpt strip_tac >> res_tac
+QED
+
+Theorem grouped_entry_origin_continuation:
+  gas_origin_ptr_path (D,0,explicit,ctx,fn,[]) (s,FEMPTY,entry_taint)
+    marks (OK t,G,tn) /\
+  fn_inst_ids_distinct fn /\ s.vs_allocas = FEMPTY /\
+  ctx.ctx_entry = SOME "__entry" /\
+  lookup_function "__entry" ctx.ctx_functions = SOME fn /\
+  fn_entry_label fn = SOME "__entry" /\ lookup_block "__entry" fn.fn_blocks = SOME bb /\
+  (!l b. lookup_block l fn.fn_blocks = SOME b ==> phi_prefix_length b.bb_instructions = 0) /\
+  s = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|> ==>
+  gas_path ctx fn s (LENGTH marks) (OK t) /\
+  gas_path_mem ctx fn s (LENGTH marks) (OK t) /\
+  alloca_history fn t /\ ~t.vs_halted /\
+  t.vs_gas_readings = DROP (LENGTH marks) vs.vs_gas_readings /\
+  t.vs_code = vs.vs_code /\ t.vs_labels = vs.vs_labels /\
+  ((!fuel. ptr_safe_run D 0 fuel ctx fn [] G tn t) ==>
+   !fuel. ptr_safe_blocks D 0 fuel ctx fn [] FEMPTY entry_taint s) /\
+  !fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
+    ?fuel'. run_context fuel' ctx vs = r
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `s.vs_current_bb = "__entry" /\ s.vs_inst_idx = 0 /\
+    s.vs_gas_readings = vs.vs_gas_readings /\ s.vs_code = vs.vs_code /\
+    s.vs_labels = vs.vs_labels` by simp[] >>
+  qpat_x_assum `s = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>` (assume_tac o SYM) >>
+  `alloca_history fn s /\ alloca_inv s` by
+    metis_tac[alloca_history_empty, alloca_inv_empty_proof] >>
+  drule gas_origin_ptr_path_projections >> strip_tac >>
+  drule gas_origin_path_erase >> simp[gas_marked_path_def] >> disch_tac >>
+  drule gas_path_mem_exec >> simp[exit_result_def] >> strip_tac >>
+  `runs_through ctx fn s t` by (simp[runs_through_def] >> metis_tac[]) >>
+  `alloca_history fn t` by
+    (mp_tac (Q.INST [`G` |-> `FEMPTY`, `G'` |-> `G`, `PG` |-> `[]`,
+       `lo` |-> `0`, `tn` |-> `entry_taint`, `tn'` |-> `tn`, `func` |-> `fn`,
+       `u` |-> `t`] body_full_path_alloca_history) >>
+     asm_rewrite_tac[]) >>
+  drule gas_path_code_labels >> simp[] >> strip_tac >>
+  drule gas_path_suffix >> simp[gas_count_suffix_def] >> disch_tac >>
+  asm_rewrite_tac[] >> rpt conj_tac
+  >- (strip_tac >>
+      `!fuel. ptr_safe_run D 0 fuel ctx fn [] FEMPTY entry_taint s` by
+        (mp_tac (Q.SPECL [`D`,`0`,`ctx`,`fn`,`[]`,`FEMPTY`,`entry_taint`,
+           `s`,`LENGTH (marks:bool list)`,`G`,`tn`,`t`] gas_path_ptr_safe_run) >>
+         asm_rewrite_tac[] >> metis_tac[]) >>
+      irule ptr_safe_blocks_from_phi_free_run >> asm_rewrite_tac[] >>
+      qexists_tac `bb` >> metis_tac[]) >>
+  mp_tac (Q.SPECL [`ctx`,`fn`,`vs`,`t`,`bb`] entry_context_continuation) >>
+  asm_rewrite_tac[] >> metis_tac[]
 QED
