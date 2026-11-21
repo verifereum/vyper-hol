@@ -23,28 +23,6 @@ QED
 (* Choose the scalar execution once. Only the child observation and its
    relational frame depend on the current horizon. *)
 Theorem for_captured_storage_head_prefix:
-  let dyn = (case bd of Fixed _ => F | Dynamic _ => T) in
-  let outs = if dyn then [dv;ov;tot;ep] else [dv;ov;ep] in
-  let addr = (\k. (if dyn then slot + 1w else slot) + n2w (k * type_slot_size tyv)) in
-  let Live = (\H k. for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,loop_body)
-      (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
-      (lvo,idx,cond) (p,dst,nb,sd) (H,k,a::rs,ei,G,tn,s)) in
-  let Fr = (\c ee s G tn.
-      alloca_history func s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-      s0.vs_alloca_next <= s.vs_alloca_next /\
-      (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==>
-             lookup_var x s = SOME w) /\
-      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-               FLOOKUP s.vs_allocas aid = SOME b) /\
-      (!x. not_fresh_at sa0 x ==>
-           FLOOKUP G x = FLOOKUP G0 x /\
-           op_taint tn (Var x) = op_taint tn0 (Var x)) /\
-      alloca_frame c0 e0 sa0 s0 c ee s /\
-      !aid off sz i.
-        FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa0.cs_next_id /\
-        (!name b sz'. local_region c0 e0.scopes s0 name b sz' ==>
-                      off + sz <= b \/ b + sz' <= off) /\
-        off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem) in
   lookup_block cond func.fn_blocks = SOME cb /\
   cb.bb_instructions =
     [mk_inst (h - 2) EQ [Var idx;lvo] [dv];
@@ -52,36 +30,73 @@ Theorem for_captured_storage_head_prefix:
   lookup_block bod func.fn_blocks = SOME bb /\ saCopy.cs_current_bb = bod /\
   saCopy.cs_current_insts =
     [mk_inst h MUL [Var idx;Lit (n2w (type_slot_size tyv))] [ov]] ++
-    (if dyn then [mk_inst (h + 1) ADD [Lit 1w;Var ov] [tot]] else []) ++
-    [mk_inst (h + if dyn then 2 else 1) ADD
-       [bop;Var (if dyn then tot else ov)] [ep]] /\
+    (if (case bd of Fixed _ => F | Dynamic _ => T)
+     then [mk_inst (h + 1) ADD [Lit 1w;Var ov] [tot]] else []) ++
+    [mk_inst (h + if (case bd of Fixed _ => F | Dynamic _ => T) then 2 else 1) ADD
+       [bop;Var (if (case bd of Fixed _ => F | Dynamic _ => T) then tot else ov)] [ep]] /\
   (!j. j < LENGTH saCopy.cs_current_insts ==>
        get_instruction bb j = SOME (fEL saCopy.cs_current_insts j)) /\
-  ALL_DISTINCT outs /\ (!x. MEM x outs ==> ~not_fresh_at sa0 x) /\
-  ~MEM idx outs /\ ~MEM p outs /\
-  (!x. lvo = Var x ==> ~MEM x outs) /\ (!x. bop = Var x ==> ~MEM x outs) /\
+  ALL_DISTINCT (if (case bd of Fixed _ => F | Dynamic _ => T)
+                then [dv;ov;tot;ep] else [dv;ov;ep]) /\
+  (!x. MEM x (if (case bd of Fixed _ => F | Dynamic _ => T)
+              then [dv;ov;tot;ep] else [dv;ov;ep]) ==> ~not_fresh_at sa0 x) /\
+  ~MEM idx (if (case bd of Fixed _ => F | Dynamic _ => T)
+            then [dv;ov;tot;ep] else [dv;ov;ep]) /\
+  ~MEM p (if (case bd of Fixed _ => F | Dynamic _ => T)
+          then [dv;ov;tot;ep] else [dv;ov;ep]) /\
+  (!x. lvo = Var x ==> ~MEM x (if (case bd of Fixed _ => F | Dynamic _ => T)
+                               then [dv;ov;tot;ep] else [dv;ov;ep])) /\
+  (!x. bop = Var x ==> ~MEM x (if (case bd of Fixed _ => F | Dynamic _ => T)
+                               then [dv;ov;tot;ep] else [dv;ov;ep])) /\
   sbExpr.cs_next_var <= saCopy.cs_next_var /\
   local_ptrs_reserved c0 sa0 /\
   (!x cap. c0.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa0 x) /\
   (!x cap. c0.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa0 x) /\
   storage_trace_domain cx st0 ei.storage_trace /\
-  (!H. valid_horizon cx st0 H ei.storage_trace ==> ?k. Live H k) ==>
+  (!H. valid_horizon cx st0 H ei.storage_trace ==>
+       ?k. for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,loop_body)
+         (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
+         (lvo,idx,cond) (p,dst,nb,sd) (H,k,a::rs,ei,G,tn,s)) ==>
   ?k u Gu tnu.
     a::rs = DROP k vs /\ k < len /\ rs = DROP (SUC k) vs /\
-    a = PlaceR (StoragePlace tr (addr k) tyv) /\
+    a = PlaceR (StoragePlace tr
+      ((if (case bd of Fixed _ => F | Dynamic _ => T) then slot + 1w else slot) +
+       n2w (k * type_slot_size tyv)) tyv) /\
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
          (OK u,Gu,tnu)) /\
     u.vs_current_bb = saCopy.cs_current_bb /\
     u.vs_inst_idx = LENGTH saCopy.cs_current_insts /\ ~u.vs_halted /\
-    eval_operand (Var ep) u = SOME (addr k) /\ op_taint tnu (Var ep) = {} /\
+    eval_operand (Var ep) u = SOME
+      ((if (case bd of Fixed _ => F | Dynamic _ => T) then slot + 1w else slot) +
+       n2w (k * type_slot_size tyv)) /\ op_taint tnu (Var ep) = {} /\
     (eval_operand bop u = SOME slot /\ op_taint tnu bop = {} /\
      slot_copy_external saCopy bop) /\
     !H. valid_horizon cx st0 H ei.storage_trace ==>
-      Live H k /\ storage_place_observed H (StoragePlace tr (addr k) tyv) /\
+      for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,loop_body)
+        (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
+        (lvo,idx,cond) (p,dst,nb,sd) (H,k,a::rs,ei,G,tn,s) /\
+      storage_place_observed H (StoragePlace tr
+        ((if (case bd of Fixed _ => F | Dynamic _ => T) then slot + 1w else slot) +
+         n2w (k * type_slot_size tyv)) tyv) /\
       stmt_state_rel H ctx func c0 cx ei u /\
       storage_well_formed_on cx ei (FST H) /\
       ghost_inv_at (DF H) lo d c0 cx ei Gu tnu u /\
-      Fr c0 ei u Gu tnu /\ return_buf_frame d c0 sa0 u /\ ret_pc_ok c0 sa0 u /\
+      (alloca_history func u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+       s0.vs_alloca_next <= u.vs_alloca_next /\
+       (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==>
+              lookup_var x u = SOME w) /\
+       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                FLOOKUP u.vs_allocas aid = SOME b) /\
+       (!x. not_fresh_at sa0 x ==>
+            FLOOKUP Gu x = FLOOKUP G0 x /\
+            op_taint tnu (Var x) = op_taint tn0 (Var x)) /\
+       alloca_frame c0 e0 sa0 s0 c0 ei u /\
+       !aid off sz i.
+         FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa0.cs_next_id /\
+         (!name b sz'. local_region c0 e0.scopes s0 name b sz' ==>
+                       off + sz <= b \/ b + sz' <= off) /\
+         off <= i /\ i < off + sz /\ i IN tnu.t_mem ==> i IN tn0.t_mem) /\
+      return_buf_frame d c0 sa0 u /\ ret_pc_ok c0 sa0 u /\
       u.vs_current_bb = saCopy.cs_current_bb /\
       u.vs_inst_idx = LENGTH saCopy.cs_current_insts /\ ~u.vs_halted /\
       allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
@@ -89,17 +104,20 @@ Theorem for_captured_storage_head_prefix:
       op_taint tnu (Var idx) = {} /\ eval_operand lvo u = SOME (n2w len) /\
       op_prov Gu lvo = NONE /\ op_taint tnu lvo = {} /\
       lookup_var p u = SOME dst /\ ptr_covers Gu tnu p u nb /\
-      eval_operand (Var ep) u = SOME (addr k) /\ op_taint tnu (Var ep) = {} /\
+      eval_operand (Var ep) u = SOME
+        ((if (case bd of Fixed _ => F | Dynamic _ => T) then slot + 1w else slot) +
+         n2w (k * type_slot_size tyv)) /\ op_taint tnu (Var ep) = {} /\
       u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
       u.vs_memory = s.vs_memory /\ u.vs_immutables = s.vs_immutables /\
       tnu.t_mem = tn.t_mem /\
       (!name b sz. local_region c0 ei.scopes u name b sz <=>
                    local_region c0 ei.scopes s name b sz) /\
-      !x. ~MEM x outs ==>
+      !x. ~MEM x (if (case bd of Fixed _ => F | Dynamic _ => T)
+                  then [dv;ov;tot;ep] else [dv;ov;ep]) ==>
         lookup_var x u = lookup_var x s /\ FLOOKUP Gu x = FLOOKUP G x /\
         op_taint tnu (Var x) = op_taint tn (Var x)
 Proof
-  CONV_TAC (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV])) >> strip_tac >>
+  strip_tac >>
   qabbrev_tac `H0 = storage_trace_horizon ei.storage_trace` >>
   `valid_horizon cx st0 H0 ei.storage_trace` by
     simp[Abbr `H0`, GSYM storage_trace_domain_def] >>

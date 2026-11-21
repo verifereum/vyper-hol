@@ -68,7 +68,7 @@ val InitialPrem = ``
   lookup_block loop_st.cs_current_bb func.fn_blocks = SOME entry_bb /\
   entry_bb.bb_instructions = loop_st.cs_current_insts ++ [mk_inst jump_id JMP [Label hdr] []]``;
 
-val InitialResult = ``
+val InitialResultWithFmp = ``
     (^Ok) k ctx func site ids D N d (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))
       st.cs_next_var limit_st tv vs header_st.cs_next_id slot initial (LENGTH vs) (LENGTH vs) actual /\
     ~actual.vs_halted /\ actual.vs_current_bb = exit_lbl /\ actual.vs_inst_idx = 0 /\
@@ -86,32 +86,33 @@ val InitialResult = ``
     (!x. abi_decoder_older_vars st.cs_next_var x ==>
       FLOOKUP Hout x = FLOOKUP G x /\ op_taint qout (Var x) = op_taint tn (Var x)) /\
     (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
+    (frame_fmp ==> actual.vs_fmp = initial.vs_fmp) /\
     actual.vs_code = initial.vs_code /\ actual.vs_gas_readings = initial.vs_gas_readings /\
     actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
     actual.vs_block_ctx = initial.vs_block_ctx /\ abi_decode_sim ctx func initial actual /\
     ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG Hout qout actual) ==>
       !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)``;
 
-val CshiftMode = ``\checked ty tv.
-  ^(rand (rator (concl prefix_complete_array_setup_exit_pair_mode_exact)))``;
+val CshiftModeWithFmp = ``\checked ty tv.
+  ^(rand (rator (concl prefix_complete_array_setup_exit_pair_mode_exact_fmp)))``;
 
 val InitialPremMode = ``(^InitialPrem) /\ (checked ==>
   sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <=
     LENGTH initial.vs_data_section /\
   sb+32 <= LENGTH initial.vs_data_section /\ alloca_history func initial)``;
 
-Theorem prefix_complete_array_initial_exit_pair_mode_exact:
-  (^CshiftMode) checked ty tv ==> (^InitialPremMode) ==>
+Theorem prefix_complete_array_initial_exit_pair_mode_exact_fmp:
+  (^CshiftModeWithFmp) checked ty tv ==> (^InitialPremMode) ==>
   ?actual Hout qout A slot.
     (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, Hout, qout)) /\
     (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual) /\
     (!x. abi_decoder_older_vars st.cs_next_var x ==>
       lookup_var x actual = lookup_var x initial) /\
-    (^InitialResult)
+    (^InitialResultWithFmp)
 Proof
   disch_then (mk_asm "child") >>
   disch_then (fn th => assume_tac th >>
-    asm "child" (fn ch => mp_tac (MATCH_MP (MATCH_MP (BETA_RULE prefix_complete_array_setup_exit_pair_mode_exact) (BETA_RULE ch)) th))) >>
+    asm "child" (fn ch => mp_tac (MATCH_MP (MATCH_MP (BETA_RULE prefix_complete_array_setup_exit_pair_mode_exact_fmp) (BETA_RULE ch)) th))) >>
   strip_tac >>
   rule_assum_tac (SIMP_RULE std_ss []) >>
   rpt (first_x_assum (CONJUNCTS_THEN assume_tac)) >>
@@ -146,5 +147,12 @@ Proof
      rewrite_tac[ONE, rich_listTheory.REPLICATE, HD]) >>
   asm_simp_tac std_ss []
 QED
+
+
+
+Theorem prefix_complete_array_initial_exit_pair_mode_exact =
+  prefix_complete_array_initial_exit_pair_mode_exact_fmp
+  |> Q.INST [`frame_fmp` |-> `F`]
+  |> PURE_REWRITE_RULE [tautLib.TAUT `((F ==> p) /\ q) <=> q`]
 
 val _ = export_theory();

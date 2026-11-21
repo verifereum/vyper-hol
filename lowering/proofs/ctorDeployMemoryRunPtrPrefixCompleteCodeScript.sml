@@ -1,6 +1,7 @@
 (* Code framing comes from concrete sequence witnesses, not continuation inclusion. *)
 Theory ctorDeployMemoryRunPtrPrefixCompleteCode
 Ancestors
+  entryDecoderStateFrame
   loweringStateRelDefs valueEncodingDefs
   compileEnv valueEncoding
   ctorDeployMemoryRunPtrPrefixCompleteMembers
@@ -209,7 +210,7 @@ Proof
   qexistsl [`t`,`H`,`qt`,`child_dst`] >> simp[LET_THM]
 QED
 
-val MshiftMode = ``\checked tys tvs.
+val MshiftModeWithFmp = ``\frame_fmp checked tys tvs.
  !dst src st final ctx func site initial limit_st sb d D N ids
    pretys pretvs preavs prevs avs vs G tn b sz Ddead lo PG.
  compile_abi_decode_complex_elems (Var dst) src DLOAD (Lit 0w) (Lit 0w)
@@ -256,6 +257,7 @@ val MshiftMode = ``\checked tys tvs.
  actual.vs_labels = initial.vs_labels /\ actual.vs_code = initial.vs_code /\
  actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
  actual.vs_block_ctx = initial.vs_block_ctx /\ actual.vs_gas_readings = initial.vs_gas_readings /\
+ (frame_fmp ==> actual.vs_fmp = initial.vs_fmp) /\
  (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
  FINITE B /\ B SUBSET range_bytes
    [(d + SUM (MAP (type_memory_bytes ce) pretys), SUM (MAP (type_memory_bytes ce) tys))] /\
@@ -270,6 +272,8 @@ val MshiftMode = ``\checked tys tvs.
    !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial) /\
  (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
+val MshiftMode = rhs (concl ((BETA_CONV THENC PURE_REWRITE_CONV [tautLib.TAUT `((F ==> p) /\ q) <=> q`])
+  ``(^MshiftModeWithFmp) F``));
 
 (* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
    joint gas-origin pointer path; the original proof below proves the rest.
@@ -283,8 +287,8 @@ Proof
     gas_path_mem_rules] >> metis_tac[]
 QED
 *)
-Theorem prefix_members_complete_mode_nil:
-  (^MshiftMode) checked [] []
+Theorem prefix_members_complete_mode_nil_fmp:
+  (^MshiftModeWithFmp) frame_fmp checked [] []
 Proof
   BETA_TAC >> rpt gen_tac >>
   simp[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def,
@@ -293,6 +297,13 @@ Proof
   qexistsl [`initial`,`G`,`tn`,`{}`] >>
   simp[val_in_memory_def, abi_encoder_registered_effect_refl, abi_decode_sim_refl,
     gas_path_mem_rules, cj 1 gas_origin_ptr_path_rules] >> metis_tac[]
+QED
+
+Theorem prefix_members_complete_mode_nil:
+  (^MshiftMode) checked [] []
+Proof
+  mp_tac (Q.INST [`frame_fmp` |-> `F`] prefix_members_complete_mode_nil_fmp) >>
+  simp_tac bool_ss []
 QED
 
 Theorem prefix_canonical_member_setup_mem_ok[local]:
@@ -323,7 +334,7 @@ Proof
 QED
 
 (* Mode templates preserve the generic padded-read contracts above. *)
-val CshiftMode = ``\checked ty tv.
+val CshiftModeWithFmp = ``\frame_fmp checked ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
@@ -373,6 +384,7 @@ val CshiftMode = ``\checked ty tv.
  actual.vs_labels = initial.vs_labels /\ actual.vs_code = initial.vs_code /\
  actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
  actual.vs_block_ctx = initial.vs_block_ctx /\ actual.vs_gas_readings = initial.vs_gas_readings /\
+ (frame_fmp ==> actual.vs_fmp = initial.vs_fmp) /\
  (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
  FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce ty)] /\
  DISJOINT B qt.t_mem /\
@@ -386,6 +398,8 @@ val CshiftMode = ``\checked ty tv.
    !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial) /\
  (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
+val CshiftMode = rhs (concl ((BETA_CONV THENC PURE_REWRITE_CONV [tautLib.TAUT `((F ==> p) /\ q) <=> q`])
+  ``(^CshiftModeWithFmp) F``));
 val CshiftCode = rhs (concl (SIMP_CONV bool_ss [] ``(^CshiftMode) F``));
 
 
@@ -429,8 +443,8 @@ Proof
   simp[Excl "enc_def"]
 QED
 *)
-Theorem prefix_scalar_complete_mode_contract:
-  type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> (^CshiftMode) checked ty tv
+Theorem prefix_scalar_complete_mode_contract_fmp:
+  type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> (^CshiftModeWithFmp) frame_fmp checked ty tv
 Proof
   disch_tac >> BETA_TAC >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -502,8 +516,19 @@ Proof
         simp[EVERY_MEM] >> rpt strip_tac >> res_tac >>
         gvs[abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
      irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >> metis_tac[]) >>
+  `actual.vs_fmp = initial.vs_fmp` by
+    (`abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
+     drule_all abi_decoder_word_reentry_code >> strip_tac >>
+     metis_tac[entry_decoder_sequence_obs, entry_decoder_obs_fmp]) >>
   qexistsl [`actual with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,`B`] >>
   simp[Excl "enc_def"]
+QED
+
+Theorem prefix_scalar_complete_mode_contract:
+  type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> (^CshiftMode) checked ty tv
+Proof
+  mp_tac (Q.INST [`frame_fmp` |-> `F`] prefix_scalar_complete_mode_contract_fmp) >>
+  simp_tac bool_ss []
 QED
 
 Theorem prefix_scalar_complete_code_contract:
@@ -526,7 +551,7 @@ Proof
 QED
 
 
-val HshiftMode = ``\checked ctx func site ids D N limit_st tv v d sz st st' initial G tn actual H qt B Ddead lo PG.
+val HshiftModeWithFmp = ``\frame_fmp checked ctx func site ids D N limit_st tv v d sz st st' initial G tn actual H qt B Ddead lo PG.
  allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
  (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
    actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
@@ -544,6 +569,7 @@ val HshiftMode = ``\checked ctx func site ids D N limit_st tv v d sz st st' init
  actual.vs_outcomes = initial.vs_outcomes /\
  actual.vs_tx_ctx = initial.vs_tx_ctx /\ actual.vs_block_ctx = initial.vs_block_ctx /\
  actual.vs_gas_readings = initial.vs_gas_readings /\
+ (frame_fmp ==> actual.vs_fmp = initial.vs_fmp) /\
  (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
  FINITE B /\ B SUBSET range_bytes [(d,sz)] /\ DISJOINT B qt.t_mem /\
  (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
@@ -618,9 +644,9 @@ Proof
   suspend "tail_and_compose"
 QED
 *)
-Theorem prefix_members_complete_mode_cons:
-  (^CshiftMode) checked ty tv /\ (^MshiftMode) checked tys tvs ==>
-  (^MshiftMode) checked (ty::tys) (tv::tvs)
+Theorem prefix_members_complete_mode_cons_fmp:
+  (^CshiftModeWithFmp) frame_fmp checked ty tv /\ (^MshiftModeWithFmp) frame_fmp checked tys tvs ==>
+  (^MshiftModeWithFmp) frame_fmp checked (ty::tys) (tv::tvs)
 Proof
   disch_then (CONJUNCTS_THEN2 (mk_asm "child") (mk_asm "tail")) >>
   BETA_TAC >> rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -657,6 +683,9 @@ Proof
     (qunabbrev_tac `prepared` >>
      qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t /\ _`
        (MATCH_ACCEPT_TAC o MATCH_MP prefix_decoder_inst_idx_room)) >>
+  `prepared.vs_fmp = initial.vs_fmp` by
+    (drule ctor_actual_member_setup_opcodes >> strip_tac >>
+     drule_all entry_decoder_sequence_obs >> simp[entry_decoder_obs_fmp, Abbr `prepared`]) >>
   `abi_decode_sim ctx func initial prepared /\
    abi_encoder_registered_effect {} [] initial prepared` by
     (qunabbrev_tac `prepared` >>
@@ -694,7 +723,7 @@ Proof
      disch_then (qspec_then `ctx` mp_tac) >> simp[Abbr `prepared`]) >>
   `fn_has_code middle end_st func` by
     (mp_tac (Q.SPECL [`middle`,`end_st`,`final`,`func`] fn_has_code_split) >> simp[]) >>
-  `?after_head Hh qh Bh. (^HshiftMode) checked ctx func site ids D N limit_st tv v
+  `?after_head Hh qh Bh. (^HshiftModeWithFmp) frame_fmp checked ctx func site ids D N limit_st tv v
     (d + SUM (MAP (type_memory_bytes ce) pretys)) (type_memory_bytes ce ty)
     middle end_st prepared H qt after_head Hh qh Bh Ddead lo PG` by
     suspend "head" >>
@@ -702,7 +731,7 @@ Proof
   suspend "tail_and_compose"
 QED
 
-Resume prefix_members_complete_mode_cons[head]:
+Resume prefix_members_complete_mode_cons_fmp[head]:
   Cases_on `type_to_abi_dec_info sf ce ty = DecComplex T []`
   >- suspend "empty_head" >>
   mp_tac (Q.INST [`childsrc` |-> `FST (ops:operand # operand)`,
@@ -757,7 +786,7 @@ Resume prefix_members_complete_mode_cons[head]:
   simp_tac bool_ss []
 QED
 
-Resume prefix_members_complete_mode_cons[empty_head]:
+Resume prefix_members_complete_mode_cons_fmp[empty_head]:
   asm_x "child" kall_tac >> asm_x "tail" kall_tac >>
   qpat_assum `abi_decoder_members ce env sf pretys pretvs preavs prevs`
     (mp_then Any mp_tac abi_decoder_members_child_facts) >>
@@ -772,7 +801,7 @@ Resume prefix_members_complete_mode_cons[empty_head]:
   metis_tac[]
 QED
 
-Resume prefix_members_complete_mode_cons[tail_and_compose]:
+Resume prefix_members_complete_mode_cons_fmp[tail_and_compose]:
   asm_x "child" kall_tac >>
   `abi_decoder_members ce env sf (pretys ++ [ty]) (pretvs ++ [tv])
      (preavs ++ [av]) (prevs ++ [v]) /\
@@ -823,7 +852,7 @@ Resume prefix_members_complete_mode_cons[tail_and_compose]:
   asm_x "tail" kall_tac >> suspend "compose"
 QED
 
-Resume prefix_members_complete_mode_cons[tail_inputs]:
+Resume prefix_members_complete_mode_cons_fmp[tail_inputs]:
   asm_x "tail" kall_tac >>
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [MAP_APPEND, MAP, SUM_APPEND, SUM, ADD_0, ADD_ASSOC]) >>
   asm_simp_tac bool_ss [MAP_APPEND, MAP, SUM_APPEND, SUM, ADD_0, ADD_ASSOC,
@@ -841,8 +870,13 @@ Resume prefix_members_complete_mode_cons[tail_inputs]:
   Cases_on `src` >> fs[op_taint_def] >> metis_tac[]
 QED
 
-Resume prefix_members_complete_mode_cons[compose]:
+Resume prefix_members_complete_mode_cons_fmp[compose]:
   `actual.vs_code = initial.vs_code` by metis_tac[] >>
+  `frame_fmp ==> actual.vs_fmp = initial.vs_fmp` by
+    (strip_tac >>
+     qpat_assum `frame_fmp ==> actual.vs_fmp = after_head.vs_fmp` drule >>
+     qpat_assum `frame_fmp ==> after_head.vs_fmp = prepared.vs_fmp` drule >>
+     simp[]) >>
   `!a. a IN Bh ==> mem_bytes_at a 1 actual.vs_memory =
        mem_bytes_at a 1 after_head.vs_memory` by
     (qpat_assum `abi_encoder_registered_effect _ _ after_head actual`
@@ -889,7 +923,7 @@ Resume prefix_members_complete_mode_cons[compose]:
   suspend "support_and_ghost"
 QED
 
-Resume prefix_members_complete_mode_cons[support_and_ghost]:
+Resume prefix_members_complete_mode_cons_fmp[support_and_ghost]:
   conj_tac >-
     (qpat_assum `Bh SUBSET _` mp_tac >> qpat_assum `Bt SUBSET _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
@@ -927,7 +961,7 @@ Resume prefix_members_complete_mode_cons[support_and_ghost]:
   simp[] >> metis_tac[gas_path_mem_then, ADD_0]
 QED
 
-Resume prefix_members_complete_mode_cons[effects]:
+Resume prefix_members_complete_mode_cons_fmp[effects]:
   `frag_ids middle end_st SUBSET frag_ids st final /\
    frag_ids end_st final SUBSET frag_ids st final` by
     (qpat_x_assum `st.cs_next_id < middle.cs_next_id` mp_tac >>
@@ -955,7 +989,7 @@ Resume prefix_members_complete_mode_cons[effects]:
   POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[abi_encoder_registered_effect_trans]
 QED
 
-Resume prefix_members_complete_mode_cons[support]:
+Resume prefix_members_complete_mode_cons_fmp[support]:
   qpat_assum `!mem. _ ==> val_in_memory tv v _ mem` mp_tac >>
   qpat_assum `!mem. _ ==> tuple_in_memory vs' tvs _ mem` mp_tac >>
   qpat_assum `!a. a IN Bh ==> mem_bytes_at a 1 actual.vs_memory = _` mp_tac >>
@@ -973,7 +1007,15 @@ Resume prefix_members_complete_mode_cons[support]:
      MAP_APPEND, MAP, SUM_APPEND, SUM, ADD_0, ADD_ASSOC]
 QED
 
-Finalise prefix_members_complete_mode_cons
+Finalise prefix_members_complete_mode_cons_fmp
+
+Theorem prefix_members_complete_mode_cons:
+  (^CshiftMode) checked ty tv /\ (^MshiftMode) checked tys tvs ==>
+  (^MshiftMode) checked (ty::tys) (tv::tvs)
+Proof
+  mp_tac (Q.INST [`frame_fmp` |-> `F`] prefix_members_complete_mode_cons_fmp) >>
+  simp_tac bool_ss []
+QED
 
 
 
@@ -1006,16 +1048,23 @@ Proof
   simp_tac bool_ss []
 QED
 *)
+Theorem prefix_members_complete_mode_fmp:
+  !tys tvs. LIST_REL ((^CshiftModeWithFmp) frame_fmp checked) tys tvs ==> (^MshiftModeWithFmp) frame_fmp checked tys tvs
+Proof
+  Induct_on `tys` >> rpt gen_tac >> Cases_on `tvs` >>
+  simp_tac bool_ss [LIST_REL_def, prefix_members_complete_mode_nil_fmp] >> strip_tac >>
+  rename1 `LIST_REL _ tys rest` >>
+  mp_tac (Q.INST [`ty` |-> `h`, `tv` |-> `h'`, `tvs` |-> `rest`]
+    prefix_members_complete_mode_cons_fmp) >>
+  (impl_tac >- (conj_tac >- (BETA_TAC >> first_assum ACCEPT_TAC) >>
+    first_x_assum irule >> gvs[])) >>
+  simp_tac bool_ss []
+QED
+
 Theorem prefix_members_complete_mode:
   !tys tvs. LIST_REL ((^CshiftMode) checked) tys tvs ==> (^MshiftMode) checked tys tvs
 Proof
-  Induct_on `tys` >> rpt gen_tac >> Cases_on `tvs` >>
-  simp_tac bool_ss [LIST_REL_def, prefix_members_complete_mode_nil] >> strip_tac >>
-  rename1 `LIST_REL _ tys rest` >>
-  mp_tac (Q.INST [`ty` |-> `h`, `tv` |-> `h'`, `tvs` |-> `rest`]
-    prefix_members_complete_mode_cons) >>
-  (impl_tac >- (conj_tac >- (BETA_TAC >> first_assum ACCEPT_TAC) >>
-    first_x_assum irule >> gvs[])) >>
+  mp_tac (Q.INST [`frame_fmp` |-> `F`] prefix_members_complete_mode_fmp) >>
   simp_tac bool_ss []
 QED
 

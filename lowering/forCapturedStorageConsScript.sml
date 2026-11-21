@@ -43,59 +43,77 @@ QED
 (* The head and cleanup run on the same endpoint. Only a continuing cleanup
    executes the (zero-GAS-mark) increment, with its original index. *)
 Theorem for_captured_storage_cons_from_stages:
-  let Live = \lab H j xs ee G' tn' t.
-    for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
-      (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
-      (lvo,idx,lab) (p,dst,nb,sd) (H,j,xs,ee,G',tn',t) in
-  let head = bind (read_result cx a) (push_scope_with_var id tyv) in
-  let clean = finally (try (ignore_bind (eval_stmts cx stmts) (return F))
-                      handle_loop_exception) pop_scope in
-  let Scoped = \v. es with <| scopes :=
-    (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)) :: es.scopes;
-    gas_obs := [] |> in
-  let Qhead = \H (res:unit + exception) eb G1 tn1 z.
-    res = INL () /\ eb.gas_obs = [] /\
-    ?v. eb = Scoped v /\ read_result cx a es = (INL v,es) /\
-        Entry H (es with gas_obs := []) v k z G1 tn1 /\
-        eval_operand bop z = SOME slot /\ op_taint tn1 bop = {} in
-  let Qclean = \H (res:bool + exception) ee G1 tn1 t.
-    ee.gas_obs = [] /\ ~t.vs_halted /\
-    ?b. res = INL b /\ (b ==> Done H ee G1 tn1 t) /\
-        (~b ==> Live incr H k (a::rs) ee G1 tn1 t /\ k < len /\
-                body_stmts_full_ok cx stmts) in
   ~s.vs_halted /\
   (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
   (!f inst u. frag_reachable ctx func s f inst u ==> dalloca_no_wrap inst u) /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==> Live cond H k (a::rs) es G tn s) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+      (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
+      (lvo,idx,cond) (p,dst,nb,sd) (H,k,a::rs,es,G,tn,s)) /\
   gas_admissible (eval_for cx tyv id stmts (a::rs)) ok es /\
   (!res. ok res ==> stmt_res_ok lctx res) /\
   (storage_trace_domain cx st0 es.storage_trace ==>
-   gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0 head (es,s,G,tn)
-     Qhead (\H res ee gt r. ?ex. res = INR ex /\ R H ex ee gt r)) /\
+   gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+     (bind (read_result cx a) (push_scope_with_var id tyv)) (es,s,G,tn)
+     (\H (res:unit + exception) eb G1 tn1 z.
+       res = INL () /\ eb.gas_obs = [] /\
+       ?v. eb = es with <| scopes := (FEMPTY |+ (id,
+             <|assignable := F; type := tyv; value := v; popped := []|>)) :: es.scopes;
+             gas_obs := [] |> /\ read_result cx a es = (INL v,es) /\
+           Entry H (es with gas_obs := []) v k z G1 tn1 /\
+           eval_operand bop z = SOME slot /\ op_taint tn1 bop = {})
+     (\H res ee gt r. ?ex. res = INR ex /\ R H ex ee gt r)) /\
   (!v eb G1 tn1 z.
-     eb = Scoped v /\ read_result cx a es = (INL v,es) /\ k < len /\
+     eb = es with <| scopes := (FEMPTY |+ (id,
+       <|assignable := F; type := tyv; value := v; popped := []|>)) :: es.scopes;
+       gas_obs := [] |> /\ read_result cx a es = (INL v,es) /\ k < len /\
      eval_operand bop z = SOME slot /\ op_taint tn1 bop = {} /\
      (!H. valid_horizon cx st0 H eb.storage_trace ==>
           Entry H (es with gas_obs := []) v k z G1 tn1) /\
      gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop exit incr)) eb /\
      (!f inst u. frag_reachable ctx func z f inst u ==> dalloca_no_wrap inst u) ==>
-     gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0 clean (eb,z,G1,tn1)
-       Qclean (\H res ee gt r. ?ex. res = INR ex /\ R H ex ee gt r)) /\
+     gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+       (finally (try (ignore_bind (eval_stmts cx stmts) (return F))
+                     handle_loop_exception) pop_scope) (eb,z,G1,tn1)
+       (\H (res:bool + exception) ee G1 tn1 t.
+         ee.gas_obs = [] /\ ~t.vs_halted /\
+         ?b. res = INL b /\ (b ==> Done H ee G1 tn1 t) /\
+             (~b ==> for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+               (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
+               (lvo,idx,incr) (p,dst,nb,sd) (H,k,a::rs,ee,G1,tn1,t) /\
+               k < len /\ body_stmts_full_ok cx stmts))
+       (\H res ee gt r. ?ex. res = INR ex /\ R H ex ee gt r)) /\
   (!ee G1 tn1 t.
      k < len /\ body_stmts_full_ok cx stmts /\
-     (!H. valid_horizon cx st0 H ee.storage_trace ==> Live incr H k (a::rs) ee G1 tn1 t) ==>
+     (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+         (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
+         (lvo,idx,incr) (p,dst,nb,sd) (H,k,a::rs,ee,G1,tn1,t)) ==>
      ?u G2 tn2. !H. valid_horizon cx st0 H ee.storage_trace ==>
        gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (t,G1,tn1) [] (OK u,G2,tn2) /\
-       Live cond H (SUC k) rs ee G2 tn2 u) ==>
+       for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+         (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
+         (lvo,idx,cond) (p,dst,nb,sd) (H,SUC k,rs,ee,G2,tn2,u)) ==>
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
-    (bind (read_result cx a) (\v. ignore_bind (push_scope_with_var id tyv v) clean))
+    (bind (read_result cx a) (\v. ignore_bind (push_scope_with_var id tyv v)
+      (finally (try (ignore_bind (eval_stmts cx stmts) (return F))
+                    handle_loop_exception) pop_scope)))
     (es,s,G,tn)
     (\H res ee G1 tn1 t. ee.gas_obs = [] /\ ~t.vs_halted /\
       ?b. res = INL b /\ (b ==> Done H ee G1 tn1 t) /\
-          (~b ==> ?j. Live cond H j rs ee G1 tn1 t))
+          (~b ==> ?j. for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+            (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
+            (lvo,idx,cond) (p,dst,nb,sd) (H,j,rs,ee,G1,tn1,t)))
     (\H res ee gt r. ?ex. res = INR ex /\ R H ex ee gt r)
 Proof
-  BasicProvers.LET_ELIM_TAC >>
+  qabbrev_tac `Live = for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+    (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)` >>
+  qabbrev_tac `head = bind (read_result cx a) (push_scope_with_var id tyv)` >>
+  qabbrev_tac `clean = finally (try (ignore_bind (eval_stmts cx stmts) (return F))
+     handle_loop_exception) pop_scope` >>
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ head _ Qhead _` >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ clean _ Qclean _` >>
   `storage_trace_frame head` by
     (simp[Abbr `head`] >> irule storage_trace_frame_bind_all >>
      simp[storage_trace_frame_read_result,storage_trace_frame_state_updates]) >>
@@ -135,16 +153,16 @@ Resume for_captured_storage_cons_from_stages[body_entry]:
   (impl_tac >- first_assum ACCEPT_TAC) >> simp[NoAsms,Abbr `Qhead`] >> strip_tac >>
   rename1 `read_result cx a es = (INL v,es)` >>
   `mid.storage_trace = es.storage_trace` by
-    (qpat_assum `mid = Scoped v` SUBST1_TAC >> simp[Abbr `Scoped`]) >>
-  `Live cond Hm k (a::rs) es G tn s` by
-    (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> Live _ _ _ _ _ _ _ _`
+    (qpat_assum `mid = es with <| scopes := _; gas_obs := [] |>` SUBST1_TAC >> simp[]) >>
+  `Live (lvo,idx,cond) (p,dst,nb,sd) (Hm,k,a::rs,es,G,tn,s)` by
+    (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> Live _ _ _`
        (qspec_then `Hm` irule) >>
      qpat_assum `mid.storage_trace = es.storage_trace` (SUBST1_TAC o SYM) >>
      first_assum ACCEPT_TAC) >>
   `k < len /\ lookup_scopes id es.scopes = NONE` by
-    (qpat_assum `Live cond Hm k _ _ _ _ _` mp_tac >>
+    (qpat_assum `Live (lvo,idx,cond) _ (Hm,k,_,_,_,_,_)` mp_tac >>
      qpat_assum `Abbrev (Live = _)` (SUBST1_TAC o REWRITE_RULE[markerTheory.Abbrev_def]) >>
-     BETA_TAC >> pure_rewrite_tac[for_captured_storage_live_def] >>
+     pure_rewrite_tac[for_captured_storage_live_def] >>
      strip_tac >> conj_tac
      >- (qpat_assum `len = LENGTH vs` SUBST1_TAC >>
          qpat_assum `a::rs = DROP k vs`
@@ -168,11 +186,10 @@ Resume for_captured_storage_cons_from_stages[body_entry]:
                             gas_origin_ptr_path_dalloca_no_wrap)) >>
      (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> disch_then ACCEPT_TAC) >>
   `gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop exit incr)) mid` by
-    (qpat_assum `mid = Scoped v` SUBST1_TAC >> simp[Abbr `Scoped`] >>
+    (qpat_assum `mid = es with <| scopes := _; gas_obs := [] |>` SUBST1_TAC >>
      drule_all captured_storage_body_admissible >> simp[]) >>
-  qpat_x_assum `mid = Scoped v` SUBST_ALL_TAC >>
-  qpat_assum `!v G1 tn1 z. _ ==> gas_outcome_full _ _ _ _ clean _ _ _`
-    (qspecl_then [`v`,`G1`,`tn1`,`t`] mp_tac) >>
+  qpat_assum `!v eb G1 tn1 z. _ ==> gas_outcome_full _ _ _ _ clean _ _ _`
+    (qspecl_then [`v`,`mid`,`G1`,`tn1`,`t`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_then ACCEPT_TAC
 QED
 
@@ -184,8 +201,8 @@ Resume for_captured_storage_cons_from_stages[increment]:
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
     ee.gas_obs = [] /\ ~t.vs_halted /\
     ?b. res = INL b /\ (b ==> Done H ee G1 tn1 t) /\
-      (~b ==> Live incr H k (a::rs) ee G1 tn1 t /\ k < len /\
-              body_stmts_full_ok cx stmts)` by
+      (~b ==> Live (lvo,idx,incr) (p,dst,nb,sd) (H,k,a::rs,ee,G1,tn1,t) /\
+              k < len /\ body_stmts_full_ok cx stmts)` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> Qclean H _ _ _ _ _` mp_tac >>
      qpat_assum `Abbrev (Qclean = _)`
        (SUBST1_TAC o REWRITE_RULE[markerTheory.Abbrev_def]) >> BETA_TAC >>
@@ -200,7 +217,8 @@ Resume for_captured_storage_cons_from_stages[increment]:
       qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _ /\ (?b. _)`
         (qspec_then `H` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >>
       qpat_assum `res = INL T` (fn th => simp[NoAsms,th])) >>
-  `!H. valid_horizon cx st0 H ee.storage_trace ==> Live incr H k (a::rs) ee G1 tn1 t` by
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    Live (lvo,idx,incr) (p,dst,nb,sd) (H,k,a::rs,ee,G1,tn1,t)` by
     (qx_gen_tac `H` >> disch_tac >>
      qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _ /\ (?b. _)`
        (qspec_then `H` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >>
@@ -210,10 +228,10 @@ Resume for_captured_storage_cons_from_stages[increment]:
   (impl_tac >- simp[]) >>
   disch_then (qx_choose_then `u` (qx_choose_then `G2` (qx_choose_then `tn2` assume_tac))) >>
   qexistsl [`u`,`G2`,`tn2`] >> qx_gen_tac `H` >> disch_tac >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ Live cond H _ _ _ _ _ _` drule >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ Live (lvo,idx,cond) _ _` drule >>
   strip_tac >> simp[] >>
   conj_tac
-  >- (qpat_assum `Live cond H _ _ _ _ _ _` mp_tac >>
+  >- (qpat_assum `Live (lvo,idx,cond) _ _` mp_tac >>
       simp[NoAsms,Abbr `Live`,for_captured_storage_live_def]) >>
   qexists `SUC k` >> first_assum ACCEPT_TAC
 QED
