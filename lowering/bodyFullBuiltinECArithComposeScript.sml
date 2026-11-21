@@ -144,7 +144,7 @@ Proof
     lower_value compile_expr cenv (expr_type e2) e2 s1 = (y,s2) /\
     (if bt = ECAdd then compile_ecadd_points x y s2
      else compile_ecmul_point x y s2) = (res,sb) /\
-    vv = FST (as_ptr_val a LocMemory (res,sb))` by
+    vv = FST (as_stack_val a (res,sb))` by
     (asm_x "tail" kall_tac >>
      Cases_on `bt = ECAdd` >> gvs[] >> metis_tac[compile_ec_operands]) >>
   `?shadow_s1. lower_value compile_expr cenv (expr_type e1)
@@ -463,8 +463,8 @@ Proof
             (assume_tac o PURE_REWRITE_RULE [width])) >>
         simp[])) >>
       disch_then ACCEPT_TAC) >>
-  `vv = LocatedValue a (mk_ptr (Var dst) LocMemory)` by
-    simp[exprLoweringTheory.as_ptr_val_def] >>
+  `vv = StackValue a (Var dst)` by
+    simp[exprLoweringTheory.as_stack_val_def] >>
   `sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
    sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= s2.cs_next_id` by
     (qpat_assum `lower_value _ _ _ e1 sa = _`
