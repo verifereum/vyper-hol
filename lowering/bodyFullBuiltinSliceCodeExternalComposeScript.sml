@@ -90,6 +90,7 @@ Theorem slice_builtin_external_vv_full_from_tail:
   (!cenv cx env a n ct addr start len es ee e tops ctx DF lo d shadow_ctx PG func shadow_func ty.
     expr_body_pre cenv cx env
       (Builtin a (Slice n) [Builtin ct (Acc Code) [addr];start;len]) es /\
+    body_const_cells_agree [(NONE,tops)] cx env ee /\
     expr_sim_inv cenv cx env ee /\ (e = start \/ e = len \/ e = addr) /\
     body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx  ==>
@@ -105,6 +106,7 @@ Theorem slice_builtin_external_vv_full_from_tail:
               body_exprs_full_ok cx [addr])) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a (Slice n) args) es /\
     code_slice_source (Slice n) args = SOME (code_ty,addr) /\
     ~is_self_code (Builtin code_ty (Acc Code) [addr]) ==>
@@ -121,8 +123,8 @@ Proof
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty start es` by
     (`expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
      asm "child_run" (irule o cj 1) >>
-     simp[] >> conj_tac >- (qexists_tac `tops` >> simp[]) >>
-     qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` (irule_at Any) >> simp[]) >>
+     simp[] >> qexistsl_tac [`a`, `addr`, `code_ty`, `env`, `es`,
+                   `len`, `n`, `start`, `tops`] >> simp[]) >>
   `!bt xs. names_builtin bt xs ==> bt <> Slice n` by
     (ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]) >>
   `!xs. ~names_builtin (Slice n) xs` by
@@ -209,6 +211,12 @@ Proof
        (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
      irule (cj 1 exprSimSourceTheory.expr_body_pre_eval) >>
      simp[SF ETA_ss] >> goal_assum (drule_at Any) >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `body_expr_full_ok cx len` by
     (qpat_x_assum `tail_run :- _` kall_tac >>
      qpat_x_assum `child_run :- _` kall_tac >>
@@ -220,8 +228,8 @@ Proof
      rpt (pop_assum kall_tac) >> simp[] >> metis_tac[]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty len mid` by
     (asm "child_run" (irule o cj 1) >>
-     simp[] >> conj_tac >- (qexists_tac `tops` >> simp[]) >>
-     qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` (irule_at Any) >> simp[]) >>
+     simp[] >> qexistsl_tac [`a`, `addr`, `code_ty`, `env`, `es`,
+                   `len`, `n`, `start`, `tops`] >> simp[]) >>
   `expr_body_pre cenv cx env len mid` by
     (`well_typed_expr env (Builtin a (Slice n) [Builtin code_ty (Acc Code) [addr];start;len])` by
        fs[expr_body_pre_def] >>
@@ -323,14 +331,20 @@ Proof
      qpat_x_assum `!tail. bind (eval_expr cx len) _ _ = _`
        (qspec_then `[]` assume_tac) >> fs[] >>
      gvs[bind_def,return_def]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env len_mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (len_mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx len) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `body_expr_full_ok cx addr` by
     (qpat_x_assum `tail_run :- _` kall_tac >>
      qpat_x_assum `child_run :- _` kall_tac >>
      `body_exprs_full_ok cx [addr]` by metis_tac[] >> fs[body_exprs_full_ok_def]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty addr len_mid` by
     (asm "child_run" (irule o cj 1) >>
-     simp[] >> conj_tac >- (qexists_tac `tops` >> simp[]) >>
-     qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` (irule_at Any) >> simp[]) >>
+     simp[] >> qexistsl_tac [`a`, `addr`, `code_ty`, `env`, `es`,
+                   `len`, `n`, `start`, `tops`] >> simp[]) >>
   `expr_body_pre cenv cx env addr len_mid` by
     (qpat_x_assum `tail_run :- _` kall_tac >>
      qpat_x_assum `child_run :- _` kall_tac >>

@@ -12,6 +12,7 @@ Theorem bop_operands_full_cps_exit:
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   body_exprs_full_ok cx [e1; e2] /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
@@ -174,6 +175,13 @@ Proof
     (drule_at (Pos last) (REWRITE_RULE [ETA_THM] expr_body_pre_eval) >>
      disch_then (qspec_then `cenv` mp_tac) >>
      simp[] >> metis_tac[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`well_typed_expr env e1` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+     `body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `bind (eval_expr cx e1) _ _ = (_, mid with gas_obs := [])`
+       (irule_at Any) >> simp[]) >>
   `expr_body_pre cenv cx env e2 mid` by metis_tac[] >>
   `body_expr_full_ok cx e2` by
     (gvs[body_exprs_full_ok_def] >> first_x_assum irule >>
@@ -236,6 +244,7 @@ Theorem bop_word_operands_full_cps_exit:
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
   body_exprs_full_ok cx [e1; e2] /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
@@ -317,6 +326,7 @@ Theorem bop_operands_full_cps:
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   body_exprs_full_ok cx [e1; e2] /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
@@ -397,6 +407,7 @@ Theorem bop_word_operands_full_cps:
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
   body_exprs_full_ok cx [e1; e2] /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\

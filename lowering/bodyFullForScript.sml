@@ -40,6 +40,7 @@ Theorem compile_for_frag_full:
        (expr_abi_decode_target_root target) (For id typ it n body) ==>
        occurs_abi_decode_target target tops) /\
     stmt_loop_calls_ok [(NONE,tops)] (For id typ it n body) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (For id typ it n body) = SOME env' /\

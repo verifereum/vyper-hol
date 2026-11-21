@@ -17,6 +17,7 @@ Theorem raw_call_prefix_prepared_full:
   gas ov op result s1 s2 s3 s4 s5 s6 s7 xs es s0 G0 tn0 k Q R.
  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
  body_exprs_full_ok cx (a::d::kws) /\
+ body_const_cells_agree [(NONE,tops)] cx env es /\
  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
  compile_expr cenv ty (Call ann (RawCallTarget flags) (a::d::kws) NONE) sa=(vv,sb) /\
  compile_expr cenv ty

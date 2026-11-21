@@ -87,6 +87,7 @@ Theorem raw_log_topics_suffix_full_under_compose:
   topics = pre ++ rest /\
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env
     (Call ann RawLog
       [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
@@ -291,6 +292,10 @@ Resume raw_log_topics_suffix_full_under_compose[continue]:
      simp[evaluation_state_component_equality]) >>
   `expr_body_pre cenv cx env e
      (es with gas_obs := gas_explicit marks s.vs_gas_readings)` by simp[] >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`well_typed_expr env e` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+     irule body_const_cells_agree_expr_read >>
+     goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >> simp[]) >>
   `expr_sim_inv cenv cx env mid` by
     (drule_all (SRULE [SF ETA_ss] expr_body_pre_eval) >> simp[]) >>
   `expr_body_pre cenv cx env
@@ -354,8 +359,7 @@ Resume raw_log_topics_suffix_full_under_compose[continue]:
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac
      >- (qexistsl_tac [`shadow_func`,`shadow_sm`,`shadow_last`] >> simp[]) >>
-     conj_tac >- (qexists_tac `tops` >> simp[]) >>
-     qexistsl_tac [`ann`,`data`,`dflt`,`env`,`n`,`pre ++ [e]`] >>
+     qexistsl_tac [`ann`,`data`,`dflt`,`env`,`n`,`pre ++ [e]`,`tops`] >>
      pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >>
      metis_tac[]) >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ (eval_exprs cx rest) _ tailQ tailR` >>
@@ -433,9 +437,8 @@ Resume raw_log_topics_suffix_full_under_compose[return_cons]:
       qpat_assum `tailops = stailops` mp_tac >>
       qpat_assum `expr_type e = _` mp_tac >>
       POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
-  conj_tac >- (qexists_tac `tops` >> simp[]) >>
   conj_tac
-  >- (qexistsl_tac [`ann`,`data`,`dflt`,`env`,`n`,`pre`] >>
+  >- (qexistsl_tac [`ann`,`data`,`dflt`,`env`,`n`,`pre`,`tops`] >>
       qpat_assum `topics = _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
   `eval_exprs cx rest (mid with gas_obs := gas_explicit tailmarks u.vs_gas_readings) = (INL vs,ee)` by
     (qpat_assum `!tail. eval_exprs cx rest _ = _` (qspec_then `[]` mp_tac) >>

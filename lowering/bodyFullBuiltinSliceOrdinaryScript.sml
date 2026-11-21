@@ -346,6 +346,7 @@ Theorem slice_builtin_none_vv_full_from_runs:
               body_exprs_full_ok cx [addr])) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a (Slice n) args) es /\
     code_slice_source (Slice n) args = NONE ==>
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -695,6 +696,12 @@ Proof
      qpat_assum `!tail. bind _ _ _ = _`
        (qspec_then `[]` (mp_tac o MATCH_MP vyperStatePreservationTheory.bind_split)) >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx src) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `expr_body_pre cenv cx env start mid` by
     (drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
      disch_then (qspecl_then [`start`,`mid`] mp_tac) >> fs[]) >>
@@ -835,6 +842,12 @@ Proof
      qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
        (qspec_then `[]` (mp_tac o MATCH_MP vyperStatePreservationTheory.bind_split)) >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env start_mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (start_mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `expr_body_pre cenv cx env len start_mid` by
     (drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
      disch_then (qspecl_then [`len`,`start_mid`] mp_tac) >> fs[]) >>
@@ -1920,6 +1933,12 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
      qpat_assum `!tail. bind _ _ _ = _`
        (qspec_then `[]` (mp_tac o MATCH_MP vyperStatePreservationTheory.bind_split)) >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx src) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `expr_body_pre cenv cx env start mid` by
     (drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
      disch_then (qspecl_then [`start`,`mid`] mp_tac) >> fs[]) >>
@@ -2056,6 +2075,12 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
      qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
        (qspec_then `[]` (mp_tac o MATCH_MP vyperStatePreservationTheory.bind_split)) >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env start_mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (start_mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `expr_body_pre cenv cx env len start_mid` by
     (drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
      disch_then (qspecl_then [`len`,`start_mid`] mp_tac) >> fs[]) >>
@@ -2684,6 +2709,7 @@ Theorem slice_builtin_none_vv_full:
               body_exprs_full_ok cx [addr])) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a (Slice n) args) es /\
     code_slice_source (Slice n) args = NONE ==>
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)

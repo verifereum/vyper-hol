@@ -435,7 +435,7 @@ Theorem intcall_callee_locked_source[local]:
     s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
   lock_if_nr cx nr (is_view_mut mut) es1 = (INL (),locked) ==>
   ?env env_after.
-    env.fn_sigs = tenv.fn_sigs /\ env.bare_globals = tenv.bare_globals /\
+    env.type_defs = tenv.type_defs /\ env.fn_sigs = tenv.fn_sigs /\ env.bare_globals = tenv.bare_globals /\
     env.bare_global_assignable = tenv.bare_global_assignable /\
     env.toplevel_vtypes = tenv.toplevel_vtypes /\
     type_stmts env ret ss = SOME env_after /\
@@ -2415,6 +2415,7 @@ Theorem intcall_callee_locked_body_frag[local]:
   ~supported_stmts_expr_exists (const_name_root cx) ss /\
   intcall_entry_full (DF,lo,d) H tops ctx func caller cx tenv name es sa sb vv
     s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
+  body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
   ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
     body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss) /\
   lock_if_nr cx nr (is_view_mut mut) es1 = (INL (),locked) /\
@@ -2490,6 +2491,19 @@ Proof
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
      TRY (rpt strip_tac >> first_x_assum drule >> simp[] >> NO_TAC) >>
      (metis_tac[])) >>
+  `body_const_cells_agree [(NONE,tops)] cx env es1` by
+    (qpat_assum `body_const_cells_agree [(NONE,tops)] cx tenv es1`
+       (strip_assume_tac o REWRITE_RULE [body_const_cells_agree_def]) >>
+     simp[body_const_cells_agree_def] >> qexistsl_tac [`roots`,`art`] >>
+     simp[] >> irule constSubstStmtsTheory.const_subst_context_static >>
+     qpat_assum `const_subst_context roots cx tenv _ _ art` (irule_at Any) >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] (cx with stk updated_by CONS (NONE,name)) env locked` by
+    (irule body_const_cells_agree_stk >>
+     drule_all intcall_callee_lock_fields >> strip_tac >>
+     qpat_assum `body_const_cells_agree [(NONE,tops)] cx env es1`
+       (mp_tac o REWRITE_RULE [body_const_cells_agree_def,
+          constSubstCorrectTheory.const_cells_agree_def]) >>
+     simp[body_const_cells_agree_def, constSubstCorrectTheory.const_cells_agree_def]) >>
   drule_all intcall_callee_locked_body >> strip_tac >>
   `?bindings. supported_stmts tops bindings ss` by
     (qexists `args ++ supported_stmts_bindings T ss ++ supported_stmts_bindings F ss` >>
@@ -2522,6 +2536,7 @@ Theorem intcall_callee_locked_body_outcome[local]:
   ss_comp = subst_consts_stmts (module_consts_env tops []) ss /\
   intcall_entry_full (DF,lo,d) H tops ctx func caller cx tenv name es sa sb vv
     s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
+  body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
   ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
     body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss) /\
   (if cx.in_deploy then ?rbc. lower_vyper_deploy_unit tops policy rbc = SOME unit
@@ -3812,6 +3827,7 @@ Theorem intcall_callee_full:
        intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
          sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
          G tn) /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
     gas_invoke_entry (ctx,func) t callee entered /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
     !bb inst lbl arg_ops argv.

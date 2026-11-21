@@ -28,45 +28,10 @@ Theorem deploy_ctor_body_substitution:
 Proof
   strip_tac >>
   drule_all deploy_frame_source_start_setup >> strip_tac >>
-  drule_all deploy_ctor_constant_cells >> strip_tac >>
-  `EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) /\
-   EVERY (no_sha256_expr o SND) (module_consts_env tops [])` by
-    (Cases_on `classify_functions tops` >> PairCases_on `r` >>
-     drule_all compileVyperTheory.lower_vyper_deploy_unit_consts_guard >> simp[]) >>
-  qabbrev_tac `cx = deploy_evaluation_context tops am tx` >>
-  `cx.txn.target = tx.target /\ cx.layouts = am.layouts /\
-   ALOOKUP cx.sources tx.target = SOME [(NONE,tops)]` by
-    simp[Abbr `cx`, deploy_evaluation_context_def, initial_evaluation_context_def] >>
-  `!src. IS_SOME src ==>
-      get_source_immutables src (constant_machine_immutables am_c tx.target) =
-      get_source_immutables src imms` by simp[merge_constant_imms_imports] >>
-  `!id tv v. FLOOKUP A id = SOME (tv,v) ==>
-      FLOOKUP (get_source_immutables NONE
-        (constant_machine_immutables am_c tx.target)) id = SOME (tv,v)` by
-    simp[vyperTypeContractTheory.merge_constant_imms_def,
-         vyperTypeInitialStateTheory.get_source_immutables_set_same,
-         finite_mapTheory.FLOOKUP_FUNION] >>
-  mp_tac (Q.INST [`cx` |-> `cx`, `mods` |-> `[(NONE,tops)]`,
-     `artifact` |-> `runtime_art`, `am` |-> `am_c`, `sc` |-> `es0.scopes`,
-     `imms` |-> `imms`, `A` |-> `A`, `current_src` |-> `NONE`] checked_module_consts_subst_context) >>
-  impl_tac >- (fs[] >> metis_tac[]) >> strip_tac >>
-  `const_subst_context roots cx env_body (module_consts_env tops [])
-     [(NONE,tops)] deploy_art` by
-    (qpat_assum `check_contract T _ _ _ = _`
-       (strip_assume_tac o MATCH_MP check_contract_nonsig_maps) >>
-     qpat_assum `check_contract F _ _ _ = _`
-       (strip_assume_tac o MATCH_MP check_contract_nonsig_maps) >>
-     irule (Q.INST [`art` |-> `runtime_art`,
-       `env` |-> `artifact_env runtime_art [(NONE,tops)] NONE`, `mode` |-> `T`]
-       const_subst_context_checked_artifact) >>
-     gvs[frame_maps_def, vyperTypeContractTheory.artifact_env_def] >> metis_tac[]) >>
-  `es0.immutables = am_c.immutables` by
-    (`?scope. bind_arguments (type_env tops) args tx.args = SOME scope` by
-       fs[deploy_ctor_start_def, deploy_ctor_singleton_type_env] >>
-     pop_assum strip_assume_tac >> drule_all deploy_ctor_source_start_fields >> simp[]) >>
+  drule_all deploy_ctor_body_subst_context >> strip_tac >>
   rpt gen_tac >> irule const_subst_eval_stmts >>
   goal_assum (drule_at Any) >> qexists_tac `NoneT` >>
-  fs[const_cells_agree_def, initial_state_def]
+  fs[const_cells_agree_def]
 QED
 
 Theorem deploy_ctor_body_frag_full_plain_defaults[local]:

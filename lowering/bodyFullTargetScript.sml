@@ -49,6 +49,7 @@ Theorem body_target_sim_full:
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
     body_base_target_full_ok cx bt /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     target_pre cenv cx env bt es ==>
     target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx env bt es
@@ -81,6 +82,7 @@ Theorem body_target_place_sim_full:
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
     body_base_target_full_ok cx bt /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     target_pre cenv cx env bt es ==>
     target_place_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx env bt es

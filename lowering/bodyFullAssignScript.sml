@@ -462,6 +462,7 @@ Theorem body_assign_local_word_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (NameTarget id)) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -742,6 +743,7 @@ Theorem body_assign_local_widened_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (NameTarget id)) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -1528,6 +1530,7 @@ Theorem body_assign_toplevel_word_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -1964,6 +1967,7 @@ Theorem body_assign_attr_storage_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld)) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -2570,6 +2574,7 @@ Theorem body_assign_attr_local_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -2988,6 +2993,7 @@ Theorem body_assign_local_memory_nonempty_full[local]:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (NameTarget id)) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -3552,6 +3558,7 @@ Theorem body_assign_local_memory_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (NameTarget id)) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -3585,9 +3592,8 @@ Proof
   irule body_assign_local_memory_nonempty_full >>
   simp[] >> rpt conj_tac
   >- first_assum ACCEPT_TAC
-  >- metis_tac[]
-  >- (qexistsl_tac [`bindings`, `tops`] >> simp[] >> first_assum ACCEPT_TAC) >>
-  qexistsl_tac [`env`, `env'`, `ty`] >> simp[] >> metis_tac[]
+  >- metis_tac[] >>
+  qexistsl_tac [`bindings`, `env`, `env'`, `tops`, `ty`] >> simp[] >> metis_tac[]
 QED
 
 Theorem body_assign_bytes_header_shr_check[local]:
@@ -8151,6 +8157,7 @@ Theorem body_assign_other_empty_target_full[local]:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget t) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -8526,6 +8533,7 @@ Theorem body_assign_other_empty_immutable_full[local]:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget t) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -8889,6 +8897,7 @@ Theorem body_assign_other_immutable_frontier_bind[local]:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget t) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -12980,6 +12989,7 @@ Theorem body_assign_other_immutable_word_write_full[local]:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget t) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -13463,6 +13473,7 @@ Theorem body_assign_other_saved_target_bind[local]:
   call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget bt) e)) /\
   ~expr_can_mutate cenv (target_to_expr bt) /\ ~immutable_root cx bt /\
   body_base_target_full_ok cx bt /\ expr_sim_inv cenv cx env mid /\
+  body_const_cells_agree [(NONE,tops)] cx env mid /\
   expr_body_pre cenv cx env e es /\ runtime_consistent env cx es /\
   functions_well_typed cx /\
   gas_admissible (eval_stmt cx (Assign (BaseTarget bt) e)) (stmt_res_ok lctx) es /\
@@ -13966,6 +13977,7 @@ Theorem body_assign_other_value_rhs_bind[local]:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget t) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -14979,6 +14991,7 @@ Theorem body_assign_other_immutable_nonword_write_full[local]:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget t) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -17781,6 +17794,7 @@ Theorem body_assign_other_nonempty_target_full[local]:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget t) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -17870,6 +17884,13 @@ Proof
       (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
   drule_all immutable_rhs_physical_typed >> strip_tac >>
   drule_all type_widens_to_value_has_type >> strip_tac >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`well_typed_expr env e` by
+       qpat_assum `expr_body_pre cenv cx env e es`
+         (ACCEPT_TAC o cj 2 o REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def]) >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `(do pv <- eval_expr cx e; read_result cx pv od) _ = (INL v,mid)`
+       (irule_at Any) >> simp[]) >>
   `target_pre cenv cx env t mid` by
     (mp_tac body_assign_saved_target_pre >> simp[]) >>
   `target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -18520,6 +18541,7 @@ Theorem body_assign_nested_empty_immutable_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget t) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -18577,6 +18599,7 @@ Theorem body_assign_nested_nonempty_immutable_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget t) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -18609,6 +18632,7 @@ Theorem body_assign_other_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget t) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -18710,6 +18734,7 @@ Theorem body_assign_toplevel_bytes_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -18746,6 +18771,7 @@ Theorem body_assign_toplevel_copy_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\

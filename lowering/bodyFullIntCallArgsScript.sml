@@ -2499,6 +2499,7 @@ Theorem intcall_args_stage_full_p2_with_path[local]:
    flags dtys newops ops ws vals ptys pflags pin f P Q R.
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx tenv esi /\
     expr_sim_inv cenv cx tenv esi /\
     EVERY (\e. expr_body_pre cenv cx tenv e esi) es /\
     body_exprs_full_ok cx es /\
@@ -2795,7 +2796,7 @@ Proof
          qpat_x_assum `body_expr_full_ok cx e`
            (mp_tac o CONJUNCT1 o
              ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-         disch_then drule >> disch_then drule >> disch_then drule >> simp[]) >>
+         disch_then drule_all >> simp[]) >>
       qpat_x_assum `expr_sim_full _ _ _ _ _ _`
         (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
       disch_then (qspec_then `st0` mp_tac) >>
@@ -3106,6 +3107,16 @@ Proof
          rpt strip_tac >> gvs[] >> metis_tac[]) >>
       simp[] >>
       conj_tac >- metis_tac[listTheory.CONS_11] >>
+      `body_const_cells_agree [(NONE,tops)] cx tenv mid` by
+        (`well_typed_expr tenv e` by
+           (qpat_assum `EVERY (\arg. expr_body_pre cenv cx tenv arg esi) (e::es)` mp_tac >>
+            simp[NoAsms, exprSimHypsDefsTheory.expr_body_pre_def]) >>
+         qpat_assum `!tail. bind (eval_expr cx e) _ _ = _`
+           (qspec_then `[]` assume_tac) >>
+         `body_const_cells_agree [(NONE,tops)] cx tenv (mid with gas_obs := [])`
+           suffices_by simp[] >>
+         irule body_const_cells_agree_expr_read >>
+         goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >> simp[]) >>
       `expr_sim_inv cenv cx tenv mid` by
         (qpat_assum `!tail. bind (eval_expr cx e) _ _ = _`
            (qspec_then `[]` mp_tac) >>
@@ -3340,7 +3351,7 @@ Proof
      qpat_x_assum `body_expr_full_ok cx e`
        (mp_tac o CONJUNCT1 o
          ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then drule >> disch_then drule >> disch_then drule >> simp[]) >>
+     disch_then drule_all >> simp[]) >>
   qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
   disch_then (qspec_then `st0` mp_tac) >>
@@ -4352,6 +4363,16 @@ Proof
         (rpt strip_tac >>
          qpat_x_assum `!j. j < LENGTH (e::es) /\ _ ==> _`
            (qspec_then `SUC j` mp_tac) >> simp[]) >>
+      `body_const_cells_agree [(NONE,tops)] cx tenv mid` by
+        (`well_typed_expr tenv e` by
+           (qpat_assum `EVERY (\arg. expr_body_pre cenv cx tenv arg esi) (e::es)` mp_tac >>
+            simp[NoAsms, exprSimHypsDefsTheory.expr_body_pre_def]) >>
+         qpat_assum `!tail. eval_expr cx e _ = _`
+           (qspec_then `[]` assume_tac) >>
+         `body_const_cells_agree [(NONE,tops)] cx tenv (mid with gas_obs := [])`
+           suffices_by simp[] >>
+         irule body_const_cells_agree_expr >>
+         goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >> simp[]) >>
       `expr_sim_inv cenv cx tenv mid` by
         (qpat_assum `!tail. eval_expr cx e _ = _`
            (qspec_then `[]` mp_tac) >>
@@ -5419,6 +5440,7 @@ Theorem intcall_args_stage_full_p2:
    flags dtys newops ops ws vals ptys pflags pin f P Q R.
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx tenv esi /\
     expr_sim_inv cenv cx tenv esi /\
     EVERY (\e. expr_body_pre cenv cx tenv e esi) es /\
     body_exprs_full_ok cx es /\
@@ -5592,6 +5614,7 @@ Theorem intcall_args_stage_full:
    flags dtys newops ops ws vals ptys pflags pin f P Q R.
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx tenv esi /\
     expr_sim_inv cenv cx tenv esi /\
     EVERY (\e. expr_body_pre cenv cx tenv e esi) es /\
     body_exprs_full_ok cx es /\
@@ -8065,6 +8088,7 @@ Theorem intcall_args_full:
    es dflt es0 mut nr args ret ss rr dflts.
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
@@ -8129,6 +8153,7 @@ Theorem intcall_args_full:
             intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name
               es sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv
               es1 t G tn) /\
+         body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
          (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
          (?H. valid_horizon cx st0 H es1.storage_trace) /\
          gas_admissible (bind (intcall_rest cx name mut nr ss prev rtv) f)
@@ -8878,7 +8903,24 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[supportedExprsTheory.supported_pure_exprs_every, EVERY_MEM] >>
      metis_tac[rich_listTheory.MEM_DROP_IMP]) >>
+  `body_const_cells_agree [(NONE,tops)] cx tenv ee` by
+    (`well_typed_exprs tenv es` by
+       (rw[constSubstCorrectTheory.frame_well_typed_exprs_every, EVERY_MEM] >>
+        qpat_assum `EVERY (\e. expr_body_pre cenv cx tenv e es0) es`
+          (drule o REWRITE_RULE [EVERY_MEM]) >> simp[expr_body_pre_def]) >>
+     qpat_assum `!tail. eval_exprs cx es _ = _`
+       (qspec_then `[]` assume_tac) >>
+     `body_const_cells_agree [(NONE,tops)] cx tenv (ee with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_exprs >>
+     goal_assum (drule_at (Pat `eval_exprs _ _ _ = _`)) >> simp[]) >>
   qabbrev_tac `cxd = cx with stk updated_by CONS (NONE,name)` >>
+  `body_const_cells_agree [(NONE,tops)] cxd (tenv with current_src := NONE) ee` by
+    (simp[Abbr `cxd`] >>
+     irule body_const_cells_agree_current_src >>
+     qpat_assum `body_const_cells_agree [(NONE,tops)] cx tenv ee`
+       (mp_tac o Q.SPEC `(NONE,name)::cx.stk` o MATCH_MP body_const_cells_agree_stk) >>
+     simp[vyperContextTheory.evaluation_context_component_equality]) >>
   `!s res fin. eval_exprs cxd ds s = (res,fin) ==> fin.scopes = s.scopes` by
     (rpt strip_tac >>
      `s with scopes := s.scopes = s` by
@@ -9242,6 +9284,23 @@ Proof
       simp[dead_lo_ok_def, sourceUnitExecutionTheory.cx_dead_def,
            cenv_without_defaults_def]) >>
   map_every qx_gen_tac [`dm`,`dvs`,`ed`,`u`,`Gd`,`tnd`] >> strip_tac >>
+  `body_const_cells_agree [(NONE,tops)] cxd (tenv with current_src := NONE) ed` by
+    (`well_typed_exprs (tenv with current_src := NONE) ds` by
+       (rw[constSubstCorrectTheory.frame_well_typed_exprs_every, EVERY_MEM] >>
+        qpat_assum `EVERY (\e. expr_body_pre (cenv_without_defaults cenv name) cxd
+          (tenv with current_src := NONE) e ee) ds`
+          (drule o REWRITE_RULE [EVERY_MEM]) >> simp[expr_body_pre_def]) >>
+     `body_const_cells_agree [(NONE,tops)] cxd (tenv with current_src := NONE)
+        (ed with gas_obs := [])` suffices_by simp[] >>
+     irule body_const_cells_agree_exprs >>
+     qpat_assum `!tail. eval_exprs cxd ds _ = _`
+       (qspec_then `[]` (irule_at Any)) >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx tenv ed` by
+    (qpat_assum `body_const_cells_agree [(NONE,tops)] cxd
+        (tenv with current_src := NONE) ed`
+       (mp_tac o Q.SPEC `tenv.current_src` o MATCH_MP body_const_cells_agree_current_src) >>
+     simp[] >> disch_then (mp_tac o Q.SPEC `cx.stk` o MATCH_MP body_const_cells_agree_stk) >>
+     simp[Abbr `cxd`, vyperContextTheory.evaluation_context_component_equality]) >>
   `!inst. active_inst func inst u ==> frag_reachable ctx func s0 func inst u` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK entry,Ga,tna)`
        (qspec_then `DF (storage_trace_horizon ed.storage_trace)` assume_tac) >>
@@ -9272,6 +9331,8 @@ Proof
        (qspec_then `Error (TypeError "IntCall bind_arguments")` drule) >>
      simp[NoAsms,exprSimDefsTheory.expr_vv_res_ok_def]) >>
   rename1 `bind_arguments (get_tenv cx) args (xs ++ dvs) = SOME penv` >>
+  `body_const_cells_agree [(NONE,tops)] cx tenv (ed with scopes := [penv])`
+    by simp[] >>
   rename1 `evaluate_type (get_tenv cx) ret = SOME rtv` >>
   `env_context_consistent tenv cx` by
     (qpat_assum `env_consistent tenv cx ee`

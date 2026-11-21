@@ -187,6 +187,7 @@ val args_input = Term `
    es dflt es0 mut nr args ret ss rr dflts.
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
@@ -251,6 +252,7 @@ val args_input = Term `
             intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name
               es sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv
               es1 t G tn) /\
+         body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
          (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
          (?H. valid_horizon cx st0 H es1.storage_trace) /\
          gas_admissible (bind (intcall_rest cx name mut nr ss prev rtv) f)
@@ -291,6 +293,7 @@ val callee_input = Term `
        intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
          sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
          G tn) /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
     gas_invoke_entry (ctx,func) t callee entered /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
     !bb inst lbl arg_ops argv.
@@ -388,6 +391,7 @@ Theorem intcall_callee_premise[local]:
        intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
          sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
          G tn) /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
     (?H. valid_horizon cx st0 H es1.storage_trace) /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (nrc,nrbs,npvs) ==>
     !callee entered bb inst lbl arg_ops argv.
@@ -443,6 +447,7 @@ Theorem intcall_sim_full:
    es dflt es0 mut nr args ret ss rr dflts.
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
@@ -542,6 +547,7 @@ Theorem intcall_vv_full:
    es dflt es0 mut nr args ret ss rr dflts.
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\

@@ -929,6 +929,7 @@ Theorem compile_log_frag_full:
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Log id args) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Log id args) = SOME env' /\
@@ -1684,6 +1685,7 @@ Theorem body_log_aggregate_full:
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Log id args) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Log id args) = SOME env' /\

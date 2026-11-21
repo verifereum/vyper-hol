@@ -21,6 +21,7 @@ Theorem ec_arith_vv_from_tail_full:
     expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
     expr_type e2 = (if bt = ECAdd then a else BaseT (UintT 256)) /\
     body_exprs_full_ok cx [e1;e2] /\ body_inv tops ctx cenv cx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a bt [e1;e2]) es /\
     compile_expr cenv ty (Builtin a bt [e1;e2]) sa = (vv,sb) /\
     compile_expr cenv ty (gas_shadow_expr (Builtin a bt [e1;e2])) shadow_sa =
@@ -121,6 +122,7 @@ Theorem ec_arith_vv_from_tail_full:
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es
@@ -279,6 +281,10 @@ Resume ec_arith_vv_from_tail_full[first_success]:
      (INL v1,mid)` by
     (qpat_x_assum `!tail. _ = _` (qspec_then `[]` mp_tac) >>
      simp[vyperStateTheory.evaluation_state_component_equality]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`well_typed_expr env e1` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+     irule body_const_cells_agree_expr_read >>
+     goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >> simp[]) >>
   `expr_sim_inv cenv cx env mid` by
     (qpat_assum `bind (eval_expr cx e1) (read_result cx) _ = _`
        (mp_then (Pos last) (qspec_then `cenv` mp_tac)
@@ -416,6 +422,7 @@ Theorem ec_arith_builtin_vv_sim_full:
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es
@@ -520,6 +527,7 @@ Theorem ec_arith_builtin_sim_full:
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es /\

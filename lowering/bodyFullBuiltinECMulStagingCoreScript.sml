@@ -20,6 +20,7 @@ Theorem ecmul_staging_full_from_transfers:
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_type e2 = (if bt = ECAdd then a else BaseT (UintT 256)) /\
   body_exprs_full_ok cx [e1;e2] /\ body_inv tops ctx cenv cx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Builtin a bt [e1;e2]) es /\
   compile_expr cenv ty (Builtin a bt [e1;e2]) sa = (vv,sb) /\
   compile_expr cenv ty (gas_shadow_expr (Builtin a bt [e1;e2])) shadow_sa =

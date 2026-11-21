@@ -1,7 +1,8 @@
 (* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
 Theory externalBodyFrame
 Ancestors
-  entryDispatchProps constSubst constSubstStmtsPreserve supportedGetterProps externalRawReturnType
+  entryDispatchProps constSubst constSubstStmts constSubstStmtsPreserve
+  bodyFullPreds gasContext supportedGetterProps externalRawReturnType
   externalBodyWidths externalBodySupport memoryLocalRhsProps
   stmtSimProps stmtSimDefs exprSimDefs exprSimHypsDefs exprSimHyps
   loweringPosts
@@ -806,6 +807,41 @@ QED
    lock. expr_sim_inv's storage-variable clause (each storage variable has
    its declared module type and no hash-map info) follows from body_inv
    and the single-module fact via body_inv_storage_var_types. *)
+Theorem external_source_body_const_cells[local]:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+  check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
+  env = function_entry_env art [(NONE,tops)] NONE External args /\
+  es.immutables = am.immutables ==>
+  body_const_cells_agree [(NONE,tops)]
+    (initial_evaluation_context am.sources am.layouts tx NONE) env es
+Proof
+  strip_tac >>
+  Cases_on `classify_functions tops` >>
+  rename1 `classify_functions tops = (exts,tail)` >> PairCases_on `tail` >>
+  drule_all lower_vyper_runtime_unit_consts_guard >> strip_tac >>
+  drule source_typing_ok_consts_ready >> strip_tac >>
+  `ALOOKUP am.sources tx.target = SOME [(NONE,tops)]` by
+    fs[source_deployment_rel_def] >>
+  mp_tac (Q.INST
+    [`cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`,
+     `mods` |-> `[(NONE,tops)]`, `imms` |-> `account_immutables am tx.target`,
+     `artifact` |-> `art`, `A` |-> `A`,
+     `sc` |-> `[]`, `current_src` |-> `NONE`]
+    constSubstCorrectTheory.checked_module_consts_subst_context) >>
+  impl_tac >- gvs[initial_evaluation_context_def] >>
+  strip_tac >>
+  `cx_tops (initial_evaluation_context am.sources am.layouts tx NONE) = tops` by
+    simp[cx_tops_def, get_module_code_def, initial_evaluation_context_def,
+         ALOOKUP_def] >>
+  simp[body_const_cells_agree_def] >>
+  qexistsl [`roots`, `art`] >> conj_tac
+  >- (irule const_subst_context_static >> goal_assum (drule_at Any) >>
+      gvs[function_entry_env_def, artifact_env_def,
+          vyperTypeContractContextTheory.FOLDL_extend_local_args_static]) >>
+  fs[constSubstCorrectTheory.const_cells_agree_def, initial_state_def]
+QED
+
 Theorem external_source_body_frame_nr:
   !tops rpolicy unit am tx ret vs mut nr args fbody env es0 es_lock lbl cenv0 pos_args
    min_cds is_payable nkey ut' iv rt st cenv sa.
@@ -841,6 +877,8 @@ Theorem external_source_body_frame_nr:
       supported_stmts tops bindings (subst_consts_stmts (module_consts_env tops []) fbody) /\
       expr_sim_inv cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) env_t es_lock /\
+      body_const_cells_agree [(NONE,tops)]
+        (initial_evaluation_context am.sources am.layouts tx NONE) env_t es_lock /\
       ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
       type_stmts env_t ret (subst_consts_stmts (module_consts_env tops []) fbody) = SOME env' /\
       stmts_exprs_ok cenv (subst_consts_stmts (module_consts_env tops []) fbody) /\
@@ -863,7 +901,6 @@ Proof
     (drule_all compiled_selected_external_body_typing >>
      metis_tac[optionTheory.IS_SOME_EXISTS]) >>
   pop_assum strip_assume_tac >>
-  qpat_x_assum `env_t = function_entry_env _ _ _ _ _` kall_tac >>
   `int_calls_stmts (subst_consts_stmts (module_consts_env tops []) fbody) =
      int_calls_stmts fbody` by
     (irule (INST_TYPE [alpha |-> ``:160 word``] checked_const_substitution_int_calls) >>
@@ -873,6 +910,8 @@ Proof
   drule_all external_body_prefix_state >> strip_tac >>
   drule external_body_lock_frame >> strip_tac >>
   `es_lock.scopes = [env] /\ es_lock.immutables = am.immutables` by simp[] >>
+  drule_all external_source_body_const_cells >> strip_tac >>
+  qpat_x_assum `env_t = function_entry_env _ _ _ _ _` kall_tac >>
   `state_well_typed es_lock /\ accounts_well_typed es_lock.accounts` by
     gvs[state_well_typed_def] >>
   drule_all external_selected_env_consistent >> strip_tac >>
@@ -1072,6 +1111,8 @@ Theorem external_source_body_frame:
       supported_stmts tops bindings (subst_consts_stmts (module_consts_env tops []) fbody) /\
       expr_sim_inv cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) env_t es0 /\
+      body_const_cells_agree [(NONE,tops)]
+        (initial_evaluation_context am.sources am.layouts tx NONE) env_t es0 /\
       ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
       type_stmts env_t ret (subst_consts_stmts (module_consts_env tops []) fbody) = SOME env' /\
       stmts_exprs_ok cenv (subst_consts_stmts (module_consts_env tops []) fbody) /\
@@ -1128,5 +1169,5 @@ Theorem external_body_frame:
         (initial_evaluation_context am.sources am.layouts tx NONE)
         (int_calls_stmts (subst_consts_stmts (module_consts_env tops []) fbody))
 Proof
-  rpt strip_tac >> drule_all external_source_body_frame >> simp[]
+  rpt strip_tac >> drule_all external_source_body_frame >> simp[] >> metis_tac[]
 QED

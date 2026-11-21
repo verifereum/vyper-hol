@@ -393,6 +393,7 @@ QED
    Keep the full vv post, including aggregate ownership and exceptional exits. *)
 Theorem for_array_expr_prefix_full:
   body_iterator_full_ok cx (Array e) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre c cx env e es /\
   compile_expr c (expr_type e) e sa = (vv,sb) /\
   compile_expr c (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sb) /\
@@ -1981,6 +1982,7 @@ QED
 (* Non-slot iterator evaluation and its actual conditional length slice. *)
 Theorem for_nonslot_array_prefix_full:
   body_iterator_full_ok cx (Array e) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre c cx env e es /\
   well_typed_iterator env elem (Array e) /\ supported_iterator tops elem (Array e) n /\
   (!nid. e = TopLevelName (expr_type e) nid ==>

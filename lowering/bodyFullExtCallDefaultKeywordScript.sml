@@ -99,6 +99,7 @@ QED
 Theorem extcall_operand_materialized_full:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env e es /\
   ~is_word_type (expr_type e) /\ dt = lowered_value_type cenv e /\
   compile_expr cenv (expr_type e) e sa = (vv,sm) /\
@@ -589,6 +590,7 @@ Finalise extcall_operand_materialized_full
 Theorem extcall_kwarg_default_owned_lookup_full:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env e es /\
   ~is_word_type rt /\ ~is_word_type (expr_type e) /\
   compile_ext_call_kwarg compile_expr cenv rt EKDefault e sa = ((op,dt),sb) /\
@@ -680,6 +682,7 @@ QED
 Theorem extcall_kwarg_default_lookup_full:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
   ~is_word_type rt /\ ~is_word_type (expr_type e) /\
   compile_ext_call_kwarg compile_expr cenv rt EKDefault e sa = ((op,dt),sb) /\
@@ -739,6 +742,7 @@ QED
 Theorem extcall_kwarg_default_full:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
   ~is_word_type rt /\ ~is_word_type (expr_type e) /\
   compile_ext_call_kwarg compile_expr cenv rt EKDefault e sa = ((op,dt),sb) /\

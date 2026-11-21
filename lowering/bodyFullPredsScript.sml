@@ -15,10 +15,195 @@
  *)
 Theory bodyFullPreds
 Ancestors bodyFullShadowBodyInv
+  constSubstCorrect constSubstStmts vyperCallOutcomeFrame gasContext
   bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   vyperInterpreter vyperTypeSystem vyperState vyperAST list
 
 val _ = Parse.hide "body";
+
+Definition body_const_cells_agree_def:
+  body_const_cells_agree mods cx env es <=>
+    ?roots art.
+      const_subst_context roots cx env (module_consts_env (cx_tops cx) [])
+        mods art /\
+      const_cells_agree roots es
+End
+
+Theorem body_const_cells_agree_immutables:
+  st.immutables = st'.immutables ==>
+  (body_const_cells_agree mods cx env st <=>
+   body_const_cells_agree mods cx env st')
+Proof
+  simp[body_const_cells_agree_def, const_cells_agree_def]
+QED
+
+Theorem body_const_cells_agree_state_updates[simp]:
+  (body_const_cells_agree mods cx env (st with gas_obs := obs) =
+   body_const_cells_agree mods cx env st) /\
+  (body_const_cells_agree mods cx env (st with scopes := scopes) =
+   body_const_cells_agree mods cx env st) /\
+  (body_const_cells_agree mods cx env (st with outcomes := outcomes) =
+   body_const_cells_agree mods cx env st) /\
+  (body_const_cells_agree mods cx env (st with requests := requests) =
+   body_const_cells_agree mods cx env st)
+Proof
+  rpt conj_tac >> irule body_const_cells_agree_immutables >> simp[]
+QED
+
+Theorem body_const_cells_agree_expr:
+  body_const_cells_agree mods cx env st /\
+  (well_typed_expr env e \/ IS_SOME (type_place_expr env e)) /\
+  eval_expr cx e st = (res,st') ==>
+  body_const_cells_agree mods cx env st'
+Proof
+  rw[body_const_cells_agree_def] >>
+  metis_tac[const_subst_context_expr_frame]
+QED
+
+Theorem body_const_cells_agree_exprs:
+  body_const_cells_agree mods cx env st /\
+  well_typed_exprs env es /\ eval_exprs cx es st = (res,st') ==>
+  body_const_cells_agree mods cx env st'
+Proof
+  rw[body_const_cells_agree_def] >>
+  metis_tac[const_subst_context_exprs_frame]
+QED
+
+Theorem body_const_cells_agree_base:
+  body_const_cells_agree mods cx env st /\
+  IS_SOME (type_place_target env bt) /\
+  eval_base_place cx bt st = (res,st') ==>
+  body_const_cells_agree mods cx env st'
+Proof
+  rw[body_const_cells_agree_def] >>
+  metis_tac[const_subst_context_base_frame]
+QED
+
+Theorem body_const_cells_agree_read:
+  body_const_cells_agree mods cx env st /\
+  read_result cx pv st = (res,st') ==>
+  body_const_cells_agree mods cx env st'
+Proof
+  rw[body_const_cells_agree_def] >>
+  qexistsl_tac [`roots`, `art`] >> simp[] >>
+  irule protected_cell_frame_cells_agree >>
+  qexists_tac `st` >> simp[] >> rpt strip_tac >>
+  mp_tac (CONJUNCT1 protected_cell_frame_reads) >>
+  simp[state_rel_frame_result] >> disch_then drule >> simp[]
+QED
+
+Theorem body_const_cells_agree_expr_read:
+  body_const_cells_agree mods cx env st /\
+  (well_typed_expr env e \/ IS_SOME (type_place_expr env e)) /\
+  bind (eval_expr cx e) (read_result cx) st = (res,st') ==>
+  body_const_cells_agree mods cx env st'
+Proof
+  strip_tac >>
+  Cases_on `eval_expr cx e st` >> Cases_on `q` >> fs[bind_def] >>
+  metis_tac[body_const_cells_agree_expr, body_const_cells_agree_read]
+QED
+
+Theorem body_const_cells_agree_frame[local]:
+  body_const_cells_agree mods cx env st /\
+  (!art addr src id.
+     checked_frame_context cx mods art src id env ==>
+     protected_cell_frame addr src id st st') ==>
+  body_const_cells_agree mods cx env st'
+Proof
+  rw[body_const_cells_agree_def] >>
+  qexistsl_tac [`roots`, `art`] >> simp[] >>
+  irule protected_cell_frame_cells_agree >>
+  qexists_tac `st` >> simp[] >>
+  rpt strip_tac >>
+  qpat_assum `const_subst_context _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [const_subst_context_def]) >>
+  metis_tac[]
+QED
+
+Theorem body_const_cells_agree_target:
+  body_const_cells_agree mods cx env st /\
+  IS_SOME (type_place_target env bt) /\
+  eval_target_place cx bt st = (res,st') ==>
+  body_const_cells_agree mods cx env st'
+Proof
+  strip_tac >> irule body_const_cells_agree_frame >>
+  qexists_tac `st` >> simp[] >>
+  metis_tac[cj 8 checked_protected_cell_frame_mutual]
+QED
+
+Theorem body_const_cells_agree_assign_tuple:
+  body_const_cells_agree mods cx env st /\
+  writable_atarget env g /\ assign_tuple_targets cx g v st = (res,st') ==>
+  body_const_cells_agree mods cx env st'
+Proof
+  strip_tac >> irule body_const_cells_agree_frame >>
+  qexists_tac `st` >> simp[] >>
+  metis_tac[cj 9 checked_protected_cell_frame_mutual]
+QED
+
+Theorem body_const_cells_agree_stmt:
+  body_const_cells_agree mods cx env st /\
+  type_stmt env ret s = SOME env' /\ eval_stmt cx s st = (res,st') ==>
+  body_const_cells_agree mods cx env' st'
+Proof
+  strip_tac >>
+  `body_const_cells_agree mods cx env st'` by
+    (irule body_const_cells_agree_frame >> qexists_tac `st` >> simp[] >>
+     metis_tac[cj 1 checked_protected_cell_frame_mutual, optionTheory.IS_SOME_DEF]) >>
+  fs[body_const_cells_agree_def] >>
+  metis_tac[const_subst_context_type_stmt]
+QED
+
+Theorem body_const_cells_agree_stmts:
+  body_const_cells_agree mods cx env st /\
+  IS_SOME (type_stmts env ret ss) /\ eval_stmts cx ss st = (res,st') ==>
+  body_const_cells_agree mods cx env st'
+Proof
+  strip_tac >> irule body_const_cells_agree_frame >>
+  qexists_tac `st` >> simp[] >>
+  metis_tac[cj 2 checked_protected_cell_frame_mutual]
+QED
+
+Theorem body_const_cells_agree_iterator:
+  body_const_cells_agree mods cx env st /\
+  well_typed_iterator env ty it /\ eval_iterator cx it st = (res,st') ==>
+  body_const_cells_agree mods cx env st'
+Proof
+  strip_tac >> irule body_const_cells_agree_frame >>
+  qexists_tac `st` >> simp[] >>
+  metis_tac[cj 3 checked_protected_cell_frame_mutual]
+QED
+
+Theorem body_const_cells_agree_extend_local[simp]:
+  body_const_cells_agree mods cx (extend_local env nm ty b) st <=>
+  body_const_cells_agree mods cx env st
+Proof
+  simp[body_const_cells_agree_def] >> EQ_TAC >> strip_tac >>
+  qexistsl_tac [`roots`, `art`] >> simp[] >>
+  irule const_subst_context_static >>
+  first_assum (irule_at Any) >> simp[extend_local_def]
+QED
+
+Theorem body_const_cells_agree_stk:
+  body_const_cells_agree mods cx env st ==>
+  body_const_cells_agree mods (cx with stk := stk) env st
+Proof
+  rw[body_const_cells_agree_def, cx_tops_stk] >>
+  qexistsl_tac [`roots`, `art`] >> simp[] >>
+  irule const_subst_context_stk >> simp[] >>
+  qpat_assum `const_subst_context _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [const_subst_context_def]) >>
+  metis_tac[]
+QED
+
+Theorem body_const_cells_agree_current_src:
+  body_const_cells_agree mods cx env st ==>
+  body_const_cells_agree mods cx (env with current_src := src) st
+Proof
+  rw[body_const_cells_agree_def] >>
+  qexistsl_tac [`roots`, `art`] >> simp[] >>
+  irule const_subst_context_static >> qexists_tac `env` >> simp[]
+QED
 
 (* As bodySim's body_expr_ok, a literal array's elements are ok too. *)
 Definition body_expr_full_ok_def:
@@ -26,6 +211,7 @@ Definition body_expr_full_ok_def:
     (!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
       body_inv tops ctx cenv cx /\
       shadow_body_inv tops ctx shadow_ctx /\
+      body_const_cells_agree [(NONE,tops)] cx env es /\
       expr_body_pre cenv cx env e es ==>
       expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty e es /\
@@ -39,6 +225,7 @@ Definition body_expr_full_ok_def:
       e = Subscript ann e1 e2 /\
       body_inv tops ctx cenv cx /\
       shadow_body_inv tops ctx shadow_ctx /\
+      body_const_cells_agree [(NONE,tops)] cx env es /\
       expr_map_pre cenv cx env e es ==>
       expr_map_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty e es)) /\
@@ -80,6 +267,7 @@ Definition body_stmt_full_ok_def:
       (!target. supported_stmt_expr_exists
          (expr_abi_decode_target_root target) s ==>
          occurs_abi_decode_target target tops) /\
+      body_const_cells_agree [(NONE,tops)] cx env es /\
       expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\
@@ -103,6 +291,7 @@ Definition body_stmts_full_ok_def:
       (!target. supported_stmts_expr_exists
          (expr_abi_decode_target_root target) ss ==>
          occurs_abi_decode_target target tops) /\
+      body_const_cells_agree [(NONE,tops)] cx env es /\
       expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmts env ret_ty ss = SOME env' /\

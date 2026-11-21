@@ -22,6 +22,7 @@ Theorem compile_raise_reason_literal_frag_full:
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))) = SOME env' /\

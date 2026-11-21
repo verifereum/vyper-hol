@@ -26,6 +26,7 @@ Theorem compile_for_storage_subplace_array_frag_full:
        (expr_abi_decode_target_root target) (For id typ (Array e) n body) ==>
        occurs_abi_decode_target target tops) /\
     stmt_loop_calls_ok [(NONE,tops)] (For id typ (Array e) n body) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
@@ -74,6 +75,7 @@ Theorem compile_for_immutable_subplace_array_frag_full:
        (expr_abi_decode_target_root target) (For id typ (Array e) n body) ==>
        occurs_abi_decode_target target tops) /\
     stmt_loop_calls_ok [(NONE,tops)] (For id typ (Array e) n body) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\

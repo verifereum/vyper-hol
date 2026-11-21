@@ -410,6 +410,7 @@ Theorem for_nonslot_array_body_invoke[local]:
       (H,k,a::rs,es,eb,G,tn,s)) /\
   return_buf_sep d bc eb s /\
   storage_trace_domain cx st0 eb.storage_trace /\
+  body_const_cells_agree [(NONE,tops)] cx benv eb /\
   body_stmts_full_ok cx body /\ expr_sim_inv bc cx benv eb /\
   ce_locals_declared bc benv /\ locals_alloc_ok bc benv /\
   body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmts tops bindings body /\
@@ -2560,6 +2561,7 @@ Theorem for_nonslot_array_scoped_body_full:
     FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd) /\
     ~cx_const_name cx (src,name) /\
     vv_location vv = SOME LocCode /\ post_value_type c e = ArrayT et bd) /\
+  body_const_cells_agree [(NONE,tops)] cx benv eb /\
   body_stmts_full_ok cx body /\ expr_sim_inv bc cx benv eb /\
   ce_locals_declared bc benv /\ locals_alloc_ok bc benv /\
   body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmts tops bindings body /\
@@ -2624,7 +2626,8 @@ Theorem for_nonslot_array_scoped_body_full:
             (!name base len. local_region c es0.scopes s0 name base len ==>
               off+sz <= base \/ base+len <= off) /\
             off <= i /\ i < off+sz /\ i IN tt.t_mem ==> i IN tn0.t_mem)) /\
-        (~b ==> t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
+        (~b ==> body_const_cells_agree [(NONE,tops)] cx env ef /\
+          t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
           for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
             (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
             (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,SUC k,rs,ef,c,ef,GG,tt,t)))
@@ -2853,6 +2856,10 @@ Resume for_nonslot_array_scoped_body_full[continue_return_buffer]:
 QED
 
 Resume for_nonslot_array_scoped_body_full[continue_live_frame]:
+  `body_const_cells_agree [(NONE,tops)] cx benv ef` by
+    (irule body_const_cells_agree_stmts >>
+     goal_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env ep` by fs[Abbr `ep`] >>
   `ep.storage_trace = ef.storage_trace` by simp[Abbr `ep`] >>
   `!H. valid_horizon cx st0 H ep.storage_trace ==>
       for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
@@ -3588,6 +3595,7 @@ Theorem for_nonslot_array_round_contracts:
     (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
     (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
     (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\
+  body_const_cells_agree [(NONE,tops)] cx env es0 /\
   body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre c cx env e es0 /\
   ce_locals_declared c env /\ locals_alloc_ok c env /\
   supported_stmt tops bindings (For id fty (Array e) n loop_body) /\
@@ -3720,6 +3728,9 @@ Resume for_nonslot_array_round_contracts[capture]:
   `eval_expr cx e start = (INL rv,em)` by
     (qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `em.gas_obs` mp_tac) >>
      simp[Abbr `start`]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env em` by
+    (irule body_const_cells_agree_expr >>
+     goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >> simp[Abbr `start`]) >>
   `expr_sim_inv c cx env em` by
     (`expr_body_pre c cx env e start` by simp[Abbr `start`] >>
      drule_all_then ACCEPT_TAC bodySimStmtFactsTheory.expr_body_pre_eval_result) >>
@@ -3794,6 +3805,7 @@ Resume for_nonslot_array_round_contracts[round_packets]:
       (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,rs,es,c,es,J,tz,z)` >>
   qabbrev_tac `Inv = \H rs es J tz z.
     z.vs_current_bb = cond /\ z.vs_inst_idx = 0 /\ return_buf_sep d c es z /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     Live H (LENGTH vs - LENGTH rs) rs es J tz z` >>
   qabbrev_tac `Done = \H ee G1 tn1 t.
     stmt_lands lctx sb (INL ()) t /\ ~t.vs_halted /\ ~block_is_terminated sb /\
@@ -3876,6 +3888,9 @@ Resume for_nonslot_array_round_contracts[cons]:
   `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
     fs[storage_trace_domain_def] >>
   qabbrev_tac `k = LENGTH vs - LENGTH (a::rs)` >>
+  `body_const_cells_agree [(NONE,tops)] cx env es` by
+    (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> Inv H (a::rs) es J tz z`
+       (drule_then (mp_tac o SIMP_RULE (srw_ss()) [Abbr `Inv`])) >> simp[]) >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
        z.vs_current_bb = cond /\ z.vs_inst_idx = 0 /\
        return_buf_sep d c es z /\ Live H k (a::rs) es J tz z` by
@@ -3918,6 +3933,8 @@ Resume for_nonslot_array_round_contracts[cons_body]:
      simp[NoAsms,push_scope_with_var_def,return_def] >>
      disch_then (SUBST1_TAC o SYM) >>
      simp[NoAsms,Abbr `sc`,evaluation_state_component_equality]) >>
+  `body_const_cells_agree [(NONE,tops)] cx (extend_local env id fty F) eb` by
+    (qpat_assum `eb = _` SUBST1_TAC >> simp[]) >>
   `eb.storage_trace = es.storage_trace` by
     (qpat_assum `eb = _` SUBST1_TAC >> simp[]) >>
   `lookup_scopes id es.scopes = NONE` by

@@ -192,6 +192,7 @@ Theorem subscript_copied_bind_caller_frames:
        read_result cx raw mid = (INL saved,mid) ==> body_expr_full_ok cx idx) /\
     body_expr_full_ok cx obj /\ body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shadow_ctx /\
     subscript_reads_base cx obj idx /\ copies_subscript_base ce obj idx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre ce cx env (Subscript ann obj idx) es /\
     expr_type obj = ArrayT et bd /\ place_type ce obj = ValPT (ArrayT et bd) /\
     post_value_type ce obj = expr_type obj /\
@@ -394,6 +395,10 @@ Resume subscript_copied_bind_caller_frames[base_success]:
   `body_expr_full_ok cx idx` by
     (qpat_assum `!s raw ee saved. eval_expr _ _ _ = _ /\ read_result _ _ _ = _ ==> _`
        drule_all >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`well_typed_expr env obj` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+     irule body_const_cells_agree_expr >>
+     goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >> simp[]) >>
   `expr_body_pre ce cx env idx mid` by
     (`expr_body_pre ce cx env (Subscript ann obj idx)
          (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
@@ -599,6 +604,7 @@ Theorem subscript_copied_bind_full:
        read_result cx raw mid = (INL saved,mid) ==> body_expr_full_ok cx idx) /\
     body_expr_full_ok cx obj /\ body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shadow_ctx /\
     subscript_reads_base cx obj idx /\ copies_subscript_base ce obj idx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre ce cx env (Subscript ann obj idx) es /\
     expr_type obj = ArrayT et bd /\ place_type ce obj = ValPT (ArrayT et bd) /\
     post_value_type ce obj = expr_type obj /\

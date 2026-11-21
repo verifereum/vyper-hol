@@ -106,6 +106,7 @@ Theorem body_augassign_local_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (NameTarget id) bop e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -138,6 +139,7 @@ Theorem body_augassign_toplevel_word_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (TopLevelNameTarget nsid) bop e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -171,6 +173,7 @@ Theorem body_augassign_attr_local_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -203,6 +206,7 @@ Theorem body_augassign_attr_storage_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -236,6 +240,7 @@ Theorem body_augassign_nested_immutable_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty t bop e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -276,6 +281,7 @@ Theorem body_augassign_other_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty t bop e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -326,6 +332,7 @@ Theorem augassign_ordinary_full[local]:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty t bop e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\

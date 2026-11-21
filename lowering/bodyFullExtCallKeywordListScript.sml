@@ -73,6 +73,7 @@ QED
 Theorem extcall_keyword_head_outcome[local]:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env e es /\
   expr_type e = ext_call_kw_type rt k /\
   compile_ext_call_kwarg compile_expr cenv rt k e sa = ((op,dt),sb) /\
@@ -177,6 +178,7 @@ QED
 Theorem extcall_request_keywords_owned_outcome:
   body_exprs_full_ok cx xs /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_sim_inv cenv cx env es /\
   (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
     expr_body_pre cenv cx env e st) /\
@@ -364,6 +366,12 @@ Resume extcall_request_keywords_owned_outcome[tail]:
        (INL v, mid with gas_obs := [])` by
     (qpat_assum `!tail. bind _ _ _ = _`
        (qspec_then `[]` (ACCEPT_TAC o REWRITE_RULE [listTheory.APPEND_NIL]))) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `bind (eval_expr cx e) _ _ = (INL v,mid with gas_obs := [])`
+       (irule_at Any) >> fs[exprSimHypsDefsTheory.expr_body_pre_def]) >>
   `expr_sim_inv cenv cx env mid` by
     (`expr_body_pre cenv cx env e
         (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by

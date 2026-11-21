@@ -1498,6 +1498,7 @@ Theorem for_storage_body_invoke_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx RetQ tops bindings env id typ
       tyv v ei body env_b ret_ty bc bc1 sb0 sb1 shadow_sb0 shadow_sb1 st0 s G
       tn idx p lvo k dst len.
+    body_const_cells_agree [(NONE,tops)] cx env ei /\
     body_stmts_full_ok cx body /\ body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\
     supported_stmts tops bindings body /\
     (!target.
@@ -1645,6 +1646,8 @@ Proof
   abbrev_lambda_tac "Keep" 3 0 `lookup_var idx t = lookup_var idx s /\ _` >>
   rpt strip_tac >>
   rename1 `body_stmts_full_ok cx stmts` >>
+  `body_const_cells_agree [(NONE,tops)] cx envb eb` by
+    simp[Abbr `envb`, Abbr `eb`] >>
   qpat_x_assum `body_stmts_full_ok _ _`
     (mp_tac o REWRITE_RULE [body_stmts_full_ok_def]) >>
   disch_then drule_all >>
@@ -3764,6 +3767,7 @@ Theorem for_storage_array_body_cleanup_full:
       slot dst tyv typ bd vs len nb id env p idx lvo sd body si lctx ei v bc
       bc1 sb0 sb1 sj tops bindings ret_ty env_b k off a rs st0 s G tn exit incr
       shadow_sb0 shadow_sb1.
+    body_const_cells_agree [(NONE,tops)] cx env ei /\
     body_stmts_full_ok cx body /\ body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\
     supported_stmts tops bindings body /\
     (!target.
@@ -3905,6 +3909,7 @@ Theorem for_storage_array_body_cleanup_full:
            FEMPTY::ei.scopes,s,G,tn)
       (\H res ee G1 tn1 t.
          ee.gas_obs = [] /\ ~t.vs_halted /\
+         body_const_cells_agree [(NONE,tops)] cx env ee /\
          ?b. res = INL b /\
              (b ==>
               (\H ee GG tt u.
@@ -4048,6 +4053,7 @@ Proof
     ?sc rest b. ef.scopes = sc::rest /\
       (case raw of INL () => INL F
          | INR ex => FST (handle_loop_exception ex ef)) = INL b /\
+      body_const_cells_agree [(NONE,tops)] cx env ef /\
       (ef with scopes := rest).gas_obs = [] /\ ~u.vs_halted /\
       (b ==> Done H (ef with scopes := rest) GG tt u) /\
       (~b ==> Ready H (a::rs) (ef with scopes := rest) GG tt u))` >>
@@ -4071,6 +4077,17 @@ Resume for_storage_array_body_cleanup_full[landing]:
   disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 strip_assume_tac
     (CONJUNCTS_THEN2 assume_tac (fn th =>
       assume_tac th >> qx_choose_then `xs` assume_tac th)))) >>
+  `body_const_cells_agree [(NONE,tops)] cx env ef` by
+    (`body_const_cells_agree [(NONE,tops)] cx (extend_local env id typ F) eb` by
+       simp[Abbr `eb`] >>
+     `body_const_cells_agree [(NONE,tops)] cx (extend_local env id typ F)
+        (ef with gas_obs := [])` suffices_by simp[] >>
+     `eval_stmts cx stmts (eb with gas_obs := xs ++ []) =
+        (raw,ef with gas_obs := [])` by
+       (qpat_assum `!tail. eval_stmts _ _ (_ with gas_obs := xs ++ tail) = _`
+         (qspec_then `[]` ACCEPT_TAC)) >>
+     irule body_const_cells_agree_stmts >>
+     goal_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >> simp[]) >>
   `valid_horizon cx st0 H eb.storage_trace` by
     (qpat_assum `!tail. eval_stmts _ _ _ = _`
        (qspec_then `[]` (mp_then (Pat `f st = (res,st')`) mp_tac
@@ -5482,6 +5499,7 @@ Theorem for_storage_array_round_full:
                       off + sz <= b \/ b + sz' <= off) /\ off <= i /\
                    i < off + sz /\ i IN tn.t_mem ==>
                    i IN tn0.t_mem) c0 ee s G tn) H (a::rs) es G tn s) /\
+      body_const_cells_agree [(NONE,tops)] cx env es /\
       gas_admissible (eval_for cx tyv id body (a::rs)) ok es ==>
       gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
         (cx_tops cx) cx st0
@@ -5499,6 +5517,7 @@ Theorem for_storage_array_round_full:
            (res :bool + vyperState$exception) (ee :evaluation_state)
            (G1 :string |-> num # num) (tn1 :taint) (t :venom_state).
            ee.gas_obs = ([] :256 word list) /\ ~t.vs_halted /\
+           body_const_cells_agree [(NONE,tops)] cx env ee /\
            ?(b :bool).
              res = (INL b :bool + vyperState$exception) /\
              (b ==>
@@ -6369,6 +6388,7 @@ Theorem compile_for_storage_array_frag_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (For id typ (Array (TopLevelName (ArrayT typ bd) nid)) n body) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty
@@ -6782,6 +6802,7 @@ Proof
                `mk_ptr (Lit slot) (slot_loc tr)`, `sa`] >>
      simp[] >> gvs[]) >>
   qabbrev_tac `Inv = (\dst H rs ei G tn s.
+    body_const_cells_agree [(NONE,tops)] cx env ei /\
     InvRaw (return_buf_sep d cenv ei s) dst H rs ei G tn s)` >>
   qpat_assum `Abbrev (InvRaw = _)` (fn raw =>
     qpat_x_assum `Abbrev (Inv = _)`
@@ -6794,6 +6815,9 @@ Proof
      qpat_x_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _ /\ InvRaw T dst H vs ee G1 tn1 t`
        (qspec_then `H` (drule_then strip_assume_tac)) >>
      conj_tac >- first_assum ACCEPT_TAC >>
+     `body_const_cells_agree [(NONE,tops)] cx env ee` by
+       (irule (iffLR body_const_cells_agree_immutables) >> qexists_tac `es` >>
+        simp[Abbr `ee`]) >>
      qpat_assum `Abbrev (InvRaw = _)` (fn raw =>
        qpat_x_assum `InvRaw _ dst H vs ee G1 tn1 t`
          (strip_assume_tac o PURE_REWRITE_RULE [AND_CLAUSES] o BETA_RULE o
@@ -6822,6 +6846,7 @@ Proof
      qpat_assum `Abbrev (Inv = _)`
        (fn th => pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
      BETA_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
      rename [`vs = DROP k vs`, `MEM (StorageRoot tr r (ArrayTV elem_tv bd)) ee.storage_trace`] >>
      qexistsl [`k`,`r`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _ /\ InvRaw T dst H vs ee G1 tn1 t` kall_tac >>
@@ -6954,6 +6979,7 @@ Resume compile_for_storage_array_frag_full[round_cons]:
   irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
   qexists_tac `\H res ee G1 tn1 t.
     ee.gas_obs = [] /\ ~t.vs_halted /\
+    body_const_cells_agree [(NONE,tops)] cx env ee /\
     ?b. res = INL b /\ (b ==> Done H ee G1 tn1 t) /\
         (~b ==> Inv dst H rs ee G1 tn1 t)` >>
   BETA_TAC >>
@@ -6972,6 +6998,10 @@ Resume compile_for_storage_array_frag_full[round_cons]:
 QED
 
 Resume compile_for_storage_array_frag_full[round_outcome]:
+  `body_const_cells_agree [(NONE,tops)] cx env ei` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> Inv dst H (_::_) _ _ _ _`
+       (qspec_then `storage_trace_horizon ei.storage_trace` mp_tac) >>
+     simp[Abbr `Inv`, GSYM storage_trace_domain_def]) >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> Inv dst H (_::_) _ _ _ _` mp_tac >>
   map_every (fn q => qpat_assum q
     (fn th => pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]))

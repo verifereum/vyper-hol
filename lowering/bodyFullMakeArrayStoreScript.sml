@@ -33,6 +33,7 @@ Theorem make_array_slot_full_bundled:
                not_fresh_at csbase x) /\
         (!H. valid_horizon cx st0 H ebase.storage_trace ==>
              stmt_state_rel H ctx func cenv cx ebase sbase)) /\ body_expr_full_ok cx e /\ expr_body_pre cenv cx env e es /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     arg_type_fits (expr_type e) dty /\
     evaluate_type (get_tenv cx) dty = SOME dtv /\
     type_memory_bytes cenv dty = type_memory_size dtv /\
@@ -1394,6 +1395,7 @@ Theorem make_array_slot_full:
                not_fresh_at csbase x) /\
         (!H. valid_horizon cx st0 H ebase.storage_trace ==>
              stmt_state_rel H ctx func cenv cx ebase sbase)) /\ body_expr_full_ok cx e /\ expr_body_pre cenv cx env e es /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     arg_type_fits (expr_type e) dty /\
     evaluate_type (get_tenv cx) dty = SOME dtv /\
     type_memory_bytes cenv dty = type_memory_size dtv /\
