@@ -6434,6 +6434,10 @@ Proof
         is_dynamic (vyper_to_abi_type (type_env tops) target))` by
        gvs[body_inv_def] >>
      `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
+     `~is_extcode e` by
+       (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+        qexists_tac `cenv` >>
+        fs[stmt_exprs_ok_def,allocLimitsTheory.alloc_limits_stmt_def]) >>
      irule stmt_expr_body_pre_alloc >>
      simp[] >> conj_tac
      >- gvs[supported_stmt_expr_exists_def] >>
@@ -11137,6 +11141,10 @@ Proof
         is_dynamic (vyper_to_abi_type (type_env tops) target))` by
        gvs[body_inv_def] >>
      `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
+     `~is_extcode e` by
+       (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+        qexists_tac `cenv` >>
+        fs[stmt_exprs_ok_def,allocLimitsTheory.alloc_limits_stmt_def]) >>
      irule stmt_expr_body_pre_alloc >>
      simp[] >> conj_tac
      >- gvs[supported_stmt_expr_exists_def] >>
