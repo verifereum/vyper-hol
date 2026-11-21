@@ -56,7 +56,7 @@ Their exact premises are in the linked owners and
 
 | Stage | Actual export / owner | Contract | Owner milestone |
 |---|---|---|---|
-| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/loweringRuntimeCorrectScript.sml)) | Raw lowering + `supported_program` + `source_typing_ok` + `source_deployment_rel` + `valid_vyper_call` + `initial_venom_state_rel` + `outcomes_accounts_typed` + `DALLOCA` budget and no-wrap guards -> `source_unit_execution_correct` (a matched source exit result, or a focus witness for an exempt run or storage-invalid gas filling) | 6 |
+| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/loweringRuntimeCorrectScript.sml)) | Raw lowering + `supported_program` + `source_typing_ok` + `source_deployment_rel` + `valid_vyper_call` + `initial_venom_state_rel` + `outcomes_accounts_typed` + `DALLOCA` budget and no-wrap guards -> `source_unit_execution_correct` (a raw exit related to the source result, or a focus witness when storage is invalid for every gas tail or the source run is exempt) | 6 |
 | S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` ([source](../lowering/vyperLoweringCorrectScript.sml)) | Lowering + `check_contract` + `raw_shape_free_program` -> `o1_source_unit_ok` | 5 |
 | S3 | `loweringMemCorrect.lower_vyper_runtime_unit_memory_ok` ([source](../lowering/loweringMemCorrectScript.sml)) | Lowering + initial state + no `DALLOCA` + entry FMP floor + `__entry` lookup and entry label + memory-safe and pointer-safe entry runs at every fuel -> `raw_unit_memory_ok`, no function `fn_eom`, `fixed_region_reserved 0`, pointer discipline and taint bounds | 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` ([source](../venom/compiler/o1PipelineCorrectScript.sml)) | Actual O1 success + raw shape (`o1_source_unit_ok`, `unit_entry_no_params`, `unit_defs_reach_uses`, `unit_fmp_unsealed`) + `o1_run_state_ok` + reserved-region/EOM/FMP facts + `dead_wf D` -> an input state at which raw memory, pointer, taint and DLOAD bounds give forward simulation `ctx_sim D` and the output's `o1_lowered_inv` | 3 |
@@ -96,9 +96,10 @@ the `layouts_agree` inside `deploy_state_rel`
 (`deploy_typing_ok_supported_programs`). Compile success already excludes what
 the lowering refuses: an unfolded `sha256` in external defaults (runtime
 lowering, `external_defaults_no_sha256`), and, in both runtime and deploy
-lowering, `create_from_blueprint` calls with a literal code offset out of
-range, an allocation bound that can reach 2⁶⁴, or raw or ABI-dynamic
-constructor arguments in a unit with ABI-dynamic storage or transient state
+lowering, `create_from_blueprint` calls with a code offset folding to an
+out-of-range integer literal (`blueprint_offset_fold_ok`), an allocation bound
+that can reach 2⁶⁴, or raw or ABI-dynamic constructor arguments in a unit with
+ABI-dynamic storage or transient state or a mapping with an ABI-dynamic value
 (`blueprint_unit_raw_fmp_ok`).
 
 **Named inventory, not forced plan arithmetic:** TASK056's source ledger is
@@ -252,9 +253,11 @@ conclusion applies to unmatched calldata.
 The identity case composes the stage bounds S1b
 (`lower_vyper_runtime_unit_run_bounded`), S6b
 (`run_venom_pipeline_run_bounded`) and S7g (`codegen_gas_sufficient`). The deploy twin
-`e2e_deploy_gas_sufficient` uses the proved S1b-d `deploy_unit_run_bounded`,
-the same S6b, and the proved S7g-d `deploy_frame_gas_sufficient`. It assumes
-the runtime bytes don't start with `0xEF`. Under `deploy_storage_ok` for every
+`e2e_deploy_gas_sufficient` uses the deploy unit's fuel bound
+(`deploy_unit_fns_fuel_stable` with `run_context_uniform_fuel`),
+`run_venom_pipeline_run_bounded_raw` and the proved S7g-d
+`deploy_frame_gas_sufficient`. It assumes the runtime bytes don't start with
+`0xEF`, which `compile_vyper_runtime_not_ef` derives from compile success. Under `deploy_storage_ok` for every
 gas filling, no exempt source observation and fewer than 2⁶⁴ trace entries on
 the raised-gas run, its OutOfGas conclusion allows oversized deposited code or
 a reached `RETURNDATACOPY`;
@@ -300,7 +303,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D7 | Restrict ExtCall syntax, not reorder source evaluation | `supportedExprs`/`supportedExprForms`: effect-free operands, word arguments/returns, exact interface/count, distinct `value=`/`gas=`/`default_return_value=` operands evaluated in source order (#553); SOME code check follows return-kind policy and `skip_contract_check`. `NoneT` ExtCall was **not admitted** at Milestone 1; the current gate admits a `NoneT` external return (`supported_external_return_type`). | 6 |
 | D8 | Runtime failure requires Abort/failing frame, not anything/fuel0 | `external_call_result_rel` rejects OK/IntRet and other Errors, relates a failed external call's `RevertData` to a Revert abort, and requires terminating run; `call_result_rel_at` failure clause. TypeError is excluded by typing, not treated as source success. | 6 |
 | D9 | Exact unspecified-behaviour exemptions, not weakened source checks | `unspecified_behaviour_exempt`, `occurs_abi_decode_target` inspect function bodies for dynamic decoding. Exact decode message also admits matching return rejection in such a program; not arbitrary ReturnReject. | 6 |
-| D10 | Typing separate from plain-EVAL syntax | `source_typing_ok` contains checker acceptance, typed constant cells, machine and tx typing; `supported_program` depends on tops alone and is no longer a premise: the tops derive it from the checker acceptance and `layouts_agree` (`check_contract_supported_program`), which `source_deployment_rel` supplies for calls and `deploy_state_rel` for deployment. Partial readiness producers are not the whole premise. | 7 |
+| D10 | Typing separate from plain-EVAL syntax | `source_typing_ok` contains checker acceptance, typed constant cells, machine and tx typing; `supported_program` depends on tops alone and is no longer a premise: the tops derive it from the checker acceptance and `layouts_agree` (`check_contract_supported_program`), which `source_deployment_rel` supplies for calls and `deploy_state_rel` for deployment; for the deploy pair `deploy_typing_ok` supplies both `check_contract F` and `check_contract T` (`deploy_typing_ok_supported_programs`). Partial readiness producers are not the whole premise. | 7 |
 | D11 | Whitelist, not open-ended exclusions | `supportedProgram` combines headers/names/body predicates; 101 named fixture membership proofs. The whitelist has since been widened to what `check_contract` accepts and is derived, not assumed, by the tops; forms it newly accepts rest on narrow `GATE_ADMISSION` lemmas. No universal compile-success witness. | 6 / 7 |
 | D12 | Ten source/type corrections, not remove fixtures | Invalid EC RuntimeError; Pop length-only storage update; empty codehash zero; decimal bound-before-truncate; bytes->address/decimal/narrow-zero-tail conversions; UnsafeDiv0 zero; minimum decimal Mul; abi_encode size rule. Actual owners `vyperContext`, `vyperState`, `vyperValueOperation`, `vyperTypeSystem`; historical source checkpoint retained. | 6 comparison proof |
 | D13 | Literal endpoint range checks + allocation-budget compiler check | `stmtLowering` tests both literal endpoints; five fixture bounds corrected historically. `vyperCompiler.lowering_context_ok` checks `unit_alloca_budget < dimword(:256)`. This is not a proof that every raw access is valid. | 5 / 6 |
@@ -345,8 +348,10 @@ and is proved (4.2). Existing bridges are not trace-aware S7 proofs.
 S1 is actual `lower_vyper_runtime_unit_correct`, replacing the retired
 `vyper_to_venom_correct`. It consumes `supported_program`, `source_typing_ok`,
 source deployment, exact valid call, `initial_venom_state_rel`, typed outcome
-accounts and, for units with `DALLOCA`, allocation-budget and no-wrap guards. Outside source-exempt runs and storage-invalid gas fillings, where
-it gives a focus witness instead, the raw run must reach the source's exit result; runtime
+accounts and, for units with `DALLOCA`, allocation-budget and no-wrap guards. Unless storage is invalid for every gas tail appended to its gas marks, or
+the source run is the same for every tail and source-exempt (it gives a focus
+witness then), the raw run must reach an exit related to the source result at
+every valid storage horizon; runtime
 failure is Abort, not Error/fuel0. Success relates canonical return bytes and
 whole effects/requests. UNREACHABLE permits ExHalt; dynamic strict decoding
 has the precise D9 exemption. Proving this
@@ -458,7 +463,8 @@ remaining scoped cheats in lowering and the pipeline should be for cases
 of the same kind:
 
 - internal function calls;
-- supported calls to other contracts (creation is outside this runtime shape);
+- supported calls to other contracts, creation included (CREATE/CREATE2 are
+  inside `unit_shape_ok`; the created callee's correctness stays deferred);
 - trace-aware GAS and assembly steps;
 - ABI values of variable size, respecting the exact decoding exemption.
 
@@ -600,8 +606,12 @@ Remaining work, roughly in dependency order (all future):
 
 **Owner: Milestone 5 / vyperLoweringCorrect S2, loweringMemCorrect S3 and o1PipelineCorrect S5.**
 These producers were ADMITTED statements at Milestone 1; all three are proved now.
-The tops reach S2's shape through `lower_vyper_runtime_unit_checked_source_shape`,
-whose non-`raw_shape_free_program` cases rest on three admitted shape lemmas.
+The call tops reach S2's shape through `lower_vyper_runtime_unit_checked_source_shape`
+(successful runtime lowering and `check_contract F`), whose
+non-`raw_shape_free_program` cases rest on three admitted shape lemmas; the
+deploy tops use `deploy_unit_o1_shape_ok`, with three admitted deploy cases.
+Units with `DALLOCA` get S3's facts from
+`lower_vyper_runtime_unit_memory_ok_from_no_wrap`.
 Actual memory API is
 [unitTransformDefs](../venom/compiler/unitTransformDefsScript.sml), not the
 older compat `lowering_memory_safe` interface, which was deleted: its proof
