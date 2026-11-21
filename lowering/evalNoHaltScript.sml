@@ -12,6 +12,7 @@ Ancestors
   vyperStatePreservation vyperExprNoControl vyperCall vyperTypeCallGraph
   supportedExprTraverse supportedStmtTraverse supportedDecls supportedProgram
   bodyStorageCases vyperGetter vyperTypeContractGetter vyperTypeContractSoundness
+  vyperCreateFrame vyperCallOutcomeFrame
 Libs
   pairLib monadsyntax
 
@@ -385,6 +386,256 @@ val nh_ss = nh_base @ [lock_nh, storage_slot_nh, immutables_nh,
   conditional_result_nh, result_array_length_nh, pop_place_nh,
   append_place_nh, new_variable_nh, array_iterator_results_nh,
   eval_ext_call_nh, eval_send_nh, eval_raw_call_nh];
+
+(* A halt in a newly created account carries its scheduled deletion. *)
+Theorem finally_halt_pending[local]:
+  finally f g s = (INR HaltException, t) /\
+  (!a a'. g a <> (INR HaltException,a')) /\
+  (!a a'. g a = (INL (),a') ==> a'.pending_deletions = a.pending_deletions) ==>
+  ?a. f s = (INR HaltException,a) /\
+      t.pending_deletions = a.pending_deletions
+Proof
+  Cases_on `f s` >> Cases_on `q` >>
+  rw[finally_def, ignore_bind_halt, return_def, raise_def] >>
+  metis_tac[oneTheory.one]
+QED
+
+Theorem finally_unless_halt_exact[local]:
+  finally_unless_halt f g s = (INR HaltException,t) /\
+  (!a a'. g a <> (INR HaltException,a')) ==>
+  f s = (INR HaltException,t)
+Proof
+  Cases_on `f s` >> Cases_on `q` >>
+  simp[finally_unless_halt_def, ignore_bind_halt, return_def]
+  >- metis_tac[] >>
+  Cases_on `y` >> simp[ignore_bind_halt, raise_def] >> metis_tac[]
+QED
+
+Theorem try_handlers_halt[local]:
+  (try f handle_function s = (INR HaltException,t) <=> f s = (INR HaltException,t)) /\
+  (try g handle_loop_exception s = (INR HaltException,t) <=>
+     g s = (INR HaltException,t))
+Proof
+  conj_tac
+  >- (Cases_on `f s` >> Cases_on `q` >> simp[try_def] >>
+      Cases_on `y` >> simp[handle_function_def, return_def, raise_def]) >>
+  Cases_on `g s` >> Cases_on `q` >>
+  simp[try_def] >>
+  Cases_on `y` >> simp[handle_loop_exception_def, return_def, raise_def]
+QED
+
+Theorem cleanup_preserves_pending[local]:
+  (pop_scope s = (INL (),t) ==> t.pending_deletions = s.pending_deletions) /\
+  (pop_function prev s = (INL (),t) ==> t.pending_deletions = s.pending_deletions) /\
+  (set_scopes scopes s = (INL (),t) ==> t.pending_deletions = s.pending_deletions)
+Proof
+  Cases_on `s.scopes` >>
+  rw[pop_scope_def, pop_function_def, set_scopes_def, return_def, raise_def] >>
+  gvs[]
+QED
+
+Theorem halt_pending_transfer[local]:
+  vyperInterpreter$transfer_value src dst amount s = (INR HaltException,s') ==> F
+Proof
+  Cases_on `amount = 0 \/ src = dst` >>
+  simp[vyperInterpreterTheory.transfer_value_def, ignore_bind_halt, bind_halt,
+       return_def, state_ops_nh, checks_nh]
+QED
+
+Theorem create_operands_nh[local]:
+  eval_create_operands cx kind has_salt rof tys offset vs s = (INR HaltException,s') ==> F
+Proof
+  `!ts v size st. eval_create cx kind has_salt rof ts v size st =
+      (INR HaltException,s') ==> F` by
+    (rpt strip_tac >> drule eval_create_exception_is_error >> simp[]) >>
+  Cases_on `kind` >> simp[vyperCreateTheory.eval_create_operands_def, LET_THM, bind_halt] >>
+  rpt strip_tac >> drule check_create_blueprint_exception_is_error >> simp[]
+QED
+
+val pending_ss = nh_ss @
+  [try_handlers_halt, halt_pending_transfer, create_operands_nh,
+   raise_def];
+
+val pending_generic_tac =
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp([Once evaluate_def, COND_RATOR] @ pending_ss) >>
+  rpt strip_tac >> gvs pending_ss >>
+  TRY (first_assum (fn th => first_assum (ACCEPT_TAC o MATCH_MP th)));
+
+val apply_pending_hyp_tac =
+  first_assum (fn th => first_assum (ACCEPT_TAC o MATCH_MP th));
+
+val staged_pending_ih =
+  first_assum (fn th =>
+    drule_all_then (fn step =>
+      ACCEPT_TAC step ORELSE drule_all_then ACCEPT_TAC step) th);
+
+val cleanup_pending_tac =
+  drule finally_halt_pending >>
+  simp[state_ops_nh, cleanup_preserves_pending, ignore_bind_halt, return_def,
+       try_handlers_halt] >>
+  strip_tac >> gvs[] >>
+  TRY (drule switch_BoolV_halt >> simp pending_ss >> strip_tac >> gvs[]) >>
+  staged_pending_ih;
+
+
+Theorem internal_body_pending_cleanup[local]:
+  (!a a'. cleanup a <> (INR HaltException,a')) /\
+  finally_unless_halt
+    (finally (try (ignore_bind (eval_stmts cxf ss) (return NoneV))
+       handle_function) (pop_function prev)) cleanup s = (INR HaltException,t) ==>
+  ?u. eval_stmts cxf ss s = (INR HaltException,u) /\
+      t.pending_deletions = u.pending_deletions
+Proof
+  strip_tac >> drule_all finally_unless_halt_exact >> strip_tac >>
+  drule finally_halt_pending >>
+  simp[state_ops_nh, cleanup_preserves_pending, try_handlers_halt,
+       ignore_bind_halt, return_def] >>
+  metis_tac[cleanup_preserves_pending]
+QED
+
+Theorem internal_defaults_pending_cleanup[local]:
+  finally (ignore_bind (set_scopes sc) f) (set_scopes prev) s =
+    (INR HaltException,t) ==>
+  ?a u. set_scopes sc s = (INL (),a) /\ f a = (INR HaltException,u) /\
+        t.pending_deletions = u.pending_deletions
+Proof
+  strip_tac >> drule finally_halt_pending >>
+  simp[state_ops_nh, cleanup_preserves_pending, ignore_bind_halt] >>
+  impl_tac >- metis_tac[CONJUNCT2 (CONJUNCT2 cleanup_preserves_pending)] >>
+  strip_tac >> qexistsl_tac [`t'`, `a`] >> simp[]
+QED
+
+fun last_premise tm =
+  let val (p,q) = dest_imp (#2 (strip_forall tm)) in
+    if is_imp (#2 (strip_forall q)) then last_premise q else p
+  end;
+
+val pending_tuple_target_tac =
+  rpt strip_tac >> pop_assum mp_tac >> simp[Once evaluate_def] >>
+  Cases_on `v` >> simp[raise_def] >> CASE_TAC >> simp[raise_def] >>
+  strip_tac >> TRY staged_pending_ih;
+
+fun apply_trace_ih th =
+  let
+    val simplified = SIMP_RULE (srw_ss()) [] th
+    val body = #2 (strip_forall (concl simplified))
+  in
+    if is_imp body then
+      first_assum (mp_then (Pos hd) apply_trace_ih simplified)
+    else
+      ACCEPT_TAC simplified
+  end;
+
+Theorem eval_halt_pending[local]:
+  (!cx x s t. cx.txn.created_in_tx /\ eval_stmt cx x s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx xs s t. cx.txn.created_in_tx /\ eval_stmts cx xs s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx x s t. cx.txn.created_in_tx /\ eval_iterator cx x s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx ty id xs vs s t. cx.txn.created_in_tx /\ eval_for cx ty id xs vs s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx x s t. cx.txn.created_in_tx /\ eval_expr cx x s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx xs s t. cx.txn.created_in_tx /\ eval_exprs cx xs s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx x s t. cx.txn.created_in_tx /\ eval_base_place cx x s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx x s t. cx.txn.created_in_tx /\ eval_target_place cx x s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx x v s t. cx.txn.created_in_tx /\ assign_tuple_targets cx x v s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx xs vs s t. cx.txn.created_in_tx /\ assign_tuple_target_list cx xs vs s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions)
+Proof
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt gen_tac >>
+  (fn (g as (_,w)) =>
+    if can (find_term (same_const ``IntCall``)) w then ALL_TAC g
+    else if can (find_term (can (match_term ``assign_tuple_targets cx
+                    (TupleTarget xs) v st``))) (last_premise w)
+    then pending_tuple_target_tac g
+    else pending_generic_tac g) >>
+  TRY (drule_then strip_assume_tac switch_BoolV_halt >> gvs pending_ss) >>
+  TRY (qpat_assum `(case err of CustomError _ _ _ => _) _ = _` (K ALL_TAC) >>
+       Cases_on `err` >> PairCases_on `p` >> gvs[AllCaseEqs(), option_CASE_rator] >>
+       gvs pending_ss >> TRY apply_pending_hyp_tac) >>
+  TRY apply_pending_hyp_tac >>
+  TRY (qpat_assum `ignore_bind (update_accounts _) _ _ = (INR HaltException,_)`
+         (mp_tac) >>
+       simp[ignore_bind_halt,state_ops_nh, update_pending_deletions_def,
+            raise_def, update_accounts_def, return_def] >> strip_tac >> gvs[]) >>
+  TRY (gvs[update_pending_deletions_def,return_def] >> NO_TAC) >>
+  TRY staged_pending_ih >>
+  TRY (cleanup_pending_tac >> NO_TAC) >>
+  TRY (qpat_assum `(if broke then _ else _) = _` (K ALL_TAC) >>
+       Cases_on `broke` >> gvs pending_ss >> staged_pending_ih) >>
+  TRY (qpat_assum `(if subscript_reads_base cx x x' then _ else _) = _`
+         (K ALL_TAC) >>
+       Cases_on `subscript_reads_base cx x x'` >> gvs pending_ss >>
+       TRY staged_pending_ih) >>
+  TRY (qpat_assum `(case v of ArrayV _ => _ | _ => _) _ = _` (K ALL_TAC) >>
+       Cases_on `v` >> gvs pending_ss >> CASE_TAC >> gvs pending_ss >>
+       staged_pending_ih) >>
+  TRY (qpat_assum `(if bt = Len then _ else _) = _` (K ALL_TAC) >>
+       Cases_on `bt = Len` >> Cases_on `bt = Env MsgGas` >> gvs pending_ss >>
+       TRY (Cases_on `code_slice_source bt xs` >> gvs pending_ss >>
+         TRY (PairCases_on `x` >> gvs pending_ss)) >>
+       TRY staged_pending_ih) >>
+  TRY (qpat_x_assum `ignore_bind (update_accounts _) _ _ = (INL (),_)` mp_tac >>
+       simp[ignore_bind_def, bind_def, update_accounts_def,
+            update_pending_deletions_def, return_def] >> strip_tac >> gvs[]) >>
+  TRY (first_assum (fn th =>
+      if can (find_term (same_const ``assign_tuple_target_list``)) (concl th)
+         andalso is_eq (concl th)
+      then mp_tac th else NO_TAC) >>
+    simp[value_CASE_rator, array_value_CASE_rator, AllCaseEqs(), raise_def] >>
+    strip_tac >> gvs[] >> staged_pending_ih) >>
+  TRY (rpt strip_tac >>
+    qpat_x_assum `eval_expr cx (Call _ (IntCall _) _ _) _ = _` mp_tac >>
+    simp_tac std_ss ([Once evaluate_def] @ pending_ss) >>
+    rpt strip_tac >>
+    TRY staged_pending_ih >>
+    TRY (drule internal_defaults_pending_cleanup >> strip_tac) >>
+    TRY (drule internal_body_pending_cleanup >>
+       impl_tac >- metis_tac[CONJUNCT2 lock_nh] >> strip_tac)) >>
+  TRY (drule (CONJUNCT1 lock_nh) >> simp[]) >>
+  TRY (drule_at (Pos last) internal_body_pending_cleanup >>
+    impl_tac >- metis_tac[CONJUNCT2 lock_nh] >> strip_tac) >>
+  TRY (qpat_assum `push_function _ _ _ _ = (INL cxf,_)`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [push_function_def, return_def])) >>
+  TRY (qpat_x_assum `t.pending_deletions = u.pending_deletions` SUBST1_TAC) >>
+  TRY (qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ _ = _`
+    (K ALL_TAC) >>
+    Cases_on `(x:unit)` >> Cases_on `(x':unit)` >> Cases_on `(x'':unit)` >>
+    TRY (qpat_x_assum `cx with stk updated_by _ = cxf` (SUBST_ALL_TAC o SYM)) >>
+    TRY (qpat_x_assum `t.pending_deletions = u.pending_deletions` SUBST1_TAC) >>
+    first_assum (fn th =>
+      if is_forall (concl th)
+      then drule_all_then (ACCEPT_TAC o SIMP_RULE (srw_ss()) [])
+        (SIMP_RULE (srw_ss()) [] th)
+      else NO_TAC)) >>
+  TRY (qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ _ = _`
+    (K ALL_TAC) >>
+    rule_assum_tac (SIMP_RULE (srw_ss()) []) >>
+    TRY staged_pending_ih) >>
+  TRY (qpat_assum `assign_tuple_target_list _ _ _ _ = (INR HaltException,_)`
+    (K ALL_TAC) >> gvs[] >> metis_tac[]) >>
+  TRY (qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ _ = _`
+    (K ALL_TAC) >> first_assum (fn th =>
+      if is_forall (concl th) then apply_trace_ih th else NO_TAC)) >>
+  TRY (qpat_x_assum `cx with stk updated_by _ = cxf` (SUBST_ALL_TAC o SYM) >>
+    rule_assum_tac (SIMP_RULE (srw_ss()) []) >>
+    first_assum (fn th =>
+      if is_forall (concl th) then apply_trace_ih th else NO_TAC))
+QED
+
+Theorem eval_stmts_halt_pending_deletions:
+  eval_stmts cx ss s = (INR HaltException,t) ==>
+  cx.txn.created_in_tx ==> MEM cx.txn.target t.pending_deletions
+Proof
+  metis_tac[CONJUNCT1 (CONJUNCT2 eval_halt_pending)]
+QED
 
 Theorem guard_INL[local]:
   (type_check b m s = (INL x, t) <=> b /\ t = s) /\
