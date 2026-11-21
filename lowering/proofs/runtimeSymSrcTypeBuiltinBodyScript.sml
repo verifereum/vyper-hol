@@ -1,5 +1,6 @@
 Theory runtimeSymSrcTypeBuiltinBody
 Ancestors
+  listZipProps
   runtimeSymSrcInterfaces stackPlanTypes
   runtimeSymSrcGeneratorContracts runtimeSymSrcEmission exprCallBounds
   supportedExprTraverse supportedExprForms supportedExprs exprLowering
@@ -48,7 +49,7 @@ Proof
   irule (MP_CANON runtime_sym_abi_encode_values_to_buf) >>
   conj_tac >- metis_tac[runtime_sym_abi_encode_to_buf] >>
   qexistsl_tac [`ce`, `dst`, `ZIP (vs,tys)`, `s`, `tops`] >>
-  simp[runtime_sym_zip_fst]
+  simp[SIMP_RULE bool_ss [combinTheory.o_DEF] EVERY_FST_ZIP]
 QED
 
 Theorem runtime_sym_type_builtin_body:

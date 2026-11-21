@@ -1,6 +1,7 @@
 (* Callback-parametric expression and call-argument operand boundaries. *)
 Theory runtimeLabelExprCallbacks
 Ancestors
+  listZipProps
   runtimeLabelExprPrimitives runtimeLabelBuiltinCore runtimeLabelBuiltinSystem runtimeLabelBuiltinArithmetic
   runtimeLabelPrimitives runtimeLabelValues runtimeLabelInvariant builtinBytes context compileEnv
   emitHelper venomInst list builtinSimple builtinSystem builtinMath builtinHashing
@@ -282,12 +283,6 @@ Resume rb_compile_subscript_for[array]:
 QED
 Finalise rb_compile_subscript_for
 
-Theorem rb_every_zip_fst:
-  !xs ys P. EVERY P xs ==> EVERY (P o FST) (ZIP (xs,ys))
-Proof
-  Induct >> Cases_on `ys` >> simp[listTheory.ZIP_def]
-QED
-
 Theorem rb_ext_call_arg_value_for[local]:
   !vv. (rb_value_ok_for source_checks) vv ==> (rb_value_ok_for source_checks) (ext_call_arg_value ty vv)
 Proof
@@ -414,7 +409,7 @@ Proof
   reverse conj_tac >- simp[rb_compile_alloc_buffer_for] >>
   gen_tac >> simp[rb_buffer_ok_for_def] >> strip_tac >>
   irule rb_step_bind_for >> qexists_tac `(rb_operand_ok_for source_checks)` >> BETA_TAC >>
-  simp[rb_step_return_for, rb_compile_abi_encode_values_to_buf_for, rb_every_zip_fst]
+  simp[rb_step_return_for, rb_compile_abi_encode_values_to_buf_for, EVERY_FST_ZIP]
 QED
 
 Theorem rb_compile_create_snapshot_for[local]:
@@ -471,7 +466,7 @@ Proof
       irule (Q.INST [`P` |-> `K T`] rb_step_ignore_bind_for) >> conj_tac >- simp[rb_compile_copy_memory_dynamic_for] >>
       irule rb_bind_emit_op_for >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
       irule rb_step_bind_for >> qexists_tac `(rb_operand_ok_for source_checks)` >> BETA_TAC >>
-      reverse conj_tac >- simp[rb_compile_abi_encode_values_to_buf_for, rb_every_zip_fst] >>
+      reverse conj_tac >- simp[rb_compile_abi_encode_values_to_buf_for, EVERY_FST_ZIP] >>
       gen_tac >> strip_tac >> irule rb_bind_emit_op_for >> BETA_TAC >> simp[rb_step_return_for]) >>
   Cases >> simp[] >> strip_tac >>
   irule rb_step_bind_for >> qexists_tac `(rb_operand_ok_for source_checks)` >> BETA_TAC >>
