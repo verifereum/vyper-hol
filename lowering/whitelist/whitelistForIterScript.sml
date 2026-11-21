@@ -223,9 +223,19 @@ Proof
   disch_then drule_all >> simp[] >> metis_tac[]
 QED
 
+Theorem loop_iterator_place_in_expr_places[local]:
+  !e p. loop_iterator_place e = SOME p ==> MEM p (expr_places e)
+Proof
+  ho_match_mp_tac
+    (vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
+     SIMP_RULE (srw_ss()) []) >>
+  simp[loop_iterator_place_def, expr_places_def, AllCaseEqs(), MEM_MAP] >>
+  metis_tac[]
+QED
+
 Theorem memory_iterator_source_classify:
   !e cx es rv ee.
-    ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
+    (loop_iterator_place e = NONE ==> expr_places e = []) /\
     expr_writes_ok (\_. F) e /\
     (!tgt nid. loop_iterator_place e = SOME tgt ==>
        target_root tgt <> TopLevelNameTarget nid) /\
@@ -238,12 +248,26 @@ Proof
     (vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
      SIMP_RULE (srw_ss()) []) >>
   rpt conj_tac >> rpt gen_tac >>
-  simp[supported_expr_exists_def, loop_iterator_place_def,
-       target_root_def, expr_writes_ok_def] >>
+  simp[loop_iterator_place_def, target_root_def, expr_writes_ok_def,
+       expr_places_def, optionTheory.OPTION_MAP_EQ_NONE, MAP_EQ_NIL] >>
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def,
       type_check_def, check_def, assert_def, lift_option_type_def,
       AllCaseEqs()]
+  >~ [`conditional_result`]
+  >- (gvs[switch_BoolV_def, bind_def, raise_def, COND_RATOR, AllCaseEqs()] >>
+      rename1 `conditional_result cx selected ss = (INL rv,ee)` >>
+      rename1 `eval_expr cx arm zs = (INL selected,ss)` >>
+      `!tgt. loop_iterator_place arm <> SOME tgt` by
+        (rpt strip_tac >> drule loop_iterator_place_in_expr_places >> simp[]) >>
+      `?v. selected = Value v` by
+        (qpat_assum `!cx' es' rv' ee'. _ ==>
+              (?v. rv' = Value v) \/
+              (?id path tgt. rv' = PlaceR (MemoryPlace id path) /\
+                             loop_iterator_place arm = SOME tgt /\ _)`
+           (qspecl_then [`cx`,`zs`,`selected`,`ss`] mp_tac) >>
+         simp[]) >>
+      gvs[conditional_result_def, return_def])
   >~ [`lookup_flag_mem cx ns mid es = (INL rv,ee)`]
   >- (Cases_on `ns` >>
       gvs[lookup_flag_mem_def, option_CASE_rator,
