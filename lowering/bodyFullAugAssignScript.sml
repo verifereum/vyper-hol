@@ -300,6 +300,11 @@ Proof
   Cases_on `immutable_root cx t /\ ~(?nsid. t = TopLevelNameTarget nsid)`
   >- (drule_all bodySimTheory.body_inv_stmt_const_name_free >> strip_tac >>
       irule body_augassign_nested_immutable_full >> metis_tac[]) >>
+  `target_mutable env t` by
+    (qpat_assum `type_stmt _ _ _ = _` mp_tac >>
+     simp[NoAsms, Once type_stmt_def, AllCaseEqs()]) >>
+  `immutable_root cx t ==> ?nsid. t = TopLevelNameTarget nsid` by
+    metis_tac[] >>
   drule_all augassign_other_target_routes >>
   disch_then (DISJ_CASES_THEN STRIP_ASSUME_TAC)
   >- suspend "ordinary" >>
@@ -976,7 +981,7 @@ Resume body_augassign_local_full[use_ordinary]:
   rpt gen_tac >> strip_tac >>
   drule_then strip_assume_tac augassign_name_target_info >>
   `~immutable_root cx (NameTarget id)` by
-    metis_tac[bodyAugPlaceTargetTheory.aug_place_supported_root_not_immutable] >>
+    simp[immutable_root_def,target_root_def] >>
   irule augassign_ordinary_full >>
   qpat_assum `supported_stmt _ _ _` (irule_at Any) >>
   qpat_assum `type_stmt _ _ _ = _` (irule_at Any) >>
@@ -1004,7 +1009,7 @@ Resume body_augassign_attr_local_full[use_ordinary]:
      qpat_assum `supported_stmt _ _ _` (irule_at Any) >>
      qpat_assum `body_inv _ _ _ _` (irule_at Any) >> simp[]) >>
   `~immutable_root cx (AttributeTarget (NameTarget id) fld)` by
-    metis_tac[bodyAugPlaceTargetTheory.aug_place_supported_root_not_immutable] >>
+    simp[immutable_root_def,target_root_def] >>
   irule augassign_ordinary_full >>
   qpat_assum `supported_stmt _ _ _` (irule_at Any) >>
   qpat_assum `type_stmt _ _ _ = _` (irule_at Any) >>
@@ -1021,7 +1026,7 @@ Resume body_augassign_attr_storage_full[use_ordinary]:
      qpat_assum `supported_stmt _ _ _` (irule_at Any) >>
      qpat_assum `body_inv _ _ _ _` (irule_at Any) >> simp[]) >>
   `~immutable_root cx (AttributeTarget (TopLevelNameTarget nsid) fld)` by
-    metis_tac[bodyAugPlaceTargetTheory.aug_place_supported_root_not_immutable] >>
+    metis_tac[bodyAugPlaceTargetTheory.aug_place_storage_field_root] >>
   irule augassign_ordinary_full >>
   qpat_assum `supported_stmt _ _ _` (irule_at Any) >>
   qpat_assum `type_stmt _ _ _ = _` (irule_at Any) >>
