@@ -280,7 +280,9 @@ jobs:
   export-parity:
     # Compiles every contract of the Vyper test exports natively and compares
     # the bytes with the patched pinned Vyper's (tools/native_export_parity.py),
-    # and checks the multi-module fixtures in bytecode/linked-units.
+    # and checks the multi-module fixtures in bytecode/linked-units. The report
+    # also compares the stock pin's bytes with both, which fails nothing;
+    # export-checker.yml adds check_contract's verdicts nightly.
     if: ${{ !cancelled() && needs.export-vyper-tests.result == 'success' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     needs: export-vyper-tests
     runs-on: ubuntu-26.04-arm
@@ -327,6 +329,13 @@ jobs:
           sh bytecode/python-o1-bytecode-fixtures --install "$RUNNER_TEMP/vyper-patched" \
             --vyper-repo vyper-src
 
+      - name: Install stock pinned Vyper
+        # Its comparisons are only reported, so its failure fails nothing.
+        continue-on-error: true
+        run: |
+          sh bytecode/python-o1-bytecode-fixtures --install "$RUNNER_TEMP/vyper-stock" --stock \
+            --vyper-repo vyper-src
+
       - name: Check native bytecode parity on the linked-unit fixtures
         # Regenerates the committed oracles with the patched pin first, so a
         # stale oracle fails the job too.
@@ -340,9 +349,11 @@ jobs:
 
       - name: Check native bytecode parity on the exported contracts
         run: |
+          stock="$RUNNER_TEMP/vyper-stock/venv/bin/python"
+          if [ -x "$stock" ]; then set -- --stock-python "$stock"; fi
           PYTHONHASHSEED=0 "$RUNNER_TEMP/vyper-patched/venv/bin/python" -P -s \
             tools/native_export_parity.py tests/vyper-test-exports "$RUNNER_TEMP/export-parity" \
-            --report export-parity-report.txt
+            --report export-parity-report.txt "$@"
 
       - name: Summarize the per-contract report
         if: ${{ !cancelled() && hashFiles('export-parity-report.txt') != '' }}

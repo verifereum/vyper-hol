@@ -1,10 +1,12 @@
 name: constant-parity
 
-# Opt-in: compares the frontend's compile-time constants with the compiler's
+# Compares the frontend's compile-time constants with the compiler's
 # folded_value over the checked-in annotated-AST fixtures
-# (frontend/constant-evaluation.md). Run it from the Actions tab.
+# (frontend/constant-evaluation.md). Runs nightly on main, or from the Actions tab.
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '41 3 * * *'
 
 permissions:
   contents: read

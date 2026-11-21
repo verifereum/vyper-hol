@@ -1,9 +1,11 @@
 #!/bin/sh
 # Generate/check an independent bytecode oracle using the pinned Python Vyper.
-# With --install DIR, only install the patched pinned Vyper, as DIR/venv.
+# With --install DIR, only install the patched pinned Vyper, as DIR/venv;
+# with --stock as well, install the pinned Vyper without the patches.
 set -eu
 
 mode=check
+stock=
 vyper_repo=${VYPER_REPO:-}
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -15,18 +17,23 @@ while [ "$#" -gt 0 ]; do
       mode=install
       install_dir=$1
       ;;
+    --stock) stock=1 ;;
     --vyper-repo)
       shift
       [ "$#" -gt 0 ] || { echo "--vyper-repo requires a path" >&2; exit 2; }
       vyper_repo=$1
       ;;
     *)
-      echo "usage: $0 [--check|--update|--install DIR] --vyper-repo PATH" >&2
+      echo "usage: $0 [--check|--update|--install DIR [--stock]] --vyper-repo PATH" >&2
       exit 2
       ;;
   esac
   shift
 done
+[ -z "$stock" ] || [ "$mode" = install ] || {
+  echo "--stock goes with --install" >&2
+  exit 2
+}
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
@@ -78,7 +85,7 @@ git -c advice.detachedHead=false -C "$staged_vyper" checkout --quiet --detach "$
 # Git would abbreviate to.
 git -C "$staged_vyper" config core.abbrev 8
 # Backport upstream fixes in filename order (see README).
-(
+[ -n "$stock" ] || (
   LC_ALL=C
   export LC_ALL
   for patch in "$script_dir"/patches/*.patch; do
@@ -95,7 +102,7 @@ UV_PYTHON_INSTALL_DIR="$stage/python" \
   SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0b1 \
   uv pip install --quiet --python "$venv/bin/python" "$staged_vyper"
 if [ "$mode" = install ]; then
-  echo "installed the patched pinned Vyper in $venv"
+  echo "installed the ${stock:+un}patched pinned Vyper in $venv"
   exit 0
 fi
 

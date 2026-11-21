@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 import tempfile
 import unittest
 from pathlib import Path
+import unittest.mock
 from unittest.mock import patch
 
 import native_export_parity as nep
@@ -46,6 +48,95 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(nep.classify("REJECT a 0.1s: frontend"), ("a", "rejected", "frontend"))
         self.assertEqual(nep.classify("FAIL a 0.1s: exception: Bind"),
                          ("a", "error", "exception: Bind"))
+
+    def test_gate(self) -> None:
+        self.assertEqual(nep.gate("FAIL a 0.1s sp=T: deploy differs"), "T")
+        self.assertEqual(nep.gate("PASS a 0.1s sp=F"), "F")
+        self.assertEqual(nep.gate("REJECT a 0.1s: frontend"), "-")
+
+
+class CheckerTests(unittest.TestCase):
+    def test_check_kind(self) -> None:
+        self.assertEqual(nep.check_kind('Fail "check_contract returned NONE"'), "reject")
+        self.assertEqual(nep.check_kind('Fail "check_contract returned if x then SOME a else NONE"'),
+                         "undecided")
+        self.assertEqual(nep.check_kind('frontend: Fail "vyperCheckContractFrontendLib: rejected"'),
+                         "frontend")
+        self.assertEqual(nep.check_kind("HOL_ERR"), "error")
+
+    def test_check_contracts_reads_the_checker_output(self) -> None:
+        out = ("CHECKED /w/a.json\n"
+               "CHECKER-REJECT /w/b.json: Fail \"check_contract returned NONE\"\n"
+               "CHECKER-REJECT /w/c.json: frontend: JSONError\n")
+        done = unittest.mock.Mock(stdout=out, stderr="", returncode=0)
+        with tempfile.TemporaryDirectory() as d, patch.object(nep.subprocess, "run", return_value=done):
+            self.assertEqual(nep.check_contracts(Path(d), ["a", "b", "c"]),
+                             {"a": "accept", "b": "reject", "c": "frontend"})
+            with self.assertRaises(SystemExit):
+                nep.check_contracts(Path(d), ["a", "b", "c", "d"])
+            done.returncode = 1
+            with self.assertRaises(SystemExit):
+                nep.check_contracts(Path(d), ["a", "b", "c"])
+
+    def test_write_fixture_drops_an_earlier_runs_files(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "x.hex").write_text("deploy=60\nruntime=00\n")
+            with patch.object(nep, "compile_contract", side_effect=ImportError("boom")):
+                with self.assertRaises(ImportError):
+                    nep.write_fixture(nep.Contract("x", "t::x", "y: uint256"), Path(d))
+            self.assertFalse((Path(d) / "x.hex").exists())
+
+
+class BytesTests(unittest.TestCase):
+    def test_sameness(self) -> None:
+        a = {"deploy": "60", "runtime": "00"}
+        self.assertEqual(nep.sameness(a, dict(a)), "same")
+        self.assertEqual(nep.sameness(a, {"deploy": "61", "runtime": "00"}), "deploy")
+        self.assertEqual(nep.sameness(a, {"deploy": "60", "runtime": "01"}), "runtime")
+        self.assertEqual(nep.sameness(a, {"deploy": "61", "runtime": "01"}), "both")
+        self.assertEqual(nep.sameness(a, None), "n/a")
+
+    def test_code(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "a.hex"
+            self.assertIsNone(nep.code(path))
+            path.write_text("deploy=60\nruntime=00\n")
+            self.assertEqual(nep.code(path), {"deploy": "60", "runtime": "00"})
+
+
+class ReportTests(unittest.TestCase):
+    def verdicts(self) -> list:
+        same = {f"{a}/{b}": "same" for a, b in nep.PAIRS}
+        return [
+            nep.Verdict(nep.Contract("a", "t::a", ""), "match", "", "T", "accept", same),
+            nep.Verdict(nep.Contract("b", "t::b", ""), "outside", "deploy differs", "F", "reject",
+                        same | {"patched/HOL": "deploy", "stock/HOL": "deploy"}),
+            nep.Verdict(nep.Contract("c", "t::c", ""), "vyper-error", "StructureException: x")]
+
+    def test_totals_and_lines(self) -> None:
+        text = nep.report(self.verdicts(), Counter())
+        self.assertIn("supported_program: 1 sp=T, 1 sp=F, 1 not reached\n", text)
+        self.assertIn("check_contract: 1 accept, 1 reject, 0 undecided, 0 frontend, 0 error, "
+                      "1 not checked\n", text)
+        self.assertIn("patched vs HOL bytes: 1 same, 1 deploy, 0 runtime, 0 both, 1 n/a\n", text)
+        self.assertIn("outside     b sp=F chk=reject stock/patched=same patched/HOL=deploy "
+                      "stock/HOL=deploy t::b: deploy differs\n", text)
+        self.assertIn("vyper-error c sp=- chk=- t::c: StructureException: x\n", text)
+
+    def test_cross_table(self) -> None:
+        self.assertEqual(nep.cross_table(self.verdicts())[1:], [
+            "             vyper-error     outside       match",
+            "accept                 0           0           1",
+            "reject                 0           1           0",
+            "not checked            1           0           0"])
+
+    def test_without_the_checker(self) -> None:
+        verdicts = self.verdicts()
+        for v in verdicts:
+            v.checker = "-"
+        text = nep.report(verdicts, Counter())
+        self.assertNotIn("check_contract", text)
+        self.assertIn("match       a sp=T stock/patched=same", text)
 
 
 class KnownTests(unittest.TestCase):
