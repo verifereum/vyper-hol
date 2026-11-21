@@ -78,6 +78,8 @@ Theorem prefix_entry_register_alloc_actual_mode:
  alloca_inv a /\ alloca_frontier_inv_from k ctx func site a /\
  a.vs_alloca_next = initial.vs_alloca_next+n /\ a.vs_alloca_next < dimword (:256) /\
  allocas_from lo a /\ lo <= a.vs_alloca_next /\
+ (ctx_has_dalloca ctx ==> allocas_below_fmp a /\
+   a.vs_alloca_next + pending_alloca_size func a <= w2n a.vs_initial_fmp) /\
  ~a.vs_halted /\ a.vs_current_bb = sa.cs_current_bb /\
  a.vs_inst_idx = LENGTH sa.cs_current_insts /\ abi_decode_sim ctx func initial a /\
  a.vs_code = initial.vs_code /\ a.vs_outcomes = initial.vs_outcomes /\
@@ -91,6 +93,44 @@ Theorem prefix_entry_register_alloc_actual_mode:
 Proof
  strip_tac >> drule_all prefix_entry_register_alloc_actual >>
  disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
+ `(ctx_has_dalloca ctx ==> allocas_below_fmp a /\
+   a.vs_alloca_next + pending_alloca_size func a <= w2n a.vs_initial_fmp)` by
+   (strip_tac >>
+    drule_all prefix_register_alloc_layout >> strip_tac >>
+    qabbrev_tac `i = mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+      [STRING #"%" (toString st.cs_next_var)]` >>
+    `MEM i (fn_insts func)` by
+      (irule lookup_block_fn_insts >>
+       qexistsl [`bb`,`initial.vs_current_bb`] >> asm_rewrite_tac[] >>
+       qpat_assum `get_instruction bb _ = SOME _` mp_tac >>
+       simp_tac bool_ss [Abbr `i`,get_instruction_def,AllCaseEqs(),optionTheory.SOME_11,optionTheory.NOT_NONE_SOME] >>
+       strip_tac >> pure_rewrite_tac[listTheory.MEM_EL] >>
+       qexists_tac `initial.vs_inst_idx` >> asm_rewrite_tac[]) >>
+    qabbrev_tac `raw = update_var (STRING #"%" (toString st.cs_next_var))
+      (n2w initial.vs_alloca_next)
+      (initial with <|vs_allocas := initial.vs_allocas |+
+        (st.cs_next_id,(initial.vs_alloca_next,n)); vs_alloca_next := initial.vs_alloca_next+n|>)` >>
+    `exec_alloca i initial (n2w n:bytes32) = OK raw` by
+      simp[Abbr `i`,Abbr `raw`,exec_alloca_def,mk_inst_def,wordsTheory.w2n_n2w,ADD_COMM] >>
+    `raw.vs_alloca_next + pending_alloca_size func raw <=
+     initial.vs_alloca_next + pending_alloca_size func initial` by
+      (irule exec_alloca_static_charge >> qexistsl [`i`,`n2w n:bytes32`] >>
+       simp[Abbr `i`]) >>
+    `a.vs_alloca_next + pending_alloca_size func a =
+      raw.vs_alloca_next + pending_alloca_size func raw` by
+      simp[Abbr `raw`,update_var_def,pending_alloca_size_def] >>
+    `a.vs_initial_fmp = initial.vs_initial_fmp` by simp[Abbr `raw`,update_var_def] >>
+    `a.vs_alloca_next + pending_alloca_size func a <= w2n a.vs_initial_fmp` by
+      (qpat_assum `ctx_has_dalloca ctx ==> _ /\ _`
+         (fn room => qpat_assum `ctx_has_dalloca ctx`
+           (mp_tac o CONJUNCT2 o MATCH_MP room)) >>
+       qpat_assum `raw.vs_alloca_next + _ <= _` mp_tac >> asm_rewrite_tac[] >> decide_tac) >>
+    conj_tac >-
+      (`allocas_below_fmp initial` by simp[] >>
+       `a.vs_alloca_next <= w2n a.vs_initial_fmp` by decide_tac >>
+       fs[Abbr `raw`,allocas_below_fmp_def,update_var_def,FLOOKUP_UPDATE] >>
+       rpt strip_tac >> Cases_on `aid = st.cs_next_id` >> gvs[] >> res_tac) >>
+    first_assum ACCEPT_TAC) >>
  qexistsl [`a`,`H`,`q`] >> asm_rewrite_tac[] >>
  conj_tac >-
    (strip_tac >> qx_gen_tac `D'` >> gen_tac >>
