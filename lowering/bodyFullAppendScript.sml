@@ -4492,3 +4492,30 @@ Theorem body_append_local_nonword_frag_full:
 Proof
   cheat
 QED
+
+(* GATE_ADMISSION: missing case, subscript Append; owner: log lane *)
+Theorem body_append_nested_subscript_frag_full:
+  !cx base key e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
+    env env' ret_ty lctx RetQ es elem cap.
+  (!s p t. eval_target_place cx (SubscriptTarget base key) s = (INL p,t) ==>
+     body_expr_full_ok cx e) /\
+  body_base_target_full_ok cx (SubscriptTarget base key) /\
+  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  supported_stmt tops bindings (Append (SubscriptTarget base key) e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (Append (SubscriptTarget base key) e) ==> occurs_abi_decode_target target tops) /\
+  expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+  locals_alloc_ok cenv env /\
+  type_stmt env ret_ty (Append (SubscriptTarget base key) e) = SOME env' /\
+  type_place_target env (SubscriptTarget base key) = SOME (Type (ArrayT elem (Dynamic cap))) /\
+  stmt_exprs_ok cenv (Append (SubscriptTarget base key) e) /\
+  call_evaluation_safe cx (int_calls_stmt (Append (SubscriptTarget base key) e)) /\
+  frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ cenv ret_ty ==>
+  stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cx lctx RetQ cenv
+    (stmt_env cenv lctx ret_ty (Append (SubscriptTarget base key) e))
+    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (SubscriptTarget base key) e)))
+    (eval_stmt cx (Append (SubscriptTarget base key) e)) es
+Proof
+  cheat
+QED
