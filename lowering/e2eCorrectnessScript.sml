@@ -976,7 +976,7 @@ Proof
   fs[raw_reachable_package_iff, codegen_reachability_package_def] >> metis_tac[]
 QED
 
-Triviality vyper_call_at_marks_by_entry:
+Theorem vyper_call_correct_at_marks_own:
   !fin policy tops deploy_bc runtime_bc rpolicy unit out prog prog' cp
    am tx txp ret es vs0 fmp vs marks.
     fin IN accepted_finalizers /\
@@ -1263,71 +1263,7 @@ Proof
           initial_evaluation_context_def] >> metis_tac[]) >> gvs[]
 QED
 
-Theorem vyper_call_correct_at_marks_own:
-  !fin policy tops deploy_bc runtime_bc rpolicy unit out prog prog' cp
-   am tx txp ret es vs0 fmp vs marks.
-    fin IN accepted_finalizers /\
-    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\
-    source_typing_ok tops am txp /\
-    call_state_rel tops (assemble prog') am tx es /\
-    LENGTH (call_trace es) < 2 ** 64 /\
-    resolve_o1_policy policy = SOME rpolicy /\
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
-    codegen_assembly rpolicy out.po_unit = SOME prog /\
-    generate_context_plan out.po_unit.cu_context = SOME cp /\
-    fin rpolicy prog = SOME prog' /\
-    vs0 = opt_entry_state_own prog prog' cp es /\
-    txp = tx with code := vs0.vs_code /\
-    w2n vs0.vs_initial_fmp <= w2n fmp /\
-    w2n fmp < 2 ** 254 /\
-    unit_alloca_budget unit.cu_context +
-      32 * ctx_dload_count unit.cu_context <= w2n fmp /\
-    external_return_type tops tx.function_name = ret /\
-    raw_variant fmp vs vs0 /\
-    (!H:(bool # bytes32 # type_value) list # num list.
-       (?fr. terminates (run_context fr unit.cu_context vs)) /\
-       raw_unit_memory_ok unit.cu_context vs /\
-       ptr_discipline 0 unit.cu_context vs /\
-       taint_within
-         (cx_dead H (initial_evaluation_context am.sources am.layouts txp NONE))
-         unit.cu_context vs /\
-       mem_inv dload_offset_ok unit.cu_context vs /\
-       mem_inv dload_headroom_ok unit.cu_context vs /\
-       mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
-         s.vs_code = vs.vs_code /\ s.vs_data_section = vs.vs_data_section)
-         unit.cu_context vs ==>
-       ctx_sim
-         (cx_dead H (initial_evaluation_context am.sources am.layouts txp NONE))
-         unit.cu_context out.po_unit.cu_context vs
-         vs0 /\
-       (fin = asm_opt_finalizer ==>
-          code_end_offset_ok (\ctx fn inst s. raw_reachable vs0 ctx fn inst s /\
-                              ~in_static_abort_prefix fn s) out.po_unit.cu_context) /\
-       ((o1_lowered_inv out.po_unit.cu_context vs0 /\
-         (fin = asm_opt_finalizer ==>
-            code_end_offset_ok (raw_reachable vs0) out.po_unit.cu_context)) \/
-        ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
-           mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
-                     lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
-             out.po_unit.cu_context vs0) /\
-         !fuel. terminates (run_context fuel unit.cu_context vs) ==>
-                ?u. run_context fuel unit.cu_context vs = Abort ExHalt_abort u))) /\
-    source_unit_execution_correct_at marks tops ret am txp unit vs
-    ==>
-    ?r es'.
-      run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/
-       !tail.
-         call_storage_ok am txp (MAP SND (call_trace es))
-           (gas_explicit marks vs.vs_gas_readings ++ tail) ==>
-         call_result_rel_at (gas_explicit marks vs.vs_gas_readings ++ tail)
-           tops am txp es r es')
-Proof
-  mp_tac vyper_call_at_marks_by_entry >>
-  simp_tac bool_ss [COND_CLAUSES, NOT_CLAUSES, AND_CLAUSES, IMP_CLAUSES]
-QED
+
 
 Theorem call_certificate_raw_entry_boundary:
   lower_vyper_runtime_unit tops rp = SOME unit /\
