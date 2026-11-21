@@ -36,7 +36,7 @@ Ancestors
   emitHelper exprLowering stmtLowering moduleLowering vyperCompiler
   compileVyper constSubst vyperGetter abiEncoder supportedProgram supportedNames
   supportedStmtTraverse supportedExprTraverse supportedTargets unitShapeDefs venomInst vyperAST
-  ptrOkCheck ptrDiscipline pointerConfinedProps pred_set
+  ptrOkCheck ptrDiscipline pointerConfinedProps concretizeAnalysisRoots pred_set
 
 (* ===== Side conditions ===== *)
 
@@ -16087,14 +16087,7 @@ Proof
   `inst_output inst = SOME x` by
     gvs[listTheory.LENGTH_EQ_NUM_compute, inst_output_def] >>
   `x IN ptr_roots P fn` by (simp[ptr_roots_def] >> metis_tac[]) >>
-  `FINITE (ptr_roots P fn)` by
-    (POP_ASSUM_LIST (K ALL_TAC) >> irule SUBSET_FINITE >>
-     qexists_tac `set (FLAT (MAP (\i. i.inst_outputs) (fn_insts fn)))` >>
-     simp[SUBSET_DEF, ptr_roots_def, pointerConfinedDefsTheory.alloca_roots_def,
-          MEM_FLAT, MEM_MAP, PULL_EXISTS] >> rpt strip_tac >>
-     rename1 `inst_output root = SOME _` >>
-     qexists_tac `root` >> simp[] >> gvs[inst_output_def, AllCaseEqs()]) >>
-  `x IN fn_pv P fn` by metis_tac[fn_pv_def, roots_in_pointer_derived_vars] >>
+  `x IN fn_pv P fn` by metis_tac[fn_pv_def, roots_in_pointer_derived_vars, ptr_roots_finite] >>
   simp[gas_var_def, retpc_var_def] >>
   metis_tac[pointer_copy_phi_var_excluded, MEM]
 QED

@@ -154,18 +154,6 @@ Proof
   Cases_on `call_ty` >> simp_tac bool_ss [call_type_case_def] >> base_plain_emit_tac
 QED
 
-Theorem compile_select_base_shape_widen_mode:
-  !internal LP R c t e. shape_mode_stable static R ==>
-    shape_base_mode_step static internal LP
-      (\st. R st /\ plain_operand st c /\ plain_operand st t /\ plain_operand st e)
-      (builtinSimple$compile_select c t e)
-      (\z st. R st /\ plain_operand st z)
-Proof
-  rpt strip_tac >> irule shape_base_step_static_imp_mode >>
-  irule compile_select_base_shape_widen >>
-  drule shape_mode_stable_imp_static >> simp[]
-QED
-
 Theorem compile_raw_call_finish_base_shape_widen_mode:
   !to_op data_ptr data_len gas_op value_op call_ty max_outsize out_val out_ptr internal.
     shape_base_mode_step static internal compiler_label

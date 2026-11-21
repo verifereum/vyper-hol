@@ -15,18 +15,13 @@ Definition expr_raw_shape_root_def:
 End
 
 Definition expr_raw_shape_root_mode_def:
-  expr_raw_shape_root_mode static e <=>
-    (static /\ ((?ty flags es d. e = Call ty (RawCallCalldataTarget flags) es d) \/
-    (?ty salted rof order es d.
-       e = Call ty (CreateTarget CreateCopyOf salted rof order) es d) \/
-    (?ty blueprint salted rof order es d.
-       e = Call ty (CreateTarget (CreateFromBlueprint blueprint) salted rof order) es d)))
+  expr_raw_shape_root_mode static e <=> static /\ expr_raw_shape_root e
 End
 
 Theorem expr_raw_shape_root_mode_static:
   expr_raw_shape_root_mode T = expr_raw_shape_root
 Proof
-  simp[FUN_EQ_THM, pairTheory.FORALL_PROD, expr_raw_shape_root_mode_def, expr_raw_shape_root_def]
+  simp[FUN_EQ_THM, expr_raw_shape_root_mode_def]
 QED
 
 Definition raw_shape_free_program_def:
@@ -62,7 +57,7 @@ Theorem constant_expr_raw_shape_mode:
     ~supported_fields_exists (expr_raw_shape_root_mode static) fs)
 Proof
   ho_match_mp_tac const_local_refs_ind >>
-  simp[constant_expr_def, supported_expr_exists_def, expr_raw_shape_root_mode_def] >>
+  simp[constant_expr_def, supported_expr_exists_def, expr_raw_shape_root_mode_def, expr_raw_shape_root_def] >>
   rpt strip_tac >> gvs[constant_builtin_def, GSYM EVERY_NOT_EXISTS,
     combinTheory.o_DEF, SF ETA_ss] >>
   gvs[EXISTS_MEM, EVERY_MEM] >> res_tac
@@ -142,7 +137,7 @@ Proof
   ho_match_mp_tac well_typed_expr_ind >> rpt conj_tac >> rpt gen_tac >>
   rpt strip_tac >>
   gvs[well_typed_expr_def, supported_expr_exists_def, expr_shape_root_mode_def,
-      expr_raw_shape_root_mode_def, AllCaseEqs()] >>
+      expr_raw_shape_root_mode_def, expr_raw_shape_root_def, AllCaseEqs()] >>
   rpt (qpat_x_assum `_ \/ _` strip_assume_tac) >>
   res_tac >> imp_res_tac well_typed_builtin_app_arity >>
   imp_res_tac well_typed_type_builtin_args_arity >> gvs[]
