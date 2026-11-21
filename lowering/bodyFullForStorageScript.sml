@@ -44,7 +44,7 @@ Ancestors exprSimSubscriptArrayLiveStorageSuffix[qualified,ignore_grammar] exprP
   bodyPtrEnvBuiltinsAllocation storageNormalizationAllocPtr
   bodyFullHashKeccakFixed stmtSimDeclPath exprSimOperands allocaSiteResource
   bodyFullForArray allocationPtr loweringHalt
-  bodyFullForHandlers haltExitProj gasOutcomeFull vyperStorageFootprint
+  bodyFullForHandlers forBodyLandOutcome haltExitProj gasOutcomeFull vyperStorageFootprint
   gasOutcomeInitialObsPtr[qualified] gasStorage[qualified]
   bodyFullIfExpReach[qualified,ignore_grammar]
   stmtSimForParts[qualified] vyperInterpreter[qualified] gasContext[qualified] fragGasCopyLoop augAssignPtrScalarSafety augAssignPtrScalarCertificate
@@ -610,6 +610,214 @@ fun abbrev_lambda_tac name arity existentials =
 
 (* Exhausted captured storage iterator: the only instructions are scalar EQ
    and the taken exit branch. The frame stays anchored at the original entry. *)
+(* The exhausted guard only needs the saved counter/length equality and the
+   exterior frame; it need not know how the iterator obtained either value. *)
+Theorem for_storage_array_nil_core:
+  !DF lo d ctx func cx lctx c0 e0 sa0 sb s0 G0 tn0 st0 explicit PG dv eid
+    exit blabel bb cond idx lvo es s G tn len.
+    local_ptrs_reserved c0 sa0 /\
+    (!x sz. c0.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x) /\
+    (!x sz. c0.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x) /\
+    (!x. not_fresh_at sa0 x ==> x <> dv) /\
+    sa0.cs_next_var <= sb.cs_next_var /\ sb.cs_current_bb = exit /\
+    sb.cs_current_insts = [] /\ ~block_is_terminated sb /\
+    lookup_block cond func.fn_blocks = SOME bb /\
+    get_instruction bb 0 = SOME (mk_inst eid EQ [Var idx; lvo] [dv]) /\
+    get_instruction bb 1 =
+      SOME (mk_inst (eid + 1) JNZ [Var dv; Label exit; Label blabel] []) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+      lookup_var idx s = SOME (n2w len) /\ FLOOKUP G idx = NONE /\
+      op_taint tn (Var idx) = {} /\ eval_operand lvo s = SOME (n2w len) /\
+      op_taint tn lvo = {} /\ op_prov G lvo = NONE /\
+      cenv_top_ext c0 c0 es.scopes /\ stmt_state_rel H ctx func c0 cx es s /\
+      storage_well_formed_on cx es (FST H) /\
+      ghost_inv_at (DF H) lo d c0 cx es G tn s /\
+      return_buf_frame d c0 sa0 s /\ return_buf_sep d c0 es s /\
+      (\c ee s G tn.
+        alloca_history func s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+        s0.vs_alloca_next <= s.vs_alloca_next /\
+        (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==>
+               lookup_var x s = SOME w) /\
+        (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
+        (!x. not_fresh_at sa0 x ==> FLOOKUP G x = FLOOKUP G0 x /\
+             op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+        alloca_frame c0 e0 sa0 s0 c ee s /\
+        !aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\
+          aid < sa0.cs_next_id /\
+          (!name b sz'. local_region c0 e0.scopes s0 name b sz' ==>
+            off + sz <= b \/ b + sz' <= off) /\ off <= i /\
+          i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem) c0 es s G tn) ==>
+    ?t G1 tn1. !H.
+      valid_horizon cx st0 H es.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
+        (OK t,G1,tn1) /\
+      (\H ee G tn t.
+         ?c. stmt_lands lctx sb (INL ()) t /\ ~t.vs_halted /\
+             ~block_is_terminated sb /\ c = c0 /\
+             cenv_top_ext c0 c ee.scopes /\ stmt_state_rel H ctx func c cx ee t /\
+             storage_well_formed_on cx ee (FST H) /\
+             return_buf_frame d c sb t /\ return_buf_sep d c ee t /\
+             ghost_inv_at (DF H) lo d c cx ee G tn t /\
+             (\c ee s G tn.
+               alloca_history func s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+               s0.vs_alloca_next <= s.vs_alloca_next /\
+               (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==>
+                      lookup_var x s = SOME w) /\
+               (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
+               (!x. not_fresh_at sa0 x ==> FLOOKUP G x = FLOOKUP G0 x /\
+                    op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+               alloca_frame c0 e0 sa0 s0 c ee s /\
+               !aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\
+                 aid < sa0.cs_next_id /\
+                 (!name b sz'. local_region c0 e0.scopes s0 name b sz' ==>
+                   off + sz <= b \/ b + sz' <= off) /\ off <= i /\
+                 i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem) c ee t G tn)
+        H (es with gas_obs := []) G1 tn1 t
+Proof
+  rpt gen_tac >>
+  abbrev_lambda_tac "Fr" 5 0 `alloca_history func s /\ _` >>
+  abbrev_lambda_tac "Done" 5 1 `stmt_lands lctx sb (INL ()) t /\ _` >>
+  rpt strip_tac >>
+  qabbrev_tac `i = mk_inst eid EQ [Var idx;lvo] [dv]` >>
+  qabbrev_tac `u = update_var dv 1w s` >>
+  qabbrev_tac `G1 = step_prov PG G i u` >>
+  qabbrev_tac `tn1 = step_taint i s u tn` >>
+  qexistsl [`jump_to exit u`, `G1`, `tn1`] >>
+  gen_tac >> disch_tac >>
+  qpat_assum `!H. valid_horizon _ _ _ _ ==> _` drule >> BETA_TAC >> strip_tac >>
+  `Fr c0 es s G tn` by simp[Abbr `Fr`] >>
+  `allocas_from lo s` by
+    (qpat_assum `ghost_inv_at _ _ _ _ _ _ _ _ _`
+      (mp_tac o REWRITE_RULE [ghost_inv_at_def]) >> simp[]) >>
+  `not_local_ptr c0 es.scopes dv` by
+    (simp[not_local_ptr_def] >> metis_tac[local_ptrs_reserved_def]) >>
+  `tn1 = tn with t_var := tn.t_var |+ (dv,{})` by
+    simp[Abbr `tn1`, Abbr `i`, Abbr `u`, membership_scalar_ghost_frame] >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by
+    (qpat_x_assum `Fr c0 es s G tn` mp_tac >> simp[NoAsms, Abbr `Fr`]) >>
+  conj_tac >- suspend "nil_path" >>
+  suspend "nil_post"
+QED
+
+Resume for_storage_array_nil_core[nil_path]:
+  `step_inst_base i s = OK u` by
+    (gvs[Abbr `i`, Abbr `u`, step_inst_base_opcode_eqs,
+          exec_pure2_def, eval_operand_def, bool_to_word_def]) >>
+  `ptr_inst_ok (DF H) lo 0 ctx func G tn i s` by
+    suspend "nil_compare_checks" >>
+  `inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+   i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode` by
+    simp[Abbr `i`, mk_inst_def, is_terminator_def,
+         inst_mem_below_frontier_def, inst_dload_in_section_def,
+         source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+  `gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
+     (OK (u with vs_inst_idx := SUC s.vs_inst_idx),G1,tn1)` by
+    (`lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb s.vs_inst_idx = SOME i` by simp[] >>
+     drule_all straight_line_origin_ptr_edge >>
+     simp[Abbr `G1`, Abbr `tn1`, Abbr `i`, mk_inst_def]) >>
+  `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+     (u with vs_inst_idx := SUC s.vs_inst_idx,G1,tn1) []
+     (OK (jump_to exit u),G1,tn1)` by suspend "nil_branch" >>
+  drule (cj 2 gas_origin_ptr_path_rules) >> disch_then drule >> simp[]
+QED
+
+Resume for_storage_array_nil_core[nil_compare_checks]:
+  simp[Abbr `i`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+       source_memory_write_ranges_def, source_memory_read_ranges_def, mk_inst_def] >>
+  simp[GSYM mk_inst_def, step_inst_non_invoke, Abbr `u`, update_var_def] >>
+  rpt strip_tac >> gvs[op_prov_def, FLOOKUP_DEF] >> metis_tac[]
+QED
+
+Resume for_storage_array_nil_core[nil_branch]:
+  qmatch_goalsub_abbrev_tac `gas_origin_ptr_path _ (v,G1,tn1) _ _` >>
+  `lookup_block v.vs_current_bb func.fn_blocks = SOME bb /\
+   get_instruction bb v.vs_inst_idx =
+     SOME (mk_inst (eid+1) JNZ [Var dv;Label exit;Label blabel] []) /\
+   ~v.vs_halted /\ eval_operand (Var dv) v = SOME 1w /\
+   op_taint tn1 (Var dv) = {} /\ allocas_from lo v /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp v)` by
+    simp[Abbr `v`, Abbr `u`, update_var_def, eval_operand_def,
+         lookup_var_def, allocas_from_def, allocas_below_fmp_def,
+         op_taint_def, FLOOKUP_UPDATE] >>
+  drule_all decoderNavigationPtrTheory.jnz_origin_ptr_path >>
+  simp[Abbr `v`, jump_to_def]
+QED
+
+Resume for_storage_array_nil_core[nil_post]:
+  `!x. not_fresh_at sa0 x ==>
+     lookup_var x (jump_to exit u) = lookup_var x s /\
+     FLOOKUP G1 x = FLOOKUP G x /\
+     op_taint tn1 (Var x) = op_taint tn (Var x)` by
+    (rpt strip_tac >> `x <> dv` by metis_tac[] >>
+     simp[Abbr `u`, Abbr `G1`, Abbr `i`, jump_to_def, update_var_def,
+          lookup_var_def, step_prov_def, out_prov_def, set_prov_def,
+          mk_inst_def, FLOOKUP_DRESTRICT, op_taint_def, FLOOKUP_UPDATE]) >>
+  `ghost_inv_at (DF H) lo d c0 cx (es with gas_obs := []) G1 tn1
+     (jump_to exit u)` by
+    (irule ghost_inv_at_exterior_frame >>
+     goal_assum (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
+     qexists `sa0` >> simp[Abbr `u`, jump_to_def, update_var_def]) >>
+  `stmt_state_rel H ctx func c0 cx (es with gas_obs := []) (jump_to exit u)` by
+    (simp[stmt_state_rel_jump_to, Abbr `u`] >>
+     irule stmt_state_rel_update_var >> simp[]) >>
+  `return_buf_frame d c0 sb (jump_to exit u)` by
+    (irule return_buf_frame_frame >>
+     goal_assum (drule_at (Pat `return_buf_frame _ _ _ _`)) >>
+     simp[Abbr `u`, jump_to_def, update_var_def] >> metis_tac[]) >>
+  `return_buf_sep d c0 (es with gas_obs := []) (jump_to exit u)` by
+    suspend "nil_sep" >>
+  `Fr c0 (es with gas_obs := []) (jump_to exit u) G1 tn1` by
+    suspend "nil_frame" >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (qpat_x_assum `storage_well_formed_on _ _ _` mp_tac >>
+     simp[NoAsms, vyperStorageFootprintTheory.storage_well_formed_on_def,
+          stmtSimAppendStorageComposeTheory.get_storage_gas_obs]) >>
+  simp[Abbr `Done`, stmt_lands_def] >>
+  gvs[Abbr `u`, jump_to_def, update_var_def]
+QED
+
+Resume for_storage_array_nil_core[nil_sep]:
+  simp[return_buf_sep_gas_obs, return_buf_sep_jump] >>
+  `!name b sz. local_region c0 es.scopes u name b sz <=>
+               local_region c0 es.scopes s name b sz` by
+    (rpt gen_tac >> irule local_region_lookup_cong >> rpt strip_tac >>
+     rename1 `lookup_var q u = lookup_var q s` >>
+     `q <> dv` by
+       (strip_tac >> qpat_assum `not_local_ptr c0 es.scopes dv`
+          (mp_tac o CONJUNCT1 o REWRITE_RULE [not_local_ptr_def]) >>
+        disch_then (drule_then mp_tac) >> simp[]) >>
+     simp[Abbr `u`, update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+  Cases_on `d` >- simp[return_buf_sep_def] >>
+  rename1 `return_buf_sep (SOME buf) _ _ _` >> PairCases_on `buf` >>
+  qpat_x_assum `return_buf_sep (SOME _) c0 es s` mp_tac >>
+  pure_rewrite_tac[return_buf_sep_def] >>
+  simp[allocas_from_def, Abbr `u`, update_var_def]
+QED
+
+Resume for_storage_array_nil_core[nil_frame]:
+  qpat_x_assum `Fr c0 es s G tn` mp_tac >> simp[Abbr `Fr`] >> strip_tac >>
+  `alloca_frame c0 e0 sa0 s0 c0 es u` by
+    (simp[Abbr `u`] >> irule alloca_frame_update_var >> simp[]) >>
+  `alloca_frame c0 e0 sa0 s0 c0 es (jump_to exit u)` by
+    (irule alloca_frame_same_state >> goal_assum (drule_at Any) >> simp[jump_to_def]) >>
+  `alloca_history func (jump_to exit u)` by
+    (irule alloca_history_jump >> simp[Abbr `u`, jump_to_def, update_var_def] >>
+     qexists `s` >> simp[]) >>
+  simp[] >>
+  conj_tac >-
+    (gvs[Abbr `u`, jump_to_def, update_var_def, allocas_below_fmp_def] >> metis_tac[]) >>
+  simp[Abbr `u`, jump_to_def, update_var_def] >>
+  conj_tac
+  >- (rpt strip_tac >> `x <> dv` by metis_tac[] >>
+      qpat_x_assum `!x. not_fresh_at sa0 x ==> FLOOKUP G x = _ /\ _`
+        (qspec_then `x` mp_tac) >> simp[op_taint_def, FLOOKUP_UPDATE]) >>
+  first_assum ACCEPT_TAC
+QED
+
+Finalise for_storage_array_nil_core
+
 Theorem for_storage_array_nil_full:
   !DF lo d ctx func cx lctx c0 e0 sa0 sb s0 G0 tn0 tr slot dst tyv typ bd vs
       len nb id env p idx cond lvo sd body st0 ok explicit PG dv eid exit
@@ -724,153 +932,18 @@ Theorem for_storage_array_nil_full:
                     i IN tn0.t_mem) c ee t G tn) H (es with gas_obs := []) G1
           tn1 t
 Proof
-  rpt gen_tac >>
-  abbrev_lambda_tac "Fr" 5 0 `alloca_history func s /\ _` >>
-  abbrev_lambda_tac "Inv" 6 2 `k <= len /\ _` >>
-  abbrev_lambda_tac "Done" 5 1 `stmt_lands lctx sb (INL ()) t /\ _` >>
-  rpt strip_tac >>
-  qabbrev_tac `i = mk_inst eid EQ [Var idx;lvo] [dv]` >>
-  qabbrev_tac `u = update_var dv 1w s` >>
-  qabbrev_tac `G1 = step_prov PG G i u` >>
-  qabbrev_tac `tn1 = step_taint i s u tn` >>
-  qexistsl [`jump_to exit u`, `G1`, `tn1`] >>
-  gen_tac >> disch_tac >>
-  first_x_assum drule >> simp[Abbr `Inv`] >> strip_tac >>
-  `k = len` by decide_tac >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  irule for_storage_array_nil_core >>
+  simp[] >> qexistsl [`bb`,`blabel`,`cond`,`dv`,`eid`,`idx`,`len`,`lvo`] >> simp[] >>
+  conj_tac >- metis_tac[] >> qx_gen_tac `H` >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ _ _ ==> _` drule >> BETA_TAC >>
+  strip_tac >>
+  `k = len` by
+    (qpat_assum `[] = DROP k vs` (mp_tac o SYM) >>
+     rewrite_tac[DROP_EQ_NIL] >> decide_tac) >>
   qpat_x_assum `k = len` SUBST_ALL_TAC >>
-  `allocas_from lo s` by
-    (qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[ghost_inv_at_def]) >>
-  `not_local_ptr c0 es.scopes dv` by
-    (simp[not_local_ptr_def] >> metis_tac[local_ptrs_reserved_def]) >>
-  `tn1 = tn with t_var := tn.t_var |+ (dv,{})` by
-    simp[Abbr `tn1`, Abbr `i`, Abbr `u`, membership_scalar_ghost_frame] >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by
-    (qpat_x_assum `Fr c0 es s G tn` mp_tac >> simp[Abbr `Fr`]) >>
-  conj_tac >- suspend "nil_path" >>
-  suspend "nil_post"
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-
-Resume for_storage_array_nil_full[nil_path]:
-  `step_inst_base i s = OK u` by
-    (gvs[Abbr `i`, Abbr `u`, step_inst_base_opcode_eqs,
-          exec_pure2_def, eval_operand_def, bool_to_word_def]) >>
-  `ptr_inst_ok (DF H) lo 0 ctx func G tn i s` by
-    suspend "nil_compare_checks" >>
-  `inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
-   i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode` by
-    simp[Abbr `i`, mk_inst_def, is_terminator_def,
-         inst_mem_below_frontier_def, inst_dload_in_section_def,
-         source_memory_read_ranges_def, source_memory_write_ranges_def] >>
-  `gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
-     (OK (u with vs_inst_idx := SUC s.vs_inst_idx),G1,tn1)` by
-    (`lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-      get_instruction bb s.vs_inst_idx = SOME i` by simp[] >>
-     drule_all straight_line_origin_ptr_edge >>
-     simp[Abbr `G1`, Abbr `tn1`, Abbr `i`, mk_inst_def]) >>
-  `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
-     (u with vs_inst_idx := SUC s.vs_inst_idx,G1,tn1) []
-     (OK (jump_to exit u),G1,tn1)` by suspend "nil_branch" >>
-  drule (cj 2 gas_origin_ptr_path_rules) >> disch_then drule >> simp[]
-QED
-
-Resume for_storage_array_nil_full[nil_compare_checks]:
-  simp[Abbr `i`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
-       source_memory_write_ranges_def, source_memory_read_ranges_def, mk_inst_def] >>
-  simp[GSYM mk_inst_def, step_inst_non_invoke, Abbr `u`,
-       update_var_def] >>
-  rpt strip_tac >> gvs[op_prov_def, FLOOKUP_DEF] >> metis_tac[]
-QED
-
-Resume for_storage_array_nil_full[nil_branch]:
-  qmatch_goalsub_abbrev_tac `gas_origin_ptr_path _ (v,G1,tn1) _ _` >>
-  `lookup_block v.vs_current_bb func.fn_blocks = SOME bb /\
-   get_instruction bb v.vs_inst_idx =
-     SOME (mk_inst (eid+1) JNZ [Var dv;Label exit;Label blabel] []) /\
-   ~v.vs_halted /\ eval_operand (Var dv) v = SOME 1w /\
-   op_taint tn1 (Var dv) = {} /\ allocas_from lo v /\
-   (ctx_has_dalloca ctx ==> allocas_below_fmp v)` by
-    simp[Abbr `v`, Abbr `u`, update_var_def, eval_operand_def,
-         lookup_var_def, allocas_from_def, allocas_below_fmp_def,
-         op_taint_def, FLOOKUP_UPDATE] >>
-  drule_all decoderNavigationPtrTheory.jnz_origin_ptr_path >>
-  simp[Abbr `v`, jump_to_def]
-QED
-
-Resume for_storage_array_nil_full[nil_post]:
-  `!x. not_fresh_at sa0 x ==>
-     lookup_var x (jump_to exit u) = lookup_var x s /\
-     FLOOKUP G1 x = FLOOKUP G x /\
-     op_taint tn1 (Var x) = op_taint tn (Var x)` by
-    (rpt strip_tac >> `x <> dv` by metis_tac[] >>
-     simp[Abbr `u`, Abbr `G1`, Abbr `i`, jump_to_def, update_var_def,
-          lookup_var_def, step_prov_def, out_prov_def, set_prov_def,
-          mk_inst_def, FLOOKUP_DRESTRICT, op_taint_def, FLOOKUP_UPDATE]) >>
-  `ghost_inv_at (DF H) lo d c0 cx (es with gas_obs := []) G1 tn1
-     (jump_to exit u)` by
-    (irule ghost_inv_at_exterior_frame >>
-     goal_assum (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
-     qexists `sa0` >>
-     simp[Abbr `u`, jump_to_def, update_var_def]) >>
-  `stmt_state_rel H ctx func c0 cx (es with gas_obs := []) (jump_to exit u)` by
-    (simp[stmt_state_rel_jump_to, Abbr `u`] >>
-     irule stmt_state_rel_update_var >> simp[]) >>
-  `return_buf_frame d c0 sb (jump_to exit u)` by
-    (irule return_buf_frame_frame >>
-     goal_assum (drule_at (Pat `return_buf_frame _ _ _ _`)) >>
-     simp[Abbr `u`, jump_to_def, update_var_def] >>
-     metis_tac[]) >>
-  `return_buf_sep d c0 (es with gas_obs := []) (jump_to exit u)` by
-    (simp[return_buf_sep_gas_obs, return_buf_sep_jump] >>
-     `!name b sz. local_region c0 es.scopes u name b sz <=>
-                  local_region c0 es.scopes s name b sz` by
-       (rpt gen_tac >> irule local_region_lookup_cong >> rpt strip_tac >>
-        rename1 `lookup_var q u = lookup_var q s` >>
-        `q <> dv` by
-          (strip_tac >> qpat_assum `not_local_ptr c0 es.scopes dv`
-             (mp_tac o CONJUNCT1 o REWRITE_RULE [not_local_ptr_def]) >>
-           disch_then (drule_then mp_tac) >> simp[]) >>
-        simp[Abbr `u`, update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
-     Cases_on `d` >- simp[return_buf_sep_def] >>
-     rename1 `return_buf_sep (SOME buf) _ _ _` >> PairCases_on `buf` >>
-     qpat_x_assum `return_buf_sep (SOME _) c0 es s` mp_tac >>
-     pure_rewrite_tac[return_buf_sep_def] >>
-     simp[allocas_from_def, Abbr `u`, update_var_def]) >>
-  `Fr c0 (es with gas_obs := []) (jump_to exit u) G1 tn1` by
-    suspend "nil_frame" >>
-  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
-    (qpat_x_assum `storage_well_formed_on _ _ _` mp_tac >>
-     simp[vyperStorageFootprintTheory.storage_well_formed_on_def,
-          stmtSimAppendStorageComposeTheory.get_storage_gas_obs]) >>
-  simp[Abbr `Done`, stmt_lands_def] >>
-  gvs[Abbr `u`, jump_to_def, update_var_def]
-QED
-
-Resume for_storage_array_nil_full[nil_frame]:
-  qpat_x_assum `Fr c0 es s G tn` mp_tac >> simp[Abbr `Fr`] >> strip_tac >>
-  `alloca_frame c0 e0 sa0 s0 c0 es u` by
-    (simp[Abbr `u`] >> irule alloca_frame_update_var >> simp[]) >>
-  `alloca_frame c0 e0 sa0 s0 c0 es (jump_to exit u)` by
-    (irule alloca_frame_same_state >> goal_assum (drule_at Any) >>
-     simp[jump_to_def]) >>
-  `alloca_history func (jump_to exit u)` by
-    (irule alloca_history_jump >>
-     simp[Abbr `u`, jump_to_def, update_var_def] >>
-     qexists `s` >> simp[]) >>
-  simp[] >>
-  conj_tac >-
-    (gvs[Abbr `u`, jump_to_def, update_var_def, allocas_below_fmp_def] >>
-     metis_tac[]) >>
-  simp[Abbr `u`, jump_to_def, update_var_def] >>
-  conj_tac
-  >- (rpt strip_tac >> `x <> dv` by metis_tac[] >>
-      qpat_x_assum `!x. not_fresh_at sa0 x ==> FLOOKUP G x = _ /\ _`
-        (qspec_then `x` mp_tac) >>
-      simp[op_taint_def, FLOOKUP_UPDATE]) >>
-  first_assum ACCEPT_TAC
-QED
-
-Finalise for_storage_array_nil_full
 
 (* The captured length is a scalar, not the iterator's located pointer. *)
 Theorem for_storage_array_length_full:
@@ -4227,33 +4300,17 @@ Proof
   disch_then (qspec_then `shadow_sb0` (mp_tac o CONV_RULE (DEPTH_CONV BETA_CONV))) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_tac >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ (eval_stmts _ _) _ Qraw _` >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ (eval_stmts _ _) _ Qraw Rraw` >>
-  (* Choose the suffix endpoint with the raw result still in scope.
-     In particular, the loop handler maps both normal and Continue to INL F. *)
-  qabbrev_tac `Qland = (\H (raw : unit + exception) ef GG tt u.
-    ?sc rest b. ef.scopes = sc::rest /\
-      (case raw of INL () => INL F
-         | INR ex => FST (handle_loop_exception ex ef)) = INL b /\
-      (ef with scopes := rest).gas_obs = [] /\ ~u.vs_halted /\
-      (b ==> Done H (ef with scopes := rest) GG tt u) /\
-      (~b ==> Ready H (a::rs) (ef with scopes := rest) GG tt u))` >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full fp _ _ _ _ (eb,s,G,tn) Qraw Rraw` >>
-  sg `gas_outcome_full fp (cx_tops cx) cx st0 (eval_stmts cx stmts)
-       (eb,s,G,tn) Qland Rraw`
-  >- (qunabbrev_tac `fp` >> irule gas_outcome_full_zero_suffix >>
-      qexists_tac `Qraw` >> conj_tac >- suspend "landing" >>
-      first_assum ACCEPT_TAC) >>
-  suspend "handler"
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ (eval_stmts cx stmts)
+    (eb,s,G,tn) Qraw _` >>
+  qunabbrev_tac `R` >> BETA_TAC >>
+  ho_match_mp_tac for_body_cleanup_from_raw_landing >>
+  conj_tac >- simp[Abbr `eb`] >> conj_tac >- first_assum ACCEPT_TAC >>
+  suspend "raw_landing"
 QED
 
-Resume for_storage_array_body_cleanup_full[landing]:
-  map_every qx_gen_tac [`raw`, `ef`, `G1`, `tn1`, `t`] >> strip_tac >>
-  qexistsl_tac [`if raw = INL () then jump_to incr t else t`, `G1`, `tn1`] >>
-  qx_gen_tac `H` >> strip_tac >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> Qraw H _ _ _ _ _`
-    (qspec_then `H` mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
+Resume for_storage_array_body_cleanup_full[raw_landing]:
+  map_every qx_gen_tac [`H`, `raw`, `ef`, `G1`, `tn1`, `t`] >> strip_tac >>
+  qpat_x_assum `Qraw H raw ef G1 tn1 t` mp_tac >>
   simp[NoAsms, Abbr `Qraw`] >>
   disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 strip_assume_tac
     (CONJUNCTS_THEN2 assume_tac (fn th =>
@@ -4291,71 +4348,7 @@ Resume for_storage_array_body_cleanup_full[landing]:
         `ret_ty`, `s`, `sb0`, `sb1`, `sj`, `tn`, `v`] >>
       qpat_assum `alloca_history func s /\ _` (map_every assume_tac o CONJUNCTS) >>
       rpt (conj_tac >- first_assum ACCEPT_TAC) >> first_assum ACCEPT_TAC) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  simp[NoAsms, Abbr `Qland`] >>
-  qexistsl_tac [`sc`, `rest`, `b`] >>
-  asm_rewrite_tac[]
-QED
-
-Resume for_storage_array_body_cleanup_full[handler]:
-  qunabbrev_tac `fp` >>
-  qpat_assum `gas_outcome_full _ _ _ _ _ _ Qland Rraw`
-    (mp_then (Pat `gas_outcome_full _ _ _ _ _ _ _ _`) mp_tac
-      for_body_cleanup_full) >>
-  (impl_tac >- simp[Abbr `eb`]) >>
-  disch_then (mp_then (Pat `gas_outcome_full _ _ _ _ _ _ _ _`) mp_tac
-    gas_outcome_full_post_mono) >>
-  disch_then irule >>
-  conj_tac >- suspend "normal_post" >> suspend "exit_post"
-QED
-
-Resume for_storage_array_body_cleanup_full[normal_post]:
-  map_every qx_gen_tac [`H`, `out`, `ee`, `G1`, `tn1`, `t`] >> BETA_TAC >>
-  disch_then (qx_choose_then `raw` (qx_choose_then `sc` strip_assume_tac)) >>
-  qpat_x_assum `Qland H raw _ G1 tn1 t` mp_tac >>
-  simp[NoAsms, Abbr `Qland`, evaluation_state_accfupds] >>
-  disch_then (qx_choose_then `b` strip_assume_tac) >>
-  `out = INL b` by
-    (qpat_x_assum `out = _` SUBST1_TAC >>
-     qpat_x_assum `_ = INL b` mp_tac >>
-     Cases_on `raw` >> simp[NoAsms] >>
-     rename1 `handle_loop_exception ex _` >> Cases_on `ex` >>
-     simp[NoAsms, vyperInterpreterTheory.handle_loop_exception_def,
-       return_def, raise_def]) >>
-  (metis_tac[])
-QED
-
-Resume for_storage_array_body_cleanup_full[exit_post]:
-  map_every qx_gen_tac [`H`, `out`, `ee`, `gt`, `r`] >> BETA_TAC >>
-  disch_then (qx_choose_then `raw` (qx_choose_then `sc` strip_assume_tac)) >>
-  sg `?ex. raw = INR ex /\ out = INR ex`
-  >- (qpat_assum `out = _` SUBST1_TAC >>
-      qpat_assum `Rraw H raw _ gt r` mp_tac >>
-      simp[NoAsms, Abbr `Rraw`] >>
-      disch_then (qspec_then `[]` mp_tac o CONJUNCT1) >>
-      Cases_on `raw` >>
-      simp[NoAsms, stmt_exit_ptr_def, oneline exprSimDefsTheory.expr_exit_def] >>
-      rename1 `_ = INR ex` >> Cases_on `ex` >> simp[NoAsms] >>
-      Cases_on `r` >> simp[NoAsms]) >>
-  qexists_tac `ex` >> conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_x_assum `raw = INR ex` SUBST_ALL_TAC >>
-  simp[NoAsms, Abbr `R`] >>
-  qpat_x_assum `Rraw H (INR ex) _ gt r` mp_tac >>
-  qpat_assum `Abbrev (Rraw = _)`
-    (fn th => pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
-  BETA_TAC >>
-  disch_then (mp_tac o MATCH_MP for_full_exit_scopes_gas_obs) >>
-  disch_then (qspecl_then [`ee.scopes`, `ee.gas_obs`] mp_tac) >>
-  `((ee with scopes := sc::ee.scopes) with
-     <|scopes := ee.scopes; gas_obs := ee.gas_obs|>) = ee` by
-    simp[NoAsms, evaluation_state_component_equality] >>
-  pop_assum SUBST1_TAC >>
-  `!tail. (ee with <|scopes := ee.scopes; gas_obs := tail|>) =
-          ee with gas_obs := tail` by
-    simp[NoAsms, evaluation_state_component_equality] >>
-  pop_assum (fn th => pure_rewrite_tac [th]) >>
-  simp[NoAsms, halt_exit_INR_type] >>
-  disch_then (ACCEPT_TAC o CONJUNCT2 o CONJUNCT2)
+  simp[NoAsms] >> qexistsl_tac [`sc`, `rest`, `b`] >> simp[]
 QED
 
 Finalise for_storage_array_body_cleanup_full
