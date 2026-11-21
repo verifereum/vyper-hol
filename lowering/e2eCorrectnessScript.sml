@@ -1211,43 +1211,18 @@ Proof
   pop_assum SUBST_ALL_TAC >>
   `assemble prog' <> []` by
     (irule codegen_assembly_finalizer_nonempty >> metis_tac[]) >>
-  `(T ==> sym_unit_static_ok out.po_unit /\
-     label_flow_own_ok out.po_unit.cu_context /\
-     vs0.vs_code = assemble prog' ++ vs0.vs_data_section /\
-     codegen_asm_entry_rel_reloc (lo_reloc prog prog') cplan prog vs0
-       (entry_asm_state vs0 es) /\
-     asm_frame_rel prog' vs0.vs_data_section es (entry_asm_state vs0 es) es
-   ) /\
-   (~T ==> sym_unit_static_ok out.po_unit /\
-     label_flow_ok out.po_unit.cu_context /\
-     vs0.vs_code = assemble prog ++ vs0.vs_data_section /\
-     codegen_asm_entry_rel cplan prog vs0 (entry_asm_state vs0 es) /\
-     asm_frame_rel prog' vs0.vs_data_section es
-       (entry_asm_state vs0 es with as_code := assemble prog' ++ vs0.vs_data_section) es)` by
-    (conj_tac
-     >- (disch_tac >>
-         drule_all lower_vyper_runtime_unit_sym_src_ok_own >> strip_tac >>
-         drule_all o1_pipeline_sym_unit_static_ok >> strip_tac >>
-         drule_all gasFocusOptLabelFlowTheory.focus_opt_label_flow_own >> strip_tac >>
-         qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`, `cplan`]
-           mp_tac opt_entry_asm_rels_own >>
-         impl_tac >- simp[] >> strip_tac >> fs[])
-     >- (disch_tac >>
-         `~program_reads_self_code tops` by
-           (qpat_assum `_ ==> ~program_reads_self_code tops` mp_tac >> simp[]) >>
-         `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-           metis_tac[entryStateRelTheory.source_typing_ok_vtype_keys_distinct] >>
-         `?A. constants_fold_module [(NONE,tops)]
-                (account_immutables am txp.target) NONE tops FEMPTY = SOME A` by
-           metis_tac[source_typing_ok_def] >>
-         drule_all lower_vyper_runtime_unit_sym_src_ok >> strip_tac >>
-         drule_all o1_pipeline_sym_unit_static_ok >> strip_tac >>
-         drule_all gasFocusOptLabelFlowTheory.focus_opt_label_flow >> strip_tac >>
-         drule_all opt_entry_codegen_asm_entry_rel >>
-         disch_then (qspecl_then [`prog`, `cplan`] assume_tac) >>
-         drule_all opt_entry_asm_frame_rel >>
-         disch_then (qspecl_then [`prog`, `cplan`] assume_tac) >>
-         fs[opt_entry_state_def, entry_venom_state_def])) >>
+  `sym_unit_static_ok out.po_unit /\
+   label_flow_own_ok out.po_unit.cu_context /\
+   vs0.vs_code = assemble prog' ++ vs0.vs_data_section /\
+   codegen_asm_entry_rel_reloc (lo_reloc prog prog') cplan prog vs0
+     (entry_asm_state vs0 es) /\
+   asm_frame_rel prog' vs0.vs_data_section es (entry_asm_state vs0 es) es` by
+    (drule_all lower_vyper_runtime_unit_sym_src_ok_own >> strip_tac >>
+     drule_all o1_pipeline_sym_unit_static_ok >> strip_tac >>
+     drule_all gasFocusOptLabelFlowTheory.focus_opt_label_flow_own >> strip_tac >>
+     qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`, `cplan`]
+       mp_tac opt_entry_asm_rels_own >>
+     impl_tac >- simp[] >> strip_tac >> fs[]) >>
   qpat_x_assum `(o1_lowered_inv _ _ /\ _) \/ _`
     (DISJ_CASES_THEN STRIP_ASSUME_TAC)
   >- (qspecl_then [`out`, `cplan`, `vs0`]
@@ -1258,19 +1233,10 @@ Proof
          (frame_resource_starved es r' es'' \/
           venom_frame_rel es r' es'' (run_context n out.po_unit.cu_context vs0))` by
         (qx_gen_tac `n` >>
-         Q.ASM_CASES_TAC `T`
-         >- (qpat_assum `T ==> sym_unit_static_ok _ /\ _`
-               (fn th => strip_assume_tac (MP th (ASSUME ``T:bool``))) >>
-             qspecl_then [`n`, `rpolicy`, `out.po_unit`, `cplan`, `prog`, `prog'`,
-                          `raw_reachable vs0`, `vs0`, `es`] mp_tac codegen_correct_asm_opt_own >>
-             impl_tac >- gvs[] >>
-             disch_then ACCEPT_TAC)
-         >- (qpat_assum `~T ==> sym_unit_static_ok _ /\ _`
-               (fn th => strip_assume_tac (MP th (ASSUME ``~T:bool``))) >>
-             qspecl_then [`n`, `rpolicy`, `out.po_unit`, `cplan`, `prog`, `prog'`,
-                          `raw_reachable vs0`, `vs0`, `es`] mp_tac codegen_correct_asm_opt >>
-             impl_tac >- gvs[] >>
-             disch_then ACCEPT_TAC)) >>
+         qspecl_then [`n`, `rpolicy`, `out.po_unit`, `cplan`, `prog`, `prog'`,
+                      `raw_reachable vs0`, `vs0`, `es`] mp_tac codegen_correct_asm_opt_own >>
+         impl_tac >- gvs[] >>
+         disch_then ACCEPT_TAC) >>
       mp_tac (Q.INST
         [`ctx` |-> `unit.cu_context`, `ctx'` |-> `out.po_unit.cu_context`,
          `vs'` |-> `vs0`, `tx` |-> `txp`,
@@ -1289,20 +1255,11 @@ Proof
        (frame_resource_starved es r' es'' \/
         ?exc out lgs. frame_outcome es r' es'' (SOME exc) out lgs)` by
     (rpt gen_tac >> strip_tac >>
-     Q.ASM_CASES_TAC `T`
-     >- (qpat_assum `T ==> sym_unit_static_ok _ /\ _`
-           (fn th => strip_assume_tac (MP th (ASSUME ``T:bool``))) >>
-         qspecl_then [`n`, `rpolicy`, `out.po_unit`, `cplan`, `prog`, `prog'`,
-                      `raw_reachable vs0`, `vs0`, `es`, `a`, `u`]
-           mp_tac codegen_correct_static_abort_asm_opt_own >>
-         impl_tac >- (BETA_TAC >> asm_rewrite_tac[]) >>
-         disch_then (ACCEPT_TAC o CONJUNCT1))
-     >- (qpat_assum `~T ==> sym_unit_static_ok _ /\ _`
-           (fn th => strip_assume_tac (MP th (ASSUME ``~T:bool``))) >>
-         qspecl_then [`n`, `rpolicy`, `out.po_unit`, `cplan`, `prog`, `prog'`,
-                      `raw_reachable vs0`, `vs0`, `es`, `a`, `u`]
-           mp_tac codegen_correct_static_abort_asm_opt >>
-         impl_tac >- (gvs[] >> metis_tac[]) >> metis_tac[])) >>
+     qspecl_then [`n`, `rpolicy`, `out.po_unit`, `cplan`, `prog`, `prog'`,
+                  `raw_reachable vs0`, `vs0`, `es`, `a`, `u`]
+       mp_tac codegen_correct_static_abort_asm_opt_own >>
+     impl_tac >- (BETA_TAC >> asm_rewrite_tac[]) >>
+     disch_then (ACCEPT_TAC o CONJUNCT1)) >>
   mp_tac (Q.INST
     [`ctx` |-> `unit.cu_context`, `ctx'` |-> `out.po_unit.cu_context`,
      `vs'` |-> `vs0`, `tx` |-> `txp`,

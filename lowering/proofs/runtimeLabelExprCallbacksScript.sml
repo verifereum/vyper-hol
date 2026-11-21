@@ -652,7 +652,11 @@ Proof
   >~ [`(rb_step_for source_checks) _ (\x. lower_value _ _ _ _ x)`]
   >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
       irule rb_lower_value_for >> simp[]) >>
-  (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+  Cases_on `is_self_addr e` >> simp[] >>
+  FIRST [
+   (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_emit_op_for >> simp[]),
+   (ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
       (Q.ISPEC `(rb_operand_ok_for source_checks)` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind_for)))) >> BETA_TAC >>
    conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
      irule rb_lower_value_for >> simp[]) >> gen_tac >> strip_tac >>
@@ -662,7 +666,7 @@ Proof
       (Q.ISPEC `(rb_operand_ok_for source_checks)` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV comp_bind_def)))) rb_step_bind_for)))) >> BETA_TAC >>
    simp[rb_emit_op_for] >>
    CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
-   irule rb_emit_op_for >> simp[])
+   irule rb_emit_op_for >> simp[])]
 QED
 
 Theorem rb_as_stack_val_for:
