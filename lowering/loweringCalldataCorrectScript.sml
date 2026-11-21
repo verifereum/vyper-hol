@@ -5,6 +5,9 @@ Ancestors
   sourceUnitExitSafe ptrDiscipline vyperCalldata
   dispatchedCallAssembly dispatchedSelectedEndpoint gasShadowRunLowering
   loweringShapeProps calldataNoneEntryController calldataNoneDecoder acceptedContextPhi
+  loweringRuntimeCorrect supportedProgram entryDispatchProps publicGetterProps
+  vyperTypeContractContext nonreentrantEntryEquiv vyperReadOnlySyntax
+  vyperTypeContractGetter vyperTypeContract compileVyper list
 
 (* The call a contract makes of raw calldata: the external entry it
    dispatches to and the arguments it decodes (vyperCalldata), including the
@@ -17,64 +20,85 @@ Definition dispatched_vyper_call_def:
         SOME (mut, nr, args, dflts, ret, body)
 End
 
-(* A supported program declares no default arguments, so every external
-   entry it exposes (functions and public getters) has none. *)
-(* S1 *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+(* The legacy dispatcher exposes only empty default lists. The checker
+   rules out parameters and therefore defaults on the fallback. *)
+Triviality selected_legacy_defaults_nil[local]:
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+  source_typing_ok tops am tx /\
+  vyperInterpreter$lookup_function NONE name External tops =
+    SOME (mut,nr,args,dflts,ret,fbody) ==>
+  dflts = []
 Proof
-  rpt gen_tac >> strip_tac >>
-  `?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit` by
-    (Cases_on `classify_functions tops` >> PairCases_on `r` >>
-     drule supported_program_no_external_defaults >> simp[] >> strip_tac >>
-     drule_at (Pat `classify_functions _ = _`) runtime_gas_shadow_unit_exists >>
-     disch_then (drule_at (Pat `lower_vyper_runtime_unit _ _ = _`)) >>
-     simp[] >> strip_tac >> qexists_tac `shadow_unit` >> simp[]) >>
-  qpat_x_assum `dispatched_vyper_call _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [dispatched_vyper_call_def]) >>
-  drule_all_then SUBST_ALL_TAC supported_program_external_dflts_nil >>
-  drule_at (Pat `runtime_gas_shadow_unit _ _ = _`)
-    (cj 1 dispatched_call_correct) >>
-  disch_then (drule_at (Pat `vyperInterpreter$lookup_function _ _ _ _ = _`)) >>
-  disch_then (qspecl_then [`unit`, `am`, `vs`] mp_tac) >>
-  simp[]
-QED
-*)
-Theorem lower_vyper_runtime_unit_correct_dispatched:
-  !tops rpolicy unit am tx ret vs.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    source_typing_ok tops am tx /\
-    source_deployment_rel tops am tx /\
-    dispatched_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\
-    outcomes_accounts_typed (SOME vs.vs_outcomes)
-    ==>
-    source_unit_execution_correct tops ret am tx unit vs
-Proof
-  cheat
+  strip_tac >> Cases_on `name = "__default__"`
+  >- (gvs[] >> drule lookup_function_External_cases >> strip_tac
+      >- (`function_header_ok External mut nr raw "__default__" args dflts ret`
+            by metis_tac[source_typing_function_header] >>
+          drule supportedNamesTheory.supported_fallback_no_arguments >> strip_tac >>
+          gvs[source_typing_ok_def] >>
+          `module_allocated am.layouts tx.target NONE tops` by
+            (drule check_contract_main_module_allocated >> simp[]) >>
+          `check_function_body am.layouts tx.target [(NONE,tops)] art NONE
+             External mut nr [] dflts ret fbody` by
+            (irule check_contract_runtime_function_body_MEM >>
+             simp[] >> qexistsl_tac [`"__default__"`, `raw`] >> simp[]) >>
+          fs[check_function_body_def]) >>
+      metis_tac[external_getter_defaults]) >>
+  drule_all lookup_function_external_member >> strip_tac >>
+  qpat_x_assum `~EXISTS external_has_defaults _` mp_tac >>
+  simp[EXISTS_MEM] >> disch_then
+    (qspec_then `subst_consts_fn (module_consts_env tops [])
+      (mut,nr,rr,name,args,dflts,ret,fbody)` mp_tac) >>
+  simp[subst_consts_fn_def, external_has_defaults_def,
+       loweringShapePropsTheory.subst_consts_exprs_length,
+       NULL_LENGTH, LENGTH_NIL]
 QED
 
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
+Triviality runtime_dispatched_readings_certificate[local]:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops ==>
+    ?shadow_unit. !am tx ret vs.
+      source_typing_ok tops am tx /\
+      source_deployment_rel tops am tx /\
+      dispatched_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+      initial_venom_state_rel tops am tx vs /\
+      outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+      (ctx_has_dalloca unit.cu_context ==>
+        unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+        w2n vs.vs_initial_fmp < 2 ** 254) ==>
+      ?marks.
+        source_unit_execution_correct_with shadow_unit.cu_context marks
+          tops ret am tx unit vs /\
+        ((?tail. call_storage_ok am tx vs.vs_outcomes
+           (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
+         !tail. FST (call_external (SOME vs.vs_outcomes)
+           (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
+           INR (Error (RuntimeError "msg.gas: no gas reading")))
 Proof
-  rpt gen_tac >> strip_tac >>
-  `?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit` by
+  rpt gen_tac >> strip_tac >> Cases_on `internal_defaults_msg_gas tops`
+  >- (drule_all runtime_body_internal_default_gas_readings >>
+      disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
+      qexists_tac `shadow_unit` >> rpt gen_tac >> strip_tac >>
+      first_x_assum (qspecl_then [`am`, `tx`, `ret`, `vs`] mp_tac) >>
+      fs[dispatched_vyper_call_def] >> metis_tac[]) >>
+  Cases_on `EXISTS external_has_defaults (FST (classify_functions tops))`
+  >- (drule_all runtime_body_grouped_default_readings >>
+      disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
+      qexists_tac `shadow_unit` >> rpt gen_tac >> strip_tac >>
+      first_x_assum (qspecl_then [`am`, `tx`, `ret`, `vs`] mp_tac) >>
+      fs[dispatched_vyper_call_def] >> metis_tac[]) >>
+  `?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+                gas_shadow_unit unit shadow_unit` by
     (Cases_on `classify_functions tops` >> PairCases_on `r` >>
-     drule supported_program_no_external_defaults >> simp[] >> strip_tac >>
-     drule_at (Pat `classify_functions _ = _`) runtime_gas_shadow_unit_exists >>
-     disch_then (drule_at (Pat `lower_vyper_runtime_unit _ _ = _`)) >>
-     simp[] >> strip_tac >> qexists_tac `shadow_unit` >> simp[]) >>
+     irule runtime_gas_shadow_unit_exists >> fs[]) >>
+  pop_assum strip_assume_tac >>
+  qexists_tac `shadow_unit` >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `dispatched_vyper_call _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [dispatched_vyper_call_def]) >>
-  drule_all_then SUBST_ALL_TAC supported_program_external_dflts_nil >>
-  drule_at (Pat `runtime_gas_shadow_unit _ _ = _`)
-    dispatched_call_correct_with_readings >>
-  disch_then (drule_at (Pat `vyperInterpreter$lookup_function _ _ _ _ = _`)) >>
-  disch_then (qspecl_then [`unit`, `am`, `vs`] mp_tac) >>
-  simp[] >> strip_tac >>
-  qexists_tac `marks` >>
-  metis_tac[source_unit_execution_correct_at_def]
+  drule_all_then SUBST_ALL_TAC selected_legacy_defaults_nil >>
+  drule_all dispatched_call_correct_with_readings >> simp[]
 QED
-*)
+
 Theorem lower_vyper_runtime_unit_correct_dispatched_readings_available:
   !tops rpolicy unit am tx ret vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -83,6 +107,9 @@ Theorem lower_vyper_runtime_unit_correct_dispatched_readings_available:
     source_deployment_rel tops am tx /\
     dispatched_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     outcomes_accounts_typed (SOME vs.vs_outcomes)
     ==>
 
@@ -96,31 +123,15 @@ Theorem lower_vyper_runtime_unit_correct_dispatched_readings_available:
            (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
          INR (Error (RuntimeError "msg.gas: no gas reading")))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all runtime_dispatched_readings_certificate >>
+  disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
+  first_x_assum (qspecl_then [`am`, `tx`, `ret`, `vs`] mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `marks` >>
+  metis_tac[source_unit_execution_correct_at_def]
 QED
 
-(* The dispatched-calldata unit theorem with a shadow context fixed by
-   the program before the call, at the raw unit's own free-memory pointer. *)
-(* TEMPORARILY CHEATED - SCRATCH SEQ-8501 census (never lands)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit` by
-    (Cases_on `classify_functions tops` >> PairCases_on `r` >>
-     drule supported_program_no_external_defaults >> simp[] >> strip_tac >>
-     drule_at (Pat `classify_functions _ = _`) runtime_gas_shadow_unit_exists >>
-     disch_then (drule_at (Pat `lower_vyper_runtime_unit _ _ = _`)) >>
-     simp[] >> strip_tac >> qexists_tac `shadow_unit` >> simp[]) >>
-  qexists_tac `shadow_unit.cu_context` >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `dispatched_vyper_call _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [dispatched_vyper_call_def]) >>
-  drule_all_then SUBST_ALL_TAC supported_program_external_dflts_nil >>
-  drule_at (Pat `runtime_gas_shadow_unit _ _ = _`)
-    (cj 2 dispatched_call_correct) >>
-  disch_then (drule_at (Pat `vyperInterpreter$lookup_function _ _ _ _ = _`)) >>
-  disch_then (qspecl_then [`unit`, `am`, `vs`] mp_tac) >>
-  simp[]
-QED
-*)
+(* The shadow context is fixed by the program before choosing a call. *)
 Theorem lower_vyper_runtime_unit_correct_dispatched_with:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -141,7 +152,13 @@ Theorem lower_vyper_runtime_unit_correct_dispatched_with:
         source_unit_execution_correct_with shadow_ctx marks
           tops ret am tx unit vs
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all runtime_dispatched_readings_certificate >>
+  disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
+  qexists_tac `shadow_unit.cu_context` >> rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then [`am`, `tx`, `ret`, `vs`] mp_tac) >>
+  impl_tac >- (simp[] >> decide_tac) >>
+  metis_tac[]
 QED
 
 (* S1, calldata that dispatches to nothing: no fallback, a short head, or a
@@ -201,7 +218,7 @@ Proof
   metis_tac[]
 QED
 
-(* S3 at the marks of S1's certificate (lower_vyper_runtime_unit_correct_dispatched),
+(* S3 at the marks of S1's certificate (lower_vyper_runtime_unit_correct_dispatched_with),
    where the storage guards hold and the source call is not exempt: its exit
    arm gives the memory-safe run from the entry and, at every valid horizon
    of the source trace, the pointer-safe run at that horizon's dead set. *)

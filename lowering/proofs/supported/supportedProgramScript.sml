@@ -23,6 +23,14 @@ Definition expr_msg_gas_root_def:
   expr_msg_gas_root _ = F
 End
 
+Definition internal_defaults_msg_gas_def:
+  internal_defaults_msg_gas tops <=>
+    EXISTS (\top. case top of
+      FunctionDecl Internal _ _ _ _ _ defaults _ _ =>
+        EXISTS (supported_expr_exists expr_msg_gas_root) defaults
+    | _ => F) tops
+End
+
 (* Omitted defaults are lowered from the same expressions in both compiler
    runs. They must be invariant under the explicit gas-read shadowing. *)
 Definition supported_default_expression_def:
