@@ -21,13 +21,13 @@ QED
 
 Theorem deploy_ptr_entry_actual_state_rel:
   !tops bc am tx es vs prog prog' cp rp runtime unit body ce nr key ut imm exit
-    sa sb sj se sp sf func mut am_c es0 args scope actual.
+    sa sb sj se sp sf func mut source_body am_c es0 args scope actual.
   deploy_source_ok tops am tx /\ deploy_state_rel tops bc am tx es /\
   gas_variant vs (opt_deploy_entry_state_own prog prog' cp tops es with vs_outcomes := vs.vs_outcomes) /\
   deploy_ctor_code tops rp runtime unit
     (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
-  deploy_ctor_start tops am tx (mut,F,body,am_c,es0) /\
-  lookup_function NONE tx.function_name Deploy tops = SOME (mut,F,args,[],NoneT,body) /\
+  deploy_ctor_start tops am tx (mut,F,source_body,am_c,es0) /\
+  lookup_function NONE tx.function_name Deploy tops = SOME (mut,F,args,[],NoneT,source_body) /\
   bind_arguments (type_env tops) args tx.args = SOME scope /\
   actual.vs_code = vs.vs_code /\
   actual.vs_accounts = vs.vs_accounts /\ actual.vs_transient = vs.vs_transient /\

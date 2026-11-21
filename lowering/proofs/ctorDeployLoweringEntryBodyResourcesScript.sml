@@ -36,7 +36,7 @@ Theorem deploy_ctor_entry_source_scopes:
  !tops tx am mut nr rr fargs body nr' body' am_c es0 scope exts ints fb.
  classify_functions tops =
    (exts,ints,fb,SOME (mut,nr,rr,"__init__",fargs,[],NoneT,body)) /\
- tx.function_name = "__init__" /\ ~nr /\ nr' = nr /\ body' = body /\
+ tx.function_name = "__init__" /\ ~nr /\ nr' = nr /\ body = subst_consts_stmts (module_consts_env tops []) body' /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\
  bind_arguments (type_env tops) fargs tx.args = SOME scope ==>
  es0.scopes = [scope]
@@ -79,7 +79,7 @@ Theorem deploy_ctor_entry_registered_map_bounds_normalized_gas_path:
    pos_args 0 0 st1 = (ce1,st2) /\
  (if nr then compile_nonreentrant_lock key ut F else comp_return ()) st2 = ((),st3) /\
  fresh_label "ctor_exit" st3 = (lbl,sa) ==>
- nr = F /\ nr' = nr /\ body' = body /\
+ nr = F /\ nr' = nr /\ body = subst_consts_stmts (module_consts_env tops []) body' /\
  ?scope initial actual.
  gas_path unit.cu_context func
    (vs with <|vs_prev_bb := NONE; vs_current_bb := "__deploy"; vs_inst_idx := 0|>)
@@ -200,7 +200,7 @@ Theorem deploy_ctor_entry_registered_map_bounds_gas_path:
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) ==>
- nr = F /\ nr' = nr /\ body' = body /\
+ nr = F /\ nr' = nr /\ body = subst_consts_stmts (module_consts_env tops []) body' /\
  ?ce1 st1 st2 fargs scope initial actual.
  gas_path unit.cu_context func
    (vs with <|vs_prev_bb := NONE; vs_current_bb := "__deploy"; vs_inst_idx := 0|>)
@@ -250,8 +250,6 @@ Proof
  `tx.function_name = "__init__"` by fs[deploy_state_rel_def] >>
  qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac classify_functions_ctor_lookup >>
  simp[] >> strip_tac >>
- `subst_consts_stmts (module_consts_env tops []) body' = body'` by
-   metis_tac[deploy_supported_constructor_subst] >>
  gvs[constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def] >>
  `is_payable = (cf0 = Payable) /\ ret = NoneT` by
    fs[set_constructor_package_target_def, package_constructor_def] >>
@@ -356,11 +354,11 @@ QED
 
 Theorem deploy_ctor_entry_immutable_resources:
  !tops rp runtime_bc unit body cenv nr key ut imm lbl sa sb sj se sp sf func
- am tx mut am_c es0 ss.
+ am tx mut source_body am_c es0 ss.
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_typing_ok tops am tx /\
- deploy_ctor_start tops am tx (mut,F,body,am_c,es0) /\
+ deploy_ctor_start tops am tx (mut,F,source_body,am_c,es0) /\
  imm_len tops <= ss.vs_alloca_next /\
  (!aid b sz. FLOOKUP ss.vs_allocas aid = SOME (b,sz) ==> imm_len tops <= b) /\
  (!p. p < imm_len tops ==>
@@ -437,7 +435,7 @@ Theorem deploy_ctor_entry_body_resources_gas_path:
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) ==>
- nr = F /\ nr' = nr /\ body' = body /\
+ nr = F /\ nr' = nr /\ body = subst_consts_stmts (module_consts_env tops []) body' /\
  ?ce1 st1 st2 fargs scope initial actual.
  gas_path unit.cu_context func
    (vs with <|vs_prev_bb := NONE; vs_current_bb := "__deploy"; vs_inst_idx := 0|>)
@@ -504,7 +502,7 @@ Theorem deploy_ctor_entry_body_resources:
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) ==>
- nr = F /\ nr' = nr /\ body' = body /\
+ nr = F /\ nr' = nr /\ body = subst_consts_stmts (module_consts_env tops []) body' /\
  ?ce1 st1 st2 fargs scope initial actual.
  cenv = (ce1 with ce_ctor_exit_label := SOME lbl) /\
  fresh_label "ctor_exit" st2 = (lbl,sa) /\

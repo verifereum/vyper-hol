@@ -230,7 +230,7 @@ val SourceEntryMode = ``\checked.
   gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
   deploy_ctor_code tops rp runtime_bc unit
     (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
-  deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
+  deploy_ctor_start tops am tx (mut,nr,source_body,am_c,es0) /\
   lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME lbl ==>
   ?actual H qt scope fargs ce0.
@@ -242,7 +242,7 @@ val SourceEntryMode = ``\checked.
       (!name p sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
         not_fresh_at sa p /\ ptr_covers H qt p actual sz)) /\
     nr = F /\
-    lookup_function NONE tx.function_name Deploy tops = SOME (mut,F,fargs,[],NoneT,body) /\
+    lookup_function NONE tx.function_name Deploy tops = SOME (mut,F,fargs,[],NoneT,source_body) /\
     es0.scopes = [scope] /\
     (!id b sz. local_region ce es0.scopes actual id b sz ==> imm_len tops <= b) /\
     es0.tStorage = am.tStorage /\ es0.logs = am.logs /\
@@ -291,6 +291,8 @@ Theorem deploy_ptr_entry_prefix_source_mode:
   !checked. (^SourceEntryMode) checked
 Proof
   gen_tac >> BETA_TAC >> strip_tac >>
+  drule_all deploy_ctor_entry_selection_agrees >> strip_tac >>
+  qpat_x_assum `body = subst_consts_stmts _ source_body` SUBST_ALL_TAC >>
   drule_all deploy_ptr_entry_normalized >> simp_tac bool_ss [LET_THM] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `fresh_vars_wrt _ initial` >> gvs[] >>
   drule_all deploy_ptr_entry_initial_resources >> strip_tac >>
@@ -316,8 +318,6 @@ Proof
   drule_all deploy_ctor_entry_data_section >> strip_tac >>
   `constructor_args_encode tops tx initial.vs_data_section` by simp[Abbr `initial`] >>
   drule_all ctorDeployLoweringEntryInputsTheory.deploy_ctor_common_source_witness >> strip_tac >>
-  drule_all ctorDeployLoweringEntrySelectionTheory.deploy_supported_constructor_subst >>
-  strip_tac >>
   qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac classify_functions_ctor_lookup >>
   simp[] >> strip_tac >>
   gvs[constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def] >>
@@ -365,7 +365,7 @@ Proof
       (qx_choose_then `end_taint` strip_assume_tac)))) >>
   `tx.function_name = "__init__"` by fs[deploy_state_rel_def] >>
   `lookup_function NONE tx.function_name Deploy tops =
-    SOME (cf0,F,args,[],NoneT,body)` by simp[] >>
+    SOME (cf0,F,args,[],NoneT,source_body)` by simp[] >>
   drule_all deploy_ctor_source_start_fields >> strip_tac >>
   `end_state.vs_accounts = vs.vs_accounts /\ end_state.vs_transient = vs.vs_transient /\
    end_state.vs_logs = vs.vs_logs /\ end_state.vs_requests = vs.vs_requests /\
@@ -464,7 +464,7 @@ Theorem deploy_ptr_entry_prefix_related_checked:
   gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
   deploy_ctor_code tops rp runtime_bc unit
     (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
-  deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
+  deploy_ctor_start tops am tx (mut,nr,source_body,am_c,es0) /\
   lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME lbl ==>
   ?actual H qt.
@@ -602,7 +602,7 @@ Theorem deploy_ptr_entry_prefix_related_checked_canonical:
   gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
   deploy_ctor_code tops rp runtime_bc unit
     (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
-  deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
+  deploy_ctor_start tops am tx (mut,nr,source_body,am_c,es0) /\
   lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME lbl ==>
   ?actual H qt.
@@ -644,7 +644,7 @@ Theorem deploy_ptr_entry_prefix_related:
   gas_variant vs (deploy_entry_state prog cplan tops es) /\
   deploy_ctor_code tops rp runtime_bc unit
     (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
-  deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
+  deploy_ctor_start tops am tx (mut,nr,source_body,am_c,es0) /\
   lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME lbl ==>
   ?actual H qt.
@@ -670,7 +670,7 @@ QED
 Theorem deploy_ctor_entry_run_ptr:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
    body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func
-   mut am_c es0 fn lbl.
+   mut source_body am_c es0 fn lbl.
     deploy_phases policy tops (deploy_bc, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
@@ -682,7 +682,7 @@ Theorem deploy_ctor_entry_run_ptr:
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
-    deploy_ctor_start tops am tx (mut, nr, body, am_c, es0) /\
+    deploy_ctor_start tops am tx (mut, nr, source_body, am_c, es0) /\
     lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl
     ==>
