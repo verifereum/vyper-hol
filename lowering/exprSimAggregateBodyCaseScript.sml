@@ -306,7 +306,8 @@ Proof
       disch_then (qspecl_then [`inst`, `b`, `type_memory_size_list tvs`] mp_tac) >>
       simp[] >> (impl_tac >- metis_tac[]) >> strip_tac >>
       `compatible_bound bnd (LENGTH args)` by
-        fs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+        fs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
+           vyperValueTheory.compatible_bound_def] >>
       `eval_expr cx (Builtin ann (MakeArray NONE bnd) args) =
        bind (eval_exprs cx args) (return o (\vs. Value (ArrayV (TupleV vs))))` by
         (simp[FUN_EQ_THM] >> gen_tac >>
