@@ -51,44 +51,6 @@ Proof
   rename1 `Num i < n` >> Cases_on `Num i < n` >> simp[]
 QED
 
-Theorem aug_place_replace_read_error[local]:
-  !path tv a old v err.
-    evaluate_subscripts tv a path = INL old /\
-    assign_subscripts tv a path (Replace v) = INR err ==>
-    ?msg. err = TypeError msg
-Proof
-  Induct_on `path` >- simp[assign_subscripts_def] >>
-  rpt gen_tac >> strip_tac >> Cases_on `h`
-  >~ [`ValueSubscript key`]
-  >- (`?i av. key = IntV i /\ a = ArrayV av` by
-        (Cases_on `key` >> fs[evaluate_subscripts_def] >>
-         Cases_on `a` >> fs[]) >>
-      gvs[] >>
-      qpat_x_assum `evaluate_subscripts _ _ _ = _` mp_tac >>
-      qpat_x_assum `assign_subscripts _ _ _ _ = _` mp_tac >>
-      simp[Once evaluate_subscripts_def, Once assign_subscripts_def, LET_THM] >>
-      Cases_on `array_index tv av i` >> simp[] >>
-      rename1 `array_index tv av i = SOME elt` >>
-      qmatch_goalsub_abbrev_tac `assign_subscripts etv elt path` >>
-      Cases_on `assign_subscripts etv elt path (Replace v)` >> simp[]
-      >- metis_tac[array_set_index_indexed_error] >>
-      Cases_on `evaluate_subscripts etv elt path` >> simp[] >>
-      first_x_assum drule_all >> rpt strip_tac >> gvs[])
-  >~ [`AttrSubscript id`]
-  >- (`?al. a = StructV al` by (Cases_on `a` >> fs[evaluate_subscripts_def]) >>
-      gvs[] >>
-      qpat_x_assum `evaluate_subscripts _ _ _ = _` mp_tac >>
-      qpat_x_assum `assign_subscripts _ _ _ _ = _` mp_tac >>
-      simp[Once evaluate_subscripts_def, Once assign_subscripts_def, LET_THM] >>
-      Cases_on `ALOOKUP al id` >> simp[] >>
-      rename1 `ALOOKUP al id = SOME fld` >>
-      qmatch_goalsub_abbrev_tac `assign_subscripts ftv fld path` >>
-      Cases_on `assign_subscripts ftv fld path (Replace v)` >> simp[] >>
-      Cases_on `evaluate_subscripts ftv fld path` >> simp[] >>
-      first_x_assum drule_all >> rpt strip_tac >> gvs[]) >>
-  fs[evaluate_subscripts_def]
-QED
-
 (* Staging ends before the storage guard; it needs no static/no-dalloca
    restriction.  The allocation/copy compiler cut is kept explicit. *)
 Theorem append_storage_aggregate_stage_ready[local]:
@@ -1369,28 +1331,6 @@ QED
 
 Finalise append_storage_aggregate_cont_full[local]
 
-Theorem append_nested_robust_array_project:
-  mem_path_offset rt path = SOME (k,ArrayTV tv (Dynamic cap)) /\
-  value_has_type rt a /\ well_formed_type_value rt /\
-  evaluate_subscripts rt a path = INL (ArrayV (DynArrayV vs)) /\
-  (!m. mem_agree_outside tm mem m ==> val_in_memory rt a b m) ==>
-  (!m. mem_agree_outside tm mem m ==>
-    val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) (b+k) m) /\
-  (!i. b+k <= i /\ i < b+k+32 ==> i NOTIN tm)
-Proof
-  strip_tac >>
-  `!m. mem_agree_outside tm mem m ==>
-    val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) (b+k) m` by
-    (rpt strip_tac >> irule bodySimAugPlaceLoadTheory.aug_place_path_project >>
-     goal_assum (drule_at Any) >> metis_tac[]) >>
-  `!m. mem_agree_outside tm mem m ==>
-    mem_word_at (b+k) m = n2w (LENGTH vs)` by
-    (rpt strip_tac >>
-     qpat_x_assum `!m. _ ==> val_in_memory (ArrayTV _ _) _ _ _` drule >>
-     simp[val_in_memory_def]) >>
-  drule representationCleanPtrTheory.robust_mem_word_at_clean >> simp[]
-QED
-
 Theorem append_nested_storage_success_path:
   compile_dynarray_append cenv bop vop 1 1 elem src_ty cap T
     (if tr then LocTransient else LocStorage) sm = ((),sb) /\
@@ -2122,73 +2062,6 @@ Resume append_nested_storage_cont_framed[static]:
 QED
 
 Finalise append_nested_storage_cont_framed[local]
-
-Theorem append_nested_storage_cont_full:
- !DF lo d ctx shadow_ctx PG func cx st0 lctx RetQ cenv env sa sm sb s0 G0 tn0
-   mid t G tn tr slot tv v bop vop w elem src_ty cap.
-  body_inv (cx_tops cx) ctx cenv cx /\
-  gas_admissible (append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v)
-    (stmt_res_ok lctx) mid /\
-  expr_sim_inv cenv cx env mid /\ supported_full_word_type elem /\
-  evaluate_type (get_tenv cx) elem = SOME tv /\
-  value_has_type tv v /\ abi_tuple_word tv v /\
-  compile_dynarray_append cenv bop vop 1 1 elem src_ty cap T
-    (if tr then LocTransient else LocStorage) sm = ((),sb) /\
-  (!x. bop = Var x \/ vop = Var x ==> not_fresh_at sm x) /\
-  eval_operand bop t = SOME slot /\ eval_operand vop t = SOME w /\
-  w = typed_val_to_w256 tv v /\
-  op_taint tn bop = {} /\ op_taint tn vop = {} /\ cap < dimword (:256) /\
-  storage_trace_domain cx st0 mid.storage_trace /\
-  (!H. valid_horizon cx st0 H mid.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx mid t /\
-    storage_well_formed_on cx mid (FST H) /\
-    ghost_inv_at (DF H) lo d cenv cx mid G tn t /\
-    storage_place_observed H (StoragePlace tr slot (ArrayTV tv (Dynamic cap)))) /\
-  (!H. dead_lo_ok H (DF H) lo cenv cx) /\ ~ctx_has_dalloca ctx /\
-  fn_inst_ids_distinct func /\ fn_has_code sm sb func /\
-  cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  local_ptrs_reserved cenv sa /\
-  (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
-  (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
-  return_buf_frame d cenv sm t /\ alloca_history func t /\
-  s0.vs_alloca_next <= t.vs_alloca_next /\ ~t.vs_halted /\
-  t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
-  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
-  (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
-    op_taint tn (Var x) = op_taint tn0 (Var x)) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
-    (append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v) (mid,t,G,tn)
-    (\H res ee Gf tf u. ?cenv''.
-      stmt_lands lctx sb res u /\ ~u.vs_halted /\
-      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
-      cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel H ctx func cenv'' cx ee u /\
-      storage_well_formed_on cx ee (FST H) /\
-      return_buf_frame d cenv'' sb u /\ alloca_history func u /\
-      s0.vs_alloca_next <= u.vs_alloca_next /\
-      ghost_inv_at (DF H) lo d cenv'' cx ee Gf tf u /\
-      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x u = SOME w) /\
-      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
-      (!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G0 x /\
-         op_taint tf (Var x) = op_taint tn0 (Var x)))
-    (\H res ee gt r. (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
-      halt_exit H cx ee res r /\
-      (ctx_has_dalloca ctx ==> !s. (r = Halt s \/ ?ir. r = IntRet ir s) ==>
-        allocas_below_fmp s))
-Proof
-  rpt gen_tac >> strip_tac >>
-  `is_word_type elem` by fs[supported_full_word_type_def, is_word_type_def] >>
-  qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`PG`,`func`,`cx`,`st0`,`lctx`,
-    `RetQ`,`cenv`,`env`,`sa`,`sm`,`sb`,`s0`,`G0`,`tn0`,`mid`,`t`,`G`,`tn`,`tr`,
-    `slot`,`tv`,`v`,`bop`,`vop`,`w`,`elem`,`src_ty`,`cap`] mp_tac
-    append_nested_storage_cont_framed >>
-  (impl_tac >- (asm_simp_tac bool_ss [] >> metis_tac[])) >> strip_tac >>
-  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
-  goal_assum (drule_at (Pos last)) >> simp[] >>
-  rpt gen_tac >> strip_tac >> qexists_tac `cenv''` >> simp[]
-QED
 
 Theorem append_outcome_scopes[local]:
   eval_stmt cx (Append bt e) es = (res,ee) ==>

@@ -228,54 +228,6 @@ End
 
 (* ===== Generic three-stage composition (PLAN §8.1) ===== *)
 
-(* The stages are explicit premises, not appeals to admitted S1-S7.
-   Source exemption is handled before the conditional stages are opened.
-   Totality supplies an actual EVM run even when neither stage applies.
-   The middle stage matches runs up to the source result's dead bytes
-   (external_call_dead), which the source relation ignores. *)
-(* The reconstructed raw oracle need not satisfy initial_ctx_rel: that
-   relation ties the output entry state to the actual EVM readings. *)
-Theorem e2e_vyper_to_evm_states:
-  !gobs tops ret am tx ctx ctx' vs_in vs_out es.
-    external_return_type tops tx.function_name = ret /\
-    vs_in.vs_outcomes = MAP SND (call_trace es) /\
-    (?fuel. external_call_result_rel
-              (storage_trace_horizon (source_storage_trace am tx (MAP SND (call_trace es)) gobs))
-              tops ret tx
-              (call_external (SOME vs_in.vs_outcomes) gobs am tx)
-              (run_context fuel ctx vs_in)) /\
-    (~source_exempt tops (call_external (SOME vs_in.vs_outcomes) gobs am tx) ==>
-       ctx_sim (external_call_dead
-                  (storage_trace_horizon (source_storage_trace am tx (MAP SND (call_trace es)) gobs)) tx
-                  (call_external (SOME vs_in.vs_outcomes) gobs am tx))
-         ctx ctx' vs_in vs_out /\
-       !fuel. ?r es'.
-         run_call es = SOME (r, es') /\
-         (frame_resource_starved es r es' \/
-          venom_frame_rel es r es' (run_context fuel ctx' vs_out)))
-    ==>
-    ?r es'. run_call es = SOME (r, es') /\
-            (frame_resource_starved es r es' \/
-             call_result_rel_at gobs tops am tx es r es')
-Proof
-  rpt strip_tac >>
-  qspec_then `es` strip_assume_tac run_call_total >>
-  qexistsl_tac [`r`, `es'`] >> simp[] >>
-  Cases_on `source_exempt tops (call_external (SOME vs_in.vs_outcomes) gobs am tx)`
-  >- (disj2_tac >> irule source_exempt_call_result_rel >> gvs[]) >>
-  gvs[] >>
-  drule_all external_call_result_rel_terminates >> strip_tac >>
-  qpat_x_assum `ctx_sim _ _ _ _ _` mp_tac >>
-  simp[ctx_sim_def] >> disch_then drule >> strip_tac >>
-  `terminates (run_context fuel' ctx' vs_out)` by
-    metis_tac[dead_result_rel_terminates] >>
-  qpat_x_assum `!fuel. frame_resource_starved es r es' \/ _`
-    (qspec_then `fuel'` strip_assume_tac) >>
-  gvs[] >>
-  drule_all external_call_result_rel_dead_transport >> strip_tac >>
-  metis_tac[external_call_result_rel_frame]
-QED
-
 Theorem e2e_vyper_to_evm:
   !gobs tops ret am tx ctx ctx' vs es.
     external_return_type tops tx.function_name = ret /\
