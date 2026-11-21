@@ -144,7 +144,7 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem for_array_expr_source_cut:
+Theorem for_array_expr_source_cut[local]:
   evaluate_type (get_tenv cx) typ = SOME tyv ==>
   eval_stmt cx (For id typ (Array e) n loop_body) =
     bind (eval_expr cx e)
