@@ -40,16 +40,15 @@ End
 
 (* abi_encode(args, ensure_tuple, method_id) -> Bytes[N]
    Mirrors Python: builtins/abi.py lower_abi_encode
-   Steps: eval args, create tuple, encode, optional method_id prefix *)
+   Assemble the Bytes buffer around the supplied payload encoder. *)
 Definition lower_abi_encode_def:
-  lower_abi_encode ensure_tuple method_id_opt src_op enc_info maxlen =
+  lower_abi_encode method_id_opt maxlen encode =
     let mid_size = (case method_id_opt of SOME _ => 4 | NONE => 0) in
     let total_size = 32 + 32 * word_size (maxlen + mid_size) in
     let data_offset = 32 + mid_size in
     do (* Allocate output buffer: [32-byte length] | [optional method_id] | [data] *)
        buf_op_alloc <- compile_alloc_buffer total_size;
        buf_op <- return buf_op_alloc.buf_operand;
-       data_ptr <- emit_op ADD [buf_op; Lit (n2w data_offset)];
        (* Optionally store method_id at buf+32 (shifted left 224 bits) *)
        (case method_id_opt of
           SOME mid =>
@@ -58,8 +57,8 @@ Definition lower_abi_encode_def:
             od
         | NONE => return ());
        (* Encode data into buffer, get runtime encoded length *)
-       encoded_len <-
-         compile_abi_encode_to_buf data_ptr src_op enc_info;
+       data_ptr <- emit_op ADD [buf_op; Lit (n2w data_offset)];
+       encoded_len <- encode data_ptr;
        (* Store total length = encoded_len + mid_size (runtime value) *)
        (if mid_size > 0 then
           do total_len <- emit_op ADD [encoded_len; Lit (n2w mid_size)];

@@ -121,7 +121,11 @@ Proof
   drule ext_call_alloc_ok_struct_fields >> strip_tac >>
   drule_all target_subscript_overlap_frame >> strip_tac >>
   simp[alloc_limits_expr_def, type_alloc_ok_def,
-       exprLoweringTheory.copies_subscript_base_def]
+       exprLoweringTheory.copies_subscript_base_def] >>
+  `lowered_value_type c' = lowered_value_type c` by
+    (simp[FUN_EQ_THM] >> metis_tac[lowered_value_type_struct_fields]) >>
+  `type_alloc_ok c' = type_alloc_ok c` by simp[FUN_EQ_THM, type_alloc_ok_def] >>
+  simp[]
 QED
 
 (* A slice's .code source, which the check skips for its address, is

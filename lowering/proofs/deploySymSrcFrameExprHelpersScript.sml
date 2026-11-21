@@ -469,6 +469,16 @@ Proof
   strip_tac >> apply_symbolic_frame symbolic_frame_struct_lit >> simp[]
 QED
 
+Theorem deploy_blocks_frame_abi_encode_payload:
+  (!vv. deploy_blocks_frame (unwrap_value cenv vv)) /\
+  (!src dst ty. deploy_blocks_frame (compile_store_memory cenv src dst ty ty)) /\
+  (!dst src info. deploy_blocks_frame (compile_abi_encode_to_buf dst src info)) ==>
+  deploy_blocks_frame (compile_abi_encode_payload cenv single vs tys dst)
+Proof
+  strip_tac >> apply_symbolic_frame symbolic_frame_abi_encode_payload >>
+  simp[deploy_blocks_frame_abi_encode_values_to_buf]
+QED
+
 Theorem deploy_blocks_frame_abi_encode_args:
   (!vv. deploy_blocks_frame (unwrap_value cenv vv)) /\
   (!ty vv. deploy_blocks_frame (compile_materialize_vv cenv ty vv)) ==>

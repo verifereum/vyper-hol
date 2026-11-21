@@ -1,6 +1,6 @@
 Theory runtimeSymSrcOpenLists
 Ancestors
-  runtimeSymSrcGeneratorContracts runtimeSymSrcEmission
+  runtimeSymSrcGeneratorContracts runtimeSymSrcEmission runtimeSymSrcExternalArgStaging
   runtimeSymSrcInterfaces exprLowering compileEnv list supportedExprTraverse
   stackPlanTypes
 
@@ -31,38 +31,10 @@ Proof
 QED
 
 Theorem runtime_sym_abi_encode_args:
-  (!ce vv s op s'. runtime_sym_env tops ce /\ runtime_sym_value vv /\
-    EVERY runtime_sym_inst (state_insts s) /\
-    unwrap_value ce vv s = (op,s') ==>
-    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
-  (!ce ty vv s op s'. runtime_sym_env tops ce /\ runtime_sym_value vv /\
-    EVERY runtime_sym_inst (state_insts s) /\
-    compile_materialize_vv ce ty vv s = (op,s') ==>
-    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) ==>
   runtime_sym_abi_encode_args_clause tops
 Proof
-  rewrite_tac[runtime_sym_abi_encode_args_clause_def] >>
-  strip_tac >> gen_tac >> gen_tac >> Induct >>
-  simp[compile_abi_encode_args_def, comp_return_def] >>
-  rpt gen_tac >> strip_tac >> gvs[comp_bind_def] >>
-  Cases_on `cfn ce (expr_type h) h s` >> gvs[] >>
-  qpat_x_assum `~supported_exprs_exists _ (h::es)` mp_tac >>
-  simp[supported_exprs_exists_every] >> strip_tac >>
-  `runtime_sym_expr_contract tops cfn ce (expr_type h) h` by
-    (first_x_assum irule >> simp[]) >>
-  `supported_expr tops h` by
-    metis_tac[runtime_sym_supported_argument, MEM, EVERY_DEF] >>
-  qpat_x_assum `runtime_sym_expr_contract _ _ _ _ _` mp_tac >>
-  rewrite_tac[runtime_sym_expr_contract_def] >>
-  simp[] >> disch_then drule_all >> strip_tac >>
-  Cases_on `~is_word_type (expr_type h) /\ exprs_can_mutate ce es` >>
-  gvs[] >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[comp_return_def] >>
-  `EVERY runtime_sym_inst (state_insts cs') /\ ~is_label_operand op` by
-    (first_x_assum drule_all >> simp[]) >>
-  `~supported_exprs_exists is_self_code es` by
-    simp[supported_exprs_exists_every, GSYM EVERY_NOT_EXISTS] >>
-  first_x_assum drule_all >> simp[]
+  rw[runtime_sym_abi_encode_args_clause_def, compile_abi_encode_args_def] >>
+  metis_tac[runtime_sym_ext_call_args]
 QED
 
 Theorem runtime_sym_concat:

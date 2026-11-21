@@ -146,19 +146,6 @@ Proof
   pure_asm_rewrite_tac[] >> metis_tac[]
 QED
 
-Theorem abi_encode_setup_raw_opcodes[local]:
-  abi_builtin_encode_setup mid maxlen st = (ops,ready) ==>
-  EVERY (\i. MEM i.inst_opcode [ALLOCA;ADD;MSTORE]) (emitted_insts st ready)
-Proof
-  Cases_on `mid` >>
-  simp[abi_builtin_encode_setup_def, abi_builtin_encode_method_id_def,
-    compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def,
-    comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  simp[emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>
-  simp[DROP_LENGTH_APPEND, mk_inst_def]
-QED
-
 Theorem abi_encode_window_concrete_phases:
   abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
   compile_abi_encode_to_buf (SND ops) src ei ready = (len,body_end) /\
@@ -246,7 +233,7 @@ Proof
   disch_then (qx_choose_then `setup_raw` (MAP_EVERY assume_tac o CONJUNCTS)) >>
   qmatch_asmsub_abbrev_tac `abi_builtin_encode_setup_frame _ _ _ _ _ initial prepared` >>
   `abi_encode_exec_frame func initial prepared` by
-    (drule abi_encode_setup_raw_opcodes >> strip_tac >>
+    (drule abi_builtin_encode_setup_opcodes >> strip_tac >>
      drule_all abi_encode_setup_sequence_frame >>
      simp_tac bool_ss [Abbr `prepared`, abi_encode_exec_frame_inst_idx]) >>
   `ready.cs_blocks = body_end.cs_blocks` by
@@ -602,7 +589,8 @@ Theorem abi_encode_nonword_no_block_run:
   evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\
   vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av /\
-  lower_abi_encode F mid op ei (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
+  lower_abi_encode mid (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
+    (\dst. compile_abi_encode_to_buf dst op ei)
     sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sa.cs_blocks = sb.cs_blocks /\ local_ptrs_reserved ce sa /\
@@ -637,7 +625,7 @@ Theorem abi_encode_nonword_no_block_run:
     p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
     actual.vs_alloca_next < dimword (:256)
 Proof
-  strip_tac >> drule lower_abi_encode_trace >> strip_tac >>
+  strip_tac >> drule lower_abi_encode_trace >> BETA_TAC >> strip_tac >>
   drule abi_builtin_encode_setup_shape >> strip_tac >>
   drule abi_encoder_counters >> strip_tac >>
   drule abi_builtin_encode_finish_shape >> strip_tac >>
@@ -668,7 +656,8 @@ Theorem abi_encode_nonword_no_block_observer:
   evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\
   vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av /\
-  lower_abi_encode F mid op ei (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
+  lower_abi_encode mid (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
+    (\dst. compile_abi_encode_to_buf dst op ei)
     sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sa.cs_blocks = sb.cs_blocks /\ local_ptrs_reserved ce sa /\

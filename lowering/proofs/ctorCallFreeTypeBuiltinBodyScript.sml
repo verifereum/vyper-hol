@@ -3,7 +3,7 @@ Theory ctorCallFreeTypeBuiltinBody
 Ancestors
   list pair vyperAST compileEnv venomInst loweringShapeDefs loweringShapeProps
   emitHelper context exprLowering exprCallBounds exprCallbackContracts ctorCallFreeRules
-  ctorCallFreeCallbacks supportedExprTraverse e2eDeployDefs
+  loweringCallArgsOpcodes ctorCallFreeCallbacks supportedExprTraverse e2eDeployDefs
   abiBuiltinDispatchCorrect exprBopLowering builtinAbi
 
 Theorem type_builtin_member_callback[local]:
@@ -71,46 +71,12 @@ local
     `EVERY (\i. P i.inst_opcode) (state_insts st2)` by
       metis_tac[pairTheory.SND] >> finish_ptr;
 
-  val encode_word =
+  val encode_case =
     simp[compile_type_builtin_dispatch_body_def] >> rpt strip_tac >>
-    ntac 3 (pairarg_tac >> simp[]) >>
-    rename1 `lower_value cfn cenv (expr_type arg) arg st = (v,st1)` >>
-    rename1 `compile_alloc_buffer 32 st1 = (buf,st2)` >>
-    rename1 `emit_void MSTORE _ st2 = (_,st3)` >>
-    `EVERY (\i. P i.inst_opcode) (state_insts st1)` by
-      (qpat_assum `!ety st. _ ==> EVERY _ (state_insts (SND (lower_value _ _ _ arg st)))`
-        (qspecl_then [`expr_type arg`, `st`] mp_tac) >>
-       qpat_assum `lower_value _ _ _ arg st = _` (fn th => simp[NoAsms, th]) >> simp[]) >>
-    `EVERY (\i. P i.inst_opcode) (state_insts st2)` by
-      metis_tac[pairTheory.SND] >>
-    `EVERY (\i. P i.inst_opcode) (state_insts st3)` by
-      (`P MSTORE` by simp[] >>
-       metis_tac[SRULE [] (Q.INST [`opc` |-> `MSTORE`] opcode_every_emit_void), pairTheory.SND]) >>
-    finish_ptr;
-
-  val encode_nonword =
-    simp[compile_type_builtin_dispatch_body_def] >> rpt strip_tac >>
-    ntac 2 (pairarg_tac >> simp[]) >>
-    rename1 `cfn cenv (expr_type arg) arg st = (src_vv,st1)` >>
-    rename1 `unwrap_value cenv src_vv st1 = (src_op,st2)` >>
-    `EVERY (\i. P i.inst_opcode) (state_insts st1)` by
-      (qpat_assum `!ety st. _ ==> EVERY _ (state_insts (SND (cfn _ _ arg st)))` (qspecl_then [`expr_type arg`, `st`] mp_tac) >>
-       qpat_assum `cfn _ _ _ st = _` (fn th => simp[NoAsms, th]) >> simp[]) >>
-    `EVERY (\i. P i.inst_opcode) (state_insts st2)` by
-      metis_tac[pairTheory.SND] >> finish_ptr;
-
-  val encode_general =
-    simp[compile_type_builtin_dispatch_body_def] >> rpt strip_tac >>
-    ntac 3 (pairarg_tac >> simp[]) >>
+    pairarg_tac >> simp[] >>
     rename1 `compile_abi_encode_args cfn cenv args st = (vs,st1)` >>
-    rename1 `compile_alloc_buffer _ st1 = (buf,st2)` >>
-    rename1 `compile_store_abi_tuple cenv _ _ _ st2 = (_,st3)` >>
-    `EVERY (\i. P i.inst_opcode) (state_insts st1)` by
-      metis_tac[pairTheory.SND] >>
-    `EVERY (\i. P i.inst_opcode) (state_insts st2)` by
-      metis_tac[pairTheory.SND] >>
-    `EVERY (\i. P i.inst_opcode) (state_insts st3)` by
-      metis_tac[pairTheory.SND] >> finish_ptr;
+    `EVERY (\i. P i.inst_opcode) (state_insts st1)` by metis_tac[pairTheory.SND] >>
+    finish_ptr;
 in
 Theorem outcomes_free_type_builtin_dispatch_body:
   P MSTORE ==>
@@ -139,15 +105,12 @@ Theorem outcomes_free_type_builtin_dispatch_body:
   (!v t st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_clamp_basetype v t st)))) /\
-  (!(ensure:bool) mid src info maxlen st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  (!mid n ce single vs tys st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (lower_abi_encode ensure mid src info maxlen st)))) /\
+      (state_insts (SND (lower_abi_encode mid n (compile_abi_encode_payload ce single vs tys) st)))) /\
   (!data info minsz maxsz outsz st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (lower_abi_decode data info minsz maxsz outsz st)))) /\
-  (!ce buf off vs st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_store_abi_tuple ce buf off vs st)))) /\
   (!ce t vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_materialize_vv ce t vv st)))) ==>
@@ -194,11 +157,7 @@ Proof
   >- extract_case
   >~ [`compile_type_builtin_dispatch_body _ _ _ _ (AbiDecode unwrap) _ _`]
   >- decode_case
-  >> rename1 `compile_type_builtin_dispatch_body _ _ _ _ (AbiEncode ensure mid) _ _` >>
-  Cases_on `LENGTH args = 1 /\ ~ensure`
-  >- (Cases_on `args` >- gvs[] >> rename1 `arg::rest` >> gvs[] >>
-      Cases_on `is_word_type (expr_type arg)` >- encode_word >> encode_nonword) >>
-  encode_general
+  >> encode_case
 QED
 
 Resume outcomes_free_type_builtin_dispatch_body[convert]:
@@ -246,15 +205,12 @@ Theorem opcode_every_type_builtin_dispatch_body:
   (!v t st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_clamp_basetype v t st)))) /\
-  (!(ensure:bool) mid src info maxlen st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  (!mid n ce single vs tys st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (lower_abi_encode ensure mid src info maxlen st)))) /\
+      (state_insts (SND (lower_abi_encode mid n (compile_abi_encode_payload ce single vs tys) st)))) /\
   (!data info minsz maxsz outsz st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (lower_abi_decode data info minsz maxsz outsz st)))) /\
-  (!ce buf off vs st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_store_abi_tuple ce buf off vs st)))) /\
   (!ce t vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_materialize_vv ce t vv st)))) ==>
@@ -277,6 +233,6 @@ Proof
   `P MSTORE` by simp[] >>
   member_callback_tac >>
   rpt strip_tac >> irule outcomes_free_type_builtin_dispatch_body >>
-  simp[UNDISCH opcode_every_abi_encode_args] >>
-  qexists_tac `R` >> qexists_tac `root2` >> simp[]
+  simp[outcomes_free_abi_encode_args] >>
+  qexistsl_tac [`R`, `root2`] >> simp[]
 QED

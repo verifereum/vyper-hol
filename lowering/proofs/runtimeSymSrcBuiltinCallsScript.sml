@@ -28,7 +28,7 @@ Theorem runtime_sym_abi_contract:
   runtime_sym_abi_clauses tops
 Proof
   rewrite_tac[runtime_sym_abi_clauses_def] >> rpt conj_tac
-  >- metis_tac[runtime_sym_lower_abi_encode]
+  >- (rpt gen_tac >> MATCH_ACCEPT_TAC runtime_sym_lower_abi_encode)
   >- metis_tac[runtime_sym_lower_abi_decode] >>
   metis_tac[runtime_sym_store_abi_tuple]
 QED

@@ -50,8 +50,8 @@ Theorem abi_encode_arguments_preserve_array_before_pop:
     (mstore 0 2w (mstore 32 1w (mstore 64 2w
       ((init_venom_state "entry") with vs_alloca_next := 96)))) of
     Halt s =>
-      eval_operand (HD (FST (abi_snapshot_test_args ce))) s = SOME 96w /\
-      eval_operand (HD (TL (FST (abi_snapshot_test_args ce)))) s = SOME 2w /\
+      eval_operand (vv_operand (HD (FST (abi_snapshot_test_args ce)))) s = SOME 96w /\
+      eval_operand (vv_operand (HD (TL (FST (abi_snapshot_test_args ce))))) s = SOME 2w /\
       mload 96 s = 2w /\ mload 128 s = 1w /\ mload 160 s = 2w /\
       mload 0 s = 1w
   | _ => F

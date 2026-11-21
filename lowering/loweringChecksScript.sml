@@ -44,3 +44,21 @@ Ancestors
   (* ABI encode/decode edge cases and size boundaries *)
   abiDecodeBoundsTest abiDecodeAliasTest abiDecoderBytesEdges
   createSizeBoundaryTest
+  (* Standalone ABI execution checks. The recursive encoder still serves
+     the unwrapped aggregate path, including scratch and stop boundaries. *)
+  abiScratchBuiltinOpenSource
+  exprSimAbiEncodeRegion exprSimAbiEncodeStopObserver
+  (* Argument capture, owned and borrowed frames, and cons postconditions. *)
+  bodyFullAbiEncodeArgStep bodyFullAbiEncodeArgsFrame bodyFullAbiEncodeArgsPost
+  exprSimAbiEncodeArgsCaptured exprSimAbiEncodeArgsUncaptured
+  (* Label and read-resource facts for argument outcomes. *)
+  bodyFullAbiEncodeOutcomeFrame bodyFullAbiEncodeReadResources
+  (* Frame the source across output setup, and the output through the
+     encoder and final length store. *)
+  bodyFullAbiEncodeSetupSourceFrame bodyFullAbiEncodeReadyFinish
+  (* Caller suffix, high-register transport, and setup and finish endpoints
+     for the window encoder. *)
+  exprSimAbiEncodeCallerSuffix exprSimAbiEncodeExtension
+  exprSimAbiEncodeSetupExtension exprSimAbiEncodeFinishExtension
+  (* Straight-line and relabelled execution of translated encoder inputs. *)
+  exprSimAbiEncodeTranslatedNoBlock exprSimAbiEncodeTranslatedRelabel

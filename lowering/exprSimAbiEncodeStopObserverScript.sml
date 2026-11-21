@@ -190,10 +190,11 @@ Proof
 QED
 
 Theorem abi_encode_stop_endpoint_non_nop:
-  lower_abi_encode ensure mid src info maxlen sa = (out,sb) ==>
+  lower_abi_encode mid maxlen
+    (\dst. compile_abi_encode_to_buf dst src info) sa = (out,sb) ==>
   EXISTS (\i. i.inst_opcode <> NOP) sb.cs_current_insts
 Proof
-  strip_tac >> drule lower_abi_encode_trace >> strip_tac >>
+  strip_tac >> drule lower_abi_encode_trace >> BETA_TAC >> strip_tac >>
   qpat_x_assum `abi_builtin_encode_finish _ _ _ _ = _` mp_tac >>
   simp[abi_builtin_encode_finish_def] >> IF_CASES_TAC >>
   simp[comp_bind_def, comp_ignore_bind_def, comp_return_def,
@@ -202,7 +203,8 @@ Proof
 QED
 
 Theorem abi_encode_stop_lower_noncollision:
-  lower_abi_encode ensure mid src info maxlen sa = (out,sb) /\
+  lower_abi_encode mid maxlen
+    (\dst. compile_abi_encode_to_buf dst src info) sa = (out,sb) /\
   fn_has_code sa sb fn /\
   EVERY (\i. i.inst_opcode = NOP) sa.cs_current_insts ==>
   !bb. MEM bb (emitted_blocks sa sb) ==> bb.bb_label <> sb.cs_current_bb
@@ -215,14 +217,16 @@ Proof
 QED
 
 Theorem abi_encode_stop_relabel_contains:
-  lower_abi_encode ensure mid src info maxlen sa = (out,sb) /\
+  lower_abi_encode mid maxlen
+    (\dst. compile_abi_encode_to_buf dst src info) sa = (out,sb) /\
   LENGTH ids = LENGTH sa.cs_current_insts /\
   fn_has_code (start_relabel L ids sa) (start_swap sa L ids sb) fn ==>
   fn_has_code (start_relabel L ids sa) (start_swap sa L ids sb)
     (abi_encode_stop_observer fn (start_swap sa L ids sb) id)
 Proof
   strip_tac >>
-  `lower_abi_encode ensure mid src info maxlen (start_relabel L ids sa) =
+  `lower_abi_encode mid maxlen
+    (\dst. compile_abi_encode_to_buf dst src info) (start_relabel L ids sa) =
     (out,start_swap sa L ids sb)` by
     metis_tac[lower_abi_encode_start_oblivious, frag_start_oblivious_def] >>
   `EVERY (\i. i.inst_opcode = NOP) (start_relabel L ids sa).cs_current_insts` by

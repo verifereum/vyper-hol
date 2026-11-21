@@ -306,8 +306,8 @@ Proof
   rpt IF_CASES_TAC >> rpt (pairarg_tac >> simp[]) >>
   simp[oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()] >>
   strip_tac >> gvs[]
-  >~ [`lower_abi_encode _ _ _ _ _ _ = _`]
-    >>~- ([`lower_abi_encode _ _ _ _ _ _ = _`],
+  >~ [`lower_abi_encode _ _ _ _ = _`]
+    >>~- ([`lower_abi_encode _ _ _ _ = _`],
       drule lower_abi_encode_open >> simp[]) >>
   drule lower_abi_decode_open >> simp[]
 QED

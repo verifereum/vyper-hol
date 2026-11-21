@@ -16,6 +16,7 @@ rr_storage
 xa_bytes_lit_return
 rl03_4topics
 rr02_dynamic
+rr03_abi
 rr04_terminus_ret
 rr_arg
 rr_nr
