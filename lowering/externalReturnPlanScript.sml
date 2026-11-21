@@ -356,13 +356,13 @@ QED
 
 Theorem return_selected_plan_nr:
   supported_program tops /\ source_typing_ok tops am tx /\
-  lookup_function NONE fname External tops = SOME (mut,nr,args,[],ret,fbody) /\
+  lookup_function NONE fname External tops = SOME (mut,nr,args,dflts,ret,fbody) /\
   ret <> NoneT /\
   set_external_package_target target
     (package_external_fn tops ut nkey_map
-      (mut,nr,rr,fname,args,[],ret,fbody)) =
+      (mut,nr,rr,fname,args,dflts,ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,nr,nkey,ut,iv,fbody,rt) /\
-  compile_register_positional_args cenv0 pos_args off st = (cenv,sa) ==>
+  cenv with ce_vars := cenv0.ce_vars = cenv0 ==>
   abi_enc_plan (type_env tops)
     (if needs_external_call_wrap ret /\
         is_dynamic (vyper_to_abi_type (type_env tops) ret)
@@ -377,7 +377,9 @@ Proof
   drule return_source_type_keys >> strip_tac >>
   drule return_package_target_inversion >> strip_tac >>
   drule return_package_metadata >> strip_tac >>
-  drule return_register_metadata >> strip_tac >> gvs[] >>
+  qpat_assum `cenv with ce_vars := _ = cenv0`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [compile_env_component_equality]) >>
+  gvs[] >>
   qmatch_goalsub_abbrev_tac `update_cenv_ret_abi bcenv ret` >>
   `bcenv.ce_struct_fields = make_struct_fields_map tops` by
     simp[Abbr `bcenv`, build_compile_env_ce_struct_fields] >>

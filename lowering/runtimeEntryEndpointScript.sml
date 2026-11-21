@@ -183,6 +183,9 @@ Definition runtime_body_endpoint_def:
              (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
                          vs_inst_idx := 0 |>, FEMPTY, entry_taint)
              marks0 (OK s0,G0,tn0)) /\
+      storage_trace_domain
+        (initial_evaluation_context am.sources am.layouts tx NONE)
+        (initial_state am []) es.storage_trace /\
       (* horizon form, as runtime_entry_endpoint has it, marks0 for [] *)
       !st0 H.
         valid_horizon
