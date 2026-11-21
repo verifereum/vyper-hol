@@ -14,6 +14,7 @@ Theorem immutable_assign_bare_global_mods:
   ce.ce_is_ctor /\ FLOOKUP env.bare_globals (src,id) = SOME ity
 Proof
   strip_tac >>
+  `ce.ce_is_ctor` by (drule_then assume_tac contract_inv_constructor >> simp[]) >>
   qpat_x_assum `supported_immutable_type _ _ = _` mp_tac >>
   simp[supported_immutable_type_def] >>
   Cases_on `supported_variable_decl tops (NONE,id)` >> simp[] >>
@@ -21,8 +22,6 @@ Proof
   Cases_on `decl0` >> Cases_on `decl1` >> Cases_on `decl3` >>
   simp[] >> strip_tac >> gvs[] >>
   drule_then strip_assume_tac supported_variable_decl_mem >> gvs[] >>
-  conj_tac
-  >- (drule_then assume_tac contract_inv_constructor >> simp[]) >>
   drule_all immutable_decl_bare_global_mods >> simp[]
 QED
 
