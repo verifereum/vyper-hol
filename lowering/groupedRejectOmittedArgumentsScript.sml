@@ -186,8 +186,9 @@ Triviality row22_model_slot_inputs:
     (!es'. expr_sim_inv (ce with ce_vars := FEMPTY) cx env es' ==>
       expr_body_pre (ce with ce_vars := FEMPTY) cx env e es') /\
     lower_value compile_expr (ce with ce_vars := FEMPTY) ty e = lower_value compile_expr ce ty e /\
-    lower_value compile_expr (ce with ce_vars := FEMPTY) ty (gas_shadow_expr e) =
-      lower_value compile_expr ce ty (gas_shadow_expr e) /\
+    lower_value compile_expr (gas_shadow_env T ce with ce_vars := FEMPTY) ty
+        (gas_shadow_expr e) =
+      lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e) /\
     evaluate_type (get_tenv cx) ty = SOME tv /\
     type_memory_bytes ce ty = type_memory_size tv /\ type_memory_size tv + 64 < dimword (:256)) vspec slots
 Proof
@@ -295,8 +296,9 @@ Theorem row22_omitted_model_inputs:
       (!es'. expr_sim_inv (ce with ce_vars := FEMPTY) cx env es' ==>
         expr_body_pre (ce with ce_vars := FEMPTY) cx env e es') /\
       lower_value compile_expr (ce with ce_vars := FEMPTY) ty e = lower_value compile_expr ce ty e /\
-      lower_value compile_expr (ce with ce_vars := FEMPTY) ty (gas_shadow_expr e) =
-        lower_value compile_expr ce ty (gas_shadow_expr e) /\
+      lower_value compile_expr (gas_shadow_env T ce with ce_vars := FEMPTY) ty
+        (gas_shadow_expr e) =
+        lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e) /\
       evaluate_type (get_tenv cx) ty = SOME tv /\
       type_memory_bytes ce ty = type_memory_size tv /\ type_memory_size tv + 64 < dimword (:256))
       (DROP k vars) slots /\
@@ -434,7 +436,8 @@ Finalise row22_omitted_model_inputs
 
 Theorem row22_omitted_seed_path_if_no_exempt:
   compile_init_kwargs ce vars off 0 hi sa = ((),sb) /\
-  compile_init_kwargs ce (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars)
+  compile_init_kwargs (gas_shadow_env T ce)
+    (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars)
     off 0 hi sha = ((),shb) /\
   fn_has_code sa sb fn /\ fn_has_code sha shb shfn /\ gas_shadow_state sa sha /\
   LIST_REL (\(n,dst,ty,e) (aid,p,base,tv).
@@ -443,8 +446,9 @@ Theorem row22_omitted_seed_path_if_no_exempt:
       expr_body_pre (ce with ce_vars := FEMPTY) cx env e es') /\
     lower_value compile_expr (ce with ce_vars := FEMPTY) ty e =
       lower_value compile_expr ce ty e /\
-    lower_value compile_expr (ce with ce_vars := FEMPTY) ty (gas_shadow_expr e) =
-      lower_value compile_expr ce ty (gas_shadow_expr e) /\
+    lower_value compile_expr (gas_shadow_env T ce with ce_vars := FEMPTY) ty
+        (gas_shadow_expr e) =
+      lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e) /\
     evaluate_type (get_tenv cx) ty = SOME tv /\
     type_memory_bytes ce ty = type_memory_size tv /\
     type_memory_size tv + 64 < dimword (:256)) vars slots /\
