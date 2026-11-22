@@ -1,12 +1,12 @@
 Theory deployDynamicMemory
 Ancestors
   deployPeakMemoryBound[ignore_grammar] deployPeakMemoryHeaders ctorDeployDefs
-  runtimeDynamicPeakMemory
+  runtimeDynamicPeakMemory[ignore_grammar]
   e2eDeployDefs e2eDefs asmOptimizer
   compileVyper supportedStmtTraverse supportedExprTraverse vyperAST
   contextRawReachable unitTransformDefs unitShapeDefs lowerDloadDefs
   venomInst venomState venomLayout exprSimHypsDefs fmpLowerSequenceExec
-  loweringShapeSource callRawVariant o1PassContract e2eEntry callTrace words list
+  loweringShapeSource callRawVariant o1PassContract[ignore_grammar] e2eEntry callTrace words list
 
 val _ = Parse.hide "tops";
 val _ = Parse.hide "body";

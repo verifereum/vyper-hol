@@ -2,7 +2,7 @@
 Theory callDynamicMemory
 Ancestors
   loweringMemCorrect runtimePeakMemoryBound runtimePeakMemorySourceGate
-  runtimeDynamicPeakMemory
+  runtimeDynamicPeakMemory[ignore_grammar]
   vyperLoweringCorrect vyperCompiler vyperTypeContract e2eDefs e2eEntry
   e2eOptEntry callRawVariant exprSimHypsDefs supportedExprTraverse
   supportedStmtTraverse vyperAST callTrace vfmTotalBalance vfmReturndataBound
