@@ -3,7 +3,7 @@ Ancestors
   fragGasMode fragGasSeq fragGasSeqMem fragExec fragExecMem
   exprLoweringProps venomInst venomState list rich_list
   fragGasPath fragGasPathMem gasCount memSafeRun venomExecSemantics
-  venomInstProofs arithmetic instIdxIndep
+  venomInstProofs arithmetic instIdxIndep ptrDiscipline unitTransformDefs
 
 Theorem gas_marked_path_step:
   !memory ctx func s bb i u n r.
@@ -91,6 +91,12 @@ Proof
   Induct_on `code` >- simp[run_inst_seq_def] >>
   rpt gen_tac >> strip_tac >>
   drule instruction_prefix_cursor >> strip_tac >>
+  `(memory ==> ctx_has_dalloca ctx ==> dalloca_no_wrap h s)` by
+    (rpt disch_tac >>
+     qpat_assum `memory ==> run_inst_seq_mem_ok _ _ /\ _`
+       (mp_tac o UNDISCH o CONJUNCT2 o UNDISCH) >>
+     disch_then (qspecl_then [`[]`, `h`, `code`, `s`] mp_tac) >>
+     simp[run_inst_seq_def]) >>
   Cases_on `step_inst_base h s` >>
   gvs[run_inst_seq_def, run_inst_seq_mem_ok_def]
   >- suspend "continue"
@@ -102,12 +108,31 @@ Resume run_inst_seq_abort_gas_path[continue]:
   `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
     metis_tac[step_preserves_halted, step_preserves_control_flow] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
+  `(memory ==> ctx_has_dalloca ctx ==>
+    !pre i post v. code = pre ++ i::post /\
+      run_inst_seq pre (u with vs_inst_idx := SUC s.vs_inst_idx) = OK v ==>
+      dalloca_no_wrap i v)` by
+    (rpt disch_tac >> rpt gen_tac >> strip_tac >>
+     `EVERY (\i. ~is_terminator i.inst_opcode) pre` by fs[EVERY_APPEND] >>
+     qpat_x_assum `run_inst_seq pre _ = OK v` mp_tac >>
+     simp[run_inst_seq_inst_idx] >>
+     Cases_on `run_inst_seq pre u` >> simp[exec_result_map_def] >>
+     disch_then (SUBST1_TAC o SYM) >>
+     rename1 `run_inst_seq pre u = OK w` >>
+     qpat_assum `memory ==> _ /\ (ctx_has_dalloca ctx ==> !pre i post v. _)`
+       (mp_tac o UNDISCH o CONJUNCT2 o UNDISCH) >>
+     disch_then (qspecl_then [`h::pre`, `i`, `post`, `w`] mp_tac) >>
+     simp[run_inst_seq_def, dalloca_no_wrap_def, eval_op_inst_idx]) >>
   first_x_assum (qspec_then `memory` mp_tac) >>
   disch_then (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
   disch_then (qspec_then `t with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
   simp[run_inst_seq_inst_idx, exec_result_map_def] >>
   disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
-  simp[] >> strip_tac >>
+  simp[] >>
+  (impl_tac >-
+    (pure_once_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+     pure_rewrite_tac[listTheory.APPEND] >> first_assum ACCEPT_TAC)) >>
+  strip_tac >>
   qexistsl [`(if h.inst_opcode = GAS then 1 else 0) + n`, `j`] >>
   irule gas_marked_path_step >> metis_tac[]
 QED

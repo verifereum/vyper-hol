@@ -24,7 +24,11 @@ Proof
   `FILTER (\i. i.inst_opcode = GAS) code = []` by
     gvs[FILTER_EQ_NIL, EVERY_MEM] >>
   Cases_on `memory` >> gvs[gas_marked_path_def]
-  >- (drule_all run_inst_seq_gas_path_mem >> simp[]) >>
+  >- (`ctx_has_dalloca ctx ==>
+        !pre i post u. code = pre ++ i::post /\
+          run_inst_seq pre s = OK u ==> dalloca_no_wrap i u` by
+        (rpt strip_tac >> fs[EVERY_APPEND]) >>
+      drule_all run_inst_seq_gas_path_mem >> simp[]) >>
   drule_all tuple_run_inst_seq_gas_path >> simp[]
 QED
 
@@ -38,8 +42,8 @@ Theorem rest_word_jump_marked:
 Proof
   strip_tac >>
   `mem_safe_step 0 ctx inst s` by
-    (simp[mem_safe_step_non_invoke] >>
-     disj1_tac >> irule below_frontier_no_ranges >> gvs[]) >>
+    (gvs[mem_safe_step_non_invoke] >>
+     disj1_tac >> irule below_frontier_no_ranges >> simp[]) >>
   `gas_path_mem_edge ctx fn s 0 (OK (jump_to lbl s))` by
     (simp[gas_path_mem_edge_def] >> qexists `0:num` >>
      gvs[step_inst_non_invoke, gas_count_step_def, is_terminator_def] >>

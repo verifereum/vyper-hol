@@ -61,6 +61,8 @@ Theorem for_range_jump_at_zero_path_mem:
     gas_path_mem ctx func s 0 (OK (jump_to lbl s))
 Proof
   rpt strip_tac >>
+  `inst.inst_opcode <> DALLOCA` by
+    (strip_tac >> fs[is_terminator_def]) >>
   `gas_path_mem_edge ctx func s 0 (OK (jump_to lbl s))` by
     (rewrite_tac[gas_path_mem_edge_def] >> simp[] >>
      qexists_tac `0:num` >>
@@ -176,6 +178,11 @@ Proof
      simp[Abbr `bb`, is_terminator_def, run_inst_seq_mem_ok_def,
           inst_dload_in_section_def, run_inst_seq_def, mk_inst_def,
           Abbr `u`] >>
+     conj_tac >-
+       (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+        qpat_assum `_ = _ ++ _`
+          (mp_tac o Q.AP_TERM `EVERY (\j. j.inst_opcode <> DALLOCA)`) >>
+        simp[EVERY_APPEND]) >>
      conj_tac >- (irule below_frontier_no_ranges >> simp[]) >>
      irule below_frontier_no_ranges >> simp[]) >>
   `gas_path_mem ctx func (u with vs_inst_idx := 2) 0
@@ -226,6 +233,11 @@ Proof
      simp[Abbr `bb`, is_terminator_def, run_inst_seq_mem_ok_def,
           inst_dload_in_section_def, run_inst_seq_def, mk_inst_def,
           Abbr `u`] >>
+     conj_tac >-
+       (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+        qpat_assum `_ = _ ++ _`
+          (mp_tac o Q.AP_TERM `EVERY (\j. j.inst_opcode <> DALLOCA)`) >>
+        simp[EVERY_APPEND]) >>
      conj_tac >- (irule below_frontier_no_ranges >> simp[]) >>
      irule below_frontier_no_ranges >> simp[]) >>
   `gas_path_mem ctx func (u with vs_inst_idx := 2) 0

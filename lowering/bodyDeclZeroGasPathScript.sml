@@ -3,7 +3,7 @@
 Theory bodyDeclZeroGasPath
 Ancestors
   fragGasSeqMem fragGasPathMem fragExecMem fragExec exprLoweringProps
-  venomInst list rich_list
+  ptrDiscipline unitTransformDefs venomInst list rich_list
 
 Theorem body_decl_zero_gas_path:
   fn_has_code sa sb func /\ same_blocks sa sb /\
