@@ -186,8 +186,19 @@ Proof
      simp[inst_extends_def, IS_PREFIX_APPEND]) >>
   ` (update_var x (4w+n2w (off-4)) a).vs_allocas = a.vs_allocas /\
     (update_var x (4w+n2w (off-4)) a).vs_current_bb = a.vs_current_bb` by simp[update_var_def] >>
-  drule_all ctor_checked_arg_sequence_reach >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+      emitted_insts allocated first = pre ++ i::post /\ run_inst_seq pre a = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `MEM i (emitted_insts allocated first)` by
+       (qpat_assum `emitted_insts allocated first = pre ++ i::post` SUBST1_TAC >>
+        simp[listTheory.MEM_APPEND]) >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_assum `emit_op ADD _ _ = _`
+       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     fs[mk_inst_def]) >>
+  drule_all (Q.INST [`ctx` |-> `ctx`] ctor_checked_arg_sequence_reach) >>
+  strip_tac >>
   qexistsl [`ready`, `DRESTRICT H0 (COMPL {x})`,
     `q with t_var := q.t_var |+ (x,{})`, `p`] >>
   pure_rewrite_tac[CONJ_ASSOC] >>

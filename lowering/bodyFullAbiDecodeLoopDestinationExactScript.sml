@@ -189,9 +189,17 @@ Proof
      `c1.cs_current_bb = sa.cs_current_bb` by
        (qpat_assum `emit_op ADD _ sa = _` (mp_tac o MATCH_MP emit_op_facts) >>
         strip_tac >> asm_rewrite_tac[]) >>
+     `ctx_has_dalloca ctx ==> !pre i post u.
+        emitted_insts sa c1 = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+       (rpt strip_tac >>
+        `MEM i (emitted_insts sa c1)` by simp[MEM_APPEND] >>
+        qpat_assum `emit_op ADD _ sa = _`
+          (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+        fs[mk_inst_def, unitTransformDefsTheory.dalloca_no_wrap_def]) >>
      drule_all emitted_origin_ptr_path >>
      disch_then (qspec_then `explicit` mp_tac) >>
-     simp[Abbr `s1`, Abbr `u1`]) >>
+     simp[Abbr `s1`]) >>
   `eval_operand idx s1 = SOME (n2w j) /\
    op_taint tn1 idx = {} /\ op_prov G1 idx = NONE` by
     (Cases_on `idx` >>
@@ -301,9 +309,17 @@ Proof
      `sb.cs_current_bb = c2.cs_current_bb` by
        (qpat_assum `emit_op ADD _ c2 = _` (mp_tac o MATCH_MP emit_op_facts) >>
         strip_tac >> asm_rewrite_tac[]) >>
+     `ctx_has_dalloca ctx ==> !pre i post u.
+        emitted_insts c2 sb = pre ++ i::post /\
+        run_inst_seq pre s2 = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+       (rpt strip_tac >>
+        `MEM i (emitted_insts c2 sb)` by simp[MEM_APPEND] >>
+        qpat_assum `emit_op ADD _ c2 = _`
+          (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+        fs[mk_inst_def, unitTransformDefsTheory.dalloca_no_wrap_def]) >>
      drule_all emitted_origin_ptr_path >>
      disch_then (qspec_then `explicit` mp_tac) >>
-     simp[Abbr `s3`, Abbr `u3`]) >>
+     simp[Abbr `s3`]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
     (s,G,tn) [] (OK s3,G3,tn3)` by
     (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
