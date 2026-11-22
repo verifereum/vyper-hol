@@ -1,10 +1,11 @@
 (* Connect successful linked calldata decoding to the installed entry route. *)
 Theory dispatchedSelectionMods
 Ancestors
-  dispatchedMissSelectionMods dispatchedClassifiedRouteMods
+  defaultDispatchModsNames dispatchedMissSelectionMods dispatchedClassifiedRouteMods
   dispatchedSignatureOriginMods dispatchedSignatureLookupMods
   dispatchedClassifierMods dispatchedDecodedBindMods
   e2eModsDefs vyperInterpreter vyperTypeContract venomInst alist list
+  constSubstMods
 
 Theorem linked_dispatched_binding_route:
   source_typing_ok_mods mods exps am tx /\
@@ -42,17 +43,22 @@ Proof
   `MEM (name,tys) (abi_deployed_signatures mods exps)` by metis_tac[FIND_MEM] >>
   drule_all (SRULE [LET_THM] deployed_signature_selected_decl) >>
   disch_then (qx_choose_then `top` (CONJUNCTS_THEN assume_tac)) >>
-  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (ALOOKUP exps name)) tops))` by
-    (fs[source_typing_ok_mods_def] >>
-     metis_tac[ALOOKUP_MEM,check_contract_external_names_distinct,contract_keys_module_distinct]) >>
+  drule_all source_typing_ok_mods_external_names_distinct >> strip_tac >>
   drule_all selected_decl_lookup_args >>
   disch_then (CONJUNCTS_THEN2 SUBST_ALL_TAC assume_tac) >>
   conj_tac >- metis_tac[decoded_parameters_bind] >>
   disj1_tac >>
-  drule_all (SRULE [LET_THM] selected_external_member_mods) >>
-  disch_then (qx_choose_then `rr` (qx_choose_then `b` assume_tac)) >>
-  qexistsl_tac [`rr`,`b`] >> simp[] >>
-  drule_all (SRULE [LET_THM] linked_classified_linear_routes) >>
-  disch_then (qspec_then `cd` (mp_tac o CONJUNCT2)) >>
-  `4 <= LENGTH cd` by decide_tac >> metis_tac[]
+  `?raw. (name <> "__default__" /\
+          top = FunctionDecl External mut guarded raw name args [] ret fbody) \/
+         public_getter_src (ALOOKUP exps name) top =
+           SOME (mut,guarded,raw,name,args,([]:expr list),ret,fbody)` suffices_by
+    (disch_then (qx_choose_then `raw` assume_tac) >>
+     drule_all selected_external_member_mods >>
+     simp[subst_consts_fn_mods_def, subst_consts_expr_mods_def] >>
+     disch_then assume_tac >>
+     qexistsl_tac [`raw`,`subst_consts_stmts_mods (consts_env_mods mods) fbody`] >> simp[] >>
+     drule_all (SRULE [LET_THM] linked_classified_linear_routes) >>
+     disch_then (qspec_then `cd` (mp_tac o CONJUNCT2)) >>
+     `4 <= LENGTH cd` by decide_tac >> metis_tac[]) >>
+  metis_tac[]
 QED

@@ -4,6 +4,15 @@ Ancestors
   alist list pair compileUnit compileVyper constSubstMods constSubst
   e2eModsDefs vyperTypeContract externalEntryChecks entryDispatchProps loweringShapeProps
 
+Theorem source_typing_ok_mods_external_names_distinct:
+  source_typing_ok_mods mods exps am tx /\ ALOOKUP mods src = SOME tops ==>
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel src) tops))
+Proof
+  rw[source_typing_ok_mods_def] >>
+  metis_tac[ALOOKUP_MEM, check_contract_external_names_distinct,
+            vyperTypeContractTheory.contract_keys_module_distinct]
+QED
+
 Theorem export_excludes_main_external:
   source_typing_ok_mods mods exps am tx /\ MEM name (MAP FST exps) ==>
   ~MEM (NONE:num option,name)
@@ -96,11 +105,8 @@ Proof
   >- (mp_tac (Q.SPEC `exps` exported_labels) >>
       simp[] >> fs[source_typing_ok_mods_def]) >>
   `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) (main_module mods)))` by
-    (qpat_x_assum `source_typing_ok_mods _ _ _ _` mp_tac >>
-     simp[source_typing_ok_mods_def] >> rpt strip_tac >>
-     drule check_contract_external_names_distinct >> strip_tac >>
-     Cases_on `ALOOKUP mods NONE` >> gvs[main_module_def] >>
-     metis_tac[ALOOKUP_MEM,contract_keys_module_distinct]) >>
+    (Cases_on `ALOOKUP mods NONE` >> simp[main_module_def] >>
+     metis_tac[source_typing_ok_mods_external_names_distinct]) >>
   conj_tac
   >- (drule classified_external_labels_distinct >>
       simp[classify_functions_def,MAP_MAP_o,combinTheory.o_DEF,LAMBDA_PROD,

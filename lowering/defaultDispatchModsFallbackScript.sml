@@ -3,7 +3,7 @@
 Theory defaultDispatchModsFallback
 Ancestors
   alist compileUnit compileVyper constSubstMods e2eModsDefs list
-  entryDispatchProps loweringShapeProps supportedNames venomFnInstsProofs
+  defaultDispatchModsNames entryDispatchProps loweringShapeProps supportedNames venomFnInstsProofs
   vyperCalldata vyperInterpreter vyperTypeContract vyperTypeContractGetter
 
 Theorem fallback_fold_slot[local]:
@@ -131,12 +131,11 @@ Proof
   mp_tac chosen_fallback_slot >>
   simp[] >> disch_tac >>
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all source_typing_ok_mods_external_names_distinct >> strip_tac >>
   qpat_x_assum `source_typing_ok_mods _ _ _ _` mp_tac >>
   simp[source_typing_ok_mods_def] >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
   `MEM (ALOOKUP exps "__default__",tops) mods` by metis_tac[ALOOKUP_MEM] >>
-  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (ALOOKUP exps "__default__")) tops))` by
-    metis_tac[check_contract_external_names_distinct, contract_keys_module_distinct] >>
   drule_all fallback_decl_agrees >> strip_tac >>
   gvs[subst_consts_fn_mods_def, subst_consts_expr_mods_def] >>
   drule_all check_contract_function_header >>

@@ -4,6 +4,7 @@ Ancestors
   compileUnit constSubstMods e2eModsDefs entryRejectCode
   defaultDispatchModsFallback defaultDispatchModsGetter defaultDispatchModsNames
   defaultDispatchModsRun defaultDispatchModsSize dispatchedClassifiedRouteMods
+  dispatchedClassifierMods
   dispatchedSignatureLookupMods dispatchedSignatureOriginMods entryDispatchProps
   vyperTypeContract entryLinearAppend entryCompileIntervals fragExec alist finite_map
   list pair option compileVyper compileEnv moduleLowering vyperInterpreter
@@ -45,10 +46,7 @@ Proof
   strip_tac >>
   drule_all deployed_signature_selected_decl >>
   disch_then (qx_choose_then `top` (CONJUNCTS_THEN assume_tac)) >>
-  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (ALOOKUP exps "__default__")) tops))` by
-    (fs[source_typing_ok_mods_def] >>
-     metis_tac[ALOOKUP_MEM, check_contract_external_names_distinct,
-               contract_keys_module_distinct]) >>
+  drule_all source_typing_ok_mods_external_names_distinct >> strip_tac >>
   drule_all selected_decl_lookup_args >>
   simp[tagged_getter_source_tuple] >> strip_tac >>
   `lookup_raw_return (ALOOKUP exps "__default__") "__default__" External tops = NONE` by
@@ -175,10 +173,17 @@ Proof
   gvs[Abbr `src`] >>
   drule_all default_signature_lookup_origin >>
   strip_tac >>
-  `abi_decl_signatures top = [("__default__", MAP SND args)] /\ MEM decl exts` by
-    (gvs[Abbr `decl`, Abbr `stmts`] >>
-     drule_all (Q.SPECL [`mods`,`exps`] selected_default_getter_classified) >>
-     simp[subst_consts_fn_mods_def, subst_consts_expr_mods_def]) >>
+  `public_getter_src (ALOOKUP exps "__default__") top =
+    SOME (mut,F,F,"__default__",args,([]:expr list),ret,fbody)` by
+    simp[tagged_getter_source_tuple] >>
+  `abi_decl_signatures top = [("__default__", MAP SND args)]` by
+    (drule tagged_getter_decl_signature >> simp[]) >>
+  `MEM decl exts` by
+    (fs[Abbr `decl`, Abbr `stmts`] >>
+     `MEM (ALOOKUP exps "__default__",subst_consts_fn_mods (consts_env_mods mods)
+         (mut,F,F,"__default__",args,([]:expr list),ret,fbody)) exts` suffices_by
+       simp[subst_consts_fn_mods_def, subst_consts_expr_mods_def] >>
+     irule selected_external_member_mods >> metis_tac[]) >>
   `tys = MAP SND args` by fs[] >> gvs[] >>
   `4 <= LENGTH cd` by decide_tac >>
   `!fl. linear_dispatch_target cd sels fl = "fn___default__"` by
