@@ -118,7 +118,7 @@ Theorem deploy_ctor_body_shadow:
       gas_shadow_context dunit.cu_context shadow_ctx /\
       gas_shadow_function func shadow_func /\
       MEM shadow_func shadow_ctx.ctx_functions /\
-      compile_stmts cenv NoLoop NoneT (MAP gas_shadow_stmt body) shadow_sa =
+      compile_stmts (gas_shadow_env T cenv) NoLoop NoneT (MAP gas_shadow_stmt body) shadow_sa =
         ((),shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       fn_has_code shadow_sa shadow_sb shadow_func

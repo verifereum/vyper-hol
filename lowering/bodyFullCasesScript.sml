@@ -672,22 +672,8 @@ Definition internal_defaults_const_names_def:
     | _ => F) tops
 End
 
-Theorem body_intcall_plain_defaults[local]:
-  MEM (FunctionDecl Internal mut nr rr fn args dflts ret ss) tops /\
-  ~internal_defaults_msg_gas tops ==>
-  ~supported_exprs_exists expr_msg_gas_root (DROP n dflts)
-Proof
-  strip_tac >> irule bodyStorageCasesTheory.supported_exprs_exists_DROP >>
-  qpat_x_assum `~internal_defaults_msg_gas tops` mp_tac >>
-  simp[supportedProgramTheory.internal_defaults_msg_gas_def, EXISTS_MEM] >>
-  disch_then (qspec_then `FunctionDecl Internal mut nr rr fn args dflts ret ss`
-    mp_tac) >> simp[supported_exprs_exists_every, EVERY_MEM] >> metis_tac[]
-QED
-
 Theorem body_intcall_case_full:
   !cx v16 src_id_opt fn es v17.
-    (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-       ~internal_defaults_msg_gas tops) /\
     (!ts mut nr args dflts ret ss.
        ~MEM (src_id_opt,fn) cx.stk /\
        get_module_code cx src_id_opt = SOME ts /\

@@ -62,7 +62,6 @@ Theorem grouped_default_call_route:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\
   EXISTS external_has_defaults (FST (classify_functions tops)) /\
-  ~internal_defaults_msg_gas tops /\
   runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
   initial_venom_state_rel tops am tx vs /\

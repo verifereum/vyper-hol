@@ -13,7 +13,7 @@ Theorem gas_shadow_compile_generate_deploy:
         ints ce body pay nr key trans)
       (compile_generate_deploy has_ctor runtime_size imm args data_size
         (MAP gas_shadow_internal_package ints)
-        ce (MAP gas_shadow_stmt body) pay nr key trans)
+        (gas_shadow_env sd ce) (MAP gas_shadow_stmt body) pay nr key trans)
 Proof
   rpt gen_tac >>
   qabbrev_tac `nrinfo = ce.ce_nonreentrant` >> PairCases_on `nrinfo` >>

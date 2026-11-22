@@ -273,7 +273,7 @@ Theorem deploy_shadow_body_inv:
           package_internal_fn tops T (K global_nonreentrant_slot) T
             (imm_len tops))
           (order_internals (deploy_internal_order (SOME cf) ints) ints)))
-      ce (MAP gas_shadow_stmt ctor_body) pay nr key trans "__deploy" =
+      (gas_shadow_env T ce) (MAP gas_shadow_stmt ctor_body) pay nr key trans "__deploy" =
       SOME shadow_unit ==>
     shadow_body_inv tops unit.cu_context shadow_unit.cu_context
 Proof
