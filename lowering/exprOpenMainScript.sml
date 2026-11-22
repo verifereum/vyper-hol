@@ -248,7 +248,8 @@ Resume compile_expr_open_general[builtin_dispatch]:
      gvs[LENGTH_EQ_NUM_compute] >>
      qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ NamedConst _ _ = _` mp_tac >>
      simp[NoAsms, compile_builtin_dispatch_body_def] >>
-     pairarg_tac >> simp[as_ptr_val_def] >> strip_tac >> gvs[SF ETA_ss] >>
+     pairarg_tac >> Cases_on `is_word_type ann` >>
+     simp[as_stack_val_def, as_ptr_val_def] >> strip_tac >> gvs[SF ETA_ss] >>
      qpat_x_assum `!cty op s. lower_value _ _ cty _ _ = (op,s) ==> _` drule >>
      simp[])
   >~ [`compile_builtin_dispatch_body _ _ _ _ (BoolChain _ _) _ _ = _`] >-
