@@ -30,7 +30,7 @@ fun slice_transport_no_wrap path root =
   qpat_assum path (fn witness =>
     qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
       qpat_assum root
-        (ACCEPT_TAC o MATCH_MP gas_origin_ptr_path_dalloca_no_wrap o
+        (ACCEPT_TAC o MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom o
          CONJ witness o CONJ no_phi)))
 
 fun slice_endpoint_bound post horizon =
@@ -753,13 +753,13 @@ Proof
   qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
       gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)`
     (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
-  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_no_wrap inst u` by
+  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_fmp_headroom inst u` by
     slice_transport_no_wrap `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)`
       `!fn i z. frag_reachable ctx func s0 fn i z ==> _` >>
   qpat_assum `!D. gas_origin_ptr_path (D,lo,_,ctx,func,PG) (t,G1,tn1) []
       (OK capture_state,capture_G,capture_tn)`
     (qspec_then `DF (storage_trace_horizon mid.storage_trace)` assume_tac) >>
-  `!fn inst u. frag_reachable ctx func capture_state fn inst u ==> dalloca_no_wrap inst u` by
+  `!fn inst u. frag_reachable ctx func capture_state fn inst u ==> dalloca_fmp_headroom inst u` by
     slice_transport_no_wrap
       `gas_origin_ptr_path _ (t,G1,tn1) [] (OK capture_state,capture_G,capture_tn)`
       `!fn i z. frag_reachable ctx func t fn i z ==> _` >>
@@ -895,7 +895,7 @@ Proof
      first_assum (irule_at Any)) >>
   asm_x "start_path"
     (qspec_then `storage_trace_horizon start_mid.storage_trace` (drule_then assume_tac)) >>
-  `!fn inst u. frag_reachable ctx func start_state fn inst u ==> dalloca_no_wrap inst u` by
+  `!fn inst u. frag_reachable ctx func start_state fn inst u ==> dalloca_fmp_headroom inst u` by
     slice_transport_no_wrap
       `gas_origin_ptr_path _ (capture_state,capture_G,capture_tn) start_marks
         (OK start_state,start_G,start_tn)`
@@ -1994,13 +1994,13 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
   qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
       gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)`
     (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
-  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_no_wrap inst u` by
+  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_fmp_headroom inst u` by
     slice_transport_no_wrap `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)`
       `!fn i z. frag_reachable ctx func s0 fn i z ==> _` >>
   qpat_assum `!D. gas_origin_ptr_path (D,lo,_,ctx,func,PG) (t,G1,tn1) []
       (OK captured,capture_G,capture_tn)`
     (qspec_then `DF (storage_trace_horizon mid.storage_trace)` assume_tac) >>
-  `!fn inst u. frag_reachable ctx func captured fn inst u ==> dalloca_no_wrap inst u` by
+  `!fn inst u. frag_reachable ctx func captured fn inst u ==> dalloca_fmp_headroom inst u` by
     slice_transport_no_wrap
       `gas_origin_ptr_path _ (t,G1,tn1) [] (OK captured,capture_G,capture_tn)`
       `!fn i z. frag_reachable ctx func t fn i z ==> _` >>
@@ -2136,7 +2136,7 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
      first_assum (irule_at Any)) >>
   asm_x "start_path"
     (qspec_then `storage_trace_horizon start_mid.storage_trace` (drule_then assume_tac)) >>
-  `!fn inst u. frag_reachable ctx func start_state fn inst u ==> dalloca_no_wrap inst u` by
+  `!fn inst u. frag_reachable ctx func start_state fn inst u ==> dalloca_fmp_headroom inst u` by
     slice_transport_no_wrap
       `gas_origin_ptr_path _ (captured,capture_G,capture_tn) start_marks
         (OK start_state,start_G,start_tn)`

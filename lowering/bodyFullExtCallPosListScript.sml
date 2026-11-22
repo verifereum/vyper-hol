@@ -125,7 +125,7 @@ Theorem extcall_request_positional_packing_outcome_named:
   MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -345,7 +345,7 @@ Proof
                    `sm`,`sa`,`env`,`d`,`cenv`] >>
          simp[comp_bind_def] >> rpt (gen_tac ORELSE strip_tac) >>
          gvs[vv_location_def, vv_storage_live_def, vv_store_bound_def]
-         >~ [`dalloca_no_wrap _ _`]
+         >~ [`dalloca_fmp_headroom _ _`]
          >- (qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> _`
                (drule_then ACCEPT_TAC)) >>
          qexists_tac `raw` >> simp[]) >>
@@ -358,7 +358,7 @@ Proof
          qexistsl [`vv`,`tops`,`sv`,`shadow_sm`,`shadow_sa`,`shadow_func`,
                    `sm`,`sa`,`env`,`d`,`cenv`] >>
          simp[] >> rpt (gen_tac ORELSE strip_tac)
-         >~ [`dalloca_no_wrap _ _`]
+         >~ [`dalloca_fmp_headroom _ _`]
          >- (qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> _`
                (drule_then ACCEPT_TAC)) >>
          qexists_tac `v` >> simp[] >>
@@ -519,11 +519,11 @@ Proof
          ACCEPT_TAC (MATCH_MP body_inv_no_phi (CONJ inv member))))) >>
   asm_x "head_path"
     (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
-  `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_fmp_headroom inst z` by
     (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
          qpat_assum `!fn i z. frag_reachable ctx func s0 fn i z ==> _`
-           (ACCEPT_TAC o MATCH_MP gas_origin_ptr_path_dalloca_no_wrap o
+           (ACCEPT_TAC o MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom o
             CONJ path o CONJ no_phi)))) >>
   qpat_x_assum `!svs' sa' shadow_sa' es' s0' G0' tn0'. _ ==> gas_outcome_full _ _ _ _ (eval_exprs cx xs) _ _ _`
     (qspecl_then [`tail_svs`, `sm`, `shadow_sm`, `mid`, `t`, `G1`, `tn1`] mp_tac) >>

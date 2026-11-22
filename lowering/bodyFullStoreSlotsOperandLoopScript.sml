@@ -58,6 +58,12 @@ Proof
               i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS)
      [mk_inst id EQ [Var cv;count] [tv]]` by
     simp[mk_inst_def, is_terminator_def] >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. [mk_inst id EQ [Var cv;count] [tv]] = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i [mk_inst id EQ [Var cv;count] [tv]]` by metis_tac[MEM_APPEND, MEM] >>
+     gvs[mk_inst_def]) >>
   drule_all_then (qspec_then `explicit` mp_tac) run_inst_seq_origin_ptr_lift >>
   simp[run_inst_seq_def, mk_inst_def, is_terminator_def]
 QED
@@ -311,6 +317,14 @@ Proof
      simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
     metis_tac[run_inst_seq_allocas_below_fmp] >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. code = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     rename1 `ins.inst_opcode <> DALLOCA` >>
+     `MEM ins code` by metis_tac[MEM_APPEND, MEM] >>
+     qpat_x_assum `EVERY (\j. _ /\ _ /\ _ /\ _ /\ j.inst_opcode <> DALLOCA) code` mp_tac >>
+     simp[EVERY_MEM] >> metis_tac[]) >>
   drule_all_then (qspec_then `explicit` strip_assume_tac) run_inst_seq_origin_ptr_lift >>
   qmatch_asmsub_abbrev_tac `gas_origin_ptr_path _ _ [] (OK t1,Gf,tnf)` >>
   `get_instruction bb t1.vs_inst_idx = SOME (mk_inst (id+7) JMP [Label hdr] [])` by

@@ -751,7 +751,11 @@ Theorem gas_mem_path_abort_any[local]:
     step_inst_base i s = Abort a t ==>
     gas_marked_path T ctx func s 0 (Abort a t)
 Proof
-  rpt strip_tac >> simp[gas_marked_path_def] >>
+  rpt strip_tac >>
+  `i.inst_opcode <> DALLOCA` by
+    (strip_tac >> qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[step_inst_base_opcode_eqs, AllCaseEqs()]) >>
+  simp[gas_marked_path_def] >>
   irule (cj 3 gas_path_mem_rules) >> simp[exit_result_def] >>
   `step_inst 0 ctx i s = Abort a t` by simp[step_inst_non_invoke] >>
   simp[gas_path_mem_edge_def] >> qexists_tac `0` >>
@@ -766,6 +770,7 @@ Theorem run_inst_seq_revert_path_mem:
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+               i.inst_opcode <> DALLOCA /\
                (is_terminator i.inst_opcode ==> i.inst_opcode = REVERT)) code /\
     run_inst_seq_mem_ok code s /\
     run_inst_seq code s = Abort a t ==>

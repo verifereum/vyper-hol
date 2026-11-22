@@ -111,6 +111,7 @@ Theorem alloca_add_mstore_opcodes[local]:
   !l. EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
                  i.inst_opcode = MSTORE) l ==>
       EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+                 i.inst_opcode <> DALLOCA /\
                  (is_terminator i.inst_opcode ==> i.inst_opcode = REVERT)) l
 Proof
   Induct >> rw[] >> rpt (qpat_x_assum `is_terminator _` mp_tac) >>
@@ -281,12 +282,14 @@ Proof
      qpat_x_assum `s' = t1` SUBST1_TAC >>
      qpat_assum `ecode = _` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
   `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+              i.inst_opcode <> DALLOCA /\
               (is_terminator i.inst_opcode ==> i.inst_opcode = REVERT))
      (emitted_insts sa sm ++ ecode)` by
     (rewrite_tac[EVERY_APPEND] >> conj_tac
      >- (irule alloca_add_mstore_opcodes >> first_assum ACCEPT_TAC) >>
      qpat_assum `ecode = _` SUBST1_TAC >>
-     rewrite_tac[EVERY_APPEND, reason_encoder_ops]) >>
+     simp[EVERY_APPEND, reason_head_def, reason_tail_def,
+          is_terminator_def, mk_inst_def]) >>
   qspecl_then [`emitted_insts sa sm ++ ecode`, `s0`, `t`, `Revert_abort`,
                `ctx`, `func`, `bb`] mp_tac run_inst_seq_revert_path_mem >>
   impl_tac

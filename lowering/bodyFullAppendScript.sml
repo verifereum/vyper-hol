@@ -4875,13 +4875,13 @@ Resume body_append_nested_frag_full[target_success]:
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   `!fn inst state. frag_reachable ctx func target_state fn inst state ==>
-    dalloca_no_wrap inst state` by
+    dalloca_fmp_headroom inst state` by
     (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
        metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
      qpat_assum `gas_origin_ptr_path _ _ _ (OK target_state,Gm,tm)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` (fn no_phi =>
-         qpat_assum `!fn inst st. frag_reachable ctx func s0 fn inst st ==> dalloca_no_wrap inst st`
-           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+         qpat_assum `!fn inst st. frag_reachable ctx func s0 fn inst st ==> dalloca_fmp_headroom inst st`
+           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
              o CONJ path o CONJ no_phi)))) >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> Q1 H place_res mid Gm tm target_state /\ _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>

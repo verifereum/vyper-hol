@@ -109,6 +109,12 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
        i.inst_opcode <> GAS) (emitted_insts sa sc)` by
     simp[mk_inst_def, is_terminator_def] >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sc = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts sa sc)` by simp[MEM_APPEND] >>
+     fs[MEM_APPEND, mk_inst_def] >> gvs[]) >>
   `run_inst_seq_mem_ok (emitted_insts sa sc) s` by
     (irule abi_decode_relative_load_mem_lower >>
      qexistsl_tac [`addr`, `b`, `h`, `p`, `pos`, `sb`, `src`, `v`] >>

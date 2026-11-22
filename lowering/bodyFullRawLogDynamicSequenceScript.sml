@@ -34,7 +34,8 @@ Proof
   `sb.cs_current_bb = sm.cs_current_bb /\
    sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm s2 ++ [i] /\
    LENGTH (emitted_insts sm s2) = 2 /\
-   EVERY (\j. j.inst_opcode <> INVOKE /\ ~is_terminator j.inst_opcode /\ j.inst_opcode <> GAS)
+   EVERY (\j. j.inst_opcode <> INVOKE /\ ~is_terminator j.inst_opcode /\
+               j.inst_opcode <> GAS /\ j.inst_opcode <> DALLOCA)
      (emitted_insts sm s2 ++ [i])` by
     (gvs[emit_op_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
          comp_return_def, fresh_var_def, fresh_id_def, emit_def, Abbr `i`] >>
@@ -93,6 +94,15 @@ Proof
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
   `FILTER (\j. j.inst_opcode = GAS) (emitted_insts sm s2 ++ [i]) = []` by
     (simp[FILTER_EQ_NIL] >> gvs[EVERY_MEM]) >>
+  `ctx_has_dalloca ctx ==> !pre j post u.
+    emitted_insts sm s2 ++ [i] = pre ++ j::post /\
+    run_inst_seq pre s = OK u ==> dalloca_no_wrap j u` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_assum `EVERY (\k. _ /\ _ /\ _ /\ k.inst_opcode <> DALLOCA) _`
+       mp_tac >>
+     qpat_assum `emitted_insts sm s2 ++ [i] = pre ++ j::post`
+       (fn th => pure_once_rewrite_tac[th]) >>
+     simp[EVERY_APPEND]) >>
   drule_all run_inst_seq_gas_origin_ptr_path >>
   simp[] >> strip_tac >>
   drule_all exec_block_run_inst_seq >>

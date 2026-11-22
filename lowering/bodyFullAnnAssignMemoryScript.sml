@@ -320,7 +320,7 @@ Theorem annassign_memory_full_raw_rhs_from_entry[local]:
   (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at a x) /\
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
   return_buf_frame d ce a entry /\ alloca_history func entry /\
-  (!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_no_wrap inst z) /\
+  (!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_fmp_headroom inst z) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func ce cx es entry /\
     storage_well_formed_on cx es (FST H) /\
@@ -493,7 +493,7 @@ Theorem annassign_memory_full_physical_rhs_from_entry[local]:
     (!x cap. old.ce_return_buf = SOME (PtrVar (Var x) cap) ==>
       not_fresh_at sa x) /\
     return_buf_frame d old sa s0 /\ alloca_history func s0 /\
-    (!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_no_wrap inst z) /\
+    (!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_fmp_headroom inst z) /\
     storage_trace_domain cx st0 es.storage_trace /\
     gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
     expr_body_pre ce cx env e es /\
@@ -909,12 +909,12 @@ Proof
     (qx_choosel_then [`w`, `entry`, `Ga`, `tna`] strip_assume_tac)) >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
-  `!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_fmp_headroom inst z` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK entry,Ga,tna)`
        (qspec_then `ARB` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn phi =>
        qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> _` (fn safe =>
-       ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+       ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
          (LIST_CONJ [path,phi,safe]))))))) >>
   Cases_on `has_length_word typ /\ is_empty_value_expr e`
   >- suspend "empty" >>

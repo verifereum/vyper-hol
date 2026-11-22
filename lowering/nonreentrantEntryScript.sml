@@ -150,6 +150,11 @@ Proof
       first_x_assum drule >> strip_tac >> gvs[is_terminator_def]) >>
   conj_tac
   >- (drule transient_lock_mem_ok >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `EVERY _ (emitted_insts st st')` mp_tac >>
+      simp[EVERY_APPEND] >> strip_tac >>
+      irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >> gvs[]) >>
   drule_all transient_lock_run >> strip_tac
   >- (disj1_tac >> goal_assum $ drule_at Any >>
       simp[vars_pc_only_inst_idx, control_moves_keep_vars] >>

@@ -19,7 +19,7 @@ Theorem make_array_loop_full:
     ctx_inst_ids_distinct ctx /\ fn_inst_ids_distinct func /\
     gas_shadow_context ctx shadow_ctx /\ gas_shadow_function func shadow_func /\
     MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
-    (!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_no_wrap inst z) /\
+    (!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_fmp_headroom inst z) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==>
            not_fresh_at csbase x) /\
@@ -264,12 +264,12 @@ Resume make_array_loop_full[continuation]:
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   asm_x "slot_path"
     (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
-  `!fn i z. frag_reachable ctx func t'' fn i z ==> dalloca_no_wrap i z` by
+  `!fn i z. frag_reachable ctx func t'' fn i z ==> dalloca_fmp_headroom i z` by
     (qpat_assum `gas_origin_ptr_path _ (s,G,tn) marks (OK t'',G1,tn1)` (fn path =>
        qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
        qpat_assum `MEM func ctx.ctx_functions` (fn member =>
        qpat_assum `!fn i z. frag_reachable ctx func s fn i z ==> _`
-         (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+         (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
           CONJ path o CONJ (MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi
             (CONJ inv member))))))) >>
   disj1_tac >> goal_assum (drule_at Any) >> BETA_TAC >>
@@ -351,7 +351,7 @@ QED
 
 Resume make_array_loop_full[tail_entry]:
   simp[] >> rpt conj_tac
-  >~ [`!fn inst z. frag_reachable ctx func t'' fn inst z ==> dalloca_no_wrap inst z`]
+  >~ [`!fn inst z. frag_reachable ctx func t'' fn inst z ==> dalloca_fmp_headroom inst z`]
   >- first_assum ACCEPT_TAC >>
   suspend "tail_entry_close"
 QED

@@ -49,6 +49,8 @@ Proof
   gen_tac >> irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >> simp[] >>
   qexistsl_tac [`[i]`, `a`] >> simp[Abbr `i`, is_terminator_def] >>
   conj_tac >-
+    (rpt strip_tac >> Cases_on `pre` >> gvs[mk_inst_def]) >>
+  conj_tac >-
     simp[run_inst_seq_mem_ok_def, inst_mem_below_frontier_def,
          inst_dload_in_section_def, mk_inst_def,
          source_memory_read_ranges_def, source_memory_write_ranges_def,
@@ -244,7 +246,14 @@ Proof
     (drule_all bop_scalar_seq_run >>
      disch_then (qspecl_then [`func`,`PG`,`D`] strip_assume_tac) >> metis_tac[]) >>
   `gD = G2 /\ tnD = tn2` by metis_tac[inst_seq_ptr_ghost_unique] >>
-  gvs[] >> drule_all run_inst_seq_origin_ptr_lift >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post reached. emitted_insts m b = pre ++ i::post /\
+      run_inst_seq pre u = OK reached ==> dalloca_no_wrap i reached)` by
+    (rpt strip_tac >>
+     `MEM i (emitted_insts m b)` by simp[MEM_APPEND] >>
+     irule dalloca_no_wrap_non_dalloca >>
+     drule_all bop_scalar_seq_outputs >> strip_tac >> gvs[]) >>
+  gvs[] >> drule_all (SIMP_RULE (srw_ss()) [] run_inst_seq_origin_ptr_lift) >>
   disch_then (qspec_then `explicit` mp_tac) >>
   simp[venom_state_fupdfupds, combinTheory.o_DEF]
 QED
@@ -281,8 +290,17 @@ Proof
      simp[] >> irule bop_scalar_seq_assert >> simp[]) >>
   qpat_assum `bop_scalar_seq {} A (prefix ++ [_]) C`
     (mp_then Any (qspec_then `u` strip_assume_tac) abiDecodeScalarRunSafetyTheory.abi_decode_scalar_run_safe) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post reached. prefix ++ [mk_inst id opc [needle] []] =
+      pre ++ i::post /\ run_inst_seq pre u = OK reached ==>
+      dalloca_no_wrap i reached)` by
+    (rpt strip_tac >>
+     `MEM i (prefix ++ [mk_inst id opc [needle] []])` by
+       metis_tac[MEM_APPEND, MEM] >>
+     irule dalloca_no_wrap_non_dalloca >>
+     drule_all bop_scalar_seq_outputs >> strip_tac >> gvs[]) >>
   drule_all run_inst_seq_origin_ptr_abort_lift >>
-  disch_then (qspecl_then [`explicit`,`ctx`,`PG`] (qx_choose_then `j` assume_tac)) >>
+  disch_then (qspecl_then [`explicit`,`PG`] (qx_choose_then `j` assume_tac)) >>
   `!D. ?G2 tn2. inst_seq_ptr D 0 ctx func PG G1 tn1
      (prefix ++ [mk_inst id opc [needle] []]) u G2 tn2` by
     (qx_gen_tac `D` >>

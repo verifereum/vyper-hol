@@ -29,7 +29,7 @@ Theorem calldata_memory_joint_run:
   gas_origin_ptr_path (D0,lo,explicit0,ctx,func,PG)
     (s0,G0,tn0) marks (OK s,G,tn) /\
   (!fn inst v. contextRawReachable$frag_reachable ctx func s0 fn inst v ==>
-     dalloca_no_wrap inst v) /\
+     dalloca_fmp_headroom inst v) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\ allocas_below_fmp s /\
   w2n s.vs_initial_fmp <= w2n s.vs_fmp /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\

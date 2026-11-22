@@ -218,6 +218,42 @@ Definition create_copy_dalloca_chunk_def:
       chunk = emitted_insts sa sd
 End
 
+Theorem create_blueprint_dalloca_chunk_windows:
+  (!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) /\
+  create_blueprint_dalloca_chunk chunk 1 ==>
+  dalloca_windows window chunk
+Proof
+  rewrite_tac[dalloca_windows_def] >> rpt strip_tac >>
+  `window chunk 1` by
+    (qpat_assum `!c. create_blueprint_dalloca_chunk c 1 ==> window c 1`
+       (qspec_then `chunk` mp_tac) >> simp[]) >>
+  drule create_blueprint_dalloca_chunk_parts >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (middle ++ [effect])` by
+    (simp[EVERY_APPEND] >> conj_tac
+     >- (fs[EVERY_MEM] >> metis_tac[])
+     >> fs[]) >>
+  `j = 1` by
+    (qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _`
+       (assume_tac o PURE_REWRITE_RULE[EVERY_EL]) >>
+     Cases_on `j` >> fs[] >> rename1 `n = 0` >>
+     Cases_on `n` >> fs[] >>
+     qpat_x_assum `!k:num. k < _ ==> _` drule >> simp[]) >>
+  qexistsl_tac [`[]`, `chunk`, `[]`, `1`] >> simp[]
+QED
+
+Theorem create_blueprint_dalloca_chunk_to_window:
+  create_blueprint_dalloca_chunk chunk k /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = prefix ++ chunk ++ suffix /\
+  s.vs_inst_idx = LENGTH prefix + k /\
+  i = EL s.vs_inst_idx bb.bb_instructions ==>
+  create_blueprint_dalloca_window fn i s
+Proof
+  strip_tac >> drule create_blueprint_dalloca_chunk_parts >> strip_tac >>
+  simp[create_blueprint_dalloca_window_def] >>
+  qexistsl_tac [`prefix`, `chunk`, `suffix`] >> gvs[EL_APPEND_EQN]
+QED
+
 Theorem create_copy_dalloca_chunk_opcodes:
   create_copy_dalloca_chunk chunk k ==>
   k = 5 /\
@@ -512,6 +548,39 @@ Proof
   `compiler_dalloca_windows window sd` by
     gvs[compiler_dalloca_windows_def, dalloca_windows_append] >>
   metis_tac[dalloca_windows_check_create_result, preserves_dalloca_windows_def]
+QED
+
+Theorem dalloca_windows_create_blueprint_append:
+  (!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+  preserves_dalloca_windows window
+    (compile_create_blueprint_append target value salt offset code args_ptr args_len rev)
+Proof
+  rw[preserves_dalloca_windows_def] >>
+  drule compile_create_blueprint_dalloca_chunk >> strip_tac >>
+  `dalloca_windows window chunk` by metis_tac[create_blueprint_dalloca_chunk_windows] >>
+  `compiler_dalloca_windows window sd` by
+    gvs[compiler_dalloca_windows_def, dalloca_windows_append] >>
+  metis_tac[dalloca_windows_check_create_result, preserves_dalloca_windows_def]
+QED
+
+Theorem active_inst_dalloca_windows_with_blueprint:
+  ALL_DISTINCT (fn_labels fn) /\ active_inst fn i s /\ i.inst_opcode = DALLOCA /\
+  (!bb. MEM bb fn.fn_blocks ==>
+    dalloca_windows (\chunk k. raw_call_dalloca_chunk chunk k \/
+       create_copy_dalloca_chunk chunk k \/ create_blueprint_dalloca_chunk chunk k)
+      bb.bb_instructions) ==>
+  raw_call_dalloca_window fn i s \/ create_copy_dalloca_window fn i s \/
+  create_blueprint_dalloca_window fn i s
+Proof
+  strip_tac >> drule_all active_inst_block_lookup >> strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions /\
+   i = EL s.vs_inst_idx bb.bb_instructions` by fs[get_instruction_def, AllCaseEqs()] >>
+  qpat_x_assum `!bb. MEM bb fn.fn_blocks ==> _` drule >> simp[dalloca_windows_def] >>
+  disch_then (qspec_then `s.vs_inst_idx` mp_tac) >>
+  fs[] >> strip_tac >>
+  metis_tac[raw_call_dalloca_chunk_to_window, create_copy_dalloca_chunk_to_window,
+            create_blueprint_dalloca_chunk_to_window, ADD_COMM]
 QED
 
 Theorem active_inst_dalloca_windows:

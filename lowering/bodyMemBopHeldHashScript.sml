@@ -95,6 +95,23 @@ Proof
      decide_tac) >>
   `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     simp[IS_PREFIX_APPEND] >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+    (qpat_x_assum `compile_bytestring_hash _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[compile_bytestring_hash_def, comp_bind_def, comp_return_def,
+          comp_ignore_bind_def, emit_op_def, fresh_id_def, fresh_var_def, emit_def] >>
+     strip_tac >>
+     qpat_x_assum `_ with <|cs_next_var := _; cs_next_id := _;
+       cs_current_insts := _|> = sb` (SUBST1_TAC o SYM) >>
+     simp[emitted_insts_def] >>
+     CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+     simp[DROP_LENGTH_APPEND, mk_inst_def]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+      !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+     qpat_assum `emitted_insts _ _ = _ ++ _::_` (fn th => simp[th, EVERY_APPEND])) >>
   drule_all run_inst_seq_gas_path_mem >> simp[] >> strip_tac >>
   `alloca_inv s` by fs[stmt_state_rel_def] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by

@@ -538,6 +538,10 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_source_path]:
         `u.vs_inst_idx + 1 = LENGTH prepared.cs_current_insts`,
         `Abbrev (source_inst = _)`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
+     `(ctx_has_dalloca ctx ==>
+        !pre i post v. [source_inst] = pre ++ i::post /\
+          run_inst_seq pre u = OK v ==> dalloca_no_wrap i v)` by
+       simp[NoAsms, Once EQ_SYM_EQ, APPEND_EQ_SING, Abbr `source_inst`, mk_inst_def] >>
      drule_all run_inst_seq_gas_origin_ptr_path >>
      simp_tac (srw_ss()) [Abbr `source_inst`, mk_inst_def] >>
      asm_rewrite_tac[] >> metis_tac[]) >>
@@ -822,6 +826,10 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_head_path]:
         `us.vs_inst_idx + 1 = LENGTH ready.cs_current_insts`,
         `Abbrev (head_inst = _)`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
+     `(ctx_has_dalloca ctx ==>
+        !pre i post v. [head_inst] = pre ++ i::post /\
+          run_inst_seq pre us = OK v ==> dalloca_no_wrap i v)` by
+       simp[NoAsms, Once EQ_SYM_EQ, APPEND_EQ_SING, Abbr `head_inst`, mk_inst_def] >>
      drule_all run_inst_seq_gas_origin_ptr_path >>
      simp_tac (srw_ss()) [Abbr `head_inst`, mk_inst_def] >>
      asm_rewrite_tac[] >> metis_tac[]) >>
@@ -4299,6 +4307,10 @@ Resume compile_abi_encode_to_buf_complex_window_joint[parent_dynamic]:
         POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) [ld]` by
        simp_tac (srw_ss()) [NoAsms,EVERY_DEF,Abbr `ld`,mk_inst_def,is_terminator_def] >>
+     `(ctx_has_dalloca ctx ==>
+        !pre i post u. [ld] = pre ++ i::post /\
+          run_inst_seq pre v = OK u ==> dalloca_no_wrap i u)` by
+       simp[NoAsms, Once EQ_SYM_EQ, APPEND_EQ_SING, Abbr `ld`, mk_inst_def] >>
      mp_tac (Q.SPECL [`[ld]`,`v`,`raw_load`,`Gv`,`tv`,`Gload`,`tt`,`ctx`,`func`,`bb`]
        run_inst_seq_gas_origin_ptr_path) >>
      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>

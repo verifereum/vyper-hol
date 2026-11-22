@@ -167,6 +167,14 @@ Proof
      simp[DROP_APPEND]) >>
   `isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     simp[IS_PREFIX_APPEND] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sm sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     qpat_assum `EVERY (\j. MEM j.inst_opcode _) _`
+       (qspec_then `i` mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     simp[MEM_APPEND] >> strip_tac >>
+     simp[memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   drule_all run_inst_seq_gas_path_mem >> simp[] >> strip_tac >>
   `alloca_inv s` by fs[expr_post_def, stmt_state_rel_def] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb)` by

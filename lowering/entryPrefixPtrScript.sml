@@ -132,7 +132,9 @@ Theorem dispatch_raw_jump_joint[local]:
   gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
     (OK (jump_to lbl s),G,tn)
 Proof
-  strip_tac >> irule dispatch_joint_edge_path >> conj_tac
+  strip_tac >>
+  `i.inst_opcode <> DALLOCA` by (strip_tac >> gvs[is_terminator_def]) >>
+  irule dispatch_joint_edge_path >> conj_tac
   >- simp[jump_to_def] >> conj_tac
   >- (rewrite_tac[gas_path_mem_edge_def] >> simp[] >> qexists_tac `0` >>
       simp[step_inst_non_invoke, gas_count_step_def, mem_safe_step_non_invoke] >>

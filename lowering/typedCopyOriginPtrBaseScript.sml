@@ -306,7 +306,7 @@ QED
 
 Theorem typed_copy_origin_ptr_emit_op_path:
   emit_op opc args a = (op,b) /\ fn_has_code a b func /\
-  opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc /\
+  opc <> INVOKE /\ opc <> GAS /\ opc <> DALLOCA /\ ~is_terminator opc /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
   (!out. step_inst_base (mk_inst a.cs_next_id opc args [out]) s =
@@ -430,7 +430,7 @@ Proof
      inst_dload_in_section (mk_inst a.cs_next_id opc [left;right] [out]) s` by
     (gen_tac >> irule typed_copy_origin_ptr_binop_checks >> simp[] >>
      metis_tac[]) >>
-  `opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc` by
+  `opc <> INVOKE /\ opc <> GAS /\ opc <> DALLOCA /\ ~is_terminator opc` by
     (gvs[] >> simp[venomInstTheory.is_terminator_def]) >>
   `!out. op = Var out ==> not_fresh_at b out` by
     metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_fresh] >>
@@ -1047,7 +1047,8 @@ Proof
     inst_dload_in_section (mk_inst a.cs_next_id LT [Var counter;length] [out]) s` by
     simp[inst_mem_below_frontier_def, memSafeRunTheory.inst_dload_in_section_def,
          mk_inst_def, source_memory_read_ranges_def, source_memory_write_ranges_def] >>
-  `LT <> INVOKE /\ LT <> GAS /\ ~is_terminator LT` by simp[is_terminator_def] >>
+  `LT <> INVOKE /\ LT <> GAS /\ LT <> DALLOCA /\ ~is_terminator LT` by
+    simp[is_terminator_def] >>
   drule_all typed_copy_origin_ptr_emit_op_path >>
   disch_then (qspecl_then [`0`,`0`,`explicit`,`PG`] strip_assume_tac) >>
   rename1 `lt = Var x` >>
@@ -1086,7 +1087,8 @@ Resume typed_copy_origin_ptr_header_branch_path[iszero]:
     inst_dload_in_section (mk_inst b.cs_next_id ISZERO [lt] [out]) q` by
     simp[inst_mem_below_frontier_def, memSafeRunTheory.inst_dload_in_section_def,
          mk_inst_def, source_memory_read_ranges_def, source_memory_write_ranges_def] >>
-  `ISZERO <> INVOKE /\ ISZERO <> GAS /\ ~is_terminator ISZERO` by simp[is_terminator_def] >>
+  `ISZERO <> INVOKE /\ ISZERO <> GAS /\ ISZERO <> DALLOCA /\ ~is_terminator ISZERO` by
+    simp[is_terminator_def] >>
   qpat_x_assum `emit_op LT _ _ = _` kall_tac >>
   drule_all typed_copy_origin_ptr_emit_op_path >>
   disch_then (qspecl_then [`0`,`0`,`explicit`,`PG`] strip_assume_tac) >>

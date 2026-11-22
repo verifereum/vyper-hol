@@ -427,11 +427,11 @@ Resume subscript_copied_bind_caller_frames[base_success]:
      `gas_origin_ptr_path (DF H0,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
         (s0,G0,tn0) marks (OK u,Gc,tnc)` by
        metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append, listTheory.APPEND_NIL] >>
-     `!fn i v. frag_reachable ctx func u fn i v ==> dalloca_no_wrap i v` by
+     `!fn i v. frag_reachable ctx func u fn i v ==> dalloca_fmp_headroom i v` by
        (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK u,Gc,tnc)` (fn path =>
         qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
         qpat_assum `!fn i v. frag_reachable ctx func s0 fn i v ==> _`
-          (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+          (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
            CONJ path o CONJ no_phi)))) >>
      simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qpat_x_assum `cvv = LocatedValue _ _` SUBST_ALL_TAC >>

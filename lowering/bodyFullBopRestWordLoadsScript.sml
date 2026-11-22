@@ -1854,6 +1854,8 @@ Resume rest_word_membership_header_joint_indexed[edge]:
       source_memory_read_ranges_def, source_memory_write_ranges_def]) >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
    get_instruction bb s.vs_inst_idx = SOME ins` by simp[] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    unitTransformDefs$dalloca_no_wrap ins s)` by simp[] >>
   drule_all straight_line_origin_ptr_edge >> simp[]
 QED
 
@@ -1884,6 +1886,19 @@ Resume rest_word_membership_header_joint_indexed[post]:
 QED
 
 Finalise rest_word_membership_header_joint_indexed
+
+(* Transport the opcode certificate across the selected prefix split. *)
+val membership_nowrap_tac =
+  disch_tac >> map_every qx_gen_tac [`pre`, `selected`, `post`, `v`] >>
+  strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+  qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+  qpat_x_assum `_ = pre ++ selected::post`
+    (fn th => pure_once_rewrite_tac [th] >> simp[EVERY_APPEND]);
+
+(* Use the established implication as a whole, not as a conditional rewrite. *)
+val simp_membership_nowrap_tac =
+  qpat_assum `ctx_has_dalloca ctx ==> !pre i post v. _`
+    (fn th => simp[EQT_INTRO (SRULE [] th)]);
 
 Theorem rest_word_membership_slot_read_joint_const:
   compile_array_membership_loop needle arr len stride skip
@@ -1948,13 +1963,19 @@ Proof
   `isPREFIX [ins] (DROP s.vs_inst_idx bb.bb_instructions)` by
     (irule bodyMemAssignTopCopyPathsTheory.topcopy_instruction_prefix >> simp[] >> metis_tac[]) >>
   `run_inst_seq [ins] s = OK u` by simp[run_inst_seq_def] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post v. [ins] = pre ++ i::post /\ run_inst_seq pre s = OK v ==>
+      unitTransformDefs$dalloca_no_wrap i v)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) [ins]` by
+       (Cases_on `tr` >> simp[Abbr `ins`, mk_inst_def]) >>
+     membership_nowrap_tac) >>
   `gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
       (s,Gs,Ts) [] (OK (u with vs_inst_idx := 3+delta),g,tn) /\
     allocas_from lo u` by
     (drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)
        (GEN_ALL run_inst_seq_origin_ptr_lift) >> simp[] >>
      disch_then (qspecl_then [`lo`, `explicit`] mp_tac) >>
-     qpat_x_assum `isPREFIX _ _` mp_tac >> simp[]) >>
+     qpat_x_assum `isPREFIX _ _` mp_tac >> simp_membership_nowrap_tac) >>
   `membership_loop_frame sa G0 T0 s0 g tn
       (u with vs_inst_idx := 3+delta)` by
     (simp[Abbr `u`] >> irule membership_frame_scalar_update >>
@@ -2037,10 +2058,17 @@ Proof
   `isPREFIX [ins] (DROP s.vs_inst_idx bb.bb_instructions)` by
     (irule bodyMemAssignTopCopyPathsTheory.topcopy_instruction_prefix >> simp[] >> metis_tac[]) >>
   `run_inst_seq [ins] s = OK u` by simp[run_inst_seq_def] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post v. [ins] = pre ++ i::post /\ run_inst_seq pre s = OK v ==>
+      unitTransformDefs$dalloca_no_wrap i v)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) [ins]` by
+       simp[Abbr `ins`, mk_inst_def] >>
+     membership_nowrap_tac) >>
   drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)
     (GEN_ALL run_inst_seq_origin_ptr_lift) >> simp[] >>
   disch_then (qspecl_then [`lo`, `explicit`] mp_tac) >>
-  qpat_x_assum `isPREFIX _ _` mp_tac >> simp[] >> strip_tac >> strip_tac >>
+  qpat_x_assum `isPREFIX _ _` mp_tac >> simp_membership_nowrap_tac >>
+  strip_tac >>
   `membership_loop_frame sa G0 T0 s0 g tn (u with vs_inst_idx := 3+delta)` by
     (simp[Abbr `u`] >> irule membership_frame_scalar_update >>
      conj_tac >- simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
@@ -2118,10 +2146,17 @@ Proof
   `isPREFIX [ins] (DROP s.vs_inst_idx bb.bb_instructions)` by
     (irule bodyMemAssignTopCopyPathsTheory.topcopy_instruction_prefix >> simp[] >> metis_tac[]) >>
   `run_inst_seq [ins] s = OK u` by simp[run_inst_seq_def] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post v. [ins] = pre ++ i::post /\ run_inst_seq pre s = OK v ==>
+      unitTransformDefs$dalloca_no_wrap i v)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) [ins]` by
+       simp[Abbr `ins`, mk_inst_def] >>
+     membership_nowrap_tac) >>
   drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)
     (GEN_ALL run_inst_seq_origin_ptr_lift) >> simp[] >>
   disch_then (qspecl_then [`lo`, `explicit`] mp_tac) >>
-  qpat_x_assum `isPREFIX _ _` mp_tac >> simp[] >> strip_tac >> strip_tac >>
+  qpat_x_assum `isPREFIX _ _` mp_tac >> simp_membership_nowrap_tac >>
+  strip_tac >>
   `membership_loop_frame sa G0 T0 s0 g tn (u with vs_inst_idx := 3+delta)` by
     (simp[Abbr `u`] >> irule membership_frame_scalar_update >>
      conj_tac >- simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
@@ -2198,13 +2233,19 @@ Proof
   `isPREFIX [ins] (DROP s.vs_inst_idx bb.bb_instructions)` by
     (irule bodyMemAssignTopCopyPathsTheory.topcopy_instruction_prefix >> simp[] >> metis_tac[]) >>
   `run_inst_seq [ins] s = OK u` by simp[run_inst_seq_def] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post v. [ins] = pre ++ i::post /\ run_inst_seq pre s = OK v ==>
+      unitTransformDefs$dalloca_no_wrap i v)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) [ins]` by
+       (Cases_on `tr` >> simp[Abbr `ins`, mk_inst_def]) >>
+     membership_nowrap_tac) >>
   `gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG)
       (s,Gs,Ts) [] (OK (u with vs_inst_idx := 3+delta),g,tn) /\
     allocas_from lo u` by
     (drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)
        (GEN_ALL run_inst_seq_origin_ptr_lift) >> simp[] >>
      disch_then (qspecl_then [`lo`, `explicit`] mp_tac) >>
-     qpat_x_assum `isPREFIX _ _` mp_tac >> simp[]) >>
+     qpat_x_assum `isPREFIX _ _` mp_tac >> simp_membership_nowrap_tac) >>
   `membership_loop_frame sa G0 T0 s0 g tn (u with vs_inst_idx := 3+delta)` by
     (simp[Abbr `u`] >> irule membership_frame_scalar_update >>
      conj_tac >- simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
@@ -2286,10 +2327,17 @@ Proof
   `isPREFIX [ins] (DROP s.vs_inst_idx bb.bb_instructions)` by
     (irule bodyMemAssignTopCopyPathsTheory.topcopy_instruction_prefix >> simp[] >> metis_tac[]) >>
   `run_inst_seq [ins] s = OK u` by simp[run_inst_seq_def] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post v. [ins] = pre ++ i::post /\ run_inst_seq pre s = OK v ==>
+      unitTransformDefs$dalloca_no_wrap i v)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) [ins]` by
+       simp[Abbr `ins`, mk_inst_def] >>
+     membership_nowrap_tac) >>
   drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)
     (GEN_ALL run_inst_seq_origin_ptr_lift) >> simp[] >>
   disch_then (qspecl_then [`lo`, `explicit`] mp_tac) >>
-  qpat_x_assum `isPREFIX _ _` mp_tac >> simp[] >> strip_tac >> strip_tac >>
+  qpat_x_assum `isPREFIX _ _` mp_tac >> simp_membership_nowrap_tac >>
+  strip_tac >>
   `membership_loop_frame sa G0 T0 s0 g tn (u with vs_inst_idx := 3+delta)` by
     (simp[Abbr `u`] >> irule membership_frame_scalar_update >>
      conj_tac >- simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
@@ -2367,10 +2415,17 @@ Proof
   `isPREFIX [ins] (DROP s.vs_inst_idx bb.bb_instructions)` by
     (irule bodyMemAssignTopCopyPathsTheory.topcopy_instruction_prefix >> simp[] >> metis_tac[]) >>
   `run_inst_seq [ins] s = OK u` by simp[run_inst_seq_def] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post v. [ins] = pre ++ i::post /\ run_inst_seq pre s = OK v ==>
+      unitTransformDefs$dalloca_no_wrap i v)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) [ins]` by
+       simp[Abbr `ins`, mk_inst_def] >>
+     membership_nowrap_tac) >>
   drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)
     (GEN_ALL run_inst_seq_origin_ptr_lift) >> simp[] >>
   disch_then (qspecl_then [`lo`, `explicit`] mp_tac) >>
-  qpat_x_assum `isPREFIX _ _` mp_tac >> simp[] >> strip_tac >> strip_tac >>
+  qpat_x_assum `isPREFIX _ _` mp_tac >> simp_membership_nowrap_tac >>
+  strip_tac >>
   `membership_loop_frame sa G0 T0 s0 g tn (u with vs_inst_idx := 3+delta)` by
     (simp[Abbr `u`] >> irule membership_frame_scalar_update >>
      conj_tac >- simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
@@ -2471,9 +2526,16 @@ Proof
        is_terminator_def]) >>
   `isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by
     (gvs[] >> Cases_on `bb.bb_instructions` >> gvs[]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post v. code = pre ++ i::post /\ run_inst_seq pre s = OK v ==>
+      unitTransformDefs$dalloca_no_wrap i v)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) code` by
+       (Cases_on `0 < skip` >> simp[mk_inst_def]) >>
+     membership_nowrap_tac) >>
   drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)
     (GEN_ALL run_inst_seq_origin_ptr_lift) >> simp[] >>
-  disch_then (qspecl_then [`lo`, `explicit`] mp_tac) >> simp[] >> strip_tac >>
+  disch_then (qspecl_then [`lo`, `explicit`] mp_tac) >>
+  simp_membership_nowrap_tac >> strip_tac >>
   Cases_on `0 < skip` >> gvs[] >>
   `u.vs_halted = s.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
     (qpat_x_assum `u with vs_vars := _ = s` mp_tac >>
@@ -2614,6 +2676,10 @@ Resume rest_word_membership_header_joint_const[edge]:
       source_memory_read_ranges_def, source_memory_write_ranges_def]) >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
    get_instruction bb s.vs_inst_idx = SOME ins` by simp[] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    unitTransformDefs$dalloca_no_wrap ins s)` by
+    (strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     Cases_on `loc` >> simp[Abbr `ins`, mk_inst_def]) >>
   drule_all straight_line_origin_ptr_edge >> simp[]
 QED
 
@@ -2732,9 +2798,16 @@ Proof
        is_terminator_def]) >>
   `isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by
     (gvs[] >> Cases_on `bb.bb_instructions` >> gvs[]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post v. code = pre ++ i::post /\ run_inst_seq pre s = OK v ==>
+      unitTransformDefs$dalloca_no_wrap i v)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) code` by
+       (Cases_on `0 < skip` >> simp[mk_inst_def]) >>
+     membership_nowrap_tac) >>
   drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)
     (GEN_ALL run_inst_seq_origin_ptr_lift) >> simp[] >>
-  disch_then (qspecl_then [`lo`, `explicit`] mp_tac) >> simp[] >> strip_tac >>
+  disch_then (qspecl_then [`lo`, `explicit`] mp_tac) >>
+  simp_membership_nowrap_tac >> strip_tac >>
   Cases_on `0 < skip` >> gvs[] >>
   `u.vs_halted = s.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
     (qpat_x_assum `u with vs_vars := _ = s` mp_tac >>

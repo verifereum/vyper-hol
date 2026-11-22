@@ -108,6 +108,16 @@ Proof
       `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
         (emitted_insts sa sb)` by simp[Abbr `i1`, Abbr `i2`, mk_inst_def, is_terminator_def] >>
       `inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s Gu tv` by simp[] >>
+      `(ctx_has_dalloca ctx ==>
+        !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+          run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+        (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+         `MEM i (emitted_insts sa sb)` by
+           (qpat_assum `emitted_insts sa sb = pre ++ i::post`
+              (fn th => pure_once_rewrite_tac[th]) >> simp[listTheory.MEM_APPEND]) >>
+         qpat_assum `emitted_insts _ _ = [i1;i2]` (fn shape =>
+           pop_assum (strip_assume_tac o SIMP_RULE bool_ss [shape, listTheory.MEM])) >>
+         simp[Abbr `i1`, Abbr `i2`, mk_inst_def]) >>
       drule_all run_inst_seq_gas_origin_ptr_path >>
       simp[Abbr `i1`, Abbr `i2`, mk_inst_def]) >>
   simp[Abbr `tu`] >>
@@ -228,6 +238,16 @@ Proof
        run_inst_seq_mem_ok (emitted_insts sa sm) s /\
        run_inst_seq (emitted_insts sa sm) s = OK w /\
        isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
+      `(ctx_has_dalloca ctx ==>
+        !pre i post u. emitted_insts sa sm = pre ++ i::post /\
+          run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+        (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+         `MEM i (emitted_insts sa sm)` by
+           (qpat_assum `emitted_insts sa sm = pre ++ i::post`
+              (fn th => pure_once_rewrite_tac[th]) >> simp[listTheory.MEM_APPEND]) >>
+         qpat_assum `emitted_insts _ _ = [i1;i2]` (fn shape =>
+           pop_assum (strip_assume_tac o SIMP_RULE bool_ss [shape, listTheory.MEM])) >>
+         simp[Abbr `i1`, Abbr `i2`, mk_inst_def]) >>
       drule_all run_inst_seq_gas_origin_ptr_path >> simp[Abbr `i1`, Abbr `i2`, mk_inst_def]) >>
   `op_taint tw (Var r) = {} /\ tw.t_mem = tv.t_mem /\
    tw.t_stor = tv.t_stor /\ tw.t_trans = tv.t_trans` by

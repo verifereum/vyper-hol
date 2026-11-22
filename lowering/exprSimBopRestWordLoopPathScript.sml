@@ -12,6 +12,7 @@ Theorem rest_word_sequence_marked:
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
              i.inst_opcode <> GAS) code /\
+  EVERY (\i. i.inst_opcode <> DALLOCA) code /\
   (memory ==> run_inst_seq_mem_ok code s) /\
   run_inst_seq code s = OK t ==>
   gas_marked_path memory ctx fn s 0
@@ -23,7 +24,11 @@ Proof
   `FILTER (\i. i.inst_opcode = GAS) code = []` by
     gvs[FILTER_EQ_NIL, EVERY_MEM] >>
   Cases_on `memory` >> gvs[gas_marked_path_def]
-  >- (drule_all run_inst_seq_gas_path_mem >> simp[]) >>
+  >- (`ctx_has_dalloca ctx ==>
+        !pre i post u. code = pre ++ i::post /\
+          run_inst_seq pre s = OK u ==> dalloca_no_wrap i u` by
+        (rpt strip_tac >> fs[EVERY_APPEND]) >>
+      drule_all run_inst_seq_gas_path_mem >> simp[]) >>
   drule_all tuple_run_inst_seq_gas_path >> simp[]
 QED
 
@@ -37,8 +42,8 @@ Theorem rest_word_jump_marked:
 Proof
   strip_tac >>
   `mem_safe_step 0 ctx inst s` by
-    (simp[mem_safe_step_non_invoke] >>
-     disj1_tac >> irule below_frontier_no_ranges >> gvs[]) >>
+    (gvs[mem_safe_step_non_invoke] >>
+     disj1_tac >> irule below_frontier_no_ranges >> simp[]) >>
   `gas_path_mem_edge ctx fn s 0 (OK (jump_to lbl s))` by
     (simp[gas_path_mem_edge_def] >> qexists `0:num` >>
      gvs[step_inst_non_invoke, gas_count_step_def, is_terminator_def] >>
@@ -109,6 +114,7 @@ Theorem rest_word_block_path:
   ~s.vs_halted /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
              i.inst_opcode <> GAS) code /\
+  EVERY (\i. i.inst_opcode <> DALLOCA) code /\
   (memory ==> run_inst_seq_mem_ok code s) /\
   run_inst_seq code s = OK u /\ ~u.vs_halted /\
   u.vs_current_bb = s.vs_current_bb /\
@@ -425,6 +431,7 @@ Theorem rest_word_body_path:
   run_inst_seq pre s = OK p /\ run_inst_seq loads p = OK q /\
   EVERY (\j. j.inst_opcode <> INVOKE /\ ~is_terminator j.inst_opcode /\
               j.inst_opcode <> GAS) (pre ++ loads) /\
+  EVERY (\i. i.inst_opcode <> DALLOCA) (pre ++ loads) /\
   (memory ==> run_inst_seq_mem_ok pre s /\ run_inst_seq_mem_ok loads p) /\
   q.vs_current_bb = s.vs_current_bb /\ ~q.vs_halted /\
   FLOOKUP q.vs_vars idx = FLOOKUP s.vs_vars idx /\
@@ -495,6 +502,7 @@ Theorem rest_word_body_loaded_path:
   run_inst_seq loads p = OK q /\
   EVERY (\j. j.inst_opcode <> INVOKE /\ ~is_terminator j.inst_opcode /\
               j.inst_opcode <> GAS) loads /\
+  EVERY (\i. i.inst_opcode <> DALLOCA) loads /\
   (memory ==> run_inst_seq_mem_ok loads p) /\
   q.vs_current_bb = p.vs_current_bb /\ ~q.vs_halted /\
   FLOOKUP q.vs_vars idx = FLOOKUP p.vs_vars idx /\

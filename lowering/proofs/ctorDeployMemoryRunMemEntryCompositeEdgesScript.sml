@@ -119,7 +119,12 @@ Theorem ctor_checked_sequence_endpoint:
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\ ~s.vs_halted /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
               i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) code /\
-  run_inst_seq_mem_ok code s /\ run_inst_seq code s = OK t /\
+  run_inst_seq_mem_ok code s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. code = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
+  run_inst_seq code s = OK t /\
   t.vs_allocas = s.vs_allocas /\ t.vs_current_bb = s.vs_current_bb /\
   end_idx = s.vs_inst_idx + LENGTH code /\ alloca_history func s ==>
   gas_path_mem ctx func s 0 (OK (t with vs_inst_idx := end_idx)) /\
@@ -131,8 +136,7 @@ Proof
    EVERY (\i. i.inst_opcode <> ALLOCA) code` by fs[EVERY_CONJ] >>
   `FILTER (\i. i.inst_opcode = GAS) code = []` by
     (fs[EVERY_MEM, FILTER_EQ_NIL] >> metis_tac[]) >>
-  drule_all run_inst_seq_gas_path_mem >>
-  disch_then (qspec_then `ctx` assume_tac) >>
+  drule_all run_inst_seq_gas_path_mem >> strip_tac >>
   `gas_path_mem ctx func s 0 (OK (t with vs_inst_idx := end_idx))` by gvs[] >>
   drule gas_path_mem_ok_suffix >> simp[] >> strip_tac >>
   irule ctor_sequence_history_advance >> qexistsl [`bb`, `code`, `s`] >> simp[ADD_COMM]

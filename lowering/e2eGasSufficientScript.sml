@@ -489,13 +489,10 @@ Proof
     (strip_tac >> fs[] >> decide_tac) >>
   `ctx_has_dalloca unit.cu_context ==>
     !fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
-      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+      dalloca_fmp_headroom inst s` by
     (strip_tac >>
      qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `fmp`, `vi`]
-       mp_tac callDynamicMemoryTheory.call_raw_variant_no_wrap >> gvs[]) >>
-  `ctx_has_dalloca unit.cu_context ==>
-    !fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
-      dalloca_no_wrap inst s` by metis_tac[] >>
+       mp_tac callDynamicMemoryTheory.call_raw_variant_headroom >> gvs[]) >>
   drule_all lower_vyper_runtime_unit_correct_dispatched_readings_available >>
   disch_then (qx_choose_then `marks` strip_assume_tac) >>
   qabbrev_tac `obs = gas_explicit marks vi.vs_gas_readings` >>
@@ -531,13 +528,12 @@ Proof
   impl_tac >- simp[] >> strip_tac >>
   `w2n vi.vs_initial_fmp <= w2n vi.vs_fmp` by simp[] >>
   `raw_unit_memory_ok unit.cu_context vi /\ ptr_discipline 0 unit.cu_context vi` by
-    (Cases_on `ctx_has_dalloca unit.cu_context`
-     >- (`!fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
-            dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
-           (qpat_assum `ctx_has_dalloca unit.cu_context ==>
-              !fn inst s. _ ==> _ /\ _` mp_tac >> simp[]) >>
-         drule_all lower_vyper_runtime_unit_memory_ok_from_no_wrap >> simp[]) >>
-     drule_all lower_vyper_runtime_unit_memory_ok >> simp[]) >>
+    (mp_tac (Q.INST [`rp` |-> `rpolicy`, `vs` |-> `vi`, `tx` |-> `td`,
+          `D` |-> `cx_dead (H : (bool # bytes32 # type_value) list # num list)
+            (initial_evaluation_context am.sources am.layouts td NONE)`]
+        e2eCorrectnessTheory.selected_raw_memory) >>
+     impl_tac >- (simp[] >> strip_tac >> res_tac >> simp[]) >>
+     simp[]) >>
   `mem_inv dload_offset_ok unit.cu_context vi` by
     (irule lower_vyper_runtime_unit_dload_offset_ok >> metis_tac[]) >>
   `mem_inv dload_headroom_ok unit.cu_context vi` by
@@ -843,23 +839,15 @@ Proof
      dunit.cu_context vi /\
    mem_inv dload_offset_ok dunit.cu_context vi /\
    mem_inv dload_headroom_ok dunit.cu_context vi` by
-    (Cases_on `deploy_dalloca_form_occurs loweringShapeSource$expr_raw_shape_root tops`
-     >- (`!fn inst s. raw_reachable vi dunit.cu_context fn inst s ==>
-            dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
-           (qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
-                        `dunit`, `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`,
-                        `es`, `vs`, `vi`, `fmp`] mp_tac deploy_entry_raw_no_wrap >>
-            simp[]) >>
-         mp_tac (Q.INST [`vs` |-> `vi`,
+    (Cases_on `ctx_has_dalloca dunit.cu_context`
+     >- (mp_tac (Q.INST [`vs` |-> `vi`,
                             `D` |-> `deploy_dead
                               (H : (bool # bytes32 # type_value) list # num list)
                               tops runtime_bc (am:abstract_machine) tx`,
                             `deploy_bc` |-> `assemble prog`]
-           deploy_selected_memory_from_no_wrap) >>
+           deploy_selected_memory_from_checked) >>
          impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[])) >>
          disch_then ACCEPT_TAC) >>
-     `~ctx_has_dalloca dunit.cu_context` by
-       metis_tac[deploy_unit_no_dalloca_static] >>
      metis_tac[deploy_selected_memory]) >>
   `dunit.cu_context.ctx_entry = SOME "__deploy"` by
     (drule lower_vyper_deploy_unit_entry >> simp[]) >>

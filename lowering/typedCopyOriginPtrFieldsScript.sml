@@ -358,7 +358,9 @@ Resume typed_copy_origin_ptr_add_path[path]:
     (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
         d_ret := K {} |>,lo,explicit,ctx,func,PG)
     (s,G,tn) [] (OK (u with vs_inst_idx := SUC s.vs_inst_idx),gf,tf)` by
-    (simp[Abbr `gf`, Abbr `tf`] >>
+    (`ctx_has_dalloca ctx ==> unitTransformDefs$dalloca_no_wrap i s` by
+       simp[Abbr `i`, mk_inst_def, unitTransformDefsTheory.dalloca_no_wrap_def] >>
+     simp[Abbr `gf`, Abbr `tf`] >>
      drule_all straight_line_origin_ptr_edge >> simp[Abbr `i`, mk_inst_def,
        is_terminator_def]) >>
   drule (cj 2 gas_origin_ptr_path_rules) >>

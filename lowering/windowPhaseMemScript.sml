@@ -30,7 +30,12 @@ Proof
   `run_inst_seq_mem_ok (emitted_insts st en) s` by
     metis_tac[window_emit_no_ranges_mem] >>
   `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
-    metis_tac[window_seq_mem_cont, window_pure_seq_def] >>
+    (irule window_seq_mem_cont >> simp[] >> qexists_tac `st` >>
+     fs[window_pure_seq_def] >>
+     rpt strip_tac >>
+     `MEM i (emitted_insts st en)` by simp[] >>
+     drule_then (SUBST_ALL_TAC o CONJUNCT1) emitted_insts_emit_op >>
+     gvs[mk_inst_def]) >>
   qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
   (conj_tac >- metis_tac[window_pure_seq_phase]) >>
   simp_tac (srw_ss()) [eval_operand_def, lookup_var_def] >>
@@ -58,7 +63,11 @@ Proof
   `run_inst_seq_mem_ok (emitted_insts st en) s` by
     metis_tac[window_emit_no_ranges_mem] >>
   `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
-    metis_tac[window_seq_mem_cont] >>
+    (irule window_seq_mem_cont >> simp[] >> qexists_tac `st` >> simp[] >>
+     rpt strip_tac >>
+     `MEM i (emitted_insts st en)` by simp[] >>
+     drule_then (SUBST_ALL_TAC o CONJUNCT1) emitted_insts_emit_op >>
+     gvs[mk_inst_def]) >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH en.cs_current_insts`, `b`] >>
   (conj_tac >- metis_tac[window_seq_phase]) >>
   simp_tac (srw_ss()) [eval_operand_def, lookup_var_def] >>
@@ -82,7 +91,12 @@ Proof
   `run_inst_seq_mem_ok (emitted_insts st en) s` by
     (drule emit_mload_mem_ok >> disch_then irule >> simp[]) >>
   `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
-    metis_tac[window_seq_mem_cont, window_pure_seq_def] >>
+    (irule window_seq_mem_cont >> simp[] >> qexists_tac `st` >>
+     fs[window_pure_seq_def] >>
+     rpt strip_tac >>
+     `MEM i (emitted_insts st en)` by simp[] >>
+     drule_then (SUBST_ALL_TAC o CONJUNCT1) emitted_insts_emit_op >>
+     gvs[mk_inst_def]) >>
   qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
   (conj_tac >- metis_tac[window_pure_seq_phase]) >>
   simp_tac (srw_ss()) [eval_operand_def, lookup_var_def] >>
@@ -117,7 +131,11 @@ Proof
     (simp[window_seq_def] >>
      simp_tac (srw_ss()) [lookup_var_def, mstore_def,
        write_memory_with_expansion_def, LET_THM]) >>
-  metis_tac[window_seq_mem_cont]
+  irule window_seq_mem_cont >> simp[] >> qexists_tac `st` >> simp[] >>
+  rpt strip_tac >>
+  `MEM i (emitted_insts st en)` by simp[] >>
+  drule_then (SUBST_ALL_TAC o CONJUNCT1) emitted_insts_emit_void >>
+  gvs[mk_inst_def]
 QED
 
 Theorem window_cursor_store_phase_mem:

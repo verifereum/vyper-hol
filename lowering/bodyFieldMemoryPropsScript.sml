@@ -142,6 +142,9 @@ Proof
   gen_tac >> strip_tac >> gvs[Abbr `P`] >>
   conj_tac >- (simp[GSYM mk_inst_def, run_inst_seq_mem_ok_last] >>
     irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  conj_tac
+  >- (rpt strip_tac >> Cases_on `pre` >>
+      gvs[mk_inst_def, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   disj1_tac >>
   `?w. eval_operand (vv_operand vv) entry = SOME w` by
     (gvs[vv_post_def] >> Cases_on `vv` >>
@@ -489,6 +492,9 @@ Proof
   simp[IS_PREFIX_APPEND3, mk_inst_def, is_terminator_def] >>
   gen_tac >> strip_tac >> gvs[Abbr `P`] >>
   conj_tac >- (drule_all body_word_load_prefix_mem_ok >> simp[mk_inst_def]) >>
+  conj_tac
+  >- (rpt strip_tac >> Cases_on `pre` >>
+      gvs[mk_inst_def, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   disj1_tac >> drule_all body_word_load_run_post >> strip_tac >>
   `alloca_inv s` by gvs[vv_post_def, stmt_state_rel_def] >>
   drule_all body_word_load_history >> strip_tac >>
@@ -651,6 +657,11 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts sm sn)` by simp[mk_inst_def, is_terminator_def] >>
   `run_inst_seq_mem_ok (emitted_insts sm sn) s` by simp[] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sm sn = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> Cases_on `pre` >>
+     gvs[mk_inst_def, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   drule_all run_inst_seq_gas_path_mem >> simp[mk_inst_def]
 QED
 
@@ -710,6 +721,11 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts sm sn)` by simp[mk_inst_def, is_terminator_def] >>
   `run_inst_seq_mem_ok (emitted_insts sm sn) s` by simp[] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sm sn = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> Cases_on `pre` >>
+     gvs[mk_inst_def, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   drule_all run_inst_seq_gas_path_mem >> simp[mk_inst_def]
 QED
 

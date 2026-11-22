@@ -208,7 +208,7 @@ Theorem for_array_snapshot_continue_full:
   c.ce_alloca_locals /\ local_ptrs_reserved c sa /\ ci_mono sa se /\
   ret_pc_ok c sa s0 /\ return_buf_frame d c sa s0 /\ return_buf_sep d c em u /\
   (!H. dead_lo_ok H (DF H) lo c cx) /\
-  (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_no_wrap inst t) /\
+  (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_fmp_headroom inst t) /\
   ce_locals_declared c env /\ locals_alloc_ok c env /\ expr_body_pre c cx env e es /\
   body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_type e = ArrayT typ bd /\ bound_length bd <= n /\
@@ -403,12 +403,12 @@ Resume for_array_snapshot_continue_full[round_frame]:
      `!x. not_fresh_at se x ==> lookup_var x tL = lookup_var x u` by simp[] >>
      drule_all_then (fn th => simp[th])
        (Q.SPECL [`c`,`se`,`u`,`tL`] copy_buffer_local_region_frame)) >>
-  `!fn inst t. frag_reachable ctx func tL fn inst t ==> dalloca_no_wrap inst t` by
+  `!fn inst t. frag_reachable ctx func tL fn inst t ==> dalloca_fmp_headroom inst t` by
     (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
        metis_tac[body_inv_no_phi] >>
      qpat_assum `!D. gas_origin_ptr_path _ (u,Gu,tu) [] (OK tL,GL,tnL)`
        (qspec_then `DF H0` assume_tac) >>
-     rpt strip_tac >> drule_all_then ACCEPT_TAC gas_origin_ptr_path_dalloca_no_wrap) >>
+     rpt strip_tac >> drule_all_then ACCEPT_TAC gas_origin_ptr_path_dalloca_fmp_headroom) >>
   `for_nonslot_code_frame c cx env ctx func id e loop_body loc rv vv av em tL` by
     (`for_nonslot_code_frame c cx env ctx func id e loop_body loc rv vv av em u` by
        (qpat_assum `loc = case vv_location vv of NONE => LocMemory | SOME l => l` SUBST1_TAC >> simp[]) >>

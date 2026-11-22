@@ -110,9 +110,16 @@ Proof
   qexists_tac `q with vs_inst_idx := 4` >> conj_tac
   >- (`LENGTH code = 4` by simp[] >>
       qpat_x_assum `LENGTH code = 4` (fn th => once_rewrite_tac [GSYM th]) >>
-      `EVERY (\j. j.inst_opcode <> INVOKE /\ ~is_terminator j.inst_opcode) code` by
+      `EVERY (\j. j.inst_opcode <> DALLOCA /\ j.inst_opcode <> INVOKE /\
+                    ~is_terminator j.inst_opcode) code` by
         simp[mk_inst_def, is_terminator_def] >>
-      irule typed_array_prefix_cont >> metis_tac[]) >>
+      irule typed_array_prefix_cont >>
+      simp[is_terminator_def] >> conj_tac
+      >- (rpt strip_tac >>
+          irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+          rename1 `j.inst_opcode <> DALLOCA` >>
+          `MEM j code` by simp[] >> fs[EVERY_MEM]) >>
+      qpat_x_assum `code ≼ bb.bb_instructions` mp_tac >> simp[]) >>
   fs[venom_state_component_equality, eval_operand_def, lookup_var_def]
 QED
 

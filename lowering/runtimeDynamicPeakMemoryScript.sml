@@ -6,7 +6,7 @@ Ancestors
   fmpLowerSequenceExec contextCodegenRel venomInst venomLayout venomState
   compileVyper vyperCompiler vyperLoweringCorrect o1PassContract
   contextRawReachable ctxLookupAgreeHelpers venomExecProofs ptrDiscipline unitTransformDefs
-  stepWriteFootprintBase
+  stepWriteFootprintBase dallocaBounds
   compileEnv arithmetic list rich_list words finite_map
 
 Theorem raw_reachable_at_active_inst[local]:
@@ -98,6 +98,122 @@ Proof
        ``\(v:venom_state). v.vs_outcomes``, ``\(v:venom_state). v.vs_call_ctx``]) >>
   qexistsl_tac [`entered`, `h`, `marks`, `q`] >> fs[] >>
   metis_tac[]
+QED
+
+Theorem raw_reachable_dalloca_headroom_from_peak:
+  ~vs0.vs_halted /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
+  w2n vs0.vs_initial_fmp < 2 ** 254 /\
+  LENGTH vs0.vs_call_ctx.cc_calldata < 2 ** 64 /\
+  raw_reachable vs0 ctx fn i s /\
+  (i.inst_opcode = DALLOCA ==>
+    w2n s.vs_fmp <= w2n vs0.vs_initial_fmp + 2 ** 64 * 2 ** 64) ==>
+  dalloca_fmp_headroom i s
+Proof
+  simp[dalloca_fmp_headroom_def] >> strip_tac >> strip_tac >>
+  `s.vs_call_ctx = vs0.vs_call_ctx` by
+    (mp_tac (Q.INST [`fmp` |-> `vs0.vs_initial_fmp`] raw_started_state) >>
+     (impl_tac >- simp[]) >> strip_tac >>
+     drule lower_budget_path_charge_facts >> simp[]) >>
+  `venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata) <= 2 ** 64` by
+    (irule dalloca_calldata_size_bound >> simp[]) >>
+  qspecl_then [`w2n vs0.vs_initial_fmp`, `2 ** 64`] mp_tac dalloca_split_budget >>
+  (impl_tac >- simp[]) >>
+  gvs[MAX_DEF] >> IF_CASES_TAC >> gvs[] >> decide_tac
+QED
+
+Theorem lower_budget_path_completed_peak:
+  lower_budget_path F (D,lo,explicit,ctx) root h marks q /\
+  root.bp_stack = [] /\
+  root.bp_state.vs_fmp = root.bp_state.vs_initial_fmp /\
+  w2n root.bp_state.vs_initial_fmp < 2 ** 254 /\
+  LENGTH root.bp_state.vs_call_ctx.cc_calldata < 2 ** 64 /\
+  LENGTH root.bp_state.vs_outcomes < 2 ** 64 /\
+  lower_history_pairs h pair /\
+  (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==> pair a < LENGTH h) /\
+  (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
+    ?fn ai pre op sz post. lower_alloc_record h a fn ai pre op sz post) /\
+  MEM root.bp_fn ctx.ctx_functions /\
+  (!fn i. MEM fn ctx.ctx_functions /\ MEM i (fn_insts fn) ==>
+    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DRET) ==>
+  w2n q.bp_state.vs_fmp <= w2n root.bp_state.vs_initial_fmp + 2 ** 64 * 2 ** 64
+Proof
+  strip_tac >>
+  drule lower_budget_path_count_le_outcomes >> strip_tac >>
+  `lower_history_count h <= 2 ** 64` by decide_tac >>
+  qspecl_then [`F`, `D`, `lo`, `explicit`, `ctx`, `root`, `h`, `marks`, `q`]
+    mp_tac lower_budget_path_fmp_guards >>
+  impl_tac >- asm_rewrite_tac[EVERY_DEF] >> strip_tac >>
+  `?charge. !a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
+    ?fn ai pre op sz post.
+      lower_alloc_record h a fn ai pre op sz post /\
+      charge a = contractABI$ceil32 (w2n sz)` by
+    (simp[GSYM SKOLEM_THM, RIGHT_EXISTS_IMP_THM] >> metis_tac[]) >>
+  qabbrev_tac `allocs = FILTER (\a. lower_event_allocates (EL a h))
+    (GENLIST I (LENGTH h))` >>
+  `LENGTH allocs <= lower_history_count h` by
+    (drule lower_budget_paired_alloc_count >>
+     `FILTER (\a. lower_event_allocates (EL a h) /\ pair a < LENGTH h)
+        (GENLIST I (LENGTH h)) = allocs` by
+       (rw[FILTER_EQ, MEM_GENLIST, Abbr `allocs`] >> metis_tac[]) >>
+     simp[]) >>
+  `SUM (MAP charge allocs) <= LENGTH allocs * 2 ** 64` by
+    (once_rewrite_tac[MULT_COMM] >>
+     rewrite_tac[GSYM combinatoricsTheory.SUM_MAP_K] >>
+     irule combinatoricsTheory.SUM_MAP_LE >>
+     simp[EVERY_MEM, Abbr `allocs`, MEM_FILTER, MEM_GENLIST] >>
+     qx_gen_tac `a` >> strip_tac >>
+     `pair a < LENGTH h` by (first_x_assum (qspec_then `a` mp_tac) >> simp[]) >>
+     qpat_x_assum `!a. _ ==> ?fn ai pre op sz post. _`
+       (qspec_then `a` mp_tac) >> simp[] >> strip_tac >>
+     drule_all lower_budget_completed_allocation_charge_bound >> simp[]) >>
+  `SUM (MAP charge allocs) <= 2 ** 64 * 2 ** 64` by
+    (`LENGTH allocs <= 2 ** 64` by decide_tac >>
+     `LENGTH allocs * 2 ** 64 <= 2 ** 64 * 2 ** 64` by simp[] >> decide_tac) >>
+  `w2n root.bp_state.vs_initial_fmp + SUM (MAP charge allocs) < dimword (:256)` by
+    (fs[wordsTheory.dimword_def, dimindex_256] >> decide_tac) >>
+  drule lower_budget_path_fmp_envelope >>
+  disch_then (qspec_then `charge` mp_tac) >>
+  (impl_tac >- (fs[Abbr `allocs`] >> metis_tac[])) >>
+  strip_tac >> fs[Abbr `allocs`] >> decide_tac
+QED
+
+Theorem raw_dalloca_headroom_from_history:
+  lowering_context_ok ctx /\ ~vs0.vs_halted /\
+  vs0.vs_fmp = vs0.vs_initial_fmp /\ w2n vs0.vs_initial_fmp < 2 ** 254 /\
+  LENGTH vs0.vs_outcomes < 2 ** 64 /\
+  LENGTH vs0.vs_call_ctx.cc_calldata < 2 ** 64 /\
+  (!entry name lbl entered root h marks q i.
+    ctx.ctx_entry = SOME name /\
+    lookup_function name ctx.ctx_functions = SOME entry /\
+    fn_entry_label entry = SOME lbl /\
+    enters_block entry
+      (vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
+      entered /\
+    root = <|bp_stack := []; bp_params := []; bp_prov := FEMPTY;
+             bp_taint := entry_taint; bp_fn := entry; bp_state := entered|> /\
+    lower_budget_path F (D,lo,explicit,ctx) root h marks q /\
+    i.inst_opcode = DALLOCA /\ active_inst q.bp_fn i q.bp_state ==>
+    ?pair. lower_history_pairs h pair /\
+      (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==> pair a < LENGTH h) /\
+      (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
+        ?fn ai pre op sz post. lower_alloc_record h a fn ai pre op sz post)) ==>
+  !fn i s. raw_reachable vs0 ctx fn i s ==> dalloca_fmp_headroom i s
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  match_mp_tac (Q.INST [`ctx` |-> `ctx`, `fn` |-> `fn`, `vs0` |-> `vs0`]
+    raw_reachable_dalloca_headroom_from_peak) >> simp[] >> strip_tac >>
+  mp_tac (Q.INST [`fmp` |-> `vs0.vs_initial_fmp`, `lo` |-> `lo`]
+    raw_started_state) >> impl_tac >- simp[] >> strip_tac >>
+  qpat_x_assum `!entry name lbl entered root h marks q i. _`
+    (qspecl_then [`entry`, `name`, `lbl`, `entered`, `root`, `h`, `marks`, `q`, `i`]
+      mp_tac) >> simp[] >> strip_tac >>
+  `MEM entry ctx.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  `!fn i. MEM fn ctx.ctx_functions /\ MEM i (fn_insts fn) ==>
+    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DRET` by
+    metis_tac[raw_fmp_opcode_guards] >>
+  mp_tac (Q.INST [`ctx` |-> `ctx`, `lo` |-> `lo`]
+    lower_budget_path_completed_peak) >>
+  impl_tac >- (fs[] >> metis_tac[]) >> simp[]
 QED
 
 (* A recorder prefix can include one larger, unpaired reservation at its

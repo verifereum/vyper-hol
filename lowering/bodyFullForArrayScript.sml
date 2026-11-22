@@ -409,7 +409,7 @@ Theorem for_array_expr_prefix_full:
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
   return_buf_frame d c sa s /\ alloca_history func s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  (!fn inst t. frag_reachable ctx func s fn inst t ==> dalloca_no_wrap inst t) /\
+  (!fn inst t. frag_reachable ctx func s fn inst t ==> dalloca_fmp_headroom inst t) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func c cx es s /\
     storage_well_formed_on cx es (FST H) /\
@@ -2004,7 +2004,7 @@ Theorem for_nonslot_array_prefix_full:
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
   return_buf_frame d c sa s /\ alloca_history func s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  (!fn inst t. frag_reachable ctx func s fn inst t ==> dalloca_no_wrap inst t) /\
+  (!fn inst t. frag_reachable ctx func s fn inst t ==> dalloca_fmp_headroom inst t) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func c cx es s /\
     storage_well_formed_on cx es (FST H) /\

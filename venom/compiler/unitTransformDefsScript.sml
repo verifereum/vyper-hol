@@ -143,6 +143,14 @@ Definition dalloca_no_wrap_def:
       w2n s.vs_fmp + ceil32 (w2n sz) < dimword (:256)
 End
 
+Definition dalloca_fmp_headroom_def:
+  dalloca_fmp_headroom inst s <=>
+    inst.inst_opcode = DALLOCA ==>
+    w2n s.vs_fmp +
+      MAX (venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata))
+          (2 ** 255 + 2 ** 64) < dimword (:256)
+End
+
 (* S3's raw memory fact: the frontier fits a word and every access is below
    it or part of a revert forwarding; DALLOCA does not wrap and the
    free-memory pointer stays at or above its initial value. *)

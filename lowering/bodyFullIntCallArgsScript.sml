@@ -2585,7 +2585,7 @@ Theorem intcall_args_stage_full_p2_with_path[local]:
     fn_has_code si sf func /\ fn_has_code shadow_si shadow_sf shadow_func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv si /\
     ((ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-     (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u)) /\
+     (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u)) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
        not_fresh_at si x) /\
@@ -3039,7 +3039,7 @@ Proof
          metis_tac[valueEncodingTypingTheory.value_has_type_val_wf,
                    exprSimPropsTheory.val_footprint_le]) >>
       `(ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-       (!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_no_wrap inst u)` by
+       (!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_fmp_headroom inst u)` by
         (conj_tac
          >- first_assum ACCEPT_TAC >>
          qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
@@ -3049,7 +3049,7 @@ Proof
          disch_then (fn path =>
            qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
              qpat_assum `!fn i z. frag_reachable ctx func s fn i z ==> _`
-               (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+               (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
                 CONJ path o CONJ no_phi)))) >>
       qpat_x_assum `!DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn flags dtys newops ops ws vals ptys pflags pin f P Q R. _` irule >>
       BETA_TAC >>
@@ -3956,7 +3956,7 @@ Proof
       `not_fresh_at cu aq` by
         (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `ca` >> simp[]) >>
       `(ctx_has_dalloca ctx ==> allocas_below_fmp wt) /\
-       (!fn inst u. frag_reachable ctx func wt fn inst u ==> dalloca_no_wrap inst u)` by
+       (!fn inst u. frag_reachable ctx func wt fn inst u ==> dalloca_fmp_headroom inst u)` by
         (conj_tac
          >- (drule typedCopyOriginPtrBaseTheory.typed_copy_state_frame_allocas_below_fmp >>
              simp[]) >>
@@ -3968,16 +3968,16 @@ Proof
                       gas_origin_ptr_path _ (t,G1,tn1) [] (OK wt,wG,wtn)`
            (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
          (impl_tac >- first_assum ACCEPT_TAC) >> disch_tac >>
-         `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_no_wrap inst u` by
+         `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_fmp_headroom inst u` by
            (qpat_assum `gas_origin_ptr_path _ (s,G,tn) marks (OK t,G1,tn1)` (fn path =>
               qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
                 qpat_assum `!fn i z. frag_reachable ctx func s fn i z ==> _`
-                  (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+                  (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
                    CONJ path o CONJ no_phi)))) >>
          qpat_assum `gas_origin_ptr_path _ (t,G1,tn1) [] (OK wt,wG,wtn)` (fn path =>
            qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
              qpat_assum `!fn i z. frag_reachable ctx func t fn i z ==> _`
-               (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+               (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
                 CONJ path o CONJ no_phi)))) >>
       irule gasOutcomeFullGuardedTheory.gas_outcome_full_zero_prefix_guarded >>
       conj_tac >-
@@ -5538,7 +5538,7 @@ Theorem intcall_args_stage_full_p2:
     fn_has_code si sf func /\ fn_has_code shadow_si shadow_sf shadow_func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv si /\
     ((ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-     (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u)) /\
+     (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u)) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
        not_fresh_at si x) /\
@@ -5712,7 +5712,7 @@ Theorem intcall_args_stage_full:
     fn_has_code si sf func /\ fn_has_code shadow_si shadow_sf shadow_func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv si /\
     ((ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-     (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u)) /\
+     (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u)) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
        not_fresh_at si x) /\
@@ -8222,7 +8222,7 @@ Theorem intcall_args_full:
       fn_has_code shadow_sa shadow_sb shadow_func /\
       fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
       (!H. dead_lo_ok H (DF H) lo cenv cx) /\
       (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
@@ -8799,12 +8799,12 @@ Proof
      (impl_tac >- first_assum ACCEPT_TAC) >>
      disch_then (ACCEPT_TAC o MATCH_MP
        bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o CONJUNCT1)) >>
-  `!fn inst u. frag_reachable ctx func entry fn inst u ==> dalloca_no_wrap inst u` by
+  `!fn inst u. frag_reachable ctx func entry fn inst u ==> dalloca_fmp_headroom inst u` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK entry,Ga,tna)`
        (qspec_then `(ARB : dead)` (fn path =>
           qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
             qpat_assum `!fn i u. frag_reachable ctx func s0 fn i u ==> _`
-              (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+              (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
                CONJ path o CONJ no_phi))))) >>
   irule gasOutcomeFullGuardedTheory.gas_outcome_full_zero_prefix_guarded >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -8903,7 +8903,7 @@ Proof
        (mp_tac o MATCH_MP bodyFullIfExpReachTheory.gas_path_reach) >>
      disch_then (qspecl_then [`func`,`entry`,`t`] mp_tac) >>
      simp[contextRawReachableTheory.frag_reachable_start]) >>
-  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_no_wrap inst u` by
+  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_fmp_headroom inst u` by
     (rpt strip_tac >>
      qpat_assum `!fn i u. frag_reachable ctx func entry fn i u ==> _`
        (MATCH_MP_TAC o Q.SPECL [`fn`,`inst`,`u`]) >>

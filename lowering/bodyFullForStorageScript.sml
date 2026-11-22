@@ -435,7 +435,7 @@ Theorem for_storage_body_invoke_full:
         fmupdate id <|assignable := F; type := tyv; value := v; popped := []|>
           FEMPTY::ei.scopes) s /\
     alloca_history func s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-    (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u) /\
+    (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u) /\
     (!H. valid_horizon cx st0 H
            (ei with
             scopes :=

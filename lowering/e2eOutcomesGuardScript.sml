@@ -11,7 +11,7 @@ Ancestors
   guardTerminalBackend guardSourceAlignment asmOptimizer asmOptNonemptyFinalizer
   vfmAccountDeletion e2eEntry
   vyperCallFiniteStorageSupport guardRequestCutAlignment loweringCalldataCorrect
-  callRawVariant callDynamicMemory[qualified,ignore_grammar] sourceUnitExecution vyperLoweringCorrect gasSummary
+  callRawVariant sourceUnitExecution vyperLoweringCorrect gasSummary
   stackPlanGen
   vfmDecreasesGas relation pair arithmetic list
   gasFocusPacketPipelineStages requestCutSelectedReplay
@@ -770,15 +770,6 @@ Proof
   `source_typing_ok tops am txp` by
     metis_tac[opt_entry_own_txp_identity] >>
   `LENGTH (call_trace es) < 2 ** 64` by fs[vyper_call_staging_def] >>
-  `ctx_has_dalloca unit.cu_context ==>
-    !vi fn inst s. raw_variant fmp vi vs0 /\
-      raw_reachable vi unit.cu_context fn inst s ==>
-      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
-    (mp_tac (Q.SPECL [`T`, `tops`, `rpolicy`, `unit`, `am`, `tx`, `txp`,
-                      `assemble prog'`, `es`, `prog`, `prog'`, `cplan`,
-                      `vs0`, `fmp`] callDynamicMemoryTheory.call_entry_raw_no_wrap) >>
-     simp_tac bool_ss [COND_CLAUSES] >>
-     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> metis_tac[]) >>
   drule_all guard_source_marks >>
   disch_then (qx_choose_then `shadow_ctx` assume_tac) >>
   qpat_assum `!vs. raw_variant fmp vs vs0 ==> _` (fn th =>

@@ -181,7 +181,7 @@ Definition for_nonslot_live_def:
     return_buf_frame d cc sa0 s /\ ret_pc_ok cc sa0 s /\ ~s.vs_halted /\
     alloca_history func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-    (!fn inst t. frag_reachable ctx func s fn inst t ==> dalloca_no_wrap inst t) /\
+    (!fn inst t. frag_reachable ctx func s fn inst t ==> dalloca_fmp_headroom inst t) /\
     (* Original anchor, at entry to the whole For fragment. *)
     alloca_frame c es0 sa0 s0 cc ee s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
@@ -475,7 +475,7 @@ Proof
      asm_rewrite_tac[]) >>
   `return_buf_frame d bc sbCopy s /\ ret_pc_ok bc sbCopy s /\
    alloca_history func s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-   (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u) /\
+   (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u) /\
    ~s.vs_halted /\ s.vs_current_bb = sbCopy.cs_current_bb /\
    s.vs_inst_idx = LENGTH sbCopy.cs_current_insts` by
     (qpat_x_assum `!H. _ ==> for_nonslot_body_entry _ _ _ _ _ _ _`
@@ -1422,7 +1422,7 @@ Theorem for_nonslot_array_entry_full:
   stmt_exprs_ok c (For id fty (Array e) n body) /\
   (!x sz. c.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x) /\
   return_buf_frame d c sa0 s0 /\ ret_pc_ok c sa0 s0 /\
-  (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_no_wrap inst t) /\
+  (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_fmp_headroom inst t) /\
   storage_trace_domain cx st0 em.storage_trace /\
   expr_sim_inv c cx env em /\ ce_locals_declared c env /\ locals_alloc_ok c env /\
   lookup_scopes id em.scopes = NONE /\
@@ -1782,7 +1782,7 @@ Resume for_nonslot_array_entry_full[item_separation]:
   `FLOOKUP G idx = NONE` by
     (qpat_assum `op_prov G (Var idx) = NONE`
        (ACCEPT_TAC o SIMP_RULE (srw_ss()) [op_prov_def])) >>
-  `!fn inst t. frag_reachable ctx func s fn inst t ==> dalloca_no_wrap inst t` by
+  `!fn inst t. frag_reachable ctx func s fn inst t ==> dalloca_fmp_headroom inst t` by
     (`?bb inst. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
        get_instruction bb s.vs_inst_idx = SOME inst /\ inst.inst_opcode <> PHI` by
        (qpat_assum `lookup_block cond func.fn_blocks = SOME _`
@@ -2200,7 +2200,7 @@ Resume for_nonslot_array_head_full[capture_frames]:
     (irule stmtSimPropsTheory.ret_pc_ok_frame >>
      qexistsl [`c`,`s`,`sa0`] >> simp[] >>
      metis_tac[stmtSimPropsTheory.cenv_top_ext_return_pc]) >>
-  `!fn inst q. frag_reachable ctx func t fn inst q ==> dalloca_no_wrap inst q` by
+  `!fn inst q. frag_reachable ctx func t fn inst q ==> dalloca_fmp_headroom inst q` by
     suspend "body_position_reachable" >>
   `!name b len. local_region bc eb.scopes t name b len ==>
      (b = w2n dw /\ len = capacity) \/ local_region c es.scopes p name b len` by
@@ -3184,7 +3184,7 @@ Resume for_nonslot_array_scoped_body_at[increment_endpoint_frame]:
   `(ctx_has_dalloca ctx ==> allocas_below_fmp z)` by
     (qpat_assum `stmt_state_rel H ctx func c cx ep z`
       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
-  `!fn inst q. frag_reachable ctx func z fn inst q ==> dalloca_no_wrap inst q` by
+  `!fn inst q. frag_reachable ctx func z fn inst q ==> dalloca_fmp_headroom inst q` by
     suspend "continue_reachable" >>
   `alloca_frame c es0 sa0 s0 c ep z /\ alloca_frame c em sbExpr u c ep z` by
     suspend "continue_memory_frames" >>
@@ -3767,7 +3767,7 @@ Resume for_nonslot_actual_increment_live[increment_live_tail]:
     (drule fragGasOriginPtrTheory.gas_origin_ptr_path_projections >> strip_tac >>
      drule bodyFullIfExpReachTheory.ifexp_ptr_path_reachable >>
      disch_then (qspec_then `t` mp_tac) >> simp[jump_to_def]) >>
-  `!fn inst q. frag_reachable ctx func t fn inst q ==> dalloca_no_wrap inst q` by
+  `!fn inst q. frag_reachable ctx func t fn inst q ==> dalloca_fmp_headroom inst q` by
     (rpt strip_tac >>
      drule contextRawReachableTheory.frag_reachable_trans >> metis_tac[]) >>
   `alloca_history func t` by
@@ -3827,7 +3827,7 @@ Theorem for_nonslot_array_round_contracts_at:
   local_ptrs_reserved c sa0 /\ (!H. dead_lo_ok H (DF H) lo c cx) /\
   (!x sz. c.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x) /\
   return_buf_frame d c sa0 s0 /\ ret_pc_ok c sa0 s0 /\
-  (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_no_wrap inst t) /\
+  (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_fmp_headroom inst t) /\
   evaluate_type (get_tenv cx) fty = SOME dtv /\ body_for_full_ok cx dtv id loop_body vs /\
   storage_trace_domain cx st0 em.storage_trace /\
   return_buf_sep d c em u /\
@@ -4413,7 +4413,7 @@ Theorem for_nonslot_array_round_contracts:
   local_ptrs_reserved c sa0 /\ (!H. dead_lo_ok H (DF H) lo c cx) /\
   (!x sz. c.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x) /\
   return_buf_frame d c sa0 s0 /\ ret_pc_ok c sa0 s0 /\
-  (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_no_wrap inst t) /\
+  (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_fmp_headroom inst t) /\
   evaluate_type (get_tenv cx) fty = SOME dtv /\ body_for_full_ok cx dtv id loop_body vs /\
   storage_trace_domain cx st0 em.storage_trace /\
   return_buf_sep d c em u /\

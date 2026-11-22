@@ -1187,7 +1187,12 @@ Proof
         mp_tac (Q.SPECL [`[ld;lt;iz]`, `u`, `r3`, `hg`, `ht`, `g3`, `t3`,
           `ctx`, `func`, `hbb`] run_inst_seq_gas_origin_ptr_path) >>
         simp[Abbr `hbb`, Abbr `ld`, Abbr `lt`, Abbr `iz`, mk_inst_def,
-          is_terminator_def, isPREFIX]) >>
+          is_terminator_def, isPREFIX] >>
+        (impl_tac >-
+          (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+           qpat_assum `_ = _ ++ [_] ++ _`
+             (mp_tac o AP_TERM ``EVERY (\i. i.inst_opcode <> DALLOCA)``) >>
+           simp[EVERY_APPEND])) >> simp[]) >>
      qabbrev_tac `hs = r3 with vs_inst_idx := 3` >>
      qabbrev_tac `target = if k < LENGTH avs then FST (SND labels)
        else SND (SND labels)` >>
@@ -2066,7 +2071,12 @@ Proof
         mp_tac (Q.SPECL [`[ai0;ai1;ai2;ai3;ai4;ai5;ai6]`, `hu`, `ar7`,
           `hg`, `ht`, `ag7`, `at7`, `ctx`, `func`, `abb`]
           run_inst_seq_gas_origin_ptr_path) >>
-        fs[Abbr `ai0`, Abbr `ai1`, Abbr `ai2`, Abbr `ai3`, Abbr `ai4`, Abbr `ai5`, Abbr `ai6`, mk_inst_def, is_terminator_def]) >>
+        fs[Abbr `ai0`, Abbr `ai1`, Abbr `ai2`, Abbr `ai3`, Abbr `ai4`, Abbr `ai5`, Abbr `ai6`, mk_inst_def, is_terminator_def] >>
+        (impl_tac >-
+          (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+           qpat_assum `_ = _ ++ [_] ++ _`
+             (mp_tac o AP_TERM ``EVERY (\i. i.inst_opcode <> DALLOCA)``) >>
+           simp[EVERY_APPEND])) >> simp[]) >>
      `LENGTH addressed.cs_current_insts = 7` by
        (qpat_assum `emitted_insts body_st addressed = _` mp_tac >>
         qpat_assum `body_st.cs_current_insts = []` mp_tac >>
@@ -3806,8 +3816,13 @@ Proof
         mp_tac (Q.SPECL [`[ti1;ti2]`, `addr_s`, `tail_raw`,
           `ag7`, `at7`, `tg2`, `tt2`, `ctx`, `func`, `tbb`]
           run_inst_seq_gas_origin_ptr_path) >>
+        qpat_x_assum `addr_s.vs_inst_idx = _` SUBST_ALL_TAC >>
         fs[Abbr `ti1`, Abbr `ti2`, Abbr `tail_s`, mk_inst_def, is_terminator_def] >>
-        metis_tac[]) >>
+        (impl_tac >-
+          (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+           qpat_assum `_ = _ ++ [_] ++ _`
+             (mp_tac o AP_TERM ``EVERY (\i. i.inst_opcode <> DALLOCA)``) >>
+           simp[EVERY_APPEND])) >> metis_tac[]) >>
      `tail_s.vs_memory = addr_s.vs_memory /\
       tail_s.vs_allocas = addr_s.vs_allocas /\
       tail_s.vs_alloca_next = addr_s.vs_alloca_next /\
@@ -6117,9 +6132,15 @@ Proof
      mp_tac (Q.SPECL [`[ex1;ex2;ex3]`, `exit_s`, `scalar_raw`,
        `exitG`, `exittn`, `eg3`, `et3`, `ctx`, `func`, `exit_bb`]
        run_inst_seq_gas_origin_ptr_path) >>
+     qpat_x_assum `exit_s.vs_inst_idx = _` SUBST_ALL_TAC >>
      Cases_on `active` >>
      fs[Abbr `ex1`, Abbr `ex2`, Abbr `ex3`, Abbr `scalar_s`,
-       mk_inst_def, is_terminator_def] >> metis_tac[]) >>
+       mk_inst_def, is_terminator_def] >>
+     (impl_tac >-
+       (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+        qpat_assum `_ = _ ++ [_] ++ _`
+          (mp_tac o AP_TERM ``EVERY (\i. i.inst_opcode <> DALLOCA)``) >>
+        simp[EVERY_APPEND])) >> metis_tac[]) >>
   `window_array_cursor T owner pp st.cs_next_id b 0 sb cap d
     (LENGTH (enc (Array NONE ty) (ListV avs))) exit_s` by
     (qpat_assum `window_array_cursor T owner pp _ _ _ _ _ _ _ loop_s` mp_tac >>
@@ -6733,8 +6754,14 @@ Proof
      mp_tac (Q.SPECL [`[pf1;pf2;pf3;pf4]`, `scalar_s`, `finish_raw`,
        `eg3`, `et3`, `pfg4`, `pft4`, `ctx`, `func`, `parent_bb`]
        run_inst_seq_gas_origin_ptr_path) >>
+     qpat_x_assum `scalar_s.vs_inst_idx = _` SUBST_ALL_TAC >>
      fs[Abbr `pf1`, Abbr `pf2`, Abbr `pf3`, Abbr `pf4`, Abbr `finish_s`,
-       mk_inst_def, is_terminator_def] >> metis_tac[]) >>
+       mk_inst_def, is_terminator_def] >>
+     (impl_tac >-
+       (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+        qpat_assum `_ = _ ++ [_] ++ _`
+          (mp_tac o AP_TERM ``EVERY (\i. i.inst_opcode <> DALLOCA)``) >>
+        simp[EVERY_APPEND])) >> metis_tac[]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
     (s,G,tn) [] (OK finish_s,pfg4,pft4)` by
     (gen_tac >>

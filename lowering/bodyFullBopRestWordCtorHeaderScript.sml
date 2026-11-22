@@ -151,6 +151,10 @@ Resume rest_word_membership_ctor_header_full_joint[none]:
       `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by
         (metis_tac[]) >>
+      `(ctx_has_dalloca ctx ==>
+        !pre i post v. code = pre ++ i::post /\ run_inst_seq pre s = OK v ==>
+          unitTransformDefs$dalloca_no_wrap i v)` by
+        simp[] >>
       drule_all run_inst_seq_gas_origin_ptr_path >> simp[]) >>
   suspend "none_post"
 QED
@@ -244,6 +248,10 @@ Resume rest_word_membership_ctor_header_full_joint[some_finish]:
         simp[Abbr `ai`, Abbr `li`, mk_inst_def, is_terminator_def] >>
       `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
+      `(ctx_has_dalloca ctx ==>
+        !pre i post v. code = pre ++ i::post /\ run_inst_seq pre s = OK v ==>
+          unitTransformDefs$dalloca_no_wrap i v)` by
+        simp[] >>
       drule_all run_inst_seq_gas_origin_ptr_path >> simp[]) >>
   suspend "some_post"
 QED
@@ -388,6 +396,15 @@ Resume rest_word_membership_ctor_header_const_full_joint[none]:
         simp[Abbr `ins`, mk_inst_def, is_terminator_def] >>
       `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
+      `(ctx_has_dalloca ctx ==>
+        !pre i post v. code = pre ++ i::post /\ run_inst_seq pre s = OK v ==>
+          unitTransformDefs$dalloca_no_wrap i v)` by
+        (strip_tac >> rpt strip_tac >>
+         `MEM i code` by simp[] >>
+         irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+         qpat_x_assum `MEM i code` mp_tac >>
+         qpat_assum `code = [ins]` (fn th => pure_rewrite_tac[th, MEM]) >>
+         strip_tac >> simp[Abbr `ins`, mk_inst_def]) >>
       drule_all run_inst_seq_gas_origin_ptr_path >> simp[]) >>
   suspend "none_post"
 QED
@@ -476,6 +493,15 @@ Resume rest_word_membership_ctor_header_const_full_joint[some_finish]:
         simp[Abbr `ai`, Abbr `li`, mk_inst_def, is_terminator_def] >>
       `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
+      `(ctx_has_dalloca ctx ==>
+        !pre i post v. code = pre ++ i::post /\ run_inst_seq pre s = OK v ==>
+          unitTransformDefs$dalloca_no_wrap i v)` by
+        (strip_tac >> rpt strip_tac >>
+         `MEM i code` by simp[] >>
+         irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+         qpat_x_assum `MEM i code` mp_tac >>
+         qpat_assum `code = [ai;li]` (fn th => pure_rewrite_tac[th, MEM]) >>
+         strip_tac >> simp[Abbr `ai`, Abbr `li`, mk_inst_def]) >>
       drule_all run_inst_seq_gas_origin_ptr_path >> simp[]) >>
   suspend "some_post"
 QED

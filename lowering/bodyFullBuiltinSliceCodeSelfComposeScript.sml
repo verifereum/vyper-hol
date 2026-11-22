@@ -353,11 +353,11 @@ Proof
        qpat_assum `MEM func ctx.ctx_functions` (fn member =>
          ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi
            (CONJ inv member))))) >>
-  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_no_wrap inst u` by
+  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_fmp_headroom inst u` by
     (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
          qpat_assum `!fn i v. frag_reachable ctx func s0 fn i v ==> _`
-           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
             CONJ path o CONJ no_phi)))) >>
   qpat_x_assum `expr_sim_full _ _ _ _ len _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>

@@ -616,7 +616,7 @@ Theorem deploy_ctor_body_joint_raw_with:
       imm_len tops + unit_alloca_budget dunit.cu_context <= w2n vs.vs_initial_fmp /\
       w2n vs.vs_initial_fmp < 2 ** 254) /\
     (ctx_has_dalloca dunit.cu_context ==> !fn inst s.
-      raw_reachable vs dunit.cu_context fn inst s ==> dalloca_no_wrap inst s) /\
+      raw_reachable vs dunit.cu_context fn inst s ==> dalloca_fmp_headroom inst s) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
@@ -737,7 +737,7 @@ Proof
           >- (drule_all raw_reachable_through_fragment >> metis_tac[]) >>
           drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
           fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
-             unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[])
+             unitTransformDefsTheory.dalloca_fmp_headroom_def] >> metis_tac[])
       >> gen_tac >> disch_tac >>
       qpat_x_assum `!st0 H. valid_horizon _ st0 H _ ==> _`
         (qspecl_then [`initial_state am []`, `H`] mp_tac) >>

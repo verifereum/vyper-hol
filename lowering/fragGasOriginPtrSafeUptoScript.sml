@@ -681,21 +681,31 @@ QED
 (* ===== The per-state facts ===== *)
 
 Theorem mem_step_facts[local]:
+  MEM fn ctx.ctx_functions /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   (revert_forward_at bb s.vs_inst_idx \/ mem_safe_step fuel ctx inst s) ==>
-  inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s
+  inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s /\
+  dalloca_no_wrap inst s
 Proof
   strip_tac
   >- (drule_all revert_forward_at_opcode >> strip_tac >>
       simp[inst_mem_ok_in_fn_def] >> metis_tac[]) >>
+  `inst.inst_opcode = DALLOCA ==> ctx_has_dalloca ctx` by
+    (strip_tac >> simp[ctx_has_dalloca_def, EXISTS_MEM] >>
+     qexists_tac `fn` >> simp[] >> qexists_tac `inst` >>
+     simp[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
+     qexists_tac `bb` >> conj_tac
+     >- metis_tac[lookup_block_MEM] >>
+     fs[get_instruction_def] >> metis_tac[EL_MEM]) >>
   gvs[Once mem_safe_step_def, inst_mem_ok_in_fn_def] >>
-  metis_tac[inst_mem_below_frontier_frontiers]
+  metis_tac[inst_mem_below_frontier_frontiers, dalloca_no_wrap_non_dalloca]
 QED
 
 Theorem invoke_mem_facts[local]:
   inst.inst_opcode = INVOKE ==>
-  inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s
+  inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s /\
+  dalloca_no_wrap inst s
 Proof
   strip_tac >>
   `inst = inst with inst_opcode := INVOKE` by
@@ -707,10 +717,12 @@ QED
 Theorem focus_at_ok[local]:
   focus_at D lo explicit ctx vs b fn PG G tn s /\ gas_cut k vs s /\
   k <= b /\ k <= LENGTH vs.vs_gas_readings /\
+  MEM fn ctx.ctx_functions /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst ==>
   ptr_inst_ok D lo 0 ctx fn G tn inst s /\
-  inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s
+  inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s /\
+  dalloca_no_wrap inst s
 Proof
   strip_tac >> drule_all focus_at_first >> strip_tac
   >- (drule gas_origin_ptr_edge_common_fuel >> strip_tac >> gvs[] >>
@@ -720,10 +732,12 @@ QED
 
 Theorem run_safe_ok[local]:
   run_safe D lo ctx fn PG G tn s /\
+  MEM fn ctx.ctx_functions /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst ==>
   ptr_inst_ok D lo 0 ctx fn G tn inst s /\
-  inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s
+  inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s /\
+  dalloca_no_wrap inst s
 Proof
   strip_tac >>
   qpat_x_assum `run_safe _ _ _ _ _ _ _ _` mp_tac >>
@@ -756,7 +770,8 @@ Theorem gas_origin_ptr_focus_frame_facts:
     frame_reachable vs ctx stk PG G tn fn inst s /\
     gas_cut (MIN (LENGTH marks) (LENGTH vs.vs_gas_readings)) vs s ==>
     (!fuel. ptr_inst_ok D lo fuel ctx fn G tn inst s) /\
-    inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s
+    inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s /\
+    dalloca_no_wrap inst s
 Proof
   strip_tac >>
   qabbrev_tac `k = MIN (LENGTH marks) (LENGTH vs.vs_gas_readings)` >>
@@ -794,8 +809,6 @@ Theorem gas_origin_ptr_focus_o1_safe_upto:
   reserved_intervals_wf ctx.ctx_global_reserved /\
   EVERY (\f. f.fn_eom = NONE) ctx.ctx_functions /\
   fmp_free_ctx ctx /\ fixed_region_reserved lo ctx /\
-  (ctx_has_dalloca ctx ==>
-   !fn inst s. raw_reachable vs ctx fn inst s ==> dalloca_no_wrap inst s) /\
   mem_inv dload_headroom_ok ctx vs /\
   w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
   code_layout_valid vs ==>
@@ -807,7 +820,8 @@ Proof
   `!stk PG G tn fn inst s.
      frame_reachable vs ctx stk PG G tn fn inst s /\ gas_cut k vs s ==>
      (!fuel. ptr_inst_ok D lo fuel ctx fn G tn inst s) /\
-     inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s` by
+     inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s /\
+     dalloca_no_wrap inst s` by
     (simp[Abbr `k`] >> metis_tac[gas_origin_ptr_focus_frame_facts]) >>
   `ptr_discipline_upto lo k ctx vs` by
     (simp[ptr_discipline_upto_def] >> conj_tac >- metis_tac[] >>
@@ -818,7 +832,8 @@ Proof
      first_x_assum drule_all >> strip_tac >>
      first_x_assum (qspec_then `fuel` mp_tac) >> simp[ptr_inst_ok_def]) >>
   `!fn inst s. raw_reachable vs ctx fn inst s /\ gas_cut k vs s ==>
-     inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s` by
+     inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s /\
+     dalloca_no_wrap inst s` by
     (rpt gen_tac >> strip_tac >> drule ptr_raw_reachable_frame >>
      strip_tac >> first_x_assum drule_all >> simp[]) >>
   `!fn inst s. raw_reachable vs ctx fn inst s /\ gas_cut k vs s ==>
@@ -830,24 +845,18 @@ Proof
      simp[mem_inv_raw_reachable, dload_headroom_ok_def] >>
      rpt strip_tac >> res_tac >> decide_tac) >>
   `!fn inst s. raw_reachable vs ctx fn inst s /\ gas_cut k vs s ==>
-     dalloca_no_wrap inst s /\
      w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
     (rpt gen_tac >> strip_tac >>
      Cases_on `ctx_has_dalloca ctx`
-     >- (conj_tac >- metis_tac[] >>
-         drule ptr_raw_reachable_frame >> strip_tac >>
-         qpat_x_assum `!stk PG G tn fn inst s.
+     >- (drule ptr_raw_reachable_frame >> strip_tac >>
+         qpat_assum `!stk PG G tn fn inst s.
             _ ==> (!fuel. ptr_inst_ok _ _ fuel _ _ _ _ _ _) /\ _`
-           (qspecl_then [`stk`, `PG`, `G`, `tn`, `fn`, `inst`, `s`] mp_tac) >>
-         simp[] >> disch_then (qspec_then `0` mp_tac o CONJUNCT1) >>
+           (drule_all_then (qspec_then `0` mp_tac o CONJUNCT1)) >>
          simp[ptr_inst_ok_def, allocas_below_fmp_def]) >>
      `EVERY pre_fmp_ops ctx.ctx_functions` by
        fs[o1PassContractTheory.fmp_free_ctx_def, EVERY_MEM] >>
      drule raw_reachable_fmp_fixed >> simp[] >> strip_tac >>
-     drule raw_reachable_initial_fmp >> strip_tac >> simp[] >>
-     simp[dalloca_no_wrap_def] >> strip_tac >>
-     drule ptr_raw_reachable_frame >> strip_tac >>
-     metis_tac[frame_reachable_dalloca]) >>
+     drule raw_reachable_initial_fmp >> strip_tac >> simp[]) >>
   rw[o1_safe_upto_def, o1_ptr_safe_upto_def, raw_mem_ok_def] >> metis_tac[]
 QED
 

@@ -144,9 +144,11 @@ Proof
         contextCodegenRelTheory.source_memory_read_ranges_def, source_memory_write_ranges_def,
         EVERY_MEM, Abbr `u`, update_var_def]) >>
     `inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
-     inst.inst_opcode <> GAS` by
+     inst.inst_opcode <> GAS /\ inst.inst_opcode <> DALLOCA` by
       (qpat_x_assum `MEM opc _` mp_tac >> simp[] >> strip_tac >>
        simp[Abbr `inst`, mk_inst_def, is_terminator_def]) >>
+    `ctx_has_dalloca ctx ==> unitTransformDefs$dalloca_no_wrap inst s` by
+      simp[memSafeRunTheory.dalloca_no_wrap_non_dalloca] >>
     drule_all straight_line_origin_ptr_edge >> simp[]) >>
  drule (cj 2 gas_origin_ptr_path_rules) >>
  disch_then (qspec_then `[]` mp_tac) >> simp[] >>

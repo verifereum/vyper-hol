@@ -319,7 +319,7 @@ QED
 
 Resume target_subscript_sim_full[index_run]:
   `!fn inst s. frag_reachable ctx func t1 fn inst s ==>
-    dalloca_no_wrap inst s` by
+    dalloca_fmp_headroom inst s` by
     (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
        metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
      qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==>
@@ -327,7 +327,7 @@ Resume target_subscript_sim_full[index_run]:
        (qspec_then `storage_trace_horizon mid1.storage_trace` mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >>
      strip_tac >>
-     metis_tac[bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap]) >>
+     metis_tac[bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom]) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok mid1` by
     (simp[gas_admissible_def] >> rpt strip_tac >>
      Cases_on `res` >- simp[expr_res_ok_def] >> rename1 `INR ex` >>
@@ -711,7 +711,7 @@ QED
 
 Resume immutable_target_subscript_sim_full[index_run]:
   `!fn inst s. frag_reachable ctx func t1 fn inst s ==>
-    dalloca_no_wrap inst s` by
+    dalloca_fmp_headroom inst s` by
     (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
        metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
      qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==>
@@ -719,7 +719,7 @@ Resume immutable_target_subscript_sim_full[index_run]:
        (qspec_then `storage_trace_horizon mid1.storage_trace` mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >>
      strip_tac >>
-     metis_tac[bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap]) >>
+     metis_tac[bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom]) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok mid1` by
     (simp[gas_admissible_def] >> rpt strip_tac >>
      Cases_on `res` >- simp[expr_res_ok_def] >> rename1 `INR ex` >>

@@ -64,10 +64,25 @@ Proof
   qexists_tac `q` >> simp[] >>
   reverse conj_tac >- (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   irule typed_bytes_child_seq_cont >> simp[] >> qexists_tac `sa` >> simp[] >>
+  gnvs[compile_store_memory_typed_bytes] >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+    gvs[compile_store_bytestring_def, compile_bytestring_copy_len_def,
+        emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+        fresh_var_def, fresh_id_def, emit_def, comp_return_def,
+        emitted_insts_def, rich_listTheory.DROP_APPEND1, mk_inst_def,
+        is_terminator_def] >>
   drule buffer_store_bytestring_shape >> strip_tac >>
   `compile_store_memory ce src dst dst_ty dst_ty sa = ((),sb)` by
     simp[compile_store_memory_def, is_bytestring_word_type] >>
-  drule aggregate_store_memory_straight >> gvs[same_blocks_def]
+  drule aggregate_store_memory_straight >> gvs[same_blocks_def] >>
+  rpt strip_tac >>
+  irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+  `MEM i (emitted_insts sa sb)` by
+    (qpat_assum `emitted_insts sa sb = _`
+       (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+  qpat_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _`
+    (mp_tac o REWRITE_RULE [listTheory.EVERY_MEM]) >>
+  disch_then drule >> simp[]
 QED
 
 Theorem normalize_word_straight[local]:
@@ -113,7 +128,21 @@ Proof
   qexists_tac `q` >> simp[] >>
   conj_tac
   >- (drule_all normalize_word_straight >> strip_tac >>
-      irule typed_bytes_child_seq_cont >> simp[] >> qexists_tac `sa` >> simp[]) >>
+      `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+        gvs[compile_store_memory_typed_word, emit_op_def, emit_void_def,
+            emit_inst_def, fresh_id_def, fresh_var_def, emit_def,
+            comp_bind_def, comp_ignore_bind_def, comp_return_def,
+            emitted_insts_def, rich_listTheory.DROP_APPEND1, mk_inst_def,
+            is_terminator_def] >>
+      irule typed_bytes_child_seq_cont >> simp[] >> qexists_tac `sa` >> simp[] >>
+      rpt strip_tac >>
+      irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+      `MEM i (emitted_insts sa sb)` by
+        (qpat_assum `emitted_insts sa sb = _`
+           (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+      qpat_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _`
+        (mp_tac o REWRITE_RULE [listTheory.EVERY_MEM]) >>
+      disch_then drule >> simp[]) >>
   conj_tac
   >- (drule_all val_in_memory_word_type >>
       simp[mem_word_at_eq_mload] >> strip_tac >>

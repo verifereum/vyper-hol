@@ -376,6 +376,9 @@ Theorem topcopy_seq_path:
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
     EVERY (\i. i.inst_opcode <> GAS) code /\
     run_inst_seq_mem_ok code s /\
+    (ctx_has_dalloca ctx ==>
+      !pre i post u. code = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> dalloca_no_wrap i u) /\
     run_inst_seq code s = OK t ==>
     gas_marked_path T ctx func s 0
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code))
@@ -443,7 +446,10 @@ Proof
   drule_at (Pat `run_inst_seq _ _ = _`) topcopy_seq_path >>
   disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
   impl_tac
-  >- (Cases_on `loc = LocStorage` >> simp[mk_inst_def, is_terminator_def]) >>
+  >- (Cases_on `loc = LocStorage` >> simp[mk_inst_def, is_terminator_def] >>
+      strip_tac >> rpt gen_tac >>
+      disch_then (mp_tac o Q.AP_TERM `EVERY (\i. i.inst_opcode <> DALLOCA)` o CONJUNCT1) >>
+      simp[EVERY_APPEND, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   strip_tac >> qexists_tac `u with vs_inst_idx := s.vs_inst_idx + 2` >>
   gvs[lookup_var_def]
 QED
@@ -521,7 +527,10 @@ Proof
   disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
   impl_tac
   >- (Cases_on `loc = LocStorage` >>
-      simp[Abbr `code`, mk_inst_def, is_terminator_def]) >>
+      simp[Abbr `code`, mk_inst_def, is_terminator_def] >>
+      strip_tac >> rpt gen_tac >>
+      disch_then (mp_tac o Q.AP_TERM `EVERY (\i. i.inst_opcode <> DALLOCA)` o CONJUNCT1) >>
+      simp[EVERY_APPEND, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   strip_tac >> qexists_tac `u with vs_inst_idx := s.vs_inst_idx+7` >>
   gvs[Abbr `code`, eval_operand_def, lookup_var_def]
 QED
@@ -658,7 +667,11 @@ Proof
      irule instMemFrontierTheory.below_frontier_no_ranges >> simp[mk_inst_def]) >>
   drule_at (Pat `run_inst_seq _ _ = _`) topcopy_seq_path >>
   disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
-  simp[mk_inst_def, is_terminator_def] >> strip_tac >>
+  impl_tac
+  >- (simp[mk_inst_def, is_terminator_def] >> strip_tac >> rpt gen_tac >>
+      disch_then (mp_tac o Q.AP_TERM `EVERY (\i. i.inst_opcode <> DALLOCA)` o CONJUNCT1) >>
+      simp[EVERY_APPEND, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
+  strip_tac >>
   `store_copy_frame sa loc b k s 0 u` by
     (simp[Abbr `u`] >> irule topcopy_frame_update >> simp[] >> metis_tac[]) >>
   qexists_tac `u with vs_inst_idx := SUC s.vs_inst_idx` >>

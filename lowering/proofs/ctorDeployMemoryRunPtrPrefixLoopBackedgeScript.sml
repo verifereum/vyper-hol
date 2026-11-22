@@ -318,6 +318,8 @@ Resume prefix_loop_increment_path[trace]:
   >- simp[Abbr `a`,Abbr `k`,mk_inst_def,is_terminator_def]
   >- (qpat_x_assum `run_inst_seq_mem_ok _ s` mp_tac >>
       simp_tac (srw_ss()) [Abbr `a`,Abbr `k`,abi_decode_backedge_insts_def,TAKE_def]) >>
+  `!v. dalloca_no_wrap a v /\ dalloca_no_wrap k v` by
+    simp[Abbr `a`,Abbr `k`,mk_inst_def,unitTransformDefsTheory.dalloca_no_wrap_def] >>
   qx_gen_tac `kk` >> strip_tac >>
   `kk = 0 \/ kk = 1` by (fs[] >> decide_tac) >>
   gvs[] >>

@@ -30,7 +30,7 @@ Theorem bop_operands_full_cps_exit:
   fn_has_code shadow_s1 shadow_s2 shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= s1.cs_next_var /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
@@ -156,11 +156,11 @@ Proof
   qpat_assum `Abbrev (P = _)`
     (fn th => simp[REWRITE_RULE [markerTheory.Abbrev_def] th, NoAsms]) >>
   strip_tac >> gvs[] >>
-  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s` by
     (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK t,G1,tn1)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
        qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _` (fn safe =>
-         ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+         ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
            (LIST_CONJ [path,no_phi,safe])))))) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
     (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ t`
@@ -264,7 +264,7 @@ Theorem bop_word_operands_full_cps_exit:
   fn_has_code shadow_s1 shadow_s2 shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= s1.cs_next_var /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
@@ -346,7 +346,7 @@ Theorem bop_operands_full_cps:
   fn_has_code shadow_s1 shadow_s2 shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= s1.cs_next_var /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
@@ -427,7 +427,7 @@ Theorem bop_word_operands_full_cps:
   fn_has_code shadow_s1 shadow_s2 shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= s1.cs_next_var /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
