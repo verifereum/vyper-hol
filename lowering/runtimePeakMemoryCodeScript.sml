@@ -218,6 +218,37 @@ Definition create_copy_dalloca_chunk_def:
       chunk = emitted_insts sa sd
 End
 
+(* The complete allocation-to-CREATE window begins after the keyword
+   operands and the code-offset check have been evaluated. *)
+Definition create_blueprint_dalloca_chunk_def:
+  create_blueprint_dalloca_chunk chunk k <=>
+    k = 1 /\
+    ?target value salt offset code args_ptr args_len sa size sm
+      alloc_ptr sn se sc created sd.
+      emit_op ADD [code;args_len] sa = (size,sm) /\
+      compile_alloc_dynamic size sm = (alloc_ptr,sn) /\
+      emit_void EXTCODECOPY [target;alloc_ptr;offset;code] sn = ((),se) /\
+      (if args_len = Lit 0w then sc = se else
+         ?args_dest sx.
+           emit_op ADD [alloc_ptr;code] se = (args_dest,sx) /\
+           compile_copy_memory_dynamic args_dest args_ptr args_len sx =
+             ((),sc)) /\
+      (case salt of NONE => emit_op CREATE [value;alloc_ptr;size]
+       | SOME salt_op => emit_op CREATE2 [value;alloc_ptr;size;salt_op]) sc =
+        (created,sd) /\
+      chunk = emitted_insts sa sd
+End
+
+Definition create_blueprint_dalloca_window_def:
+  create_blueprint_dalloca_window fn i s <=>
+    ?bb prefix chunk suffix.
+      lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      bb.bb_instructions = prefix ++ chunk ++ suffix /\
+      s.vs_inst_idx = LENGTH prefix + 1 /\
+      i = EL 1 chunk /\
+      create_blueprint_dalloca_chunk chunk 1
+End
+
 Theorem create_copy_dalloca_chunk_opcodes:
   create_copy_dalloca_chunk chunk k ==>
   k = 5 /\
