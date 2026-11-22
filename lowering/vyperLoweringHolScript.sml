@@ -108,3 +108,5 @@ Ancestors
   logBytesRobustSeqPtr logBytesSeqPtr revertReasonPrefixPtr
   reasonCompilerProps reasonLiteralBufferPtr reasonSourceProps
   reasonTypingProps revertReasonSuffixPathPtr
+  (* and/or chains (BoolChain) *)
+  exprSimBoolChain bodyFullBoolChain
