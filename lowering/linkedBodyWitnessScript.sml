@@ -98,7 +98,8 @@ Proof
          finite_mapTheory.FEVERY_FEMPTY] >>
   `immutable_section_layout_mods linked_witness_mods ce` by
     (irule unit_module_locations_immutable_layout >>
-     simp[Abbr `ce`, build_compile_env_unit_def, linked_witness_distinct_modules] >>
+     simp[Abbr `ce`, build_compile_env_unit_def, pairTheory.ELIM_UNCURRY,
+          linked_witness_distinct_modules] >>
      metis_tac[]) >>
   simp[contract_inv_def, cenv_module_pins_mods_def, Abbr `ce`,
        build_compile_env_unit_def, get_tenv_def, pairTheory.ELIM_UNCURRY, LET_THM,
@@ -120,9 +121,10 @@ Proof
   >- (strip_tac >> EVAL_TAC)
   >- (simp[linked_body_calls_resolved_def] >>
       metis_tac[linked_witness_closed_bodies])
-  >- fs[Abbr `ce`, build_compile_env_unit_def]
+  >- (Cases_on `cx.in_deploy` >> simp[])
   >- (rpt strip_tac >> metis_tac[linked_witness_closed_bodies])
-  >> fs[Abbr `ce`, build_compile_env_unit_def]
+  >- (rpt strip_tac >> metis_tac[linked_witness_closed_bodies])
+  >> fs[]
 QED
 
 (* These are the support and resolution premises at the entry boundary.
