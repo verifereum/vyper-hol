@@ -8,6 +8,7 @@ Ancestors
   deployDynamicMemory loweringShapeSource ptrDiscipline callTrace unitTransformDefs venomState
   contextRawReachable ctorDeployLoweringCode ctorDeployBodyShadow ctorDeployLoweringEntryPrefix
   ctorDeployLoweringReturn ctorDeployMemoryRunMemPrefixLayout ctorDeployMemoryRunMemPrefixSource
+  deployCtorPlainDefaults
 
 (* A successful asm_opt compilation exposes the deployment unit's phases, with
    the final assembly optimizer's output as the deployed code. *)
@@ -211,6 +212,9 @@ Proof
     imm_len tops + unit_alloca_budget dunit.cu_context <= w2n vs.vs_initial_fmp /\
     w2n vs.vs_initial_fmp < 2 ** 254` by
     (strip_tac >> fs[] >> decide_tac) >>
+  drule_all deploy_ctor_plain_defaults_shadow_env >> strip_tac >>
+  `compile_stmts (gas_shadow_env T cenv) NoLoop NoneT
+     (MAP gas_shadow_stmt body) shadow_sa = ((),shadow_sb)` by simp[] >>
   drule_all deploy_ctor_body_joint_raw_with >> simp[]
 QED
 
