@@ -51,6 +51,8 @@ Ancestors bodyImmutableStoreMemory[qualified,ignore_grammar]
   bodyMemoryDefs[qualified,ignore_grammar] tuplePlaceWriteOutcome[qualified,ignore_grammar]
   tuplePlacePointerReady[qualified,ignore_grammar] bodyFullStoreSlotsStatic[qualified,ignore_grammar]
   placeStoreSlots[qualified,ignore_grammar] gasOriginPtrLabels[qualified,ignore_grammar]
+  bodyFullImmutablePathStore[qualified,ignore_grammar]
+  immutableBytestringPath[qualified,ignore_grammar]
 
 
 val _ = Parse.hide "body";
@@ -923,7 +925,6 @@ QED
 Finalise body_assign_tuple_nonlocal_write_ready[local]
 
 (* A successful nonlocal head observes its root before the joint slot store. *)
-(* GATE_ADMISSION: held, nested borrowed tuple containing dynamic arrays *)
 Theorem tuple_place_nested_dynamic_borrow_target_frame:
   !DF lo d ctx shadow_ctx PG func shadow_func cenv cx env bt es n b sz off tvs
    st0 ty sa sb shadow_sa shadow_sb r s0 G0 tn0.
@@ -988,7 +989,19 @@ Theorem tuple_place_nested_dynamic_borrow_target_frame:
           expr_exit res q /\ halt_exit H cx ee res q /\
           (ctx_has_dalloca ctx ==> !s. q = Halt s ==> allocas_below_fmp s))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `expr_sim_inv cenv cx env es` by fs[target_pre_def] >>
+  qpat_assum `bodyFullTargetDefs$target_place_sim_full _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [bodyFullTargetDefsTheory.target_place_sim_full_def]) >>
+  disch_then (qspecl_then [`st0`,`ty`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,
+                           `r`,`s0`,`G0`,`tn0`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_tac >> irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >> simp[] >>
+  rpt gen_tac >> disch_then (qx_choose_then `p` (map_every assume_tac o CONJUNCTS)) >>
+  qexists_tac `p` >> simp[] >>
+  `locals_kept cenv es ee s0 t` by fs[target_post_def] >>
+  drule_all tuplePlaceBorrowTheory.tuple_borrow_locals_kept >> simp[]
 QED
 
 Theorem body_assign_tuple_nonlocal_head_full_path:
@@ -6209,41 +6222,809 @@ Proof
   fs[supportedStmtsTheory.supported_target_def]
 QED
 
-(* GATE_ADMISSION: missing case, nested immutable tuple assignment; owner: body place lane *)
-Theorem body_assign_tuple_nested_immutable_full:
-  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
-    (!s'' tv t s'3' v t'.
-       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
-       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
-    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-       (Assign (TupleTarget gs) e) ==>
-       occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
-    ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
-    ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
-    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
-    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty /\
-    EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
-                    ~(?nsid. t = TopLevelNameTarget nsid)) gs ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
-      (eval_stmt cx (Assign (TupleTarget gs) e)) es
+(* A computed immutable store changes only the constructor section.
+   The tuple loop retains the byte window and provenance above it. *)
+Triviality tuple_immutable_path_window:
+  off + type_memory_size tv <= lo /\ lo <= p /\ allocas_from lo s /\
+  (!a n. regions_disjoint a n off (type_memory_size tv) ==>
+     mem_bytes_at a n q.vs_memory = mem_bytes_at a n s.vs_memory) /\
+  (!i. ~(off <= i /\ i < off+type_memory_size tv) /\ i IN tq.t_mem ==>
+       i IN tn.t_mem) /\
+  (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s /\
+     FLOOKUP Gq x = FLOOKUP G x /\ op_taint tq (Var x) = op_taint tn (Var x)) ==>
+  mem_bytes_at p n q.vs_memory = mem_bytes_at p n s.vs_memory /\
+  (!i. p <= i /\ i < p+n /\ i IN tq.t_mem ==> i IN tn.t_mem) /\
+  (!aid a cap i. FLOOKUP s.vs_allocas aid = SOME (a,cap) /\
+      a <= i /\ i < a+cap /\ i IN tq.t_mem ==> i IN tn.t_mem) /\
+  (!x cap. not_fresh_at sa x /\ ptr_covers G tn x s cap ==> ptr_covers Gq tq x q cap)
 Proof
-  cheat
+  strip_tac >>
+  conj_tac
+  >- (first_assum irule >> simp[regions_disjoint_def] >> decide_tac) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `!i. ~(off <= i /\ _) /\ _ ==> i IN tn.t_mem` irule >>
+      simp[] >> decide_tac) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `allocas_from lo s` (drule_then assume_tac o REWRITE_RULE [allocas_from_def]) >>
+      qpat_assum `!i. ~(off <= i /\ _) /\ _ ==> i IN tn.t_mem` irule >>
+      simp[] >> decide_tac) >>
+  rpt strip_tac >>
+  irule decoderGhostFramePtrTheory.ptr_covers_frame >> qexistsl [`G`,`s`,`tn`] >>
+  qpat_assum `!x. not_fresh_at sa x ==> lookup_var x q = _ /\ _`
+    (drule_then (map_every assume_tac o CONJUNCTS)) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem body_assign_tuple_other_full:
+(* Reassemble the tuple-specific post from a shared physical write. *)
+Triviality tuple_immutable_path_store_success:
+  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env mid /\
+  stmt_state_rel (H0 : (bool # bytes32 # type_value) list # num list) ctx func ce cx mid s /\
+  local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\ ce.ce_module = NONE /\
+  FLOOKUP env.bare_globals (NONE,id) = SOME ity /\
+  FLOOKUP ce.ce_module_vars (NONE,id) = SOME (ImmutableLoc off) /\
+  ce.ce_module_var_type (NONE,id) = SOME ity /\
+  evaluate_type (get_tenv cx) ity = SOME itv /\
+  mem_path_offset itv path = SOME (k,ptv) /\
+  write_place cx (ImmutablePlace NONE id path) v mid = (INL (),fin) /\
+  value_has_type ptv v /\ off+k+type_memory_size ptv <= lo /\
+  lo <= p /\ allocas_from lo s /\ ~block_is_terminated sb /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  (!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  bodyFullImmutablePathStore$immutable_path_store_post
+    (lo,explicit,ctx,func,PG) (off+k) ptv v sa sb (s,G,tn) (q,Gq,tq) ==>
+  (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK q,Gq,tq)) /\
+  (!(H : (bool # bytes32 # type_value) list # num list) D.
+    stmt_state_rel H ctx func ce cx mid s /\ storage_well_formed_on cx mid (FST H) /\
+    dead_lo_ok H D lo ce cx /\ ghost_inv_at D lo d ce cx mid G tn s ==>
+    stmt_state_rel H ctx func ce cx fin q /\ storage_well_formed_on cx fin (FST H) /\
+    ghost_inv_at D lo d ce cx fin Gq tq q) /\
+  alloca_frame ce mid sa s ce fin q /\
+  ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
+  q.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~block_is_terminated sb /\
+  s.vs_alloca_next <= q.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp q) /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==> FLOOKUP q.vs_allocas aid = SOME entry) /\
+  (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s /\
+     FLOOKUP Gq x = FLOOKUP G x /\ op_taint tq (Var x) = op_taint tn (Var x)) /\
+  (!x cap. not_fresh_at sa x /\ ptr_covers G tn x s cap ==> ptr_covers Gq tq x q cap) /\
+  mem_bytes_at p n q.vs_memory = mem_bytes_at p n s.vs_memory /\
+  (!i. p <= i /\ i < p+n /\ i IN tq.t_mem ==> i IN tn.t_mem) /\
+  (!aid a cap i. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,cap) /\
+      a <= i /\ i < a+cap /\ i IN tq.t_mem ==> i IN tn.t_mem)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `bodyFullImmutablePathStore$immutable_path_store_post _ _ _ _ _ _ _ _`
+    (map_every assume_tac o CONJUNCTS o
+     REWRITE_RULE [bodyFullImmutablePathStoreTheory.immutable_path_store_post_def]) >>
+  `q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next /\
+   q.vs_fmp = s.vs_fmp /\ q.vs_initial_fmp = s.vs_initial_fmp /\
+   q.vs_call_ctx = s.vs_call_ctx /\
+   q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient` by
+    (qpat_assum `(q with <|vs_vars := _; vs_memory := _; vs_immutables := _;
+        vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|>) = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `allocas_from lo q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp q)` by
+    (qpat_assum `q.vs_allocas = s.vs_allocas` (fn allocas =>
+       qpat_assum `q.vs_fmp = s.vs_fmp` (fn fmp =>
+         qpat_assum `q.vs_initial_fmp = s.vs_initial_fmp` (fn initial =>
+           PURE_REWRITE_TAC [allocas_from_def,allocas_below_fmp_def,allocas,fmp,initial]))) >>
+     conj_tac
+     >- (qpat_assum `allocas_from lo s` (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+       (ACCEPT_TAC o REWRITE_RULE [allocas_below_fmp_def])) >>
+  `val_in_memory ptv v (off+k) q.vs_memory` by
+    (qpat_assum `!m. mem_agree_outside tq.t_mem q.vs_memory m ==> _` irule >>
+     simp[mem_agree_outside_def]) >>
+  qpat_assum `write_place cx (ImmutablePlace NONE id path) v mid = (INL (),fin)`
+    (map_every assume_tac o CONJUNCTS o MATCH_MP vyperPlaceFramesTheory.write_immutable_place_frame) >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac >-
+    (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+     conj_tac
+     >- (irule immutableDeployAssignRestoreTheory.immutable_path_store_stmt_state_rel >>
+         rpt (CHANGED_TAC (first_assum (irule_at Any))) >> simp[]) >>
+     conj_tac
+     >- (`storage_well_formed_on cx fin (FST H) <=> storage_well_formed_on cx mid (FST H)` by
+           (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+            qpat_assum `?imms. fin = mid with immutables := imms`
+              (qx_choose_then `imms` SUBST1_TAC) >> simp[]) >> simp[]) >>
+     qpat_assum `ce.ce_module = NONE` (fn mod_eq =>
+       MATCH_MP_TAC (SIMP_RULE bool_ss [mod_eq] (Q.INST [
+         `tops` |-> `tops`,`ctx` |-> `ctx`,`func` |-> `func`,
+         `ee` |-> `mid`,`ce` |-> `ce`,`env` |-> `env`,`H` |-> `H : (bool # bytes32 # type_value) list # num list`,
+         `s` |-> `s`,`G` |-> `G`,`tn` |-> `tn`,`sa` |-> `sa`,
+         `id` |-> `id`,`ty` |-> `ity`,`off` |-> `off`,`k` |-> `k`,
+         `itv` |-> `itv`,`path` |-> `path`,`ptv` |-> `ptv`,`v` |-> `v`,
+         `tf` |-> `tq`,`Gf` |-> `Gq`]
+         (INST_TYPE [alpha |-> ``:256``]
+           immutableDeployAssignPathGhostTheory.immutable_path_store_ghost_inv)))) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     asm_simp_tac bool_ss [] >> simp[NoAsms])) >>
+  (conj_tac >-
+    (drule_then (map_every assume_tac o CONJUNCTS) exprSimPropsTheory.mem_path_offset_sound >>
+     qpat_assum `ce.ce_module = NONE` (fn mod_eq =>
+       MATCH_MP_TAC (SIMP_RULE bool_ss [mod_eq] (Q.INST [
+         `H` |-> `H0 : (bool # bytes32 # type_value) list # num list`,`ctx` |-> `ctx`,`func` |-> `func`,`su` |-> `sa`,
+         `ee` |-> `mid`,`off` |-> `off`,`id` |-> `id`,`ity` |-> `ity`,
+         `itv` |-> `itv`]
+         (INST_TYPE [alpha |-> ``:256``] immutable_assign_suffix_alloca_frame)))) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     TRY (qx_gen_tac `x` >> disch_tac >>
+          qpat_assum `!x. not_fresh_at sa x ==> lookup_var x q = _ /\ _`
+            (drule_then (ACCEPT_TAC o CONJUNCT1)) >> NO_TAC) >>
+     TRY (qpat_assum `?imms. fin = mid with immutables := imms`
+             (qx_choose_then `imms` SUBST1_TAC) >> simp[] >> NO_TAC) >>
+     rpt strip_tac >>
+     qpat_assum `!b n. regions_disjoint b n (off+k) (type_memory_size ptv) ==> _` irule >>
+     fs[regions_disjoint_def] >> decide_tac)) >>
+  `mem_bytes_at p n q.vs_memory = mem_bytes_at p n s.vs_memory /\
+   (!i. p <= i /\ i < p+n /\ i IN tq.t_mem ==> i IN tn.t_mem) /\
+   (!aid a cap i. FLOOKUP s.vs_allocas aid = SOME (a,cap) /\
+     a <= i /\ i < a+cap /\ i IN tq.t_mem ==> i IN tn.t_mem) /\
+   (!x cap. not_fresh_at sa x /\ ptr_covers G tn x s cap ==> ptr_covers Gq tq x q cap)` by
+    (match_mp_tac (Q.INST [`off` |-> `off+k`,`tv` |-> `ptv`] tuple_immutable_path_window) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  simp[] >> metis_tac[]
+QED
+
+Triviality tuple_immutable_pending_operands:
+  !i p tys tvs vs elems c c' s s' G G' tn tn'.
+    LENGTH vs = LENGTH tvs /\ LENGTH tys = LENGTH tvs /\
+    (!x. not_fresh_at c x ==> not_fresh_at c' x) /\
+    (!x v. not_fresh_at c x /\ lookup_var x s = SOME v ==> lookup_var x s' = SOME v) /\
+    (!x. not_fresh_at c x ==> FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    (!x k. not_fresh_at c x /\ ptr_covers G tn x s k ==> ptr_covers G' tn' x s' k) /\
+    (!mem. mem_agree_outside tn'.t_mem s'.vs_memory mem ==>
+       val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) p mem) /\
+    (!j. i <= j /\ j < LENGTH tys ==>
+       ?x. EL j elems = Var x /\ not_fresh_at c x /\ op_taint tn (Var x) = {} /\
+         if is_word_type (EL j tys) then
+           lookup_var x s = SOME (typed_val_to_w256 (EL j tvs) (EL j vs)) /\ op_prov G (Var x) = NONE
+         else
+           lookup_var x s = SOME (n2w (p + SUM (MAP type_memory_size (TAKE j tvs)))) /\
+           ptr_covers G tn x s (type_memory_size (EL j tvs)) /\
+           (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+             val_in_memory (EL j tvs) (EL j vs)
+               (p + SUM (MAP type_memory_size (TAKE j tvs))) mem)) ==>
+    !j. i <= j /\ j < LENGTH tys ==>
+      ?x. EL j elems = Var x /\ not_fresh_at c' x /\ op_taint tn' (Var x) = {} /\
+        if is_word_type (EL j tys) then
+          lookup_var x s' = SOME (typed_val_to_w256 (EL j tvs) (EL j vs)) /\ op_prov G' (Var x) = NONE
+        else
+          lookup_var x s' = SOME (n2w (p + SUM (MAP type_memory_size (TAKE j tvs)))) /\
+          ptr_covers G' tn' x s' (type_memory_size (EL j tvs)) /\
+          (!mem. mem_agree_outside tn'.t_mem s'.vs_memory mem ==>
+            val_in_memory (EL j tvs) (EL j vs)
+              (p + SUM (MAP type_memory_size (TAKE j tvs))) mem)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qx_gen_tac `j` >> disch_tac >>
+  qpat_assum `!j. i <= j /\ j < LENGTH tys ==> ?x. _`
+    (qspec_then `j` (fn old =>
+      qpat_assum `i <= j /\ j < LENGTH tys`
+        (qx_choose_then `x` (map_every assume_tac o CONJUNCTS) o MATCH_MP old))) >>
+  qpat_assum `!x. not_fresh_at c x ==> FLOOKUP G' x = _ /\ _`
+    (qspec_then `x` (drule_then (map_every assume_tac o CONJUNCTS))) >>
+  qexists_tac `x` >> conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum (drule_then ACCEPT_TAC) >>
+  conj_tac >- (qpat_assum `op_taint tn' (Var x) = op_taint tn (Var x)` SUBST1_TAC >>
+               first_assum ACCEPT_TAC) >>
+  Cases_on `is_word_type (EL j tys)`
+  >- (qpat_x_assum `if is_word_type (EL j tys) then _ else _`
+        (map_every assume_tac o CONJUNCTS o REWRITE_RULE [ASSUME ``is_word_type (EL j tys)``]) >>
+      PURE_REWRITE_TAC [ASSUME ``is_word_type (EL j tys)``,boolTheory.COND_CLAUSES] >>
+      conj_tac >- (qpat_assum `!x v. not_fresh_at c x /\ lookup_var x s = SOME v ==> _`
+                    (drule_all_then ACCEPT_TAC)) >>
+      qpat_assum `op_prov G (Var x) = NONE` mp_tac >>
+      qpat_assum `FLOOKUP G' x = FLOOKUP G x` (fn eq => simp[NoAsms,op_prov_def,eq])) >>
+  qpat_x_assum `if is_word_type (EL j tys) then _ else _`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [ASSUME ``~is_word_type (EL j tys)``]) >>
+  PURE_REWRITE_TAC [ASSUME ``~is_word_type (EL j tys)``,boolTheory.COND_CLAUSES] >>
+  conj_tac >- (qpat_assum `!x v. not_fresh_at c x /\ lookup_var x s = SOME v ==> _`
+                (drule_all_then ACCEPT_TAC)) >>
+  conj_tac >- (qpat_assum `!x k. not_fresh_at c x /\ ptr_covers G tn x s k ==> _`
+                (drule_all_then ACCEPT_TAC)) >>
+  qx_gen_tac `mem` >> disch_tac >>
+  `j < LENGTH tvs` by decide_tac >>
+  `tuple_in_memory vs tvs p mem` by
+    (qpat_assum `!mem. mem_agree_outside tn'.t_mem s'.vs_memory mem ==> _`
+      (drule_then (mp_tac o REWRITE_RULE [valueEncodingPropsTheory.val_in_memory_tuple])) >>
+     simp[NoAsms]) >>
+  qspecl_then [`vs`,`tvs`,`p`,`mem`,`j`] match_mp_tac
+    tupleMemoryLayoutTheory.tuple_in_memory_element >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem tuple_immutable_path_flat_store[local]:
+  compile_assign_value ce dst LocCode op (is_word_type sty) NONE dty sty
+    (type_memory_bytes ce dty) sa = ((),sb) /\
+  (sty = dty \/ is_bytestring_type dty) /\
+  expr_sim_inv ce cx env st /\
+  assignable_type (get_tenv cx) sty /\ type_widens_to (get_tenv cx) sty dty /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\ value_has_type stv v /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  copy_old_operand sa dst /\ eval_operand dst s = SOME (n2w off) /\
+  op_taint tn dst = {} /\ op_prov G dst = NONE /\
+  (if is_word_type sty then
+     copy_old_operand sa op /\ eval_operand op s = SOME (typed_val_to_w256 stv v) /\
+     op_taint tn op = {}
+   else ?x a. op = Var x /\ not_fresh_at sa x /\ lookup_var x s = SOME (n2w a) /\
+     lo <= a /\ a + type_memory_size stv <= s.vs_alloca_next /\
+     ptr_covers G tn x s (type_memory_size stv) /\
+     (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory stv v a mem)) /\
+  off + type_memory_size dtv <= lo /\ lo <= s.vs_alloca_next /\
+  s.vs_alloca_next < dimword (:256) /\
+  (!base. ce.ce_imm_alloca = SOME base ==> eval_operand base s = SOME 0w /\
+     copy_old_operand sa base /\ op_taint tn base = {} /\ op_prov G base = NONE) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?q Gf tf. bodyFullImmutablePathStore$immutable_path_store_post
+    (lo,explicit,ctx,func,PG) off dtv v sa sb (s,G,tn) (q,Gf,tf)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `lo < dimword (:256)` by decide_tac >>
+  Cases_on `is_word_type sty`
+  >- (`sty = dty` by drule_all_then ACCEPT_TAC typedMemoryCopyTheory.return_source_word_widens_eq >>
+      `stv = dtv` by fs[] >>
+      qpat_x_assum `sty = dty` SUBST_ALL_TAC >>
+      qpat_x_assum `stv = dtv` SUBST_ALL_TAC >>
+      `type_memory_size dtv = 32` by
+        drule_all_then ACCEPT_TAC localValueStorePropsTheory.evaluated_word_memory_size >>
+      `off+32 <= lo` by decide_tac >>
+      `!base. ce.ce_imm_alloca = SOME base ==> eval_operand base s = SOME 0w /\
+           op_taint tn base = {} /\ op_prov G base = NONE` by
+        (qx_gen_tac `base_op` >> disch_tac >>
+         qpat_assum `!base. ce.ce_imm_alloca = SOME base ==> _` (drule_then strip_assume_tac) >>
+         simp[]) >>
+      qpat_assum `if is_word_type dty then _ else _`
+        (map_every assume_tac o CONJUNCTS o REWRITE_RULE [ASSUME ``is_word_type dty``]) >>
+      qpat_assum `compile_assign_value _ _ LocCode _ _ _ _ _ _ sa = _`
+        (assume_tac o REWRITE_RULE [ASSUME ``is_word_type dty``]) >>
+      match_mp_tac (Q.INST [`ce` |-> `ce`,`dst` |-> `dst`,`op` |-> `op`,
+        `loc` |-> `NONE : data_location option`,`ty` |-> `dty`,`sty` |-> `dty`,
+        `bytes` |-> `type_memory_bytes ce dty`,`tenv` |-> `get_tenv cx`]
+        bodyFullImmutablePathStoreTheory.immutable_path_store_word) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_assum `if is_word_type sty then _ else _`
+    (qx_choosel_then [`source_var`,`source_addr`] (map_every assume_tac o CONJUNCTS) o
+     REWRITE_RULE [ASSUME ``~is_word_type sty``]) >>
+  `source_addr+type_memory_size stv < dimword (:256)` by decide_tac >>
+  `eval_operand (Var source_var) s = SOME (n2w source_addr)` by
+    simp[venomStateTheory.eval_operand_def] >>
+  Cases_on `is_bytestring_type dty` >- suspend "bytes" >>
+  `sty = dty` by
+    (qpat_assum `~is_bytestring_type dty` (fn not_bytes =>
+       qpat_assum `sty = dty \/ is_bytestring_type dty` (fn layout =>
+         ACCEPT_TAC (MATCH_MP (tautLib.TAUT `~B /\ (A \/ B) ==> A`)
+                       (CONJ not_bytes layout))))) >>
+  `dtv = stv` by
+    (qpat_assum `evaluate_type (get_tenv cx) sty = SOME stv` mp_tac >>
+     qpat_assum `sty = dty` (fn eq =>
+       qpat_assum `evaluate_type (get_tenv cx) dty = SOME dtv`
+         (fn ty => simp[NoAsms,eq,ty]))) >>
+  `type_memory_bytes ce dty = type_memory_size dtv` by
+    drule_all_then ACCEPT_TAC exprSimHypsTheory.expr_sim_inv_memory_size >>
+  `0 < type_memory_size dtv` by
+    (drule_all_then (ACCEPT_TAC o CONJUNCT2)
+       immutableAssignRepresentationTheory.immutable_assign_widened_memory_positive) >>
+  qpat_x_assum `sty = dty` SUBST_ALL_TAC >>
+  qpat_x_assum `dtv = stv` SUBST_ALL_TAC >>
+  qpat_x_assum `op = Var source_var` SUBST_ALL_TAC >>
+  qpat_assum `~is_word_type dty` (fn flag =>
+    qpat_assum `type_memory_bytes ce dty = type_memory_size stv` (fn size =>
+      qpat_assum `compile_assign_value ce dst LocCode (Var source_var) _ _ _ _ _ sa = _`
+        (assume_tac o REWRITE_RULE [flag,size]))) >>
+  match_mp_tac (Q.INST [`ce` |-> `ce`,`dst` |-> `dst`,`src` |-> `source_var`,
+    `loc` |-> `NONE : data_location option`,`ty` |-> `dty`,`a` |-> `source_addr`]
+    bodyFullImmutablePathStoreTheory.immutable_path_store_fixed) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
+QED
+
+Resume tuple_immutable_path_flat_store[bytes]:
+  `is_bytestring_type sty` by drule_all_then ACCEPT_TAC typedMemoryCopyTheory.typed_copy_bytestring_source >>
+  `compile_store_immutable_bytestring ce.ce_imm_alloca (Var source_var) dst sa = ((),sb)` by
+    (qpat_x_assum `op = Var source_var` SUBST_ALL_TAC >>
+     fs[compile_assign_value_def, comp_bind_def, comp_return_def]) >>
+  `!region. ce.ce_imm_alloca = SOME region ==> eval_operand region s = SOME 0w /\
+    op_taint tn region = {} /\ op_prov G region = NONE` by
+    (qx_gen_tac `region` >> disch_tac >>
+     qpat_assum `!base. ce.ce_imm_alloca = SOME base ==> _` (drule_then strip_assume_tac) >>
+     simp[]) >>
+  `!x. ce.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sa x` by
+    (qx_gen_tac `base_var` >> disch_tac >>
+     qpat_assum `!base. ce.ce_imm_alloca = SOME base ==> _` (drule_then strip_assume_tac) >>
+     fs[exprSimCopyTheory.copy_old_operand_def]) >>
+  match_mp_tac (Q.INST [`imm` |-> `ce.ce_imm_alloca`,`a` |-> `source_addr`,
+    `dst` |-> `dst`,`src` |-> `source_var`,`cx` |-> `cx`,`sty` |-> `sty`,
+    `stv` |-> `stv`,`dty` |-> `dty`]
+    immutableBytestringPathTheory.body_assign_immutable_bytes_path_store) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
+QED
+
+Finalise tuple_immutable_path_flat_store[local]
+
+
+Theorem tuple_immutable_target_snapshot[local]:
+  bodyFullTargetDefs$imm_target_post H ctx func cenv cx es sa sb s ee id path ty r t /\
+  ghost_kept_at lo cenv es sa G tn s G' tn' /\
+  val_wf tv v /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory tv v p mem) /\
+  b <= p /\ p + type_memory_size tv <= b + cap /\
+  ((?aid. FLOOKUP s.vs_allocas aid = SOME (b,cap) /\ aid < sa.cs_next_id /\
+       (!name a sz. local_region cenv es.scopes s name a sz ==>
+                    b + cap <= a \/ a + sz <= b)) \/
+   (?name. local_region cenv es.scopes s name b cap /\
+           mem_bytes_at p (type_memory_size tv) t.vs_memory =
+           mem_bytes_at p (type_memory_size tv) s.vs_memory)) ==>
+  (!mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==> val_in_memory tv v p mem)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `bodyFullTargetDefs$imm_target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [bodyFullTargetDefsTheory.imm_target_post_def]) >>
+  qpat_assum `ghost_kept_at _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
+  qspecl_then [`tv`,`v`,`p`,`p`,`type_memory_size tv`,`tn.t_mem`,`tn'.t_mem`,
+               `s.vs_memory`,`t.vs_memory`]
+    MATCH_MP_TAC robustCopyTransportPtrTheory.robust_val_in_memory_decreasing_taint_transport >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (irule exprSimPropsTheory.val_footprint_le >> first_assum ACCEPT_TAC) >>
+  `!i. i < type_memory_size tv ==> b <= p+i /\ p+i < b+cap` by
+    (rpt strip_tac >> decide_tac) >>
+  qpat_x_assum `(?aid. FLOOKUP s.vs_allocas aid = SOME (b,cap) /\ _) \/ _`
+    (DISJ_CASES_THEN strip_assume_tac)
+  >- (conj_tac
+      >- (`mem_bytes_at b cap t.vs_memory = mem_bytes_at b cap s.vs_memory` by
+            (qpat_assum `!a off sz. FLOOKUP s.vs_allocas a = SOME (off,sz) /\ _ ==> _`
+               (qspecl_then [`aid`,`b`,`cap`] MATCH_MP_TAC) >>
+             rpt conj_tac >> first_assum ACCEPT_TAC) >>
+          `b + (p - b) = p` by decide_tac >>
+          qspecl_then [`b`,`b`,`cap`,`t.vs_memory`,`s.vs_memory`,`p-b`,
+                       `type_memory_size tv`] mp_tac
+            valueEncodingPropsTheory.mem_bytes_at_translated_window >>
+          (impl_tac >- (conj_tac >- first_assum ACCEPT_TAC >> decide_tac)) >>
+          asm_rewrite_tac[]) >>
+      conj_tac >- (rpt strip_tac >>
+        qpat_assum `!i. i < type_memory_size tv ==> _` (drule_then strip_assume_tac) >>
+        qpat_assum `!aid off sz i. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\ _ ==> _`
+          (qspecl_then [`aid`,`b`,`cap`,`p+i`] MATCH_MP_TAC) >>
+        rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      first_assum ACCEPT_TAC) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_assum `!i. i < type_memory_size tv ==> _` (drule_then strip_assume_tac) >>
+    qpat_assum `!n b sz i. local_region cenv es.scopes s n b sz /\ _ ==> _`
+      (qspecl_then [`name`,`b`,`cap`,`p+i`] MATCH_MP_TAC) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem tuple_immutable_target_source_endpoint[local]:
+  expr_sim_inv cenv cx env es /\ well_typed_target env bt ty /\
+  call_evaluation_safe cx (int_calls_target bt) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  eval_target_place cx bt es = (INL (ImmutablePlace src id path),ee) ==>
+  expr_sim_inv cenv cx env ee /\ state_well_typed ee /\
+  runtime_place_typed cx ee (ImmutablePlace src id path) tv /\
+  runtime_place_writable cx ee (ImmutablePlace src id path)
+Proof
+  strip_tac >>
+  qpat_assum `expr_sim_inv _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
+  drule_all exprSimPopNestedLocalSourceTheory.eval_target_place_runtime_facts >>
+  strip_tac >>
+  drule_all exprSimPopNestedLocalSourceTheory.eval_target_place_writable >>
+  simp[vyperTargetPlaceWriteTheory.writable_place_result_def] >> strip_tac >>
+  drule (cj 8 vyperEvalOutcomeSuffixTheory.eval_outcome_suffix_mutual) >> strip_tac >>
+  `IS_SOME ee.outcomes` by
+    metis_tac[exprOracleStorageInterfacesTheory.outcome_suffix_IS_SOME] >>
+  `outcomes_accounts_typed ee.outcomes` by
+    (rw[outcomes_accounts_typed_def] >>
+     drule_then irule vyperEvalOutcomeSuffixTheory.outcome_suffix_EVERY >>
+     fs[outcomes_accounts_typed_def]) >>
+  `popped_keys_indexed ee.scopes` by
+    (drule_all stmtPoppedKeysTheory.eval_target_place_popped_keys_indexed >> simp[]) >>
+  `env.type_defs = get_tenv cx` by
+    fs[vyperTypeInvariantsTheory.env_consistent_def,
+       vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  `runtime_place_typed cx ee (ImmutablePlace src id path) tv` by
+    (qpat_assum `eval_result_typed _ (PlaceR _) _`
+       (mp_tac o REWRITE_RULE [vyperPlaceResultTypingTheory.eval_result_typed_place]) >>
+     PURE_REWRITE_TAC[ASSUME ``env.type_defs = get_tenv cx``,
+       ASSUME ``evaluate_type (get_tenv cx) ty = SOME tv``,optionTheory.SOME_11] >>
+     simp[]) >>
+  asm_rewrite_tac[expr_sim_inv_def]
+QED
+
+Theorem tuple_immutable_target_alloca_frame[local]:
+  bodyFullTargetDefs$imm_target_post H ctx func cenv cx es sa sb s0 ee id path ty r t /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa ==>
+  alloca_frame cenv es sa s0 cenv ee t
+Proof
+  strip_tac >>
+  qpat_assum `bodyFullTargetDefs$imm_target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [bodyFullTargetDefsTheory.imm_target_post_def]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by fs[locals_kept_def] >>
+  drule_all stmtSimDefsTheory.alloca_frame_of_mem_frame >> simp[]
+QED
+
+Theorem tuple_immutable_target_source_write[local]:
+  bodyFullTargetDefs$imm_target_post H ctx func cenv cx es sa sb s ee id path ty r t /\
+  expr_sim_inv cenv cx env es /\ target_indices_pre cenv cx env bt /\
+  well_typed_target env bt ty /\ call_evaluation_safe cx (int_calls_target bt) /\
+  eval_target_place cx bt (es with gas_obs := obs) =
+    (INL (ImmutablePlace NONE id path),ee) ==>
+  ?ff. write_place cx (ImmutablePlace NONE id path) v ee = (INL (),ff) /\
+       (!tail. write_place cx (ImmutablePlace NONE id path) v (ee with gas_obs := tail) =
+               (INL (),ff with gas_obs := tail)) /\
+       ff.scopes = ee.scopes /\ ff.storage_trace = ee.storage_trace /\ ff.gas_obs = ee.gas_obs
+Proof
+  strip_tac >>
+  qpat_assum `bodyFullTargetDefs$imm_target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [bodyFullTargetDefsTheory.imm_target_post_def]) >>
+  `type_place_target env bt = SOME (Type ty)` by fs[well_typed_target_def] >>
+  drule_all bodyFullTargetImmutableWriteTheory.immutable_target_write_entry >>
+  disch_then (qspec_then `v` strip_assume_tac) >>
+  drule_then assume_tac tuplePlaceSourceGasTheory.tuple_place_write_gas_obs >>
+  drule_then strip_assume_tac vyperPlaceFramesTheory.write_immutable_place_frame >>
+  qexists_tac `fin` >> simp[]
+QED
+
+(* Both tuple layouts use the same target judgment. Add the source typing
+   at its actual gas-marked endpoint before the write. *)
+Theorem tuple_immutable_head_target[local]:
+  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  body_base_target_full_ok cx bt /\ body_const_cells_agree [(NONE,tops)] cx env es /\
+  expr_sim_inv cenv cx env es /\
+  target_indices_pre cenv cx env bt /\ cx.in_deploy /\ immutable_root cx bt /\
+  target_root bt = TopLevelNameTarget (NONE,id) /\ ~cx_const_name cx (NONE,id) /\
+  well_typed_target env bt ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+  call_evaluation_safe cx (int_calls_target bt) /\
+  compile_get_target_ptr compile_expr cenv bt sa = (r,sb) /\
+  compile_get_target_ptr compile_expr cenv (gas_shadow_target bt)
+    shadow_sa = (r,shadow_sb) /\
+  gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
+  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+  gas_shadow_function func shadow_func /\
+  MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
+  fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  return_buf_frame d cenv sa s /\ alloca_history func s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    (cx_tops cx) cx st0 (eval_target_place cx bt) (es,s,G,tn)
+    (\H res ee G' tn' t. ?path.
+      res = INL (ImmutablePlace NONE id path) /\
+      bodyFullTargetDefs$imm_target_post H ctx func cenv cx es sa sb s ee id path ty r t /\
+      expr_sim_inv cenv cx env ee /\ state_well_typed ee /\
+      runtime_place_typed cx ee (ImmutablePlace NONE id path) tv /\
+      runtime_place_writable cx ee (ImmutablePlace NONE id path) /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s.vs_alloca_next <= t.vs_alloca_next /\ ~t.vs_halted /\ ee.gas_obs = [] /\
+      ghost_inv_at (DF H) lo d cenv cx ee G' tn' t /\
+      target_ptr_ok cenv (PlaceR (ImmutablePlace NONE id path)) r G' tn' t /\
+      op_prov G' (FST r) = NONE /\
+      ghost_kept_at lo cenv es sa G tn s G' tn')
+    (\H res ee gt q.
+      expr_exit res q /\ halt_exit H cx ee res q /\
+      (ctx_has_dalloca ctx ==> !s. q = Halt s ==> allocas_below_fmp s))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `type_place_target env bt = SOME (Type ty)` by fs[well_typed_target_def] >>
+  drule_all_then assume_tac tuplePlaceTargetGasTheory.tuple_place_target_gas_admissible >>
+  mp_tac (Q.SPECL [`bt`,`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,`func`,
+                   `shadow_func`,`cenv`,`cx`,`env`,`es`,`id`]
+    bodyFullTargetTheory.body_imm_target_place_sim_full) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  PURE_REWRITE_TAC[bodyFullTargetDefsTheory.imm_target_place_sim_full_def] >>
+  disch_then (qspecl_then [`st0`,`ty`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,`r`,`s`,`G`,`tn`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_tac >>
+  irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
+  goal_assum (drule_at Any) >> reverse conj_tac >- simp[] >>
+  rpt gen_tac >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?xs. !tail. eval_target_place _ _ _ = _`
+    (qx_choose_then `xs` assume_tac) >>
+  qpat_x_assum `?name path. res = INL (ImmutablePlace NONE name path) /\ _`
+    (qx_choosel_then [`name`,`path`] (map_every assume_tac o CONJUNCTS)) >>
+  `name = id` by
+    (qpat_assum `target_root bt = TopLevelNameTarget (NONE,name)` mp_tac >>
+     PURE_REWRITE_TAC[ASSUME ``target_root bt = TopLevelNameTarget (NONE,id)``] >> simp[]) >>
+  qpat_x_assum `name = id` SUBST_ALL_TAC >>
+  qexists_tac `path` >> asm_rewrite_tac[] >>
+  `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
+  `eval_target_place cx bt (es with gas_obs := xs) = (INL (ImmutablePlace NONE id path),ee)` by
+    (qpat_assum `!tail. eval_target_place cx bt _ = _`
+       (qspec_then `[]` (fn eval =>
+         qpat_assum `res = INL (ImmutablePlace NONE id path)` (fn result =>
+           qpat_assum `ee with gas_obs := [] = ee` (fn obs =>
+             ACCEPT_TAC (REWRITE_RULE [APPEND_NIL,result,obs] eval)))))) >>
+  `expr_sim_inv cenv cx env (es with gas_obs := xs)` by simp[] >>
+  drule_all tuple_immutable_target_source_endpoint >> simp[]
+QED
+
+(* A nested constructor head uses the same source bind for both tuple
+   layouts. Keep the target's actual marked path for the continuation. *)
+Theorem tuple_immutable_target_then[local]:
+  gas_outcome_full cfg tops cx st0 (eval_target_place cx bt) (src,s,G,tn)
+    TargetQ
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+       (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)) /\
+  (!H e ee gt r. expr_exit (INR e : place + exception) r /\
+     halt_exit H cx ee (INR e : place + exception) r /\
+     (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s) ==>
+     R H (INR e) ee gt r) /\
+  (!marks res ee G' tn' t.
+     (!tail. eval_target_place cx bt (src with gas_obs :=
+              gas_explicit marks s.vs_gas_readings ++ tail) =
+              (res,ee with gas_obs := tail)) /\
+     storage_trace_domain cx st0 ee.storage_trace /\
+     (!H. valid_horizon cx st0 H ee.storage_trace ==> TargetQ H res ee G' tn' t) /\
+     (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) marks (OK t,G',tn')) ==>
+     ?pl. res = INL pl /\
+       gas_outcome_full cfg tops cx st0
+         (bind (write_place cx pl v) (\u. assign_tuple_target_list cx todo vs))
+         (ee,t,G',tn') Q R) /\
+  cfg = (DF,lo,explicit,ctx,func,PG) ==>
+  gas_outcome_full cfg tops cx st0
+    (assign_tuple_target_list cx (BaseTarget bt::todo) (v::vs)) (src,s,G,tn) Q R
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> gvs[] >>
+  `assign_tuple_target_list cx (BaseTarget bt::todo) (v::vs) =
+   bind (eval_target_place cx bt) (\pl. bind (write_place cx pl v)
+     (\u. assign_tuple_target_list cx todo vs))` by
+    simp[Once evaluate_def,Once evaluate_def,ignore_bind_def,bind_assoc] >>
+  pop_assum (fn th => PURE_REWRITE_TAC[th]) >>
+  irule gasOutcomeFullComposeTheory.gas_outcome_full_bind_all_path >> BETA_TAC >>
+  (conj_tac >- (gen_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+    simp[NoAsms,vyperStorageTraceTheory.storage_trace_frame_write_place,
+         cj 10 vyperStorageTraceTheory.evaluate_storage_trace_frame])) >>
+  (conj_tac >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_place >>
+    goal_assum (drule_at Any) >> simp[])) >>
+  (conj_tac >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_place >> simp[])) >>
+  (conj_tac >- simp[NoAsms,cj 8 vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  qexists_tac `TargetQ` >> reverse conj_tac
+  >- (irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+      goal_assum (drule_at Any) >> simp[] >> rpt gen_tac >> strip_tac >>
+      Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def] >>
+      qpat_assum `!H e ee gt r. _ ==> R H (INR e) ee gt r`
+        (qspecl_then [`H`,`y`,`ee`,`gt`,`r`] match_mp_tac) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qx_genl_tac [`marks`,`res`,`ee`,`G'`,`tn'`,`t`] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >> disj1_tac >>
+  qpat_assum `!marks res ee G' tn' t. _ ==> ?pl. _`
+    (qspecl_then [`marks`,`res`,`ee`,`G'`,`tn'`,`t`] match_mp_tac) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+Theorem tuple_immutable_write_then[local]:
+  ~s.vs_halted /\ fin.gas_obs = [] /\
+  (!tail. write_place cx pl v (ee with gas_obs := tail) = (INL (),fin with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H fin.storage_trace ==>
+     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK q,Gf,tf)) /\
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    (assign_tuple_target_list cx todo vs) (fin,q,Gf,tf) Q R ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    (bind (write_place cx pl v) (\u. assign_tuple_target_list cx todo vs))
+    (ee,s,G,tn) Q R
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule gasOutcomeFullComposeTheory.gas_outcome_full_bind >> BETA_TAC >>
+  simp[NoAsms,vyperStorageTraceTheory.storage_trace_frame_write_place,
+       cj 10 vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  (conj_tac >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_unit >>
+    goal_assum (drule_at Any) >> simp[])) >>
+  (conj_tac >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_unit >> simp[])) >>
+  irule gasOutcomeFullComposeTheory.gas_outcome_full_pure >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`Gf`,`fin`,`INL ()`,`q`,`tf`] >>
+  BETA_TAC >>
+  qpat_assum `!tail. write_place _ _ _ _ = _` (fn th => simp[NoAsms,th]) >>
+  qpat_assum `fin.gas_obs = []` (fn th => simp[NoAsms,GSYM th]) >>
+  gen_tac >> disch_tac >> conj_tac
+  >- first_x_assum (drule_then ACCEPT_TAC) >> first_assum ACCEPT_TAC
+QED
+
+Theorem tuple_immutable_source_then[local]:
+  (!tail. eval_target_place cx bt (src with gas_obs := xs ++ tail) =
+     (INL pl,mid with gas_obs := tail)) /\
+  (!tail. write_place cx pl v (mid with gas_obs := tail) = (INL (),fin with gas_obs := tail)) /\
+  fin.gas_obs = [] /\
+  body_tuple_targets_full_ok cx (BaseTarget bt::todo) (v::vs) /\
+  gas_admissible (assign_tuple_target_list cx (BaseTarget bt::todo) (v::vs)) ok src ==>
+  body_tuple_targets_full_ok cx todo vs /\
+  gas_admissible (assign_tuple_target_list cx todo vs) ok fin
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!tail. assign_tuple_targets cx (BaseTarget bt) v (src with gas_obs := xs ++ tail) =
+    (INL (),fin with gas_obs := tail)` by simp[Once evaluate_def,bind_def] >>
+  `fin with gas_obs := [] = fin` by simp[evaluation_state_component_equality] >>
+  conj_tac
+  >- (qpat_assum `body_tuple_targets_full_ok cx (BaseTarget bt::todo) (v::vs)`
+        (strip_assume_tac o REWRITE_RULE [body_tuple_target_full_ok_def]) >>
+      first_x_assum irule >> qexistsl_tac [`src with gas_obs := xs`,`()`,`fin`] >>
+      qpat_assum `!tail. assign_tuple_targets cx (BaseTarget bt) v _ = _`
+        (qspec_then `[]` (fn eval =>
+           qpat_assum `fin with gas_obs := [] = fin`
+             (fn obs => ACCEPT_TAC (REWRITE_RULE [APPEND_NIL,obs] eval))))) >>
+  qpat_x_assum `gas_admissible _ ok src` mp_tac >>
+  simp[Once evaluate_def,ignore_bind_def] >> disch_tac >>
+  drule_all stmtSimForRoundsTheory.gas_admissible_bind_tail >> BETA_TAC >>
+  qpat_assum `fin with gas_obs := [] = fin` (fn obs => rewrite_tac[obs])
+QED
+
+(* Split the one-head compilation at the target/write boundary. The two
+   compilations agree on the destination, including its type and location. *)
+Theorem tuple_immutable_target_code[local]:
+  compile_tuple_store_all cenv [sty] [BaseTarget bt] [op] cur = ((),sm) /\
+  compile_tuple_store_all cenv [sty] [BaseTarget (gas_shadow_target bt)] [op] shadow_cur =
+    ((),shadow_sm) /\
+  gas_shadow_state cur shadow_cur /\
+  fn_has_code cur sm func /\ fn_has_code shadow_cur shadow_sm shadow_func ==>
+  ?target_r target_cs shadow_target_cs.
+    compile_get_target_ptr compile_expr cenv bt cur = (target_r,target_cs) /\
+    compile_get_target_ptr compile_expr cenv (gas_shadow_target bt) shadow_cur =
+      (target_r,shadow_target_cs) /\
+    gas_shadow_state target_cs shadow_target_cs /\
+    ci_mono cur target_cs /\ ci_mono target_cs sm /\
+    fn_has_code cur target_cs func /\ fn_has_code target_cs sm func /\
+    fn_has_code shadow_cur shadow_target_cs shadow_func /\
+    fn_has_code shadow_target_cs shadow_sm shadow_func /\
+    !dty. FST (SND target_r) = SOME LocCode /\ SND (SND target_r) = SOME (ValPT dty) /\
+          (is_word_type sty ==> is_word_type dty) /\ (is_word_type dty ==> is_word_type sty) ==>
+      (if is_word_type sty then
+         compile_store_at_loc cenv.ce_imm_alloca (FST target_r) op (SOME LocCode) target_cs
+       else compile_assign_value cenv (FST target_r) LocCode op F NONE dty sty
+              (type_memory_bytes cenv dty) target_cs) = ((),sm) /\
+      (if is_word_type sty then
+         compile_store_at_loc cenv.ce_imm_alloca (FST target_r) op (SOME LocCode) shadow_target_cs
+       else compile_assign_value cenv (FST target_r) LocCode op F NONE dty sty
+              (type_memory_bytes cenv dty) shadow_target_cs) = ((),shadow_sm)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `compile_get_target_ptr compile_expr cenv bt cur` >>
+  rename1 `_ = (target_r,target_cs)` >>
+  mp_tac (Q.INST [`cenv` |-> `cenv`,`bt` |-> `bt`]
+    gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_get_target_ptr) >>
+  simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
+  disch_then (qspecl_then [`cur`,`shadow_cur`] mp_tac) >> simp[] >>
+  Cases_on `compile_get_target_ptr compile_expr cenv (gas_shadow_target bt) shadow_cur` >>
+  simp[] >> strip_tac >> gvs[] >>
+  rename1 `gas_shadow_state target_cs shadow_target_cs` >>
+  rename1 `compile_get_target_ptr _ _ bt cur = (target_r,target_cs)` >>
+  qabbrev_tac `dst_loc = (case FST (SND target_r) of SOME l => l | NONE => LocMemory)` >>
+  qabbrev_tac `dst_type = (case SND (SND target_r) of SOME (ValPT t) => t | _ => sty)` >>
+  qabbrev_tac `write = if is_word_type sty then
+      if is_word_type dst_type then
+        compile_store_at_loc cenv.ce_imm_alloca (FST target_r) op (FST (SND target_r))
+      else emit_void INVALID []
+    else compile_assign_value cenv (FST target_r) dst_loc op (is_word_type dst_type)
+           NONE dst_type sty (type_memory_bytes cenv dst_type)` >>
+  `write target_cs = ((),sm) /\ write shadow_target_cs = ((),shadow_sm)` by
+    (conj_tac
+     >- (qpat_assum `compile_get_target_ptr _ _ bt cur = _` (fn th =>
+           qpat_assum `compile_tuple_store_all _ [_] [BaseTarget bt] [_] cur = _`
+             (mp_tac o SIMP_RULE (srw_ss()) [compile_tuple_store_all_def,th,comp_bind_def,
+               comp_ignore_bind_def,comp_return_def])) >>
+         simp[NoAsms,Abbr `write`,Abbr `dst_loc`,Abbr `dst_type`] >>
+         POP_ASSUM_LIST kall_tac >> pairarg_tac >> gvs[]) >>
+     qpat_assum `compile_get_target_ptr _ _ (gas_shadow_target bt) shadow_cur = _` (fn th =>
+       qpat_assum `compile_tuple_store_all _ [_] [BaseTarget (gas_shadow_target bt)] [_] shadow_cur = _`
+         (mp_tac o SIMP_RULE (srw_ss()) [compile_tuple_store_all_def,th,comp_bind_def,
+           comp_ignore_bind_def,comp_return_def])) >>
+     simp[NoAsms,Abbr `write`,Abbr `dst_loc`,Abbr `dst_type`] >>
+     POP_ASSUM_LIST kall_tac >> pairarg_tac >> gvs[]) >>
+  `ci_mono cur target_cs /\ ci_mono shadow_cur shadow_target_cs` by
+    (conj_tac
+     >- (qspec_then `cur` mp_tac (Q.SPECL [`bt`,`cenv`] ci_mono_compile_get_target_ptr) >> simp[]) >>
+     qspec_then `shadow_cur` mp_tac
+       (Q.SPECL [`gas_shadow_target bt`,`cenv`] ci_mono_compile_get_target_ptr) >> simp[]) >>
+  `!c. ci_mono c (SND (write c))` by
+    (simp[Abbr `write`] >> gen_tac >> rpt IF_CASES_TAC >>
+     simp[cj 1 ci_mono_stmt_helpers,cj 2 ci_mono_stmt_helpers,ci_mono_emit_void]) >>
+  `ci_mono target_cs sm /\ ci_mono shadow_target_cs shadow_sm` by
+    (pop_assum (fn th => map_every (fn c => qspec_then c mp_tac th) [`target_cs`,`shadow_target_cs`]) >> simp[]) >>
+  `fn_has_code cur target_cs func /\ fn_has_code target_cs sm func` by
+    (irule fn_has_code_split >> fs[ci_mono_def]) >>
+  `fn_has_code shadow_cur shadow_target_cs shadow_func /\
+   fn_has_code shadow_target_cs shadow_sm shadow_func` by
+    (irule fn_has_code_split >> fs[ci_mono_def]) >>
+  simp[] >>
+  gen_tac >> strip_tac >>
+  qpat_assum `write target_cs = _` mp_tac >>
+  qpat_assum `write shadow_target_cs = _` mp_tac >>
+  Cases_on `is_word_type sty` >> fs[Abbr `write`,Abbr `dst_loc`,Abbr `dst_type`]
+QED
+
+Theorem tuple_immutable_target_pending[local]:
+  bodyFullTargetDefs$imm_target_post H ctx func cenv cx es sa sb s ee id path ty r t /\
+  ghost_kept_at lo cenv es sa G tn s G' tn' /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  sa.cs_next_id <= sb.cs_next_id /\ sa.cs_next_var <= sb.cs_next_var /\
+  val_wf (TupleTV tvs) (ArrayV (TupleV vs)) /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) p mem) /\
+  ((?aid b cap. FLOOKUP s.vs_allocas aid = SOME (b,cap) /\ aid < sa.cs_next_id /\
+       b <= p /\ p + type_memory_size_list tvs <= b+cap /\
+       (!name a sz. local_region cenv es.scopes s name a sz ==>
+                    b+cap <= a \/ a+sz <= b)) \/
+   (?name b cap. local_region cenv es.scopes s name b cap /\ b <= p /\
+       p + type_memory_size_list tvs <= b+cap /\
+       local_path_at cenv cx name (p-b) (TupleTV tvs))) /\
+  (!name b cap. locals_kept cenv es ee s t /\ local_region cenv es.scopes s name b cap /\ b <= p /\
+       p + type_memory_size_list tvs <= b+cap /\
+       local_path_at cenv cx name (p-b) (TupleTV tvs) ==>
+       mem_bytes_at p (type_memory_size_list tvs) t.vs_memory =
+       mem_bytes_at p (type_memory_size_list tvs) s.vs_memory) ==>
+  (!mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==>
+    val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) p mem) /\
+  ((?aid b cap. FLOOKUP t.vs_allocas aid = SOME (b,cap) /\ aid < sb.cs_next_id /\
+       b <= p /\ p + type_memory_size_list tvs <= b+cap /\
+       (!name a sz. local_region cenv ee.scopes t name a sz ==>
+                    b+cap <= a \/ a+sz <= b)) \/
+   (?name b cap. local_region cenv ee.scopes t name b cap /\ b <= p /\
+       p + type_memory_size_list tvs <= b+cap /\
+       local_path_at cenv cx name (p-b) (TupleTV tvs))) /\
+  (!x n. not_fresh_at sa x /\ ptr_covers G tn x s n ==> ptr_covers G' tn' x t n) /\
+  alloca_frame cenv es sa s cenv ee t
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `alloca_frame cenv es sa s cenv ee t` by
+    (drule_all tuple_immutable_target_alloca_frame >> simp[]) >>
+  qpat_assum `bodyFullTargetDefs$imm_target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [bodyFullTargetDefsTheory.imm_target_post_def]) >>
+  `MAP FDOM es.scopes = MAP FDOM ee.scopes` by fs[locals_kept_def] >>
+  drule_all_then assume_tac tuplePlaceStepTheory.tuple_place_endpoint_local_regions_some >>
+  conj_tac
+  >- (qpat_x_assum `(?aid b cap. FLOOKUP s.vs_allocas _ = _ /\ _) \/ _`
+        (DISJ_CASES_THEN strip_assume_tac)
+      >> (mp_tac (Q.INST [`tv` |-> `TupleTV tvs`,`v` |-> `ArrayV (TupleV vs)`,
+                         `b` |-> `b`,`cap` |-> `cap`]
+                   (INST_TYPE [beta |-> ``:num # num``] tuple_immutable_target_snapshot)) >>
+          rewrite_tac[valueEncodingTheory.type_memory_size_def] >>
+          disch_then MATCH_MP_TAC >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC))
+      >- (disj1_tac >> qexists_tac `aid` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disj2_tac >> qexists_tac `name` >> conj_tac >- first_assum ACCEPT_TAC >>
+      qpat_assum `!n b cap. locals_kept _ _ _ _ _ /\ _ ==> _`
+        (qspecl_then [`name`,`b`,`cap`] match_mp_tac) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (qpat_assum `!n b sz. local_region cenv ee.scopes t n b sz <=> _`
+        (fn regions => PURE_REWRITE_TAC [regions]) >>
+      qpat_x_assum `(?aid b cap. FLOOKUP s.vs_allocas _ = _ /\ _) \/ _`
+        (DISJ_CASES_THEN strip_assume_tac)
+      >- (disj1_tac >> qexistsl [`aid`,`b`,`cap`] >> rpt conj_tac >>
+          TRY (first_assum ACCEPT_TAC) >> TRY (decide_tac >> NO_TAC) >>
+          qpat_assum `!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> _`
+            (drule_then ACCEPT_TAC)) >>
+      disj2_tac >> qexistsl [`name`,`b`,`cap`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  conj_tac >| [ALL_TAC,first_assum ACCEPT_TAC] >>
+  fs[ghost_kept_at_def] >> rpt strip_tac >>
+  `?w. lookup_var x s = SOME w` by fs[ptr_covers_def] >>
+  `lookup_var x t = lookup_var x s` by
+    (qpat_assum `!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==> _`
+       (drule_all_then assume_tac) >> simp[]) >>
+  qpat_assum `!x. not_fresh_at sa x ==> FLOOKUP G' x = _ /\ _`
+    (drule_then (map_every assume_tac o CONJUNCTS)) >>
+  irule assignTuplePtrCopyLenTheory.ptr_covers_lookup_frame >>
+  qpat_assum `ptr_covers G tn x s n` (irule_at Any) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem tuple_assign_exact_with_borrowed_frame[local]:
   !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
        eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
@@ -6265,8 +7046,17 @@ Theorem body_assign_tuple_other_full:
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
     frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
-    ~EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
-                     ~(?nsid. t = TopLevelNameTarget nsid)) gs /\
+    (!bt. MEM (BaseTarget bt) gs /\ immutable_root cx bt /\
+          ~(?nsid. bt = TopLevelNameTarget nsid) ==>
+          !(H : (bool # bytes32 # type_value) list # num list) src mid u t sa sb id path ty r obs name b cap p tvs.
+            eval_target_place cx bt (src with gas_obs := obs) =
+              (INL (ImmutablePlace NONE id path),mid) /\
+            bodyFullTargetDefs$imm_target_post H ctx func cenv cx src sa sb u mid id path ty r t /\
+            local_region cenv src.scopes u name b cap /\
+            b <= p /\ p + type_memory_size_list tvs <= b+cap /\
+            local_path_at cenv cx name (p-b) (TupleTV tvs) ==>
+            mem_bytes_at p (type_memory_size_list tvs) t.vs_memory =
+              mem_bytes_at p (type_memory_size_list tvs) u.vs_memory) /\
     lowered_value_type cenv e = expr_type e /\
     ~(?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
             EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids) ==>
@@ -6525,8 +7315,17 @@ Proof
     EVERY (\g. case g of BaseTarget bt =>
       supported_target tops bindings bt /\ target_indices_pre cenv cx env bt
       | TupleTarget ts => F) todo /\
-    ~EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
-                     ~(?nsid. t = TopLevelNameTarget nsid)) todo /\
+    (!bt. MEM (BaseTarget bt) todo /\ immutable_root cx bt /\
+          ~(?nsid. bt = TopLevelNameTarget nsid) ==>
+          !(H : (bool # bytes32 # type_value) list # num list) src mid u t sa sb id path ty r obs name b cap p tvs.
+            eval_target_place cx bt (src with gas_obs := obs) =
+              (INL (ImmutablePlace NONE id path),mid) /\
+            bodyFullTargetDefs$imm_target_post H ctx func cenv cx src sa sb u mid id path ty r t /\
+            local_region cenv src.scopes u name b cap /\
+            b <= p /\ p + type_memory_size_list tvs <= b+cap /\
+            local_path_at cenv cx name (p-b) (TupleTV tvs) ==>
+            mem_bytes_at p (type_memory_size_list tvs) t.vs_memory =
+              mem_bytes_at p (type_memory_size_list tvs) u.vs_memory) /\
     body_tuple_targets_full_ok cx todo vs1 /\
     body_const_cells_agree [(NONE,tops)] cx env src /\
     expr_sim_inv cenv cx env src /\ src with gas_obs := [] = src /\
@@ -6683,15 +7482,25 @@ Proof
     qpat_assum `body_tuple_targets_full_ok cx (BaseTarget bt::todo) (vi::vs_tail)`
       (strip_assume_tac o REWRITE_RULE [body_tuple_target_full_ok_def])) >>>
   HEADGOAL (
-    qpat_x_assum `~EXISTS _ (BaseTarget bt::todo)`
-      (fn th =>
-        let val guard = REWRITE_RULE [listTheory.EXISTS_DEF,DE_MORGAN_THM] th
-        in map_every assume_tac [SRULE [] (CONJUNCT1 guard),CONJUNCT2 guard] end)) >>>
-  HEADGOAL (Cases_on `immutable_root cx bt`) >>>
+    sg `!t. MEM (BaseTarget t) todo /\ immutable_root cx t /\
+          ~(?nsid. t = TopLevelNameTarget nsid) ==>
+          !(H : (bool # bytes32 # type_value) list # num list) src mid u t' sa sb id path ty r obs name b cap p tvs.
+            eval_target_place cx t (src with gas_obs := obs) =
+              (INL (ImmutablePlace NONE id path),mid) /\
+            bodyFullTargetDefs$imm_target_post H ctx func cenv cx src sa sb u mid id path ty r t' /\
+            local_region cenv src.scopes u name b cap /\
+            b <= p /\ p + type_memory_size_list tvs <= b+cap /\
+            local_path_at cenv cx name (p-b) (TupleTV tvs) ==>
+            mem_bytes_at p (type_memory_size_list tvs) t'.vs_memory =
+              mem_bytes_at p (type_memory_size_list tvs) u.vs_memory`) >>>
   HEADGOAL (
-    qpat_assum `~immutable_root cx bt \/ _` (fn guard =>
-      qpat_assum `immutable_root cx bt` (fn root =>
-        assume_tac (SIMP_RULE std_ss [root] guard)))) >>>
+    qx_gen_tac `target` >> disch_then (map_every assume_tac o CONJUNCTS) >>
+    qpat_assum `!t. MEM (BaseTarget t) (BaseTarget bt::todo) /\
+              immutable_root cx t /\ ~(?nsid. t = TopLevelNameTarget nsid) ==> _`
+      (qspec_then `target` match_mp_tac) >>
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>>
+  HEADGOAL (Cases_on `immutable_root cx bt`) >>>
+  HEADGOAL (Cases_on `?nsid. bt = TopLevelNameTarget nsid`) >>>
   HEADGOAL (sg `?ns id. bt = TopLevelNameTarget (ns,id) /\
                          IS_SOME (supported_immutable_type tops (ns,id))`) >>>
   HEADGOAL (
@@ -7082,7 +7891,7 @@ Proof
     qpat_assum `!i:num. i + SUC k = SUC k + i` (fn th => rewrite_tac[th]) >>
     rpt conj_tac >> FIRST
       [first_assum ACCEPT_TAC,
-       qpat_assum `~EXISTS _ todo` (ACCEPT_TAC o SRULE []),
+       qpat_assum `!t. MEM (BaseTarget t) todo /\ _ ==> _` (ACCEPT_TAC o SRULE []),
        ALL_TAC]) >>>
   HEADGOAL (
     qpat_assum `fin.storage_trace = src.storage_trace` (fn tr =>
@@ -7138,6 +7947,7 @@ Proof
     qexists_tac `()` >>
     qpat_assum `fin with gas_obs := [] = fin` (fn th => rewrite_tac[th]) >>
     first_assum ACCEPT_TAC) >>>
+  HEADGOAL (suspend "nested_immutable") >>>
   HEADGOAL (
     `target_pre cenv cx env bt src` by simp[targetPlaceSimTheory.target_pre_def] >>
     `well_typed_target env bt sty` by
@@ -10944,6 +11754,723 @@ Proof
   HEADGOAL (first_assum ACCEPT_TAC)
 QED
 
+
+Resume tuple_assign_exact_with_borrowed_frame[nested_immutable]:
+  ALL_TAC >>>
+  HEADGOAL (
+    `well_typed_target env bt sty` by
+      (qpat_assum `well_typed_atarget env (BaseTarget bt) sty` mp_tac >>
+       simp[NoAsms,well_typed_atarget_def]) >>
+    `IS_SOME (type_place_target env bt)` by fs[well_typed_target_def] >>
+    drule_all bodyFullTargetRootsTheory.typed_immutable_target_root >>
+    disch_then (qx_choosel_then [`id`,`root_ty`] (map_every assume_tac o CONJUNCTS))) >>>
+  HEADGOAL (
+    drule_all tuple_immutable_target_code >>
+    disch_then (qx_choosel_then [`target_r`,`target_cs`,`shadow_target_cs`]
+      (map_every assume_tac o CONJUNCTS))) >>>
+  HEADGOAL (
+    mp_tac (Q.INST [`es` |-> `src`, `ty` |-> `sty`, `tv` |-> `stv`,
+         `sa` |-> `cur`, `sb` |-> `target_cs`,
+         `shadow_sa` |-> `shadow_cur`, `shadow_sb` |-> `shadow_target_cs`,
+         `r` |-> `target_r`, `s` |-> `u`, `G` |-> `Gu`, `tn` |-> `tu`]
+       tuple_immutable_head_target) >>
+    (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac) >>>
+  HEADGOAL (
+    irule tuple_immutable_target_then >>
+    qpat_assum `gas_outcome_full _ _ _ _ (eval_target_place cx bt) _ _ _`
+      (irule_at Any) >> BETA_TAC) >>>
+  HEADGOAL (qexistsl [`lo`,`func`,`gas_explicit_sites ctx shadow_ctx`,`PG`,`DF`]) >>>
+  HEADGOAL (reverse conj_tac) >>>
+  HEADGOAL (conj_tac) >>>
+  HEADGOAL (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS)) >>>
+  HEADGOAL (
+    irule (INST_TYPE [alpha |-> ``:place``]
+      augAssignFullRhsSavedTheory.augassign_expr_exit_to_stmt_exit) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (simp[]) >>>
+  HEADGOAL (suspend "target_frame")
+QED
+
+
+Resume tuple_assign_exact_with_borrowed_frame[target_frame]:
+  ALL_TAC >>>
+  HEADGOAL (
+    map_every qx_gen_tac [`nested_marks`,`target_res`,`mid`,`Gmid`,`tmid`,`m`] >>
+    disch_then (map_every assume_tac o CONJUNCTS) >>
+    qabbrev_tac `Hm = storage_trace_horizon mid.storage_trace` >>
+    `valid_horizon cx st0 Hm mid.storage_trace` by
+      simp[Abbr `Hm`,GSYM vyperStorageFootprintTheory.storage_trace_domain_def] >>
+    qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> ?path. _`
+      (qspec_then `Hm` (drule_then (qx_choose_then `path` (map_every assume_tac o CONJUNCTS)))) >>
+    qpat_x_assum `target_res = INL (ImmutablePlace NONE id path)` SUBST_ALL_TAC >>
+    qexists_tac `ImmutablePlace NONE id path` >> BETA_TAC >> simp[]) >>>
+  HEADGOAL (
+    `mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
+    `eval_target_place cx bt (src with gas_obs := gas_explicit nested_marks u.vs_gas_readings) =
+     (INL (ImmutablePlace NONE id path),mid)` by
+      (qpat_assum `!tail. eval_target_place cx bt _ = _`
+         (qspec_then `[]` (fn eval =>
+            qpat_assum `mid with gas_obs := [] = mid` (fn obs =>
+              ACCEPT_TAC (REWRITE_RULE [APPEND_NIL,obs] eval))))) >>
+    `!H. valid_horizon cx st0 H mid.storage_trace ==> valid_horizon cx st0 H src.storage_trace` by
+      (rpt strip_tac >>
+       `valid_horizon cx st0 H (src with gas_obs :=
+                                gas_explicit nested_marks u.vs_gas_readings).storage_trace` suffices_by simp[] >>
+       irule (INST_TYPE [alpha |-> ``:place``] vyperStorageFootprintTheory.valid_horizon_frame) >>
+       qexists_tac `eval_target_place cx bt` >>
+       qpat_assum `eval_target_place cx bt _ = (INL _,mid)` (irule_at Any) >>
+       simp[cj 8 vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+    `stmt_state_rel Hm ctx func cenv cx src u` by
+      (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> valid_horizon cx st0 H src.storage_trace`
+         (qspec_then `Hm` (drule_then assume_tac)) >>
+       qpat_assum `!H. valid_horizon cx st0 H src.storage_trace ==> _ /\ _`
+         (qspec_then `Hm` (drule_then (ACCEPT_TAC o CONJUNCT1))))) >>>
+  HEADGOAL (drule_all tuple_immutable_target_source_write) >>>
+  HEADGOAL (disch_then (qspec_then `vi`
+    (qx_choose_then `fin` (map_every assume_tac o CONJUNCTS)))) >>>
+  HEADGOAL (`fin.gas_obs = []` by simp[]) >>>
+  HEADGOAL (
+    drule_all tuple_immutable_source_then >>
+    disch_then (map_every assume_tac o CONJUNCTS)) >>>
+  HEADGOAL (
+    `assignable_type (get_tenv cx) sty` by
+      (qpat_assum `EVERY (assignable_type _) (sty::_)` mp_tac >> simp[NoAsms]) >>
+    `0 < type_memory_size stv` by
+      (irule (cj 1 valueEncodingPropsTheory.type_memory_size_pos) >>
+       drule_all_then ACCEPT_TAC vyperTypeSystemTheory.assignable_type_slot_size_pos) >>
+    qpat_assum `CONS vi vs_tail = DROP k vs`
+      (strip_assume_tac o MATCH_MP fragExecTheory.DROP_EQ_CONS o SYM) >>
+    qpat_assum `CONS stv tvs_tail = DROP k tvs`
+      (strip_assume_tac o MATCH_MP fragExecTheory.DROP_EQ_CONS o SYM) >>
+    `SUM (MAP type_memory_size (TAKE k tvs)) + type_memory_size stv <=
+       type_memory_size_list tvs` by
+      (qpat_assum `EL k tvs = stv` (SUBST1_TAC o SYM) >>
+       pure_rewrite_tac [valueEncodingProofsTheory.type_memory_size_list_sum] >>
+       irule abiEncoderInputTheory.abi_encoder_prefix_sum_bound >> simp[]) >>
+    `0 < type_memory_size_list tvs` by decide_tac) >>>
+  HEADGOAL (
+    mp_tac (Q.INST [`H` |-> `Hm`, `es` |-> `src`, `sa` |-> `cur`, `sb` |-> `target_cs`,
+      `s` |-> `u`, `ee` |-> `mid`, `ty` |-> `sty`, `r` |-> `target_r`, `t` |-> `m`,
+      `G` |-> `Gu`, `tn` |-> `tu`, `G'` |-> `Gmid`, `tn'` |-> `tmid`]
+      (INST_TYPE [alpha |-> ``:256``] tuple_immutable_target_pending)) >>
+    impl_tac) >>>
+  HEADGOAL (
+    rpt conj_tac >>
+    TRY (first_assum ACCEPT_TAC) >>
+    TRY (qpat_assum `ci_mono cur target_cs`
+           (fn mono => FIRST (map ACCEPT_TAC (CONJUNCTS (REWRITE_RULE [ci_mono_def] mono))))) ) >>>
+  HEADGOAL (
+    qpat_assum `type_memory_size_list tvs = 0 \/ _`
+      (DISJ_CASES_THEN2
+        (fn zero => qpat_assum `0 < type_memory_size_list tvs`
+          (mp_tac o REWRITE_RULE [zero]) >> simp[NoAsms])
+        ACCEPT_TAC)) >>>
+  HEADGOAL (
+    qx_genl_tac [`borrowed_name`,`borrowed_base`,`borrowed_cap`] >>
+    disch_then (map_every assume_tac o CONJUNCTS) >>
+    `MEM (BaseTarget bt) (BaseTarget bt::todo)` by simp[NoAsms]) >>>
+  HEADGOAL (
+    qpat_assum `!bt'. MEM (BaseTarget bt') (BaseTarget bt::todo) /\
+                   immutable_root cx bt' /\ ~(?nsid. bt' = TopLevelNameTarget nsid) ==> _`
+      (qspec_then `bt` mp_tac) >>
+    (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC))) >>>
+  HEADGOAL (
+    disch_then irule) >>>
+  HEADGOAL (
+    qexistsl_tac [`Hm`,`borrowed_base`,`borrowed_cap`,`id`,`mid`,`borrowed_name`,
+      `gas_explicit nested_marks u.vs_gas_readings`,`path`,`target_r`,`cur`,`target_cs`,`src`,`sty`] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (disch_then (map_every assume_tac o CONJUNCTS)) >>>
+  HEADGOAL (
+    qpat_assum `bodyFullTargetDefs$imm_target_post Hm ctx func cenv cx src cur target_cs u _ _ _ _ _ m`
+      (map_every assume_tac o CONJUNCTS o REWRITE_RULE [bodyFullTargetDefsTheory.imm_target_post_def]) >>
+    qpat_x_assum `?off itv iv k ptv v. FLOOKUP cenv.ce_module_vars (NONE,id) =
+                  SOME (ImmutableLoc off) /\ _`
+      (qx_choosel_then [`off`,`itv`,`iv`,`leaf_off`,`ptv`,`old_leaf`]
+        (map_every assume_tac o CONJUNCTS)) >>
+    drule_all_then (map_every assume_tac o CONJUNCTS)
+      bodyFullTargetImmutableWriteTheory.immutable_target_write_root >>
+    qpat_assum `FLOOKUP (case ALOOKUP mid.immutables cx.txn.target of NONE => _ | SOME _ => _) _ = SOME _` mp_tac >>
+    Cases_on `ALOOKUP mid.immutables cx.txn.target` >>
+    simp[NoAsms,finite_mapTheory.FLOOKUP_EMPTY] >> strip_tac) >>>
+  HEADGOAL (
+    qpat_assum `ci_mono cur target_cs`
+      (map_every assume_tac o CONJUNCTS o REWRITE_RULE [ci_mono_def])) >>>
+  HEADGOAL (sg `return_buf_frame d cenv target_cs m`) >>>
+  HEADGOAL (
+    irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+    qpat_assum `return_buf_frame d cenv cur u` (irule_at Any) >>
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[NoAsms]) >>>
+  HEADGOAL (sg `local_ptrs_reserved cenv target_cs`) >>>
+  HEADGOAL (
+    irule local_ptrs_reserved_next_var >>
+    qpat_assum `local_ptrs_reserved cenv cur` (irule_at Any) >>
+    first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at target_cs x` by
+      (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+       qexists_tac `cur` >> simp[]) >>
+    `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at target_cs x` by
+      (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+       qexists_tac `cur` >> simp[])) >>>
+  HEADGOAL (
+    `gas_origin_ptr_path (DF Hm,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+       (u,Gu,tu) nested_marks (OK m,Gmid,tmid)` by
+      (qpat_assum `!H. _ ==> gas_origin_ptr_path _ (u,Gu,tu) nested_marks (OK m,Gmid,tmid)`
+         (qspec_then `Hm` (drule_then ACCEPT_TAC))) >>
+    `!fn inst z. frag_reachable ctx func m fn inst z ==> dalloca_no_wrap inst z` by
+      tuple_path_no_wrap `gas_origin_ptr_path _ (u,Gu,tu) nested_marks (OK m,Gmid,tmid)`
+        `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_no_wrap inst z`) >>>
+  HEADGOAL (
+    `p + type_memory_size_list tvs <= m.vs_alloca_next` by decide_tac >>
+    qpat_assum `ghost_kept_at lo cenv src cur Gu tu u Gmid tmid`
+      (map_every assume_tac o CONJUNCTS o REWRITE_RULE [ghost_kept_at_def])) >>>
+  HEADGOAL (
+    sg `if is_word_type sty then
+         copy_old_operand target_cs op0 /\
+         eval_operand op0 m = SOME (typed_val_to_w256 stv vi) /\ op_taint tmid op0 = {}
+       else ?x a. op0 = Var x /\ not_fresh_at target_cs x /\
+         lookup_var x m = SOME (n2w a) /\
+         p <= a /\ a + type_memory_size stv <= p + type_memory_size_list tvs /\
+         ptr_covers Gmid tmid x m (type_memory_size stv) /\
+         (!mem. mem_agree_outside tmid.t_mem m.vs_memory mem ==>
+           val_in_memory stv vi a mem)`) >>>
+  HEADGOAL (
+    `not_fresh_at target_cs xmem` by
+      (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `cur` >> simp[]) >>
+    `op_taint tmid (Var xmem) = {}` by
+      (qpat_assum `!x. not_fresh_at cur x ==> FLOOKUP Gmid x = _ /\ _`
+         (qspec_then `xmem` (drule_then strip_assume_tac)) >> simp[]) >>
+    Cases_on `is_word_type sty`) >>>
+  HEADGOAL (
+    qpat_assum `is_word_type sty` (fn word =>
+      qpat_assum `if is_word_type sty then lookup_var xmem u = _ /\ _ else _`
+        (strip_assume_tac o REWRITE_RULE [word])) >>
+    simp[exprSimCopyTheory.copy_old_operand_def,eval_operand_def] >>
+    qpat_assum `!x w. not_fresh_at cur x /\ lookup_var x u = SOME w ==> _`
+      (drule_all_then ACCEPT_TAC)) >>>
+  HEADGOAL (
+    qpat_assum `~is_word_type sty` (fn word =>
+      qpat_assum `if is_word_type sty then lookup_var xmem u = _ /\ _ else _`
+        (strip_assume_tac o REWRITE_RULE [word]) >>
+      PURE_REWRITE_TAC [word,boolTheory.COND_CLAUSES]) >>
+    qexistsl [`xmem`,`p + SUM (MAP type_memory_size (TAKE k tvs))`] >>
+    asm_simp_tac bool_ss [] >> rpt conj_tac >>
+    TRY (qpat_assum `!x n. not_fresh_at cur x /\ ptr_covers Gu tu x u n ==> _`
+          (drule_all_then ACCEPT_TAC) >> simp[] >> NO_TAC) >>
+    TRY (qpat_assum `!x w. not_fresh_at cur x /\ lookup_var x u = SOME w ==> _`
+          (drule_all_then ACCEPT_TAC) >> NO_TAC) >>
+    TRY (decide_tac >> NO_TAC) >>
+    rpt strip_tac >>
+    qpat_assum `!mem. mem_agree_outside tmid.t_mem m.vs_memory mem ==> _`
+      (drule_then (mp_tac o REWRITE_RULE [valueEncodingPropsTheory.val_in_memory_tuple])) >>
+    disch_tac >>
+    map_every (fn pat => qpat_assum pat (SUBST1_TAC o SYM))
+      [`EL k tvs = stv`,`EL k vs = vi`] >>
+    irule tupleMemoryLayoutTheory.tuple_in_memory_element >>
+    simp[] >>
+    qpat_assum `values_have_types tvs vs`
+      (assume_tac o MATCH_MP vyperTypingTheory.values_have_types_length) >> decide_tac) >>>
+  HEADGOAL (
+    `off + type_memory_size itv <= lo` by
+      (qpat_assum `!H. dead_lo_ok H (DF H) lo cenv cx`
+         (qspec_then `Hm` assume_tac) >>
+       drule_all_then ACCEPT_TAC tuple_immutable_slot_span)) >>>
+  HEADGOAL (
+    `copy_old_operand target_cs (FST target_r)` by
+      simp[exprSimCopyTheory.copy_old_operand_def] >>
+    qpat_assum `target_ptr_ok cenv _ target_r Gmid tmid m`
+      (map_every assume_tac o CONJUNCTS o
+        REWRITE_RULE [bodyFullTargetDefsTheory.target_ptr_ok_def]) >>
+    qpat_assum `ghost_inv_at (DF Hm) lo d cenv cx mid Gmid tmid m`
+      (map_every assume_tac o CONJUNCTS o REWRITE_RULE [ghost_inv_at_def])) >>>
+  HEADGOAL (
+    qpat_assum `!dty. FST (SND target_r) = SOME LocCode /\ _ ==> _`
+      (qspec_then `sty` mp_tac) >>
+    impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+    disch_then (map_every assume_tac o CONJUNCTS)) >>>
+  HEADGOAL (
+    sg `?q Gq tq.
+      (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (m,Gmid,tmid) [] (OK q,Gq,tq)) /\
+      (!(H : (bool # bytes32 # type_value) list # num list) D. stmt_state_rel H ctx func cenv cx mid m /\
+        storage_well_formed_on cx mid (FST H) /\ dead_lo_ok H D lo cenv cx /\
+        ghost_inv_at D lo d cenv cx mid Gmid tmid m ==>
+        stmt_state_rel H ctx func cenv cx fin q /\ storage_well_formed_on cx fin (FST H) /\
+        ghost_inv_at D lo d cenv cx fin Gq tq q) /\
+      alloca_frame cenv mid target_cs m cenv fin q /\
+      ~q.vs_halted /\ q.vs_current_bb = sm.cs_current_bb /\
+      q.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~block_is_terminated sm /\
+      m.vs_alloca_next <= q.vs_alloca_next /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp q) /\
+      (!aid entry. FLOOKUP m.vs_allocas aid = SOME entry ==> FLOOKUP q.vs_allocas aid = SOME entry) /\
+      (!x. not_fresh_at target_cs x ==> lookup_var x q = lookup_var x m /\
+        FLOOKUP Gq x = FLOOKUP Gmid x /\ op_taint tq (Var x) = op_taint tmid (Var x)) /\
+      (!x cap. not_fresh_at target_cs x /\ ptr_covers Gmid tmid x m cap ==> ptr_covers Gq tq x q cap) /\
+      mem_bytes_at p (type_memory_size_list tvs) q.vs_memory =
+        mem_bytes_at p (type_memory_size_list tvs) m.vs_memory /\
+      (!i. p <= i /\ i < p+type_memory_size_list tvs /\ i IN tq.t_mem ==> i IN tmid.t_mem) /\
+      (!aid a len i. aid < target_cs.cs_next_id /\ FLOOKUP m.vs_allocas aid = SOME (a,len) /\
+        a <= i /\ i < a+len /\ i IN tq.t_mem ==> i IN tmid.t_mem)`) >>>
+  HEADGOAL (suspend "computed_immutable_write") >>>
+  HEADGOAL (suspend "suffix_frame")
+QED
+
+Resume tuple_assign_exact_with_borrowed_frame[suffix_frame]:
+  ALL_TAC >>>
+  HEADGOAL (
+    sg `!H. valid_horizon cx st0 H fin.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx fin q /\
+       storage_well_formed_on cx fin (FST H) /\
+       ghost_inv_at (DF H) lo d cenv cx fin Gq tq q`) >>>
+  HEADGOAL (
+    qx_gen_tac `H` >>
+    qpat_assum `fin.storage_trace = mid.storage_trace`
+      (fn eq => simp[NoAsms,eq]) >> strip_tac) >>>
+  HEADGOAL (
+    qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> ?path. _`
+      (qspec_then `H` (drule_then
+        (qx_choose_then `path_at_horizon` (map_every assume_tac o CONJUNCTS))))) >>>
+  HEADGOAL (
+    qpat_assum `!H. dead_lo_ok H (DF H) lo cenv cx`
+      (qspec_then `H` assume_tac) >>
+    qpat_assum `bodyFullTargetDefs$imm_target_post H _ _ _ _ src cur target_cs u mid _ _ _ _ m`
+      (map_every assume_tac o CONJUNCTS o REWRITE_RULE
+        [bodyFullTargetDefsTheory.imm_target_post_def])) >>>
+  HEADGOAL (
+    qpat_assum `!H D. stmt_state_rel H ctx func cenv cx mid m /\ _ ==>
+                 stmt_state_rel H ctx func cenv cx fin q /\ _`
+      (qspecl_then [`H`,`DF H`] mp_tac)) >>>
+  HEADGOAL (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (disch_then ACCEPT_TAC) >>>
+  HEADGOAL (
+    `expr_sim_inv cenv cx env fin` by
+      (irule tuplePlaceSourceTheory.tuple_place_write_inv >>
+       qpat_assum `write_place cx (ImmutablePlace NONE id path) vi mid = _` (irule_at Any) >>
+       simp[vyperStoragePlaceProvenanceTheory.storage_place_region_def] >>
+       qexists_tac `stv` >> simp[]) >>
+    `assign_tuple_targets cx (BaseTarget bt) vi
+       (src with gas_obs := gas_explicit nested_marks u.vs_gas_readings) = (INL (),fin)` by
+      (qpat_assum `eval_target_place cx bt (src with gas_obs := _) = (INL _,mid)` (fn target =>
+       qpat_assum `write_place cx (ImmutablePlace NONE id path) vi mid = (INL (),fin)` (fn write =>
+         simp[NoAsms,cj 56 vyperInterpreterTheory.evaluate_def,bind_def,target,write]))) >>
+    `writable_atarget env (BaseTarget bt)` by
+      (qpat_assum `well_typed_atarget env (BaseTarget bt) _`
+        (ACCEPT_TAC o MATCH_MP constSubstCorrectTheory.well_typed_atarget_writable)) >>
+    `body_const_cells_agree [(NONE,tops)] cx env fin` by
+      (irule body_const_cells_agree_assign_tuple >>
+       qpat_assum `assign_tuple_targets cx (BaseTarget bt) vi _ = (INL (),fin)`
+         (irule_at Any) >> simp[])) >>>
+  HEADGOAL (
+    `alloca_frame cenv src cur u cenv fin q` by
+      (irule stmtSimDefsTheory.alloca_frame_trans >>
+       qexistsl_tac [`cenv`,`mid`,`m`,`target_cs`] >> simp[ci_mono_def]) >>
+    `alloca_frame cenv es sa s0 cenv fin q` by
+      (irule stmtSimDefsTheory.alloca_frame_trans >>
+       qexistsl_tac [`cenv`,`src`,`u`,`cur`] >> simp[]) >>
+    `!aid entry. FLOOKUP u.vs_allocas aid = SOME entry ==> FLOOKUP q.vs_allocas aid = SOME entry` by
+      (rpt strip_tac >>
+       qpat_assum `!aid entry. FLOOKUP u.vs_allocas aid = SOME entry ==> _` (drule_then assume_tac) >>
+       qpat_assum `!aid entry. FLOOKUP m.vs_allocas aid = SOME entry ==> _` (drule_then ACCEPT_TAC))) >>>
+  HEADGOAL (
+    `!x. not_fresh_at cur x ==> not_fresh_at target_cs x` by
+      (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+       qexists_tac `cur` >> simp[]) >>
+    `!x w. not_fresh_at cur x /\ lookup_var x u = SOME w ==> lookup_var x q = SOME w` by
+      (qx_genl_tac [`saved_var`,`saved_val`] >>
+       disch_then (map_every assume_tac o CONJUNCTS) >>
+       `lookup_var saved_var m = SOME saved_val` by
+         (qpat_assum `!x w. not_fresh_at cur x /\ lookup_var x u = SOME w ==> _`
+            (qspecl_then [`saved_var`,`saved_val`] match_mp_tac) >>
+          conj_tac >> first_assum ACCEPT_TAC) >>
+       `not_fresh_at target_cs saved_var` by (first_assum (drule_then ACCEPT_TAC)) >>
+       qpat_assum `lookup_var saved_var m = SOME saved_val` (fn saved =>
+         qpat_assum `!x. not_fresh_at target_cs x ==> lookup_var x q = _ /\ _`
+           (qspec_then `saved_var`
+             (drule_then (ACCEPT_TAC o REWRITE_RULE [saved] o CONJUNCT1))))) >>
+    `!x. not_fresh_at cur x ==> FLOOKUP Gq x = FLOOKUP Gu x /\
+        op_taint tq (Var x) = op_taint tu (Var x)` by
+      (qx_gen_tac `saved_var` >> disch_tac >>
+       `not_fresh_at target_cs saved_var` by (first_assum (drule_then ACCEPT_TAC)) >>
+       qpat_assum `!x. not_fresh_at target_cs x ==> lookup_var x q = _ /\ _`
+         (qspec_then `saved_var` (drule_then strip_assume_tac)) >>
+       qpat_assum `!x. not_fresh_at cur x ==> FLOOKUP Gmid x = _ /\ _`
+         (qspec_then `saved_var` (drule_then strip_assume_tac)) >> simp[])) >>>
+  HEADGOAL (
+    `!x n. not_fresh_at cur x /\ ptr_covers Gu tu x u n ==> ptr_covers Gq tq x q n` by
+      (qx_genl_tac [`saved_var`,`saved_cap`] >>
+       disch_then (map_every assume_tac o CONJUNCTS) >>
+       qpat_assum `!x n. not_fresh_at cur x /\ ptr_covers Gu tu x u n ==> _`
+         (drule_all_then assume_tac) >>
+       `not_fresh_at target_cs saved_var` by (first_assum (drule_then ACCEPT_TAC)) >>
+       qpat_assum `!x n. not_fresh_at target_cs x /\ ptr_covers Gmid tmid x m n ==> _`
+         (drule_all_then ACCEPT_TAC))) >>>
+  HEADGOAL (
+    `!x w. not_fresh_at target_cs x /\ lookup_var x m = SOME w ==>
+       lookup_var x q = SOME w` by
+      (qx_genl_tac [`saved_var`,`saved_val`] >>
+       disch_then (map_every assume_tac o CONJUNCTS) >>
+       qpat_assum `lookup_var saved_var m = SOME saved_val` (fn saved =>
+         qpat_assum `!x. not_fresh_at target_cs x ==> lookup_var x q = _ /\ _`
+           (qspec_then `saved_var`
+             (drule_then (ACCEPT_TAC o REWRITE_RULE [saved] o CONJUNCT1)))))) >>>
+  HEADGOAL (
+    `return_buf_frame d cenv sm q` by
+      (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+       qpat_assum `return_buf_frame d cenv target_cs m` (irule_at Any) >>
+       qpat_assum `ci_mono target_cs sm`
+         (map_every assume_tac o CONJUNCTS o REWRITE_RULE [ci_mono_def]) >>
+       simp[]) >>
+    qpat_assum `!D. gas_origin_ptr_path (D,lo,_,ctx,func,PG) (m,Gmid,tmid) [] (OK q,Gq,tq)`
+      (qspec_then `DF Hm` assume_tac)) >>>
+  HEADGOAL (
+    `alloca_history func q` by
+      (qpat_assum `stmt_state_rel Hm ctx func cenv cx mid m`
+         (mp_then Any assume_tac bodyMemBopRestWordPathTheory.rest_word_state_alloca_inv) >>
+       drule_all_then ACCEPT_TAC bodyFullPathHistoryTheory.body_full_path_alloca_history) >>
+    `!fn inst z. frag_reachable ctx func q fn inst z ==> dalloca_no_wrap inst z` by
+      tuple_path_no_wrap `gas_origin_ptr_path _ (m,Gmid,tmid) [] (OK q,Gq,tq)`
+        `!fn inst z. frag_reachable ctx func m fn inst z ==> dalloca_no_wrap inst z`) >>>
+  HEADGOAL (
+    `!mem. mem_agree_outside tq.t_mem q.vs_memory mem ==>
+       val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) p mem` by
+      (`val_footprint (TupleTV tvs) (ArrayV (TupleV vs)) <= type_memory_size_list tvs` by
+         (drule exprSimPropsTheory.val_footprint_le >> simp[valueEncodingTheory.type_memory_size_def]) >>
+       match_mp_tac robustCopyTransportPtrTheory.robust_val_in_memory_decreasing_taint_transport >>
+       qexistsl_tac [`p`,`type_memory_size_list tvs`,`tmid.t_mem`,`m.vs_memory`] >>
+       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+       qx_gen_tac `rhs_byte` >> disch_then (map_every assume_tac o CONJUNCTS) >>
+       qpat_assum `!j. p <= j /\ j < p + type_memory_size_list tvs /\ j IN tq.t_mem ==> _`
+         (qspec_then `p+rhs_byte` match_mp_tac) >>
+       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac)) >>>
+  HEADGOAL (
+    sg `!n b len. local_region cenv fin.scopes q n b len <=>
+                    local_region cenv mid.scopes m n b len`) >>>
+  HEADGOAL (
+    `MAP FDOM mid.scopes = MAP FDOM fin.scopes` by
+      (qpat_assum `fin.scopes = mid.scopes` (fn eq => simp[NoAsms,eq])) >>
+    qpat_assum `stmt_state_rel Hm ctx func cenv cx mid m` (fn state =>
+      qpat_assum `local_ptrs_reserved cenv target_cs` (fn reserved =>
+        qpat_assum `!x w. not_fresh_at target_cs x /\ lookup_var x m = SOME w ==> _` (fn vars =>
+          qpat_assum `MAP FDOM mid.scopes = MAP FDOM fin.scopes` (fn scopes =>
+            ACCEPT_TAC (MATCH_MP tuplePlaceStepTheory.tuple_place_endpoint_local_regions_some
+              (LIST_CONJ [state,reserved,vars,scopes]))))))) >>>
+  HEADGOAL (
+    Q.SUBGOAL_THEN `type_memory_size_list tvs = 0 \/
+      (?aid b cap. FLOOKUP q.vs_allocas aid = SOME (b,cap) /\ aid < sm.cs_next_id /\
+       b <= p /\ p + type_memory_size_list tvs <= b + cap /\
+       (!n a len. local_region cenv fin.scopes q n a len ==> b + cap <= a \/ a + len <= b)) \/
+      (?n b cap. local_region cenv fin.scopes q n b cap /\ b <= p /\
+       p + type_memory_size_list tvs <= b + cap /\
+       local_path_at cenv cx n (p-b) (TupleTV tvs))` ASSUME_TAC) >>>
+  HEADGOAL (
+    disj2_tac >>
+    qpat_assum `!n a len. local_region cenv fin.scopes q n a len <=> _`
+      (PURE_REWRITE_TAC o single) >>
+    qpat_assum `(?aid b cap. FLOOKUP m.vs_allocas aid = SOME (b,cap) /\ _) \/ _`
+      (DISJ_CASES_THEN2
+        (qx_choosel_then [`rhs_id`,`rhs_base`,`rhs_cap`]
+          (map_every assume_tac o CONJUNCTS))
+        (qx_choosel_then [`rhs_name`,`rhs_base`,`rhs_cap`]
+          (map_every assume_tac o CONJUNCTS)))) >>>
+  HEADGOAL (
+    disj1_tac >> qexistsl [`rhs_id`,`rhs_base`,`rhs_cap`] >> rpt conj_tac >>
+    TRY (first_assum ACCEPT_TAC)
+    >- (qpat_assum `!aid entry. FLOOKUP m.vs_allocas aid = SOME entry ==> _`
+          (drule_then ACCEPT_TAC)) >>
+    qpat_assum `rhs_id < target_cs.cs_next_id` mp_tac >>
+    qpat_assum `ci_mono target_cs sm` (mp_tac o REWRITE_RULE [ci_mono_def]) >> decide_tac) >>>
+  HEADGOAL (
+    disj2_tac >> qexistsl [`rhs_name`,`rhs_base`,`rhs_cap`] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>>
+  HEADGOAL (
+    `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP q.vs_allocas aid = SOME b` by
+      (rpt strip_tac >>
+       qpat_assum `!a b. FLOOKUP s0.vs_allocas a = SOME b ==> FLOOKUP u.vs_allocas a = SOME b`
+         (drule_then assume_tac) >>
+       qpat_assum `!a b. FLOOKUP u.vs_allocas a = SOME b ==> FLOOKUP m.vs_allocas a = SOME b`
+         (drule_then assume_tac) >>
+       qpat_assum `!a b. FLOOKUP m.vs_allocas a = SOME b ==> FLOOKUP q.vs_allocas a = SOME b`
+         (drule_then ACCEPT_TAC))) >>>
+  HEADGOAL (
+    `cur.cs_next_id <= target_cs.cs_next_id` by
+      (qpat_assum `ci_mono cur target_cs` mp_tac >> simp[ci_mono_def]) >>
+    `!aid a len i. FLOOKUP m.vs_allocas aid = SOME (a,len) /\ aid < target_cs.cs_next_id /\
+        (!n b cap. local_region cenv mid.scopes m n b cap ==> a+len <= b \/ b+cap <= a) /\
+        a <= i /\ i < a+len /\ i IN tq.t_mem ==> i IN tmid.t_mem` by
+      (qx_genl_tac [`alloc_id`,`alloc_base`,`alloc_size`,`alloc_byte`] >>
+       disch_then (map_every assume_tac o CONJUNCTS) >>
+       qpat_assum `!aid a len i. aid < target_cs.cs_next_id /\ _ ==> i IN tmid.t_mem`
+         (qspecl_then [`alloc_id`,`alloc_base`,`alloc_size`,`alloc_byte`] match_mp_tac) >>
+       rpt conj_tac >> first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (
+    `!aid a len i. FLOOKUP u.vs_allocas aid = SOME (a,len) /\ aid < cur.cs_next_id /\
+        (!n b cap. local_region cenv src.scopes u n b cap ==> a+len <= b \/ b+cap <= a) /\
+        a <= i /\ i < a+len /\ i IN tq.t_mem ==> i IN tu.t_mem` by
+      (match_mp_tac (GEN_ALL alloca_taint_kept_trans) >>
+       qpat_assum `alloca_frame cenv src cur u cenv mid m` (irule_at Any) >>
+       qexistsl [`tmid`,`target_cs`] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (
+    `!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+       (!n b sz'. local_region cenv es.scopes s0 n b sz' ==> off + sz <= b \/ b + sz' <= off) /\
+       off <= i /\ i < off + sz /\ i IN tq.t_mem ==> i IN tn0.t_mem` by
+      (match_mp_tac (GEN_ALL alloca_taint_kept_trans) >>
+       qpat_assum `alloca_frame cenv es sa s0 cenv src u` (irule_at Any) >>
+       qexistsl [`tu`,`cur`] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (
+    `ci_mono cur sm` by
+      (irule ci_mono_trans >> qexists_tac `target_cs` >> simp[]) >>
+    sg `!i. i < LENGTH tys_tail ==>
+       ?x. EL i ops_tail = Var x /\ not_fresh_at sm x /\ op_taint tq (Var x) = {} /\
+         if is_word_type (EL i tys_tail) then
+           lookup_var x q = SOME (typed_val_to_w256 (EL i tvs_tail) (EL i vs_tail)) /\
+           op_prov Gq (Var x) = NONE
+         else lookup_var x q =
+           SOME (n2w (p + SUM (MAP type_memory_size (TAKE (SUC k+i) tvs)))) /\
+           ptr_covers Gq tq x q (type_memory_size (EL i tvs_tail))`) >>>
+  HEADGOAL (
+    qx_gen_tac `suffix_index` >> disch_tac >>
+    qpat_assum `!j. j < LENGTH (sty::tys_tail) ==> ?x. _ /\ not_fresh_at cur x /\ _`
+      (qspec_then `SUC suffix_index` mp_tac) >>
+    simp[NoAsms] >> (impl_tac >- first_assum ACCEPT_TAC) >>
+    disch_then (qx_choose_then `suffix_var` (map_every assume_tac o CONJUNCTS))) >>>
+  HEADGOAL (
+    `not_fresh_at sm suffix_var` by
+      (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `cur` >> simp[]) >>
+    qpat_assum `!x. not_fresh_at cur x ==> FLOOKUP Gq x = _ /\ _`
+      (qspec_then `suffix_var` (drule_then strip_assume_tac)) >>
+    `k + SUC suffix_index = suffix_index + SUC k` by decide_tac >>
+    qexists_tac `suffix_var` >>
+    asm_rewrite_tac[] >>
+    Cases_on `is_word_type (EL suffix_index tys_tail)`) >>>
+  HEADGOAL (
+    qpat_x_assum `if is_word_type (EL suffix_index tys_tail) then _ else _`
+      (map_every assume_tac o CONJUNCTS o REWRITE_RULE
+        [ASSUME ``is_word_type (EL suffix_index tys_tail)``]) >>
+    PURE_REWRITE_TAC [ASSUME ``is_word_type (EL suffix_index tys_tail)``,
+      boolTheory.COND_CLAUSES]) >>>
+  HEADGOAL (
+    conj_tac >-
+      (qpat_assum `!x w. not_fresh_at cur x /\ lookup_var x u = SOME w ==> _`
+        (drule_all_then ACCEPT_TAC)) >>
+    qpat_assum `op_prov Gu (Var suffix_var) = NONE` mp_tac >>
+    qpat_assum `FLOOKUP Gq suffix_var = FLOOKUP Gu suffix_var`
+      (fn eq => simp[NoAsms,op_prov_def,eq])) >>>
+  HEADGOAL (
+    qpat_assum `~is_word_type (EL suffix_index tys_tail)` (fn word =>
+      qpat_assum `k + SUC suffix_index = suffix_index + SUC k` (fn index =>
+        qpat_x_assum `if is_word_type (EL suffix_index tys_tail) then _ else _`
+          (map_every assume_tac o CONJUNCTS o REWRITE_RULE [word,index]) >>
+        PURE_REWRITE_TAC [word,boolTheory.COND_CLAUSES]))) >>>
+  HEADGOAL (
+    conj_tac >-
+      (qpat_assum `!x w. not_fresh_at cur x /\ lookup_var x u = SOME w ==> _`
+        (drule_all_then ACCEPT_TAC)) >>
+    qpat_assum `!x n. not_fresh_at cur x /\ ptr_covers Gu tu x u n ==> _`
+      (drule_all_then ACCEPT_TAC)) >>>
+  HEADGOAL (
+    `!x. not_fresh_at sa x ==> not_fresh_at cur x` by
+      (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+       qexists_tac `sa` >> simp[]) >>
+    `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x q = SOME w` by
+      (qx_genl_tac [`saved_var`,`saved_val`] >>
+       disch_then (map_every assume_tac o CONJUNCTS) >>
+       qpat_assum `!x w. not_fresh_at cur x /\ lookup_var x u = SOME w ==> _`
+         (qspecl_then [`saved_var`,`saved_val`] match_mp_tac) >>
+       conj_tac >- (first_assum (drule_then ACCEPT_TAC)) >>
+       qpat_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> _`
+         (qspecl_then [`saved_var`,`saved_val`] match_mp_tac) >>
+       conj_tac >> first_assum ACCEPT_TAC) >>
+    `!x. not_fresh_at sa x ==> FLOOKUP Gq x = FLOOKUP G0 x /\
+       op_taint tq (Var x) = op_taint tn0 (Var x)` by
+      (qx_gen_tac `saved_var` >> disch_tac >>
+       `not_fresh_at cur saved_var` by (first_assum (drule_then ACCEPT_TAC)) >>
+       qpat_assum `!x. not_fresh_at cur x ==> FLOOKUP Gq x = _ /\ _`
+         (qspec_then `saved_var` (drule_then strip_assume_tac)) >>
+       qpat_assum `!x. not_fresh_at sa x ==> FLOOKUP Gu x = _ /\ _`
+         (qspec_then `saved_var` (drule_then strip_assume_tac)) >> simp[]) >>
+    `EVERY (assignable_type (get_tenv cx)) tys_tail` by
+      (qpat_assum `EVERY (assignable_type _) (sty::_)` mp_tac >> simp[NoAsms]) >>
+    `values_have_types tvs_tail vs_tail` by simp[vyperTypeDefaultsTheory.values_have_types_LIST_REL]) >>>
+  HEADGOAL (
+    `!H. valid_horizon cx st0 H fin.storage_trace ==>
+       gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (m,Gmid,tmid) [] (OK q,Gq,tq)` by
+      (qx_gen_tac `H` >> disch_tac >>
+       qpat_assum `!D. gas_origin_ptr_path (D,lo,_,ctx,func,PG) (m,Gmid,tmid) [] (OK q,Gq,tq)`
+         (qspec_then `DF H` ACCEPT_TAC))) >>>
+  HEADGOAL (
+    match_mp_tac (Q.INST [`q` |-> `q`, `fin` |-> `fin`, `Gf` |-> `Gq`, `tf` |-> `tq`]
+       tuple_immutable_write_then)) >>>
+  HEADGOAL (
+    Q.SUBGOAL_THEN
+      `sa.cs_next_id <= sm.cs_next_id /\ sa.cs_next_var <= sm.cs_next_var /\
+       p + type_memory_size_list tvs <= q.vs_alloca_next /\
+       s0.vs_alloca_next <= q.vs_alloca_next` (map_every assume_tac o CONJUNCTS)) >>>
+  HEADGOAL (
+    qpat_assum `ci_mono target_cs sm`
+      (mp_tac o REWRITE_RULE [ci_mono_def]) >> decide_tac) >>>
+  HEADGOAL (
+    `local_ptrs_reserved cenv sm` by
+      (irule local_ptrs_reserved_next_var >> qexists_tac `cur` >> simp[]) >>
+    `!x. not_fresh_at cur x ==> not_fresh_at sm x` by
+      (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+       qexists_tac `cur` >> simp[])) >>>
+  HEADGOAL (
+    `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x` by
+      (qx_genl_tac [`ret_var`,`ret_size`] >> disch_tac >>
+       qpat_assum `!x. not_fresh_at cur x ==> not_fresh_at sm x` match_mp_tac >>
+       qpat_assum `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at cur x`
+         (drule_then ACCEPT_TAC)) >>
+    `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x` by
+      (qx_genl_tac [`ret_var`,`ret_size`] >> disch_tac >>
+       qpat_assum `!x. not_fresh_at cur x ==> not_fresh_at sm x` match_mp_tac >>
+       qpat_assum `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at cur x`
+         (drule_then ACCEPT_TAC))) >>>
+  HEADGOAL (
+    `fin with gas_obs := [] = fin` by simp[evaluation_state_component_equality] >>
+    `storage_trace_domain cx st0 fin.storage_trace` by
+      (qpat_assum `fin.storage_trace = mid.storage_trace` SUBST1_TAC >>
+       first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    asm "suffix_ih" (qspecl_then
+      [`tys_tail`,`tvs_tail`,`vs_tail`,`ops_tail`,`SUC k`,`p`,`sm`,`shadow_sm`,`fin`,`q`,`Gq`,`tq`] mp_tac) >>
+    impl_tac) >>>
+  HEADGOAL (
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    TRY (first_assum (ACCEPT_TAC o SYM))) >>>
+  HEADGOAL (disch_then ACCEPT_TAC)
+QED
+
+Resume tuple_assign_exact_with_borrowed_frame[computed_immutable_write]:
+  ALL_TAC >>>
+  HEADGOAL (
+    `ptv = stv` by
+      (qpat_assum `evaluate_type (get_tenv cx) sty = SOME stv` mp_tac >>
+       qpat_assum `evaluate_type (get_tenv cx) sty = SOME ptv` (fn ty => simp[NoAsms,ty])) >>
+    `value_has_type ptv vi` by simp[] >>
+    qpat_assum `mem_path_offset itv path = SOME (leaf_off,ptv)`
+      (map_every assume_tac o CONJUNCTS o MATCH_MP exprSimPropsTheory.mem_path_offset_sound) >>
+    `off+leaf_off+type_memory_size ptv <= lo` by decide_tac >>
+    `m.vs_alloca_next < dimword (:256)` by
+      (qpat_assum `stmt_state_rel Hm ctx func cenv cx mid m`
+        (ACCEPT_TAC o MATCH_MP exprLoweringPropsTheory.alloca_room_next_lt o
+         MATCH_MP stateRelProjTheory.stmt_state_rel_alloca_room))) >>>
+  HEADGOAL (
+    `0 < type_memory_size ptv` by
+      (qpat_assum `ptv = stv` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+    `0 < lo` by decide_tac >>
+    `!base. cenv.ce_imm_alloca = SOME base ==> eval_operand base m = SOME 0w /\
+       copy_old_operand target_cs base /\ op_taint tmid base = {} /\ op_prov Gmid base = NONE` by
+      (qx_gen_tac `base_op` >> disch_tac >>
+       drule_all_then (map_every assume_tac o CONJUNCTS) tuple_immutable_word_base >>
+       rpt conj_tac >> first_assum ACCEPT_TAC)) >>>
+  HEADGOAL (
+    `compile_assign_value cenv (FST target_r) LocCode op0 (is_word_type sty) NONE sty sty
+       (type_memory_bytes cenv sty) target_cs = ((),sm)` by
+      (qpat_assum `(if is_word_type sty then compile_store_at_loc _ _ _ _ _ else _) = ((),sm)`
+        mp_tac >>
+       Cases_on `is_word_type sty`
+       >- (qpat_assum `is_word_type sty` (fn flag =>
+             simp_tac bool_ss [flag,compile_store_at_loc_def,compile_assign_value_def]) >>
+           simp[comp_return_def,comp_bind_def]) >>
+       qpat_assum `~is_word_type sty` (fn flag => simp_tac bool_ss [flag])) >>
+    `~block_is_terminated sm` by
+      (qpat_assum `compile_assign_value _ _ LocCode _ _ _ _ _ _ target_cs = ((),sm)`
+        (ACCEPT_TAC o MATCH_MP immutableAssignOpenTheory.immutable_assign_loccode_open))) >>>
+  HEADGOAL (
+    `if is_word_type sty then
+       copy_old_operand target_cs op0 /\
+       eval_operand op0 m = SOME (typed_val_to_w256 stv vi) /\ op_taint tmid op0 = {}
+     else ?x a. op0 = Var x /\ not_fresh_at target_cs x /\
+       lookup_var x m = SOME (n2w a) /\
+       lo <= a /\ a + type_memory_size stv <= m.vs_alloca_next /\
+       ptr_covers Gmid tmid x m (type_memory_size stv) /\
+       (!mem. mem_agree_outside tmid.t_mem m.vs_memory mem ==> val_in_memory stv vi a mem)` by
+      (Cases_on `is_word_type sty`
+       >- (qpat_assum `is_word_type sty` (fn word =>
+             qpat_assum `if is_word_type sty then copy_old_operand target_cs op0 /\ _ else _`
+               (mp_tac o REWRITE_RULE [word]) >> simp_tac bool_ss [word])) >>
+       qpat_assum `~is_word_type sty` (fn word =>
+         qpat_assum `if is_word_type sty then copy_old_operand target_cs op0 /\ _ else _`
+           (qx_choosel_then [`rhs_var`,`rhs_value_addr`] (map_every assume_tac o CONJUNCTS) o
+            REWRITE_RULE [word]) >> simp_tac bool_ss [word]) >>
+       qexistsl [`rhs_var`,`rhs_value_addr`] >>
+       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac)) >>>
+  HEADGOAL (
+    mp_tac (Q.INST [`ce` |-> `cenv`,`dst` |->
+       `FST (target_r : operand # data_location option # place_ty option)`,
+       `sty` |-> `sty`,`dty` |-> `sty`,`stv` |-> `stv`,`dtv` |-> `ptv`,
+       `v` |-> `vi`,`op` |-> `op0`,`off` |-> `off+leaf_off`,`sa` |-> `target_cs`,
+       `sb` |-> `sm`,`st` |-> `mid`,`s` |-> `m`,`G` |-> `Gmid`,`tn` |-> `tmid`,
+       `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
+       tuple_immutable_path_flat_store) >> impl_tac) >>>
+  HEADGOAL (
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    simp[vyperTypeArgFitsTheory.type_widens_to_refl]) >>>
+  HEADGOAL (
+    disch_then (qx_choosel_then [`q`,`Gq`,`tq`] assume_tac) >>
+    qexistsl [`q`,`Gq`,`tq`] >>
+    match_mp_tac (Q.INST [`H0` |-> `Hm : (bool # bytes32 # type_value) list # num list`,`v` |-> `vi`,`id` |-> `id`,
+      `ity` |-> `root_ty`,`ptv` |-> `ptv`,`itv` |-> `itv`,`off` |-> `off`,
+      `k` |-> `leaf_off`,`path` |-> `path`,`tops` |-> `tops`,`env` |-> `env`]
+      tuple_immutable_path_store_success)) >>>
+  HEADGOAL (rpt conj_tac >> first_assum ACCEPT_TAC)
+
+QED
+
+Finalise tuple_assign_exact_with_borrowed_frame[local]
+Theorem body_assign_tuple_other_full:
+  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
+    body_expr_full_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
+    expr_sim_inv cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
+    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    ~EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
+                     ~(?nsid. t = TopLevelNameTarget nsid)) gs /\
+    lowered_value_type cenv e = expr_type e /\
+    ~(?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
+            EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids) ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qspecl_then [`cx`,`gs`,`e`,`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,`ctx`,
+    `shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`]
+    match_mp_tac tuple_assign_exact_with_borrowed_frame >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qx_gen_tac `target` >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qsuff_tac `F` >- simp[] >>
+  qpat_assum `~EXISTS _ gs` (match_mp_tac o NOT_ELIM) >>
+  simp_tac bool_ss [EXISTS_MEM] >> qexists_tac `BaseTarget target` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `target` >> asm_simp_tac bool_ss [] >>
+  qx_gen_tac `top_id` >> strip_tac >>
+  qpat_assum `~(?nsid. target = TopLevelNameTarget nsid)` (match_mp_tac o NOT_ELIM) >>
+  qexists_tac `top_id` >> first_assum ACCEPT_TAC
+QED
+
+
 Theorem tuple_widened_storage_alloc_bound[local]:
   !tys gs i.
     tuple_assign_alloc_ok cenv tys gs /\ i < LENGTH tys /\ i < LENGTH gs /\
@@ -10975,7 +12502,7 @@ Proof
   metis_tac[cj 10 constSubstCorrectTheory.checked_protected_cell_frame_mutual]
 QED
 
-Theorem body_assign_tuple_widened_full:
+Theorem tuple_assign_widened_with_immutable_paths[local]:
   !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
        eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
@@ -10997,8 +12524,6 @@ Theorem body_assign_tuple_widened_full:
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
     frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
-    ~EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
-                     ~(?nsid. t = TopLevelNameTarget nsid)) gs /\
     lowered_value_type cenv e <> expr_type e ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
@@ -11762,15 +13287,33 @@ Proof
        (qspec_then `i` mp_tac) >> metis_tac[]) >>
   `value_has_type (EL i dtvs) (EL i vs)` by
     (drule_all vyperTypeArgFitsTheory.type_widens_to_value_has_type >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env src` by
+    (`body_const_cells_agree [(NONE,tops)] cx env ee` by
+       (irule body_const_cells_agree_expr_read >>
+        qpat_assum `bind (eval_expr cx e) (read_result cx) _ = (INL v',ee)`
+          (irule_at Any) >>
+        qpat_assum `expr_body_pre cenv cx env e es`
+          (assume_tac o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >> simp[]) >>
+     `EVERY (writable_atarget env) (TAKE i gs)` by
+       (qpat_assum `LIST_REL (\g ty. well_typed_atarget env g ty) gs dtys` mp_tac >>
+        simp_tac (srw_ss()) [NoAsms,LIST_REL_EL_EQN,EVERY_EL] >>
+        strip_tac >> qx_gen_tac `j` >> strip_tac >>
+        `j < LENGTH gs /\ j < i` by
+          (qpat_assum `j < LENGTH (TAKE i gs)` mp_tac >>
+           POP_ASSUM_LIST kall_tac >>
+           simp[listTheory.LENGTH_TAKE_EQ] >> rw[] >> decide_tac) >>
+        simp[listTheory.EL_TAKE] >>
+        qpat_assum `!j. j < LENGTH gs ==> _` (drule_then
+          (ACCEPT_TAC o MATCH_MP constSubstCorrectTheory.well_typed_atarget_writable))) >>
+     `body_const_cells_agree [(NONE,tops)] cx env (src with gas_obs := [])`
+       suffices_by simp[] >>
+     irule tuple_assign_prefix_preserves_const_cells >>
+     qpat_assum `!tail. assign_tuple_target_list cx (TAKE i gs) (TAKE i vs) _ = _`
+       (qspec_then `[]` (irule_at Any)) >>
+     simp[]) >>
   Cases_on `immutable_root cx head`
-  >- (`MEM (BaseTarget head) gs` by metis_tac[listTheory.EL_MEM] >>
-      `?nsid. head = TopLevelNameTarget nsid` by
-        (qpat_assum `EVERY ($~ o (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\ _)) gs`
-           (qspec_then `BaseTarget head` mp_tac o REWRITE_RULE [listTheory.EVERY_MEM]) >>
-         qpat_assum `MEM (BaseTarget head) gs` mp_tac >>
-         qpat_assum `immutable_root cx head` mp_tac >>
-         POP_ASSUM_LIST kall_tac >> simp[combinTheory.o_DEF] >> metis_tac[]) >>
-      `?ns id. head = TopLevelNameTarget (ns,id) /\
+  >- (Cases_on `?nsid. head = TopLevelNameTarget nsid`
+      >- (`?ns id. head = TopLevelNameTarget (ns,id) /\
                 IS_SOME (supported_immutable_type tops (ns,id))` by
         (irule tuple_assign_immutable_toplevel_type >>
          rpt (CHANGED_TAC (first_assum (irule_at Any))) >>
@@ -12249,31 +13792,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   irule gasExemptCertTheory.gas_exempt_cert_bind_unit >>
   qpat_assum `gas_marked_exec _ _ _ _ _ (INL _) _ (OK _)` (irule_at Any) >> simp[]) >>
-  (`body_const_cells_agree [(NONE,tops)] cx env src` by
-     (`body_const_cells_agree [(NONE,tops)] cx env ee` by
-        (irule body_const_cells_agree_expr_read >>
-         qpat_assum `bind (eval_expr cx e) (read_result cx) _ = (INL v',ee)`
-           (irule_at Any) >>
-         qpat_assum `expr_body_pre cenv cx env e es`
-           (assume_tac o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >> simp[]) >>
-      `EVERY (writable_atarget env) (TAKE i gs)` by
-        (qpat_assum `LIST_REL (\g ty. well_typed_atarget env g ty) gs dtys` mp_tac >>
-         simp_tac (srw_ss()) [NoAsms,LIST_REL_EL_EQN,EVERY_EL] >>
-         strip_tac >> qx_gen_tac `j` >> strip_tac >>
-         `j < LENGTH gs /\ j < i` by
-           (qpat_assum `j < LENGTH (TAKE i gs)` mp_tac >>
-            POP_ASSUM_LIST kall_tac >>
-            simp[listTheory.LENGTH_TAKE_EQ] >> rw[] >> decide_tac) >>
-         simp[listTheory.EL_TAKE] >>
-         qpat_assum `!j. j < LENGTH gs ==> _` (drule_then
-           (ACCEPT_TAC o MATCH_MP constSubstCorrectTheory.well_typed_atarget_writable))) >>
-      `body_const_cells_agree [(NONE,tops)] cx env (src with gas_obs := [])`
-        suffices_by simp[] >>
-      irule tuple_assign_prefix_preserves_const_cells >>
-      qpat_assum `!tail. assign_tuple_target_list cx (TAKE i gs) (TAKE i vs) _ = _`
-        (qspec_then `[]` (irule_at Any)) >>
-      simp[]) >>
-   `target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+   suspend "nested_immutable") >>
+  (`target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
           cenv cx env head src` by
         (irule body_target_place_sim_full >> simp[target_pre_def] >>
          qexists_tac `tops` >> simp[]) >>
@@ -14910,4 +16430,987 @@ Proof
               (drule_then (ACCEPT_TAC o CONJUNCT2))) >>
         asm "write_continue" (qspecl_then [`q`,`Gq`,`tq`] match_mp_tac) >>
         pure_asm_rewrite_tac[] >> simp[NoAsms]))
+QED
+
+
+Resume tuple_assign_widened_with_immutable_paths[nested_immutable]:
+   qpat_assum `frame c src s G tn` mp_tac >>
+   qpat_assum `Abbrev (frame = _)`
+     (fn def => simp[NoAsms,REWRITE_RULE [markerTheory.Abbrev_def] def]) >> strip_tac >>
+   qpat_assum `cursor_ok c` mp_tac >>
+   qpat_assum `Abbrev (cursor_ok = _)`
+     (fn def => simp[NoAsms,REWRITE_RULE [markerTheory.Abbrev_def] def]) >> strip_tac >>
+   qpat_assum `joint src s G tn` mp_tac >>
+   qpat_assum `Abbrev (joint = _)`
+     (fn def => simp[NoAsms,REWRITE_RULE [markerTheory.Abbrev_def] def]) >> disch_tac >>
+   `IS_SOME (type_place_target env head)` by fs[well_typed_target_def] >>
+   drule_all bodyFullTargetRootsTheory.typed_immutable_target_root >>
+   disch_then (qx_choosel_then [`id`,`root_ty`] (map_every assume_tac o CONJUNCTS)) >>
+   mp_tac (Q.INST [`es` |-> `src`, `bt` |-> `head`, `ty` |-> `EL i dtys`,
+       `tv` |-> `EL i dtvs`, `sa` |-> `c`, `sb` |-> `place_cs`,
+       `shadow_sa` |-> `sh`, `shadow_sb` |-> `shadow_place_cs`,
+       `r` |-> `place_result`] tuple_immutable_head_target) >>
+   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
+   qpat_assum `Abbrev (cfg = _)`
+     (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+   `assign_tuple_target_list cx (BaseTarget head :: DROP (SUC i) gs)
+       (EL i vs :: DROP (SUC i) vs) =
+     bind (eval_target_place cx head) (\pl. bind (write_place cx pl (EL i vs))
+       (\u. assign_tuple_target_list cx (DROP (SUC i) gs) (DROP (SUC i) vs)))` by
+     simp[Once evaluate_def,Once evaluate_def,ignore_bind_def,bind_assoc] >>
+   pop_assum (SUBST1_TAC o SYM) >>
+   irule tuple_immutable_target_then >>
+   qpat_assum `gas_outcome_full _ _ _ _ (eval_target_place cx head) _ _ _`
+     (irule_at Any) >> BETA_TAC >>
+   qexistsl [`lo`,`func`,`gas_explicit_sites ctx shadow_ctx`,`PG`,`DF`] >>
+   (reverse conj_tac
+    >- (conj_tac
+        >- (simp[Abbr `stmtR`,NoAsms] >> rpt gen_tac >>
+            disch_then (map_every assume_tac o CONJUNCTS) >>
+            irule (INST_TYPE [alpha |-> ``:place``]
+              augAssignFullRhsSavedTheory.augassign_expr_exit_to_stmt_exit) >>
+            rpt conj_tac >> first_assum ACCEPT_TAC)
+        >> simp[])) >>
+   qx_genl_tac [`headmarks`,`p_res`,`mid`,`Gp`,`tp`,`sp`] >>
+   disch_then (map_every assume_tac o CONJUNCTS) >>
+   qabbrev_tac `H0 = storage_trace_horizon mid.storage_trace` >>
+   `valid_horizon cx st0 H0 mid.storage_trace` by
+      simp[Abbr `H0`,GSYM vyperStorageFootprintTheory.storage_trace_domain_def] >>
+   qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> ?path. _`
+     (qspec_then `H0` (drule_then (qx_choose_then `path` (map_every assume_tac o CONJUNCTS)))) >>
+   qpat_x_assum `p_res = INL (ImmutablePlace NONE id path)` SUBST_ALL_TAC >>
+   qexists_tac `ImmutablePlace NONE id path` >> BETA_TAC >> simp[] >>
+   `mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
+   `eval_target_place cx head (src with gas_obs := gas_explicit headmarks s.vs_gas_readings) =
+     (INL (ImmutablePlace NONE id path),mid)` by
+     (qpat_assum `!tail. eval_target_place cx head _ = _`
+       (qspec_then `[]` (fn eval =>
+          qpat_assum `mid with gas_obs := [] = mid` (fn obs =>
+            ACCEPT_TAC (REWRITE_RULE [APPEND_NIL,obs] eval))))) >>
+   `!H. valid_horizon cx st0 H mid.storage_trace ==> valid_horizon cx st0 H src.storage_trace` by
+     (rpt strip_tac >>
+      `valid_horizon cx st0 H (src with gas_obs :=
+                               gas_explicit headmarks s.vs_gas_readings).storage_trace` suffices_by simp[] >>
+      irule (INST_TYPE [alpha |-> ``:place``] vyperStorageFootprintTheory.valid_horizon_frame) >>
+      qexists_tac `eval_target_place cx head` >>
+      qpat_assum `eval_target_place cx head _ = (INL _,mid)` (irule_at Any) >>
+      simp[cj 8 vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+   `stmt_state_rel H0 ctx func cenv cx src s` by
+     (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> valid_horizon cx st0 H src.storage_trace`
+        (qspec_then `H0` (drule_then assume_tac)) >>
+      qpat_assum `!H. valid_horizon cx st0 H src.storage_trace ==> _ /\ _`
+        (qspec_then `H0` (drule_then (ACCEPT_TAC o CONJUNCT1)))) >>
+   drule_all tuple_immutable_target_source_write >>
+   disch_then (qspec_then `EL i vs`
+     (qx_choose_then `ff` (map_every assume_tac o CONJUNCTS))) >>
+   `expr_sim_inv cenv cx env ff` by
+     (irule tuplePlaceSourceTheory.tuple_place_write_inv >>
+      qpat_assum `write_place cx (ImmutablePlace NONE id path) (EL i vs) mid = _`
+        (irule_at Any) >> simp[vyperStoragePlaceProvenanceTheory.storage_place_region_def] >>
+      qexists_tac `EL i dtvs` >> simp[]) >>
+   `ff.gas_obs = []` by simp[] >>
+   `body_tuple_targets_full_ok cx (DROP (SUC i) gs) (DROP (SUC i) vs)` by
+     (first_x_assum irule >>
+      qexistsl_tac [`src with gas_obs := gas_explicit headmarks s.vs_gas_readings`, `()`, `ff`] >>
+      simp[Once evaluate_def,bind_def]) >>
+   qpat_assum `snapshot c src s tn` mp_tac >>
+   qpat_assum `Abbrev (snapshot = _)`
+     (fn def => simp[NoAsms,REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+   disch_then (CONJUNCTS_THEN2
+     (qx_choosel_then [`snap_id'`,`snap_base'`,`snap_cap'`] strip_assume_tac)
+     (map_every assume_tac o CONJUNCTS)) >>
+   `val_wf (TupleTV tvs) (ArrayV (TupleV vs))` by
+     (irule valueTypingMemoryPropsTheory.value_has_type_memory_wf >>
+      simp[vyperTypingTheory.value_has_type_def]) >>
+   `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n w) mem` by
+     (`val_footprint (TupleTV tvs) (ArrayV (TupleV vs)) <= type_memory_size_list tvs` by
+        (drule exprSimPropsTheory.val_footprint_le >> simp[valueEncodingTheory.type_memory_size_def]) >>
+      `!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
+            val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n w) mem` by
+        (qpat_assum `!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==> _` mp_tac >>
+         simp[NoAsms,valueEncodingPropsTheory.val_in_memory_tuple]) >>
+      match_mp_tac robustCopyTransportPtrTheory.robust_val_in_memory_decreasing_taint_transport >>
+      qexistsl_tac [`w2n w`,`type_memory_size_list tvs`,`tf.t_mem`,`t.vs_memory`] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      qx_gen_tac `byte_offset` >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      qpat_assum `!j. w2n w <= j /\ _ ==> j IN tf.t_mem` irule >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+   mp_tac (Q.INST [`H` |-> `H0`, `es` |-> `src`, `sa` |-> `c`, `sb` |-> `place_cs`,
+      `ee` |-> `mid`, `ty` |-> `EL i dtys`, `r` |-> `(place_result : operand # data_location option # place_ty option)`, `t` |-> `sp`,
+      `G'` |-> `Gp`, `tn'` |-> `tp`, `p` |-> `w2n (w:bytes32)`]
+      (INST_TYPE [alpha |-> ``:256``] tuple_immutable_target_pending)) >>
+   (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     TRY (simp[ci_mono_def] >> NO_TAC)
+     >- (disj1_tac >> qexistsl [`snap_id'`,`snap_base'`,`snap_cap'`] >>
+         rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+     qx_genl_tac [`name`,`addr`,`cap`] >> disch_then (map_every assume_tac o CONJUNCTS) >>
+     Cases_on `type_memory_size_list tvs = 0`
+     >- simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
+     qpat_assum `!n b cap. local_region cenv src.scopes s n b cap ==> _`
+       (qspecl_then [`name`,`addr`,`cap`] (drule_then strip_assume_tac)) >>
+     qsuff_tac `F` >- simp[] >> decide_tac)) >>
+   disch_then (map_every assume_tac o CONJUNCTS) >>
+   qpat_assum `bodyFullTargetDefs$imm_target_post H0 ctx func cenv cx src c place_cs s _ _ _ _ _ sp`
+     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [bodyFullTargetDefsTheory.imm_target_post_def]) >>
+   qpat_assum `ghost_kept_at lo cenv src c G tn s Gp tp`
+     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [ghost_kept_at_def]) >>
+   `!x. not_fresh_at c x ==> not_fresh_at place_cs x` by
+     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+      qexists_tac `c` >> simp[]) >>
+   `pending i place_cs sp Gp tp` by
+     (qpat_assum `pending i c s G tn` mp_tac >>
+      simp[Abbr `pending`,NoAsms] >>
+      disch_tac >> qx_gen_tac `j` >> disch_tac >>
+      qpat_assum `!j. i <= j /\ j < LENGTH tys ==> ?x. _`
+        (qspec_then `j` (fn saved =>
+          qpat_assum `i <= j /\ j < LENGTH tys`
+            (qx_choose_then `x` (map_every assume_tac o CONJUNCTS) o MATCH_MP saved))) >>
+      `not_fresh_at place_cs x` by (first_assum (drule_then ACCEPT_TAC)) >>
+      qpat_assum `!x. not_fresh_at c x ==> FLOOKUP Gp x = _ /\ _`
+        (qspec_then `x` (drule_then strip_assume_tac)) >>
+      qexists_tac `x` >> conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >-
+        (qpat_assum `op_taint tp (Var x) = op_taint tn (Var x)` SUBST1_TAC >>
+         first_assum ACCEPT_TAC) >>
+      Cases_on `is_word_type (EL j tys)`
+      >- (qpat_x_assum `if is_word_type (EL j tys) then _ else _`
+            (map_every assume_tac o CONJUNCTS o
+              REWRITE_RULE [ASSUME ``is_word_type (EL j tys)``]) >>
+          PURE_REWRITE_TAC [ASSUME ``is_word_type (EL j tys)``,boolTheory.COND_CLAUSES] >>
+          conj_tac >-
+            (qpat_assum `!x w. not_fresh_at c x /\ lookup_var x s = SOME w ==> _`
+              (drule_all_then ACCEPT_TAC)) >>
+          qpat_assum `op_prov G (Var x) = NONE` mp_tac >>
+          qpat_assum `FLOOKUP Gp x = FLOOKUP G x` (fn eq => simp[NoAsms,op_prov_def,eq])) >>
+      qpat_x_assum `if is_word_type (EL j tys) then _ else _`
+        (map_every assume_tac o CONJUNCTS o
+          REWRITE_RULE [ASSUME ``~is_word_type (EL j tys)``]) >>
+      PURE_REWRITE_TAC [ASSUME ``~is_word_type (EL j tys)``,boolTheory.COND_CLAUSES] >>
+      conj_tac >- (qpat_assum `!x w. not_fresh_at c x /\ lookup_var x s = SOME w ==> _`
+        (drule_all_then ACCEPT_TAC)) >>
+      conj_tac >- (qpat_assum `!x n. not_fresh_at c x /\ ptr_covers G tn x s n ==> _`
+        (drule_all_then ACCEPT_TAC)) >>
+      qx_gen_tac `rhs_mem` >> disch_tac >>
+      `j < LENGTH tvs` by decide_tac >>
+      `tuple_in_memory vs tvs (w2n w) rhs_mem` by
+        (qpat_assum `!mem. mem_agree_outside tp.t_mem sp.vs_memory mem ==> _`
+          (drule_then (mp_tac o REWRITE_RULE [valueEncodingPropsTheory.val_in_memory_tuple])) >>
+         simp[NoAsms]) >>
+      qspecl_then [`vs`,`tvs`,`w2n w`,`rhs_mem`,`j`] mp_tac
+        tupleMemoryLayoutTheory.tuple_in_memory_element >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then (ACCEPT_TAC o ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM])) >>
+   `local_ptrs_reserved cenv place_cs` by
+     (irule local_ptrs_reserved_next_var >> qexists_tac `c` >> simp[ci_mono_def]) >>
+   `!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at place_cs x` by
+     (rpt strip_tac >>
+      qpat_assum `!x. not_fresh_at c x ==> not_fresh_at place_cs x` match_mp_tac >>
+      first_assum (drule_then ACCEPT_TAC)) >>
+   `!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at place_cs x` by
+     (rpt strip_tac >>
+      qpat_assum `!x. not_fresh_at c x ==> not_fresh_at place_cs x` match_mp_tac >>
+      first_assum (drule_then ACCEPT_TAC)) >>
+   `allocas_from lo sp /\ lo <= sp.vs_alloca_next` by
+     (qpat_assum `ghost_inv_at (DF H0) lo d cenv cx mid Gp tp sp`
+       (fn th => let val post = REWRITE_RULE [ghost_inv_at_def] th
+                 in ACCEPT_TAC (CONJ (cj 7 post) (cj 8 post)) end)) >>
+   qpat_x_assum `?off itv iv k ptv v.
+       FLOOKUP cenv.ce_module_vars (NONE,id) = SOME (ImmutableLoc off) /\
+       _ /\ _ /\ _ /\ _ /\ eval_operand (FST place_result) sp = SOME (n2w (off+k))`
+     (qx_choosel_then [`off`,`itv`,`iv`,`leaf_off`,`ptv`,`old_leaf`]
+       (map_every assume_tac o CONJUNCTS)) >>
+   drule_all_then (map_every assume_tac o CONJUNCTS)
+     bodyFullTargetImmutableWriteTheory.immutable_target_write_root >>
+   `is_word_type (EL i dtys) <=> is_word_type (EL i tys)` by
+     (metis_tac[typedMemoryCopyTheory.return_source_word_widens_eq,
+                compileEnvTheory.type_widens_to_word]) >>
+   qabbrev_tac `imm_store =
+     if is_word_type (EL i tys) then
+       compile_store_at_loc cenv.ce_imm_alloca (FST place_result) (EL i elems) (SOME LocCode)
+     else compile_assign_value cenv (FST place_result) LocCode (EL i elems)
+       F NONE (EL i dtys) (EL i tys) (type_memory_bytes cenv (EL i dtys))` >>
+   `imm_store place_cs = ((),write_cs) /\ imm_store shadow_place_cs = ((),shadow_write_cs)` by
+     (qpat_assum `_ = ((),write_cs)` mp_tac >>
+      qpat_assum `_ = ((),shadow_write_cs)` mp_tac >>
+      qpat_assum `tys = ltys` (fn eq => rewrite_tac[GSYM eq]) >>
+      qpat_assum `FST (SND place_result) = SOME LocCode` (fn loc =>
+        qpat_assum `SND (SND place_result) = SOME (ValPT (EL i dtys))` (fn ty =>
+          simp[NoAsms,Abbr `imm_store`,LET_THM,loc,ty,value_type_place_def])) >>
+      Cases_on `is_word_type (EL i tys)` >> simp[]) >>
+   `compile_assign_value cenv (FST place_result) LocCode (EL i elems) (is_word_type (EL i tys))
+      NONE (EL i dtys) (EL i tys) (type_memory_bytes cenv (EL i dtys)) place_cs = ((),write_cs)` by
+     (qpat_assum `imm_store place_cs = ((),write_cs)` mp_tac >>
+      Cases_on `is_word_type (EL i tys)`
+      >- (simp_tac bool_ss [Abbr `imm_store`,ASSUME ``is_word_type (EL i tys)``,
+            compile_assign_value_def,compile_store_at_loc_def] >>
+          simp[comp_bind_def,comp_return_def]) >>
+      simp_tac bool_ss [Abbr `imm_store`,ASSUME ``~is_word_type (EL i tys)``]) >>
+   `~block_is_terminated write_cs` by
+     (qpat_assum `compile_assign_value _ _ LocCode _ _ _ _ _ _ place_cs = ((),write_cs)`
+       (ACCEPT_TAC o MATCH_MP immutableAssignOpenTheory.immutable_assign_loccode_open)) >>
+   `gas_shadow_state write_cs shadow_write_cs` by
+     (`gas_shadow_compiles imm_store imm_store` by
+        (Cases_on `is_word_type (EL i tys)` >>
+         simp[Abbr `imm_store`,gasShadowCompileStmtOpsTheory.gas_shadow_compiles_store_at_loc,
+              gasShadowCompileStmtOpsTheory.gas_shadow_compiles_assign_value]) >>
+      qpat_assum `gas_shadow_compiles imm_store imm_store`
+        (qspecl_then [`place_cs`,`shadow_place_cs`] mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
+      simp[]) >>
+   sg `?q Gq tq.
+      (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (sp,Gp,tp) [] (OK q,Gq,tq)) /\
+      (!(H : (bool # bytes32 # type_value) list # num list) D. stmt_state_rel H ctx func cenv cx mid sp /\
+        storage_well_formed_on cx mid (FST H) /\ dead_lo_ok H D lo cenv cx /\
+        ghost_inv_at D lo d cenv cx mid Gp tp sp ==>
+        stmt_state_rel H ctx func cenv cx ff q /\ storage_well_formed_on cx ff (FST H) /\
+        ghost_inv_at D lo d cenv cx ff Gq tq q) /\
+      alloca_frame cenv mid place_cs sp cenv ff q /\
+      ~q.vs_halted /\ q.vs_current_bb = write_cs.cs_current_bb /\
+      q.vs_inst_idx = LENGTH write_cs.cs_current_insts /\ ~block_is_terminated write_cs /\
+      sp.vs_alloca_next <= q.vs_alloca_next /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp q) /\
+      (!aid entry. FLOOKUP sp.vs_allocas aid = SOME entry ==> FLOOKUP q.vs_allocas aid = SOME entry) /\
+      (!x. not_fresh_at place_cs x ==> lookup_var x q = lookup_var x sp /\
+        FLOOKUP Gq x = FLOOKUP Gp x /\ op_taint tq (Var x) = op_taint tp (Var x)) /\
+      (!x cap. not_fresh_at place_cs x /\ ptr_covers Gp tp x sp cap ==> ptr_covers Gq tq x q cap) /\
+      mem_bytes_at (w2n (w:bytes32)) (type_memory_size_list tvs) q.vs_memory =
+        mem_bytes_at (w2n (w:bytes32)) (type_memory_size_list tvs) sp.vs_memory /\
+      (!i. (w2n (w:bytes32)) <= i /\ i < (w2n (w:bytes32))+type_memory_size_list tvs /\ i IN tq.t_mem ==> i IN tp.t_mem) /\
+      (!aid a len i. aid < place_cs.cs_next_id /\ FLOOKUP sp.vs_allocas aid = SOME (a,len) /\
+        a <= i /\ i < a+len /\ i IN tq.t_mem ==> i IN tp.t_mem)` >- suspend "computed_immutable_write" >>
+   `!x. not_fresh_at c x ==> not_fresh_at write_cs x` by
+     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+      qexists_tac `c` >> simp[]) >>
+   `!x. not_fresh_at c x ==>
+     FLOOKUP Gq x = FLOOKUP G x /\ op_taint tq (Var x) = op_taint tn (Var x)` by
+     (qx_gen_tac `old_var` >> disch_tac >>
+      qpat_assum `!x. not_fresh_at c x ==> FLOOKUP Gp x = _ /\ _`
+        (qspec_then `old_var` (drule_then strip_assume_tac)) >>
+      `not_fresh_at place_cs old_var` by (first_assum (drule_then ACCEPT_TAC)) >>
+      qpat_assum `!x. not_fresh_at place_cs x ==> lookup_var x q = _ /\ _`
+        (qspec_then `old_var` (drule_then strip_assume_tac)) >>
+      simp[]) >>
+   `!x v. not_fresh_at c x /\ lookup_var x s = SOME v ==> lookup_var x q = SOME v` by
+     (qx_genl_tac [`old_var`,`old_val`] >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      qpat_assum `!x v. not_fresh_at c x /\ lookup_var x s = SOME v ==> _`
+        (drule_all_then assume_tac) >>
+      `not_fresh_at place_cs old_var` by (first_assum (drule_then ACCEPT_TAC)) >>
+      qpat_assum `!x. not_fresh_at place_cs x ==> lookup_var x q = _ /\ _`
+        (qspec_then `old_var` (drule_then strip_assume_tac)) >> simp[]) >>
+   `!x. not_fresh_at place_cs x ==> not_fresh_at write_cs x` by
+     (qx_gen_tac `old_var` >> disch_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+      qexists_tac `place_cs` >> simp[]) >>
+   `!x v. not_fresh_at place_cs x /\ lookup_var x sp = SOME v ==> lookup_var x q = SOME v` by
+     (qx_genl_tac [`old_var`,`old_val`] >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      qpat_assum `!x. not_fresh_at place_cs x ==> lookup_var x q = _ /\ _`
+         (qspec_then `old_var` (drule_then (assume_tac o CONJUNCT1))) >> simp[]) >>
+   `!x. not_fresh_at place_cs x ==>
+     FLOOKUP Gq x = FLOOKUP Gp x /\ op_taint tq (Var x) = op_taint tp (Var x)` by
+     (qx_gen_tac `old_var` >> disch_tac >>
+      qpat_assum `!x. not_fresh_at place_cs x ==> lookup_var x q = _ /\ _`
+        (qspec_then `old_var` (drule_then (ACCEPT_TAC o CONJUNCT2)))) >>
+   `!mem. mem_agree_outside tq.t_mem q.vs_memory mem ==>
+      val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n w) mem` by
+     (`val_footprint (TupleTV tvs) (ArrayV (TupleV vs)) <= type_memory_size_list tvs` by
+        (drule exprSimPropsTheory.val_footprint_le >> simp[valueEncodingTheory.type_memory_size_def]) >>
+      match_mp_tac robustCopyTransportPtrTheory.robust_val_in_memory_decreasing_taint_transport >>
+      qexistsl [`w2n w`,`type_memory_size_list tvs`,`tp.t_mem`,`sp.vs_memory`] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      qx_gen_tac `rhs_byte` >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      qpat_assum `!j. w2n w <= j /\ j < w2n w + type_memory_size_list tvs /\ j IN tq.t_mem ==> _`
+        (qspec_then `w2n w+rhs_byte` match_mp_tac) >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+   `pending (SUC i) write_cs q Gq tq` by
+     (qpat_assum `Abbrev (pending = _)` (fn definition =>
+        PURE_REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] definition] >> BETA_TAC) >>
+      qspecl_then [`SUC i`,`w2n (w:bytes32)`,`tys`,`tvs`,`vs`,`elems`,
+        `place_cs`,`write_cs`,`sp`,`q`,`Gp`,`Gq`,`tp`,`tq`]
+        match_mp_tac tuple_immutable_pending_operands >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      TRY (first_assum (ACCEPT_TAC o SYM)) >>
+      qx_gen_tac `member_index` >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      qpat_assum `pending i place_cs sp Gp tp` mp_tac >> simp[NoAsms,Abbr `pending`] >>
+      disch_then (qspec_then `member_index` match_mp_tac) >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+   `!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP q.vs_allocas aid = SOME b` by
+     (qx_genl_tac [`alloc_id`,`alloc_entry`] >> disch_tac >>
+      qpat_assum `!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP sp.vs_allocas aid = SOME b`
+        (drule_then assume_tac) >>
+      qpat_assum `!aid b. FLOOKUP sp.vs_allocas aid = SOME b ==> FLOOKUP q.vs_allocas aid = SOME b`
+        (drule_then ACCEPT_TAC)) >>
+   `gas_origin_ptr_path (DF H0,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (s,G,tn) headmarks (OK q,Gq,tq)` by
+     (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> gas_origin_ptr_path _ _ _ _`
+        (qspec_then `H0` (drule_then (qspecl_then [`sp`,`Gp`,`tp`,`[]`,`OK q`,`Gq`,`tq`] mp_tac o
+          MATCH_MP fragGasOriginPtrTheory.gas_origin_ptr_path_append))) >>
+      simp[]) >>
+   `!fn inst u. frag_reachable ctx func q fn inst u ==> dalloca_no_wrap inst u` by
+     tuple_path_no_wrap `gas_origin_ptr_path _ (s,G,tn) headmarks (OK q,Gq,tq)`
+       `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u` >>
+   `alloca_history func q` by
+     (irule bodyFullPathHistoryTheory.body_full_path_alloca_history >>
+      qpat_assum `gas_origin_ptr_path _ (s,G,tn) headmarks (OK q,Gq,tq)` (irule_at Any) >>
+      qpat_assum `stmt_state_rel H0 ctx func cenv cx src s`
+        (mp_then Any assume_tac bodyMemBopRestWordPathTheory.rest_word_state_alloca_inv) >>
+      simp[]) >>
+   `return_buf_frame d cenv write_cs q` by
+     (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+      qpat_assum `return_buf_frame d cenv c s` (irule_at Any) >>
+      simp[]) >>
+   `!bw cap. d = SOME (bw,cap) ==> allocas_from (w2n bw + cap) q` by
+     (qpat_assum `gas_origin_ptr_path _ (s,G,tn) headmarks (OK q,Gq,tq)` (fn path =>
+      qpat_assum `return_buf_frame d cenv c s` (fn ret =>
+      qpat_assum `return_buf_sep d cenv src s` (fn sep =>
+         ACCEPT_TAC (MATCH_MP return_buf_allocas_path (LIST_CONJ [path,ret,sep])))))) >>
+   `MAP FDOM ff.scopes = MAP FDOM src.scopes` by
+     (qpat_assum `ff.scopes = mid.scopes` SUBST1_TAC >>
+      qpat_assum `locals_kept cenv src mid s sp` mp_tac >> simp[NoAsms,locals_kept_def]) >>
+   `return_buf_sep d cenv ff q` by
+     (irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qexistsl [`H0`,`ctx`,`cx`,`src`,`func`,`s`,`c`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+   `alloca_frame cenv src c s cenv ff q` by
+     (irule stmtSimDefsTheory.alloca_frame_trans >>
+      qexistsl [`cenv`,`mid`,`sp`,`place_cs`] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+   `alloca_frame cenv es sa s0 cenv ff q` by
+     (irule stmtSimDefsTheory.alloca_frame_trans >>
+      qexistsl [`cenv`,`src`,`s`,`c`] >> simp[]) >>
+   `!n b len. local_region cenv ff.scopes q n b len <=>
+        local_region cenv src.scopes s n b len` by
+     (qpat_assum `stmt_state_rel H0 ctx func cenv cx src s` (fn state =>
+       qpat_assum `local_ptrs_reserved cenv c` (fn reserved =>
+         qpat_assum `!x v. not_fresh_at c x /\ lookup_var x s = SOME v ==> lookup_var x q = SOME v`
+           (fn vars =>
+             qpat_assum `MAP FDOM ff.scopes = MAP FDOM src.scopes` (fn scopes =>
+               ACCEPT_TAC (MATCH_MP tuplePlaceStepTheory.tuple_place_endpoint_local_regions_some
+                 (LIST_CONJ [state,reserved,vars,SYM scopes]))))))) >>
+   `mem_bytes_at (w2n w) (type_memory_size_list tvs) q.vs_memory =
+      mem_bytes_at (w2n w) (type_memory_size_list tvs) t.vs_memory` by
+     (`mem_bytes_at snap_base' snap_cap' sp.vs_memory =
+       mem_bytes_at snap_base' snap_cap' s.vs_memory` by
+        (qpat_assum `!aid a n. FLOOKUP s.vs_allocas aid = SOME (a,n) /\ _ ==> _`
+            (qspecl_then [`snap_id'`,`snap_base'`,`snap_cap'`] mp_tac) >>
+          impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+          disch_then ACCEPT_TAC) >>
+      `snap_base' + (w2n w - snap_base') = w2n w` by decide_tac >>
+      qspecl_then [`snap_base'`,`snap_base'`,`snap_cap'`,`sp.vs_memory`,`s.vs_memory`,
+        `w2n w - snap_base'`,`type_memory_size_list tvs`] mp_tac
+           valueEncodingPropsTheory.mem_bytes_at_translated_window >>
+      impl_tac >- (conj_tac >- first_assum ACCEPT_TAC >> decide_tac) >>
+      simp[]) >>
+   `!j. w2n w <= j /\ j < w2n w + type_memory_size_list tvs /\ j IN tq.t_mem ==> j IN tf.t_mem` by
+     (qx_gen_tac `byte_offset` >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      qpat_assum `!j. w2n w <= j /\ _ ==> j IN tf.t_mem` (qspec_then `byte_offset` match_mp_tac) >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (decide_tac >> NO_TAC) >>
+      qpat_assum `!aid a n j. FLOOKUP s.vs_allocas aid = SOME (a,n) /\ _ ==> j IN tn.t_mem`
+        (qspecl_then [`snap_id'`,`snap_base'`,`snap_cap'`,`byte_offset`] match_mp_tac) >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (decide_tac >> NO_TAC) >>
+      qpat_assum `!j. w2n w <= j /\ j < w2n w + type_memory_size_list tvs /\ j IN tq.t_mem ==> _`
+        (qspec_then `byte_offset` (drule_all_then ACCEPT_TAC))) >>
+   `snapshot write_cs ff q tq` by
+     (qpat_assum `Abbrev (snapshot = _)`
+        (fn def => simp[NoAsms,REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+      (conj_tac >-
+        (qexistsl [`snap_id'`,`snap_base'`,`snap_cap'`] >>
+         rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (decide_tac >> NO_TAC) >>
+         TRY (qpat_assum `!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP q.vs_allocas aid = SOME b`
+               (drule_then ACCEPT_TAC) >> NO_TAC) >>
+         qx_genl_tac [`name`,`addr`,`cap`] >> disch_tac >>
+         qpat_assum `!n b len. local_region cenv ff.scopes q n b len <=> _`
+           (qspecl_then [`name`,`addr`,`cap`] (fn eq =>
+              qpat_assum `local_region cenv ff.scopes q name addr cap`
+                (assume_tac o REWRITE_RULE [eq]))) >>
+         qpat_assum `!n b cap. local_region cenv src.scopes s n b cap ==> _`
+           (qspecl_then [`name`,`addr`,`cap`] (drule_then ACCEPT_TAC)))) >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      qx_gen_tac `byte_offset` >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      qpat_assum `!j. w2n w <= j /\ j < w2n w + type_memory_size_list tvs /\ j IN tq.t_mem ==> _`
+        (qspec_then `byte_offset` match_mp_tac) >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+  `!aid off sz j. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\ aid < c.cs_next_id /\
+      (!n b z. local_region cenv src.scopes s n b z ==> off+sz <= b \/ b+z <= off) /\
+      off <= j /\ j < off+sz /\ j IN tq.t_mem ==> j IN tn.t_mem` by
+    (match_mp_tac (GEN_ALL alloca_taint_kept_trans) >>
+     qpat_assum `alloca_frame cenv src c s cenv mid sp` (irule_at Any) >>
+     qexistsl [`tp`,`place_cs`] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qx_genl_tac [`alloc_id`,`alloc_base`,`alloc_size`,`byte`] >>
+     disch_then (map_every assume_tac o CONJUNCTS) >>
+     qpat_assum `!aid a n j. aid < place_cs.cs_next_id /\ _ ==> j IN tp.t_mem`
+       (qspecl_then [`alloc_id`,`alloc_base`,`alloc_size`,`byte`] match_mp_tac) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!aid off sz j. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+      (!n b z. local_region cenv es.scopes s0 n b z ==> off+sz <= b \/ b+z <= off) /\
+      off <= j /\ j < off+sz /\ j IN tq.t_mem ==> j IN tn0.t_mem` by
+    (match_mp_tac (GEN_ALL alloca_taint_kept_trans) >>
+     qpat_assum `alloca_frame cenv es sa s0 cenv src s` (irule_at Any) >>
+     qexistsl_tac [`tn`,`c`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at c x` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+  `!x. not_fresh_at sa x ==> FLOOKUP Gq x = FLOOKUP G0 x /\
+    op_taint tq (Var x) = op_taint tn0 (Var x)` by
+    (rpt strip_tac >>
+     `not_fresh_at c x` by simp[] >>
+     qpat_assum `!x. not_fresh_at sa x ==> FLOOKUP G x = _ /\ _`
+       (drule_then strip_assume_tac) >>
+     qpat_assum `!x. not_fresh_at c x ==> FLOOKUP Gq x = _ /\ _`
+       (drule_then strip_assume_tac) >> simp[]) >>
+  `!x a. not_fresh_at sa x /\ lookup_var x s0 = SOME a ==> lookup_var x q = SOME a` by
+    (rpt strip_tac >>
+     `lookup_var x s = SOME a` by (first_assum irule >> simp[]) >>
+     qpat_assum `!x a. not_fresh_at c x /\ lookup_var x s = SOME a ==> _` irule >> simp[]) >>
+  `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP q.vs_allocas aid = SOME b` by
+    (rpt strip_tac >>
+     qpat_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b`
+       (drule_then assume_tac) >>
+     qpat_assum `!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP q.vs_allocas aid = SOME b`
+       (drule_then ACCEPT_TAC)) >>
+  `s0.vs_alloca_next <= q.vs_alloca_next` by decide_tac >>
+  `frame write_cs ff q Gq tq` by
+    (qpat_assum `Abbrev (frame = _)` (fn th =>
+       simp[NoAsms,REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
+     pure_asm_rewrite_tac[] >> simp[NoAsms]) >>
+  `!x z. cenv.ce_return_buf = SOME (PtrVar (Var x) z) ==> not_fresh_at write_cs x` by
+    (rpt strip_tac >>
+     qpat_assum `!x. not_fresh_at c x ==> not_fresh_at write_cs x` irule >>
+     qpat_assum `!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at c x`
+       (drule_then ACCEPT_TAC)) >>
+  `!x z. cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at write_cs x` by
+    (rpt strip_tac >>
+     qpat_assum `!x. not_fresh_at c x ==> not_fresh_at write_cs x` irule >>
+     qpat_assum `!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at c x`
+       (drule_then ACCEPT_TAC)) >>
+  `local_ptrs_reserved cenv write_cs` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `c` >> simp[]) >>
+  `sa.cs_next_id <= write_cs.cs_next_id /\ sa.cs_next_var <= write_cs.cs_next_var` by
+    decide_tac >>
+  `cursor_ok write_cs` by
+    (qpat_assum `Abbrev (cursor_ok = _)` (fn th =>
+       simp[NoAsms,REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
+     pure_asm_rewrite_tac[] >> simp[NoAsms]) >>
+   `!tail. assign_tuple_targets cx (BaseTarget head) (EL i vs)
+      (src with gas_obs := gas_explicit headmarks s.vs_gas_readings ++ tail) =
+      (INL (),ff with gas_obs := tail)` by
+     (simp_tac bool_ss [Once evaluate_def] >> simp[bind_def]) >>
+   `!tail. assign_tuple_target_list cx (TAKE (SUC i) gs) (TAKE (SUC i) vs)
+      (ee with gas_obs := obs ++ gas_explicit headmarks s.vs_gas_readings ++ tail) =
+      (INL (),ff with gas_obs := tail)` by
+     (`i < LENGTH vs` by decide_tac >>
+      `TAKE (SUC i) gs = TAKE i gs ++ [BaseTarget head] /\
+       TAKE (SUC i) vs = TAKE i vs ++ [EL i vs]` by
+        (qpat_assum `i < LENGTH gs` (mp_tac o MATCH_MP rich_listTheory.TAKE_SUC_BY_TAKE) >>
+         qpat_assum `i < LENGTH vs` (mp_tac o MATCH_MP rich_listTheory.TAKE_SUC_BY_TAKE) >>
+         qpat_assum `EL i gs = BaseTarget head`
+           (fn th => simp_tac bool_ss [th,SNOC_APPEND])) >>
+      qx_gen_tac `tail` >>
+      qpat_assum `TAKE (SUC i) gs = _` SUBST1_TAC >>
+      qpat_assum `TAKE (SUC i) vs = _` SUBST1_TAC >>
+      qpat_assum `!ps qs st st1 g v st2. LENGTH ps = LENGTH qs /\ _ ==> _` irule >>
+      conj_tac >- (simp_tac bool_ss [LENGTH_TAKE_EQ] >> decide_tac) >>
+      qexists_tac `src with gas_obs := gas_explicit headmarks s.vs_gas_readings ++ tail` >>
+      conj_tac
+      >- (qpat_assum `!tail. assign_tuple_target_list cx (TAKE i gs) (TAKE i vs) _ = _`
+            (qspec_then `gas_explicit headmarks s.vs_gas_readings ++ tail` mp_tac) >>
+          simp_tac bool_ss [APPEND_ASSOC]) >>
+      qpat_assum `!tail. assign_tuple_targets cx (BaseTarget head) (EL i vs) _ = _`
+        (qspec_then `tail` ACCEPT_TAC)) >>
+   `storage_trace_domain cx st0 ff.storage_trace` by simp[] >>
+   `joint ff q Gq tq` by
+     (simp[NoAsms,Abbr `joint`] >> qx_gen_tac `write_horizon` >> disch_tac >>
+      `valid_horizon cx st0 write_horizon mid.storage_trace` by
+        (qpat_assum `ff.storage_trace = mid.storage_trace` (fn eq =>
+           qpat_assum `valid_horizon cx st0 write_horizon ff.storage_trace`
+             (ACCEPT_TAC o REWRITE_RULE [eq]))) >>
+      qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> ?path. _`
+        (qspec_then `write_horizon`
+          (drule_then (qx_choose_then `path_at_horizon` (map_every assume_tac o CONJUNCTS)))) >>
+      qpat_assum `bodyFullTargetDefs$imm_target_post write_horizon ctx func cenv cx src c place_cs
+              s mid _ _ _ _ sp`
+        (map_every assume_tac o CONJUNCTS o REWRITE_RULE [bodyFullTargetDefsTheory.imm_target_post_def]) >>
+      qpat_assum `!H. dead_lo_ok H (DF H) lo cenv cx`
+        (qspec_then `write_horizon` assume_tac) >>
+      qpat_assum `!H D. stmt_state_rel H ctx func cenv cx mid sp /\ _ ==>
+                     stmt_state_rel H ctx func cenv cx ff q /\ _`
+        (qspecl_then [`write_horizon`,`DF write_horizon`] mp_tac) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then ACCEPT_TAC) >>
+   `gas_outcome_full cfg (cx_tops cx) cx st0
+      (assign_tuple_target_list cx (DROP (SUC i) gs) (DROP (SUC i) vs))
+      (ff,q,Gq,tq) stmtQ stmtR` by
+     (qpat_assum `!j c sh src s G tn obs. j + k = LENGTH gs /\ _ ==> _`
+        (qspecl_then [`SUC i`,`write_cs`,`shadow_write_cs`,`ff`,`q`,`Gq`,`tq`,
+          `obs ++ gas_explicit headmarks s.vs_gas_readings`] (mp_tac o BETA_RULE)) >>
+      impl_tac >- (`SUC i + k = LENGTH gs` by decide_tac >>
+        pure_asm_rewrite_tac[] >> simp[NoAsms]) >>
+      disch_then ACCEPT_TAC) >>
+   `!H. valid_horizon cx st0 H ff.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (sp,Gp,tp) [] (OK q,Gq,tq)` by
+     (qx_gen_tac `write_horizon` >> disch_tac >>
+      qpat_assum `!D. gas_origin_ptr_path _ (sp,Gp,tp) [] (OK q,Gq,tq)`
+        (qspec_then `DF write_horizon` ACCEPT_TAC)) >>
+   qpat_assum `Abbrev (cfg = _)` (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+   match_mp_tac (Q.INST [`q` |-> `q`,`fin` |-> `ff`,`Gf` |-> `Gq`,`tf` |-> `tq`]
+     tuple_immutable_write_then) >>
+   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+   qpat_assum `gas_outcome_full cfg _ _ _ (assign_tuple_target_list cx (DROP (SUC i) gs) _)
+        (ff,q,Gq,tq) _ _` mp_tac >>
+   simp[NoAsms,Abbr `cfg`]
+
+QED
+
+Resume tuple_assign_widened_with_immutable_paths[computed_immutable_write]:
+   `ptv = EL i dtvs` by
+     (qpat_assum `evaluate_type (get_tenv cx) (EL i dtys) = SOME ptv` mp_tac >>
+      qpat_assum `evaluate_type (get_tenv cx) (EL i dtys) = SOME (EL i dtvs)`
+        (fn eq => simp[NoAsms,eq])) >>
+   `value_has_type ptv (EL i vs)` by simp[] >>
+   qpat_assum `mem_path_offset itv path = SOME (leaf_off,ptv)`
+     (map_every assume_tac o CONJUNCTS o MATCH_MP exprSimPropsTheory.mem_path_offset_sound) >>
+   `off + type_memory_size itv <= lo` by
+     (qpat_assum `!H. dead_lo_ok H (DF H) lo cenv cx` (qspec_then `H0` assume_tac) >>
+      drule_all_then ACCEPT_TAC tuple_immutable_slot_span) >>
+   `off+leaf_off+type_memory_size ptv <= lo` by decide_tac >>
+   `sp.vs_alloca_next < dimword (:256)` by
+     (qpat_assum `stmt_state_rel H0 ctx func cenv cx mid sp`
+        (ACCEPT_TAC o MATCH_MP alloca_room_next_lt o MATCH_MP stateRelProjTheory.stmt_state_rel_alloca_room)) >>
+   `copy_old_operand place_cs (FST place_result)` by
+     simp[exprSimCopyTheory.copy_old_operand_def] >>
+   qpat_assum `target_ptr_ok cenv _ place_result Gp tp sp`
+     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [bodyFullTargetDefsTheory.target_ptr_ok_def]) >>
+   `FLOOKUP sp.vs_allocas snap_id' = SOME (snap_base',snap_cap')` by
+     (qpat_assum `!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> _`
+       (drule_then ACCEPT_TAC)) >>
+   `snap_id' < place_cs.cs_next_id` by decide_tac >>
+   `alloca_inv sp` by
+     (qpat_assum `stmt_state_rel H0 ctx func cenv cx mid sp`
+       (mp_then Any ACCEPT_TAC bodyMemBopRestWordPathTheory.rest_word_state_alloca_inv)) >>
+   `w2n w + type_memory_size_list tvs <= sp.vs_alloca_next /\ lo <= w2n w` by
+     (qpat_assum `FLOOKUP sp.vs_allocas snap_id' = SOME (snap_base',snap_cap')` (fn registered =>
+        qpat_assum `alloca_inv sp` (fn valid =>
+          assume_tac (MATCH_MP allocaSiteResourceTheory.alloca_site_registered_below
+            (CONJ valid registered))) >>
+        qpat_assum `allocas_from lo sp`
+          (mp_tac o REWRITE_RULE [ptrDisciplineTheory.allocas_from_def]) >>
+        disch_then (mp_tac o (fn floor => MATCH_MP floor registered))) >> decide_tac) >>
+   `w2n w + type_memory_size_list tvs < dimword (:256)` by decide_tac >>
+   `!n b len. local_region cenv mid.scopes sp n b len <=>
+     local_region cenv src.scopes s n b len` by
+     (`MAP FDOM src.scopes = MAP FDOM mid.scopes` by
+        (qpat_assum `locals_kept cenv src mid s sp` mp_tac >> simp[NoAsms,locals_kept_def]) >>
+      drule_all_then ACCEPT_TAC tuplePlaceStepTheory.tuple_place_endpoint_local_regions_some) >>
+  `assignable_type (get_tenv cx) (EL i tys)` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+      [`type_widens_to (get_tenv cx) (EL i tys) (EL i dtys)`,
+       `assignable_type (get_tenv cx) (EL i dtys)`,
+       `evaluate_type (get_tenv cx) (EL i tys) = SOME (EL i tvs)`] >>
+     POP_ASSUM_LIST kall_tac >>
+     simp[type_widens_to_def] >>
+     metis_tac[cj 1 placeRelayoutSemanticTheory.arg_type_fits_source_assignable,
+       vyperTypeSystemTheory.well_formed_type_def,optionTheory.IS_SOME_EXISTS]) >>
+  `if is_word_type (EL i tys) then
+      copy_old_operand place_cs (EL i elems) /\
+      eval_operand (EL i elems) sp = SOME (typed_val_to_w256 (EL i tvs) (EL i vs)) /\
+      op_taint tp (EL i elems) = {}
+    else ?x u. EL i elems = Var x /\ not_fresh_at place_cs x /\ lookup_var x sp = SOME u /\
+      ptr_covers Gp tp x sp (type_memory_size (EL i tvs)) /\
+      (!mem. mem_agree_outside tp.t_mem sp.vs_memory mem ==>
+        val_in_memory (EL i tvs) (EL i vs) (w2n u) mem) /\
+      w2n u + type_memory_size (EL i tvs) <= sp.vs_alloca_next /\
+      w2n w <= w2n u /\ w2n u + type_memory_size (EL i tvs) <= w2n w + type_memory_size_list tvs /\
+      (EL i tys <> EL i dtys /\ ~is_bytestring_type (EL i dtys) ==>
+       ?b z. b <= w2n w /\ w2n w + type_memory_size_list tvs <= b+z /\
+         ((?aid. aid < place_cs.cs_next_id /\ FLOOKUP sp.vs_allocas aid = SOME (b,z)) \/
+          (?name. local_region cenv mid.scopes sp name b z)))` by
+    (qpat_assum `pending i place_cs sp Gp tp` mp_tac >> simp[Abbr `pending`,NoAsms] >>
+     disch_then (qspec_then `i` mp_tac) >> (impl_tac >- simp[]) >>
+     disch_then (qx_choose_then `x` (map_every assume_tac o CONJUNCTS)) >>
+     qpat_x_assum `if is_word_type (EL i tys) then _ else _` mp_tac >>
+     Cases_on `is_word_type (EL i tys)` >>
+     asm_simp_tac bool_ss [] >> strip_tac
+     >- simp[copy_old_operand_def,venomStateTheory.eval_operand_def] >>
+     qabbrev_tac `a = w2n w + SUM (MAP type_memory_size (TAKE i tvs))` >>
+     `a + type_memory_size (EL i tvs) <= w2n w + type_memory_size_list tvs` by
+       (drule tupleMemoryLayoutTheory.tuple_element_interval >>
+        simp[Abbr `a`,valueEncodingProofsTheory.type_memory_size_list_sum] >> decide_tac) >>
+     `w2n w <= a /\ a < dimword (:256) /\
+       a + type_memory_size (EL i tvs) <= sp.vs_alloca_next` by
+       (simp[Abbr `a`] >> decide_tac) >>
+     `lookup_var x sp = SOME (n2w a) /\
+       (!mem. mem_agree_outside tp.t_mem sp.vs_memory mem ==>
+              val_in_memory (EL i tvs) (EL i vs) a mem)` by
+       simp[Abbr `a`] >>
+     qexistsl_tac [`x`,`n2w a`] >>
+     simp[wordsTheory.w2n_n2w,arithmeticTheory.LESS_MOD] >>
+     rpt strip_tac >>
+     qexistsl_tac [`snap_base'`,`snap_cap'`] >>
+     simp[] >> disj1_tac >> qexists_tac `snap_id'` >> simp[]) >>
+   `0 < type_memory_size ptv` by
+     (drule_all_then (ACCEPT_TAC o CONJUNCT2)
+       immutableAssignRepresentationTheory.immutable_assign_widened_memory_positive) >>
+   `0 < lo` by decide_tac >>
+   `!base. cenv.ce_imm_alloca = SOME base ==> eval_operand base sp = SOME 0w /\
+     copy_old_operand place_cs base /\ op_taint tp base = {} /\ op_prov Gp base = NONE` by
+     (qx_gen_tac `base_op` >> disch_tac >>
+      drule_all_then (map_every assume_tac o CONJUNCTS) tuple_immutable_word_base >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+   Cases_on `EL i tys = EL i dtys \/ is_bytestring_type (EL i dtys)`
+   >- (
+   `if is_word_type (EL i tys) then
+       copy_old_operand place_cs (EL i elems) /\
+       eval_operand (EL i elems) sp = SOME (typed_val_to_w256 (EL i tvs) (EL i vs)) /\
+       op_taint tp (EL i elems) = {}
+     else ?x a. EL i elems = Var x /\ not_fresh_at place_cs x /\
+       lookup_var x sp = SOME (n2w a) /\ lo <= a /\
+       a + type_memory_size (EL i tvs) <= sp.vs_alloca_next /\
+       ptr_covers Gp tp x sp (type_memory_size (EL i tvs)) /\
+       (!mem. mem_agree_outside tp.t_mem sp.vs_memory mem ==> val_in_memory (EL i tvs) (EL i vs) a mem)` by
+     (Cases_on `is_word_type (EL i tys)`
+      >- (qpat_assum `is_word_type (EL i tys)` (fn word =>
+            qpat_assum `if is_word_type (EL i tys) then copy_old_operand place_cs (EL i elems) /\ _ else _`
+              (mp_tac o REWRITE_RULE [word]) >> simp_tac bool_ss [word])) >>
+      qpat_assum `~is_word_type (EL i tys)` (fn word =>
+        qpat_assum `if is_word_type (EL i tys) then copy_old_operand place_cs (EL i elems) /\ _ else _`
+          (qx_choosel_then [`rhs_var`,`rhs_addr`] (map_every assume_tac o CONJUNCTS) o
+           REWRITE_RULE [word]) >> simp_tac bool_ss [word]) >>
+      qexistsl [`rhs_var`,`w2n (rhs_addr:bytes32)`] >>
+      simp[NoAsms,wordsTheory.n2w_w2n] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+   mp_tac (Q.INST [`ce` |-> `cenv`,`dst` |-> `FST (place_result : operand # data_location option # place_ty option)`,
+     `sty` |-> `EL i tys`,`dty` |-> `EL i dtys`,`stv` |-> `EL i tvs`,`dtv` |-> `ptv`,
+     `v` |-> `EL i vs`,`op` |-> `EL i elems`,`off` |-> `off+leaf_off`,
+     `sa` |-> `place_cs`,`sb` |-> `write_cs`,`st` |-> `mid`,`s` |-> `sp`,
+     `G` |-> `Gp`,`tn` |-> `tp`,`explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
+     tuple_immutable_path_flat_store) >>
+   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+   disch_then (qx_choosel_then [`q`,`Gq`,`tq`] assume_tac) >>
+   qexistsl [`q`,`Gq`,`tq`] >>
+   match_mp_tac (Q.INST [`H0` |-> `H0 : (bool # bytes32 # type_value) list # num list`,
+     `v` |-> `EL i vs`,`id` |-> `id`,`ity` |-> `root_ty`,`ptv` |-> `ptv`,`itv` |-> `itv`,
+     `off` |-> `off`,`k` |-> `leaf_off`,`path` |-> `path`,`tops` |-> `tops`,`env` |-> `env`]
+     tuple_immutable_path_store_success) >>
+   rpt conj_tac >> first_assum ACCEPT_TAC) >>
+   suspend "normalized"
+
+QED
+
+Resume tuple_assign_widened_with_immutable_paths[normalized]:
+   qpat_assum `~(EL i tys = EL i dtys \/ is_bytestring_type (EL i dtys))`
+     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [boolTheory.DE_MORGAN_THM]) >>
+   `~is_word_type (EL i tys)` by
+     (strip_tac >> drule_all_then assume_tac typedMemoryCopyTheory.return_source_word_widens_eq >>
+      qpat_assum `EL i tys <> EL i dtys` (fn ne =>
+        qpat_assum `EL i tys = EL i dtys` (ACCEPT_TAC o MP (NOT_ELIM ne)))) >>
+   qpat_assum `if is_word_type (EL i tys) then _ else _`
+     (fn saved => qpat_assum `~is_word_type (EL i tys)` (fn nonword =>
+        qx_choosel_then [`copy_src`,`copy_sw`] (map_every assume_tac o CONJUNCTS)
+          (REWRITE_RULE [nonword] saved))) >>
+   `type_memory_bytes cenv (EL i dtys) = type_memory_size ptv` by
+     drule_all_then ACCEPT_TAC exprSimHypsTheory.expr_sim_inv_memory_size >>
+   `w2n (copy_sw:bytes32)+type_memory_size (EL i tvs) < dimword (:256) /\
+     type_memory_size ptv < dimword (:256)` by decide_tac >>
+   `compile_assign_value cenv (FST place_result) LocCode (Var copy_src) F NONE
+     (EL i dtys) (EL i tys) (type_memory_size ptv) place_cs = ((),write_cs)` by
+     (qpat_assum `compile_assign_value cenv (FST place_result) LocCode (EL i elems)
+         (is_word_type (EL i tys)) NONE (EL i dtys) (EL i tys) _ place_cs = _`
+        (fn built => qpat_assum `~is_word_type (EL i tys)` (fn nonword =>
+          qpat_assum `EL i elems = Var copy_src` (fn source =>
+            qpat_assum `type_memory_bytes cenv (EL i dtys) = type_memory_size ptv`
+              (fn size => ACCEPT_TAC (REWRITE_RULE [nonword,source,size] built)))))) >>
+   `EL i dtys <> EL i tys` by simp[Once EQ_SYM_EQ] >>
+   drule_all tuple_immutable_normalized_cursors >>
+   disch_then (CHOOSE_THEN (CHOOSE_THEN (CHOOSE_THEN
+     (map_every assume_tac o CONJUNCTS)))) >>
+   rename1 `compile_alloc_buffer (type_memory_size ptv) place_cs = (norm_buffer,norm_alloc_cs)` >>
+   rename1 `compile_store_memory_typed cenv norm_buffer.buf_operand (EL i dtys)
+     (Var copy_src) (EL i tys) norm_alloc_cs = ((),norm_cs)` >>
+   `ci_mono place_cs norm_alloc_cs` by
+     (qpat_assum `compile_alloc_buffer (type_memory_size ptv) place_cs = _` (fn th =>
+        mp_tac (Q.SPECL [`type_memory_size ptv`,`place_cs`]
+          ci_mono_compile_alloc_buffer) >> simp[NoAsms,th])) >>
+   `ci_mono place_cs norm_cs` by
+     (irule ci_mono_trans >> qexists_tac `norm_alloc_cs` >> simp[]) >>
+   `acyclic_struct_metadata cenv.ce_struct_fields /\
+     sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+     (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+        ALL_DISTINCT (MAP FST fields) /\
+        EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+          sz = type_memory_size tv) fields)` by
+     (qpat_assum `body_inv tops ctx cenv cx`
+        (mp_then Any mp_tac immutableDeployAssignRangesTheory.immutable_assign_copy_metadata) >>
+      disch_then drule >> simp[]) >>
+   (Q.SUBGOAL_THEN `?b len. b <= w2n (w:bytes32) /\ w2n w+type_memory_size_list tvs <= b+len /\
+     ((?aid. aid < place_cs.cs_next_id /\ FLOOKUP sp.vs_allocas aid = SOME (b,len)) \/
+      (?name. local_region cenv mid.scopes sp name b len))` ASSUME_TAC
+     >- (qpat_assum `EL i tys <> EL i dtys /\ ~is_bytestring_type (EL i dtys) ==> _`
+          (drule_all_then ACCEPT_TAC))) >>
+   drule_all (INST_TYPE [alpha |-> ``:256``,beta |-> ``:256``]
+     tuple_immutable_normalized_prefix) >>
+   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`]
+     (qx_choosel_then [`norm_state`,`norm_src`,`norm_addr`,`Gn`,`tt`]
+       (map_every assume_tac o CONJUNCTS))) >>
+   `stmt_state_rel H0 ctx func cenv cx mid norm_state` by
+     (qpat_assum `!H. stmt_state_rel H ctx func cenv cx mid sp ==> _`
+       (qspec_then `H0` (drule_then ACCEPT_TAC))) >>
+   `norm_state.vs_labels = sp.vs_labels` by
+     (qpat_assum `!D. gas_origin_ptr_path _ (sp,Gp,tp) [] (OK norm_state,Gn,tt)`
+       (qspec_then `DF H0`
+         (ACCEPT_TAC o MATCH_MP gasOriginPtrLabelsTheory.gas_origin_ptr_path_preserves_labels))) >>
+   `norm_state.vs_alloca_next < dimword (:256)` by
+     (qpat_assum `stmt_state_rel H0 ctx func cenv cx mid norm_state`
+       (ACCEPT_TAC o MATCH_MP alloca_room_next_lt o MATCH_MP stateRelProjTheory.stmt_state_rel_alloca_room)) >>
+   `lo <= norm_state.vs_alloca_next` by decide_tac >>
+   `!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at norm_cs x` by
+     (qx_genl_tac [`x`,`cap`] >> disch_tac >>
+      `not_fresh_at place_cs x` by first_assum (drule_then ACCEPT_TAC) >>
+      qpat_assum `!x. not_fresh_at place_cs x ==> not_fresh_at norm_cs x /\ _`
+        (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+   `!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at norm_cs x` by
+     (qx_genl_tac [`x`,`cap`] >> disch_tac >>
+      `not_fresh_at place_cs x` by first_assum (drule_then ACCEPT_TAC) >>
+      qpat_assum `!x. not_fresh_at place_cs x ==> not_fresh_at norm_cs x /\ _`
+        (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+   `copy_old_operand norm_cs (FST place_result) /\
+     eval_operand (FST place_result) norm_state = SOME (n2w (off+leaf_off)) /\
+     op_taint tt (FST place_result) = {} /\ op_prov Gn (FST place_result) = NONE` by
+     (map_every (fn pat => qpat_assum pat mp_tac)
+        [`norm_state.vs_labels = sp.vs_labels`,
+         `!x. not_fresh_at place_cs x ==> not_fresh_at norm_cs x /\ _`,
+         `copy_old_operand place_cs (FST place_result)`,
+         `eval_operand (FST place_result) sp = SOME (n2w (off+leaf_off))`,
+         `op_taint tp (FST place_result) = {}`,`op_prov Gp (FST place_result) = NONE`] >>
+      POP_ASSUM_LIST kall_tac >>
+      Cases_on `FST place_result` >>
+      simp[eval_operand_def,copy_old_operand_def,op_taint_def,op_prov_def] >> metis_tac[]) >>
+   `!base. cenv.ce_imm_alloca = SOME base ==> eval_operand base norm_state = SOME 0w /\
+     copy_old_operand norm_cs base /\ op_taint tt base = {} /\ op_prov Gn base = NONE` by
+     (qx_gen_tac `base_op` >> disch_tac >>
+      qpat_assum `!base. cenv.ce_imm_alloca = SOME base ==> eval_operand base sp = _ /\ _`
+        (drule_then (map_every assume_tac o CONJUNCTS)) >>
+      map_every (fn pat => qpat_assum pat mp_tac)
+        [`norm_state.vs_labels = sp.vs_labels`,
+         `!x. not_fresh_at place_cs x ==> not_fresh_at norm_cs x /\ _`,
+         `eval_operand base_op sp = SOME 0w`,`copy_old_operand place_cs base_op`,
+         `op_taint tp base_op = {}`,`op_prov Gp base_op = NONE`] >>
+      POP_ASSUM_LIST kall_tac >> Cases_on `base_op` >>
+      simp[eval_operand_def,copy_old_operand_def,op_taint_def,op_prov_def] >> metis_tac[]) >>
+   qpat_assum `norm_buffer.buf_operand = Var norm_src` (fn eq =>
+     qpat_x_assum `compile_assign_value _ _ LocCode norm_buffer.buf_operand _ _ _ _ _ norm_cs = _`
+       (assume_tac o REWRITE_RULE [eq])) >>
+   mp_tac (Q.INST [`ce` |-> `cenv`,`dst` |->
+     `FST (place_result : operand # data_location option # place_ty option)`,
+     `src` |-> `norm_src`,`loc` |-> `NONE : data_location option`,`ty` |-> `EL i dtys`,
+     `a` |-> `norm_addr`,`off` |-> `off+leaf_off`,`tv` |-> `ptv`,`v` |-> `EL i vs`,
+     `sa` |-> `norm_cs`,`sb` |-> `write_cs`,`s` |-> `norm_state`,`G` |-> `Gn`,`tn` |-> `tt`,
+     `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
+     bodyFullImmutablePathStoreTheory.immutable_path_store_fixed) >>
+   (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+       simp[venomStateTheory.eval_operand_def])) >>
+   disch_then (qx_choosel_then [`q`,`Gq`,`tq`] assume_tac) >>
+   drule_all (Q.INST [`H0` |-> `H0 : (bool # bytes32 # type_value) list # num list`,
+      `ce` |-> `cenv`,`mid` |-> `mid`,`fin` |-> `ff`,
+      `s` |-> `norm_state`,`G` |-> `Gn`,`tn` |-> `tt`,
+      `sa` |-> `norm_cs`,`sb` |-> `write_cs`,`v` |-> `EL i vs`,`id` |-> `id`,
+      `ity` |-> `root_ty`,`ptv` |-> `ptv`,`itv` |-> `itv`,`off` |-> `off`,`k` |-> `leaf_off`,
+      `path` |-> `path`,`tops` |-> `tops`,`env` |-> `env`,
+      `p` |-> `w2n (w:bytes32)`,`n` |-> `type_memory_size_list tvs`]
+     tuple_immutable_path_store_success) >>
+   disch_then (qspecl_then [`tvs`,`d`] (map_every assume_tac o CONJUNCTS)) >>
+   qexistsl [`q`,`Gq`,`tq`] >>
+   (conj_tac >- (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+     qpat_assum `!D. gas_origin_ptr_path _ (sp,Gp,tp) [] (OK norm_state,Gn,tt)`
+       (qspec_then `D` (irule_at Any)) >>
+     qpat_assum `!D. gas_origin_ptr_path _ (norm_state,Gn,tt) [] (OK q,Gq,tq)`
+       (qspec_then `D` ACCEPT_TAC))) >>
+   (conj_tac >- (qx_genl_tac [`H`,`D`] >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      qpat_assum `!H D. stmt_state_rel H ctx func cenv cx mid norm_state /\ _ ==> _`
+        (qspecl_then [`H`,`D`] match_mp_tac) >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      first_assum (drule_then ACCEPT_TAC))) >>
+   (conj_tac >- (irule stmtSimDefsTheory.alloca_frame_trans >>
+      qexistsl [`cenv`,`mid`,`norm_state`,`norm_cs`] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      qpat_assum `ci_mono place_cs norm_cs`
+        (mp_tac o REWRITE_RULE [ci_mono_def]) >> simp[NoAsms])) >>
+   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+   TRY (decide_tac >> NO_TAC) >>
+   TRY (qx_genl_tac [`aid`,`entry`] >> disch_tac >>
+     qpat_assum `!aid entry. FLOOKUP sp.vs_allocas aid = SOME entry ==> _`
+       (drule_then assume_tac) >>
+     qpat_assum `!aid entry. FLOOKUP norm_state.vs_allocas aid = SOME entry ==> _`
+       (drule_then ACCEPT_TAC) >> NO_TAC) >>
+   TRY (qx_gen_tac `old_var` >> disch_tac >>
+     qpat_assum `!x. not_fresh_at place_cs x ==> not_fresh_at norm_cs x /\ _`
+       (qspec_then `old_var` (drule_then (map_every assume_tac o CONJUNCTS))) >>
+     qpat_assum `!x. not_fresh_at norm_cs x ==> lookup_var x q = _ /\ _`
+       (qspec_then `old_var` (drule_then (map_every assume_tac o CONJUNCTS))) >>
+     asm_simp_tac bool_ss [] >> NO_TAC) >>
+   TRY (qx_genl_tac [`old_var`,`old_cap`] >> disch_then (map_every assume_tac o CONJUNCTS) >>
+     `not_fresh_at norm_cs old_var` by
+       (qpat_assum `!x. not_fresh_at place_cs x ==> not_fresh_at norm_cs x /\ _`
+        (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+     qpat_assum `!x cap. not_fresh_at place_cs x /\ ptr_covers Gp tp x sp cap ==> _`
+       (drule_all_then assume_tac) >>
+     qpat_assum `!x cap. not_fresh_at norm_cs x /\ ptr_covers Gn tt x norm_state cap ==> _`
+       (drule_all_then ACCEPT_TAC) >> NO_TAC) >>
+   TRY (qpat_assum `mem_bytes_at (w2n w) _ q.vs_memory = _` SUBST1_TAC >>
+        first_assum ACCEPT_TAC >> NO_TAC) >>
+   TRY (qx_gen_tac `byte` >> disch_then (map_every assume_tac o CONJUNCTS) >>
+     qpat_assum `!j. w2n w <= j /\ j < w2n w + type_memory_size_list tvs ==> _`
+       (qspec_then `byte` mp_tac) >> impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then (SUBST1_TAC o SYM) >>
+     qpat_assum `!j. w2n w <= j /\ j < w2n w + type_memory_size_list tvs /\ j IN tq.t_mem ==> _`
+       (drule_all_then ACCEPT_TAC) >> NO_TAC) >>
+   qx_genl_tac [`aid`,`a`,`cap`,`byte`] >> disch_then (map_every assume_tac o CONJUNCTS) >>
+   `aid < norm_cs.cs_next_id` by
+     (qpat_assum `ci_mono place_cs norm_cs` (mp_tac o REWRITE_RULE [ci_mono_def]) >> decide_tac) >>
+   qpat_assum `!aid entry. FLOOKUP sp.vs_allocas aid = SOME entry ==> _`
+     (drule_then assume_tac) >>
+   qpat_assum `!aid a cap i. aid < norm_cs.cs_next_id /\ _ ==> i IN tt.t_mem`
+     (qspecl_then [`aid`,`a`,`cap`,`byte`] (drule_all_then assume_tac)) >>
+   qpat_assum `!aid a cap i. aid < place_cs.cs_next_id /\ _ ==> i IN tp.t_mem`
+     (qspecl_then [`aid`,`a`,`cap`,`byte`] (drule_all_then ACCEPT_TAC))
+
+QED
+
+Finalise tuple_assign_widened_with_immutable_paths[local]
+
+Theorem body_assign_tuple_widened_full:
+  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
+    body_expr_full_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
+    expr_sim_inv cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
+    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    ~EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
+                     ~(?nsid. t = TopLevelNameTarget nsid)) gs /\
+    lowered_value_type cenv e <> expr_type e ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qspecl_then [`cx`,`gs`,`e`,`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,`ctx`,
+    `shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`]
+    match_mp_tac tuple_assign_widened_with_immutable_paths >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem body_assign_tuple_nested_immutable_conditional[local]:
+  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
+    body_expr_full_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
+    expr_sim_inv cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
+    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    (!bt. MEM (BaseTarget bt) gs /\ immutable_root cx bt /\
+          ~(?nsid. bt = TopLevelNameTarget nsid) ==>
+          !(H : (bool # bytes32 # type_value) list # num list) src mid u t sa sb id path ty r obs name b cap p tvs.
+            eval_target_place cx bt (src with gas_obs := obs) =
+              (INL (ImmutablePlace NONE id path),mid) /\
+            bodyFullTargetDefs$imm_target_post H ctx func cenv cx src sa sb u mid id path ty r t /\
+            local_region cenv src.scopes u name b cap /\
+            b <= p /\ p + type_memory_size_list tvs <= b+cap /\
+            local_path_at cenv cx name (p-b) (TupleTV tvs) ==>
+            mem_bytes_at p (type_memory_size_list tvs) t.vs_memory =
+              mem_bytes_at p (type_memory_size_list tvs) u.vs_memory) /\
+    EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
+                    ~(?nsid. t = TopLevelNameTarget nsid)) gs ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `lowered_value_type cenv e = expr_type e`
+  >- (qspecl_then [`cx`,`gs`,`e`,`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,`ctx`,
+        `shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`]
+        match_mp_tac tuple_assign_exact_with_borrowed_frame >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      rpt strip_tac >>
+      qpat_x_assum `gs = MAP _ ids` SUBST_ALL_TAC >>
+      qpat_assum `EXISTS _ (MAP _ ids)` mp_tac >>
+      simp[listTheory.EXISTS_MAP,listTheory.EVERY_MAP,combinTheory.o_DEF,
+           immutable_root_def,target_root_def]) >>
+  qspecl_then [`cx`,`gs`,`e`,`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,`ctx`,
+    `shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`]
+    match_mp_tac tuple_assign_widened_with_immutable_paths >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem body_assign_tuple_nested_immutable_full:
+  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
+    body_expr_full_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
+    expr_sim_inv cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
+    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
+                    ~(?nsid. t = TopLevelNameTarget nsid)) gs ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qspecl_then [`cx`,`gs`,`e`,`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,`ctx`,
+    `shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`]
+    match_mp_tac body_assign_tuple_nested_immutable_conditional >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt strip_tac >>
+  `locals_kept cenv src mid u t` by fs[bodyFullTargetDefsTheory.imm_target_post_def] >>
+  drule_all (SRULE [valueEncodingTheory.type_memory_size_def]
+    tuplePlaceBorrowTheory.tuple_borrow_locals_kept) >> simp[]
 QED

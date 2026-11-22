@@ -2,6 +2,7 @@
 Theory tuplePlaceGeometry
 Ancestors
   exprSimProps loweringPosts compileEnv vyperTyping vyperValue valueEncoding
+  vyperPlaceWriteSoundness
   list rich_list arithmetic integer pair alist
 Libs
   pairLib
@@ -156,6 +157,22 @@ Proof
   rpt strip_tac >> Cases_on `pre` >>
   gvs[mem_path_offset_def, optionTheory.OPTION_MAP_EQ_SOME, EXISTS_PROD] >>
   metis_tac[]
+QED
+
+Theorem tuple_place_mutable_path_barrier:
+  !path tv k out.
+    mutable_place_path tv path /\
+    mem_path_offset tv path = SOME (k,out) ==>
+    tuple_place_no_tuple_step tv path
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  gvs[mem_path_offset_def, AllCaseEqs(), EXISTS_PROD] >>
+  drule tuple_place_no_tuple_step_cons >> disch_then (rewrite_tac o single) >>
+  Cases_on `h` >> Cases_on `tv` >>
+  gvs[mutable_place_path_def, mem_step_offset_def, AllCaseEqs()] >>
+  imp_res_tac mem_field_offset_sound >> gvs[] >>
+  Cases_on `v` >> gvs[mutable_place_path_def, mem_step_offset_def] >>
+  Cases_on `b` >> gvs[mem_step_offset_def, AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem tuple_place_tuple_barrier_apart:
