@@ -44,7 +44,7 @@ Theorem grouped_registered_body_endpoint:
   gas_shadow_function fn shadow_fn /\
   MEM fn unit.cu_context.ctx_functions /\ MEM shadow_fn shadow_unit.cu_context.ctx_functions /\
   gas_shadow_state sa shadow_sa /\
-  compile_guarded_body ce nr global_nonreentrant_slot T (mut = View)
+  compile_guarded_body (gas_shadow_env T ce) nr global_nonreentrant_slot T (mut = View)
     (MAP gas_shadow_stmt body) (if body_ret = NoneT then NONE else SOME body_ret)
     shadow_sa = ((),shadow_final) /\ fn_has_code shadow_sa shadow_final shadow_fn /\
   s = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|> /\

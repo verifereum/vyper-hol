@@ -6,6 +6,7 @@ Ancestors
   exprSimSource vyperTypeCallStackSoundness vyperTypeEvalProofs
   vyperTypeInvariants vyperTypeContract words list rich_list pair finite_map
   alist vyperContext vyperInterpreter gasContext constSubst exprSimHypsDefs
+  gasShadowCompileBase compileEnv
 
 (* Recover the environment used by allocation checking from the grouped package. *)
 Triviality selected_default_allocs:
@@ -158,8 +159,8 @@ Theorem grouped_selected_omitted_readiness:
   EVERY (\(n,dst,ty,e). runtime_constant_expr [(NONE,tops)] e /\ expr_type e = ty /\
     (!es'. expr_sim_inv c0 cx env es' ==> expr_body_pre c0 cx env e es') /\
     lower_value compile_expr c0 ty e = lower_value compile_expr ce ty e /\
-    lower_value compile_expr c0 ty (gas_shadow_expr e) =
-      lower_value compile_expr ce ty (gas_shadow_expr e) /\
+    lower_value compile_expr (gas_shadow_env T c0) ty (gas_shadow_expr e) =
+      lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e) /\
     type_memory_bytes ce ty + 64 < dimword (:256)) (DROP k vars)
 Proof
   strip_tac >>
@@ -206,14 +207,19 @@ Proof
   `!es'. expr_sim_inv c0 cx env es' ==> expr_body_pre c0 cx env e es'` by
     (rpt strip_tac >> qpat_x_assum `env = _` SUBST_ALL_TAC >>
      irule selected_default_expr_pre >> metis_tac[]) >>
-  `lower_value compile_expr c0 ty e = lower_value compile_expr ce ty e /\
-   lower_value compile_expr c0 ty (gas_shadow_expr e) =
-     lower_value compile_expr ce ty (gas_shadow_expr e)` by
-    (qpat_x_assum `c0 = _` SUBST_ALL_TAC >>
-     match_mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`]
+  `!c. lower_value compile_expr (c with ce_vars := FEMPTY) ty e =
+         lower_value compile_expr c ty e /\
+       lower_value compile_expr (c with ce_vars := FEMPTY) ty (gas_shadow_expr e) =
+         lower_value compile_expr c ty (gas_shadow_expr e)` by
+    (gen_tac >> match_mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`]
        (SPEC_ALL runtime_default_lower_value_vars_frame)) >>
      qpat_assum `well_typed_expr env e`
        (mp_tac o MATCH_MP (cj 1 well_typed_expr_builtin_args_length)) >> simp[]) >>
+  `gas_shadow_env T c0 = (gas_shadow_env T ce with ce_vars := FEMPTY)` by
+    rw[gas_shadow_env_def, compile_env_component_equality] >>
+  qpat_assum `!c. lower_value compile_expr _ _ _ = _ /\ _`
+    (fn th => assume_tac (cj 1 (Q.SPEC `ce` th)) >>
+              assume_tac (cj 2 (Q.SPEC `gas_shadow_env T ce` th))) >>
   qpat_x_assum `c0 = _` SUBST_ALL_TAC >>
   qpat_x_assum `ce = _` SUBST_ALL_TAC >>
   qpat_x_assum `cx = _` SUBST_ALL_TAC >>
