@@ -6706,7 +6706,7 @@ Theorem tuple_immutable_head_target[local]:
   well_typed_target env bt ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
   call_evaluation_safe cx (int_calls_target bt) /\
   compile_get_target_ptr compile_expr cenv bt sa = (r,sb) /\
-  compile_get_target_ptr compile_expr cenv (gas_shadow_target bt)
+  compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (gas_shadow_target bt)
     shadow_sa = (r,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -6892,13 +6892,13 @@ QED
    compilations agree on the destination, including its type and location. *)
 Theorem tuple_immutable_target_code[local]:
   compile_tuple_store_all cenv [sty] [BaseTarget bt] [op] cur = ((),sm) /\
-  compile_tuple_store_all cenv [sty] [BaseTarget (gas_shadow_target bt)] [op] shadow_cur =
-    ((),shadow_sm) /\
+  compile_tuple_store_all (gas_shadow_env T cenv) [sty] [BaseTarget (gas_shadow_target bt)] [op]
+    shadow_cur = ((),shadow_sm) /\
   gas_shadow_state cur shadow_cur /\
   fn_has_code cur sm func /\ fn_has_code shadow_cur shadow_sm shadow_func ==>
   ?target_r target_cs shadow_target_cs.
     compile_get_target_ptr compile_expr cenv bt cur = (target_r,target_cs) /\
-    compile_get_target_ptr compile_expr cenv (gas_shadow_target bt) shadow_cur =
+    compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (gas_shadow_target bt) shadow_cur =
       (target_r,shadow_target_cs) /\
     gas_shadow_state target_cs shadow_target_cs /\
     ci_mono cur target_cs /\ ci_mono target_cs sm /\
@@ -6919,11 +6919,13 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `compile_get_target_ptr compile_expr cenv bt cur` >>
   rename1 `_ = (target_r,target_cs)` >>
-  mp_tac (Q.INST [`cenv` |-> `cenv`,`bt` |-> `bt`]
-    gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_get_target_ptr) >>
-  simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
+  `gas_shadow_compiles (compile_get_target_ptr compile_expr cenv bt)
+    (compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (gas_shadow_target bt))` by
+    irule gas_shadow_stmt_get_target_ptr_env >>
+  pop_assum (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
   disch_then (qspecl_then [`cur`,`shadow_cur`] mp_tac) >> simp[] >>
-  Cases_on `compile_get_target_ptr compile_expr cenv (gas_shadow_target bt) shadow_cur` >>
+  Cases_on `compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+    (gas_shadow_target bt) shadow_cur` >>
   simp[] >> strip_tac >> gvs[] >>
   rename1 `gas_shadow_state target_cs shadow_target_cs` >>
   rename1 `compile_get_target_ptr _ _ bt cur = (target_r,target_cs)` >>
@@ -6953,7 +6955,8 @@ Proof
     (conj_tac
      >- (qspec_then `cur` mp_tac (Q.SPECL [`bt`,`cenv`] ci_mono_compile_get_target_ptr) >> simp[]) >>
      qspec_then `shadow_cur` mp_tac
-       (Q.SPECL [`gas_shadow_target bt`,`cenv`] ci_mono_compile_get_target_ptr) >> simp[]) >>
+       (Q.SPECL [`gas_shadow_target bt`,`gas_shadow_env T cenv`]
+          ci_mono_compile_get_target_ptr) >> simp[]) >>
   `!c. ci_mono c (SND (write c))` by
     (simp[Abbr `write`] >> gen_tac >> rpt IF_CASES_TAC >>
      simp[cj 1 ci_mono_stmt_helpers,cj 2 ci_mono_stmt_helpers,ci_mono_emit_void]) >>
