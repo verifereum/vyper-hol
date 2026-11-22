@@ -55,7 +55,10 @@ val expected_status =
    ("test_raw_deployer_nonce_address_mismatch",false),
    ("test_internal_error_on_expected_revert",false),
    ("test_short_calldata",false), ("test_trace_abi_ignored",true),
-   ("test_blueprint_call",false)];
+   ("test_blueprint_call",false),
+   (* a static call writing state raises "write in static context",
+      which the runner counts as an expected failure *)
+   ("test_static_call_rejects_state_write",true)];
 val expected_names = List.map #1 expected_status;
 (* These failures must fail for their own reason. *)
 val expected_errors =
