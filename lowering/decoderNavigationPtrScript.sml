@@ -31,6 +31,7 @@ Theorem straight_line_step_origin:
   i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
   ~is_terminator i.inst_opcode /\
   inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  (ctx_has_dalloca ctx ==> dalloca_no_wrap i s) /\
   ptr_inst_ok D lo 0 ctx fn G tn i s /\
   step_inst_base i s = OK t ==>
   gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
@@ -51,6 +52,7 @@ Theorem navigation_instruction_origin:
   i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
   ~is_terminator i.inst_opcode /\
   inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  (ctx_has_dalloca ctx ==> dalloca_no_wrap i s) /\
   ptr_inst_ok D lower 0 ctx func G tn i s /\
   step_inst_base i s = OK t ==>
   gas_origin_ptr_path (D,lower,explicit,ctx,func,PG) (s,G,tn) []
@@ -408,6 +410,7 @@ Theorem straight_line_checked_step_origin:
   get_instruction bb s.vs_inst_idx = SOME i /\
   i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\ ~is_terminator i.inst_opcode /\
   inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  (ctx_has_dalloca ctx ==> dalloca_no_wrap i s) /\
   ptr_safe_step D lo 0 ctx fn PG G tn i s /\ step_inst_base i s = OK u ==>
   gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
     (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
