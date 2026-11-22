@@ -74,7 +74,7 @@ Theorem stmt_frag_nil_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty es.
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
-      (stmts_env cenv lctx ty []) (stmts_env cenv lctx ty [])
+      (stmts_env cenv lctx ty []) (stmts_env (gas_shadow_env T cenv) lctx ty [])
       (eval_stmts cx []) es
 Proof
   rw[stmt_frag_full_def, stmts_env_def, comp_return_def] >>

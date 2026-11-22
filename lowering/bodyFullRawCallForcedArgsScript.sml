@@ -17,10 +17,10 @@ Theorem raw_call_forced_args_full:
   body_exprs_full_ok cx (a::d::kws) /\
   lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
   lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
-  lower_value compile_expr cenv (BaseT AddressT) (gas_shadow_expr a) shadow_sa =
-    (addr,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type d) (gas_shadow_expr d) shadow_s1 =
-    (data,shadow_s2) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT)
+    (gas_shadow_expr a) shadow_sa = (addr,shadow_s1) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type d)
+    (gas_shadow_expr d) shadow_s1 = (data,shadow_s2) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state s1 shadow_s1 /\
   gas_shadow_state s2 shadow_s2 /\ gas_shadow_context ctx shadow_ctx /\
   gas_shadow_function func shadow_func /\ ctx_inst_ids_distinct ctx /\

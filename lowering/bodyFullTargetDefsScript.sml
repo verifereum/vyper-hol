@@ -73,7 +73,8 @@ Definition imm_target_place_sim_full_def:
     !st0 ty sa sb shadow_sa shadow_sb r s0 G0 tn0.
       type_place_target env bt = SOME (Type ty) /\
       compile_get_target_ptr compile_expr cenv bt sa = (r,sb) /\
-      compile_get_target_ptr compile_expr cenv (gas_shadow_target bt)
+      compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+        (gas_shadow_target bt)
         shadow_sa = (r,shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -127,7 +128,8 @@ Definition target_sim_full_def:
     !st0 vt sa sb shadow_sa shadow_sb r s0 G0 tn0.
       type_place_target env bt = SOME vt /\
       compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
-      compile_get_target_ptr compile_expr cenv (gas_shadow_target bt)
+      compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+        (gas_shadow_target bt)
         shadow_sa = (r, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -179,7 +181,8 @@ Definition target_place_sim_full_def:
     !st0 ty sa sb shadow_sa shadow_sb r s0 G0 tn0.
       type_place_target env bt = SOME (Type ty) /\
       compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
-      compile_get_target_ptr compile_expr cenv (gas_shadow_target bt)
+      compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+        (gas_shadow_target bt)
         shadow_sa = (r, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -243,7 +246,8 @@ Definition assign_target_place_sim_full_def:
     !st0 ty sa sb shadow_sa shadow_sb r s0 G0 tn0.
       type_place_target env bt = SOME (Type ty) /\
       compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
-      compile_get_target_ptr compile_expr cenv (gas_shadow_target bt)
+      compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+        (gas_shadow_target bt)
         shadow_sa = (r, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\

@@ -146,7 +146,7 @@ Resume concat_sim_full[vv]:
 QED
 
 Resume concat_sim_full[shadow]:
-  qpat_assum `compile_expr cenv ty (gas_shadow_expr (Builtin a (Concat n) args)) shadow_sa = _`
+  qpat_assum `compile_expr _ ty (gas_shadow_expr (Builtin a (Concat n) args)) shadow_sa = _`
     (mp_tac o SIMP_RULE (srw_ss())
       [gasShadowTheory.gas_shadow_expr_def,gasShadowTheory.gas_shadow_builtin_def]) >>
   disch_then (mp_tac o MATCH_MP exprSimConcatResultTheory.concat_compile_shape) >>
@@ -186,13 +186,15 @@ Resume concat_sim_full[shadow]:
     (assume_tac o SIMP_RULE bool_ss [LET_THM]) >>
   qmatch_assum_abbrev_tac
     `compile_concat compile_expr cenv args dataop infos ob.buf_operand s4 = ((),s5)` >>
+  `gas_shadow_compiles (compile_concat compile_expr cenv args dataop infos ob.buf_operand)
+     (compile_concat compile_expr (gas_shadow_env T cenv)
+       (MAP gas_shadow_expr args) dataop infos ob.buf_operand)` by
+    (irule (REWRITE_RULE [COND_CLAUSES]
+       (Q.INST [`sh` |-> `T`] gas_shadow_compiles_concat_env)) >>
+     irule (cj 1 gas_shadow_compile_expr_env)) >>
   `gas_shadow_state s5 shadow_s5` by
-    (mp_tac (Q.INST [`sh` |-> `T`,`cenv` |-> `cenv`,
-       `data_ptr` |-> `dataop`,`off_ptr` |-> `ob.buf_operand`]
-       (MATCH_MP gasShadowCompileHelpersTheory.gas_shadow_compiles_concat
-         (cj 1 gasShadowCompileTheory.gas_shadow_compile_expr))) >>
-     disch_then (qspecl_then [`args`,`infos`] mp_tac) >>
-     simp_tac bool_ss [] >> rewrite_tac[gas_shadow_compiles_def] >>
+    (qpat_x_assum `gas_shadow_compiles (compile_concat _ _ _ _ _ _) _`
+       (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
      disch_then (qspecl_then [`s4`,`shadow_s4`] mp_tac) >> simp[]) >>
   `ci_mono shadow_s4 shadow_s5` by
     (qpat_assum `compile_concat _ _ _ _ _ _ shadow_s4 = _` mp_tac >>

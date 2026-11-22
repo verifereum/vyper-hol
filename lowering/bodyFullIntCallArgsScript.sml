@@ -31,7 +31,7 @@ Ancestors bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragG
   transientLockProps transientLockPtr[qualified,ignore_grammar] fragGasCopyLoop[qualified,ignore_grammar]
   instSeqPtrLo[qualified,ignore_grammar] fragExecMem fragGasSeqPtr
   unitTransformDefs[qualified,ignore_grammar] memSafeRun[qualified,ignore_grammar]
-  fragGasOriginPtrInvoke bodyFullShadowBodyInvLowering[qualified,ignore_grammar]
+  fragGasOriginPtrInvoke bodyFullShadowInternalRun[qualified,ignore_grammar]
   intCallMaterializeFull bodyFullAllocGeneric[qualified,ignore_grammar]
   internalReturnMemoryInputs[qualified,ignore_grammar]
   abiBufferAllocationCode[qualified,ignore_grammar]
@@ -2576,7 +2576,7 @@ Theorem intcall_args_stage_full_p2_with_path[local]:
        vv_type vv = lowered_value_type cenv e) /\
     compile_stage_intcall_args compile_expr cenv es flags dtys si =
       (newops,sf) /\
-    compile_stage_intcall_args compile_expr cenv (MAP gas_shadow_expr es)
+    compile_stage_intcall_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr es)
       flags dtys shadow_si = (newops,shadow_sf) /\
     gas_shadow_state si shadow_si /\ gas_shadow_state sf shadow_sf /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -2782,14 +2782,15 @@ Proof
       rename1 `compile_stage_intcall_args compile_expr cenv es flags1 dtys1 cu =
         (rest,cf)` >>
       simp[] >> strip_tac >>
-      Cases_on `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_si` >>
-      rename1 `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_si =
+      Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_si` >>
+      rename1 `compile_expr _ (expr_type e) (gas_shadow_expr e) shadow_si =
         (shadow_vv,shadow_ci)` >>
+      `gas_shadow_compiles (compile_expr cenv (expr_type e) e)
+         (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
+        irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr_env >>
       `vv = shadow_vv /\ gas_shadow_state ci shadow_ci` by
-        (mp_tac (Q.INST [`ty` |-> `expr_type e`]
-           gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr) >>
-         simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-         disch_then (qspecl_then [`si`,`shadow_si`] mp_tac) >> simp[]) >>
+        (drule_all bodyFullSharedTheory.gas_shadow_step >>
+         disch_then strip_assume_tac >> simp[]) >>
       Cases_on `unwrap_value cenv vv shadow_ci` >>
       rename1 `unwrap_value cenv vv shadow_ci = (shadow_op,shadow_cu)` >>
       `op = shadow_op /\ gas_shadow_state cu shadow_cu` by
@@ -2802,12 +2803,12 @@ Proof
       qpat_x_assum `compile_stage_intcall_args _ _ _ _ _ shadow_si = _` mp_tac >>
       simp[Once compile_stage_intcall_args_def, comp_bind_def,
            comp_return_def] >>
-      Cases_on `compile_stage_intcall_args compile_expr cenv
+      Cases_on `compile_stage_intcall_args compile_expr (gas_shadow_env T cenv)
         (MAP gas_shadow_expr es) flags1 dtys1 shadow_cu` >>
       simp[] >> strip_tac >>
       `lower_value compile_expr cenv (expr_type e) e si = (op,cu)` by
         simp[lower_value_def, comp_bind_def] >>
-      `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
+      `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e)
          shadow_si = (op,shadow_cu)` by
         simp[lower_value_def, comp_bind_def] >>
       `cs_extends si cu` by
@@ -2823,7 +2824,7 @@ Proof
         (qpat_assum `lower_value _ _ _ _ shadow_si = _`
            (mp_then Any mp_tac (CONJUNCT2 exprLoweringPropsTheory.compile_expr_grows)) >> simp[]) >>
       `cs_extends shadow_cu shadow_sf` by
-        (`ci_mono shadow_cu (SND (compile_stage_intcall_args compile_expr cenv
+        (`ci_mono shadow_cu (SND (compile_stage_intcall_args compile_expr (gas_shadow_env T cenv)
             (MAP gas_shadow_expr es) flags1 dtys1 shadow_cu))` by
            (irule exprLoweringPropsTheory.ci_mono_compile_stage_intcall_args >>
             simp[exprLoweringPropsTheory.compile_expr_ci_mono]) >>
@@ -3264,14 +3265,15 @@ Proof
   Cases_on `compile_stage_intcall_args compile_expr cenv es flags1 dtys1 cs` >>
   rename1 `compile_stage_intcall_args compile_expr cenv es flags1 dtys1 cs = (rest,cf)` >>
   simp[comp_ignore_bind_def, comp_bind_def, comp_return_def] >> strip_tac >>
-  Cases_on `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_si` >>
-  rename1 `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_si =
+  Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_si` >>
+  rename1 `compile_expr _ (expr_type e) (gas_shadow_expr e) shadow_si =
     (shadow_vv,shadow_ci)` >>
+  `gas_shadow_compiles (compile_expr cenv (expr_type e) e)
+     (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
+    irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr_env >>
   `vv = shadow_vv /\ gas_shadow_state ci shadow_ci` by
-    (mp_tac (Q.INST [`ty` |-> `expr_type e`]
-       gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`si`,`shadow_si`] mp_tac) >> simp[]) >>
+    (drule_all bodyFullSharedTheory.gas_shadow_step >>
+     disch_then strip_assume_tac >> simp[]) >>
   qpat_x_assum `vv = shadow_vv` (SUBST_ALL_TAC o SYM) >>
   Cases_on `compile_alloc_buffer (MAX 32 (type_memory_bytes cenv dty)) shadow_ci` >>
   rename1 `compile_alloc_buffer (MAX 32 (type_memory_bytes cenv dty)) shadow_ci =
@@ -3309,9 +3311,9 @@ Proof
   qpat_assum `Abbrev (store_step = _)`
     (fn th => rewrite_tac[GSYM (REWRITE_RULE[markerTheory.Abbrev_def] th)]) >>
   simp[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
-  Cases_on `compile_stage_intcall_args compile_expr cenv
+  Cases_on `compile_stage_intcall_args compile_expr (gas_shadow_env T cenv)
     (MAP gas_shadow_expr es) flags1 dtys1 shadow_cs` >>
-  rename1 `compile_stage_intcall_args compile_expr cenv
+  rename1 `compile_stage_intcall_args compile_expr _
     (MAP gas_shadow_expr es) flags1 dtys1 shadow_cs = (shadow_rest,shadow_cf)` >>
   simp[] >> strip_tac >>
   `!a. ci_mono a (SND (store_step a))` by
@@ -3355,14 +3357,14 @@ Proof
         qpat_assum `store_step shadow_cu = _`
           (fn th => pure_rewrite_tac[th, pairTheory.SND]) >>
         simp[NoAsms]) >>
-     mp_tac (Q.SPECL [`compile_expr`,`cenv`,`MAP gas_shadow_expr es`,`flags1`,`dtys1`,`shadow_cs`]
+     mp_tac (Q.SPECL [`compile_expr`,`gas_shadow_env T cenv`,`MAP gas_shadow_expr es`,`flags1`,`dtys1`,`shadow_cs`]
           exprLoweringPropsTheory.ci_mono_compile_stage_intcall_args) >>
      simp[exprLoweringPropsTheory.compile_expr_ci_mono]) >>
   `ci_mono si ci /\ ci_mono shadow_si shadow_ci` by
     (conj_tac
      >- (qspecl_then [`cenv`,`expr_type e`,`e`,`si`] mp_tac
            (CONJUNCT1 exprLoweringPropsTheory.compile_expr_ci_mono) >> simp[]) >>
-     qspecl_then [`cenv`,`expr_type e`,`gas_shadow_expr e`,`shadow_si`] mp_tac
+     qspecl_then [`gas_shadow_env T cenv`,`expr_type e`,`gas_shadow_expr e`,`shadow_si`] mp_tac
        (CONJUNCT1 exprLoweringPropsTheory.compile_expr_ci_mono) >> simp[]) >>
   qpat_x_assum `cf = sf` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `shadow_cf = shadow_sf` (SUBST_ALL_TAC o SYM) >>
@@ -5527,7 +5529,7 @@ Theorem intcall_args_stage_full_p2:
        vv_type vv = lowered_value_type cenv e) /\
     compile_stage_intcall_args compile_expr cenv es flags dtys si =
       (newops,sf) /\
-    compile_stage_intcall_args compile_expr cenv (MAP gas_shadow_expr es)
+    compile_stage_intcall_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr es)
       flags dtys shadow_si = (newops,shadow_sf) /\
     gas_shadow_state si shadow_si /\ gas_shadow_state sf shadow_sf /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -5701,7 +5703,7 @@ Theorem intcall_args_stage_full:
        vv_type vv = lowered_value_type cenv e) /\
     compile_stage_intcall_args compile_expr cenv es flags dtys si =
       (newops,sf) /\
-    compile_stage_intcall_args compile_expr cenv (MAP gas_shadow_expr es)
+    compile_stage_intcall_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr es)
       flags dtys shadow_si = (newops,shadow_sf) /\
     gas_shadow_state si shadow_si /\ gas_shadow_state sf shadow_sf /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -6986,7 +6988,7 @@ Proof
     (qx_choose_then `ops` (qx_choose_then `argv` (qx_choose_then `callee`
     (qx_choose_then `setup` (qx_choose_then `entered` strip_assume_tac))))))) >>
   drule_all intcall_args_selected_head >> strip_tac >>
-  drule_all bodyFullShadowBodyInvLoweringTheory.body_inv_selected_internal_code >>
+  drule_all bodyFullShadowInternalRunTheory.body_inv_selected_internal_code >>
   disch_then (qx_choose_then `label` (qx_choose_then `ce` (qx_choose_then `params`
     (qx_choose_then `has_rb` (qx_choose_then `nr'` (qx_choose_then `key`
     (qx_choose_then `trans` (qx_choose_then `view` (qx_choose_then `ctor`
@@ -7966,7 +7968,7 @@ Theorem args_callee_package_room[local]:
 Proof
   DISCH_THEN (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
   drule_all args_callee_room >> strip_tac >>
-  drule_all bodyFullShadowBodyInvLoweringTheory.body_inv_selected_internal_code >>
+  drule_all bodyFullShadowInternalRunTheory.body_inv_selected_internal_code >>
   disch_then (qx_choose_then `actual_lbl` (qx_choose_then `actual_ce` (qx_choose_then `actual_params`
     (qx_choose_then `actual_rb` (qx_choose_then `actual_nr` (qx_choose_then `actual_key`
     (qx_choose_then `actual_trans` (qx_choose_then `actual_view` (qx_choose_then `actual_ctor`
@@ -8193,8 +8195,6 @@ Theorem intcall_args_full:
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
     LENGTH es <= LENGTH args /\
-    ~supported_exprs_exists supportedProgram$expr_msg_gas_root
-      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
     (!s1 vs t1.
        ~MEM (NONE,name) cx.stk /\
@@ -8208,7 +8208,7 @@ Theorem intcall_args_full:
       comp_bind (compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt))
         kc sa = (out, sb) /\
       comp_bind
-        (compile_expr cenv ty
+        (compile_expr (gas_shadow_env T cenv) ty
            (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)))
         kc shadow_sa = (out, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
@@ -8287,21 +8287,6 @@ Proof
   `MAP expr_type compiled_dflts = MAP expr_type dflts` by simp[Abbr `compiled_dflts`] >>
   `LENGTH compiled_dflts = LENGTH dflts` by
     simp[Abbr `compiled_dflts`, loweringShapePropsTheory.subst_consts_exprs_length] >>
-  `MAP gas_shadow_expr (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) compiled_dflts) =
-   DROP (LENGTH dflts - (LENGTH args - LENGTH es)) compiled_dflts` by
-    (qmatch_goalsub_abbrev_tac `MAP gas_shadow_expr omitted` >>
-     `~supported_exprs_exists supportedProgram$expr_msg_gas_root omitted` by
-       (simp[Abbr `omitted`, Abbr `compiled_dflts`,
-          constSubstCorrectTheory.subst_consts_exprs_map, GSYM listTheory.MAP_DROP] >>
-        rewrite_tac[GSYM constSubstCorrectTheory.subst_consts_exprs_map] >>
-        `~supported_exprs_exists supportedProgram$expr_msg_gas_root
-            (DROP (LENGTH dflts + LENGTH es - LENGTH args) dflts)` by
-          (`LENGTH dflts + LENGTH es - LENGTH args =
-              LENGTH dflts - (LENGTH args - LENGTH es)` by decide_tac >>
-           asm_rewrite_tac[]) >>
-        drule_all_then ACCEPT_TAC module_consts_defaults_no_msg_gas) >>
-     qspecl_then [`omitted`,`0`] mp_tac gasShadowShapeTheory.omitted_defaults_gas_shadow_id >>
-     simp[]) >>
   `eval_expr cx (Call ann (IntCall (NONE,name)) es dflt) =
    bind (eval_exprs cx es) (\vs.
      bind get_scopes (\prev.
@@ -8344,7 +8329,7 @@ Proof
     (qpat_x_assum `comp_bind _ _ sa = _` mp_tac >> simp[comp_bind_def]) >>
   qpat_assum `compile_expr _ _ _ sa = (vv,sm)`
     (assume_tac o REWRITE_RULE [exprSimSendTheory.compile_expr_call]) >>
-  Cases_on `compile_expr cenv ty
+  Cases_on `compile_expr (gas_shadow_env T cenv) ty
     (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)) shadow_sa` >>
   rename1 `compile_expr _ _ _ shadow_sa = (shadow_vv,shadow_sm)` >>
   qpat_assum `compile_expr _ _ _ shadow_sa = (shadow_vv,shadow_sm)`
@@ -8361,7 +8346,9 @@ Proof
   simp[SimpLHS] >> strip_tac >>
   qpat_assum `compile_call _ _ _ _ _ (MAP gas_shadow_expr es) _ shadow_sa = _`
     (mp_then Any mp_tac intCallStepTheory.compile_call_intcall_shape) >>
-  simp[SimpLHS] >> strip_tac >>
+  simp[SimpLHS, gasShadowCompileHelpersTheory.gas_shadow_env_omitted_defaults,
+       gasShadowCompileHelpersTheory.gas_shadow_env_without_defaults] >>
+  strip_tac >>
   rename1 `compile_stage_intcall_args _ _ es _ _ st2 = (sup_ops,st2a)` >>
   rename1 `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) _ _ sh_st2 =
     (sh_sup_ops,sh_st2a)` >>
@@ -8378,10 +8365,10 @@ Proof
      drule_all (cj 2 bodyFullSharedTheory.gas_shadow_step) >> simp[]) >>
   `!ce xs flags tys sh.
      gas_shadow_compiles (compile_stage_intcall_args compile_expr ce xs flags tys)
-       (compile_stage_intcall_args compile_expr ce
+       (compile_stage_intcall_args compile_expr (gas_shadow_env T ce)
          (if sh then MAP gas_shadow_expr xs else xs) flags tys)` by
-    (rpt gen_tac >> irule gasShadowCompileCallSupportTheory.gas_shadow_compiles_stage_intcall_args >>
-     ACCEPT_TAC (cj 1 gasShadowCompileTheory.gas_shadow_compile_expr)) >>
+    (rpt gen_tac >> irule gasShadowCompileCallSupportTheory.gas_shadow_compiles_stage_intcall_args_env >>
+     simp[cj 1 gasShadowCompileTheory.gas_shadow_compile_expr_env]) >>
   `sh_sup_ops = sup_ops /\ gas_shadow_state st2a sh_st2a` by
     (qpat_assum `compile_stage_intcall_args _ _ es _ _ st2 = _` mp_tac >>
      qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) _ _ sh_st2 = _` mp_tac >>
@@ -8399,18 +8386,15 @@ Proof
     simp[Abbr `ds`] >>
   `sh_def_ops = def_ops /\ gas_shadow_state st3 sh_st3` by
     (qpat_assum `compile_stage_intcall_args _ _ ds _ _ st2a = _` mp_tac >>
-     qpat_assum `compile_stage_intcall_args _ _ ds _ _ sh_st2a = _` mp_tac >>
+     qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr _) _ _ sh_st2a = _` mp_tac >>
      qpat_assum `gas_shadow_state st2a sh_st2a` mp_tac >>
      qpat_assum `!ce xs flags tys sh. gas_shadow_compiles _ _`
        (qspecl_then [`cenv_without_defaults cenv (nsid_to_string (NONE,name))`,
          `ds`, `DROP (LENGTH es) pvs`,
          `DROP (LENGTH es) (TAKE (LENGTH args)
-           (cenv.ce_func_param_types (nsid_to_string (NONE,name))))`, `F`] mp_tac) >>
+           (cenv.ce_func_param_types (nsid_to_string (NONE,name))))`, `T`] mp_tac) >>
      SIMP_TAC std_ss [] >>
      metis_tac[bodyFullSharedTheory.gas_shadow_step]) >>
-  `MAP gas_shadow_expr ds = ds` by
-    (qpat_assum `ds = DROP _ compiled_dflts` (SUBST1_TAC) >>
-     first_assum ACCEPT_TAC) >>
   `!ce xs flags tys a ops b.
       compile_stage_intcall_args compile_expr ce xs flags tys a = (ops,b) ==>
       cs_extends a b` by
@@ -8518,10 +8502,10 @@ Proof
      qpat_assum `cenv.ce_func_info _ = (rc',rbs,pvs)` SUBST1_TAC >>
      simp[NoAsms, compute_func_info_def] >> metis_tac[]) >>
   `LENGTH pvs = LENGTH args` by simp[LENGTH_compute_pass_via_stack] >>
-  `!xs a. LENGTH xs = LENGTH es ==>
-      compile_stage_intcall_args compile_expr cenv xs
+  `!ce xs a. LENGTH xs = LENGTH es ==>
+      compile_stage_intcall_args compile_expr ce xs
         (TAKE (LENGTH es) pvs) (TAKE (LENGTH es) (MAP SND args)) a =
-      compile_stage_intcall_args compile_expr cenv xs pvs
+      compile_stage_intcall_args compile_expr ce xs pvs
         (TAKE (LENGTH args) (cenv.ce_func_param_types (nsid_to_string (NONE,name)))) a` by
     (rpt gen_tac >> disch_then (assume_tac o SYM) >>
      qpat_assum `cenv.ce_func_param_types _ = MAP SND args` SUBST1_TAC >>
@@ -8532,7 +8516,7 @@ Proof
   `compile_stage_intcall_args compile_expr cenv es
       (TAKE (LENGTH es) pvs) (TAKE (LENGTH es) (MAP SND args)) st2 =
       (sup_ops,st2a)` by simp[] >>
-  `compile_stage_intcall_args compile_expr cenv (MAP gas_shadow_expr es)
+  `compile_stage_intcall_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr es)
       (TAKE (LENGTH es) pvs) (TAKE (LENGTH es) (MAP SND args)) sh_st2 =
       (sup_ops,sh_st2a)` by simp[] >>
   `expr_sim_inv cenv cx tenv es0` by
@@ -9162,13 +9146,12 @@ Proof
     (qpat_assum `TAKE (LENGTH args) _ = MAP SND args` (SUBST1_TAC o SYM) >>
      qpat_assum `compile_stage_intcall_args _ _ ds _ _ st2a = _` mp_tac >>
      simp[NoAsms, nsid_to_string_def]) >>
-  `compile_stage_intcall_args compile_expr (cenv_without_defaults cenv name)
+  `compile_stage_intcall_args compile_expr (gas_shadow_env T (cenv_without_defaults cenv name))
       (MAP gas_shadow_expr ds) (DROP (LENGTH es) pvs)
       (DROP (LENGTH es) (MAP SND args)) sh_st2a = (def_ops,sh_st3)` by
     (qpat_assum `TAKE (LENGTH args) _ = MAP SND args` (SUBST1_TAC o SYM) >>
-     qpat_assum `MAP gas_shadow_expr ds = ds` SUBST1_TAC >>
      qpat_assum `sh_def_ops = def_ops` (SUBST1_TAC o SYM) >>
-     qpat_assum `compile_stage_intcall_args _ _ ds _ _ sh_st2a = _` mp_tac >>
+     qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr _) _ _ sh_st2a = _` mp_tac >>
      simp[NoAsms, nsid_to_string_def]) >>
   `!src H tr. valid_horizon cxd src H tr = valid_horizon cx src H tr` by
     ((qunabbrev_tac `cxd` >> POP_ASSUM_LIST (K ALL_TAC) >>
@@ -9355,7 +9338,7 @@ Proof
                (tenv with current_src := NONE) ee` (irule_at Any) >>
   qpat_assum `compile_stage_intcall_args _ (cenv_without_defaults cenv name)
                ds _ _ st2a = (def_ops,st3)` (irule_at Any) >>
-  qpat_assum `compile_stage_intcall_args _ (cenv_without_defaults cenv name)
+  qpat_assum `compile_stage_intcall_args _ _
                (MAP gas_shadow_expr ds) _ _ sh_st2a = (def_ops,sh_st3)`
     (irule_at Any) >>
   qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>

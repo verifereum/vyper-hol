@@ -99,7 +99,7 @@ Theorem grouped_default_normal_bound_entry:
     common.ec_pos_args 4 entry = (ce,sa) /\ fn_has_code entry sa fn /\
   compile_guarded_body ce common.ec_nonreentrant common.ec_nkey common.ec_transient
     common.ec_view common.ec_body common.ec_return sa = ((),final) /\ fn_has_code sa final fn /\
-  compile_guarded_body ce common.ec_nonreentrant common.ec_nkey common.ec_transient
+  compile_guarded_body (gas_shadow_env T ce) common.ec_nonreentrant common.ec_nkey common.ec_transient
     common.ec_view (MAP gas_shadow_stmt common.ec_body) common.ec_return shadow_sa = ((),shadow_final) /\
   fn_has_code shadow_sa shadow_final shadow_fn /\ gas_shadow_state sa shadow_sa /\
   ctx.ctx_entry = SOME "__entry" /\ lookup_function "__entry" ctx.ctx_functions = SOME fn /\
@@ -522,7 +522,8 @@ Resume grouped_default_normal_bound_entry[endpoint]:
      simp_tac (srw_ss()) [evaluation_state_fupdfupds] >> first_assum ACCEPT_TAC) >>
   `compile_guarded_body ce nr global_nonreentrant_slot T (mut = View) ss
      (if ret = NoneT then NONE else SOME ret) sa = ((),final) /\
-   compile_guarded_body ce nr global_nonreentrant_slot T (mut = View) (MAP gas_shadow_stmt ss)
+   compile_guarded_body (gas_shadow_env T ce) nr global_nonreentrant_slot T (mut = View)
+     (MAP gas_shadow_stmt ss)
      (if ret = NoneT then NONE else SOME ret) shadow_sa = ((),shadow_final)` by
     (qpat_assum `compile_guarded_body _ _ _ _ _ _ _ sa = _` mp_tac >>
      qpat_assum `compile_guarded_body _ _ _ _ _ _ _ shadow_sa = _` mp_tac >> fs[]) >>

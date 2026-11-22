@@ -176,13 +176,13 @@ Theorem concat_head_arm_full:
          if is_bytestring_type (expr_type e) then (T,0:num)
          else case expr_type e of BaseT (BytesT (Fixed m)) => (F,m)
                        | _ => (F,32:num)) (e::args)) (Var ov) sa = ((),sb) /\
-    compile_concat compile_expr cenv (MAP gas_shadow_expr (e::args)) (Var dv)
+    compile_concat compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr (e::args)) (Var dv)
       (MAP (\e.
          if is_bytestring_type (expr_type e) then (T,0:num)
          else case expr_type e of BaseT (BytesT (Fixed m)) => (F,m)
                        | _ => (F,32:num)) (e::args)) (Var ov) shadow_sa = ((),shadow_sb) /\
     lower_value compile_expr cenv (expr_type e) e sa = (op,sc) /\
-    lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa =
+    lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa =
       (op,shadow_sc) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sc shadow_sc /\
     gas_shadow_state sb shadow_sb /\ gas_shadow_context ctx shadow_ctx /\
@@ -247,7 +247,7 @@ Theorem concat_head_arm_full:
            if is_bytestring_type (expr_type e) then (T,0:num)
            else case expr_type e of BaseT (BytesT (Fixed m)) => (F,m)
                          | _ => (F,32:num)) args) (Var ov) s2 = ((),sb) /\
-      compile_concat compile_expr cenv (MAP gas_shadow_expr args) (Var dv)
+      compile_concat compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr args) (Var dv)
         (MAP (\e.
            if is_bytestring_type (expr_type e) then (T,0:num)
            else case expr_type e of BaseT (BytesT (Fixed m)) => (F,m)
@@ -415,7 +415,7 @@ Proof
       (MAP (\e. if is_bytestring_type (expr_type e) then (T,0:num)
         else case expr_type e of BaseT (BytesT (Fixed m)) => (F,m)
              | _ => (F,32:num)) args) (Var ov) s2 = ((),sb) /\
-    compile_concat compile_expr cenv (MAP gas_shadow_expr args) (Var dv)
+    compile_concat compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr args) (Var dv)
       (MAP (\e. if is_bytestring_type (expr_type e) then (T,0:num)
         else case expr_type e of BaseT (BytesT (Fixed m)) => (F,m)
              | _ => (F,32:num)) args) (Var ov) shadow_s2 = ((),shadow_sb) /\

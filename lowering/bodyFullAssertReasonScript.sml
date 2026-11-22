@@ -43,7 +43,7 @@ Theorem compile_assert_reason_frag_full_from_raise:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Raise (RaiseReason e)))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason e))))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason e))))
       (eval_stmt cx (Raise (RaiseReason e))) es) ==>
   !cx e se DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
@@ -65,7 +65,7 @@ Theorem compile_assert_reason_frag_full_from_raise:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assert e (AssertReason se)))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assert e (AssertReason se))))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assert e (AssertReason se))))
       (eval_stmt cx (Assert e (AssertReason se))) es
 Proof
   disch_then (markerLib.mk_asm "producer") >>
@@ -75,11 +75,7 @@ Proof
   `expr_type e = BaseT BoolT` by fs[type_stmt_assert_reason] >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx (BaseT BoolT) e es` by
-    (qpat_x_assum `body_expr_full_ok cx e`
-       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `tops`, `ctx`,
-       `shadow_ctx`, `func`, `shadow_func`, `cenv`, `env`, `BaseT BoolT`,
-       `es`] mp_tac) >> simp[]) >>
+    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
   rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   fs[gas_shadow_stmt_def, gas_shadow_assert_reason_def] >>
   drule_all compile_assert_reason_layout_full >> strip_tac >> gvs[] >>
@@ -232,7 +228,7 @@ Resume compile_assert_reason_frag_full_from_raise[false]:
   `stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
      cx lctx RetQ cenv
      (stmt_env cenv lctx ret_ty (Raise (RaiseReason se)))
-     (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason se))))
+     (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason se))))
      (eval_stmt cx (Raise (RaiseReason se))) (mid with gas_obs := [])` by
     (asm "producer" irule >> metis_tac[]) >>
   qpat_x_assum `stmt_frag_full _ _ _ _ _ _ _ _ _` mp_tac >>
@@ -361,7 +357,7 @@ Theorem compile_assert_reason_frag_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assert e (AssertReason se)))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assert e (AssertReason se))))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assert e (AssertReason se))))
       (eval_stmt cx (Assert e (AssertReason se))) es
 Proof
   mp_tac compile_assert_reason_frag_full_from_raise >>

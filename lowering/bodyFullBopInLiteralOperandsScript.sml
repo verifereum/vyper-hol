@@ -30,7 +30,7 @@ Theorem bop_in_literal_operands_clean_full_halt:
     MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
     fn_has_code sa sb func /\
     (!shadow_xs shadow_sb.
-       lower_word_args cenv expr_type (MAP gas_shadow_expr args) shadow_sa =
+       lower_word_args (gas_shadow_env T cenv) expr_type (MAP gas_shadow_expr args) shadow_sa =
          (shadow_xs,shadow_sb) ==> fn_has_code shadow_sa shadow_sb shadow_func) /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
@@ -86,15 +86,14 @@ Proof
     (irule exprSimSourceTheory.expr_body_pre_gas_admissible >> metis_tac[]) >>
   qpat_x_assum `lower_word_args _ _ (h::args) _ = _`
     (strip_assume_tac o REWRITE_RULE [lower_word_args_cons]) >>
-  `?shadow_s1. lower_value compile_expr cenv (expr_type h)
+  `?shadow_s1. lower_value compile_expr (gas_shadow_env T cenv) (expr_type h)
       (gas_shadow_expr h) shadow_sa = (x,shadow_s1) /\
       gas_shadow_state s1 shadow_s1` by
-    (qspecl_then [`cenv`, `expr_type h`, `h`] mp_tac
-       (Q.GENL [`cenv`, `ty`, `e`] gas_shadow_stmt_lower_value) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then drule >> simp[] >>
-     Cases_on `lower_value compile_expr cenv (expr_type h) (gas_shadow_expr h) shadow_sa` >>
-     gvs[]) >>
+    (drule (REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]
+       (Q.INST [`sd` |-> `T`] gas_shadow_stmt_lower_value_env)) >>
+     disch_then (qspecl_then [`expr_type h`, `h`, `cenv`] mp_tac) >> simp[] >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type h)
+       (gas_shadow_expr h) shadow_sa` >> gvs[]) >>
   `!e. MEM e (h::args) ==> expr_type e = expr_type e1` by
     (drule_all literal_body_typing >> strip_tac >>
      fs[EVERY_MEM] >> metis_tac[listTheory.MEM]) >>
@@ -115,12 +114,12 @@ Proof
   `fn_has_code sa s1 func` by
     metis_tac[fn_has_code_mid, compileEnvTheory.cs_extends_refl] >>
   `!aa ss oo ff.
-     lower_word_args cenv expr_type (MAP gas_shadow_expr aa) ss = (oo,ff) ==>
+     lower_word_args (gas_shadow_env T cenv) expr_type (MAP gas_shadow_expr aa) ss = (oo,ff) ==>
      cs_extends ss ff` by
     (Induct >> simp[lower_word_args_nil, compileEnvTheory.cs_extends_refl] >>
      rpt gen_tac >> simp[lower_word_args_cons] >> rpt strip_tac >>
      metis_tac[cj 2 compile_expr_grows, compileEnvTheory.cs_extends_trans]) >>
-  Cases_on `lower_word_args cenv expr_type (MAP gas_shadow_expr args) shadow_s1` >>
+  Cases_on `lower_word_args (gas_shadow_env T cenv) expr_type (MAP gas_shadow_expr args) shadow_s1` >>
   rename1 `lower_word_args _ _ (MAP gas_shadow_expr args) shadow_s1 = (shadow_ys,shadow_sb)` >>
   `fn_has_code shadow_sa shadow_sb shadow_func` by
     (qpat_x_assum `!xx ss. lower_word_args _ _ _ shadow_sa = _ ==> _` irule >>
@@ -362,7 +361,7 @@ Theorem bop_in_literal_operands_clean_full:
     MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
     fn_has_code sa sb func /\
     (!shadow_xs shadow_sb.
-       lower_word_args cenv expr_type (MAP gas_shadow_expr args) shadow_sa =
+       lower_word_args (gas_shadow_env T cenv) expr_type (MAP gas_shadow_expr args) shadow_sa =
          (shadow_xs,shadow_sb) ==> fn_has_code shadow_sa shadow_sb shadow_func) /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
@@ -421,7 +420,7 @@ Theorem bop_in_literal_operands_full:
     MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
     fn_has_code sa sb func /\
     (!shadow_xs shadow_sb.
-       lower_word_args cenv expr_type (MAP gas_shadow_expr args) shadow_sa =
+       lower_word_args (gas_shadow_env T cenv) expr_type (MAP gas_shadow_expr args) shadow_sa =
          (shadow_xs,shadow_sb) ==> fn_has_code shadow_sa shadow_sb shadow_func) /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\

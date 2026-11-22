@@ -29,7 +29,8 @@ QED
 
 Theorem grouped_default_omitted_cut:
   compile_init_kwargs ce (DROP k vars) off 0 hi last = ((),sb) /\
-  compile_init_kwargs ce (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) (DROP k vars))
+  compile_init_kwargs (gas_shadow_env T ce)
+    (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) (DROP k vars))
     off 0 hi shlast = ((),shb) /\
   fn_has_code last sb fn /\ fn_has_code shlast shb shfn /\ gas_shadow_state last shlast /\
   LIST_REL (\(n,dst,ty,e) (aid,p,base,tv).
@@ -38,8 +39,9 @@ Theorem grouped_default_omitted_cut:
       expr_body_pre (ce with ce_vars := FEMPTY) cx env e es') /\
     lower_value compile_expr (ce with ce_vars := FEMPTY) ty e =
       lower_value compile_expr ce ty e /\
-    lower_value compile_expr (ce with ce_vars := FEMPTY) ty (gas_shadow_expr e) =
-      lower_value compile_expr ce ty (gas_shadow_expr e) /\
+    lower_value compile_expr (gas_shadow_env T (ce with ce_vars := FEMPTY))
+      ty (gas_shadow_expr e) =
+      lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e) /\
     evaluate_type (get_tenv cx) ty = SOME tv /\
     type_memory_bytes ce ty = type_memory_size tv /\
     type_memory_size tv + 64 < dimword (:256)) (DROP k vars) (DROP k slots) /\

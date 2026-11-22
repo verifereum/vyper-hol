@@ -7,18 +7,21 @@ Ancestors
   entryRawFunction loweringShapeDefs fragExec emitHelper vyperCompiler venomInst
   gasShadowRunLowering gasShadowUnitGuards gasShadowRuntimeDispatch gasShadowUnitExtract
   gasShadowUnit compileVyper bodyFullShadowInternalRun loweringShapeProps vyperLoweringCorrect
+  gasShadowRuntimeKwargEnv gasShadowRuntimeRegisterEnv gasShadowCompileStmtBase
 
 val shadow_group = ``\group. case group of
   ExternalSingle selector package =>
     ExternalSingle selector (gas_shadow_external_package package)
 | ExternalDefaults common entries specs off =>
-    ExternalDefaults (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+    ExternalDefaults (common with <| ec_env := gas_shadow_env T common.ec_env;
+                    ec_body := MAP gas_shadow_stmt common.ec_body |>)
       entries (MAP (\(n,ty,e). (n,ty,gas_shadow_expr e)) specs) off``;
 
 val shadow_job = ``\job. case job of
   ExternalLegacyJob package => ExternalLegacyJob (gas_shadow_external_package package)
 | ExternalCommonJob common kwvars => ExternalCommonJob
-    (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+    (common with <| ec_env := gas_shadow_env T common.ec_env;
+                    ec_body := MAP gas_shadow_stmt common.ec_body |>)
     (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) kwvars)``;
 
 Theorem grouped_common_job_guarded_code:
@@ -45,10 +48,11 @@ Theorem grouped_common_job_guarded_code:
     fn_has_code sa done fn /\
     shadow_entry.cs_current_bb = common.ec_common_label /\ shadow_entry.cs_current_insts = [] /\
     compile_register_positional_args
-      (compile_register_kwarg_vars common.ec_env kwvars) common.ec_pos_args 4 shadow_entry =
-      (ce,shadow_sa) /\
+      (gas_shadow_env T (compile_register_kwarg_vars common.ec_env kwvars))
+      common.ec_pos_args 4 shadow_entry = (gas_shadow_env T ce,shadow_sa) /\
     fn_has_code shadow_entry shadow_sa shadow_fn /\
-    compile_guarded_body ce common.ec_nonreentrant common.ec_nkey common.ec_transient
+    compile_guarded_body (gas_shadow_env T ce) common.ec_nonreentrant
+      common.ec_nkey common.ec_transient
       common.ec_view (MAP gas_shadow_stmt common.ec_body) common.ec_return shadow_sa =
       ((),shadow_done) /\
     fn_has_code shadow_sa shadow_done shadow_fn /\
@@ -67,11 +71,13 @@ Proof
   disch_then (qx_choosel_then
     [`shadow_start`,`shadow_entry`,`shadow_ce`,`shadow_sa`,`shadow_done`] strip_assume_tac) >>
   fs[external_common_accfupds, combinTheory.K_THM,
-    gas_shadow_compile_register_kwarg_vars] >>
+    gas_shadow_compile_register_kwarg_vars,
+    compile_register_kwarg_vars_gas_shadow_env] >>
   `gas_shadow_state start shadow_start` by
-    (qspec_then `pre` mp_tac gas_shadow_compiles_compile_external_jobs >>
-     simp_tac (srw_ss()) [gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sd`,`shadow_sd`] mp_tac) >>
+    (qspecl_then [`T`,`pre`]
+       (drule_then (mp_tac o SPEC_ALL) o Q.SPECL [`sd`,`shadow_sd`] o
+        REWRITE_RULE [gas_shadow_compiles_def])
+       gas_shadow_compiles_compile_external_jobs >>
      asm_rewrite_tac[SND]) >>
   `gas_shadow_state entry shadow_entry` by
     (qspec_then `common.ec_common_label` mp_tac
@@ -79,14 +85,13 @@ Proof
      simp_tac (srw_ss()) [gas_shadow_compiles_def] >>
      disch_then (qspecl_then [`start`,`shadow_start`] mp_tac) >>
      asm_rewrite_tac[SND] >> strip_tac >> asm_rewrite_tac[]) >>
-  `ce = shadow_ce /\ gas_shadow_state sa shadow_sa` by
-    (mp_tac (Q.SPECL [`common.ec_pos_args`,
-       `compile_register_kwarg_vars common.ec_env
-          (kwvars : (string # operand # type # expr) list)`,`4`]
-       gas_shadow_compiles_compile_register_positional_args) >>
-     simp_tac bool_ss [gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`entry`,`shadow_entry`] mp_tac) >>
-     asm_rewrite_tac[FST,SND] >> strip_tac >> simp[]) >>
+  `gas_shadow_env T ce = shadow_ce /\ gas_shadow_state sa shadow_sa` by
+    (qspecl_then [`common.ec_pos_args`,
+       `compile_register_kwarg_vars common.ec_env kwvars`,`4`]
+       (drule_then (mp_tac o SPEC_ALL) o Q.SPECL [`entry`,`shadow_entry`] o
+        REWRITE_RULE [gas_shadow_compiles_env_def])
+       (Q.INST [`sd` |-> `T`] gas_shadow_compiles_env_register_positional_args) >>
+     asm_rewrite_tac[FST,SND]) >>
   qexistsl_tac [`shadow_entry`,`shadow_sa`,`shadow_done`] >>
   `cs_extends sd entry /\ cs_extends entry done` by metis_tac[cs_extends_trans] >>
   fs[] >>
@@ -181,16 +186,19 @@ Proof
   `ssf = sf /\ sfb = fallback` by metis_tac[pairTheory.PAIR_EQ] >>
   qpat_x_assum `ssf = sf` SUBST_ALL_TAC >>
   qpat_x_assum `sfb = fallback` SUBST_ALL_TAC >>
+  `gas_shadow_state sf sf` by simp[gas_shadow_state_refl] >>
   `shjobs = MAP ^shadow_job jobs /\ gas_shadow_state sd shd` by
-    (mp_tac (Q.SPECL [`groups`,`fallback`,`sf`,`sf`]
-      (Q.SPEC `gasShadowModuleDefs$gas_shadow_external_package`
-        (GEN_ALL gas_shadow_compile_group_dispatch_linear))) >>
-     asm_rewrite_tac[FST,SND,gas_shadow_state_refl]) >>
+    (drule_then (mp_tac o SPEC_ALL)
+      (Q.SPECL [`groups`,`fallback`,`sf`,`sf`]
+        (Q.SPEC `gasShadowModuleDefs$gas_shadow_external_package`
+          (GEN_ALL (Q.INST [`sd` |-> `T`] gas_shadow_compile_group_dispatch_linear)))) >>
+     asm_rewrite_tac[FST,SND]) >>
   pop_assum strip_assume_tac >>
   `gas_shadow_state sx shx` by
-    (qspec_then `jobs` mp_tac gas_shadow_compiles_compile_external_jobs >>
-     simp_tac bool_ss [gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sd`,`shd`] mp_tac) >>
+    (qspecl_then [`T`,`jobs`]
+       (drule_then (mp_tac o SPEC_ALL) o Q.SPECL [`sd`,`shd`] o
+        REWRITE_RULE [gas_shadow_compiles_def])
+       gas_shadow_compiles_compile_external_jobs >>
      fs[pairTheory.SND]) >>
   `gas_shadow_state sn shn` by
     (qspec_then `fallback` mp_tac (GEN_ALL gas_shadow_compiles_new_block) >>

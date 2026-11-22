@@ -303,13 +303,16 @@ Proof
   rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
   drule_all lower_value_rounding >> strip_tac >>
   rename1 `(if bt = Ceil then compile_ceil x 10000000000 else compile_floor x 10000000000) s1 = (op,sb)` >>
-  Cases_on `lower_value compile_expr cenv ty
+  Cases_on `lower_value compile_expr (gas_shadow_env T cenv) ty
               (gas_shadow_expr e) shadow_sa` >>
-  rename1 `lower_value _ _ _ _ shadow_sa = (shadow_x,shadow_s1)` >>
+  rename1 `lower_value _ _ _ (gas_shadow_expr _) shadow_sa = (shadow_x,shadow_s1)` >>
   `shadow_x = x /\ gas_shadow_state s1 shadow_s1` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `ty`, `e` |-> `e`]
-      gas_shadow_stmt_lower_value) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >> metis_tac[pairTheory.FST, pairTheory.SND]) >>
+    (`gas_shadow_compiles (lower_value compile_expr cenv ty e)
+       (lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e))` by
+       irule gas_shadow_stmt_lower_value_env >>
+     pop_assum (qspecl_then [`sa`, `shadow_sa`] mp_tac o
+       REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]) >>
+     simp[]) >>
   drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
   `straight_fresh
     (if bt = Ceil then compile_ceil x 10000000000 else compile_floor x 10000000000)` by
@@ -321,14 +324,14 @@ Proof
   `fn_has_code sa s1 func /\ fn_has_code s1 sb func` by
     metis_tac[fragExecTheory.fn_has_code_split] >>
   `fn_has_code shadow_sa shadow_s1 shadow_func` by
-    (`lower_value compile_expr cenv ty
+    (`lower_value compile_expr (gas_shadow_env T cenv) ty
         (Builtin (BaseT (IntT 256)) bt [gas_shadow_expr e]) shadow_sa =
           (op,shadow_sb)` by
        (Cases_on `bt = Ceil` >>
         gvs[gasShadowTheory.gas_shadow_expr_def, gasShadowTheory.gas_shadow_builtin_def]) >>
-     mp_tac (Q.INST [`e` |-> `gas_shadow_expr e`, `sa` |-> `shadow_sa`,
-       `sb` |-> `shadow_sb`, `ann` |-> `BaseT (IntT 256)`] lower_value_rounding) >>
-     asm_rewrite_tac[] >> strip_tac >>
+     qpat_x_assum `lower_value _ _ _ (Builtin _ _ [gas_shadow_expr _]) _ = _`
+       (mp_then Any mp_tac lower_value_rounding) >>
+     simp[] >> strip_tac >>
      `cs_extends shadow_s1 shadow_sb` by
        (Cases_on `bt = Ceil` >> gvs[] >>
         metis_tac[straight_fresh_cs_extends, straight_fresh_ceil, straight_fresh_floor]) >>

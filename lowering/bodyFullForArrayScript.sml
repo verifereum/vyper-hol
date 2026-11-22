@@ -396,7 +396,7 @@ Theorem for_array_expr_prefix_full:
   body_const_cells_agree [(NONE,tops)] cx env es /\
   body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre c cx env e es /\
   compile_expr c (expr_type e) e sa = (vv,sb) /\
-  compile_expr c (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sb) /\
+  compile_expr (gas_shadow_env T c) (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\
@@ -1991,7 +1991,7 @@ Theorem for_nonslot_array_prefix_full:
    !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
   expr_type e = ArrayT elem bd /\
   compile_expr c (expr_type e) e sa = (vv,sb) /\
-  compile_expr c (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sb) /\
+  compile_expr (gas_shadow_env T c) (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\

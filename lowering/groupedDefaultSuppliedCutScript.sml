@@ -17,7 +17,7 @@ Theorem grouped_default_supplied_cut:
   specs = MAP (\((n,ty),e). (n,ty,e)) (ZIP (DROP (LENGTH args - LENGTH ds) args,ds)) /\
   compile_create_kwarg_allocas ce specs a = (vars,b) /\
   compile_init_kwargs ce vars (4 + SUM (MAP tv_abi_size (TAKE (LENGTH args - LENGTH ds) tvs))) k hi si = ((),sb) /\
-  compile_init_kwargs ce (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars)
+  compile_init_kwargs (gas_shadow_env T ce) (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars)
     (4 + SUM (MAP tv_abi_size (TAKE (LENGTH args - LENGTH ds) tvs))) k hi sha = ((),shb) /\
   fn_has_code si sb fn /\ fn_has_code sha shb shfn /\ gas_shadow_state si sha /\
   (!name op ty e. MEM (name,op,ty,e) vars ==>
@@ -50,7 +50,7 @@ Theorem grouped_default_supplied_cut:
     compile_init_kwargs ce (DROP k vars)
       (4 + SUM (MAP tv_abi_size (TAKE (LENGTH args - LENGTH ds) tvs)) +
         SUM (MAP tv_abi_size (TAKE k (DROP (LENGTH args - LENGTH ds) tvs)))) 0 hi last = ((),sb) /\
-    compile_init_kwargs ce (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) (DROP k vars))
+    compile_init_kwargs (gas_shadow_env T ce) (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) (DROP k vars))
       (4 + SUM (MAP tv_abi_size (TAKE (LENGTH args - LENGTH ds) tvs)) +
         SUM (MAP tv_abi_size (TAKE k (DROP (LENGTH args - LENGTH ds) tvs)))) 0 hi shlast = ((),shb) /\
     fn_has_code last sb fn /\ fn_has_code shlast shb shfn /\ gas_shadow_state last shlast /\

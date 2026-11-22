@@ -12,11 +12,14 @@ Theorem ecadd_staging_full:
   body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Builtin a bt [e1;e2]) es /\
   compile_expr cenv ty (Builtin a bt [e1;e2]) sa = (vv,sb) /\
-  compile_expr cenv ty (gas_shadow_expr (Builtin a bt [e1;e2])) shadow_sa = (vv,shadow_sb) /\
+  compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (Builtin a bt [e1;e2]))
+    shadow_sa = (vv,shadow_sb) /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e2) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa = (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e2) (gas_shadow_expr e2) shadow_s1 = (y,shadow_s2) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1)
+    (gas_shadow_expr e1) shadow_sa = (x,shadow_s1) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e2)
+    (gas_shadow_expr e2) shadow_s1 = (y,shadow_s2) /\
   (if bt = ECAdd then compile_ecadd_points x y s2 else compile_ecmul_point x y s2) = (res,sb) /\
   vv = FST (as_stack_val a (res,sb)) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state s1 shadow_s1 /\

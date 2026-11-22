@@ -3,7 +3,7 @@
    the supported-fragment traversals see the same roots on both sides. *)
 Theory gasShadowShape
 Ancestors
-  loweringShapeProps gasShadow gasShadowModuleDefs
+  loweringShapeProps gasShadow gasShadowModuleDefs gasShadowCompileBase
   supportedStmtTraverse supportedExprTraverse supportedProgram unitShapeDefs
   vyperAST list rich_list
 
@@ -135,13 +135,21 @@ Proof
   simp[gas_shadow_shape_stmts_exists_ind, gas_shadow_expr_shape_root]
 QED
 
+Theorem cenv_static_ok_gas_shadow_env:
+  cenv_static_ok (gas_shadow_env sd c) <=> cenv_static_ok c
+Proof
+  rw[cenv_static_ok_def, gas_shadow_env_defaults, EVERY_MAP] >>
+  simp[EVERY_MEM, pairTheory.FORALL_PROD, gas_shadow_expr_exists_invariant,
+       gas_shadow_expr_shape_root]
+QED
+
 Theorem gas_shadow_external_fn_shape_ok:
   external_fn_shape_ok p ==>
   external_fn_shape_ok (gas_shadow_external_package p)
 Proof
   PairCases_on `p` >>
   simp[external_fn_shape_ok_def, gas_shadow_external_package_def,
-       gas_shadow_shape_stmts_exists]
+       gas_shadow_shape_stmts_exists, cenv_static_ok_gas_shadow_env]
 QED
 
 Theorem gas_shadow_internal_fn_shape_ok:
@@ -150,7 +158,7 @@ Theorem gas_shadow_internal_fn_shape_ok:
 Proof
   PairCases_on `p` >>
   simp[internal_fn_shape_ok_def, gas_shadow_internal_package_def,
-       gas_shadow_shape_stmts_exists]
+       gas_shadow_shape_stmts_exists, cenv_static_ok_gas_shadow_env]
 QED
 
 Theorem gas_shadow_fallback_shape_ok:
@@ -160,5 +168,5 @@ Proof
   Cases_on `fb` >- simp[fallback_shape_ok_def] >>
   rename1 `SOME p` >> PairCases_on `p` >>
   simp[fallback_shape_ok_def, gas_shadow_fallback_package_def,
-       gas_shadow_shape_stmts_exists]
+       gas_shadow_shape_stmts_exists, cenv_static_ok_gas_shadow_env]
 QED

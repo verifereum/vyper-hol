@@ -56,7 +56,7 @@ Proof
   qpat_x_assum `!sa. ?t op sb. _` (qspec_then `sa` strip_assume_tac) >> gvs[] >>
   `lower_value compile_expr cenv ty e sa = (op,sb)` by
     simp[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def] >>
-  `lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa =
+  `lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa =
      (op,shadow_sb)` by
     simp[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def] >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
