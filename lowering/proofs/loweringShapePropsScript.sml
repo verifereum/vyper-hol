@@ -16196,7 +16196,8 @@ Proof
         first_block_no_preds fn`
     by (rpt gen_tac >> strip_tac >>
         match_mp_tac (Q.SPECL [`descs`, `segs`, `insts`, `fn`] internal_fns_ok_mode) >>
-        asm_rewrite_tac[Abbr `ifns`, Abbr `insts`]) >>
+        rpt conj_tac >> TRY (FIRST_ASSUM ACCEPT_TAC) >>
+        qpat_assum `MEM fn ifns` (ACCEPT_TAC o REWRITE_RULE [Abbr `ifns`])) >>
   `entry_fn_no_ret (mk_raw_function entry_label entry)`
     by (simp[contextCodegenRelTheory.entry_fn_no_ret_def,
              mk_raw_function_fields, EVERY_MEM] >>
