@@ -39,10 +39,9 @@ Proof
   rename1 `compile_init_kwargs _ _ off 0 hi shlast = ((),shb)` >>
   `gas_shadow_compiles (lower_value compile_expr ce ty e)
     (lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e))` by
-    (mp_tac (Q.INST [`sd` |-> `T`, `sh` |-> `T`, `cenv` |-> `ce`]
-       (MATCH_MP gas_shadow_compiles_lower_value_env
-         (CONJUNCT1 gas_shadow_compile_expr_env))) >>
-     simp[]) >>
+    (irule (REWRITE_RULE [boolTheory.COND_CLAUSES]
+       (Q.INST [`sd` |-> `T`, `sh` |-> `T`] gas_shadow_compiles_lower_value_env)) >>
+     irule (CONJUNCT1 (Q.INST [`sd` |-> `T`] gas_shadow_compile_expr_env))) >>
   `shop = op /\ gas_shadow_state mid shmid` by
     (qpat_assum `gas_shadow_compiles (lower_value _ _ _ _) _`
        (qspecl_then [`sa`,`sha`] mp_tac o REWRITE_RULE[gas_shadow_compiles_def]) >>
