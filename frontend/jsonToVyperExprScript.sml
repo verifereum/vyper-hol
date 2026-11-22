@@ -1370,12 +1370,15 @@ End
    from something other than a list literal (a subscript of a constant,
    NESTED[0]), it is marked NamedConst: the pinned compiler unrolls a
    membership only over a list literal (lower_Compare) and loops over any
-   other array. *)
+   other array.  A named constant is marked around its value, not its name:
+   the checker types the body before constants are substituted, and
+   NamedConst takes only a value (named_const_operand). *)
 Definition membership_operand_def:
   membership_operand ctx r r' =
     case lookup_origin_pair ctx r of
-    | SOME (Builtin _ (MakeArray (SOME _) _) _, _) =>
-        Builtin (expr_type r') NamedConst [r']
+    | SOME (Builtin a (MakeArray (SOME t) n) es, _) =>
+        Builtin (expr_type r') NamedConst
+          [origin_retype (expr_type r') (Builtin a (MakeArray (SOME t) n) es)]
     | _ =>
       case (r, r') of
       | (JE_List _ _, _) => r'
@@ -1990,12 +1993,14 @@ End
 (* An assignment's value val' (translated from val).  Where the source names
    an empty constant, it is marked NamedConst: the pinned compiler's
    shortcut looks only at how the value is written, and copies a name's
-   value in full. *)
+   value in full.  As in membership_operand, the mark wraps the constant's
+   value. *)
 Definition assign_value_def:
   assign_value ctx val val' =
     case lookup_origin_entry ctx val of
     | SOME (v, _) =>
-        if empty_value_tree v then Builtin (expr_type val') NamedConst [val']
+        if empty_value_tree v then
+          Builtin (expr_type val') NamedConst [origin_retype (expr_type val') v]
         else val'
     | NONE => val'
 End
