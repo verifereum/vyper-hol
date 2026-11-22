@@ -6103,6 +6103,8 @@ Resume body_append_storage_word_frag_full[after_root]:
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   disj1_tac >> qexists_tac `place` >> conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `!tail. eval_target_place cx (TopLevelNameTarget (NONE,nid1)) _ =
+    (res,mid with gas_obs := tail)` kall_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> res = INL place /\ _` kall_tac >>
   qpat_x_assum `res = INL place` kall_tac >>
   qpat_x_assum `t = s0` SUBST_ALL_TAC >>
@@ -6535,6 +6537,8 @@ Resume body_append_storage_aggregate_frag_full[after_root]:
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   disj1_tac >> qexists_tac `place` >> conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `!tail. eval_target_place cx (TopLevelNameTarget (NONE,nid1)) _ =
+    (res,mid with gas_obs := tail)` kall_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> res = INL place /\ _` kall_tac >>
   qpat_x_assum `res = INL place` kall_tac >>
   qpat_x_assum `t = s0` SUBST_ALL_TAC >>
