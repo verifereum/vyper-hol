@@ -17,6 +17,10 @@ Theorem emitted_origin_ptr_path:
     ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
     s.vs_inst_idx = LENGTH sb.cs_current_insts /\
     run_inst_seq_mem_ok code s /\
+    (ptrDiscipline$ctx_has_dalloca ctx ==>
+      !pre i post u. code = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==>
+        unitTransformDefs$dalloca_no_wrap i u) /\
     inst_seq_ptr D lo ctx func PG G tn code s G' tn' /\
     run_inst_seq code s = OK t ==>
     gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) []
@@ -35,7 +39,9 @@ Proof
     fs[EVERY_MEM] >>
   qspecl_then [`code`, `s`, `t`, `G`, `tn`, `G'`, `tn'`, `ctx`, `func`, `bb`]
     mp_tac run_inst_seq_gas_origin_ptr_path >>
-  simp[]
+  simp[] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  asm_rewrite_tac[]
 QED
 
 Theorem emitted_alloca_history:

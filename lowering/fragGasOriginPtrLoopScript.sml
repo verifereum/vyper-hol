@@ -31,6 +31,7 @@ Theorem step_origin_ptr_path:
   i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
   i.inst_opcode <> GAS /\
   inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  (ctx_has_dalloca ctx ==> dalloca_no_wrap i s) /\
   ptr_safe_step D lo 0 ctx func PG G tn i s /\
   step_inst 0 ctx i s = OK u /\
   ghost_step 0 ctx PG G tn i s = (G', tn') ==>
@@ -62,6 +63,8 @@ Theorem prefix_trace_origin_ptr_indexed[local]:
                i.inst_opcode <> GAS) xs /\
     run_inst_seq_mem_ok xs ((u 0) with vs_inst_idx := k) /\
     (!j. j < LENGTH xs ==>
+      (ctx_has_dalloca ctx ==>
+       dalloca_no_wrap (EL j xs) (u j)) /\
       step_inst 0 ctx (EL j xs) ((u j) with vs_inst_idx := k + j) =
         OK ((u (SUC j)) with vs_inst_idx := k + j) /\
       ptr_safe_step D lo 0 ctx func PG (g j) (q j) (EL j xs)
@@ -137,6 +140,8 @@ Theorem prefix_trace_origin_ptr_path:
                i.inst_opcode <> GAS) xs /\
     run_inst_seq_mem_ok xs s /\
     (!j. j < LENGTH xs ==>
+      (ctx_has_dalloca ctx ==>
+       dalloca_no_wrap (EL j xs) (u j)) /\
       step_inst 0 ctx (EL j xs) ((u j) with vs_inst_idx := s.vs_inst_idx + j) =
         OK ((u (SUC j)) with vs_inst_idx := s.vs_inst_idx + j) /\
       ptr_safe_step D lo 0 ctx func PG (g j) (q j) (EL j xs)
@@ -250,6 +255,10 @@ Theorem emitted_origin_ptr_path:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
              i.inst_opcode <> GAS) (emitted_insts st st') /\
   run_inst_seq_mem_ok (emitted_insts st st') s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st st' = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
   inst_seq_ptr D lo ctx func PG G tn (emitted_insts st st') s H qt /\
   run_inst_seq (emitted_insts st st') s = OK t ==>
   gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) []

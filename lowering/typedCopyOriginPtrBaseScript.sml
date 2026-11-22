@@ -306,7 +306,7 @@ QED
 
 Theorem typed_copy_origin_ptr_emit_op_path:
   emit_op opc args a = (op,b) /\ fn_has_code a b func /\
-  opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc /\
+  opc <> INVOKE /\ opc <> GAS /\ opc <> DALLOCA /\ ~is_terminator opc /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
   (!out. step_inst_base (mk_inst a.cs_next_id opc args [out]) s =
