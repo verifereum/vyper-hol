@@ -5326,6 +5326,7 @@ Proof
      disch_then (qspecl_then [`func`,`inst`,`s`] mp_tac) >> simp[] >>
      disch_then irule >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `dalloca_fmp_headroom inst s` mp_tac >>
+  qpat_x_assum `venomLayout$ceil32 (w2n sz) <= _` mp_tac >>
   simp[dalloca_fmp_headroom_def,arithmeticTheory.MAX_DEF] >>
   rw[] >> decide_tac
 QED
