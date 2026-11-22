@@ -143,6 +143,145 @@ Proof
   metis_tac[expr_body_pre_vv_gas_admissible]
 QED
 
+(* Fixed-site request: the caller supplies replay only at this paired
+   bytecode-child entry, not at arbitrary invocations of e. *)
+Definition raw_bytecode_replay_at_def:
+  raw_bytecode_replay_at (DF,lo,dep,ctx,shadow_ctx,PG,func,shadow_func)
+    tops ce cx env e es (st0,sa,a,shadow_sa,shadow_a,vv,s0,G0,tn0) <=>
+  (expr_body_pre ce cx env e es /\
+   expr_vv_sim_full_pre (DF,lo,dep,ctx,shadow_ctx,PG,func,shadow_func)
+     ce cx (expr_type e) e es (st0,sa,a,shadow_sa,shadow_a,vv,s0,G0,tn0) ==>
+   gas_completed_operand (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     tops cx st0 sa a (eval_expr cx e) (es,s0,G0,tn0)
+     (\H res ee G tn t. ?tv. res = INL tv /\
+       vv_post H ctx func ce cx e es sa a s0 ee tv vv t /\
+       vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) ee tv vv t /\
+       alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+       s0.vs_alloca_next <= t.vs_alloca_next /\
+       ghost_inv_at (DF H) lo dep ce cx ee G tn t /\
+       ptr_vv_ok cx (post_value_type ce e) tv vv ee G tn t /\
+       (!v. tv = Value v /\ ~is_word_type (post_value_type ce e) /\
+          ~is_bytestring_type (post_value_type ce e) ==>
+          vv_own ce cx (post_value_type ce e) sa a ee tv vv t /\
+          (!t' p. vv = LocatedValue t' p ==> p.ptr_location = LocMemory)) /\
+       (ce.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+        ?val. read_result cx tv ee = (INL val,ee) /\
+          !rt w. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME rt /\
+                 eval_operand (vv_operand vv) t = SOME w ==>
+                 w2n w + type_memory_size rt <= lo /\
+                 (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
+                        val_in_memory rt val (w2n w) mem)) /\
+       (!t' op. vv = StackValue t' op /\ ~is_word_type (post_value_type ce e) ==>
+          ptr_buf_ok ce e op G t) /\
+       (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
+          ptr_buf_ok ce e p.ptr_operand G t) /\
+       ghost_kept_at lo ce es sa G0 tn0 s0 G tn))
+End
+
+Theorem raw_bytecode_replay_at_of_completed:
+  body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  EVERY (create_operand_completed_ok cx) (create_operand_order RawCreate hs (e::v::rest)) ==>
+  raw_bytecode_replay_at (DF,lo,dep,ctx,shadow_ctx,PG,func,shadow_func)
+    tops ce cx env e es (st0,sa,a,shadow_sa,shadow_a,vv,s0,G0,tn0)
+Proof
+  strip_tac >>
+  `create_operand_completed_ok cx e` by fs[create_operand_order_def] >>
+  pure_rewrite_tac[raw_bytecode_replay_at_def] >> strip_tac >>
+  drule_all create_size_replay_vv_cut >> simp[]
+QED
+
+Theorem create_raw_bytecode_replay_from_replay:
+  body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  expr_body_pre ce cx env (Call ann (CreateTarget RawCreate hs rof ks) (e::v::rest) df) es /\
+  raw_bytecode_replay_at (DF,lo,dep,ctx,shadow_ctx,PG,func,shadow_func)
+    tops ce cx env e es (st0,sa,a,shadow_sa,shadow_a,vv,s0,G0,tn0) /\
+  expr_vv_sim_full_pre (DF,lo,dep,ctx,shadow_ctx,PG,func,shadow_func)
+    ce cx ty (Call ann (CreateTarget RawCreate hs rof ks) (e::v::rest) df) es
+    (st0,sa,sb,shadow_sa,shadow_sb,parent_vv,s0,G0,tn0) /\
+  compile_expr ce (expr_type e) e sa = (vv,a) /\
+  compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_a) /\
+  expr_sim_full_code (ctx,shadow_ctx,func,shadow_func) (sa,a,shadow_sa,shadow_a) /\
+  create_expr_prefix sa a (gas_explicit_sites ctx shadow_ctx) ctx func s0 ms u /\
+  u.vs_current_bb = a.cs_current_bb /\ u.vs_inst_idx = LENGTH a.cs_current_insts /\
+  eval_expr cx (Call ann (CreateTarget RawCreate hs rof ks) (e::v::rest) df)
+    (es with gas_obs := gas_explicit (ms ++ later) s0.vs_gas_readings ++ tail) = (res,ee) /\
+  valid_horizon cx st0 H ee.storage_trace ==>
+  (?err. res = INR (Error err) /\ unspecified_behaviour_exempt tops err) \/
+  ?p tv code G tn n.
+    expr_type e = BaseT (BytesT (Dynamic n)) /\ LENGTH code <= n /\ n <= 49152 /\
+    eval_expr cx e (es with gas_obs := gas_explicit (ms ++ later) s0.vs_gas_readings ++ tail) = (INL tv,p) /\
+    p.gas_obs = gas_explicit later u.vs_gas_readings ++ tail /\
+    read_result cx tv p = (INL (BytesV code),p) /\
+    read_result cx tv (p with gas_obs := []) = (INL (BytesV code),p with gas_obs := []) /\
+    bind (eval_exprs cx (TAKE (LENGTH rest - (if hs then 1 else 0)) rest ++
+                       v :: DROP (LENGTH rest - (if hs then 1 else 0)) rest))
+      (\vs. eval_create_operands cx RawCreate hs rof (MAP expr_type (e::v::rest))
+        (blueprint_literal_offset cx hs (e::v::rest)) (BytesV code::vs)) p = (res,ee) /\
+    valid_horizon cx st0 H p.storage_trace /\ expr_sim_inv ce cx env p /\
+    !h. valid_horizon cx st0 h p.storage_trace ==>
+      gas_origin_ptr_path (DF h,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (s0,G0,tn0) ms (OK u,G,tn) /\
+      vv_post h ctx func ce cx e es sa a s0 (p with gas_obs := []) tv vv u /\
+      vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) (p with gas_obs := []) tv vv u /\
+      alloca_history func u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+      s0.vs_alloca_next <= u.vs_alloca_next /\
+      ghost_inv_at (DF h) lo dep ce cx (p with gas_obs := []) G tn u /\
+      ptr_vv_ok cx (post_value_type ce e) tv vv (p with gas_obs := []) G tn u /\
+      (ce.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+       !rt w. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME rt /\
+              eval_operand (vv_operand vv) u = SOME w ==>
+              w2n w + type_memory_size rt <= lo /\
+              (!mem. mem_agree_outside tn.t_mem u.vs_memory mem ==>
+                      val_in_memory rt (BytesV code) (w2n w) mem)) /\
+      (!t' op. vv = StackValue t' op /\ ~is_word_type (post_value_type ce e) ==> ptr_buf_ok ce e op G u) /\
+      (!t' ptr. vv = LocatedValue t' ptr /\ ptr.ptr_location = LocMemory ==>
+               ptr_buf_ok ce e ptr.ptr_operand G u) /\
+      ghost_kept_at lo ce es sa G0 tn0 s0 G tn
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `expr_body_pre ce cx env e es` by
+    (drule exprBodyPrePropsTheory.expr_body_pre_static_facts >> strip_tac >>
+     `MEM e (e::v::rest)` by simp[] >> metis_tac[create_call_operand_body_pre]) >>
+  drule_all create_raw_first_full_pre >> strip_tac >>
+  qhdtm_x_assum `raw_bytecode_replay_at`
+    (fn th => mp_tac (REWRITE_RULE [raw_bytecode_replay_at_def] th)) >>
+  (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
+  qpat_x_assum `eval_expr _ (Call _ _ _ _) _ = _`
+    (assume_tac o REWRITE_RULE[create_raw_call_split]) >>
+  qmatch_asmsub_abbrev_tac `es with gas_obs := gs` >>
+  `?head_res p. eval_expr cx e (es with gas_obs := gs) = (head_res,p)` by
+    (Cases_on `eval_expr cx e (es with gas_obs := gs)` >> simp[]) >>
+  `valid_horizon cx st0 H p.storage_trace` by metis_tac[create_raw_cont_horizon] >>
+  `gs = gas_explicit ms s0.vs_gas_readings ++ (gas_explicit later u.vs_gas_readings ++ tail)` by
+    (drule create_prefix_readings >> simp[Abbr `gs`, gas_explicit_append, APPEND_ASSOC]) >>
+  qpat_x_assum `gas_completed_operand _ _ _ _ _ _ _ _ _`
+    (qspecl_then [`H`,`ms`,`u`,`gas_explicit later u.vs_gas_readings ++ tail`,`head_res`,`p`] mp_tac
+      o REWRITE_RULE[gas_completed_operand_def]) >>
+  (impl_tac >- (qpat_assum `gs = gas_explicit _ _ ++ (_ ++ _)`
+      (fn th => PURE_REWRITE_TAC[GSYM th]) >> simp[])) >>
+  strip_tac
+  >- (`well_typed_expr env (Call ann (CreateTarget RawCreate hs rof ks) (e::v::rest) df)` by
+        metis_tac[exprBodyPrePropsTheory.expr_body_pre_static_facts] >>
+      drule create_raw_first_type >> strip_tac >>
+      qpat_assum `!h. valid_horizon _ _ h _ ==> _`
+        (mp_tac o BETA_RULE o Q.SPEC `H`) >>
+      asm_rewrite_tac[] >> disch_then strip_assume_tac >>
+      qpat_x_assum `head_res = INL _` SUBST_ALL_TAC >>
+      drule_all create_raw_read_bytes >> strip_tac >>
+      `expr_sim_inv ce cx env p` by
+        (`expr_body_pre ce cx env e (es with gas_obs := gs)` by
+          simp[exprSimSourceTheory.expr_body_pre_gas_obs] >>
+         metis_tac[exprSimSourceTheory.expr_body_pre_eval_result]) >>
+      disj2_tac >> qexistsl_tac [`p`,`tv`,`code`,`G`,`tn`,`n`] >>
+      simp[] >> conj_tac
+      >- (qpat_x_assum `bind (eval_expr _ _) _ _ = _` mp_tac >>
+          simp[bind_def]) >>
+      rpt strip_tac >>
+      first_x_assum (drule_then strip_assume_tac) >> gvs[]) >>
+  disj1_tac >> qexists_tac `err` >>
+  qpat_x_assum `bind (eval_expr _ _) _ _ = _` mp_tac >> simp[bind_def]
+QED
+
 Theorem create_raw_bytecode_replay:
   body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre ce cx env (Call ann (CreateTarget RawCreate hs rof ks) (e::v::rest) df) es /\
@@ -191,44 +330,8 @@ Theorem create_raw_bytecode_replay:
       ghost_kept_at lo ce es sa G0 tn0 s0 G tn
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `expr_body_pre ce cx env e es` by
-    (drule exprBodyPrePropsTheory.expr_body_pre_static_facts >> strip_tac >>
-     `MEM e (e::v::rest)` by simp[] >> metis_tac[create_call_operand_body_pre]) >>
-  `create_operand_completed_ok cx e` by fs[create_operand_order_def] >>
-  drule_all create_raw_first_full_pre >> strip_tac >>
-  drule_all create_size_replay_vv_cut >> strip_tac >>
-  qpat_x_assum `eval_expr _ (Call _ _ _ _) _ = _`
-    (assume_tac o REWRITE_RULE[create_raw_call_split]) >>
-  qmatch_asmsub_abbrev_tac `es with gas_obs := gs` >>
-  `?head_res p. eval_expr cx e (es with gas_obs := gs) = (head_res,p)` by
-    (Cases_on `eval_expr cx e (es with gas_obs := gs)` >> simp[]) >>
-  `valid_horizon cx st0 H p.storage_trace` by metis_tac[create_raw_cont_horizon] >>
-  `gs = gas_explicit ms s0.vs_gas_readings ++ (gas_explicit later u.vs_gas_readings ++ tail)` by
-    (drule create_prefix_readings >> simp[Abbr `gs`, gas_explicit_append, APPEND_ASSOC]) >>
-  qpat_x_assum `gas_completed_operand _ _ _ _ _ _ _ _ _`
-    (qspecl_then [`H`,`ms`,`u`,`gas_explicit later u.vs_gas_readings ++ tail`,`head_res`,`p`] mp_tac
-      o REWRITE_RULE[gas_completed_operand_def]) >>
-  (impl_tac >- (qpat_assum `gs = gas_explicit _ _ ++ (_ ++ _)`
-      (fn th => PURE_REWRITE_TAC[GSYM th]) >> simp[])) >>
-  strip_tac
-  >- (`well_typed_expr env (Call ann (CreateTarget RawCreate hs rof ks) (e::v::rest) df)` by
-        metis_tac[exprBodyPrePropsTheory.expr_body_pre_static_facts] >>
-      drule create_raw_first_type >> strip_tac >>
-      qpat_assum `!h. valid_horizon _ _ h _ ==> _`
-        (mp_tac o BETA_RULE o Q.SPEC `H`) >>
-      asm_rewrite_tac[] >> disch_then strip_assume_tac >>
-      qpat_x_assum `head_res = INL _` SUBST_ALL_TAC >>
-      drule_all create_raw_read_bytes >> strip_tac >>
-      `expr_sim_inv ce cx env p` by
-        (`expr_body_pre ce cx env e (es with gas_obs := gs)` by
-          simp[exprSimSourceTheory.expr_body_pre_gas_obs] >>
-         metis_tac[exprSimSourceTheory.expr_body_pre_eval_result]) >>
-      disj2_tac >> qexistsl_tac [`p`,`tv`,`code`,`G`,`tn`,`n`] >>
-      simp[] >> conj_tac
-      >- (qpat_x_assum `bind (eval_expr _ _) _ _ = _` mp_tac >>
-          simp[bind_def]) >>
-      rpt strip_tac >>
-      first_x_assum (drule_then strip_assume_tac) >> gvs[]) >>
-  disj1_tac >> qexists_tac `err` >>
-  qpat_x_assum `bind (eval_expr _ _) _ _ = _` mp_tac >> simp[bind_def]
+  drule_all raw_bytecode_replay_at_of_completed >> disch_tac >>
+  mp_tac (SPEC_ALL create_raw_bytecode_replay_from_replay) >>
+  (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))) >>
+  disch_then ACCEPT_TAC
 QED
