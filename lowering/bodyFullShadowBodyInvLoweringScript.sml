@@ -395,11 +395,16 @@ Proof
     linked_body_calls_resolved_def, function_int_calls_def,
     supported_declaration_body_def, supported_function_body_def,
     supported_stmt_bindings_def, supported_stmt_def, body_stmts_safe_iff, body_stmt_safe_def,
-    supported_stmt_expr_exists_def, int_calls_stmt_def] >>
-  qexistsl_tac [`<| rpol_target := all_capabilities;
-                   rpol_frontend_dispatch := Linear;
-                   rpol_final_assembly := FAP_Optimize |>`, `unit`] >>
-  simp[]
+    supported_stmt_expr_exists_def, int_calls_stmt_def]
+  >~ [`?rp unit'. _`] >-
+    (qexistsl_tac [`<| rpol_target := all_capabilities;
+                     rpol_frontend_dispatch := Linear;
+                     rpol_final_assembly := FAP_Optimize |>`, `unit`] >>
+     simp[EQ_SYM_EQ]) >>
+  rpt strip_tac >> gvs[AllCaseEqs(), function_mutability_ok_def,
+    stmt_mutability_ok_def, function_int_calls_def, supported_declaration_body_def,
+    supported_function_body_def, supported_stmt_def, body_stmts_safe_iff,
+    body_stmt_safe_def, supported_stmt_expr_exists_def, int_calls_stmt_def]
 QED
 
 Theorem linked_two_module_internal_code:

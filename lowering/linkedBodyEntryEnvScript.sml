@@ -12,7 +12,14 @@ Theorem contract_inv_build_compile_env_unit:
 Proof
   simp[contract_inv_def, cenv_module_pins_mods_def, immutable_section_layout_mods_def,
        build_compile_env_unit_def, pairTheory.ELIM_UNCURRY] >>
-  strip_tac >> fs[]
+  strip_tac >> fs[] >> rpt conj_tac
+  >- (qpat_assum `!src tops. ALOOKUP mods src = SOME tops ==> _` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[])
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- (qpat_assum `ce.ce_module_vars = _` (SUBST1_TAC o SYM) >>
+      first_assum ACCEPT_TAC)
+  >> first_assum ACCEPT_TAC
 QED
 
 Theorem stmts_exprs_ok_entry_target:

@@ -86,7 +86,8 @@ Proof
     `~supported_target_exists (const_name_root cx) t` by
       (drule_all body_inv_stmt_const_name_free >>
        simp[supported_stmt_expr_exists_def]) >>
-    irule aug_place_target_indices_pre >>
+    irule (Q.INST [`tops` |-> `tops`, `bindings` |-> `bindings`]
+      aug_place_target_indices_pre) >>
     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
         alloc_limits_stmt_def, int_calls_stmt_def] >>
     simp[optionTheory.IS_SOME_EXISTS] >>
