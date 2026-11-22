@@ -1782,9 +1782,8 @@
       }
     ]
   },
-  "test_static_call_rejects_state_write": {
-    "deps": [],
-    "item_type": "test",
+  "static_write_setup": {
+    "item_type": "fixture",
     "traces": [
       {
         "annotated_ast": {
@@ -2127,7 +2126,15 @@
         },
         "trace_type": "deployment",
         "value": 0
-      },
+      }
+    ]
+  },
+  "test_static_call_rejects_state_write": {
+    "item_type": "test",
+    "deps": [
+      "fixture/static_write_setup"
+    ],
+    "traces": [
       {
         "call_args": {
           "calldata": "b0f2b72a0000000000000000000000000000000000000000000000000000000000000007",
@@ -2194,6 +2201,50 @@
         "output": "0000000000000000000000000000000000000000000000000000000000000000",
         "python_args": {
           "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  },
+  "test_static_call_write_reason": {
+    "item_type": "test",
+    "deps": [
+      "fixture/static_write_setup"
+    ],
+    "traces": [
+      {
+        "call_args": {
+          "calldata": "b0f2b72a0000000000000000000000000000000000000000000000000000000000000007",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "set_value",
+        "output": "",
+        "python_args": {
+          "args": [
+            7
+          ],
           "kwargs": {}
         },
         "trace_type": "call"
