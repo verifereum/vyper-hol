@@ -6397,7 +6397,7 @@ Resume create_blueprint_materialize[total]:
   `i.inst_opcode = DALLOCA /\ i.inst_operands = [tot_op] /\ i.inst_outputs = [p]` by
     simp[Abbr `i`,mk_inst_def] >>
   `venomLayout$ceil32 (w2n (n2w N:bytes32)) <= 2 ** 255 + 2 ** 64` by
-    simp[Abbr `N`,IgnAsm `prefix = _`] >>
+    asm_rewrite_tac[] >>
   drule_all (Q.INST [`s` |-> `u`, `inst` |-> `i`,
     `n` |-> `w2n (n2w N:bytes32)`] create_dalloca_cut_bound) >>
   strip_tac >>
