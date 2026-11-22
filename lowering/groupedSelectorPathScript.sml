@@ -25,11 +25,12 @@ Theorem compile_group_entries_selected_origin_with_frame:
         cs_extends sa checks /\ cs_extends done sb /\ ci_mono done sb /\
         (!sha shb shfn. gas_shadow_state sa sha /\
           compile_group_entries mid entries
-            (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+            (common with <| ec_env := gas_shadow_env T common.ec_env;
+                           ec_body := MAP gas_shadow_stmt common.ec_body |>)
             (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars) off sha = ((),shb) /\
           fn_has_code sha shb shfn ==>
           ?shinit shdone.
-            compile_entry_point_kwargs common.ec_env
+            compile_entry_point_kwargs (gas_shadow_env T common.ec_env)
               (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars) off k
               common.ec_common_label shinit = ((),shdone) /\
             fn_has_code shinit shdone shfn /\ gas_shadow_state init shinit) /\
