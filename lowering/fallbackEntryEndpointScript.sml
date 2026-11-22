@@ -222,7 +222,7 @@ Proof
   metis_tac[source_typing_ok_vtype_keys_distinct, supportedProgramTheory.supported_program_def]
 QED
 
-Theorem fallback_empty_registration_state:
+Theorem fallback_empty_registration_state[local]:
   initial_venom_state_rel tops am tx vs /\
   send_call_value mut
     (initial_evaluation_context am.sources am.layouts tx NONE)
