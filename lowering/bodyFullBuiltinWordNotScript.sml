@@ -10,7 +10,7 @@ Ancestors
   finite_map venomExecSemantics builtinSimple vyperValueOperation valueEncoding vyperInterpreter vyperContext
   vyperTypeSystem vyperTyping vyperAST list
 
-Theorem word_not_pre[local]:
+Theorem word_not_pre:
   expr_body_pre cenv cx env (Builtin ann Not args) es ==>
   ?e. args = [e] /\ ann = expr_type e /\
       expr_body_pre cenv cx env e es /\

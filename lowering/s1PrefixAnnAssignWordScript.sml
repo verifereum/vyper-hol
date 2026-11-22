@@ -1,7 +1,7 @@
 (* Request-prefix companion to bodyFullAnnAssignWord. *)
 Theory s1PrefixAnnAssignWord
 Ancestors
-  s1PrefixPreds bodyFullAnnAssignWord s1PrefixDefs
+  s1PrefixPreds bodyFullAnnAssignWord s1PrefixDefs s1PrefixCompose s1PrefixProps vyperStorageTrace list gasShadowCompileStmtHelpers gasShadowCompileStmtBase stmtSimProps loweringSlice gasShadow exprLoweringProps bodyFullAnnAssignMemoryPost bodyFullHashKeccakFixed stateRelProj bodyFullIfExpReach stmtSimDeclSource bodySimFull exprSimDefs bodyFullAllocaFresh gasOutcomeFullCompose vyperState vyperStorageFootprint loweringPosts compileEnv
 
 Theorem annassign_word_prefix_execution_sep:
   is_word_type (expr_type e) /\
@@ -50,8 +50,143 @@ Theorem annassign_word_prefix_execution_sep:
       cx st0 (eval_stmt cx (AnnAssign id (expr_type e) e))
       (es,s0,G0,tn0)
 Proof
-  cheat
+  strip_tac >> Cases_on `storage_trace_domain cx st0 es.storage_trace`
+  >- suspend "layout" >> suspend "no_horizon"
 QED
+
+Resume annassign_word_prefix_execution_sep[no_horizon]:
+  `storage_trace_frame (eval_stmt cx (AnnAssign id (expr_type e) e))` by
+    simp[evaluate_storage_trace_frame] >>
+  rewrite_tac[gas_prefix_full_def] >> qexists_tac `[]` >> conj_tac
+  >- (qexistsl_tac [`storage_trace_horizon es.storage_trace`, `func`, `PG`, `G0`, `tn0`, `s0`] >>
+      simp[gasOutcomeFullTheory.gas_origin_ptr_focus_nil]) >>
+  rpt gen_tac >> strip_tac >> drule_all storage_trace_frame_prefix >>
+  simp[] >> strip_tac >>
+  `es.storage_trace ++ observations = obs_pre ++ StorageOutcome rq outcome :: sfx` by fs[] >>
+  pop_assum (strip_assume_tac o REWRITE_RULE [listTheory.APPEND_EQ_APPEND])
+  >- (`l = []` by (Cases_on `l` >> fs[]) >>
+      metis_tac[listTheory.APPEND_NIL,
+                bodyFullExtCallPackingReadyTheory.extcall_packing_observed_domain]) >>
+  metis_tac[gasOutcomeFullTheory.valid_horizon_append,
+            bodyFullExtCallPackingReadyTheory.extcall_packing_observed_domain]
+QED
+
+Resume annassign_word_prefix_execution_sep[layout]:
+  drule_all annassign_word_full_declared_layout >>
+  disch_then (qx_choosel_then [`p`, `a`, `b`, `op`] strip_assume_tac) >>
+  `gas_shadow_state r r'` by
+    (mp_tac (Q.INST [`cenv` |-> `cenv`, `id` |-> `id`, `ty` |-> `expr_type e`, `sd` |-> `T`]
+       gas_shadow_compiles_env_declare_local) >>
+     rewrite_tac[gas_shadow_compiles_env_def] >>
+     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
+  `r'.cs_blocks = shadow_sa.cs_blocks` by
+    (drule_at (Pat `declare_local _ _ _ shadow_sa = _`) declare_local_ptr >>
+     simp[] >> strip_tac >> simp[]) >>
+  `fn_has_code r' shadow_sf shadow_func` by
+    fs[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def] >>
+  `local_ptrs_reserved (gas_shadow_env T cenv) shadow_sa` by
+    (`sa.cs_next_var = shadow_sa.cs_next_var` by
+       fs[gasShadowStateTheory.gas_shadow_state_def] >>
+     `local_ptrs_reserved cenv shadow_sa` by
+       (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+     qpat_assum `local_ptrs_reserved cenv shadow_sa` mp_tac >>
+     pure_rewrite_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def,
+                      gasShadowCompileBaseTheory.gas_shadow_env_fields] >>
+     disch_then ACCEPT_TAC) >>
+  `local_ptrs_reserved (gas_shadow_env T cenv') r'` by
+    (drule_at (Pat `declare_local _ _ _ shadow_sa = _`) declare_local_reserved >> simp[]) >>
+  qpat_assum `compile_stmt _ _ _ (AnnAssign _ _ (gas_shadow_expr _)) _ = _`
+    (mp_then (Pos hd) mp_tac compile_annassign_word_parts) >>
+  disch_then (qspecl_then [`shadow_func`,`p`,`32`] mp_tac) >>
+  simp[gas_shadow_expr_type, gasShadowCompileBaseTheory.gas_shadow_env_fields] >>
+  (impl_tac >- metis_tac[compile_expr_grows]) >>
+  disch_then (qx_choosel_then [`shadow_a`,`shadow_b`,`shadow_op`] strip_assume_tac) >>
+  `gas_shadow_state a shadow_a` by
+    (mp_tac (Q.INST [`opc` |-> `ALLOCA`, `ops` |-> `[Lit 32w]`, `outs` |-> `[p]`]
+       gasShadowStateTheory.gas_shadow_compiles_emit_inst) >>
+     rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`r`,`r'`] mp_tac) >> simp[]) >>
+  `shadow_op = op /\ gas_shadow_state b shadow_b` by
+    (mp_tac (Q.INST [`cenv` |-> `cenv'`, `e` |-> `e`, `ty` |-> `expr_type e`, `sd` |-> `T`]
+       gas_shadow_stmt_lower_value_env) >>
+     rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`a`,`shadow_a`] mp_tac) >> simp[]) >>
+  gvs[] >> suspend "entry"
+QED
+
+Resume annassign_word_prefix_execution_sep[entry]:
+  `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` by
+    metis_tac[storage_trace_domain_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
+    s0.vs_alloca_next + pending_alloca_size func s0 <= w2n s0.vs_initial_fmp` by
+    (strip_tac >> conj_tac >- metis_tac[stmt_state_rel_allocas_below_fmp] >>
+     drule stmt_state_rel_fmp_room >> simp[fmp_room_def] >> decide_tac) >>
+  qpat_assum `type_memory_bytes cenv (expr_type e) = 32` (assume_tac o SYM) >>
+  drule_all annassign_full_alloc_entry >>
+  disch_then (qspecl_then [`PG`, `gas_explicit_sites ctx shadow_ctx`]
+    (qx_choosel_then [`w`, `t`, `G'`, `tn'`] strip_assume_tac)) >>
+  `cenv'.ce_is_ctor = cenv.ce_is_ctor` by
+    (qpat_assum `cenv' with <|ce_vars := _; ce_var_type := _;
+                              ce_dynarray_capacity := _|> = cenv` mp_tac >>
+     simp[compile_env_component_equality]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    metis_tac[storage_trace_domain_def, stmt_state_rel_allocas_below_fmp] >>
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s` by
+    (Cases_on `ctx_has_dalloca ctx`
+     >- (qpat_assum `ctx_has_dalloca ctx ==> (!bb. _) /\ (!fn inst s. _)`
+           (drule_then strip_assume_tac) >>
+         qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK t,G',tn')`
+           (qspec_then `ARB` (fn path =>
+           qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn phi =>
+           qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _` (fn safe =>
+           ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
+             (LIST_CONJ [path,phi,safe]))))))) >>
+     rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >>
+     disch_then drule >> strip_tac >>
+     fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
+        unitTransformDefsTheory.dalloca_fmp_headroom_def] >> metis_tac[]) >>
+  `!H. dead_lo_ok H (DF H) lo cenv' cx` by
+    (pure_rewrite_tac[bodyPtrDefsTheory.dead_lo_ok_def] >>
+     qpat_assum `cenv'.ce_is_ctor = cenv.ce_is_ctor` SUBST1_TAC >>
+     qpat_assum `!H. dead_lo_ok H _ _ cenv _`
+       (ACCEPT_TAC o PURE_REWRITE_RULE[bodyPtrDefsTheory.dead_lo_ok_def])) >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    (drule annassign_admissible_rhs >> simp[]) >>
+  suspend "source"
+QED
+
+Resume annassign_word_prefix_execution_sep[source]:
+  irule gas_prefix_full_zero_prefix_guarded >> simp[evaluate_storage_trace_frame] >>
+  qexistsl_tac [`G'`,`t`,`tn'`] >>
+  conj_tac >- metis_tac[] >>
+  `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     cx st0 (bind (eval_expr cx e) (read_result cx)) (es,t,G',tn')` by
+    (qpat_assum `expr_sim_prefix _ _ _ _ _ _`
+       (drule_all o REWRITE_RULE [expr_sim_prefix_def, expr_sim_full_pre_def]) >> simp[]) >>
+  drule eval_annassign_action >> disch_then (qspecl_then [`id`,`e`] SUBST1_TAC) >>
+  qpat_assum `expr_sim_full _ _ _ _ _ _`
+    (drule_all o REWRITE_RULE [expr_sim_full_def]) >> strip_tac >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,t,G',tn')
+     (\H res ee G tn u. ~u.vs_halted) (\H res ee gt r. ISR res)` by
+    (qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _`
+       (mp_then Any irule gas_outcome_full_post_source) >>
+     simp[] >> rpt strip_tac >> Cases_on `res` >> fs[expr_exit_def]) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ (\H res ee G tn u. ~u.vs_halted) _`
+    (mp_then Any irule gas_prefix_full_bind_no_outcome) >>
+  simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+       storage_trace_frame_read_result, requests_outcomes_frame_bind_all,
+       evaluate_requests_outcomes_frame, requests_outcomes_frame_read_result,
+       storage_trace_frame_new_variable] >>
+  rpt gen_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+  Cases_on `st.scopes` >>
+  simp[new_variable_def, bind_def, ignore_bind_def, get_scopes_def,
+       type_check_def, assert_def, return_def, raise_def, set_scopes_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Finalise annassign_word_prefix_execution_sep
 
 Theorem annassign_word_prefix_execution:
   is_word_type (expr_type e) /\
@@ -98,5 +233,9 @@ Theorem annassign_word_prefix_execution:
       cx st0 (eval_stmt cx (AnnAssign id (expr_type e) e))
       (es,s0,G0,tn0)
 Proof
-  cheat
+  strip_tac >>
+  `ctx_has_dalloca ctx ==>
+    (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s)` by simp[] >>
+  drule_all annassign_word_prefix_execution_sep >> simp[]
 QED
