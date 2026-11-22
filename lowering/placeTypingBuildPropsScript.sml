@@ -29,9 +29,7 @@ Theorem struct_namespace_collision_rejected:
   check_contract F [] (2w : 160 word) mods = NONE /\
   check_contract T [] (2w : 160 word) mods = NONE
 Proof
-  simp[LET_THM] >> conj_tac >> CCONTR_TAC >>
-  gvs[optionTheory.NOT_NONE_SOME] >>
-  drule check_contract_namespaces_ok >> simp[contract_namespaces_ok_def]
+  simp[LET_THM, check_contract_def, contract_namespaces_ok_def]
 QED
 
 Theorem add_toplevel_vtypes_deploy:
