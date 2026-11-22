@@ -76,7 +76,7 @@ Theorem extcall_keyword_head_outcome[local]:
   expr_body_pre cenv cx env e es /\
   expr_type e = ext_call_kw_type rt k /\
   compile_ext_call_kwarg compile_expr cenv rt k e sa = ((op,dt),sb) /\
-  compile_ext_call_kwarg compile_expr cenv rt k (gas_shadow_expr e)
+  compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt k (gas_shadow_expr e)
     shadow_sa = ((op,dt),shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -182,7 +182,7 @@ Theorem extcall_request_keywords_owned_outcome:
     expr_body_pre cenv cx env e st) /\
   MAP expr_type xs = MAP (ext_call_kw_type rt) ks /\
   compile_ext_call_kwargs compile_expr cenv rt ks xs sa = ((vo,go,dopt),sb) /\
-  compile_ext_call_kwargs compile_expr cenv rt ks (MAP gas_shadow_expr xs)
+  compile_ext_call_kwargs compile_expr (gas_shadow_env T cenv) rt ks (MAP gas_shadow_expr xs)
     shadow_sa = ((vo,go,dopt),shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\

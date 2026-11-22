@@ -36,7 +36,7 @@ Theorem compile_raise_reason_frag_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Raise (RaiseReason e)))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason e))))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason e))))
       (eval_stmt cx (Raise (RaiseReason e))) es
 Proof
   rpt gen_tac >> strip_tac >>

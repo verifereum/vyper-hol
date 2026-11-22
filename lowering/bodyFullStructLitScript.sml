@@ -509,7 +509,7 @@ Theorem structlit_fields_bundled_full[local]:
     (pure ==> pure_frame ce func ees fr sf s)) ==>
   !fs tys tvs es si sb shadow_si shadow_sb s0 G0 tn0 cells off out.
     compile_struct_lit compile_expr ce (StructT nsid) fs (Var root) off si = (out,sb) /\
-    compile_struct_lit compile_expr ce (StructT nsid)
+    compile_struct_lit compile_expr (gas_shadow_env T ce) (StructT nsid)
       (MAP (I ## gas_shadow_expr) fs) (Var root) off shadow_si = (out,shadow_sb) /\
     expr_sim_full_code (ctx,shadow_ctx,func,shadow_func) (si,sb,shadow_si,shadow_sb) /\
     body_inv (cx_tops cx) ctx ce cx /\
@@ -1412,7 +1412,7 @@ Theorem structlit_allocated_fields_bundled_full[local]:
     literal_prefix_ok cells tn s /\
     (pure ==> pure_frame ce func es sa s0 s)) /\
   compile_struct_lit compile_expr ce (StructT nsid) fs (Var root) 0 sm = (out,sb) /\
-  compile_struct_lit compile_expr ce (StructT nsid)
+  compile_struct_lit compile_expr (gas_shadow_env T ce) (StructT nsid)
     (MAP (I ## gas_shadow_expr) fs) (Var root) 0 shadow_sm = (out,shadow_sb) /\
   expr_sim_full_code (ctx,shadow_ctx,func,shadow_func) (sm,sb,shadow_sm,shadow_sb) /\
   body_inv (cx_tops cx) ctx ce cx /\

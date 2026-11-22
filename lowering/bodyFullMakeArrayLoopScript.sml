@@ -63,7 +63,7 @@ Theorem make_array_loop_full:
           (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
                val_in_memory rt v p m)) ps)) ps off s tn /\
     compile_make_tuple compile_expr cenv args tys (Var q) off sa = (Var q,sb) /\
-    compile_make_tuple compile_expr cenv (MAP gas_shadow_expr args) tys
+    compile_make_tuple compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr args) tys
       (Var q) off shadow_sa = (Var q,shadow_sb) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
     fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func ==>

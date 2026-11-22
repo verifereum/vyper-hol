@@ -346,7 +346,7 @@ QED
 Theorem shadow_compile_same[local]:
   gas_shadow_state sa shadow_sa /\
   compile_expr cenv ty e sa = (vv, sm) /\
-  compile_expr cenv ty (gas_shadow_expr e) shadow_sa = (vv2, shadow_sm) ==>
+  compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa = (vv2, shadow_sm) ==>
   vv2 = vv /\ gas_shadow_state sm shadow_sm
 Proof
   strip_tac >>

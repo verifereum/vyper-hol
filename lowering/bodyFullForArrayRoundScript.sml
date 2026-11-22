@@ -422,8 +422,8 @@ Theorem for_nonslot_array_body_invoke[local]:
   call_evaluation_safe cx (int_calls_stmts body) /\
   frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc ret_ty /\
   stmts_env bc (InLoop exit incr) ret_ty body sbCopy = (bc',sbBody) /\
-  stmts_env bc (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
-    shadow_sbCopy = (bc',shadow_sbBody) /\
+  stmts_env (gas_shadow_env T bc) (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
+    shadow_sbCopy = (gas_shadow_env T bc',shadow_sbBody) /\
   gas_shadow_state sbCopy shadow_sbCopy /\ gas_shadow_state sbBody shadow_sbBody /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -768,7 +768,7 @@ Theorem for_nonslot_array_layout_full_with_increment:
   expr_type e = ArrayT sty bd /\ c.ce_alloca_locals /\
   local_ptrs_reserved c sa0 /\ gas_shadow_state sa0 shadow_sa0 /\
   compile_stmt c lctx ret_ty (For id fty (Array e) n loop_body) sa0 = ((),sb) /\
-  compile_stmt c lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
+  compile_stmt (gas_shadow_env T c) lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
     shadow_sa0 = ((),shadow_sb) /\
   fn_has_code sa0 sb func /\ fn_has_code shadow_sa0 shadow_sb shadow_func ==>
   ?vv sbExpr shadow_sbExpr loc len_op saL bc saD saA xd capacity aidItem
@@ -1035,7 +1035,7 @@ Theorem for_nonslot_array_layout_full_with_done_age[local]:
   expr_type e = ArrayT sty bd /\ c.ce_alloca_locals /\
   local_ptrs_reserved c sa0 /\ gas_shadow_state sa0 shadow_sa0 /\
   compile_stmt c lctx ret_ty (For id fty (Array e) n loop_body) sa0 = ((),sb) /\
-  compile_stmt c lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
+  compile_stmt (gas_shadow_env T c) lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
     shadow_sa0 = ((),shadow_sb) /\
   fn_has_code sa0 sb func /\ fn_has_code shadow_sa0 shadow_sb shadow_func ==>
   ?vv sbExpr shadow_sbExpr loc len_op saL bc saD saA xd capacity aidItem
@@ -1055,7 +1055,7 @@ Theorem for_nonslot_array_layout_full:
   expr_type e = ArrayT sty bd /\ c.ce_alloca_locals /\
   local_ptrs_reserved c sa0 /\ gas_shadow_state sa0 shadow_sa0 /\
   compile_stmt c lctx ret_ty (For id fty (Array e) n loop_body) sa0 = ((),sb) /\
-  compile_stmt c lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
+  compile_stmt (gas_shadow_env T c) lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
     shadow_sa0 = ((),shadow_sb) /\
   fn_has_code sa0 sb func /\ fn_has_code shadow_sa0 shadow_sb shadow_func ==>
   ?vv sbExpr shadow_sbExpr loc len_op saL bc saD saA xd capacity aidItem
@@ -2766,8 +2766,8 @@ Theorem for_nonslot_array_scoped_body_at[local]:
   call_evaluation_safe cx (int_calls_stmts body) /\
   frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc ret_ty /\
   stmts_env bc (InLoop exit incr) ret_ty body sbCopy = (bc',sbBody) /\
-  stmts_env bc (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
-    shadow_sbCopy = (bc',shadow_sbBody) /\
+  stmts_env (gas_shadow_env T bc) (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
+    shadow_sbCopy = (gas_shadow_env T bc',shadow_sbBody) /\
   gas_shadow_state sbCopy shadow_sbCopy /\ gas_shadow_state sbBody shadow_sbBody /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -4375,8 +4375,8 @@ Theorem for_nonslot_array_scoped_body_full:
   call_evaluation_safe cx (int_calls_stmts body) /\
   frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc ret_ty /\
   stmts_env bc (InLoop exit incr) ret_ty body sbCopy = (bc',sbBody) /\
-  stmts_env bc (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
-    shadow_sbCopy = (bc',shadow_sbBody) /\
+  stmts_env (gas_shadow_env T bc) (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
+    shadow_sbCopy = (gas_shadow_env T bc',shadow_sbBody) /\
   gas_shadow_state sbCopy shadow_sbCopy /\ gas_shadow_state sbBody shadow_sbBody /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\

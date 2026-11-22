@@ -3963,7 +3963,7 @@ Theorem body_append_local_nonword_frag_full:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (NameTarget id) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (NameTarget id) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (NameTarget id) e)))
     (eval_stmt cx (Append (NameTarget id) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -4755,7 +4755,7 @@ Theorem body_append_nested_frag_full[local]:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append t e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append t e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append t e)))
     (eval_stmt cx (Append t e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -5887,7 +5887,7 @@ Theorem body_append_nested_subscript_frag_full:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (SubscriptTarget base key) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (SubscriptTarget base key) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (SubscriptTarget base key) e)))
     (eval_stmt cx (Append (SubscriptTarget base key) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -5918,7 +5918,7 @@ Theorem body_append_nested_attribute_frag_full:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (AttributeTarget base field) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (AttributeTarget base field) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (AttributeTarget base field) e)))
     (eval_stmt cx (Append (AttributeTarget base field) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -5949,7 +5949,7 @@ Theorem body_append_storage_word_frag_full:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget nid) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
     (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -6367,7 +6367,7 @@ Theorem body_append_storage_aggregate_frag_full[local]:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget nid) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
     (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -6936,7 +6936,7 @@ Theorem body_append_storage_bytestring_frag_full:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget nid) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
     (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
   rpt strip_tac >>
@@ -6965,7 +6965,7 @@ Theorem body_append_storage_flat_copy_frag_full:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget nid) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
     (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
   rpt strip_tac >> irule body_append_storage_aggregate_frag_full >> simp[] >>
@@ -6994,7 +6994,7 @@ Theorem body_append_storage_typed_copy_frag_full:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget nid) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
     (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
   rpt strip_tac >> irule body_append_storage_aggregate_frag_full >> simp[] >>
@@ -7023,7 +7023,7 @@ Theorem body_append_storage_tuple_layout_frag_full:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget nid) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
     (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
   rpt strip_tac >> irule body_append_storage_aggregate_frag_full >> simp[] >>

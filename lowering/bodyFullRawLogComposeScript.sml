@@ -65,9 +65,9 @@ QED
 
 Theorem raw_log_expr_sim_full:
   (!ce ty e. gas_shadow_compiles (lower_value compile_expr ce ty e)
-    (lower_value compile_expr ce ty (gas_shadow_expr e))) /\
+    (lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e))) /\
   (!ce xs. gas_shadow_compiles (compile_multi_exprs compile_expr ce xs)
-    (compile_multi_exprs compile_expr ce (MAP gas_shadow_expr xs))) /\
+    (compile_multi_exprs compile_expr (gas_shadow_env T ce) (MAP gas_shadow_expr xs))) /\
   body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env (Call ann RawLog args dflt) es ==>

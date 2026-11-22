@@ -140,13 +140,13 @@ Theorem runtime_selected_body_shadow_with_shadow_nr:
       MEM func unit.cu_context.ctx_functions /\
       MEM shadow_func shadow_ctx.ctx_functions /\
       stmts_env cenv NoLoop ret fbody sl = (cenv',sb) /\
-      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sl =
-        (cenv',shadow_sb) /\
+      stmts_env (gas_shadow_env T cenv) NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sl =
+        (gas_shadow_env T cenv',shadow_sb) /\
       gas_shadow_state sl shadow_sl /\ gas_shadow_state sb shadow_sb /\
       fn_has_code sl sb func /\ fn_has_code sb st' func /\
       fn_has_code shadow_sl shadow_sb shadow_func /\
       gas_shadow_state sa shadow_sa /\
-      compile_guarded_body cenv nr key ut iv (MAP gas_shadow_stmt fbody) rt
+      compile_guarded_body (gas_shadow_env T cenv) nr key ut iv (MAP gas_shadow_stmt fbody) rt
         shadow_sa = ((), shadow_st') /\
       fn_has_code shadow_sa shadow_st' shadow_func
 Proof
@@ -355,8 +355,8 @@ Theorem runtime_selected_body_shadow_with_shadow:
       MEM func unit.cu_context.ctx_functions /\
       MEM shadow_func shadow_ctx.ctx_functions /\
       stmts_env cenv NoLoop ret fbody sa = (cenv',sb) /\
-      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa =
-        (cenv',shadow_sb) /\
+      stmts_env (gas_shadow_env T cenv) NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa =
+        (gas_shadow_env T cenv',shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       fn_has_code sa sb func /\ fn_has_code sb st' func /\
       fn_has_code shadow_sa shadow_sb shadow_func
@@ -393,8 +393,8 @@ Theorem runtime_selected_body_shadow:
       MEM func unit.cu_context.ctx_functions /\
       MEM shadow_func shadow_ctx.ctx_functions /\
       stmts_env cenv NoLoop ret fbody sa = (cenv',sb) /\
-      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa =
-        (cenv',shadow_sb) /\
+      stmts_env (gas_shadow_env T cenv) NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa =
+        (gas_shadow_env T cenv',shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       fn_has_code sa sb func /\ fn_has_code sb st' func /\
       fn_has_code shadow_sa shadow_sb shadow_func
@@ -476,13 +476,13 @@ Theorem runtime_fallback_body_shadow_with_shadow_nr:
       MEM func unit.cu_context.ctx_functions /\
       MEM shadow_func shadow_ctx.ctx_functions /\
       stmts_env cenv NoLoop ret fbody sl = (cenv',sb) /\
-      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sl =
-        (cenv',shadow_sb) /\
+      stmts_env (gas_shadow_env T cenv) NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sl =
+        (gas_shadow_env T cenv',shadow_sb) /\
       gas_shadow_state sl shadow_sl /\ gas_shadow_state sb shadow_sb /\
       fn_has_code sl sb func /\ fn_has_code sb st' func /\
       fn_has_code shadow_sl shadow_sb shadow_func /\
       gas_shadow_state sa shadow_sa /\
-      compile_guarded_body cenv nr key ut iv (MAP gas_shadow_stmt fbody) rt
+      compile_guarded_body (gas_shadow_env T cenv) nr key ut iv (MAP gas_shadow_stmt fbody) rt
         shadow_sa = ((), shadow_st') /\
       fn_has_code shadow_sa shadow_st' shadow_func
 Proof
@@ -707,8 +707,8 @@ Theorem runtime_fallback_body_shadow_with_shadow:
       MEM func unit.cu_context.ctx_functions /\
       MEM shadow_func shadow_ctx.ctx_functions /\
       stmts_env cenv NoLoop ret fbody sa = (cenv',sb) /\
-      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa =
-        (cenv',shadow_sb) /\
+      stmts_env (gas_shadow_env T cenv) NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa =
+        (gas_shadow_env T cenv',shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       fn_has_code sa sb func /\ fn_has_code sb st' func /\
       fn_has_code shadow_sa shadow_sb shadow_func
@@ -751,13 +751,13 @@ Theorem runtime_entry_body_shadow_with_shadow_nr:
       MEM func unit.cu_context.ctx_functions /\
       MEM shadow_func shadow_ctx.ctx_functions /\
       stmts_env cenv NoLoop ret fbody sl = (cenv',sb) /\
-      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sl =
-        (cenv',shadow_sb) /\
+      stmts_env (gas_shadow_env T cenv) NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sl =
+        (gas_shadow_env T cenv',shadow_sb) /\
       gas_shadow_state sl shadow_sl /\ gas_shadow_state sb shadow_sb /\
       fn_has_code sl sb func /\ fn_has_code sb st' func /\
       fn_has_code shadow_sl shadow_sb shadow_func /\
       gas_shadow_state sa shadow_sa /\
-      compile_guarded_body cenv nr key ut iv (MAP gas_shadow_stmt fbody) rt
+      compile_guarded_body (gas_shadow_env T cenv) nr key ut iv (MAP gas_shadow_stmt fbody) rt
         shadow_sa = ((), shadow_st') /\
       fn_has_code shadow_sa shadow_st' shadow_func
 Proof
@@ -790,8 +790,8 @@ Theorem runtime_entry_body_shadow_with_shadow:
       MEM func unit.cu_context.ctx_functions /\
       MEM shadow_func shadow_ctx.ctx_functions /\
       stmts_env cenv NoLoop ret fbody sa = (cenv',sb) /\
-      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa =
-        (cenv',shadow_sb) /\
+      stmts_env (gas_shadow_env T cenv) NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa =
+        (gas_shadow_env T cenv',shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       fn_has_code sa sb func /\ fn_has_code sb st' func /\
       fn_has_code shadow_sa shadow_sb shadow_func
@@ -823,8 +823,8 @@ Theorem runtime_entry_body_shadow:
       MEM func unit.cu_context.ctx_functions /\
       MEM shadow_func shadow_ctx.ctx_functions /\
       stmts_env cenv NoLoop ret fbody sa = (cenv',sb) /\
-      stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa =
-        (cenv',shadow_sb) /\
+      stmts_env (gas_shadow_env T cenv) NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa =
+        (gas_shadow_env T cenv',shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       fn_has_code sa sb func /\ fn_has_code sb st' func /\
       fn_has_code shadow_sa shadow_sb shadow_func

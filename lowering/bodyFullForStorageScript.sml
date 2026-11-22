@@ -413,8 +413,8 @@ Theorem for_storage_body_invoke_full:
     stmts_exprs_ok bc body /\ call_evaluation_safe cx (int_calls_stmts body) /\
     frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc
       ret_ty /\ stmts_env bc (InLoop exit incr) ret_ty body sb0 = (bc1,sb1) /\
-    stmts_env bc (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
-      shadow_sb0 = (bc1,shadow_sb1) /\ gas_shadow_state sb0 shadow_sb0 /\
+    stmts_env (gas_shadow_env T bc) (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
+      shadow_sb0 = (gas_shadow_env T bc1,shadow_sb1) /\ gas_shadow_state sb0 shadow_sb0 /\
     gas_shadow_state sb1 shadow_sb1 /\ gas_shadow_context ctx shadow_ctx /\
     ctx_inst_ids_distinct ctx /\ gas_shadow_function func shadow_func /\
     MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\

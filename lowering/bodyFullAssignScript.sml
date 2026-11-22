@@ -477,7 +477,7 @@ Theorem body_assign_local_word_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -764,7 +764,7 @@ Theorem body_assign_local_widened_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -1412,9 +1412,9 @@ Theorem body_assign_toplevel_word_full_framed_frame[local]:
   cenv.ce_module_var_type (NONE,id) = SOME (expr_type e) /\
   is_word_type (expr_type e) /\
   stmt_env cenv lctx ret_ty (Assign (BaseTarget (TopLevelNameTarget (NONE,id))) e) sa = (ce,sb) /\
-  stmt_env cenv lctx ret_ty
+  stmt_env (gas_shadow_env T cenv) lctx ret_ty
     (gas_shadow_stmt (Assign (BaseTarget (TopLevelNameTarget (NONE,id))) e)) shadow_sa =
-      (ce,shadow_sb) /\
+      (gas_shadow_env T ce,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\
@@ -1544,7 +1544,7 @@ Theorem body_assign_toplevel_word_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)))
       (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -1896,9 +1896,9 @@ Theorem body_assign_toplevel_copy_entry[local]:
   stmt_state_rel H ctx func cenv cx es s0 /\
   stmt_env cenv lctx ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e)
     sa = (ce,sb) /\
-  stmt_env cenv lctx ret_ty
+  stmt_env (gas_shadow_env T cenv) lctx ret_ty
     (gas_shadow_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
-    shadow_sa = (ce,shadow_sb) /\
+    shadow_sa = (gas_shadow_env T ce,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ fn_has_code sa sb func /\
   fn_has_code shadow_sa shadow_sb shadow_func ==>
   ce = cenv /\ expr_body_pre cenv cx env e es /\
@@ -1912,7 +1912,7 @@ Theorem body_assign_toplevel_copy_entry[local]:
     storage_var_info cx NONE id = SOME (tr,slot,tv) /\
     type_memory_bytes cenv ty = type_memory_size tv /\ 0 < type_slot_size tv /\
     lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
-    lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa =
+    lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa =
       (op,shadow_sm) /\
     gas_shadow_state sm shadow_sm /\
     compile_store_slots cenv op (Lit (n2w slot)) ty tr sm = ((),sb) /\
@@ -1981,7 +1981,7 @@ Theorem body_assign_attr_storage_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld)) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld)) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld)) e)))
       (eval_stmt cx (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld)) e)) es
 Proof
   rpt gen_tac >> strip_tac >> PairCases_on `nsid` >>
@@ -2586,7 +2586,7 @@ Theorem body_assign_attr_local_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)))
       (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -3011,7 +3011,7 @@ Theorem body_assign_local_memory_nonempty_full[local]:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -3584,7 +3584,7 @@ Theorem body_assign_local_memory_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -4270,9 +4270,9 @@ QED
 Theorem body_assign_immutable_value_code[local]:
   stmt_env cenv lctx ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e)
     sa = (ce,sb) /\
-  stmt_env cenv lctx ret_ty
+  stmt_env (gas_shadow_env T cenv) lctx ret_ty
     (gas_shadow_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
-    shadow_sa = (ce,shadow_sb) /\
+    shadow_sa = (gas_shadow_env T ce,shadow_sb) /\
   compile_get_target_ptr compile_expr cenv (TopLevelNameTarget nsid) =
     comp_return (Lit (n2w off), SOME LocCode, SOME (ValPT ity)) /\
   ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
@@ -4283,7 +4283,7 @@ Theorem body_assign_immutable_value_code[local]:
     compile_expr cenv (expr_type e) e sa = (vv,sm) /\
     unwrap_value cenv vv sm = (op,su) /\
     lower_value compile_expr cenv (expr_type e) e sa = (op,su) /\
-    lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa =
+    lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa =
       (op,shadow_su) /\
     gas_shadow_state su shadow_su /\
     compile_assign_value cenv (Lit (n2w off)) LocCode op (is_word_type ity)
@@ -7484,7 +7484,7 @@ Theorem body_assign_other_empty_target_full[local]:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -7860,7 +7860,7 @@ Theorem body_assign_other_empty_immutable_full[local]:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -8234,14 +8234,14 @@ Theorem body_assign_other_immutable_frontier_bind[local]:
       (!tv. evaluate_type (get_tenv cx) ity = SOME tv ==>
             off + type_memory_size tv < dimword (:256)) /\
       stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e) sa = (cenv,sb) /\
-      stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e))
-        shadow_sa = (cenv,shadow_sb) /\
+      stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e))
+        shadow_sa = (gas_shadow_env T cenv,shadow_sb) /\
       compile_get_target_ptr compile_expr cenv t =
         comp_return (Lit (n2w off), SOME LocCode, SOME (ValPT ity)) /\
       compile_expr cenv (expr_type e) e sa = (vv,sm) /\
       unwrap_value cenv vv sm = (op,su) /\
       lower_value compile_expr cenv (expr_type e) e sa = (op,su) /\
-      lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa =
+      lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa =
         (op,shadow_su) /\
       compile_assign_value cenv (Lit (n2w off)) LocCode op (is_word_type ity)
         (vv_location vv) ity (lowered_value_type cenv e)
@@ -8325,7 +8325,7 @@ Theorem body_assign_other_immutable_frontier_bind[local]:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -9276,7 +9276,7 @@ Theorem body_assign_snapshot_bind_at_target[local]:
     ce cx env t mid /\
   type_place_target env t = SOME (Type ty) /\
   compile_get_target_ptr compile_expr ce t ss = (r,st) /\
-  compile_get_target_ptr compile_expr ce (gas_shadow_target t) shss = (r,shst) /\
+  compile_get_target_ptr compile_expr (gas_shadow_env T ce) (gas_shadow_target t) shss = (r,shst) /\
   gas_shadow_state ss shss /\ gas_shadow_state st shst /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\
@@ -9493,7 +9493,7 @@ Theorem body_assign_other_snapshot_target_bind[local]:
   compile_expr ce (expr_type e) e sa = (vv0,sm) /\
   compile_snapshot_vv ce T (vv_with_type (lowered_value_type ce e) vv0) sm = (snap,ss) /\
   compile_get_target_ptr compile_expr ce t ss = (r,st) /\
-  compile_get_target_ptr compile_expr ce (gas_shadow_target t) shss = (r,shst) /\
+  compile_get_target_ptr compile_expr (gas_shadow_env T ce) (gas_shadow_target t) shss = (r,shst) /\
   unwrap_value ce snap st = (op,su) /\
   fn_has_code sm ss func /\ fn_has_code ss st func /\ fn_has_code shss shst shadow_func /\
   gas_shadow_state ss shss /\ gas_shadow_state st shst /\
@@ -11051,14 +11051,14 @@ Theorem body_assign_other_immutable_word_write_full[local]:
       (!tv. evaluate_type (get_tenv cx) ity = SOME tv ==>
             off + type_memory_size tv < dimword (:256)) /\
       stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e) sa = (cenv,sb) /\
-      stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e))
-        shadow_sa = (cenv,shadow_sb) /\
+      stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e))
+        shadow_sa = (gas_shadow_env T cenv,shadow_sb) /\
       compile_get_target_ptr compile_expr cenv t =
         comp_return (Lit (n2w off), SOME LocCode, SOME (ValPT ity)) /\
       compile_expr cenv (expr_type e) e sa = (vv,sm) /\
       unwrap_value cenv vv sm = (op,su) /\
       lower_value compile_expr cenv (expr_type e) e sa = (op,su) /\
-      lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa =
+      lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa =
         (op,shadow_su) /\
       compile_assign_value cenv (Lit (n2w off)) LocCode op (is_word_type ity)
         (vv_location vv) ity (lowered_value_type cenv e)
@@ -11356,7 +11356,7 @@ Theorem body_assign_saved_target_outcome[local]:
   assign_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx env t mid /\
   type_place_target env t = SOME (Type ty) /\
   compile_get_target_ptr compile_expr cenv t sr = (r,st) /\
-  compile_get_target_ptr compile_expr cenv (gas_shadow_target t) shadow_sr = (r,shadow_st) /\
+  compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (gas_shadow_target t) shadow_sr = (r,shadow_st) /\
   gas_shadow_state sr shadow_sr /\ gas_shadow_state st shadow_st /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\
@@ -11493,7 +11493,7 @@ Theorem body_assign_other_saved_target_bind[local]:
   read_result cx tv mid = (INL v,mid) /\
   compile_expr cenv (expr_type e) e sa = (vv,sm) /\
   compile_get_target_ptr compile_expr cenv bt sm = (r,sb) /\
-  compile_get_target_ptr compile_expr cenv (gas_shadow_target bt) shadow_sr =
+  compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (gas_shadow_target bt) shadow_sr =
     (r,shadow_st) /\
   unwrap_value cenv vv sb = (op,sc) /\
   (case FST (SND r) of
@@ -11719,12 +11719,12 @@ QED
 Theorem body_assign_value_paired_code[local]:
   ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
   stmt_env cenv lctx ty (Assign (BaseTarget t) e) sa = (cenv',sb) /\
-  stmt_env cenv lctx ty (gas_shadow_stmt (Assign (BaseTarget t) e)) ta = (cenv',tb) /\
+  stmt_env (gas_shadow_env T cenv) lctx ty (gas_shadow_stmt (Assign (BaseTarget t) e)) ta = (gas_shadow_env T cenv',tb) /\
   gas_shadow_state sa ta /\ fn_has_code sa sb func /\ fn_has_code ta tb tf ==>
   ?vv0 sr vv ss r st op su tr ts tt tu.
     cenv' = cenv /\
     compile_expr cenv (expr_type e) e sa = (vv0,sr) /\
-    compile_expr cenv (expr_type e) (gas_shadow_expr e) ta = (vv0,tr) /\
+    compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) ta = (vv0,tr) /\
     ((expr_can_mutate cenv (target_to_expr t) /\
       compile_snapshot_vv cenv T (vv_with_type (lowered_value_type cenv e) vv0)
         sr = (vv,ss) /\
@@ -11732,7 +11732,7 @@ Theorem body_assign_value_paired_code[local]:
         tr = (vv,ts)) \/
      (~expr_can_mutate cenv (target_to_expr t) /\ vv = vv0 /\ ss = sr /\ ts = tr)) /\
     compile_get_target_ptr compile_expr cenv t ss = (r,st) /\
-    compile_get_target_ptr compile_expr cenv (gas_shadow_target t) ts = (r,tt) /\
+    compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (gas_shadow_target t) ts = (r,tt) /\
     unwrap_value cenv vv st = (op,su) /\ unwrap_value cenv vv tt = (op,tu) /\
     (case FST (SND r) of
        SOME loc => compile_assign_value cenv (FST r) loc op
@@ -11995,8 +11995,8 @@ Theorem body_assign_other_value_rhs_bind[local]:
     (!st0 sa sb shadow_sa shadow_sb s0 G0 tn0 cenv'
       vv0 sr vv ss r st op su tr ts tt tu marks tv v mid G tn s.
       stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e) sa = (cenv',sb) /\
-      stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e))
-        shadow_sa = (cenv',shadow_sb) /\
+      stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e))
+        shadow_sa = (gas_shadow_env T cenv',shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
       gas_shadow_function func shadow_func /\
@@ -12020,7 +12020,7 @@ Theorem body_assign_other_value_rhs_bind[local]:
       storage_trace_domain cx st0 es.storage_trace /\
       cenv' = cenv /\
       compile_expr cenv (expr_type e) e sa = (vv0,sr) /\
-      compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa = (vv0,tr) /\
+      compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa = (vv0,tr) /\
       ((expr_can_mutate cenv (target_to_expr t) /\
         compile_snapshot_vv cenv T (vv_with_type (lowered_value_type cenv e) vv0)
           sr = (vv,ss) /\
@@ -12028,7 +12028,7 @@ Theorem body_assign_other_value_rhs_bind[local]:
           tr = (vv,ts)) \/
        (~expr_can_mutate cenv (target_to_expr t) /\ vv = vv0 /\ ss = sr /\ ts = tr)) /\
       compile_get_target_ptr compile_expr cenv t ss = (r,st) /\
-      compile_get_target_ptr compile_expr cenv (gas_shadow_target t) ts = (r,tt) /\
+      compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (gas_shadow_target t) ts = (r,tt) /\
       unwrap_value cenv vv st = (op,su) /\ unwrap_value cenv vv tt = (op,tu) /\
       (case FST (SND r) of
          SOME loc => compile_assign_value cenv (FST r) loc op
@@ -12131,7 +12131,7 @@ Theorem body_assign_other_value_rhs_bind[local]:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -12942,14 +12942,14 @@ Theorem body_assign_other_immutable_nonword_write_full[local]:
       (!tv. evaluate_type (get_tenv cx) ity = SOME tv ==>
             off + type_memory_size tv < dimword (:256)) /\
       stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e) sa = (cenv,sb) /\
-      stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e))
-        shadow_sa = (cenv,shadow_sb) /\
+      stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e))
+        shadow_sa = (gas_shadow_env T cenv,shadow_sb) /\
       compile_get_target_ptr compile_expr cenv t =
         comp_return (Lit (n2w off), SOME LocCode, SOME (ValPT ity)) /\
       compile_expr cenv (expr_type e) e sa = (vv,sm) /\
       unwrap_value cenv vv sm = (op,su) /\
       lower_value compile_expr cenv (expr_type e) e sa = (op,su) /\
-      lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa =
+      lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa =
         (op,shadow_su) /\
       compile_assign_value cenv (Lit (n2w off)) LocCode op (is_word_type ity)
         (vv_location vv) ity (lowered_value_type cenv e)
@@ -15733,7 +15733,7 @@ Theorem body_assign_other_nonempty_target_full[local]:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -16489,7 +16489,7 @@ Theorem body_assign_nested_empty_immutable_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -17166,7 +17166,7 @@ Theorem body_assign_nested_nonempty_immutable_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -17576,7 +17576,7 @@ Theorem body_assign_other_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -17657,7 +17657,7 @@ Theorem body_assign_toplevel_copy_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)))
       (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>

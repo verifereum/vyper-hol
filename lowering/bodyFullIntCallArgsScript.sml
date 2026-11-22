@@ -2632,7 +2632,7 @@ Theorem intcall_args_stage_full_p2_with_path[local]:
        vv_type vv = lowered_value_type cenv e) /\
     compile_stage_intcall_args compile_expr cenv es flags dtys si =
       (newops,sf) /\
-    compile_stage_intcall_args compile_expr cenv (MAP gas_shadow_expr es)
+    compile_stage_intcall_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr es)
       flags dtys shadow_si = (newops,shadow_sf) /\
     gas_shadow_state si shadow_si /\ gas_shadow_state sf shadow_sf /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -5560,7 +5560,7 @@ Theorem intcall_args_stage_full_p2:
        vv_type vv = lowered_value_type cenv e) /\
     compile_stage_intcall_args compile_expr cenv es flags dtys si =
       (newops,sf) /\
-    compile_stage_intcall_args compile_expr cenv (MAP gas_shadow_expr es)
+    compile_stage_intcall_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr es)
       flags dtys shadow_si = (newops,shadow_sf) /\
     gas_shadow_state si shadow_si /\ gas_shadow_state sf shadow_sf /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -5733,7 +5733,7 @@ Theorem intcall_args_stage_full:
        vv_type vv = lowered_value_type cenv e) /\
     compile_stage_intcall_args compile_expr cenv es flags dtys si =
       (newops,sf) /\
-    compile_stage_intcall_args compile_expr cenv (MAP gas_shadow_expr es)
+    compile_stage_intcall_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr es)
       flags dtys shadow_si = (newops,shadow_sf) /\
     gas_shadow_state si shadow_si /\ gas_shadow_state sf shadow_sf /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -8216,7 +8216,7 @@ Theorem intcall_args_full:
       comp_bind (compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt))
         kc sa = (out, sb) /\
       comp_bind
-        (compile_expr cenv ty
+        (compile_expr (gas_shadow_env T cenv) ty
            (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)))
         kc shadow_sa = (out, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\

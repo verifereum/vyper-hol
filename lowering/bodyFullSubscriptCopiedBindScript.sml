@@ -58,7 +58,7 @@ QED
 
 Theorem copied_array_cuts[local]:
   compile_expr ce ty (Subscript ann obj idx) sa = (vv,sb) /\
-  compile_expr ce ty (gas_shadow_expr (Subscript ann obj idx)) sha = (vv,shb) /\
+  compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr (Subscript ann obj idx)) sha = (vv,shb) /\
   gas_shadow_state sa sha /\
   place_type ce obj = ValPT (ArrayT et bd) /\
   copies_subscript_base ce obj idx ==>
@@ -75,9 +75,9 @@ Theorem copied_array_cuts[local]:
       (compile_ptr_load ce.ce_is_ctor ce.ce_imm_alloca loc)
       si = (dst,sb) /\
     vv = LocatedValue ann (mk_ptr dst loc) /\
-    compile_expr ce ty (gas_shadow_expr obj) sha = (bvv,shm) /\
+    compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr obj) sha = (bvv,shm) /\
     compile_snapshot_vv ce T bvv shm = (cvv,shc) /\
-    lower_value compile_expr ce ty (gas_shadow_expr idx) shc = (iop,shi) /\
+    lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr idx) shc = (iop,shi) /\
     gas_shadow_state sm shm /\ gas_shadow_state sc shc /\ gas_shadow_state si shi /\
     cs_extends sa sm /\ cs_extends sm sc /\ cs_extends sc si /\ cs_extends si sb /\
     cs_extends sha shm /\ cs_extends shm shc /\ cs_extends shc shi /\ cs_extends shi shb
