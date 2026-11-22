@@ -10587,7 +10587,9 @@ Proof
      `~supported_target_exists (\x. ~is_extcode x /\ ~byte_widths_expr x) head` by
        (qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o REWRITE_RULE [stmt_exprs_ok_def]) >>
         metis_tac[])) >>>
-  HEADGOAL (drule_all_then strip_assume_tac tuple_assign_target_supported_calls) >>>
+  HEADGOAL (
+    `IS_SOME (type_place_target env head)` by simp[] >>
+    drule_all_then strip_assume_tac tuple_assign_target_supported_calls) >>>
   HEADGOAL (sg `byte_widths_target head`) >>>
   HEADGOAL (irule tuple_assign_target_widths >>
     conj_tac >- first_assum ACCEPT_TAC >>
@@ -12939,6 +12941,7 @@ Proof
      `~supported_target_exists (\x. ~is_extcode x /\ ~byte_widths_expr x) head` by
        (qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o REWRITE_RULE [stmt_exprs_ok_def]) >>
         metis_tac[]) >>
+     `IS_SOME (type_place_target env head)` by simp[] >>
      drule_all_then strip_assume_tac tuple_assign_target_supported_calls >>
      `byte_widths_target head` by
        (irule tuple_assign_target_widths >> conj_tac >- first_assum ACCEPT_TAC >>
