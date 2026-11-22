@@ -3,8 +3,10 @@ structure vyperTestRunnerLib :> vyperTestRunnerLib = struct
 open HolKernel boolLib listSyntax vyperTestRunnerTheory cv_transLib
 local open Timeout in end
 
-(* A hung test still fails its theory; the old per-test limit was 120 s. *)
-fun time_limit tests = Time.fromSeconds (Int.toLarge (120 + 10 * tests))
+(* A hung test still fails its theory; the old per-test limit was 120 s.
+   The fixed part covers preparing the interpreter's code equations, done
+   once per theory, which dominates a small but slow suite. *)
+fun time_limit tests = Time.fromSeconds (Int.toLarge (240 + 20 * tests))
 
 val run_tests_tm = prim_mk_const{Thy="vyperTestRunner",Name="run_tests"}
 val trace_ty = mk_thy_type{Thy="vyperTestRunner",Tyop="trace",Args=[]}
