@@ -115,6 +115,8 @@ Proof
       `(!t nm. gas_shadow_expr arr <> Name t nm) /\
        (!t nm. gas_shadow_expr arr <> TopLevelName t nm)`
         by (Cases_on `arr` >> gvs[gas_shadow_expr_def]) >>
+      `(!t nm. arr <> Name t nm) /\
+       (!t nm. arr <> TopLevelName t nm)` by metis_tac[] >>
       asm_simp_tac bool_ss [supported_non_name_array_iterator] >>
       strip_tac >>
       conj_tac >- metis_tac[] >>
