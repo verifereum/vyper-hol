@@ -28,20 +28,18 @@ Theorem deploy_blocks_frame_type_builtin_dispatch_body:
   deploy_blocks_frame (compile_type_builtin_dispatch_body cfn cenv vv_ty ty tb ret_ty args)
 Proof
   strip_tac >> Cases_on `tb` >>
-  simp[deploy_blocks_frame_def, compile_type_builtin_dispatch_body_def] >>
-  rpt strip_tac >> rpt IF_CASES_TAC >>
-  simp[deploy_blocks_frame_equation,
+  simp[deploy_blocks_frame_def, compile_type_builtin_dispatch_body_def,
+       pairTheory.ELIM_UNCURRY, oneline as_stack_val_def,
+       oneline as_ptr_val_def] >>
+  rpt gen_tac >>
+  simp[deploy_blocks_frame_equation, pairTheory.ELIM_UNCURRY,
        oneline as_stack_val_def, oneline as_ptr_val_def] >>
-  TRY pairarg_tac >>
-  gvs[deploy_blocks_frame_equation,
-      oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()] >>
-  TRY pairarg_tac >>
-  gvs[deploy_blocks_frame_equation,
-      oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[deploy_blocks_frame_equation,
-       oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()]) >>
-  Cases_on `ret_ty` >> gvs[deploy_blocks_frame_equation,
-    oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()]
+  rpt IF_CASES_TAC >>
+  simp[pairTheory.pair_CASE_def, pairTheory.ELIM_UNCURRY] >>
+  Cases_on `ret_ty` >>
+  simp[deploy_blocks_frame_equation, pairTheory.pair_CASE_def,
+       pairTheory.ELIM_UNCURRY, oneline as_stack_val_def,
+       oneline as_ptr_val_def]
 QED
 
 Theorem deploy_blocks_frame_expr_body:
