@@ -5,6 +5,20 @@ Ancestors
   gasShadowCompile gasShadowCompileBase gasShadowState
   compileEnv exprLowering exprLoweringProps exprOperandVar fragExec vyperState pair
 
+Theorem gas_prefix_full_state_cong:
+  (!qe. SND (source qe) = SND (source' qe)) ==>
+  (gas_prefix_full P cx st0 source (es,s,G,tn) <=>
+   gas_prefix_full P cx st0 source' (es,s,G,tn))
+Proof
+  strip_tac >>
+  PairCases_on `P` >> PURE_REWRITE_TAC[gas_prefix_full_def] >>
+  AP_TERM_TAC >> ABS_TAC >> AP_TERM_TAC >>
+  eq_tac >> rpt strip_tac >>
+  qpat_assum `!tail res ee obs_pre rq outcome sfx H. _ ==> request_site _ _ _ _ _ _ _`
+    (qspec_then `tail` irule) >>
+  metis_tac[pairTheory.PAIR, pairTheory.SND]
+QED
+
 Theorem gas_prefix_full_bind_read_result:
   gas_prefix_full P cx st0 (bind source (read_result cx)) (es,s,G,tn) <=>
   gas_prefix_full P cx st0 source (es,s,G,tn)
@@ -14,12 +28,7 @@ Proof
      Cases_on `res` >> simp[bind_def] >>
      rename1 `SND (read_result cx raw ee) = ee` >>
      Cases_on `read_result cx raw ee` >> drule read_result_state >> simp[]) >>
-  PairCases_on `P` >> PURE_REWRITE_TAC[gas_prefix_full_def] >>
-  AP_TERM_TAC >> ABS_TAC >> AP_TERM_TAC >>
-  eq_tac >> rpt strip_tac >>
-  qpat_assum `!tail res ee obs_pre rq outcome sfx H. _ ==> request_site _ _ _ _ _ _ _`
-    (qspec_then `tail` irule) >>
-  metis_tac[pairTheory.PAIR, pairTheory.SND]
+  irule gas_prefix_full_state_cong >> simp[]
 QED
 
 Theorem expr_sim_prefix_of_vv:
