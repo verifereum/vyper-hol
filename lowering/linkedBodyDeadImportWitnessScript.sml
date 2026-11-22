@@ -34,6 +34,25 @@ Proof
   metis_tac[]
 QED
 
+Triviality dead_import_immutable_layout:
+  ce.ce_module_vars = add_immutable_locations_unit
+    (get_struct_fields (make_struct_fields_map_mods ^dead_mods)) ^dead_mods
+    (add_module_var_locations_mods ^dead_mods FEMPTY) ==>
+  immutable_section_layout_mods ^dead_mods ce
+Proof
+  `!src name off size. ~immutable_region_mods ^dead_mods src name off size` by
+    (PURE_REWRITE_TAC[immutable_region_mods_def] >> rpt strip_tac >>
+     rename1 `tops = pre ++ VariableDecl vis Immutable name vty slot :: post` >>
+     `MEM (VariableDecl vis Immutable name vty slot) tops` by simp[] >>
+     qpat_x_assum `tops = pre ++ _ :: post` kall_tac >>
+     Cases_on `src = NONE` >> gvs[ALOOKUP_def] >>
+     Cases_on `src = SOME 1` >> gvs[ALOOKUP_def]) >>
+  strip_tac >>
+  `ce.ce_module_vars = FEMPTY` by (simp[] >> EVAL_TAC) >>
+  `imm_len_mods ^dead_mods = 0` by (simp[imm_len_mods_def] >> EVAL_TAC) >>
+  simp[immutable_section_layout_mods_def]
+QED
+
 Theorem linked_dead_import_contract_inv:
   (?art. check_contract F [] (2w:160 word) ^dead_mods = SOME art) /\
   (?bs. compile_vyper_mods asm_opt_finalizer (o1_policy all_capabilities)
@@ -55,18 +74,26 @@ Proof
   PURE_REWRITE_TAC [contract_inv_def] >>
   simp[get_tenv_def, LET_THM] >>
   rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      Cases_on `src = NONE` >> gvs[ALOOKUP_def] >- EVAL_TAC >>
+      Cases_on `src = SOME 1` >> gvs[ALOOKUP_def] >> EVAL_TAC)
   >- EVAL_TAC
-  >- EVAL_TAC
-  >- (rpt strip_tac >> gvs[ALOOKUP_def, AllCaseEqs()] >> EVAL_TAC)
-  >- EVAL_TAC
-  >- (qexistsl [`p`, `unit`] >> simp[]) >>
-  TRY (simp[build_compile_env_unit_def, LET_THM] >> NO_TAC) >>
-  TRY (simp[linked_body_calls_resolved_def, ALOOKUP_def, AllCaseEqs()] >>
-       rpt strip_tac >> gvs[] >> NO_TAC) >>
-  TRY (simp[cenv_module_pins_mods_def, build_compile_env_unit_def, LET_THM] >> NO_TAC) >>
-  TRY (simp[acyclic_struct_metadata_def, build_compile_env_unit_def, LET_THM] >>
-       EVAL_TAC >> NO_TAC) >>
-  rpt strip_tac >> gvs[ALOOKUP_def, AllCaseEqs(),
-    immutable_section_layout_mods_def, immutable_region_mods_def, imm_len_mods_def,
-    build_compile_env_unit_def, LET_THM] >> EVAL_TAC
+  >- (qexistsl [`p`, `unit`] >> simp[])
+  >- (simp[linked_body_calls_resolved_def] >> rpt strip_tac >>
+      Cases_on `src = NONE` >> gvs[ALOOKUP_def] >>
+      Cases_on `src = SOME 1` >> gvs[ALOOKUP_def]) >>
+  qabbrev_tac `mods = ^dead_mods` >>
+  (* Reduce builder projections without evaluating the concrete metadata tables. *)
+  simp_tac bool_ss [cenv_module_pins_mods_def, build_compile_env_unit_def,
+    LET_THM, pairTheory.ELIM_UNCURRY, pairTheory.FST, pairTheory.SND,
+    combinTheory.K_THM, compileEnvTheory.compile_env_accfupds,
+    compileEnvTheory.compile_env_accessors] >>
+  simp[]
+  >- (`make_struct_fields_map_mods mods = FEMPTY` by
+        (simp[Abbr `mods`] >> EVAL_TAC) >> simp[])
+  >- (simp[Abbr `mods`] >> rpt strip_tac >>
+      Cases_on `src = NONE` >> gvs[ALOOKUP_def] >>
+      Cases_on `src = SOME 1` >> gvs[ALOOKUP_def] >> EVAL_TAC) >>
+  unabbrev_all_tac >>
+  irule dead_import_immutable_layout >> simp[]
 QED
