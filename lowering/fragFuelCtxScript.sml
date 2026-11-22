@@ -26,12 +26,6 @@ Proof
   simp[]
 QED
 
-Theorem lookup_function_fn_name[local]:
-  !fns name fn. lookup_function name fns = SOME fn ==> fn.fn_name = name
-Proof
-  Induct >> rw[lookup_function_def, FIND_thm] >> gvs[lookup_function_def]
-QED
-
 Theorem lowering_context_ok_ctx_wf[local]:
   !ctx entry efn.
     lowering_context_ok ctx /\ ctx.ctx_entry = SOME entry /\
@@ -115,13 +109,13 @@ Proof
   first_x_assum irule >> qexistsl_tac [`i`, `name`] >> simp[]
 QED
 
-Theorem ctx_fuel_bounded:
+Theorem ctx_entry_callees_stable:
   !ctx entry efn.
     lowering_context_ok ctx /\ ctx.ctx_entry = SOME entry /\
     lookup_function entry ctx.ctx_functions = SOME efn /\
     (!fn. MEM fn ctx.ctx_functions ==>
           ?Kf. !G. callees_stable G ctx fn ==> fuel_stable (G + Kf) ctx fn) ==>
-    ?G. fuel_stable G ctx efn
+    ?G. callees_stable G ctx efn
 Proof
   rpt strip_tac >>
   drule_all lowering_context_ok_ctx_wf >> strip_tac >>
@@ -133,9 +127,24 @@ Proof
   `?i. list_index entry (fcg_postorder (fcg_analyze ctx) entry) = SOME i` by
     (Cases_on `list_index entry (fcg_postorder (fcg_analyze ctx) entry)` >>
      gvs[list_index_def, INDEX_OF_eq_NONE]) >>
-  qspecl_then [`SUC i`, `ctx`, `entry`, `efn`] mp_tac ctx_fuel_bounded_upto >>
-  simp[] >> strip_tac >> qexists_tac `G` >> first_x_assum irule >>
-  qexistsl_tac [`i`, `entry`] >> simp[]
+  qspecl_then [`i`, `ctx`, `entry`, `efn`] mp_tac ctx_fuel_bounded_upto >>
+  simp[] >> strip_tac >> qexists_tac `G` >>
+  simp[callees_stable_def] >> rpt strip_tac >>
+  drule_all callee_earlier >> strip_tac >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Theorem ctx_fuel_bounded:
+  !ctx entry efn.
+    lowering_context_ok ctx /\ ctx.ctx_entry = SOME entry /\
+    lookup_function entry ctx.ctx_functions = SOME efn /\
+    (!fn. MEM fn ctx.ctx_functions ==>
+          ?Kf. !G. callees_stable G ctx fn ==> fuel_stable (G + Kf) ctx fn) ==>
+    ?G. fuel_stable G ctx efn
+Proof
+  rpt strip_tac >> drule_all ctx_entry_callees_stable >> strip_tac >>
+  `MEM efn ctx.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  metis_tac[]
 QED
 
 Theorem run_context_fuel_stable:

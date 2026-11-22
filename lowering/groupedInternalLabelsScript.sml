@@ -5,6 +5,8 @@ Ancestors
   entryInternalAppend entryCompileIntervals fragExec emitHelperProps exprLoweringProps venomInst pair
   abiDecoderCounters externalEntryChecks placeMemoryCodeLayout venomExecSemantics context
   groupedKeywordDecode groupedEntryCounters
+  gasShadowState gasShadowRuntimeOps gasShadowRuntimeDispatch gasShadowModuleArgs
+  gasShadowCompileBase gasShadowCompileContext
 Libs monadsyntax
 
 fun label_steps rws =
@@ -68,6 +70,34 @@ Proof
   `cs_extends first last` by metis_tac[CONJUNCT1 compile_abi_decode_labels, SND] >>
   `cs_extends last sb` by metis_tac[group_init_kwarg_labels, SND] >>
   qexistsl_tac [`src`,`mid`,`first`,`last`] >> simp[] >>
+  metis_tac[fn_has_code_split, cs_extends_trans]
+QED
+
+Theorem compile_init_kwargs_omitted_intervals:
+  compile_init_kwargs ce ((name,dst,ty,default_e)::vars) off 0 hi sa = ((),sb) /\
+  fn_has_code sa sb fn ==>
+  ?value mid last.
+    lower_value compile_expr ce ty default_e sa = (value,mid) /\
+    (if is_word_type ty then emit_void MSTORE [dst;value]
+     else if is_bytestring_type ty then compile_store_bytestring value dst
+     else emit_void MCOPY [dst;value;Lit (n2w (type_memory_bytes ce ty))]) mid = ((),last) /\
+    compile_init_kwargs ce vars off 0 hi last = ((),sb) /\
+    fn_has_code sa mid fn /\ fn_has_code mid last fn /\ fn_has_code last sb fn
+Proof
+  strip_tac >> drule compile_init_kwargs_omitted_parts >> strip_tac >>
+  `cs_extends sa (SND (lower_value compile_expr ce ty default_e sa))` by
+    (mp_tac (ISPEC (Term `exprLowering$compile_expr`) lower_value_labels) >>
+     simp[compile_expr_labels]) >>
+  `cs_extends sa mid` by
+    (qpat_assum `lower_value compile_expr ce ty default_e sa = _` (fn eq =>
+       qpat_assum `cs_extends sa (SND _)`
+         (ACCEPT_TAC o SIMP_RULE bool_ss [eq, SND]))) >>
+  `cs_extends mid last` by
+    (qpat_assum `(if _ then _ else _) mid = _` mp_tac >>
+     Cases_on `is_word_type ty` >> Cases_on `is_bytestring_type ty` >>
+     simp[] >> metis_tac[emit_void_labels, compile_store_bytestring_labels, SND]) >>
+  `cs_extends last sb` by metis_tac[group_init_kwarg_labels, SND] >>
+  qexistsl_tac [`value`,`mid`,`last`] >> simp[] >>
   metis_tac[fn_has_code_split, cs_extends_trans]
 QED
 
@@ -213,7 +243,6 @@ Proof
   first_assum MATCH_ACCEPT_TAC
 QED
 
-(* The grouped comparison jumps directly into the selected entry. *)
 Theorem compile_group_entries_extends:
   compile_group_entries mid entries common vars off sa = ((),sb) /\
   EVERY (\(_,name,_,_). ~internal_label_ok name) entries ==>
@@ -222,13 +251,34 @@ Proof
   metis_tac[group_entry_labels, SND]
 QED
 
-Theorem compile_group_entries_cons_layout:
+val group_entry_prefix = ``\mid sel lbl.
+  do matched <- emit_op EQ [mid; Lit (n2w sel)];
+     next <- fresh_label "next";
+     emit_inst JNZ [matched; Label lbl; Label next] [];
+     new_block lbl;
+     return next
+  od``;
+
+Theorem group_entry_prefix_shadow[local]:
+  gas_shadow_compiles (^group_entry_prefix mid sel lbl) (^group_entry_prefix mid sel lbl)
+Proof
+  BETA_TAC >> simp_tac bool_ss [comp_ignore_bind_def] >>
+  rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
+    >- simp[gas_shadow_compiles_emit_op_same, gas_shadow_compiles_fresh_label,
+      gas_shadow_compiles_emit_inst, gas_shadow_compiles_new_block] >>
+    gen_tac >> BETA_TAC) >>
+  simp[gas_shadow_compiles_return]
+QED
+
+(* The grouped comparison jumps directly into the selected entry. *)
+Theorem compile_group_entries_cons_layout_with_frame:
   compile_group_entries mid ((sel,lbl,mincd,k)::entries) common vars off sa =
     ((),sb) /\ fn_has_code sa sb fn /\
   EVERY (\(_,name,_,_). ~internal_label_ok name) entries ==>
   ?next st checks init done bb.
     compile_group_entries mid entries common vars off st = ((),sb) /\
-    fn_has_code st sb fn /\ cs_extends done sb /\ st.cs_current_bb = next /\ st.cs_current_insts = [] /\
+    fn_has_code st sb fn /\ st.cs_current_bb = next /\ st.cs_current_insts = [] /\
+    cs_extends sa checks /\ cs_extends sa st /\ cs_extends done sb /\ ci_mono done sb /\
     sa.cs_next_var < st.cs_next_var /\ sa.cs_next_var < checks.cs_next_var /\
     sa.cs_next_id <= st.cs_next_id /\ sa.cs_next_id <= checks.cs_next_id /\
     init.cs_next_var <= done.cs_next_var /\ done.cs_next_var <= st.cs_next_var /\
@@ -239,6 +289,8 @@ Theorem compile_group_entries_cons_layout:
     get_instruction bb (SUC (LENGTH sa.cs_current_insts)) =
       SOME (mk_inst (sa.cs_next_id + 1) JNZ
         [Var (STRING #"%" (toString sa.cs_next_var)); Label lbl; Label next] []) /\
+    ^group_entry_prefix mid sel lbl sa = (next,checks) /\
+    new_block next done = (done.cs_current_bb,st) /\
     checks.cs_current_bb = lbl /\ checks.cs_current_insts = [] /\
     compile_entry_checks mincd common.ec_payable checks = ((),init) /\
     fn_has_code checks init fn /\
@@ -268,7 +320,6 @@ Proof
     fn_has_code init done fn /\ fn_has_code st sb fn` by
     (rpt conj_tac >> metis_tac[fn_has_code_mid, cs_extends_trans, cs_extends_refl]) >>
   drule_all fn_has_code_new_block >> strip_tac >>
-  `cs_extends done sb` by metis_tac[cs_extends_trans] >>
   imp_res_tac new_block_props >>
   imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
   imp_res_tac emit_inst_extends >> imp_res_tac fresh_label_props >>
@@ -285,13 +336,129 @@ Proof
     ci_mono s3 checks /\ ci_mono checks init /\ ci_mono init done /\ ci_mono done st` by
     (rpt conj_tac >> metis_tac[ci_mono_emit_op, ci_mono_fresh_label, ci_mono_emit_inst,
        ci_mono_new_block, compile_entry_checks_ci_mono, compile_entry_point_kwargs_ci_mono, SND]) >>
-  `sa.cs_next_id <= st.cs_next_id /\ sa.cs_next_id <= checks.cs_next_id` by
+  `sa.cs_next_id <= st.cs_next_id /\ sa.cs_next_id <= checks.cs_next_id /\
+    init.cs_next_var <= done.cs_next_var /\ done.cs_next_var <= st.cs_next_var` by
     fs[ci_mono_def] >>
+  `cs_extends sa checks /\ cs_extends sa st /\ cs_extends done sb` by
+    (rpt conj_tac >> metis_tac[cs_extends_trans]) >>
+  `ci_mono done sb` by metis_tac[ci_mono_trans, compile_group_entries_ci_mono, SND] >>
   imp_res_tac compile_entry_checks_next_var >>
+  `^group_entry_prefix mid sel lbl sa = (next,checks)` by
+    (simp_tac bool_ss [comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
+     MAP_EVERY (fn pattern => qpat_assum pattern
+       (fn th => simp_tac bool_ss [th,FST,SND,pairTheory.UNCURRY,LET_THM]))
+       [`emit_op EQ _ sa = _`,`fresh_label "next" s1 = _`,
+        `emit_inst JNZ _ _ s2 = _`,`new_block lbl s3 = _`]) >>
   fs[same_blocks_def] >>
   qmatch_asmsub_abbrev_tac `lookup_block sa.cs_current_bb fn.fn_blocks = SOME blk` >>
   qexistsl_tac [`st`,`checks`,`init`,`done`] >>
-  simp[Abbr `blk`, get_instruction_def, EL_APPEND_EQN, arithmeticTheory.ADD1]
+  simp[Abbr `blk`, get_instruction_def, EL_APPEND_EQN, arithmeticTheory.ADD1,
+    comp_return_def]
+QED
+
+Theorem compile_group_entries_cons_layout:
+  compile_group_entries mid ((sel,lbl,mincd,k)::entries) common vars off sa =
+    ((),sb) /\ fn_has_code sa sb fn /\
+  EVERY (\(_,name,_,_). ~internal_label_ok name) entries ==>
+  ?next st checks init done bb.
+    compile_group_entries mid entries common vars off st = ((),sb) /\
+    fn_has_code st sb fn /\ cs_extends done sb /\ st.cs_current_bb = next /\ st.cs_current_insts = [] /\
+    sa.cs_next_var < st.cs_next_var /\ sa.cs_next_var < checks.cs_next_var /\
+    sa.cs_next_id <= st.cs_next_id /\ sa.cs_next_id <= checks.cs_next_id /\
+    init.cs_next_var <= done.cs_next_var /\ done.cs_next_var <= st.cs_next_var /\
+    lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb (LENGTH sa.cs_current_insts) =
+      SOME (mk_inst sa.cs_next_id EQ [mid; Lit (n2w sel)]
+        [STRING #"%" (toString sa.cs_next_var)]) /\
+    get_instruction bb (SUC (LENGTH sa.cs_current_insts)) =
+      SOME (mk_inst (sa.cs_next_id + 1) JNZ
+        [Var (STRING #"%" (toString sa.cs_next_var)); Label lbl; Label next] []) /\
+    checks.cs_current_bb = lbl /\ checks.cs_current_insts = [] /\
+    compile_entry_checks mincd common.ec_payable checks = ((),init) /\
+    fn_has_code checks init fn /\
+    compile_entry_point_kwargs common.ec_env vars off k common.ec_common_label init =
+      ((),done) /\ fn_has_code init done fn
+Proof
+  strip_tac >> drule_all compile_group_entries_cons_layout_with_frame >>
+  disch_then (qx_choosel_then [`next`,`st`,`checks`,`init`,`done`,`bb`] strip_assume_tac) >>
+  qexistsl_tac [`next`,`st`,`checks`,`init`,`done`,`bb`] >> asm_rewrite_tac[]
+QED
+
+(* The selector and entry checks are shared. Only the initializer
+   expressions change in the shadow compiler. *)
+Theorem compile_group_entry_shadow_states:
+  ^group_entry_prefix mid sel lbl sa = (next,checks) /\
+  ^group_entry_prefix mid sel lbl sha = (shnext,shchecks) /\
+  compile_entry_checks mincd common.ec_payable checks = ((),init) /\
+  compile_entry_checks mincd common.ec_payable shchecks = ((),shinit) /\
+  compile_entry_point_kwargs common.ec_env vars off k common.ec_common_label init = ((),done) /\
+  compile_entry_point_kwargs common.ec_env
+    (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars) off k common.ec_common_label shinit =
+    ((),shdone) /\
+  new_block next done = (done.cs_current_bb,st) /\
+  new_block shnext shdone = (shdone.cs_current_bb,shst) /\
+  gas_shadow_state sa sha ==>
+  shnext = next /\ gas_shadow_state init shinit /\
+  gas_shadow_state done shdone /\ gas_shadow_state st shst
+Proof
+  disch_then (map_every (assume_tac o BETA_RULE) o CONJUNCTS) >>
+  `next = shnext /\ gas_shadow_state checks shchecks` by
+    (mp_tac (Q.INST [`mid` |-> `mid`,`sel` |-> `sel`,`lbl` |-> `lbl`]
+        (SPEC_ALL group_entry_prefix_shadow)) >>
+     simp_tac bool_ss [gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`sa`,`sha`] mp_tac) >>
+     asm_rewrite_tac[FST,SND]) >>
+  `gas_shadow_state init shinit` by
+    (mp_tac (Q.INST [`min_cds` |-> `mincd`,`payable` |-> `common.ec_payable`]
+       (SPEC_ALL gas_shadow_compiles_compile_entry_checks)) >>
+     simp_tac bool_ss [gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`checks`,`shchecks`] mp_tac) >>
+     asm_rewrite_tac[FST,SND]) >>
+  `gas_shadow_state done shdone` by
+    (mp_tac (Q.INST [`ce` |-> `common.ec_env`,`xs` |-> `vars`,
+      `off` |-> `off`,`k` |-> `k`,`lbl` |-> `common.ec_common_label`]
+      (SPEC_ALL gas_shadow_compiles_entry_point_kwargs)) >>
+     simp_tac bool_ss [gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`init`,`shinit`] mp_tac) >>
+     asm_rewrite_tac[FST,SND]) >>
+  qpat_x_assum `next = shnext` SUBST_ALL_TAC >>
+  asm_rewrite_tac[] >>
+  qspec_then `shnext` mp_tac (GEN_ALL gas_shadow_compiles_new_block) >>
+  simp_tac bool_ss [gas_shadow_compiles_def] >>
+  disch_then (qspecl_then [`done`,`shdone`] mp_tac) >>
+  asm_rewrite_tac[FST,SND] >>
+  simp[]
+QED
+
+Theorem compile_group_entry_shadow_layout:
+  ^group_entry_prefix mid sel lbl sa = (next,checks) /\
+  compile_entry_checks mincd common.ec_payable checks = ((),init) /\
+  compile_entry_point_kwargs common.ec_env vars off k common.ec_common_label init = ((),done) /\
+  new_block next done = (done.cs_current_bb,st) /\
+  gas_shadow_state sa sha /\
+  compile_group_entries mid ((sel,lbl,mincd,k)::entries)
+    (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+    (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars) off sha = ((),shb) /\
+  fn_has_code sha shb shfn /\
+  EVERY (\(_,name,_,_). ~internal_label_ok name) entries ==>
+  ?shst shinit shdone.
+    compile_group_entries mid entries
+      (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+      (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars) off shst = ((),shb) /\
+    fn_has_code shst shb shfn /\ gas_shadow_state st shst /\
+    compile_entry_point_kwargs common.ec_env (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars)
+      off k common.ec_common_label shinit = ((),shdone) /\
+    fn_has_code shinit shdone shfn /\ gas_shadow_state init shinit
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all compile_group_entries_cons_layout_with_frame >>
+  disch_then (qx_choosel_then [`shnext`,`shst`,`shchecks`,`shinit`,`shdone`,`shbb`]
+    strip_assume_tac) >>
+  fs[external_common_accfupds, combinTheory.K_THM] >>
+  RULE_ASSUM_TAC BETA_RULE >>
+  drule_all (BETA_RULE compile_group_entry_shadow_states) >> strip_tac >>
+  qexistsl_tac [`shst`,`shinit`,`shdone`] >>
+  asm_rewrite_tac[]
 QED
 
 Theorem common_job_labels[local]:
@@ -499,13 +666,12 @@ Proof
   metis_tac[fn_has_code_split]
 QED
 
-Theorem compile_group_dispatch_linear_layout:
+Theorem compile_group_dispatch_linear_layout_with_frame:
   compile_group_dispatch_linear groups fallback st = (jobs,st') /\
   fn_has_code st st' fn /\ EVERY group_entry_labels_ok groups ==>
   ?d q r b0 bd br.
     compile_external_groups (Var (STRING #"%" (toString (st.cs_next_var + 4))))
-      groups q = (jobs,r) /\ fn_has_code q r fn /\ cs_extends r st' /\
-    r.cs_next_var <= st'.cs_next_var /\
+      groups q = (jobs,r) /\ fn_has_code q r fn /\ ci_mono r st' /\ cs_extends r st' /\
     q.cs_current_bb = d /\ LENGTH q.cs_current_insts = 2 /\
     q.cs_next_var = st.cs_next_var + 5 /\
     lookup_block st.cs_current_bb fn.fn_blocks = SOME b0 /\
@@ -533,12 +699,20 @@ Theorem compile_group_dispatch_linear_layout:
     lookup_block r.cs_current_bb fn.fn_blocks = SOME br /\
     get_instruction br (LENGTH r.cs_current_insts) =
       SOME (mk_inst r.cs_next_id JMP [Label fallback] []) /\
-    (r.cs_current_insts = [] ==> phi_prefix_length br.bb_instructions = 0)
+    (r.cs_current_insts = [] ==> phi_prefix_length br.bb_instructions = 0) /\
+    (!other other_jobs other_end other_fn.
+      compile_group_dispatch_linear other fallback st = (other_jobs,other_end) /\
+      fn_has_code st other_end other_fn /\ EVERY group_entry_labels_ok other ==>
+      ?rr. compile_external_groups (Var (STRING #"%" (toString (st.cs_next_var + 4))))
+          other q = (other_jobs,rr) /\ fn_has_code q rr other_fn)
 Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `compile_group_dispatch_linear groups fallback st = _` mp_tac >>
   simp[compile_group_dispatch_linear_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> fs[]) >> strip_tac >> gvs[] >>
   rename1 `emit_inst JMP _ _ a9 = (_, st')` >>
+  `ci_mono a9 st'` by metis_tac[ci_mono_emit_inst, SND] >>
   rename1 `compile_external_groups _ _ a8 = (_, a9)` >>
   rename1 `emit_op SHR _ a7 = (_, a8)` >>
   rename1 `emit_op CALLDATALOAD _ a6 = (_, a7)` >>
@@ -600,11 +774,64 @@ Proof
      Cases_on `br.bb_instructions` >>
      simp[get_instruction_def, phi_prefix_length_def, mk_inst_def] >>
      strip_tac >> gvs[phi_prefix_length_def, mk_inst_def]) >>
-  `a9.cs_next_var <= st'.cs_next_var` by
-    metis_tac[ci_mono_emit_inst, ci_mono_def, SND] >>
   qexistsl_tac [`a8`, `a9`] >>
   gvs[Abbr `blk`, get_instruction_def, EL_APPEND_EQN,
-       arithmeticTheory.ADD1]
+       arithmeticTheory.ADD1] >>
+  rpt gen_tac >>
+  simp_tac bool_ss [compile_group_dispatch_linear_def, comp_bind_def,
+    comp_ignore_bind_def, comp_return_def] >>
+  asm_simp_tac bool_ss [pairTheory.UNCURRY] >>
+  Cases_on `compile_external_groups (Var (STRING #"%" (toString (st.cs_next_var + 4))))
+    other a8` >>
+  fs[comp_bind_def] >>
+  rpt strip_tac >>
+  `cs_extends a8 r` by metis_tac[external_groups_labels, SND] >>
+  `cs_extends r other_end` by
+    (qpat_assum `SND (emit_inst JMP _ [] r) = other_end` (SUBST1_TAC o SYM) >>
+     metis_tac[ci_mono_emit_inst, ci_mono_def]) >>
+  `cs_extends st a8` by metis_tac[cs_extends_trans] >>
+  metis_tac[fn_has_code_mid]
+QED
+
+Theorem compile_group_dispatch_linear_layout:
+  compile_group_dispatch_linear groups fallback st = (jobs,st') /\
+  fn_has_code st st' fn /\ EVERY group_entry_labels_ok groups ==>
+  ?d q r b0 bd br.
+    compile_external_groups (Var (STRING #"%" (toString (st.cs_next_var + 4))))
+      groups q = (jobs,r) /\ fn_has_code q r fn /\ cs_extends r st' /\
+    r.cs_next_var <= st'.cs_next_var /\
+    q.cs_current_bb = d /\ LENGTH q.cs_current_insts = 2 /\
+    q.cs_next_var = st.cs_next_var + 5 /\
+    lookup_block st.cs_current_bb fn.fn_blocks = SOME b0 /\
+    get_instruction b0 (LENGTH st.cs_current_insts) =
+      SOME (mk_inst st.cs_next_id CALLDATASIZE []
+        [STRING #"%" (toString st.cs_next_var)]) /\
+    get_instruction b0 (SUC (LENGTH st.cs_current_insts)) =
+      SOME (mk_inst (st.cs_next_id + 1) LT
+        [Var (STRING #"%" (toString st.cs_next_var)); Lit 4w]
+        [STRING #"%" (toString (st.cs_next_var + 1))]) /\
+    get_instruction b0 (SUC (SUC (LENGTH st.cs_current_insts))) =
+      SOME (mk_inst (st.cs_next_id + 2) ISZERO
+        [Var (STRING #"%" (toString (st.cs_next_var + 1)))]
+        [STRING #"%" (toString (st.cs_next_var + 2))]) /\
+    get_instruction b0 (SUC (SUC (SUC (LENGTH st.cs_current_insts)))) =
+      SOME (mk_inst (st.cs_next_id + 3) JNZ
+        [Var (STRING #"%" (toString (st.cs_next_var + 2))); Label d; Label fallback] []) /\
+    lookup_block d fn.fn_blocks = SOME bd /\
+    get_instruction bd 0 = SOME (mk_inst (st.cs_next_id + 4) CALLDATALOAD
+      [Lit 0w] [STRING #"%" (toString (st.cs_next_var + 3))]) /\
+    get_instruction bd 1 = SOME (mk_inst (st.cs_next_id + 5) SHR
+      [Lit 224w; Var (STRING #"%" (toString (st.cs_next_var + 3)))]
+      [STRING #"%" (toString (st.cs_next_var + 4))]) /\
+    phi_prefix_length bd.bb_instructions = 0 /\
+    lookup_block r.cs_current_bb fn.fn_blocks = SOME br /\
+    get_instruction br (LENGTH r.cs_current_insts) =
+      SOME (mk_inst r.cs_next_id JMP [Label fallback] []) /\
+    (r.cs_current_insts = [] ==> phi_prefix_length br.bb_instructions = 0)
+Proof
+  strip_tac >> drule_all compile_group_dispatch_linear_layout_with_frame >>
+  disch_then (qx_choosel_then [`d`,`q`,`r`,`b0`,`bd`,`br`] strip_assume_tac) >>
+  qexistsl_tac [`d`,`q`,`r`,`b0`,`bd`,`br`] >> asm_rewrite_tac[] >> fs[ci_mono_def]
 QED
 
 Theorem group_dispatch_labels[local]:

@@ -4,6 +4,11 @@ Keep executable pytest scenarios here, grouped by semantic area and named for th
 behavior they exercise. Add each scenario in the same commit as its semantics fix.
 Unfixed divergences belong in issues, not in the enabled test suite.
 
+`hand/` holds cases whose expected results are written from the language rules
+rather than taken from a compiler: each test cites the sentence of Vyper's
+documentation at `VYPER_PIN`, or the section of the Solidity ABI specification,
+its expectation follows from.
+
 The pinned export generator temporarily copies this directory into
 `tests/functional/codegen/vyper_hol_regression/` for a default full-suite export
 and removes the copy afterwards. Focused `--test`/`--fixture` exports do not add
