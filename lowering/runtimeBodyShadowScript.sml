@@ -8,7 +8,8 @@ Ancestors
   moduleLowering vyperCompiler actualRegistrationCode
   actualDecoderPackaging rawEntryCode loweringShapeProps loweringShapeDefs
   loweringShapeRules compileEnv venomInst list gasShadowShape
-  gasShadowStmtEnv externalCallSelected supportedProgram supportedProgramProps supportedNames
+  gasShadowStmtEnv gasShadowRuntimeRegisterEnv gasShadowCompileStmtBase
+  externalCallSelected supportedProgram supportedProgramProps supportedNames
   loweringShapeSource gasShadowRuntimeBodies gasShadowRuntimeOps
   gasShadowModuleOps gasShadowCompileContext gasShadowModuleDefs gasShadowUnitGuards
   nonreentrantEntryPath entryRejectCode entryCompileIntervals entryCodeOwnership
@@ -229,19 +230,20 @@ Proof
      disch_then (qspecl_then [`checks`, `shadow_checks`] mp_tac) >> simp[]) >>
   Cases_on `compile_entry_checks mincd pay shadow_checks` >>
   rename1 `_ = (v,shadow_st)` >> Cases_on `v` >> gvs[] >>
-  qspecl_then [`pos`, `ce`, `4`] mp_tac gas_shadow_compiles_compile_register_positional_args >>
-  rewrite_tac[gas_shadow_compiles_def] >>
-  disch_then (qspecl_then [`st`, `shadow_st`] mp_tac) >> simp[] >>
-  Cases_on `compile_register_positional_args ce pos 4 shadow_st` >>
-  rename1 `_ = (shadow_cenv,shadow_sa)` >> simp[] >> strip_tac >> gvs[] >>
+  Cases_on `compile_register_positional_args (gas_shadow_env T ce) pos 4 shadow_st` >>
+  rename1 `_ = (shadow_cenv,shadow_sa)` >>
+  qspecl_then [`pos`, `ce`, `4`]
+    (drule_then (mp_tac o SPEC_ALL) o Q.SPECL [`st`, `shadow_st`] o REWRITE_RULE [gas_shadow_compiles_env_def])
+    (Q.INST [`sd` |-> `T`] gas_shadow_compiles_env_register_positional_args) >>
+  simp[] >> strip_tac >> gvs[] >>
   `gas_shadow_state
      (SND (compile_guarded_body cenv nr key ut iv fbody
        (if ret = NoneT then NONE else SOME ret) sa))
-     (SND (compile_guarded_body cenv nr key ut iv (MAP gas_shadow_stmt fbody)
+     (SND (compile_guarded_body (gas_shadow_env T cenv) nr key ut iv (MAP gas_shadow_stmt fbody)
        (if ret = NoneT then NONE else SOME ret) shadow_sa))` by
     (irule (cj 2 (REWRITE_RULE [gas_shadow_compiles_def]
        gas_shadow_compiles_compile_guarded_body)) >> simp[]) >>
-  Cases_on `compile_guarded_body cenv nr key ut iv (MAP gas_shadow_stmt fbody)
+  Cases_on `compile_guarded_body (gas_shadow_env T cenv) nr key ut iv (MAP gas_shadow_stmt fbody)
     (if ret = NoneT then NONE else SOME ret) shadow_sa` >>
   rename1 `_ = (v,shadow_end)` >> Cases_on `v` >> gvs[] >>
   `gas_shadow_compiles
@@ -254,11 +256,12 @@ Proof
   rename1 `_ = (answer,shadow_sl)` >> Cases_on `answer` >>
   qpat_x_assum `gas_shadow_compiles _ _` (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
   disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[] >> strip_tac >>
-  qspecl_then [`fbody`, `cenv`, `NoLoop`, `ret`] mp_tac gas_shadow_stmts_env >>
-  rewrite_tac[gas_shadow_compiles_def] >>
-  disch_then (qspecl_then [`sl`, `shadow_sl`] mp_tac) >> simp[] >>
-  Cases_on `stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sl` >>
-  rename1 `_ = (ec,shadow_sb)` >> simp[] >> strip_tac >> gvs[] >>
+  Cases_on `stmts_env (gas_shadow_env T cenv) NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sl` >>
+  rename1 `_ = (ec,shadow_sb)` >>
+  qspecl_then [`fbody`, `cenv`, `NoLoop`, `ret`]
+    (drule_then (mp_tac o SPEC_ALL) o Q.SPECL [`sl`, `shadow_sl`] o REWRITE_RULE [gas_shadow_compiles_env_def])
+    (Q.INST [`sd` |-> `T`] gas_shadow_stmts_env_env) >>
+  simp[] >> strip_tac >> gvs[] >>
   qmatch_asmsub_abbrev_tac `run_lowering sels packs ips fall rpolicy 0 0 [] info "__entry"` >>
   `OPTREL gas_shadow_unit (SOME unit)
     (run_lowering sels (MAP gas_shadow_external_package packs)
@@ -284,8 +287,8 @@ Proof
   qpat_x_assum `(_,_) = fresh_label _ _` (assume_tac o SYM) >>
   rule_assum_tac (PURE_REWRITE_RULE [MAP_APPEND, MAP, gas_shadow_external_package_def]) >>
   drule_all run_lowering_pinned_body_interval >> strip_tac >>
-  `stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) =
-   stmts_env cenv NoLoop
+  `stmts_env (gas_shadow_env T cenv) NoLoop ret (MAP gas_shadow_stmt fbody) =
+   stmts_env (gas_shadow_env T cenv) NoLoop
      (case (if ret = NoneT then NONE else SOME ret) of
         NONE => BaseT BoolT | SOME t => t) (MAP gas_shadow_stmt fbody)` by
     (Cases_on `ret = NoneT` >- (
@@ -294,8 +297,9 @@ Proof
          metis_tac[type_stmts_none_valued_return, gas_shadow_valued_return] >>
        `supported_stmts tops bindings (MAP gas_shadow_stmt fbody)` by
          metis_tac[gas_shadow_supported_stmts] >>
-       irule stmtsEnvRetTyTheory.stmts_env_ret_ty >> metis_tac[]) >> simp[]) >>
-  `compile_stmts cenv NoLoop
+       irule stmtsEnvRetTyTheory.stmts_env_ret_ty_no_valued_return >> simp[] >>
+       qexistsl_tac [`bindings`, `tops`] >> simp[]) >> simp[]) >>
+  `compile_stmts (gas_shadow_env T cenv) NoLoop
      (case (if ret = NoneT then NONE else SOME ret) of
         NONE => BaseT BoolT | SOME t => t) (MAP gas_shadow_stmt fbody) shadow_sl =
       ((),shadow_sb)` by
@@ -576,11 +580,11 @@ Proof
   `gas_shadow_state
      (SND (compile_guarded_body ce nr key ut iv fbody
        (if ret = NoneT then NONE else SOME ret) st))
-     (SND (compile_guarded_body ce nr key ut iv (MAP gas_shadow_stmt fbody)
+     (SND (compile_guarded_body (gas_shadow_env T ce) nr key ut iv (MAP gas_shadow_stmt fbody)
        (if ret = NoneT then NONE else SOME ret) shadow_st))` by
     (irule (cj 2 (REWRITE_RULE [gas_shadow_compiles_def]
        gas_shadow_compiles_compile_guarded_body)) >> simp[]) >>
-  Cases_on `compile_guarded_body ce nr key ut iv (MAP gas_shadow_stmt fbody)
+  Cases_on `compile_guarded_body (gas_shadow_env T ce) nr key ut iv (MAP gas_shadow_stmt fbody)
     (if ret = NoneT then NONE else SOME ret) shadow_st` >>
   rename1 `_ = (v,shadow_end)` >> Cases_on `v` >> gvs[] >>
   `gas_shadow_compiles
@@ -593,11 +597,12 @@ Proof
   rename1 `_ = (answer,shadow_sl)` >> Cases_on `answer` >>
   qpat_x_assum `gas_shadow_compiles _ _` (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
   disch_then (qspecl_then [`st`, `shadow_st`] mp_tac) >> simp[] >> strip_tac >>
-  qspecl_then [`fbody`, `ce`, `NoLoop`, `ret`] mp_tac gas_shadow_stmts_env >>
-  rewrite_tac[gas_shadow_compiles_def] >>
-  disch_then (qspecl_then [`sl`, `shadow_sl`] mp_tac) >> simp[] >>
-  Cases_on `stmts_env ce NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sl` >>
-  rename1 `_ = (ec,shadow_sb)` >> simp[] >> strip_tac >> gvs[] >>
+  Cases_on `stmts_env (gas_shadow_env T ce) NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sl` >>
+  rename1 `_ = (ec,shadow_sb)` >>
+  qspecl_then [`fbody`, `ce`, `NoLoop`, `ret`]
+    (drule_then (mp_tac o SPEC_ALL) o Q.SPECL [`sl`, `shadow_sl`] o REWRITE_RULE [gas_shadow_compiles_env_def])
+    (Q.INST [`sd` |-> `T`] gas_shadow_stmts_env_env) >>
+  simp[] >> strip_tac >> gvs[] >>
   `OPTREL gas_shadow_unit (SOME unit)
     (run_lowering sels (MAP gas_shadow_external_package packs)
       (MAP gas_shadow_internal_package ips)
@@ -631,11 +636,12 @@ Proof
      `buckets` |-> `0`, `metadata` |-> `0`, `dense` |-> `[]`,
      `fl` |-> `fallback_lbl`, `ls` |-> `label_st`, `ds` |-> `dispatch_st`,
      `opened` |-> `shadow_opened`, `checks` |-> `shadow_checks`,
+     `ce` |-> `gas_shadow_env T ce`,
      `st` |-> `shadow_st`, `st'` |-> `shadow_end`]
     run_lowering_fallback_body_interval) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  `stmts_env ce NoLoop ret (MAP gas_shadow_stmt fbody) =
-   stmts_env ce NoLoop
+  `stmts_env (gas_shadow_env T ce) NoLoop ret (MAP gas_shadow_stmt fbody) =
+   stmts_env (gas_shadow_env T ce) NoLoop
      (case (if ret = NoneT then NONE else SOME ret) of
         NONE => BaseT BoolT | SOME t => t) (MAP gas_shadow_stmt fbody)` by
     (Cases_on `ret = NoneT` >- (
@@ -644,8 +650,9 @@ Proof
          metis_tac[type_stmts_none_valued_return, gas_shadow_valued_return] >>
        `supported_stmts tops bindings (MAP gas_shadow_stmt fbody)` by
          metis_tac[gas_shadow_supported_stmts] >>
-       irule stmtsEnvRetTyTheory.stmts_env_ret_ty >> metis_tac[]) >> simp[]) >>
-  `compile_stmts ce NoLoop
+       irule stmtsEnvRetTyTheory.stmts_env_ret_ty_no_valued_return >> simp[] >>
+       qexistsl_tac [`bindings`, `tops`] >> simp[]) >> simp[]) >>
+  `compile_stmts (gas_shadow_env T ce) NoLoop
      (case (if ret = NoneT then NONE else SOME ret) of
         NONE => BaseT BoolT | SOME t => t) (MAP gas_shadow_stmt fbody) shadow_sl =
       ((),shadow_sb)` by
