@@ -9478,9 +9478,10 @@ Resume compile_builtin_dispatch_body_shape_mode[namedconst]:
   reverse conj_tac
   >- (shape_under_tac lower_value_from_callback_shape_mode `\st. T` >>
       simp[shape_mode_stable_def]) >>
-  gen_tac >> simp[shape_mode_step_def, shape_extends_refl_mode, as_ptr_val_def,
-                  value_shape_ok_def, mk_ptr_def] >>
-  Cases_on `x` >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+  gen_tac >> Cases_on `is_word_type ret_ty` >> Cases_on `x` >>
+  simp[shape_mode_step_def, shape_extends_refl_mode, as_stack_val_def,
+       as_ptr_val_def, value_shape_ok_def, mk_ptr_def, plain_operand_def,
+       stackPlanTypesTheory.is_label_operand_def]
 QED
 Resume compile_builtin_dispatch_body_shape_mode[boolchain]:
   rename1 `compile_builtin_dispatch_body cfn cenv ret_ty ty (BoolChain is_and n) args` >>
