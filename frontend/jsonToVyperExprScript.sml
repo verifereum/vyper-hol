@@ -1356,19 +1356,25 @@ Definition lookup_origin_pair_def:
 End
 
 (* The right operand r' (translated from r) of an in / not in.  Where the
-   source names a constant array, it is marked NamedConst: the pinned
-   compiler unrolls a membership only over a list literal (lower_Compare)
-   and loops over the array a name refers to.  A named constant is marked
-   around its value, not its name: the checker types the body before
-   constants are substituted, and NamedConst takes only a value
-   (named_const_operand). *)
+   source names a constant array, or r' is an array the frontend folded
+   from something other than a list literal (a subscript of a constant,
+   NESTED[0]), it is marked NamedConst: the pinned compiler unrolls a
+   membership only over a list literal (lower_Compare) and loops over any
+   other array.  A named constant is marked around its value, not its name:
+   the checker types the body before constants are substituted, and
+   NamedConst takes only a value (named_const_operand). *)
 Definition membership_operand_def:
   membership_operand ctx r r' =
     case lookup_origin_pair ctx r of
     | SOME (Builtin a (MakeArray (SOME t) n) es, _) =>
         Builtin (expr_type r') NamedConst
           [origin_retype (expr_type r') (Builtin a (MakeArray (SOME t) n) es)]
-    | _ => r'
+    | _ =>
+      case (r, r') of
+      | (JE_List _ _, _) => r'
+      | (_, Builtin _ (MakeArray (SOME _) _) _) =>
+          Builtin (expr_type r') NamedConst [r']
+      | _ => r'
 End
 
 (* A subscript or attribute is typed at the element's or field's own type:
