@@ -110,11 +110,15 @@ Theorem raw_reachable_dalloca_headroom_from_peak:
   dalloca_fmp_headroom i s
 Proof
   simp[dalloca_fmp_headroom_def] >> strip_tac >> strip_tac >>
-  drule_all (Q.INST [`fmp` |-> `vs0.vs_initial_fmp`] raw_started_state) >>
-  strip_tac >> drule lower_budget_path_charge_facts >> simp[] >> strip_tac >>
-  `LENGTH s.vs_call_ctx.cc_calldata < 2 ** 64` by metis_tac[] >>
-  drule dalloca_calldata_size_bound >>
-  simp[MAX_DEF, wordsTheory.dimword_def, dimindex_256] >> decide_tac
+  `s.vs_call_ctx = vs0.vs_call_ctx` by
+    (mp_tac (Q.INST [`fmp` |-> `vs0.vs_initial_fmp`] raw_started_state) >>
+     (impl_tac >- simp[]) >> strip_tac >>
+     drule lower_budget_path_charge_facts >> simp[]) >>
+  `venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata) <= 2 ** 64` by
+    (irule dalloca_calldata_size_bound >> simp[]) >>
+  qspecl_then [`w2n vs0.vs_initial_fmp`, `2 ** 64`] mp_tac dalloca_split_budget >>
+  (impl_tac >- simp[]) >>
+  gvs[MAX_DEF] >> IF_CASES_TAC >> gvs[] >> decide_tac
 QED
 
 Theorem lower_budget_path_completed_peak:
@@ -153,9 +157,12 @@ Proof
        (rw[FILTER_EQ, MEM_GENLIST, Abbr `allocs`] >> metis_tac[]) >>
      simp[]) >>
   `SUM (MAP charge allocs) <= LENGTH allocs * 2 ** 64` by
-    (once_rewrite_tac[MULT_COMM] >> rewrite_tac[GSYM SUM_MAP_K] >>
-     irule SUM_MAP_LE >> simp[EVERY_MEM, Abbr `allocs`, MEM_FILTER, MEM_GENLIST] >>
-     rpt strip_tac >>
+    (once_rewrite_tac[MULT_COMM] >>
+     rewrite_tac[GSYM combinatoricsTheory.SUM_MAP_K] >>
+     irule combinatoricsTheory.SUM_MAP_LE >>
+     simp[EVERY_MEM, Abbr `allocs`, MEM_FILTER, MEM_GENLIST] >>
+     qx_gen_tac `a` >> strip_tac >>
+     `pair a < LENGTH h` by (first_x_assum (qspec_then `a` mp_tac) >> simp[]) >>
      qpat_x_assum `!a. _ ==> ?fn ai pre op sz post. _`
        (qspec_then `a` mp_tac) >> simp[] >> strip_tac >>
      drule_all lower_budget_completed_allocation_charge_bound >> simp[]) >>
@@ -163,10 +170,10 @@ Proof
     (`LENGTH allocs <= 2 ** 64` by decide_tac >>
      `LENGTH allocs * 2 ** 64 <= 2 ** 64 * 2 ** 64` by simp[] >> decide_tac) >>
   `w2n root.bp_state.vs_initial_fmp + SUM (MAP charge allocs) < dimword (:256)` by
-    (simp[wordsTheory.dimword_def, dimindex_256] >> decide_tac) >>
+    (fs[wordsTheory.dimword_def, dimindex_256] >> decide_tac) >>
   drule lower_budget_path_fmp_envelope >>
   disch_then (qspec_then `charge` mp_tac) >>
-  impl_tac >- fs[Abbr `allocs`] >>
+  (impl_tac >- (fs[Abbr `allocs`] >> metis_tac[])) >>
   strip_tac >> fs[Abbr `allocs`] >> decide_tac
 QED
 

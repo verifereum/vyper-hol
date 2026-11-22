@@ -224,11 +224,20 @@ Theorem create_blueprint_dalloca_chunk_windows:
   dalloca_windows window chunk
 Proof
   rewrite_tac[dalloca_windows_def] >> rpt strip_tac >>
+  `window chunk 1` by
+    (qpat_assum `!c. create_blueprint_dalloca_chunk c 1 ==> window c 1`
+       (qspec_then `chunk` mp_tac) >> simp[]) >>
   drule create_blueprint_dalloca_chunk_parts >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (middle ++ [effect])` by
+    (simp[EVERY_APPEND] >> conj_tac
+     >- (fs[EVERY_MEM] >> metis_tac[])
+     >> fs[]) >>
   `j = 1` by
-    (Cases_on `j` >> fs[] >> rename1 `SUC j'` >>
-     Cases_on `j'` >> fs[EL_APPEND_EQN] >>
-     BasicProvers.every_case_tac >> fs[EVERY_MEM, EL_MEM]) >>
+    (qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _`
+       (assume_tac o PURE_REWRITE_RULE[EVERY_EL]) >>
+     Cases_on `j` >> fs[] >> rename1 `n = 0` >>
+     Cases_on `n` >> fs[] >>
+     qpat_x_assum `!k:num. k < _ ==> _` drule >> simp[]) >>
   qexistsl_tac [`[]`, `chunk`, `[]`, `1`] >> simp[]
 QED
 
