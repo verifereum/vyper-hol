@@ -687,17 +687,20 @@ Proof
      simp[deploy_ctor_code_def, comp_return_def, new_block_def] >>
      rpt strip_tac >> FIRST [gvs[]]) >>
   `SND (stmts_env cenv NoLoop NoneT body sa) = sb /\
-   SND (stmts_env cenv NoLoop NoneT (MAP gas_shadow_stmt body) shadow_sa) =
+   SND (stmts_env (gas_shadow_env T cenv) NoLoop NoneT
+          (MAP gas_shadow_stmt body) shadow_sa) =
      shadow_sb` by fs[compile_stmts_env] >>
   qabbrev_tac `cenv' = FST (stmts_env cenv NoLoop NoneT body sa)` >>
   `stmts_env cenv NoLoop NoneT body sa = (cenv', sb)` by
     (Cases_on `stmts_env cenv NoLoop NoneT body sa` >> fs[Abbr `cenv'`]) >>
-  `stmts_env cenv NoLoop NoneT (MAP gas_shadow_stmt body) shadow_sa =
-     (cenv', shadow_sb)` by
-    (mp_tac (Q.SPECL [`body`, `cenv`, `NoLoop`, `NoneT`] gas_shadow_stmts_env) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
+  `stmts_env (gas_shadow_env T cenv) NoLoop NoneT (MAP gas_shadow_stmt body)
+     shadow_sa = (gas_shadow_env T cenv', shadow_sb)` by
+    (mp_tac (Q.SPECL [`body`, `cenv`, `NoLoop`, `NoneT`]
+       (Q.INST [`sd` |-> `T`] gas_shadow_stmts_env_env)) >>
+     rewrite_tac[gasShadowCompileStmtBaseTheory.gas_shadow_compiles_env_def] >>
      disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[] >>
-     Cases_on `stmts_env cenv NoLoop NoneT (MAP gas_shadow_stmt body) shadow_sa` >>
+     Cases_on `stmts_env (gas_shadow_env T cenv) NoLoop NoneT
+       (MAP gas_shadow_stmt body) shadow_sa` >>
      fs[]) >>
   `gas_admissible (eval_stmts (deploy_evaluation_context tops am tx) body)
      (stmt_res_ok NoLoop) (es0 with outcomes := SOME vs.vs_outcomes)` by
