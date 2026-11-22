@@ -497,8 +497,32 @@ Proof
   `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` by
     metis_tac[] >>
   `is_word_type (expr_type e)` by simp[] >>
-  gvs[] >> drule_all body_assign_local_word_full_setup >> strip_tac >> gvs[] >>
+  gvs[] >> drule_all assign_local_word_code_parts >> strip_tac >> gvs[] >>
   rename1 `lower_value compile_expr cenv (expr_type e) e sa = (op,sm)` >>
+  `?shadow_sm. lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sa = (op,shadow_sm) /\
+       gas_shadow_state sm shadow_sm` by
+    (`FST (lower_value compile_expr cenv (expr_type e) e sa) =
+       FST (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+         (gas_shadow_expr e) shadow_sa) /\
+       gas_shadow_state (SND (lower_value compile_expr cenv (expr_type e) e sa))
+         (SND (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+           (gas_shadow_expr e) shadow_sa))` by
+       (irule (REWRITE_RULE [gas_shadow_compiles_def]
+          (Q.INST [`sd` |-> `T`] gas_shadow_stmt_lower_value_env)) >> simp[]) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sa` >> gvs[]) >>
+  `fn_has_code shadow_sa shadow_sm shadow_func` by
+    (qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _` mp_tac >>
+     simp[gas_shadow_stmt_def,gas_shadow_assignment_def,gas_shadow_expr_def] >> strip_tac >>
+     qpat_x_assum `stmt_env _ _ _ (Assign _ e) sa = _` kall_tac >>
+     `is_word_type (expr_type (gas_shadow_expr e))` by simp[gas_shadow_expr_type] >>
+     `FLOOKUP (gas_shadow_env T cenv).ce_vars id = SOME (PtrVar (Var p) sz)` by simp[] >>
+     `(gas_shadow_env T cenv).ce_var_type id = SOME (expr_type (gas_shadow_expr e))` by
+       simp[gas_shadow_expr_type] >>
+     drule_all assign_local_word_code_parts >> strip_tac >> gvs[gas_shadow_expr_type] >>
+     metis_tac[]) >>
+  `gas_shadow_state sm shadow_sm` by first_assum ACCEPT_TAC >>
   drule assign_local_admissible_rhs >> strip_tac >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
      not_fresh_at sa x` by metis_tac[ret_pc_ok_def] >>
@@ -800,12 +824,18 @@ Proof
   conj_tac >- simp[] >> strip_tac >>
   drule_all assign_local_relayout_code_parts >> strip_tac >>
   qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC >>
-  `?shadow_sB. lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
-     shadow_sa = (op,shadow_sB) /\ gas_shadow_state sB shadow_sB` by
-    (mp_tac (Q.INST [`ty` |-> `expr_type e`] gas_shadow_stmt_lower_value) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[] >>
-     Cases_on `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >> simp[]) >>
+  `?shadow_sB. lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+     (gas_shadow_expr e) shadow_sa = (op,shadow_sB) /\ gas_shadow_state sB shadow_sB` by
+    (`FST (lower_value compile_expr cenv (expr_type e) e sa) =
+       FST (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+         (gas_shadow_expr e) shadow_sa) /\
+       gas_shadow_state (SND (lower_value compile_expr cenv (expr_type e) e sa))
+         (SND (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+           (gas_shadow_expr e) shadow_sa))` by
+       (irule (REWRITE_RULE [gas_shadow_compiles_def]
+          (Q.INST [`sd` |-> `T`] gas_shadow_stmt_lower_value_env)) >> simp[]) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sa` >> gvs[]) >>
   `fn_has_code shadow_sa shadow_sB shadow_func` by suspend "shadow" >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
     fs[ret_pc_ok_def] >>
@@ -840,6 +870,8 @@ Resume body_assign_local_widened_full[shadow]:
   `~(has_length_word (expr_type (gas_shadow_expr e)) /\
       is_empty_value_expr (gas_shadow_expr e))` by
     (Cases_on `e` >> gvs[is_empty_value_expr_def, gas_shadow_expr_def, expr_type_def]) >>
+  `FLOOKUP (gas_shadow_env T cenv).ce_vars id = SOME (PtrVar (Var p) sz)` by simp[] >>
+  `(gas_shadow_env T cenv).ce_var_type id = SOME ty` by simp[] >>
   drule_all assign_local_relayout_code_parts >> strip_tac >>
   qpat_x_assum `lower_value _ _ _ (gas_shadow_expr e) _ = _` mp_tac >> simp[]
 QED
@@ -1467,10 +1499,33 @@ Proof
   `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
     metis_tac[stmt_state_rel_vars_rels] >>
   drule_all toplevel_storage_ce_vars >> strip_tac >>
-  drule_all body_assign_toplevel_word_full_code >> strip_tac >> gvs[] >>
+  drule_all assign_storage_word_code_parts >> strip_tac >> gvs[] >>
   rename1 `lower_value compile_expr cenv (expr_type e) e sa = (op,sm)` >>
-  rename1 `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
-    shadow_sa = (op,shadow_sm)` >>
+  `?shadow_sm. lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sa = (op,shadow_sm) /\
+       gas_shadow_state sm shadow_sm` by
+    (`FST (lower_value compile_expr cenv (expr_type e) e sa) =
+       FST (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+         (gas_shadow_expr e) shadow_sa) /\
+       gas_shadow_state (SND (lower_value compile_expr cenv (expr_type e) e sa))
+         (SND (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+           (gas_shadow_expr e) shadow_sa))` by
+       (irule (REWRITE_RULE [gas_shadow_compiles_def]
+          (Q.INST [`sd` |-> `T`] gas_shadow_stmt_lower_value_env)) >> simp[]) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sa` >> gvs[]) >>
+  `fn_has_code shadow_sa shadow_sm shadow_func` by
+    (qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _` mp_tac >>
+     simp[gas_shadow_stmt_def,gas_shadow_assignment_def,gas_shadow_expr_def] >> strip_tac >>
+     qpat_x_assum `stmt_env _ _ _ (Assign _ e) sa = _` kall_tac >>
+     `is_word_type (expr_type (gas_shadow_expr e))` by simp[gas_shadow_expr_type] >>
+     `FLOOKUP (gas_shadow_env T cenv).ce_module_vars (NONE,id) =
+        SOME (if tr then TransientLoc (n2w slot) else StorageLoc (n2w slot))` by simp[] >>
+     `(gas_shadow_env T cenv).ce_hashmap_info (NONE,id) = NONE` by simp[] >>
+     `(gas_shadow_env T cenv).ce_module_var_type (NONE,id) =
+        SOME (expr_type (gas_shadow_expr e))` by simp[gas_shadow_expr_type] >>
+     drule_all assign_storage_word_code_parts >> strip_tac >>
+     gvs[gas_shadow_expr_type] >> metis_tac[]) >>
   `sa.cs_next_var <= sm.cs_next_var` by
     (qspecl_then [`cenv`,`expr_type e`,`e`,`sa`]
        mp_tac ci_mono_lower_value_compile_expr >> simp[ci_mono_def]) >>
@@ -1930,22 +1985,34 @@ Proof
   disch_then (qspecl_then [`expr_type e`,`tr`,`n2w off`,`func`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >> gvs[] >>
   rename1 `lower_value compile_expr cenv (expr_type e) e sa = (op,sm)` >>
-  `?shadow_sm. lower_value compile_expr cenv (expr_type e)
+  `?shadow_sm. lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
        (gas_shadow_expr e) shadow_sa = (op,shadow_sm) /\
        gas_shadow_state sm shadow_sm` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type e`, `e` |-> `e`]
-       gas_shadow_stmt_lower_value) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[] >>
-     Cases_on `lower_value compile_expr cenv (expr_type e)
-       (gas_shadow_expr e) shadow_sa` >> simp[]) >>
+    (`FST (lower_value compile_expr cenv (expr_type e) e sa) =
+       FST (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+         (gas_shadow_expr e) shadow_sa) /\
+       gas_shadow_state (SND (lower_value compile_expr cenv (expr_type e) e sa))
+         (SND (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+           (gas_shadow_expr e) shadow_sa))` by
+       (irule (REWRITE_RULE [gas_shadow_compiles_def]
+          (Q.INST [`sd` |-> `T`] gas_shadow_stmt_lower_value_env)) >> simp[]) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sa` >> gvs[]) >>
   `fn_has_code shadow_sa shadow_sm shadow_func` by
     (qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _` mp_tac >>
      simp[gas_shadow_stmt_def, gas_shadow_assignment_def, gas_shadow_expr_def] >> strip_tac >>
      qpat_x_assum `stmt_env _ _ _ (Assign _ e) sa = _` kall_tac >>
      `expr_type (gas_shadow_expr e) = expr_type e` by simp[gas_shadow_expr_type] >>
-     `lowered_value_type cenv (gas_shadow_expr e) = expr_type (gas_shadow_expr e)` by simp[] >>
-     drule_all body_assign_topcopy_slots_code >> strip_tac >>
+     `lowered_value_type (gas_shadow_env T cenv) (gas_shadow_expr e) =
+        expr_type (gas_shadow_expr e)` by simp[gas_shadow_expr_type] >>
+     `FLOOKUP (gas_shadow_env T cenv).ce_module_vars (NONE,r) =
+        SOME (if tr then TransientLoc (n2w off) else StorageLoc (n2w off))` by simp[] >>
+     `(gas_shadow_env T cenv).ce_hashmap_info (NONE,r) = NONE` by simp[] >>
+     `(gas_shadow_env T cenv).ce_module_var_type (NONE,r) =
+        SOME (expr_type (gas_shadow_expr e))` by simp[gas_shadow_expr_type] >>
+     drule body_assign_topcopy_slots_code >>
+     disch_then (qspecl_then [`expr_type (gas_shadow_expr e)`,`tr`,`n2w off`,`shadow_func`] mp_tac) >>
+     (impl_tac >- simp[]) >> strip_tac >>
      gvs[gas_shadow_expr_type]) >>
   drule_then assume_tac expr_body_pre_gas_admissible >>
   simp[storage_var_info_def] >>
@@ -2613,11 +2680,19 @@ Proof
     metis_tac[compile_expr_ci_mono,ci_mono_emit_op,ci_mono_unwrap_value,ci_mono_emit_void,SND] >>
   `fn_has_code sa sm func /\ fn_has_code sm sn func /\ fn_has_code sn su func /\ fn_has_code su sb func` by
     (fs[ci_mono_def] >> metis_tac[fn_has_code_split,cs_extends_trans]) >>
-  `?shadow_sm. compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sm) /\
+  `?shadow_sm. compile_expr (gas_shadow_env T cenv) (expr_type e)
+      (gas_shadow_expr e) shadow_sa = (vv,shadow_sm) /\
     gas_shadow_state sm shadow_sm` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`,`ty` |-> `expr_type e`,`e` |-> `e`] gas_shadow_stmt_compile_expr) >>
-     simp[gas_shadow_compiles_def] >> disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[] >>
-     Cases_on `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >> simp[]) >>
+    (`FST (compile_expr cenv (expr_type e) e sa) =
+       FST (compile_expr (gas_shadow_env T cenv) (expr_type e)
+         (gas_shadow_expr e) shadow_sa) /\
+       gas_shadow_state (SND (compile_expr cenv (expr_type e) e sa))
+         (SND (compile_expr (gas_shadow_env T cenv) (expr_type e)
+           (gas_shadow_expr e) shadow_sa))` by
+       (irule (REWRITE_RULE [gas_shadow_compiles_def]
+          (Q.INST [`sd` |-> `T`] gas_shadow_stmt_compile_expr_env)) >> simp[]) >>
+     Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sa` >> gvs[]) >>
   `fn_has_code shadow_sa shadow_sm shadow_func` by suspend "shadow" >>
   `!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x` by fs[ret_pc_ok_def] >>
   `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by metis_tac[expr_body_pre_vv_gas_admissible] >>
@@ -2646,6 +2721,11 @@ Resume body_assign_attr_local_full[shadow]:
   simp[gas_shadow_stmt_def,gas_shadow_assignment_def,gas_shadow_expr_def] >> strip_tac >>
   qpat_x_assum `stmt_env _ _ _ (Assign _ e) sa = _` kall_tac >>
   `is_word_type (expr_type (gas_shadow_expr e))` by simp[gas_shadow_expr_type] >>
+  `FLOOKUP (gas_shadow_env T cenv).ce_vars id = SOME (PtrVar (Var p) sz)` by simp[] >>
+  `(gas_shadow_env T cenv).ce_var_type id = SOME (StructT sid)` by simp[] >>
+  `ALOOKUP (get_struct_fields (gas_shadow_env T cenv).ce_struct_fields
+      (nsid_to_string sid)) fld = SOME (expr_type (gas_shadow_expr e),fsz)` by
+    simp[gas_shadow_expr_type] >>
   drule_all assign_attr_local_code_parts >> strip_tac >> gvs[gas_shadow_expr_type] >>
   `ci_mono shadow_sa shadow_sm /\ ci_mono shadow_sm sn' /\
    ci_mono sn' su' /\ ci_mono su' shadow_sb` by
@@ -3058,22 +3138,29 @@ QED
 Resume body_assign_local_memory_nonempty_full[shadow]:
   qpat_assum `cx_tops cx = tops` (SUBST1_TAC o SYM) >>
   `?shadow_sB.
-     lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa = (op,shadow_sB) /\
+     lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sa = (op,shadow_sB) /\
      gas_shadow_state sB shadow_sB` by
-    (mp_tac (Q.INST [`ty` |-> `expr_type e`]
-       gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[] >>
-     Cases_on `lower_value compile_expr cenv (expr_type e)
-       (gas_shadow_expr e) shadow_sa` >> simp[]) >>
+    (`FST (lower_value compile_expr cenv (expr_type e) e sa) =
+       FST (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+         (gas_shadow_expr e) shadow_sa) /\
+       gas_shadow_state (SND (lower_value compile_expr cenv (expr_type e) e sa))
+         (SND (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+           (gas_shadow_expr e) shadow_sa))` by
+       (irule (REWRITE_RULE [gas_shadow_compiles_def]
+          (Q.INST [`sd` |-> `T`] gas_shadow_stmt_lower_value_env)) >> simp[]) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sa` >> gvs[]) >>
   `fn_has_code shadow_sa shadow_sB shadow_func` by
     (qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _` mp_tac >>
      simp[gas_shadow_stmt_def,gas_shadow_assignment_def,gas_shadow_expr_def] >> strip_tac >>
      qpat_x_assum `stmt_env _ _ _ (Assign _ e) sa = _` kall_tac >>
      `~(has_length_word (expr_type (gas_shadow_expr e)) /\
          is_empty_value_expr (gas_shadow_expr e))` by gvs[gas_shadow_expr_type] >>
-     Q.SUBGOAL_THEN `lowered_value_type cenv (gas_shadow_expr e) = ty \/
+     Q.SUBGOAL_THEN `lowered_value_type (gas_shadow_env T cenv) (gas_shadow_expr e) = ty \/
                       is_bytestring_type ty` assume_tac >- simp[] >>
+     `(gas_shadow_env T cenv).ce_var_type id = SOME ty` by simp[] >>
+     `FLOOKUP (gas_shadow_env T cenv).ce_vars id = SOME (PtrVar (Var p) sz)` by simp[] >>
      drule_all assign_local_memory_widen_code_parts >> strip_tac >>
      gns[gas_shadow_expr_type] >> metis_tac[]) >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -4301,16 +4388,27 @@ Proof
   `~(has_length_word (expr_type (gas_shadow_expr e)) /\
       is_empty_value_expr (gas_shadow_expr e))` by simp[gas_shadow_expr_type] >>
   qpat_x_assum `stmt_env _ _ _ (Assign _ e) sa = _` kall_tac >>
+  `compile_get_target_ptr compile_expr (gas_shadow_env T ce)
+      (TopLevelNameTarget nsid) =
+      comp_return (Lit (n2w off), SOME LocCode, SOME (ValPT ity))` by
+    (qpat_assum `compile_get_target_ptr compile_expr ce _ = _`
+       (fn h => simp[compile_get_target_ptr_def] >>
+          metis_tac[SIMP_RULE (srw_ss()) [compile_get_target_ptr_def] h])) >>
   drule_all immutable_assign_code_parts >> strip_tac >>
   gvs[gas_shadow_expr_type] >>
-  rename [`lower_value compile_expr cenv (expr_type e) e sa = (op,su)`,
-          `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
-             shadow_sa = (shadow_op,shadow_su)`] >>
+  rename [`lower_value compile_expr ce (expr_type e) e sa = (op,su)`,
+          `lower_value compile_expr (gas_shadow_env T ce) (expr_type e)
+             (gas_shadow_expr e) shadow_sa = (shadow_op,shadow_su)`] >>
   `shadow_op = op /\ gas_shadow_state su shadow_su` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type e`, `e` |-> `e`]
-       gas_shadow_stmt_lower_value) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+    (`FST (lower_value compile_expr ce (expr_type e) e sa) =
+       FST (lower_value compile_expr (gas_shadow_env T ce) (expr_type e)
+         (gas_shadow_expr e) shadow_sa) /\
+       gas_shadow_state (SND (lower_value compile_expr ce (expr_type e) e sa))
+         (SND (lower_value compile_expr (gas_shadow_env T ce) (expr_type e)
+           (gas_shadow_expr e) shadow_sa))` by
+       (irule (REWRITE_RULE [gas_shadow_compiles_def]
+          (Q.INST [`sd` |-> `T`] gas_shadow_stmt_lower_value_env)) >> simp[]) >>
+     gvs[]) >>
   gvs[] >>
   `fn_has_code sa su func` by metis_tac[fn_has_code_split, cs_extends_trans] >>
   `fn_has_code shadow_sa shadow_su shadow_func` by
@@ -7504,16 +7602,23 @@ Proof
   simp[stmt_frag_full_def] >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all assignPlacePureCodeTheory.assign_place_pure_empty_code >> strip_tac >>
-  `stmt_env cenv lctx ret_ty
+  `stmt_env (gas_shadow_env T cenv) lctx ret_ty
       (Assign (BaseTarget (gas_shadow_target t)) (gas_shadow_expr e)) shadow_sa =
-      (cenv',shadow_sb)` by fs[gas_shadow_stmt_def, gas_shadow_assignment_def] >>
-  `?shadow_sp. compile_get_target_ptr compile_expr cenv (gas_shadow_target t)
-      shadow_sa = (tr,shadow_sp) /\ gas_shadow_state st shadow_sp` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `bt` |-> `t`] gas_shadow_stmt_get_target_ptr) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[] >>
-     Cases_on `compile_get_target_ptr compile_expr cenv (gas_shadow_target t) shadow_sa` >>
-     simp[]) >>
+      (gas_shadow_env T cenv',shadow_sb)` by
+    fs[gas_shadow_stmt_def, gas_shadow_assignment_def] >>
+  `?shadow_sp. compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+      (gas_shadow_target t) shadow_sa = (tr,shadow_sp) /\
+      gas_shadow_state st shadow_sp` by
+    (`FST (compile_get_target_ptr compile_expr cenv t sa) =
+       FST (compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+         (gas_shadow_target t) shadow_sa) /\
+       gas_shadow_state (SND (compile_get_target_ptr compile_expr cenv t sa))
+         (SND (compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+           (gas_shadow_target t) shadow_sa))` by
+       (irule (REWRITE_RULE [gas_shadow_compiles_def]
+          (Q.INST [`sd` |-> `T`] gas_shadow_stmt_get_target_ptr_env)) >> simp[]) >>
+     Cases_on `compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+       (gas_shadow_target t) shadow_sa` >> gvs[]) >>
   `compile_store_at_loc cenv.ce_imm_alloca (FST tr) (Lit 0w) (FST (SND tr))
       shadow_sp = ((),shadow_sb)` by
     (qpat_assum `stmt_env _ _ _ (Assign (BaseTarget (gas_shadow_target _)) _) _ = _`
@@ -11797,9 +11902,15 @@ Proof
     (Q.INST [`e` |-> `gas_shadow_expr e`,`t` |-> `gas_shadow_target t`]
       body_assign_value_code_slice)) >> strip_tac >>
   `vv0 = vv0' /\ gas_shadow_state sr sr'` by
-    (mp_tac (Q.INST [`ty` |-> `expr_type e`] gas_shadow_stmt_compile_expr) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`ta`] mp_tac) >> simp[]) >>
+    (`FST (compile_expr cenv (expr_type e) e sa) =
+       FST (compile_expr (gas_shadow_env T cenv) (expr_type e)
+         (gas_shadow_expr e) ta) /\
+       gas_shadow_state (SND (compile_expr cenv (expr_type e) e sa))
+         (SND (compile_expr (gas_shadow_env T cenv) (expr_type e)
+           (gas_shadow_expr e) ta))` by
+       (irule (REWRITE_RULE [gas_shadow_compiles_def]
+          (Q.INST [`sd` |-> `T`] gas_shadow_stmt_compile_expr_env)) >> simp[]) >>
+     gvs[]) >>
   Cases_on `expr_can_mutate cenv (target_to_expr t)` >> fs[] >>
   `vv = vv' /\ gas_shadow_state ss ss'` by
     (mp_tac (Q.INST [`copy_flag` |-> `T`,
@@ -11809,9 +11920,15 @@ Proof
      disch_then (qspecl_then [`sr`,`sr'`] mp_tac) >> simp[]) >>
   rename1 `compile_get_target_ptr compile_expr _ (gas_shadow_target t) ss' = (trg,st')` >>
   `r = trg /\ gas_shadow_state st st'` by
-    (mp_tac (Q.INST [`bt` |-> `t`] gas_shadow_stmt_get_target_ptr) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`ss`,`ss'`] mp_tac) >> simp[]) >>
+    (`FST (compile_get_target_ptr compile_expr cenv t ss) =
+       FST (compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+         (gas_shadow_target t) ss') /\
+       gas_shadow_state (SND (compile_get_target_ptr compile_expr cenv t ss))
+         (SND (compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+           (gas_shadow_target t) ss'))` by
+       (irule (REWRITE_RULE [gas_shadow_compiles_def]
+          (Q.INST [`sd` |-> `T`] gas_shadow_stmt_get_target_ptr_env)) >> simp[]) >>
+     gvs[]) >>
   `op = op' /\ gas_shadow_state su su'` by
     (qpat_assum `vv = vv'` (fn eq =>
        qpat_assum `unwrap_value cenv vv' st' = _`
@@ -15628,7 +15745,10 @@ Resume body_assign_other_saved_unstaged_memory_write_full[typed_separation]:
      `op_prov Gz (FST r) = FLOOKUP Gz p` by fs[target_ptr_ok_def] >>
      qpat_assum `ptr_covers Gz tnz p z sz`
         (mp_tac o CONJUNCT2 o REWRITE_RULE [ptr_covers_def]) >>
-     Cases_on `FST r` >> gvs[op_prov_def]) >>
+     Cases_on `FST r`
+     >- (gvs[op_prov_def] >> metis_tac[])
+     >- simp[]
+     >- (gvs[op_prov_def] >> metis_tac[])) >>
   `not_fresh_at sc xd` by
     (irule freshWritesTheory.not_fresh_at_mono >> qexists `sb` >>
      fs[ci_mono_def,target_ptr_ok_def]) >>
@@ -16532,13 +16652,20 @@ Proof
   simp[stmt_frag_full_def] >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all assignPlacePureCodeTheory.assign_place_pure_empty_code >> strip_tac >>
-  `?shadow_st. compile_get_target_ptr compile_expr cenv (gas_shadow_target t)
+  `?shadow_st. compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (gas_shadow_target t)
       shadow_sa = (tr,shadow_st) /\ gas_shadow_state st shadow_st` by
-    (mp_tac (Q.INST [`bt` |-> `t`] gas_shadow_stmt_get_target_ptr) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[] >>
-     Cases_on `compile_get_target_ptr compile_expr cenv (gas_shadow_target t) shadow_sa` >>
-     simp[]) >>
+    (Cases_on `compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+       (gas_shadow_target t) shadow_sa` >>
+     `FST (compile_get_target_ptr compile_expr cenv t sa) =
+        FST (compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+          (gas_shadow_target t) shadow_sa) /\
+        gas_shadow_state
+          (SND (compile_get_target_ptr compile_expr cenv t sa))
+          (SND (compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+            (gas_shadow_target t) shadow_sa))` by
+       (irule (REWRITE_RULE [gas_shadow_compiles_def]
+         (Q.INST [`sd` |-> `T`] gas_shadow_stmt_get_target_ptr_env)) >> simp[]) >>
+     gvs[]) >>
   `compile_store_at_loc cenv.ce_imm_alloca (FST tr) (Lit 0w) (FST (SND tr))
       shadow_st = ((),shadow_sb)` by
     (qpat_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _`
@@ -17620,8 +17747,7 @@ Proof
   qpat_assum `compile_get_target_ptr compile_expr cenv t =
     comp_return (Lit (n2w off),SOME LocCode,SOME (ValPT ity))` (irule_at Any) >>
   qpat_assum `compile_expr cenv (expr_type e) e sa = (vv,sm)` (irule_at Any) >>
-  qpat_assum `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
-    shadow_sa = (op,shadow_su)` (irule_at Any) >>
+  qpat_assum `lower_value compile_expr _ _ (gas_shadow_expr _) _ = _` (irule_at Any) >>
   qexistsl [`su`, `shadow_sb`, `shadow_func`, `marks`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
