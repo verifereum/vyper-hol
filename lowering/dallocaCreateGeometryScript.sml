@@ -170,3 +170,128 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   rpt (goal_assum $ drule_at Any)
 QED
+
+(* The complete allocation-to-CREATE window begins after the keyword
+   operands and the code-offset check have been evaluated. *)
+Definition create_blueprint_dalloca_chunk_def:
+  create_blueprint_dalloca_chunk chunk k <=>
+    k = 1 /\
+    ?target value salt offset code args_ptr args_len sa size sm
+      alloc_ptr sn se sc created sd.
+      emit_op ADD [code;args_len] sa = (size,sm) /\
+      compile_alloc_dynamic size sm = (alloc_ptr,sn) /\
+      emit_void EXTCODECOPY [target;alloc_ptr;offset;code] sn = ((),se) /\
+      (if args_len = Lit 0w then sc = se else
+         ?args_dest sx.
+           emit_op ADD [alloc_ptr;code] se = (args_dest,sx) /\
+           compile_copy_memory_dynamic args_dest args_ptr args_len sx =
+             ((),sc)) /\
+      (case salt of NONE => emit_op CREATE [value;alloc_ptr;size]
+       | SOME salt_op => emit_op CREATE2 [value;alloc_ptr;size;salt_op]) sc =
+        (created,sd) /\
+      chunk = emitted_insts sa sd
+End
+
+Definition create_blueprint_dalloca_window_def:
+  create_blueprint_dalloca_window fn i s <=>
+    ?bb prefix chunk suffix.
+      lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      bb.bb_instructions = prefix ++ chunk ++ suffix /\
+      s.vs_inst_idx = LENGTH prefix + 1 /\
+      i = EL 1 chunk /\
+      create_blueprint_dalloca_chunk chunk 1
+End
+
+Theorem create_blueprint_dalloca_chunk_parts:
+  create_blueprint_dalloca_chunk chunk k ==>
+  k = 1 /\
+  ?sum alloc middle effect.
+    chunk = sum :: alloc :: (middle ++ [effect]) /\
+    sum.inst_opcode = ADD /\ alloc.inst_opcode = DALLOCA /\
+    MEM effect.inst_opcode [CREATE; CREATE2] /\
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+               ~MEM i.inst_opcode [DALLOCA; CALL; STATICCALL; DELEGATECALL;
+                                   CREATE; CREATE2]) middle
+Proof
+  strip_tac >> drule (iffLR create_blueprint_dalloca_chunk_def) >>
+  strip_tac >> simp[] >> qexistsl_tac [`HD chunk`, `EL 1 chunk`,
+    `TAKE (LENGTH chunk - 3) (DROP 2 chunk)`, `LAST chunk`] >>
+  Cases_on `salt` >> Cases_on `args_len = Lit 0w` >>
+  gvs[compile_alloc_dynamic_def, compile_copy_memory_dynamic_def,
+      emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+  PURE_REWRITE_TAC [emitted_insts_def, GSYM APPEND_ASSOC, APPEND,
+                    DROP_LENGTH_APPEND] >>
+  simp[mk_inst_def, is_terminator_def, DROP_LENGTH_APPEND]
+QED
+
+Theorem compile_create_blueprint_dalloca_chunk:
+  compile_create_blueprint_append target value salt offset code args_ptr
+    args_len rof sa = (result,sb) ==>
+  ?sd created chunk.
+    create_blueprint_dalloca_chunk chunk 1 /\
+    sd.cs_blocks = sa.cs_blocks /\
+    sd.cs_current_bb = sa.cs_current_bb /\
+    sd.cs_current_insts = sa.cs_current_insts ++ chunk /\
+    compile_check_create_result created rof sd = (result,sb)
+Proof
+  strip_tac >> drule create_blueprint_create_prefix >> strip_tac >>
+  qexistsl_tac [`sd`, `created`, `emitted_insts sa sd`] >>
+  conj_tac
+  >- (simp[create_blueprint_dalloca_chunk_def] >>
+      qexistsl_tac [`target`, `value`, `salt`, `offset`, `code`, `args_ptr`,
+        `args_len`, `sa`, `size'`, `sm`, `alloc_ptr`, `sn`, `se`, `sc`,
+        `created`, `sd`] >> asm_rewrite_tac[]) >>
+  Cases_on `salt` >> Cases_on `args_len = Lit 0w` >>
+  gvs[compile_alloc_dynamic_def, compile_copy_memory_dynamic_def,
+      emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+  PURE_REWRITE_TAC [emitted_insts_def, GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  simp[DROP_LENGTH_APPEND]
+QED
+
+Theorem create_blueprint_dalloca_chunk_geometry:
+  create_blueprint_dalloca_chunk chunk 1 /\
+  chunk = sum :: alloc :: (middle ++ [effect]) /\
+  run_inst_seq (alloc :: middle) pre = OK ready /\
+  step_inst_base effect ready = OK after ==>
+  ?op sz ws.
+    alloc.inst_operands = [op] /\ eval_operand op pre = SOME sz /\
+    w2n sz <= 65536 /\
+    eval_operands effect.inst_operands ready = SOME ws /\
+    ?value salt.
+      (effect.inst_opcode = CREATE /\ ws = [value; pre.vs_fmp; sz]) \/
+      (effect.inst_opcode = CREATE2 /\ ws = [value; pre.vs_fmp; sz; salt])
+Proof
+  strip_tac >> drule (iffLR create_blueprint_dalloca_chunk_def) >>
+  strip_tac >>
+  `alloc.inst_operands = [size'] /\
+   alloc :: middle = emitted_insts sm sc /\
+   [effect] = emitted_insts sc sd /\
+   (case salt of NONE => effect.inst_opcode = CREATE /\
+       effect.inst_operands = [value; alloc_ptr; size']
+    | SOME salt_op => effect.inst_opcode = CREATE2 /\
+       effect.inst_operands = [value; alloc_ptr; size'; salt_op])` by
+    (Cases_on `salt` >> Cases_on `args_len = Lit 0w` >>
+     gvs[compile_alloc_dynamic_def, compile_copy_memory_dynamic_def,
+         emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+     full_simp_tac pure_ss
+       [emitted_insts_def, GSYM APPEND_ASSOC, APPEND, DROP_LENGTH_APPEND] >>
+     gvs[DROP_APPEND, DROP_LENGTH_TOO_LONG, DROP_LENGTH_APPEND, mk_inst_def]) >>
+  `run_inst_seq (emitted_insts sm sc) pre = OK ready` by metis_tac[] >>
+  drule create_blueprint_allocation_geometry >>
+  disch_then (qspecl_then [`alloc_ptr`, `sn`, `target`, `offset`, `se`,
+                            `sc`, `args_ptr`, `pre`, `ready`] mp_tac) >>
+  impl_tac >- asm_rewrite_tac[] >> strip_tac >>
+  `run_inst_seq (emitted_insts sc sd) ready = OK after` by
+    (qpat_assum `[effect] = _` (fn th => REWRITE_TAC [GSYM th]) >>
+     Cases_on `salt` >> fs[run_inst_seq_def, is_terminator_def]) >>
+  drule_all create_emit_completed_bound >> strip_tac >>
+  `w2n sz <= 65536` by metis_tac[venomLayoutTheory.ceil32_ge] >>
+  qexistsl_tac [`size'`, `sz`] >>
+  Cases_on `salt` >> fs[] >>
+  qpat_x_assum `step_inst_base effect ready = OK after` mp_tac >>
+  simp[step_inst_base_opcode_eqs, AllCaseEqs(), eval_operands_def] >>
+  metis_tac[]
+QED
