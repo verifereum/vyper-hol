@@ -355,9 +355,9 @@ Resume create_size_exit_raw[raw_calls]:
        (POP_ASSUM_LIST (K ALL_TAC) >> Induct >> simp[int_calls_expr_def]) >>
      qpat_assum `xs ++ _ = rest` (SUBST1_TAC o SYM) >>
      simp[int_calls_expr_def]) >>
-  qpat_assum `EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
-      (int_calls_expr _)`
-    (qspec_then `call` (drule_then ACCEPT_TAC) o REWRITE_RULE[EVERY_MEM])
+  qpat_assum `EVERY _ (int_calls_expr (Call _ _ _ _))`
+    (qspec_then `call` mp_tac o SIMP_RULE bool_ss [EVERY_MEM]) >>
+  simp[]
 QED
 
 Resume create_size_exit_raw[raw_capacity]:
