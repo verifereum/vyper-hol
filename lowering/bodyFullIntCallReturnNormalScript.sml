@@ -7,7 +7,7 @@ Ancestors context[qualified,ignore_grammar]
   vyperInterpreter vyperState vyperAST vyperTyping bodyFullIntCallReturnTyping
   bodyFullIntCallReturnValue bodyFullHashKeccakFixed stateRelProj
   valueEncodingProofs valueCopyBytes bodyFullIntCallReturnMetadata
-  exprLoweringProps exprSimDefs bodyFullIntCallNativeReturn
+  exprLoweringProps exprSimDefs bodyFullIntCallNativeReturn bodyFullIntCallReturnWitness
 
 Libs
   monadsyntax
@@ -841,7 +841,9 @@ Theorem intcall_return_selected_edge:
           (tc with t_var := DRESTRICT tn.t_var (COMPL (set inst.inst_outputs))) /\
         ghost_inv_at (DF h) lo d cenv cx (es1 with scopes := prev)
           (DRESTRICT G (COMPL (set inst.inst_outputs)))
-          (tc with t_var := DRESTRICT tn.t_var (COMPL (set inst.inst_outputs))) returned)
+          (tc with t_var := DRESTRICT tn.t_var (COMPL (set inst.inst_outputs))) returned) /\
+      (!h. valid_horizon cx st0 h out.storage_trace ==>
+         stmt_state_rel h ctx func cenv cx (out with scopes := prev) returned)
 Proof
   rpt gen_tac >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
@@ -909,6 +911,7 @@ Proof
   conj_tac >- (rpt strip_tac >> drule_all intcall_completed_child_native >> simp[]) >>
   qexistsl_tac [`out`,`returned`] >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  reverse conj_tac >- suspend "caller_state" >>
   gen_tac >> strip_tac >>
   qpat_assum `!h. valid_horizon cx st0 h ee.storage_trace ==> _ /\ _`
     (drule_then strip_assume_tac) >>
@@ -924,10 +927,37 @@ Proof
   drule_all intcall_return_ghost_inv >> simp[]
 QED
 
-Theorem intcall_return_normal_owned:
+Resume intcall_return_selected_edge[caller_state]:
+  gen_tac >> strip_tac >>
+  `valid_horizon cx st0 h ee.storage_trace` by
+    (`storage_trace_frame (unlock_if_nr cx nr (is_view_mut mut))` by
+       simp[unlock_if_nr_def,vyperStorageTraceTheory.storage_trace_frame_optional_locks] >>
+     drule vyperStorageFootprintTheory.valid_horizon_frame >>
+     disch_then (qspecl_then [`st0`,`out`,`ee with gas_obs := []`,
+       `INL ()`,`cx`,`h`] mp_tac) >> simp[]) >>
+  qpat_assum `!h. valid_horizon cx st0 h ee.storage_trace ==> _ /\ _`
+    (drule_then strip_assume_tac) >>
+  `valid_horizon cx st0 h es1.storage_trace` by metis_tac[] >>
+  qpat_assum `!h. valid_horizon cx st0 h es1.storage_trace ==> _`
+    (drule_then assume_tac) >>
+  `dead_lo_ok h (DF h) lo cenv cx` by simp[] >>
+  qpat_assum `!tail. intcall_callee_src _ _ _ _ _ _ = _`
+    (qspec_then `[]` assume_tac) >>
+  drule_all intcall_return_invoke_setup >>
+  disch_then (qx_choose_then `setup` strip_assume_tac) >>
+  `exit_result (IntRet ir cs)` by simp[fragExecTheory.exit_result_def] >>
+  drule_all setup_terminal_certificate >> strip_tac >>
+  `step_inst fuel ctx inst t = OK returned` by
+    simp[Once venomExecSemanticsTheory.step_inst_def] >>
+  drule_all intcall_return_stmt_state_rel >> simp[]
+QED
+Finalise intcall_return_selected_edge
+
+Theorem intcall_return_normal_tracked:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 st0 sa sm shadow_sa shadow_sm vv s0 G0 tn0 mut nr args ret ss
-   rr prev penv rtv es1 t G tn rc rbs pvs callee entered bb inst lbl arg_ops argv dflts.
+   rr prev penv rtv es1 t G tn rc rbs pvs callee entered bb inst lbl arg_ops argv dflts
+   bad_scope full_scope.
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
@@ -967,9 +997,11 @@ Theorem intcall_return_normal_owned:
            intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv rc
              (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
              sa.cs_next_id sm.cs_next_id t tn res (ee with gas_obs := []) (Gc,tc) r))) ==>
-    (fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func ==>
-     gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-       (cx_tops cx) cx st0 (intcall_rest cx name mut nr ss prev rtv) (es1,t,G,tn)
+    (fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func /\
+     intcall_return_scope_rules (gas_explicit_sites ctx shadow_ctx) ctx func t sm
+       bad_scope full_scope ==>
+     intcall_return_witness (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+       cx st0 (intcall_rest cx name mut nr ss prev rtv) (es1,t,G,tn)
        (\H res ee G tn t'. ?tv. res = INL tv /\
          vv_post H ctx func cenv cx (Call ann (IntCall (NONE,name)) es dflt)
            es0 sa sm s0 ee tv vv t' /\
@@ -1001,7 +1033,8 @@ Theorem intcall_return_normal_owned:
             ptr_buf_ok cenv (Call ann (IntCall (NONE,name)) es dflt) p.ptr_operand G t') /\
          ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn)
        (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
-        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)))
+        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+       bad_scope full_scope)
 Proof
   rpt gen_tac >> strip_tac >> strip_tac >>
   qpat_assum `!H. valid_horizon cx st0 H es1.storage_trace ==> _` (mk_asm "entry") >>
@@ -1037,7 +1070,7 @@ Proof
   gvs[] >> suspend "intret"
 QED
 
-Resume intcall_return_normal_owned[abort]:
+Resume intcall_return_normal_tracked[abort]:
   `?ex. res = INR ex` by
     (Cases_on `res` >> Cases_on `r` >>
      gvs[exprSimDefsTheory.expr_exit_def]) >> gvs[] >>
@@ -1062,9 +1095,15 @@ Resume intcall_return_normal_owned[abort]:
      `ptr_inst_ok (DF H') lo 0 ctx func G tn inst t` by
        (drule_all intcall_entry_invoke_ptr >> simp[]) >>
      drule_all gas_origin_ptr_invoke_exit >> simp[]) >>
-  rewrite_tac[gas_outcome_full_def] >> qexists_tac `marks` >>
-  disj2_tac >> disj1_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon out.storage_trace) out.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `full_scope marks r` by
+    (qpat_assum `!H'. valid_horizon cx st0 H' out.storage_trace ==> gas_origin_ptr_edge _ _ _ _`
+       (drule_then assume_tac) >> drule_all intcall_return_scope_abort >> simp[]) >>
+  rewrite_tac[intcall_return_witness_def] >> qexists_tac `marks` >>
+  disj2_tac >>
   qexistsl_tac [`INR ex`,`out`,`r`,`G`,`tn`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- simp[] >>
   conj_tac >- suspend "abort_domain" >>
   gen_tac >> strip_tac >>
@@ -1096,10 +1135,10 @@ Resume intcall_return_normal_owned[abort]:
   (impl_tac >- first_assum ACCEPT_TAC) >>
   strip_tac >> drule_all gas_origin_ptr_edge_halt_fmp >> simp[]
 QED
-Resume intcall_return_normal_owned[abort_domain]:
+Resume intcall_return_normal_tracked[abort_domain]:
   metis_tac[]
 QED
-Resume intcall_return_normal_owned[intret]:
+Resume intcall_return_normal_tracked[intret]:
   rename1 `cenv.ce_func_info _ = (nret,rbs,pvs)` >>
   `!h. valid_horizon cx st0 h ee.storage_trace ==>
       gas_origin_ptr_path
@@ -1253,12 +1292,27 @@ Resume intcall_return_normal_owned[intret]:
      simp[] >> rpt strip_tac >>
      metis_tac[listTheory.APPEND_NIL,
        cj 2 fragGasOriginPtrTheory.gas_origin_ptr_path_rules]) >>
+  `full_scope marks (OK (stored with vs_inst_idx := LENGTH sm.cs_current_insts))` by
+    (qpat_assum `!h. valid_horizon cx st0 h ee.storage_trace ==> gas_origin_ptr_edge _ _ _ _`
+       (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+     (impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+     strip_tac >>
+     `run_inst_seq (emitted_insts st4 sm)
+        (returned with vs_inst_idx := SUC t.vs_inst_idx) = OK stored` by
+       (qpat_assum `LENGTH st4.cs_current_insts = SUC t.vs_inst_idx`
+          (fn th => qpat_assum `run_inst_seq _ _ = OK stored`
+            (ACCEPT_TAC o PURE_REWRITE_RULE [th]))) >>
+     `~(returned with vs_inst_idx := SUC t.vs_inst_idx).vs_halted /\
+      (returned with vs_inst_idx := SUC t.vs_inst_idx).vs_current_bb = st4.cs_current_bb /\
+      (returned with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx = LENGTH st4.cs_current_insts` by simp[] >>
+     drule_all intcall_return_scope_register >> simp[]) >>
   Cases_on `storage_trace_domain cx st0 out.storage_trace`
   >- suspend "register_post" >>
-  rewrite_tac[gas_outcome_full_def] >> qexists `marks` >> disj1_tac >>
+  rewrite_tac[intcall_return_witness_def] >> qexists `marks` >> disj1_tac >>
   conj_tac
   >- (irule gas_bad_storage_at_endpoint >>
       qexistsl [`out with scopes := prev`,`INL (Value v)`] >> simp[]) >>
+  conj_tac >- (drule_all intcall_return_scope_bad >> simp[]) >>
   qexistsl [`storage_trace_horizon ee.storage_trace`,`func`,`PG`,`Gs`,`ts`,
     `stored with vs_inst_idx := LENGTH sm.cs_current_insts`] >>
   conj_tac
@@ -1272,12 +1326,12 @@ Resume intcall_return_normal_owned[intret]:
   qpat_assum `!H'. valid_horizon cx st0 H' ee.storage_trace ==> gas_origin_ptr_path _ _ _ _` irule >>
   gvs[vyperStorageFootprintTheory.storage_trace_domain_def]
 QED
-Resume intcall_return_normal_owned[register_post]:
-  rewrite_tac[gas_outcome_full_def] >> qexists `marks` >> disj2_tac >>
-  disj1_tac >>
+Resume intcall_return_normal_tracked[register_post]:
+  rewrite_tac[intcall_return_witness_def] >> qexists `marks` >> disj2_tac >>
   qexistsl [`INL (Value v)`,`out with scopes := prev`,
     `OK (stored with vs_inst_idx := LENGTH sm.cs_current_insts)`,`Gs`,`ts`] >>
   simp_tac (srw_ss()) [] >>
+  conj_tac >- simp[] >>
   conj_tac >- simp[] >>
   conj_tac >- simp[] >>
   gen_tac >> strip_tac >>
@@ -1296,15 +1350,8 @@ Resume intcall_return_normal_owned[register_post]:
   asm "entry" (qspec_then `H'` mp_tac) >>
   (impl_tac >- metis_tac[]) >> strip_tac >>
   `dead_lo_ok H' (DF H') lo cenv cx` by simp[] >>
-  qpat_assum `!tail. intcall_callee_src _ _ _ _ _ _ = _`
-    (qspec_then `[]` assume_tac) >>
-  drule_all intcall_return_invoke_setup >>
-  disch_then (qx_choose_then `setup` strip_assume_tac) >>
-  drule_all setup_terminal_certificate >>
-  simp[fragExecTheory.exit_result_def] >> strip_tac >>
-  `step_inst fuel ctx inst t = OK returned` by
-    simp[Once venomExecSemanticsTheory.step_inst_def] >>
-  drule_all intcall_return_stmt_state_rel >> strip_tac >>
+  qpat_assum `!h. valid_horizon cx st0 h out.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _`
+    (drule_then assume_tac) >>
   qpat_assum `LENGTH st4.cs_current_insts = SUC t.vs_inst_idx`
     (fn th => qpat_assum `run_inst_seq _ _ = OK stored`
       (assume_tac o REWRITE_RULE [th])) >>
@@ -1366,7 +1413,7 @@ Resume intcall_return_normal_owned[register_post]:
   simp[ptrDisciplineTheory.allocas_below_fmp_def] >>
   strip_tac >> first_assum ACCEPT_TAC
 QED
-Resume intcall_return_normal_owned[intret_void]:
+Resume intcall_return_normal_tracked[intret_void]:
   gvs[] >>
   drule intCallFrameTheory.invoke_return_frame >> strip_tac >>
   `~returned.vs_halted` by
@@ -1395,12 +1442,26 @@ Resume intcall_return_normal_owned[intret_void]:
      irule (cj 2 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >>
      goal_assum (drule_at Any) >>
      simp[fragGasOriginPtrTheory.gas_origin_ptr_path_rules]) >>
+  `full_scope marks (OK (returned with vs_inst_idx := SUC t.vs_inst_idx))` by
+    (qpat_assum `!h. valid_horizon cx st0 h ee.storage_trace ==> gas_origin_ptr_edge _ _ _ _`
+       (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+     (impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+     strip_tac >>
+     `returned.vs_current_bb = t.vs_current_bb` by
+       (qpat_assum `bind_outputs [] [] _ = SOME returned`
+          (mp_tac o SRULE [venomExecSemanticsTheory.bind_outputs_def]) >>
+        disch_then (mp_tac o Q.AP_TERM `\s:venom_state. s.vs_current_bb`) >>
+        simp[venomExecSemanticsTheory.adopt_return_fmp_def,
+             venomExecSemanticsTheory.merge_callee_state_def]) >>
+     irule intcall_return_scope_void >> goal_assum (drule_at Any) >>
+     first_assum (irule_at Any) >> simp[]) >>
   Cases_on `storage_trace_domain cx st0 out.storage_trace`
   >- suspend "void_post" >>
-  rewrite_tac[gas_outcome_full_def] >> qexists `marks` >> disj1_tac >>
+  rewrite_tac[intcall_return_witness_def] >> qexists `marks` >> disj1_tac >>
   conj_tac
   >- (irule gas_bad_storage_at_endpoint >>
       qexistsl [`out with scopes := prev`,`INL (Value v)`] >> simp[]) >>
+  conj_tac >- (drule_all intcall_return_scope_bad >> simp[]) >>
   qexistsl [`storage_trace_horizon ee.storage_trace`,`func`,`PG`,`G`,
     `tc with t_var := tn.t_var`,`returned with vs_inst_idx := SUC t.vs_inst_idx`] >>
   conj_tac
@@ -1411,12 +1472,12 @@ Resume intcall_return_normal_owned[intret_void]:
   qpat_assum `!H'. valid_horizon cx st0 H' ee.storage_trace ==> gas_origin_ptr_path _ _ _ _` irule >>
   gvs[vyperStorageFootprintTheory.storage_trace_domain_def]
 QED
-Resume intcall_return_normal_owned[void_post]:
-  rewrite_tac[gas_outcome_full_def] >> qexists `marks` >> disj2_tac >>
-  disj1_tac >>
+Resume intcall_return_normal_tracked[void_post]:
+  rewrite_tac[intcall_return_witness_def] >> qexists `marks` >> disj2_tac >>
   qexistsl [`INL (Value v)`,`out with scopes := prev`,
     `OK (returned with vs_inst_idx := SUC t.vs_inst_idx)`,`G`,`tc with t_var := tn.t_var`] >>
   simp_tac (srw_ss()) [] >>
+  conj_tac >- simp[] >>
   conj_tac >- simp[] >>
   conj_tac >- simp[] >>
   gen_tac >> strip_tac >>
@@ -1435,12 +1496,6 @@ Resume intcall_return_normal_owned[void_post]:
   asm "entry" (qspec_then `H'` mp_tac) >>
   (impl_tac >- metis_tac[]) >> strip_tac >>
   `dead_lo_ok H' (DF H') lo cenv cx` by simp[] >>
-  qpat_assum `!tail. intcall_callee_src _ _ _ _ _ _ = _`
-    (qspec_then `[]` assume_tac) >>
-  drule_all intcall_return_invoke_setup >>
-  disch_then (qx_choose_then `setup` strip_assume_tac) >>
-  drule_all setup_terminal_certificate >>
-  simp[fragExecTheory.exit_result_def] >> strip_tac >>
   `unlock_if_nr cx nr (is_view_mut mut) (ee with gas_obs := []) =
       (INL (),out)` by
     (qpat_assum `!tail. (if _ then _ else _) _ = _`
@@ -1449,9 +1504,8 @@ Resume intcall_return_normal_owned[void_post]:
   `bind_outputs [] ir.iret_values
       (adopt_return_fmp ir (merge_callee_state t cs)) = SOME returned` by simp[] >>
   `!x:string. MEM x [] ==> ~not_fresh_at sa x` by simp[] >>
-  `step_inst fuel ctx inst t = OK returned` by
-    simp[Once venomExecSemanticsTheory.step_inst_def] >>
-  drule_all intcall_return_stmt_state_rel >> strip_tac >>
+  qpat_assum `!h. valid_horizon cx st0 h out.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _`
+    (drule_then assume_tac) >>
   qpat_assum `stmt_state_rel H' ctx func cenv cx _ returned`
     (assume_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   `ctx_has_dalloca ctx ==>
@@ -1507,7 +1561,7 @@ Resume intcall_return_normal_owned[void_post]:
   >- suspend "void_no_buffer" >>
   suspend "void_buffer"
 QED
-Resume intcall_return_normal_owned[void_no_buffer]:
+Resume intcall_return_normal_tracked[void_no_buffer]:
  `vv = StackValue ret (Lit 0w)` by
    (qpat_assum `cenv.ce_func_info _ = _` mp_tac >>
     qpat_assum `cenv.ce_func_return_type _ = _` mp_tac >>
@@ -1530,7 +1584,7 @@ Resume intcall_return_normal_owned[void_no_buffer]:
  >- suspend "void_none" >>
  suspend "void_zero_layout"
 QED
-Resume intcall_return_normal_owned[void_none]:
+Resume intcall_return_normal_tracked[void_none]:
  `ret = NoneT` by metis_tac[] >>
  `ann = NoneT` by fs[vyperTypeArgFitsTheory.type_widens_to_NoneT] >>
  `rtv = NoneTV` by fs[vyperValueTheory.evaluate_type_def] >>
@@ -1562,7 +1616,7 @@ Resume intcall_return_normal_owned[void_none]:
    loweringPostsTheory.val_footprint_def, loweringPostsTheory.vv_own_def,
    loweringPostsTheory.expr_val_own_def]
 QED
-Resume intcall_return_normal_owned[void_none_vv]:
+Resume intcall_return_normal_tracked[void_none_vv]:
  simp[loweringPostsTheory.vv_post_def,
    loweringPostsTheory.post_value_type_def,
    exprLoweringTheory.lowered_value_type_def,
@@ -1578,7 +1632,7 @@ Resume intcall_return_normal_owned[void_none_vv]:
  qpat_assum `!aid b sz. _ ==> mem_bytes_at b sz returned.vs_memory = _` mp_tac >>
  simp[]
 QED
-Resume intcall_return_normal_owned[void_zero_layout]:
+Resume intcall_return_normal_tracked[void_zero_layout]:
  `expr_sim_inv cenv cx tenv es0` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
  `type_memory_bytes cenv ret = type_memory_size rtv` by
    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
@@ -1606,7 +1660,7 @@ Resume intcall_return_normal_owned[void_zero_layout]:
  conj_tac >- suspend "void_zero_bound" >>
  suspend "void_zero_frame"
 QED
-Resume intcall_return_normal_owned[void_zero_vv]:
+Resume intcall_return_normal_tracked[void_zero_vv]:
  simp[loweringPostsTheory.vv_post_def,
    loweringPostsTheory.post_value_type_def,
    exprLoweringTheory.lowered_value_type_def] >>
@@ -1618,14 +1672,14 @@ Resume intcall_return_normal_owned[void_zero_vv]:
  qpat_assum `!aid b sz. _ ==> mem_bytes_at b sz returned.vs_memory = _` mp_tac >>
  simp[]
 QED
-Resume intcall_return_normal_owned[void_zero_bound]:
+Resume intcall_return_normal_tracked[void_zero_bound]:
  `val_store_size rtv v = 0` by
    (drule exprSimPropsTheory.val_store_size_le >> simp[]) >>
  simp[exprSimMemDefsTheory.vv_store_bound_def,
    exprLoweringTheory.lowered_value_type_def, read_result_def, return_def,
    venomStateTheory.eval_operand_def]
 QED
-Resume intcall_return_normal_owned[void_zero_frame]:
+Resume intcall_return_normal_tracked[void_zero_frame]:
  simp[bodyPtrDefsTheory.ptr_vv_ok_def, bodyPtrDefsTheory.ptr_val_ok_def,
    exprLoweringTheory.lowered_value_type_def, loweringPostsTheory.post_value_type_def,
    contextTheory.vv_location_def, read_result_def, return_def,
@@ -1636,7 +1690,7 @@ Resume intcall_return_normal_owned[void_zero_frame]:
    loweringPostsTheory.vv_own_def, loweringPostsTheory.expr_val_own_def,
    read_result_def, return_def, venomStateTheory.eval_operand_def]
 QED
-Resume intcall_return_normal_owned[void_buffer]:
+Resume intcall_return_normal_tracked[void_buffer]:
  `?rbuf off.
     vv = LocatedValue ret (base_ptr rbuf) /\
     eval_operand rbuf.buf_operand t = SOME (n2w off) /\
@@ -1747,7 +1801,7 @@ Resume intcall_return_normal_owned[void_buffer]:
  conj_tac >- suspend "buffer_bound" >>
  suspend "buffer_frame"
 QED
-Resume intcall_return_normal_owned[buffer_bound]:
+Resume intcall_return_normal_tracked[buffer_bound]:
  `val_wf rtv v` by metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
  `val_store_size rtv v <= type_memory_size rtv` by
    metis_tac[exprSimPropsTheory.val_store_size_le] >>
@@ -1763,7 +1817,7 @@ Resume intcall_return_normal_owned[buffer_bound]:
  qpat_assum `val_store_size rtv v <= type_memory_size rtv` mp_tac >>
  rpt (pop_assum kall_tac) >> simp[]
 QED
-Resume intcall_return_normal_owned[buffer_vv]:
+Resume intcall_return_normal_tracked[buffer_vv]:
  pure_rewrite_tac[loweringPostsTheory.vv_post_def] >>
  simp[] >>
  conj_tac >- suspend "buffer_holds" >>
@@ -1779,7 +1833,7 @@ Resume intcall_return_normal_owned[buffer_vv]:
  qpat_assum `!aid b sz. _ ==> mem_bytes_at b sz returned.vs_memory = _` mp_tac >>
  simp[]
 QED
-Resume intcall_return_normal_owned[buffer_holds]:
+Resume intcall_return_normal_tracked[buffer_holds]:
  `!mem. mem_agree_outside tc.t_mem returned.vs_memory mem ==>
     val_in_memory rtv v (w2n (n2w off : bytes32)) mem` by metis_tac[] >>
  map_every (fn p => qpat_assum p mp_tac)
@@ -1813,7 +1867,7 @@ Resume intcall_return_normal_owned[buffer_holds]:
  simp[bodyPtrDefsTheory.mem_agree_outside_def] >> strip_tac >>
  strip_tac >> metis_tac[exprSimPropsTheory.val_in_memory_word_type]
 QED
-Resume intcall_return_normal_owned[buffer_at]:
+Resume intcall_return_normal_tracked[buffer_at]:
  simp[loweringPostsTheory.vv_at_def, contextTheory.base_ptr_def,
    read_result_def, return_def, exprLoweringTheory.lowered_value_type_def] >>
  rpt gen_tac >> disch_tac >>
@@ -1852,7 +1906,7 @@ Resume intcall_return_normal_owned[buffer_at]:
  disj1_tac >> qexistsl [`sa.cs_next_id`,`off`,`rbuf.buf_size`] >>
  simp[] >> metis_tac[]
 QED
-Resume intcall_return_normal_owned[buffer_own]:
+Resume intcall_return_normal_tracked[buffer_own]:
  strip_tac >>
  simp[loweringPostsTheory.vv_own_def, contextTheory.base_ptr_def,
    read_result_def, return_def] >>
@@ -1863,7 +1917,7 @@ Resume intcall_return_normal_owned[buffer_own]:
  disj1_tac >> qexistsl [`sa.cs_next_id`,`off`,`rbuf.buf_size`] >>
  simp[] >> metis_tac[]
 QED
-Resume intcall_return_normal_owned[buffer_frame]:
+Resume intcall_return_normal_tracked[buffer_frame]:
  simp[contextTheory.base_ptr_def, contextTheory.vv_location_def] >>
  conj_tac >- suspend "buffer_ptr" >>
  conj_tac >-
@@ -1872,7 +1926,7 @@ Resume intcall_return_normal_owned[buffer_frame]:
     gvs[contextTheory.base_ptr_def]) >>
  suspend "buffer_buf"
 QED
-Resume intcall_return_normal_owned[buffer_ptr]:
+Resume intcall_return_normal_tracked[buffer_ptr]:
  simp[bodyPtrDefsTheory.ptr_vv_ok_def, contextTheory.base_ptr_def,
    read_result_def, return_def, ptrDisciplineTheory.op_taint_def] >>
  simp[bodyPtrDefsTheory.ptr_vv_ok_def, contextTheory.base_ptr_def,
@@ -1892,7 +1946,7 @@ Resume intcall_return_normal_owned[buffer_ptr]:
  conj_tac >- suspend "buffer_ptr_bytes" >>
  suspend "buffer_ptr_extent"
 QED
-Resume intcall_return_normal_owned[buffer_buf]:
+Resume intcall_return_normal_tracked[buffer_buf]:
  simp[bodyPtrDefsTheory.ptr_buf_ok_def, contextTheory.base_ptr_def] >>
  `expr_sim_inv cenv cx tenv es0` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
  `type_memory_bytes cenv ret = type_memory_size rtv` by
@@ -1906,7 +1960,7 @@ Resume intcall_return_normal_owned[buffer_buf]:
     rpt (pop_assum kall_tac) >> simp[]) >>
  simp[]
 QED
-Resume intcall_return_normal_owned[buffer_ptr_bytes]:
+Resume intcall_return_normal_tracked[buffer_ptr_bytes]:
  map_every (fn p => qpat_assum p mp_tac)
    [`evaluate_type (get_tenv cx) ret = SOME rtv`, `value_has_type rtv v`,
     `type_widens_to (get_tenv cx) ret ann`,
@@ -1929,7 +1983,7 @@ Resume intcall_return_normal_owned[buffer_ptr_bytes]:
  conj_tac >- simp[] >>
  qexistsl [`ret`, `ann`, `get_tenv cx`, `rtv`] >> simp[]
 QED
-Resume intcall_return_normal_owned[buffer_ptr_extent]:
+Resume intcall_return_normal_tracked[buffer_ptr_extent]:
  `val_wf rtv v` by metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
  `val_store_size rtv v <= type_memory_size rtv` by
    metis_tac[exprSimPropsTheory.val_store_size_le] >>
@@ -1939,4 +1993,91 @@ Resume intcall_return_normal_owned[buffer_ptr_extent]:
     `val_store_size rtv v <= type_memory_size rtv`] >>
  rpt (pop_assum kall_tac) >> simp[]
 QED
-Finalise intcall_return_normal_owned
+Finalise intcall_return_normal_tracked
+
+Theorem intcall_return_normal_owned:
+  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
+   es dflt es0 st0 sa sm shadow_sa shadow_sm vv s0 G0 tn0 mut nr args ret ss
+   rr prev penv rtv es1 t G tn rc rbs pvs callee entered bb inst lbl arg_ops argv dflts.
+    body_inv tops ctx cenv cx /\
+    expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+    lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa = (vv,sm) /\
+    compile_expr (gasShadowCompileBase$gas_shadow_env T cenv) ty
+      (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)) shadow_sa = (vv,shadow_sm) /\
+    gas_shadow_state sa shadow_sa /\ gas_shadow_state sm shadow_sm /\
+    gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+    gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
+    MEM shadow_func shadow_ctx.ctx_functions /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+       intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
+         sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn) /\
+    (?H. valid_horizon cx st0 H es1.storage_trace) /\
+    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
+    gas_invoke_entry (ctx,func) t callee entered /\
+    lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb t.vs_inst_idx = SOME inst /\
+    decode_invoke inst = SOME (lbl,arg_ops) /\ eval_operands arg_ops t = SOME argv /\
+    (?marks res ee r Gc tc.
+       (!tail. intcall_callee_src cx name mut nr ss
+          (es1 with gas_obs := gas_explicit marks entered.vs_gas_readings ++ tail) =
+            (res,ee with gas_obs := tail)) /\
+       storage_trace_domain cx st0 ee.storage_trace /\
+       !H. valid_horizon cx st0 H ee.storage_trace ==>
+         gas_origin_ptr_path
+           (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
+           (entered,FEMPTY,tn with t_var := FEMPTY) marks (r,Gc,tc) /\
+         ((?u. r = OK u /\ F) \/
+          (exit_result r /\
+           intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv rc
+             (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
+             sa.cs_next_id sm.cs_next_id t tn res (ee with gas_obs := []) (Gc,tc) r))) ==>
+    (fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func ==>
+     gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+       (cx_tops cx) cx st0 (intcall_rest cx name mut nr ss prev rtv) (es1,t,G,tn)
+       (\H res ee G tn t'. ?tv. res = INL tv /\
+         vv_post H ctx func cenv cx (Call ann (IntCall (NONE,name)) es dflt)
+           es0 sa sm s0 ee tv vv t' /\
+         vv_store_bound cx (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt))
+           (lowered_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) ee tv vv t' /\
+         t'.vs_current_bb = sm.cs_current_bb /\ t'.vs_inst_idx = LENGTH sm.cs_current_insts /\
+         alloca_history func t' /\
+        (ctx_has_dalloca ctx ==> allocas_below_fmp t') /\ s0.vs_alloca_next <= t'.vs_alloca_next /\
+         ghost_inv_at (DF H) lo d cenv cx ee G tn t' /\
+         ptr_vv_ok cx (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) tv vv ee G tn t' /\
+         (!v. tv = Value v /\
+              ~is_word_type
+                (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) /\
+              ~is_bytestring_type
+                (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) ==>
+              vv_own cenv cx
+                (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt))
+                sa sm ee tv vv t' /\
+              (!ty' p. vv = LocatedValue ty' p ==> p.ptr_location = LocMemory)) /\
+         (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+          ?val. read_result cx tv ee = (INL val,ee) /\
+            !rt w. evaluate_type (get_tenv cx) (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) = SOME rt /\
+              eval_operand (vv_operand vv) t' = SOME w ==>
+              w2n w + type_memory_size rt <= lo /\
+              (!mem. mem_agree_outside tn.t_mem t'.vs_memory mem ==> val_in_memory rt val (w2n w) mem)) /\
+         (!ty' op. vv = StackValue ty' op /\ ~is_word_type (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) ==>
+            ptr_buf_ok cenv (Call ann (IntCall (NONE,name)) es dflt) op G t') /\
+         (!ty' p. vv = LocatedValue ty' p /\ p.ptr_location = LocMemory ==>
+            ptr_buf_ok cenv (Call ann (IntCall (NONE,name)) es dflt) p.ptr_operand G t') /\
+         ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn)
+       (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)))
+Proof
+  rpt gen_tac >>
+  disch_then (mp_tac o MATCH_MP
+    (Q.INST [`bad_scope` |-> `\marks. T`, `full_scope` |-> `\marks r. T`]
+      (SPEC_ALL intcall_return_normal_tracked))) >>
+  simp[intcall_return_scope_rules_def] >>
+  metis_tac[intcall_return_witness_full]
+QED
