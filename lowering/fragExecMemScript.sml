@@ -280,6 +280,7 @@ Theorem frag_exec_mem_step:
     inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
     (!s. P s ==>
        inst_mem_below_frontier inst s /\ inst_dload_in_section inst s /\
+       (ctx_has_dalloca ctx ==> dalloca_no_wrap inst s) /\
        ((?s1. step_inst_base inst s = OK s1 /\
               Q (s1 with vs_inst_idx := LENGTH st'.cs_current_insts)) \/
         (?a s1. step_inst_base inst s = Abort a s1 /\ R (Abort a s1)))) ==>
@@ -607,15 +608,18 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-(* A straight-line prefix of the block whose instructions are below the
-   frontier: a memory-safe run from past it is a memory-safe run from its
-   start, and a run that aborts in it is memory-safe. *)
+(* A straight-line prefix with safe memory accesses and non-wrapping
+   allocations extends a memory-safe continuation. A run that aborts in
+   the prefix is memory-safe too. *)
 Theorem mem_safe_run_inst_seq:
   !is s fuel ctx fn bb.
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX is (DROP s.vs_inst_idx bb.bb_instructions) /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) is /\
-    run_inst_seq_mem_ok is s ==>
+    run_inst_seq_mem_ok is s /\
+    (ctx_has_dalloca ctx ==>
+      !pre i post u. is = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+        dalloca_no_wrap i u) ==>
     (!s'. run_inst_seq is s = OK s' /\
           mem_safe_run fuel ctx fn
             (s' with vs_inst_idx := s.vs_inst_idx + LENGTH is) ==>
@@ -665,9 +669,8 @@ Proof
   metis_tac[step_preserves_halted, step_inst_non_invoke]
 QED
 
-(* frag_exec_run_inst_seq with memory safety: the straight-line fragment
-   is memory-safe when its instructions are below the frontier where they
-   run. *)
+(* A straight-line fragment is memory-safe when its instructions are
+   within the frontier and its allocations do not wrap where they run. *)
 Theorem frag_exec_mem_run_inst_seq:
   !ctx st st' P Q R.
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
@@ -676,6 +679,10 @@ Theorem frag_exec_mem_run_inst_seq:
       (emitted_insts st st') /\
     (!s. P s ==>
        run_inst_seq_mem_ok (emitted_insts st st') s /\
+       (ctx_has_dalloca ctx ==>
+         !pre i post u.
+           emitted_insts st st' = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+           dalloca_no_wrap i u) /\
        ((?s'. run_inst_seq (emitted_insts st st') s = OK s' /\
               Q (s' with vs_inst_idx := LENGTH st'.cs_current_insts)) \/
         (?a s'. run_inst_seq (emitted_insts st st') s = Abort a s' /\

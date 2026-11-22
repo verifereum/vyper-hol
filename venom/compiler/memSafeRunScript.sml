@@ -195,6 +195,12 @@ End
 
 (* ===== Unfolding ===== *)
 
+Theorem dalloca_no_wrap_non_dalloca[simp]:
+  !inst s. inst.inst_opcode <> DALLOCA ==> dalloca_no_wrap inst s
+Proof
+  simp[dalloca_no_wrap_def]
+QED
+
 Theorem mem_safe_step_non_invoke:
   !fuel ctx inst s.
     inst.inst_opcode <> INVOKE ==>
