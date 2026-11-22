@@ -323,7 +323,7 @@ QED
 
 (* The code check changes neither saved operand observations nor the
    allocation frontier. Reuse the precheck's pointwise guarantees. *)
-Theorem extcall_precheck_dispatch_operands[local]:
+Theorem extcall_precheck_dispatch_operands:
   EVERY (safe_operand sp) [addr;value;gas;buf;off;len;default_op] /\
   (!op. safe_operand sp op ==> eval_operand op t = eval_operand op s /\
     op_taint tn1 op = op_taint tn op /\
@@ -446,7 +446,7 @@ Proof
   rename1 `_ = (fr,es)` >> Cases_on `fr` >> simp[]
 QED
 
-Theorem extcall_frame_value_replay[local]:
+Theorem extcall_frame_value_replay:
   frame_call_value cx value_opt ee = (INL framed,ee) ==>
   !tail. frame_call_value cx value_opt (ee with gas_obs := tail) =
     (INL framed,ee with gas_obs := tail)
