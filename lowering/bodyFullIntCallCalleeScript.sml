@@ -2384,9 +2384,10 @@ Proof
   conj_tac >- (rpt strip_tac >> res_tac) >>
   conj_tac >- (qexistsl [`policy`, `unit`] >> simp[]) >>
   conj_tac
-  >- (qpat_assum `linked_body_calls_resolved _ cx` mp_tac >>
-      simp[bodyCallSupportTheory.linked_body_calls_resolved_def,
-           vyperTypeInvariantsTheory.context_function_live_context]) >>
+  >- (simp[NoAsms, bodyCallSupportTheory.linked_body_calls_resolved_def,
+           vyperTypeInvariantsTheory.context_function_live_context] >>
+      qpat_assum `linked_body_calls_resolved _ cx`
+        (ACCEPT_TAC o SIMP_RULE (srw_ss()) [bodyCallSupportTheory.linked_body_calls_resolved_def])) >>
   conj_tac >- (rpt strip_tac >> res_tac) >>
   conj_tac >> first_assum ACCEPT_TAC
 QED
