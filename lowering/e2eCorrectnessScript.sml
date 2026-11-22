@@ -34,7 +34,7 @@ Ancestors
   fragExec memSafeRun venomExecProofs unitShapeDefs sourceUnitExitSafe
   staticAbortDefs codegenStaticAbort o1PipelineMemoryLoweredAbort runtimeLabelEntry
   staticAbortAsmOptCorrect codegenStaticAbortAsmOpt
-  runtimeSymSrcUnit codegenAsmOpt codegenAsmOptRevert codegenEntryRel asmFrameRel
+  runtimeSymSrcPackageTransport[qualified] codegenAsmOpt codegenAsmOptRevert codegenEntryRel asmFrameRel
   o1CodeEndOffset o1PipelineCompose o1StaticPipelineCorrect
   staticShadowDefs staticShadowRun staticShadowO1State runtimeLabelReadiness
   codegenSymRel codegenRel frameRel asmOptNonemptyFinalizer

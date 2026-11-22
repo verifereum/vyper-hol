@@ -292,23 +292,35 @@ Definition contract_failure_messages_def:
     "Exp~"; "Div0"; "Mod0"; "ewv bound"; "ewv neg"; "evaluate_slice range";
     "convert uint bound"; "convert int flag bound"; "convert BytesV bound";
     "convert bytes string"; "convert string bytes";
-    "convert string string bound";
+    "convert string string bound"; "Div overflow";
+    "convert BytesV uint bound"; "convert BytesV int bound";
+    "convert bytes address"; "convert int bound"; "convert int address";
+    "convert flag int bound"; "convert flag uint bound";
+    "convert decimal int"; "convert decimal uint"; "append overflow";
     (* semantics/vyperContextScript.sml *)
     "AddMod division by zero"; "MulMod division by zero";
     "evaluate_block_hash"; "evaluate_extract32 start";
     "evaluate_extract32 bytesM"; "evaluate_extract32 address clamp";
+    "Neg operand bound"; "ECAdd invalid point"; "ECMul invalid point";
     (* semantics/vyperABIScript.sml, abi_decode *)
     "abi_decode invalid"; "abi_decode conversion";
     (* semantics/vyperStateScript.sml *)
     "evaluate_subscripts array_index"; "array fixed oob";
     "array dynamic length oob"; "pop empty storage array";
     "pop empty memory array"; "append full storage array";
+    "assign_subscripts array_index"; "array dynamic capacity oob";
+    (* check_not_static here, and the static call value check in
+       vyperInterpreterScript.sml *)
+    "write in static context";
     (* semantics/vyperCreateScript.sml *)
     "create source has no deployable code"; "create address collision";
+    "create initcode too large";
+    "create insufficient balance or nonce limit"; "create failed";
     (* semantics/vyperInterpreterScript.sml; "call lookup_function" is
        external dispatch finding no function and no __default__ *)
     "not Payable"; "no range"; "For too long"; "send failed";
     "ExtCall target has no code"; "call lookup_function";
+    "transfer_value amount"; "nonreentrant lock";
     (* raw_call_evm below: the EVM call reverted *)
     "raw_call_evm reverted";
     calldata_rejected_msg; dispatch_rejected_msg]

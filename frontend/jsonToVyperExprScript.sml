@@ -791,6 +791,14 @@ Definition resolve_func_module_ref_def:
         _ _ _ _ _ _) fallback =
     (if tc = SOME "module" then resolve_module_alias ctx alias src
      else resolve_source_ref ctx fallback) ∧
+  (* A nested alias path (library.roots.isqrt) names the module through each
+     module's import map; its call node carries the builtin modules' shared
+     source ID, which would resolve to the current module. *)
+  resolve_func_module_ref ctx (JE_Attribute obj _ _ _ _ _ _) fallback =
+    (case resolve_module_expr (expr_all_import_maps ctx) (expr_import_map ctx)
+            obj of
+     | SOME src_id => SOME src_id
+     | NONE => resolve_source_ref ctx fallback) ∧
   resolve_func_module_ref ctx _ fallback = resolve_source_ref ctx fallback
 End
 
@@ -1017,8 +1025,13 @@ Definition translate_unary_def:
     fold_pin_constant (Builtin (translate_type (expr_type_ctx ctx) ret_ty) Neg [e])) /\
   (translate_unary ctx JUop_Not e ret_ty =
     fold_pin_constant (Builtin (BaseT BoolT) Not [e])) /\
+  (* `~x` has the type of `x`.  A flag annotation names only the flag, so it
+     resolves to the current module's flag of that name; the translated
+     operand carries the declaring module. *)
   (translate_unary ctx JUop_Invert e ret_ty =
-    fold_pin_constant (Builtin (translate_type (expr_type_ctx ctx) ret_ty) Not [e]))
+    let ty = translate_type (expr_type_ctx ctx) ret_ty in
+    fold_pin_constant
+      (Builtin (case ty of FlagT _ => expr_type e | _ => ty) Not [e]))
 End
 
 
@@ -1432,11 +1445,16 @@ Definition translate_expr_with_policy_def:
   (* BinOp *)
   (* The checker needs a literal exponent unless the base is one, so a
      compile-time exponent is folded. *)
+  (* A flag annotation names only the flag, so it resolves to the current
+     module's flag of that name; `|`, `&` and `^` have the type of their
+     operands, and the translated left operand carries the declaring module. *)
   (translate_expr_with_policy resolve ctx (JE_BinOp l op r ret_ty) =
+    let l' = translate_expr_with_policy resolve ctx l in
+    let r' = translate_expr_with_policy resolve ctx r in
+    let ty = translate_type (expr_type_ctx ctx) ret_ty in
     fold_pin_constant
-      (Builtin (translate_type (expr_type_ctx ctx) ret_ty) (Bop (translate_binop op))
-        [translate_expr_with_policy resolve ctx l;
-         exponent_operand op (translate_expr_with_policy resolve ctx r)])) /\
+      (Builtin (case ty of FlagT _ => expr_type l' | _ => ty)
+        (Bop (translate_binop op)) [l'; exponent_operand op r'])) /\
 
   (translate_expr_with_policy resolve ctx (JE_Compare l op r) =
     let l' = translate_expr_with_policy resolve ctx l in
@@ -1479,8 +1497,13 @@ Definition translate_expr_with_policy_def:
     translate_unary ctx op (translate_expr_with_policy resolve ctx e) ret_ty) /\
 
   (* IfExp (ternary) *)
+  (* A flag-typed IfExp has the flag of its arms (see BinOp). *)
   (translate_expr_with_policy resolve ctx (JE_IfExp test body orelse ret_ty) =
-    IfExp (translate_type (expr_type_ctx ctx) ret_ty) (translate_expr_with_policy resolve ctx test) (translate_expr_with_policy resolve ctx body) (translate_expr_with_policy resolve ctx orelse)) /\
+    let test' = translate_expr_with_policy resolve ctx test in
+    let body' = translate_expr_with_policy resolve ctx body in
+    let orelse' = translate_expr_with_policy resolve ctx orelse in
+    let ty = translate_type (expr_type_ctx ctx) ret_ty in
+    IfExp (case ty of FlagT _ => expr_type body' | _ => ty) test' body' orelse') /\
 
   (* Tuple: Vyper types a tuple literal by its context (e.g. the parameter
      it is passed to), so members may be wider than the elements. *)
