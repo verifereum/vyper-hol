@@ -1112,7 +1112,7 @@ Proof
             vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right]
 QED
 
-Theorem ifexp_root_jnz_origin_path[local]:
+Theorem ifexp_root_jnz_origin_path:
   expr_post H ctx func cenv cx c es sa sc s0 mid (BoolV sel) cop u /\
   expr_type c = BaseT BoolT /\
   emit_inst JNZ [cop; Label tl; Label el] [] sj = ((),sn) /\
@@ -1132,7 +1132,7 @@ Proof
      valueEncodingTheory.val_to_w256_def]
 QED
 
-Theorem ifexp_ghost_inv_at_jump[local]:
+Theorem ifexp_ghost_inv_at_jump:
   ghost_inv_at D lo d cenv cx es G tn (jump_to l s) <=>
   ghost_inv_at D lo d cenv cx es G tn s
 Proof
