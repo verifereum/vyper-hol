@@ -1350,9 +1350,19 @@ Definition expr_origin_key_def:
   expr_origin_key _ _ = NONE
 End
 
+(* The constant-origin table's entry for a constant reference.  Besides
+   literal trees the table holds the empty(T) constants
+   (module_origin_constants), which only assign_value reads. *)
+Definition lookup_origin_entry_def:
+  lookup_origin_entry ctx source =
+    OPTION_BIND (expr_origin_key ctx source) (ALOOKUP (expr_origins ctx))
+End
+
 Definition lookup_origin_pair_def:
   lookup_origin_pair ctx source =
-    OPTION_BIND (expr_origin_key ctx source) (ALOOKUP (expr_origins ctx))
+    case lookup_origin_entry ctx source of
+    | SOME (v, origin) => if pin_literal_tree v then SOME (v, origin) else NONE
+    | NONE => NONE
 End
 
 (* The right operand r' (translated from r) of an in / not in.  Where the
@@ -1970,6 +1980,31 @@ End
 
 (* Local bindings enter the context after their initializer and stay within
    their block; loop binders are visible only in the loop body. *)
+(* The values the pinned compiler's empty-value shortcut takes when they
+   are written out (stmt.py _is_empty_value): [], b"" and empty(T); the
+   shapes of the lowering's is_empty_value_expr. *)
+Definition empty_value_tree_def:
+  empty_value_tree (Builtin _ (MakeArray (SOME _) _) []) = T /\
+  empty_value_tree (Literal _ (BytesL [])) = T /\
+  empty_value_tree (TypeBuiltin _ Empty _ _) = T /\
+  empty_value_tree _ = F
+End
+
+(* An assignment's value val' (translated from val).  Where the source names
+   an empty constant, it is marked NamedConst: the pinned compiler's
+   shortcut looks only at how the value is written, and copies a name's
+   value in full.  As in membership_operand, the mark wraps the constant's
+   value. *)
+Definition assign_value_def:
+  assign_value ctx val val' =
+    case lookup_origin_entry ctx val of
+    | SOME (v, _) =>
+        if empty_value_tree v then
+          Builtin (expr_type val') NamedConst [origin_retype (expr_type val') v]
+        else val'
+    | NONE => val'
+End
+
 Definition translate_stmt_def:
   (translate_stmt nominal_index all_import_maps ctx JS_Pass = Pass) /\
   (translate_stmt nominal_index all_import_maps ctx JS_Break = Break) /\
@@ -2012,11 +2047,12 @@ Definition translate_stmt_def:
         (get_iter_bound ctx iter)
         (translate_stmts nominal_index all_import_maps body_ctx body)) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_Assign tgt val) =
-    Assign (translate_target ctx tgt) (translate_expr ctx val)) /\
+    Assign (translate_target ctx tgt)
+      (assign_value ctx val (translate_expr ctx val))) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_AnnAssign var ty ann val) =
     AnnAssign var
       (canonical_decl_type nominal_index all_import_maps ctx ty ann)
-      (translate_expr ctx val)) /\
+      (assign_value ctx val (translate_expr ctx val))) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_AugAssign tgt op val) =
     let val' = exponent_operand op (translate_expr ctx val) in
     AugAssign (expr_type val') (translate_base_target ctx tgt)
