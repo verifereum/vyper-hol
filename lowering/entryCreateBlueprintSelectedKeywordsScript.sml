@@ -1,7 +1,12 @@
 (* Replay the keyword suffix without replaying the address or payload. *)
 Theory entryCreateBlueprintSelectedKeywords
 Ancestors
-  entryCreateSelectedSalt createSizeBlueprintOffset
+  entryCreateSelectedSalt createSizeBlueprintOffset entryCreateBlueprintReadCut
+  createSizeBlueprintKeywordReplay createSizeOperandPre createSizeCopyReplay
+  bodyFullPreds exprBodyPreProps exprOperandVar createSizePrefixReplay
+  loweringPosts loweringStateRelDefs exprSimHypsDefs exprSimWordArgs vyperValue
+  vyperTypeSystem vyperStorageFootprint vyperStorageTrace vyperState vyperCreate
+  valueEncoding exprLoweringProps freshWrites arithmetic list compileEnv venomState
 
 Theorem selected_offset_word[local]:
   value_runtime_typed env (BaseT (UintT 256)) v /\
@@ -94,18 +99,26 @@ Proof
    MEM off (create_operand_order (CreateFromBlueprint raw) hs args) /\
    (hs ==> MEM salt (create_operand_order (CreateFromBlueprint raw) hs args))` by
     (Cases_on `hs` >> simp[MEM_APPEND]) >>
-  qabbrev_tac `finish = \kvs. eval_create_operands cx (CreateFromBlueprint raw) hs rof
+  qabbrev_tac `kfinal = \kvs. eval_create_operands cx (CreateFromBlueprint raw) hs rof
        (MAP expr_type args) (blueprint_literal_offset cx hs args) (av::(cvs ++ kvs))` >>
-  `!kvs. storage_trace_frame (finish kvs)` by
-    simp[Abbr `finish`, storage_trace_frame_create_operands] >>
+  `!kvs. storage_trace_frame (kfinal kvs)` by
+    simp[Abbr `kfinal`, storage_trace_frame_create_operands] >>
   `expr_body_pre ce cx env amount p` by metis_tac[create_call_operand_body_pre] >>
-  qabbrev_tac `ka = \v. bind (eval_exprs cx ((if hs then [salt] else []) ++ [off])) (\vs. finish (v::vs))` >>
+  qabbrev_tac `ka = \v. bind (eval_exprs cx ((if hs then [salt] else []) ++ [off])) (\vs. kfinal (v::vs))` >>
   `bind (bind (eval_expr cx amount) (read_result cx)) ka p = (res,out)` by fs[Abbr `ka`, create_copy_source_cons] >>
   `!v. storage_trace_frame (ka v)` by simp[Abbr `ka`, blueprint_read_list_frame] >>
   suspend "amount"
 QED
 
 Resume blueprint_agreed_keywords_at_cuts[amount]:
+  `expr_sim_full_pre (DF,lo,d,ctx,shctx,PG,fnc,shfnc)
+     ce cx (expr_type amount) amount p (st0,ca,cm,sca,scm,amount_op,u,G,tn) ==>
+   gas_completed_operand (DF,lo,gas_explicit_sites ctx shctx,ctx,fnc,PG)
+     tops cx st0 ca cm (bind (eval_expr cx amount) (read_result cx)) (p,u,G,tn)
+     (expr_sim_full_post (DF,lo,d,ctx,fnc) ce cx amount (p,ca,cm,u,amount_op,G,tn))` by
+    (strip_tac >> first_assum irule >>
+     rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+     qexistsl [`sca`,`scm`] >> first_assum ACCEPT_TAC) >>
   drule_all blueprint_read_at_cut_from_replay >>
   disch_then (strip_assume_tac o SPEC_ALL)
   >- metis_tac[] >>
@@ -116,7 +129,7 @@ Resume blueprint_agreed_keywords_at_cuts[amount]:
        (strip_assume_tac o MATCH_MP expr_body_pre_static_facts) >> simp[]) >>
   drule_all blueprint_keyword_mono >> strip_tac >>
   `hs ==> expr_body_pre ce cx env salt pa` by metis_tac[create_call_operand_body_pre] >>
-  qabbrev_tac `ksalt = \svs. bind (eval_exprs cx [off]) (\ovs. finish (avalue::(svs ++ ovs)))` >>
+  qabbrev_tac `ksalt = \svs. bind (eval_exprs cx [off]) (\ovs. kfinal (avalue::(svs ++ ovs)))` >>
   `bind (eval_exprs cx (if hs then [salt] else [])) ksalt pa = (res,out)` by
     fs[Abbr `ka`, Abbr `ksalt`, blueprint_eval_salt_offset] >>
   `!svs. storage_trace_frame (ksalt svs)` by
@@ -126,6 +139,17 @@ Resume blueprint_agreed_keywords_at_cuts[amount]:
 QED
 
 Resume blueprint_agreed_keywords_at_cuts[salt]:
+  rename1 `ghost_inv_at (DF _) lo d ce cx pa Ga ta m` >>
+  `hs ==> expr_body_pre ce cx env salt pa /\
+    expr_type salt = BaseT (BytesT (Fixed 32)) /\
+    (expr_sim_full_pre (DF,lo,d,ctx,shctx,PG,fnc,shfnc)
+       ce cx (expr_type salt) salt pa (st0,cm,cn,scm,scn,salt_op,m,Ga,ta) ==>
+     gas_completed_operand (DF,lo,gas_explicit_sites ctx shctx,ctx,fnc,PG)
+       tops cx st0 cm cn (bind (eval_expr cx salt) (read_result cx)) (pa,m,Ga,ta)
+       (expr_sim_full_post (DF,lo,d,ctx,fnc) ce cx salt (pa,cm,cn,m,salt_op,Ga,ta)))` by
+    (strip_tac >> conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+     strip_tac >> first_assum irule >>
+     rpt (conj_tac >- metis_tac[]) >> qexistsl [`scm`,`scn`] >> first_assum ACCEPT_TAC) >>
   drule_all blueprint_optional_salt_from_scalar >>
   disch_then (strip_assume_tac o SPEC_ALL)
   >- metis_tac[] >>
@@ -134,12 +158,12 @@ Resume blueprint_agreed_keywords_at_cuts[salt]:
   `local_ptrs_reserved ce cn /\
    (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at cn x) /\
    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at cn x)` by
-    metis_tac[blueprint_keyword_mono] >>
+    (drule_all (Q.INST [`ca` |-> `cm`, `cb` |-> `cn`] blueprint_keyword_mono) >> simp[]) >>
   `n.vs_current_bb = cn.cs_current_bb /\
    n.vs_inst_idx = LENGTH cn.cs_current_insts /\ n.vs_labels = m.vs_labels` by
     (qpat_assum `if hs then lower_value _ _ _ salt cm = _ /\ _ else _` mp_tac >>
      Cases_on `hs` >> simp[] >> metis_tac[create_prefix_labels]) >>
-  qabbrev_tac `ko = \ov. finish (avalue::(salts ++ [ov]))` >>
+  qabbrev_tac `ko = \ov. kfinal (avalue::(salts ++ [ov]))` >>
   `bind (bind (eval_expr cx off) (read_result cx)) ko ps = (res,out)` by
     fs[Abbr `ksalt`, Abbr `ko`, create_copy_source_cons,
        cj 49 vyperInterpreterTheory.evaluate_def, bind_return] >>
@@ -157,7 +181,7 @@ Resume blueprint_agreed_keywords_at_cuts[offset]:
      (!x. offset_op = Var x ==> not_fresh_at cb x) /\
      cn.cs_next_var <= cb.cs_next_var /\ t.vs_labels = n.vs_labels /\
      (!x w. not_fresh_at cn x /\ lookup_var x n = SOME w ==> lookup_var x t = SOME w)`
-  suffices_by (strip_tac >- metis_tac[] >> suspend "finish") >>
+  suffices_by (strip_tac >- metis_tac[] >> suspend "kfinal") >>
   qpat_x_assum `(?oty i. origin_fold_value off = _ /\ _) \/ _` strip_assume_tac
   >- suspend "folded" >>
   suspend "dynamic"
@@ -176,6 +200,16 @@ QED
 
 Resume blueprint_agreed_keywords_at_cuts[dynamic]:
   `expr_body_pre ce cx env off ps` by metis_tac[create_call_operand_body_pre] >>
+  rename1 `ghost_inv_at (DF _) lo d ce cx ps Gs ts n` >>
+  `expr_sim_full_pre (DF,lo,d,ctx,shctx,PG,fnc,shfnc)
+     ce cx (expr_type off) off ps (st0,cn,cb,scn,scb,offset_op,n,Gs,ts) ==>
+   gas_completed_operand (DF,lo,gas_explicit_sites ctx shctx,ctx,fnc,PG)
+     tops cx st0 cn cb (bind (eval_expr cx off) (read_result cx)) (ps,n,Gs,ts)
+     (expr_sim_full_post (DF,lo,d,ctx,fnc) ce cx off (ps,cn,cb,n,offset_op,Gs,ts))` by
+    (strip_tac >> first_assum irule >>
+     rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+     qexistsl [`scn`,`scb`] >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `expr_sim_full_pre _ _ _ _ amount _ _ ==> _` kall_tac >>
   drule_all blueprint_read_at_cut_from_replay >>
   disch_then (strip_assume_tac o SPEC_ALL)
   >- metis_tac[] >>
@@ -183,27 +217,36 @@ Resume blueprint_agreed_keywords_at_cuts[dynamic]:
   `?ow. dest_NumV v = SOME (w2n ow) /\ eval_operand offset_op t = SOME ow` by
     (irule selected_offset_word >> metis_tac[]) >>
   `!x. offset_op = Var x ==> not_fresh_at cb x` by
-    (drule (REWRITE_RULE[GSYM AND_IMP_INTRO] compile_lower_value_var) >> simp[]) >>
+    (qpat_assum `lower_value compile_expr ce _ off cn = _`
+       (mp_tac o MATCH_MP (REWRITE_RULE[GSYM AND_IMP_INTRO] compile_lower_value_var)) >> simp[]) >>
   `t.vs_labels = n.vs_labels` by metis_tac[create_prefix_labels] >>
   disj2_tac >> qexistsl [`v`,`q`,`ow`] >> simp[] >> metis_tac[]
 QED
 
-Resume blueprint_agreed_keywords_at_cuts[finish]:
+Resume blueprint_agreed_keywords_at_cuts[kfinal]:
   `eval_exprs cx [off] ps = (INL [ov],qp)` by
     (irule blueprint_eval_join_cons >> metis_tac[eval_exprs_nil]) >>
   drule_all blueprint_eval_join_salt_offset >> strip_tac >>
   `?amt. dest_NumV avalue = SOME amt` by metis_tac[blueprint_keyword_uint] >>
-  drule_all blueprint_decoded_keywords >> strip_tac >>
+  `?ops. dest_create_args (CreateFromBlueprint raw) hs
+    (create_operand_layout (CreateFromBlueprint raw) hs (av::(cvs ++ avalue::(salts ++ [ov])))) = SOME ops /\
+    ops.co_code_src = AddressCodeSource (w2w aw) /\ ops.co_ctor_args = cvs /\
+    ops.co_code_offset = SOME (w2n ow)` by
+    (irule blueprint_decoded_keywords >>
+     rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE (qexists_tac `amt` >> first_assum ACCEPT_TAC))) >>
+  pop_assum strip_assume_tac >>
   `!x w. not_fresh_at ca x /\ lookup_var x u = SOME w ==> lookup_var x t = SOME w` by
     (rpt gen_tac >> strip_tac >>
      `not_fresh_at cm x /\ not_fresh_at cn x` by
        metis_tac[freshWritesTheory.not_fresh_at_mono, LESS_EQ_TRANS] >>
      metis_tac[]) >>
-  `eval_operand target_op t = SOME aw` by metis_tac[blueprint_eval_operand_frame] >>
+  `t.vs_labels = u.vs_labels` by metis_tac[] >>
+  `eval_operand target_op t = SOME aw` by
+    (irule blueprint_eval_operand_frame >> qexistsl [`ca`,`u`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disj2_tac >> qexistsl [`avalue::(salts ++ [ov])`,`qp`,`ops`,`ow`] >>
   simp[] >> rpt conj_tac
   >- (irule blueprint_eval_join_cons >> qexists_tac `pa` >> simp[])
-  >- fs[Abbr `ko`, Abbr `finish`]
-  >- metis_tac[blueprint_lookup_code] >> decide_tac
+  >- (drule blueprint_lookup_code >> simp[]) >> decide_tac
 QED
 Finalise blueprint_agreed_keywords_at_cuts

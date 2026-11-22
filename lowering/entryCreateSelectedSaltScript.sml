@@ -2,7 +2,8 @@
 Theory entryCreateSelectedSalt
 Ancestors
   entryCreateBlueprintReadCut createSizeBlueprintKeywordReplay
-  bodyFullPreds constSubstCorrect
+  bodyFullPreds vyperState createSizeCopyReplay exprSimWordArgs
+  exprBodyPreProps vyperTypeExprSoundness vyperValue vyperTyping vyperCreate
 
 Theorem blueprint_optional_salt_from_scalar:
   (hs ==> expr_body_pre ce cx env salt p /\
@@ -55,14 +56,15 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS)
   >- (disj2_tac >> qexistsl [`G`,`tn`] >> gvs[] >> first_assum ACCEPT_TAC) >>
   `bind (bind (eval_expr cx salt) (read_result cx)) (\v. k [v]) p = (res,out)` by
-    fs[create_copy_source_cons, eval_exprs_nil, bind_def] >>
+    fs[create_copy_source_cons, cj 49 vyperInterpreterTheory.evaluate_def, bind_return] >>
   `!v. storage_trace_frame ((\v. k [v]) v)` by simp[] >>
   drule_all blueprint_read_at_cut_from_replay >> strip_tac >- metis_tac[] >>
   `body_const_cells_agree [(NONE,tops)] cx env q` by
     (irule body_const_cells_agree_expr_read >>
      goal_assum (drule_at Any) >> drule expr_body_pre_static_facts >> simp[]) >>
   `?w. dest_create_salt v = SOME w` by
-    (qpat_assum `value_runtime_typed _ _ v` mp_tac >>
+    (qpat_assum `expr_type salt = _` (fn th =>
+       qpat_assum `value_runtime_typed _ _ v` (mp_tac o REWRITE_RULE[th])) >>
      Cases_on `v` >> simp[value_runtime_typed_def, evaluate_type_def,
        value_has_type_def, dest_create_salt_def, dest_BytesV_def]) >>
   `eval_exprs cx [salt] p = (INL [v],q)` by
