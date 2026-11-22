@@ -28,6 +28,7 @@ Ancestors
   memSafeRun ptrSafeRun ptrOkCheck ptrDiscipline unitMemInv
   unitTransformDefs lowerDloadDefs ctorDeployDefs deployUnitProducers
   o1PassContract rawReachableFmp ctxLookupAgree
+  concretizePtrCoverageStaticMemReachability
   finite_map list pred_set relation arithmetic
 
 (* ===== The frontier from k ===== *)
@@ -240,6 +241,26 @@ Proof
         metis_tac[active_inst_mem_fn_insts]) >>
      simp[dalloca_no_wrap_def]) >>
   metis_tac[lowered_unit_raw_memory_ok_from_no_wrap]
+QED
+
+Theorem lowered_unit_checked_dalloca_facts:
+  !lo ctx name fn lbl vs.
+    lowering_context_ok ctx /\ ctx.ctx_entry = SOME name /\
+    lookup_function name ctx.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl /\ ctx_has_dalloca ctx /\
+    (!fuel. mem_safe_blocks fuel ctx fn
+      (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                  vs_inst_idx := 0 |>)) /\
+    ptr_discipline lo ctx vs ==>
+    !f inst s. raw_reachable vs ctx f inst s ==>
+      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lowered_unit_entry_facts >> strip_tac >>
+  drule_all mem_safe_blocks_raw_dalloca_no_wrap >> strip_tac >>
+  rpt gen_tac >> strip_tac >> conj_tac >- metis_tac[] >>
+  drule ptr_raw_reachable_frame >> strip_tac >>
+  fs[ptr_discipline_def, allocas_below_fmp_def] >> metis_tac[]
 QED
 
 (* A memory-safe run keeps every reachable DLOAD inside its data section. *)
