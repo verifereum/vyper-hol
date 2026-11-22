@@ -2,6 +2,7 @@
 Theory bodyAppendResolvedPre
 Ancestors
   bodyInvExecutionProps bodyInvCodeProps bodyAppendStorageAdapter
+  bodySingletonCallSupport
   stmtExprAllocationPreProps compileUnit alist
   bodyAugPlaceTarget bodySimAugPlaceLoad bodyAppendStorageFacts bodyExprPreFacts bodyStorageCases
   bodySim exprSimHypsDefs targetPlaceSim targetPlaceLive gasContext
@@ -105,10 +106,12 @@ Resume body_append_typed_pre[target]:
   qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
     SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
       int_calls_stmt_def, EVERY_APPEND, DE_MORGAN_THM]) >>
+  `IS_SOME (type_place_target env bt)` by simp[] >>
+  drule_all_then assume_tac body_inv_typed_target_calls_main >>
   irule target_indices_pre_of_body >>
   simp[] >> conj_tac
   >- fs[supported_stmt_expr_exists_def] >>
-  fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_left]
+  fs[int_calls_stmt_def, EVERY_MEM] >> metis_tac[call_evaluation_safe_append_left]
 QED
 
 Resume body_append_typed_pre[rhs]:
