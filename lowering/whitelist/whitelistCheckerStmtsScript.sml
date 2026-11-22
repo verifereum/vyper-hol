@@ -370,6 +370,12 @@ QED
 
 (* ===== Statements ===== *)
 
+Triviality checker_custom_error_supported:
+  custom_error_resolved [(NONE,tops)] err ==> supported_custom_error tops err
+Proof
+  Cases_on `err` >> simp[supported_custom_error_def]
+QED
+
 Theorem type_stmt_leaf_supported[local]:
   checker_env_ok tops env /\ checker_stmt_env_ok tops env /\
   FDOM env.var_types SUBSET set (MAP FST bindings) /\
@@ -390,15 +396,16 @@ Proof
   >~ [`Assert _ r`]
   >- (Cases_on `r` >>
       gvs[type_stmt_def, supported_stmt_def, AllCaseEqs(),
-          supported_assert_reason_def, supported_custom_error_def,
+          supported_assert_reason_def,
           custom_errors_stmt_ok_def, well_typed_custom_error_def] >>
-      metis_tac[checker_pure, checker_pures, checker_string_reason])
+      metis_tac[checker_pure, checker_pures, checker_string_reason,
+                checker_custom_error_supported])
   >~ [`Raise r`]
   >- (Cases_on `r` >>
       gvs[type_stmt_def, supported_stmt_def, AllCaseEqs(),
-          supported_raise_reason_def, supported_custom_error_def,
+          supported_raise_reason_def,
           custom_errors_stmt_ok_def, well_typed_custom_error_def] >>
-      metis_tac[checker_pures, checker_string_reason])
+      metis_tac[checker_pures, checker_string_reason, checker_custom_error_supported])
   >~ [`Return r`]
   >- (Cases_on `r` >> gvs[type_stmt_def, supported_stmt_def, AllCaseEqs()] >>
       metis_tac[checker_supported_expr])
