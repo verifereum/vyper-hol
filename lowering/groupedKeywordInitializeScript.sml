@@ -59,7 +59,8 @@ QED
 Theorem grouped_omitted_initializers:
   !vars slots kept sa sha es s G tn.
     compile_init_kwargs ce vars off 0 hi sa = ((),sb) /\
-    compile_init_kwargs ce (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars)
+    compile_init_kwargs (gas_shadow_env T ce)
+      (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars)
       off 0 hi sha = ((),shb) /\
     fn_has_code sa sb fn /\ fn_has_code sha shb shfn /\ gas_shadow_state sa sha /\
     LIST_REL (\(n,dst,ty,e) (aid,p,base,tv).
@@ -68,8 +69,9 @@ Theorem grouped_omitted_initializers:
         expr_body_pre (ce with ce_vars := FEMPTY) cx env e es') /\
       lower_value compile_expr (ce with ce_vars := FEMPTY) ty e =
         lower_value compile_expr ce ty e /\
-      lower_value compile_expr (ce with ce_vars := FEMPTY) ty (gas_shadow_expr e) =
-        lower_value compile_expr ce ty (gas_shadow_expr e) /\
+      lower_value compile_expr (gas_shadow_env T (ce with ce_vars := FEMPTY))
+        ty (gas_shadow_expr e) =
+        lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e) /\
       evaluate_type (get_tenv cx) ty = SOME tv /\
       type_memory_bytes ce ty = type_memory_size tv /\
       type_memory_size tv + 64 < dimword (:256)) vars slots /\
@@ -258,7 +260,8 @@ Finalise grouped_omitted_initializers
 Theorem grouped_supplied_initializers:
   !tvs vars slots vals kept off sa sha s G tn.
     compile_init_kwargs ce vars (4+off) (LENGTH tvs) hi sa = ((),sb) /\
-    compile_init_kwargs ce (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars)
+    compile_init_kwargs (gas_shadow_env T ce)
+      (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars)
       (4+off) (LENGTH tvs) hi sha = ((),shb) /\
     fn_has_code sa sb fn /\ fn_has_code sha shb shfn /\ gas_shadow_state sa sha /\
     LIST_REL (\(n,dst,ty,e) (aid,p,base,tv).
@@ -280,7 +283,7 @@ Theorem grouped_supplied_initializers:
     ?last shlast t J tz.
       compile_init_kwargs ce (DROP (LENGTH tvs) vars)
         (4+off+SUM (MAP tv_abi_size tvs)) 0 hi last = ((),sb) /\
-      compile_init_kwargs ce
+      compile_init_kwargs (gas_shadow_env T ce)
         (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) (DROP (LENGTH tvs) vars))
         (4+off+SUM (MAP tv_abi_size tvs)) 0 hi shlast = ((),shb) /\
       fn_has_code last sb fn /\ fn_has_code shlast shb shfn /\ gas_shadow_state last shlast /\
@@ -424,7 +427,7 @@ Resume grouped_supplied_initializers[owners]:
        qpat_assum pattern (assume_tac o SIMP_RULE bool_ss
          [size_eq,arithmeticTheory.SUC_SUB1,arithmeticTheory.ADD_ASSOC]))
        [`compile_init_kwargs ce var_tail _ _ hi last = _`,
-        `compile_init_kwargs ce (MAP _ var_tail) _ _ hi shadow_last = _`]) >>
+        `compile_init_kwargs _ (MAP _ var_tail) _ _ hi shadow_last = _`]) >>
   qpat_assum `!vars slots vals kept off sa sha s G tn. compile_init_kwargs _ vars _ _ _ _ = _ /\ _ ==> _`
     (qspecl_then [`var_tail`,`slot_tail`,`xs`,`(aid,p,b0,tv,x)::kept`,
       `off+tv_abi_size tv`,`last`,`shadow_last`,`tail_state`,`G1`,`tn1`] mp_tac) >>
