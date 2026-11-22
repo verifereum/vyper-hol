@@ -146,7 +146,7 @@ Theorem body_annassign_word_full:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all annassign_word_full_source >> strip_tac >>
-  drule supported_expr_body_calls >> strip_tac >>
+  drule_all_then strip_assume_tac bodySingletonCallSupportTheory.supported_singleton_expr_body_calls >>
   rw[stmt_frag_full_def] >>
   fs[stmt_env_def, declare_stmt_local_def, gas_shadow_stmt_def,
      comp_bind_def, comp_ignore_bind_def, comp_return_def,

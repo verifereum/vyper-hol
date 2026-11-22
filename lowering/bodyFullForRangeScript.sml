@@ -205,6 +205,8 @@ Proof
   imp_res_tac call_evaluation_safe_append_left >>
   imp_res_tac call_evaluation_safe_append_right >>
   gvs[supported_stmt_expr_exists_def, supported_iterator_exists_def] >>
+  `supported_type_namespace typ` by
+    (Cases_on `typ` >> gvs[is_int_type_def, supported_type_namespace_def]) >>
   metis_tac[call_evaluation_safe_append_left]
 QED
 
@@ -6658,8 +6660,8 @@ Resume compile_for_range_frag_full[checked]:
       (qx_gen_tac `ee` >> strip_tac >>
        sg ([QUOTE "supported_expr tops "] @ e) >-
          simp[supportedExprsTheory.supported_expr_def] >>
-       qpat_assum ([QUOTE "supported_expr tops "] @ e)
-         (mp_then Any strip_assume_tac supported_expr_body_calls) >>
+       drule_all_then strip_assume_tac
+         bodySingletonCallSupportTheory.supported_singleton_expr_body_calls >>
        sg ([QUOTE "~supported_expr_exists (const_name_root cx) "] @ e) >-
          (drule_all body_inv_stmt_const_name_free >>
           simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def,

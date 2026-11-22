@@ -3,7 +3,9 @@
 Theory typedCopyProducer
 Ancestors
   typedCopyMetadata typedCopyDomain supportedProgram supportedDecls
-  vyperTypeContract compileVyper list pair
+  vyperTypeContract vyperTypeContractStaticMaps vyperTypeSystem
+  checkedTypeNamespace supportedStmtTraverse
+  vyperContext compileVyper alist list pair finite_map
 
 Theorem struct_decl_type_key_member:
   MEM (StructDecl name args) tops ==>
@@ -41,7 +43,14 @@ Theorem supported_checked_struct_metadata_acyclic:
 Proof
   rpt strip_tac >> irule make_struct_fields_map_acyclic >> conj_tac
   >- (drule checked_contract_struct_args_unique >> simp[])
-  >> fs[supported_program_def]
+  conj_tac >- fs[supported_program_def] >>
+  rpt gen_tac >> strip_tac >>
+  `check_toplevel_decl [(NONE,tops)] art NONE (StructDecl name fields)` by
+    (irule check_contract_toplevel_decl_MEM_checked >>
+     simp[ALOOKUP_def] >> metis_tac[]) >>
+  fs[check_toplevel_decl_def, EVERY_MEM, FORALL_PROD, type_env_all_modules_def,
+     GSYM type_env_def, FUNION_FEMPTY_2] >>
+  metis_tac[singleton_well_formed_type_namespace, assignable_type_well_formed]
 QED
 
 Theorem supported_checked_compile_env_struct_metadata_acyclic:

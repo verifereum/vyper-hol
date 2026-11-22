@@ -1,6 +1,6 @@
 (* Shared event metadata and pure argument readiness for the Log cases. *)
 Theory bodySimLogArgs
-Ancestors
+Ancestors bodyCallSupport
   allocLimits allocLimitsProps
   exprSimSource bodyExprPreFacts exprSimHypsDefs list bodySim stmtSimLog exprSimHyps
   bodyStorageCases bodyInvSplit bodyInvCodeProps bodyInvExecutionProps
@@ -364,12 +364,12 @@ Proof
     (mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`]
       body_log_snapshot_expr_pre_mods) >>
      simp[main_module_def, ALOOKUP_def]) >>
-  `supported_pure_expr tops e` by metis_tac[supported_pure_exprs_every, EVERY_MEM] >>
-  drule_then strip_assume_tac (CONJUNCT1 supported_pure_main_calls) >>
   drule_then assume_tac contract_inv_type_env >>
-  fs[expr_body_pre_split_def, type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2,
-     listTheory.EVERY_CONJ, supported_exprs_exists_every, EXISTS_MEM] >>
-  metis_tac[]
+  drule_then assume_tac contract_inv_module_codes >>
+  fs[expr_body_pre_split_def, expr_body_pre_mods_def, type_env_all_modules_def,
+     type_env_def, FUNION_FEMPTY_2, EVERY_MEM, pairTheory.FORALL_PROD,
+     supported_exprs_exists_every, EXISTS_MEM, source_body_call_supported_def] >>
+  rpt strip_tac >> res_tac >> gvs[ALOOKUP_def]
 QED
 
 (* Body safety and root allocation checks give each argument expr_body_pre;
