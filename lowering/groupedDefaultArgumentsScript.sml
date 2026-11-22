@@ -12,7 +12,7 @@ Proof
   strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem opt_mmap_take_some[local]:
+Theorem opt_mmap_take_some:
   !xs ys n. OPT_MMAP f xs = SOME ys ==>
     OPT_MMAP f (TAKE n xs) = SOME (TAKE n ys)
 Proof

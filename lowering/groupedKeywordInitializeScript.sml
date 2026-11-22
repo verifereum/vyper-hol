@@ -448,26 +448,3 @@ Resume grouped_supplied_initializers[owners]:
 QED
 
 Finalise grouped_supplied_initializers
-
-Theorem grouped_initializer_kept_slots:
-  !slots vals.
-    LIST_REL (\(id,p,base,tv) v. ^initialized_slot sa s G tn (id,p,base,tv,v))
-      slots vals ==>
-    ?kept. MAP FST kept = MAP FST slots /\ EVERY (^initialized_slot sa s G tn) kept /\
-      !sb t J tz. EVERY (^initialized_slot sb t J tz) kept ==>
-        LIST_REL (\(id,p,base,tv) v. ^initialized_slot sb t J tz (id,p,base,tv,v))
-          slots vals
-Proof
-  Induct
-  >- (Cases >> simp[] >> qexists_tac `[]` >> simp[]) >>
-  qx_gen_tac `slot` >> PairCases_on `slot` >>
-  Cases >> simp[LIST_REL_def] >>
-  rpt strip_tac >>
-  qpat_assum `!vs. LIST_REL _ slots vs ==> _` (qspec_then `t` mp_tac) >>
-  impl_tac >- fs[] >>
-  disch_then (qx_choose_then `kept` strip_assume_tac) >>
-  qexists_tac `(slot0,slot1,slot2,slot3,h)::kept` >>
-  asm_simp_tac (srw_ss()) [MAP, EVERY_DEF, LIST_REL_def] >>
-  rpt gen_tac >> strip_tac >> fs[] >>
-  metis_tac[]
-QED

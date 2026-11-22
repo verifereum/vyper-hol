@@ -10,7 +10,7 @@ Ancestors
   exprSimAbiDecodeCertificate exprSimAbiDecodePrims exprSimAbiDecodeTrace
   exprSimAbiDecodeResourcePrims fragFuel fragFuelConfinement
   fragFuelExpr fragFuelRuntimeBody fragFuelLoopAbiDecDyn fragObserverCodeProps calldataNoneFallbackJoint
-  registrationRejectMetadata calldataSourceSize vyperABIEntries
+  registrationRejectMetadata calldataSourceSize groupedDefaultArguments vyperABIEntries
   calldataNoneDecoder fragGasOriginPtrExec abiDecoderCoherence abiDecoderReentry finite_map
   calldataNoneRegisterFold calldataNoneRegisterOne
   exprSimAbiDecodeObservedEndpoint exprSimAbiDecodeObserverReject exprSimAbiGasBridge abiEncoderObserver fragExec
@@ -2927,48 +2927,10 @@ Proof
   qexists_tac `(prefix,k)` >> simp[]
 QED
 
-Theorem typed_calldata_prefix[local]:
-  OPT_MMAP (evaluate_type env) (MAP SND args) = SOME tvs ==>
-  OPT_MMAP (evaluate_type env) (MAP SND (TAKE n args)) = SOME (TAKE n tvs)
-Proof
-  qid_spec_tac `tvs` >> qid_spec_tac `args` >>
-  Induct_on `n` >> Cases_on `args` >>
-  simp[TAKE_def, OPT_MMAP_def, AllCaseEqs()] >> rw[] >>
-  res_tac >> simp[]
-QED
-
-Theorem coherent_calldata_head_size[local]:
-  !args tvs. LIST_REL (\(n,ty) tv.
-      abi_decoder_coherent ce env ce.ce_struct_fields ty tv) args tvs ==>
-    min_calldata_size ce args 0 = 4 + SUM (MAP tv_abi_size tvs)
-Proof
-  Induct >> Cases_on `tvs` >>
-  simp[min_calldata_size_def] >>
-  qx_gen_tac `arg` >> PairCases_on `arg` >> strip_tac >> fs[] >>
-  first_x_assum drule >> simp[min_calldata_size_def] >>
-  drule calldata_coherent_embedded_size >> simp[]
-QED
-
 Theorem prefix_head_size_le[local]:
   !n tvs. SUM (MAP tv_abi_size (TAKE n tvs)) <= SUM (MAP tv_abi_size tvs)
 Proof
   Induct >> Cases_on `tvs` >> simp[TAKE_def]
-QED
-
-Theorem coherent_calldata_prefix_head[local]:
-  LIST_REL (\(n,ty) tv.
-    abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
-    (?loc. FLOOKUP ce.ce_vars n = SOME loc /\
-      var_location_memory_size loc = SOME (type_memory_size tv)) /\
-    type_memory_size tv < dimword (:256)) args tvs ==>
-  min_calldata_size ce (TAKE n args) 0 = 4 + SUM (MAP tv_abi_size (TAKE n tvs))
-Proof
-  strip_tac >> irule (SPEC_ALL coherent_calldata_head_size) >> qexists_tac `env` >>
-  qpat_x_assum `LIST_REL _ args tvs` (fn th =>
-    mp_tac (Q.INST [`n` |-> `n`] (MATCH_MP (SPEC_ALL LIST_REL_TAKE) th))) >>
-  simp[LIST_REL_EL_EQN] >> rpt strip_tac >>
-  first_x_assum (qspec_then `n'` mp_tac) >> simp[] >>
-  Cases_on `EL n' (TAKE n args)` >> simp[]
 QED
 
 Theorem grouped_kwarg_names[local]:
@@ -4359,13 +4321,17 @@ Proof
   `OPT_MMAP (evaluate_type (type_env tops)) (MAP SND prefix) = SOME (TAKE (n+k) all_tvs) /\
    OPT_MMAP (evaluate_type (type_env tops)) (MAP SND (TAKE n args)) = SOME pos_tvs` by
     (qpat_assum `prefix = TAKE _ args` SUBST1_TAC >>
-     simp[Abbr `pos_tvs`] >> conj_tac >> irule typed_calldata_prefix >>
-     first_assum ACCEPT_TAC) >>
+     simp[Abbr `pos_tvs`] >> conj_tac >> pure_rewrite_tac[MAP_TAKE] >>
+     irule opt_mmap_take_some >> first_assum ACCEPT_TAC) >>
+  `LIST_REL (\arg tv. abi_decoder_coherent common.ec_env
+     (type_env tops) common.ec_env.ce_struct_fields (SND arg) tv) args all_tvs` by
+    (qpat_assum `LIST_REL (\(name,ty) tv. _ /\ _ /\ _) args all_tvs` mp_tac >>
+     ho_match_mp_tac LIST_REL_mono >> Cases >> simp[]) >>
   qabbrev_tac `mincd = min_calldata_size common.ec_env prefix 0` >>
   `mincd = 4 + SUM (MAP tv_abi_size (TAKE (n+k) all_tvs))` by
     (simp[Abbr `mincd`] >>
-     qpat_assum `LIST_REL _ args all_tvs`
-       (mp_tac o Q.INST [`n` |-> `n+k`] o MATCH_MP coherent_calldata_prefix_head) >>
+     qpat_assum `LIST_REL (\arg tv. abi_decoder_coherent _ _ _ (SND arg) tv) args all_tvs`
+       (mp_tac o Q.INST [`n` |-> `n+k`] o MATCH_MP grouped_argument_min_calldata_size) >>
      simp[]) >>
   `mincd < dimword (:256)` by
     (mp_tac (Q.SPECL [`n+k`,`all_tvs`] prefix_head_size_le) >> decide_tac) >>
@@ -4437,8 +4403,8 @@ Proof
      simp_tac bool_ss [optionTheory.NOT_SOME_NONE]) >>
   `off = 4 + pos_size` by
     (qpat_assum `off = _` SUBST1_TAC >>
-     qpat_assum `LIST_REL _ args all_tvs`
-       (mp_tac o Q.INST [`n` |-> `n`] o MATCH_MP coherent_calldata_prefix_head) >>
+     qpat_assum `LIST_REL (\arg tv. abi_decoder_coherent _ _ _ (SND arg) tv) args all_tvs`
+       (mp_tac o Q.INST [`n` |-> `n`] o MATCH_MP grouped_argument_min_calldata_size) >>
      simp[Abbr `n`, Abbr `pos_size`, Abbr `pos_tvs`]) >>
   `4 + pos_size + SUM (MAP tv_abi_size kw_tvs) < dimword (:256)` by
     (qpat_assum `TAKE (n+k) all_tvs = _` (fn parts =>
@@ -4451,7 +4417,8 @@ Proof
        (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [abi_entries_member])) >>
   `LIST_REL (\(n,ty) tv. abi_decoder_coherent common.ec_env (type_env tops)
       common.ec_env.ce_struct_fields ty tv) args all_tvs` by
-    (qpat_assum `LIST_REL _ args all_tvs` mp_tac >> ho_match_mp_tac LIST_REL_mono >>
+    (qpat_assum `LIST_REL (\(name,ty) tv. _ /\ _ /\ _) args all_tvs` mp_tac >>
+     ho_match_mp_tac LIST_REL_mono >>
      Cases >> simp[]) >>
   `EVERY (\g. case g of ExternalSingle _ _ => T
       | ExternalDefaults comp es sp _ => EVERY
