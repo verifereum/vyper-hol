@@ -2,7 +2,7 @@
 Theory bodyFullSubscriptCopiedBind
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullPreds bodySimFull bodyFullSubscriptCapturedPlace
+  bodyFullPreds bodySimFull bodyFullShared bodyFullSubscriptCapturedPlace
   gasOutcomeFullCompose gasOutcomeFullGuarded gasShadowCompile
   gasShadowCompileConvert gasShadowCompileStmtHelpers
   exprSimSubscriptArray exprSimSubscriptArraySource
@@ -83,35 +83,23 @@ Theorem copied_array_cuts[local]:
     cs_extends sha shm /\ cs_extends shm shc /\ cs_extends shc shi /\ cs_extends shi shb
 Proof
   strip_tac >> drule_all compile_expr_copied_array_subscript >> strip_tac >>
-  `copies_subscript_base ce (gas_shadow_expr obj) (gas_shadow_expr idx) /\
-   place_type ce (gas_shadow_expr obj) = ValPT (ArrayT et bd)` by
+  `copies_subscript_base (gas_shadow_env T ce) (gas_shadow_expr obj) (gas_shadow_expr idx) /\
+   place_type (gas_shadow_env T ce) (gas_shadow_expr obj) = ValPT (ArrayT et bd)` by
     gvs[copies_subscript_base_def] >>
   qpat_x_assum `compile_expr _ _ (gas_shadow_expr (Subscript _ _ _)) _ = _` mp_tac >>
   simp[gas_shadow_expr_def] >> strip_tac >>
   drule_all compile_expr_copied_array_subscript >> strip_tac >>
-  `?shm. compile_expr ce ty (gas_shadow_expr obj) sha = (bvv,shm) /\
-         gas_shadow_state sm shm` by
-    (mp_tac (cj 1 gas_shadow_compile_expr |> Q.SPECL [`ce`, `ty`, `obj`, `T`]) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `sha`] mp_tac) >> simp[] >>
-     Cases_on `compile_expr ce ty (gas_shadow_expr obj) sha` >> simp[]) >>
-  gvs[] >>
-  `?shc. compile_snapshot_vv ce T bvv shm = (cvv,shc) /\ gas_shadow_state sc shc` by
-    (mp_tac (Q.INST [`cenv` |-> `ce`, `copy_flag` |-> `T`, `vv` |-> `bvv`]
-       gas_shadow_compiles_snapshot_vv) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sm`, `shm`] mp_tac) >> simp[] >>
-     Cases_on `compile_snapshot_vv ce T bvv shm` >> simp[]) >>
-  gvs[] >>
-  rename1 `gas_shadow_state sc shadow_c` >>
-  `?shi. lower_value compile_expr ce ty (gas_shadow_expr idx) shadow_c = (iop,shi) /\
-         gas_shadow_state si shi` by
-    (mp_tac (Q.INST [`cenv` |-> `ce`, `e` |-> `idx`]
-        gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sc`, `shadow_c`] mp_tac) >> simp[] >>
-     Cases_on `lower_value compile_expr ce ty (gas_shadow_expr idx) shadow_c` >> simp[]) >>
-  gvs[] >>
+  `gas_shadow_compiles (compile_expr ce ty obj)
+     (compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr obj))` by
+    irule gas_shadow_stmt_compile_expr_env >>
+  drule_all_then strip_assume_tac gas_shadow_step >> gvs[] >>
+  `gas_shadow_compiles (compile_snapshot_vv ce T bvv)
+     (compile_snapshot_vv ce T bvv)` by irule gas_shadow_compiles_snapshot_vv >>
+  drule_all_then strip_assume_tac gas_shadow_step >> gvs[] >>
+  `gas_shadow_compiles (lower_value compile_expr ce ty idx)
+     (lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr idx))` by
+    irule gas_shadow_stmt_lower_value_env >>
+  drule_all_then strip_assume_tac gas_shadow_step >> gvs[] >>
   rpt (goal_assum (drule_at Any)) >> simp[] >>
   metis_tac[compile_expr_extends, cj 2 compile_expr_grows,
     ci_mono_compile_snapshot_vv, ci_mono_def, pairTheory.SND, copied_array_suffix_extends]
