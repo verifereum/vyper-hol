@@ -147,12 +147,14 @@ Theorem gas_shadow_compile_external_groups:
     (MAP (\group. case group of
       ExternalSingle selector package => ExternalSingle selector (gas_shadow_external_package package)
     | ExternalDefaults common entries specs off => ExternalDefaults
-        (common with ec_body := MAP gas_shadow_stmt common.ec_body) entries
+        (common with <| ec_env := gas_shadow_env sd common.ec_env;
+                       ec_body := MAP gas_shadow_stmt common.ec_body |>) entries
         (MAP (\(n,ty,e). (n,ty,gas_shadow_expr e)) specs) off) groups) t) =
   MAP (\job. case job of
       ExternalLegacyJob package => ExternalLegacyJob (gas_shadow_external_package package)
     | ExternalCommonJob common kwvars => ExternalCommonJob
-        (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+        (common with <| ec_env := gas_shadow_env sd common.ec_env;
+                       ec_body := MAP gas_shadow_stmt common.ec_body |>)
         (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) kwvars))
     (FST (compile_external_groups mid groups s)) /\
   gas_shadow_state (SND (compile_external_groups mid groups s))
@@ -160,7 +162,8 @@ Theorem gas_shadow_compile_external_groups:
     (MAP (\group. case group of
       ExternalSingle selector package => ExternalSingle selector (gas_shadow_external_package package)
     | ExternalDefaults common entries specs off => ExternalDefaults
-        (common with ec_body := MAP gas_shadow_stmt common.ec_body) entries
+        (common with <| ec_env := gas_shadow_env sd common.ec_env;
+                       ec_body := MAP gas_shadow_stmt common.ec_body |>) entries
         (MAP (\(n,ty,e). (n,ty,gas_shadow_expr e)) specs) off) groups) t))
 Proof
   Induct >> rpt gen_tac
@@ -182,24 +185,21 @@ Proof
     gas_shadow_compile_create_kwarg_allocas >>
   disch_then drule_all >> strip_tac >>
   Cases_on `compile_create_kwarg_allocas common.ec_env specs s` >>
-  Cases_on `compile_create_kwarg_allocas common.ec_env
+  Cases_on `compile_create_kwarg_allocas (gas_shadow_env sd common.ec_env)
     (MAP (\(n,ty,e). (n,ty,gas_shadow_expr e)) specs) t` >> gvs[] >>
   `gas_shadow_compiles (compile_group_entries mid entries common q off)
     (compile_group_entries mid entries
-      (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+      (common with <| ec_env := gas_shadow_env sd common.ec_env;
+                       ec_body := MAP gas_shadow_stmt common.ec_body |>)
       (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) q) off)` by
-    (`(common with <| ec_env := gas_shadow_env F common.ec_env;
-                     ec_body := MAP gas_shadow_stmt common.ec_body |>) =
-      (common with ec_body := MAP gas_shadow_stmt common.ec_body)` by
-       simp[external_common_component_equality] >>
-     pop_assum (pure_once_rewrite_tac o single o SYM) >>
-     irule gas_shadow_compiles_compile_group_entries) >>
+    irule gas_shadow_compiles_compile_group_entries >>
   qpat_x_assum `gas_shadow_compiles _ _` mp_tac >>
   rewrite_tac[gas_shadow_compiles_def] >> disch_then drule_all >> strip_tac >>
   first_x_assum (qspecl_then [`mid`,
     `SND (compile_group_entries mid entries common q off r)`,
     `SND (compile_group_entries mid entries
-      (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+      (common with <| ec_env := gas_shadow_env sd common.ec_env;
+                       ec_body := MAP gas_shadow_stmt common.ec_body |>)
       (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) q) off r')`] mp_tac) >>
   simp[] >> strip_tac >>
   gvs[compile_external_groups_def, comp_ignore_bind_def, comp_bind_def,
@@ -212,12 +212,14 @@ Theorem gas_shadow_compile_group_dispatch_linear:
     (MAP (\group. case group of
       ExternalSingle selector package => ExternalSingle selector (gas_shadow_external_package package)
     | ExternalDefaults common entries specs off => ExternalDefaults
-        (common with ec_body := MAP gas_shadow_stmt common.ec_body) entries
+        (common with <| ec_env := gas_shadow_env sd common.ec_env;
+                       ec_body := MAP gas_shadow_stmt common.ec_body |>) entries
         (MAP (\(n,ty,e). (n,ty,gas_shadow_expr e)) specs) off) groups) fb t) =
   MAP (\job. case job of
       ExternalLegacyJob package => ExternalLegacyJob (gas_shadow_external_package package)
     | ExternalCommonJob common kwvars => ExternalCommonJob
-        (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+        (common with <| ec_env := gas_shadow_env sd common.ec_env;
+                       ec_body := MAP gas_shadow_stmt common.ec_body |>)
         (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) kwvars))
     (FST (compile_group_dispatch_linear groups fb s)) /\
   gas_shadow_state (SND (compile_group_dispatch_linear groups fb s))
@@ -225,7 +227,8 @@ Theorem gas_shadow_compile_group_dispatch_linear:
     (MAP (\group. case group of
       ExternalSingle selector package => ExternalSingle selector (gas_shadow_external_package package)
     | ExternalDefaults common entries specs off => ExternalDefaults
-        (common with ec_body := MAP gas_shadow_stmt common.ec_body) entries
+        (common with <| ec_env := gas_shadow_env sd common.ec_env;
+                       ec_body := MAP gas_shadow_stmt common.ec_body |>) entries
         (MAP (\(n,ty,e). (n,ty,gas_shadow_expr e)) specs) off) groups) fb t))
 Proof
   ntac 2 gen_tac >>
@@ -239,7 +242,8 @@ Proof
   qexists_tac `MAP (\job. case job of
     ExternalLegacyJob package => ExternalLegacyJob (gas_shadow_external_package package)
   | ExternalCommonJob common kwvars => ExternalCommonJob
-      (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+      (common with <| ec_env := gas_shadow_env sd common.ec_env;
+                       ec_body := MAP gas_shadow_stmt common.ec_body |>)
       (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) kwvars))` >>
   reverse conj_tac >- simp[gas_shadow_compile_external_groups] >>
   gen_tac >> BETA_TAC >>
