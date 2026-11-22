@@ -791,6 +791,14 @@ Definition resolve_func_module_ref_def:
         _ _ _ _ _ _) fallback =
     (if tc = SOME "module" then resolve_module_alias ctx alias src
      else resolve_source_ref ctx fallback) ∧
+  (* A nested alias path (library.roots.isqrt) names the module through each
+     module's import map; its call node carries the builtin modules' shared
+     source ID, which would resolve to the current module. *)
+  resolve_func_module_ref ctx (JE_Attribute obj _ _ _ _ _ _) fallback =
+    (case resolve_module_expr (expr_all_import_maps ctx) (expr_import_map ctx)
+            obj of
+     | SOME src_id => SOME src_id
+     | NONE => resolve_source_ref ctx fallback) ∧
   resolve_func_module_ref ctx _ fallback = resolve_source_ref ctx fallback
 End
 
