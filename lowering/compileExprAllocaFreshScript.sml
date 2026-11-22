@@ -2600,7 +2600,13 @@ Theorem alloca_suffix_builtin_body[local]:
     alloca_suffix k a
       (SND (compile_builtin_dispatch_body cfn ce rt ty bi es a))
 Proof
-  strip_tac >> rpt gen_tac >> strip_tac >> Cases_on `bi` >>
+  strip_tac >> rpt gen_tac >> strip_tac >> Cases_on `bi`
+  >~ [`NamedConst`] >-
+    (`alloca_suffix k a (SND (lower_value cfn ce ty (HD es) a))` by
+       (irule alloca_suffix_lower_value >> simp[]) >>
+     Cases_on `lower_value cfn ce ty (HD es) a` >>
+     Cases_on `is_word_type rt` >>
+     gvs[compile_builtin_dispatch_body_def, as_stack_val_def, as_ptr_val_def]) >>
   simp[alloca_suffix_builtin_bop, alloca_suffix_builtin_slice,
        alloca_suffix_builtin_hash] >>
   simp[compile_builtin_dispatch_body_def,
