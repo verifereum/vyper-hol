@@ -13,7 +13,7 @@ Ancestors
   stateFrame ptrDiscipline stmtReasonMemory emitHelperProps bodyPtrMakeArrayEmission
   venomInstProofs1 gasEvents bodySim loweringShapeDefs createExprSizeExitDefs
   createSizePrefixReplay createSizeObservedPrefix createCtorSegmentArrival
-  createSizeBlueprintKeywordReplay
+  createSizeBlueprintKeywordReplay entryCreateBlueprintReadCut
 
 (* A retained operand is replayed through its unwrap as one scalar read. *)
 Theorem blueprint_raw_nonword_tag[local]:
@@ -36,9 +36,14 @@ Proof
   Cases_on `vv` >> gvs[exprReasonOperandTheory.reason_result_shape_def,vv_type_def]
 QED
 
-Theorem blueprint_raw_retained_at_cut:
+Theorem blueprint_raw_retained_at_cut_from_replay:
   body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shctx /\
-  expr_body_pre ce cx env e p /\ create_operand_completed_ok cx e /\
+  expr_body_pre ce cx env e p /\
+  (expr_sim_full_pre (DF,lo,d,ctx,shctx,PG,fnc,shfnc) ce cx (expr_type e) e p
+     (st0,ca,cu,sca,scu,raw_op,s,G,tn) ==>
+   gas_completed_operand (DF,lo,gas_explicit_sites ctx shctx,ctx,fnc,PG)
+     tops cx st0 ca cu (bind (eval_expr cx e) (read_result cx)) (p,s,G,tn)
+     (expr_sim_full_post (DF,lo,d,ctx,fnc) ce cx e (p,ca,cu,s,raw_op,G,tn))) /\
   expr_type e = BaseT (BytesT (Dynamic k)) /\ ~exprs_can_mutate ce later /\
   eval_operand target_op s = SOME aw /\ (!x. target_op = Var x ==> not_fresh_at ca x) /\
   local_ptrs_reserved ce ca /\ (!h. dead_lo_ok h (DF h) lo ce cx) /\
@@ -112,7 +117,13 @@ Proof
      qexistsl_tac [`cm`,`m`] >> simp[]) >>
   `p.gas_obs = gas_explicit ((mc ++ mu) ++ rest) s.vs_gas_readings ++ tail` by
     simp[APPEND_ASSOC] >>
-  drule_all blueprint_read_at_cut >> strip_tac >- metis_tac[] >>
+  `expr_sim_full_pre (DF,lo,d,ctx,shctx,PG,fnc,shfnc) ce cx (expr_type e) e p
+     (st0,ca,cu,sca,scu,raw_op,s,G,tn) ==>
+   gas_completed_operand (DF,lo,gas_explicit_sites ctx shctx,ctx,fnc,PG)
+     tops cx st0 ca cu (bind (eval_expr cx e) (read_result cx)) (p,s,G,tn)
+     (expr_sim_full_post (DF,lo,d,ctx,fnc) ce cx e (p,ca,cu,s,raw_op,G,tn))` by
+    simp[] >>
+  drule_all blueprint_read_at_cut_from_replay >> strip_tac >- metis_tac[] >>
   rename1 `bind (eval_expr cx e) (read_result cx) p = (INL bv,q)` >>
   `?bs. bv = BytesV bs` by
     (`value_has_type (BaseTV (BytesT (Dynamic k))) bv` by
@@ -132,6 +143,68 @@ Proof
     (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   disj2_tac >> qexistsl [`bs`,`q`,`G'`,`tn'`] >> simp[] >>
   metis_tac[freshWritesTheory.not_fresh_at_mono]
+QED
+
+(* Compatibility for clients with global completedness. *)
+Theorem blueprint_raw_retained_at_cut:
+  body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shctx /\
+  expr_body_pre ce cx env e p /\ create_operand_completed_ok cx e /\
+  expr_type e = BaseT (BytesT (Dynamic k)) /\ ~exprs_can_mutate ce later /\
+  eval_operand target_op s = SOME aw /\ (!x. target_op = Var x ==> not_fresh_at ca x) /\
+  local_ptrs_reserved ce ca /\ (!h. dead_lo_ok h (DF h) lo ce cx) /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at ca x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at ca x) /\
+  return_buf_frame d ce ca s /\ alloca_history fnc s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  (!f i z. frag_reachable ctx fnc s f i z ==> dalloca_fmp_headroom i z) /\
+  (!h. valid_horizon cx st0 h p.storage_trace ==>
+    stmt_state_rel h ctx fnc ce cx p s /\ storage_well_formed_on cx p (FST h) /\
+    ghost_inv_at (DF h) lo d ce cx p G tn s) /\
+  ~s.vs_halted /\ s.vs_current_bb = ca.cs_current_bb /\
+  s.vs_inst_idx = LENGTH ca.cs_current_insts /\
+  compile_expr ce (expr_type e) e ca = (vv,cm) /\
+  compile_snapshot_vv ce (exprs_can_mutate ce later) vv cm = (saved,cs) /\
+  unwrap_value ce saved cs = (raw_op,cu) /\
+  compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) sca = (vv,scm) /\
+  compile_snapshot_vv ce (exprs_can_mutate ce (MAP gas_shadow_expr later)) vv scm = (ssaved,scs) /\
+  unwrap_value ce ssaved scs = (raw_op,scu) /\
+  expr_sim_full_code (ctx,shctx,fnc,shfnc) (ca,cu,sca,scu) /\
+  emit_op MLOAD [raw_op] cu = (len,cl) /\ fn_has_code cu cl fnc /\
+  create_expr_prefix ca cm (gas_explicit_sites ctx shctx) ctx fnc s mc m /\
+  create_expr_prefix cm cs (gas_explicit_sites ctx shctx) ctx fnc m ms v /\
+  create_expr_prefix cs cu (gas_explicit_sites ctx shctx) ctx fnc v mu u /\
+  u.vs_current_bb = cu.cs_current_bb /\ u.vs_inst_idx = LENGTH cu.cs_current_insts /\
+  (!v. storage_trace_frame (kont v)) /\
+  bind (bind (eval_expr cx e) (read_result cx)) kont p = (res,out) /\
+  valid_horizon cx st0 H out.storage_trace /\
+  p.gas_obs = gas_explicit (mc ++ (ms ++ (mu ++ rest))) s.vs_gas_readings ++ tail ==>
+  (?err. res = INR (Error err) /\ unspecified_behaviour_exempt tops err) \/
+  ?bs q G' tn'.
+    bind (eval_expr cx e) (read_result cx) p = (INL (BytesV bs),q) /\
+    kont (BytesV bs) q = (res,out) /\ valid_horizon cx st0 H q.storage_trace /\
+    q.gas_obs = gas_explicit rest u.vs_gas_readings ++ tail /\
+    expr_val_rel cx (BaseT (BytesT (Dynamic k))) (BytesV bs) raw_op u /\
+    eval_operand target_op u = SOME aw /\ (!x. target_op = Var x ==> not_fresh_at cu x) /\
+    expr_sim_inv ce cx env q /\ local_ptrs_reserved ce cu /\
+    (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at cu x) /\
+    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at cu x) /\
+    return_buf_frame d ce cu u /\ alloca_history fnc u /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+    (!f i z. frag_reachable ctx fnc u f i z ==> dalloca_fmp_headroom i z) /\
+    (!h. valid_horizon cx st0 h q.storage_trace ==>
+      stmt_state_rel h ctx fnc ce cx q u /\ storage_well_formed_on cx q (FST h) /\
+      ghost_inv_at (DF h) lo d ce cx q G' tn' u) /\
+    ~u.vs_halted /\ u.vs_current_bb = cu.cs_current_bb /\
+    u.vs_inst_idx = LENGTH cu.cs_current_insts
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `expr_sim_full_pre (DF,lo,d,ctx,shctx,([]:(num # num) option list),fnc,shfnc)
+     ce cx (expr_type e) e p (st0,ca,cu,sca,scu,raw_op,s,G,tn) ==>
+   gas_completed_operand (DF,lo,gas_explicit_sites ctx shctx,ctx,fnc,([]:(num # num) option list))
+     tops cx st0 ca cu (bind (eval_expr cx e) (read_result cx)) (p,s,G,tn)
+     (expr_sim_full_post (DF,lo,d,ctx,fnc) ce cx e (p,ca,cu,s,raw_op,G,tn))` by
+    (disch_tac >> drule_all create_size_replay_value_cut >> simp[]) >>
+  drule_all blueprint_raw_retained_at_cut_from_replay >> simp[]
 QED
 
 (* A silent straight-line operand of raw blueprint preparation has only one
