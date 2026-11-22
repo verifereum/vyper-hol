@@ -3,7 +3,8 @@ Theory linkedBodyWitnessContext
 Ancestors
   e2eModsWitness e2eDeployModsDefs e2eModsDefs e2eDefs e2eWitnessCompute
   vyperTypeContract vyperTypeContractContext vyperContext vyperInterpreter
-  bodySim bodyQualifiedStmtSupport exprSimHypsDefs compileUnit constSubst
+  bodySim bodyInvSplit bodyQualifiedStmtSupport exprSimHypsDefs compileUnit constSubst
+  linkedBodyWitness linkedBodyEntryEnv supportedStmtTraverse
   vyperAST context alist list
 Libs computeLib finite_mapLib intReduce
 
@@ -132,3 +133,83 @@ Theorem linked_witness_external_body_checks:
 Proof
   simp[external_lookup] >> EVAL_TAC
 QED
+
+Triviality linked_witness_entry_static_gate:
+  ALOOKUP linked_witness_mods src = SOME tops /\
+  MEM (FunctionDecl vis mut nr raw name args dflts ret ss) tops /\
+  (vis = Deploy \/ vis = External) /\ (vis = Deploy <=> cx.in_deploy) /\
+  ALOOKUP cx.sources cx.txn.target = SOME linked_witness_mods /\
+  cx.nonreentrant_slot = SOME global_nonreentrant_slot /\
+  layouts_agree_mods linked_witness_mods linked_witness_exports am tx /\
+  cx.stk = [(src,name)] /\ context_function_live cx (src,name) /\
+  check_contract cx.in_deploy cx.layouts cx.txn.target linked_witness_mods =
+    SOME art /\
+  subst_consts_stmts_mods (consts_env_mods linked_witness_mods) ss = ss /\
+  stmts_exprs_ok (build_compile_env_unit linked_witness_mods src vis mut name
+    args ret ss T) ss ==>
+  ?ctx ce env'.
+    contract_inv linked_witness_mods linked_witness_exports ctx ce cx /\
+    module_body_inv linked_witness_mods src tops ce cx /\
+    supported_stmts tops (args ++ supported_stmts_bindings T ss ++
+      supported_stmts_bindings F ss) ss /\
+    (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) ss ==>
+      EXISTS (occurs_abi_decode_target target o SND) linked_witness_mods) /\
+    type_stmts (function_entry_env art linked_witness_mods src vis args)
+      ret ss = SOME env' /\
+    stmts_exprs_ok ce ss /\
+    call_evaluation_safe cx (int_calls_stmts ss)
+Proof
+  strip_tac >>
+  `vis = Deploy ==> cx.in_deploy` by simp[] >>
+  drule_all_then strip_assume_tac linked_witness_entry_support >>
+  qexistsl [`ctx`,
+    `build_compile_env_unit linked_witness_mods src vis mut name args ret ss T
+      with ce_target := ce.ce_target`, `env'`] >>
+  simp[stmts_exprs_ok_entry_target] >>
+  conj_tac
+  >- (irule contract_inv_build_compile_env_unit >> simp[]) >>
+  simp[module_body_inv_def, build_compile_env_unit_def, pairTheory.ELIM_UNCURRY]
+QED
+
+fun static_gate src cx vis args ret body tops =
+  ``?ctx ce art env'.
+    check_contract (^cx).in_deploy (^cx).layouts ((^cx).txn).target
+      linked_witness_mods = SOME art /\
+    contract_inv linked_witness_mods linked_witness_exports ctx ce ^cx /\
+    module_body_inv linked_witness_mods ^src ^tops ce ^cx /\
+    supported_stmts ^tops (^args ++ supported_stmts_bindings T ^body ++
+      supported_stmts_bindings F ^body) ^body /\
+    (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) ^body ==>
+      EXISTS (occurs_abi_decode_target target o SND) linked_witness_mods) /\
+    type_stmts (function_entry_env art linked_witness_mods ^src ^vis ^args)
+      ^ret ^body = SOME env' /\
+    stmts_exprs_ok ce ^body /\
+    call_evaluation_safe ^cx (int_calls_stmts ^body)``
+
+fun define_static_gate thm_name src cx decl tops ctx_facts entry_facts =
+  let
+    val (_, [vis, mut, nr, raw, name, args, dflts, ret, body]) = strip_comb decl
+    val goal = static_gate src cx vis args ret body tops
+    val selected_gate = INST
+      [``src : num option`` |-> src, ``cx : evaluation_context`` |-> cx,
+       ``vis : function_visibility`` |-> vis, ``mut : function_mutability`` |-> mut,
+       ``nr : bool`` |-> nr, ``raw : bool`` |-> raw, ``name : string`` |-> name,
+       ``args : (string # type) list`` |-> args, ``dflts : expr list`` |-> dflts,
+       ``ret : type`` |-> ret, ``ss : stmt list`` |-> body, ``tops : toplevel list`` |-> tops]
+      linked_witness_entry_static_gate
+  in
+    Q.store_thm (thm_name, [ANTIQUOTE goal],
+      mp_tac ctx_facts >> simp[] >> rpt strip_tac >>
+      mp_tac entry_facts >> simp[] >> rpt strip_tac >>
+      mp_tac selected_gate >>
+      simp[] >> impl_tac >- metis_tac[] >>
+      strip_tac >> metis_tac[])
+  end
+
+val _ = define_static_gate "linked_witness_constructor_entry_gate" ``NONE : num option``
+  constructor_context constructor_decl constructor_tops linked_witness_constructor_context
+  linked_witness_constructor_body_checks
+
+val _ = define_static_gate "linked_witness_external_entry_gate" ``SOME 2``
+  external_context external_decl external_tops linked_witness_external_context
+  linked_witness_external_body_checks
