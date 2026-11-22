@@ -6226,7 +6226,14 @@ Resume body_append_storage_word_frag_full[rhs_exit]:
   Cases_on `result` >> simp[exprSimDefsTheory.expr_exit_INL] >>
   strip_tac >> simp[stmt_exit_ptr_def] >>
   conj_tac >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
-  fs[exprSimDefsTheory.halt_exit_def]
+  fs[exprSimDefsTheory.halt_exit_def] >>
+  rpt strip_tac >> gvs[] >>
+  rename1 `expr_exit (INR exc) (IntRet _ _)` >>
+  qpat_assum `expr_exit (INR exc) (IntRet _ _)` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  Cases_on `exc` >> simp[exprSimDefsTheory.expr_exit_def] >>
+  rename1 `expr_exit (INR (Error err)) (IntRet _ _)` >>
+  Cases_on `err` >> simp[exprSimDefsTheory.expr_exit_def]
 QED
 
 Resume body_append_storage_word_frag_full[suffix]:
@@ -6655,7 +6662,14 @@ Resume body_append_storage_aggregate_frag_full[rhs_exit]:
   Cases_on `result` >> simp[exprSimDefsTheory.expr_exit_INL] >>
   strip_tac >> simp[stmt_exit_ptr_def] >>
   conj_tac >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
-  fs[exprSimDefsTheory.halt_exit_def]
+  fs[exprSimDefsTheory.halt_exit_def] >>
+  rpt strip_tac >> gvs[] >>
+  rename1 `expr_exit (INR exc) (IntRet _ _)` >>
+  qpat_assum `expr_exit (INR exc) (IntRet _ _)` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  Cases_on `exc` >> simp[exprSimDefsTheory.expr_exit_def] >>
+  rename1 `expr_exit (INR (Error err)) (IntRet _ _)` >>
+  Cases_on `err` >> simp[exprSimDefsTheory.expr_exit_def]
 QED
 
 Resume body_append_storage_aggregate_frag_full[suffix]:
