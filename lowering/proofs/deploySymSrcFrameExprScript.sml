@@ -128,8 +128,10 @@ Proof
   >~ [`compile_builtin_dispatch_body _ _ _ _ NamedConst _`]
   >- (simp[deploy_blocks_frame_def, compile_builtin_dispatch_body_def] >>
       rpt strip_tac >>
-      simp[deploy_blocks_frame_equation, oneline as_ptr_val_def] >>
-      gvs[pairTheory.ELIM_UNCURRY, oneline as_ptr_val_def])
+      simp[deploy_blocks_frame_equation] >>
+      Cases_on `is_word_type ret_ty` >>
+      gvs[pairTheory.ELIM_UNCURRY, oneline as_stack_val_def,
+          oneline as_ptr_val_def])
   >~ [`compile_builtin_dispatch_body _ _ _ _ (BoolChain _ _) _`]
   >- (`!d r l es. deploy_blocks_frame (compile_bool_chain_ops cfn cenv d r l es)` by
         (rpt gen_tac >>
