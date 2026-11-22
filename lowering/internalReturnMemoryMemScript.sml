@@ -712,7 +712,7 @@ Proof
   qpat_assum `stmt_env _ _ _ (Return (SOME (gas_shadow_expr e))) shadow_sa = _`
     (mp_then Any mp_tac return_memory_compile_parts) >> simp[] >>
     disch_then drule_all >> strip_tac >>
-  rename1 `lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa =
+  rename1 `lower_value compile_expr _ ty (gas_shadow_expr e) shadow_sa =
              (shadow_op, shadow_sm)` >>
   rename1 `compile_return_unlock cenv shadow_sm = ((), shadow_su)` >>
   `type_memory_bytes cenv ty = type_memory_size tv` by
@@ -974,15 +974,17 @@ Proof
   qpat_assum `stmt_env _ _ _ (Return (SOME (gas_shadow_expr e))) shadow_sa = _`
     (mp_then Any mp_tac return_memory_compile_parts) >> simp[] >>
     disch_then drule_all >> strip_tac >>
-  rename1 `lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa =
+  rename1 `lower_value compile_expr _ ty (gas_shadow_expr e) shadow_sa =
              (shadow_op, shadow_sm)` >>
   rename1 `compile_return_unlock cenv shadow_sm = ((), shadow_su)` >>
   `type_memory_bytes cenv ty = type_memory_size tv` by
     metis_tac[expr_sim_inv_memory_size] >>
   `op = shadow_op /\ gas_shadow_state sm shadow_sm` by
-    (mp_tac gas_shadow_stmt_lower_value >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+    (`gas_shadow_compiles (lower_value compile_expr cenv ty e)
+        (lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e))` by
+       irule gas_shadow_stmt_lower_value_env >>
+     pop_assum mp_tac >> simp[gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
   qpat_x_assum `op = shadow_op` (SUBST_ALL_TAC o SYM) >>
   rpt (qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
