@@ -56,14 +56,14 @@ Theorem ecadd_staging_full_from_transfers:
   body_exprs_full_ok cx [e1;e2] /\ body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Builtin a bt [e1;e2]) es /\
   compile_expr cenv ty (Builtin a bt [e1;e2]) sa = (vv,sb) /\
-  compile_expr cenv ty (gas_shadow_expr (Builtin a bt [e1;e2])) shadow_sa =
-    (vv,shadow_sb) /\
+  compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (Builtin a bt [e1;e2]))
+    shadow_sa = (vv,shadow_sb) /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e2) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
-    (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e2) (gas_shadow_expr e2) shadow_s1 =
-    (y,shadow_s2) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1)
+    (gas_shadow_expr e1) shadow_sa = (x,shadow_s1) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e2)
+    (gas_shadow_expr e2) shadow_s1 = (y,shadow_s2) /\
   (if bt = ECAdd then compile_ecadd_points x y s2
    else compile_ecmul_point x y s2) = (res,sb) /\
   vv = FST (as_stack_val a (res,sb)) /\
@@ -1209,7 +1209,7 @@ Resume ecadd_staging_full_from_transfers[after_shadow_buffer]:
      simp[comp_bind_def,comp_return_def,FUN_EQ_THM]) >>
   `?shadow_res. compile_ecadd_points (Var p) (Var p2) shadow_s2 =
      (shadow_res,shadow_sb)` by
-    (qpat_assum `compile_expr cenv ty (gas_shadow_expr _) shadow_sa = _`
+    (qpat_assum `compile_expr _ _ (gas_shadow_expr _) shadow_sa = _`
        (fn whole =>
      qpat_assum `lower_value _ _ _ (gas_shadow_expr e1) shadow_sa = _` (fn one =>
      qpat_assum `lower_value _ _ _ (gas_shadow_expr e2) shadow_s1 = _` (fn two =>
