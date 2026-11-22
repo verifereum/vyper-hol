@@ -76,16 +76,15 @@ QED
 
 Resume compile_raise_reason_nonliteral_frag_full[layout]:
   drule compile_reason_message_cases >> strip_tac >- metis_tac[] >>
-  `stmt_env cenv lctx ret_ty (Raise (RaiseReason (gas_shadow_expr e))) shadow_sa =
-     (cenv,shadow_sb)` by gvs[gas_shadow_stmt_def, gas_shadow_raise_reason_def] >>
   drule_all raise_reason_compiler_code >> strip_tac >>
-  qpat_assum `stmt_env _ _ _ _ shadow_sa = _`
-    (mp_then Any strip_assume_tac compile_raise_reason_parts) >>
-  `vv' = vv /\ gas_shadow_state sm sm'` by
-    (mp_tac gas_shadow_compile_reason_message >>
-     rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >> gvs[] >>
+  qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _`
+    (mp_tac o REWRITE_RULE [gas_shadow_stmt_def, gas_shadow_raise_reason_def]) >>
+  disch_then (mp_then Any strip_assume_tac compile_raise_reason_parts) >>
   drule_all raise_reason_compiler_code >> strip_tac >>
+  `gas_shadow_compiles (compile_reason_message cenv e)
+     (compile_reason_message (gas_shadow_env T cenv) (gas_shadow_expr e))` by
+    irule gas_shadow_compile_reason_message_env >>
+  drule_all gas_shadow_step >> strip_tac >> gvs[] >>
   `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
     metis_tac[raise_reason_raw_admissible] >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
@@ -94,7 +93,8 @@ Resume compile_raise_reason_nonliteral_frag_full[layout]:
 QED
 
 Resume compile_raise_reason_nonliteral_frag_full[expression]:
-  `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,sm')` by
+  `compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa =
+     (vv,sm')` by
     (qpat_assum `compile_reason_message _ (gas_shadow_expr _) _ = _`
        (mp_then Any mp_tac compile_reason_message_cases) >>
      strip_tac
