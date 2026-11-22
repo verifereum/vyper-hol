@@ -1015,8 +1015,13 @@ Definition translate_unary_def:
     fold_pin_constant (Builtin (translate_type (expr_type_ctx ctx) ret_ty) Neg [e])) /\
   (translate_unary ctx JUop_Not e ret_ty =
     fold_pin_constant (Builtin (BaseT BoolT) Not [e])) /\
+  (* `~x` has the type of `x`.  A flag annotation names only the flag, so it
+     resolves to the current module's flag of that name; the translated
+     operand carries the declaring module. *)
   (translate_unary ctx JUop_Invert e ret_ty =
-    fold_pin_constant (Builtin (translate_type (expr_type_ctx ctx) ret_ty) Not [e]))
+    let ty = translate_type (expr_type_ctx ctx) ret_ty in
+    fold_pin_constant
+      (Builtin (case ty of FlagT _ => expr_type e | _ => ty) Not [e]))
 End
 
 

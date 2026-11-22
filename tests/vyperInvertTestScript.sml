@@ -26,7 +26,7 @@ Theorem invert_frontend_test:
     Builtin (BaseT BoolT) Not [Name (BaseT BoolT) "x"]
 Proof
   simp[translate_unary_def, translate_type_def, expr_type_ctx_def,
-       tctx_current_nsid_def, fold_pin_constant_def,
+       tctx_current_nsid_def, fold_pin_constant_def, expr_type_def,
        vyperOriginFoldTheory.origin_fold_value_def,
        vyperOriginFoldTheory.origin_fold_builtin_def]
 QED
