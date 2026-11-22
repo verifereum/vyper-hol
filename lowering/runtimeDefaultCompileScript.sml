@@ -11,20 +11,6 @@ val bad_builtin_arity = ``\e. case e of
   | TypeBuiltin _ bt _ args => ~type_builtin_args_length_ok bt (LENGTH args)
   | _ => F``;
 
-Theorem checked_builtin_args_length[local]:
-  well_typed_builtin_app ty bt ts ==> builtin_args_length_ok bt (LENGTH ts)
-Proof
-  Cases_on `bt` >> rw[well_typed_builtin_app_def, builtin_args_length_ok_def] >> simp[] >>
-  Cases_on `o'` >> gvs[well_typed_builtin_app_def, compatible_bound_def]
-QED
-
-Theorem checked_type_builtin_args_length[local]:
-  well_typed_type_builtin_args bt target ts ==> type_builtin_args_length_ok bt (LENGTH ts)
-Proof
-  Cases_on `bt` >> simp[well_typed_type_builtin_args_def, type_builtin_args_length_ok_def] >> simp[] >>
-  Cases_on `ts` >> simp[]
-QED
-
 Theorem well_typed_expr_builtin_args_length:
   (!env e. well_typed_expr env e ==> ~supported_expr_exists ^bad_builtin_arity e) /\
   (!env e vt. type_place_expr env e = SOME vt ==>
@@ -40,7 +26,8 @@ Proof
   gvs[well_typed_expr_def, supported_expr_exists_def, AllCaseEqs()] >>
   rpt (qpat_x_assum `_ \/ _` strip_assume_tac) >>
   res_tac >> gvs[] >>
-  metis_tac[checked_builtin_args_length, checked_type_builtin_args_length, LENGTH_MAP]
+  metis_tac[vyperTypeBuiltinsTheory.well_typed_builtin_app_length,
+            vyperTypeBuiltinsTheory.well_typed_type_builtin_args_length, LENGTH_MAP]
 QED
 
 Theorem constant_expr_gas_shadow[local]:

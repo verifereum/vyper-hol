@@ -160,9 +160,10 @@ Proof
   `EVERY group_entry_labels_ok (MAP ^shadow_group groups)` by
     (fs[EVERY_MAP, EVERY_MEM] >> gen_tac >> strip_tac >>
      qpat_assum `!e. MEM e groups ==> _` (drule_then mp_tac) >>
-     Cases_on `group` >>
-     TRY (PairCases_on `p0`) >>
-     simp[group_entry_labels_ok_def, gas_shadow_external_package_def]) >>
+     Cases_on `group`
+     >- (rename1 `ExternalSingle _ pkg` >> PairCases_on `pkg` >>
+         simp[group_entry_labels_ok_def, gas_shadow_external_package_def]) >>
+     simp[group_entry_labels_ok_def]) >>
   mp_tac (Q.INST [`groups` |-> `groups`, `ips` |-> `ips`, `fb` |-> `fb`,
     `rp` |-> `rp`, `unit` |-> `unit`, `fn` |-> `fn`]
     (SPEC_ALL run_grouped_lowering_dispatch_code)) >>

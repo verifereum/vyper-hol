@@ -90,19 +90,6 @@ Proof
   qexists_tac `fresh::ls` >> fs[DISJOINT_DEF, EXTENSION] >> metis_tac[]
 QED
 
-Theorem fuel_probe_lookup[local]:
-  !b bs. ALL_DISTINCT (MAP (\b. b.bb_label) bs) /\ MEM b bs ==>
-  lookup_block b.bb_label bs = SOME b
-Proof
-  metis_tac[MEM_lookup_block]
-QED
-
-Theorem fuel_probe_block_absent[local]:
-  !bs l. lookup_block l bs = NONE <=> ~MEM l (MAP (\b. b.bb_label) bs)
-Proof
-  Induct >> simp[lookup_block_def, FIND_thm] >> fs[lookup_block_def] >> metis_tac[]
-QED
-
 Theorem fuel_probe_blocks_do_not_invoke[local]:
   !ls bb i. MEM bb (fuel_probe_blocks ls) /\ MEM i bb.bb_instructions ==>
   i.inst_opcode <> INVOKE
@@ -133,11 +120,14 @@ Proof
     fs[Abbr `blocks`, Abbr `ls`, fuel_probe_block_labels, DISJOINT_DEF, EXTENSION] >>
   `!l. MEM l (MAP (\b. b.bb_label) blocks) ==> lookup_block l base.fn_blocks = NONE` by
     (simp[Abbr `blocks`, fuel_probe_block_labels, Abbr `ls`] >> rpt strip_tac >> gvs[] >>
-     fs[fuel_probe_block_absent, DISJOINT_DEF, EXTENSION] >> metis_tac[]) >>
+     Cases_on `lookup_block l base.fn_blocks` >> simp[] >>
+     fs[DISJOINT_DEF, EXTENSION, MEM_MAP] >>
+     metis_tac[lookup_block_MEM, lookup_block_label]) >>
   `!b. MEM b blocks ==> lookup_block b.bb_label host.fn_blocks = SOME b` by
     (rpt strip_tac >>
      `lookup_block b.bb_label base.fn_blocks = NONE` by metis_tac[MEM_MAP] >>
-     drule_all fuel_probe_lookup >>
+     `lookup_block b.bb_label blocks = SOME b` by
+       metis_tac[MEM_lookup_block] >>
      fs[Abbr `host`, lookup_block_def, FIND_APPEND_CASE]) >>
   `no_phi_fn host` by
     fs[Abbr `host`, Abbr `blocks`, no_phi_fn_def, EVERY_APPEND, fuel_probe_block_no_phi] >>
@@ -153,52 +143,6 @@ Proof
   gen_tac >> conj_tac
   >- (irule fuel_probe_runs_out >> simp[] >> qexists_tac `ls` >> simp[]) >>
   mp_tac (Q.SPECL [`ls`,`host`,`ctx`,`s`] fuel_probe_stops) >> simp[]
-QED
-
-Theorem frag_fuel_excludes_unlisted_jump:
-  frag_fuel Wv {} {} sa sb Kb /\ at_point sa s /\
-  fn_has_code sa sb observer /\ no_phi_fn observer /\
-  lookup_block sb.cs_current_bb observer.fn_blocks = SOME cut /\
-  get_instruction cut (LENGTH sb.cs_current_insts) = SOME (mk_inst id STOP [] []) /\
-  s'.vs_inst_idx = 0 /\ ~s'.vs_halted /\
-  (!host. no_phi_fn host /\
-    (!l b. lookup_block l observer.fn_blocks = SOME b ==> lookup_block l host.fn_blocks = SOME b) ==>
-    ?cost. !fuel ctx. run_from (fuel + cost) ctx host s = run_from fuel ctx host s') ==>
-  IS_SOME (lookup_block s'.vs_current_bb observer.fn_blocks)
-Proof
-  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  Cases_on `lookup_block s'.vs_current_bb observer.fn_blocks` >> simp[] >>
-  mp_tac (Q.INST [`base` |-> `observer`, `s` |-> `s'`, `fuel` |-> `Kb`]
-    fuel_probe_attach) >>
-  asm_rewrite_tac[] >> disch_then (qx_choose_then `host` strip_assume_tac) >>
-  `fn_has_code sa sb host` by
-    (fs[fn_has_code_def] >> qexists_tac `cut` >> simp[]) >>
-  `lookup_block sb.cs_current_bb host.fn_blocks = SOME cut` by metis_tac[] >>
-  `?cost. !fuel ctx. run_from (fuel + cost) ctx host s = run_from fuel ctx host s'` by
-    metis_tac[] >>
-  qabbrev_tac `ctx = <|ctx_functions := []|>` >>
-  `callees_stable 0 ctx host` by simp[callees_stable_def, Abbr `ctx`, lookup_function_def, FIND_thm] >>
-  qpat_x_assum `frag_fuel _ _ _ _ _ _` (mp_tac o REWRITE_RULE [frag_fuel_def]) >>
-  disch_then (qspecl_then [`0`,`0`,`ctx`,`host`,`s`] mp_tac) >>
-  impl_tac >- (asm_rewrite_tac[ZERO_LESS_EQ]) >>
-  disch_then (qx_choose_then `j` strip_assume_tac) >>
-  `!u f. at_point sb u ==> run_from f ctx host u =
-          Halt (halt_state (u with vs_returndata := []))` by
-    simp[at_point_def, run_from_def, Once exec_block_def, step_inst_non_invoke,
-         mk_inst_def, step_inst_base_opcode_eqs] >>
-  `!f g. run_from (f + j) ctx host s = run_from (g + j) ctx host s` by
-    (fs[fuel_outcome_def] >> metis_tac[]) >>
-  `run_from (Kb + cost) ctx host s = run_from (SUC Kb + cost) ctx host s` by
-    (`Kb + cost - j + j = Kb + cost /\ SUC Kb + cost - j + j = SUC Kb + cost` by decide_tac >>
-     qpat_x_assum `_ = SUC Kb + cost` (fn hi =>
-       qpat_x_assum `_ = Kb + cost` (fn lo =>
-         qpat_assum `!f g. run_from _ _ _ _ = _`
-           (qspecl_then [`Kb + cost - j`, `SUC Kb + cost - j`]
-             (ACCEPT_TAC o REWRITE_RULE [lo,hi]))))) >>
-  `run_from Kb ctx host s' = run_from (SUC Kb) ctx host s'` by
-    metis_tac[] >>
-  qpat_x_assum `!ctx. (∃e. _) /\ ∃t. _` (qspec_then `ctx` strip_assume_tac) >>
-  metis_tac[exec_result_distinct]
 QED
 
 (* The probe is executed in the original context when the fragment calls
@@ -255,6 +199,26 @@ Proof
      asm_rewrite_tac[] >> metis_tac[]) >>
   qpat_x_assum `!ctx. (∃e. _) /\ ∃t. _` (qspec_then `ctx` strip_assume_tac) >>
   metis_tac[exec_result_distinct]
+QED
+
+Theorem frag_fuel_excludes_unlisted_jump:
+  frag_fuel Wv {} {} sa sb Kb /\ at_point sa s /\
+  fn_has_code sa sb observer /\ no_phi_fn observer /\
+  lookup_block sb.cs_current_bb observer.fn_blocks = SOME cut /\
+  get_instruction cut (LENGTH sb.cs_current_insts) = SOME (mk_inst id STOP [] []) /\
+  s'.vs_inst_idx = 0 /\ ~s'.vs_halted /\
+  (!host. no_phi_fn host /\
+    (!l b. lookup_block l observer.fn_blocks = SOME b ==> lookup_block l host.fn_blocks = SOME b) ==>
+    ?cost. !fuel ctx. run_from (fuel + cost) ctx host s = run_from fuel ctx host s') ==>
+  IS_SOME (lookup_block s'.vs_current_bb observer.fn_blocks)
+Proof
+  strip_tac >>
+  match_mp_tac (Q.INST [`G` |-> `0`, `ctx` |-> `<|ctx_functions := []|>`,
+    `Wv` |-> `Wv`, `sa` |-> `sa`, `sb` |-> `sb`, `Kb` |-> `Kb`,
+    `s` |-> `s`, `cut` |-> `cut`, `id` |-> `id`]
+    frag_fuel_excludes_unlisted_jump_stable) >>
+  asm_simp_tac (srw_ss()) [callees_stable_def, lookup_function_def, FIND_thm] >>
+  metis_tac[]
 QED
 
 Theorem frag_observed_edge_fuel:
