@@ -89,7 +89,8 @@ Theorem aug_place_supported_root_namespace:
   IS_SOME (get_module_code cx src) ==> src = NONE
 Proof
   strip_tac >> Cases_on `src` >> fs[] >>
-  metis_tac[body_inv_qualified_module_absent]
+  drule_then (qspec_then `x` assume_tac) body_inv_qualified_module_absent >>
+  fs[]
 QED
 
 Theorem aug_place_supported_root_decl:
