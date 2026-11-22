@@ -469,8 +469,8 @@ Proof
  pop_assum strip_assume_tac >>
  `sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <=
    LENGTH prepared.vs_data_section` by
-   (qpat_x_assum `(^Ow) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ prepared` mp_tac >>
-    simp_tac bool_ss [] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+   (qpat_assum `(^Ow) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ initial _ _ prepared`
+      (MAP_EVERY assume_tac o CONJUNCTS o BETA_RULE) >>
     qpat_assum `prepared.vs_data_section = initial.vs_data_section` SUBST1_TAC >>
     qpat_assum `sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <=
       LENGTH initial.vs_data_section` ACCEPT_TAC) >>
