@@ -516,12 +516,7 @@ Proof
   TRY (simp[expr_res_ok_def, expr_vv_res_ok_def] >> NO_TAC)
   >- (rpt gen_tac >> strip_tac >>
   `vv2 = vv /\ gas_shadow_state sm shadow_sm` by
-    (qpat_assum `gas_shadow_state sa shadow_sa` (fn initial =>
-       qpat_assum `compile_expr _ _ (Call _ _ _ _) sa = (vv,sm)` (fn real =>
-         qpat_assum `compile_expr _ _ (gas_shadow_expr _) shadow_sa = _`
-           (fn shadow =>
-             ACCEPT_TAC (MATCH_MP shadow_compile_same
-               (LIST_CONJ [initial, real, shadow])))))) >>
+    (drule_all shadow_compile_same >> simp[]) >>
   qpat_x_assum `vv2 = vv` SUBST_ALL_TAC >>
   stage_tac callee_input (qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`func`,`tops`,`cenv`,`cx`,
                `tenv`,`name`,`es`,`st0`,`sa`,`sm`,`vv`,`s0`,`es0`,`G0`,`tn0`,
