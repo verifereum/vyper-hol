@@ -927,16 +927,16 @@ Theorem selfdestruct_expr_full_from_interfaces:
     expr_type e = BaseT AddressT /\
     gas_shadow_compiles
       (lower_value compile_expr cenv (expr_type e) e)
-      (lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)) /\
+      (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e)) /\
     gas_shadow_state sa ssa /\
     compile_expr cenv ty (Call ann SelfDestructTarget [e] dflt) sa = (vv,sb) /\
-    compile_expr cenv ty (gas_shadow_expr (Call ann SelfDestructTarget [e] dflt))
+    compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (Call ann SelfDestructTarget [e] dflt))
       ssa = (svv,ssb) /\
     fn_has_code sa sb func /\ fn_has_code ssa ssb sfunc ==>
     ?op sm ssm.
       vv = StackValue ann (Lit 0w) /\ svv = StackValue ann (Lit 0w) /\
       lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
-      lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
+      lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e)
         ssa = (op,ssm) /\
       gas_shadow_state sm ssm /\
       compile_selfdestruct op sm = ((),sb) /\
@@ -1337,16 +1337,16 @@ Theorem selfdestruct_full_layout_shadow:
     expr_type e = BaseT AddressT /\
     gas_shadow_compiles
       (lower_value compile_expr cenv (expr_type e) e)
-      (lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)) /\
+      (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e)) /\
     gas_shadow_state sa ssa /\
     compile_expr cenv ty (Call ann SelfDestructTarget [e] dflt) sa = (vv,sb) /\
-    compile_expr cenv ty (gas_shadow_expr (Call ann SelfDestructTarget [e] dflt))
+    compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (Call ann SelfDestructTarget [e] dflt))
       ssa = (svv,ssb) /\
     fn_has_code sa sb func /\ fn_has_code ssa ssb sfunc ==>
     ?data sm ssm.
       vv = StackValue ann (Lit 0w) /\ svv = StackValue ann (Lit 0w) /\
       lower_value compile_expr cenv (expr_type e) e sa = (data,sm) /\
-      lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
+      lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e)
         ssa = (data,ssm) /\
       gas_shadow_state sm ssm /\
       compile_selfdestruct data sm = ((),sb) /\

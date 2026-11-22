@@ -129,19 +129,19 @@ QED
 
 Theorem return_stack_aggregate_shadow_unlock[local]:
   lower_value compile_expr cenv ty e sa = (op,sm) /\
-  lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa =
+  lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa =
     (shadow_op,shadow_sm) /\
   gas_shadow_state sa shadow_sa /\
   compile_return_unlock cenv sm = ((),su) /\
-  compile_return_unlock cenv shadow_sm = ((),shadow_su) ==>
+  compile_return_unlock (gas_shadow_env T cenv) shadow_sm = ((),shadow_su) ==>
   op = shadow_op /\ gas_shadow_state sm shadow_sm /\
   gas_shadow_state su shadow_su
 Proof
+  simp[gasShadowCompileStmtBaseTheory.compile_return_unlock_gas_shadow_env] >>
   strip_tac >>
   `op = shadow_op /\ gas_shadow_state sm shadow_sm` by
-    (mp_tac gas_shadow_stmt_lower_value >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+    (drule (REWRITE_RULE[gas_shadow_compiles_def] gas_shadow_stmt_lower_value_env) >>
+     disch_then (qspecl_then [`ty`,`T`,`e`,`cenv`] mp_tac) >> simp[]) >>
   mp_tac (Q.SPEC `cenv` (GEN_ALL gas_shadow_compiles_return_unlock)) >>
   simp[gas_shadow_compiles_def] >>
   disch_then (qspecl_then [`sm`,`shadow_sm`] mp_tac) >> simp[]
@@ -411,7 +411,7 @@ Theorem compile_return_stack_aggregate_frag_full_taint[local]:
          (!i. i < lo /\ i IN (SND gt).t_mem ==>
               imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)) cenv
      (stmt_env cenv lctx ty (Return (SOME e)))
-     (stmt_env cenv lctx ty (Return (SOME (gas_shadow_expr e))))
+     (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
      (eval_stmt cx (Return (SOME e))) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -439,15 +439,18 @@ Proof
   | _ => [])` by simp[Abbr `tys`] >>
   mp_tac return_stack_aggregate_compile_parts >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  mp_tac (Q.INST [`e` |-> `gas_shadow_expr e`, `sa` |-> `shadow_sa`,
-    `sb` |-> `shadow_sb`, `func` |-> `shadow_func`]
-    return_stack_aggregate_compile_parts) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  rename1 `lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa =
+  qpat_assum `stmt_env _ _ _ (Return (SOME (gas_shadow_expr e))) shadow_sa = _`
+    (mp_then Any (qspecl_then [`tys`,`rsz`,`rpc`,`shadow_func`] mp_tac)
+      return_stack_aggregate_compile_parts) >>
+  impl_tac
+  >- (pure_rewrite_tac[gasShadowCompileBaseTheory.gas_shadow_env_fields] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  rename1 `lower_value compile_expr _ ty (gas_shadow_expr e) shadow_sa =
              (shadow_op,shadow_sm)` >>
-  rename1 `compile_return_unlock cenv shadow_sm = ((),shadow_su)` >>
+  rename1 `compile_return_unlock _ shadow_sm = ((),shadow_su)` >>
   `op = shadow_op /\ gas_shadow_state sm shadow_sm` by
-    metis_tac[return_stack_aggregate_shadow_unlock] >>
+    (drule_all return_stack_aggregate_shadow_unlock >> simp[]) >>
   qpat_x_assum `op = shadow_op` SUBST_ALL_TAC >>
   rpt (qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by

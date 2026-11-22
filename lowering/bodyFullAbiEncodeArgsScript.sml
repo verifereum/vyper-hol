@@ -84,16 +84,17 @@ Proof
   rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
   drule_all compile_abi_encode_body_layout >>
   disch_then (qx_choosel_then [`svs`,`st`,`out`] strip_assume_tac) >>
-  qpat_x_assum `compile_expr ce cty (gas_shadow_expr _) shadow_sa = _` mp_tac >>
+  qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) shadow_sa = _` mp_tac >>
   simp[gasShadowTheory.gas_shadow_expr_def] >> strip_tac >>
   drule_at (Pat `compile_expr _ _ _ shadow_sa = _`) compile_abi_encode_body_layout >>
   disch_then drule_all >> strip_tac >>
-  rename1 `compile_abi_encode_args compile_expr ce (MAP gas_shadow_expr args) shadow_sa =
+  rename1 `compile_abi_encode_args compile_expr _ (MAP gas_shadow_expr args) shadow_sa =
     (shadow_svs,shadow_st)` >>
   `gas_shadow_compiles (compile_abi_encode_args compile_expr ce args)
-     (compile_abi_encode_args compile_expr ce (MAP gas_shadow_expr args))` by
-    (mp_tac (Q.INST [`cenv` |-> `ce`, `sh` |-> `T`]
-      (MATCH_MP gas_shadow_compiles_abi_encode_args (cj 1 gas_shadow_compile_expr))) >> simp[]) >>
+     (compile_abi_encode_args compile_expr (gas_shadow_env T ce) (MAP gas_shadow_expr args))` by
+    (irule (SIMP_RULE bool_ss []
+       (Q.INST [`sh` |-> `T`] gas_shadow_compiles_abi_encode_args_env)) >>
+     simp[cj 1 gas_shadow_compile_expr_env]) >>
   `shadow_svs = svs /\ gas_shadow_state st shadow_st` by
     (qpat_x_assum `gas_shadow_compiles _ _` mp_tac >>
      rewrite_tac[gas_shadow_compiles_def] >>
@@ -105,7 +106,7 @@ Proof
   qpat_assum `compile_abi_encode_args _ _ args sa = _`
     (assume_tac o REWRITE_RULE [compile_abi_encode_args_def]) >>
   qpat_assum `compile_abi_encode_args _ _ (MAP _ args) shadow_sa = _`
-    (assume_tac o REWRITE_RULE [compile_abi_encode_args_def]) >>
+    (assume_tac o REWRITE_RULE [compile_abi_encode_args_def, gasShadowCompileBaseTheory.lowered_value_type_gas_shadow_env]) >>
   mp_tac (Q.INST [`cenv` |-> `ce`, `kw_es` |-> `[]:expr list`, `xs` |-> `args`,
     `sb` |-> `st`, `shadow_sb` |-> `shadow_st`]
     (Q.SPEC `T` extcall_request_positional_packing_outcome_named)) >>

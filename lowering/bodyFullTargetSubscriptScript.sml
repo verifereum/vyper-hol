@@ -171,6 +171,15 @@ Proof
   TRY (rename1 `Error er` >> Cases_on `er` >> simp[expr_exit_def])
 QED
 
+Theorem gas_shadow_compile_result[local]:
+  gas_shadow_compiles f g ==>
+  f s = (x,s') /\ gas_shadow_state s t ==>
+  ?t'. g t = (x,t') /\ gas_shadow_state s' t'
+Proof
+  strip_tac >> strip_tac >>
+  Cases_on `g t` >> drule_all gas_shadow_step >> simp[]
+QED
+
 Theorem target_subscript_sim_full:
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
@@ -197,38 +206,22 @@ Proof
   (impl_tac >- simp[compile_expr_ci_mono]) >> strip_tac >>
   qpat_x_assum `compile_get_target_ptr _ _ (gas_shadow_target _) _ = _`
     (assume_tac o SIMP_RULE std_ss [gas_shadow_expr_def]) >>
-  Cases_on `compile_get_target_ptr compile_expr cenv (gas_shadow_target bt)
-              shadow_sa` >>
-  rename1 `compile_get_target_ptr _ _ (gas_shadow_target bt) shadow_sa =
-             (srb, shadow_sm)` >>
-  qspecl_then [`compile_get_target_ptr compile_expr cenv bt`,
-               `compile_get_target_ptr compile_expr cenv (gas_shadow_target bt)`,
-               `sa`, `shadow_sa`, `rb`, `sm`, `srb`, `shadow_sm`] mp_tac
-    (Q.GENL [`f`, `g`, `s`, `t`, `x`, `s'`, `y`, `t'`] gas_shadow_step) >>
-  (impl_tac
-   >- (simp[] >>
-       mp_tac (MATCH_MP gas_shadow_compiles_get_target_ptr
-                 (CONJUNCT1 gas_shadow_compile_expr)) >>
-       disch_then (qspecl_then [`bt`, `cenv`, `T`] mp_tac) >> simp[])) >>
-  strip_tac >> gvs[] >>
-  Cases_on `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
-              shadow_sm` >>
-  rename1 `lower_value _ _ _ (gas_shadow_expr e) shadow_sm = (siop, shadow_sn)` >>
-  `gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
-     (lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e))` by
-    (irule (gas_shadow_compiles_lower_value
-            |> INST [``sh:bool`` |-> ``T``] |> REWRITE_RULE []) >>
-     MATCH_ACCEPT_TAC (CONJUNCT1 gas_shadow_compile_expr)) >>
-  qspecl_then [`lower_value compile_expr cenv (expr_type e) e`,
-               `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)`,
-               `sm`, `shadow_sm`, `iop`, `sn`, `siop`, `shadow_sn`] mp_tac
-    (Q.GENL [`f`, `g`, `s`, `t`, `x`, `s'`, `y`, `t'`] gas_shadow_step) >>
-  (impl_tac >- simp[]) >> strip_tac >> gvs[] >>
-  `expr_type (gas_shadow_expr e) = expr_type e` by simp[gas_shadow_expr_type] >>
-  qspecl_then [`compile_expr`, `cenv`, `gas_shadow_target bt`,
-               `gas_shadow_expr e`, `shadow_sa`, `rb`, `shadow_sm`, `iop`,
-               `shadow_sn`, `r`, `shadow_sb`] mp_tac target_subscript_compile_cut >>
-  (impl_tac >- simp[compile_expr_ci_mono]) >> strip_tac >>
+  `?shadow_sm.
+     compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+       (gas_shadow_target bt) shadow_sa = (rb,shadow_sm) /\
+     gas_shadow_state sm shadow_sm` by
+    (irule (MATCH_MP gas_shadow_compile_result gas_shadow_stmt_get_target_ptr_env) >>
+     qexists_tac `sa` >> simp[]) >>
+  `?shadow_sn.
+     lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sm = (iop,shadow_sn) /\
+     gas_shadow_state sn shadow_sn` by
+    (irule (MATCH_MP gas_shadow_compile_result gas_shadow_stmt_lower_value_env) >>
+     qexists_tac `sm` >> simp[]) >>
+  qpat_assum `compile_get_target_ptr _ _
+    (SubscriptTarget (gas_shadow_target _) (gas_shadow_expr _)) shadow_sa = _`
+    (mp_then (Pos last) mp_tac target_subscript_compile_cut) >>
+  simp[compile_expr_ci_mono, gas_shadow_expr_type] >> strip_tac >>
   `cs_extends sa sm /\ cs_extends sm sn /\ cs_extends sn sb /\
    sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
    cs_extends shadow_sa shadow_sm /\ cs_extends shadow_sm shadow_sn /\
@@ -569,15 +562,6 @@ Proof
   Cases_on `x` >> simp[get_place_def,return_def,raise_def]
 QED
 
-Theorem gas_shadow_compile_result[local]:
-  gas_shadow_compiles f g ==>
-  f s = (x,s') /\ gas_shadow_state s t ==>
-  ?t'. g t = (x,t') /\ gas_shadow_state s' t'
-Proof
-  strip_tac >> strip_tac >>
-  Cases_on `g t` >> drule_all gas_shadow_step >> simp[]
-QED
-
 Theorem immutable_target_subscript_sim_full:
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
@@ -611,16 +595,18 @@ Proof
   (impl_tac >- simp[compile_expr_ci_mono]) >> strip_tac >>
   qpat_x_assum `compile_get_target_ptr _ _ (gas_shadow_target _) _ = _`
     (assume_tac o SIMP_RULE std_ss [gas_shadow_expr_def]) >>
-  qpat_assum `gas_shadow_state sa shadow_sa`
-    (mp_then (Pos last) mp_tac
-      (MATCH_MP gas_shadow_compile_result gas_shadow_stmt_get_target_ptr)) >>
-  disch_then (fn th => qpat_assum `compile_get_target_ptr _ _ bt sa = _`
-    (qx_choose_then `shadow_sm` strip_assume_tac o MATCH_MP th)) >>
-  qpat_assum `gas_shadow_state sm shadow_sm`
-    (mp_then (Pos last) mp_tac
-      (MATCH_MP gas_shadow_compile_result gas_shadow_stmt_lower_value)) >>
-  disch_then (fn th => qpat_assum `lower_value _ _ _ e sm = _`
-    (qx_choose_then `shadow_sn` strip_assume_tac o MATCH_MP th)) >>
+  `?shadow_sm.
+     compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+       (gas_shadow_target bt) shadow_sa = (rb,shadow_sm) /\
+     gas_shadow_state sm shadow_sm` by
+    (irule (MATCH_MP gas_shadow_compile_result gas_shadow_stmt_get_target_ptr_env) >>
+     qexists_tac `sa` >> simp[]) >>
+  `?shadow_sn.
+     lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sm = (iop,shadow_sn) /\
+     gas_shadow_state sn shadow_sn` by
+    (irule (MATCH_MP gas_shadow_compile_result gas_shadow_stmt_lower_value_env) >>
+     qexists_tac `sm` >> simp[]) >>
   qpat_assum `compile_get_target_ptr _ _
     (SubscriptTarget (gas_shadow_target _) (gas_shadow_expr _)) shadow_sa = _`
     (mp_then (Pos last) mp_tac target_subscript_compile_cut) >>

@@ -136,13 +136,15 @@ Proof
   `cs_extends sm sb` by
     (irule cs_extends_trans >> qexists_tac `st2` >> simp[]) >>
   drule_all fn_has_code_split >> strip_tac >>
-  `?shadow_sm. compile_expr cenv ty (gas_shadow_expr e1) shadow_sa =
+  `?shadow_sm. compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1) shadow_sa =
       (bvv,shadow_sm) /\ gas_shadow_state sm shadow_sm` by
-    (mp_tac (cj 1 gas_shadow_compile_expr |> Q.SPECL [`cenv`, `ty`, `e1`, `T`]) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[] >>
-     strip_tac >>
-     Cases_on `compile_expr cenv ty (gas_shadow_expr e1) shadow_sa` >> gvs[]) >>
+    (`gas_shadow_compiles (compile_expr cenv ty e1)
+         (compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1))` by
+       irule gas_shadow_stmt_compile_expr_env >>
+     pop_assum (qspecl_then [`sa`, `shadow_sa`] mp_tac o
+       REWRITE_RULE [gas_shadow_compiles_def]) >>
+     Cases_on `compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1) shadow_sa` >>
+     simp[]) >>
   `cs_extends shadow_sa shadow_sm /\ cs_extends shadow_sm shadow_sb` by
     suspend "shadow_extends" >>
   `fn_has_code shadow_sa shadow_sm shadow_func` by
@@ -232,13 +234,15 @@ Resume subscript_nocopy_bind_full[after_base]:
   `body_expr_full_ok cx e2` by metis_tac[] >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e2 mid` by
     (fs[body_expr_full_ok_def] >> metis_tac[]) >>
-  `?shadow_st2. lower_value compile_expr cenv ty (gas_shadow_expr e2)
+  `?shadow_st2. lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e2)
       shadow_sm = (iop,shadow_st2) /\ gas_shadow_state st2 shadow_st2` by
-    (mp_tac (Q.INST [`e` |-> `e2`]
-       gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sm`, `shadow_sm`] mp_tac) >> simp[] >> strip_tac >>
-     Cases_on `lower_value compile_expr cenv ty (gas_shadow_expr e2) shadow_sm` >> gvs[]) >>
+    (`gas_shadow_compiles (lower_value compile_expr cenv ty e2)
+       (lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e2))` by
+       irule gas_shadow_stmt_lower_value_env >>
+     pop_assum (qspecl_then [`sm`, `shadow_sm`] mp_tac o
+       REWRITE_RULE [gas_shadow_compiles_def]) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e2) shadow_sm` >>
+     simp[]) >>
   `cs_extends shadow_sm shadow_st2 /\ cs_extends shadow_st2 shadow_sb` by
     (`cs_extends shadow_sm shadow_st2` by
        (qpat_assum `lower_value _ _ _ _ shadow_sm = _`

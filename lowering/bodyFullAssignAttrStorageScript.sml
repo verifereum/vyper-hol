@@ -35,7 +35,7 @@ Theorem compile_assign_attr_storage_full:
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty
         (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src,id)) fld)) e))
-      (stmt_env cenv lctx ty
+      (stmt_env (gas_shadow_env T cenv) lctx ty
         (gas_shadow_stmt
           (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src,id)) fld)) e)))
       (eval_stmt cx
@@ -62,20 +62,23 @@ Proof
   `fn_has_code sa sm func /\ fn_has_code sm sn func /\
    fn_has_code sn su func /\ fn_has_code su sb func` by
     (fs[ci_mono_def] >> metis_tac[fn_has_code_split, cs_extends_trans]) >>
-  `?shadow_sm. compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa =
-                (vv,shadow_sm) /\ gas_shadow_state sm shadow_sm` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type e`, `e` |-> `e`]
-       gas_shadow_stmt_compile_expr) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[] >>
-     Cases_on `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
-     simp[]) >>
+  `?shadow_sm. compile_expr (gas_shadow_env T cenv) (expr_type e)
+                  (gas_shadow_expr e) shadow_sa = (vv,shadow_sm) /\
+                gas_shadow_state sm shadow_sm` by
+    (`gas_shadow_compiles (compile_expr cenv (expr_type e) e)
+       (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))`
+       by irule gas_shadow_stmt_compile_expr_env >>
+     qpat_x_assum `gas_shadow_compiles _ _`
+       (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
+     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >>
+     Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e)
+                 (gas_shadow_expr e) shadow_sa` >> simp[]) >>
   `cs_extends shadow_sa shadow_sm /\ cs_extends shadow_sm shadow_sb` by
     (qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _` mp_tac >>
      simp[gas_shadow_stmt_def, gas_shadow_assignment_def, gas_shadow_expr_def] >>
      strip_tac >>
-     mp_tac (Q.SPECL [`cenv`, `lctx`, `ty`, `src`, `id`, `fld`,
-       `gas_shadow_expr e`, `shadow_sa`, `cenv`, `shadow_sb`, `tr`,
+     mp_tac (Q.SPECL [`gas_shadow_env T cenv`, `lctx`, `ty`, `src`, `id`, `fld`,
+       `gas_shadow_expr e`, `shadow_sa`, `gas_shadow_env T cenv`, `shadow_sb`, `tr`,
        `n2w slot`, `sid`, `expr_type e`, `fsz`] assign_attr_storage_code_parts) >>
      simp[] >> strip_tac >> gvs[] >>
      rename1 `emit_op ADD _ shadow_sm = (shadow_dst,shadow_sn)` >>

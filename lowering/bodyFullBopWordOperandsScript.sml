@@ -16,9 +16,9 @@ Theorem bop_operands_full_cps_exit:
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
     (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
     (y,shadow_s2) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state s1 shadow_s1 /\
   gas_shadow_state s2 shadow_s2 /\
@@ -250,9 +250,9 @@ Theorem bop_word_operands_full_cps_exit:
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
     (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
     (y,shadow_s2) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state s1 shadow_s1 /\
   gas_shadow_state s2 shadow_s2 /\
@@ -332,9 +332,9 @@ Theorem bop_operands_full_cps:
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
     (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
     (y,shadow_s2) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state s1 shadow_s1 /\
   gas_shadow_state s2 shadow_s2 /\
@@ -413,9 +413,9 @@ Theorem bop_word_operands_full_cps:
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
     (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
     (y,shadow_s2) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state s1 shadow_s1 /\
   gas_shadow_state s2 shadow_s2 /\

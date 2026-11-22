@@ -143,14 +143,16 @@ Proof
     simp[compile_get_target_ptr_def, comp_return_def] >>
   drule_all stmtSimAppendResolvedTheory.append_resolved_word_code_parts >> strip_tac >>
   gvs[] >>
-  Cases_on `lower_value compile_expr cenv (expr_type e)
+  Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
     (gas_shadow_expr e) shadow_sa` >>
-  rename1 `lower_value compile_expr cenv (expr_type e)
+  rename1 `lower_value compile_expr _ _
     (gas_shadow_expr e) shadow_sa = (shadow_op,shadow_sm)` >>
   `shadow_op = vop /\ gas_shadow_state sm shadow_sm` by
-    (qspec_then `expr_type e` mp_tac (Q.GEN `ty` gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+    (irule gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ e sa = (vop,sm)` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _`
+       (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
   gvs[] >>
   `compile_dynarray_append cenv (Var p) shadow_op 32 32 (expr_type e)
      (lowered_value_type cenv e) cap T LocMemory sm = ((),sb)` by
@@ -217,7 +219,7 @@ Resume body_append_local_primitive_full[rhs_full]:
       (expr_type e) (lowered_value_type cenv (gas_shadow_expr e)) cap T
       LocMemory shadow_sm =
       ((),shadow_sb)` by
-    (qpat_x_assum `stmt_env _ _ _ _ shadow_sa = _` mp_tac >>
+    (qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) shadow_sa = _` mp_tac >>
      simp[gasShadowTheory.gas_shadow_stmt_def, gasShadowTheory.gas_shadow_expr_def, stmt_env_def, stmtLoweringTheory.declare_stmt_local_def,
           comp_bind_def, comp_ignore_bind_def, comp_return_def,
           Once stmtLoweringTheory.compile_stmt_def, compile_get_target_ptr_def] >>
@@ -232,8 +234,9 @@ Resume body_append_local_primitive_full[rhs_full]:
      simp[cs_extends_def] >> qexists_tac `[]` >>
      fs[emitHelperPropsTheory.inst_extends_def, same_blocks_def]) >>
   `cs_extends shadow_sa shadow_sm` by
-    (qpat_assum `lower_value _ _ _ _ shadow_sa = _` mp_tac >>
-     qspecl_then [`cenv`, `expr_type e`, `gas_shadow_expr e`, `shadow_sa`]
+    (qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _` mp_tac >>
+     qspecl_then [`gas_shadow_env T cenv`, `expr_type e`,
+                  `gas_shadow_expr e`, `shadow_sa`]
        mp_tac ci_mono_lower_value_compile_expr >> simp[ci_mono_def]) >>
   `fn_has_code shadow_sa shadow_sm shadow_func` by
     (drule_all fragExecTheory.fn_has_code_split >> simp[]) >>

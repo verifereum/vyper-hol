@@ -20,7 +20,7 @@ Libs monadsyntax
 
 Theorem for_captured_storage_continue_full:
   compile_stmt c lctx ret_ty (For id typ (Array e) n loop_body) sa = ((),sb) /\
-  compile_stmt c lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body))
+  compile_stmt (gas_shadow_env T c) lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body))
     sha = ((),shb) /\
   compile_expr c (expr_type e) e sa = (vv,se) /\
   gas_shadow_state sa sha /\ fn_has_code sa sb func /\ fn_has_code sha shb shadow_func /\

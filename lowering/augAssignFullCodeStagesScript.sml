@@ -19,14 +19,14 @@ QED
 
 Theorem augassign_full_code_stages:
   stmt_env cenv lctx ret_ty (AugAssign ty t bop e) sa = (c,sf) /\
-  stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign ty t bop e))
-    shadow_sa = (c,shadow_sf) /\
+  stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign ty t bop e))
+    shadow_sa = (gas_shadow_env T c,shadow_sf) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sf shadow_sf /\
   fn_has_code sa sf func /\ fn_has_code shadow_sa shadow_sf shadow_func ==>
   c = cenv /\
   ?r s0 shadow_s0.
     compile_get_target_ptr compile_expr cenv t sa = (r,s0) /\
-    compile_get_target_ptr compile_expr cenv (gas_shadow_target t)
+    compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (gas_shadow_target t)
       shadow_sa = (r,shadow_s0) /\
     gas_shadow_state s0 shadow_s0 /\
     ci_mono sa s0 /\ ci_mono shadow_sa shadow_s0 /\
@@ -50,7 +50,7 @@ Theorem augassign_full_code_stages:
           emit_op (case loc of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD)
             [FST r]) shadow_s0 = (cur,shadow_s1) /\
        lower_value compile_expr cenv ty e s1 = (rhs,s2) /\
-       lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_s1 =
+       lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_s1 =
          (rhs,shadow_s2) /\
        compile_binop bop cur rhs ty NONE
          (if bop = Exp then expr_int_literal e else NONE) s2 = (result,s3) /\
@@ -84,17 +84,17 @@ Proof
     (strip_assume_tac o MATCH_MP aug_place_code_parts) >>
   qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _` mp_tac >>
   simp[gas_shadow_stmt_def] >>
-  disch_then (strip_assume_tac o MATCH_MP aug_place_code_parts) >>
+  disch_then (strip_assume_tac o SIMP_RULE (srw_ss())
+    [gasShadowCompileBaseTheory.gas_shadow_env_fields] o MATCH_MP aug_place_code_parts) >>
   rename1 `compile_get_target_ptr compile_expr cenv t sa = (r,s0)` >>
-  rename1 `compile_get_target_ptr compile_expr cenv (gas_shadow_target t)
-    shadow_sa = (sr,shadow_s0)` >>
+  rename1 `compile_get_target_ptr _ _ (gas_shadow_target t) shadow_sa = (sr,shadow_s0)` >>
   `r = sr /\ gas_shadow_state s0 shadow_s0` by
     (irule augassign_shadow_step >>
      rpt (first_assum (irule_at Any)) >>
-     simp[gas_shadow_stmt_get_target_ptr]) >>
+     simp[gas_shadow_stmt_get_target_ptr_env]) >>
   `ci_mono sa s0 /\ ci_mono shadow_sa shadow_s0` by
     (mp_tac (Q.SPECL [`t`, `cenv`, `sa`] ci_mono_compile_get_target_ptr) >>
-     mp_tac (Q.SPECL [`gas_shadow_target t`, `cenv`, `shadow_sa`]
+     mp_tac (Q.SPECL [`gas_shadow_target t`, `gas_shadow_env T cenv`, `shadow_sa`]
        ci_mono_compile_get_target_ptr) >> simp[]) >>
   gvs[]
   >- (`ci_mono s0 sf /\ ci_mono shadow_s0 shadow_sf` by
@@ -113,7 +113,7 @@ Proof
   `rhs = shadow_rhs /\ gas_shadow_state s2 shadow_s2` by
     (irule augassign_shadow_step >>
      rpt (first_assum (irule_at Any)) >>
-     simp[gas_shadow_stmt_lower_value]) >>
+     simp[gas_shadow_stmt_lower_value_env]) >>
   gvs[] >>
   `result = shadow_result /\ gas_shadow_state s3 shadow_s3` by
     (irule augassign_shadow_step >>

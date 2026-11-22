@@ -207,16 +207,18 @@ Proof
   `local_ptrs_reserved cenv shadow_sa` by
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
      qexists_tac `sa` >> fs[gasShadowStateTheory.gas_shadow_state_def]) >>
+  `local_ptrs_reserved (gas_shadow_env T cenv) shadow_sa` by
+    (qpat_assum `local_ptrs_reserved cenv shadow_sa` mp_tac >>
+     pure_rewrite_tac[local_ptrs_reserved_def,gasShadowCompileBaseTheory.gas_shadow_env_fields] >>
+     simp[]) >>
   qpat_assum `compile_slice_code start_op' len_op' _ st2' = _`
     (mp_then Any drule_all slice_self_compilation_context) >> strip_tac >>
-  qpat_assum `compile_slice_code start_op' len_op' _ st2' = _`
-    (mp_then Any strip_assume_tac exprSimSliceSelfCodeTheory.slice_code_decompose) >>
-  gvs[] >>
   `start_op' = start_op /\ gas_shadow_state st1 st1'` by
-    (qpat_x_assum `tail_run :- _` kall_tac >>
-     qpat_x_assum `child_run :- _` kall_tac >>
-     metis_tac[gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value,
-               gasShadowStateTheory.gas_shadow_compiles_def,pairTheory.FST,pairTheory.SND]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ start sa = _` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr start) shadow_sa = _`
+       (irule_at Any) >>
+     simp[] >> irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env) >>
   gvs[] >>
   rewrite_tac[exprSimSliceSelfCodeTheory.slice_self_code_actions] >>
   `expr_body_pre cenv cx env start es` by
@@ -314,10 +316,11 @@ Proof
      drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
      disch_then (qspecl_then [`len`,`mid`] mp_tac) >> fs[]) >>
   `len_op' = len_op /\ gas_shadow_state st2 st2'` by
-    (qpat_x_assum `tail_run :- _` kall_tac >>
-     qpat_x_assum `child_run :- _` kall_tac >>
-     metis_tac[gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value,
-               gasShadowStateTheory.gas_shadow_compiles_def,pairTheory.FST,pairTheory.SND]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ len st1 = _` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr len) st1' = _`
+       (irule_at Any) >>
+     simp[] >> irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env) >>
   gvs[] >>
   `sa.cs_next_var <= st1.cs_next_var` by fs[exprLoweringPropsTheory.ci_mono_def] >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st1 x` by

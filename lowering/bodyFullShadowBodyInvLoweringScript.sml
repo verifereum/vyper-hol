@@ -157,7 +157,7 @@ Proof
   `gas_shadow_state start startS` by
     (qspecl_then [`MAP (package_external_group tops rp.rpol_target
                         T (K global_nonreentrant_slot)) exts`, `[]`, `fall`]
-       mp_tac gas_shadow_compile_generate_grouped_runtime >>
+       mp_tac (Q.INST [`sd` |-> `T`] gas_shadow_compile_generate_grouped_runtime) >>
      qpat_assum `Abbrev (shadow_groups = _)` (fn th =>
        simp[gas_shadow_compiles_def, GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
      disch_then (qspecl_then [`initial_compile_state "__entry"`,

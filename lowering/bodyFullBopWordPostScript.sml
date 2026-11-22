@@ -12,8 +12,10 @@ Theorem bop_suffix_success_post:
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa = (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e2) shadow_s1 = (y,shadow_s2) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1)
+    (gas_shadow_expr e1) shadow_sa = (x,shadow_s1) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1)
+    (gas_shadow_expr e2) shadow_s1 = (y,shadow_s2) /\
   compile_binop bop x y (expr_type e1)
     (if bop = Exp then expr_int_literal e1 else NONE)
     (if bop = Exp then expr_int_literal e2 else NONE) s2 = (op,sb) /\
@@ -153,8 +155,10 @@ Theorem bop_word_suffix_success_post:
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa = (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e2) shadow_s1 = (y,shadow_s2) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1)
+    (gas_shadow_expr e1) shadow_sa = (x,shadow_s1) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1)
+    (gas_shadow_expr e2) shadow_s1 = (y,shadow_s2) /\
   compile_binop bop x y (expr_type e1)
     (if bop = Exp then expr_int_literal e1 else NONE)
     (if bop = Exp then expr_int_literal e2 else NONE) s2 = (op,sb) /\

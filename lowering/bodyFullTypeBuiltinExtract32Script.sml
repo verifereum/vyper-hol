@@ -54,14 +54,17 @@ Proof
     (fs[body_exprs_full_ok_def, body_expr_full_ok_def] >> metis_tac[]) >>
   `gas_admissible (bind (eval_expr cx src) (read_result cx)) expr_res_ok es` by
     (drule (CONV_RULE (DEPTH_CONV ETA_CONV) extract32_vv_first_admissible) >> simp[]) >>
-  `?shadow_s1. lower_value compile_expr cenv (expr_type src)
+  `?shadow_s1. lower_value compile_expr (gas_shadow_env T cenv) (expr_type src)
       (gas_shadow_expr src) shadow_sa = (src_op,shadow_s1) /\
       gas_shadow_state s1 shadow_s1` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type src`, `e` |-> `src`] gas_shadow_stmt_lower_value) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
+    (`gas_shadow_compiles
+        (lower_value compile_expr cenv (expr_type src) src)
+        (lower_value compile_expr (gas_shadow_env T cenv) (expr_type src)
+          (gas_shadow_expr src))` by irule gas_shadow_stmt_lower_value_env >>
+     pop_assum (mp_tac o REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]) >>
      disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[] >>
-     Cases_on `lower_value compile_expr cenv (expr_type src)
-       (gas_shadow_expr src) shadow_sa` >> gvs[]) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv)
+       (BaseT (BytesT (Dynamic m))) (gas_shadow_expr src) shadow_sa` >> simp[]) >>
   `fn_has_code shadow_sa shadow_s1 shadow_func` by
     (qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
      simp[gasShadowTheory.gas_shadow_expr_def] >>
@@ -229,13 +232,17 @@ Resume extract32_vv_full[offset_entry]:
      simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
      disch_then (qspecl_then [`s1`,`shadow_s1`] mp_tac) >> simp[] >>
      Cases_on `compile_bytestring_src (Var sv) shadow_s1` >> gvs[]) >>
-  `?shadow_s3. lower_value compile_expr cenv ty (gas_shadow_expr off) shadow_s2 =
-      (off_op,shadow_s3) /\ gas_shadow_state s3 shadow_s3` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `ty`, `e` |-> `off`]
-      gas_shadow_stmt_lower_value) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`s2`,`shadow_s2`] mp_tac) >> simp[] >>
-     Cases_on `lower_value compile_expr cenv ty (gas_shadow_expr off) shadow_s2` >> gvs[]) >>
+  `?shadow_s3. lower_value compile_expr (gas_shadow_env T cenv) ty
+      (gas_shadow_expr off) shadow_s2 = (off_op,shadow_s3) /\
+      gas_shadow_state s3 shadow_s3` by
+    (`gas_shadow_compiles
+        (lower_value compile_expr cenv ty off)
+        (lower_value compile_expr (gas_shadow_env T cenv) ty
+          (gas_shadow_expr off))` by irule gas_shadow_stmt_lower_value_env >>
+     pop_assum (mp_tac o REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]) >>
+     disch_then (qspecl_then [`s2`, `shadow_s2`] mp_tac) >> simp[] >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) ty
+       (gas_shadow_expr off) shadow_s2` >> simp[]) >>
   `fn_has_code shadow_s2 shadow_s3 shadow_func` by
     (qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
      simp[gasShadowTheory.gas_shadow_expr_def] >>

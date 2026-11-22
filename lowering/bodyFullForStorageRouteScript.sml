@@ -79,7 +79,7 @@ Theorem compile_for_storage_array_frag_full:
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty
         (For id typ (Array (TopLevelName (ArrayT typ bd) nid)) n body))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt
         (For id typ (Array (TopLevelName (ArrayT typ bd) nid)) n body)))
       (eval_stmt cx
         (For id typ (Array (TopLevelName (ArrayT typ bd) nid)) n body)) es

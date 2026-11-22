@@ -271,14 +271,6 @@ Proof
   rw[expr_sim_full_def] >>
   drule_all lower_value_acc >> strip_tac >>
   rename1 `lower_value compile_expr cenv (BaseT AddressT) e sa = (x,s1)` >>
-  `?sx ss1. lower_value compile_expr cenv (BaseT AddressT)
-      (gas_shadow_expr e) shadow_sa = (sx,ss1)` by metis_tac[pairTheory.PAIR] >>
-  `sx = x /\ gas_shadow_state s1 ss1` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `BaseT AddressT`, `e` |-> `e`]
-       gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
-  gvs[] >>
   `cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var` by
     (qpat_assum `lower_value _ _ _ e sa = _`
        (mp_then Any mp_tac expr_body_pre_lower_value_word_shape) >>
@@ -299,7 +291,7 @@ Proof
   `~is_self_codesize (Acc item) [gas_shadow_expr e]` by
     (qpat_x_assum `~is_self_codesize (Acc item) [e]` mp_tac >>
      simp[is_self_codesize_def, gasShadowCompileHelpersTheory.gas_shadow_self_addr]) >>
-  `?xx sm. lower_value compile_expr cenv (BaseT AddressT)
+  `?xx sm. lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT)
       (gas_shadow_expr e) shadow_sa = (xx,sm) /\
     (case item of
        Balance => emit_op BALANCE [xx]
@@ -316,8 +308,14 @@ Proof
          >- (qexistsl_tac [`account_item_type item`, `ty`] >>
              gvs[gas_shadow_expr_def, gas_shadow_builtin_def]))) >>
   gvs[] >>
-  rename1 `lower_value compile_expr cenv (BaseT AddressT)
-    (gas_shadow_expr e) shadow_sa = (sx,ss1)` >>
+  rename1 `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = (sx,ss1)` >>
+  `sx = x /\ gas_shadow_state s1 ss1` by
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ e sa = (x,s1)` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _`
+       (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
+  qpat_x_assum `sx = x` (SUBST_ALL_TAC o SYM) >>
   `fn_has_code shadow_sa ss1 shadow_func` by
     (qpat_assum `_ ss1 = (op,shadow_sb)` mp_tac >>
      qpat_assum `fn_has_code shadow_sa shadow_sb shadow_func` mp_tac >>
