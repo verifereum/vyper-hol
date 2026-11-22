@@ -390,14 +390,14 @@ Proof
   >~ [`Assert _ r`]
   >- (Cases_on `r` >>
       gvs[type_stmt_def, supported_stmt_def, AllCaseEqs(),
-          supported_assert_reason_def, custom_errors_stmt_ok_def,
-          well_typed_custom_error_def] >>
+          supported_assert_reason_def, supported_custom_error_def,
+          custom_errors_stmt_ok_def, well_typed_custom_error_def] >>
       metis_tac[checker_pure, checker_pures, checker_string_reason])
   >~ [`Raise r`]
   >- (Cases_on `r` >>
       gvs[type_stmt_def, supported_stmt_def, AllCaseEqs(),
-          supported_raise_reason_def, custom_errors_stmt_ok_def,
-          well_typed_custom_error_def] >>
+          supported_raise_reason_def, supported_custom_error_def,
+          custom_errors_stmt_ok_def, well_typed_custom_error_def] >>
       metis_tac[checker_pures, checker_string_reason])
   >~ [`Return r`]
   >- (Cases_on `r` >> gvs[type_stmt_def, supported_stmt_def, AllCaseEqs()] >>
