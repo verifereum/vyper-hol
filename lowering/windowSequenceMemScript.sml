@@ -15,7 +15,8 @@ Theorem window_seq_mem_fragment[local]:
     (\u. u = (t with vs_inst_idx := LENGTH st'.cs_current_insts)) (K F)
 Proof
   strip_tac >> irule frag_exec_mem_run_inst_seq >>
-  fs[window_seq_def, inst_extends_def] >> rpt strip_tac >> gvs[] >>
+  fs[window_seq_def, inst_extends_def] >> rpt strip_tac >> gvs[]
+  >- metis_tac[] >>
   disj1_tac >> qexists_tac `t` >> simp[]
 QED
 
@@ -33,7 +34,7 @@ Theorem window_seq_mem_cont:
 Proof
   strip_tac >>
   drule_all window_seq_mem_fragment >>
-  disch_then (qspec_then `ctx` assume_tac) >>
+  disch_then assume_tac >>
   drule mem_cont_sim_from_fragment >>
   disch_then (qspec_then `s` mp_tac) >> simp[]
 QED

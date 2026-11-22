@@ -99,14 +99,20 @@ Proof
    DROP (SUC s.vs_inst_idx) bb.bb_instructions = rest` by
     (drule prefix_DROP_CONS >> simp[get_instruction_def]) >>
   `inst_mem_below_frontier h s` by
-    (first_x_assum irule >> qexistsl_tac [`xs`, `[]`] >> simp[run_inst_seq_def]) >>
+    (qpat_assum `!pre i post u. _ ==> inst_mem_below_frontier i u`
+       (qspecl_then [`[]`, `h`, `xs`, `s`] mp_tac) >>
+     simp[run_inst_seq_def]) >>
+  `mem_safe_step fuel ctx h s` by
+    (simp[mem_safe_step_non_invoke] >> disch_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> _` (mp_tac o UNDISCH) >>
+     disch_then (qspecl_then [`[]`, `h`, `xs`, `s`] mp_tac) >>
+     simp[run_inst_seq_def]) >>
   `mem_safe_block fuel ctx bb s =
     (case step_inst_base h s of
        OK s1 => mem_safe_block fuel ctx bb (s1 with vs_inst_idx := SUC s.vs_inst_idx)
      | _ => T)` by
     (CONV_TAC (LAND_CONV (REWR_CONV mem_safe_block_def)) >>
-     asm_simp_tac (srw_ss())
-       [mem_safe_step_non_invoke, step_inst_non_invoke]) >>
+     simp[step_inst_non_invoke]) >>
   Cases_on `step_inst_base h s` >> gvs[] >>
   rename1 `step_inst_base h s = OK s1` >>
   `s1.vs_inst_idx = s.vs_inst_idx` by
@@ -125,8 +131,24 @@ Proof
       inst_mem_below_frontier i u` by
     (qspecl_then [`xs`, `s1`] mp_tac run_inst_seq_prefix_safe_inst_idx >>
      asm_rewrite_tac[] >> disch_then (qspec_then `SUC s.vs_inst_idx` ACCEPT_TAC)) >>
-  first_x_assum (qspecl_then [`s1 with vs_inst_idx := SUC s.vs_inst_idx`,
-    `fuel`, `ctx`, `bb`] mp_tac) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. xs = pre ++ i::post /\
+      run_inst_seq pre (s1 with vs_inst_idx := SUC s.vs_inst_idx) = OK u ==>
+      dalloca_no_wrap i u)` by
+    (disch_tac >> rpt gen_tac >> strip_tac >>
+     `EVERY (\i. ~is_terminator i.inst_opcode) pre` by fs[EVERY_APPEND] >>
+     qpat_x_assum `run_inst_seq pre _ = OK u` mp_tac >>
+     simp[run_inst_seq_inst_idx] >>
+     Cases_on `run_inst_seq pre s1` >> simp[exec_result_map_def] >>
+     disch_then (SUBST1_TAC o SYM) >>
+     rename1 `run_inst_seq pre s1 = OK v` >>
+     qpat_assum `ctx_has_dalloca ctx ==> !pre i post u. h::xs = _ /\ _ ==> _`
+       (mp_tac o UNDISCH) >>
+     disch_then (qspecl_then [`h::pre`, `i`, `post`, `v`] mp_tac) >>
+     simp[run_inst_seq_def, dalloca_no_wrap_def, eval_op_inst_idx]) >>
+  qpat_x_assum `!s fuel ctx bb. _ ==> _`
+    (qspecl_then [`s1 with vs_inst_idx := SUC s.vs_inst_idx`,
+                  `fuel`, `ctx`, `bb`] mp_tac) >>
   asm_rewrite_tac[] >> simp[run_inst_seq_inst_idx] >> strip_tac >>
   Cases_on `run_inst_seq xs s1` >> gvs[exec_result_map_def] >>
   metis_tac[arithmeticTheory.ADD_CLAUSES]
