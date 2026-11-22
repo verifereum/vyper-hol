@@ -110,7 +110,7 @@ Proof
   metis_tac[call_evaluation_safe_append_right]
 QED
 
-Theorem tuple_assignment_rhs_pre[local]:
+Theorem tuple_assignment_rhs_pre:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
