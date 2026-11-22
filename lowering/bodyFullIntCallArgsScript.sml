@@ -2118,9 +2118,8 @@ Proof
                    get_module_code (cx with stk updated_by CONS (NONE,name)) NONE = SOME ts /\
                    IS_SOME (supported_function_decl ts c Internal))
      (int_calls_expr e)` by
-    (simp[EVERY_MEM] >> qx_gen_tac `call` >> strip_tac >> conj_tac
-     >- fs[EVERY_MEM] >>
-     qexists_tac `tops` >> fs[EVERY_MEM]) >>
+    (simp[EVERY_MEM] >> qx_gen_tac `call` >> strip_tac >> conj_tac >>
+     fs[EVERY_MEM]) >>
   fs[expr_body_pre_split_def, expr_body_pre_mods_def, GSYM source_body_calls_main,
      GSYM const_name_root_mods_singleton,
      vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,

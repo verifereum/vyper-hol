@@ -4,7 +4,7 @@ Ancestors
   bodyQualifiedStmtSource constSubstMods constSubst vyperTypeContractStaticMaps
   vyperTypeConstantCells vyperTypeContractContext vyperTypeEventLookup vyperTypeEnvExtension
   vyperTypeContract vyperTypeSystem vyperInterpreter vyperContext vyperAST
-  alist pair list
+  exprSimSource[qualified,ignore_grammar] alist pair list
 
 Triviality checked_const_replacement_type:
   check_contract dep layouts addr mods = SOME art /\
@@ -159,12 +159,6 @@ Proof
      ordered_error_kwargs_subst, NULL_EQ]
 QED
 
-Triviality checked_exprs_member:
-  !es. well_typed_exprs env es ==> !e. MEM e es ==> well_typed_expr env e
-Proof
-  Induct >> simp[well_typed_expr_def] >> metis_tac[]
-QED
-
 Triviality checked_custom_error_subst:
   check_contract dep layouts addr mods = SOME art /\
   env.bare_globals = art.cta_bare_globals /\
@@ -191,7 +185,7 @@ Proof
      strip_tac >>
      drule checked_linked_const_annotation >> disch_then irule >>
      qexists_tac `env` >> simp[] >>
-     irule checked_exprs_member >>
+     irule exprSimSourceTheory.well_typed_exprs_member >>
      qexists_tac `custom_error_exprs (CustomError (id0,id1) pos kw)` >>
      fs[well_typed_custom_error_def]) >>
   `order_custom_error_args params
