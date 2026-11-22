@@ -51,6 +51,8 @@ Definition builtin_arity_def:
     | Keccak256 => 1 | Sha256 => 1 | AsWeiValue _ => 1 | Uint2Str _ => 1
     | Ceil => 1 | Floor => 1 | BlockHash => 1 | BlobHash => 1 | Acc _ => 1
     | MethodId => 1
+    | NamedConst => 1
+    | BoolChain _ _ => 1
     | _ => 0
 End
 
