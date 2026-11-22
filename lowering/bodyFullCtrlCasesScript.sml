@@ -83,10 +83,9 @@ Proof
      qexists_tac `[]` >> simp[]) >>
   irule compile_assert_frag_full >> simp[] >>
   qpat_x_assum `body_expr_full_ok _ _`
-    (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_full_ok_def]) >>
-  disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `tops`, `ctx`, `shadow_ctx`,
-    `func`, `shadow_func`, `cenv`, `env`, `BaseT BoolT`, `es`] mp_tac) >>
-  simp[]
+    (strip_assume_tac o REWRITE_RULE [body_expr_full_ok_def]) >>
+  qpat_x_assum `!DF. _ ==> expr_sim_full _ _ _ _ _ _ /\ _` drule_all >>
+  disch_then (fn sim => simp[sim])
 QED
 
 Theorem assert_bare_stmt_full_ok:
@@ -124,33 +123,17 @@ Proof
         qexists_tac `cenv` >> fs[allocLimitsTheory.alloc_limits_stmt_def]) >>
      qexists_tac `[]` >> simp[]) >>
   irule compile_expr_stmt_frag_ok_full >>
-  simp[gas_shadow_stmt_compile_expr] >> conj_tac
+  simp[gas_shadow_stmt_compile_expr] >> reverse conj_tac
   >- (rpt strip_tac >>
       `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
       metis_tac[compile_expr_open_general]) >>
   qpat_x_assum `body_expr_full_ok _ _`
-    (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_full_ok_def]) >>
-  disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `tops`, `ctx`, `shadow_ctx`,
-    `func`, `shadow_func`, `cenv`, `env`, `expr_type e`, `es`] mp_tac) >>
-  simp[]
+    (strip_assume_tac o REWRITE_RULE [body_expr_full_ok_def]) >>
+  qpat_x_assum `!DF. _ ==> expr_sim_full _ _ _ _ _ _ /\ _` drule_all >>
+  disch_then (fn sim => simp[sim])
 QED
 
 (* ===== If ===== *)
-
-(* A block's compile environment pairs with its shadow's. *)
-Theorem if_branch_shadow_compiles[local]:
-  !ss cenv lctx ty.
-    gas_shadow_compiles (stmts_env cenv lctx ty ss)
-      (stmts_env cenv lctx ty (MAP gas_shadow_stmt ss))
-Proof
-  Induct >> simp[stmts_env_def, gas_shadow_compiles_return] >>
-  rpt gen_tac >> ho_match_mp_tac gas_shadow_compiles_get_terminated >>
-  Cases >> simp[gas_shadow_compiles_return] >>
-  irule gas_shadow_compiles_bind >>
-  simp[gas_shadow_compiles_declare_stmt_local] >> gen_tac >>
-  simp[comp_ignore_bind_def] >> irule gas_shadow_compiles_bind >>
-  simp[gas_shadow_compile_stmt]
-QED
 
 Theorem if_stmt_full_ok:
   !cx e ss1 ss2.
@@ -182,20 +165,21 @@ Proof
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
      cenv cx (BaseT BoolT) e es` by
     (qpat_x_assum `body_expr_full_ok _ _`
-       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `tops`, `ctx`,
-       `shadow_ctx`, `func`, `shadow_func`, `cenv`, `env`, `BaseT BoolT`,
-       `es`] mp_tac) >> simp[]) >>
+       (strip_assume_tac o REWRITE_RULE [body_expr_full_ok_def]) >>
+     qpat_x_assum `!DF. _ ==> expr_sim_full _ _ _ _ _ _ /\ _` drule_all >>
+     disch_then (fn sim => simp[sim])) >>
   `ctx_has_dalloca ctx /\ MEM func ctx.ctx_functions ==>
     !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     (strip_tac >> qpat_assum `body_inv _ ctx _ cx` (fn inv =>
        qpat_assum `MEM func ctx.ctx_functions` (fn member =>
          ACCEPT_TAC (MATCH_MP body_inv_no_phi (CONJ inv member))))) >>
   irule compile_if_stmt_frag_full >>
-  simp[stmts_env_cs_mono, gas_shadow_stmt_lower_value,
-       if_branch_shadow_compiles] >>
-  conj_tac >- metis_tac[compile_expr_grows] >>
-  conj_tac >- metis_tac[compile_expr_grows] >>
+  simp[stmts_env_cs_mono] >>
+  conj_tac >- (rpt strip_tac >> drule compile_expr_grows >> simp[]) >>
+  conj_tac >- (rpt strip_tac >> drule compile_expr_grows >> simp[]) >>
+  conj_tac >- irule gas_shadow_stmt_lower_value_env >>
+  conj_tac >- irule gas_shadow_stmts_env_env >>
+  conj_tac >- irule gas_shadow_stmts_env_env >>
   rpt strip_tac >>
   rename1 `_ = (INL (BoolV b), es1)` >>
   `?tv s1. eval_expr cx e (es with gas_obs := gs) = (INL tv, s1)` by
