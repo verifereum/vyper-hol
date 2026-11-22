@@ -49,6 +49,19 @@ Proof
   metis_tac[typed_toplevel_target_module, NOT_SOME_NONE]
 QED
 
+Theorem body_inv_toplevel_read_main:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  well_typed_expr env (TopLevelName ty (src,id)) ==>
+  src = NONE
+Proof
+  strip_tac >> Cases_on `src` >> simp[] >>
+  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  `?ts. get_module_code cx (SOME x) = SOME ts` by
+    (irule typed_toplevel_lookup_module >>
+     fs[well_typed_expr_def, IS_SOME_EXISTS] >> metis_tac[]) >>
+  drule_then assume_tac body_inv_qualified_module_absent >> gvs[]
+QED
+
 Theorem body_inv_immutable_target_main:
   body_inv tops ctx cenv cx /\ immutable_root cx t /\
   target_root t = TopLevelNameTarget (src,id) ==>
