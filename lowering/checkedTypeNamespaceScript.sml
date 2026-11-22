@@ -2,9 +2,9 @@
 Theory checkedTypeNamespace
 Ancestors
   supportedStmtTraverse supportedTypes vyperContext vyperValue
-  vyperAST vyperTypeSystem finite_map pair list
+  vyperAST vyperTypeSystem compileEnv finite_map pair list combin pred_set
 
-Triviality type_env_qualified_lookup:
+Theorem type_env_qualified_lookup:
   !tops src name. FLOOKUP (type_env tops) (SOME src,name) = NONE
 Proof
   simp[type_env_def] >> Induct >> simp[type_env_for_module_def] >> Cases >>
@@ -35,3 +35,26 @@ Definition unqualified_struct_metadata_def:
   unqualified_struct_metadata sf <=>
     FEVERY (\(_,fields). EVERY (supported_type_namespace o FST o SND) fields) sf
 End
+
+Theorem unqualified_struct_metadata_delete[simp]:
+  unqualified_struct_metadata sf ==> unqualified_struct_metadata (sf \\ name)
+Proof
+  simp[unqualified_struct_metadata_def, FEVERY_ALL_FLOOKUP, FORALL_PROD,
+       DOMSUB_FLOOKUP_THM] >> metis_tac[]
+QED
+
+Theorem unqualified_struct_metadata_lookup:
+  unqualified_struct_metadata sf ==> !name.
+  EVERY (supported_type_namespace o FST o SND) (get_struct_fields sf name)
+Proof
+  strip_tac >> gen_tac >>
+  fs[unqualified_struct_metadata_def, FEVERY_ALL_FLOOKUP, FORALL_PROD,
+     get_struct_fields_def] >>
+  Cases_on `FLOOKUP sf name` >> gvs[] >> res_tac
+QED
+
+Theorem supported_types_namespace_every:
+  !ts. supported_types_namespace ts ==> EVERY supported_type_namespace ts
+Proof
+  Induct >> simp[supported_type_namespace_def]
+QED

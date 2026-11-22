@@ -21,8 +21,8 @@ QED
 Theorem body_inv_qualified_module_absent:
   body_inv tops ctx cenv cx ==> !src. get_module_code cx (SOME src) = NONE
 Proof
-  strip_tac >> drule body_inv_contract >>
-  drule_then assume_tac contract_inv_module_codes >> fs[ALOOKUP_def]
+  strip_tac >> drule_then assume_tac body_inv_contract >>
+  drule contract_inv_module_codes >> simp[ALOOKUP_def]
 QED
 
 Theorem body_inv_toplevel_target_main:

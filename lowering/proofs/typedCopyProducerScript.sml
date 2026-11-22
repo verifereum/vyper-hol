@@ -41,16 +41,17 @@ Theorem supported_checked_struct_metadata_acyclic:
   check_contract in_deploy layouts addr [(NONE,tops)] = SOME art ==>
   acyclic_struct_metadata (make_struct_fields_map tops)
 Proof
-  rpt strip_tac >> irule make_struct_fields_map_acyclic >> conj_tac
-  >- (drule checked_contract_struct_args_unique >> simp[])
-  conj_tac >- fs[supported_program_def] >>
-  rpt gen_tac >> strip_tac >>
-  `check_toplevel_decl [(NONE,tops)] art NONE (StructDecl name fields)` by
-    (irule check_contract_toplevel_decl_MEM_checked >>
-     simp[ALOOKUP_def] >> metis_tac[]) >>
-  fs[check_toplevel_decl_def, EVERY_MEM, FORALL_PROD, type_env_all_modules_def,
-     GSYM type_env_def, FUNION_FEMPTY_2] >>
-  metis_tac[singleton_well_formed_type_namespace, assignable_type_well_formed]
+  strip_tac >> drule_then assume_tac checked_contract_struct_args_unique >>
+  `!name fields. MEM (StructDecl name fields) tops ==>
+    EVERY (supported_type_namespace o SND) fields` by
+    (rpt strip_tac >>
+     `check_toplevel_decl [(NONE,tops)] art NONE (StructDecl name fields)` by
+       (drule check_contract_toplevel_decl_MEM_checked >> simp[ALOOKUP_def]) >>
+     fs[check_toplevel_decl_def, EVERY_MEM, FORALL_PROD, type_env_all_modules_def,
+        GSYM type_env_def, FUNION_FEMPTY_2] >>
+     metis_tac[singleton_well_formed_type_namespace, assignable_type_well_formed]) >>
+  irule make_struct_fields_map_acyclic >> fs[supported_program_def] >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem supported_checked_compile_env_struct_metadata_acyclic:

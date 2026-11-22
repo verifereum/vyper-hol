@@ -688,7 +688,8 @@ Theorem stmt_exprs_ok_flat:
      alloc_limits_stmt cenv s /\
      (stmt_valued_return s /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
         return_buffer_ok cenv) /\
-     ~supported_stmt_expr_exists (const_name_root_mods cenv.ce_modules) s)
+     ~supported_stmt_expr_exists (const_name_root_mods cenv.ce_modules) s /\
+     qualified_stmt_decls_ok cenv.ce_modules s)
 Proof
   rpt strip_tac >>
   `(\e. ~is_extcode e /\ ~(byte_widths_expr e /\
@@ -709,7 +710,8 @@ Theorem stmts_exprs_ok_thm:
     alloc_limits_stmts cenv ss /\
     (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
        return_buffer_ok cenv) /\
-    ~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) ss
+    ~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) ss /\
+    qualified_stmts_decls_ok cenv.ce_modules ss
 Proof
   Induct >>
   simp[stmts_exprs_ok_def, supported_stmt_expr_exists_def, stmt_exprs_ok_def,

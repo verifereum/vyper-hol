@@ -11,6 +11,7 @@ Ancestors
   bodyFullShadowBodyInv bodyFullMemoryStore bodyFullMemorySameTypeStore
   bodySimStmtFacts[qualified,ignore_grammar]
   bodyInvCodeProps[qualified,ignore_grammar] exprBodyPreProps[qualified,ignore_grammar]
+  bodyTypedTargetScope[qualified,ignore_grammar]
   exprBodyPreCallSafetyProps[qualified,ignore_grammar]
   bodyFullStructLitPhysical immutableDeployAssignRanges
   placeMemoryTypeInterfaces
@@ -6018,6 +6019,8 @@ Proof
   rename1 `type_place_target env (TopLevelNameTarget nid) =
     SOME (Type (ArrayT checked_elem (Dynamic checked_cap)))` >>
   PairCases_on `nid` >>
+  `nid0 = NONE` by metis_tac[bodyTypedTargetScopeTheory.body_inv_toplevel_target_main,
+                              optionTheory.IS_SOME_EXISTS] >>
   `?vis mut elem cap ast_slot.
      supported_variable_decl tops (nid0,nid1) =
        SOME (vis,mut,ArrayT elem (Dynamic cap),SOME ast_slot) /\
@@ -6441,6 +6444,8 @@ Proof
   rename1 `type_place_target env (TopLevelNameTarget nid) =
     SOME (Type (ArrayT checked_elem (Dynamic checked_cap)))` >>
   PairCases_on `nid` >>
+  `nid0 = NONE` by metis_tac[bodyTypedTargetScopeTheory.body_inv_toplevel_target_main,
+                              optionTheory.IS_SOME_EXISTS] >>
   `?vis mut elem cap ast_slot.
      supported_variable_decl tops (nid0,nid1) =
        SOME (vis,mut,ArrayT elem (Dynamic cap),SOME ast_slot) /\

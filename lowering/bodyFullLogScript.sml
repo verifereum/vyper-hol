@@ -15,6 +15,7 @@ Ancestors exprSimAggregateNestedStore[qualified,ignore_grammar]
   bodyExprPreFacts exprBodyPreProps bodyInvCodeProps allocLimits allocLimitsProps exprSimSource vyperTypeCallGraph
   bodyFullLogScalarTopics bodyFullLogSuffix bodyFullHashKeccakFixed supportedStmtTraverse
   bodySimLogArgs stmtSimLogTrace exprSimHyps whitelistLogWiden
+  bodyQualifiedStmtSupport
   supportedExprs supportedExprTraverse
   vyperTypeCallStackSoundness vyperTypeExprSoundness vyperTypeInvariants
   stmtLowering context compileEnv gasShadowState gasShadowCompileStmtHelpers gasShadowCompileStmtCases
@@ -952,6 +953,9 @@ Proof
   `supported_log tops id args` by
     (qpat_assum `supported_stmt tops bindings (Log id args)` mp_tac >>
      simp_tac bool_ss [supported_stmt_def]) >>
+  `FST id = NONE` by
+    (Cases_on `FST id` >> gvs[stmt_exprs_ok_def, body_inv_def,
+                              cenv_module_pins_def, alistTheory.ALOOKUP_def]) >>
   `?fields. supported_event_fields tops id = SOME fields` by
     (Cases_on `supported_event_fields tops id` >> fs[supported_log_def]) >>
   `supported_pure_exprs tops args /\

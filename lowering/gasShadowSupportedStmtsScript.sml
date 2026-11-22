@@ -80,7 +80,7 @@ Theorem shadow_custom_error_support[local]:
   supported_custom_error tops (gas_shadow_custom_error err) /\
   EVERY (supported_pure_expr tops) (custom_error_exprs (gas_shadow_custom_error err))
 Proof
-  Cases_on `err` >> rename1 `custom_error_resolved _ (CustomError id pos kw)` >>
+  Cases_on `err` >> rename1 `supported_custom_error _ (CustomError id pos kw)` >>
   PairCases_on `id` >>
   simp[gas_shadow_custom_error_def, custom_error_exprs_def, MAP_MAP_o, o_DEF,
        EVERY_MAP, EVERY_MEM, SF ETA_ss, supported_custom_error_def, custom_error_resolved_def,
