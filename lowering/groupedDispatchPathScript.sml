@@ -228,11 +228,12 @@ Theorem grouped_default_group_selected_origin_with_frame:
     cs_extends done sd /\ ci_mono done sd /\
     (!sha shb shfn. gas_shadow_state sc sha /\
       compile_group_entries (Var mid) entries
-        (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+        (common with <| ec_env := gas_shadow_env T common.ec_env;
+                       ec_body := MAP gas_shadow_stmt common.ec_body |>)
         (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars) off sha = ((),shb) /\
       fn_has_code sha shb shfn ==>
       ?shinit shdone.
-        compile_entry_point_kwargs common.ec_env
+        compile_entry_point_kwargs (gas_shadow_env T common.ec_env)
           (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars) off k
           common.ec_common_label shinit = ((),shdone) /\
         fn_has_code shinit shdone shfn /\ gas_shadow_state init shinit) /\
@@ -359,7 +360,8 @@ val shadow_group = ``\group. case group of
   ExternalSingle selector package =>
     ExternalSingle selector (gas_shadow_external_package package)
 | ExternalDefaults common entries specs off =>
-    ExternalDefaults (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+    ExternalDefaults (common with <| ec_env := gas_shadow_env T common.ec_env;
+                       ec_body := MAP gas_shadow_stmt common.ec_body |>)
       entries (MAP (\(n,ty,e). (n,ty,gas_shadow_expr e)) specs) off``;
 
 Theorem compile_external_groups_selected_default_origin_with_frame:
@@ -399,7 +401,7 @@ Theorem compile_external_groups_selected_default_origin_with_frame:
       EVERY group_entry_labels_ok
         (MAP ^shadow_group (pref ++ ExternalDefaults common entries specs off::rest)) ==>
       ?shinit shdone.
-        compile_entry_point_kwargs common.ec_env
+        compile_entry_point_kwargs (gas_shadow_env T common.ec_env)
           (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars) off k
           common.ec_common_label shinit = ((),shdone) /\
         fn_has_code shinit shdone shfn /\ gas_shadow_state init shinit) /\
@@ -462,8 +464,8 @@ Resume compile_external_groups_selected_default_origin_with_frame[shadow_entry]:
   disch_then (qx_choosel_then [`shpref`,`shtail`,`shsc`]
     (map_every assume_tac o CONJUNCTS)) >>
   `gas_shadow_state sc shsc` by
-    metis_tac[pairTheory.SND,
-      Q.SPECL [`pref`,`Var mid`,`sa`,`sha`] gas_shadow_compile_external_groups] >>
+    metis_tac[pairTheory.SND, Q.SPECL [`pref`,`Var mid`,`sa`,`sha`]
+      (Q.INST [`sd` |-> `T`] gas_shadow_compile_external_groups)] >>
   drule_at (Pat `compile_external_groups _ _ shsc = (shtail,shb)`)
     compile_external_defaults_cons_layout >>
   disch_then (qspec_then `shfn` mp_tac) >>
@@ -473,15 +475,8 @@ Resume compile_external_groups_selected_default_origin_with_frame[shadow_entry]:
   fs[external_common_accfupds, combinTheory.K_THM] >>
   `shvars = MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars /\
     gas_shadow_state alloc_end shalloc` by
-    (qpat_assum `compile_create_kwarg_allocas common.ec_env specs sc = (vars,alloc_end)`
-       (fn alloc =>
-         let
-           val (alloc_action, _) = dest_eq (concl alloc)
-           val [env, specs, before_state] = #2 (strip_comb alloc_action)
-         in
-           mp_tac (ISPECL [specs,env,before_state,Term `shsc:compile_state`]
-             gas_shadow_compile_create_kwarg_allocas)
-         end) >>
+    (qspecl_then [`specs`,`common.ec_env`,`sc`,`shsc`] mp_tac
+       (Q.INST [`sd` |-> `T`] gas_shadow_compile_create_kwarg_allocas) >>
      asm_rewrite_tac[pairTheory.FST, pairTheory.SND]) >>
   qpat_x_assum `shvars = _` SUBST_ALL_TAC >>
   qpat_assum `!sha shb shfn. gas_shadow_state alloc_end sha /\ _ ==> _`
