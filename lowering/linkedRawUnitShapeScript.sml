@@ -49,3 +49,16 @@ Proof
   drule package_internal_blocks_raw_defaults >>
   simp[EVERY_MEM, function_raw_metadata_defaults_def]
 QED
+
+Theorem lower_vyper_runtime_unit_global_reserved_mods:
+  lower_vyper_runtime_unit_mods mods exps rpolicy = SOME unit ==>
+  unit.cu_context.ctx_global_reserved = []
+Proof
+  simp[lower_vyper_runtime_unit_mods_def] >>
+  pairarg_tac >> simp[bool_case_eq] >> strip_tac >> gvs[]
+  >- (qpat_x_assum `run_grouped_lowering _ _ _ _ _ = _` mp_tac >>
+      simp[run_grouped_lowering_def, extract_context_with_internals_def,
+           mk_venom_context_def] >>
+      pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
+  drule_then ACCEPT_TAC run_lowering_global_reserved
+QED
