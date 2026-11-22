@@ -2682,7 +2682,7 @@ Proof
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
   qpat_assum `stmts_env body_ce NoLoop ret ss_comp = _`
     (pure_once_rewrite_tac o single o SYM) >>
-  qpat_assum `stmts_env body_ce NoLoop ret (MAP gas_shadow_stmt ss_comp) = _`
+  qpat_assum `stmts_env _ NoLoop ret (MAP gas_shadow_stmt ss_comp) = _`
     (pure_once_rewrite_tac o single o SYM) >>
   irule bodySimFullTheory.stmt_frag_full_source_cong >>
   qexists_tac `eval_stmts (cx with stk updated_by CONS (NONE,name)) ss_comp` >>
