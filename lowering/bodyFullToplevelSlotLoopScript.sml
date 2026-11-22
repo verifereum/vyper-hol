@@ -197,12 +197,21 @@ Theorem toplevel_slot_copy_backedge_joint[local]:
     (OK (jump_to (slot_copy_cond cs) (t with vs_inst_idx := 7)),Gf,tnf)
 Proof
   strip_tac >>
+  `!pre i post u. TAKE 7 bb.bb_instructions = pre ++ i::post /\
+     run_inst_seq pre s = OK u ==> dalloca_no_wrap i u` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) (TAKE 7 bb.bb_instructions)` by
+       fs[slot_copy_body_insts_def, TAKE_def, mk_inst_def] >>
+     rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY _ _` mp_tac >> simp[]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
     (OK (t with vs_inst_idx := 7),Gf,tnf)` by
     (drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)
        run_inst_seq_gas_origin_ptr_path >>
      disch_then (qspecl_then [`explicit`, `t`, `bb`] mp_tac) >>
-     (impl_tac >- fs[slot_copy_body_insts_def, TAKE_def, mk_inst_def, is_terminator_def]) >>
+     (impl_tac >-
+        (qpat_x_assum `!pre i post u. _ ==> dalloca_no_wrap i u` mp_tac >>
+         simp[slot_copy_body_insts_def, TAKE_def, mk_inst_def, is_terminator_def] >>
+         rpt disch_tac >> first_assum ACCEPT_TAC)) >>
      simp[slot_copy_body_insts_def, TAKE_def, mk_inst_def]) >>
   `~(t with vs_inst_idx := 7).vs_halted` by
     (drule gas_origin_ptr_path_projections >> metis_tac[gas_path_ptr_ok_not_halted]) >>

@@ -252,13 +252,27 @@ Resume prefix_bulk_complete_mode_contract_fmp[finish]:
        (irule abiDecoderTypedComposeTheory.abi_decoder_inst_extends_prefix >> simp[]) >>
      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
                  i.inst_opcode <> GAS) (emitted_insts st st')` by
-       (qpat_x_assum `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) _` mp_tac >>
-        qpat_x_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+       (qpat_assum `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) _` mp_tac >>
+        qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
                         ~is_alloca_op i.inst_opcode) _` mp_tac >>
         rpt (pop_assum kall_tac) >>
         simp[EVERY_MEM] >> rpt strip_tac >> res_tac >>
         gvs[abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
-     irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >> metis_tac[]) >>
+     `ctx_has_dalloca ctx ==>
+        !pre i post u. emitted_insts st st' = pre ++ i::post /\
+          run_inst_seq pre initial = OK u ==>
+          unitTransformDefs$dalloca_no_wrap i u` by
+       (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+        `MEM i (emitted_insts st st')` by simp[MEM_APPEND] >>
+        qpat_assum `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) _`
+          (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+        disch_then drule >> rpt (pop_assum kall_tac) >>
+        simp[abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def] >>
+        strip_tac >> simp[]) >>
+     irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
+     conj_tac >- (first_assum ACCEPT_TAC) >>
+     qexists_tac `st` >> asm_simp_tac bool_ss [] >>
+     rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
   `(ctx_has_dalloca ctx ==>
       allocas_below_fmp (t with vs_inst_idx := LENGTH st'.cs_current_insts) /\
       (t with vs_inst_idx := LENGTH st'.cs_current_insts).vs_alloca_next + pending_alloca_size func (t with vs_inst_idx := LENGTH st'.cs_current_insts) <=

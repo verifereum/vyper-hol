@@ -152,6 +152,8 @@ Proof
     `inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
      inst.inst_opcode <> GAS` by
        simp[Abbr `inst`, mk_inst_def, is_terminator_def] >>
+    `ctx_has_dalloca ctx ==> dalloca_no_wrap inst s` by
+      simp[unitTransformDefsTheory.dalloca_no_wrap_def, Abbr `inst`, mk_inst_def] >>
     drule_all straight_line_origin_ptr_edge >> simp[]) >>
  drule (cj 2 gas_origin_ptr_path_rules) >>
  disch_then (qspec_then `[]` mp_tac) >> simp[] >>

@@ -62,12 +62,32 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts st ready)` by
     (drule calldata_element_setup_opcodes >> simp[EVERY_MEM]) >>
+  `~dec_info_needs_offset (type_to_abi_dec_info sf ce ty)` by
+    metis_tac[abi_decoder_coherent_array_iff, abi_decoder_coherent_dynamic,
+              abi_decoder_needs_offset_iff] >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st ready)` by
+    (qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     qpat_assum `~dec_info_needs_offset _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+     asm_simp_tac bool_ss [abiDecoderLoopSetupTheory.abi_decode_array_element_setup_def,
+       abiDecoderIndexedAddressTheory.abi_decode_indexed_address_def,
+       comp_bind_def, comp_return_def, comp_ignore_bind_def,
+       emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def, emit_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+     gvs[emitted_insts_def, venomInstTheory.mk_inst_def] >>
+     pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+     simp_tac bool_ss [rich_listTheory.DROP_LENGTH_APPEND, APPEND] >> simp[]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==> !pre i post u.
+      emitted_insts st ready = pre ++ [i] ++ post /\ run_inst_seq pre initial = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     fs[EVERY_APPEND]) >>
   mp_tac (Q.INST [`s` |-> `initial`, `t` |-> `prepared`, `P` |-> `\child.
     abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
       (Lit 0w) (Lit 0w) 0 sb d b cap st.cs_next_var limit_st initial child /\
     (!op. abi_decoder_operand_live st.cs_next_var op ==>
       eval_operand op child = eval_operand op initial)`] (SPEC_ALL successful_sequence_endpoint)) >>
-  simp[eval_op_inst_idx] >> strip_tac >>
+  simp[eval_op_inst_idx] >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   qexists_tac `prepared with vs_inst_idx := LENGTH ready.cs_current_insts` >>
   simp[eval_op_inst_idx]
 QED

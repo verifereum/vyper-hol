@@ -126,9 +126,14 @@ Proof
   qexistsl_tac [`u`,`H`,`th`] >> simp[] >>
   gen_tac >> irule emitted_origin_ptr_path >> simp[] >>
       qexistsl_tac [`emitted_insts sa sb`,`sa`] >> simp[] >>
-      drule slice_bytestring_src_control >> strip_tac >> simp[] >>
-      conj_tac >- simp[EVERY_MEM,venomInstTheory.is_terminator_def] >>
-      conj_tac >- metis_tac[compile_bytestring_src_mem_ok, eval_operand_def] >>
+      drule slice_bytestring_src_control >> strip_tac >>
+      simp[venomInstTheory.is_terminator_def] >>
+      conj_tac >-
+        (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+         qpat_assum `[mk_inst _ MLOAD _ _; mk_inst _ ADD _ _] = _ ++ _`
+           (mp_tac o Q.AP_TERM `\code. EVERY (\j. j.inst_opcode <> DALLOCA) code`) >>
+         simp[EVERY_APPEND,venomInstTheory.mk_inst_def]) >>
+      conj_tac >- (drule compile_bytestring_src_mem_ok >> simp[eval_operand_def]) >>
       irule inst_seq_ptr_zero_to_lo >> simp[] >> qexists_tac `D` >>
       qpat_assum `!D. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H th`
         (qspec_then `D` mp_tac) >>

@@ -12,7 +12,12 @@ Theorem store_slots_prefix_jump_mem[local]:
   s.vs_inst_idx + LENGTH prefix = k /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) prefix /\
   EVERY (\i. i.inst_opcode <> GAS) prefix /\
-  run_inst_seq_mem_ok prefix s /\ run_inst_seq prefix s = OK u /\
+  run_inst_seq_mem_ok prefix s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. prefix = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
+  run_inst_seq prefix s = OK u /\
   (term.inst_opcode = JMP \/ term.inst_opcode = JNZ) /\
   step_inst_base term (u with vs_inst_idx := k) =
     OK (jump_to lbl (u with vs_inst_idx := k)) ==>
@@ -61,7 +66,11 @@ Proof
   strip_tac >> irule store_slots_prefix_jump_mem >> simp[] >>
   simp[mk_inst_def, is_terminator_def, run_inst_seq_def,
        step_inst_base_opcode_eqs, eval_operand_def, run_inst_seq_mem_ok_last,
-       below_frontier_no_ranges]
+       below_frontier_no_ranges] >>
+  rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+  qpat_x_assum `_ = _ ++ _`
+    (mp_tac o Q.AP_TERM `EVERY (\i. i.inst_opcode <> DALLOCA)`) >>
+  simp[EVERY_APPEND]
 QED
 
 Theorem store_slots_array_condition_mem:
@@ -87,7 +96,11 @@ Proof
   `i < dimword (:256)` by decide_tac >>
   gvs[eval_operand_def] >>
   Cases_on `i < N` >> simp[bool_to_word_def, w2n_n2w,
-    LESS_MOD, lookup_var_update_var]
+    LESS_MOD, lookup_var_update_var] >>
+  rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+  qpat_x_assum `_ = _ ++ _`
+    (mp_tac o Q.AP_TERM `EVERY (\i. i.inst_opcode <> DALLOCA)`) >>
+  simp[EVERY_APPEND]
 QED
 
 Theorem store_slots_array_backedge_mem:
@@ -106,5 +119,9 @@ Proof
   simp[mk_inst_def, is_terminator_def, run_inst_seq_def,
        step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def,
        lookup_var_update_var, word_add_n2w, ADD1,
-       run_inst_seq_mem_ok_cons, run_inst_seq_mem_ok_last, below_frontier_no_ranges]
+       run_inst_seq_mem_ok_cons, run_inst_seq_mem_ok_last, below_frontier_no_ranges] >>
+  rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+  qpat_x_assum `_ = _ ++ _`
+    (mp_tac o Q.AP_TERM `EVERY (\i. i.inst_opcode <> DALLOCA)`) >>
+  simp[EVERY_APPEND]
 QED

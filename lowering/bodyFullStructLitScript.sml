@@ -523,7 +523,7 @@ Theorem structlit_fields_bundled_full[local]:
     LIST_REL (\t e. arg_type_fits (expr_type e) t) tys (MAP SND fs) /\
     OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
     local_ptrs_reserved ce si /\ local_ptrs_reserved ce fr /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
     (!H. dead_lo_ok H (DF H) lo ce cx) /\
     (!x sz. ce.ce_return_buf = SOME(PtrVar(Var x) sz) ==> not_fresh_at si x) /\
     (!x sz. ce.ce_return_pc = SOME(PtrVar(Var x) sz) ==> not_fresh_at si x) /\
@@ -717,11 +717,11 @@ Proof
       (s0,G0,tn0) marks (OK t,G1,tn1)` by
     (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
          gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)` drule >> simp[]) >>
-  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s` by
     (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
        qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _` (fn safe =>
-         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
            (LIST_CONJ [path,no_phi,safe])))))) >>
   qpat_assum `Abbrev (childQ = _)` (fn eq =>
     qpat_x_assum `childQ _ _ _ _ _ _`
@@ -1275,11 +1275,11 @@ Proof
          simp[ghost_inv_at_def]) >>
      irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
      qexistsl_tac [`G''`, `z`, `tn''`] >> simp[]) >>
-  `!fn inst s. frag_reachable ctx func u fn inst s ==> dalloca_no_wrap inst s` by
+  `!fn inst s. frag_reachable ctx func u fn inst s ==> dalloca_fmp_headroom inst s` by
     (qpat_assum `gas_origin_ptr_path _ (t,G1,tn1) [] (OK u,G2,tn2)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
        qpat_assum `!fn inst s. frag_reachable ctx func t fn inst s ==> _` (fn safe =>
-         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
            (LIST_CONJ [path,no_phi,safe])))))) >>
   `body_const_cells_agree [(NONE,cx_tops cx)] cx env mid` by
     (`well_typed_expr env e` by
@@ -1438,7 +1438,7 @@ Theorem structlit_allocated_fields_bundled_full[local]:
   LIST_REL (\t e. arg_type_fits (expr_type e) t) tys (MAP SND fs) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
   local_ptrs_reserved ce sm /\ local_ptrs_reserved ce sa /\
-    (!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s) /\
+    (!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s) /\
   (!H. dead_lo_ok H (DF H) lo ce cx) /\
   (!x sz. ce.ce_return_buf = SOME(PtrVar(Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. ce.ce_return_pc = SOME(PtrVar(Var x) sz) ==> not_fresh_at sm x) /\
@@ -1676,11 +1676,11 @@ Proof
     (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
        qpat_assum `MEM func ctx.ctx_functions` (fn member =>
          ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi (CONJ inv member))))) >>
-  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK t,G,tn)` (qspec_then `DF (storage_trace_horizon es.storage_trace)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
        qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _` (fn safe =>
-         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
            (LIST_CONJ [path,no_phi,safe]))))))) >>
   `cx_tops cx = tops` by
     metis_tac[body_inv_main_code] >>

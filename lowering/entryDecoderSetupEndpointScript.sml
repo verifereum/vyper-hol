@@ -134,10 +134,18 @@ Proof
      ho_match_mp_tac (GEN_ALL calldata_element_setup_prefix_safe) >>
      qexistsl_tac [`src`, `p`] >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st ready = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts st ready)` by simp[] >>
+     qpat_assum `EVERY (\i. abi_decoder_reentry_opcode _) _`
+       (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     disch_then drule >> simp[abi_decoder_reentry_opcode_def, DISJ_IMP_THM]) >>
   mp_tac (Q.INST [`P` |-> `\s:venom_state. T`]
     (SPEC_ALL successful_sequence_endpoint)) >>
-  asm_simp_tac (srw_ss()) [] >> strip_tac >>
-  qpat_x_assum `LET _ _` (strip_assume_tac o SIMP_RULE (srw_ss()) [LET_THM]) >>
+  asm_simp_tac (srw_ss()) [LET_THM] >>
+  (impl_tac >- fs[]) >> strip_tac >>
   qexists_tac `t with vs_inst_idx := LENGTH ready.cs_current_insts` >>
   fs[abi_decoder_address_frame_def, eval_op_inst_idx, fresh_vars_wrt_def]
 QED
@@ -227,10 +235,18 @@ Proof
   drule_all entry_straight_line_alloca_history >> strip_tac >>
   `run_inst_seq_mem_ok (emitted_insts st mid) s` by
     (irule run_inst_seq_mem_ok_every >> fs[EVERY_MEM] >> metis_tac[]) >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st mid = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts st mid)` by simp[] >>
+     qpat_assum `EVERY (\i. abi_decoder_reentry_opcode _) _`
+       (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     disch_then drule >> simp[abi_decoder_reentry_opcode_def, DISJ_IMP_THM]) >>
   mp_tac (Q.INST [`ready` |-> `mid`, `P` |-> `\s:venom_state. T`]
     (SPEC_ALL successful_sequence_endpoint)) >>
-  asm_simp_tac (srw_ss()) [] >> strip_tac >>
-  qpat_x_assum `LET _ _` (strip_assume_tac o SIMP_RULE (srw_ss()) [LET_THM]) >>
+  asm_simp_tac (srw_ss()) [LET_THM] >>
+  (impl_tac >- fs[]) >> strip_tac >>
   qexists_tac `t with vs_inst_idx := LENGTH mid.cs_current_insts` >>
   fs[eval_op_inst_idx, fresh_vars_wrt_def]
 QED

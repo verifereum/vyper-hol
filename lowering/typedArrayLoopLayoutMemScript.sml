@@ -247,7 +247,12 @@ Theorem typed_array_prefix_cont:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX code bb.bb_instructions /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
-  run_inst_seq_mem_ok code s /\ run_inst_seq code s = OK q /\
+  run_inst_seq_mem_ok code s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. code = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
+  run_inst_seq code s = OK q /\
   ~s.vs_halted /\ s.vs_inst_idx = 0 ==>
   mem_cont_sim ctx fn s (q with vs_inst_idx := LENGTH code)
 Proof
@@ -257,5 +262,6 @@ Proof
         cs_current_insts := []|>`,
       `sb` |-> `ARB with <|cs_blocks := []; cs_current_bb := s.vs_current_bb;
         cs_current_insts := code|>`] (SPEC_ALL typed_bytes_child_seq_cont))) >>
-  simp[] >> metis_tac[]
+  simp[] >> pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, APPEND] >>
+  first_assum ACCEPT_TAC
 QED

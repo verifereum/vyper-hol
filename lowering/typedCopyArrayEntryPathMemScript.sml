@@ -91,12 +91,26 @@ Resume typed_dynarray_prefix_path_mem[path]:
     simp[emitted_insts_def, DROP_LENGTH_APPEND] >>
   `LENGTH code = 7 /\
    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
-       ~is_terminator i.inst_opcode) code` by
+       ~is_terminator i.inst_opcode /\ i.inst_opcode <> DALLOCA) code` by
     simp[mk_inst_def, is_terminator_def] >>
   qpat_x_assum `code = _` kall_tac >>
+  `ctx_has_dalloca ctx ==> !pre i post u. code = pre ++ [i] ++ post /\
+      run_inst_seq pre s = OK u ==> dalloca_no_wrap i u` by
+    (rpt strip_tac >>
+     `MEM i code` by
+       (qpat_assum `code = pre ++ [i] ++ post` (rw o single) >> simp[]) >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  `(ctx_has_dalloca ctx ==> !pre i post u. code = pre ++ [i] ++ post /\
+      run_inst_seq pre s = OK u ==> dalloca_no_wrap i u) /\
+    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+      ~is_terminator i.inst_opcode) code` by
+    (conj_tac
+     >- first_x_assum ACCEPT_TAC
+     >- (fs[EVERY_MEM] >> metis_tac[])) >>
   `gas_path_mem ctx fn s 0 (OK (q with vs_inst_idx := LENGTH sm.cs_current_insts))` by
     (irule body_decl_zero_gas_path >> simp[] >> qexists_tac `sa` >>
-     simp[IS_PREFIX_APPEND, same_blocks_def]) >>
+     simp[IS_PREFIX_APPEND, same_blocks_def] >>
+     first_x_assum ACCEPT_TAC) >>
   suspend "finish"
 QED
 Resume typed_dynarray_prefix_path_mem[finish]:

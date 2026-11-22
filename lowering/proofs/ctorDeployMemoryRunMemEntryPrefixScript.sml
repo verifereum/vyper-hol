@@ -45,9 +45,14 @@ Proof
     gvs[] >>
   `ss'.vs_allocas = initial.vs_allocas /\ ss'.vs_current_bb = initial.vs_current_bb` by
     simp[update_var_def] >>
-  drule_all ctor_checked_emitted_endpoint >>
-  disch_then (qspec_then `ctx` mp_tac) >>
-  strip_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+    (drule emitted_insts_emit_op >> simp[mk_inst_def]) >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st st' = pre ++ i::post /\
+      run_inst_seq pre initial = OK u ==> dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     fs[EVERY_APPEND]) >>
+  drule_all (Q.INST [`ctx` |-> `ctx`] ctor_checked_emitted_endpoint) >> strip_tac >>
   goal_assum (drule_at Any) >>
   gvs[eval_op_inst_idx, fresh_vars_wrt_def, update_var_def]
 QED
@@ -96,8 +101,14 @@ Theorem ctor_checked_payable:
     actual.vs_gas_readings = initial.vs_gas_readings /\
     alloca_history func actual
 Proof
-  strip_tac >> drule_all compile_payable_check_ok_or_revert >>
-  simp[] >> strip_tac >>
+  strip_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st0 st3)` by
+    (gvs[emit_op_def, emit_void_def, emit_inst_def, fresh_var_def,
+         fresh_id_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def, emitted_insts_def, DROP_LENGTH_APPEND] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+     simp[DROP_LENGTH_APPEND, mk_inst_def]) >>
+  drule_all compile_payable_check_ok_or_revert >> simp[] >> strip_tac >>
   drule_all ctor_checked_payable_shape >> strip_tac >>
   `ss'.vs_halted = initial.vs_halted /\
    ss'.vs_current_bb = initial.vs_current_bb /\ ss'.vs_prev_bb = initial.vs_prev_bb` by
@@ -110,8 +121,12 @@ Proof
       i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts st0 st3)` by
     fs[EVERY_CONJ] >>
   `run_inst_seq_mem_ok (emitted_insts st0 st3) initial` by simp[] >>
-  drule_all ctor_checked_emitted_endpoint >>
-  disch_then (qspec_then `ctx` mp_tac) >> strip_tac >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st0 st3 = pre ++ i::post /\
+      run_inst_seq pre initial = OK u ==> dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     fs[EVERY_APPEND]) >>
+  drule_all (Q.INST [`ctx` |-> `ctx`] ctor_checked_emitted_endpoint) >> strip_tac >>
   qexists `ss'` >>
   gvs[fresh_vars_wrt_def]
 QED
@@ -158,7 +173,17 @@ Theorem ctor_checked_lock:
     actual.vs_gas_readings = initial.vs_gas_readings /\
     alloca_history func actual
 Proof
-  strip_tac >> drule_all compile_nonreentrant_lock_correct >> strip_tac >>
+  strip_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+    (qpat_x_assum `compile_nonreentrant_lock _ F F _ = _` mp_tac >>
+     simp[compile_nonreentrant_lock_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+     gvs[emit_op_def, emit_void_def, emit_inst_def, fresh_var_def,
+         fresh_id_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def, emitted_insts_def, DROP_LENGTH_APPEND] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+     simp[DROP_LENGTH_APPEND, mk_inst_def]) >>
+  drule_all compile_nonreentrant_lock_correct >> strip_tac >>
   drule ctor_checked_lock_shape >> strip_tac >>
   `ss'.vs_halted = initial.vs_halted /\
    ss'.vs_current_bb = initial.vs_current_bb /\ ss'.vs_prev_bb = initial.vs_prev_bb` by
@@ -171,8 +196,12 @@ Proof
       i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts st st')` by
     fs[EVERY_CONJ] >>
   `run_inst_seq_mem_ok (emitted_insts st st') initial` by simp[] >>
-  drule_all ctor_checked_emitted_endpoint >>
-  disch_then (qspec_then `ctx` mp_tac) >> strip_tac >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st st' = pre ++ i::post /\
+      run_inst_seq pre initial = OK u ==> dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     fs[EVERY_APPEND]) >>
+  drule_all (Q.INST [`ctx` |-> `ctx`] ctor_checked_emitted_endpoint) >> strip_tac >>
   qexistsl [`ss' with vs_inst_idx := LENGTH st'.cs_current_insts`, `ss'`] >>
   gvs[sload_def, contract_storage_def]
 QED

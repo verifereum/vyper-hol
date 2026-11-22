@@ -170,6 +170,13 @@ Resume raw_call_header_joint[path]:
       (emitted_insts s2 s4) /\
    FILTER (\i. i.inst_opcode = GAS) (emitted_insts s2 s4) = []` by
     simp[mk_inst_def, is_terminator_def] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+      !pre i post u. emitted_insts s2 s4 = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts s2 s4)` by
+       simp[mk_inst_def] >>
+     fs[EVERY_MEM] >> rpt strip_tac >>
+     irule dalloca_no_wrap_non_dalloca >> metis_tac[MEM_APPEND, MEM]) >>
   drule_all run_inst_seq_gas_origin_ptr_path >>
   simp[Abbr `t4`]
 QED

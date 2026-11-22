@@ -387,6 +387,14 @@ Proof
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     (simp[run_inst_seq_mem_ok_def, instMemFrontierTheory.below_frontier_no_ranges,
           mk_inst_def] >> BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+     emitted_insts sa sb = pre ++ i::post /\
+     run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts sa sb)` by
+       (qpat_assum `emitted_insts sa sb = pre ++ i::post`
+          (fn th => pure_rewrite_tac[th]) >> simp[MEM_APPEND]) >>
+     gvs[mk_inst_def]) >>
   qexistsl_tac [`t`, `Gf`, `tnf`] >>
   conj_tac >-
     (rpt strip_tac >> irule member_prefix_normal_observed >> simp[] >>

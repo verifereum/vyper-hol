@@ -44,7 +44,8 @@ Proof
     (irule body_immutable_copy_mem_ok >> metis_tac[]) >>
   drule code_copy_insts >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
-      ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+      ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
+    EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
     (fs[emitted_insts_def, DROP_APPEND, EVERY_MEM] >> rpt strip_tac >>
      first_x_assum drule >> strip_tac >> gvs[is_terminator_def]) >>
   `run_inst_seq (emitted_insts sa sb) s = OK t /\
@@ -64,6 +65,10 @@ Proof
         (qpat_x_assum `!k. inst_seq_ptr D _ _ _ _ _ _ _ _ _ _`
           (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]) >>
       irule emitted_origin_ptr_path >>
-      simp[] >> qexistsl [`emitted_insts sa sb`,`sa`] >> simp[]) >>
+      simp[] >> qexistsl [`emitted_insts sa sb`,`sa`] >> simp[] >>
+      rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+      `MEM i (emitted_insts sa sb)` by simp[MEM_APPEND] >>
+      qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _`
+        (mp_tac o REWRITE_RULE [EVERY_MEM]) >> disch_then drule >> simp[]) >>
   simp[]
 QED

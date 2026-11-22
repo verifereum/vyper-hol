@@ -393,7 +393,8 @@ Proof
   `mem_safe_step 0 ctx inst t7` by
     (`source_memory_read_ranges inst t7 = [(ib,LENGTH bs)] /\
       source_memory_write_ranges inst t7 = [(ro,cap)] /\
-      inst_dload_in_section inst t7 /\ inst.inst_opcode <> INVOKE` by
+      inst_dload_in_section inst t7 /\ inst.inst_opcode <> INVOKE /\
+      inst.inst_opcode <> DALLOCA` by
        (Cases_on `call_ty` >>
         simp[Abbr `inst`, Abbr `ops`, Abbr `opc`, mk_inst_def,
              source_memory_read_ranges_def, source_memory_write_ranges_def,
@@ -402,7 +403,8 @@ Proof
      map_every (fn pat => qpat_assum pat mp_tac)
        [`LENGTH bs = 0 \/ ib + _ <= _ \/ _`, `cap <> 0 ==> ro + cap <= _`,
         `source_memory_read_ranges inst t7 = _`, `source_memory_write_ranges inst t7 = _`,
-        `inst_dload_in_section inst t7`, `inst.inst_opcode <> INVOKE`] >>
+        `inst_dload_in_section inst t7`, `inst.inst_opcode <> INVOKE`,
+        `inst.inst_opcode <> DALLOCA`] >>
      POP_ASSUM_LIST (K all_tac) >>
      simp[mem_safe_step_non_invoke, inst_mem_below_frontiers_def,
           inst_mem_below_frontier_def] >> tautLib.TAUT_TAC) >>

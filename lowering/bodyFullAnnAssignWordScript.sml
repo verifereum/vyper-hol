@@ -326,7 +326,7 @@ Theorem annassign_word_full_rhs[local]:
   fn_has_code a b func /\ fn_has_code shadow_a shadow_b shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce a /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-  (!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s) /\
   (!H. dead_lo_ok H (DF H) lo old cx) /\ ce.ce_is_ctor = old.ce_is_ctor /\
   ce.ce_return_buf = old.ce_return_buf /\ ce.ce_return_pc = old.ce_return_pc /\
   (!x sz. old.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -505,7 +505,7 @@ Theorem annassign_word_full_runtime_preparation[local]:
   fn_has_code sa sf func /\ fn_has_code shadow_sa shadow_sf shadow_func /\
   (ctx_has_dalloca ctx ==>
     (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s)) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s)) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -634,7 +634,7 @@ Proof
   `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
     (qpat_assum `stmt_state_rel _ ctx func cenv' cx es t`
        (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
-  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s` by
     (Cases_on `ctx_has_dalloca ctx`
      >- (qpat_assum `ctx_has_dalloca ctx ==> (!bb. _) /\ (!fn inst s. _)`
            (drule_then strip_assume_tac) >>
@@ -642,12 +642,12 @@ Proof
            (qspec_then `ARB` (fn path =>
            qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn phi =>
            qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _` (fn safe =>
-           ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+           ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
              (LIST_CONJ [path,phi,safe]))))))) >>
      rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >>
      disch_then drule >> strip_tac >>
      fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
-        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+        unitTransformDefsTheory.dalloca_fmp_headroom_def] >> metis_tac[]) >>
   drule_all annassign_word_full_rhs >> disch_tac >>
   `?H:(bool # 256 word # type_value) list # num list.
       stmt_state_rel H ctx func cenv' cx es t` by goal_assum (drule_at Any) >>
@@ -812,7 +812,7 @@ Theorem annassign_word_full_execution_sep:
   fn_has_code sa sf func /\ fn_has_code shadow_sa shadow_sf shadow_func /\
   (ctx_has_dalloca ctx ==>
     (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s)) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s)) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -962,7 +962,7 @@ Proof
   strip_tac >>
   `ctx_has_dalloca ctx ==>
     (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s)` by simp[] >>
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s)` by simp[] >>
   drule_all annassign_word_full_execution_sep >>
   disch_then (fn th => irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
     irule_at Any th) >>

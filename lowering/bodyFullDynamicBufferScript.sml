@@ -12,15 +12,12 @@ Ancestors
    memory-length part of fmp_room is recovered only once enough of the
    region has been materialised by writes (or was already in memory). *)
 Theorem dalloca_origin_region_exact:
-  body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions /\
-  gas_origin_ptr_path (D0,lo,explicit0,ctx,func,PG)
-    (s0,G0,tn0) marks (OK s,G,tn) /\
-  (!fn i v. contextRawReachable$frag_reachable ctx func s0 fn i v ==>
-            dalloca_no_wrap i v) /\
-  ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  MEM func ctx.ctx_functions /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   inst.inst_opcode = DALLOCA /\ inst.inst_operands = [size_op] /\
   inst.inst_outputs = [out] /\ eval_operand size_op s = SOME sz /\
+  w2n s.vs_fmp + venomLayout$ceil32 (w2n sz) < dimword (:256) /\
   op_taint tn size_op = {} /\ allocas_from lo s /\ allocas_below_fmp s ==>
   ?t Gh th.
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
@@ -51,16 +48,13 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `active_inst func inst s` by
     (drule_all contextCodegenRelPropsTheory.lookup_instruction_active >> simp[]) >>
-  `!b. MEM b func.fn_blocks ==> phi_prefix_length b.bb_instructions = 0` by
-    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
   `contextRawReachable$frag_reachable ctx func s func inst s` by
     simp[contextRawReachableTheory.frag_reachable_start] >>
-  `dalloca_no_wrap inst s` by
-    (drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >> simp[]) >>
+  `dalloca_no_wrap inst s` by simp[dalloca_no_wrap_def] >>
   qabbrev_tac `alloc_base = w2n s.vs_fmp` >>
   qabbrev_tac `alloc_len = venomLayout$ceil32 (w2n sz)` >>
   `alloc_base + alloc_len < dimword (:256)` by
-    fs[dalloca_no_wrap_def, Abbr `alloc_base`, Abbr `alloc_len`] >>
+    fs[Abbr `alloc_base`, Abbr `alloc_len`] >>
   qabbrev_tac `u = update_var out s.vs_fmp (s with vs_fmp := s.vs_fmp + n2w alloc_len)` >>
   `step_inst 0 ctx inst s = OK u` by
     simp[lowerDloadPtrDallocaTheory.dalloca_step_success, Abbr `u`, Abbr `alloc_len`] >>

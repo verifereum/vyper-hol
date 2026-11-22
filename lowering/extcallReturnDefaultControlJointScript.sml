@@ -87,6 +87,13 @@ Resume return_default_test_joint[path]:
   gen_tac >> irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
   conj_tac >- simp[] >>
   qexistsl_tac [`emitted_insts a b`, `a`] >> simp[is_terminator_def] >>
+  conj_tac >-
+    (rpt strip_tac >>
+     `MEM i (pre ++ [i] ++ post)` by simp[] >>
+     pop_assum mp_tac >>
+     qpat_assum `[_;_] = pre ++ [i] ++ post` (once_rewrite_tac o single o SYM) >>
+     simp[] >> strip_tac >>
+     simp[memSafeRunTheory.dalloca_no_wrap_non_dalloca, mk_inst_def]) >>
   conj_tac >- (simp[run_inst_seq_mem_ok_def,
     unitTransformDefsTheory.inst_mem_below_frontier_def,
     memSafeRunTheory.inst_dload_in_section_def, mk_inst_def,

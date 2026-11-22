@@ -112,29 +112,40 @@ Proof
 QED
 
 Theorem expr_dispatch_defaults_gate[local]:
-  compile_env_blueprint_free cenv /\ compile_env_builtin_arity cenv ==>
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+    compile_env_blueprint_free cenv) /\
+  compile_env_builtin_arity cenv ==>
   !name n.
-    compile_env_blueprint_free (cenv_without_defaults cenv name) /\
+    (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+      compile_env_blueprint_free (cenv_without_defaults cenv name)) /\
     compile_env_builtin_arity (cenv_without_defaults cenv name) /\
     (!e. MEM e (omitted_defaults cenv name n) ==>
-         ~supported_expr_exists blueprint_create_root e /\
+         (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+           ~supported_expr_exists blueprint_create_root e) /\
          ~supported_expr_exists short_builtin_args e)
 Proof
+  strip_tac >> rpt gen_tac >>
+  drule (SIMP_RULE (srw_ss()) [EVERY_MEM] omitted_defaults_builtin_arity) >>
   strip_tac >>
-  imp_res_tac omitted_defaults_blueprint_free >>
-  imp_res_tac omitted_defaults_builtin_arity >>
-  fs[EVERY_MEM] >> metis_tac[]
+  Cases_on `!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1` >>
+  fs[] >- metis_tac[] >>
+  drule (SIMP_RULE (srw_ss()) [EVERY_MEM] omitted_defaults_blueprint_free) >>
+  metis_tac[]
 QED
 
 Theorem dalloca_windows_expr_call[local]:
-  (!ct env e. compile_env_blueprint_free env /\ compile_env_builtin_arity env /\
-              ~supported_expr_exists blueprint_create_root e /\
+  (!ct env e. (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        compile_env_blueprint_free env) /\ compile_env_builtin_arity env /\
+              (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        ~supported_expr_exists blueprint_create_root e) /\
               ~supported_expr_exists short_builtin_args e ==>
      preserves_dalloca_windows window (cfn env ct e)) /\
   (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
   (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) /\
-  compile_env_blueprint_free cenv /\ compile_env_builtin_arity cenv /\
-  ~supported_expr_exists blueprint_create_root (Call rt target args d) /\
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        compile_env_blueprint_free cenv) /\ compile_env_builtin_arity cenv /\
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        ~supported_expr_exists blueprint_create_root (Call rt target args d)) /\
   ~supported_expr_exists short_builtin_args (Call rt target args d) ==>
   preserves_dalloca_windows window (compile_call cfn cenv rt ty target args d)
 Proof
@@ -143,17 +154,23 @@ Proof
      preserves_dalloca_windows window (cfn cenv ct e)` by
     (rpt strip_tac >> first_assum irule >> simp[] >>
      metis_tac[call_callback_child_supported]) >>
+  Q.SUBGOAL_THEN
+    `(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) \/
+     (!raw salted rof order. target <> CreateTarget (CreateFromBlueprint raw) salted rof order)`
+    assume_tac
+  >- (Cases_on `!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1` >>
+      fs[supported_expr_exists_def, blueprint_create_root_def]) >>
   irule dalloca_windows_compile_call >> simp[] >>
-  imp_res_tac expr_dispatch_defaults_gate >>
-  conj_tac
-  >- fs[supported_expr_exists_def, blueprint_create_root_def] >>
   conj_tac
   >- (rpt strip_tac >> first_assum irule >>
       simp[call_callback_children_def, MEM_APPEND, MEM_FLAT, MEM_MAP] >>
       metis_tac[]) >>
   conj_tac
   >- (rpt strip_tac >> first_assum irule >> simp[call_callback_children_def]) >>
-  rpt strip_tac >> first_assum irule >> simp[] >> metis_tac[]
+  rpt strip_tac >> rename1 `MEM e (omitted_defaults cenv (nsid_to_string id) (LENGTH args))` >>
+  drule_all expr_dispatch_defaults_gate >>
+  disch_then (qspecl_then [`nsid_to_string id`, `LENGTH args`] strip_assume_tac) >>
+  first_assum irule >> simp[] >> metis_tac[]
 QED
 
 Theorem dalloca_windows_modular_names[local]:
@@ -191,8 +208,10 @@ Proof
 QED
 
 Theorem dalloca_windows_expr_body[local]:
-  (!env ct e. compile_env_blueprint_free env /\ compile_env_builtin_arity env /\
-              ~supported_expr_exists blueprint_create_root e /\
+  (!env ct e. (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        compile_env_blueprint_free env) /\ compile_env_builtin_arity env /\
+              (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        ~supported_expr_exists blueprint_create_root e) /\
               ~supported_expr_exists short_builtin_args e ==>
      preserves_dalloca_windows window (cfn env ct e)) /\
   (!ann bi args. e = Builtin ann bi args ==>
@@ -201,8 +220,10 @@ Theorem dalloca_windows_expr_body[local]:
       preserves_dalloca_windows window (tfn cenv ann ty tb rt args)) /\
   (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
   (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) /\
-  compile_env_blueprint_free cenv /\ compile_env_builtin_arity cenv /\
-  ~supported_expr_exists blueprint_create_root e /\
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        compile_env_blueprint_free cenv) /\ compile_env_builtin_arity cenv /\
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        ~supported_expr_exists blueprint_create_root e) /\
   ~supported_expr_exists short_builtin_args e ==>
   preserves_dalloca_windows window (compile_expr_body cfn bfn tfn cenv ty e)
 Proof
@@ -261,14 +282,18 @@ QED
 
 Theorem dalloca_windows_expr_child[local]:
   (!e cenv ty st. expr_size e + cenv_defaults_size cenv < bound ==>
-    compile_env_blueprint_free cenv /\ compile_env_builtin_arity cenv /\
-    ~supported_expr_exists blueprint_create_root e /\
+    (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        compile_env_blueprint_free cenv) /\ compile_env_builtin_arity cenv /\
+    (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        ~supported_expr_exists blueprint_create_root e) /\
     ~supported_expr_exists short_builtin_args e /\
     compiler_dalloca_windows window st ==>
     compiler_dalloca_windows window (SND (compile_expr cenv ty e st))) ==>
   !e cenv ty.
-    compile_env_blueprint_free cenv /\ compile_env_builtin_arity cenv /\
-    ~supported_expr_exists blueprint_create_root e /\
+    (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        compile_env_blueprint_free cenv) /\ compile_env_builtin_arity cenv /\
+    (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        ~supported_expr_exists blueprint_create_root e) /\
     ~supported_expr_exists short_builtin_args e ==>
     preserves_dalloca_windows window (expr_child_callback bound compile_expr cenv ty e)
 Proof
@@ -279,11 +304,13 @@ Proof
 QED
 
 Theorem dalloca_windows_builtin_children[local]:
-  (!e ct. ~supported_expr_exists blueprint_create_root e /\
+  (!e ct. (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        ~supported_expr_exists blueprint_create_root e) /\
           ~supported_expr_exists short_builtin_args e ==>
           preserves_dalloca_windows window (cfn cenv ct e)) /\
   builtin_arity bi <= LENGTH args /\
-  ~supported_exprs_exists blueprint_create_root args /\
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        ~supported_exprs_exists blueprint_create_root args) /\
   ~supported_exprs_exists short_builtin_args args ==>
   preserves_dalloca_windows window (compile_builtin_dispatch_body cfn cenv rt ty bi args)
 Proof
@@ -292,13 +319,11 @@ Proof
     metis_tac[supported_exprs_exists_every, EXISTS_MEM] >>
   irule dalloca_windows_builtin_dispatch_body >> simp[] >> conj_tac
   >- (rpt strip_tac >>
-      `~supported_expr_exists blueprint_create_root e /\
-       ~supported_expr_exists short_builtin_args e` by
-        metis_tac[supported_exprs_exists_every, EXISTS_MEM] >>
-      qpat_assum `!e ct. ~supported_expr_exists _ e /\ _ ==> _` irule >>
-      metis_tac[expr_shape_extcode_addr]) >>
+      qpat_assum `!e ct. (_ /\ _) ==> preserves_dalloca_windows window (cfn cenv ct e)` irule >>
+      metis_tac[expr_shape_extcode_addr, supported_exprs_exists_every, EXISTS_MEM]) >>
   rpt strip_tac >> irule dalloca_windows_multi_exprs >>
-  rpt strip_tac >> qpat_assum `!e ct. ~supported_expr_exists _ e /\ _ ==> _` irule >>
+  rpt strip_tac >>
+  qpat_assum `!e ct. (_ /\ _) ==> preserves_dalloca_windows window (cfn cenv ct e)` irule >>
   metis_tac[supported_exprs_exists_every, EXISTS_MEM, supported_expr_exists_def]
 QED
 
@@ -306,22 +331,28 @@ Theorem dalloca_windows_compile_expr_mutual[local]:
   (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
   (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) ==>
   ((!ce ty e st.
-     compile_env_blueprint_free ce /\ compile_env_builtin_arity ce /\
-     ~supported_expr_exists blueprint_create_root e /\
+     (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        compile_env_blueprint_free ce) /\ compile_env_builtin_arity ce /\
+     (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        ~supported_expr_exists blueprint_create_root e) /\
      ~supported_expr_exists short_builtin_args e /\
      compiler_dalloca_windows window st ==>
      compiler_dalloca_windows window (SND (compile_expr ce ty e st))) /\
    (!ce rt ty bi args st.
-     compile_env_blueprint_free ce /\ compile_env_builtin_arity ce /\
+     (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        compile_env_blueprint_free ce) /\ compile_env_builtin_arity ce /\
      builtin_arity bi <= LENGTH args /\
-     ~supported_exprs_exists blueprint_create_root args /\
+     (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        ~supported_exprs_exists blueprint_create_root args) /\
      ~supported_exprs_exists short_builtin_args args /\
      compiler_dalloca_windows window st ==>
      compiler_dalloca_windows window (SND (compile_builtin_dispatch ce rt ty bi args st))) /\
    (!ce vt ty tb rt args st.
-     compile_env_blueprint_free ce /\ compile_env_builtin_arity ce /\
+     (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        compile_env_blueprint_free ce) /\ compile_env_builtin_arity ce /\
      type_builtin_arity tb <= LENGTH args /\
-     ~supported_exprs_exists blueprint_create_root args /\
+     (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        ~supported_exprs_exists blueprint_create_root args) /\
      ~supported_exprs_exists short_builtin_args args /\
      compiler_dalloca_windows window st ==>
      compiler_dalloca_windows window
@@ -329,10 +360,8 @@ Theorem dalloca_windows_compile_expr_mutual[local]:
 Proof
   strip_tac >> ho_match_mp_tac compile_expr_ind >>
   rpt conj_tac >> rpt gen_tac >> strip_tac >>
-  RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >> rpt strip_tac >>
-  qpat_assum `!child env ct cs. _ ==> _ ==>
-      compiler_dalloca_windows window (SND (compile_expr env ct child cs))`
-    (assume_tac o MATCH_MP dalloca_windows_expr_child) >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [NOT_CLAUSES, AND_CLAUSES]) >> rpt strip_tac >>
+  first_assum (assume_tac o MATCH_MP dalloca_windows_expr_child) >>
   simp[Once compile_expr_raw_def, Excl "expr_child_callback_def",
        Excl "builtin_child_callback_def", Excl "type_child_callback_def"] >>
   CONV_TAC (DEPTH_CONV ETA_CONV)
@@ -360,8 +389,10 @@ QED
 Theorem dalloca_windows_compile_expr:
   (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
   (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) /\
-  compile_env_blueprint_free cenv /\ compile_env_builtin_arity cenv /\
-  ~supported_expr_exists blueprint_create_root e /\
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        compile_env_blueprint_free cenv) /\ compile_env_builtin_arity cenv /\
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        ~supported_expr_exists blueprint_create_root e) /\
   ~supported_expr_exists short_builtin_args e ==>
   preserves_dalloca_windows window (compile_expr cenv ty e)
 Proof

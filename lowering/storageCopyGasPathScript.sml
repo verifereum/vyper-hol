@@ -17,7 +17,9 @@ Theorem storage_copy_seq_path:
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
     EVERY (\i. i.inst_opcode <> GAS) code /\
-    (memory ==> run_inst_seq_mem_ok code s) /\
+    (memory ==> run_inst_seq_mem_ok code s /\
+      (ctx_has_dalloca ctx ==> !pre i post u. code = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)) /\
     run_inst_seq code s = OK t ==>
     gas_marked_path memory ctx func s 0
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code))
@@ -26,7 +28,8 @@ Proof
   `FILTER (\i. i.inst_opcode = GAS) code = []` by
     (gvs[FILTER_EQ_NIL, EVERY_MEM]) >>
   Cases_on `memory` >> gvs[gas_marked_path_def]
-  >- (drule_all run_inst_seq_gas_path_mem >> simp[]) >>
+  >- (drule_at (Pat `run_inst_seq _ _ = OK _`) run_inst_seq_gas_path_mem >>
+      simp[] >> metis_tac[]) >>
   drule_all tuple_run_inst_seq_gas_path >> simp[]
 QED
 
@@ -80,7 +83,9 @@ Proof
       simp[mk_inst_def, is_terminator_def, run_inst_seq_def,
            step_inst_base_opcode_eqs, eval_operand_def, run_inst_seq_mem_ok_def] >>
       conj_tac
-      >- (strip_tac >> irule below_frontier_no_ranges >> simp[]) >>
+      >- (strip_tac >> conj_tac
+          >- (irule below_frontier_no_ranges >> simp[]) >>
+          rpt strip_tac >> Cases_on `pre` >> gvs[]) >>
       gvs[mk_inst_def]) >>
   simp[storage_copy_inv_def, eval_operand_def, eval_operand_update_var,
        lookup_var_update_var, copy_prefix_idx, copy_prefix_zero,
@@ -117,7 +122,9 @@ Proof
       simp_tac bool_ss [LENGTH, ONE] >> disch_then irule >>
       simp[run_inst_seq_def, run_inst_seq_mem_ok_def] >>
       conj_tac
-      >- (strip_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+      >- (strip_tac >> conj_tac
+          >- (irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+          rpt strip_tac >> Cases_on `pre` >> gvs[mk_inst_def]) >>
       simp[mk_inst_def, is_terminator_def] >> gvs[mk_inst_def]) >>
   gvs[storage_copy_test_def, storage_copy_inv_def, eval_operand_def,
       eval_operand_update_var, lookup_var_update_var, copy_prefix_idx,
@@ -207,11 +214,18 @@ Proof
   `storage_copy_inv cv ds loc a b n sbase (k+1) r` by
     (drule storage_copy_body_run_inv >> disch_then irule >>
      asm_rewrite_tac[] >> simp[]) >>
-  `memory ==> run_inst_seq_mem_ok code s` by
-    (strip_tac >>
-     qpat_assum `code = _` (fn th => pure_rewrite_tac [th]) >>
-     irule body_storage_iteration_mem_ok >> asm_rewrite_tac[] >>
-     qexistsl [`b`, `k`] >> gvs[dimword_def]) >>
+  `memory ==> run_inst_seq_mem_ok code s /\
+     (ctx_has_dalloca ctx ==> !pre i post u. code = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+    (strip_tac >> conj_tac
+     >- (qpat_assum `code = _` (fn th => pure_rewrite_tac [th]) >>
+         irule body_storage_iteration_mem_ok >> asm_rewrite_tac[] >>
+         qexistsl [`b`, `k`] >> gvs[dimword_def]) >>
+     `EVERY (\i. i.inst_opcode <> DALLOCA) code` by
+       (Cases_on `loc = LocStorage` >> simp[mk_inst_def]) >>
+     rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY _ code` mp_tac >>
+     simp[EVERY_APPEND]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
    EVERY (\i. i.inst_opcode <> GAS) code` by
     (simp[mk_inst_def, is_terminator_def] >>

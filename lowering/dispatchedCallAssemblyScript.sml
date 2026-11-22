@@ -75,7 +75,7 @@ Theorem dispatched_call_correct_from_selected_endpoint:
     initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     (ctx_has_dalloca unit.cu_context ==>
       !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-        dalloca_no_wrap inst s) /\
+        dalloca_fmp_headroom inst s) /\
     (ctx_has_dalloca unit.cu_context ==>
       unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
       w2n vs.vs_initial_fmp < 2 ** 254) /\
@@ -216,7 +216,7 @@ Theorem dispatched_nonreentrant_result[local]:
   outcomes_accounts_typed (SOME vs.vs_outcomes) /\
   (ctx_has_dalloca unit.cu_context ==>
     !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-      dalloca_no_wrap inst s) /\
+      dalloca_fmp_headroom inst s) /\
   calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
     SOME (tx.function_name,tx.args) /\
   vyperInterpreter$lookup_function NONE tx.function_name External tops =
@@ -379,7 +379,7 @@ Triviality dispatched_call_readings_from_selected_endpoint:
     initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     (ctx_has_dalloca unit.cu_context ==>
       !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-        dalloca_no_wrap inst s) /\
+        dalloca_fmp_headroom inst s) /\
     (ctx_has_dalloca unit.cu_context ==>
       unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
       w2n vs.vs_initial_fmp < 2 ** 254) /\
@@ -428,7 +428,7 @@ Theorem dispatched_call_correct_with_readings:
     initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     (ctx_has_dalloca unit.cu_context ==>
       !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-        dalloca_no_wrap inst s) /\
+        dalloca_fmp_headroom inst s) /\
     (ctx_has_dalloca unit.cu_context ==>
       unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
       w2n vs.vs_initial_fmp < 2 ** 254) /\
@@ -472,7 +472,7 @@ Theorem dispatched_call_correct:
     initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     (ctx_has_dalloca unit.cu_context ==>
       !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-        dalloca_no_wrap inst s) /\
+        dalloca_fmp_headroom inst s) /\
     (ctx_has_dalloca unit.cu_context ==>
       unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
       w2n vs.vs_initial_fmp < 2 ** 254) /\

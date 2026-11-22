@@ -152,6 +152,20 @@ Proof
   `run_inst_seq_mem_ok (emitted_insts sm sb) s` by
     (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
        sha256_typed_suffix_mem_ok >> simp[]) >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sm sb)` by
+    (Cases_on `bty` >> gvs[is_bytes_or_string_type_def, is_bytestring_type_def] >>
+     TRY (rename1 `expr_type e = BaseT (BytesT bd)` >> Cases_on `bd`) >>
+     gvs[is_bytestring_type_def, builtinHashingTheory.compile_sha256_bytes_def,
+         builtinHashingTheory.compile_sha256_bytesm_def,
+         contextTheory.compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
+         emitHelperTheory.emit_void_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def, fresh_id_def, fresh_var_def, emit_def, emitted_insts_def] >>
+     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+     simp[venomInstTheory.mk_inst_def]) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sm sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+    (rpt strip_tac >> fs[listTheory.EVERY_APPEND, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   drule_at (Pos hd) sha256_typed_suffix_shape >> simp[] >> strip_tac >>
   pop_assum (qspecl_then [`x`,`sm`,`sb`,`op`] mp_tac) >>
   (impl_tac >- (qpat_x_assum `(if _ then _ else _) = (op,sb)` mp_tac >> simp[])) >>
@@ -181,7 +195,7 @@ Resume sha256_typed_effectful_path_mem[abort]:
   drule_at (Pat `run_inst_seq _ _ = _`)
     (Q.SPEC `T` run_inst_seq_abort_gas_path) >> simp[] >>
   disch_then (qspecl_then [`ctx`,`func`,`bb`] mp_tac) >> simp[] >>
-  strip_tac >> goal_assum drule >>
+  disch_then (drule_then strip_assume_tac) >> goal_assum drule >>
   simp[exit_result_def, expr_exit_def]
 QED
 Resume sha256_typed_effectful_path_mem[success]:
@@ -204,7 +218,7 @@ Resume sha256_typed_effectful_path_mem[success]:
     simp[rich_listTheory.IS_PREFIX_APPEND] >>
   drule_at (Pat `run_inst_seq _ _ = _`) run_inst_seq_gas_path_mem >> simp[] >>
   disch_then (qspecl_then [`ctx`,`func`,`bb`] mp_tac) >> simp[] >>
-  strip_tac >>
+  disch_then (drule_then strip_assume_tac) >>
   `alloca_inv s` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
        (qspec_then `H` mp_tac) >>

@@ -49,9 +49,11 @@ Proof
   `inst_mem_below_frontier (mk_inst sm.cs_next_id MSTORE [Var p;op] []) s /\
    inst_dload_in_section (mk_inst sm.cs_next_id MSTORE [Var p;op] []) s /\
    (mk_inst sm.cs_next_id MSTORE [Var p;op] []).inst_opcode <> INVOKE /\
-   ~is_terminator (mk_inst sm.cs_next_id MSTORE [Var p;op] []).inst_opcode` by
+   ~is_terminator (mk_inst sm.cs_next_id MSTORE [Var p;op] []).inst_opcode /\
+   (ctx_has_dalloca ctx ==>
+    dalloca_no_wrap (mk_inst sm.cs_next_id MSTORE [Var p;op] []) s)` by
     simp[mk_inst_def,is_terminator_def,below_frontier_MSTORE,
-         eval_operand_def,inst_dload_in_section_def] >>
+         eval_operand_def,inst_dload_in_section_def,dalloca_no_wrap_non_dalloca] >>
   drule_all straight_line_origin_ptr_edge >> simp[mk_inst_def]
 QED
 

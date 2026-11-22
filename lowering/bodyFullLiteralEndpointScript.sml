@@ -3,7 +3,7 @@ Ancestors
   bodyFullLiteralBuffer bodyLiteralBufferMemory bodyFullUnwrapRun
   exprSimLiteralBuffer exprSimMemDefs loweringPosts vyperAST
   fragGasSeqPtr fragExecMem exprLoweringProps venomMemDefs context vyperState
-  list rich_list
+  list rich_list literalBufferOpcodeShape ptrDiscipline memSafeRun
 
 Theorem literal_bytelike_full_path:
   compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
@@ -30,9 +30,15 @@ Proof
     ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
     gvs[EVERY_MEM, FILTER_EQ_NIL] >>
   `sb.cs_current_bb = sa.cs_current_bb` by gvs[same_blocks_def] >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ [i] ++ post /\
+      run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+    (drule literal_bytelike_emitted_non_dalloca >> rpt strip_tac >>
+     gvs[EVERY_APPEND, dalloca_no_wrap_non_dalloca]) >>
   reverse conj_tac >- metis_tac[] >>
   irule emitted_origin_ptr_path >> conj_tac >- simp[] >>
-  qexistsl_tac [`emitted_insts sa sb`, `sa`] >> simp[]
+  qexistsl_tac [`emitted_insts sa sb`, `sa`] >> simp[] >>
+  qpat_assum `ctx_has_dalloca ctx ==> _` ACCEPT_TAC
 QED
 
 Theorem literal_bytelike_full_memory:

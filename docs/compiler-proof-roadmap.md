@@ -95,14 +95,8 @@ and the `source_deployment_rel` inside `call_state_rel`
 (`source_typing_ok_supported_program`); the deploy pair derives
 `supported_program` and `supported_program_deploy` from `deploy_typing_ok` and
 the `layouts_agree` inside `deploy_state_rel`
-(`deploy_typing_ok_supported_programs`). Compile success already excludes what
-the lowering refuses: an unfolded `sha256` in external defaults (runtime
-lowering, `external_defaults_no_sha256`), and, in both runtime and deploy
-lowering, `create_from_blueprint` calls with a code offset folding to an
-out-of-range integer literal (`blueprint_offset_fold_ok`), an allocation bound
-that can reach 2⁶⁴, or raw or ABI-dynamic constructor arguments in a unit with
-ABI-dynamic storage or transient state or a mapping with an ABI-dynamic value
-(`blueprint_unit_raw_fmp_ok`).
+(`deploy_typing_ok_supported_programs`). Runtime lowering refuses an
+unfolded `sha256` in external defaults (`external_defaults_no_sha256`).
 
 **Named inventory, not forced plan arithmetic:** TASK056's source ledger is
 **130 -> 128**, removing only the local

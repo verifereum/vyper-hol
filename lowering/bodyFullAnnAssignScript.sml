@@ -185,7 +185,7 @@ Proof
        (drule_then mp_tac) >> simp[FLOOKUP_DEF]) >>
   `ctx_has_dalloca ctx ==>
     (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s)` by
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s)` by
     metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
   drule_all annassign_word_full_execution_sep >>
   disch_then (qspec_then `RetQ` assume_tac) >>

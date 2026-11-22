@@ -133,7 +133,8 @@ Proof
      `lookup_block u.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
      mp_tac (Q.INST [`s` |-> `u`, `i` |-> `i0`, `u` |-> `u1`]
                straight_line_origin_ptr_edge) >>
-     impl_tac >- simp[] >>
+     impl_tac >-
+       simp[Abbr `i0`, unitTransformDefsTheory.dalloca_no_wrap_def, mk_inst_def] >>
      simp[Abbr `k`, ADD1]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
      (u1 with vs_inst_idx := k, step_prov PG G i0 u1, step_taint i0 u u1 tn) []

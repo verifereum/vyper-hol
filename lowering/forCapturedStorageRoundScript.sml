@@ -324,7 +324,7 @@ Theorem for_captured_storage_round_from_head:
   emit_inst JMP [Label cond] [] sl = ((),sm) /\ fn_has_code si sm func /\
   not_fresh_at si idx /\ p <> idx /\ p <> out /\
   (!x. lvo = Var x ==> x <> idx /\ x <> out) /\ (!x. bop = Var x ==> x <> idx /\ x <> out) /\
-  ~s.vs_halted /\ (!f inst u. frag_reachable ctx func s f inst u ==> dalloca_no_wrap inst u) /\
+  ~s.vs_halted /\ (!f inst u. frag_reachable ctx func s f inst u ==> dalloca_fmp_headroom inst u) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
       (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)

@@ -90,7 +90,11 @@ Proof
      disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
      simp[IS_PREFIX_APPEND, run_inst_seq_mem_ok_last, GSYM mk_inst_def,
           is_terminator_def] >>
-     (impl_tac >- (irule body_wordtype_name_MLOAD_frontier >> metis_tac[])) >>
+     (impl_tac >-
+       (conj_tac
+        >- (irule body_wordtype_name_MLOAD_frontier >> metis_tac[])
+        >> rpt strip_tac >> rename1 `_ = pre ++ [j] ++ post` >>
+        Cases_on `pre` >> gvs[mk_inst_def])) >>
      simp[]) >>
   qexistsl [`entry`, `p`, `sz`, `out`] >>
   gvs[Abbr `out`, same_blocks_def, update_var_def]

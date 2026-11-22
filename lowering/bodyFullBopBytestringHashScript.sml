@@ -270,6 +270,12 @@ Proof
   simp[] >>
   disch_then (qspecl_then [`HG`, `un`, `HGf`, `unf`] mp_tac) >>
   simp[] >> disch_then irule >> simp[] >>
+  (conj_tac >-
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `EVERY (\j. j.inst_opcode <> DALLOCA) ((pre ++ [i]) ++ post)` by
+       (qpat_assum `_ = (pre ++ [i]) ++ post`
+          (fn th => pure_once_rewrite_tac[GSYM th]) >> simp[mk_inst_def]) >>
+     fs[EVERY_APPEND])) >>
   qexists_tac `bb` >>
   qpat_x_assum `isPREFIX _ _` mp_tac >> simp[] >> metis_tac[]
 QED

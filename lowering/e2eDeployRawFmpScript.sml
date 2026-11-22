@@ -170,14 +170,14 @@ Proof
       simp[]) >>
   pop_assum strip_assume_tac >>
   `ctx_has_dalloca dunit.cu_context ==>
-    !fn inst st. raw_reachable vs dunit.cu_context fn inst st ==> dalloca_no_wrap inst st` by
+    !fn inst st. raw_reachable vs dunit.cu_context fn inst st ==> dalloca_fmp_headroom inst st` by
     (strip_tac >>
      `deploy_dalloca_form_occurs expr_raw_shape_root tops` by
        metis_tac[deploy_unit_no_dalloca_static] >>
      qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
        `dunit`, `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`,
        `opt_deploy_entry_state_own prog prog' cplan tops es`, `vs`, `fmp`]
-       mp_tac deploy_entry_raw_no_wrap >>
+       mp_tac deploy_entry_raw_headroom >>
      impl_tac >- fs[deploy_source_ok_def] >> metis_tac[]) >>
   `ctx_has_dalloca dunit.cu_context ==>
     imm_len tops + unit_alloca_budget dunit.cu_context <= w2n vs.vs_initial_fmp /\

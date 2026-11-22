@@ -462,7 +462,9 @@ Resume prefix_loop_header_operand_path[trace]:
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   simp_tac bool_ss [LET_THM] >> BETA_TAC >>
   disch_then (qspecl_then [`0`,`kk`] mp_tac) >>
-  unabbrev_all_tac >> simp[]
+  unabbrev_all_tac >> simp[] >>
+  `kk = 0 \/ kk = 1 \/ kk = 2 \/ kk = 3` by decide_tac >>
+  gvs[abi_decode_header_insts_def,mk_inst_def]
 QED
 
 Finalise prefix_loop_header_operand_path

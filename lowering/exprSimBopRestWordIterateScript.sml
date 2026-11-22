@@ -424,6 +424,11 @@ Resume rest_word_compiled_search[body]:
   `R q` by simp[Abbr `R`] >>
   `R (update_var matched (bool_to_word (elem i = needle)) q)` by metis_tac[] >>
   drule_all exprSimBopRestWordLoadPathTheory.rest_word_ptr_load_code >> strip_tac >>
+  `EVERY (\j. j.inst_opcode <> DALLOCA) (emitted_insts cl cm)` by
+    (qpat_assum `EVERY (\i. MEM i.inst_opcode _) _` mp_tac >>
+     pure_rewrite_tac[listTheory.EVERY_MEM] >>
+     disch_then (fn th => gen_tac >> strip_tac >> drule th) >>
+     simp[] >> strip_tac >> gvs[]) >>
   `EVERY (\j. j.inst_opcode <> INVOKE /\ ~is_terminator j.inst_opcode /\
           j.inst_opcode <> GAS) (emitted_insts cl cm)` by
     (qpat_x_assum `EVERY (\i. MEM i.inst_opcode _) _` mp_tac >>

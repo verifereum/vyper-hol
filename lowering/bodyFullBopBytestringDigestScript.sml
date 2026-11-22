@@ -73,6 +73,14 @@ Proof
        (drule_then strip_assume_tac) >>
      simp[inst_mem_below_frontier_def, inst_dload_in_section_def,
           source_memory_write_ranges_def, source_memory_read_ranges_def]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `MEM i (emitted_insts sa sb)` by simp[] >>
+     qpat_x_assum `EVERY (\i. i.inst_opcode = EQ \/ _) _`
+       (mp_tac o SRULE [EVERY_MEM]) >>
+     disch_then (drule_then strip_assume_tac) >> simp[]) >>
   drule_all concat_code_prefix >> strip_tac >>
   `raw.vs_halted = s.vs_halted /\ raw.vs_current_bb = s.vs_current_bb` by
     (qpat_x_assum `raw with vs_vars := _ = s` mp_tac >>

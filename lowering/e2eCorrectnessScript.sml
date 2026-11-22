@@ -14,6 +14,7 @@
 Theory e2eCorrectness
 Ancestors
   ptrDiscipline unitMemInv lowerDloadDefs moduleLoweringProps
+  ctorDeployMemoryFrontier loweringPtrCorrect
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry e2eOptEntry o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
@@ -49,7 +50,7 @@ Ancestors
   oracleExecProps gasFocusStaticPrefixDriver words arithmetic sorting
   ownSymSrcUnit codegenLabelDisciplined fnPlanPlaceRevertPostamble
   codegenSymOwnRel callDynamicMemory[qualified,ignore_grammar]
-  callRejectMemory[qualified,ignore_grammar] stackPlanGen[qualified,ignore_grammar]
+  stackPlanGen[qualified,ignore_grammar]
 
 
 (* =====================================================================
@@ -861,11 +862,8 @@ QED
 
 (* The S3 memory facts of the raw unit from the entry's memory- and
    pointer-safe runs, through the loweringMemCorrect bridges. *)
-Theorem selected_raw_memory[local]:
+Theorem selected_raw_memory:
   lower_vyper_runtime_unit tops rp = SOME unit /\
-  (ctx_has_dalloca unit.cu_context ==>
-    !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp) /\
   (ctx_has_dalloca unit.cu_context ==>
     unit_alloca_budget unit.cu_context +
       32 * ctx_dload_count unit.cu_context <= w2n vs.vs_initial_fmp) /\
@@ -889,7 +887,21 @@ Proof
   `raw_unit_memory_ok unit.cu_context vs /\
     ptr_discipline 0 unit.cu_context vs /\ taint_within D unit.cu_context vs` by
     (Cases_on `ctx_has_dalloca unit.cu_context` >> gvs[]
-     >- (mp_tac (Q.SPECL [`tops`, `rp`, `unit`, `am`, `tx`, `vs`, `fn`,
+     >- (drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+         `fn' = fn` by
+           (qpat_assum `lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn`
+              (fn entry => qpat_assum
+                `lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn'`
+                (mp_tac o REWRITE_RULE [entry])) >> simp[]) >>
+         qpat_x_assum `fn' = fn` SUBST_ALL_TAC >>
+         `ptr_discipline 0 unit.cu_context vs /\ taint_within D unit.cu_context vs` by
+           (match_mp_tac (Q.SPECL [`tops`, `rp`, `unit`, `vs`, `fn`, `"__entry"`, `D`]
+              lower_vyper_runtime_unit_ptr_taint) >> simp[]) >>
+         `!f inst s. raw_reachable vs unit.cu_context f inst s ==>
+            dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+           (match_mp_tac (Q.SPECL [`0`, `unit.cu_context`, `"__entry"`, `fn`,
+                `"__entry"`, `vs`] lowered_unit_checked_dalloca_facts) >> simp[]) >>
+         mp_tac (Q.SPECL [`tops`, `rp`, `unit`, `am`, `tx`, `vs`, `fn`,
                           `"__entry"`, `D`]
                lower_vyper_runtime_unit_memory_ok_from_no_wrap) >>
          impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
@@ -1071,12 +1083,6 @@ Proof
     metis_tac[opt_entry_initial_venom_state_rel_own] >>
   `initial_venom_state_rel tops am txp vs` by
     metis_tac[raw_variant_initial_venom_state_rel] >>
-  `!fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-     dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
-    (rpt gen_tac >> disch_tac >> irule callDynamicMemoryTheory.call_entry_raw_no_wrap >>
-     qexistsl_tac [`am`, `assemble prog'`, `cplan`, `es`, `fmp`, `fn`, `T`,
-       `prog`, `prog'`, `rpolicy`, `tops`, `tx`, `txp`, `unit`, `vs`, `vs0`] >>
-     simp[]) >>
   qpat_x_assum `source_unit_execution_correct_at _ _ _ _ _ _ _` mp_tac >>
   simp[source_unit_execution_correct_at_def,
        source_unit_execution_correct_with_def] >> strip_tac
@@ -1269,9 +1275,6 @@ Theorem call_certificate_raw_entry_boundary:
   lower_vyper_runtime_unit tops rp = SOME unit /\
   o1_source_unit_ok unit /\ source_typing_ok tops am tx /\
   (ctx_has_dalloca unit.cu_context ==>
-    !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp) /\
-  (ctx_has_dalloca unit.cu_context ==>
     unit_alloca_budget unit.cu_context +
       32 * ctx_dload_count unit.cu_context <= w2n vs.vs_initial_fmp) /\
   initial_venom_state_rel tops am tx vs /\ code_layout_valid vs /\
@@ -1423,10 +1426,6 @@ Theorem call_marked_focus_family:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   o1_source_unit_ok unit /\ source_typing_ok tops am tx /\
   (ctx_has_dalloca unit.cu_context ==>
-    !vi fn inst s. raw_variant fmp vi vs0 /\
-      raw_reachable vi unit.cu_context fn inst s ==>
-      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp) /\
-  (ctx_has_dalloca unit.cu_context ==>
     unit_alloca_budget unit.cu_context +
       32 * ctx_dload_count unit.cu_context <= w2n fmp) /\
   initial_venom_state_rel tops am tx vs0 /\ code_layout_valid vs0 /\
@@ -1483,10 +1482,7 @@ Proof
     call_certificate_raw_entry_boundary >>
   simp[] >> disch_then (qspec_then `rpolicy` irule) >>
   simp[] >> rpt conj_tac
-  >- (qexists_tac `rpolicy` >> simp[])
-  >- (strip_tac >> rpt gen_tac >> strip_tac >>
-      qpat_assum `ctx_has_dalloca _ ==> !vi fn inst s. raw_variant _ _ _ /\ _ ==> _`
-        (qspecl_then [`vi`, `fn`, `inst`, `s`] mp_tac o UNDISCH) >> simp[]) >>
+  >- (qexists_tac `rpolicy` >> simp[]) >>
   metis_tac[ADD_COMM]
 QED
 
@@ -1694,14 +1690,6 @@ Proof
        init_venom_state_def] >>
   `initial_venom_state_rel tops am txp vs0` by
     metis_tac[opt_entry_initial_venom_state_rel_own] >>
-  `ctx_has_dalloca unit.cu_context ==>
-    !vi fn inst s. raw_variant fmp vi vs0 /\
-      raw_reachable vi unit.cu_context fn inst s ==>
-      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
-    (strip_tac >> mp_tac (Q.SPECL [`T`, `tops`, `rpolicy`, `unit`, `am`, `tx`, `txp`,
-                      `assemble prog'`, `es`, `prog`, `prog'`, `cplan`,
-                      `vs0`, `fmp`] callDynamicMemoryTheory.call_entry_raw_no_wrap) >>
-     simp[ADD_COMM] >> metis_tac[]) >>
   mp_tac (SIMP_RULE (srw_ss()) [] (Q.INST
     [`tx` |-> `txp`, `prefix_ok` |-> `\(s:venom_state) (m:bool list). T`]
     call_marked_focus_family)) >>
@@ -2238,17 +2226,6 @@ Proof
   `code_layout_valid vi /\ vi.vs_fmp = fmp /\ vi.vs_initial_fmp = fmp` by
     (fs[raw_variant_def, gas_variant_def, code_layout_valid_def,
         venomStateTheory.venom_state_component_equality] >> metis_tac[]) >>
-  `ctx_has_dalloca unit.cu_context ==>
-    !fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
-      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
-    (strip_tac >>
-     `unit_alloca_budget unit.cu_context <= w2n fmp` by
-       (res_tac >> decide_tac) >>
-     qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `fmp`, `vi`]
-       mp_tac (Q.GENL [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `fmp`, `vi`]
-         callRejectMemoryTheory.call_reject_raw_variant_no_wrap) >>
-     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >> metis_tac[]) >>
-     simp[]) >>
   `?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
     metis_tac[source_typing_ok_def] >>
   qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vi`]

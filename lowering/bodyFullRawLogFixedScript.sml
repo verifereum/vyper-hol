@@ -22,7 +22,7 @@ Theorem raw_log_fixed_data_full:
     fn_has_code sa sd func /\ fn_has_code sd sm func /\
     fn_has_code shadow_sa shadow_sd shadow_func /\ fn_has_code shadow_sd shadow_sm shadow_func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    (!fn inst t. frag_reachable ctx func s0 fn inst t ==> dalloca_no_wrap inst t) /\
+    (!fn inst t. frag_reachable ctx func s0 fn inst t ==> dalloca_fmp_headroom inst t) /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
       !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\

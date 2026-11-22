@@ -283,6 +283,13 @@ Proof
     (Q.SPECL [`code`, `s`, `t`, `G`, `tn`, `G'`, `tn'`, `ctx`, `func`, `bb`]
       run_inst_seq_gas_origin_ptr_path)) >>
   simp[] >> disch_then irule >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `MEM i code` by metis_tac[MEM_APPEND, MEM] >>
+      qpat_assum `EVERY (\inst. MEM inst.inst_opcode _ /\ _) code`
+        (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+      disch_then (qspec_then `i` mp_tac) >>
+      simp[MEM] >> strip_tac >> fs[dalloca_no_wrap_def]) >>
   irule run_inst_seq_mem_ok_every >>
   fs[EVERY_MEM] >> rpt strip_tac >>
   qpat_x_assum `!inst. MEM inst code ==> _ /\ ?idx out. _`

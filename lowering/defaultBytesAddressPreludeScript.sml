@@ -288,8 +288,21 @@ Proof
        codegenRelTheory.source_memory_write_ranges_def]) >>
   `raw.vs_allocas = s.vs_allocas /\ raw.vs_current_bb = s.vs_current_bb` by
     simp[Abbr `raw`, update_var_def] >>
-  drule_all ctor_checked_arg_sequence_reach >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sd)` by
+    simp[mk_inst_def] >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+      emitted_insts sa sd = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `MEM i (emitted_insts sa sd)` by
+       (qpat_assum `emitted_insts sa sd = pre ++ i::post` SUBST1_TAC >>
+        simp[MEM_APPEND]) >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_assum `EVERY (\j. j.inst_opcode <> DALLOCA) _`
+       (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     disch_then (qspec_then `i` mp_tac) >> simp[]) >>
+  drule_all (Q.INST [`ctx` |-> `ctx`] ctor_checked_arg_sequence_reach) >>
+  strip_tac >>
   qexists `raw` >> simp[Abbr `raw`]
 QED
 

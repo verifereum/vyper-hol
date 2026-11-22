@@ -50,6 +50,10 @@ Theorem constructor_terminal_mem_path:
     ~is_terminator i.inst_opcode) pre /\
   run_inst_seq pre s = OK mid /\
   step_inst_base (mk_inst id RETURN [dst; sz] []) mid = Halt final /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !before i post u. (pre ++ [mk_inst id RETURN [dst; sz] []]) = before ++ i::post /\
+      run_inst_seq before s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
   run_inst_seq_mem_ok (pre ++ [mk_inst id RETURN [dst; sz] []]) s ==>
   ?final'. gas_path_mem ctx func s 0 (Halt final')
 Proof
@@ -60,8 +64,19 @@ Proof
    EVERY (\i. ~is_terminator i.inst_opcode) pre /\
    LENGTH (FILTER (\i. i.inst_opcode = GAS) pre) = 0` by
     (fs[EVERY_MEM, LENGTH_NIL, FILTER_EQ_NIL] >> metis_tac[]) >>
-  drule_all run_inst_seq_gas_path_mem >>
-  disch_then (qspec_then `ctx` assume_tac) >> gvs[] >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+   !before i post u. pre = before ++ i::post /\
+     run_inst_seq before s = OK u ==> dalloca_no_wrap i u` by
+    (strip_tac >> rpt gen_tac >> strip_tac >>
+     qpat_x_assum `ptrDiscipline$ctx_has_dalloca ctx ==> _` mp_tac >>
+     simp[] >>
+     disch_then (qspecl_then [`before`, `i`,
+       `post ++ [mk_inst id RETURN [dst; sz] []]`, `u`] irule) >>
+     simp[APPEND_ASSOC]) >>
+  `gas_path_mem ctx func s (LENGTH (FILTER (\i. i.inst_opcode = GAS) pre))
+     (OK (mid with vs_inst_idx := s.vs_inst_idx + LENGTH pre))` by
+    (irule run_inst_seq_gas_path_mem >> metis_tac[]) >>
+  gvs[] >>
   qmatch_asmsub_abbrev_tac `gas_path_mem ctx func s 0 (OK shifted)` >>
   `~shifted.vs_halted /\ shifted.vs_current_bb = s.vs_current_bb` by
     (simp[Abbr `shifted`] >>
@@ -124,6 +139,22 @@ Proof
     (`run_inst_seq [mk_inst id RETURN [dst;szop] []] mid = Halt final` by
        metis_tac[run_inst_seq_append] >>
      fs[run_inst_seq_def, AllCaseEqs()]) >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA)
+     (pre ++ [mk_inst id RETURN [dst;szop] []])` by
+    (simp[EVERY_APPEND, mk_inst_def] >>
+     simp[EVERY_MEM] >> rpt strip_tac >>
+     qpat_assum `EVERY (\i. MEM i.inst_opcode _) pre`
+       (qspec_then `i` mp_tac o REWRITE_RULE[EVERY_MEM]) >> simp[]) >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+     !before i post u.
+       pre ++ [mk_inst id RETURN [dst;szop] []] = before ++ i::post /\
+       run_inst_seq before s = OK u ==> dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     `MEM i (pre ++ [mk_inst id RETURN [dst;szop] []])` by
+       (qpat_assum `pre ++ [_] = _` (once_rewrite_tac o single) >>
+        simp[MEM_APPEND]) >>
+     qpat_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _`
+       (qspec_then `i` mp_tac o REWRITE_RULE[EVERY_MEM]) >> simp[]) >>
   irule constructor_terminal_mem_path >> metis_tac[]
 QED
 
@@ -180,8 +211,14 @@ Proof
       `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
         [mk_inst st_exit.cs_next_id TSTORE [Lit (n2w nkey); Lit 0w] []]` by
         simp[mk_inst_def, is_terminator_def] >>
+      `ptrDiscipline$ctx_has_dalloca ctx ==>
+       !before i post v.
+         [mk_inst st_exit.cs_next_id TSTORE [Lit (n2w nkey); Lit 0w] []] =
+           before ++ i::post /\ run_inst_seq before s = OK v ==>
+         dalloca_no_wrap i v` by
+        (rpt strip_tac >> Cases_on `before` >>
+         gvs[mk_inst_def, dalloca_no_wrap_non_dalloca]) >>
       drule_all run_inst_seq_gas_path_mem >>
-      disch_then (qspec_then `ctx` mp_tac) >>
       simp[mk_inst_def, is_terminator_def] >> strip_tac >>
       `~(u with vs_inst_idx := 1).vs_halted /\
        (u with vs_inst_idx := 1).vs_current_bb = ep.cs_current_bb /\

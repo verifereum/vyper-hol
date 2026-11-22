@@ -44,6 +44,9 @@ Proof
   disch_then irule >>
   simp[run_inst_seq_def, GSYM mk_inst_def] >>
   conj_tac
+  >- (rpt strip_tac >> Cases_on `pre` >>
+      gvs[memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
+  conj_tac
   >- (simp[run_inst_seq_mem_ok_def, unitTransformDefsTheory.inst_mem_below_frontier_def,
       memSafeRunTheory.inst_dload_in_section_def, mk_inst_def,
       contextCodegenRelTheory.source_memory_read_ranges_def,

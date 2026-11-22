@@ -138,6 +138,17 @@ Proof
        contextCodegenRelTheory.source_memory_read_ranges_def,
        codegenRelTheory.source_memory_write_ranges_def,
        inst_dload_in_section_def]) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+    (disch_tac >> rpt gen_tac >> strip_tac >>
+     `MEM i (emitted_insts sa sb)` by
+       (qpat_x_assum `emitted_insts sa sb = pre ++ i::post`
+          (fn th => pure_rewrite_tac[th]) >> simp[MEM_APPEND]) >>
+     irule dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `emitted_insts sa sb = pre ++ i::post` kall_tac >>
+     qpat_x_assum `MEM i (emitted_insts sa sb)` mp_tac >>
+     simp[] >> strip_tac >> gvs[mk_inst_def]) >>
   `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     (qpat_assum `fn_has_code _ _ _` mp_tac >>
@@ -176,8 +187,8 @@ Proof
         simp[venomStateTheory.venom_state_component_equality]) >>
      `run_inst_seq (emitted_insts sa sb) s = Abort err u` by metis_tac[] >>
      drule_all run_inst_seq_abort_origin_ptr_uniform >>
-     disch_then (qspec_then `ctx` strip_assume_tac) >>
-     qexists `j` >> metis_tac[]) >>
+     disch_then (qx_choose_then `j` assume_tac) >>
+     qexists `j` >> gen_tac >> first_x_assum irule >> simp[]) >>
   Cases_on `r` >> gvs[exec_result_map_def]
   >- (qexistsl [`H`, `th`] >> simp[blockPrefixEquivTheory.lookup_var_set_inst_idx] >>
       rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>

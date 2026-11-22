@@ -179,14 +179,14 @@ fun mapping_index_shadow_tac shadow_type =
   `(!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x)` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  `!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_fmp_headroom inst z` by
     (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
        metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
        gas_origin_ptr_path _ (s0,G0,tn0) marks (OK s,G1,tn1)`
        (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
      qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK s,G1,tn1)`
-       (mp_then (Pos hd) mp_tac bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap) >>
+       (mp_then (Pos hd) mp_tac bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom) >>
      asm_rewrite_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ e2 _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
