@@ -21,7 +21,7 @@ Proof
   rw[] >> simp[]
 QED
 
-Triviality lookup_global_no_outcome:
+Theorem lookup_global_no_outcome:
   lookup_global cx src id st = (res, st') ==>
   EVERY (\ob. !rq oc. ob = StorageOutcome rq oc ==> computed_precompile rq)
     (DROP (LENGTH st.storage_trace) st'.storage_trace)
