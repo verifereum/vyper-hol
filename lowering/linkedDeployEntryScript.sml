@@ -6,6 +6,9 @@ Ancestors
   e2eDefs asmFrameRel asmDataSuffixProps codegenEntryRel codegenLabelDisciplined
   codegenRel contextCodegenRel contextPlanLayoutProps deployFrameReplay
   frameRel finite_map list loweringStateRelDefs callTrace venomState vyperArith
+  ctorDeployInitcode ctorDeployDefs compileVyper compileEnv abiTypeBoundProps
+  vyperTypeABI vyperTyping vyperABI vyperAST moduleLowering constSubst constSubstMods
+  vyperInterpreter pair option rich_list
 
 Theorem deploy_own_txp_identity_mods:
   !mods exps bc am tx prog prog' cplan es.
@@ -78,4 +81,63 @@ Proof
   simp[init_venom_state_def, w2n_n2w, DROP_APPEND] >>
   fs[context_memory_rel_def, CONJ_ASSOC] >>
   gen_tac >> Cases_on `FLOOKUP (lo_reloc prog prog') l` >> simp[]
+QED
+
+Theorem constructor_args_size_bounded_mods:
+  lower_vyper_deploy_unit_mods mods exps rpolicy runtime_bc = SOME unit /\
+  sfields_tenv_consistent (make_struct_fields_map_mods mods)
+    (type_env_all_modules mods) /\
+  constructor_args_encode_mods mods tx bs ==>
+  LENGTH bs < 2 ** 128
+Proof
+  strip_tac >>
+  qpat_x_assum `constructor_args_encode_mods _ _ _` mp_tac >>
+  simp[constructor_args_encode_mods_def, IS_SOME_EXISTS] >> strip_tac >> gvs[] >>
+  drule bind_arguments_values_typed >> strip_tac >>
+  drule_all (cj 2 vyper_to_abi_enc_length_bound) >> strip_tac >>
+  `EVERY (\t. IS_SOME (evaluate_type (type_env_all_modules mods) t))
+     (MAP SND args)` by
+    (fs[EVERY_MEM, LIST_REL_EL_EQN, MEM_EL, PULL_EXISTS] >>
+     rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  drule_all abi_size_bound_tuple_typed >> strip_tac >>
+  `vyper_abi_size_bound (type_env_all_modules mods) (TupleT (MAP SND args)) =
+   vyper_abi_size_bound_list (type_env_all_modules mods) (MAP SND args)` by
+    simp[Once vyper_abi_size_bound_def] >>
+  `abi_size_bound (make_struct_fields_map_mods mods) (TupleT (MAP SND args)) <
+     2 ** 128` suffices_by (strip_tac >> fs[] >> decide_tac) >>
+  qpat_x_assum `lower_vyper_deploy_unit_mods _ _ _ _ = _` mp_tac >>
+  simp[lower_vyper_deploy_unit_mods_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[bool_case_eq] >> strip_tac >>
+  qpat_x_assum `classify_functions_unit _ _ = _` mp_tac >>
+  simp[classify_functions_unit_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  qspecl_then [`main_module mods`, `NONE`, `"__init__"`] mp_tac
+    classify_functions_ctor_lookup >>
+  simp[classify_functions_def] >>
+  Cases_on `ctor` >> simp[]
+  >- (strip_tac >> gvs[abi_size_bound_def]) >>
+  rename1 `ctor_named_init (OPTION_MAP _ (SOME raw_ctor))` >>
+  PairCases_on `raw_ctor` >>
+  gvs[subst_consts_fn_mods_def, subst_consts_fn_def, ctor_named_init_def] >>
+  strip_tac >> gvs[fn_allocs_ok_unit_def, build_compile_env_unit_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem deploy_entry_code_layout_mods:
+  deploy_state_rel_mods mods exps (assemble prog') am tx es /\
+  (!bs. constructor_args_encode_mods mods tx bs ==> LENGTH bs < 2 ** 128) /\
+  FLOOKUP (lo_reloc prog prog') "code_end" = SOME (LENGTH (assemble prog')) /\
+  LENGTH (assemble prog') < 65536 ==>
+  code_layout_valid (opt_entry_state_own prog prog' cplan es)
+Proof
+  strip_tac >>
+  `?bs. (FST (HD es.contexts)).msgParams.code = assemble prog' ++ bs /\
+        constructor_args_encode_mods mods tx bs` by
+    fs[deploy_state_rel_mods_def] >>
+  `LENGTH bs < 2 ** 128` by (first_x_assum irule >> first_assum ACCEPT_TAC) >>
+  simp[code_layout_valid_def, opt_entry_state_own_def, entry_venom_state_frame_fields,
+       FLOOKUP_o_f, DROP_LENGTH_APPEND, dimword_def, dimindex_256] >>
+  qpat_assum `LENGTH bs < 2 ** 128`
+    (assume_tac o REWRITE_RULE [EVAL ``2 ** 128 : num``]) >>
+  decide_tac
 QED
