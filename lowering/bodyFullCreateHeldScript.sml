@@ -6751,7 +6751,11 @@ Resume create_blueprint_prepared_path[append]:
     (qpat_assum `LENGTH prefix = n` SUBST1_TAC >>
      qspecl_then [`n + LENGTH args`,`2 ** 250 + 2 ** 59`] mp_tac
        (GEN_ALL dallocaBoundsTheory.ceil32_le_multiple) >>
-     simp[] >> decide_tac) >>
+     (impl_tac >-
+       (qpat_assum `n < _` mp_tac >>
+        qpat_assum `LENGTH args < _` mp_tac >>
+        simp[NoAsms] >> decide_tac)) >>
+     simp[NoAsms]) >>
   drule_all create_blueprint_materialize >> strip_tac >>
   suspend "result"
 QED
