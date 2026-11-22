@@ -3,6 +3,7 @@
 Theory e2eModsLifecycle
 Ancestors
   e2eLifecycle e2eModsDefs e2eDeployModsDefs e2eDefs e2eComposition
+  e2eTransactionWorld
   vyperContext vyperInterpreter vyperState vyperTypeContract
   vyperTypeContractSoundness vyperTypeDeploymentMachine
   vyperTypeInitialState vyperTypeInvariants vyperDeployConstantsFoldMods
@@ -209,3 +210,215 @@ Proof
      account_immutables_def] >>
   gvs[]
 QED
+
+Theorem call_external_next_source_machine_mods:
+  source_typing_ok_mods mods exps am tx /\
+  source_deployment_rel_mods mods exps am tx /\
+  call_external orc gs am tx = (res, am', rqs) ==>
+  next_source_machine am' es' = next_source_machine am es'
+Proof
+  strip_tac >>
+  `am'.immutables = am.immutables` by
+    (irule call_external_runtime_mods_preserves_immutables >>
+     fs[source_typing_ok_mods_def, source_deployment_rel_mods_def] >>
+     metis_tac[]) >>
+  drule call_external_static_fields >>
+  simp[next_source_machine_def, abstract_machine_component_equality]
+QED
+
+Theorem call_preserves_transaction_world_mods:
+  call_ready_mods mods exps runtime_bc am tx.target /\
+  call_tx_well_typed tx /\
+  runtime_bc <> [] /\
+  call_state_rel_mods mods exps runtime_bc am tx es /\ LENGTH es.contexts = 1 /\
+  balance_bounded (2 ** 256 - 1) es /\
+  run_call es = SOME (r, es') /\ ~MEM tx.target es'.rollback.toDelete ==>
+  call_ready_mods mods exps runtime_bc (transaction_world am r es') tx.target
+Proof
+  strip_tac >> Cases_on `r = INR NONE` >> simp[transaction_world_def] >>
+  `source_typing_ok_mods mods exps am tx /\
+   source_deployment_rel_mods mods exps am tx` by fs[call_ready_mods_def] >>
+  Cases_on `call_external NONE [] am tx` >>
+  rename1 `call_external NONE [] am tx = (res, output)` >>
+  PairCases_on `output` >>
+  rename1 `call_external NONE [] am tx = (res, am_out, rqs)` >>
+  `next_source_machine am_out es' = next_source_machine am es'` by
+    (irule call_external_next_source_machine_mods >> metis_tac[]) >>
+  drule_all call_preserves_call_ready_mods >> simp[]
+QED
+
+Theorem transaction_sequence_call_ready_mods:
+  LENGTH worlds = SUC (LENGTH calls) /\
+  call_ready_mods mods exps runtime_bc (HD worlds) a /\
+  runtime_bc <> [] /\
+  (!i tx ret H es r es'.
+    i < LENGTH calls /\ EL i calls = (tx, ret, H, es, r, es') /\
+    call_ready_mods mods exps runtime_bc (EL i worlds) a ==>
+    tx.target = a /\ call_tx_well_typed tx /\
+    call_state_rel_mods mods exps runtime_bc (EL i worlds) tx es /\
+    LENGTH es.contexts = 1 /\ balance_bounded (2 ** 256 - 1) es /\
+    run_call es = SOME (r, es') /\ ~MEM a es'.rollback.toDelete /\
+    EL (SUC i) worlds = transaction_world (EL i worlds) r es') ==>
+  EVERY (\am. call_ready_mods mods exps runtime_bc am a) worlds
+Proof
+  strip_tac >>
+  `!i. i < LENGTH worlds ==> call_ready_mods mods exps runtime_bc (EL i worlds) a` by
+    (Induct >- (Cases_on `worlds` >> gvs[]) >> strip_tac >>
+     `i < LENGTH calls /\ i < LENGTH worlds` by decide_tac >>
+     `call_ready_mods mods exps runtime_bc (EL i worlds) a` by metis_tac[] >>
+     Cases_on `EL i calls` >> rename1 `EL i calls = (tx, tail)` >>
+     PairCases_on `tail` >>
+     rename1 `EL i calls = (tx, ret, H, es, r, es')` >>
+     `tx.target = a /\ call_tx_well_typed tx /\
+      call_state_rel_mods mods exps runtime_bc (EL i worlds) tx es /\
+      LENGTH es.contexts = 1 /\ balance_bounded (2 ** 256 - 1) es /\
+      run_call es = SOME (r, es') /\ ~MEM a es'.rollback.toDelete /\
+      EL (SUC i) worlds = transaction_world (EL i worlds) r es'` by
+       metis_tac[] >>
+     metis_tac[call_preserves_transaction_world_mods]) >>
+  simp[listTheory.EVERY_EL]
+QED
+
+Theorem transaction_world_storage_handoff_mods:
+  source_typing_ok_mods mods exps am tx /\
+  source_deployment_rel_mods mods exps am tx /\
+  call_external_trace (SOME (MAP SND (call_trace es))) gs am tx =
+    (res, am', rqs, obs) /\
+  H = storage_trace_horizon obs /\
+  valid_horizon (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am []) H obs /\
+  am.tStorage tx.target = empty_storage /\
+  LENGTH es.contexts = 1 /\ run_call es = SOME (r, es') /\
+  ~source_exempt_mods mods (call_external (SOME (MAP SND (call_trace es))) gs am tx) /\
+  (r = INR NONE ==>
+    call_result_rel_at_mods gs mods exps am tx es r es' /\
+    ~MEM tx.target es'.rollback.toDelete) /\
+  cx2.txn.target = tx.target /\
+  (!slot tv. MEM (F, slot, tv) R2 /\ ~MEM (F, slot, tv) (FST H) ==>
+    slots_in_range
+      (lookup_account tx.target (transaction_world am r es').accounts).storage
+      (w2n slot) tv) ==>
+  storage_well_formed_on cx2 (initial_state (transaction_world am r es') []) R2 /\
+  (transaction_world am r es').tStorage tx.target = empty_storage
+Proof
+  strip_tac >> reverse conj_tac
+  >- (irule transaction_world_transient_empty >> simp[]) >>
+  reverse (Cases_on `r = INR NONE`) >> gvs[]
+  >- suspend "unchanged_world" >>
+  `call_external (SOME (MAP SND (call_trace es))) gs am tx =
+    (res, am', rqs)` by simp[call_external_def] >>
+  `source_storage_trace am tx (MAP SND (call_trace es)) gs = obs` by
+    simp[source_storage_trace_def] >>
+  `next_source_machine am' es' = next_source_machine am es'` by
+    (irule call_external_next_source_machine_mods >> metis_tac[]) >>
+  `?art. check_contract F am.layouts tx.target mods = SOME art /\
+         checked_contract_runtime_ready art mods am tx /\
+         machine_well_typed am /\ call_tx_well_typed tx` by
+    suspend "runtime_ready" >>
+  `storage_well_formed_on
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am' []) (FST (storage_trace_horizon obs))` by
+    (irule vyperCallFiniteStorageTheory.call_external_storage_well_formed_on >>
+     metis_tac[]) >>
+  `accounts_agree (storage_trace_horizon obs) tx.target am'.accounts
+    (process_deletions es'.rollback.toDelete es'.rollback.accounts)` by
+    suspend "committed_accounts" >>
+  suspend "extend_horizon"
+QED
+
+Resume transaction_world_storage_handoff_mods[unchanged_world]:
+  rw[transaction_world_def, vyperStorageFootprintTheory.storage_well_formed_on_def] >>
+  rename1 `MEM (tr, slot, tv) R2` >> Cases_on `tr`
+  >- (simp[vyperStorageBackendTheory.get_storage_def, vyperInterpreterTheory.initial_state_def] >>
+      irule (CONJUNCT1 vyperLookupStorageTheory.slots_in_range_zero_reads) >>
+      simp[vyperStorageTheory.read_slot_def, lookup_storage_def, empty_storage_def]) >>
+  Cases_on `MEM (F, slot, tv) (FST (storage_trace_horizon obs))` >>
+  gvs[transaction_world_def, lookup_account_def, vyperStorageBackendTheory.get_storage_def,
+      vyperInterpreterTheory.initial_state_def] >>
+  fs[vyperStorageFootprintTheory.valid_horizon_def,
+     vyperStorageFootprintTheory.storage_well_formed_on_def] >>
+  qpat_x_assum `!b slot tv. MEM (b, slot, tv) _ ==> _`
+    (qspecl_then [`F`, `slot`, `tv`] mp_tac) >>
+  simp[vyperStorageBackendTheory.get_storage_def, vyperInterpreterTheory.initial_state_def,
+       initial_evaluation_context_def]
+QED
+
+Resume transaction_world_storage_handoff_mods[runtime_ready]:
+  fs[source_typing_ok_mods_def, global_cells_typed_mods_def] >>
+  `ALOOKUP am.sources tx.target = SOME mods /\
+   (case ALOOKUP am.exports tx.target of NONE => [] | SOME xs => xs) = exps` by
+    (fs[source_deployment_rel_mods_def] >>
+     Cases_on `ALOOKUP am.exports tx.target` >> gvs[]) >>
+  simp[checked_contract_runtime_ready_def] >>
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`addr` |-> `tx.target`]
+    vyperTypeContractStaticMapsTheory.check_contract_toplevel_vtypes_consistent_initial)) >>
+  simp[get_module_code_def, initial_evaluation_context_def] >> strip_tac >>
+  drule vyperTypeContractStaticMapsTheory.check_contract_bare_globals_consistent_initial >>
+  disch_then (qspecl_then [`tx`, `am.sources`] mp_tac) >>
+  simp[get_module_code_def, initial_evaluation_context_def] >> strip_tac >>
+  fs[account_immutables_def, empty_immutables_def] >>
+  simp[immutables_ready_def, get_tenv_def, get_module_code_def,
+       initial_evaluation_context_def] >>
+  conj_tac >- metis_tac[optionTheory.IS_SOME_EXISTS] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> ?tv v. _` drule >>
+      strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty)` >>
+  Cases_on `FLOOKUP art.cta_bare_globals (src,id)`
+  >- (qpat_x_assum `!src id ty. _ /\ FLOOKUP art.cta_bare_globals (src,id) = NONE ==> _`
+        (qspecl_then [`src`,`id`,`ty`] mp_tac) >>
+      simp[] >> strip_tac >> gvs[]) >>
+  rename1 `FLOOKUP art.cta_bare_globals (src,id) = SOME bare_ty` >>
+  qpat_x_assum `!src id ty. _ ==> ?ts. _ /\ FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\ _`
+    (qspecl_then [`src`,`id`,`bare_ty`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> ?tv v. _`
+    (qspecl_then [`src`,`id`,`bare_ty`] mp_tac) >>
+  simp[]
+QED
+
+Resume transaction_world_storage_handoff_mods[committed_accounts]:
+  namedCases_on `res` ["v", "source_exc"] >>
+  gvs[call_result_rel_at_mods_def, effects_agree_def, LET_THM] >>
+  Cases_on `source_exc` >>
+  gvs[exception_outcome_rel_mods_def, source_exempt_mods_def,
+      frameOutcomeTheory.frame_outcome_def, AllCaseEqs()]
+QED
+
+Resume transaction_world_storage_handoff_mods[extend_horizon]:
+  qabbrev_tac `D = storage_dead (storage_trace_horizon obs) F
+    (lookup_account tx.target am'.accounts).storage` >>
+  `lookup_account tx.target
+    (process_deletions es'.rollback.toDelete es'.rollback.accounts) =
+   lookup_account tx.target es'.rollback.accounts` by
+    simp[lookup_account_process_deletions] >>
+  `storage_agree D (lookup_account tx.target am'.accounts).storage
+    (lookup_account tx.target es'.rollback.accounts).storage` by
+    fs[loweringStateRelDefsTheory.accounts_agree_def, GSYM lookup_account_def,
+       Abbr `D`] >>
+  `!j b slot tv. D j b /\ MEM (F, slot, tv) (FST (storage_trace_horizon obs)) /\
+    w2n slot <= j /\ j < w2n slot + type_slot_size tv ==>
+    dead_bytes (lookup_account tx.target am'.accounts).storage
+      (w2n slot) tv j b` by
+    (rw[Abbr `D`] >>
+     drule accountsRelPropsTheory.observed_storage_region_read_live >>
+     simp[loweringStateRelDefsTheory.storage_read_live_def] >> metis_tac[]) >>
+  `!slot tv. MEM (F, slot, tv) R2 /\ ~MEM (F, slot, tv) (FST (storage_trace_horizon obs)) ==>
+    slots_in_range (lookup_account tx.target es'.rollback.accounts).storage
+      (w2n slot) tv` by
+    fs[transaction_world_def, next_source_machine_def,
+       lookup_account_process_deletions] >>
+  `regions_consistent (FST (storage_trace_horizon obs))` by
+    fs[vyperStorageFootprintTheory.valid_horizon_def] >>
+  mp_tac (Q.INST
+    [`cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`,
+     `R1` |-> `FST (storage_trace_horizon obs)`, `D` |-> `D`]
+    storage_well_formed_on_horizon_extension) >>
+  (impl_tac >- gvs[initial_evaluation_context_def]) >>
+  simp[transaction_world_def]
+QED
+
+Finalise transaction_world_storage_handoff_mods
