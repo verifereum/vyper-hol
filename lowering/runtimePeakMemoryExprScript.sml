@@ -675,7 +675,8 @@ QED
 Theorem dalloca_windows_compile_call:
   (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
   (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) /\
-  (!raw salted rof order. target <> CreateTarget (CreateFromBlueprint raw) salted rof order) /\
+  ((!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) \/
+   (!raw salted rof order. target <> CreateTarget (CreateFromBlueprint raw) salted rof order)) /\
   (!ct e. MEM e args ==> preserves_dalloca_windows window (cfn cenv ct e)) /\
   (!ct id e.
      target = IntCall id /\ MEM e (omitted_defaults cenv (nsid_to_string id) (LENGTH args)) ==>
@@ -696,7 +697,7 @@ Proof
      dalloca_windows_compile_send, dalloca_windows_raw_call_target,
      dalloca_windows_raw_call_calldata, dalloca_windows_compile_raw_log,
      dalloca_windows_compile_raw_revert, dalloca_windows_compile_selfdestruct,
-     dalloca_windows_compile_call_create_copy])) >>
+     dalloca_windows_compile_call_create_copy, dalloca_windows_compile_call_blueprint])) >>
   simp[] >> first_assum ACCEPT_TAC
 QED
 
