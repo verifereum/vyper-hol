@@ -293,7 +293,6 @@ Resume body_sim_full_mutual_ranked[intcall]:
   >- (qpat_x_assum `!m:num. m < rank ==> _` kall_tac >>
       rpt gen_tac >> strip_tac >> gvs[] >>
       metis_tac[]) >>
-  reverse conj_tac >- (rpt strip_tac >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >> Cases_on `(dflts,ss) = ([],[])`
   >- gvs[subst_consts_stmt_def, subst_consts_expr_def,
           body_stmts_nil_case_full, body_exprs_full_ok_def] >>
@@ -428,7 +427,6 @@ Proof
      simp[] >> disch_then irule >> gvs[] >> metis_tac[]) >>
   `!ts. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,ts)] ==>
         struct_args_unique ts /\
-        ~supportedProgram$internal_defaults_msg_gas ts /\
         (!vis mut nr raw fn args dflts ret body.
            MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts ==>
            stmts_loop_calls_ok [(NONE,ts)]
