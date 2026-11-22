@@ -354,7 +354,7 @@ Theorem selected_internal_shadow_code:
     ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks) /\
     MEM sf sctx.ctx_functions /\ gas_shadow_function callee sf /\
     new_block label beforeS = (oldS,entryS) /\
-    compile_internal_function ce params has_rb nr key trans view ctor ilen
+    compile_internal_function (gas_shadow_env T ce) params has_rb nr key trans view ctor ilen
       (MAP gas_shadow_stmt ss) rt entryS = ((),finalS) /\
     gas_shadow_state entry entryS /\ gas_shadow_state final finalS /\
     fn_has_code entryS finalS sf
@@ -381,14 +381,14 @@ Proof
     compile_internal_fn_bodies (MAP gas_shadow_internal_package xs)
       startS = ((),shadow_before) /\
     new_block label shadow_before = (shadow_old,shadow_entry) /\
-    compile_internal_function ce params has_rb nr key trans view ctor ilen
+    compile_internal_function (gas_shadow_env T ce) params has_rb nr key trans view ctor ilen
       (MAP gas_shadow_stmt ss) rt shadow_entry = ((),shadow_final) /\
     fn_has_code shadow_entry shadow_final shadow_callee` by
     (mp_tac (Q.INST [`entry` |-> `name`, `final` |-> `run_endS`,
        `ctx` |-> `sctx`, `data` |-> `sdata`, `start` |-> `startS`,
        `xs` |-> `MAP gas_shadow_internal_package xs`,
        `ys` |-> `MAP gas_shadow_internal_package ys`,
-       `ss` |-> `MAP gas_shadow_stmt ss`,
+       `ce` |-> `gas_shadow_env T ce`, `ss` |-> `MAP gas_shadow_stmt ss`,
        `has_buf` |-> `has_rb`, `imm_len` |-> `ilen`, `ret` |-> `rt`]
        extract_context_selected_internal_code) >>
      simp[internal_fn_descriptors_def, oneTheory.one] >> metis_tac[]) >>
@@ -407,10 +407,14 @@ Proof
     (mp_tac gas_shadow_compiles_new_block >> simp[gas_shadow_compiles_def] >>
      disch_then (qspecl_then [`real_before`, `shadow_before`] mp_tac) >> simp[]) >>
   `gas_shadow_state real_final shadow_final` by
-    (mp_tac (Q.SPECL [`ce`, `params`, `has_rb`, `nr`, `key`, `trans`, `view`,
-      `ctor`, `ilen`, `ss`, `rt`] gas_shadow_compile_internal_function) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`real_entry`, `shadow_entry`] mp_tac) >> simp[]) >>
+    (`gas_shadow_compiles
+        (compile_internal_function ce params has_rb nr key trans view ctor ilen ss rt)
+        (compile_internal_function (gas_shadow_env T ce) params has_rb nr key trans
+          view ctor ilen (MAP gas_shadow_stmt ss) rt)` by
+       irule gas_shadow_compile_internal_function >>
+     qpat_x_assum `gas_shadow_compiles _ _`
+       (qspecl_then [`real_entry`, `shadow_entry`] mp_tac o
+         REWRITE_RULE [gas_shadow_compiles_def]) >> simp[]) >>
   qexistsl_tac [`real_before`, `real_old`, `real_entry`, `real_final`, `shadow_callee`,
     `shadow_before`, `shadow_old`, `shadow_entry`, `shadow_final`] >>
   fs[]
