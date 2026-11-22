@@ -47,6 +47,12 @@ Proof
   rw[lift_sum_def] >> Cases_on `x` >> fs[return_def, raise_def]
 QED
 
+Theorem if_lift_sum_state:
+  (if b then lift_sum x else lift_sum y) st = (res,st') ==> st' = st
+Proof
+  Cases_on `b` >> simp[] >> metis_tac[lift_sum_state]
+QED
+
 (* msg.gas is evaluated by next_gas_reading, never by evaluate_builtin. *)
 Theorem evaluate_builtin_MsgGas:
   evaluate_builtin cx acc ty (Env MsgGas) ts vs = INR (TypeError "builtin")

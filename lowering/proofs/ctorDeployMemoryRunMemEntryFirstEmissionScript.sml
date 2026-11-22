@@ -1810,11 +1810,28 @@ Proof
             goal_assum $ drule_at Any >> simp[]) >>
         rewrite_tac[GSYM cs_appends_def] >> simp[cs_appends_emit_helpers])]),
     (metis_tac[]),
-    (ho_match_mp_tac first_emission_bind >> conj_tac
-     >- (ho_match_mp_tac first_emission_strong >>
-         rpt gen_tac >> strip_tac >> irule (cj 1 first_emission_emit_helpers) >>
-         goal_assum $ drule_at Any >> simp[]) >>
-     simp[first_emission_return, cs_extends_refl])]
+    (Cases_on `is_self_addr e`
+     >- (rpt gen_tac >> strip_tac >> gvs[] >>
+         FIRST [
+           (drule_at Any (cj 3 first_emission_emit_helpers) >>
+            gvs[] >> metis_tac[]),
+           (rpt gen_tac >> Cases_on `emit_inst INVALID [] [] a` >>
+            simp[] >> strip_tac >> gvs[] >>
+            drule_at Any (cj 1 first_emission_emit_helpers) >>
+            gvs[comp_bind_def, comp_return_def] >>
+            metis_tac[first_emission_return])])
+     >- (gvs[] >>
+         FIRST [
+           (ho_match_mp_tac first_emission_bind >> conj_tac
+            >- metis_tac[] >>
+            gen_tac >> ho_match_mp_tac first_emission_strong >>
+            rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
+            goal_assum $ drule_at Any >> simp[]),
+           (rpt gen_tac >> Cases_on `emit_inst INVALID [] [] a` >>
+            simp[] >> strip_tac >> gvs[] >>
+            drule_at Any (cj 1 first_emission_emit_helpers) >>
+            gvs[comp_bind_def, comp_return_def] >>
+            metis_tac[first_emission_return]) ]))]
 QED
 
 Theorem ctor_alloc_buffer_appends[local]:

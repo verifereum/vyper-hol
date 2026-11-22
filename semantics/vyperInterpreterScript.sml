@@ -1693,7 +1693,9 @@ Definition evaluate_def:
         od
       | NONE => eval_exprs cx es);
       acc <- get_accounts;
-      v <- lift_sum $ evaluate_builtin cx acc ty bt (MAP expr_type es) vs;
+      v <- if is_self_codesize bt es then
+             lift_sum $ evaluate_self_codesize cx vs
+           else lift_sum $ evaluate_builtin cx acc ty bt (MAP expr_type es) vs;
       precompile_call_success bt vs;
       return v
     od;

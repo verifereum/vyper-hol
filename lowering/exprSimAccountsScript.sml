@@ -33,6 +33,7 @@ Theory exprSimAccounts
 Ancestors
   exprUnopSimDefs exprUnopStraight exprSimUnopCompose
   exprSimUnopProps
+  exprSimValues
   exprSimSource
   exprSimHypsDefs
   loweringPosts
@@ -48,6 +49,176 @@ Libs
   pairLib wordsLib
 
 (* ===== The fragment ===== *)
+
+Theorem lower_value_self_codesize[local]:
+  !cenv ty ann e1 sa.
+    is_self_addr e1 ==>
+    lower_value compile_expr cenv ty
+      (Builtin ann (Acc Codesize)
+        [e1]) sa =
+    emit_op CODESIZE [] sa
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[Once lower_value_def, comp_bind_def, compile_expr_unary_builtin] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  simp[lower_value_child_call, vyperASTTheory.expr_type_def,
+       listTheory.list_size_def, compile_acc_def,
+       as_stack_val_pair, unwrap_value_def, comp_return_def,
+       comp_bind_def, is_self_addr_def]
+QED
+
+Theorem self_addr_source_all_tails:
+  !cx e1 es. is_self_addr e1 ==>
+    eval_expr cx e1 es = return (Value (AddressV cx.txn.target)) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `e1` >> gvs[is_self_addr_def] >>
+  Cases_on `b` >> gvs[is_self_addr_def] >>
+  Cases_on `l` >>
+  Cases_on `e` >> gvs[is_self_addr_def] >>
+  simp[is_self_addr_def, Once evaluate_def,
+       vyperContextTheory.evaluate_builtin_def,
+       Once evaluate_def,
+       builtin_args_length_ok_def, is_self_codesize_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.get_accounts_def, vyperStateTheory.lift_sum_def,
+       vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.return_def]
+QED
+
+Theorem self_addr_source_exprs[local]:
+  !cx e1 es. is_self_addr e1 ==>
+    eval_exprs cx [e1] es = return [AddressV cx.txn.target] es
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[FUN_EQ_THM, exprSimWordArgsTheory.eval_exprs_cons_action,
+       exprSimWordArgsTheory.eval_exprs_nil, self_addr_source_all_tails,
+       vyperStateTheory.bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.read_result_def]
+QED
+
+Theorem self_codesize_source_all_tails[local]:
+  !cx ann e1 es. is_self_addr e1 ==>
+    eval_expr cx
+      (Builtin ann (Acc Codesize)
+        [e1]) es =
+    return (Value (IntV (&LENGTH cx.txn.code))) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[self_addr_source_exprs, Once vyperInterpreterTheory.evaluate_def,
+       vyperContextTheory.evaluate_builtin_def, is_self_codesize_def,
+       is_self_addr_def, evaluate_self_codesize_def,
+       builtin_args_length_ok_def, vyperStateTheory.type_check_def,
+       vyperStateTheory.assert_def, vyperStateTheory.get_accounts_def,
+       vyperStateTheory.lift_sum_def, vyperStateTheory.bind_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def, vyperStateTheory.read_result_def]
+QED
+
+Theorem self_codesize_source_bind_all_tails[local]:
+  !cx e1 es tail. is_self_addr e1 ==>
+    bind (eval_expr cx
+      (Builtin (BaseT (UintT 256)) (Acc Codesize)
+        [e1]))
+      (read_result cx) (es with gas_obs := tail) =
+    (INL (IntV (&LENGTH cx.txn.code)), es with gas_obs := tail)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[self_codesize_source_all_tails, vyperStateTheory.bind_def,
+       vyperStateTheory.read_result_def, vyperStateTheory.return_def]
+QED
+
+Theorem self_codesize_target_prefix[local]:
+  is_self_addr e1 /\
+  lower_value compile_expr cenv ty
+      (Builtin (BaseT (UintT 256)) (Acc Codesize)
+        [e1]) sa = (op,sb) /\
+  fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H)) /\
+  (?H. valid_horizon cx st0 H es.storage_trace) /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_path ctx func s0 0 (OK t) /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        expr_post H ctx func cenv cx
+          (Builtin (BaseT (UintT 256)) (Acc Codesize)
+            [e1])
+          es sa sb s0 (es with gas_obs := [])
+          (IntV (&LENGTH cx.txn.code)) op t) /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  rename1 `valid_horizon cx st0 H0 es.storage_trace` >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
+  `emit_op CODESIZE [] sa = (op,sb)` by
+    metis_tac[lower_value_self_codesize] >>
+  `!out. step_inst_base (mk_inst sa.cs_next_id CODESIZE [] [out]) s0 =
+     OK (update_var out (val_to_w256 (IntV &LENGTH cx.txn.code)) s0)` by
+    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+       (drule_then strip_assume_tac) >>
+     simp[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def] >>
+     fs[stmt_state_rel_def, state_rel_def, accounts_rel_def,
+        val_to_w256_def, integer_wordTheory.i2w_def]) >>
+  qabbrev_tac `out = STRING #"%" (toString sa.cs_next_var)` >>
+  qexists_tac `update_var out (val_to_w256 (IntV &LENGTH cx.txn.code)) s0
+                 with vs_inst_idx := SUC s0.vs_inst_idx` >>
+  conj_tac
+  >- (`CODESIZE <> GAS /\ CODESIZE <> INVOKE /\
+       ~is_terminator CODESIZE` by simp[is_terminator_def] >>
+      drule_all emit_op_zero_path >> simp[Abbr `out`]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     expr_post H ctx func cenv cx
+       (Builtin (BaseT (UintT 256)) (Acc Codesize)
+         [e1])
+       es sa sb s0 (es with gas_obs := [])
+       (IntV &LENGTH cx.txn.code) op
+       (update_var out (val_to_w256 (IntV &LENGTH cx.txn.code)) s0
+          with vs_inst_idx := SUC s0.vs_inst_idx) /\
+     (update_var out (val_to_w256 (IntV &LENGTH cx.txn.code)) s0
+        with vs_inst_idx := SUC s0.vs_inst_idx).vs_current_bb = sb.cs_current_bb /\
+     (update_var out (val_to_w256 (IntV &LENGTH cx.txn.code)) s0
+        with vs_inst_idx := SUC s0.vs_inst_idx).vs_inst_idx =
+          LENGTH sb.cs_current_insts` suffices_by
+    (strip_tac >> metis_tac[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+        comp_ignore_bind_def, comp_return_def, emit_def] >>
+  `!x. not_fresh_at sa x ==> x <> out` by
+    (simp[not_fresh_at_def, Abbr `out`] >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `not_local_ptr cenv es.scopes out` by
+    (simp[Abbr `out`] >> irule local_ptrs_reserved_fresh >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `stmt_state_rel H ctx func cenv cx es
+      (update_var out (val_to_w256 (IntV &LENGTH cx.txn.code)) s0)` by
+    (irule stmt_state_rel_update_var >> simp[]) >>
+  drule msg_gas_state_frame >>
+  disch_then (qspecl_then [
+    `(update_var out (val_to_w256 (IntV &LENGTH cx.txn.code)) s0).vs_gas_readings`,
+    `SUC s0.vs_inst_idx`, `[]`] mp_tac) >>
+  simp[] >> strip_tac >>
+  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
+       vyperASTTheory.expr_type_def, is_word_type_def,
+       exprSimPropsTheory.typed_val_to_w256_word_value, word_value_def,
+       exprSimPropsTheory.locals_kept_mem,
+       stmt_state_rel_inst_idx, update_var_def,
+       eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+       Abbr `out`] >>
+  rpt strip_tac >> metis_tac[]
+QED
 
 (* The account address Venom reads (w2w of the operand) is the source's
    (word_of_bytes_be of the address's bytes). *)
@@ -314,7 +485,8 @@ QED
 Theorem lower_value_acc:
   !cenv ty ann item e1 sa op sb.
     lower_value compile_expr cenv ty (Builtin ann (Acc item) [e1]) sa =
-      (op, sb) /\ item <> Code ==>
+      (op, sb) /\ item <> Code /\
+      ~is_self_codesize (Acc item) [e1] ==>
     ?x s1.
       lower_value compile_expr cenv (BaseT AddressT) e1 sa = (x, s1) /\
       (case item of
@@ -332,7 +504,7 @@ Proof
   simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
        compile_builtin_dispatch_body_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  Cases_on `item` >> gvs[compile_acc_def] >>
+  Cases_on `item` >> gvs[compile_acc_def, is_self_codesize_def] >>
   simp[lower_value_child_call, vyperASTTheory.expr_size_def,
        listTheory.list_size_def] >>
   rpt (pairarg_tac >> gvs[]) >>
@@ -365,13 +537,56 @@ Proof
   Cases >> simp[account_item_type_def, is_word_type_def]
 QED
 
+(* self.codesize is the one account spelling whose address is the active
+   frame.  CODESIZE reads that frame directly, so its source value is the
+   code carried by accounts_rel rather than the target account's code. *)
+Theorem compile_acc_self_codesize_case:
+  !nocalls ctx func cenv cx ann item args.
+    is_self_codesize (Acc item) args /\
+    exprs_case nocalls ctx func cenv cx args ==>
+    expr_vv_case nocalls ctx func cenv cx (Builtin ann (Acc item) args)
+Proof
+  rpt strip_tac >> irule expr_vv_case_stack >> rpt conj_tac
+  >- metis_tac[eval_expr_builtin_value]
+  >- simp[compile_acc_stack]
+  >- (rewrite_tac[expr_sim_case_def] >> rpt gen_tac >> strip_tac >>
+      `item = Codesize /\
+       ?e1. args = [e1] /\ is_self_addr e1` by
+        (Cases_on `item` >> gvs[is_self_codesize_def] >>
+         Cases_on `args` >> gvs[] >> rename1 `e1::rest` >>
+         Cases_on `rest` >> gvs[]) >>
+      gvs[] >> irule expr_sim_values_domain >>
+      rpt gen_tac >> strip_tac >>
+      `ann = BaseT (UintT 256)` by
+        gvs[expr_body_pre_split_def, expr_body_pre_mods_def,
+            well_typed_expr_def, well_typed_builtin_app_def,
+            account_item_type_def] >>
+      gvs[] >>
+      `?t. gas_path ctx func s0 0 (OK t) /\
+        (!H. valid_horizon cx st0 H es.storage_trace ==>
+          expr_post H ctx func cenv cx
+            (Builtin (BaseT (UintT 256)) (Acc Codesize) [e1])
+            es sa sb s0 (es with gas_obs := [])
+            (IntV (&LENGTH cx.txn.code)) op t) /\
+        t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts` by
+        metis_tac[self_codesize_target_prefix] >>
+      qexistsl_tac [`[]`, `IntV (&LENGTH cx.txn.code)`, `es`, `t`] >>
+      simp[gasNormalPrefixTheory.gas_value_prefix_def,
+           gasSummaryTheory.gas_marked_exec_def,
+           fragGasModeTheory.gas_marked_path_def,
+           self_codesize_source_bind_all_tails,
+           GSYM ETA_THM] >> rpt strip_tac >> metis_tac[])
+QED
+
 (* ===== The case lemma ===== *)
 
 (* An account read other than .code: compile_unop_sim with the address
    operand lowered as an address, and compile_acc_frag. *)
 Theorem compile_acc_read_case:
   !nocalls ctx func cenv cx ann item args.
-    item <> Code /\ exprs_case nocalls ctx func cenv cx args ==>
+    item <> Code /\ ~is_self_codesize (Acc item) args /\
+    exprs_case nocalls ctx func cenv cx args ==>
     expr_vv_case nocalls ctx func cenv cx (Builtin ann (Acc item) args)
 Proof
   rpt strip_tac >> irule expr_vv_case_stack >> rpt conj_tac
@@ -404,6 +619,7 @@ Proof
     >- simp[]
     >- simp[builtin_args_length_ok_def]
     >- simp[account_item_type_word]
+    >- metis_tac[account_item_type_word]
     >- simp[is_word_type_def]
     >- (rpt strip_tac >> drule_all lower_value_acc >> simp[])
     >- (rpt gen_tac >> strip_tac >>

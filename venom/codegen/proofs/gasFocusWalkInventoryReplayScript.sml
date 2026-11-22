@@ -5458,9 +5458,12 @@ Proof
       strip_tac >> simp[is_terminator_def]) >>
   drule opcodeClassTheory.step_inst_abort_opcodes >> rpt strip_tac >>
   simp[is_terminator_def, dftDefsTheory.dft_abort_compatible_def,
-       dftDefsTheory.dft_abort_kind_def, dftScheduleOrderTheory.dft_must_order_def,
-       venomEffectsTheory.read_effects_def, venomEffectsTheory.write_effects_def,
-       venomEffectsTheory.all_effects_def, pred_setTheory.DISJOINT_INSERT,
+       dftDefsTheory.dft_abort_kind_def] >>
+  simp[dftScheduleOrderTheory.dft_must_order_def,
+       venomEffectsTheory.read_effects_def,
+       venomEffectsTheory.write_effects_def,
+       venomEffectsTheory.all_effects_def,
+       pred_setTheory.DISJOINT_INSERT,
        pred_setTheory.DISJOINT_INSERT']
 QED
 

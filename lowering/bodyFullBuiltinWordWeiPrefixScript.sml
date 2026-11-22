@@ -25,7 +25,8 @@ Theorem as_wei_value_source_bind:
 Proof
   rpt gen_tac >>
   simp[eval_expr_builtin_action, builtin_args_length_ok_def,
-       eval_exprs_cons_action, Once evaluate_def, bind_assoc] >>
+       eval_exprs_cons_action, Once evaluate_def, bind_assoc,
+       vyperContextTheory.is_self_codesize_def] >>
   AP_TERM_TAC >> ABS_TAC >> AP_TERM_TAC >> ABS_TAC >>
   simp[FUN_EQ_THM, bind_def, return_def]
 QED

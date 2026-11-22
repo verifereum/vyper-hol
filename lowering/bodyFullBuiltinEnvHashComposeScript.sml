@@ -156,7 +156,8 @@ Proof
  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
    (irule unop_operand_admissible >>
     qexistsl_tac [`BaseT (BytesT (Fixed 32))`, `bt`] >>
-    Cases_on `bt = BlockHash` >> gvs[precompile_builtin_def]) >>
+    Cases_on `bt = BlockHash` >> gvs[precompile_builtin_def,
+                                      vyperContextTheory.is_self_codesize_def]) >>
  qpat_x_assum `expr_sim_full _ _ _ _ e es` mp_tac >>
  rewrite_tac[expr_sim_full_def] >> simp[] >>
  disch_then (drule_all_then assume_tac) >>
@@ -164,7 +165,8 @@ Proof
  `bind (eval_expr cx (Builtin (BaseT (BytesT (Fixed 32))) bt [e])) (read_result cx) =
   bind (bind (eval_expr cx e) (read_result cx))
     (\v es. (unop_result cx (BaseT (BytesT (Fixed 32))) bt [expr_type e] v es, es))` by
-   (irule eval_expr_unop_action_general >> Cases_on `bt = BlockHash` >> gvs[precompile_builtin_def]) >>
+   (irule eval_expr_unop_action_general >> Cases_on `bt = BlockHash` >>
+    gvs[precompile_builtin_def, vyperContextTheory.is_self_codesize_def]) >>
  pop_assum SUBST1_TAC >>
  irule gas_outcome_full_bind_all >>
  conj_tac

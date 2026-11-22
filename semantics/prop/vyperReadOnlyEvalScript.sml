@@ -536,9 +536,10 @@ QED
 
 Resume evaluate_read_only_calls[builtin_other]:
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
-  >- rpt (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
-          simp[machine_frame_def, machine_frame_reads, machine_frame_primitives,
-               machine_frame_precompile_call_success]) >>
+  >- (Cases_on `is_self_codesize bt es` >>
+      rpt (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
+           simp[machine_frame_def, machine_frame_reads, machine_frame_primitives,
+                machine_frame_precompile_call_success])) >>
   gvs[SF ETA_ss] >> Cases_on `code_slice_source bt es` >> simp[]
   >- metis_tac[] >>
   rename1 `_ = SOME p` >> PairCases_on `p` >> simp[] >>

@@ -31,7 +31,7 @@ Proof
        builtin_args_length_ok_def, read_result_def] >>
   simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   Cases_on `item` >>
-  gvs[evaluate_builtin_def, env_item_type_def, return_def, raise_def,
+  gvs[evaluate_builtin_def, is_self_codesize_def, env_item_type_def, return_def, raise_def,
       read_result_def]
 QED
 

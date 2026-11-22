@@ -3063,6 +3063,7 @@ Theorem ecrecover_read_cases:
      | INL w => (do precompile_call_success ECRecover vs; return w od) es1 = (res,es'))
 Proof
   strip_tac >> qpat_x_assum `bind _ _ _ = _` mp_tac >>
+  `~is_self_codesize ECRecover args` by simp[is_self_codesize_def] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, builtin_args_length_ok_def] >>
   Cases_on `eval_exprs cx args es` >>
@@ -3073,7 +3074,7 @@ Proof
   simp[bind_def, return_def, raise_def, read_result_def, ignore_bind_def] >>
   Cases_on `precompile_call_success ECRecover vs es1` >>
   rename1 `precompile_call_success ECRecover vs es1 = (out,es2)` >> Cases_on `out` >>
-  simp[bind_def, return_def, read_result_def] >> rpt strip_tac >> gvs[] >> metis_tac[]
+  simp[is_self_codesize_def, bind_def, return_def, read_result_def] >> rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
 (* An argument list's gas outcome, then a continuation on its values. *)

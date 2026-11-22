@@ -864,7 +864,8 @@ Proof
        assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
        builtin_args_length_ok_def, read_result_def] >>
   simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
-  Cases_on `item` >> fs[evaluate_builtin_def, return_def, raise_def] >>
+  Cases_on `item` >> fs[evaluate_builtin_def, is_self_codesize_def,
+                         return_def, raise_def] >>
   rw[] >> gvs[expr_res_ok_def, read_result_def, return_def]
 QED
 

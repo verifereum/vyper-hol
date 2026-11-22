@@ -224,7 +224,14 @@ Resume eval_no_mutation_scopes[Builtin]:
           rpt strip_tac >>
           imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
           imp_res_tac precompile_call_success_state >>
-          gvs[expr_can_mutate_def, type_check_def, assert_def] >> metis_tac[]) >>
+          qpat_x_assum `!s'' t. _ /\ _ /\ _ /\ NONE = NONE ==> _`
+            (qspecl_then [`st`, `st`] (fn th => assume_tac
+              (SIMP_RULE (srw_ss()) [type_check_def,
+               builtin_args_length_ok_def, assert_def] th))) >>
+          qpat_x_assum `builtin_args_length_ok bt (LENGTH es) /\ bt <> Len /\ bt <> Env MsgGas ==> _` drule_all >>
+          strip_tac >>
+          imp_res_tac if_lift_sum_state >>
+          simp[evaluation_state_component_equality] >> gvs[] >> metis_tac[]) >>
       PairCases_on `x` >>
       `?n start len. bt = Slice n /\
                      es = [Builtin x0 (Acc Code) [x1]; start; len]` by

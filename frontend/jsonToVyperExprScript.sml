@@ -925,6 +925,8 @@ Definition translate_attribute_def:
       Builtin (BaseT BoolT) (Acc IsContract) [Builtin (BaseT AddressT) (Env SelfAddr) []]
     else if obj = "self" /\ attr = "codehash" then
       Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [Builtin (BaseT AddressT) (Env SelfAddr) []]
+    else if obj = "self" /\ attr = "codesize" then
+      Builtin (BaseT (UintT 256)) (Acc Codesize) [Builtin (BaseT AddressT) (Env SelfAddr) []]
     (* self.x: declaration types override incomplete compiler expression metadata. *)
     else if obj = "self" then
       let nsid = (resolve_source_ref ctx attr_src_id_opt, attr) in

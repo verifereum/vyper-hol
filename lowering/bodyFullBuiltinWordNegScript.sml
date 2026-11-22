@@ -762,7 +762,8 @@ Proof
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     (irule unop_operand_admissible >>
      qexistsl [`expr_type e`, `Neg`] >>
-     simp[builtin_args_length_ok_def, vyperInterpreterTheory.precompile_builtin_def]) >>
+     simp[builtin_args_length_ok_def, vyperInterpreterTheory.precompile_builtin_def,
+          vyperContextTheory.is_self_codesize_def]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ e _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `s1`, `shadow_sa`, `shadow_s1`,

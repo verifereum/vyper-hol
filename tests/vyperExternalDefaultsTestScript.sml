@@ -38,6 +38,7 @@ Proof
   simp[eval_external_defaults_run, evaluate_def, evaluate_literal_def,
        read_result_def, builtin_args_length_ok_def,
        evaluate_builtin_def, evaluate_account_op_def,
+       is_self_codesize_def,
        type_check_def, assert_def, get_accounts_def,
        lift_sum_def, bind_def, ignore_bind_def, return_def, raise_def]
 QED
@@ -69,6 +70,7 @@ Proof
   simp[eval_external_defaults_cons, evaluate_def, evaluate_literal_def,
        read_result_def, builtin_args_length_ok_def,
        evaluate_builtin_def, evaluate_account_op_def,
+       is_self_codesize_def,
        type_check_def, assert_def, get_accounts_def,
        lift_sum_def, bind_def, ignore_bind_def, return_def, raise_def]
 QED

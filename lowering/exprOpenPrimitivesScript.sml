@@ -115,6 +115,7 @@ Theorem compile_acc_open:
     ~block_is_terminated sb
 Proof
   rpt gen_tac >> Cases_on `item` >> simp[compile_acc_def] >>
+  Cases_on `is_self_addr e` >> simp[] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
   drule emit_op_nonterminator_open >> simp[is_terminator_def]
 QED
