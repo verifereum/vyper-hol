@@ -2,11 +2,59 @@
 Theory defaultDispatchMods
 Ancestors
   compileUnit constSubstMods e2eModsDefs entryRejectCode
-  defaultDispatchModsFallback defaultDispatchModsGetter defaultDispatchModsHit
-  defaultDispatchModsNames defaultDispatchModsPackage defaultDispatchModsRoute
-  defaultDispatchModsRun defaultDispatchModsSignatures defaultDispatchModsSize
-  vyperTypeContract entryLinearAppend entryCompileIntervals fragExec list pair option
-  compileVyper compileEnv moduleLowering
+  defaultDispatchModsFallback defaultDispatchModsGetter defaultDispatchModsNames
+  defaultDispatchModsRun defaultDispatchModsSize dispatchedClassifiedRouteMods
+  dispatchedSignatureLookupMods dispatchedSignatureOriginMods entryDispatchProps
+  vyperTypeContract entryLinearAppend entryCompileIntervals fragExec alist finite_map
+  list pair option compileVyper compileEnv moduleLowering vyperInterpreter
+
+(* Both linked package builders use the same environment for this declaration. *)
+Theorem empty_fallback_external_package_unit[local]:
+  set_fallback_package_target target
+    (package_fallback_fn_unit mods use_trans nkeys
+      (SOME (src,(mut,nr,rr,name,[],([]:expr list),ret,fbody)))) =
+    SOME (ce,pay,nr',key,ut,iv,body',rt) ==>
+  set_external_package_target target
+    (package_external_fn_unit mods use_trans nkeys
+      (src,(mut,nr,rr,name,[],([]:expr list),ret,fbody))) =
+    ("fn_" ++ name,ce,[],4,pay,nr',key,ut,iv,body',rt) /\ ce.ce_vars = FEMPTY
+Proof
+  simp[package_fallback_fn_unit_def, package_external_fn_unit_def,
+       set_fallback_package_target_def, set_external_package_target_def,
+       build_positional_args_def, min_calldata_size_def] >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `build_flag_info_mods mods (K (K 0)) (K 0)` >>
+  Cases_on `ret = NoneT` >>
+  simp[update_cenv_nonreentrant_def, update_cenv_ret_abi_def,
+       build_compile_env_unit_def, allocate_args_def]
+QED
+
+(* On a hit, the __default__ ABI signature can only come from a getter. *)
+Theorem default_signature_lookup_origin[local]:
+  source_typing_ok_mods mods exps am tx /\
+  ALOOKUP mods (ALOOKUP exps "__default__") = SOME tops /\
+  vyperInterpreter$lookup_function (ALOOKUP exps "__default__") "__default__" External tops =
+    SOME (mut,nr,args,[],ret,fbody) /\
+  MEM ("__default__",tys) (abi_deployed_signatures mods exps) ==>
+  lookup_raw_return_or_F (ALOOKUP exps "__default__") "__default__" External tops = F /\
+  ?top. MEM top tops /\ MEM ("__default__",tys) (abi_decl_signatures top) /\
+    is_public_getter_decl "__default__" top /\
+    external_getter_tuple (ALOOKUP exps "__default__") top =
+      SOME (mut,nr,args,([]:expr list),ret,fbody)
+Proof
+  strip_tac >>
+  drule_all deployed_signature_selected_decl >>
+  disch_then (qx_choose_then `top` (CONJUNCTS_THEN assume_tac)) >>
+  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (ALOOKUP exps "__default__")) tops))` by
+    (fs[source_typing_ok_mods_def] >>
+     metis_tac[ALOOKUP_MEM, check_contract_external_names_distinct,
+               contract_keys_module_distinct]) >>
+  drule_all selected_decl_lookup_args >>
+  simp[tagged_getter_source_tuple] >> strip_tac >>
+  `lookup_raw_return (ALOOKUP exps "__default__") "__default__" External tops = NONE` by
+    metis_tac[public_getter_raw_return_none] >>
+  simp[lookup_raw_return_or_F_def] >> qexists_tac `top` >> fs[]
+QED
 
 Theorem default_dispatch_cases_mods:
   !sels. sels = MAP (\(sel,lbl,z). (sel,lbl))
@@ -73,17 +121,10 @@ Proof
   `elbl = "__entry"` by (drule_all run_lowering_entry_label >> simp[]) >>
   drule_then assume_tac (Q.INST [`name` |-> `"__default__"`]
     export_excludes_main_external) >>
+  drule_all linked_classified_linear_routes >>
+  disch_then (qspec_then `cd` (CONJUNCTS_THEN assume_tac)) >>
   qabbrev_tac `tenv = type_env_all_modules mods` >>
   qabbrev_tac `sigs = abi_deployed_signatures mods exps` >>
-  `ALL_DISTINCT (MAP (\(n,ts). abi_method_id tenv n ts) sigs)` by
-    fs[Abbr `tenv`, Abbr `sigs`, source_typing_ok_mods_def, exports_ok_def] >>
-  `!m n r name params ds res b.
-     MEM (m,n,r,name,params,ds,res,b) (MAP SND exts) ==>
-     MEM (name,MAP SND params) sigs` by
-    (simp[Abbr `sigs`, MEM_MAP, EXISTS_PROD] >>
-     metis_tac[compiled_entry_deployed_signature, tagged_getter_decl_signature]) >>
-  drule_all (SIMP_RULE pure_ss [LET_THM] default_linear_routes) >>
-  disch_then assume_tac >>
   qabbrev_tac `selectors = build_selectors tenv (MAP SND exts)` >>
   qabbrev_tac `sels = MAP (\(sel,lbl,z). (sel,lbl)) selectors` >>
   qpat_x_assum `calldata_dispatch_mods _ _ _ = _` mp_tac >>
@@ -132,20 +173,16 @@ Proof
   simp[markerTheory.Abbrev_def, AllCaseEqs()] >> strip_tac >>
   drule_then assume_tac venomInstTheory.FIND_MEM >>
   gvs[Abbr `src`] >>
-  drule_all (SIMP_RULE pure_ss [LET_THM] default_signature_lookup_origin) >>
+  drule_all default_signature_lookup_origin >>
   strip_tac >>
   `abi_decl_signatures top = [("__default__", MAP SND args)] /\ MEM decl exts` by
     (gvs[Abbr `decl`, Abbr `stmts`] >>
      drule_all (Q.SPECL [`mods`,`exps`] selected_default_getter_classified) >>
      simp[subst_consts_fn_mods_def, subst_consts_expr_mods_def]) >>
   `tys = MAP SND args` by fs[] >> gvs[] >>
-  `MEM (mut,F,F,"__default__",args,([]:expr list),ret,stmts) (MAP SND exts)` by
-    (simp[MEM_MAP] >> qexists_tac `decl` >> simp[Abbr `decl`]) >>
   `4 <= LENGTH cd` by decide_tac >>
   `!fl. linear_dispatch_target cd sels fl = "fn___default__"` by
-    (gen_tac >>
-     qpat_assum `!fl data. _` (qspecl_then [`fl`,`cd`] (mp_tac o CONJUNCT2)) >>
-     metis_tac[]) >>
+    (fs[Abbr `decl`] >> metis_tac[]) >>
   `?ce pa mc pay key ut iv rt. set_external_package_target rpolicy.rpol_target
     (package_external_fn_unit mods T (K global_nonreentrant_slot) decl) =
     ("fn___default__",ce,pa,mc,pay,F,key,ut,iv,stmts,rt)` by

@@ -26,16 +26,12 @@ Proof
          simp[external_name_keys_toplevel_def]) >>
       Cases_on `name = "__default__"` >> gvs[abi_decl_signatures_def] >>
       metis_tac[]) >>
+  `public_getter_src src decl = SOME (mut,nr,F,name,args,([]:expr list),ret,b)` by
+    simp[tagged_getter_source_tuple] >>
   `MEM (src,name) (external_name_keys_toplevel src decl)` by
-    (Cases_on `decl` >> gvs[is_public_getter_decl_def] >>
-     Cases_on `v` >> gvs[is_public_getter_decl_def, external_name_keys_toplevel_def]) >>
+    (drule tagged_getter_name_key >> simp[fn_decl_name_def]) >>
   `top = decl` by
     (drule all_distinct_flat_map_unique >> disch_then irule >> simp[] >>
      qexists_tac `(src,name)` >> simp[]) >>
-  `public_getter_src src top = SOME (mut,nr,F,name,args,([]:expr list),ret,b)` by
-    (Cases_on `decl` >> gvs[is_public_getter_decl_def] >>
-     Cases_on `v` >>
-     gvs[is_public_getter_decl_def, public_getter_src_def, external_getter_tuple_def] >>
-     rpt CASE_TAC >> gvs[]) >>
-  drule tagged_getter_decl_signature >> strip_tac >> gvs[]
+  gvs[] >> drule tagged_getter_decl_signature >> strip_tac >> gvs[]
 QED

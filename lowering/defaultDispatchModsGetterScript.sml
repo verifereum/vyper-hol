@@ -18,7 +18,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >> metis_tac[FST]
 QED
 
-Theorem tagged_getter_source_tuple[local]:
+Theorem tagged_getter_source_tuple:
   !src top mut nr rr name args dflts ret body.
     public_getter_src src top = SOME (mut,nr,rr,name,args,dflts,ret,body) <=>
     rr = F /\ is_public_getter_decl name top /\
@@ -48,7 +48,7 @@ Proof
   metis_tac[build_getter_args_root_irrelevant, FST]
 QED
 
-Theorem tagged_getter_name_key[local]:
+Theorem tagged_getter_name_key:
   public_getter_src src top = SOME g ==>
   MEM (src,fn_decl_name g) (external_name_keys_toplevel src top)
 Proof

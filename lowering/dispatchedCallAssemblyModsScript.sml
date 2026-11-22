@@ -2,7 +2,7 @@
 Theory dispatchedCallAssemblyMods
 Ancestors
   dispatchedValuePrefix dispatchedSelectionMods dispatchedRejectCodeMods
-  dispatchedRejectCertificateBoundary e2eModsDefs entryRejectCode sourceUnitExecutionMods
+  dispatchedRejectCertificateMods e2eModsDefs entryRejectCode sourceUnitExecutionMods
   sourceValueRejection vyperContext vyperInterpreter vyperState
 
 Triviality source_dispatched_value_reject_trace_mods:
@@ -87,7 +87,9 @@ Proof
   qexists_tac `[]` >> conj_tac
   >- (drule_all (SIMP_RULE pure_ss [LET_THM] linked_routed_reject_code) >>
       strip_tac >>
-      irule linked_installed_reject_certificate_boundary >>
+      qpat_assum `!os gobs. call_external_trace _ _ _ _ = _`
+        (qspec_then `vs.vs_outcomes` assume_tac) >>
+      irule linked_installed_reject_certificate >>
       fs[] >> qexistsl_tac [`checked`,`de`,`ds`,`fl`,`mc`,`opened`,`selectors`] >> simp[]) >>
   strip_tac >> qx_gen_tac `tail` >>
   qpat_x_assum `!os gobs. call_external_trace _ _ _ _ = _`
