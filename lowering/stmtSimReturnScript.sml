@@ -1282,16 +1282,6 @@ Proof
       gas_shadow_state_def]
 QED
 
-Theorem emitted_ret_shadow_prefix[local]:
-  emit_inst RET [op; rpc] [] sm = ((), sb) /\
-  emit_inst RET [shadow_op; rpc] [] shadow_sm = ((), shadow_sb) /\
-  gas_shadow_state sb shadow_sb ==>
-  op = shadow_op /\ gas_shadow_state sm shadow_sm
-Proof
-  simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
-  strip_tac >> gvs[gas_shadow_state_def, gas_shadow_inst_def, mk_inst_def]
-QED
-
 Theorem return_word_compile_parts[local]:
   cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
   cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\

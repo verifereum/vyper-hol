@@ -191,10 +191,19 @@ Resume body_assign_immutable_bytes_header_joint_fresh[memory]:
 QED
 
 Resume body_assign_immutable_bytes_header_joint_fresh[join]:
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sm)` by
+    (gvs[compile_bytestring_word_count_def, emit_op_def,
+         comp_bind_def, comp_ignore_bind_def, comp_return_def,
+         fresh_id_def, fresh_var_def, emit_def] >>
+     simp[emitted_insts_def, DROP_APPEND, SUB_PLUS, mk_inst_def]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
       (OK (t with vs_inst_idx := LENGTH sm.cs_current_insts),Gf,tnf)` by
     (irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
-     conj_tac >- simp[] >>
+     conj_tac >-
+       (strip_tac >> rpt gen_tac >> strip_tac >>
+        irule dalloca_no_wrap_non_dalloca >>
+        qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+        simp[EVERY_MEM]) >>
      qexistsl_tac [`emitted_insts sa sm`,`sa`] >>
      gvs[same_blocks_def, EVERY_MEM]) >>
   `fresh_vars_wrt sa s ==>
@@ -384,6 +393,13 @@ Proof
       i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) [i0]` by
     simp[Abbr `i0`, mk_inst_def, is_terminator_def] >>
   `lookup_block q.vs_current_bb func.fn_blocks = SOME bbH` by simp[] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. [i0] = pre ++ i::post /\ run_inst_seq pre q = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `MEM i [i0]` by
+       (qpat_assum `[i0] = _` (fn th => pure_once_rewrite_tac [th]) >> simp[]) >>
+     gvs[Abbr `i0`, mk_inst_def]) >>
   drule_all_then (qspec_then `explicit` strip_assume_tac) run_inst_seq_origin_ptr_lift >>
   qabbrev_tac `t0 = u0 with vs_inst_idx := q.vs_inst_idx + LENGTH [i0]` >>
   qabbrev_tac `lbl = if j=n then exit else loop_body` >>
@@ -656,6 +672,13 @@ Proof
       i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) [i0]` by
     simp[Abbr `i0`, mk_inst_def, is_terminator_def] >>
   `lookup_block s0.vs_current_bb func.fn_blocks = SOME bbE` by simp[] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. [i0] = pre ++ i::post /\ run_inst_seq pre s0 = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `MEM i [i0]` by
+       (qpat_assum `[i0] = _` (fn th => pure_once_rewrite_tac [th]) >> simp[]) >>
+     gvs[Abbr `i0`, mk_inst_def]) >>
   drule_all_then (qspec_then `explicit` strip_assume_tac) run_inst_seq_origin_ptr_lift >>
   qabbrev_tac `t0 = u0 with vs_inst_idx := s0.vs_inst_idx + LENGTH [i0]` >>
   `get_instruction bbE (s0.vs_inst_idx+1) =
@@ -1442,6 +1465,7 @@ Proof
        (strip_assume_tac o REWRITE_RULE [rich_listTheory.IS_PREFIX_APPEND, GSYM APPEND_ASSOC, APPEND]) >>
      simp[rich_listTheory.IS_PREFIX_APPEND, get_instruction_def, EL_APPEND_EQN]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+   EVERY (\i. i.inst_opcode <> DALLOCA) code /\
    FILTER (\i. i.inst_opcode = GAS) code = []` by
     (Cases_on `imm` >>
      simp[Abbr `code`, Abbr `pI`, Abbr `pS`, Abbr `p5`, Abbr `p4`, Abbr `p3`,
@@ -1453,7 +1477,13 @@ Proof
        (mp_then (Pat `run_inst_seq _ _ = _`) mp_tac fragGasSeqPtrTheory.run_inst_seq_gas_origin_ptr_path) >>
      disch_then (drule_at (Pat `inst_seq_ptr _ _ _ _ _ G tn code q _ _`) o SPEC_ALL) >>
      disch_then (qspecl_then [`explicit`,`bbB`] mp_tac) >>
-     simp[Abbr `endp`]) >>
+     simp[Abbr `endp`] >>
+     (impl_tac >-
+       (strip_tac >> rpt gen_tac >> strip_tac >>
+        irule dalloca_no_wrap_non_dalloca >>
+        qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) code` mp_tac >>
+        simp[EVERY_MEM])) >>
+     simp[]) >>
   `qe.vs_current_bb = loop_body /\ ~qe.vs_halted /\
    qe.vs_allocas = q.vs_allocas /\ qe.vs_alloca_next = q.vs_alloca_next /\
    qe.vs_fmp = q.vs_fmp /\ qe.vs_initial_fmp = q.vs_initial_fmp /\

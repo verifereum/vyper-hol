@@ -10,6 +10,85 @@ Ancestors
   valueEncodingProofs valueEncodingProps emitHelperProps exprLoweringProps localPtrsProps
   emitHelper compileEnv venomState venomExecSemantics venomInst words list arithmetic
 
+Theorem window_leaf_sequence_result[local]:
+  abi_encoder_window_pre ctx func st en dst src ei at av sb cap d s /\
+  window_seq st en s raw /\
+  mem_bytes_at d (LENGTH (enc at av)) raw.vs_memory = enc at av /\
+  eval_operand out raw = SOME (n2w (LENGTH (enc at av))) /\
+  abi_encoder_registered_effect (window_alloca_sites func (frag_ids st en))
+    [(d,LENGTH (enc at av))] s raw /\
+  raw.vs_allocas = s.vs_allocas /\ raw.vs_alloca_next = s.vs_alloca_next /\
+  raw.vs_halted = s.vs_halted /\ raw.vs_current_bb = s.vs_current_bb ==>
+  window_strong_result ctx func st en out at av d s
+    (raw with vs_inst_idx := LENGTH en.cs_current_insts)
+Proof
+  strip_tac >>
+  `!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
+    FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32` by
+    metis_tac[window_pre_sites] >>
+  qpat_x_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [abi_encoder_window_pre_def]) >>
+  qpat_x_assum `!inst b sz. _ ==> _` kall_tac >>
+  `alloca_inv raw` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
+  `alloca_room ctx func raw` by
+    (irule alloca_room_fields >> qexists_tac `s` >> simp[]) >>
+  `window_alloca_growth s raw` by
+    (simp[window_alloca_growth_def] >> metis_tac[optionTheory.NOT_SOME_NONE]) >>
+  `window_phase ctx func st en (window_alloca_sites func (frag_ids st en))
+    [(d,LENGTH (enc at av))] s (raw with vs_inst_idx := LENGTH en.cs_current_insts)` by
+    (irule window_seq_phase >> simp[]) >>
+  irule window_complex_phase_result >> simp[] >>
+  Cases_on `out` >> gvs[eval_operand_def, lookup_var_def]
+QED
+
+Theorem window_bytes_contract_mem:
+  !dst src st out st' ctx func s at av sb cap d.
+  compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,st') /\
+  abi_encoder_window_pre ctx func st st' dst src (AbiBytestring maxlen) at av sb cap d s ==>
+  ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [abi_encoder_window_pre_def]) >>
+  qpat_x_assum `!inst b sz. _ ==> _` kall_tac >>
+  qpat_assum `abi_encoder_window_input _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [abi_encoder_window_bytes_iff]) >>
+  qpat_x_assum `av = BytesV _` SUBST_ALL_TAC >>
+  `LENGTH (enc at (BytesV bs)) = 32+contractABI$ceil32 (LENGTH bs)` by
+    metis_tac[abi_encoder_bytes_encoding] >>
+  `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
+  `LENGTH bs <= contractABI$ceil32 (LENGTH bs)` by
+    metis_tac[abi_encoder_ceil32_bounds] >>
+  `sb < dimword (:256) /\ LENGTH bs+31 < dimword (:256) /\
+   d+contractABI$ceil32 (LENGTH bs) < dimword (:256) /\
+   32+LENGTH bs < dimword (:256) /\ sb+32+LENGTH bs <= s.vs_alloca_next /\
+   d+32+contractABI$ceil32 (LENGTH bs) <= s.vs_alloca_next /\
+   sb+32+LENGTH bs < dimword (:256) /\
+   d+32+contractABI$ceil32 (LENGTH bs) < dimword (:256)` by decide_tac >>
+  `mload sb s = n2w (LENGTH bs)` by metis_tac[mem_word_at_eq_mload] >>
+  `!x. dst = Var x \/ src = Var x ==> not_fresh_at st x` by metis_tac[] >>
+  drule_all window_bytes_sequence_mem >>
+  disch_then (qspec_then `ctx` (qx_choose_then `actual` strip_assume_tac)) >>
+  (* Recover the remaining frame fields from the same raw execution. *)
+  drule_all window_bytes_sequence >>
+  disch_then (qx_choose_then `framed` strip_assume_tac) >>
+  `framed = actual` by fs[window_seq_def] >> pop_assum SUBST_ALL_TAC >>
+  `cap <> 0` by (strip_tac >> gvs[]) >>
+  `sb + cap <= d \/ d + LENGTH (enc at (BytesV bs)) <= sb` by
+    (qpat_x_assum `venomMemDefs$regions_disjoint _ _` mp_tac >>
+     asm_simp_tac bool_ss [venomMemDefsTheory.regions_disjoint_def, ADD_EQ_0,
+       DECIDE ``(32:num) <> 0``]) >>
+  `mem_bytes_at d (LENGTH (enc at (BytesV bs))) actual.vs_memory = enc at (BytesV bs)` by
+    (qpat_assum `actual.vs_memory = _` (fn th => rewrite_tac[th]) >>
+     irule window_bytes_input_memory >> qexistsl_tac [`cap`, `maxlen`] >> asm_rewrite_tac[]) >>
+  `abi_encoder_registered_effect (window_alloca_sites func (frag_ids st st'))
+     [(d,LENGTH (enc at (BytesV bs)))] s actual` by
+    (asm_rewrite_tac[] >> irule window_bytes_effect >> simp[] >>
+     qexistsl_tac [`LENGTH bs`, `sb`] >> simp[]) >>
+  qexists_tac `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
+  asm_rewrite_tac[] >> metis_tac[window_leaf_sequence_result]
+QED
+
 Theorem window_copy_contract_mem:
   !dst src st out st' ctx func s at av sb cap d.
   compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,st') /\
@@ -49,8 +128,12 @@ Proof
      metis_tac[ci_mono_emit_void, ci_mono_def, pairTheory.SND]) >>
   `run_inst_seq_mem_ok (emitted_insts st st') s` by
     (drule emit_mcopy_mem_ok >> disch_then irule >> simp[] >> decide_tac) >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+    (drule emitted_insts_emit_void >> simp[mk_inst_def]) >>
   `mem_cont_sim ctx func s ((mcopy d sb sz s) with vs_inst_idx := LENGTH st'.cs_current_insts)` by
-    metis_tac[window_seq_mem_cont] >>
+    (irule window_seq_mem_cont >> simp[] >> qexists_tac `st` >> simp[] >>
+     rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     fs[EVERY_APPEND]) >>
   qexists_tac `(mcopy d sb sz s) with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   asm_rewrite_tac[] >>
   simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
@@ -119,6 +202,18 @@ Proof
      rpt strip_tac >> simp[mstore_def, write_memory_with_expansion_def] >>
      metis_tac[lookup_var_update_not_fresh, LESS_EQ_REFL]) >>
   `run_inst_seq_mem_ok (emitted_insts st st') s` by metis_tac[window_word_mem_checks] >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+    (drule abi_encode_word_trace >> strip_tac >>
+     drule emitted_insts_emit_op >> strip_tac >>
+     drule emitted_insts_emit_void >> strip_tac >>
+     `emitted_insts st st' = emitted_insts st loaded_st ++ emitted_insts loaded_st st'` by
+       metis_tac[emitted_insts_append] >>
+     gvs[mk_inst_def]) >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st st' = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY _ (emitted_insts st st')` mp_tac >> simp[EVERY_MEM]) >>
   `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
     metis_tac[window_seq_mem_cont] >>
   `abi_encoder_extend_sim ctx func s
@@ -147,81 +242,4 @@ Proof
     GSYM mem_word_at_eq_mload, mstore_def, write_memory_with_expansion_def] >>
   conj_tac >- metis_tac[abi_encoder_extend_sim_sim] >>
   asm "sizes" ACCEPT_TAC
-QED
-
-Theorem window_leaf_sequence_result[local]:
-  abi_encoder_window_pre ctx func st en dst src ei at av sb cap d s /\
-  window_seq st en s raw /\
-  mem_bytes_at d (LENGTH (enc at av)) raw.vs_memory = enc at av /\
-  eval_operand out raw = SOME (n2w (LENGTH (enc at av))) /\
-  abi_encoder_registered_effect (window_alloca_sites func (frag_ids st en))
-    [(d,LENGTH (enc at av))] s raw /\
-  raw.vs_allocas = s.vs_allocas /\ raw.vs_alloca_next = s.vs_alloca_next /\
-  raw.vs_halted = s.vs_halted /\ raw.vs_current_bb = s.vs_current_bb ==>
-  window_strong_result ctx func st en out at av d s
-    (raw with vs_inst_idx := LENGTH en.cs_current_insts)
-Proof
-  strip_tac >>
-  `!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
-    FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32` by
-    metis_tac[window_pre_sites] >>
-  qpat_x_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [abi_encoder_window_pre_def]) >>
-  qpat_x_assum `!inst b sz. _ ==> _` kall_tac >>
-  `alloca_inv raw` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
-  `alloca_room ctx func raw` by
-    (irule alloca_room_fields >> qexists_tac `s` >> simp[]) >>
-  `window_alloca_growth s raw` by
-    (simp[window_alloca_growth_def] >> metis_tac[optionTheory.NOT_SOME_NONE]) >>
-  `window_phase ctx func st en (window_alloca_sites func (frag_ids st en))
-    [(d,LENGTH (enc at av))] s (raw with vs_inst_idx := LENGTH en.cs_current_insts)` by
-    (irule window_seq_phase >> simp[]) >>
-  irule window_complex_phase_result >> simp[] >>
-  Cases_on `out` >> gvs[eval_operand_def, lookup_var_def]
-QED
-
-Theorem window_bytes_contract_mem:
-  !dst src st out st' ctx func s at av sb cap d.
-  compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,st') /\
-  abi_encoder_window_pre ctx func st st' dst src (AbiBytestring maxlen) at av sb cap d s ==>
-  ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [abi_encoder_window_pre_def]) >>
-  qpat_x_assum `!inst b sz. _ ==> _` kall_tac >>
-  qpat_assum `abi_encoder_window_input _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [abi_encoder_window_bytes_iff]) >>
-  qpat_x_assum `av = BytesV _` SUBST_ALL_TAC >>
-  `LENGTH (enc at (BytesV bs)) = 32+contractABI$ceil32 (LENGTH bs)` by
-    metis_tac[abi_encoder_bytes_encoding] >>
-  `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
-  `LENGTH bs <= contractABI$ceil32 (LENGTH bs)` by
-    metis_tac[abi_encoder_ceil32_bounds] >>
-  `sb < dimword (:256) /\ LENGTH bs+31 < dimword (:256) /\
-   d+contractABI$ceil32 (LENGTH bs) < dimword (:256) /\
-   32+LENGTH bs < dimword (:256) /\ sb+32+LENGTH bs <= s.vs_alloca_next /\
-   d+32+contractABI$ceil32 (LENGTH bs) <= s.vs_alloca_next /\
-   sb+32+LENGTH bs < dimword (:256) /\
-   d+32+contractABI$ceil32 (LENGTH bs) < dimword (:256)` by decide_tac >>
-  `mload sb s = n2w (LENGTH bs)` by metis_tac[mem_word_at_eq_mload] >>
-  `!x. dst = Var x \/ src = Var x ==> not_fresh_at st x` by metis_tac[] >>
-  drule_all window_bytes_mem_checks >> strip_tac >>
-  drule_all window_bytes_sequence >> strip_tac >>
-  rename1 `window_seq st st' s actual` >>
-  `mem_cont_sim ctx func s
-     (actual with vs_inst_idx := LENGTH st'.cs_current_insts)` by
-    (drule_all window_seq_mem_cont >> simp[]) >>
-  `sb + cap <= d \/ d + LENGTH (enc at (BytesV bs)) <= sb` by
-    (qpat_x_assum `venomMemDefs$regions_disjoint _ _` mp_tac >>
-     pure_asm_rewrite_tac[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
-  `mem_bytes_at d (LENGTH (enc at (BytesV bs))) actual.vs_memory = enc at (BytesV bs)` by
-    (qpat_assum `actual.vs_memory = _` (fn th => rewrite_tac[th]) >>
-     irule window_bytes_input_memory >> qexistsl_tac [`cap`, `maxlen`] >> asm_rewrite_tac[]) >>
-  `abi_encoder_registered_effect (window_alloca_sites func (frag_ids st st'))
-     [(d,LENGTH (enc at (BytesV bs)))] s actual` by
-    (asm_rewrite_tac[] >> irule window_bytes_effect >> simp[] >>
-     qexistsl_tac [`LENGTH bs`, `sb`] >> simp[]) >>
-  qexists_tac `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
-  asm_rewrite_tac[] >> metis_tac[window_leaf_sequence_result]
 QED

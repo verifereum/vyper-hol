@@ -12,6 +12,38 @@ Ancestors
   abiDecoderLoopEmit abiDecoderCounters abiDecoderDynarrayPrefix
   abiDecoderDynarrayBound abiDecoderArrayHeader abiDecoderReservation
   abiDecoderArrayLoopInit abiDecoderFrameCompose calldataWordLeaf calldataBytesLeaf
+  memSafeRun
+
+(* Classify the emitted code before taking the reached-instruction split. *)
+fun calldata_owned_emitter_non_dalloca pat defs =
+  qpat_assum pat mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+  simp(defs @ [comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def]) >>
+  strip_tac >> gvs[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >> simp[DROP_LENGTH_APPEND, mk_inst_def];
+
+val calldata_owned_loop_non_dalloca =
+  qpat_assum `emitted_insts _ _ = _ ++ _ ++ _`
+    (fn th => pure_once_rewrite_tac[th]) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >> pure_rewrite_tac[EVERY_APPEND] >> conj_tac
+  >- calldata_owned_emitter_non_dalloca `abi_decode_count_guard _ _ _ _ = _`
+       [abi_decode_count_guard_def] >>
+  conj_tac
+  >- calldata_owned_emitter_non_dalloca `abi_decode_array_header _ _ _ _ = _`
+       [abi_decode_array_header_def] >>
+  drule calldata_index_init_instructions >> simp[mk_inst_def];
+
+val calldata_owned_reached_no_wrap =
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  strip_tac >> map_every qx_gen_tac [`pre`,`i`,`post`,`u`] >> strip_tac >>
+  irule dalloca_no_wrap_non_dalloca >>
+  `EVERY (\x. x.inst_opcode <> DALLOCA) (pre ++ i::post)` suffices_by
+    simp[EVERY_APPEND] >>
+  qpat_assum `_ = pre ++ i::post` (fn th => pure_once_rewrite_tac[GSYM th]) >>
+  (first_assum ACCEPT_TAC ORELSE
+   (qpat_assum `emitted_insts _ _ = _ ++ _ ++ _`
+      (fn th => pure_once_rewrite_tac[GSYM (REWRITE_RULE[GSYM APPEND_ASSOC] th)]) >>
+    first_assum ACCEPT_TAC));
 
 Theorem calldata_index_init_owned_after_alloca:
   abi_decode_index_init st = (ip,st') /\
@@ -354,8 +386,10 @@ Proof
   `!op. abi_decoder_operand_live st.cs_next_var op ==>
      eval_operand op (mstore p 0w allocated) = eval_operand op initial` by
     suspend "live" >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st loop_st)` by
+    calldata_owned_loop_non_dalloca >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> asm_rewrite_tac[] >>
-  simp_tac bool_ss [] >>
+  simp_tac bool_ss [] >> conj_tac >- calldata_owned_reached_no_wrap >>
   reverse conj_tac >- suspend "execution" >>
   suspend "safety"
 QED
@@ -950,9 +984,12 @@ Theorem calldata_indexed_address_repeat_frag_mem:
     (K F)
 Proof
   strip_tac >> drule calldata_indexed_address_code_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+    calldata_owned_emitter_non_dalloca `abi_decode_indexed_address _ _ _ _ = _`
+      [abi_decode_indexed_address_def] >>
   drule_all calldata_indexed_address_repeat >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> asm_rewrite_tac[] >>
-  simp_tac bool_ss [] >> conj_tac
+  simp_tac bool_ss [] >> conj_tac >- calldata_owned_reached_no_wrap >> conj_tac
   >- (ho_match_mp_tac (GEN_ALL calldata_indexed_address_prefix_safe) >>
       goal_assum (drule_at Any)) >>
   disj1_tac >> qexists_tac `t` >> simp[eval_op_inst_idx]
@@ -976,9 +1013,13 @@ Theorem calldata_element_pointer_repeat_frag_mem:
 Proof
   rpt gen_tac >> strip_tac >>
   drule calldata_element_pointer_code_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+    calldata_owned_emitter_non_dalloca `compile_abi_decode_dyn_elem_ptr _ _ _ _ _ _ _ = _`
+      [compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def,
+       compile_abi_decode_range_check_def] >>
   drule_all calldata_element_pointer_repeat >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> asm_rewrite_tac[] >>
-  simp_tac bool_ss [] >> conj_tac
+  simp_tac bool_ss [] >> conj_tac >- calldata_owned_reached_no_wrap >> conj_tac
   >- (ho_match_mp_tac (GEN_ALL calldata_element_pointer_prefix_safe) >>
       goal_assum (drule_at Any)) >>
   disj1_tac >> qexists_tac `t` >> simp[eval_op_inst_idx]
@@ -1350,8 +1391,20 @@ Proof
   drule_all abi_decode_array_element_setup_shape >> strip_tac >>
   drule_all calldata_element_setup_repeat >> strip_tac >>
   drule calldata_element_setup_opcodes >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+    (qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> Cases_on `dec_info_needs_offset di` >>
+     asm_simp_tac bool_ss [abiDecoderLoopSetupTheory.abi_decode_array_element_setup_def,
+       abi_decode_indexed_address_def, compile_abi_decode_dyn_elem_ptr_def,
+       compile_abi_dec_addr_def, compile_abi_decode_range_check_def,
+       comp_bind_def, comp_return_def, comp_ignore_bind_def,
+       emit_op_def, fresh_var_def, fresh_id_def, emit_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+     gvs[emitted_insts_def, mk_inst_def] >>
+     pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+     simp_tac bool_ss [DROP_LENGTH_APPEND, APPEND] >> simp[]) >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> asm_rewrite_tac[] >>
-  simp_tac bool_ss [] >> conj_tac
+  simp_tac bool_ss [] >> conj_tac >- calldata_owned_reached_no_wrap >> conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_element_setup_prefix_safe) >>
       goal_assum (drule_at Any) >> metis_tac[]) >>
@@ -3626,8 +3679,11 @@ Theorem calldata_count_guard_repeat_frag_mem:
 Proof
   strip_tac >> drule abi_decode_count_guard_shape >> strip_tac >>
   drule calldata_count_guard_code_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+    calldata_owned_emitter_non_dalloca `abi_decode_count_guard _ _ _ _ = _`
+      [abi_decode_count_guard_def] >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >>
-  fs[inst_extends_def] >> conj_tac
+  fs[inst_extends_def] >> conj_tac >- calldata_owned_reached_no_wrap >> conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac calldata_prefix_safe_every >>
       drule calldata_count_guard_instruction_safe >> simp[]) >>
@@ -3660,7 +3716,8 @@ Proof
   strip_tac >> drule_all calldata_array_header_repeat_sequence >> strip_tac >>
   `st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-     (emitted_insts st st')` by
+     (emitted_insts st st') /\
+   EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
     (qpat_x_assum `abi_decode_array_header _ _ _ _ = _` mp_tac >>
      simp[abi_decode_array_header_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
@@ -3668,7 +3725,8 @@ Proof
      simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
      simp[DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]) >>
   drule calldata_array_header_opcodes >> strip_tac >>
-  irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> fs[inst_extends_def] >> conj_tac
+  irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> fs[inst_extends_def] >>
+  conj_tac >- calldata_owned_reached_no_wrap >> conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_array_header_repeat_prefix_safe) >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
@@ -3787,8 +3845,10 @@ Proof
   `!op. abi_decoder_operand_live st.cs_next_var op ==>
      eval_operand op (mstore p 0w allocated) = eval_operand op initial` by
     suspend "live" >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st loop_st)` by
+    calldata_owned_loop_non_dalloca >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> asm_rewrite_tac[] >>
-  simp_tac bool_ss [] >>
+  simp_tac bool_ss [] >> conj_tac >- calldata_owned_reached_no_wrap >>
   reverse conj_tac >- suspend "execution" >>
   suspend "safety"
 QED

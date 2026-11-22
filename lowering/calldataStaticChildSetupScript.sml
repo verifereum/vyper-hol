@@ -96,9 +96,28 @@ Proof
    eval_operand dst initial = SOME (n2w d)` by fs[abi_decoder_ranges_def] >>
   drule_all calldata_element_setup_repeat >> strip_tac >> gvs[] >>
   irule frag_exec_mem_run_inst_seq >> fs[inst_extends_def] >>
-  irule run_inst_seq_mem_ok_of_prefix_safe >> reverse conj_tac
-  >- (drule calldata_element_setup_opcodes >> simp[EVERY_MEM]) >>
-  ho_match_mp_tac (GEN_ALL calldata_element_setup_prefix_safe) >>
-  qexistsl_tac [`src`, `n2w slot`] >>
-  goal_assum (drule_at Any) >> simp[w2n_n2w] >> metis_tac[]
+  conj_tac
+  >- (irule run_inst_seq_mem_ok_of_prefix_safe >> reverse conj_tac
+      >- (drule calldata_element_setup_opcodes >> simp[EVERY_MEM]) >>
+      ho_match_mp_tac (GEN_ALL calldata_element_setup_prefix_safe) >>
+      qexistsl_tac [`src`, `n2w slot`] >>
+      goal_assum (drule_at Any) >> simp[w2n_n2w] >> metis_tac[]) >>
+  `~dec_info_needs_offset (type_to_abi_dec_info sf ce ty)` by
+    metis_tac[abi_decoder_coherent_array_iff, abi_decoder_coherent_dynamic,
+              abi_decoder_needs_offset_iff] >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st ready)` by
+    (qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     qpat_assum `~dec_info_needs_offset _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+     asm_simp_tac bool_ss [abiDecoderLoopSetupTheory.abi_decode_array_element_setup_def,
+       abiDecoderIndexedAddressTheory.abi_decode_indexed_address_def,
+       comp_bind_def, comp_return_def, comp_ignore_bind_def,
+       emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def, emit_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+     gvs[emitted_insts_def, venomInstTheory.mk_inst_def] >>
+     pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+     simp_tac bool_ss [rich_listTheory.DROP_LENGTH_APPEND, APPEND] >> simp[]) >>
+  rpt strip_tac >>
+  irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+  fs[EVERY_APPEND]
 QED

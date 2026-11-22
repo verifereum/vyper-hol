@@ -722,11 +722,21 @@ Proof
      (emitted_insts a6 a8)` by
     (imp_res_tac emitted_insts_emit_op >> simp[is_terminator_def] >>
      irule (SRULE [LET_THM, is_terminator_def] linear_method_ops_mem)) >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts a6 a8)` by
+    simp[mk_inst_def] >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post v. emitted_insts a6 a8 = pre ++ i::post /\
+      run_inst_seq pre ss = OK v ==> dalloca_no_wrap i v)` by
+    (rpt strip_tac >>
+     qpat_assum `EVERY (\j. j.inst_opcode <> DALLOCA) _` mp_tac >>
+     qpat_assum `emitted_insts a6 a8 = pre ++ i::post`
+       (fn th => pure_rewrite_tac[th, EVERY_APPEND, EVERY_DEF]) >>
+     metis_tac[dalloca_no_wrap_non_dalloca]) >>
   `!n. mem_safe_run n ctx fn (u with vs_inst_idx := LENGTH a8.cs_current_insts)` by
     (first_x_assum irule >> simp[control_moves_keep_vars] >>
      irule vars_pc_only_inst_idx >> simp[]) >>
   gen_tac >> drule_all mem_safe_run_inst_seq >>
-  disch_then (qspecl_then [`n`, `ctx`] mp_tac) >> gvs[]
+  disch_then (qspec_then `n` mp_tac) >> gvs[]
 QED
 
 Theorem linear_size_prefix_mem_safe[local]:
@@ -759,11 +769,21 @@ Proof
     (imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
      simp[is_terminator_def] >>
      irule (SRULE [LET_THM, is_terminator_def] linear_size_ops_mem)) >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st a3)` by
+    simp[mk_inst_def] >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post v. emitted_insts st a3 = pre ++ i::post /\
+      run_inst_seq pre ss = OK v ==> dalloca_no_wrap i v)` by
+    (rpt strip_tac >>
+     qpat_assum `EVERY (\j. j.inst_opcode <> DALLOCA) _` mp_tac >>
+     qpat_assum `emitted_insts st a3 = pre ++ i::post`
+       (fn th => pure_rewrite_tac[th, EVERY_APPEND, EVERY_DEF]) >>
+     metis_tac[dalloca_no_wrap_non_dalloca]) >>
   `!n. mem_safe_run n ctx fn (u with vs_inst_idx := LENGTH a3.cs_current_insts)` by
     (first_x_assum irule >> simp[control_moves_keep_vars] >>
      irule vars_pc_only_inst_idx >> simp[]) >>
   gen_tac >> drule_all mem_safe_run_inst_seq >>
-  disch_then (qspecl_then [`n`, `ctx`] mp_tac) >> gvs[]
+  disch_then (qspec_then `n` mp_tac) >> gvs[]
 QED
 
 Theorem linear_selector_tail_mem_safe[local]:

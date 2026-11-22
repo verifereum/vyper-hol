@@ -104,7 +104,8 @@ Resume u2s_compare_joint_transition[path]:
      qspecl_then [`[u2s_inst a iid EQ [Var (u2s_var a 0); Lit 0w] [u2s_var a k]]`,
        `s`, `u`, `G`, `tn`, `G1`, `tn1`, `ctx`, `fn`, `bb`]
        mp_tac run_inst_seq_gas_origin_ptr_path >>
-     simp[u2s_inst_def, mk_inst_def, is_terminator_def]) >>
+     simp[u2s_inst_def, mk_inst_def, is_terminator_def, APPEND_EQ_CONS,
+       dalloca_no_wrap_non_dalloca]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
     (u with vs_inst_idx := 1,G1,tn1) [] (OK t,G1,tn1)` by
     (gen_tac >> simp[Abbr `t`] >>
@@ -319,7 +320,12 @@ Resume u2s_setup_joint_transition[path]:
          (SPEC_ALL run_inst_seq_gas_origin_ptr_path))) >>
      simp[GSYM u2s_inst_def, GSYM u2s_setup_def] >>
      qexistsl_tac [`a`, `op`, `p`] >>
-     fs[u2s_setup_def, u2s_inst_def, mk_inst_def, rich_listTheory.DROP_LENGTH_APPEND]) >>
+     fs[u2s_setup_def, u2s_inst_def, mk_inst_def, rich_listTheory.DROP_LENGTH_APPEND] >>
+     disch_tac >> map_every qx_gen_tac [`prefix`, `i`, `suffix`, `v`] >> strip_tac >>
+     irule dalloca_no_wrap_non_dalloca >>
+     `EVERY (\j. j.inst_opcode <> DALLOCA) (prefix ++ [i] ++ suffix)` by
+       (qpat_assum `_ = prefix ++ [i] ++ suffix` (SUBST1_TAC o SYM) >> simp[]) >>
+     fs[EVERY_APPEND]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
     (u with vs_inst_idx := s.vs_inst_idx + 3,G1,tn1) [] (OK t,G1,tn1)` by
     (gen_tac >>

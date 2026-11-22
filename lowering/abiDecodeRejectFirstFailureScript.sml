@@ -494,6 +494,12 @@ Proof
      goal_assum (drule_at Any) >> irule bop_scalar_seq_assert >> simp[]) >>
   qpat_assum `bop_scalar_seq _ _ cut _`
     (mp_then Any (qspec_then `s` strip_assume_tac) abiDecodeScalarRunSafetyTheory.abi_decode_scalar_run_safe) >>
+  `(ctx_has_dalloca ctx ==> !pre i post u'.
+      cut = pre ++ i::post /\ run_inst_seq pre s = OK u' ==>
+      unitTransformDefs$dalloca_no_wrap i u')` by
+    (rpt strip_tac >> `MEM i cut` by simp[] >>
+     drule_all bodyPtrBopScalarOutcomeTheory.bop_scalar_seq_outputs >>
+     disch_then (mp_tac o CONJUNCT1) >> simp[] >> strip_tac >> simp[]) >>
   `?j. !D lower explicit PG G tn H th.
      inst_seq_ptr D lower ctx func PG G tn cut s H th ==>
      gas_origin_ptr_path (D,lower,explicit,ctx,func,PG)
@@ -548,6 +554,12 @@ Proof
     (drule_all bop_scalar_seq_run >>
      disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
      metis_tac[inst_seq_ptr_ghost_unique]) >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+      emitted_insts sa sb = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> `MEM i (emitted_insts sa sb)` by simp[] >>
+     drule_all bodyPtrBopScalarOutcomeTheory.bop_scalar_seq_outputs >>
+     disch_then (mp_tac o CONJUNCT1) >> simp[] >> strip_tac >> simp[]) >>
   drule_all run_inst_seq_origin_ptr_lift >> simp[]
 QED
 

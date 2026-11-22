@@ -464,6 +464,11 @@ Proof
     (fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
      qpat_x_assum `!i. MEM i _ ==> _` (qspec_then `i` mp_tac) >>
      simp[] >> rpt strip_tac >> gvs[venomInstTheory.is_terminator_def]) >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts cl cm)` by
+    (fs[listTheory.EVERY_MEM] >> gen_tac >> disch_tac >>
+     qpat_x_assum `!i. MEM i _ ==> i.inst_opcode = _ \/ _`
+       (qspec_then `i` mp_tac) >>
+     simp[] >> strip_tac >> gvs[]) >>
   `gas_marked_path memory execctx fn s 0
     (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts cl cm)))` by
     (irule exprSimBopRestWordLoopPathTheory.rest_word_sequence_marked >>
@@ -586,6 +591,8 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
     i.inst_opcode <> GAS) (emitted_insts ch cs)` by
     simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts ch cs)` by
+    simp[venomInstTheory.mk_inst_def] >>
   `gas_marked_path memory execctx fn s 0
     (OK ((update_var validvar 1w (update_var invvar 0w s)) with
       vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts ch cs)))` by

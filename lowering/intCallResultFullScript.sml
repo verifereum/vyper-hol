@@ -153,7 +153,8 @@ Theorem store_multi_results_checked[local]:
       qt.t_mem = tn.t_mem DIFF
         {i | w2n b + off <= i /\ i < w2n b + off + 32 * LENGTH ops} /\
       qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-      EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)
+      EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> DALLOCA)
+        (emitted_insts sa sb)
 Proof
   Induct
   >- (rpt strip_tac >>
@@ -210,7 +211,8 @@ Proof
   `emitted_insts sa sb = emitted_insts sa post ++ emitted_insts post sb` by
     (irule emitted_insts_append >> simp[]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa post) /\
-   EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa post)` by
+   EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> DALLOCA)
+     (emitted_insts sa post)` by
     (drule emitted_insts_emit_op >> strip_tac >>
      drule emitted_insts_emit_void >> strip_tac >>
      pure_rewrite_tac[emitted_insts_def] >>
@@ -284,6 +286,11 @@ Proof
       `inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s H qt` by
         (qpat_x_assum `!D k. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
            (qspecl_then [`D`,`s.vs_inst_idx`] mp_tac) >> simp[]) >>
+      `(ctx_has_dalloca ctx ==>
+        !pre i post v. emitted_insts sa sb = pre ++ i::post /\
+          run_inst_seq pre s = OK v ==> dalloca_no_wrap i v)` by
+        (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+         fs[EVERY_MEM] >> metis_tac[MEM_APPEND, MEM]) >>
       simp[inst_extends_def] >> fs[same_blocks_def, EVERY_MEM] >> metis_tac[]) >>
   simp[] >> reverse conj_tac >- fs[] >> rpt strip_tac >>
   `mem_bytes_at (w2n b + off + 32 * i) 32 u.vs_memory =

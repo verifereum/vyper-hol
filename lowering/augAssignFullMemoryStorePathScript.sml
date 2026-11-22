@@ -41,8 +41,8 @@ Proof
     (gvs[] >> irule step_MSTORE >> simp[]) >>
   `i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
    ~is_terminator i.inst_opcode /\ inst_mem_below_frontier i s /\
-   inst_dload_in_section i s` by
-    simp[mk_inst_def, inst_mem_below_frontier_def,
+   inst_dload_in_section i s /\ (ctx_has_dalloca ctx ==> dalloca_no_wrap i s)` by
+    simp[mk_inst_def, inst_mem_below_frontier_def, dalloca_no_wrap_def,
          inst_dload_in_section_def, source_memory_read_ranges_def,
          source_memory_write_ranges_def, fixed_source_write_range_def,
          is_terminator_def] >>

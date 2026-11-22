@@ -795,7 +795,7 @@ Theorem ifexp_arm_outcome_full_conditional[local]:
   fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
-  (!fn inst s. frag_reachable ctx func u fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func u fn inst s ==> dalloca_fmp_headroom inst s) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -1579,7 +1579,7 @@ Resume ifexp_vv_full_root_uniform[arm]:
      qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) cm (OK z,G1,tn1)` (irule_at Any) >>
      simp[]) >>
   `!fn inst s. frag_reachable ctx func (jump_to (if sel then tl else el) z) fn inst s ==>
-       dalloca_no_wrap inst s` by
+       dalloca_fmp_headroom inst s` by
     (qx_genl_tac [`afn`,`inst`,`u0`] >> strip_tac >>
      qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _` irule >>
      qexists_tac `afn` >>

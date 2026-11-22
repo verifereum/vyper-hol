@@ -58,11 +58,16 @@ Proof
   `u.vs_current_bb = sb.cs_current_bb` by
     (qpat_assum `u = s with vs_vars := u.vs_vars`
        (mp_tac o Q.AP_TERM `\st. st.vs_current_bb`) >> simp[]) >>
+  `!i. MEM i (emitted_insts sa sb) ==> i.inst_opcode <> DALLOCA` by
+    (drule compile_assert_slice_bounds_layout >> strip_tac >>
+     simp[] >> rpt strip_tac >> gvs[mk_inst_def]) >>
   qexistsl_tac [`G'`,`tn'`] >>
   conj_tac
   >- (gen_tac >> irule emitted_origin_ptr_path >> simp[] >>
-      qexistsl_tac [`emitted_insts sa sb`,`sa`] >> simp[] >>
-      fs[EVERY_MEM] >> metis_tac[]) >>
+      qexistsl_tac [`emitted_insts sa sb`,`sa`] >> simp[]
+      >- (fs[EVERY_MEM] >> metis_tac[]) >>
+      rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+      first_x_assum irule >> simp[]) >>
   asm_simp_tac bool_ss [] >>
   conj_tac
   >- (rpt strip_tac >> simp[] >>

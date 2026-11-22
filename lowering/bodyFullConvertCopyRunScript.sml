@@ -42,7 +42,11 @@ Proof
   simp[mk_inst_def, is_terminator_def] >>
   conj_tac >- fs[same_blocks_def] >>
   rewrite_tac[GSYM mk_inst_def] >>
-  simp[inst_seq_ptr_def] >> conj_tac
+  simp[inst_seq_ptr_def] >>
+  conj_tac >-
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     Cases_on `pre` >> gvs[mk_inst_def]) >>
+  conj_tac
   >- (irule ptr_inst_ok_lower_bound_transport >> simp[] >> qexists_tac `0` >>
       simp[] >> irule ptr_inst_ok_mcopy_operand >> simp[eval_operand_def,op_taint_def]) >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]

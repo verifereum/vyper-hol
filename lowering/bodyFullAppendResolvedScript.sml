@@ -632,7 +632,12 @@ Resume body_append_local_primitive_full[append_success]:
        (mp_then (Pat `run_inst_seq _ _ = _`) mp_tac
          fragGasSeqPtrTheory.run_inst_seq_gas_origin_ptr_path) >>
      simp[] >> disch_then irule >> conj_tac
-     >- (qexists_tac `bb` >> metis_tac[]) >>
+     >- (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+         qpat_x_assum `EVERY (\i. i.inst_opcode = MLOAD \/ _) (emitted_insts sm sb)` mp_tac >>
+         qpat_assum `emitted_insts sm sb = _` mp_tac >>
+         rpt (pop_assum kall_tac) >> disch_then SUBST1_TAC >>
+         simp[EVERY_APPEND] >> rpt strip_tac >> fs[]) >>
+     conj_tac >- (qexists_tac `bb` >> metis_tac[]) >>
      qpat_assum `!D k. inst_seq_ptr D _ _ _ _ _ _ _ _ _ _`
        (qspecl_then [`D`, `t.vs_inst_idx`] mp_tac) >> simp[NoAsms]) >>
   `value_has_type tv v` by

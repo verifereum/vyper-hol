@@ -5503,7 +5503,7 @@ QED
 
 Finalise frag_raw_reachable_outcome_suffix[local]
 
-Theorem grouped_reject_cut_fragment_no_wrap:
+Theorem grouped_reject_cut_fragment_no_dalloca:
   lower_vyper_runtime_unit tops rp = SOME u /\
   supported_program tops /\ source_typing_ok tops am tx /\
   source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
@@ -5517,13 +5517,13 @@ Theorem grouped_reject_cut_fragment_no_wrap:
       FEMPTY,entry_taint) marks (OK cut,G,tn) /\
   frag_reachable u.cu_context fn (cut with vs_outcomes := prefix) callee inst s /\
   cut.vs_outcomes = prefix ++ tail ==>
-  dalloca_no_wrap inst s
+  inst.inst_opcode <> DALLOCA
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   reverse (Cases_on `ctx_has_dalloca u.cu_context`)
   >- (`MEM fn u.cu_context.ctx_functions` by metis_tac[lookup_function_MEM] >>
       drule_all frag_reachable_members >> strip_tac >>
-      fs[ctx_has_dalloca_def, EXISTS_MEM, dalloca_no_wrap_def] >> metis_tac[]) >>
+      fs[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
   qabbrev_tac `start =
     vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
   drule gas_origin_ptr_path_projections >> strip_tac >>
@@ -5547,8 +5547,26 @@ Proof
   disch_then (qspecl_then [`vs`, `tail`] mp_tac) >>
   simp[active_inst_outcomes_update,venom_state_accfupds,venom_state_fupdfupds] >>
   impl_tac >- metis_tac[] >>
-  strip_tac >>
-  `inst.inst_opcode <> DALLOCA` by metis_tac[is_raw_fmp_opcode_def] >>
+  strip_tac >> metis_tac[is_raw_fmp_opcode_def]
+QED
+
+Theorem grouped_reject_cut_fragment_no_wrap:
+  lower_vyper_runtime_unit tops rp = SOME u /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
+  calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
+  lookup_function "__entry" u.cu_context.ctx_functions = SOME fn /\
+  (ctx_has_dalloca u.cu_context ==>
+    unit_alloca_budget u.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254) /\
+  gas_origin_ptr_path (D,0,explicit,u.cu_context,fn,[])
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
+      FEMPTY,entry_taint) marks (OK cut,G,tn) /\
+  frag_reachable u.cu_context fn (cut with vs_outcomes := prefix) callee inst s /\
+  cut.vs_outcomes = prefix ++ tail ==>
+  dalloca_no_wrap inst s
+Proof
+  strip_tac >> drule_all grouped_reject_cut_fragment_no_dalloca >>
   simp[dalloca_no_wrap_def]
 QED
 

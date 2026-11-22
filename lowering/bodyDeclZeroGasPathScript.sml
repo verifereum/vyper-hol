@@ -3,7 +3,7 @@
 Theory bodyDeclZeroGasPath
 Ancestors
   fragGasSeqMem fragGasPathMem fragExecMem fragExec exprLoweringProps
-  venomInst list rich_list
+  ptrDiscipline unitTransformDefs venomInst list rich_list
 
 Theorem body_decl_zero_gas_path:
   fn_has_code sa sb func /\ same_blocks sa sb /\
@@ -13,6 +13,9 @@ Theorem body_decl_zero_gas_path:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   run_inst_seq_mem_ok (emitted_insts sa sb) s /\
+  (ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> dalloca_no_wrap i u) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   gas_path_mem ctx func s 0
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))

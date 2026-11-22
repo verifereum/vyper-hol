@@ -359,7 +359,8 @@ Proof
           eval_operand_def, w2n_n2w]) >>
   `inst_mem_below_frontier inst s` by
     (fs[inst_mem_below_frontier_def, w2n_eq_0]) >>
-  `mem_safe_step 0 ctx inst s` by simp[mem_safe_step_non_invoke] >>
+  `mem_safe_step 0 ctx inst s` by
+    (Cases_on `call_ty` >> simp[mem_safe_step_non_invoke, mk_inst_def]) >>
   mp_tac raw_call_actual_call_mem_safe_full >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then ACCEPT_TAC

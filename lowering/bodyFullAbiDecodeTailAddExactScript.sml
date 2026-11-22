@@ -108,6 +108,7 @@ Resume abi_decode_tail_ptr_add_joint_exact[effects]:
 QED
 
 Resume abi_decode_tail_ptr_add_joint_exact[package]:
+  `(ctx_has_dalloca ctx ==> dalloca_no_wrap i s)` by simp[] >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
     (s,G,tn) [] (OK t,gf,tf)` by
     (gen_tac >>

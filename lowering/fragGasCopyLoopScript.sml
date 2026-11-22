@@ -16,7 +16,7 @@ Ancestors
   contextCodegenRel exprSimPtrTopLevelStorageCopy exprSimPtrTopLevelCopy exprSimStorageCopy
   bodyStorageCopyMemory bodyMemAssignTopCopyPaths
   fragGasSeqPtrContext fragGasSeqPtr fragGasSeqAbort fragGasOriginPtr fragGasOriginPtrLoop fragGasOrigin
-  ptrSafetyTransport instMemFrontier fragExecMem fragExec memSafeRun
+  ptrSafetyTransport instMemFrontier fragExecMem fragExec memSafeRun checkedPrefixCursor
   gasEvents gasCount ptrSafeRun ptrDiscipline bodyPtrDefs typedCopyPtr
   decoderGhostFramePtr exprLoweringProps venomMemProps
   venomInstProofs instIdxIndep
@@ -67,7 +67,12 @@ Theorem run_inst_seq_origin_ptr_lift:
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
              i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) code /\
-  run_inst_seq_mem_ok code s /\ allocas_from lo s /\
+  run_inst_seq_mem_ok code s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. code = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
+  allocas_from lo s /\
   inst_seq_ptr D 0 ctx func PG G tn code s G' tn' /\
   run_inst_seq code s = OK t ==>
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
@@ -101,7 +106,12 @@ Theorem run_inst_seq_abort_origin_ptr_uniform:
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
       i.inst_opcode <> GAS) code /\
-    run_inst_seq_mem_ok code s /\ run_inst_seq code s = Abort a t ==>
+    run_inst_seq_mem_ok code s /\
+    (ptrDiscipline$ctx_has_dalloca ctx ==>
+      !pre i post u. code = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==>
+        unitTransformDefs$dalloca_no_wrap i u) /\
+    run_inst_seq code s = Abort a t ==>
     ?j. !D lo explicit PG G tn HG th.
       inst_seq_ptr D lo ctx func PG G tn code s HG th ==>
       gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
@@ -110,6 +120,11 @@ Proof
   Induct_on `code` >- simp[run_inst_seq_def] >>
   rpt gen_tac >> strip_tac >>
   drule instruction_prefix_cursor >> strip_tac >>
+  `(ctx_has_dalloca ctx ==> dalloca_no_wrap h s)` by
+    (disch_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> _` (mp_tac o UNDISCH) >>
+     disch_then (qspecl_then [`[]`, `h`, `code`, `s`] mp_tac) >>
+     simp[run_inst_seq_def]) >>
   Cases_on `step_inst_base h s` >>
   gvs[run_inst_seq_def, run_inst_seq_mem_ok_def]
   >- suspend "continue"
@@ -122,10 +137,20 @@ Resume run_inst_seq_abort_origin_ptr_uniform[continue]:
   `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
     metis_tac[step_preserves_halted, step_preserves_control_flow] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) code` by gvs[EVERY_MEM] >>
+  `(ctx_has_dalloca ctx ==>
+     !pre i post v. code = (pre ++ [i]) ++ post /\
+       run_inst_seq pre (u with vs_inst_idx := SUC s.vs_inst_idx) = OK v ==>
+       dalloca_no_wrap i v)` by
+    (pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, APPEND] >>
+     MATCH_MP_TAC checked_prefix_tail_cursor >> simp[] >>
+     qpat_assum `ctx_has_dalloca ctx ==> !pre i post v. _` mp_tac >>
+     simp[GSYM listTheory.APPEND_ASSOC]) >>
   first_x_assum (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
   disch_then (qspecl_then [`a`,`t with vs_inst_idx := SUC s.vs_inst_idx`,`ctx`,`func`,`bb`] mp_tac) >>
   simp[run_inst_seq_inst_idx, exec_result_map_def, run_inst_seq_mem_ok_inst_idx] >>
-  strip_tac >> qexists_tac `j` >> rpt strip_tac >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (qx_choose_then `j` assume_tac) >>
+  qexists_tac `j` >> rpt strip_tac >>
   gvs[inst_seq_ptr_def] >>
   `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
@@ -153,7 +178,12 @@ Theorem run_inst_seq_origin_ptr_abort_lift:
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
              i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) code /\
-  run_inst_seq_mem_ok code s /\ allocas_from lo s /\
+  run_inst_seq_mem_ok code s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. code = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
+  allocas_from lo s /\
   run_inst_seq code s = Abort a t ==>
   ?j. !D G tn G' tn'.
     inst_seq_ptr D 0 ctx func PG G tn code s G' tn' ==>
@@ -165,7 +195,9 @@ Proof
       i.inst_opcode <> GAS) code` by fs[EVERY_CONJ] >>
   qspecl_then [`code`,`s`,`a`,`t`,`ctx`,`func`,`bb`]
     mp_tac run_inst_seq_abort_origin_ptr_uniform >>
-  (impl_tac >- simp[]) >>
+  (impl_tac >-
+    (simp[] >> pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, APPEND] >>
+     first_assum ACCEPT_TAC)) >>
   disch_then (qx_choose_then `j` assume_tac) >>
   qexists_tac `j` >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `!D lo explicit PG G tn HG th. _`
@@ -311,6 +343,10 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
               i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) [i0]` by
     simp[Abbr `i0`, mk_inst_def, is_terminator_def] >>
+  `(ctx_has_dalloca ctx ==>
+     !pre i post v. [i0] = pre ++ i::post /\
+       run_inst_seq pre s = OK v ==> dalloca_no_wrap i v)` by
+    (rpt strip_tac >> Cases_on `pre` >> gvs[Abbr `i0`, mk_inst_def]) >>
   drule_all_then (qspec_then `explicit` strip_assume_tac)
     run_inst_seq_origin_ptr_lift >>
   qabbrev_tac `t0 = u0 with vs_inst_idx := s.vs_inst_idx + LENGTH [i0]` >>
@@ -381,6 +417,10 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
               i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) [i0]` by
     simp[Abbr `i0`, mk_inst_def, is_terminator_def] >>
+  `(ctx_has_dalloca ctx ==>
+     !pre i post v. [i0] = pre ++ i::post /\
+       run_inst_seq pre s = OK v ==> dalloca_no_wrap i v)` by
+    (rpt strip_tac >> Cases_on `pre` >> gvs[Abbr `i0`, mk_inst_def]) >>
   drule_all_then (qspec_then `explicit` strip_assume_tac)
     run_inst_seq_origin_ptr_lift >>
   qabbrev_tac `t = u with vs_inst_idx := s.vs_inst_idx + LENGTH [i0]` >>
@@ -484,6 +524,12 @@ Proof
      <|bb_label := s.vs_current_bb;
        bb_instructions := code ++ [mk_inst (id+7) JMP [Label hdr] []]|>` by
     (qpat_x_assum `code = _` SUBST1_TAC >> simp[]) >>
+  `(ctx_has_dalloca ctx ==>
+     !pre i post v. code = pre ++ i::post /\
+       run_inst_seq pre s = OK v ==> dalloca_no_wrap i v)` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `code = pre ++ i::post` SUBST_ALL_TAC >>
+     fs[EVERY_APPEND]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
      (OK (r with vs_inst_idx := s.vs_inst_idx + LENGTH code),Gf,tnf) /\
    allocas_from lo r` by
@@ -979,6 +1025,10 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
               i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) [i0]` by
     simp[Abbr `i0`, mk_inst_def, is_terminator_def] >>
+  `(ctx_has_dalloca ctx ==>
+     !pre i post v. [i0] = pre ++ i::post /\
+       run_inst_seq pre s = OK v ==> dalloca_no_wrap i v)` by
+    (rpt strip_tac >> Cases_on `pre` >> gvs[Abbr `i0`, mk_inst_def]) >>
   drule_all_then (qspec_then `explicit` strip_assume_tac)
     run_inst_seq_origin_ptr_lift >>
   qabbrev_tac `t0 = u0 with vs_inst_idx := s.vs_inst_idx + 1` >>
@@ -1044,6 +1094,10 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
               i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) [i0]` by
     simp[Abbr `i0`, mk_inst_def, is_terminator_def] >>
+  `(ctx_has_dalloca ctx ==>
+     !pre i post v. [i0] = pre ++ i::post /\
+       run_inst_seq pre s = OK v ==> dalloca_no_wrap i v)` by
+    (rpt strip_tac >> Cases_on `pre` >> gvs[Abbr `i0`, mk_inst_def]) >>
   drule_all_then (qspec_then `explicit` strip_assume_tac)
     run_inst_seq_origin_ptr_lift >>
   qabbrev_tac `t = u with vs_inst_idx := SUC s.vs_inst_idx` >>
@@ -1271,17 +1325,23 @@ Proof
                  i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) code` by
        (simp[Abbr `code`] >> Cases_on `loc = LocStorage` >>
         simp[mk_inst_def, is_terminator_def]) >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+         ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
+         i.inst_opcode <> DALLOCA) code` by
+       (simp[Abbr `code`] >> Cases_on `loc = LocStorage` >>
+        simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
+     `(ctx_has_dalloca ctx ==>
+        !pre i post v. code = pre ++ i::post /\
+          run_inst_seq pre q = OK v ==> dalloca_no_wrap i v)` by
+       (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+        qpat_x_assum `code = pre ++ i::post` SUBST_ALL_TAC >>
+        fs[EVERY_APPEND]) >>
      `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (q,Gj,tj) []
         (OK (r0 with vs_inst_idx := q.vs_inst_idx + LENGTH code),Gf,tnf) /\
       allocas_from lo r0` by
        (irule run_inst_seq_origin_ptr_lift >>
         rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
         qexists_tac `bbb` >> fs[]) >>
-     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-         ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
-         i.inst_opcode <> DALLOCA) code` by
-       (simp[Abbr `code`] >> Cases_on `loc = LocStorage` >>
-        simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
      `(ctx_has_dalloca ctx ==> allocas_below_fmp r0)` by
        metis_tac[run_inst_seq_allocas_below_fmp] >>
      qabbrev_tac `t1 = r0 with vs_inst_idx := q.vs_inst_idx + LENGTH code` >>

@@ -650,8 +650,18 @@ Proof
      drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
      drule_all abi_decode_array_element_setup_shape >> strip_tac >>
      `X0.vs_inst_idx = LENGTH st.cs_current_insts` by simp[] >>
-     drule_all ctor_checked_emitted_endpoint >>
-     disch_then (qspec_then `ctx` mp_tac) >> simp[Abbr `prepared`]) >>
+     `(ptrDiscipline$ctx_has_dalloca ctx ==>
+       !pre i post u. emitted_insts st middle = pre ++ i::post /\
+         run_inst_seq pre X0 = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+       (`EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st middle)` by
+          (drule prefix_loop_element_setup_code >> simp[LET_THM] >>
+           Cases_on `dec_info_needs_offset (type_to_abi_dec_info sf ce ty)` >>
+           simp[mk_inst_def]) >>
+        rpt strip_tac >>
+        irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+        fs[EVERY_APPEND]) >>
+     drule_all (Q.INST [`ctx` |-> `ctx`] ctor_checked_emitted_endpoint) >>
+     simp[Abbr `prepared`]) >>
   drule_all prefix_complete_array_setup_ambient >> strip_tac >>
   `(^Ok) k ctx func site ids D N d
      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
@@ -1207,8 +1217,18 @@ Proof
      drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
      drule_all abi_decode_array_element_setup_shape >> strip_tac >>
      `X0.vs_inst_idx = LENGTH st.cs_current_insts` by simp[] >>
-     drule_all ctor_checked_emitted_endpoint >>
-     disch_then (qspec_then `ctx` strip_assume_tac) >>
+     `(ptrDiscipline$ctx_has_dalloca ctx ==>
+       !pre i post u. emitted_insts st middle = pre ++ i::post /\
+         run_inst_seq pre X0 = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+       (`EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st middle)` by
+          (drule prefix_loop_element_setup_code >> simp[LET_THM] >>
+           Cases_on `dec_info_needs_offset (type_to_abi_dec_info sf ce ty)` >>
+           simp[mk_inst_def]) >>
+        rpt strip_tac >>
+        irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+        fs[EVERY_APPEND]) >>
+     drule_all (Q.INST [`ctx` |-> `ctx`] ctor_checked_emitted_endpoint) >>
+     strip_tac >>
      `X0 with vs_inst_idx := LENGTH st.cs_current_insts = X0` by
        simp[venom_state_component_equality] >>
      `!D'. inst_seq_ptr D' lo ctx func PG X1 X2 (emitted_insts st middle) X0 H qt` by

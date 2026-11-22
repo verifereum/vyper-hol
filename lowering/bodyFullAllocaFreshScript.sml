@@ -172,7 +172,9 @@ Proof
       qspecl_then [`[ins]`, `sa`, `sb`, `s`, `t`, `G`, `tn`,
                    `step_prov PG G ins t`, `step_taint ins s t tn`]
         mp_tac emitted_origin_ptr_path >>
-      simp[]) >>
+      simp[Once EQ_SYM_EQ, listTheory.APPEND_EQ_CONS,
+           Abbr `ins`, mk_inst_def,
+           memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   conj_tac >- simp[] >>
   conj_tac >- simp[] >>
   conj_tac

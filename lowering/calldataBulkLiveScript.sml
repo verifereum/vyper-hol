@@ -4,7 +4,7 @@ Ancestors
   valueEncodingDefs safeSequence calldataWordLeaf calldataBytesLeaf calldataBytesLive calldataBulkLeaf calldataDynOwned abiDecoderReentry
   abiDecoderFrameCompose abiDecoderBulk abiDecoderCopy abiDecoderComposition abiDecoderContract abiDecoderGuards abiDecoderRange abiEncoder
   emitHelperProps exprLoweringProps compileEnv emitHelper valueEncoding
-  venomExecSemantics venomState venomInst words arithmetic list
+  venomExecSemantics venomState venomInst words arithmetic list calldataBulkNoWrap
 
 Theorem calldata_bulk_payload_live:
   abi_decode_bulk_payload dst src cnt mem_sz CALLDATALOAD (Lit 0w) st = ((),st') /\
@@ -434,7 +434,11 @@ Proof
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_bulk_shape >> strip_tac >>
   drule_all calldata_bulk_opcodes >> strip_tac >>
+  drule_all calldata_bulk_non_dalloca >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
+  >- (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+      fs[EVERY_APPEND]) >>
+  conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_bulk_live_prefix_safe) >>
       qexistsl_tac [`src`,`p`,`mem_sz`,`maxn`,`ei`,`dst`,`d`,`abi_sz`] >> simp[]) >>
@@ -627,7 +631,11 @@ Proof
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_bulk_shape >> strip_tac >>
   drule_all calldata_bulk_opcodes >> strip_tac >>
+  drule_all calldata_bulk_non_dalloca >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
+  >- (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+      fs[EVERY_APPEND]) >>
+  conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_bulk_live_prefix_safe_mod) >>
       qexistsl_tac [`src`,`p`,`mem_sz`,`maxn`,`ei`,`dst`,`d`,`abi_sz`] >> simp[]) >>

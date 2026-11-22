@@ -81,7 +81,8 @@ Proof
   drule_all raw_call_success_run_aged >> strip_tac >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     (irule raw_call_success_mem_ok >> metis_tac[]) >>
-  `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb)) = 0` by
+  `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb)) = 0 /\
+   EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
     (qpat_x_assum `comp_bind _ _ _ = _` mp_tac >>
      simp[compile_select_def, comp_bind_def, emit_op_def, fresh_var_def,
           fresh_id_def, comp_ignore_bind_def, comp_return_def, emit_def,
@@ -89,6 +90,12 @@ Proof
      simp[emitted_insts_def] >>
      pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
      simp[mk_inst_def]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+      !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+     simp[EVERY_APPEND]) >>
   `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     (fs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
@@ -107,5 +114,8 @@ Proof
   qexists_tac `t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)` >>
   simp[raw_call_finish_view_control, eval_operand_def, lookup_var_def] >>
   fs[same_blocks_def, listTheory.LENGTH_APPEND] >>
-  first_x_assum (qspec_then `ctx` mp_tac) >> simp[arithmeticTheory.ADD_COMM]
+  qpat_assum `gas_path_mem ctx func s _ _` mp_tac >>
+  qpat_assum `FILTER _ _ = []` (pure_rewrite_tac o single) >>
+  qpat_assum `s.vs_inst_idx = _` (pure_rewrite_tac o single) >>
+  simp[arithmeticTheory.ADD_COMM]
 QED

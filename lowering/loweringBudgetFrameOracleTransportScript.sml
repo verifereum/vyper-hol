@@ -258,5 +258,6 @@ Theorem mem_safe_step_outcomes_update:
 Proof
   simp[mem_safe_step_non_invoke, memory_checks_outcomes_update,
        inst_mem_below_frontiers_def, read_ranges_outcomes_update,
-       write_ranges_outcomes_update]
+       write_ranges_outcomes_update, dalloca_no_wrap_def,
+       operand_outcomes_update]
 QED

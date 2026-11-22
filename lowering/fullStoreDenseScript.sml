@@ -100,7 +100,12 @@ Proof
        source_memory_read_ranges_def, run_inst_seq_def,
        step_inst_base_opcode_eqs, mk_inst_def, is_terminator_def,
        exec_read1_def, exec_write2_def, eval_operand_def,
-       update_var_def, lookup_var_def, FLOOKUP_UPDATE, sstore_def, tstore_def])) >>
+       update_var_def, lookup_var_def, FLOOKUP_UPDATE, sstore_def, tstore_def] >>
+     rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     `MEM i (pre ++ [i] ++ post)` by simp[] >>
+     qpat_x_assum `_ = pre ++ [i] ++ post` (fn th =>
+       pop_assum mp_tac >> pure_rewrite_tac[GSYM th]) >>
+     simp[] >> strip_tac >> simp[])) >>
   simp[]
 QED
 

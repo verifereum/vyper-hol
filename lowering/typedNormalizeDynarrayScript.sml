@@ -325,9 +325,19 @@ Theorem typed_dynarray_equal_cont:
 Proof
   strip_tac >> drule_all typed_dynarray_equal_compiler_run >> strip_tac >>
   drule typed_dynarray_equal_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by simp[] >>
+  `!pre i post v. emitted_insts sa sb = pre ++ i::post ==>
+     unitTransformDefs$dalloca_no_wrap i v` by
+    (rpt gen_tac >> disch_tac >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY _ _` mp_tac >>
+     qpat_x_assum `emitted_insts sa sb = pre ++ _`
+       (fn th => pure_once_rewrite_tac[th]) >> simp[EVERY_APPEND]) >>
   qexists_tac `u` >> reverse conj_tac >- simp[] >>
   irule typed_bytes_child_seq_cont >> simp[] >>
-  qexists_tac `sa` >> simp[IS_PREFIX_APPEND, mk_inst_def, is_terminator_def]
+  qexists_tac `sa` >> simp[IS_PREFIX_APPEND, is_terminator_def] >>
+  qpat_x_assum `!pre i post v. _ ==> unitTransformDefs$dalloca_no_wrap i v` mp_tac >>
+  simp[] >> metis_tac[]
 QED
 
 (* The header and data writes together affect only the live destination. *)

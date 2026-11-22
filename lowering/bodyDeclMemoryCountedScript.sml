@@ -63,8 +63,17 @@ Proof
   `run_inst_seq_mem_ok (emitted_insts sa sA) s` by
     (simp[run_inst_seq_mem_ok_last] >>
      irule instMemFrontierTheory.below_frontier_no_ranges >> simp[Abbr `A`, mk_inst_def]) >>
+  `ctx_has_dalloca ctx ==>
+      !pre i post u. emitted_insts sa sA = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> dalloca_no_wrap i u` by
+    (strip_tac >> rpt gen_tac >> strip_tac >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     Cases_on `pre` >> Cases_on `post` >>
+     gvs[Abbr `A`, mk_inst_def]) >>
   `gas_path_mem ctx func s 0 (OK (t with vs_inst_idx := LENGTH sA.cs_current_insts))` by
-    (irule body_decl_zero_gas_path >> simp[] >> qexists_tac `sa` >> simp[is_terminator_def]) >>
+    (irule body_decl_zero_gas_path >> simp[] >> qexists_tac `sa` >>
+     simp[is_terminator_def] >>
+     gvs[is_terminator_def, body_decl_zero_gas_path]) >>
   `alloca_history func (t with vs_inst_idx := LENGTH sA.cs_current_insts)` by
     (irule body_store_memory_history >> simp[same_blocks_def, is_terminator_def] >>
      qexistsl_tac [`s`, `sa`] >> simp[is_terminator_def] >> fs[stmt_state_rel_def, same_blocks_def]) >>
@@ -93,6 +102,10 @@ Theorem body_decl_cursor_path:
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     run_inst_seq_mem_ok (emitted_insts sa sb) s /\
+    (ptrDiscipline$ctx_has_dalloca ctx ==>
+      !pre i post u. (emitted_insts sa sb) = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==>
+        unitTransformDefs$dalloca_no_wrap i u) /\
     run_inst_seq (emitted_insts sa sb) s = OK t ==>
     gas_path_mem ctx func s 0
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
@@ -101,7 +114,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   `gas_path_mem ctx func s 0
      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))` by
-    (irule body_decl_zero_gas_path >> simp[] >> qexists_tac `sa` >> simp[]) >>
+    (irule body_decl_zero_gas_path >> simp[] >> qexists_tac `sa` >>
+     simp[] >> gvs[body_decl_zero_gas_path]) >>
   drule gas_path_mem_exec >> strip_tac >> gvs[exit_result_def] >>
   `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
      isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
@@ -210,10 +224,33 @@ Proof
     metis_tac[compile_store_memory_same_no_gas] >>
   `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
      ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by fs[EVERY_MEM] >>
+  `ctx_has_dalloca ctx ==>
+      !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> dalloca_no_wrap i u` by
+    (strip_tac >> rpt gen_tac >> strip_tac >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts sa sb)` by
+       (qpat_x_assum `emitted_insts sa sb = pre ++ i::post` (rw o single) >>
+        simp[MEM_APPEND]) >>
+     Cases_on `is_bytestring_type ty` THENL
+     [ fs[compile_store_memory_def] >>
+       drule logBytesCodePtrTheory.compile_store_bytestring_opcodes >>
+       simp[EVERY_MEM] >> disch_then (qspec_then `i` mp_tac) >>
+       simp[] >> strip_tac >> simp[],
+       fs[compile_store_memory_def] >>
+       Cases_on `type_memory_size tyv` THENL
+       [ gvs[compile_copy_memory_def, comp_return_def, emitted_insts_def],
+         fs[compile_copy_memory_def] >> drule emitted_insts_emit_void >>
+         disch_then (fn th =>
+           qpat_x_assum `MEM i (emitted_insts sa sb)` mp_tac >>
+           simp_tac (srw_ss()) [th] >> strip_tac >> simp[mk_inst_def])
+       ]
+     ]) >>
   `gas_path_mem ctx func s 0
      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb` by
-    (irule body_decl_cursor_path >> simp[] >> qexists_tac `sa` >> simp[]) >>
+    (irule body_decl_cursor_path >> simp[] >> qexists_tac `sa` >>
+     simp[] >> gvs[body_decl_cursor_path]) >>
   `alloca_inv s` by fs[stmt_state_rel_def] >>
   `alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule body_store_memory_history >> simp[] >>
@@ -280,10 +317,28 @@ Proof
     metis_tac[body_scratch_prefix_no_gas] >>
   `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
      ~is_terminator i.inst_opcode) (emitted_insts sa sn)` by fs[EVERY_MEM] >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sn)` by
+    (asm_simp_tac (srw_ss()) [EVERY_APPEND] >> conj_tac THENL
+     [ drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >> strip_tac >>
+       drule emitted_insts_emit_op >> simp[mk_inst_def],
+       Cases_on `n` THENL
+       [ gvs[compile_copy_memory_def, comp_return_def, emitted_insts_def],
+         fs[compile_copy_memory_def] >> drule emitted_insts_emit_void >> simp[mk_inst_def]
+       ]
+     ]) >>
+  `ctx_has_dalloca ctx ==>
+      !pre i post u. emitted_insts sa sn = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> dalloca_no_wrap i u` by
+    (strip_tac >> rpt gen_tac >> strip_tac >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts sa sn)` by (simp[MEM_APPEND]) >>
+     qpat_assum `EVERY _ (emitted_insts sa sn)`
+       (qspec_then `i` mp_tac o REWRITE_RULE [EVERY_MEM]) >> simp[]) >>
   `gas_path_mem ctx func s 0
      (OK (t with vs_inst_idx := LENGTH sn.cs_current_insts)) /\
    ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb` by
-    (irule body_decl_cursor_path >> simp[] >> qexists_tac `sa` >> simp[]) >>
+    (irule body_decl_cursor_path >> simp[] >> qexists_tac `sa` >>
+     simp[] >> gvs[body_decl_cursor_path]) >>
   `alloca_inv s` by fs[stmt_state_rel_def] >>
   `alloca_history func (t with vs_inst_idx := LENGTH sn.cs_current_insts)` by
     (irule body_store_memory_history >> simp[] >>

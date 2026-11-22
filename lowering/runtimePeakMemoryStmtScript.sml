@@ -45,8 +45,10 @@ fun windows_tac thms =
 Theorem dalloca_windows_compile_place:
   (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
   (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) /\
-  compile_env_blueprint_free ce /\ compile_env_builtin_arity ce /\
-  ~supported_target_exists blueprint_create_root bt /\
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        compile_env_blueprint_free ce) /\ compile_env_builtin_arity ce /\
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        ~supported_target_exists blueprint_create_root bt) /\
   ~supported_target_exists short_builtin_args bt ==>
   preserves_dalloca_windows window (compile_get_target_ptr compile_expr ce bt)
 Proof
@@ -90,13 +92,17 @@ Theorem dalloca_windows_compile_stmt_mutual[local]:
   (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
   (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) ==>
   ((!ce lc ty s.
-    compile_env_blueprint_free ce /\ compile_env_builtin_arity ce /\
-    ~supported_stmt_expr_exists blueprint_create_root s /\
+    (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        compile_env_blueprint_free ce) /\ compile_env_builtin_arity ce /\
+    (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        ~supported_stmt_expr_exists blueprint_create_root s) /\
     ~supported_stmt_expr_exists short_builtin_args s ==>
     preserves_dalloca_windows window (compile_stmt ce lc ty s)) /\
    (!ce lc ty ss.
-    compile_env_blueprint_free ce /\ compile_env_builtin_arity ce /\
-    ~supported_stmts_expr_exists blueprint_create_root ss /\
+    (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        compile_env_blueprint_free ce) /\ compile_env_builtin_arity ce /\
+    (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        ~supported_stmts_expr_exists blueprint_create_root ss) /\
     ~supported_stmts_expr_exists short_builtin_args ss ==>
     preserves_dalloca_windows window (compile_stmts ce lc ty ss)))
 Proof
@@ -112,14 +118,24 @@ Proof
   >>> SPLIT_LT 18 (ALL_LT, SPLIT_LT 5 (ALLGOALS compile_stmt_windows_tac, ALL_LT))
   >>> SPLIT_LT 9 (ALL_LT, SPLIT_LT 9 (ALLGOALS compile_stmt_windows_tac, ALL_LT))
   >>> SPLIT_LT 9 (ALLGOALS compile_stmt_windows_tac, ALL_LT) >>
-  metis_tac[dalloca_windows_supported_tuple_member]
+  FIRST [
+    (* Member exclusions for custom errors, logs and tuple assignment. *)
+    qpat_assum `MEM _ _` (K ALL_TAC) >>
+    metis_tac[dalloca_windows_supported_tuple_member],
+    (* Instantiate the list induction hypotheses at the live block. *)
+    qpat_assum `~block_is_terminated _` (K ALL_TAC) >> metis_tac[],
+    (* Declaration scope preserves the function defaults. *)
+    `compile_env_blueprint_free ce` by metis_tac[] >>
+    fs[compile_env_blueprint_free_def]]
 QED
 
 Theorem dalloca_windows_compile_stmts:
   (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
   (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) /\
-  compile_env_blueprint_free ce /\ compile_env_builtin_arity ce /\
-  ~supported_stmts_expr_exists blueprint_create_root ss /\
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        compile_env_blueprint_free ce) /\ compile_env_builtin_arity ce /\
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+        ~supported_stmts_expr_exists blueprint_create_root ss) /\
   ~supported_stmts_expr_exists short_builtin_args ss ==>
   preserves_dalloca_windows window (compile_stmts ce lc ty ss)
 Proof

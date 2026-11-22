@@ -13,7 +13,8 @@ Theorem store_slots_emitted_seq_path_mem:
   same_blocks sa sb /\ fn_has_code sa sb func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+  EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> DALLOCA /\
+             ~is_terminator i.inst_opcode)
     (emitted_insts sa sb) /\
   LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb)) = 0 /\
   run_inst_seq_mem_ok (emitted_insts sa sb) s /\
@@ -34,12 +35,19 @@ Proof
      qexists_tac `l` >> rewrite_tac[]) >>
   drule_at (Pat `run_inst_seq _ _ = _`) run_inst_seq_gas_path_mem >>
   disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
-  simp[gas_marked_path_def]
+  simp[gas_marked_path_def] >> impl_tac
+  >- (conj_tac
+      >- (gvs[EVERY_MEM] >> metis_tac[]) >>
+      rpt strip_tac >>
+      `MEM i (emitted_insts sa sb)` by simp[MEM_APPEND] >>
+      irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+      fs[EVERY_MEM] >> metis_tac[]) >>
+  simp[]
 QED
 
 Theorem store_slots_emit_op_path_mem:
   emit_op opc args sa = (op,sb) /\ fn_has_code sa sb func /\
-  opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc /\
+  opc <> INVOKE /\ opc <> GAS /\ opc <> DALLOCA /\ ~is_terminator opc /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!out. inst_mem_below_frontier (mk_inst sa.cs_next_id opc args [out]) s /\
@@ -237,7 +245,10 @@ Proof
      irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
   drule_at (Pat `run_inst_seq _ _ = _`) topcopy_seq_path >>
   disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
-  simp[mk_inst_def, is_terminator_def] >> strip_tac >>
+  simp[mk_inst_def, is_terminator_def] >> impl_tac
+  >- (rpt strip_tac >> Cases_on `pre` >>
+      gvs[memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
+  strip_tac >>
   qexists_tac `(update_var tv (if i = n then 1w else 0w) s)
     with vs_inst_idx := s.vs_inst_idx + 1` >>
   conj_tac >- simp[] >>

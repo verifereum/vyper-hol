@@ -77,6 +77,13 @@ Proof
   `w2n ow + 32 <= s.vs_alloca_next` by decide_tac >>
   `run_inst_seq_mem_ok [mk_inst sc.cs_next_id MSTORE [Var oq; Lit 0w] []] s` by
     (drule_all emit_mstore_mem_ok >> simp[]) >>
+  `(ctx_has_dalloca ctx ==>
+      !pre i post u. [mk_inst sc.cs_next_id MSTORE [Var oq; Lit 0w] []] =
+        pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+        unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `[_] = _ ++ _` (mp_tac o SYM) >>
+     simp[listTheory.APPEND_EQ_SING] >> strip_tac >> simp[mk_inst_def]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
       (OK (raw with vs_inst_idx := LENGTH sc'.cs_current_insts),G,tn')` by
     (gen_tac >> irule emitted_origin_ptr_path >>

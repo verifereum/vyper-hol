@@ -191,7 +191,8 @@ Proof
   simp[same_blocks_def] >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
                ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
-    EVERY (\i. i.inst_opcode <> ALLOCA) (emitted_insts sa sb)` by
+    EVERY (\i. i.inst_opcode <> ALLOCA) (emitted_insts sa sb) /\
+    EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
     (qpat_x_assum `EVERY _ (emitted_insts sa sb)`
        (assume_tac o SIMP_RULE bool_ss [EVERY_MEM]) >>
      simp[EVERY_MEM] >> rpt strip_tac >>
@@ -212,7 +213,9 @@ Proof
       (OK (raw with vs_inst_idx := LENGTH sb.cs_current_insts),Gf,tnf)` by
     (irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
      simp[] >> qexistsl_tac [`emitted_insts sa sb`,`sa`] >>
-     simp[]) >>
+     simp[] >> rpt strip_tac >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     fs[EVERY_MEM]) >>
   asm_simp_tac bool_ss [] >>
   qexistsl_tac [`raw with vs_inst_idx := LENGTH sb.cs_current_insts`,`Gf`,`tnf`] >>
   simp[IgnAsm `sb.cs_current_insts = _`] >> conj_tac

@@ -300,12 +300,12 @@ Resume concat_sim_full[loop]:
     (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
        qpat_assum `MEM func ctx.ctx_functions` (fn member =>
          ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi (CONJ inv member))))) >>
-  `!fn inst z. frag_reachable ctx func t4 fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func t4 fn inst z ==> dalloca_fmp_headroom inst z` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK t4,G4,tn4)`
        (qspec_then `DF (storage_trace_horizon es.storage_trace)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
        qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> _` (fn safe =>
-         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
            (LIST_CONJ [path,no_phi,safe]))))))) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t4` by
     (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> stmt_state_rel _ _ _ _ _ _ t4 /\ _`

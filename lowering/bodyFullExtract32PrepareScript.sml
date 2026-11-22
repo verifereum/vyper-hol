@@ -203,14 +203,25 @@ Resume extract32_prepare_full[posts]:
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   conj_tac
-  >- (qpat_assum `LENGTH sn.cs_current_insts = _` (fn th => rewrite_tac[GSYM th]) >>
+  >- (`ctx_has_dalloca ctx ==>
+        !pre i post q. emitted_insts sm sn = pre ++ i::post /\
+          run_inst_seq pre s = OK q ==> unitTransformDefs$dalloca_no_wrap i q` by
+        (rpt strip_tac >>
+         `MEM i (emitted_insts sm sn)` by
+           (qpat_assum `_ = pre ++ i::post` (fn th => simp[th, MEM_APPEND])) >>
+         pop_assum mp_tac >>
+         qpat_assum `emitted_insts sm sn = [_;_]`
+           (fn th => pure_rewrite_tac[th]) >>
+         simp[] >> strip_tac >>
+         simp[mk_inst_def, unitTransformDefsTheory.dalloca_no_wrap_def]) >>
+      qpat_assum `LENGTH sn.cs_current_insts = _` (fn th => rewrite_tac[GSYM th]) >>
       irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
       simp[NoAsms] >> conj_tac >- simp[] >>
       qexistsl_tac [`emitted_insts sm sn`,`sm`] >>
       simp[mk_inst_def, is_terminator_def] >>
       qpat_assum `!D lo. allocas_from lo s ==> _`
         (qspecl_then [`DF H`,`lo`] mp_tac) >>
-      gvs[ghost_inv_at_def, mk_inst_def]) >>
+      gvs[ghost_inv_at_def, mk_inst_def] >> first_assum ACCEPT_TAC) >>
   conj_tac
   >- (irule extract32_prepare_post_readonly >>
       conj_tac >- metis_tac[] >>

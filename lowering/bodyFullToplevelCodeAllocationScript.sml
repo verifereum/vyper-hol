@@ -61,7 +61,9 @@ Proof
     (OK (u with vs_inst_idx := LENGTH mid.cs_current_insts),Gf,tnf)` by
     (irule emitted_origin_ptr_path >> conj_tac >- (simp[]) >>
      qexistsl [`emitted_insts sm mid`,`sm`] >>
-     simp[ec_alloc_buffer_mem_ok, mk_inst_def, is_terminator_def]) >>
+     simp[ec_alloc_buffer_mem_ok, mk_inst_def, is_terminator_def,
+          Once EQ_SYM_EQ, APPEND_EQ_SING,
+          memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   `LENGTH mid.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>
   `a = u with vs_inst_idx := LENGTH mid.cs_current_insts` by simp[] >>
   gvs[]

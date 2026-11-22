@@ -324,6 +324,14 @@ Proof
      qpat_assum `!i. MEM i (emitted_insts sa sb) ==> i.inst_opcode = ADD \/ _`
        (drule_then strip_assume_tac) >>
      gvs[is_terminator_def]) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post v. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK v ==> unitTransformDefs$dalloca_no_wrap i v)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts sa sb)` by simp[MEM_APPEND] >>
+     qpat_assum `EVERY (\i. MEM i.inst_opcode [ADD; MLOAD; ISTORE]) _`
+       (drule_then mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     simp[] >> strip_tac >> simp[]) >>
   qexistsl [`u`,`Gf`,`tf`] >> simp[] >>
   reverse conj_tac
   >- metis_tac[ADD_COMM] >>
@@ -334,7 +342,8 @@ Proof
      `explicit` |-> `explicit`]
     (Q.SPECL [`emitted_insts sa sb`,`s`,`u`,`G`,`tn`,`Gf`,`tf`,`ctx`,`func`,`bb`]
       run_inst_seq_gas_origin_ptr_path)) >>
-  simp[]
+  simp[] >> disch_then irule >>
+  qpat_assum `ctx_has_dalloca ctx ==> !pre i post v. _` mp_tac >> simp[]
 QED
 
 Resume immutable_copy_words_path[ghosts]:

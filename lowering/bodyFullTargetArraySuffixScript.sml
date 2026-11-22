@@ -990,12 +990,23 @@ Proof
   mp_tac (Q.INST [`s` |-> `sg`, `sa` |-> `sc`, `G` |-> `H`,
     `tn` |-> `tm`] (SPEC_ALL array_elem_ptr_nonalias_uniform)) >>
   impl_tac >- simp[] >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sc sb)` by
+    (qpat_assum `array_elem_ptr _ _ _ _ _ _ = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> Cases_on `dyn` >>
+     simp[array_elem_ptr_def, emitHelperTheory.emit_op_def,
+          comp_bind_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
+          emit_def, comp_return_def] >>
+     strip_tac >> gvs[emitted_insts_def] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND, venomInstTheory.mk_inst_def]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (sg,H,tm) []
       (OK (t' with vs_inst_idx := LENGTH sb.cs_current_insts),H',tm')` by
     (gen_tac >> irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
      simp[Abbr `sg`] >>
      qexistsl [`emitted_insts sc sb`, `sc`] >>
-     gvs[same_blocks_def]) >>
+     gvs[same_blocks_def] >> rpt strip_tac >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     gvs[EVERY_APPEND]) >>
   qexistsl [`t' with vs_inst_idx := LENGTH sb.cs_current_insts`, `H'`, `tm'`] >>
   simp[instIdxIndepTheory.eval_op_inst_idx] >>
   conj_tac

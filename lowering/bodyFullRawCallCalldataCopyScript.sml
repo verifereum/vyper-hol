@@ -29,7 +29,7 @@ Theorem calldata_memory_joint_run:
   gas_origin_ptr_path (D0,lo,explicit0,ctx,func,PG)
     (s0,G0,tn0) marks (OK s,G,tn) /\
   (!fn inst v. contextRawReachable$frag_reachable ctx func s0 fn inst v ==>
-     dalloca_no_wrap inst v) /\
+     dalloca_fmp_headroom inst v) /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\ allocas_below_fmp s /\
   w2n s.vs_initial_fmp <= w2n s.vs_fmp /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -103,7 +103,8 @@ Proof
         impl_tac >-
           (simp[inst_mem_below_frontier_def, Abbr `size_inst`, mk_inst_def,
                 is_terminator_def, inst_dload_in_section_def,
-                source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+                source_memory_read_ranges_def, source_memory_write_ranges_def,
+                dalloca_no_wrap_non_dalloca] >>
            fs[mk_inst_def]) >>
         simp[Abbr `size_inst`, Abbr `s1`, Abbr `G1`, Abbr `tn1`, mk_inst_def]) >>
      drule (cj 2 gas_origin_ptr_path_rules) >>
@@ -131,13 +132,26 @@ Resume calldata_memory_joint_run[allocate]:
      irule scalar_builtin_output_clean >> simp[]) >>
   `alloc_inst.inst_opcode = DALLOCA /\ alloc_inst.inst_operands = [Var szreg] /\
    alloc_inst.inst_outputs = [ptrreg]` by simp[Abbr `alloc_inst`, mk_inst_def] >>
-  qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK s1,G1,tn1)`
-    (mp_then (Pat `gas_origin_ptr_path _ _ _ _`)
-      (qspecl_then [`tops`,`n2w n`,`Var szreg`,`ptrreg`,`alloc_inst`,`cx`,`cenv`,`bb`] mp_tac)
-      dalloca_origin_region_exact) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then (qx_choose_then `s2` (qx_choose_then `G2`
-    (qx_choose_then `tn2` (map_every assume_tac o CONJUNCTS)))) >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[body_inv_no_phi] >>
+  `contextRawReachable$frag_reachable ctx func s1 func alloc_inst s1` by
+    (irule contextRawReachableTheory.frag_reachable_start >>
+     drule_all contextCodegenRelPropsTheory.lookup_instruction_active >> simp[]) >>
+  `dalloca_fmp_headroom alloc_inst s1` by
+    (qpat_assum `gas_origin_ptr_path _ _ _ (OK s1,G1,tn1)`
+       (mp_then (Pat `gas_origin_ptr_path _ _ _ _`) mp_tac
+          gas_origin_ptr_path_dalloca_fmp_headroom) >>
+     disch_then (qspecl_then [`func`,`alloc_inst`,`s1`] mp_tac) >> simp[] >>
+     disch_then irule >> first_assum ACCEPT_TAC) >>
+  `w2n s1.vs_fmp + venomLayout$ceil32 (w2n (n2w n : bytes32)) < dimword (:256)` by
+    (qpat_x_assum `dalloca_fmp_headroom alloc_inst s1` mp_tac >>
+     simp[dalloca_fmp_headroom_def, Abbr `s1`, Abbr `v`, update_var_def,
+          w2n_n2w, Abbr `n`, arithmeticTheory.MAX_DEF] >>
+     rw[] >> decide_tac) >>
+  drule_all (Q.INST [`s` |-> `s1`, `tn` |-> `tn1`] dalloca_origin_region_exact) >>
+  disch_then (qspecl_then [`PG`,`G1`]
+    (qx_choose_then `s2` (qx_choose_then `G2`
+      (qx_choose_then `tn2` (map_every assume_tac o CONJUNCTS))))) >>
   `ptrreg <> szreg` by simp[Abbr `ptrreg`, Abbr `szreg`] >>
   `lookup_var szreg s1 = SOME (n2w n)` by
     simp[Abbr `s1`, Abbr `v`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
@@ -202,7 +216,8 @@ Resume calldata_memory_joint_run[copy_inst]:
         `Abbrev (copy_inst = _)`] >>
      POP_ASSUM_LIST (K all_tac) >>
      simp[markerTheory.Abbrev_def, mem_safe_step_non_invoke, mk_inst_def,
-          inst_dload_in_section_def, inst_mem_below_frontiers_def] >>
+          inst_dload_in_section_def, inst_mem_below_frontiers_def,
+          dalloca_no_wrap_non_dalloca] >>
      rpt strip_tac >> disj2_tac >>
      asm_simp_tac (srw_ss()) [venomLayoutTheory.ceil32_ge]) >>
   `step_prov PG G2 copy_inst u = G2 /\

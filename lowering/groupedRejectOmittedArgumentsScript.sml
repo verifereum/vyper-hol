@@ -319,7 +319,7 @@ Theorem row22_omitted_model_inputs:
     expr_sim_inv (ce with ce_vars := FEMPTY) cx env es /\
     body_const_cells_agree [(NONE,tops)] cx env es /\
     alloca_history fn s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-    (!f inst w. frag_reachable ctx fn s f inst w ==> dalloca_no_wrap inst w) /\
+    (!f inst w. frag_reachable ctx fn s f inst w ==> dalloca_fmp_headroom inst w) /\
     ~s.vs_halted /\ at_point sa s
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -405,7 +405,7 @@ QED
 
 Resume row22_omitted_model_inputs[bounds]:
   mp_tac (Q.INST [`cut` |-> `u`, `marks` |-> `[]`]
-    (SPEC_ALL row22_real_cut_empty_oracle_no_wrap)) >>
+    (SPEC_ALL row22_real_cut_empty_oracle_headroom)) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_tac >>
   qpat_x_assum `selected_registration_resources _ _ _ _ _ _` (strip_assume_tac o REWRITE_RULE[selected_registration_resources_def]) >>
@@ -470,7 +470,7 @@ Theorem row22_omitted_seed_path_if_no_exempt:
   expr_sim_inv (ce with ce_vars := FEMPTY) cx env es /\
   body_const_cells_agree [(NONE,tops)] cx env es /\
   alloca_history fn s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  (!f inst u. frag_reachable ctx fn s f inst u ==> dalloca_no_wrap inst u) /\
+  (!f inst u. frag_reachable ctx fn s f inst u ==> dalloca_fmp_headroom inst u) /\
   ~s.vs_halted /\ at_point sa s /\
   check_contract F layouts addr [(NONE,src_tops)] = SOME art /\
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,src_tops)] /\

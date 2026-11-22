@@ -184,7 +184,8 @@ Proof
   qpat_x_assum `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx`
     (fn th => pure_once_rewrite_tac [th]) >>
   irule step_origin_ptr_path >> (conj_tac >- simp[]) >>
-  qexistsl_tac [`bb`, `mk_inst sa.cs_next_id opc ops [x]`] >> simp[mk_inst_def]
+  qexistsl_tac [`bb`, `mk_inst sa.cs_next_id opc ops [x]`] >>
+  fs[MEM] >> gvs[mk_inst_def, memSafeRunTheory.dalloca_no_wrap_non_dalloca]
 QED
 
 Theorem member_navigation_emit_joint_pc[local]:

@@ -57,9 +57,20 @@ Proof
   `inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s Gf tnf` by
     (qpat_x_assum `!k. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
        (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]) >>
+  `ctx_has_dalloca ctx ==>
+   !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+     run_inst_seq pre s = OK u ==> dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+       (fs[emitted_insts_def, DROP_APPEND, EVERY_MEM] >> rpt strip_tac >>
+        qpat_x_assum `!i. MEM i _ ==> _` drule >> simp[]) >>
+     qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+     simp[EVERY_APPEND]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),Gf,tnf)` by
-    (irule emitted_origin_ptr_path >> metis_tac[]) >>
+    (irule emitted_origin_ptr_path >> conj_tac >- simp[] >>
+     qexistsl [`emitted_insts sa sb`, `sa`] >> simp[] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> asm_rewrite_tac[]) >>
   qexistsl [`Gf`, `tnf`, `t`] >> simp[]
 QED
 
@@ -90,7 +101,9 @@ Proof
   qexistsl [`[mk_inst sb.cs_next_id ALLOCA [Lit (n2w nb)] [root]]`, `sb`] >>
   simp[run_inst_seq_def, inst_seq_ptr_def, mk_inst_def, is_terminator_def,
     run_inst_seq_mem_ok_def, inst_mem_below_frontier_def, inst_dload_in_section_def,
-    source_memory_read_ranges_def, source_memory_write_ranges_def]
+    source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+  rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+  Cases_on `pre` >> gvs[]
 QED
 
 Theorem runtime_code_copy_origin_execution:

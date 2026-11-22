@@ -40,6 +40,14 @@ Proof
       `ctx`, `fn`, `bb`] mp_tac) >>
   simp[abi_decode_backedge_insts_def, mk_inst_def, is_terminator_def,
        DROP_LENGTH_APPEND] >>
+  (impl_tac >-
+    (rpt strip_tac >> rename1 `dalloca_no_wrap inst u` >>
+     `MEM inst [mk_inst id ADD [Var iv; Lit 1w] [nv];
+                mk_inst (id + 1) MSTORE [ip; Var nv] []]` by
+       (pure_rewrite_tac[mk_inst_def] >>
+        qpat_x_assum `_ = _ ++ [inst] ++ _`
+          (fn th => pure_once_rewrite_tac[th] >> simp[MEM_APPEND])) >>
+     gvs[MEM, mk_inst_def])) >>
   strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_path_mem ctx fn s 0 (OK u)` >>
   `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb /\

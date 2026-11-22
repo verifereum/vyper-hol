@@ -481,7 +481,18 @@ Proof
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_bulk_shape >> strip_tac >>
   drule_all calldata_bulk_opcodes >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
+     simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def,
+          compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+          fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
+     simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+     simp[DROP_LENGTH_APPEND, mk_inst_def]) >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
+  >- (rw[] >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+      fs[EVERY_MEM] >> metis_tac[MEM_APPEND, MEM]) >>
+  conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_bulk_prefix_safe) >>
       goal_assum (drule_at Any) >> simp[] >> metis_tac[ADD_COMM]) >>
@@ -506,7 +517,18 @@ Proof
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_bulk_shape >> strip_tac >>
   drule_all calldata_bulk_opcodes >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
+     simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def,
+          compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+          fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
+     simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+     simp[DROP_LENGTH_APPEND, mk_inst_def]) >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
+  >- (rw[] >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+      fs[EVERY_MEM] >> metis_tac[MEM_APPEND, MEM]) >>
+  conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_bulk_prefix_safe) >>
       goal_assum (drule_at Any) >> simp[] >> metis_tac[ADD_COMM]) >>

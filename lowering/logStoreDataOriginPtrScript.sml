@@ -159,6 +159,9 @@ Resume compile_copy_memory_origin_ptr_path[path]:
     (`inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
        inst.inst_opcode <> GAS` by
        simp[Abbr `inst`, venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
+     `ctx_has_dalloca ctx ==> unitTransformDefs$dalloca_no_wrap inst s` by
+       simp[Abbr `inst`, venomInstTheory.mk_inst_def,
+            unitTransformDefsTheory.dalloca_no_wrap_def] >>
      drule_all straight_line_origin_ptr_edge >>
      disch_then (qspecl_then [`explicit`, `PG`] mp_tac) >> simp[Abbr `tf`]) >>
   `~sc.vs_halted` by

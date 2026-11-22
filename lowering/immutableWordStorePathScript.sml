@@ -65,6 +65,15 @@ Proof
        (drule_then strip_assume_tac) >> simp[]) >>
   `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s Gf tf` by
     (first_x_assum (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]) >>
+  `(ctx_has_dalloca ctx ==>
+     !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+       run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `MEM i (emitted_insts sa sb)` by simp[] >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY (\i. i.inst_opcode = ADD \/ i.inst_opcode = ISTORE) _`
+       (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     disch_then drule >> Cases_on `i.inst_opcode` >> simp[]) >>
   qexistsl_tac [`Gf`,`tf`] >> simp[] >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
    isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>

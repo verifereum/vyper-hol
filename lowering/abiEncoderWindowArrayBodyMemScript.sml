@@ -15,6 +15,7 @@ Theorem window_array_tail_seq_mem[local]:
   abi_encode_array_tail data_op dp st = (ops,en) /\
   eval_operand dp s = SOME (n2w slot) /\ slot < dimword (:256) /\
   slot+32 <= s.vs_alloca_next ==>
+  EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st en) /\
   run_inst_seq_mem_ok (emitted_insts st en) s
 Proof
   simp_tac bool_ss [abi_encode_array_tail_def, comp_bind_def, comp_return_def, LET_THM] >>
@@ -24,7 +25,10 @@ Proof
   `inst_extends st mid /\ inst_extends mid en` by metis_tac[inst_extends_emit_op] >>
   `emitted_insts st en = emitted_insts st mid ++ emitted_insts mid en` by
     metis_tac[emitted_insts_append, inst_extends_def, inst_extends_trans] >>
-  asm_rewrite_tac[] >> match_mp_tac run_inst_seq_mem_ok_append >> conj_tac
+  qpat_assum `emitted_insts st en = _` (fn th => pure_rewrite_tac [th]) >>
+  conj_tac
+  >- (imp_res_tac emitted_insts_emit_op >> simp[mk_inst_def]) >>
+  match_mp_tac run_inst_seq_mem_ok_append >> conj_tac
   >- (drule emit_mload_mem_ok >> disch_then irule >> simp[]) >>
   rpt strip_tac >> drule emit_op_mem_ok >> disch_then irule >> simp[] >>
   irule below_frontier_no_ranges >> simp[mk_inst_def]
@@ -46,8 +50,12 @@ Theorem window_array_tail_phase_mem:
     mem_cont_sim ctx func s t
 Proof
   strip_tac >> drule_all window_array_tail_pure >> strip_tac >>
-  `run_inst_seq_mem_ok (emitted_insts st en) s` by
-    (drule_all window_array_tail_seq_mem >> simp[]) >>
+  drule_all window_array_tail_seq_mem >> strip_tac >>
+  `ctx_has_dalloca ctx ==>
+   !pre i post u. emitted_insts st en = pre ++ i::post /\
+     run_inst_seq pre s = OK u ==> dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_APPEND]) >>
   `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
     metis_tac[window_seq_mem_cont, window_pure_seq_def] >>
   qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
@@ -75,6 +83,7 @@ Theorem window_array_addresses_seq_mem[local]:
   abi_encode_array_addresses ip src dst asz msz st = (coords,en) /\
   eval_operand ip s = SOME (n2w slot) /\ slot < dimword (:256) /\
   slot+32 <= s.vs_alloca_next ==>
+  EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st en) /\
   run_inst_seq_mem_ok (emitted_insts st en) s
 Proof
   simp[abi_encode_array_addresses_def, abi_decode_array_head_setup_def,
@@ -107,8 +116,12 @@ Theorem window_array_addresses_phase_mem:
     mem_cont_sim ctx func s t
 Proof
   strip_tac >> drule_all window_array_addresses_pure >> strip_tac >>
-  `run_inst_seq_mem_ok (emitted_insts st en) s` by
-    (drule_all window_array_addresses_seq_mem >> simp[]) >>
+  drule_all window_array_addresses_seq_mem >> strip_tac >>
+  `ctx_has_dalloca ctx ==>
+   !pre i post u. emitted_insts st en = pre ++ i::post /\
+     run_inst_seq pre s = OK u ==> dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_APPEND]) >>
   `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
     metis_tac[window_seq_mem_cont, window_pure_seq_def] >>
   qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>

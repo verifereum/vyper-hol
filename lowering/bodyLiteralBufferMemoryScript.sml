@@ -14,6 +14,7 @@ Theory bodyLiteralBufferMemory
 Ancestors
   exprSimLiteralBuffer exprSimMemDefs exprSimMemoryPath exprSimUnwrapProps
   fragGasSeqMem allocaHistoryFragment allocaFootprint instMemFrontier
+  literalBufferOpcodeShape memSafeRun ptrDiscipline
   fragExecMem fragGasPathMem fragGasMode gasSummary gasOutcome gasStorage
   vyperStorageFootprint
   exprSimVVFrame exprSimAlloc exprSimProps exprSimDefs exprSimHypsDefs
@@ -287,8 +288,12 @@ Proof
   drule_all alloca_history_run_inst_seq >> strip_tac >>
   `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     simp[IS_PREFIX_APPEND3] >>
-  drule_all run_inst_seq_gas_path_mem >>
-  disch_then (qspec_then `ctx` mp_tac) >> gvs[]
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+    (drule literal_bytelike_emitted_non_dalloca >> rpt strip_tac >>
+     gvs[EVERY_APPEND, dalloca_no_wrap_non_dalloca]) >>
+  drule_all run_inst_seq_gas_path_mem >> gvs[]
 QED
 
 (* The buffer holds the literal's value: the counted run, its value post
