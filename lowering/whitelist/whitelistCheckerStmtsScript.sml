@@ -11,7 +11,7 @@ Theory whitelistCheckerStmts
 Ancestors
   list pred_set finite_map alist pair vyperAST vyperValue vyperContext vyperTypeSystem
   vyperTypeCallGraph vyperEventArgCompat vyperTypeEnvExtension constSubst
-  vyperTypeContract
+  vyperTypeContract checkedTypeNamespace
   supportedTypes supportedDecls supportedExprForms supportedExprs
   supportedTargets supportedStmtTraverse supportedStmts
   whitelistCheckerDecls whitelistCheckerExprs supportedGetterProps
@@ -265,12 +265,6 @@ Theorem type_env_key_main:
 Proof
   simp[type_env_def] >> Induct >> simp[type_env_for_module_def] >> Cases >>
   rw[type_env_for_module_def, FLOOKUP_UPDATE] >> res_tac >> gvs[]
-QED
-
-Theorem supported_types_namespace_every[local]:
-  !ts. supported_types_namespace ts <=> EVERY supported_type_namespace ts
-Proof
-  Induct >> simp[supported_type_namespace_def]
 QED
 
 Theorem assignable_type_namespace[local]:

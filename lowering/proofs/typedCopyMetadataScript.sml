@@ -264,7 +264,7 @@ Proof
            supported_word_type_def, supported_string_type_def] >> strip_tac >>
       fs[type_rank_def, supported_type_namespace_def] >>
       `EVERY supported_type_namespace tys` by
-        (drule supported_types_namespace_every >> simp[]) >>
+        fs[supported_types_namespace_every] >>
       AP_TERM_TAC >> irule MAP_CONG >> simp[] >> rpt strip_tac >>
       first_x_assum irule >> simp[] >>
       conj_tac >- (fs[EVERY_MEM] >> res_tac) >>

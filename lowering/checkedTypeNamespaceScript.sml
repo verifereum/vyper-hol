@@ -54,7 +54,7 @@ Proof
 QED
 
 Theorem supported_types_namespace_every:
-  !ts. supported_types_namespace ts ==> EVERY supported_type_namespace ts
+  !ts. supported_types_namespace ts <=> EVERY supported_type_namespace ts
 Proof
   Induct >> simp[supported_type_namespace_def]
 QED

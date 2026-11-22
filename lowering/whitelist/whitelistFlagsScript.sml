@@ -239,7 +239,7 @@ Proof
       qpat_x_assum `supported_nested_type _ _ _ (TupleT _)` mp_tac >>
       drule nonagg_leaf_nested_struct >> disch_then (fn th => simp[th]) >>
       strip_tac >> fs[type_rank_def, supported_type_namespace_def] >>
-      drule_then assume_tac supported_types_namespace_every >>
+      fs[supported_types_namespace_every] >>
       AP_TERM_TAC >> irule MAP_CONG >> simp[] >> rpt strip_tac >>
       first_x_assum irule >> simp[] >> conj_tac
       >- (fs[EVERY_MEM] >> res_tac) >>

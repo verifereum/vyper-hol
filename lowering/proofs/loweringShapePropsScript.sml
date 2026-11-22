@@ -16188,20 +16188,15 @@ Proof
                 rets_scoped_segments_mode
             in mp_tac (SPECL [descs,segs,``entry : basic_block list``] rule) end) >>
         asm_rewrite_tac[]) >>
+  `!i. MEM i (FLAT (MAP (\bb. bb.bb_instructions) (FLAT segs))) ==>
+       MEM i insts`
+    by simp[Abbr `insts`, MAP_APPEND, FLAT_APPEND] >>
   `!fn. MEM fn ifns ==>
         fn_shape_ok fn /\ EVERY (lowered_inst_mode_ok static T) (fn_insts fn) /\
         first_block_no_preds fn`
     by (rpt gen_tac >> strip_tac >>
         match_mp_tac (Q.SPECL [`descs`, `segs`, `insts`, `fn`] internal_fns_ok_mode) >>
-        gvs[Abbr `ifns`, Abbr `insts`, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
-        conj_tac >- metis_tac[] >>
-        rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-        rpt strip_tac >>
-        FIRST [
-          qpat_assum `MEM l' segs` (K ALL_TAC) >>
-          qexists_tac `bb` >> simp[] >> qexists_tac `l'` >> simp[],
-          qpat_assum `!seg bb inst. _ ==> ?front x. _`
-            (qspecl_then [`seg`,`bb`,`inst`] mp_tac) >> simp[]]) >>
+        asm_rewrite_tac[Abbr `ifns`, Abbr `insts`]) >>
   `entry_fn_no_ret (mk_raw_function entry_label entry)`
     by (simp[contextCodegenRelTheory.entry_fn_no_ret_def,
              mk_raw_function_fields, EVERY_MEM] >>
