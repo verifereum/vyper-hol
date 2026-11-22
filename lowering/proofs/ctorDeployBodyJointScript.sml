@@ -603,7 +603,6 @@ Theorem deploy_ctor_body_joint_raw_with:
    func mut nr' body' am_c es0 shadow_ctx shadow_func shadow_sa shadow_sb.
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
-    ~internal_defaults_msg_gas tops /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops (assemble prog') am tx es /\
     call_outcomes_ok am tx vs.vs_outcomes /\

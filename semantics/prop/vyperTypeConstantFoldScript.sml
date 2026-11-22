@@ -22,7 +22,7 @@ Ancestors
   vyperTypeContract vyperTypeConstantCells vyperTypeInvariants
   vyperTypeSystem vyperTypeValues vyperTypeExprSoundness
   vyperTypeInitialState vyperTyping vyperMisc vyperPlaceResultTyping
-  vyperTypeContractStaticMaps vyperTypeBuiltins
+  vyperTypeContractStaticMaps vyperTypeBuiltins vyperConstantFoldReplay
 
 (* ===== Context independence of constant builtins ===== *)
 
@@ -1343,37 +1343,6 @@ Proof
   simp[contract_namespaces_ok_def, ALL_DISTINCT_contract_keys_constants_order,
        type_env_all_modules_constants_order,
        MATCH_MP PERM_EVERY (SPEC_ALL PERM_constants_order)]
-QED
-
-Theorem constant_value_reference_congruence[local]:
-  (!mods ref e v.
-    constant_expr mods e /\ constant_value mods ref e = SOME v ==>
-    !a b.
-      (!s id. declared_constant mods s id /\
-        IS_SOME (FLOOKUP (get_source_immutables s ref) id) ==>
-        FLOOKUP (get_source_immutables s a) id =
-        FLOOKUP (get_source_immutables s b) id) ==>
-      constant_value mods a e = constant_value mods b e) /\
-  (!mods ref es vs.
-    EVERY (constant_expr mods) es /\ constant_values mods ref es = SOME vs ==>
-    !a b.
-      (!s id. declared_constant mods s id /\
-        IS_SOME (FLOOKUP (get_source_immutables s ref) id) ==>
-        FLOOKUP (get_source_immutables s a) id =
-        FLOOKUP (get_source_immutables s b) id) ==>
-      constant_values mods a es = constant_values mods b es)
-Proof
-  ho_match_mp_tac constant_value_ind >>
-  rpt conj_tac >> rpt gen_tac >>
-  simp[constant_expr_def, constant_value_def] >>
-  rpt strip_tac >>
-  RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) [AllCaseEqs()]) >>
-  gvs[] >>
-  rpt (qpat_x_assum `EVERY _ _ ==> _` mp_tac >>
-       simp[EVERY_MEM] >> strip_tac) >>
-  rpt (first_x_assum (qspecl_then [`a`,`b`] mp_tac)) >>
-  simp[] >> rpt strip_tac >> gvs[] >>
-  metis_tac[EVERY_MEM, IS_SOME_EXISTS]
 QED
 
 Theorem constants_fold_module_reference_independence[local]:

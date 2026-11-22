@@ -188,7 +188,7 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-Theorem selected_registration_suffix[local]:
+Theorem selected_registration_suffix:
   LENGTH args = LENGTH tvs /\ LENGTH args = LENGTH vals /\
   ALL_DISTINCT (MAP FST args) /\
   (!ce j. j < LENGTH args /\ ce = ce0 with ce_vars := ce.ce_vars ==>
@@ -333,7 +333,26 @@ Proof
   metis_tac[gas_origin_ptr_path_trans]
 QED
 
-Theorem selected_registration_terminal_locals[local]:
+(* The grouped entry installs keywords first. The source binds positionals first. *)
+Theorem selected_registration_owners_swap_append:
+  LENGTH names1 = LENGTH tvs1 /\ LENGTH names1 = LENGTH vals1 /\
+  LENGTH names2 = LENGTH tvs2 /\ LENGTH names2 = LENGTH vals2 /\
+  selected_registration_owners fn (names1 ++ names2) (tvs1 ++ tvs2) (vals1 ++ vals2)
+    (LENGTH names1 + LENGTH names2) ce st s G tn ==>
+  selected_registration_owners fn (names2 ++ names1) (tvs2 ++ tvs1) (vals2 ++ vals1)
+    (LENGTH names2 + LENGTH names1) ce st s G tn
+Proof
+  simp_tac bool_ss [selected_registration_owners_def] >> strip_tac >>
+  gen_tac >> strip_tac >> Cases_on `j < LENGTH (names2 : string list)`
+  >- (first_x_assum (qspec_then `LENGTH names1 + j` mp_tac) >>
+      impl_tac >- decide_tac >>
+      simp[listTheory.EL_APPEND_EQN] >> fs[]) >>
+  first_x_assum (qspec_then `j - LENGTH names2` mp_tac) >>
+  `j - LENGTH names2 < LENGTH names1` by decide_tac >>
+  simp[listTheory.EL_APPEND_EQN] >> fs[]
+QED
+
+Theorem selected_registration_terminal_locals:
   bind_arguments env args vals = SOME envb /\
   ALL_DISTINCT (MAP FST args) /\
   LIST_REL (\ty tv. evaluate_type env ty = SOME tv) (MAP SND args) tvs /\

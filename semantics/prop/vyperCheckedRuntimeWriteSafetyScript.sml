@@ -178,7 +178,7 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem checked_runtime_write_roots[local]:
+Theorem checked_runtime_write_roots:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\ tx.target = addr ==>
   !sid id vt. FLOOKUP art.cta_toplevel_vtypes (sid,id) = SOME vt /\
@@ -229,7 +229,7 @@ Proof
   metis_tac[getter_writes_ok, expr_writes_ok_def]
 QED
 
-Theorem checked_external_selected_writes[local]:
+Theorem checked_external_selected_writes:
   !am tx mods art cx src ts mut nr args dflts ret bod R.
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\

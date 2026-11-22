@@ -1724,14 +1724,34 @@ val () = check_rejects empty_layouts
          [Return (SOME (Literal (BaseT (UintT 256)) (IntL 1)))]])]
     : (num option # toplevel list) list``
 
-(* Exports may name only functions of allocated modules. *)
+val fallback_export_modules =
+  ``[(NONE, []);
+     (SOME 1, [FunctionDecl External Nonpayable F F "__default__" [] [] NoneT []])]
+    : (num option # toplevel list) list``
+
+(* Stateful exports need an allocated module. A stateless fallback needs no slots. *)
 Theorem exports_ok_uninitialized_module:
   ~exports_ok ^empty_layouts ^zero_address
      ^(uninit_modules lib_double lib_double) [("set_x", 1)] /\
   exports_ok ^lib_x_layouts ^zero_address
      ^(uninit_modules lib_double lib_double) [("set_x", 1)] /\
-  exports_ok ^empty_layouts ^zero_address
-     ^(uninit_modules lib_double lib_double) [("quad", 2)]
+  exports_ok ^empty_layouts ^zero_address ^fallback_export_modules [("__default__", 1)]
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+Theorem exports_ok_unresolved_export:
+  ~exports_ok ^empty_layouts ^zero_address ^fallback_export_modules [("missing", 1)] /\
+  ~exports_ok ^empty_layouts ^zero_address
+    ^(uninit_modules lib_double lib_double) [("quad", 2)]
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+(* Fallback exports have no selector, so this checks name uniqueness directly. *)
+Theorem exports_ok_duplicate_export_name:
+  ~exports_ok ^empty_layouts ^zero_address ^fallback_export_modules
+    [("__default__", 1); ("__default__", 1)]
 Proof
   CONV_TAC vyperCheckContractLib.check_contract_conv
 QED
@@ -1748,6 +1768,23 @@ fun selector_modules name lib =
     : (num option # toplevel list) list``
 val selector_exports = ``[("collate_propagate_storage", 1n)]``
 val selector_collision_modules = selector_modules "burn" ``[^selector_collate]``
+
+(* Neither main member has a selector. Vyper also rejects the private
+   constant clash when it constructs the module namespace. *)
+Theorem exports_ok_main_member_clash:
+  ~exports_ok ^empty_layouts ^zero_address
+    [(NONE, [FunctionDecl Internal Pure F F "collate_propagate_storage" [] [] NoneT []]);
+     (SOME 1, [^selector_collate])]
+    ^selector_exports /\
+  ~exports_ok ^empty_layouts ^zero_address
+    [(NONE, [VariableDecl Private
+      (Constant (Literal (BaseT (UintT 256)) (IntL 42)))
+      "collate_propagate_storage" (BaseT (UintT 256)) NONE]);
+     (SOME 1, [^selector_collate])]
+    ^selector_exports
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
 
 Theorem exports_ok_function_selector_collision:
   IS_SOME (check_contract F ^empty_layouts ^zero_address

@@ -218,6 +218,55 @@ Proof
       opcode_every_emit_inst]
 QED
 
+Theorem typed_copy_opcodes:
+  (!opc. MEM opc [MLOAD; MSTORE; NOT; ADD; AND; MCOPY; ASSIGN;
+    JMP; LT; ISZERO; JNZ; MUL; GT; ASSERT] ==> P opc) ==>
+  (!ce dst dt src st s. (~acyclic_struct_metadata ce.ce_struct_fields ==> P INVALID) /\
+    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_store_memory_typed ce dst dt src st s)))) /\
+  (!ce dst src dts sts doff soff s. (~acyclic_struct_metadata ce.ce_struct_fields ==> P INVALID) /\
+    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_typed_copy_fields ce dst src dts sts doff soff s)))) /\
+  (!ce dst dt src st n s. (~acyclic_struct_metadata ce.ce_struct_fields ==> P INVALID) /\
+    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_copy_sarray_typed ce dst dt src st n s)))) /\
+  (!ce dst dt cap src st s. (~acyclic_struct_metadata ce.ce_struct_fields ==> P INVALID) /\
+    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_copy_dynarray_typed ce dst dt cap src st s)))) /\
+  (!ce dst src dfs sfs doff soff s. (~acyclic_struct_metadata ce.ce_struct_fields ==> P INVALID) /\
+    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_struct_typed_copy ce dst src dfs sfs doff soff s))))
+Proof
+  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  ho_match_mp_tac compile_store_memory_typed_ind >> rpt strip_tac
+  >- (simp[Once compile_store_memory_typed_def] >>
+      Cases_on `is_word_type dt`
+      >- (simp[] >> irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst]) >>
+      Cases_on `is_bytestring_type dt /\ is_bytestring_type st`
+      >- simp[outcomes_free_bytestring_copy] >>
+      Cases_on `acyclic_struct_metadata ce.ce_struct_fields`
+      >- (Cases_on `dt` >> Cases_on `st` >> gvs[] >>
+          rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >> simp[outcomes_free_copy_memory]) >>
+      fs[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst]) >>
+  simp[Once compile_store_memory_typed_def] >> gnvs[] >>
+  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return, opcode_every_emit_op,
+      opcode_every_emit_void, opcode_every_emit_inst,
+    every_state_insts_fresh_id, every_state_insts_fresh_var, every_state_insts_fresh_label,
+        every_state_insts_new_block, outcomes_free_byte_offset,
+    outcomes_free_copy_memory, outcomes_free_bytestring_copy,
+    compile_copy_memory_dynamic_def]),
+    gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
+        irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind,
+    conj_tac, IF_CASES_TAC,
+    first_assum (fn th => irule th >> simp[] >> NO_TAC), pairarg_tac]) >>
+  first_x_assum irule >> gvs[] >> metis_tac[]
+QED
+
 Theorem outcomes_free_typed_copy:
   (!opc. MEM opc [MLOAD; MSTORE; NOT; ADD; AND; MCOPY; INVALID; ASSIGN;
     JMP; LT; ISZERO; JNZ; MUL; GT; ASSERT] ==> P opc) ==>
@@ -237,29 +286,12 @@ Theorem outcomes_free_typed_copy:
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_struct_typed_copy ce dst src dfs sfs doff soff s))))
 Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  ho_match_mp_tac compile_store_memory_typed_ind >> rpt strip_tac
-  >- (simp[Once compile_store_memory_typed_def] >>
-      Cases_on `is_word_type dt`
-      >- (simp[] >> irule ctorCallFreeRulesTheory.every_state_insts_bind >> simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst]) >>
-      Cases_on `is_bytestring_type dt /\ is_bytestring_type st`
-      >- simp[outcomes_free_bytestring_copy] >>
-      Cases_on `acyclic_struct_metadata ce.ce_struct_fields`
-      >- (Cases_on `dt` >> Cases_on `st` >> gvs[] >>
-          rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >> simp[outcomes_free_copy_memory]) >>
-      simp[opcode_every_emit_op, opcode_every_emit_void, opcode_every_emit_inst]) >>
-  simp[Once compile_store_memory_typed_def] >> gnvs[] >>
-  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return, opcode_every_emit_op,
-      opcode_every_emit_void, opcode_every_emit_inst,
-    every_state_insts_fresh_id, every_state_insts_fresh_var, every_state_insts_fresh_label,
-        every_state_insts_new_block, outcomes_free_byte_offset,
-    outcomes_free_copy_memory, outcomes_free_bytestring_copy,
-    compile_copy_memory_dynamic_def]),
-    gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
-        irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind,
-    conj_tac, IF_CASES_TAC,
-    first_assum (fn th => irule th >> simp[] >> NO_TAC), pairarg_tac]) >>
-  first_x_assum irule >> gvs[] >> metis_tac[]
+  strip_tac >>
+  mp_tac (SPEC_ALL typed_copy_opcodes) >>
+  impl_tac >- (rpt strip_tac >> first_x_assum irule >> fs[]) >>
+  strip_tac >>
+  rpt conj_tac >> rpt strip_tac >> first_assum irule >>
+  fs[DISJ_IMP_THM, FORALL_AND_THM]
 QED
 
 Theorem outcomes_free_store_memory:

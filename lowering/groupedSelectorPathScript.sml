@@ -1,13 +1,13 @@
 (* Walk the actual comparisons to the first matching grouped entry. *)
 Theory groupedSelectorPath
 Ancestors
-  entryPrefixPtr groupedInternalLabels groupedSelectorStep entryDispatchPtr typedCopyArrayPtr
+  groupedInternalLabels groupedSelectorStep entryDispatchPtr typedCopyArrayPtr
   actualEntryAllocationFrame moduleLoweringProps emitHelperProps
   fragGasOriginPtr fragGasOriginPtrExec fragGasPathPtr ptrDiscipline
   compileEnv moduleLowering fragExec venomState ptrSafeRun loweringStateRelDefs
-  finite_map list
+  finite_map list gasShadowState gasShadow
 
-Theorem compile_group_entries_selected_origin:
+Theorem compile_group_entries_selected_origin_with_frame:
   !entries mid common vars off sa sb fn m s ctx PG G tn lo.
     compile_group_entries mid entries common vars off sa = ((),sb) /\
     fn_has_code sa sb fn /\
@@ -22,6 +22,18 @@ Theorem compile_group_entries_selected_origin:
       FIND (\(n,_,_,_). m = n2w n) entries = SOME (sel,lbl,mincd,k) ==>
       ?checks init done t G' tn'.
         checks.cs_current_bb = lbl /\ checks.cs_current_insts = [] /\
+        cs_extends sa checks /\ cs_extends done sb /\ ci_mono done sb /\
+        (!sha shb shfn. gas_shadow_state sa sha /\
+          compile_group_entries mid entries
+            (common with <| ec_env := gas_shadow_env T common.ec_env;
+                           ec_body := MAP gas_shadow_stmt common.ec_body |>)
+            (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars) off sha = ((),shb) /\
+          fn_has_code sha shb shfn ==>
+          ?shinit shdone.
+            compile_entry_point_kwargs (gas_shadow_env T common.ec_env)
+              (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars) off k
+              common.ec_common_label shinit = ((),shdone) /\
+            fn_has_code shinit shdone shfn /\ gas_shadow_state init shinit) /\
         sa.cs_next_id <= checks.cs_next_id /\
         sa.cs_next_var < checks.cs_next_var /\
         compile_entry_checks mincd common.ec_payable checks = ((),init) /\
@@ -42,7 +54,7 @@ Proof
   Induct >> simp[FIND_thm] >>
   gen_tac >> PairCases_on `h` >> simp[EVERY_DEF, FIND_thm] >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  drule_all compile_group_entries_cons_layout >>
+  drule_all compile_group_entries_cons_layout_with_frame >>
   disch_then (qx_choosel_then [`next`,`next_state`,`checks`,`init`,`done`,`bb`]
     strip_assume_tac) >>
   qabbrev_tac `out = STRING #"%" (toString sa.cs_next_var)` >>
@@ -64,11 +76,12 @@ Proof
   suspend "next"
 QED
 
-Resume compile_group_entries_selected_origin[selected]:
+Resume compile_group_entries_selected_origin_with_frame[selected]:
   gvs[] >>
   qexistsl_tac [`checks`, `init`, `done`, `u`, `Gu`, `tnu`] >>
   simp[] >>
   rpt conj_tac
+  >- suspend "shadow_selected"
   >- (qpat_assum `!sa sb. _ ==> fresh_vars_wrt sb u`
         (qspecl_then [`sa`,`checks`] mp_tac) >> simp[Abbr `out`])
   >- (gen_tac >> strip_tac >>
@@ -84,7 +97,7 @@ Resume compile_group_entries_selected_origin[selected]:
   simp[]
 QED
 
-Resume compile_group_entries_selected_origin[next]:
+Resume compile_group_entries_selected_origin_with_frame[next]:
   fs[] >>
   `fresh_vars_wrt next_state u` by
     (qpat_assum `!sa sb. _ ==> fresh_vars_wrt sb u`
@@ -106,11 +119,14 @@ Resume compile_group_entries_selected_origin[next]:
     strip_assume_tac) >>
   `sa.cs_next_var < checks'.cs_next_var` by
     metis_tac[arithmeticTheory.LESS_TRANS] >>
+  `cs_extends sa checks'` by metis_tac[cs_extends_trans] >>
   qexistsl_tac [`checks'`,`init'`,`done'`,`t`,`G'`,`tn'`] >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
     (s,G,tn) [] (OK t,G',tn')` by metis_tac[gas_origin_ptr_path_append, APPEND] >>
   `vars_pc_only s t` by metis_tac[vars_pc_only_trans] >>
-  simp[] >> conj_tac
+  simp[] >>
+  conj_tac >- suspend "shadow_next" >>
+  conj_tac
   >- (rpt strip_tac >> `not_fresh_at next_state p` by
        fs[not_fresh_at_def] >> metis_tac[]) >>
   rpt strip_tac >> first_x_assum irule >>
@@ -129,7 +145,30 @@ Resume compile_group_entries_selected_origin[next]:
   disch_then (qspec_then `fuel` ACCEPT_TAC)
 QED
 
-Finalise compile_group_entries_selected_origin
+Resume compile_group_entries_selected_origin_with_frame[shadow_selected]:
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  RULE_ASSUM_TAC BETA_RULE >>
+  drule_all (BETA_RULE (Q.INST [`mid` |-> `mid`, `sel` |-> `h0`,
+    `sa` |-> `sa`, `checks` |-> `checks`, `st` |-> `next_state`]
+      compile_group_entry_shadow_layout)) >>
+  disch_then (qx_choosel_then [`shst`,`shinit`,`shdone`] strip_assume_tac) >>
+  qexistsl_tac [`shinit`,`shdone`] >> asm_rewrite_tac[]
+QED
+
+Resume compile_group_entries_selected_origin_with_frame[shadow_next]:
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  RULE_ASSUM_TAC BETA_RULE >>
+  drule_all (BETA_RULE (Q.INST [`mid` |-> `mid`, `sel` |-> `h0`,
+    `sa` |-> `sa`, `st` |-> `next_state`]
+      compile_group_entry_shadow_layout)) >>
+  disch_then (qx_choosel_then [`shst`,`shinit`,`shdone`] strip_assume_tac) >>
+  qpat_assum `!sha shb shfn. gas_shadow_state next_state sha /\ _ ==> _`
+    (qspecl_then [`shst`,`shb`,`shfn`] mp_tac) >>
+  impl_tac >- asm_rewrite_tac[] >>
+  disch_then ACCEPT_TAC
+QED
+
+Finalise compile_group_entries_selected_origin_with_frame
 
 Theorem compile_group_entries_missed_origin:
   !entries mid common vars off sa sb fn m s ctx PG G tn lo.

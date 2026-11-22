@@ -647,21 +647,23 @@ Proof
   ACCEPT_TAC bodyFullIfExpTheory.ifexp_expr_full_ok
 QED
 
-(* Instantiate the Args theorem at the continuation type of each lift. *)
+(* The frozen lifts still ask for a restricted Args rule. The concrete
+   rule is stronger: its header does not exclude msg.gas defaults. *)
 fun apply_case_lift lift =
-  let
-    val (args_premise, _) = dest_imp (concl lift)
-    val (_, args_types) = match_term (concl intcall_args_full) args_premise
-    val composed = MP (MP lift (INST_TYPE args_types intcall_args_full))
-                      intcall_callee_full
-  in
-    qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`PG`,`func`,
-                 `shadow_func`,`tops`,`cenv`,`cx`,`env`,`ty`,`v16`,
-                 `fn`,`es`,`v17`,`es'`,`mut`,`nr`,`args`,`ret`,`ss`,
-                 `rr`,`dflts`] mp_tac composed >>
-    impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-    disch_then ACCEPT_TAC
-  end;
+  mp_tac lift >>
+  (impl_tac >-
+    (rpt gen_tac >> strip_tac >>
+     qmatch_asmsub_rename_tac
+       `supported_exprs_exists expr_msg_gas_root (DROP _ defaults)` >>
+     MATCH_MP_TAC intcall_args_full >> qexists `defaults` >>
+     rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  (impl_tac >- MATCH_ACCEPT_TAC intcall_callee_full) >>
+  disch_then (qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`PG`,`func`,
+                          `shadow_func`,`tops`,`cenv`,`cx`,`env`,`ty`,`v16`,
+                          `fn`,`es`,`v17`,`es'`,`mut`,`nr`,`args`,`ret`,`ss`,
+                          `rr`,`dflts`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then ACCEPT_TAC;
 
 Definition internal_defaults_const_names_def:
   internal_defaults_const_names tops <=>
@@ -672,22 +674,8 @@ Definition internal_defaults_const_names_def:
     | _ => F) tops
 End
 
-Theorem body_intcall_plain_defaults[local]:
-  MEM (FunctionDecl Internal mut nr rr fn args dflts ret ss) tops /\
-  ~internal_defaults_msg_gas tops ==>
-  ~supported_exprs_exists expr_msg_gas_root (DROP n dflts)
-Proof
-  strip_tac >> irule bodyStorageCasesTheory.supported_exprs_exists_DROP >>
-  qpat_x_assum `~internal_defaults_msg_gas tops` mp_tac >>
-  simp[supportedProgramTheory.internal_defaults_msg_gas_def, EXISTS_MEM] >>
-  disch_then (qspec_then `FunctionDecl Internal mut nr rr fn args dflts ret ss`
-    mp_tac) >> simp[supported_exprs_exists_every, EVERY_MEM] >> metis_tac[]
-QED
-
 Theorem body_intcall_case_full:
   !cx v16 src_id_opt fn es v17.
-    (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-       ~internal_defaults_msg_gas tops) /\
     (!ts mut nr args dflts ret ss.
        ~MEM (src_id_opt,fn) cx.stk /\
        get_module_code cx src_id_opt = SOME ts /\
@@ -717,14 +705,7 @@ Proof
   ONCE_REWRITE_TAC[body_expr_full_ok_def] >> simp[] >>
   rpt gen_tac >> strip_tac >>
   drule_all body_intcall_source_selection >> strip_tac >>
-  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
-    cx_tops cx = tops` by
-    (drule bodyInvCodePropsTheory.body_inv_main_code >> strip_tac >>
-     fs[body_inv_def]) >>
-  qpat_assum `!ts. ALOOKUP _ _ = SOME _ ==> _` (drule_then strip_assume_tac) >>
-  `~supported_exprs_exists expr_msg_gas_root
-        (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)` by
-    (drule_all body_intcall_plain_defaults >> simp[]) >>
+  drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
   `~MEM (src_id_opt,fn) cx.stk ==> body_exprs_full_ok cx es` by
     (strip_tac >> drule intcall_results_full_ih >> disch_then drule_all >>
      simp[]) >>

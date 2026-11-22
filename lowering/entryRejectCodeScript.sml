@@ -154,6 +154,55 @@ Proof
   simp[] >> metis_tac[package_internal_blocks_prefix]
 QED
 
+Theorem run_grouped_lowering_dispatch_code:
+  run_grouped_lowering groups ips fb rp "__entry" = SOME unit /\
+  EVERY group_entry_labels_ok groups /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips) /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn ==>
+  ?sf fallback jobs sd sx sn se.
+    fresh_label "fallback" (initial_compile_state "__entry") = (fallback,sf) /\
+    sf.cs_current_bb = "__entry" /\ sf.cs_current_insts = [] /\
+    sf.cs_next_var = 0 /\ sf.cs_next_id = 0 /\
+    compile_group_dispatch_linear groups fallback sf = (jobs,sd) /\
+    fn_has_code sf sd fn /\ fn_has_code sd sx fn /\
+    compile_external_jobs jobs sd = ((),sx) /\
+    new_block fallback sx = (sx.cs_current_bb,sn) /\
+    sn.cs_current_bb = fallback /\ sn.cs_current_insts = [] /\
+    (case fb of
+       NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+     | SOME (ce,pay,nr,key,tr,view,stmts,rt) =>
+         compile_fallback_body ce pay nr key tr view stmts rt) sn = ((),se) /\
+    fn_has_code sn se fn /\
+    EVERY group_job_label_ok jobs /\
+    cs_extends sf sd /\ cs_extends sd se /\ cs_extends sx se /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks se)) /\
+    (!bb. MEM bb (all_blocks se) ==>
+       lookup_block bb.bb_label fn.fn_blocks = SOME bb)
+Proof
+  strip_tac >> drule_all run_grouped_lowering_retained_entry_prefix >>
+  disch_then (qx_choosel_then [`se`,`rest`] strip_assume_tac) >>
+  drule run_grouped_lowering_context >>
+  disch_then (strip_assume_tac o MATCH_MP lowering_context_ok_bridge) >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    (`MEM fn unit.cu_context.ctx_functions` by metis_tac[lookup_function_MEM] >>
+     gvs[EVERY_MEM, fn_labels_def] >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks se))` by
+    gvs[MAP_APPEND, ALL_DISTINCT_APPEND] >>
+  `!bb. MEM bb (all_blocks se) ==> lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (rpt strip_tac >> irule MEM_lookup_block >> fs[MEM_APPEND]) >>
+  drule_all compile_grouped_runtime_entry_layout >>
+  disch_then (qx_choosel_then [`fl`,`sf`,`jobs`,`sd`,`sx`,`sn`] strip_assume_tac) >>
+  `cs_extends sd se` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sf sd fn /\ fn_has_code sd sx fn` by
+    metis_tac[fn_has_code_retained_interval] >>
+  `fn_has_code sn se fn` by metis_tac[fn_has_code_endpoint_coverage] >>
+  `sn.cs_current_bb = fl /\ sn.cs_current_insts = []` by metis_tac[new_block_props] >>
+  qexistsl_tac [`sf`,`fl`,`jobs`,`sd`,`sx`,`sn`,`se`] >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `fresh_label _ _ = _` mp_tac >>
+  simp[fresh_label_def, initial_compile_state_def]
+QED
+
 Theorem run_lowering_fallback_revert_code:
   run_lowering sels exts ints NONE rp bc mb db ei "__entry" = SOME u /\
   EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,ss,rt). jump_label_ok lbl) exts /\

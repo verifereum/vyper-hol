@@ -8,7 +8,6 @@ Ancestors
   deployDynamicMemory loweringShapeSource ptrDiscipline callTrace unitTransformDefs venomState
   contextRawReachable ctorDeployLoweringCode ctorDeployBodyShadow ctorDeployLoweringEntryPrefix
   ctorDeployLoweringReturn ctorDeployMemoryRunMemPrefixLayout ctorDeployMemoryRunMemPrefixSource
-  deployCtorPlainDefaults
 
 (* A successful asm_opt compilation exposes the deployment unit's phases, with
    the final assembly optimizer's output as the deployed code. *)
@@ -108,29 +107,6 @@ Proof
   fs[allocas_below_fmp_def, raw_variant_def, gas_variant_def, venom_state_component_equality]
 QED
 
-(* GATE_ADMISSION: held, constructor entry with msg.gas internal defaults *)
-Theorem deploy_unit_execution_internal_default_gas:
-  !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es fmp.
-    internal_defaults_msg_gas tops /\
-    fin IN accepted_finalizers /\
-    fin rpolicy prog = SOME prog' /\
-    deploy_phases policy tops (assemble prog, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_state_rel tops (assemble prog') am tx es /\
-    deploy_source_ok tops am tx /\
-    LENGTH (call_trace es) < 2 ** 64 /\
-    w2n (opt_deploy_entry_state_own prog prog' cplan tops es).vs_initial_fmp <= w2n fmp /\
-    w2n fmp < 2 ** 254 /\
-    imm_len tops + unit_alloca_budget dunit.cu_context +
-      32 * ctx_dload_count dunit.cu_context <= w2n fmp ==>
-    ?shadow_ctx. !vs.
-      raw_variant fmp vs (opt_deploy_entry_state_own prog prog' cplan tops es) ==>
-      ?marks. deploy_unit_execution_correct_with shadow_ctx marks
-        tops runtime_bc am tx dunit vs
-Proof
-  cheat
-QED
-
 (* Replay constructor execution at the same FMP chosen for the raw
    gas and memory proofs. The constructor-free entry uses the FMP
    transport for a unit without dynamic allocations. *)
@@ -153,11 +129,6 @@ Theorem deploy_unit_execution_correct_selected_raw_fmp:
         tops runtime_bc am tx dunit vs
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `internal_defaults_msg_gas tops`
-  >- (qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`, `dunit`,
-        `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`, `fmp`]
-        mp_tac deploy_unit_execution_internal_default_gas >>
-      asm_rewrite_tac[]) >>
   drule_all deploy_relocated_data_layout >> strip_tac >>
   `IS_SOME (FLOOKUP (lo_reloc prog prog') "runtime_begin")` by simp[] >>
   `?exts ints fb cfo. classify_functions tops = (exts, ints, fb, cfo)` by
@@ -212,10 +183,6 @@ Proof
     imm_len tops + unit_alloca_budget dunit.cu_context <= w2n vs.vs_initial_fmp /\
     w2n vs.vs_initial_fmp < 2 ** 254` by
     (strip_tac >> fs[] >> decide_tac) >>
-  rename1 `compile_stmts _ _ _ (MAP gas_shadow_stmt stmts) _ = _` >>
-  drule_all deploy_ctor_plain_defaults_shadow_env >> strip_tac >>
-  `compile_stmts (gas_shadow_env T cenv) NoLoop NoneT
-     (MAP gas_shadow_stmt stmts) shadow_sa = ((),shadow_sb)` by simp[] >>
   drule_all deploy_ctor_body_joint_raw_with >> simp[]
 QED
 

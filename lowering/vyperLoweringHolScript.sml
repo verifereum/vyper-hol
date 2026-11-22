@@ -13,6 +13,7 @@ Ancestors
   loweringCalldataCorrect registrationGuardRejectOrigin
   dispatchedEntryValueRevert
   e2eLifecycle e2eTransactionWorld
+  e2eModsLifecycle
   e2eCodeFrame ownSymSrcUnit
   runtimeSymSrcDynarrayAppend runtimeSymSrcModuleArgPreservation runtimeSymSrcRuntimeBoundary runtimeSymSrcStatements
   (* definitions *)
@@ -56,6 +57,7 @@ Ancestors
   immutableLocationProps
   loweringShapeDefs
   loweringShapeProps
+  runtimeUnitShapeMods ctorDeployShapeMods
   ctorShapeProps ctorUnitShape
   intCallStep extCallOracleStep intCallLookup intCallCallee intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
   bodyFullShadowBodyInvLowering

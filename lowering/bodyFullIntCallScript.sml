@@ -4,7 +4,7 @@ Theory bodyFullIntCall
 Ancestors bodyFullShadowBodyInv
   bodyFullIntCallDefs bodyFullPreds bodyIntCallSeams bodySim constSubst
   vyperInterpreter vyperState vyperAST finite_map list
-  bodyFullIntCallReturn compileVyper moduleLowering fragGasFocus
+  bodyFullIntCallArgs bodyFullIntCallReturn compileVyper moduleLowering fragGasFocus
   gasShadowCompile gasShadowState exprSimAccounts fragExec exprSimUnwrap
   bodySimFull exprLowering compileEnv exprSimDefs vyperStorageTrace
 Libs
@@ -338,6 +338,18 @@ val vv_args_input =
 fun stage_tac input ttac =
   first_assum (fn th => if aconv (concl th) input then ttac th else NO_TAC);
 
+(* The Args rule uses the entry prefix; keep the last conjunct for the callee. *)
+fun intcall_apply_args entry kc out f P rewrites =
+  MATCH_MP intcall_args_full (LIST_CONJ (List.take (CONJUNCTS entry, 10)))
+  |> Q.SPECL [`DF`,`lo`,`d`,`PG`,`func`,`shadow_func`,`ty`,
+              `st0`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,`s0`,`G0`,`tn0`]
+  |> Q.ISPECL [kc]
+  |> Q.SPEC out
+  |> Q.ISPECL [f]
+  |> Q.SPEC P
+  |> PURE_REWRITE_RULE rewrites
+  |> match_mp_tac;
+
 Theorem bind_return_right[local]:
   bind m return = m
 Proof
@@ -453,8 +465,6 @@ Theorem intcall_sim_full:
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
-    ~supportedExprTraverse$supported_exprs_exists supportedProgram$expr_msg_gas_root
-      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
     (!s1 vs t1.
        ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,t1) ==>
@@ -476,8 +486,9 @@ Theorem intcall_sim_full:
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Call ann (IntCall (NONE,name)) es dflt) es0
 Proof
-  strip_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
+  disch_then kall_tac >> strip_tac >>
+  rpt gen_tac >> disch_then (fn entry =>
+  strip_assume_tac entry >>
   rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `lower_value _ _ _ (Call _ _ _ _) _ = _`
     (assume_tac o REWRITE_RULE [lower_value_def, ETA_THM]) >>
@@ -493,30 +504,22 @@ Proof
        (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)) shadow_sa =
        (vv2, shadow_sm) /\
      unwrap_value cenv vv2 shadow_sm = (op, shadow_sb)` by
-    (qpat_assum `comp_bind (compile_expr _ _ (gas_shadow_expr _)) _ _ = _`
-       (strip_assume_tac o SIMP_RULE pure_ss [comp_bind_def, LET_THM, pairTheory.ELIM_UNCURRY]) >>
-     metis_tac[pairTheory.PAIR]) >>
+    (qpat_assum `comp_bind (compile_expr _ _ (gas_shadow_expr _)) _ _ = _` mp_tac >>
+     pure_rewrite_tac[comp_bind_def, LET_THM, pairTheory.ELIM_UNCURRY] >>
+     Cases_on `compile_expr (gas_shadow_env T cenv) ty
+       (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)) shadow_sa` >>
+     simp[]) >>
   `!v. storage_trace_frame (read_result cx v)` by
     simp[storage_trace_frame_read_result] >>
   `!v. cs_appends (unwrap_value cenv v)` by
-    (rw[cs_appends_def] >> metis_tac[unwrap_value_extends]) >>
+    (rw[cs_appends_def] >> drule_then ACCEPT_TAC unwrap_value_extends) >>
   `?nrc nrbs npvs. cenv.ce_func_info (nsid_to_string (NONE,name)) =
                 (nrc,nrbs,npvs)` by metis_tac[pairTheory.ABS_PAIR_THM] >>
-  stage_tac read_args_input (fn args_stage =>
-    let val header = Q.SPECL [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`PG`,`func`,`shadow_func`,
-                `tops`,`cenv`,`cx`,`tenv`,`ty`,`ann`,`name`,`es`,`dflt`,`es0`,
-                `mut`,`nr`,`args`,`ret`,`ss`,`rr`,`dflts`] args_stage
-    in mp_tac (header
-    |> UNDISCH
-    |> Q.SPECL [`st0`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,`s0`,`G0`,`tn0`]
-    |> Q.ISPECL [`unwrap_value cenv : vyper_value -> operand compiler`]
-    |> Q.SPEC `op`
-    |> Q.ISPECL [`read_result cx`]
-    |> Q.SPEC `expr_res_ok` |> DISCH (fst (dest_imp (concl header)))) end) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then irule >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (simp[expr_res_ok_def, expr_vv_res_ok_def] >> NO_TAC)
-  >- (rpt gen_tac >> strip_tac >>
+  intcall_apply_args entry `unwrap_value cenv` `op` `read_result cx`
+    `expr_res_ok` [] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (simp[expr_res_ok_def, expr_vv_res_ok_def] >> NO_TAC) >>
+  rpt gen_tac >> strip_tac >>
   `vv2 = vv /\ gas_shadow_state sm shadow_sm` by
     (drule_all shadow_compile_same >> simp[]) >>
   qpat_x_assum `vv2 = vv` SUBST_ALL_TAC >>
@@ -532,9 +535,7 @@ Proof
                `mut`,`nr`,`args`,`ret`,`ss`,`rr`,`prev`,`penv`,`rtv`,`es1`,
                `t`,`G`,`tn`,`nrc`,`nrbs`,`npvs`,`dflts`] mp_tac intcall_return_full >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
-      disch_then (irule o CONJUNCT2) >> simp[]) >>
-  CONV_TAC (DEPTH_CONV BETA_CONV) >> rpt strip_tac >>
-  fs[expr_res_ok_def, expr_vv_res_ok_def]
+  disch_then (irule o CONJUNCT2) >> simp[])
 QED
 
 
@@ -551,8 +552,6 @@ Theorem intcall_vv_full:
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
-    ~supportedExprTraverse$supported_exprs_exists supportedProgram$expr_msg_gas_root
-      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
     (!s1 vs t1.
        ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,t1) ==>
@@ -574,31 +573,22 @@ Theorem intcall_vv_full:
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Call ann (IntCall (NONE,name)) es dflt) es0
 Proof
-  strip_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
+  disch_then kall_tac >> strip_tac >>
+  rpt gen_tac >> disch_then (fn entry =>
+  strip_assume_tac entry >>
   rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
   `?nrc nrbs npvs. cenv.ce_func_info (nsid_to_string (NONE,name)) =
                 (nrc,nrbs,npvs)` by metis_tac[pairTheory.ABS_PAIR_THM] >>
   `!v : eval_result. storage_trace_frame (return v)` by
     simp[storage_trace_frame_return] >>
   `!v : vyper_value. cs_appends (comp_return v)` by simp[cs_appends_return] >>
-  stage_tac vv_args_input (fn args_stage =>
-    let val header = Q.SPECL [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`PG`,`func`,`shadow_func`,
-                `tops`,`cenv`,`cx`,`tenv`,`ty`,`ann`,`name`,`es`,`dflt`,`es0`,
-                `mut`,`nr`,`args`,`ret`,`ss`,`rr`,`dflts`] args_stage
-    in mp_tac (header
-    |> UNDISCH
-    |> Q.SPECL [`st0`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,`s0`,`G0`,`tn0`]
-    |> Q.ISPECL [`comp_return : vyper_value -> vyper_value compiler`]
-    |> Q.SPEC `vv`
-    |> Q.ISPECL [`return : eval_result -> evaluation_state ->
-                           (eval_result + exception) # evaluation_state`]
-    |> Q.SPEC `expr_vv_res_ok` |> DISCH (fst (dest_imp (concl header)))) end) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  rewrite_tac[bind_return_right, comp_bind_comp_return] >>
-  disch_then irule >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (simp[expr_res_ok_def, expr_vv_res_ok_def] >> NO_TAC)
-  >- (rpt gen_tac >> strip_tac >>
+  intcall_apply_args entry `comp_return : vyper_value -> vyper_value compiler`
+    `vv` `return : eval_result -> evaluation_state ->
+                   (eval_result + exception) # evaluation_state`
+    `expr_vv_res_ok` [bind_return_right, comp_bind_comp_return] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (simp[] >> NO_TAC) >>
+  rpt gen_tac >> strip_tac >>
   qpat_x_assum `comp_return _ _ = _`
     (strip_assume_tac o SIMP_RULE std_ss [comp_return_def, pairTheory.PAIR_EQ]) >>
   qpat_x_assum `_ = vv` SUBST_ALL_TAC >>
@@ -615,6 +605,5 @@ Proof
                `mut`,`nr`,`args`,`ret`,`ss`,`rr`,`prev`,`penv`,`rtv`,`es1`,
                `t`,`G`,`tn`,`nrc`,`nrbs`,`npvs`,`dflts`] mp_tac intcall_return_full_owned >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
-      disch_then (irule o CONJUNCT1) >> simp[]) >>
-  CONV_TAC (DEPTH_CONV BETA_CONV) >> rpt strip_tac >> fs[]
+  disch_then (irule o CONJUNCT1) >> simp[])
 QED
