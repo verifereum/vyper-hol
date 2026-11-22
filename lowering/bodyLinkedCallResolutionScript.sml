@@ -52,7 +52,6 @@ Proof
       (FunctionDecl vis mut nr raw name args dflts sig.ret_ty ss))` by
     (fs[contract_inv_def] >> res_tac >> simp[]) >>
   simp[source_body_call_supported_def] >>
-  qexists_tac `tops` >> simp[] >>
   conj_tac
   >- (simp[supported_linked_callee_def] >>
       drule_then assume_tac supported_function_decl_exists >>
