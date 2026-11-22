@@ -6,6 +6,10 @@ Ancestors
 
 Theorem window_seq_mem_fragment[local]:
   window_seq st st' s t /\
+  (ctx_has_dalloca ctx ==>
+    !pre i post u.
+      emitted_insts st st' = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      dalloca_no_wrap i u) /\
   run_inst_seq_mem_ok (emitted_insts st st') s ==>
   frag_exec_mem ctx st st' (\u. u = s)
     (\u. u = (t with vs_inst_idx := LENGTH st'.cs_current_insts)) (K F)
@@ -17,6 +21,10 @@ QED
 
 Theorem window_seq_mem_cont:
   window_seq st st' s t /\
+  (ctx_has_dalloca ctx ==>
+    !pre i post u.
+      emitted_insts st st' = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      dalloca_no_wrap i u) /\
   run_inst_seq_mem_ok (emitted_insts st st') s /\
   fn_has_code st st' func /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\

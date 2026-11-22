@@ -80,6 +80,9 @@ Theorem mem_safe_block_run_inst_seq:
     isPREFIX xs (DROP s.vs_inst_idx bb.bb_instructions) /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
                i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES) xs /\
+    (ctx_has_dalloca ctx ==>
+      !pre i post u. xs = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+        dalloca_no_wrap i u) /\
     (!pre i post u. xs = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
       inst_mem_below_frontier i u) ==>
     (!u. run_inst_seq xs s = OK u ==>
@@ -137,6 +140,10 @@ Theorem frag_exec_mem_run_inst_seq:
                i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
       (emitted_insts st st') /\
     (!s. P s ==>
+       (ctx_has_dalloca ctx ==>
+         !pre i post u.
+           emitted_insts st st' = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+           dalloca_no_wrap i u) /\
        (!pre i post u. emitted_insts st st' = pre ++ i::post /\
           run_inst_seq pre s = OK u ==> inst_mem_below_frontier i u) /\
        ((?s'. run_inst_seq (emitted_insts st st') s = OK s' /\

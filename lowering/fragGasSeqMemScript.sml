@@ -11,6 +11,7 @@ Theorem straight_line_mem_edge:
   get_instruction bb s.vs_inst_idx = SOME i /\
   i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
   inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  (ctx_has_dalloca ctx ==> dalloca_no_wrap i s) /\
   step_inst_base i s = OK u ==>
   gas_path_mem_edge ctx func s (if i.inst_opcode = GAS then 1 else 0)
     (OK (u with vs_inst_idx := SUC s.vs_inst_idx))
@@ -30,6 +31,9 @@ Theorem run_inst_seq_gas_path_mem:
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
     run_inst_seq_mem_ok code s /\
+    (ctx_has_dalloca ctx ==>
+      !pre i post u. code = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+        dalloca_no_wrap i u) /\
     run_inst_seq code s = OK t ==>
     gas_path_mem ctx func s
       (LENGTH (FILTER (\i. i.inst_opcode = GAS) code))
