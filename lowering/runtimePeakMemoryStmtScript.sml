@@ -118,7 +118,15 @@ Proof
   >>> SPLIT_LT 18 (ALL_LT, SPLIT_LT 5 (ALLGOALS compile_stmt_windows_tac, ALL_LT))
   >>> SPLIT_LT 9 (ALL_LT, SPLIT_LT 9 (ALLGOALS compile_stmt_windows_tac, ALL_LT))
   >>> SPLIT_LT 9 (ALLGOALS compile_stmt_windows_tac, ALL_LT) >>
-  metis_tac[dalloca_windows_supported_tuple_member]
+  FIRST [
+    (* Member exclusions for custom errors, logs and tuple assignment. *)
+    qpat_assum `MEM _ _` (K ALL_TAC) >>
+    metis_tac[dalloca_windows_supported_tuple_member],
+    (* Instantiate the list induction hypotheses at the live block. *)
+    qpat_assum `~block_is_terminated _` (K ALL_TAC) >> metis_tac[],
+    (* Declaration scope preserves the function defaults. *)
+    `compile_env_blueprint_free ce` by metis_tac[] >>
+    fs[compile_env_blueprint_free_def]]
 QED
 
 Theorem dalloca_windows_compile_stmts:
