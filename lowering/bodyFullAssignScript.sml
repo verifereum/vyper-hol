@@ -11888,11 +11888,15 @@ Resume body_assign_other_saved_target_bind[normal]:
   drule_then
     (assume_tac o SIMP_RULE (srw_ss()) [optionTheory.FORALL_OPTION, ALOOKUP_def] o
      MATCH_MP body_assign_function_mutability_mods) body_inv_contract >>
+  `IS_SOME (type_place_target env bt)` by
+    (drule_then strip_assume_tac body_assign_saved_target_type >> simp[]) >>
+  drule_all_then assume_tac body_inv_typed_target_calls_main >>
   `EVERY (\c. FST c = NONE /\ supported_program (cx_tops cx) /\
           IS_SOME (supported_function_decl (cx_tops cx) c Internal))
     (int_calls_target bt)` by
     (drule supported_stmt_body_safe >>
-     simp[body_stmt_safe_def, int_calls_stmt_def, int_calls_atarget_def, EVERY_APPEND]) >>
+     simp[body_stmt_safe_def, int_calls_stmt_def, int_calls_atarget_def, EVERY_APPEND] >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
   mp_tac (Q.INST [`es` |-> `es with gas_obs := prefix ++ gs`,
                   `es1` |-> `mid with gas_obs := gs`,
                   `p` |-> `p`, `ty` |-> `ty`,
