@@ -114,5 +114,5 @@ Proof
      `nr` |-> `nr`, `raw` |-> `raw`, `name` |-> `name`,
      `args` |-> `args`, `dflts` |-> `dflts`, `ret` |-> `ret`,
      `ss` |-> `ss`] linked_body_calls_resolve) >>
-  simp[EVERY_MEM]
+  fs[EVERY_MEM]
 QED
