@@ -2,10 +2,10 @@
 Theory linkedCallEntry
 Ancestors
   e2eModsDefs e2eDefs e2eEntry sourceUnitExecutionMods loweringStateRelDefs
-  vyperLoweringCorrect
+  vyperLoweringCorrect vyperCompiler lowerDloadDefs venomLayout
   asmFrameRel asmDataSuffixProps codegenEntryRel codegenLabelDisciplined
   contextCodegenRel codegenRel frameRel vfmExecution vfmExecutionProp
-  venomState words vyperArith finite_map list rich_list
+  venomState arithmetic words vyperArith finite_map list rich_list
 
 Theorem opt_entry_initial_venom_state_rel_mods:
   !mods exps prog prog' am tx es cplan.
@@ -17,7 +17,8 @@ Proof
      installed_code_rel_mods_def] >>
   simp[initial_venom_state_rel_mods_def, opt_entry_state_own_def,
        entry_venom_state_frame_fields, entry_venom_state_fresh] >>
-  simp[venom_env_rel_def, call_ctx_rel_def, entry_venom_state_def] >>
+  simp[venom_env_rel_def, call_ctx_rel_def] >>
+  simp[entry_venom_state_def] >>
   fs[tx_block_fields_rel_def] >>
   conj_tac
   >- (gen_tac >>
@@ -65,4 +66,29 @@ Proof
   qpat_assum `assemble prog' ++ section = tx.code`
     (fn code => once_rewrite_tac[GSYM code]) >>
   simp[entry_venom_state_frame_fields, CONJ_ASSOC]
+QED
+
+Theorem call_raw_fmp_exists_mods:
+  lowering_context_ok unit.cu_context /\
+  cplan.cp_initial_fmp < 2 ** 254 ==>
+  ?fmp:bytes32.
+    w2n (opt_entry_state_own prog prog' cplan es).vs_initial_fmp <= w2n fmp /\
+    w2n fmp < 2 ** 254 /\
+    unit_alloca_budget unit.cu_context +
+      32 * ctx_dload_count unit.cu_context <= w2n fmp
+Proof
+  strip_tac >>
+  qabbrev_tac `need = unit_alloca_budget unit.cu_context +
+     32 * ctx_dload_count unit.cu_context` >>
+  `need < 2 ** 254` by
+    (drule lowering_context_ok_static_headroom >>
+     simp[Abbr `need`, ctx_dload_count_def, FILTER_FLAT, LENGTH_FLAT,
+          MAP_MAP_o, combinTheory.o_DEF]) >>
+  qabbrev_tac `n = MAX cplan.cp_initial_fmp need` >>
+  `n < 2 ** 254` by simp[Abbr `n`, MAX_DEF] >>
+  `n < dimword (:256) /\ cplan.cp_initial_fmp < dimword (:256)` by
+    (fs[dimword_def, dimindex_256] >> decide_tac) >>
+  qexists_tac `n2w n` >>
+  simp[opt_entry_state_own_def, entry_venom_state_def, w2n_n2w] >>
+  fs[Abbr `n`, MAX_DEF] >> decide_tac
 QED
