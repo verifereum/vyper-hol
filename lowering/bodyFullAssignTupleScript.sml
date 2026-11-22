@@ -60,7 +60,7 @@ fun tuple_path_no_wrap pat reach =
   qpat_assum pat (fn path =>
     qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` (fn phi =>
       qpat_assum reach (fn nowrap =>
-        ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+        ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
           (LIST_CONJ [path,phi,nowrap])))));
 
 Theorem type_stmt_assigntuple[local]:
@@ -904,7 +904,7 @@ Theorem tuple_place_nested_dynamic_borrow_target_frame:
       return_buf_frame d cenv sa s0 /\
       alloca_history func s0 /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
       (!H. valid_horizon cx st0 H es.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es s0 /\
         storage_well_formed_on cx es (FST H) /\
@@ -6479,7 +6479,7 @@ Proof
     u.vs_current_bb = cur.cs_current_bb /\ u.vs_inst_idx = LENGTH cur.cs_current_insts /\
     return_buf_frame d cenv cur u /\ alloca_history func u /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
-    (!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_no_wrap inst z) /\
+    (!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_fmp_headroom inst z) /\
     storage_trace_domain cx st0 src.storage_trace /\
     (!H. valid_horizon cx st0 H src.storage_trace ==>
       stmt_state_rel H ctx func cenv cx src u /\ storage_well_formed_on cx src (FST H) /\
@@ -6802,10 +6802,10 @@ Proof
     `alloca_history func q` by
       (qpat_assum `gas_origin_ptr_path _ (u,Gu,tu) [] (OK q,Gq,tq)`
         (mp_then Any irule bodyFullPathHistoryTheory.body_full_path_alloca_history) >> simp[])) >>>
-  HEADGOAL (sg `!fn inst z. frag_reachable ctx func q fn inst z ==> dalloca_no_wrap inst z`) >>>
+  HEADGOAL (sg `!fn inst z. frag_reachable ctx func q fn inst z ==> dalloca_fmp_headroom inst z`) >>>
   HEADGOAL (
     tuple_path_no_wrap `gas_origin_ptr_path _ (u,Gu,tu) [] (OK q,Gq,tq)`
-      `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_no_wrap inst z`) >>>
+      `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_fmp_headroom inst z`) >>>
   HEADGOAL (sg `!mem. mem_agree_outside tq.t_mem q.vs_memory mem ==>
        val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) p mem`) >>>
   HEADGOAL (rpt strip_tac >>
@@ -6820,7 +6820,7 @@ Proof
     simp[valueEncodingTheory.type_memory_size_def]) >>>
   HEADGOAL (simp[vyperTypeDefaultsTheory.values_have_types_LIST_REL]) >>>
   HEADGOAL (
-    qpat_assum `!fn inst z. frag_reachable ctx func q fn inst z ==> dalloca_no_wrap inst z`
+    qpat_assum `!fn inst z. frag_reachable ctx func q fn inst z ==> dalloca_fmp_headroom inst z`
       (fn th => rewrite_tac[th])) >>>
   HEADGOAL (sg `!i. i < LENGTH tys_tail ==>
       ?x. EL i ops_tail = Var x /\ not_fresh_at sm x /\ op_taint tq (Var x) = {} /\
@@ -7251,9 +7251,9 @@ Proof
       (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
          gas_origin_ptr_path _ (u,Gu,tu) target_marks _`
          (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
-    `!fn inst z. frag_reachable ctx func m fn inst z ==> dalloca_no_wrap inst z` by
+    `!fn inst z. frag_reachable ctx func m fn inst z ==> dalloca_fmp_headroom inst z` by
       tuple_path_no_wrap `gas_origin_ptr_path _ (u,Gu,tu) target_marks (OK m,Gmid,tmid)`
-      `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_no_wrap inst z`) >>>
+      `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_fmp_headroom inst z`) >>>
   HEADGOAL (
     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
       targetQ H _ mid Gmid tmid m /\ _`
@@ -8145,12 +8145,12 @@ Proof
     qpat_assum `!D. gas_origin_ptr_path (D,lo,_,ctx,func,PG) (m,Gmid,tmid) [] (OK q,Gq,tq)`
       (qspec_then `DF (storage_trace_horizon mid.storage_trace)` (irule_at Any)) >>
     rpt conj_tac >> first_assum ACCEPT_TAC) >>>
-  HEADGOAL (sg `!fn inst z. frag_reachable ctx func q fn inst z ==> dalloca_no_wrap inst z`) >>>
+  HEADGOAL (sg `!fn inst z. frag_reachable ctx func q fn inst z ==> dalloca_fmp_headroom inst z`) >>>
   HEADGOAL (
     qpat_assum `!D. gas_origin_ptr_path (D,lo,_,ctx,func,PG) (m,Gmid,tmid) [] (OK q,Gq,tq)`
       (qspec_then `DF (storage_trace_horizon mid.storage_trace)` assume_tac) >>
     tuple_path_no_wrap `gas_origin_ptr_path _ (m,Gmid,tmid) [] (OK q,Gq,tq)`
-      `!fn inst z. frag_reachable ctx func m fn inst z ==> dalloca_no_wrap inst z`) >>>
+      `!fn inst z. frag_reachable ctx func m fn inst z ==> dalloca_fmp_headroom inst z`) >>>
   HEADGOAL (sg `gas_admissible (bind (write_place cx place vi)
       (\u. assign_tuple_target_list cx todo vs_tail)) (stmt_res_ok lctx) mid`) >>>
   HEADGOAL (
@@ -9045,12 +9045,12 @@ Proof
                        lookup_var x m = SOME w`
       (qspecl_then [`vx`,`vw`] match_mp_tac) >>
     conj_tac >> first_assum ACCEPT_TAC) >>>
-  HEADGOAL (sg `!fn inst z. frag_reachable ctx func q fn inst z ==> dalloca_no_wrap inst z`) >>>
+  HEADGOAL (sg `!fn inst z. frag_reachable ctx func q fn inst z ==> dalloca_fmp_headroom inst z`) >>>
   HEADGOAL (
     qpat_assum `!D. gas_origin_ptr_path (D,lo,_,ctx,func,PG) (m,Gmid,tmid) [] (OK q,Gq,tq)`
       (qspec_then `DF (storage_trace_horizon mid.storage_trace)` assume_tac) >>
     tuple_path_no_wrap `gas_origin_ptr_path _ (m,Gmid,tmid) [] (OK q,Gq,tq)`
-      `!fn inst z. frag_reachable ctx func m fn inst z ==> dalloca_no_wrap inst z`) >>>
+      `!fn inst z. frag_reachable ctx func m fn inst z ==> dalloca_fmp_headroom inst z`) >>>
   HEADGOAL (sg `!mem. mem_agree_outside tq.t_mem q.vs_memory mem ==>
     val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) p mem`) >>>
   HEADGOAL (
@@ -9927,7 +9927,7 @@ Proof
       (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
        qexistsl_tac [`cenv`,`s0`,`sa`] >> simp[] >> decide_tac)) >>>
   HEADGOAL (
-    `!fn inst z. frag_reachable ctx func t' fn inst z ==> dalloca_no_wrap inst z` by
+    `!fn inst z. frag_reachable ctx func t' fn inst z ==> dalloca_fmp_headroom inst z` by
       (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
           gas_origin_ptr_path _ (s0,G0,tn0) marks (OK v,G',tn') /\ _`
          (qspec_then `storage_trace_horizon ee.storage_trace`
@@ -9935,13 +9935,13 @@ Proof
              qpat_assum `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace)
                             ee.storage_trace`
                (assume_tac o CONJUNCT1 o MATCH_MP rule))) >>
-       `!fn inst z. frag_reachable ctx func v fn inst z ==> dalloca_no_wrap inst z` by
+       `!fn inst z. frag_reachable ctx func v fn inst z ==> dalloca_fmp_headroom inst z` by
          tuple_path_no_wrap `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK v,G',tn')`
-           `!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z` >>
+           `!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z` >>
        qpat_assum `!D. gas_origin_ptr_path _ (v,G',tn') [] (OK t',Gf',tf')`
          (qspec_then `DF (storage_trace_horizon ee.storage_trace)` assume_tac) >>
        tuple_path_no_wrap `gas_origin_ptr_path _ (v,G',tn') [] (OK t',Gf',tf')`
-      `!fn inst z. frag_reachable ctx func v fn inst z ==> dalloca_no_wrap inst z`)) >>>
+      `!fn inst z. frag_reachable ctx func v fn inst z ==> dalloca_fmp_headroom inst z`)) >>>
   HEADGOAL (
     `~block_is_terminated stage_mid` by
       (qpat_assum `compile_alloc_buffer _ su = (_,stage_mid)`
@@ -10426,7 +10426,7 @@ Proof
       (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
        qexistsl_tac [`cenv`,`s0`,`sa`] >> simp[] >> decide_tac)) >>>
   HEADGOAL (
-    `!fn inst z. frag_reachable ctx func t' fn inst z ==> dalloca_no_wrap inst z` by
+    `!fn inst z. frag_reachable ctx func t' fn inst z ==> dalloca_fmp_headroom inst z` by
       (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
           gas_origin_ptr_path _ (s0,G0,tn0) marks (OK v,G',tn') /\ _`
          (qspec_then `storage_trace_horizon ee.storage_trace`
@@ -10434,13 +10434,13 @@ Proof
              qpat_assum `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace)
                             ee.storage_trace`
                (assume_tac o CONJUNCT1 o MATCH_MP rule))) >>
-       `!fn inst z. frag_reachable ctx func v fn inst z ==> dalloca_no_wrap inst z` by
+       `!fn inst z. frag_reachable ctx func v fn inst z ==> dalloca_fmp_headroom inst z` by
          tuple_path_no_wrap `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK v,G',tn')`
-           `!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z` >>
+           `!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z` >>
        qpat_assum `!D. gas_origin_ptr_path _ (v,G',tn') [] (OK t',Gf',tf')`
          (qspec_then `DF (storage_trace_horizon ee.storage_trace)` assume_tac) >>
        tuple_path_no_wrap `gas_origin_ptr_path _ (v,G',tn') [] (OK t',Gf',tf')`
-      `!fn inst z. frag_reachable ctx func v fn inst z ==> dalloca_no_wrap inst z`)) >>>
+      `!fn inst z. frag_reachable ctx func v fn inst z ==> dalloca_fmp_headroom inst z`)) >>>
   HEADGOAL (
     `gas_marked_path F ctx func s0 (LENGTH marks) (OK v)` by
       (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK v,G',tn')`
@@ -11422,7 +11422,7 @@ Proof
        (ee with gas_obs := obs ++ tail) = (INL (),src with gas_obs := tail)) /\
     frame c src s G tn /\ joint src s G tn /\ cursor_ok c /\ pending i c s G tn /\
     snapshot c src s tn /\
-    (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u)` >>
+    (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u)` >>
   `!k i c sh src s G tn obs. i+k = LENGTH gs /\ entry i c sh src s G tn obs ==>
      gas_outcome_full cfg (cx_tops cx) cx st0 (assign_tuple_target_list cx (DROP i gs) (DROP i vs))
        (src,s,G,tn) stmtQ stmtR` suffices_by
@@ -11558,14 +11558,14 @@ Proof
           (fn th => let val kept = REWRITE_RULE [ghost_kept_at_def] th
                     in map_every assume_tac [cj 1 kept, cj 2 kept] end) >>
         rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     `!fn inst z. frag_reachable ctx func v fn inst z ==> dalloca_no_wrap inst z` by
+     `!fn inst z. frag_reachable ctx func v fn inst z ==> dalloca_fmp_headroom inst z` by
        tuple_path_no_wrap `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK v,G',tn')`
-       `!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z` >>
+       `!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z` >>
      qpat_assum `!D. gas_origin_ptr_path _ (v,G',tn') [] (OK t,Gf,tf)`
        (qspec_then `DF (storage_trace_horizon ee.storage_trace)` assume_tac) >>
-     `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_no_wrap inst z` by
+     `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_fmp_headroom inst z` by
        tuple_path_no_wrap `gas_origin_ptr_path _ (v,G',tn') [] (OK t,Gf,tf)`
-       `!fn inst z. frag_reachable ctx func v fn inst z ==> dalloca_no_wrap inst z` >>
+       `!fn inst z. frag_reachable ctx func v fn inst z ==> dalloca_fmp_headroom inst z` >>
      simp[Abbr `entry`,Once evaluate_def,return_def] >> gvs[] >> strip_tac >> first_assum irule >> first_assum ACCEPT_TAC) >>
   Induct_on `k`
   >- (simp[Abbr `entry`,NoAsms] >> rpt gen_tac >> strip_tac >>
@@ -12109,9 +12109,9 @@ Proof
      qexists_tac `src with gas_obs := tail` >> conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
   qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) [] (OK q,Gq,tq)`
     (qspec_then `DF (storage_trace_horizon ff.storage_trace)` assume_tac) >>
-  `!fn inst u. frag_reachable ctx func q fn inst u ==> dalloca_no_wrap inst u` by
+  `!fn inst u. frag_reachable ctx func q fn inst u ==> dalloca_fmp_headroom inst u` by
     tuple_path_no_wrap `gas_origin_ptr_path _ (s,G,tn) [] (OK q,Gq,tq)`
-    `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u` >>
+    `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u` >>
   `gas_outcome_full cfg (cx_tops cx) cx st0
      (assign_tuple_target_list cx (DROP (SUC i) gs) (DROP (SUC i) vs))
      (ff,q,Gq,tq) stmtQ stmtR` by
@@ -12224,9 +12224,9 @@ Proof
             gas_origin_ptr_path _ (s,G,tn) headmarks (OK sp,Gp,tp)`
            (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
          (impl_tac >- first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC) >>
-      `!fn inst u. frag_reachable ctx func sp fn inst u ==> dalloca_no_wrap inst u` by
+      `!fn inst u. frag_reachable ctx func sp fn inst u ==> dalloca_fmp_headroom inst u` by
         tuple_path_no_wrap `gas_origin_ptr_path _ (s,G,tn) headmarks (OK sp,Gp,tp)`
-        `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u` >>
+        `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u` >>
       qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ _ mid Gp tp sp`
         (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
       (impl_tac >- first_assum ACCEPT_TAC) >>
@@ -12955,9 +12955,9 @@ Proof
              `s0.vs_alloca_next <= q.vs_alloca_next` by decide_tac >>
              qpat_assum `!D. gas_origin_ptr_path _ (sp,Gp,tp) [] (OK q,Gq,tq)`
                (qspec_then `DF H0` assume_tac) >>
-             `!fn inst u. frag_reachable ctx func q fn inst u ==> dalloca_no_wrap inst u` by
+             `!fn inst u. frag_reachable ctx func q fn inst u ==> dalloca_fmp_headroom inst u` by
                tuple_path_no_wrap `gas_origin_ptr_path _ (sp,Gp,tp) [] (OK q,Gq,tq)`
-               `!fn inst u. frag_reachable ctx func sp fn inst u ==> dalloca_no_wrap inst u` >>
+               `!fn inst u. frag_reachable ctx func sp fn inst u ==> dalloca_fmp_headroom inst u` >>
              `gas_outcome_full cfg (cx_tops cx) cx st0
                 (assign_tuple_target_list cx (DROP (SUC i) gs) (DROP (SUC i) vs))
                 (ff,q,Gq,tq) stmtQ stmtR` by

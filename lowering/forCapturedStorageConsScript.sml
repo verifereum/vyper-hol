@@ -10,7 +10,7 @@ Ancestors
 Theorem for_captured_storage_cons_from_stages:
   ~s.vs_halted /\
   (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
-  (!f inst u. frag_reachable ctx func s f inst u ==> dalloca_no_wrap inst u) /\
+  (!f inst u. frag_reachable ctx func s f inst u ==> dalloca_fmp_headroom inst u) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
       (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
@@ -36,7 +36,7 @@ Theorem for_captured_storage_cons_from_stages:
      (!H. valid_horizon cx st0 H eb.storage_trace ==>
           Entry H (es with gas_obs := []) v k z G1 tn1) /\
      gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop exit incr)) eb /\
-     (!f inst u. frag_reachable ctx func z f inst u ==> dalloca_no_wrap inst u) ==>
+     (!f inst u. frag_reachable ctx func z f inst u ==> dalloca_fmp_headroom inst u) ==>
      gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
        (finally (try (ignore_bind (eval_stmts cx stmts) (return F))
                      handle_loop_exception) pop_scope) (eb,z,G1,tn1)
@@ -143,12 +143,12 @@ Resume for_captured_storage_cons_from_stages[body_entry]:
      qpat_assum `read_result cx a es = (INL v',es)` mp_tac >>
      qpat_assum `read_result cx a es = (INL v,es)` (fn th => simp[NoAsms,th]) >>
      disch_then SUBST_ALL_TAC >> first_assum ACCEPT_TAC) >>
-  `!f inst u. frag_reachable ctx func t f inst u ==> dalloca_no_wrap inst u` by
+  `!f inst u. frag_reachable ctx func t f inst u ==> dalloca_fmp_headroom inst u` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> gas_origin_ptr_path _ _ _ _`
        (qspec_then `Hm` (drule_then assume_tac)) >>
      qpat_assum `gas_origin_ptr_path _ (s,G,tn) _ (OK t,G1,tn1)`
        (mp_tac o MATCH_MP (CONV_RULE (REWR_CONV (GSYM AND_IMP_INTRO))
-                            gas_origin_ptr_path_dalloca_no_wrap)) >>
+                            gas_origin_ptr_path_dalloca_fmp_headroom)) >>
      (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> disch_then ACCEPT_TAC) >>
   `gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop exit incr)) mid` by
     (qpat_assum `mid = es with <| scopes := _; gas_obs := [] |>` SUBST1_TAC >>

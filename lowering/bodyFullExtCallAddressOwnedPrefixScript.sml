@@ -53,7 +53,7 @@ Theorem extcall_request_guarded_operand_prefix_address_owned_bundled:
   gas_shadow_state sb shadow_sb /\
   fn_has_code sm sb func /\ fn_has_code shadow_sm shadow_sb shadow_func /\
   local_ptrs_reserved cenv sa /\
-  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -79,7 +79,7 @@ Theorem extcall_request_guarded_operand_prefix_address_owned_bundled:
     EVERY (\sv. !x. vv_operand sv = Var x ==> not_fresh_at sb x) svs /\
     return_buf_frame d cenv sb u /\ ~u.vs_halted /\
     expr_sim_full_endpoint func sb s0 u /\
-    (!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_no_wrap inst z) /\
+    (!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_fmp_headroom inst z) /\
     wb_frame cenv mid ee sm t u /\
     MAP FDOM ee.scopes = MAP FDOM mid.scopes /\
     expr_sim_inv cenv cx env ee /\
@@ -171,11 +171,11 @@ Proof
   qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
       gas_origin_ptr_path _ (s0,G0,tn0) marks1 (OK t,G1,tn1)`
     (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
-  `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_fmp_headroom inst z` by
     (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks1 (OK t,G1,tn1)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
          qpat_assum `!fn i z. frag_reachable ctx func s0 fn i z ==> _`
-           (ACCEPT_TAC o MATCH_MP gas_origin_ptr_path_dalloca_no_wrap o
+           (ACCEPT_TAC o MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom o
             CONJ path o CONJ no_phi)))) >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> mid.gas_obs = [] /\ _`
     (drule_then strip_assume_tac) >> gvs[] >>
@@ -214,11 +214,11 @@ Proof
   qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
       gas_origin_ptr_path _ (t,G1,tn1) marks2 (OK u,G2,tn2)`
     (qspec_then `storage_trace_horizon ee.storage_trace` (drule_then assume_tac)) >>
-  `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_fmp_headroom inst z` by
     (qpat_assum `gas_origin_ptr_path _ (t,G1,tn1) marks2 (OK u,G2,tn2)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
          qpat_assum `!fn i z. frag_reachable ctx func t fn i z ==> _`
-           (ACCEPT_TAC o MATCH_MP gas_origin_ptr_path_dalloca_no_wrap o
+           (ACCEPT_TAC o MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom o
             CONJ path o CONJ no_phi)))) >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> ee.gas_obs = [] /\ _`
     (drule_then strip_assume_tac) >> gvs[] >>
@@ -281,7 +281,7 @@ Theorem extcall_request_guarded_operand_prefix_address_owned:
   fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func /\
   fn_has_code sm sb func /\ fn_has_code shadow_sm shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -309,7 +309,7 @@ Theorem extcall_request_guarded_operand_prefix_address_owned:
     s0.vs_alloca_next <= u.vs_alloca_next /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    (!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_no_wrap inst z) /\
+    (!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_fmp_headroom inst z) /\
     wb_frame cenv mid ee sm t u /\
     MAP FDOM ee.scopes = MAP FDOM mid.scopes /\
     expr_sim_inv cenv cx env ee /\

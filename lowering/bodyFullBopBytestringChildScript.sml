@@ -11,7 +11,7 @@ Theorem bop_bytestring_selected_child_full_halt:
   body_inv tops ctx cenv cx /\ fn_has_code sa sz func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
-    (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u)) /\
+    (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u)) /\
   (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   alloca_history func s /\ ~s.vs_halted /\
@@ -66,10 +66,10 @@ Proof
   (reverse conj_tac >- metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!m cb. _` drule_all >> strip_tac >>
-  `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u` by
+  `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u` by
     (Cases_on `ctx_has_dalloca ctx` >- fs[] >>
      rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >> simp[] >>
-     strip_tac >> fs[unitTransformDefsTheory.dalloca_no_wrap_def,
+     strip_tac >> fs[unitTransformDefsTheory.dalloca_fmp_headroom_def,
        ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
      metis_tac[]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>

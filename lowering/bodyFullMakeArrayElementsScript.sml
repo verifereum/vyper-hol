@@ -17,7 +17,7 @@ Theorem make_array_elements_full:
     ctx_inst_ids_distinct ctx /\ fn_inst_ids_distinct func /\
     gas_shadow_context ctx shadow_ctx /\ gas_shadow_function func shadow_func /\
     MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
-    (!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_no_wrap inst z) /\
+    (!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_fmp_headroom inst z) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==>
            not_fresh_at csbase x) /\

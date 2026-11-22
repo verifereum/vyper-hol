@@ -97,13 +97,13 @@ Resume compile_rest_word_membership_full[after_needle]:
         (qpat_assum `needleQ (storage_trace_horizon _) _ _ _ _ t` mp_tac >>
          simp_tac bool_ss [Abbr `needleQ`] >>
          strip_tac >> first_assum ACCEPT_TAC) >>
-      `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_no_wrap inst u` by
+      `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_fmp_headroom inst u` by
         (qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _`
            (qspec_then `storage_trace_horizon mid.storage_trace`
              (drule_then assume_tac)) >>
          qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)`
            (fn path => ASSUME_TAC (MATCH_MP (REWRITE_RULE[GSYM AND_IMP_INTRO]
-              bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap) path)) >>
+              bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom) path)) >>
          qpat_x_assum `(!bb. MEM bb func.fn_blocks ==> _) ==> _`
            (fn th => mp_tac th) >>
          impl_tac >- first_assum ACCEPT_TAC >>

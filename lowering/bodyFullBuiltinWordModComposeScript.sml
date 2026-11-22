@@ -223,12 +223,12 @@ Proof
          (cx_tops cx) cx st0 (bind (eval_expr cx e1) (read_result cx))
          (es,s0,G0,tn0)
          (\H res ee GG tt u. firstQ H res ee GG tt u /\
-            (!fn i v. frag_reachable ctx func u fn i v ==> dalloca_no_wrap i v))
+            (!fn i v. frag_reachable ctx func u fn i v ==> dalloca_fmp_headroom i v))
          firstR` by
         (irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
          qpat_assum `gas_outcome_full _ _ _ _ _ _ firstQ firstR` (irule_at Any) >>
          simp[] >> rpt strip_tac >>
-         drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+         drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >>
          disch_then ACCEPT_TAC) >>
       qpat_x_assum `gas_outcome_full _ _ _ _ _ _ firstQ firstR` kall_tac >>
       unabbrev_all_tac >>
@@ -338,12 +338,12 @@ Proof
          (cx_tops cx) cx st0 (bind (eval_expr cx e2) (read_result cx))
          (mid,t,G1,tn1)
          (\H res ee GG tt u. secondQ H res ee GG tt u /\
-            (!fn i v. frag_reachable ctx func u fn i v ==> dalloca_no_wrap i v))
+            (!fn i v. frag_reachable ctx func u fn i v ==> dalloca_fmp_headroom i v))
          secondR` by
         (irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
          qpat_assum `gas_outcome_full _ _ _ _ _ _ secondQ secondR` (irule_at Any) >>
          simp[] >> rpt strip_tac >>
-         drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+         drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >>
          disch_then ACCEPT_TAC) >>
       qpat_x_assum `gas_outcome_full _ _ _ _ _ _ secondQ secondR` kall_tac >>
       unabbrev_all_tac >>

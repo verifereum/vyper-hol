@@ -110,12 +110,12 @@ Resume send_expr_sim_full[arity]:
   `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
      (cx_tops cx) cx st0 (bind (eval_expr cx to_e) (read_result cx))
      (es,s0,G0,tn0) (\H res ee GG tt z. childQ H res ee GG tt z /\
-       (!fn j v. frag_reachable ctx func z fn j v ==> dalloca_no_wrap j v))
+       (!fn j v. frag_reachable ctx func z fn j v ==> dalloca_fmp_headroom j v))
      childR` by
     (irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
      qpat_assum `gas_outcome_full _ _ _ _ _ _ childQ childR` (irule_at Any) >>
      simp[] >> rpt strip_tac >>
-     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >>
      disch_then ACCEPT_TAC) >>
   qpat_x_assum `gas_outcome_full _ _ _ _ _ _ childQ childR` kall_tac >>
   asm_rewrite_tac[] >>
@@ -145,7 +145,7 @@ Resume send_expr_sim_full[arity]:
       simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
            vyperStorageTraceTheory.storage_trace_frame_return]) >>
   qexists `\H res ee G tn t. childQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = [] /\
-      (!fn j v. frag_reachable ctx func t fn j v ==> dalloca_no_wrap j v)` >>
+      (!fn j v. frag_reachable ctx func t fn j v ==> dalloca_fmp_headroom j v)` >>
   conj_tac >~ [`storage_trace_domain _ _ _`] >- suspend "after_address" >>
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ childR` (irule_at Any) >>
@@ -233,7 +233,7 @@ Resume send_expr_sim_full[after_address]:
          (qspec_then `H` mp_tac) >>
        metis_tac[loweringPostsTheory.expr_post_def])) >>
     strip_tac >>
-    `!fn j v. frag_reachable ctx func t fn j v ==> dalloca_no_wrap j v` by
+    `!fn j v. frag_reachable ctx func t fn j v ==> dalloca_fmp_headroom j v` by
       (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> childQ _ _ _ _ _ _ /\ _`
          (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then strip_assume_tac)) >>
        first_assum ACCEPT_TAC) >>
@@ -241,12 +241,12 @@ Resume send_expr_sim_full[after_address]:
     `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
        (cx_tops cx) cx st0 (bind (eval_expr cx amount_e) (read_result cx))
        (mid,t,G1,tn1) (\H res ee GG tt z. amountQ H res ee GG tt z /\
-         (!fn j v. frag_reachable ctx func z fn j v ==> dalloca_no_wrap j v))
+         (!fn j v. frag_reachable ctx func z fn j v ==> dalloca_fmp_headroom j v))
        amountR` by
       (irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
        qpat_assum `gas_outcome_full _ _ _ _ _ _ amountQ amountR` (irule_at Any) >>
        simp[] >> rpt strip_tac >>
-       drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+       drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >>
        disch_then ACCEPT_TAC) >>
     qpat_x_assum `gas_outcome_full _ _ _ _ _ _ amountQ amountR` kall_tac >>
     once_rewrite_tac[vyperStateTheory.bind_assoc] >>
@@ -280,7 +280,7 @@ Resume send_expr_sim_full[after_address]:
         simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
              vyperStorageTraceTheory.storage_trace_frame_return]) >>
     qexists `\H res ee G tn t. amountQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = [] /\
-      (!fn j v. frag_reachable ctx func t fn j v ==> dalloca_no_wrap j v)` >>
+      (!fn j v. frag_reachable ctx func t fn j v ==> dalloca_fmp_headroom j v)` >>
     conj_tac >~ [`storage_trace_domain _ _ _`] >- suspend "after_amount" >>
     irule gas_outcome_full_post_source >>
     qpat_assum `gas_outcome_full _ _ _ _ _ _ _ amountR` (irule_at Any) >>

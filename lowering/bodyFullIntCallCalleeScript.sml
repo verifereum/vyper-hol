@@ -2689,7 +2689,7 @@ Theorem intcall_callee_locked_body_outcome[local]:
   ~block_is_terminated body_start /\ return_buf_frame dret body_ce body_start at_body /\
   return_buf_sep dret body_ce locked at_body /\
   alloca_history callee at_body /\ (ctx_has_dalloca ctx ==> allocas_below_fmp at_body) /\
-  (!fn inst s. frag_reachable ctx callee at_body fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx callee at_body fn inst s ==> dalloca_fmp_headroom inst s) /\
   (!K. valid_horizon (cx with stk updated_by CONS (NONE,name)) st0 K locked.storage_trace ==>
     stmt_state_rel K ctx callee body_ce (cx with stk updated_by CONS (NONE,name)) locked at_body /\
     storage_well_formed_on (cx with stk updated_by CONS (NONE,name)) locked (FST K) /\
@@ -3975,7 +3975,7 @@ Theorem intcall_callee_full:
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
     MEM func ctx.ctx_functions /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
     (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!H. valid_horizon cx st0 H es1.storage_trace ==>
@@ -5572,14 +5572,14 @@ Proof
              irule >> first_assum ACCEPT_TAC) >>
         first_assum ACCEPT_TAC) >>
      disch_then ACCEPT_TAC) >>
-  `!fn inst s. frag_reachable ctx callee entered fn inst s ==> dalloca_no_wrap inst s` by
+  `!fn inst s. frag_reachable ctx callee entered fn inst s ==> dalloca_fmp_headroom inst s` by
     (rpt gen_tac >> strip_tac >>
-     qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s` irule >>
+     qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s` irule >>
      qexists_tac `fn` >>
      qpat_assum `frag_reachable ctx callee entered fn _ _`
        (fn reach => qspecl_then [`func`,`s0`] irule (MATCH_MP frag_reachable_trans reach)) >>
      first_assum ACCEPT_TAC) >>
-  `!fn inst s. frag_reachable ctx callee at_body fn inst s ==> dalloca_no_wrap inst s` by
+  `!fn inst s. frag_reachable ctx callee at_body fn inst s ==> dalloca_fmp_headroom inst s` by
     (qpat_assum `!D. gas_origin_ptr_path _ _ [] (OK at_body,Gl,tnl)`
        (qspec_then `DF Hlock` assume_tac) >>
      `!bb. MEM bb callee.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
@@ -5587,9 +5587,9 @@ Proof
      qpat_assum `gas_origin_ptr_path _ _ [] (OK at_body,Gl,tnl)` (fn path =>
        qpat_assum `!bb. MEM bb callee.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0`
          (fn phi =>
-           qpat_assum `!fn inst s. frag_reachable ctx callee entered fn inst s ==> dalloca_no_wrap inst s`
+           qpat_assum `!fn inst s. frag_reachable ctx callee entered fn inst s ==> dalloca_fmp_headroom inst s`
              (fn nowrap => ACCEPT_TAC (MATCH_MP
-               bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+               bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
                (LIST_CONJ [path,phi,nowrap])))))) >>
   qabbrev_tac `pushed = cx with stk updated_by CONS (NONE,name)` >>
   `!H. valid_horizon pushed st0 H locked.storage_trace ==>

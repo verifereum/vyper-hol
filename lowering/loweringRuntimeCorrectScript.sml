@@ -728,7 +728,7 @@ Theorem runtime_body_reached_dalloca_no_wrap[local]:
     !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
       dalloca_no_wrap inst s) ==>
   !fn inst s. frag_reachable unit.cu_context func s0 fn inst s ==>
-    dalloca_no_wrap inst s
+    dalloca_fmp_headroom inst s
 Proof
   strip_tac >>
   Cases_on `ctx_has_dalloca unit.cu_context`
@@ -766,7 +766,7 @@ QED
 
 val runtime_reached_no_wrap_tac =
   `!fn inst s. frag_reachable unit.cu_context func s0 fn inst s ==>
-     dalloca_no_wrap inst s` by (
+     dalloca_fmp_headroom inst s` by (
   mp_tac (Q.INST
     [`tops` |-> `tops`, `rpolicy` |-> `rpolicy`, `unit` |-> `unit`,
      `func` |-> `func`, `vs` |-> `vs`, `s0` |-> `s0`, `n` |-> `0:num`]
@@ -1315,7 +1315,7 @@ Proof
   `gas_path unit.cu_context func entry (LENGTH marks0) (OK s_b)` by
     (drule_then (ACCEPT_TAC o CONJUNCT1) fragGasPathMemTheory.gas_path_mem_exec) >>
   `!fn inst s. frag_reachable unit.cu_context func s_b fn inst s ==>
-       dalloca_no_wrap inst s` by
+       dalloca_fmp_headroom inst s` by
     (mp_tac (Q.INST [`s0` |-> `s_b`, `n` |-> `LENGTH (marks0:bool list)`]
       (SPEC_ALL runtime_body_reached_dalloca_no_wrap)) >>
      impl_tac >- (fs[Abbr `entry`] >> metis_tac[]) >>
@@ -1385,7 +1385,7 @@ Proof
   impl_tac
   >- (`cenv.ce_return_buf = NONE` by fs[return_buf_frame_def] >>
       qpat_assum `!fn inst s. frag_reachable unit.cu_context func s_b fn inst s ==>
-          dalloca_no_wrap inst s`
+          dalloca_fmp_headroom inst s`
         (fn nowrap =>
           simp[dead_lo_ok_def, ret_pc_ok_def, return_buf_sep_def, gas_admissible_def, nowrap]) >>
       rpt strip_tac >> asm_simp_tac std_ss []
@@ -1399,7 +1399,7 @@ Proof
           disch_then (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp
                              o CONJUNCT1) >> simp[])
       >- (qpat_assum `!fn inst s. frag_reachable unit.cu_context func s_b fn inst s ==>
-             dalloca_no_wrap inst s`
+             dalloca_fmp_headroom inst s`
             (fn nowrap => first_assum (ACCEPT_TAC o MATCH_MP nowrap)))
       >> qpat_assum `!H. valid_horizon _ _ H es_lock.storage_trace ==> _`
            drule >> simp[]) >>

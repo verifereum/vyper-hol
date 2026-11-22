@@ -264,13 +264,13 @@ Proof
     (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
        qpat_assum `MEM func ctx.ctx_functions` (fn member =>
          ACCEPT_TAC (MATCH_MP body_inv_no_phi (CONJ inv member))))) >>
-  `!fn inst v. frag_reachable ctx func t fn inst v ==> dalloca_no_wrap inst v` by
+  `!fn inst v. frag_reachable ctx func t fn inst v ==> dalloca_fmp_headroom inst v` by
     (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
         gas_origin_ptr_path _ _ marks (OK t,_,_)`
        (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then mp_tac)) >>
      qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` mp_tac >>
      qpat_assum `!fn inst v. frag_reachable ctx func s0 fn inst v ==> _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_origin_ptr_path_dalloca_no_wrap]) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_origin_ptr_path_dalloca_fmp_headroom]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ len _` (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`st1`,`st2`,`st1'`,`st2'`,`len_op`,`t`,`G1`,`tn1`] mp_tac) >>
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
@@ -362,13 +362,13 @@ Proof
        (qspec_then `H` (mp_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def])) >> simp[]) >>
   `gas_admissible (bind (eval_expr cx addr) (read_result cx)) expr_res_ok len_mid` by
     (drule exprSimSourceTheory.expr_body_pre_gas_admissible >> simp[]) >>
-  `!fn inst v. frag_reachable ctx func u fn inst v ==> dalloca_no_wrap inst v` by
+  `!fn inst v. frag_reachable ctx func u fn inst v ==> dalloca_fmp_headroom inst v` by
     (qpat_assum `!H. valid_horizon cx st0 H len_mid.storage_trace ==>
         gas_origin_ptr_path _ _ len_marks (OK u,_,_)`
        (qspec_then `storage_trace_horizon len_mid.storage_trace` (drule_then mp_tac)) >>
      qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` mp_tac >>
      qpat_assum `!fn inst v. frag_reachable ctx func t fn inst v ==> _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_origin_ptr_path_dalloca_no_wrap]) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_origin_ptr_path_dalloca_fmp_headroom]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ addr _` (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`st2`,`st3`,`st2'`,`st3'`,`addr_op`,`u`,`G2`,`tn2`] mp_tac) >>
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>

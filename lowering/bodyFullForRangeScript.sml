@@ -2537,7 +2537,7 @@ Theorem range_full_body_entry:
         ptr_covers G tn p s sz /\ op_taint tn (Var cv) = {} /\
         op_prov G (Var cv) = NONE /\ op_taint tn (Var ev) = {} /\
         op_prov G (Var ev) = NONE /\ alloca_history func s /\
-        (!fn inst v. frag_reachable ctx func s fn inst v ==> dalloca_no_wrap inst v) /\
+        (!fn inst v. frag_reachable ctx func s fn inst v ==> dalloca_fmp_headroom inst v) /\
         (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
         s0.vs_alloca_next <= s.vs_alloca_next /\
         (!x v.
@@ -2631,7 +2631,7 @@ Theorem range_full_body_entry:
                 (jump_to body_lbl
                    (update_var dv (bool_to_word F) s with vs_inst_idx := 1)) with
               vs_inst_idx := 1) fn inst v ==>
-           dalloca_no_wrap inst v) /\
+           dalloca_fmp_headroom inst v) /\
         s0.vs_alloca_next <=
         (mstore (w2n w) (i2w (n1 + &k))
            (jump_to body_lbl
@@ -3497,11 +3497,11 @@ Resume range_full_body_entry[entry_runtime]:
     (drule_all bodyFullPathHistoryTheory.body_full_path_alloca_history >> simp[]) >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     (metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi]) >>
-  `!fn inst v. frag_reachable ctx func t fn inst v ==> dalloca_no_wrap inst v` by
+  `!fn inst v. frag_reachable ctx func t fn inst v ==> dalloca_fmp_headroom inst v` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) [] (OK t,Gf,tt) /\ _`
        (qspec_then `DF H0`
          (fn th => mp_then (Pos hd) mp_tac
-           bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap (CONJUNCT1 th))) >>
+           bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom (CONJUNCT1 th))) >>
      asm_rewrite_tac []) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ bc _ ep t /\ _`
@@ -3517,7 +3517,7 @@ Resume range_full_body_entry[entry_runtime]:
        (qspec_then `H` mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >> simp[])
     (rpt strip_tac >> simp[])
-  >> IF (qmatch_goalsub_rename_tac `dalloca_no_wrap _ _`)
+  >> IF (qmatch_goalsub_rename_tac `dalloca_fmp_headroom _ _`)
        (qpat_assum `!fn inst v. frag_reachable ctx func t fn inst v ==> _`
           (drule_then ACCEPT_TAC))
        (IF (qmatch_goalsub_rename_tac `alloca_frame _ _ _ _ _ _ _`)
@@ -4603,7 +4603,7 @@ Theorem range_full_round:
          op_taint tn (Var ev) = ({} :num -> bool) /\
          op_prov G (Var ev) = (NONE :(num # num) option) /\
          alloca_history func s /\
-         (!fn inst v. frag_reachable ctx func s fn inst v ==> dalloca_no_wrap inst v) /\
+         (!fn inst v. frag_reachable ctx func s fn inst v ==> dalloca_fmp_headroom inst v) /\
          (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
          s0.vs_alloca_next <= s.vs_alloca_next /\
          (!(x :string) (v :256 word).
@@ -4713,7 +4713,7 @@ Theorem range_full_round:
                     (update_var dv (bool_to_word F) s with
                      vs_inst_idx := (1 :num))) with vs_inst_idx := (1 :num)) fn
               inst v ==>
-            dalloca_no_wrap inst v) /\
+            dalloca_fmp_headroom inst v) /\
          s0.vs_alloca_next <=
          (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
             (jump_to body_lbl
@@ -5345,7 +5345,7 @@ Theorem range_full_round:
                op_prov G (Var ev) = (NONE :(num # num) option) /\
                alloca_history func s /\
                (!(fn :ir_function) (inst :instruction) (v :venom_state).
-                  frag_reachable ctx func s fn inst v ==> dalloca_no_wrap inst v) /\
+                  frag_reachable ctx func s fn inst v ==> dalloca_fmp_headroom inst v) /\
                (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
                s0.vs_alloca_next <= s.vs_alloca_next /\
                (!(x :string) (v :256 word).
@@ -5632,14 +5632,14 @@ Proof
     metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
   qabbrev_tac `EnrichedQ = \H res ee Gb tb u.
     SourceQ H res ee Gb tb u /\
-    (!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_no_wrap inst z)` >>
+    (!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_fmp_headroom inst z)` >>
   `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
      (cx_tops cx) cx st0 (eval_stmts cx body) (ep,t,Gentry,tt) EnrichedQ BR` by
     (irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
      qpat_x_assum `gas_outcome_full _ _ _ _ _ _ SourceQ BR` (irule_at Any) >>
      simp[NoAsms, Abbr `EnrichedQ`] >> rpt strip_tac >>
      qpat_assum `gas_origin_ptr_path _ (t,Gentry,tt) _ (OK _,_,_)`
-       (mp_then (Pos hd) mp_tac bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap) >>
+       (mp_then (Pos hd) mp_tac bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom) >>
      asm_rewrite_tac [] >> disch_then (drule_then ACCEPT_TAC)) >>
   qpat_x_assum `gas_outcome_full _ _ _ _ _ _ SourceQ BR` kall_tac >>
   qpat_assum `!DF0 lo0 d0 ctx0 func0 PG0 tops0 cx0 st0 body0 es0 s G tn Q R. _`
@@ -5990,9 +5990,9 @@ Resume range_full_round[backedge]:
              simp[NoAsms, cond_eq, cv_eq, nv_eq, age, DRESTRICT_DRESTRICT]))))) >>
   `!fn inst v. frag_reachable ctx func
       (jump_to cond_lbl (update_var cv (countw+1w) (update_var nv (countw+1w) at_incr)))
-      fn inst v ==> dalloca_no_wrap inst v` by
+      fn inst v ==> dalloca_fmp_headroom inst v` by
     (qpat_assum `gas_origin_ptr_path _ (t',G1,tn1) [] (OK (jump_to _ _),_,_)`
-       (mp_then (Pos hd) mp_tac bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap) >>
+       (mp_then (Pos hd) mp_tac bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom) >>
      asm_rewrite_tac []) >>
   `ret_pc_ok cenv sa t'` by
     (irule ret_pc_ok_frame >> qexistsl_tac [`cenv`,`s`,`sa`] >>
@@ -6664,11 +6664,11 @@ Resume compile_for_range_frag_full[checked]:
     `gas_outcome_full cfg tops' cx st0 (bind (eval_expr cx e1) _) (es,s0,G0,tn0) Q0 R0` >>
   `gas_outcome_full cfg tops' cx st0 (bind (eval_expr cx e1) (read_result cx))
      (es,s0,G0,tn0) (\H res ee G tn t. Q0 H res ee G tn t /\
-       (!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_no_wrap inst z)) R0` by
+       (!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_fmp_headroom inst z)) R0` by
     (unabbrev_all_tac >> irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
      qpat_assum `gas_outcome_full _ _ _ _ (bind (eval_expr cx e1) _) _ _ _`
        (irule_at Any) >> simp[NoAsms] >> rpt strip_tac >>
-     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >>
      simp[]) >>
   qpat_x_assum `gas_outcome_full _ _ _ _ (bind (eval_expr cx e1) _) _ Q0 R0` kall_tac >>
   unabbrev_all_tac >>
@@ -6690,7 +6690,7 @@ Resume compile_for_range_frag_full[join_endpoints]:
       (~is_word_type (post_value_type cenv e1) ==> ptr_buf_ok cenv e1 op1 G t) /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
       ee.gas_obs = [] /\ ~t.vs_halted /\
-      (!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_no_wrap inst z) /\
+      (!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_fmp_headroom inst z) /\
       (!bw capacity. d = SOME (bw,capacity) ==> allocas_from (w2n bw + capacity) t)`,
     `P2` |-> `\(v1:value) mid1 G1 tn1 t1 H v ee G tn t.
       expr_post H ctx func cenv cx e2 mid1 s1 st t1 ee v op2 t /\
@@ -6704,7 +6704,7 @@ Resume compile_for_range_frag_full[join_endpoints]:
       (~is_word_type (post_value_type cenv e2) ==> ptr_buf_ok cenv e2 op2 G t) /\
       ghost_kept_at lo cenv mid1 s1 G1 tn1 t1 G tn /\
       ee.gas_obs = [] /\ ~t.vs_halted /\
-      (!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_no_wrap inst z) /\
+      (!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_fmp_headroom inst z) /\
       (!bw capacity. d = SOME (bw,capacity) ==> allocas_from (w2n bw + capacity) t)`]
       (SPEC_ALL range_full_endpoints))) >>
   map_every qexists_tac [`G0`,`cenv`,`d`,`op1`,`op2`,`s0`,`s1`,`sa`,`st`,`tn0`,`tyv`] >>
@@ -6743,7 +6743,7 @@ QED
 
 Resume compile_for_range_frag_full[first_success]:
   map_every qx_gen_tac [`marks1`,`v1`,`mid1`,`G1`,`tn1`,`t1`] >> strip_tac >>
-  `!fn inst z. frag_reachable ctx func t1 fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func t1 fn inst z ==> dalloca_fmp_headroom inst z` by
     (qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==> expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _ /\ _`
        (qspec_then `storage_trace_horizon mid1.storage_trace` mp_tac) >>
      impl_tac >- (qpat_assum `storage_trace_domain cx st0 mid1.storage_trace`
@@ -6792,11 +6792,11 @@ Resume compile_for_range_frag_full[first_success]:
     `gas_outcome_full cfg tops' cx st0 (bind (eval_expr cx e2) _) (mid1,t1,G1,tn1) Q0 R0` >>
   `gas_outcome_full cfg tops' cx st0 (bind (eval_expr cx e2) (read_result cx))
      (mid1,t1,G1,tn1) (\H res ee G tn t. Q0 H res ee G tn t /\
-       (!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_no_wrap inst z)) R0` by
+       (!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_fmp_headroom inst z)) R0` by
     (unabbrev_all_tac >> irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
      qpat_assum `gas_outcome_full _ _ _ _ (bind (eval_expr cx e2) _) _ _ _`
        (irule_at Any) >> simp[NoAsms] >> rpt strip_tac >>
-     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >>
      simp[]) >>
   qpat_x_assum `gas_outcome_full _ _ _ _ (bind (eval_expr cx e2) _) _ Q0 R0` kall_tac >>
   unabbrev_all_tac >>
@@ -7198,7 +7198,7 @@ val range_join_rounds_tac =
     ptr_covers G tn p s sz /\ op_taint tn (Var cv) = {} /\ op_prov G (Var cv) = NONE /\
     op_taint tn (Var ev) = {} /\ op_prov G (Var ev) = NONE /\
     alloca_history func s /\
-    (!fn inst v. frag_reachable ctx func s fn inst v ==> dalloca_no_wrap inst v) /\
+    (!fn inst v. frag_reachable ctx func s fn inst v ==> dalloca_fmp_headroom inst v) /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     s0.vs_alloca_next <= s.vs_alloca_next /\
     (!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==> lookup_var x s = SOME v) /\
@@ -7308,13 +7308,13 @@ val range_join_rounds_entry_tac =
     (drule_then strip_assume_tac) >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
-  `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_fmp_headroom inst z` by
     (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
                   gas_origin_ptr_path _ _ _ (OK t,_,_)`
        (qspec_then `H` mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >>
      disch_then (mp_then (Pos hd) mp_tac
-       bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap) >>
+       bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom) >>
      asm_rewrite_tac []);
 
 val range_join_rounds_sep_tac =

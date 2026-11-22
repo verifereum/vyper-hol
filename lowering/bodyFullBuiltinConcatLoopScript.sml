@@ -38,7 +38,7 @@ Theorem concat_args_sim_full:
        expr_body_pre cenv cx env e st) /\
     body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
-    (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+    (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z) /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
@@ -323,13 +323,13 @@ Resume concat_args_sim_full[continue]:
      qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _`
        (qspec_then `H` mp_tac) >> simp[])) >>
   disch_then (strip_assume_tac o SIMP_RULE bool_ss [LET_THM]) >>
-  `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_fmp_headroom inst z` by
     (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK t,G1,tn1)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
        qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> _` (fn safe =>
-         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
            (LIST_CONJ [path,no_phi,safe])))))) >>
-  `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_fmp_headroom inst z` by
     (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
          gas_origin_ptr_path _ (t,G1,tn1) [] (OK u,G2,tn2) /\ _`
        (fn th => qpat_assum `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace`
@@ -337,7 +337,7 @@ Resume concat_args_sim_full[continue]:
      qpat_assum `gas_origin_ptr_path _ (t,G1,tn1) [] (OK u,G2,tn2)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
        qpat_assum `!fn inst z. frag_reachable ctx func t fn inst z ==> _` (fn safe =>
-         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
            (LIST_CONJ [path,no_phi,safe])))))) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
     (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_path _ (t,G1,tn1) [] (OK u,G2,tn2) /\ _`
@@ -375,7 +375,7 @@ Resume concat_args_sim_full[tail]:
       `s0` |-> `u`, `G0` |-> `G2`, `tn0` |-> `tn2`] o SPEC_ALL) >>
   (impl_tac >- (rpt conj_tac >> asm_simp_tac arith_ss [LET_THM] >>
      rpt strip_tac >> asm_rewrite_tac[]
-     >~ [`dalloca_no_wrap inst z`]
+     >~ [`dalloca_fmp_headroom inst z`]
      >- (qpat_assum `!fn inst z. frag_reachable ctx func u fn inst z ==> _` irule >>
          goal_assum (drule_at Any))
      >~ [`expr_body_pre cenv cx env x st`]

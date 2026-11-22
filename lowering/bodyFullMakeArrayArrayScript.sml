@@ -178,22 +178,22 @@ Resume make_array_vv_sim_full_conditional[elements]:
      conj_tac >- fs[ci_mono_def] >> qexists_tac `shadow_sa` >> fs[ci_mono_def]) >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
-  `!fn i z. frag_reachable ctx func si fn i z ==> dalloca_no_wrap i z` by
+  `!fn i z. frag_reachable ctx func si fn i z ==> dalloca_fmp_headroom i z` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK si,Gi,tni)`
        (qspec_then `DF (storage_trace_horizon es.storage_trace)` assume_tac) >>
      qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) [] (OK si,Gi,tni)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
          qpat_assum `!fn i z. frag_reachable ctx func s0 fn i z ==> _`
-           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
             CONJ path o CONJ no_phi)))) >>
-  `!fn i z. frag_reachable ctx func sj fn i z ==> dalloca_no_wrap i z` by
+  `!fn i z. frag_reachable ctx func sj fn i z ==> dalloca_fmp_headroom i z` by
     (qpat_assum `!D explicit. gas_origin_ptr_path _ (si,Gi,tni) [] (OK sj,Gj,tnj)`
        (qspecl_then [`DF (storage_trace_horizon es.storage_trace)`,
                      `gas_explicit_sites ctx shadow_ctx`] assume_tac) >>
      qpat_assum `gas_origin_ptr_path _ (si,Gi,tni) [] (OK sj,Gj,tnj)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
          qpat_assum `!fn i z. frag_reachable ctx func si fn i z ==> _`
-           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
             CONJ path o CONJ no_phi)))) >>
   mp_tac (Q.INST [`csbase` |-> `sa`, `ebase` |-> `es`, `sbase` |-> `s0`,
     `Gbase` |-> `G0`, `tnbase` |-> `tn0`, `aid` |-> `sa.cs_next_id`,
@@ -207,7 +207,7 @@ QED
 
 Resume make_array_vv_sim_full_conditional[elements_pre]:
   fs[ci_mono_def] >> simp[arithmeticTheory.ADD_SYM] >> rpt conj_tac
-  >~ [`!fn inst z. frag_reachable ctx func sj fn inst z ==> dalloca_no_wrap inst z`]
+  >~ [`!fn inst z. frag_reachable ctx func sj fn inst z ==> dalloca_fmp_headroom inst z`]
   >- first_assum ACCEPT_TAC
   >~ [`regions_disjoint _ _ _ _`]
   >-

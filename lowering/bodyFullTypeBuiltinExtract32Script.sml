@@ -116,7 +116,7 @@ Resume extract32_vv_full[source_continuation]:
     gvs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
-  `!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_fmp_headroom inst z` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
        gas_origin_ptr_path _ (s0,G0,tn0) marks (OK s,G1,tn1)`
        (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
@@ -124,7 +124,7 @@ Resume extract32_vv_full[source_continuation]:
      qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK s,G1,tn1)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
        qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> _` (fn safe =>
-         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
            (LIST_CONJ [path,no_phi,safe])))))) >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\ ~s.vs_halted /\ mid.gas_obs = []`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
@@ -270,11 +270,11 @@ Resume extract32_vv_full[offset_inputs]:
     (qpat_assum `expr_post _ _ _ _ _ src es sa s2 s0 mid _ _ u`
        (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def]) >>
      drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> simp[]) >>
-  `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_fmp_headroom inst z` by
     (qpat_assum `gas_origin_ptr_path _ (s,G1,tn1) [] (OK u,G2,tn2)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
        qpat_assum `!fn inst z. frag_reachable ctx func s fn inst z ==> _` (fn safe =>
-         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
            (LIST_CONJ [path,no_phi,safe])))))) >>
   drule fragGasOriginPtrTheory.gas_origin_ptr_path_projections >>
   metis_tac[fragGasSeqPtrTheory.gas_path_ptr_ok_not_halted]

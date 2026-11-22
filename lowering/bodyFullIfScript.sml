@@ -621,33 +621,33 @@ QED
 
 Resume compile_if_stmt_frag_full[entry]:
   `~ctx_has_dalloca ctx ==> !from fn inst s.
-     frag_reachable ctx func from fn inst s ==> dalloca_no_wrap inst s` by
+     frag_reachable ctx func from fn inst s ==> dalloca_fmp_headroom inst s` by
     (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     simp[unitTransformDefsTheory.dalloca_no_wrap_def] >> strip_tac >>
+     simp[unitTransformDefsTheory.dalloca_fmp_headroom_def] >> strip_tac >>
      `ctx_has_dalloca ctx` by
        (simp_tac bool_ss [ctx_has_dalloca_def, EXISTS_MEM] >>
         qexists_tac `fn` >> conj_tac >- first_assum ACCEPT_TAC >>
         qexists_tac `inst` >> simp[]) >> fs[]) >>
-  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s` by
     (Cases_on `ctx_has_dalloca ctx`
      >- (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by fs[] >>
          qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK t,G1,tn1)` (fn path =>
          qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
          qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _`
-           (fn safe => ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+           (fn safe => ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
              (LIST_CONJ [path,no_phi,safe])))))) >>
      qpat_assum `~ctx_has_dalloca ctx ==> !from fn inst s. _` drule >>
      disch_then (qspec_then `t` ACCEPT_TAC)) >>
   `!fn inst s.
      frag_reachable ctx func (jump_to (if b then tl else el) t) fn inst s ==>
-     dalloca_no_wrap inst s` by
+     dalloca_fmp_headroom inst s` by
     (Cases_on `ctx_has_dalloca ctx`
      >- (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by fs[] >>
          qpat_assum `!H. gas_origin_ptr_path _ (t,G1,tn1) [] _`
            (qspec_then `storage_trace_horizon mid.storage_trace` (fn path =>
          qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
          qpat_assum `!fn inst s. frag_reachable ctx func t fn inst s ==> _`
-           (fn safe => ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+           (fn safe => ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
              (LIST_CONJ [path,no_phi,safe]))))))) >>
      qpat_assum `~ctx_has_dalloca ctx ==> !from fn inst s. _` drule >>
      disch_then (qspec_then `jump_to (if b then tl else el) t` ACCEPT_TAC)) >>

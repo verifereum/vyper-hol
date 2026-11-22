@@ -85,13 +85,13 @@ Resume make_tuple_vv_sim_full_conditional[loop]:
      conj_tac >- fs[ci_mono_def] >> qexists `shadow_sa` >> fs[ci_mono_def]) >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
-  `!fn i z. frag_reachable ctx func si fn i z ==> dalloca_no_wrap i z` by
+  `!fn i z. frag_reachable ctx func si fn i z ==> dalloca_fmp_headroom i z` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK si,Gi,tni)`
        (qspec_then `DF (storage_trace_horizon es.storage_trace)` assume_tac) >>
      qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) [] (OK si,Gi,tni)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
          qpat_assum `!fn i z. frag_reachable ctx func s0 fn i z ==> _`
-           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
             CONJ path o CONJ no_phi)))) >>
   mp_tac (Q.INST [`csbase` |-> `sa`, `ebase` |-> `es`, `sbase` |-> `s0`,
     `Gbase` |-> `G0`, `tnbase` |-> `tn0`, `aid` |-> `sa.cs_next_id`,
@@ -101,7 +101,7 @@ Resume make_tuple_vv_sim_full_conditional[loop]:
     `ssm`,`shadow_sb`,`es`,`si`,`Gi`,`tni`] mp_tac) >>
   (impl_tac >-
     (fs[ci_mono_def] >> rpt conj_tac
-     >~ [`!fn inst z. frag_reachable ctx func si fn inst z ==> dalloca_no_wrap inst z`]
+     >~ [`!fn inst z. frag_reachable ctx func si fn inst z ==> dalloca_fmp_headroom inst z`]
      >- first_assum ACCEPT_TAC >>
      rpt strip_tac >> simp[]
      >- (qpat_x_assum `!name b len. local_region _ _ _ name b len ==> _` irule >>

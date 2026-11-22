@@ -37,7 +37,7 @@ Theorem for_captured_storage_continue_full:
   c.ce_alloca_locals /\ local_ptrs_reserved c sa /\
   ret_pc_ok c sa s0 /\ return_buf_frame d c sa s0 /\ return_buf_sep d c em u /\
   (!H. dead_lo_ok H (DF H) lo c cx) /\
-  (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_no_wrap inst t) /\
+  (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_fmp_headroom inst t) /\
   ce_locals_declared c env /\ locals_alloc_ok c env /\ expr_body_pre c cx env e es /\
   expr_type e = ArrayT typ bd /\ bound_length bd <= n /\
   evaluate_type (get_tenv cx) typ = SOME tyv /\
@@ -220,7 +220,7 @@ Resume for_captured_storage_continue_full[rounds]:
       (start,sa,s0,G0,tn0) (em,se,bop,tr,slot,tyv,bd,vs,len)
       (lvo,idx,cond) (p,dst,nb,sd) (H,k,rs,ee,GG,tt,s)` >>
   qabbrev_tac `Inv = \H rs ee GG tt s. (?k. Live H k rs ee GG tt s) /\
-    (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u)` >>
+    (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u)` >>
   qabbrev_tac `Done = \H ee GG tt t.
     for_array_loop_post (DF,lo,d,ctx,func) c cx lctx
       (start,sa,s0,G0,tn0) sb H (INL ()) ee GG tt t` >>
@@ -463,7 +463,7 @@ Resume for_captured_storage_continue_full[induct]:
         simp[NoAsms,Abbr `Inv`] >>
         conj_tac >- (qexists `0` >> simp[NoAsms,Abbr `Live`] >> first_assum ACCEPT_TAC) >>
         qpat_assum `gas_origin_ptr_path _ (u,Gu,tu) [] (OK z,G,tn)`
-          (mp_then (Pos hd) mp_tac gas_origin_ptr_path_dalloca_no_wrap) >>
+          (mp_then (Pos hd) mp_tac gas_origin_ptr_path_dalloca_fmp_headroom) >>
         asm_rewrite_tac[]) >>
      first_assum ACCEPT_TAC) >>
   suspend "finish"
@@ -483,7 +483,7 @@ Resume for_captured_storage_continue_full[cons]:
   `!H. valid_horizon cx st0 H ei.storage_trace ==> ?k. Live H k (a::rs) ei g tt s` by
     (qx_gen_tac `H` >> disch_tac >> qpat_assum `!H. valid_horizon _ _ H ei.storage_trace ==> Inv _ _ _ _ _ _`
        (qspec_then `H` (drule_then mp_tac)) >> simp[NoAsms,Abbr `Inv`]) >>
-  `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u` by
+  `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u` by
     (qpat_assum `!H. valid_horizon _ _ H ei.storage_trace ==> Inv _ _ _ _ _ _`
        (qspec_then `storage_trace_horizon ei.storage_trace` mp_tac) >>
      qpat_assum `storage_trace_domain cx st0 ei.storage_trace`
@@ -499,7 +499,7 @@ Resume for_captured_storage_continue_full[cons]:
      disch_tac >> simp[NoAsms,Abbr `Inv`] >>
      conj_tac >- (qpat_assum `~b ==> ?j. Live _ _ _ _ _ _ _` irule >> first_assum ACCEPT_TAC) >>
      qpat_assum `gas_origin_ptr_path _ (s,g,tt) _ (OK _,_,_)`
-       (mp_then (Pos hd) mp_tac gas_origin_ptr_path_dalloca_no_wrap) >> asm_rewrite_tac[]) >>
+       (mp_then (Pos hd) mp_tac gas_origin_ptr_path_dalloca_fmp_headroom) >> asm_rewrite_tac[]) >>
   suspend "cons_stages"
 QED
 

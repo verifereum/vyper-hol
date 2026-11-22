@@ -65,7 +65,7 @@ Theorem intcall_return_full_owned:
     MEM shadow_func shadow_ctx.ctx_functions /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
             not_fresh_at sa x) /\
@@ -275,7 +275,7 @@ Theorem intcall_return_full:
     MEM shadow_func shadow_ctx.ctx_functions /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
             not_fresh_at sa x) /\

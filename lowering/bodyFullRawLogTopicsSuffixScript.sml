@@ -102,7 +102,7 @@ Theorem raw_log_topics_suffix_full_under_compose:
   MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  (!fn inst st. frag_reachable ctx func s fn inst st ==> dalloca_no_wrap inst st) /\
+  (!fn inst st. frag_reachable ctx func s fn inst st ==> dalloca_fmp_headroom inst st) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -272,11 +272,11 @@ Resume raw_log_topics_suffix_full_under_compose[continue]:
   qunabbrev_tac `pathQ` >> RULE_ASSUM_TAC BETA_RULE >> BETA_TAC >>
   qpat_assum `Abbrev (headQ = _)`
     (fn th => pure_rewrite_tac[REWRITE_RULE [markerTheory.Abbrev_def] th]) >> BETA_TAC >> strip_tac >>
-  `!fn inst s. frag_reachable ctx func u fn inst s ==> dalloca_no_wrap inst s` by
+  `!fn inst s. frag_reachable ctx func u fn inst s ==> dalloca_fmp_headroom inst s` by
     (qpat_assum `gas_origin_ptr_path _ (s,G0,tn0) _ (OK u,G1,tn1)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
        qpat_assum `!fn inst st. frag_reachable ctx func s fn inst st ==> _` (fn safe =>
-         ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+         ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
            (LIST_CONJ [path,no_phi,safe])))))) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
     (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ u`

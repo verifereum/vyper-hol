@@ -317,12 +317,12 @@ Proof
   `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
      (cx_tops cx) cx st0 (eval_target_place cx t) (es,s0,G0,tn0)
      (\H res ee G tn v. targetQ H res ee G tn v /\
-       (!fn i z. frag_reachable ctx func v fn i z ==> dalloca_no_wrap i z))
+       (!fn i z. frag_reachable ctx func v fn i z ==> dalloca_fmp_headroom i z))
      targetR` by
     (irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
      qpat_assum `gas_outcome_full _ _ _ _ _ _ targetQ targetR` (irule_at Any) >>
      simp[] >> rpt strip_tac >>
-     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >>
      disch_then ACCEPT_TAC) >>
   qpat_x_assum `gas_outcome_full _ _ _ _ _ _ targetQ targetR` kall_tac >>
   qmatch_goalsub_abbrev_tac
@@ -331,7 +331,7 @@ Proof
   irule augassign_target_bind_full >>
   qexists_tac `\H res ee G tn u. targetQ H res ee G tn u /\
     ~u.vs_halted /\ ee.gas_obs = [] /\
-    (!fn i z. frag_reachable ctx func u fn i z ==> dalloca_no_wrap i z)` >>
+    (!fn i z. frag_reachable ctx func u fn i z ==> dalloca_fmp_headroom i z)` >>
   reverse conj_tac
   >- (irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
       qpat_assum `gas_outcome_full _ _ _ _ _ _ _ targetR` (irule_at Any) >>
@@ -349,7 +349,7 @@ Resume body_augassign_nested_immutable_full[nested_target_endpoint]:
   qabbrev_tac `H0 = storage_trace_horizon st.storage_trace` >>
   `valid_horizon cx st0 H0 st.storage_trace` by
     fs[Abbr `H0`,vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  `!fn i z. frag_reachable ctx func v fn i z ==> dalloca_no_wrap i z` by
+  `!fn i z. frag_reachable ctx func v fn i z ==> dalloca_fmp_headroom i z` by
     (qpat_assum `!H. valid_horizon _ _ H st.storage_trace ==> targetQ _ _ _ _ _ _ /\ _`
        (qspec_then `H0` (drule_then strip_assume_tac)) >>
      first_assum ACCEPT_TAC) >>
@@ -483,12 +483,12 @@ QED
 Resume body_augassign_nested_immutable_full[nested_rhs_compose]:
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok st` by
     (irule expr_body_pre_gas_admissible >> qexistsl_tac [`cenv`,`env`] >> simp[]) >>
-  `!fn inst q. frag_reachable ctx func u fn inst q ==> dalloca_no_wrap inst q` by
+  `!fn inst q. frag_reachable ctx func u fn inst q ==> dalloca_fmp_headroom inst q` by
     (qpat_assum `!D. gas_origin_ptr_path _ (v,Gtarget,tnt) [] (OK u,Gload,tnload)`
        (qspec_then `DF H0` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
          qpat_assum `!fn i z. frag_reachable ctx func v fn i z ==> _`
-           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
             CONJ path o CONJ no_phi))))) >>
   `!H. valid_horizon cx st0 H st.storage_trace ==>
     stmt_state_rel H ctx func cenv cx st u /\
@@ -1310,12 +1310,12 @@ Proof
   `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
      (cx_tops cx) cx st0 (eval_target_place cx t) (es,s0,G0,tn0)
      (\H res ee G tn v. targetQ H res ee G tn v /\
-       (!fn i z. frag_reachable ctx func v fn i z ==> dalloca_no_wrap i z))
+       (!fn i z. frag_reachable ctx func v fn i z ==> dalloca_fmp_headroom i z))
      targetR` by
     (irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
      qpat_assum `gas_outcome_full _ _ _ _ _ _ targetQ targetR` (irule_at Any) >>
      simp[] >> rpt strip_tac >>
-     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >>
      disch_then ACCEPT_TAC) >>
   qpat_x_assum `gas_outcome_full _ _ _ _ _ _ targetQ targetR` kall_tac >>
   qmatch_goalsub_abbrev_tac
@@ -1324,7 +1324,7 @@ Proof
   irule augassign_target_bind_full >>
   qexists_tac `\H res ee G tn u. targetQ H res ee G tn u /\
     ~u.vs_halted /\ ee.gas_obs = [] /\
-    (!fn i z. frag_reachable ctx func u fn i z ==> dalloca_no_wrap i z)` >>
+    (!fn i z. frag_reachable ctx func u fn i z ==> dalloca_fmp_headroom i z)` >>
   reverse conj_tac
   >- ((irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
       qpat_assum `gas_outcome_full _ _ _ _ _ _ _ targetR` (irule_at Any) >>
@@ -1337,7 +1337,7 @@ Proof
   qx_genl_tac [`marks`,`res`,`st`,`Gtarget`,`tnt`,`v`] >> BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon st.storage_trace) st.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  `!fn i z. frag_reachable ctx func v fn i z ==> dalloca_no_wrap i z` by
+  `!fn i z. frag_reachable ctx func v fn i z ==> dalloca_fmp_headroom i z` by
     (qpat_assum `!H. valid_horizon _ _ H st.storage_trace ==> targetQ _ _ _ _ _ _ /\ _`
        (qspec_then `storage_trace_horizon st.storage_trace` (drule_then strip_assume_tac)) >>
      first_assum ACCEPT_TAC) >>
@@ -1428,11 +1428,11 @@ Proof
     (drule_all aug_place_rhs_pre_target_gas_obs >> simp[]) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok st` by
     (irule expr_body_pre_gas_admissible >> qexistsl_tac [`cenv`,`env`] >> simp[]) >>
-  `!fn inst q. frag_reachable ctx func u fn inst q ==> dalloca_no_wrap inst q` by
+  `!fn inst q. frag_reachable ctx func u fn inst q ==> dalloca_fmp_headroom inst q` by
     (qpat_assum `gas_origin_ptr_path _ (v,Gtarget,tnt) [] (OK u,Gload,tnload)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
          qpat_assum `!fn i z. frag_reachable ctx func v fn i z ==> _`
-           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
             CONJ path o CONJ no_phi)))) >>
   `!H. valid_horizon cx st0 H st.storage_trace ==>
     stmt_state_rel H ctx func cenv cx st u /\
@@ -2161,11 +2161,11 @@ Resume body_augassign_other_full[immutable_rhs_setup]:
     (irule expr_body_pre_gas_admissible >> qexistsl_tac [`cenv`,`env`] >> simp[]) >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
-  `!fn inst q. frag_reachable ctx func u fn inst q ==> dalloca_no_wrap inst q` by
+  `!fn inst q. frag_reachable ctx func u fn inst q ==> dalloca_fmp_headroom inst q` by
     (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) [] (OK u,Gload,tnload)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
          qpat_assum `!fn i z. frag_reachable ctx func s0 fn i z ==> _`
-           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
             CONJ path o CONJ no_phi)))) >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es u /\

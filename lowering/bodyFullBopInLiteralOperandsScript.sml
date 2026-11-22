@@ -32,7 +32,7 @@ Theorem bop_in_literal_operands_clean_full_halt:
        lower_word_args cenv expr_type (MAP gas_shadow_expr args) shadow_sa =
          (shadow_xs,shadow_sb) ==> fn_has_code shadow_sa shadow_sb shadow_func) /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -182,11 +182,11 @@ Proof
   strip_tac >> qunabbrev_tac `pathQ` >> qunabbrev_tac `HeadPost` >>
   RULE_ASSUM_TAC BETA_RULE >>
   qpat_x_assum `((?v. _) /\ (?cm. gas_origin_ptr_path _ _ cm _)) /\ _` strip_assume_tac >>
-  `!fn inst s. frag_reachable ctx func t1 fn inst s ==> dalloca_no_wrap inst s` by
+  `!fn inst s. frag_reachable ctx func t1 fn inst s ==> dalloca_fmp_headroom inst s` by
     (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK t1,G1,tn1)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
        qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _` (fn safe =>
-         ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+         ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
            (LIST_CONJ [path,no_phi,safe])))))) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t1` by
     (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ t1`
@@ -358,7 +358,7 @@ Theorem bop_in_literal_operands_clean_full:
        lower_word_args cenv expr_type (MAP gas_shadow_expr args) shadow_sa =
          (shadow_xs,shadow_sb) ==> fn_has_code shadow_sa shadow_sb shadow_func) /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -416,7 +416,7 @@ Theorem bop_in_literal_operands_full:
        lower_word_args cenv expr_type (MAP gas_shadow_expr args) shadow_sa =
          (shadow_xs,shadow_sb) ==> fn_has_code shadow_sa shadow_sb shadow_func) /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
