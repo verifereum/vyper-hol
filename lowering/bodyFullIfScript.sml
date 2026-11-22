@@ -317,60 +317,9 @@ Proof
   qexistsl_tac [`s9`, `s10`, `s11`, `t9`, `t10`, `e2`] >> simp[]
 QED
 
-Theorem compile_if_layout_shadow_ids[local]:
-  !cenv lctx ty c ss1 ss2 c' ss1' ss2' sa sb ta tb func sfunc.
-  compile_stmt cenv lctx ty (If c ss1 ss2) sa = ((), sb) /\
-  compile_stmt cenv lctx ty (If c' ss1' ss2') ta = ((), tb) /\
-  gas_shadow_state sa ta /\
-  fn_has_code sa sb func /\ fn_has_code ta tb sfunc /\
-  (!sx op sy. lower_value compile_expr cenv (BaseT BoolT) c sx = (op, sy) ==>
-     cs_extends sx sy /\ sx.cs_next_var <= sy.cs_next_var) /\
-  (!sx op sy. lower_value compile_expr cenv (BaseT BoolT) c' sx = (op, sy) ==>
-     cs_extends sx sy /\ sx.cs_next_var <= sy.cs_next_var) /\
-  cs_mono (stmts_env cenv lctx ty ss1) /\
-  cs_mono (stmts_env cenv lctx ty ss2) /\
-  cs_mono (stmts_env cenv lctx ty ss1') /\
-  cs_mono (stmts_env cenv lctx ty ss2') /\
-  gas_shadow_compiles (lower_value compile_expr cenv (BaseT BoolT) c)
-    (lower_value compile_expr cenv (BaseT BoolT) c') /\
-  gas_shadow_compiles (stmts_env cenv lctx ty ss1)
-    (stmts_env cenv lctx ty ss1') /\
-  gas_shadow_compiles (stmts_env cenv lctx ty ss2)
-    (stmts_env cenv lctx ty ss2') ==>
-  ?op cond scond pre post tl el xl.
-    lower_value compile_expr cenv (BaseT BoolT) c sa = (op, cond) /\
-    lower_value compile_expr cenv (BaseT BoolT) c' ta = (op, scond) /\
-    gas_shadow_state cond scond /\
-    fn_has_code sa cond func /\ fn_has_code ta scond sfunc /\
-    cs_extends sa cond /\ sa.cs_next_var <= cond.cs_next_var /\
-    sa.cs_next_var <= sb.cs_next_var /\
-    pre.cs_current_bb = cond.cs_current_bb /\
-    pre.cs_current_insts = cond.cs_current_insts /\
-    emit_inst JNZ [op; Label tl; Label el] [] pre = ((), post) /\
-    fn_has_code pre post func /\
-    !b. ?entry last after sentry slast cenvb.
-      stmts_env cenv lctx ty (if b then ss1 else ss2) entry =
-        (cenvb, last) /\
-      stmts_env cenv lctx ty (if b then ss1' else ss2') sentry =
-        (cenvb, slast) /\
-      gas_shadow_state entry sentry /\ gas_shadow_state last slast /\
-      fn_has_code sentry slast sfunc /\
-      entry.cs_current_bb = (if b then tl else el) /\
-      entry.cs_current_insts = [] /\
-      cs_extends sa entry /\ sa.cs_next_var <= entry.cs_next_var /\
-      sa.cs_next_id <= entry.cs_next_id /\
-      cs_extends entry last /\ cs_extends last sb /\
-      last.cs_next_var <= sb.cs_next_var /\
-      fn_has_code entry last func /\ fn_has_code last after func /\
-      (if block_is_terminated last then after = last
-       else emit_inst JMP [Label xl] [] last = ((), after)) /\
-      (~block_is_terminated last ==>
-       sb.cs_current_bb = xl /\ sb.cs_current_insts = [])
-Proof
-  qspec_then `F` (ACCEPT_TAC o REWRITE_RULE
-    [gasShadowCompileBaseTheory.gas_shadow_env_F, gas_shadow_compiles_env_F])
-    compile_if_layout_shadow_ids_env
-QED
+val compile_if_layout_shadow_ids =
+  REWRITE_RULE [gasShadowCompileBaseTheory.gas_shadow_env_F, gas_shadow_compiles_env_F]
+    (Q.SPEC `F` compile_if_layout_shadow_ids_env);
 
 Theorem compile_if_layout_shadow:
   !cenv lctx ty c ss1 ss2 c' ss1' ss2' sa sb ta tb func sfunc.
