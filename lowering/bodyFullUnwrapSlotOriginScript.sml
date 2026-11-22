@@ -147,6 +147,14 @@ Proof
     [mk_inst id load [src] [out]; mk_inst (id+1) MSTORE [Var root;Var out] []]` by
     (qpat_x_assum `load = SLOAD \/ load = TLOAD` strip_assume_tac >>
      simp[mk_inst_def, is_terminator_def]) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u.
+      [mk_inst id load [src] [out]; mk_inst (id+1) MSTORE [Var root;Var out] []] =
+        pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (qpat_assum `load = SLOAD \/ load = TLOAD` strip_assume_tac >>
+     simp[listTheory.APPEND_EQ_CONS, mk_inst_def] >> rpt strip_tac >>
+     gvs[listTheory.APPEND_EQ_CONS, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   drule_all emitted_origin_ptr_path >>
   disch_then (qspec_then `explicit` assume_tac) >>
   qexistsl [`Gf`, `tnf`, `t with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
