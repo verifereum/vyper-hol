@@ -110,13 +110,16 @@ Proof
   `is_word_type (vv_type (ext_call_arg_value (lowered_value_type cenv e) vv))` by
     metis_tac[] >>
   gvs[comp_bind_def] >>
-  Cases_on `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa` >>
   rename1 `compile_expr _ _ (gas_shadow_expr _) _ = (shadow_vv,shadow_sm)` >>
   `shadow_vv = vv /\ gas_shadow_state sm shadow_sm` by
-    (qspecl_then [`cenv`, `expr_type e`, `e`, `T`] mp_tac
-       (cj 1 gas_shadow_compile_expr) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
+    (`gas_shadow_compiles (compile_expr cenv (expr_type e) e)
+       (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
+       irule (cj 1 gas_shadow_compile_expr_env |> SPEC_ALL |>
+              Q.INST [`shadow` |-> `T`] |> REWRITE_RULE [COND_CLAUSES]) >>
+     qpat_x_assum `gas_shadow_compiles _ _`
+       (qspecl_then [`sa`, `shadow_sa`] mp_tac o
+        REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]) >> simp[]) >>
   gvs[] >>
   `cs_extends sa sm /\ cs_extends shadow_sa shadow_sm` by
     metis_tac[exprSimUnwrapTheory.compile_expr_extends] >>
