@@ -2,6 +2,7 @@
 Theory s1PrefixCases
 Ancestors
   s1PrefixPreds s1PrefixReturnSome s1PrefixReturnNone s1PrefixExits
+  s1PrefixStmtZero
   allocLimits allocLimitsProps bodyExprPreFacts bodySim
   exprSimHypsDefs gasContext gasShadow supportedExprs supportedStmts
   supportedExprTraverse supportedStmtTraverse
@@ -68,4 +69,16 @@ Theorem body_raise_unreachable_case_prefix:
   !cx. body_stmt_prefix_ok cx (Raise RaiseUnreachable)
 Proof
   simp[body_stmt_prefix_ok_def, compile_raise_frag_prefix]
+QED
+
+Theorem body_pass_case_prefix:
+  !cx. body_stmt_prefix_ok cx Pass
+Proof
+  simp[body_stmt_prefix_ok_def, gas_shadow_stmt_def, compile_pass_frag_prefix]
+QED
+
+Theorem body_stmts_nil_case_prefix:
+  !cx. body_stmts_prefix_ok cx []
+Proof
+  simp[body_stmts_prefix_ok_def, stmt_frag_nil_prefix]
 QED
