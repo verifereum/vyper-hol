@@ -55,7 +55,7 @@ Theorem intcall_return_full_owned:
     LENGTH es <= LENGTH args /\
     compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
       (vv, sm) /\
-    compile_expr cenv ty
+    compile_expr (gasShadowCompileBase$gas_shadow_env T cenv) ty
       (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)) shadow_sa =
       (vv, shadow_sm) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sm shadow_sm /\
@@ -265,7 +265,7 @@ Theorem intcall_return_full:
     LENGTH es <= LENGTH args /\
     compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
       (vv, sm) /\
-    compile_expr cenv ty
+    compile_expr (gasShadowCompileBase$gas_shadow_env T cenv) ty
       (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)) shadow_sa =
       (vv, shadow_sm) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sm shadow_sm /\
