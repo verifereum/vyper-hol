@@ -206,7 +206,8 @@ Proof
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
     fs[deploy_phases_def] >>
   drule lower_vyper_deploy_unit_context_ok >> strip_tac >>
-  drule lower_vyper_deploy_unit_entry >> strip_tac >>
+  `dunit.cu_context.ctx_entry = SOME "__deploy"` by
+    (drule lower_vyper_deploy_unit_entry >> simp[]) >>
   drule deploy_imm_alloca_budget_ok >> strip_tac >>
   `imm_len tops + unit_alloca_budget dunit.cu_context < dimword (:256)` by
     decide_tac >>

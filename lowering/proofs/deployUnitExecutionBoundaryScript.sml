@@ -82,14 +82,13 @@ Resume deploy_certificate_raw_entry_boundary[focus]:
   `o1_safe_upto (deploy_dead H tops runtime_bc am (tx with code := vs_out.vs_code))
      (imm_len tops) (MIN (LENGTH marks) (LENGTH v.vs_gas_readings))
      dunit.cu_context v` by
-    (irule gas_origin_ptr_focus_o1_safe_upto >> simp[] >> rpt conj_tac
-     >- first_assum ACCEPT_TAC
-     >- (qexists `\nm. set (ctx_ptr_param_list dunit.cu_context nm)` >> simp[]) >>
-     metis_tac[]) >>
+    (drule (Q.INST [`P` |-> `\nm. set (ctx_ptr_param_list dunit.cu_context nm)`]
+       gas_origin_ptr_focus_o1_safe_upto) >> simp[] >> metis_tac[]) >>
   `!fn inst s. raw_reachable v dunit.cu_context fn inst s /\
      gas_cut (MIN (LENGTH marks) (LENGTH v.vs_gas_readings)) v s ==>
      inst_dload_in_section inst s` by
-    (drule gas_origin_ptr_focus_dload_upto >> simp[] >> metis_tac[]) >>
+    (drule (Q.INST [`P` |-> `\nm. set (ctx_ptr_param_list dunit.cu_context nm)`]
+       gas_origin_ptr_focus_dload_upto) >> simp[] >> metis_tac[]) >>
   drule gas_origin_ptr_focus_origin >> strip_tac >>
   drule_at (Pat `gas_origin_focus _ _ _ _ _ _`)
     gas_origin_focus_entry_events_prefix >> simp[] >> strip_tac >>
