@@ -3,18 +3,30 @@ Ancestors
   placeTypingProps vyperTypeContract vyperTypeContractStaticMaps
   compileVyper compileEnv list finite_map
 
-(* A single-module checker does not reject dots in declaration identifiers,
-   so a main-module "0.m" spells like the imported (SOME 0,"m").  The
-   compile env keys module variables by nsid, so the two stay apart. *)
+(* Reject parsed names that can spell a compiler-qualified namespace. *)
 Theorem map_namespace_collision_probe:
   let tops = [HashMapDecl Private F "0.m" (BaseT (UintT 256))
                 (Type (BaseT (UintT 256))) (SOME 0)] in
   let mods = [(NONE,tops)] in
   let layouts = [(0w, ([( (NONE,"0.m"), 0)], []))] in
-  IS_SOME (check_contract F layouts 0w mods) /\
+  check_contract F layouts 0w mods = NONE /\
   build_hashmap_info tops (SOME 0,"m") = NONE /\
   FLOOKUP (build_contract_type_artifact F mods).cta_toplevel_vtypes
     (SOME 0,"m") = NONE
+Proof
+  EVAL_TAC
+QED
+
+Theorem struct_namespace_collision_rejected:
+  let ty = BaseT (UintT 256) in
+  let sty = StructT (NONE,"0.Foo") in
+  let mods =
+    [(NONE,[StructDecl "0.Foo" [("a",ty); ("b",ty)];
+            FunctionDecl External View F F "get" [("arg",sty)] [] ty
+              [Return (SOME (Attribute ty (Name sty "arg") "a"))]]);
+     (SOME 0,[StructDecl "Foo" [("b",ty); ("a",ty)]])] in
+  check_contract F [] (2w : 160 word) mods = NONE /\
+  check_contract T [] (2w : 160 word) mods = NONE
 Proof
   EVAL_TAC
 QED
