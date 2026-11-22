@@ -337,6 +337,8 @@ Theorem aug_place_legacy_subscript_info:
   IS_SOME (supported_target_info tops bindings
     (SubscriptTarget (TopLevelNameTarget id) key))
 Proof
+  Cases_on `FST id <> NONE`
+  >- simp[supportedTargetsTheory.supported_target_info_def] >>
   simp[supportedExprFormsTheory.supported_subscript_base_def] >>
   strip_tac
   >- suspend "array"
