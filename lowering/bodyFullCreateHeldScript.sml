@@ -5308,8 +5308,8 @@ Theorem create_dalloca_cut_bound[local]:
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   inst.inst_opcode = DALLOCA /\
-  venomLayout$ceil32 (w2n sz) <= 2 ** 255 + 2 ** 64 ==>
-  w2n s.vs_fmp + venomLayout$ceil32 (w2n sz) < dimword (:256)
+  venomLayout$ceil32 n <= 2 ** 255 + 2 ** 64 ==>
+  w2n s.vs_fmp + venomLayout$ceil32 n < dimword (:256)
 Proof
   strip_tac >>
   `!b. MEM b func.fn_blocks ==> phi_prefix_length b.bb_instructions = 0` by
@@ -5326,7 +5326,7 @@ Proof
      disch_then (qspecl_then [`func`,`inst`,`s`] mp_tac) >> simp[] >>
      disch_then irule >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `dalloca_fmp_headroom inst s` mp_tac >>
-  qpat_x_assum `venomLayout$ceil32 (w2n sz) <= _` mp_tac >>
+  qpat_x_assum `venomLayout$ceil32 n <= _` mp_tac >>
   simp[dalloca_fmp_headroom_def,arithmeticTheory.MAX_DEF] >>
   rw[] >> decide_tac
 QED
@@ -5492,7 +5492,7 @@ Resume create_copy_prepared_path[allocate]:
      simp[wordsTheory.w2n_n2w,wordsTheory.dimword_def] >>
      decide_tac) >>
   drule_all (Q.INST [`s` |-> `pre`, `inst` |-> `alloc_inst`,
-    `sz` |-> `n2w (LENGTH code + 32):bytes32`] create_dalloca_cut_bound) >>
+    `n` |-> `w2n (n2w (LENGTH code + 32):bytes32)`] create_dalloca_cut_bound) >>
   strip_tac >>
   drule_all (Q.INST [`s` |-> `pre`, `tn` |-> `ta`]
     bodyFullDynamicBufferTheory.dalloca_origin_region_exact) >>
@@ -6399,7 +6399,7 @@ Resume create_blueprint_materialize[total]:
   `venomLayout$ceil32 (w2n (n2w N:bytes32)) <= 2 ** 255 + 2 ** 64` by
     simp[Abbr `N`,IgnAsm `prefix = _`] >>
   drule_all (Q.INST [`s` |-> `u`, `inst` |-> `i`,
-    `sz` |-> `n2w N:bytes32`] create_dalloca_cut_bound) >>
+    `n` |-> `w2n (n2w N:bytes32)`] create_dalloca_cut_bound) >>
   strip_tac >>
   drule_all (Q.INST [`s` |-> `u`, `tn` |-> `tu`]
     bodyFullDynamicBufferTheory.dalloca_origin_region_exact) >>
