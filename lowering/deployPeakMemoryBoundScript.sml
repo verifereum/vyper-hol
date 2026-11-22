@@ -110,34 +110,38 @@ Theorem dalloca_windows_packaged_constructor[local]:
     (compile_stmts env NoLoop NoneT fbody)
 Proof
   strip_tac >>
-  drule classify_functions_ctor_mem >> strip_tac >>
-  `~supported_stmts_expr_exists short_builtin_args raw_body /\
-   EVERY (\e. ~supported_expr_exists short_builtin_args e) raw_defaults` by
-    metis_tac[checked_source_builtin_arity] >>
-  `~supported_stmts_expr_exists blueprint_create_root raw_body /\
-   EVERY (\e. ~supported_expr_exists blueprint_create_root e) raw_defaults` by
-    metis_tac[] >>
-  `!mut nr rr name args ds ret ss.
-    MEM (FunctionDecl Internal mut nr rr name args ds ret ss) source_tops ==>
-    ~supported_stmts_expr_exists blueprint_create_root ss /\
-    EVERY (\d. ~supported_expr_exists blueprint_create_root d) ds` by
-    metis_tac[] >>
-  `compile_env_blueprint_free
-      (build_compile_env source_tops Deploy mut (name:string) args ret ss tr) /\
-    compile_env_builtin_arity
+  Cases_on `!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1` >>
+  fs[] >>
+  (drule classify_functions_ctor_mem >> strip_tac >>
+    `~supported_stmts_expr_exists short_builtin_args raw_body /\
+     EVERY (\e. ~supported_expr_exists short_builtin_args e) raw_defaults` by
+      metis_tac[checked_source_builtin_arity] >>
+    TRY (`~supported_stmts_expr_exists blueprint_create_root raw_body /\
+     EVERY (\e. ~supported_expr_exists blueprint_create_root e) raw_defaults` by
+      metis_tac[] >>
+    `!mut nr rr name args ds ret ss.
+      MEM (FunctionDecl Internal mut nr rr name args ds ret ss) source_tops ==>
+      ~supported_stmts_expr_exists blueprint_create_root ss /\
+      EVERY (\d. ~supported_expr_exists blueprint_create_root d) ds` by
+      metis_tac[]) >>
+    `compile_env_builtin_arity
       (build_compile_env source_tops Deploy mut (name:string) args ret ss tr)` by
-    metis_tac[build_compile_env_blueprint_free, build_compile_env_builtin_arity] >>
-  drule_all (Q.INST [`stmts` |-> `raw_body`, `dflts` |-> `raw_defaults`]
-    subst_consts_fn_blueprint_free) >> strip_tac >>
-  drule_all (Q.INST [`stmts` |-> `raw_body`, `dflts` |-> `raw_defaults`]
-    subst_checked_fn_builtin_arity) >> strip_tac >>
-  mp_tac (Q.INST [`ce` |-> `build_compile_env source_tops Deploy mut (name:string) args ret ss tr`,
-    `env` |-> `env`, `fbody` |-> `fbody`, `lc` |-> `NoLoop`, `rt` |-> `NoneT`]
-    dalloca_windows_packaged_stmts) >>
-  impl_tac >-
-    gvs[package_constructor_def, set_constructor_package_target_def,
-        update_cenv_nonreentrant_def, subst_consts_fn_def] >>
-  simp[]
+      metis_tac[build_compile_env_builtin_arity] >>
+    TRY (
+      `compile_env_blueprint_free
+        (build_compile_env source_tops Deploy mut (name:string) args ret ss tr)` by
+        metis_tac[build_compile_env_blueprint_free] >>
+      drule_all (Q.INST [`stmts` |-> `raw_body`, `dflts` |-> `raw_defaults`]
+        subst_consts_fn_blueprint_free) >> strip_tac) >>
+    drule_all (Q.INST [`stmts` |-> `raw_body`, `dflts` |-> `raw_defaults`]
+      subst_checked_fn_builtin_arity) >> strip_tac >>
+    mp_tac (Q.INST [`ce` |-> `build_compile_env source_tops Deploy mut (name:string) args ret ss tr`,
+      `env` |-> `env`, `fbody` |-> `fbody`, `lc` |-> `NoLoop`, `rt` |-> `NoneT`]
+      dalloca_windows_packaged_stmts) >>
+    impl_tac >-
+      gvs[package_constructor_def, set_constructor_package_target_def,
+          update_cenv_nonreentrant_def, subst_consts_fn_def] >>
+    simp[])
 QED
 
 Theorem lower_vyper_deploy_unit_dalloca_windows_for:
@@ -156,7 +160,8 @@ Theorem lower_vyper_deploy_unit_dalloca_windows_for:
 Proof
   strip_tac >>
   fs[deploy_typing_ok_def] >>
-  `!mut nr rr name args ds ret ss.
+  `~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+    !mut nr rr name args ds ret ss.
     MEM (FunctionDecl Internal mut nr rr name args ds ret ss) source_tops ==>
     ~supported_stmts_expr_exists blueprint_create_root ss /\
     EVERY (\d. ~supported_expr_exists blueprint_create_root d) ds` by
@@ -185,7 +190,7 @@ Proof
                (FST (SND (classify_functions source_tops)))`]
          (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
            dalloca_windows_packaged_internals) checked))) >>
-     simp[] >> impl_tac >- first_assum ACCEPT_TAC >>
+     simp[] >> impl_tac >- simp[] >>
      simp[]) >>
   simp[]
 QED

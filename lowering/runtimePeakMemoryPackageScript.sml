@@ -137,9 +137,9 @@ Proof
 QED
 
 Theorem dalloca_windows_packaged_internals:
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\
   (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
   (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) /\
-  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\
   (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
     !mut nr rr name args ds ret ss.
     MEM (FunctionDecl Internal mut nr rr name args ds ret ss) source_tops ==>
