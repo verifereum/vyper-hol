@@ -29,13 +29,15 @@ val shadow_group = ``\group. case group of
   ExternalSingle selector package =>
     ExternalSingle selector (gas_shadow_external_package package)
 | ExternalDefaults common entries specs off =>
-    ExternalDefaults (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+    ExternalDefaults (common with <| ec_env := gas_shadow_env T common.ec_env;
+      ec_body := MAP gas_shadow_stmt common.ec_body |>)
       entries (MAP (\(n,ty,e). (n,ty,gas_shadow_expr e)) specs) off``;
 
 val shadow_job = ``\job. case job of
   ExternalLegacyJob package => ExternalLegacyJob (gas_shadow_external_package package)
 | ExternalCommonJob common kwvars => ExternalCommonJob
-    (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+    (common with <| ec_env := gas_shadow_env T common.ec_env;
+      ec_body := MAP gas_shadow_stmt common.ec_body |>)
     (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) kwvars)``;
 
 val start = ``vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>``;

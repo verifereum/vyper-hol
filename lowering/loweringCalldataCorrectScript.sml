@@ -80,12 +80,7 @@ Triviality runtime_dispatched_readings_certificate[local]:
            (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
            INR (Error (RuntimeError "msg.gas: no gas reading")))
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `internal_defaults_msg_gas tops`
-  >- (drule_all runtime_body_internal_default_gas_readings >>
-      disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
-      qexists_tac `shadow_unit` >> rpt gen_tac >> strip_tac >>
-      first_x_assum (qspecl_then [`am`, `tx`, `ret`, `vs`] mp_tac) >>
-      fs[dispatched_vyper_call_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
   Cases_on `EXISTS external_has_defaults (FST (classify_functions tops))`
   >- (drule_all runtime_body_grouped_default_readings >>
       disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>

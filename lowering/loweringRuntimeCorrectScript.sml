@@ -1889,8 +1889,7 @@ Theorem lower_vyper_runtime_unit_correct_readings_available:
            (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
          INR (Error (RuntimeError "msg.gas: no gas reading")))
 Proof
-  rpt strip_tac >> Cases_on `internal_defaults_msg_gas tops`
-  >- runtime_alternate_readings_tac runtime_body_internal_default_gas_readings >>
+  rpt strip_tac >>
   Cases_on `EXISTS external_has_defaults (FST (classify_functions tops))`
   >- runtime_alternate_readings_tac runtime_body_grouped_default_readings >>
   selected_entry_split_tac
