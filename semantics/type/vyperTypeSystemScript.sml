@@ -446,7 +446,9 @@ Definition well_typed_builtin_app_def:
     (ts = [BaseT (UintT 256); BaseT (UintT 256)] /\ ty = BaseT (UintT 256)) /\
   well_typed_builtin_app ty Abs ts =
     (ty = BaseT (IntT 256) /\ ts = [BaseT (IntT 256)]) /\
-  well_typed_builtin_app ty NamedConst ts = (ts = [ty])
+  well_typed_builtin_app ty NamedConst ts = (ts = [ty]) /\
+  well_typed_builtin_app ty (BoolChain _ _) ts =
+    (ts = [BaseT BoolT] /\ ty = BaseT BoolT)
 End
 
 Definition well_formed_type_def:

@@ -1008,15 +1008,25 @@ Definition pin_bool_values_def:
   pin_bool_values _ = NONE
 End
 
+(* A chain of 3 or more operands is marked BoolChain around the nested IfExp
+   it desugars to, so the lowering can follow the pinned compiler's
+   lower_BoolOp; `(b and c) if a else False` has the same IfExp and lowers as
+   a ternary. *)
+Definition bool_chain_def:
+  bool_chain is_and es e =
+    if 3 <= LENGTH es then Builtin (BaseT BoolT) (BoolChain is_and (LENGTH es)) [e]
+    else e
+End
+
 Definition translate_boolop_def:
   translate_boolop JBoolop_And es =
     (case pin_bool_values (MAP origin_fold_value es) of
      | SOME bs => Literal (BaseT BoolT) (BoolL (EVERY I bs))
-     | NONE => boolop_and es) /\
+     | NONE => bool_chain T es (boolop_and es)) /\
   translate_boolop JBoolop_Or es =
     (case pin_bool_values (MAP origin_fold_value es) of
      | SOME bs => Literal (BaseT BoolT) (BoolL (EXISTS I bs))
-     | NONE => boolop_or es)
+     | NONE => bool_chain F es (boolop_or es))
 End
 
 
