@@ -181,6 +181,14 @@ Proof
   Cases_on `h` >> simp[ALOOKUP_def]
 QED
 
+Theorem named_array_args_mods_singleton[local]:
+  named_array_args_mods (MAP (λ(id,v). ((NONE,id),v)) env) bi es es' =
+  named_array_args env bi es es'
+Proof
+  rw[named_array_args_mods_def, named_array_args_def] >>
+  BasicProvers.every_case_tac >> gvs[alookup_main_consts]
+QED
+
 Theorem subst_consts_expr_mods_singleton[local]:
   (∀env e. subst_consts_expr_mods (MAP (λ(id,v). ((NONE,id),v)) env) e =
            subst_consts_expr env e) ∧
@@ -194,7 +202,8 @@ Theorem subst_consts_expr_mods_singleton[local]:
             subst_consts_fields env fs)
 Proof
   ho_match_mp_tac subst_consts_expr_ind >>
-  simp[subst_consts_expr_mods_def, subst_consts_expr_def, alookup_main_consts] >>
+  simp[subst_consts_expr_mods_def, subst_consts_expr_def, alookup_main_consts,
+       named_array_args_mods_singleton] >>
   rpt gen_tac >> Cases_on `ns` >> simp[]
 QED
 

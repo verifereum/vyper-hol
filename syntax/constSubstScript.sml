@@ -277,6 +277,12 @@ Definition named_array_args_def:
     | _ => es'
 End
 
+Theorem named_array_args_nil[simp]:
+  named_array_args [] bi es es' = es'
+Proof
+  rw[named_array_args_def] >> BasicProvers.every_case_tac >> gvs[]
+QED
+
 Definition subst_consts_expr_def:
   subst_consts_expr env (Name ty id) = Name ty id /\
   subst_consts_expr env (TopLevelName ty (ns,id)) =
