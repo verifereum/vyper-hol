@@ -171,8 +171,7 @@ Proof
     (Cases_on `FLOOKUP cenv.ce_vars id` >> simp[] >>
      fs[ce_locals_declared_def] >> metis_tac[]) >>
   `body_stmt_safe tops (AnnAssign id (expr_type e) e)` by
-    simp[body_stmt_safe_def, supported_stmt_expr_exists_def,
-         int_calls_stmt_def, GSYM expr_has_evm_run_def, EVERY_CONJ] >>
+    metis_tac[supported_stmt_body_safe] >>
   drule_all_then strip_assume_tac annassign_full_declared_rhs_pre >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       rhs_ce cx (expr_type e) e es` by
