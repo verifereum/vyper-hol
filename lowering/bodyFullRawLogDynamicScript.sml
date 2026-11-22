@@ -15,8 +15,8 @@ Theorem raw_log_dynamic_data_full:
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx (expr_type data) data es /\
   lower_value compile_expr cenv (expr_type data) data sa = (data_op,sm) /\
-  lower_value compile_expr cenv (expr_type data) (gas_shadow_expr data)
-    shadow_sa = (data_op,shadow_sm) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type data)
+    (gas_shadow_expr data) shadow_sa = (data_op,shadow_sm) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sm shadow_sm /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\
