@@ -173,10 +173,10 @@ Theorem body_ifexp_children_full_ok_mods:
      body_expr_full_ok_mods mods exps cx b)
 Proof
   rpt gen_tac >>
-  disch_then
-    (mp_tac o CONJUNCT2 o CONJUNCT1 o CONJUNCT2 o
-      ONCE_REWRITE_RULE [body_expr_full_ok_mods_def]) >>
-  simp[]
+  disch_then (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_mods_def]) >>
+  qpat_x_assum `!t' c' a' b'. IfExp _ _ _ _ = IfExp t' c' a' b' ==> _`
+    (qspecl_then [`t`, `c`, `a`, `b`] mp_tac) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem contract_inv_singleton_pins[local]:
@@ -273,15 +273,27 @@ Proof
       ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
       (body_exprs_full_ok_mods mods exps cx es <=> body_exprs_full_ok cx es))` by
     (ho_match_mp_tac body_expr_full_ok_mods_ind >> rpt conj_tac >>
-     rpt strip_tac >> gvs[] >>
-     ASSUM_LIST (MAP_EVERY assume_tac o mapfilter (MATCH_MP body_inv_singleton)) >>
+     rpt strip_tac >> gvs[]
+     >- (rename1 `body_expr_full_ok_mods _ _ cx' e <=> _` >>
+         `!t c a b. e = IfExp t c a b ==>
+            (((?s tv s'. eval_expr cx' c s = (INL tv,s')) ==>
+              body_expr_full_ok_mods [(NONE,tops)] [] cx' a /\
+              body_expr_full_ok_mods [(NONE,tops)] [] cx' b) <=>
+             ((?s tv s'. eval_expr cx' c s = (INL tv,s')) ==>
+              body_expr_full_ok cx' a /\ body_expr_full_ok cx' b))` by
+           (rpt gen_tac >> disch_tac >>
+            Cases_on `?s tv s'. eval_expr cx' c s = (INL tv,s')` >>
+            simp[] >> metis_tac[]) >>
+         drule body_inv_singleton >> strip_tac >>
+         once_rewrite_tac[body_expr_full_ok_mods_def, body_expr_full_ok_def] >>
+         simp[module_body_inv_def, ALOOKUP_def] >>
+         simp[FORALL_OPTION, GSYM shadow_body_inv_split_def, GSYM AND_IMP_INTRO] >>
+         once_rewrite_tac[contract_inv_singleton_guard] >>
+         simp[expr_body_pre_mods_singleton, expr_map_pre_mods_singleton,
+             expr_sim_full_mods_singleton, expr_vv_sim_full_mods_singleton,
+             expr_map_sim_full_mods_singleton]) >>
      once_rewrite_tac[body_expr_full_ok_mods_def, body_expr_full_ok_def] >>
-     simp[module_body_inv_def, ALOOKUP_def] >>
-     simp[FORALL_OPTION, GSYM shadow_body_inv_split_def, GSYM AND_IMP_INTRO] >>
-     once_rewrite_tac[contract_inv_singleton_guard] >>
-     simp[expr_body_pre_mods_singleton, expr_map_pre_mods_singleton,
-         expr_sim_full_mods_singleton, expr_vv_sim_full_mods_singleton,
-         expr_map_sim_full_mods_singleton] >>
+     simp[] >>
      Cases_on `?s tv t s1 v t1. eval_expr cx' e s = (INL tv,t) /\
                               read_result cx' tv s1 = (INL v,t1)` >>
      simp[] >>
