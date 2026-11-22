@@ -118,17 +118,18 @@ Proof
     (SPEC_ALL external_package_bare_globals)) >>
   impl_tac >- asm_rewrite_tac[] >> strip_tac >>
   `~cx.in_deploy` by simp[Abbr `cx`,initial_evaluation_context_def] >>
+  qpat_assum `source_deployment_rel tops am tx`
+    (assume_tac o CONJUNCT1 o REWRITE_RULE [source_deployment_rel_def]) >>
   `!src ts. get_module_code cx src = SOME ts ==> src = NONE /\ ts = tops` by
     (gen_tac >> Cases_on `src` >>
-     fs[Abbr `cx`,get_module_code_def, initial_evaluation_context_def,
-        source_deployment_rel_def]) >>
+     qpat_assum `ALOOKUP am.sources tx.target = SOME [(NONE,tops)]` (fn lookup =>
+       simp[NoAsms, Abbr `cx`, get_module_code_def,
+            initial_evaluation_context_def, lookup])) >>
   `!src ts. get_module_code cx src = SOME ts ==> src = NONE` by
     metis_tac[] >>
   `cenv_module_pins tops ce` by (drule intcall_args_body_inv_pins >> simp[]) >>
   `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
     metis_tac[source_typing_ok_type_def_keys_distinct] >>
-  `ALOOKUP am.sources tx.target = SOME [(NONE,tops)]` by
-    fs[source_deployment_rel_def] >>
   `get_tenv cx = type_env tops` by
     (simp_tac (srw_ss()) [Abbr `cx`,get_tenv_def, initial_evaluation_context_def,
        type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2] >>
