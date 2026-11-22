@@ -404,7 +404,7 @@ Proof
     stmt_mutability_ok_def, function_int_calls_def, supported_declaration_body_def,
     supported_function_body_def, supported_stmt_def, body_stmts_safe_iff,
     body_stmt_safe_def, supported_stmt_bindings_def, supported_stmt_expr_exists_def,
-    int_calls_stmt_def, int_calls_expr_def, LET_THM]
+    int_calls_stmt_def, int_calls_expr_def, supported_pure_expr_def, LET_THM]
 QED
 
 Theorem linked_two_module_internal_code:

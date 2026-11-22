@@ -65,6 +65,10 @@ Theorem augassign_entry_target_indices_pre:
   target_indices_pre cenv cx env t
 Proof
   strip_tac >>
+  `call_evaluation_safe cx (int_calls_target t)` by
+    (qpat_assum `call_evaluation_safe cx (int_calls_stmt (AugAssign _ _ _ _))`
+      (ACCEPT_TAC o MATCH_MP call_evaluation_safe_append_left o
+       PURE_REWRITE_RULE [int_calls_stmt_def])) >>
   Cases_on `(?bt fld. t = AttributeTarget bt fld) \/
             (?bt k. t = SubscriptTarget bt k)`
   >- (
@@ -95,8 +99,7 @@ Proof
     >- (qexists_tac `bindings` >> conj_tac
         >- (qexists_tac `pt` >> simp[]) >>
         rpt strip_tac >> res_tac >> fs[optionTheory.IS_SOME_EXISTS]) >>
-    qpat_assum `call_evaluation_safe cx (int_calls_target t ++ int_calls_expr e)`
-      (ACCEPT_TAC o MATCH_MP call_evaluation_safe_append_left)) >>
+    simp[]) >>
   Cases_on `t` >> gvs[target_indices_pre_def]
 QED
 
