@@ -3721,6 +3721,9 @@ Resume append_nested_memory_cont_full[finish]:
   qpat_assum `typed_copy_state_frame sa _ _ s t`
     (strip_assume_tac o SIMP_RULE (srw_ss())
       [typed_copy_state_frame_def, venomStateTheory.venom_state_component_equality]) >>
+  simp[] >> rpt strip_tac >>
+  qpat_assum `!aid off sz i. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\ _ ==> _`
+    (qspecl_then [`aid`, `off`, `sz`, `i`] mp_tac) >>
   simp[]
 QED
 

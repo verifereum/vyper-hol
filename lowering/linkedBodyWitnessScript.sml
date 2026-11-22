@@ -21,20 +21,12 @@ val reduce_fold = DEPTH_CONV (fn tm =>
 val linked_mods_normalized =
   CONV_RULE (RAND_CONV (reduce_fold THENC EVAL)) linked_witness_mods_def
 
-Triviality linked_witness_headers:
-  EVERY (supported_module_headers o SND) linked_witness_mods
-Proof
-  simp[linked_mods_normalized, EVERY_DEF] >> rpt conj_tac >> EVAL_TAC
-QED
-
-Triviality linked_witness_main_support:
-  supported_program (main_module linked_witness_mods) /\
-  supported_program_deploy (main_module linked_witness_mods)
-Proof
-  simp[linked_mods_normalized, main_module_def, ALOOKUP_def,
-       supported_program_def, supported_program_deploy_def, EVERY_DEF] >>
-  rpt conj_tac >> EVAL_TAC
-QED
+val eval_linked_fixture = REWRITE_CONV [linked_mods_normalized] THENC EVAL
+val linked_witness_headers = EQT_ELIM (eval_linked_fixture
+  ``EVERY (supported_module_headers o SND) linked_witness_mods``)
+val linked_witness_main_support = EQT_ELIM (eval_linked_fixture
+  ``supported_program (main_module linked_witness_mods) /\
+    supported_program_deploy (main_module linked_witness_mods)``)
 
 Theorem linked_witness_imported_constructor:
   ?tops. ALOOKUP linked_witness_mods (SOME 2) = SOME tops /\
