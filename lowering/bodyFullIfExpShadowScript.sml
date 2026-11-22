@@ -5,7 +5,7 @@ Theory bodyFullIfExpShadow
 Ancestors
   gasShadow gasShadowState exprSimIfExp exprLoweringProps exprLowering
   emitHelperProps fragExec compileEnv loweringPosts vyperAST loweringStateRelDefs
-  gasShadowCompilePure
+  gasShadowCompilePure gasShadowCompileBase
 
 Theorem gas_shadow_call[local]:
   gas_shadow_compiles f g /\ gas_shadow_state s ss /\
@@ -114,33 +114,32 @@ Proof
   simp[]
 QED
 
-(* The three spine premises are instances of gasShadowCompile's
-   gas_shadow_compile_expr, gas_shadow_compiles_lower_value and the
-   arm helpers' shadow compilation (alloc buffer, unwrap, store). *)
+(* The spine premises pair the condition, arm expression and conversion
+   at the real and shadow compiler environments. *)
 Theorem ifexp_shadow_code_layout:
   compile_expr cenv ty (IfExp t c a b) st = (vv,st') /\
-  compile_expr cenv ty (gas_shadow_expr (IfExp t c a b)) shadow_st =
+  compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (IfExp t c a b)) shadow_st =
     (vv,shadow_st') /\
   gas_shadow_state st shadow_st /\
   fn_has_code st st' func /\ fn_has_code shadow_st shadow_st' shadow_func /\
   local_ptrs_reserved cenv st /\
   (!ty' e. gas_shadow_compiles (compile_expr cenv ty' e)
-             (compile_expr cenv ty' (gas_shadow_expr e))) /\
+             (compile_expr (gas_shadow_env T cenv) ty' (gas_shadow_expr e))) /\
   (!ty' e. gas_shadow_compiles (lower_value compile_expr cenv ty' e)
-             (lower_value compile_expr cenv ty' (gas_shadow_expr e))) /\
+             (lower_value compile_expr (gas_shadow_env T cenv) ty' (gas_shadow_expr e))) /\
   (!rt at av. gas_shadow_compiles (compile_ifexp_arm cenv rt at av)
-                (compile_ifexp_arm cenv rt at av)) ==>
+                (compile_ifexp_arm (gas_shadow_env T cenv) rt at av)) ==>
   ?cop sc shadow_sc sj sn tl el xl rv se shadow_se av sea shadow_sea aop
    sx sy sz.
     lower_value compile_expr cenv (BaseT BoolT) c st = (cop,sc) /\
-    lower_value compile_expr cenv (BaseT BoolT) (gas_shadow_expr c)
+    lower_value compile_expr (gas_shadow_env T cenv) (BaseT BoolT) (gas_shadow_expr c)
       shadow_st = (cop,shadow_sc) /\
     gas_shadow_state sc shadow_sc /\
     emit_inst JNZ [cop; Label tl; Label el] [] sj = ((),sn) /\
     sj.cs_current_bb = sc.cs_current_bb /\
     sj.cs_current_insts = sc.cs_current_insts /\
     compile_expr cenv ty (if sel then a else b) se = (av,sea) /\
-    compile_expr cenv ty (gas_shadow_expr (if sel then a else b)) shadow_se =
+    compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (if sel then a else b)) shadow_se =
       (av,shadow_sea) /\
     gas_shadow_state se shadow_se /\ gas_shadow_state sea shadow_sea /\
     compile_ifexp_arm cenv t (lowered_value_type cenv (if sel then a else b))
