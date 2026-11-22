@@ -212,6 +212,10 @@ Theorem ctor_checked_arg_sequence_reach:
             i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS)
    (emitted_insts st middle) /\
  run_inst_seq_mem_ok (emitted_insts st middle) initial /\
+ (ptrDiscipline$ctx_has_dalloca ctx ==>
+   !pre i post u. (emitted_insts st middle) = pre ++ i::post /\
+     run_inst_seq pre initial = OK u ==>
+     unitTransformDefs$dalloca_no_wrap i u) /\
  run_inst_seq (emitted_insts st middle) initial = OK raw /\
  raw.vs_allocas = initial.vs_allocas /\ raw.vs_current_bb = initial.vs_current_bb /\
  alloca_history func initial /\
