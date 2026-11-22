@@ -38,7 +38,9 @@ Proof
      simp[]) >>
   `!ts. mods <> [(NONE,ts)]` by (rpt strip_tac >> gvs[ALOOKUP_def]) >>
   `context_function_live cx (SOME x,name)` by
-    fs[fn_sigs_live_def] >>
+    (qpat_assum `fn_sigs_live _ _` mp_tac >>
+     simp_tac bool_ss [fn_sigs_live_def] >>
+     disch_then (qspecl_then [`(SOME x,name)`,`sig`] mp_tac) >> simp[]) >>
   qpat_x_assum `linked_fn_sigs_declared _ _ _` mp_tac >>
   simp[linked_fn_sigs_declared_def] >>
   disch_then (qspecl_then [`SOME x`, `name`, `sig`] mp_tac) >>
