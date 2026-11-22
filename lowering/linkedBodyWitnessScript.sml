@@ -159,7 +159,14 @@ Proof
   drule_all_then (qspec_then `src` strip_assume_tac) linked_witness_contract_inv >>
   `check_function_body_in_mode cx.in_deploy vis` by
     metis_tac[check_function_body_in_mode_def] >>
-  drule_all_then strip_assume_tac linked_witness_closed_bodies >>
+  drule_all_then (qspec_then `cx.in_deploy` strip_assume_tac)
+    linked_witness_closed_bodies >>
+  `function_live cx.layouts cx.txn.target linked_witness_mods
+      (live_functions cx.layouts cx.txn.target linked_witness_mods) (src,name)` by
+    (qpat_assum `context_function_live cx (src,name)`
+       (mp_tac o REWRITE_RULE [context_function_live_def]) >>
+     qpat_assum `ALOOKUP cx.sources cx.txn.target = SOME linked_witness_mods`
+       (fn sources => simp[NoAsms, sources])) >>
   drule_all_then assume_tac check_contract_function_body_MEM >>
   `MEM (src,tops) linked_witness_mods` by metis_tac[ALOOKUP_MEM] >>
   rpt conj_tac

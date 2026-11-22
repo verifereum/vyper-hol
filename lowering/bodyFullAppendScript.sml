@@ -6225,7 +6225,8 @@ Resume body_append_storage_word_frag_full[rhs_exit]:
   qx_genl_tac [`H`, `result`, `ee`, `gt`, `r`] >>
   Cases_on `result` >> simp[exprSimDefsTheory.expr_exit_INL] >>
   strip_tac >> simp[stmt_exit_ptr_def] >>
-  metis_tac[stmtSimPropsTheory.expr_exit_INR_type, exprSimDefsTheory.halt_exit_INR_type]
+  conj_tac >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+  fs[exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume body_append_storage_word_frag_full[suffix]:
@@ -6653,7 +6654,8 @@ Resume body_append_storage_aggregate_frag_full[rhs_exit]:
   qx_genl_tac [`H`, `result`, `ee`, `gt`, `r`] >>
   Cases_on `result` >> simp[exprSimDefsTheory.expr_exit_INL] >>
   strip_tac >> simp[stmt_exit_ptr_def] >>
-  metis_tac[stmtSimPropsTheory.expr_exit_INR_type, exprSimDefsTheory.halt_exit_INR_type]
+  conj_tac >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+  fs[exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume body_append_storage_aggregate_frag_full[suffix]:
