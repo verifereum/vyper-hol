@@ -64,7 +64,8 @@ Theorem compile_raise_custom_frag_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Raise (RaiseCustomError err)))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Raise (RaiseCustomError err))))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty
+        (gas_shadow_stmt (Raise (RaiseCustomError err))))
       (eval_stmt cx (Raise (RaiseCustomError err))) es
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `err` >> rename1 `CustomError id pos kw` >>
@@ -76,7 +77,8 @@ Proof
   qabbrev_tac `tys = MAP (lowered_value_type cenv) args` >>
   mp_tac (Q.INST [`ce` |-> `cenv`, `ta` |-> `shadow_sa`,
     `tb` |-> `shadow_sb`, `sfunc` |-> `shadow_func`, `ty` |-> `ret_ty`,
-    `ca` |-> `cenv'`, `ct` |-> `cenv'`] compile_raise_custom_layout_full) >>
+    `ca` |-> `cenv'`, `ct` |-> `gas_shadow_env T cenv'`]
+    compile_raise_custom_layout_full) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[Abbr `tys`]) >>
   disch_then (qx_choosel_then [`saved`,`se`,`te`,`buf`,`sm`,`ss`]
     strip_assume_tac) >>
