@@ -318,7 +318,7 @@ Theorem annassign_word_full_rhs[local]:
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     ce cx (expr_type e) e es /\
   lower_value compile_expr ce (expr_type e) e a = (op,b) /\
-  lower_value compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_a = (op,shadow_b) /\
+  lower_value compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) shadow_a = (op,shadow_b) /\
   gas_shadow_state a shadow_a /\ gas_shadow_state b shadow_b /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -518,10 +518,11 @@ Theorem annassign_word_full_runtime_preparation[local]:
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   declare_local cenv id (expr_type e) sa = (cenv',r) /\
-  declare_local cenv id (expr_type e) shadow_sa = (cenv',r') /\
+  declare_local (gas_shadow_env T cenv) id (expr_type e) shadow_sa =
+    (gas_shadow_env T cenv',r') /\
   compile_stmt cenv' lctx ret_ty (AnnAssign id (expr_type e) e) r = ((),sf) /\
-  compile_stmt cenv' lctx ret_ty (AnnAssign id (expr_type e) (gas_shadow_expr e)) r' =
-    ((),shadow_sf) ==>
+  compile_stmt (gas_shadow_env T cenv') lctx ret_ty
+    (AnnAssign id (expr_type e) (gas_shadow_expr e)) r' = ((),shadow_sf) ==>
   ?p a b op w t Ga tna.
     FLOOKUP cenv'.ce_vars id = SOME (PtrVar (Var p) 32) /\
     (!n. n <> id ==> FLOOKUP cenv'.ce_vars n = FLOOKUP cenv.ce_vars n) /\
@@ -578,17 +579,46 @@ Proof
     (qx_choosel_then [`w`, `t`, `G'`, `tn'`] strip_assume_tac)) >>
   qpat_x_assum `32 = type_memory_bytes cenv (expr_type e)` (assume_tac o SYM) >>
   `gas_shadow_state r r'` by
-    (mp_tac (Q.INST [`ty` |-> `expr_type e`] gas_shadow_compiles_declare_local) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
+    (mp_tac (Q.INST [`cenv` |-> `cenv`, `id` |-> `id`, `ty` |-> `expr_type e`, `sd` |-> `T`]
+       gas_shadow_compiles_env_declare_local) >>
+     rewrite_tac[gas_shadow_compiles_env_def] >>
      disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
   `r'.cs_blocks = shadow_sa.cs_blocks` by
-    (qpat_x_assum `declare_local _ _ _ shadow_sa = _` assume_tac >>
-     drule_all declare_local_ptr >> strip_tac >> gvs[]) >>
+    (drule_at (Pat `declare_local _ _ _ shadow_sa = _`) declare_local_ptr >>
+     simp[] >> strip_tac >> simp[]) >>
   `fn_has_code r' shadow_sf shadow_func` by
     fs[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def] >>
-  drule_all (SRULE [] (Q.INST [`typ` |-> `expr_type e`]
-    annassign_word_full_shadow_parts)) >> strip_tac >>
-  rename1 `lower_value _ _ _ (gas_shadow_expr e) _ = (shadow_op,shadow_b)` >> gvs[] >>
+  `local_ptrs_reserved (gas_shadow_env T cenv) shadow_sa` by
+    (`sa.cs_next_var = shadow_sa.cs_next_var` by
+       (qpat_assum `gas_shadow_state sa shadow_sa`
+          (strip_assume_tac o REWRITE_RULE [gasShadowStateTheory.gas_shadow_state_def]) >>
+        first_assum ACCEPT_TAC) >>
+     `local_ptrs_reserved cenv shadow_sa` by
+       (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+     qpat_assum `local_ptrs_reserved cenv shadow_sa` mp_tac >>
+     pure_rewrite_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def,
+       gasShadowCompileBaseTheory.gas_shadow_env_fields] >>
+     disch_then ACCEPT_TAC) >>
+  `local_ptrs_reserved (gas_shadow_env T cenv') r'` by
+    (drule_at (Pat `declare_local _ _ _ shadow_sa = _`) declare_local_reserved >>
+     disch_then irule >> first_assum ACCEPT_TAC) >>
+  qpat_assum `compile_stmt _ _ _ (AnnAssign _ _ (gas_shadow_expr _)) _ = _`
+    (mp_then (Pos hd) mp_tac compile_annassign_word_parts) >>
+  disch_then (qspecl_then [`shadow_func`,`p`,`32`] mp_tac) >>
+  simp[gas_shadow_expr_type] >>
+  (impl_tac >- metis_tac[compile_expr_grows]) >>
+  disch_then (qx_choosel_then [`shadow_a`,`shadow_b`,`shadow_op`] strip_assume_tac) >>
+  `gas_shadow_state sa' shadow_a` by
+    (mp_tac (Q.INST [`opc` |-> `ALLOCA`, `ops` |-> `[Lit 32w]`, `outs` |-> `[p]`]
+       gasShadowStateTheory.gas_shadow_compiles_emit_inst) >>
+     rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`r`,`r'`] mp_tac) >> simp[]) >>
+  `shadow_op = vop /\ gas_shadow_state sb shadow_b` by
+    (mp_tac (Q.INST [`cenv` |-> `cenv'`, `e` |-> `e`, `ty` |-> `expr_type e`, `sd` |-> `T`]
+       gas_shadow_stmt_lower_value_env) >>
+     rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`sa'`,`shadow_a`] mp_tac) >> simp[]) >>
+  gvs[] >>
   `cenv'.ce_is_ctor = cenv.ce_is_ctor` by
     (qpat_x_assum `cenv' with <|ce_vars := _; ce_dynarray_capacity := _;
                               ce_var_type := _|> = cenv` mp_tac >>
@@ -795,10 +825,11 @@ Theorem annassign_word_full_execution_sep:
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   declare_local cenv id (expr_type e) sa = (cenv',r) /\
-  declare_local cenv id (expr_type e) shadow_sa = (cenv',r') /\
+  declare_local (gas_shadow_env T cenv) id (expr_type e) shadow_sa =
+    (gas_shadow_env T cenv',r') /\
   compile_stmt cenv' lctx ret_ty (AnnAssign id (expr_type e) e) r = ((),sf) /\
-  compile_stmt cenv' lctx ret_ty (AnnAssign id (expr_type e) (gas_shadow_expr e)) r' =
-    ((),shadow_sf) ==>
+  compile_stmt (gas_shadow_env T cenv') lctx ret_ty
+    (AnnAssign id (expr_type e) (gas_shadow_expr e)) r' = ((),shadow_sf) ==>
   gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
     (eval_stmt cx (AnnAssign id (expr_type e) e)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?ce.
@@ -900,10 +931,11 @@ Theorem annassign_word_full_execution:
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   declare_local cenv id (expr_type e) sa = (cenv',r) /\
-  declare_local cenv id (expr_type e) shadow_sa = (cenv',r') /\
+  declare_local (gas_shadow_env T cenv) id (expr_type e) shadow_sa =
+    (gas_shadow_env T cenv',r') /\
   compile_stmt cenv' lctx ret_ty (AnnAssign id (expr_type e) e) r = ((),sf) /\
-  compile_stmt cenv' lctx ret_ty (AnnAssign id (expr_type e) (gas_shadow_expr e)) r' =
-    ((),shadow_sf) ==>
+  compile_stmt (gas_shadow_env T cenv') lctx ret_ty
+    (AnnAssign id (expr_type e) (gas_shadow_expr e)) r' = ((),shadow_sf) ==>
   gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
     (eval_stmt cx (AnnAssign id (expr_type e) e)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?ce.
