@@ -479,7 +479,9 @@ Resume grouped_default_call_route[retained]:
              simp_tac (srw_ss()) [pre,opened,reg,body])))) >>
      rpt strip_tac >> first_assum ACCEPT_TAC) >>
   `cs_extends checks sb /\ cs_extends sb sd /\ cs_extends term entry /\ cs_extends sb entry` by
-    (conj_tac >- metis_tac[ci_mono_def,cs_extends_trans] >>
+    (conj_tac >-
+      (irule cs_extends_trans >> qexists_tac `si` >> conj_tac >>
+       first_assum (ACCEPT_TAC o cj 1 o PURE_REWRITE_RULE [ci_mono_def])) >>
      rpt conj_tac >>
      first_assum (ACCEPT_TAC o cj 1 o PURE_REWRITE_RULE [ci_mono_def])) >>
   `cs_extends done se /\ cs_extends sb done` by
