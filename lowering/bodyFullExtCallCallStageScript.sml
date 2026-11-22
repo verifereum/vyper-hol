@@ -9,7 +9,7 @@ Ancestors
   abiCallerAllocation exprLoweringProps emitHelperProps
   gasOutcomeFullCompose vyperStorageTrace vyperStorageFootprint exprSimDefs
 
-Theorem extcall_call_intervals[local]:
+Theorem extcall_call_intervals:
   (if ret_type = NoneT /\ ~skip then compile_extcodesize_check addr
    else comp_return ()) sp = ((),s1) /\
   emit_op opc ops s1 = (success,s2) /\
@@ -67,7 +67,7 @@ Proof
 QED
 
 (* Split the call suffix without unfolding the individual code emitters. *)
-Theorem extcall_call_layout[local]:
+Theorem extcall_call_layout:
   !ret_type skip addr_op is_static gas_op call_offset call_len buf_op ret_len
    value_op sp u sr.
   comp_ignore_bind
@@ -223,7 +223,7 @@ Proof
 QED
 
 (* All errors before a successful take halt at the fetched instruction. *)
-Theorem extcall_fetched_select[local]:
+Theorem extcall_fetched_select:
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr value gas buf off len cap target value_opt calldata has_default
     default_op default_ty default_opt ee t /\
