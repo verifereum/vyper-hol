@@ -280,16 +280,16 @@ Proof
      cenv cx ty (Builtin (expr_type e) Not [e]) es` by
     (rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
      drule lower_value_not >> strip_tac >>
-     `?shadow_s1. lower_value compile_expr cenv (expr_type e)
-        (gas_shadow_expr e) shadow_sa = (x,shadow_s1) /\
-        gas_shadow_state s1 shadow_s1` by
-       (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type e`, `e` |-> `e`]
-          gas_shadow_stmt_lower_value) >>
-        simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-        disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >>
-        simp[] >> strip_tac >>
-        qexists_tac `SND (lower_value compile_expr cenv (expr_type e)
-          (gas_shadow_expr e) shadow_sa)` >> simp[pairTheory.PAIR]) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+         (gas_shadow_expr e) shadow_sa` >>
+     rename1 `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = (shadow_x,shadow_s1)` >>
+     `shadow_x = x /\ gas_shadow_state s1 shadow_s1` by
+       (`gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
+          (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+            (gas_shadow_expr e))` by irule gas_shadow_stmt_lower_value_env >>
+        pop_assum (qspecl_then [`sa`, `shadow_sa`] mp_tac o
+                   REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]) >> simp[]) >>
+     qpat_x_assum `shadow_x = x` SUBST_ALL_TAC >>
      `is_word_type (expr_type e)` by
        (qpat_x_assum `is_bool_type _ \/ _` mp_tac >>
         Cases_on `expr_type e` >> simp[is_word_type_def] >>
@@ -312,7 +312,8 @@ Proof
           gasShadowTheory.gas_shadow_builtin_def, MAP] >>
         simp[NoAsms] >>
         disch_then (strip_assume_tac o MATCH_MP lower_value_not) >>
-        gvs[gasShadowTheory.gas_shadow_expr_type]) >>
+        gvs[gasShadowTheory.gas_shadow_expr_type,
+            gasShadowCompileBaseTheory.compile_invert_gas_shadow_env]) >>
      `cs_extends shadow_sa shadow_s1` by
        metis_tac[cj 2 exprLoweringPropsTheory.compile_expr_grows] >>
      `cs_extends shadow_s1 shadow_sb` by
@@ -367,16 +368,14 @@ Proof
        exprSimSourceTheory.expr_body_pre_eval) >>
      disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     `env.type_defs = get_tenv cx` by
+       (qpat_assum `expr_sim_inv _ _ _ _` mp_tac >>
+        pure_rewrite_tac[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
+                         vyperTypeInvariantsTheory.env_context_consistent_def] >>
+        strip_tac >> first_assum ACCEPT_TAC) >>
      `?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
            value_has_type tv v` by
        (qpat_x_assum `!v'. INL v = INL v' ==> _` (qspec_then `v` mp_tac) >>
-        qpat_assum `expr_sim_inv _ _ _ _`
-          (mp_tac o CONJUNCT1 o
-           PURE_REWRITE_RULE [vyperTypeInvariantsTheory.env_context_consistent_def] o
-           CONJUNCT1 o PURE_REWRITE_RULE [vyperTypeInvariantsTheory.env_consistent_def] o
-           CONJUNCT1 o PURE_REWRITE_RULE [expr_sim_inv_def]) >>
-        rpt (pop_assum kall_tac) >>
-        strip_tac >>
         simp[vyperTypeExprResultTheory.expr_result_typed_def,
           vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
           vyperTypeInvariantsTheory.value_result_typed_def]) >>
