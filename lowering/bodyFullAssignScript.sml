@@ -2589,6 +2589,9 @@ Resume body_assign_field_store_joint_frame[edge]:
    ~is_terminator (mk_inst su.cs_next_id MSTORE [Var dst;op] []).inst_opcode` by
     (simp[mk_inst_def,is_terminator_def,below_frontier_MSTORE,
       eval_operand_def,inst_dload_in_section_def] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==>
+   dalloca_no_wrap (mk_inst su.cs_next_id MSTORE [Var dst;op] []) z` by
+    simp[mk_inst_def,dalloca_no_wrap_non_dalloca] >>
   drule_all straight_line_origin_ptr_edge >>
   disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >> simp[] >> strip_tac >>
   `~((mstore (off + w2n w0) (typed_val_to_w256 ftv v) z) with
@@ -8301,6 +8304,14 @@ Proof
     (irule body_assign_immutable_word_mem_ok >>
      qexistsl [`cenv.ce_imm_alloca`,`off`,`Lit 0w`] >>
      simp[IgnAsm `off = compute_immutables_len _ _`] >> decide_tac) >>
+  `ctx_has_dalloca ctx ==> !pre i post u'.
+     emitted_insts sa sb = pre ++ i::post /\ run_inst_seq pre s0 = OK u' ==>
+     dalloca_no_wrap i u'` by
+    (rpt strip_tac >>
+     qpat_assum `EVERY (\i. MEM i.inst_opcode [ADD; ISTORE]) _` mp_tac >>
+     qpat_assum `emitted_insts _ _ = _ ++ _` (fn th => pure_rewrite_tac [th]) >>
+     simp[EVERY_APPEND] >> strip_tac >>
+     irule dalloca_no_wrap_non_dalloca >> simp[]) >>
   qabbrev_tac `q = u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   `!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
          (s0,G0,tn0) [] (OK q,Gf,tf)` by
@@ -10281,6 +10292,14 @@ Proof
      qpat_assum `EVERY (\i. MEM i.inst_opcode [ADD; MLOAD; ISTORE]) _`
        (drule_then (strip_assume_tac o BETA_RULE) o REWRITE_RULE[EVERY_MEM, MEM]) >>
      simp[]) >>
+  `ctx_has_dalloca ctx ==> !pre i post u'.
+     emitted_insts su sb = pre ++ i::post /\ run_inst_seq pre s = OK u' ==>
+     dalloca_no_wrap i u'` by
+    (rpt strip_tac >>
+     qpat_assum `EVERY (\i. MEM i.inst_opcode [ADD; MLOAD; ISTORE]) _` mp_tac >>
+     qpat_assum `emitted_insts _ _ = _ ++ _` (fn th => pure_rewrite_tac [th]) >>
+     simp[EVERY_APPEND] >> strip_tac >>
+     irule dalloca_no_wrap_non_dalloca >> simp[]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
      (s,G,tn) [] (OK q,Gs,ts)` by
     (gen_tac >> qpat_assum `!D. inst_seq_ptr D lo ctx func PG G tn _ _ _ _`
@@ -11173,8 +11192,21 @@ Proof
     (`off + 32 <= s.vs_alloca_next` by decide_tac >>
      `!region. imm = SOME region ==> eval_operand region s = SOME 0w` by metis_tac[] >>
      drule_all body_assign_immutable_word_mem_ok >> simp[]) >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts su sb)` by
+    (Cases_on `imm` >>
+     qpat_x_assum `compile_imm_store_word _ _ _ _ = _` mp_tac >>
+     simp[compile_imm_store_word_def,emit_op_def,emit_void_def,
+          fresh_id_def,fresh_var_def,emit_def,comp_bind_def,
+          comp_ignore_bind_def,comp_return_def] >>
+     strip_tac >> gvs[Excl "APPEND_ASSOC", GSYM listTheory.APPEND_ASSOC,
+       emitted_insts_def,DROP_APPEND2,mk_inst_def]) >>
   irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
   simp[] >> qexistsl [`emitted_insts su sb`,`su`] >> simp[] >>
+  conj_tac >-
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     qpat_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+     qpat_assum `emitted_insts _ _ = _ ++ _` (fn th => pure_rewrite_tac [th]) >>
+     simp[EVERY_APPEND]) >>
   qpat_x_assum `Gf' = Gf` SUBST_ALL_TAC >>
   qpat_x_assum `tf' = tf` SUBST_ALL_TAC >>
   qpat_assum `!k. inst_seq_ptr D' _ _ _ _ _ _ _ _ Gf tf`

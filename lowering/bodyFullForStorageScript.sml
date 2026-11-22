@@ -260,7 +260,8 @@ Resume for_storage_array_nil_core[nil_path]:
   `ptr_inst_ok (DF H) lo 0 ctx func G tn i s` by
     suspend "nil_compare_checks" >>
   `inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
-   i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode` by
+   i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+   (ctx_has_dalloca ctx ==> dalloca_no_wrap i s)` by
     simp[Abbr `i`, mk_inst_def, is_terminator_def,
          inst_mem_below_frontier_def, inst_dload_in_section_def,
          source_memory_read_ranges_def, source_memory_write_ranges_def] >>
@@ -1049,7 +1050,8 @@ Proof
     (`(mk_inst iid opc [a;b] [out]).inst_opcode <> INVOKE /\
       ~is_terminator (mk_inst iid opc [a;b] [out]).inst_opcode /\
       inst_mem_below_frontier (mk_inst iid opc [a;b] [out]) s /\
-      inst_dload_in_section (mk_inst iid opc [a;b] [out]) s` by
+      inst_dload_in_section (mk_inst iid opc [a;b] [out]) s /\
+      (ctx_has_dalloca ctx ==> dalloca_no_wrap (mk_inst iid opc [a;b] [out]) s)` by
        (gvs[] >> simp[mk_inst_def, is_terminator_def,
          unitTransformDefsTheory.inst_mem_below_frontier_def,
          memSafeRunTheory.inst_dload_in_section_def,
