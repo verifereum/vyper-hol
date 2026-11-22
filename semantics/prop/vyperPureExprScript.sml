@@ -215,7 +215,7 @@ Proof
   fs[type_check_def, assert_def, return_def, raise_def, ignore_bind_def,
      bind_def] >>
   simp[AllCaseEqs(), return_def] >> strip_tac >> gvs[return_def] >>
-  imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >> gvs[]
+  imp_res_tac get_accounts_state >> imp_res_tac if_lift_sum_state >> gvs[]
   >>~- ([`option_CASE (code_slice_source _ _) _ _ _ = _`],
         drule_at (Pos last) builtin_operands_preserve >>
         disch_then (qspec_then

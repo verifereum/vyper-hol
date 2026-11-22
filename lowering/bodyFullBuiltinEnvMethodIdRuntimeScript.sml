@@ -66,13 +66,14 @@ Theorem method_id_runtime_joint_outcome_from_suffix:
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ann e es
     st0 sa sm sb shadow_sa ss shadow_sb x op fixed s0 G0 tn0.
     body_inv tops ctx cenv cx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin ann MethodId [e]) es /\
     method_id_literal e = NONE /\
     ann = BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)) /\
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx (expr_type e) e es /\
     lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
-    lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa = (x,ss) /\
+    lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa = (x,ss) /\
     compile_method_id_runtime (expr_type e) x fixed sm = (op,sb) /\
     compile_method_id_runtime (expr_type e) x fixed ss = (op,shadow_sb) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
@@ -143,9 +144,12 @@ Resume method_id_runtime_joint_outcome_from_suffix[child_run]:
     simp[cj 5 hash_suffix_appends] >>
   drule_all hash_unary_suffix_cut >> strip_tac >>
   `gas_shadow_state sm ss` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type e`, `e` |-> `e`]
-      gas_shadow_stmt_lower_value) >> rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
+    (`x = x /\ gas_shadow_state sm ss` suffices_by simp[] >>
+     irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ e sa = (x,sm)` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _`
+       (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
   `fn_has_code shadow_sa ss shadow_func` by
     (`cs_extends shadow_sa ss` by metis_tac[cj 2 compile_expr_grows] >>
      `cs_extends ss shadow_sb` by metis_tac[fragExecTheory.cs_appends_def] >>
@@ -164,7 +168,8 @@ Resume method_id_runtime_joint_outcome_from_suffix[bind_composition]:
       (\v mid. (builtin_result cx mid.accounts ann MethodId [expr_type e] [v],mid))` by
     (mp_tac (Q.INST [`bi` |-> `MethodId`, `ann` |-> `ann`, `e` |-> `e`, `cx` |-> `cx`]
        exprSimUnopComposePropsTheory.eval_expr_unop_action_general) >>
-     simp[builtin_args_length_ok_def, builtin_result_def, exprSimUnopPropsTheory.unop_result_def,
+      simp[builtin_args_length_ok_def, is_self_codesize_def, builtin_result_def,
+           exprSimUnopPropsTheory.unop_result_def,
           vyperInterpreterTheory.precompile_builtin_def]) >>
   pop_assum SUBST1_TAC >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
@@ -264,6 +269,7 @@ Theorem method_id_runtime_sim_full_from_suffix:
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann e es.
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin ann MethodId [e]) es /\
     body_expr_full_ok cx e /\ method_id_literal e = NONE ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -302,12 +308,14 @@ Resume method_id_runtime_sim_full_from_suffix[value_run]:
          gvs[as_stack_val_def, as_ptr_val_def, comp_bind_def,
              unwrap_value_def, comp_return_def, expr_type_def, is_word_type_def, contextTheory.mk_ptr_def]) >>
       qpat_x_assum `op = op'` SUBST_ALL_TAC >>
-      `?sx ss. lower_value compile_expr cenv (expr_type e)
+      `?sx ss. lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
          (gas_shadow_expr e) shadow_sa = (sx,ss)` by metis_tac[pairTheory.PAIR] >>
       `sx = x /\ gas_shadow_state sm ss` by
-        (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type e`, `e` |-> `e`]
-          gas_shadow_stmt_lower_value) >> rewrite_tac[gas_shadow_compiles_def] >>
-         disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
+        (irule bodyFullSharedTheory.gas_shadow_step >>
+         qpat_assum `lower_value _ _ _ e sa = (x,sm)` (irule_at Any) >>
+         qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _`
+           (irule_at Any) >>
+         simp[] >> irule gas_shadow_stmt_lower_value_env) >>
       qpat_x_assum `sx = x` SUBST_ALL_TAC >>
       `?sop ssb. compile_method_id_runtime (expr_type e) x fixed ss = (sop,ssb)` by
         metis_tac[pairTheory.PAIR] >>
@@ -346,12 +354,14 @@ Resume method_id_runtime_sim_full_from_suffix[vv_run]:
      Cases_on `fixed` >>
      gvs[as_stack_val_def, as_ptr_val_def, comp_bind_def, comp_return_def]) >>
   qpat_x_assum `vv = _` SUBST_ALL_TAC >>
-  `?sx ss. lower_value compile_expr cenv (expr_type e)
+  `?sx ss. lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
      (gas_shadow_expr e) shadow_sa = (sx,ss)` by metis_tac[pairTheory.PAIR] >>
   `sx = x /\ gas_shadow_state sm ss` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type e`, `e` |-> `e`]
-      gas_shadow_stmt_lower_value) >> rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ e sa = (x,sm)` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _`
+       (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
   qpat_x_assum `sx = x` SUBST_ALL_TAC >>
   `?sop ssb. compile_method_id_runtime (expr_type e) x fixed ss = (sop,ssb)` by
     metis_tac[pairTheory.PAIR] >>
@@ -373,13 +383,15 @@ Resume method_id_runtime_sim_full_from_suffix[vv_source_transport]:
      bind (bind (eval_expr cx e) (read_result cx))
       (\v mid. ((case builtin_result cx mid.accounts ann MethodId [expr_type e] [v] of
                   INL r => INL (Value r) | INR ex => INR ex),mid))` by
-    (irule eval_expr_unary_builtin_action >> simp[builtin_args_length_ok_def]) >>
+    (irule eval_expr_unary_builtin_action >>
+     simp[builtin_args_length_ok_def, is_self_codesize_def]) >>
   `bind (eval_expr cx (Builtin ann MethodId [e])) (read_result cx) =
     bind (bind (eval_expr cx e) (read_result cx))
       (\v mid. (builtin_result cx mid.accounts ann MethodId [expr_type e] [v],mid))` by
     (mp_tac (Q.INST [`bi` |-> `MethodId`, `ann` |-> `ann`, `e` |-> `e`, `cx` |-> `cx`]
        exprSimUnopComposePropsTheory.eval_expr_unop_action_general) >>
-     simp[builtin_args_length_ok_def, builtin_result_def, exprSimUnopPropsTheory.unop_result_def,
+     simp[builtin_args_length_ok_def, is_self_codesize_def, builtin_result_def,
+          exprSimUnopPropsTheory.unop_result_def,
           vyperInterpreterTheory.precompile_builtin_def]) >>
   dxrule_at Any (Q.INST
     [`f` |-> `\res. case res of INL (v:value) => INL (Value v) | INR ex => INR ex`]

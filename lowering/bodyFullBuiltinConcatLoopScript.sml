@@ -6,7 +6,7 @@ Ancestors stmtSimProps[qualified,ignore_grammar]
   bodyFullIfExpReach[qualified,ignore_grammar] bodyFullHashKeccakFixed[qualified,ignore_grammar]
   gasOutcomeFullCompose gasOutcomeFullGuarded gasExemptCert
   exprSimConcatArgs exprSimConcatSource exprSimWordArgs
-  gasShadowCompile gasShadowCompileHelpers gasShadowState gasShadowUnit gasExplicitSites
+  gasShadowCompileStmtHelpers gasShadowState gasShadowUnit gasExplicitSites
   bodyPtrBytestringBuiltinsWindowGhost wordArgsPtr
   exprLoweringProps loweringStateRelDefs loweringPosts compileEnv stateRelProj
   vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperState
@@ -20,7 +20,7 @@ Theorem concat_args_sim_full:
          if is_bytestring_type (expr_type e) then (T,0:num)
          else case expr_type e of BaseT (BytesT (Fixed m)) => (F,m)
                        | _ => (F,32:num)) args) (Var ov) sa = ((),sb) /\
-    compile_concat compile_expr cenv (MAP gas_shadow_expr args) (Var dv)
+    compile_concat compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr args) (Var dv)
       (MAP (\e.
          if is_bytestring_type (expr_type e) then (T,0:num)
          else case expr_type e of BaseT (BytesT (Fixed m)) => (F,m)
@@ -33,6 +33,7 @@ Theorem concat_args_sim_full:
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     EVERY (\e. is_bytestring_type (expr_type e) \/
                  ?m. expr_type e = BaseT (BytesT (Fixed m))) args /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     (!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
        expr_body_pre cenv cx env e st) /\
@@ -164,8 +165,9 @@ Proof
     (qpat_assum `body_exprs_full_ok cx (e::args)`
        (mp_tac o REWRITE_RULE [body_exprs_full_ok_def]) >> strip_tac >>
      qpat_x_assum `body_expr_full_ok cx e`
-       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then (qspecl_then
+       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     qpat_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+       _ ==> expr_sim_full _ _ _ _ e _ /\ _` (qspecl_then
        [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,
         `cenv`,`env`,`expr_type e`,`es`] mp_tac) >> simp[]) >>
   Cases_on `lower_value compile_expr cenv (expr_type e) e sa` >>
@@ -178,10 +180,10 @@ Proof
      goal_assum (drule_at Any) >> simp[] >>
      qexistsl [`args`,`dv`,`ov`] >> gvs[]) >>
   `gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
-      (lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e))` by
-    (irule (Q.INST [`sh` |-> `T`] gas_shadow_compiles_lower_value |> SRULE []) >>
-     simp[cj 1 gas_shadow_compile_expr]) >>
-  Cases_on `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+      (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
+    irule gas_shadow_stmt_lower_value_env >>
+  Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+    (gas_shadow_expr e) shadow_sa` >>
   rename1 `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = (shadow_op,shadow_sc)` >>
   `shadow_op = op /\ gas_shadow_state sc shadow_sc` by
     (qpat_x_assum `gas_shadow_compiles _ _`
@@ -192,7 +194,7 @@ Proof
     (qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _`
        (mp_then Any mp_tac (cj 2 compile_expr_grows)) >> simp[ci_mono_def]) >>
   `ci_mono shadow_sc shadow_sb` by
-    (qspecl_then [`cenv`,`gas_shadow_expr e`,`MAP gas_shadow_expr args`,
+    (qspecl_then [`gas_shadow_env T cenv`,`gas_shadow_expr e`,`MAP gas_shadow_expr args`,
        `dv`,`ov`,`shadow_sa`,`shadow_sb`,`op`,`shadow_sc`] mp_tac concat_cons_mono >>
      (impl_tac >-
        (RULE_ASSUM_TAC (SIMP_RULE bool_ss [LET_THM,listTheory.MAP,
@@ -276,6 +278,15 @@ Resume concat_args_sim_full[continue]:
   `expr_body_pre cenv cx env e
       (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by
     simp[exprSimSourceTheory.expr_body_pre_gas_obs] >>
+  `body_const_cells_agree [(NONE,tops)] cx env ee` by
+    (`well_typed_expr env e` by
+       qpat_assum `expr_body_pre _ cx env e _`
+         (ACCEPT_TAC o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     `body_const_cells_agree [(NONE,tops)] cx env (ee with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `bind (eval_expr cx e) _ _ = (_, ee with gas_obs := [])`
+       (irule_at Any) >> simp[]) >>
   drule_all concat_head_typed >>
   disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
   rename1 `evaluate_type (get_tenv cx) (expr_type e) = SOME tv` >>

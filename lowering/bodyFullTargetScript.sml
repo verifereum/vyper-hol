@@ -48,6 +48,7 @@ Theorem body_imm_target_place_sim_full:
   !bt DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env es id.
     body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     body_base_target_full_ok cx bt /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ target_indices_pre cenv cx env bt /\
     cx.in_deploy /\ immutable_root cx bt /\
     target_root bt = TopLevelNameTarget (NONE,id) /\
@@ -81,6 +82,7 @@ Theorem body_target_sim_full:
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
     body_base_target_full_ok cx bt /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     target_pre cenv cx env bt es ==>
     target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx env bt es
@@ -113,6 +115,7 @@ Theorem body_target_place_sim_full:
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
     body_base_target_full_ok cx bt /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     target_pre cenv cx env bt es ==>
     target_place_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx env bt es

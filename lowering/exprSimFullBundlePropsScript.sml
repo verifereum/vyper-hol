@@ -28,7 +28,7 @@ Definition expr_sim_full_hypotheses_def:
   expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty e es (st0,sa,sb,shadow_sa,shadow_sb,op,s0,G0,tn0) <=>
       lower_value compile_expr cenv ty e sa = (op, sb) /\
-      lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa =
+      lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa =
         (op, shadow_sb) /\
       expr_sim_full_code (ctx,shadow_ctx,func,shadow_func) (sa,sb,shadow_sa,shadow_sb) /\
       local_ptrs_reserved cenv sa /\

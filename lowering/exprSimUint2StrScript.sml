@@ -2898,6 +2898,7 @@ Theorem compile_typed_unary_builtin_vv_sim_with_initial_rel:
   expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
   expr_sim ctx func cenv cx ty e es /\ expr_type e = BaseT bty /\
   ~precompile_builtin bt /\ bt <> Len /\ builtin_args_length_ok bt 1 /\
+  ~is_self_codesize bt [e] /\
   (!sa sb vv. compile_expr cenv ty (Builtin ann bt [e]) sa = (vv,sb) ==>
     ?x sm. lower_value compile_expr cenv ty e sa = (x,sm) /\
       code x sm = (vv,sb)) /\
@@ -2946,7 +2947,8 @@ Proof
    bind (bind (eval_expr cx e) (read_result cx))
      (\v es. ((case builtin_result cx es.accounts ann bt [expr_type e] [v] of
                  INL w => INL (Value w) | INR exc => INR exc), es))` by
-    (irule eval_expr_unary_builtin_action >> simp[]) >>
+    (irule eval_expr_unary_builtin_action >>
+     simp[vyperContextTheory.is_self_codesize_def]) >>
   qpat_x_assum `gas_admissible (eval_expr _ _) _ _`
     (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
   asm_rewrite_tac[] >> strip_tac >>
@@ -3235,7 +3237,8 @@ Proof
     gvs[expr_body_pre_def] >>
   drule uint2str_expr_types >> strip_tac >> gvs[] >>
   irule compile_typed_unary_builtin_vv_sim_with_initial_rel >>
-  simp[vyperContextTheory.builtin_args_length_ok_def] >>
+  simp[vyperContextTheory.builtin_args_length_ok_def,
+       vyperContextTheory.is_self_codesize_def] >>
   qexistsl_tac [`\x sm. as_ptr_val (BaseT (StringT n)) LocMemory
       (compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm)`, `env`] >>
   simp[vyperContextTheory.builtin_args_length_ok_def] >>

@@ -204,9 +204,10 @@ QED
 Theorem extcall_pos_aggregate_outcome:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env e es /\
   compile_expr cenv (expr_type e) e sa = (vv,sb) /\
-  compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sb) /\
+  compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sb) /\
   compile_snapshot_vv cenv F
     (ext_call_arg_value (lowered_value_type cenv e) vv) sb = (sv,sb) /\
   ~is_word_type (vv_type (ext_call_arg_value (lowered_value_type cenv e) vv)) /\

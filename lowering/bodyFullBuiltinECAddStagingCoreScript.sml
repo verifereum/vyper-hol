@@ -54,16 +54,17 @@ Theorem ecadd_staging_full_from_transfers:
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_type e2 = (if bt = ECAdd then a else BaseT (UintT 256)) /\
   body_exprs_full_ok cx [e1;e2] /\ body_inv tops ctx cenv cx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Builtin a bt [e1;e2]) es /\
   compile_expr cenv ty (Builtin a bt [e1;e2]) sa = (vv,sb) /\
-  compile_expr cenv ty (gas_shadow_expr (Builtin a bt [e1;e2])) shadow_sa =
-    (vv,shadow_sb) /\
+  compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (Builtin a bt [e1;e2]))
+    shadow_sa = (vv,shadow_sb) /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e2) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
-    (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e2) (gas_shadow_expr e2) shadow_s1 =
-    (y,shadow_s2) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1)
+    (gas_shadow_expr e1) shadow_sa = (x,shadow_s1) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e2)
+    (gas_shadow_expr e2) shadow_s1 = (y,shadow_s2) /\
   (if bt = ECAdd then compile_ecadd_points x y s2
    else compile_ecmul_point x y s2) = (res,sb) /\
   vv = FST (as_stack_val a (res,sb)) /\
@@ -834,7 +835,16 @@ Resume ecadd_staging_full_from_transfers[after_output_allocation]:
      not_fresh_at ca z) /\
    (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==>
      not_fresh_at ca z)` by
-    (rpt strip_tac >> `not_fresh_at s2 z` by metis_tac[] >>
+    (rpt strip_tac >> `not_fresh_at s2 z` by
+       (FIRST
+          [qpat_assum `!z sz. cenv.ce_return_buf = _ ==> not_fresh_at s2 z`
+             (qspecl_then [`z`,`sz`] (fn rule =>
+                qpat_assum `cenv.ce_return_buf = SOME (PtrVar (Var z) sz)`
+                  (ACCEPT_TAC o MP rule))),
+           qpat_assum `!z sz. cenv.ce_return_pc = _ ==> not_fresh_at s2 z`
+             (qspecl_then [`z`,`sz`] (fn rule =>
+                qpat_assum `cenv.ce_return_pc = SOME (PtrVar (Var z) sz)`
+                  (ACCEPT_TAC o MP rule)))]) >>
      irule loweringShapeDefsTheory.not_fresh_at_mono >>
      qexists_tac `s2` >> simp[]) >>
   `stmt_state_rel (storage_trace_horizon es2.storage_trace)
@@ -901,7 +911,16 @@ Resume ecadd_staging_full_from_transfers[before_copy_ghost]:
      not_fresh_at sp z) /\
    (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==>
      not_fresh_at sp z)` by
-    (rpt strip_tac >> `not_fresh_at s2 z` by metis_tac[] >>
+    (rpt strip_tac >> `not_fresh_at s2 z` by
+       (FIRST
+          [qpat_assum `!z sz. cenv.ce_return_buf = _ ==> not_fresh_at s2 z`
+             (qspecl_then [`z`,`sz`] (fn rule =>
+                qpat_assum `cenv.ce_return_buf = SOME (PtrVar (Var z) sz)`
+                  (ACCEPT_TAC o MP rule))),
+           qpat_assum `!z sz. cenv.ce_return_pc = _ ==> not_fresh_at s2 z`
+             (qspecl_then [`z`,`sz`] (fn rule =>
+                qpat_assum `cenv.ce_return_pc = SOME (PtrVar (Var z) sz)`
+                  (ACCEPT_TAC o MP rule)))]) >>
      qpat_assum `not_fresh_at s2 z` mp_tac >>
      qpat_assum `s2.cs_next_var <= ca.cs_next_var` mp_tac >>
      qpat_assum `ca.cs_next_var <= sp.cs_next_var` mp_tac >>
@@ -1209,7 +1228,7 @@ Resume ecadd_staging_full_from_transfers[after_shadow_buffer]:
      simp[comp_bind_def,comp_return_def,FUN_EQ_THM]) >>
   `?shadow_res. compile_ecadd_points (Var p) (Var p2) shadow_s2 =
      (shadow_res,shadow_sb)` by
-    (qpat_assum `compile_expr cenv ty (gas_shadow_expr _) shadow_sa = _`
+    (qpat_assum `compile_expr _ _ (gas_shadow_expr _) shadow_sa = _`
        (fn whole =>
      qpat_assum `lower_value _ _ _ (gas_shadow_expr e1) shadow_sa = _` (fn one =>
      qpat_assum `lower_value _ _ _ (gas_shadow_expr e2) shadow_s1 = _` (fn two =>

@@ -2,7 +2,7 @@ Theory vyperEvalReadingErrors
 Ancestors
   list pair option vyperState vyperInterpreter vyperCreate vyperMisc
   vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches
-  vyperStatePreservation vyperPureReadingErrors
+  vyperStatePreservation vyperPureReadingErrors vyperContext
 Libs
   monadsyntax pairLib evalWalkLib
 
@@ -100,8 +100,20 @@ fun READING_INTRO (g as (_,w)) =
    else if is_imp w andalso not (is_reading_concl (snd (dest_imp w))) then strip_tac
    else NO_TAC) g;
 
+Theorem reading_self_lift[local]:
+  !cx vs st st'.
+    lift_sum (evaluate_self_codesize cx vs) st <> (INR ^missing_exc,st')
+Proof
+  Cases_on `vs` >> simp[vyperContextTheory.evaluate_self_codesize_def,
+    lift_sum_def, return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `h` >> Cases_on `t` >>
+  gvs[vyperContextTheory.evaluate_self_codesize_def,
+      lift_sum_def, return_def, raise_def, AllCaseEqs()]
+QED
+
 val reading_primitives = [return_def, raise_def, reading_lifts,
-    pure_reading_error_exclusions, type_check_def, check_def, assert_def];
+    reading_self_lift, pure_reading_error_exclusions, type_check_def,
+    check_def, assert_def];
 
 (* Prefer a fact about the exposed computation to splits inside its data
    arguments (for example the array-bound case buried in a return value). *)
@@ -354,7 +366,8 @@ Proof
 QED
 
 val READING_CONSTRUCTOR_TAC =
-  rpt READING_INTRO >> simp_tac bool_ss [Once evaluate_def] >>
+  rpt READING_INTRO >> simp_tac bool_ss [Once evaluate_def,
+    vyperContextTheory.is_self_codesize_def] >>
   READING_WALK (reading_create_operands :: reading_evaluator_primitives :: reading_base)
     [switch_BoolV_def];
 

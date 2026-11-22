@@ -72,6 +72,7 @@ Theorem annassign_word_full_source[local]:
   supported_stmt tops bindings (AnnAssign id typ e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
     (AnnAssign id typ e) ==> occurs_abi_decode_target target tops) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_sim_inv cenv cx env es /\
   type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
   stmt_exprs_ok cenv (AnnAssign id typ e) /\
@@ -104,6 +105,15 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+(* Use the RHS simulation clause with the real declaration's typing facts. *)
+fun annassign_rhs_sim_tac g =
+  (qpat_assum `body_expr_full_ok _ _`
+     (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+   qpat_assum `!DF lo d PG tops ctx sc f sf ce env ty es.
+                 _ ==> expr_sim_full _ _ _ _ _ _ /\ expr_vv_sim_full _ _ _ _ _ _`
+     (drule_all_then strip_assume_tac) >>
+   simp[]) g;
+
 (* A word local. *)
 Theorem body_annassign_word_full:
   !cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
@@ -118,6 +128,7 @@ Theorem body_annassign_word_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -130,7 +141,7 @@ Theorem body_annassign_word_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
       (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -141,21 +152,31 @@ Proof
      comp_bind_def, comp_ignore_bind_def, comp_return_def,
      pairTheory.pair_case_thm] >>
   Cases_on `declare_local cenv id (expr_type e) sa` >>
-  Cases_on `declare_local cenv id (expr_type e) shadow_sa` >>
-  gvs[] >>
-  Cases_on `compile_stmt q lctx ret_ty (AnnAssign id (expr_type e) e) r` >>
-  Cases_on `compile_stmt q' lctx ret_ty
+  rename1 `declare_local _ _ _ sa = (decl_ce,r)` >>
+  Cases_on `declare_local (gas_shadow_env T cenv) id (expr_type e) shadow_sa` >>
+  rename1 `declare_local _ _ _ shadow_sa = (shadow_decl_ce,r')` >>
+  `shadow_decl_ce = gas_shadow_env T decl_ce /\ gas_shadow_state r r'` by
+    (mp_tac (Q.INST [`cenv` |-> `cenv`, `id` |-> `id`,
+       `ty` |-> `expr_type e`, `sd` |-> `T`]
+       (REWRITE_RULE [gasShadowCompileStmtBaseTheory.gas_shadow_compiles_env_def]
+         gasShadowCompileStmtBaseTheory.gas_shadow_compiles_env_declare_local)) >>
+     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+  qpat_x_assum `shadow_decl_ce = _` SUBST_ALL_TAC >>
+  Cases_on `compile_stmt decl_ce lctx ret_ty (AnnAssign id (expr_type e) e) r` >>
+  Cases_on `compile_stmt (gas_shadow_env T decl_ce) lctx ret_ty
               (AnnAssign id (expr_type e) (gas_shadow_expr e)) r'` >>
   gvs[] >>
+  rename1 `declare_local _ _ _ sa = (rhs_ce,r)` >>
   `FLOOKUP cenv.ce_vars id = NONE` by
     (Cases_on `FLOOKUP cenv.ce_vars id` >> simp[] >>
      fs[ce_locals_declared_def] >> metis_tac[]) >>
   `body_stmt_safe tops (AnnAssign id (expr_type e) e)` by
     simp[body_stmt_safe_def, supported_stmt_expr_exists_def,
          int_calls_stmt_def, GSYM expr_has_evm_run_def, EVERY_CONJ] >>
-  drule_all annassign_full_declared_rhs_pre >> strip_tac >>
+  drule_all_then strip_assume_tac annassign_full_declared_rhs_pre >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv' cx (expr_type e) e es` by metis_tac[body_expr_full_ok_def] >>
+      rhs_ce cx (expr_type e) e es` by
+    annassign_rhs_sim_tac >>
   `lookup_scopes id es.scopes = NONE` by
     (fs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
          vyperTypeInvariantsTheory.env_scopes_consistent_def] >>
@@ -196,6 +217,7 @@ Theorem body_annassign_memory_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -215,7 +237,7 @@ Theorem body_annassign_memory_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
       (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -255,11 +277,7 @@ Proof
   simp[] >>
   rpt gen_tac >> disch_tac >>
   drule_all_then strip_assume_tac annassign_full_declared_rhs_pre >>
-  qpat_assum `body_expr_full_ok cx e`
-    (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-  disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,
-    `shadow_ctx`,`func`,`shadow_func`,`ce`,`env`,`ty`,`es`] mp_tac) >>
-  simp[]
+  annassign_rhs_sim_tac
 QED
 
 (* A memory local whose source is a widened aggregate. *)
@@ -276,6 +294,7 @@ Theorem body_annassign_widened_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -293,7 +312,7 @@ Theorem body_annassign_widened_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
       (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -328,7 +347,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all annassign_full_declared_rhs_pre >> strip_tac >>
   drule_all declare_local_memory_types_mem >> strip_tac >>
-  simp[] >> metis_tac[body_expr_full_ok_def]
+  annassign_rhs_sim_tac >>
+  qpat_assum `~(lowered_value_type cenv e = _ \/ _)` mp_tac >> simp[]
 QED
 
 (* Any other declared type. *)
@@ -345,6 +365,7 @@ Theorem body_annassign_other_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -359,7 +380,7 @@ Theorem body_annassign_other_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
       (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -395,8 +416,8 @@ Proof
       irule annassign_other_typed_full_execution >>
       fs[] >> qexistsl_tac [`env`, `tops`] >> simp[] >>
       rpt gen_tac >> strip_tac >>
-      drule_all annassign_full_declared_rhs_pre >> strip_tac >>
-      simp[] >> metis_tac[body_expr_full_ok_def]) >>
+      drule_all_then strip_assume_tac annassign_full_declared_rhs_pre >>
+      annassign_rhs_sim_tac) >>
   irule body_annassign_widened_full >> simp[] >>
   metis_tac[annassign_memory_bytes_pos_ptr]
 QED

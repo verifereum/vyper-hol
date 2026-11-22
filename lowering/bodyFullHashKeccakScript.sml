@@ -8,7 +8,7 @@ Ancestors
   exprSimHash exprSimHashBoundary exprSimHyps exprSimHypsDefs exprSimSource
   gasShadowCompile gasShadowCompileStmtHelpers gasShadowState gasShadow
   exprLoweringProps exprLowering loweringPosts compileEnv vyperTyping
-  vyperInterpreter vyperState vyperAST vyperTypeSystem
+  vyperInterpreter vyperContext vyperState vyperAST vyperTypeSystem
   stmtSimProps gasExemptCert vyperStorageTrace vyperStorageFootprint
 
 Theorem keccak_vv_sim_full:
@@ -30,14 +30,14 @@ Proof
   gvs[] >>
   `cs_extends sa sm` by
     (drule (cj 2 compile_expr_grows) >> simp[]) >>
-  `?shadow_sm. lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
-      shadow_sa = (v,shadow_sm) /\ gas_shadow_state sm shadow_sm` by
-    (mp_tac (Q.INST [`ty` |-> `expr_type e`] gas_shadow_stmt_lower_value) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[] >>
-     strip_tac >>
-     Cases_on `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
-     gvs[]) >>
+  `?shadow_sm. lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+      (gas_shadow_expr e) shadow_sa = (v,shadow_sm) /\ gas_shadow_state sm shadow_sm` by
+    (qpat_x_assum `gas_shadow_state sb shadow_sb` kall_tac >>
+     drule (REWRITE_RULE [gas_shadow_compiles_def]
+       (Q.INST [`ty` |-> `expr_type e`, `sd` |-> `T`] gas_shadow_stmt_lower_value_env)) >>
+     disch_then (qspecl_then [`e`, `cenv`] mp_tac) >> simp[] >> strip_tac >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sa` >> gvs[]) >>
   `?bty. expr_type e = BaseT bty` by
     (Cases_on `expr_type e` >> gvs[is_bytes_or_string_type_def]) >>
   `cs_extends sm sb` by
@@ -52,7 +52,7 @@ Proof
      metis_tac[hash_suffix_appends, cs_appends_def]) >>
   `cs_extends shadow_sa shadow_sm /\ cs_extends shadow_sm shadow_sb` by
     (conj_tac >- (drule (cj 2 compile_expr_grows) >> simp[]) >>
-     qpat_x_assum `compile_expr cenv ty (gas_shadow_expr _) _ = _` mp_tac >>
+     qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
      simp[gas_shadow_expr_def, gas_shadow_builtin_def, compile_hash_singleton] >>
      pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
      qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
@@ -81,7 +81,8 @@ Proof
    bind (bind (eval_expr cx e) (read_result cx))
      (\v es. ((case builtin_result cx es.accounts (BaseT (BytesT (Fixed 32)))
        Keccak256 [expr_type e] [v] of INL w => INL (Value w) | INR exc => INR exc),es))` by
-    (irule eval_expr_unary_builtin_action >> simp[vyperContextTheory.builtin_args_length_ok_def]) >>
+    (irule eval_expr_unary_builtin_action >>
+     simp[vyperContextTheory.builtin_args_length_ok_def, is_self_codesize_def]) >>
   asm_rewrite_tac[] >> irule gas_outcome_full_bind_all >>
   `!res : value + exception. !r.
      (?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r) <=> expr_exit res r` by

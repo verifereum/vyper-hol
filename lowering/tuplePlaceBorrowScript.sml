@@ -8,6 +8,7 @@ Ancestors
   targetPlaceLive vyperTypeSystem vyperTypeEnv vyperSubscriptOverlap vyperAST
   vyperLocalAccessFrame vyperValueOperation finite_map list pair
   exprSimAttributeFields exprSimHypsDefs valueEncoding valueEncodingDefs
+  exprSimProps tuplePlaceGeometry
 
 Theorem tuple_place_supported_target_scopes:
   !bt tops cx es res ee.
@@ -212,5 +213,71 @@ Proof
   qpat_x_assum `locals_kept _ _ _ _ _`
     (mp_tac o CONJUNCT1 o REWRITE_RULE [locals_kept_def]) >>
   disch_then irule >> qexistsl_tac [`b`,`id`,`sz`] >> simp[] >>
-  rpt strip_tac >> drule_all local_path_at_dynarray_apart >> decide_tac
+  rpt strip_tac >> drule dynarray_len_untupled_imp_at >> strip_tac >>
+  drule_all local_path_at_dynarray_apart >> decide_tac
+QED
+
+(* The header of an enclosing dynamic array precedes every child. Any
+   other reachable header has a path disjoint from the tuple's path. *)
+Theorem tuple_place_dynamic_header_apart[local]:
+  mem_path_offset root tuple_path = SOME (off,TupleTV tvs) /\
+  mem_path_offset root header_path = SOME (k,ArrayTV etv (Dynamic n)) /\
+  tuple_place_no_tuple_step root header_path ==>
+  off + type_memory_size (TupleTV tvs) <= k \/ k + 32 <= off
+Proof
+  strip_tac >>
+  Cases_on `?tail. header_path = tuple_path ++ tail`
+  >- (pop_assum (qx_choose_then `tail` SUBST_ALL_TAC) >>
+      Cases_on `tail` >- gvs[] >>
+      qpat_x_assum `tuple_place_no_tuple_step _ _`
+        (mp_tac o REWRITE_RULE [tuple_place_no_tuple_step_def]) >>
+      disch_then (qspecl_then [`tuple_path`, `h`, `t`, `off`, `tvs`] mp_tac) >>
+      simp[]) >>
+  Cases_on `?tail. tuple_path = header_path ++ tail`
+  >- (pop_assum (qx_choose_then `tail` SUBST_ALL_TAC) >>
+      Cases_on `tail` >- gvs[] >>
+      drule mem_path_offset_append_decompose >> strip_tac >> gvs[] >>
+      Cases_on `h` >> gvs[mem_path_offset_def, mem_step_offset_def,
+                          AllCaseEqs(), EXISTS_PROD] >>
+      Cases_on `v` >> gvs[mem_step_offset_def, AllCaseEqs(), EXISTS_PROD] >>
+      decide_tac) >>
+  drule_all tuple_place_paths_apart >> simp[type_memory_size_def] >> decide_tac
+QED
+
+Theorem tuple_borrow_untupled_header_apart[local]:
+  expr_sim_inv cenv cx env es /\
+  local_path_at cenv cx id off (TupleTV tvs) /\
+  dynarray_len_untupled cenv id k ==>
+  off + type_memory_size (TupleTV tvs) <= k \/ k + 32 <= off
+Proof
+  rw[local_path_at_def, dynarray_len_untupled_def] >> gvs[] >>
+  rename1 `type_path_offset cenv root_ty header_path = SOME (k,ArrayT et (Dynamic n))` >>
+  rename1 `evaluate_type (get_tenv cx) root_ty = SOME root_tv` >>
+  `tuple_place_no_tuple_step root_tv header_path` by
+    (simp[tuple_place_no_tuple_step_def] >> rpt strip_tac >>
+     drule_all mem_path_offset_type >> strip_tac >>
+     `?tys. pt = TupleT tys` by
+       (qpat_x_assum `evaluate_type _ pt = _` mp_tac >>
+        Cases_on `pt` >> simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
+     gvs[] >> metis_tac[]) >>
+  drule_all type_path_offset_mem >> strip_tac >>
+  qpat_x_assum `evaluate_type _ (ArrayT _ _) = _` mp_tac >>
+  simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  irule tuple_place_dynamic_header_apart >> metis_tac[]
+QED
+
+Theorem tuple_borrow_locals_kept:
+  expr_sim_inv cenv cx env inv_state /\
+  locals_kept cenv es ee s0 s /\
+  local_region cenv es.scopes s0 id b sz /\
+  b <= off /\ off + type_memory_size (TupleTV tvs) <= b + sz /\
+  local_path_at cenv cx id (off - b) (TupleTV tvs) ==>
+  mem_bytes_at off (type_memory_size (TupleTV tvs)) s.vs_memory =
+  mem_bytes_at off (type_memory_size (TupleTV tvs)) s0.vs_memory
+Proof
+  strip_tac >>
+  qpat_x_assum `locals_kept _ _ _ _ _`
+    (mp_tac o CONJUNCT1 o REWRITE_RULE [locals_kept_def]) >>
+  disch_then irule >> qexistsl_tac [`b`, `id`, `sz`] >> simp[] >>
+  rpt strip_tac >> drule_all tuple_borrow_untupled_header_apart >> decide_tac
 QED

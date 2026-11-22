@@ -26,7 +26,7 @@ Theorem invert_frontend_test:
     Builtin (BaseT BoolT) Not [Name (BaseT BoolT) "x"]
 Proof
   simp[translate_unary_def, translate_type_def, expr_type_ctx_def,
-       tctx_current_nsid_def, fold_pin_constant_def,
+       tctx_current_nsid_def, fold_pin_constant_def, expr_type_def,
        vyperOriginFoldTheory.origin_fold_value_def,
        vyperOriginFoldTheory.origin_fold_builtin_def]
 QED
@@ -39,6 +39,26 @@ Theorem invert_frontend_literals_test:
     (JT_Named NONE "bool") = Literal (BaseT BoolT) (BoolL F)
 Proof
   EVAL_TAC
+QED
+
+(* A flag annotation names only the flag, so it resolves to the current
+   module's flag of that name.  An IfExp or a BinOp annotated with a flag
+   takes the flag of its translated operands instead, which may be an imported
+   flag; other annotations are kept. *)
+Theorem flag_ifexp_binop_frontend_test:
+  (translate_type (expr_type_ctx ctx) ty = FlagT local /\
+   expr_type (translate_expr_with_policy resolve ctx a) = FlagT imported ==>
+   expr_type (translate_expr_with_policy resolve ctx (JE_IfExp c a b ty)) =
+     FlagT imported /\
+   expr_type (translate_expr_with_policy resolve ctx (JE_BinOp a op b ty)) =
+     FlagT imported) /\
+  (translate_type (expr_type_ctx ctx) ty = BaseT (UintT 256) ==>
+   expr_type (translate_expr_with_policy resolve ctx (JE_IfExp c a b ty)) =
+     BaseT (UintT 256) /\
+   expr_type (translate_expr_with_policy resolve ctx (JE_BinOp a op b ty)) =
+     BaseT (UintT 256))
+Proof
+  rw[] >> simp[Once translate_expr_with_policy_def, expr_type_def]
 QED
 
 (* Both supported directions and representative narrow-width rejections. *)
@@ -212,7 +232,8 @@ Proof
   simp[Once evaluate_def, bind_def, return_def, evaluate_literal_def] >>
   simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   simp[Once evaluate_def, bind_def, return_def, get_accounts_def,
-       evaluate_builtin_def, evaluate_literal_def, lift_sum_def]
+       evaluate_builtin_def, evaluate_literal_def, lift_sum_def,
+       is_self_codesize_def]
 QED
 
 Theorem invert_bytes32_cps_test:

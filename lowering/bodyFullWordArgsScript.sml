@@ -22,12 +22,12 @@ Theorem gas_shadow_compiles_lower_word_args:
   (!e. tyf (gas_shadow_expr e) = tyf e) ==>
   !todo. gas_shadow_compiles
     (lower_word_args cenv tyf todo)
-    (lower_word_args cenv tyf (MAP gas_shadow_expr todo))
+    (lower_word_args (gas_shadow_env T cenv) tyf (MAP gas_shadow_expr todo))
 Proof
   strip_tac >> Induct >>
   simp[lower_word_args_def,listTheory.MAP,gas_shadow_compiles_return] >>
   gen_tac >> irule gas_shadow_compiles_bind >>
-  simp[gas_shadow_stmt_lower_value] >>
+  simp[gas_shadow_stmt_lower_value_env] >>
   gen_tac >> irule gas_shadow_compiles_bind >>
   simp[gas_shadow_compiles_return]
 QED
@@ -41,9 +41,10 @@ Theorem lower_word_args_by_type_sim_full:
       expr_body_pre cenv cx env e ee /\ is_word_type (expr_type e)) /\
     body_exprs_full_ok cx todo /\
     body_inv tops ctx cenv cx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env es /\
     lower_word_args cenv tyf todo sa = (xs,sm) /\
-    lower_word_args cenv tyf (MAP gas_shadow_expr todo) shadow_sa =
+    lower_word_args (gas_shadow_env T cenv) tyf (MAP gas_shadow_expr todo) shadow_sa =
       (xs,shadow_sm) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sm shadow_sm /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -96,11 +97,16 @@ Proof
   `expr_body_pre cenv cx env e es /\ is_word_type (expr_type e)` by
     (qpat_assum `!e ee. _` (qspecl_then [`e`, `es`] mp_tac) >> simp[]) >>
   `tyf (gas_shadow_expr e) = tyf e` by simp[] >>
+  `well_typed_expr env e` by
+    (drule exprBodyPrePropsTheory.expr_body_pre_static_facts >> simp[]) >>
   gvs[lower_word_args_cons, MAP] >>
   `gas_shadow_state s1 s1'` by
-    (mp_tac (Q.INST [`ty` |-> `tyf e`] gas_shadow_stmt_lower_value) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
+    (`gas_shadow_state
+        (SND (lower_value compile_expr cenv (tyf e) e sa))
+        (SND (lower_value compile_expr (gas_shadow_env T cenv) (tyf e)
+          (gas_shadow_expr e) shadow_sa))` suffices_by simp[] >>
+     irule (cj 2 (REWRITE_RULE [gas_shadow_compiles_def] gas_shadow_stmt_lower_value_env)) >>
+     simp[]) >>
   `cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var /\
    sa.cs_next_id <= s1.cs_next_id /\
    (!z. x = Var z ==> not_fresh_at s1 z) /\ (!l. x <> Label l)` by
@@ -114,15 +120,11 @@ Proof
   `fn_has_code sa s1 func /\ fn_has_code s1 sm func` by
     metis_tac[fn_has_code_mid, compileEnvTheory.cs_extends_refl] >>
   `cs_extends shadow_sa s1'` by
-    (mp_tac (Q.SPECL [`cenv`, `tyf (gas_shadow_expr e)`, `gas_shadow_expr e`, `shadow_sa`]
-      ci_mono_lower_value_compile_expr) >> simp[ci_mono_def]) >>
-  `!a b zs. lower_word_args cenv tyf (MAP gas_shadow_expr rest) a = (zs,b) ==>
-      cs_extends a b` by
-    (POP_ASSUM_LIST (K all_tac) >> Induct_on `rest` >>
-     simp[lower_word_args_nil, compileEnvTheory.cs_extends_refl] >>
-     rpt strip_tac >> gvs[lower_word_args_cons] >>
-     metis_tac[ci_mono_lower_value_compile_expr, ci_mono_def, pairTheory.SND,
-               compileEnvTheory.cs_extends_trans]) >>
+    (qspecl_then [`gas_shadow_env T cenv`, `tyf e`, `gas_shadow_expr e`, `shadow_sa`]
+       mp_tac ci_mono_lower_value_compile_expr >> simp[ci_mono_def]) >>
+  `cs_extends s1' shadow_sm` by
+    (qpat_assum `lower_word_args _ _ (MAP gas_shadow_expr _) _ = _`
+       (mp_tac o MATCH_MP ci_mono_lower_word_args) >> simp[ci_mono_def]) >>
   `fn_has_code shadow_sa s1' shadow_func /\
    fn_has_code s1' shadow_sm shadow_func` by
     metis_tac[fn_has_code_mid, compileEnvTheory.cs_extends_refl] >>
@@ -202,6 +204,12 @@ Proof
      imp_res_tac expr_body_pre_eval >> fs[SF ETA_ss] >>
      qpat_x_assum `!res es'. _ ==> expr_sim_inv _ _ _ _`
        (qspecl_then [`INL v`, `mid with gas_obs := []`] mp_tac) >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` strip_assume_tac) >>
+     `body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >> simp[]) >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
       expr_post H ctx func cenv cx e es sa s1 s0 mid v x t /\
       t.vs_current_bb = s1.cs_current_bb /\
@@ -261,8 +269,7 @@ Proof
      >- (qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
          gvs[body_exprs_full_ok_def, bind_def, AllCaseEqs()] >> metis_tac[])
      >- (qexistsl_tac [`shadow_func`, `s1'`, `shadow_sm`, `tyf`] >> simp[])
-     >- (qexists_tac `tops` >> simp[])
-     >- (qexists_tac `env` >> rpt strip_tac >>
+     >- (qexistsl_tac [`env`, `tops`] >> simp[] >> rpt strip_tac >>
          qpat_assum `!e ee. _` (qspecl_then [`e'`, `ee`] mp_tac) >> simp[])) >>
   qpat_assum `gas_outcome_full _ _ _ _ (eval_exprs cx rest) _ _ _`
     (fn th => assume_tac th) >>
@@ -359,9 +366,10 @@ Theorem lower_word_args_sim_full:
       expr_body_pre cenv cx env e ee /\ is_word_type (expr_type e)) /\
     body_exprs_full_ok cx todo /\
     body_inv tops ctx cenv cx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env es /\
     lower_word_args cenv (\e. ty) todo sa = (xs,sm) /\
-    lower_word_args cenv (\e. ty) (MAP gas_shadow_expr todo) shadow_sa =
+    lower_word_args (gas_shadow_env T cenv) (\e. ty) (MAP gas_shadow_expr todo) shadow_sa =
       (xs,shadow_sm) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sm shadow_sm /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\

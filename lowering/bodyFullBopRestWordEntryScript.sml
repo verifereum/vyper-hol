@@ -7,10 +7,12 @@ Ancestors
 
 Theorem rest_word_full_second_entry:
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
+  body_const_cells_agree mods cx env es /\
   body_exprs_full_ok cx [e1;e2] /\
   (!tail. bind (eval_expr cx e1) (read_result cx)
      (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
        (INL needle,mid with gas_obs := tail)) ==>
+  body_const_cells_agree mods cx env mid /\
   body_expr_full_ok cx e2 /\
   expr_body_pre cenv cx env e2 (mid with gas_obs := []) /\
   MAP FDOM es.scopes = MAP FDOM mid.scopes
@@ -26,6 +28,12 @@ Proof
       (es with gas_obs := gas_explicit marks s.vs_gas_readings)` by simp[] >>
   `expr_sim_inv cenv cx env (mid with gas_obs := [])` by
     metis_tac[expr_body_pre_eval] >>
+  conj_tac
+  >- (`well_typed_expr env e1` by fs[expr_body_pre_def] >>
+      `body_const_cells_agree mods cx env (mid with gas_obs := [])`
+        suffices_by simp[] >>
+      irule body_const_cells_agree_expr_read >>
+      goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >> simp[]) >>
   conj_tac
   >- (fs[body_exprs_full_ok_def] >>
       drule (REWRITE_RULE [ETA_AX] eval_expr_read_INL) >>

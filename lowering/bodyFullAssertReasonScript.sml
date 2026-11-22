@@ -32,6 +32,7 @@ Theorem compile_assert_reason_frag_full_from_raise:
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Raise (RaiseReason e)) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Raise (RaiseReason e)) = SOME env' /\
@@ -42,7 +43,7 @@ Theorem compile_assert_reason_frag_full_from_raise:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Raise (RaiseReason e)))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason e))))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason e))))
       (eval_stmt cx (Raise (RaiseReason e))) es) ==>
   !cx e se DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
@@ -53,6 +54,7 @@ Theorem compile_assert_reason_frag_full_from_raise:
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Assert e (AssertReason se)) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assert e (AssertReason se)) = SOME env' /\
@@ -63,7 +65,7 @@ Theorem compile_assert_reason_frag_full_from_raise:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assert e (AssertReason se)))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assert e (AssertReason se))))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assert e (AssertReason se))))
       (eval_stmt cx (Assert e (AssertReason se))) es
 Proof
   disch_then (markerLib.mk_asm "producer") >>
@@ -73,11 +75,7 @@ Proof
   `expr_type e = BaseT BoolT` by fs[type_stmt_assert_reason] >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx (BaseT BoolT) e es` by
-    (qpat_x_assum `body_expr_full_ok cx e`
-       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `tops`, `ctx`,
-       `shadow_ctx`, `func`, `shadow_func`, `cenv`, `env`, `BaseT BoolT`,
-       `es`] mp_tac) >> simp[]) >>
+    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
   rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   fs[gas_shadow_stmt_def, gas_shadow_assert_reason_def] >>
   drule_all compile_assert_reason_layout_full >> strip_tac >> gvs[] >>
@@ -219,10 +217,18 @@ Resume compile_assert_reason_frag_full_from_raise[false]:
     (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
                                   gas_outcome_full_zero_prefix)) >>
   drule_all assert_reason_false_source_ready >> strip_tac >>
+  `body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])` by
+    (`well_typed_expr env e` by
+       qpat_assum `expr_body_pre _ cx env e _`
+         (ACCEPT_TAC o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     qpat_assum `!tail. bind (eval_expr cx e) _ _ = _`
+       (qspec_then `[]` assume_tac) >>
+     irule body_const_cells_agree_expr_read >>
+     goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >> simp[]) >>
   `stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
      cx lctx RetQ cenv
      (stmt_env cenv lctx ret_ty (Raise (RaiseReason se)))
-     (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason se))))
+     (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason se))))
      (eval_stmt cx (Raise (RaiseReason se))) (mid with gas_obs := [])` by
     (asm "producer" irule >> metis_tac[]) >>
   qpat_x_assum `stmt_frag_full _ _ _ _ _ _ _ _ _` mp_tac >>
@@ -340,6 +346,7 @@ Theorem compile_assert_reason_frag_full:
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Assert e (AssertReason se)) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assert e (AssertReason se)) = SOME env' /\
@@ -350,7 +357,7 @@ Theorem compile_assert_reason_frag_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assert e (AssertReason se)))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assert e (AssertReason se))))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assert e (AssertReason se))))
       (eval_stmt cx (Assert e (AssertReason se))) es
 Proof
   mp_tac compile_assert_reason_frag_full_from_raise >>

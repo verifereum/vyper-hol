@@ -415,6 +415,7 @@ Resume evaluate_unwritten_local[builtin_ok]:
   Cases_on `code_slice_source bt es`
   >- (simp[bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
       imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >>
+      imp_res_tac if_lift_sum_state >>
       imp_res_tac precompile_call_success_state >> gvs[] >> metis_tac[]) >>
   rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
   `~MEM (WriteAcc (LocalRef id)) (accesses_exprs (TL es)) /\
@@ -425,6 +426,7 @@ Resume evaluate_unwritten_local[builtin_ok]:
      rw[code_slice_source_SOME] >> gvs[accesses_expr_def]) >>
   simp[bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >> FIRST [gvs[]] >>
   imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >>
+  imp_res_tac if_lift_sum_state >>
   imp_res_tac precompile_call_success_state >> gvs[] >> metis_tac[]
 QED
 Resume evaluate_unwritten_local[pop]:

@@ -66,9 +66,9 @@ Theorem raw_log_topics_post_cons:
   expr_type e = BaseT (BytesT (Fixed 32)) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
   compile_multi_exprs compile_expr cenv rest sm = (ops,sb) /\
-  lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e)
     shadow_sa = (op,shadow_sm) /\
-  compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr rest)
+  compile_multi_exprs compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr rest)
     shadow_sm = (ops,shadow_sb) /\
   stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\

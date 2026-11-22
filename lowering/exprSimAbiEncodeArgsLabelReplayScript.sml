@@ -74,6 +74,17 @@ Proof
   Cases_on `q` >> fs[assert_def, bind_def, return_def] >>
   simp[get_accounts_def, bind_def, return_def] >>
   rename1 `evaluate_builtin cx r.accounts ann bi [expr_type e] [a]` >>
+  Cases_on `is_self_codesize bi [e]`
+  >- (Cases_on `a` >>
+      simp[is_self_codesize_def, evaluate_self_codesize_def,
+           get_accounts_def, lift_sum_def, bind_def, return_def, raise_def,
+           read_result_def, ignore_bind_def] >>
+      strip_tac >> gvs[] >>
+      simp[Once evaluate_def, type_check_def, assert_def,
+           ignore_bind_def, abi_args_singleton_source, bind_def, return_def,
+           lift_sum_def, get_accounts_def, read_result_def,
+           evaluate_self_codesize_def] >>
+      gvs[evaluate_self_codesize_def]) >>
   Cases_on `evaluate_builtin cx r.accounts ann bi [expr_type e] [a]` >>
   simp[get_accounts_def, lift_sum_def, bind_def, return_def, raise_def,
        read_result_def, ignore_bind_def] >>

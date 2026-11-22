@@ -51,9 +51,10 @@ Theorem extcall_request_head_halt_outcome:
   expr_type addr = BaseT AddressT /\
   body_exprs_full_ok cx [addr] /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env addr es /\
   lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,sb) /\
-  lower_value compile_expr cenv (BaseT AddressT) (gas_shadow_expr addr)
+  lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT) (gas_shadow_expr addr)
     shadow_sa = (ao,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -143,9 +144,10 @@ Theorem extcall_request_head_outcome:
   expr_type addr = BaseT AddressT /\
   body_exprs_full_ok cx [addr] /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env addr es /\
   lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,sb) /\
-  lower_value compile_expr cenv (BaseT AddressT) (gas_shadow_expr addr)
+  lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT) (gas_shadow_expr addr)
     shadow_sa = (ao,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\

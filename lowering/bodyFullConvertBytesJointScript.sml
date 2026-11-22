@@ -267,6 +267,7 @@ QED
 Theorem convert_bytes_vv_sim_full:
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (TypeBuiltin ann Convert dst [e]) es /\
   body_expr_full_ok cx e /\ is_bytestring_type dst ==>
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -298,15 +299,17 @@ Proof
     (Cases_on `type_memory_bytes cenv (lowered_value_type cenv e) < type_memory_bytes cenv ann` >>
      gvs[oneline as_ptr_val_def, AllCaseEqs()] >>
      metis_tac[pairTheory.PAIR]) >> gvs[] >>
-  `?shadow_sm. lower_value compile_expr cenv (expr_type e)
+  `?shadow_sm. lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
       (gas_shadow_expr e) shadow_sa = (x,shadow_sm) /\
       gas_shadow_state sm shadow_sm` by
-    (mp_tac (Q.INST [`ty` |-> `expr_type e`, `sh` |-> `T`]
-      (MATCH_MP gasShadowCompileHelpersTheory.gas_shadow_compiles_lower_value
-        (cj 1 gas_shadow_compile_expr))) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >>
-     simp[] >> metis_tac[pairTheory.PAIR]) >>
+    (`gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
+       (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+         (gas_shadow_expr e))` by
+       irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env >>
+     pop_assum (qspecl_then [`sa`,`shadow_sa`] mp_tac o
+                REWRITE_RULE [gas_shadow_compiles_def]) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sa` >> simp[]) >>
   `cs_extends sa sm /\ cs_extends shadow_sa shadow_sm` by
     metis_tac[compile_expr_grows] >>
   qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>

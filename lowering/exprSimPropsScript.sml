@@ -100,6 +100,12 @@ Proof
   first_x_assum drule >> strip_tac >> simp[subscripts_type_def]
 QED
 
+Theorem dynarray_len_untupled_imp_at:
+  dynarray_len_untupled cenv n k ==> dynarray_len_at cenv n k
+Proof
+  rw[dynarray_len_untupled_def, dynarray_len_at_def] >> metis_tac[]
+QED
+
 Theorem dynarray_len_at_root:
   !cenv n et m.
     cenv.ce_var_type n = SOME (ArrayT et (Dynamic m)) ==>
@@ -201,15 +207,6 @@ Theorem vv_at_memory_val_at:
 Proof
   rw[vv_at_def, expr_val_at_def] >> first_x_assum drule_all >> strip_tac >>
   simp[] >> metis_tac[]
-QED
-
-Theorem dynarray_free_step[local]:
-  !tv sb k etv. dynarray_free tv /\ mem_step_offset tv sb = SOME (k,etv) ==>
-                dynarray_free etv
-Proof
-  rw[dynarray_free_def] >> strip_tac >>
-  first_x_assum (qspec_then `sb::path` mp_tac) >>
-  simp[mem_path_offset_def]
 QED
 
 Theorem mem_field_offset_apart[local]:
@@ -864,7 +861,8 @@ Proof
        assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
        builtin_args_length_ok_def, read_result_def] >>
   simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
-  Cases_on `item` >> fs[evaluate_builtin_def, return_def, raise_def] >>
+  Cases_on `item` >> fs[evaluate_builtin_def, is_self_codesize_def,
+                         return_def, raise_def] >>
   rw[] >> gvs[expr_res_ok_def, read_result_def, return_def]
 QED
 

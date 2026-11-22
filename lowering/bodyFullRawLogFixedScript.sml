@@ -12,7 +12,7 @@ Theorem raw_log_fixed_data_full:
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx (expr_type data) data es /\
     lower_value compile_expr cenv (expr_type data) data sd = (data_op,sm) /\
-    lower_value compile_expr cenv (expr_type data) (gas_shadow_expr data)
+    lower_value compile_expr (gas_shadow_env T cenv) (expr_type data) (gas_shadow_expr data)
       shadow_sd = (data_op,shadow_sm) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sm shadow_sm /\
     gas_shadow_state sd shadow_sd /\

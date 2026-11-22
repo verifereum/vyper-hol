@@ -17,9 +17,10 @@ Theorem raw_call_prefix_prepared_full:
   gas ov op result s1 s2 s3 s4 s5 s6 s7 xs es s0 G0 tn0 k Q R.
  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
  body_exprs_full_ok cx (a::d::kws) /\
+ body_const_cells_agree [(NONE,tops)] cx env es /\
  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
  compile_expr cenv ty (Call ann (RawCallTarget flags) (a::d::kws) NONE) sa=(vv,sb) /\
- compile_expr cenv ty
+ compile_expr (gas_shadow_env T cenv) ty
    (gas_shadow_expr (Call ann (RawCallTarget flags) (a::d::kws) NONE))
    shadow_sa=(vv,shadow_sb) /\
  lower_value compile_expr cenv (BaseT AddressT) a sa=(addr,s1) /\
@@ -130,19 +131,21 @@ Theorem raw_call_prefix_prepared_full:
        bind (eval_exprs cx kws) (k av dv)))) (es,s0,G0,tn0) Q R
 Proof
   rpt gen_tac >> strip_tac >>
-  `?h1. lower_value compile_expr cenv (BaseT AddressT) (gas_shadow_expr a)
-       shadow_sa = (addr,h1) /\ gas_shadow_state s1 h1` by
-    (mp_tac (Q.INST [`ty` |-> `BaseT AddressT`, `e` |-> `a`]
-       gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >>
+  `?h1. lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT)
+       (gas_shadow_expr a) shadow_sa = (addr,h1) /\ gas_shadow_state s1 h1` by
+    (`gas_shadow_compiles (lower_value compile_expr cenv (BaseT AddressT) a)
+       (lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT)
+          (gas_shadow_expr a))` by irule gas_shadow_stmt_lower_value_env >>
+     pop_assum (mp_tac o Q.SPECL [`sa`, `shadow_sa`] o
+       REWRITE_RULE [gas_shadow_compiles_def]) >>
      simp[] >> metis_tac[pairTheory.PAIR]) >>
-  `?h2. lower_value compile_expr cenv (expr_type d) (gas_shadow_expr d)
-       h1 = (data,h2) /\ gas_shadow_state s2 h2` by
-    (mp_tac (Q.INST [`ty` |-> `expr_type d`, `e` |-> `d`]
-       gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`s1`, `h1`] mp_tac) >>
+  `?h2. lower_value compile_expr (gas_shadow_env T cenv) (expr_type d)
+       (gas_shadow_expr d) h1 = (data,h2) /\ gas_shadow_state s2 h2` by
+    (`gas_shadow_compiles (lower_value compile_expr cenv (expr_type d) d)
+       (lower_value compile_expr (gas_shadow_env T cenv) (expr_type d)
+          (gas_shadow_expr d))` by irule gas_shadow_stmt_lower_value_env >>
+     pop_assum (mp_tac o Q.SPECL [`s1`, `h1`] o
+       REWRITE_RULE [gas_shadow_compiles_def]) >>
      simp[] >> metis_tac[pairTheory.PAIR]) >>
   `?h3. emit_op MLOAD [data] h2 = (len,h3) /\ gas_shadow_state s3 h3` by
     (mp_tac (Q.INST [`opc` |-> `MLOAD`, `opc'` |-> `MLOAD`, `ops` |-> `[data]`]
@@ -159,12 +162,12 @@ Proof
      simp[] >> metis_tac[pairTheory.PAIR]) >>
   `gas_shadow_compiles
      (compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws kws)
-     (compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws
+     (compile_ext_call_kwargs compile_expr (gas_shadow_env T cenv) NoneT flags.rcf_kws
        (MAP gas_shadow_expr kws))` by
-    (irule (Q.INST [`sh` |-> `T`] gas_shadow_compiles_ext_call_kwargs
+    (irule (Q.INST [`sh` |-> `T`] gas_shadow_compiles_ext_call_kwargs_env
               |> SIMP_RULE (srw_ss()) []) >>
-     simp[cj 1 gasShadowCompileTheory.gas_shadow_compile_expr]) >>
-  `?h5. compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws
+     simp[cj 1 gasShadowCompileTheory.gas_shadow_compile_expr_env]) >>
+  `?h5. compile_ext_call_kwargs compile_expr (gas_shadow_env T cenv) NoneT flags.rcf_kws
        (MAP gas_shadow_expr kws) h4 = ((vo,go,ignored),h5) /\
        gas_shadow_state s5 h5` by
     (qpat_x_assum `gas_shadow_compiles _ _` mp_tac >>
@@ -198,19 +201,20 @@ Proof
    go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ignored = NONE` by
     (drule_all exprSimRawCallTheory.raw_call_kwargs_word_args >>
      strip_tac >> gvs[]) >>
-  `!todo. gas_shadow_compiles
-     (lower_word_args cenv (K (BaseT (UintT 256))) todo)
-     (lower_word_args cenv (K (BaseT (UintT 256))) (MAP gas_shadow_expr todo))` by
+  `gas_shadow_compiles
+     (lower_word_args cenv (K (BaseT (UintT 256))) kws)
+     (lower_word_args (gas_shadow_env T cenv) (K (BaseT (UintT 256)))
+        (MAP gas_shadow_expr kws))` by
     simp[gas_shadow_compiles_lower_word_args] >>
-  `lower_word_args cenv (K (BaseT (UintT 256)))
+  `lower_word_args (gas_shadow_env T cenv) (K (BaseT (UintT 256)))
      (MAP gas_shadow_expr kws) h4 = (xs,h5)` by
-    (drule_at (Pat `compile_ext_call_kwargs _ _ _ _ _ _ = _`)
+    (qpat_x_assum `compile_ext_call_kwargs _ _ _ _ kws s4 = _` kall_tac >>
+     drule_at (Pat `compile_ext_call_kwargs _ _ _ _ _ _ = _`)
        exprSimRawCallTheory.raw_call_kwargs_word_args >>
      simp[] >> strip_tac >>
-     qpat_x_assum `!todo. gas_shadow_compiles _ _`
-       (mp_tac o Q.SPECL [`s4`,`h4`] o
-        REWRITE_RULE [gas_shadow_compiles_def] o Q.SPEC `kws`) >>
-     simp[] >> metis_tac[pairTheory.PAIR]) >>
+     qpat_x_assum `gas_shadow_compiles (lower_word_args _ _ _) _`
+       (mp_tac o Q.SPECL [`s4`,`h4`] o REWRITE_RULE [gas_shadow_compiles_def]) >>
+     simp[]) >>
   `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 s3 /\ ci_mono s3 s4 /\
    ci_mono s4 s5 /\ ci_mono s5 s6 /\ ci_mono s6 s7 /\ ci_mono s7 sb` by
     (rpt conj_tac
@@ -303,6 +307,18 @@ Proof
                simp[cj 6 evaluate_storage_trace_frame]) >>
   qx_genl_tac [`gsA`,`av`,`esA`,`tA`,`GA`,`tnA`,`gsD`,`bs`,`esD`,`tD`,`GD`,`tnD`] >>
   strip_tac >>
+  `well_typed_expr env a /\ well_typed_expr env d` by
+    (qpat_assum `expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es`
+       (mp_tac o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     simp[vyperTypeSystemTheory.well_typed_expr_def]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env esA` by
+    (irule body_const_cells_agree_expr_read >>
+     qpat_assum `bind (eval_expr cx a) (read_result cx) _ = (INL av,esA)` (irule_at Any) >>
+     simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env esD` by
+    (irule body_const_cells_agree_expr_read >>
+     qpat_assum `bind (eval_expr cx d) (read_result cx) _ = (INL (BytesV bs),esD)` (irule_at Any) >>
+     simp[]) >>
   `valid_horizon cx st0 (storage_trace_horizon esD.storage_trace)
      esD.storage_trace` by
     (qpat_assum `storage_trace_domain cx st0 esD.storage_trace`
@@ -446,7 +462,7 @@ Proof
   (impl_tac >-
     (qpat_assum `lower_word_args cenv (K _) kws s4 = _`
        (assume_tac o SIMP_RULE std_ss [combinTheory.K_DEF]) >>
-     qpat_assum `lower_word_args cenv (K _) (MAP gas_shadow_expr kws) h4 = _`
+     qpat_assum `lower_word_args _ (K _) (MAP gas_shadow_expr kws) h4 = _`
        (assume_tac o SIMP_RULE std_ss [combinTheory.K_DEF]) >>
      rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >>
   strip_tac >>

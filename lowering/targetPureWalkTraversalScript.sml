@@ -260,7 +260,8 @@ Resume walk_outer_mutual[builtin]:
   IF_CASES_TAC >- suspend "builtin_len" >>
   IF_CASES_TAC >- (machine_leaf >> simp[state_rel_frame_def, next_gas_reading_def] >> gen_tac >> Cases_on `st.gas_obs` >> simp[raise_def, return_def, machine_frame_def, bind_def]) >>
   match_mp_tac walk_bind >> reverse conj_tac
-  >- (gen_tac >> BETA_TAC >> machine_leaf >>
+  >- (gen_tac >> BETA_TAC >> Cases_on `is_self_codesize bt es` >> simp[] >>
+      machine_leaf >>
       rpt (match_mp_tac machine_frame_bind >>
         conj_tac >- simp[machine_frame_primitives, machine_frame_reads,
                          machine_frame_precompile_call_success] >> gen_tac >> BETA_TAC) >>

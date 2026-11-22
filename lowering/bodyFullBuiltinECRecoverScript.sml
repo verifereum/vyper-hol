@@ -30,6 +30,7 @@ Theorem ecrecover_expr_sim_full:
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a ECRecover args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a ECRecover args) es
@@ -45,44 +46,31 @@ Proof
   disch_then (qx_choose_then `h` (qx_choose_then `v`
     (qx_choose_then `r` (qx_choose_then `sig`
       (qx_choose_then `sf` strip_assume_tac))))) >>
-  `!todo. gas_shadow_compiles (lower_word_args cenv (\e. ty) todo)
-    (lower_word_args cenv (\e. ty) (MAP gas_shadow_expr todo))` by
-    (Induct >> simp[lower_word_args_def,MAP,gas_shadow_compiles_return] >> gen_tac >>
-     irule gas_shadow_compiles_bind >> simp[gas_shadow_stmt_lower_value] >>
-     gen_tac >> irule gas_shadow_compiles_bind >>
-     simp[gas_shadow_compiles_return]) >>
+  `gas_shadow_compiles (lower_word_args cenv (\e. ty) args)
+    (lower_word_args (gas_shadow_env T cenv) (\e. ty)
+      (MAP gas_shadow_expr args))` by
+    simp[bodyFullWordArgsTheory.gas_shadow_compiles_lower_word_args] >>
   `?shadow_sf.
-     lower_word_args cenv (\e. ty) (MAP gas_shadow_expr args) shadow_sa =
-       ([h;v;r;sig],shadow_sf) /\ gas_shadow_state sf shadow_sf` by
-    (qpat_assum `!todo. gas_shadow_compiles _ _`
-       (mp_tac o Q.SPECL [`sa`,`shadow_sa`] o
-        REWRITE_RULE [gas_shadow_compiles_def] o Q.SPEC `args`) >> simp[] >>
-     Cases_on `lower_word_args cenv (\e. ty)
+     lower_word_args (gas_shadow_env T cenv) (\e. ty) (MAP gas_shadow_expr args)
+       shadow_sa = ([h;v;r;sig],shadow_sf) /\ gas_shadow_state sf shadow_sf` by
+    (qpat_x_assum `gas_shadow_compiles (lower_word_args _ _ _) _`
+       (mp_tac o Q.SPECL [`sa`,`shadow_sa`] o REWRITE_RULE [gas_shadow_compiles_def]) >>
+     Cases_on `lower_word_args (gas_shadow_env T cenv) (\e. ty)
        (MAP gas_shadow_expr args) shadow_sa` >> simp[] >> metis_tac[]) >>
   `?hh hv hr hs shadow_cut.
-     lower_word_args cenv (\e. ty) (MAP gas_shadow_expr args) shadow_sa =
-       ([hh;hv;hr;hs],shadow_cut) /\
+     lower_word_args (gas_shadow_env T cenv) (\e. ty) (MAP gas_shadow_expr args)
+       shadow_sa = ([hh;hv;hr;hs],shadow_cut) /\
      compile_ecrecover hh hv hr hs shadow_cut = (op,shadow_sb)` by
-    (`lower_value compile_expr cenv ty
-        (Builtin (BaseT AddressT) ECRecover (MAP gas_shadow_expr args))
-        shadow_sa = (op,shadow_sb)` by
-       fs[gas_shadow_expr_def,gas_shadow_builtin_def] >>
-     mp_tac (Q.INST [`args` |-> `MAP gas_shadow_expr args`,
-       `sa` |-> `shadow_sa`,`sb` |-> `shadow_sb`,
-       `ann` |-> `BaseT AddressT`] lower_value_ecrecover_args) >>
-     simp[] >> metis_tac[]) >>
+    (irule lower_value_ecrecover_args >>
+     fs[gas_shadow_expr_def,gas_shadow_builtin_def] >>
+     qexists_tac `BaseT AddressT` >> simp[]) >>
   `shadow_cut = shadow_sf /\ hh = h /\ hv = v /\ hr = r /\ hs = sig` by
     metis_tac[pairTheory.PAIR_EQ,listTheory.CONS_11] >>
   gvs[] >>
   rename1 `lower_word_args cenv (\e. ty) args sa = ([h;v;r;sig],sf)` >>
   rename1 `gas_shadow_state sf shadow_sf` >>
-  `!todo x y ops. lower_word_args cenv (\e. ty) todo x = (ops,y) ==>
-    ci_mono x y` by
-    (POP_ASSUM_LIST (K all_tac) >> Induct >>
-     simp[lower_word_args_nil,ci_mono_refl] >> rpt gen_tac >>
-     rw[lower_word_args_cons] >>
-     metis_tac[ci_mono_lower_value_compile_expr,ci_mono_trans,pairTheory.SND]) >>
-  `ci_mono sa sf /\ ci_mono shadow_sa shadow_sf` by metis_tac[] >>
+  `ci_mono sa sf /\ ci_mono shadow_sa shadow_sf` by
+    metis_tac[bodyFullWordArgsTheory.ci_mono_lower_word_args] >>
   `cs_extends sa sf /\ cs_extends shadow_sa shadow_sf /\
    sa.cs_next_var <= sf.cs_next_var /\ sa.cs_next_id <= sf.cs_next_id` by
     fs[ci_mono_def] >>
@@ -1339,6 +1327,7 @@ Theorem ecrecover_builtin_sim_full:
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a ECRecover args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a ECRecover args) es /\

@@ -125,6 +125,7 @@ Proof
   `eval_expr cx (Builtin ann (MakeArray (SOME et) (Dynamic n)) []) es =
      (INL (Value (ArrayV (make_array_value tv (Dynamic n) []))), es)` by
     (simp[Once evaluate_def, vyperContextTheory.builtin_args_length_ok_def,
+          vyperContextTheory.is_self_codesize_def,
           type_check_def, assert_def, ignore_bind_def, bind_def, return_def,
           get_accounts_def, lift_sum_def, vyperContextTheory.evaluate_builtin_def] >>
      simp[Once evaluate_def, return_def, bind_def,

@@ -2,6 +2,7 @@ Theory bodyFullPop
 Ancestors
   bodyFullTarget bodyFullTargetDefs bodyFullPreds bodySimFull bodyFullOfVV
   gasOutcomeFullCompose gasOutcomeFull gasShadowCompile gasShadowState gasShadow
+  gasShadowCompileStmtHelpers
   exprSimPopNestedLocalSource exprSimPopNestedLocalHandoff exprSimPopNestedLocalRun
   popTargetPre exprSimHyps exprSimHypsDefs exprSimSource exprSimPopNestedBase
   exprLoweringProps loweringPosts exprLowering compileEnv stmtLoweringMono
@@ -1343,16 +1344,18 @@ Proof
   qpat_x_assum `compile_expr cenv ty (Pop ann bt) sa = _` mp_tac >>
   simp[Once nested_pop_compile_eq] >> pairarg_tac >> simp[] >> strip_tac >>
   `?shadow_sm.
-     compile_get_target_ptr compile_expr cenv (gas_shadow_target bt) shadow_sa =
-       ((rb0,rb1,rb2),shadow_sm) /\ gas_shadow_state sm shadow_sm` by
-    (mp_tac (MATCH_MP gasShadowCompileHelpersTheory.gas_shadow_compiles_get_target_ptr
-       (cj 1 gas_shadow_compile_expr)) >>
-     disch_then (qspecl_then [`bt`, `cenv`, `T`] mp_tac) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >>
+     compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+       (gas_shadow_target bt) shadow_sa = ((rb0,rb1,rb2),shadow_sm) /\
+     gas_shadow_state sm shadow_sm` by
+    (`gas_shadow_compiles (compile_get_target_ptr compile_expr cenv bt)
+       (compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+          (gas_shadow_target bt))` by irule gas_shadow_stmt_get_target_ptr_env >>
+     qpat_x_assum `gas_shadow_compiles _ _`
+       (qspecl_then [`sa`, `shadow_sa`] mp_tac o
+        REWRITE_RULE [gas_shadow_compiles_def]) >>
      simp[] >> strip_tac >>
-     Cases_on `compile_get_target_ptr compile_expr cenv (gas_shadow_target bt) shadow_sa` >>
-     gvs[]) >>
+     Cases_on `compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+       (gas_shadow_target bt) shadow_sa` >> gvs[]) >>
   drule nested_pop_target_admissible >> strip_tac >>
   `?n. type_place_target env bt = SOME (Type (ArrayT ann (Dynamic n)))` by
     (irule well_typed_expr_Pop_dynamic_target >>
@@ -1366,12 +1369,12 @@ Proof
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     (irule fn_has_code_split >> gvs[ci_mono_def]) >>
   `cs_extends shadow_sm shadow_sb` by
-    (qpat_x_assum `compile_expr cenv ty (gas_shadow_expr (Pop ann bt)) shadow_sa = _` mp_tac >>
+    (qpat_x_assum `compile_expr _ _ (gas_shadow_expr (Pop ann bt)) _ = _` mp_tac >>
      simp[gas_shadow_expr_def, Once nested_pop_compile_eq] >>
      pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
      metis_tac[ci_mono_compile_dynarray_pop, pairTheory.SND, ci_mono_def]) >>
   `cs_extends shadow_sa shadow_sm` by
-    (mp_tac (Q.SPECL [`gas_shadow_target bt`, `cenv`, `shadow_sa`]
+    (mp_tac (Q.SPECL [`gas_shadow_target bt`, `gas_shadow_env T cenv`, `shadow_sa`]
        ci_mono_compile_get_target_ptr) >> simp[ci_mono_def]) >>
   `fn_has_code shadow_sa shadow_sm shadow_func` by
     (drule_all fn_has_code_split >> simp[]) >>

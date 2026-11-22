@@ -561,7 +561,7 @@ Resume eval_observation_frame_pred[Builtin]:
       assert_def, return_def, raise_def,
       vyperContextTheory.builtin_args_length_ok_def, LENGTH_EQ_NUM_compute] >>
   imp_res_tac result_array_length_state >> imp_res_tac lift_option_type_state >>
-  imp_res_tac lift_sum_state >> imp_res_tac next_gas_reading_state >>
+  imp_res_tac if_lift_sum_state >> imp_res_tac next_gas_reading_state >>
   imp_res_tac precompile_call_success_state >>
   gvs[get_accounts_def, return_def] >> res_tac >> gvs[] >>
   Cases_on `code_slice_source bt es`
@@ -775,7 +775,7 @@ Resume eval_name_projection_mutual[Builtin]:
   gvs[expr_writes_ok_def, SF ETA_ss, type_check_def, assert_def, return_def,
       raise_def, vyperContextTheory.builtin_args_length_ok_def, LENGTH_EQ_NUM_compute] >>
   imp_res_tac result_array_length_state >> imp_res_tac lift_option_type_state >>
-  imp_res_tac lift_sum_state >> imp_res_tac next_gas_reading_state >>
+  imp_res_tac if_lift_sum_state >> imp_res_tac next_gas_reading_state >>
   imp_res_tac get_accounts_scopes >> imp_res_tac precompile_call_success_state >>
   gvs[] >> res_tac >> gvs[] >>
   Cases_on `code_slice_source bt es`

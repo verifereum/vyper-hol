@@ -150,6 +150,17 @@ Definition dynarray_len_at_def:
       type_path_offset cenv t0 path = SOME (k, ArrayT et (Dynamic m))
 End
 
+(* A dynamic array header that a mutable path can reach without
+   stepping through a tuple. *)
+Definition dynarray_len_untupled_def:
+  dynarray_len_untupled cenv n k <=>
+    ?t0 path et m.
+      cenv.ce_var_type n = SOME t0 /\
+      type_path_offset cenv t0 path = SOME (k, ArrayT et (Dynamic m)) /\
+      !pre sb rest j ts. path = pre ++ sb::rest ==>
+        type_path_offset cenv t0 pre <> SOME (j, TupleT ts)
+End
+
 (* A value of type tv sits at offset k of the local n's region: a path
    through the type value of n's declared type reaches tv at k. *)
 Definition local_path_at_def:
@@ -224,9 +235,8 @@ End
 
 (* Code run from s0 to s, taking the source from es to es', leaves the
    live locals' memory alone, but for the length words of their dynamic
-   arrays: the bytes of every live local's region at es apart from each
-   dynamic array length word inside it (dynarray_len_at, the root's and the
-   nested ones') are kept.  The only memory of a local an expression writes
+   arrays reachable without stepping through a tuple
+   (dynarray_len_untupled). The only memory of a local an expression writes
    is the length word of the array a pop pops (exprSimPop for a local
    x.pop(); a pop on a nested place, x.f.pop() or x[i].pop(), writes the
    length word at its offset in x's declared type).  A pop records the
@@ -239,7 +249,7 @@ Definition locals_kept_def:
     (!n b sz off len.
        local_region cenv es.scopes s0 n b sz /\ b <= off /\
        off + len <= b + sz /\
-       (!k. dynarray_len_at cenv n k ==> off + len <= b + k \/ b + k + 32 <= off) ==>
+       (!k. dynarray_len_untupled cenv n k ==> off + len <= b + k \/ b + k + 32 <= off) ==>
        mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory) /\
     MAP FDOM es'.scopes = MAP FDOM es.scopes /\
     scopes_progress es.scopes es'.scopes /\

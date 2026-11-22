@@ -16,7 +16,7 @@ Ancestors
   o1PipelineCompose deployUnitProducers ctorDeployRawEntryFacts
   asmOptNonemptyFinalizer asmOptNonemptyWitness asmFrameRel deployFrameReplay
   callTrace unitTransformDefs gasMaskProjection gasEvents gasExplicitSites codegenSymRel
-  deploySymSrcUnit e2eDefs list venomState gasFocusPrefixDriver
+  e2eDefs list venomState gasFocusPrefixDriver
 
 (* A successful compilation exposes the deployment unit's phases. *)
 Theorem compile_vyper_deploy_phases:

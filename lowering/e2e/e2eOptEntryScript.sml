@@ -12,8 +12,8 @@ Ancestors
   unitTransformDefs venomState finite_map
 
 Theorem opt_entry_codegen_asm_entry_rel:
-  !tops prog prog' am tx es cplan u.
-  call_state_rel tops (assemble prog') am tx es /\ unit_shape_ok u ==>
+  !tops prog prog' am tx es cplan.
+  call_state_rel tops (assemble prog') am tx es ==>
   codegen_asm_entry_rel cplan prog (opt_entry_state prog prog' cplan es)
     (entry_asm_state (opt_entry_state prog prog' cplan es) es)
 Proof
@@ -25,44 +25,6 @@ Proof
   gvs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
       entry_venom_state_def, venomStateTheory.init_venom_state_def,
       context_memory_rel_def]
-QED
-
-Theorem opt_entry_asm_frame_rel:
-  !tops prog prog' am tx es cplan u.
-  call_state_rel tops (assemble prog') am tx es /\ unit_shape_ok u /\
-  assemble prog' <> [] ==>
-  asm_frame_rel prog' (opt_entry_state prog prog' cplan es).vs_data_section es
-    (entry_asm_state (opt_entry_state prog prog' cplan es) es with
-       as_code := assemble prog' ++
-         (opt_entry_state prog prog' cplan es).vs_data_section) es
-Proof
-  rpt strip_tac >>
-  drule_then (qspecl_then [`u`, `cplan`] assume_tac)
-    entry_venom_state_initial_ctx_rel >>
-  drule_then (qspec_then `cplan` strip_assume_tac)
-    entry_venom_state_installed_section >>
-  fs[entry_venom_state_frame_fields] >>
-  `account_already_created
-     (lookup_account (FST (HD es.contexts)).msgParams.callee
-        es.rollback.accounts)` by
-    (`(FST (HD es.contexts)).msgParams.code <> []` by
-       (strip_tac >> fs[]) >>
-     gvs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def,
-         vfmExecutionTheory.account_already_created_def,
-         listTheory.NULL_EQ]) >>
-  `asm_frame_rel prog' (entry_venom_state prog' cplan es).vs_data_section es
-     (entry_asm_state (entry_venom_state prog' cplan es) es) es` by
-    metis_tac[asm_frame_rel_entry] >>
-  `entry_asm_state (opt_entry_state prog prog' cplan es) es with
-     as_code := assemble prog' ++
-       (opt_entry_state prog prog' cplan es).vs_data_section =
-   entry_asm_state (entry_venom_state prog' cplan es) es` by
-    (qpat_assum `_ = assemble prog' ++ _` (fn th => REWRITE_TAC [GSYM th]) >>
-     simp[opt_entry_state_def, entry_asm_state_def] >>
-     simp[entry_venom_state_def] >>
-     qpat_x_assum `_ = assemble prog' ++ _` (ACCEPT_TAC o SYM)) >>
-  qpat_x_assum `entry_asm_state _ _ with as_code := _ = _` SUBST1_TAC >>
-  fs[opt_entry_state_def, entry_venom_state_frame_fields]
 QED
 
 Theorem opt_entry_fields:
@@ -129,4 +91,31 @@ Proof
       vfmExecutionTheory.account_already_created_def, listTheory.NULL_EQ] >>
   qpat_assum `tx.code = assemble prog' ++ _` (fn th => once_rewrite_tac[GSYM th]) >>
   simp[CONJ_ASSOC]
+QED
+
+Theorem opt_entry_asm_frame_rel:
+  !tops prog prog' am tx es cplan.
+  call_state_rel tops (assemble prog') am tx es /\
+  assemble prog' <> [] ==>
+  asm_frame_rel prog' (opt_entry_state prog prog' cplan es).vs_data_section es
+    (entry_asm_state (opt_entry_state prog prog' cplan es) es with
+       as_code := assemble prog' ++
+         (opt_entry_state prog prog' cplan es).vs_data_section) es
+Proof
+  rpt strip_tac >>
+  qspecl_then [`tops`, `prog'`, `prog'`, `am`, `tx`, `es`, `cplan`]
+    mp_tac opt_entry_asm_rels_own >>
+  asm_simp_tac (srw_ss()) [opt_entry_state_own_identity] >>
+  strip_tac >>
+  fs[entry_venom_state_frame_fields] >>
+  `entry_asm_state (opt_entry_state prog prog' cplan es) es with
+     as_code := assemble prog' ++
+       (opt_entry_state prog prog' cplan es).vs_data_section =
+   entry_asm_state (entry_venom_state prog' cplan es) es` by
+    (qpat_assum `_ = assemble prog' ++ _` (fn th => REWRITE_TAC [GSYM th]) >>
+     simp[opt_entry_state_def, entry_asm_state_def] >>
+     simp[entry_venom_state_def] >>
+     qpat_x_assum `_ = assemble prog' ++ _` (ACCEPT_TAC o SYM)) >>
+  qpat_x_assum `entry_asm_state _ _ with as_code := _ = _` SUBST1_TAC >>
+  fs[opt_entry_state_def, entry_venom_state_frame_fields]
 QED

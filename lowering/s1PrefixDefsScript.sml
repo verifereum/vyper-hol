@@ -61,7 +61,7 @@ Definition expr_map_sim_full_pre_def:
     cenv cx ty e es
     (st0, sa, sb, shadow_sa, shadow_sb, vv, s0, G0, tn0) <=>
       compile_expr cenv ty e sa = (vv, sb) /\
-      compile_expr cenv ty (gas_shadow_expr e) shadow_sa = (vv, shadow_sb) /\
+      compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa = (vv, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
       gas_shadow_function func shadow_func /\
@@ -104,7 +104,7 @@ Definition expr_sim_full_pre_def:
     cenv cx ty e es
     (st0, sa, sb, shadow_sa, shadow_sb, op, s0, G0, tn0) <=>
       lower_value compile_expr cenv ty e sa = (op, sb) /\
-      lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa =
+      lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa =
         (op, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -148,7 +148,7 @@ Definition expr_vv_sim_full_pre_def:
     cenv cx ty e es
     (st0, sa, sb, shadow_sa, shadow_sb, vv, s0, G0, tn0) <=>
       compile_expr cenv ty e sa = (vv, sb) /\
-      compile_expr cenv ty (gas_shadow_expr e) shadow_sa = (vv, shadow_sb) /\
+      compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa = (vv, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
       gas_shadow_function func shadow_func /\
@@ -193,7 +193,7 @@ Definition stmt_frag_full_pre_def:
     source es
     (st0, sa, sb, shadow_sa, shadow_sb, s0, G0, tn0, cenv') <=>
       m sa = (cenv', sb) /\
-      shadow_m shadow_sa = (cenv', shadow_sb) /\
+      shadow_m shadow_sa = (gas_shadow_env T cenv', shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
       gas_shadow_function func shadow_func /\
@@ -261,7 +261,8 @@ Definition frame_ret_ok_prefix_def:
       stmt_frag_prefix (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cx lctx RetQ cenv'
         (stmt_env cenv' lctx ret_ty (Return eo))
-        (stmt_env cenv' lctx ret_ty (Return (OPTION_MAP gas_shadow_expr eo)))
+        (stmt_env (gas_shadow_env T cenv') lctx ret_ty
+          (Return (OPTION_MAP gas_shadow_expr eo)))
         (eval_stmt cx (Return eo)) es
 End
 
@@ -477,7 +478,8 @@ Theorem frame_ret_ok_full_eq:
       stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cx lctx RetQ cenv'
         (stmt_env cenv' lctx ret_ty (Return eo))
-        (stmt_env cenv' lctx ret_ty (Return (OPTION_MAP gas_shadow_expr eo)))
+        (stmt_env (gas_shadow_env T cenv') lctx ret_ty
+          (Return (OPTION_MAP gas_shadow_expr eo)))
         (eval_stmt cx (Return eo)) es
 Proof
   simp[frame_ret_ok_full_def, frame_ret_ok_full_pre_def]

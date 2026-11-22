@@ -28,8 +28,8 @@ Theorem bop_suffix_full_halt:
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
-  lower_value compile_expr cenv ty (gas_shadow_expr (Builtin ann (Bop bop) [e1;e2]))
-    shadow_sa = (op,shadow_sb) /\
+  lower_value compile_expr (gas_shadow_env T cenv) ty
+    (gas_shadow_expr (Builtin ann (Bop bop) [e1;e2])) shadow_sa = (op,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -48,9 +48,9 @@ Theorem bop_suffix_full_halt:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
     (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
     (y,shadow_s2) /\
   compile_binop bop x y (expr_type e1)
     (if bop = Exp then expr_int_literal e1 else NONE)
@@ -216,8 +216,8 @@ Theorem bop_suffix_full:
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
-  lower_value compile_expr cenv ty (gas_shadow_expr (Builtin ann (Bop bop) [e1;e2]))
-    shadow_sa = (op,shadow_sb) /\
+  lower_value compile_expr (gas_shadow_env T cenv) ty
+    (gas_shadow_expr (Builtin ann (Bop bop) [e1;e2])) shadow_sa = (op,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -236,9 +236,9 @@ Theorem bop_suffix_full:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
     (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
     (y,shadow_s2) /\
   compile_binop bop x y (expr_type e1)
     (if bop = Exp then expr_int_literal e1 else NONE)
@@ -322,8 +322,8 @@ Theorem bop_word_suffix_full_halt:
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
-  lower_value compile_expr cenv ty (gas_shadow_expr (Builtin ann (Bop bop) [e1;e2]))
-    shadow_sa = (op,shadow_sb) /\
+  lower_value compile_expr (gas_shadow_env T cenv) ty
+    (gas_shadow_expr (Builtin ann (Bop bop) [e1;e2])) shadow_sa = (op,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -342,9 +342,9 @@ Theorem bop_word_suffix_full_halt:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
     (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
     (y,shadow_s2) /\
   compile_binop bop x y (expr_type e1)
     (if bop = Exp then expr_int_literal e1 else NONE)
@@ -430,8 +430,8 @@ Theorem bop_word_suffix_full:
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
-  lower_value compile_expr cenv ty (gas_shadow_expr (Builtin ann (Bop bop) [e1;e2]))
-    shadow_sa = (op,shadow_sb) /\
+  lower_value compile_expr (gas_shadow_env T cenv) ty
+    (gas_shadow_expr (Builtin ann (Bop bop) [e1;e2])) shadow_sa = (op,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -450,9 +450,9 @@ Theorem bop_word_suffix_full:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
     (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
     (y,shadow_s2) /\
   compile_binop bop x y (expr_type e1)
     (if bop = Exp then expr_int_literal e1 else NONE)

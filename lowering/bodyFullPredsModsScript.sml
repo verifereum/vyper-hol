@@ -16,6 +16,7 @@ Definition body_expr_full_ok_mods_def[nocompute]:
       contract_inv mods exps ctx cenv cx /\
       module_body_inv mods src tops cenv cx /\
       shadow_body_inv_mods mods exps ctx shadow_ctx /\
+      body_const_cells_agree mods cx env es /\
       expr_body_pre_mods mods cenv cx env e es ==>
       expr_sim_full_mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty e es /\
@@ -30,6 +31,7 @@ Definition body_expr_full_ok_mods_def[nocompute]:
       contract_inv mods exps ctx cenv cx /\
       module_body_inv mods src tops cenv cx /\
       shadow_body_inv_mods mods exps ctx shadow_ctx /\
+      body_const_cells_agree mods cx env es /\
       expr_map_pre_mods mods cenv cx env e es ==>
       expr_map_sim_full_mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty e es)) /\
@@ -57,6 +59,7 @@ Definition body_stmt_full_ok_mods_def[nocompute]:
       (!target. supported_stmt_expr_exists
          (expr_abi_decode_target_root target) s ==>
          EXISTS (occurs_abi_decode_target target o SND) mods) /\
+      body_const_cells_agree mods cx env es /\
       expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\
@@ -66,7 +69,7 @@ Definition body_stmt_full_ok_mods_def[nocompute]:
       stmt_frag_full_mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cx lctx RetQ cenv
         (stmt_env cenv lctx ret_ty s)
-        (stmt_env cenv lctx ret_ty (gas_shadow_stmt s))
+        (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt s))
         (eval_stmt cx s) es
 End
 
@@ -81,6 +84,7 @@ Definition body_stmts_full_ok_mods_def[nocompute]:
       (!target. supported_stmts_expr_exists
          (expr_abi_decode_target_root target) ss ==>
          EXISTS (occurs_abi_decode_target target o SND) mods) /\
+      body_const_cells_agree mods cx env es /\
       expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmts env ret_ty ss = SOME env' /\
@@ -91,7 +95,7 @@ Definition body_stmts_full_ok_mods_def[nocompute]:
       stmt_frag_full_mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cx lctx RetQ cenv
         (stmts_env cenv lctx ret_ty ss)
-        (stmts_env cenv lctx ret_ty (MAP gas_shadow_stmt ss))
+        (stmts_env (gas_shadow_env T cenv) lctx ret_ty (MAP gas_shadow_stmt ss))
         (eval_stmts cx ss) es
 End
 

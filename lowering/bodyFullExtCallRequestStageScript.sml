@@ -11,7 +11,7 @@ Ancestors
   gasShadowCompileHelpers gasShadowCompileStmtHelpers
   entryReachBodyFirstEmissionExprSupport entryReachBodyFirstEmissionExpr
   externalEntryShape gasShadowState gasShadowCompileConvert
-  evalNoHalt exprSimDefs gasOutcomeFull
+  evalNoHalt exprSimDefs gasOutcomeFull bodyFullPreds list
   bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
 Libs
   pairLib
@@ -81,28 +81,23 @@ Proof
   gvs[listTheory.EVERY_MEM, listTheory.EXISTS_MEM] >> metis_tac[]
 QED
 
-(* Pair the positional cuts, including the snapshots chosen by the unchanged
-   mutation test. The generic shadow proof is private to its compiler theory. *)
+(* Pair the observed positional cuts using the compiler correspondence. *)
 Theorem request_stage_pos_shadow_cut[local]:
   gas_shadow_state a a' /\
   compile_ext_call_args compile_expr ce kws tys xs a = (av,b) /\
-  compile_ext_call_args compile_expr ce (MAP gas_shadow_expr kws) tys
+  compile_ext_call_args compile_expr (gas_shadow_env T ce) (MAP gas_shadow_expr kws) tys
     (MAP gas_shadow_expr xs) a' = (av',b') ==>
   av' = av /\ gas_shadow_state b b'
 Proof
-  `!xs kws tys. gas_shadow_compiles (compile_ext_call_args compile_expr ce kws tys xs)
-    (compile_ext_call_args compile_expr ce (MAP gas_shadow_expr kws) tys
-      (MAP gas_shadow_expr xs))` suffices_by
-    (simp[gas_shadow_compiles_def] >> metis_tac[pairTheory.FST,pairTheory.SND]) >>
-  Induct >> rpt gen_tac >> Cases_on `tys` >>
-  simp[compile_ext_call_args_def, gas_shadow_compiles_return] >>
-  match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- metis_tac[cj 1 gas_shadow_compile_expr,boolTheory.COND_CLAUSES] >>
-  gen_tac >> BETA_TAC >> match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- (ONCE_REWRITE_TAC[GSYM listTheory.MAP_APPEND] >>
-      simp[gas_shadow_expr_can_mutate, gas_shadow_compiles_snapshot_vv]) >>
-  gen_tac >> BETA_TAC >> irule gas_shadow_compiles_bind >>
-  simp[gas_shadow_compiles_return]
+  strip_tac >>
+  `gas_shadow_compiles (compile_ext_call_args compile_expr ce kws tys xs)
+    (compile_ext_call_args compile_expr (gas_shadow_env T ce) (MAP gas_shadow_expr kws) tys
+      (MAP gas_shadow_expr xs))` by
+    (mp_tac (Q.INST [`sd` |-> `T`, `sh` |-> `T`, `cenv` |-> `ce`]
+      (MATCH_MP gas_shadow_compiles_ext_call_args (cj 1 gas_shadow_compile_expr_env))) >>
+     disch_then (qspecl_then [`xs`,`kws`,`tys`] mp_tac) >> simp[]) >>
+  pop_assum (qspecl_then [`a`,`a'`] mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
+  simp[EQ_SYM_EQ]
 QED
 
 (* The packed source action no longer evaluates the operands. Its recorded
@@ -132,6 +127,7 @@ QED
 Theorem extcall_request_full:
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env
     (Call ann (ExtCall stat skip (fname,ats,rt) opts) args dr) es /\
   (!st target mid n. eval_exprs cx (TAKE 1 args) st = (INL target,mid) /\
@@ -143,7 +139,7 @@ Theorem extcall_request_full:
   body_exprs_full_ok cx (TAKE 1 args) /\
   compile_expr cenv ty (Call ann (ExtCall stat skip (fname,ats,rt) opts) args dr)
     sa = (vv,sb) /\
-  compile_expr cenv ty (gas_shadow_expr
+  compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr
     (Call ann (ExtCall stat skip (fname,ats,rt) opts) args dr)) shadow_sa = (vv,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -259,8 +255,8 @@ Proof
     listTheory.MAP_MAP_o, combinTheory.o_DEF, SF boolSimps.ETA_ss]) >>
   rename1 `lower_value _ _ _ (gas_shadow_expr addr) shadow_sa = (shadow_ao,shadow_s1)` >>
   `shadow_ao = ao /\ gas_shadow_state s1 shadow_s1` by
-    (mp_tac (Q.INST [`e` |-> `addr`, `ty` |-> `BaseT AddressT`]
-        gas_shadow_stmt_lower_value) >>
+    (mp_tac (Q.INST [`sd` |-> `T`, `e` |-> `addr`, `ty` |-> `BaseT AddressT`]
+        gas_shadow_stmt_lower_value_env) >>
      simp[gas_shadow_compiles_def] >>
      disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
   drule_all request_stage_pos_shadow_cut >> strip_tac >>
@@ -270,9 +266,11 @@ Proof
   rename1 `compile_ext_call_kwargs _ _ rt opts (MAP gas_shadow_expr kw_es) shadow_s2 =
       ((shadow_vo,shadow_go,shadow_def),shadow_s3)` >>
   `gas_shadow_compiles (compile_ext_call_kwargs compile_expr cenv rt opts kw_es)
-      (compile_ext_call_kwargs compile_expr cenv rt opts (MAP gas_shadow_expr kw_es))` by
-    (mp_tac (Q.INST [`return_type` |-> `rt`, `sh` |-> `T`]
-      (MATCH_MP gas_shadow_compiles_ext_call_kwargs (cj 1 gas_shadow_compile_expr))) >> simp[]) >>
+      (compile_ext_call_kwargs compile_expr (gas_shadow_env T cenv) rt opts
+        (MAP gas_shadow_expr kw_es))` by
+    (mp_tac (Q.INST [`return_type` |-> `rt`, `sd` |-> `T`, `sh` |-> `T`]
+      (MATCH_MP gas_shadow_compiles_ext_call_kwargs_env (cj 1 gas_shadow_compile_expr_env))) >>
+     simp[]) >>
   `shadow_vo = vo /\ shadow_go = go /\ shadow_def = def /\ gas_shadow_state s3 shadow_s3` by
     (qpat_x_assum `gas_shadow_compiles _ _` (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
      disch_then (qspecl_then [`s2`,`shadow_s2`] mp_tac) >> simp[]) >>
@@ -281,7 +279,8 @@ Proof
                      (cj 1 externalEntryShapeTheory.compile_expr_labels)) >>
      disch_then (fn th =>
        qspecl_then [`cenv`,`BaseT AddressT`,`addr`,`sa`] mp_tac th >>
-       qspecl_then [`cenv`,`BaseT AddressT`,`gas_shadow_expr addr`,`shadow_sa`] mp_tac th) >>
+       qspecl_then [`gas_shadow_env T cenv`,`BaseT AddressT`,
+                    `gas_shadow_expr addr`,`shadow_sa`] mp_tac th) >>
      simp[]) >>
   `cs_extends s1 s2 /\ cs_extends shadow_s1 shadow_s2` by
     (conj_tac >> irule (cj 1 (MATCH_MP first_emission_ext_call_args
@@ -342,6 +341,24 @@ Proof
   `!e st. MEM e kw_es /\ expr_sim_inv cenv cx env st ==>
      expr_body_pre cenv cx env e st` by
     (simp[Abbr `kw_es`] >> metis_tac[rich_listTheory.MEM_DROP_IMP]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (irule body_const_cells_agree_exprs >>
+     qpat_assum `eval_exprs cx [addr] (es with gas_obs := obs1) = _` (irule_at Any) >>
+     simp[vyperTypeSystemTheory.well_typed_expr_def] >>
+     qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _`
+       (mp_tac o REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def,
+         cj 13 vyperTypeSystemTheory.well_typed_expr_def]) >>
+     simp[vyperTypeSystemTheory.well_typed_expr_def]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env ee` by
+    (irule body_const_cells_agree_exprs >>
+     qpat_assum `eval_exprs cx xs (mid with gas_obs := obs2) = _` (irule_at Any) >>
+     simp[constSubstCorrectTheory.frame_well_typed_exprs_every, EVERY_MEM] >>
+     rpt strip_tac >>
+     qpat_assum `!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==> _`
+       (qspecl_then [`e`,`mid`] mp_tac) >>
+     (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then (ACCEPT_TAC o cj 2 o
+       REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def])) >>
   `MAP expr_type kw_es = MAP (ext_call_kw_type rt) opts` by
     gvs[Abbr `kw_es`] >>
   `ci_mono sa s1 /\ ci_mono s1 s2` by

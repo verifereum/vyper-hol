@@ -2,7 +2,7 @@
 Theory bodyMemAssignTopCopyFacts
 Ancestors
   stmtExprAllocationPreProps bodyInvCodeProps compileUnit alist
-  augAssignPtrToplevelMetadata linkedStorageMetadataProps exprBodyPreProps
+  linkedStorageMetadataProps exprBodyPreProps
   supportedExprTraverse allocLimits allocLimitsProps
   bodyStorageCases[qualified,ignore_grammar]
   bodyMemAssignTopCopyIndex allocaFootprint[qualified] allocaHistoryFragment[qualified] bodySimStmtFacts exprSimHyps
@@ -110,7 +110,7 @@ Proof
     metis_tac[find_var_decl_storage_some] >>
   `FLOOKUP env.bare_global_assignable (src,id) = NONE` by
     (Cases_on `FLOOKUP env.bare_global_assignable (src,id)` >> simp[] >>
-     drule_all_then strip_assume_tac augassign_env_assignable_find_none >> gvs[]) >>
+     drule_all_then strip_assume_tac env_assignable_find_NONE >> gvs[]) >>
   Cases_on `type_place_target env (TopLevelNameTarget (src,id))` >>
   gvs[type_stmt_def, atarget_accepts_def] >>
   rename1 `type_place_target _ _ = SOME vt` >> Cases_on `vt` >> gvs[] >>

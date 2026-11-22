@@ -1,5 +1,6 @@
 Theory bodyFullForStorageCapture
 Ancestors
+  exprBodyPreCallSafetyProps exprBodyPreTypingProps
   exprSimSource exprSimPopStorage stmtSimAugAssignPlaceStorage
   vyperFiniteStoragePreservation vyperStoragePlaceRegion vyperStorageBackend
   vyperStorageFootprint vyperInterpreter vyperState vyperValue vyperAST vyperTypeValues
@@ -13,8 +14,8 @@ Ancestors
 
 (* A successful expression can capture a subarray, so the observed root
    need not be the array itself. The iterator saves addresses, not values. *)
-Theorem for_storage_iterator_capture:
-  expr_body_pre c cx env e es /\
+Theorem for_storage_iterator_capture_mods:
+  expr_body_pre_mods mods c cx env e es /\
   eval_expr cx e es = (INL (PlaceR (StoragePlace tr slot (ArrayTV et bd))),ee) /\
   valid_horizon cx st0 H ee.storage_trace /\
   storage_well_formed_on cx es (FST H) /\
@@ -33,9 +34,8 @@ Theorem for_storage_iterator_capture:
 Proof
   strip_tac >>
   `valid_horizon cx es H ee.storage_trace` by fs[valid_horizon_def] >>
-  `runtime_consistent env cx es /\ well_typed_expr env e /\
-   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e)` by
-    fs[expr_body_pre_def, expr_sim_inv_def, runtime_consistent_def] >>
+  drule_then strip_assume_tac expr_body_pre_mods_runtime_typing >>
+  drule_then assume_tac expr_body_pre_mods_call_evaluation_safe >>
   drule_all eval_expr_observed_region >> strip_tac >>
   `storage_place_observed H (StoragePlace tr slot (ArrayTV et bd))` by
     metis_tac[aug_place_storage_rooted_observed] >>
@@ -51,6 +51,27 @@ Proof
   gvs[result_array_length_def, get_storage_backend_eq, bind_def,
       ignore_bind_def, check_def, assert_def, return_def, compatible_bound_def] >>
   qexistsl [`offset`, `tv`, `path`, `delta`] >> simp[]
+QED
+
+Theorem for_storage_iterator_capture:
+  expr_body_pre c cx env e es /\
+  eval_expr cx e es = (INL (PlaceR (StoragePlace tr slot (ArrayTV et bd))),ee) /\
+  valid_horizon cx st0 H ee.storage_trace /\
+  storage_well_formed_on cx es (FST H) /\
+  storage_well_formed_on cx ee (FST H) /\
+  len = (case bd of Fixed n => n | Dynamic n =>
+           w2n (lookup_storage slot (get_storage cx ee tr))) ==>
+  compatible_bound bd len /\ len <= bound_length bd /\
+  eval_iterator cx (Array e) es =
+    (INL (GENLIST (\i. PlaceR (StoragePlace tr
+        ((case bd of Fixed _ => slot | Dynamic _ => slot + 1w) +
+         n2w (i * type_slot_size et)) et)) len),ee) /\
+  ?off root path delta.
+    MEM (StorageRoot tr off root) ee.storage_trace /\
+    storage_subregion root path delta (ArrayTV et bd) /\
+    slot = n2w off + n2w delta
+Proof
+  simp[expr_body_pre_split_def] >> metis_tac[for_storage_iterator_capture_mods]
 QED
 
 Theorem for_storage_iterator_child_observed:

@@ -21,6 +21,7 @@ Theorem len_builtin_sim_full:
       body_expr_full_ok cx (HD args)) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es /\
@@ -56,12 +57,14 @@ Resume len_builtin_sim_full[value]:
   drule_all len_load_extends >> strip_tac >>
   drule compile_expr_extends >> strip_tac >>
   drule_all fn_has_code_split >> strip_tac >>
-  mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `ty`, `e` |-> `e`]
-    gas_shadow_stmt_compile_expr) >>
-  simp[gas_shadow_compiles_def] >>
-  disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >>
+  `gas_shadow_compiles (compile_expr cenv ty e)
+     (compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e))` by
+    irule gas_shadow_stmt_compile_expr_env >>
+  qpat_x_assum `gas_shadow_compiles _ _`
+    (qspecl_then [`sa`,`shadow_sa`] mp_tac o
+     REWRITE_RULE [gas_shadow_compiles_def]) >>
   simp[] >> strip_tac >>
-  Cases_on `compile_expr cenv ty (gas_shadow_expr e) shadow_sa` >> gvs[] >>
+  Cases_on `compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa` >> gvs[] >>
   gvs[gasShadowTheory.gas_shadow_expr_def, gasShadowTheory.gas_shadow_builtin_def, compile_expr_len,
       as_stack_val_pair, comp_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >>

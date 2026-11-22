@@ -36,7 +36,7 @@ Definition for_nonslot_layout_def:
     (sbBody, sj, sb, shadow_sbCopy, shadow_sbBody) <=>
     expr_type e = ArrayT sty bd /\
     compile_expr c (expr_type e) e sa0 = (vv,sbExpr) /\
-    compile_expr c (expr_type e) (gas_shadow_expr e) shadow_sa0 =
+    compile_expr (gas_shadow_env T c) (expr_type e) (gas_shadow_expr e) shadow_sa0 =
       (vv,shadow_sbExpr) /\
     gas_shadow_state sa0 shadow_sa0 /\ gas_shadow_state sbExpr shadow_sbExpr /\
     fn_has_code sa0 sbExpr func /\ fn_has_code shadow_sa0 shadow_sbExpr shadow_func /\
@@ -82,7 +82,8 @@ Definition for_nonslot_layout_def:
       saCopy = ((),sbCopy) /\
     fn_has_code sa saCopy func /\ fn_has_code saCopy sbCopy func /\
     compile_stmts bc (InLoop exit incr) ret_ty loop_body sbCopy = ((),sbBody) /\
-    compile_stmts bc (InLoop exit incr) ret_ty (MAP gas_shadow_stmt loop_body)
+    compile_stmts (gas_shadow_env T bc) (InLoop exit incr) ret_ty
+      (MAP gas_shadow_stmt loop_body)
       shadow_sbCopy = ((),shadow_sbBody) /\
     gas_shadow_state sbCopy shadow_sbCopy /\ gas_shadow_state sbBody shadow_sbBody /\
     fn_has_code sbCopy sbBody func /\ fn_has_code shadow_sbCopy shadow_sbBody shadow_func /\
@@ -413,6 +414,7 @@ Theorem for_nonslot_array_body_invoke[local]:
       (H,k,a::rs,es,eb,G,tn,s)) /\
   return_buf_sep d bc eb s /\
   storage_trace_domain cx st0 eb.storage_trace /\
+  body_const_cells_agree [(NONE,tops)] cx benv eb /\
   body_stmts_full_ok cx body /\ expr_sim_inv bc cx benv eb /\
   ce_locals_declared bc benv /\ locals_alloc_ok bc benv /\
   body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmts tops bindings body /\
@@ -422,8 +424,8 @@ Theorem for_nonslot_array_body_invoke[local]:
   call_evaluation_safe cx (int_calls_stmts body) /\
   frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc ret_ty /\
   stmts_env bc (InLoop exit incr) ret_ty body sbCopy = (bc',sbBody) /\
-  stmts_env bc (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
-    shadow_sbCopy = (bc',shadow_sbBody) /\
+  stmts_env (gas_shadow_env T bc) (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
+    shadow_sbCopy = (gas_shadow_env T bc',shadow_sbBody) /\
   gas_shadow_state sbCopy shadow_sbCopy /\ gas_shadow_state sbBody shadow_sbBody /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -768,7 +770,7 @@ Theorem for_nonslot_array_layout_full_with_increment:
   expr_type e = ArrayT sty bd /\ c.ce_alloca_locals /\
   local_ptrs_reserved c sa0 /\ gas_shadow_state sa0 shadow_sa0 /\
   compile_stmt c lctx ret_ty (For id fty (Array e) n loop_body) sa0 = ((),sb) /\
-  compile_stmt c lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
+  compile_stmt (gas_shadow_env T c) lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
     shadow_sa0 = ((),shadow_sb) /\
   fn_has_code sa0 sb func /\ fn_has_code shadow_sa0 shadow_sb shadow_func ==>
   ?vv sbExpr shadow_sbExpr loc len_op saL bc saD saA xd capacity aidItem
@@ -785,19 +787,32 @@ Proof
   strip_tac >> drule_all nonslot_for_compiler_cuts >> strip_tac >>
   gvs[gasShadowTheory.gas_shadow_stmt_def,gasShadowTheory.gas_shadow_iterator_def] >>
   `expr_type (gas_shadow_expr e) = ArrayT sty bd` by simp[] >>
-  drule_all (Q.INST [`e` |-> `gas_shadow_expr e`,
-                    `loop_body` |-> `MAP gas_shadow_stmt loop_body`]
-                   nonslot_for_compiler_cuts) >> strip_tac >> gvs[] >>
-  nonslot_align_cut gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr >>
+  drule_all (SIMP_RULE (srw_ss()) []
+    (Q.INST [`c` |-> `gas_shadow_env T c`, `e` |-> `gas_shadow_expr e`,
+             `loop_body` |-> `MAP gas_shadow_stmt loop_body`]
+      nonslot_for_compiler_cuts)) >> strip_tac >> gvs[] >>
+  nonslot_align_cut gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr_env >>
   nonslot_align_cut nonslot_length_shadow >>
-  nonslot_align_cut gasShadowCompileStmtBaseTheory.gas_shadow_compiles_declare_local >>
+  `gas_shadow_env T bc = bc' /\ gas_shadow_state saD saD'` by
+    (mp_tac (Q.INST [`sd` |-> `T`, `cenv` |-> `c`, `ty` |-> `fty`]
+       gasShadowCompileStmtBaseTheory.gas_shadow_compiles_env_declare_local) >>
+     rewrite_tac[gasShadowCompileStmtBaseTheory.gas_shadow_compiles_env_def] >>
+     disch_then (qspecl_then [`saL`,`saL'`] (drule_then mp_tac)) >> simp[]) >>
+  (* Retain only the real lookup before simplifying the shadow projections. *)
+  qpat_x_assum `FLOOKUP bc'.ce_vars id = SOME _` kall_tac >>
+  qpat_x_assum `gas_shadow_env _ _ = bc'` (SUBST_ALL_TAC o SYM) >>
+  gvs[] >>
   nonslot_align_cut gasShadowCompileStmtBaseTheory.gas_shadow_compiles_emit_local_alloca >>
   nonslot_align_cut nonslot_control_shadow >>
   nonslot_align_cut gasShadowCompileContextTheory.gas_shadow_compiles_emit_op_same >>
   nonslot_align_cut nonslot_header_shadow >>
   nonslot_align_cut gasShadowCompileContextTheory.gas_shadow_compiles_emit_op_same >>
+  `saL'.cs_next_var = saL.cs_next_var` by fs[gas_shadow_state_def] >>
+  pop_assum (fn th =>
+    qpat_x_assum `compile_iter_elem_copy _ _ _ _ _ _ _ _ saCopy' = _`
+      (assume_tac o REWRITE_RULE [th])) >>
   nonslot_align_cut gasShadowCompileStmtOpsTheory.gas_shadow_compiles_iter_elem_copy >>
-  nonslot_align_cut (CONJUNCT2 gasShadowCompileStmtTheory.gas_shadow_compile_stmt) >>
+  nonslot_align_cut (CONJUNCT2 gasShadowCompileStmtTheory.gas_shadow_compile_stmt_env) >>
   `compile_alloc_buffer (type_memory_bytes c fty) saL =
    (<|buf_operand := Var (STRING #"%" (toString saL.cs_next_var));
       buf_size := type_memory_bytes c fty|>,saA)` by
@@ -1035,7 +1050,7 @@ Theorem for_nonslot_array_layout_full_with_done_age[local]:
   expr_type e = ArrayT sty bd /\ c.ce_alloca_locals /\
   local_ptrs_reserved c sa0 /\ gas_shadow_state sa0 shadow_sa0 /\
   compile_stmt c lctx ret_ty (For id fty (Array e) n loop_body) sa0 = ((),sb) /\
-  compile_stmt c lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
+  compile_stmt (gas_shadow_env T c) lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
     shadow_sa0 = ((),shadow_sb) /\
   fn_has_code sa0 sb func /\ fn_has_code shadow_sa0 shadow_sb shadow_func ==>
   ?vv sbExpr shadow_sbExpr loc len_op saL bc saD saA xd capacity aidItem
@@ -1055,7 +1070,7 @@ Theorem for_nonslot_array_layout_full:
   expr_type e = ArrayT sty bd /\ c.ce_alloca_locals /\
   local_ptrs_reserved c sa0 /\ gas_shadow_state sa0 shadow_sa0 /\
   compile_stmt c lctx ret_ty (For id fty (Array e) n loop_body) sa0 = ((),sb) /\
-  compile_stmt c lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
+  compile_stmt (gas_shadow_env T c) lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
     shadow_sa0 = ((),shadow_sb) /\
   fn_has_code sa0 sb func /\ fn_has_code shadow_sa0 shadow_sb shadow_func ==>
   ?vv sbExpr shadow_sbExpr loc len_op saL bc saD saA xd capacity aidItem
@@ -2287,7 +2302,10 @@ QED
 Resume for_nonslot_array_head_full[body_position_reachable]:
   `~block_is_terminated saCopy` by
     (drule exprOpenPrimitivesTheory.emit_op_nonterminator_open >> simp[is_terminator_def]) >>
-  `acyclic_struct_metadata c.ce_struct_fields` by fs[bodySimTheory.body_inv_def] >>
+  `acyclic_struct_metadata c.ce_struct_fields` by
+    (qpat_assum `body_inv tops ctx c cx`
+       (ACCEPT_TAC o MATCH_MP bodyInvCodePropsTheory.contract_inv_acyclic_struct_metadata
+         o MATCH_MP bodySimTheory.body_inv_contract)) >>
   `~block_is_terminated sbCopy` by
     (irule for_nonslot_copy_open >>
      qexistsl [`addr`,`c`,`Var xd`,`fty`,`loc`,`saCopy`,`stride`,`sty`] >>
@@ -2751,6 +2769,7 @@ Theorem for_nonslot_array_scoped_body_at[local]:
   expr_type e = ArrayT et bd /\
   (?start. eval_expr cx e start = (INL rv,em)) /\
   for_nonslot_code_frame c cx env ctx func id e body loc rv vv av em u /\
+  body_const_cells_agree [(NONE,tops)] cx benv eb /\
   body_stmts_full_ok cx body /\ expr_sim_inv bc cx benv eb /\
   ce_locals_declared bc benv /\ locals_alloc_ok bc benv /\
   body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmts tops bindings body /\
@@ -2766,8 +2785,8 @@ Theorem for_nonslot_array_scoped_body_at[local]:
   call_evaluation_safe cx (int_calls_stmts body) /\
   frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc ret_ty /\
   stmts_env bc (InLoop exit incr) ret_ty body sbCopy = (bc',sbBody) /\
-  stmts_env bc (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
-    shadow_sbCopy = (bc',shadow_sbBody) /\
+  stmts_env (gas_shadow_env T bc) (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
+    shadow_sbCopy = (gas_shadow_env T bc',shadow_sbBody) /\
   gas_shadow_state sbCopy shadow_sbCopy /\ gas_shadow_state sbBody shadow_sbBody /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -2815,7 +2834,8 @@ Theorem for_nonslot_array_scoped_body_at[local]:
             (!name base len. local_region c es0.scopes s0 name base len ==>
               off+sz <= base \/ base+len <= off) /\
             off <= i /\ i < off+sz /\ i IN tt.t_mem ==> i IN tn0.t_mem)) /\
-        (~b ==> t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
+        (~b ==> body_const_cells_agree [(NONE,tops)] cx env ef /\
+          t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
           for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
             (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
             (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,SUC k,rs,ef,c,ef,GG,tt,t)))
@@ -3048,6 +3068,15 @@ Resume for_nonslot_array_scoped_body_at[continue_return_buffer]:
 QED
 
 Resume for_nonslot_array_scoped_body_at[continue_live_frame]:
+  `body_const_cells_agree [(NONE,tops)] cx benv ef` by
+    (irule body_const_cells_agree_stmts >>
+     qpat_assum `eval_stmts cx body (eb with gas_obs := obs) = (raw,ef)`
+       (irule_at Any) >>
+     qexists_tac `ret_ty` >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env ep` by
+    (qpat_assum `body_const_cells_agree [(NONE,tops)] cx benv ef` mp_tac >>
+     qpat_assum `benv = extend_local env id fty F` (fn eq =>
+       simp[NoAsms, eq, Abbr `ep`])) >>
   `ep.storage_trace = ef.storage_trace` by simp[Abbr `ep`] >>
   `!H. valid_horizon cx st0 H ep.storage_trace ==>
       for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
@@ -3294,7 +3323,7 @@ Resume for_nonslot_array_scoped_body_at[continue_source_typed]:
   qexistsl_tac [`bindings`,`body`,`env'`,`esObs`,`fty`,`id`,`raw`,
                `ret_ty`,`tops`,`dtv`,`v`] >>
   qpat_assum `body_inv tops ctx bc cx`
-    (strip_assume_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
+    (strip_assume_tac o MATCH_MP bodyInvExecutionPropsTheory.body_inv_main_support) >>
   qpat_assum `eb with gas_obs := obs = _` (SUBST1_TAC o SYM) >>
   simp[] >>
   qpat_assum `benv = extend_local env id fty F` (fn eq =>
@@ -3311,6 +3340,9 @@ Resume for_nonslot_array_scoped_body_at[increment_return_buffer]:
   qpat_assum `for_nonslot_live _ _ _ _ _ (H,SUC k,rs,ep,c,ep,G',tn',t')`
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE[for_nonslot_live_def]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac >-
+    (qpat_assum `body_const_cells_agree [(NONE,tops)] cx env ep` mp_tac >>
+     simp[NoAsms, Abbr `ep`]) >>
   irule bodyFullSharedTheory.return_buf_sep_transport >>
   conj_tac
   >- (qpat_assum `gas_origin_ptr_path _ (z,FST _,SND _) [] (OK t',G',tn')`
@@ -3473,12 +3505,13 @@ QED
 Finalise for_nonslot_array_scoped_body_at
 
 (* Classify the captured result at the actual expression execution. *)
-Theorem for_nonslot_array_capture_classify[local]:
-  body_inv tops ctx c cx /\ expr_sim_inv c cx env em /\
+Theorem for_nonslot_array_capture_classify_mods[local]:
+  contract_inv mods exps ctx c cx /\ expr_sim_inv_mods mods c cx env em /\
   well_typed_iterator env et (Array e) /\ expr_type e = ArrayT et bd /\
-  supported_iterator tops et (Array e) n /\
-  (!nid. e = TopLevelName (expr_type e) nid ==>
-     IS_SOME (supported_immutable_type tops nid)) /\
+  type_widens_to env.type_defs (post_value_type c e) (expr_type e) /\
+  (!src name. e = TopLevelName (expr_type e) (src,name) ==>
+     ?tops. ALOOKUP mods src = SOME tops /\
+       IS_SOME (supported_immutable_type tops (NONE,name))) /\
   (~(?ty nid. e = TopLevelName ty nid) ==>
    !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
   eval_expr cx e start = (INL rv,em) /\
@@ -3490,7 +3523,7 @@ Theorem for_nonslot_array_capture_classify[local]:
     e = TopLevelName (ArrayT et bd) (src,name) /\
     rv = PlaceR (ImmutablePlace src name []) /\
     FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd) /\
-    ~cx_const_name cx (src,name) /\ post_value_type c e = ArrayT et bd)
+    ~cx_const_name_mods mods (src,name) /\ post_value_type c e = ArrayT et bd)
 Proof
   strip_tac >>
   Cases_on `?nid. e = TopLevelName (ArrayT et bd) nid`
@@ -3498,46 +3531,50 @@ Proof
   suspend "nested_root"
 QED
 
-Resume for_nonslot_array_capture_classify[bare_root]:
+Resume for_nonslot_array_capture_classify_mods[bare_root]:
   pop_assum (qx_choose_then `nid` SUBST_ALL_TAC) >>
   PairCases_on `nid` >>
-  `?it. supported_immutable_type tops (nid0,nid1) = SOME it` by
-    (qpat_assum `!nid. _ ==> IS_SOME _` (qspec_then `(nid0,nid1)` mp_tac) >>
-     simp[NoAsms,vyperASTTheory.expr_type_def,optionTheory.IS_SOME_EXISTS]) >>
-  `get_module_code cx NONE = SOME tops` by fs[bodySimTheory.body_inv_def] >>
+  rename1 `TopLevelName (ArrayT et bd) (src,name)` >>
+  qpat_assum `!src name. _ ==> ?tops. _`
+    (qspecl_then [`src`, `name`]
+       (strip_assume_tac o SIMP_RULE (srw_ss())
+         [vyperASTTheory.expr_type_def, optionTheory.IS_SOME_EXISTS])) >>
+  rename1 `supported_immutable_type tops (NONE,name) = SOME it` >>
   `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-    (drule bodySimTheory.body_inv_modules_aligned >> simp[]) >>
-  drule_all bodyStorageMetadataTheory.supported_immutable_type_find_NONE >>
-  strip_tac >> qpat_x_assum `nid0 = NONE` SUBST_ALL_TAC >>
-  `rv = PlaceR (ImmutablePlace NONE nid1 [])` by
+    (drule_then (qspecl_then [`src`, `tops`] drule)
+       moduleVariableKeyPropsTheory.contract_inv_unqualified_variable_keys >>
+     simp[NoAsms]) >>
+  `find_var_decl_by_name name tops = NONE` by
+    (drule_all bodyStorageMetadataTheory.supported_immutable_type_find_NONE >> simp[]) >>
+  `get_module_code cx src = SOME tops` by
+    (drule_then (qspec_then `src` (assume_tac))
+       bodyInvCodePropsTheory.contract_inv_module_codes >> simp[]) >>
+  `rv = PlaceR (ImmutablePlace src name [])` by
     (qpat_x_assum `eval_expr _ (TopLevelName _ _) start = _` mp_tac >>
      Cases_on `ALOOKUP start.immutables cx.txn.target` >>
-     simp[Once evaluate_def,lookup_global_def,bind_def,lift_option_type_def,
-          get_immutables_def,get_address_immutables_def,return_def,raise_def] >>
+     simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+          get_immutables_def, get_address_immutables_def, return_def, raise_def] >>
      rename1 `ALOOKUP start.immutables cx.txn.target = SOME imms` >>
-     Cases_on `FLOOKUP (get_source_immutables NONE imms) nid1` >>
+     Cases_on `FLOOKUP (get_source_immutables src imms) name` >>
      simp[return_def,raise_def]) >>
-  `~cx_const_name cx (NONE,nid1)` by
-    (strip_tac >> drule_all bodySimTheory.body_inv_const_name_not_root >> simp[]) >>
-  `env_context_consistent env cx` by
-    (qpat_assum `expr_sim_inv c cx env em` mp_tac >>
-     simp[NoAsms, exprSimHypsDefsTheory.expr_sim_inv_def,
-          vyperTypeInvariantsTheory.env_consistent_def] >>
-     strip_tac >> first_assum ACCEPT_TAC) >>
-  `bare_globals_complete env.bare_globals cx` by
-    (qpat_assum `env_context_consistent env cx`
-      (ACCEPT_TAC o cj 7 o REWRITE_RULE [vyperTypeInvariantsTheory.env_context_consistent_def])) >>
-  `FLOOKUP env.bare_globals (NONE,nid1) = SOME it` by
+  `~cx_const_name_mods mods (src,name)` by
+    (simp[exprSimHypsDefsTheory.cx_const_name_mods_def] >> strip_tac >>
+     drule_then (qspec_then `name` drule)
+       supportedNameRootTheory.distinct_module_consts_env_names_constant >>
+     gvs[supportedDeclsTheory.supported_immutable_type_def, AllCaseEqs()]) >>
+  `FLOOKUP env.bare_globals (src,name) = SOME it` by
     (qpat_x_assum `supported_immutable_type _ _ = _` mp_tac >>
-     simp[supportedDeclsTheory.supported_immutable_type_def,AllCaseEqs()] >>
-     strip_tac >> gvs[] >> drule bodyStorageMetadataTheory.supported_variable_decl_mem >>
-     strip_tac >> fs[vyperTypeInvariantsTheory.bare_globals_complete_def] >> metis_tac[]) >>
-  drule_all vyperTypeInvariantsTheory.env_context_consistent_bare_global_find_NONE >> strip_tac >>
-  fs[well_typed_iterator_def,Once well_typed_expr_def,vyperASTTheory.expr_type_def] >>
-  simp[] >> qexistsl [`NONE`,`nid1`] >> simp[]
+     simp[supportedDeclsTheory.supported_immutable_type_def, AllCaseEqs()] >>
+     strip_tac >> gvs[] >>
+     drule_then strip_assume_tac bodyStorageMetadataTheory.supported_variable_decl_mem >>
+     drule_all_then ACCEPT_TAC immutableRegionTypingPropsTheory.immutable_decl_bare_global_mods) >>
+  drule_then assume_tac exprBodyPrePropsTheory.expr_sim_inv_mods_env >>
+  drule_all vyperTypeInvariantsTheory.env_consistent_bare_global_find_NONE >> strip_tac >>
+  fs[well_typed_iterator_def, Once well_typed_expr_def, vyperASTTheory.expr_type_def] >>
+  simp[] >> qexistsl [`src`,`name`] >> simp[]
 QED
 
-Resume for_nonslot_array_capture_classify[nested_root]:
+Resume for_nonslot_array_capture_classify_mods[nested_root]:
   `~(?ty nid. e = TopLevelName ty nid)` by
     (strip_tac >> qpat_x_assum `e = TopLevelName _ _` SUBST_ALL_TAC >>
      fs[vyperASTTheory.expr_type_def]) >>
@@ -3548,16 +3585,13 @@ Resume for_nonslot_array_capture_classify[nested_root]:
   `well_typed_expr env e /\ expr_writes_ok (\_. F) e` by fs[well_typed_iterator_def] >>
   drule_all whitelistForIterTheory.memory_iterator_source_classify >> strip_tac
   >- (`?pty pbd. post_value_type c e = ArrayT pty pbd` by
-        (`type_widens_to env.type_defs (post_value_type c e) (ArrayT et bd)` by
-           (qpat_assum `expr_type e = _` (SUBST1_TAC o SYM) >>
-            irule post_value_type_widens >> simp[] >> qexistsl [`cx`,`em`] >> simp[]) >>
-         qpat_x_assum `type_widens_to _ _ _` mp_tac >> simp[type_widens_to_def] >>
+        (qpat_x_assum `type_widens_to _ _ _` mp_tac >> simp[type_widens_to_def] >>
          Cases_on `post_value_type c e` >> simp[arg_type_fits_def]) >>
       Cases_on `vv` >> fs[vv_location_def,is_word_type_def,is_bytestring_type_def]) >>
   fs[] >> Cases_on `vv` >> fs[vv_location_def,vv_place_ptr_def]
 QED
 
-Finalise for_nonslot_array_capture_classify[local]
+Finalise for_nonslot_array_capture_classify_mods[local]
 
 (* The branch owns the source prefix bind. At its normal continuation the
    canonical prefix capture supplies the representation; only the relation,
@@ -3776,6 +3810,7 @@ Theorem for_nonslot_array_round_contracts_at:
     (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
     (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
     (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\
+  body_const_cells_agree [(NONE,tops)] cx env em /\
   body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre c cx env e es0 /\
   ce_locals_declared c env /\ locals_alloc_ok c env /\
   supported_stmt tops bindings (For id fty (Array e) n loop_body) /\
@@ -3923,7 +3958,9 @@ Resume for_nonslot_array_round_contracts_at[capture]:
   `local_ptrs_rel func c em.scopes u` by
     (qhdtm_assum `vv_post` (mp_tac o cj 1 o REWRITE_RULE [vv_post_def]) >>
      disch_then (ACCEPT_TAC o MATCH_MP (cj 1 stateRelProjTheory.stmt_state_rel_local_ptrs_alloca))) >>
-  `c.ce_alloca_locals` by fs[bodySimTheory.body_inv_def] >>
+  `c.ce_alloca_locals` by
+    (qpat_assum `body_inv tops ctx c cx`
+    (ACCEPT_TAC o MATCH_MP bodyInvExecutionPropsTheory.contract_inv_alloca_locals o MATCH_MP bodySimTheory.body_inv_contract)) >>
   suspend "entry"
 QED
 
@@ -3969,6 +4006,7 @@ Resume for_nonslot_array_round_contracts_at[round_packets]:
       (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,rs,es,c,es,J,tz,z)` >>
   qabbrev_tac `Inv = \H rs es J tz z.
     z.vs_current_bb = cond /\ z.vs_inst_idx = 0 /\ return_buf_sep d c es z /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     Live H (LENGTH vs - LENGTH rs) rs es J tz z` >>
   qabbrev_tac `Done = \H ee G1 tn1 t.
     stmt_lands lctx sb (INL ()) t /\ ~t.vs_halted /\ ~block_is_terminated sb /\
@@ -4051,6 +4089,10 @@ Resume for_nonslot_array_round_contracts_at[cons]:
   `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
     fs[storage_trace_domain_def] >>
   qabbrev_tac `k = LENGTH vs - LENGTH (a::rs)` >>
+  `body_const_cells_agree [(NONE,tops)] cx env es` by
+    (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> Inv H (a::rs) es J tz z`
+       (qspec_then `storage_trace_horizon es.storage_trace` (drule_then mp_tac)) >>
+     simp[NoAsms, Abbr `Inv`] >> strip_tac >> first_assum ACCEPT_TAC) >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
        z.vs_current_bb = cond /\ z.vs_inst_idx = 0 /\
        return_buf_sep d c es z /\ Live H k (a::rs) es J tz z` by
@@ -4093,6 +4135,8 @@ Resume for_nonslot_array_round_contracts_at[cons_body]:
      simp[NoAsms,push_scope_with_var_def,return_def] >>
      disch_then (SUBST1_TAC o SYM) >>
      simp[NoAsms,Abbr `sc`,evaluation_state_component_equality]) >>
+  `body_const_cells_agree [(NONE,tops)] cx (extend_local env id fty F) eb` by
+    (qpat_assum `eb = _` SUBST1_TAC >> simp[]) >>
   `eb.storage_trace = es.storage_trace` by
     (qpat_assum `eb = _` SUBST1_TAC >> simp[]) >>
   `lookup_scopes id es.scopes = NONE` by
@@ -4184,8 +4228,8 @@ Resume for_nonslot_array_round_contracts_at[cons_body_geometry]:
        (mp_then Any mp_tac exprOpenPrimitivesTheory.emit_op_nonterminator_open) >>
      simp[NoAsms,is_terminator_def]) >>
   `acyclic_struct_metadata c.ce_struct_fields` by
-    (qpat_assum `body_inv tops ctx c cx` (mp_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >>
-     strip_tac >> first_assum ACCEPT_TAC) >>
+    (qpat_assum `body_inv tops ctx c cx`
+    (ACCEPT_TAC o MATCH_MP bodyInvCodePropsTheory.contract_inv_acyclic_struct_metadata o MATCH_MP bodySimTheory.body_inv_contract)) >>
   `~block_is_terminated sbCopy` by
     (irule for_nonslot_copy_open >>
      qexistsl [`addr`,`c`,`Var xd`,`fty`,`loc`,`saCopy`,`stride`,`sty`] >>
@@ -4342,111 +4386,6 @@ QED
 
 Finalise for_nonslot_array_round_contracts_at
 
-Theorem for_nonslot_array_scoped_body_full:
-  (!H. valid_horizon cx st0 H eb.storage_trace ==>
-    for_nonslot_body_entry (DF H,lo,d,ctx,func,cx,c,id,env,body)
-      (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-      (len_op,idx,bw) (xd,dw,capacity,aidItem) (bc,benv,sbCopy,dtv,v)
-      (H,k,a::rs,es,eb,G,tn,s)) /\
-  return_buf_sep d bc eb s /\
-  storage_trace_domain cx st0 eb.storage_trace /\
-  expr_sim_inv c cx env em /\ local_ptrs_rel func c em.scopes u /\
-  well_typed_expr env e /\ expr_writes_ok (\_. F) e /\
-  expr_type e = ArrayT et bd /\
-  (?start. eval_expr cx e start = (INL rv,em)) /\
-  (loc = LocCode ==> ?src name.
-    e = TopLevelName (ArrayT et bd) (src,name) /\
-    rv = PlaceR (ImmutablePlace src name []) /\
-    FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd) /\
-    ~cx_const_name cx (src,name) /\
-    vv_location vv = SOME LocCode /\ post_value_type c e = ArrayT et bd) /\
-  body_stmts_full_ok cx body /\ expr_sim_inv bc cx benv eb /\
-  ce_locals_declared bc benv /\ locals_alloc_ok bc benv /\
-  body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmts tops bindings body /\
-  (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
-    occurs_abi_decode_target target tops) /\
-  type_stmts benv ret_ty body = SOME env' /\ stmts_exprs_ok bc body /\
-  benv = extend_local env id fty F /\ id NOTIN FDOM env.var_types /\
-  evaluate_type (get_tenv cx) fty = SOME dtv /\
-  iterator_unmodified (Array e) body /\
-  (?limit. stmt_loop_calls_ok [(NONE,tops)] (For id fty (Array e) limit body)) /\
-  (?bb inst. lookup_block incr func.fn_blocks = SOME bb /\
-    get_instruction bb 0 = SOME inst /\ inst.inst_opcode <> PHI) /\
-  call_evaluation_safe cx (int_calls_stmts body) /\
-  frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc ret_ty /\
-  stmts_env bc (InLoop exit incr) ret_ty body sbCopy = (bc',sbBody) /\
-  stmts_env bc (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
-    shadow_sbCopy = (bc',shadow_sbBody) /\
-  gas_shadow_state sbCopy shadow_sbCopy /\ gas_shadow_state sbBody shadow_sbBody /\
-  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
-  gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
-  MEM shadow_func shadow_ctx.ctx_functions /\
-  fn_has_code sbCopy sbBody func /\ fn_has_code shadow_sbCopy shadow_sbBody shadow_func /\
-  (!H. dead_lo_ok H (DF H) lo bc cx) /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved bc sbCopy /\
-  (!x sz. bc.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sbCopy x) /\
-  ~block_is_terminated sbCopy /\
-  gas_admissible (eval_stmts cx body) (stmt_res_ok (InLoop exit incr)) eb /\
-  emit_jmp_if_not_terminated incr sbBody = ((),sj) /\ fn_has_code sbBody sj func /\
-  sb.cs_current_bb = exit /\ sb.cs_current_insts = [] /\
-  ci_mono sa0 sbCopy /\ ci_mono sbExpr sbCopy /\ ci_mono saL sbCopy /\ ci_mono sa0 sb /\
-  local_ptrs_reserved c saL /\ not_fresh_at sbCopy idx /\ not_fresh_at sbCopy xd /\
-  (!p. vv_operand vv = Var p \/ len_op = Var p ==> not_fresh_at saL p) /\
-  (!z J tz. z.vs_current_bb = incr /\ z.vs_inst_idx = 0 /\
-    (!H. valid_horizon cx st0 H tz.storage_trace ==>
-      for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
-        (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-        (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,a::rs,tz,c,tz,FST J,SND J,z)) ==>
-    ?t Gf tf. !H. valid_horizon cx st0 H tz.storage_trace ==>
-      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-        (z,FST J,SND J) [] (OK t,Gf,tf) /\
-      t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
-      for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
-        (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-        (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,SUC k,rs,tz,c,tz,Gf,tf,t)) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
-    (finally (try (do eval_stmts cx body; return F od) handle_loop_exception) pop_scope)
-    (eb,s,G,tn)
-    (\H out ef GG tt t. ?b. out = INL b /\
-        ef.gas_obs = [] /\ ~t.vs_halted /\ return_buf_sep d c ef t /\
-        (b ==> stmt_lands lctx sb (INL ()) t /\ ~block_is_terminated sb /\
-          cenv_top_ext c c ef.scopes /\ stmt_state_rel H ctx func c cx ef t /\
-          storage_well_formed_on cx ef (FST H) /\ return_buf_frame d c sb t /\
-          ghost_inv_at (DF H) lo d c cx ef GG tt t /\ alloca_history func t /\
-          (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ s0.vs_alloca_next <= t.vs_alloca_next /\
-          (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
-          (!aid row. FLOOKUP s0.vs_allocas aid = SOME row ==> FLOOKUP t.vs_allocas aid = SOME row) /\
-          (!x. not_fresh_at sa0 x ==>
-            FLOOKUP GG x = FLOOKUP G0 x /\ op_taint tt (Var x) = op_taint tn0 (Var x)) /\
-          alloca_frame c es0 sa0 s0 c ef t /\
-          (!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa0.cs_next_id /\
-            (!name base len. local_region c es0.scopes s0 name base len ==>
-              off+sz <= base \/ base+len <= off) /\
-            off <= i /\ i < off+sz /\ i IN tt.t_mem ==> i IN tn0.t_mem)) /\
-        (~b ==> t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
-          for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
-            (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-            (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,SUC k,rs,ef,c,ef,GG,tt,t)))
-    (\H out ef gt r. ?ex. out = INR ex /\
-      (!tail. stmt_exit_ptr (RetQ H) (ef with gas_obs := tail) (INR ex) gt r) /\
-      halt_exit H cx ef (INR ex) r /\
-      (ctx_has_dalloca ctx ==> !z. (r = Halt z \/ ?ir. r = IntRet ir z) ==>
-        allocas_below_fmp z))
-Proof
-  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by fs[bodySimTheory.body_inv_def] >>
-  `for_nonslot_code_frame c cx env ctx func id e body loc rv vv av em u` by
-    (irule for_nonslot_code_frame_bare >>
-     conj_tac >- (qexistsl [`bd`,`et`] >> first_assum ACCEPT_TAC) >>
-     qpat_assum `?limit. stmt_loop_calls_ok _ _`
-       (qx_choose_then `limit` assume_tac) >>
-     simp[] >> qexistsl [`fty`,`limit`] >> simp[]) >>
-  mp_tac (SPEC_ALL for_nonslot_array_scoped_body_at) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then ACCEPT_TAC
-QED
-
 Theorem for_nonslot_array_round_contracts:
   for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
     (sa0,vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL)
@@ -4454,6 +4393,7 @@ Theorem for_nonslot_array_round_contracts:
     (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
     (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
     (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\
+  body_const_cells_agree [(NONE,tops)] cx env es0 /\
   body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre c cx env e es0 /\
   ce_locals_declared c env /\ locals_alloc_ok c env /\
   supported_stmt tops bindings (For id fty (Array e) n loop_body) /\
@@ -4573,10 +4513,19 @@ Proof
   `expr_type e = ArrayT sty bd /\ loc = (case vv_location vv of NONE => LocMemory | SOME l => l)` by
     (qhdtm_assum `for_nonslot_layout` (mp_tac o REWRITE_RULE [for_nonslot_layout_def]) >> simp[]) >>
   `expr_type e = ArrayT fty bd` by fs[well_typed_iterator_def] >>
+  qpat_assum `?obs. !tail. eval_expr _ _ _ = _` (qx_choose_then `obs` assume_tac) >>
+  qabbrev_tac `start = es0 with gas_obs := obs ++ em.gas_obs` >>
+  `eval_expr cx e start = (INL rv,em)` by
+    (qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `em.gas_obs` mp_tac) >>
+     simp[Abbr `start`]) >>
+  `expr_body_pre c cx env e start` by simp[Abbr `start`] >>
   `?start. eval_expr cx e start = (INL rv,em) /\ expr_body_pre c cx env e start` by
-    (qpat_assum `?obs. !tail. eval_expr _ _ _ = _` (qx_choose_then `obs` assume_tac) >>
-     qexists `es0 with gas_obs := obs ++ em.gas_obs` >>
-     qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `em.gas_obs` mp_tac) >> simp[]) >>
+    (qexists `start` >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env em` by
+    (irule body_const_cells_agree_expr >>
+     qpat_assum `eval_expr cx e start = (INL rv,em)` (irule_at Any) >>
+     imp_res_tac exprBodyPrePropsTheory.expr_body_pre_static_facts >>
+     simp[Abbr `start`]) >>
   `expr_sim_inv c cx env em` by
     (drule_all_then ACCEPT_TAC bodySimStmtFactsTheory.expr_body_pre_eval_result) >>
   `vv_place_ptr c cx em u rv vv` by fs[vv_post_def] >>
@@ -4584,16 +4533,37 @@ Proof
      ~is_bytestring_type (post_value_type c e) /\ vv = LocatedValue ty p ==>
      p.ptr_location = LocMemory)` by
     (rpt strip_tac >> first_x_assum (drule_all_then strip_assume_tac) >> simp[]) >>
-  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by fs[bodySimTheory.body_inv_def] >>
+  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
+    (qpat_assum `body_inv tops ctx _ cx`
+       (ACCEPT_TAC o MATCH_MP contractInvContextPropsTheory.contract_inv_singleton_source_modules
+         o MATCH_MP bodySimTheory.body_inv_contract)) >>
   `for_nonslot_code_frame c cx env ctx func id e loop_body loc rv vv av em u` by
     (irule for_nonslot_code_frame_bare >>
      conj_tac >- (qexistsl [`bd`,`fty`] >> disch_tac >>
        `vv_location vv = SOME LocCode` by
          (qpat_assum `loc = (case vv_location vv of NONE => LocMemory | SOME l => l)` mp_tac >>
           Cases_on `vv_location vv` >> simp[]) >>
-       mp_tac (Q.INST [`et` |-> `fty`] for_nonslot_array_capture_classify) >>
+       qpat_assum `body_inv tops ctx c cx` (fn inv =>
+         assume_tac (MATCH_MP bodySimTheory.body_inv_contract inv) >>
+         strip_assume_tac (MATCH_MP bodyInvCodePropsTheory.body_inv_main_code inv)) >>
+       `expr_sim_inv_mods [(NONE,tops)] c cx env em` by
+         fs[exprSimHypsDefsTheory.expr_sim_inv_split_def] >>
+       `type_widens_to env.type_defs (post_value_type c e) (expr_type e)` by
+         (irule post_value_type_widens >> conj_tac >- fs[well_typed_iterator_def] >>
+          qexistsl [`cx`,`em`] >> first_assum ACCEPT_TAC) >>
+       `!src name. e = TopLevelName (expr_type e) (src,name) ==>
+          ?ts. ALOOKUP [(NONE,tops)] src = SOME ts /\
+               IS_SOME (supported_immutable_type ts (NONE,name))` by
+         (rpt gen_tac >> strip_tac >>
+          qpat_assum `!nid. e = TopLevelName _ nid ==> _`
+            (qspec_then `(src,name)` (drule_then assume_tac)) >>
+          Cases_on `src` >>
+          gvs[alistTheory.ALOOKUP_def, supportedDeclsTheory.supported_immutable_type_def,
+               supportedDeclsTheory.supported_lookup_other_module]) >>
+       mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`, `et` |-> `fty`]
+                 for_nonslot_array_capture_classify_mods) >>
        (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-       qpat_assum `vv_location vv = SOME LocCode` (fn eq => simp[NoAsms,eq])) >>
+       fs[exprSimHypsDefsTheory.cx_const_name_split_def]) >>
      simp[] >> qexistsl [`fty`,`n`] >> simp[]) >>
   mp_tac (SPEC_ALL for_nonslot_array_round_contracts_at) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>

@@ -1,6 +1,7 @@
 (* Snapshot continuation of an array For, at the actual expression cut. *)
 Theory forCapturedArraySnapshot
 Ancestors
+  exprBodyPreProps
   bodyFullForExprCut bodyFullForArray bodyFullForArrayRound bodyFullForRounds bodyFullIfExpReach
   bodyFullShared bodyFullTargetArrayLoad ptrDiscipline
   gasOutcomeFullGuarded gasExemptCert reasonEndpointResourcesPtr
@@ -66,10 +67,11 @@ Theorem snapshot_location[local]:
   (loc = LocMemory \/ loc = LocCode) /\ (loc = LocMemory ==> rv = Value (ArrayV av))
 Proof
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
+  drule_then strip_assume_tac expr_body_pre_static_facts >>
   `?pty pbd. post_value_type c e = ArrayT pty pbd` by
     (`type_widens_to env.type_defs (post_value_type c e) (ArrayT typ bd)` by
        (qpat_assum `expr_type e = _` (SUBST1_TAC o SYM) >>
-        irule post_value_type_widens >> fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+        irule post_value_type_widens >> simp[] >>
         qexistsl [`cx`,`es`] >> simp[]) >>
      pop_assum mp_tac >> simp[vyperTypeSystemTheory.type_widens_to_def] >>
      Cases_on `post_value_type c e` >> simp[vyperTypeSystemTheory.arg_type_fits_def]) >>
@@ -186,10 +188,10 @@ Finalise snapshot_length
 
 Theorem for_array_snapshot_continue_full:
   compile_stmt c lctx ret_ty (For id typ (Array e) n loop_body) sa = ((),sb) /\
-  compile_stmt c lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body))
-    sha = ((),shb) /\
+  compile_stmt (gas_shadow_env T c) lctx ret_ty
+    (gas_shadow_stmt (For id typ (Array e) n loop_body)) sha = ((),shb) /\
   compile_expr c (expr_type e) e sa = (vv,se) /\
-  compile_expr c (expr_type e) (gas_shadow_expr e) sha = (vv,she) /\
+  compile_expr (gas_shadow_env T c) (expr_type e) (gas_shadow_expr e) sha = (vv,she) /\
   gas_shadow_state sa sha /\ fn_has_code sa sb func /\ fn_has_code sha shb shadow_func /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -208,6 +210,7 @@ Theorem for_array_snapshot_continue_full:
   (!H. dead_lo_ok H (DF H) lo c cx) /\
   (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_fmp_headroom inst t) /\
   ce_locals_declared c env /\ locals_alloc_ok c env /\ expr_body_pre c cx env e es /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_type e = ArrayT typ bd /\ bound_length bd <= n /\
   evaluate_type (get_tenv cx) typ = SOME tyv /\
   storage_trace_domain cx st0 em.storage_trace /\
@@ -262,6 +265,13 @@ Proof
       qpat_assum `!tail. eval_expr cx e _ = _` (qspec_then `[]` mp_tac) >>
       simp[NoAsms, Abbr `start`,eq])) >>
   `expr_body_pre c cx env e start` by simp[Abbr `start`] >>
+  `body_const_cells_agree [(NONE,tops)] cx env em` by
+    (irule body_const_cells_agree_expr >>
+     qpat_assum `eval_expr cx e start = _`
+       (irule_at (Pat `eval_expr _ _ _ = _`)) >>
+     qpat_assum `expr_body_pre c cx env e start`
+       (assume_tac o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     simp[Abbr `start`]) >>
   drule_all snapshot_read >>
   disch_then (CONJUNCTS_THEN2 assume_tac
     (qx_choosel_then [`av`,`xs`] (map_every assume_tac o CONJUNCTS))) >>

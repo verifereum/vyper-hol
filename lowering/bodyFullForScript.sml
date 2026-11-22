@@ -40,6 +40,7 @@ Theorem compile_for_frag_full:
        (expr_abi_decode_target_root target) (For id typ it n body) ==>
        occurs_abi_decode_target target tops) /\
     stmt_loop_calls_ok [(NONE,tops)] (For id typ it n body) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (For id typ it n body) = SOME env' /\
@@ -50,7 +51,7 @@ Theorem compile_for_frag_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (For id typ it n body))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (For id typ it n body)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ it n body)))
       (eval_stmt cx (For id typ it n body)) es
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `it`

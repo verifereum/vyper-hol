@@ -8,7 +8,7 @@
  *)
 Theory bodyFullAugAssign
 Ancestors stateFrame[qualified,ignore_grammar] bodyPtrDefs[qualified,ignore_grammar]
-  stateRelProj
+  stateRelProj exprBodyPreProps[qualified,ignore_grammar]
   augAssignFullTargetRoutes augAssignFullEntryPre augAssignFullCodeStages
   augAssignFullBindStages augAssignFullSourceReplay augAssignFullRhsSaved
   augAssignFullLoad augAssignFullImmutableValidLoad augAssignFullImmutableCertificate
@@ -116,6 +116,7 @@ Theorem body_augassign_local_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (NameTarget id) bop e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -127,7 +128,7 @@ Theorem body_augassign_local_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign aty (NameTarget id) bop e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty (NameTarget id) bop e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign aty (NameTarget id) bop e)))
       (eval_stmt cx (AugAssign aty (NameTarget id) bop e)) es
 Proof
   suspend "use_ordinary"
@@ -148,6 +149,7 @@ Theorem body_augassign_toplevel_word_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (TopLevelNameTarget nsid) bop e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -160,7 +162,7 @@ Theorem body_augassign_toplevel_word_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign aty (TopLevelNameTarget nsid) bop e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty (TopLevelNameTarget nsid) bop e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign aty (TopLevelNameTarget nsid) bop e)))
       (eval_stmt cx (AugAssign aty (TopLevelNameTarget nsid) bop e)) es
 Proof
   suspend "use_ordinary"
@@ -181,6 +183,7 @@ Theorem body_augassign_attr_local_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -192,7 +195,7 @@ Theorem body_augassign_attr_local_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e)))
       (eval_stmt cx (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e)) es
 Proof
   suspend "use_ordinary"
@@ -213,6 +216,7 @@ Theorem body_augassign_attr_storage_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -225,7 +229,7 @@ Theorem body_augassign_attr_storage_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e)))
       (eval_stmt cx (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e)) es
 Proof
   suspend "use_ordinary"
@@ -245,6 +249,7 @@ Theorem body_augassign_nested_immutable_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty t bop e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -264,7 +269,7 @@ Theorem body_augassign_nested_immutable_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign aty t bop e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty t bop e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign aty t bop e)))
       (eval_stmt cx (AugAssign aty t bop e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -390,6 +395,10 @@ Resume body_augassign_nested_immutable_full[nested_target_endpoint]:
        qpat_assum `!tail. eval_target_place cx t _ = _`
          (qspec_then `[]` (mp_tac o PURE_REWRITE_RULE [APPEND_NIL,upd]))) >>
      simp[Abbr `p`,Abbr `reads`]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env st` by
+    (irule body_const_cells_agree_target >>
+     qpat_assum `eval_target_place cx t (es with gas_obs := reads) = (INL p,st)`
+       (irule_at Any) >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
     (drule_all augassign_entry_rhs_pre >> simp[]) >>
   `expr_body_pre cenv cx env e st` by
@@ -404,7 +413,8 @@ Resume body_augassign_nested_immutable_full[nested_load]:
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
   gvs[finite_mapTheory.FLOOKUP_EMPTY] >>
   rename1 `ALOOKUP st.immutables cx.txn.target = SOME imms` >>
-  `expr_sim_inv cenv cx env st` by fs[expr_body_pre_def] >>
+  `expr_sim_inv cenv cx env st` by
+    metis_tac[exprBodyPrePropsTheory.expr_body_pre_static_facts] >>
   `dead_lo_ok H0 (DF H0) lo cenv cx` by
     (qpat_assum `!H. dead_lo_ok H _ _ _ _` (qspec_then `H0` ACCEPT_TAC)) >>
   drule_all augassign_immutable_path_load_resources >> strip_tac >>
@@ -1204,6 +1214,7 @@ Theorem body_augassign_other_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty t bop e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -1221,7 +1232,7 @@ Theorem body_augassign_other_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign aty t bop e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty t bop e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign aty t bop e)))
       (eval_stmt cx (AugAssign aty t bop e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1254,6 +1265,7 @@ Theorem augassign_ordinary_full[local]:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty t bop e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -1267,7 +1279,7 @@ Theorem augassign_ordinary_full[local]:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign aty t bop e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty t bop e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign aty t bop e)))
       (eval_stmt cx (AugAssign aty t bop e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1372,6 +1384,10 @@ Proof
        qpat_assum `!tail. eval_target_place _ _ _ = _`
          (qspec_then `[]` (ACCEPT_TAC o REWRITE_RULE [APPEND_NIL,upd])))) >>
   qmatch_asmsub_abbrev_tac `eval_target_place cx t (es with gas_obs := reads) = (INL p,st)` >>
+  `body_const_cells_agree [(NONE,tops)] cx env st` by
+    (irule body_const_cells_agree_target >>
+     qpat_assum `eval_target_place cx t (es with gas_obs := reads) = (INL p,st)`
+       (irule_at Any) >> simp[]) >>
   `!id path. p = MemoryPlace id path ==>
     ?entry v. lookup_scopes id st.scopes = SOME entry /\
       evaluate_subscripts entry.type entry.value path = INL v` by

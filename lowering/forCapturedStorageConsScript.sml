@@ -43,7 +43,7 @@ Theorem for_captured_storage_cons_from_stages:
        (\H (res:bool + exception) ee G1 tn1 t.
          ee.gas_obs = [] /\ ~t.vs_halted /\
          ?b. res = INL b /\ (b ==> Done H ee G1 tn1 t) /\
-             (~b ==> for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+             (~b ==> Guard ee /\ for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
                (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
                (lvo,idx,incr) (p,dst,nb,sd) (H,k,a::rs,ee,G1,tn1,t) /\
                k < len /\ body_stmts_full_ok cx stmts))
@@ -66,7 +66,7 @@ Theorem for_captured_storage_cons_from_stages:
     (es,s,G,tn)
     (\H res ee G1 tn1 t. ee.gas_obs = [] /\ ~t.vs_halted /\
       ?b. res = INL b /\ (b ==> Done H ee G1 tn1 t) /\
-          (~b ==> ?j. for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+          (~b ==> Guard ee /\ ?j. for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
             (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
             (lvo,idx,cond) (p,dst,nb,sd) (H,j,rs,ee,G1,tn1,t)))
     (\H res ee gt r. ?ex. res = INR ex /\ R H ex ee gt r)
@@ -166,7 +166,7 @@ Resume for_captured_storage_cons_from_stages[increment]:
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
     ee.gas_obs = [] /\ ~t.vs_halted /\
     ?b. res = INL b /\ (b ==> Done H ee G1 tn1 t) /\
-      (~b ==> Live (lvo,idx,incr) (p,dst,nb,sd) (H,k,a::rs,ee,G1,tn1,t) /\
+      (~b ==> Guard ee /\ Live (lvo,idx,incr) (p,dst,nb,sd) (H,k,a::rs,ee,G1,tn1,t) /\
               k < len /\ body_stmts_full_ok cx stmts)` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> Qclean H _ _ _ _ _` mp_tac >>
      qpat_assum `Abbrev (Qclean = _)`
@@ -187,7 +187,10 @@ Resume for_captured_storage_cons_from_stages[increment]:
     (qx_gen_tac `H` >> disch_tac >>
      qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _ /\ (?b. _)`
        (qspec_then `H` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >>
-     qpat_assum `res = INL F` (fn th => simp[NoAsms,th])) >>
+     qpat_assum `res = INL F` (fn th => simp[NoAsms,th]) >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
+  `Guard ee` by
+    (qpat_assum `~F ==> Guard ee /\ _` mp_tac >> simp[]) >>
   qpat_assum `!ee G1 tn1 t. _ ==> ?u G2 tn2. _`
     (qspecl_then [`ee`,`G1`,`tn1`,`t`] mp_tac) >>
   (impl_tac >- simp[]) >>

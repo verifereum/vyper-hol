@@ -18,7 +18,7 @@ Ancestors
   (* semantics properties *)
   vyperSemanticsHol
   (* frontend, its cv translation, and the test runner *)
-  vyperTestRunner jsonToVyperCV
+  vyperTestRunner jsonToVyperCV jsonToVyperExprProps
   (* compiler passes *)
   venomPassesHol
   (* analysis roll-up *)
@@ -57,6 +57,8 @@ Ancestors
      bytes, widened returns *)
   actualDecoderPackaging actualRegistrationCode actualEntryAllocationFrame
   allocaHistoryFragment ctorRegisterArgs
+  entryPtrSeamRegisterMods[qualified,ignore_grammar]
+  ctorDeployMemoryRunPtrPrefixEntrySemanticMods[qualified,ignore_grammar]
   nonreentrantEntry nonreentrantSource nonreentrantExit
   builtinBytesMemory concatMemory exprSimConvertFromBytes
   stmtSimReturnWiden
@@ -82,6 +84,8 @@ Ancestors
   e2eGasSufficient e2eGasSufficientTop
   (* deployment: the constructor frame and deploy correctness *)
   e2eDeployCorrectness
+  (* linked-module boundaries for runtime and deployment *)
+  e2eModsDefs[qualified,ignore_grammar] e2eDeployModsDefs[qualified,ignore_grammar]
   (* body induction: custom-error raise and assert pieces *)
   stmtSimCustomErrorRevert
   (* codegen: its assembly is label-disciplined (the asm optimizer's premise) *)

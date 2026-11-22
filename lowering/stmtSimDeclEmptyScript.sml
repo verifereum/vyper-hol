@@ -58,7 +58,8 @@ Proof
   Cases_on `args` >> gvs[is_empty_value_expr_def] >>
   simp[Ntimes evaluate_def 24, vyperContextTheory.builtin_args_length_ok_def,
        type_check_def, assert_def, ignore_bind_def, bind_def, return_def,
-       get_accounts_def, vyperContextTheory.evaluate_builtin_def] >>
+       get_accounts_def, vyperContextTheory.evaluate_builtin_def,
+       vyperContextTheory.is_self_codesize_def] >>
   Cases_on `compatible_bound bd 0` >>
   Cases_on `evaluate_type (get_tenv cx) x` >>
   simp[bind_def, return_def, raise_def, lift_sum_def]

@@ -22,6 +22,7 @@ Theorem make_tuple_vv_sim_full_conditional:
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin ann (MakeArray NONE n) args) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (MakeArray NONE n) args) es
@@ -48,14 +49,14 @@ Proof
     simp[type_memory_bytes_def] >>
   `?sba ssm su.
     compile_alloc_buffer (type_memory_size_list tvs) shadow_sa = (sba,ssm) /\
-    compile_make_tuple compile_expr cenv (MAP gas_shadow_expr args) tys
+    compile_make_tuple compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr args) tys
       sba.buf_operand 0 ssm = (su,shadow_sb)` by
     (qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
      simp[gas_shadow_expr_def,gas_shadow_builtin_def,compile_tuple_literal] >>
      Cases_on `compile_alloc_buffer (type_memory_size_list tvs) shadow_sa` >>
      simp[tuple_literal_types_def] >>
-     Cases_on `compile_make_tuple compile_expr cenv (MAP gas_shadow_expr args)
-       tys q.buf_operand 0 r` >>
+     Cases_on `compile_make_tuple compile_expr (gas_shadow_env T cenv)
+       (MAP gas_shadow_expr args) tys q.buf_operand 0 r` >>
      simp[as_ptr_val_def] >> metis_tac[]) >>
   `sba = ba /\ gas_shadow_state sm ssm` by
     (mp_tac (Q.INST [`nbytes` |-> `type_memory_size_list tvs`]

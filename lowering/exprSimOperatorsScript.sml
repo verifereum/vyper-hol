@@ -556,6 +556,7 @@ Proof
     >- simp[]
     >- simp[]
     >- simp[builtin_args_length_ok_def]
+    >- simp[is_self_codesize_def]
     >- simp[]
     >- simp[]
     >- (rpt strip_tac >> drule lower_value_not >> simp[])
@@ -607,7 +608,8 @@ Proof
     (Cases_on `expr_type e1` >>
      gvs[is_numeric_type_def, is_int_type_def, is_word_type_def] >>
      rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_word_type_def]) >>
-  irule compile_unop_sim >> simp[builtin_args_length_ok_def, is_word_type_def] >>
+  irule compile_unop_sim >> simp[builtin_args_length_ok_def, is_word_type_def,
+                                   is_self_codesize_def] >>
   qexistsl [`\x. compile_neg x (expr_type e1)`, `expr_type e1`] >>
   rpt conj_tac
   >~ [`unop_frag`]
@@ -654,6 +656,7 @@ Proof
     >- simp[]
     >- simp[]
     >- simp[builtin_args_length_ok_def]
+    >- simp[is_self_codesize_def]
     >- simp[is_word_type_def]
     >- simp[is_word_type_def]
     >- (rpt strip_tac >> drule lower_value_abs >> simp[])

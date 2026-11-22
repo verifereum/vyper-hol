@@ -7,7 +7,8 @@ Ancestors
   bodyFullShared bodyFullPreds bodySimFull gasOutcomeFullStmts gasOutcomeFullCompose
   gasOutcomeFull bodyFullIfExpReach bodyFullHashKeccakFixed
   fragGasEmitCtrl fragGasOriginPtrExec fragGasOriginPtr
-  fragGasOrigin gasShadowState gasShadowUnit gasShadow bodyDeclMemoryCompose
+  fragGasOrigin gasShadowState gasShadowStmtEnv gasShadowCompileStmtBase
+  gasShadowUnit gasShadow bodyDeclMemoryCompose
   bodyPtrDefs bodyMemoryDefs stmtSimIfProps stmtSimProps
   stmtSimDefs exprSimDefs loweringPosts gasExemptCert gasSummary
   gasSummaryCompose fragGasPathPtr fragGasPathMem fragGasMode fragExec
@@ -191,29 +192,29 @@ Proof
   simp[]
 QED
 
-Theorem compile_if_layout_shadow_ids[local]:
-  !cenv lctx ty c ss1 ss2 c' ss1' ss2' sa sb ta tb func sfunc.
+Theorem compile_if_layout_shadow_ids_env[local]:
+  !sd cenv lctx ty c ss1 ss2 c' ss1' ss2' sa sb ta tb func sfunc.
   compile_stmt cenv lctx ty (If c ss1 ss2) sa = ((), sb) /\
-  compile_stmt cenv lctx ty (If c' ss1' ss2') ta = ((), tb) /\
+  compile_stmt (gas_shadow_env sd cenv) lctx ty (If c' ss1' ss2') ta = ((), tb) /\
   gas_shadow_state sa ta /\
   fn_has_code sa sb func /\ fn_has_code ta tb sfunc /\
   (!sx op sy. lower_value compile_expr cenv (BaseT BoolT) c sx = (op, sy) ==>
      cs_extends sx sy /\ sx.cs_next_var <= sy.cs_next_var) /\
-  (!sx op sy. lower_value compile_expr cenv (BaseT BoolT) c' sx = (op, sy) ==>
+  (!sx op sy. lower_value compile_expr (gas_shadow_env sd cenv) (BaseT BoolT) c' sx = (op, sy) ==>
      cs_extends sx sy /\ sx.cs_next_var <= sy.cs_next_var) /\
   cs_mono (stmts_env cenv lctx ty ss1) /\
   cs_mono (stmts_env cenv lctx ty ss2) /\
-  cs_mono (stmts_env cenv lctx ty ss1') /\
-  cs_mono (stmts_env cenv lctx ty ss2') /\
+  cs_mono (stmts_env (gas_shadow_env sd cenv) lctx ty ss1') /\
+  cs_mono (stmts_env (gas_shadow_env sd cenv) lctx ty ss2') /\
   gas_shadow_compiles (lower_value compile_expr cenv (BaseT BoolT) c)
-    (lower_value compile_expr cenv (BaseT BoolT) c') /\
-  gas_shadow_compiles (stmts_env cenv lctx ty ss1)
-    (stmts_env cenv lctx ty ss1') /\
-  gas_shadow_compiles (stmts_env cenv lctx ty ss2)
-    (stmts_env cenv lctx ty ss2') ==>
+    (lower_value compile_expr (gas_shadow_env sd cenv) (BaseT BoolT) c') /\
+  gas_shadow_compiles_env sd (stmts_env cenv lctx ty ss1)
+    (stmts_env (gas_shadow_env sd cenv) lctx ty ss1') /\
+  gas_shadow_compiles_env sd (stmts_env cenv lctx ty ss2)
+    (stmts_env (gas_shadow_env sd cenv) lctx ty ss2') ==>
   ?op cond scond pre post tl el xl.
     lower_value compile_expr cenv (BaseT BoolT) c sa = (op, cond) /\
-    lower_value compile_expr cenv (BaseT BoolT) c' ta = (op, scond) /\
+    lower_value compile_expr (gas_shadow_env sd cenv) (BaseT BoolT) c' ta = (op, scond) /\
     gas_shadow_state cond scond /\
     fn_has_code sa cond func /\ fn_has_code ta scond sfunc /\
     cs_extends sa cond /\ sa.cs_next_var <= cond.cs_next_var /\
@@ -225,8 +226,8 @@ Theorem compile_if_layout_shadow_ids[local]:
     !b. ?entry last after sentry slast cenvb.
       stmts_env cenv lctx ty (if b then ss1 else ss2) entry =
         (cenvb, last) /\
-      stmts_env cenv lctx ty (if b then ss1' else ss2') sentry =
-        (cenvb, slast) /\
+      stmts_env (gas_shadow_env sd cenv) lctx ty (if b then ss1' else ss2') sentry =
+        (gas_shadow_env sd cenvb, slast) /\
       gas_shadow_state entry sentry /\ gas_shadow_state last slast /\
       fn_has_code sentry slast sfunc /\
       entry.cs_current_bb = (if b then tl else el) /\
@@ -242,15 +243,13 @@ Theorem compile_if_layout_shadow_ids[local]:
        sb.cs_current_bb = xl /\ sb.cs_current_insts = [])
 Proof
   rpt gen_tac >> strip_tac >>
-  qspecl_then [`cenv`, `lctx`, `ty`, `c`, `ss1`, `ss2`, `sa`, `sb`, `func`]
-    mp_tac compile_if_chain_frontiers >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_assum `compile_stmt _ _ _ (If c _ _) sa = _`
+    (mp_then Any drule_all compile_if_chain_frontiers) >>
   disch_then (qx_choosel_then [`op`, `s1`, `s2`, `s3`, `s4`, `s5`, `s6`,
     `s7`, `s8`, `s9`, `s10`, `s11`, `tl`, `el`, `xl`, `x5`, `x8`]
     strip_assume_tac) >>
-  qspecl_then [`cenv`, `lctx`, `ty`, `c'`, `ss1'`, `ss2'`, `ta`, `tb`, `sfunc`]
-    mp_tac compile_if_chain_frontiers >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_assum `compile_stmt _ _ _ (If c' _ _) ta = _`
+    (mp_then Any drule_all compile_if_chain_frontiers) >>
   disch_then (qx_choosel_then [`op'`, `t1`, `t2`, `t3`, `t4`, `t5`, `t6`,
     `t7`, `t8`, `t9`, `t10`, `t11`, `tl'`, `el'`, `xl'`, `y5`, `y8`]
     strip_assume_tac) >>
@@ -271,19 +270,22 @@ Proof
     metis_tac[gas_shadow_step, gas_shadow_compiles_new_block] >>
   `stmts_env cenv lctx ty ss1 s6 =
      (FST (stmts_env cenv lctx ty ss1 s6), s7) /\
-   stmts_env cenv lctx ty ss1' t6 =
-     (FST (stmts_env cenv lctx ty ss1' t6), t7) /\
+   stmts_env (gas_shadow_env sd cenv) lctx ty ss1' t6 =
+     (FST (stmts_env (gas_shadow_env sd cenv) lctx ty ss1' t6), t7) /\
    stmts_env cenv lctx ty ss2 s9 =
      (FST (stmts_env cenv lctx ty ss2 s9), s10) /\
-   stmts_env cenv lctx ty ss2' t9 =
-     (FST (stmts_env cenv lctx ty ss2' t9), t10)` by
+   stmts_env (gas_shadow_env sd cenv) lctx ty ss2' t9 =
+     (FST (stmts_env (gas_shadow_env sd cenv) lctx ty ss2' t9), t10)` by
     (fs[compile_stmts_env] >> metis_tac[PAIR]) >>
   qabbrev_tac `e1 = FST (stmts_env cenv lctx ty ss1 s6)` >>
-  qabbrev_tac `e1' = FST (stmts_env cenv lctx ty ss1' t6)` >>
+  qabbrev_tac `e1' = FST (stmts_env (gas_shadow_env sd cenv) lctx ty ss1' t6)` >>
   qabbrev_tac `e2 = FST (stmts_env cenv lctx ty ss2 s9)` >>
-  qabbrev_tac `e2' = FST (stmts_env cenv lctx ty ss2' t9)` >>
-  `e1' = e1 /\ gas_shadow_state s7 t7` by metis_tac[gas_shadow_step] >>
-  qpat_x_assum `e1' = e1` SUBST_ALL_TAC >>
+  qabbrev_tac `e2' = FST (stmts_env (gas_shadow_env sd cenv) lctx ty ss2' t9)` >>
+  `gas_shadow_env sd e1 = e1' /\ gas_shadow_state s7 t7` by
+    (qpat_assum `gas_shadow_compiles_env _ (stmts_env _ _ _ ss1) _`
+       (mp_tac o REWRITE_RULE [gas_shadow_compiles_env_def]) >>
+     disch_then (qspecl_then [`s6`, `t6`] mp_tac) >> simp[]) >>
+  qpat_x_assum `gas_shadow_env sd e1 = e1'` (SUBST_ALL_TAC o SYM) >>
   `block_is_terminated t7 = block_is_terminated s7` by
     metis_tac[gas_shadow_terminated] >>
   `gas_shadow_state s8 t8` by
@@ -291,10 +293,11 @@ Proof
      metis_tac[gas_shadow_step, gas_shadow_compiles_emit_inst]) >>
   `gas_shadow_state s9 t9` by
     metis_tac[gas_shadow_step, gas_shadow_compiles_new_block] >>
-  `e2' = e2 /\ gas_shadow_state s10 t10` by metis_tac[gas_shadow_step] >>
-  qpat_x_assum `e2' = e2` SUBST_ALL_TAC >>
-  `block_is_terminated t10 = block_is_terminated s10` by
-    metis_tac[gas_shadow_terminated] >>
+  `gas_shadow_env sd e2 = e2' /\ gas_shadow_state s10 t10` by
+    (qpat_assum `gas_shadow_compiles_env _ (stmts_env _ _ _ ss2) _`
+       (mp_tac o REWRITE_RULE [gas_shadow_compiles_env_def]) >>
+     disch_then (qspecl_then [`s9`, `t9`] mp_tac) >> simp[]) >>
+  qpat_x_assum `gas_shadow_env sd e2 = e2'` (SUBST_ALL_TAC o SYM) >>
   `sa.cs_next_id <= s1.cs_next_id` by
     metis_tac[cj 2 compile_expr_grows] >>
   `s6.cs_next_id <= s7.cs_next_id` by
@@ -313,6 +316,10 @@ Proof
   >- (qexistsl_tac [`s6`, `s7`, `s8`, `t6`, `t7`, `e1`] >> simp[]) >>
   qexistsl_tac [`s9`, `s10`, `s11`, `t9`, `t10`, `e2`] >> simp[]
 QED
+
+val compile_if_layout_shadow_ids =
+  REWRITE_RULE [gasShadowCompileBaseTheory.gas_shadow_env_F, gas_shadow_compiles_env_F]
+    (Q.SPEC `F` compile_if_layout_shadow_ids_env);
 
 Theorem compile_if_layout_shadow:
   !cenv lctx ty c ss1 ss2 c' ss1' ss2' sa sb ta tb func sfunc.
@@ -426,33 +433,33 @@ Theorem compile_if_stmt_frag_full:
     (!sa op sb. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
     (!sa op sb.
-       lower_value compile_expr cenv (BaseT BoolT) (gas_shadow_expr c) sa =
+       lower_value compile_expr (gas_shadow_env T cenv) (BaseT BoolT) (gas_shadow_expr c) sa =
          (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
     cs_mono (stmts_env cenv lctx ty ss1) /\
     cs_mono (stmts_env cenv lctx ty ss2) /\
-    cs_mono (stmts_env cenv lctx ty (MAP gas_shadow_stmt ss1)) /\
-    cs_mono (stmts_env cenv lctx ty (MAP gas_shadow_stmt ss2)) /\
+    cs_mono (stmts_env (gas_shadow_env T cenv) lctx ty (MAP gas_shadow_stmt ss1)) /\
+    cs_mono (stmts_env (gas_shadow_env T cenv) lctx ty (MAP gas_shadow_stmt ss2)) /\
     gas_shadow_compiles (lower_value compile_expr cenv (BaseT BoolT) c)
-      (lower_value compile_expr cenv (BaseT BoolT) (gas_shadow_expr c)) /\
-    gas_shadow_compiles (stmts_env cenv lctx ty ss1)
-      (stmts_env cenv lctx ty (MAP gas_shadow_stmt ss1)) /\
-    gas_shadow_compiles (stmts_env cenv lctx ty ss2)
-      (stmts_env cenv lctx ty (MAP gas_shadow_stmt ss2)) /\
+      (lower_value compile_expr (gas_shadow_env T cenv) (BaseT BoolT) (gas_shadow_expr c)) /\
+    gas_shadow_compiles_env T (stmts_env cenv lctx ty ss1)
+      (stmts_env (gas_shadow_env T cenv) lctx ty (MAP gas_shadow_stmt ss1)) /\
+    gas_shadow_compiles_env T (stmts_env cenv lctx ty ss2)
+      (stmts_env (gas_shadow_env T cenv) lctx ty (MAP gas_shadow_stmt ss2)) /\
     (!gs b es1.
        bind (eval_expr cx c) (read_result cx) (es with gas_obs := gs) =
          (INL (BoolV b), es1) ==>
        stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
          cx lctx RetQ cenv
          (stmts_env cenv lctx ty (if b then ss1 else ss2))
-         (stmts_env cenv lctx ty
+         (stmts_env (gas_shadow_env T cenv) lctx ty
             (if b then MAP gas_shadow_stmt ss1 else MAP gas_shadow_stmt ss2))
          (eval_stmts cx (if b then ss1 else ss2))
          (es1 with scopes := FEMPTY :: es1.scopes)) ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty (If c ss1 ss2))
-      (stmt_env cenv lctx ty
+      (stmt_env (gas_shadow_env T cenv) lctx ty
          (If (gas_shadow_expr c) (MAP gas_shadow_stmt ss1)
             (MAP gas_shadow_stmt ss2)))
       (eval_stmt cx (If c ss1 ss2)) es
@@ -468,12 +475,7 @@ Proof
   qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC >>
   qpat_x_assum `stmt_env _ _ _ (If (gas_shadow_expr c) _ _) _ = _`
     (strip_assume_tac o SIMP_RULE std_ss [stmt_env_if]) >>
-  qspecl_then [`cenv`, `lctx`, `ty`, `c`, `ss1`, `ss2`, `gas_shadow_expr c`,
-    `MAP gas_shadow_stmt ss1`, `MAP gas_shadow_stmt ss2`, `sa`, `sb`,
-    `shadow_sa`, `shadow_sb`, `func`, `shadow_func`]
-    mp_tac compile_if_layout_shadow_ids >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  strip_tac >>
+  drule_all (Q.SPEC `T` compile_if_layout_shadow_ids_env) >> strip_tac >>
   `gas_admissible (bind (eval_expr cx c) (read_result cx)) expr_res_ok es` by
     (irule if_condition_admissible >> metis_tac[]) >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>

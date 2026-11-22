@@ -65,11 +65,12 @@ QED
 
 Theorem raw_log_expr_sim_full:
   (!ce ty e. gas_shadow_compiles (lower_value compile_expr ce ty e)
-    (lower_value compile_expr ce ty (gas_shadow_expr e))) /\
+    (lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e))) /\
   (!ce xs. gas_shadow_compiles (compile_multi_exprs compile_expr ce xs)
-    (compile_multi_exprs compile_expr ce (MAP gas_shadow_expr xs))) /\
+    (compile_multi_exprs compile_expr (gas_shadow_env T ce) (MAP gas_shadow_expr xs))) /\
   body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Call ann RawLog args dflt) es ==>
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Call ann RawLog args dflt) es
@@ -95,7 +96,8 @@ Proof
      gvs[well_typed_expr_def, well_typed_builtin_app_def,
          compatible_bound_def, builtin_args_length_ok_def]) >> gvs[] >>
   rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
-  drule_all raw_log_full_layout_shadow >> strip_tac >>
+  drule_all (Q.INST [`shadow_defaults` |-> `T`] raw_log_full_layout_shadow) >>
+  strip_tac >>
   `EVERY (\op. (!x. op = Var x ==> not_fresh_at sm x) /\
                  (!l. op <> Label l)) ops` by
     (irule raw_log_topics_operands_shape >>
@@ -169,7 +171,7 @@ QED
 Resume raw_log_expr_sim_full[continuation]:
   markerLib.RESUME_TAC >> (
   rename1 `compile_multi_exprs compile_expr cenv topics sa = (ops,sm)` >>
-  rename1 `compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr topics)
+  rename1 `compile_multi_exprs compile_expr _ (MAP gas_shadow_expr topics)
     shadow_sa = (ops,shadow_sm)` >>
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t`] >>
   BETA_TAC >> strip_tac >> disj1_tac >>
@@ -207,6 +209,17 @@ Resume raw_log_expr_sim_full[continuation]:
      first_x_assum (qspec_then `gas_explicit marks s0.vs_gas_readings ++ gs` mp_tac) >>
      qpat_assum `!tail. eval_exprs cx topics _ = _` (qspec_then `gs` assume_tac) >>
      fs[Abbr `tail_source`, bind_def] >> metis_tac[]) >>
+  `well_typed_exprs env topics` by
+    (qpat_assum `expr_body_pre cenv cx env (Call _ RawLog _ _) es`
+       (mp_tac o cj 2 o REWRITE_RULE [expr_body_pre_def]) >>
+     simp[Once well_typed_expr_def] >>
+     strip_tac >> fs[well_typed_expr_def, well_typed_builtin_app_def]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[body_const_cells_agree_state_updates] >>
+     irule body_const_cells_agree_exprs >>
+     qpat_assum `!tail. eval_exprs cx topics _ = _` (qspec_then `[]` (irule_at Any)) >>
+     simp[body_const_cells_agree_state_updates]) >>
   `expr_sim_inv cenv cx env mid` by fs[expr_body_pre_def] >>
   `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
     (qpat_assum `!tail. eval_exprs cx topics _ = _`
@@ -226,8 +239,9 @@ Resume raw_log_expr_sim_full[continuation]:
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type data) data mid` by
     (qpat_assum `body_expr_full_ok cx data`
-       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then drule_all >> metis_tac[]) >>
+       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     qpat_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+       _ ==> expr_sim_full _ _ _ _ _ _ /\ _` drule_all >> simp[]) >>
   FIRST [qpat_assum `expr_type data = BaseT (BytesT (Fixed 32))`
            (K all_tac) >> suspend "fixed_data",
          suspend "dynamic_data"])

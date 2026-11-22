@@ -1,5 +1,6 @@
 Theory bodyFullForIteratorHeld
 Ancestors
+  contractInvContextProps
   bodyFullForArrayBranch forNestedArrayCapture[qualified,ignore_grammar]
   vyperTypeContract[qualified,ignore_grammar]
   forCapturedArraySnapshot forSelectedImmutableLayout
@@ -29,6 +30,7 @@ Theorem compile_for_storage_subplace_array_frag_full:
        (expr_abi_decode_target_root target) (For id typ (Array e) n body) ==>
        occurs_abi_decode_target target tops) /\
     stmt_loop_calls_ok [(NONE,tops)] (For id typ (Array e) n body) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
@@ -48,7 +50,7 @@ Theorem compile_for_storage_subplace_array_frag_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (For id typ (Array e) n body))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n body)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n body)))
       (eval_stmt cx (For id typ (Array e) n body)) es
 Proof
   rpt gen_tac >> DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
@@ -56,9 +58,8 @@ Proof
     (qx_choosel_then [`tgt`,`nid`] (map_every assume_tac o CONJUNCTS)) >>
   irule for_array_expr_cut_frag_full >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  conj_tac >- (qexistsl [`bindings`,`tops`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl [`env`,`env'`] >> reverse conj_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qexistsl [`bindings`,`env`,`env'`,`tops`] >> asm_rewrite_tac[] >>
   map_every qx_gen_tac [`st0`,`sa`,`sb`,`sha`,`shb`,`s0`,`G0`,`tn0`,`vv`,
     `se`,`she`,`bd`,`tyv`,`marks`,`rv`,`em`,`G`,`tn`,`u`] >>
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
@@ -209,6 +210,7 @@ Theorem compile_for_immutable_subplace_array_frag_full:
        (expr_abi_decode_target_root target) (For id typ (Array e) n body) ==>
        occurs_abi_decode_target target tops) /\
     stmt_loop_calls_ok [(NONE,tops)] (For id typ (Array e) n body) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
@@ -223,14 +225,13 @@ Theorem compile_for_immutable_subplace_array_frag_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (For id typ (Array e) n body))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n body)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n body)))
       (eval_stmt cx (For id typ (Array e) n body)) es
 Proof
   rpt gen_tac >> strip_tac >> irule for_array_expr_cut_frag_full >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  conj_tac >- (qexistsl [`bindings`,`tops`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl [`env`,`env'`] >> reverse conj_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qexistsl [`bindings`,`env`,`env'`,`tops`] >> asm_rewrite_tac[] >>
   map_every qx_gen_tac [`st0`,`sa`,`sb`,`sha`,`shb`,`s0`,`G0`,`tn0`,`vv`,
     `se`,`she`,`bd`,`tyv`,`marks`,`rv`,`em`,`G`,`tn`,`u`] >>
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
@@ -295,7 +296,9 @@ Resume compile_for_immutable_subplace_array_frag_full[frame]:
   drule_then strip_assume_tac bodyFullForFactsTheory.type_stmt_for_projection >>
   drule_at_then (Pat `eval_expr cx e start = _`) drule_all exprSimSourceTheory.expr_body_pre_eval_result >>
   strip_tac >>
-  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by fs[bodySimTheory.body_inv_def] >>
+  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
+    (drule_then (MATCH_ACCEPT_TAC o MATCH_MP contract_inv_singleton_source_modules)
+       bodySimTheory.body_inv_contract) >>
   `~cx_const_name cx (src,name)` by
     (strip_tac >> drule_all_then strip_assume_tac bodySimTheory.body_inv_const_name_not_root >> fs[]) >>
   `evaluate_type (get_tenv cx) (ArrayT typ bd) = SOME (ArrayTV tyv bd)` by

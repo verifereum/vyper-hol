@@ -24,9 +24,9 @@ Theorem raw_log_topics_suffix_full_under_compose:
   expr_type e = BaseT (BytesT (Fixed 32)) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
   compile_multi_exprs compile_expr cenv rest sm = (ops,sb) /\
-  lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e)
     shadow_sa = (op,shadow_sm) /\
-  compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr rest)
+  compile_multi_exprs compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr rest)
     shadow_sm = (ops,shadow_sb) /\
   stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
@@ -80,13 +80,14 @@ Theorem raw_log_topics_suffix_full_under_compose:
    env ann n data dflt st0 sa sb shadow_sa shadow_sb ops es s G0 tn0.
   (!cenv ty e.
      gas_shadow_compiles (lower_value compile_expr cenv ty e)
-       (lower_value compile_expr cenv ty (gas_shadow_expr e))) /\
+       (lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e))) /\
   (!cenv xs.
      gas_shadow_compiles (compile_multi_exprs compile_expr cenv xs)
-       (compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr xs))) /\
+       (compile_multi_exprs compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr xs))) /\
   topics = pre ++ rest /\
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env
     (Call ann RawLog
       [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
@@ -94,7 +95,7 @@ Theorem raw_log_topics_suffix_full_under_compose:
         topics; data] dflt) es /\
   body_exprs_full_ok cx rest /\
   compile_multi_exprs compile_expr cenv rest sa = (ops,sb) /\
-  compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr rest)
+  compile_multi_exprs compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr rest)
     shadow_sa = (ops,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -164,23 +165,25 @@ Proof
   Cases_on `compile_multi_exprs compile_expr cenv rest sm` >>
   rename1 `compile_multi_exprs compile_expr cenv rest sm = (tailops,last)` >>
   simp[] >> strip_tac >>
-  qpat_x_assum `compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr (e::rest)) shadow_sa = _` mp_tac >>
+  qpat_x_assum `compile_multi_exprs compile_expr _ (MAP gas_shadow_expr (e::rest)) shadow_sa = _` mp_tac >>
   simp[MAP, Once compile_multi_exprs_def, comp_bind_def, comp_return_def] >>
-  Cases_on `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
-  rename1 `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa = (sop,shadow_sm)` >>
-  Cases_on `compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr rest) shadow_sm` >>
-  rename1 `compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr rest) shadow_sm = (stailops,shadow_last)` >>
+  Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  rename1 `lower_value compile_expr _ (expr_type e) (gas_shadow_expr e) shadow_sa = (sop,shadow_sm)` >>
+  Cases_on `compile_multi_exprs compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr rest) shadow_sm` >>
+  rename1 `compile_multi_exprs compile_expr _ (MAP gas_shadow_expr rest) shadow_sm = (stailops,shadow_last)` >>
   simp[] >> strip_tac >>
   `op = sop /\ gas_shadow_state sm shadow_sm` by
     (qpat_x_assum `!cenv ty e. gas_shadow_compiles _ _`
        (qspecl_then [`cenv`, `expr_type e`, `e`] mp_tac) >>
      rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
+     qpat_x_assum `gas_shadow_state sa shadow_sa` assume_tac >>
+     disch_then drule >> simp[]) >>
   `tailops = stailops /\ gas_shadow_state last shadow_last` by
     (qpat_x_assum `!cenv xs. gas_shadow_compiles _ _`
        (qspecl_then [`cenv`, `rest`] mp_tac) >>
      rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sm`, `shadow_sm`] mp_tac) >> simp[]) >>
+     qpat_x_assum `gas_shadow_state sm shadow_sm` assume_tac >>
+     disch_then drule >> simp[]) >>
   `expr_sim_inv cenv cx env es` by
     (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >> simp[exprSimHypsDefsTheory.expr_body_pre_def]) >>
   `expr_body_pre cenv cx env
@@ -197,8 +200,8 @@ Proof
      conj_tac
      >- (qspecl_then [`compile_expr`,`cenv`,`rest`,`sm`] mp_tac ci_mono_compile_multi_exprs >> simp[compile_expr_ci_mono]) >>
      conj_tac
-     >- (qspecl_then [`cenv`,`expr_type e`,`gas_shadow_expr e`,`shadow_sa`] mp_tac ci_mono_lower_value_compile_expr >> simp[]) >>
-     qspecl_then [`compile_expr`,`cenv`,`MAP gas_shadow_expr rest`,`shadow_sm`] mp_tac ci_mono_compile_multi_exprs >> simp[compile_expr_ci_mono]) >>
+     >- (qspecl_then [`gas_shadow_env T cenv`,`expr_type e`,`gas_shadow_expr e`,`shadow_sa`] mp_tac ci_mono_lower_value_compile_expr >> simp[]) >>
+     qspecl_then [`compile_expr`,`gas_shadow_env T cenv`,`MAP gas_shadow_expr rest`,`shadow_sm`] mp_tac ci_mono_compile_multi_exprs >> simp[compile_expr_ci_mono]) >>
   `fn_has_code sa sm func /\ fn_has_code sm last func /\
    fn_has_code shadow_sa shadow_sm shadow_func /\
    fn_has_code shadow_sm shadow_last shadow_func` by
@@ -208,8 +211,9 @@ Proof
     (qpat_x_assum `body_exprs_full_ok cx (e::rest)`
        (mp_tac o ONCE_REWRITE_RULE [body_exprs_full_ok_def]) >> strip_tac >>
      qpat_x_assum `body_expr_full_ok cx e`
-       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then drule_all >> simp[]) >>
+       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     qpat_x_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+       _ ==> expr_sim_full _ _ _ _ _ _ /\ _` drule_all >> simp[]) >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     (qpat_assum `body_inv _ ctx _ cx` (fn inv =>
        qpat_assum `MEM func ctx.ctx_functions` (fn member =>
@@ -291,6 +295,10 @@ Resume raw_log_topics_suffix_full_under_compose[continue]:
      simp[evaluation_state_component_equality]) >>
   `expr_body_pre cenv cx env e
      (es with gas_obs := gas_explicit marks s.vs_gas_readings)` by simp[] >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`well_typed_expr env e` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+     irule body_const_cells_agree_expr_read >>
+     goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >> simp[]) >>
   `expr_sim_inv cenv cx env mid` by
     (drule_all (SRULE [SF ETA_ss] expr_body_pre_eval) >> simp[]) >>
   `expr_body_pre cenv cx env
@@ -354,8 +362,7 @@ Resume raw_log_topics_suffix_full_under_compose[continue]:
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac
      >- (qexistsl_tac [`shadow_func`,`shadow_sm`,`shadow_last`] >> simp[]) >>
-     conj_tac >- (qexists_tac `tops` >> simp[]) >>
-     qexistsl_tac [`ann`,`data`,`dflt`,`env`,`n`,`pre ++ [e]`] >>
+     qexistsl_tac [`ann`,`data`,`dflt`,`env`,`n`,`pre ++ [e]`,`tops`] >>
      pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >>
      metis_tac[]) >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ (eval_exprs cx rest) _ tailQ tailR` >>
@@ -428,12 +435,12 @@ Resume raw_log_topics_suffix_full_under_compose[return_cons]:
   conj_tac
   >- (qexistsl_tac [`shadow_sa`,`shadow_last`,`shadow_sm`] >>
       qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _` mp_tac >>
-      qpat_assum `compile_multi_exprs _ _ _ shadow_sm = _` mp_tac >>
+      qpat_assum `compile_multi_exprs _ _ (MAP gas_shadow_expr rest) shadow_sm = _` mp_tac >>
       qpat_assum `op = sop` mp_tac >>
       qpat_assum `tailops = stailops` mp_tac >>
       qpat_assum `expr_type e = _` mp_tac >>
       POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
-  conj_tac >- (qexists_tac `tops` >> simp[]) >>
+  conj_tac >- (qexists_tac `tops` >> first_assum ACCEPT_TAC) >>
   conj_tac
   >- (qexistsl_tac [`ann`,`data`,`dflt`,`env`,`n`,`pre`] >>
       qpat_assum `topics = _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>

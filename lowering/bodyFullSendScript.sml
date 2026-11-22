@@ -24,6 +24,7 @@ Theorem send_expr_sim_full:
    has_gas args dflt es.
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
     body_exprs_full_ok cx args ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -72,19 +73,16 @@ Resume send_expr_sim_full[arity]:
      qpat_x_assum `body_expr_full_ok cx to_e` mp_tac >>
      simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
   `gas_shadow_compiles (lower_value compile_expr cenv (expr_type to_e) to_e)
-     (lower_value compile_expr cenv (expr_type to_e) (gas_shadow_expr to_e))` by
-    (irule (SRULE [] (Q.INST [`sh` |-> `T`]
-       gasShadowCompileHelpersTheory.gas_shadow_compiles_lower_value)) >>
-     simp[gas_shadow_compile_expr]) >>
+     (lower_value compile_expr (gas_shadow_env T cenv) (expr_type to_e)
+       (gas_shadow_expr to_e))` by
+    irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env >>
   rename1 `lower_value compile_expr cenv (BaseT AddressT) to_e sa = (addr_op,s1)` >>
-  `?shadow_s1. lower_value compile_expr cenv (expr_type to_e)
+  `?shadow_s1. lower_value compile_expr (gas_shadow_env T cenv) (expr_type to_e)
       (gas_shadow_expr to_e) shadow_sa = (addr_op,shadow_s1) /\
       gas_shadow_state s1 shadow_s1` by
     (qpat_x_assum `gas_shadow_compiles _ _`
        (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[] >>
-     Cases_on `lower_value compile_expr cenv (BaseT AddressT)
-       (gas_shadow_expr to_e) shadow_sa` >> gvs[]) >>
+     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
   gvs[] >>
   `!ce ct e a op b. lower_value compile_expr ce ct e a = (op,b) ==>
      cs_extends a b` by
@@ -178,6 +176,13 @@ Resume send_expr_sim_full[after_address]:
     `expr_body_pre cenv cx env amount_e mid` by
       (irule expr_body_pre_send_arg >>
        qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` (irule_at Any) >> simp[]) >>
+    `body_const_cells_agree [(NONE,tops)] cx env mid` by
+      (`body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+         suffices_by simp[] >>
+       irule body_const_cells_agree_expr_read >>
+       qpat_assum `!tail. bind (eval_expr cx to_e) _ _ = _`
+         (qspec_then `[]` (irule_at Any)) >>
+       fs[exprSimHypsDefsTheory.expr_body_pre_def]) >>
     `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
        cenv cx (expr_type amount_e) amount_e mid` by
       (`?ss raw tt uu. eval_expr cx to_e ss = (INL raw,tt) /\
@@ -189,20 +194,21 @@ Resume send_expr_sim_full[after_address]:
        gvs[body_exprs_full_ok_def, EVERY_DEF] >>
        `body_expr_full_ok cx amount_e` by
          metis_tac[] >>
-       qpat_x_assum `body_expr_full_ok cx amount_e` mp_tac >>
-       simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
+       qpat_assum `body_expr_full_ok cx amount_e`
+         (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,`func`,
+                       `shadow_func`,`cenv`,`env`,`expr_type amount_e`,`mid`] mp_tac o
+          CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >> simp[]) >>
     `gas_shadow_compiles (lower_value compile_expr cenv (expr_type amount_e) amount_e)
-       (lower_value compile_expr cenv (expr_type amount_e) (gas_shadow_expr amount_e))` by
-      (irule (SRULE [] (Q.INST [`sh` |-> `T`]
-         gasShadowCompileHelpersTheory.gas_shadow_compiles_lower_value)) >>
-       simp[gas_shadow_compile_expr]) >>
+       (lower_value compile_expr (gas_shadow_env T cenv) (expr_type amount_e)
+         (gas_shadow_expr amount_e))` by
+      irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env >>
     qpat_x_assum `gas_shadow_compiles _ _`
       (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
     disch_then (qspecl_then [`s1`, `shadow_s1`] mp_tac) >> simp[] >> strip_tac >>
     gvs[] >>
     rename1 `lower_value compile_expr cenv (BaseT (UintT 256)) amount_e s1 =
        (amount_op,amount_end)` >>
-    rename1 `lower_value compile_expr cenv (BaseT (UintT 256))
+    rename1 `lower_value compile_expr _ (BaseT (UintT 256))
        (gas_shadow_expr amount_e) shadow_s1 = (amount_op,shadow_amount_end)` >>
     `fn_has_code s1 amount_end func /\
      fn_has_code shadow_s1 shadow_amount_end shadow_func` by
@@ -416,6 +422,24 @@ QED
 
 Resume send_expr_sim_full[gas_child]:
   markerLib.RESUME_TAC >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`well_typed_expr env to_e` by
+       qpat_assum `expr_body_pre cenv cx env to_e es`
+         (ACCEPT_TAC o cj 2 o REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def]) >>
+     `body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx to_e) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid'` by
+    (`well_typed_expr env amount_e` by
+       qpat_assum `expr_body_pre cenv cx env amount_e mid`
+         (ACCEPT_TAC o cj 2 o REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def]) >>
+     `body_const_cells_agree [(NONE,tops)] cx env (mid' with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx amount_e) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> simp[]) >>
   `expr_body_pre cenv cx env gas_e mid'` by
     (irule expr_body_pre_send_arg >>
      qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` (irule_at Any) >> simp[]) >>
@@ -449,10 +473,9 @@ Resume send_expr_sim_full[gas_child]:
     (qpat_x_assum `body_expr_full_ok cx gas_e` mp_tac >>
      simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
   `gas_shadow_compiles (lower_value compile_expr cenv (expr_type gas_e) gas_e)
-    (lower_value compile_expr cenv (expr_type gas_e) (gas_shadow_expr gas_e))` by
-    (irule (SRULE [] (Q.INST [`sh` |-> `T`]
-       gasShadowCompileHelpersTheory.gas_shadow_compiles_lower_value)) >>
-     simp[gas_shadow_compile_expr]) >>
+    (lower_value compile_expr (gas_shadow_env T cenv) (expr_type gas_e)
+      (gas_shadow_expr gas_e))` by
+    irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env >>
   qpat_x_assum `gas_shadow_compiles _ _`
     (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
   disch_then (qspecl_then [`amount_end`,`shadow_amount_end`] mp_tac) >>
@@ -798,6 +821,7 @@ Theorem send_expr_vv_sim_full:
    has_gas args dflt es.
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
     body_exprs_full_ok cx args ==>
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)

@@ -33,6 +33,7 @@ Theorem make_array_slot_full_bundled:
                not_fresh_at csbase x) /\
         (!H. valid_horizon cx st0 H ebase.storage_trace ==>
              stmt_state_rel H ctx func cenv cx ebase sbase)) /\ body_expr_full_ok cx e /\ expr_body_pre cenv cx env e es /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     arg_type_fits (expr_type e) dty /\
     evaluate_type (get_tenv cx) dty = SOME dtv /\
     type_memory_bytes cenv dty = type_memory_size dtv /\
@@ -68,7 +69,7 @@ Theorem make_array_slot_full_bundled:
         src <- unwrap_value cenv vv;
         compile_store_memory cenv src dst dty (lowered_value_type cenv e)
      od) sa = ((),sb) /\
-    (do vv <- compile_expr cenv (expr_type (gas_shadow_expr e)) (gas_shadow_expr e);
+    (do vv <- compile_expr (gas_shadow_env T cenv) (expr_type (gas_shadow_expr e)) (gas_shadow_expr e);
         dst <- emit_op ADD [Var q; Lit (n2w off)];
         src <- unwrap_value cenv vv;
         compile_store_memory cenv src dst dty
@@ -147,16 +148,18 @@ Proof
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e) e es` by
     (qpat_x_assum `body_expr_full_ok cx e`
-       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then drule_all >> simp[]) >>
+       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     qpat_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+         _ ==> expr_sim_full _ _ _ _ _ _ /\ expr_vv_sim_full _ _ _ _ _ _`
+       drule_all >> simp[]) >>
   `gas_shadow_compiles (compile_expr cenv (expr_type e) e)
-     (compile_expr cenv (expr_type e) (gas_shadow_expr e))` by
-     irule gas_shadow_stmt_compile_expr >>
+     (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
+     irule gas_shadow_stmt_compile_expr_env >>
   qpat_x_assum `gas_shadow_compiles _ _`
     (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
   disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >>
   simp[] >> strip_tac >>
-  Cases_on `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa` >>
   gvs[] >>
   rename1 `compile_expr cenv (expr_type e) e sa = (vv,sm)` >>
   rename1 `gas_shadow_state sm shadow_sm` >>
@@ -1405,6 +1408,7 @@ Theorem make_array_slot_full:
                not_fresh_at csbase x) /\
         (!H. valid_horizon cx st0 H ebase.storage_trace ==>
              stmt_state_rel H ctx func cenv cx ebase sbase)) /\ body_expr_full_ok cx e /\ expr_body_pre cenv cx env e es /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     arg_type_fits (expr_type e) dty /\
     evaluate_type (get_tenv cx) dty = SOME dtv /\
     type_memory_bytes cenv dty = type_memory_size dtv /\
@@ -1442,7 +1446,7 @@ Theorem make_array_slot_full:
         src <- unwrap_value cenv vv;
         compile_store_memory cenv src dst dty (lowered_value_type cenv e)
      od) sa = ((),sb) /\
-    (do vv <- compile_expr cenv (expr_type (gas_shadow_expr e)) (gas_shadow_expr e);
+    (do vv <- compile_expr (gas_shadow_env T cenv) (expr_type (gas_shadow_expr e)) (gas_shadow_expr e);
         dst <- emit_op ADD [Var q; Lit (n2w off)];
         src <- unwrap_value cenv vv;
         compile_store_memory cenv src dst dty

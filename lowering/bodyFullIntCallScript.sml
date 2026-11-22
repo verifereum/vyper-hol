@@ -2,7 +2,7 @@
  * supplied-argument, omitted-default, and callee-body stages. *)
 Theory bodyFullIntCall
 Ancestors bodyFullShadowBodyInv
-  bodyFullIntCallDefs bodyFullPreds bodyIntCallSeams bodySim
+  bodyFullIntCallDefs bodyFullPreds bodyIntCallSeams bodySim constSubst
   vyperInterpreter vyperState vyperAST finite_map list
   bodyFullIntCallReturn compileVyper moduleLowering fragGasFocus
   gasShadowCompile gasShadowState exprSimAccounts fragExec exprSimUnwrap
@@ -164,9 +164,11 @@ Theorem intcall_entry_body_ih[local]:
      evaluate_type (get_tenv cx) ret = SOME rtv /\
      (nr ==> IS_SOME cx.nonreentrant_slot) /\
      (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-     body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss) ==>
+     body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+         (subst_consts_stmts (module_consts_env tops []) ss)) ==>
   ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-   body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss)
+   body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+         (subst_consts_stmts (module_consts_env tops []) ss))
 Proof
   strip_tac >>
   `nr ==> IS_SOME cx.nonreentrant_slot` by
@@ -187,14 +189,13 @@ val args_input = Term `
    es dflt es0 mut nr args ret ss rr dflts.
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
     LENGTH es <= LENGTH args /\
-    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx)
-      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     ~supportedExprTraverse$supported_exprs_exists supportedProgram$expr_msg_gas_root
       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
@@ -202,14 +203,15 @@ val args_input = Term `
        ~MEM (NONE,name) cx.stk /\
        eval_exprs cx es s1 = (INL vs,t1) ==>
        body_exprs_full_ok (cx with stk updated_by CONS (NONE,name))
-         (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)) ==>
+         (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
+           (subst_consts_exprs (module_consts_env tops []) dflts))) ==>
     !st0 sa sb shadow_sa shadow_sb s0 G0 tn0 kc out f P Q R.
       (!v. storage_trace_frame (f v)) /\
       (!v. cs_appends (kc v)) /\
       comp_bind (compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt))
         kc sa = (out, sb) /\
       comp_bind
-        (compile_expr cenv ty
+        (compile_expr (gas_shadow_env T cenv) ty
            (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)))
         kc shadow_sa = (out, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
@@ -251,6 +253,7 @@ val args_input = Term `
             intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name
               es sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv
               es1 t G tn) /\
+         body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
          (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
          (?H. valid_horizon cx st0 H es1.storage_trace) /\
          gas_admissible (bind (intcall_rest cx name mut nr ss prev rtv) f)
@@ -275,12 +278,11 @@ val callee_input = Term `
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx) dflts /\
-    ~supportedStmtTraverse$supported_stmts_expr_exists (const_name_root cx) ss /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
     LENGTH es <= LENGTH args /\
     ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss) /\
+       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+         (subst_consts_stmts (module_consts_env tops []) ss)) /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
     MEM func ctx.ctx_functions /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
@@ -291,6 +293,7 @@ val callee_input = Term `
        intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
          sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
          G tn) /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
     gas_invoke_entry (ctx,func) t callee entered /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
     !bb inst lbl arg_ops argv.
@@ -346,11 +349,12 @@ QED
 Theorem shadow_compile_same[local]:
   gas_shadow_state sa shadow_sa /\
   compile_expr cenv ty e sa = (vv, sm) /\
-  compile_expr cenv ty (gas_shadow_expr e) shadow_sa = (vv2, shadow_sm) ==>
+  compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa = (vv2, shadow_sm) ==>
   vv2 = vv /\ gas_shadow_state sm shadow_sm
 Proof
   strip_tac >>
-  qspecl_then [`cenv`,`ty`,`e`,`T`] mp_tac (CONJUNCT1 gas_shadow_compile_expr) >>
+  qspecl_then [`cenv`,`ty`,`e`,`T`] mp_tac
+    (CONJUNCT1 (Q.INST [`sd` |-> `T`] gas_shadow_compile_expr_env)) >>
   simp[gas_shadow_compiles_def] >> disch_then drule >> simp[]
 QED
 
@@ -364,8 +368,6 @@ Theorem intcall_callee_premise[local]:
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx) dflts /\
-    ~supportedStmtTraverse$supported_stmts_expr_exists (const_name_root cx) ss /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
     (!s1 vs t1 sd dvs td penv rtv.
        ~MEM (NONE,name) cx.stk /\
@@ -377,7 +379,8 @@ Theorem intcall_callee_premise[local]:
        evaluate_type (get_tenv cx) ret = SOME rtv /\
        (nr ==> IS_SOME cx.nonreentrant_slot) /\
        (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss) /\
+       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+         (subst_consts_stmts (module_consts_env tops []) ss)) /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
     MEM func ctx.ctx_functions /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
@@ -388,6 +391,7 @@ Theorem intcall_callee_premise[local]:
        intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
          sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
          G tn) /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
     (?H. valid_horizon cx st0 H es1.storage_trace) /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (nrc,nrbs,npvs) ==>
     !callee entered bb inst lbl arg_ops argv.
@@ -443,22 +447,20 @@ Theorem intcall_sim_full:
    es dflt es0 mut nr args ret ss rr dflts.
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx) dflts /\
-    ~supportedStmtTraverse$supported_stmts_expr_exists (const_name_root cx) ss /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
-    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx)
-      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     ~supportedExprTraverse$supported_exprs_exists supportedProgram$expr_msg_gas_root
       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
     (!s1 vs t1.
        ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,t1) ==>
        body_exprs_full_ok (cx with stk updated_by CONS (NONE,name))
-         (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)) /\
+         (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
+           (subst_consts_exprs (module_consts_env tops []) dflts))) /\
     (!s1 vs t1 sd dvs td penv rtv.
        ~MEM (NONE,name) cx.stk /\
        eval_exprs cx es s1 = (INL vs,t1) /\
@@ -469,7 +471,8 @@ Theorem intcall_sim_full:
        evaluate_type (get_tenv cx) ret = SOME rtv /\
        (nr ==> IS_SOME cx.nonreentrant_slot) /\
        (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss) ==>
+       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+         (subst_consts_stmts (module_consts_env tops []) ss)) ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Call ann (IntCall (NONE,name)) es dflt) es0
 Proof
@@ -478,16 +481,21 @@ Proof
   rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `lower_value _ _ _ (Call _ _ _ _) _ = _`
     (assume_tac o REWRITE_RULE [lower_value_def, ETA_THM]) >>
+  `unwrap_value (gas_shadow_env T cenv) = unwrap_value cenv` by
+    simp[FUN_EQ_THM] >>
   qpat_x_assum `lower_value _ _ _ (gas_shadow_expr _) _ = _`
     (assume_tac o REWRITE_RULE [lower_value_def, ETA_THM]) >>
+  qpat_x_assum `unwrap_value _ = unwrap_value _` (fn eq =>
+    qpat_x_assum `comp_bind (compile_expr _ _ (gas_shadow_expr _)) _ _ = _`
+      (assume_tac o REWRITE_RULE [eq])) >>
   `?vv2 shadow_sm.
-     compile_expr cenv ty
+     compile_expr (gas_shadow_env T cenv) ty
        (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)) shadow_sa =
        (vv2, shadow_sm) /\
      unwrap_value cenv vv2 shadow_sm = (op, shadow_sb)` by
-    (qpat_x_assum `comp_bind (compile_expr _ _ (gas_shadow_expr _)) _ _ = _`
-       mp_tac >>
-     simp[comp_bind_def] >> pairarg_tac >> simp[]) >>
+    (qpat_assum `comp_bind (compile_expr _ _ (gas_shadow_expr _)) _ _ = _`
+       (strip_assume_tac o SIMP_RULE pure_ss [comp_bind_def, LET_THM, pairTheory.ELIM_UNCURRY]) >>
+     metis_tac[pairTheory.PAIR]) >>
   `!v. storage_trace_frame (read_result cx v)` by
     simp[storage_trace_frame_read_result] >>
   `!v. cs_appends (unwrap_value cenv v)` by
@@ -510,12 +518,7 @@ Proof
   TRY (simp[expr_res_ok_def, expr_vv_res_ok_def] >> NO_TAC)
   >- (rpt gen_tac >> strip_tac >>
   `vv2 = vv /\ gas_shadow_state sm shadow_sm` by
-    (qpat_assum `gas_shadow_state sa shadow_sa` (fn initial =>
-       qpat_assum `compile_expr _ _ (Call _ _ _ _) sa = (vv,sm)` (fn real =>
-         qpat_assum `compile_expr _ _ (gas_shadow_expr _) shadow_sa = _`
-           (fn shadow =>
-             ACCEPT_TAC (MATCH_MP shadow_compile_same
-               (LIST_CONJ [initial, real, shadow])))))) >>
+    (drule_all shadow_compile_same >> simp[]) >>
   qpat_x_assum `vv2 = vv` SUBST_ALL_TAC >>
   stage_tac callee_input (qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`func`,`tops`,`cenv`,`cx`,
                `tenv`,`name`,`es`,`st0`,`sa`,`sm`,`vv`,`s0`,`es0`,`G0`,`tn0`,
@@ -542,22 +545,20 @@ Theorem intcall_vv_full:
    es dflt es0 mut nr args ret ss rr dflts.
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx) dflts /\
-    ~supportedStmtTraverse$supported_stmts_expr_exists (const_name_root cx) ss /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
-    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx)
-      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     ~supportedExprTraverse$supported_exprs_exists supportedProgram$expr_msg_gas_root
       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
     (!s1 vs t1.
        ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,t1) ==>
        body_exprs_full_ok (cx with stk updated_by CONS (NONE,name))
-         (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)) /\
+         (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
+           (subst_consts_exprs (module_consts_env tops []) dflts))) /\
     (!s1 vs t1 sd dvs td penv rtv.
        ~MEM (NONE,name) cx.stk /\
        eval_exprs cx es s1 = (INL vs,t1) /\
@@ -568,7 +569,8 @@ Theorem intcall_vv_full:
        evaluate_type (get_tenv cx) ret = SOME rtv /\
        (nr ==> IS_SOME cx.nonreentrant_slot) /\
        (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss) ==>
+       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+         (subst_consts_stmts (module_consts_env tops []) ss)) ==>
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Call ann (IntCall (NONE,name)) es dflt) es0
 Proof

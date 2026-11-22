@@ -27,8 +27,8 @@ Theorem bop_bytestring_selected_child_full_halt:
     lower_value compile_expr cenv (expr_type e) e sa = (m,cb) ==>
     ?shadow_sa shadow_cb.
       lower_value compile_expr cenv (expr_type e) e sa = (m,cb) /\
-      lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa =
-        (m,shadow_cb) /\
+      lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+        (gas_shadow_expr e) shadow_sa = (m,shadow_cb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state cb shadow_cb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
       gas_shadow_function func shadow_func /\
@@ -103,8 +103,8 @@ Theorem bop_bytestring_selected_child_full:
     lower_value compile_expr cenv (expr_type e) e sa = (m,cb) ==>
     ?shadow_sa shadow_cb.
       lower_value compile_expr cenv (expr_type e) e sa = (m,cb) /\
-      lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa =
-        (m,shadow_cb) /\
+      lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+        (gas_shadow_expr e) shadow_sa = (m,shadow_cb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state cb shadow_cb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
       gas_shadow_function func shadow_func /\

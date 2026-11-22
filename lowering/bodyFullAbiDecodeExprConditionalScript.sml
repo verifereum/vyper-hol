@@ -86,6 +86,7 @@ Theorem abi_decode_singleton_vv_full[local]:
   ^decode_guarded_producer /\ ^decode_cut_selector /\
   body_inv tops ctx ce cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre ce cx env (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\
   body_exprs_full_ok cx [e] ==>
@@ -103,15 +104,15 @@ Proof
        ONCE_REWRITE_RULE [body_expr_full_ok_def]) >> simp[]) >>
   simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
   drule_all abi_decode_singleton_compile >> simp[] >> strip_tac >> gvs[] >>
-  `?shadow_start. lower_value compile_expr ce (expr_type e)
+  `?shadow_start. lower_value compile_expr (gas_shadow_env T ce) (expr_type e)
      (gas_shadow_expr e) shadow_sa = (data,shadow_start) /\
      gas_shadow_state start shadow_start` by
-    (mp_tac (Q.INST [`cenv` |-> `ce`, `ty` |-> `expr_type e`, `e` |-> `e`]
-       gas_shadow_stmt_lower_value) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[] >>
-     Cases_on `lower_value compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_sa` >>
-     gvs[]) >>
+    (qpat_assum `gas_shadow_state sa shadow_sa`
+       (mp_then Any mp_tac (REWRITE_RULE [gas_shadow_compiles_def]
+         (Q.INST [`sd` |-> `T`] gas_shadow_stmt_lower_value_env))) >>
+     disch_then (qspecl_then [`expr_type e`,`e`,`ce`] mp_tac) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T ce) (expr_type e)
+       (gas_shadow_expr e) shadow_sa` >> simp[]) >>
   `fn_has_code shadow_sa shadow_start shadow_func` by
     (qpat_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
      simp[gas_shadow_expr_def, NoAsms] >> strip_tac >>
@@ -312,6 +313,7 @@ Proof
       conj_tac >- asm "guarded" ACCEPT_TAC >>
       conj_tac >- asm "selector" ACCEPT_TAC >>
       qpat_assum `shadow_body_inv tops ctx shadow_ctx` (irule_at Any) >>
+      qpat_assum `body_const_cells_agree [(NONE,tops)] cx env es'` (irule_at Any) >>
       simp[] >> goal_assum (drule_at Any)) >>
   irule expr_sim_full_of_vv >> simp[] >>
   conj_tac

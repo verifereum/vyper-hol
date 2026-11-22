@@ -852,6 +852,7 @@ Theorem bound_labels_acc:
     (SND (compile_acc cfn ce e acc s))))
 Proof
   strip_tac >> Cases_on `acc` >> simp[compile_acc_def, bound_labels_lower_value] >>
+  TRY IF_CASES_TAC >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_lower_value, bound_labels_emit_op,
     bound_labels_emit_inst]), irule pair_let_snd_preserves,
     conj_tac, gen_tac, strip_tac])

@@ -633,6 +633,31 @@ End
 
 val () = cv_auto_trans is_self_addr_def;
 
+Definition is_self_codesize_def:
+  is_self_codesize bt es =
+    case bt of
+    | Acc Codesize =>
+        (case es of
+         | [addr] => is_self_addr addr
+         | _ => F)
+    | _ => F
+End
+
+Theorem is_self_codesize_slice_def[simp]:
+  is_self_codesize (Slice n) es = F
+Proof
+  gvs[is_self_codesize_def]
+QED
+
+val () = cv_auto_trans is_self_codesize_def;
+
+Definition evaluate_self_codesize_def:
+  evaluate_self_codesize cx [BytesV _] = INL (IntV (&LENGTH cx.txn.code)) ∧
+  evaluate_self_codesize _ _ = INR (TypeError "builtin")
+End
+
+val () = cv_auto_trans evaluate_self_codesize_def;
+
 Definition evaluate_code_source_def:
   evaluate_code_source cx acc is_self code_ty addr_ty addr_vs =
     if is_self then

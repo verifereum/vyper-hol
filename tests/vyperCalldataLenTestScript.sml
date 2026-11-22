@@ -128,7 +128,7 @@ Proof
   simp[Once evaluate_def, builtin_args_length_ok_def,
        type_check_def, assert_def, ignore_bind_def, bind_def] >>
   simp[Once evaluate_def, return_def, bind_def, get_accounts_def,
-       lift_sum_def, evaluate_builtin_def]
+       lift_sum_def, evaluate_builtin_def, is_self_codesize_def]
 QED
 
 Theorem calldata_len_malformed_eval_test:

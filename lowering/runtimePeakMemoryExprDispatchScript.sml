@@ -43,7 +43,7 @@ Theorem dalloca_windows_acc[local]:
   preserves_dalloca_windows window (cfn cenv (BaseT AddressT) e) ==>
   preserves_dalloca_windows window (compile_acc cfn cenv e item)
 Proof
-  Cases_on `item` >>
+  Cases_on `item` >> Cases_on `is_self_addr e` >>
   simp[dalloca_windows_result_state, compile_acc_def, LET_THM, pairTheory.UNCURRY] >>
   rpt strip_tac >> finish_window_state []
 QED

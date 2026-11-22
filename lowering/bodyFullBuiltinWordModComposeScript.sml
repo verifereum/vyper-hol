@@ -79,6 +79,7 @@ Theorem modular_sim_full_from_suffix:
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es /\
@@ -113,6 +114,7 @@ Proof
          qpat_assum `body_inv _ _ _ _` mp_tac >>
          qpat_assum `expr_body_pre cenv cx env e1 es` mp_tac >>
          qpat_assum `shadow_body_inv tops ctx shadow_ctx` mp_tac >>
+         qpat_assum `body_const_cells_agree [(NONE,tops)] cx env es` mp_tac >>
          rpt (pop_assum kall_tac) >>
          simp[body_expr_full_ok_def] >> metis_tac[]) >>
       `!e. MEM e [e1;e2;e3] ==> expr_body_pre cenv cx env e es` by
@@ -151,24 +153,36 @@ Proof
          asm_rewrite_tac[] >> strip_tac >>
          mp_tac (Q.SPECL [`s2`, `s3`, `sb`, `func`] fn_has_code_split) >>
          asm_rewrite_tac[] >> strip_tac >> asm_rewrite_tac[]) >>
-      `?sh1. lower_value compile_expr cenv ty (gas_shadow_expr e1) shadow_sa = (x,sh1) /\
-        gas_shadow_state s1 sh1` by
-        (Cases_on `lower_value compile_expr cenv ty (gas_shadow_expr e1) shadow_sa` >>
-         mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `ty`, `e` |-> `e1`] gas_shadow_stmt_lower_value) >>
-         simp[gas_shadow_compiles_def] >>
-         disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
-      `?sh2. lower_value compile_expr cenv ty (gas_shadow_expr e2) sh1 = (y,sh2) /\
-        gas_shadow_state s2 sh2` by
-        (Cases_on `lower_value compile_expr cenv ty (gas_shadow_expr e2) sh1` >>
-         mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `ty`, `e` |-> `e2`] gas_shadow_stmt_lower_value) >>
-         simp[gas_shadow_compiles_def] >>
-         disch_then (qspecl_then [`s1`, `sh1`] mp_tac) >> simp[]) >>
-      `?sh3. lower_value compile_expr cenv ty (gas_shadow_expr e3) sh2 = (z,sh3) /\
-        gas_shadow_state s3 sh3` by
-        (Cases_on `lower_value compile_expr cenv ty (gas_shadow_expr e3) sh2` >>
-         mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `ty`, `e` |-> `e3`] gas_shadow_stmt_lower_value) >>
-         simp[gas_shadow_compiles_def] >>
-         disch_then (qspecl_then [`s2`, `sh2`] mp_tac) >> simp[]) >>
+      `?sh1. lower_value compile_expr (gas_shadow_env T cenv) ty
+                (gas_shadow_expr e1) shadow_sa = (x,sh1) /\
+             gas_shadow_state s1 sh1` by
+        (`gas_shadow_compiles (lower_value compile_expr cenv ty e1)
+           (lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1))`
+           by irule gas_shadow_stmt_lower_value_env >>
+         Cases_on `lower_value compile_expr (gas_shadow_env T cenv) ty
+                     (gas_shadow_expr e1) shadow_sa` >>
+         fs[gas_shadow_compiles_def] >>
+         first_x_assum (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
+      `?sh2. lower_value compile_expr (gas_shadow_env T cenv) ty
+                (gas_shadow_expr e2) sh1 = (y,sh2) /\
+             gas_shadow_state s2 sh2` by
+        (`gas_shadow_compiles (lower_value compile_expr cenv ty e2)
+           (lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e2))`
+           by irule gas_shadow_stmt_lower_value_env >>
+         Cases_on `lower_value compile_expr (gas_shadow_env T cenv) ty
+                     (gas_shadow_expr e2) sh1` >>
+         fs[gas_shadow_compiles_def] >>
+         first_x_assum (qspecl_then [`s1`, `sh1`] mp_tac) >> simp[]) >>
+      `?sh3. lower_value compile_expr (gas_shadow_env T cenv) ty
+                (gas_shadow_expr e3) sh2 = (z,sh3) /\
+             gas_shadow_state s3 sh3` by
+        (`gas_shadow_compiles (lower_value compile_expr cenv ty e3)
+           (lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e3))`
+           by irule gas_shadow_stmt_lower_value_env >>
+         Cases_on `lower_value compile_expr (gas_shadow_env T cenv) ty
+                     (gas_shadow_expr e3) sh2` >>
+         fs[gas_shadow_compiles_def] >>
+         first_x_assum (qspecl_then [`s2`, `sh2`] mp_tac) >> simp[]) >>
       `cs_extends shadow_sa sh1 /\ cs_extends sh1 sh2 /\ cs_extends sh2 sh3` by
         (rpt conj_tac
          >- (qpat_assum `lower_value _ _ _ (gas_shadow_expr e1) shadow_sa = _`
@@ -233,6 +247,7 @@ Proof
       qpat_x_assum `gas_outcome_full _ _ _ _ _ _ firstQ firstR` kall_tac >>
       unabbrev_all_tac >>
       simp[exprSimWordArgsTheory.eval_expr_builtin_action,
+           vyperContextTheory.is_self_codesize_def,
            vyperInterpreterTheory.precompile_builtin_def,
            vyperInterpreterTheory.code_slice_source_def,
            vyperContextTheory.builtin_args_length_ok_def,
@@ -280,6 +295,19 @@ Proof
          pure_rewrite_tac[APPEND_NIL] >>
          CONV_TAC (DEPTH_CONV ETA_CONV) >> disch_then ACCEPT_TAC) >>
       `expr_sim_inv cenv cx env mid` by fs[] >>
+      `expr_body_pre cenv cx env e1 es` by
+        (drule expr_body_pre_builtin_arg >>
+         disch_then (qspecl_then [`e1`, `es`] mp_tac) >>
+         simp[] >> fs[expr_body_pre_def]) >>
+      `body_const_cells_agree [(NONE,tops)] cx env mid` by
+        (`well_typed_expr env e1` by
+           qpat_assum `expr_body_pre cenv cx env e1 es`
+             (ACCEPT_TAC o cj 2 o REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def]) >>
+         `body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+           suffices_by simp[] >>
+         irule body_const_cells_agree_expr_read >>
+         qpat_assum `!tail. bind (eval_expr cx e1) _ _ = _`
+           (qspec_then `[]` (irule_at Any)) >> simp[]) >>
       `expr_body_pre cenv cx env e2 mid` by
         (drule expr_body_pre_builtin_arg >>
          disch_then (qspecl_then [`e2`, `mid`] mp_tac) >> simp[]) >>
@@ -297,6 +325,7 @@ Proof
         (qpat_assum `body_expr_full_ok cx e2` mp_tac >>
          qpat_assum `body_inv _ _ _ _` mp_tac >>
          qpat_assum `expr_body_pre cenv cx env e2 mid` mp_tac >>
+         qpat_assum `body_const_cells_agree [(NONE,tops)] cx env mid` mp_tac >>
          qpat_assum `shadow_body_inv tops ctx shadow_ctx` mp_tac >>
          rpt (pop_assum kall_tac) >>
          simp[body_expr_full_ok_def] >> metis_tac[]) >>
@@ -390,6 +419,15 @@ Proof
          pure_rewrite_tac[APPEND_NIL] >>
          CONV_TAC (DEPTH_CONV ETA_CONV) >> disch_then ACCEPT_TAC) >>
       `expr_sim_inv cenv cx env mid'` by fs[] >>
+      `body_const_cells_agree [(NONE,tops)] cx env mid'` by
+        (`well_typed_expr env e2` by
+           qpat_assum `expr_body_pre cenv cx env e2 mid`
+             (ACCEPT_TAC o cj 2 o REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def]) >>
+         `body_const_cells_agree [(NONE,tops)] cx env (mid' with gas_obs := [])`
+           suffices_by simp[] >>
+         irule body_const_cells_agree_expr_read >>
+         qpat_assum `!tail. bind (eval_expr cx e2) _ _ = _`
+           (qspec_then `[]` (irule_at Any)) >> simp[]) >>
       `expr_body_pre cenv cx env e3 mid'` by
         (drule expr_body_pre_builtin_arg >>
          disch_then (qspecl_then [`e3`, `mid'`] mp_tac) >> simp[]) >>
@@ -411,6 +449,7 @@ Proof
         (qpat_assum `body_expr_full_ok cx e3` mp_tac >>
          qpat_assum `body_inv _ _ _ _` mp_tac >>
          qpat_assum `expr_body_pre cenv cx env e3 mid'` mp_tac >>
+         qpat_assum `body_const_cells_agree [(NONE,tops)] cx env mid'` mp_tac >>
          qpat_assum `shadow_body_inv tops ctx shadow_ctx` mp_tac >>
          rpt (pop_assum kall_tac) >>
          simp[body_expr_full_ok_def] >> metis_tac[]) >>

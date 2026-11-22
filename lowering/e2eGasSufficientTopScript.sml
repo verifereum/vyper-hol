@@ -15,8 +15,8 @@ Ancestors
   e2eCorrectness e2eDefs e2eEntry e2eOptEntry e2eProducers
   callRawVariant callDynamicMemory[qualified,ignore_grammar] sourceUnitExitSafe exprSimHypsDefs
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
-  loweringShapeSource runtimeLabelReadiness runtimeSymSrcUnit fragFuelUnit
-  e2eDeployRawFmp e2eDeployAtMarks e2eDeployDefs deploySymSrcUnit
+  loweringShapeSource runtimeLabelReadiness fragFuelUnit
+  e2eDeployRawFmp e2eDeployAtMarks e2eDeployDefs
   ctorDeployDefs ctorDeployDefsReach ctorDeployRawEntryFacts whitelistCheckerGate
   ctorDeployFrame ctorDeployShape ctorDeployDead ctorDeployRunBounded
   ctorDeployInitcodeAsm ctorDeployMemoryFrontier ctorDeployLoweringSource

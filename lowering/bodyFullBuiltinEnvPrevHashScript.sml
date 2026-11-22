@@ -52,7 +52,7 @@ Proof
   conj_tac
   >- (simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
-       builtin_args_length_ok_def, read_result_def] >>
+       builtin_args_length_ok_def, read_result_def, is_self_codesize_def] >>
       simp[Once evaluate_def, bind_def, read_result_def, return_def,
        evaluate_builtin_def, tx_env_ok_evaluate_prevhash]) >>
   gen_tac >> strip_tac >>
@@ -125,6 +125,7 @@ Theorem env_prevhash_sim_full:
     (builtin_args_length_ok bt (LENGTH args) /\ bt = Len ==>
      body_expr_full_ok cx (HD args)) /\
     body_inv tops ctx cenv cx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin a bt args) es /\

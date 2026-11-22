@@ -26,7 +26,7 @@ Theorem expr_sim_full_of_vv_with_buffer:
   expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx ty e es ==>
   !st0 sa sb shadow_sa shadow_sb op s0 G0 tn0.
     lower_value compile_expr cenv ty e sa = (op,sb) /\
-    lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa = (op,shadow_sb) /\
+    lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa = (op,shadow_sb) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
     gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -69,14 +69,20 @@ Proof
   simp[lower_value_def, comp_bind_def] >>
   Cases_on `compile_expr cenv ty e sa` >> rename1 `_ = (vv, sm)` >>
   simp[] >> strip_tac >>
-  qpat_x_assum `lower_value compile_expr cenv ty (gas_shadow_expr e) _ = _` mp_tac >>
+  qpat_x_assum `lower_value compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
   simp[lower_value_def, comp_bind_def] >>
-  Cases_on `compile_expr cenv ty (gas_shadow_expr e) shadow_sa` >>
-  rename1 `_ = (vv', shadow_sm)` >> simp[] >> strip_tac >>
+  Cases_on `compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa` >>
+  rename1 `_ = (vv', shadow_sm)` >>
+  simp[gasShadowCompileBaseTheory.unwrap_value_gas_shadow_env] >> strip_tac >>
   `vv' = vv /\ gas_shadow_state sm shadow_sm` by
-    (qspecl_then [`cenv`,`ty`,`e`,`T`] mp_tac (cj 1 gas_shadow_compile_expr) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+    (`gas_shadow_compiles (compile_expr cenv ty e)
+       (compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e))` by
+       irule (cj 1 gas_shadow_compile_expr_env |> SPEC_ALL |>
+              Q.INST [`shadow` |-> `T`] |> REWRITE_RULE [COND_CLAUSES]) >>
+     qpat_x_assum `gas_shadow_compiles _ _`
+       (qspecl_then [`sa`,`shadow_sa`] mp_tac o
+        REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]) >>
+     simp[]) >>
   gvs[] >>
   qpat_assum `compile_expr cenv ty e sa = _`
     (strip_assume_tac o MATCH_MP exprSimUnwrapTheory.compile_expr_extends) >>

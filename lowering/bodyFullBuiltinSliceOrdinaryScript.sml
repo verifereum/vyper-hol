@@ -346,6 +346,7 @@ Theorem slice_builtin_none_vv_full_from_runs:
               body_exprs_full_ok cx [addr])) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a (Slice n) args) es /\
     code_slice_source (Slice n) args = NONE ==>
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -378,10 +379,10 @@ Proof
       cenv cx (expr_type src) src es` by
     (`body_expr_full_ok cx src` by fs[body_exprs_full_ok_def] >>
      qpat_assum `body_expr_full_ok cx src`
-       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
+       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     first_assum (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
        `func`,`shadow_func`,`cenv`,`env`,`expr_type src`,`es`] mp_tac) >>
-     (impl_tac >- simp[]) >> disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+     simp[]) >>
   pure_rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!bt xs. names_builtin bt xs ==> bt <> Slice n` by
@@ -418,15 +419,16 @@ Proof
     exprBopLoweringTheory.lower_value_child_call] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
   qmatch_asmsub_rename_tac
-    `lower_value compile_expr cenv (expr_type src) (gas_shadow_expr src)
+    `lower_value compile_expr _ (expr_type src) (gas_shadow_expr src)
        shadow_sa = (shadow_src,shadow_s1)` >>
   qmatch_asmsub_rename_tac
     `compile_bytestring_src shadow_src shadow_s1 = ((shadow_len,shadow_data),shadow_sc)` >>
   `shadow_src = src_op /\ gas_shadow_state st1 shadow_s1` by
-    (map_every (fn label => asm_x label kall_tac)
-       ["dynamic_run","fixed_run","tail_run","dynamic_source_post"] >>
-     metis_tac[gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value,
-       gasShadowStateTheory.gas_shadow_compiles_def,pairTheory.FST,pairTheory.SND]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ src sa = (src_op,st1)` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr src) shadow_sa = _`
+       (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
   qpat_assum `shadow_src = src_op` SUBST_ALL_TAC >>
   `shadow_len = src_len /\ shadow_data = src_data /\
    gas_shadow_state sc shadow_sc` by
@@ -438,26 +440,32 @@ Proof
   qpat_assum `shadow_len = src_len` SUBST_ALL_TAC >>
   qpat_assum `shadow_data = src_data` SUBST_ALL_TAC >>
   qmatch_asmsub_rename_tac
-    `lower_value compile_expr cenv ty (gas_shadow_expr start) shadow_sc =
+    `lower_value compile_expr _ ty (gas_shadow_expr start) shadow_sc =
        (shadow_start,shadow_sd)` >>
   qmatch_asmsub_rename_tac
-    `lower_value compile_expr cenv ty (gas_shadow_expr len) shadow_sd =
+    `lower_value compile_expr _ ty (gas_shadow_expr len) shadow_sd =
        (shadow_count,shadow_se)` >>
   `shadow_start = start_op /\ gas_shadow_state sd shadow_sd` by
-    (map_every (fn label => asm_x label kall_tac)
-       ["dynamic_run","fixed_run","tail_run","dynamic_source_post"] >>
-     metis_tac[gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value,
-       gasShadowStateTheory.gas_shadow_compiles_def,pairTheory.FST,pairTheory.SND]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ start sc = (start_op,sd)` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr start) shadow_sc = _`
+       (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
   qpat_assum `shadow_start = start_op` SUBST_ALL_TAC >>
   `shadow_count = len_op /\ gas_shadow_state se shadow_se` by
-    (map_every (fn label => asm_x label kall_tac)
-       ["dynamic_run","fixed_run","tail_run","dynamic_source_post"] >>
-     metis_tac[gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value,
-       gasShadowStateTheory.gas_shadow_compiles_def,pairTheory.FST,pairTheory.SND]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ len sd = (len_op,se)` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr len) shadow_sd = _`
+       (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
   qpat_assum `shadow_count = len_op` SUBST_ALL_TAC >>
   `local_ptrs_reserved cenv shadow_sa` by
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
      qexists_tac `sa` >> fs[gasShadowStateTheory.gas_shadow_state_def]) >>
+  `local_ptrs_reserved (gas_shadow_env T cenv) shadow_sa` by
+    (pure_rewrite_tac[local_ptrs_reserved_def,
+       gasShadowCompileBaseTheory.gas_shadow_env_fields] >>
+     pure_rewrite_tac[GSYM local_ptrs_reserved_def] >> first_assum ACCEPT_TAC) >>
   `ci_mono shadow_s1 shadow_sc` by
     (qspecl_then [`src_op`,`shadow_s1`] mp_tac
        exprLoweringPropsTheory.ci_mono_compile_bytestring_src >> simp[]) >>
@@ -695,6 +703,12 @@ Proof
      qpat_assum `!tail. bind _ _ _ = _`
        (qspec_then `[]` (mp_tac o MATCH_MP vyperStatePreservationTheory.bind_split)) >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx src) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `expr_body_pre cenv cx env start mid` by
     (drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
      disch_then (qspecl_then [`start`,`mid`] mp_tac) >> fs[]) >>
@@ -702,10 +716,10 @@ Proof
       cenv cx ty start mid` by
     (`body_expr_full_ok cx start` by fs[body_exprs_full_ok_def] >>
      qpat_assum `body_expr_full_ok cx start`
-       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
+       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     first_assum (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
        `func`,`shadow_func`,`cenv`,`env`,`ty`,`mid`] mp_tac) >>
-     (impl_tac >- simp[]) >> disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+     simp[]) >>
   `sa.cs_next_var <= sc.cs_next_var /\ st1.cs_next_var <= sc.cs_next_var` by
     fs[exprLoweringPropsTheory.ci_mono_def] >>
   `s0.vs_alloca_next <= captured.vs_alloca_next` by
@@ -835,6 +849,12 @@ Proof
      qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
        (qspec_then `[]` (mp_tac o MATCH_MP vyperStatePreservationTheory.bind_split)) >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env start_mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (start_mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `expr_body_pre cenv cx env len start_mid` by
     (drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
      disch_then (qspecl_then [`len`,`start_mid`] mp_tac) >> fs[]) >>
@@ -842,10 +862,10 @@ Proof
       cenv cx ty len start_mid` by
     (`body_expr_full_ok cx len` by fs[body_exprs_full_ok_def] >>
      qpat_assum `body_expr_full_ok cx len`
-       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
+       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     first_assum (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
        `func`,`shadow_func`,`cenv`,`env`,`ty`,`start_mid`] mp_tac) >>
-     (impl_tac >- simp[]) >> disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+     simp[]) >>
   `return_buf_frame d cenv sd start_state` by
     (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
      qexistsl_tac [`cenv`,`capture_state`,`sc`] >> simp[] >>
@@ -1092,8 +1112,11 @@ Proof
     op_prov length_G len_op = NONE /\ op_taint length_tn len_op = {}` by
      (qpat_assum `ptr_val_ok _ _ _ start_op start_G start_tn start_state` mp_tac >>
       qpat_assum `ptr_val_ok _ _ _ len_op length_G length_tn length_state` mp_tac >>
-      fs[bodyPtrDefsTheory.ptr_val_ok_def,loweringPostsTheory.post_value_type_def,
-         compileEnvTheory.is_word_type_def]) >>
+      qpat_assum `expr_type start = BaseT (UintT 256)` mp_tac >>
+      qpat_assum `expr_type len = BaseT (UintT 256)` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> ntac 2 strip_tac >>
+      simp[bodyPtrDefsTheory.ptr_val_ok_def, loweringPostsTheory.post_value_type_word,
+        compileEnvTheory.is_word_type_def]) >>
    `eval_operand start_op length_state = SOME (n2w i)` by
      (qpat_assum `expr_post _ _ _ _ _ len start_mid sd se start_state length_mid _ len_op length_state`
         (mp_then Any mp_tac exprSimSliceOrdinaryFrameTheory.slice_post_operands) >>
@@ -1152,7 +1175,9 @@ Proof
         (mp_then Any mp_tac abiEncodeOwnershipTheory.abi_encode_owned_footprint_frontier) >>
       disch_then drule >> disch_then drule >>
       disch_then (qspec_then `src_ptr` mp_tac) >>
-      (impl_tac >- fs[]) >> fs[]) >>
+      (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
+      qpat_assum `val_footprint vt v = LENGTH source_bytes + 32`
+        (fn th => simp[NoAsms, th]) >> decide_tac) >>
    `expr_val_rel cx (BaseT bt) v src_op capture_state` by
      (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         expr_post _ _ _ _ _ src es sa sc s0 mid v src_op captured`
@@ -1572,14 +1597,15 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
     compileEnvTheory.is_bytestring_type_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
   qmatch_asmsub_rename_tac
-    `lower_value compile_expr cenv (BaseT (BytesT (Fixed m))) (gas_shadow_expr src)
+    `lower_value compile_expr _ (BaseT (BytesT (Fixed m))) (gas_shadow_expr src)
        shadow_sa = (shadow_src,shadow_s1)` >>
   qmatch_asmsub_rename_tac `compile_alloc_buffer 32 shadow_s1 = (shadow_buf,shadow_sm)` >>
   `shadow_src = src_op /\ gas_shadow_state st1 shadow_s1` by
-    (map_every (fn label => asm_x label kall_tac)
-       ["dynamic_run","fixed_run","tail_run","dynamic_source_post"] >>
-     metis_tac[gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value,
-       gasShadowStateTheory.gas_shadow_compiles_def,pairTheory.FST,pairTheory.SND]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ src sa = (src_op,st1)` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr src) shadow_sa = _`
+       (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
   qpat_assum `shadow_src = src_op` SUBST_ALL_TAC >>
   `shadow_buf = buf /\ gas_shadow_state sm shadow_sm` by
     (qpat_assum `compile_alloc_buffer 32 st1 = (buf,sm)` mp_tac >>
@@ -1600,26 +1626,32 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
      metis_tac[gasShadowStateTheory.gas_shadow_compiles_emit_void,
        gasShadowStateTheory.gas_shadow_compiles_def,pairTheory.FST,pairTheory.SND]) >>
   qmatch_asmsub_rename_tac
-    `lower_value compile_expr cenv ty (gas_shadow_expr start) shadow_sc =
+    `lower_value compile_expr _ ty (gas_shadow_expr start) shadow_sc =
        (shadow_start,shadow_sd)` >>
   qmatch_asmsub_rename_tac
-    `lower_value compile_expr cenv ty (gas_shadow_expr len) shadow_sd =
+    `lower_value compile_expr _ ty (gas_shadow_expr len) shadow_sd =
        (shadow_count,shadow_se)` >>
   `shadow_start = start_op /\ gas_shadow_state sd shadow_sd` by
-    (map_every (fn label => asm_x label kall_tac)
-       ["dynamic_run","fixed_run","tail_run","dynamic_source_post"] >>
-     metis_tac[gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value,
-       gasShadowStateTheory.gas_shadow_compiles_def,pairTheory.FST,pairTheory.SND]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ start sc = (start_op,sd)` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr start) shadow_sc = _`
+       (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
   qpat_assum `shadow_start = start_op` SUBST_ALL_TAC >>
   `shadow_count = len_op /\ gas_shadow_state se shadow_se` by
-    (map_every (fn label => asm_x label kall_tac)
-       ["dynamic_run","fixed_run","tail_run","dynamic_source_post"] >>
-     metis_tac[gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value,
-       gasShadowStateTheory.gas_shadow_compiles_def,pairTheory.FST,pairTheory.SND]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ len sd = (len_op,se)` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr len) shadow_sd = _`
+       (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
   qpat_assum `shadow_count = len_op` SUBST_ALL_TAC >>
   `local_ptrs_reserved cenv shadow_sa` by
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
      qexists_tac `sa` >> fs[gasShadowStateTheory.gas_shadow_state_def]) >>
+  `local_ptrs_reserved (gas_shadow_env T cenv) shadow_sa` by
+    (pure_rewrite_tac[local_ptrs_reserved_def,
+       gasShadowCompileBaseTheory.gas_shadow_env_fields] >>
+     pure_rewrite_tac[GSYM local_ptrs_reserved_def] >> first_assum ACCEPT_TAC) >>
   `ci_mono shadow_s1 shadow_sc` by
     (irule exprSimSliceOrdinaryContextTheory.slice_fixed_capture_ci_mono >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
@@ -1920,6 +1952,12 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
      qpat_assum `!tail. bind _ _ _ = _`
        (qspec_then `[]` (mp_tac o MATCH_MP vyperStatePreservationTheory.bind_split)) >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx src) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `expr_body_pre cenv cx env start mid` by
     (drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
      disch_then (qspecl_then [`start`,`mid`] mp_tac) >> fs[]) >>
@@ -1927,10 +1965,10 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
       cenv cx ty start mid` by
     (`body_expr_full_ok cx start` by fs[body_exprs_full_ok_def] >>
      qpat_assum `body_expr_full_ok cx start`
-       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
+       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     first_assum (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
        `func`,`shadow_func`,`cenv`,`env`,`ty`,`mid`] mp_tac) >>
-     (impl_tac >- simp[]) >> disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+     simp[]) >>
   `sa.cs_next_var <= st1.cs_next_var /\ st1.cs_next_var <= sc.cs_next_var /\
    sa.cs_next_var <= sc.cs_next_var` by fs[exprLoweringPropsTheory.ci_mono_def] >>
   `s0.vs_alloca_next <= captured.vs_alloca_next` by decide_tac >>
@@ -2056,6 +2094,12 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
      qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
        (qspec_then `[]` (mp_tac o MATCH_MP vyperStatePreservationTheory.bind_split)) >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env start_mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (start_mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `expr_body_pre cenv cx env len start_mid` by
     (drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
      disch_then (qspecl_then [`len`,`start_mid`] mp_tac) >> fs[]) >>
@@ -2063,10 +2107,10 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
       cenv cx ty len start_mid` by
     (`body_expr_full_ok cx len` by fs[body_exprs_full_ok_def] >>
      qpat_assum `body_expr_full_ok cx len`
-       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
+       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     first_assum (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
        `func`,`shadow_func`,`cenv`,`env`,`ty`,`start_mid`] mp_tac) >>
-     (impl_tac >- simp[]) >> disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+     simp[]) >>
   `return_buf_frame d cenv sd start_state` by
     (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
      qexistsl_tac [`cenv`,`captured`,`sc`] >> simp[] >>
@@ -2319,8 +2363,11 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
     op_prov length_G len_op = NONE /\ op_taint length_tn len_op = {}` by
      (qpat_assum `ptr_val_ok _ _ _ start_op start_G start_tn start_state` mp_tac >>
       qpat_assum `ptr_val_ok _ _ _ len_op length_G length_tn length_state` mp_tac >>
-      fs[bodyPtrDefsTheory.ptr_val_ok_def,loweringPostsTheory.post_value_type_def,
-         compileEnvTheory.is_word_type_def]) >>
+      qpat_assum `expr_type start = BaseT (UintT 256)` mp_tac >>
+      qpat_assum `expr_type len = BaseT (UintT 256)` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> ntac 2 strip_tac >>
+      simp[bodyPtrDefsTheory.ptr_val_ok_def, loweringPostsTheory.post_value_type_word,
+        compileEnvTheory.is_word_type_def]) >>
    `eval_operand start_op length_state = SOME (n2w i)` by
      (qpat_assum `expr_post _ _ _ _ _ len start_mid sd se start_state length_mid _ len_op length_state`
         (mp_then Any mp_tac exprSimSliceOrdinaryFrameTheory.slice_post_operands) >>
@@ -2413,9 +2460,10 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
        not_fresh_at se x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
        not_fresh_at se x)` by
-     (conj_tac >> rpt strip_tac >>
-      irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >>
-      fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+     (qpat_assum `!x sz. cenv.ce_return_buf = _ ==> not_fresh_at sd x` mp_tac >>
+      qpat_assum `!x sz. cenv.ce_return_pc = _ ==> not_fresh_at sd x` mp_tac >>
+      qpat_assum `sd.cs_next_var <= se.cs_next_var` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
    `stmt_state_rel (storage_trace_horizon length_mid.storage_trace)
       ctx func cenv cx length_mid length_state` by
      (qpat_assum `!H. valid_horizon _ _ H length_mid.storage_trace ==>
@@ -2684,6 +2732,7 @@ Theorem slice_builtin_none_vv_full:
               body_exprs_full_ok cx [addr])) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a (Slice n) args) es /\
     code_slice_source (Slice n) args = NONE ==>
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)

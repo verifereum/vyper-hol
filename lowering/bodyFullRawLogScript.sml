@@ -2,11 +2,8 @@
  * raw_log over the finite-horizon joint judgment: the topics, the data
  * operand and the LOG share one origin/memory/pointer witness.
  *
- * The two shadow-compile premises are the lower_value and
- * compile_multi_exprs forms of the gas-shadow compile spine
- * (gas_shadow_compiles_lower_value with gas_shadow_compile_expr, and
- * gas_shadow_compiles_multi_exprs), which this base doesn't carry yet;
- * body_raw_log_case_full discharges them once it does.
+ * The joint simulation uses the env-aware shadow compiler rules for
+ * lower_value and compile_multi_exprs.
  *
  * TOP-LEVEL:
  *   raw_log_expr_full_ok
@@ -14,6 +11,7 @@
 Theory bodyFullRawLog
 Ancestors
   bodyFullRawLogCompose bodyFullExprGeneric bodyFullPreds bodySimFull
+  gasShadowCompile gasShadowCompileHelpers gasShadowCompileStmtHelpers
   gasShadowState gasShadow exprLowering exprCallbackContracts exprSimHypsDefs vyperTypeSystem
   vyperAST list compileEnv vyperInterpreter vyperValue vyperState valueEncoding
 Libs pairLib
@@ -41,10 +39,12 @@ Resume raw_log_expr_full_ok[judgments]:
     `shadow_func`,`cenv`,`env`,`ty`,`start`] >> strip_tac >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty (Call ann RawLog es dflt) start` by
-    (irule raw_log_expr_sim_full >> goal_assum (drule_at Any) >>
-     goal_assum (drule_at Any) >> simp[] >>
-     conj_tac >- (qexists_tac `tops` >> simp[]) >>
-     qexists_tac `env` >> simp[]) >>
+    (irule raw_log_expr_sim_full >> simp[gas_shadow_stmt_lower_value_env] >>
+     conj_tac
+     >- metis_tac[Q.INST [`sd` |-> `T`, `sh` |-> `T`]
+           (MATCH_MP gas_shadow_compiles_multi_exprs_env
+             (CONJUNCT1 gas_shadow_compile_expr_env))] >>
+     map_every qexists_tac [`env`, `tops`] >> simp[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   irule expr_vv_sim_stack_full >> simp[] >> rpt conj_tac
   >~ [`!sa. ?t op sb. compile_expr cenv ty (Call ann RawLog es dflt) sa =

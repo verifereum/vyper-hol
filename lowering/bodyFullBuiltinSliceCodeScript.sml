@@ -16,6 +16,7 @@ Theorem slice_builtin_some_vv_full:
               body_exprs_full_ok cx [addr])) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a (Slice n) args) es /\
     code_slice_source (Slice n) args = SOME (code_ty,addr) ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -27,12 +28,10 @@ Proof
       (impl_tac >- (conj_tac >> rpt gen_tac >>
          FIRST [MATCH_ACCEPT_TAC slice_code_tail_full,
                 MATCH_ACCEPT_TAC slice_code_child_full])) >>
-      disch_then irule >> simp[] >> conj_tac >- (qexists_tac `tops` >> simp[]) >>
-      qexists_tac `env` >> simp[]) >>
+      disch_then irule >> simp[] >> qexistsl_tac [`env`, `tops`] >> simp[]) >>
   mp_tac slice_builtin_external_vv_full_from_tail >>
   (impl_tac >- (conj_tac >> rpt gen_tac >>
      FIRST [MATCH_ACCEPT_TAC slice_code_tail_full,
             MATCH_ACCEPT_TAC slice_code_child_full])) >>
-  disch_then irule >> simp[] >> conj_tac >- (qexists_tac `tops` >> simp[]) >>
-  qexists_tac `env` >> simp[]
+  disch_then irule >> simp[] >> qexistsl_tac [`env`, `tops`] >> simp[]
 QED

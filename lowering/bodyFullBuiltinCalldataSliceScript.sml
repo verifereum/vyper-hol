@@ -25,6 +25,7 @@ Theorem calldata_slice_vv_sim_full:
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (CalldataSlice n) args) es
@@ -49,13 +50,16 @@ Proof
        (type_memory_bytes cenv (BaseT (BytesT (Dynamic m)))) sm` >>
      gvs[as_ptr_val_def,comp_return_def]) >>
   qpat_x_assum `vv = _` SUBST_ALL_TAC >>
-  `?sx ss. lower_value compile_expr cenv (expr_type e)
-     (gas_shadow_expr e) shadow_sa = (sx,ss)` by metis_tac[pairTheory.PAIR] >>
-  `sx = x /\ gas_shadow_state sm ss` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type e`, `e` |-> `e`]
-      gas_shadow_stmt_lower_value) >> rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
-  qpat_x_assum `sx = x` SUBST_ALL_TAC >>
+  `gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
+     (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e))` by irule gas_shadow_stmt_lower_value_env >>
+  `?ss. lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+     (gas_shadow_expr e) shadow_sa = (x,ss) /\ gas_shadow_state sm ss` by
+    (qpat_x_assum `gas_shadow_compiles _ _` (fn th =>
+       qpat_assum `gas_shadow_state sa shadow_sa`
+         (mp_then Any mp_tac (REWRITE_RULE[gas_shadow_compiles_def] th))) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sa` >> simp[] >> metis_tac[]) >>
   `compile_slice_calldata x (Lit (n2w n))
       (type_memory_bytes cenv (BaseT (BytesT (Dynamic m)))) ss = (out,shadow_sb)` by
     (qpat_x_assum `compile_expr _ _ (gas_shadow_expr (Builtin _ _ _)) _ = _` mp_tac >>
@@ -80,7 +84,7 @@ Proof
     metis_tac[expr_body_pre_gas_admissible] >>
   `lower_value compile_expr cenv (BaseT (UintT 256)) e sa = (x,sm)` by
     (qpat_assum `expr_type e = _` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
-  `lower_value compile_expr cenv (BaseT (UintT 256))
+  `lower_value compile_expr (gas_shadow_env T cenv) (BaseT (UintT 256))
      (gas_shadow_expr e) shadow_sa = (x,ss)` by
     (qpat_assum `expr_type e = _` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `expr_sim_full _ _ _ _ e es`
@@ -94,7 +98,8 @@ Proof
                     (CalldataSlice n) [expr_type e] [v] of
                   INL r => INL (Value r) | INR ex => INR ex),mid))` by
     (irule eval_expr_unary_builtin_action >>
-     simp[precompile_builtin_def,builtin_args_length_ok_def]) >>
+     simp[precompile_builtin_def,builtin_args_length_ok_def,
+       is_self_codesize_def]) >>
   pop_assum SUBST1_TAC >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   irule gas_outcome_full_bind_all >> rpt conj_tac
@@ -473,6 +478,7 @@ Theorem calldata_slice_expr_sim_full:
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (CalldataSlice n) args) es
@@ -480,9 +486,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (CalldataSlice n) args) es` by
-    (irule calldata_slice_vv_sim_full >> simp[] >> conj_tac
-     >- (qexists_tac `tops` >> simp[]) >>
-     qexists_tac `env` >> simp[]) >>
+    (irule calldata_slice_vv_sim_full >> simp[] >>
+     qexistsl_tac [`env`, `tops`] >> simp[]) >>
   irule bodyFullOfVVTheory.expr_sim_full_of_vv >> simp[] >>
   conj_tac
   >- (rpt strip_tac >>

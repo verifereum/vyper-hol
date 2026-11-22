@@ -25,6 +25,7 @@ Theorem make_array_elements_full:
            not_fresh_at csbase x) /\
     (!H. valid_horizon cx st0 H ebase.storage_trace ==>
          stmt_state_rel H ctx func cenv cx ebase sbase) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     body_exprs_full_ok cx args /\
     (!e ee. MEM e args /\ expr_sim_inv cenv cx env ee ==>
             expr_body_pre cenv cx env e ee) /\
@@ -63,7 +64,7 @@ Theorem make_array_elements_full:
            val_in_memory rt v p m)) ps /\
     compile_make_array_elems compile_expr cenv args et (type_memory_bytes cenv et)
       header (Var q) 0 sa = (Var q,sb) /\
-    compile_make_array_elems compile_expr cenv (MAP gas_shadow_expr args) et
+    compile_make_array_elems compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr args) et
       (type_memory_bytes cenv et) header (Var q) 0 shadow_sa = (Var q,shadow_sb) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
     fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func ==>
@@ -128,7 +129,10 @@ Proof
   `LIST_REL (\ty tv. type_memory_bytes cenv ty = type_memory_size tv)
     (REPLICATE (LENGTH args) et) (REPLICATE (LENGTH args) tv)` by
     simp[LIST_REL_REPLICATE_same] >>
-  fs[exprSimAggregateLoopsTheory.compile_make_array_elems_as_tuple] >>
+  fs[exprSimAggregateLoopsTheory.compile_make_array_elems_as_tuple,
+     SIMP_RULE (srw_ss()) [gasShadowCompileBaseTheory.type_memory_bytes_gas_shadow_env]
+       (Q.INST [`ce` |-> `gas_shadow_env T cenv`]
+          exprSimAggregateLoopsTheory.compile_make_array_elems_as_tuple)] >>
   irule gas_outcome_full_post_mono >>
   irule_at (Pos last) make_array_loop_full >> BETA_TAC >>
   first_assum (irule_at (Pat `ghost_kept_at _ _ _ _ _ _ _ _ _`)) >>
