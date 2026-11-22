@@ -149,6 +149,10 @@ Theorem body_decl_frag_at_cursor:
        s.vs_current_bb = st.cs_current_bb /\
        s.vs_inst_idx = LENGTH st.cs_current_insts ==>
        run_inst_seq_mem_ok (emitted_insts st st') s /\
+       (ptrDiscipline$ctx_has_dalloca ctx ==>
+         !pre i post u. (emitted_insts st st') = pre ++ i::post /\
+           run_inst_seq pre s = OK u ==>
+           unitTransformDefs$dalloca_no_wrap i u) /\
        ?t. run_inst_seq (emitted_insts st st') s = OK t /\
            Q (t with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
     frag_exec_mem ctx st st' P Q R

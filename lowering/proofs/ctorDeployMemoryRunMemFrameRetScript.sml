@@ -50,6 +50,10 @@ Theorem constructor_terminal_mem_path:
     ~is_terminator i.inst_opcode) pre /\
   run_inst_seq pre s = OK mid /\
   step_inst_base (mk_inst id RETURN [dst; sz] []) mid = Halt final /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !before i post u. (pre ++ [mk_inst id RETURN [dst; sz] []]) = before ++ i::post /\
+      run_inst_seq before s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
   run_inst_seq_mem_ok (pre ++ [mk_inst id RETURN [dst; sz] []]) s ==>
   ?final'. gas_path_mem ctx func s 0 (Halt final')
 Proof

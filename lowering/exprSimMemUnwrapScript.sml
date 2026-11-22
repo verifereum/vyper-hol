@@ -37,7 +37,8 @@ Theorem emit_op_path_mem:
   !ctx func cenv cx es opc args sa op sb s0 w.
     emit_op opc args sa = (op, sb) /\ local_ptrs_reserved cenv sa /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    opc <> INVOKE /\ opc <> GAS /\ opc <> ALLOCA /\ ~is_terminator opc /\
+    opc <> INVOKE /\ opc <> GAS /\ opc <> ALLOCA /\ opc <> DALLOCA /\
+    ~is_terminator opc /\
     stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
     ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
