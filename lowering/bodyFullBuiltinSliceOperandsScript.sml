@@ -8,6 +8,7 @@ Ancestors
 Theorem slice_code_child_full:
   expr_body_pre cenv cx env
     (Builtin a (Slice n) [Builtin ct (Acc Code) [addr]; start; len]) es /\
+  body_const_cells_agree [(NONE,tops)] cx env ee /\
   expr_sim_inv cenv cx env ee /\
   (e = start \/ e = len \/ e = addr) /\
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\

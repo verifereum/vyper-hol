@@ -346,6 +346,7 @@ Theorem slice_builtin_none_vv_full_from_runs:
               body_exprs_full_ok cx [addr])) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a (Slice n) args) es /\
     code_slice_source (Slice n) args = NONE ==>
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -695,6 +696,12 @@ Proof
      qpat_assum `!tail. bind _ _ _ = _`
        (qspec_then `[]` (mp_tac o MATCH_MP vyperStatePreservationTheory.bind_split)) >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx src) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `expr_body_pre cenv cx env start mid` by
     (drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
      disch_then (qspecl_then [`start`,`mid`] mp_tac) >> fs[]) >>
@@ -835,6 +842,12 @@ Proof
      qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
        (qspec_then `[]` (mp_tac o MATCH_MP vyperStatePreservationTheory.bind_split)) >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env start_mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (start_mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `expr_body_pre cenv cx env len start_mid` by
     (drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
      disch_then (qspecl_then [`len`,`start_mid`] mp_tac) >> fs[]) >>
@@ -1092,8 +1105,11 @@ Proof
     op_prov length_G len_op = NONE /\ op_taint length_tn len_op = {}` by
      (qpat_assum `ptr_val_ok _ _ _ start_op start_G start_tn start_state` mp_tac >>
       qpat_assum `ptr_val_ok _ _ _ len_op length_G length_tn length_state` mp_tac >>
-      fs[bodyPtrDefsTheory.ptr_val_ok_def,loweringPostsTheory.post_value_type_def,
-         compileEnvTheory.is_word_type_def]) >>
+      qpat_assum `expr_type start = BaseT (UintT 256)` mp_tac >>
+      qpat_assum `expr_type len = BaseT (UintT 256)` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> ntac 2 strip_tac >>
+      simp[bodyPtrDefsTheory.ptr_val_ok_def, loweringPostsTheory.post_value_type_word,
+        compileEnvTheory.is_word_type_def]) >>
    `eval_operand start_op length_state = SOME (n2w i)` by
      (qpat_assum `expr_post _ _ _ _ _ len start_mid sd se start_state length_mid _ len_op length_state`
         (mp_then Any mp_tac exprSimSliceOrdinaryFrameTheory.slice_post_operands) >>
@@ -1152,7 +1168,9 @@ Proof
         (mp_then Any mp_tac abiEncodeOwnershipTheory.abi_encode_owned_footprint_frontier) >>
       disch_then drule >> disch_then drule >>
       disch_then (qspec_then `src_ptr` mp_tac) >>
-      (impl_tac >- fs[]) >> fs[]) >>
+      (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
+      qpat_assum `val_footprint vt v = LENGTH source_bytes + 32`
+        (fn th => simp[NoAsms, th]) >> decide_tac) >>
    `expr_val_rel cx (BaseT bt) v src_op capture_state` by
      (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         expr_post _ _ _ _ _ src es sa sc s0 mid v src_op captured`
@@ -1920,6 +1938,12 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
      qpat_assum `!tail. bind _ _ _ = _`
        (qspec_then `[]` (mp_tac o MATCH_MP vyperStatePreservationTheory.bind_split)) >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx src) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `expr_body_pre cenv cx env start mid` by
     (drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
      disch_then (qspecl_then [`start`,`mid`] mp_tac) >> fs[]) >>
@@ -2056,6 +2080,12 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
      qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
        (qspec_then `[]` (mp_tac o MATCH_MP vyperStatePreservationTheory.bind_split)) >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env start_mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (start_mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `expr_body_pre cenv cx env len start_mid` by
     (drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
      disch_then (qspecl_then [`len`,`start_mid`] mp_tac) >> fs[]) >>
@@ -2319,8 +2349,11 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
     op_prov length_G len_op = NONE /\ op_taint length_tn len_op = {}` by
      (qpat_assum `ptr_val_ok _ _ _ start_op start_G start_tn start_state` mp_tac >>
       qpat_assum `ptr_val_ok _ _ _ len_op length_G length_tn length_state` mp_tac >>
-      fs[bodyPtrDefsTheory.ptr_val_ok_def,loweringPostsTheory.post_value_type_def,
-         compileEnvTheory.is_word_type_def]) >>
+      qpat_assum `expr_type start = BaseT (UintT 256)` mp_tac >>
+      qpat_assum `expr_type len = BaseT (UintT 256)` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> ntac 2 strip_tac >>
+      simp[bodyPtrDefsTheory.ptr_val_ok_def, loweringPostsTheory.post_value_type_word,
+        compileEnvTheory.is_word_type_def]) >>
    `eval_operand start_op length_state = SOME (n2w i)` by
      (qpat_assum `expr_post _ _ _ _ _ len start_mid sd se start_state length_mid _ len_op length_state`
         (mp_then Any mp_tac exprSimSliceOrdinaryFrameTheory.slice_post_operands) >>
@@ -2413,9 +2446,10 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
        not_fresh_at se x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
        not_fresh_at se x)` by
-     (conj_tac >> rpt strip_tac >>
-      irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >>
-      fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+     (qpat_assum `!x sz. cenv.ce_return_buf = _ ==> not_fresh_at sd x` mp_tac >>
+      qpat_assum `!x sz. cenv.ce_return_pc = _ ==> not_fresh_at sd x` mp_tac >>
+      qpat_assum `sd.cs_next_var <= se.cs_next_var` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
    `stmt_state_rel (storage_trace_horizon length_mid.storage_trace)
       ctx func cenv cx length_mid length_state` by
      (qpat_assum `!H. valid_horizon _ _ H length_mid.storage_trace ==>
@@ -2684,6 +2718,7 @@ Theorem slice_builtin_none_vv_full:
               body_exprs_full_ok cx [addr])) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a (Slice n) args) es /\
     code_slice_source (Slice n) args = NONE ==>
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)

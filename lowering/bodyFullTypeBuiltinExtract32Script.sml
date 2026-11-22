@@ -34,6 +34,7 @@ QED
 Theorem extract32_vv_full[local]:
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (TypeBuiltin ann Extract32 ret [src;off]) es /\
   body_exprs_full_ok cx [src;off] ==>
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -210,9 +211,16 @@ Resume extract32_vv_full[offset_entry]:
      first_x_assum irule >>
      qpat_x_assum `bind _ _ _ = (INL _,mid)` mp_tac >>
      simp[vyperStateTheory.bind_def, AllCaseEqs()] >> metis_tac[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (irule body_const_cells_agree_expr_read >>
+     qpat_assum `bind (eval_expr cx src) _ _ = (INL _,mid)` (irule_at Any) >>
+     fs[exprSimHypsDefsTheory.expr_body_pre_def]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty off mid` by
-    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (qpat_assum `body_expr_full_ok cx off`
+       (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,`func`,
+                     `shadow_func`,`cenv`,`env`,`ty`,`mid`] mp_tac o
+        CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >> simp[]) >>
   `gas_admissible (bind (eval_expr cx off) (read_result cx)) expr_res_ok mid` by
     metis_tac[expr_body_pre_gas_admissible] >>
   `?shadow_s2. compile_bytestring_src (Var sv) shadow_s1 = ((len,data),shadow_s2) /\

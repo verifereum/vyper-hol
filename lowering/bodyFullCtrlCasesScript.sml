@@ -236,6 +236,13 @@ Proof
      disch_then (qspecl_then [`INL (BoolV b)`, `es1`] mp_tac) >>
      impl_tac >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> first_assum ACCEPT_TAC) >>
      simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env es1` by
+    (irule body_const_cells_agree_expr_read >>
+     goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env
+      (es1 with scopes updated_by CONS FEMPTY)` by
+    (irule (iffLR body_const_cells_agree_immutables) >>
+     qexists_tac `es1` >> simp[]) >>
   drule expr_sim_inv_push_scope >> strip_tac >>
   rpt (qpat_x_assum `body_stmts_full_ok _ _`
          (strip_assume_tac o REWRITE_RULE [body_stmts_full_ok_def])) >>
@@ -285,6 +292,10 @@ Proof
        (assume_tac o MATCH_MP contract_inv_alloca_locals o MATCH_MP body_inv_contract) >>
      irule expr_sim_inv_stmt >> simp[] >>
      metis_tac[expr_sim_inv_gas_obs, call_evaluation_safe_append_left]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env1 es1` by
+    (irule body_const_cells_agree_stmt >>
+     goal_assum (drule_at (Pat `eval_stmt _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `type_stmt _ _ _ = _`)) >> simp[]) >>
   `ce_locals_declared c env1` by metis_tac[ce_locals_declared_stmt] >>
   `locals_alloc_ok c env1` by metis_tac[locals_alloc_ok_stmt] >>
   `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>

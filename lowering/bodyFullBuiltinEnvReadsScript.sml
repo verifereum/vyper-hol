@@ -42,6 +42,7 @@ Theorem env_reads_sim_full:
     (builtin_args_length_ok bt (LENGTH args) /\ bt = Len ==>
      body_expr_full_ok cx (HD args)) /\
     body_inv tops ctx cenv cx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin a bt args) es /\

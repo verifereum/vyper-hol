@@ -175,6 +175,7 @@ Theorem target_subscript_sim_full:
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
   body_base_target_full_ok cx (SubscriptTarget bt e) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx env bt es /\
@@ -313,6 +314,8 @@ Resume target_subscript_sim_full[index]:
                    `INL pv`] >> fs[target_pre_def]) >>
   `expr_body_pre cenv cx env e mid1` by
     fs[target_pre_def, target_indices_pre_def] >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid1` by
+    (irule body_const_cells_agree_base >> goal_assum (drule_at Any) >> simp[]) >>
   `body_expr_full_ok cx e` by
     (fs[body_base_target_full_ok_def] >> first_x_assum irule >> metis_tac[]) >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -579,6 +582,7 @@ Theorem immutable_target_subscript_sim_full:
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
   body_base_target_full_ok cx (SubscriptTarget bt e) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_sim_inv cenv cx env es /\
   target_indices_pre cenv cx env (SubscriptTarget bt e) /\
   cx.in_deploy /\ immutable_root cx bt /\ ~cx_const_name cx (NONE,id) /\
@@ -701,6 +705,10 @@ Resume immutable_target_subscript_sim_full[index]:
       (INL (PlaceR p),mid1)` by
     (irule tuplePlaceSourceHeadTheory.tuple_place_target_base_inversion >> simp[]) >>
   `target_indices_pre cenv cx env bt` by fs[target_indices_pre_def] >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid1` by
+    (irule body_const_cells_agree_base >>
+     qpat_assum `eval_base_place cx bt _ = (INL (PlaceR p),mid1)` (irule_at Any) >>
+     simp[]) >>
   `expr_sim_inv cenv cx env mid1` by
     (mp_tac (Q.INST [`s` |-> `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
        `s'` |-> `mid1`,`t` |-> `bt`,`r` |-> `INL p`] aug_place_target_inv) >>

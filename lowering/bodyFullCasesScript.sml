@@ -403,8 +403,7 @@ Proof
           qpat_assum `~is_word_type (expr_type e) ==> _` drule >> simp[]) >>
       conj_tac >- first_assum ACCEPT_TAC >>
       conj_tac >- first_assum ACCEPT_TAC >>
-      conj_tac >- (qexists_tac `tops` >> asm_rewrite_tac[]) >>
-      qexists_tac `env` >> asm_rewrite_tac[]) >>
+      qexistsl_tac [`env`, `tops`] >> asm_rewrite_tac[]) >>
   rpt gen_tac >> strip_tac >> gvs[]
 QED
 
@@ -675,22 +674,10 @@ End
 
 Theorem body_intcall_plain_defaults[local]:
   MEM (FunctionDecl Internal mut nr rr fn args dflts ret ss) tops /\
-  cx_tops cx = tops /\
-  ~internal_defaults_const_names tops /\ ~internal_defaults_msg_gas tops ==>
-  ~supported_exprs_exists (const_name_root cx) dflts /\
-  ~supported_stmts_expr_exists (const_name_root cx) ss /\
+  ~internal_defaults_msg_gas tops ==>
   ~supported_exprs_exists expr_msg_gas_root (DROP n dflts)
 Proof
-  strip_tac >>
-  `const_name_root_mods [(NONE,tops)] = const_name_root cx` by
-    metis_tac[const_name_root_mods_singleton] >>
-  `~supported_exprs_exists (const_name_root cx) dflts /\
-    ~supported_stmts_expr_exists (const_name_root cx) ss` by
-    (qpat_x_assum `~internal_defaults_const_names tops` mp_tac >>
-     simp[internal_defaults_const_names_def, EXISTS_MEM] >>
-     disch_then (qspec_then `FunctionDecl Internal mut nr rr fn args dflts ret ss`
-       mp_tac) >> simp[]) >>
-  simp[] >> irule bodyStorageCasesTheory.supported_exprs_exists_DROP >>
+  strip_tac >> irule bodyStorageCasesTheory.supported_exprs_exists_DROP >>
   qpat_x_assum `~internal_defaults_msg_gas tops` mp_tac >>
   simp[supportedProgramTheory.internal_defaults_msg_gas_def, EXISTS_MEM] >>
   disch_then (qspec_then `FunctionDecl Internal mut nr rr fn args dflts ret ss`
@@ -700,57 +687,16 @@ QED
 Theorem body_intcall_case_full:
   !cx v16 src_id_opt fn es v17.
     (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-       ~internal_defaults_const_names tops /\ ~internal_defaults_msg_gas tops) /\
-    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
-         ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
-         t'5' s'8' dflt_vs t'6' all_tenv s'9' env t'7' s'10' rtv
-         t'8' is_view s'11' x'' t'9' s'12' cxf t'10'.
-       type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
-       lift_option_type (get_module_code cx src_id_opt)
-         "IntCall get_module_code" s'3' = (INL ts,t') /\
-       lift_option_type (lookup_callable_function cx.in_deploy fn ts)
-         "IntCall lookup_function" s'4' = (INL tup,t'') /\ mut = FST tup /\
-       stup = SND tup /\ (nr <=> FST stup) /\ stup2 = SND stup /\
-       args = FST stup2 /\ sstup = SND stup2 /\ dflts = FST sstup /\
-       sstup2 = SND sstup /\ ret = FST sstup2 /\ body' = SND sstup2 /\
-       type_check
-         (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
-         "IntCall args length" s'5' = (INL x',t'3') /\
-       eval_exprs cx es s'6' = (INL vs,t'4') /\
-       needed_dflts = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
-       cxd = cx with stk updated_by CONS (src_id_opt,fn) /\
-       get_scopes s'7' = (INL prev,t'5') /\
-       finally
-         (ignore_bind (set_scopes [FEMPTY]) (eval_exprs cxd needed_dflts))
-         (set_scopes prev) s'8' = (INL dflt_vs,t'6') /\
-       all_tenv = get_tenv cx /\
-       lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs))
-         "IntCall bind_arguments" s'9' = (INL env,t'7') /\
-       lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret" s'10' =
-       (INL rtv,t'8') /\ (is_view <=> is_view_mut mut) /\
-       lock_if_nr cx nr is_view s'11' = (INL x'',t'9') /\
-       push_function (src_id_opt,fn) env cx s'12' = (INL cxf,t'10') ==>
-       body_stmts_full_ok cxf body') /\
-    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
-         ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
-         t'5' s'8' x'' t'6'.
-       type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
-       lift_option_type (get_module_code cx src_id_opt)
-         "IntCall get_module_code" s'3' = (INL ts,t') /\
-       lift_option_type (lookup_callable_function cx.in_deploy fn ts)
-         "IntCall lookup_function" s'4' = (INL tup,t'') /\ mut = FST tup /\
-       stup = SND tup /\ (nr <=> FST stup) /\ stup2 = SND stup /\
-       args = FST stup2 /\ sstup = SND stup2 /\ dflts = FST sstup /\
-       sstup2 = SND sstup /\ ret = FST sstup2 /\ body' = SND sstup2 /\
-       type_check
-         (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
-         "IntCall args length" s'5' = (INL x',t'3') /\
-       eval_exprs cx es s'6' = (INL vs,t'4') /\
-       needed_dflts = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
-       cxd = cx with stk updated_by CONS (src_id_opt,fn) /\
-       get_scopes s'7' = (INL prev,t'5') /\
-       set_scopes [FEMPTY] s'8' = (INL x'',t'6') ==>
-       body_exprs_full_ok cxd needed_dflts) /\
+       ~internal_defaults_msg_gas tops) /\
+    (!ts mut nr args dflts ret ss.
+       ~MEM (src_id_opt,fn) cx.stk /\
+       get_module_code cx src_id_opt = SOME ts /\
+       lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,ss) ==>
+       body_stmts_full_ok (cx with stk updated_by CONS (src_id_opt,fn))
+         (subst_consts_stmts (module_consts_env (cx_tops cx) []) ss) /\
+       body_exprs_full_ok (cx with stk updated_by CONS (src_id_opt,fn))
+         (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
+           (subst_consts_exprs (module_consts_env (cx_tops cx) []) dflts))) /\
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
          ret body' s'5' x' t'3'.
        type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
@@ -776,24 +722,26 @@ Proof
     (drule bodyInvCodePropsTheory.body_inv_main_code >> strip_tac >>
      fs[body_inv_def]) >>
   qpat_assum `!ts. ALOOKUP _ _ = SOME _ ==> _` (drule_then strip_assume_tac) >>
-  `~supported_exprs_exists (const_name_root cx) dflts /\
-    ~supported_stmts_expr_exists (const_name_root cx) ss /\
-    ~supported_exprs_exists expr_msg_gas_root
+  `~supported_exprs_exists expr_msg_gas_root
         (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)` by
     (drule_all body_intcall_plain_defaults >> simp[]) >>
-  `~supported_exprs_exists (const_name_root cx)
-        (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)` by
-    (irule bodyStorageCasesTheory.supported_exprs_exists_DROP >>
-     first_assum ACCEPT_TAC) >>
   `~MEM (src_id_opt,fn) cx.stk ==> body_exprs_full_ok cx es` by
     (strip_tac >> drule intcall_results_full_ih >> disch_then drule_all >>
      simp[]) >>
+  `~MEM (src_id_opt,fn) cx.stk ==>
+     body_stmts_full_ok (cx with stk updated_by CONS (src_id_opt,fn))
+       (subst_consts_stmts (module_consts_env tops []) ss) /\
+     body_exprs_full_ok (cx with stk updated_by CONS (src_id_opt,fn))
+       (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
+         (subst_consts_exprs (module_consts_env tops []) dflts))` by
+    (strip_tac >>
+     qpat_assum `!ts mut nr args dflts ret ss. _ ==> _` drule_all >>
+     gvs[]) >>
   `!s1 vs t1.
      ~MEM (src_id_opt,fn) cx.stk /\ eval_exprs cx es s1 = (INL vs,t1) ==>
      body_exprs_full_ok (cx with stk updated_by CONS (src_id_opt,fn))
-       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)` by
-    (rpt strip_tac >> drule intcall_defaults_full_ih >> disch_then drule_all >>
-     simp[]) >>
+       (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
+         (subst_consts_exprs (module_consts_env tops []) dflts))` by metis_tac[] >>
   `!s1 vs t1 sd dvs td penv rtv.
        ~MEM (src_id_opt,fn) cx.stk /\
        eval_exprs cx es s1 = (INL vs,t1) /\
@@ -804,9 +752,8 @@ Proof
        evaluate_type (get_tenv cx) ret = SOME rtv /\
        (nr ==> IS_SOME cx.nonreentrant_slot) /\
        (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-       body_stmts_full_ok (cx with stk updated_by CONS (src_id_opt,fn)) ss` by
-    (rpt strip_tac >> drule intcall_body_full_ih >> disch_then drule_all >>
-     simp[]) >>
+       body_stmts_full_ok (cx with stk updated_by CONS (src_id_opt,fn))
+         (subst_consts_stmts (module_consts_env tops []) ss)` by metis_tac[] >>
   qpat_x_assum `src_id_opt = NONE` SUBST_ALL_TAC >>
   conj_tac
   >- apply_case_lift intcall_sim_full >>
@@ -881,9 +828,10 @@ Proof
   >- (qpat_assum `body_exprs_full_ok cx args` (fn args_ok =>
       qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
       qpat_assum `shadow_body_inv tops ctx shadow_ctx` (fn shadow =>
+      qpat_assum `body_const_cells_agree [(NONE,tops)] cx env es` (fn consts =>
       qpat_assum `expr_body_pre cenv cx env _ es` (fn pre =>
         MATCH_ACCEPT_TAC (MATCH_MP bodyFullRawCallTheory.raw_call_expr_vv_full
-          (LIST_CONJ [args_ok,inv,shadow,pre]))))))) >>
+          (LIST_CONJ [args_ok,inv,shadow,consts,pre])))))))) >>
   irule bodyFullOfVVTheory.expr_sim_full_of_vv >> simp[] >>
   conj_tac
   >- (rpt strip_tac >> drule_all expr_body_pre_copy_ok >> simp[]) >>
@@ -1012,6 +960,7 @@ Theorem selfdestruct_expr_full_from_interfaces:
     cenv env ty es.
     body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Call ann SelfDestructTarget args dflt) es
@@ -1454,6 +1403,7 @@ Theorem selfdestruct_expr_full:
   !cx ann args dflt DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
     body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Call ann SelfDestructTarget args dflt) es
@@ -1549,8 +1499,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   irule bodyFullSubscriptTheory.subscript_expr_full_ok_from_place_base >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qspecl_then [`cx`, `v8`, `e1`, `e2`] ACCEPT_TAC
-    bodyFullSubscriptUnframedArrayTheory.subscript_unframed_array_vv_full
+  MATCH_ACCEPT_TAC bodyFullSubscriptUnframedArrayTheory.subscript_unframed_array_vv_full
 QED
 
 (* Join the TypeBuiltin constructor proofs. *)

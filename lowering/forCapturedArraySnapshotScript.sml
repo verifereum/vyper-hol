@@ -210,6 +210,7 @@ Theorem for_array_snapshot_continue_full:
   (!H. dead_lo_ok H (DF H) lo c cx) /\
   (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_no_wrap inst t) /\
   ce_locals_declared c env /\ locals_alloc_ok c env /\ expr_body_pre c cx env e es /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_type e = ArrayT typ bd /\ bound_length bd <= n /\
   evaluate_type (get_tenv cx) typ = SOME tyv /\
   storage_trace_domain cx st0 em.storage_trace /\
@@ -264,6 +265,13 @@ Proof
       qpat_assum `!tail. eval_expr cx e _ = _` (qspec_then `[]` mp_tac) >>
       simp[NoAsms, Abbr `start`,eq])) >>
   `expr_body_pre c cx env e start` by simp[Abbr `start`] >>
+  `body_const_cells_agree [(NONE,tops)] cx env em` by
+    (irule body_const_cells_agree_expr >>
+     qpat_assum `eval_expr cx e start = _`
+       (irule_at (Pat `eval_expr _ _ _ = _`)) >>
+     qpat_assum `expr_body_pre c cx env e start`
+       (assume_tac o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     simp[Abbr `start`]) >>
   drule_all snapshot_read >>
   disch_then (CONJUNCTS_THEN2 assume_tac
     (qx_choosel_then [`av`,`xs`] (map_every assume_tac o CONJUNCTS))) >>

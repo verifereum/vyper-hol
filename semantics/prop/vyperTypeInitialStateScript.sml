@@ -529,7 +529,7 @@ Proof
   gvs[]
 QED
 
-Theorem is_bare_global_decl_cases[local]:
+Theorem is_bare_global_decl_cases:
   is_bare_global_decl id ts ==>
   is_immutable_decl id ts \/
   ?vis e vid typ slot.

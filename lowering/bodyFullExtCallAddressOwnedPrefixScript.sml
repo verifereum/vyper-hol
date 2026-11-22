@@ -4,8 +4,8 @@ Ancestors
   bodyFullExtCallTargetOutcome bodyFullExtCallPosList
   gasOutcomeFull gasOutcomeFullCompose gasExemptCert vyperStorageTrace vyperStorageFootprint
   exprSimDefs bodyFullIfExpReach
-  exprSimSource exprSafeOperand exprSimWordArgs exprLoweringProps stmtSimProps
-  bodySimFull compileEnv loweringPosts vyperInterpreter wordArgsPtr
+  exprSimHypsDefs exprSimSource exprSafeOperand exprSimWordArgs exprLoweringProps stmtSimProps
+  bodyFullPreds bodySimFull compileEnv loweringPosts vyperInterpreter wordArgsPtr
   evalNoHalt supportedExprTraverse vyperTypeCallGraph list
 
 (* At each bind, expose that the producer's cut has consumed its observations. *)
@@ -30,6 +30,7 @@ Theorem extcall_request_guarded_operand_prefix_address_owned_bundled:
   expr_type addr = BaseT AddressT /\
   body_exprs_full_ok cx (TAKE 1 args) /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env addr es /\
   (!st target mid n. eval_exprs cx (TAKE 1 args) st = (INL target,mid) /\
      n = LENGTH arg_types ==> body_exprs_full_ok cx (TAKE n (DROP 1 args))) /\
@@ -186,6 +187,12 @@ Proof
     (qpat_assum `!tail. eval_exprs cx [addr] _ = _`
        (mp_tac o REWRITE_RULE [listTheory.APPEND_NIL] o Q.SPEC `[]`) >>
      pure_asm_rewrite_tac[] >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (irule body_const_cells_agree_exprs >>
+     qpat_assum `eval_exprs cx [addr] _ = (INL [v],mid)` (irule_at Any) >>
+     qpat_assum `expr_body_pre _ cx env addr _`
+       (assume_tac o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     simp[vyperTypeSystemTheory.well_typed_expr_def]) >>
   `body_exprs_full_ok cx xs` by metis_tac[] >>
   `is_word_type (expr_type addr)` by simp[is_word_type_def] >>
   drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
@@ -255,6 +262,7 @@ Theorem extcall_request_guarded_operand_prefix_address_owned:
   expr_type addr = BaseT AddressT /\
   body_exprs_full_ok cx (TAKE 1 args) /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env addr es /\
   (!st target mid n. eval_exprs cx (TAKE 1 args) st = (INL target,mid) /\
      n = LENGTH arg_types ==> body_exprs_full_ok cx (TAKE n (DROP 1 args))) /\

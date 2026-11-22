@@ -64,6 +64,7 @@ Theorem compile_for_storage_array_frag_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (For id typ (Array (TopLevelName (ArrayT typ bd) nid)) n body) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty
@@ -87,9 +88,7 @@ Proof
   drule_all_then assume_tac for_storage_literal_expr_pre >>
   irule for_array_prepared_expr_cut_frag_full >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  conj_tac >- (qexists_tac `tops` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  qexistsl [`env`,`env'`] >> rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  reverse conj_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qexistsl [`env`,`env'`,`tops`] >> asm_rewrite_tac[] >>
   map_every qx_gen_tac [`st0`,`sa`,`sb`,`sha`,`shb`,`s0`,`G0`,`tn0`,`vv`,
     `se`,`she`,`bound`,`tyv`,`marks`,`rv`,`em`,`G`,`tn`,`u`] >>
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>

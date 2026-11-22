@@ -41,6 +41,7 @@ Theorem lower_word_args_by_type_sim_full:
       expr_body_pre cenv cx env e ee /\ is_word_type (expr_type e)) /\
     body_exprs_full_ok cx todo /\
     body_inv tops ctx cenv cx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env es /\
     lower_word_args cenv tyf todo sa = (xs,sm) /\
     lower_word_args cenv tyf (MAP gas_shadow_expr todo) shadow_sa =
@@ -96,6 +97,8 @@ Proof
   `expr_body_pre cenv cx env e es /\ is_word_type (expr_type e)` by
     (qpat_assum `!e ee. _` (qspecl_then [`e`, `es`] mp_tac) >> simp[]) >>
   `tyf (gas_shadow_expr e) = tyf e` by simp[] >>
+  `well_typed_expr env e` by
+    (drule exprBodyPrePropsTheory.expr_body_pre_static_facts >> simp[]) >>
   gvs[lower_word_args_cons, MAP] >>
   `gas_shadow_state s1 s1'` by
     (mp_tac (Q.INST [`ty` |-> `tyf e`] gas_shadow_stmt_lower_value) >>
@@ -202,6 +205,12 @@ Proof
      imp_res_tac expr_body_pre_eval >> fs[SF ETA_ss] >>
      qpat_x_assum `!res es'. _ ==> expr_sim_inv _ _ _ _`
        (qspecl_then [`INL v`, `mid with gas_obs := []`] mp_tac) >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` strip_assume_tac) >>
+     `body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >> simp[]) >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
       expr_post H ctx func cenv cx e es sa s1 s0 mid v x t /\
       t.vs_current_bb = s1.cs_current_bb /\
@@ -261,8 +270,7 @@ Proof
      >- (qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
          gvs[body_exprs_full_ok_def, bind_def, AllCaseEqs()] >> metis_tac[])
      >- (qexistsl_tac [`shadow_func`, `s1'`, `shadow_sm`, `tyf`] >> simp[])
-     >- (qexists_tac `tops` >> simp[])
-     >- (qexists_tac `env` >> rpt strip_tac >>
+     >- (qexistsl_tac [`env`, `tops`] >> simp[] >> rpt strip_tac >>
          qpat_assum `!e ee. _` (qspecl_then [`e'`, `ee`] mp_tac) >> simp[])) >>
   qpat_assum `gas_outcome_full _ _ _ _ (eval_exprs cx rest) _ _ _`
     (fn th => assume_tac th) >>
@@ -359,6 +367,7 @@ Theorem lower_word_args_sim_full:
       expr_body_pre cenv cx env e ee /\ is_word_type (expr_type e)) /\
     body_exprs_full_ok cx todo /\
     body_inv tops ctx cenv cx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env es /\
     lower_word_args cenv (\e. ty) todo sa = (xs,sm) /\
     lower_word_args cenv (\e. ty) (MAP gas_shadow_expr todo) shadow_sa =
