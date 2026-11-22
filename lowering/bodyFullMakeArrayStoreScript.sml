@@ -147,16 +147,18 @@ Proof
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e) e es` by
     (qpat_x_assum `body_expr_full_ok cx e`
-       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then drule_all >> simp[]) >>
+       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     qpat_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+         _ ==> expr_sim_full _ _ _ _ _ _ /\ expr_vv_sim_full _ _ _ _ _ _`
+       drule_all >> simp[]) >>
   `gas_shadow_compiles (compile_expr cenv (expr_type e) e)
-     (compile_expr cenv (expr_type e) (gas_shadow_expr e))` by
-     irule gas_shadow_stmt_compile_expr >>
+     (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
+     irule gas_shadow_stmt_compile_expr_env >>
   qpat_x_assum `gas_shadow_compiles _ _`
     (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
   disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >>
   simp[] >> strip_tac >>
-  Cases_on `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa` >>
   gvs[] >>
   rename1 `compile_expr cenv (expr_type e) e sa = (vv,sm)` >>
   rename1 `gas_shadow_state sm shadow_sm` >>
