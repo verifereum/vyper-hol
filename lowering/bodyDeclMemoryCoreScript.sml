@@ -139,37 +139,6 @@ Proof
   drule_all allocaHistoryFragmentTheory.alloca_history_run_inst_seq >> simp[]
 QED
 
-Theorem body_decl_frag_at_cursor:
-  !ctx st st' P Q R.
-    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
-    isPREFIX st.cs_current_insts st'.cs_current_insts /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-      (emitted_insts st st') /\
-    (!s. P s /\ ~s.vs_halted /\
-       s.vs_current_bb = st.cs_current_bb /\
-       s.vs_inst_idx = LENGTH st.cs_current_insts ==>
-       run_inst_seq_mem_ok (emitted_insts st st') s /\
-       (ptrDiscipline$ctx_has_dalloca ctx ==>
-         !pre i post u. (emitted_insts st st') = pre ++ i::post /\
-           run_inst_seq pre s = OK u ==>
-           unitTransformDefs$dalloca_no_wrap i u) /\
-       ?t. run_inst_seq (emitted_insts st st') s = OK t /\
-           Q (t with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
-    frag_exec_mem ctx st st' P Q R
-Proof
-  rpt gen_tac >> strip_tac >>
-  qabbrev_tac `P' = \s. P s /\ ~s.vs_halted /\
-    s.vs_current_bb = st.cs_current_bb /\
-    s.vs_inst_idx = LENGTH st.cs_current_insts` >>
-  `frag_exec_mem ctx st st' P' Q R` by
-    (irule frag_exec_mem_run_inst_seq >> simp[Abbr `P'`] >>
-     rpt strip_tac >> qpat_assum `!s. P s /\ _ ==> _` drule_all >>
-     disch_then (irule o CONJUNCT1 o CONJUNCT2) >> simp[] >>
-     qexistsl [`post`, `pre`] >> simp[]) >>
-  fs[frag_exec_mem_def, Abbr `P'`] >>
-  rpt gen_tac >> strip_tac >> first_x_assum drule >> simp[]
-QED
-
 Theorem annassign_memory_store_body_frag_mem:
   !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sa sb sw d R.
     compile_store_memory cenv src (Var p) ty ty sa = ((), sb) /\

@@ -63,7 +63,7 @@ Proof
 QED
 
 (* Cursor-aware lifting, keeping the entry cursor implicit in the judgment. *)
-Theorem copy_memory_frag_at_cursor[local]:
+Theorem body_decl_frag_at_cursor:
   !ctx st st' P Q R.
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
     isPREFIX st.cs_current_insts st'.cs_current_insts /\
@@ -132,7 +132,7 @@ Theorem compile_copy_memory_body_frag_mem:
         mem_bytes_at a k t.vs_memory = mem_bytes_at a k s0.vs_memory)) R
 Proof
   rpt strip_tac >> drule buffer_copy_memory_shape >> strip_tac >>
-  irule copy_memory_frag_at_cursor >>
+  irule body_decl_frag_at_cursor >>
   simp[same_blocks_def, IS_PREFIX_APPEND] >>
   reverse conj_tac
   >- (conj_tac >- fs[same_blocks_def] >>
@@ -208,7 +208,7 @@ Theorem compile_store_bytestring_body_frag_mem:
         mem_bytes_at a k t.vs_memory = mem_bytes_at a k s0.vs_memory)) R
 Proof
   rpt strip_tac >> drule buffer_store_bytestring_shape >> strip_tac >>
-  irule copy_memory_frag_at_cursor >>
+  irule body_decl_frag_at_cursor >>
   simp[same_blocks_def, IS_PREFIX_APPEND] >>
   reverse conj_tac
   >- (fs[same_blocks_def] >> metis_tac[store_bytestring_body_code]) >>
@@ -687,7 +687,7 @@ Theorem compile_assign_value_name_staged_body_frag_mem:
 Proof
   rpt strip_tac >> drule_all assign_memory_body_shape >> strip_tac >>
   fs[same_blocks_def] >>
-  irule copy_memory_frag_at_cursor >>
+  irule body_decl_frag_at_cursor >>
   asm_simp_tac (srw_ss()) [same_blocks_def, IS_PREFIX_APPEND] >>
   rpt strip_tac >> gvs[] >>
   `!x. Var p = Var x \/ dst = Var x ==> not_fresh_at sa x` by (simp[] >> metis_tac[])
