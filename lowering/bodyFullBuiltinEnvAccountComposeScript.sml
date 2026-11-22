@@ -16,23 +16,6 @@ Ancestors
 Libs
   pairLib
 
-Theorem self_codesize_lower[local]:
-  !cenv ty e1 sa. is_self_addr e1 ==>
-    lower_value compile_expr cenv ty
-      (Builtin (BaseT (UintT 256)) (Acc Codesize) [e1]) sa =
-    emit_op CODESIZE [] sa
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[Once lower_value_def, comp_bind_def, compile_expr_unary_builtin] >>
-  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
-       compile_builtin_dispatch_body_def] >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  simp[exprBopLoweringTheory.lower_value_child_call, vyperASTTheory.expr_type_def,
-       listTheory.list_size_def, compile_acc_def,
-       exprBopLoweringTheory.as_stack_val_pair, unwrap_value_def, comp_return_def,
-       comp_bind_def, vyperContextTheory.is_self_addr_def]
-QED
-
 Theorem self_codesize_ptr_ok[local]:
   allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   step_inst_base (mk_inst id CODESIZE [] [out]) s = OK (update_var out w s) ==>
@@ -71,7 +54,7 @@ Theorem self_codesize_full_path[local]:
 Proof
   strip_tac >>
   `emit_op CODESIZE [] sa = (op,sb)` by
-    metis_tac[self_codesize_lower] >>
+    metis_tac[exprSimAccountsTheory.lower_value_self_codesize] >>
   drule emitted_insts_emit_op >> strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb` by
     gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
@@ -143,28 +126,6 @@ Proof
   irule (cj 1 gas_origin_ptr_path_rules) >> simp[update_var_def]
 QED
 
-Theorem self_codesize_source[local]:
-  !cx es tail.
-    bind (eval_expr cx
-      (Builtin (BaseT (UintT 256)) (Acc Codesize)
-        [Builtin (BaseT AddressT) (Env SelfAddr) []]))
-      (read_result cx) (es with gas_obs := tail) =
-    (INL (IntV (&LENGTH cx.txn.code)), es with gas_obs := tail)
-Proof
-  rpt gen_tac >>
-  simp[self_addr_source_all_tails,
-       exprSimWordArgsTheory.eval_exprs_cons_action,
-       exprSimWordArgsTheory.eval_exprs_nil,
-       Once evaluate_def, type_check_def, assert_def, ignore_bind_def,
-       bind_def, return_def, lift_sum_def, get_accounts_def,
-       read_result_def, evaluate_builtin_def, builtin_args_length_ok_def,
-       is_self_codesize_def,
-       vyperStateTheory.bind_def, vyperStateTheory.return_def,
-       vyperStateTheory.lift_sum_def, vyperStateTheory.get_accounts_def,
-       vyperStateTheory.read_result_def, vyperStateTheory.ignore_bind_def,
-       evaluate_self_codesize_def]
-QED
-
 Theorem self_codesize_sim_full[local]:
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty es.
     body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
@@ -210,11 +171,11 @@ Proof
     strip_assume_tac) >>
   irule gas_outcome_full_pure >> simp[] >>
   qexistsl_tac [`G'`, `es`, `INL (IntV (&LENGTH cx.txn.code))`, `t`, `tn'`] >>
-  simp[self_codesize_source] >>
+  simp[exprSimAccountsTheory.self_codesize_source_bind_all_tails] >>
   qx_gen_tac `H` >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
     (drule_then strip_assume_tac) >>
-  gvs[self_codesize_lower, exprSimMemDefsTheory.expr_store_bound_def, expr_type_def,
+  gvs[exprSimAccountsTheory.lower_value_self_codesize, exprSimMemDefsTheory.expr_store_bound_def, expr_type_def,
       is_word_type_def, update_var_def, alloca_history_def] >>
   drule emitted_insts_emit_op >> strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb` by
