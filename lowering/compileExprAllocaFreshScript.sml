@@ -2578,6 +2578,21 @@ Proof
             alloca_suffix_emit_op])
 QED
 
+Theorem alloca_suffix_bool_chain_ops[local]:
+  (!e a. k <= a.cs_next_var ==>
+    alloca_suffix k a (SND (lower_value cfn ce (BaseT BoolT) e a))) ==>
+  !es a. k <= a.cs_next_var ==>
+    alloca_suffix k a
+      (SND (compile_bool_chain_ops cfn ce is_and result exit_lbl es a))
+Proof
+  strip_tac >> Induct_on `es`
+  >- simp[compile_bool_chain_ops_def] >>
+  Cases_on `es` >> Cases_on `is_and` >>
+  simp[Once compile_bool_chain_ops_def, comp_ignore_bind_def] >>
+  rpt (rpt strip_tac >> irule alloca_suffix_bind_floor >>
+       simp[alloca_suffix_emit_inst])
+QED
+
 Theorem alloca_suffix_builtin_body[local]:
   (!ce ty e a. k <= a.cs_next_var ==>
     alloca_suffix k a (SND (cfn ce ty e a))) ==>
@@ -2604,7 +2619,8 @@ Proof
             alloca_suffix_mulmod, alloca_suffix_ceil, alloca_suffix_floor,
             alloca_suffix_pow_mod256, alloca_suffix_ecrecover,
             alloca_suffix_ecadd_points, alloca_suffix_ecmul_point,
-            alloca_suffix_uint2str, pairTheory.FORALL_PROD] >> rpt strip_tac) >>
+            alloca_suffix_uint2str, alloca_suffix_bool_chain_ops,
+            pairTheory.FORALL_PROD] >> rpt strip_tac) >>
   simp[alloca_suffix_builtin_calldatasize, alloca_suffix_refl]
   >- (IF_CASES_TAC >> simp[alloca_suffix_emit_op, alloca_suffix_invert])
   >- (IF_CASES_TAC >> simp[alloca_suffix_wei_int, alloca_suffix_wei_decimal])
