@@ -2,7 +2,7 @@
    internal calls when every inlined constant is free of them. *)
 Theory constSubstStmtsPreserve
 Ancestors
-  supportedNameRoot constSubstCorrect constSubstStmts constSubst supportedProgram supportedStmts
+  supportedNameRoot supportedIteratorProps constSubstCorrect constSubstStmts constSubst supportedProgram supportedStmts
   supportedTargets supportedStmtTraverse supportedExprTraverse supportedExprs
   supportedExprForms supportedDecls vyperTypeContract vyperTypeCallGraph vyperAST
   exprSimHypsDefs exprLowering compileVyper vyperTypeSystem vyperTypeEnv
@@ -1007,23 +1007,6 @@ Proof
   metis_tac[const_subst_supported_string_reason, const_subst_supported_custom_error]
 QED
 
-Theorem const_subst_supported_array_form[local]:
-  (!t name. e <> Name t name) /\ (!t id. e <> TopLevelName t id) ==>
-  (supported_iterator tops ty (Array e) n <=>
-   supported_expr tops e /\
-   (!t fid args drv. e = Call t (IntCall fid) args drv /\ FST fid = NONE ==>
-      ?m nr rr ps ds b.
-        supported_function_decl tops fid Internal = SOME (m,nr,rr,ps,ds,t,b)) /\
-   ?bd. expr_type e = ArrayT ty bd /\ bound_length bd <= n)
-Proof
-  Cases_on `e` >> simp[supported_iterator_def] >>
-  Cases_on `c` >> simp[] >>
-  rename1 `FST fid = NONE` >>
-  Cases_on `supported_function_decl tops fid Internal` >> simp[] >>
-  rename1 `supported_function_decl tops fid Internal = SOME decl` >>
-  PairCases_on `decl` >> simp[]
-QED
-
 Theorem const_subst_supported_array[local]:
   const_subst_supported_replacements tops E /\
   ~supported_expr_exists (const_subst_changes_type E) e /\
@@ -1037,7 +1020,7 @@ Proof
       gvs[subst_consts_expr_def] >> Cases_on `ALOOKUP E id1` >> gvs[] >>
       fs[const_subst_supported_replacements_def] >>
       first_x_assum drule >> strip_tac >>
-      simp[const_subst_supported_array_form, supported_expr_def] >>
+      simp[supported_non_name_array_iterator, supported_expr_def] >>
       drule const_subst_preserves_expr_type >>
       Cases_on `t` >> simp[supported_iterator_def, expr_type_def] >>
       rpt strip_tac >> gvs[supported_iterator_def, subst_consts_expr_def] >>
@@ -1047,7 +1030,7 @@ Proof
    (!t fid args drv. subst_consts_expr E e = Call t (IntCall fid) args drv ==>
       ?args' drv'. e = Call t (IntCall fid) args' drv')` by
      (Cases_on `e` >> gvs[subst_consts_expr_def]) >>
-  fs[const_subst_supported_array_form] >>
+  fs[supported_non_name_array_iterator] >>
   metis_tac[const_subst_preserves_expr_type, const_subst_supported_expr]
 QED
 
