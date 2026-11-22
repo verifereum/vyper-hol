@@ -3,7 +3,7 @@
 Theory e2eModsLifecycle
 Ancestors
   e2eLifecycle e2eModsDefs e2eDeployModsDefs e2eDefs e2eComposition
-  e2eTransactionWorld
+  e2eTransactionWorld linkedCallPremises
   vyperContext vyperInterpreter vyperState vyperTypeContract
   vyperTypeContractSoundness vyperTypeDeploymentMachine
   vyperTypeInitialState vyperTypeInvariants vyperDeployConstantsFoldMods
@@ -316,7 +316,7 @@ Proof
   `?art. check_contract F am.layouts tx.target mods = SOME art /\
          checked_contract_runtime_ready art mods am tx /\
          machine_well_typed am /\ call_tx_well_typed tx` by
-    suspend "runtime_ready" >>
+    (drule_all source_typing_ok_runtime_ready_mods >> simp[]) >>
   `storage_well_formed_on
     (initial_evaluation_context am.sources am.layouts tx NONE)
     (initial_state am' []) (FST (storage_trace_horizon obs))` by
@@ -343,43 +343,6 @@ Resume transaction_world_storage_handoff_mods[unchanged_world]:
     (qspecl_then [`F`, `slot`, `tv`] mp_tac) >>
   simp[vyperStorageBackendTheory.get_storage_def, vyperInterpreterTheory.initial_state_def,
        initial_evaluation_context_def]
-QED
-
-Resume transaction_world_storage_handoff_mods[runtime_ready]:
-  fs[source_typing_ok_mods_def, global_cells_typed_mods_def] >>
-  `ALOOKUP am.sources tx.target = SOME mods /\
-   (case ALOOKUP am.exports tx.target of NONE => [] | SOME xs => xs) = exps` by
-    (fs[source_deployment_rel_mods_def] >>
-     Cases_on `ALOOKUP am.exports tx.target` >> gvs[]) >>
-  simp[checked_contract_runtime_ready_def] >>
-  drule_all (SIMP_RULE bool_ss [] (Q.INST [`addr` |-> `tx.target`]
-    vyperTypeContractStaticMapsTheory.check_contract_toplevel_vtypes_consistent_initial)) >>
-  simp[get_module_code_def, initial_evaluation_context_def] >> strip_tac >>
-  drule vyperTypeContractStaticMapsTheory.check_contract_bare_globals_consistent_initial >>
-  disch_then (qspecl_then [`tx`, `am.sources`] mp_tac) >>
-  simp[get_module_code_def, initial_evaluation_context_def] >> strip_tac >>
-  fs[account_immutables_def, empty_immutables_def] >>
-  simp[immutables_ready_def, get_tenv_def, get_module_code_def,
-       initial_evaluation_context_def] >>
-  conj_tac >- metis_tac[optionTheory.IS_SOME_EXISTS] >>
-  conj_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> ?tv v. _` drule >>
-      strip_tac >> gvs[]) >>
-  rpt gen_tac >> strip_tac >>
-  rename1 `FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty)` >>
-  Cases_on `FLOOKUP art.cta_bare_globals (src,id)`
-  >- (qpat_x_assum `!src id ty. _ /\ FLOOKUP art.cta_bare_globals (src,id) = NONE ==> _`
-        (qspecl_then [`src`,`id`,`ty`] mp_tac) >>
-      simp[] >> strip_tac >> gvs[]) >>
-  rename1 `FLOOKUP art.cta_bare_globals (src,id) = SOME bare_ty` >>
-  qpat_x_assum `!src id ty. _ ==> ?ts. _ /\ FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\ _`
-    (qspecl_then [`src`,`id`,`bare_ty`] mp_tac) >>
-  simp[] >> strip_tac >> gvs[] >>
-  rpt strip_tac >>
-  qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> ?tv v. _`
-    (qspecl_then [`src`,`id`,`bare_ty`] mp_tac) >>
-  simp[]
 QED
 
 Resume transaction_world_storage_handoff_mods[committed_accounts]:
