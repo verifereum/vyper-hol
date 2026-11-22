@@ -36,19 +36,22 @@ Proof
 QED
 
 Theorem dalloca_windows_external_env[local]:
-  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\ runtime_blueprint_free source_tops ==>
-  compile_env_blueprint_free
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+    runtime_blueprint_free source_tops) ==>
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+   compile_env_blueprint_free
     (FST (SND (set_external_package_target target
-                (package_external_fn source_tops tr keys (mut,nr,rr,name,args,ds,ret,fbody))))) /\
+                (package_external_fn source_tops tr keys (mut,nr,rr,name,args,ds,ret,fbody)))))) /\
   compile_env_builtin_arity
     (FST (SND (set_external_package_target target
                 (package_external_fn source_tops tr keys (mut,nr,rr,name,args,ds,ret,fbody)))))
 Proof
   strip_tac >>
-  drule runtime_blueprint_free_internal >> strip_tac >>
-  `compile_env_blueprint_free
-     (build_compile_env source_tops External mut name args ret fbody tr)` by
-    metis_tac[build_compile_env_blueprint_free] >>
+  `~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+    compile_env_blueprint_free
+      (build_compile_env source_tops External mut name args ret fbody tr)` by
+    metis_tac[runtime_blueprint_free_internal, build_compile_env_blueprint_free] >>
   `compile_env_builtin_arity
      (build_compile_env source_tops External mut name args ret fbody tr)` by
     metis_tac[build_compile_env_builtin_arity] >>
@@ -80,20 +83,23 @@ Theorem dalloca_windows_packaged_externals[local]:
     (MAP (set_external_package_target target o package_external_fn source_tops tr keys)
       (FST (classify_functions source_tops)))
 Proof
-  strip_tac >> simp[EVERY_MAP, EVERY_MEM, combinTheory.o_DEF] >>
+  strip_tac >>
+  Cases_on `!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1` >>
+  fs[] >>
+  (simp[EVERY_MAP, EVERY_MEM, combinTheory.o_DEF] >>
   qx_gen_tac `e` >> PairCases_on `e` >> strip_tac >>
   imp_res_tac classify_external_blueprint_free >>
   imp_res_tac classify_external_builtin_arity >>
-  drule_all (Q.INST [`mut` |-> `e0`, `nr` |-> `e1`, `rr` |-> `e2`,
+  mp_tac (Q.INST [`mut` |-> `e0`, `nr` |-> `e1`, `rr` |-> `e2`,
     `name` |-> `e3`, `args` |-> `e4`, `ds` |-> `e5`, `ret` |-> `e6`,
-    `fbody` |-> `e7`] dalloca_windows_external_env) >> strip_tac >>
+    `fbody` |-> `e7`] dalloca_windows_external_env) >> (impl_tac >- simp[]) >> strip_tac >>
   simp[package_external_fn_def, set_external_package_target_def,
        runtime_external_package_windows_def] >>
   irule dalloca_windows_external_function_body >>
   rpt strip_tac >> irule dalloca_windows_packaged_stmts >> simp[] >>
   qexists_tac `FST (SND (set_external_package_target target
     (package_external_fn source_tops tr keys (e0,e1,e2,e3,e4,e5,e6,e7))))` >>
-  gvs[package_external_fn_def, set_external_package_target_def]
+  gvs[package_external_fn_def, set_external_package_target_def])
 QED
 
 Theorem dalloca_windows_packaged_groups[local]:
@@ -104,13 +110,16 @@ Theorem dalloca_windows_packaged_groups[local]:
   EVERY (runtime_external_group_windows window)
     (MAP (package_external_group source_tops target tr keys) (FST (classify_functions source_tops)))
 Proof
-  strip_tac >> simp[EVERY_MAP, EVERY_MEM] >>
+  strip_tac >>
+  Cases_on `!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1` >>
+  fs[] >>
+  (simp[EVERY_MAP, EVERY_MEM] >>
   qx_gen_tac `e` >> PairCases_on `e` >> strip_tac >>
   imp_res_tac classify_external_blueprint_free >>
   imp_res_tac classify_external_builtin_arity >>
-  drule_all (Q.INST [`mut` |-> `e0`, `nr` |-> `e1`, `rr` |-> `e2`,
+  mp_tac (Q.INST [`mut` |-> `e0`, `nr` |-> `e1`, `rr` |-> `e2`,
     `name` |-> `e3`, `args` |-> `e4`, `ds` |-> `e5`, `ret` |-> `e6`,
-    `fbody` |-> `e7`] dalloca_windows_external_env) >> strip_tac >>
+    `fbody` |-> `e7`] dalloca_windows_external_env) >> (impl_tac >- simp[]) >> strip_tac >>
   simp[package_external_group_def] >> COND_CASES_TAC
   >- (simp[runtime_external_group_windows_def] >>
       fs[EVERY_MEM, combinTheory.o_DEF] >>
@@ -124,7 +133,7 @@ Proof
       gvs[package_external_fn_def, set_external_package_target_def]) >>
   rpt strip_tac >> irule dalloca_windows_compile_expr >> simp[] >>
   fs[package_external_fn_def, set_external_package_target_def, EVERY_MEM] >>
-  metis_tac[group_spec_default_mem]
+  metis_tac[group_spec_default_mem])
 QED
 
 Theorem dalloca_windows_packaged_internals:
@@ -143,9 +152,12 @@ Theorem dalloca_windows_packaged_internals:
     (MAP (set_internal_package_target target o package_internal_fn source_tops tr keys ctor_mode ilen)
       (order_internals order (FST (SND (classify_functions source_tops)))))
 Proof
-  strip_tac >> simp[EVERY_MAP, EVERY_MEM, combinTheory.o_DEF, MEM_order_internals] >>
+  strip_tac >>
+  Cases_on `!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1` >>
+  fs[] >>
+  (simp[EVERY_MAP, EVERY_MEM, combinTheory.o_DEF, MEM_order_internals] >>
   qx_gen_tac `e` >> PairCases_on `e` >> strip_tac >>
-  drule_all classify_internal_blueprint_free >> strip_tac >>
+  TRY (drule_all classify_internal_blueprint_free >> strip_tac) >>
   imp_res_tac classify_internal_builtin_arity >>
   imp_res_tac build_compile_env_blueprint_free >>
   imp_res_tac build_compile_env_builtin_arity >>
@@ -154,7 +166,7 @@ Proof
   rpt strip_tac >> irule dalloca_windows_packaged_stmts >> simp[] >>
   qexists_tac `build_compile_env source_tops Internal e0 e3 e4 e6 e7 tr` >>
   simp[update_cenv_nonreentrant_def] >>
-  metis_tac[build_compile_env_blueprint_free, build_compile_env_builtin_arity]
+  metis_tac[build_compile_env_blueprint_free, build_compile_env_builtin_arity])
 QED
 
 Theorem dalloca_windows_packaged_fallback[local]:
@@ -171,7 +183,9 @@ Theorem dalloca_windows_packaged_fallback[local]:
        (compile_fallback_body ce pay nr key ut vw fbody rt))
 Proof
   strip_tac >>
-  drule runtime_blueprint_free_internal >> strip_tac >>
+  Cases_on `!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1` >>
+  fs[] >>
+  (TRY (drule runtime_blueprint_free_internal >> strip_tac) >>
   Cases_on `FST (SND (SND (classify_functions source_tops)))`
   >- simp[package_fallback_fn_def, set_fallback_package_target_def] >>
   rename1 `SOME src` >> PairCases_on `src` >>
@@ -185,7 +199,7 @@ Proof
   qexists_tac `build_compile_env source_tops External src0 src3 src4 src6 src7 tr` >>
   Cases_on `src6 = NoneT` >>
   gvs[update_cenv_ret_abi_def, update_cenv_nonreentrant_def] >>
-  metis_tac[build_compile_env_blueprint_free, build_compile_env_builtin_arity]
+  metis_tac[build_compile_env_blueprint_free, build_compile_env_builtin_arity])
 QED
 
 Theorem run_lowering_dalloca_windows[local]:
