@@ -78,6 +78,7 @@ Theorem for_range_straight_line_mem_edge:
     get_instruction bb s.vs_inst_idx = SOME i /\
     i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
     inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+    (ctx_has_dalloca ctx ==> dalloca_no_wrap i s) /\
     step_inst_base i s = OK u /\
     k = (if i.inst_opcode = GAS then 1 else 0) /\
     t = (u with vs_inst_idx := SUC s.vs_inst_idx) ==>

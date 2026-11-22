@@ -11,7 +11,8 @@ Theorem gas_marked_path_step:
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME i /\
     i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-    (memory ==> inst_mem_below_frontier i s /\ inst_dload_in_section i s) /\
+    (memory ==> inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+      (ctx_has_dalloca ctx ==> dalloca_no_wrap i s)) /\
     step_inst_base i s = OK u /\
     gas_marked_path memory ctx func
       (u with vs_inst_idx := SUC s.vs_inst_idx) n r ==>
@@ -35,7 +36,8 @@ Theorem gas_marked_path_abort:
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME i /\
     i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-    (memory ==> inst_mem_below_frontier i s /\ inst_dload_in_section i s) /\
+    (memory ==> inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+      (ctx_has_dalloca ctx ==> dalloca_no_wrap i s)) /\
     step_inst_base i s = Abort a t ==>
     gas_marked_path memory ctx func s
       (if i.inst_opcode = GAS then 1 else 0) (Abort a t)
@@ -79,7 +81,9 @@ Theorem run_inst_seq_abort_gas_path:
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
-    (memory ==> run_inst_seq_mem_ok code s) /\
+    (memory ==> run_inst_seq_mem_ok code s /\
+      (ctx_has_dalloca ctx ==> !pre i post u. code = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)) /\
     run_inst_seq code s = Abort a t ==>
     ?n j. gas_marked_path memory ctx func s n
       (Abort a (t with vs_inst_idx := j))

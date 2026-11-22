@@ -17,7 +17,9 @@ Theorem storage_copy_seq_path:
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
     EVERY (\i. i.inst_opcode <> GAS) code /\
-    (memory ==> run_inst_seq_mem_ok code s) /\
+    (memory ==> run_inst_seq_mem_ok code s /\
+      (ctx_has_dalloca ctx ==> !pre i post u. code = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)) /\
     run_inst_seq code s = OK t ==>
     gas_marked_path memory ctx func s 0
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code))

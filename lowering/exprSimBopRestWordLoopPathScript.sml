@@ -12,6 +12,7 @@ Theorem rest_word_sequence_marked:
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
              i.inst_opcode <> GAS) code /\
+  EVERY (\i. i.inst_opcode <> DALLOCA) code /\
   (memory ==> run_inst_seq_mem_ok code s) /\
   run_inst_seq code s = OK t ==>
   gas_marked_path memory ctx fn s 0
@@ -109,6 +110,7 @@ Theorem rest_word_block_path:
   ~s.vs_halted /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
              i.inst_opcode <> GAS) code /\
+  EVERY (\i. i.inst_opcode <> DALLOCA) code /\
   (memory ==> run_inst_seq_mem_ok code s) /\
   run_inst_seq code s = OK u /\ ~u.vs_halted /\
   u.vs_current_bb = s.vs_current_bb /\
@@ -425,6 +427,7 @@ Theorem rest_word_body_path:
   run_inst_seq pre s = OK p /\ run_inst_seq loads p = OK q /\
   EVERY (\j. j.inst_opcode <> INVOKE /\ ~is_terminator j.inst_opcode /\
               j.inst_opcode <> GAS) (pre ++ loads) /\
+  EVERY (\i. i.inst_opcode <> DALLOCA) (pre ++ loads) /\
   (memory ==> run_inst_seq_mem_ok pre s /\ run_inst_seq_mem_ok loads p) /\
   q.vs_current_bb = s.vs_current_bb /\ ~q.vs_halted /\
   FLOOKUP q.vs_vars idx = FLOOKUP s.vs_vars idx /\
@@ -495,6 +498,7 @@ Theorem rest_word_body_loaded_path:
   run_inst_seq loads p = OK q /\
   EVERY (\j. j.inst_opcode <> INVOKE /\ ~is_terminator j.inst_opcode /\
               j.inst_opcode <> GAS) loads /\
+  EVERY (\i. i.inst_opcode <> DALLOCA) loads /\
   (memory ==> run_inst_seq_mem_ok loads p) /\
   q.vs_current_bb = p.vs_current_bb /\ ~q.vs_halted /\
   FLOOKUP q.vs_vars idx = FLOOKUP p.vs_vars idx /\
