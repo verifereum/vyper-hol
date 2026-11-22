@@ -751,7 +751,11 @@ Theorem gas_mem_path_abort_any[local]:
     step_inst_base i s = Abort a t ==>
     gas_marked_path T ctx func s 0 (Abort a t)
 Proof
-  rpt strip_tac >> simp[gas_marked_path_def] >>
+  rpt strip_tac >>
+  `i.inst_opcode <> DALLOCA` by
+    (strip_tac >> qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[step_inst_base_opcode_eqs, AllCaseEqs()]) >>
+  simp[gas_marked_path_def] >>
   irule (cj 3 gas_path_mem_rules) >> simp[exit_result_def] >>
   `step_inst 0 ctx i s = Abort a t` by simp[step_inst_non_invoke] >>
   simp[gas_path_mem_edge_def] >> qexists_tac `0` >>

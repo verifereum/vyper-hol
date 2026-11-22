@@ -330,6 +330,98 @@ Proof
   Cases_on `i.inst_opcode = GAS` >> simp[]
 QED
 
+Theorem sha_origin_abort_edge[local]:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+  i.inst_opcode <> GAS /\ inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  ptr_inst_ok D lo 0 ctx fn G tn i s /\ step_inst_base i s = Abort a t ==>
+  gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (Abort a t,G,tn)
+Proof
+  strip_tac >>
+  `i.inst_opcode <> DALLOCA` by
+    (strip_tac >> qpat_x_assum `step_inst_base i s = Abort a t` mp_tac >>
+     pure_once_rewrite_tac[step_inst_base_def] >>
+     asm_rewrite_tac[opcode_case_def] >> simp[AllCaseEqs()]) >>
+  `step_inst 0 ctx i s = Abort a t` by simp[step_inst_non_invoke] >>
+  rewrite_tac[gas_origin_ptr_edge_def] >> conj_tac
+  >- (rewrite_tac[gas_origin_edge_def] >> conj_tac >- simp[] >>
+      qexistsl_tac [`0`, `bb`, `i`, `Abort a t`] >>
+      simp[gas_events_step_def, mem_safe_step_non_invoke, exit_result_def]) >>
+  rewrite_tac[gas_path_ptr_edge_def] >> simp[] >>
+  qexists_tac `0` >>
+  simp[gas_count_step_def, ptr_safe_step_def, exit_result_def]
+QED
+
+Theorem sha_zero_origin_abort:
+  !code s t a G tn G' tn' ctx fn bb.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+      ~is_terminator i.inst_opcode) code /\
+    run_inst_seq_mem_ok code s /\
+    (ptrDiscipline$ctx_has_dalloca ctx ==>
+      !pre i post u. code = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==>
+        unitTransformDefs$dalloca_no_wrap i u) /\
+    inst_seq_ptr D lo ctx fn PG G tn code s G' tn' /\
+    run_inst_seq code s = Abort a t ==>
+    ?j. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+      (Abort a (t with vs_inst_idx := j),G',tn')
+Proof
+  Induct >- simp[run_inst_seq_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule instruction_prefix_cursor >> strip_tac >>
+  Cases_on `step_inst_base h s` >>
+  gvs[run_inst_seq_def, inst_seq_ptr_def, run_inst_seq_mem_ok_def]
+  >~ [`step_inst_base h s = OK u`]
+  >- (`step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
+      `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+        metis_tac[step_preserves_halted, step_preserves_control_flow] >>
+      `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
+      `(ctx_has_dalloca ctx ==> dalloca_no_wrap h s)` by
+        (disch_tac >>
+         qpat_assum `ctx_has_dalloca ctx ==> !pre i post v. _` (mp_tac o UNDISCH) >>
+         disch_then (qspecl_then [`[]`, `h`, `code`, `s`] mp_tac) >>
+         simp[run_inst_seq_def]) >>
+      `(ctx_has_dalloca ctx ==>
+        !pre i post v. code = pre ++ i::post /\
+          run_inst_seq pre (u with vs_inst_idx := SUC s.vs_inst_idx) = OK v ==>
+          dalloca_no_wrap i v)` by
+        (rpt disch_tac >> rpt gen_tac >> strip_tac >>
+         `EVERY (\i. ~is_terminator i.inst_opcode) pre` by fs[EVERY_APPEND] >>
+         qpat_x_assum `run_inst_seq pre _ = OK v` mp_tac >>
+         simp[run_inst_seq_inst_idx] >>
+         Cases_on `run_inst_seq pre u` >> simp[exec_result_map_def] >>
+         disch_then (SUBST1_TAC o SYM) >>
+         rename1 `run_inst_seq pre u = OK w` >>
+         qpat_assum `ctx_has_dalloca ctx ==> !pre i post v. h::code = _ /\ _ ==> _`
+           (mp_tac o UNDISCH) >>
+         disch_then (qspecl_then [`h::pre`, `i`, `post`, `w`] mp_tac) >>
+         simp[run_inst_seq_def, unitTransformDefsTheory.dalloca_no_wrap_def,
+              eval_op_inst_idx]) >>
+      first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
+        `t with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+      simp[run_inst_seq_inst_idx, exec_result_map_def] >>
+      disch_then (qspecl_then [`step_prov PG G h u`, `step_taint h s u tn`,
+        `G'`, `tn'`, `ctx`, `fn`, `bb`] mp_tac) >>
+      simp[] >>
+      (impl_tac >-
+        (pure_once_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+         pure_rewrite_tac[listTheory.APPEND] >> first_assum ACCEPT_TAC)) >>
+      strip_tac >> qexists_tac `j` >>
+      `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+        (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+          step_prov PG G h u,step_taint h s u tn)` by
+        (drule_all straight_line_origin_ptr_edge >> simp[]) >>
+      drule (cj 2 gas_origin_ptr_path_rules) >> disch_then drule >> simp[]) >>
+  qexists_tac `t.vs_inst_idx` >> simp[] >>
+  irule (cj 3 gas_origin_ptr_path_rules) >> simp[exit_result_def] >>
+  irule sha_origin_abort_edge >> simp[] >> metis_tac[]
+QED
+
 Theorem run_inst_seq_gas_origin_ptr_path:
   !code s t G tn G' tn' ctx func bb.
     ~s.vs_halted /\
@@ -360,10 +452,36 @@ Proof
   `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
     metis_tac[step_preserves_halted, step_preserves_control_flow] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
-  first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
-    `t with vs_inst_idx := SUC s.vs_inst_idx`, `step_prov PG G h u`,
-    `step_taint h s u tn`, `G'`, `tn'`, `ctx`, `func`, `bb`] mp_tac) >>
-  simp[run_inst_seq_inst_idx, exec_result_map_def] >> strip_tac >>
+  `(ctx_has_dalloca ctx ==> dalloca_no_wrap h s)` by
+    (disch_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> _` (mp_tac o UNDISCH) >>
+     disch_then (qspecl_then [`[]`, `h`, `code`, `s`] mp_tac) >>
+     simp[run_inst_seq_def]) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post v. code = pre ++ i::post /\
+      run_inst_seq pre (u with vs_inst_idx := SUC s.vs_inst_idx) = OK v ==>
+      dalloca_no_wrap i v)` by
+    (disch_tac >> rpt gen_tac >> strip_tac >>
+     `EVERY (\i. ~is_terminator i.inst_opcode) pre` by fs[EVERY_APPEND] >>
+     qpat_x_assum `run_inst_seq pre _ = OK v` mp_tac >>
+     simp[run_inst_seq_inst_idx] >>
+     Cases_on `run_inst_seq pre u` >> simp[exec_result_map_def] >>
+     disch_then (SUBST1_TAC o SYM) >>
+     rename1 `run_inst_seq pre u = OK w` >>
+     qpat_assum `ctx_has_dalloca ctx ==> !pre i post v. h::code = _ /\ _ ==> _`
+       (mp_tac o UNDISCH) >>
+     disch_then (qspecl_then [`h::pre`, `i`, `post`, `w`] mp_tac) >>
+     simp[run_inst_seq_def, unitTransformDefsTheory.dalloca_no_wrap_def,
+          eval_op_inst_idx]) >>
+  qpat_assum `!s t G tn G' tn' ctx func bb. _ ==> gas_origin_ptr_path _ _ _ _`
+    (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
+      `t with vs_inst_idx := SUC s.vs_inst_idx`, `step_prov PG G h u`,
+      `step_taint h s u tn`, `G'`, `tn'`, `ctx`, `func`, `bb`] mp_tac) >>
+  simp[run_inst_seq_inst_idx, exec_result_map_def] >>
+  (impl_tac >-
+    (pure_once_rewrite_tac[GSYM APPEND_ASSOC] >>
+     pure_rewrite_tac[APPEND] >> first_assum ACCEPT_TAC)) >>
+  strip_tac >>
   `gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG) (s, G, tn)
     (if h.inst_opcode = GAS then [(func.fn_name, h.inst_id) IN explicit] else [])
     (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
@@ -412,67 +530,6 @@ Proof
   fs[ptr_safe_run_def] >>
   once_rewrite_tac[ptr_safe_block_def] >>
   simp[]
-QED
-
-Theorem sha_origin_abort_edge[local]:
-  ~s.vs_halted /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME i /\
-  i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-  i.inst_opcode <> GAS /\ inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
-  ptr_inst_ok D lo 0 ctx fn G tn i s /\ step_inst_base i s = Abort a t ==>
-  gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (Abort a t,G,tn)
-Proof
-  strip_tac >>
-  `step_inst 0 ctx i s = Abort a t` by simp[step_inst_non_invoke] >>
-  rewrite_tac[gas_origin_ptr_edge_def] >> conj_tac
-  >- (rewrite_tac[gas_origin_edge_def] >> conj_tac >- simp[] >>
-      qexistsl_tac [`0`, `bb`, `i`, `Abort a t`] >>
-      simp[gas_events_step_def, mem_safe_step_non_invoke, exit_result_def]) >>
-  rewrite_tac[gas_path_ptr_edge_def] >> simp[] >>
-  qexists_tac `0` >>
-  simp[gas_count_step_def, ptr_safe_step_def, exit_result_def]
-QED
-
-Theorem sha_zero_origin_abort:
-  !code s t a G tn G' tn' ctx fn bb.
-    ~s.vs_halted /\
-    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
-    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
-      ~is_terminator i.inst_opcode) code /\
-    run_inst_seq_mem_ok code s /\
-    (ptrDiscipline$ctx_has_dalloca ctx ==>
-      !pre i post u. code = pre ++ i::post /\
-        run_inst_seq pre s = OK u ==>
-        unitTransformDefs$dalloca_no_wrap i u) /\
-    inst_seq_ptr D lo ctx fn PG G tn code s G' tn' /\
-    run_inst_seq code s = Abort a t ==>
-    ?j. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-      (Abort a (t with vs_inst_idx := j),G',tn')
-Proof
-  Induct >- simp[run_inst_seq_def] >>
-  rpt gen_tac >> strip_tac >>
-  drule instruction_prefix_cursor >> strip_tac >>
-  Cases_on `step_inst_base h s` >>
-  gvs[run_inst_seq_def, inst_seq_ptr_def, run_inst_seq_mem_ok_def]
-  >~ [`step_inst_base h s = OK u`]
-  >- (`step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
-      `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
-        metis_tac[step_preserves_halted, step_preserves_control_flow] >>
-      `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
-      first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
-        `t with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
-      simp[run_inst_seq_inst_idx, exec_result_map_def] >>
-      disch_then drule_all >> strip_tac >> qexists_tac `j` >>
-      `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-        (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
-          step_prov PG G h u,step_taint h s u tn)` by
-        (drule_all straight_line_origin_ptr_edge >> simp[]) >>
-      drule (cj 2 gas_origin_ptr_path_rules) >> disch_then drule >> simp[]) >>
-  qexists_tac `t.vs_inst_idx` >> simp[] >>
-  irule (cj 3 gas_origin_ptr_path_rules) >> simp[exit_result_def] >>
-  irule sha_origin_abort_edge >> simp[] >> metis_tac[]
 QED
 
 Theorem inst_seq_ptr_invariant:

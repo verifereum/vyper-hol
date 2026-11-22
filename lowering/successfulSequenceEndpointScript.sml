@@ -31,8 +31,11 @@ Proof
   strip_tac >> gen_tac >>
   qspecl_then [`xs`, `s`, `fuel`, `ctx`, `fn`, `bb`] mp_tac mem_safe_run_inst_seq >>
   asm_rewrite_tac[] >>
-  (impl_tac >- (fs[IS_PREFIX_APPEND] >>
-    pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> metis_tac[])) >>
+  (impl_tac >-
+    (conj_tac
+     >- (fs[IS_PREFIX_APPEND] >>
+         pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> metis_tac[])
+     >> gvs[] >> first_assum ACCEPT_TAC)) >>
   disch_then (irule o CONJUNCT1) >> qexists_tac `t` >> gvs[]
 QED
 
