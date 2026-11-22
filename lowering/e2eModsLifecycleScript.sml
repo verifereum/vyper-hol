@@ -7,7 +7,7 @@ Ancestors
   vyperTypeContractSoundness vyperTypeDeploymentMachine
   vyperTypeInitialState vyperTypeInvariants vyperDeployConstantsFoldMods
   vfmState vfmExecution vfmRunCall vfmTotalBalance callTrace
-  alist finite_map
+  e2eCodeFrame vyperLinkedRuntimeImmutables alist finite_map
 
 Definition call_ready_mods_def:
   call_ready_mods mods exps runtime_bc am a <=>
@@ -145,5 +145,67 @@ Proof
                    (SOME (MAP SND (call_trace es))) gs am tx mods exps)`,
                 `am`, `deploy_bc`, `es`, `gs`, `SOME (MAP SND (call_trace es))`,
                 `r`, `rqs`] >>
+  gvs[]
+QED
+
+(* Ownership depends on the layout and target, which the call preserves. *)
+Triviality call_preserves_linked_ownership:
+  source_typing_ok_mods mods exps am tx /\
+  am'.layouts = am.layouts ==>
+  linked_state_ownership_ok (next_source_machine am' es').layouts tx.target
+    mods exps
+Proof
+  simp[source_typing_ok_mods_def] >> metis_tac[]
+QED
+
+Theorem call_preserves_call_ready_mods:
+  call_ready_mods mods exps runtime_bc am tx.target /\ call_tx_well_typed tx /\
+  runtime_bc <> [] /\
+  call_state_rel_mods mods exps runtime_bc am tx es /\ LENGTH es.contexts = 1 /\
+  balance_bounded (2 ** 256 - 1) es /\
+  run_call es = SOME (r, es') /\ ~MEM tx.target es'.rollback.toDelete /\
+  call_external orc gobs am tx = (res, am', rqs) ==>
+  call_ready_mods mods exps runtime_bc (next_source_machine am' es') tx.target
+Proof
+  strip_tac >>
+  `source_typing_ok_mods mods exps am tx /\
+   source_deployment_rel_mods mods exps am tx` by
+    fs[call_ready_mods_def] >>
+  `am'.immutables = am.immutables` by
+    (irule call_external_runtime_mods_preserves_immutables >>
+     fs[source_typing_ok_mods_def, source_deployment_rel_mods_def] >>
+     metis_tac[]) >>
+  drule call_external_static_fields >> strip_tac >>
+  `?ctxt rb rest mr.
+     es.contexts = (ctxt, rb) :: rest /\ wf_state es /\
+     ctxt.msgParams.outputTo = Memory mr /\
+     installed_code_rel_mods mods runtime_bc (account_immutables am tx.target)
+       ctxt.msgParams.code /\
+     (lookup_account tx.target es.rollback.accounts).code =
+       ctxt.msgParams.code` by
+    (fs[call_state_rel_mods_def, evm_state_ok_def] >> metis_tac[]) >>
+  `accounts_well_typed es'.rollback.accounts` by
+    (irule run_call_accounts_well_typed >> goal_assum $ drule_at Any >> simp[]) >>
+  `(lookup_account tx.target es'.rollback.accounts).code =
+   (lookup_account tx.target es.rollback.accounts).code` by
+    (irule run_call_preserves_installed_code >>
+     gvs[installed_code_rel_mods_def] >> metis_tac[]) >>
+  `machine_well_typed (next_source_machine am' es')` by
+    (irule next_source_machine_well_typed >>
+     fs[source_typing_ok_mods_def, machine_well_typed_def]) >>
+  simp[call_ready_mods_def] >> conj_tac
+  >- (gvs[lookup_account_process_deletions] >> fs[account_immutables_def]) >>
+  qx_gen_tac `tx2` >> strip_tac >>
+  `source_typing_ok_mods mods exps am tx2 /\
+   source_deployment_rel_mods mods exps am tx2` by
+    fs[call_ready_mods_def] >>
+  `linked_state_ownership_ok (next_source_machine am' es').layouts
+     tx2.target mods exps` by
+    (irule call_preserves_linked_ownership >> metis_tac[]) >>
+  `layouts_agree_mods mods exps (next_source_machine am' es') tx2` by
+    metis_tac[layouts_agree_mods_cong, next_source_machine_fields,
+              source_deployment_rel_mods_def] >>
+  fs[source_typing_ok_mods_def, source_deployment_rel_mods_def,
+     account_immutables_def] >>
   gvs[]
 QED

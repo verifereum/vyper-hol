@@ -19,12 +19,16 @@ val code = ``\cx. get_module_code cx = M /\
 val iterator_writes = ``\it. case it of
     Array e => expr_writes_ok G e
   | Range lo hi => expr_writes_ok G lo /\ expr_writes_ok G hi``;
-val mutations = ``\(addr:address). !cx target s pl t.
-    cx.txn.target = addr /\ G target /\
-    eval_target_place cx target s = (INL pl,t) /\ ^cell s /\ ^cell t ==>
+val guarded_place = ``G target /\
+  eval_target_place cx target s = (INL pl,t) /\ ^cell s /\ ^cell t``;
+fun mutations_when guard = ``\(addr:address). !cx target s pl t.
+    ^guard ==>
     (!v. state_rel_frame ^observation (write_place cx pl v)) /\
     (!v. state_rel_frame ^observation (append_place cx pl v)) /\
     state_rel_frame ^observation (pop_place cx pl)``;
+val mutations = mutations_when ``cx.txn.target = addr /\ ^guarded_place``;
+val code_mutations = mutations_when
+  ``get_module_code cx = M /\ cx.txn.target = addr /\ ^guarded_place``;
 val live_callables = ``
   !sid fn ts mut nr args ds rt b.
     P (sid,fn) /\ M sid = SOME ts /\
@@ -93,7 +97,7 @@ val LIVE_TRANSITIVITY =
   simp[Abbr `R`];
 val LIVE_TARGET =
   conj_tac >- LIVE_IH >> BETA_TAC >> rpt strip_tac >>
-  qpat_assum `!cx target s pl t. _ /\ _ /\ eval_target_place cx target s = _ /\ _ ==> _`
+  qpat_assum `!cx target s pl t. _ /\ _ /\ _ /\ eval_target_place cx target s = _ /\ _ ==> _`
     (drule_at_then (Pat `eval_target_place _ _ _ = _`) mp_tac) >>
   simp[] >> strip_tac;
 val LIVE_STEP = IF (MATCH_MP_TAC observation_target_bind) LIVE_TARGET
@@ -132,8 +136,7 @@ fun LIVE_EXPR_CHUNK (g as (_,w)) =
       else LIVE_ATOMIC g
   | _ => LIVE_ATOMIC g;
 
-Theorem live_guarded_observation_mutual[local]:
-  ^live_callables /\ ^mutations addr ==>
+val mutual_frames = ``
   (!cx s. ^code cx /\ EVERY P (int_calls_stmt s) /\ stmt_writes_ok G s ==>
      state_rel_frame ^observation (eval_stmt cx s)) /\
   (!cx ss. ^code cx /\ EVERY P (int_calls_stmts ss) /\ stmts_writes_ok G ss ==>
@@ -155,7 +158,10 @@ Theorem live_guarded_observation_mutual[local]:
      state_rel_frame ^observation (assign_tuple_targets cx g v)) /\
   (!cx gs vs. ^code cx /\ EVERY P (int_calls_atargets gs) /\
               EVERY (atarget_writes_ok G) gs ==>
-     state_rel_frame ^observation (assign_tuple_target_list cx gs vs))
+     state_rel_frame ^observation (assign_tuple_target_list cx gs vs))``;
+
+Theorem live_guarded_observation_mutual_code[local]:
+  ^live_callables /\ ^code_mutations addr ==> ^mutual_frames
 Proof
   BETA_TAC >> strip_tac >> ho_match_mp_tac evaluate_ind >>
   rpt conj_tac >> rpt gen_tac >>
@@ -178,7 +184,7 @@ Proof
   LIVE_SIMPLE
 QED
 
-Resume live_guarded_observation_mutual[builtin]:
+Resume live_guarded_observation_mutual_code[builtin]:
   LIVE_CASE
   >- (gvs[type_check_def, assert_def, check_def, return_def, raise_def] >>
       Cases_on `es` >> gvs[builtin_args_length_ok_def, int_calls_expr_def,
@@ -188,7 +194,7 @@ Resume live_guarded_observation_mutual[builtin]:
       DISJ_IMP_THM, FORALL_AND_THM, AllCaseEqs()] >> LIVE_IH
 QED
 
-Resume live_guarded_observation_mutual[create]:
+Resume live_guarded_observation_mutual_code[create]:
   LIVE_CASE >>
   all_tac >>~- ([`state_rel_frame _ (eval_create _ _ _ _ _ _ _)`], LIVE_ATOMIC) >>
   rename1 `state_rel_frame _ (eval_exprs cx (create_operand_order kind has_salt es))` >>
@@ -202,7 +208,7 @@ Resume live_guarded_observation_mutual[create]:
   LIVE_IH
 QED
 
-Resume live_guarded_observation_mutual[rawlog]:
+Resume live_guarded_observation_mutual_code[rawlog]:
   simp_tac bool_ss [Once evaluate_def] >>
   MATCH_MP_TAC state_rel_frame_bind_guarded >> conj_tac >- LIVE_TRANSITIVITY >>
   conj_tac >- LIVE_IH >> rpt gen_tac >> strip_tac >>
@@ -214,7 +220,7 @@ Resume live_guarded_observation_mutual[rawlog]:
   Cases_on `dest_BytesV (EL 1 v)` >> gvs[return_def, raise_def] >> fs[]
 QED
 
-Resume live_guarded_observation_mutual[intcall]:
+Resume live_guarded_observation_mutual_code[intcall]:
   simp_tac bool_ss [Once evaluate_def] >>
   ntac 25 LIVE_STEP >> rpt gen_tac >> strip_tac >>
   simp_tac bool_ss [LET_THM, FST, SND] >>
@@ -256,7 +262,58 @@ Resume live_guarded_observation_mutual[intcall]:
   drule release_nonreentrant_lock_immutables >> simp[]
 QED
 
-Finalise live_guarded_observation_mutual[local]
+Finalise live_guarded_observation_mutual_code[local]
+
+Theorem live_guarded_observation_mutual[local]:
+  ^live_callables /\ ^mutations addr ==>
+  (!cx s. ^code cx /\ EVERY P (int_calls_stmt s) /\ stmt_writes_ok G s ==>
+     state_rel_frame ^observation (eval_stmt cx s)) /\
+  (!cx ss. ^code cx /\ EVERY P (int_calls_stmts ss) /\ stmts_writes_ok G ss ==>
+     state_rel_frame ^observation (eval_stmts cx ss)) /\
+  (!cx it. ^code cx /\ EVERY P (int_calls_iterator it) /\ ^iterator_writes it ==>
+     state_rel_frame ^observation (eval_iterator cx it)) /\
+  (!cx tyv nm bod vs. ^code cx /\ EVERY P (int_calls_stmts bod) /\
+                     stmts_writes_ok G bod ==>
+     state_rel_frame ^observation (eval_for cx tyv nm bod vs)) /\
+  (!cx e. ^code cx /\ EVERY P (int_calls_expr e) /\ expr_writes_ok G e ==>
+     state_rel_frame ^observation (eval_expr cx e)) /\
+  (!cx es. ^code cx /\ EVERY P (int_calls_exprs es) /\ EVERY (expr_writes_ok G) es ==>
+     state_rel_frame ^observation (eval_exprs cx es)) /\
+  (!cx t. ^code cx /\ EVERY P (int_calls_target t) /\ target_writes_ok G t ==>
+     state_rel_frame ^observation (eval_base_place cx t)) /\
+  (!cx t. ^code cx /\ EVERY P (int_calls_target t) /\ target_writes_ok G t ==>
+     state_rel_frame ^observation (eval_target_place cx t)) /\
+  (!cx g v. ^code cx /\ EVERY P (int_calls_atarget g) /\ atarget_writes_ok G g ==>
+     state_rel_frame ^observation (assign_tuple_targets cx g v)) /\
+  (!cx gs vs. ^code cx /\ EVERY P (int_calls_atargets gs) /\
+              EVERY (atarget_writes_ok G) gs ==>
+     state_rel_frame ^observation (assign_tuple_target_list cx gs vs))
+Proof
+  BETA_TAC >> strip_tac >>
+  mp_tac (BETA_RULE live_guarded_observation_mutual_code) >>
+  impl_tac >- (conj_tac >- first_assum ACCEPT_TAC >>
+    rpt gen_tac >> strip_tac >>
+    qpat_assum `!cx target s pl t. _ ==> _` (drule_all_then ACCEPT_TAC)) >>
+  disch_then ACCEPT_TAC
+QED
+
+val list_frames = ``
+  (!cx es. ^code cx /\ EVERY P (int_calls_exprs es) /\ EVERY (expr_writes_ok G) es ==>
+     state_rel_frame ^observation (eval_exprs cx es)) /\
+  (!cx ss. ^code cx /\ EVERY P (int_calls_stmts ss) /\ stmts_writes_ok G ss ==>
+     state_rel_frame ^observation (eval_stmts cx ss))``;
+
+fun LIVE_LIST_FRAMES th =
+  BETA_TAC >> strip_tac >>
+  mp_tac (BETA_RULE th) >>
+  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >> conj_tac >> first_assum ACCEPT_TAC;
+
+Theorem live_guarded_list_observation_frames_code:
+  ^live_callables /\ ^code_mutations addr ==> ^list_frames
+Proof
+  LIVE_LIST_FRAMES live_guarded_observation_mutual_code
+QED
 
 Theorem live_guarded_list_observation_frames:
   ^live_callables /\ ^mutations addr ==>
@@ -265,8 +322,5 @@ Theorem live_guarded_list_observation_frames:
   (!cx ss. ^code cx /\ EVERY P (int_calls_stmts ss) /\ stmts_writes_ok G ss ==>
      state_rel_frame ^observation (eval_stmts cx ss))
 Proof
-  BETA_TAC >> strip_tac >>
-  mp_tac (BETA_RULE live_guarded_observation_mutual) >>
-  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
-  strip_tac >> conj_tac >> first_assum ACCEPT_TAC
+  LIVE_LIST_FRAMES live_guarded_observation_mutual
 QED
