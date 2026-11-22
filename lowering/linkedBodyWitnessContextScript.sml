@@ -168,7 +168,10 @@ Proof
   simp[stmts_exprs_ok_entry_target] >>
   conj_tac
   >- (irule contract_inv_build_compile_env_unit >> simp[]) >>
-  simp[module_body_inv_def, build_compile_env_unit_def, pairTheory.ELIM_UNCURRY]
+  simp[module_body_inv_def, build_compile_env_unit_def, pairTheory.ELIM_UNCURRY] >>
+  qpat_assum `subst_consts_stmts_mods _ ss = ss`
+    (fn subst => qpat_assum `type_stmts _ _ _ = SOME env'`
+      (ACCEPT_TAC o PURE_REWRITE_RULE [subst]))
 QED
 
 fun static_gate src cx vis args ret body tops =
