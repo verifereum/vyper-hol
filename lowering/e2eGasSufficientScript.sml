@@ -532,7 +532,12 @@ Proof
           `D` |-> `cx_dead (H : (bool # bytes32 # type_value) list # num list)
             (initial_evaluation_context am.sources am.layouts td NONE)`]
         e2eCorrectnessTheory.selected_raw_memory) >>
-     impl_tac >- (simp[] >> strip_tac >> res_tac >> simp[]) >>
+     impl_tac >-
+       (simp[] >> strip_tac >>
+        qpat_assum `ctx_has_dalloca unit.cu_context ==>
+          unit_alloca_budget _ + 32 * ctx_dload_count _ <= w2n fmp /\ _`
+          (mp_tac o CONJUNCT1 o UNDISCH) >>
+        simp[arithmeticTheory.ADD_AC]) >>
      simp[]) >>
   `mem_inv dload_offset_ok unit.cu_context vi` by
     (irule lower_vyper_runtime_unit_dload_offset_ok >> metis_tac[]) >>
