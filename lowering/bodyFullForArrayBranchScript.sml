@@ -302,6 +302,7 @@ Proof
      `well_typed_expr env (TopLevelName (expr_type e) (nid0,nid1))` by
        (qpat_assum `e = TopLevelName _ _` (fn th => REWRITE_TAC [GSYM th]) >>
         first_assum ACCEPT_TAC) >>
+     PURE_REWRITE_TAC [pairTheory.FST] >>
      drule_all_then ACCEPT_TAC bodyTypedTargetScopeTheory.body_inv_toplevel_read_main) >>
   `!nid. e = TopLevelName (expr_type e) nid ==>
      IS_SOME (supported_immutable_type tops nid)` by
