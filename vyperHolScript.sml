@@ -82,6 +82,8 @@ Ancestors
   e2eGasSufficient e2eGasSufficientTop
   (* deployment: the constructor frame and deploy correctness *)
   e2eDeployCorrectness
+  (* linked-module boundaries for runtime and deployment *)
+  e2eModsDefs[qualified,ignore_grammar] e2eDeployModsDefs[qualified,ignore_grammar]
   (* body induction: custom-error raise and assert pieces *)
   stmtSimCustomErrorRevert
   (* codegen: its assembly is label-disciplined (the asm optimizer's premise) *)
