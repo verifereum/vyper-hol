@@ -293,6 +293,123 @@ Proof
   metis_tac[lower_event_allocates_def, lower_event_consumes_def, MEM]
 QED
 
+(* At a live DALLOCA, any prior Blueprint reservation has already reached
+   its consuming CREATE. A prefix still in the window cannot reach a
+   second DALLOCA. *)
+Theorem lower_budget_blueprint_recorded_window:
+  lower_budget_path F (D,lo,explicit,ctx) root h marks last /\
+  active_inst last.bp_fn current last.bp_state /\ current.inst_opcode = DALLOCA /\
+  n < LENGTH h /\ EL n h = BudgetStep n p i fuel (OK t) q /\
+  ALL_DISTINCT (fn_labels p.bp_fn) /\
+  create_blueprint_dalloca_window p.bp_fn i p.bp_state ==>
+  lower_history_window h last n
+Proof
+  strip_tac >> drule create_blueprint_dalloca_window_parts >> strip_tac >>
+  drule_all lower_budget_path_at_base_step >> strip_tac >>
+  `EVERY (\j. ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE)
+     (i :: middle)` by fs[EVERY_MEM, is_terminator_def] >>
+  `!k. 0 < k /\ k < LENGTH (i :: middle) ==>
+      MEM (EL k (i :: middle)) middle` by
+    (Cases >> simp[] >> metis_tac[EL_MEM]) >>
+  qabbrev_tac `b = n + LENGTH (i :: middle)` >>
+  `n < b` by simp[Abbr `b`] >>
+  `b < LENGTH h` by
+    (CCONTR_TAC >>
+     mp_tac (Q.INST [`steps` |-> `i :: middle`, `effect` |-> `effect`,
+                     `rest` |-> `suffix`] lower_budget_pending_before_effect) >>
+     impl_tac >- (fs[Abbr `b`] >> decide_tac) >> strip_tac >>
+     `current = EL (LENGTH h - n) ((i :: middle) ++ [effect])` by metis_tac[] >>
+     Cases_on `LENGTH h - n = LENGTH (i :: middle)`
+     >- fs[EL_APPEND_EQN, MEM] >>
+     `0 < LENGTH h - n /\ LENGTH h - n < LENGTH (i :: middle)` by
+       (fs[Abbr `b`] >> decide_tac) >>
+     `MEM current middle` by fs[EL_APPEND_EQN] >>
+     fs[EVERY_MEM, MEM]) >>
+  `isPREFIX (i :: middle) (DROP p.bp_state.vs_inst_idx bb.bb_instructions)` by
+    metis_tac[IS_PREFIX_APPEND] >>
+  mp_tac (Q.SPECL [`i :: middle`, `n`, `m`, `p`] lower_budget_run_window) >>
+  (impl_tac >- (fs[Abbr `b`] >> decide_tac)) >> strip_tac >>
+  rename1 `run_inst_seq (i :: middle) p.bp_state = OK ready` >>
+  rename1 `lower_budget_path _ _ _ (TAKE (n + LENGTH (i :: middle)) h) em ep` >>
+  `DROP ep.bp_state.vs_inst_idx bb.bb_instructions = effect :: suffix` by
+    (simp[ADD_COMM, GSYM DROP_DROP_T, DROP_LENGTH_APPEND]) >>
+  `active_inst ep.bp_fn effect ep.bp_state` by
+    (drule DROP_EQ_CONS >> strip_tac >> irule lookup_instruction_active >>
+     qexists_tac `bb` >> simp[get_instruction_def]) >>
+  `ALL_DISTINCT (fn_labels ep.bp_fn) /\
+   ~is_terminator effect.inst_opcode /\ effect.inst_opcode <> INVOKE` by
+    fs[MEM, is_terminator_def] >>
+  `lower_budget_path F (D,lo,explicit,ctx) root (TAKE b h) em ep` by
+    simp[Abbr `b`] >>
+  drule_all (Q.INST [`n` |-> `b`, `p` |-> `ep`, `i` |-> `effect`]
+    lower_budget_window_index_next) >> strip_tac >>
+  rename1 `EL b h = BudgetStep b ep effect ef (OK et) eq` >>
+  `step_inst_base effect ready = OK et` by
+    (fs[step_inst_inst_idx_indep, exec_result_map_def] >> metis_tac[]) >>
+  drule_all create_blueprint_dalloca_chunk_geometry >> strip_tac >>
+  `eval_operands effect.inst_operands ep.bp_state = SOME ws` by
+    fs[eval_ops_inst_idx] >>
+  `lower_alloc_record h n p.bp_fn i p.bp_state op sz t` by
+    (simp[lower_alloc_record_def] >>
+     qexistsl_tac [`p`, `fuel`, `q`] >>
+     asm_rewrite_tac[] >> decide_tac) >>
+  pure_rewrite_tac[lower_history_window_def] >> BETA_TAC >>
+  qexists_tac `b` >> rpt conj_tac
+  >- decide_tac
+  >- decide_tac
+  >- (strip_tac >> conj_tac >- fs[lower_event_consumes_def, MEM] >>
+      qexistsl_tac [`p.bp_fn`, `i`, `p.bp_state`, `op`, `sz`, `t`,
+                    `p`, `fuel`, `q`, `ep`, `effect`, `ef`, `et`, `eq`, `ws`] >>
+      asm_rewrite_tac[] >> metis_tac[]) >>
+  TRY (decide_tac >> NO_TAC) >>
+  TRY (qexistsl_tac [`p.bp_fn`, `i`, `p.bp_state`, `op`, `sz`, `t`] >>
+       first_assum ACCEPT_TAC >> NO_TAC) >>
+  rpt strip_tac >>
+  `0 < j - n /\ j - n < LENGTH (i :: middle) /\ n + (j - n) = j` by
+    fs[Abbr `b`] >>
+  qpat_x_assum `!j. j < LENGTH (i :: middle) ==> _`
+    (qspec_then `j - n` mp_tac) >> simp[] >> strip_tac >>
+  `MEM (EL (j - n) (i :: middle)) middle` by metis_tac[] >>
+  fs[EVERY_MEM] >> rpt (goal_assum (drule_at Any)) >>
+  metis_tac[lower_event_allocates_def, lower_event_consumes_def, MEM]
+QED
+
+Theorem lower_budget_headroom_history_certificate:
+  root.bp_stack = [] /\ MEM root.bp_fn ctx.ctx_functions /\
+  enters_block root.bp_fn start root.bp_state /\
+  lower_budget_path F (D,lo,explicit,ctx) root h marks q /\
+  LENGTH root.bp_state.vs_call_ctx.cc_calldata < 2 ** 64 /\
+  account_code_lengths_ok root.bp_state.vs_accounts /\
+  outcomes_accounts_typed (SOME root.bp_state.vs_outcomes) /\
+  (!fn. MEM fn ctx.ctx_functions ==> ALL_DISTINCT (fn_labels fn)) /\
+  (!fn i s. MEM fn ctx.ctx_functions /\ active_inst fn i s /\
+    i.inst_opcode = DALLOCA ==>
+      raw_call_dalloca_window fn i s \/ create_copy_dalloca_window fn i s \/
+      create_blueprint_dalloca_window fn i s) /\
+  active_inst q.bp_fn current q.bp_state /\ current.inst_opcode = DALLOCA ==>
+  ?pair. lower_history_pairs h pair /\
+    (!n. n < LENGTH h /\ lower_event_allocates (EL n h) ==> pair n < LENGTH h) /\
+    (!n. n < LENGTH h /\ lower_event_allocates (EL n h) ==>
+      ?fn ai pre op sz post. lower_alloc_record h n fn ai pre op sz post)
+Proof
+  strip_tac >>
+  `!n. n < LENGTH h /\ lower_event_allocates (EL n h) ==>
+       lower_history_window h q n` by
+    (rpt strip_tac >> drule_all lower_budget_alloc_event >> strip_tac >>
+     drule_all lower_budget_path_at_base_step >> strip_tac >>
+     `MEM p.bp_fn ctx.ctx_functions` by metis_tac[lower_budget_path_current_fn_mem] >>
+     `ALL_DISTINCT (fn_labels p.bp_fn)` by metis_tac[] >>
+     `raw_call_dalloca_window p.bp_fn i p.bp_state \/
+       create_copy_dalloca_window p.bp_fn i p.bp_state \/
+       create_blueprint_dalloca_window p.bp_fn i p.bp_state` by metis_tac[]
+     >- metis_tac[lower_budget_raw_call_recorded_window]
+     >- metis_tac[lower_budget_create_copy_recorded_window] >>
+     metis_tac[lower_budget_blueprint_recorded_window]) >>
+  fs[lower_history_window_def] >>
+  drule (BETA_RULE lower_history_pairs_before_allocation) >>
+  metis_tac[]
+QED
+
 Theorem lower_budget_dynamic_history_certificate:
   root.bp_stack = [] /\ MEM root.bp_fn ctx.ctx_functions /\
   enters_block root.bp_fn start root.bp_state /\
