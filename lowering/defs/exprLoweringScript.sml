@@ -3522,6 +3522,13 @@ Definition compile_builtin_dispatch_body_def:
           let (v1, st1) = lower_value compile_expr cenv ty e1 st in
           let (v2, st2) = lower_value compile_expr cenv ty e2 st1 in
           as_stack_val ret_ty (compile_pow_mod256 v1 v2 st2))
+     | NamedConst =>
+         (* A named constant lowers as its value, held in memory: an array is
+            materialised there (Python's lower_List), so the membership arm
+            above loops over it, as Python's lower_Compare does for a name. *)
+         (let (op, st1) = lower_value compile_expr cenv ty (HD args) st in
+          as_ptr_val ret_ty LocMemory
+            ((case op of Label _ => Lit 0w | _ => op), st1))
      | ECRecover =>
          (let e_hash = HD args in let e_v = EL 1 args in
           let e_r = EL 2 args in let e_s = EL 3 args in

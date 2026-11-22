@@ -50,6 +50,7 @@ QED
 val () = cv_auto_trans origin_retype_def;
 val () = cv_auto_trans expr_origin_key_def;
 val () = cv_auto_trans lookup_origin_pair_def;
+val () = cv_auto_trans membership_operand_def;
 
 val () = cv_auto_trans find_keyword_def;
 fun cv_equation name =
