@@ -371,7 +371,7 @@ Proof
   strip_tac >>
   `assignable_type (type_env tops) ty` by
     (irule supported_place_evaluated_assignable >>
-     metis_tac[supported_value_type_def, finite_mapTheory.SUBMAP_REFL]) >>
+     simp[] >> qexists_tac `tops` >> fs[supported_value_type_def]) >>
   metis_tac[ctor_evaluated_abi_inverse]
 QED
 
@@ -661,7 +661,7 @@ Proof
   strip_tac >>
   `assignable_type (type_env tops) ty` by
     (irule supported_place_evaluated_assignable >>
-     metis_tac[supported_value_type_def, finite_mapTheory.SUBMAP_REFL]) >>
+     simp[] >> qexists_tac `tops` >> fs[supported_value_type_def]) >>
   metis_tac[ctor_evaluated_abi_valid]
 QED
 
@@ -674,7 +674,7 @@ Proof
   strip_tac >>
   `assignable_type (type_env tops) ty` by
     (irule supported_place_evaluated_assignable >>
-     metis_tac[supported_value_type_def, finite_mapTheory.SUBMAP_REFL]) >>
+     simp[] >> qexists_tac `tops` >> fs[supported_value_type_def]) >>
   Cases_on `ty`
   >~ [`BaseT bt`]
   >- (Cases_on `bt` >> Cases_on `v` >> gvs[vyper_to_abi_base_def])

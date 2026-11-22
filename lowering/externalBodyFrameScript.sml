@@ -22,6 +22,7 @@ Ancestors
   vyperTypeEvalSoundness vyperTypeExprSoundness vyperTypeInvariants
   vyperTypeContractFunction vyperTypeContractSoundness vyperTypeContractContext
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeExternalDefaults
+  vyperTypeContractGetter vyperGetter
   vyperTypeInitialState vyperTypeBindArguments
   vyperTypeEvalStoragePreservation vyperTypeStoragePreservation
   vyperStorageLayoutSafety vyperStorageBackend vyperPlaceInvariants
