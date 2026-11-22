@@ -278,32 +278,38 @@ Resume extcall_request_keywords_owned_outcome[cons]:
   PairCases_on `q` >>
   rename1 `compile_ext_call_kwarg _ _ _ _ _ sa = ((op,dt),sm)` >>
   `gas_shadow_compiles (compile_ext_call_kwarg compile_expr cenv rt k e)
-     (compile_ext_call_kwarg compile_expr cenv rt k (gas_shadow_expr e))` by
-    (mp_tac (Q.INST [`return_type` |-> `rt`, `sh` |-> `T`]
-      (MATCH_MP gas_shadow_compiles_ext_call_kwarg (cj 1 gas_shadow_compile_expr))) >> simp[]) >>
-  Cases_on `compile_ext_call_kwarg compile_expr cenv rt k (gas_shadow_expr e) shadow_sa` >>
+     (compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt k (gas_shadow_expr e))` by
+    (irule (SIMP_RULE bool_ss []
+      (Q.INST [`sh` |-> `T`] gas_shadow_compiles_ext_call_kwarg_env)) >>
+     simp[cj 1 gas_shadow_compile_expr_env]) >>
+  Cases_on `compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt k (gas_shadow_expr e) shadow_sa` >>
   rename1 `compile_ext_call_kwarg _ _ _ _ (gas_shadow_expr e) shadow_sa = (z,shadow_sm)` >>
   qpat_x_assum `gas_shadow_compiles _ _` (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
   disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >>
   simp[] >> strip_tac >> gvs[] >>
   `gas_shadow_compiles (compile_ext_call_kwargs compile_expr cenv rt ks xs)
-    (compile_ext_call_kwargs compile_expr cenv rt ks (MAP gas_shadow_expr xs))` by
-    (mp_tac (Q.INST [`return_type` |-> `rt`, `sh` |-> `T`]
-      (MATCH_MP gas_shadow_compiles_ext_call_kwargs (cj 1 gas_shadow_compile_expr))) >> simp[]) >>
+    (compile_ext_call_kwargs compile_expr (gas_shadow_env T cenv) rt ks (MAP gas_shadow_expr xs))` by
+    (irule (SIMP_RULE bool_ss []
+      (Q.INST [`sh` |-> `T`] gas_shadow_compiles_ext_call_kwargs_env)) >>
+     simp[cj 1 gas_shadow_compile_expr_env]) >>
   Cases_on `compile_ext_call_kwargs compile_expr cenv rt ks xs sm` >>
   PairCases_on `q` >>
   rename1 `compile_ext_call_kwargs _ _ rt ks xs sm = ((vot,got,dopt_t),sb_t)` >>
-  Cases_on `compile_ext_call_kwargs compile_expr cenv rt ks (MAP gas_shadow_expr xs) shadow_sm` >>
+  Cases_on `compile_ext_call_kwargs compile_expr (gas_shadow_env T cenv) rt ks (MAP gas_shadow_expr xs) shadow_sm` >>
   rename1 `compile_ext_call_kwargs _ _ rt ks (MAP gas_shadow_expr xs) shadow_sm = (z,shadow_sb_t)` >>
   qpat_x_assum `gas_shadow_compiles _ _` (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
   disch_then (qspecl_then [`sm`,`shadow_sm`] mp_tac) >>
   simp[] >> strip_tac >> gvs[compile_ext_call_kwargs_def, comp_bind_def, comp_return_def] >>
   `cs_extends sa sm /\ cs_extends shadow_sa shadow_sm` by
-    (conj_tac >> irule (cj 1 (MATCH_MP first_emission_ext_call_kwarg
-                                        (cj 1 first_emission_compile_expr))) >> metis_tac[]) >>
+    (conj_tac >>
+     (let val extends = cj 1 (MATCH_MP first_emission_ext_call_kwarg
+                                      (cj 1 first_emission_compile_expr))
+      in first_assum (mp_then Any ACCEPT_TAC extends) end)) >>
   `cs_extends sm sb /\ cs_extends shadow_sm shadow_sb` by
-    (conj_tac >> irule (cj 1 (MATCH_MP first_emission_ext_call_kwargs
-                                        (cj 1 first_emission_compile_expr))) >> metis_tac[]) >>
+    (conj_tac >>
+     (let val extends = cj 1 (MATCH_MP first_emission_ext_call_kwargs
+                                      (cj 1 first_emission_compile_expr))
+      in first_assum (mp_then Any ACCEPT_TAC extends) end)) >>
   `fn_has_code sa sm func /\ fn_has_code sm sb func /\
    fn_has_code shadow_sa shadow_sm shadow_func /\ fn_has_code shadow_sm shadow_sb shadow_func` by
     metis_tac[fn_has_code_split] >>
