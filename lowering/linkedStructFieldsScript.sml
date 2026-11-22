@@ -1,14 +1,16 @@
 Theory linkedStructFields
 Ancestors
   linkedNsidProps structFieldsProps compileUnit compileEnv vyperTypeContract
-  vyperContext vyperAST finite_map list pair
+  vyperContext vyperAST loweringStateRelDefs typedCopyMetadata finite_map list pair
 
 Triviality linked_type_key_member:
-  MEM (src,tops) mods /\ MEM (StructDecl name args) tops ==>
-  MEM (src,name) (contract_keys type_def_keys_toplevel mods)
+  MEM (StructDecl name args) tops ==>
+  MEM (src,name) (FLAT (MAP (type_def_keys_toplevel src) tops))
 Proof
-  simp[contract_keys_def, MEM_FLAT, MEM_MAP, PULL_EXISTS, EXISTS_PROD] >>
-  metis_tac[struct_decl_type_key_member]
+  strip_tac >> simp[MEM_FLAT] >>
+  qexists_tac `type_def_keys_toplevel src (StructDecl name args)` >>
+  simp[MEM_MAP, type_def_keys_toplevel_def] >>
+  qexists_tac `StructDecl name args` >> simp[type_def_keys_toplevel_def]
 QED
 
 Triviality linked_struct_name_no_dot:
@@ -16,8 +18,12 @@ Triviality linked_struct_name_no_dot:
   MEM (StructDecl name args) tops ==>
   ~MEM #"." name
 Proof
-  simp[contract_namespaces_ok_def, EVERY_MEM, FORALL_PROD] >>
-  metis_tac[]
+  simp[contract_namespaces_ok_def] >> strip_tac >>
+  qpat_x_assum `EVERY (\(s,ts). EVERY _ ts) mods` mp_tac >>
+  simp[Once EVERY_MEM] >>
+  disch_then (qspec_then `(src,tops)` mp_tac) >> simp[] >>
+  simp[Once EVERY_MEM] >>
+  disch_then (qspec_then `StructDecl name args` mp_tac) >> simp[]
 QED
 
 Triviality type_env_for_module_key_src:
@@ -38,7 +44,7 @@ Proof
   Induct >> simp[] >> Cases >>
   simp[type_env_for_module_def, type_def_keys_toplevel_def, FLOOKUP_UPDATE,
        ALL_DISTINCT_APPEND] >>
-  rw[] >> gvs[] >> metis_tac[struct_decl_type_key_member]
+  rw[] >> gvs[] >> metis_tac[linked_type_key_member]
 QED
 
 Triviality linked_struct_type_origin:
@@ -47,9 +53,13 @@ Triviality linked_struct_type_origin:
     ?tops. MEM (src,tops) mods /\ MEM (StructDecl name args) tops
 Proof
   Induct >> simp[type_env_all_modules_def] >>
-  PairCases_on `h` >> simp[type_env_all_modules_def, FLOOKUP_FUNION] >>
+  gen_tac >> PairCases_on `h` >> simp[type_env_all_modules_def, FLOOKUP_FUNION] >>
   rpt gen_tac >> Cases_on `FLOOKUP (type_env_for_module h0 h1) (src,name)` >>
-  simp[] >> metis_tac[type_env_for_module_struct_mem]
+  simp[] >> strip_tac
+  >- (first_x_assum drule >> disch_then (qx_choose_then `tops` strip_assume_tac) >>
+      qexists_tac `tops` >> simp[]) >>
+  gvs[] >> drule type_env_for_module_struct_mem >> simp[] >> strip_tac >>
+  qexists_tac `h1` >> gvs[]
 QED
 
 Triviality linked_struct_type_lookup:
@@ -60,7 +70,7 @@ Triviality linked_struct_type_lookup:
     FLOOKUP (type_env_all_modules mods) (src,name) = SOME (StructArgs args)
 Proof
   Induct >> simp[] >>
-  PairCases_on `h` >>
+  gen_tac >> PairCases_on `h` >>
   simp[type_env_all_modules_def, FLOOKUP_FUNION, contract_keys_def,
        ALL_DISTINCT_APPEND] >>
   rpt strip_tac >> gvs[]
@@ -79,8 +89,8 @@ Triviality struct_fields_map_src_origin:
       fields = build_struct_fields_one tenv args
 Proof
   Induct >> simp[build_struct_fields_map_src_def] >> Cases >>
-  rw[build_struct_fields_map_src_def] >> res_tac >>
-  gvs[FLOOKUP_UPDATE] >> metis_tac[]
+  rw[build_struct_fields_map_src_def] >> first_x_assum drule >> strip_tac >>
+  gvs[FLOOKUP_UPDATE, AllCaseEqs()] >> metis_tac[]
 QED
 
 Triviality struct_fields_map_mods_origin:
@@ -90,7 +100,7 @@ Triviality struct_fields_map_mods_origin:
     ?src tops name args. MEM (src,tops) mods /\ MEM (StructDecl name args) tops /\
       key = nsid_to_string (src,name) /\ fields = build_struct_fields_one tenv args
 Proof
-  Induct >> simp[build_struct_fields_map_mods_def] >> PairCases_on `h` >>
+  Induct >> simp[build_struct_fields_map_mods_def] >> gen_tac >> PairCases_on `h` >>
   rw[build_struct_fields_map_mods_def] >> res_tac >>
   metis_tac[struct_fields_map_src_origin]
 QED
@@ -103,8 +113,8 @@ Triviality struct_fields_map_src_absent:
 Proof
   Induct >> simp[build_struct_fields_map_src_def] >> Cases >>
   rw[build_struct_fields_map_src_def, DISJ_IMP_THM, FORALL_AND_THM] >>
-  first_x_assum (mp_tac o SPECL [``tenv : nsid |-> type_args``, ``src : num option``]) >>
-  simp[FLOOKUP_UPDATE]
+  first_x_assum drule >>
+  disch_then (fn th => simp[th, FLOOKUP_UPDATE])
 QED
 
 Triviality struct_fields_map_mods_absent:
@@ -113,10 +123,12 @@ Triviality struct_fields_map_mods_absent:
        nsid_to_string (src,name) <> key) ==>
     FLOOKUP (build_struct_fields_map_mods tenv mods sf) key = FLOOKUP sf key
 Proof
-  Induct >> simp[build_struct_fields_map_mods_def] >> PairCases_on `h` >>
+  Induct >> simp[build_struct_fields_map_mods_def] >> gen_tac >> PairCases_on `h` >>
   rw[build_struct_fields_map_mods_def] >>
-  first_x_assum (fn th => DEP_REWRITE_TAC [th]) >>
-  simp[struct_fields_map_src_absent] >> metis_tac[]
+  `!src tops name args. MEM (src,tops) mods /\ MEM (StructDecl name args) tops ==>
+       nsid_to_string (src,name) <> key` by metis_tac[] >>
+  first_x_assum drule >> disch_then (fn th => simp[th]) >>
+  irule struct_fields_map_src_absent >> metis_tac[]
 QED
 
 Triviality struct_fields_map_src_lookup:
@@ -126,16 +138,19 @@ Triviality struct_fields_map_src_lookup:
     FLOOKUP (build_struct_fields_map_src tenv src tops sf)
       (nsid_to_string (src,name)) = SOME (build_struct_fields_one tenv args)
 Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  Cases_on `MEM (StructDecl name args) tops`
-  >- (Cases_on `h` >> gvs[ALL_DISTINCT_APPEND, build_struct_fields_map_src_def] >>
+  Induct >> simp[] >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
+  reverse (disch_then (DISJ_CASES_THEN assume_tac))
+  >- (Cases_on `h` >>
+      gvs[ALL_DISTINCT_APPEND, type_def_keys_toplevel_def, build_struct_fields_map_src_def] >>
       first_x_assum irule >> simp[]) >>
-  `h = StructDecl name args` by fs[] >>
   gvs[type_def_keys_toplevel_def, build_struct_fields_map_src_def] >>
-  DEP_REWRITE_TAC [struct_fields_map_src_absent] >> simp[FLOOKUP_UPDATE] >>
-  rpt strip_tac >> Cases_on `src` >>
-  gvs[nsid_to_string_def, APPEND_11] >>
-  metis_tac[struct_decl_type_key_member]
+  `!n a. MEM (StructDecl n a) tops ==>
+      nsid_to_string (src,n) <> nsid_to_string (src,name)` by
+    (rpt strip_tac >>
+     `n = name` by (Cases_on `src` >> fs[nsid_to_string_def, APPEND_11]) >>
+     gvs[] >> metis_tac[linked_type_key_member]) >>
+  drule struct_fields_map_src_absent >> simp[FLOOKUP_UPDATE]
 QED
 
 Triviality struct_fields_map_mods_lookup:
@@ -147,15 +162,16 @@ Triviality struct_fields_map_mods_lookup:
     FLOOKUP (build_struct_fields_map_mods tenv mods sf) (nsid_to_string (src,name)) =
       SOME (build_struct_fields_one tenv args)
 Proof
-  Induct >> simp[] >> PairCases_on `h` >>
+  Induct >> simp[] >> gen_tac >> PairCases_on `h` >>
   rw[build_struct_fields_map_mods_def, contract_keys_def, ALL_DISTINCT_APPEND] >>
   gvs[]
-  >- (DEP_REWRITE_TAC [struct_fields_map_mods_absent] >>
-      simp[struct_fields_map_src_lookup] >>
-      rpt strip_tac >>
-      `(src',name') = (h0,name)` suffices_by
-        (rw[] >> fs[MEM_MAP] >> metis_tac[]) >>
-      irule nsid_to_string_dot_free_injective >> simp[] >> metis_tac[]) >>
+  >- (`!s ts n a. MEM (s,ts) mods /\ MEM (StructDecl n a) ts ==>
+          nsid_to_string (s,n) <> nsid_to_string (h0,name)` by
+        (rpt strip_tac >>
+         `(s,n) = (h0,name)` by
+           (irule nsid_to_string_dot_free_injective >> simp[] >> metis_tac[]) >>
+         gvs[MEM_MAP] >> metis_tac[]) >>
+      drule struct_fields_map_mods_absent >> simp[struct_fields_map_src_lookup]) >>
   first_x_assum irule >> simp[contract_keys_def] >> metis_tac[]
 QED
 
@@ -166,15 +182,23 @@ Proof
   strip_tac >>
   `!s ts n a. MEM (s,ts) mods /\ MEM (StructDecl n a) ts ==> ~MEM #"." n`
     by metis_tac[linked_struct_name_no_dot] >>
-  fs[contract_namespaces_ok_def] >>
-  rw[sfields_tenv_consistent_def, make_struct_fields_map_mods_def]
-  >- (PairCases_on `nsid` >>
-      drule_then strip_assume_tac linked_struct_type_origin >>
+  `ALL_DISTINCT (MAP FST mods) /\
+   ALL_DISTINCT (contract_keys type_def_keys_toplevel mods)`
+    by fs[contract_namespaces_ok_def] >>
+  qpat_x_assum `contract_namespaces_ok _ _` kall_tac >>
+  simp[sfields_tenv_consistent_def, make_struct_fields_map_mods_def] >>
+  conj_tac
+  >- (rpt strip_tac >> PairCases_on `nsid` >>
+      drule_then (qx_choose_then `tops` strip_assume_tac) linked_struct_type_origin >>
       qexists_tac `build_struct_fields_one (type_env_all_modules mods) args` >>
       simp[built_struct_fields_names, built_struct_fields_types] >>
-      metis_tac[struct_fields_map_mods_lookup]) >>
-  drule_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) struct_fields_map_mods_origin >>
-  qexistsl [`(src,name')`, `args`] >>
-  simp[built_struct_fields_names, built_struct_fields_types] >>
-  metis_tac[linked_struct_type_lookup]
+      irule struct_fields_map_mods_lookup >> simp[] >> conj_tac
+      >- first_assum ACCEPT_TAC >>
+      qexists_tac `tops` >> simp[]) >>
+  rpt strip_tac >> drule struct_fields_map_mods_origin >> simp[] >>
+  disch_then (qx_choose_then `src` (qx_choose_then `tops`
+    (qx_choose_then `sname` (qx_choose_then `args` strip_assume_tac)))) >>
+  qexistsl [`(src,sname)`, `args`] >>
+  gvs[built_struct_fields_names, built_struct_fields_types] >>
+  irule linked_struct_type_lookup >> simp[] >> qexists_tac `tops` >> simp[]
 QED
