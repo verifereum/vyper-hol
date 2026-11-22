@@ -102,5 +102,19 @@ Theorem for_storage_body_invoke_prefix:
          fmupdate id <|assignable := F; type := tyv; value := v; popped := []|>
            FEMPTY::ei.scopes,s,G,tn)
 Proof
-  cheat
+  rpt gen_tac >>
+  qpat_abbrev_tac `envb = extend_local env id typ F` >>
+  qpat_abbrev_tac `eb = ei with scopes := (FEMPTY |+ (id, _)) :: ei.scopes` >>
+  rpt strip_tac >>
+  `body_const_cells_agree [(NONE,tops)] cx envb eb` by
+    simp[Abbr `envb`, Abbr `eb`] >>
+  qpat_x_assum `body_stmts_prefix_ok _ _`
+    (mp_tac o REWRITE_RULE [body_stmts_prefix_ok_def]) >>
+  disch_then drule_all >>
+  disch_then (qspec_then `InLoop exit incr` mp_tac) >>
+  rewrite_tac [stmt_frag_prefix_def] >>
+  disch_then (qspecl_then [`st0`, `sb0`, `sb1`, `shadow_sb0`,
+    `shadow_sb1`, `s`, `G`, `tn`, `bc1`] mp_tac) >>
+  simp[stmt_frag_full_pre_def] >> (impl_tac >- first_assum ACCEPT_TAC) >>
+  simp[]
 QED
