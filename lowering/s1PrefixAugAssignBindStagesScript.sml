@@ -2,6 +2,8 @@
 Theory s1PrefixAugAssignBindStages
 Ancestors
   s1PrefixPreds augAssignFullBindStages s1PrefixDefs
+  s1PrefixCompose s1PrefixProps vyperStorageTrace
+  stmtSimAugAssign stmtSimAugAssignPlaceMemory
 
 Theorem augassign_target_bind_prefix:
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
@@ -33,7 +35,19 @@ Theorem augassign_target_bind_prefix:
               ptv bop cur rhs)) (write_place cx p))))))
     (es,s,G,tn)
 Proof
-  cheat
+  strip_tac >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _`
+    (mp_then Any irule gas_prefix_full_bind) >>
+  BETA_TAC >>
+  simp[evaluate_storage_trace_frame, evaluate_requests_outcomes_frame] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac >- (rpt strip_tac >> simp[]) >>
+  gen_tac >> irule storage_trace_frame_bind_all >>
+  simp[storage_trace_frame_read_place] >> gen_tac >>
+  irule storage_trace_frame_bind_all >>
+  simp[storage_trace_frame_place_type] >> gen_tac >>
+  irule storage_trace_frame_bind_all >>
+  simp[augassign_rhs_trace_frame, aug_place_store_trace_frame]
 QED
 
 Theorem augassign_rhs_bind_prefix:
