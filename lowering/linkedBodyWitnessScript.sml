@@ -178,7 +178,8 @@ Proof
       simp[EXISTS_MEM, occurs_abi_decode_target_def,
            declaration_abi_decode_target_def] >>
       qexists_tac `(src,tops)` >> simp[] >>
-      qexists_tac `FunctionDecl vis mut nr raw name args dflts ret ss` >> simp[])
+      qexists_tac `FunctionDecl vis mut nr raw name args dflts ret ss` >>
+      simp[declaration_abi_decode_target_def])
   >- fs[check_function_body_def, LET_THM, optionTheory.IS_SOME_EXISTS]
   >- (mp_tac (Q.INST [`owner` |-> `(src,name)`, `calls` |-> `int_calls_stmts ss`]
         checked_contract_call_evaluation_safe_singleton) >>
