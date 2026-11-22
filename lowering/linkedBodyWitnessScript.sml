@@ -181,12 +181,16 @@ Proof
       qexists_tac `FunctionDecl vis mut nr raw name args dflts ret ss` >>
       simp[declaration_abi_decode_target_def])
   >- fs[check_function_body_def, LET_THM, optionTheory.IS_SOME_EXISTS]
-  >- (mp_tac (Q.INST [`owner` |-> `(src,name)`, `calls` |-> `int_calls_stmts ss`]
-        checked_contract_call_evaluation_safe_singleton) >>
-      simp[calls_follow_call_graph_def, EVERY_MEM, call_edge_rel_def] >>
-      impl_tac >- metis_tac[contract_call_edges_function, function_int_calls_def, MEM_APPEND] >>
-      `cx with stk := [(src,name)] = cx` by
+  >- (`calls_follow_call_graph (contract_call_edges linked_witness_mods)
+          (src,name) (int_calls_stmts ss)` by
+        (rw[calls_follow_call_graph_def, EVERY_MEM, call_edge_rel_def] >>
+         irule contract_call_edges_function >>
+         qexistsl [`args`, `ss`, `dflts`, `mut`, `nr`, `raw`, `ret`, `tops`, `vis`] >>
+         simp[function_int_calls_def]) >>
+      `cx = cx with stk := [(src,name)]` by
         simp[vyperContextTheory.evaluation_context_component_equality] >>
-      simp[])
+      pop_assum SUBST1_TAC >>
+      irule checked_contract_call_evaluation_safe_singleton >>
+      qexistsl [`art`, `cx.layouts`, `linked_witness_mods`] >> simp[])
   >> simp[]
 QED
