@@ -120,7 +120,7 @@ Theorem annassign_other_typed_full_execution:
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty e es) ==>
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
     (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
