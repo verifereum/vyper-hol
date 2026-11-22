@@ -888,6 +888,12 @@ Proof
     ptr_discipline 0 unit.cu_context vs /\ taint_within D unit.cu_context vs` by
     (Cases_on `ctx_has_dalloca unit.cu_context` >> gvs[]
      >- (drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+         `fn' = fn` by
+           (qpat_assum `lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn`
+              (fn entry => qpat_assum
+                `lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn'`
+                (mp_tac o REWRITE_RULE [entry])) >> simp[]) >>
+         qpat_x_assum `fn' = fn` SUBST_ALL_TAC >>
          `ptr_discipline 0 unit.cu_context vs /\ taint_within D unit.cu_context vs` by
            (match_mp_tac (Q.SPECL [`tops`, `rp`, `unit`, `vs`, `fn`, `"__entry"`, `D`]
               lower_vyper_runtime_unit_ptr_taint) >> simp[]) >>
