@@ -2275,8 +2275,9 @@ Proof
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx (TupleT tys) e es` by
     (qpat_assum `body_expr_full_ok cx e`
-       (mp_tac o CONJUNCT1 o PURE_ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then drule_all >> simp[]) >>
+       (strip_assume_tac o PURE_ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     qpat_assum `!DF lo d PG tops ctx sh fn sfn ce en ty es.
+         _ ==> expr_sim_full _ _ _ _ _ _ /\ _` drule_all >> simp[]) >>
   rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `(EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy)` by simp[] >>
@@ -2286,21 +2287,24 @@ Proof
       (map_every assume_tac o CONJUNCTS))) >>
   `lower_value compile_expr cenv (TupleT tys) e sa = (op,su)` by
     simp[lower_value_def,comp_bind_def] >>
-  `?shadow_su. lower_value compile_expr cenv (TupleT tys) (gas_shadow_expr e)
-      shadow_sa = (op,shadow_su) /\ gas_shadow_state su shadow_su` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `TupleT tys`, `e` |-> `e`]
-       gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
+  `?shadow_su. lower_value compile_expr (gas_shadow_env T cenv) (TupleT tys)
+      (gas_shadow_expr e) shadow_sa = (op,shadow_su) /\ gas_shadow_state su shadow_su` by
+    (`gas_shadow_compiles (lower_value compile_expr cenv (TupleT tys) e)
+        (lower_value compile_expr (gas_shadow_env T cenv) (TupleT tys) (gas_shadow_expr e))` by
+       irule gas_shadow_stmt_lower_value_env >>
+     pop_assum (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
      disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[] >>
-     Cases_on `lower_value compile_expr cenv (TupleT tys) (gas_shadow_expr e) shadow_sa` >>
-     simp[]) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (TupleT tys)
+        (gas_shadow_expr e) shadow_sa` >> simp[]) >>
   `fn_has_code shadow_sa shadow_su shadow_func` by
     (qpat_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _` mp_tac >>
      pure_rewrite_tac[gas_shadow_stmt_def,gas_shadow_assignment_def] >> strip_tac >>
      qpat_x_assum `stmt_env _ _ _ (Assign _ e) sa = _` kall_tac >>
      `expr_type (gas_shadow_expr e) = TupleT tys /\
-       lowered_value_type cenv (gas_shadow_expr e) = expr_type (gas_shadow_expr e)` by
-       simp[gasShadowCompilePureTheory.gas_shadow_lowered_value_type] >>
+       lowered_value_type (gas_shadow_env T cenv) (gas_shadow_expr e) =
+         expr_type (gas_shadow_expr e)` by simp[] >>
+     `(EXISTS (\t. ~is_word_type t) tys ==>
+        (gas_shadow_env T cenv).ce_target CapMcopy)` by simp[] >>
      drule_all tupleAssignPartsTheory.assign_tuple_targets_code_parts >>
      disch_then (CONJUNCTS_THEN2 (K ALL_TAC)
        (qx_choosel_then [`svv`,`shadow_sc`,`sop`,`su2`,`sstaged`,`shadow_sl`,`selems`,`shadow_ss`]
@@ -6254,12 +6258,14 @@ Proof
      simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
   `lower_value compile_expr cenv (expr_type e) e sa = (op,su)` by
     simp[lower_value_def,comp_bind_def] >>
-  Cases_on `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+    (gas_shadow_expr e) shadow_sa` >>
   rename1 `lower_value _ _ _ (gas_shadow_expr e) _ = (shadow_op,shadow_su)` >>
   `shadow_op = op /\ gas_shadow_state su shadow_su` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type e`, `e` |-> `e`]
-       gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
+    (`gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
+        (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
+       irule gas_shadow_stmt_lower_value_env >>
+     pop_assum (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
      disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
   gvs[] >>
   `cs_extends sa su` by metis_tac[cs_extends_trans] >>
@@ -6269,7 +6275,7 @@ Proof
   simp[NoAsms,gas_shadow_stmt_def,gas_shadow_assignment_def,stmt_env_def,
        declare_stmt_local_def,Once compile_stmt_def,
        comp_bind_def,comp_ignore_bind_def,comp_return_def] >>
-  Cases_on `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa` >>
   rename1 `compile_expr _ _ (gas_shadow_expr e) _ = (shadow_vv,shadow_sc)` >>
   Cases_on `unwrap_value cenv shadow_vv shadow_sc` >>
   rename1 `unwrap_value _ shadow_vv _ = (op',su')` >>
@@ -6277,7 +6283,7 @@ Proof
   `op' = op /\ su' = shadow_su` by
     gvs[lower_value_def,comp_bind_def] >>
   gvs[] >>
-  Cases_on `compile_tuple_unpack cenv (lowered_value_type cenv e)
+  Cases_on `compile_tuple_unpack (gas_shadow_env T cenv) (lowered_value_type cenv e)
     (is_memory_view e /\ vv_location shadow_vv = SOME LocMemory)
     (MAP gas_shadow_assignment gs) op shadow_su` >>
   gvs[] >>
@@ -6293,46 +6299,50 @@ Proof
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     metis_tac[expr_body_pre_gas_admissible] >>>
   HEADGOAL (sg `?shadow_ss. gas_shadow_state ss shadow_ss /\
-    compile_tuple_store_all cenv tys (MAP gas_shadow_assignment gs) elems shadow_ss =
-      ((),shadow_sb) /\ fn_has_code shadow_ss shadow_sb shadow_func`) >>>
+    compile_tuple_store_all (gas_shadow_env T cenv) tys (MAP gas_shadow_assignment gs)
+      elems shadow_ss = ((),shadow_sb) /\ fn_has_code shadow_ss shadow_sb shadow_func`) >>>
   HEADGOAL (
     `expr_type (gas_shadow_expr e) = TupleT tys /\
-     lowered_value_type cenv (gas_shadow_expr e) = expr_type (gas_shadow_expr e)` by
-      simp[gasShadowCompilePureTheory.gas_shadow_lowered_value_type]) >>>
+     lowered_value_type (gas_shadow_env T cenv) (gas_shadow_expr e) =
+       expr_type (gas_shadow_expr e)` by simp[] >>
+    `(EXISTS (\t. ~is_word_type t) tys ==>
+      (gas_shadow_env T cenv).ce_target CapMcopy)` by simp[]) >>>
   HEADGOAL (
     qpat_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _`
-      (assume_tac o PURE_REWRITE_RULE [gas_shadow_stmt_def,gas_shadow_assignment_def]) >>
-    mp_tac (Q.SPECL [`cenv`,`lctx`,`ret_ty`,`MAP gas_shadow_assignment gs`,
-      `gas_shadow_expr e`,`tys`,`shadow_sa`,`shadow_sb`,`cenv`,`shadow_func`]
-      tupleAssignPartsTheory.assign_tuple_targets_code_parts) >>
-    (impl_tac >- simp[]) >>
-    simp[NoAsms] >>
-    disch_then (qx_choosel_then [`svv`,`ssc`,`sop`,`ssu`,`sstaged`,`ssl`,`selems`,`sss`]
-      (map_every assume_tac o CONJUNCTS))) >>>
+      (mp_then (Pos hd) mp_tac tupleAssignPartsTheory.assign_tuple_targets_code_parts o
+       PURE_REWRITE_RULE [gas_shadow_stmt_def,gas_shadow_assignment_def]) >>
+    disch_then drule_all >>
+    disch_then (CONJUNCTS_THEN2 (K ALL_TAC)
+      (qx_choosel_then [`svv`,`ssc`,`sop`,`ssu`,`sstaged`,`ssl`,`selems`,`sss`]
+        (map_every assume_tac o CONJUNCTS)))) >>>
   HEADGOAL (
     `svv = shadow_vv /\ ssc = shadow_sc` by
-      (qpat_assum `compile_expr cenv _ (gas_shadow_expr e) shadow_sa = (shadow_vv,shadow_sc)` mp_tac >>
-       qpat_assum `compile_expr cenv _ (gas_shadow_expr e) shadow_sa = (svv,ssc)`
+      (qpat_assum `compile_expr _ _ (gas_shadow_expr e) shadow_sa = (shadow_vv,shadow_sc)` mp_tac >>
+       qpat_assum `compile_expr _ _ (gas_shadow_expr e) shadow_sa = (svv,ssc)`
          (fn eq => simp[NoAsms,eq]))) >>>
   HEADGOAL (
     `shadow_vv = vv` by
-      (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `TupleT tys`, `e` |-> `e`]
-         gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr) >>
-       rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
+      (`gas_shadow_compiles (compile_expr cenv (TupleT tys) e)
+          (compile_expr (gas_shadow_env T cenv) (TupleT tys) (gas_shadow_expr e))` by
+         irule gas_shadow_stmt_compile_expr_env >>
+       pop_assum (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
        disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[])) >>>
   HEADGOAL (
     `sop = op /\ ssu = shadow_su` by
       (qpat_assum `svv = shadow_vv` (fn vv_eq =>
        qpat_assum `ssc = shadow_sc` (fn sc_eq =>
        qpat_assum `unwrap_value cenv shadow_vv shadow_sc = (op,shadow_su)` (fn code =>
-       qpat_assum `unwrap_value cenv svv ssc = (sop,ssu)` mp_tac >>
+       qpat_assum `unwrap_value _ svv ssc = (sop,ssu)` mp_tac >>
        simp[NoAsms,vv_eq,sc_eq,code]))))) >>>
   HEADGOAL (
     qpat_assum `svv = shadow_vv` (fn v1 =>
     qpat_assum `shadow_vv = vv` (fn v2 =>
     qpat_assum `sop = op` (fn ptr =>
     qpat_assum `ssu = shadow_su` (fn st =>
-      RULE_ASSUM_TAC (PURE_REWRITE_RULE [v1,v2,ptr,st])))))) >>>
+      RULE_ASSUM_TAC (PURE_REWRITE_RULE [v1,v2,ptr,st,
+        gasShadowCompileStmtBaseTheory.gas_shadow_is_memory_view,
+        gasShadowCompileBaseTheory.type_memory_bytes_gas_shadow_env,
+        gasShadowCompileStmtBaseTheory.compile_tuple_load_all_gas_shadow_env])))))) >>>
   HEADGOAL (
     qpat_assum `(if _ then _ else _) su = (staged,sl)` (fn stage =>
       let val f = rator (lhs (concl stage)) in
@@ -6362,7 +6372,7 @@ Proof
   HEADGOAL (
     qexists_tac `sss` >>
     qpat_assum `selems = elems` (fn elems =>
-      qpat_assum `compile_tuple_store_all cenv tys (MAP gas_shadow_assignment gs) selems sss = _`
+      qpat_assum `compile_tuple_store_all _ tys (MAP gas_shadow_assignment gs) selems sss = _`
         (assume_tac o PURE_REWRITE_RULE [elems])) >>
     rpt conj_tac >> first_assum ACCEPT_TAC) >>>
   HEADGOAL (
@@ -6468,7 +6478,7 @@ Proof
     gas_admissible (assign_tuple_target_list cx todo vs1) (stmt_res_ok lctx) src /\
     call_evaluation_safe cx (int_calls_atargets todo) /\
     compile_tuple_store_all cenv tys1 todo ops1 cur = ((),sb) /\
-    compile_tuple_store_all cenv tys1 (MAP gas_shadow_assignment todo) ops1 shadow_cur =
+    compile_tuple_store_all (gas_shadow_env T cenv) tys1 (MAP gas_shadow_assignment todo) ops1 shadow_cur =
       ((),shadow_sb) /\ gas_shadow_state cur shadow_cur /\
     fn_has_code cur sb func /\ fn_has_code shadow_cur shadow_sb shadow_func /\
     sa.cs_next_id <= cur.cs_next_id /\ sa.cs_next_var <= cur.cs_next_var /\
@@ -6593,7 +6603,7 @@ Proof
   HEADGOAL (
     `gas_shadow_state sm shadow_sm` by
       (qspecl_then [`[sty]`,`[BaseTarget bt]`,`[op0]`] mp_tac
-         (Q.INST [`cenv` |-> `cenv`] gasShadowCompileStmtHelpersTheory.gas_shadow_compile_tuple_store_all) >>
+         (Q.INST [`cenv` |-> `cenv`, `sd` |-> `T`] gas_shadow_compile_tuple_store_all_env) >>
        rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
        disch_then (qspecl_then [`cur`,`shadow_cur`] mp_tac) >>
        simp[gasShadowTheory.gas_shadow_assignment_def])) >>>
@@ -6605,9 +6615,9 @@ Proof
     `fn_has_code cur sm func /\ fn_has_code sm sb func` by
       (irule fn_has_code_split >> simp[])) >>>
   HEADGOAL (
-    qpat_assum `compile_tuple_store_all cenv [_] [_] [_] shadow_cur = ((),shadow_sm)`
+    qpat_assum `compile_tuple_store_all _ [_] [_] [_] shadow_cur = ((),shadow_sm)`
       (mp_then Any strip_assume_tac tupleAssignPartsTheory.tuple_target_stores_growth) >>
-    qpat_assum `compile_tuple_store_all cenv tys_tail (MAP gas_shadow_assignment todo) ops_tail shadow_sm = ((),shadow_sb)`
+    qpat_assum `compile_tuple_store_all _ tys_tail (MAP gas_shadow_assignment todo) ops_tail shadow_sm = ((),shadow_sb)`
       (mp_then Any strip_assume_tac tupleAssignPartsTheory.tuple_target_stores_growth) >>
     `fn_has_code shadow_cur shadow_sm shadow_func /\ fn_has_code shadow_sm shadow_sb shadow_func` by
       (irule fn_has_code_split >> simp[])) >>>
@@ -7073,17 +7083,17 @@ Proof
     `?target_r target_cs. compile_get_target_ptr compile_expr cenv bt cur = (target_r,target_cs)` by
       (Cases_on `compile_get_target_ptr compile_expr cenv bt cur` >> simp[])) >>>
   HEADGOAL (
-    `compile_get_target_ptr compile_expr cenv (gas_shadow_target bt) shadow_cur =
-       (target_r,SND (compile_get_target_ptr compile_expr cenv (gas_shadow_target bt) shadow_cur)) /\
-     gas_shadow_state target_cs
-       (SND (compile_get_target_ptr compile_expr cenv (gas_shadow_target bt) shadow_cur))` by
-      (mp_tac (Q.INST [`cenv` |-> `cenv`, `bt` |-> `bt`]
-         gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_get_target_ptr) >>
-       simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
+    `?shadow_target_cs.
+       compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+         (gas_shadow_target bt) shadow_cur = (target_r,shadow_target_cs) /\
+       gas_shadow_state target_cs shadow_target_cs` by
+      (`gas_shadow_compiles (compile_get_target_ptr compile_expr cenv bt)
+         (compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (gas_shadow_target bt))` by
+         irule gas_shadow_stmt_get_target_ptr_env >>
+       pop_assum (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
        disch_then (qspecl_then [`cur`,`shadow_cur`] mp_tac) >> simp[] >>
-       Cases_on `compile_get_target_ptr compile_expr cenv (gas_shadow_target bt) shadow_cur` >>
-       simp[]) >>
-    qmatch_asmsub_abbrev_tac `gas_shadow_state target_cs shadow_target_cs`) >>>
+       Cases_on `compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+         (gas_shadow_target bt) shadow_cur` >> simp[])) >>>
   HEADGOAL (
     qabbrev_tac `dest_loc = (case FST (SND target_r) of SOME l => l | NONE => LocMemory)` >>
     qabbrev_tac `dest_ty = (case SND (SND target_r) of SOME (ValPT t) => t | _ => sty)` >>
@@ -7117,7 +7127,7 @@ Proof
        >- (qspec_then `cur` mp_tac
             (Q.SPECL [`bt`,`cenv`] ci_mono_compile_get_target_ptr) >> simp[]) >>
        qspec_then `shadow_cur` mp_tac
-         (Q.SPECL [`gas_shadow_target bt`,`cenv`] ci_mono_compile_get_target_ptr) >> simp[])) >>>
+         (Q.SPECL [`gas_shadow_target bt`,`gas_shadow_env T cenv`] ci_mono_compile_get_target_ptr) >> simp[])) >>>
   HEADGOAL (
     `!c. ci_mono c (SND (head_store c))` by
       (simp[Abbr `head_store`] >> gen_tac >> rpt IF_CASES_TAC >>
@@ -10932,12 +10942,14 @@ Proof
   simp[] >> strip_tac >>
   `lower_value compile_expr cenv (expr_type e) e sa = (op,su)` by
     simp[lower_value_def,comp_bind_def] >>
-  Cases_on `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+    (gas_shadow_expr e) shadow_sa` >>
   rename1 `lower_value _ _ _ (gas_shadow_expr e) _ = (shadow_op,shadow_su)` >>
   `shadow_op = op /\ gas_shadow_state su shadow_su` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type e`, `e` |-> `e`]
-       gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
+    (`gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
+        (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
+       irule gas_shadow_stmt_lower_value_env >>
+     pop_assum (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
      disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
   gvs[] >>
   Cases_on `compile_tuple_unpack cenv (lowered_value_type cenv e)
@@ -10954,7 +10966,7 @@ Proof
   simp[NoAsms,gas_shadow_stmt_def,gas_shadow_assignment_def,stmt_env_def,
        declare_stmt_local_def,Once compile_stmt_def,
        comp_bind_def,comp_ignore_bind_def,comp_return_def] >>
-  Cases_on `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa` >>
   rename1 `compile_expr _ _ (gas_shadow_expr e) _ = (shadow_vv,shadow_sc)` >>
   Cases_on `unwrap_value cenv shadow_vv shadow_sc` >>
   rename1 `unwrap_value _ shadow_vv _ = (op',su')` >>
@@ -10963,7 +10975,7 @@ Proof
     (qpat_x_assum `lower_value _ _ _ (gas_shadow_expr e) _ = _` mp_tac >>
      simp[lower_value_def,comp_bind_def]) >>
   gvs[] >>
-  Cases_on `compile_tuple_unpack cenv (lowered_value_type cenv e)
+  Cases_on `compile_tuple_unpack (gas_shadow_env T cenv) (lowered_value_type cenv e)
     (is_memory_view e /\ vv_location shadow_vv = SOME LocMemory)
     (MAP gas_shadow_assignment gs) op shadow_su` >>
   gvs[] >>
@@ -11344,8 +11356,8 @@ Proof
      rewrite_tac[gas_shadow_compiles_def] >>
      disch_then (qspecl_then [`su`,`shadow_su`] mp_tac) >> simp[]) >>
   qpat_x_assum `shadow_elems = elems` SUBST_ALL_TAC >>
-  `compile_tuple_store_all cenv tys (MAP gas_shadow_assignment gs) elems
-     shadow_ss = ((),shadow_sb)` by
+  `compile_tuple_store_all (gas_shadow_env T cenv) tys (MAP gas_shadow_assignment gs)
+     elems shadow_ss = ((),shadow_sb)` by
     (qpat_assum `compile_tuple_unpack _ _ _ _ _ shadow_su = ((),shadow_sb)` mp_tac >>
      qpat_assum `lowered_value_type cenv e = TupleT ltys` (fn th => rewrite_tac[th]) >>
      qpat_assum `tys = ltys` (fn th => rewrite_tac[GSYM th]) >>
@@ -11353,8 +11365,8 @@ Proof
      qpat_assum `op = Var root` (fn th => rewrite_tac[th]) >>
      SIMP_TAC bool_ss [Once compile_tuple_unpack_def, LET_THM,
        comp_bind_def, comp_return_def, TypeBase.case_def_of ``:type``] >>
-     qpat_assum `compile_tuple_load_all cenv (Var root) tys 0 shadow_su = (elems,shadow_ss)`
-       (fn th => simp[th])) >>
+     qpat_assum `compile_tuple_load_all _ (Var root) tys 0 shadow_su = (elems,shadow_ss)`
+       (fn th => simp[NoAsms,th])) >>
   `cs_extends shadow_su shadow_ss /\ cs_extends shadow_ss shadow_sb` by
     metis_tac[stmtSimReturnTheory.compile_tuple_load_all_grows,
               tupleAssignPartsTheory.tuple_target_stores_growth] >>
@@ -11413,8 +11425,8 @@ Proof
        j IN tf.t_mem)` >>
   qabbrev_tac `entry = \i c sh src s G tn obs.
     compile_tuple_store_all cenv (DROP i tys) (DROP i gs) (DROP i elems) c = ((),sb) /\
-    compile_tuple_store_all cenv (DROP i tys) (DROP i (MAP gas_shadow_assignment gs))
-      (DROP i elems) sh = ((),shadow_sb) /\
+    compile_tuple_store_all (gas_shadow_env T cenv) (DROP i tys)
+      (DROP i (MAP gas_shadow_assignment gs)) (DROP i elems) sh = ((),shadow_sb) /\
     fn_has_code c sb func /\ fn_has_code sh shadow_sb shadow_func /\ gas_shadow_state c sh /\
     expr_sim_inv cenv cx env src /\ body_tuple_targets_full_ok cx (DROP i gs) (DROP i vs) /\
     storage_trace_domain cx st0 src.storage_trace /\
@@ -11630,9 +11642,10 @@ Proof
   disch_then (qx_choose_then `shadow_place_cs` mp_tac) >>
   disch_then (qx_choose_then `shadow_write_cs` strip_assume_tac) >>
   `place_result = shadow_place_result /\ gas_shadow_state place_cs shadow_place_cs` by
-    (mp_tac (Q.INST [`bt` |-> `head`]
-       gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_get_target_ptr) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
+    (`gas_shadow_compiles (compile_get_target_ptr compile_expr cenv head)
+        (compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (gas_shadow_target head))` by
+       irule gas_shadow_stmt_get_target_ptr_env >>
+     pop_assum (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
      disch_then (qspecl_then [`c`,`sh`] mp_tac) >> simp[]) >>
   qpat_x_assum `place_result = shadow_place_result` (SUBST_ALL_TAC o SYM) >>
   `env.type_defs = get_tenv cx` by
@@ -11719,13 +11732,14 @@ Proof
   disch_then (qspec_then `compile_expr` strip_assume_tac) >>
   `place_cs = c /\ shadow_place_cs = sh /\
     place_result = (Lit (n2w off), SOME LocCode, SOME (ValPT (EL i dtys)))` by
-    (qpat_assum `compile_get_target_ptr compile_expr cenv (TopLevelNameTarget (ns,id)) = _`
-       (fn layout =>
-         qpat_assum `compile_get_target_ptr compile_expr cenv (TopLevelNameTarget (ns,id)) c = _`
-           (mp_tac o REWRITE_RULE [layout,comp_return_def]) >>
-         qpat_assum `compile_get_target_ptr compile_expr cenv (gas_shadow_target (TopLevelNameTarget (ns,id))) sh = _`
-           (mp_tac o REWRITE_RULE [gasShadowTheory.gas_shadow_expr_def,layout,comp_return_def])) >>
-     simp[NoAsms] >> rpt strip_tac >> simp[]) >>
+    (qpat_x_assum `compile_get_target_ptr compile_expr _
+         (gas_shadow_target (TopLevelNameTarget (ns,id))) sh = _` mp_tac >>
+     qpat_x_assum `compile_get_target_ptr compile_expr cenv (TopLevelNameTarget (ns,id)) c = _` mp_tac >>
+     qpat_assum `FLOOKUP cenv.ce_module_vars (ns,id) = SOME (ImmutableLoc off)` (fn loc =>
+       qpat_assum `cenv.ce_module_var_type (ns,id) = SOME _` (fn ty =>
+         simp[NoAsms,loc,ty,gasShadowTheory.gas_shadow_expr_def,
+              cj 2 compile_get_target_ptr_def,comp_return_def])) >>
+     rpt strip_tac >> simp[]) >>
   qpat_x_assum `place_cs = c` SUBST_ALL_TAC >>
   qpat_x_assum `shadow_place_cs = sh` SUBST_ALL_TAC >>
   qpat_x_assum `place_result = _` SUBST_ALL_TAC >>
