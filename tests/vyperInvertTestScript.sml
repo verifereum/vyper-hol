@@ -212,7 +212,8 @@ Proof
   simp[Once evaluate_def, bind_def, return_def, evaluate_literal_def] >>
   simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   simp[Once evaluate_def, bind_def, return_def, get_accounts_def,
-       evaluate_builtin_def, evaluate_literal_def, lift_sum_def]
+       evaluate_builtin_def, evaluate_literal_def, lift_sum_def,
+       is_self_codesize_def]
 QED
 
 Theorem invert_bytes32_cps_test:

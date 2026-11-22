@@ -2045,7 +2045,7 @@ Proof
        get_accounts_def, lift_sum_def, raise_def] >>
   Cases_on `l` >>
   gvs[method_id_literal_def, evaluate_literal_def, evaluate_builtin_def,
-      return_def, raise_def]
+      is_self_codesize_def, return_def, raise_def]
 QED
 
 Theorem compile_method_id_literal_dynamic_vv_sim:
@@ -2584,7 +2584,8 @@ Proof
 QED
 
 Theorem eval_expr_unary_builtin_cases:
-  ~precompile_builtin bt /\ bt <> Len /\ builtin_args_length_ok bt 1 /\
+  ~precompile_builtin bt /\ bt <> Len /\ ~is_self_codesize bt [e] /\
+  builtin_args_length_ok bt 1 /\
   eval_expr cx (Builtin ann bt [e]) es = (res,es') ==>
   (?exc. (do r <- eval_expr cx e; read_result cx r od) es = (INR exc,es') /\ res = INR exc) \/
   ?v. (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es') /\
@@ -2605,6 +2606,7 @@ Proof
        builtin_result_def, AllCaseEqs(), precompile_call_success_not_builtin,
        ignore_bind_def] >>
   rpt strip_tac >> gvs[bind_def, AllCaseEqs()] >>
+  gvs[is_self_codesize_def] >>
   Cases_on `evaluate_builtin cx es1.accounts ann bt [expr_type e] [v]` >>
   gvs[return_def, raise_def] >> metis_tac[]
 QED
@@ -2628,7 +2630,8 @@ Proof
        builtin_result_def, AllCaseEqs(), ignore_bind_def] >>
   rpt strip_tac >> gvs[bind_def, AllCaseEqs()] >>
   Cases_on `evaluate_builtin cx es1.accounts ann Sha256 [expr_type e] [v]` >>
-  gvs[return_def, raise_def, ignore_bind_def, bind_def] >> metis_tac[]
+  gvs[return_def, raise_def, ignore_bind_def, bind_def,
+      is_self_codesize_def] >> metis_tac[]
 QED
 
 Theorem sha256_source_outcome_step:
@@ -2662,7 +2665,8 @@ Proof
 QED
 
 Theorem eval_expr_unary_builtin_action:
-  ~precompile_builtin bt /\ bt <> Len /\ builtin_args_length_ok bt 1 ==>
+  ~precompile_builtin bt /\ bt <> Len /\ ~is_self_codesize bt [e] /\
+  builtin_args_length_ok bt 1 ==>
   eval_expr cx (Builtin ann bt [e]) =
   bind (bind (eval_expr cx e) (read_result cx))
     (\v es. ((case builtin_result cx es.accounts ann bt [expr_type e] [v] of
@@ -2721,7 +2725,8 @@ QED
 Theorem compile_typed_unary_builtin_vv_sim:
   expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
   expr_sim ctx func cenv cx (expr_type e) e es /\ expr_type e = BaseT bty /\
-  ~precompile_builtin bt /\ bt <> Len /\ builtin_args_length_ok bt 1 /\
+  ~precompile_builtin bt /\ bt <> Len /\ ~is_self_codesize bt [e] /\
+  builtin_args_length_ok bt 1 /\
   (!sa sb vv. compile_expr cenv ty (Builtin ann bt [e]) sa = (vv,sb) ==>
     ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
       code x sm = (vv,sb)) /\
@@ -3111,7 +3116,8 @@ QED
 Theorem compile_typed_stack_unary_builtin_vv_sim:
   expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
   expr_sim ctx func cenv cx (expr_type e) e es /\ expr_type e = BaseT bty /\
-  ~precompile_builtin bt /\ bt <> Len /\ builtin_args_length_ok bt 1 /\
+  ~precompile_builtin bt /\ bt <> Len /\ ~is_self_codesize bt [e] /\
+  builtin_args_length_ok bt 1 /\
   (!sa sb vv. compile_expr cenv ty (Builtin ann bt [e]) sa = (vv,sb) ==>
      ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
        as_stack_val ann (code x sm) = (vv,sb)) /\
@@ -3135,7 +3141,8 @@ Theorem compile_typed_stack_unary_builtin_vv_sim:
          (StackValue ann op) t) ==>
   expr_vv_sim ctx func cenv cx ty (Builtin ann bt [e]) es
 Proof
-  strip_tac >> irule compile_typed_unary_builtin_vv_sim >> simp[] >>
+  strip_tac >> irule compile_typed_unary_builtin_vv_sim >>
+  simp[is_self_codesize_def] >>
   qexistsl [`\x sm. as_stack_val ann (code x sm)`, `env`] >> simp[] >>
   conj_tac >- metis_tac[] >>
   reverse conj_tac
@@ -3186,7 +3193,7 @@ Proof
   `?bty. expr_type e = BaseT bty` by
     (Cases_on `expr_type e` >> gvs[is_bytes_or_string_type_def]) >>
   irule compile_typed_stack_unary_builtin_vv_sim >>
-  simp[builtin_args_length_ok_def] >>
+  simp[builtin_args_length_ok_def, is_self_codesize_def] >>
   reverse conj_tac >- (qexists `env` >> gvs[]) >>
   qexists `\x sm.
     (if is_bytestring_type (expr_type e) then compile_keccak256_bytes x sm
@@ -3994,7 +4001,7 @@ Proof
   `ann = BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4))` by
     (gvs[Abbr `fixed`] >> metis_tac[]) >>
   irule compile_typed_unary_builtin_vv_sim >>
-  simp[builtin_args_length_ok_def] >>
+  simp[builtin_args_length_ok_def, is_self_codesize_def] >>
   qexistsl [`\x sm. let (op,sb) =
       compile_method_id_runtime (expr_type e) x fixed sm in
       ((if fixed then StackValue ann op else

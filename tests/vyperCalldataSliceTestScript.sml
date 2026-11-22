@@ -180,7 +180,7 @@ Proof
        assert_def, ignore_bind_def, bind_def] >>
   simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   simp[Once evaluate_def, bind_def, return_def, get_accounts_def,
-       evaluate_builtin_def, lift_sum_def]
+       evaluate_builtin_def, lift_sum_def, is_self_codesize_def]
 QED
 
 Theorem calldata_slice_eval_range_error_state_test:
@@ -194,7 +194,7 @@ Proof
        assert_def, ignore_bind_def, bind_def] >>
   simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   simp[Once evaluate_def, bind_def, return_def, get_accounts_def,
-       evaluate_builtin_def, lift_sum_def, raise_def]
+       evaluate_builtin_def, lift_sum_def, raise_def, is_self_codesize_def]
 QED
 
 Theorem calldata_slice_cps_start_state_test:

@@ -12,7 +12,7 @@ Ancestors
   immSectionDead e2eDeployDefs e2eProducers ptrDiscipline passSimulationDefs
   venomExecSemantics venomState e2eEntry compileVyper compileEnv valueEncoding
   immutableSectionRel vyperValue vyperContext
-  callCodeEval callCodeEvalPrims callCodeLookup
+  callCodeLookup
   supportedDecls supportedProgram supportedExprs supportedExprForms
   supportedExprTraverse constSubst exprLowering vyperInterpreter vyperState
   vyperStorageFootprint list

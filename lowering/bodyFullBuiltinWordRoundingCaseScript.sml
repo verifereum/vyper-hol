@@ -337,7 +337,8 @@ Proof
     (irule unop_operand_admissible >>
      qexistsl [`BaseT (IntT 256)`, `bt`] >>
      Cases_on `bt = Ceil` >>
-     gvs[builtin_args_length_ok_def, vyperInterpreterTheory.precompile_builtin_def]) >>
+     gvs[builtin_args_length_ok_def, vyperInterpreterTheory.precompile_builtin_def,
+         vyperContextTheory.is_self_codesize_def]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ e _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `s1`, `shadow_sa`, `shadow_s1`,
@@ -346,12 +347,16 @@ Proof
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ RoundingChildPost _` >>
   `bt <> Len /\ ~precompile_builtin bt /\ builtin_args_length_ok bt 1` by
     (Cases_on `bt = Ceil` >>
-     gvs[builtin_args_length_ok_def, vyperInterpreterTheory.precompile_builtin_def]) >>
+     gvs[builtin_args_length_ok_def, vyperInterpreterTheory.precompile_builtin_def,
+         vyperContextTheory.is_self_codesize_def]) >>
+  `~is_self_codesize bt [e]` by
+    (Cases_on `bt = Ceil` >> gvs[vyperContextTheory.is_self_codesize_def]) >>
   simp[eval_expr_unop_action_general] >>
   irule gas_outcome_full_bind_all >>
   conj_tac
-  >- (gen_tac >> simp[vyperStorageTraceTheory.storage_trace_frame_def,
-                     unop_result_def]) >>
+  >- (gen_tac >> Cases_on `bt = Ceil` >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_def,
+           unop_result_def, vyperContextTheory.is_self_codesize_def]) >>
   conj_tac
   >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
       metis_tac[]) >>

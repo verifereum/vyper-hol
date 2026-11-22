@@ -28,7 +28,8 @@ Proof
     (simp[Once evaluate_def, builtin_args_length_ok_def, compatible_bound_def,
           type_check_def, assert_def, ignore_bind_def, bind_def, return_def,
           get_accounts_def, lift_sum_def, evaluate_builtin_def,
-          evaluate_type_def, make_array_value_def]) >>
+          evaluate_type_def, make_array_value_def,
+          vyperContextTheory.is_self_codesize_def]) >>
   qpat_x_assum `body_exprs_full_ok _ [_; _]` mp_tac >>
   simp[body_exprs_full_ok_def] >> strip_tac >>
   first_x_assum irule >>
@@ -60,7 +61,8 @@ Proof
     (simp[Once evaluate_def, builtin_args_length_ok_def, compatible_bound_def,
           type_check_def, assert_def, ignore_bind_def, bind_def, return_def,
           get_accounts_def, lift_sum_def, evaluate_builtin_def,
-          evaluate_type_def, make_array_value_def]) >>
+          evaluate_type_def, make_array_value_def,
+          vyperContextTheory.is_self_codesize_def]) >>
   `expr_sim_inv cenv cx env es'` by
     (drule_all expr_body_pre_eval_result >> simp[]) >>
   simp[] >> conj_tac

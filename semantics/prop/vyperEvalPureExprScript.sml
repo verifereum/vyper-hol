@@ -115,7 +115,9 @@ Definition eval_pure_expr_def:
                  | NONE => NONE)
               | NONE => eval_pure_exprs cx st es) of
         | SOME vs =>
-          (case evaluate_builtin cx st.accounts ty bt (MAP expr_type es) vs of
+          (case (if is_self_codesize bt es then
+                   evaluate_self_codesize cx vs
+                 else evaluate_builtin cx st.accounts ty bt (MAP expr_type es) vs) of
            | INL v => SOME (Value v)
            | INR _ => NONE)
         | NONE => NONE)
@@ -392,7 +394,7 @@ Proof
       simp[Once eval_pure_expr_def] >> strip_tac >>
       `bt <> Env MsgGas` by
         (strip_tac >>
-         gvs[AllCaseEqs(), vyperStatePreservationTheory.evaluate_builtin_MsgGas]) >>
+         gvs[AllCaseEqs(), vyperContextTheory.is_self_codesize_def, vyperStatePreservationTheory.evaluate_builtin_MsgGas]) >>
       simp[Once vyperInterpreterTheory.evaluate_def] >>
       simp monadic_defs >>
       simp[vyperStateTheory.type_check_def, vyperStateTheory.assert_def] >>
@@ -607,12 +609,26 @@ Proof
               `s1 = st with storage_trace := s1.storage_trace` by
                 metis_tac[eval_exprs_preserves_state] >>
               pop_assum SUBST_ALL_TAC >>
-              simp[] >>
-              fs[vyperStateTheory.get_accounts_def, vyperStateTheory.return_def,
-                 vyperStateTheory.bind_def, vyperStateTheory.lift_sum_def,
-                 vyperInterpreterTheory.precompile_call_success_def] >>
-              Cases_on `evaluate_builtin cx st.accounts ty bt (MAP expr_type es) vs` >>
-              gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def])
+              Cases_on `is_self_codesize bt es`
+              >- (Cases_on `bt` >> gvs[vyperContextTheory.is_self_codesize_def] >>
+                  Cases_on `a` >> gvs[vyperContextTheory.is_self_codesize_def] >>
+                  Cases_on `es` >> gvs[vyperContextTheory.is_self_codesize_def] >>
+                  Cases_on `t` >> gvs[vyperContextTheory.is_self_codesize_def] >>
+                  Cases_on `h` >> gvs[vyperContextTheory.is_self_addr_def] >>
+                  Cases_on `b` >> gvs[vyperContextTheory.is_self_addr_def] >>
+                  Cases_on `l` >> gvs[vyperContextTheory.is_self_addr_def] >>
+                  Cases_on `e` >> gvs[vyperContextTheory.is_self_addr_def] >>
+                  fs[vyperStateTheory.get_accounts_def, vyperStateTheory.return_def,
+                     vyperStateTheory.bind_def, vyperStateTheory.lift_sum_def,
+                     vyperInterpreterTheory.precompile_call_success_def] >>
+                  Cases_on `evaluate_self_codesize cx vs` >>
+                  gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def])
+              >- (simp[] >>
+                  fs[vyperStateTheory.get_accounts_def, vyperStateTheory.return_def,
+                     vyperStateTheory.bind_def, vyperStateTheory.lift_sum_def,
+                     vyperInterpreterTheory.precompile_call_success_def] >>
+                  Cases_on `evaluate_builtin cx st.accounts ty bt (MAP expr_type es) vs` >>
+                  gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]))
           >- (rename1 `code_slice_source bt es = SOME p` >>
               PairCases_on `p` >>
               `EVERY pure_expr (TL es) /\ EVERY pure_expr [p1]` by

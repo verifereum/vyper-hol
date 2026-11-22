@@ -105,7 +105,8 @@ Proof
   Cases_on `rr` >> simp[get_accounts_def, bind_def, return_def,
                          builtin_args_length_ok_def] >>
   rename1 `eval_exprs cx [e] es = (INL vs,es1)` >>
-  simp[evaluate_builtin_def, lift_sum_def, bind_def, return_def, raise_def] >>
+  simp[is_self_codesize_def, evaluate_builtin_def, lift_sum_def, bind_def,
+       return_def, raise_def] >>
   Cases_on `vs` >> simp[raise_def] >>
   rename1 `eval_exprs cx [e] es = (INL (v::rest),es1)` >>
   Cases_on `rest` >> simp[raise_def] >>
@@ -1101,6 +1102,7 @@ Theorem compile_unary_builtin_rel_vv_sim:
   expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
   expr_sim ctx func cenv cx (expr_type e) e es /\ expr_type e = BaseT bty /\
   ~precompile_builtin bt /\ bt <> Len /\ builtin_args_length_ok bt 1 /\
+  ~is_self_codesize bt [e] /\
   (!sa sb vv. compile_expr cenv ty (Builtin ann bt [e]) sa = (vv,sb) ==>
     ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
       code x sm = (vv,sb)) /\
@@ -1148,7 +1150,7 @@ Proof
    bind (bind (eval_expr cx e) (read_result cx))
      (\v es. ((case builtin_result cx es.accounts ann bt [expr_type e] [v] of
                  INL w => INL (Value w) | INR exc => INR exc), es))` by
-    (irule eval_expr_unary_builtin_action >> simp[]) >>
+    (irule eval_expr_unary_builtin_action >> simp[is_self_codesize_def]) >>
   qpat_x_assum `gas_admissible (eval_expr _ _) _ _`
     (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
   asm_rewrite_tac[] >> strip_tac >>
@@ -1243,10 +1245,12 @@ Proof
                       (type_memory_bytes cenv (BaseT (BytesT (Dynamic m)))) sm)`]
            (SPEC_ALL compile_unary_builtin_rel_vv_sim)) >>
   BETA_TAC >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (simp[builtin_args_length_ok_def, precompile_builtin_def] >> NO_TAC) >>
+  TRY (simp[builtin_args_length_ok_def, precompile_builtin_def,
+            is_self_codesize_def] >> NO_TAC) >>
   qexists_tac `env` >> BETA_TAC >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (simp[builtin_args_length_ok_def, precompile_builtin_def] >> NO_TAC) >>
+  TRY (simp[builtin_args_length_ok_def, precompile_builtin_def,
+            is_self_codesize_def] >> NO_TAC) >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `as_ptr_val _ _ _ = _` mp_tac >>
   Cases_on `compile_slice_calldata x (Lit (n2w n))

@@ -8,7 +8,7 @@ Ancestors
   exprSimHash exprSimHashBoundary exprSimHyps exprSimHypsDefs exprSimSource
   gasShadowCompile gasShadowCompileStmtHelpers gasShadowState gasShadow
   exprLoweringProps exprLowering loweringPosts compileEnv vyperTyping
-  vyperInterpreter vyperState vyperAST vyperTypeSystem
+  vyperInterpreter vyperContext vyperState vyperAST vyperTypeSystem
   stmtSimProps gasExemptCert vyperStorageTrace vyperStorageFootprint
 
 Theorem keccak_vv_sim_full:
@@ -81,7 +81,8 @@ Proof
    bind (bind (eval_expr cx e) (read_result cx))
      (\v es. ((case builtin_result cx es.accounts (BaseT (BytesT (Fixed 32)))
        Keccak256 [expr_type e] [v] of INL w => INL (Value w) | INR exc => INR exc),es))` by
-    (irule eval_expr_unary_builtin_action >> simp[vyperContextTheory.builtin_args_length_ok_def]) >>
+    (irule eval_expr_unary_builtin_action >>
+     simp[vyperContextTheory.builtin_args_length_ok_def, is_self_codesize_def]) >>
   asm_rewrite_tac[] >> irule gas_outcome_full_bind_all >>
   `!res : value + exception. !r.
      (?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r) <=> expr_exit res r` by

@@ -1516,7 +1516,7 @@ Proof
   Cases_on `out` >>
   gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def,
       vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
-      AllCaseEqs()] >> metis_tac[]
+      vyperContextTheory.is_self_codesize_def, AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem ec_source_tail_cases:

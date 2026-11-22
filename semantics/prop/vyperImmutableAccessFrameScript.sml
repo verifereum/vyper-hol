@@ -646,7 +646,7 @@ Proof
           qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
           simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
             assert_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >>
-          imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >>
+          imp_res_tac get_accounts_state >> imp_res_tac if_lift_sum_state >>
           imp_res_tac precompile_call_success_state >> gvs[] >>
           rpt strip_tac >> first_x_assum irule >> simp[] >>
           first_assum ACCEPT_TAC) >>
@@ -682,6 +682,7 @@ Proof
       simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
         assert_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >>
       imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >>
+      imp_res_tac if_lift_sum_state >>
       imp_res_tac precompile_call_success_state >> gvs[] >>
       rpt strip_tac >> metis_tac[]) >>
   gvs[Once evaluate_def, type_check_def, assert_def, bind_def,

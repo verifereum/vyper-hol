@@ -691,6 +691,14 @@ Proof
   simp[FUN_EQ_THM, evaluate_builtin_def, get_tenv_stk]
 QED
 
+Theorem evaluate_self_codesize_stk[local]:
+  evaluate_self_codesize (cx with stk := s) = evaluate_self_codesize cx
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >> Cases_on `x` >>
+  TRY (Cases_on `t`) >> TRY (Cases_on `h`) >>
+  simp[vyperContextTheory.evaluate_self_codesize_def]
+QED
+
 Theorem evaluate_type_builtin_oneline[local] =
   oneline evaluate_type_builtin_def
 
@@ -750,7 +758,11 @@ Proof
       >- (Cases_on `es` >>
           gvs[builtin_args_length_ok_def, type_check_def, assert_def,
               bind_def, ignore_bind_def, result_array_length_stk]) >>
-      gvs[bind_def, ignore_bind_def, COND_RATOR, get_tenv_stk, evaluate_builtin_stk])
+      Cases_on `is_self_codesize bt es` >>
+      gvs[bind_def, ignore_bind_def, COND_RATOR, get_tenv_stk, evaluate_builtin_stk,
+          vyperContextTheory.is_self_codesize_def,
+          vyperContextTheory.evaluate_self_codesize_def,
+          evaluate_self_codesize_stk])
   >~ [`evaluate_type_builtin`]
   >- (`!st. eval_exprs (cx with stk := s) es st = eval_exprs cx es st` by
         (irule eval_exprs_stk_from_elements >> gvs[EVERY_MEM]) >>

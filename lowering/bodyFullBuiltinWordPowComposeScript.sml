@@ -176,6 +176,7 @@ Proof
         (`eval_exprs cx [] = return []` by
            simp[FUN_EQ_THM, exprSimWordArgsTheory.eval_exprs_nil, vyperStateTheory.return_def] >>
          simp[exprSimWordArgsTheory.eval_expr_builtin_action,
+              vyperContextTheory.is_self_codesize_def,
               exprSimWordArgsTheory.eval_exprs_cons_action,
               vyperContextTheory.builtin_args_length_ok_def,
               vyperInterpreterTheory.precompile_builtin_def,

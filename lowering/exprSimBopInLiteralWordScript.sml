@@ -216,8 +216,10 @@ Proof
   `MakeArray (SOME et) n <> Len /\ MakeArray (SOME et) n <> Env MsgGas /\
    ~precompile_builtin (MakeArray (SOME et) n) /\ code_slice_source (MakeArray (SOME et) n) elems = NONE /\
    MakeArray (SOME et) n <> Bop In /\ MakeArray (SOME et) n <> Bop NotIn /\
-   builtin_args_length_ok (MakeArray (SOME et) n) (LENGTH elems)` by
-    simp[precompile_builtin_def, builtin_args_length_ok_def] >>
+   builtin_args_length_ok (MakeArray (SOME et) n) (LENGTH elems) /\
+   ~is_self_codesize (MakeArray (SOME et) n) elems` by
+    simp[precompile_builtin_def, builtin_args_length_ok_def,
+         is_self_codesize_def] >>
   drule_all eval_expr_builtin_action >>
   disch_then (qspecl_then [`cx`, `a`] mp_tac) >>
   simp[builtin_result_def, evaluate_builtin_def] >>

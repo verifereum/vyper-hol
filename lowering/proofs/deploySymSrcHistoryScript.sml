@@ -5,7 +5,6 @@ Ancestors
 
 Definition deploy_sym_inst_def:
   deploy_sym_inst i <=>
-    i.inst_opcode <> CODESIZE /\
     (i.inst_opcode = CODECOPY ==>
       ?dst sz. i.inst_operands = [dst; Label "runtime_begin"; sz]) /\
     ~MEM (Label "code_end") i.inst_operands

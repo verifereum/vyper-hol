@@ -14,7 +14,8 @@ Proof
       get_accounts_def] >>
   gvs[Once evaluate_def, bind_def, return_def, get_accounts_def] >>
   Cases_on `evaluate_builtin cx st.accounts ann (Env item) [] []` >>
-  gvs[lift_sum_def, bind_def, return_def, raise_def]
+  gvs[lift_sum_def, bind_def, return_def, raise_def,
+      is_self_codesize_def]
 QED
 
 Theorem env_item_sim_prefix:
