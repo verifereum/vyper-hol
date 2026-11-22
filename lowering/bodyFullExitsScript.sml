@@ -261,7 +261,7 @@ Theorem compile_assert_frag_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Assert e ak))
-      (stmt_env cenv lctx ty (Assert (gas_shadow_expr e) ak))
+      (stmt_env (gas_shadow_env T cenv) lctx ty (Assert (gas_shadow_expr e) ak))
       (eval_stmt cx (Assert e ak)) es
 Proof
   rpt gen_tac >>
@@ -295,7 +295,11 @@ Proof
   rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`, `sa`, `s1`, `shadow_sa`, `t1`, `op`, `s0`,
     `G0`, `tn0`] mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  (* Neither Assert compile changes its environment.  The shadow return
+     equation therefore identifies the two environment keys in this call. *)
+  (impl_tac >- (rpt conj_tac >>
+    qpat_assum `gas_shadow_env T cenv = cenv` (rewrite_tac o single) >>
+    first_assum ACCEPT_TAC)) >>
   disch_then (fn outcome =>
     qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
       qpat_assum `return_buf_sep d cenv es s0` (fn sep =>

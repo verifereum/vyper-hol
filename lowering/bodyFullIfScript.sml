@@ -7,7 +7,8 @@ Ancestors
   bodyFullShared bodyFullPreds bodySimFull gasOutcomeFullStmts gasOutcomeFullCompose
   gasOutcomeFull bodyFullIfExpReach bodyFullHashKeccakFixed
   fragGasEmitCtrl fragGasOriginPtrExec fragGasOriginPtr
-  fragGasOrigin gasShadowState gasShadowUnit gasShadow bodyDeclMemoryCompose
+  fragGasOrigin gasShadowState gasShadowStmtEnv gasShadowCompileStmtBase
+  gasShadowUnit gasShadow bodyDeclMemoryCompose
   bodyPtrDefs bodyMemoryDefs stmtSimIfProps stmtSimProps
   stmtSimDefs exprSimDefs loweringPosts gasExemptCert gasSummary
   gasSummaryCompose fragGasPathPtr fragGasPathMem fragGasMode fragExec
@@ -426,33 +427,33 @@ Theorem compile_if_stmt_frag_full:
     (!sa op sb. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
     (!sa op sb.
-       lower_value compile_expr cenv (BaseT BoolT) (gas_shadow_expr c) sa =
+       lower_value compile_expr (gas_shadow_env T cenv) (BaseT BoolT) (gas_shadow_expr c) sa =
          (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
     cs_mono (stmts_env cenv lctx ty ss1) /\
     cs_mono (stmts_env cenv lctx ty ss2) /\
-    cs_mono (stmts_env cenv lctx ty (MAP gas_shadow_stmt ss1)) /\
-    cs_mono (stmts_env cenv lctx ty (MAP gas_shadow_stmt ss2)) /\
+    cs_mono (stmts_env (gas_shadow_env T cenv) lctx ty (MAP gas_shadow_stmt ss1)) /\
+    cs_mono (stmts_env (gas_shadow_env T cenv) lctx ty (MAP gas_shadow_stmt ss2)) /\
     gas_shadow_compiles (lower_value compile_expr cenv (BaseT BoolT) c)
-      (lower_value compile_expr cenv (BaseT BoolT) (gas_shadow_expr c)) /\
-    gas_shadow_compiles (stmts_env cenv lctx ty ss1)
-      (stmts_env cenv lctx ty (MAP gas_shadow_stmt ss1)) /\
-    gas_shadow_compiles (stmts_env cenv lctx ty ss2)
-      (stmts_env cenv lctx ty (MAP gas_shadow_stmt ss2)) /\
+      (lower_value compile_expr (gas_shadow_env T cenv) (BaseT BoolT) (gas_shadow_expr c)) /\
+    gas_shadow_compiles_env T (stmts_env cenv lctx ty ss1)
+      (stmts_env (gas_shadow_env T cenv) lctx ty (MAP gas_shadow_stmt ss1)) /\
+    gas_shadow_compiles_env T (stmts_env cenv lctx ty ss2)
+      (stmts_env (gas_shadow_env T cenv) lctx ty (MAP gas_shadow_stmt ss2)) /\
     (!gs b es1.
        bind (eval_expr cx c) (read_result cx) (es with gas_obs := gs) =
          (INL (BoolV b), es1) ==>
        stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
          cx lctx RetQ cenv
          (stmts_env cenv lctx ty (if b then ss1 else ss2))
-         (stmts_env cenv lctx ty
+         (stmts_env (gas_shadow_env T cenv) lctx ty
             (if b then MAP gas_shadow_stmt ss1 else MAP gas_shadow_stmt ss2))
          (eval_stmts cx (if b then ss1 else ss2))
          (es1 with scopes := FEMPTY :: es1.scopes)) ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty (If c ss1 ss2))
-      (stmt_env cenv lctx ty
+      (stmt_env (gas_shadow_env T cenv) lctx ty
          (If (gas_shadow_expr c) (MAP gas_shadow_stmt ss1)
             (MAP gas_shadow_stmt ss2)))
       (eval_stmt cx (If c ss1 ss2)) es
@@ -487,6 +488,11 @@ Proof
     (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
        (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
      simp[]) >>
+  (* The If returns its input environment. For this literal-env interface
+     the shadow return therefore forces the input env to be a fixed point. *)
+  `lower_value compile_expr (gas_shadow_env T cenv) (BaseT BoolT)
+     (gas_shadow_expr c) shadow_sa = (op,scond)` by
+    simp[] >>
   (* the condition, on the If's own input block *)
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_sim_full_def] >>
@@ -591,6 +597,19 @@ Resume compile_if_stmt_frag_full[selected]:
   `gas_admissible (eval_stmts cx (if b then ss1 else ss2)) (stmt_res_ok lctx)
      (mid with scopes := FEMPTY :: mid.scopes)` by
     (drule_all if_branch_admissible >> simp[]) >>
+  (* Compare the literal-env layout with the env-indexed branch run.
+     The input fixed point and determinism identify the shadow exits. *)
+  `gas_shadow_env T cenvb = cenvb` by
+    (`gas_shadow_compiles_env T
+        (stmts_env cenv lctx ty (if b then ss1 else ss2))
+        (stmts_env (gas_shadow_env T cenv) lctx ty
+           (if b then MAP gas_shadow_stmt ss1 else MAP gas_shadow_stmt ss2))` by
+       (Cases_on `b` >> simp[NoAsms, gas_shadow_stmts_env_env]) >>
+     pop_assum (mp_tac o REWRITE_RULE [gas_shadow_compiles_env_def]) >>
+     disch_then (qspecl_then [`entry`, `sentry`] mp_tac) >> simp[]) >>
+  `stmts_env cenv lctx ty
+     (if b then MAP gas_shadow_stmt ss1 else MAP gas_shadow_stmt ss2) sentry =
+       (gas_shadow_env T cenvb,slast)` by simp[] >>
   (* the selected branch, on the condition's posts *)
   qpat_x_assum `!gs b es1. _`
     (qspecl_then [`gas_explicit marks s0.vs_gas_readings`, `b`, `mid`]
