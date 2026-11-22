@@ -2113,15 +2113,13 @@ Proof
   `get_module_code (cx with stk updated_by CONS (NONE,name)) NONE =
      get_module_code cx NONE` by
     simp[NoAsms, vyperContextTheory.get_module_code_def] >>
-  `EVERY (\c. ?ts. get_module_code (cx with stk updated_by CONS (NONE,name))
-                         (FST c) = SOME ts /\
-                    supported_program ts /\
-                    IS_SOME (supported_function_decl ts (NONE,SND c) Internal))
+  `EVERY (\c. FST c = NONE /\
+              ?ts. supported_program ts /\
+                   get_module_code (cx with stk updated_by CONS (NONE,name)) NONE = SOME ts /\
+                   IS_SOME (supported_function_decl ts c Internal))
      (int_calls_expr e)` by
-    (fs[EVERY_MEM] >> qx_gen_tac `call` >> strip_tac >>
-     `FST call = NONE` by res_tac >>
-     `(NONE,SND call) = call` by (Cases_on `call` >> fs[]) >>
-     simp[] >> res_tac) >>
+    (pure_rewrite_tac[EVERY_CONJ] >> conj_tac >- first_assum ACCEPT_TAC >>
+     rw[EVERY_MEM] >> qexists_tac `tops` >> fs[EVERY_MEM]) >>
   fs[expr_body_pre_split_def, expr_body_pre_mods_def, GSYM source_body_calls_main,
      GSYM const_name_root_mods_singleton,
      vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,

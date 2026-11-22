@@ -79,6 +79,7 @@ Proof
       fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
     `EVERY (\e. ~is_extcode e) (target_indices t)` by
       metis_tac[alloc_limits_target_indices_not_extcode] >>
+    `IS_SOME (type_place_target env t)` by simp[] >>
     drule_all_then assume_tac body_inv_typed_target_calls_main >>
     mp_tac (Q.SPECL [`tops`, `bindings`, `t`] supported_target_info_main_calls) >>
     simp[] >> strip_tac >>

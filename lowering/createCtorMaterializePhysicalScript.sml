@@ -93,8 +93,10 @@ Proof
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
   >~ [`mem_bytes_at b n z.vs_memory = _`] >-
     (qpat_assum `!aid off sz. _ ==> mem_bytes_at off sz z.vs_memory = _`
-       (qspecl_then [`aid`, `b`, `n`] mp_tac) >> simp[]) >>
+       (qspecl_then [`aid`, `b`, `n`] irule) >> simp[] >>
+     first_assum MATCH_ACCEPT_TAC) >>
   rpt strip_tac >>
   qpat_assum `!aid off sz i. _ ==> i IN ta.t_mem`
-    (qspecl_then [`aid`, `b`, `n`, `i`] mp_tac) >> simp[]
+    (qspecl_then [`aid`, `b`, `n`, `i`] irule) >> simp[] >>
+  first_assum MATCH_ACCEPT_TAC
 QED
