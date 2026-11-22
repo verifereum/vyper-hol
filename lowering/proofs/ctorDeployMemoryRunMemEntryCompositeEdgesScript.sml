@@ -136,8 +136,7 @@ Proof
    EVERY (\i. i.inst_opcode <> ALLOCA) code` by fs[EVERY_CONJ] >>
   `FILTER (\i. i.inst_opcode = GAS) code = []` by
     (fs[EVERY_MEM, FILTER_EQ_NIL] >> metis_tac[]) >>
-  drule_all run_inst_seq_gas_path_mem >>
-  disch_then (qspec_then `ctx` assume_tac) >>
+  drule_all run_inst_seq_gas_path_mem >> strip_tac >>
   `gas_path_mem ctx func s 0 (OK (t with vs_inst_idx := end_idx))` by gvs[] >>
   drule gas_path_mem_ok_suffix >> simp[] >> strip_tac >>
   irule ctor_sequence_history_advance >> qexistsl [`bb`, `code`, `s`] >> simp[ADD_COMM]

@@ -181,6 +181,8 @@ Proof
      simp[Abbr `i`, mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
           inst_dload_in_section_def, source_memory_read_ranges_def,
           source_memory_write_ranges_def]) >>
+  `ctx_has_dalloca ctx ==> dalloca_no_wrap i s` by
+    (Cases_on `tr` >> simp[Abbr `i`, mk_inst_def, dalloca_no_wrap_non_dalloca]) >>
   `!D. gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G1,tn1)` by
     (gen_tac >>
      qpat_assum `!D. ptr_inst_ok D _ _ _ _ _ _ _ _` (qspec_then `D` assume_tac) >>

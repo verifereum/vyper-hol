@@ -67,5 +67,20 @@ Proof
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`H`, `u`] >> simp[] >>
   rpt gen_tac >> irule emitted_origin_ptr_path >> simp[] >>
-  qexists_tac `sa` >> simp[]
+  qexists_tac `sa` >> simp[] >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+     simp_tac (srw_ss()) [Once abiEncoderTheory.compile_abi_decode_to_buf_def,
+       abiEncoderTheory.compile_abi_dec_addr_def,
+       abiEncoderTheory.compile_abi_decode_static_def, comp_return_def,
+       comp_bind_def, comp_ignore_bind_def, LET_THM] >>
+     pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+     drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+     drule emitHelperPropsTheory.emitted_insts_emit_void >> strip_tac >>
+     drule calldataClampPtrTheory.calldata_clamp_instructions >> strip_tac >>
+     gvs[exprLoweringPropsTheory.emitted_insts_def, APPEND_ASSOC,
+         exprLoweringPropsTheory.DROP_PREFIX, venomInstTheory.mk_inst_def,
+         AllCaseEqs()]) >>
+  rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+  fs[EVERY_APPEND]
 QED

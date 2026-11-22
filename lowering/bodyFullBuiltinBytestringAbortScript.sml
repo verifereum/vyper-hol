@@ -184,12 +184,22 @@ Proof
     simp[Abbr `tn'`, Abbr `names`, GENLIST_CONS, combinTheory.o_DEF,
          FUPDATE_LIST, op_taint_def, FLOOKUP_UPDATE] >>
   qexistsl_tac [`G'`,`tn'`] >> gen_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (TAKE 5 (emitted_insts sa sb))` by
+    (drule compile_assert_slice_bounds_layout >>
+     disch_then (SUBST1_TAC o last o CONJUNCTS) >> simp[TAKE, mk_inst_def]) >>
+  `(ctx_has_dalloca ctx ==> !pre i post u'.
+     TAKE 5 (emitted_insts sa sb) = pre ++ i::post /\
+     run_inst_seq pre s = OK u' ==> dalloca_no_wrap i u')` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY _ (TAKE 5 (emitted_insts sa sb))` mp_tac >>
+     simp[]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
       (OK v,G',tn')` by
     (simp[Abbr `v`] >>
      qspecl_then [`TAKE 5 (emitted_insts sa sb)`, `s`, `p`, `G`, `tn`,
                   `G'`, `tn'`, `ctx`, `func`, `bb`]
        mp_tac run_inst_seq_gas_origin_ptr_path >>
+     (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))) >>
      simp[]) >>
   `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (v,G',tn') []
       (Abort Revert_abort (u with vs_inst_idx := s.vs_inst_idx+5),G',tn')` by
