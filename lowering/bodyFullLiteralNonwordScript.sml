@@ -7,7 +7,7 @@ Ancestors
   vyperTyping vyperTypeSystem valueEncodingProofs valueEncodingDefs
   vyperInterpreter vyperState vyperValue venomState context compileEnv
   list finite_map pred_set words vyperTypeCallGraph exprSimPtrLiteralOps allocLimits vyperAST
-  vyperValueOperation valueEncoding gasShadowCompile gasShadowState gasContext exprSimDefs
+  vyperValueOperation valueEncoding gasShadowCompileStmtHelpers gasShadowState gasContext exprSimDefs
   exprSimPtrLiteralBuffer exprSimLiteralBuffer bodyPtrMakeArrayAllocBuffer
   exprSimPtrLiteralPayload venomInst venomExecSemantics exprSimMemDefs ptrDiscipline
 
@@ -250,14 +250,14 @@ Proof
   `op = p.ptr_operand /\ sb = sm` by
     (drule_all lower_value_nonword_memory >> simp[]) >>
   gvs[] >>
-  `?sc. compile_expr cenv ty (gas_shadow_expr (Literal ann l)) shadow_sa =
-     (LocatedValue ann p,sc)` by
-    (mp_tac (Q.SPECL [`cenv`, `ty`, `Literal ann l`, `T`]
-      (CONJUNCT1 gas_shadow_compile_expr)) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >>
-     simp[] >> Cases_on `compile_expr cenv ty (gas_shadow_expr (Literal ann l)) shadow_sa` >>
-     simp[]) >>
+  `?sc. compile_expr (gas_shadow_env T cenv) ty
+          (gas_shadow_expr (Literal ann l)) shadow_sa = (LocatedValue ann p,sc)` by
+    (qpat_x_assum `gas_shadow_state sb shadow_sb` kall_tac >>
+     mp_tac (Q.INST [`sd` |-> `T`, `e` |-> `Literal ann l`]
+       gas_shadow_stmt_compile_expr_env) >>
+     pure_rewrite_tac [gas_shadow_compiles_def] >> disch_then drule >>
+     Cases_on `compile_expr (gas_shadow_env T cenv) ty
+                 (gas_shadow_expr (Literal ann l)) shadow_sa` >> simp[]) >>
   `sc = shadow_sb` by
     (qpat_x_assum `lower_value _ _ _ _ shadow_sa = _` mp_tac >>
      simp[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def]) >>

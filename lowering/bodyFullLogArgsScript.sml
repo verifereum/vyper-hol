@@ -334,7 +334,8 @@ Theorem compile_log_eval_all_full_store_bound_halt:
       EVERY (\e. post_value_type cenv e = expr_type e) args /\
       well_typed_exprs env args /\
       compile_log_eval_all cenv args sa = (ops, sb) /\
-      compile_log_eval_all cenv (MAP gas_shadow_expr args) shadow_sa =
+      compile_log_eval_all (gas_shadow_env T cenv)
+        (MAP gas_shadow_expr args) shadow_sa =
         (ops, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -381,9 +382,9 @@ Proof
   `~exprs_can_mutate cenv (MAP gas_shadow_expr args)` by
     simp[gas_shadow_expr_can_mutate] >>
   qpat_x_assum `compile_log_eval_all cenv (e::args) sa = _` mp_tac >>
-  qpat_x_assum `compile_log_eval_all cenv (gas_shadow_expr e::_) _ = _` mp_tac >>
+  qpat_x_assum `compile_log_eval_all _ (gas_shadow_expr e::_) _ = _` mp_tac >>
   simp[compile_log_eval_all_unsaved_cons] >> rpt strip_tac >> gvs[] >>
-  rename1 `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
+  rename1 `lower_value compile_expr _ (expr_type e) (gas_shadow_expr e)
              shadow_sa = (x, ssm)` >>
   rename1 `lower_value compile_expr cenv (expr_type e) e sa = (x, sm)` >>
   suspend "cons"
@@ -391,8 +392,8 @@ QED
 
 Resume compile_log_eval_all_full_store_bound_halt[cons]:
   `gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
-     (lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e))` by
-    simp[gas_shadow_stmt_lower_value] >>
+     (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e))` by irule gas_shadow_stmt_lower_value_env >>
   `gas_shadow_state sm ssm` by
     (qpat_x_assum `gas_shadow_compiles _ _`
        (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
@@ -409,8 +410,8 @@ Resume compile_log_eval_all_full_store_bound_halt[cons]:
     (qspecl_then [`args`, `sm`, `ys`, `sb`] mp_tac compile_log_eval_all_grows >>
      simp[]) >>
   `cs_extends ssm shadow_sb` by
-    (qspecl_then [`MAP gas_shadow_expr args`, `ssm`, `ys`, `shadow_sb`] mp_tac
-       compile_log_eval_all_grows >> simp[]) >>
+    (qpat_assum `compile_log_eval_all _ (MAP gas_shadow_expr _) _ = _`
+       (mp_then (Pos (el 2)) mp_tac compile_log_eval_all_grows) >> simp[]) >>
   `fn_has_code sa sm func /\ fn_has_code sm sb func /\
    fn_has_code shadow_sa ssm shadow_func /\
    fn_has_code ssm shadow_sb shadow_func` by
@@ -614,7 +615,8 @@ Theorem compile_log_eval_all_full_halt:
       EVERY (\e. post_value_type cenv e = expr_type e) args /\
       well_typed_exprs env args /\
       compile_log_eval_all cenv args sa = (ops, sb) /\
-      compile_log_eval_all cenv (MAP gas_shadow_expr args) shadow_sa =
+      compile_log_eval_all (gas_shadow_env T cenv)
+        (MAP gas_shadow_expr args) shadow_sa =
         (ops, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -705,7 +707,8 @@ Theorem compile_log_eval_all_full_store_bound:
       EVERY (\e. post_value_type cenv e = expr_type e) args /\
       well_typed_exprs env args /\
       compile_log_eval_all cenv args sa = (ops, sb) /\
-      compile_log_eval_all cenv (MAP gas_shadow_expr args) shadow_sa =
+      compile_log_eval_all (gas_shadow_env T cenv)
+        (MAP gas_shadow_expr args) shadow_sa =
         (ops, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -763,7 +766,8 @@ Theorem compile_log_eval_all_full:
       EVERY (\e. post_value_type cenv e = expr_type e) args /\
       well_typed_exprs env args /\
       compile_log_eval_all cenv args sa = (ops, sb) /\
-      compile_log_eval_all cenv (MAP gas_shadow_expr args) shadow_sa =
+      compile_log_eval_all (gas_shadow_env T cenv)
+        (MAP gas_shadow_expr args) shadow_sa =
         (ops, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
