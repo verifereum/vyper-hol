@@ -109,12 +109,20 @@ the regions and backends observed for the chosen gas readings.
 
 ## S1–S7: stage producers
 
-`holbuild check` reports the numbered S2–S7 exports below clean, with no
-admission in their closure. S1's own proof is complete: it is proved from the entry bridge, the joint
-body simulation (`bodySimFullMain.body_stmts_sim_full`) and the halt bridge,
-but its closure reaches the narrow case lemmas still admitted for the forms the
-widened whitelist newly accepts; each is marked `GATE_ADMISSION` at its
-declaration. Generic composition and each L1–L13 have none. See the [Milestone 1 source owners and receipt](compiler-proof-status-2026-10-09.md#built-logical-admission-path).
+All seven stage exports below are proved, with no admission in their closures.
+S1 is proved from the entry bridge, the joint body simulation
+(`bodySimFullMain.body_stmts_sim_full`) and the halt bridge. Generic
+composition and each L1–L13 have none either. `vyper_call_correct`,
+`e2e_deploy_correctness` and S1 reach no admitted lemma.
+`vyper_call_gas_sufficient` reaches only `call_entry_reachable_create_size_ok`
+and `e2e_deploy_gas_sufficient` only `deploy_entry_reachable_create_size_ok`
+([e2eGasSufficient](../lowering/e2eGasSufficientScript.sml)): the two held
+claims, marked `GATE_ADMISSION`, that, from the call or deploy entry, every
+reachable creation instruction meets the init-code size check
+`inst_create_size_ok`, blueprint forms included. The one other admitted
+theorem, `function_inliner_correct`, lies under no top. See the [Milestone 1
+source owners and
+receipt](compiler-proof-status-2026-10-09.md#built-logical-admission-path).
 
 | ID | Saved export | Consumes / produces | Future owner |
 |---|---|---|---|
@@ -149,8 +157,8 @@ They are separately saved Hyp0/no-axiom/no-admission objects. In particular:
   it is not a derivation of that relation for arbitrary EVM runs.
 - `e2eCorrectness.e2e_vyper_to_evm` is clean generic composition with explicit
   stage contracts; at Milestone 1, `vyper_call_correct` closed them with
-  admitted S1–S7. All seven are proved now; S1's closure reaches the narrow
-  `GATE_ADMISSION` case lemmas.
+  admitted S1–S7. All seven are proved now, and `vyper_call_correct`
+  reaches no admitted lemma.
 
 TASK056 full saved logical closures: top378/generic30 recorded nodes, no legacy,
 deployment or function-simulation dependencies. Source admission count is
@@ -190,8 +198,7 @@ producers remain Milestone 7 work.
 
 `e2eDeployCorrectness.e2e_deploy_correctness` is a meaningful single-frame
 creation statement (Milestone 6 item7), not the old proved `T` placeholder. It
-is proved except for the narrow `GATE_ADMISSION` case lemmas its closure
-reaches, and assumes no whitelist: `deploy_typing_ok_supported_programs` derives
+is proved, reaches no admitted lemma, and assumes no whitelist: `deploy_typing_ok_supported_programs` derives
 `supported_program` and `supported_program_deploy` from `deploy_typing_ok` and
 the `layouts_agree` inside `deploy_state_rel`. Its premises are
 `fin IN accepted_finalizers`, `compile_vyper fin policy tops = SOME
