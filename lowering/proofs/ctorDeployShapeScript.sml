@@ -16,6 +16,9 @@ Ancestors
   emitHelper venomInst ptrDiscipline deployDynamicMemory
   e2eDeployDefs vyperTypeContract constSubst supportedStmtTraverse supportedExprTraverse alist
 
+val _ = Parse.hide "tops";
+val _ = Parse.hide "body";
+
 (* ===== The constructor's source ===== *)
 
 Theorem build_compile_env_non_internal_no_return_pc[local]:
