@@ -6,7 +6,7 @@ Ancestors
   fmpLowerSequenceExec contextCodegenRel venomInst venomLayout venomState
   compileVyper vyperCompiler vyperLoweringCorrect o1PassContract
   contextRawReachable ctxLookupAgreeHelpers venomExecProofs ptrDiscipline unitTransformDefs
-  stepWriteFootprintBase
+  stepWriteFootprintBase dallocaBounds
   compileEnv arithmetic list rich_list words finite_map
 
 Theorem raw_reachable_at_active_inst[local]:

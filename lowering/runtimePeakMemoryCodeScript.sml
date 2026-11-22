@@ -228,7 +228,7 @@ Proof
   `j = 1` by
     (Cases_on `j` >> fs[] >> rename1 `SUC j'` >>
      Cases_on `j'` >> fs[EL_APPEND_EQN] >>
-     every_case_tac >> fs[EVERY_MEM, EL_MEM]) >>
+     BasicProvers.every_case_tac >> fs[EVERY_MEM, EL_MEM]) >>
   qexistsl_tac [`[]`, `chunk`, `[]`, `1`] >> simp[]
 QED
 
