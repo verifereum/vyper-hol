@@ -117,6 +117,59 @@ Proof
   simp[MAX_DEF, wordsTheory.dimword_def, dimindex_256] >> decide_tac
 QED
 
+Theorem lower_budget_path_completed_peak:
+  lower_budget_path F (D,lo,explicit,ctx) root h marks q /\
+  root.bp_stack = [] /\
+  root.bp_state.vs_fmp = root.bp_state.vs_initial_fmp /\
+  w2n root.bp_state.vs_initial_fmp < 2 ** 254 /\
+  LENGTH root.bp_state.vs_call_ctx.cc_calldata < 2 ** 64 /\
+  LENGTH root.bp_state.vs_outcomes < 2 ** 64 /\
+  lower_history_pairs h pair /\
+  (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==> pair a < LENGTH h) /\
+  (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
+    ?fn ai pre op sz post. lower_alloc_record h a fn ai pre op sz post) /\
+  MEM root.bp_fn ctx.ctx_functions /\
+  (!fn i. MEM fn ctx.ctx_functions /\ MEM i (fn_insts fn) ==>
+    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DRET) ==>
+  w2n q.bp_state.vs_fmp <= w2n root.bp_state.vs_initial_fmp + 2 ** 64 * 2 ** 64
+Proof
+  strip_tac >>
+  drule lower_budget_path_count_le_outcomes >> strip_tac >>
+  `lower_history_count h <= 2 ** 64` by decide_tac >>
+  qspecl_then [`F`, `D`, `lo`, `explicit`, `ctx`, `root`, `h`, `marks`, `q`]
+    mp_tac lower_budget_path_fmp_guards >>
+  impl_tac >- asm_rewrite_tac[EVERY_DEF] >> strip_tac >>
+  `?charge. !a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
+    ?fn ai pre op sz post.
+      lower_alloc_record h a fn ai pre op sz post /\
+      charge a = contractABI$ceil32 (w2n sz)` by
+    (simp[GSYM SKOLEM_THM, RIGHT_EXISTS_IMP_THM] >> metis_tac[]) >>
+  qabbrev_tac `allocs = FILTER (\a. lower_event_allocates (EL a h))
+    (GENLIST I (LENGTH h))` >>
+  `LENGTH allocs <= lower_history_count h` by
+    (drule lower_budget_paired_alloc_count >>
+     `FILTER (\a. lower_event_allocates (EL a h) /\ pair a < LENGTH h)
+        (GENLIST I (LENGTH h)) = allocs` by
+       (rw[FILTER_EQ, MEM_GENLIST, Abbr `allocs`] >> metis_tac[]) >>
+     simp[]) >>
+  `SUM (MAP charge allocs) <= LENGTH allocs * 2 ** 64` by
+    (once_rewrite_tac[MULT_COMM] >> rewrite_tac[GSYM SUM_MAP_K] >>
+     irule SUM_MAP_LE >> simp[EVERY_MEM, Abbr `allocs`, MEM_FILTER, MEM_GENLIST] >>
+     rpt strip_tac >>
+     qpat_x_assum `!a. _ ==> ?fn ai pre op sz post. _`
+       (qspec_then `a` mp_tac) >> simp[] >> strip_tac >>
+     drule_all lower_budget_completed_allocation_charge_bound >> simp[]) >>
+  `SUM (MAP charge allocs) <= 2 ** 64 * 2 ** 64` by
+    (`LENGTH allocs <= 2 ** 64` by decide_tac >>
+     `LENGTH allocs * 2 ** 64 <= 2 ** 64 * 2 ** 64` by simp[] >> decide_tac) >>
+  `w2n root.bp_state.vs_initial_fmp + SUM (MAP charge allocs) < dimword (:256)` by
+    (simp[wordsTheory.dimword_def, dimindex_256] >> decide_tac) >>
+  drule lower_budget_path_fmp_envelope >>
+  disch_then (qspec_then `charge` mp_tac) >>
+  impl_tac >- fs[Abbr `allocs`] >>
+  strip_tac >> fs[Abbr `allocs`] >> decide_tac
+QED
+
 (* A recorder prefix can include one larger, unpaired reservation at its
    end. The current-site condition excludes one immediately before another
    DALLOCA, so only completed, outcome-charged allocations contribute there. *)
