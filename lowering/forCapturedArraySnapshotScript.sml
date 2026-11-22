@@ -186,10 +186,10 @@ Finalise snapshot_length
 
 Theorem for_array_snapshot_continue_full:
   compile_stmt c lctx ret_ty (For id typ (Array e) n loop_body) sa = ((),sb) /\
-  compile_stmt c lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body))
-    sha = ((),shb) /\
+  compile_stmt (gas_shadow_env T c) lctx ret_ty
+    (gas_shadow_stmt (For id typ (Array e) n loop_body)) sha = ((),shb) /\
   compile_expr c (expr_type e) e sa = (vv,se) /\
-  compile_expr c (expr_type e) (gas_shadow_expr e) sha = (vv,she) /\
+  compile_expr (gas_shadow_env T c) (expr_type e) (gas_shadow_expr e) sha = (vv,she) /\
   gas_shadow_state sa sha /\ fn_has_code sa sb func /\ fn_has_code sha shb shadow_func /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
