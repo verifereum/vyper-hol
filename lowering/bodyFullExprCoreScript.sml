@@ -1055,6 +1055,16 @@ Resume bop_bytes_eq_sim_full[endpoint]:
         metis_tac[bodyUnopFragMemoryTheory.writes_fresh_mem_ok] >>
       `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
         (emitted_insts s2 sb)` by fs[EVERY_MEM] >>
+      (* The whitelist of fresh writes excludes DALLOCA at any suffix step. *)
+      `(ctx_has_dalloca ctx ==> !pre i post v.
+        emitted_insts s2 sb = pre ++ i::post /\
+        run_inst_seq pre u = OK v ==> dalloca_no_wrap i v)` by
+        (rpt strip_tac >>
+         irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+         `MEM i (emitted_insts s2 sb)` by simp[] >>
+         qpat_assum `writes_fresh _ _`
+           (qspec_then `i` mp_tac o REWRITE_RULE[writes_fresh_def, EVERY_MEM]) >>
+         Cases_on `i.inst_opcode = DALLOCA` >> simp[fresh_write_op_def]) >>
       qpat_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
         (qspec_then `DF H` assume_tac) >>
       drule_all fragGasSeqPtrTheory.run_inst_seq_gas_origin_ptr_path >>

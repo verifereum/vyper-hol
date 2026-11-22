@@ -297,9 +297,10 @@ Proof
   `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK v,G',tn')` by
     (`i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
        inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
-       i.inst_opcode <> GAS` by
+       (ctx_has_dalloca ctx ==> dalloca_no_wrap i s) /\ i.inst_opcode <> GAS` by
        simp[Abbr `i`, mk_inst_def, is_terminator_def,
             inst_mem_below_frontier_def, inst_dload_in_section_def,
+            dalloca_no_wrap_non_dalloca,
             source_memory_read_ranges_def, source_memory_write_ranges_def] >>
      drule_all straight_line_origin_ptr_edge >>
      disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >>

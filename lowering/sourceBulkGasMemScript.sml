@@ -7,7 +7,7 @@ Ancestors
   abiDecoderComposition abiDecoderReentry abiDecoderRange abiDecoderGuard abiEncoder
   fragGasSeqMem fragExecMem stmtReasonLitFragMemory
   compileEnv emitHelper emitHelperProps exprLoweringProps
-  venomInst venomState venomExecSemantics words list rich_list arithmetic
+  venomInst venomState venomExecSemantics words list rich_list arithmetic calldataBulkNoWrap
 
 Theorem source_bulk_prefix_safe[local]:
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
@@ -122,5 +122,10 @@ Proof
     simp[FILTER_EQ_NIL] >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
    isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+    (drule_all calldata_bulk_non_dalloca >> rpt strip_tac >>
+     gvs[EVERY_APPEND, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   drule_all run_inst_seq_gas_path_mem >> simp[]
 QED
