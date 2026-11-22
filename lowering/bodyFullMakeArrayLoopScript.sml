@@ -177,12 +177,13 @@ Proof
   qpat_assum `compile_make_tuple _ _ (h::args) _ _ _ sa = _`
     (strip_assume_tac o MATCH_MP compile_make_tuple_cons) >>
   qpat_assum `compile_make_tuple _ _ (gas_shadow_expr h::_) _ _ _ shadow_sa = _`
-    (strip_assume_tac o MATCH_MP compile_make_tuple_cons) >>
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [] o MATCH_MP compile_make_tuple_cons) >>
   `vv = vv' /\ gas_shadow_state sm sm'` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type h`, `e` |-> `h`]
-       gas_shadow_stmt_compile_expr) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> gvs[]) >> gvs[] >>
+    (`gas_shadow_compiles (compile_expr cenv (expr_type h) h)
+        (compile_expr (gas_shadow_env T cenv) (expr_type h) (gas_shadow_expr h))` by
+       irule gas_shadow_stmt_compile_expr_env >>
+     pop_assum (qspecl_then [`sa`,`shadow_sa`] mp_tac o
+                REWRITE_RULE [gas_shadow_compiles_def]) >> simp[]) >> gvs[] >>
   `dst = dst' /\ gas_shadow_state sn sn'` by
     (mp_tac (Q.INST [`opc` |-> `ADD`, `ops` |-> `[Var q; Lit (n2w off)]`]
       gas_shadow_compiles_emit_op_same) >>
@@ -217,7 +218,7 @@ Proof
                              `off + type_memory_size dtv`,`st`] mp_tac) >>
      simp[externalEntryShapeTheory.compile_expr_labels] >> strip_tac >>
      mp_tac externalEntryShapeTheory.compile_make_tuple_labels >>
-     disch_then (qspecl_then [`compile_expr`,`cenv`,`MAP gas_shadow_expr args`,`t`,`Var q`,
+     disch_then (qspecl_then [`compile_expr`,`gas_shadow_env T cenv`,`MAP gas_shadow_expr args`,`t`,`Var q`,
                              `off + type_memory_size dtv`,`st'`] mp_tac) >>
      simp[externalEntryShapeTheory.compile_expr_labels]) >>
   `fn_has_code sa st func /\ fn_has_code st sb func /\
