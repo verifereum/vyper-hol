@@ -384,6 +384,10 @@ Theorem straight_path_mem:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   run_inst_seq_mem_ok (emitted_insts sa sb) s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. (emitted_insts sa sb) = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   gas_path_mem ctx func s 0
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
