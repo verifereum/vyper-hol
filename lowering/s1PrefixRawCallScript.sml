@@ -6,6 +6,7 @@ Ancestors
   ptrSafeRun memSafeRun bodyPtrDefs venomInst venomExecSemantics emitHelperProps
   vyperCallOutcomeProps vyperCallOutcome vyperState extCallOracle
   e2eRequestCutDefs vyperStorageFootprint gasSummary list rich_list arithmetic option
+  s1PrefixPreds bodyFullRawCall
 
 Theorem raw_call_actual_call_prefix:
   emit_op (case call_ty of
@@ -122,4 +123,17 @@ Proof
   rewrite_tac[request_site_def] >>
   qexistsl_tac [`[]`, `func`, `PG`, `G`, `tn`, `s`, `inst`, `0`, `u`] >>
   fs[gas_origin_ptr_focus_nil, step_inst_non_invoke]
+QED
+
+Theorem raw_call_expr_vv_prefix:
+  body_exprs_full_ok cx args /\
+  body_exprs_prefix_ok cx args /\
+  body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
+  expr_vv_sim_prefix (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Call ann (RawCallTarget flags) args dflt) es
+Proof
+  cheat
 QED
