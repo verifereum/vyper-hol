@@ -310,6 +310,7 @@ Theorem straight_line_origin_ptr_edge:
   get_instruction bb s.vs_inst_idx = SOME i /\
   i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
   inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  (ctx_has_dalloca ctx ==> dalloca_no_wrap i s) /\
   ptr_inst_ok D lo 0 ctx func G tn i s /\
   step_inst_base i s = OK u ==>
   gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG) (s, G, tn)

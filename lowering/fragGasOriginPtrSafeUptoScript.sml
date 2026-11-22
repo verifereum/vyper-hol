@@ -681,10 +681,12 @@ QED
 (* ===== The per-state facts ===== *)
 
 Theorem mem_step_facts[local]:
+  MEM fn ctx.ctx_functions /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   (revert_forward_at bb s.vs_inst_idx \/ mem_safe_step fuel ctx inst s) ==>
-  inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s
+  inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s /\
+  dalloca_no_wrap inst s
 Proof
   strip_tac
   >- (drule_all revert_forward_at_opcode >> strip_tac >>
@@ -695,7 +697,8 @@ QED
 
 Theorem invoke_mem_facts[local]:
   inst.inst_opcode = INVOKE ==>
-  inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s
+  inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s /\
+  dalloca_no_wrap inst s
 Proof
   strip_tac >>
   `inst = inst with inst_opcode := INVOKE` by
@@ -707,10 +710,12 @@ QED
 Theorem focus_at_ok[local]:
   focus_at D lo explicit ctx vs b fn PG G tn s /\ gas_cut k vs s /\
   k <= b /\ k <= LENGTH vs.vs_gas_readings /\
+  MEM fn ctx.ctx_functions /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst ==>
   ptr_inst_ok D lo 0 ctx fn G tn inst s /\
-  inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s
+  inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s /\
+  dalloca_no_wrap inst s
 Proof
   strip_tac >> drule_all focus_at_first >> strip_tac
   >- (drule gas_origin_ptr_edge_common_fuel >> strip_tac >> gvs[] >>
@@ -720,10 +725,12 @@ QED
 
 Theorem run_safe_ok[local]:
   run_safe D lo ctx fn PG G tn s /\
+  MEM fn ctx.ctx_functions /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst ==>
   ptr_inst_ok D lo 0 ctx fn G tn inst s /\
-  inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s
+  inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s /\
+  dalloca_no_wrap inst s
 Proof
   strip_tac >>
   qpat_x_assum `run_safe _ _ _ _ _ _ _ _` mp_tac >>
@@ -756,7 +763,8 @@ Theorem gas_origin_ptr_focus_frame_facts:
     frame_reachable vs ctx stk PG G tn fn inst s /\
     gas_cut (MIN (LENGTH marks) (LENGTH vs.vs_gas_readings)) vs s ==>
     (!fuel. ptr_inst_ok D lo fuel ctx fn G tn inst s) /\
-    inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s
+    inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s /\
+    dalloca_no_wrap inst s
 Proof
   strip_tac >>
   qabbrev_tac `k = MIN (LENGTH marks) (LENGTH vs.vs_gas_readings)` >>
@@ -794,8 +802,6 @@ Theorem gas_origin_ptr_focus_o1_safe_upto:
   reserved_intervals_wf ctx.ctx_global_reserved /\
   EVERY (\f. f.fn_eom = NONE) ctx.ctx_functions /\
   fmp_free_ctx ctx /\ fixed_region_reserved lo ctx /\
-  (ctx_has_dalloca ctx ==>
-   !fn inst s. raw_reachable vs ctx fn inst s ==> dalloca_no_wrap inst s) /\
   mem_inv dload_headroom_ok ctx vs /\
   w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
   code_layout_valid vs ==>
