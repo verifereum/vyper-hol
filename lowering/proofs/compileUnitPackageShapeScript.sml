@@ -77,16 +77,17 @@ Proof
   match_mp_tac annotated_immutables_mods_static >> first_assum ACCEPT_TAC
 QED
 
-Theorem build_compile_env_unit_static_mode:
-  EVERY (\nd. ~supported_exprs_exists (expr_shape_root_mode static) (SND nd))
-    (build_func_defaults_mods mods) ==>
-  cenv_static_mode_ok static
-    (build_compile_env_unit mods src vis mut fname args ret ss use_trans) /\
-  (vis <> Internal ==>
-    (build_compile_env_unit mods src vis mut fname args ret ss use_trans).ce_return_pc = NONE)
+val _ = Parse.hide "body";
+
+Theorem build_compile_env_unit_static_locations:
+  (!k loc. FLOOKUP
+     (build_compile_env_unit mods src vis mut fname args ret body use_trans).ce_vars
+     k = SOME loc ==> static_loc loc) /\
+  (!k loc. FLOOKUP
+     (build_compile_env_unit mods src vis mut fname args ret body use_trans).ce_module_vars
+     k = SOME loc ==> static_loc loc)
 Proof
-  strip_tac >> simp[build_compile_env_unit_def] >>
-  rpt (pairarg_tac >> fs[]) >>
+  simp[build_compile_env_unit_def] >> rpt (pairarg_tac >> gvs[]) >>
   `!k loc. FLOOKUP
      (FST (allocate_args (get_struct_fields (make_struct_fields_map_mods mods))
                         args 0 FEMPTY)) k = SOME loc ==> static_loc loc` by
@@ -97,6 +98,23 @@ Proof
      static_loc loc` by
     (match_mp_tac immutable_locations_unit_static >>
      match_mp_tac module_var_locations_mods_static >> simp[]) >>
+  qpat_x_assum `allocate_args _ _ _ _ = _`
+    (SUBST_ALL_TAC o SYM o SRULE [] o Q.AP_TERM `FST`) >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem build_compile_env_unit_static_mode:
+  EVERY (\nd. ~supported_exprs_exists (expr_shape_root_mode static) (SND nd))
+    (build_func_defaults_mods mods) ==>
+  cenv_static_mode_ok static
+    (build_compile_env_unit mods src vis mut fname args ret ss use_trans) /\
+  (vis <> Internal ==>
+    (build_compile_env_unit mods src vis mut fname args ret ss use_trans).ce_return_pc = NONE)
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`body` |-> `ss`] build_compile_env_unit_static_locations) >>
+  simp[build_compile_env_unit_def] >>
+  rpt (pairarg_tac >> fs[]) >> strip_tac >>
   Cases_on `vis = Internal` >>
   gvs[allocate_internal_special_vars_def, AllCaseEqs(), cenv_static_mode_ok_def] >>
   conj_tac >> first_assum ACCEPT_TAC
