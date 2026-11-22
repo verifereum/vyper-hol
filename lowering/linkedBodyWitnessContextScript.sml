@@ -58,10 +58,13 @@ Proof
   rpt strip_tac >>
   simp[initial_evaluation_context_def, deploy_evaluation_context_mods_def] >>
   simp entry_context_simps >>
-  simp[context_function_live_def, function_live_def] >>
-  disj1_tac >>
-  simp[linked_witness_mods_def, ALOOKUP_def, module_allocated_def,
-       toplevel_allocated_def, lookup_var_slot_in_layouts_def]
+  simp[context_function_live_def, function_live_def]
+  >- (disj1_tac >>
+      simp[linked_witness_mods_def, ALOOKUP_def, module_allocated_def,
+           toplevel_allocated_def, lookup_var_slot_in_layouts_def])
+  >- (simp[GSYM optionTheory.IS_SOME_EXISTS] >>
+      qpat_assum `SOME _ = check_contract T _ _ linked_witness_mods`
+        (fn checked => simp[NoAsms, SIMP_RULE (srw_ss()) entry_context_simps (SYM checked)]))
 QED
 
 Theorem linked_witness_external_context:
@@ -83,10 +86,13 @@ Proof
   rpt strip_tac >>
   simp[initial_evaluation_context_def, find_function_module_def] >>
   simp entry_context_simps >>
-  simp[context_function_live_def, function_live_def, linked_witness_exports_def] >>
-  disj1_tac >>
-  simp[linked_witness_mods_def, ALOOKUP_def, module_allocated_def,
-       toplevel_allocated_def, lookup_var_slot_in_layouts_def]
+  simp[context_function_live_def, function_live_def, linked_witness_exports_def]
+  >- (disj1_tac >>
+      simp[linked_witness_mods_def, ALOOKUP_def, module_allocated_def,
+           toplevel_allocated_def, lookup_var_slot_in_layouts_def])
+  >- (simp[GSYM optionTheory.IS_SOME_EXISTS] >>
+      qpat_assum `SOME _ = check_contract F _ _ linked_witness_mods`
+        (fn checked => simp[NoAsms, SIMP_RULE (srw_ss()) entry_context_simps (SYM checked)]))
 QED
 
 fun fixture_entry src fname =
