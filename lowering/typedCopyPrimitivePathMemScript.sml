@@ -33,13 +33,26 @@ Proof
     (drule_all typed_copy_word_mem_ok >> simp[]) >>
   qpat_x_assum `sb.cs_current_insts = _` kall_tac >>
   qexists_tac `q` >> simp[] >> conj_tac
-  >- (irule body_decl_zero_gas_path >> simp[] >> qexists_tac `sa` >> simp[] >>
+  >- (`EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+        gvs[compile_store_memory_typed_word, emit_op_def, emit_void_def,
+            emit_inst_def, fresh_id_def, fresh_var_def, emit_def,
+            comp_bind_def, comp_ignore_bind_def, comp_return_def,
+            emitted_insts_def, DROP_APPEND1, mk_inst_def] >>
+      `(ctx_has_dalloca ctx ==>
+        !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+          run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+        (rpt strip_tac >>
+         irule dalloca_no_wrap_non_dalloca >>
+         `MEM i (emitted_insts sa sb)` by simp[] >>
+         fs[EVERY_MEM]) >>
+      irule body_decl_zero_gas_path >> simp[] >> qexists_tac `sa` >> simp[] >>
       qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
       simp[compile_store_memory_typed_word, emit_op_def, emit_void_def,
            emit_inst_def, fresh_id_def, fresh_var_def, emit_def,
            comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
       strip_tac >> gvs[same_blocks_def, emitted_insts_def, DROP_APPEND1,
-                       mk_inst_def, is_terminator_def]) >>
+                       mk_inst_def, is_terminator_def] >>
+      first_assum ACCEPT_TAC) >>
   conj_tac
   >- (drule_all val_in_memory_word_type >>
       simp[mem_word_at_eq_mload] >> strip_tac >>
@@ -78,14 +91,26 @@ Proof
   drule_all normalize_bytestring_window_run >> strip_tac >>
   qexists_tac `q` >> simp[] >>
   reverse conj_tac >- (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  drule buffer_store_bytestring_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+              ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
+   EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+    (qpat_x_assum `compile_store_bytestring _ _ _ = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[compile_store_bytestring_def, compile_bytestring_copy_len_def,
+          emit_op_def, emit_void_def, emit_inst_def, fresh_id_def,
+          fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def] >> strip_tac >>
+     gvs[emitted_insts_def, DROP_APPEND1, mk_inst_def, is_terminator_def]) >>
   irule body_decl_zero_gas_path >> simp[] >> qexists_tac `sa` >> simp[] >>
-  qpat_x_assum `compile_store_bytestring _ _ _ = _` mp_tac >>
-  simp[compile_store_bytestring_def, compile_bytestring_copy_len_def,
-       emit_op_def, emit_void_def, emit_inst_def, fresh_id_def,
-       fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def] >> strip_tac >>
-  gvs[same_blocks_def, emitted_insts_def, DROP_APPEND1,
-      mk_inst_def, is_terminator_def]
+  rpt strip_tac >>
+  irule dalloca_no_wrap_non_dalloca >>
+  `MEM i (emitted_insts sa sb)` by
+    (qpat_assum `emitted_insts sa sb = _`
+       (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+  qpat_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _`
+    (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+  disch_then drule >> simp[]
 QED
 
 (* This includes a zero-byte MCOPY: neither source nor destination is read. *)
@@ -123,7 +148,10 @@ Proof
       simp[emit_void_def, emit_inst_def, fresh_id_def, emit_def,
            comp_bind_def, comp_ignore_bind_def, comp_return_def] >> strip_tac >>
       gvs[same_blocks_def, emitted_insts_def, DROP_APPEND1,
-          mk_inst_def, is_terminator_def]) >>
+          mk_inst_def, is_terminator_def] >>
+      rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+      qpat_x_assum `[_] = _` (mp_tac o Q.AP_TERM `MEM i`) >>
+      simp[MEM_APPEND] >> strip_tac >> gvs[]) >>
   conj_tac >- (irule buffer_mcopy_encoding >> simp[]) >>
   conj_tac >- (rpt strip_tac >> irule buffer_mcopy_exterior >> simp[]) >>
   simp[buffer_mcopy_restore, mcopy_def, write_memory_with_expansion_def, lookup_var_def]
