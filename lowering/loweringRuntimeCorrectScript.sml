@@ -1225,9 +1225,11 @@ Proof
       (CONJ code (ASSUME ``fn_has_code sa st' func``)))) >>
   disch_then (qx_choosel_then [`sl`,`sb`] strip_assume_tac) >>
   qpat_assum
-    `compile_guarded_body cenv nr _ T _ (MAP gas_shadow_stmt compiled_body) _ shadow_sa = _`
-    (fn code => mp_tac (MATCH_MP nonreentrantEntryPathTheory.guarded_body_code_from_registration
-      (CONJ code (ASSUME ``fn_has_code shadow_sa shadow_st' shadow_func``)))) >>
+    `compile_guarded_body _ nr _ T _ (MAP gas_shadow_stmt compiled_body) _ shadow_sa = _`
+    (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+      (Q.INST [`func` |-> `shadow_func`]
+        nonreentrantEntryPathTheory.guarded_body_code_from_registration))) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`shadow_sl`,`shadow_sb`] strip_assume_tac) >>
   `gas_shadow_compiles
      (if nr then compile_nonreentrant_lock global_nonreentrant_slot T (mut = View)
@@ -1245,26 +1247,28 @@ Proof
     mp_tac guarded_body_stmts_env >>
   impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[])) >>
   disch_then (qx_choose_then `cenv'` assume_tac) >>
-  Cases_on `stmts_env cenv NoLoop ret (MAP gas_shadow_stmt compiled_body) shadow_sl` >>
-  rename1 `_ = (shadow_cenv',shadow_end)` >>
-  qspecl_then [`compiled_body`,`cenv`,`NoLoop`,`ret`] mp_tac
-    gasShadowStmtEnvTheory.gas_shadow_stmts_env >>
-  rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
-  disch_then (qspecl_then [`sl`,`shadow_sl`] mp_tac) >>
-  asm_simp_tac std_ss [pairTheory.FST,pairTheory.SND] >> strip_tac >>
-  qpat_x_assum `cenv' = shadow_cenv'` (SUBST_ALL_TAC o SYM) >>
-  `shadow_end = shadow_sb` by
-    (qpat_assum `compile_stmts cenv NoLoop _ (MAP gas_shadow_stmt compiled_body) _ = _`
+  `SND (stmts_env (gas_shadow_env T cenv) NoLoop ret (MAP gas_shadow_stmt compiled_body)
+          shadow_sl) = shadow_sb` by
+    (qpat_assum `compile_stmts _ NoLoop _ (MAP gas_shadow_stmt compiled_body) _ = _`
        (mp_tac o REWRITE_RULE [compile_stmts_env]) >>
-     reverse (Cases_on `ret = NoneT`) >- fs[] >>
+     reverse (Cases_on `ret = NoneT`) >- simp[] >>
      gvs[] >> drule type_stmts_none_valued_return >> strip_tac >>
      qspecl_then [`MAP gas_shadow_stmt compiled_body`,`tops`,`bindings`,
-       `unit.cu_context`,`cenv`,`cx`,`NoLoop`,`NoneT`,`BaseT BoolT`]
-       mp_tac stmts_env_ret_ty >>
-     impl_tac >- simp[gasShadowStmtEnvTheory.gas_shadow_supported_stmts,
-       gasShadowStmtEnvTheory.gas_shadow_valued_return] >>
-     disch_then (fn th => PURE_REWRITE_TAC [GSYM th]) >> simp[]) >>
-  qpat_x_assum `shadow_end = shadow_sb` SUBST_ALL_TAC >>
+       `gas_shadow_env T cenv`,`NoLoop`,`NoneT`,`BaseT BoolT`]
+       mp_tac stmts_env_ret_ty_no_valued_return >>
+     (impl_tac >- simp[gasShadowStmtEnvTheory.gas_shadow_supported_stmts,
+       gasShadowStmtEnvTheory.gas_shadow_valued_return]) >>
+     disch_then (fn th => PURE_REWRITE_TAC [th]) >> simp[]) >>
+  qspecl_then [`compiled_body`,`cenv`,`NoLoop`,`ret`] mp_tac
+    (Q.INST [`sd` |-> `T`] gasShadowStmtEnvTheory.gas_shadow_stmts_env_env) >>
+  rewrite_tac[gasShadowCompileStmtBaseTheory.gas_shadow_compiles_env_def] >>
+  disch_then (qspecl_then [`sl`,`shadow_sl`] mp_tac) >>
+  asm_simp_tac std_ss [pairTheory.FST,pairTheory.SND] >> strip_tac >>
+  `stmts_env (gas_shadow_env T cenv) NoLoop ret (MAP gas_shadow_stmt compiled_body)
+     shadow_sl = (gas_shadow_env T cenv',shadow_sb)` by
+    metis_tac[pairTheory.PAIR] >>
+  qpat_x_assum `SND (stmts_env _ _ _ (MAP gas_shadow_stmt _) _) = _` kall_tac >>
+  qpat_x_assum `_ = FST (stmts_env _ _ _ (MAP gas_shadow_stmt _) _)` kall_tac >>
   `?s_b G_b tn_b.
      gas_path_mem unit.cu_context func entry (LENGTH marks0) (OK s_b) /\
      alloca_history func s_b /\ return_buf_frame NONE cenv sl s_b /\
@@ -1287,7 +1291,7 @@ Proof
        (qpat_x_assum `lock_if_nr cx F _ es0 = _` mp_tac >>
         qpat_x_assum `(if F then _ else _) sa = _` mp_tac >>
         simp_tac (srw_ss()) [lock_if_nr_def, return_def, comp_return_def] >>
-        ntac 2 strip_tac >> gvs[] >>
+        ntac 2 (disch_then (SUBST_ALL_TAC o SYM)) >>
         qexistsl [`s0`,`G0`,`tn0`] >>
         asm_rewrite_tac[] >> qx_gen_tac `H` >> strip_tac >>
         qpat_assum `!st0 H. valid_horizon _ _ H _ ==> _`
