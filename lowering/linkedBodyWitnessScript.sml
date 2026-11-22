@@ -73,7 +73,8 @@ Triviality linked_witness_closed_bodies:
 Proof
   rpt gen_tac >> Cases_on `src` >> Cases_on `in_deploy` >>
   simp[linked_mods_normalized, ALOOKUP_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >> EVAL_TAC
+  rpt strip_tac >> gvs[check_function_body_in_mode_def] >> EVAL_TAC >>
+  simp[] >> EVAL_TAC
 QED
 
 Theorem linked_witness_contract_inv:
