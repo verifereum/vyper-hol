@@ -74,9 +74,10 @@ Proof
     gas_shadow_compile_register_kwarg_vars,
     compile_register_kwarg_vars_gas_shadow_env] >>
   `gas_shadow_state start shadow_start` by
-    (qspecl_then [`T`,`pre`] mp_tac gas_shadow_compiles_compile_external_jobs >>
-     simp_tac (srw_ss()) [gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sd`,`shadow_sd`] mp_tac) >>
+    (qspecl_then [`T`,`pre`]
+       (drule_then (mp_tac o SPEC_ALL) o Q.SPECL [`sd`,`shadow_sd`] o
+        REWRITE_RULE [gas_shadow_compiles_def])
+       gas_shadow_compiles_compile_external_jobs >>
      asm_rewrite_tac[SND]) >>
   `gas_shadow_state entry shadow_entry` by
     (qspec_then `common.ec_common_label` mp_tac
@@ -86,10 +87,10 @@ Proof
      asm_rewrite_tac[SND] >> strip_tac >> asm_rewrite_tac[]) >>
   `gas_shadow_env T ce = shadow_ce /\ gas_shadow_state sa shadow_sa` by
     (qspecl_then [`common.ec_pos_args`,
-       `compile_register_kwarg_vars common.ec_env kwvars`,`4`] mp_tac
+       `compile_register_kwarg_vars common.ec_env kwvars`,`4`]
+       (drule_then (mp_tac o SPEC_ALL) o Q.SPECL [`entry`,`shadow_entry`] o
+        REWRITE_RULE [gas_shadow_compiles_env_def])
        (Q.INST [`sd` |-> `T`] gas_shadow_compiles_env_register_positional_args) >>
-     rewrite_tac[gas_shadow_compiles_env_def] >>
-     disch_then (qspecl_then [`entry`,`shadow_entry`] mp_tac) >>
      asm_rewrite_tac[FST,SND]) >>
   qexistsl_tac [`shadow_entry`,`shadow_sa`,`shadow_done`] >>
   `cs_extends sd entry /\ cs_extends entry done` by metis_tac[cs_extends_trans] >>
@@ -185,16 +186,19 @@ Proof
   `ssf = sf /\ sfb = fallback` by metis_tac[pairTheory.PAIR_EQ] >>
   qpat_x_assum `ssf = sf` SUBST_ALL_TAC >>
   qpat_x_assum `sfb = fallback` SUBST_ALL_TAC >>
+  `gas_shadow_state sf sf` by simp[gas_shadow_state_refl] >>
   `shjobs = MAP ^shadow_job jobs /\ gas_shadow_state sd shd` by
-    (mp_tac (Q.SPECL [`groups`,`fallback`,`sf`,`sf`]
-      (Q.SPEC `gasShadowModuleDefs$gas_shadow_external_package`
-        (GEN_ALL (Q.INST [`sd` |-> `T`] gas_shadow_compile_group_dispatch_linear)))) >>
-     asm_rewrite_tac[FST,SND,gas_shadow_state_refl]) >>
+    (drule_then (mp_tac o SPEC_ALL)
+      (Q.SPECL [`groups`,`fallback`,`sf`,`sf`]
+        (Q.SPEC `gasShadowModuleDefs$gas_shadow_external_package`
+          (GEN_ALL (Q.INST [`sd` |-> `T`] gas_shadow_compile_group_dispatch_linear)))) >>
+     asm_rewrite_tac[FST,SND]) >>
   pop_assum strip_assume_tac >>
   `gas_shadow_state sx shx` by
-    (qspecl_then [`T`,`jobs`] mp_tac gas_shadow_compiles_compile_external_jobs >>
-     simp_tac bool_ss [gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sd`,`shd`] mp_tac) >>
+    (qspecl_then [`T`,`jobs`]
+       (drule_then (mp_tac o SPEC_ALL) o Q.SPECL [`sd`,`shd`] o
+        REWRITE_RULE [gas_shadow_compiles_def])
+       gas_shadow_compiles_compile_external_jobs >>
      fs[pairTheory.SND]) >>
   `gas_shadow_state sn shn` by
     (qspec_then `fallback` mp_tac (GEN_ALL gas_shadow_compiles_new_block) >>
