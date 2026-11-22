@@ -15,6 +15,12 @@ Libs
 val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset
 val () = computeLib.upd_compset intReduce.add_int_compset
 
+(* Native CV evaluation supplies the fixture's selector hashes. *)
+val () = computeLib.add_funs (map cv_eval [
+  ``function_selector "bar" []``,
+  ``function_selector "get_x" []``,
+  ``function_selector "locked_get_x" []``])
+
 val reduce_fold = DEPTH_CONV (fn tm =>
   if is_comb tm andalso same_const (rator tm) ``origin_fold_value``
   then cv_eval tm else NO_CONV tm)
