@@ -305,7 +305,9 @@ Resume grouped_keyword_decode_supplied_with_frame[finish]:
     FLOOKUP t.vs_allocas id = SOME entry` by
     (gen_tac >> Cases >> strip_tac >>
      qpat_assum `!id q k. FLOOKUP ready.vs_allocas id = SOME (q,k) ==> _`
-       (qspecl_then [`id`,`q`,`r`] mp_tac) >> simp[]) >>
+       (qspecl_then [`id`,`q`,`r`] mp_tac) >>
+     qpat_assum `ready.vs_allocas = s.vs_allocas` (pure_rewrite_tac o single) >>
+     disch_then irule >> first_assum ACCEPT_TAC) >>
   `!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < last.cs_next_id` by
     (rpt gen_tac >> strip_tac >> CCONTR_TAC >>
      qpat_assum `!id. id < first.cs_next_id \/ _ ==> _` (qspec_then `id` mp_tac) >>
