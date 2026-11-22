@@ -220,7 +220,8 @@ Theorem mem_safe_run_return_seq[local]:
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX (pre ++ [mk_inst id RETURN [dst;szop] []])
       (DROP s.vs_inst_idx bb.bb_instructions) /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pre /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> DALLOCA /\
+               ~is_terminator i.inst_opcode) pre /\
     run_inst_seq_mem_ok (pre ++ [mk_inst id RETURN [dst;szop] []]) s ==>
     mem_safe_run fuel ctx fn s
 Proof

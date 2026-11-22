@@ -36,7 +36,7 @@ Theorem scalar_edge_mem[local]:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> GAS /\
-  ~is_terminator inst.inst_opcode /\ ~s.vs_halted /\
+  inst.inst_opcode <> DALLOCA /\ ~is_terminator inst.inst_opcode /\ ~s.vs_halted /\
   step_inst_base inst s = OK t /\ ~t.vs_halted /\
   inst_mem_below_frontier inst s /\ inst_dload_in_section inst s ==>
   gas_path_mem_edge ctx fn s 0

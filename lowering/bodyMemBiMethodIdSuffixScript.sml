@@ -220,7 +220,12 @@ Theorem method_id_run_path_mem:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  run_inst_seq_mem_ok code s /\ run_inst_seq code s = OK t /\
+  run_inst_seq_mem_ok code s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. code = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
+  run_inst_seq code s = OK t /\
   fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s ==>
   gas_marked_path T ctx func s (LENGTH (FILTER (\i. i.inst_opcode = GAS) code))
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\

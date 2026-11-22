@@ -23,7 +23,7 @@ Theorem checks_forward_step[local]:
   ~s.vs_halted /\ ~u.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME i /\
-  i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\ ~is_terminator i.inst_opcode /\
+  i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\ i.inst_opcode <> DALLOCA /\ ~is_terminator i.inst_opcode /\
   inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
   step_inst_base i s = OK u /\
   (!D. ptr_inst_ok D lo 0 ctx fn G tn i s) ==>
