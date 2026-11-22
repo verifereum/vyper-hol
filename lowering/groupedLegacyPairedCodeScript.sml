@@ -51,9 +51,10 @@ QED
 
 Resume grouped_legacy_paired_code[synchronise]:
   `gas_shadow_state start shstart` by
-    (qspecl_then [`T`,`pre`] mp_tac gas_shadow_compiles_compile_external_jobs >>
-     simp_tac (srw_ss()) [gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sd`,`shd`] mp_tac) >>
+    (qspecl_then [`T`,`pre`]
+       (drule_then (mp_tac o SPEC_ALL) o Q.SPECL [`sd`,`shd`] o
+        REWRITE_RULE [gas_shadow_compiles_def])
+       gas_shadow_compiles_compile_external_jobs >>
      asm_rewrite_tac[SND]) >>
   `gas_shadow_state checks shchecks` by
     (qspec_then `lbl` mp_tac (GEN_ALL gas_shadow_compiles_new_block) >>
