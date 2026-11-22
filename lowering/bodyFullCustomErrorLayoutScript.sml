@@ -81,13 +81,14 @@ Proof
 QED
 
 Theorem compile_assert_custom_layout_full:
+  !sd.
   stmt_env cenv lctx ty (Assert e (AssertCustomError err)) sa = (ce,sb) /\
-  stmt_env cenv lctx ty
+  stmt_env (gas_shadow_env sd cenv) lctx ty
     (Assert (gas_shadow_expr e) (AssertCustomError (gas_shadow_custom_error err)))
     ta = (ct,tb) /\
   gas_shadow_state sa ta /\ fn_has_code sa sb func /\ fn_has_code ta tb sfunc ==>
   ?op s1 ok s2 fl s3 s4 entry last t1 t2 t3 t4 sentry slast.
-    ce = cenv /\ ct = cenv /\
+    ce = cenv /\ ct = gas_shadow_env sd cenv /\
     lower_value compile_expr cenv (BaseT BoolT) e sa = (op,s1) /\
     fresh_label "assert_ok" s1 = (ok,s2) /\
     fresh_label "assert_fail" s2 = (fl,s3) /\
@@ -95,13 +96,15 @@ Theorem compile_assert_custom_layout_full:
     new_block fl s4 = (s4.cs_current_bb,entry) /\
     stmt_env cenv lctx ty (Raise (RaiseCustomError err)) entry = (cenv,last) /\
     new_block ok last = (last.cs_current_bb,sb) /\
-    lower_value compile_expr cenv (BaseT BoolT) (gas_shadow_expr e) ta = (op,t1) /\
+    lower_value compile_expr (gas_shadow_env sd cenv) (BaseT BoolT)
+      (gas_shadow_expr e) ta = (op,t1) /\
     fresh_label "assert_ok" t1 = (ok,t2) /\
     fresh_label "assert_fail" t2 = (fl,t3) /\
     emit_inst JNZ [op; Label ok; Label fl] [] t3 = ((),t4) /\
     new_block fl t4 = (t4.cs_current_bb,sentry) /\
-    stmt_env cenv lctx ty (Raise (RaiseCustomError (gas_shadow_custom_error err)))
-      sentry = (cenv,slast) /\
+    stmt_env (gas_shadow_env sd cenv) lctx ty
+      (Raise (RaiseCustomError (gas_shadow_custom_error err))) sentry =
+        (gas_shadow_env sd cenv,slast) /\
     new_block ok slast = (slast.cs_current_bb,tb) /\
     gas_shadow_state s1 t1 /\ gas_shadow_state entry sentry /\
     gas_shadow_state last slast /\
@@ -120,7 +123,7 @@ Theorem compile_assert_custom_layout_full:
     tb.cs_current_bb = ok /\ tb.cs_current_insts = [] /\
     ta.cs_next_var <= sentry.cs_next_var /\ ta.cs_next_var <= tb.cs_next_var
 Proof
-  strip_tac >>
+  rpt strip_tac >>
   qpat_assum `stmt_env _ _ _ (Assert e _) _ = _`
     (mp_then Any (qx_choosel_then [`op`,`s1`,`ok`,`s2`,`fl`,`s3`,
       `s4`,`entry`,`last`] strip_assume_tac) compile_assert_custom_parts) >>
@@ -128,7 +131,7 @@ Proof
     (mp_then Any (qx_choosel_then [`op'`,`t1`,`ok'`,`t2`,`fl'`,`t3`,
       `t4`,`sentry`,`slast`] strip_assume_tac) compile_assert_custom_parts) >>
   `op' = op /\ gas_shadow_state s1 t1` by
-    metis_tac[gas_shadow_step, gas_shadow_stmt_lower_value] >> gvs[] >>
+    metis_tac[gas_shadow_step, gas_shadow_stmt_lower_value_env] >> gvs[] >>
   `ok' = ok /\ gas_shadow_state s2 t2` by
     metis_tac[gas_shadow_step, gas_shadow_compiles_fresh_label] >> gvs[] >>
   `fl' = fl /\ gas_shadow_state s3 t3` by
@@ -139,14 +142,13 @@ Proof
     metis_tac[gas_shadow_step, gas_shadow_compiles_new_block] >>
   `gas_shadow_state last slast` by
     (fs[stmt_env_raise_custom] >>
-     metis_tac[gas_shadow_step,
-       REWRITE_RULE [gasShadowCompileBaseTheory.gas_shadow_env_F]
-         (Q.INST [`sd` |-> `F`] gas_shadow_compile_revert_with_custom_error)]) >>
+     metis_tac[gas_shadow_step, gas_shadow_compile_revert_with_custom_error]) >>
   mp_tac (Q.INST [`cenv` |-> `ce`, `x5` |-> `s4.cs_current_bb`,
     `x7` |-> `last.cs_current_bb`] assert_custom_compiler_code) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >>
-  mp_tac (Q.INST [`cenv` |-> `ce`, `e` |-> `gas_shadow_expr e`,
+  mp_tac (Q.INST [`cenv` |-> `gas_shadow_env sd ce`,
+    `e` |-> `gas_shadow_expr e`,
     `err` |-> `gas_shadow_custom_error err`,
     `sa` |-> `ta`, `sb` |-> `tb`, `func` |-> `sfunc`,
     `s1` |-> `t1`, `s2` |-> `t2`, `s3` |-> `t3`, `s4` |-> `t4`,
