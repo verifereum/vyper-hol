@@ -90,6 +90,7 @@ Proof
      mp_tac (Q.INST [`root` |-> `<| bp_stack := []; bp_params := [];
        bp_prov := FEMPTY; bp_taint := entry_taint; bp_fn := entry;
        bp_state := entered |>`, `lo` |-> `w2n vi.vs_initial_fmp`,
+       `current` |-> `i`,
        `start` |-> `vi with <|vs_prev_bb := NONE; vs_current_bb := lbl;
                             vs_inst_idx := 0|>`]
        lower_budget_headroom_history_certificate) >>
