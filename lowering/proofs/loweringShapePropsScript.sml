@@ -16175,6 +16175,19 @@ Proof
         gs[mk_raw_function_fields] >>
         gvs[fn_insts_def, MEM_fn_insts_blocks_iff, mk_raw_function_fields,
             EVERY_MEM, lowered_inst_mode_ok_def] >> metis_tac[]) >>
+  `!seg bb inst.
+      MEM seg segs /\ MEM bb seg /\ MEM inst bb.bb_instructions /\
+      inst.inst_opcode = RET ==>
+      ?front x. inst.inst_operands = front ++ [Var x] /\
+                opaque_out RETPC_PARAM (HD seg).bb_instructions x`
+    by (qpat_assum `LIST_REL (internal_segment_mode_ok _) descs segs`
+          (fn th =>
+            let
+              val [mode,descs,segs] = snd (strip_comb (concl th))
+              val rule = INST [``static : bool`` |-> rand mode]
+                rets_scoped_segments_mode
+            in mp_tac (SPECL [descs,segs,``entry : basic_block list``] rule) end) >>
+        asm_rewrite_tac[]) >>
   `!fn. MEM fn ifns ==>
         fn_shape_ok fn /\ EVERY (lowered_inst_mode_ok static T) (fn_insts fn) /\
         first_block_no_preds fn`
@@ -16185,14 +16198,8 @@ Proof
         rpt conj_tac
         >- first_assum ACCEPT_TAC
         >- first_assum ACCEPT_TAC >>
-        qpat_assum `LIST_REL (internal_segment_mode_ok _) descs segs`
-          (fn th =>
-            let
-              val [mode,descs,segs] = snd (strip_comb (concl th))
-              val rule = INST [``static : bool`` |-> rand mode]
-                rets_scoped_segments_mode
-            in mp_tac (SPECL [descs,segs,``entry : basic_block list``] rule) end) >>
-        asm_rewrite_tac[]) >>
+        rpt strip_tac >> qexists_tac `bb` >> simp[] >>
+        qexists_tac `l'` >> simp[]) >>
   `entry_fn_no_ret (mk_raw_function entry_label entry)`
     by (simp[contextCodegenRelTheory.entry_fn_no_ret_def,
              mk_raw_function_fields, EVERY_MEM] >>
