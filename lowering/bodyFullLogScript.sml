@@ -219,7 +219,8 @@ Proof
      qspecl_then [`supported_event_leaf_type`,`LENGTH tops`,`tops`,`ty`] mp_tac
        supported_nested_evaluated_assignable >> simp[] >>
      disch_then (qspecl_then [`get_tenv cx`,`{}`] mp_tac) >>
-     fs[finite_mapTheory.DRESTRICT_UNIV] >> metis_tac[optionTheory.IS_SOME_EXISTS]) >>
+     fs[finite_mapTheory.DRESTRICT_UNIV] >>
+     metis_tac[optionTheory.IS_SOME_EXISTS, checkedTypeNamespaceTheory.type_env_struct_namespace]) >>
   `EVERY (assignable_type (get_tenv cx)) src` by
     metis_tac[cj 2 arg_type_fits_source_assignable] >>
   `!ty. MEM ty src ==>

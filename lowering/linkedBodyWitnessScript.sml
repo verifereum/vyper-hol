@@ -104,16 +104,14 @@ Proof
        build_compile_env_unit_def, get_tenv_def, pairTheory.ELIM_UNCURRY, LET_THM,
        linked_witness_distinct_modules, GSYM contract_keys_def] >>
   rpt conj_tac
-  >- (rpt strip_tac >>
-      `MEM (src,tops) linked_witness_mods` by metis_tac[ALOOKUP_MEM] >>
+  >- (qx_genl_tac [`module_src`, `tops`] >> strip_tac >>
+      `MEM (module_src,tops) linked_witness_mods` by
+        (drule_then ACCEPT_TAC ALOOKUP_MEM) >>
       mp_tac linked_witness_headers >> simp[EVERY_MEM, FORALL_PROD] >>
-      strip_tac >> simp[] >>
-      conj_tac >- (strip_tac >> gvs[main_module_def] >> simp[linked_witness_main_support]) >>
-      mp_tac linked_witness_distinct_modules >>
-      qpat_x_assum `ALOOKUP _ _ = SOME _` mp_tac >>
-      Cases_on `src` >> simp[contract_keys_def, linked_mods_normalized,
-                                 ALOOKUP_def, AllCaseEqs()] >>
-      rpt strip_tac >> gvs[] >> EVAL_TAC)
+      strip_tac >> simp[] >> conj_tac
+      >- (strip_tac >> gvs[main_module_def] >> simp[linked_witness_main_support]) >>
+      irule vyperTypeContractTheory.contract_keys_module_distinct >>
+      qexists_tac `linked_witness_mods` >> simp[linked_witness_distinct_modules])
   >- (qexistsl [`p`, `unit`] >> simp[])
   >- (strip_tac >> EVAL_TAC)
   >- (simp[linked_body_calls_resolved_def] >>
