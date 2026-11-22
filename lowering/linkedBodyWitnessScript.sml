@@ -25,7 +25,9 @@ val eval_linked_fixture = REWRITE_CONV [linked_mods_normalized] THENC EVAL
 Triviality linked_witness_headers:
   EVERY (supported_module_headers o SND) linked_witness_mods
 Proof
-  simp[linked_mods_normalized, supported_module_headers_def] >>
+  simp[linked_mods_normalized, supported_module_headers_def,
+       supported_module_declaration_header_def, supported_declaration_header_def,
+       supported_function_return_def] >>
   EVAL_TAC
 QED
 val linked_witness_main_support = EQT_ELIM (eval_linked_fixture
