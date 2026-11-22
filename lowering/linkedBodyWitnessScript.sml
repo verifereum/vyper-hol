@@ -92,7 +92,7 @@ Proof
   qexistsl [`unit.cu_context`, `ce`] >>
   `acyclic_struct_metadata ce.ce_struct_fields` by
     (simp[Abbr `ce`, build_compile_env_unit_def] >>
-     CONV_TAC (LAND_CONV EVAL) >> simp[acyclic_struct_metadata_def]) >>
+     CONV_TAC (RAND_CONV EVAL) >> simp[acyclic_struct_metadata_def]) >>
   `immutable_section_layout_mods linked_witness_mods ce` by
     (irule unit_module_locations_immutable_layout >>
      simp[Abbr `ce`, build_compile_env_unit_def, linked_witness_distinct_modules] >>
