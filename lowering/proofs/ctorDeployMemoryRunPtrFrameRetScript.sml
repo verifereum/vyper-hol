@@ -1106,7 +1106,7 @@ Theorem constructor_return_none_frag_full:
            (LENGTH runtime_bc) (imm_len tops) nr nkey v ee r)
       body_cenv
       (stmt_env body_cenv lctx NoneT (Return NONE))
-      (stmt_env body_cenv lctx NoneT (Return NONE))
+      (stmt_env (gas_shadow_env T body_cenv) lctx NoneT (Return NONE))
       (eval_stmt cx (Return NONE)) es
 Proof
   rpt gen_tac >> strip_tac >>
