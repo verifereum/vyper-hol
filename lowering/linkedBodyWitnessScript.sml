@@ -112,7 +112,7 @@ Proof
       simp[] >> conj_tac
       >- (strip_tac >>
           `main_module linked_witness_mods = tops` by
-            (simp[main_module_def] >> every_case_tac >> gvs[]) >>
+            (simp[main_module_def] >> BasicProvers.every_case_tac >> gvs[]) >>
           metis_tac[linked_witness_main_support]) >>
       irule vyperTypeContractTheory.contract_keys_module_distinct >>
       qexists_tac `linked_witness_mods` >> simp[linked_witness_distinct_modules])
