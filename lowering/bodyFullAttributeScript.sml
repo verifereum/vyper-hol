@@ -36,13 +36,16 @@ Proof
   drule attr_extends >> strip_tac >>
   drule compile_expr_extends >> strip_tac >>
   drule_all fn_has_code_split >> strip_tac >>
-  `?shadow_sm. compile_expr cenv ty (gas_shadow_expr obj) shadow_sa =
+  `gas_shadow_compiles (compile_expr cenv ty obj)
+     (compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr obj))` by
+    irule (cj 1 gas_shadow_compile_expr_env |> SPEC_ALL |>
+           Q.INST [`shadow` |-> `T`] |> REWRITE_RULE [COND_CLAUSES]) >>
+  `?shadow_sm. compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr obj) shadow_sa =
       (bvv,shadow_sm) /\ gas_shadow_state sm shadow_sm` by
-    (mp_tac (cj 1 gas_shadow_compile_expr |> Q.SPECL [`cenv`, `ty`, `obj`, `T`]) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >>
-     simp[] >> strip_tac >>
-     Cases_on `compile_expr cenv ty (gas_shadow_expr obj) shadow_sa` >> gvs[]) >>
+    (qpat_x_assum `gas_shadow_compiles _ _`
+       (qspecl_then [`sa`, `shadow_sa`] mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
+     Cases_on `compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr obj) shadow_sa` >>
+     simp[]) >>
   `cs_extends shadow_sa shadow_sm /\ cs_extends shadow_sm shadow_sb` by
     (drule compile_expr_extends >> strip_tac >>
      qpat_x_assum `compile_expr _ _ (gas_shadow_expr (Attribute _ _ _)) _ = _`

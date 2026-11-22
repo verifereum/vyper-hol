@@ -122,20 +122,21 @@ QED
 
 Theorem for_array_expr_compile_cuts:
   compile_stmt c lctx ret_ty (For id typ (Array e) n loop_body) sa = ((),sb) /\
-  compile_stmt c lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body)) sha = ((),shb) /\
+  compile_stmt (gas_shadow_env T c) lctx ret_ty
+    (gas_shadow_stmt (For id typ (Array e) n loop_body)) sha = ((),shb) /\
   fn_has_code sa sb func /\ fn_has_code sha shb shfunc /\
   gas_shadow_state sa sha ==>
   ?vv se she. compile_expr c (expr_type e) e sa = (vv,se) /\
-    compile_expr c (expr_type e) (gas_shadow_expr e) sha = (vv,she) /\
+    compile_expr (gas_shadow_env T c) (expr_type e) (gas_shadow_expr e) sha = (vv,she) /\
     gas_shadow_state se she /\ fn_has_code sa se func /\
     fn_has_code sha she shfunc /\ ci_mono sa se /\ ci_mono se sb
 Proof
   strip_tac >>
   Cases_on `compile_expr c (expr_type e) e sa` >>
-  Cases_on `compile_expr c (expr_type e) (gas_shadow_expr e) sha` >>
+  Cases_on `compile_expr (gas_shadow_env T c) (expr_type e) (gas_shadow_expr e) sha` >>
   `gas_shadow_compiles (compile_expr c (expr_type e) e)
-    (compile_expr c (expr_type e) (gas_shadow_expr e))` by
-    irule gas_shadow_stmt_compile_expr >>
+    (compile_expr (gas_shadow_env T c) (expr_type e) (gas_shadow_expr e))` by
+    irule gas_shadow_stmt_compile_expr_env >>
   drule_all gas_shadow_step >> strip_tac >> gvs[] >>
   drule_all for_array_expr_compile_code >> strip_tac >>
   fs[gasShadowTheory.gas_shadow_stmt_def,gasShadowTheory.gas_shadow_iterator_def] >>
