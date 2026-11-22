@@ -209,7 +209,7 @@ val args_input = Term `
       comp_bind (compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt))
         kc sa = (out, sb) /\
       comp_bind
-        (compile_expr cenv ty
+        (compile_expr (gas_shadow_env T cenv) ty
            (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)))
         kc shadow_sa = (out, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
@@ -350,7 +350,8 @@ Theorem shadow_compile_same[local]:
   vv2 = vv /\ gas_shadow_state sm shadow_sm
 Proof
   strip_tac >>
-  qspecl_then [`cenv`,`ty`,`e`,`T`] mp_tac (CONJUNCT1 gas_shadow_compile_expr) >>
+  qspecl_then [`cenv`,`ty`,`e`,`T`] mp_tac
+    (CONJUNCT1 (Q.INST [`sd` |-> `T`] gas_shadow_compile_expr_env)) >>
   simp[gas_shadow_compiles_def] >> disch_then drule >> simp[]
 QED
 
@@ -478,16 +479,21 @@ Proof
   rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `lower_value _ _ _ (Call _ _ _ _) _ = _`
     (assume_tac o REWRITE_RULE [lower_value_def, ETA_THM]) >>
+  `unwrap_value (gas_shadow_env T cenv) = unwrap_value cenv` by
+    simp[FUN_EQ_THM] >>
   qpat_x_assum `lower_value _ _ _ (gas_shadow_expr _) _ = _`
     (assume_tac o REWRITE_RULE [lower_value_def, ETA_THM]) >>
+  qpat_x_assum `unwrap_value _ = unwrap_value _` (fn eq =>
+    qpat_x_assum `comp_bind (compile_expr _ _ (gas_shadow_expr _)) _ _ = _`
+      (assume_tac o REWRITE_RULE [eq])) >>
   `?vv2 shadow_sm.
-     compile_expr cenv ty
+     compile_expr (gas_shadow_env T cenv) ty
        (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)) shadow_sa =
        (vv2, shadow_sm) /\
      unwrap_value cenv vv2 shadow_sm = (op, shadow_sb)` by
-    (qpat_x_assum `comp_bind (compile_expr _ _ (gas_shadow_expr _)) _ _ = _`
-       mp_tac >>
-     simp[comp_bind_def] >> pairarg_tac >> simp[]) >>
+    (qpat_assum `comp_bind (compile_expr _ _ (gas_shadow_expr _)) _ _ = _`
+       (strip_assume_tac o SIMP_RULE pure_ss [comp_bind_def, LET_THM, pairTheory.ELIM_UNCURRY]) >>
+     metis_tac[pairTheory.PAIR]) >>
   `!v. storage_trace_frame (read_result cx v)` by
     simp[storage_trace_frame_read_result] >>
   `!v. cs_appends (unwrap_value cenv v)` by
@@ -510,12 +516,7 @@ Proof
   TRY (simp[expr_res_ok_def, expr_vv_res_ok_def] >> NO_TAC)
   >- (rpt gen_tac >> strip_tac >>
   `vv2 = vv /\ gas_shadow_state sm shadow_sm` by
-    (qpat_assum `gas_shadow_state sa shadow_sa` (fn initial =>
-       qpat_assum `compile_expr _ _ (Call _ _ _ _) sa = (vv,sm)` (fn real =>
-         qpat_assum `compile_expr _ _ (gas_shadow_expr _) shadow_sa = _`
-           (fn shadow =>
-             ACCEPT_TAC (MATCH_MP shadow_compile_same
-               (LIST_CONJ [initial, real, shadow])))))) >>
+    (drule_all shadow_compile_same >> simp[]) >>
   qpat_x_assum `vv2 = vv` SUBST_ALL_TAC >>
   stage_tac callee_input (qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`func`,`tops`,`cenv`,`cx`,
                `tenv`,`name`,`es`,`st0`,`sa`,`sm`,`vv`,`s0`,`es0`,`G0`,`tn0`,
