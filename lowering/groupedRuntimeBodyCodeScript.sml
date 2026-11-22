@@ -287,37 +287,6 @@ Proof
   metis_tac[fn_has_code_split]
 QED
 
-Theorem grouped_runtime_entry_compile_labels:
-  run_grouped_lowering groups ips fb rp "__entry" = SOME unit /\
-  EVERY group_entry_labels_ok groups /\
-  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips) /\
-  lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
-  compile_generate_grouped_runtime groups [] fb
-    (initial_compile_state "__entry") = ((),se) ==>
-  ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks se))
-Proof
-  strip_tac >> drule_all grouped_internal_run_labels >>
-  disch_then (qx_choosel_then [`start`,`final`,`data`] strip_assume_tac) >> gvs[] >>
-  drule lowering_context_ok_bridge >> strip_tac >>
-  `MEM fn unit.cu_context.ctx_functions` by metis_tac[lookup_function_MEM] >>
-  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
-    (fs[EVERY_MEM, fn_labels_def] >> metis_tac[]) >>
-  qpat_assum `extract_context_with_internals _ _ _ = _`
-    (mp_tac o REWRITE_RULE [extract_context_with_internals_def]) >>
-  simp[AllCaseEqs(), GSYM all_blocks_def] >> strip_tac >>
-  qpat_x_assum `v = (entry_blocks,functions)` SUBST_ALL_TAC >>
-  `?tail. all_blocks final = all_blocks se ++ tail` by
-    (Cases_on `ips = []` >- fs[compile_internal_fn_bodies_def, comp_return_def] >>
-     metis_tac[internal_fn_bodies_retains_prefix]) >>
-  `!d. MEM d (internal_fn_descriptors ips) ==>
-    ~MEM (FST d) (MAP (\bb. bb.bb_label) (all_blocks se))` by
-    (simp[MEM_MAP] >> fs[EVERY_MEM] >> metis_tac[]) >>
-  `fn.fn_blocks = entry_blocks` by (drule_all extracted_entry_blocks >> simp[]) >>
-  `?rest. entry_blocks = all_blocks se ++ rest` by
-    metis_tac[package_internal_blocks_prefix] >>
-  gvs[MAP_APPEND, ALL_DISTINCT_APPEND]
-QED
-
 Theorem lower_grouped_runtime_pair:
   lower_vyper_runtime_unit tops rp = SOME unit /\
   classify_functions tops = (exts,ints,fb,ctor) /\
