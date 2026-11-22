@@ -170,7 +170,7 @@ Theorem annassign_widened_full_execution:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ old
     (stmt_env old lctx ret_ty (AnnAssign id typ e))
-    (stmt_env old lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
+    (stmt_env (gas_shadow_env T old) lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
     (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   strip_tac >>
