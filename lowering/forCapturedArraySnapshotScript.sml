@@ -1,6 +1,7 @@
 (* Snapshot continuation of an array For, at the actual expression cut. *)
 Theory forCapturedArraySnapshot
 Ancestors
+  exprBodyPreProps
   bodyFullForExprCut bodyFullForArray bodyFullForArrayRound bodyFullForRounds bodyFullIfExpReach
   bodyFullShared bodyFullTargetArrayLoad ptrDiscipline
   gasOutcomeFullGuarded gasExemptCert reasonEndpointResourcesPtr
@@ -66,10 +67,11 @@ Theorem snapshot_location[local]:
   (loc = LocMemory \/ loc = LocCode) /\ (loc = LocMemory ==> rv = Value (ArrayV av))
 Proof
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
+  drule_then strip_assume_tac expr_body_pre_static_facts >>
   `?pty pbd. post_value_type c e = ArrayT pty pbd` by
     (`type_widens_to env.type_defs (post_value_type c e) (ArrayT typ bd)` by
        (qpat_assum `expr_type e = _` (SUBST1_TAC o SYM) >>
-        irule post_value_type_widens >> fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+        irule post_value_type_widens >> simp[] >>
         qexistsl [`cx`,`es`] >> simp[]) >>
      pop_assum mp_tac >> simp[vyperTypeSystemTheory.type_widens_to_def] >>
      Cases_on `post_value_type c e` >> simp[vyperTypeSystemTheory.arg_type_fits_def]) >>

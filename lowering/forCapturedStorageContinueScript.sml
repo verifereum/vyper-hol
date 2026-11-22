@@ -1,6 +1,7 @@
 (* Continuation of a storage-array For after evaluating its iterator place. *)
 Theory forCapturedStorageContinue
 Ancestors
+  bodyInvExecutionProps
   bodyFullForExprCut bodyFullForArrayRound bodyFullForRounds bodyFullForFacts
   forCapturedStorageCode forCapturedStorageEntry forCapturedStorageHead forCapturedStorageRound
   bodyFullForStorage bodyFullForStorageCapture bodyFullForRange bodyFullIfExpReach
@@ -346,9 +347,7 @@ Resume for_captured_storage_continue_full[ret_frame]:
 QED
 
 Resume for_captured_storage_continue_full[source_body]:
-  `get_module_code cx NONE = SOME tops /\ supported_program tops` by
-    (qpat_assum `body_inv tops ctx c cx` (mp_tac o REWRITE_RULE [body_inv_def]) >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  drule_then strip_assume_tac body_inv_main_support >>
   `cx_tops cx = tops` by
     (qpat_assum `get_module_code cx NONE = SOME tops`
        (fn th => simp[NoAsms,gasContextTheory.cx_tops_def,th])) >>

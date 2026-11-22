@@ -1,5 +1,6 @@
 Theory bodyFullForIteratorHeld
 Ancestors
+  contractInvContextProps
   bodyFullForArrayBranch forNestedArrayCapture[qualified,ignore_grammar]
   vyperTypeContract[qualified,ignore_grammar]
   forCapturedArraySnapshot forSelectedImmutableLayout
@@ -295,7 +296,9 @@ Resume compile_for_immutable_subplace_array_frag_full[frame]:
   drule_then strip_assume_tac bodyFullForFactsTheory.type_stmt_for_projection >>
   drule_at_then (Pat `eval_expr cx e start = _`) drule_all exprSimSourceTheory.expr_body_pre_eval_result >>
   strip_tac >>
-  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by fs[bodySimTheory.body_inv_def] >>
+  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
+    (drule_then (MATCH_ACCEPT_TAC o MATCH_MP contract_inv_singleton_source_modules)
+       bodySimTheory.body_inv_contract) >>
   `~cx_const_name cx (src,name)` by
     (strip_tac >> drule_all_then strip_assume_tac bodySimTheory.body_inv_const_name_not_root >> fs[]) >>
   `evaluate_type (get_tenv cx) (ArrayT typ bd) = SOME (ArrayTV tyv bd)` by
