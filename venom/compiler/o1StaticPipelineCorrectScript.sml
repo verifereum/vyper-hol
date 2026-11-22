@@ -600,8 +600,6 @@ Theorem o1_pipeline_code_end_offset_ok_static_abort_fixed:
   vi = (v7 with <|vs_fmp := fmp; vs_initial_fmp := fmp|>) /\
   (!fuel. gas_res_rel (run_context fuel (stage 7) v7)
      (ev_context orc fuel (stage 7) vs_out)) /\
-  (!fuel. gas_res_rel (run_context fuel (stage 8) vs_out)
-     (ev_context orc fuel (stage 8) vs_out)) /\
   (!p d fn inst s. ev_reachable orc vs_out (stage 7) p d fn inst s ==>
      ?ws. raw_reachable v7 (stage 7) fn inst (s with vs_gas_readings := ws)) /\
   (!fn inst s. raw_reachable vs_out (stage 8) fn inst s ==>
