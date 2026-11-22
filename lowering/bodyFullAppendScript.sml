@@ -28,6 +28,7 @@ Ancestors
   assignTuplePtrStoreWord rawCallBufferPtr vyperPlaceWriteSoundness vyperTyping
   tuplePlaceSourceHead exprSimPrecompiles stmtSimForArrayFrame vyperScopePreservation
   appendStorageStageTransportPtr appendStorageStaticPtr fragGasCopyLoop instSeqPtrLo appendResolvedStorageRel
+  fragGasCopySeqLiftProps
   vyperFiniteStoragePreservation assignTuplePtrLoadStep targetSubscriptStorage appendStorageGhostPtr
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
@@ -1772,7 +1773,7 @@ Resume append_nested_storage_success_path[lift]:
      simp[EVERY_MEM] >> strip_tac >> gen_tac >> disch_tac >>
      first_x_assum drule >> strip_tac >> gvs[]) >>
   `inst_seq_ptr D lo ctx func PG G tn (emitted_insts sm sb) t G9 tn9` by
-    (irule fragGasCopyLoopTheory.inst_seq_ptr_lower_bound_transport >>
+    (irule fragGasCopySeqLiftPropsTheory.inst_seq_ptr_lower_bound_transport >>
      simp[] >> qexists_tac `0` >> simp[] >> metis_tac[]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
       (emitted_insts sm sb)` by
@@ -1902,7 +1903,7 @@ Resume append_nested_storage_abort_path[lift]:
      first_x_assum drule >> strip_tac >> gvs[]) >>
   `!D. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sm sb) t G' tn'` by
     (gen_tac >>
-     irule fragGasCopyLoopTheory.inst_seq_ptr_lower_bound_transport >>
+     irule fragGasCopySeqLiftPropsTheory.inst_seq_ptr_lower_bound_transport >>
      simp[] >> qexists_tac `0` >> simp[] >>
      irule instSeqPtrLoTheory.inst_seq_ptr_zero_to_lo >>
      simp[ptrDisciplineTheory.allocas_from_def] >> qexists_tac
