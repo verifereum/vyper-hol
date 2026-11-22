@@ -6,25 +6,40 @@ Ancestors
   vyperScopePreservation vyperStatePreservation vyperCallOutcomeFrame
   vyperInterpreter vyperState vyperAST pair
 
+Theorem guarded_base_place_immutable_origin[local]:
+  !t cx st src id path st'.
+    runtime_write_root R t /\
+    eval_base_place cx t st = (INL (PlaceR (ImmutablePlace src id path)),st') ==>
+    R src id /\
+    ?ts. get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = NONE
+Proof
+  measureInduct_on `base_assignment_target_size t` >>
+  Cases_on `t` >> rpt gen_tac >> strip_tac
+  >~ [`eval_base_place _ (NameTarget _) _ = _`]
+  >- (drule eval_name_target_memory_root >> simp[])
+  >~ [`eval_base_place _ (TopLevelNameTarget _) _ = _`]
+  >- (rename1 `eval_base_place cx (TopLevelNameTarget root) st = _` >>
+      PairCases_on `root` >> gvs[Once evaluate_def, runtime_write_root_def] >>
+      drule lookup_global_immutable_root >> strip_tac >> gvs[] >>
+      gvs[lookup_global_def, vyperMiscTheory.option_CASE_rator,
+          vyperMiscTheory.prod_CASE_rator, var_decl_info_CASE_rator, bind_def,
+          lift_option_type_def, return_def, raise_def, get_immutables_def,
+          get_address_immutables_def, AllCaseEqs(), ignore_bind_def,
+          record_storage_event_def]) >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def,
+      runtime_write_root_def] >>
+  drule extend_place_immutable_root >> strip_tac >> gvs[] >>
+  rename1 `eval_base_place cx inner _ = _` >>
+  first_x_assum (qspec_then `inner` mp_tac) >> simp[] >> metis_tac[]
+QED
+
 Theorem guarded_base_place_root[local]:
   !t cx st src id path st'.
     runtime_write_root R t /\
     eval_base_place cx t st = (INL (PlaceR (ImmutablePlace src id path)),st') ==>
     R src id
 Proof
-  measureInduct_on `base_assignment_target_size t` >>
-  Cases_on `t` >> rpt strip_tac
-  >~ [`eval_base_place _ (NameTarget _) _ = _`]
-  >- (drule eval_name_target_memory_root >> simp[])
-  >~ [`eval_base_place _ (TopLevelNameTarget _) _ = _`]
-  >- (rename1 `eval_base_place cx (TopLevelNameTarget root) st = _` >>
-      PairCases_on `root` >> gvs[Once evaluate_def, runtime_write_root_def] >>
-      drule lookup_global_immutable_root >> simp[]) >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def,
-      runtime_write_root_def] >>
-  drule extend_place_immutable_root >> strip_tac >> gvs[] >>
-  rename1 `eval_base_place cx inner _ = _` >>
-  first_x_assum (qspec_then `inner` mp_tac) >> simp[] >> metis_tac[]
+  metis_tac[guarded_base_place_immutable_origin]
 QED
 
 Theorem guarded_target_place_root[local]:
@@ -37,6 +52,19 @@ Proof
       raise_def, AllCaseEqs()] >>
   Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
   metis_tac[guarded_base_place_root]
+QED
+
+Theorem runtime_resolved_target_not_immutable:
+  runtime_write_roots_resolve cx R /\ runtime_write_root R tgt /\
+  eval_target_place cx tgt st = (INL pl,mid) ==>
+  !sid id path. pl <> ImmutablePlace sid id path
+Proof
+  rpt strip_tac >> gvs[] >>
+  gvs[Once evaluate_def, bind_def, get_place_def, return_def,
+      raise_def, AllCaseEqs()] >>
+  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
+  drule_all guarded_base_place_immutable_origin >> strip_tac >>
+  fs[runtime_write_roots_resolve_def] >> res_tac >> gvs[]
 QED
 
 Theorem runtime_guarded_cell_mutations:
