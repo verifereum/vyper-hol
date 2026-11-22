@@ -537,9 +537,18 @@ Theorem lower_history_pairs_from_windows:
       ?fn ai pre op sz post. lower_alloc_record h a fn ai pre op sz post)
 Proof
   BETA_TAC >> strip_tac >>
-  drule (BETA_RULE lower_history_pairs_before_allocation) >>
-  strip_tac >> qexists_tac `pair` >>
-  simp[lower_history_current_def] >> metis_tac[]
+  dxrule_then strip_assume_tac (BETA_RULE lower_history_pairs_before_allocation) >>
+  qexists_tac `pair` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  rewrite_tac[lower_history_current_def] >>
+  qx_gen_tac `i` >> strip_tac >>
+  conj_tac
+  >- (map_every qx_gen_tac [`op`, `sz`] >> strip_tac >>
+      qpat_assum `!i op sz. _ ==> w2n sz <= _`
+        (qspecl_then [`i`, `op`, `sz`] mp_tac) >> simp[]) >>
+  qpat_assum `!i. _ ==> !a. _ ==> pair a < LENGTH h`
+    (qspec_then `i` mp_tac) >> simp[]
 QED
 
 Theorem lower_history_pairs_from_recorded_windows:
