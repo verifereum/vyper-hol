@@ -42,7 +42,7 @@ Theorem return_selected_none_nr_frag_full:
           (abstract_machine_from_state am.sources am.exports am.layouts ee'),
          ee'.requests) r)
     ce (stmt_env ce lctx ret (Return NONE))
-    (stmt_env ce lctx ret (Return NONE))
+    (stmt_env (gas_shadow_env T ce) lctx ret (Return NONE))
     (eval_stmt cx (Return NONE)) es
 Proof
   rpt strip_tac >>
@@ -91,7 +91,7 @@ Proof
           compile_nonreentrant_unlock global_nonreentrant_slot T (mut = View)
         else comp_return ()) sa = ((),su) /\
         emit_inst STOP [] [] su = ((),sb)` by
-    (qpat_x_assum `stmt_env _ _ _ _ sa = _` mp_tac >>
+    (qpat_x_assum `stmt_env _ _ _ _ sa = (_,sb)` mp_tac >>
      simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
           comp_bind_def, comp_ignore_bind_def, comp_return_def,
           compile_return_unlock_def] >>
