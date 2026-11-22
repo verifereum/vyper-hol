@@ -1,7 +1,7 @@
 Theory vyperPinFoldProps
 Ancestors
   vyperOriginFold vyperPinFold vyperConstEval vyperEvalPureExpr vyperContext vyperState vyperValue vyperAST
-  vyperValueOperation vyperTypeExprSoundness vyperConstEvalProps jsonToVyperExpr
+  vyperValueOperation vyperTypeExprSoundness vyperConstEvalProps
 
 Theorem pin_constant_literal_evaluate:
   pin_constant_literal v = SOME l ==> evaluate_literal l = v
@@ -566,13 +566,4 @@ Proof
   gvs[eval_pure_expr_def] >>
   irule (cj 1 origin_fold_tree_exact_mutual) >>
   simp[pin_literal_tree_def]
-QED
-
-Theorem fold_pin_constant_eval_eq:
-  eval_expr cx (fold_pin_constant e) st = eval_expr cx e st
-Proof
-  Cases_on `origin_fold_value e` >> simp[fold_pin_constant_def] >>
-  drule origin_fold_value_literal_sound >>
-  disch_then (qspecl_then [`st`, `cx`] SUBST1_TAC) >>
-  simp[vyperInterpreterTheory.evaluate_def, return_def]
 QED

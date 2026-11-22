@@ -18,7 +18,7 @@ Ancestors
   (* semantics properties *)
   vyperSemanticsHol
   (* frontend, its cv translation, and the test runner *)
-  vyperTestRunner jsonToVyperCV
+  vyperTestRunner jsonToVyperCV jsonToVyperExprProps
   (* compiler passes *)
   venomPassesHol
   (* analysis roll-up *)
