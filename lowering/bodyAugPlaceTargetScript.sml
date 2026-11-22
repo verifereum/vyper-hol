@@ -80,7 +80,8 @@ Proof
     supported_place_root tops nsid)` suffices_by simp[] >>
   ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
   simp[target_root_def, supportedTargetsTheory.supported_target_info_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  metis_tac[supportedExprFormsTheory.supported_place_root_def]
 QED
 
 Theorem aug_place_supported_root_namespace:
