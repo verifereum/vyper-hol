@@ -44,8 +44,9 @@ Proof
   rename1 `MEM (src,name) (int_calls_target t)` >>
   Cases_on `src` >> simp[] >>
   qpat_assum `EVERY _ (int_calls_target t)`
-    (drule_then strip_assume_tac o SIMP_RULE bool_ss
-      [EVERY_MEM, GSYM FLOOKUP_DEF, optionTheory.IS_SOME_EXISTS]) >>
+    (drule_then assume_tac o SIMP_RULE bool_ss [EVERY_MEM]) >>
+  `?sig. FLOOKUP env.fn_sigs (SOME x,name) = SOME sig` by simp[FLOOKUP_DEF] >>
+  pop_assum strip_assume_tac >>
   qpat_x_assum `fn_sigs_consistent _ _`
     (drule_then strip_assume_tac o REWRITE_RULE [fn_sigs_consistent_def]) >>
   drule_then assume_tac body_inv_qualified_module_absent >> gvs[]
