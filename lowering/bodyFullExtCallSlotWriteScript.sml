@@ -28,6 +28,17 @@ Proof
   `run_inst_seq (emitted_insts sa sb) s = OK q` by simp[run_inst_seq_def] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts sa sb)` by simp[mk_inst_def] >>
+  `opc <> DALLOCA` by
+    (strip_tac >>
+     qpat_assum `step_inst_base _ _ = OK _` mp_tac >>
+     pure_once_rewrite_tac[step_inst_base_def] >>
+     simp[mk_inst_def, AllCaseEqs()]) >>
+  `(ctx_has_dalloca ctx ==>
+     !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+       run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `emitted_insts sa sb = _ ++ _` (mp_tac o SYM) >>
+     simp[listTheory.APPEND_EQ_SING] >> strip_tac >> simp[mk_inst_def]) >>
   drule_all run_inst_seq_gas_origin_ptr_path >> simp[mk_inst_def]
 QED
 

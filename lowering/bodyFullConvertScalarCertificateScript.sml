@@ -151,7 +151,7 @@ Theorem scalar_convert_code[local]:
     ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
     | _ => mk_convert_op src dst) sa = (out,sb) ==>
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-    i.inst_opcode <> GAS) (emitted_insts sa sb) /\
+    i.inst_opcode <> GAS /\ i.inst_opcode <> DALLOCA) (emitted_insts sa sb) /\
   run_inst_seq_mem_ok (emitted_insts sa sb) s
 Proof
   strip_tac >> drule_all scalar_dispatch_op >>
@@ -200,8 +200,14 @@ Proof
     | _ => mk_convert_op src dst))` by metis_tac[bodyPtrTypeBuiltinsScalarRawOutcomeTheory.scalar_dispatch_straight_fresh] >>
   drule_all fragGasFreshTheory.straight_fresh_code_prefix >> strip_tac >>
   drule_all scalar_convert_code >> disch_then (qspec_then `s` strip_assume_tac) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+    i.inst_opcode <> GAS) (emitted_insts sa sb)` by fs[EVERY_MEM] >>
   `EVERY (\i. i.inst_opcode <> INVOKE) (emitted_insts sa sb)` by fs[EVERY_MEM] >>
-  Cases_on `r` >> gvs[]
+  Cases_on `r` >> gvs[] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> gvs[EVERY_APPEND, dalloca_no_wrap_non_dalloca])
   >- (drule_all scalar_convert_uniform_ok >>
       disch_then (qspecl_then [`fn`,`PG`] strip_assume_tac) >>
       qexistsl [`H`,`th`] >>
@@ -221,8 +227,7 @@ Proof
     (gen_tac >> irule bodyFullAllocGenericTheory.inst_seq_ptr_lower_bound_from_alloca_next >> simp[] >> qexists `0` >> simp[]) >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
   `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
-  drule_all run_inst_seq_abort_origin_ptr_uniform >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all run_inst_seq_abort_origin_ptr_uniform >> strip_tac >>
   qexistsl [`H`,`th`,`j`] >> simp[exec_result_map_def] >>
   metis_tac[]
 QED

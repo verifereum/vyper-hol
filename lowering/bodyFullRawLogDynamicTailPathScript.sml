@@ -270,6 +270,8 @@ Proof
         (qunabbrev_tac `i` >> irule rawLogPtrInstTheory.log_taint_ok >>
          simp[Abbr `q`, wordsTheory.w2n_n2w, LESS_MOD]) >>
       `i.inst_opcode = LOG` by simp[Abbr `i`, venomInstTheory.mk_inst_def] >>
+      `unitTransformDefs$dalloca_no_wrap i q` by
+        simp[memSafeRunTheory.dalloca_no_wrap_non_dalloca] >>
       `ptrDiscipline$allocas_from lo q` by
         (simp[Abbr `q`, ptrDisciplineTheory.allocas_from_def] >>
          qpat_x_assum `ghost_inv_at (DF H) _ _ _ _ _ _ _ _` mp_tac >>
@@ -286,7 +288,8 @@ Proof
        sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm s2 ++ [i] /\
        LENGTH s2.cs_current_insts = LENGTH sm.cs_current_insts + LENGTH (emitted_insts sm s2) /\
        EVERY (\j. j.inst_opcode <> INVOKE /\ ~venomInst$is_terminator j.inst_opcode /\ j.inst_opcode <> GAS)
-         (emitted_insts sm s2)` by
+         (emitted_insts sm s2) /\
+       EVERY (\j. j.inst_opcode <> DALLOCA) (emitted_insts sm s2)` by
         (gvs[emit_op_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
              comp_return_def, fresh_var_def, fresh_id_def, emit_def, Abbr `i`] >>
          simp[emitted_insts_def, APPEND_ASSOC, DROP_LENGTH_APPEND] >>
@@ -303,6 +306,12 @@ Proof
        FILTER (\j. j.inst_opcode = GAS) (emitted_insts sm s2) = []` by
         (simp[FILTER_EQ_NIL] >> gvs[EVERY_MEM]) >>
       `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+      `(ctx_has_dalloca ctx ==>
+         !pre j post v. emitted_insts sm s2 = pre ++ j::post /\
+           run_inst_seq pre s = OK v ==> unitTransformDefs$dalloca_no_wrap j v)` by
+        (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+         qpat_x_assum `EVERY (\j. j.inst_opcode <> DALLOCA) _` mp_tac >>
+         simp[EVERY_APPEND]) >>
       `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK q,G1,tn1)` by
         (drule_all run_inst_seq_gas_origin_ptr_path >> simp[Abbr `q`]) >>
       `~q.vs_halted /\ q.vs_current_bb = sm.cs_current_bb` by
