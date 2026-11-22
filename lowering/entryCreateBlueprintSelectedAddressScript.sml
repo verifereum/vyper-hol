@@ -1,6 +1,6 @@
 Theory entryCreateBlueprintSelectedAddress
 Ancestors
-  createSizeBlueprintAddress bodyFullPreds
+  entryCreateBlueprintReadCut bodyFullPreds
   vyperTypeExprSoundness vyperTyping loweringStateRelDefs vyperValue
   valueEncoding vyperCreate exprBodyPreProps createSizeOperandPre
   vyperTypeSystem vyperInterpreter createSizeCopyReplay list loweringPosts compileEnv
@@ -54,7 +54,7 @@ Proof
   Cases_on `hs` >> simp[create_operand_order_def,create_copy_source_cons]
 QED
 
-(* Draft adapter: uncomment once the shared selected scalar rule is synced.
+(* Replay the address at the first observed exit, before constructor arguments. *)
 Theorem blueprint_agreed_address_at_cut:
   body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shctx /\
   expr_body_pre ce cx env (Call ann (CreateTarget (CreateFromBlueprint raw) hs rof ks) args df) es /\
@@ -77,52 +77,6 @@ Theorem blueprint_agreed_address_at_cut:
     gas_completed_operand (DF,lo,gas_explicit_sites ctx shctx,ctx,fnc,PG)
       tops cx st0 sa ca (bind (eval_expr cx target) (read_result cx)) (start,s0,G0,tn0)
       (expr_sim_full_post (DF,lo,d,ctx,fnc) ce cx target (start,sa,ca,s0,target_op,G0,tn0))) /\
-  (* The scalar transition is shared with the payload and keyword cases.
-     Only its selected entry and actual continuation are instantiated here. *)
-  (!p k rr out'.
-    body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shctx /\
-    expr_body_pre ce cx env target p /\
-    (expr_sim_full_pre (DF,lo,d,ctx,shctx,PG,fnc,shfnc) ce cx (expr_type target) target p
-      (st0,sa,ca,shadow_sa,sca,target_op,s0,G0,tn0) ==>
-     gas_completed_operand (DF,lo,gas_explicit_sites ctx shctx,ctx,fnc,PG)
-       tops cx st0 sa ca (bind (eval_expr cx target) (read_result cx)) (p,s0,G0,tn0)
-       (expr_sim_full_post (DF,lo,d,ctx,fnc) ce cx target (p,sa,ca,s0,target_op,G0,tn0))) /\
-    lower_value compile_expr ce (expr_type target) target sa = (target_op,ca) /\
-    lower_value compile_expr (gas_shadow_env T ce) (expr_type target)
-      (gas_shadow_expr target) shadow_sa = (target_op,sca) /\
-    expr_sim_full_code (ctx,shctx,fnc,shfnc) (sa,ca,shadow_sa,sca) /\
-    local_ptrs_reserved ce sa /\ (!h. dead_lo_ok h (DF h) lo ce cx) /\
-    (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-    return_buf_frame d ce sa s0 /\ alloca_history fnc s0 /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-    (!f i z. frag_reachable ctx fnc s0 f i z ==> dalloca_fmp_headroom i z) /\
-    (!h. valid_horizon cx st0 h p.storage_trace ==>
-      stmt_state_rel h ctx fnc ce cx p s0 /\ storage_well_formed_on cx p (FST h) /\
-      ghost_inv_at (DF h) lo d ce cx p G0 tn0 s0) /\
-    ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
-    s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    create_expr_prefix sa ca (gas_explicit_sites ctx shctx) ctx fnc s0 chunk u /\
-    u.vs_current_bb = ca.cs_current_bb /\ u.vs_inst_idx = LENGTH ca.cs_current_insts /\
-    (!v. storage_trace_frame (k v)) /\
-    bind (bind (eval_expr cx target) (read_result cx)) k p = (rr,out') /\
-    valid_horizon cx st0 H out'.storage_trace /\
-    p.gas_obs = gas_explicit (chunk ++ rest) s0.vs_gas_readings ++ tail ==>
-    (?err. rr = INR (Error err) /\ unspecified_behaviour_exempt tops err) \/
-    ?v q G' tn'.
-      bind (eval_expr cx target) (read_result cx) p = (INL v,q) /\ k v q = (rr,out') /\
-      q.gas_obs = gas_explicit rest u.vs_gas_readings ++ tail /\
-      valid_horizon cx st0 H q.storage_trace /\
-      expr_sim_inv ce cx env q /\ value_runtime_typed env (expr_type target) v /\
-      expr_val_rel cx (post_value_type ce target) v target_op u /\
-      sa.cs_next_var <= ca.cs_next_var /\
-      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x u = SOME w) /\
-      return_buf_frame d ce ca u /\ alloca_history fnc u /\
-      (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
-      (!f i z. frag_reachable ctx fnc u f i z ==> dalloca_fmp_headroom i z) /\
-      (!h. valid_horizon cx st0 h q.storage_trace ==>
-        stmt_state_rel h ctx fnc ce cx q u /\ storage_well_formed_on cx q (FST h) /\
-        ghost_inv_at (DF h) lo d ce cx q G' tn' u) /\ ~u.vs_halted) /\
   eval_expr cx (Call ann (CreateTarget (CreateFromBlueprint raw) hs rof ks) args df)
     (es with gas_obs := gas_explicit (chunk ++ rest) s0.vs_gas_readings ++ tail) = (res,out) /\
   valid_horizon cx st0 H out.storage_trace ==>
@@ -169,20 +123,12 @@ Proof
      `start.storage_trace = es.storage_trace` by simp[Abbr `start`] >>
      asm_rewrite_tac[]) >>
   `expr_sim_full_pre (DF,lo,d,ctx,shctx,PG,fnc,shfnc) ce cx (expr_type target) target start
-      (st0,sa,ca,shadow_sa,sca,target_op,s0,G0,tn0)` by
-    (`gas_admissible (bind (eval_expr cx target) (read_result cx)) expr_res_ok start` by
-       (irule expr_body_pre_gas_admissible >> goal_assum (drule_at Any)) >>
-     qpat_assum `expr_sim_full_code _ _`
-       (strip_assume_tac o REWRITE_RULE[expr_sim_full_code_def]) >>
-     rewrite_tac[expr_sim_full_pre_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `gas_completed_operand (DF,lo,gas_explicit_sites ctx shctx,ctx,fnc,PG)
+      (st0,sa,ca,shadow_sa,sca,target_op,s0,G0,tn0) ==>
+   gas_completed_operand (DF,lo,gas_explicit_sites ctx shctx,ctx,fnc,PG)
       tops cx st0 sa ca (bind (eval_expr cx target) (read_result cx)) (start,s0,G0,tn0)
       (expr_sim_full_post (DF,lo,d,ctx,fnc) ce cx target (start,sa,ca,s0,target_op,G0,tn0))` by
-    (first_assum irule >> simp[]) >>
-  PRED_ASSUM (fn tm => length (fst (strip_forall tm)) = 4) (mk_asm "scalar") >>
-  asm "scalar" (qspecl_then [`start`,`k`,`res`,`out`] mp_tac) >>
-  (impl_tac >- (rpt (conj_tac >- (first_assum ACCEPT_TAC ORELSE simp[])) >>
-                first_assum ACCEPT_TAC)) >>
+    (strip_tac >> first_assum irule >> simp[]) >>
+  drule_all blueprint_read_at_cut_from_replay >>
   strip_tac >- (disj1_tac >> qexists_tac `err` >> simp[]) >>
   rename1 `k av p = (res,out)` >>
   `body_const_cells_agree [(NONE,tops)] cx env p` by
@@ -198,4 +144,3 @@ Proof
   disj2_tac >> qexistsl_tac [`av`,`aw`,`p`,`G'`,`tn'`] >> fs[Abbr `k`] >>
   first_assum ACCEPT_TAC
 QED
-*)
