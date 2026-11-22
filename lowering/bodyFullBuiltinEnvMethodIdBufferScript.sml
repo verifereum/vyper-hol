@@ -417,15 +417,6 @@ Resume method_id_output_buffer_full_run[memory_safety]:
      `inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G2 tn4` by simp[] >>
      `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
        metis_tac[] >>
-     `(ctx_has_dalloca ctx ==>
-       !pre i post u. emitted_insts sa sb = pre ++ i::post /\
-         run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
-       (`EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by simp[mk_inst_def] >>
-        strip_tac >> rpt gen_tac >>
-        disch_then (fn th =>
-          qpat_assum `EVERY _ (emitted_insts sa sb)`
-            (mp_tac o REWRITE_RULE [CONJUNCT1 th])) >>
-        simp[EVERY_APPEND, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
      drule_all run_inst_seq_gas_origin_ptr_path >> simp[mk_inst_def]) >>
   suspend "exterior_frame"
 QED

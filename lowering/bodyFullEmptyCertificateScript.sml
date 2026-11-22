@@ -246,6 +246,22 @@ Proof
   `!D lo. allocas_from lo s /\ lo <= s.vs_alloca_next ==>
     inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s finalG tk` by
     suspend "sequence" >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sm sb)` by
+    (Cases_on `header` >> fs[]
+     >- (drule emitted_insts_emit_void >> simp[mk_inst_def]) >>
+     `!n op st st'. compile_zero_words op n st = ((),st') ==>
+             EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+            (POP_ASSUM_LIST (K ALL_TAC) >>
+             Induct >- simp[builtinSimpleTheory.compile_zero_words_def,
+                            comp_return_def, emitted_insts_refl] >>
+             rpt gen_tac >> strip_tac >>
+             Cases_on `compile_zero_words op n st` >>
+             rename1 `compile_zero_words op n st = (ignored,mid)` >>
+             Cases_on `ignored:unit` >>
+             drule_all bodyPtrTypeBuiltinsEmptyWordsTheory.empty_zero_words_successor_code >>
+             disch_then SUBST1_TAC >> simp[mk_inst_def] >>
+             first_x_assum irule >> qexists_tac `op` >> simp[]) >>
+     first_x_assum irule >> goal_assum drule) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts sa sb)` by
     (gvs[EVERY_MEM, mk_inst_def] >> metis_tac[MEM]) >>
@@ -278,7 +294,11 @@ Resume empty_buffer_uniform_run[path]:
   irule emitted_origin_ptr_path >> simp[] >>
   qexistsl_tac [`emitted_insts sa sb`, `sa`] >>
   gvs[EVERY_MEM, mk_inst_def] >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
+  rpt strip_tac >> gvs[] >>
+  irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+  qpat_assum `_ :: emitted_insts sm sb = _ ++ _`
+    (mp_tac o AP_TERM ``EVERY (\i:instruction. i.inst_opcode <> DALLOCA)``) >>
+  simp[EVERY_APPEND, EVERY_MEM]
 QED
 Finalise empty_buffer_uniform_run
 
