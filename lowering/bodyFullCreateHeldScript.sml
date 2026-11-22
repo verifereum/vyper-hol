@@ -2105,7 +2105,7 @@ Theorem create_body_operand_cut_replay:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s /\ alloca_history func s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_no_wrap i z) /\
+  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_fmp_headroom i z) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s /\
     storage_well_formed_on cx es (FST H) /\
@@ -2125,7 +2125,7 @@ Theorem create_body_operand_cut_replay:
     ptr_val_ok cx (post_value_type cenv e) v op G1 tn1 t /\
     ghost_kept_at lo cenv es sa G tn s G1 tn1 /\
     return_buf_frame d cenv sb t /\
-    (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_no_wrap i z) /\
+    (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_fmp_headroom i z) /\
     body_const_cells_agree [(NONE,tops)] cx env ee /\
     expr_sim_inv cenv cx env ee /\ expr_result_typed env e (Value v) /\
     (?a tv b a' v' b'. eval_expr cx e a = (INL tv,b) /\
@@ -2197,9 +2197,9 @@ Proof
      metis_tac[ci_mono_lower_value_compile_expr,ci_mono_def,pairTheory.SND]) >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
-  `!f i z. frag_reachable ctx func t f i z ==> dalloca_no_wrap i z` by
+  `!f i z. frag_reachable ctx func t f i z ==> dalloca_fmp_headroom i z` by
     (rpt gen_tac >> strip_tac >>
-     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >> simp[]) >>
+     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >> simp[]) >>
   `body_const_cells_agree [(NONE,tops)] cx env ee`
     by (irule create_operand_const_cells_replay >> rpt (goal_assum (drule_at Any))) >>
   qpat_assum `!v ee G1 tn1 t. _ ==> gas_outcome_full _ _ _ _ _ _ _ _` irule >>
@@ -2224,7 +2224,7 @@ Theorem create_body_operand_cut[local]:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s /\ alloca_history func s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_no_wrap i z) /\
+  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_fmp_headroom i z) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s /\
     storage_well_formed_on cx es (FST H) /\
@@ -2244,7 +2244,7 @@ Theorem create_body_operand_cut[local]:
     ptr_val_ok cx (post_value_type cenv e) v op G1 tn1 t /\
     ghost_kept_at lo cenv es sa G tn s G1 tn1 /\
     return_buf_frame d cenv sb t /\
-    (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_no_wrap i z) /\
+    (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_fmp_headroom i z) /\
     body_const_cells_agree [(NONE,tops)] cx env ee /\
     expr_sim_inv cenv cx env ee /\ expr_result_typed env e (Value v) /\
     (?a tv b a' v' b'. eval_expr cx e a = (INL tv,b) /\
@@ -2492,7 +2492,7 @@ Theorem raw_create_scalar_suffix_cut:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s /\ alloca_history func s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_no_wrap i z) /\
+  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_fmp_headroom i z) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s /\ storage_well_formed_on cx es (FST H) /\
     ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
@@ -2509,7 +2509,7 @@ Theorem raw_create_scalar_suffix_cut:
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\ expr_sim_inv cenv cx env ee /\
     s.vs_alloca_next <= t.vs_alloca_next /\ alloca_history func t /\
     return_buf_frame d cenv sb t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-    (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_no_wrap i z) /\
+    (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_fmp_headroom i z) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     storage_trace_domain cx st0 ee.storage_trace /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -2954,11 +2954,11 @@ Resume proxy_expr_sim_from_parts[salt_cut]:
   fs[Once body_exprs_full_ok_def] >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
-  `!fn i z. frag_reachable ctx func sbuf fn i z ==> dalloca_no_wrap i z` by
+  `!fn i z. frag_reachable ctx func sbuf fn i z ==> dalloca_fmp_headroom i z` by
     (rpt gen_tac >> strip_tac >>
      qpat_assum `!D. gas_origin_ptr_path _ _ _ (OK sbuf,Gbuf,tnb)`
        (qspec_then `DF (storage_trace_horizon ea.storage_trace)`
-         (mp_then Any drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap)) >> simp[]) >>
+         (mp_then Any drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom)) >> simp[]) >>
   rewrite_tac[Once exprSimWordArgsTheory.eval_exprs_cons_action] >>
   simp[NoAsms,Once vyperInterpreterTheory.evaluate_def,bind_assoc,bind_return] >>
   once_rewrite_tac[GSYM bind_assoc] >>
@@ -3480,7 +3480,7 @@ Theorem create_ctor_borrowed_head_outcome:
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
   MEM shadow_func shadow_ctx.ctx_functions /\ fn_has_code sa sb func /\
   fn_has_code sh shb shadow_func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -3856,7 +3856,7 @@ Theorem create_ctor_materialized_head_outcome:
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
   MEM shadow_func shadow_ctx.ctx_functions /\ fn_has_code sa ss func /\
   fn_has_code sh shs shadow_func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -3981,7 +3981,7 @@ Theorem create_ctor_head_outcome[local]:
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
   MEM shadow_func shadow_ctx.ctx_functions /\ fn_has_code sa ss func /\
   fn_has_code sh shs shadow_func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -4127,7 +4127,7 @@ Theorem create_ctor_rows_outcome[local]:
   MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -4350,10 +4350,10 @@ Resume create_ctor_rows_outcome[tail_at_cut]:
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     (rpt strip_tac >> irule bodyFullIfExpReachTheory.body_inv_no_phi >>
      qexistsl [`cenv`,`ctx`,`cx`,`func`,`tops`] >> simp[]) >>
-  `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_fmp_headroom inst z` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> gas_origin_ptr_path _ _ _ _`
        (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
-     rpt strip_tac >> irule bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+     rpt strip_tac >> irule bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >>
      qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)` (irule_at Any) >>
      qexists `fn` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `!svs' sa' sb' sh' shb' es' s' g' tn'. _ ==>
@@ -4604,7 +4604,7 @@ Theorem create_ctor_rows_cut:
   MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -5301,6 +5301,27 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE,finite_mapTheory.DOMSUB_FLOOKUP_THM]
 QED
 
+Theorem create_dalloca_cut_bound[local]:
+  body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions /\
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s0,G0,tn0) marks (OK s,G,tn) /\
+  (!fn i u. frag_reachable ctx func s0 fn i u ==> dalloca_fmp_headroom i u) /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode = DALLOCA /\
+  venomLayout$ceil32 (w2n sz) <= 2 ** 255 + 2 ** 64 ==>
+  w2n s.vs_fmp + venomLayout$ceil32 (w2n sz) < dimword (:256)
+Proof
+  strip_tac >>
+  drule_all bodyFullIfExpReachTheory.body_inv_no_phi >> strip_tac >>
+  `frag_reachable ctx func s func inst s` by
+    (irule contextRawReachableTheory.frag_reachable_start >>
+     drule_all contextCodegenRelPropsTheory.lookup_instruction_active >> simp[]) >>
+  drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >>
+  disch_then (drule_then mp_tac) >>
+  simp[dalloca_fmp_headroom_def,arithmeticTheory.MAX_DEF] >>
+  rw[] >> decide_tac
+QED
+
 (* The dispatch buffer, including its ghost, is chosen before any horizon
    or explicit-site quantifier. The zero-code branch stops at ASSERT. *)
 Theorem create_copy_prepared_path:
@@ -5309,7 +5330,7 @@ Theorem create_copy_prepared_path:
   gas_origin_ptr_path (D0,lo,explicit0,ctx,func,PG)
     (s0,G0,tn0) marks (OK s,G,tn) /\
   (!fn i v. contextRawReachable$frag_reachable ctx func s0 fn i v ==>
-            dalloca_no_wrap i v) /\
+            dalloca_fmp_headroom i v) /\
   storage_trace_domain cx st0 ee.storage_trace /\
   stmt_state_rel H0 ctx func cenv cx es s0 /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -5451,15 +5472,23 @@ Resume create_copy_prepared_path[allocate]:
   disch_then (qspecl_then [`pre`,`func`] mp_tac) >>
   (impl_tac >- asm_rewrite_tac[]) >>
   disch_then (qx_choose_then `p` (qx_choose_then `bb5` (map_every assume_tac o CONJUNCTS))) >>
-  qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK pre,Ga,ta)`
-    (mp_then (Pat `gas_origin_ptr_path _ _ _ _`) mp_tac bodyFullDynamicBufferTheory.dalloca_origin_region_exact) >>
-  disch_then (assume_tac) >>
-  qpat_assum `get_instruction bb5 _ = SOME _` (fn fetched =>
-    first_x_assum (fn th => mp_then (Pat `get_instruction _ _ = SOME _`) mp_tac th fetched)) >>
-  disch_then (qspecl_then [`tops`,`n2w (LENGTH code + 32)`,`cx`,`cenv`] mp_tac o
-    SIMP_RULE (srw_ss()) [Excl "UNWIND_EXISTS_CONV",mk_inst_def]) >>
-  (impl_tac >- asm_rewrite_tac[]) >>
-  disch_then (qx_choosel_then [`al`,`Gb`,`tb`] (map_every assume_tac o CONJUNCTS)) >>
+  qabbrev_tac `alloc_inst = mk_inst a5.cs_next_id DALLOCA [size'] [p]` >>
+  `alloc_inst.inst_opcode = DALLOCA /\ alloc_inst.inst_operands = [size'] /\
+   alloc_inst.inst_outputs = [p]` by simp[Abbr `alloc_inst`,mk_inst_def] >>
+  `get_instruction bb5 pre.vs_inst_idx = SOME alloc_inst` by simp[Abbr `alloc_inst`] >>
+  `venomLayout$ceil32 (w2n (n2w (LENGTH code + 32):bytes32)) <=
+   2 ** 255 + 2 ** 64` by
+    (qspecl_then [`LENGTH code + 32`,`1024`] mp_tac
+       (GEN_ALL dallocaBoundsTheory.ceil32_le_multiple) >>
+     simp[wordsTheory.w2n_n2w,wordsTheory.dimword_def,wordsTheory.dimindex_256] >>
+     decide_tac) >>
+  drule_all (Q.INST [`s` |-> `pre`, `inst` |-> `alloc_inst`,
+    `sz` |-> `n2w (LENGTH code + 32):bytes32`] create_dalloca_cut_bound) >>
+  strip_tac >>
+  drule_all (Q.INST [`s` |-> `pre`, `tn` |-> `ta`]
+    bodyFullDynamicBufferTheory.dalloca_origin_region_exact) >>
+  disch_then (qspecl_then [`PG`,`Ga`]
+    (qx_choosel_then [`al`,`Gb`,`tb`] (map_every assume_tac o CONJUNCTS))) >>
   qpat_x_assum `alloc_ptr = Var p` SUBST_ALL_TAC >>
   rpt (qpat_x_assum `cs_extends _ _` (fn th =>
     if aconv (concl th) ``cs_extends sm sc`` then NO_TAC else ALL_TAC)) >>
@@ -6259,7 +6288,7 @@ Theorem create_blueprint_materialize[local]:
   compile_create_blueprint_append target amount sop off code args_ptr cnt rof sa = (result,sb) /\
   fn_has_code sa sb func /\ body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions /\
   gas_origin_ptr_path (D0,lo,explicit0,ctx,func,PG) (s0,G0,tn0) marks (OK s,G,tn) /\
-  (!fn i v. contextRawReachable$frag_reachable ctx func s0 fn i v ==> dalloca_no_wrap i v) /\
+  (!fn i v. contextRawReachable$frag_reachable ctx func s0 fn i v ==> dalloca_fmp_headroom i v) /\
   ctx_has_dalloca ctx /\ allocas_below_fmp s /\ allocas_from lo s /\
   s.vs_alloca_next <= w2n s.vs_fmp /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -6276,7 +6305,8 @@ Theorem create_blueprint_materialize[local]:
       (args = [] \/ w2n a + LENGTH args <= s.vs_alloca_next) /\
       (!i. w2n a <= i /\ i < w2n a + LENGTH args ==> i NOTIN tn.t_mem) /\
       read_memory (w2n a) (LENGTH args) s = args) /\
-  LENGTH prefix + LENGTH args < dimword (:256) ==>
+  LENGTH prefix + LENGTH args < dimword (:256) /\
+  venomLayout$ceil32 (LENGTH prefix + LENGTH args) <= 2 ** 255 + 2 ** 64 ==>
   ?sc p size t H z.
     compile_create_dispatch (Var p) size amount sop rof sc = (result,sb) /\
     fn_has_code sc sb func /\ cs_extends sa sc /\ sa.cs_next_var <= sc.cs_next_var /\
@@ -6357,8 +6387,15 @@ Resume create_blueprint_materialize[total]:
   qabbrev_tac `i = mk_inst sm.cs_next_id DALLOCA [tot_op] [p]` >>
   `i.inst_opcode = DALLOCA /\ i.inst_operands = [tot_op] /\ i.inst_outputs = [p]` by
     simp[Abbr `i`,mk_inst_def] >>
-  drule_all bodyFullDynamicBufferTheory.dalloca_origin_region_exact >>
-  disch_then (qx_choosel_then [`v`,`Gv`,`tv`] (map_every assume_tac o CONJUNCTS)) >>
+  `venomLayout$ceil32 (w2n (n2w N:bytes32)) <= 2 ** 255 + 2 ** 64` by
+    simp[Abbr `N`,IgnAsm `prefix = _`] >>
+  drule_all (Q.INST [`s` |-> `u`, `inst` |-> `i`,
+    `sz` |-> `n2w N:bytes32`] create_dalloca_cut_bound) >>
+  strip_tac >>
+  drule_all (Q.INST [`s` |-> `u`, `tn` |-> `tu`]
+    bodyFullDynamicBufferTheory.dalloca_origin_region_exact) >>
+  disch_then (qspecl_then [`PG`,`Gu`]
+    (qx_choosel_then [`v`,`Gv`,`tv`] (map_every assume_tac o CONJUNCTS))) >>
   suspend "allocated"
 QED
 
@@ -6587,7 +6624,7 @@ Theorem create_blueprint_prepared_path:
   compile_create_blueprint_append target amount sop off code args_ptr cnt rof sm = (result,sb) /\
   fn_has_code sa sb func /\ body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions /\
   gas_origin_ptr_path (D0,lo,explicit0,ctx,func,PG) (s0,G0,tn0) marks (OK s,G,tn) /\
-  (!fn i v. contextRawReachable$frag_reachable ctx func s0 fn i v ==> dalloca_no_wrap i v) /\
+  (!fn i v. contextRawReachable$frag_reachable ctx func s0 fn i v ==> dalloca_fmp_headroom i v) /\
   ctx_has_dalloca ctx /\ allocas_below_fmp s /\ allocas_from lo s /\
   s.vs_alloca_next <= w2n s.vs_fmp /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -6701,6 +6738,11 @@ Resume create_blueprint_prepared_path[append]:
     (qpat_assum `LENGTH prefix = n` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
   `eval_operand code u = SOME (n2w (LENGTH prefix))` by
     (qpat_assum `LENGTH prefix = n` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  `venomLayout$ceil32 (LENGTH prefix + LENGTH args) <= 2 ** 255 + 2 ** 64` by
+    (qpat_assum `LENGTH prefix = n` SUBST1_TAC >>
+     qspecl_then [`n + LENGTH args`,`2 ** 250 + 2 ** 59`] mp_tac
+       (GEN_ALL dallocaBoundsTheory.ceil32_le_multiple) >>
+     simp[] >> decide_tac) >>
   drule_all create_blueprint_materialize >> strip_tac >>
   suspend "result"
 QED
@@ -6843,7 +6885,7 @@ Theorem create_copy_finish[local]:
   compile_create_copy target amount sop rof sm = (result,sb) /\
   fn_has_code sm sb func /\ body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions /\
   gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s0,G0,tn0) marks (OK s,G,tn) /\
-  (!fn i z. frag_reachable ctx func s0 fn i z ==> dalloca_no_wrap i z) /\
+  (!fn i z. frag_reachable ctx func s0 fn i z ==> dalloca_fmp_headroom i z) /\
   storage_trace_domain cx st0 ee.storage_trace /\ valid_horizon cx st0 H ee.storage_trace /\
   stmt_state_rel H ctx func cenv cx es s0 /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -8013,7 +8055,7 @@ Theorem blueprint_offset_cut[local]:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s /\ alloca_history func s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_no_wrap i z) /\
+  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_fmp_headroom i z) /\
   storage_trace_domain cx st0 es.storage_trace /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s /\
@@ -8039,7 +8081,7 @@ Theorem blueprint_offset_cut[local]:
     s.vs_alloca_next <= t.vs_alloca_next /\
     wb_frame cenv es ee sa s t /\ ghost_kept_at lo cenv es sa G tn s G1 tn1 /\
     return_buf_frame d cenv sb t /\
-    (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_no_wrap i z) /\
+    (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_fmp_headroom i z) /\
     expr_sim_inv cenv cx env ee /\
     dest_NumV v = SOME (w2n ow) /\ eval_operand op t = SOME ow /\
     op_taint tn1 op = {} /\ op_prov G1 op = NONE /\
@@ -8122,7 +8164,7 @@ Theorem blueprint_scalar_suffix_cut:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s /\ alloca_history func s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_no_wrap i z) /\
+  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_fmp_headroom i z) /\
   storage_trace_domain cx st0 es.storage_trace /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s /\
@@ -8168,7 +8210,7 @@ Theorem blueprint_scalar_suffix_cut:
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\ expr_sim_inv cenv cx env ee /\
     s.vs_alloca_next <= t.vs_alloca_next /\ alloca_history func t /\
     return_buf_frame d cenv sb t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-    (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_no_wrap i z) /\
+    (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_fmp_headroom i z) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     storage_trace_domain cx st0 ee.storage_trace /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -8244,7 +8286,7 @@ Proof
     ~n.vs_halted /\ n.vs_current_bb = sn.cs_current_bb /\ n.vs_inst_idx = LENGTH sn.cs_current_insts /\
     alloca_history func n /\ return_buf_frame d cenv sn n /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp n) /\
-    (!fn i z. frag_reachable ctx func n fn i z ==> dalloca_no_wrap i z) /\
+    (!fn i z. frag_reachable ctx func n fn i z ==> dalloca_fmp_headroom i z) /\
     s.vs_alloca_next <= n.vs_alloca_next /\ wb_frame cenv es en sa s n /\
     ghost_kept_at lo cenv es sa G tn s Gn tnn /\
     eval_operand y n = SOME yw /\ op_taint tnn y = {} /\
@@ -9017,7 +9059,7 @@ Theorem blueprint_raw_args_cut:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s /\ alloca_history func s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_no_wrap i z) /\
+  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_fmp_headroom i z) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s /\ storage_well_formed_on cx es (FST H) /\
     ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
@@ -9032,7 +9074,7 @@ Theorem blueprint_raw_args_cut:
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\ s.vs_alloca_next <= u.vs_alloca_next /\
     alloca_history func u /\ return_buf_frame d cenv sb u /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
-    (!fn i z. frag_reachable ctx func u fn i z ==> dalloca_no_wrap i z) /\
+    (!fn i z. frag_reachable ctx func u fn i z ==> dalloca_fmp_headroom i z) /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. data = Var x \/ cnt = Var x ==> not_fresh_at sb x) /\
     storage_trace_domain cx st0 ee.storage_trace /\
@@ -9260,8 +9302,8 @@ Resume blueprint_raw_args_cut[borrow]:
        map_every (fn sel => qpat_assum sel SUBST1_TAC)
          [`z.vs_initial_fmp = t.vs_initial_fmp`,`z.vs_fmp = t.vs_fmp`,`z.vs_allocas = t.vs_allocas`] >>
        ACCEPT_TAC (REWRITE_RULE[allocas_below_fmp_def] th))) >>
-  `!fn i u. frag_reachable ctx func z fn i u ==> dalloca_no_wrap i u` by
-    (rpt strip_tac >> irule bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+  `!fn i u. frag_reachable ctx func z fn i u ==> dalloca_fmp_headroom i u` by
+    (rpt strip_tac >> irule bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >>
      qpat_assum `!D explicit. gas_origin_ptr_path _ (t,G1,tn1) [] (OK z,Gz,tz)`
        (qspecl_then [`DF (storage_trace_horizon ee.storage_trace)`,`gas_explicit_sites ctx shadow_ctx`]
          (irule_at Any)) >>
@@ -9601,7 +9643,7 @@ Resume blueprint_raw_args_cut[copy_store]:
      qpat_assum `h with <|vs_vars := _; vs_inst_idx := _|> = u` (fn eq =>
        qpat_assum `allocas_below_fmp u` (mp_tac o ONCE_REWRITE_RULE [GSYM eq])) >>
      simp[allocas_below_fmp_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
-  `!fn i r. frag_reachable ctx func h fn i r ==> dalloca_no_wrap i r` by suspend "copy_reach" >>
+  `!fn i r. frag_reachable ctx func h fn i r ==> dalloca_fmp_headroom i r` by suspend "copy_reach" >>
   `!tail. eval_exprs cx [e] (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
       (INL [BytesV bs],ee with gas_obs := tail)` by
     (qx_gen_tac `tail` >>
@@ -9648,7 +9690,7 @@ Resume blueprint_raw_args_cut[copy_header_semantics]:
 QED
 
 Resume blueprint_raw_args_cut[copy_reach]:
-  rpt strip_tac >> irule bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+  rpt strip_tac >> irule bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >>
   qpat_assum `!H. _ ==> stmt_state_rel H ctx func cenv cx ee h /\ _`
     (drule_then (map_every assume_tac o CONJUNCTS)) >>
   qpat_assum `gas_origin_ptr_path _ (s,G,tn) marks (OK h,Gh,th)` (irule_at Any) >>
@@ -9751,7 +9793,7 @@ Theorem create_blueprint_finish[local]:
   compile_create_blueprint_check lit target off sm = (codep,sn) /\
   compile_create_blueprint_append target amount sop off codep args_ptr cnt rof sn = (result,sb) /\
   fn_has_code sm sb func /\ body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions /\
-  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_no_wrap i z) /\
+  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_fmp_headroom i z) /\
   storage_trace_domain cx st0 ee.storage_trace /\
   stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx es s0 /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -9982,7 +10024,7 @@ Theorem blueprint_encoded_args_cut:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s /\ alloca_history func s /\
-  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_no_wrap i z) /\
+  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_fmp_headroom i z) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s /\ storage_well_formed_on cx es (FST H) /\
     ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
@@ -9998,7 +10040,7 @@ Theorem blueprint_encoded_args_cut:
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\ s.vs_alloca_next <= z.vs_alloca_next /\
     alloca_history func z /\ return_buf_frame d cenv sb z /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
-    (!fn i u. frag_reachable ctx func z fn i u ==> dalloca_no_wrap i u) /\
+    (!fn i u. frag_reachable ctx func z fn i u ==> dalloca_fmp_headroom i u) /\
     ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. data = Var x \/ cnt = Var x ==> not_fresh_at sb x) /\
     storage_trace_domain cx st0 ee.storage_trace /\
@@ -10208,8 +10250,8 @@ Resume blueprint_encoded_args_cut[apply_next]:
   `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
     (qpat_assum `stmt_state_rel _ ctx func cenv cx ee z`
        (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >> simp[]) >>
-  `!fn i u. frag_reachable ctx func z fn i u ==> dalloca_no_wrap i u` by
-    (rpt strip_tac >> irule bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+  `!fn i u. frag_reachable ctx func z fn i u ==> dalloca_fmp_headroom i u` by
+    (rpt strip_tac >> irule bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >>
      qpat_assum `!H. _ ==> gas_origin_ptr_path _ (s,G,tn) marks (OK z,Gz,tz)`
        (drule_then (irule_at Any)) >> qexists `fn` >>
      simp[] >> metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi]) >>
@@ -10440,7 +10482,7 @@ Resume create_blueprint_expr_full_ok[ctor]:
     wb_frame cenv et eu a st u /\ ghost_kept_at lo cenv et a Gtar tnt st Gu tu /\
     st.vs_alloca_next <= u.vs_alloca_next /\ alloca_history func u /\
     return_buf_frame d' cenv ca u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
-    (!fn i z. frag_reachable ctx func u fn i z ==> dalloca_no_wrap i z) /\
+    (!fn i z. frag_reachable ctx func u fn i z ==> dalloca_fmp_headroom i z) /\
     ~u.vs_halted /\ u.vs_current_bb = ca.cs_current_bb /\ u.vs_inst_idx = LENGTH ca.cs_current_insts /\
     (!v. p = Var v \/ n = Var v ==> not_fresh_at ca v) /\
     storage_trace_domain cx st0 eu.storage_trace /\
@@ -12591,7 +12633,7 @@ Theorem raw_create_encoded_args_cut:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s /\ alloca_history func s /\
-  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_no_wrap i z) /\
+  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_fmp_headroom i z) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s /\ storage_well_formed_on cx es (FST H) /\
     ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
@@ -12618,7 +12660,7 @@ Theorem raw_create_encoded_args_cut:
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\ s.vs_alloca_next <= z.vs_alloca_next /\
     alloca_history func z /\ return_buf_frame d cenv sb z /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
-    (!fn i u. frag_reachable ctx func z fn i u ==> dalloca_no_wrap i u) /\
+    (!fn i u. frag_reachable ctx func z fn i u ==> dalloca_fmp_headroom i u) /\
     ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
       valid_horizon cx st0 H es.storage_trace /\ stmt_state_rel H ctx func cenv cx ee z /\
@@ -12811,8 +12853,8 @@ Resume raw_create_encoded_args_cut[apply_next]:
      qexistsl [`tr`,`Gr`] >> simp[]) >>
   `s.vs_alloca_next <= z.vs_alloca_next` by
     (irule arithmeticTheory.LESS_EQ_TRANS >> qexists `rs.vs_alloca_next` >> simp[]) >>
-  `!fn i u. frag_reachable ctx func z fn i u ==> dalloca_no_wrap i u` by
-    (rpt strip_tac >> irule bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+  `!fn i u. frag_reachable ctx func z fn i u ==> dalloca_fmp_headroom i u` by
+    (rpt strip_tac >> irule bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >>
      qpat_assum `!H. _ ==> gas_origin_ptr_path _ (s,G,tn) marks (OK z,Gz,tz)`
        (drule_then (irule_at Any)) >> qexists `fn` >>
      simp[] >> metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi]) >>
@@ -12878,7 +12920,7 @@ Theorem raw_create_bytecode_cut:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s /\ alloca_history func s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_no_wrap i z) /\
+  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_fmp_headroom i z) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s /\ storage_well_formed_on cx es (FST H) /\
     ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
@@ -12895,7 +12937,7 @@ Theorem raw_create_bytecode_cut:
     wb_frame cenv es ee sa s z /\ ghost_kept_at lo cenv es sa G tn s Gz tz /\
     s.vs_alloca_next <= z.vs_alloca_next /\ alloca_history func z /\ return_buf_frame d cenv sb z /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
-    (!fn i u. frag_reachable ctx func z fn i u ==> dalloca_no_wrap i u) /\
+    (!fn i u. frag_reachable ctx func z fn i u ==> dalloca_fmp_headroom i u) /\
     ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
       valid_horizon cx st0 H es.storage_trace /\ stmt_state_rel H ctx func cenv cx ee z /\
@@ -13365,8 +13407,8 @@ Resume raw_create_bytecode_cut[header_paths]:
      qpat_assum `!H. _ ==> gas_origin_ptr_path _ (s,G,tn) marks (OK t,G1,tn1)`
        (drule_then (mp_tac o MATCH_MP fragGasOriginPtrTheory.gas_origin_ptr_path_append)) >>
      disch_then (qspecl_then [`t`,`G1`,`tn1`,`[]`,`OK z`,`Gz`,`tz`] mp_tac) >> simp[]) >>
-  `!fn i u. frag_reachable ctx func z fn i u ==> dalloca_no_wrap i u` by
-    (rpt strip_tac >> irule bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+  `!fn i u. frag_reachable ctx func z fn i u ==> dalloca_fmp_headroom i u` by
+    (rpt strip_tac >> irule bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >>
      qpat_assum `!H. _ ==> valid_horizon cx st0 H es.storage_trace /\ stmt_state_rel H ctx func cenv cx ee z /\ _`
        (drule_then strip_assume_tac) >>
      qpat_assum `gas_origin_ptr_path _ (s,G,tn) marks (OK z,Gz,tz)` (irule_at Any) >>
@@ -13528,7 +13570,7 @@ Resume raw_create_expr_full_ok[bytecode]:
     wb_frame cenv es eu sa s0 u /\ ghost_kept_at lo cenv es sa G0 tn0 s0 Gu tu /\
     s0.vs_alloca_next <= u.vs_alloca_next /\ alloca_history func u /\
     return_buf_frame d cenv se u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
-    (!fn i z. frag_reachable ctx func u fn i z ==> dalloca_no_wrap i z) /\
+    (!fn i z. frag_reachable ctx func u fn i z ==> dalloca_fmp_headroom i z) /\
     ~u.vs_halted /\ u.vs_current_bb = se.cs_current_bb /\ u.vs_inst_idx = LENGTH se.cs_current_insts /\
     (!H. valid_horizon cx st0 H eu.storage_trace ==>
       valid_horizon cx st0 H es.storage_trace /\ stmt_state_rel H ctx func cenv cx eu u /\

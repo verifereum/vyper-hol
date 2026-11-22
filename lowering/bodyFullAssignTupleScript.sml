@@ -6719,7 +6719,7 @@ Theorem tuple_immutable_head_target[local]:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s /\ alloca_history func s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u) /\
+  (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s /\
     storage_well_formed_on cx es (FST H) /\
@@ -11963,9 +11963,9 @@ Resume tuple_assign_exact_with_borrowed_frame[target_frame]:
        (u,Gu,tu) nested_marks (OK m,Gmid,tmid)` by
       (qpat_assum `!H. _ ==> gas_origin_ptr_path _ (u,Gu,tu) nested_marks (OK m,Gmid,tmid)`
          (qspec_then `Hm` (drule_then ACCEPT_TAC))) >>
-    `!fn inst z. frag_reachable ctx func m fn inst z ==> dalloca_no_wrap inst z` by
+    `!fn inst z. frag_reachable ctx func m fn inst z ==> dalloca_fmp_headroom inst z` by
       tuple_path_no_wrap `gas_origin_ptr_path _ (u,Gu,tu) nested_marks (OK m,Gmid,tmid)`
-        `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_no_wrap inst z`) >>>
+        `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_fmp_headroom inst z`) >>>
   HEADGOAL (
     `p + type_memory_size_list tvs <= m.vs_alloca_next` by decide_tac >>
     qpat_assum `ghost_kept_at lo cenv src cur Gu tu u Gmid tmid`
@@ -12173,9 +12173,9 @@ Resume tuple_assign_exact_with_borrowed_frame[suffix_frame]:
       (qpat_assum `stmt_state_rel Hm ctx func cenv cx mid m`
          (mp_then Any assume_tac bodyMemBopRestWordPathTheory.rest_word_state_alloca_inv) >>
        drule_all_then ACCEPT_TAC bodyFullPathHistoryTheory.body_full_path_alloca_history) >>
-    `!fn inst z. frag_reachable ctx func q fn inst z ==> dalloca_no_wrap inst z` by
+    `!fn inst z. frag_reachable ctx func q fn inst z ==> dalloca_fmp_headroom inst z` by
       tuple_path_no_wrap `gas_origin_ptr_path _ (m,Gmid,tmid) [] (OK q,Gq,tq)`
-        `!fn inst z. frag_reachable ctx func m fn inst z ==> dalloca_no_wrap inst z`) >>>
+        `!fn inst z. frag_reachable ctx func m fn inst z ==> dalloca_fmp_headroom inst z`) >>>
   HEADGOAL (
     `!mem. mem_agree_outside tq.t_mem q.vs_memory mem ==>
        val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) p mem` by
@@ -16795,9 +16795,9 @@ Resume tuple_assign_widened_with_immutable_paths[nested_immutable]:
         (qspec_then `H0` (drule_then (qspecl_then [`sp`,`Gp`,`tp`,`[]`,`OK q`,`Gq`,`tq`] mp_tac o
           MATCH_MP fragGasOriginPtrTheory.gas_origin_ptr_path_append))) >>
       simp[]) >>
-   `!fn inst u. frag_reachable ctx func q fn inst u ==> dalloca_no_wrap inst u` by
+   `!fn inst u. frag_reachable ctx func q fn inst u ==> dalloca_fmp_headroom inst u` by
      tuple_path_no_wrap `gas_origin_ptr_path _ (s,G,tn) headmarks (OK q,Gq,tq)`
-       `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u` >>
+       `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u` >>
    `alloca_history func q` by
      (irule bodyFullPathHistoryTheory.body_full_path_alloca_history >>
       qpat_assum `gas_origin_ptr_path _ (s,G,tn) headmarks (OK q,Gq,tq)` (irule_at Any) >>
