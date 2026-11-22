@@ -16195,11 +16195,12 @@ Proof
         match_mp_tac (Q.SPECL [`descs`, `segs`, `insts`, `fn`] internal_fns_ok_mode) >>
         gvs[Abbr `ifns`, Abbr `insts`, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
         conj_tac >- metis_tac[] >>
-        rpt conj_tac
-        >- first_assum ACCEPT_TAC
-        >- first_assum ACCEPT_TAC >>
-        rpt strip_tac >> qexists_tac `bb` >> simp[] >>
-        qexists_tac `l'` >> simp[]) >>
+        rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+        rpt strip_tac >>
+        FIRST [
+          qpat_assum `!seg bb inst. _ ==> ?front x. _`
+            (qspecl_then [`seg`,`bb`,`inst`] mp_tac) >> simp[],
+          qexists_tac `bb` >> simp[] >> qexists_tac `l'` >> simp[]]) >>
   `entry_fn_no_ret (mk_raw_function entry_label entry)`
     by (simp[contextCodegenRelTheory.entry_fn_no_ret_def,
              mk_raw_function_fields, EVERY_MEM] >>

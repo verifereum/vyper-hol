@@ -21,8 +21,6 @@ Proof
   Cases_on `a0` >> Cases_on `b0` >>
   simp[nsid_to_string_def] >>
   rpt strip_tac >> gvs[MEM_APPEND] >>
-  mp_tac (Q.SPECL
-    [`toString (x:num)`, `a1`, `toString (x':num)`, `b1`, `#"."`]
-    MEM_APPEND_lemma) >>
+  drule MEM_APPEND_lemma >>
   simp[decimal_has_no_dot, toString_11]
 QED
