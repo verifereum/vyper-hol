@@ -3,6 +3,7 @@ Ancestors
   exprLowering compileEnv context exprSimHypsDefs
   exprSimBopRestWordFacts exprSimSource exprBopLowering exprLoweringProps
   gasShadowState gasShadow gasShadowCompile gasShadowCompileHelpers gasShadowCompileMembership
+  gasShadowCompileStmtHelpers
   exprOperandVar externalEntryShape localPtrsProps freshWrites fragExec
 
 Theorem rest_word_full_compile_layout:
@@ -11,7 +12,8 @@ Theorem rest_word_full_compile_layout:
   expr_type e2 = ArrayT (expr_type e1) bd /\
   (!a t n elems. e2 <> Builtin a (MakeArray t n) elems) /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
-  lower_value compile_expr cenv ty (gas_shadow_expr (Builtin ann (Bop bop) [e1;e2])) sha = (op,shb) /\
+  lower_value compile_expr (gas_shadow_env sd cenv) ty
+    (gas_shadow_expr (Builtin ann (Bop bop) [e1;e2])) sha = (op,shb) /\
   gas_shadow_state sa sha /\
   fn_has_code sa sb func /\ fn_has_code sha shb shfunc /\
   local_ptrs_reserved cenv sa /\
@@ -21,9 +23,11 @@ Theorem rest_word_full_compile_layout:
     lower_value compile_expr cenv (expr_type e1) e1 sa = (needle,s1) /\
     compile_expr cenv (expr_type e2) e2 s1 = (vv,sm) /\
     compile_var_array_membership cenv needle vv (ArrayT (expr_type e1) bd) (bop = In) sm = (op,sb) /\
-    lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) sha = (needle,sh1) /\
-    compile_expr cenv (expr_type e2) (gas_shadow_expr e2) sh1 = (vv,shm) /\
-    compile_var_array_membership cenv needle vv (ArrayT (expr_type e1) bd) (bop = In) shm = (op,shb) /\
+    lower_value compile_expr (gas_shadow_env sd cenv) (expr_type e1)
+      (gas_shadow_expr e1) sha = (needle,sh1) /\
+    compile_expr (gas_shadow_env sd cenv) (expr_type e2) (gas_shadow_expr e2) sh1 = (vv,shm) /\
+    compile_var_array_membership (gas_shadow_env sd cenv) needle vv
+      (ArrayT (expr_type e1) bd) (bop = In) shm = (op,shb) /\
     gas_shadow_state s1 sh1 /\ gas_shadow_state sm shm /\
     cs_extends sa s1 /\ cs_extends s1 sm /\ cs_extends sm sb /\
     cs_extends sha sh1 /\ cs_extends sh1 shm /\ cs_extends shm shb /\
@@ -55,19 +59,22 @@ QED
 
 Resume rest_word_full_compile_layout[frontiers]:
   `gas_shadow_compiles (lower_value compile_expr cenv (expr_type e1) e1)
-     (lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1))` by
-    (irule (SRULE [] (Q.SPEC `T` (Q.GEN `sh` (SPEC_ALL gas_shadow_compiles_lower_value)))) >>
-     simp[cj 1 gas_shadow_compile_expr]) >>
-  Cases_on `lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) sha` >>
+     (lower_value compile_expr (gas_shadow_env sd cenv) (expr_type e1)
+       (gas_shadow_expr e1))` by irule gas_shadow_stmt_lower_value_env >>
+  Cases_on `lower_value compile_expr (gas_shadow_env sd cenv) (expr_type e1)
+     (gas_shadow_expr e1) sha` >>
   rename1 `lower_value _ _ _ (gas_shadow_expr e1) sha = (shneedle,sh1)` >>
   `shneedle = needle /\ gas_shadow_state st1 sh1` by
     (qpat_x_assum `gas_shadow_compiles _ _` mp_tac >>
      simp[gas_shadow_compiles_def] >> disch_then drule >> simp[]) >>
   gnvs[] >>
-  Cases_on `compile_expr cenv (expr_type e2) (gas_shadow_expr e2) sh1` >>
+  `gas_shadow_compiles (compile_expr cenv (expr_type e2) e2)
+     (compile_expr (gas_shadow_env sd cenv) (expr_type e2)
+       (gas_shadow_expr e2))` by irule gas_shadow_stmt_compile_expr_env >>
+  Cases_on `compile_expr (gas_shadow_env sd cenv) (expr_type e2) (gas_shadow_expr e2) sh1` >>
   rename1 `compile_expr _ _ (gas_shadow_expr e2) sh1 = (shvv,shm)` >>
   `shvv = arr_vv /\ gas_shadow_state st2 shm` by
-    (qspecl_then [`cenv`, `expr_type e2`, `e2`, `T`] mp_tac (cj 1 gas_shadow_compile_expr) >>
+    (qpat_x_assum `gas_shadow_compiles _ _` mp_tac >>
      simp[gas_shadow_compiles_def] >> disch_then drule >> gvs[]) >>
   gnvs[] >>
   `!a t n elems. gas_shadow_expr e2 <> Builtin a (MakeArray t n) elems` by

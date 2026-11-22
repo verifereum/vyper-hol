@@ -9,18 +9,19 @@ Ancestors
 
 Theorem grouped_default_initializer_intervals:
   compile_init_kwargs ce ((name,dst,ty,e)::vars) off 0 hi sa = ((),sb) /\
-  compile_init_kwargs ce
+  compile_init_kwargs (gas_shadow_env T ce)
     ((name,dst,ty,gas_shadow_expr e)::MAP (\(n,p,a,d). (n,p,a,gas_shadow_expr d)) vars)
     off 0 hi sha = ((),shb) /\
   fn_has_code sa sb fn /\ fn_has_code sha shb shfn /\ gas_shadow_state sa sha ==>
   ?op mid last shmid shlast.
     lower_value compile_expr ce ty e sa = (op,mid) /\
-    lower_value compile_expr ce ty (gas_shadow_expr e) sha = (op,shmid) /\
+    lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e) sha = (op,shmid) /\
     (if is_word_type ty then emit_void MSTORE [dst;op]
      else if is_bytestring_type ty then compile_store_bytestring op dst
      else emit_void MCOPY [dst;op;Lit (n2w (type_memory_bytes ce ty))]) mid = ((),last) /\
     compile_init_kwargs ce vars off 0 hi last = ((),sb) /\
-    compile_init_kwargs ce (MAP (\(n,p,a,d). (n,p,a,gas_shadow_expr d)) vars)
+    compile_init_kwargs (gas_shadow_env T ce)
+      (MAP (\(n,p,a,d). (n,p,a,gas_shadow_expr d)) vars)
       off 0 hi shlast = ((),shb) /\
     fn_has_code sa mid fn /\ fn_has_code sha shmid shfn /\
     fn_has_code mid last fn /\ fn_has_code last sb fn /\ fn_has_code shlast shb shfn /\
@@ -30,17 +31,17 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_assum `compile_init_kwargs ce ((name,dst,ty,e)::vars) off 0 hi sa = _`
     (mp_then Any (drule_then strip_assume_tac) compile_init_kwargs_omitted_intervals) >>
-  qpat_assum `compile_init_kwargs ce ((name,dst,ty,gas_shadow_expr e)::_) off 0 hi sha = _`
+  qpat_assum `compile_init_kwargs _ ((name,dst,ty,gas_shadow_expr e)::_) off 0 hi sha = _`
     (mp_then Any (drule_then strip_assume_tac) compile_init_kwargs_omitted_intervals) >>
   rename1 `lower_value compile_expr ce ty e sa = (op,mid)` >>
-  rename1 `lower_value compile_expr ce ty (gas_shadow_expr e) sha = (shop,shmid)` >>
+  rename1 `lower_value compile_expr _ ty (gas_shadow_expr e) sha = (shop,shmid)` >>
   rename1 `compile_init_kwargs ce vars off 0 hi last = ((),sb)` >>
-  rename1 `compile_init_kwargs ce _ off 0 hi shlast = ((),shb)` >>
+  rename1 `compile_init_kwargs _ _ off 0 hi shlast = ((),shb)` >>
   `gas_shadow_compiles (lower_value compile_expr ce ty e)
-    (lower_value compile_expr ce ty (gas_shadow_expr e))` by
-    (mp_tac (Q.INST [`sh` |-> `T`, `cenv` |-> `ce`]
-       (MATCH_MP gas_shadow_compiles_lower_value (CONJUNCT1 gas_shadow_compile_expr))) >>
-     simp[]) >>
+    (lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e))` by
+    (irule (REWRITE_RULE [boolTheory.COND_CLAUSES]
+       (Q.INST [`sd` |-> `T`, `sh` |-> `T`] gas_shadow_compiles_lower_value_env)) >>
+     irule (CONJUNCT1 (Q.INST [`sd` |-> `T`] gas_shadow_compile_expr_env))) >>
   `shop = op /\ gas_shadow_state mid shmid` by
     (qpat_assum `gas_shadow_compiles (lower_value _ _ _ _) _`
        (qspecl_then [`sa`,`sha`] mp_tac o REWRITE_RULE[gas_shadow_compiles_def]) >>
@@ -49,7 +50,7 @@ Proof
   `gas_shadow_state last shlast` by
     (Cases_on `is_word_type ty` >> Cases_on `is_bytestring_type ty` >>
      fs[] >> metis_tac[gas_shadow_compiles_emit_void, gas_shadow_compiles_store_bytestring,
-		     gas_shadow_compiles_def, pairTheory.SND]) >>
+             gas_shadow_compiles_def, pairTheory.SND]) >>
   `ci_mono mid last` by
     (Cases_on `is_word_type ty` >> Cases_on `is_bytestring_type ty` >>
      fs[] >> metis_tac[ci_mono_emit_void, ci_mono_compile_store_bytestring, pairTheory.SND]) >>
@@ -67,30 +68,34 @@ Theorem grouped_supplied_initializer_shadow:
    else first = mid) /\
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) first = ((),last) /\
-  compile_init_kwargs ce
+  compile_init_kwargs (gas_shadow_env T ce)
     ((name,dst,ty,gas_shadow_expr e)::MAP (\(n,p,a,d). (n,p,a,gas_shadow_expr d)) vars)
     off k hi sha = ((),shb) /\
   fn_has_code sha shb shfn /\ gas_shadow_state sa sha ==>
   ?shadow_last.
-    compile_init_kwargs ce (MAP (\(n,p,a,d). (n,p,a,gas_shadow_expr d)) vars)
+    compile_init_kwargs (gas_shadow_env T ce)
+      (MAP (\(n,p,a,d). (n,p,a,gas_shadow_expr d)) vars)
       (off + abi_embedded_static_size ce.ce_struct_fields ty) (k - 1) hi shadow_last = ((),shb) /\
     fn_has_code shadow_last shb shfn /\ gas_shadow_state last shadow_last /\ ci_mono sa last
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  gvs[gas_shadow_env_fields] >>
   mp_tac (Q.INST [`sa` |-> `sha`,`sb` |-> `shb`,`fn` |-> `shfn`,
     `default_e` |-> `gas_shadow_expr e`,
-    `vars` |-> `MAP (\(n,p,a,d). (n,p,a,gas_shadow_expr d)) vars`]
+    `vars` |-> `MAP (\(n,p,a,d). (n,p,a,gas_shadow_expr d)) vars`,
+    `ce` |-> `gas_shadow_env T ce`]
     (SPEC_ALL compile_init_kwargs_supplied_intervals)) >>
   impl_tac >- asm_rewrite_tac[] >>
   disch_then (qx_choosel_then [`shadow_src`,`shadow_mid`,`shadow_first`,`shadow_last`]
     strip_assume_tac) >>
   `shadow_src = src /\ gas_shadow_state mid shadow_mid` by
-    (mp_tac (Q.SPECL [`sa`,`sha`]
+    (gs[gas_shadow_env_fields] >>
+     drule_then (qspecl_then [`ty`, `off`, `ce`] mp_tac)
        (REWRITE_RULE [gas_shadow_compiles_def]
-         (Q.INST [`src` |-> `Lit 4w`,`dyn` |-> `is_abi_dynamic ce.ce_struct_fields ty`,
-            `off` |-> `off-4`,`opc` |-> `CALLDATALOAD`,`base_op` |-> `Lit 0w`,
-            `hi` |-> `Lit 0w`] gas_shadow_compiles_getelemptr_abi))) >>
-     asm_rewrite_tac[pairTheory.FST,pairTheory.SND] >> simp[]) >>
+         (Q.INST [`src` |-> `Lit 4w`, `dyn` |-> `is_abi_dynamic ce.ce_struct_fields ty`,
+            `off` |-> `off - 4`, `opc` |-> `CALLDATALOAD`, `base_op` |-> `Lit 0w`,
+            `hi` |-> `Lit 0w`] gas_shadow_compiles_getelemptr_abi)) >>
+     simp[]) >>
   qpat_x_assum `shadow_src = src` SUBST_ALL_TAC >>
   `gas_shadow_state first shadow_first` by
     (Cases_on `is_abi_dynamic ce.ce_struct_fields ty` >> gvs[] >>
@@ -103,11 +108,13 @@ Proof
        (qspecl_then [`mid`,`shadow_mid`] mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
      asm_rewrite_tac[pairTheory.FST,pairTheory.SND]) >>
   `gas_shadow_state last shadow_last` by
-    (mp_tac (Q.SPECL [`first`,`shadow_first`]
+    (gs[gas_shadow_env_fields] >>
+     drule_at (Pat `gas_shadow_state first shadow_first`)
        (REWRITE_RULE [gas_shadow_compiles_def]
-         (Q.INST [`opc` |-> `CALLDATALOAD`,`base_op` |-> `Lit 0w`,
-           `hi` |-> `Lit 0w`,`info` |-> `type_to_abi_dec_info ce.ce_struct_fields ce ty`]
-           gas_shadow_compiles_abi_decode_to_buf))) >>
+         (Q.INST [`opc` |-> `CALLDATALOAD`, `base_op` |-> `Lit 0w`,
+            `hi` |-> `Lit 0w`, `info` |-> `type_to_abi_dec_info ce.ce_struct_fields ce ty`]
+            gas_shadow_compiles_abi_decode_to_buf)) >>
+     disch_then (qspecl_then [`ty`, `src`, `dst`, `ce`] mp_tac) >>
      simp[]) >>
   `ci_mono sa mid` by
     (qpat_assum `compile_getelemptr_abi _ _ _ _ _ _ sa = _` mp_tac >>
@@ -123,5 +130,8 @@ Proof
          strip_assume_tac (MATCH_MP registration_ptr_guard_code th)) >>
      simp[ci_mono_def]) >>
   `ci_mono first last` by metis_tac[ci_mono_compile_abi_decode,pairTheory.SND] >>
-  qexists_tac `shadow_last` >> asm_rewrite_tac[] >> metis_tac[ci_mono_trans]
+  qexists_tac `shadow_last` >> conj_tac
+  >- (gvs[])
+  >- metis_tac[ci_mono_trans]
 QED
+

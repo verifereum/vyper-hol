@@ -28,10 +28,10 @@ Theorem for_array_prepared_expr_cut_frag_full:
   type_stmt env ret_ty (For id typ (Array e) n loop_body) = SOME env' /\
   (!st0 sa sb sha shb s0 G0 tn0 vv se she bd tyv marks rv em G tn u.
      compile_stmt cenv lctx ret_ty (For id typ (Array e) n loop_body) sa = ((),sb) /\
-     compile_stmt cenv lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body))
+     compile_stmt (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body))
        sha = ((),shb) /\
      compile_expr cenv (expr_type e) e sa = (vv,se) /\
-     compile_expr cenv (expr_type e) (gas_shadow_expr e) sha = (vv,she) /\
+     compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) sha = (vv,she) /\
      gas_shadow_state sa sha /\ gas_shadow_state se she /\ gas_shadow_state sb shb /\
      gas_shadow_context ctx shadow_ctx /\ gas_shadow_function func shadow_func /\
      ctx_inst_ids_distinct ctx /\ fn_inst_ids_distinct func /\
@@ -78,7 +78,7 @@ Theorem for_array_prepared_expr_cut_frag_full:
        (for_array_loop_exit ctx cx RetQ)) ==>
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (For id typ (Array e) n loop_body))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body)))
     (eval_stmt cx (For id typ (Array e) n loop_body)) es
 Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
@@ -87,7 +87,7 @@ Proof
        comp_ignore_bind_def,comp_return_def] >> pairarg_tac >> simp[] >> strip_tac >>
   qpat_x_assum `cenv = cenv'` (SUBST_ALL_TAC o SYM) >>
   `compile_stmt cenv lctx ret_ty (For id typ (Array e) n loop_body) sa = ((),sb)` by gvs[] >>
-  `compile_stmt cenv lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body))
+  `compile_stmt (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body))
      shadow_sa = ((),shadow_sb)` by
     (qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _` mp_tac >>
      simp[gas_shadow_stmt_def,stmt_env_def,declare_stmt_local_def,

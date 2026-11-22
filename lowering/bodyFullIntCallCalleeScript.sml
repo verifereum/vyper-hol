@@ -22,7 +22,7 @@ Ancestors bodyFullShadowBodyInv sourceUnitExecution[qualified,ignore_grammar] lo
   internalReturnStackAggregate[qualified,ignore_grammar]
   bodyExprPreFacts fragExec intCallCallee stmtSimProps emitHelper context
   compileVyper gasShadow gasShadowState gasShadowModuleOps
-  gasShadowCompileContext gasShadowStmtEnv entryInternalAppend entryCompileIntervals
+  gasShadowCompileContext gasShadowStmtEnv bodyFullIntCallEntryShadow entryInternalAppend entryCompileIntervals
   intCallLookup ctorDeployLoweringPrefix venomExecProps
   externalEntryShape abiDecoderAppend intCallEntryFull exprLoweringProps
   storageCopyGasPath fragGasOriginPtrLoop contextProps
@@ -747,32 +747,6 @@ Proof
      simp[pred_setTheory.SUBSET_DEF] >> metis_tac[]) >>
   simp[ptrDisciplineTheory.step_taint_def] >>
   drule_all taintAgreeTheory.mem_taint_frame_source_range >> simp[]
-QED
-
-Theorem gas_shadow_internal_function_entry[local]:
-  gas_shadow_compiles (compile_internal_function_entry ce params has_rb
-    ctor ilen rt) (compile_internal_function_entry ce params has_rb
-    ctor ilen rt)
-Proof
-  simp[compile_internal_function_entry_def, comp_ignore_bind_def] >>
-  ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- (Cases_on `has_rb` >>
-      simp[compile_internal_entry_prefix_def, gas_shadow_compiles_bind,
-           gas_shadow_compiles_return, gas_shadow_compiles_emit_op,
-           gas_shadow_compiles_internal_param_decls]) >>
-  gen_tac >> ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- (IF_CASES_TAC >>
-      simp[gas_shadow_compiles_bind, gas_shadow_compiles_return,
-           gas_shadow_compiles_fixed_region_with_id]) >>
-  gen_tac >> ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- simp[gas_shadow_compiles_materialize_internal_params] >>
-  gen_tac >> ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- (Cases_on `rt` >> simp[gas_shadow_compiles_return] >>
-      IF_CASES_TAC >>
-      simp[comp_ignore_bind_def, gas_shadow_compiles_bind,
-           gas_shadow_compiles_return,
-           gasShadowCompileContextTheory.gas_shadow_compiles_alloc_buffer]) >>
-  simp[gas_shadow_compiles_return]
 QED
 
 (* Factor the entry into the four straight-line compiler phases. *)
@@ -2529,16 +2503,17 @@ Theorem intcall_callee_body_return_type[local]:
   rt = (if ret = NoneT then NONE else SOME ret) ==>
   stmts_env ce NoLoop ret ss =
     stmts_env ce NoLoop (case rt of SOME ty => ty | NONE => BaseT BoolT) ss /\
-  stmts_env ce NoLoop ret (MAP gas_shadow_stmt ss) =
-    stmts_env ce NoLoop (case rt of SOME ty => ty | NONE => BaseT BoolT)
-      (MAP gas_shadow_stmt ss)
+  stmts_env (gas_shadow_env T ce) NoLoop ret (MAP gas_shadow_stmt ss) =
+    stmts_env (gas_shadow_env T ce) NoLoop
+      (case rt of SOME ty => ty | NONE => BaseT BoolT) (MAP gas_shadow_stmt ss)
 Proof
   strip_tac >> Cases_on `ret = NoneT` >> gvs[] >>
   drule_then assume_tac externalCallSelectedTheory.type_stmts_none_valued_return >>
   conj_tac
-  >- metis_tac[stmtsEnvRetTyTheory.stmts_env_ret_ty] >>
-  metis_tac[stmtsEnvRetTyTheory.stmts_env_ret_ty,
-            gas_shadow_supported_stmts, gas_shadow_valued_return]
+  >- (irule stmtsEnvRetTyTheory.stmts_env_ret_ty_no_valued_return >>
+      simp[] >> metis_tac[]) >>
+  irule stmtsEnvRetTyTheory.stmts_env_ret_ty_no_valued_return >>
+  simp[gas_shadow_valued_return] >> metis_tac[gas_shadow_supported_stmts]
 QED
 
 (* This interface separates source typing and the paired body compiler
@@ -2571,7 +2546,8 @@ Theorem intcall_callee_locked_body_frag[local]:
     stmt_frag_full (DF,lo,dret,ctx,shadow_ctx,PG,callee,sf)
       (cx with stk updated_by CONS (NONE,name)) NoLoop RetQ body_ce
       (stmts_env body_ce NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty) ss_comp)
-      (stmts_env body_ce NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty) (MAP gas_shadow_stmt ss_comp))
+      (stmts_env (gas_shadow_env T body_ce) NoLoop
+        (case rt of NONE => BaseT BoolT | SOME ty => ty) (MAP gas_shadow_stmt ss_comp))
       (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) locked /\
     gas_admissible (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) (stmt_res_ok NoLoop) locked /\
     body_ce.ce_is_ctor = caller.ce_is_ctor
@@ -2706,7 +2682,7 @@ Proof
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
   qpat_assum `stmts_env body_ce NoLoop ret ss_comp = _`
     (pure_once_rewrite_tac o single o SYM) >>
-  qpat_assum `stmts_env body_ce NoLoop ret (MAP gas_shadow_stmt ss_comp) = _`
+  qpat_assum `stmts_env _ NoLoop ret (MAP gas_shadow_stmt ss_comp) = _`
     (pure_once_rewrite_tac o single o SYM) >>
   irule bodySimFullTheory.stmt_frag_full_source_cong >>
   qexists_tac `eval_stmts (cx with stk updated_by CONS (NONE,name)) ss_comp` >>
@@ -2745,8 +2721,8 @@ Theorem intcall_callee_locked_body_outcome[local]:
   frame_ret_ok_full (DF,lo,dret,ctx,shadow_ctx,PG,callee,sf)
     (cx with stk updated_by CONS (NONE,name)) RetQ body_ce ret /\
   stmts_env body_ce NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty) ss_comp body_start = (env_end,body_end) /\
-  stmts_env body_ce NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty) (MAP gas_shadow_stmt ss_comp) shadow_start =
-    (env_end,shadow_end) /\
+  stmts_env (gas_shadow_env T body_ce) NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty)
+    (MAP gas_shadow_stmt ss_comp) shadow_start = (gas_shadow_env T env_end,shadow_end) /\
   gas_shadow_state body_start shadow_start /\ gas_shadow_state body_end shadow_end /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function callee sf /\ MEM callee ctx.ctx_functions /\
@@ -2803,8 +2779,8 @@ Proof
   `stmt_frag_full (DF,lo,dret,ctx,shadow_ctx,PG,callee,sf)
       (cx with stk updated_by CONS (NONE,name)) NoLoop RetQ body_ce
       (stmts_env body_ce NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty) ss_comp)
-      (stmts_env body_ce NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty)
-         (MAP gas_shadow_stmt ss_comp))
+      (stmts_env (gas_shadow_env T body_ce) NoLoop
+         (case rt of NONE => BaseT BoolT | SOME ty => ty) (MAP gas_shadow_stmt ss_comp))
       (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) locked /\
     gas_admissible (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss)
       (stmt_res_ok NoLoop) locked /\
@@ -3146,7 +3122,7 @@ Theorem intcall_callee_buffered_return_relayout[local]:
     (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ty (Return (SOME e)))
-    (stmt_env cenv lctx ty (Return (SOME (gas_shadow_expr e))))
+    (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
   strip_tac >>
@@ -4124,17 +4100,12 @@ Proof
      (gvs[])) >>
   Cases_on `compile_internal_function_entry ce params has_rb ctor ilen rt entry` >>
   rename1 `_ = (entry_info,prologue)` >>
+  PairCases_on `entry_info` >>
   `?prologueS.
-     compile_internal_function_entry ce params has_rb ctor ilen rt entryS =
-       (entry_info,prologueS) /\ gas_shadow_state prologue prologueS` by
-    (`gas_shadow_compiles (compile_internal_function_entry ce params has_rb
-        ctor ilen rt) (compile_internal_function_entry ce params has_rb
-        ctor ilen rt)` by simp[gas_shadow_internal_function_entry] >>
-     qpat_x_assum `gas_shadow_compiles _ _`
-       (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
-     disch_then (qspecl_then [`entry`, `entryS`] mp_tac) >>
-     Cases_on `compile_internal_function_entry ce params has_rb ctor ilen rt
-       entryS` >> simp[]) >>
+     compile_internal_function_entry (gas_shadow_env T ce) params has_rb
+       ctor ilen rt entryS = ((gas_shadow_env T entry_info0,entry_info1,entry_info2),prologueS) /\
+     gas_shadow_state prologue prologueS` by
+    (irule intcall_shadow_entry_cut >> qexists_tac `entry` >> simp[]) >>
   pop_assum strip_assume_tac >>
   qabbrev_tac `lock = if nr' then compile_nonreentrant_lock key trans view
                       else comp_return ()` >>
@@ -4149,19 +4120,20 @@ Proof
      disch_then (qspecl_then [`prologue`, `prologueS`] mp_tac) >>
      Cases_on `lock prologueS` >> simp[]) >>
   pop_assum strip_assume_tac >>
-  PairCases_on `entry_info` >>
   qabbrev_tac `body_ce = entry_info0 with
     <|ce_imm_alloca := entry_info2; ce_alloca_locals := T|>` >>
   qabbrev_tac `body_ty = case rt of SOME ty => ty | NONE => BaseT BoolT` >>
   Cases_on `stmts_env body_ce NoLoop body_ty compiled_ss a` >>
   rename1 `_ = (body_out,b)` >>
-  `?bS. stmts_env body_ce NoLoop body_ty (MAP gas_shadow_stmt compiled_ss) aS =
-          (body_out,bS) /\ gas_shadow_state b bS` by
-    (qspecl_then [`compiled_ss`, `body_ce`, `NoLoop`, `body_ty`]
-       (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) gas_shadow_stmts_env >>
-     disch_then (qspecl_then [`a`, `aS`] mp_tac) >>
-     Cases_on `stmts_env body_ce NoLoop body_ty (MAP gas_shadow_stmt compiled_ss)
-       aS` >> simp[]) >>
+  `?bS. stmts_env (gas_shadow_env T body_ce) NoLoop body_ty (MAP gas_shadow_stmt compiled_ss) aS =
+          (gas_shadow_env T body_out,bS) /\ gas_shadow_state b bS` by
+    (`gas_shadow_compiles_env T (stmts_env body_ce NoLoop body_ty compiled_ss)
+        (stmts_env (gas_shadow_env T body_ce) NoLoop body_ty
+           (MAP gas_shadow_stmt compiled_ss))` by irule gas_shadow_stmts_env_env >>
+     pop_assum (qspecl_then [`a`,`aS`] mp_tac o
+       REWRITE_RULE [gasShadowCompileStmtBaseTheory.gas_shadow_compiles_env_def]) >>
+     Cases_on `stmts_env (gas_shadow_env T body_ce) NoLoop body_ty
+       (MAP gas_shadow_stmt compiled_ss) aS` >> simp[]) >>
   pop_assum strip_assume_tac >>
   `cs_appends lock` by
     (simp[Abbr `lock`] >> Cases_on `nr'` >>
@@ -4192,12 +4164,20 @@ Proof
        `entry_info1`, `entry_info2`, `prologue`, `a`, `body_out`, `b`,
        `callee`] mp_tac intcall_lowering_suffix >>
      fs[Abbr `lock`, Abbr `body_ce`, Abbr `body_ty`]) >>
+  `gas_shadow_env T body_ce = (gas_shadow_env T entry_info0) with
+     <|ce_imm_alloca := entry_info2; ce_alloca_locals := T|>` by
+    simp[Abbr `body_ce`, gasShadowCompileBaseTheory.gas_shadow_env_def] >>
   `fn_has_code aS bS sf` by
-    (qspecl_then [`ce`, `params`, `has_rb`, `nr'`, `key`, `trans`, `view`,
-       `ctor`, `ilen`, `MAP gas_shadow_stmt compiled_ss`, `rt`, `entryS`,
-       `finalS`, `entry_info0`, `entry_info1`, `entry_info2`, `prologueS`,
-       `aS`, `body_out`, `bS`, `sf`] mp_tac intcall_lowering_suffix >>
-     fs[Abbr `lock`, Abbr `body_ce`, Abbr `body_ty`]) >>
+    (`(if nr' then compile_nonreentrant_lock key trans view else comp_return ())
+        prologueS = ((),aS)` by fs[Abbr `lock`] >>
+     `stmts_env ((gas_shadow_env T entry_info0) with
+        <|ce_imm_alloca := entry_info2; ce_alloca_locals := T|>) NoLoop
+        (case rt of SOME ty => ty | NONE => BaseT BoolT)
+        (MAP gas_shadow_stmt compiled_ss) aS = (gas_shadow_env T body_out,bS)` by
+       (qpat_assum `gas_shadow_env T body_ce = _` (rewrite_tac o single o SYM) >>
+        qpat_assum `stmts_env _ _ _ (MAP gas_shadow_stmt _) aS = _` mp_tac >>
+        simp[Abbr `body_ty`]) >>
+     drule_all (Q.SPEC `gas_shadow_env T ce` intcall_lowering_suffix) >> simp[]) >>
   qpat_assum `compile_internal_function_entry _ _ _ _ _ _ entry = _`
     (strip_assume_tac o MATCH_MP (SPEC_ALL intcall_callee_entry_phases)) >>
   drule_then strip_assume_tac intcall_callee_capture_same_blocks >>

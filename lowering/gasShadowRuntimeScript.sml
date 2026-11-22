@@ -51,7 +51,8 @@ Theorem gas_shadow_compile_generate_grouped_runtime:
           ExternalSingle selector (gas_shadow_external_package package)
       | ExternalDefaults common entries specs head_offset =>
           ExternalDefaults
-            (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+            (common with <| ec_env := gas_shadow_env sd common.ec_env;
+                           ec_body := MAP gas_shadow_stmt common.ec_body |>)
             entries
             (MAP (\(name,ty,e). (name,ty,gas_shadow_expr e)) specs)
             head_offset) groups)
@@ -67,7 +68,8 @@ Proof
   qexists_tac `MAP (\job. case job of
     ExternalLegacyJob package => ExternalLegacyJob (gas_shadow_external_package package)
   | ExternalCommonJob common kwvars => ExternalCommonJob
-      (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+      (common with <| ec_env := gas_shadow_env sd common.ec_env;
+                           ec_body := MAP gas_shadow_stmt common.ec_body |>)
       (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) kwvars))` >>
   reverse conj_tac >- simp[gas_shadow_compile_group_dispatch_linear] >>
   gen_tac >> BETA_TAC >>

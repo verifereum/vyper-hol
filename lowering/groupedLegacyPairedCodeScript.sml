@@ -5,11 +5,13 @@ Ancestors
   gasShadowModuleDefs gasShadowState gasShadow exprLoweringProps
   entryRejectAllocationIds selectedEntryPrefixCode entryPtrSeamRegister
   moduleLowering compileEnv emitHelper list pair
+  gasShadowRuntimeRegisterEnv gasShadowCompileStmtBase
 
 val shadow_job = ``\job. case job of
   ExternalLegacyJob package => ExternalLegacyJob (gas_shadow_external_package package)
 | ExternalCommonJob common kwvars => ExternalCommonJob
-    (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+    (common with <| ec_env := gas_shadow_env T common.ec_env;
+                    ec_body := MAP gas_shadow_stmt common.ec_body |>)
     (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) kwvars)``;
 
 Theorem grouped_legacy_paired_code:
@@ -26,7 +28,8 @@ Theorem grouped_legacy_paired_code:
     ~block_is_terminated sa /\
     compile_guarded_body cf nr key ut view ss rt sa = ((),done) /\
     fn_has_code sa done fn /\ gas_shadow_state sa sha /\
-    compile_guarded_body cf nr key ut view (MAP gas_shadow_stmt ss) rt sha = ((),shdone) /\
+    compile_guarded_body (gas_shadow_env T cf) nr key ut view (MAP gas_shadow_stmt ss)
+      rt sha = ((),shdone) /\
     fn_has_code sha shdone shfn
 Proof
   strip_tac >>
@@ -48,9 +51,10 @@ QED
 
 Resume grouped_legacy_paired_code[synchronise]:
   `gas_shadow_state start shstart` by
-    (qspec_then `pre` mp_tac gas_shadow_compiles_compile_external_jobs >>
-     simp_tac (srw_ss()) [gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sd`,`shd`] mp_tac) >>
+    (qspecl_then [`T`,`pre`]
+       (drule_then (mp_tac o SPEC_ALL) o Q.SPECL [`sd`,`shd`] o
+        REWRITE_RULE [gas_shadow_compiles_def])
+       gas_shadow_compiles_compile_external_jobs >>
      asm_rewrite_tac[SND]) >>
   `gas_shadow_state checks shchecks` by
     (qspec_then `lbl` mp_tac (GEN_ALL gas_shadow_compiles_new_block) >>
@@ -63,11 +67,12 @@ Resume grouped_legacy_paired_code[synchronise]:
      simp_tac (srw_ss()) [gas_shadow_compiles_def] >>
      disch_then (qspecl_then [`checks`,`shchecks`] mp_tac) >>
      asm_rewrite_tac[SND]) >>
-  `cf = shcf /\ gas_shadow_state sa sha` by
-    (qspecl_then [`pa`,`ce`,`4`] mp_tac gas_shadow_compiles_compile_register_positional_args >>
-     simp_tac bool_ss [gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`reg`,`shreg`] mp_tac) >>
-     asm_rewrite_tac[FST,SND] >> strip_tac >> simp[]) >>
+  `gas_shadow_env T cf = shcf /\ gas_shadow_state sa sha` by
+    (qspecl_then [`pa`,`ce`,`4`]
+       (drule_then (mp_tac o SPEC_ALL) o Q.SPECL [`reg`,`shreg`] o
+        REWRITE_RULE [gas_shadow_compiles_env_def])
+       (Q.INST [`sd` |-> `T`] gas_shadow_compiles_env_register_positional_args) >>
+     asm_rewrite_tac[FST,SND]) >>
   qexistsl_tac [`checks`,`reg`,`cf`,`sa`,`done`,`sha`,`shdone`] >>
   asm_rewrite_tac[] >> conj_tac
   >- (irule ci_mono_trans >> qexists_tac `start` >> conj_tac

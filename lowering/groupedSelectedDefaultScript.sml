@@ -10,7 +10,8 @@ val shadow_group = ``\group. case group of
   ExternalSingle selector package =>
     ExternalSingle selector (gas_shadow_external_package package)
 | ExternalDefaults common entries specs off =>
-    ExternalDefaults (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+    ExternalDefaults (common with <| ec_env := gas_shadow_env T common.ec_env;
+      ec_body := MAP gas_shadow_stmt common.ec_body |>)
       entries (MAP (\(n,ty,e). (n,ty,gas_shadow_expr e)) specs) off``;
 
 Theorem grouped_selected_default_initializer_start:
@@ -51,7 +52,7 @@ Theorem grouped_selected_default_initializer_start:
     emit_inst JMP [Label common.ec_common_label] [] si' = ((),last) /\
     cs_extends last dispatch_end /\ ci_mono last dispatch_end /\
     cs_extends dispatch_end sd /\ ci_mono dispatch_end sd /\
-    compile_init_kwargs common.ec_env
+    compile_init_kwargs (gas_shadow_env T common.ec_env)
       (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars)
       off k (Lit 0w) shadow_si = ((),shadow_si') /\
     fn_has_code shadow_si shadow_si' shadow_fn /\ gas_shadow_state si shadow_si /\
@@ -103,7 +104,7 @@ Proof
     qpat_assum `fn_has_code si last fn` (fn installed =>
       qx_choose_then `si'` (map_every assume_tac o CONJUNCTS)
         (MATCH_MP compile_entry_point_kwargs_layout (CONJ code installed)))) >>
-  qpat_assum `compile_entry_point_kwargs common.ec_env (MAP _ vars) _ _ _ _ = _` (fn code =>
+  qpat_assum `compile_entry_point_kwargs _ (MAP _ vars) _ _ _ _ = _` (fn code =>
     qpat_assum `fn_has_code shadow_si shadow_last shadow_fn` (fn installed =>
       qx_choose_then `shadow_si'` (map_every assume_tac o CONJUNCTS)
         (MATCH_MP compile_entry_point_kwargs_layout (CONJ code installed)))) >>

@@ -3967,7 +3967,7 @@ Theorem body_append_local_nonword_frag_full:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (NameTarget id) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (NameTarget id) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (NameTarget id) e)))
     (eval_stmt cx (Append (NameTarget id) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -3984,7 +3984,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `compile_get_target_ptr compile_expr cenv (NameTarget id) sa =
     ((Var p,SOME LocMemory,SOME (ValPT (ArrayT elem (Dynamic cap)))),sa) /\
-   compile_get_target_ptr compile_expr cenv (NameTarget id) shadow_sa =
+   compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (NameTarget id) shadow_sa =
     ((Var p,SOME LocMemory,SOME (ValPT (ArrayT elem (Dynamic cap)))),shadow_sa)` by
     simp[compile_get_target_ptr_def, comp_return_def] >>
   qpat_assum `stmt_env _ _ _ (Append _ e) sa = _`
@@ -4047,11 +4047,12 @@ Resume body_append_local_nonword_frag_full[rhs_setup]:
     (mp_then (Pos hd) mp_tac append_resolved_copy_code_parts) >>
   simp[IgnAsm `mid = es with gas_obs := []`] >> strip_tac >>
   rename1 `lower_value compile_expr cenv elem e sa = (vop,sm)` >>
-  rename1 `lower_value compile_expr cenv elem (gas_shadow_expr e) shadow_sa = (vop',shadow_sm)` >>
+  rename1 `lower_value compile_expr _ elem (gas_shadow_expr e) shadow_sa = (vop',shadow_sm)` >>
   `vop' = vop /\ gas_shadow_state sm shadow_sm` by
-    (qspec_then `elem` mp_tac (Q.GEN `ty` gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ e sa = _` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _` (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
   qpat_x_assum `vop' = vop` SUBST_ALL_TAC >>
   `ci_mono sm sb /\ ci_mono shadow_sm shadow_sb` by
     metis_tac[ci_mono_compile_dynarray_append,ci_mono_compile_alloc_buffer,
@@ -4765,7 +4766,7 @@ Theorem body_append_nested_frag_full[local]:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append t e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append t e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append t e)))
     (eval_stmt cx (Append t e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -4792,16 +4793,17 @@ Proof
   drule_all body_target_place_sim_full >>
   disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `func`, `shadow_func`]
     assume_tac) >>
-  `compile_get_target_ptr compile_expr cenv (gas_shadow_target t) shadow_sa =
-      (r,SND (compile_get_target_ptr compile_expr cenv (gas_shadow_target t) shadow_sa)) /\
+  `compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (gas_shadow_target t) shadow_sa =
+      (r,SND (compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (gas_shadow_target t) shadow_sa)) /\
    gas_shadow_state sp
-     (SND (compile_get_target_ptr compile_expr cenv (gas_shadow_target t) shadow_sa))` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `bt` |-> `t`]
-       gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_get_target_ptr) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[] >>
-     Cases_on `compile_get_target_ptr compile_expr cenv (gas_shadow_target t) shadow_sa` >>
-     simp[]) >>
+     (SND (compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (gas_shadow_target t) shadow_sa))` by
+    (Cases_on `compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+                (gas_shadow_target t) shadow_sa` >> simp[] >>
+     irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `compile_get_target_ptr _ _ t sa = _` (irule_at Any) >>
+     qpat_assum `compile_get_target_ptr _ _ (gas_shadow_target t) shadow_sa = _`
+       (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_get_target_ptr_env) >>
   qmatch_asmsub_abbrev_tac `gas_shadow_state sp shadow_sp` >>
   `ci_mono shadow_sa shadow_sp /\ ci_mono shadow_sp shadow_sb /\
    fn_has_code shadow_sa shadow_sp shadow_func /\
@@ -4958,9 +4960,10 @@ Resume body_append_nested_frag_full[rhs]:
   disch_then (qspec_then `shadow_func` (drule_then strip_assume_tac)) >>
   rename1 `lower_value _ _ _ (gas_shadow_expr e) shadow_sp = (shadow_op,shadow_sm)` >>
   `shadow_op = vop /\ gas_shadow_state sm shadow_sm` by
-    (qspec_then `elem` mp_tac (Q.GEN `ty` gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sp`,`shadow_sp`] mp_tac) >> simp[]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ e sp = _` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sp = _` (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
   qpat_x_assum `shadow_op = vop` SUBST_ALL_TAC >>
   `local_ptrs_reserved cenv sp` by
     (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> fs[ci_mono_def]) >>
@@ -5161,7 +5164,14 @@ Resume body_append_nested_frag_full[resolve_pointer]:
   `place_ptr_rel cenv cx u (PlaceR p) addr (SOME loc)
         (Type (ArrayT elem (Dynamic cap)))` by
     (Cases_on `p` >> fs[place_ptr_rel_def] >>
-     metis_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def]) >>
+     rename1 `FLOOKUP cenv.ce_vars nm = SOME (PtrVar (Var pv) psz)` >>
+     `not_fresh_at sp pv` by
+       (qpat_x_assum `local_ptrs_reserved cenv sp` mp_tac >>
+        rewrite_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
+        strip_tac >> qpat_x_assum `!n1 n2 p sz1 sz2. _` drule >>
+        disch_then (qspecl_then [`nm`,`psz`] strip_assume_tac)) >>
+     qpat_x_assum `!x y. not_fresh_at sp x /\ _ ==> lookup_var x u = SOME y`
+       irule >> simp[]) >>
   `op_taint trhs (Var x) = {}` by
     fs[bodyFullTargetDefsTheory.target_ptr_ok_def,ghost_kept_at_def] >>
   `target_ptr_ok cenv (PlaceR p)
@@ -5923,7 +5933,7 @@ Theorem body_append_nested_subscript_frag_full:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (SubscriptTarget base key) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (SubscriptTarget base key) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (SubscriptTarget base key) e)))
     (eval_stmt cx (Append (SubscriptTarget base key) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -5955,7 +5965,7 @@ Theorem body_append_nested_attribute_frag_full:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (AttributeTarget base field) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (AttributeTarget base field) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (AttributeTarget base field) e)))
     (eval_stmt cx (Append (AttributeTarget base field) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -5987,7 +5997,7 @@ Theorem body_append_storage_word_frag_full:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget nid) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
     (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -6128,7 +6138,7 @@ Resume body_append_storage_word_frag_full[rhs_code]:
        gasShadowTheory.gas_shadow_expr_def]) >>
   `?vop raw_shadow sm shadow_sm. cenv' = cenv /\
      lower_value compile_expr cenv elem e sa = (vop,sm) /\
-     lower_value compile_expr cenv elem (gas_shadow_expr e) shadow_sa = (raw_shadow,shadow_sm) /\
+     lower_value compile_expr (gas_shadow_env T cenv) elem (gas_shadow_expr e) shadow_sa = (raw_shadow,shadow_sm) /\
      ci_mono sm sb /\ ci_mono shadow_sm shadow_sb` by
     (`type_slot_size tv = 1` by metis_tac[exprSimUnwrapTheory.word_type_slot_size] >>
        `type_memory_bytes cenv elem = 32` by simp[] >>
@@ -6142,9 +6152,10 @@ Resume body_append_storage_word_frag_full[rhs_code]:
        rpt (goal_assum (drule_at Any)) >>
        simp[] >> metis_tac[ci_mono_compile_dynarray_append,pairTheory.SND]) >>
   `raw_shadow = vop /\ gas_shadow_state sm shadow_sm` by
-    (qspec_then `elem` mp_tac (Q.GEN `ty` gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ e sa = _` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _` (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
   qpat_x_assum `raw_shadow = vop` SUBST_ALL_TAC >>
   `ci_mono sa sm /\ ci_mono shadow_sa shadow_sm` by
     metis_tac[ci_mono_lower_value_compile_expr,pairTheory.SND] >>
@@ -6409,7 +6420,7 @@ Theorem body_append_storage_aggregate_frag_full[local]:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget nid) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
     (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -6550,7 +6561,7 @@ Resume body_append_storage_aggregate_frag_full[rhs_code]:
        gasShadowTheory.gas_shadow_expr_def]) >>
   `?vop raw_shadow sm shadow_sm. cenv' = cenv /\
      lower_value compile_expr cenv elem e sa = (vop,sm) /\
-     lower_value compile_expr cenv elem (gas_shadow_expr e) shadow_sa = (raw_shadow,shadow_sm) /\
+     lower_value compile_expr (gas_shadow_env T cenv) elem (gas_shadow_expr e) shadow_sa = (raw_shadow,shadow_sm) /\
      ci_mono sm sb /\ ci_mono shadow_sm shadow_sb` by
     (every_drule stmtSimAppendStorageComposeTheory.append_storage_copy_code_parts >>
      simp[] >>
@@ -6562,9 +6573,10 @@ Resume body_append_storage_aggregate_frag_full[rhs_code]:
      metis_tac[ci_mono_compile_dynarray_append,ci_mono_compile_alloc_buffer,
        ci_mono_compile_store_memory,exprLoweringPropsTheory.ci_mono_trans,pairTheory.SND]) >>
   `raw_shadow = vop /\ gas_shadow_state sm shadow_sm` by
-    (qspec_then `elem` mp_tac (Q.GEN `ty` gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ e sa = _` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _` (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
   qpat_x_assum `raw_shadow = vop` SUBST_ALL_TAC >>
   `ci_mono sa sm /\ ci_mono shadow_sa shadow_sm` by
     metis_tac[ci_mono_lower_value_compile_expr,pairTheory.SND] >>
@@ -6983,7 +6995,7 @@ Theorem body_append_storage_bytestring_frag_full:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget nid) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
     (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
   rpt strip_tac >>
@@ -7013,7 +7025,7 @@ Theorem body_append_storage_flat_copy_frag_full:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget nid) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
     (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
   rpt strip_tac >> irule body_append_storage_aggregate_frag_full >> simp[] >>
@@ -7043,7 +7055,7 @@ Theorem body_append_storage_typed_copy_frag_full:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget nid) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
     (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
   rpt strip_tac >> irule body_append_storage_aggregate_frag_full >> simp[] >>
@@ -7073,7 +7085,7 @@ Theorem body_append_storage_tuple_layout_frag_full:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget nid) e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
     (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
   rpt strip_tac >> irule body_append_storage_aggregate_frag_full >> simp[] >>

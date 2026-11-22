@@ -3,7 +3,7 @@ Theory bodyFullRawRevertValue
 Ancestors
   bodyFullShadowBodyInv
   bodyFullRawRevertInterfaces bodyFullPreds bodySimFull exprSimHypsDefs
-  exprLowering gasOutcomeFullCompose
+  exprLowering gasOutcomeFullCompose gasShadowCompileStmtHelpers
   exprOperandVar exprSimProps loweringPosts bodyPtrDefs exprSimMemDefs
   gasExemptCert vyperSystemControl vyperStorageFootprint
   vyperAST gasShadow vyperInterpreter vyperState compileEnv builtinSystem
@@ -55,14 +55,16 @@ Proof
 QED
 
 Resume raw_revert_value_full_from_tail[compiler]:
-  `!child ss. ?sm. compile_expr cenv ty (Call NoneT RawRevert [child] NONE) ss =
-       (StackValue NoneT (Lit 0w),sm)` by
+  `!ce child ss v st.
+     compile_expr ce ty (Call NoneT RawRevert [child] NONE) ss = (v,st) ==>
+     v = StackValue NoneT (Lit 0w)` by
     (rpt gen_tac >> simp[Once compile_expr_def, compile_call_def, expr_type_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-     rpt (pairarg_tac >> simp[]) >> metis_tac[]) >>
+     rpt (pairarg_tac >> simp[])) >>
   `compile_expr cenv ty (Call NoneT RawRevert [e] NONE) sa =
        (StackValue NoneT (Lit 0w),sb) /\
-   compile_expr cenv ty (gas_shadow_expr (Call NoneT RawRevert [e] NONE))
+   compile_expr (gas_shadow_env T cenv) ty
+       (gas_shadow_expr (Call NoneT RawRevert [e] NONE))
        shadow_sa = (StackValue NoneT (Lit 0w),shadow_sb)` by
     (qpat_x_assum `lower_value _ _ _ (Call _ _ _ _) _ = _` mp_tac >>
      qpat_x_assum `lower_value _ _ _ (gas_shadow_expr _) _ = _` mp_tac >>
@@ -70,10 +72,11 @@ Resume raw_revert_value_full_from_tail[compiler]:
      simp[lower_value_def, comp_bind_def] >>
      rpt (pairarg_tac >> simp[]) >>
      `vv' = StackValue NoneT (Lit 0w) /\ vv = StackValue NoneT (Lit 0w)` by
-       metis_tac[pairTheory.PAIR_EQ] >>
+       (conj_tac >> first_x_assum irule >> metis_tac[]) >>
      gvs[unwrap_value_def, comp_return_def]) >>
   `gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
-     (lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e))` by simp[] >>
+     (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e))` by irule gas_shadow_stmt_lower_value_env >>
   drule_all raw_revert_layout_shadow >> strip_tac >>
   suspend "operand"
 QED

@@ -139,7 +139,7 @@ Theorem row22_dispatch_callback_if_seed:
     fn_has_code si cut fn /\ fn_has_code cut last fn /\
     emit_inst JMP [Label common.ec_common_label] [] cut = ((),last) /\
     ci_mono last dispatch_end /\
-    compile_init_kwargs common.ec_env
+    compile_init_kwargs (gas_shadow_env T common.ec_env)
       (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars)
       off k (Lit 0w) shadow_si = ((),shadow_cut) /\
     fn_has_code shadow_si shadow_cut shadow_fn /\ gas_shadow_state si shadow_si /\
@@ -167,7 +167,7 @@ Theorem row22_dispatch_callback_if_seed:
       common.ec_pos_args 4 entry = (cef,registered) /\ fn_has_code entry registered fn /\
     compile_init_kwargs common.ec_env (DROP k vars) (4 + SUM (MAP tv_abi_size tvs)) 0
       (Lit 0w) residual = ((),cut) /\
-    compile_init_kwargs common.ec_env
+    compile_init_kwargs (gas_shadow_env T common.ec_env)
       (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) (DROP k vars))
       (4 + SUM (MAP tv_abi_size tvs)) 0 (Lit 0w) shadow_residual = ((),shadow_cut) /\
     fn_has_code residual cut fn /\ fn_has_code shadow_residual shadow_cut shadow_fn /\

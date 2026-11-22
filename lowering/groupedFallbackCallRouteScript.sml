@@ -251,7 +251,7 @@ QED
 Resume grouped_fallback_call_route[guard]:
   `compile_fallback_body ce (mut = Payable) nr global_nonreentrant_slot T
     (mut = View) stmts rt sn = ((),se) /\
-   compile_fallback_body ce (mut = Payable) nr global_nonreentrant_slot T
+   compile_fallback_body (gas_shadow_env T ce) (mut = Payable) nr global_nonreentrant_slot T
     (mut = View) (MAP gas_shadow_stmt stmts) rt shn = ((),she)` by
     (qpat_assum `(case fall of NONE => _ | SOME (_,_,_,_,_,_,_,_) => _) sn = _` mp_tac >>
      qpat_assum `(case OPTION_MAP gas_shadow_fallback_package fall of NONE => _

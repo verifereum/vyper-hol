@@ -175,7 +175,7 @@ Theorem return_selected_valued_frag_full_core[local]:
           (abstract_machine_from_state am.sources am.exports am.layouts us),
          us.requests) r)
     ce (stmt_env ce lctx ret (Return (SOME e)))
-    (stmt_env ce lctx ret (Return (SOME (gas_shadow_expr e))))
+    (stmt_env (gas_shadow_env T ce) lctx ret (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
   strip_tac >>
@@ -193,14 +193,16 @@ Proof
   pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `lower_value compile_expr ce ret e sa` >>
   rename1 `lower_value compile_expr ce ret e sa = (op,sm)` >>
-  Cases_on `lower_value compile_expr ce ret (gas_shadow_expr e) shadow_sa` >>
-  rename1 `lower_value compile_expr ce ret (gas_shadow_expr e) shadow_sa =
+  Cases_on `lower_value compile_expr (gas_shadow_env T ce) ret
+              (gas_shadow_expr e) shadow_sa` >>
+  rename1 `lower_value compile_expr _ ret (gas_shadow_expr e) shadow_sa =
              (shadow_op,shadow_sm)` >>
   `op = shadow_op /\ gas_shadow_state sm shadow_sm` by
-    (qspecl_then [`sa`, `shadow_sa`] mp_tac
-      (REWRITE_RULE [gas_shadow_compiles_def]
-        (Q.INST [`cenv` |-> `ce`, `ty` |-> `ret`]
-          gas_shadow_stmt_lower_value)) >> simp[]) >>
+    (`gas_shadow_compiles (lower_value compile_expr ce ret e)
+        (lower_value compile_expr (gas_shadow_env T ce) ret (gas_shadow_expr e))`
+       by irule gas_shadow_stmt_lower_value_env >>
+     pop_assum (qspecl_then [`sa`, `shadow_sa`] mp_tac o
+       REWRITE_RULE [gas_shadow_compiles_def]) >> simp[]) >>
   qpat_x_assum `op = shadow_op` (SUBST_ALL_TAC o SYM) >>
   `cs_extends sm sb /\ cs_extends shadow_sm shadow_sb` by
     metis_tac[return_value_code_prefix] >>
@@ -208,8 +210,8 @@ Proof
     (conj_tac
      >- (qspecl_then [`ce`, `ret`, `e`, `sa`] mp_tac
            (cj 2 ci_mono_compile_expr_sa) >> simp[ci_mono_def]) >>
-     qspecl_then [`ce`, `ret`, `gas_shadow_expr e`, `shadow_sa`] mp_tac
-       (cj 2 ci_mono_compile_expr_sa) >> simp[ci_mono_def]) >>
+     qspecl_then [`gas_shadow_env T ce`, `ret`, `gas_shadow_expr e`, `shadow_sa`]
+       mp_tac (cj 2 ci_mono_compile_expr_sa) >> simp[ci_mono_def]) >>
   `fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func` by
     metis_tac[fn_has_code_split] >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
@@ -2716,7 +2718,7 @@ Theorem return_selected_valued_frag_full:
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
     ce (stmt_env ce lctx ret (Return (SOME e)))
-    (stmt_env ce lctx ret (Return (SOME (gas_shadow_expr e))))
+    (stmt_env (gas_shadow_env T ce) lctx ret (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
   strip_tac >>
@@ -2772,7 +2774,7 @@ Theorem return_selected_valued_frag_full_nr:
           (abstract_machine_from_state am.sources am.exports am.layouts us),
          us.requests) r)
     ce (stmt_env ce lctx ret (Return (SOME e)))
-    (stmt_env ce lctx ret (Return (SOME (gas_shadow_expr e))))
+    (stmt_env (gas_shadow_env T ce) lctx ret (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
   strip_tac >>

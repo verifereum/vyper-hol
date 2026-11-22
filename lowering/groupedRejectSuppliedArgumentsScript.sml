@@ -54,7 +54,7 @@ Theorem row22_supplied_suffix_start:
   off = min_calldata_size ce (TAKE n args) 0 /\
   compile_create_kwarg_allocas ce specs alloc_start = (vars,alloc_end) /\
   compile_init_kwargs ce vars off k (Lit 0w) sa = ((),sb) /\
-  compile_init_kwargs ce (MAP (\(name,p,ty,e). (name,p,ty,gas_shadow_expr e)) vars)
+  compile_init_kwargs (gas_shadow_env T ce) (MAP (\(name,p,ty,e). (name,p,ty,gas_shadow_expr e)) vars)
     off k (Lit 0w) sha = ((),shb) /\
   fn_has_code sa sb fn /\ fn_has_code sha shb shfn /\ gas_shadow_state sa sha /\
   4 + SUM (MAP tv_abi_size tvs) <= LENGTH s.vs_call_ctx.cc_calldata /\
@@ -76,7 +76,7 @@ Theorem row22_supplied_suffix_start:
   ?last shlast t J tz slots vals.
     compile_init_kwargs ce (DROP k vars) (4 + SUM (MAP tv_abi_size tvs)) 0
       (Lit 0w) last = ((),sb) /\
-    compile_init_kwargs ce
+    compile_init_kwargs (gas_shadow_env T ce)
       (MAP (\(name,p,ty,e). (name,p,ty,gas_shadow_expr e)) (DROP k vars))
       (4 + SUM (MAP tv_abi_size tvs)) 0 (Lit 0w) shlast = ((),shb) /\
     fn_has_code last sb fn /\ fn_has_code shlast shb shfn /\ gas_shadow_state last shlast /\
@@ -175,7 +175,7 @@ Resume row22_supplied_suffix_start[run]:
       map_every (fn pat => qpat_assum pat
         (assume_tac o PURE_REWRITE_RULE [offset, SYM count]))
         [`compile_init_kwargs ce vars _ _ _ sa = _`,
-         `compile_init_kwargs ce (MAP _ vars) _ _ _ sha = _`])) >>
+         `compile_init_kwargs _ (MAP _ vars) _ _ _ sha = _`])) >>
   qpat_assum `LIST_REL (^row22_kw_meta ce env) vars slots`
     (assume_tac o SIMP_RULE bool_ss []) >>
   qpat_assum `EVERY (^row22_kw_alloc sa s G tn) slots`

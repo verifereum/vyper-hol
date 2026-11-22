@@ -273,7 +273,8 @@ Theorem body_assign_local_memory_empty_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty
+        (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>

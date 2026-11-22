@@ -2,6 +2,7 @@
 Theory bodyFullRawRevertInterfaces
 Ancestors
   exprSimHypsDefs exprLoweringProps builtinSystem gasShadowState gasShadow
+  gasShadowCompileBase
   fragExec vyperInterpreter vyperTypeSystem supportedExprTraverse
   list rich_list pair allocLimits vyperTypeCallGraph vyperState
   exprLowering compileEnv emitHelper vyperAST exprCallbackContracts
@@ -38,20 +39,21 @@ Proof
 QED
 
 Theorem raw_revert_layout_shadow:
-  !cenv ty ann e dflt sa sb vv ssa ssb svv func sfunc.
+  !cenv ty ann e dflt sa sb vv ssa ssb svv func sfunc sd.
     gas_shadow_compiles
       (lower_value compile_expr cenv (expr_type e) e)
-      (lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)) /\
+      (lower_value compile_expr (gas_shadow_env sd cenv) (expr_type e)
+        (gas_shadow_expr e)) /\
     gas_shadow_state sa ssa /\
     compile_expr cenv ty (Call ann RawRevert [e] dflt) sa = (vv,sb) /\
-    compile_expr cenv ty (gas_shadow_expr (Call ann RawRevert [e] dflt))
-      ssa = (svv,ssb) /\
+    compile_expr (gas_shadow_env sd cenv) ty
+      (gas_shadow_expr (Call ann RawRevert [e] dflt)) ssa = (svv,ssb) /\
     fn_has_code sa sb func /\ fn_has_code ssa ssb sfunc ==>
     ?data sm ssm.
       vv = StackValue ann (Lit 0w) /\ svv = StackValue ann (Lit 0w) /\
       lower_value compile_expr cenv (expr_type e) e sa = (data,sm) /\
-      lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
-        ssa = (data,ssm) /\
+      lower_value compile_expr (gas_shadow_env sd cenv) (expr_type e)
+        (gas_shadow_expr e) ssa = (data,ssm) /\
       gas_shadow_state sm ssm /\
       compile_raw_revert data sm = ((),sb) /\
       compile_raw_revert data ssm = ((),ssb) /\
@@ -72,11 +74,12 @@ Proof
     (irule lower_value_callback_contract >>
      irule expr_child_callback_agrees >> simp[]) >>
   `lower_value
-      (expr_child_callback (cenv_defaults_size cenv + expr_size (gas_shadow_expr e) +
-        (type_size ann +
+      (expr_child_callback (cenv_defaults_size (gas_shadow_env sd cenv) +
+        expr_size (gas_shadow_expr e) + (type_size ann +
          (option_size expr_size (OPTION_MAP gas_shadow_expr dflt) + 2)))
-        compile_expr) cenv (expr_type e) (gas_shadow_expr e) =
-      lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)` by
+        compile_expr) (gas_shadow_env sd cenv) (expr_type e) (gas_shadow_expr e) =
+      lower_value compile_expr (gas_shadow_env sd cenv) (expr_type e)
+        (gas_shadow_expr e)` by
     (irule lower_value_callback_contract >>
      irule expr_child_callback_agrees >> simp[]) >>
   gvs[] >>
@@ -88,8 +91,8 @@ Proof
        suffices_by gvs[] >>
      irule ci_mono_lower_value_cfn >> simp[compile_expr_ci_mono]) >>
   `ci_mono ssa st1'` by
-    (`ci_mono ssa (SND (lower_value compile_expr cenv (expr_type e)
-                        (gas_shadow_expr e) ssa))` suffices_by gvs[] >>
+    (`ci_mono ssa (SND (lower_value compile_expr (gas_shadow_env sd cenv)
+         (expr_type e) (gas_shadow_expr e) ssa))` suffices_by gvs[] >>
      irule ci_mono_lower_value_cfn >> simp[compile_expr_ci_mono]) >>
   `ci_mono st1 sb /\ ci_mono st1' ssb` by
     (qpat_x_assum `compile_raw_revert data st1 = _` mp_tac >>

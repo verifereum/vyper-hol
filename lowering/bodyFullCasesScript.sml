@@ -647,21 +647,23 @@ Proof
   ACCEPT_TAC bodyFullIfExpTheory.ifexp_expr_full_ok
 QED
 
-(* Instantiate the Args theorem at the continuation type of each lift. *)
+(* The frozen lifts still ask for a restricted Args rule. The concrete
+   rule is stronger: its header does not exclude msg.gas defaults. *)
 fun apply_case_lift lift =
-  let
-    val (args_premise, _) = dest_imp (concl lift)
-    val (_, args_types) = match_term (concl intcall_args_full) args_premise
-    val composed = MP (MP lift (INST_TYPE args_types intcall_args_full))
-                      intcall_callee_full
-  in
-    qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`PG`,`func`,
-                 `shadow_func`,`tops`,`cenv`,`cx`,`env`,`ty`,`v16`,
-                 `fn`,`es`,`v17`,`es'`,`mut`,`nr`,`args`,`ret`,`ss`,
-                 `rr`,`dflts`] mp_tac composed >>
-    impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-    disch_then ACCEPT_TAC
-  end;
+  mp_tac lift >>
+  (impl_tac >-
+    (rpt gen_tac >> strip_tac >>
+     qmatch_asmsub_rename_tac
+       `supported_exprs_exists expr_msg_gas_root (DROP _ defaults)` >>
+     MATCH_MP_TAC intcall_args_full >> qexists `defaults` >>
+     rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  (impl_tac >- MATCH_ACCEPT_TAC intcall_callee_full) >>
+  disch_then (qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`PG`,`func`,
+                          `shadow_func`,`tops`,`cenv`,`cx`,`env`,`ty`,`v16`,
+                          `fn`,`es`,`v17`,`es'`,`mut`,`nr`,`args`,`ret`,`ss`,
+                          `rr`,`dflts`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then ACCEPT_TAC;
 
 Definition internal_defaults_const_names_def:
   internal_defaults_const_names tops <=>
@@ -672,22 +674,8 @@ Definition internal_defaults_const_names_def:
     | _ => F) tops
 End
 
-Theorem body_intcall_plain_defaults[local]:
-  MEM (FunctionDecl Internal mut nr rr fn args dflts ret ss) tops /\
-  ~internal_defaults_msg_gas tops ==>
-  ~supported_exprs_exists expr_msg_gas_root (DROP n dflts)
-Proof
-  strip_tac >> irule bodyStorageCasesTheory.supported_exprs_exists_DROP >>
-  qpat_x_assum `~internal_defaults_msg_gas tops` mp_tac >>
-  simp[supportedProgramTheory.internal_defaults_msg_gas_def, EXISTS_MEM] >>
-  disch_then (qspec_then `FunctionDecl Internal mut nr rr fn args dflts ret ss`
-    mp_tac) >> simp[supported_exprs_exists_every, EVERY_MEM] >> metis_tac[]
-QED
-
 Theorem body_intcall_case_full:
   !cx v16 src_id_opt fn es v17.
-    (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-       ~internal_defaults_msg_gas tops) /\
     (!ts mut nr args dflts ret ss.
        ~MEM (src_id_opt,fn) cx.stk /\
        get_module_code cx src_id_opt = SOME ts /\
@@ -717,14 +705,7 @@ Proof
   ONCE_REWRITE_TAC[body_expr_full_ok_def] >> simp[] >>
   rpt gen_tac >> strip_tac >>
   drule_all body_intcall_source_selection >> strip_tac >>
-  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
-    cx_tops cx = tops` by
-    (drule bodyInvCodePropsTheory.body_inv_main_code >> strip_tac >>
-     fs[body_inv_def]) >>
-  qpat_assum `!ts. ALOOKUP _ _ = SOME _ ==> _` (drule_then strip_assume_tac) >>
-  `~supported_exprs_exists expr_msg_gas_root
-        (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)` by
-    (drule_all body_intcall_plain_defaults >> simp[]) >>
+  drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
   `~MEM (src_id_opt,fn) cx.stk ==> body_exprs_full_ok cx es` by
     (strip_tac >> drule intcall_results_full_ih >> disch_then drule_all >>
      simp[]) >>
@@ -927,16 +908,16 @@ Theorem selfdestruct_expr_full_from_interfaces:
     expr_type e = BaseT AddressT /\
     gas_shadow_compiles
       (lower_value compile_expr cenv (expr_type e) e)
-      (lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)) /\
+      (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e)) /\
     gas_shadow_state sa ssa /\
     compile_expr cenv ty (Call ann SelfDestructTarget [e] dflt) sa = (vv,sb) /\
-    compile_expr cenv ty (gas_shadow_expr (Call ann SelfDestructTarget [e] dflt))
+    compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (Call ann SelfDestructTarget [e] dflt))
       ssa = (svv,ssb) /\
     fn_has_code sa sb func /\ fn_has_code ssa ssb sfunc ==>
     ?op sm ssm.
       vv = StackValue ann (Lit 0w) /\ svv = StackValue ann (Lit 0w) /\
       lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
-      lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
+      lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e)
         ssa = (op,ssm) /\
       gas_shadow_state sm ssm /\
       compile_selfdestruct op sm = ((),sb) /\
@@ -981,28 +962,28 @@ Proof
 QED
 
 Resume selfdestruct_expr_full_from_interfaces[compiler]:
-  `!child ss. ?sm. compile_expr cenv ty
-      (Call NoneT SelfDestructTarget [child] NONE) ss =
-      (StackValue NoneT (Lit 0w),sm)` by
+  `!ce child ss v st.
+     compile_expr ce ty (Call NoneT SelfDestructTarget [child] NONE) ss = (v,st) ==>
+     v = StackValue NoneT (Lit 0w)` by
     (rpt gen_tac >> simp[Once compile_expr_def, compile_call_def, expr_type_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-     rpt (pairarg_tac >> simp[]) >> metis_tac[]) >>
+     rpt (pairarg_tac >> simp[])) >>
   `compile_expr cenv ty (Call NoneT SelfDestructTarget [e] NONE) sa =
        (StackValue NoneT (Lit 0w),sb) /\
-   compile_expr cenv ty (gas_shadow_expr (Call NoneT SelfDestructTarget [e] NONE))
+   compile_expr (gas_shadow_env T cenv) ty
+       (gas_shadow_expr (Call NoneT SelfDestructTarget [e] NONE))
        shadow_sa = (StackValue NoneT (Lit 0w),shadow_sb)` by
     (qpat_x_assum `lower_value _ _ _ (Call _ _ _ _) _ = _` mp_tac >>
      qpat_x_assum `lower_value _ _ _ (gas_shadow_expr _) _ = _` mp_tac >>
      simp[gas_shadow_expr_def] >> simp[lower_value_def, comp_bind_def] >>
      rpt (pairarg_tac >> simp[]) >>
      `vv' = StackValue NoneT (Lit 0w) /\ vv = StackValue NoneT (Lit 0w)` by
-       metis_tac[pairTheory.PAIR_EQ] >>
+       (conj_tac >> first_x_assum irule >> metis_tac[]) >>
      gvs[unwrap_value_def, comp_return_def]) >>
   `gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
-     (lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e))` by
-    (irule (SRULE [] (Q.INST [`sh` |-> `T`]
-       gasShadowCompileHelpersTheory.gas_shadow_compiles_lower_value)) >>
-     simp[gas_shadow_compile_expr]) >>
+     (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e))` by
+    irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env >>
   asm "layout_contract" drule_all >> strip_tac >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     metis_tac[exprSimSourceTheory.expr_body_pre_gas_admissible] >>
@@ -1337,16 +1318,16 @@ Theorem selfdestruct_full_layout_shadow:
     expr_type e = BaseT AddressT /\
     gas_shadow_compiles
       (lower_value compile_expr cenv (expr_type e) e)
-      (lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)) /\
+      (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e)) /\
     gas_shadow_state sa ssa /\
     compile_expr cenv ty (Call ann SelfDestructTarget [e] dflt) sa = (vv,sb) /\
-    compile_expr cenv ty (gas_shadow_expr (Call ann SelfDestructTarget [e] dflt))
+    compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (Call ann SelfDestructTarget [e] dflt))
       ssa = (svv,ssb) /\
     fn_has_code sa sb func /\ fn_has_code ssa ssb sfunc ==>
     ?data sm ssm.
       vv = StackValue ann (Lit 0w) /\ svv = StackValue ann (Lit 0w) /\
       lower_value compile_expr cenv (expr_type e) e sa = (data,sm) /\
-      lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
+      lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e)
         ssa = (data,ssm) /\
       gas_shadow_state sm ssm /\
       compile_selfdestruct data sm = ((),sb) /\
@@ -1368,11 +1349,12 @@ Proof
     (irule lower_value_callback_contract >>
      irule expr_child_callback_agrees >> simp[]) >>
   `lower_value
-      (expr_child_callback (cenv_defaults_size cenv + expr_size (gas_shadow_expr e) +
-        (type_size ann +
+      (expr_child_callback (cenv_defaults_size (gas_shadow_env T cenv) +
+        expr_size (gas_shadow_expr e) + (type_size ann +
          (option_size expr_size (OPTION_MAP gas_shadow_expr dflt) + 2)))
-        compile_expr) cenv (BaseT AddressT) (gas_shadow_expr e) =
-      lower_value compile_expr cenv (BaseT AddressT) (gas_shadow_expr e)` by
+        compile_expr) (gas_shadow_env T cenv) (BaseT AddressT) (gas_shadow_expr e) =
+      lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT)
+        (gas_shadow_expr e)` by
     (irule lower_value_callback_contract >>
      irule expr_child_callback_agrees >> simp[]) >>
   gvs[] >>
@@ -1384,8 +1366,8 @@ Proof
        suffices_by gvs[] >>
      irule ci_mono_lower_value_cfn >> simp[compile_expr_ci_mono]) >>
   `ci_mono ssa st1'` by
-    (`ci_mono ssa (SND (lower_value compile_expr cenv (BaseT AddressT)
-                        (gas_shadow_expr e) ssa))` suffices_by gvs[] >>
+    (`ci_mono ssa (SND (lower_value compile_expr (gas_shadow_env T cenv)
+                        (BaseT AddressT) (gas_shadow_expr e) ssa))` suffices_by gvs[] >>
      irule ci_mono_lower_value_cfn >> simp[compile_expr_ci_mono]) >>
   `ci_mono st1 sb /\ ci_mono st1' ssb` by
     (qpat_x_assum `compile_selfdestruct data st1 = _` mp_tac >>

@@ -35,7 +35,7 @@ Theorem compile_assert_custom_frag_full_from_raise:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assert e (AssertCustomError err)))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assert e (AssertCustomError err))))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assert e (AssertCustomError err))))
       (eval_stmt cx (Assert e (AssertCustomError err))) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -202,7 +202,8 @@ Resume compile_assert_custom_frag_full_from_raise[false]:
   `stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
      cx lctx RetQ cenv
      (stmt_env cenv lctx ret_ty (Raise (RaiseCustomError err)))
-     (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Raise (RaiseCustomError err))))
+     (stmt_env (gas_shadow_env T cenv) lctx ret_ty
+       (gas_shadow_stmt (Raise (RaiseCustomError err))))
      (eval_stmt cx (Raise (RaiseCustomError err))) (mid with gas_obs := [])` by
     (`?tv t'. eval_expr cx e
         (es with gas_obs := gas_explicit marks s0.vs_gas_readings) = (INL tv,t')` by

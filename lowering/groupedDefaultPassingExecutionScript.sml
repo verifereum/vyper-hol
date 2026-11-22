@@ -103,7 +103,7 @@ Theorem grouped_default_passing_execution:
   specs = MAP (\((n,ty),e). (n,ty,e)) (ZIP (DROP ^ppos args,ds)) /\
   compile_create_kwarg_allocas ^pce specs a = (vars,b) /\
   compile_init_kwargs ^pce vars ^poff k (Lit 0w) si = ((),sb) /\
-  compile_init_kwargs ^pce (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars)
+  compile_init_kwargs (gas_shadow_env T ^pce) (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars)
     ^poff k (Lit 0w) sha = ((),shb) /\
   fn_has_code si sb fn /\ fn_has_code sha shb shfn /\ gas_shadow_state si sha /\
   (!name op ty e. MEM (name,op,ty,e) vars ==>
@@ -189,8 +189,8 @@ Proof
     dst = Var q /\ runtime_constant_expr [(NONE,tops)] e /\ expr_type e = ty /\
     (!es'. expr_sim_inv ^pce0 ^pcx ^penv es' ==> expr_body_pre ^pce0 ^pcx ^penv e es') /\
     lower_value compile_expr ^pce0 ty e = lower_value compile_expr ^pce ty e /\
-    lower_value compile_expr ^pce0 ty (gas_shadow_expr e) =
-      lower_value compile_expr ^pce ty (gas_shadow_expr e) /\
+    lower_value compile_expr (gas_shadow_env T ^pce0) ty (gas_shadow_expr e) =
+      lower_value compile_expr (gas_shadow_env T ^pce) ty (gas_shadow_expr e) /\
     evaluate_type (get_tenv ^pcx) ty = SOME tv /\
     type_memory_bytes ^pce ty = type_memory_size tv /\ type_memory_size tv + 64 < dimword (:256))
     (DROP k vars) (DROP k slots)` by

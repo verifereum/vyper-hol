@@ -24,13 +24,13 @@ Theorem ec_arith_vv_from_tail_full:
     body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a bt [e1;e2]) es /\
     compile_expr cenv ty (Builtin a bt [e1;e2]) sa = (vv,sb) /\
-    compile_expr cenv ty (gas_shadow_expr (Builtin a bt [e1;e2])) shadow_sa =
+    compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (Builtin a bt [e1;e2])) shadow_sa =
       (vv,shadow_sb) /\
     lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
     lower_value compile_expr cenv (expr_type e2) e2 s1 = (y,s2) /\
-    lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
+    lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
       (x,shadow_s1) /\
-    lower_value compile_expr cenv (expr_type e2) (gas_shadow_expr e2) shadow_s1 =
+    lower_value compile_expr (gas_shadow_env T cenv) (expr_type e2) (gas_shadow_expr e2) shadow_s1 =
       (y,shadow_s2) /\
     (if bt = ECAdd then compile_ecadd_points x y s2
      else compile_ecmul_point x y s2) = (res,sb) /\
@@ -149,24 +149,24 @@ Proof
     vv = FST (as_stack_val a (res,sb))` by
     (asm_x "tail" kall_tac >>
      Cases_on `bt = ECAdd` >> gvs[] >> metis_tac[compile_ec_operands]) >>
-  `?shadow_s1. lower_value compile_expr cenv (expr_type e1)
-      (gas_shadow_expr e1) shadow_sa = (x,shadow_s1) /\
-      gas_shadow_state s1 shadow_s1` by
-    (mp_tac (Q.INST [`ty` |-> `expr_type e1`, `e` |-> `e1`]
-       gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[] >>
-     Cases_on `lower_value compile_expr cenv (expr_type e1)
-       (gas_shadow_expr e1) shadow_sa` >> gvs[]) >>
-  `?shadow_s2. lower_value compile_expr cenv (expr_type e2)
-      (gas_shadow_expr e2) shadow_s1 = (y,shadow_s2) /\
-      gas_shadow_state s2 shadow_s2` by
-    (mp_tac (Q.INST [`ty` |-> `expr_type e2`, `e` |-> `e2`]
-       gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`s1`,`shadow_s1`] mp_tac) >> simp[] >>
-     Cases_on `lower_value compile_expr cenv (expr_type e2)
-       (gas_shadow_expr e2) shadow_s1` >> gvs[]) >>
+  Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1)
+      (gas_shadow_expr e1) shadow_sa` >>
+  rename1 `lower_value _ _ _ (gas_shadow_expr e1) shadow_sa = (shadow_x,shadow_s1)` >>
+  `shadow_x = x /\ gas_shadow_state s1 shadow_s1` by
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ e1 sa = (x,s1)` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr e1) shadow_sa = _` (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
+  qpat_x_assum `shadow_x = x` SUBST_ALL_TAC >>
+  Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e2)
+      (gas_shadow_expr e2) shadow_s1` >>
+  rename1 `lower_value _ _ _ (gas_shadow_expr e2) shadow_s1 = (shadow_y,shadow_s2)` >>
+  `shadow_y = y /\ gas_shadow_state s2 shadow_s2` by
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ e2 s1 = (y,s2)` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr e2) shadow_s1 = _` (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
+  qpat_x_assum `shadow_y = y` SUBST_ALL_TAC >>
   `expr_body_pre cenv cx env e1 es` by
     (irule exprOpenFirstOperandTheory.expr_body_pre_builtin_head >>
      goal_assum (drule_at Any) >> rpt strip_tac >> gvs[]) >>
@@ -175,7 +175,10 @@ Proof
     (qpat_assum `body_exprs_full_ok _ _` mp_tac >>
      pure_rewrite_tac[body_exprs_full_ok_def] >> strip_tac >>
      qpat_assum `body_expr_full_ok _ e1`
-       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     qpat_assum `!df l dd pg ts c sc f sf ce en ty' ee.
+                  _ ==> expr_sim_full _ _ _ _ _ _ /\ expr_vv_sim_full _ _ _ _ _ _`
+       mp_tac >>
      disch_then drule_all >> simp[]) >>
   qpat_assum `lower_value _ _ _ e1 sa = _`
     (mp_then Any strip_assume_tac (cj 2 exprLoweringPropsTheory.compile_expr_grows)) >>
@@ -307,7 +310,10 @@ Resume ec_arith_vv_from_tail_full[first_success]:
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e2) e2 mid` by
     (qpat_x_assum `body_expr_full_ok _ e2`
-       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     qpat_assum `!df l dd pg ts c sc f sf ce en ty' ee.
+                  _ ==> expr_sim_full _ _ _ _ _ _ /\ expr_vv_sim_full _ _ _ _ _ _`
+       mp_tac >>
      disch_then drule_all >> simp[]) >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
     expr_post H ctx func cenv cx e1 es sa s1 s0 mid v1 x t /\

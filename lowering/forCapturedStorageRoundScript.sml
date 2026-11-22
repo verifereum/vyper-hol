@@ -299,7 +299,7 @@ Theorem for_captured_storage_round_from_head:
   stmts_exprs_ok bc stmts /\ call_evaluation_safe cx (int_calls_stmts stmts) /\
   frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc ret_ty /\
   stmts_env bc (InLoop exit incr) ret_ty stmts sb0 = (bc1,sb1) /\
-  stmts_env bc (InLoop exit incr) ret_ty (MAP gas_shadow_stmt stmts) shadow_sb0 = (bc1,shadow_sb1) /\
+  stmts_env (gas_shadow_env T bc) (InLoop exit incr) ret_ty (MAP gas_shadow_stmt stmts) shadow_sb0 = (gas_shadow_env T bc1,shadow_sb1) /\
   gas_shadow_state sb0 shadow_sb0 /\ gas_shadow_state sb1 shadow_sb1 /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
@@ -457,7 +457,9 @@ Resume for_captured_storage_round_from_head[invoke]:
   disch_then (drule_at (Pat `type_stmts _ _ _`)) >>
   disch_then (fn th => qpat_assum `stmts_env bc (InLoop exit incr) ret_ty stmts sb0 = _`
     (mp_then (Pat `stmts_env _ _ _ _ _`) mp_tac th)) >>
-  disch_then (drule_at (Pat `gas_shadow_state sb0 _`)) >>
+  disch_then (fn th =>
+    qpat_assum `stmts_env _ _ _ (MAP gas_shadow_stmt _) _ = _`
+      (mp_then (Pat `stmts_env _ _ _ (MAP gas_shadow_stmt _) _`) mp_tac th)) >>
   disch_then (fn th => qpat_assum `lookup_var idx z = _`
     (mp_then (Pat `lookup_var _ _ = SOME (n2w _)`) mp_tac th)) >>
   disch_then (fn th => qpat_assum `lookup_var p z = _`
@@ -465,7 +467,7 @@ Resume for_captured_storage_round_from_head[invoke]:
   disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
   qpat_assum `eb = ei with scopes := _` (fn eq =>
     disch_then (mp_tac o PURE_REWRITE_RULE[GSYM eq])) >>
-  disch_then (qspecl_then [`shadow_sb0`,`st0`,`GG`,`tt`] mp_tac) >>
+  disch_then (qspecl_then [`st0`,`GG`,`tt`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ (eval_stmts cx stmts)
     (eb,z,GG,tt) Qraw _` >>
