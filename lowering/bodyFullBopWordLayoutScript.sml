@@ -8,16 +8,16 @@ Theorem bop_full_layout:
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1; e2]) sa = (op,sb) /\
-  lower_value compile_expr cenv ty
+  lower_value compile_expr (gas_shadow_env T cenv) ty
     (gas_shadow_expr (Builtin ann (Bop bop) [e1; e2])) shadow_sa = (op,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func ==>
   ?x y s1 s2 shadow_s1 shadow_s2.
     lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
     lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
-    lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
+    lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
       (x,shadow_s1) /\
-    lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
+    lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
       (y,shadow_s2) /\
     compile_binop bop x y (expr_type e1)
       (if bop = Exp then expr_int_literal e1 else NONE)
@@ -56,13 +56,13 @@ Proof
   simp[gas_shadow_expr_def, gas_shadow_builtin_def, gas_shadow_expr_type] >> strip_tac >>
   drule lower_value_bop >> simp[gas_shadow_expr_type] >> strip_tac >>
   `x' = x /\ gas_shadow_state s1 s1'` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type e1`, `e` |-> `e1`]
-      gas_shadow_stmt_lower_value) >>
+    (mp_tac (Q.INST [`sd` |-> `T`, `ty` |-> `expr_type e1`, `e` |-> `e1`]
+      gas_shadow_stmt_lower_value_env) >>
      simp[gas_shadow_compiles_def] >>
      disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
   `y' = y /\ gas_shadow_state s2 s2'` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type e1`, `e` |-> `e2`]
-      gas_shadow_stmt_lower_value) >>
+    (mp_tac (Q.INST [`sd` |-> `T`, `ty` |-> `expr_type e1`, `e` |-> `e2`]
+      gas_shadow_stmt_lower_value_env) >>
      simp[gas_shadow_compiles_def] >>
      disch_then (qspecl_then [`s1`, `s1'`] mp_tac) >> simp[]) >>
   gvs[] >>
@@ -76,16 +76,16 @@ Theorem bop_word_full_layout:
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1; e2]) sa = (op,sb) /\
-  lower_value compile_expr cenv ty
+  lower_value compile_expr (gas_shadow_env T cenv) ty
     (gas_shadow_expr (Builtin ann (Bop bop) [e1; e2])) shadow_sa = (op,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func ==>
   ?x y s1 s2 shadow_s1 shadow_s2.
     lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
     lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
-    lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
+    lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
       (x,shadow_s1) /\
-    lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
+    lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
       (y,shadow_s2) /\
     compile_binop bop x y (expr_type e1)
       (if bop = Exp then expr_int_literal e1 else NONE)
