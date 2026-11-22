@@ -12,7 +12,8 @@ Triviality event_fields_from_unique_decl:
 Proof
   Induct >> simp[supported_event_fields_def, event_decl_unique_def] >>
   Cases >> simp[supported_event_fields_def, event_decl_unique_def] >>
-  Cases_on `s = name` >> simp[] >> metis_tac[]
+  Cases_on `s = name` >> simp[] >> rpt strip_tac >> gvs[] >>
+  metis_tac[event_decl_unique_def]
 QED
 
 Triviality checked_event_fields:

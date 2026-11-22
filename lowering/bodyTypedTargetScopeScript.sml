@@ -5,6 +5,20 @@ Ancestors
   vyperTypeEnv vyperTypeInvariants vyperTypeSystem vyperContext vyperAST
   alist finite_map option pair
 
+Theorem typed_toplevel_lookup_module:
+  env_consistent env cx es /\
+  (IS_SOME (FLOOKUP env.bare_globals (src,id)) \/
+   IS_SOME (FLOOKUP env.toplevel_vtypes (src,id))) ==>
+  ?tops. get_module_code cx src = SOME tops
+Proof
+  strip_tac >>
+  Cases_on `FLOOKUP env.bare_globals (src,id)`
+  >- (gvs[IS_SOME_EXISTS] >> Cases_on `x` >>
+      metis_tac[env_consistent_toplevel_storage_static,
+                env_consistent_toplevel_hashmap_static]) >>
+  drule_all_then strip_assume_tac env_consistent_bare_global_find_NONE >> simp[]
+QED
+
 Theorem typed_toplevel_target_module:
   expr_sim_inv_mods mods cenv cx env es /\
   type_place_target env (TopLevelNameTarget (src,id)) = SOME vt ==>
@@ -14,8 +28,7 @@ Proof
   `env_consistent env cx es` by fs[expr_sim_inv_mods_def] >>
   fs[type_place_target_TopLevelNameTarget]
   >- (fs[env_consistent_def, env_context_consistent_def] >> res_tac >> simp[]) >>
-  Cases_on `vt` >>
-  metis_tac[env_consistent_toplevel_storage_static, env_consistent_toplevel_hashmap_static]
+  metis_tac[typed_toplevel_lookup_module, IS_SOME_EXISTS]
 QED
 
 Theorem body_inv_qualified_module_absent:
