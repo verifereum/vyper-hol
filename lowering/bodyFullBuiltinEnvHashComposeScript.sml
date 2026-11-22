@@ -117,13 +117,17 @@ Proof
     simp[lower_value_child_call, vyperASTTheory.expr_size_def, list_size_def] >>
     rpt (pairarg_tac >> gvs[]) >>
     rw[] >> gvs[as_stack_val_pair, unwrap_value_def, comp_return_def, builtinMiscTheory.compile_blobhash_def]) >>
- `?shadow_sm. lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa = (x,shadow_sm) /\
-    gas_shadow_state sm shadow_sm` by
-   (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `ty`, `e` |-> `e`] gas_shadow_stmt_lower_value) >>
-    rewrite_tac[gas_shadow_compiles_def] >>
+ `?shadow_sm.
+    lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e)
+      shadow_sa = (x,shadow_sm) /\ gas_shadow_state sm shadow_sm` by
+   (`gas_shadow_compiles (lower_value compile_expr cenv ty e)
+       (lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e))` by
+      irule gas_shadow_stmt_lower_value_env >>
+    qpat_x_assum `gas_shadow_compiles _ _`
+      (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >>
-    simp[] >> strip_tac >>
-    Cases_on `lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa` >> gvs[]) >>
+    Cases_on `lower_value compile_expr (gas_shadow_env T cenv) ty
+      (gas_shadow_expr e) shadow_sa` >> simp[]) >>
  `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var` by
    metis_tac[cj 2 compile_expr_grows] >>
  `cs_extends sm sb` by
