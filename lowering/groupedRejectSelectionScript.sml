@@ -259,7 +259,7 @@ Theorem row22_selected_start_with_cut:
     fn_has_code si cut fn /\ fn_has_code cut last fn /\
     emit_inst JMP [Label common.ec_common_label] [] cut = ((),last) /\
     ci_mono last dispatch_end /\
-    compile_init_kwargs common.ec_env
+    compile_init_kwargs (gas_shadow_env T common.ec_env)
       (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars)
       off k (Lit 0w) shadow_si = ((),shadow_cut) /\
     fn_has_code shadow_si shadow_cut shadow_fn /\ gas_shadow_state si shadow_si /\
@@ -356,7 +356,8 @@ Resume row22_selected_start_with_cut[pass]:
     (\group. case group of
       ExternalSingle selector package => ExternalSingle selector (gas_shadow_external_package package)
     | ExternalDefaults common entries specs off =>
-        ExternalDefaults (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+        ExternalDefaults (common with <| ec_env := gas_shadow_env T common.ec_env;
+          ec_body := MAP gas_shadow_stmt common.ec_body |>)
           entries (MAP (\(n,ty,e). (n,ty,gas_shadow_expr e)) specs) off) groups)` by
     (simp[NoAsms, EVERY_MAP, EVERY_MEM] >> qx_gen_tac `group` >> strip_tac >>
      qpat_assum `EVERY group_entry_labels_ok groups`

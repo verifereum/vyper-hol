@@ -495,8 +495,13 @@ Proof
     (gen_tac >> Cases_on `eval_exprs cx ds (es with gas_obs := gs)` >>
      drule_all grouped_checked_default_source_frame >>
      simp[vyperStateTheory.evaluation_state_component_equality]) >>
+  `gas_shadow_env T (ce with ce_vars := FEMPTY) =
+     (gas_shadow_env T ce) with ce_vars := FEMPTY` by
+    rw[gasShadowCompileBaseTheory.gas_shadow_env_def, compile_env_component_equality] >>
+  pop_assum $ mk_asm "shadow_vars" >>
   mp_tac (Q.INST [`mods` |-> `[(NONE,src_tops)]`, `PG` |-> `[]`]
     (SPEC_ALL grouped_omitted_initializers)) >>
+  asm_x "shadow_vars" (pure_rewrite_tac o single) >>
   impl_tac >-
     (qpat_assum `at_point sa s` (strip_assume_tac o REWRITE_RULE [at_point_def]) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
