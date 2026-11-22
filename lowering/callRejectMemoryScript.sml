@@ -1,7 +1,7 @@
 (* The raw FMP stays fixed on paths that never reach its operations. *)
 Theory callRejectMemory
 Ancestors
-  contextRawReachable contextCodegenRel contextCodegenRelProps venomState venomInst venomExecSemantics venomInstProps
+  deployBodyReachability contextRawReachable contextCodegenRel contextCodegenRelProps venomState venomInst venomExecSemantics venomInstProps
   venomExecProofs venomFnInstsProofs venomInstProofs1 ctxLookupAgreeHelpers frameAllocationEffects
   ctxLookupAgree unitTransformDefs o1PassContract vyperCalldata callRawVariant
   runtimePeakMemoryCode runtimePeakMemoryModule runtimePeakMemoryAbi loweringRuntimeOpcodes
@@ -30,10 +30,11 @@ Ancestors
   groupedEntryCounters groupedKeywordAllocas fmpStageBlockSimCode
   entryRejectAllocationIds groupedEntryPackage rejectPrefixSourceShape
   entryStateRel dispatchedValueSelection venomWf loweringShapeProps loweringShapeRules
-  calldataRegistrationExec fragGasOriginPtr fragGasOrigin fragGasPathPtr
+  calldataRegistrationExec fragGasOriginPtr fragGasOriginPtrLoop fragGasOrigin fragGasPathPtr
   gasEvents gasCount memSafeRun codegenRel ptrSafeRun
   groupedDispatchPath groupedEntryResources groupedKeywordReject selectedAcceptedFold
   vyperLoweringCorrect supportedProgram e2eDefs ptrDiscipline words arithmetic list relation
+  allocasBelowFmpUpdatesProps loweringBudgetFrameOracleTransport requestCutOracleReplay[qualified]
 
 val _ = Parse.hide "tops";
 val _ = Parse.hide "body";
@@ -321,22 +322,6 @@ Proof
   strip_tac >>
   first_x_assum (qspecl_then [`st`,`FST (m st)`,`SND (m st)`] mp_tac) >>
   simp[]
-QED
-
-Theorem frag_code_in_state_insts[local]:
-  MEM i (frag_code sa sb) ==> MEM i (state_insts sb)
-Proof
-  `!b. MEM b (emitted_blocks sa sb) ==> MEM b sb.cs_blocks` by
-    (simp[emitted_blocks_def] >> metis_tac[MEM_TAKE]) >>
-  Cases_on `emitted_blocks sa sb` >>
-  simp[frag_code_def, state_insts_def, emitted_insts_def, all_blocks_def,
-       MEM_FLAT, MEM_MAP, MEM_REVERSE] >>
-  strip_tac
-  >- metis_tac[MEM_DROP_IMP] >>
-  `MEM (LAST (h::t)) sb.cs_blocks` by metis_tac[MEM_LAST_NOT_NIL, NOT_CONS_NIL] >>
-  `!b. MEM b (FRONT (h::t)) ==> MEM b sb.cs_blocks` by
-    metis_tac[MEM_FRONT] >>
-  metis_tac[MEM_DROP_IMP]
 QED
 
 Theorem every_reject_prefix_opcode[local]:
@@ -1309,6 +1294,32 @@ Proof
   metis_tac[]
 QED
 
+Theorem installed_empty_revert_origin[local]:
+  emit_inst REVERT [Lit 0w; Lit 0w] [] sa = ((),sb) /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (Abort Revert_abort (revert_state (set_returndata [] s)),G,tn)
+Proof
+  strip_tac >> drule_all installed_empty_revert_code >> strip_tac >>
+  rpt gen_tac >> irule (cj 3 gas_origin_ptr_path_rules) >>
+  simp[exit_result_def, gas_origin_ptr_edge_def] >>
+  conj_tac
+  >- (simp[gas_origin_edge_def] >> qexists_tac `0` >>
+      simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
+           gas_events_step_def, mem_safe_step_non_invoke,
+           inst_mem_below_frontier_def, inst_dload_in_section_def,
+           source_memory_write_ranges_def, source_memory_read_ranges_def,
+           memory_range_of_operands_def, eval_operand_def, exit_result_def]) >>
+  simp[gas_path_ptr_edge_def] >> qexists_tac `0` >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
+       gas_count_step_def, ptr_safe_step_def, ptr_inst_ok_def,
+       access_ok_def, taint_ok_def, exit_result_def,
+       source_memory_read_ranges_def, source_memory_write_ranges_def,
+       memory_range_of_operands_def, eval_operand_def, op_taint_def]
+QED
+
 Theorem installed_empty_revert_terminal[local]:
   emit_inst REVERT [Lit 0w; Lit 0w] [] sa = ((),sb) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
@@ -2155,7 +2166,7 @@ Proof
   simp[Abbr `observer`, abi_decode_frag_observer_cut_no_revert]
 QED
 
-Theorem registered_kwarg_fields[local]:
+Theorem registered_kwarg_fields:
   !vars ce.
     (compile_register_kwarg_vars ce vars).ce_struct_fields = ce.ce_struct_fields /\
     (compile_register_kwarg_vars ce vars).ce_flag_n_members = ce.ce_flag_n_members /\
@@ -2166,7 +2177,7 @@ Proof
   PairCases >> simp[compile_register_kwarg_vars_def, FLOOKUP_UPDATE]
 QED
 
-Theorem registered_kwarg_positional_metadata[local]:
+Theorem registered_kwarg_positional_metadata:
   ALL_DISTINCT (MAP FST args) /\
   LIST_REL (\(name,ty) tv.
     abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
@@ -2927,13 +2938,13 @@ Proof
   qexists_tac `(prefix,k)` >> simp[]
 QED
 
-Theorem prefix_head_size_le[local]:
+Theorem prefix_head_size_le:
   !n tvs. SUM (MAP tv_abi_size (TAKE n tvs)) <= SUM (MAP tv_abi_size tvs)
 Proof
   Induct >> Cases_on `tvs` >> simp[TAKE_def]
 QED
 
-Theorem grouped_kwarg_names[local]:
+Theorem grouped_kwarg_names:
   LENGTH (defaults:expr list) <= LENGTH (args:(string # type) list) /\
   specs = MAP (\((n,ty),e). (n,ty,e))
     (ZIP (DROP (LENGTH args - LENGTH defaults) args,defaults)) /\
@@ -2956,7 +2967,7 @@ Proof
   simp[pairTheory.LAMBDA_PROD]
 QED
 
-Theorem grouped_defaults_argument_metadata[local]:
+Theorem grouped_defaults_argument_metadata:
   lower_vyper_runtime_unit tops rp = SOME u /\
   supported_program tops /\ source_typing_ok tops am tx /\
   MEM (mut,nr,rr,name,args,defaults,ret,stmts) (FST (classify_functions tops)) /\
@@ -4563,6 +4574,982 @@ Proof
       drule_all grouped_defaults_selected_source_reject >> simp[]) >>
   `unit_alloca_budget unit.cu_context < 2 ** 254` by (fs[] >> decide_tac) >>
   drule_all runtime_legacy_reject_excludes_fmp >> simp[]
+QED
+
+Theorem grouped_selected_default_checks_origin[local]:
+  compile_group_dispatch_linear groups fallback sa = (jobs,sb) /\
+  fn_has_code sa sb fn /\ EVERY group_entry_labels_ok groups /\
+  groups = pre ++ ExternalDefaults common entries specs off::post /\
+  EVERY (\group. case group of
+    ExternalSingle (sel,_,_) _ => calldata_method_id s.vs_call_ctx.cc_calldata <> n2w sel
+  | ExternalDefaults comp es sp _ =>
+      FIND (\(sel,_,_,_). calldata_method_id s.vs_call_ctx.cc_calldata = n2w sel) es = NONE /\
+      EVERY (\(_,ty,_). type_memory_bytes comp.ec_env ty < dimword (:256)) sp) pre /\
+  FIND (\(n,_,_,_). calldata_method_id s.vs_call_ctx.cc_calldata = n2w n) entries =
+     SOME (sel,lbl,mincd,k) /\
+  EVERY (\(_,ty,_). type_memory_bytes common.ec_env ty < dimword (:256)) specs /\
+  4 <= LENGTH s.vs_call_ctx.cc_calldata /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+  mincd < dimword (:256) /\
+  ((~common.ec_payable /\ s.vs_call_ctx.cc_callvalue <> 0w) \/
+   (4 < mincd /\ LENGTH s.vs_call_ctx.cc_calldata < mincd)) /\
+  selected_registration_resources ctx fn site lo sa s /\ s.vs_allocas = FEMPTY /\
+  fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword (:256) /\
+  (!lbl bb. lookup_block lbl fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+     s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
+  ?z Hz tz. z.vs_returndata = [] /\
+    !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+       (s,G,tn) [] (Abort Revert_abort z,Hz,tz)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all grouped_dispatch_long_prelude >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
+  rename1 `compile_external_groups (Var mid) groups prep = (jobs,cut)` >>
+  rename1 `selected_registration_resources ctx fn site lo prep before` >>
+  rename1 `selected_registration_frame s tn before tb` >>
+  rename1 `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (s,G,tn) [] (OK before,Gb,tb)` >>
+  qpat_x_assum `groups = pre ++ _` SUBST_ALL_TAC >>
+  drule_all compile_external_groups_selected_default_origin >>
+  disch_then (qspecl_then [`PG`,`Gb`] strip_assume_tac) >>
+  rename1 `compile_entry_checks mincd common.ec_payable checks = ((),init)` >>
+  rename1 `selected_registration_frame before tb hit th` >>
+  rename1 `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (before,Gb,tb) [] (OK hit,Gh,th)` >>
+  `hit.vs_call_ctx = s.vs_call_ctx` by fs[selected_registration_frame_def] >>
+  qpat_assum `selected_registration_resources ctx fn site lo checks hit`
+    (strip_assume_tac o REWRITE_RULE [selected_registration_resources_def]) >>
+  mp_tac (Q.INST [`m` |-> `mincd`,`pay` |-> `common.ec_payable`,
+    `st` |-> `checks`,`last` |-> `init`,`s` |-> `hit`,
+    `G` |-> `Gh`,`tn` |-> `th`]
+    (SPEC_ALL entryChecksRejectJointTheory.compile_entry_checks_reject_joint)) >>
+  impl_tac >- (asm_rewrite_tac[] >> metis_tac[]) >>
+  strip_tac >>
+  qexistsl_tac [`z`,`H`,`u`] >> simp[] >>
+  rpt gen_tac >>
+  metis_tac[gas_origin_ptr_path_trans]
+QED
+
+Theorem legacy_checks_registration_reject_origin[local]:
+  compile_entry_checks m pay opened = ((),checked) /\
+  compile_register_positional_args ce (build_positional_args ce args) 4 checked = (cef,last) /\
+  fn_has_code opened checked fn /\ fn_has_code checked last fn /\
+  ALL_DISTINCT (MAP FST args) /\
+  LIST_REL (\(name,ty) tv.
+    abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
+    (?loc. FLOOKUP ce.ce_vars name = SOME loc /\
+      var_location_memory_size loc = SOME (type_memory_size tv)) /\
+    type_memory_size tv < dimword (:256)) args tvs /\
+  m = 4 + SUM (MAP tv_abi_size tvs) /\ m < dimword (:256) /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+  4 <= LENGTH s.vs_call_ctx.cc_calldata /\
+  (LENGTH s.vs_call_ctx.cc_calldata < m \/
+   calldata_decode_args s.vs_call_ctx.cc_calldata tvs 0 = NONE) /\
+  selected_registration_resources ctx fn site 0 opened s /\
+  fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword (:256) /\
+  (!name bb. lookup_block name fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
+  ?z Hz tz. z.vs_returndata = [] /\
+    !D explicit. gas_origin_ptr_path (D,0,explicit,ctx,fn,[])
+       (s,G,tn) [] (Abort Revert_abort z,Hz,tz)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  Cases_on `(~pay /\ s.vs_call_ctx.cc_callvalue <> 0w) \/
+            LENGTH s.vs_call_ctx.cc_calldata < m`
+  >- (qpat_assum `selected_registration_resources ctx fn site 0 opened s`
+        (strip_assume_tac o REWRITE_RULE [selected_registration_resources_def]) >>
+      Q.SUBGOAL_THEN `(~pay /\ s.vs_call_ctx.cc_callvalue <> 0w) \/
+        (4 < m /\ LENGTH s.vs_call_ctx.cc_calldata < m)` ASSUME_TAC
+      >- (qpat_assum `(~pay /\ _) \/ LENGTH _ < m` (DISJ_CASES_THEN assume_tac)
+          >- (DISJ1_TAC >> first_assum ACCEPT_TAC) >>
+          DISJ2_TAC >> decide_tac) >>
+      mp_tac (Q.INST [`lo` |-> `0`,`st` |-> `opened`,`last` |-> `checked`,
+        `PG` |-> `[]`] (SPEC_ALL entryChecksRejectJointTheory.compile_entry_checks_reject_joint)) >>
+      impl_tac >- (asm_rewrite_tac[] >> metis_tac[]) >>
+      disch_then MATCH_ACCEPT_TAC) >>
+  `m <= LENGTH s.vs_call_ctx.cc_calldata` by
+    (qpat_assum `~(_ \/ LENGTH s.vs_call_ctx.cc_calldata < m)`
+       (mp_tac o CONJUNCT2 o REWRITE_RULE [DE_MORGAN_THM]) >>
+     simp[arithmeticTheory.NOT_LESS]) >>
+  Q.SUBGOAL_THEN `pay \/ s.vs_call_ctx.cc_callvalue = 0w` ASSUME_TAC
+  >- metis_tac[] >>
+  `calldata_decode_args s.vs_call_ctx.cc_calldata tvs 0 = NONE` by metis_tac[] >>
+  mp_tac (Q.INST [`lo` |-> `0`,`sa` |-> `opened`,`sb` |-> `checked`,
+    `PG` |-> `[]`] (SPEC_ALL grouped_default_checks_pass_origin)) >>
+  impl_tac >- asm_rewrite_tac[] >>
+  disch_then (qx_choosel_then [`t`,`provenance_after`,`taint_after`] strip_assume_tac) >>
+  `t.vs_call_ctx = s.vs_call_ctx` by fs[selected_registration_frame_def] >>
+  qpat_assum `selected_registration_resources ctx fn site 0 checked t`
+    (strip_assume_tac o REWRITE_RULE [selected_registration_resources_def]) >>
+  mp_tac (Q.INST [`sa` |-> `checked`,`sb` |-> `last`,`s` |-> `t`,
+     `G` |-> `provenance_after`,`tn` |-> `taint_after`] (SPEC_ALL coherent_registration_reject_path)) >>
+  impl_tac >- (asm_rewrite_tac[] >> metis_tac[]) >>
+  disch_then (qx_choosel_then [`z`,`Hz`,`tz`] strip_assume_tac) >>
+  qexistsl_tac [`z`,`Hz`,`tz`] >> simp[] >>
+  rpt gen_tac >> irule gas_origin_ptr_path_trans >>
+  qexistsl_tac [`provenance_after`,`t`,`taint_after`] >> simp[]
+QED
+
+Theorem grouped_prefix_misses_and_widths[local]:
+  EVERY (\e. calldata_method_id cd <> n2w (FST e)) (grouped_selectors pre) /\
+  EVERY (\g. case g of ExternalSingle _ _ => T
+      | ExternalDefaults comp es sp _ => EVERY
+          (\(_,ty,_). type_memory_bytes comp.ec_env ty < dimword (:256)) sp) pre ==>
+  EVERY (\g. case g of ExternalSingle (sel,_,_) _ => calldata_method_id cd <> n2w sel
+    | ExternalDefaults comp es sp _ =>
+      FIND (\(sel,_,_,_). calldata_method_id cd = n2w sel) es = NONE /\
+      EVERY (\(_,ty,_). type_memory_bytes comp.ec_env ty < dimword (:256)) sp) pre
+Proof
+  disch_then (CONJUNCTS_THEN assume_tac) >>
+  `!g e. MEM g pre /\ MEM e (external_group_selectors g) ==>
+    calldata_method_id cd <> n2w (FST e)` by
+    (qx_genl_tac [`g`,`e`] >> disch_then (CONJUNCTS_THEN assume_tac) >>
+     `MEM e (grouped_selectors pre)` by
+       (simp[grouped_selectors_def, MEM_FLAT, MEM_MAP] >>
+        qexists_tac `external_group_selectors g` >> simp[] >>
+        qexists_tac `g` >> simp[]) >>
+     qpat_assum `EVERY _ (grouped_selectors pre)`
+       (qspec_then `e` mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     simp_tac bool_ss [ASSUME ``MEM e (grouped_selectors pre)``] >>
+     simp[]) >>
+
+  simp_tac bool_ss [EVERY_MEM] >> Cases
+     >- (rename1 `ExternalSingle selector pkg` >> PairCases_on `selector` >> strip_tac >>
+         qpat_assum `!g e. MEM g pre /\ _ ==> _`
+           (qspecl_then [`ExternalSingle (selector0,selector1,selector2) pkg`,
+             `(selector0,selector1,selector2)`] mp_tac) >>
+         simp[external_group_selectors_def]) >>
+     rename1 `MEM (ExternalDefaults comp es sp offset) pre ==> _` >>
+     strip_tac >> simp_tac (srw_ss()) [] >> conj_tac
+     >- (simp[mem2varBlockSimHelpersTheory.FIND_NONE_EVERY, combinTheory.o_DEF,
+              EVERY_MEM, pairTheory.FORALL_PROD] >> rpt strip_tac >>
+         rename1 `MEM (sel,lbl,sz,k') es` >>
+         qpat_assum `!g e. MEM g pre /\ _ ==> _`
+           (qspecl_then [`ExternalDefaults comp es sp offset`,`(sel,lbl,sel MOD 256 = 0)`] mp_tac) >>
+         simp[external_group_selectors_def, MEM_MAP] >>
+         qexists_tac `(sel,lbl,sz,k')` >> simp[]) >>
+     qpat_assum `EVERY (\g. case g of ExternalSingle _ _ => T | _ => _) pre`
+       (qspec_then `ExternalDefaults comp es sp offset` mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     simp[]
+QED
+
+Theorem grouped_selected_legacy_job_origin[local]:
+  compile_group_dispatch_linear groups fl sf = (jobs,sd) /\
+  compile_external_jobs jobs sd = ((),sx) /\ EVERY group_job_label_ok jobs /\
+  fn_has_code sf sd fn /\ fn_has_code sd sx fn /\ EVERY group_entry_labels_ok groups /\
+  groups = pre ++ ExternalSingle (sel,"fn_" ++ name,tz)
+    ("fn_" ++ name,ce,build_positional_args ce args,m,pay,nr,key,tr,view,stmts,rt)::post /\
+  EVERY (\group. case group of
+    ExternalSingle (n,_,_) _ => calldata_method_id s.vs_call_ctx.cc_calldata <> n2w n
+  | ExternalDefaults common entries specs _ =>
+      FIND (\(n,_,_,_). calldata_method_id s.vs_call_ctx.cc_calldata = n2w n) entries = NONE /\
+      EVERY (\(_,ty,_). type_memory_bytes common.ec_env ty < dimword (:256)) specs) pre /\
+  calldata_method_id s.vs_call_ctx.cc_calldata = n2w sel /\
+  selected_registration_resources ctx fn site 0 sf s /\ s.vs_allocas = FEMPTY /\
+  4 <= LENGTH s.vs_call_ctx.cc_calldata /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+  ALL_DISTINCT (MAP FST args) /\
+  LIST_REL (\(n,ty) tv.
+    abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
+    (?loc. FLOOKUP ce.ce_vars n = SOME loc /\
+      var_location_memory_size loc = SOME (type_memory_size tv)) /\
+    type_memory_size tv < dimword (:256)) args tvs /\
+  m = 4 + SUM (MAP tv_abi_size tvs) /\ m < dimword (:256) /\
+  (LENGTH s.vs_call_ctx.cc_calldata < m \/
+   calldata_decode_args s.vs_call_ctx.cc_calldata tvs 0 = NONE) /\
+  (!lbl bb. lookup_block lbl fn.fn_blocks = SOME bb ==> phi_prefix_length bb.bb_instructions = 0) /\
+  fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword (:256) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
+  ?z Hz tz'. z.vs_returndata = [] /\
+    !D explicit. gas_origin_ptr_path (D,0,explicit,ctx,fn,[])
+       (s,G,tn) [] (Abort Revert_abort z,Hz,tz')
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all grouped_dispatch_long_prelude_with_frame >>
+  disch_then (qspecl_then [`tn`,`[]`,`G`] strip_assume_tac) >>
+  rename1 `compile_external_groups (Var mid) groups prep = (jobs,cut)` >>
+  `cut.cs_next_var <= sd.cs_next_var /\ cut.cs_next_id <= sd.cs_next_id` by
+    fs[ci_mono_def] >>
+  rename1 `selected_registration_resources ctx fn site 0 prep before` >>
+  rename1 `selected_registration_frame s tn before tb` >>
+  rename1 `!D explicit. gas_origin_ptr_path (D,0,explicit,ctx,fn,[])
+    (s,G,tn) [] (OK before,Gb,tb)` >>
+  qabbrev_tac `pk = ("fn_" ++ name,ce,build_positional_args ce args,m,pay,nr,key,tr,view,stmts,rt)` >>
+  qpat_x_assum `groups = pre ++ _` SUBST_ALL_TAC >>
+  drule_all compile_external_groups_selected_single_origin >>
+  disch_then (qspecl_then [`[]`,`Gb`] strip_assume_tac) >>
+  rename1 `compile_selector_checks (Var mid) [(sel,"fn_" ++ name)] cmp = ((),cmpend)` >>
+  rename1 `selected_registration_frame before tb hit th` >>
+  rename1 `!D explicit. gas_origin_ptr_path (D,0,explicit,ctx,fn,[])
+    (before,Gb,tb) [] (OK hit,Gh,th)` >>
+  `hit.vs_call_ctx = s.vs_call_ctx` by fs[selected_registration_frame_def] >>
+  drule_all compile_external_legacy_job_interval >>
+  disch_then (qx_choosel_then [`legacy_begin`,`legacy_end`,`jobs_pre`,`jobs_post`] strip_assume_tac) >>
+  `sd.cs_next_id <= legacy_begin.cs_next_id /\ sd.cs_next_var <= legacy_begin.cs_next_var` by
+    metis_tac[compile_external_jobs_ci_mono, ci_mono_def, SND] >>
+  `MEM ("fn_" ++ name,ce,build_positional_args ce args,m,pay,nr,key,tr,view,stmts,rt) [pk]` by
+    simp[Abbr `pk`] >>
+  drule_all external_fn_selected_check_intervals >>
+  disch_then (qx_choosel_then [`opened`,`checked`,`cef`,`last`,`bodyend`] strip_assume_tac) >>
+  `cs_extends checked last` by metis_tac[registration_compile_ci_mono, ci_mono_def, SND] >>
+  `fn_has_code opened checked fn /\ fn_has_code checked last fn` by
+    metis_tac[fn_has_code_mid, cs_extends_trans] >>
+  `EVERY group_entry_labels_ok post` by
+    (qpat_assum `EVERY group_entry_labels_ok (pre ++ _::post)`
+       (mp_tac o REWRITE_RULE [EVERY_APPEND, EVERY_DEF]) >>
+     disch_then (ACCEPT_TAC o CONJUNCT2 o CONJUNCT2)) >>
+  drule_all compile_external_groups_append_layout >>
+  disch_then (qx_choosel_then [`earlier`,`tail_jobs`,`split_at`] strip_assume_tac) >>
+  `split_at = cmp` by metis_tac[pairTheory.PAIR_EQ] >>
+  pop_assum SUBST_ALL_TAC >>
+  drule_all compile_external_single_cons_layout >>
+  disch_then (qx_choosel_then [`later`,`remaining`] strip_assume_tac) >>
+  `later = cmpend` by metis_tac[pairTheory.PAIR_EQ] >>
+  pop_assum SUBST_ALL_TAC >>
+  `cmpend.cs_next_var <= cut.cs_next_var /\ cmpend.cs_next_id <= cut.cs_next_id` by
+    metis_tac[groupedEntryCountersTheory.compile_external_groups_ci_mono, ci_mono_def, SND] >>
+  `cmp.cs_next_id <= cmpend.cs_next_id` by
+    metis_tac[groupedEntryCountersTheory.compile_selector_checks_ci_mono, ci_mono_def, SND] >>
+  `legacy_begin.cs_next_id <= opened.cs_next_id /\
+    legacy_begin.cs_next_var <= opened.cs_next_var` by
+    (`pre' = []` by
+       (qpat_assum `[pk] = _` mp_tac >> Cases_on `pre'` >> simp[]) >>
+     qpat_x_assum `pre' = []` SUBST_ALL_TAC >>
+     qpat_x_assum `compile_external_fn_bodies [] legacy_begin = _`
+       (strip_assume_tac o SIMP_RULE (srw_ss()) [compile_external_fn_bodies_def, comp_return_def]) >>
+     drule new_block_props >> simp[]) >>
+  `selected_registration_resources ctx fn site 0 opened hit` by
+    (simp[selected_registration_resources_def] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+     >- (rpt strip_tac >>
+       qpat_assum `!id e. FLOOKUP hit.vs_allocas id = SOME e ==> _`
+         (drule_then assume_tac) >> decide_tac) >>
+     irule fresh_vars_wrt_mono >> qexists_tac `cmpend` >> simp[] >> decide_tac) >>
+  mp_tac (Q.INST [`s` |-> `hit`,`G` |-> `Gh`,`tn` |-> `th`]
+    (SPEC_ALL legacy_checks_registration_reject_origin)) >>
+  impl_tac >- (asm_rewrite_tac[] >> metis_tac[]) >>
+  disch_then (qx_choosel_then [`z`,`Hz`,`tz'`] strip_assume_tac) >>
+  qexistsl_tac [`z`,`Hz`,`tz'`] >> simp[] >>
+  rpt gen_tac >>
+  irule gas_origin_ptr_path_trans >> qexistsl_tac [`Gb`,`before`,`tb`] >> simp[] >>
+  irule gas_origin_ptr_path_trans >> qexistsl_tac [`Gh`,`hit`,`th`] >> simp[]
+QED
+
+Theorem grouped_legacy_selected_source_origin[local]:
+  lower_vyper_runtime_unit tops rp = SOME u /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  initial_venom_state_rel tops am tx vs /\
+  EXISTS external_has_defaults (FST (classify_functions tops)) /\
+  4 <= LENGTH vs.vs_call_ctx.cc_calldata /\
+  MEM (mut,nr,rr,name,args,[],ret,fbody) (FST (classify_functions tops)) /\
+  abi_method_id (type_env tops) name (MAP SND args) = cd_selector vs.vs_call_ctx.cc_calldata /\
+  (OPT_MMAP (evaluate_type (type_env tops)) (MAP SND args) = NONE \/
+    ?tvs. OPT_MMAP (evaluate_type (type_env tops)) (MAP SND args) = SOME tvs /\
+      (LENGTH vs.vs_call_ctx.cc_calldata < 4 + SUM (MAP tv_abi_size tvs) \/
+       calldata_decode_args vs.vs_call_ctx.cc_calldata tvs 0 = NONE)) /\
+  (ctx_has_dalloca u.cu_context ==>
+     unit_alloca_budget u.cu_context <= w2n vs.vs_initial_fmp) ==>
+  ?fn z Hz tz. lookup_function "__entry" u.cu_context.ctx_functions = SOME fn /\
+    z.vs_returndata = [] /\
+    !D explicit. gas_origin_ptr_path (D,0,explicit,u.cu_context,fn,[])
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
+       FEMPTY,entry_taint) [] (Abort Revert_abort z,Hz,tz)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qabbrev_tac `start = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
+  `start = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>` by
+    simp[Abbr `start`] >>
+  drule_all grouped_runtime_reject_dispatch_inputs >>
+  disch_then (qx_choosel_then [`groups`,`entry`,`fl`,`sf`,`jobs`,`sd`,`sx`,`final`,`art`] strip_assume_tac) >>
+  qabbrev_tac `ext = (mut,nr,rr,name,args,[]:expr list,ret,fbody)` >>
+  Cases_on `set_external_package_target rp.rpol_target (package_external_fn tops T
+    (K global_nonreentrant_slot) ext)` >> PairCases_on `r` >>
+  rename1 `set_external_package_target _ _ = (lbl,ce,pos,m,pay,nr',key,ut,iv,pbody,rt)` >>
+  `lbl = "fn_" ++ name` by
+    (qpat_assum `set_external_package_target _ _ = _` mp_tac >>
+     simp[NoAsms, Abbr `ext`, package_external_fn_def, set_external_package_target_def, LET_THM]) >>
+  qpat_x_assum `lbl = _` SUBST_ALL_TAC >>
+  qunabbrev_tac `ext` >>
+  `ALL_DISTINCT (MAP FST args) /\ pos = build_positional_args ce args /\
+    ?tvs. OPT_MMAP (evaluate_type (type_env tops)) (MAP SND args) = SOME tvs /\
+      m = 4 + SUM (MAP tv_abi_size tvs) /\ m < dimword (:256) /\
+      LIST_REL (\(argname,ty) (ty',tv). ty = ty' /\
+        abi_decoder_coherent ce (type_env tops) ce.ce_struct_fields ty tv /\
+        (?loc. FLOOKUP ce.ce_vars argname = SOME loc /\
+          var_location_memory_size loc = SOME (type_memory_size tv)) /\
+        type_memory_size tv < dimword (:256)) args (ZIP (MAP SND args,tvs))` by
+    (drule_all registration_reject_classified_package_inputs >>
+     disch_then ACCEPT_TAC) >>
+  qpat_x_assum `pos = _` SUBST_ALL_TAC >>
+  `LIST_REL (\(n,ty) tv.
+    abi_decoder_coherent ce (type_env tops) ce.ce_struct_fields ty tv /\
+    (?loc. FLOOKUP ce.ce_vars n = SOME loc /\
+      var_location_memory_size loc = SOME (type_memory_size tv)) /\
+    type_memory_size tv < dimword (:256)) args tvs` by
+    (drule OPT_MMAP_LENGTH >> strip_tac >>
+     simp[LIST_REL_EL_EQN] >> qx_gen_tac `i` >> strip_tac >>
+     qpat_x_assum `LIST_REL _ args _`
+       (qspec_then `i` mp_tac o CONJUNCT2 o REWRITE_RULE [LIST_REL_EL_EQN]) >>
+     Cases_on `EL i args` >> simp[EL_ZIP, EL_MAP]) >>
+  qabbrev_tac `chosen_id = cd_selector vs.vs_call_ctx.cc_calldata` >>
+  qabbrev_tac `hit = ExternalSingle (chosen_id,"fn_" ++ name,selector_has_trailing_zeroes chosen_id)
+    ("fn_" ++ name,ce,build_positional_args ce args,m,pay,nr',key,ut,iv,pbody,rt)` >>
+  `package_external_group tops rp.rpol_target T (K global_nonreentrant_slot)
+     (mut,nr,rr,name,args,[],ret,fbody) = hit` by
+    simp[Abbr `hit`, package_external_group_no_defaults,
+         compute_selector_method_id, GSYM markerTheory.Abbrev_def] >>
+  `MEM hit groups` by
+    (qpat_assum `groups = MAP _ _` SUBST1_TAC >> simp[MEM_MAP] >>
+     qexists_tac `(mut,nr,rr,name,args,[]:expr list,ret,fbody)` >> simp[]) >>
+  pop_assum (qx_choosel_then [`pre`,`post`] assume_tac o REWRITE_RULE [MEM_SPLIT]) >>
+  `ALL_DISTINCT (MAP FST (grouped_selectors groups))` by
+    (qpat_assum `groups = MAP _ _` SUBST1_TAC >>
+     drule check_contract_grouped_selectors_distinct >> simp[]) >>
+  `calldata_method_id vs.vs_call_ctx.cc_calldata = n2w chosen_id` by
+    simp[Abbr `chosen_id`, cd_selector_method_id] >>
+  `EVERY (\e. calldata_method_id vs.vs_call_ctx.cc_calldata <> n2w (FST e))
+       (grouped_selectors pre)` by
+    (match_mp_tac (Q.INST [`groups` |-> `groups`,`group` |-> `hit`,
+       `post` |-> `post`,`sel` |-> `(chosen_id,"fn_" ++ name,selector_has_trailing_zeroes chosen_id)`,
+       `tops` |-> `tops`,`target` |-> `rp.rpol_target`,`trans` |-> `T`,
+       `nkeys` |-> `K global_nonreentrant_slot`] grouped_selected_package_predecessors) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     simp[Abbr `hit`, external_group_selectors_def]) >>
+  SUBGOAL_THEN ``LENGTH vs.vs_call_ctx.cc_calldata < m \/
+    calldata_decode_args vs.vs_call_ctx.cc_calldata tvs 0 = NONE`` ASSUME_TAC
+  >- metis_tac[optionTheory.SOME_11, optionTheory.NOT_NONE_SOME] >>
+  `EVERY (\g. case g of ExternalSingle _ _ => T
+    | ExternalDefaults comp es sp _ =>
+       EVERY (\(_,ty,_). type_memory_bytes comp.ec_env ty < dimword (:256)) sp) groups` by
+    (qpat_assum `groups = MAP _ _` SUBST1_TAC >>
+     Cases_on `classify_functions tops` >> PairCases_on `r` >>
+     drule_all checked_grouped_package_keyword_widths >> simp[]) >>
+  `EVERY (\g. case g of ExternalSingle _ _ => T
+    | ExternalDefaults comp es sp _ =>
+       EVERY (\(_,ty,_). type_memory_bytes comp.ec_env ty < dimword (:256)) sp) pre` by
+    (qpat_assum `groups = pre ++ _` (fn split =>
+       qpat_assum `EVERY (\g. case g of ExternalSingle _ _ => T | _ => _) groups`
+         (mp_tac o PURE_ONCE_REWRITE_RULE [split])) >>
+     simp[EVERY_APPEND]) >>
+  `EVERY (\g. case g of ExternalSingle (sel,_,_) _ =>
+      calldata_method_id start.vs_call_ctx.cc_calldata <> n2w sel
+    | ExternalDefaults comp es sp _ =>
+      FIND (\(sel,_,_,_). calldata_method_id start.vs_call_ctx.cc_calldata = n2w sel) es = NONE /\
+      EVERY (\(_,ty,_). type_memory_bytes comp.ec_env ty < dimword (:256)) sp) pre` by
+    (qpat_assum `start.vs_call_ctx = _` SUBST1_TAC >>
+     irule grouped_prefix_misses_and_widths >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `sf.cs_current_bb = "__entry"` by
+    (qpat_assum `at_point sf start` (mp_tac o REWRITE_RULE [at_point_def]) >>
+     simp[Abbr `start`]) >>
+  drule_all (Q.INST [`site` |-> `ARB`] (SPEC_ALL grouped_dispatch_initial_resources)) >>
+  strip_tac >>
+  mp_tac (Q.INST [`ctx` |-> `u.cu_context`,`s` |-> `start`,
+    `fn` |-> `entry`,`site` |-> `ARB`,`env` |-> `type_env tops`,
+    `nr` |-> `nr'`,`tr` |-> `ut`,`view` |-> `iv`,`stmts` |-> `pbody`,
+    `sel` |-> `chosen_id`,`tz` |-> `selector_has_trailing_zeroes chosen_id`,
+    `G` |-> `FEMPTY`,`tn` |-> `entry_taint`] (SPEC_ALL grouped_selected_legacy_job_origin)) >>
+  qunabbrev_tac `hit` >>
+  impl_tac >-
+    (rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+       qpat_assum `start.vs_call_ctx = _` SUBST1_TAC >> asm_rewrite_tac[]]) >>
+  strip_tac >>
+  qexistsl_tac [`entry`,`z`,`Hz`,`tz'`] >>
+  asm_rewrite_tac[]
+QED
+
+Theorem grouped_defaults_selected_early_origin:
+  lower_vyper_runtime_unit tops rp = SOME u /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  initial_venom_state_rel tops am tx vs /\
+  EXISTS external_has_defaults (FST (classify_functions tops)) /\
+  4 <= LENGTH vs.vs_call_ctx.cc_calldata /\
+  MEM (mut,nr,rr,name,args,defaults,ret,stmts) (FST (classify_functions tops)) /\
+  defaults <> [] /\ MEM (prefix,k) (abi_entries args defaults) /\
+  abi_method_id (type_env tops) name (MAP SND prefix) = cd_selector vs.vs_call_ctx.cc_calldata /\
+  OPT_MMAP (evaluate_type (type_env tops)) (MAP SND prefix) = SOME prefix_tvs /\
+  (LENGTH vs.vs_call_ctx.cc_calldata < 4 + SUM (MAP tv_abi_size prefix_tvs) \/
+    calldata_decode_args vs.vs_call_ctx.cc_calldata
+      (DROP (LENGTH args - LENGTH defaults) prefix_tvs)
+      (SUM (MAP tv_abi_size (TAKE (LENGTH args - LENGTH defaults) prefix_tvs))) = NONE) /\
+  (ctx_has_dalloca u.cu_context ==>
+     unit_alloca_budget u.cu_context <= w2n vs.vs_initial_fmp) ==>
+  ?fn z G tn. lookup_function "__entry" u.cu_context.ctx_functions = SOME fn /\
+    z.vs_returndata = [] /\
+    !D explicit. gas_origin_ptr_path (D,0,explicit,u.cu_context,fn,[])
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
+       FEMPTY,entry_taint) [] (Abort Revert_abort z,G,tn)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qabbrev_tac `start = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
+  `start = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>` by
+    simp[Abbr `start`] >>
+  drule_all grouped_runtime_reject_dispatch_inputs >>
+  disch_then (qx_choosel_then [`groups`,`entry`,`fl`,`sf`,`jobs`,`sd`,`sx`,`final`,`art`] strip_assume_tac) >>
+  qabbrev_tac `ext = (mut,nr,rr,name,args,defaults,ret,stmts)` >>
+  qabbrev_tac `group = package_external_group tops rp.rpol_target T (K global_nonreentrant_slot) ext` >>
+  `?common entries specs off. group = ExternalDefaults common entries specs off` by
+    (simp[Abbr `group`, Abbr `ext`, package_external_group_def, LET_THM, NULL_EQ] >>
+     pairarg_tac >> gvs[]) >>
+  `MEM group groups` by
+    (qpat_assum `groups = MAP _ _` SUBST1_TAC >> simp[MEM_MAP, Abbr `group`] >>
+     qexists_tac `ext` >> simp[Abbr `ext`]) >>
+  qpat_x_assum `MEM group groups`
+    (qx_choosel_then [`pre`,`post`] assume_tac o REWRITE_RULE [MEM_SPLIT]) >>
+  `ALL_DISTINCT (MAP FST (grouped_selectors groups))` by
+    (qpat_assum `groups = MAP _ _` SUBST1_TAC >>
+     drule check_contract_grouped_selectors_distinct >> simp[]) >>
+  qunabbrev_tac `ext` >>
+  `group = package_external_group tops rp.rpol_target T (K global_nonreentrant_slot)
+    (mut,nr,rr,name,args,defaults,ret,stmts)` by simp[Abbr `group`] >>
+  `package_external_group tops rp.rpol_target T (K global_nonreentrant_slot)
+    (mut,nr,rr,name,args,defaults,ret,stmts) = ExternalDefaults common entries specs off` by
+    metis_tac[] >>
+  drule_all grouped_defaults_argument_metadata >>
+  disch_then (CONJUNCTS_THEN2 assume_tac (qx_choose_then `all_tvs` strip_assume_tac)) >>
+  `LENGTH defaults <= LENGTH args` by metis_tac[checked_classified_defaults_length] >>
+  drule_all grouped_defaults_selected_entry >> strip_tac >>
+  `FIND (\(n,_,_,_). calldata_method_id vs.vs_call_ctx.cc_calldata = n2w n) entries =
+    SOME (cd_selector vs.vs_call_ctx.cc_calldata,external_prefix_label name k,
+          min_calldata_size common.ec_env prefix 0,k)` by
+    (drule_all grouped_defaults_selected_find >> disch_then ACCEPT_TAC) >>
+  `EVERY (\e. calldata_method_id vs.vs_call_ctx.cc_calldata <> n2w (FST e))
+       (grouped_selectors pre)` by
+    (match_mp_tac (Q.INST [`groups` |-> `groups`,`group` |-> `group`,`post` |-> `post`,
+       `sel` |-> `(cd_selector vs.vs_call_ctx.cc_calldata,external_prefix_label name k,
+         cd_selector vs.vs_call_ctx.cc_calldata MOD 256 = 0)`,
+       `tops` |-> `tops`,`target` |-> `rp.rpol_target`,`trans` |-> `T`,
+       `nkeys` |-> `K global_nonreentrant_slot`] grouped_selected_package_predecessors) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+     >- (qpat_assum `group = ExternalDefaults _ _ _ _` SUBST1_TAC >>
+         simp[external_group_selectors_def, MEM_MAP] >>
+         qexists_tac `(cd_selector vs.vs_call_ctx.cc_calldata,external_prefix_label name k,
+           min_calldata_size common.ec_env prefix 0,k)` >>
+         simp[] >> metis_tac[venomInstTheory.FIND_MEM]) >>
+     simp[cd_selector_method_id]) >>
+  qabbrev_tac `n = LENGTH args - LENGTH defaults` >>
+  qabbrev_tac `pos_tvs = TAKE n all_tvs` >>
+  `prefix = TAKE (n+k) args` by
+    (qpat_assum `MEM (prefix,k) (abi_entries args defaults)`
+       (mp_tac o REWRITE_RULE [abi_entries_member]) >>
+     simp[Abbr `n`]) >>
+  `OPT_MMAP (evaluate_type (type_env tops)) (MAP SND prefix) = SOME (TAKE (n+k) all_tvs) /\
+   OPT_MMAP (evaluate_type (type_env tops)) (MAP SND (TAKE n args)) = SOME pos_tvs` by
+    (qpat_assum `prefix = TAKE _ args` SUBST1_TAC >>
+     simp[Abbr `pos_tvs`] >> conj_tac >> pure_rewrite_tac[MAP_TAKE] >>
+     irule opt_mmap_take_some >> first_assum ACCEPT_TAC) >>
+  `LIST_REL (\arg tv. abi_decoder_coherent common.ec_env
+    (type_env tops) common.ec_env.ce_struct_fields (SND arg) tv) args all_tvs` by
+    (qpat_assum `LIST_REL (\(name,ty) tv. _ /\ _ /\ _) args all_tvs` mp_tac >>
+     ho_match_mp_tac LIST_REL_mono >> Cases >> simp[]) >>
+  qabbrev_tac `mincd = min_calldata_size common.ec_env prefix 0` >>
+  `mincd = 4 + SUM (MAP tv_abi_size (TAKE (n+k) all_tvs))` by
+    (simp[Abbr `mincd`] >>
+     qpat_assum `LIST_REL (\arg tv. abi_decoder_coherent _ _ _ (SND arg) tv) args all_tvs`
+       (mp_tac o Q.INST [`n` |-> `n+k`] o MATCH_MP grouped_argument_min_calldata_size) >>
+     simp[]) >>
+  `mincd < dimword (:256)` by
+    (mp_tac (Q.SPECL [`n+k`,`all_tvs`] prefix_head_size_le) >> decide_tac) >>
+  `prefix_tvs = TAKE (n+k) all_tvs` by metis_tac[optionTheory.SOME_11] >>
+  pop_assum SUBST_ALL_TAC >>
+  `TAKE n (TAKE (n+k) all_tvs) = pos_tvs` by
+    simp[TAKE_TAKE_T, Abbr `pos_tvs`] >>
+  `sf.cs_current_bb = "__entry"` by
+    (qpat_assum `at_point sf start` (mp_tac o REWRITE_RULE [at_point_def]) >>
+     simp[Abbr `start`]) >>
+  drule_all (Q.INST [`site` |-> `ARB`] (SPEC_ALL grouped_dispatch_initial_resources)) >>
+  strip_tac >>
+  `!label bb. lookup_block label entry.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0` by
+    (qpat_assum `no_phi_fn entry` (mp_tac o REWRITE_RULE [no_phi_fn_def, EVERY_MEM]) >>
+     metis_tac[lookup_block_MEM]) >>
+  `FIND (\(i,_,_,_). calldata_method_id start.vs_call_ctx.cc_calldata = n2w i) entries =
+     SOME (cd_selector vs.vs_call_ctx.cc_calldata,external_prefix_label name k,mincd,k)` by
+    simp[Abbr `mincd`] >>
+  qpat_x_assum `group = ExternalDefaults _ _ _ _` SUBST_ALL_TAC >>
+  `EVERY (\g. case g of ExternalSingle _ _ => T
+      | ExternalDefaults comp es sp _ => EVERY
+          (\(_,ty,_). type_memory_bytes comp.ec_env ty < dimword (:256)) sp) groups` by
+    (qpat_assum `groups = MAP _ _` SUBST1_TAC >>
+     Cases_on `classify_functions tops` >> PairCases_on `r` >>
+     drule_all checked_grouped_package_keyword_widths >> simp[]) >>
+  `EVERY (\g. case g of ExternalSingle _ _ => T
+      | ExternalDefaults comp es sp _ => EVERY
+          (\(_,ty,_). type_memory_bytes comp.ec_env ty < dimword (:256)) sp) pre /\
+    EVERY (\(_,ty,_). type_memory_bytes common.ec_env ty < dimword (:256)) specs` by
+    (qpat_assum `groups = pre ++ _` (fn split =>
+       qpat_assum `EVERY (\g. case g of ExternalSingle _ _ => T | _ => _) groups`
+         (mp_tac o PURE_ONCE_REWRITE_RULE [split])) >>
+     simp[EVERY_APPEND]) >>
+  `!g e. MEM g pre /\ MEM e (external_group_selectors g) ==>
+    calldata_method_id start.vs_call_ctx.cc_calldata <> n2w (FST e)` by
+    (qx_genl_tac [`g`,`e`] >> disch_then (CONJUNCTS_THEN assume_tac) >>
+     `MEM e (grouped_selectors pre)` by
+       (simp[grouped_selectors_def, MEM_FLAT, MEM_MAP] >>
+        qexists_tac `external_group_selectors g` >> simp[] >>
+        qexists_tac `g` >> simp[]) >>
+     qpat_assum `EVERY _ (grouped_selectors pre)`
+       (qspec_then `e` mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     simp_tac bool_ss [ASSUME ``MEM e (grouped_selectors pre)``] >>
+     qpat_assum `start.vs_call_ctx = _` SUBST1_TAC >>
+     simp[]) >>
+  `EVERY (\g. case g of ExternalSingle (sel,_,_) _ =>
+        calldata_method_id start.vs_call_ctx.cc_calldata <> n2w sel
+      | ExternalDefaults comp es sp _ =>
+        FIND (\(sel,_,_,_). calldata_method_id start.vs_call_ctx.cc_calldata = n2w sel) es = NONE /\
+        EVERY (\(_,ty,_). type_memory_bytes comp.ec_env ty < dimword (:256)) sp) pre` by
+    (simp_tac bool_ss [EVERY_MEM] >> Cases
+     >- (rename1 `ExternalSingle selector pkg` >> PairCases_on `selector` >> strip_tac >>
+         qpat_assum `!g e. MEM g pre /\ _ ==> _`
+           (qspecl_then [`ExternalSingle (selector0,selector1,selector2) pkg`,
+             `(selector0,selector1,selector2)`] mp_tac) >>
+         simp[external_group_selectors_def]) >>
+     rename1 `MEM (ExternalDefaults comp es sp offset) pre ==> _` >>
+     strip_tac >> simp_tac (srw_ss()) [] >> conj_tac
+     >- (simp[mem2varBlockSimHelpersTheory.FIND_NONE_EVERY, combinTheory.o_DEF,
+              EVERY_MEM, pairTheory.FORALL_PROD] >> rpt strip_tac >>
+         rename1 `MEM (sel,lbl,sz,k') es` >>
+         qpat_assum `!g e. MEM g pre /\ _ ==> _`
+           (qspecl_then [`ExternalDefaults comp es sp offset`,`(sel,lbl,sel MOD 256 = 0)`] mp_tac) >>
+         simp[external_group_selectors_def, MEM_MAP] >>
+         qexists_tac `(sel,lbl,sz,k')` >> simp[]) >>
+     qpat_assum `EVERY (\g. case g of ExternalSingle _ _ => T | _ => _) pre`
+       (qspec_then `ExternalDefaults comp es sp offset` mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     simp[]) >>
+  Cases_on `LENGTH start.vs_call_ctx.cc_calldata < mincd \/
+             (~common.ec_payable /\ start.vs_call_ctx.cc_callvalue <> 0w)`
+  >- (SUBGOAL_THEN ``(~common.ec_payable /\ start.vs_call_ctx.cc_callvalue <> 0w) \/
+        (4 < mincd /\ LENGTH start.vs_call_ctx.cc_calldata < mincd)`` ASSUME_TAC
+      >- (qpat_assum `LENGTH start.vs_call_ctx.cc_calldata < mincd \/
+                        (~common.ec_payable /\ start.vs_call_ctx.cc_callvalue <> 0w)`
+            (DISJ_CASES_THEN assume_tac)
+          >- (DISJ2_TAC >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+          DISJ1_TAC >> first_assum ACCEPT_TAC) >>
+      mp_tac (Q.INST [`s` |-> `start`,`fn` |-> `entry`,
+        `ctx` |-> `u.cu_context`,`site` |-> `ARB`,`lo` |-> `0`,`PG` |-> `[]`,
+        `G` |-> `FEMPTY`,`tn` |-> `entry_taint`,`sa` |-> `sf`,`sb` |-> `sd`,
+        `fallback` |-> `fl`,`sel` |-> `cd_selector vs.vs_call_ctx.cc_calldata`,
+        `lbl` |-> `external_prefix_label name k`]
+        (SPEC_ALL grouped_selected_default_checks_origin)) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      strip_tac >>
+      qexistsl_tac [`entry`,`z`,`Hz`,`tz`] >> asm_rewrite_tac[]) >>
+  qpat_assum `~(LENGTH start.vs_call_ctx.cc_calldata < mincd \/ _)`
+    (CONJUNCTS_THEN assume_tac o
+       REWRITE_RULE [DE_MORGAN_THM, arithmeticTheory.NOT_LESS, NOT_CLAUSES]) >>
+  `~(LENGTH vs.vs_call_ctx.cc_calldata < 4 + SUM (MAP tv_abi_size (TAKE (n+k) all_tvs)))` by
+    (qpat_assum `start.vs_call_ctx = _` (SUBST1_TAC o SYM) >> decide_tac) >>
+  `LENGTH args - LENGTH defaults = n` by simp[Abbr `n`] >>
+  qabbrev_tac `kw_tvs = TAKE k (DROP n all_tvs)` >>
+  qabbrev_tac `pos_size = SUM (MAP tv_abi_size pos_tvs)` >>
+  `DROP n (TAKE (n+k) all_tvs) = kw_tvs` by
+    (simp_tac bool_ss [listTheory.DROP_TAKE, Abbr `kw_tvs`] >>
+     `n + k - n = k` by decide_tac >> asm_rewrite_tac[]) >>
+  `calldata_decode_args start.vs_call_ctx.cc_calldata kw_tvs pos_size = NONE` by
+    (qpat_assum `start.vs_call_ctx = _` SUBST1_TAC >>
+     qpat_x_assum `(LENGTH _ < 4 + SUM _) \/ _` (DISJ_CASES_THEN assume_tac)
+     >- metis_tac[] >>
+     qpat_assum `calldata_decode_args vs.vs_call_ctx.cc_calldata (DROP _ _) _ = NONE` mp_tac >>
+     qpat_assum `TAKE n (TAKE (n+k) all_tvs) = pos_tvs` (fn take =>
+       qpat_assum `DROP n (TAKE (n+k) all_tvs) = kw_tvs` (fn drop =>
+         simp_tac bool_ss [ASSUME ``LENGTH (args:argument list) -
+           LENGTH (defaults:expr list) = n``, take, drop, Abbr `pos_size`]))) >>
+  `TAKE (n+k) all_tvs = pos_tvs ++ kw_tvs` by
+    simp[TAKE_SUM, Abbr `pos_tvs`, Abbr `kw_tvs`] >>
+  `off = 4 + pos_size` by
+    (qpat_assum `off = _` SUBST1_TAC >>
+     qpat_assum `LIST_REL (\arg tv. abi_decoder_coherent _ _ _ (SND arg) tv) args all_tvs`
+       (mp_tac o Q.INST [`n` |-> `n`] o MATCH_MP grouped_argument_min_calldata_size) >>
+     simp[Abbr `n`, Abbr `pos_size`, Abbr `pos_tvs`]) >>
+  `4 + pos_size + SUM (MAP tv_abi_size kw_tvs) < dimword (:256)` by
+    (qpat_assum `TAKE (n+k) all_tvs = _` (fn parts =>
+       qpat_assum `mincd = 4 + SUM _`
+         (assume_tac o PURE_REWRITE_RULE [parts, MAP_APPEND, SUM_APPEND])) >>
+     qpat_assum `Abbrev (pos_size = _)` (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     decide_tac) >>
+  `k <= LENGTH defaults` by
+    (qpat_assum `MEM (prefix,k) (abi_entries args defaults)`
+       (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [abi_entries_member])) >>
+  `LIST_REL (\(n,ty) tv. abi_decoder_coherent common.ec_env (type_env tops)
+      common.ec_env.ce_struct_fields ty tv) args all_tvs` by
+    (qpat_assum `LIST_REL (\(name,ty) tv. _ /\ _ /\ _) args all_tvs` mp_tac >>
+     ho_match_mp_tac LIST_REL_mono >>
+     Cases >> simp[]) >>
+  `LENGTH kw_tvs = k` by
+    (qpat_assum `OPT_MMAP _ (MAP SND args) = SOME all_tvs`
+       (mp_tac o MATCH_MP OPT_MMAP_LENGTH) >>
+     simp[Abbr `kw_tvs`, Abbr `n`, LENGTH_TAKE_EQ, LENGTH_DROP] >> decide_tac) >>
+  `groups = pre ++ ExternalDefaults common entries specs (4+pos_size)::post` by
+    (qpat_assum `off = 4 + pos_size` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
+  mp_tac (Q.INST [`sa` |-> `sf`,`sb` |-> `sd`,`s` |-> `start`,
+    `ctx` |-> `u.cu_context`,`fn` |-> `entry`,`site` |-> `ARB`,`lo` |-> `0`,
+    `fallback` |-> `fl`,`sel` |-> `cd_selector vs.vs_call_ctx.cc_calldata`,
+    `lbl` |-> `external_prefix_label name k`,`kw` |-> `kw_tvs`,
+    `off` |-> `pos_size`,`env` |-> `type_env tops`,
+    `PG` |-> `[]`,`G` |-> `FEMPTY`,`tn` |-> `entry_taint`]
+    (SPEC_ALL grouped_bad_supplied_origin)) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    qx_genl_tac [`vars`,`st`,`t`,`H`,`ut`] >>
+    disch_then (CONJUNCTS_THEN assume_tac) >>
+    qunabbrev_tac `kw_tvs` >>
+    irule (DISCH_ALL (CONJUNCT2 (UNDISCH (SPEC_ALL grouped_supplied_owners)))) >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    qexistsl_tac [`args`,`defaults`] >>
+    asm_simp_tac bool_ss [Abbr `n`] >>
+    qpat_assum `specs = MAP _ _` (SUBST1_TAC o SYM) >>
+    first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  qexistsl_tac [`entry`,`z`,`H`,`u'`] >> asm_rewrite_tac[]
+QED
+
+Theorem grouped_runtime_no_selector_origin:
+  lower_vyper_runtime_unit tops rp = SOME u /\
+  source_typing_ok tops am tx /\ initial_venom_state_rel tops am tx vs /\
+  ~EXISTS is_default_decl tops /\
+  EXISTS external_has_defaults (FST (classify_functions tops)) /\
+  (LENGTH vs.vs_call_ctx.cc_calldata < 4 \/
+   FIND (\(name,tys). abi_method_id (type_env tops) name tys =
+      cd_selector vs.vs_call_ctx.cc_calldata) (abi_external_signatures tops) = NONE) /\
+  (ctx_has_dalloca u.cu_context ==>
+    unit_alloca_budget u.cu_context <= w2n vs.vs_initial_fmp) ==>
+  ?fn z H v.
+    lookup_function "__entry" u.cu_context.ctx_functions = SOME fn /\
+    z.vs_returndata = [] /\
+    !D explicit. gas_origin_ptr_path (D,0,explicit,u.cu_context,fn,[])
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
+        FEMPTY,entry_taint) [] (Abort Revert_abort z,H,v)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  rename1 `lookup_function "__entry" _ = SOME fn` >>
+  drule_all lower_runtime_grouped_packages >> strip_tac >>
+  `FST (SND (SND (classify_functions tops))) = NONE` by
+    (drule calldataNoneFallbackJointTheory.absent_default_fold >>
+     simp[classify_functions_def] >> rpt (pairarg_tac >> gvs[])) >>
+  `fb = NONE` by simp[package_fallback_fn_def, set_fallback_package_target_def] >>
+  qpat_x_assum `fb = NONE` SUBST_ALL_TAC >>
+  drule_all grouped_fallback_dispatch_code >>
+  disch_then (qx_choosel_then [`fl`,`sf`,`jobs`,`sd`,`sn`,`se`] strip_assume_tac) >>
+  qabbrev_tac `start =
+    vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
+  mp_tac (Q.INST [`st` |-> `sf`,`s` |-> `start`,`unit` |-> `u`,
+    `policy` |-> `rp`,`fn` |-> `fn`] (SPEC_ALL grouped_dispatch_initial_resources)) >>
+  impl_tac >- simp[Abbr `start`] >>
+  strip_tac >>
+  `?bb. lookup_block fl fn.fn_blocks = SOME bb` by
+    (drule_all installed_empty_revert_code >> strip_tac >> metis_tac[]) >>
+  `?t ghost_after tt. ~t.vs_halted /\ t.vs_current_bb = fl /\ t.vs_inst_idx = 0 /\
+    allocas_from 0 t /\ (ctx_has_dalloca u.cu_context ==> allocas_below_fmp t) /\
+    !D explicit. gas_origin_ptr_path (D,0,explicit,u.cu_context,fn,[])
+      (start,FEMPTY,entry_taint) [] (OK t,ghost_after,tt)` by
+    (Cases_on `LENGTH start.vs_call_ctx.cc_calldata < 4`
+     >- (mp_tac (Q.INST [`ctx` |-> `u.cu_context`,`s` |-> `start`,`st` |-> `sf`,
+           `st'` |-> `sd`,`fallback` |-> `fl`,`lo` |-> `0`,
+           `PG` |-> `[]`,`G` |-> `FEMPTY`,`tn` |-> `entry_taint`]
+           (SPEC_ALL grouped_dispatch_short_prelude)) >>
+         impl_tac >- (fs[selected_registration_resources_def] >> metis_tac[]) >>
+         strip_tac >>
+         qexistsl_tac [`t`,`G'`,`tn'`] >> simp[allocas_from_def] >> strip_tac >>
+         `allocas_below_fmp t <=> allocas_below_fmp start` by
+           (irule allocas_below_fmp_fields >>
+            fs[vars_pc_only_def, venom_state_component_equality]) >>
+         metis_tac[]) >>
+     `4 <= LENGTH start.vs_call_ctx.cc_calldata` by decide_tac >>
+     `start.vs_call_ctx = vs.vs_call_ctx` by simp[Abbr `start`] >>
+     `FIND (\(name,tys). abi_method_id (type_env tops) name tys =
+       cd_selector start.vs_call_ctx.cc_calldata) (abi_external_signatures tops) = NONE` by
+       (fs[Abbr `start`] >> decide_tac) >>
+     drule_all grouped_selector_from_source_miss >>
+     disch_then (mk_asm "selectors_missed") >>
+     `EVERY (\group. case group of ExternalSingle _ _ => T
+        | ExternalDefaults comp es sp _ => EVERY
+         (\(_,ty,_). type_memory_bytes comp.ec_env ty < dimword (:256)) sp) groups` by
+       (qpat_assum `groups = MAP _ _` SUBST1_TAC >>
+        fs[source_typing_ok_def] >> Cases_on `classify_functions tops` >>
+        PairCases_on `r` >> drule_all checked_grouped_package_keyword_widths >> simp[]) >>
+     `EVERY (\group. case group of
+        ExternalSingle (sel,lbl,tz) pkg =>
+          calldata_method_id start.vs_call_ctx.cc_calldata <> n2w sel
+      | ExternalDefaults common entries specs _ =>
+          FIND (\(sel,_,_,_). calldata_method_id start.vs_call_ctx.cc_calldata = n2w sel)
+            entries = NONE /\
+          EVERY (\(_,ty,_). type_memory_bytes common.ec_env ty < dimword (:256)) specs)
+       groups` by
+       (simp[EVERY_MEM] >> qx_gen_tac `group` >> strip_tac >>
+        asm "selectors_missed" (qspec_then `group` mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+        qpat_assum `EVERY (\group. case group of ExternalSingle _ _ => T | _ => _) groups`
+          (qspec_then `group` mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+        Cases_on `group`
+        >- (rename1 `MEM (ExternalSingle selector pkg) groups` >>
+            PairCases_on `selector` >> simp[]) >>
+        simp[]) >>
+     mp_tac (Q.INST [`ctx` |-> `u.cu_context`,`s` |-> `start`,`sa` |-> `sf`,
+        `sb` |-> `sd`,`fallback` |-> `fl`,`target` |-> `bb`,`lo` |-> `0`,
+        `PG` |-> `[]`,`G` |-> `FEMPTY`,`tn` |-> `entry_taint`]
+        (SPEC_ALL grouped_dispatch_missed_fallback_origin)) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     strip_tac >> qexistsl_tac [`t`,`G'`,`tn'`] >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,0,explicit,u.cu_context,fn,[])
+      (t,ghost_after,tt) [] (Abort Revert_abort (revert_state (set_returndata [] t)),ghost_after,tt)` by
+    (irule installed_empty_revert_origin >> simp[] >> qexistsl_tac [`sn`,`se`] >> simp[]) >>
+  qexistsl_tac [`fn`,`revert_state (set_returndata [] t)`,`ghost_after`,`tt`] >>
+  simp[Abbr `start`, revert_state_def, set_returndata_def] >>
+  rpt gen_tac >>
+  qpat_assum `!D explicit. gas_origin_ptr_path _ (start,FEMPTY,entry_taint) _ _`
+    (qspecl_then [`D`,`explicit`] assume_tac) >>
+  qpat_assum `!D explicit. gas_origin_ptr_path _ (t,ghost_after,tt) _ _`
+    (qspecl_then [`D`,`explicit`] assume_tac) >>
+  qpat_assum `gas_origin_ptr_path _ (start,FEMPTY,entry_taint) _ _`
+    (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
+  disch_then (qspecl_then [`t`,`ghost_after`,`tt`,`[]`,
+    `Abort Revert_abort (revert_state (set_returndata [] t))`,`ghost_after`,`tt`] mp_tac) >>
+  simp[revert_state_def, set_returndata_def]
+QED
+
+Theorem grouped_runtime_unit_reject_dispatch_origin:
+  lower_vyper_runtime_unit tops rp = SOME u /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  initial_venom_state_rel tops am tx vs /\
+  calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
+  EXISTS external_has_defaults (FST (classify_functions tops)) /\
+  (ctx_has_dalloca u.cu_context ==>
+     unit_alloca_budget u.cu_context <= w2n vs.vs_initial_fmp) /\
+  (!mut nr rr name args defaults ret stmts prefix k tvs.
+    4 <= LENGTH vs.vs_call_ctx.cc_calldata /\
+    MEM (mut,nr,rr,name,args,defaults,ret,stmts) (FST (classify_functions tops)) /\
+    defaults <> [] /\ MEM (prefix,k) (abi_entries args defaults) /\
+    abi_method_id (type_env tops) name (MAP SND prefix) = cd_selector vs.vs_call_ctx.cc_calldata /\
+    OPT_MMAP (evaluate_type (type_env tops)) (MAP SND prefix) = SOME tvs /\
+    4 + SUM (MAP tv_abi_size tvs) <= LENGTH vs.vs_call_ctx.cc_calldata /\
+    calldata_decode_args vs.vs_call_ctx.cc_calldata
+      (TAKE (LENGTH args - LENGTH defaults) tvs) 0 = NONE /\
+    calldata_decode_args vs.vs_call_ctx.cc_calldata
+      (DROP (LENGTH args - LENGTH defaults) tvs)
+      (SUM (MAP tv_abi_size (TAKE (LENGTH args - LENGTH defaults) tvs))) <> NONE ==>
+    ?fn z H tn marks.
+      lookup_function "__entry" u.cu_context.ctx_functions = SOME fn /\
+      z.vs_returndata = [] /\
+      !D. gas_origin_ptr_path (D,0,EMPTY,u.cu_context,fn,[])
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
+         FEMPTY,entry_taint) marks (Abort Revert_abort z,H,tn)) ==>
+  ?fn z H tn marks.
+    lookup_function "__entry" u.cu_context.ctx_functions = SOME fn /\
+    z.vs_returndata = [] /\
+    !D. gas_origin_ptr_path (D,0,EMPTY,u.cu_context,fn,[])
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
+       FEMPTY,entry_taint) marks (Abort Revert_abort z,H,tn)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule calldata_dispatch_none_cases >>
+  disch_then (DISJ_CASES_THEN2 (CONJUNCTS_THEN assume_tac)
+    (qx_choosel_then [`name`,`tys`] (REPEAT_TCL CONJUNCTS_THEN assume_tac)))
+  >- (mp_tac (SPEC_ALL grouped_runtime_no_selector_origin) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then (qx_choosel_then [`fn`,`z`,`H`,`tn`] strip_assume_tac) >>
+      qexistsl_tac [`fn`,`z`,`H`,`tn`,`[]`] >> simp[]) >>
+  mp_tac (Q.INST [`cd` |-> `vs.vs_call_ctx.cc_calldata`,
+    `target` |-> `rp.rpol_target`,`trans` |-> `T`,`nkeys` |-> `K global_nonreentrant_slot`]
+    grouped_source_selected_package) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`mut`,`nr`,`rr`,`args`,`defaults`,`ret`,`stmts`,
+    `prefix`,`k`,`group`,`sel`] strip_assume_tac) >>
+  `abi_method_id (type_env tops) name (MAP SND prefix) =
+    cd_selector vs.vs_call_ctx.cc_calldata` by
+    (qpat_assum `FIND _ _ = SOME (name,tys)` (mp_tac o MATCH_MP venomInstTheory.FIND_P) >>
+     simp[]) >>
+  SUBGOAL_THEN ``OPT_MMAP (evaluate_type (type_env tops))
+    (MAP SND (prefix:argument list)) = NONE \/
+    ?tvs. OPT_MMAP (evaluate_type (type_env tops)) (MAP SND prefix) = SOME tvs /\
+      (LENGTH vs.vs_call_ctx.cc_calldata < 4 + SUM (MAP tv_abi_size tvs) \/
+       calldata_decode_args vs.vs_call_ctx.cc_calldata tvs 0 = NONE)`` ASSUME_TAC
+  >- metis_tac[] >>
+  Cases_on `defaults = []`
+  >- (qpat_x_assum `defaults = []` SUBST_ALL_TAC >>
+      qpat_x_assum `MEM (prefix,k) (abi_entries args [])`
+        (strip_assume_tac o SIMP_RULE (srw_ss()) [abi_entries_no_defaults]) >>
+      qpat_x_assum `prefix = args` SUBST_ALL_TAC >>
+      drule_all grouped_legacy_selected_source_origin >>
+      disch_then (qx_choosel_then [`fn`,`z`,`H`,`tn`] strip_assume_tac) >>
+      qexistsl_tac [`fn`,`z`,`H`,`tn`,`[]`] >> simp[]) >>
+  `?common entries specs off. group = ExternalDefaults common entries specs off` by
+    (qpat_assum `group = _` SUBST1_TAC >>
+     simp[package_external_group_def, LET_THM, NULL_EQ] >>
+     pairarg_tac >> gvs[]) >>
+  `package_external_group tops rp.rpol_target T (K global_nonreentrant_slot)
+    (mut,nr,rr,name,args,defaults,ret,stmts) = ExternalDefaults common entries specs off` by
+    metis_tac[] >>
+  drule_all grouped_defaults_argument_metadata >>
+  disch_then (CONJUNCTS_THEN2 assume_tac (qx_choose_then `all_tvs` strip_assume_tac)) >>
+  `prefix = TAKE (LENGTH args - LENGTH defaults + k) args` by
+    (qpat_assum `MEM (prefix,k) (abi_entries args defaults)`
+      (mp_tac o REWRITE_RULE [abi_entries_member]) >> simp[]) >>
+  `?tvs. OPT_MMAP (evaluate_type (type_env tops)) (MAP SND prefix) = SOME tvs` by
+    (qpat_assum `prefix = TAKE _ args` SUBST1_TAC >>
+     qexists_tac `TAKE (LENGTH args - LENGTH defaults + k) all_tvs` >>
+     pure_rewrite_tac[MAP_TAKE] >> irule opt_mmap_take_some >> first_assum ACCEPT_TAC) >>
+  SUBGOAL_THEN ``LENGTH vs.vs_call_ctx.cc_calldata < 4 + SUM (MAP tv_abi_size tvs) \/
+   calldata_decode_args vs.vs_call_ctx.cc_calldata tvs 0 = NONE`` ASSUME_TAC
+  >- metis_tac[optionTheory.NOT_SOME_NONE, optionTheory.SOME_11] >>
+  qabbrev_tac `pos_tvs = TAKE (LENGTH args - LENGTH defaults) tvs` >>
+  qabbrev_tac `kw_tvs = DROP (LENGTH args - LENGTH defaults) tvs` >>
+  ASM_CASES_TAC ``LENGTH vs.vs_call_ctx.cc_calldata < 4 + SUM (MAP tv_abi_size tvs) \/
+      calldata_decode_args vs.vs_call_ctx.cc_calldata kw_tvs
+        (SUM (MAP tv_abi_size pos_tvs)) = NONE``
+  >- (qunabbrev_tac `pos_tvs` >> qunabbrev_tac `kw_tvs` >>
+      drule_all grouped_defaults_selected_early_origin >>
+      disch_then (qx_choosel_then [`fn`,`z`,`H`,`tn`] strip_assume_tac) >>
+      qexistsl_tac [`fn`,`z`,`H`,`tn`,`[]`] >> simp[]) >>
+  qpat_x_assum `~(LENGTH _ < _ \/ _)`
+    (CONJUNCTS_THEN assume_tac o REWRITE_RULE [DE_MORGAN_THM, NOT_LESS]) >>
+  `?kw_vals. calldata_decode_args vs.vs_call_ctx.cc_calldata kw_tvs
+      (SUM (MAP tv_abi_size pos_tvs)) = SOME kw_vals` by
+    metis_tac[optionTheory.option_nchotomy] >>
+  `calldata_decode_args vs.vs_call_ctx.cc_calldata tvs 0 = NONE` by
+    (qpat_x_assum `LENGTH _ < 4 + SUM _ \/ _` mp_tac >>
+     qpat_assum `4 + SUM (MAP tv_abi_size tvs) <= LENGTH _`
+       (fn le => simp_tac bool_ss [REWRITE_RULE [GSYM NOT_LESS] le])) >>
+  `calldata_decode_args vs.vs_call_ctx.cc_calldata pos_tvs 0 = NONE` by
+    (Cases_on `calldata_decode_args vs.vs_call_ctx.cc_calldata pos_tvs 0` >> simp[] >>
+     `pos_tvs ++ kw_tvs = tvs` by simp[Abbr `pos_tvs`, Abbr `kw_tvs`, TAKE_DROP] >>
+     `calldata_decode_args vs.vs_call_ctx.cc_calldata (pos_tvs ++ kw_tvs) 0 =
+        SOME (x ++ kw_vals)` by
+       (irule calldata_decode_args_append_success >> simp[]) >>
+     metis_tac[optionTheory.NOT_SOME_NONE]) >>
+  qunabbrev_tac `pos_tvs` >> qunabbrev_tac `kw_tvs` >>
+  qpat_assum `!m n r f args defaults ret stmts prefix k tvs. _`
+    (qspecl_then [`mut`,`nr`,`rr`,`name`,`args`,`defaults`,`ret`,`stmts`,
+      `prefix`,`k`,`tvs`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[]) >>
+  disch_then ACCEPT_TAC
+QED
+
+Theorem raw_reachable_from_entry_path:
+  ctx.ctx_entry = SOME "__entry" /\
+  lookup_function "__entry" ctx.ctx_functions = SOME fn /\
+  fn_entry_label fn = SOME "__entry" /\
+  (!lbl bb. lookup_block lbl fn.fn_blocks = SOME bb ==> phi_prefix_length bb.bb_instructions = 0) /\
+  s = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|> /\
+  ~s.vs_halted /\ gas_path ctx fn s n (OK w) /\ active_inst fn inst w ==>
+  raw_reachable vs ctx fn inst w
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `?bb. lookup_block "__entry" fn.fn_blocks = SOME bb` by
+    (Cases_on `fn.fn_blocks` >>
+     fs[fn_entry_label_def, entry_block_def, lookup_block_def, FIND_thm]) >>
+  `enters_block fn s s` by
+    (simp[enters_block_def] >>
+     `phi_prefix_length bb.bb_instructions = 0` by metis_tac[] >>
+     simp[eval_phis_no_phi]) >>
+  irule raw_reachable_gas_path >>
+  simp[] >> conj_tac >- metis_tac[] >>
+  qexistsl_tac [`n`,`s`] >> asm_rewrite_tac[] >>
+  rpt strip_tac >> irule (cj 1 raw_reachable_rules) >>
+  simp[] >> metis_tac[optionTheory.SOME_11]
+QED
+
+(* Lift successful fragment steps by appending an unused oracle suffix. *)
+Triviality frag_raw_reachable_outcome_suffix:
+  !ctx fn0 s0 fn inst s.
+    frag_reachable ctx fn0 s0 fn inst s ==>
+    !vs tail.
+      (!i. active_inst fn0 i s0 ==>
+        raw_reachable vs ctx fn0 i (s0 with vs_outcomes := s0.vs_outcomes ++ tail)) /\
+      (!f i w. raw_reachable vs ctx f i w ==> i.inst_opcode <> INVOKE) ==>
+      raw_reachable vs ctx fn inst (s with vs_outcomes := s.vs_outcomes ++ tail)
+Proof
+  ho_match_mp_tac frag_reachable_ind >> rpt conj_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS)
+  >- metis_tac[]
+  >- suspend "next"
+  >- suspend "block" >>
+  metis_tac[]
+QED
+
+Resume frag_raw_reachable_outcome_suffix[next]:
+  `raw_reachable vs ctx fn inst (s with vs_outcomes := s.vs_outcomes ++ tail)` by metis_tac[] >>
+  `inst.inst_opcode <> INVOKE` by metis_tac[] >>
+  `step_inst fuel ctx inst (s with vs_outcomes := s.vs_outcomes ++ tail) =
+     OK (s' with vs_outcomes := s'.vs_outcomes ++ tail)` by
+    (drule_at (Pat `step_inst _ _ _ _ = _`)
+       requestCutOracleReplayTheory.step_inst_noninvoke_success_outcome_suffix >>
+     simp[instIdxIndepTheory.exec_result_map_def]) >>
+  qpat_assum `raw_reachable _ _ _ _ _`
+    (mp_then (Pat `raw_reachable _ _ _ _ _`) mp_tac (cj 2 raw_reachable_rules)) >>
+  disch_then (qspecl_then [`inst'`,`s' with vs_outcomes := s'.vs_outcomes ++ tail`,`fuel`] mp_tac) >>
+  simp[active_inst_outcomes_update,venom_state_accfupds] >>
+  impl_tac >- (fs[active_inst_def] >> metis_tac[]) >> simp[venom_state_fupdcanon]
+QED
+
+Resume frag_raw_reachable_outcome_suffix[block]:
+  `raw_reachable vs ctx fn inst (s with vs_outcomes := s.vs_outcomes ++ tail)` by metis_tac[] >>
+  `inst.inst_opcode <> INVOKE` by metis_tac[] >>
+  `step_inst fuel ctx inst (s with vs_outcomes := s.vs_outcomes ++ tail) =
+     OK (s' with vs_outcomes := s'.vs_outcomes ++ tail)` by
+    (drule_at (Pat `step_inst _ _ _ _ = _`)
+       requestCutOracleReplayTheory.step_inst_noninvoke_success_outcome_suffix >>
+     simp[instIdxIndepTheory.exec_result_map_def]) >>
+  drule enters_block_outcome_suffix >> disch_then (qspec_then `tail` assume_tac) >>
+  irule (cj 3 raw_reachable_rules) >>
+  simp[active_inst_outcomes_update,venom_state_accfupds] >>
+  qexistsl_tac [`fuel`, `inst`, `s with vs_outcomes := s.vs_outcomes ++ tail`,
+    `s' with vs_outcomes := s'.vs_outcomes ++ tail`] >>
+  simp[active_inst_outcomes_update,venom_state_accfupds]
+QED
+
+Finalise frag_raw_reachable_outcome_suffix[local]
+
+Theorem grouped_reject_cut_fragment_no_wrap:
+  lower_vyper_runtime_unit tops rp = SOME u /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
+  calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
+  lookup_function "__entry" u.cu_context.ctx_functions = SOME fn /\
+  (ctx_has_dalloca u.cu_context ==>
+    unit_alloca_budget u.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254) /\
+  gas_origin_ptr_path (D,0,explicit,u.cu_context,fn,[])
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
+      FEMPTY,entry_taint) marks (OK cut,G,tn) /\
+  frag_reachable u.cu_context fn (cut with vs_outcomes := prefix) callee inst s /\
+  cut.vs_outcomes = prefix ++ tail ==>
+  dalloca_no_wrap inst s
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  reverse (Cases_on `ctx_has_dalloca u.cu_context`)
+  >- (`MEM fn u.cu_context.ctx_functions` by metis_tac[lookup_function_MEM] >>
+      drule_all frag_reachable_members >> strip_tac >>
+      fs[ctx_has_dalloca_def, EXISTS_MEM, dalloca_no_wrap_def] >> metis_tac[]) >>
+  qabbrev_tac `start =
+    vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
+  drule gas_origin_ptr_path_projections >> strip_tac >>
+  drule gas_path_ptr_erase >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_entry_label >> strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  `!lbl bb. lookup_block lbl fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0` by metis_tac[lowering_context_ok_block_phi] >>
+  `~start.vs_halted /\ vs.vs_fmp = vs.vs_initial_fmp` by
+    fs[Abbr `start`, initial_venom_state_rel_def] >>
+  `!i. active_inst fn i cut ==> raw_reachable vs u.cu_context fn i cut` by
+    (gen_tac >> disch_tac >> irule raw_reachable_from_entry_path >>
+     fs[Abbr `start`] >> metis_tac[]) >>
+  qpat_assum `ctx_has_dalloca _ ==> _` (drule_then strip_assume_tac) >>
+  mp_tac (Q.SPECL [`tops`,`rp`,`u`,`am`,`tx`,`vs`]
+    lower_vyper_runtime_unit_reject_reaches_no_fmp_ops) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  `(cut with vs_outcomes := prefix ++ tail) = cut` by
+    simp[venom_state_component_equality] >>
+  drule frag_raw_reachable_outcome_suffix >>
+  disch_then (qspecl_then [`vs`, `tail`] mp_tac) >>
+  simp[active_inst_outcomes_update,venom_state_accfupds,venom_state_fupdfupds] >>
+  impl_tac >- metis_tac[] >>
+  strip_tac >>
+  `inst.inst_opcode <> DALLOCA` by metis_tac[is_raw_fmp_opcode_def] >>
+  simp[dalloca_no_wrap_def]
 QED
 
 Theorem call_reject_raw_variant_no_wrap:

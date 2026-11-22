@@ -92,6 +92,15 @@ Proof
   simp[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]
 QED
 
+Theorem allocas_below_fmp_from_frontier:
+  alloca_inv s /\ s.vs_alloca_next <= w2n s.vs_initial_fmp /\
+  w2n s.vs_initial_fmp <= w2n s.vs_fmp ==>
+  allocas_below_fmp s
+Proof
+  strip_tac >> simp[allocas_below_fmp_def] >> rpt strip_tac >>
+  drule_all alloca_site_registered_below >> decide_tac
+QED
+
 Theorem alloca_site_registered_disjoint:
   alloca_inv s /\ id <> other /\
   FLOOKUP s.vs_allocas id = SOME (b,sz) /\

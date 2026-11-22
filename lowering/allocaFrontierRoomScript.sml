@@ -55,6 +55,20 @@ Proof
        deploy_ctor_alloca_size_eq]
 QED
 
+Theorem alloca_frontier_charge_frame:
+  t.vs_alloca_next + pending_alloca_size fn t =
+    s.vs_alloca_next + pending_alloca_size fn s /\
+  alloca_frontier_inv ctx fn site s ==>
+  alloca_frontier_inv ctx fn site t
+Proof
+  `!u. alloca_frontier_inv_from 0 ctx fn site u <=> alloca_frontier_inv ctx fn site u` by
+    simp[alloca_frontier_inv_from_shift_def] >>
+  pop_assum (fn zero => PURE_REWRITE_TAC [GSYM zero]) >>
+  PURE_REWRITE_TAC [alloca_frontier_inv_from_def, ADD_CLAUSES,
+    GSYM deploy_ctor_pending_alloca_eq] >>
+  strip_tac >> asm_rewrite_tac[]
+QED
+
 Theorem deploy_ctor_frontier_alloca_room:
   alloca_frontier_inv_from k ctx func site s /\
   k + unit_alloca_budget ctx < dimword (:256) ==>
