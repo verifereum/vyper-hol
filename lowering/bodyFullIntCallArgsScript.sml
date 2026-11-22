@@ -31,7 +31,7 @@ Ancestors bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragG
   transientLockProps transientLockPtr[qualified,ignore_grammar] fragGasCopyLoop[qualified,ignore_grammar]
   instSeqPtrLo[qualified,ignore_grammar] fragExecMem fragGasSeqPtr
   unitTransformDefs[qualified,ignore_grammar] memSafeRun[qualified,ignore_grammar]
-  fragGasOriginPtrInvoke bodyFullShadowBodyInvLowering[qualified,ignore_grammar]
+  fragGasOriginPtrInvoke bodyFullShadowInternalRun[qualified,ignore_grammar]
   intCallMaterializeFull bodyFullAllocGeneric[qualified,ignore_grammar]
   internalReturnMemoryInputs[qualified,ignore_grammar]
   abiBufferAllocationCode[qualified,ignore_grammar]
@@ -6988,7 +6988,7 @@ Proof
     (qx_choose_then `ops` (qx_choose_then `argv` (qx_choose_then `callee`
     (qx_choose_then `setup` (qx_choose_then `entered` strip_assume_tac))))))) >>
   drule_all intcall_args_selected_head >> strip_tac >>
-  drule_all bodyFullShadowBodyInvLoweringTheory.body_inv_selected_internal_code >>
+  drule_all bodyFullShadowInternalRunTheory.body_inv_selected_internal_code >>
   disch_then (qx_choose_then `label` (qx_choose_then `ce` (qx_choose_then `params`
     (qx_choose_then `has_rb` (qx_choose_then `nr'` (qx_choose_then `key`
     (qx_choose_then `trans` (qx_choose_then `view` (qx_choose_then `ctor`
@@ -7968,7 +7968,7 @@ Theorem args_callee_package_room[local]:
 Proof
   DISCH_THEN (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
   drule_all args_callee_room >> strip_tac >>
-  drule_all bodyFullShadowBodyInvLoweringTheory.body_inv_selected_internal_code >>
+  drule_all bodyFullShadowInternalRunTheory.body_inv_selected_internal_code >>
   disch_then (qx_choose_then `actual_lbl` (qx_choose_then `actual_ce` (qx_choose_then `actual_params`
     (qx_choose_then `actual_rb` (qx_choose_then `actual_nr` (qx_choose_then `actual_key`
     (qx_choose_then `actual_trans` (qx_choose_then `actual_view` (qx_choose_then `actual_ctor`
