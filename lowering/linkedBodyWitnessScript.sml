@@ -110,7 +110,10 @@ Proof
       `supported_module_headers tops` by
         (mp_tac linked_witness_headers >> simp[EVERY_MEM, FORALL_PROD] >> metis_tac[]) >>
       simp[] >> conj_tac
-      >- (strip_tac >> gvs[main_module_def] >> simp[linked_witness_main_support]) >>
+      >- (strip_tac >>
+          `main_module linked_witness_mods = tops` by
+            (simp[main_module_def] >> every_case_tac >> gvs[]) >>
+          metis_tac[linked_witness_main_support]) >>
       irule vyperTypeContractTheory.contract_keys_module_distinct >>
       qexists_tac `linked_witness_mods` >> simp[linked_witness_distinct_modules])
   >- (qexistsl [`p`, `unit`] >> simp[])
