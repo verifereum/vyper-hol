@@ -45,14 +45,15 @@ Proof
   drule_all array_body_allocation_layout >> strip_tac >> gvs[] >>
   `?sba ssm su.
     compile_alloc_buffer (type_memory_bytes cenv (ArrayT et n)) shadow_sa = (sba,ssm) /\
-    compile_make_array compile_expr cenv (MAP gas_shadow_expr args) et
+    compile_make_array compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr args) et
       (type_memory_bytes cenv et) (case n of Dynamic _ => T | _ => F)
       sba.buf_operand ssm = (su,shadow_sb)` by
     (qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
-     simp[gas_shadow_expr_def,gas_shadow_builtin_def,compile_array_literal] >>
+     simp[gas_shadow_expr_def,gas_shadow_builtin_def,compile_array_literal,
+          gasShadowCompileBaseTheory.type_memory_bytes_gas_shadow_env] >>
      Cases_on `compile_alloc_buffer (type_memory_bytes cenv (ArrayT et n)) shadow_sa` >>
      simp[] >>
-     Cases_on `compile_make_array compile_expr cenv (MAP gas_shadow_expr args) et
+     Cases_on `compile_make_array compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr args) et
        (type_memory_size tv) (case n of Dynamic _ => T | _ => F)
        q.buf_operand r` >>
      gvs[exprLoweringTheory.as_ptr_val_def]) >>
@@ -93,7 +94,7 @@ Resume make_array_vv_sim_full_conditional[split_header]:
      disch_then (qspecl_then [`sm`,`ssm`] mp_tac) >> simp[] >>
      Cases_on `emit_void MSTORE [Var q; Lit (n2w (LENGTH args))] ssm` >>
      Cases_on `q'` >> gvs[]) >>
-  `compile_make_array_elems compile_expr cenv (MAP gas_shadow_expr args) et
+  `compile_make_array_elems compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr args) et
      (type_memory_size tv) header (Var q) 0 ssh = (Var q,shadow_sb)` by
     (qpat_x_assum `compile_make_array _ _ (MAP _ args) _ _ _ _ _ = _` mp_tac >>
      simp[exprLoweringTheory.compile_make_array_def,compileEnvTheory.comp_ignore_bind_def,
@@ -166,9 +167,11 @@ Resume make_array_vv_sim_full_conditional[elements]:
       metis_tac[ci_mono_emit_void,pairTheory.SND] >> simp[ci_mono_refl]) >>
   `ci_mono shadow_sa ssh` by
     (irule ci_mono_trans >> qexists_tac `ssm` >> simp[]) >>
+  `type_memory_bytes (gas_shadow_env T cenv) et = type_memory_size tv` by
+    simp[gasShadowCompileBaseTheory.type_memory_bytes_gas_shadow_env] >>
   `ci_mono ssh shadow_sb` by
     (qpat_assum `compile_make_array_elems _ _ (MAP _ args) _ _ _ _ _ _ = _` mp_tac >>
-     qpat_assum `type_memory_bytes cenv et = _`
+     qpat_assum `type_memory_bytes (gas_shadow_env T _) _ = _`
        (fn th => pure_rewrite_tac[GSYM th,compile_make_array_elems_as_tuple]) >> strip_tac >>
      qpat_x_assum `compile_make_tuple _ _ _ _ _ _ _ = _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[] >> strip_tac >>
