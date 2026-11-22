@@ -171,7 +171,8 @@ Proof
   simp ([linked_witness_initial_machine_def, linked_witness_deploy_tx_def,
          p23_deploy_tx_def, vyperContextTheory.empty_call_txn_def,
          vyperInterpreterTheory.initial_machine_state_def, linked_deploy_length] @
-        type_simps @ empty_accounts_simps)
+        type_simps @ empty_accounts_simps) >>
+  EVAL_TAC
 QED
 
 (* Use list membership to compute the declaration's position in each module. *)
