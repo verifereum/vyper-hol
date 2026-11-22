@@ -16198,9 +16198,10 @@ Proof
         rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
         rpt strip_tac >>
         FIRST [
+          qpat_assum `MEM l' segs` (K ALL_TAC) >>
+          qexists_tac `bb` >> simp[] >> qexists_tac `l'` >> simp[],
           qpat_assum `!seg bb inst. _ ==> ?front x. _`
-            (qspecl_then [`seg`,`bb`,`inst`] mp_tac) >> simp[],
-          qexists_tac `bb` >> simp[] >> qexists_tac `l'` >> simp[]]) >>
+            (qspecl_then [`seg`,`bb`,`inst`] mp_tac) >> simp[]]) >>
   `entry_fn_no_ret (mk_raw_function entry_label entry)`
     by (simp[contextCodegenRelTheory.entry_fn_no_ret_def,
              mk_raw_function_fields, EVERY_MEM] >>
