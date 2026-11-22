@@ -14,6 +14,7 @@
     "tests/vyper-regression/builtins/test_convert_address_to_bytes_m.py": "a5b3bbe54d258899522329f6a4dbc0652c938bf0b0b77aebd92201ae609d1532",
     "tests/vyper-regression/builtins/test_self_is_contract.py": "a8308ed138fff6a2b6c4723285f39de741cf4fa1099820464a61b84f9db645a2",
     "tests/vyper-regression/create/test_create_operand_order.py": "cb1ea3bd7239c72a64d9ac1663a7e85c2d1a9d5601e9c2c91b5a8b0e136c9827",
+    "tests/vyper-regression/flags/test_imported_flag_invert.py": "cc3b54d646224564f91337acbf9fe8ea96d368a19b5efefc5d2637f4b0cffd7c",
     "tests/vyper-regression/modules/test_nested_module_call.py": "9743fc32ad7f0b44832795f0abdb1e35013380d5d37c0ccf4a81a827b9890a7e",
     "tools/vyper_test_export_plugin.py": "5ccf4e510be76fc09d3329642abb181b0726d215aa782b863b43a1b213d9e2d9",
     "tools/vyper_test_exports.py": "a0708d10fda15ef633a8026e46c9a6c7c803b5db3a71f50627bd4c6a0347fd8f"
