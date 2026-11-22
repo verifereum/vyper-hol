@@ -128,3 +128,65 @@ Proof
                 `sz`,`alloc_ptr`] >>
   simp[] >> metis_tac[]
 QED
+
+(* The append up to (and including) the consuming CREATE, before the
+ * result check. The initial state's label and instruction prefix are
+ * retained when this segment is placed in a completed block. *)
+Definition blueprint_append_code_def:
+  blueprint_append_code target value salt offset code args_ptr args_len a created d chunk <=>
+    ?m n e c add alloc effect sz ptr.
+      cs_extends a d /\ d.cs_current_bb = a.cs_current_bb /\
+      d.cs_current_insts = a.cs_current_insts ++ chunk /\
+      chunk = add :: alloc :: (emitted_insts n c ++ [effect]) /\
+      emitted_insts a m = [add] /\
+      add.inst_opcode = ADD /\ add.inst_operands = [code;args_len] /\
+      emitted_insts m n = [alloc] /\
+      alloc.inst_opcode = DALLOCA /\ alloc.inst_operands = [sz] /\
+      emit_op ADD [code;args_len] a = (sz,m) /\
+      compile_alloc_dynamic sz m = (ptr,n) /\
+      emit_void EXTCODECOPY [target;ptr;offset;code] n = ((),e) /\
+      (if args_len = Lit 0w then c = e else
+         ?dst x. emit_op ADD [ptr;code] e = (dst,x) /\
+                 compile_copy_memory_dynamic dst args_ptr args_len x = ((),c)) /\
+      (case salt of NONE => emit_op CREATE [value;ptr;sz]
+       | SOME salt_op => emit_op CREATE2 [value;ptr;sz;salt_op]) c = (created,d) /\
+      (case salt of
+         NONE => effect.inst_opcode = CREATE /\
+                 effect.inst_operands = [value;ptr;sz]
+       | SOME salt_op => effect.inst_opcode = CREATE2 /\
+                         effect.inst_operands = [value;ptr;sz;salt_op]) /\
+      EVERY (\j. ~MEM j.inst_opcode [DALLOCA;CALL;STATICCALL;DELEGATECALL;
+                                     CREATE;CREATE2;INVOKE] /\
+                 ~is_terminator j.inst_opcode) (emitted_insts n c)
+End
+
+Theorem blueprint_append_segment_geometry:
+  compile_create_blueprint_append target value salt offset code args_ptr
+    args_len rof a = (result,b) ==>
+  ?created d chunk.
+    blueprint_append_code target value salt offset code args_ptr args_len a created d chunk /\
+    compile_check_create_result created rof d = (result,b)
+Proof
+  strip_tac >> drule create_blueprint_create_prefix >> strip_tac >>
+  drule_all blueprint_append_segment >> strip_tac >>
+  qexistsl_tac [`created`,`sd`,`add' :: i :: (emitted_insts sn sc ++ [effect])`] >>
+  asm_rewrite_tac[] >> pure_rewrite_tac[blueprint_append_code_def] >>
+  qexistsl_tac [`sm`,`sn`,`se`,`sc`,`add'`,`i`,`effect`,`size'`,`alloc_ptr`] >>
+  asm_rewrite_tac[]
+QED
+
+Theorem blueprint_append_code_only_dalloca:
+  blueprint_append_code target value salt offset code args_ptr args_len a created d chunk ==>
+  1 < LENGTH chunk /\ (EL 1 chunk).inst_opcode = DALLOCA /\
+  !k. k < LENGTH chunk /\ (EL k chunk).inst_opcode = DALLOCA ==> k = 1
+Proof
+  Cases_on `salt` >>
+  rw[blueprint_append_code_def] >> simp[] >>
+  `EVERY (\j. j.inst_opcode <> DALLOCA) (emitted_insts n c ++ [effect])` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  Cases_on `k` >> gvs[] >>
+  rename1 `j = 0` >> Cases_on `j` >> gs[EL_APPEND_EQN, EVERY_EL] >>
+  rename1 `idx < LENGTH (emitted_insts n c) + 1` >>
+  `idx < LENGTH (emitted_insts n c) \/ idx = LENGTH (emitted_insts n c)` by decide_tac >>
+  gvs[]
+QED
