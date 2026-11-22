@@ -159,7 +159,7 @@ Triviality linked_witness_entry_static_gate:
     stmts_exprs_ok ce ss /\
     call_evaluation_safe cx (int_calls_stmts ss)
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `vis = Deploy ==> cx.in_deploy` by simp[] >>
   drule_all_then strip_assume_tac linked_witness_entry_support >>
   qexistsl [`ctx`,
