@@ -94,7 +94,7 @@ Proof
   strip_tac >> gen_tac >>
   qspec_then `cx.in_deploy` strip_assume_tac linked_witness_lowering >>
   qabbrev_tac `ce = build_compile_env_unit linked_witness_mods src
-      (if cx.in_deploy then Deploy else External) NonPayable ""
+      (if cx.in_deploy then Deploy else External) Nonpayable ""
       [] NoneT [] T with ce_target := p.rpol_target` >>
   qexistsl [`unit.cu_context`, `ce`] >>
   `acyclic_struct_metadata ce.ce_struct_fields` by
