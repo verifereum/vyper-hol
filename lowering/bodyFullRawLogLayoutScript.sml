@@ -6,13 +6,13 @@ Libs pairLib
 
 Theorem raw_log_full_layout_shadow:
   (!ce ty e. gas_shadow_compiles (lower_value compile_expr ce ty e)
-    (lower_value compile_expr ce ty (gas_shadow_expr e))) /\
+    (lower_value compile_expr (gas_shadow_env shadow_defaults ce) ty (gas_shadow_expr e))) /\
   (!ce xs. gas_shadow_compiles (compile_multi_exprs compile_expr ce xs)
-    (compile_multi_exprs compile_expr ce (MAP gas_shadow_expr xs))) /\
+    (compile_multi_exprs compile_expr (gas_shadow_env shadow_defaults ce) (MAP gas_shadow_expr xs))) /\
   gas_shadow_state sa shadow_sa /\
   lower_value compile_expr cenv ty
     (Call ann RawLog [Builtin a (MakeArray elem bd) topics; data] dflt) sa = (op,sb) /\
-  lower_value compile_expr cenv ty
+  lower_value compile_expr (gas_shadow_env shadow_defaults cenv) ty
     (gas_shadow_expr (Call ann RawLog [Builtin a (MakeArray elem bd) topics; data] dflt))
     shadow_sa = (op,shadow_sb) /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func ==>
@@ -22,12 +22,13 @@ Theorem raw_log_full_layout_shadow:
     (StackValue ann (Lit 0w),sb) /\
   ?ops sm shadow_sm sd shadow_sd value sn shadow_sn.
     compile_multi_exprs compile_expr cenv topics sa = (ops,sm) /\
-    compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr topics)
+    compile_multi_exprs compile_expr (gas_shadow_env shadow_defaults cenv) (MAP gas_shadow_expr topics)
       shadow_sa = (ops,shadow_sm) /\
     gas_shadow_state sm shadow_sm /\ gas_shadow_state sd shadow_sd /\
     gas_shadow_state sn shadow_sn /\
     lower_value compile_expr cenv (expr_type data) data sd = (value,sn) /\
-    lower_value compile_expr cenv (expr_type data) (gas_shadow_expr data)
+    lower_value compile_expr (gas_shadow_env shadow_defaults cenv)
+      (expr_type data) (gas_shadow_expr data)
       shadow_sd = (value,shadow_sn) /\
     ci_mono sa sm /\ ci_mono sm sd /\ ci_mono sd sn /\ ci_mono sn sb /\
     fn_has_code sa sm func /\ fn_has_code sm sd func /\
@@ -75,21 +76,22 @@ QED
 Resume raw_log_full_layout_shadow[fixed]:
   drule_all raw_log_fixed_layout >> strip_tac >>
   gvs[raw_log_topic_exprs_def, unwrap_value_def, comp_return_def] >>
-  Cases_on `compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr topics) shadow_sa` >>
+  Cases_on `compile_multi_exprs compile_expr (gas_shadow_env shadow_defaults cenv) (MAP gas_shadow_expr topics) shadow_sa` >>
   rename1 `compile_multi_exprs _ _ _ shadow_sa = (sops,ss1)` >>
   qpat_assum `!ce xs. gas_shadow_compiles _ _`
     (qspecl_then [`cenv`,`topics`] (mp_tac o REWRITE_RULE [gas_shadow_compiles_def])) >>
   disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[] >> strip_tac >> gvs[] >>
   `gas_shadow_compiles
     (lower_value compile_expr cenv (expr_type data) data)
-    (lower_value compile_expr cenv (expr_type data) (gas_shadow_expr data))` by metis_tac[] >>
+    (lower_value compile_expr (gas_shadow_env shadow_defaults cenv)
+      (expr_type data) (gas_shadow_expr data))` by metis_tac[] >>
   assume_tac (Q.SPEC `32` gas_shadow_compiles_alloc_buffer) >>
-  drule_at (Pat `compile_alloc_buffer 32 _ = _`)
+  drule_at (Pat `gas_shadow_compiles (lower_value _ _ _ _) _`)
     (REWRITE_RULE [listTheory.APPEND] raw_log_fixed_continuation_shadow) >>
+  disch_then (drule_at (Pat `compile_alloc_buffer 32 _ = _`)) >>
   disch_then (drule_at (Pat `emit_void MSTORE _ _ = _`)) >>
   disch_then (drule_at (Pat `emit_inst LOG _ _ _ = _`)) >>
   disch_then (drule_at (Pat `gas_shadow_state _ _`)) >>
-  disch_then (qspecl_then [`data`,`cenv`] mp_tac) >>
   simp[] >> strip_tac >>
   qpat_x_assum `lower_value _ _ _ (gas_shadow_expr (Call _ _ _ _)) _ = _` mp_tac >>
   simp[gas_shadow_expr_def, gas_shadow_builtin_def, Once lower_value_def,
