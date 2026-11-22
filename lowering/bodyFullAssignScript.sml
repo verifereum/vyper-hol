@@ -11702,7 +11702,8 @@ Theorem body_assign_function_mutability_mods[local]:
   contract_inv mods exps ctx cenv cx ==>
   !src tops vis mut nr rr fn args dflts ret body.
     ALOOKUP mods src = SOME tops /\
-    MEM (FunctionDecl vis mut nr rr fn args dflts ret body) tops ==>
+    MEM (FunctionDecl vis mut nr rr fn args dflts ret body) tops /\
+    (src = NONE \/ MEM (src,fn) (linked_live_functions mods exps)) ==>
     function_mutability_ok mods vis mut nr dflts body
 Proof
   simp[contract_inv_def] >> rpt strip_tac >> res_tac
