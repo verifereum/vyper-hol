@@ -16185,7 +16185,14 @@ Proof
         rpt conj_tac
         >- first_assum ACCEPT_TAC
         >- first_assum ACCEPT_TAC >>
-        drule_all_then ACCEPT_TAC rets_scoped_segments_mode) >>
+        qpat_assum `LIST_REL (internal_segment_mode_ok _) descs segs`
+          (fn th =>
+            let
+              val [mode,descs,segs] = snd (strip_comb (concl th))
+              val rule = INST [``static : bool`` |-> rand mode]
+                rets_scoped_segments_mode
+            in mp_tac (SPECL [descs,segs,``entry : basic_block list``] rule) end) >>
+        asm_rewrite_tac[]) >>
   `entry_fn_no_ret (mk_raw_function entry_label entry)`
     by (simp[contextCodegenRelTheory.entry_fn_no_ret_def,
              mk_raw_function_fields, EVERY_MEM] >>
