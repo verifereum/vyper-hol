@@ -60,7 +60,7 @@ Proof
       `fuel <> 0` by decide_tac >>
       `supported_struct_fields tops id = SOME args` by metis_tac[] >>
       ONCE_REWRITE_TAC[supported_nested_type_def] >>
-      simp[EVERY_MEM, NULL_EQ] >> disj2_tac >> rpt strip_tac >>
+      simp[EVERY_MEM, NULL_EQ] >> strip_tac >> disj2_tac >> rpt strip_tac >>
       first_x_assum irule >>
       gvs[EVERY_MEM, DOMSUB_FLOOKUP_THM, AllCaseEqs()] >>
       metis_tac[DECIDE ``a <= b ==> a - 1 <= b - 1:num``])
