@@ -138,7 +138,11 @@ Proof
          IS_SOME (exported_fallback mods exps))` by fs[AllCaseEqs()] >>
       `args = [] /\ fb = SOME decl` by
         (fs[Abbr `decl`, Abbr `src`, Abbr `stmts`] >>
-         metis_tac[default_miss_classified]) >>
+         mp_tac (Q.INST_TYPE [`:'a` |-> `:num`]
+           (Q.INST [`guarded` |-> `F`] default_miss_classified)) >> simp[] >>
+         disch_then (fn th =>
+           qpat_assum `MEM "__default__" (MAP FST exps) ==> _`
+             (ACCEPT_TAC o MP th))) >>
       `!fl. linear_dispatch_target cd sels fl = fl` by
         (qpat_x_assum `Abbrev (NONE = _)` mp_tac >>
          simp[markerTheory.Abbrev_def, AllCaseEqs()] >> metis_tac[]) >>
