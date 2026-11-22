@@ -43,15 +43,6 @@ Proof
   metis_tac[storage_agree_empty_mask]
 QED
 
-Theorem grouped_default_empty_mask_ghost:
-  ghost_inv_at (cx_dead ([],[]) cx) 0 NONE ce cx es G tn s ==>
-  ghost_inv H NONE ce cx es G tn s
-Proof
-  simp[ghost_inv_cx_dead, ghost_inv_at_def, stor_taint_ok_at_def, cx_dead_def,
-    storage_dead_def] >>
-  strip_tac >> first_assum irule >> simp[]
-QED
-
 Theorem source_no_sha256_after_const_substitution:
   (!env e. no_sha256_expr (subst_consts_expr env e) ==> no_sha256_expr e) /\
   (!env bt. no_sha256_btarget (subst_consts_btarget env bt) ==> no_sha256_btarget bt) /\
@@ -100,11 +91,16 @@ Theorem grouped_default_conditional_no_mapping[local]:
 Proof
   Cases_on `v` >> simp[conditional_result_def, bind_def, return_def, raise_def]
   >- metis_tac[sumTheory.INL_11, eval_result_distinct] >>
-  Cases_on `place_type_value cx p st` >> Cases_on `q` >>
+  rename1 `place_type_value cx place st` >>
+  Cases_on `place_type_value cx place st` >>
+  rename1 `place_type_value cx place st = (type_result,typed_state)` >>
+  Cases_on `type_result` >>
   gvs[bind_def, return_def]
   >- (IF_CASES_TAC >> gvs[return_def]
       >- metis_tac[sumTheory.INL_11, eval_result_distinct] >>
-      Cases_on `read_place cx p r'` >> Cases_on `q` >>
+      Cases_on `read_place cx place typed_state` >>
+      rename1 `read_place cx place typed_state = (value_or_error,post_read_state)` >>
+      Cases_on `value_or_error` >>
       rpt strip_tac >> gvs[bind_def, return_def]) >>
   rpt strip_tac >> gvs[sumTheory.sum_distinct]
 QED

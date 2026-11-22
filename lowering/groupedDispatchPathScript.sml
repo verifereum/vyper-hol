@@ -307,53 +307,6 @@ QED
 
 Finalise grouped_default_group_selected_origin_with_frame
 
-Theorem grouped_default_group_selected_origin:
-  compile_create_kwarg_allocas common.ec_env specs sa = (vars,sc) /\
-  compile_group_entries (Var mid) entries common vars off sc = ((),sd) /\
-  fn_has_code sa sc fn /\ fn_has_code sc sd fn /\
-  EVERY (\(_,name,_,_). ~internal_label_ok name) entries /\
-  (!name bb. lookup_block name fn.fn_blocks = SOME bb ==>
-    phi_prefix_length bb.bb_instructions = 0) /\
-  FIND (\(n,_,_,_). m = n2w n) entries = SOME (sel,lbl,mincd,k) /\
-  selected_registration_resources ctx fn site lo sa s /\
-  fn_inst_ids_distinct fn /\
-  EVERY (\(_,ty,_). type_memory_bytes common.ec_env ty < dimword (:256)) specs /\
-  unit_alloca_budget ctx < dimword (:256) /\
-  not_fresh_at sa mid /\ eval_operand (Var mid) s = SOME m /\
-  op_taint tn (Var mid) = {} /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
-    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
-  ?checks init done t G' tn'.
-    MAP (\(n,_,ty,e). (n,ty,e)) vars = specs /\
-    checks.cs_current_bb = lbl /\ checks.cs_current_insts = [] /\
-    compile_entry_checks mincd common.ec_payable checks = ((),init) /\
-    fn_has_code checks init fn /\
-    compile_entry_point_kwargs common.ec_env vars off k common.ec_common_label init =
-      ((),done) /\ fn_has_code init done fn /\
-    selected_registration_resources ctx fn site lo checks t /\
-    selected_registration_frame s tn t tn' /\ t.vs_memory = s.vs_memory /\
-    (!name op ty e. MEM (name,op,ty,e) vars ==>
-      ?id q base.
-        op = Var q /\ not_fresh_at checks q /\ lookup_var q t = SOME (n2w base) /\
-        MEM (mk_inst id ALLOCA [Lit (n2w (type_memory_bytes common.ec_env ty))] [q])
-          (fn_insts fn) /\
-        FLOOKUP t.vs_allocas id = SOME (base,type_memory_bytes common.ec_env ty) /\
-        id < checks.cs_next_id /\
-        base + type_memory_bytes common.ec_env ty < dimword (:256) /\
-        ptr_covers G' tn' q t (type_memory_bytes common.ec_env ty)) /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
-      t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp) /\
-    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
-      (s,G,tn) [] (OK t,G',tn')) /\
-    (!D. (!fuel. ptr_safe_blocks D lo fuel ctx fn PG G' tn' t) ==>
-      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
-Proof
-  strip_tac >> drule_all grouped_default_group_selected_origin_with_frame >>
-  disch_then (qspecl_then [`PG`,`G`]
-    (qx_choosel_then [`checks`,`init`,`done`,`t`,`G'`,`tn'`] strip_assume_tac)) >>
-  qexistsl_tac [`checks`,`init`,`done`,`t`,`G'`,`tn'`] >> asm_rewrite_tac[] >> drule compile_create_kwarg_allocas_preserves_specs >> simp[]
-QED
-
 
 val shadow_group = ``\group. case group of
   ExternalSingle selector package =>
