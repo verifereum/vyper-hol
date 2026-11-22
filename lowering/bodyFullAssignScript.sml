@@ -4227,7 +4227,7 @@ Proof
       metis_tac[body_assign_select_nonvalue])
 QED
 
-Theorem body_assign_storage_result_shape[local]:
+Theorem body_assign_storage_result_shape:
   body_inv tops ctx cenv cx /\
   compile_expr cenv ty e sa = (LocatedValue t p,sb) /\
   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
