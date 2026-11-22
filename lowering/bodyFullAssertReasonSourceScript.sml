@@ -6,7 +6,8 @@ Ancestors
   bodySim allocLimits compileVyper vyperTypeCallGraph vyperTypeCallStackSoundness
   gasOutcome gasContext stmtSimDefs supportedStmts supportedStmtTraverse
   vyperInterpreter vyperState vyperTypeSystem vyperAST list
-  bodyInvCodeProps bodyInvSplit bodyInvMetadataProps exprSimHypsDefs compileUnit alist
+  bodyInvCodeProps bodyInvSplit bodyInvMetadataProps exprSimHypsDefs exprBodyPreProps
+  bodySingletonCallSupport compileUnit alist
 
 Theorem type_stmt_assert_reason:
   type_stmt env ret_ty (Assert e (AssertReason r)) =

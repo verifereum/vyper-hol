@@ -11,7 +11,7 @@ Ancestors bodyCallSupport
   vyperABI vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallGraph
   vyperTypeCallStackSoundness exprLowering
   vyperValue valueEncodingProps placeMemoryTypeInterfaces structFieldsProps exprSimProps arithmetic
-  aggregateEvaluatedLayout valueCopyBytes vyperEventArgCompat
+  aggregateEvaluatedLayout valueCopyBytes vyperEventArgCompat checkedTypeNamespace
   vyperTypeExprResult retAbiPlanProps abiDecoderMembers finite_map pred_set
 
 (* Expression readiness comes directly from exprSimSource; the statement
@@ -67,7 +67,8 @@ Theorem supported_nested_abi_env:
   !leaf fuel tops ty.
     (!t. leaf t ==> supported_event_leaf_type t) ==>
     !large removed.
-      supported_nested_type leaf fuel tops ty /\ type_env tops SUBMAP large ==>
+      supported_nested_type leaf fuel tops ty /\ type_env tops SUBMAP large /\
+      (!k fields. FLOOKUP large k = SOME (StructArgs fields) ==> FST k = NONE) ==>
       vyper_to_abi_type (DRESTRICT (type_env tops) (COMPL removed)) ty =
       vyper_to_abi_type (DRESTRICT large (COMPL removed)) ty
 Proof
@@ -82,7 +83,13 @@ Proof
   simp[Once supported_nested_type_def, supported_scalar_type_def,
        supported_word_type_def, supported_string_type_def] >> strip_tac
   >~ [`FLOOKUP _ p`]
-  >- (Cases_on `supported_struct_fields tops p` >> gvs[] >>
+  >- (Cases_on `FST p = NONE`
+      >| [ALL_TAC,
+          PairCases_on `p` >> Cases_on `p0` >>
+          gvs[type_env_qualified_lookup, FLOOKUP_DRESTRICT] >>
+          Cases_on `FLOOKUP large (SOME x,p1)` >> gvs[] >>
+          Cases_on `x'` >> gvs[]] >>
+      Cases_on `supported_struct_fields tops p` >> gvs[] >>
       rename1 `supported_struct_fields tops p = SOME fields` >>
       drule supported_struct_fields_type_env >> strip_tac >>
       `FLOOKUP large p = SOME (StructArgs fields)` by
@@ -106,6 +113,7 @@ Theorem supported_nested_evaluated_assignable:
     (!t. leaf t ==> supported_event_leaf_type t) ==>
     !large removed tv.
       supported_nested_type leaf fuel tops ty /\ type_env tops SUBMAP large /\
+      (!k fields. FLOOKUP large k = SOME (StructArgs fields) ==> FST k = NONE) /\
       evaluate_type (DRESTRICT large (COMPL removed)) ty = SOME tv ==>
       assignable_type (DRESTRICT large (COMPL removed)) ty
 Proof
@@ -139,6 +147,10 @@ Proof
         simp[well_formed_type_def] >>
       simp[assignable_type_def] >> Cases_on `bd` >>
       gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >> metis_tac[]) >>
+  Cases_on `FST p = NONE`
+  >| [ALL_TAC,
+      gvs[vyperValueTheory.evaluate_type_def, FLOOKUP_DRESTRICT, AllCaseEqs()] >>
+      metis_tac[]] >>
   Cases_on `supported_struct_fields tops p` >> gvs[] >>
   rename1 `supported_struct_fields tops p = SOME fields` >>
   drule supported_struct_fields_type_env >> strip_tac >>
@@ -165,6 +177,7 @@ QED
 Theorem supported_place_evaluated_assignable:
   !tops tenv ty tv.
     supported_place_type tops ty /\ type_env tops SUBMAP tenv /\
+    (!k fields. FLOOKUP tenv k = SOME (StructArgs fields) ==> FST k = NONE) /\
     evaluate_type tenv ty = SOME tv ==>
     assignable_type tenv ty
 Proof
@@ -178,7 +191,8 @@ QED
 
 Theorem supported_place_abi_env:
   !tops cx ty.
-    get_module_code cx NONE = SOME tops /\ supported_place_type tops ty ==>
+    get_module_code cx NONE = SOME tops /\ supported_place_type tops ty /\
+    (!k fields. FLOOKUP (get_tenv cx) k = SOME (StructArgs fields) ==> FST k = NONE) ==>
     vyper_to_abi_type (type_env tops) ty = vyper_to_abi_type (get_tenv cx) ty
 Proof
   rpt strip_tac >> drule body_main_type_env_submap >> strip_tac >>

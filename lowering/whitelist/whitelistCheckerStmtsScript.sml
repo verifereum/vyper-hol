@@ -103,13 +103,13 @@ Theorem supported_place_root_target_info[local]:
   supported_place_root tops id ==>
   IS_SOME (supported_target_info tops bindings (TopLevelNameTarget id))
 Proof
-  simp[supported_place_root_def, supported_target_info_def] >>
+  Cases_on `FST id = NONE` >> simp[supported_place_root_def, supported_target_info_def] >>
   Cases_on `supported_variable_decl tops id` >> simp[]
   >- (Cases_on `supported_hashmap_decl tops id` >> simp[] >>
-      rename1 `SOME hm` >> PairCases_on `hm` >> simp[]) >>
-  rename1 `SOME vd` >> PairCases_on `vd` >> simp[] >>
+      rename1 `supported_hashmap_decl tops id = SOME hm` >> PairCases_on `hm` >> simp[]) >>
+  rename1 `supported_variable_decl tops id = SOME vd` >> PairCases_on `vd` >> simp[] >>
   Cases_on `supported_hashmap_decl tops id` >> simp[] >>
-  rename1 `SOME hm` >> PairCases_on `hm` >> simp[]
+  rename1 `supported_hashmap_decl tops id = SOME hm` >> PairCases_on `hm` >> simp[]
 QED
 
 Theorem checker_toplevel_target_root[local]:

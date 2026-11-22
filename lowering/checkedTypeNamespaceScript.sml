@@ -11,6 +11,14 @@ Proof
   rw[type_env_for_module_def, FLOOKUP_UPDATE]
 QED
 
+Theorem type_env_struct_namespace[simp]:
+  !tops k fields. FLOOKUP (type_env tops) k = SOME (StructArgs fields) ==>
+    FST k = NONE
+Proof
+  rpt gen_tac >> PairCases_on `k` >> Cases_on `k0` >>
+  simp[type_env_qualified_lookup]
+QED
+
 Triviality singleton_evaluated_type_namespace:
   (!tenv ty. tenv = type_env tops /\ IS_SOME (evaluate_type tenv ty) ==>
      supported_type_namespace ty) /\

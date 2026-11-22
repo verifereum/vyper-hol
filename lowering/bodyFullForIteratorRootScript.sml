@@ -69,7 +69,7 @@ Proof
   measureInduct_on `expr_size e` >> Cases_on `e` >>
   simp[vyperTypeContractTheory.loop_iterator_place_def, target_root_def,
        well_typed_expr_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[target_root_def, IS_SOME_EXISTS, AllCaseEqs()]
+  rpt strip_tac >> gvs[target_root_def, optionTheory.IS_SOME_EXISTS, AllCaseEqs()]
   >- (PairCases_on `nid` >>
       gvs[well_typed_expr_def, AllCaseEqs()] >> metis_tac[]) >>
   first_x_assum (qspec_then `e'` mp_tac) >>

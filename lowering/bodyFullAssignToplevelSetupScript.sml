@@ -2,7 +2,7 @@
 Theory bodyFullAssignToplevelSetup
 Ancestors
   augAssignPtrToplevelMetadata bodyStorageMetadata bodyExprPreFacts bodySim
-  bodyTypedTargetScope
+  bodyTypedTargetScope bodySingletonCallSupport
   supportedDecls bodyInvCodeProps bodyInvMetadataProps
   bodyMainModuleProps linkedStorageMetadataProps exprBodyPreProps bodyInvSplit alist compileUnit
   exprSimHypsDefs exprSimHyps supportedStmts supportedExprs supportedExprForms
@@ -106,5 +106,5 @@ Proof
   fs[expr_body_pre_split_def, vyperContextTheory.type_env_all_modules_def,
      vyperContextTheory.type_env_def, finite_mapTheory.FUNION_FEMPTY_2,
      supported_stmt_expr_exists_def, supported_assignment_exists_def] >>
-  metis_tac[]
+  metis_tac[body_inv_typed_calls_main, expr_body_pre_mods_well_typed]
 QED

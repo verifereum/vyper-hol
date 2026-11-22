@@ -1,6 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryAggregate
 Ancestors
-  valueEncodingDefs bodySimLogArgs vyperTypeSystem
+  valueEncodingDefs bodySimLogArgs vyperTypeSystem checkedTypeNamespace
   vyperMisc sourceAbiArray pair
   vyperABI contractABI list rich_list arithmetic vyperTyping vyperValue valueEncoding supportedTypes
   ctorDeployMemoryRunMemEntrySupported ctorDeployMemoryRunMemEntryDefaults
