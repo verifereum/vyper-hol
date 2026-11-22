@@ -107,8 +107,9 @@ Proof
   >- (qx_genl_tac [`module_src`, `tops`] >> strip_tac >>
       `MEM (module_src,tops) linked_witness_mods` by
         (drule_then ACCEPT_TAC ALOOKUP_MEM) >>
-      mp_tac linked_witness_headers >> simp[EVERY_MEM, FORALL_PROD] >>
-      strip_tac >> simp[] >> conj_tac
+      `supported_module_headers tops` by
+        (mp_tac linked_witness_headers >> simp[EVERY_MEM, FORALL_PROD] >> metis_tac[]) >>
+      simp[] >> conj_tac
       >- (strip_tac >> gvs[main_module_def] >> simp[linked_witness_main_support]) >>
       irule vyperTypeContractTheory.contract_keys_module_distinct >>
       qexists_tac `linked_witness_mods` >> simp[linked_witness_distinct_modules])

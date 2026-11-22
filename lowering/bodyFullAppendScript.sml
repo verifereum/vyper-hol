@@ -3724,7 +3724,10 @@ Resume append_nested_memory_cont_full[finish]:
   simp[] >> qx_genl_tac [`aid`, `base_loc`, `alloc_len`, `i`] >> strip_tac >>
   qpat_assum `!aid off sz j. _ ==> j IN tn.t_mem`
     (qspecl_then [`aid`, `base_loc`, `alloc_len`, `i`] mp_tac) >>
-  simp[arithmeticTheory.ADD_COMM]
+  simp[] >>
+  qpat_assum `!name a len. local_region cenv mid.scopes s name a len ==> _`
+    (fn th => POP_ASSUM_LIST (K ALL_TAC) >> mp_tac th) >>
+  metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Finalise append_nested_memory_cont_full[local]
