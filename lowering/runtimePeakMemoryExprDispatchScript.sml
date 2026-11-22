@@ -124,9 +124,13 @@ Theorem expr_dispatch_defaults_gate[local]:
            ~supported_expr_exists blueprint_create_root e) /\
          ~supported_expr_exists short_builtin_args e)
 Proof
-  strip_tac >> imp_res_tac omitted_defaults_builtin_arity >>
-  rpt strip_tac >> imp_res_tac omitted_defaults_blueprint_free >>
-  fs[EVERY_MEM] >> metis_tac[]
+  strip_tac >> rpt gen_tac >>
+  drule (SIMP_RULE (srw_ss()) [EVERY_MEM] omitted_defaults_builtin_arity) >>
+  strip_tac >>
+  Cases_on `!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1` >>
+  fs[] >- metis_tac[] >>
+  drule (SIMP_RULE (srw_ss()) [EVERY_MEM] omitted_defaults_blueprint_free) >>
+  metis_tac[]
 QED
 
 Theorem dalloca_windows_expr_call[local]:
@@ -150,18 +154,23 @@ Proof
      preserves_dalloca_windows window (cfn cenv ct e)` by
     (rpt strip_tac >> first_assum irule >> simp[] >>
      metis_tac[call_callback_child_supported]) >>
-  irule dalloca_windows_compile_call >> simp[] >>
-  imp_res_tac expr_dispatch_defaults_gate >>
-  conj_tac
+  Q.SUBGOAL_THEN
+    `(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) \/
+     (!raw salted rof order. target <> CreateTarget (CreateFromBlueprint raw) salted rof order)`
+    assume_tac
   >- (Cases_on `!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1` >>
       fs[supported_expr_exists_def, blueprint_create_root_def]) >>
+  irule dalloca_windows_compile_call >> simp[] >>
   conj_tac
   >- (rpt strip_tac >> first_assum irule >>
       simp[call_callback_children_def, MEM_APPEND, MEM_FLAT, MEM_MAP] >>
       metis_tac[]) >>
   conj_tac
   >- (rpt strip_tac >> first_assum irule >> simp[call_callback_children_def]) >>
-  rpt strip_tac >> first_assum irule >> simp[] >> metis_tac[]
+  rpt strip_tac >> rename1 `MEM e (omitted_defaults cenv (nsid_to_string id) (LENGTH args))` >>
+  drule_all expr_dispatch_defaults_gate >>
+  disch_then (qspecl_then [`nsid_to_string id`, `LENGTH args`] strip_assume_tac) >>
+  first_assum irule >> simp[] >> metis_tac[]
 QED
 
 Theorem dalloca_windows_modular_names[local]:
@@ -310,11 +319,11 @@ Proof
     metis_tac[supported_exprs_exists_every, EXISTS_MEM] >>
   irule dalloca_windows_builtin_dispatch_body >> simp[] >> conj_tac
   >- (rpt strip_tac >>
-      qpat_assum `!e ct. _ ==> preserves_dalloca_windows window (cfn cenv ct e)` irule >>
+      qpat_assum `!e ct. (_ /\ _) ==> preserves_dalloca_windows window (cfn cenv ct e)` irule >>
       metis_tac[expr_shape_extcode_addr, supported_exprs_exists_every, EXISTS_MEM]) >>
   rpt strip_tac >> irule dalloca_windows_multi_exprs >>
   rpt strip_tac >>
-  qpat_assum `!e ct. _ ==> preserves_dalloca_windows window (cfn cenv ct e)` irule >>
+  qpat_assum `!e ct. (_ /\ _) ==> preserves_dalloca_windows window (cfn cenv ct e)` irule >>
   metis_tac[supported_exprs_exists_every, EXISTS_MEM, supported_expr_exists_def]
 QED
 
@@ -351,10 +360,8 @@ Theorem dalloca_windows_compile_expr_mutual[local]:
 Proof
   strip_tac >> ho_match_mp_tac compile_expr_ind >>
   rpt conj_tac >> rpt gen_tac >> strip_tac >>
-  RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >> rpt strip_tac >>
-  qpat_assum `!child env ct cs. _ ==> _ ==>
-      compiler_dalloca_windows window (SND (compile_expr env ct child cs))`
-    (assume_tac o MATCH_MP dalloca_windows_expr_child) >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [NOT_CLAUSES, AND_CLAUSES]) >> rpt strip_tac >>
+  first_assum (assume_tac o MATCH_MP dalloca_windows_expr_child) >>
   simp[Once compile_expr_raw_def, Excl "expr_child_callback_def",
        Excl "builtin_child_callback_def", Excl "type_child_callback_def"] >>
   CONV_TAC (DEPTH_CONV ETA_CONV)
