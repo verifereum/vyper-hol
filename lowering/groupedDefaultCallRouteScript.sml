@@ -72,7 +72,7 @@ Theorem grouped_default_call_route:
     unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
     w2n vs.vs_initial_fmp < 2 ** 254) /\
   (ctx_has_dalloca unit.cu_context ==>
-    !fn inst s. raw_reachable vs unit.cu_context fn inst s ==> dalloca_no_wrap inst s) /\
+    !fn inst s. raw_reachable vs unit.cu_context fn inst s ==> dalloca_fmp_headroom inst s) /\
   vyperInterpreter$lookup_function NONE tx.function_name External tops =
     SOME (mut,nr,args,dflts,ret,fbody) /\ dflts <> [] /\
   4 <= LENGTH vs.vs_call_ctx.cc_calldata /\
