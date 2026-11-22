@@ -80,22 +80,23 @@ Finalise create_trace_from_edge
 
 (* Increasing the initial fuel to cover the completed prefix does not
    reselect any instruction: each edge agrees at every larger fuel. *)
-Theorem create_trace_from_completed:
-  gas_origin_path mem E C f s marks (OK t) /\
+Theorem create_trace_from_completed_min:
+  !m. gas_origin_path mem E C f s marks (OK t) /\
   (!b. MEM b f.fn_blocks ==> phi_prefix_length b.bb_instructions = 0) ==>
   ?bound. !k p d. bound <= k ==>
     ?left dd kk. create_trace_from p d k C f s =
-      left ++ create_trace_from p dd kk C f t /\ kk <= k
+      left ++ create_trace_from p dd kk C f t /\ m <= kk /\ kk <= k
 Proof
+  gen_tac >>
   `!mem E C f s marks res. gas_origin_path mem E C f s marks res ==>
     !t. res = OK t /\
     (!b. MEM b f.fn_blocks ==> phi_prefix_length b.bb_instructions = 0) ==>
     ?bound. !k p d. bound <= k ==>
       ?left dd kk. create_trace_from p d k C f s =
-        left ++ create_trace_from p dd kk C f t /\ kk <= k`
+        left ++ create_trace_from p dd kk C f t /\ m <= kk /\ kk <= k`
     suffices_by metis_tac[] >>
   ho_match_mp_tac gas_origin_path_ind >> rpt conj_tac
-  >- (rpt strip_tac >> gvs[] >> qexists_tac `0` >>
+  >- (rpt strip_tac >> gvs[] >> qexists_tac `m` >>
       rpt strip_tac >> qexistsl_tac [`[]`, `d`, `k`] >> simp[])
   >- (rpt gen_tac >> strip_tac >> rpt strip_tac >> gvs[] >>
       drule_all create_trace_from_edge >>
@@ -110,4 +111,14 @@ Proof
       disch_then (qx_choosel_then [`l2`, `d2`, `k2`] strip_assume_tac) >>
       qexistsl_tac [`l1 ++ l2`, `d2`, `k2`] >> simp[APPEND_ASSOC] >> decide_tac) >>
   rpt strip_tac >> gvs[exit_result_def]
+QED
+
+Theorem create_trace_from_completed:
+  gas_origin_path mem E C f s marks (OK t) /\
+  (!b. MEM b f.fn_blocks ==> phi_prefix_length b.bb_instructions = 0) ==>
+  ?bound. !k p d. bound <= k ==>
+    ?left dd kk. create_trace_from p d k C f s =
+      left ++ create_trace_from p dd kk C f t /\ kk <= k
+Proof
+  metis_tac[Q.SPEC `0` create_trace_from_completed_min]
 QED
