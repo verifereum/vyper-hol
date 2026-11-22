@@ -392,7 +392,7 @@ Proof
        annotated_immutables_len_def] >>
   rpt strip_tac >> gvs[foo_supported, toplevel_vtype_keys_toplevel_def,
     function_mutability_ok_def, stmt_mutability_ok_def, listTheory.APPEND_EQ_SING,
-    linked_body_calls_resolved_def, function_int_calls_def, int_calls_stmts_def,
+    linked_body_calls_resolved_def, function_int_calls_def,
     supported_declaration_body_def, supported_function_body_def,
     supported_stmt_bindings_def, supported_stmt_def, body_stmts_safe_iff, body_stmt_safe_def,
     supported_stmt_expr_exists_def, int_calls_stmt_def] >>

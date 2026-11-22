@@ -1,7 +1,7 @@
 (* Source composition for the non-slot Array branch of For. *)
 Theory bodyFullForArrayBranch
 Ancestors
-  bodyInvCodeProps bodyInvExecutionProps
+  bodyInvCodeProps bodyInvExecutionProps bodyCallSupport[qualified,ignore_grammar]
   bodyFullShadowBodyInv constSubst bodyStorageMetadata vyperSubscriptOverlap
   bodyFullForArrayRound gasOutcomeFull gasOutcomeFullCompose gasExemptCert
   gasContext gasSummary stmtSimForRounds stmtSimDefs exprSimDefs bodyPtrDefs
@@ -121,7 +121,7 @@ Proof
   drule_then assume_tac bodyMainModulePropsTheory.contract_inv_main_module >>
   drule_then assume_tac bodyInvMetadataPropsTheory.contract_inv_type_env >>
   `~expr_has_evm_run e /\
-    EVERY (bodyCallSupportTheory.source_body_call_supported cx) (int_calls_expr e)` by
+    EVERY (bodyCallSupport$source_body_call_supported cx) (int_calls_expr e)` by
     (Cases_on `supported_expr (main_module mods) e`
      >- (`well_typed_expr env e` by fs[vyperTypeSystemTheory.well_typed_iterator_def] >>
          drule_all_then ACCEPT_TAC supported_expr_body_calls_mods) >>
