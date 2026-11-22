@@ -471,7 +471,8 @@ Proof
    LENGTH prepared.vs_data_section` by
    (qpat_x_assum `(^Ow) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ prepared` mp_tac >>
     simp_tac bool_ss [] >> strip_tac >>
-    fs[Once vyper_to_abi_type_def, Excl "enc_def"]) >>
+    qpat_assum `_ <= LENGTH prepared.vs_data_section`
+      (mp_tac o PURE_REWRITE_RULE [Once vyper_to_abi_type_def]) >> simp[]) >>
  asm_x "child" mp_tac >> simp_tac bool_ss [Abbr `Child`] >> disch_tac >>
  qpat_x_assum `(^Ow) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ initial _ _ prepared`
    (MAP_EVERY assume_tac o CONJUNCTS o BETA_RULE) >>

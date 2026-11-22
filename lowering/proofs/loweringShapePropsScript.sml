@@ -16181,7 +16181,7 @@ Proof
     by (rpt gen_tac >> strip_tac >>
         match_mp_tac (Q.SPECL [`descs`, `segs`, `insts`, `fn`] internal_fns_ok_mode) >>
         gvs[Abbr `ifns`, Abbr `insts`, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
-        conj_tac >- metis_tac[] >>
+        rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
         match_mp_tac (Q.SPECL [`descs`, `segs`, `entry`] rets_scoped_segments_mode) >>
         simp[]) >>
   `entry_fn_no_ret (mk_raw_function entry_label entry)`

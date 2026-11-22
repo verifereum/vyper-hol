@@ -119,8 +119,8 @@ QED
 
 Resume return_supported_evaluated_plan[struct]:
   `FST id = NONE` by
-    (qpat_assum `evaluate_type tenv (StructT id) = _` mp_tac >>
-     simp[evaluate_type_def, AllCaseEqs()] >> strip_tac >>
+    (qpat_x_assum `evaluate_type tenv (StructT id) = _` mp_tac >>
+     simp[Once evaluate_type_def, AllCaseEqs(), LET_THM] >> strip_tac >>
      qpat_assum `tenv SUBMAP _` (drule_then assume_tac o REWRITE_RULE [SUBMAP_FLOOKUP_EQN]) >>
      res_tac) >>
   Cases_on `is_abi_dynamic cenv.ce_struct_fields (StructT id)`

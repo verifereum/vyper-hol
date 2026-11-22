@@ -260,6 +260,9 @@ Proof
   rpt conj_tac
   >- (qexistsl [`rpolicy`, `unit`] >> simp[])
   >- (rpt strip_tac >> gvs[] >>
+      gvs[supported_program_deploy_def, EVERY_MEM, supported_deploy_declaration_def] >>
+      res_tac >> gvs[])
+  >- (rpt strip_tac >> gvs[] >>
       imp_res_tac supported_program_declaration >>
       gvs[supported_program_deploy_def, EVERY_MEM, supported_deploy_declaration_def] >>
       res_tac >> gvs[]) >>
