@@ -24,7 +24,7 @@ Ancestors
    place live in the local's value (local_target_live).  The run is
    compile_pop_name_sim's at the target's pointer: the pop stores the
    array's new length word inside the local's region, which locals_kept
-   exempts (dynarray_len_at), and the result is the element's pointer,
+   exempts (dynarray_len_untupled), and the result is the element's pointer,
    read back through the popped history. *)
 Theorem pop_nested_local_sim:
   !ctx func cenv cx env ann bt ty es id.

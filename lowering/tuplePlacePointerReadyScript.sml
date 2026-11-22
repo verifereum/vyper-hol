@@ -221,7 +221,7 @@ Proof
   `evaluate_type (get_tenv cx) t0 = SOME entry.type` by
     (drule bodySimAugPlaceLoadTheory.aug_place_entry_type_agrees >> metis_tac[]) >> gvs[] >>
   `tuple_place_no_tuple_step entry.type l` by
-    (irule tuple_place_mutable_path_barrier >> metis_tac[]) >>
+    (irule tuplePlaceGeometryTheory.tuple_place_mutable_path_barrier >> metis_tac[]) >>
   irule tuplePlaceGeometryTheory.tuple_place_tuple_barrier_apart >>
   conj_tac >- metis_tac[listTheory.EL_MEM] >>
   qexistsl [`path`, `l`, `entry.type`] >> simp[]

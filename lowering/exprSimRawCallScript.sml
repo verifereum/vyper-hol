@@ -803,6 +803,7 @@ Proof
       qexistsl_tac [`b`, `n`, `sz`] >> simp[] >> rpt strip_tac >>
       `dynarray_free (BaseTV (BytesT (Dynamic cap)))` by
         simp[exprSimPropsTheory.dynarray_free_base] >>
+      drule exprSimPropsTheory.dynarray_len_untupled_imp_at >> strip_tac >>
       drule_all exprSimAttributeFieldsTheory.local_val_at_dynarray_apart >>
       decide_tac)
   >> simp[mem_bytes_at_def]

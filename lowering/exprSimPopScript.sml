@@ -720,7 +720,8 @@ Proof
       >- fs[]
       >- (simp[local_region_def] >> metis_tac[])
       >- fs[]
-      >- (irule dynarray_len_at_root >> metis_tac[])
+      >- (simp[dynarray_len_untupled_def] >> qexists_tac `[]` >>
+          simp[type_path_offset_def])
       >- fs[]
       >- gvs[pred_setTheory.ABSORPTION_RWT]
       >- fs[]

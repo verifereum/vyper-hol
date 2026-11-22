@@ -272,5 +272,7 @@ Proof
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   qpat_x_assum `locals_kept _ _ _ _ _`
     (mp_tac o CONJUNCT1 o REWRITE_RULE [locals_kept_def]) >>
-  disch_then irule >> qexistsl_tac [`b`, `n`, `sz`] >> simp[]
+  disch_then irule >> qexistsl_tac [`b`, `n`, `sz`] >> simp[] >>
+  rpt strip_tac >> drule dynarray_len_untupled_imp_at >> disch_tac >>
+  qpat_x_assum `!k. dynarray_len_at _ _ k ==> _` drule >> decide_tac
 QED
