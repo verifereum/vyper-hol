@@ -18,6 +18,7 @@
 Theory loweringMemCorrect
 Ancestors
   vyperLoweringCorrect vyperCompiler loweringPtrCorrect memSafeRun
+  runtimePeakMemoryBound[ignore_grammar]
   allocaFrontierBound ptrDiscipline lowerDloadDefs contextCodegenRel venomWf
   venomInst unitMemInv unitTransformDefs rawReachableFmp ctxLookupAgree
   loweringShapeSource loweringShapeProps loweringUnitEntryShape moduleLowering
@@ -214,7 +215,6 @@ Proof
   metis_tac[lower_vyper_runtime_unit_dynamic_source_unit_shape]
 QED
 
-(* GATE_ADMISSION: held, blueprint DALLOCA no-wrap and FMP floor *)
 Theorem lower_vyper_runtime_unit_blueprint_raw_fmp:
   !tops rpolicy unit layouts addr art.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -241,9 +241,9 @@ Theorem lower_vyper_runtime_unit_blueprint_raw_fmp:
       outcomes_accounts_typed (SOME vi.vs_outcomes) /\
       LENGTH vi.vs_call_ctx.cc_calldata < 2 ** 64 ==>
       !fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
-        dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp)
+        dalloca_fmp_headroom inst s
 Proof
-  cheat
+  metis_tac[lower_vyper_runtime_unit_raw_headroom]
 QED
 
 Theorem runtime_raw_shape_cases[local]:

@@ -163,7 +163,6 @@ Proof
   impl_tac >- asm_rewrite_tac[] >> simp[]
 QED
 
-(* GATE_ADMISSION: held, deployment DALLOCA peak memory for create blueprint *)
 Theorem lower_vyper_deploy_unit_raw_fmp_create_blueprint:
   !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan
    am tx es vs vi (fmp:bytes32).
@@ -185,14 +184,19 @@ Theorem lower_vyper_deploy_unit_raw_fmp_create_blueprint:
     outcomes_accounts_typed (SOME vi.vs_outcomes) /\
     LENGTH vi.vs_call_ctx.cc_calldata < 2 ** 64 ==>
     !fn inst s. raw_reachable vi dunit.cu_context fn inst s ==>
-      s.vs_initial_fmp = fmp /\
-      w2n s.vs_initial_fmp <= w2n s.vs_fmp /\ dalloca_no_wrap inst s /\
-      fmp_frontier_rel (w2n vs.vs_initial_fmp) (w2n fmp)
-        (w2n vs.vs_initial_fmp + (w2n s.vs_fmp - w2n fmp)) s.vs_fmp /\
-      (inst.inst_opcode = DALLOCA ==>
-        w2n s.vs_fmp <= w2n fmp + 2 ** 64 * 2 ** 64)
+      dalloca_fmp_headroom inst s
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
+    fs[deploy_phases_def] >>
+  `~vs.vs_halted /\ vs.vs_accounts = accounts_after_transfer tx am.accounts` by
+    fs[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
+       entry_venom_state_def, init_venom_state_def, deploy_state_rel_def] >>
+  `~vi.vs_halted /\ vi.vs_accounts = vs.vs_accounts /\
+    vi.vs_fmp = fmp /\ vi.vs_initial_fmp = fmp` by
+    fs[raw_variant_def, gas_variant_def,
+       venomStateTheory.venom_state_component_equality] >>
+  metis_tac[lower_vyper_deploy_unit_raw_headroom]
 QED
 
 (* A constructor or packaged internal uses one of the three dynamic forms. *)
