@@ -139,7 +139,7 @@ Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   mp_tac (Q.INST [`prefix` |-> `[]`, `tail` |-> `cut.vs_outcomes`, `u` |-> `unit`]
     grouped_reject_cut_fragment_no_dalloca) >>
-  simp[dalloca_fmp_headroom_def] >> metis_tac[]
+  simp[unitTransformDefsTheory.dalloca_fmp_headroom_def] >> metis_tac[]
 QED
 
 Triviality row22_reject_cut_fmp:
