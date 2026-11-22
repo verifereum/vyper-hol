@@ -7,7 +7,7 @@ Ancestors context[qualified,ignore_grammar]
   vyperInterpreter vyperState vyperAST vyperTyping bodyFullIntCallReturnTyping
   bodyFullIntCallReturnValue bodyFullHashKeccakFixed stateRelProj
   valueEncodingProofs valueCopyBytes bodyFullIntCallReturnMetadata
-  exprLoweringProps exprSimDefs
+  exprLoweringProps exprSimDefs bodyFullIntCallNativeReturn
 
 Libs
   monadsyntax
@@ -781,6 +781,149 @@ Resume intcall_return_register_post[ghost_kept]:
 QED
 Finalise intcall_return_register_post
 
+(* The completed child witness is an input, not chosen again from a full
+   outcome. The first restored cursor is after INVOKE and before any stores. *)
+Theorem intcall_return_selected_edge:
+  !DF lo d ctx explicit PG func tops cenv cx tenv name es es0 st0 sa sm vv s0
+   G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn rc rbs pvs rb callee entered
+   bb inst lbl arg_ops argv v ee marks Gc tc ir cs.
+    (!h. valid_horizon cx st0 h es1.storage_trace ==>
+       intcall_entry_full (DF,lo,d) h tops ctx func cenv cx tenv name es
+         sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn) /\
+    (!h. valid_horizon cx st0 h ee.storage_trace ==>
+         valid_horizon cx st0 h es1.storage_trace) /\
+    (!h. dead_lo_ok h (DF h) lo cenv cx) /\
+    body_inv tops ctx cenv cx /\ fn_has_code sa sm func /\ local_ptrs_reserved cenv sa /\
+    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
+    gas_invoke_entry (ctx,func) t callee entered /\
+    lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb t.vs_inst_idx = SOME inst /\
+    decode_invoke inst = SOME (lbl,arg_ops) /\ eval_operands arg_ops t = SOME argv /\
+    (!tail. intcall_callee_src cx name mut nr ss
+       (es1 with gas_obs := gas_explicit marks t.vs_gas_readings ++ tail) =
+         (INL v,ee with gas_obs := tail)) /\
+    storage_trace_domain cx st0 ee.storage_trace /\
+    (!h. valid_horizon cx st0 h ee.storage_trace ==>
+      gas_origin_ptr_path (DF h,lo,explicit,ctx,callee,MAP (op_prov G) arg_ops)
+        (entered,FEMPTY,tn with t_var := FEMPTY) marks (IntRet ir cs,Gc,tc) /\
+      intcall_callee_exit_full (DF,lo) h func cenv cx mut nr rtv rc
+        rb sa.cs_next_id sm.cs_next_id t tn
+        (INL v) (ee with gas_obs := []) (Gc,tc) (IntRet ir cs)) ==>
+    inst.inst_opcode = INVOKE /\
+    LENGTH inst.inst_outputs = rc /\
+    LENGTH ir.iret_values = rc /\ ir.iret_adopt_fmp = NONE /\
+    (!D. ptr_inst_ok D lo 0 ctx func G tn inst t) /\
+    (!setup fuel p depth i s.
+      enters_block callee setup entered /\ run_blocks fuel ctx callee setup = IntRet i s ==>
+      i = ir /\ s = cs /\
+      marks = entryCreateBodyCut$create_cut_marks explicit
+        (dftGasFromListTraceDefs$trace_blocks p depth fuel ctx callee setup)) /\
+    ?out returned.
+      unlock_if_nr cx nr (is_view_mut mut) (ee with gas_obs := []) =
+         (INL (),out) /\
+      safe_cast rtv v = SOME v /\
+      (!tail. unlock_if_nr cx nr (is_view_mut mut) (ee with gas_obs := tail) =
+         (INL (),out with gas_obs := tail)) /\
+      (!tail. intcall_rest cx name mut nr ss prev rtv
+         (es1 with gas_obs := gas_explicit marks t.vs_gas_readings ++ tail) =
+           (INL (Value v),(out with scopes := prev) with gas_obs := tail)) /\
+      bind_outputs inst.inst_outputs ir.iret_values
+        (adopt_return_fmp ir (merge_callee_state t cs)) = SOME returned /\
+      (!h. valid_horizon cx st0 h ee.storage_trace ==>
+        gas_origin_ptr_edge (DF h,lo,explicit,ctx,func,PG) (t,G,tn) marks
+          (OK (returned with vs_inst_idx := SUC t.vs_inst_idx),
+           DRESTRICT G (COMPL (set inst.inst_outputs)),
+           tc with t_var := DRESTRICT tn.t_var (COMPL (set inst.inst_outputs))) /\
+        ghost_kept_at lo cenv es0 sa G0 tn0 s0
+          (DRESTRICT G (COMPL (set inst.inst_outputs)))
+          (tc with t_var := DRESTRICT tn.t_var (COMPL (set inst.inst_outputs))) /\
+        ghost_inv_at (DF h) lo d cenv cx (es1 with scopes := prev)
+          (DRESTRICT G (COMPL (set inst.inst_outputs)))
+          (tc with t_var := DRESTRICT tn.t_var (COMPL (set inst.inst_outputs))) returned)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!h. valid_horizon cx st0 h ee.storage_trace ==> _ /\ _`
+    (drule_then strip_assume_tac) >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) es1.storage_trace` by
+    metis_tac[] >>
+  qpat_assum `!h. valid_horizon cx st0 h es1.storage_trace ==> _`
+    (drule_then assume_tac) >>
+  `?out. unlock_if_nr cx nr (is_view_mut mut) (ee with gas_obs := []) =
+           (INL (),out)` by
+    (qhdtm_assum `intcall_callee_exit_full` mp_tac >>
+     simp_tac (srw_ss()) [intcall_callee_exit_full_def] >>
+     strip_tac >> metis_tac[]) >>
+  `gas_admissible (intcall_rest cx name mut nr ss prev rtv) expr_vv_res_ok es1` by
+    (qhdtm_assum `intcall_entry_full` mp_tac >>
+     pure_rewrite_tac[intcall_entry_full_def] >> metis_tac[]) >>
+  qpat_assum `!tail. intcall_callee_src _ _ _ _ _ _ = _`
+    (qspec_then `[]` assume_tac) >>
+  drule_all intcall_return_source >>
+  disch_then (qspecl_then [`prev`,`rtv`] assume_tac) >>
+  `safe_cast rtv v = SOME v` by
+    (Cases_on `safe_cast rtv v`
+     >- (gvs[] >> drule_all gasContextTheory.gas_admissible_result >>
+         simp[exprSimDefsTheory.expr_vv_res_ok_def]) >>
+     metis_tac[loweringHaltTheory.safe_cast_some_eq]) >>
+  `!tail. unlock_if_nr cx nr (is_view_mut mut) (ee with gas_obs := tail) =
+       (INL (),out with gas_obs := tail)` by
+    (Cases_on `nr /\ ~is_view_mut mut` >>
+     Cases_on `cx.nonreentrant_slot` >>
+     gvs[unlock_if_nr_def, release_nonreentrant_lock_def,
+         record_storage_event_def, get_transient_storage_def,
+         update_transient_def, ignore_bind_def, bind_def, return_def]) >>
+  `entered.vs_gas_readings = t.vs_gas_readings` by
+    metis_tac[fragGasFocusTheory.gas_invoke_entry_readings] >>
+  `!tail. intcall_rest cx name mut nr ss prev rtv
+      (es1 with gas_obs := gas_explicit marks t.vs_gas_readings ++ tail) =
+       (INL (Value v),(out with scopes := prev) with gas_obs := tail)` by
+    (gen_tac >> qpat_assum `!tail. intcall_callee_src _ _ _ _ _ _ = _`
+       (qspec_then `tail` mp_tac) >>
+     qpat_assum `!tail. unlock_if_nr _ _ _ _ = _`
+       (qspec_then `tail` mp_tac) >>
+     disch_tac >> disch_then (mp_then Any mp_tac intcall_return_source) >>
+     simp[] >> disch_then (qspecl_then [`prev`,`rtv`] mp_tac) >> simp[]) >>
+  `inst.inst_opcode = INVOKE` by
+    (fs[fragGasFocusTheory.gas_invoke_entry_def] >> metis_tac[]) >>
+  `ptr_inst_ok (DF (storage_trace_horizon ee.storage_trace)) lo 0 ctx func G tn inst t` by
+    (drule_all intcall_entry_invoke_ptr >> simp[]) >>
+  `!D. ptr_inst_ok D lo 0 ctx func G tn inst t` by
+    (qpat_x_assum `ptr_inst_ok _ lo 0 ctx func G tn inst t` mp_tac >>
+     asm_simp_tac bool_ss [ptrSafeRunTheory.ptr_inst_ok_def]) >>
+  rename1 `cenv.ce_func_info _ = (nret,rbs,pvs)` >>
+  drule_all intcall_entry_invoke_continuation >> strip_tac >>
+  `LENGTH ir.iret_values = nret /\ ir.iret_adopt_fmp = NONE` by
+    (qhdtm_assum `intcall_callee_exit_full` mp_tac >>
+     pure_rewrite_tac[intcall_callee_exit_full_def,intcall_callee_exit_def] >>
+     simp_tac (srw_ss()) [] >> metis_tac[]) >>
+  `LENGTH inst.inst_outputs = LENGTH ir.iret_values` by simp[] >>
+  `ptr_inst_ok (DF (storage_trace_horizon ee.storage_trace)) lo 0 ctx func G tn inst t` by simp[] >>
+  drule_all gas_origin_ptr_invoke_intret >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  rename1 `bind_outputs _ _ _ = SOME returned` >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (rpt strip_tac >> drule_all intcall_completed_child_native >> simp[]) >>
+  qexistsl_tac [`out`,`returned`] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  gen_tac >> strip_tac >>
+  qpat_assum `!h. valid_horizon cx st0 h ee.storage_trace ==> _ /\ _`
+    (drule_then strip_assume_tac) >>
+  `valid_horizon cx st0 h es1.storage_trace` by metis_tac[] >>
+  qpat_assum `!h. valid_horizon cx st0 h es1.storage_trace ==> _`
+    (drule_then assume_tac) >>
+  `ptr_inst_ok (DF h) lo 0 ctx func G tn inst t` by simp[] >>
+  conj_tac
+  >- (drule_all gas_origin_ptr_invoke_intret >>
+      disch_then (qspec_then `PG` strip_assume_tac) >> gvs[]) >>
+  `dead_lo_ok h (DF h) lo cenv cx` by simp[] >>
+  conj_tac >- (drule_all intcall_return_ghost_kept >> simp[]) >>
+  drule_all intcall_return_ghost_inv >> simp[]
+QED
+
 Theorem intcall_return_normal_owned:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 st0 sa sm shadow_sa shadow_sm vv s0 G0 tn0 mut nr args ret ss
@@ -957,105 +1100,31 @@ Resume intcall_return_normal_owned[abort_domain]:
   metis_tac[]
 QED
 Resume intcall_return_normal_owned[intret]:
-  `?out. unlock_if_nr cx nr (is_view_mut mut) (ee with gas_obs := []) =
-           (INL (),out)` by
-    (qhdtm_assum `intcall_callee_exit_full` mp_tac >>
-     simp_tac (srw_ss()) [intcall_callee_exit_full_def] >>
-     strip_tac >> metis_tac[]) >>
-  `gas_admissible (intcall_rest cx name mut nr ss prev rtv) expr_vv_res_ok es1` by
-    (asm "entry" (qspec_then `H` mp_tac) >>
-     pure_rewrite_tac[intcall_entry_full_def] >>
-     simp[] >> metis_tac[]) >>
-  qpat_assum `!tail. intcall_callee_src _ _ _ _ _ _ = _`
-    (qspec_then `[]` assume_tac) >>
-  drule_all intcall_return_source >>
-  disch_then (qspecl_then [`prev`,`rtv`] assume_tac) >>
-  `safe_cast rtv v = SOME v` by
-    (Cases_on `safe_cast rtv v`
-     >- (gvs[] >>
-         drule_all gasContextTheory.gas_admissible_result >>
-         simp[exprSimDefsTheory.expr_vv_res_ok_def]) >>
-     metis_tac[loweringHaltTheory.safe_cast_some_eq]) >>
-  `!tail. unlock_if_nr cx nr (is_view_mut mut) (ee with gas_obs := tail) =
-       (INL (),out with gas_obs := tail)` by
-    (Cases_on `nr /\ ~is_view_mut mut` >>
-     Cases_on `cx.nonreentrant_slot` >>
-     gvs[unlock_if_nr_def, release_nonreentrant_lock_def,
-         record_storage_event_def, get_transient_storage_def,
-         update_transient_def, ignore_bind_def, bind_def, return_def]) >>
-  `!tail. intcall_rest cx name mut nr ss prev rtv
-      (es1 with gas_obs := gas_explicit marks t.vs_gas_readings ++ tail) =
-       (INL (Value v),(out with scopes := prev) with gas_obs := tail)` by
-    (gen_tac >>
-     qpat_assum `!tail. intcall_callee_src _ _ _ _ _ _ = _`
-       (qspec_then `tail` mp_tac) >>
-     qpat_assum `!tail. unlock_if_nr _ _ _ _ = _`
-       (qspec_then `tail` mp_tac) >>
-     disch_tac >> disch_then (mp_then Any mp_tac intcall_return_source) >>
-     simp[] >> disch_then (qspecl_then [`prev`,`rtv`] mp_tac) >> simp[]) >>
-  `inst.inst_opcode = INVOKE` by
-    (fs[fragGasFocusTheory.gas_invoke_entry_def] >> metis_tac[]) >>
+  rename1 `cenv.ce_func_info _ = (nret,rbs,pvs)` >>
+  `!h. valid_horizon cx st0 h ee.storage_trace ==>
+      gas_origin_ptr_path
+        (DF h,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
+        (entered,FEMPTY,tn with t_var := FEMPTY) marks (IntRet ir cs,Gc,tc) /\
+      intcall_callee_exit_full (DF,lo) h func cenv cx mut nr rtv nret
+        (if nret = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
+        sa.cs_next_id sm.cs_next_id t tn (INL v) (ee with gas_obs := []) (Gc,tc)
+        (IntRet ir cs)` by
+    (rpt strip_tac >>
+     qpat_assum `!h. valid_horizon cx st0 h ee.storage_trace ==> _ /\ _`
+       (drule_then strip_assume_tac) >> gvs[]) >>
+  drule_all intcall_return_selected_edge >>
+  disch_then (qspec_then `PG` (strip_assume_tac o
+    SIMP_RULE bool_ss [FORALL_AND_THM, IMP_CONJ_THM])) >>
+  rpt (qpat_x_assum `!setup fuel i s. enters_block _ _ _ /\ _ ==> _` kall_tac ORELSE
+       qpat_x_assum `!setup fuel p depth i s. enters_block _ _ _ /\ _ ==> _` kall_tac) >>
+  rename1 `bind_outputs _ _ _ = SOME returned` >>
   asm "entry" (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
   (impl_tac >- metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
   strip_tac >>
-  `ptr_inst_ok (DF (storage_trace_horizon ee.storage_trace)) lo 0 ctx func G tn inst t` by
-    (drule_all intcall_entry_invoke_ptr >> simp[]) >>
-  rename1 `cenv.ce_func_info _ = (nret,rbs,pvs)` >>
-  `LENGTH inst.inst_outputs = nret` by
-    (drule_all intcall_entry_invoke_arity >> simp[]) >>
-  `!D. ptr_inst_ok D lo 0 ctx func G tn inst t` by
-    (qpat_x_assum `ptr_inst_ok _ lo 0 ctx func G tn inst t` mp_tac >>
-     asm_simp_tac bool_ss [ptrSafeRunTheory.ptr_inst_ok_def]) >>
-  `LENGTH ir.iret_values = nret /\ ir.iret_adopt_fmp = NONE` by
-    (qhdtm_assum `intcall_callee_exit_full` mp_tac >>
-     pure_rewrite_tac[intcall_callee_exit_full_def, intcall_callee_exit_def] >>
-     simp_tac (srw_ss()) [] >> metis_tac[]) >>
-  `LENGTH inst.inst_outputs = LENGTH ir.iret_values` by simp[] >>
-  drule_all gas_origin_ptr_invoke_intret >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
-  rename1 `bind_outputs _ _ _ = SOME returned` >>
-  `!H'. valid_horizon cx st0 H' ee.storage_trace ==>
-     gas_origin_ptr_edge
-       (DF H',lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-       (t,G,tn) marks
-       (OK (returned with vs_inst_idx := SUC t.vs_inst_idx),
-        DRESTRICT G (COMPL (set inst.inst_outputs)),
-        tc with t_var := DRESTRICT tn.t_var (COMPL (set inst.inst_outputs)))` by
-    (gen_tac >> strip_tac >>
-     qpat_assum `!H'. valid_horizon cx st0 H' ee.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
-       (qspec_then `H'` mp_tac) >>
-     (impl_tac >- simp[]) >> strip_tac >>
-     `ptr_inst_ok (DF H') lo 0 ctx func G tn inst t` by simp[] >>
-     drule_all gas_origin_ptr_invoke_intret >>
-     disch_then (qspec_then `PG` strip_assume_tac) >> gvs[]) >>
   drule_all intcall_entry_invoke_continuation >> strip_tac >>
   qhdtm_assum `intcall_entry_full` (fn entry =>
     let val th = PURE_REWRITE_RULE [intcall_entry_full_def] entry
     in map_every (assume_tac o (fn i => cj i th)) [17, 18, 20, 22] end) >>
-  `!H'. valid_horizon cx st0 H' ee.storage_trace ==>
-    ghost_kept_at lo cenv es0 sa G0 tn0 s0
-      (DRESTRICT G (COMPL (set inst.inst_outputs)))
-      (tc with t_var := DRESTRICT tn.t_var (COMPL (set inst.inst_outputs)))` by
-    (gen_tac >> strip_tac >>
-     asm "entry" (qspec_then `H'` mp_tac) >>
-     (impl_tac >- metis_tac[]) >> strip_tac >>
-     qpat_assum `!H'. valid_horizon cx st0 H' ee.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
-       (qspec_then `H'` mp_tac) >>
-     (impl_tac >- simp[]) >> strip_tac >>
-     `dead_lo_ok H' (DF H') lo cenv cx` by simp[] >>
-     drule_all intcall_return_ghost_kept >> simp[]) >>
-  `!H'. valid_horizon cx st0 H' ee.storage_trace ==>
-    ghost_inv_at (DF H') lo d cenv cx (es1 with scopes := prev)
-      (DRESTRICT G (COMPL (set inst.inst_outputs)))
-      (tc with t_var := DRESTRICT tn.t_var (COMPL (set inst.inst_outputs))) returned` by
-    (gen_tac >> strip_tac >>
-     asm "entry" (qspec_then `H'` mp_tac) >>
-     (impl_tac >- metis_tac[]) >> strip_tac >>
-     qpat_assum `!H'. valid_horizon cx st0 H' ee.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
-       (qspec_then `H'` mp_tac) >>
-     (impl_tac >- simp[]) >> strip_tac >>
-     `dead_lo_ok H' (DF H') lo cenv cx` by simp[] >>
-     drule_all intcall_return_ghost_inv >> simp[]) >>
   Cases_on `nret = 0` >- suspend "intret_void" >>
   `0 < nret` by simp[] >>
   qpat_x_assum `0 < nret ==> _` (fn post =>
@@ -1130,9 +1199,7 @@ Resume intcall_return_normal_owned[intret]:
   `ctx_has_dalloca ctx ==>
      allocas_below_fmp (returned with vs_inst_idx := SUC t.vs_inst_idx)` by
     (strip_tac >>
-     `allocas_below_fmp t` by
-       (qpat_assum `ptr_inst_ok _ _ _ _ _ _ _ _ _` mp_tac >>
-        simp[ptrSafeRunTheory.ptr_inst_ok_def]) >>
+     `allocas_below_fmp t` by metis_tac[] >>
      drule_all intCallStepTheory.bind_outputs_lookup >> strip_tac >>
      qpat_x_assum `returned = _` SUBST1_TAC >>
      qpat_x_assum `allocas_below_fmp t` mp_tac >>
