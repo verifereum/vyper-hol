@@ -22,8 +22,12 @@ val linked_mods_normalized =
   CONV_RULE (RAND_CONV (reduce_fold THENC EVAL)) linked_witness_mods_def
 
 val eval_linked_fixture = REWRITE_CONV [linked_mods_normalized] THENC EVAL
-val linked_witness_headers = EQT_ELIM (eval_linked_fixture
-  ``EVERY (supported_module_headers o SND) linked_witness_mods``)
+Triviality linked_witness_headers:
+  EVERY (supported_module_headers o SND) linked_witness_mods
+Proof
+  simp[linked_mods_normalized, supported_module_headers_def] >>
+  EVAL_TAC
+QED
 val linked_witness_main_support = EQT_ELIM (eval_linked_fixture
   ``supported_program (main_module linked_witness_mods) /\
     supported_program_deploy (main_module linked_witness_mods)``)
@@ -46,7 +50,7 @@ Triviality linked_witness_lowering:
     else lower_vyper_runtime_unit_mods linked_witness_mods
       linked_witness_exports p = SOME unit
 Proof
-  mp_tac linked_witness_deploy_premises >>
+  mp_tac (cj 2 linked_witness_deploy_premises) >>
   simp[compile_vyper_mods_def, compile_vyper_with_mods_def, AllCaseEqs()] >>
   rpt strip_tac >> Cases_on `deploy` >> metis_tac[]
 QED
