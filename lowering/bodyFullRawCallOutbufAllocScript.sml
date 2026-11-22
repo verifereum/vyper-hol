@@ -159,8 +159,13 @@ Resume raw_call_outbuf_alloc_joint[path]:
   `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
               ~is_terminator i.inst_opcode) [ins]` by
     simp[Abbr `ins`, mk_inst_def, is_terminator_def] >>
+  `!pre i post v. [ins] = pre ++ i::post /\ run_inst_seq pre s = OK v ==>
+       unitTransformDefs$dalloca_no_wrap i v` by
+    (Cases_on `pre` >> simp[] >> rpt strip_tac >> gvs[Abbr `ins`, mk_inst_def,
+      memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   qspecl_then [`[ins]`, `sa`, `sb`, `s`, `u`, `G`, `tn`, `G1`, `tn1`]
-    mp_tac emitted_origin_ptr_path >> simp[]
+    mp_tac emitted_origin_ptr_path >> simp[] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> asm_rewrite_tac[]
 QED
 
 Resume raw_call_outbuf_alloc_joint[record]:
