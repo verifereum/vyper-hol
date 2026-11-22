@@ -319,7 +319,7 @@ Proof
     fs[type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2] >>
   qspecl_then [`cenv`, `cx`, `env`, `e`, `es`, `calls`]
     irule stmt_expr_body_pre >>
-  simp[] >> metis_tac[supported_pure_expr_effect_free, no_effect_call_operands]
+  simp[] >> qexists_tac `calls` >> first_assum ACCEPT_TAC
 QED
 
 Theorem body_log_snapshot_expr_pre_mods:
