@@ -2,7 +2,8 @@
 Theory bodyLinkedCallResolution
 Ancestors
   bodyCallSupport bodyInvSplit bodyMainModuleProps bodyInvCodeProps
-  exprSimHypsDefs supportedDecls supportedProgram vyperTypeContract
+  exprSimHypsDefs supportedDecls supportedProgram supportedExprTraverse
+  vyperTypeContract whitelistCheckerDecls
   vyperTypeCallGraph vyperTypeInvariants alist finite_map list pair
 
 Theorem supported_body_calls_resolve:
@@ -77,4 +78,33 @@ Proof
     (fs[EVERY_MEM, FORALL_PROD, supported_linked_callee_def] >>
      metis_tac[optionTheory.SOME_11]) >>
   metis_tac[supported_body_calls_resolve]
+QED
+
+
+(* A linked body uses its selected module's support and the unit's
+   declaration for every call in the expression. *)
+Theorem linked_supported_expr_body_calls:
+  contract_inv mods exps ctx cenv cx /\
+  expr_sim_inv_mods mods cenv cx env es /\
+  (!ts. mods <> [(NONE,ts)]) /\
+  ALOOKUP mods src = SOME tops /\
+  MEM (FunctionDecl vis mut nr raw name args dflts ret ss) tops /\
+  context_function_live cx (src,name) /\
+  check_function_body_in_mode cx.in_deploy vis /\
+  supported_expr tops e /\ well_typed_expr env e /\
+  EVERY (\call. MEM call (function_int_calls dflts ss)) (int_calls_expr e) ==>
+  ~expr_has_evm_run e /\ EVERY (source_body_call_supported cx) (int_calls_expr e)
+Proof
+  strip_tac >> drule_then assume_tac supported_expr_no_evm_run >>
+  drule_then assume_tac (cj 1 well_typed_int_calls_fn_sigs) >>
+  simp[] >>
+  mp_tac (Q.INST
+    [`calls` |-> `int_calls_expr e`, `mods` |-> `mods`,
+     `exps` |-> `exps`, `ctx` |-> `ctx`, `cenv` |-> `cenv`,
+     `env` |-> `env`, `es` |-> `es`, `src` |-> `src`,
+     `tops` |-> `tops`, `vis` |-> `vis`, `mut` |-> `mut`,
+     `nr` |-> `nr`, `raw` |-> `raw`, `name` |-> `name`,
+     `args` |-> `args`, `dflts` |-> `dflts`, `ret` |-> `ret`,
+     `ss` |-> `ss`] linked_body_calls_resolve) >>
+  simp[EVERY_MEM]
 QED
