@@ -233,7 +233,7 @@ Proof
   `fn_has_code sa sm func` by
     metis_tac[fn_has_code_mid, compileEnvTheory.cs_extends_refl] >>
   `!shadow_xs shadow_sm.
-    lower_word_args cenv expr_type (MAP gas_shadow_expr (e1::elems)) shadow_sa =
+    lower_word_args (gas_shadow_env T cenv) expr_type (MAP gas_shadow_expr (e1::elems)) shadow_sa =
       (shadow_xs,shadow_sm) ==> fn_has_code shadow_sa shadow_sm shadow_func` by
     (rpt strip_tac >>
      qpat_assum `lower_value _ _ _ (gas_shadow_expr _) _ = _` mp_tac >>
@@ -250,7 +250,7 @@ Proof
      >- (qexistsl_tac [`shadow_sb`, `shadow_sa`] >>
          simp[compileEnvTheory.cs_extends_refl]) >>
      `!args ss oo ff.
-        lower_word_args cenv expr_type args ss = (oo,ff) ==> cs_extends ss ff` by
+        lower_word_args (gas_shadow_env T cenv) expr_type args ss = (oo,ff) ==> cs_extends ss ff` by
        (Induct >> simp[lower_word_args_nil, compileEnvTheory.cs_extends_refl] >>
         rpt gen_tac >> simp[lower_word_args_cons] >> rpt strip_tac >>
         metis_tac[cj 2 compile_expr_grows, compileEnvTheory.cs_extends_trans]) >>
@@ -355,10 +355,10 @@ Proof
   drule_all bop_bytestring_selected_compile_cuts >> strip_tac >>
   drule_all bop_bytestring_selected_code_intervals >> strip_tac >>
   `(!m cb. bytestring_literal_hash (gas_shadow_expr e1) = NONE /\
-      lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa = (m,cb) ==>
+      lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa = (m,cb) ==>
       fn_has_code shadow_sa cb shadow_func) /\
    (!m cb. bytestring_literal_hash (gas_shadow_expr e2) = NONE /\
-      lower_value compile_expr cenv (expr_type e2) (gas_shadow_expr e2) shadow_sh1 = (m,cb) ==>
+      lower_value compile_expr (gas_shadow_env T cenv) (expr_type e2) (gas_shadow_expr e2) shadow_sh1 = (m,cb) ==>
       fn_has_code shadow_sh1 cb shadow_func)` by
     (qpat_x_assum `lower_value _ _ _ (Builtin _ _ [e1;e2]) _ = _` kall_tac >>
      qpat_x_assum `lower_value _ _ _ (gas_shadow_expr (Builtin _ _ _)) _ = _`
