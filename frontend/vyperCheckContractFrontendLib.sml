@@ -143,7 +143,7 @@ fun prepare_translated_input
      ("import map", import_map), ("storage layout", storage_layout)]
   val sources = normalize_sources (eval_closed "translated sources" sources)
   val modules = eval_closed "storage-slot annotation"
-    (apply "annotate_sources_slots" [storage_layout, sources])
+    (apply "annotate_sources_slots_mods" [storage_layout, import_map, sources])
   val layout_pair = eval_closed "storage layout extraction"
     (apply "extract_storage_layout" [import_map, storage_layout])
   val layout_entry = pairSyntax.mk_pair (address, layout_pair)
