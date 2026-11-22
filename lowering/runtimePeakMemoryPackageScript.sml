@@ -8,12 +8,16 @@ Ancestors
 
 
 Theorem dalloca_windows_packaged_stmts:
-  compile_env_blueprint_free ce /\ compile_env_builtin_arity ce /\
-  ~supported_stmts_expr_exists blueprint_create_root fbody /\
+  (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
+  (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) /\
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+    compile_env_blueprint_free ce) /\ compile_env_builtin_arity ce /\
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+    ~supported_stmts_expr_exists blueprint_create_root fbody) /\
   ~supported_stmts_expr_exists short_builtin_args fbody /\
   env.ce_func_defaults = ce.ce_func_defaults ==>
   preserves_dalloca_windows
-    (\chunk k. raw_call_dalloca_chunk chunk k \/ create_copy_dalloca_chunk chunk k)
+    window
     (compile_stmts env lc rt fbody)
 Proof
   rpt strip_tac >> irule dalloca_windows_compile_stmts >>
@@ -68,9 +72,11 @@ Proof
 QED
 
 Theorem dalloca_windows_packaged_externals[local]:
-  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\ runtime_blueprint_free source_tops ==>
-  EVERY (runtime_external_package_windows
-          (\chunk k. raw_call_dalloca_chunk chunk k \/ create_copy_dalloca_chunk chunk k))
+  (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
+  (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) /\
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\ (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+    runtime_blueprint_free source_tops) ==>
+  EVERY (runtime_external_package_windows window)
     (MAP (set_external_package_target target o package_external_fn source_tops tr keys)
       (FST (classify_functions source_tops)))
 Proof
@@ -91,9 +97,11 @@ Proof
 QED
 
 Theorem dalloca_windows_packaged_groups[local]:
-  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\ runtime_blueprint_free source_tops ==>
-  EVERY (runtime_external_group_windows
-          (\chunk k. raw_call_dalloca_chunk chunk k \/ create_copy_dalloca_chunk chunk k))
+  (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
+  (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) /\
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\ (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+    runtime_blueprint_free source_tops) ==>
+  EVERY (runtime_external_group_windows window)
     (MAP (package_external_group source_tops target tr keys) (FST (classify_functions source_tops)))
 Proof
   strip_tac >> simp[EVERY_MAP, EVERY_MEM] >>
@@ -120,14 +128,17 @@ Proof
 QED
 
 Theorem dalloca_windows_packaged_internals:
+  (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
+  (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) /\
   check_contract F layouts addr [(NONE, source_tops)] = SOME art /\
-  (!mut nr rr name args ds ret ss.
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+    !mut nr rr name args ds ret ss.
     MEM (FunctionDecl Internal mut nr rr name args ds ret ss) source_tops ==>
     ~supported_stmts_expr_exists blueprint_create_root ss /\
     EVERY (\d. ~supported_expr_exists blueprint_create_root d) ds) ==>
   EVERY (\(lbl,ce,ps,buf,nr,key,ut,vw,ctor,im,fbody,rt).
     preserves_dalloca_windows
-      (\chunk k. raw_call_dalloca_chunk chunk k \/ create_copy_dalloca_chunk chunk k)
+      window
       (compile_internal_function ce ps buf nr key ut vw ctor im fbody rt))
     (MAP (set_internal_package_target target o package_internal_fn source_tops tr keys ctor_mode ilen)
       (order_internals order (FST (SND (classify_functions source_tops)))))
@@ -147,13 +158,16 @@ Proof
 QED
 
 Theorem dalloca_windows_packaged_fallback[local]:
-  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\ runtime_blueprint_free source_tops ==>
+  (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
+  (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) /\
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\ (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+    runtime_blueprint_free source_tops) ==>
   (case set_fallback_package_target target
      (package_fallback_fn source_tops tr keys (FST (SND (SND (classify_functions source_tops))))) of
      NONE => T
    | SOME (ce,pay,nr,key,ut,vw,fbody,rt) =>
      preserves_dalloca_windows
-       (\chunk k. raw_call_dalloca_chunk chunk k \/ create_copy_dalloca_chunk chunk k)
+       window
        (compile_fallback_body ce pay nr key ut vw fbody rt))
 Proof
   strip_tac >>
@@ -208,12 +222,14 @@ Proof
   simp[FUN_EQ_THM, pairTheory.FORALL_PROD, runtime_external_package_windows_def]
 QED
 
-Theorem lower_vyper_runtime_unit_dalloca_windows:
+Theorem lower_vyper_runtime_unit_dalloca_windows_for:
+  (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
+  (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) /\
   lower_vyper_runtime_unit source_tops policy = SOME unit /\
-  source_typing_ok source_tops am tx /\ runtime_blueprint_free source_tops ==>
+  source_typing_ok source_tops am tx /\ (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+    runtime_blueprint_free source_tops) ==>
   !fn bb. MEM fn unit.cu_context.ctx_functions /\ MEM bb fn.fn_blocks ==>
-    dalloca_windows (\chunk k. raw_call_dalloca_chunk chunk k \/
-                                create_copy_dalloca_chunk chunk k) bb.bb_instructions
+    dalloca_windows window bb.bb_instructions
 Proof
   strip_tac >>
   fs[source_typing_ok_def] >>
@@ -221,9 +237,7 @@ Proof
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
   simp[lower_vyper_runtime_unit_def] >> pairarg_tac >> gvs[AllCaseEqs()] >>
   rpt strip_tac >>
-  FIRST (map (drule o REWRITE_RULE [GSYM AND_IMP_INTRO] o
-    Q.INST [`window` |-> `\chunk k. raw_call_dalloca_chunk chunk k \/
-                                  create_copy_dalloca_chunk chunk k`])
+  FIRST (map (drule o REWRITE_RULE [GSYM AND_IMP_INTRO])
     [run_grouped_lowering_dalloca_windows, run_lowering_dalloca_windows]) >>
   disch_then (qspecl_then [`fn`, `bb`] mp_tac) >>
   (impl_tac >-
@@ -253,5 +267,19 @@ Proof
        disch_then (assume_tac o REWRITE_RULE
          [eq, pairTheory.FST, runtime_external_package_windows_eq] o SPEC_ALL)) >>
      first_assum ACCEPT_TAC)) >>
+  simp[]
+QED
+
+Theorem lower_vyper_runtime_unit_dalloca_windows:
+  lower_vyper_runtime_unit source_tops policy = SOME unit /\
+  source_typing_ok source_tops am tx /\ runtime_blueprint_free source_tops ==>
+  !fn bb. MEM fn unit.cu_context.ctx_functions /\ MEM bb fn.fn_blocks ==>
+    dalloca_windows (\chunk k. raw_call_dalloca_chunk chunk k \/
+                                create_copy_dalloca_chunk chunk k) bb.bb_instructions
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`window` |-> `\chunk k. raw_call_dalloca_chunk chunk k \/
+                                  create_copy_dalloca_chunk chunk k`]
+    lower_vyper_runtime_unit_dalloca_windows_for) >>
   simp[]
 QED

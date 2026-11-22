@@ -89,9 +89,12 @@ Proof
 QED
 
 Theorem dalloca_windows_packaged_constructor[local]:
+  (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
+  (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) /\
   check_contract T layouts (addr:160 word) [(NONE, source_tops)] = SOME deploy_art /\
   check_contract F layouts addr [(NONE, source_tops)] = SOME art /\
-  (!vis mut nr rr name args ds ret ss.
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+    !vis mut nr rr name args ds ret ss.
     MEM (FunctionDecl vis mut nr rr name args ds ret ss) source_tops /\
     (vis = Deploy \/ vis = Internal) ==>
     ~supported_stmts_expr_exists blueprint_create_root ss /\
@@ -103,7 +106,7 @@ Theorem dalloca_windows_packaged_constructor[local]:
     (ce,params,pay,nonreentrant,nkey,use_trans,fbody,ret_ty) /\
   env.ce_func_defaults = ce.ce_func_defaults ==>
   preserves_dalloca_windows
-    (\chunk k. raw_call_dalloca_chunk chunk k \/ create_copy_dalloca_chunk chunk k)
+    window
     (compile_stmts env NoLoop NoneT fbody)
 Proof
   strip_tac >>
@@ -137,17 +140,19 @@ Proof
   simp[]
 QED
 
-Theorem lower_vyper_deploy_unit_dalloca_windows[local]:
+Theorem lower_vyper_deploy_unit_dalloca_windows_for:
+  (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
+  (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) /\
   lower_vyper_deploy_unit source_tops rpolicy runtime_bc = SOME dunit /\
   deploy_typing_ok source_tops am tx /\
-  (!vis mut nr rr name args ds ret ss.
+  (~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
+    !vis mut nr rr name args ds ret ss.
     MEM (FunctionDecl vis mut nr rr name args ds ret ss) source_tops /\
     (vis = Deploy \/ vis = Internal) ==>
     ~supported_stmts_expr_exists blueprint_create_root ss /\
     EVERY (\d. ~supported_expr_exists blueprint_create_root d) ds) ==>
   !fn bb. MEM fn dunit.cu_context.ctx_functions /\ MEM bb fn.fn_blocks ==>
-    dalloca_windows (\chunk k. raw_call_dalloca_chunk chunk k \/
-                               create_copy_dalloca_chunk chunk k) bb.bb_instructions
+    dalloca_windows window bb.bb_instructions
 Proof
   strip_tac >>
   fs[deploy_typing_ok_def] >>
@@ -160,10 +165,7 @@ Proof
   simp[lower_vyper_deploy_unit_def] >> pairarg_tac >> simp[] >>
   pairarg_tac >> simp[AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  drule (REWRITE_RULE [GSYM AND_IMP_INTRO]
-    (Q.INST [`window` |-> `\chunk k. raw_call_dalloca_chunk chunk k \/
-                                create_copy_dalloca_chunk chunk k`]
-      run_deploy_lowering_dalloca_windows)) >>
+  drule (REWRITE_RULE [GSYM AND_IMP_INTRO] run_deploy_lowering_dalloca_windows) >>
   disch_then (qspecl_then [`fn`, `bb`] mp_tac) >>
   impl_tac >-
     (simp[] >> irule dalloca_windows_generate_deploy >>
@@ -185,6 +187,25 @@ Proof
            dalloca_windows_packaged_internals) checked))) >>
      simp[] >> impl_tac >- first_assum ACCEPT_TAC >>
      simp[]) >>
+  simp[]
+QED
+
+Theorem lower_vyper_deploy_unit_dalloca_windows[local]:
+  lower_vyper_deploy_unit source_tops rpolicy runtime_bc = SOME dunit /\
+  deploy_typing_ok source_tops am tx /\
+  (!vis mut nr rr name args ds ret ss.
+    MEM (FunctionDecl vis mut nr rr name args ds ret ss) source_tops /\
+    (vis = Deploy \/ vis = Internal) ==>
+    ~supported_stmts_expr_exists blueprint_create_root ss /\
+    EVERY (\d. ~supported_expr_exists blueprint_create_root d) ds) ==>
+  !fn bb. MEM fn dunit.cu_context.ctx_functions /\ MEM bb fn.fn_blocks ==>
+    dalloca_windows (\chunk k. raw_call_dalloca_chunk chunk k \/
+                               create_copy_dalloca_chunk chunk k) bb.bb_instructions
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`window` |-> `\chunk k. raw_call_dalloca_chunk chunk k \/
+                                  create_copy_dalloca_chunk chunk k`]
+    lower_vyper_deploy_unit_dalloca_windows_for) >>
   simp[]
 QED
 
