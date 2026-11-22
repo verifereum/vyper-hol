@@ -58,3 +58,41 @@ Proof
     fs[]) >>
   simp[]
 QED
+
+Theorem raw_headroom_from_dalloca_windows:
+  lowering_context_ok ctx /\ account_code_lengths_ok vi.vs_accounts /\
+  ~vi.vs_halted /\ vi.vs_fmp = vi.vs_initial_fmp /\
+  w2n vi.vs_initial_fmp < 2 ** 254 /\
+  LENGTH vi.vs_outcomes < 2 ** 64 /\
+  outcomes_accounts_typed (SOME vi.vs_outcomes) /\
+  LENGTH vi.vs_call_ctx.cc_calldata < 2 ** 64 /\
+  (!fn i s. MEM fn ctx.ctx_functions /\ active_inst fn i s /\
+    i.inst_opcode = DALLOCA ==>
+      raw_call_dalloca_window fn i s \/ create_copy_dalloca_window fn i s \/
+      create_blueprint_dalloca_window fn i s) ==>
+  !fn i s. raw_reachable vi ctx fn i s ==> dalloca_fmp_headroom i s
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`vs0` |-> `vi`, `lo` |-> `w2n vi.vs_initial_fmp`]
+    raw_dalloca_headroom_from_history) >>
+  impl_tac >-
+    (asm_rewrite_tac[] >> rpt strip_tac >>
+     qpat_x_assum `root = _` SUBST_ALL_TAC >>
+     `MEM entry ctx.ctx_functions` by metis_tac[lookup_function_MEM] >>
+     `!fn. MEM fn ctx.ctx_functions ==> ALL_DISTINCT (fn_labels fn)` by
+       fs[lowering_context_ok_def, EVERY_MEM] >>
+     `entered.vs_outcomes = vi.vs_outcomes /\
+      entered.vs_accounts = vi.vs_accounts` by
+       (imp_res_tac enters_block_preserves_outcomes >>
+        imp_res_tac account_codes_enters_block >> fs[]) >>
+     `entered.vs_call_ctx = vi.vs_call_ctx` by
+       (drule ld_enters_block_call_ctx >> simp[]) >>
+     mp_tac (Q.INST [`root` |-> `<| bp_stack := []; bp_params := [];
+       bp_prov := FEMPTY; bp_taint := entry_taint; bp_fn := entry;
+       bp_state := entered |>`, `lo` |-> `w2n vi.vs_initial_fmp`,
+       `start` |-> `vi with <|vs_prev_bb := NONE; vs_current_bb := lbl;
+                            vs_inst_idx := 0|>`]
+       lower_budget_headroom_history_certificate) >>
+     fs[]) >>
+  simp[]
+QED
