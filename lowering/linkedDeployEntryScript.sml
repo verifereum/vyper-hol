@@ -3,6 +3,9 @@ Theory linkedDeployEntry
 Ancestors
   e2eDeployModsDefs e2eEntry bodyInvSplit compileUnit
   vyperCompiler lowerDloadDefs venomLayout vyperContext arithmetic words
+  e2eDefs asmFrameRel asmDataSuffixProps codegenEntryRel codegenLabelDisciplined
+  codegenRel contextCodegenRel contextPlanLayoutProps deployFrameReplay
+  frameRel finite_map list loweringStateRelDefs callTrace venomState vyperArith
 
 Theorem deploy_own_txp_identity_mods:
   !mods exps bc am tx prog prog' cplan es.
@@ -42,4 +45,37 @@ Proof
   qexists_tac `n2w n` >>
   simp[opt_entry_state_own_def, entry_venom_state_def, w2n_n2w] >>
   fs[Abbr `n`, MAX_DEF] >> decide_tac
+QED
+
+Theorem opt_deploy_asm_rels_own_mods:
+  !mods exps prog prog' am tx es cplan vs.
+    deploy_state_rel_mods mods exps (assemble prog') am tx es /\
+    assemble prog' <> [] /\
+    vs = (opt_entry_state_own prog prog' cplan es with vs_alloca_next := imm_len_mods mods) ==>
+    vs.vs_code = assemble prog' ++ vs.vs_data_section /\
+    codegen_asm_entry_rel_reloc (lo_reloc prog prog') cplan prog vs
+      (entry_asm_state vs (shadow_root es)) /\
+    asm_frame_rel prog' vs.vs_data_section (shadow_root es)
+      (entry_asm_state vs (shadow_root es)) (shadow_root es)
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `wf_state (shadow_root es)` by fs[deploy_state_rel_mods_def, shadow_root_wf_state] >>
+  fs[deploy_state_rel_mods_def] >>
+  `frame_obs (shadow_root es) = frame_obs es` by
+    (irule shadow_root_frame_obs >> simp[]) >>
+  `call_trace (shadow_root es) = call_trace es /\
+   gas_readings (shadow_root es) = gas_readings es` by
+    simp[call_trace_def, gas_readings_def] >>
+  `es.txParams.blockNumber < dimword (:256)` by
+    (fs[tx_block_fields_rel_def, tx_env_ok_def] >>
+     irule lt_dimword_256 >> qexists_tac `255` >> simp[]) >>
+  simp[codegen_asm_entry_rel_reloc_def, asm_frame_rel_def, asm_evm_rel_def,
+       entry_asm_state_def, shared_state_rel_def, venom_asm_terminal_rel_def,
+       opt_entry_state_own_def, data_suffix_assemble, asm_pc_to_offset_zero,
+       entry_venom_state_frame_fields, FLOOKUP_o_f,
+       shadow_root_def, shadow_root_contexts_def] >>
+  simp[entry_venom_state_def] >>
+  simp[init_venom_state_def, w2n_n2w, DROP_APPEND] >>
+  fs[context_memory_rel_def, CONJ_ASSOC] >>
+  gen_tac >> Cases_on `FLOOKUP (lo_reloc prog prog') l` >> simp[]
 QED
