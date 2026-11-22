@@ -1016,7 +1016,12 @@ Theorem const_subst_supported_array_form[local]:
         supported_function_decl tops fid Internal = SOME (m,nr,rr,ps,ds,t,b)) /\
    ?bd. expr_type e = ArrayT ty bd /\ bound_length bd <= n)
 Proof
-  Cases_on `e` >> simp[supported_iterator_def]
+  Cases_on `e` >> simp[supported_iterator_def] >>
+  Cases_on `c` >> simp[] >>
+  rename1 `FST fid = NONE` >>
+  Cases_on `supported_function_decl tops fid Internal` >> simp[] >>
+  rename1 `supported_function_decl tops fid Internal = SOME decl` >>
+  PairCases_on `decl` >> simp[]
 QED
 
 Theorem const_subst_supported_array[local]:
