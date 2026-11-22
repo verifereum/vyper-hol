@@ -32,6 +32,7 @@ Theorem compile_assert_reason_frag_full_from_raise:
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Raise (RaiseReason e)) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Raise (RaiseReason e)) = SOME env' /\
@@ -53,6 +54,7 @@ Theorem compile_assert_reason_frag_full_from_raise:
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Assert e (AssertReason se)) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assert e (AssertReason se)) = SOME env' /\
@@ -219,6 +221,14 @@ Resume compile_assert_reason_frag_full_from_raise[false]:
     (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
                                   gas_outcome_full_zero_prefix)) >>
   drule_all assert_reason_false_source_ready >> strip_tac >>
+  `body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])` by
+    (`well_typed_expr env e` by
+       qpat_assum `expr_body_pre _ cx env e _`
+         (ACCEPT_TAC o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     qpat_assum `!tail. bind (eval_expr cx e) _ _ = _`
+       (qspec_then `[]` assume_tac) >>
+     irule body_const_cells_agree_expr_read >>
+     goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >> simp[]) >>
   `stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
      cx lctx RetQ cenv
      (stmt_env cenv lctx ret_ty (Raise (RaiseReason se)))
@@ -340,6 +350,7 @@ Theorem compile_assert_reason_frag_full:
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Assert e (AssertReason se)) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assert e (AssertReason se)) = SOME env' /\

@@ -51,6 +51,7 @@ Theorem extcall_request_head_halt_outcome:
   expr_type addr = BaseT AddressT /\
   body_exprs_full_ok cx [addr] /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env addr es /\
   lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,sb) /\
   lower_value compile_expr cenv (BaseT AddressT) (gas_shadow_expr addr)
@@ -143,6 +144,7 @@ Theorem extcall_request_head_outcome:
   expr_type addr = BaseT AddressT /\
   body_exprs_full_ok cx [addr] /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env addr es /\
   lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,sb) /\
   lower_value compile_expr cenv (BaseT AddressT) (gas_shadow_expr addr)

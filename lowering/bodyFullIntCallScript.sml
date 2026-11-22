@@ -2,7 +2,7 @@
  * supplied-argument, omitted-default, and callee-body stages. *)
 Theory bodyFullIntCall
 Ancestors bodyFullShadowBodyInv
-  bodyFullIntCallDefs bodyFullPreds bodyIntCallSeams bodySim
+  bodyFullIntCallDefs bodyFullPreds bodyIntCallSeams bodySim constSubst
   vyperInterpreter vyperState vyperAST finite_map list
   bodyFullIntCallReturn compileVyper moduleLowering fragGasFocus
   gasShadowCompile gasShadowState exprSimAccounts fragExec exprSimUnwrap
@@ -164,9 +164,11 @@ Theorem intcall_entry_body_ih[local]:
      evaluate_type (get_tenv cx) ret = SOME rtv /\
      (nr ==> IS_SOME cx.nonreentrant_slot) /\
      (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-     body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss) ==>
+     body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+         (subst_consts_stmts (module_consts_env tops []) ss)) ==>
   ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-   body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss)
+   body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+         (subst_consts_stmts (module_consts_env tops []) ss))
 Proof
   strip_tac >>
   `nr ==> IS_SOME cx.nonreentrant_slot` by
@@ -187,14 +189,13 @@ val args_input = Term `
    es dflt es0 mut nr args ret ss rr dflts.
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
     LENGTH es <= LENGTH args /\
-    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx)
-      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     ~supportedExprTraverse$supported_exprs_exists supportedProgram$expr_msg_gas_root
       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
@@ -202,7 +203,8 @@ val args_input = Term `
        ~MEM (NONE,name) cx.stk /\
        eval_exprs cx es s1 = (INL vs,t1) ==>
        body_exprs_full_ok (cx with stk updated_by CONS (NONE,name))
-         (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)) ==>
+         (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
+           (subst_consts_exprs (module_consts_env tops []) dflts))) ==>
     !st0 sa sb shadow_sa shadow_sb s0 G0 tn0 kc out f P Q R.
       (!v. storage_trace_frame (f v)) /\
       (!v. cs_appends (kc v)) /\
@@ -251,6 +253,7 @@ val args_input = Term `
             intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name
               es sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv
               es1 t G tn) /\
+         body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
          (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
          (?H. valid_horizon cx st0 H es1.storage_trace) /\
          gas_admissible (bind (intcall_rest cx name mut nr ss prev rtv) f)
@@ -275,12 +278,11 @@ val callee_input = Term `
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx) dflts /\
-    ~supportedStmtTraverse$supported_stmts_expr_exists (const_name_root cx) ss /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
     LENGTH es <= LENGTH args /\
     ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss) /\
+       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+         (subst_consts_stmts (module_consts_env tops []) ss)) /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
     MEM func ctx.ctx_functions /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
@@ -291,6 +293,7 @@ val callee_input = Term `
        intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
          sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
          G tn) /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
     gas_invoke_entry (ctx,func) t callee entered /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
     !bb inst lbl arg_ops argv.
@@ -364,8 +367,6 @@ Theorem intcall_callee_premise[local]:
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx) dflts /\
-    ~supportedStmtTraverse$supported_stmts_expr_exists (const_name_root cx) ss /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
     (!s1 vs t1 sd dvs td penv rtv.
        ~MEM (NONE,name) cx.stk /\
@@ -377,7 +378,8 @@ Theorem intcall_callee_premise[local]:
        evaluate_type (get_tenv cx) ret = SOME rtv /\
        (nr ==> IS_SOME cx.nonreentrant_slot) /\
        (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss) /\
+       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+         (subst_consts_stmts (module_consts_env tops []) ss)) /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
     MEM func ctx.ctx_functions /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
@@ -388,6 +390,7 @@ Theorem intcall_callee_premise[local]:
        intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
          sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
          G tn) /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
     (?H. valid_horizon cx st0 H es1.storage_trace) /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (nrc,nrbs,npvs) ==>
     !callee entered bb inst lbl arg_ops argv.
@@ -443,22 +446,20 @@ Theorem intcall_sim_full:
    es dflt es0 mut nr args ret ss rr dflts.
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx) dflts /\
-    ~supportedStmtTraverse$supported_stmts_expr_exists (const_name_root cx) ss /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
-    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx)
-      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     ~supportedExprTraverse$supported_exprs_exists supportedProgram$expr_msg_gas_root
       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
     (!s1 vs t1.
        ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,t1) ==>
        body_exprs_full_ok (cx with stk updated_by CONS (NONE,name))
-         (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)) /\
+         (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
+           (subst_consts_exprs (module_consts_env tops []) dflts))) /\
     (!s1 vs t1 sd dvs td penv rtv.
        ~MEM (NONE,name) cx.stk /\
        eval_exprs cx es s1 = (INL vs,t1) /\
@@ -469,7 +470,8 @@ Theorem intcall_sim_full:
        evaluate_type (get_tenv cx) ret = SOME rtv /\
        (nr ==> IS_SOME cx.nonreentrant_slot) /\
        (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss) ==>
+       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+         (subst_consts_stmts (module_consts_env tops []) ss)) ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Call ann (IntCall (NONE,name)) es dflt) es0
 Proof
@@ -542,22 +544,20 @@ Theorem intcall_vv_full:
    es dflt es0 mut nr args ret ss rr dflts.
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx) dflts /\
-    ~supportedStmtTraverse$supported_stmts_expr_exists (const_name_root cx) ss /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
-    ~supportedExprTraverse$supported_exprs_exists (const_name_root cx)
-      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     ~supportedExprTraverse$supported_exprs_exists supportedProgram$expr_msg_gas_root
       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
     (!s1 vs t1.
        ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,t1) ==>
        body_exprs_full_ok (cx with stk updated_by CONS (NONE,name))
-         (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)) /\
+         (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
+           (subst_consts_exprs (module_consts_env tops []) dflts))) /\
     (!s1 vs t1 sd dvs td penv rtv.
        ~MEM (NONE,name) cx.stk /\
        eval_exprs cx es s1 = (INL vs,t1) /\
@@ -568,7 +568,8 @@ Theorem intcall_vv_full:
        evaluate_type (get_tenv cx) ret = SOME rtv /\
        (nr ==> IS_SOME cx.nonreentrant_slot) /\
        (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss) ==>
+       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+         (subst_consts_stmts (module_consts_env tops []) ss)) ==>
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Call ann (IntCall (NONE,name)) es dflt) es0
 Proof

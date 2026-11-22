@@ -13,94 +13,104 @@ Theory bodySimFullMain
 Ancestors bodyFullShadowBodyInv bodyFullRaiseCustomError bodyFullAssertCustomError
   bodyFullCases bodyFullCreateHeld bodyFullIf bodyFullExprStmt bodyFullExits bodyFullPreds bodySimFull gasShadow bodySim supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeCallGraph typedCopyMetadata alist list
-  vyperTypeContract[qualified,ignore_grammar]
+  vyperTypeContract[qualified,ignore_grammar] constSubst bodyLoopCalls
 
 val _ = Parse.hide "body";
 
 val body_ind = evaluate_ind
   |> Q.SPECL [
-       `\cx s. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+       `\cx s. LENGTH (remcode cx) <= rank /\
+                 (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
                  ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss) /\
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss)) /\
                  stmt_loop_calls_ok [(NONE,tops)] s) ==>
           body_stmt_full_ok cx s`,
-       `\cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+       `\cx ss. LENGTH (remcode cx) <= rank /\
+                 (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
                  ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss) /\
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss)) /\
                  stmts_loop_calls_ok [(NONE,tops)] ss) ==>
           body_stmts_full_ok cx ss`,
-       `\cx it. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+       `\cx it. LENGTH (remcode cx) <= rank /\
+                 (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
                  ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss)) ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
           body_iterator_full_ok cx it`,
-       `\cx tyv nm body vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+       `\cx tyv nm body vs. LENGTH (remcode cx) <= rank /\
+                 (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
                  ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss) /\
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss)) /\
                  stmts_loop_calls_ok [(NONE,tops)] body) ==>
           body_for_full_ok cx tyv nm body vs`,
-       `\cx e. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+       `\cx e. LENGTH (remcode cx) <= rank /\
+                 (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
                  ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss)) ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
           body_expr_full_ok cx e`,
-       `\cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+       `\cx es. LENGTH (remcode cx) <= rank /\
+                 (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
                  ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss)) ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
           body_exprs_full_ok cx es`,
-       `\cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+       `\cx t. LENGTH (remcode cx) <= rank /\
+                 (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
                  ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss)) ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
           body_base_target_full_ok cx t`,
-       `\cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+       `\cx t. LENGTH (remcode cx) <= rank /\
+                 (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
                  ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss)) ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
           body_base_target_full_ok cx t`,
-       `\cx g v. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+       `\cx g v. LENGTH (remcode cx) <= rank /\
+                 (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
                  ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss)) ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
           body_tuple_target_full_ok cx g v`,
-       `\cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+       `\cx gs vs. LENGTH (remcode cx) <= rank /\
+                 (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
                  ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss)) ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
           body_tuple_targets_full_ok cx gs vs`]
   |> CONV_RULE (DEPTH_CONV BETA_CONV);
 
@@ -158,13 +168,16 @@ Theorem callable_body_loop_calls_ok[local]:
   lookup_callable_function cx.in_deploy name ts = SOME (mut,nr,args,dflts,ret,ss) /\
   (!vis fm fr raw fn fa fd ft body.
      MEM (FunctionDecl vis fm fr raw fn fa fd ft body) tops ==>
-     stmts_loop_calls_ok [(NONE,tops)] body) ==>
-  stmts_loop_calls_ok [(NONE,tops)] ss
+     stmts_loop_calls_ok [(NONE,tops)]
+       (subst_consts_stmts (module_consts_env tops []) body)) ==>
+  stmts_loop_calls_ok [(NONE,tops)]
+    (subst_consts_stmts (module_consts_env tops []) ss)
 Proof
   rpt strip_tac >>
   Cases_on `src` >> gvs[vyperContextTheory.get_module_code_def, alistTheory.ALOOKUP_def] >>
   drule vyperTypeCallStackSoundnessTheory.lookup_callable_function_SOME_decompose >>
-  simp[] >> rpt strip_tac >> gvs[vyperTypeContractTheory.stmt_loop_calls_ok_def] >>
+  simp[] >> rpt strip_tac >>
+  gvs[subst_consts_stmt_def, vyperTypeContractTheory.stmt_loop_calls_ok_def] >>
   metis_tac[]
 QED
 
@@ -175,85 +188,43 @@ fun full_loop_case th =
     asm_rewrite_tac[] >> metis_tac[]
   end;
 
-Theorem body_sim_full_mutual:
-  (!cx s. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
-                 (!vis mut nr raw fn args dflts ret ss.
-                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss) /\
-                 stmt_loop_calls_ok [(NONE,tops)] s) ==>
-    body_stmt_full_ok cx s) /\
-  (!cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
-                 (!vis mut nr raw fn args dflts ret ss.
-                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss) /\
-                 stmts_loop_calls_ok [(NONE,tops)] ss) ==>
-    body_stmts_full_ok cx ss) /\
-  (!cx it. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
-                 (!vis mut nr raw fn args dflts ret ss.
-                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss)) ==>
-    body_iterator_full_ok cx it) /\
-  (!cx tyv nm body vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
-                 (!vis mut nr raw fn args dflts ret ss.
-                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss) /\
-                 stmts_loop_calls_ok [(NONE,tops)] body) ==>
-    body_for_full_ok cx tyv nm body vs) /\
-  (!cx e. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
-                 (!vis mut nr raw fn args dflts ret ss.
-                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss)) ==>
-    body_expr_full_ok cx e) /\
-  (!cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
-                 (!vis mut nr raw fn args dflts ret ss.
-                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss)) ==>
-    body_exprs_full_ok cx es) /\
-  (!cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
-                 (!vis mut nr raw fn args dflts ret ss.
-                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss)) ==>
-    body_base_target_full_ok cx t) /\
-  (!cx g v. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
-                 (!vis mut nr raw fn args dflts ret ss.
-                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss)) ==>
-    body_tuple_target_full_ok cx g v) /\
-  (!cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 struct_args_unique tops /\
-                 ~internal_defaults_const_names tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
-                 (!vis mut nr raw fn args dflts ret ss.
-                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-                    stmts_loop_calls_ok [(NONE,tops)] ss)) ==>
-    body_tuple_targets_full_ok cx gs vs)
+Theorem callable_remcode_decreases[local]:
+  ~MEM (src,fn) cx.stk /\
+  get_module_code cx src = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,ss) /\
+  (dflts,ss) <> ([],[]) ==>
+  LENGTH (remcode (cx with stk updated_by CONS (src,fn))) < LENGTH (remcode cx)
 Proof
+  strip_tac >>
+  drule_all_then (qspec_then `src` assume_tac) lookup_callable_function_eq_ALOOKUP_module_fns >>
+  fs[vyperContextTheory.get_module_code_def, AllCaseEqs()] >>
+  drule_all ALOOKUP_FLAT_MAP_module_fns >> strip_tac >>
+  qabbrev_tac `all_fns = FLAT (MAP (\(sid,tl). module_fns sid tl) mods)` >>
+  `MEM ((src,fn),(dflts,ss)) all_fns` by
+    (irule alistTheory.ALOOKUP_MEM >> first_assum ACCEPT_TAC) >>
+  `FILTER (\((sid,f),ss). ~MEM (sid,f) ((src,fn)::cx.stk)) all_fns =
+     FILTER (\(k,ss). k <> (src,fn))
+       (FILTER (\((sid,f),ss). ~MEM (sid,f) cx.stk) all_fns)` by
+    (simp[rich_listTheory.FILTER_FILTER] >> AP_THM_TAC >> AP_TERM_TAC >>
+     simp[FUN_EQ_THM, pairTheory.FORALL_PROD]) >>
+  simp[remcode_def, GSYM markerTheory.Abbrev_def] >>
+  qpat_assum `FILTER _ all_fns = FILTER _ (FILTER _ all_fns)`
+    (once_rewrite_tac o single o SIMP_RULE (srw_ss()) []) >>
+  irule rich_listTheory.LENGTH_FILTER_LESS >>
+  simp[EXISTS_MEM, MEM_FILTER] >>
+  qexists_tac `((src,fn),(dflts,ss))` >> simp[]
+QED
+
+fun without_smaller_rank tac =
+  qpat_x_assum `!m:num. m < rank ==> _` (K ALL_TAC) >> tac;
+
+Theorem body_sim_full_mutual_ranked[local]:
+  !rank:num. ^(snd (dest_imp (concl body_ind)))
+Proof
+  completeInduct_on `rank` >>
   mp_tac body_ind >> impl_tac
-  >- (rpt conj_tac >| [
+  >- (rpt conj_tac >|
+    (map without_smaller_rank [
     (* 0 *) full_case body_pass_case_full,
     (* 1 *) full_case body_continue_case_full,
     (* 2 *) full_case body_break_case_full,
@@ -294,79 +265,20 @@ Proof
     (* 37 *) full_case body_pop_case_full,
     (* 38 *) full_case body_type_builtin_case_full,
     (* 39 *) full_case body_send_case_full,
-    (* 40 *) full_case body_extcall_case_full,
-    (* 41 *)
-      rpt strip_tac >> full_simp_tac bool_ss full_case_simps >>
-      irule (SIMP_RULE bool_ss full_case_simps body_intcall_case_full) >>
-      asm_rewrite_tac[] >> rpt strip_tac
-      >~ [`body_stmts_full_ok _ _`]
-      >- (`!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-             (!vis mut nr raw fn args dflts ret ss.
-               MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-               stmts_loop_calls_ok [(NONE,tops)] ss) /\
-             stmts_loop_calls_ok [(NONE,tops)] (SND (SND (SND (SND (SND tup)))))` by
-            (gen_tac >> disch_tac >>
-             qpat_assum `!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==> _`
-               (qspec_then `tops` mp_tac) >> simp[] >> strip_tac >>
-             conj_tac >- first_assum ACCEPT_TAC >>
-             PairCases_on `tup` >>
-             gvs[vyperTypeEvalProofsTheory.lift_option_type_INL_eq] >>
-             drule_all_then ACCEPT_TAC callable_body_loop_calls_ok) >>
-          rename1 `type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" sRec = (INL xRec,tRec)` >>
-          rename1 `type_check _ "IntCall args length" sLen = (INL xLen,tLen)` >>
-          rename1 `eval_exprs cx es sArgs = (INL vs,tArgs)` >>
-          rename1 `get_scopes sScope = (INL prev,tScope)` >>
-          rename1 `finally _ (set_scopes prev) sDflt = (INL dvs,tDflt)` >>
-          rename1 `lift_option_type (get_module_code _ _) _ sMod = (INL ts,tMod)` >>
-          rename1 `lift_option_type (lookup_callable_function _ _ _) _ sLookup = (INL tup,tLookup)` >>
-          rename1 `lift_option_type (bind_arguments _ _ _) _ sBind = (INL env,tBind)` >>
-          rename1 `lift_option_type (evaluate_type _ _) _ sType = (INL rtv,tType)` >>
-          rename1 `lock_if_nr cx _ _ sLock = (INL xLock,tLock)` >>
-          qpat_x_assum `!s x t sm ts tm su tup tu sl xl tl sa vs ta sc prev tc sd ds td
-               sb env tb sy rtv ty sk xk tk. _ ==> _ ==> body_stmts_full_ok _ _`
-            (qspecl_then [`sRec`,`xRec`,`tRec`,`sMod`,`ts`,`tMod`,`sLookup`,`tup`,`tLookup`,
-              `sLen`,`xLen`,`tLen`,`sArgs`,`vs`,`tArgs`,`sScope`,`prev`,`tScope`,
-              `sDflt`,`dvs`,`tDflt`,`sBind`,`env`,`tBind`,`sType`,`rtv`,`tType`,
-              `sLock`,`xLock`,`tLock`] mp_tac) >>
-          simp[] >> disch_then irule >> gen_tac >> disch_tac >>
-          qpat_assum `!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==> _`
-            (qspec_then `tops` mp_tac) >> simp[]) >>
-      TRY (fs[] >> NO_TAC) >>
-      TRY (
-        `!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-            !vis mut nr raw fn args dflts ret ss.
-              MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
-              stmts_loop_calls_ok [(NONE,tops)] ss` by
-          (gen_tac >> disch_tac >>
-           qpat_assum `!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==> _`
-             (qspec_then `tops` mp_tac) >> simp[]) >>
-        rename1 `type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" sRec = (INL xRec,tRec)` >>
-        rename1 `lift_option_type (get_module_code _ _) _ sMod = (INL ts,tMod)` >>
-        rename1 `lift_option_type (lookup_callable_function _ _ _) _ sLookup = (INL tup,tLookup)` >>
-        rename1 `type_check _ "IntCall args length" sLen = (INL xLen,tLen)` >>
-        FIRST [
-          qpat_x_assum `!s x t sm ts tm su tup tu sl xl tl. _ ==> _ ==> body_exprs_full_ok _ _`
-            (qspecl_then [`sRec`,`xRec`,`tRec`,`sMod`,`ts`,`tMod`,`sLookup`,`tup`,`tLookup`,
-               `sLen`,`xLen`,`tLen`] mp_tac) >> simp[] >>
-            disch_then irule >> first_assum ACCEPT_TAC,
-          rename1 `eval_exprs cx es sArgs = (INL vs,tArgs)` >>
-          rename1 `get_scopes sScope = (INL prev,tScope)` >>
-          rename1 `set_scopes [FEMPTY] sSet = (INL xSet,tSet)` >>
-          qpat_x_assum `!s x t sm ts tm su tup tu sl xl tl sa vs ta sc prev tc ss xs ts'.
-                 _ ==> _ ==> body_exprs_full_ok _ _`
-            (qspecl_then [`sRec`,`xRec`,`tRec`,`sMod`,`ts`,`tMod`,`sLookup`,`tup`,`tLookup`,
-               `sLen`,`xLen`,`tLen`,`sArgs`,`vs`,`tArgs`,`sScope`,`prev`,`tScope`,
-               `sSet`,`xSet`,`tSet`] mp_tac) >> simp[] >>
-            disch_then irule >> first_assum ACCEPT_TAC]),
+    (* 40 *) full_case body_extcall_case_full
+  ] @ [suspend "intcall"] @ map without_smaller_rank [
     (* 42 *) full_case body_raw_call_case_full,
     (* 43 *) full_case body_raw_call_calldata_case_full,
     (* 44 *) full_case body_raw_log_case_full,
     (* 45 *) full_case body_raw_revert_case_full,
     (* 46 *) full_case body_selfdestruct_case_full,
-    (* CREATE *) rpt gen_tac >> Cases_on `kind` >>
+    (* 47 *) rpt gen_tac >> Cases_on `kind` >>
           rpt strip_tac >> full_simp_tac bool_ss full_case_simps >>
-          metis_tac[create_minimal_proxy_expr_full_ok, create_copy_expr_full_ok,
-            create_blueprint_expr_full_ok, raw_create_expr_full_ok],
+          FIRST [irule create_minimal_proxy_expr_full_ok,
+                 irule create_copy_expr_full_ok,
+                 irule create_blueprint_expr_full_ok,
+                 irule raw_create_expr_full_ok] >>
+          asm_rewrite_tac[] >> metis_tac[],
     (* 48 *) simp[body_exprs_full_ok_def],
     (* 49 *) rpt strip_tac >> fs[] >> rw[body_exprs_full_ok_def] >> metis_tac[],
     (* 50 *) simp[body_base_target_full_ok_def],
@@ -380,14 +292,125 @@ Proof
     (* 58 *) rpt strip_tac >> fs[] >> rw[body_tuple_target_full_ok_def] >> metis_tac[],
     (* 59 *) simp[body_tuple_target_full_ok_def],
     (* 60 *) simp[body_tuple_target_full_ok_def]
-  ] >> rpt strip_tac >> metis_tac[]) >>
+  ]) >> rpt strip_tac >> metis_tac[]) >>
   strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume body_sim_full_mutual_ranked[intcall]:
+  rpt strip_tac >> full_simp_tac bool_ss full_case_simps >>
+  irule (SIMP_RULE bool_ss full_case_simps body_intcall_case_full) >>
+  conj_tac
+  >- (qpat_x_assum `!m:num. m < rank ==> _` kall_tac >>
+      rpt gen_tac >> strip_tac >> gvs[] >>
+      metis_tac[]) >>
+  reverse conj_tac >- (rpt strip_tac >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> Cases_on `(dflts,ss) = ([],[])`
+  >- gvs[subst_consts_stmt_def, subst_consts_expr_def,
+          body_stmts_nil_case_full, body_exprs_full_ok_def] >>
+  `LENGTH (remcode (cx with stk updated_by CONS (src_id_opt,fn))) < rank` by
+    (drule_all callable_remcode_decreases >> decide_tac) >>
+  qpat_x_assum `!m:num. m < rank ==> _` (drule_then strip_assume_tac) >>
+  conj_tac
+  >- (first_x_assum irule >> simp[] >> gen_tac >> strip_tac >>
+      qpat_assum `!tops. ALOOKUP cx.sources _ = SOME _ ==> _`
+        (qspec_then `tops` mp_tac) >> simp[] >> strip_tac >>
+      `cx_tops cx = tops` by
+        fs[gasContextTheory.cx_tops_def, vyperContextTheory.get_module_code_def,
+           alistTheory.ALOOKUP_def] >>
+      asm_rewrite_tac[] >>
+      irule callable_body_loop_calls_ok >> metis_tac[]) >>
+  first_x_assum irule >> simp[] >> gen_tac >> strip_tac >>
+  qpat_assum `!tops. ALOOKUP cx.sources _ = SOME _ ==> _`
+    (qspec_then `tops` mp_tac) >> simp[]
+QED
+
+Finalise body_sim_full_mutual_ranked
+
+Theorem body_sim_full_mutual:
+  (!cx s. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss)) /\
+                 stmt_loop_calls_ok [(NONE,tops)] s) ==>
+    body_stmt_full_ok cx s) /\
+  (!cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss)) /\
+                 stmts_loop_calls_ok [(NONE,tops)] ss) ==>
+    body_stmts_full_ok cx ss) /\
+  (!cx it. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_iterator_full_ok cx it) /\
+  (!cx tyv nm body vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss)) /\
+                 stmts_loop_calls_ok [(NONE,tops)] body) ==>
+    body_for_full_ok cx tyv nm body vs) /\
+  (!cx e. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_expr_full_ok cx e) /\
+  (!cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_exprs_full_ok cx es) /\
+  (!cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_base_target_full_ok cx t) /\
+  (!cx g v. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_tuple_target_full_ok cx g v) /\
+  (!cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 struct_args_unique tops /\
+                 ~supportedProgram$internal_defaults_msg_gas tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_tuple_targets_full_ok cx gs vs)
+Proof
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  qspec_then `LENGTH (remcode cx)` mp_tac body_sim_full_mutual_ranked >>
+  strip_tac >> first_x_assum irule >> asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL]
 QED
 
 Theorem body_stmts_sim_full:
   !DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
    ret_ty lctx RetQ ss es.
-    ~internal_defaults_const_names tops /\
     ~supportedProgram$internal_defaults_msg_gas tops /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\ struct_args_unique tops /\
@@ -399,6 +422,7 @@ Theorem body_stmts_sim_full:
     (!target. supported_stmts_expr_exists
        (expr_abi_decode_target_root target) ss ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmts env ret_ty ss = SOME env' /\
@@ -413,13 +437,22 @@ Theorem body_stmts_sim_full:
       (eval_stmts cx ss) es
 Proof
   rpt strip_tac >>
+  `!vis mut nr raw fn args dflts ret body.
+      MEM (FunctionDecl vis mut nr raw fn args dflts ret body) tops ==>
+      stmts_loop_calls_ok [(NONE,tops)] (subst_consts_stmts (module_consts_env tops []) body)` by
+    (qpat_assum `body_const_cells_agree _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [body_const_cells_agree_def]) >>
+     `cx_tops cx = tops` by fs[alistTheory.ALOOKUP_def] >>
+     rpt strip_tac >>
+     drule checked_subst_consts_loop_calls_ok >>
+     simp[] >> disch_then irule >> gvs[] >> metis_tac[]) >>
   `!ts. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,ts)] ==>
         struct_args_unique ts /\
-        ~internal_defaults_const_names ts /\
         ~supportedProgram$internal_defaults_msg_gas ts /\
         (!vis mut nr raw fn args dflts ret body.
            MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts ==>
-           stmts_loop_calls_ok [(NONE,ts)] body) /\
+           stmts_loop_calls_ok [(NONE,ts)]
+             (subst_consts_stmts (module_consts_env ts []) body)) /\
         stmts_loop_calls_ok [(NONE,ts)] ss` by (fs[body_inv_def] >> metis_tac[]) >>
   metis_tac[body_sim_full_mutual, body_stmts_full_ok_def]
 QED

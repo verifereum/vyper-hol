@@ -2061,21 +2061,20 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem checked_frame_intcall_static:
-  checked_frame_context cx mods art src id env /\
+Theorem checked_intcall_static:
+  check_contract mode cx.layouts cx.txn.target mods = SOME art /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\ frame_maps env art /\
   well_typed_expr env (Call ty (IntCall (call_src,fn)) es drv) /\
   get_module_code cx call_src = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,ss) ==>
   ?vis.
-    checked_frame_context cx mods art src id
-      (function_entry_env art mods call_src vis args) /\
     IS_SOME (type_stmts (function_entry_env art mods call_src vis args) ret ss) /\
     well_typed_exprs (defaults_env (function_entry_env art mods call_src vis args)) dflts
 Proof
   strip_tac >>
   qpat_x_assum `well_typed_expr _ _` mp_tac >>
   simp[Once well_typed_expr_def] >> strip_tac >>
-  fs[checked_frame_context_def, frame_maps_def] >>
+  fs[frame_maps_def] >>
   drule check_contract_artifact_fields >> strip_tac >>
   `FLOOKUP (build_contract_type_artifact mode mods).cta_fn_sigs
        (call_src,fn) = SOME sig /\
@@ -2093,7 +2092,26 @@ Proof
     (Cases_on `vis` >> gvs[check_function_body_in_mode_def, include_fn_sig_def]) >>
   drule_all vyperTypeContractContextTheory.check_contract_function_body_MEM >>
   strip_tac >>
-  qexists `vis` >> fs[check_function_body_def] >>
+  qexists `vis` >> fs[check_function_body_def]
+QED
+
+Theorem checked_frame_intcall_static:
+  checked_frame_context cx mods art src id env /\
+  well_typed_expr env (Call ty (IntCall (call_src,fn)) es drv) /\
+  get_module_code cx call_src = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,ss) ==>
+  ?vis.
+    checked_frame_context cx mods art src id
+      (function_entry_env art mods call_src vis args) /\
+    IS_SOME (type_stmts (function_entry_env art mods call_src vis args) ret ss) /\
+    well_typed_exprs (defaults_env (function_entry_env art mods call_src vis args)) dflts
+Proof
+  strip_tac >>
+  qpat_assum `checked_frame_context _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [checked_frame_context_def]) >>
+  mp_tac (Q.INST [`mode` |-> `mode`] (SPEC_ALL checked_intcall_static)) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qexists `vis` >> simp[checked_frame_context_def] >>
   qexists `mode` >> simp[]
 QED
 

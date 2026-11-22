@@ -19,6 +19,7 @@ Theorem subscript_nocopy_bind_full:
     (!s raw t. eval_expr cx e1 s = (INL raw,t) ==> body_expr_full_ok cx e2) /\
     body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
     expr_type e1 = ArrayT et bd /\ place_type cenv e1 = ValPT (ArrayT et bd) /\
     post_value_type cenv e1 = expr_type e1 /\
@@ -220,6 +221,10 @@ Resume subscript_nocopy_bind_full[after_base]:
     (`mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
      qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` mp_tac) >>
      qpat_assum `mid with gas_obs := [] = mid` (fn th => simp[NoAsms, th])) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`well_typed_expr env e1` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+     irule body_const_cells_agree_expr >>
+     goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >> simp[]) >>
   `expr_body_pre cenv cx env e2 mid` by
     (irule expr_body_pre_array_subscript_index_after_base >>
      goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >> simp[] >>

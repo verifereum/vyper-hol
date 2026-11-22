@@ -63,6 +63,7 @@ Theorem abi_encode_vv_full_from_packaging:
   body_inv tops ctx ce cx /\
   shadow_body_inv tops ctx shadow_ctx /\
   (LENGTH args = 1 /\ ~ensure ==> ~is_word_type (lowered_value_type ce (HD args))) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
   (!s x t. type_check
       (type_builtin_args_length_ok (AbiEncode ensure mid) (LENGTH args))

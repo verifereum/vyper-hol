@@ -7,6 +7,7 @@ Ancestors
 Theorem abi_encode_nonword_vv_full_from_packaging:
   body_inv tops ctx ce cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid) ty [e]) es /\
   body_expr_full_ok cx e /\ ~is_word_type (expr_type e)
   ==> expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -19,7 +20,5 @@ Proof
     metis_tac[expr_body_pre_lowered_fits, arg_type_fits_word_type] >>
   `body_exprs_full_ok cx [e]` by simp[body_exprs_full_ok_def] >>
   irule abi_encode_vv_full_from_packaging >> simp[] >>
-  conj_tac
-  >- (qexists_tac `tops` >> asm_rewrite_tac[]) >>
-  qexists_tac `env` >> asm_rewrite_tac[]
+  qexistsl_tac [`env`, `tops`] >> asm_rewrite_tac[]
 QED

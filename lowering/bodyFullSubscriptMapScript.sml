@@ -111,6 +111,10 @@ fun mapping_index_source_tac index_pre parent_res_ok =
      qpat_assum `!tail. eval_expr _ _ (_ with gas_obs := _ ++ tail) = _`
        (qspec_then `[]` mp_tac) >>
      pure_rewrite_tac[listTheory.APPEND_NIL] >> metis_tac[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`IS_SOME (type_place_expr env e1)` by simp[] >>
+     irule body_const_cells_agree_expr >>
+     goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >> simp[]) >>
   index_pre >>
   `expr_body_pre cenv cx env e2 mid` by
     (irule (cj 3 mapping_subscript_index_pre) >>
@@ -414,6 +418,7 @@ Theorem subscript_map_map_full:
   !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
     (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok cx e2) /\
     body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_map_pre cenv cx env (Subscript ann e1 e2) es /\
     expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e1 es ==>
     expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -480,6 +485,7 @@ Theorem subscript_map_full:
   !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es kt vt.
     (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok cx e2) /\
     body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
     place_type cenv e1 = MapPT kt vt /\
     expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

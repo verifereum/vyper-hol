@@ -188,6 +188,7 @@ QED
 Theorem raw_call_calldata_vv_full[local]:
   body_exprs_full_ok cx args /\
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es ==>
   expr_vv_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Call ann (RawCallCalldataTarget flags) args dflt) es
@@ -893,9 +894,10 @@ Proof
   >- (qpat_assum `body_exprs_full_ok cx args` (fn args_ok =>
       qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
       qpat_assum `shadow_body_inv tops ctx shadow_ctx` (fn shadow =>
+      qpat_assum `body_const_cells_agree [(NONE,tops)] cx env es` (fn cells =>
       qpat_assum `expr_body_pre cenv cx env _ es` (fn pre =>
         MATCH_ACCEPT_TAC (MATCH_MP raw_call_calldata_vv_full
-          (LIST_CONJ [args_ok,inv,shadow,pre]))))))) >>
+          (LIST_CONJ [args_ok,inv,shadow,cells,pre])))))))) >>
   irule bodyFullOfVVTheory.expr_sim_full_of_vv >> simp[] >>
   conj_tac
   >- (rpt strip_tac >> drule_all expr_body_pre_copy_ok >> simp[]) >>

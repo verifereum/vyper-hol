@@ -25,6 +25,7 @@ Theorem make_array_elements_full:
            not_fresh_at csbase x) /\
     (!H. valid_horizon cx st0 H ebase.storage_trace ==>
          stmt_state_rel H ctx func cenv cx ebase sbase) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     body_exprs_full_ok cx args /\
     (!e ee. MEM e args /\ expr_sim_inv cenv cx env ee ==>
             expr_body_pre cenv cx env e ee) /\

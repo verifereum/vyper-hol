@@ -329,6 +329,7 @@ Theorem for_captured_storage_round_from_head:
     for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
       (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
       (lvo,idx,cond) (p,dst,nb,sd) (H,k,a::rs,es,G,tn,s)) /\
+  body_const_cells_agree [(NONE,cx_tops cx)] cx env es /\
   gas_admissible (eval_for cx tyv id stmts (a::rs)) (stmt_res_ok lctx) es /\
   (storage_trace_domain cx st0 es.storage_trace ==>
     gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
@@ -349,7 +350,8 @@ Theorem for_captured_storage_round_from_head:
       ?b. res = INL b /\
         (b ==> for_array_loop_post (DF,lo,d,ctx,func) c0 cx lctx
           (e0,sa0,s0,G0,tn0) sb H (INL ()) ee GG tt z) /\
-        (~b ==> ?j. for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+        (~b ==> body_const_cells_agree [(NONE,cx_tops cx)] cx env ee /\
+          ?j. for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
           (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
           (lvo,idx,cond) (p,dst,nb,sd) (H,j,rs,ee,GG,tt,z)))
     (\H res ee gt r. ?ex. res = INR ex /\ for_array_loop_exit ctx cx RetQ H (INR ex) ee gt r)
@@ -365,6 +367,7 @@ Proof
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[body_inv_no_phi] >>
   ho_match_mp_tac (BETA_RULE (Q.INST [`ok` |-> `stmt_res_ok lctx`,
+    `Guard` |-> `body_const_cells_agree [(NONE,cx_tops cx)] cx env`,
     `Entry` |-> `\H ei v j z GG tt.
       for_captured_storage_round_entry (DF,lo,d,ctx,func)
         (cx,c0,bc,extend_local env id typ F,sb0,stmts) (e0,sa0,s0,G0,tn0)
@@ -431,6 +434,7 @@ QED
 
 Resume for_captured_storage_round_from_head[invoke]:
   qabbrev_tac `ei = es with gas_obs := []` >>
+  `body_const_cells_agree [(NONE,cx_tops cx)] cx env ei` by simp[Abbr `ei`] >>
   `eb = ei with scopes := (FEMPTY |+ (id,<|assignable := F; type := tyv; value := v; popped := []|>))::ei.scopes` by
     (qpat_assum `for_captured_storage_round_scope _ _ _ _ = eb` mp_tac >>
      simp[for_captured_storage_round_scope_def,Abbr `ei`]) >>
@@ -483,6 +487,13 @@ Resume for_captured_storage_round_from_head[raw_land]:
        (qx_choose_then `xs` (qspec_then `[]`
          (mp_then (Pat `f st = (res,st')`) mp_tac valid_horizon_frame))) >>
      simp[evaluation_state_accfupds,CONJUNCT1 (CONJUNCT2 evaluate_storage_trace_frame)]) >>
+  `body_const_cells_agree [(NONE,cx_tops cx)] cx env ef` by
+    (`body_const_cells_agree [(NONE,cx_tops cx)] cx
+         (extend_local env id typ F) (ef with gas_obs := [])` suffices_by simp[] >>
+     irule body_const_cells_agree_stmts >>
+     qpat_assum `?xs. !tail. eval_stmts _ _ _ = _`
+       (qx_choose_then `xs` (qspec_then `[]` (irule_at (Pat `eval_stmts _ _ _ = _`)))) >>
+     qexists_tac `ret_ty` >> simp[]) >>
   `valid_horizon cx st0 H es.storage_trace` by
     (qpat_assum `eb.storage_trace = es.storage_trace` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
   qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> for_captured_storage_live _ _ _ _ _ _`
@@ -546,6 +557,7 @@ Resume for_captured_storage_round_from_head[pack_landing]:
 QED
 
 Resume for_captured_storage_round_from_head[pack_live]:
+  conj_tac >- simp[] >>
   conj_tac >- (
     `ei.storage_trace = es.storage_trace` by simp[Abbr `ei`] >>
     `(ef with scopes := rest).storage_trace =

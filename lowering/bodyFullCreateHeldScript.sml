@@ -1676,9 +1676,26 @@ Proof
   simp[] >> metis_tac[valid_horizon_append]
 QED
 
+Theorem create_operand_const_cells_replay[local]:
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre cenv cx env e es /\
+  (!tail. bind (eval_expr cx e) (read_result cx)
+    (es with gas_obs := prefix ++ tail) = (res,ee with gas_obs := tail)) ==>
+  body_const_cells_agree mods cx env ee
+Proof
+  strip_tac >>
+  qpat_assum `!tail. _ = _` (qspec_then `[]` assume_tac) >>
+  qpat_assum `expr_body_pre _ _ _ _ _`
+    (strip_assume_tac o MATCH_MP expr_body_pre_static_facts) >>
+  `body_const_cells_agree mods cx env (ee with gas_obs := [])` suffices_by simp[] >>
+  irule body_const_cells_agree_expr_read >>
+  qexistsl [`e`, `res`, `es with gas_obs := prefix`] >> fs[]
+QED
+
 (* A cut evaluates exactly one operand. The continuation receives the
    typing and IH guard from replay, and all horizon facts from that run. *)
 Theorem create_body_operand_cut_replay:
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env e es /\ body_expr_full_ok cx e /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
@@ -1715,6 +1732,7 @@ Theorem create_body_operand_cut_replay:
     ghost_kept_at lo cenv es sa G tn s G1 tn1 /\
     return_buf_frame d cenv sb t /\
     (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_no_wrap i z) /\
+    body_const_cells_agree [(NONE,tops)] cx env ee /\
     expr_sim_inv cenv cx env ee /\ expr_result_typed env e (Value v) /\
     (?a tv b a' v' b'. eval_expr cx e a = (INL tv,b) /\
                         read_result cx tv a' = (INL v',b')) /\
@@ -1788,11 +1806,14 @@ Proof
   `!f i z. frag_reachable ctx func t f i z ==> dalloca_no_wrap i z` by
     (rpt gen_tac >> strip_tac >>
      drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env ee`
+    by (irule create_operand_const_cells_replay >> rpt (goal_assum (drule_at Any))) >>
   qpat_assum `!v ee G1 tn1 t. _ ==> gas_outcome_full _ _ _ _ _ _ _ _` irule >>
   simp[] >> metis_tac[]
 QED
 
 Theorem create_body_operand_cut[local]:
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env e es /\ body_expr_full_ok cx e /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
@@ -1829,6 +1850,7 @@ Theorem create_body_operand_cut[local]:
     ghost_kept_at lo cenv es sa G tn s G1 tn1 /\
     return_buf_frame d cenv sb t /\
     (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_no_wrap i z) /\
+    body_const_cells_agree [(NONE,tops)] cx env ee /\
     expr_sim_inv cenv cx env ee /\ expr_result_typed env e (Value v) /\
     (?a tv b a' v' b'. eval_expr cx e a = (INL tv,b) /\
                         read_result cx tv a' = (INL v',b')) /\
@@ -1929,6 +1951,7 @@ Proof
 QED
 
 Theorem proxy_expr_sim_from_parts:
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env (Call ann (CreateTarget CreateMinimalProxy salted rof ks) args dflt) es /\
   body_exprs_full_ok cx (create_operand_order CreateMinimalProxy salted args) /\
@@ -2397,8 +2420,7 @@ Proof
   >- (drule proxy_pre_args >> simp[]) >>
   conj_asm1_tac
   >- (irule proxy_expr_sim_from_parts >>
-      reverse conj_tac >- (simp[] >> conj_tac >- (qexists `tops` >> simp[]) >>
-                           qexists `env` >> simp[]) >>
+      reverse conj_tac >- (simp[] >> qexistsl [`env`,`tops`] >> simp[]) >>
       rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
       qpat_x_assum `?p. _ = Var p /\ ptr_covers _ _ p _ 54 /\ _` strip_assume_tac >>
       gvs[] >>
@@ -2750,6 +2772,7 @@ Finalise create_ctor_borrowed_row
 (* Reading a borrowed aggregate adds no target instruction. Its source
    read still runs immediately, before evaluating any later argument. *)
 Theorem create_ctor_borrowed_head_outcome:
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre cenv cx env e es /\
   compile_expr cenv (expr_type e) e sa = (vv,sb) /\
@@ -3128,6 +3151,7 @@ Finalise create_ctor_saved_row_suffix
 
 (* A copying snapshot carries its own allocation witness to the suffix. *)
 Theorem create_ctor_materialized_head_outcome:
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre cenv cx env e es /\
   ~is_word_type (expr_type e) /\
@@ -3253,6 +3277,7 @@ Finalise create_ctor_materialized_head_outcome
 (* All constructor heads use the same packet at the immediate-read cut.
    A private allocation is required only when a nonword snapshot copies. *)
 Theorem create_ctor_head_outcome[local]:
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre cenv cx env e es /\
   compile_expr cenv (expr_type e) e sa = (vv,sm) /\
@@ -3396,6 +3421,7 @@ Finalise create_ctor_head_outcome
 (* Constructor operands are read before evaluating the suffix. Their row
    witnesses refer to the original compiler cuts and the final runtime cut. *)
 Theorem create_ctor_rows_outcome[local]:
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   body_exprs_full_ok cx xs /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env es /\
   (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
@@ -3623,6 +3649,8 @@ Resume create_ctor_rows_outcome[tail_at_cut]:
     (`expr_body_pre cenv cx env e
         (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
      drule_all (REWRITE_RULE [ETA_AX] exprSimSourceTheory.expr_body_pre_eval) >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid`
+    by (irule create_operand_const_cells_replay >> rpt (goal_assum (drule_at Any))) >>
   `body_exprs_full_ok cx xs` by
     (drule_at (Pat `bind _ _ _ = _`) (REWRITE_RULE [ETA_AX] exprSimSourceTheory.eval_expr_read_INL) >>
      strip_tac >> fs[Once body_exprs_full_ok_def] >> metis_tac[]) >>
@@ -3869,6 +3897,7 @@ Finalise create_ctor_rows_outcome
 (* The continuation starts only after all constructor arguments were read.
    The row relation describes the actual saved values at the common cut. *)
 Theorem create_ctor_rows_cut:
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   body_exprs_full_ok cx xs /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env es /\
   (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
@@ -7506,6 +7535,7 @@ QED
 (* A folded offset performs no target instructions, but does contribute
    a successful source operand to the replay of the later list. *)
 Theorem blueprint_offset_cut[local]:
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   expr_sim_inv cenv cx env es /\
   expr_body_pre cenv cx env e es /\ body_expr_full_ok cx e /\
@@ -7667,6 +7697,7 @@ QED
 (* The size/count window is recovered at the actual endpoint of the
    scalar reads, not assumed to survive arbitrary evaluation. *)
 Theorem blueprint_scalar_suffix_cut:
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env
     (Call ann (CreateTarget (CreateFromBlueprint raw) salted rof ks)
@@ -7809,6 +7840,7 @@ Proof
     IS_SOME sv = salted /\ dest_optional_salt sv = SOME sw /\
     OPTREL (\op w. eval_operand op n = SOME w /\ op_taint tnn op = {} /\
       (!x. op = Var x ==> not_fresh_at sn x) /\ (!l. op <> Label l)) sop sw /\
+    body_const_cells_agree [(NONE,tops)] cx env en /\
     expr_sim_inv cenv cx env en /\ body_expr_full_ok cx offset /\
     storage_trace_domain cx st0 en.storage_trace /\
     (!H. valid_horizon cx st0 H en.storage_trace ==>
@@ -7914,6 +7946,8 @@ Resume blueprint_scalar_suffix_cut[salt_some]:
       qexists `gas_explicit ma s.vs_gas_readings ++ (gas_explicit ms m.vs_gas_readings ++ go)` >>
       irule create_eval_exprs_cons_replay >> qexists `em` >> simp[] >>
       irule create_eval_exprs_cons_replay >> qexists `en` >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env en`
+    by (irule create_operand_const_cells_replay >> rpt (goal_assum (drule_at Any))) >>
   qpat_x_assum `body_exprs_full_ok cx [offset]` mp_tac >>
   rewrite_tac[Once body_exprs_full_ok_def] >> simp[]
 QED
@@ -8570,6 +8604,7 @@ Finalise blueprint_raw_copy_store_exit
 (* The raw argument is read before any scalar, even when its snapshot
    borrows the original bytes. Recover the window at the actual suffix exit. *)
 Theorem blueprint_raw_args_cut:
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env e es /\ body_expr_full_ok cx e /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
@@ -9531,6 +9566,7 @@ Finalise create_blueprint_finish
 (* Constructor values are evaluated before the scalar suffix. The encoder
    keeps only its registered byte window live across that suffix. *)
 Theorem blueprint_encoded_args_cut:
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   ctor <> [] /\ LENGTH salts = (if salted then 1 else 0) /\
   expr_body_pre cenv cx env
     (Call ann (CreateTarget (CreateFromBlueprint F) salted rof ks)
@@ -10069,6 +10105,19 @@ QED
 Resume create_blueprint_expr_full_ok[ctor_values]:
   qx_genl_tac [`vs`,`bytes`,`eu`,`Gu`,`tu`,`u`,`ctor_marks`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `well_typed_exprs env ctor` by
+    (simp[constSubstCorrectTheory.frame_well_typed_exprs_every,EVERY_MEM] >>
+     qx_gen_tac `arg` >> strip_tac >>
+     `expr_body_pre cenv cx env arg et` by
+       (irule create_operand_pre >>
+        qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` (irule_at Any) >> simp[]) >>
+     drule_then strip_assume_tac expr_body_pre_static_facts >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env eu` by
+    (qpat_assum `!tail. eval_exprs cx ctor _ = (INL vs,_)` (qspec_then `[]` assume_tac) >>
+     `body_const_cells_agree [(NONE,tops)] cx env (eu with gas_obs := [])` suffices_by simp[] >>
+     irule body_const_cells_agree_exprs >>
+     qexistsl [`ctor`,`INL vs`,
+       `et with gas_obs := gas_explicit ctor_marks st.vs_gas_readings`] >> fs[]) >>
   `body_exprs_full_ok cx (amount::(salts ++ [offset]))` by
     (qpat_assum `!st vs en. eval_exprs cx ctor st = (INL vs,en) ==> _` mp_tac >>
      qpat_assum `!tail. eval_exprs cx ctor _ = (INL vs,_)` (qspec_then `[]` mp_tac) >>
@@ -10924,6 +10973,7 @@ QED
 (* The prepared initcode belongs to the continuation: the scalar cut
    evaluates only the amount and, when present, the one salt expression. *)
 Theorem raw_create_scalar_suffix_cut:
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env amount es /\ body_exprs_full_ok cx (amount::salts) /\
   expr_type amount = BaseT (UintT 256) /\
@@ -12483,6 +12533,7 @@ Finalise raw_create_total_path
 (* The constructor cut owns its bytecode prefix before the first row is
    evaluated. The new owner is registered before the encoder starts. *)
 Theorem raw_create_encoded_args_cut:
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   ctor <> [] /\
   expr_body_pre cenv cx env
     (Call ann (CreateTarget RawCreate salted rof ks) (code::amount::(ctor ++ salts)) dflt) entry /\
@@ -12779,6 +12830,7 @@ Finalise raw_create_encoded_args_cut
 (* The first bytecode read always uses the registered snapshot, even if
    the child was already represented by a pointer into ordinary memory. *)
 Theorem raw_create_bytecode_cut:
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env code es /\ body_expr_full_ok cx code /\
   expr_type code = BaseT (BytesT (Dynamic bound)) /\
@@ -12808,6 +12860,7 @@ Theorem raw_create_bytecode_cut:
     (!tail. bind (eval_expr cx code) (read_result cx)
        (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
        (INL (BytesV bs),ee with gas_obs := tail)) /\
+    body_const_cells_agree [(NONE,tops)] cx env ee /\
     expr_sim_inv cenv cx env ee /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     storage_trace_domain cx st0 ee.storage_trace /\
     wb_frame cenv es ee sa s z /\ ghost_kept_at lo cenv es sa G tn s Gz tz /\
@@ -12915,6 +12968,11 @@ Resume raw_create_bytecode_cut[snapshot_inputs]:
   qpat_assum `ee with gas_obs := [] = ee` (fn eq =>
     qpat_assum `!tail. monad_bind (eval_expr cx code) _ _ = _`
       (qspec_then `[]` (assume_tac o REWRITE_RULE [eq]))) >>
+  `body_const_cells_agree [(NONE,tops)] cx env ee` by
+    (irule body_const_cells_agree_expr_read >>
+     qexistsl [`code`, `INL v`, `es with gas_obs := gas_explicit marks s.vs_gas_readings ++ []`] >>
+     qpat_assum `expr_body_pre cenv cx env code es`
+       (strip_assume_tac o MATCH_MP expr_body_pre_static_facts) >> simp[]) >>
   drule_all (REWRITE_RULE [exprSimPropsTheory.vv_post_initial_gas]
     (Q.INST [`es` |-> `es with gas_obs := gas_explicit marks s.vs_gas_readings ++ []`,
              `s` |-> `t`, `s0` |-> `s`] raw_create_bytecode_physical_input)) >>
@@ -13377,6 +13435,7 @@ Resume raw_create_expr_full_ok[bytecode]:
   once_rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action] >>
   simp[NoAsms,bind_assoc,bind_return] >> once_rewrite_tac[GSYM bind_assoc] >>
   ho_match_mp_tac (GEN_ALL raw_create_bytecode_cut) >>
+  qpat_assum `body_const_cells_agree [(NONE,tops)] cx env es` (irule_at Any) >>
   qpat_assum `compile_expr cenv _ code sa = (vv,sa1)` (irule_at Any) >>
   qpat_assum `compile_expr _ _ (gas_shadow_expr code) shadow_sa = _` (irule_at Any) >>
   qpat_assum `compile_create_snapshot cenv vv _ sa1 = (root,sa2)` (irule_at Any) >>
@@ -13435,6 +13494,7 @@ Resume raw_create_expr_full_ok[bytecode]:
   `!cvs enc eu u Gu tu.
     (if ctor = [] /\ cvs = [] then enc = []
      else encode_create_ctor_args (get_tenv cx) (MAP expr_type ctor) cvs = SOME enc) /\
+    body_const_cells_agree [(NONE,tops)] cx env eu /\
     expr_sim_inv cenv cx env eu /\ body_exprs_full_ok cx (amount::salts) /\ ci_mono sa se /\
     wb_frame cenv es eu sa s0 u /\ ghost_kept_at lo cenv es sa G0 tn0 s0 Gu tu /\
     s0.vs_alloca_next <= u.vs_alloca_next /\ alloca_history func u /\
@@ -13478,6 +13538,7 @@ Resume raw_create_expr_full_ok[scalar]:
      gvs[Abbr `raw_action`]) >>
   simp[Abbr `cutQ`] >>
   ho_match_mp_tac (GEN_ALL raw_create_scalar_suffix_cut) >>
+  qpat_assum `body_const_cells_agree [(NONE,tops)] cx env eu` (irule_at Any) >>
   qpat_assum `lower_value _ _ _ amount se = (v,sf)` (irule_at Any) >>
   qpat_assum `lower_value _ _ _ (gas_shadow_expr amount) she = _` (irule_at Any) >>
   qpat_assum `compile_create_salt _ _ _ sf = (sop,sg)` (irule_at Any) >>
@@ -13607,6 +13668,7 @@ Resume raw_create_expr_full_ok[ctor]:
   once_rewrite_tac[create_eval_exprs_append] >>
   simp[NoAsms,bind_assoc,bind_return] >>
   ho_match_mp_tac (GEN_ALL (Q.INST [`off` |-> `32`] raw_create_encoded_args_cut)) >>
+  qpat_assum `body_const_cells_agree [(NONE,tops)] cx env ee` (irule_at Any) >>
   qpat_assum `expr_body_pre cenv cx env (Call _ (CreateTarget RawCreate _ _ _) _ _) es`
     (irule_at Any) >>
   qpat_assum `expr_type code = BaseT (BytesT (Dynamic bd))` (irule_at Any) >>
@@ -13623,7 +13685,7 @@ Resume raw_create_expr_full_ok[ctor]:
   qpat_assum `site.inst_outputs = [owner]` (irule_at Any) >>
   qpat_assum `ptr_covers Gz tz src z (LENGTH bs)` (irule_at Any) >>
   qpat_assum `read_memory (pbase+32) (LENGTH bs) z = bs` (irule_at Any) >>
-  qexistsl [`tops`,`shadow_func`] >>
+  qexists `shadow_func` >>
   qpat_assum `!a. ci_mono sa a ==> _`
     (qspec_then `sc` (drule_then (map_every assume_tac o CONJUNCTS))) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
@@ -13646,6 +13708,21 @@ Resume raw_create_expr_full_ok[ctor]:
        vyperStorageTraceTheory.storage_trace_frame_read_result] >>
   qx_genl_tac [`cvs`,`ctor_bytes`,`eu`,`Gu`,`tu`,`u`,`ctor_marks`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `well_typed_exprs env ctor` by
+    (simp[constSubstCorrectTheory.frame_well_typed_exprs_every,EVERY_MEM] >>
+     qx_gen_tac `arg` >> strip_tac >>
+     `expr_body_pre cenv cx env arg ee` by
+       (irule create_operand_pre >>
+        qpat_assum `expr_body_pre cenv cx env (Call _ (CreateTarget RawCreate _ _ _) _ _) es`
+          (irule_at Any) >>
+        simp[MEM_APPEND]) >>
+     drule_then strip_assume_tac expr_body_pre_static_facts >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env eu` by
+    (qpat_assum `!tail. eval_exprs cx ctor _ = (INL cvs,_)` (qspec_then `[]` assume_tac) >>
+     `body_const_cells_agree [(NONE,tops)] cx env (eu with gas_obs := [])` suffices_by simp[] >>
+     irule body_const_cells_agree_exprs >>
+     qexistsl [`ctor`,`INL cvs`,
+       `ee with gas_obs := gas_explicit ctor_marks z.vs_gas_readings`] >> fs[]) >>
   `body_exprs_full_ok cx (amount::salts)` by
     (qpat_assum `!st vs en. eval_exprs cx ctor st = (INL vs,en) ==> _` irule >>
      qpat_assum `!tail. eval_exprs cx ctor _ = _` (qspec_then `[]` (irule_at Any))) >>

@@ -121,6 +121,7 @@ Theorem slice_builtin_self_vv_full_from_tail:
   (!cenv cx env a n ct addr start len es ee e tops ctx DF lo d shadow_ctx PG func shadow_func ty.
     expr_body_pre cenv cx env
       (Builtin a (Slice n) [Builtin ct (Acc Code) [addr];start;len]) es /\
+    body_const_cells_agree [(NONE,tops)] cx env ee /\
     expr_sim_inv cenv cx env ee /\ (e = start \/ e = len \/ e = addr) /\
     body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx  ==>
@@ -136,6 +137,7 @@ Theorem slice_builtin_self_vv_full_from_tail:
               body_exprs_full_ok cx [addr])) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a (Slice n) args) es /\
     code_slice_source (Slice n) args = SOME (code_ty,addr) /\
     is_self_code (Builtin code_ty (Acc Code) [addr]) ==>
@@ -152,8 +154,8 @@ Proof
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty start es` by
     (`expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
      asm "child_run" (irule o cj 1) >>
-     simp[] >> conj_tac >- (qexists_tac `tops` >> simp[]) >>
-     qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` (irule_at Any) >> simp[]) >>
+     simp[] >> qexistsl_tac [`a`, `addr`, `code_ty`, `env`, `es`,
+                   `len`, `n`, `start`, `tops`] >> simp[]) >>
   `?self_ty. addr = Builtin self_ty (Env SelfAddr) []` by
     (qpat_x_assum `is_self_code _` mp_tac >> rpt (pop_assum kall_tac) >>
      rewrite_tac[Once (oneline is_self_code_def)] >>
@@ -282,6 +284,12 @@ Proof
        `INL v`,`mid with gas_obs := []`] mp_tac
        exprSimSourceTheory.expr_body_pre_eval >> fs[SF ETA_ss]) >>
   `expr_sim_inv cenv cx env mid` by fs[] >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `body_expr_full_ok cx len` by
     (qpat_x_assum `body_exprs_full_ok cx [start;len]` mp_tac >>
      simp[body_exprs_full_ok_def] >> strip_tac >>
@@ -292,8 +300,10 @@ Proof
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty len (mid with gas_obs := [])` by
     (asm "child_run" (irule o cj 1) >> simp[] >>
-     conj_tac >- (qexists_tac `tops` >> simp[]) >>
-     qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` (irule_at Any) >> simp[]) >>
+     qexistsl_tac [`BaseT (BytesT (Dynamic n))`,
+       `Builtin (BaseT AddressT) (Env SelfAddr) []`,
+       `BaseT (BytesT (Dynamic 24576))`, `env`, `es`,
+       `len`, `n`, `start`, `tops`] >> simp[]) >>
   `expr_body_pre cenv cx env len mid` by
     (`well_typed_expr env
         (Builtin (BaseT (BytesT (Dynamic n))) (Slice n) [Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code)

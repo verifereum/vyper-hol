@@ -412,6 +412,7 @@ Theorem for_nonslot_array_body_invoke[local]:
       (H,k,a::rs,es,eb,G,tn,s)) /\
   return_buf_sep d bc eb s /\
   storage_trace_domain cx st0 eb.storage_trace /\
+  body_const_cells_agree [(NONE,tops)] cx benv eb /\
   body_stmts_full_ok cx body /\ expr_sim_inv bc cx benv eb /\
   ce_locals_declared bc benv /\ locals_alloc_ok bc benv /\
   body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmts tops bindings body /\
@@ -2753,6 +2754,7 @@ Theorem for_nonslot_array_scoped_body_at[local]:
   expr_type e = ArrayT et bd /\
   (?start. eval_expr cx e start = (INL rv,em)) /\
   for_nonslot_code_frame c cx env ctx func id e body loc rv vv av em u /\
+  body_const_cells_agree [(NONE,tops)] cx benv eb /\
   body_stmts_full_ok cx body /\ expr_sim_inv bc cx benv eb /\
   ce_locals_declared bc benv /\ locals_alloc_ok bc benv /\
   body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmts tops bindings body /\
@@ -2817,7 +2819,8 @@ Theorem for_nonslot_array_scoped_body_at[local]:
             (!name base len. local_region c es0.scopes s0 name base len ==>
               off+sz <= base \/ base+len <= off) /\
             off <= i /\ i < off+sz /\ i IN tt.t_mem ==> i IN tn0.t_mem)) /\
-        (~b ==> t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
+        (~b ==> body_const_cells_agree [(NONE,tops)] cx env ef /\
+          t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
           for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
             (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
             (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,SUC k,rs,ef,c,ef,GG,tt,t)))
@@ -3050,6 +3053,15 @@ Resume for_nonslot_array_scoped_body_at[continue_return_buffer]:
 QED
 
 Resume for_nonslot_array_scoped_body_at[continue_live_frame]:
+  `body_const_cells_agree [(NONE,tops)] cx benv ef` by
+    (irule body_const_cells_agree_stmts >>
+     qpat_assum `eval_stmts cx body (eb with gas_obs := obs) = (raw,ef)`
+       (irule_at Any) >>
+     qexists_tac `ret_ty` >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env ep` by
+    (qpat_assum `body_const_cells_agree [(NONE,tops)] cx benv ef` mp_tac >>
+     qpat_assum `benv = extend_local env id fty F` (fn eq =>
+       simp[NoAsms, eq, Abbr `ep`])) >>
   `ep.storage_trace = ef.storage_trace` by simp[Abbr `ep`] >>
   `!H. valid_horizon cx st0 H ep.storage_trace ==>
       for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
@@ -3313,6 +3325,9 @@ Resume for_nonslot_array_scoped_body_at[increment_return_buffer]:
   qpat_assum `for_nonslot_live _ _ _ _ _ (H,SUC k,rs,ep,c,ep,G',tn',t')`
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE[for_nonslot_live_def]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac >-
+    (qpat_assum `body_const_cells_agree [(NONE,tops)] cx env ep` mp_tac >>
+     simp[NoAsms, Abbr `ep`]) >>
   irule bodyFullSharedTheory.return_buf_sep_transport >>
   conj_tac
   >- (qpat_assum `gas_origin_ptr_path _ (z,FST _,SND _) [] (OK t',G',tn')`
@@ -3780,6 +3795,7 @@ Theorem for_nonslot_array_round_contracts_at:
     (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
     (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
     (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\
+  body_const_cells_agree [(NONE,tops)] cx env em /\
   body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre c cx env e es0 /\
   ce_locals_declared c env /\ locals_alloc_ok c env /\
   supported_stmt tops bindings (For id fty (Array e) n loop_body) /\
@@ -3975,6 +3991,7 @@ Resume for_nonslot_array_round_contracts_at[round_packets]:
       (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,rs,es,c,es,J,tz,z)` >>
   qabbrev_tac `Inv = \H rs es J tz z.
     z.vs_current_bb = cond /\ z.vs_inst_idx = 0 /\ return_buf_sep d c es z /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     Live H (LENGTH vs - LENGTH rs) rs es J tz z` >>
   qabbrev_tac `Done = \H ee G1 tn1 t.
     stmt_lands lctx sb (INL ()) t /\ ~t.vs_halted /\ ~block_is_terminated sb /\
@@ -4057,6 +4074,10 @@ Resume for_nonslot_array_round_contracts_at[cons]:
   `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
     fs[storage_trace_domain_def] >>
   qabbrev_tac `k = LENGTH vs - LENGTH (a::rs)` >>
+  `body_const_cells_agree [(NONE,tops)] cx env es` by
+    (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> Inv H (a::rs) es J tz z`
+       (qspec_then `storage_trace_horizon es.storage_trace` (drule_then mp_tac)) >>
+     simp[NoAsms, Abbr `Inv`] >> strip_tac >> first_assum ACCEPT_TAC) >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
        z.vs_current_bb = cond /\ z.vs_inst_idx = 0 /\
        return_buf_sep d c es z /\ Live H k (a::rs) es J tz z` by
@@ -4099,6 +4120,8 @@ Resume for_nonslot_array_round_contracts_at[cons_body]:
      simp[NoAsms,push_scope_with_var_def,return_def] >>
      disch_then (SUBST1_TAC o SYM) >>
      simp[NoAsms,Abbr `sc`,evaluation_state_component_equality]) >>
+  `body_const_cells_agree [(NONE,tops)] cx (extend_local env id fty F) eb` by
+    (qpat_assum `eb = _` SUBST1_TAC >> simp[]) >>
   `eb.storage_trace = es.storage_trace` by
     (qpat_assum `eb = _` SUBST1_TAC >> simp[]) >>
   `lookup_scopes id es.scopes = NONE` by
@@ -4355,6 +4378,7 @@ Theorem for_nonslot_array_round_contracts:
     (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
     (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
     (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\
+  body_const_cells_agree [(NONE,tops)] cx env es0 /\
   body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre c cx env e es0 /\
   ce_locals_declared c env /\ locals_alloc_ok c env /\
   supported_stmt tops bindings (For id fty (Array e) n loop_body) /\
@@ -4474,10 +4498,19 @@ Proof
   `expr_type e = ArrayT sty bd /\ loc = (case vv_location vv of NONE => LocMemory | SOME l => l)` by
     (qhdtm_assum `for_nonslot_layout` (mp_tac o REWRITE_RULE [for_nonslot_layout_def]) >> simp[]) >>
   `expr_type e = ArrayT fty bd` by fs[well_typed_iterator_def] >>
+  qpat_assum `?obs. !tail. eval_expr _ _ _ = _` (qx_choose_then `obs` assume_tac) >>
+  qabbrev_tac `start = es0 with gas_obs := obs ++ em.gas_obs` >>
+  `eval_expr cx e start = (INL rv,em)` by
+    (qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `em.gas_obs` mp_tac) >>
+     simp[Abbr `start`]) >>
+  `expr_body_pre c cx env e start` by simp[Abbr `start`] >>
   `?start. eval_expr cx e start = (INL rv,em) /\ expr_body_pre c cx env e start` by
-    (qpat_assum `?obs. !tail. eval_expr _ _ _ = _` (qx_choose_then `obs` assume_tac) >>
-     qexists `es0 with gas_obs := obs ++ em.gas_obs` >>
-     qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `em.gas_obs` mp_tac) >> simp[]) >>
+    (qexists `start` >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env em` by
+    (irule body_const_cells_agree_expr >>
+     qpat_assum `eval_expr cx e start = (INL rv,em)` (irule_at Any) >>
+     imp_res_tac exprBodyPrePropsTheory.expr_body_pre_static_facts >>
+     simp[Abbr `start`]) >>
   `expr_sim_inv c cx env em` by
     (drule_all_then ACCEPT_TAC bodySimStmtFactsTheory.expr_body_pre_eval_result) >>
   `vv_place_ptr c cx em u rv vv` by fs[vv_post_def] >>

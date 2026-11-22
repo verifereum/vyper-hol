@@ -79,6 +79,7 @@ Theorem modular_sim_full_from_suffix:
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es /\
@@ -113,6 +114,7 @@ Proof
          qpat_assum `body_inv _ _ _ _` mp_tac >>
          qpat_assum `expr_body_pre cenv cx env e1 es` mp_tac >>
          qpat_assum `shadow_body_inv tops ctx shadow_ctx` mp_tac >>
+         qpat_assum `body_const_cells_agree [(NONE,tops)] cx env es` mp_tac >>
          rpt (pop_assum kall_tac) >>
          simp[body_expr_full_ok_def] >> metis_tac[]) >>
       `!e. MEM e [e1;e2;e3] ==> expr_body_pre cenv cx env e es` by
@@ -281,6 +283,19 @@ Proof
          pure_rewrite_tac[APPEND_NIL] >>
          CONV_TAC (DEPTH_CONV ETA_CONV) >> disch_then ACCEPT_TAC) >>
       `expr_sim_inv cenv cx env mid` by fs[] >>
+      `expr_body_pre cenv cx env e1 es` by
+        (drule expr_body_pre_builtin_arg >>
+         disch_then (qspecl_then [`e1`, `es`] mp_tac) >>
+         simp[] >> fs[expr_body_pre_def]) >>
+      `body_const_cells_agree [(NONE,tops)] cx env mid` by
+        (`well_typed_expr env e1` by
+           qpat_assum `expr_body_pre cenv cx env e1 es`
+             (ACCEPT_TAC o cj 2 o REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def]) >>
+         `body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+           suffices_by simp[] >>
+         irule body_const_cells_agree_expr_read >>
+         qpat_assum `!tail. bind (eval_expr cx e1) _ _ = _`
+           (qspec_then `[]` (irule_at Any)) >> simp[]) >>
       `expr_body_pre cenv cx env e2 mid` by
         (drule expr_body_pre_builtin_arg >>
          disch_then (qspecl_then [`e2`, `mid`] mp_tac) >> simp[]) >>
@@ -298,6 +313,7 @@ Proof
         (qpat_assum `body_expr_full_ok cx e2` mp_tac >>
          qpat_assum `body_inv _ _ _ _` mp_tac >>
          qpat_assum `expr_body_pre cenv cx env e2 mid` mp_tac >>
+         qpat_assum `body_const_cells_agree [(NONE,tops)] cx env mid` mp_tac >>
          qpat_assum `shadow_body_inv tops ctx shadow_ctx` mp_tac >>
          rpt (pop_assum kall_tac) >>
          simp[body_expr_full_ok_def] >> metis_tac[]) >>
@@ -391,6 +407,15 @@ Proof
          pure_rewrite_tac[APPEND_NIL] >>
          CONV_TAC (DEPTH_CONV ETA_CONV) >> disch_then ACCEPT_TAC) >>
       `expr_sim_inv cenv cx env mid'` by fs[] >>
+      `body_const_cells_agree [(NONE,tops)] cx env mid'` by
+        (`well_typed_expr env e2` by
+           qpat_assum `expr_body_pre cenv cx env e2 mid`
+             (ACCEPT_TAC o cj 2 o REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def]) >>
+         `body_const_cells_agree [(NONE,tops)] cx env (mid' with gas_obs := [])`
+           suffices_by simp[] >>
+         irule body_const_cells_agree_expr_read >>
+         qpat_assum `!tail. bind (eval_expr cx e2) _ _ = _`
+           (qspec_then `[]` (irule_at Any)) >> simp[]) >>
       `expr_body_pre cenv cx env e3 mid'` by
         (drule expr_body_pre_builtin_arg >>
          disch_then (qspecl_then [`e3`, `mid'`] mp_tac) >> simp[]) >>
@@ -412,6 +437,7 @@ Proof
         (qpat_assum `body_expr_full_ok cx e3` mp_tac >>
          qpat_assum `body_inv _ _ _ _` mp_tac >>
          qpat_assum `expr_body_pre cenv cx env e3 mid'` mp_tac >>
+         qpat_assum `body_const_cells_agree [(NONE,tops)] cx env mid'` mp_tac >>
          qpat_assum `shadow_body_inv tops ctx shadow_ctx` mp_tac >>
          rpt (pop_assum kall_tac) >>
          simp[body_expr_full_ok_def] >> metis_tac[]) >>

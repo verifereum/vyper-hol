@@ -66,6 +66,7 @@ Theorem method_id_runtime_joint_outcome_from_suffix:
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ann e es
     st0 sa sm sb shadow_sa ss shadow_sb x op fixed s0 G0 tn0.
     body_inv tops ctx cenv cx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin ann MethodId [e]) es /\
     method_id_literal e = NONE /\
     ann = BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)) /\
@@ -265,6 +266,7 @@ Theorem method_id_runtime_sim_full_from_suffix:
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann e es.
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin ann MethodId [e]) es /\
     body_expr_full_ok cx e /\ method_id_literal e = NONE ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

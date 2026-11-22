@@ -43,8 +43,7 @@ Resume raw_log_expr_full_ok[judgments]:
      cenv cx ty (Call ann RawLog es dflt) start` by
     (irule raw_log_expr_sim_full >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> simp[] >>
-     conj_tac >- (qexists_tac `tops` >> simp[]) >>
-     qexists_tac `env` >> simp[]) >>
+     map_every qexists_tac [`env`, `tops`] >> simp[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   irule expr_vv_sim_stack_full >> simp[] >> rpt conj_tac
   >~ [`!sa. ?t op sb. compile_expr cenv ty (Call ann RawLog es dflt) sa =

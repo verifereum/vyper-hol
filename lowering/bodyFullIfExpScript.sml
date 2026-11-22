@@ -124,12 +124,22 @@ Resume ifexp_expr_full_ok_from_root[arms]:
     (qpat_assum `expr_body_pre _ _ _ e1 (_ with gas_obs := _)`
        (mp_then Any mp_tac exprSimSourceTheory.expr_body_pre_eval) >>
      simp[] >> metis_tac[]) >>
+  `well_typed_expr env e1` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+  `body_const_cells_agree [(NONE,tops)] cx env es1` by
+    (irule body_const_cells_agree_expr_read >>
+     qpat_assum `bind (eval_expr cx e1) _ _ = (_,es1)` (irule_at Any) >> simp[]) >>
   `expr_body_pre cenv cx env e2 es1 /\ expr_body_pre cenv cx env e3 es1` by metis_tac[] >>
   `body_expr_full_ok cx e2 /\ body_expr_full_ok cx e3` by
     (qpat_x_assum `bind _ _ _ = _` mp_tac >>
      simp[bind_def, AllCaseEqs()] >> metis_tac[]) >>
-  conj_tac >- (fs[bodyFullPredsTheory.body_expr_full_ok_def] >> metis_tac[]) >>
-  conj_tac >- (fs[bodyFullPredsTheory.body_expr_full_ok_def] >> metis_tac[]) >>
+  conj_tac >- (qpat_assum `body_expr_full_ok cx e2`
+    (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+    disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,
+      `shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`ty`,`es1`] mp_tac) >> simp[]) >>
+  conj_tac >- (qpat_assum `body_expr_full_ok cx e3`
+    (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+    disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,
+      `shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`ty`,`es1`] mp_tac) >> simp[]) >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
       `expr_body_pre cenv cx env e (es1 with gas_obs := gs')` by
