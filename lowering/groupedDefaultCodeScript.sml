@@ -109,12 +109,12 @@ Proof
      asm_rewrite_tac[pairTheory.FST,pairTheory.SND]) >>
   `gas_shadow_state last shadow_last` by
     (gs[gas_shadow_env_fields] >>
-     qpat_assum `gas_shadow_state first shadow_first`
-       (mp_then Any (qspecl_then [`ty`, `src`, `dst`, `ce`] mp_tac)
-         (REWRITE_RULE [gas_shadow_compiles_def]
-           (Q.INST [`opc` |-> `CALLDATALOAD`, `base_op` |-> `Lit 0w`,
-              `hi` |-> `Lit 0w`, `info` |-> `type_to_abi_dec_info ce.ce_struct_fields ce ty`]
-              gas_shadow_compiles_abi_decode_to_buf))) >>
+     drule_at (Pat `gas_shadow_state first shadow_first`)
+       (REWRITE_RULE [gas_shadow_compiles_def]
+         (Q.INST [`opc` |-> `CALLDATALOAD`, `base_op` |-> `Lit 0w`,
+            `hi` |-> `Lit 0w`, `info` |-> `type_to_abi_dec_info ce.ce_struct_fields ce ty`]
+            gas_shadow_compiles_abi_decode_to_buf)) >>
+     disch_then (qspecl_then [`ty`, `src`, `dst`, `ce`] mp_tac) >>
      simp[]) >>
   `ci_mono sa mid` by
     (qpat_assum `compile_getelemptr_abi _ _ _ _ _ _ sa = _` mp_tac >>
