@@ -2,6 +2,7 @@
 Theory loweringBudgetCreateCopy
 Ancestors
   runtimePeakMemoryCode loweringBudgetDallocaWindows loweringBudgetAccountCodes
+  dallocaCreateGeometry
   loweringBudgetPathDeterminism loweringBudgetStoreRecorder
   loweringCallBudgetHistory exprLoweringProps venomExecProofs
   fnBlockBodySteps contextCodegenRel contextCodegenRelProps lowerDloadPtrRawReachable
