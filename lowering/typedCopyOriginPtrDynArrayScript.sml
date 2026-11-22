@@ -32,7 +32,8 @@ Proof
      step_taint (mk_inst sa.cs_next_id opc args outs) s u tn)` by
     (mp_tac (straight_line_origin_ptr_edge |> Q.INST
        [`i` |-> `mk_inst sa.cs_next_id opc args outs`]) >>
-     simp[venomInstTheory.mk_inst_def] >> disch_then irule >> simp[]) >>
+     simp[venomInstTheory.mk_inst_def, unitTransformDefsTheory.dalloca_no_wrap_def] >>
+     disch_then irule >> simp[]) >>
   `~u.vs_halted` by
     ( `step_inst 0 ctx (mk_inst sa.cs_next_id opc args outs) s = OK u` by
         simp[venomExecSemanticsTheory.step_inst_non_invoke, venomInstTheory.mk_inst_def] >>
@@ -247,6 +248,16 @@ Proof
         [i1;i2;i3]` by
        simp[Abbr `i1`, Abbr `i2`, Abbr `i3`, venomInstTheory.mk_inst_def,
          venomInstTheory.is_terminator_def] >>
+     `EVERY (\i. i.inst_opcode <> DALLOCA) [i1;i2;i3]` by
+       simp[Abbr `i1`, Abbr `i2`, Abbr `i3`, venomInstTheory.mk_inst_def] >>
+     `(ctx_has_dalloca ctx ==>
+       !pre i post v. [i1;i2;i3] = pre ++ i::post /\
+         run_inst_seq pre s = OK v ==> unitTransformDefs$dalloca_no_wrap i v)` by
+       (rpt strip_tac >>
+        qpat_x_assum `[i1;i2;i3] = _` (fn split =>
+          qpat_x_assum `EVERY (\j. j.inst_opcode <> DALLOCA) _`
+            (mp_tac o PURE_REWRITE_RULE [split])) >>
+        simp[listTheory.EVERY_APPEND, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
      drule_all run_inst_seq_gas_origin_ptr_path >>
      simp[Abbr `i1`, Abbr `i2`, Abbr `i3`, venomInstTheory.mk_inst_def]) >>
   qexistsl [`u with vs_inst_idx := s.vs_inst_idx + 3`, `Gf`, `tnf`] >>
@@ -899,6 +910,16 @@ Resume typed_copy_origin_ptr_dynarray_fast_data_path[path]:
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) [i1;i2]` by
     simp[Abbr `i1`, Abbr `i2`, venomInstTheory.mk_inst_def,
       venomInstTheory.is_terminator_def] >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) [i1;i2]` by
+    simp[Abbr `i1`, Abbr `i2`, venomInstTheory.mk_inst_def] >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post v. [i1;i2] = pre ++ i::post /\
+      run_inst_seq pre s = OK v ==> unitTransformDefs$dalloca_no_wrap i v)` by
+    (rpt strip_tac >>
+     qpat_x_assum `[i1;i2] = _` (fn split =>
+       qpat_x_assum `EVERY (\j. j.inst_opcode <> DALLOCA) _`
+         (mp_tac o PURE_REWRITE_RULE [split])) >>
+     simp[listTheory.EVERY_APPEND, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   drule_all run_inst_seq_gas_origin_ptr_path >>
   simp[Abbr `i1`, Abbr `i2`, venomInstTheory.mk_inst_def]
 QED

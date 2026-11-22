@@ -201,9 +201,16 @@ Proof
   qexistsl [`t`, `G'`, `tn'`] >> simp[] >> gen_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
       (emitted_insts sa sb) /\
-   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = [] /\
+   EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
     (drule word_neg_emission >> strip_tac >>
      simp[mk_inst_def, is_terminator_def]) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+     simp[EVERY_APPEND]) >>
   drule word_neg_memory_safe >> strip_tac >>
   `inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G' tn'` by simp[] >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by simp[] >>
@@ -255,6 +262,8 @@ Proof
   qexistsl [`G'`, `tn'`] >> gen_tac >>
   first_x_assum (qspec_then `D` strip_assume_tac) >>
   gvs[Once inst_seq_ptr_def] >>
+  `(ctx_has_dalloca ctx ==> dalloca_no_wrap i s)` by
+    simp[Abbr `i`, mk_inst_def] >>
   `inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
    mem_safe_step 0 ctx j u` by
     simp[Abbr `i`, Abbr `j`, mem_safe_step_non_invoke,

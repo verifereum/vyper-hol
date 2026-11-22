@@ -141,7 +141,7 @@ Proof
   mp_tac (Q.INST [`func` |-> `fn`,
     `i` |-> `mk_inst st.cs_next_id opc ops [STRING #"%" (toString st.cs_next_var)]`,
     `u` |-> `t`, `G'` |-> `H`, `tn'` |-> `qt`] step_origin_ptr_path) >>
-  simp[] >> simp[mk_inst_def]
+  simp[mk_inst_def, dalloca_no_wrap_non_dalloca]
 QED
 
 Theorem prefix_register_address_add_run:

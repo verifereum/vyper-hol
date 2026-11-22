@@ -148,6 +148,9 @@ Resume typed_copy_origin_ptr_sarray_fast_path[path]:
     (`inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
        inst.inst_opcode <> GAS` by
        simp[Abbr `inst`, venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
+     `ctx_has_dalloca ctx ==> dalloca_no_wrap inst s` by
+       simp[unitTransformDefsTheory.dalloca_no_wrap_def, Abbr `inst`,
+            venomInstTheory.mk_inst_def] >>
      drule_all straight_line_origin_ptr_edge >>
      disch_then (qspecl_then [`explicit`, `PG`] mp_tac) >> simp[Abbr `tf`]) >>
   `~sc.vs_halted` by

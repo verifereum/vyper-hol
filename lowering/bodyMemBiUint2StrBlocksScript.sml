@@ -4,7 +4,7 @@ Ancestors
   exprSimUint2Str fragExecMem instMemFrontier venomMemDefs arithmetic
   memSafeRun venomInst venomState finite_map list rich_list
   venomExecSemantics exprLoweringProps exprSimBopRestWordLoopPath
-  fragGasMode fragGasPathMem allocaHistoryFragment
+  fragGasMode fragGasPathMem fragGasSeqMem allocaHistoryFragment
 
 Theorem u2s_body_nonstore_mem_ok[local]:
   run_inst_seq_mem_ok (TAKE 4 (u2s_body a buf n)) s /\
@@ -243,11 +243,13 @@ Proof
   strip_tac >>
   `isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by
     (simp[u2s_drop_prefix, IS_PREFIX_APPEND] >> metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code` by
+    fs[EVERY_MEM] >>
+  `FILTER (\i. i.inst_opcode = GAS) code = []` by
+    fs[FILTER_EQ_NIL, EVERY_MEM] >>
   `gas_marked_path T ctx fn s 0
     (OK (t with vs_inst_idx := LENGTH pre + LENGTH code))` by
-    (qpat_assum `s.vs_inst_idx = _` (fn th => rewrite_tac [GSYM th]) >>
-     irule rest_word_sequence_marked >>
-     simp[u2s_drop_prefix, IS_PREFIX_APPEND] >> metis_tac[]) >>
+    (drule_all run_inst_seq_gas_path_mem >> simp[gas_marked_path_def]) >>
   `gas_marked_path T ctx fn (t with vs_inst_idx := LENGTH pre + LENGTH code)
     0 (OK (jump_to lbl (t with vs_inst_idx := LENGTH pre + LENGTH code)))` by
     (irule rest_word_jump_marked >> simp[] >>
@@ -350,7 +352,11 @@ Proof
      `pre` |-> `[]`, `code` |-> `TAKE 9 (u2s_body a buf n)`,
      `j` |-> `LAST (u2s_body a buf n)`] u2s_memory_block_history) >>
   simp[u2s_body_def, u2s_inst_def, mk_inst_def, is_terminator_def,
-       step_inst_base_opcode_eqs]
+       step_inst_base_opcode_eqs] >>
+  rpt strip_tac >>
+  qpat_x_assum `_ = _ ++ _`
+    (mp_tac o Q.AP_TERM `EVERY (\i. i.inst_opcode <> DALLOCA)`) >>
+  simp[]
 QED
 
 Theorem u2s_final_memory_path:
@@ -377,7 +383,11 @@ Proof
      `pre` |-> `[]`, `code` |-> `TAKE 4 (u2s_final a buf n)`,
      `j` |-> `LAST (u2s_final a buf n)`] u2s_memory_block_history) >>
   simp[u2s_final_def, u2s_inst_def, mk_inst_def, is_terminator_def,
-       step_inst_base_opcode_eqs]
+       step_inst_base_opcode_eqs] >>
+  rpt strip_tac >>
+  qpat_x_assum `_ = _ ++ _`
+    (mp_tac o Q.AP_TERM `EVERY (\i. i.inst_opcode <> DALLOCA)`) >>
+  simp[]
 QED
 
 Theorem u2s_zero_memory_path:
@@ -404,7 +414,11 @@ Proof
      `pre` |-> `[]`, `code` |-> `TAKE 6 (u2s_zero a buf n)`,
      `j` |-> `LAST (u2s_zero a buf n)`] u2s_memory_block_history) >>
   simp[u2s_zero_def, u2s_inst_def, mk_inst_def, is_terminator_def,
-       step_inst_base_opcode_eqs]
+       step_inst_base_opcode_eqs] >>
+  rpt strip_tac >>
+  qpat_x_assum `_ = _ ++ _`
+    (mp_tac o Q.AP_TERM `EVERY (\i. i.inst_opcode <> DALLOCA)`) >>
+  simp[]
 QED
 
 Theorem u2s_setup_memory_path:
@@ -429,7 +443,11 @@ Proof
      `code` |-> `TAKE 3 (u2s_setup a op buf)`,
      `j` |-> `LAST (u2s_setup a op buf)`] u2s_memory_block_history) >>
   simp[u2s_setup_def, u2s_inst_def, mk_inst_def, is_terminator_def,
-       step_inst_base_opcode_eqs]
+       step_inst_base_opcode_eqs] >>
+  rpt strip_tac >>
+  qpat_x_assum `_ = _ ++ _`
+    (mp_tac o Q.AP_TERM `EVERY (\i. i.inst_opcode <> DALLOCA)`) >>
+  simp[]
 QED
 
 Theorem u2s_check_memory_path:
@@ -453,7 +471,11 @@ Proof
     [`bb` |-> `<|bb_label := u2s_label a 0; bb_instructions := u2s_check a|>`,
      `pre` |-> `[]`, `code` |-> `TAKE 1 (u2s_check a)`,
      `j` |-> `LAST (u2s_check a)`] u2s_memory_block_history) >>
-  gvs[u2s_check_def, u2s_inst_def, mk_inst_def, is_terminator_def]
+  gvs[u2s_check_def, u2s_inst_def, mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `_ = _ ++ _`
+    (mp_tac o Q.AP_TERM `EVERY (\i. i.inst_opcode <> DALLOCA)`) >>
+  simp[]
 QED
 
 Theorem u2s_cond_memory_path:
@@ -477,5 +499,9 @@ Proof
     [`bb` |-> `<|bb_label := u2s_label a 1; bb_instructions := u2s_cond a|>`,
      `pre` |-> `[]`, `code` |-> `TAKE 1 (u2s_cond a)`,
      `j` |-> `LAST (u2s_cond a)`] u2s_memory_block_history) >>
-  gvs[u2s_cond_def, u2s_inst_def, mk_inst_def, is_terminator_def]
+  gvs[u2s_cond_def, u2s_inst_def, mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `_ = _ ++ _`
+    (mp_tac o Q.AP_TERM `EVERY (\i. i.inst_opcode <> DALLOCA)`) >>
+  simp[]
 QED

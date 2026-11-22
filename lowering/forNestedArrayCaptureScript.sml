@@ -103,10 +103,19 @@ Theorem select_capture_immutable[local]:
 Proof
   Cases_on `ALOOKUP s.immutables cx.txn.target` >>
   simp[select_result_def, extend_place_def, extend_memory_place_def,
-       place_type_value_def, read_place_def, get_immutables_def, get_address_immutables_def,
-       bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
-       return_def, raise_def, vyperMiscTheory.option_CASE_rator,
-       vyperMiscTheory.sum_CASE_rator, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+       place_type_value_def, read_place_def, get_immutables_def,
+       get_address_immutables_def, bind_def, ignore_bind_def,
+       lift_option_type_def, lift_sum_def, return_def, raise_def,
+       vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator] >>
+  rename1 `ALOOKUP s.immutables cx.txn.target = SOME imms` >>
+  Cases_on `FLOOKUP (get_source_immutables src imms) name` >> simp[] >>
+  rename1 `FLOOKUP (get_source_immutables src imms) name = SOME tva` >>
+  Cases_on `subscripts_type (FST tva) path` >> simp[] >>
+  rename1 `subscripts_type (FST tva) path = SOME ptv` >>
+  Cases_on `evaluate_subscripts (FST tva) (SND tva) path` >> simp[] >>
+  rename1 `evaluate_subscripts (FST tva) (SND tva) path = INL v` >>
+  Cases_on `evaluate_subscripts ptv v [sb]` >> simp[] >>
+  strip_tac >> gvs[] >>
   drule_all evaluate_subscripts_append >>
   disch_then (qspec_then `[sb]` assume_tac) >>
   qexistsl [`FST tva`,`SND tva`] >> simp[lookup_immutable_def]

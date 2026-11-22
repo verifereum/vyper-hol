@@ -5,7 +5,7 @@ Ancestors
   bodyPtrHashBuiltinsShaTail bodyPtrHashBuiltinsShaTailSteps fragExecMem memSafeRun gasEvents
   venomExecProofs venomExecSemantics venomState venomInstProofs venomInst
   instIdxIndep fragExec exprLoweringProps fragGasSeqMem fragGasSeqAbort
-  ptrDiscipline list rich_list arithmetic
+  ptrDiscipline checkedPrefixCursor list rich_list arithmetic
 
 Theorem sha_gas_head_origin_abort:
   !code s t a G tn G' tn' ctx fn bb id gv.
@@ -43,6 +43,14 @@ Proof
    isPREFIX code (DROP (u with vs_inst_idx := SUC s.vs_inst_idx).vs_inst_idx bb.bb_instructions)` by simp[] >>
   `run_inst_seq_mem_ok code (u with vs_inst_idx := SUC s.vs_inst_idx)` by
     simp[run_inst_seq_mem_ok_inst_idx] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post r. code = pre ++ i::post /\
+      run_inst_seq pre (u with vs_inst_idx := SUC s.vs_inst_idx) = OK r ==>
+      unitTransformDefs$dalloca_no_wrap i r)` by
+    (match_mp_tac (GEN_ALL checked_prefix_tail_cursor) >>
+     qexistsl_tac [`s`, `mk_inst id GAS [] [gv]`] >>
+     qpat_x_assum `ptrDiscipline$ctx_has_dalloca ctx ==> !pre i post r. _` mp_tac >>
+     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, APPEND] >> simp[]) >>
   drule_all sha_zero_origin_abort >>
   disch_then (qspec_then `explicit` strip_assume_tac) >> qexists_tac `j` >>
   `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn)
@@ -77,6 +85,11 @@ Theorem sha_one_prefix_gas_abort:
     (Abort a (t with vs_inst_idx := j),G',tn')
 Proof
   strip_tac >> drule instruction_prefix_cursor >> strip_tac >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==> unitTransformDefs$dalloca_no_wrap h s)` by
+    (strip_tac >>
+     qpat_assum `ptrDiscipline$ctx_has_dalloca ctx ==> _` (mp_tac o UNDISCH) >>
+     disch_then (qspecl_then [`[]`, `h`, `mk_inst id GAS [] [gv]::code`, `s`] mp_tac) >>
+     simp[run_inst_seq_def]) >>
   `step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
   `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
     metis_tac[step_preserves_halted, step_preserves_control_flow] >>
@@ -95,6 +108,14 @@ Proof
    lookup_block (u with vs_inst_idx := SUC s.vs_inst_idx).vs_current_bb fn.fn_blocks = SOME bb /\
    isPREFIX (mk_inst id GAS [] [gv]::code)
      (DROP (u with vs_inst_idx := SUC s.vs_inst_idx).vs_inst_idx bb.bb_instructions)` by simp[] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post r. (mk_inst id GAS [] [gv]::code) = pre ++ i::post /\
+      run_inst_seq pre (u with vs_inst_idx := SUC s.vs_inst_idx) = OK r ==>
+      unitTransformDefs$dalloca_no_wrap i r)` by
+    (match_mp_tac (GEN_ALL checked_prefix_tail_cursor) >>
+     qexistsl_tac [`s`, `h`] >>
+     qpat_x_assum `ptrDiscipline$ctx_has_dalloca ctx ==> !pre i post r. _` mp_tac >>
+     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, APPEND] >> simp[]) >>
   drule_all sha_gas_head_origin_abort >> strip_tac >> qexists_tac `j` >>
   `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
     (OK (u with vs_inst_idx := SUC s.vs_inst_idx),

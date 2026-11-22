@@ -186,6 +186,14 @@ Proof
   metis_tac[]
 QED
 
+Theorem scalar_shape_prefix_no_wrap[local]:
+  EVERY scalar_shape code /\ code = pre ++ ins::post ==>
+  dalloca_no_wrap ins u
+Proof
+  strip_tac >> Cases_on `ins.inst_opcode = DALLOCA` >>
+  gvs[EVERY_APPEND, scalar_shape_def, scalar_binary_def, scalar_unary_def]
+QED
+
 Theorem array_bounds_check_joint_ok:
   array_bounds_check idx len sgn sa = ((),sb) /\
   eval_operand idx s = SOME i /\ eval_operand len s = SOME n /\
@@ -204,11 +212,31 @@ Theorem array_bounds_check_joint_ok:
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w)
 Proof
   strip_tac >> drule_all array_bounds_check_ok >> strip_tac >>
+  `!pre ins post u. emitted_insts sa sb = pre ++ ins::post ==>
+      dalloca_no_wrap ins u` by
+    (drule array_bounds_check_shape >> metis_tac[scalar_shape_prefix_no_wrap]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
      (OK (ss' with vs_inst_idx := LENGTH sb.cs_current_insts),G',tn')` by
     (irule emitted_origin_ptr_path >> simp[] >>
-     qexistsl_tac [`emitted_insts sa sb`, `sa`] >> fs[same_blocks_def]) >>
+     qexistsl_tac [`emitted_insts sa sb`, `sa`] >> fs[same_blocks_def] >>
+     metis_tac[]) >>
   qexists_tac `ss'` >> simp[]
+QED
+
+Theorem array_elem_ptr_shape_mem[local]:
+  array_elem_ptr bop idx dyn ws esz sa = (p,sb) ==>
+  EVERY scalar_shape (emitted_insts sa sb) /\
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  Cases_on `dyn` >>
+  simp[array_elem_ptr_def, emit_op_def, comp_bind_def, comp_ignore_bind_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
+  strip_tac >> gvs[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >> simp[DROP_LENGTH_APPEND] >>
+  (conj_tac >- simp[scalar_shape_def, scalar_binary_def]) >>
+  irule run_inst_seq_mem_ok_every >>
+  simp[inst_mem_below_frontier_def, inst_dload_in_section_def,
+       source_memory_read_ranges_def, source_memory_write_ranges_def]
 QED
 
 Theorem array_elem_ptr_joint:
@@ -229,10 +257,14 @@ Theorem array_elem_ptr_joint:
     eval_operand p t = SOME ((if dyn then b + n2w ws else b) + i * n2w esz)
 Proof
   strip_tac >> drule_all array_elem_ptr_run >> strip_tac >>
+  `!pre ins post u. emitted_insts sa sb = pre ++ ins::post ==>
+      dalloca_no_wrap ins u` by
+    (drule array_elem_ptr_shape_mem >> metis_tac[scalar_shape_prefix_no_wrap]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
      (OK (ss' with vs_inst_idx := LENGTH sb.cs_current_insts),G',tn')` by
     (irule emitted_origin_ptr_path >> simp[] >>
-     qexistsl_tac [`emitted_insts sa sb`, `sa`] >> fs[same_blocks_def]) >>
+     qexistsl_tac [`emitted_insts sa sb`, `sa`] >> fs[same_blocks_def] >>
+     metis_tac[]) >>
   qexists_tac `ss'` >> simp[]
 QED
 
@@ -255,36 +287,9 @@ Theorem array_abort_joint_run[local]:
     ?j. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
           (Abort a (t with vs_inst_idx := j),G',tn')
 Proof
-  Induct >- simp[run_inst_seq_def] >>
   rpt gen_tac >> strip_tac >>
-  drule instruction_prefix_cursor >> strip_tac >>
-  Cases_on `step_inst_base h s` >>
-  gvs[run_inst_seq_def, inst_seq_ptr_def, run_inst_seq_mem_ok_def]
-  >~ [`step_inst_base h s = OK u`]
-  >- (`step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
-      `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
-        metis_tac[step_preserves_halted, step_preserves_control_flow] >>
-      `EVERY (\ins. ~is_terminator ins.inst_opcode) code` by fs[EVERY_MEM] >>
-      first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
-        `t with vs_inst_idx := SUC s.vs_inst_idx`, `a`, `step_prov PG G h u`,
-        `step_taint h s u tn`, `G'`, `tn'`, `ctx`, `func`, `bb`] mp_tac) >>
-      simp[run_inst_seq_inst_idx, exec_result_map_def] >> strip_tac >>
-      qexists_tac `j` >>
-      `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-        (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
-         step_prov PG G h u, step_taint h s u tn)` by
-        (drule_all straight_line_origin_ptr_edge >> simp[]) >>
-      drule (cj 2 gas_origin_ptr_path_rules) >> disch_then drule >> simp[]) >>
-  qexists_tac `t.vs_inst_idx` >> simp[] >>
-  irule (cj 3 gas_origin_ptr_path_rules) >> simp[exit_result_def] >>
-  simp[gas_origin_ptr_edge_def] >> conj_tac
-  >- (simp[gas_origin_edge_def] >>
-      qexists_tac `0` >>
-      simp[step_inst_non_invoke, gas_events_step_def,
-           mem_safe_step_non_invoke, exit_result_def]) >>
-  simp[gas_path_ptr_edge_def] >> qexists_tac `0` >>
-  simp[gas_count_step_def, ptr_safe_step_def, step_inst_non_invoke,
-       exit_result_def]
+  irule sha_zero_origin_abort >> simp[] >> qexists_tac `code` >>
+  fs[EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem array_bounds_check_joint_abort:
@@ -304,14 +309,18 @@ Theorem array_bounds_check_joint_abort:
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
       (Abort Revert_abort (t with vs_inst_idx := j),G',tn')
 Proof
-  strip_tac >> drule_all array_bounds_check_oob >> strip_tac >>
+  strip_tac >>
+  `!pre ins post u. emitted_insts sa sb = pre ++ ins::post ==>
+      dalloca_no_wrap ins u` by
+    (drule array_bounds_check_shape >> metis_tac[scalar_shape_prefix_no_wrap]) >>
+  drule_all array_bounds_check_oob >> strip_tac >>
   `?j. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
      (Abort Revert_abort (ss' with vs_inst_idx := j),G',tn')` by
     (irule array_abort_joint_run >> simp[] >>
      fs[fn_has_code_def, IS_PREFIX_APPEND] >>
      qexistsl_tac [`bb`, `emitted_insts sa sb`] >>
      gvs[IS_PREFIX_APPEND, DROP_APPEND, DROP_LENGTH_NIL,
-         APPEND_ASSOC]) >>
+         APPEND_ASSOC] >> metis_tac[]) >>
   metis_tac[]
 QED
 
@@ -414,22 +423,6 @@ Proof
               irule straight_fresh_emit_op >> simp[fresh_write_op_def] >> NO_TAC,
               MATCH_ACCEPT_TAC straight_fresh_return,
               IF_CASES_TAC])
-QED
-
-Theorem array_elem_ptr_shape_mem[local]:
-  array_elem_ptr bop idx dyn ws esz sa = (p,sb) ==>
-  EVERY scalar_shape (emitted_insts sa sb) /\
-  run_inst_seq_mem_ok (emitted_insts sa sb) s
-Proof
-  Cases_on `dyn` >>
-  simp[array_elem_ptr_def, emit_op_def, comp_bind_def, comp_ignore_bind_def,
-       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
-  strip_tac >> gvs[emitted_insts_def] >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC] >> simp[DROP_LENGTH_APPEND] >>
-  (conj_tac >- simp[scalar_shape_def, scalar_binary_def]) >>
-  irule run_inst_seq_mem_ok_every >>
-  simp[inst_mem_below_frontier_def, inst_dload_in_section_def,
-       source_memory_read_ranges_def, source_memory_write_ranges_def]
 QED
 
 Theorem array_address_cons_success[local]:
@@ -689,7 +682,11 @@ Theorem array_bounds_check_nonalias_uniform:
     (t with vs_vars := s.vs_vars) =
       (if idx_in_range sgn iw nw then s else revert_state (set_returndata [] s))
 Proof
-  strip_tac >> drule_all array_bounds_check_nonalias_run >> strip_tac >>
+  strip_tac >>
+  `!pre ins post u. emitted_insts sa sb = pre ++ ins::post ==>
+      dalloca_no_wrap ins u` by
+    (drule array_bounds_check_shape >> metis_tac[scalar_shape_prefix_no_wrap]) >>
+  drule_all array_bounds_check_nonalias_run >> strip_tac >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     metis_tac[array_bounds_check_mem_ok] >>
   `?H tm. inst_seq_ptr
@@ -703,7 +700,8 @@ Proof
          lo,explicit,ctx,func,PG) (s,G,tn) []
         (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,tm)` by
         (irule emitted_origin_ptr_path >> simp[] >>
-         qexistsl [`emitted_insts sa sb`, `sa`] >> fs[same_blocks_def]) >>
+         qexistsl [`emitted_insts sa sb`, `sa`] >> fs[same_blocks_def] >>
+         metis_tac[]) >>
       qexistsl [`H`, `tm`] >> simp[] >>
       conj_tac
       >- (gen_tac >> irule gas_origin_ptr_path_from_no_dead >> gvs[]) >>
@@ -715,7 +713,8 @@ Proof
     (irule array_abort_joint_run >> simp[] >>
      fs[fn_has_code_def, IS_PREFIX_APPEND] >>
      qexistsl [`bb`, `emitted_insts sa sb`] >>
-     gvs[IS_PREFIX_APPEND, DROP_APPEND, DROP_LENGTH_NIL, APPEND_ASSOC]) >>
+     gvs[IS_PREFIX_APPEND, DROP_APPEND, DROP_LENGTH_NIL, APPEND_ASSOC] >>
+     metis_tac[]) >>
   qexistsl [`j`, `H`, `tm`] >> simp[] >>
   conj_tac
   >- (gen_tac >> irule gas_origin_ptr_path_from_no_dead >> gvs[]) >>

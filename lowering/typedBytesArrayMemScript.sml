@@ -77,7 +77,8 @@ Proof
   strip_tac >>
   `frag_exec_mem ctx sa sb (\u. u = s)
      (\t. t = q with vs_inst_idx := LENGTH sb.cs_current_insts) (K F)` by
-    (irule frag_exec_mem_run_inst_seq >> simp[] >> metis_tac[]) >>
+    (irule frag_exec_mem_run_inst_seq >> simp[] >>
+     qpat_x_assum `ptrDiscipline$ctx_has_dalloca _ ==> _` mp_tac >> simp[]) >>
   drule mem_cont_sim_from_fragment >> simp[]
 QED
 
@@ -112,10 +113,18 @@ Proof
   qexists_tac `q` >> simp[] >>
   irule typed_bytes_child_seq_cont >> simp[] >> qexists_tac `sa` >> simp[] >>
   gnvs[typed_bytes_array_dispatch] >>
+  `EVERY (\ins. ins.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+    (gvs[compile_store_bytestring_def, compile_bytestring_copy_len_def,
+         emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+         comp_bind_def, comp_ignore_bind_def, comp_return_def,
+         fresh_id_def, fresh_var_def, emit_def,
+         emitted_insts_def, rich_listTheory.DROP_APPEND1,
+         venomInstTheory.mk_inst_def]) >>
   drule buffer_store_bytestring_shape >> strip_tac >>
   `compile_store_memory ce src dst (BaseT (BytesT (Dynamic 1)))
      (BaseT (BytesT (Dynamic 1))) sa = ((),sb)` by
     simp[compile_store_memory_def, is_word_type_def, is_bytestring_type_def] >>
   drule aggregate_store_memory_straight >>
-  gvs[same_blocks_def]
+  gvs[same_blocks_def] >> rpt strip_tac >>
+  irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >> fs[]
 QED

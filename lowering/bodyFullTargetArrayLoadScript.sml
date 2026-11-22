@@ -84,7 +84,7 @@ QED
    instruction which the compiler actually emitted. *)
 Theorem array_length_emit_concrete[local]:
   emit_op opc args sa = (Var out,sb) /\ fn_has_code sa sb func /\
-  opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc /\
+  opc <> INVOKE /\ opc <> GAS /\ opc <> DALLOCA /\ ~is_terminator opc /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   step_inst_base (mk_inst sa.cs_next_id opc args [out]) s =
@@ -177,7 +177,7 @@ Theorem array_length_step_joint[local]:
     (step_taint (mk_inst sa.cs_next_id opc args [out]) s (update_var out w s) tn)
 Proof
   strip_tac >>
-  `opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc` by
+  `opc <> INVOKE /\ opc <> GAS /\ opc <> DALLOCA /\ ~is_terminator opc` by
     (gvs[] >> simp[is_terminator_def]) >>
   qpat_x_assum `array_length_step_ok _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp_tac (srw_ss()) [array_length_step_ok_def] >> strip_tac >>

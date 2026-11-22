@@ -72,11 +72,12 @@ Resume rest_word_membership_segment_compare_joint[compare]:
        instruction_accessors, instruction_accfupds, combinTheory.K_THM,
        opcode_case_def] >> simp[exec_pure2_def]) >>
   `~is_terminator ins.inst_opcode /\ ins.inst_opcode <> INVOKE /\
-   inst_mem_below_frontier ins s /\ inst_dload_in_section ins s` by
+   inst_mem_below_frontier ins s /\ inst_dload_in_section ins s /\
+   (ctx_has_dalloca ctx ==> dalloca_no_wrap ins s)` by
     simp[mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
          inst_dload_in_section_def, source_memory_read_ranges_def,
-         source_memory_write_ranges_def] >>
-  drule_all straight_line_origin_ptr_edge >> simp[]
+         source_memory_write_ranges_def, dalloca_no_wrap_def] >>
+  drule_all straight_line_origin_ptr_edge >> simp[mk_inst_def]
 QED
 
 Resume rest_word_membership_segment_compare_joint[branch]:
@@ -280,11 +281,12 @@ Proof
           update_var_def]) >>
   `step_inst_base ins s = OK t /\
    ~is_terminator ins.inst_opcode /\ ins.inst_opcode <> INVOKE /\
-   inst_mem_below_frontier ins s /\ inst_dload_in_section ins s` by
+   inst_mem_below_frontier ins s /\ inst_dload_in_section ins s /\
+   (ctx_has_dalloca ctx ==> dalloca_no_wrap ins s)` by
     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
          is_terminator_def, inst_mem_below_frontier_def,
          inst_dload_in_section_def, source_memory_read_ranges_def,
-         source_memory_write_ranges_def] >>
+         source_memory_write_ranges_def, dalloca_no_wrap_def] >>
   `step_prov PG G ins t = G1 /\ step_taint ins s t tn = tn1` by
     suspend "found_ghost" >>
   `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
@@ -429,10 +431,11 @@ Proof
     (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def] >>
      gvs[eval_operand_def, membership_loop_registers_def]) >>
   `~is_terminator ins.inst_opcode /\ ins.inst_opcode <> INVOKE /\
-   inst_mem_below_frontier ins s /\ inst_dload_in_section ins s` by
+   inst_mem_below_frontier ins s /\ inst_dload_in_section ins s /\
+   (ctx_has_dalloca ctx ==> dalloca_no_wrap ins s)` by
     simp[mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
          inst_dload_in_section_def, source_memory_read_ranges_def,
-         source_memory_write_ranges_def] >>
+         source_memory_write_ranges_def, dalloca_no_wrap_def] >>
   `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
     (OK u,G1,tn1)` by
     (drule_all straight_line_origin_ptr_edge >> simp[]) >>
@@ -617,10 +620,11 @@ Resume rest_word_membership_segment_increment_joint[add_edge]:
      qx_gen_tac `operand` >> Cases_on `operand` >>
      gvs[op_taint_def] >> metis_tac[]) >>
   `~is_terminator a.inst_opcode /\ a.inst_opcode <> INVOKE /\
-   inst_mem_below_frontier a s /\ inst_dload_in_section a s` by
+   inst_mem_below_frontier a s /\ inst_dload_in_section a s /\
+   (ctx_has_dalloca ctx ==> dalloca_no_wrap a s)` by
     simp[mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
          inst_dload_in_section_def, source_memory_read_ranges_def,
-         source_memory_write_ranges_def] >>
+         source_memory_write_ranges_def, dalloca_no_wrap_def] >>
   drule_all straight_line_origin_ptr_edge >>
   disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >> gvs[]
 QED
@@ -656,10 +660,11 @@ Resume rest_word_membership_segment_increment_joint[assign_edge]:
    ~(t with vs_inst_idx := 1).vs_halted /\
    ~is_terminator b.inst_opcode /\ b.inst_opcode <> INVOKE /\
    inst_mem_below_frontier b (t with vs_inst_idx := 1) /\
-   inst_dload_in_section b (t with vs_inst_idx := 1)` by
+   inst_dload_in_section b (t with vs_inst_idx := 1) /\
+   (ctx_has_dalloca ctx ==> dalloca_no_wrap b (t with vs_inst_idx := 1))` by
     fs[update_var_def, mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
          inst_dload_in_section_def, source_memory_read_ranges_def,
-         source_memory_write_ranges_def] >>
+         source_memory_write_ranges_def, dalloca_no_wrap_def] >>
   drule_all straight_line_origin_ptr_edge >>
   disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >> gvs[]
 QED
@@ -820,6 +825,13 @@ Resume rest_word_membership_segment_init_prefix_joint[assigns]:
    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code` by
     (conj_tac >- fs[Abbr `code`] >>
      simp[Abbr `code`, mk_inst_def, is_terminator_def]) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. code = pre ++ i::post /\ run_inst_seq pre e = OK u ==>
+      dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `MEM i code` by simp[MEM_APPEND] >>
+     qpat_x_assum `MEM i code` mp_tac >> simp[Abbr `code`] >>
+     strip_tac >> simp[mk_inst_def, dalloca_no_wrap_def]) >>
   drule_all run_inst_seq_gas_origin_ptr_path >>
   disch_then (qspec_then `explicit` mp_tac) >>
   simp[Abbr `code`, mk_inst_def, is_terminator_def]

@@ -125,6 +125,17 @@ Proof
   drule_all compile_alloc_buffer_body_header_slice >> strip_tac >>
   `isPREFIX (emitted_insts sa sm ++ emitted_insts sm sb)
      (DROP s.vs_inst_idx bb.bb_instructions)` by simp[IS_PREFIX_APPEND] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sm ++ emitted_insts sm sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts sa sm ++ emitted_insts sm sb)` by
+       (qpat_assum `_ = pre ++ i::post` (fn th => pure_rewrite_tac[th]) >>
+        simp[]) >>
+     drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+     drule emitted_insts_emit_op >> strip_tac >>
+     drule emitted_insts_emit_void >> strip_tac >>
+     fs[MEM_APPEND, mk_inst_def]) >>
   conj_tac >> rpt gen_tac >> strip_tac >>
   drule_all mem_safe_run_inst_seq >> simp[]
 QED
@@ -174,6 +185,9 @@ Theorem frag_exec_mem_run_inst_seq_at_cursor[local]:
        s.vs_current_bb = st.cs_current_bb /\
        s.vs_inst_idx = LENGTH st.cs_current_insts ==>
        run_inst_seq_mem_ok (emitted_insts st st') s /\
+       (ptrDiscipline$ctx_has_dalloca ctx ==>
+        !pre i post u. emitted_insts st st' = pre ++ i::post /\
+          run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u) /\
        ((?t. run_inst_seq (emitted_insts st st') s = OK t /\
               Q (t with vs_inst_idx := LENGTH st'.cs_current_insts)) \/
         (?a t. run_inst_seq (emitted_insts st st') s = Abort a t /\
@@ -185,7 +199,11 @@ Proof
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts` >>
   `frag_exec_mem ctx st st' P' Q R` by
-    (irule frag_exec_mem_run_inst_seq >> simp[Abbr `P'`]) >>
+    (irule frag_exec_mem_run_inst_seq >> simp[Abbr `P'`] >>
+     rpt strip_tac >> qpat_assum `!s. P s /\ _ ==> _` drule_all >>
+     disch_then (assume_tac o CONJUNCT1 o CONJUNCT2) >>
+     first_x_assum irule >> simp[] >>
+     qexistsl [`post`,`pre`] >> simp[]) >>
   fs[frag_exec_mem_def, Abbr `P'`] >>
   rpt gen_tac >> strip_tac >> first_x_assum drule >> simp[]
 QED
@@ -245,7 +263,13 @@ Proof
   >- (drule abi_builtin_alloc_buffer_shape >> strip_tac >>
       drule emitted_insts_emit_op >> strip_tac >>
       gvs[run_inst_seq_mem_ok_last] >>
-      irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+      irule below_frontier_no_ranges >> simp[mk_inst_def])
+  >- (irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+      `MEM i (emitted_insts sa sm)` by
+        (qpat_assum `_ = pre ++ [i] ++ post`
+           (fn th => pure_rewrite_tac[th]) >> simp[]) >>
+      drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+      drule emitted_insts_emit_op >> strip_tac >> fs[mk_inst_def]) >>
   drule_all compile_alloc_buffer_body_inst >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
   `!name p n. local_region ce es.scopes t name p n <=>
@@ -403,7 +427,10 @@ Proof
      simp[mk_inst_def, is_terminator_def, IS_PREFIX_APPEND] >>
      rpt strip_tac
      >- (simp[run_inst_seq_mem_ok_last] >>
-         irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+         irule below_frontier_no_ranges >> simp[mk_inst_def])
+     >- (irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+         qpat_x_assum `[_] = pre ++ [i] ++ post` (mp_tac o SYM) >>
+         simp[APPEND_EQ_SING] >> metis_tac[]) >>
      `alloca_inv s` by fs[stmt_state_rel_def] >>
      `alloca_history func (t with vs_inst_idx := LENGTH mid.cs_current_insts)` by
        (irule body_alloc_history >> goal_assum (drule_at Any) >>

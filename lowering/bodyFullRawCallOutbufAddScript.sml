@@ -73,6 +73,12 @@ Proof
                   ~is_terminator i.inst_opcode)
          [mk_inst sa.cs_next_id ADD [ov;Lit 32w] [out]]` by
         simp[mk_inst_def, is_terminator_def] >>
+      `ptrDiscipline$ctx_has_dalloca ctx ==>
+       !pre i post v.
+         [mk_inst sa.cs_next_id ADD [ov;Lit 32w] [out]] = pre ++ i::post /\
+         run_inst_seq pre s = OK v ==> unitTransformDefs$dalloca_no_wrap i v` by
+        (disch_tac >> Cases_on `pre` >>
+         simp[mk_inst_def, unitTransformDefsTheory.dalloca_no_wrap_def]) >>
       drule_all bodyFullUnwrapRunTheory.emitted_origin_ptr_path >> simp[]) >>
   `sb.cs_current_bb = sa.cs_current_bb /\ sa.cs_next_var <= sb.cs_next_var` by
     gvs[copy_runtime_frame_def, same_blocks_def] >>
