@@ -190,20 +190,13 @@ Proof
        type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2]
 QED
 
-(* Exports share the main self namespace, which lets the selector and
-   source name lookup agree on the selected declaration. Each module's
-   folded constant cells must already be present at call entry. *)
+(* Each module's folded constant cells must already be present at call entry. *)
 Definition source_typing_ok_mods_def:
   source_typing_ok_mods mods exps am tx <=>
     ?art.
       check_contract F am.layouts tx.target mods = SOME art /\
       exports_ok am.layouts tx.target mods exps /\
       linked_state_ownership_ok am.layouts tx.target mods exps /\
-      EVERY (\(name, src).
-        MEM (SOME src, name) (contract_keys external_name_keys_toplevel mods)) exps /\
-      ALL_DISTINCT (MAP FST exps) /\
-      EVERY (\(name, _).
-        ~MEM (NONE, name) (contract_keys self_member_keys_toplevel mods)) exps /\
       global_cells_typed_mods mods art.cta_bare_globals (account_immutables am tx.target) /\
       (!src tops. MEM (src, tops) mods ==>
         ?cenv.

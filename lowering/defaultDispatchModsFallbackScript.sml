@@ -134,6 +134,7 @@ Proof
   drule_all source_typing_ok_mods_external_names_distinct >> strip_tac >>
   qpat_x_assum `source_typing_ok_mods _ _ _ _` mp_tac >>
   simp[source_typing_ok_mods_def] >> strip_tac >>
+  drule_then strip_assume_tac exports_ok_names >>
   first_x_assum drule_all >> strip_tac >>
   `MEM (ALOOKUP exps "__default__",tops) mods` by metis_tac[ALOOKUP_MEM] >>
   drule_all fallback_decl_agrees >> strip_tac >>

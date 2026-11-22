@@ -85,7 +85,9 @@ Proof
   rename1 `ALOOKUP am.exports tx.target = SOME exps` >>
   Cases_on `ALOOKUP exps fn` >> gvs[]
   >- metis_tac[check_contract_main_module_allocated] >>
-  gvs[exports_ok_def, EVERY_MEM] >>
+  qpat_x_assum `exports_ok _ _ _ _`
+    (assume_tac o CONJUNCT1 o REWRITE_RULE [exports_ok_def]) >>
+  gvs[EVERY_MEM] >>
   drule ALOOKUP_MEM >> strip_tac >>
   first_x_assum drule >> simp[]
 QED

@@ -37,7 +37,8 @@ Proof
       gvs[] >> metis_tac[]) >>
   rename1 `MEM (nm,s) exps` >>
   Cases_on `ALOOKUP mods (SOME s)` >> gvs[MEM_FILTER] >>
-  `ALL_DISTINCT (MAP FST exps)` by fs[source_typing_ok_mods_def] >>
+  `ALL_DISTINCT (MAP FST exps)` by
+    (fs[source_typing_ok_mods_def] >> metis_tac[exports_ok_names]) >>
   `ALOOKUP exps name = SOME s` by metis_tac[ALOOKUP_ALL_DISTINCT_MEM] >>
   gvs[abi_external_signatures_def,MEM_FLAT,MEM_MAP,PULL_EXISTS] >> metis_tac[]
 QED
