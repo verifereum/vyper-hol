@@ -48,14 +48,14 @@ Proof
     simp[type_memory_bytes_def] >>
   `?sba ssm su.
     compile_alloc_buffer (type_memory_size_list tvs) shadow_sa = (sba,ssm) /\
-    compile_make_tuple compile_expr cenv (MAP gas_shadow_expr args) tys
+    compile_make_tuple compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr args) tys
       sba.buf_operand 0 ssm = (su,shadow_sb)` by
     (qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
      simp[gas_shadow_expr_def,gas_shadow_builtin_def,compile_tuple_literal] >>
      Cases_on `compile_alloc_buffer (type_memory_size_list tvs) shadow_sa` >>
      simp[tuple_literal_types_def] >>
-     Cases_on `compile_make_tuple compile_expr cenv (MAP gas_shadow_expr args)
-       tys q.buf_operand 0 r` >>
+     Cases_on `compile_make_tuple compile_expr (gas_shadow_env T cenv)
+       (MAP gas_shadow_expr args) tys q.buf_operand 0 r` >>
      simp[as_ptr_val_def] >> metis_tac[]) >>
   `sba = ba /\ gas_shadow_state sm ssm` by
     (mp_tac (Q.INST [`nbytes` |-> `type_memory_size_list tvs`]
