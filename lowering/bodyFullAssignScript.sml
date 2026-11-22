@@ -7,7 +7,7 @@
  * TOP-LEVEL: the body_*_full sub-shape theorems below.
  *)
 Theory bodyFullAssign
-Ancestors immutableBytestringPath bodyImmutableStoreMemory[qualified,ignore_grammar]
+Ancestors bodySingletonCallSupport immutableBytestringPath bodyImmutableStoreMemory[qualified,ignore_grammar]
   placeDestinationBounds[qualified,ignore_grammar]
   assignPlaceProvenance[qualified,ignore_grammar]
   exprSimLayoutTransport[qualified,ignore_grammar]
