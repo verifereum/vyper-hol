@@ -6161,6 +6161,7 @@ Resume body_append_storage_word_frag_full[after_root]:
 QED
 
 Resume body_append_storage_word_frag_full[rhs_code]:
+  qpat_x_assum `nid0 = NONE` SUBST_ALL_TAC >>
   qpat_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _`
     (assume_tac o SRULE [gasShadowTheory.gas_shadow_stmt_def,
        gasShadowTheory.gas_shadow_expr_def]) >>
@@ -6589,6 +6590,7 @@ Resume body_append_storage_aggregate_frag_full[after_root]:
 QED
 
 Resume body_append_storage_aggregate_frag_full[rhs_code]:
+  qpat_x_assum `nid0 = NONE` SUBST_ALL_TAC >>
   qpat_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _`
     (assume_tac o SRULE [gasShadowTheory.gas_shadow_stmt_def,
        gasShadowTheory.gas_shadow_expr_def]) >>
