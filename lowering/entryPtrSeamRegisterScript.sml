@@ -2757,7 +2757,7 @@ QED
 
 (* Caller readiness is quantified over the unchanged decoder metadata and
    calldata; no package or source-interpreter facts enter this induction. *)
-Theorem registration_owned_suffix_joint[local]:
+Theorem registration_owned_suffix_joint:
   !R ce0 args tvs vals env sf cd ctx fn site lo PG.
   (!ce2 st2 ce3 last2 name prim dyn sz di h loc n q.
     compile_register_positional_args ce2 [(name,prim,dyn,sz,di)] (4+h) st2 = (ce3,last2) /\

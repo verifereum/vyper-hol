@@ -6,7 +6,7 @@ Ancestors
   immutableMemoryFrame reasonCopySourcePtr representationCleanPtr
   valueCopyBytes valueCopy exprSimBufferStore robustCopyTransportPtr
 
-Theorem extcall_default_bytes_store_capacity_joint:
+Theorem bytestring_store_extent_joint:
   compile_store_memory ce (Var src) (Var dst) rt sty sa = ((),sb) /\
   is_bytestring_type rt /\ is_bytestring_type sty /\
   evaluate_type (get_tenv cx) rt = SOME tv /\
@@ -17,9 +17,9 @@ Theorem extcall_default_bytes_store_capacity_joint:
   lookup_var src s = SOME sw /\ lookup_var dst s = SOME dw /\
   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
      val_in_memory stv v (w2n sw) mem) /\
-  ptr_covers G tn src s (type_memory_size stv) /\
+  ptr_covers G tn src s (val_store_size stv v) /\
   ptr_covers G tn dst s (type_memory_size tv) /\
-  w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+  w2n sw + val_store_size stv v <= s.vs_alloca_next /\
   w2n dw + type_memory_size tv <= s.vs_alloca_next /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
@@ -61,6 +61,11 @@ Proof
      simp[] >> qexistsl_tac [`rt`,`sty`,`get_tenv cx`] >> simp[]) >>
   rename1 `mload (w2n sw) s = n2w len` >>
   qabbrev_tac `n = 32 + 32 * word_size len` >>
+  `val_store_size stv v = n` by
+    (qspecl_then [`get_tenv cx`,`sty`,`stv`] mp_tac bytestring_type_value >>
+     asm_rewrite_tac[] >> strip_tac >> Cases_on `v` >>
+     gvs[vyperTypingTheory.value_has_type_def, loweringPostsTheory.val_footprint_def,
+         exprSimPropsTheory.val_store_size_def, Abbr `n`]) >>
   `32 <= n /\ n <= type_memory_size tv /\ n <= type_memory_size stv /\
    val_footprint stv v <= n /\ len + 31 < dimword (:256) /\
    n < dimword (:256)` by
@@ -103,7 +108,7 @@ Proof
   suspend "exit"
 QED
 
-Resume extcall_default_bytes_store_capacity_joint[header]:
+Resume bytestring_store_extent_joint[header]:
   `(?bs. v = BytesV bs /\ len = LENGTH bs) \/
    (?str. v = StringV str /\ len = LENGTH str)` by
     (qspecl_then [`get_tenv cx`,`sty`,`stv`] mp_tac bytestring_type_value >>
@@ -115,7 +120,7 @@ Resume extcall_default_bytes_store_capacity_joint[header]:
   asm_rewrite_tac[] >> strip_tac >> gvs[valueEncodingDefsTheory.val_in_memory_def]
 QED
 
-Resume extcall_default_bytes_store_capacity_joint[exit]:
+Resume bytestring_store_extent_joint[exit]:
   conj_tac >- asm_rewrite_tac[] >>
   `(?bs. v = BytesV bs /\ len = LENGTH bs) \/
    (?str. v = StringV str /\ len = LENGTH str)` suffices_by
@@ -147,4 +152,51 @@ Resume extcall_default_bytes_store_capacity_joint[exit]:
   asm_rewrite_tac[] >> strip_tac >> Cases_on `v` >>
   gvs[vyperTypingTheory.value_has_type_def, loweringPostsTheory.val_footprint_def]
 QED
-Finalise extcall_default_bytes_store_capacity_joint
+Finalise bytestring_store_extent_joint
+
+Theorem extcall_default_bytes_store_capacity_joint:
+  compile_store_memory ce (Var src) (Var dst) rt sty sa = ((),sb) /\
+  is_bytestring_type rt /\ is_bytestring_type sty /\
+  evaluate_type (get_tenv cx) rt = SOME tv /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\
+  value_has_type tv v /\ value_has_type stv v /\ val_wf stv v /\
+  type_memory_size tv + 64 < dimword (:256) /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\
+  lookup_var src s = SOME sw /\ lookup_var dst s = SOME dw /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+     val_in_memory stv v (w2n sw) mem) /\
+  ptr_covers G tn src s (type_memory_size stv) /\
+  ptr_covers G tn dst s (type_memory_size tv) /\
+  w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+  w2n dw + type_memory_size tv <= s.vs_alloca_next /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u Gf tm.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+       (s,G,tn) [] (OK u,Gf,tm)) /\
+    (!mem. mem_agree_outside tm.t_mem u.vs_memory mem ==>
+       val_in_memory tv v (w2n dw) mem) /\
+    lookup_var dst u = SOME dw /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x u = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x)) /\
+    (!off k. off+k <= w2n dw \/ w2n dw+type_memory_size tv <= off ==>
+      mem_bytes_at off k u.vs_memory = mem_bytes_at off k s.vs_memory) /\
+    (!i. i < w2n dw \/ w2n dw+type_memory_size tv <= i ==>
+      (i IN tm.t_mem <=> i IN tn.t_mem)) /\
+    LENGTH s.vs_memory <= LENGTH u.vs_memory /\
+    (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+              vs_inst_idx := s.vs_inst_idx|>) = s /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted
+Proof
+  strip_tac >>
+  `val_store_size stv v <= type_memory_size stv` by simp[exprSimPropsTheory.val_store_size_le] >>
+  irule bytestring_store_extent_joint >> asm_rewrite_tac[] >>
+  qexistsl_tac [`ce`,`cx`,`rt`,`src`,`stv`,`sty`,`sw`] >> asm_rewrite_tac[] >>
+  conj_tac >- decide_tac >>
+  irule ptr_covers_mono >> qexists_tac `type_memory_size stv` >> asm_rewrite_tac[]
+QED
