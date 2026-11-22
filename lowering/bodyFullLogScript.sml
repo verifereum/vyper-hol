@@ -15,7 +15,7 @@ Ancestors exprSimAggregateNestedStore[qualified,ignore_grammar]
   bodyExprPreFacts exprBodyPreProps bodyInvCodeProps allocLimits allocLimitsProps exprSimSource vyperTypeCallGraph
   bodyFullLogScalarTopics bodyFullLogSuffix bodyFullHashKeccakFixed supportedStmtTraverse
   bodySimLogArgs stmtSimLogTrace exprSimHyps whitelistLogWiden checkedTypeNamespace
-  bodyQualifiedStmtSupport
+  bodyQualifiedStmtSupport bodyInvMetadataProps[qualified,ignore_grammar]
   supportedExprs supportedExprTraverse
   vyperTypeCallStackSoundness vyperTypeExprSoundness vyperTypeInvariants
   stmtLowering context compileEnv gasShadowState gasShadowCompileStmtHelpers gasShadowCompileStmtCases
@@ -209,7 +209,7 @@ Proof
      metis_tac[optionTheory.IS_SOME_EXISTS]) >>
   `get_tenv cx = type_env tops` by
     (drule_then assume_tac body_inv_contract >>
-     drule_then assume_tac contract_inv_type_env >>
+     drule_then assume_tac bodyInvMetadataPropsTheory.contract_inv_type_env >>
      fs[vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
         finite_mapTheory.FUNION_FEMPTY_2]) >>
   `EVERY (assignable_type (get_tenv cx)) decl` by
