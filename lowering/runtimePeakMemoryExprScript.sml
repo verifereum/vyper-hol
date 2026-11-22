@@ -607,6 +607,64 @@ Proof
   metis_tac[MEM_FRONT_NOT_NIL, MEM_LAST_NOT_NIL]
 QED
 
+Theorem dalloca_windows_blueprint_args[local]:
+  (!ct e. MEM e args ==> preserves_dalloca_windows window (cfn cenv ct e)) ==>
+  preserves_dalloca_windows window
+    (compile_create_blueprint_args cfn cenv raw later_es args)
+Proof
+  Cases_on `raw`
+  >- (Cases_on `args` >> TRY (Cases_on `t`) >>
+      simp[compile_create_blueprint_args_def] >> strip_tac >>
+      windows_tac [dalloca_windows_snapshot, dalloca_windows_unwrap_value]) >>
+  Cases_on `args = []` >> simp[compile_create_blueprint_args_def] >>
+  strip_tac >>
+  windows_tac [dalloca_windows_create_ctor_args, dalloca_windows_abi_encode_values]
+QED
+
+Theorem dalloca_windows_blueprint_check[local]:
+  preserves_dalloca_windows window
+    (compile_create_blueprint_check is_lit target offset)
+Proof
+  Cases_on `is_lit` >> simp[compile_create_blueprint_check_def] >>
+  windows_pure_tac
+QED
+
+Theorem dalloca_windows_blueprint_call[local]:
+  (!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) /\
+  (!ct e. MEM e args ==> preserves_dalloca_windows window (cfn cenv ct e)) ==>
+  preserves_dalloca_windows window
+    (compile_create_call cfn cenv (CreateFromBlueprint raw) salted rof args)
+Proof
+  strip_tac >>
+  Cases_on `args` >- (simp[compile_create_call_def] >> windows_pure_tac) >>
+  Cases_on `t` >- (simp[compile_create_call_def] >> windows_pure_tac) >>
+  Cases_on `salted` >>
+  Cases_on `t'` >- (simp[compile_create_call_def] >> windows_pure_tac) >>
+  simp[compile_create_call_def] >>
+  windows_tac [dalloca_windows_create_blueprint_append,
+    dalloca_windows_lower_value, dalloca_windows_create_salt,
+    dalloca_windows_blueprint_args, dalloca_windows_blueprint_check] >>
+  fs[] >>
+  metis_tac[MEM_TL]
+QED
+
+Theorem dalloca_windows_compile_call_blueprint:
+  (!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) /\
+  (!ct e. MEM e args ==> preserves_dalloca_windows window (cfn cenv ct e)) ==>
+  preserves_dalloca_windows window
+    (compile_call cfn cenv rt ty (CreateTarget (CreateFromBlueprint raw) salted rof order)
+      args d)
+Proof
+  strip_tac >>
+  `preserves_dalloca_windows window
+      (compile_create_call cfn cenv (CreateFromBlueprint raw) salted rof args)` by
+    metis_tac[dalloca_windows_blueprint_call] >>
+  fs[preserves_dalloca_windows_def, compile_call_def, as_stack_val_def] >>
+  rpt strip_tac >>
+  Cases_on `compile_create_call cfn cenv (CreateFromBlueprint raw) salted rof args st` >>
+  gvs[as_stack_val_def] >> metis_tac[]
+QED
+
 Theorem dalloca_windows_state_wrappers:
   SND (as_stack_val t (op_st:operand # compile_state)) = SND op_st /\
   SND (as_ptr_val t loc op_st) = SND op_st
