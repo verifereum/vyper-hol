@@ -46,12 +46,12 @@ QED
 
 Theorem gas_shadow_compile_create_kwarg_allocas:
   !xs ce s t. gas_shadow_state s t ==>
-    FST (compile_create_kwarg_allocas ce
+    FST (compile_create_kwarg_allocas (gas_shadow_env sd ce)
       (MAP (\(n,ty,e). (n,ty,gas_shadow_expr e)) xs) t) =
       MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e))
         (FST (compile_create_kwarg_allocas ce xs s)) /\
     gas_shadow_state (SND (compile_create_kwarg_allocas ce xs s))
-      (SND (compile_create_kwarg_allocas ce
+      (SND (compile_create_kwarg_allocas (gas_shadow_env sd ce)
         (MAP (\(n,ty,e). (n,ty,gas_shadow_expr e)) xs) t))
 Proof
   Induct >> rpt gen_tac
