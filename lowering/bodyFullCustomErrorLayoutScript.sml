@@ -173,12 +173,12 @@ QED
 Theorem custom_error_compile_args_shadow[local]:
   gas_shadow_compiles
     (compile_ext_call_args compile_expr ce [] tys args)
-    (compile_ext_call_args compile_expr ce [] tys (MAP gas_shadow_expr args))
+    (compile_ext_call_args compile_expr (gas_shadow_env T ce) [] tys
+      (MAP gas_shadow_expr args))
 Proof
-  mp_tac (REWRITE_RULE [gasShadowCompileBaseTheory.gas_shadow_env_F]
-    (Q.INST [`sd` |-> `F`, `sh` |-> `T`, `cenv` |-> `ce`]
+  mp_tac (Q.INST [`sd` |-> `T`, `sh` |-> `T`, `cenv` |-> `ce`]
       (MATCH_MP gas_shadow_compiles_ext_call_args
-        (cj 1 gas_shadow_compile_expr_env)))) >>
+        (cj 1 gas_shadow_compile_expr_env))) >>
   disch_then (qspecl_then [`args`,`[]`,`tys`] mp_tac) >> simp[]
 QED
 
@@ -195,14 +195,15 @@ Theorem compile_raise_custom_layout_full:
   args = custom_error_exprs (CustomError id pos kw) /\
   tys = MAP (lowered_value_type ce) args /\
   stmt_env ce lctx ty (Raise (RaiseCustomError (CustomError id pos kw))) sa = (ca,sb) /\
-  stmt_env ce lctx ty
+  stmt_env (gas_shadow_env T ce) lctx ty
      (Raise (RaiseCustomError (gas_shadow_custom_error (CustomError id pos kw))))
      ta = (ct,tb) /\
   gas_shadow_state sa ta /\ fn_has_code sa sb func /\ fn_has_code ta tb sfunc ==>
   ?saved se te buf sm ss.
-    ca = ce /\ ct = ce /\
+    ca = ce /\ ct = gas_shadow_env T ce /\
     compile_ext_call_args compile_expr ce [] tys args sa = (saved,se) /\
-    compile_ext_call_args compile_expr ce [] tys (MAP gas_shadow_expr args) ta = (saved,te) /\
+    compile_ext_call_args compile_expr (gas_shadow_env T ce) [] tys
+      (MAP gas_shadow_expr args) ta = (saved,te) /\
     gas_shadow_state se te /\ fn_has_code sa se func /\ fn_has_code ta te sfunc /\
     ci_mono sa se /\
     compile_alloc_buffer (abi_size_bound ce.ce_struct_fields (TupleT tys) + 32)
@@ -232,7 +233,8 @@ Proof
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`saved`,`se`,`buf`,`sm`,`ss`] strip_assume_tac) >>
   `?saved' te tbuf tm ts.
-    compile_ext_call_args compile_expr ce [] tys (MAP gas_shadow_expr args) ta = (saved',te) /\
+    compile_ext_call_args compile_expr (gas_shadow_env T ce) [] tys
+      (MAP gas_shadow_expr args) ta = (saved',te) /\
     compile_alloc_buffer (abi_size_bound ce.ce_struct_fields (TupleT tys) + 32)
       te = (tbuf,tm) /\
     emit_void MSTORE
@@ -244,11 +246,13 @@ Proof
      else
        ?dst st encoded en offset sr len sn.
          emit_op ADD [tbuf.buf_operand; Lit 32w] ts = (dst,st) /\
-         compile_abi_encode_values_to_buf ce dst (ZIP (saved',tys)) st = (encoded,en) /\
+         compile_abi_encode_values_to_buf (gas_shadow_env T ce) dst
+           (ZIP (saved',tys)) st = (encoded,en) /\
          emit_op ADD [tbuf.buf_operand; Lit 28w] en = (offset,sr) /\
          emit_op ADD [Lit 4w; encoded] sr = (len,sn) /\
          emit_inst REVERT [offset; len] [] sn = ((),tb))` by
-    (mp_tac (Q.INST [`cenv` |-> `ce`, `args` |-> `MAP gas_shadow_expr args`,
+    (mp_tac (Q.INST [`cenv` |-> `gas_shadow_env T ce`,
+        `args` |-> `MAP gas_shadow_expr args`,
         `positional` |-> `MAP gas_shadow_expr pos`,
         `kwargs` |-> `MAP (I ## gas_shadow_expr) kw`,
         `s0` |-> `ta`, `s1` |-> `tb`] compile_revert_with_custom_error_split) >>
