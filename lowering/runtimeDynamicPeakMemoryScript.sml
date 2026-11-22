@@ -170,6 +170,45 @@ Proof
   strip_tac >> fs[Abbr `allocs`] >> decide_tac
 QED
 
+Theorem raw_dalloca_headroom_from_history:
+  lowering_context_ok ctx /\ ~vs0.vs_halted /\
+  vs0.vs_fmp = vs0.vs_initial_fmp /\ w2n vs0.vs_initial_fmp < 2 ** 254 /\
+  LENGTH vs0.vs_outcomes < 2 ** 64 /\
+  LENGTH vs0.vs_call_ctx.cc_calldata < 2 ** 64 /\
+  (!entry name lbl entered root h marks q i.
+    ctx.ctx_entry = SOME name /\
+    lookup_function name ctx.ctx_functions = SOME entry /\
+    fn_entry_label entry = SOME lbl /\
+    enters_block entry
+      (vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
+      entered /\
+    root = <|bp_stack := []; bp_params := []; bp_prov := FEMPTY;
+             bp_taint := entry_taint; bp_fn := entry; bp_state := entered|> /\
+    lower_budget_path F (D,lo,explicit,ctx) root h marks q /\
+    i.inst_opcode = DALLOCA /\ active_inst q.bp_fn i q.bp_state ==>
+    ?pair. lower_history_pairs h pair /\
+      (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==> pair a < LENGTH h) /\
+      (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
+        ?fn ai pre op sz post. lower_alloc_record h a fn ai pre op sz post)) ==>
+  !fn i s. raw_reachable vs0 ctx fn i s ==> dalloca_fmp_headroom i s
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  match_mp_tac (Q.INST [`ctx` |-> `ctx`, `fn` |-> `fn`, `vs0` |-> `vs0`]
+    raw_reachable_dalloca_headroom_from_peak) >> simp[] >> strip_tac >>
+  mp_tac (Q.INST [`fmp` |-> `vs0.vs_initial_fmp`, `lo` |-> `lo`]
+    raw_started_state) >> impl_tac >- simp[] >> strip_tac >>
+  qpat_x_assum `!entry name lbl entered root h marks q i. _`
+    (qspecl_then [`entry`, `name`, `lbl`, `entered`, `root`, `h`, `marks`, `q`, `i`]
+      mp_tac) >> simp[] >> strip_tac >>
+  `MEM entry ctx.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  `!fn i. MEM fn ctx.ctx_functions /\ MEM i (fn_insts fn) ==>
+    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DRET` by
+    metis_tac[raw_fmp_opcode_guards] >>
+  mp_tac (Q.INST [`ctx` |-> `ctx`, `lo` |-> `lo`]
+    lower_budget_path_completed_peak) >>
+  impl_tac >- (fs[] >> metis_tac[]) >> simp[]
+QED
+
 (* A recorder prefix can include one larger, unpaired reservation at its
    end. The current-site condition excludes one immediately before another
    DALLOCA, so only completed, outcome-charged allocations contribute there. *)
