@@ -22,7 +22,7 @@
     "tests/vyper-regression/hand/test_hand_default_function.py": "34ee923aa8fe83730d859d167cd6a4d5f5ee028915374c6330e2f5de61dd68ac",
     "tests/vyper-regression/modules/test_nested_module_call.py": "9743fc32ad7f0b44832795f0abdb1e35013380d5d37c0ccf4a81a827b9890a7e",
     "tools/vyper_test_export_plugin.py": "5ccf4e510be76fc09d3329642abb181b0726d215aa782b863b43a1b213d9e2d9",
-    "tools/vyper_test_exports.py": "a0708d10fda15ef633a8026e46c9a6c7c803b5db3a71f50627bd4c6a0347fd8f"
+    "tools/vyper_test_exports.py": "cd813a0403d65166156643ec54c31b6cfc91790778442cd66e9bdac95cf36e6d"
   },
   "profile": {
     "harness_defaults": {
