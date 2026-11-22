@@ -1,6 +1,6 @@
 (* Allocation and selector execution through grouped dispatch. *)
 Theory groupedDispatchPath
-Ancestors
+Ancestors pair[qualified,ignore_grammar]
   groupedAllocatorStep groupedEntryResources groupedInternalLabels
   groupedSelectorPath groupedEntryCounters groupedKeywordAllocas groupedKeywordDecode
   exprLoweringProps ptrDiscipline fragGasOriginPtr moduleLoweringProps
@@ -464,8 +464,9 @@ Resume compile_external_groups_selected_default_origin_with_frame[shadow_entry]:
   disch_then (qx_choosel_then [`shpref`,`shtail`,`shsc`]
     (map_every assume_tac o CONJUNCTS)) >>
   `gas_shadow_state sc shsc` by
-    metis_tac[pairTheory.SND, Q.SPECL [`pref`,`Var mid`,`sa`,`sha`]
-      (Q.INST [`sd` |-> `T`] gas_shadow_compile_external_groups)] >>
+    (drule (Q.INST [`sd` |-> `T`] gas_shadow_compile_external_groups) >>
+     disch_then (qspecl_then [`gas_shadow_external_package`,`pref`,`Var mid`] mp_tac) >>
+     asm_rewrite_tac[pairTheory.SND] >> simp[]) >>
   drule_at (Pat `compile_external_groups _ _ shsc = (shtail,shb)`)
     compile_external_defaults_cons_layout >>
   disch_then (qspec_then `shfn` mp_tac) >>
@@ -475,8 +476,9 @@ Resume compile_external_groups_selected_default_origin_with_frame[shadow_entry]:
   fs[external_common_accfupds, combinTheory.K_THM] >>
   `shvars = MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars /\
     gas_shadow_state alloc_end shalloc` by
-    (qspecl_then [`specs`,`common.ec_env`,`sc`,`shsc`] mp_tac
-       (Q.INST [`sd` |-> `T`] gas_shadow_compile_create_kwarg_allocas) >>
+    (drule (INST_TYPE [``:'a`` |-> ``:string``]
+       (Q.INST [`sd` |-> `T`] gas_shadow_compile_create_kwarg_allocas)) >>
+     disch_then (qspecl_then [`specs`,`common.ec_env`] mp_tac) >>
      asm_rewrite_tac[pairTheory.FST, pairTheory.SND]) >>
   qpat_x_assum `shvars = _` SUBST_ALL_TAC >>
   qpat_assum `!sha shb shfn. gas_shadow_state alloc_end sha /\ _ ==> _`
