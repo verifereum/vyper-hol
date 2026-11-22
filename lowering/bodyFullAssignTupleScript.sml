@@ -6243,8 +6243,12 @@ Theorem tuple_assign_immutable_toplevel_type[local]:
 Proof
   strip_tac >> gvs[] >> PairCases_on `nsid` >>
   `nsid0 = NONE` by metis_tac[body_inv_immutable_target_main, target_root_def] >>
-  `~supported_scalar_target tops (nsid0,nsid1)` by
-    metis_tac[augAssignFullTargetRoutesTheory.augassign_scalar_target_route] >>
+  gvs[] >>
+  `~supported_scalar_target tops (NONE,nsid1)` by
+    (strip_tac >>
+     mp_tac (Q.INST [`nsid` |-> `(NONE,nsid1)`, `ctx` |-> `ctx`, `cenv` |-> `cenv`]
+       augAssignFullTargetRoutesTheory.augassign_scalar_target_route) >>
+     simp[] >> metis_tac[]) >>
   fs[supportedStmtsTheory.supported_target_def]
 QED
 

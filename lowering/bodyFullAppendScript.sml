@@ -3718,8 +3718,10 @@ Resume append_nested_memory_cont_full[finish]:
   >- (qpat_assum `ghost_inv_at (DF H) lo d cenv cx ff Gf tf t`
         (mp_tac o REWRITE_RULE [ghost_inv_at_def]) >>
       simp_tac (srw_ss()) [ghost_inv_at_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
-  fs[typed_copy_state_frame_def, venomStateTheory.venom_state_component_equality] >>
-  metis_tac[]
+  qpat_assum `typed_copy_state_frame sa _ _ s t`
+    (strip_assume_tac o SIMP_RULE (srw_ss())
+      [typed_copy_state_frame_def, venomStateTheory.venom_state_component_equality]) >>
+  simp[]
 QED
 
 Finalise append_nested_memory_cont_full[local]
