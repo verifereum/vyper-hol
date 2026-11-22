@@ -1952,7 +1952,7 @@ Proof
   simp[] >> qexistsl_tac [`op`,`sm`] >> simp[]
 QED
 
-Theorem body_assign_toplevel_copy_entry[local]:
+Theorem body_assign_toplevel_copy_entry:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
