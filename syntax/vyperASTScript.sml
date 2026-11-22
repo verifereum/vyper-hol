@@ -161,6 +161,12 @@ Datatype:
                    frontend emits it, where the pinned compiler's code depends
                    on that spelling: at a membership's right operand, which it
                    unrolls only over a list literal *)
+  | BoolChain bool num
+                (* an and (T) / or (F) chain of n operands; the identity on
+                   its one argument, the nested IfExp the frontend builds for
+                   the chain.  Only the frontend emits it, for n >= 3, so the
+                   lowering can emit the pinned compiler's single-exit
+                   lower_BoolOp instead of n - 1 ternaries *)
 End
 
 (* Resolved external call signature: (func_name, arg_types, return_type) *)

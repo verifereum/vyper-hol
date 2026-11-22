@@ -619,6 +619,10 @@ Definition evaluate_builtin_def:
         (case vs of
          | [v] => INL v
          | _ => INR (TypeError "builtin"))
+    | BoolChain _ _ =>
+        (case vs of
+         | [BoolV b] => INL (BoolV b)
+         | _ => INR (TypeError "builtin"))
     | _ => INR (TypeError "builtin")
 End
 
@@ -714,7 +718,8 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok ECAdd n = (n = 2) ∧
   builtin_args_length_ok ECMul n = (n = 2) ∧
   builtin_args_length_ok PowMod256 n = (n = 2) ∧
-  builtin_args_length_ok NamedConst n = (n = 1)
+  builtin_args_length_ok NamedConst n = (n = 1) ∧
+  builtin_args_length_ok (BoolChain _ _) n = (n = 1)
 End
 
 val () = cv_auto_trans builtin_args_length_ok_def;
