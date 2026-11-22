@@ -633,7 +633,11 @@ Proof
     (Cases_on `DROP s.vs_inst_idx bb.bb_instructions` >> gvs[]) >>
   drule DROP_EQ_CONS >> strip_tac >>
   `get_instruction bb s.vs_inst_idx = SOME h` by simp[get_instruction_def] >>
-  `!fuel. mem_safe_step fuel ctx h s` by simp[mem_safe_step_non_invoke] >>
+  `!fuel. mem_safe_step fuel ctx h s` by
+    (simp[mem_safe_step_non_invoke] >> disch_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> _` (mp_tac o UNDISCH) >>
+     disch_then (qspecl_then [`[]`, `h`, `is`, `s`] mp_tac) >>
+     simp[run_inst_seq_def]) >>
   `!fuel. step_inst fuel ctx h s = step_inst_base h s` by
     simp[step_inst_non_invoke] >>
   Cases_on `step_inst_base h s` >> gvs[]
@@ -641,6 +645,20 @@ Proof
   >- (`s1.vs_current_bb = s.vs_current_bb` by
         metis_tac[step_preserves_control_flow] >>
       `EVERY (\i. ~is_terminator i.inst_opcode) is` by fs[EVERY_MEM] >>
+      `(ctx_has_dalloca ctx ==>
+        !pre i post u. is = pre ++ i::post /\
+          run_inst_seq pre (s1 with vs_inst_idx := SUC s.vs_inst_idx) = OK u ==>
+          dalloca_no_wrap i u)` by
+        (disch_tac >> rpt gen_tac >> strip_tac >>
+         `EVERY (\i. ~is_terminator i.inst_opcode) pre` by fs[EVERY_APPEND] >>
+         qpat_x_assum `run_inst_seq pre _ = OK u` mp_tac >>
+         simp[run_inst_seq_inst_idx] >>
+         Cases_on `run_inst_seq pre s1` >> simp[exec_result_map_def] >>
+         disch_then (SUBST1_TAC o SYM) >>
+         rename1 `run_inst_seq pre s1 = OK v` >>
+         qpat_assum `ctx_has_dalloca ctx ==> _` (mp_tac o UNDISCH) >>
+         disch_then (qspecl_then [`h::pre`, `i`, `post`, `v`] mp_tac) >>
+         simp[run_inst_seq_def, dalloca_no_wrap_def, eval_operand_inst_idx]) >>
       `mem_safe_run fuel ctx fn s <=>
        mem_safe_run fuel ctx fn (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
         (qspecl_then [`fuel`, `ctx`, `fn`, `s`, `bb`, `h`, `s1`] mp_tac
@@ -648,6 +666,9 @@ Proof
       simp[] >>
       first_x_assum (qspecl_then [`s1 with vs_inst_idx := SUC s.vs_inst_idx`,
                                   `fuel`, `ctx`, `fn`, `bb`] mp_tac) >>
+      (impl_tac >-
+        (qpat_assum `ctx_has_dalloca ctx ==> !pre i post u. is = _ /\ _ ==> _`
+           mp_tac >> simp[])) >>
       simp[run_inst_seq_inst_idx] >>
       Cases_on `run_inst_seq is s1` >> simp[exec_result_map_def] >>
       simp[arithmeticTheory.ADD1]) >>
@@ -720,14 +741,16 @@ Proof
       gvs[] >> rpt strip_tac >>
       qexists_tac `fuel` >> gvs[run_from_def] >>
       qspecl_then [`t`, `s`, `fuel`, `ctx`, `fn`, `bb`] mp_tac
-        mem_safe_run_inst_seq >> simp[]) >>
+        mem_safe_run_inst_seq >>
+      (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> simp[]) >>
   disj2_tac >>
   `?n. exec_block 0 ctx bb s = Abort a (s' with vs_inst_idx := n)` by
     (qspecl_then [`t`, `s`, `0`, `ctx`, `bb`] mp_tac
        exec_block_run_inst_seq >> simp[]) >>
   qexists_tac `0` >> simp[run_from_def, exit_result_def] >>
   qspecl_then [`t`, `s`, `0`, `ctx`, `fn`, `bb`] mp_tac
-    mem_safe_run_inst_seq >> simp[]
+    mem_safe_run_inst_seq >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> simp[]
 QED
 
 
