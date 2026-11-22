@@ -3570,12 +3570,14 @@ Definition compile_builtin_dispatch_body_def:
           let (v2, st2) = lower_value compile_expr cenv ty e2 st1 in
           as_stack_val ret_ty (compile_pow_mod256 v1 v2 st2))
      | NamedConst =>
-         (* A named constant lowers as its value, held in memory: an array is
-            materialised there (Python's lower_List), so the membership arm
-            above loops over it, as Python's lower_Compare does for a name. *)
-         (let (op, st1) = lower_value compile_expr cenv ty (HD args) st in
-          as_ptr_val ret_ty LocMemory
-            ((case op of Label _ => Lit 0w | _ => op), st1))
+         (* A named constant lowers as its value: a word as is, anything else
+            held in memory. An array is materialised there (Python's
+            lower_List), so the membership arm above loops over it, as
+            Python's lower_Compare does for a name. *)
+         (let (op0, st1) = lower_value compile_expr cenv ty (HD args) st in
+          let op = (case op0 of Label _ => Lit 0w | _ => op0) in
+          if is_word_type ret_ty then as_stack_val ret_ty (op, st1)
+          else as_ptr_val ret_ty LocMemory (op, st1))
      | BoolChain is_and n =>
          (let (result, st1) = fresh_var st in
           let (exit_lbl, st2) = fresh_label "bool_exit" st1 in
