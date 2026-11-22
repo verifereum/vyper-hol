@@ -40,7 +40,7 @@ Theorem extcall_request_snapshot_word_owned_full:
   comp_bind (compile_expr cenv (expr_type e) e)
     (\vv. compile_snapshot_vv cenv F
       (ext_call_arg_value (lowered_value_type cenv e) vv)) sa = (sv,sb) /\
-  comp_bind (compile_expr cenv (expr_type (gas_shadow_expr e)) (gas_shadow_expr e))
+  comp_bind (compile_expr (gas_shadow_env T cenv) (expr_type (gas_shadow_expr e)) (gas_shadow_expr e))
     (\vv. compile_snapshot_vv cenv F
       (ext_call_arg_value (lowered_value_type cenv (gas_shadow_expr e)) vv))
     shadow_sa = (sv,shadow_sb) /\

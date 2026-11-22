@@ -175,7 +175,7 @@ Theorem return_selected_valued_frag_full_core[local]:
           (abstract_machine_from_state am.sources am.exports am.layouts us),
          us.requests) r)
     ce (stmt_env ce lctx ret (Return (SOME e)))
-    (stmt_env ce lctx ret (Return (SOME (gas_shadow_expr e))))
+    (stmt_env (gas_shadow_env T ce) lctx ret (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
   strip_tac >>
@@ -2716,7 +2716,7 @@ Theorem return_selected_valued_frag_full:
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
     ce (stmt_env ce lctx ret (Return (SOME e)))
-    (stmt_env ce lctx ret (Return (SOME (gas_shadow_expr e))))
+    (stmt_env (gas_shadow_env T ce) lctx ret (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
   strip_tac >>
@@ -2772,7 +2772,7 @@ Theorem return_selected_valued_frag_full_nr:
           (abstract_machine_from_state am.sources am.exports am.layouts us),
          us.requests) r)
     ce (stmt_env ce lctx ret (Return (SOME e)))
-    (stmt_env ce lctx ret (Return (SOME (gas_shadow_expr e))))
+    (stmt_env (gas_shadow_env T ce) lctx ret (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
   strip_tac >>

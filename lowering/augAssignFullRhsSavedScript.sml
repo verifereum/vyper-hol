@@ -36,7 +36,7 @@ Theorem augassign_rhs_saved_outcome:
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre cenv cx env e es /\
   lower_value compile_expr cenv ty e sa = (op,sb) /\
-  lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa =
+  lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa =
     (op,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\

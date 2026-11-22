@@ -786,7 +786,7 @@ Theorem ifexp_arm_outcome_full_conditional[local]:
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es1 /\
   expr_type e = t /\
   compile_expr cenv ty e sa = (vv,sm) /\
-  compile_expr cenv ty (gas_shadow_expr e) shadow_sa = (vv,shadow_sm) /\
+  compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa = (vv,shadow_sm) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sm shadow_sm /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\

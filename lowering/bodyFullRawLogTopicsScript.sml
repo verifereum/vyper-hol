@@ -22,10 +22,10 @@ Theorem raw_log_topics_full:
    env ann n data dflt st0 sa sb shadow_sa shadow_sb ops es s G0 tn0.
   (!cenv ty e.
      gas_shadow_compiles (lower_value compile_expr cenv ty e)
-       (lower_value compile_expr cenv ty (gas_shadow_expr e))) /\
+       (lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e))) /\
   (!cenv xs.
      gas_shadow_compiles (compile_multi_exprs compile_expr cenv xs)
-       (compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr xs))) /\
+       (compile_multi_exprs compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr xs))) /\
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env
@@ -37,7 +37,7 @@ Theorem raw_log_topics_full:
     [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
       (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics; data] /\
   compile_multi_exprs compile_expr cenv topics sa = (ops,sb) /\
-  compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr topics)
+  compile_multi_exprs compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr topics)
     shadow_sa = (ops,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\

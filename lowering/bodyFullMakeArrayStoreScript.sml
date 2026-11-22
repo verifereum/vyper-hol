@@ -68,7 +68,7 @@ Theorem make_array_slot_full_bundled:
         src <- unwrap_value cenv vv;
         compile_store_memory cenv src dst dty (lowered_value_type cenv e)
      od) sa = ((),sb) /\
-    (do vv <- compile_expr cenv (expr_type (gas_shadow_expr e)) (gas_shadow_expr e);
+    (do vv <- compile_expr (gas_shadow_env T cenv) (expr_type (gas_shadow_expr e)) (gas_shadow_expr e);
         dst <- emit_op ADD [Var q; Lit (n2w off)];
         src <- unwrap_value cenv vv;
         compile_store_memory cenv src dst dty
@@ -1431,7 +1431,7 @@ Theorem make_array_slot_full:
         src <- unwrap_value cenv vv;
         compile_store_memory cenv src dst dty (lowered_value_type cenv e)
      od) sa = ((),sb) /\
-    (do vv <- compile_expr cenv (expr_type (gas_shadow_expr e)) (gas_shadow_expr e);
+    (do vv <- compile_expr (gas_shadow_env T cenv) (expr_type (gas_shadow_expr e)) (gas_shadow_expr e);
         dst <- emit_op ADD [Var q; Lit (n2w off)];
         src <- unwrap_value cenv vv;
         compile_store_memory cenv src dst dty

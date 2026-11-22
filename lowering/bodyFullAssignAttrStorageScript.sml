@@ -35,7 +35,7 @@ Theorem compile_assign_attr_storage_full:
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty
         (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src,id)) fld)) e))
-      (stmt_env cenv lctx ty
+      (stmt_env (gas_shadow_env T cenv) lctx ty
         (gas_shadow_stmt
           (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src,id)) fld)) e)))
       (eval_stmt cx

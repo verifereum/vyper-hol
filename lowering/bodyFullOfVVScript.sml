@@ -26,7 +26,7 @@ Theorem expr_sim_full_of_vv_with_buffer:
   expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx ty e es ==>
   !st0 sa sb shadow_sa shadow_sb op s0 G0 tn0.
     lower_value compile_expr cenv ty e sa = (op,sb) /\
-    lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa = (op,shadow_sb) /\
+    lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa = (op,shadow_sb) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
     gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\

@@ -102,7 +102,7 @@ Theorem extcall_operand_materialized_full:
   expr_body_pre cenv cx env e es /\
   ~is_word_type (expr_type e) /\ dt = lowered_value_type cenv e /\
   compile_expr cenv (expr_type e) e sa = (vv,sm) /\
-  compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sm) /\
+  compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sm) /\
   compile_materialize_vv cenv dt vv sm = (op,sb) /\
   compile_materialize_vv cenv dt vv shadow_sm = (op,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
@@ -592,7 +592,7 @@ Theorem extcall_kwarg_default_owned_lookup_full:
   expr_body_pre cenv cx env e es /\
   ~is_word_type rt /\ ~is_word_type (expr_type e) /\
   compile_ext_call_kwarg compile_expr cenv rt EKDefault e sa = ((op,dt),sb) /\
-  compile_ext_call_kwarg compile_expr cenv rt EKDefault (gas_shadow_expr e)
+  compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt EKDefault (gas_shadow_expr e)
     shadow_sa = ((op,dt),shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -683,7 +683,7 @@ Theorem extcall_kwarg_default_lookup_full:
   expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
   ~is_word_type rt /\ ~is_word_type (expr_type e) /\
   compile_ext_call_kwarg compile_expr cenv rt EKDefault e sa = ((op,dt),sb) /\
-  compile_ext_call_kwarg compile_expr cenv rt EKDefault (gas_shadow_expr e)
+  compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt EKDefault (gas_shadow_expr e)
     shadow_sa = ((op,dt),shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -742,7 +742,7 @@ Theorem extcall_kwarg_default_full:
   expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
   ~is_word_type rt /\ ~is_word_type (expr_type e) /\
   compile_ext_call_kwarg compile_expr cenv rt EKDefault e sa = ((op,dt),sb) /\
-  compile_ext_call_kwarg compile_expr cenv rt EKDefault (gas_shadow_expr e)
+  compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt EKDefault (gas_shadow_expr e)
     shadow_sa = ((op,dt),shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\

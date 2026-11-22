@@ -145,10 +145,10 @@ Theorem range_full_outer_env:
    cenv' = cenv /\
    compile_stmt cenv lctx ret_ty (For id typ (Range e1 e2) n body) sa =
      ((), sb)) /\
-  (stmt_env cenv lctx ret_ty
+  (stmt_env (gas_shadow_env T cenv) lctx ret_ty
      (gas_shadow_stmt (For id typ (Range e1 e2) n body)) ssa = (scenv', ssb) <=>
    scenv' = cenv /\
-   compile_stmt cenv lctx ret_ty
+   compile_stmt (gas_shadow_env T cenv) lctx ret_ty
      (For id typ (Range (gas_shadow_expr e1) (gas_shadow_expr e2)) n
        (MAP gas_shadow_stmt body)) ssa = ((), ssb))
 Proof
@@ -266,14 +266,14 @@ Theorem range_full_compiler_geometry:
     stmt_env cenv lctx ty
       (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
         bound stmts) sa = (cenv', sb) /\
-    stmt_env cenv lctx ty
+    stmt_env (gas_shadow_env T cenv) lctx ty
       (gas_shadow_stmt
         (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
           bound stmts)) ssa = (scenv', ssb) /\
     cenv.ce_alloca_locals /\ fn_has_code sa sb func /\
     (!c lc s t. compile_stmts c lc ty stmts s = ((), t) ==> cs_extends s t) ==>
     cenv' = cenv /\ scenv' = cenv /\
-    compile_stmt cenv lctx ty
+    compile_stmt (gas_shadow_env T cenv) lctx ty
       (For id fty
         (Range (gas_shadow_expr (Literal a1 (IntL n1)))
                (gas_shadow_expr (Literal a2 (IntL n2))))
@@ -336,7 +336,7 @@ Theorem range_full_compiler_geometry:
   (!cenv lctx ty id fty e1 e2 bound stmts sa cenv' sb ssa scenv' ssb
        op1 s1 op2 st func.
     stmt_env cenv lctx ty (For id fty (Range e1 e2) bound stmts) sa = (cenv', sb) /\
-    stmt_env cenv lctx ty (gas_shadow_stmt (For id fty (Range e1 e2) bound stmts))
+    stmt_env (gas_shadow_env T cenv) lctx ty (gas_shadow_stmt (For id fty (Range e1 e2) bound stmts))
       ssa = (scenv', ssb) /\
     lower_value compile_expr cenv fty e1 sa = (op1, s1) /\
     lower_value compile_expr cenv fty e2 s1 = (op2, st) /\
@@ -344,7 +344,7 @@ Theorem range_full_compiler_geometry:
     cenv.ce_alloca_locals /\ fn_has_code sa sb func /\
     (!c lc s t. compile_stmts c lc ty stmts s = ((), t) ==> cs_extends s t) ==>
     cenv' = cenv /\ scenv' = cenv /\
-    compile_stmt cenv lctx ty
+    compile_stmt (gas_shadow_env T cenv) lctx ty
       (For id fty (Range (gas_shadow_expr e1) (gas_shadow_expr e2)) bound
         (MAP gas_shadow_stmt stmts)) ssa = ((), ssb) /\
     ?p cv rv g1 z1 g2 z2 ev dv entry_lbl cond_lbl body_lbl incr_lbl exit_lbl
@@ -2181,9 +2181,9 @@ Theorem range_body_compiler_pair:
     gas_shadow_state sb0 shadow_sb0 ==>
     ?bc' shadow_sb1.
       stmts_env bc lctx ret_ty body sb0 = (bc',sb1) /\
-      stmts_env bc lctx ret_ty (MAP gas_shadow_stmt body) shadow_sb0 =
+      stmts_env (gas_shadow_env T bc) lctx ret_ty (MAP gas_shadow_stmt body) shadow_sb0 =
         (bc',shadow_sb1) /\
-      compile_stmts bc lctx ret_ty (MAP gas_shadow_stmt body) shadow_sb0 =
+      compile_stmts (gas_shadow_env T bc) lctx ret_ty (MAP gas_shadow_stmt body) shadow_sb0 =
         ((),shadow_sb1) /\
       gas_shadow_state sb1 shadow_sb1
 Proof
@@ -2201,7 +2201,7 @@ Theorem range_body_pair_containment:
   !bc ret_ty body exit_lbl incr_lbl sb0 sb1 shadow_sb0 shadow_sb1
     shadow_sa shadow_sb func shadow_func.
     compile_stmts bc (InLoop exit_lbl incr_lbl) ret_ty body sb0 = ((),sb1) /\
-    compile_stmts bc (InLoop exit_lbl incr_lbl) ret_ty
+    compile_stmts (gas_shadow_env T bc) (InLoop exit_lbl incr_lbl) ret_ty
       (MAP gas_shadow_stmt body) shadow_sb0 = ((),shadow_sb1) /\
     gas_shadow_state sb0 shadow_sb0 /\
     fn_has_code sb0 sb1 func /\
@@ -2212,7 +2212,7 @@ Theorem range_body_pair_containment:
     ?body_cenv.
       stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty body sb0 =
         (body_cenv,sb1) /\
-      stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty
+      stmts_env (gas_shadow_env T bc) (InLoop exit_lbl incr_lbl) ret_ty
         (MAP gas_shadow_stmt body) shadow_sb0 = (body_cenv,shadow_sb1) /\
       gas_shadow_state sb1 shadow_sb1 /\
       fn_has_code sb0 sb1 func /\
@@ -2388,7 +2388,7 @@ Theorem range_full_body_entry:
       ret_ty /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
     stmt_env cenv lctx ret_ty (For id typ (Range e1 e2) bound body) sa =
     (cenv,sb) /\
-    stmt_env cenv lctx ret_ty
+    stmt_env (gas_shadow_env T cenv) lctx ret_ty
       (gas_shadow_stmt (For id typ (Range e1 e2) bound body)) shadow_sa =
     (cenv,shadow_sb) /\ gas_shadow_state sa shadow_sa /\
     gas_shadow_state sb shadow_sb /\ gas_shadow_context ctx shadow_ctx /\
@@ -2426,7 +2426,7 @@ Theorem range_full_body_entry:
             [mk_inst st.cs_next_id ALLOCA
                [Lit (n2w (type_memory_bytes cenv typ))] [p];
              mk_inst (st.cs_next_id + 1) JMP [Label entry_lbl] []]|> /\
-      compile_stmt cenv lctx ret_ty
+      compile_stmt (gas_shadow_env T cenv) lctx ret_ty
         (For id typ (Range (gas_shadow_expr e1) (gas_shadow_expr e2)) bound
            (MAP gas_shadow_stmt body)) shadow_sa = ((),shadow_sb) /\
       (!a1 m1 a2 m2.
@@ -2505,7 +2505,7 @@ Theorem range_full_body_entry:
       sa.cs_next_var <= sb0.cs_next_var /\ cs_extends sa sb0 /\
       cs_extends shadow_sa shadow_sb0 /\ cs_extends shadow_sb1 shadow_sb /\
       stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty body sb0 = (body_cenv,sb1) /\
-      stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty (MAP gas_shadow_stmt body)
+      stmts_env (gas_shadow_env T bc) (InLoop exit_lbl incr_lbl) ret_ty (MAP gas_shadow_stmt body)
         shadow_sb0 = (body_cenv,shadow_sb1) /\
       gas_shadow_state sb0 shadow_sb0 /\ gas_shadow_state sb1 shadow_sb1 /\
       fn_has_code sb0 sb1 func /\
@@ -4412,7 +4412,7 @@ Theorem range_full_round:
        cenv ret_ty /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
      stmt_env cenv lctx ret_ty (For id typ (Range e1 e2) bound body) sa =
      (cenv,sb) /\
-     stmt_env cenv lctx ret_ty
+     stmt_env (gas_shadow_env T cenv) lctx ret_ty
        (gas_shadow_stmt (For id typ (Range e1 e2) bound body)) shadow_sa =
      (cenv,shadow_sb) /\ gas_shadow_state sa shadow_sa /\
      gas_shadow_state sb shadow_sb /\ gas_shadow_context ctx shadow_ctx /\
@@ -4461,7 +4461,7 @@ Theorem range_full_round:
                 [Lit (n2w (type_memory_bytes cenv typ) :256 word)] [p];
               mk_inst (st.cs_next_id + (1 :num)) JMP [Label entry_lbl]
                 ([] :string list)]|> /\
-       compile_stmt cenv lctx ret_ty
+       compile_stmt (gas_shadow_env T cenv) lctx ret_ty
          (For id typ (Range (gas_shadow_expr e1) (gas_shadow_expr e2)) bound
             (MAP gas_shadow_stmt body)) shadow_sa = ((),shadow_sb) /\
        (!(a1 :type) (m1 :int) (a2 :type) (m2 :int).
@@ -4556,7 +4556,7 @@ Theorem range_full_round:
        cs_extends shadow_sa shadow_sb0 /\ cs_extends shadow_sb1 shadow_sb /\
        stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty body sb0 =
        (body_cenv,sb1) /\
-       stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty
+       stmts_env (gas_shadow_env T bc) (InLoop exit_lbl incr_lbl) ret_ty
          (MAP gas_shadow_stmt body) shadow_sb0 = (body_cenv,shadow_sb1) /\
        gas_shadow_state sb0 shadow_sb0 /\ gas_shadow_state sb1 shadow_sb1 /\
        fn_has_code sb0 sb1 func /\
@@ -5135,7 +5135,7 @@ Theorem range_full_round:
       ret_ty /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
     stmt_env cenv lctx ret_ty (For id typ (Range e1 e2) bound body) sa =
     (cenv,sb) /\
-    stmt_env cenv lctx ret_ty
+    stmt_env (gas_shadow_env T cenv) lctx ret_ty
       (gas_shadow_stmt (For id typ (Range e1 e2) bound body)) shadow_sa =
     (cenv,shadow_sb) /\ gas_shadow_state sa shadow_sa /\
     gas_shadow_state sb shadow_sb /\ gas_shadow_context ctx shadow_ctx /\
@@ -5184,7 +5184,7 @@ Theorem range_full_round:
                [Lit (n2w (type_memory_bytes cenv typ) :256 word)] [p];
              mk_inst (st.cs_next_id + (1 :num)) JMP [Label entry_lbl]
                ([] :string list)]|> /\
-      compile_stmt cenv lctx ret_ty
+      compile_stmt (gas_shadow_env T cenv) lctx ret_ty
         (For id typ (Range (gas_shadow_expr e1) (gas_shadow_expr e2)) bound
            (MAP gas_shadow_stmt body)) shadow_sa = ((),shadow_sb) /\
       (!(a1 :type) (m1 :int) (a2 :type) (m2 :int).
@@ -5278,7 +5278,7 @@ Theorem range_full_round:
       sa.cs_next_var <= sb0.cs_next_var /\ cs_extends sa sb0 /\
       cs_extends shadow_sa shadow_sb0 /\ cs_extends shadow_sb1 shadow_sb /\
       stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty body sb0 = (body_cenv,sb1) /\
-      stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty (MAP gas_shadow_stmt body)
+      stmts_env (gas_shadow_env T bc) (InLoop exit_lbl incr_lbl) ret_ty (MAP gas_shadow_stmt body)
         shadow_sb0 = (body_cenv,shadow_sb1) /\
       gas_shadow_state sb0 shadow_sb0 /\ gas_shadow_state sb1 shadow_sb1 /\
       fn_has_code sb0 sb1 func /\
@@ -6468,7 +6468,7 @@ Theorem compile_for_range_frag_full:
  stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
    cx lctx RetQ cenv
    (stmt_env cenv lctx ret_ty (For id typ (Range e1 e2) n body))
-   (stmt_env cenv lctx ret_ty
+   (stmt_env (gas_shadow_env T cenv) lctx ret_ty
       (gas_shadow_stmt (For id typ (Range e1 e2) n body)))
    (eval_stmt cx (For id typ (Range e1 e2) n body)) es
 Proof

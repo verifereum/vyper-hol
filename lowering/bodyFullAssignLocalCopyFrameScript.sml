@@ -29,7 +29,7 @@ Theorem body_assign_local_memory_rhs_frontier:
     cenv cx (expr_type e) e es /\
   compile_expr cenv (expr_type e) e sa = (vv,sV) /\
   unwrap_value cenv vv sV = (op,sB) /\
-  lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa =
     (op,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sB shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\

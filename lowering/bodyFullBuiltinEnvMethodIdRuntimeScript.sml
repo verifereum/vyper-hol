@@ -72,7 +72,7 @@ Theorem method_id_runtime_joint_outcome_from_suffix:
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx (expr_type e) e es /\
     lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
-    lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa = (x,ss) /\
+    lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa = (x,ss) /\
     compile_method_id_runtime (expr_type e) x fixed sm = (op,sb) /\
     compile_method_id_runtime (expr_type e) x fixed ss = (op,shadow_sb) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\

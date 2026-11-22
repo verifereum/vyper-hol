@@ -19,7 +19,7 @@ Theorem raw_call_prefix_prepared_full:
  body_exprs_full_ok cx (a::d::kws) /\
  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
  compile_expr cenv ty (Call ann (RawCallTarget flags) (a::d::kws) NONE) sa=(vv,sb) /\
- compile_expr cenv ty
+ compile_expr (gas_shadow_env T cenv) ty
    (gas_shadow_expr (Call ann (RawCallTarget flags) (a::d::kws) NONE))
    shadow_sa=(vv,shadow_sb) /\
  lower_value compile_expr cenv (BaseT AddressT) a sa=(addr,s1) /\

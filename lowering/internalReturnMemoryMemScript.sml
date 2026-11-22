@@ -692,7 +692,7 @@ Theorem internal_return_memory_full_robust_taint:
         (!i. i < lo /\ i IN (SND gt).t_mem ==>
              imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i))) cenv
     (stmt_env cenv lctx ty (Return (SOME e)))
-    (stmt_env cenv lctx ty (Return (SOME (gas_shadow_expr e))))
+    (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -957,7 +957,7 @@ Theorem internal_return_memory_relayout_robust_taint:
         (!i. i < lo /\ i IN (SND gt).t_mem ==>
              imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i))) cenv
     (stmt_env cenv lctx ty (Return (SOME e)))
-    (stmt_env cenv lctx ty (Return (SOME (gas_shadow_expr e))))
+    (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -1327,7 +1327,7 @@ Theorem internal_return_memory_full_robust:
         mem_agree_outside (SND gt).t_mem u.vs_memory mem ==>
         val_in_memory tv v (w2n bw) mem)) cenv
     (stmt_env cenv lctx ty (Return (SOME e)))
-    (stmt_env cenv lctx ty (Return (SOME (gas_shadow_expr e))))
+    (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1385,7 +1385,7 @@ Theorem internal_return_memory_full:
     (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx (\H v ee gt r. intret_mem_q H func ce cx tv bw v ee r) cenv
     (stmt_env cenv lctx ty (Return (SOME e)))
-    (stmt_env cenv lctx ty (Return (SOME (gas_shadow_expr e))))
+    (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
   rpt gen_tac >> strip_tac >>
