@@ -355,8 +355,18 @@ Resume abi_decode_caller_guard_joint[reject]:
   disch_then (qspecl_then [`fn`, `PG`,
     `<| d_stor := K (K {}); d_trans := K (K {});
         d_imm := K {}; d_ret := K {} |>`] strip_assume_tac) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post z. cut = pre ++ i::post /\ run_inst_seq pre u = OK z ==>
+      unitTransformDefs$dalloca_no_wrap i z)` by
+    (rpt strip_tac >>
+     `MEM i cut` by simp[MEM_APPEND] >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     drule_all bop_scalar_seq_outputs >>
+     disch_then (assume_tac o CONJUNCT1) >> strip_tac >>
+     qpat_x_assum `MEM i.inst_opcode _` mp_tac >>
+     qpat_assum `i.inst_opcode = DALLOCA` (fn th => simp[NoAsms, th])) >>
   drule_all run_inst_seq_origin_ptr_abort_lift >>
-  disch_then (qspecl_then [`explicit`, `ctx`, `PG`] strip_assume_tac) >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   qabbrev_tac `rj = Abort Revert_abort (t with vs_inst_idx := j)` >>
   qabbrev_tac `rp = Abort Revert_abort
     (t with vs_inst_idx := LENGTH sb.cs_current_insts + LENGTH prefix)` >>

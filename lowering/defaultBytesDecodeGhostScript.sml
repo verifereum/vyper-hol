@@ -3,7 +3,8 @@ Theory defaultBytesDecodeGhost
 Ancestors calldataDecodePtr calldataBytesLive abiDecoderBytes fragGasOriginPtrLoop
   fragGasSeqPtr fragExecMem venomState venomExecSemantics bodyPtrDefs
   ptrDiscipline ptrSafeRun compileEnv codegenRel emitHelper abiDecoderContract
-  decoderGhostFramePtr words list arithmetic finite_map pred_set
+  decoderGhostFramePtr calldataBytesSentinelShape unitTransformDefs
+  words list arithmetic finite_map pred_set
 
 Theorem default_bytes_decode_origin:
   compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
@@ -53,5 +54,7 @@ Proof
     (gvs[] >> simp[venom_state_component_equality]) >>
   qexistsl_tac [`G'`,`tn'`] >> gvs[] >>
   rpt gen_tac >> irule emitted_origin_ptr_path >> simp[] >>
-  qexists_tac `sa` >> simp[]
+  qexists_tac `sa` >> simp[] >> rpt strip_tac >>
+  drule calldata_bytes_sentinel_non_dalloca >>
+  simp[EVERY_APPEND, dalloca_no_wrap_def]
 QED

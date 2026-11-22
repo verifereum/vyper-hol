@@ -6661,8 +6661,17 @@ Proof
   `?t. run_inst_seq code s = Abort a t` by
     (Cases_on `tload (n2w key) s = 1w` >> fs[Abbr `a`, Abbr `code`,
                             transientLockPropsTheory.transient_lock_code_execution]) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. code = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i code` by
+       (qpat_assum `code = _ ++ _` (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+     Cases_on `view` >>
+     fs[Abbr `code`, transientLockPropsTheory.transient_lock_code_def] >>
+     gvs[emitHelperPropsTheory.mk_inst_opcode]) >>
   drule_all fragGasCopyLoopTheory.run_inst_seq_abort_origin_ptr_uniform >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  strip_tac >>
   `!D. ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn code s G' tn'` by
     (gen_tac >> simp[Abbr `code`] >>
      irule transientLockPtrTheory.transient_lock_abort_ptr_ghost >> simp[]) >>

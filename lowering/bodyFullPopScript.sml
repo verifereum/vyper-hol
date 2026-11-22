@@ -877,6 +877,15 @@ Proof
         mk_inst (id+1) ISZERO [Var x0] [x1];
         mk_inst (id+2) ISZERO [Var x1] [x2]]` by
        simp[mk_inst_def, is_terminator_def] >>
+     `(ctx_has_dalloca ctx ==> !pre i post u.
+         [mk_inst id MLOAD [Var p] [x0];
+          mk_inst (id+1) ISZERO [Var x0] [x1];
+          mk_inst (id+2) ISZERO [Var x1] [x2]] = pre ++ i::post /\
+         run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+       (rpt strip_tac >>
+        qpat_x_assum `_ = _ ++ i::_` (mp_tac o Q.AP_TERM `MEM i`) >>
+        simp[] >> disch_then (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC) >>
+        simp[dalloca_no_wrap_def,mk_inst_def]) >>
      qpat_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
        (qspec_then `D` assume_tac) >>
      drule_all run_inst_seq_gas_origin_ptr_path >>
@@ -905,7 +914,7 @@ Proof
      simp[] >> irule bop_assert_ptr_inst_ok >> simp[]) >>
   simp[step_inst_non_invoke, pop_step_ASSERT, lookup_var_def,
     bool_to_word_def, gas_events_step_def, gas_count_step_def,
-    mem_safe_step_non_invoke, mk_inst_def,
+    mem_safe_step_non_invoke, dalloca_no_wrap_def, mk_inst_def,
     inst_mem_below_frontier_def, inst_dload_in_section_def,
     source_memory_read_ranges_def, source_memory_write_ranges_def]
 QED
@@ -1275,6 +1284,14 @@ Proof
         rpt conj_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) prefix` by
        (Cases_on `tr` >> simp[Abbr `prefix`,mk_inst_def,is_terminator_def]) >>
+     `(ctx_has_dalloca ctx ==> !pre i post u.
+         prefix = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+         dalloca_no_wrap i u)` by
+       (rpt strip_tac >>
+        qpat_x_assum `_ = _ ++ i::_` (mp_tac o Q.AP_TERM `MEM i`) >>
+        Cases_on `tr` >> simp[Abbr `prefix`] >>
+        disch_then (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC) >>
+        simp[dalloca_no_wrap_def,mk_inst_def]) >>
      qpat_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ prefix _ _ _`
        (qspec_then `D` assume_tac) >>
      drule_all run_inst_seq_gas_origin_ptr_path >>
@@ -1303,7 +1320,8 @@ Proof
          (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])) >>
      qexists_tac `0` >> simp[] >> irule bop_assert_ptr_inst_ok >> simp[]) >>
   simp[step_inst_non_invoke,pop_step_ASSERT,lookup_var_def,
-    gas_events_step_def,gas_count_step_def,mem_safe_step_non_invoke,mk_inst_def,
+    gas_events_step_def,gas_count_step_def,mem_safe_step_non_invoke,
+    dalloca_no_wrap_def,mk_inst_def,
     inst_mem_below_frontier_def,inst_dload_in_section_def,
     source_memory_read_ranges_def,source_memory_write_ranges_def]
 QED
@@ -1561,6 +1579,15 @@ Resume pop_vv_full_of_target[memory_suffix]:
       isPREFIX (memory_pop_insts (Var hdr_var) sm.cs_next_id
         (type_memory_bytes cenv ann) x0 x1 x2 x3 x4 x5 x6)
         (DROP t.vs_inst_idx bb.bb_instructions)` by simp[] >>
+     `(ctx_has_dalloca ctx ==> !pre i post u.
+         memory_pop_insts (Var hdr_var) sm.cs_next_id
+           (type_memory_bytes cenv ann) x0 x1 x2 x3 x4 x5 x6 = pre ++ i::post /\
+         run_inst_seq pre t = OK u ==> dalloca_no_wrap i u)` by
+       (rpt strip_tac >>
+        qpat_x_assum `_ = _ ++ i::_` (mp_tac o Q.AP_TERM `MEM i`) >>
+        simp[memory_pop_insts_def] >>
+        disch_then (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC) >>
+        simp[dalloca_no_wrap_def,mk_inst_def]) >>
      qpat_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
        (qspec_then `D` assume_tac) >>
      drule_all run_inst_seq_gas_origin_ptr_path >>
@@ -2124,6 +2151,14 @@ Resume pop_full_storage_static_path[prefix]:
             (qspecl_then [`D`,`s.vs_inst_idx`]
               (ACCEPT_TAC o REWRITE_RULE [eq])))) >>
      `isPREFIX prefix (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
+     `(ctx_has_dalloca ctx ==> !pre i post u.
+         prefix = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+         dalloca_no_wrap i u)` by
+       (rpt strip_tac >>
+        qpat_x_assum `_ = _ ++ i::_` (mp_tac o Q.AP_TERM `MEM i`) >>
+        Cases_on `tr` >> simp[Abbr `prefix`,Abbr `load`,Abbr `chunk`] >>
+        disch_then (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC) >>
+        simp[dalloca_no_wrap_def,mk_inst_def]) >>
      drule_all run_inst_seq_gas_origin_ptr_path >>
      Cases_on `tr` >> simp[Abbr `prefix`,Abbr `load`,Abbr `chunk`,mk_inst_def,
        nested_pop_suffix_def]) >>
@@ -2168,7 +2203,8 @@ Resume pop_full_storage_static_path[exit]:
      rpt strip_tac >> gvs[]) >>
   irule exit_inst_origin_ptr >> Cases_on `tr` >> fs[Abbr `i`,Abbr `u`] >>
   simp[exit_result_def,step_inst_non_invoke,
-    mem_safe_step_non_invoke,gas_events_step_def,gas_count_step_def,mk_inst_def,
+    mem_safe_step_non_invoke,dalloca_no_wrap_def,
+    gas_events_step_def,gas_count_step_def,mk_inst_def,
     inst_mem_below_frontier_def,inst_dload_in_section_def,
     source_memory_read_ranges_def,source_memory_write_ranges_def] >>
   fs[GSYM mk_inst_def,step_inst_non_invoke]
@@ -2492,6 +2528,15 @@ Resume pop_vv_full_of_target[storage_positive]:
        (nested_pop_suffix rb0 tr sm.cs_next_id (type_slot_size etv)
          x0 x1 x2 x3 x4 x5 x6)` by
        (Cases_on `tr` >> simp[nested_pop_suffix_def,mk_inst_def,is_terminator_def]) >>
+     `(ctx_has_dalloca ctx ==> !pre i post u.
+         nested_pop_suffix rb0 tr sm.cs_next_id (type_slot_size etv)
+           x0 x1 x2 x3 x4 x5 x6 = pre ++ i::post /\
+         run_inst_seq pre t = OK u ==> dalloca_no_wrap i u)` by
+       (rpt strip_tac >>
+        qpat_x_assum `_ = _ ++ i::_` (mp_tac o Q.AP_TERM `MEM i`) >>
+        Cases_on `tr` >> simp[nested_pop_suffix_def] >>
+        disch_then (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC) >>
+        simp[dalloca_no_wrap_def,mk_inst_def]) >>
      qpat_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
        (qspec_then `D` assume_tac) >>
      drule_all run_inst_seq_gas_origin_ptr_path >>

@@ -1601,7 +1601,8 @@ Proof
           fragExecMemTheory.run_inst_seq_mem_ok_last, fragGasSeqPtrTheory.inst_seq_ptr_def] >>
      simp[Abbr `ins`, mk_inst_def, is_terminator_def,
           instMemFrontierTheory.below_frontier_no_ranges,
-          memSafeRunTheory.inst_dload_in_section_def]) >>
+          memSafeRunTheory.inst_dload_in_section_def] >>
+     rpt strip_tac >> Cases_on `pre` >> gvs[]) >>
   `step_prov PG G ins t = G |+ (out,(s.vs_alloca_next,w2n w)) /\
    step_taint ins s t tn = tn with <| t_mem := tn.t_mem UNION
        {i | s.vs_alloca_next <= i /\ i < s.vs_alloca_next + w2n w};
@@ -2062,6 +2063,17 @@ Proof
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     (irule nonreentrantEntryTheory.lock_opcodes_mem_ok >>
      Cases_on `view` >> simp[transientLockPropsTheory.transient_lock_code_def]) >>
+  `!i w. MEM i (transient_lock_code key view sa) ==>
+       unitTransformDefs$dalloca_no_wrap i w` by
+    (Cases_on `view` >> simp[transientLockPropsTheory.transient_lock_code_def] >>
+     rpt strip_tac >> gvs[]) >>
+  `(ctx_has_dalloca ctx ==>
+      !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> first_x_assum irule >>
+     qpat_assum `emitted_insts _ _ = transient_lock_code _ _ _`
+       (SUBST1_TAC o SYM) >>
+     qpat_assum `emitted_insts _ _ = _ ++ _` SUBST1_TAC >> simp[]) >>
   qexistsl_tac [`G'`,`tn'`] >> conj_tac >- first_assum MATCH_ACCEPT_TAC >>
   conj_tac
   >- (rpt strip_tac >> irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
@@ -2072,7 +2084,7 @@ Proof
     (fs[emitHelperPropsTheory.inst_extends_def] >>
      drule_all stmtReasonLitFragMemoryTheory.fn_has_code_code >> metis_tac[]) >>
   drule_all fragGasCopyLoopTheory.run_inst_seq_abort_origin_ptr_uniform >>
-  disch_then (qspec_then `ctx` (qx_choose_then `j` assume_tac)) >>
+  disch_then (qx_choose_then `j` assume_tac) >>
   qexists_tac `j` >> rpt gen_tac >>
   first_assum irule >> first_assum MATCH_ACCEPT_TAC
 QED

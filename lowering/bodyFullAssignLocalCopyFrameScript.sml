@@ -348,6 +348,10 @@ Resume body_assign_local_memory_flat_copy_effect[path]:
      simp[mk_inst_def] >> qexists_tac `0` >> simp[] >> (gvs[mk_inst_def, fragGasCopyLoopTheory.inst_seq_ptr_lower_bound_transport]))) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts sa sb)` by simp[mk_inst_def,is_terminator_def] >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post z. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre u = OK z ==> unitTransformDefs$dalloca_no_wrap i z)` by
+    simp[APPEND_EQ_CONS, mk_inst_def, memSafeRunTheory.dalloca_no_wrap_non_dalloca] >>
   drule_all run_inst_seq_gas_origin_ptr_path >>
   simp[Abbr `t`,mk_inst_def]
 QED

@@ -144,6 +144,14 @@ Proof
     metis_tac[bodyPtrBopScalarSeqTheory.bop_scalar_seq_opcodes] >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     metis_tac[bodyFullAbiDecodeClampMemoryTheory.abi_decode_scalar_seq_mem_ok] >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts sa sb)` by simp[MEM_APPEND] >>
+     drule_all bop_scalar_seq_outputs >>
+     Cases_on `i.inst_opcode = DALLOCA` >> simp[]) >>
   drule_all fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
   disch_then (qspec_then `explicit` assume_tac) >>
   drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
@@ -466,6 +474,18 @@ Proof
     simp[mk_inst_def, is_terminator_def] >>
   `run_inst_seq_mem_ok (emitted_insts sa sc) s` by
     suspend "load_memory" >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sc = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts sa sc)` by
+       (qpat_assum `emitted_insts sa sc = pre ++ i::post`
+          (fn th => pure_rewrite_tac[th]) >> simp[MEM_APPEND]) >>
+     pop_assum mp_tac >>
+     qpat_assum `emitted_insts sa sc = emitted_insts sa sb ++ emitted_insts sb sc`
+       (fn th => pure_rewrite_tac[th]) >>
+     simp[mk_inst_def] >> strip_tac >> simp[]) >>
   `((t with vs_inst_idx := s.vs_inst_idx) with
          vs_inst_idx := LENGTH sc.cs_current_insts) = t` by
     simp[venom_state_component_equality] >>

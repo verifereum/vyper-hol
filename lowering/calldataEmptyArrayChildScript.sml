@@ -54,9 +54,24 @@ Proof
      ho_match_mp_tac (GEN_ALL calldata_element_setup_prefix_safe) >>
      qexistsl_tac [`src`, `n2w slot`] >>
      goal_assum (drule_at Any) >> simp[w2n_n2w] >> metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st ready)` by
+    (qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     asm_simp_tac bool_ss [abi_decode_static_element_setup_phases,
+       abiDecoderIndexedAddressTheory.abi_decode_indexed_address_def,
+       comp_bind_def, comp_return_def, emitHelperTheory.emit_op_def,
+       fresh_var_def, fresh_id_def, emit_def, comp_ignore_bind_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[emitted_insts_def] >>
+     pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND, venomInstTheory.mk_inst_def]) >>
   mp_tac (Q.INST [`s` |-> `initial`, `t` |-> `prepared`, `P` |-> `\s. T`]
     (SPEC_ALL successful_sequence_endpoint)) >>
-  simp[eval_op_inst_idx] >> strip_tac >>
+  simp[eval_op_inst_idx] >>
+  (impl_tac >-
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+     qpat_assum `emitted_insts st ready = _` SUBST1_TAC >>
+     simp[EVERY_APPEND])) >>
+  strip_tac >>
   qexists_tac `prepared with vs_inst_idx := LENGTH ready.cs_current_insts` >>
   fs[eval_op_inst_idx, fresh_vars_wrt_def]
 QED

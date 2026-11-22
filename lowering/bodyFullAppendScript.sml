@@ -2125,6 +2125,16 @@ Proof
 QED
 
 Resume append_nested_storage_cont_framed[classify]:
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sm sb = pre ++ i::post /\
+      run_inst_seq pre t = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (drule_then (mp_tac o CONJUNCT2 o CONJUNCT2)
+       bodyMemAppendFactsTheory.append_storage_word_suffix_footprint_mem >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY _ _` mp_tac >>
+     qpat_x_assum `emitted_insts sm sb = _` (fn th => pure_rewrite_tac[th]) >>
+     simp[EVERY_APPEND] >> rpt strip_tac >> fs[]) >>
   `type_slot_size tv = 1` by metis_tac[exprSimUnwrapTheory.word_type_slot_size] >>
   `encode_value tv v = SOME [(0,typed_val_to_w256 tv v)]` by
     metis_tac[stmtSimAssignStorageFactsTheory.encode_value_word_typed] >>
@@ -2207,9 +2217,12 @@ Resume append_nested_storage_cont_framed[source_success]:
      metis_tac[fragGasSeqPtrTheory.inst_seq_ptr_ghost_unique]) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,G,tn) []
       (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts),Gf,tf)` by
-    (rpt gen_tac >> irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
-     conj_tac >- simp[] >> qexists_tac `sm` >>
-     simp[] >> fs[EVERY_MEM]) >>
+    (rpt gen_tac >>
+     qpat_assum `run_inst_seq (emitted_insts sm sb) t = OK u`
+       (mp_then (Pat `run_inst_seq _ _ = _`) mp_tac
+          fragGasOriginPtrLoopTheory.emitted_origin_ptr_path) >>
+     simp[EVERY_MEM] >> disch_then irule >> simp[] >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
   drule_all stmtAppendStoragePathPtrTheory.append_storage_word_suffix_code >> strip_tac >>
   `alloca_history func (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (`alloca_inv t` by fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
@@ -2333,7 +2346,7 @@ Resume append_nested_storage_cont_framed[capacity]:
 QED
 
 Resume append_nested_storage_cont_framed[capacity_joint]:
-  first_x_assum (qspec_then `ctx` (qx_choose_then `jm` assume_tac)) >>
+  rename1 `gas_path_mem ctx func t 0 (Abort Revert_abort (r with vs_inst_idx := jm))` >>
   `r with vs_inst_idx := jm = r with vs_inst_idx := j` by
     (qpat_assum `gas_path_mem _ _ _ _ _` mp_tac >>
      qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
