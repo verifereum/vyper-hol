@@ -517,6 +517,7 @@ signature vyperASTSyntax = sig
   val ECAdd_tm : term val is_ECAdd : term -> bool
   val ECMul_tm : term val is_ECMul : term -> bool
   val PowMod256_tm : term val is_PowMod256 : term -> bool
+  val NamedArray_tm : term val is_NamedArray : term -> bool
 
   val AbiDecode_tm : term
   val mk_AbiDecode_tm : term -> term

@@ -8,6 +8,18 @@ Theory constSubstMods
 Ancestors
   vyperAST alist list pair vyperContext constSubst vyperInterpreter
 
+(* As named_array_args, for keys of any module. *)
+Definition named_array_args_mods_def:
+  named_array_args_mods env bi es es' =
+    case (bi, es, es') of
+      (Bop op, [_; TopLevelName _ k], [a; r]) =>
+        if (op = In \/ op = NotIn) /\ IS_SOME (ALOOKUP env k) /\
+           is_ArrayT (expr_type r)
+        then [a; Builtin (expr_type r) NamedArray [r]]
+        else es'
+    | _ => es'
+End
+
 Definition subst_consts_expr_mods_def:
   subst_consts_expr_mods env (Name ty id) = Name ty id /\
   subst_consts_expr_mods env (TopLevelName ty (ns,id)) =
@@ -25,7 +37,8 @@ Definition subst_consts_expr_mods_def:
   subst_consts_expr_mods env (Attribute ty a id) =
     Attribute ty (subst_consts_expr_mods env a) id /\
   subst_consts_expr_mods env (Builtin ty bi es) =
-    Builtin ty bi (subst_consts_exprs_mods env es) /\
+    Builtin ty bi
+      (named_array_args_mods env bi es (subst_consts_exprs_mods env es)) /\
   subst_consts_expr_mods env (TypeBuiltin ty bi t es) =
     TypeBuiltin ty bi t (subst_consts_exprs_mods env es) /\
   subst_consts_expr_mods env (Pop ty tgt) = Pop ty (subst_consts_btarget_mods env tgt) /\

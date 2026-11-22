@@ -24,6 +24,7 @@ val checker_defs =
    check_function_body_in_mode_def,
    check_function_body_def,
    (* The constant-substituted body check_function_body also types. *)
+   constSubstModsTheory.named_array_args_mods_def,
    constSubstModsTheory.subst_consts_expr_mods_def,
    constSubstModsTheory.subst_consts_target_mods_def,
    constSubstModsTheory.subst_consts_iter_mods_def,
@@ -182,6 +183,7 @@ val checker_defs =
    stmt_no_control_escape_def,
    vyperValueTheory.evaluate_type_def,
    vyperASTTheory.bound_length_def,
+   vyperASTTheory.is_ArrayT_def,
    vyperValueTheory.type_slot_size_def,
    vfmConstantsTheory.word_size_def,
    vyperValueTheory.compatible_bound_def,

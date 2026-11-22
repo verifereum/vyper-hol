@@ -19,6 +19,8 @@ val () = cv_auto_trans no_neg_exp_stmt_def;
 
 val () = cv_auto_trans no_neg_exp_fn_def;
 
+val () = cv_auto_trans named_array_args_def;
+
 val () = cv_auto_trans subst_consts_expr_def;
 
 val () = cv_auto_trans subst_consts_target_def;

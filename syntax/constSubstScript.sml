@@ -262,6 +262,21 @@ Definition no_neg_exp_fn_def:
     (no_neg_exp_exprs dflts /\ no_neg_exp_stmts body)
 End
 
+(* A builtin's substituted arguments es', given its arguments es.  The right
+   operand of a membership that names an array constant stays marked as
+   NamedArray around its replacement, so the lowering loops over it as the
+   pinned compiler does for a name, rather than unrolling it as a literal. *)
+Definition named_array_args_def:
+  named_array_args env bi es es' =
+    case (bi, es, es') of
+      (Bop op, [_; TopLevelName _ (NONE,id)], [a; r]) =>
+        if (op = In \/ op = NotIn) /\ IS_SOME (ALOOKUP env id) /\
+           is_ArrayT (expr_type r)
+        then [a; Builtin (expr_type r) NamedArray [r]]
+        else es'
+    | _ => es'
+End
+
 Definition subst_consts_expr_def:
   subst_consts_expr env (Name ty id) = Name ty id /\
   subst_consts_expr env (TopLevelName ty (ns,id)) =
@@ -281,7 +296,7 @@ Definition subst_consts_expr_def:
   subst_consts_expr env (Attribute ty a id) =
     Attribute ty (subst_consts_expr env a) id /\
   subst_consts_expr env (Builtin ty bi es) =
-    Builtin ty bi (subst_consts_exprs env es) /\
+    Builtin ty bi (named_array_args env bi es (subst_consts_exprs env es)) /\
   subst_consts_expr env (TypeBuiltin ty bi t es) =
     TypeBuiltin ty bi t (subst_consts_exprs env es) /\
   subst_consts_expr env (Pop ty tgt) = Pop ty (subst_consts_btarget env tgt) /\

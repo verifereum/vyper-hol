@@ -242,6 +242,7 @@ val (ECRecover_tm, is_ECRecover) = syntax0 "ECRecover"
 val (ECAdd_tm, is_ECAdd) = syntax0 "ECAdd"
 val (ECMul_tm, is_ECMul) = syntax0 "ECMul"
 val (PowMod256_tm, is_PowMod256) = syntax0 "PowMod256"
+val (NamedArray_tm, is_NamedArray) = syntax0 "NamedArray"
 
 val (EKValue_tm, is_EKValue) = syntax0 "EKValue"
 val (EKGas_tm, is_EKGas) = syntax0 "EKGas"
