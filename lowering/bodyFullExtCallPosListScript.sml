@@ -115,7 +115,7 @@ Theorem extcall_request_positional_packing_outcome_named:
      expr_body_pre cenv cx env e st) /\
   compile_ext_call_args compile_expr cenv kw_es
     (MAP (lowered_value_type cenv) xs) xs sa = (svs,sb) /\
-  compile_ext_call_args compile_expr cenv (MAP gas_shadow_expr kw_es)
+  compile_ext_call_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr kw_es)
     (MAP (lowered_value_type cenv) (MAP gas_shadow_expr xs))
     (MAP gas_shadow_expr xs) shadow_sa = (svs,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
@@ -168,13 +168,15 @@ Proof
      simp[Abbr `copy`]) >>
   Cases_on `compile_expr cenv (expr_type e) e sa` >>
   rename1 `compile_expr cenv (expr_type e) e sa = (vv,si)` >>
-  Cases_on `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
-  rename1 `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa = (shvv,shadow_si)` >>
+  Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  rename1 `compile_expr _ _ (gas_shadow_expr e) shadow_sa = (shvv,shadow_si)` >>
   `shvv = vv /\ gas_shadow_state si shadow_si` by
-    (qspecl_then [`cenv`, `expr_type e`, `e`, `T`] mp_tac
-       (cj 1 gas_shadow_compile_expr) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
+    (`gas_shadow_compiles (compile_expr cenv (expr_type e) e)
+       (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
+       irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr_env >>
+     qpat_assum `gas_shadow_compiles (compile_expr _ _ _) _`
+       (mp_tac o Q.SPECL [`sa`, `shadow_sa`] o REWRITE_RULE [gas_shadow_compiles_def]) >>
+     simp[]) >>
   qpat_x_assum `shvv = vv` SUBST_ALL_TAC >>
   `body_expr_full_ok cx e /\ expr_body_pre cenv cx env e es` by
     (fs[Once body_exprs_full_ok_def] >> metis_tac[]) >>
@@ -197,13 +199,13 @@ Proof
   `?tail_svs. svs = sv::tail_svs /\
      compile_ext_call_args compile_expr cenv kw_es
        (MAP (lowered_value_type cenv) xs) xs sm = (tail_svs,sb) /\
-     compile_ext_call_args compile_expr cenv (MAP gas_shadow_expr kw_es)
+     compile_ext_call_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr kw_es)
        (MAP (lowered_value_type cenv) (MAP gas_shadow_expr xs))
        (MAP gas_shadow_expr xs) shadow_sm = (tail_svs,shadow_sb)` by
     (Cases_on `compile_ext_call_args compile_expr cenv kw_es
         (MAP (lowered_value_type cenv) xs) xs sm` >>
      rename1 `compile_ext_call_args _ _ kw_es _ xs sm = (rest,sr)` >>
-     Cases_on `compile_ext_call_args compile_expr cenv (MAP gas_shadow_expr kw_es)
+     Cases_on `compile_ext_call_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr kw_es)
         (MAP (lowered_value_type cenv) (MAP gas_shadow_expr xs))
         (MAP gas_shadow_expr xs) shadow_sm` >>
      rename1 `compile_ext_call_args _ _ (MAP _ kw_es) _ (MAP _ xs) shadow_sm =
@@ -219,7 +221,7 @@ Proof
      >- (qspec_then `sa` mp_tac (Q.SPECL [`cenv`, `expr_type e`, `e`]
           (cj 1 compile_expr_ci_mono)) >> simp[]) >>
      qspec_then `shadow_sa` mp_tac
-       (Q.SPECL [`cenv`, `expr_type e`, `gas_shadow_expr e`]
+       (Q.SPECL [`gas_shadow_env T cenv`, `expr_type e`, `gas_shadow_expr e`]
           (cj 1 compile_expr_ci_mono)) >> simp[]) >>
   `ci_mono si sm /\ ci_mono shadow_si shadow_sm` by
     (qunabbrev_tac `snap` >>
@@ -235,7 +237,7 @@ Proof
        `compile_expr`, `cenv`, `kw_es`, `sm`] mp_tac ci_mono_compile_ext_call_args >>
      qspecl_then [`MAP gas_shadow_expr xs`,
        `MAP (lowered_value_type cenv) (MAP gas_shadow_expr xs)`,
-       `compile_expr`, `cenv`, `MAP gas_shadow_expr kw_es`, `shadow_sm`]
+       `compile_expr`, `gas_shadow_env T cenv`, `MAP gas_shadow_expr kw_es`, `shadow_sm`]
        mp_tac ci_mono_compile_ext_call_args >> simp[cj 1 compile_expr_ci_mono]) >>
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     (mp_tac (Q.SPECL [`sa`, `sm`, `sb`, `func`] fn_has_code_split) >>
