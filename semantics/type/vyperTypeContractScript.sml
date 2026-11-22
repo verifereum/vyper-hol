@@ -522,6 +522,7 @@ Definition runtime_constant_builtin_def:
   runtime_constant_builtin (Env item) = (item <> SelfAddr) /\
   runtime_constant_builtin (Acc item) = (item <> Code) /\
   runtime_constant_builtin NamedConst = T /\
+  runtime_constant_builtin (BoolChain _ _) = T /\
   runtime_constant_builtin _ = F
 End
 
