@@ -85,7 +85,7 @@ Proof
        comp_ignore_bind_def,comp_return_def] >> pairarg_tac >> simp[] >> strip_tac >>
   qpat_x_assum `cenv = cenv'` (SUBST_ALL_TAC o SYM) >>
   `compile_stmt cenv lctx ret_ty (For id typ (Array e) n loop_body) sa = ((),sb)` by gvs[] >>
-  `compile_stmt cenv lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body))
+  `compile_stmt (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body))
      shadow_sa = ((),shadow_sb)` by
     (qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _` mp_tac >>
      simp[gas_shadow_stmt_def,stmt_env_def,declare_stmt_local_def,
