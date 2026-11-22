@@ -54,10 +54,19 @@ Proof
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     (irule body_ctor_copy_mem_ok >> metis_tac[]) >>
   drule code_ctor_copy_insts >> strip_tac >>
+  `emitted_insts sa sb = is` by simp[emitted_insts_def, DROP_LENGTH_APPEND] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
                ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
-    (fs[emitted_insts_def, DROP_APPEND, EVERY_MEM] >> rpt strip_tac >>
+    (fs[EVERY_MEM] >> rpt strip_tac >>
      first_x_assum drule >> strip_tac >> gvs[is_terminator_def]) >>
+  `!pre i post u. emitted_insts sa sb = pre ++ i::post ==> dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts sa sb)` by
+       (qpat_assum `emitted_insts sa sb = pre ++ i::post`
+          (fn th => pure_rewrite_tac[th]) >> simp[MEM_APPEND]) >>
+     qpat_x_assum `EVERY (\i. MEM i.inst_opcode [ADD; ILOAD; MSTORE]) is`
+       (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     disch_then (qspec_then `i` mp_tac) >> gvs[] >> strip_tac >> simp[]) >>
   `run_inst_seq (emitted_insts sa sb) s = OK t /\
    sb.cs_current_bb = sa.cs_current_bb /\
    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb` by

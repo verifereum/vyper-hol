@@ -31,7 +31,8 @@ Proof
   disch_then (qspecl_then [`explicit`,`t`,`bb`] mp_tac) >>
   (impl_tac >- simp[slot_copy_init_insts_def, mk_inst_def, is_terminator_def,
     DROP_LENGTH_APPEND, eval_operand_def, run_inst_seq_mem_ok_def, step_inst_base_opcode_eqs, inst_mem_below_frontier_def,
-    inst_dload_in_section_def, source_memory_read_ranges_def, source_memory_write_ranges_def]) >>
+    inst_dload_in_section_def, source_memory_read_ranges_def, source_memory_write_ranges_def,
+    APPEND_EQ_CONS, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   simp[mk_inst_def] >> strip_tac >>
   qabbrev_tac `u = t with vs_inst_idx := s.vs_inst_idx+1` >>
   `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by

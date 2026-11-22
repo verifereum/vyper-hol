@@ -235,6 +235,16 @@ Proof
     (irule convert_dynamic_scalar_mem_ok >> simp[] >>
      goal_assum (drule_at (Pat `compile_type_convert _ _ _ = _`)) >>
      qexists_tac `a` >> simp[eval_operand_def] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts sa sb)` by simp[] >>
+     Cases_on `i.inst_opcode = DALLOCA` >> simp[] >>
+     qpat_x_assum `dynamic_writes_fresh sa (emitted_insts sa sb)` mp_tac >>
+     pure_rewrite_tac[dynamic_writes_fresh_def, EVERY_MEM] >>
+     disch_then (qspec_then `i` mp_tac) >>
+     simp[freshWritesTheory.fresh_write_op_def]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sm)` by
     (drule dynamic_writes_fresh_path_opcodes >>
      simp[EVERY_APPEND, EVERY_MEM] >> metis_tac[]) >>
@@ -325,7 +335,7 @@ Resume signed_convert_origin_path[abort]:
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\ i.inst_opcode <> GAS)
     (emitted_insts sa sb)` by (fs[EVERY_MEM] >> metis_tac[]) >>
   drule_all fragGasCopyLoopTheory.run_inst_seq_abort_origin_ptr_uniform >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  strip_tac >>
   qexistsl_tac [`Revert_abort`,`sf with vs_inst_idx := j`,`H`,`th'`] >>
   gen_tac >> first_x_assum irule >>
   qpat_x_assum `!D q. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) _ H th'`

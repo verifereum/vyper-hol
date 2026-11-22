@@ -489,6 +489,12 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
               i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) [a;b]` by
     simp[Abbr `a`, Abbr `b`, mk_inst_def, is_terminator_def] >>
+  `(ctx_has_dalloca ctx ==> !pre i post u'.
+      [a;b] = pre ++ i::post /\ run_inst_seq pre s = OK u' ==>
+      dalloca_no_wrap i u')` by
+    (rpt strip_tac >>
+     `MEM i [a;b]` by metis_tac[MEM_APPEND, MEM] >>
+     fs[Abbr `a`, Abbr `b`, mk_inst_def]) >>
   drule_all run_inst_seq_origin_ptr_lift >>
   disch_then (qspecl_then [`explicit`] strip_assume_tac) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
@@ -1361,6 +1367,9 @@ Resume range_literal_entry_full[literal_path]:
        inst_dload_in_section_def, source_memory_read_ranges_def,
        source_memory_write_ranges_def, inst_seq_ptr_def] >>
      conj_tac
+     >- (rpt strip_tac >> Cases_on `pre` >> gvs[] >>
+         rename1 `[_] = tail ++ [i] ++ post` >> Cases_on `tail` >> gvs[]) >>
+     conj_tac
      >- (irule scalar_ptr_inst_ok_lo >>
          simp[scalar_shape_def, scalar_binary_def, scalar_unary_def,
            op_prov_def, op_taint_def] >>
@@ -2143,14 +2152,24 @@ Proof
   drule_all scalar_seq_metadata_frame_lo >> strip_tac >>
   `!A. scalar_code A code ==>
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-               i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) code` by
+               i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS /\
+               i.inst_opcode <> DALLOCA) code` by
     (POP_ASSUM_LIST (K ALL_TAC) >> Induct_on `code` >>
      simp[scalar_code_def] >> rpt gen_tac >> strip_tac >>
      reverse conj_tac >- metis_tac[] >>
      gvs[scalar_shape_def, scalar_binary_def, scalar_unary_def,
          venomInstTheory.is_terminator_def]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-               i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) code` by metis_tac[] >>
+               i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS /\
+               i.inst_opcode <> DALLOCA) code` by metis_tac[] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+               i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) code` by
+    fs[EVERY_MEM] >>
+  `(ctx_has_dalloca ctx ==> !pre i post u'.
+      code = pre ++ i::post /\ run_inst_seq pre s = OK u' ==>
+      dalloca_no_wrap i u')` by
+    (rpt strip_tac >> `MEM i code` by metis_tac[MEM_APPEND, MEM] >>
+     fs[EVERY_MEM]) >>
   qexistsl_tac [`G'`, `tn'`] >>
   asm_simp_tac bool_ss [LEFT_EXISTS_AND_THM, RIGHT_EXISTS_AND_THM] >>
   conj_tac >- suspend "success" >>
@@ -2167,7 +2186,7 @@ Resume range_scalar_joint_lift[abort]:
   Cases_on `?a t. run_inst_seq code s = Abort a t`
   >- (pop_assum strip_assume_tac >>
       drule_all run_inst_seq_origin_ptr_abort_lift >>
-      disch_then (qspecl_then [`explicit`, `ctx`, `PG`]
+      disch_then (qspecl_then [`explicit`, `PG`]
         (qx_choose_then `j` assume_tac)) >>
       qexists_tac `j` >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
   qexists_tac `0` >> metis_tac[]

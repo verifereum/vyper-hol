@@ -9,7 +9,8 @@ Ancestors
 Theorem exact_scalar_clamp_opcodes[local]:
   compile_abi_clamp_basetype value clamp sa = ((),sb) ==>
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-    i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts sa sb)
+    i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS /\
+    i.inst_opcode <> DALLOCA) (emitted_insts sa sb)
 Proof
   strip_tac >> drule calldata_clamp_instructions >> strip_tac >>
   gvs[mk_inst_def, MEM, is_terminator_def] >>
@@ -34,7 +35,8 @@ Theorem exact_scalar_clamp_abort_joint:
 Proof
   strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-    i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts sa sb)` by
+    i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS /\
+    i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
     metis_tac[exact_scalar_clamp_opcodes] >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     metis_tac[compile_abi_clamp_basetype_mem_ok] >>
@@ -44,6 +46,11 @@ Proof
     (!x. x IN R ==> FLOOKUP H x = FLOOKUP G x /\
       FLOOKUP u.t_var x = FLOOKUP tn.t_var x)` by
     (irule abi_decode_clamp_abort_ptr >> metis_tac[]) >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+    emitted_insts sa sb = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+    unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_APPEND]) >>
   `?j. !D lo explicit PG G tn HG th.
     inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s HG th ==>
     gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []

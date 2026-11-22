@@ -136,6 +136,14 @@ Proof
      Cases_on `i.inst_opcode = ALLOCA` >> simp[is_alloca_op_def]) >>
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX (emitted_insts st en) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+      emitted_insts st en = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     disch_tac >>
+     qpat_assum `EVERY (\i. abi_decoder_reentry_opcode _) _`
+       (qspec_then `i` mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     simp[abi_decoder_reentry_opcode_def, MEM_APPEND]) >>
   `!explicit. gas_origin_ptr_path (empty_dead,lo,explicit,ctx,func,PG)
         (s,G,tn) [] (OK t,Gf,tf)` by
     (gen_tac >> drule_all run_inst_seq_origin_ptr_lift >> simp[Abbr `t`]) >>

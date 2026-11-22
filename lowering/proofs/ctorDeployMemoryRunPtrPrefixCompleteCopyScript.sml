@@ -203,16 +203,17 @@ Resume prefix_bytestring_complete_mode_contract_fmp[package]:
      goal_assum (drule_at Any) >> metis_tac[]) >>
   `!a. a < lo ==> read_byte a t.vs_memory = read_byte a initial.vs_memory` by
     (drule prefix_copy_low_frame >> disch_then (qspec_then `lo` mp_tac) >> simp[]) >>
+  `checked ==> run_inst_seq_mem_ok (emitted_insts st st') initial` by
+    (strip_tac >> gvs[] >>
+     `sb <= LENGTH initial.vs_data_section` by decide_tac >>
+     `d + abi_decode_bytes_copy_size n <= initial.vs_alloca_next` by simp[] >>
+     irule ctor_bytes_reentry_mem_ok >>
+     qexistsl [`LENGTH bs`, `d`, `Var dst`, `Lit 0w`, `n`, `sb`, `src`] >>
+     simp[] >> decide_tac) >>
   `checked ==> gas_path_mem ctx func initial 0
      (OK (t with vs_inst_idx := LENGTH st'.cs_current_insts)) /\
      alloca_history func (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
     (strip_tac >> gvs[] >>
-     `sb <= LENGTH initial.vs_data_section` by decide_tac >>
-     `d + abi_decode_bytes_copy_size n <= initial.vs_alloca_next` by simp[] >>
-     `run_inst_seq_mem_ok (emitted_insts st st') initial` by
-       (irule ctor_bytes_reentry_mem_ok >>
-        qexistsl [`LENGTH bs`, `d`, `Var dst`, `Lit 0w`, `n`, `sb`, `src`] >>
-        simp[] >> decide_tac) >>
      drule_all ctor_bytes_sequence_zero_path >> strip_tac >>
      `t.vs_current_bb = initial.vs_current_bb` by simp[] >>
      drule_all ctor_bytes_sequence_history >> simp[]) >>
@@ -228,14 +229,13 @@ Resume prefix_bytestring_complete_mode_contract_fmp[package]:
      gas_origin_ptr_path (D', lo, explicit, ctx, func, PG) (initial, G, tn) []
        (OK (t with vs_inst_idx := LENGTH st'.cs_current_insts), H, qt)` by
     (strip_tac >> gvs[] >>
-     `sb <= LENGTH initial.vs_data_section` by decide_tac >>
-     `d + abi_decode_bytes_copy_size n <= initial.vs_alloca_next` by simp[] >>
-     `run_inst_seq_mem_ok (emitted_insts st st') initial` by
-       (irule ctor_bytes_reentry_mem_ok >>
-        qexistsl [`LENGTH bs`, `d`, `Var dst`, `Lit 0w`, `n`, `sb`, `src`] >>
-        simp[] >> decide_tac) >>
      rpt gen_tac >> irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
-     simp[] >> qexists_tac `st` >> simp[]) >>
+     simp[] >> qexists_tac `st` >> simp[] >>
+     rpt strip_tac >>
+     Cases_on `i.inst_opcode = DALLOCA` >> simp[] >>
+     qpat_assum `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) _` mp_tac >>
+     qpat_assum `emitted_insts st st' = _` (fn th => PURE_REWRITE_TAC [th]) >>
+     simp[EVERY_APPEND, abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
   `(ctx_has_dalloca ctx ==>
       allocas_below_fmp (t with vs_inst_idx := LENGTH st'.cs_current_insts) /\
       (t with vs_inst_idx := LENGTH st'.cs_current_insts).vs_alloca_next + pending_alloca_size func (t with vs_inst_idx := LENGTH st'.cs_current_insts) <=

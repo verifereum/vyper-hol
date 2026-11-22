@@ -292,7 +292,15 @@ Proof
     by metis_tac[LENGTH_APPEND] >>
   qpat_x_assum `LENGTH st3.cs_current_insts = _`
     (fn th => pure_once_rewrite_tac[th]) >>
-  irule (cj 1 run_inst_seq_origin_ptr_lift) >> simp[] >> metis_tac[]
+  `ctx_has_dalloca ctx ==> !pre i post u.
+    emitted_insts st0 st3 = pre ++ [i] ++ post /\ run_inst_seq pre s = OK u ==>
+    unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts st0 st3)` by simp[] >> fs[EVERY_MEM]) >>
+  irule (cj 1 run_inst_seq_origin_ptr_lift) >> simp[] >>
+  conj_tac
+  >- first_assum ACCEPT_TAC >>
+  gvs[]
 QED
 
 Resume append_storage_guard_conditional_uniform[pointer]:
@@ -346,8 +354,12 @@ Proof
   `run_inst_seq_mem_ok (emitted_insts st0 st3) s` by simp[] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
     i.inst_opcode <> GAS) (emitted_insts st0 st3)` by fs[EVERY_MEM] >>
-  drule_all run_inst_seq_abort_origin_ptr_uniform >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `ctx_has_dalloca ctx ==> !pre i post u.
+    emitted_insts st0 st3 = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+    unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts st0 st3)` by simp[] >> fs[EVERY_MEM]) >>
+  drule_all run_inst_seq_abort_origin_ptr_uniform >> strip_tac >>
   qexistsl_tac [`t`,`j`,`Gf`,`tf`] >> reverse conj_tac
   >- (asm_rewrite_tac[] >> rpt strip_tac >> metis_tac[]) >>
   rpt gen_tac >> first_x_assum irule >>

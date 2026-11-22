@@ -144,7 +144,9 @@ Proof
      `inst_seq_ptr D lo ctx func PG G1 tn1 (emitted_insts middle sb) prepared G1 tn2` by
        simp[inst_seq_ptr_def, Abbr `tn2`] >>
      irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
-     simp[] >> qexists_tac `middle` >> simp[is_terminator_def]) >>
+     simp[] >> qexists_tac `middle` >>
+     simp[is_terminator_def, APPEND_EQ_CONS,
+          memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
      (s,G,tn) [] (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts),G1,tn2)` by
     (rpt gen_tac >>
@@ -762,7 +764,12 @@ Proof
       lo,explicit,ctx,func,PG) (s,G,tn) []
      (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts),H,th)` by
     (gen_tac >> irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
-     simp[] >> qexists_tac `sa` >> simp[]) >>
+     simp[] >> qexists_tac `sa` >> simp[] >> rpt strip_tac >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts sa sb)` by simp[MEM_APPEND] >>
+     qpat_assum `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) _`
+       (drule_then mp_tac o REWRITE_RULE[EVERY_MEM]) >>
+     Cases_on `i.inst_opcode = DALLOCA` >> simp[abi_decoder_reentry_opcode_def]) >>
   qexistsl_tac [`ar`, `H`, `th`] >> simp[] >>
   metis_tac[gas_origin_ptr_path_from_no_dead]
 QED

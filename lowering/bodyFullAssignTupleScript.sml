@@ -421,7 +421,8 @@ Proof
      `!out. ptr_inst_ok D lo 0 ctx func G tn
        (mk_inst sa.cs_next_id MLOAD [Var root] [out]) s` by
        (gen_tac >> irule ptr_inst_ok_mload_lo >> simp[]) >>
-     `MLOAD <> INVOKE /\ MLOAD <> GAS /\ ~is_terminator MLOAD` by
+     `MLOAD <> INVOKE /\ MLOAD <> GAS /\ MLOAD <> DALLOCA /\
+        ~is_terminator MLOAD` by
        simp[venomInstTheory.is_terminator_def] >>
      drule_all typed_copy_origin_ptr_emit_op_path >>
      disch_then (qspecl_then [`0`,`0`,`explicit`,`PG`] mp_tac) >>
@@ -3768,6 +3769,18 @@ Proof
      qpat_assum `!z. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
        (qspec_then `LENGTH sa.cs_current_insts` mp_tac) >>
      simp[] >> metis_tac[venom_state_component_equality]) >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+    (fs[EVERY_MEM] >> rpt strip_tac >>
+     qpat_assum `!i. MEM i _ ==> i.inst_opcode = ADD \/ _`
+       (drule_then strip_assume_tac) >>
+     gvs[]) >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+      emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+     simp[EVERY_APPEND]) >>
   qexistsl_tac [`u`,`Gf`,`tf`] >> simp[] >>
   conj_tac
   >- (`lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -4303,6 +4316,12 @@ Proof
   simp[] >> conj_tac
   >- (gen_tac >> irule decoderNavigationPtrTheory.straight_line_step_origin >>
       drule augAssignPtrScalarCertificateTheory.scalar_shape_control >> strip_tac >>
+      `i.inst_opcode <> DALLOCA` by
+        (gvs[augAssignPtrScalarCertificateTheory.scalar_shape_def,
+             augAssignPtrScalarCertificateTheory.scalar_binary_def,
+             augAssignPtrScalarCertificateTheory.scalar_unary_def]) >>
+      `ctx_has_dalloca ctx ==> dalloca_no_wrap i s` by
+        (disch_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >> simp[]) >>
       `ptr_inst_ok D lo 0 ctx fn G tn i s` by
         (irule augAssignPtrScalarSafetyTheory.scalar_ptr_inst_ok_lo >> simp[]) >>
       goal_assum (drule_at Any) >> simp[]) >>
@@ -8809,6 +8828,9 @@ Proof
   HEADGOAL (
     qpat_assum `m.vs_current_bb = target_cs.cs_current_bb` (fn pc => PURE_REWRITE_TAC[pc]) >>
     first_assum ACCEPT_TAC) >>>
+  HEADGOAL (sg `ctx_has_dalloca ctx ==> dalloca_no_wrap store_ins m`) >>>
+  HEADGOAL (simp[Abbr `store_ins`,mk_inst_def,
+    memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>>
   HEADGOAL (sg `gas_origin_ptr_edge (store_dead,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     (m,Gmid,tmid) [] (OK (written with vs_inst_idx := SUC m.vs_inst_idx),Gmid,word_store_ghost)`) >>>
   HEADGOAL (
@@ -8817,9 +8839,20 @@ Proof
       `func` |-> `func`,`PG` |-> `PG`,`s` |-> `m`,`bb` |-> `bb`,
       `G` |-> `Gmid`,`tn` |-> `tmid`,`i` |-> `store_ins`,`u` |-> `written`]
       fragGasSeqPtrTheory.straight_line_origin_ptr_edge) >>
-    impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, asm_rewrite_tac[]]) >>
+    impl_tac >-
+      (qpat_assum `~m.vs_halted` (fn h1 =>
+       qpat_assum `lookup_block m.vs_current_bb func.fn_blocks = SOME bb` (fn h2 =>
+       qpat_assum `get_instruction bb m.vs_inst_idx = SOME store_ins` (fn h3 =>
+       qpat_assum `store_ins.inst_opcode <> INVOKE` (fn h4 =>
+       qpat_assum `~is_terminator store_ins.inst_opcode` (fn h5 =>
+       qpat_assum `inst_mem_below_frontier store_ins m` (fn h6 =>
+       qpat_assum `inst_dload_in_section store_ins m` (fn h7 =>
+       qpat_assum `ctx_has_dalloca ctx ==> dalloca_no_wrap store_ins m` (fn h8 =>
+       qpat_assum `ptr_inst_ok store_dead lo 0 ctx func Gmid tmid store_ins m` (fn h9 =>
+       qpat_assum `step_inst_base store_ins m = OK written` (fn h10 =>
+         ACCEPT_TAC (LIST_CONJ [h1,h2,h3,h4,h5,h6,h7,h8,h9,h10])))))))))))) >>
     qpat_assum `Abbrev (word_store_ghost = _)` (fn ghost =>
-      pure_rewrite_tac[GSYM (REWRITE_RULE [markerTheory.Abbrev_def] ghost)]) >>
+      PURE_REWRITE_TAC [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] ghost)]) >>
     asm_rewrite_tac[]) >>>
   HEADGOAL (
     `~written.vs_halted` by simp[Abbr `written`,mstore_def] >>
