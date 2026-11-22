@@ -2,6 +2,7 @@
 Theory callDynamicMemory
 Ancestors
   loweringMemCorrect runtimePeakMemoryBound runtimePeakMemorySourceGate
+  runtimeDynamicPeakMemory
   vyperLoweringCorrect vyperCompiler vyperTypeContract e2eDefs e2eEntry
   e2eOptEntry callRawVariant exprSimHypsDefs supportedExprTraverse
   supportedStmtTraverse vyperAST callTrace vfmTotalBalance vfmReturndataBound
@@ -35,7 +36,7 @@ Proof
   simp[w2n_n2w] >> gvs[Abbr `raw_headroom`, MAX_DEF] >> decide_tac
 QED
 
-Theorem call_raw_variant_no_wrap:
+Theorem call_raw_variant_headroom:
   !tops rp unit am tx vs0 fmp vi.
     lower_vyper_runtime_unit tops rp = SOME unit /\
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
@@ -49,9 +50,15 @@ Theorem call_raw_variant_no_wrap:
     outcomes_accounts_typed (SOME vi.vs_outcomes) /\
     LENGTH vi.vs_call_ctx.cc_calldata < 2 ** 64 ==>
     !fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
-      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp
+      dalloca_fmp_headroom inst s
 Proof
   rpt gen_tac >> strip_tac >>
+  `initial_venom_state_rel tops am tx vi` by
+    metis_tac[raw_variant_initial_venom_state_rel] >>
+  `~vi.vs_halted` by fs[initial_venom_state_rel_def] >>
+  `vi.vs_initial_fmp = fmp /\ vi.vs_fmp = fmp` by
+    fs[raw_variant_def, gas_variant_def,
+       venomStateTheory.venom_state_component_equality] >>
   `blueprint_create_root =
      (\e. ?ty b s r ks es d.
        e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d)` by
@@ -66,7 +73,7 @@ Proof
           asm_rewrite_tac[wordsTheory.n2w_w2n] >>
           qpat_assum `runtime_blueprint_free _`
             (mp_tac o REWRITE_RULE [runtime_blueprint_free_def]) >> simp[]) >>
-      simp[dalloca_no_wrap_def] >> metis_tac[]) >>
+      strip_tac >> metis_tac[raw_reachable_dalloca_headroom_from_peak]) >>
   `?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
     metis_tac[source_typing_ok_def] >>
   `?vis mut nr rr name args dflts ret body.
@@ -84,11 +91,7 @@ Proof
   qspecl_then [`tops`, `rp`, `unit`, `am.layouts`, `tx.target`, `art`]
     mp_tac lower_vyper_runtime_unit_blueprint_raw_fmp >>
   (impl_tac >- (asm_rewrite_tac[] >> metis_tac[])) >>
-  disch_then (qspecl_then [`am`, `tx`, `vi`] mp_tac) >>
-  `initial_venom_state_rel tops am tx vi` by
-    metis_tac[raw_variant_initial_venom_state_rel] >>
-  fs[raw_variant_def, gas_variant_def,
-     venomStateTheory.venom_state_component_equality] >> metis_tac[]
+  disch_then (qspecl_then [`am`, `tx`, `vi`] mp_tac) >> simp[]
 QED
 
 Theorem call_state_rel_calldata_bound:
@@ -99,7 +102,7 @@ Proof
   metis_tac[vfmBufferTheory.LENGTH_buffer_to_list]
 QED
 
-Theorem call_entry_raw_no_wrap:
+Theorem call_entry_raw_headroom:
   !own tops rp unit am tx txp bc es prog prog' cplan vs0 fmp.
     lower_vyper_runtime_unit tops rp = SOME unit /\
     source_typing_ok tops am txp /\ call_state_rel tops bc am tx es /\
@@ -113,7 +116,7 @@ Theorem call_entry_raw_no_wrap:
       32 * ctx_dload_count unit.cu_context <= w2n fmp ==>
     !vi fn inst s. raw_variant fmp vi vs0 /\
        raw_reachable vi unit.cu_context fn inst s ==>
-       dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp
+       dalloca_fmp_headroom inst s
 Proof
   rpt gen_tac >> strip_tac >>
   `source_deployment_rel tops am txp` by
@@ -136,6 +139,6 @@ Proof
     metis_tac[call_state_rel_calldata_bound, raw_variant_call_ctx] >>
   `vi.vs_outcomes = vs0.vs_outcomes` by metis_tac[raw_variant_outcomes] >>
   qspecl_then [`tops`, `rp`, `unit`, `am`, `txp`, `vs0`, `fmp`, `vi`]
-    mp_tac call_raw_variant_no_wrap >>
+    mp_tac call_raw_variant_headroom >>
   fs[] >> metis_tac[]
 QED
