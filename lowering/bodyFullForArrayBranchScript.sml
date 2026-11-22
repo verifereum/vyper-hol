@@ -2,6 +2,7 @@
 Theory bodyFullForArrayBranch
 Ancestors
   bodyInvCodeProps bodyInvExecutionProps bodyCallSupport[qualified,ignore_grammar]
+  bodyTypedTargetScope[qualified,ignore_grammar]
   bodyFullShadowBodyInv constSubst bodyStorageMetadata vyperSubscriptOverlap
   bodyFullForArrayRound gasOutcomeFull gasOutcomeFullCompose gasExemptCert
   gasContext gasSummary stmtSimForRounds stmtSimDefs exprSimDefs bodyPtrDefs
@@ -207,7 +208,8 @@ Theorem nonslot_iterator_bare_immutable_mods[local]:
   expr_type e = ArrayT typ bd /\
   ~(?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
              supported_storage_value (main_module mods) nid (ArrayT typ bd)) /\
-  ~supported_expr_exists (const_name_root_mods mods) e ==>
+  ~supported_expr_exists (const_name_root_mods mods) e /\
+  (!nid. e = TopLevelName (expr_type e) nid ==> FST nid = NONE) ==>
   !nid. e = TopLevelName (expr_type e) nid ==>
     ?tops. ALOOKUP mods (FST nid) = SOME tops /\
       IS_SOME (supported_immutable_type tops (NONE,SND nid))
@@ -215,6 +217,7 @@ Proof
   strip_tac >>
   drule_then assume_tac bodyMainModulePropsTheory.contract_inv_main_module >>
   rpt strip_tac >>
+  `FST nid = NONE` by metis_tac[] >>
   qpat_assum `e = TopLevelName _ _` SUBST_ALL_TAC >>
   gvs[supported_iterator_def,vyperASTTheory.expr_type_def] >>
   PairCases_on `nid` >> Cases_on `nid0` >>
@@ -291,6 +294,11 @@ Proof
   `?bd. expr_type e = ArrayT typ bd /\ bound_length bd = n` by
     (drule_then strip_assume_tac vyperTypeSystemTheory.type_stmt_for_array_bound >>
      simp[bound_length_def]) >>
+  `!nid. e = TopLevelName (expr_type e) nid ==> FST nid = NONE` by
+    (drule bodyFullForFactsTheory.type_stmt_for_projection >>
+     simp[vyperTypeSystemTheory.well_typed_iterator_def] >> strip_tac >>
+     rpt strip_tac >> PairCases_on `nid` >> fs[] >>
+     drule_all_then ACCEPT_TAC bodyTypedTargetScopeTheory.body_inv_toplevel_read_main) >>
   `!nid. e = TopLevelName (expr_type e) nid ==>
      IS_SOME (supported_immutable_type tops nid)` by
     (qpat_assum `body_inv tops ctx cenv cx`

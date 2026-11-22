@@ -1497,7 +1497,8 @@ Proof
      `check_function_body am.layouts tx.target [(NONE,tops)] deploy_art NONE
         Deploy mut nr args [] NoneT source_body` by
        (irule check_contract_deploy_function_body_MEM >> simp[] >>
-        qexistsl [`"__init__"`, `raw`] >> fs[]) >>
+        qpat_assum `~nr` (SUBST_ALL_TAC o EQF_INTRO) >>
+        qexistsl [`"__init__"`, `raw`] >> simp[]) >>
      drule_all (SIMP_RULE (srw_ss())
        [consts_env_mods_singleton, subst_consts_mods_singleton]
        (Q.INST [`mods` |-> `[(NONE,tops)]`]
