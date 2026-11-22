@@ -56,7 +56,7 @@ Their exact premises are in the linked owners and
 
 | Stage | Actual export / owner | Contract | Owner milestone |
 |---|---|---|---|
-| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/loweringRuntimeCorrectScript.sml)) | Raw lowering + `supported_program` + `source_typing_ok` + `source_deployment_rel` + `valid_vyper_call` + `initial_venom_state_rel` + `outcomes_accounts_typed` + `DALLOCA` budget and no-wrap guards -> `source_unit_execution_correct`: for some gas marks, a raw exit related to the source result at every valid storage horizon, or a focus witness when storage is invalid for every gas tail appended to the readings the marks select or the source run is the same for every tail and exempt | 6 |
+| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/loweringRuntimeCorrectScript.sml)) | Raw lowering + `supported_program` + `source_typing_ok` + `source_deployment_rel` + `valid_vyper_call` + `initial_venom_state_rel` + `outcomes_accounts_typed` + `DALLOCA` budget and free-memory-pointer headroom (`dalloca_fmp_headroom`) guards -> `source_unit_execution_correct`: for some gas marks, a raw exit related to the source result at every valid storage horizon, or a focus witness when storage is invalid for every gas tail appended to the readings the marks select or the source run is the same for every tail and exempt | 6 |
 | S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` ([source](../lowering/vyperLoweringCorrectScript.sml)) | Lowering + `check_contract F` + `raw_shape_free_program` -> `o1_source_unit_ok` | 5 |
 | S3 | `loweringMemCorrect.lower_vyper_runtime_unit_memory_ok` ([source](../lowering/loweringMemCorrectScript.sml)) | Lowering + initial state + no `DALLOCA` + entry FMP floor + `__entry` lookup and entry label + memory-safe and pointer-safe entry runs at every fuel -> `raw_unit_memory_ok`, no function `fn_eom`, `fixed_region_reserved 0`, pointer discipline and taint bounds | 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` ([source](../venom/compiler/o1PipelineCorrectScript.sml)) | Actual O1 success + raw shape (`o1_source_unit_ok`, `unit_entry_no_params`, `unit_defs_reach_uses`, `unit_fmp_unsealed`) + `o1_run_state_ok` + reserved-region/EOM/FMP facts + `dead_wf D` -> an input state at which raw memory, pointer, taint and DLOAD bounds give forward simulation `ctx_sim D` and the output's `o1_lowered_inv` | 3 |
@@ -345,7 +345,7 @@ and is proved (4.2). Existing bridges are not trace-aware S7 proofs.
 S1 is actual `lower_vyper_runtime_unit_correct`, replacing the retired
 `vyper_to_venom_correct`. It consumes `supported_program`, `source_typing_ok`,
 source deployment, exact valid call, `initial_venom_state_rel`, typed outcome
-accounts and, for units with `DALLOCA`, allocation-budget and no-wrap guards. Unless storage is invalid for every gas tail appended to the readings its gas marks select, or
+accounts and, for units with `DALLOCA`, allocation-budget and free-memory-pointer headroom (`dalloca_fmp_headroom`) guards. Unless storage is invalid for every gas tail appended to the readings its gas marks select, or
 the source run is the same for every tail and source-exempt (it gives a focus
 witness then), the raw run must reach an exit related to the source result at
 every valid storage horizon; runtime
@@ -608,7 +608,11 @@ The call tops reach S2's shape through `lower_vyper_runtime_unit_checked_source_
 non-`raw_shape_free_program` cases are three proved shape lemmas; the deploy
 tops use `deploy_unit_o1_shape_ok`, with three proved deploy cases.
 Units with `DALLOCA` get S3's facts from
-`lower_vyper_runtime_unit_memory_ok_from_no_wrap`.
+`lower_vyper_runtime_unit_memory_ok_from_no_wrap`, whose reachable no-wrap and
+FMP-floor inputs the call tops produce from the memory-safe entry runs
+(`selected_raw_memory`, through `lowered_unit_checked_dalloca_facts`): the
+memory-safety check gives `dalloca_no_wrap` at every `DALLOCA` it reaches
+(`mem_safe_point_dalloca_no_wrap`), so neither input is an S1 premise.
 Actual memory API is
 [unitTransformDefs](../venom/compiler/unitTransformDefsScript.sml), not the
 older compat `lowering_memory_safe` interface, which was deleted: its proof
@@ -629,6 +633,25 @@ source read/write range to be **empty**, below the frontier
 (`off + len <= s.vs_alloca_next`) or inside the dynamic region
 `[vs_initial_fmp, vs_fmp)`. A zero-length range need not have a small offset. This is an actual-sites safety contract,
 not byte-array length or “all memory initialized”.
+
+In `raw_unit_memory_ok`, `dalloca_no_wrap` is a fact the memory-safety check
+establishes, not a caller obligation; the caller's `DALLOCA` obligation is S1's
+`dalloca_fmp_headroom`. The two definitions
+([unitTransformDefs](../venom/compiler/unitTransformDefsScript.sml)):
+
+```sml
+dalloca_no_wrap inst s <=>
+  inst.inst_opcode = DALLOCA ==>
+  !sz_op sz.
+    inst.inst_operands = [sz_op] /\ eval_operand sz_op s = SOME sz ==>
+    w2n s.vs_fmp + ceil32 (w2n sz) < dimword (:256)
+
+dalloca_fmp_headroom inst s <=>
+  inst.inst_opcode = DALLOCA ==>
+  w2n s.vs_fmp +
+    MAX (venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata))
+        (2 ** 255 + 2 ** 64) < dimword (:256)
+```
 
 [contextCodegenRel](../venom/codegen/defs/contextCodegenRelScript.sml) defines
 post-PHI `enters_block`/`fn_entry_inv`, ordinary incremented instruction
