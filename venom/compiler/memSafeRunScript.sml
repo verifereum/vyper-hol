@@ -579,6 +579,39 @@ Proof
   metis_tac[mem_safe_point_callee]
 QED
 
+Theorem mem_safe_point_dalloca_no_wrap:
+  !ctx fn inst s.
+    ctx_has_dalloca ctx /\ mem_safe_point ctx fn inst s ==>
+    dalloca_no_wrap inst s
+Proof
+  rw[mem_safe_point_def] >> drule_all active_inst_lookup >> strip_tac >>
+  `revert_forward_at bb s.vs_inst_idx \/ mem_safe_step 0 ctx inst s` by
+    metis_tac[mem_safe_run_head] >>
+  pop_assum strip_assume_tac
+  >- (drule_all revert_forward_at_opcode >> rw[] >> simp[]) >>
+  pop_assum mp_tac >> simp[Once mem_safe_step_def]
+QED
+
+Theorem mem_safe_blocks_raw_dalloca_no_wrap:
+  !ctx vs name fn lbl.
+    ctx.ctx_entry = SOME name /\
+    lookup_function name ctx.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl /\
+    EVERY (\f. ALL_DISTINCT (fn_labels f)) ctx.ctx_functions /\
+    (!fuel. mem_safe_blocks fuel ctx fn
+      (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                  vs_inst_idx := 0 |>)) /\
+    ctx_has_dalloca ctx ==>
+    !f inst s. raw_reachable vs ctx f inst s ==> dalloca_no_wrap inst s
+Proof
+  rpt gen_tac >> strip_tac >>
+  `codegen_reachability_package mem_safe_point ctx vs` by
+    (simp[codegen_reachability_package_def, mem_safe_point_closed] >>
+     irule mem_safe_point_entry >> simp[] >>
+     drule lookup_function_MEM >> fs[EVERY_MEM]) >>
+  metis_tac[raw_reachable_least, mem_safe_point_dalloca_no_wrap]
+QED
+
 (* The bridge: a memory-safe run from the unit's entry, and an invariant J
    that bounds the frontier (alloca_frontier_inv under the unit's alloca
    budget), with the two free-memory-pointer facts at every raw-reachable
