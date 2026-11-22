@@ -673,12 +673,13 @@ Proof
     (runtime_sym_unary_args_tac >>
      qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _` mp_tac >>
      simp[NoAsms, compile_builtin_dispatch_body_def] >>
-     pairarg_tac >> simp[] >>
-     simp[as_ptr_val_def] >> strip_tac >> gvs[] >>
-     first_assum (qspecl_then [`ty`,`s`,`op`,`s'`] mp_tac) >>
-     simp[] >> strip_tac >>
-     simp[runtime_sym_value_def, mk_ptr_def] >>
-     Cases_on `op` >> simp[is_label_operand_def])
+     pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+     rename1 `lower_value _ _ _ _ _ = (op0,st1)` >>
+     qpat_x_assum `!t s op s'. _ /\ lower_value _ _ _ _ _ = _ ==> _`
+       drule_all >> strip_tac >>
+     Cases_on `is_word_type rt` >> Cases_on `op0` >>
+     gvs[as_stack_val_def, as_ptr_val_def, runtime_sym_value_def,
+         mk_ptr_def, is_label_operand_def])
   >~ [`BoolChain is_and n`] >-
     (runtime_sym_unary_args_tac >>
      qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _` mp_tac >>

@@ -561,8 +561,9 @@ Proof
     all_tac >~ [`compile_builtin_dispatch_body _ _ _ _ PowMod256 args`] >- branch "mod2" >>
     all_tac >~ [`compile_builtin_dispatch_body _ _ _ _ NamedConst args`] >- (
       Cases_on `args` >- gvs[] >> rename1 `arg::rest` >>
-      child_facts [`arg`] >>
-      simp[compile_builtin_dispatch_body_def, as_ptr_val_pair, LET_THM, pairTheory.UNCURRY]) >>
+      child_facts [`arg`] >> Cases_on `is_word_type ret_ty` >>
+      simp[compile_builtin_dispatch_body_def, as_stack_val_pair, as_ptr_val_pair,
+           LET_THM, pairTheory.UNCURRY]) >>
     all_tac >~ [`compile_builtin_dispatch_body _ _ _ _ (BoolChain d n) args`] >- (
       Cases_on `args` >- gvs[] >> rename1 `arg::rest` >>
       rename1 `compile_builtin_dispatch_body cfn cenv ret_ty ty (BoolChain d n) (arg::rest)` >>
