@@ -14,6 +14,7 @@ Ancestors bodyFullShadowBodyInv bodyFullRaiseCustomError bodyFullAssertCustomErr
   bodyFullCases bodyFullCreateHeld bodyFullIf bodyFullExprStmt bodyFullExits bodyFullPreds bodySimFull gasShadow bodySim supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeCallGraph typedCopyMetadata alist list
   vyperTypeContract[qualified,ignore_grammar] constSubst bodyLoopCalls
+  bodyFullPredsMods bodyFullPostsMods bodyInvSplit constSubstMods
 
 val _ = Parse.hide "body";
 
@@ -433,4 +434,94 @@ Proof
              (subst_consts_stmts (module_consts_env ts []) body)) /\
         stmts_loop_calls_ok [(NONE,ts)] ss` by (fs[body_inv_def] >> metis_tac[]) >>
   metis_tac[body_sim_full_mutual, body_stmts_full_ok_def]
+QED
+
+(* The linked induction ranges over all declarations that the interpreter
+   can select, with each function's constants already substituted. *)
+val linked_body_guard =
+  ``ALOOKUP cx.sources cx.txn.target = SOME mods /\
+    EVERY (struct_args_unique o SND) mods /\
+    (!src tops vis mut nr raw fn args dflts ret ss.
+       ALOOKUP mods src = SOME tops /\
+       MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+       stmts_loop_calls_ok mods
+         (subst_consts_stmts_mods (consts_env_mods mods) ss))``;
+
+fun linked_body_ind rank_guard =
+  evaluate_ind
+  |> Q.SPECL [
+       `\cx s. ^rank_guard /\ ^linked_body_guard /\ stmt_loop_calls_ok mods s ==>
+         body_stmt_full_ok_mods mods exps cx s`,
+       `\cx ss. ^rank_guard /\ ^linked_body_guard /\ stmts_loop_calls_ok mods ss ==>
+         body_stmts_full_ok_mods mods exps cx ss`,
+       `\cx it. ^rank_guard /\ ^linked_body_guard ==>
+         body_iterator_full_ok_mods mods exps cx it`,
+       `\cx tyv nm body vs.
+         ^rank_guard /\ ^linked_body_guard /\ stmts_loop_calls_ok mods body ==>
+         body_for_full_ok_mods mods exps cx tyv nm body vs`,
+       `\cx e. ^rank_guard /\ ^linked_body_guard ==>
+         body_expr_full_ok_mods mods exps cx e`,
+       `\cx es. ^rank_guard /\ ^linked_body_guard ==>
+         body_exprs_full_ok_mods mods exps cx es`,
+       `\cx t. ^rank_guard /\ ^linked_body_guard ==>
+         body_base_target_full_ok_mods mods exps cx t`,
+       `\cx t. ^rank_guard /\ ^linked_body_guard ==>
+         body_base_target_full_ok_mods mods exps cx t`,
+       `\cx g v. ^rank_guard /\ ^linked_body_guard ==>
+         body_tuple_target_full_ok_mods mods exps cx g v`,
+       `\cx gs vs. ^rank_guard /\ ^linked_body_guard ==>
+         body_tuple_targets_full_ok_mods mods exps cx gs vs`]
+  |> CONV_RULE (DEPTH_CONV BETA_CONV);
+
+val ranked_linked_body_ind = linked_body_ind ``LENGTH (remcode cx) <= rank``;
+
+Theorem body_sim_full_mutual_ranked_mods:
+  !mods exps rank:num. ^(snd (dest_imp (concl ranked_linked_body_ind)))
+Proof
+  cheat
+QED
+
+Theorem body_sim_full_mutual_mods:
+  !mods exps. ^(simpLib.SIMP_CONV bool_ss []
+    (snd (dest_imp (concl (linked_body_ind boolSyntax.T)))) |> concl |> rhs)
+Proof
+  rpt gen_tac >> rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  qmatch_asmsub_rename_tac `ALOOKUP cx.sources cx.txn.target` >>
+  qspecl_then [`mods`, `exps`, `LENGTH (remcode cx)`] strip_assume_tac
+    body_sim_full_mutual_ranked_mods >>
+  first_x_assum irule >> asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL]
+QED
+
+Theorem body_stmts_sim_full_mods:
+  !DF lo d PG mods exps src tops bindings ctx shadow_ctx func shadow_func
+    cenv cx env env' ret_ty lctx RetQ ss es.
+    contract_inv mods exps ctx cenv cx /\
+    module_body_inv mods src tops cenv cx /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    EVERY (struct_args_unique o SND) mods /\
+    supported_stmts tops bindings ss /\
+    (!sid ts vis mut nr raw fn args dflts ret body.
+       ALOOKUP mods sid = SOME ts /\
+       MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts ==>
+       stmts_loop_calls_ok mods
+         (subst_consts_stmts_mods (consts_env_mods mods) body)) /\
+    stmts_loop_calls_ok mods ss /\
+    (!target. supported_stmts_expr_exists
+       (expr_abi_decode_target_root target) ss ==>
+       EXISTS (occurs_abi_decode_target target o SND) mods) /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmts env ret_ty ss = SOME env' /\
+    stmts_exprs_ok cenv ss /\
+    call_evaluation_safe cx (int_calls_stmts ss) /\
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty ==>
+    stmt_frag_full_mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmts_env cenv lctx ret_ty ss)
+      (stmts_env (gas_shadow_env T cenv) lctx ret_ty (MAP gas_shadow_stmt ss))
+      (eval_stmts cx ss) es
+Proof
+  cheat
 QED
