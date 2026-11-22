@@ -6,7 +6,7 @@ Ancestors
   immutableMemoryFrame reasonCopySourcePtr representationCleanPtr
   valueCopyBytes valueCopy exprSimBufferStore robustCopyTransportPtr
 
-Theorem bytestring_store_extent_joint:
+val bytestring_store_inputs = ``
   compile_store_memory ce (Var src) (Var dst) rt sty sa = ((),sb) /\
   is_bytestring_type rt /\ is_bytestring_type sty /\
   evaluate_type (get_tenv cx) rt = SOME tv /\
@@ -24,8 +24,9 @@ Theorem bytestring_store_extent_joint:
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb func /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?u Gf tm.
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts``;
+
+val bytestring_store_post = ``
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
        (s,G,tn) [] (OK u,Gf,tm)) /\
     (!mem. mem_agree_outside tm.t_mem u.vs_memory mem ==>
@@ -43,7 +44,13 @@ Theorem bytestring_store_extent_joint:
               vs_inst_idx := s.vs_inst_idx|>) = s /\
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
     u.vs_current_bb = sb.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted``;
+
+Theorem bytestring_store_extent_joint_exact:
+  ^bytestring_store_inputs ==>
+  ?u Gf tm.
+    run_inst_seq (emitted_insts sa sb) s = OK (u with vs_inst_idx := s.vs_inst_idx) /\
+    ^bytestring_store_post
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `compile_store_bytestring (Var src) (Var dst) sa = ((),sb)` by
@@ -108,7 +115,7 @@ Proof
   suspend "exit"
 QED
 
-Resume bytestring_store_extent_joint[header]:
+Resume bytestring_store_extent_joint_exact[header]:
   `(?bs. v = BytesV bs /\ len = LENGTH bs) \/
    (?str. v = StringV str /\ len = LENGTH str)` by
     (qspecl_then [`get_tenv cx`,`sty`,`stv`] mp_tac bytestring_type_value >>
@@ -120,7 +127,13 @@ Resume bytestring_store_extent_joint[header]:
   asm_rewrite_tac[] >> strip_tac >> gvs[valueEncodingDefsTheory.val_in_memory_def]
 QED
 
-Resume bytestring_store_extent_joint[exit]:
+Resume bytestring_store_extent_joint_exact[exit]:
+  conj_tac >-
+    (`t.vs_inst_idx = s.vs_inst_idx` by
+       (qpat_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+        simp[venomStateTheory.venom_state_component_equality]) >>
+     qpat_assum `run_inst_seq (emitted_insts sa sb) s = OK t` (pure_rewrite_tac o single) >>
+     gvs[venomStateTheory.venom_state_fupdfupds, venomStateTheory.venom_state_component_equality]) >>
   conj_tac >- asm_rewrite_tac[] >>
   `(?bs. v = BytesV bs /\ len = LENGTH bs) \/
    (?str. v = StringV str /\ len = LENGTH str)` suffices_by
@@ -152,7 +165,16 @@ Resume bytestring_store_extent_joint[exit]:
   asm_rewrite_tac[] >> strip_tac >> Cases_on `v` >>
   gvs[vyperTypingTheory.value_has_type_def, loweringPostsTheory.val_footprint_def]
 QED
-Finalise bytestring_store_extent_joint
+Finalise bytestring_store_extent_joint_exact
+
+Theorem bytestring_store_extent_joint:
+  ^bytestring_store_inputs ==> ?u Gf tm. ^bytestring_store_post
+Proof
+  disch_tac >> mp_tac (SPEC_ALL bytestring_store_extent_joint_exact) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (qx_choosel_then [`u`,`Gf`,`tm`] (assume_tac o CONJUNCT2)) >>
+  qexistsl_tac [`u`,`Gf`,`tm`] >> first_assum ACCEPT_TAC
+QED
 
 Theorem extcall_default_bytes_store_capacity_joint:
   compile_store_memory ce (Var src) (Var dst) rt sty sa = ((),sb) /\
