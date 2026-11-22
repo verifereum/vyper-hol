@@ -225,6 +225,7 @@ val checker_defs =
    integer_value_bits_def,
    power_exponent_ok_def,
    power_operands_ok_def,
+   named_const_operand_def,
    builtin_operands_ok_def,
    augassign_shift_amount_ok_def, augassign_operand_ok_def,
    is_prim_word_type_def,

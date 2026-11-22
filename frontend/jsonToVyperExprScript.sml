@@ -1345,6 +1345,22 @@ Definition lookup_origin_pair_def:
     OPTION_BIND (expr_origin_key ctx source) (ALOOKUP (expr_origins ctx))
 End
 
+(* The right operand r' (translated from r) of an in / not in.  Where the
+   source names a constant array, it is marked NamedConst: the pinned
+   compiler unrolls a membership only over a list literal (lower_Compare)
+   and loops over the array a name refers to.  A named constant is marked
+   around its value, not its name: the checker types the body before
+   constants are substituted, and NamedConst takes only a value
+   (named_const_operand). *)
+Definition membership_operand_def:
+  membership_operand ctx r r' =
+    case lookup_origin_pair ctx r of
+    | SOME (Builtin a (MakeArray (SOME t) n) es, _) =>
+        Builtin (expr_type r') NamedConst
+          [origin_retype (expr_type r') (Builtin a (MakeArray (SOME t) n) es)]
+    | _ => r'
+End
+
 (* A subscript or attribute is typed at the element's or field's own type:
    Vyper annotates it with the type its context expects, which may be wider.
    A HashMap value (no array base) keeps the annotation. *)
@@ -1459,7 +1475,9 @@ Definition translate_expr_with_policy_def:
   (translate_expr_with_policy resolve ctx (JE_Compare l op r) =
     let l' = translate_expr_with_policy resolve ctx l in
     let r' = translate_expr_with_policy resolve ctx r in
-    let original = Builtin (BaseT BoolT) (Bop (translate_binop op)) [l';r'] in
+    let r'' = if MEM op [JBop_In; JBop_NotIn]
+              then membership_operand ctx r r' else r' in
+    let original = Builtin (BaseT BoolT) (Bop (translate_binop op)) [l';r''] in
     if ~MEM op [JBop_In; JBop_NotIn; JBop_Eq; JBop_NotEq]
     then fold_pin_constant original else
     let lv = origin_fold_value
