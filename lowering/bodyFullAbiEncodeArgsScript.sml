@@ -3,7 +3,7 @@ Ancestors
   bodyFullShadowBodyInv bodyFullExtCallPosList
   bodyFullPreds bodySimFull
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
-  exprSimAbiEncodeRuntimeInputs abiEncodeArgsCase abiEncodeEndpointMetadata
+  exprSimAbiEncodeRuntimeInputs abiEncodeArgsCase abiEncodeEndpointMetadata abiEncodeSnapshotOperandProps
   stmtSimProps[qualified,ignore_grammar]
   abiBuiltinEncodeCode abiBuiltinEncodeMethod abiBuiltinEncodeAllocate bodyFullAbiEncodeSetupTail
   bodyFullAbiEncodeAllocOrigin bodyFullAbiEncodeFinish bodyFullAbiEncodeResultResources
@@ -42,21 +42,8 @@ Theorem abi_encode_snapshot_not_label[local]:
   compile_snapshot_vv ce copy (ext_call_arg_value (lowered_value_type ce e) vv) sm =
     (sv,ss) ==> !l. vv_operand sv <> Label l
 Proof
-  strip_tac >>
-  `!l. vv_operand vv <> Label l` by metis_tac[assign_place_operand_not_label] >>
-  `vv_operand (ext_call_arg_value (lowered_value_type ce e) vv) = vv_operand vv` by
-    (Cases_on `vv` >> simp[ext_call_arg_value_def, vv_operand_def]) >>
-  qpat_x_assum `compile_snapshot_vv _ _ _ _ = _` mp_tac >>
-  simp[compile_snapshot_vv_def] >> IF_CASES_TAC
-  >- (simp[comp_bind_def] >> pairarg_tac >> simp[comp_return_def] >>
-      strip_tac >> gvs[vv_operand_def] >> drule unwrap_value_not_label >> simp[]) >>
-  Cases_on `copy` >> simp[comp_bind_def, comp_return_def]
-  >- (pairarg_tac >> simp[] >> strip_tac >> gvs[vv_operand_def, mk_ptr_def] >>
-      qpat_x_assum `compile_materialize_vv _ _ _ _ = _` mp_tac >>
-      simp[compile_materialize_vv_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-      rpt (pairarg_tac >> simp[]) >> rpt strip_tac >> gvs[] >>
-      drule abi_builtin_alloc_buffer_shape >> simp[emit_op_eq]) >>
-  strip_tac >> gvs[]
+  strip_tac >> irule abi_snapshot_operand_not_label >>
+  metis_tac[assign_place_operand_not_label]
 QED
 
 Theorem abi_encode_vv_full_from_packaging:

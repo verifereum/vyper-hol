@@ -10,6 +10,7 @@
  *)
 Theory bodyFullCreateHeld
 Ancestors
+  blueprintLiteralOffsetProps[qualified,ignore_grammar]
   bodyFullForArrayRound[qualified,ignore_grammar]
   abiDecodeValidFiniteLoop[qualified,ignore_grammar]
   bodyFullExtCallPosAggregate[qualified,ignore_grammar]
@@ -118,16 +119,6 @@ Proof
   rpt (goal_assum (drule_at Any))
 QED
 
-Theorem blueprint_offset_form[local]:
-  ((case e of Literal _ (IntL i) => comp_return (Lit (i2w i)) | _ => f) =
-     (case expr_int_literal e of SOME i => comp_return (Lit (i2w i)) | NONE => f)) /\
-  (is_int_literal e = IS_SOME (expr_int_literal e))
-Proof
-  Cases_on `e` >> simp[expr_int_literal_def,vyperPinFoldTheory.is_int_literal_def] >>
-  rename1 `Literal _ l` >> Cases_on `l` >>
-  simp[expr_int_literal_def,vyperPinFoldTheory.is_int_literal_def]
-QED
-
 Theorem blueprint_compile_cuts[local]:
   gas_shadow_state sa sh /\
   lower_value compile_expr cenv ty
@@ -172,7 +163,7 @@ Proof
   `(if salted then SOME (HD (MAP gas_shadow_expr salts)) else NONE) =
      OPTION_MAP gas_shadow_expr (if salted then SOME (HD salts) else NONE)` by
     (Cases_on `salted` >> Cases_on `salts` >> gvs[]) >>
-  gvs[gas_shadow_expr_type,blueprint_offset_form,
+  gvs[gas_shadow_expr_type,blueprintLiteralOffsetPropsTheory.blueprint_offset_form,
       gasShadowCompileHelpersTheory.gas_shadow_origin_fold_value,
       gasShadowCompilePureTheory.gas_shadow_expr_int_literal] >>
   drule_all_then strip_assume_tac
@@ -7315,60 +7306,6 @@ Proof
   metis_tac[listTheory.MAP_EQ_CONS, listTheory.MAP_EQ_NIL]
 QED
 
-Theorem blueprint_offset_literal_bit[local]:
-  expr_body_pre cenv cx env offset es /\ LENGTH salts = (if salted then 1 else 0) ==>
-  blueprint_literal_offset cx salted (target::amount::(salts ++ offset::ctor)) =
-    IS_SOME (expr_int_literal (origin_fold_value offset))
-Proof
-  strip_tac >>
-  `subst_consts_expr (case get_module_code cx NONE of
-      SOME tops => module_consts_env tops [] | NONE => []) offset = offset` by
-    (Cases_on `get_module_code cx NONE`
-     >- simp[constSubstTheory.subst_consts_expr_empty] >>
-     simp[] >> irule (cj 1 constSubstStmtsPreserveTheory.subst_consts_expr_unchanged) >>
-     drule expr_body_pre_static_facts >> strip_tac >> CCONTR_TAC >> gvs[] >>
-     qpat_assum `supported_expr_exists _ offset`
-       (mp_then Any (qspec_then `const_name_root cx` mp_tac)
-         (cj 1 supportedExprTraverseTheory.supported_expr_exists_mono)) >>
-     impl_tac
-     >- (rpt strip_tac >> gvs[exprSimHypsDefsTheory.const_name_root_def,
-           exprSimHypsDefsTheory.cx_const_name_def,gasContextTheory.cx_tops_def,
-           optionTheory.IS_SOME_EQ_NOT_NONE] >>
-         metis_tac[alistTheory.ALOOKUP_NONE]) >>
-     simp[]) >>
-  Cases_on `salted` >> gvs[LENGTH_EQ_NUM_compute,blueprint_literal_offset_def,blueprint_offset_form]
-QED
-
-Theorem blueprint_literal_offset_read[local]:
-  expr_int_literal (origin_fold_value e) = SOME i ==>
-  bind (eval_expr cx e) (read_result cx) st = (INL (IntV i),st)
-Proof
-  `!x. expr_int_literal x = SOME i ==> ?ty. x = Literal ty (IntL i)` by
-    (Cases >> simp[expr_int_literal_def] >> rename1 `Literal _ l` >>
-     Cases_on `l` >> simp[expr_int_literal_def]) >>
-  strip_tac >> first_x_assum drule >> strip_tac >>
-  drule vyperPinFoldPropsTheory.origin_fold_value_literal_sound >>
-  disch_then (qspecl_then [`st`,`cx`] assume_tac) >>
-  simp[bind_def,vyperValueOperationTheory.evaluate_literal_def,read_result_def,return_def]
-QED
-
-Theorem blueprint_literal_offset_word[local]:
-  expr_body_pre cenv cx env e es /\ expr_type e = BaseT (UintT 256) /\
-  expr_int_literal (origin_fold_value e) = SOME i ==>
-  dest_NumV (IntV i) = SOME (w2n (i2w i : bytes32))
-Proof
-  strip_tac >>
-  `is_word_type (expr_type e)` by simp[is_word_type_def] >>
-  `?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\ value_has_type tyv (IntV i)` by
-    (drule exprSimSourceTheory.operand_eval_evidence_semantics >>
-     disch_then (qspecl_then [`IntV i`,`[]`,`es with gas_obs := []`] mp_tac) >>
-     simp[] >> (impl_tac >- (qexistsl [`[]`,`es`] >> simp[blueprint_literal_offset_read])) >>
-     simp[]) >>
-  `tyv = BaseTV (UintT 256)` by metis_tac[abiValueEncodingTheory.evaluate_type_base_result] >>
-  gvs[] >> drule exprSimSendTheory.uint256_typed_dest >>
-  simp[valueEncodingTheory.typed_val_to_w256_def,valueEncodingTheory.val_to_w256_def]
-QED
-
 Theorem blueprint_read_prepared[local]:
   IS_SOME ee.outcomes /\ dest_AddressV target = SOME addr /\
   dest_NumV amount = SOME value /\ dest_NumV offset = SOME off /\
@@ -8129,9 +8066,9 @@ Proof
       fs[loweringPostsTheory.expr_post_def]) >>
   rename1 `expr_int_literal (origin_fold_value e) = SOME i` >>
   `bind (eval_expr cx e) (read_result cx) = return (IntV i)` by
-    simp[FUN_EQ_THM,blueprint_literal_offset_read,return_def] >>
+    simp[FUN_EQ_THM,blueprintLiteralOffsetPropsTheory.blueprint_literal_offset_read,return_def] >>
   `dest_NumV (IntV i) = SOME (w2n (i2w i : bytes32))` by
-    metis_tac[blueprint_literal_offset_word] >>
+    metis_tac[blueprintLiteralOffsetPropsTheory.blueprint_literal_offset_word] >>
   gvs[comp_return_def,bind_return] >>
   qpat_assum `!v ee G1 tn1 t ow marks. _ ==> gas_outcome_full _ _ _ _ _ _ _ _` irule >>
   simp[eval_operand_def,op_taint_def,op_prov_def,exprSimWordArgsTheory.wb_frame_refl,
@@ -8251,7 +8188,7 @@ Proof
     (irule create_operand_pre >>
      qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` (irule_at Any) >> simp[]) >>
   `LENGTH salts = (if salted then 1 else 0)` by (Cases_on `salted` >> gvs[]) >>
-  drule_all blueprint_offset_literal_bit >> strip_tac >>
+  drule_all blueprintLiteralOffsetPropsTheory.blueprint_offset_literal_bit >> strip_tac >>
   qpat_x_assum `body_exprs_full_ok _ (amount::_)` mp_tac >>
   rewrite_tac[Once body_exprs_full_ok_def] >> strip_tac >>
   once_rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action] >>
