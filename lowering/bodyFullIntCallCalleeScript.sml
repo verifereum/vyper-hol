@@ -2383,7 +2383,10 @@ Proof
   gvs[immutable_section_layout_mods_def] >>
   conj_tac >- (rpt strip_tac >> res_tac) >>
   conj_tac >- (qexistsl [`policy`, `unit`] >> simp[]) >>
-  conj_tac >- fs[bodyCallSupportTheory.linked_body_calls_resolved_def] >>
+  conj_tac
+  >- (qpat_assum `linked_body_calls_resolved _ cx` mp_tac >>
+      simp[bodyCallSupportTheory.linked_body_calls_resolved_def,
+           vyperTypeInvariantsTheory.context_function_live_context]) >>
   conj_tac >- (rpt strip_tac >> res_tac) >>
   conj_tac >> first_assum ACCEPT_TAC
 QED
