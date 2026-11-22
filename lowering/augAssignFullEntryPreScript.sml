@@ -91,7 +91,11 @@ Proof
     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
         alloc_limits_stmt_def, int_calls_stmt_def] >>
     simp[optionTheory.IS_SOME_EXISTS] >>
-    fs[EVERY_MEM] >> metis_tac[call_evaluation_safe_append_left]) >>
+    fs[EVERY_MEM] >> conj_tac
+    >- (qexists_tac `bindings` >> conj_tac
+        >- (qexists_tac `pt` >> simp[]) >>
+        rpt strip_tac >> res_tac >> fs[optionTheory.IS_SOME_EXISTS]) >>
+    metis_tac[call_evaluation_safe_append_left]) >>
   Cases_on `t` >> gvs[target_indices_pre_def]
 QED
 

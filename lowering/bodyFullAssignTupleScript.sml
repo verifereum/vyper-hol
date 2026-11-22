@@ -6232,7 +6232,7 @@ Proof
   Cases_on `t` >>
   gvs[supported_target_def, supportedExprTraverseTheory.supported_expr_exists_def, int_calls_expr_def] >>
   rpt strip_tac >> drule_all_then assume_tac body_inv_typed_target_calls_main >>
-  fs[EVERY_MEM] >> metis_tac[]
+  fs[EVERY_MEM, int_calls_expr_def] >> metis_tac[]
 QED
 
 Theorem tuple_assign_immutable_toplevel_type[local]:
