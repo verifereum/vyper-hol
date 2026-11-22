@@ -217,13 +217,9 @@ Theorem ld_joint_delegatecall_execute:
     request_agree_except D rq1 rq2 /\
     rq1.cr_static = s.vs_call_ctx.cc_static /\
     ld_shared_agree D s.vs_call_ctx.cc_address
-      (tn with <|t_stor := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
-          ~computed_precompile (LAST r1.vs_requests) /\
-          r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+      (tn with <|t_stor := if adopt_guard rq1.cr_static s r1 (HD s.vs_outcomes).co_success
         then {} else tn.t_stor;
-        t_trans := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
-          ~computed_precompile (LAST r1.vs_requests) /\
-          r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+        t_trans := if adopt_guard rq1.cr_static s r1 (HD s.vs_outcomes).co_success
         then {} else tn.t_trans|>) r1 r2 /\
     source_memory_write_ranges inst s = [(ro,rs)] /\
     (rs=0 \/ (ro=ro' /\ (ro+rs<=lo \/
@@ -773,13 +769,9 @@ Theorem ld_call_outcome_effects[local]:
                t_trans := if s1.vs_transient <> s.vs_transient then {} else tn.t_trans|>)
     s1 t1 /\
   ld_shared_agree D A
-    (tn with <|t_stor := if ~rq1.cr_static /\ s1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s1.vs_requests) /\
-                  s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+    (tn with <|t_stor := if adopt_guard rq1.cr_static s s1 (HD s.vs_outcomes).co_success
                 then {} else tn.t_stor;
-               t_trans := if ~rq1.cr_static /\ s1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s1.vs_requests) /\
-                  s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+               t_trans := if adopt_guard rq1.cr_static s s1 (HD s.vs_outcomes).co_success
                 then {} else tn.t_trans|>) s1 t1
 Proof
   strip_tac >>

@@ -756,13 +756,9 @@ Theorem taint_agree_consume_call:
   taint_agree D X
     (tn with <|t_mem := tn.t_mem DIFF
         {i | ro <= i /\ i < ro + LENGTH (TAKE rs r1.vs_returndata)};
-      t_stor := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r1.vs_requests) /\
-        r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+      t_stor := if adopt_guard rq1.cr_static s r1 (HD s.vs_outcomes).co_success
         then {} else tn.t_stor;
-      t_trans := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r1.vs_requests) /\
-        r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+      t_trans := if adopt_guard rq1.cr_static s r1 (HD s.vs_outcomes).co_success
         then {} else tn.t_trans|>) r1 r2
 Proof
   strip_tac >>
@@ -792,14 +788,8 @@ Theorem taint_agree_consume_call_request:
     taint_agree D X
       (tn with <|t_mem := tn.t_mem DIFF
         {i | ro <= i /\ i < ro + LENGTH (TAKE rs r.vs_returndata)};
-       t_stor := if ~(static \/ s.vs_call_ctx.cc_static) /\
-         r.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r.vs_requests) /\ r.vs_outcomes <> s.vs_outcomes /\
-         (HD s.vs_outcomes).co_success then {} else tn.t_stor;
-       t_trans := if ~(static \/ s.vs_call_ctx.cc_static) /\
-         r.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r.vs_requests) /\ r.vs_outcomes <> s.vs_outcomes /\
-         (HD s.vs_outcomes).co_success then {} else tn.t_trans|>) r u
+       t_stor := if adopt_guard (static \/ s.vs_call_ctx.cc_static) s r (HD s.vs_outcomes).co_success then {} else tn.t_stor;
+       t_trans := if adopt_guard (static \/ s.vs_call_ctx.cc_static) s r (HD s.vs_outcomes).co_success then {} else tn.t_trans|>) r u
 Proof
   rpt gen_tac >> disch_tac >>
   `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
@@ -930,15 +920,9 @@ Theorem taint_agree_exec_delegatecall:
     taint_agree D X
       (tn with <|t_mem := tn.t_mem DIFF
         {i | w2n ro <= i /\ i < w2n ro + LENGTH (TAKE (w2n rs) r.vs_returndata)};
-      t_stor := if ~s.vs_call_ctx.cc_static /\
-        r.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r.vs_requests) /\
-        r.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+      t_stor := if adopt_guard s.vs_call_ctx.cc_static s r (HD s.vs_outcomes).co_success
         then {} else tn.t_stor;
-      t_trans := if ~s.vs_call_ctx.cc_static /\
-        r.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r.vs_requests) /\
-        r.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+      t_trans := if adopt_guard s.vs_call_ctx.cc_static s r (HD s.vs_outcomes).co_success
         then {} else tn.t_trans;
       t_var := set_var_taint tn.t_var [out] {}|>) s' (update_var out w u)
 Proof
@@ -989,15 +973,9 @@ Theorem taint_agree_delegatecall_mask:
   step_taint inst s (update_var out w r) tn =
     tn with <|t_mem := tn.t_mem DIFF
         {i | ro <= i /\ i < ro + LENGTH (TAKE rs r.vs_returndata)};
-      t_stor := if ~s.vs_call_ctx.cc_static /\
-        r.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r.vs_requests) /\
-        r.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+      t_stor := if adopt_guard s.vs_call_ctx.cc_static s r (HD s.vs_outcomes).co_success
         then {} else tn.t_stor;
-      t_trans := if ~s.vs_call_ctx.cc_static /\
-        r.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r.vs_requests) /\
-        r.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+      t_trans := if adopt_guard s.vs_call_ctx.cc_static s r (HD s.vs_outcomes).co_success
         then {} else tn.t_trans;
       t_var := set_var_taint tn.t_var [out] {}|>
 Proof
@@ -1054,15 +1032,9 @@ Proof
   `step_taint inst s (update_var out w r) tn =
      tn with <|t_mem := tn.t_mem DIFF
         {i | w2n ro <= i /\ i < w2n ro + LENGTH (TAKE (w2n rs) r.vs_returndata)};
-      t_stor := if ~s.vs_call_ctx.cc_static /\
-        r.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r.vs_requests) /\
-        r.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+      t_stor := if adopt_guard s.vs_call_ctx.cc_static s r (HD s.vs_outcomes).co_success
         then {} else tn.t_stor;
-      t_trans := if ~s.vs_call_ctx.cc_static /\
-        r.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r.vs_requests) /\
-        r.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+      t_trans := if adopt_guard s.vs_call_ctx.cc_static s r (HD s.vs_outcomes).co_success
         then {} else tn.t_trans;
       t_var := set_var_taint tn.t_var [out] {}|>` by
     (irule taint_agree_delegatecall_mask >>
@@ -1305,13 +1277,9 @@ Theorem taint_agree_call_mask:
   step_taint inst s (update_var out w r) tn =
     (tn with <|t_mem := tn.t_mem DIFF
        {i | ro <= i /\ i < ro + LENGTH (TAKE rs r.vs_returndata)};
-      t_stor := if ~rq.cr_static /\ r.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r.vs_requests) /\
-        r.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+      t_stor := if adopt_guard rq.cr_static s r (HD s.vs_outcomes).co_success
         then {} else tn.t_stor;
-      t_trans := if ~rq.cr_static /\ r.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r.vs_requests) /\
-        r.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+      t_trans := if adopt_guard rq.cr_static s r (HD s.vs_outcomes).co_success
         then {} else tn.t_trans|>) with
       t_var := set_var_taint tn.t_var [out] {}
 Proof
@@ -1343,14 +1311,8 @@ Theorem taint_agree_exec_ext_call:
     taint_agree D X
       ((tn with <|t_mem := tn.t_mem DIFF
         {i | w2n ro <= i /\ i < w2n ro + LENGTH (TAKE (w2n rs) r.vs_returndata)};
-       t_stor := if ~(static \/ s.vs_call_ctx.cc_static) /\
-         r.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r.vs_requests) /\ r.vs_outcomes <> s.vs_outcomes /\
-         (HD s.vs_outcomes).co_success then {} else tn.t_stor;
-       t_trans := if ~(static \/ s.vs_call_ctx.cc_static) /\
-         r.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r.vs_requests) /\ r.vs_outcomes <> s.vs_outcomes /\
-         (HD s.vs_outcomes).co_success then {} else tn.t_trans|>) with
+       t_stor := if adopt_guard (static \/ s.vs_call_ctx.cc_static) s r (HD s.vs_outcomes).co_success then {} else tn.t_stor;
+       t_trans := if adopt_guard (static \/ s.vs_call_ctx.cc_static) s r (HD s.vs_outcomes).co_success then {} else tn.t_trans|>) with
        t_var := set_var_taint tn.t_var [out] {}) s' (update_var out w u)
 Proof
   rpt gen_tac >> disch_tac >>

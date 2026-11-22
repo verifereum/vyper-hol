@@ -209,13 +209,9 @@ Theorem fmp_mem_call_observe[local]:
   consume_call_outcome rq2 ro' rs t = (w2,r2) ==>
   w1 = w2 /\ r1.vs_returndata = r2.vs_returndata /\
   ld_shared_agree D s.vs_call_ctx.cc_address
-    (tn with <|t_stor := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r1.vs_requests) /\
-                    r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+    (tn with <|t_stor := if adopt_guard rq1.cr_static s r1 (HD s.vs_outcomes).co_success
                   then {} else tn.t_stor;
-               t_trans := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r1.vs_requests) /\
-                    r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+               t_trans := if adopt_guard rq1.cr_static s r1 (HD s.vs_outcomes).co_success
                   then {} else tn.t_trans|>) r1 r2
 Proof
   strip_tac >>
@@ -362,13 +358,9 @@ Theorem fmp_mem_call_shared[local]:
             else inst.inst_opcode = STATICCALL) /\
   rq1 = (venom_call_request s addr value off sz static with <|cr_kind := kind; cr_gas := SOME (w2n (gas:bytes32))|>) /\
   ld_shared_agree D s.vs_call_ctx.cc_address
-    (tn with <|t_stor := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r1.vs_requests) /\
-                    r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+    (tn with <|t_stor := if adopt_guard rq1.cr_static s r1 (HD s.vs_outcomes).co_success
                   then {} else tn.t_stor;
-               t_trans := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r1.vs_requests) /\
-                    r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+               t_trans := if adopt_guard rq1.cr_static s r1 (HD s.vs_outcomes).co_success
                   then {} else tn.t_trans|>) r1 r2 ==>
   ld_shared_agree D s.vs_call_ctx.cc_address
     (step_taint inst s (update_var out w1 r1) tn)
@@ -436,13 +428,9 @@ Proof
   drule_all fmp_mem_call_execute >> strip_tac >>
   `w1 = w2 /\ r1.vs_returndata = r2.vs_returndata /\
    ld_shared_agree D s.vs_call_ctx.cc_address
-    (tn with <|t_stor := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r1.vs_requests) /\
-                    r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+    (tn with <|t_stor := if adopt_guard rq1.cr_static s r1 (HD s.vs_outcomes).co_success
                   then {} else tn.t_stor;
-               t_trans := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r1.vs_requests) /\
-                    r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+               t_trans := if adopt_guard rq1.cr_static s r1 (HD s.vs_outcomes).co_success
                   then {} else tn.t_trans|>) r1 r2` by
     (irule fmp_mem_call_observe >>
      goal_assum (drule_at (Pat `fmp_stage_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>

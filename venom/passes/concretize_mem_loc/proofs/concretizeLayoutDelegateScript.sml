@@ -37,12 +37,8 @@ Theorem delegate_taint:
   step_taint inst s post tn =
     tn with <|t_mem := tn.t_mem DIFF range_bytes (step_writes inst s post);
               t_var := tn.t_var |+ (v,{});
-      t_stor := if (~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
-     ~computed_precompile (LAST post.vs_requests) /\
-     post.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) then {} else tn.t_stor;
-      t_trans := if (~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
-     ~computed_precompile (LAST post.vs_requests) /\
-     post.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) then {} else tn.t_trans|>
+      t_stor := if (adopt_guard s.vs_call_ctx.cc_static s post (HD s.vs_outcomes).co_success) then {} else tn.t_stor;
+      t_trans := if (adopt_guard s.vs_call_ctx.cc_static s post (HD s.vs_outcomes).co_success) then {} else tn.t_trans|>
 Proof
   strip_tac >>
   `new_site_bytes s post = {}` by
@@ -255,12 +251,8 @@ Theorem concretize_delegate_taint_order:
   relocation_taint_le next (step_taint inst s post tn) (step_taint inst t post' un)
 Proof
   strip_tac >>
-  `(~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
-     ~computed_precompile (LAST post.vs_requests) /\
-     post.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
-    (~t.vs_call_ctx.cc_static /\ post'.vs_requests <> t.vs_requests /\
-     ~computed_precompile (LAST post'.vs_requests) /\
-     post'.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success)` by
+  `(adopt_guard s.vs_call_ctx.cc_static s post (HD s.vs_outcomes).co_success) <=>
+    (adopt_guard t.vs_call_ctx.cc_static t post' (HD t.vs_outcomes).co_success)` by
     (dxrule delegate_success_envelope >> strip_tac >>
      dxrule delegate_success_envelope >> strip_tac >>
      qmatch_asmsub_abbrev_tac `consume_call_outcome rq _ _ s = _` >>
@@ -277,22 +269,14 @@ Proof
   `step_taint inst s post tn =
     tn with <|t_mem := tn.t_mem DIFF range_bytes (step_writes inst s post);
               t_var := tn.t_var |+ (out,{});
-      t_stor := if (~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
-     ~computed_precompile (LAST post.vs_requests) /\
-     post.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) then {} else tn.t_stor;
-      t_trans := if (~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
-     ~computed_precompile (LAST post.vs_requests) /\
-     post.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) then {} else tn.t_trans|>` by
+      t_stor := if (adopt_guard s.vs_call_ctx.cc_static s post (HD s.vs_outcomes).co_success) then {} else tn.t_stor;
+      t_trans := if (adopt_guard s.vs_call_ctx.cc_static s post (HD s.vs_outcomes).co_success) then {} else tn.t_trans|>` by
     (irule delegate_taint >> simp[] >> metis_tac[]) >>
   `step_taint inst t post' un =
     un with <|t_mem := un.t_mem DIFF range_bytes (step_writes inst t post');
               t_var := un.t_var |+ (out,{});
-      t_stor := if (~t.vs_call_ctx.cc_static /\ post'.vs_requests <> t.vs_requests /\
-     ~computed_precompile (LAST post'.vs_requests) /\
-     post'.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success) then {} else un.t_stor;
-      t_trans := if (~t.vs_call_ctx.cc_static /\ post'.vs_requests <> t.vs_requests /\
-     ~computed_precompile (LAST post'.vs_requests) /\
-     post'.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success) then {} else un.t_trans|>` by
+      t_stor := if (adopt_guard t.vs_call_ctx.cc_static t post' (HD t.vs_outcomes).co_success) then {} else un.t_stor;
+      t_trans := if (adopt_guard t.vs_call_ctx.cc_static t post' (HD t.vs_outcomes).co_success) then {} else un.t_trans|>` by
     (irule delegate_taint >> simp[] >> metis_tac[]) >>
   `LENGTH (TAKE (w2n rs) post'.vs_returndata) =
     MIN (w2n rs) (LENGTH post'.vs_returndata)` by

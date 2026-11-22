@@ -9,17 +9,9 @@ Ancestors
 Theorem call_step_storage_taint:
   inst.inst_opcode = CALL ==>
   (step_taint inst s s' tn).t_stor =
-    (if ~s.vs_call_ctx.cc_static /\
-        s'.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s'.vs_requests) /\
-        s'.vs_outcomes <> s.vs_outcomes /\
-        (HD s.vs_outcomes).co_success then {} else tn.t_stor) /\
+    (if adopt_guard s.vs_call_ctx.cc_static s s' (HD s.vs_outcomes).co_success then {} else tn.t_stor) /\
   (step_taint inst s s' tn).t_trans =
-    (if ~s.vs_call_ctx.cc_static /\
-        s'.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s'.vs_requests) /\
-        s'.vs_outcomes <> s.vs_outcomes /\
-        (HD s.vs_outcomes).co_success then {} else tn.t_trans)
+    (if adopt_guard s.vs_call_ctx.cc_static s s' (HD s.vs_outcomes).co_success then {} else tn.t_trans)
 Proof
   simp[step_taint_def, adopt_reset_def, store_taint_def]
 QED
@@ -179,17 +171,13 @@ QED
 Theorem call_stor_taint_ok:
   inst.inst_opcode = CALL /\ stor_taint_ok H cx tn s /\
   s'.vs_call_ctx = s.vs_call_ctx /\
-  (~(~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s'.vs_requests) /\
-      s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) ==>
+  (~(adopt_guard s.vs_call_ctx.cc_static s s' (HD s.vs_outcomes).co_success) ==>
    s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient) ==>
   stor_taint_ok H cx (step_taint inst s s' tn) s'
 Proof
   strip_tac >> drule call_step_storage_taint >> strip_tac >>
   gvs[stor_taint_ok_def] >>
-  Cases_on `~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s'.vs_requests) /\
-            s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success` >>
+  Cases_on `adopt_guard s.vs_call_ctx.cc_static s s' (HD s.vs_outcomes).co_success` >>
   gvs[step_taint_def, imm_taint_def]
 QED
 
@@ -235,9 +223,7 @@ QED
 Theorem consume_call_no_reset_accounts:
   rq = (venom_call_request s aw vw ao az F with cr_gas := gas_cap) /\
   t = SND (consume_call_outcome rq ro rz s) /\
-  ~(~s.vs_call_ctx.cc_static /\ t.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST t.vs_requests) /\
-    t.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) ==>
+  ~(adopt_guard s.vs_call_ctx.cc_static s t (HD s.vs_outcomes).co_success) ==>
   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient
 Proof
   strip_tac >>
@@ -260,17 +246,13 @@ Theorem call_stor_taint_ok_at:
   inst.inst_opcode = CALL /\ stor_taint_ok_at D tn s /\
   s'.vs_call_ctx = s.vs_call_ctx /\
   s'.vs_immutables = s.vs_immutables /\
-  (~(~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s'.vs_requests) /\
-      s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) ==>
+  (~(adopt_guard s.vs_call_ctx.cc_static s s' (HD s.vs_outcomes).co_success) ==>
    s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient) ==>
   stor_taint_ok_at D (step_taint inst s s' tn) s'
 Proof
   strip_tac >> drule call_step_storage_taint >> strip_tac >>
   gvs[stor_taint_ok_at_def] >>
-  Cases_on `~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s'.vs_requests) /\
-            s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success` >>
+  Cases_on `adopt_guard s.vs_call_ctx.cc_static s s' (HD s.vs_outcomes).co_success` >>
   gvs[step_taint_def, imm_taint_def]
 QED
 

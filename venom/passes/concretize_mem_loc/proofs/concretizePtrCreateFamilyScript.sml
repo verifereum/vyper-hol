@@ -861,11 +861,7 @@ Proof
      (reverse conj_tac
       >- (`post.vs_call_ctx = s'.vs_call_ctx` by
             metis_tac[ptr_history_content_call_ctx] >>
-          Cases_on `~a.po_state.vs_call_ctx.cc_static /\
-             post.vs_requests <> a.po_state.vs_requests /\
-             ~computed_precompile (LAST post.vs_requests) /\
-             post.vs_outcomes <> a.po_state.vs_outcomes /\
-             (HD a.po_state.vs_outcomes).co_success` >>
+          Cases_on `adopt_guard a.po_state.vs_call_ctx.cc_static a.po_state post (HD a.po_state.vs_outcomes).co_success` >>
           fs[ptr_history_content_def, ptr_taint_content_def, step_taint_def,
             store_taint_def, adopt_reset_def, imm_taint_def, contract_storage_def,
             contract_transient_def, storage_agree_except_def, word_agree_except_def] >>
