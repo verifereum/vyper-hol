@@ -146,7 +146,12 @@ Resume body_assign_empty_scalar_suffix[memory_path]:
   simp[inst_seq_ptr_def,ifexp_materialize_mstore_ghost] >>
   fs[same_blocks_def,run_inst_seq_def,step_inst_base_opcode_eqs,mk_inst_def,
      exec_write2_def,eval_operand_def,is_terminator_def] >>
-  metis_tac[ifexp_materialize_mstore_ghost,mk_inst_def]
+  conj_tac
+  >- (strip_tac >> rpt gen_tac >> strip_tac >>
+      irule dalloca_no_wrap_non_dalloca >>
+      qpat_x_assum `[_] = _ ++ _` (mp_tac o Q.AP_TERM `MEM (i:instruction)`) >>
+      simp[] >> strip_tac >> gvs[]) >>
+  simp[GSYM mk_inst_def,ifexp_materialize_mstore_ghost]
 QED
 Resume body_assign_empty_scalar_suffix[storage]:
   gvs[compile_store_at_loc_def] >>
@@ -241,8 +246,17 @@ Resume body_assign_empty_scalar_suffix[code_path]:
   irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >> simp[] >>
   qexistsl_tac [`emitted_insts sa sb`,`sa`] >>
   fs[same_blocks_def] >>
-  conj_tac >- (fs[EVERY_MEM] >> rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[is_terminator_def]) >>
-  first_x_assum (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]
+  conj_tac
+  >- (strip_tac >> rpt gen_tac >> strip_tac >>
+      irule dalloca_no_wrap_non_dalloca >>
+      qpat_assum `EVERY _ (emitted_insts sa sb)`
+        (qspec_then `i` mp_tac o REWRITE_RULE[EVERY_MEM]) >>
+      simp[] >> strip_tac >> gvs[]) >>
+  first_x_assum (qspec_then `s.vs_inst_idx` mp_tac) >> simp[] >>
+  disch_then kall_tac >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  qpat_assum `EVERY _ (emitted_insts sa sb)` (drule o REWRITE_RULE[EVERY_MEM]) >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 Finalise body_assign_empty_scalar_suffix
 
