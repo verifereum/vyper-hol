@@ -6041,7 +6041,9 @@ Proof
      disch_then (map_every assume_tac o CONJUNCTS) >> suspend "compose") >>
   qpat_x_assum `supported_stmt _ _ _` mp_tac >>
   simp[Once supported_stmt_def, supportedStmtsTheory.supported_append_target_def] >>
-  metis_tac[bodyAppendStorageFactsTheory.supported_append_storage_decl]
+  mp_tac (Q.INST [`nid` |-> `(NONE,nid1)`, `tops` |-> `tops`]
+    bodyAppendStorageFactsTheory.supported_append_storage_decl) >>
+  simp[] >> metis_tac[]
 QED
 
 Resume body_append_storage_word_frag_full[compose]:
@@ -6466,7 +6468,9 @@ Proof
      disch_then (map_every assume_tac o CONJUNCTS) >> suspend "compose") >>
   qpat_x_assum `supported_stmt _ _ _` mp_tac >>
   simp[Once supported_stmt_def, supportedStmtsTheory.supported_append_target_def] >>
-  metis_tac[bodyAppendStorageFactsTheory.supported_append_storage_decl]
+  mp_tac (Q.INST [`nid` |-> `(NONE,nid1)`, `tops` |-> `tops`]
+    bodyAppendStorageFactsTheory.supported_append_storage_decl) >>
+  simp[] >> metis_tac[]
 QED
 
 Resume body_append_storage_aggregate_frag_full[compose]:
