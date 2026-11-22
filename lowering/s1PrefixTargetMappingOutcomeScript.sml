@@ -1,7 +1,8 @@
 (* Request-prefix companion to bodyFullTargetMappingOutcome. *)
 Theory s1PrefixTargetMappingOutcome
 Ancestors
-  s1PrefixPreds bodyFullTargetMappingOutcome s1PrefixDefs
+  s1PrefixPreds bodyFullTargetMappingOutcome s1PrefixDefs s1PrefixFrame
+  vyperState vyperStorageTrace list
 
 Theorem mapping_extension_prefix_outcome:
   extend_place cx (HashMapRef tr base_slot kt vt) (ValueSubscript v) mid2 = (res,ee) /\
@@ -30,5 +31,12 @@ Theorem mapping_extension_prefix_outcome:
       cx st0 (extend_place cx (HashMapRef tr base_slot kt vt) (ValueSubscript v))
       (mid2,t2,G2,tn2)
 Proof
-  cheat
+  strip_tac >> irule gas_prefix_full_no_outcome >>
+  simp[storage_trace_frame_extend_place] >>
+  Cases_on `vt` >> simp[extend_place_nested_mapping] >>
+  rename1 `HashMapRef _ _ _ (Type typ)` >>
+  Cases_on `evaluate_type (get_tenv cx) typ` >>
+  simp[extend_place_mapping_leaf, DROP_APPEND1,
+       extend_place_def, lift_option_type_def, bind_def, ignore_bind_def,
+       raise_def, record_storage_event_def, return_def]
 QED

@@ -2,6 +2,11 @@
 Theory s1PrefixBuiltinSliceCodeSelfCompose
 Ancestors
   s1PrefixPreds bodyFullBuiltinSliceCodeSelfCompose s1PrefixDefs
+  exprBodyPreProps externalEntryShape exprSimLiteralWord
+  exprSimSource bodyFullShared gasShadowCompileStmtHelpers exprSimSliceSource
+  vyperInterpreter vyperState exprLowering exprSimHypsDefs exprLoweringProps
+  exprSimSliceSelfCode gasShadow fragExec compileEnv
+Libs monadsyntax
 
 Theorem slice_builtin_self_vv_prefix_from_tail:
   (!query_op query_ops sa limit sc start cnt sd N out data se copy_op copy_ops sf sb
@@ -115,5 +120,120 @@ Theorem slice_builtin_self_vv_prefix_from_tail:
     expr_vv_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a (Slice n) args) es
 Proof
-  cheat
+  disch_then (CONJUNCTS_THEN2 kall_tac
+    (CONJUNCTS_THEN2 kall_tac (mk_asm "child_prefix"))) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `code_slice_source _ _ = SOME _`
+    (strip_assume_tac o REWRITE_RULE [code_slice_source_SOME]) >>
+  gvs[] >> fs[vyperContextTheory.builtin_args_length_ok_def] >>
+  `body_expr_prefix_ok cx start` by fs[body_exprs_prefix_ok_def] >>
+  drule expr_body_pre_static_facts >> strip_tac >>
+  `expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx ty start es` by
+    (asm "child_prefix" (irule o cj 1) >> simp[] >>
+     qexistsl_tac [`a`,`addr`,`code_ty`,`env`,`es`,`len`,`n`,`start`,`tops`] >> simp[]) >>
+  `?self_ty. addr = Builtin self_ty (Env SelfAddr) []` by
+    (qpat_x_assum `is_self_code _` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     rewrite_tac[Once (oneline is_self_code_def)] >>
+     rpt (CASE_TAC >> fs[]) >> metis_tac[]) >>
+  gvs[] >>
+  `well_typed_expr env (Builtin code_ty (Acc Code) [Builtin self_ty (Env SelfAddr) []])` by
+    (qpat_assum `well_typed_expr env (Builtin _ (Slice _) _)`
+       (assume_tac o MATCH_MP (cj 1 (iffLR (cj 9 vyperTypeSystemTheory.well_typed_expr_def)))) >>
+     irule exprSimSourceTheory.well_typed_exprs_member >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `code_ty = BaseT (BytesT (Dynamic 24576)) /\ self_ty = BaseT AddressT` by
+    (qpat_assum `well_typed_expr env (Builtin _ (Acc Code) _)`
+       (mp_tac o MATCH_MP (cj 2 (iffLR (cj 9 vyperTypeSystemTheory.well_typed_expr_def)))) >>
+     simp[NoAsms,vyperTypeSystemTheory.well_typed_builtin_app_def,
+          vyperTypeSystemTheory.account_item_type_def,vyperASTTheory.expr_type_def]) >>
+  `a = BaseT (BytesT (Dynamic n)) /\ expr_type start = BaseT (UintT 256) /\
+   expr_type len = BaseT (UintT 256) /\
+   slice_operands_ok (Slice n) [Builtin code_ty (Acc Code) [Builtin self_ty (Env SelfAddr) []];start;len]` by
+    (qpat_assum `well_typed_expr env (Builtin _ (Slice _) _)`
+       (mp_tac o MATCH_MP slice_typed_args) >> simp[vyperASTTheory.expr_type_def]) >>
+  `?lt j. len = Literal lt (IntL j)` by
+    (qpat_x_assum `slice_operands_ok _ _` mp_tac >>
+     simp[vyperTypeSystemTheory.slice_operands_ok_def] >>
+     Cases_on `len` >> simp[] >>
+     rename1 `Literal lt lit` >> Cases_on `lit` >> simp[]) >>
+  gvs[] >>
+  `expr_body_pre cenv cx env start es` by
+    (`expr_type start <> BaseT (BytesT (Dynamic 24576))` by simp[] >>
+     qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _`
+       (mp_then Any mp_tac exprSimSourceTheory.expr_body_pre_builtin_typed_arg) >>
+     disch_then (qspecl_then [`start`,`es`] mp_tac) >> simp[]) >>
+  suspend "start_compilation"
 QED
+
+Resume slice_builtin_self_vv_prefix_from_tail[start_compilation]:
+  rw[expr_vv_sim_prefix_def,expr_vv_sim_full_pre_def] >>
+  `!xs. ~names_builtin (Slice n) xs` by
+    (`!bt xs. names_builtin bt xs ==> bt <> Slice n` by
+       (ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]) >>
+     metis_tac[]) >>
+  qpat_x_assum `compile_expr _ _ (Builtin _ _ _) _ = _` mp_tac >>
+  simp[compile_expr_builtin_dispatch,compile_builtin_dispatch_component_eq,
+       exprBopLoweringTheory.lower_value_child_call,is_self_code_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
+  simp[gas_shadow_expr_def,gas_shadow_builtin_def,
+       compile_expr_builtin_dispatch,compile_builtin_dispatch_component_eq,
+       exprBopLoweringTheory.lower_value_child_call,is_self_code_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  rename [`lower_value _ _ _ start sa = (start_op,sm)`,
+          `lower_value _ _ _ (Literal lt (IntL j)) sm = (len_op,sn)`,
+          `lower_value _ _ _ (gas_shadow_expr start) shadow_sa = (sh_start_op,sh_sm)`,
+          `lower_value _ _ _ (Literal lt (IntL j)) sh_sm = (sh_len_op,sh_sn)`] >>
+  qabbrev_tac `sz = type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))` >>
+  `cs_extends sn sb` by
+    (qspecl_then [`start_op`,`len_op`,`sz`,`sn`,`\x. T`] mp_tac compile_slice_code_labels >>
+     Cases_on `compile_slice_code start_op len_op sz sn` >> gvs[as_ptr_val_def]) >>
+  `cs_extends sh_sn shadow_sb` by
+    (qspecl_then [`sh_start_op`,`sh_len_op`,`sz`,`sh_sn`,`\x. T`] mp_tac compile_slice_code_labels >>
+     Cases_on `compile_slice_code sh_start_op sh_len_op sz sh_sn` >> gvs[as_ptr_val_def]) >>
+  `fn_has_code sa sm func /\ fn_has_code shadow_sa sh_sm shadow_func` by
+    (imp_res_tac (cj 2 compile_expr_grows) >>
+     metis_tac[fn_has_code_split,cs_extends_trans]) >>
+  `sh_start_op = start_op /\ gas_shadow_state sm sh_sm` by
+    (irule gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ start sa = _` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr start) shadow_sa = _` (irule_at Any) >>
+     simp[gas_shadow_stmt_lower_value_env]) >>
+  `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     cx st0 (bind (eval_expr cx start) (read_result cx)) (es,s0,G0,tn0)` by
+    (qpat_x_assum `expr_sim_prefix _ _ _ _ start _`
+       (irule o REWRITE_RULE[expr_sim_prefix_def]) >>
+     qexistsl_tac [`start_op`,`sa`,`sm`,`shadow_sa`,`sh_sm`] >>
+     simp[expr_sim_full_pre_def] >> conj_tac
+     >- metis_tac[expr_body_pre_gas_admissible] >>
+     first_assum ACCEPT_TAC) >>
+  suspend "source_trace"
+QED
+
+Resume slice_builtin_self_vv_prefix_from_tail[source_trace]:
+  (* Only the start expression can append requests: length is an integer
+     literal and the self-code evaluator reads code without an external call. *)
+  qpat_x_assum `gas_prefix_full _ _ _ (bind (eval_expr cx start) _) _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  rewrite_tac[slice_self_code_actions,gas_prefix_full_def] >>
+  disch_then (qx_choose_then `marks` (CONJUNCTS_THEN ASSUME_TAC)) >>
+  qexists_tac `marks` >> conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `st = es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail` >>
+  Cases_on `bind (eval_expr cx start) (read_result cx) st` >>
+  rename1 `bind (eval_expr cx start) (read_result cx) st = (ans,mid)` >>
+  `ee.storage_trace = mid.storage_trace` by
+    (qpat_x_assum `_ st = (res,ee)` mp_tac >>
+     simp[Once bind_def] >> Cases_on `ans` >> simp[] >>
+     rename1 `_ st = (INL sv,mid)` >>
+     `bind (eval_expr cx (Literal lt (IntL j))) (read_result cx) mid =
+       (INL (evaluate_literal (IntL j)),mid)` by
+       (qspecl_then [`cx`,`lt`,`IntL j`,`mid`,`mid.gas_obs`] mp_tac literal_read_all_tails >> simp[]) >>
+     Cases_on `evaluate_slice (BytesV cx.txn.code) sv (evaluate_literal (IntL j)) n` >>
+     simp[bind_def,get_accounts_def,lift_sum_def,return_def,raise_def]) >>
+  qpat_assum `!tail res ee obs_pre rq outcome sfx H. _` irule >> simp[] >>
+  qexistsl_tac [`mid`,`ans`,`sfx`,`tail`] >> gs[Abbr `st`]
+QED
+
+Finalise slice_builtin_self_vv_prefix_from_tail

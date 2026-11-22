@@ -1,7 +1,9 @@
 (* Request-prefix companion to bodyFullAssignLocalEmpty. *)
 Theory s1PrefixAssignLocalEmpty
 Ancestors
-  s1PrefixPreds bodyFullAssignLocalEmpty s1PrefixDefs
+  s1PrefixPreds s1PrefixDefs s1PrefixFrame assignBasePtrLocalBodyFacts
+  exprBodyPreProps memoryLocalRhsProps stmtSimAssignMem targetPlaceSim
+  vyperStorageTrace
 
 Theorem body_assign_local_memory_empty_prefix:
   !cx id ty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
@@ -39,5 +41,17 @@ Theorem body_assign_local_memory_empty_prefix:
         (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all assign_base_local_rhs_pre >> strip_tac >>
+  drule_all expr_sim_inv_local >> strip_tac >>
+  drule expr_body_pre_env_type_defs >> strip_tac >>
+  rename1 `lookup_scopes id es.scopes = SOME ent` >>
+  `evaluate_type (get_tenv cx) ty = SOME ent.type` by metis_tac[] >>
+  `!gs. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+        (INL (default_value ent.type), es with gas_obs := gs)` by
+    metis_tac[memory_rhs_empty_read_destination] >>
+  rw[stmt_frag_prefix_def, stmt_frag_full_pre_def] >>
+  drule_all assign_local_identity_rhs_all_tails >> strip_tac >>
+  irule gas_prefix_full_no_outcome >>
+  simp[evaluate_storage_trace_frame]
 QED
