@@ -3956,6 +3956,7 @@ Theorem body_append_local_nonword_frag_full:
   supported_stmt tops bindings (Append (NameTarget id) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (Append (NameTarget id) e) ==> occurs_abi_decode_target target tops) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
   locals_alloc_ok cenv env /\
   type_stmt env ret_ty (Append (NameTarget id) e) = SOME env' /\
@@ -4062,6 +4063,7 @@ Resume body_append_local_nonword_frag_full[rhs_setup]:
     (fs[ci_mono_def] >> metis_tac[fragExecTheory.fn_has_code_split]) >>
   `(!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x)` by
     fs[loweringPostsTheory.ret_pc_ok_def] >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by simp[] >>
   `expr_body_pre cenv cx env e mid` by
     fs[exprSimSourceTheory.expr_body_pre_gas_obs] >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok mid` by
@@ -4071,6 +4073,7 @@ Resume body_append_local_nonword_frag_full[rhs_setup]:
        (mp_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
      qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
      qpat_assum `shadow_body_inv tops ctx shadow_ctx` mp_tac >>
+     qpat_assum `body_const_cells_agree [(NONE,tops)] cx env mid` mp_tac >>
      qpat_assum `expr_body_pre cenv cx env e mid` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
@@ -4751,6 +4754,7 @@ Theorem body_append_nested_frag_full[local]:
   supported_stmt tops bindings (Append t e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (Append t e) ==> occurs_abi_decode_target target tops) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
   locals_alloc_ok cenv env /\
   type_stmt env ret_ty (Append t e) = SOME env' /\
@@ -4899,6 +4903,11 @@ Resume body_append_nested_frag_full[target_success]:
     fs[exprSimSourceTheory.expr_body_pre_gas_obs] >>
   `expr_body_pre cenv cx env e mid` by
     metis_tac[bodyAppendResolvedPreTheory.append_resolved_rhs_body_pre] >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (irule body_const_cells_agree_target >>
+     qpat_assum `eval_target_place cx t (_ with gas_obs := _) = (INL p,mid)`
+       (irule_at (Pat `eval_target_place _ _ _ = _`)) >>
+     simp[]) >>
   `?trace. mid.storage_trace = es.storage_trace ++ trace` by
     (`storage_trace_frame (eval_target_place cx t)` by
        simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
@@ -4969,6 +4978,7 @@ Resume body_append_nested_frag_full[rhs]:
     (qpat_assum `body_expr_full_ok cx e` (mp_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
      qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
      qpat_assum `shadow_body_inv tops ctx shadow_ctx` mp_tac >>
+     qpat_assum `body_const_cells_agree [(NONE,tops)] cx env mid` mp_tac >>
      qpat_assum `expr_body_pre cenv cx env e mid` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
@@ -5902,6 +5912,7 @@ Theorem body_append_nested_subscript_frag_full:
   supported_stmt tops bindings (Append (SubscriptTarget base key) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (Append (SubscriptTarget base key) e) ==> occurs_abi_decode_target target tops) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
   locals_alloc_ok cenv env /\
   type_stmt env ret_ty (Append (SubscriptTarget base key) e) = SOME env' /\
@@ -5933,6 +5944,7 @@ Theorem body_append_nested_attribute_frag_full:
   supported_stmt tops bindings (Append (AttributeTarget base field) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (Append (AttributeTarget base field) e) ==> occurs_abi_decode_target target tops) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
   locals_alloc_ok cenv env /\
   type_stmt env ret_ty (Append (AttributeTarget base field) e) = SOME env' /\
@@ -5963,6 +5975,7 @@ Theorem body_append_storage_word_frag_full:
   supported_stmt tops bindings (Append (TopLevelNameTarget nid) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (Append (TopLevelNameTarget nid) e) ==> occurs_abi_decode_target target tops) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
   locals_alloc_ok cenv env /\
   type_stmt env ret_ty (Append (TopLevelNameTarget nid) e) = SOME env' /\
@@ -6095,6 +6108,9 @@ Resume body_append_storage_word_frag_full[after_root]:
     (drule bodyExprPreFactsTheory.supported_stmt_body_safe >> simp[]) >>
   `supported_expr tops e` by simp[supportedExprsTheory.supported_expr_def] >>
   drule_all bodyAppendStorageAdapterTheory.body_append_expr_pre >> strip_tac >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`mid.immutables = es.immutables` by simp[Abbr `observed`] >>
+     metis_tac[body_const_cells_agree_immutables]) >>
   `expr_body_pre cenv cx env e mid` by simp[Abbr `observed`] >>
   `env_consistent env cx es` by fs[expr_sim_inv_def] >>
   `find_var_decl_by_name nid1 tops <> NONE` by simp[] >>
@@ -6381,6 +6397,7 @@ Theorem body_append_storage_aggregate_frag_full[local]:
   supported_stmt tops bindings (Append (TopLevelNameTarget nid) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (Append (TopLevelNameTarget nid) e) ==> occurs_abi_decode_target target tops) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
   locals_alloc_ok cenv env /\
   type_stmt env ret_ty (Append (TopLevelNameTarget nid) e) = SOME env' /\
@@ -6513,6 +6530,9 @@ Resume body_append_storage_aggregate_frag_full[after_root]:
     (drule bodyExprPreFactsTheory.supported_stmt_body_safe >> simp[]) >>
   `supported_expr tops e` by simp[supportedExprsTheory.supported_expr_def] >>
   drule_all bodyAppendStorageAdapterTheory.body_append_expr_pre >> strip_tac >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`mid.immutables = es.immutables` by simp[Abbr `observed`] >>
+     metis_tac[body_const_cells_agree_immutables]) >>
   `expr_body_pre cenv cx env e mid` by simp[Abbr `observed`] >>
   `env_consistent env cx es` by fs[expr_sim_inv_def] >>
   `find_var_decl_by_name nid1 tops <> NONE` by simp[] >>
@@ -6560,6 +6580,7 @@ Resume body_append_storage_aggregate_frag_full[rhs_code]:
        (mp_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
      qpat_assum `body_inv tops ctx cenv cx` mp_tac >>
      qpat_assum `shadow_body_inv tops ctx shadow_ctx` mp_tac >>
+     qpat_assum `body_const_cells_agree [(NONE,tops)] cx env mid` mp_tac >>
      qpat_assum `expr_body_pre cenv cx env e mid` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
@@ -6950,6 +6971,7 @@ Theorem body_append_storage_bytestring_frag_full:
   supported_stmt tops bindings (Append (TopLevelNameTarget nid) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (Append (TopLevelNameTarget nid) e) ==> occurs_abi_decode_target target tops) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
   locals_alloc_ok cenv env /\
   type_stmt env ret_ty (Append (TopLevelNameTarget nid) e) = SOME env' /\
@@ -6978,6 +7000,7 @@ Theorem body_append_storage_flat_copy_frag_full:
   supported_stmt tops bindings (Append (TopLevelNameTarget nid) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (Append (TopLevelNameTarget nid) e) ==> occurs_abi_decode_target target tops) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
   locals_alloc_ok cenv env /\
   type_stmt env ret_ty (Append (TopLevelNameTarget nid) e) = SOME env' /\
@@ -7006,6 +7029,7 @@ Theorem body_append_storage_typed_copy_frag_full:
   supported_stmt tops bindings (Append (TopLevelNameTarget nid) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (Append (TopLevelNameTarget nid) e) ==> occurs_abi_decode_target target tops) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
   locals_alloc_ok cenv env /\
   type_stmt env ret_ty (Append (TopLevelNameTarget nid) e) = SOME env' /\
@@ -7035,6 +7059,7 @@ Theorem body_append_storage_tuple_layout_frag_full:
   supported_stmt tops bindings (Append (TopLevelNameTarget nid) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (Append (TopLevelNameTarget nid) e) ==> occurs_abi_decode_target target tops) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
   locals_alloc_ok cenv env /\
   type_stmt env ret_ty (Append (TopLevelNameTarget nid) e) = SOME env' /\

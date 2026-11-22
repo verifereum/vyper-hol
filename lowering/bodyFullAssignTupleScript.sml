@@ -2275,6 +2275,7 @@ Theorem body_assign_tuple_targets_word_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget gs) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -3041,6 +3042,7 @@ Theorem body_assign_tuple_locals_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -6220,6 +6222,7 @@ Theorem body_assign_tuple_nested_immutable_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget gs) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -6252,6 +6255,7 @@ Theorem body_assign_tuple_other_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget gs) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -6445,6 +6449,13 @@ Proof
        (INL source_v,ee with gas_obs := [])` by
        (qexists_tac `gas_explicit marks s0.vs_gas_readings` >>
         qpat_x_assum `!tail. _ = (res,ee with gas_obs := tail)` kall_tac >> gvs[])) >>>
+  HEADGOAL (`body_const_cells_agree [(NONE,tops)] cx env ee` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (ee with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `bind (eval_expr cx e) (read_result cx) (es with gas_obs := obs) =
+                       (INL source_v,ee with gas_obs := [])`
+       (irule_at Any) >> simp[])) >>>
   HEADGOAL (drule bodyPtrBopTypedSourceTheory.bop_typed_source_witness >>
     disch_then (qspecl_then [`source_v`,`ee with gas_obs := []`] mp_tac) >>
     (impl_tac >- (qexists_tac `obs` >> first_assum ACCEPT_TAC)) >> strip_tac >>
@@ -6517,6 +6528,7 @@ Proof
     ~EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
                      ~(?nsid. t = TopLevelNameTarget nsid)) todo /\
     body_tuple_targets_full_ok cx todo vs1 /\
+    body_const_cells_agree [(NONE,tops)] cx env src /\
     expr_sim_inv cenv cx env src /\ src with gas_obs := [] = src /\
     gas_admissible (assign_tuple_target_list cx todo vs1) (stmt_res_ok lctx) src /\
     call_evaluation_safe cx (int_calls_atargets todo) /\
@@ -6816,7 +6828,16 @@ Proof
           (src with gas_obs := tail) = _`
          (qspec_then `[]` mp_tac) >>
        qpat_assum `src with gas_obs := [] = src` (fn th => rewrite_tac[th]) >>
-       qpat_assum `fin with gas_obs := [] = fin` (fn th => rewrite_tac[th])) >>
+       qpat_assum `fin with gas_obs := [] = fin` (fn th => rewrite_tac[th]))) >>>
+  HEADGOAL (
+    `body_const_cells_agree [(NONE,tops)] cx env fin` by
+      (`writable_atarget env (BaseTarget (TopLevelNameTarget (ns,id)))` by
+         qpat_assum `well_typed_atarget env (BaseTarget (TopLevelNameTarget (ns,id))) sty`
+          (ACCEPT_TAC o MATCH_MP constSubstCorrectTheory.well_typed_atarget_writable) >>
+       irule body_const_cells_agree_assign_tuple >>
+       qpat_assum `assign_tuple_targets cx (BaseTarget (TopLevelNameTarget (ns,id))) vi src = _`
+         (irule_at Any) >> simp[])) >>>
+  HEADGOAL (
     `body_tuple_targets_full_ok cx todo vs_tail` by
       (first_x_assum irule >> qexistsl_tac [`src`,`()`,`fin`] >> simp[]) >>
     asm "suffix_ih" (qspecl_then
@@ -7202,8 +7223,11 @@ Proof
   HEADGOAL (
     `bodyFullTargetDefs$target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
        cenv cx env bt src` by
-      (irule bodyFullTargetTheory.body_target_place_sim_full >> simp[] >>
-       qexists_tac `tops` >> conj_tac >> first_assum ACCEPT_TAC)) >>>
+      (qspecl_then [`bt`, `DF`, `lo`, `d`, `PG`, `tops`, `ctx`, `shadow_ctx`,
+          `func`, `shadow_func`, `cenv`, `cx`, `env`, `src`] mp_tac
+         bodyFullTargetTheory.body_target_place_sim_full >>
+       impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+       disch_then ACCEPT_TAC)) >>>
   HEADGOAL (
     qpat_assum `bodyFullTargetDefs$target_place_sim_full _ _ _ _ _ _`
       (mp_tac o REWRITE_RULE [bodyFullTargetDefsTheory.target_place_sim_full_def]) >>
@@ -8242,6 +8266,16 @@ Proof
     qpat_assum `eval_target_place cx bt (src with gas_obs := _) = (INL place,mid)` (fn target =>
       qpat_assum `write_place cx place vi mid = (INL (),fin)` (fn write =>
         simp[NoAsms,cj 56 vyperInterpreterTheory.evaluate_def,bind_def,target,write]))) >>>
+  HEADGOAL (sg `body_const_cells_agree [(NONE,tops)] cx env fin`) >>>
+  HEADGOAL (
+    irule body_const_cells_agree_assign_tuple >>
+    qexistsl [`BaseTarget bt`, `INL ()`,
+      `src with gas_obs := gas_explicit target_marks u.vs_gas_readings`, `vi`] >>
+    rpt conj_tac >>
+    FIRST [first_assum ACCEPT_TAC,
+      simp[NoAsms, body_const_cells_agree_state_updates] >> first_assum ACCEPT_TAC,
+      qpat_assum `well_typed_atarget env (BaseTarget bt) _`
+        (ACCEPT_TAC o MATCH_MP constSubstCorrectTheory.well_typed_atarget_writable)]) >>>
   HEADGOAL (sg `body_tuple_targets_full_ok cx todo vs_tail`) >>>
   HEADGOAL (
     qpat_assum `(?(s:evaluation_state) x t.
@@ -8568,6 +8602,16 @@ Proof
     qpat_assum `eval_target_place cx bt (src with gas_obs := _) = (INL place,mid)` (fn target =>
       qpat_assum `write_place cx place vi mid = (INL (),fin)` (fn write =>
         simp[NoAsms,cj 56 vyperInterpreterTheory.evaluate_def,bind_def,target,write]))) >>>
+  HEADGOAL (sg `body_const_cells_agree [(NONE,tops)] cx env fin`) >>>
+  HEADGOAL (
+    irule body_const_cells_agree_assign_tuple >>
+    qexistsl [`BaseTarget bt`, `INL ()`,
+      `src with gas_obs := gas_explicit target_marks u.vs_gas_readings`, `vi`] >>
+    rpt conj_tac >>
+    FIRST [first_assum ACCEPT_TAC,
+      simp[NoAsms, body_const_cells_agree_state_updates] >> first_assum ACCEPT_TAC,
+      qpat_assum `well_typed_atarget env (BaseTarget bt) _`
+        (ACCEPT_TAC o MATCH_MP constSubstCorrectTheory.well_typed_atarget_writable)]) >>>
   HEADGOAL (sg `body_tuple_targets_full_ok cx todo vs_tail`) >>>
   HEADGOAL (
     qpat_assum `(?(s:evaluation_state) x t.
@@ -10916,6 +10960,21 @@ Proof
   simp[allocLimitsTheory.tuple_assign_alloc_ok_def] >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
+Theorem tuple_assign_prefix_preserves_const_cells[local]:
+  body_const_cells_agree mods cx env st /\ EVERY (writable_atarget env) gs /\
+  assign_tuple_target_list cx gs vs st = (res,st') ==>
+  body_const_cells_agree mods cx env st'
+Proof
+  rw[body_const_cells_agree_def] >>
+  qexistsl [`roots`, `art`, `imms`, `A`] >> simp[] >>
+  irule constSubstCorrectTheory.protected_cell_frame_cells_agree >>
+  qexists_tac `st` >> simp[] >>
+  rpt strip_tac >>
+  qpat_assum `const_subst_context _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [constSubstCorrectTheory.const_subst_context_def]) >>
+  metis_tac[cj 10 constSubstCorrectTheory.checked_protected_cell_frame_mutual]
+QED
+
 Theorem body_assign_tuple_widened_full:
   !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
@@ -10928,6 +10987,7 @@ Theorem body_assign_tuple_widened_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget gs) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -12189,7 +12249,31 @@ Proof
   rpt gen_tac >> strip_tac >>
   irule gasExemptCertTheory.gas_exempt_cert_bind_unit >>
   qpat_assum `gas_marked_exec _ _ _ _ _ (INL _) _ (OK _)` (irule_at Any) >> simp[]) >>
-  (`target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+  (`body_const_cells_agree [(NONE,tops)] cx env src` by
+     (`body_const_cells_agree [(NONE,tops)] cx env ee` by
+        (irule body_const_cells_agree_expr_read >>
+         qpat_assum `bind (eval_expr cx e) (read_result cx) _ = (INL v',ee)`
+           (irule_at Any) >>
+         qpat_assum `expr_body_pre cenv cx env e es`
+           (assume_tac o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >> simp[]) >>
+      `EVERY (writable_atarget env) (TAKE i gs)` by
+        (qpat_assum `LIST_REL (\g ty. well_typed_atarget env g ty) gs dtys` mp_tac >>
+         simp_tac (srw_ss()) [NoAsms,LIST_REL_EL_EQN,EVERY_EL] >>
+         strip_tac >> qx_gen_tac `j` >> strip_tac >>
+         `j < LENGTH gs /\ j < i` by
+           (qpat_assum `j < LENGTH (TAKE i gs)` mp_tac >>
+            POP_ASSUM_LIST kall_tac >>
+            simp[listTheory.LENGTH_TAKE_EQ] >> rw[] >> decide_tac) >>
+         simp[listTheory.EL_TAKE] >>
+         qpat_assum `!j. j < LENGTH gs ==> _` (drule_then
+           (ACCEPT_TAC o MATCH_MP constSubstCorrectTheory.well_typed_atarget_writable))) >>
+      `body_const_cells_agree [(NONE,tops)] cx env (src with gas_obs := [])`
+        suffices_by simp[] >>
+      irule tuple_assign_prefix_preserves_const_cells >>
+      qpat_assum `!tail. assign_tuple_target_list cx (TAKE i gs) (TAKE i vs) _ = _`
+        (qspec_then `[]` (irule_at Any)) >>
+      simp[]) >>
+   `target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
           cenv cx env head src` by
         (irule body_target_place_sim_full >> simp[target_pre_def] >>
          qexists_tac `tops` >> simp[]) >>

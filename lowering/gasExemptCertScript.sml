@@ -181,6 +181,14 @@ Inductive gas_exempt_cert:
      gas_exempt_cert memory tops (ctx, func)
        (ignore_bind (eval_expr cx e) (return ()))
        (es, s0) marks (err, ee) (leaf, finish))
+
+[~source_cong:]
+  (!memory tops ctx func source source' es s0 marks err ee leaf finish.
+     gas_exempt_cert memory tops (ctx, func) source (es, s0)
+       marks (err, ee) (leaf, finish) /\
+     (!gs. source' (es with gas_obs := gs) = source (es with gas_obs := gs)) ==>
+     gas_exempt_cert memory tops (ctx, func) source' (es, s0)
+       marks (err, ee) (leaf, finish))
 End
 
 Theorem gas_exempt_cert_forget_memory:
@@ -267,7 +275,9 @@ Proof
    (rpt gen_tac >> rpt strip_tac >>
     Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
     metis_tac[gas_exempt_cert_unforce_result, gas_exempt_origin_from_mem,
-              gas_marked_exec_from_mem])]
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+    irule gas_exempt_cert_source_cong >> qexists_tac `source` >> simp[])]
 QED
 
 
@@ -385,8 +395,9 @@ Proof
   >- (rpt gen_tac >> simp[] >> strip_tac >>
       drule gas_invoke_entry_readings >> strip_tac >>
       conj_tac >- gvs[] >> metis_tac[gas_focus_path_rules])
-  >> rpt gen_tac >> simp[] >> strip_tac >>
-     gen_tac >> irule gas_source_unforce_result >> metis_tac[]
+  >- (rpt gen_tac >> simp[] >> strip_tac >>
+      gen_tac >> irule gas_source_unforce_result >> metis_tac[]) >>
+  rpt gen_tac >> simp[] >> strip_tac >> simp[]
   end
 QED
 
@@ -439,5 +450,6 @@ Proof
   >- (irule gas_exempt_cert_handler >> qexists `mid` >> simp[])
   >- (irule gas_exempt_cert_get_scopes >> simp[])
   >- metis_tac[gas_exempt_cert_invoke]
-  >> metis_tac[gas_exempt_cert_unforce_result]
+  >- metis_tac[gas_exempt_cert_unforce_result] >>
+  irule gas_exempt_cert_source_cong >> qexists_tac `source` >> simp[]
 QED

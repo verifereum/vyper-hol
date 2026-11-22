@@ -512,6 +512,7 @@ Theorem structlit_fields_bundled_full[local]:
     compile_struct_lit compile_expr ce (StructT nsid)
       (MAP (I ## gas_shadow_expr) fs) (Var root) off shadow_si = (out,shadow_sb) /\
     expr_sim_full_code (ctx,shadow_ctx,func,shadow_func) (si,sb,shadow_si,shadow_sb) /\
+    body_const_cells_agree [(NONE,cx_tops cx)] cx env es /\
     body_inv (cx_tops cx) ctx ce cx /\
     shadow_body_inv (cx_tops cx) ctx shadow_ctx /\
     body_exprs_full_ok cx (MAP SND fs) /\
@@ -1276,6 +1277,14 @@ Proof
        qpat_assum `!fn inst s. frag_reachable ctx func t fn inst s ==> _` (fn safe =>
          ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
            (LIST_CONJ [path,no_phi,safe])))))) >>
+  `body_const_cells_agree [(NONE,cx_tops cx)] cx env mid` by
+    (`well_typed_expr env e` by
+       qpat_assum `expr_body_pre _ cx env e _`
+         (ACCEPT_TAC o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     qpat_assum `!tail. eval_expr cx e _ = _`
+       (qspec_then `mid.gas_obs` (assume_tac o SIMP_RULE (srw_ss()) [])) >>
+     irule body_const_cells_agree_expr >>
+     goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >> simp[]) >>
   qpat_assum `!tys tvs' es' si' sb' shadow_si' shadow_sb' s0' G0' tn0' cells' off' out'. _`
     (fn ih => qpat_assum `compile_struct_lit compile_expr ce (StructT nsid) fs (Var root) _ ss = _`
       (mp_then Any mp_tac ih)) >>
@@ -1415,6 +1424,7 @@ Theorem structlit_allocated_fields_bundled_full[local]:
   compile_struct_lit compile_expr ce (StructT nsid)
     (MAP (I ## gas_shadow_expr) fs) (Var root) 0 shadow_sm = (out,shadow_sb) /\
   expr_sim_full_code (ctx,shadow_ctx,func,shadow_func) (sm,sb,shadow_sm,shadow_sb) /\
+  body_const_cells_agree [(NONE,cx_tops cx)] cx env es /\
   body_inv (cx_tops cx) ctx ce cx /\
   shadow_body_inv (cx_tops cx) ctx shadow_ctx /\ body_exprs_full_ok cx (MAP SND fs) /\
   (?Hbase. stmt_state_rel Hbase ctx func ce cx es s0) /\
@@ -1562,6 +1572,7 @@ Theorem structlit_vv_sim_full[local]:
     body_exprs_full_ok cx (MAP SND kes) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (StructLit v7 (src_id_opt,id) kes) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (StructLit v7 (src_id_opt,id) kes) es

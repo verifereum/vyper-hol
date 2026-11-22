@@ -318,7 +318,7 @@ Proof
 QED
 
 
-Theorem type_stmts_static_maps_transfer[local]:
+Theorem type_stmts_static_maps_transfer:
   type_stmts env1 ret body = SOME env_after /\
   static_maps_transfer_env env1 env2 ==>
   ?env_after2. type_stmts env2 ret body = SOME env_after2
@@ -328,6 +328,35 @@ Proof
   disch_then (qspec_then `env2` mp_tac) >>
   simp[] >>
   metis_tac[]
+QED
+
+Theorem function_entry_env_static_maps_transfer:
+  check_contract cx.in_deploy cx.layouts cx.txn.target mods = SOME art /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\
+  env_context_consistent env cx /\
+  env.fn_sigs = art.cta_fn_sigs /\
+  env.bare_globals = art.cta_bare_globals /\
+  env.bare_global_assignable = art.cta_bare_global_assignable ==>
+  static_maps_transfer_env (function_entry_env art mods src vis args)
+    (function_entry_env art mods src vis args with
+      <|toplevel_vtypes := env.toplevel_vtypes; flag_members := env.flag_members|>)
+Proof
+  strip_tac >>
+  qpat_assum `env_context_consistent env cx`
+    (strip_assume_tac o REWRITE_RULE [env_context_consistent_def]) >>
+  simp[static_maps_transfer_env_def, function_entry_env_def, artifact_env_def,
+       FOLDL_extend_local_args_static] >>
+  rpt conj_tac >> rpt strip_tac
+  >- (irule artifact_toplevel_vtypes_lookup_transfer_context >>
+      qexistsl_tac [`args`, `art`, `cx`, `src`, `mods`, `vis`] >>
+      simp[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static])
+  >- (PairCases_on `k` >>
+      drule_all vyperTypeContractStaticMapsTheory.check_contract_bare_globals_consistent_checked >>
+      disch_then (qspec_then `cx.layouts` strip_assume_tac) >>
+      first_assum ACCEPT_TAC)
+  >> irule artifact_flag_members_lookup_transfer_context >>
+  qexistsl_tac [`args`, `art`, `cx`, `src`, `mods`, `vis`] >>
+  simp[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static]
 QED
 
 Theorem FOLDL_extend_local_args_empty_locals[local]:

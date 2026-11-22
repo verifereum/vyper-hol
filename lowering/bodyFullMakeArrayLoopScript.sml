@@ -1,7 +1,7 @@
 (* Full-H composition of the MakeArray store loop. *)
 Theory bodyFullMakeArrayLoop
 Ancestors exprSimDefs[qualified,ignore_grammar]
-  bodyFullMakeArrayStore exprSimAggregateLoops exprSimAggregateSource
+  bodyFullPreds bodyFullMakeArrayStore exprSimAggregateLoops exprSimAggregateSource
   exprSimWordArgs gasOutcomeFullCompose exprSimSource exprLowering compileEnv
   valueEncoding gasShadowCompileHelpers gasShadowState gasShadow
   gasShadowCompileStmtHelpers gasShadowCompileContext gasShadowCompileConvert
@@ -27,6 +27,7 @@ Theorem make_array_loop_full:
            not_fresh_at csbase x) /\
     (!H. valid_horizon cx st0 H ebase.storage_trace ==>
          stmt_state_rel H ctx func cenv cx ebase sbase) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     body_exprs_full_ok cx args /\
     (!e ee. MEM e args /\ expr_sim_inv cenv cx env ee ==>
             expr_body_pre cenv cx env e ee) /\
@@ -277,6 +278,13 @@ Resume make_array_loop_full[continuation]:
         (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ [])` by simp[] >>
      drule_at (Pat `bind _ _ _ = _`)
        (SIMP_RULE (srw_ss() ++ ETA_ss) [] expr_body_pre_eval) >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx h) (read_result cx) _ = _`
+       (qspec_then `[]` (irule_at Any)) >>
+     imp_res_tac exprBodyPrePropsTheory.expr_body_pre_static_facts >> simp[]) >>
   `body_exprs_full_ok cx args` by
     (qpat_assum `!tail. bind (eval_expr cx h) (read_result cx) _ = _`
        (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [])) >>

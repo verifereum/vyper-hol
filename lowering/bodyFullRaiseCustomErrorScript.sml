@@ -54,6 +54,7 @@ Theorem compile_raise_custom_frag_full:
     supported_stmt tops bindings (Raise (RaiseCustomError err)) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Raise (RaiseCustomError err)) ==> occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Raise (RaiseCustomError err)) = SOME env' /\

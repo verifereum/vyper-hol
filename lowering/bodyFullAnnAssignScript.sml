@@ -72,6 +72,7 @@ Theorem annassign_word_full_source[local]:
   supported_stmt tops bindings (AnnAssign id typ e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
     (AnnAssign id typ e) ==> occurs_abi_decode_target target tops) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_sim_inv cenv cx env es /\
   type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
   stmt_exprs_ok cenv (AnnAssign id typ e) /\
@@ -118,6 +119,7 @@ Theorem body_annassign_word_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -196,6 +198,7 @@ Theorem body_annassign_memory_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -276,6 +279,7 @@ Theorem body_annassign_widened_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -345,6 +349,7 @@ Theorem body_annassign_other_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\

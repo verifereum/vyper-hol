@@ -70,6 +70,7 @@ Theorem raw_log_expr_sim_full:
     (compile_multi_exprs compile_expr ce (MAP gas_shadow_expr xs))) /\
   body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Call ann RawLog args dflt) es ==>
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Call ann RawLog args dflt) es
@@ -207,6 +208,17 @@ Resume raw_log_expr_sim_full[continuation]:
      first_x_assum (qspec_then `gas_explicit marks s0.vs_gas_readings ++ gs` mp_tac) >>
      qpat_assum `!tail. eval_exprs cx topics _ = _` (qspec_then `gs` assume_tac) >>
      fs[Abbr `tail_source`, bind_def] >> metis_tac[]) >>
+  `well_typed_exprs env topics` by
+    (qpat_assum `expr_body_pre cenv cx env (Call _ RawLog _ _) es`
+       (mp_tac o cj 2 o REWRITE_RULE [expr_body_pre_def]) >>
+     simp[Once well_typed_expr_def] >>
+     strip_tac >> fs[well_typed_expr_def, well_typed_builtin_app_def]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[body_const_cells_agree_state_updates] >>
+     irule body_const_cells_agree_exprs >>
+     qpat_assum `!tail. eval_exprs cx topics _ = _` (qspec_then `[]` (irule_at Any)) >>
+     simp[body_const_cells_agree_state_updates]) >>
   `expr_sim_inv cenv cx env mid` by fs[expr_body_pre_def] >>
   `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
     (qpat_assum `!tail. eval_exprs cx topics _ = _`

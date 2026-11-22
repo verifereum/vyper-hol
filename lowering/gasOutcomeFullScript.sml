@@ -60,6 +60,29 @@ Proof
   rw[gas_outcome_full_def] >> qexists_tac `marks` >> metis_tac[]
 QED
 
+Theorem gas_outcome_full_source_cong:
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+    (es, s, G, tn) Q R /\
+  (!gs. source' (es with gas_obs := gs) = source (es with gas_obs := gs)) ==>
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source'
+    (es, s, G, tn) Q R
+Proof
+  rw[gas_outcome_full_def, gas_bad_storage_at_def] >>
+  qexists_tac `marks`
+  >- (disj1_tac >> simp[] >>
+      qexistsl_tac [`H`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`, `finish'`] >>
+      simp[])
+  >- (disj2_tac >> disj1_tac >>
+      qexistsl_tac [`res`, `ee`, `r`, `G'`, `tn'`] >> simp[]) >>
+  disj2_tac >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`, `finish'`] >>
+  conj_tac
+  >- (irule gas_exempt_cert_source_cong >>
+      qexists_tac `ignore_bind source (return ())` >>
+      simp[ignore_bind_def, bind_def]) >>
+  qexists_tac `H` >> simp[]
+QED
+
 (* With no step, the focus stops where it starts. *)
 Theorem gas_origin_ptr_focus_nil:
   ~s.vs_halted ==>

@@ -12,6 +12,7 @@ Ancestors
 
 Theorem raw_call_forced_args_full:
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
   body_exprs_full_ok cx (a::d::kws) /\
   lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
@@ -48,6 +49,7 @@ Theorem raw_call_forced_args_full:
     bind (eval_expr cx d) (read_result cx) (esA with gas_obs := gsD) =
       (INL (BytesV bs),esD) /\
     esA.gas_obs = [] /\ esD.gas_obs = [] /\
+    body_const_cells_agree [(NONE,tops)] cx env esD /\
     body_exprs_full_ok cx kws /\ expr_sim_inv cenv cx env esD /\
     storage_trace_domain cx st0 esD.storage_trace /\
     (!fn inst s. frag_reachable ctx func tD fn inst s ==> dalloca_no_wrap inst s) /\
@@ -158,6 +160,10 @@ Proof
   qpat_assum `esA with gas_obs := [] = esA` (fn update =>
     qpat_assum `!tail. bind (eval_expr cx a) _ _ = _`
       (qspec_then `[]` (assume_tac o REWRITE_RULE [APPEND_NIL,update]))) >>
+  `body_const_cells_agree [(NONE,tops)] cx env esA` by
+    (`well_typed_expr env a` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+     irule body_const_cells_agree_expr_read >>
+     goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >> simp[]) >>
   `expr_sim_inv cenv cx env esA` by
     (drule_at (Pos last) (REWRITE_RULE [ETA_THM] expr_body_pre_eval) >>
      disch_then (qspec_then `cenv` mp_tac) >> simp[]) >>
@@ -242,6 +248,10 @@ Proof
   qpat_assum `esD with gas_obs := [] = esD` (fn update =>
     qpat_assum `!tail. bind (eval_expr cx d) _ _ = _`
       (qspec_then `[]` (assume_tac o REWRITE_RULE [APPEND_NIL,update]))) >>
+  `body_const_cells_agree [(NONE,tops)] cx env esD` by
+    (`well_typed_expr env d` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+     irule body_const_cells_agree_expr_read >>
+     goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >> simp[]) >>
   `expr_sim_inv cenv cx env esD /\ expr_result_typed env d (Value dv)` by
     (drule_at (Pos last) (REWRITE_RULE [ETA_THM] expr_body_pre_eval) >>
      disch_then (qspec_then `cenv` mp_tac) >> simp[]) >>

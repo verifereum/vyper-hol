@@ -33,6 +33,7 @@ Theorem concat_args_sim_full:
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     EVERY (\e. is_bytestring_type (expr_type e) \/
                  ?m. expr_type e = BaseT (BytesT (Fixed m))) args /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     (!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
        expr_body_pre cenv cx env e st) /\
@@ -276,6 +277,15 @@ Resume concat_args_sim_full[continue]:
   `expr_body_pre cenv cx env e
       (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by
     simp[exprSimSourceTheory.expr_body_pre_gas_obs] >>
+  `body_const_cells_agree [(NONE,tops)] cx env ee` by
+    (`well_typed_expr env e` by
+       qpat_assum `expr_body_pre _ cx env e _`
+         (ACCEPT_TAC o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     `body_const_cells_agree [(NONE,tops)] cx env (ee with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `bind (eval_expr cx e) _ _ = (_, ee with gas_obs := [])`
+       (irule_at Any) >> simp[]) >>
   drule_all concat_head_typed >>
   disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
   rename1 `evaluate_type (get_tenv cx) (expr_type e) = SOME tv` >>

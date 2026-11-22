@@ -25,6 +25,7 @@ Theorem calldata_slice_vv_sim_full:
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (CalldataSlice n) args) es
@@ -474,6 +475,7 @@ Theorem calldata_slice_expr_sim_full:
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (CalldataSlice n) args) es
@@ -481,9 +483,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (CalldataSlice n) args) es` by
-    (irule calldata_slice_vv_sim_full >> simp[] >> conj_tac
-     >- (qexists_tac `tops` >> simp[]) >>
-     qexists_tac `env` >> simp[]) >>
+    (irule calldata_slice_vv_sim_full >> simp[] >>
+     qexistsl_tac [`env`, `tops`] >> simp[]) >>
   irule bodyFullOfVVTheory.expr_sim_full_of_vv >> simp[] >>
   conj_tac
   >- (rpt strip_tac >>

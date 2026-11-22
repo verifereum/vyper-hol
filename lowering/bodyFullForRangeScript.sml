@@ -1963,6 +1963,7 @@ Theorem range_full_nil:
   Inv = (\H rs ee G tn s. ?k.
     k + LENGTH rs = N /\
     rs = GENLIST (\j. Value (IntV (n1 + &(k+j)))) (LENGTH rs) /\
+    body_const_cells_agree [(NONE,tops)] cx env ee /\
     expr_sim_inv cenv cx env ee /\ lookup_scopes id ee.scopes = NONE /\
     s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
     stmt_state_rel H ctx func cenv cx ee s /\
@@ -2527,6 +2528,7 @@ Theorem range_full_body_entry:
         body_for_full_ok cx tyv id body
           (GENLIST (\j. Value (IntV (n1 + &j))) N) /\ k + LENGTH (a::rs) = N /\
         a::rs = GENLIST (\j. Value (IntV (n1 + &(k + j)))) (LENGTH (a::rs)) /\
+        body_const_cells_agree [(NONE,tops)] cx env es /\
         expr_sim_inv cenv cx env es /\ lookup_scopes id es.scopes = NONE /\
         storage_trace_domain cx st0 es.storage_trace /\
         s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
@@ -4588,7 +4590,8 @@ Theorem range_full_round:
          k + LENGTH (a::rs) = N /\
          a::rs =
          GENLIST (\(j :num). Value (IntV (n1 + ((&(k + j)) :int)) :value))
-           (LENGTH (a::rs)) /\ expr_sim_inv cenv cx env es /\
+           (LENGTH (a::rs)) /\ body_const_cells_agree [(NONE,tops)] cx env es /\
+         expr_sim_inv cenv cx env es /\
          lookup_scopes id es.scopes = (NONE :scope_entry option) /\
          storage_trace_domain cx st0 es.storage_trace /\
          s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = (0 :num) /\
@@ -5327,7 +5330,8 @@ Theorem range_full_round:
                rs =
                GENLIST
                  (\(j :num). Value (IntV (n1 + ((&(k + j)) :int)) :value))
-                 (LENGTH rs) /\ expr_sim_inv cenv cx env ee /\
+                 (LENGTH rs) /\ body_const_cells_agree [(NONE,tops)] cx env ee /\
+               expr_sim_inv cenv cx env ee /\
                lookup_scopes id ee.scopes = (NONE :scope_entry option) /\
                s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = (0 :num) /\
                ~s.vs_halted /\ stmt_state_rel H ctx func cenv cx ee s /\
@@ -5596,6 +5600,9 @@ Proof
               SF CONJ_ss] >> strip_tac >>
          qpat_assum `SOME _ = lookup_scopes nm es.scopes` (SUBST1_TAC o SYM) >> simp[]) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `body_const_cells_agree [(NONE,tops)] cx env ep` by
+    (irule (iffLR body_const_cells_agree_immutables) >>
+     qexists_tac `es` >> simp[Abbr `ep`]) >>
   `stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cx (InLoop exit_lbl incr_lbl) RetQ bc
      (stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty body)
@@ -5606,10 +5613,8 @@ Proof
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac
-     >- (qexistsl_tac [`bindings`, `tops`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     conj_tac
-     >- (qexistsl_tac [`extend_local env id typ F`, `body_env'`] >>
-         rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     >- (qexistsl_tac [`bindings`, `extend_local env id typ F`, `body_env'`, `tops`] >>
+         simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
      first_assum ACCEPT_TAC) >>
   qpat_x_assum `stmt_frag_full _ _ _ _ _ _ _ _ _`
     (qspecl_then [`st0`, `sb0`, `sb1`, `shadow_sb0`, `shadow_sb1`,
@@ -6103,6 +6108,14 @@ Resume range_full_round[backedge]:
     (FEMPTY |+ (id, <|assignable := F; type := tyv;
                        value := IntV (n1 + &k); popped := []|>)) :: esH.scopes` by
     simp[NoAsms, Abbr `epH`, Abbr `ep`, Abbr `esH`, evaluation_state_component_equality] >>
+  `body_const_cells_agree [(NONE,tops)] cx env ee` by
+    (`body_const_cells_agree [(NONE,tops)] cx (extend_local env id typ F) epH` by
+       simp[Abbr `epH`] >>
+     `body_const_cells_agree [(NONE,tops)] cx (extend_local env id typ F) prepop` by
+       (irule body_const_cells_agree_stmts >>
+        qpat_assum `eval_stmts cx body epH = (rawH,prepop)` (irule_at Any) >>
+        qexists_tac `ret_ty` >> simp[]) >>
+     fs[Abbr `prepop`]) >>
   `expr_sim_inv cenv cx env ee` by
     (qpat_assum `prepop with scopes := ee.scopes = ee` (SUBST1_TAC o SYM) >>
      irule bodyExprPreFactsTheory.expr_sim_inv_for_pop >>
@@ -6457,6 +6470,7 @@ Theorem compile_for_range_frag_full:
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
       (For id typ (Range e1 e2) n body) ==>
       occurs_abi_decode_target target tops) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
   locals_alloc_ok cenv env /\
   type_stmt env ret_ty (For id typ (Range e1 e2) n body) = SOME env' /\
@@ -6751,6 +6765,14 @@ Resume compile_for_range_frag_full[first_success]:
      disch_then strip_assume_tac >> first_assum ACCEPT_TAC) >>
   qpat_assum `!tail. bind (eval_expr cx e1) (read_result cx) _ = (INL v1,mid1 with gas_obs := tail)`
     (qspec_then `[]` (mk_asm "read1")) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid1` by
+    (`well_typed_expr env e1` by
+       qpat_assum `expr_body_pre cenv cx env e1 es`
+         (ACCEPT_TAC o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     `body_const_cells_agree [(NONE,tops)] cx env (mid1 with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     asm "read1" (irule_at Any) >> simp[]) >>
   `expr_sim_inv cenv cx env mid1 /\ expr_result_typed env e1 (Value v1)` by
     (asm "read1" (mp_then Any mp_tac
        (SRULE [SF ETA_ss] exprSimSourceTheory.expr_body_pre_eval)) >>
@@ -6855,6 +6877,14 @@ Resume compile_for_range_frag_full[second_success]:
   map_every qx_gen_tac [`marks2`,`v2`,`mid2`,`G2`,`tn2`,`t2`] >> strip_tac >>
   qpat_assum `!tail. bind (eval_expr cx e2) (read_result cx) _ = (INL v2,mid2 with gas_obs := tail)`
     (qspec_then `[]` (mk_asm "read2")) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid2` by
+    (`well_typed_expr env e2` by
+       qpat_assum `expr_body_pre cenv cx env e2 mid1`
+         (ACCEPT_TAC o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     `body_const_cells_agree [(NONE,tops)] cx env (mid2 with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     asm "read2" (irule_at Any) >> simp[]) >>
   `expr_sim_inv cenv cx env mid2 /\ expr_result_typed env e2 (Value v2)` by
     (asm "read2" (mp_then Any mp_tac
        (SRULE [SF ETA_ss] exprSimSourceTheory.expr_body_pre_eval)) >>
@@ -7005,7 +7035,7 @@ Resume compile_for_range_frag_full[second_success]:
 QED
 
 (* Apply the selected initialization witness and recover its full iterator list. *)
-fun range_join_init_tac replay scopes =
+fun range_join_init_tac replay scopes immutables =
   irule gas_outcome_full_bind_all_path >>
   conj_tac >- simp[cj 4 evaluate_storage_trace_frame] >>
   conj_tac >-
@@ -7035,17 +7065,25 @@ fun range_join_init_tac replay scopes =
                   (?rs. res = INL rs /\ _) /\ _`
        (drule_then strip_assume_tac) >> qexists `rs` >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `rs = GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))` by
-    (qpat_x_assum replay (qspec_then `[]` mp_tac) >>
-     simp[Abbr `init`,get_range_limits_def,lift_sum_def,bind_def,
-          ignore_bind_def,check_def,assert_def,
-          vyperValueTheory.compatible_bound_def,return_def]) >>
+  `!st. init st = (INL (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))),st)` by
+    (simp[Abbr `init`, get_range_limits_def, lift_sum_def, bind_def,
+          ignore_bind_def, check_def, assert_def,
+          vyperValueTheory.compatible_bound_def, return_def]) >>
+  qpat_assum replay
+    (qspec_then `[]` (fn step =>
+      qpat_assum `!st. init st = _` (fn init =>
+        qpat_assum `res = INL rs` (fn res =>
+          strip_assume_tac
+            (PURE_REWRITE_RULE [init, res, pairTheory.PAIR_EQ, sumTheory.INL_11]
+               step))))) >>
+  sg `rs = GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))` >-
+    (FIRST [first_assum ACCEPT_TAC, irule EQ_SYM >> first_assum ACCEPT_TAC]) >>
   sg scopes >-
-    (qpat_assum replay (qspec_then `[]`
-       (mp_tac o Q.AP_TERM `(\p. (SND p : evaluation_state).scopes)`)) >>
-     simp[Abbr `init`,get_range_limits_def,lift_sum_def,bind_def,
-          ignore_bind_def,check_def,assert_def,
-          vyperValueTheory.compatible_bound_def,return_def]) >>
+    (qpat_assum `_ with gas_obs := _ = mid with gas_obs := []`
+       (mp_tac o Q.AP_TERM `(\s:evaluation_state. s.scopes)`) >> simp[NoAsms]) >>
+  sg immutables >-
+    (qpat_assum `_ with gas_obs := _ = mid with gas_obs := []`
+       (mp_tac o Q.AP_TERM `(\s:evaluation_state. s.immutables)`) >> simp[NoAsms]) >>
   disj1_tac >> qexists `rs` >> conj_tac >- first_assum ACCEPT_TAC;
 
 val range_init_admissible_tac =
@@ -7115,9 +7153,11 @@ Resume compile_for_range_frag_full[checked_init]:
     (Q.INST [`d` |-> `d`, `cenv` |-> `cenv`, `sa` |-> `st`]
        bodyFullSharedTheory.gas_outcome_full_return_buf_allocas_from) >>
   range_join_init_tac
-    `!tail. _ (mid2 with gas_obs := gas_explicit _ _ ++ tail) =
+    `!tail. init (mid2 with gas_obs := gas_explicit _ _ ++ tail) =
        (res,mid with gas_obs := tail)`
-    `mid.scopes = mid2.scopes` >>
+    `mid.scopes = mid2.scopes` `mid.immutables = mid2.immutables` >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (irule (iffLR body_const_cells_agree_immutables) >> qexists_tac `mid2` >> simp[]) >>
   `MAP FDOM mid.scopes = MAP FDOM es.scopes` by simp[] >>
   `gas_admissible (eval_for cx tyv id body rs) (stmt_res_ok lctx) mid` by
     (`eval_stmt cx (For id typ (Range e1 e2) n body) =
@@ -7161,10 +7201,15 @@ Resume compile_for_range_frag_full[checked_init]:
      qexistsl [`es with gas_obs := gas_explicit marks1 s0.vs_gas_readings ++ gas_explicit marks2 t1.vs_gas_readings`,
                `mid2 with gas_obs := []`] >>
      qpat_assum `!tail. bind (eval_expr cx e1) (read_result cx) _ = _`
-       (qspec_then `gas_explicit marks2 t1.vs_gas_readings` assume_tac) >>
-     asm "read2" (assume_tac o REWRITE_RULE [APPEND_NIL]) >>
-     simp[Once bind_def] >> simp[Once bind_def] >>
-     simp[Once bind_def, get_range_limits_def, lift_sum_def, return_def])) >>
+       (qspec_then `gas_explicit marks2 t1.vs_gas_readings` (mk_asm "range_read1")) >>
+     asm "range_read1" (fn th => simp[NoAsms, Once bind_def, th]) >>
+     asm "read2" (fn th => simp[NoAsms, Once bind_def, REWRITE_RULE [APPEND_NIL] th]) >>
+     qpat_assum `v1 = IntV n1` (fn v1 =>
+       qpat_assum `v2 = IntV n2` (fn v2 =>
+         qpat_assum `n1 <= n2` (fn bounds =>
+           qpat_assum `rs = GENLIST _ _` (fn rs =>
+             simp[NoAsms, v1, v2, bounds, rs, bind_def, get_range_limits_def,
+                  lift_sum_def, return_def])))))) >>
   suspend "range_rounds"
 QED
 
@@ -7173,21 +7218,28 @@ fun defer_exists_conv tm =
   ((SWAP_EXISTS_CONV THENC QUANT_CONV defer_exists_conv) ORELSEC ALL_CONV) tm;
 
 (* Both initializer cases continue with the same selected compiler package. *)
-val range_join_rounds_tac =
+val range_join_rounds_source_tac =
   `lift_option_type (evaluate_type (get_tenv cx) typ) "For evaluate_type" es = (INL tyv,es)` by
-    simp[lift_option_type_def, return_def] >>
+    (qpat_assum `evaluate_type (get_tenv cx) typ = SOME tyv`
+       (fn ty => simp[NoAsms, ty, lift_option_type_def, return_def])) >>
   `check (compatible_bound (Dynamic n) (LENGTH rs)) "For too long" es = (INL (),es)` by
-    simp[LENGTH_GENLIST, vyperValueTheory.compatible_bound_def, check_def, assert_def, return_def] >>
+    (qpat_assum `rs = GENLIST _ _` (fn rs =>
+      qpat_assum `Num (n2 - n1) <= n` (fn length =>
+        simp[NoAsms, rs, length, LENGTH_GENLIST, vyperValueTheory.compatible_bound_def,
+             check_def, assert_def, return_def]))) >>
   `body_for_full_ok cx tyv id body rs` by
     (qpat_assum `!tenv s'' tyv t s'3' vs t' s'4' x t''. _ ==> body_for_full_ok _ _ _ _ _`
        irule >>
      conj_tac >- (qpat_assum `eval_iterator cx (Range e1 e2) _ = (INL rs,_)`
        (irule_at Any) >> simp[]) >>
      conj_tac >- (qexistsl [`es`,`es`,`()`] >> first_assum ACCEPT_TAC) >>
-     qexistsl [`es`,`es`,`get_tenv cx`] >> simp[]) >>
+     qexistsl [`es`,`es`,`get_tenv cx`] >> simp[]);
+
+val range_join_rounds_invariants_tac =
   qabbrev_tac `Inv = \H rs ee G tn s. ?k.
     k + LENGTH rs = Num (n2 - n1) /\
     rs = GENLIST (\j. Value (IntV (n1 + &(k+j)))) (LENGTH rs) /\
+    body_const_cells_agree [(NONE,tops)] cx env ee /\
     expr_sim_inv cenv cx env ee /\ lookup_scopes id ee.scopes = NONE /\
     s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
     stmt_state_rel H ctx func cenv cx ee s /\ storage_well_formed_on cx ee (FST H) /\
@@ -7228,7 +7280,9 @@ val range_join_rounds_tac =
     (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex : unit + exception) gt r) /\
     halt_exit H cx ee (INR ex : unit + exception) r /\
     (ctx_has_dalloca ctx ==> !s.
-      (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s)` >>
+      (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s)`;
+
+val range_join_rounds_post_tac =
   irule gas_outcome_full_post_mono >>
   qexistsl [`\H res ee G tn t. res = INL () /\ Done H ee G tn t`,
             `\H res ee gt r. ?ex. res = INR ex /\ R H ex ee gt r`] >>
@@ -7284,7 +7338,7 @@ val range_join_rounds_nil_tac =
      qexistsl [`Num (n2-n1)`,`ainst`,`body`,`body_lbl`,`n`,`cenv`,`cenv`,
                `cond_lbl`,`cv`,`d`,`dv`,`e1`,`e2`,`j1`,`env`,`es`,`ev`,`exit_lbl`,
                `id`,`j2`,`lctx`,`n1`,`n2`,`stmt_res_ok lctx`,`p`,`ret_ty`,`s0`,
-               `sa`,`sb`,`sb0`,`sz`,`tn0`,`typ`,`tyv`,`w`] >>
+               `sa`,`sb`,`sb0`,`sz`,`tn0`,`tops`,`typ`,`tyv`,`w`] >>
      (fn (asl, goal) =>
         let
           val (inv, body) = dest_exists goal
@@ -7307,7 +7361,9 @@ val range_join_rounds_entry_tac =
                 (?rs. _) /\ (!bw capacity. _ ==> allocas_from _ t)`
     (drule_then strip_assume_tac) >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
-    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+    (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+       qpat_assum `MEM func ctx.ctx_functions`
+         (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi o CONJ inv))) >>
   `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_no_wrap inst z` by
     (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
                   gas_origin_ptr_path _ _ _ (OK t,_,_)`
@@ -7425,9 +7481,11 @@ Resume compile_for_range_frag_full[literal]:
     (Q.INST [`d` |-> `d`, `cenv` |-> `cenv`, `sa` |-> `sa`]
        bodyFullSharedTheory.gas_outcome_full_return_buf_allocas) >>
   range_join_init_tac
-    `!tail. _ (es with gas_obs := gas_explicit _ _ ++ tail) =
+    `!tail. init (es with gas_obs := gas_explicit _ _ ++ tail) =
        (res,mid with gas_obs := tail)`
-    `mid.scopes = es.scopes` >>
+    `mid.scopes = es.scopes` `mid.immutables = es.immutables` >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (irule (iffLR body_const_cells_agree_immutables) >> qexists_tac `es` >> simp[]) >>
   `MAP FDOM mid.scopes = MAP FDOM es.scopes` by simp[] >>
   `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` by
     (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> stmt_state_rel _ _ _ _ _ es s0 /\ _`
@@ -7436,12 +7494,17 @@ Resume compile_for_range_frag_full[literal]:
   `gas_admissible (eval_for cx tyv id body rs) (stmt_res_ok lctx) mid` by
     range_init_admissible_tac >>
   `?start finish. eval_iterator cx (Range e1 e2) start = (INL rs,finish)` by
-    (qexistsl [`es`,`es`] >> simp[return_def]) >>
+    (qexistsl [`es`,`es`] >>
+     qpat_assum `eval_iterator cx (Range e1 e2) = _` (fn iter =>
+       qpat_assum `rs = GENLIST _ _` (fn rs =>
+         simp[NoAsms, iter, rs, return_def]))) >>
   suspend "literal_rounds"
 QED
 
 Resume compile_for_range_frag_full[literal_rounds]:
-  range_join_rounds_tac >>
+  range_join_rounds_source_tac >>
+  range_join_rounds_invariants_tac >>
+  range_join_rounds_post_tac >>
   range_join_rounds_cons_tac >>
   range_join_rounds_nil_tac >>
   range_join_rounds_entry_tac >>
@@ -7450,7 +7513,9 @@ Resume compile_for_range_frag_full[literal_rounds]:
 QED
 
 Resume compile_for_range_frag_full[range_rounds]:
-  range_join_rounds_tac >>
+  range_join_rounds_source_tac >>
+  range_join_rounds_invariants_tac >>
+  range_join_rounds_post_tac >>
   range_join_rounds_cons_tac >>
   range_join_rounds_nil_tac >>
   range_join_rounds_entry_tac >>

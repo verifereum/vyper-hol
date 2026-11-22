@@ -67,6 +67,7 @@ Theorem pow_mod256_sim_full_from_suffix:
     (builtin_args_length_ok PowMod256 (LENGTH args) ==> body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a PowMod256 args) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin a PowMod256 args) es /\
@@ -217,6 +218,12 @@ Proof
                  (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ mid.gas_obs)` by
                 simp[expr_body_pre_def] >>
               metis_tac[exprSimSourceTheory.expr_body_pre_eval]) >>
+           `body_const_cells_agree [(NONE,tops)] cx env mid` by
+             (qpat_assum `!tail. _ = (INL v,_)`
+                (qspec_then `mid.gas_obs` (assume_tac o SIMP_RULE (srw_ss()) [])) >>
+              `well_typed_expr env x0` by fs[expr_body_pre_def] >>
+              irule body_const_cells_agree_expr_read >>
+              goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >> simp[]) >>
            `expr_body_pre cenv cx env x0' mid` by
              (irule expr_body_pre_builtin_arg >>
               conj_tac >- first_assum ACCEPT_TAC >>
@@ -388,7 +395,8 @@ Proof
                  (qx_choose_then `tn2` strip_assume_tac))) >>
                `v = IntV (&w2n (val_to_w256 v)) /\
                 v' = IntV (&w2n (val_to_w256 v'))` by
-                 metis_tac[uint_value_word_rep, arithmeticTheory.LESS_EQ_REFL] >>
+                 (conj_tac >> irule uint_value_word_rep >>
+                  qexists_tac `256` >> simp[]) >>
                `builtin_result cx mid'.accounts (BaseT (UintT 256)) PowMod256
                   [BaseT (UintT 256);BaseT (UintT 256)] [v;v'] =
                 INL (IntV (&w2n (word_exp (val_to_w256 v) (val_to_w256 v'))))` by

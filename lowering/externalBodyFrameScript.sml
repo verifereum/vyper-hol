@@ -1,7 +1,8 @@
 (* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
 Theory externalBodyFrame
 Ancestors
-  entryDispatchProps constSubst constSubstStmtsPreserve supportedGetterProps externalRawReturnType externalReturnPackage externalEntryBound
+  entryDispatchProps constSubst constSubstCorrect constSubstStmts constSubstStmtsPreserve
+  bodyFullPreds gasContext supportedGetterProps externalRawReturnType externalReturnPackage externalEntryBound
   externalBodyWidths externalBodySupport memoryLocalRhsProps
   stmtSimProps stmtSimDefs exprSimDefs exprSimHypsDefs exprSimHyps
   loweringPosts
@@ -817,6 +818,171 @@ QED
    lock. expr_sim_inv's storage-variable clause (each storage variable has
    its declared module type and no hash-map info) follows from body_inv
    and the single-module fact via body_inv_storage_var_types. *)
+Theorem external_source_body_const_cells[local]:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+  check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
+  env = function_entry_env art [(NONE,tops)] NONE External args /\
+  es.immutables = am.immutables ==>
+  body_const_cells_agree [(NONE,tops)]
+    (initial_evaluation_context am.sources am.layouts tx NONE) env es
+Proof
+  strip_tac >>
+  Cases_on `classify_functions tops` >>
+  rename1 `classify_functions tops = (exts,tail)` >> PairCases_on `tail` >>
+  drule_all lower_vyper_runtime_unit_consts_guard >> strip_tac >>
+  drule source_typing_ok_consts_ready >> strip_tac >>
+  `ALOOKUP am.sources tx.target = SOME [(NONE,tops)]` by
+    fs[source_deployment_rel_def] >>
+  mp_tac (Q.INST
+    [`cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`,
+     `mods` |-> `[(NONE,tops)]`, `imms` |-> `account_immutables am tx.target`,
+     `artifact` |-> `art`, `A` |-> `A`,
+     `sc` |-> `[]`, `current_src` |-> `NONE`]
+    constSubstCorrectTheory.checked_module_consts_subst_context) >>
+  impl_tac >- gvs[initial_evaluation_context_def] >>
+  strip_tac >>
+  `cx_tops (initial_evaluation_context am.sources am.layouts tx NONE) = tops` by
+    simp[cx_tops_def, get_module_code_def, initial_evaluation_context_def,
+         ALOOKUP_def] >>
+  `frame_maps env art` by simp[] >>
+  `const_subst_context roots
+      (initial_evaluation_context am.sources am.layouts tx NONE) env
+      (module_consts_env tops []) [(NONE,tops)] art` by
+    (irule const_subst_context_static >> goal_assum (drule_at Any) >>
+     gvs[function_entry_env_def, artifact_env_def,
+         vyperTypeContractContextTheory.FOLDL_extend_local_args_static]) >>
+  `const_cells_agree roots es` by
+    fs[const_cells_agree_def, initial_state_def] >>
+  pure_once_rewrite_tac [body_const_cells_agree_def] >>
+  qexistsl_tac [`roots`, `art`, `account_immutables am tx.target`, `A`] >>
+  qpat_assum `cx_tops (initial_evaluation_context am.sources am.layouts tx NONE) = tops`
+    (fn th => pure_rewrite_tac [th]) >>
+  conj_tac
+  >- qpat_assum `check_contract F am.layouts tx.target [(NONE,tops)] = SOME art`
+       (fn th => simp[NoAsms, initial_evaluation_context_def, th]) >>
+  conj_tac
+  >- qpat_assum `ALOOKUP am.sources tx.target = SOME [(NONE,tops)]`
+       (fn th => simp[NoAsms, initial_evaluation_context_def, th]) >>
+  conj_tac >- simp[NoAsms] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem runtime_context_bare_globals[local]:
+  env_context_consistent env cx /\ env_context_consistent env' cx ==>
+  env.bare_globals = env'.bare_globals
+Proof
+  `!e1 e2 src id ty.
+     env_context_consistent e1 cx /\ env_context_consistent e2 cx /\
+     FLOOKUP e1.bare_globals (src,id) = SOME ty ==>
+     FLOOKUP e2.bare_globals (src,id) = SOME ty` by
+    (rpt gen_tac >> strip_tac >>
+     drule_at_then (Pat `FLOOKUP _ _ = SOME _`) drule
+       env_context_consistent_bare_global_find_NONE >>
+     disch_then (qx_choose_then `ts` strip_assume_tac) >>
+     drule is_bare_global_decl_cases >> strip_tac >>
+     imp_res_tac is_immutable_decl_MEM_Immutable_exists >>
+     fs[env_context_consistent_def, bare_globals_complete_def] >>
+     metis_tac[]) >>
+  simp[fmap_eq_flookup, FORALL_PROD] >>
+  rpt strip_tac >>
+  Cases_on `FLOOKUP env.bare_globals (p_1,p_2)` >>
+  Cases_on `FLOOKUP env'.bare_globals (p_1,p_2)` >>
+  metis_tac[optionTheory.SOME_11, optionTheory.NOT_NONE_SOME]
+QED
+
+Theorem runtime_context_fn_sigs[local]:
+  ~cx.in_deploy /\ env_context_consistent env cx /\ env_context_consistent env' cx ==>
+  env.fn_sigs = env'.fn_sigs
+Proof
+  strip_tac >>
+  `!e1 e2 src fn sg.
+      env_context_consistent e1 cx /\ env_context_consistent e2 cx /\
+      FLOOKUP e1.fn_sigs (src,fn) = SOME sg ==>
+      FLOOKUP e2.fn_sigs (src,fn) = SOME sg` by
+    (rpt gen_tac >> strip_tac >>
+     fs[env_context_consistent_def, fn_sigs_declared_complete_nondeploy,
+        fn_sigs_consistent_def, fn_sigs_live_def, fn_sigs_complete_def] >>
+     qpat_assum `!sid f signature. FLOOKUP e1.fn_sigs _ = _ ==> _`
+       (drule_then strip_assume_tac) >>
+     `context_function_live cx (src,fn)` by
+       (qpat_assum `!k signature. FLOOKUP e1.fn_sigs k = SOME signature ==> _`
+          (drule_then ACCEPT_TAC)) >>
+     rename1 `lookup_callable_function _ fn ts = SOME (fm,nr,params,dflts,sg.ret_ty,ss)` >>
+     qpat_assum `~cx.in_deploy` (fn runtime =>
+       qpat_assum `fn_sigs_declared_complete e2.fn_sigs cx`
+         (qspecl_then [`src`,`fn`,`ts`,`fm`,`nr`,`params`,`dflts`,
+                      `sg.ret_ty`,`ss`] mp_tac o
+          REWRITE_RULE [MATCH_MP fn_sigs_declared_complete_nondeploy runtime,
+                        fn_sigs_complete_def])) >>
+     simp[fn_sig_component_equality]) >>
+  simp[fmap_eq_flookup, FORALL_PROD] >>
+  rpt strip_tac >>
+  Cases_on `FLOOKUP env.fn_sigs (p_1,p_2)` >>
+  Cases_on `FLOOKUP env'.fn_sigs (p_1,p_2)` >>
+  metis_tac[optionTheory.SOME_11, optionTheory.NOT_NONE_SOME]
+QED
+
+Theorem external_source_body_const_cells_checked:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+  env_context_consistent env (initial_evaluation_context am.sources am.layouts tx NONE) /\
+  es.immutables = am.immutables ==>
+  body_const_cells_agree [(NONE,tops)]
+    (initial_evaluation_context am.sources am.layouts tx NONE) env es
+Proof
+  strip_tac >>
+  drule source_typing_ok_consts_ready >> strip_tac >>
+  `ALOOKUP am.sources tx.target = SOME [(NONE,tops)]` by
+    fs[source_deployment_rel_def] >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx NONE` >>
+  qabbrev_tac `canonical_env = artifact_env art [(NONE,tops)] NONE` >>
+  `~cx.in_deploy` by simp[Abbr `cx`, initial_evaluation_context_def] >>
+  `env_context_consistent canonical_env cx` by
+    (unabbrev_all_tac >> irule check_contract_env_context_consistent_initial_NONE >>
+     simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx canonical_env es` by
+    (unabbrev_all_tac >> irule external_source_body_const_cells >>
+     asm_rewrite_tac[] >> conj_tac
+     >- (qexistsl [`rpolicy`,`unit`] >> first_assum ACCEPT_TAC) >>
+     qexistsl [`[]`,`art`] >> simp[function_entry_env_def]) >>
+  `env.bare_globals = canonical_env.bare_globals` by
+    drule_all_then ACCEPT_TAC runtime_context_bare_globals >>
+  `env.fn_sigs = canonical_env.fn_sigs` by
+    drule_all_then ACCEPT_TAC runtime_context_fn_sigs >>
+  `env.bare_global_assignable = canonical_env.bare_global_assignable` by
+    fs[env_context_consistent_def, bare_global_assignable_complete_def] >>
+  `env.type_defs = get_tenv cx` by fs[env_context_consistent_def] >>
+  `!id ty. FLOOKUP env.bare_globals (NONE,id) = SOME ty ==>
+            FLOOKUP env.toplevel_vtypes (NONE,id) = SOME (Type ty)` by
+    (rpt strip_tac >>
+     drule_all_then strip_assume_tac env_context_consistent_bare_global_find_NONE >>
+     first_assum ACCEPT_TAC) >>
+  qpat_x_assum `body_const_cells_agree _ cx canonical_env es`
+    (strip_assume_tac o REWRITE_RULE [body_const_cells_agree_def]) >>
+  rewrite_tac [body_const_cells_agree_def] >>
+  qexistsl [`roots`,`art'`,`imms`,`A'`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (simp[ALOOKUP_def] >> NO_TAC)
+  >- fs[frame_maps_def] >>
+  qpat_x_assum `const_subst_context roots cx canonical_env _ _ art'`
+    (strip_assume_tac o REWRITE_RULE [const_subst_context_def]) >>
+  rewrite_tac [const_subst_context_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_assum `!a s n t e. MEM (a,s,n,t,e) roots ==> _`
+        (drule_then (strip_assume_tac o REWRITE_RULE [checked_frame_context_def])) >>
+      simp[checked_frame_context_def, frame_maps_def] >>
+      conj_tac >- (qexists_tac `mode` >> fs[]) >> fs[frame_maps_def]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!i e. ALOOKUP (module_consts_env _ []) i = SOME e ==> _`
+    (drule_then strip_assume_tac) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (simp[] >> NO_TAC) >>
+  TRY (qpat_assum `!id ty. FLOOKUP env.bare_globals (NONE,id) = SOME ty ==> _`
+         irule >> simp[] >> NO_TAC) >>
+  metis_tac[]
+QED
+
 Theorem external_source_body_frame_nr:
   !tops rpolicy unit am tx ret vs mut nr args dflts fbody gs es0 lbl cenv0
    pos_args min_cds is_payable nkey ut iv rt cenv.
@@ -848,6 +1014,8 @@ Theorem external_source_body_frame_nr:
       supported_stmts tops bindings (subst_consts_stmts (module_consts_env tops []) fbody) /\
       expr_sim_inv cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) env_t es0 /\
+      body_const_cells_agree [(NONE,tops)]
+        (initial_evaluation_context am.sources am.layouts tx NONE) env_t es0 /\
       ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
       type_stmts env_t ret (subst_consts_stmts (module_consts_env tops []) fbody) = SOME env' /\
       stmts_exprs_ok cenv (subst_consts_stmts (module_consts_env tops []) fbody) /\
@@ -870,7 +1038,6 @@ Proof
     (drule_all compiled_selected_external_body_typing >>
      metis_tac[optionTheory.IS_SOME_EXISTS]) >>
   pop_assum strip_assume_tac >>
-  qpat_x_assum `env_t = function_entry_env _ _ _ _ _` kall_tac >>
   `int_calls_stmts (subst_consts_stmts (module_consts_env tops []) fbody) =
      int_calls_stmts fbody` by
     (irule (INST_TYPE [alpha |-> ``:160 word``] checked_const_substitution_int_calls) >>
@@ -878,6 +1045,8 @@ Proof
        `am.layouts`, `F`, `[(NONE,tops)]`] >> simp[]) >>
   `machine_well_typed am` by gvs[source_typing_ok_def] >>
   drule_all external_entry_bound_source_frame >> strip_tac >>
+  drule_all external_source_body_const_cells >> strip_tac >>
+  qpat_x_assum `env_t = function_entry_env _ _ _ _ _` kall_tac >>
   drule_all external_selected_env_consistent >> strip_tac >>
   `outcomes_accounts_typed es0.outcomes /\ IS_SOME es0.outcomes` by
     (qpat_assum `outcome_suffix _ _`
@@ -1096,6 +1265,8 @@ Theorem external_source_body_frame:
       supported_stmts tops bindings (subst_consts_stmts (module_consts_env tops []) fbody) /\
       expr_sim_inv cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) env_t es0 /\
+      body_const_cells_agree [(NONE,tops)]
+        (initial_evaluation_context am.sources am.layouts tx NONE) env_t es0 /\
       ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
       type_stmts env_t ret (subst_consts_stmts (module_consts_env tops []) fbody) = SOME env' /\
       stmts_exprs_ok cenv (subst_consts_stmts (module_consts_env tops []) fbody) /\
@@ -1174,5 +1345,5 @@ Theorem external_body_frame:
         (initial_evaluation_context am.sources am.layouts tx NONE)
         (int_calls_stmts (subst_consts_stmts (module_consts_env tops []) fbody))
 Proof
-  rpt strip_tac >> drule_all external_source_body_frame >> simp[]
+  rpt strip_tac >> drule_all external_source_body_frame >> simp[] >> metis_tac[]
 QED

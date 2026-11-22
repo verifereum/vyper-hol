@@ -207,6 +207,7 @@ Theorem bop_in_literal_word_sim_full:
      body_exprs_full_ok cx elems) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env
       (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -330,6 +331,7 @@ Theorem bop_bytestring_eqne_sim_full:
     body_exprs_full_ok cx [e1; e2] /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
@@ -429,6 +431,15 @@ Proof
      simp[SF ETA_ss] >>
      qpat_x_assum `bind _ _ _ = _` (assume_tac o REWRITE_RULE [APPEND_NIL]) >>
      disch_then drule >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`well_typed_expr env e1` by
+       qpat_assum `expr_body_pre cenv cx env e1 es`
+         (ACCEPT_TAC o cj 2 o REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def]) >>
+     `body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx e1) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> simp[]) >>
   `expr_body_pre cenv cx env e2 mid` by
     (irule expr_body_pre_builtin_arg >> conj_tac >- simp[] >>
      qexistsl_tac [`ann`, `[e1; e2]`, `Bop bop`, `es`] >> simp[]) >>
@@ -701,6 +712,7 @@ Theorem bop_word_sim_full:
     body_exprs_full_ok cx [e1; e2] /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
@@ -744,6 +756,7 @@ Theorem bop_bytes_eq_sim_full:
     body_exprs_full_ok cx [e1; e2] /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
@@ -843,12 +856,23 @@ Resume bop_bytes_eq_sim_full[second]:
        simp[expr_body_pre_gas_obs] >>
      drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_eval) >> simp[]) >>
   `expr_body_pre cenv cx env e2 mid` by metis_tac[] >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`well_typed_expr env e1` by
+       qpat_assum `expr_body_pre cenv cx env e1 es`
+         (ACCEPT_TAC o cj 2 o REWRITE_RULE [expr_body_pre_def]) >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `bind (eval_expr cx e1) (read_result cx) _ = (INL v,mid)`
+       (irule_at Any) >> simp[]) >>
   `body_expr_full_ok cx e2` by
     (gnvs[body_exprs_full_ok_def] >>
      metis_tac[eval_expr_read_INL]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e1) e2 mid` by
-    metis_tac[body_expr_full_ok_def] >>
+    (qpat_assum `body_expr_full_ok cx e2`
+      (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_full_ok_def]) >>
+     disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
+         `func`,`shadow_func`,`cenv`,`env`,`expr_type e1`,`mid`] mp_tac) >>
+     simp[]) >>
   `gas_admissible (bind (eval_expr cx e2) (read_result cx)) expr_res_ok mid` by
     (irule expr_body_pre_gas_admissible >> metis_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
@@ -1237,6 +1261,7 @@ Theorem bop_bytes_sim_full[local]:
     body_exprs_full_ok cx [e1; e2] /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
@@ -1310,6 +1335,7 @@ Theorem bop_rest_word_sim_full:
     body_exprs_full_ok cx [e1; e2] /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
