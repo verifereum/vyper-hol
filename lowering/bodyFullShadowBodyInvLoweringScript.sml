@@ -315,86 +315,11 @@ Proof
      PERM_order_deploy_internals]
 QED
 
-Theorem body_inv_selected_internal_code_mods:
-  contract_inv mods exps ctx cenv cx /\
-  module_body_inv mods src tops cenv cx /\
-  MEM (FunctionDecl Internal mut nr rr fname args dflts ret ss) tops /\
-  lookup_function
-    (internal_fn_label (build_func_ids_mods 0 mods (nsid_to_string (src,fname)))
-      (nsid_to_string (src,fname)) (MAP SND args) cx.in_deploy)
-    ctx.ctx_functions = SOME callee ==>
-  ?label ce params has_rb nr' key trans view ctor ilen rt before old entry final.
-    set_internal_package_target cenv.ce_target
-      (package_internal_fn_unit mods T (K global_nonreentrant_slot) cx.in_deploy
-        (if cx.in_deploy then imm_len_mods mods else 0)
-        (src,subst_consts_fn_mods (consts_env_mods mods)
-          (mut,nr,rr,fname,args,dflts,ret,ss))) =
-      (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,
-        subst_consts_stmts_mods (consts_env_mods mods) ss,rt) /\
-    label = internal_fn_label (build_func_ids_mods 0 mods (nsid_to_string (src,fname)))
-      (nsid_to_string (src,fname)) (MAP SND args) cx.in_deploy /\
-    new_block label before = (old,entry) /\
-    compile_internal_function ce params has_rb nr' key trans view ctor ilen
-      (subst_consts_stmts_mods (consts_env_mods mods) ss) rt entry = ((),final) /\
-    fn_has_code entry final callee /\
-    ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks) /\
-    ctx_inst_ids_distinct ctx
-Proof
-  strip_tac >> drule_all selected_unit_internal_run >> strip_tac >>
-  qpat_assum `MEM _ ips` (fn th =>
-    qabbrev_tac `pkg = ^(rand (rator (concl th)))`) >>
-  PairCases_on `pkg` >>
-  qpat_assum `Abbrev (_ = _)` (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  `pkg0 = internal_fn_label
-      (build_func_ids_mods 0 mods (nsid_to_string (src,fname)))
-      (nsid_to_string (src,fname)) (MAP SND args) cx.in_deploy /\
-    pkg10 = subst_consts_stmts_mods (consts_env_mods mods) ss` by
-    (qpat_assum `(_,_,_,_,_,_,_,_,_,_,_,_) = set_internal_package_target _ _` mp_tac >>
-     simp_tac std_ss [subst_consts_fn_mods_def, package_internal_fn_unit_def,
-       set_internal_package_target_def, LET_THM, pairTheory.PAIR_EQ] >>
-     strip_tac >> asm_rewrite_tac[]) >>
-  `ALL_DISTINCT (MAP (\f. f.fn_name) raw.ctx_functions) /\
-    EVERY (\f. ALL_DISTINCT (MAP (\bb. bb.bb_label) f.fn_blocks)) raw.ctx_functions /\
-    ctx_inst_ids_distinct ctx` by
-    (fs[lowering_context_ok_def, ctx_fn_names_def, fn_labels_def, EVERY_MEM] >>
-     metis_tac[]) >>
-  `lookup_function pkg0 raw.ctx_functions = SOME callee` by fs[] >>
-  drule_all extract_context_internal_code_by_labels >> strip_tac >>
-  qexistsl_tac [`pkg0`, `pkg1`, `pkg2`, `pkg3`, `pkg4`, `pkg5`, `pkg6`,
-    `pkg7`, `pkg8`, `pkg9`, `pkg11`, `before`, `old`, `entry`, `after`] >>
-  qpat_x_assum `pkg10 = _` SUBST_ALL_TAC >> fs[]
-QED
+Theorem body_inv_selected_internal_code_mods =
+  bodyFullShadowInternalRunTheory.body_inv_selected_internal_code_mods
 
-Theorem body_inv_selected_internal_code:
-  body_inv tops ctx cenv cx /\
-  MEM (FunctionDecl Internal mut nr rr fname args dflts ret ss) tops /\
-  lookup_function
-    (internal_fn_label (build_func_ids 0 tops fname) fname (MAP SND args)
-       cx.in_deploy) ctx.ctx_functions = SOME callee ==>
-  ?label ce params has_rb nr' key trans view ctor ilen rt before old entry final.
-    set_internal_package_target cenv.ce_target
-      (package_internal_fn tops T (K global_nonreentrant_slot) cx.in_deploy
-        (if cx.in_deploy then imm_len tops else 0)
-        (subst_consts_fn (module_consts_env tops [])
-          (mut,nr,rr,fname,args,dflts,ret,ss))) =
-      (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,
-        subst_consts_stmts (module_consts_env tops []) ss,rt) /\
-    label = internal_fn_label (build_func_ids 0 tops fname) fname
-      (MAP SND args) cx.in_deploy /\
-    new_block label before = (old,entry) /\
-    compile_internal_function ce params has_rb nr' key trans view ctor ilen
-      (subst_consts_stmts (module_consts_env tops []) ss) rt entry = ((),final) /\
-    fn_has_code entry final callee /\
-    ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks) /\
-    ctx_inst_ids_distinct ctx
-Proof
-  strip_tac >> drule body_inv_contract >> drule body_inv_module >> rpt strip_tac >>
-  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `src` |-> `NONE`, `exps` |-> `[]`]
-    body_inv_selected_internal_code_mods) >>
-  simp[package_internal_fn_unit_singleton, build_func_ids_mods_singleton,
-       nsid_to_string_def, imm_len_mods_singleton, consts_env_mods_singleton,
-       subst_consts_fn_mods_singleton, subst_consts_mods_singleton]
-QED
+Theorem body_inv_selected_internal_code =
+  bodyFullShadowInternalRunTheory.body_inv_selected_internal_code
 
 (* Two modules can declare the same internal name and lower to distinct labels. *)
 Theorem two_module_unit_lowers[local]:
