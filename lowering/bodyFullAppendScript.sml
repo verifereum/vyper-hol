@@ -6221,16 +6221,11 @@ Resume body_append_storage_word_frag_full[rhs_code]:
 QED
 
 Resume body_append_storage_word_frag_full[rhs_exit]:
-  simp[Abbr `R1`] >> rpt gen_tac >> strip_tac >>
-  Cases_on `res` >> Cases_on `r` >> gvs[exprSimDefsTheory.expr_exit_def] >>
-  rename1 `INR exc` >> Cases_on `exc` >>
-  qpat_x_assum `expr_exit _ _` mp_tac >>
-  qpat_x_assum `halt_exit _ _ _ _ _` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-  gvs[exprSimDefsTheory.expr_exit_def, stmt_exit_ptr_def,
-      exprSimDefsTheory.halt_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >>
-  gvs[exprSimDefsTheory.expr_exit_def, stmt_exit_ptr_def]
+  simp[Abbr `R1`] >>
+  qx_genl_tac [`H`, `result`, `ee`, `gt`, `r`] >>
+  Cases_on `result` >> simp[exprSimDefsTheory.expr_exit_INL] >>
+  strip_tac >> simp[stmt_exit_ptr_def] >>
+  metis_tac[stmtSimPropsTheory.expr_exit_INR_type, exprSimDefsTheory.halt_exit_INR_type]
 QED
 
 Resume body_append_storage_word_frag_full[suffix]:
@@ -6654,16 +6649,11 @@ Resume body_append_storage_aggregate_frag_full[rhs_code]:
 QED
 
 Resume body_append_storage_aggregate_frag_full[rhs_exit]:
-  simp[Abbr `R1`] >> rpt gen_tac >> strip_tac >>
-  Cases_on `res` >> Cases_on `r` >> gvs[exprSimDefsTheory.expr_exit_def] >>
-  rename1 `INR exc` >> Cases_on `exc` >>
-  qpat_x_assum `expr_exit _ _` mp_tac >>
-  qpat_x_assum `halt_exit _ _ _ _ _` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-  gvs[exprSimDefsTheory.expr_exit_def, stmt_exit_ptr_def,
-      exprSimDefsTheory.halt_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >>
-  gvs[exprSimDefsTheory.expr_exit_def, stmt_exit_ptr_def]
+  simp[Abbr `R1`] >>
+  qx_genl_tac [`H`, `result`, `ee`, `gt`, `r`] >>
+  Cases_on `result` >> simp[exprSimDefsTheory.expr_exit_INL] >>
+  strip_tac >> simp[stmt_exit_ptr_def] >>
+  metis_tac[stmtSimPropsTheory.expr_exit_INR_type, exprSimDefsTheory.halt_exit_INR_type]
 QED
 
 Resume body_append_storage_aggregate_frag_full[suffix]:
