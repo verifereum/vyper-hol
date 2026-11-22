@@ -25,11 +25,18 @@ Proof
   Cases_on `src`
   >- (simp[source_body_call_supported_def, supported_linked_callee_def] >>
       fs[contract_inv_def] >> res_tac >> simp[]) >>
+  `(SOME x,name) IN FDOM env.fn_sigs` by
+    (qpat_assum `!src fn. MEM (src,fn) calls ==> _`
+       (qspecl_then [`SOME x`,`name`] mp_tac) >> simp[]) >>
   `?sig. FLOOKUP env.fn_sigs (SOME x,name) = SOME sig` by
-    (res_tac >> gvs[FLOOKUP_DEF]) >>
+    simp[FLOOKUP_DEF] >>
   pop_assum strip_assume_tac >>
-  `!ts. mods <> [(NONE,ts)]` by
-    (rpt strip_tac >> gvs[FLOOKUP_DEF, fn_sigs_consistent_def, ALOOKUP_def]) >>
+  `?target. get_module_code cx (SOME x) = SOME target` by
+    (qpat_assum `fn_sigs_consistent _ _` mp_tac >>
+     simp_tac bool_ss [fn_sigs_consistent_def] >>
+     disch_then (qspecl_then [`SOME x`,`name`,`sig`] mp_tac) >>
+     simp[]) >>
+  `!ts. mods <> [(NONE,ts)]` by (rpt strip_tac >> gvs[ALOOKUP_def]) >>
   `context_function_live cx (SOME x,name)` by
     fs[fn_sigs_live_def] >>
   qpat_x_assum `linked_fn_sigs_declared _ _ _` mp_tac >>

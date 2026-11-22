@@ -17,8 +17,10 @@ Proof
       simp[]) >>
   fs[IS_SOME_EXISTS] >>
   rename1 `FLOOKUP env.toplevel_vtypes (src,id) = SOME vt` >>
+  Cases_on `FLOOKUP env.bare_globals (src,id)` >>
   Cases_on `vt` >>
-  metis_tac[env_consistent_toplevel_storage_static,
+  metis_tac[env_consistent_bare_global_find_NONE,
+            env_consistent_toplevel_storage_static,
             env_consistent_toplevel_hashmap_static]
 QED
 
