@@ -14,7 +14,7 @@ Ancestors
   emitHelperProps stmtSimStoreCopy bodyMemAssignTopCopyCompiler
   bodyMemAssignTopCopyLoop fragGasPathPtr wordLoadStorePtr assignBasePtrWordStore codegenRel
   contextCodegenRel exprSimPtrTopLevelStorageCopy exprSimPtrTopLevelCopy exprSimStorageCopy
-  bodyStorageCopyMemory bodyMemAssignTopCopyPaths
+  bodyStorageCopyMemory bodyMemAssignTopCopyPaths fragGasStorageCopyBodyProps fragGasStorageCopyHeaderProps
   fragGasSeqPtrContext fragGasSeqPtr fragGasSeqAbort fragGasOriginPtr fragGasOriginPtrLoop fragGasOrigin
   ptrSafetyTransport instMemFrontier fragExecMem fragExec memSafeRun
   gasEvents gasCount ptrSafeRun ptrDiscipline bodyPtrDefs typedCopyPtr
@@ -345,58 +345,15 @@ Theorem storage_copy_header_origin_ptr[local]:
     r.vs_current_bb = (if k=n then exit_lbl else body_lbl)
 Proof
   rpt strip_tac >>
-  drule toplevel_copy_inv_bounds >> strip_tac >>
-  drule toplevel_copy_inv_counter_value >> strip_tac >>
-  drule toplevel_copy_inv_counter >> strip_tac >>
-  `((n2w k):256 word = n2w n) <=> k=n` by
-    (`k < 2**256` by decide_tac >>
-     pure_rewrite_tac[n2w_11, dimword_def] >>
-     gvs[arithmeticTheory.LESS_MOD]) >>
-  `step_inst_base (mk_inst id EQ [Var cv;Lit (n2w n)] [tv]) s =
-     OK (update_var tv (bool_to_word (k=n)) s)` by
-    simp[step_inst_base_def, exec_pure2_def, mk_inst_def,
-         eval_operands_def, eval_operand_def] >>
-  `ptr_inst_ok D 0 0 ctx func G tn
-     (mk_inst id EQ [Var cv;Lit (n2w n)] [tv]) s` by
-    (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
-          mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def] >>
-     simp[GSYM mk_inst_def, step_inst_non_invoke, update_var_def] >>
-     rpt strip_tac >> Cases_on `op` >> gvs[op_taint_def]) >>
-  `run_inst_seq_mem_ok [mk_inst id EQ [Var cv;Lit (n2w n)] [tv]] s` by
-    (simp[run_inst_seq_mem_ok_last, inst_dload_in_section_def, mk_inst_def] >>
-     irule below_frontier_no_ranges >> simp[]) >>
-  drule instruction_prefix_cursor >> strip_tac >>
-  drule instruction_prefix_cursor >> strip_tac >>
-  `isPREFIX [mk_inst id EQ [Var cv;Lit (n2w n)] [tv]]
-     (DROP s.vs_inst_idx bb.bb_instructions)` by
-    (qpat_x_assum `isPREFIX (_::_::_) _` mp_tac >>
-     Cases_on `DROP s.vs_inst_idx bb.bb_instructions` >> simp[]) >>
-  qabbrev_tac `i0 = mk_inst id EQ [Var cv;Lit (n2w n)] [tv]` >>
-  qabbrev_tac `u = update_var tv (bool_to_word (k=n)) s` >>
-  qabbrev_tac `G1 = step_prov PG G i0 u` >>
-  qabbrev_tac `tn1 = step_taint i0 s u tn` >>
-  `inst_seq_ptr D 0 ctx func PG G tn [i0] s G1 tn1` by
-    simp[inst_seq_ptr_def, Abbr `G1`, Abbr `tn1`] >>
-  `run_inst_seq [i0] s = OK u` by simp[run_inst_seq_def] >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-              i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) [i0]` by
-    simp[Abbr `i0`, mk_inst_def, is_terminator_def] >>
+  drule_all storage_copy_header_ptr_run >>
+  disch_then (qspecl_then [`D`,`PG`]
+    (qx_choosel_then [`u`,`t`,`G1`,`tn1`] strip_assume_tac)) >>
   drule_all_then (qspec_then `explicit` strip_assume_tac)
     run_inst_seq_origin_ptr_lift >>
-  qabbrev_tac `t = u with vs_inst_idx := s.vs_inst_idx + LENGTH [i0]` >>
-  `toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G1 tn1 t` by
-    (simp[Abbr `t`, Abbr `G1`, Abbr `tn1`, Abbr `u`, Abbr `i0`] >>
-     irule toplevel_copy_test_inv >> simp[] >> metis_tac[]) >>
-  `op_taint tn1 (Var tv) = {}` by
-    simp[Abbr `tn1`, Abbr `i0`, step_taint_def, set_var_taint_def, out_taint_def,
-         mk_inst_def, op_taint_def, FLOOKUP_UPDATE, eval_operand_def] >>
-  `~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\
-    t.vs_inst_idx = SUC s.vs_inst_idx /\ allocas_from lo t /\
-    lookup_var tv t = SOME (bool_to_word (k=n))` by
-    (simp[Abbr `t`, Abbr `u`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
-     gvs[allocas_from_def, allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
-    (gvs[Abbr `t`, Abbr `u`, update_var_def, allocas_below_fmp_def] >> metis_tac[]) >>
+  qpat_x_assum `t = _ with vs_inst_idx := _`
+    (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))) >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G1,tn1)` by
+    simp[Abbr `t`] >>
   `step_inst_base (mk_inst (id+1) JNZ [Var tv;Label exit_lbl;Label body_lbl] []) t =
     OK (jump_to (if k=n then exit_lbl else body_lbl) t)` by
     (Cases_on `k=n` >>
@@ -414,7 +371,7 @@ Proof
      simp[mk_inst_def] >> gvs[mk_inst_def]) >>
   qexistsl_tac [`jump_to (if k=n then exit_lbl else body_lbl) t`, `G1`, `tn1`] >>
   conj_tac >- (irule origin_ptr_path_then >> qexistsl_tac [`G1`, `t`, `tn1`] >>
-               gvs[Abbr `t`]) >>
+               gvs[]) >>
   gvs[jump_to_def, allocas_from_def, allocas_below_fmp_def] >> metis_tac[]
 QED
 
@@ -444,42 +401,19 @@ Theorem storage_copy_body_origin_ptr[local]:
     ~r.vs_halted /\ r.vs_current_bb = hdr /\ r.vs_inst_idx = 0
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >> rpt gen_tac >>
-  drule toplevel_copy_inv_source >> strip_tac >>
-  drule toplevel_copy_inv_destination >> strip_tac >>
-  drule toplevel_copy_inv_counter_value >> strip_tac >>
-  drule toplevel_copy_inv_bounds >> strip_tac >>
-  `eval_operand (Var dst) s = SOME (n2w b) /\
-   eval_operand (Var cv) s = SOME (n2w k)` by simp[eval_operand_def] >>
-  qspecl_then [`if loc = LocStorage then SLOAD else TLOAD`, `src`, `Var dst`,
-    `a`, `n2w b`, `cv`, `sv`, `vv`, `mv`, `dv`, `nv`, `id`, `s`, `n2w k`]
-    mp_tac storage_copy_body_run >>
-  (impl_tac >- (Cases_on `loc = LocStorage` >> gvs[MEM] >> metis_tac[])) >>
-  disch_then (qx_choose_then `r` strip_assume_tac) >>
-  qpat_x_assum `run_inst_seq _ s = OK r` mp_tac >>
-  qmatch_goalsub_abbrev_tac `run_inst_seq code s` >> strip_tac >>
+  qabbrev_tac `code =
+      [mk_inst id ADD [src;Var cv] [sv];
+       mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+       mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+       mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+       mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+       mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+       mk_inst (id+6) ASSIGN [Var nv] [cv]]` >>
   RULE_ASSUM_TAC (REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  drule_all toplevel_copy_body_ptr >>
+  drule_all storage_copy_body_ptr_run >>
   disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-      ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> SETFMP /\
-      i.inst_opcode <> DALLOCA) code` by
-    (qpat_x_assum `code = _` SUBST1_TAC >>
-     Cases_on `loc = LocStorage` >> simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp r)` by
-    metis_tac[run_inst_seq_allocas_below_fmp] >>
-  `run_inst_seq_mem_ok code s` by
-    (qpat_x_assum `code = _` SUBST1_TAC >>
-     irule body_storage_iteration_mem_ok >> rpt conj_tac
-     >- (rpt strip_tac >> gvs[] >> metis_tac[])
-     >- gvs[]
-     >- (qexistsl_tac [`b`, `k`] >> gvs[eval_operand_def, dimword_def]) >>
-     gvs[]) >>
   `isPREFIX code (DROP s.vs_inst_idx
      (code ++ [mk_inst (id+7) JMP [Label hdr] []]))` by simp[] >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-              i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) code` by
-    (qpat_x_assum `code = _` SUBST1_TAC >>
-     Cases_on `loc = LocStorage` >> simp[mk_inst_def, is_terminator_def]) >>
   `lookup_block s.vs_current_bb func.fn_blocks = SOME
      <|bb_label := s.vs_current_bb;
        bb_instructions := code ++ [mk_inst (id+7) JMP [Label hdr] []]|>` by

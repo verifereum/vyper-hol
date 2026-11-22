@@ -1,7 +1,7 @@
 (* Immutable reads impose no source bound on the destination write frame. *)
 Theory exprPtrCodeCopyFrame
 Ancestors
-  exprPtrCodeCopyPost immutableCopyExecution venomMemProps venomState
+  exprPtrCodeCopyPost immutableCopyExecution immutableCopyExterior venomMemProps venomState
   venomExecSemantics words arithmetic valueEncodingProps exprSimCopy
 
 Theorem immutable_word_exterior:
@@ -10,10 +10,7 @@ Theorem immutable_word_exterior:
   mem_bytes_at at len (immutable_word_transfer F F a b off s).vs_memory =
   mem_bytes_at at len s.vs_memory
 Proof
-  strip_tac >>
-  `w2n (b+n2w off) = w2n b+off` by
-    (Cases_on `b` >> fs[word_add_n2w]) >>
-  simp[immutable_word_transfer_def, mstore_mem_bytes_at_disjoint]
+  strip_tac >> irule immutable_copy_word_exterior >> simp[]
 QED
 
 Theorem immutable_transfers_exterior:
@@ -23,13 +20,7 @@ Theorem immutable_transfers_exterior:
   mem_bytes_at at len (immutable_transfers F F a b n off s).vs_memory =
   mem_bytes_at at len s.vs_memory
 Proof
-  Induct >- simp[immutable_transfers_def] >> rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  simp[Once immutable_transfers_def] >>
-  `w2n b+(off+32)+32*n < dimword (:256) /\
-    (at+len <= w2n b+(off+32) \/ w2n b+(off+32)+32*n <= at)` by
-    (fs[MULT_SUC] >> decide_tac) >>
-  irule immutable_word_exterior >> fs[MULT_SUC] >> decide_tac
+  rpt strip_tac >> irule immutable_copy_transfers_exterior >> simp[]
 QED
 
 Theorem code_copy_endpoint_exterior:
