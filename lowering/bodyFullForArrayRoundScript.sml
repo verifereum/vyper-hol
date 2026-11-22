@@ -785,19 +785,32 @@ Proof
   strip_tac >> drule_all nonslot_for_compiler_cuts >> strip_tac >>
   gvs[gasShadowTheory.gas_shadow_stmt_def,gasShadowTheory.gas_shadow_iterator_def] >>
   `expr_type (gas_shadow_expr e) = ArrayT sty bd` by simp[] >>
-  drule_all (Q.INST [`e` |-> `gas_shadow_expr e`,
-                    `loop_body` |-> `MAP gas_shadow_stmt loop_body`]
-                   nonslot_for_compiler_cuts) >> strip_tac >> gvs[] >>
-  nonslot_align_cut gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr >>
+  drule_all (SIMP_RULE (srw_ss()) []
+    (Q.INST [`c` |-> `gas_shadow_env T c`, `e` |-> `gas_shadow_expr e`,
+             `loop_body` |-> `MAP gas_shadow_stmt loop_body`]
+      nonslot_for_compiler_cuts)) >> strip_tac >> gvs[] >>
+  nonslot_align_cut gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr_env >>
   nonslot_align_cut nonslot_length_shadow >>
-  nonslot_align_cut gasShadowCompileStmtBaseTheory.gas_shadow_compiles_declare_local >>
+  `gas_shadow_env T bc = bc' /\ gas_shadow_state saD saD'` by
+    (mp_tac (Q.INST [`sd` |-> `T`, `cenv` |-> `c`, `ty` |-> `fty`]
+       gasShadowCompileStmtBaseTheory.gas_shadow_compiles_env_declare_local) >>
+     rewrite_tac[gasShadowCompileStmtBaseTheory.gas_shadow_compiles_env_def] >>
+     disch_then (qspecl_then [`saL`,`saL'`] (drule_then mp_tac)) >> simp[]) >>
+  (* Retain only the real lookup before simplifying the shadow projections. *)
+  qpat_x_assum `FLOOKUP bc'.ce_vars id = SOME _` kall_tac >>
+  qpat_x_assum `gas_shadow_env _ _ = bc'` (SUBST_ALL_TAC o SYM) >>
+  gvs[] >>
   nonslot_align_cut gasShadowCompileStmtBaseTheory.gas_shadow_compiles_emit_local_alloca >>
   nonslot_align_cut nonslot_control_shadow >>
   nonslot_align_cut gasShadowCompileContextTheory.gas_shadow_compiles_emit_op_same >>
   nonslot_align_cut nonslot_header_shadow >>
   nonslot_align_cut gasShadowCompileContextTheory.gas_shadow_compiles_emit_op_same >>
+  `saL'.cs_next_var = saL.cs_next_var` by fs[gas_shadow_state_def] >>
+  pop_assum (fn th =>
+    qpat_x_assum `compile_iter_elem_copy _ _ _ _ _ _ _ _ saCopy' = _`
+      (assume_tac o REWRITE_RULE [th])) >>
   nonslot_align_cut gasShadowCompileStmtOpsTheory.gas_shadow_compiles_iter_elem_copy >>
-  nonslot_align_cut (CONJUNCT2 gasShadowCompileStmtTheory.gas_shadow_compile_stmt) >>
+  nonslot_align_cut (CONJUNCT2 gasShadowCompileStmtTheory.gas_shadow_compile_stmt_env) >>
   `compile_alloc_buffer (type_memory_bytes c fty) saL =
    (<|buf_operand := Var (STRING #"%" (toString saL.cs_next_var));
       buf_size := type_memory_bytes c fty|>,saA)` by
