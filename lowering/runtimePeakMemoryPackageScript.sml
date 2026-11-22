@@ -111,6 +111,11 @@ Theorem dalloca_windows_packaged_groups[local]:
     (MAP (package_external_group source_tops target tr keys) (FST (classify_functions source_tops)))
 Proof
   strip_tac >>
+  mp_tac (Q.INST [`target` |-> `target`, `tr` |-> `tr`, `keys` |-> `keys`]
+    dalloca_windows_packaged_externals) >>
+  (impl_tac >- simp[]) >>
+  disch_then (assume_tac o SIMP_RULE (srw_ss ())
+    [EVERY_MAP, EVERY_MEM, combinTheory.o_DEF]) >>
   Cases_on `!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1` >>
   fs[] >>
   (simp[EVERY_MAP, EVERY_MEM] >>
@@ -121,10 +126,8 @@ Proof
     `name` |-> `e3`, `args` |-> `e4`, `ds` |-> `e5`, `ret` |-> `e6`,
     `fbody` |-> `e7`] dalloca_windows_external_env) >> (impl_tac >- simp[]) >> strip_tac >>
   simp[package_external_group_def] >> COND_CASES_TAC
-  >- (simp[runtime_external_group_windows_def] >>
-      fs[EVERY_MEM, combinTheory.o_DEF] >>
-      metis_tac[dalloca_windows_packaged_externals, EVERY_MEM, MEM_MAP,
-                combinTheory.o_THM]) >>
+  >- (qpat_assum `!e. MEM e _ ==> runtime_external_package_windows _ _` drule >>
+      simp[runtime_external_group_windows_def]) >>
   simp[runtime_external_group_windows_def, package_external_fn_def,
        set_external_package_target_def] >> conj_tac
   >- (rpt strip_tac >> irule dalloca_windows_packaged_stmts >> simp[] >>
@@ -153,20 +156,27 @@ Theorem dalloca_windows_packaged_internals:
       (order_internals order (FST (SND (classify_functions source_tops)))))
 Proof
   strip_tac >>
-  Cases_on `!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1` >>
-  fs[] >>
-  (simp[EVERY_MAP, EVERY_MEM, combinTheory.o_DEF, MEM_order_internals] >>
+  fs[] >> simp[EVERY_MAP, EVERY_MEM, combinTheory.o_DEF, MEM_order_internals] >>
   qx_gen_tac `e` >> PairCases_on `e` >> strip_tac >>
-  TRY (drule_all classify_internal_blueprint_free >> strip_tac) >>
   imp_res_tac classify_internal_builtin_arity >>
-  imp_res_tac build_compile_env_blueprint_free >>
-  imp_res_tac build_compile_env_builtin_arity >>
   simp[package_internal_fn_def, set_internal_package_target_def] >>
   irule dalloca_windows_internal_function >>
-  rpt strip_tac >> irule dalloca_windows_packaged_stmts >> simp[] >>
-  qexists_tac `build_compile_env source_tops Internal e0 e3 e4 e6 e7 tr` >>
-  simp[update_cenv_nonreentrant_def] >>
-  metis_tac[build_compile_env_blueprint_free, build_compile_env_builtin_arity])
+  rpt strip_tac >> irule dalloca_windows_packaged_stmts >>
+  simp[GSYM LEFT_EXISTS_AND_THM] >>
+  qmatch_goalsub_abbrev_tac
+    `update_cenv_nonreentrant (base_env with <|ce_is_ctor := _; ce_raw_return := _|>) _ _ _ _` >>
+  qexists_tac `base_env` >>
+  simp[update_cenv_nonreentrant_def, Abbr `base_env`] >>
+  conj_tac
+  >- (conj_tac >- metis_tac[build_compile_env_builtin_arity] >>
+      disch_tac >>
+      qpat_assum `(?chunk. create_blueprint_dalloca_chunk chunk 1 /\ ~window chunk 1) ==> _`
+        (fn th => drule th >> strip_tac) >>
+      irule build_compile_env_blueprint_free >> metis_tac[]) >>
+  disch_tac >>
+  qpat_assum `(?chunk. create_blueprint_dalloca_chunk chunk 1 /\ ~window chunk 1) ==> _`
+    (fn th => drule th >> strip_tac) >>
+  drule_all classify_internal_blueprint_free >> simp[]
 QED
 
 Theorem dalloca_windows_packaged_fallback[local]:
@@ -247,40 +257,34 @@ Theorem lower_vyper_runtime_unit_dalloca_windows_for:
 Proof
   strip_tac >>
   fs[source_typing_ok_def] >>
-  drule runtime_blueprint_free_internal >> strip_tac >>
+  `(?chunk. create_blueprint_dalloca_chunk chunk 1 /\ ~window chunk 1) ==>
+   !mut nr rr name args ds ret ss.
+     MEM (FunctionDecl Internal mut nr rr name args ds ret ss) source_tops ==>
+     ~supported_stmts_expr_exists blueprint_create_root ss /\
+     EVERY (\d. ~supported_expr_exists blueprint_create_root d) ds` by
+    (disch_tac >>
+     qpat_assum `_ ==> runtime_blueprint_free _` (fn th => drule th >> strip_tac) >>
+     drule runtime_blueprint_free_internal >> simp[]) >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
   simp[lower_vyper_runtime_unit_def] >> pairarg_tac >> gvs[AllCaseEqs()] >>
   rpt strip_tac >>
   FIRST (map (drule o REWRITE_RULE [GSYM AND_IMP_INTRO])
     [run_grouped_lowering_dalloca_windows, run_lowering_dalloca_windows]) >>
-  disch_then (qspecl_then [`fn`, `bb`] mp_tac) >>
+  disch_then (qspecl_then [`window`, `fn`, `bb`] mp_tac) >>
   (impl_tac >-
     (simp[] >>
      FIRST [irule dalloca_windows_generate_grouped_runtime,
             irule dalloca_windows_generate_runtime] >>
      rpt conj_tac >>
-     TRY (drule_all (Q.INST [`tr` |-> `T`, `target` |-> `policy.rpol_target`,
-                          `keys` |-> `K global_nonreentrant_slot`]
-          dalloca_windows_packaged_groups) >> fs[] >> NO_TAC) >>
-     all_tac >~ [`order_internals _ _`] >-
-       (drule_all (Q.INST [`tr` |-> `T`, `target` |-> `policy.rpol_target`,
-          `keys` |-> `K global_nonreentrant_slot`,
-          `ctor_mode` |-> `F`, `ilen` |-> `0`,
-          `order` |-> `runtime_internal_order source_tops (FST (SND (classify_functions source_tops)))`]
-          dalloca_windows_packaged_internals) >>
-        qpat_assum `classify_functions _ = _` (fn eq =>
-          disch_then (assume_tac o REWRITE_RULE [eq, pairTheory.FST, pairTheory.SND] o SPEC_ALL)) >>
-        first_assum ACCEPT_TAC) >>
-     TRY (drule_all (Q.INST [`tr` |-> `T`, `target` |-> `policy.rpol_target`,
-                          `keys` |-> `K global_nonreentrant_slot`]
-          dalloca_windows_packaged_fallback) >> fs[] >> NO_TAC) >>
-     drule_all (Q.INST [`tr` |-> `T`, `target` |-> `policy.rpol_target`,
-                        `keys` |-> `K global_nonreentrant_slot`]
-       dalloca_windows_packaged_externals) >>
      qpat_assum `classify_functions _ = _` (fn eq =>
-       disch_then (assume_tac o REWRITE_RULE
-         [eq, pairTheory.FST, runtime_external_package_windows_eq] o SPEC_ALL)) >>
-     first_assum ACCEPT_TAC)) >>
+       FIRST (map (irule o REWRITE_RULE
+         [eq, pairTheory.FST, pairTheory.SND, runtime_external_package_windows_eq,
+          NOT_FORALL_THM, NOT_IMP] o Q.INST_TYPE [`:'a` |-> `:160 word`])
+         [dalloca_windows_packaged_groups, dalloca_windows_packaged_internals,
+          dalloca_windows_packaged_fallback, dalloca_windows_packaged_externals])) >>
+     simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     rename1 `check_contract F _ _ _ = SOME checked` >>
+     map_every qexists_tac [`tx.target`, `checked`, `am.layouts`] >> simp[])) >>
   simp[]
 QED
 
