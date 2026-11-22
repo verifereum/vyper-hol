@@ -288,10 +288,10 @@ Theorem body_ifexp_children_full_ok:
      body_expr_full_ok cx a /\ body_expr_full_ok cx b)
 Proof
   rpt gen_tac >>
-  disch_then
-    (mp_tac o CONJUNCT2 o CONJUNCT1 o CONJUNCT2 o
-      ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-  simp[]
+  disch_then (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+  qpat_x_assum `!t' c' a' b'. IfExp _ _ _ _ = IfExp t' c' a' b' ==> _`
+    (qspecl_then [`t`, `c`, `a`, `b`] mp_tac) >>
+  simp[] >> metis_tac[]
 QED
 
 Definition body_stmt_full_ok_def:
