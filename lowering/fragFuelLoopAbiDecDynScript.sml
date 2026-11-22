@@ -9,7 +9,7 @@ Theory fragFuelLoopAbiDecDyn
 Ancestors
   fragFuel fragFuelContextBase abiEncoder compileEnv emitHelper context
   exprSimAbiEncodeObliviousCode exprSimAbiEncodeObliviousContext fragExec
-  fragFuelLoopAbiDecDynSteps exprSimAbiGasBridge exprLoweringProps list sorting
+  fragFuelLoopAbiDecDynSteps fragObserverCodeProps exprSimAbiGasBridge exprLoweringProps list sorting
   fnBlockBodyHelpers
   venomInst venomMemProps venomInstProps venomExecSemantics venomEffects venomState
 Libs
@@ -3178,23 +3178,6 @@ Theorem abi_dyn_empty_context_stable[local]:
 Proof
   simp[callees_stable_def, venomInstTheory.lookup_function_def,
        listTheory.FIND_thm]
-QED
-
-Theorem abi_dyn_observer_no_phi:
-  !sa sb fn id. fn_has_code sa sb fn /\ no_phi_fn fn ==>
-    no_phi_fn (frag_observer sa sb fn id)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-    IS_PREFIX bb.bb_instructions sb.cs_current_insts` by gvs[fn_has_code_def] >>
-  `phi_prefix_length bb.bb_instructions = 0` by
-    (drule venomExecProofsTheory.lookup_block_MEM >>
-     gvs[no_phi_fn_def, EVERY_MEM] >> metis_tac[]) >>
-  simp[frag_observer_def, no_phi_fn_def] >> conj_tac
-  >- (gvs[rich_listTheory.IS_PREFIX_APPEND] >>
-      Cases_on `sb.cs_current_insts` >>
-      gvs[phi_prefix_length_def, mk_inst_def, AllCaseEqs()]) >>
-  gvs[no_phi_fn_def, EVERY_MEM, MEM_FILTER] >> metis_tac[]
 QED
 
 Theorem abi_dyn_observer_outcome_stable[local]:

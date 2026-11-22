@@ -9,7 +9,7 @@ Ancestors
   exprSimAbiDecodeTraceSafe exprSimAbiDecodeShape abiEncoder sorting pred_set
   exprSimAbiDecodeCertificate exprSimAbiDecodePrims exprSimAbiDecodeTrace
   exprSimAbiDecodeResourcePrims fragFuel fragFuelConfinement
-  fragFuelExpr fragFuelRuntimeBody fragFuelLoopAbiDecDyn calldataNoneFallbackJoint
+  fragFuelExpr fragFuelRuntimeBody fragFuelLoopAbiDecDyn fragObserverCodeProps calldataNoneFallbackJoint
   registrationRejectMetadata calldataSourceSize vyperABIEntries
   calldataNoneDecoder fragGasOriginPtrExec abiDecoderCoherence abiDecoderReentry finite_map
   calldataNoneRegisterFold calldataNoneRegisterOne
@@ -634,22 +634,6 @@ Proof
   strip_tac >> gvs[emitted_blocks_def] >> metis_tac[MEM_TAKE]
 QED
 
-Theorem reject_observer_has_code[local]:
-  fn_has_code sa sb fn /\
-  ~MEM sb.cs_current_bb (MAP (\bb. bb.bb_label) (emitted_blocks sa sb)) ==>
-  fn_has_code sa sb (frag_observer sa sb fn id)
-Proof
-  rw[fn_has_code_def]
-  >- (rename1 `MEM emitted (emitted_blocks sa sb)` >>
-      `emitted.bb_label <> sb.cs_current_bb` by (fs[MEM_MAP] >> metis_tac[]) >>
-      simp[frag_observer_def, lookup_block_def, FIND_thm] >>
-      rewrite_tac[GSYM lookup_block_def] >>
-      irule exprSimAbiGasBridgeTheory.frag_observer_lookup_filter >> simp[]) >>
-  qexists_tac `<|bb_label := sb.cs_current_bb;
-    bb_instructions := sb.cs_current_insts ++ [mk_inst id STOP [] []]|>` >>
-  simp[frag_observer_cut_lookup, IS_PREFIX_APPEND3]
-QED
-
 Theorem reject_observer_prefix_code[local]:
   fn_has_code sa sb fn /\
   (!bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
@@ -751,7 +735,7 @@ Proof
      impl_tac >-
        (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
         >- (qpat_assum `observer = _` SUBST1_TAC >> irule reject_observer_has_code >> simp[])
-        >- (qpat_assum `observer = _` SUBST1_TAC >> irule fragFuelLoopAbiDecDynTheory.abi_dyn_observer_no_phi >> simp[])
+        >- (qpat_assum `observer = _` SUBST1_TAC >> irule fragObserverCodePropsTheory.abi_dyn_observer_no_phi >> simp[])
         >- simp[frag_observer_cut_lookup]
         >- simp[frag_observer_cut_instruction] >>
         rpt strip_tac >>
@@ -1437,57 +1421,6 @@ Proof
        venom_state_component_equality, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem grouped_dispatch_code[local]:
-  run_grouped_lowering groups ints fallback rp "__entry" = SOME u /\
-  EVERY group_entry_labels_ok groups /\
-  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
-  lookup_function "__entry" u.cu_context.ctx_functions = SOME fn ==>
-  ?fl sf jobs sd sx sn se.
-    fresh_label "fallback" (initial_compile_state "__entry") = (fl,sf) /\
-    compile_group_dispatch_linear groups fl sf = (jobs,sd) /\
-    compile_external_jobs jobs sd = ((),sx) /\
-    EVERY group_job_label_ok jobs /\
-    (case fallback of
-       NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
-     | SOME (ce,pay,nr,key,tr,view,stmts,rt) =>
-         compile_fallback_body ce pay nr key tr view stmts rt) sn = ((),se) /\
-    sf.cs_current_bb = "__entry" /\ sf.cs_current_insts = [] /\
-    sn.cs_current_bb = fl /\ sn.cs_current_insts = [] /\
-    fn_has_code sf sd fn /\ fn_has_code sd sx fn /\
-    cs_extends sf sd /\ cs_extends sd se /\ cs_extends sx se /\
-    ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks se)) /\
-    (fallback = NONE ==> fn_has_code sn se fn)
-Proof
-  strip_tac >> drule_all run_grouped_lowering_retained_entry_prefix >>
-  disch_then (qx_choosel_then [`se`,`rest`] strip_assume_tac) >>
-  `ALL_DISTINCT (fn_labels fn)` by
-    (drule_all grouped_internal_run_labels >> strip_tac >>
-     drule lowering_context_ok_bridge >> strip_tac >>
-     `MEM fn u.cu_context.ctx_functions` by metis_tac[lookup_function_MEM] >>
-     fs[EVERY_MEM] >> metis_tac[]) >>
-  `ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks se))` by
-    (qpat_assum `ALL_DISTINCT (fn_labels fn)` mp_tac >>
-     qpat_assum `fn.fn_blocks = _` (fn eq => PURE_REWRITE_TAC [fn_labels_def, eq]) >>
-     simp[MAP_APPEND, ALL_DISTINCT_APPEND]) >>
-  `!bb. MEM bb (all_blocks se) ==> lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
-    (rpt strip_tac >> irule MEM_lookup_block >> conj_tac
-     >- fs[fn_labels_def] >>
-     qpat_assum `fn.fn_blocks = _` (fn eq => PURE_REWRITE_TAC [eq]) >> simp[]) >>
-  drule_all compile_grouped_runtime_entry_layout >>
-  disch_then (qx_choosel_then [`fl`,`sf`,`jobs`,`sd`,`sx`,`sn`] strip_assume_tac) >>
-  `fn_has_code sf sd fn /\ fn_has_code sd sx fn` by
-    metis_tac[fn_has_code_retained_interval, cs_extends_trans, cs_extends_refl] >>
-  `(fallback = NONE ==> fn_has_code sn se fn)` by
-    (strip_tac >> fs[] >>
-     `cs_extends sn se` by metis_tac[cs_extends_emit_inst] >>
-     metis_tac[fn_has_code_retained_interval, cs_extends_refl]) >>
-  `sf.cs_current_bb = "__entry" /\ sf.cs_current_insts = []` by
-    (drule fresh_label_props >> simp[initial_compile_state_def]) >>
-  `sn.cs_current_bb = fl /\ sn.cs_current_insts = []` by metis_tac[new_block_props] >>
-  qexistsl_tac [`fl`,`sf`,`jobs`,`sd`,`sx`,`sn`,`se`] >> simp[] >>
-  irule cs_extends_trans >> qexists_tac `sx` >> simp[]
-QED
-
 Theorem grouped_fallback_dispatch_code[local]:
   run_grouped_lowering groups ints NONE rp "__entry" = SOME u /\
   EVERY group_entry_labels_ok groups /\
@@ -1500,7 +1433,7 @@ Theorem grouped_fallback_dispatch_code[local]:
     sn.cs_current_bb = fl /\ sn.cs_current_insts = [] /\
     fn_has_code sf sd fn /\ fn_has_code sn se fn
 Proof
-  strip_tac >> drule_all grouped_dispatch_code >> simp[] >> metis_tac[]
+  strip_tac >> drule_all run_grouped_lowering_dispatch_code >> simp[] >> metis_tac[]
 QED
 
 Theorem installed_grouped_short_reject_prefix[local]:
@@ -3819,8 +3752,8 @@ Proof
   rename1 `lookup_function "__entry" _ = SOME fn` >>
   drule_all lower_runtime_grouped_packages >>
   disch_then (qx_choosel_then [`groups`,`ints`,`fallback`] strip_assume_tac) >>
-  drule_all grouped_dispatch_code >>
-  disch_then (qx_choosel_then [`fl`,`sf`,`jobs`,`sd`,`sx`,`sn`,`final`] strip_assume_tac) >>
+  drule_all run_grouped_lowering_dispatch_code >>
+  disch_then (qx_choosel_then [`sf`,`fl`,`jobs`,`sd`,`sx`,`sn`,`final`] strip_assume_tac) >>
   `?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
     fs[source_typing_ok_def] >>
   `MEM fn u.cu_context.ctx_functions` by metis_tac[lookup_function_MEM] >>
@@ -4309,7 +4242,7 @@ Proof
      >- metis_tac[reject_observer_code, EVERY_DEF]
      >- (irule reject_observer_prefix_code >> simp[] >>
          fs[no_phi_fn_def, EVERY_MEM] >> metis_tac[lookup_block_MEM]) >>
-     metis_tac[fragFuelLoopAbiDecDynTheory.abi_dyn_observer_no_phi]) >>
+     metis_tac[fragObserverCodePropsTheory.abi_dyn_observer_no_phi]) >>
   `SUM (MAP alloca_size (FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts obs))) <=
    unit_alloca_budget ctx` by
     (irule observed_alloca_budget >> simp[] >> qexists_tac `fn` >> simp[] >>

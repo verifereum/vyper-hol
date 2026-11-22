@@ -516,7 +516,7 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem external_signature_return[local]:
+Theorem external_signature_return:
   supported_program tops /\ fn_sigs_consistent fs cx /\ ~cx.in_deploy /\
   (!src ts. get_module_code cx src = SOME ts ==> src = NONE /\ ts = tops) /\
   cenv.ce_func_return_type = build_func_return_type tops /\

@@ -183,7 +183,7 @@ Proof
   gvs[] >> qexistsl [`G`,`tn`] >> simp[]
 QED
 
-Theorem fallback_empty_environment[local]:
+Theorem fallback_empty_environment:
   set_fallback_package_target target
     (package_fallback_fn tops T (K global_nonreentrant_slot)
       (SOME (mut,nr,rr,"__default__",[],([] : expr list),ret,fbody))) =
@@ -222,7 +222,7 @@ Proof
   metis_tac[source_typing_ok_vtype_keys_distinct, supportedProgramTheory.supported_program_def]
 QED
 
-Theorem fallback_empty_registration_state[local]:
+Theorem fallback_empty_registration_state:
   initial_venom_state_rel tops am tx vs /\
   send_call_value mut
     (initial_evaluation_context am.sources am.layouts tx NONE)
