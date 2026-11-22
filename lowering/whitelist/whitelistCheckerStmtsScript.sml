@@ -333,7 +333,7 @@ Proof
          gvs[well_typed_expr_def, bound_length_def] >>
          metis_tac[checker_env_bare_toplevel, checker_env_ok_def,
                    checker_vtype_ok_def, optionTheory.IS_SOME_DEF]) >>
-  rw[] >> gvs[call_result_expr_def]
+  Cases_on `c` >> gvs[call_result_expr_def]
 QED
 
 Theorem type_stmt_for_head_supported[local]:
