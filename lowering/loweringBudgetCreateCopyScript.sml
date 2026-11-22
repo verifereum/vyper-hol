@@ -321,7 +321,11 @@ Proof
      impl_tac >- (fs[Abbr `b`] >> decide_tac) >> strip_tac >>
      `current = EL (LENGTH h - n) ((i :: middle) ++ [effect])` by metis_tac[] >>
      Cases_on `LENGTH h - n = LENGTH (i :: middle)`
-     >- fs[EL_APPEND_EQN, MEM] >>
+     >- (`LENGTH h = b` by (fs[Abbr `b`] >> decide_tac) >>
+         `current = effect` by
+           (qpat_x_assum `current = EL _ _` mp_tac >> simp[EL_APPEND_EQN]) >>
+         qpat_x_assum `current = effect` SUBST_ALL_TAC >>
+         qpat_x_assum `MEM effect.inst_opcode [CREATE; CREATE2]` mp_tac >> simp[]) >>
      `0 < LENGTH h - n /\ LENGTH h - n < LENGTH (i :: middle)` by
        (fs[Abbr `b`] >> decide_tac) >>
      `MEM current middle` by fs[EL_APPEND_EQN] >>
@@ -345,8 +349,10 @@ Proof
   drule_all (Q.INST [`n` |-> `b`, `p` |-> `ep`, `i` |-> `effect`]
     lower_budget_window_index_next) >> strip_tac >>
   rename1 `EL b h = BudgetStep b ep effect ef (OK et) eq` >>
-  `step_inst_base effect ready = OK et` by
-    (fs[step_inst_inst_idx_indep, exec_result_map_def] >> metis_tac[]) >>
+  `?after. step_inst_base effect ready = OK after` by
+    (qpat_x_assum `step_inst_base effect ep.bp_state = OK et` mp_tac >>
+     simp[step_inst_inst_idx_indep] >>
+     Cases_on `step_inst_base effect ready` >> simp[exec_result_map_def]) >>
   drule_all create_blueprint_dalloca_chunk_geometry >> strip_tac >>
   `eval_operands effect.inst_operands ep.bp_state = SOME ws` by
     fs[eval_ops_inst_idx] >>
@@ -355,19 +361,20 @@ Proof
      qexistsl_tac [`p`, `fuel`, `q`] >>
      asm_rewrite_tac[] >> decide_tac) >>
   pure_rewrite_tac[lower_history_window_def] >> BETA_TAC >>
-  qexists_tac `b` >> rpt conj_tac
-  >- decide_tac
-  >- decide_tac
-  >- (strip_tac >> conj_tac >- fs[lower_event_consumes_def, MEM] >>
-      qexistsl_tac [`p.bp_fn`, `i`, `p.bp_state`, `op`, `sz`, `t`,
-                    `p`, `fuel`, `q`, `ep`, `effect`, `ef`, `et`, `eq`, `ws`] >>
-      asm_rewrite_tac[] >> metis_tac[]) >>
-  TRY (decide_tac >> NO_TAC) >>
-  TRY (qexistsl_tac [`p.bp_fn`, `i`, `p.bp_state`, `op`, `sz`, `t`] >>
-       first_assum ACCEPT_TAC >> NO_TAC) >>
+  qexists_tac `b` >>
+  (rpt conj_tac
+   >- decide_tac
+   >- decide_tac
+   >- (strip_tac >> conj_tac >- fs[lower_event_consumes_def, MEM] >>
+       qexistsl_tac [`p.bp_fn`, `i`, `p.bp_state`, `op`, `sz`, `t`,
+                     `p`, `fuel`, `q`, `ep`, `effect`, `ef`, `et`, `eq`, `ws`] >>
+       asm_rewrite_tac[] >> metis_tac[])
+   >- (`b <> LENGTH h` by decide_tac >> simp[])
+   >- (qexistsl_tac [`p.bp_fn`, `i`, `p.bp_state`, `op`, `sz`, `t`] >>
+       first_assum ACCEPT_TAC)) >>
   rpt strip_tac >>
   `0 < j - n /\ j - n < LENGTH (i :: middle) /\ n + (j - n) = j` by
-    fs[Abbr `b`] >>
+    (fs[Abbr `b`] >> decide_tac) >>
   qpat_x_assum `!j. j < LENGTH (i :: middle) ==> _`
     (qspec_then `j - n` mp_tac) >> simp[] >> strip_tac >>
   `MEM (EL (j - n) (i :: middle)) middle` by metis_tac[] >>
@@ -406,7 +413,8 @@ Proof
      >- metis_tac[lower_budget_raw_call_recorded_window]
      >- metis_tac[lower_budget_create_copy_recorded_window] >>
      metis_tac[lower_budget_blueprint_recorded_window]) >>
-  fs[lower_history_window_def] >>
+  qpat_x_assum `!n. _ ==> lower_history_window h q n`
+    (assume_tac o BETA_RULE o PURE_REWRITE_RULE [lower_history_window_def]) >>
   drule (BETA_RULE lower_history_pairs_before_allocation) >>
   metis_tac[]
 QED

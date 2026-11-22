@@ -612,13 +612,21 @@ Theorem dalloca_windows_blueprint_args[local]:
   preserves_dalloca_windows window
     (compile_create_blueprint_args cfn cenv raw later_es args)
 Proof
-  Cases_on `raw`
-  >- (Cases_on `args` >> TRY (Cases_on `t`) >>
-      simp[compile_create_blueprint_args_def] >> strip_tac >>
-      windows_tac [dalloca_windows_snapshot, dalloca_windows_unwrap_value]) >>
-  Cases_on `args = []` >> simp[compile_create_blueprint_args_def] >>
-  strip_tac >>
-  windows_tac [dalloca_windows_create_ctor_args, dalloca_windows_abi_encode_values]
+  strip_tac >> Cases_on `raw`
+  >- (Cases_on `args`
+      >- (simp[compile_create_blueprint_args_def] >> windows_pure_tac) >>
+      rename1 `compile_create_blueprint_args _ _ _ _ (e::es)` >>
+      Cases_on `es`
+      >- (`preserves_dalloca_windows window (cfn cenv (expr_type e) e)` by simp[] >>
+          simp[compile_create_blueprint_args_def] >>
+          windows_tac [dalloca_windows_snapshot, dalloca_windows_unwrap_value]) >>
+      simp[compile_create_blueprint_args_def] >> windows_pure_tac) >>
+  Cases_on `args = []`
+  >- simp[compile_create_blueprint_args_def, dalloca_windows_return] >>
+  `preserves_dalloca_windows window (compile_create_ctor_args cfn cenv args)` by
+    (irule dalloca_windows_create_ctor_args >> first_assum ACCEPT_TAC) >>
+  simp[compile_create_blueprint_args_def] >>
+  windows_tac [dalloca_windows_abi_encode_values]
 QED
 
 Theorem dalloca_windows_blueprint_check[local]:
@@ -637,15 +645,18 @@ Theorem dalloca_windows_blueprint_call[local]:
 Proof
   strip_tac >>
   Cases_on `args` >- (simp[compile_create_call_def] >> windows_pure_tac) >>
-  Cases_on `t` >- (simp[compile_create_call_def] >> windows_pure_tac) >>
-  Cases_on `salted` >>
-  Cases_on `t'` >- (simp[compile_create_call_def] >> windows_pure_tac) >>
-  simp[compile_create_call_def] >>
+  rename1 `compile_create_call _ _ _ _ _ (_::rest)` >>
+  Cases_on `rest` >- (simp[compile_create_call_def] >> windows_pure_tac) >>
+  rename1 `compile_create_call _ _ _ _ _ (_::_::rest)` >>
+  Cases_on `rest`
+  >- (Cases_on `salted` >> simp[compile_create_call_def] >> windows_pure_tac) >>
+  rename1 `compile_create_call _ _ _ _ _ (_::_::_::tail)` >>
+  Cases_on `salted` >> Cases_on `tail` >>
+  fs[compile_create_call_def] >>
   windows_tac [dalloca_windows_create_blueprint_append,
     dalloca_windows_lower_value, dalloca_windows_create_salt,
     dalloca_windows_blueprint_args, dalloca_windows_blueprint_check] >>
-  fs[] >>
-  metis_tac[MEM_TL]
+  irule dalloca_windows_blueprint_args >> fs[] >> metis_tac[]
 QED
 
 Theorem dalloca_windows_compile_call_blueprint:
