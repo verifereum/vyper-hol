@@ -299,7 +299,8 @@ Proof
             qpat_assum `!e. MEM e (emitted_insts sa sb) ==> _`
               (qspecl_then [`i`] assume_tac) >>
             qpat_assum `MEM i (emitted_insts sa sb) ==> _`
-              (drule_then strip_assume_tac) >> fs[MEM]) >>
+              (drule_then (mp_tac o CONJUNCT1 o BETA_RULE)) >>
+              Cases_on `i.inst_opcode = DALLOCA` >> asm_simp_tac (srw_ss()) [MEM]) >>
          drule_all run_inst_seq_gas_origin_ptr_path >> simp[]) >>
       qexistsl_tac [`sf with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)`,`H`,`th`] >>
       simp[eval_operand_def, lookup_var_def] >>
@@ -353,7 +354,8 @@ Proof
      qpat_assum `!e. MEM e (emitted_insts sa sb) ==> _`
        (qspecl_then [`i`] assume_tac) >>
      qpat_assum `MEM i (emitted_insts sa sb) ==> _`
-       (drule_then strip_assume_tac) >> fs[MEM]) >>
+       (drule_then (mp_tac o CONJUNCT1 o BETA_RULE)) >>
+       Cases_on `i.inst_opcode = DALLOCA` >> asm_simp_tac (srw_ss()) [MEM]) >>
   drule_all run_inst_seq_abort_origin_ptr_uniform >>
   disch_then strip_assume_tac >>
   qexistsl_tac [`Revert_abort`,`sf with vs_inst_idx := j`,`H`,`th`] >>

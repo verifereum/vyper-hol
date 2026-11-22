@@ -671,7 +671,8 @@ Resume make_array_slot_full_bundled[bytes_store]:
      rpt strip_tac >> gvs[] >>
      simp[listTheory.APPEND_ASSOC,rich_listTheory.DROP_APPEND1]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-     i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts sc sb)` by
+     i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS /\
+     i.inst_opcode <> DALLOCA) (emitted_insts sc sb)` by
     (mp_tac (Q.INST [`src` |-> `Var xs`, `dst` |-> `Var out`, `sa` |-> `sc`]
        logBytesCodePtrTheory.compile_store_bytestring_opcodes) >>
      (impl_tac >- simp[]) >>
@@ -684,7 +685,17 @@ Resume make_array_slot_full_bundled[bytes_store]:
     `bb` |-> `codebb`, `explicit` |-> `gas_explicit_sites ctx shadow_ctx`,
     `D` |-> `<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>`]
     run_inst_seq_origin_ptr_lift) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >-
+    (simp[] >> conj_tac
+     >- (qpat_assum `EVERY _ (emitted_insts sc sb)` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >> simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+     rpt strip_tac >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_assum `EVERY _ (emitted_insts sc sb)` mp_tac >>
+     qpat_assum `emitted_insts sc sb = _ ++ [i] ++ _` (fn th =>
+       pure_once_rewrite_tac [th]) >>
+     simp[listTheory.EVERY_APPEND])) >>
+  strip_tac >>
   suspend "bytes_finish"
 QED
 
