@@ -197,6 +197,7 @@ Proof
          irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
          rename1 `j.inst_opcode <> DALLOCA` >>
          `MEM j code` by simp[] >> fs[EVERY_MEM]) >>
+     conj_tac >- simp[Abbr `code`, mk_inst_def, is_terminator_def] >>
      qexists_tac `HD sb.cs_blocks` >>
      fs[Abbr `code`, Abbr `ctr`, Abbr `so`, Abbr `dso`, Abbr `sp`, Abbr `dp`]) >>
   qexists_tac `q with vs_inst_idx := 4` >>
