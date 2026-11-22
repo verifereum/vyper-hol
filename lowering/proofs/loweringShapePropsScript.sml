@@ -16197,7 +16197,9 @@ Proof
     by (rpt gen_tac >> strip_tac >>
         match_mp_tac (Q.SPECL [`descs`, `segs`, `insts`, `fn`] internal_fns_ok_mode) >>
         rpt conj_tac >> TRY (FIRST_ASSUM ACCEPT_TAC) >>
-        qpat_assum `MEM fn ifns` (ACCEPT_TAC o REWRITE_RULE [Abbr `ifns`])) >>
+        qpat_assum `Abbrev (ifns = _)`
+          (fn eq => qpat_assum `MEM fn ifns`
+            (ACCEPT_TAC o SUBS [PURE_REWRITE_RULE [markerTheory.Abbrev_def] eq]))) >>
   `entry_fn_no_ret (mk_raw_function entry_label entry)`
     by (simp[contextCodegenRelTheory.entry_fn_no_ret_def,
              mk_raw_function_fields, EVERY_MEM] >>
