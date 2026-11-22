@@ -127,7 +127,7 @@ Theorem body_augassign_local_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign aty (NameTarget id) bop e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty (NameTarget id) bop e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign aty (NameTarget id) bop e)))
       (eval_stmt cx (AugAssign aty (NameTarget id) bop e)) es
 Proof
   suspend "use_ordinary"
@@ -160,7 +160,7 @@ Theorem body_augassign_toplevel_word_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign aty (TopLevelNameTarget nsid) bop e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty (TopLevelNameTarget nsid) bop e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign aty (TopLevelNameTarget nsid) bop e)))
       (eval_stmt cx (AugAssign aty (TopLevelNameTarget nsid) bop e)) es
 Proof
   suspend "use_ordinary"
@@ -192,7 +192,7 @@ Theorem body_augassign_attr_local_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e)))
       (eval_stmt cx (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e)) es
 Proof
   suspend "use_ordinary"
@@ -225,7 +225,7 @@ Theorem body_augassign_attr_storage_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e)))
       (eval_stmt cx (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e)) es
 Proof
   suspend "use_ordinary"
@@ -264,7 +264,7 @@ Theorem body_augassign_nested_immutable_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign aty t bop e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty t bop e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign aty t bop e)))
       (eval_stmt cx (AugAssign aty t bop e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1221,7 +1221,7 @@ Theorem body_augassign_other_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign aty t bop e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty t bop e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign aty t bop e)))
       (eval_stmt cx (AugAssign aty t bop e)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1267,7 +1267,7 @@ Theorem augassign_ordinary_full[local]:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign aty t bop e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AugAssign aty t bop e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign aty t bop e)))
       (eval_stmt cx (AugAssign aty t bop e)) es
 Proof
   rpt gen_tac >> strip_tac >>
