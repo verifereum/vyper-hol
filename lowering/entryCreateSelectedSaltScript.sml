@@ -51,7 +51,7 @@ Theorem blueprint_optional_salt_from_scalar:
       stmt_state_rel h ctx fnc ce cx q t /\ storage_well_formed_on cx q (FST h) /\
       ghost_inv_at (DF h) lo d ce cx q G' tn' t) /\ ~t.vs_halted
 Proof
-  reverse (Cases_on `hs`) >> simp[eval_exprs_nil, return_def, bind_return] >>
+  reverse (Cases_on `hs`) >> simp[cj 49 vyperInterpreterTheory.evaluate_def, return_def, bind_return] >>
   disch_then (map_every assume_tac o CONJUNCTS)
   >- (disj2_tac >> qexistsl [`G`,`tn`] >> gvs[] >> first_assum ACCEPT_TAC) >>
   `bind (bind (eval_expr cx salt) (read_result cx)) (\v. k [v]) p = (res,out)` by

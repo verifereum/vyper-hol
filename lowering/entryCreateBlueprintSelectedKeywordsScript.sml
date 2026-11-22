@@ -141,7 +141,8 @@ Resume blueprint_agreed_keywords_at_cuts[salt]:
      Cases_on `hs` >> simp[] >> metis_tac[create_prefix_labels]) >>
   qabbrev_tac `ko = \ov. finish (avalue::(salts ++ [ov]))` >>
   `bind (bind (eval_expr cx off) (read_result cx)) ko ps = (res,out)` by
-    fs[Abbr `ks`, Abbr `ko`, create_copy_source_cons, eval_exprs_nil, bind_def] >>
+    fs[Abbr `ksalt`, Abbr `ko`, create_copy_source_cons,
+       cj 49 vyperInterpreterTheory.evaluate_def, bind_return] >>
   `!ov. storage_trace_frame (ko ov)` by simp[Abbr `ko`] >>
   drule_all create_blueprint_offset_bridge >> strip_tac >>
   suspend "offset"
