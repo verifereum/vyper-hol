@@ -13,7 +13,7 @@ Theorem ecrecover_args_suffix_full:
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env es /\
     lower_word_args cenv (\e. ty) todo sa = (xs,sm) /\
-    lower_word_args cenv (\e. ty) (MAP gas_shadow_expr todo) shadow_sa =
+    lower_word_args (gas_shadow_env T cenv) (\e. ty) (MAP gas_shadow_expr todo) shadow_sa =
       (xs,shadow_sm) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sm shadow_sm /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
