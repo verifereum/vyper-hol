@@ -37,6 +37,10 @@ Theorem ctor_checked_emitted_endpoint:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
               i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts st st') /\
   run_inst_seq_mem_ok (emitted_insts st st') s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. (emitted_insts st st') = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
   run_inst_seq (emitted_insts st st') s = OK t /\
   t.vs_allocas = s.vs_allocas /\ t.vs_current_bb = s.vs_current_bb /\
   alloca_history func s ==>
