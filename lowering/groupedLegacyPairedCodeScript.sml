@@ -67,10 +67,10 @@ Resume grouped_legacy_paired_code[synchronise]:
      disch_then (qspecl_then [`checks`,`shchecks`] mp_tac) >>
      asm_rewrite_tac[SND]) >>
   `gas_shadow_env T cf = shcf /\ gas_shadow_state sa sha` by
-    (qspecl_then [`pa`,`ce`,`4`] mp_tac
+    (qspecl_then [`pa`,`ce`,`4`]
+       (drule_then (mp_tac o SPEC_ALL) o Q.SPECL [`reg`,`shreg`] o
+        REWRITE_RULE [gas_shadow_compiles_env_def])
        (Q.INST [`sd` |-> `T`] gas_shadow_compiles_env_register_positional_args) >>
-     rewrite_tac[gas_shadow_compiles_env_def] >>
-     disch_then (qspecl_then [`reg`,`shreg`] mp_tac) >>
      asm_rewrite_tac[FST,SND]) >>
   qexistsl_tac [`checks`,`reg`,`cf`,`sa`,`done`,`sha`,`shdone`] >>
   asm_rewrite_tac[] >> conj_tac

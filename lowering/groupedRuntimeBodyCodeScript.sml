@@ -86,10 +86,10 @@ Proof
      asm_rewrite_tac[SND] >> strip_tac >> asm_rewrite_tac[]) >>
   `gas_shadow_env T ce = shadow_ce /\ gas_shadow_state sa shadow_sa` by
     (qspecl_then [`common.ec_pos_args`,
-       `compile_register_kwarg_vars common.ec_env kwvars`,`4`] mp_tac
+       `compile_register_kwarg_vars common.ec_env kwvars`,`4`]
+       (drule_then (mp_tac o SPEC_ALL) o Q.SPECL [`entry`,`shadow_entry`] o
+        REWRITE_RULE [gas_shadow_compiles_env_def])
        (Q.INST [`sd` |-> `T`] gas_shadow_compiles_env_register_positional_args) >>
-     rewrite_tac[gas_shadow_compiles_env_def] >>
-     disch_then (qspecl_then [`entry`,`shadow_entry`] mp_tac) >>
      asm_rewrite_tac[FST,SND]) >>
   qexistsl_tac [`shadow_entry`,`shadow_sa`,`shadow_done`] >>
   `cs_extends sd entry /\ cs_extends entry done` by metis_tac[cs_extends_trans] >>
