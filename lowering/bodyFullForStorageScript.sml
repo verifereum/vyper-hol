@@ -260,7 +260,8 @@ Resume for_storage_array_nil_core[nil_path]:
   `ptr_inst_ok (DF H) lo 0 ctx func G tn i s` by
     suspend "nil_compare_checks" >>
   `inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
-   i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode` by
+   i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+   (ctx_has_dalloca ctx ==> dalloca_no_wrap i s)` by
     simp[Abbr `i`, mk_inst_def, is_terminator_def,
          inst_mem_below_frontier_def, inst_dload_in_section_def,
          source_memory_read_ranges_def, source_memory_write_ranges_def] >>
@@ -435,7 +436,7 @@ Theorem for_storage_body_invoke_full:
         fmupdate id <|assignable := F; type := tyv; value := v; popped := []|>
           FEMPTY::ei.scopes) s /\
     alloca_history func s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-    (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u) /\
+    (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u) /\
     (!H. valid_horizon cx st0 H
            (ei with
             scopes :=
@@ -1049,7 +1050,8 @@ Proof
     (`(mk_inst iid opc [a;b] [out]).inst_opcode <> INVOKE /\
       ~is_terminator (mk_inst iid opc [a;b] [out]).inst_opcode /\
       inst_mem_below_frontier (mk_inst iid opc [a;b] [out]) s /\
-      inst_dload_in_section (mk_inst iid opc [a;b] [out]) s` by
+      inst_dload_in_section (mk_inst iid opc [a;b] [out]) s /\
+      (ctx_has_dalloca ctx ==> dalloca_no_wrap (mk_inst iid opc [a;b] [out]) s)` by
        (gvs[] >> simp[mk_inst_def, is_terminator_def,
          unitTransformDefsTheory.inst_mem_below_frontier_def,
          memSafeRunTheory.inst_dload_in_section_def,

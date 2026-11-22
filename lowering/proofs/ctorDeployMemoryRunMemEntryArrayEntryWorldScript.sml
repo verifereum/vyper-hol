@@ -169,8 +169,15 @@ Proof
      qexists `emitted_insts st st'` >> simp[] >> rpt strip_tac >>
      `~is_terminator i.inst_opcode` by (fs[EVERY_MEM] >> metis_tac[]) >>
      drule_all step_inst_base_preserves_all >> simp[]) >>
-  drule_all ctor_checked_emitted_endpoint >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st st' = pre ++ i::post /\
+      run_inst_seq pre initial = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts st st')` by simp[MEM_APPEND] >>
+     qpat_assum `EVERY (\e. abi_decoder_reentry_opcode e.inst_opcode) _`
+       (qspec_then `i` mp_tac o REWRITE_RULE[EVERY_MEM]) >>
+     simp[abi_decoder_reentry_opcode_def] >> rpt strip_tac >> gvs[]) >>
+  drule_all (Q.INST [`ctx` |-> `ctx`] ctor_checked_emitted_endpoint) >> strip_tac >>
   drule_all ctor_word_path_sim >> strip_tac >>
   qexists `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   gvs[instIdxIndepTheory.eval_op_inst_idx, abi_decode_frame_def,
@@ -230,8 +237,15 @@ Proof
      qexists `emitted_insts st st'` >> simp[] >> rpt strip_tac >>
      `~is_terminator i.inst_opcode` by (fs[EVERY_MEM] >> metis_tac[]) >>
      drule_all step_inst_base_preserves_all >> simp[]) >>
-  drule_all ctor_checked_emitted_endpoint >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st st' = pre ++ i::post /\
+      run_inst_seq pre initial = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts st st')` by simp[MEM_APPEND] >>
+     qpat_assum `EVERY (\e. abi_decoder_reentry_opcode e.inst_opcode) _`
+       (qspec_then `i` mp_tac o REWRITE_RULE[EVERY_MEM]) >>
+     simp[abi_decoder_reentry_opcode_def] >> rpt strip_tac >> gvs[]) >>
+  drule_all (Q.INST [`ctx` |-> `ctx`] ctor_checked_emitted_endpoint) >> strip_tac >>
   drule_all ctor_word_path_sim >> strip_tac >>
   qexists `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   gvs[instIdxIndepTheory.eval_op_inst_idx, abi_decoder_address_frame_def,

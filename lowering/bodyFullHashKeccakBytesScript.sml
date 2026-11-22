@@ -50,6 +50,14 @@ Proof
      (emitted_insts sa sb) /\
    FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
     simp[mk_inst_def, is_terminator_def] >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+    simp[mk_inst_def] >>
+  `(ctx_has_dalloca ctx ==>
+     !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+       run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+     simp[EVERY_APPEND]) >>
   drule_all run_inst_seq_gas_origin_ptr_path >> simp[]
 QED
 

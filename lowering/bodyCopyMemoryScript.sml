@@ -63,7 +63,7 @@ Proof
 QED
 
 (* Cursor-aware lifting, keeping the entry cursor implicit in the judgment. *)
-Theorem copy_memory_frag_at_cursor[local]:
+Theorem body_decl_frag_at_cursor:
   !ctx st st' P Q R.
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
     isPREFIX st.cs_current_insts st'.cs_current_insts /\
@@ -73,6 +73,10 @@ Theorem copy_memory_frag_at_cursor[local]:
        s.vs_current_bb = st.cs_current_bb /\
        s.vs_inst_idx = LENGTH st.cs_current_insts ==>
        run_inst_seq_mem_ok (emitted_insts st st') s /\
+       (ptrDiscipline$ctx_has_dalloca ctx ==>
+         !pre i post u. (emitted_insts st st') = pre ++ i::post /\
+           run_inst_seq pre s = OK u ==>
+           unitTransformDefs$dalloca_no_wrap i u) /\
        ?t. run_inst_seq (emitted_insts st st') s = OK t /\
            Q (t with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
     frag_exec_mem ctx st st' P Q R
@@ -83,9 +87,28 @@ Proof
     s.vs_inst_idx = LENGTH st.cs_current_insts` >>
   `frag_exec_mem ctx st st' P' Q R` by
     (irule frag_exec_mem_run_inst_seq >> simp[Abbr `P'`] >>
-     metis_tac[]) >>
+     pure_once_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+     pure_rewrite_tac[APPEND] >> metis_tac[]) >>
   fs[frag_exec_mem_def, Abbr `P'`] >>
   rpt gen_tac >> strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem copy_code_no_wrap[local]:
+  EVERY (\i. i.inst_opcode <> DALLOCA) code /\
+  code = pre ++ [i] ++ post ==> unitTransformDefs$dalloca_no_wrap i u
+Proof
+  rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+  gvs[EVERY_APPEND]
+QED
+
+Theorem copy_memory_body_non_dalloca[local]:
+  compile_copy_memory dst src n sa = ((),sb) ==>
+  EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)
+Proof
+  Cases_on `n`
+  >- simp[compile_copy_memory_def, comp_return_def, emitted_insts_def] >>
+  simp[compile_copy_memory_def] >> strip_tac >>
+  drule emitted_insts_emit_void >> simp[mk_inst_def]
 QED
 
 Theorem compile_copy_memory_body_frag_mem:
@@ -109,7 +132,7 @@ Theorem compile_copy_memory_body_frag_mem:
         mem_bytes_at a k t.vs_memory = mem_bytes_at a k s0.vs_memory)) R
 Proof
   rpt strip_tac >> drule buffer_copy_memory_shape >> strip_tac >>
-  irule copy_memory_frag_at_cursor >>
+  irule body_decl_frag_at_cursor >>
   simp[same_blocks_def, IS_PREFIX_APPEND] >>
   reverse conj_tac
   >- (conj_tac >- fs[same_blocks_def] >>
@@ -121,7 +144,9 @@ Proof
       simp[mk_inst_def, is_terminator_def]) >>
   rpt strip_tac >> gvs[]
   >- (irule compile_copy_memory_body_mem_ok >>
-      metis_tac[ADD_COMM]) >>
+      metis_tac[ADD_COMM])
+  >- (drule copy_memory_body_non_dalloca >> strip_tac >>
+      drule_all copy_code_no_wrap >> simp[]) >>
   drule_all copy_memory_body_run >> strip_tac >>
   `alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule copy_memory_body_history >> metis_tac[]) >>
@@ -131,7 +156,8 @@ QED
 Theorem store_bytestring_body_code[local]:
   compile_store_bytestring src dst sa = ((),sb) ==>
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-    (emitted_insts sa sb)
+    (emitted_insts sa sb) /\
+  EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)
 Proof
   rpt strip_tac >>
   gvs[compile_store_bytestring_def, compile_bytestring_copy_len_def,
@@ -182,12 +208,14 @@ Theorem compile_store_bytestring_body_frag_mem:
         mem_bytes_at a k t.vs_memory = mem_bytes_at a k s0.vs_memory)) R
 Proof
   rpt strip_tac >> drule buffer_store_bytestring_shape >> strip_tac >>
-  irule copy_memory_frag_at_cursor >>
+  irule body_decl_frag_at_cursor >>
   simp[same_blocks_def, IS_PREFIX_APPEND] >>
   reverse conj_tac
   >- (fs[same_blocks_def] >> metis_tac[store_bytestring_body_code]) >>
   rpt strip_tac >> gvs[]
-  >- (irule compile_store_bytestring_body_mem_ok >> metis_tac[ADD_COMM]) >>
+  >- (irule compile_store_bytestring_body_mem_ok >> metis_tac[ADD_COMM])
+  >- (drule store_bytestring_body_code >> strip_tac >>
+      drule_all copy_code_no_wrap >> simp[]) >>
   drule buffer_store_bytestring_run >>
   disch_then drule >> disch_then drule >>
   disch_then (qspec_then `len` mp_tac) >>
@@ -576,14 +604,15 @@ QED
 Theorem store_memory_body_code[local]:
   compile_store_memory ce src dst ann ann sa = ((),sb) ==>
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-    (emitted_insts sa sb)
+    (emitted_insts sa sb) /\
+  EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)
 Proof
   Cases_on `is_word_type ann`
   >- (simp[compile_store_memory_def] >> strip_tac >>
       drule emitted_insts_emit_void >> simp[mk_inst_def, is_terminator_def]) >>
   Cases_on `is_bytestring_type ann` >> simp[compile_store_memory_def]
   >- metis_tac[store_bytestring_body_code] >>
-  metis_tac[copy_memory_body_code]
+  metis_tac[copy_memory_body_code, copy_memory_body_non_dalloca]
 QED
 
 Theorem assign_memory_body_shape[local]:
@@ -592,7 +621,8 @@ Theorem assign_memory_body_shape[local]:
   same_blocks sa sb /\
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-    (emitted_insts sa sb)
+    (emitted_insts sa sb) /\
+  EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)
 Proof
   rpt strip_tac >> drule_all assign_memory_body_code >> strip_tac >>
   drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >> strip_tac >>
@@ -602,11 +632,11 @@ Proof
   `same_blocks sa sb /\
    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb` by
     (fs[same_blocks_def] >> metis_tac[APPEND_ASSOC]) >>
-  asm_simp_tac (srw_ss()) [EVERY_APPEND] >> rpt conj_tac
-  >- (drule emitted_insts_emit_op >> strip_tac >>
-      simp[mk_inst_def, is_terminator_def])
-  >- metis_tac[copy_memory_body_code] >>
-  metis_tac[store_memory_body_code]
+  drule copy_memory_body_code >> strip_tac >>
+  drule copy_memory_body_non_dalloca >> strip_tac >>
+  drule store_memory_body_code >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  asm_simp_tac (srw_ss()) [EVERY_APPEND, mk_inst_def, is_terminator_def]
 QED
 
 Theorem assign_memory_body_history[local]:
@@ -657,7 +687,7 @@ Theorem compile_assign_value_name_staged_body_frag_mem:
 Proof
   rpt strip_tac >> drule_all assign_memory_body_shape >> strip_tac >>
   fs[same_blocks_def] >>
-  irule copy_memory_frag_at_cursor >>
+  irule body_decl_frag_at_cursor >>
   asm_simp_tac (srw_ss()) [same_blocks_def, IS_PREFIX_APPEND] >>
   rpt strip_tac >> gvs[] >>
   `!x. Var p = Var x \/ dst = Var x ==> not_fresh_at sa x` by (simp[] >> metis_tac[])

@@ -89,6 +89,11 @@ Proof
    FILTER (\i. i.inst_opcode = GAS) code = []` by
     (Cases_on `nr /\ ~iv` >>
      simp[Abbr `code`, mk_inst_def, is_terminator_def]) >>
+  `ctx_has_dalloca ctx ==>
+    !pre i post u. code = (pre ++ [i]) ++ post /\ run_inst_seq pre s = OK u ==>
+      dalloca_no_wrap i u` by
+    (strip_tac >> rpt gen_tac >> Cases_on `nr /\ ~iv` >> Cases_on `pre` >>
+     simp[Abbr `code`] >> strip_tac >> gvs[mk_inst_def, dalloca_no_wrap_def]) >>
   `run_inst_seq_mem_ok code s` by
     (irule run_inst_seq_mem_ok_every >> Cases_on `nr /\ ~iv` >>
      simp[Abbr `code`, mk_inst_def, inst_mem_below_frontier_def,
@@ -99,7 +104,8 @@ Proof
     (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code),G,tn1)` by
     (rpt gen_tac >>
      mp_tac (Q.SPECL [`code`, `s`, `t`, `G`, `tn`, `G`, `tn1`,
-       `ctx`, `func`, `bb`] run_inst_seq_gas_origin_ptr_path) >> simp[]) >>
+       `ctx`, `func`, `bb`] run_inst_seq_gas_origin_ptr_path) >> simp[] >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
   `gas_path ctx func s 0
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code)) /\
    gas_path_mem ctx func s 0

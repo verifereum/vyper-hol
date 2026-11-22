@@ -515,6 +515,14 @@ Proof
         rpt (pop_assum kall_tac) >>
         simp[EVERY_MEM] >> rpt strip_tac >> res_tac >>
         gvs[abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
+     `(ctx_has_dalloca ctx ==> !pre i post u.
+         emitted_insts st st' = pre ++ i::post /\
+         run_inst_seq pre initial = OK u ==> dalloca_no_wrap i u)` by
+       (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+        qpat_assum `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) _`
+          (qspec_then `i` mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+        Cases_on `i.inst_opcode = DALLOCA` >>
+        simp[MEM_APPEND, abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
      irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >> metis_tac[]) >>
   `actual.vs_fmp = initial.vs_fmp` by
     (`abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
@@ -711,6 +719,14 @@ Proof
        (emitted_insts st middle)` by fs[EVERY_CONJ] >>
      drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
      `t.vs_allocas = initial.vs_allocas` by gvs[Abbr `prepared`] >>
+     `(ctx_has_dalloca ctx ==> !pre i post u.
+         emitted_insts st middle = pre ++ i::post /\
+         run_inst_seq pre initial = OK u ==> dalloca_no_wrap i u)` by
+       (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+        qpat_assum `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) _`
+          (qspec_then `i` mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+        Cases_on `i.inst_opcode = DALLOCA` >>
+        simp[MEM_APPEND, abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
      `!D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) []
         (OK (t with vs_inst_idx := LENGTH middle.cs_current_insts), H, qt)` by
        (`EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
@@ -719,8 +735,7 @@ Proof
              i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) _` mp_tac >>
            rpt (pop_assum kall_tac) >> simp[EVERY_MEM] >> metis_tac[]) >>
         rpt gen_tac >> irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >> metis_tac[]) >>
-     drule_all ctor_checked_emitted_endpoint >>
-     disch_then (qspec_then `ctx` mp_tac) >> simp[Abbr `prepared`]) >>
+     drule_all ctor_checked_emitted_endpoint >> simp[Abbr `prepared`]) >>
   `fn_has_code middle end_st func` by
     (mp_tac (Q.SPECL [`middle`,`end_st`,`final`,`func`] fn_has_code_split) >> simp[]) >>
   `?after_head Hh qh Bh. (^HshiftModeWithFmp) frame_fmp checked ctx func site ids D N limit_st tv v

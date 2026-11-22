@@ -212,6 +212,10 @@ Theorem ctor_checked_arg_sequence_reach:
             i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS)
    (emitted_insts st middle) /\
  run_inst_seq_mem_ok (emitted_insts st middle) initial /\
+ (ptrDiscipline$ctx_has_dalloca ctx ==>
+   !pre i post u. (emitted_insts st middle) = pre ++ i::post /\
+     run_inst_seq pre initial = OK u ==>
+     unitTransformDefs$dalloca_no_wrap i u) /\
  run_inst_seq (emitted_insts st middle) initial = OK raw /\
  raw.vs_allocas = initial.vs_allocas /\ raw.vs_current_bb = initial.vs_current_bb /\
  alloca_history func initial /\
@@ -224,8 +228,8 @@ Theorem ctor_checked_arg_sequence_reach:
  alloca_history func (raw with vs_inst_idx := LENGTH middle.cs_current_insts)
 Proof
  strip_tac >>
- drule_all ctor_checked_emitted_endpoint >>
- disch_then (qspec_then `ctx` strip_assume_tac) >>
+ drule_all (Q.INST [`ctx` |-> `ctx`] ctor_checked_emitted_endpoint) >>
+ strip_tac >>
  asm_rewrite_tac[] >>
  `frag_exec ctx st middle (\s. s = initial)
    (\t. t = raw with vs_inst_idx := LENGTH middle.cs_current_insts) (K F)` by
@@ -277,8 +281,14 @@ Proof
  qmatch_asmsub_abbrev_tac `run_inst_seq _ initial = OK raw` >>
  `raw.vs_allocas = initial.vs_allocas /\ raw.vs_current_bb = initial.vs_current_bb` by
    simp[Abbr `raw`, update_var_def] >>
- drule_all ctor_checked_arg_sequence_reach >>
- disch_then (qspec_then `ctx` assume_tac) >>
+ `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st middle = pre ++ i::post /\
+      run_inst_seq pre initial = OK u ==> dalloca_no_wrap i u)` by
+   (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+    `MEM i (emitted_insts st middle)` by simp[MEM_APPEND] >>
+    drule emitted_insts_emit_op >> strip_tac >> fs[mk_inst_def]) >>
+ drule_all (Q.INST [`ctx` |-> `ctx`] ctor_checked_arg_sequence_reach) >>
+ strip_tac >>
  gvs[Abbr `raw`, eval_op_inst_idx, fresh_vars_wrt_def, update_var_def] >>
  asm_rewrite_tac[]
 QED
@@ -331,8 +341,14 @@ Proof
  qmatch_asmsub_abbrev_tac `run_inst_seq _ initial = OK raw` >>
  `raw.vs_allocas = initial.vs_allocas /\ raw.vs_current_bb = initial.vs_current_bb` by
    simp[Abbr `raw`, update_var_def] >>
- drule_all ctor_checked_arg_sequence_reach >>
- disch_then (qspec_then `ctx` assume_tac) >>
+ `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st middle = pre ++ i::post /\
+      run_inst_seq pre initial = OK u ==> dalloca_no_wrap i u)` by
+   (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+    `MEM i (emitted_insts st middle)` by simp[MEM_APPEND] >>
+    drule emitted_insts_emit_op >> strip_tac >> fs[mk_inst_def]) >>
+ drule_all (Q.INST [`ctx` |-> `ctx`] ctor_checked_arg_sequence_reach) >>
+ strip_tac >>
  gvs[Abbr `raw`, eval_op_inst_idx, fresh_vars_wrt_def, update_var_def] >>
  asm_rewrite_tac[]
 QED

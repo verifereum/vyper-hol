@@ -171,6 +171,22 @@ Proof
   disch_then (qspecl_then [`func`,`PG`] strip_assume_tac) >>
   drule_all extract32_tail_code_cuts >> strip_tac >>
   `emitted_insts st3 sb = emitted_insts st3 st4 ++ emitted_insts st4 sb` by metis_tac[] >>
+  `EVERY (\ins. ins.inst_opcode <> DALLOCA) (emitted_insts st3 sb)` by
+    (simp[EVERY_APPEND] >> conj_tac
+     >- (mp_tac (Q.SPECL [`Var len`,`Var data`,`offset`] extract32_read_load) >>
+         simp[extract32_straight_read_frame_def] >> disch_then drule >>
+         simp[EVERY_MEM] >> strip_tac >> rpt strip_tac >> first_x_assum drule >>
+         gvs[fresh_write_op_def]) >>
+     mp_tac (Q.SPECL [`raw`,`BaseT bt`] extract32_read_clamp_basetype) >>
+     simp[extract32_straight_read_frame_def] >> disch_then drule >>
+     simp[EVERY_MEM] >> strip_tac >> rpt strip_tac >> first_x_assum drule >>
+     gvs[fresh_write_op_def]) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre ins post u. emitted_insts st3 sb = pre ++ ins::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap ins u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY (\ins. ins.inst_opcode <> DALLOCA) _` mp_tac >>
+     simp[EVERY_APPEND]) >>
   `eval_operand (Var len) (drop_fresh st3 s) = SOME (n2w (LENGTH bs)) /\
    eval_operand (Var data) (drop_fresh st3 s) = SOME (n2w (p+32)) /\
    eval_operand offset (drop_fresh st3 s) = SOME (n2w (Num i))` by
@@ -233,7 +249,8 @@ Resume extract32_suffix_full[abort]:
      (emitted_insts st3 st4 ++ emitted_insts st4 sb)` by simp[EVERY_APPEND] >>
   qspecl_then [`emitted_insts st3 sb`,`s`,`Revert_abort`,`t`,`ctx`,`func`,`bb`]
     mp_tac run_inst_seq_abort_origin_ptr_uniform >>
-  (impl_tac >- simp[]) >> disch_then (qx_choose_then `j` assume_tac) >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choose_then `j` assume_tac) >>
   irule gas_outcome_full_exit >> simp[] >>
   qexistsl_tac [`HG`,`ee`,`Abort Revert_abort (t with vs_inst_idx := j)`,`INR (Error y)`,`th`] >>
   simp[fragExecTheory.exit_result_def] >> conj_tac

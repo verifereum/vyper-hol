@@ -117,8 +117,20 @@ Proof
     (irule window_array_scalar_exit_pure >> metis_tac[]) >>
   `run_inst_seq_mem_ok (emitted_insts st en) s` by
     (irule window_array_scalar_exit_seq_mem >> metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st en)` by
+    (qpat_x_assum `(if active then _ else _) = (out,en)` mp_tac >>
+     Cases_on `active` >>
+     simp[abi_encode_array_dynamic_exit_def, abi_encode_array_static_exit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+     simp[emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+     simp[DROP_LENGTH_APPEND, mk_inst_def]) >>
   `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
-    metis_tac[window_seq_mem_cont, window_pure_seq_def] >>
+    (irule window_seq_mem_cont >> simp[] >> qexists_tac `st` >>
+     fs[window_pure_seq_def] >> rpt strip_tac >>
+     irule dalloca_no_wrap_non_dalloca >>
+     gvs[EVERY_MEM, MEM_APPEND]) >>
   `mem_bytes_at d (LENGTH (enc (Array NONE ty) (ListV avs))) s.vs_memory =
       enc (Array NONE ty) (ListV avs)` by metis_tac[window_array_prefix_complete] >>
   `window_phase ctx func st en {} [] s

@@ -121,6 +121,26 @@ Proof
   drule_all keccak_typed_suffix_mem_ok >> strip_tac >>
   drule_all keccak_typed_suffix_shape >> strip_tac >>
   drule_all keccak_typed_suffix_no_gas >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sm sb)` by
+    (qpat_assum `_ = (op,sb)` mp_tac >>
+     qpat_assum `is_bytes_or_string_type (expr_type e)` mp_tac >>
+     qpat_assum `expr_type e = BaseT bty` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     Cases_on `bty` >>
+     gvs[is_bytes_or_string_type_def, is_bytestring_type_def] >>
+     TRY (rename1 `BytesT bd` >> Cases_on `bd` >>
+          gvs[is_bytestring_type_def]) >>
+     gvs[compile_keccak256_bytes_def, compile_keccak256_bytesm_def,
+         compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def, emit_op_def, emit_void_def, fresh_id_def,
+         fresh_var_def, emit_def] >>
+     simp[emitted_insts_def, DROP_APPEND, mk_inst_def,
+          arithmeticTheory.SUB_PLUS]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sm sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     fs[EVERY_APPEND, unitTransformDefsTheory.dalloca_no_wrap_def]) >>
   `(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
       DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sm sb ++ rest) /\
     s.vs_inst_idx + LENGTH (emitted_insts sm sb) = LENGTH sb.cs_current_insts` by

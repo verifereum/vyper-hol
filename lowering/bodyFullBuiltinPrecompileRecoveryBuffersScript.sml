@@ -236,7 +236,8 @@ Proof
      simp[eval_operand_def] >>
      fs[EVERY_MEM] >> metis_tac[]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> ALLOCA /\
-       i.inst_opcode <> GAS /\ i.inst_opcode <> ISTORE /\ ~is_terminator i.inst_opcode)
+       i.inst_opcode <> GAS /\ i.inst_opcode <> ISTORE /\
+       i.inst_opcode <> DALLOCA /\ ~is_terminator i.inst_opcode)
      (emitted_insts sa sp)` by
     (qpat_assum `(do emit_void MSTORE _; _ od) sa = ((),sp)` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
@@ -244,6 +245,11 @@ Proof
        comp_return_def,fresh_id_def,fresh_var_def,emit_def] >>
      strip_tac >> gvs[] >>
      simp[emitted_insts_def,DROP_APPEND1,mk_inst_def,is_terminator_def]) >>
+  `!pre i post u. emitted_insts sa sp = pre ++ i::post ==>
+       unitTransformDefs$dalloca_no_wrap i u` by
+    (qpat_assum `EVERY _ (emitted_insts sa sp)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[EVERY_MEM] >>
+     metis_tac[MEM_APPEND,MEM,memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   `!D. inst_seq_ptr D 0 ctx func PG G1 tn1 (emitted_insts sa sp)
        s1 G2 tn2` by
     (gen_tac >>
@@ -495,13 +501,19 @@ Proof
    same_blocks sm sz /\
    EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> ALLOCA /\
      i.inst_opcode <> GAS /\ i.inst_opcode <> ISTORE /\
-     ~is_terminator i.inst_opcode) (emitted_insts sm sz)` by
+     i.inst_opcode <> DALLOCA /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sm sz)` by
     (qpat_assum `emit_void MSTORE _ sm = ((),sz)` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      simp[emit_void_def,comp_bind_def,comp_ignore_bind_def,comp_return_def,
        fresh_id_def,emit_def] >> strip_tac >> gvs[] >>
      simp[emitted_insts_def,DROP_APPEND1,mk_inst_def,is_terminator_def,
        same_blocks_def]) >>
+  `!pre i post u. emitted_insts sm sz = pre ++ i::post ==>
+       unitTransformDefs$dalloca_no_wrap i u` by
+    (qpat_assum `EVERY _ (emitted_insts sm sz)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[EVERY_MEM] >>
+     metis_tac[MEM_APPEND,MEM,memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   `s3 with vs_inst_idx := s3.vs_inst_idx = s3` by
     simp[venom_state_component_equality] >>
   qpat_assum `!k. inst_seq_ptr _ _ _ _ _ _ _ _ _ G3 tn4`

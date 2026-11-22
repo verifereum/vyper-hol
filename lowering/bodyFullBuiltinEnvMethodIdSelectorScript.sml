@@ -158,7 +158,7 @@ Resume method_id_selector_full_run[package]:
    LENGTH (emitted_insts sa sb) = 2 /\ sa.cs_next_var <= sb.cs_next_var /\
    (!x. op = Var x ==> not_fresh_at sb x) /\
    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-     i.inst_opcode <> GAS) (emitted_insts sa sb)` by
+     i.inst_opcode <> GAS /\ i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
     (gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
       comp_ignore_bind_def, comp_return_def, emit_def, emitted_insts_def] >>
      pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
@@ -196,6 +196,12 @@ Resume method_id_selector_full_run[path]:
     simp[IS_PREFIX_APPEND] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
     (fs[EVERY_MEM] >> metis_tac[]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY (\i. _ /\ _ /\ _ /\ i.inst_opcode <> DALLOCA) _` mp_tac >>
+     simp[EVERY_APPEND]) >>
   drule_all run_inst_seq_gas_origin_ptr_path >>
   `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
     (simp[FILTER_EQ_NIL] >> fs[EVERY_MEM] >> metis_tac[]) >>

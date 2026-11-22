@@ -4844,14 +4844,18 @@ Resume place_slots_elements_static_mem_local[child]:
    (!x. slot = Var x ==> not_fresh_at loopbs x)` by
     (fs[ci_mono_def] >> metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
   drule_all store_slots_addresses_sequence >> strip_tac >>
-  `run_inst_seq_mem_ok (emitted_insts loopbs loopsc) hu` by
+  `EVERY (\j. j.inst_opcode <> INVOKE /\ j.inst_opcode <> DALLOCA /\
+              ~is_terminator j.inst_opcode) (emitted_insts loopbs loopsc) /\
+   run_inst_seq_mem_ok (emitted_insts loopbs loopsc) hu` by
     (qpat_x_assum `(do _ <- emit_op MUL _; _ od) _ = _` mp_tac >>
      simp[comp_bind_def, comp_return_def, emit_op_def, fresh_var_def,
           emit_inst_def, fresh_id_def, emit_def, comp_ignore_bind_def] >>
-     strip_tac >> gvs[] >> irule fragExecMemTheory.run_inst_seq_mem_ok_every >>
+     strip_tac >> gvs[] >>
      simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
-     simp[DROP_LENGTH_APPEND] >> rpt conj_tac >> gen_tac >>
-     irule instMemFrontierTheory.below_frontier_no_ranges >> simp[mk_inst_def]) >>
+     simp[DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def] >>
+     irule fragExecMemTheory.run_inst_seq_mem_ok_every >>
+     simp[] >> rpt conj_tac >> gen_tac >>
+     irule instMemFrontierTheory.below_frontier_no_ranges >> simp[]) >>
   `LENGTH (FILTER (\j. j.inst_opcode = GAS) (emitted_insts loopbs loopsc)) = 0` by
     (qpat_x_assum `EVERY (\j. j.inst_opcode <> GAS) _` mp_tac >>
      simp[LENGTH_NIL, FILTER_EQ_NIL]) >>

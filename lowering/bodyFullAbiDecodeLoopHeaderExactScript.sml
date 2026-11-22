@@ -141,6 +141,13 @@ Proof
        i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS)
      [mk_inst sa.cs_next_id MLOAD [Var counter] [out]]` by
     simp[mk_inst_def, is_terminator_def] >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+      [mk_inst sa.cs_next_id MLOAD [Var counter] [out]] = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i [mk_inst sa.cs_next_id MLOAD [Var counter] [out]]` by
+       (qpat_assum `[_] = pre ++ i::post` SUBST1_TAC >> simp[MEM_APPEND]) >>
+     fs[mk_inst_def]) >>
   drule_all run_inst_seq_origin_ptr_lift >>
   simp[Abbr `t`]
 QED

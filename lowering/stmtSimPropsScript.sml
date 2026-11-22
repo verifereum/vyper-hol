@@ -325,7 +325,7 @@ Theorem emit_abort_zero_path_mem:
   gas_path_mem ctx func s 0 (Abort a t)
 Proof
   strip_tac >>
-  `inst_dload_in_section (mk_inst sa.cs_next_id opc ops []) s` by
+  `inst_dload_in_section (mk_inst sa.cs_next_id opc ops []) s /\ opc <> DALLOCA` by
     (drule step_inst_base_abort_opcodes >> simp[mk_inst_def] >>
      strip_tac >> gvs[inst_dload_in_section_def, mk_inst_def]) >>
   drule emit_inst_extends >> strip_tac >>
@@ -433,8 +433,9 @@ Theorem run_from_jump_end_mem:
          mem_safe_run fuel' ctx func ss)
 Proof
   rpt gen_tac >> strip_tac >>
-  `inst.inst_opcode <> DLOAD /\ inst.inst_opcode <> DLOADBYTES` by
-    (conj_tac >> strip_tac >> gvs[is_terminator_def]) >>
+  `inst.inst_opcode <> DLOAD /\ inst.inst_opcode <> DLOADBYTES /\
+   inst.inst_opcode <> DALLOCA` by
+    (rpt conj_tac >> strip_tac >> gvs[is_terminator_def]) >>
   drule_all fn_has_code_same_block >> strip_tac >>
   `get_instruction bb (LENGTH sa.cs_current_insts) = SOME inst` by
     (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
@@ -457,7 +458,7 @@ Theorem emit_abort_exit_mem:
              stmt_exit RetQ es' res r /\ mem_safe_run fuel ctx func s0
 Proof
   rpt strip_tac >>
-  `inst_dload_in_section (mk_inst st.cs_next_id opc ops []) s0` by
+  `inst_dload_in_section (mk_inst st.cs_next_id opc ops []) s0 /\ opc <> DALLOCA` by
     (drule step_inst_base_abort_opcodes >> simp[mk_inst_def] >>
      strip_tac >> gvs[inst_dload_in_section_def, mk_inst_def]) >>
   drule emit_inst_extends >> strip_tac >>

@@ -148,6 +148,15 @@ Proof
      qpat_x_assum `step_inst_base wr (_ with vs_inst_idx := _) = _` mp_tac >>
      simp[] >> strip_tac >>
      simp[Abbr `G2`, Abbr `tn2`]) >>
+  `(ctx_has_dalloca ctx ==>
+     !pre i post u. [ld;wr] = pre ++ i::post /\
+       run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `MEM i [ld;wr]` by
+       (qpat_assum `[ld;wr] = pre ++ i::post` SUBST1_TAC >> simp[MEM_APPEND]) >>
+     pop_assum mp_tac >> simp[] >> strip_tac >>
+     gvs[Abbr `ld`, Abbr `wr`, mk_inst_def,
+         unitTransformDefsTheory.dalloca_no_wrap_def]) >>
   drule_all run_inst_seq_gas_origin_ptr_path >>
   simp[Abbr `s2`, Abbr `s1`, Abbr `tmp`]
 QED
@@ -489,6 +498,15 @@ Resume compile_abi_encode_to_buf_copy_window_joint[copy_path]:
    FILTER (\i. i.inst_opcode = GAS) [copy_inst] = []` by
     simp[Abbr `copy_inst`, mk_inst_def, is_terminator_def] >>
   `run_inst_seq [copy_inst] s = OK u` by metis_tac[] >>
+  `(ctx_has_dalloca ctx ==>
+     !pre i post v. [copy_inst] = pre ++ i::post /\
+       run_inst_seq pre s = OK v ==> unitTransformDefs$dalloca_no_wrap i v)` by
+    (rpt strip_tac >>
+     `MEM i [copy_inst]` by
+       (qpat_assum `[copy_inst] = pre ++ i::post` SUBST1_TAC >> simp[MEM_APPEND]) >>
+     pop_assum mp_tac >> simp[] >> disch_then SUBST1_TAC >>
+     simp[Abbr `copy_inst`, mk_inst_def,
+          unitTransformDefsTheory.dalloca_no_wrap_def]) >>
   drule_all run_inst_seq_gas_origin_ptr_path >> simp[]
 QED
 Finalise compile_abi_encode_to_buf_copy_window_joint

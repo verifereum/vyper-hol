@@ -179,15 +179,15 @@ Resume raw_log_expr_sim_full[continuation]:
      mid.storage_trace` by fs[storage_trace_domain_def] >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
-  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)`
        (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
      impl_tac >- first_assum ACCEPT_TAC >>
      disch_then (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` (fn phi =>
-         qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s`
-           (fn no_wrap => ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+         qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s`
+           (fn no_wrap => ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
              (LIST_CONJ [path,phi,no_wrap])))))) >>
   fs[Abbr `topicQ`] >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
@@ -279,9 +279,9 @@ Resume raw_log_expr_sim_full[fixed_data]:
      >~ [`local_ptrs_reserved cenv sm`]
      >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
          fs[ci_mono_def])
-     >~ [`!fn inst t'. frag_reachable ctx func t fn inst t' ==> dalloca_no_wrap inst t'`]
+     >~ [`!fn inst t'. frag_reachable ctx func t fn inst t' ==> dalloca_fmp_headroom inst t'`]
      >- (rpt strip_tac >> qpat_assum
-           `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s`
+           `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s`
            (qspecl_then [`fn`, `inst`, `t'`] MATCH_MP_TAC) >> first_assum ACCEPT_TAC)
      >~ [`!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x`]
      >- (rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >>
@@ -368,7 +368,7 @@ Resume raw_log_expr_sim_full[dynamic_data]:
         raw_log_dynamic_data_full))) >>
   simp[loweringPostsTheory.post_value_type_bytestring,
     compileEnvTheory.is_bytestring_type_def] >> rpt conj_tac
-  >~ [`!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s`]
+  >~ [`!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s`]
   >- first_assum ACCEPT_TAC
   >~ [`!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x`]
   >- (rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >>

@@ -571,6 +571,15 @@ Resume abi_decode_loop_select_joint_exact[success]:
       i.inst_opcode <> GAS) (emitted_insts s2 sb)` by
     metis_tac[bodyPtrBopScalarSeqTheory.bop_scalar_seq_opcodes] >>
   `run_inst_seq_mem_ok (emitted_insts s2 sb) t` by metis_tac[bodyFullAbiDecodeClampMemoryTheory.abi_decode_scalar_seq_mem_ok] >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post w. emitted_insts s2 sb = pre ++ i::post /\
+      run_inst_seq pre t = OK w ==> unitTransformDefs$dalloca_no_wrap i w)` by
+    (rpt strip_tac >>
+     `MEM i (emitted_insts s2 sb)` by simp[MEM_APPEND] >>
+     drule_all bodyPtrBopScalarOutcomeTheory.bop_scalar_seq_outputs >>
+     strip_tac >>
+     simp[unitTransformDefsTheory.dalloca_no_wrap_def] >>
+     CCONTR_TAC >> gvs[]) >>
   drule_all fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
   disch_then (qspec_then `explicit` assume_tac) >>
   drule_all bodyPtrBopScalarOutcomeTheory.bop_scalar_seq_runtime_frame >> strip_tac >>

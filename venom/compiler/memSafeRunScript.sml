@@ -5,7 +5,7 @@
  * s executes, in callee frames too, reads and writes within the ALLOCA
  * frontier or, in contexts with DALLOCA, within the two allocation regions,
  * and reads the data section only from offsets within it
- * (inst_dload_in_section).
+ * (inst_dload_in_section). Each DALLOCA also has a non-wrapping extent.
  * The check follows the runner's own recursion (step_inst, exec_block,
  * run_blocks), so it sees exactly the instructions the run executes, in
  * the states it executes them in.
@@ -90,6 +90,7 @@ Definition mem_safe_defs:
     (inst_mem_below_frontier inst s \/
      (ctx_has_dalloca ctx /\ inst_mem_below_frontiers inst s)) /\
     inst_dload_in_section inst s /\
+    (ctx_has_dalloca ctx ==> dalloca_no_wrap inst s) /\
     if inst.inst_opcode = INVOKE then
       case decode_invoke inst of
         NONE => T
@@ -194,13 +195,20 @@ End
 
 (* ===== Unfolding ===== *)
 
+Theorem dalloca_no_wrap_non_dalloca[simp]:
+  !inst s. inst.inst_opcode <> DALLOCA ==> dalloca_no_wrap inst s
+Proof
+  simp[dalloca_no_wrap_def]
+QED
+
 Theorem mem_safe_step_non_invoke:
   !fuel ctx inst s.
     inst.inst_opcode <> INVOKE ==>
     (mem_safe_step fuel ctx inst s <=>
      (inst_mem_below_frontier inst s \/
       (ctx_has_dalloca ctx /\ inst_mem_below_frontiers inst s)) /\
-     inst_dload_in_section inst s)
+     inst_dload_in_section inst s /\
+     (ctx_has_dalloca ctx ==> dalloca_no_wrap inst s))
 Proof
   rw[Once mem_safe_step_def]
 QED
@@ -217,7 +225,7 @@ Theorem mem_safe_step_invoke:
       (ctx_has_dalloca ctx /\ inst_mem_below_frontiers inst s)) /\
      mem_safe_blocks fuel ctx callee cs)
 Proof
-  rw[Once mem_safe_step_def]
+  rw[Once mem_safe_step_def, dalloca_no_wrap_def]
 QED
 
 Theorem mem_safe_block_step:
@@ -569,6 +577,39 @@ Proof
   >- metis_tac[mem_safe_point_step]
   >- metis_tac[mem_safe_point_jump] >>
   metis_tac[mem_safe_point_callee]
+QED
+
+Theorem mem_safe_point_dalloca_no_wrap:
+  !ctx fn inst s.
+    ctx_has_dalloca ctx /\ mem_safe_point ctx fn inst s ==>
+    dalloca_no_wrap inst s
+Proof
+  rw[mem_safe_point_def] >> drule_all active_inst_lookup >> strip_tac >>
+  `revert_forward_at bb s.vs_inst_idx \/ mem_safe_step 0 ctx inst s` by
+    metis_tac[mem_safe_run_head] >>
+  pop_assum strip_assume_tac
+  >- (drule_all revert_forward_at_opcode >> rw[] >> simp[]) >>
+  pop_assum mp_tac >> simp[Once mem_safe_step_def]
+QED
+
+Theorem mem_safe_blocks_raw_dalloca_no_wrap:
+  !ctx vs name fn lbl.
+    ctx.ctx_entry = SOME name /\
+    lookup_function name ctx.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl /\
+    EVERY (\f. ALL_DISTINCT (fn_labels f)) ctx.ctx_functions /\
+    (!fuel. mem_safe_blocks fuel ctx fn
+      (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                  vs_inst_idx := 0 |>)) /\
+    ctx_has_dalloca ctx ==>
+    !f inst s. raw_reachable vs ctx f inst s ==> dalloca_no_wrap inst s
+Proof
+  rpt gen_tac >> strip_tac >>
+  `codegen_reachability_package mem_safe_point ctx vs` by
+    (simp[codegen_reachability_package_def, mem_safe_point_closed] >>
+     irule mem_safe_point_entry >> simp[] >>
+     drule lookup_function_MEM >> fs[EVERY_MEM]) >>
+  metis_tac[raw_reachable_least, mem_safe_point_dalloca_no_wrap]
 QED
 
 (* The bridge: a memory-safe run from the unit's entry, and an invariant J

@@ -29,15 +29,15 @@ val pinitialized = ``\st s G tn (aid,q,base,tv) v.
   ^pallocated st s G tn (aid,q,base,tv) /\ value_has_type tv v /\
   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory tv v base mem)``;
 
-Theorem grouped_passing_frag_no_wrap[local]:
+Theorem grouped_passing_frag_headroom[local]:
   ctx.ctx_entry = SOME "__entry" /\
   venomInst$lookup_function "__entry" ctx.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME "__entry" /\
   lookup_block "__entry" fn.fn_blocks = SOME bb /\ phi_prefix_length bb.bb_instructions = 0 /\
   (!b label. lookup_block label fn.fn_blocks = SOME b ==> phi_prefix_length b.bb_instructions = 0) /\
   gas_origin_ptr_path (D,0,exp,ctx,fn,[]) (^pentry,FEMPTY,entry_taint) marks (OK t,J,tz) /\
-  (ctx_has_dalloca ctx ==> !f inst s. raw_reachable vs ctx f inst s ==> dalloca_no_wrap inst s) ==>
-  !f inst s. frag_reachable ctx fn t f inst s ==> dalloca_no_wrap inst s
+  (ctx_has_dalloca ctx ==> !f inst s. raw_reachable vs ctx f inst s ==> dalloca_fmp_headroom inst s) ==>
+  !f inst s. frag_reachable ctx fn t f inst s ==> dalloca_fmp_headroom inst s
 Proof
   strip_tac >> Cases_on `ctx_has_dalloca ctx`
   >- (`enters_block fn ^pentry ^pentry` by
@@ -54,7 +54,7 @@ Proof
   rpt strip_tac >>
   `MEM fn ctx.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
   drule_then drule frag_reachable_members >> strip_tac >>
-  fs[ctx_has_dalloca_def, EXISTS_MEM, dalloca_no_wrap_def] >> metis_tac[]
+  fs[ctx_has_dalloca_def, EXISTS_MEM, dalloca_fmp_headroom_def] >> metis_tac[]
 QED
 
 (* The full type evaluation and the slot types refer to the same index. *)
@@ -131,7 +131,7 @@ Theorem grouped_default_passing_execution:
   (!D e. gas_origin_ptr_path (D,0,e,^pctx,fn,[]) (^pentry,FEMPTY,entry_taint) [] (OK s,G,tn)) /\
   s.vs_gas_readings = vs.vs_gas_readings /\ s.vs_call_ctx.cc_calldata = vs.vs_call_ctx.cc_calldata /\
   (ctx_has_dalloca ^pctx ==>
-    !f inst u. raw_reachable vs ^pctx f inst u ==> dalloca_no_wrap inst u) ==>
+    !f inst u. raw_reachable vs ^pctx f inst u ==> dalloca_fmp_headroom inst u) ==>
   (?marks. source_unit_execution_correct_with ^psh marks tops ret am tx unit vs /\
     ((?tail. call_storage_ok am tx vs.vs_outcomes (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
      !tail. FST (call_external (SOME vs.vs_outcomes)
@@ -215,12 +215,12 @@ Proof
        (qspecl_then [`cx_dead (storage_trace_horizon es.storage_trace) ^pcx`,`^pexp`] assume_tac) >>
      `alloca_inv s` by fs[selected_registration_resources_def] >>
      drule_all body_full_path_alloca_history >> simp[]) >>
-  `!f inst u. frag_reachable ^pctx fn t f inst u ==> dalloca_no_wrap inst u` by
+  `!f inst u. frag_reachable ^pctx fn t f inst u ==> dalloca_fmp_headroom inst u` by
     (qpat_assum `!D e. gas_origin_ptr_path _ (_,FEMPTY,entry_taint) [] (OK t,J,tz)`
        (qspecl_then [`cx_dead (storage_trace_horizon es.storage_trace) ^pcx`,`^pexp`] assume_tac) >>
      `!bb lbl. lookup_block lbl fn.fn_blocks = SOME bb ==> phi_prefix_length bb.bb_instructions = 0`
        by metis_tac[] >>
-     rpt strip_tac >> irule grouped_passing_frag_no_wrap >>
+     rpt strip_tac >> irule grouped_passing_frag_headroom >>
      qpat_assum `gas_origin_ptr_path _ _ [] (OK t,J,tz)` (irule_at Any) >>
      qexistsl_tac [`f`,`bb`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `cx_tops ^pcx = tops` by

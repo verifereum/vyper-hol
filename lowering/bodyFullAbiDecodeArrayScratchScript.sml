@@ -399,7 +399,13 @@ Resume abi_decode_array_scratch_loop_entry_horizon_joint[alloc_frame]:
        (s,G,tn) [] (OK t,Gf,tnf)` by
     (qx_gen_tac `H` >> disch_tac >> simp[NoAsms, Abbr `t`] >>
      irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >> simp[] >>
-     qexistsl_tac [`[al;st]`,`sa`] >> simp[]) >>
+     qexistsl_tac [`[al;st]`,`sa`] >> simp[] >>
+     rpt strip_tac >>
+     `MEM i [al;st]` by
+       (pure_asm_rewrite_tac[] >> simp[MEM_APPEND]) >>
+     qpat_x_assum `MEM i [al;st]` (strip_assume_tac o REWRITE_RULE [MEM]) >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     asm_rewrite_tac [] >> simp[NoAsms, Abbr `al`, Abbr `st`, venomInstTheory.mk_inst_def]) >>
   `alloca_inv s` by metis_tac[stmt_state_rel_local_ptrs_alloca] >>
   `alloca_history fn t` by
     (simp[NoAsms, Abbr `t`] >> irule emitted_alloca_history >> simp[] >>

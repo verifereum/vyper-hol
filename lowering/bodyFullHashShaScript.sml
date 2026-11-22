@@ -18,6 +18,28 @@ Ancestors
   vyperInterpreter vyperState vyperAST vyperTypeSystem
   stmtSimProps gasExemptCert vyperStorageTrace vyperStorageFootprint
 
+(* Both SHA buffer suffixes allocate only with static ALLOCA. *)
+fun sha_suffix_no_wrap_tac g = (
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sm sn)` by
+    (FIRST [qpat_assum `compile_sha256_bytes _ sm = (_,sn)` mp_tac,
+            qpat_assum `compile_sha256_bytesm _ _ sm = (_,sn)` mp_tac] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[builtinHashingTheory.compile_sha256_bytes_def,
+       builtinHashingTheory.compile_sha256_bytesm_def, contextTheory.compile_alloc_buffer_def,
+       emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_var_def, fresh_id_def, emit_def] >>
+     strip_tac >> gvs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
+       APPEND_ASSOC, venomInstTheory.mk_inst_def] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+     simp[venomInstTheory.mk_inst_def]) >>
+  `(ctx_has_dalloca ctx ==>
+     !pre i post u. emitted_insts sm sn = pre ++ i::post /\
+       run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     fs[EVERY_MEM] >> metis_tac[MEM_APPEND, MEM])
+) g;
+
 fun sha_memory_prepare_tac g = (
   `eval_operand (Var p) s = SOME (n2w b)` by simp[eval_operand_def] >>
   `b+32+LENGTH bs <= b'+sz'` by decide_tac >>
@@ -50,6 +72,7 @@ fun sha_memory_prepare_tac g = (
      qexists_tac `bb` >> gvs[rich_listTheory.IS_PREFIX_APPEND] >>
      pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,
        rich_listTheory.DROP_LENGTH_APPEND] >> metis_tac[]) >>
+  sha_suffix_no_wrap_tac >>
   `run_inst_seq_mem_ok (emitted_insts sm sn) s` by
     (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
        expr_post H ctx func cenv cx e es sa sm s0 mid _ (Var p) s /\ _`
@@ -257,7 +280,7 @@ irule gas_outcome_full_intro >>
         (fn th => once_rewrite_tac[GSYM th]) >>
       qpat_assum `s.vs_inst_idx = LENGTH sm.cs_current_insts`
         (fn th => once_rewrite_tac[GSYM th]) >>
-      irule run_inst_seq_gas_origin_ptr_path >> simp[] >>
+      irule run_inst_seq_gas_origin_ptr_path >> asm_rewrite_tac[] >> simp[] >>
       qpat_assum `s.vs_inst_idx = LENGTH sm.cs_current_insts` (fn idx =>
         qpat_assum `isPREFIX (emitted_insts sm sn) (DROP s.vs_inst_idx bb.bb_instructions)`
           (ACCEPT_TAC o REWRITE_RULE [idx]))) >>
@@ -482,6 +505,7 @@ Resume sha_vv_sim_full[fixed_outcome]:
      qexists_tac `bb` >> gvs[rich_listTheory.IS_PREFIX_APPEND] >>
      pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,
        rich_listTheory.DROP_LENGTH_APPEND] >> metis_tac[]) >>
+  sha_suffix_no_wrap_tac >>
   `run_inst_seq_mem_ok (emitted_insts sm sn) s` by
     (qpat_assum `expr_post _ _ _ _ _ e es sa sm s0 mid (BytesV bs) v s`
        (mp_then Any mp_tac sha256_typed_suffix_mem_ok) >>
@@ -833,7 +857,7 @@ Resume sha_vv_sim_full[fixed_success]:
         (fn th => once_rewrite_tac[GSYM th]) >>
       qpat_assum `s.vs_inst_idx = LENGTH sm.cs_current_insts`
         (fn th => once_rewrite_tac[GSYM th]) >>
-      irule run_inst_seq_gas_origin_ptr_path >> simp[] >>
+      irule run_inst_seq_gas_origin_ptr_path >> asm_rewrite_tac[] >> simp[] >>
       qpat_assum `s.vs_inst_idx = LENGTH sm.cs_current_insts` (fn idx =>
         qpat_assum `isPREFIX (emitted_insts sm sn) (DROP s.vs_inst_idx bb.bb_instructions)`
           (ACCEPT_TAC o REWRITE_RULE [idx]))) >>

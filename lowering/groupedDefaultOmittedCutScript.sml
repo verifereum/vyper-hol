@@ -71,7 +71,7 @@ Theorem grouped_default_omitted_cut:
   alloca_history fn t /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
     t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp) /\
-  (!f inst u. frag_reachable ctx fn t f inst u ==> dalloca_no_wrap inst u) ==>
+  (!f inst u. frag_reachable ctx fn t f inst u ==> dalloca_fmp_headroom inst u) ==>
   gas_outcome_full (DF,0,gas_explicit_sites ctx shadow_ctx,ctx,fn,PG)
     (cx_tops cx) cx st0 (eval_exprs cx (DROP k ds)) (es,t,J,tz)
     (\H res ee J' tz' u. ?values.

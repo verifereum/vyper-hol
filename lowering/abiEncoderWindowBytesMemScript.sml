@@ -198,8 +198,13 @@ Theorem window_bytes_sequence_mem:
 Proof
   strip_tac >> drule_all window_bytes_mem_checks >> strip_tac >>
   drule_all window_bytes_sequence >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st final)` by
+    (drule abiBytestringCodeTheory.compile_abi_bytestring_code >>
+     simp[abiBytestringCodeTheory.bytestring_encoder_insts_def, mk_inst_def]) >>
   qexists_tac `t` >> simp[] >> irule window_seq_mem_cont >>
-  (conj_tac >- first_assum ACCEPT_TAC) >> qexists_tac `st` >> simp[]
+  (conj_tac >- first_assum ACCEPT_TAC) >> qexists_tac `st` >> simp[] >>
+  rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+  qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM, MEM_APPEND]
 QED
 
 (* Zero payload still copies its header and writes a complete zero word. *)

@@ -172,8 +172,14 @@ Resume default_bytes_registration_step_footprint[execution_frame]:
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
      i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts first decoded)` by
     (gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts first decoded = pre ++ i::post /\
+      run_inst_seq pre ready = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >>
+     drule calldataBytesSentinelShapeTheory.calldata_bytes_sentinel_non_dalloca >>
+     simp[EVERY_APPEND, unitTransformDefsTheory.dalloca_no_wrap_def]) >>
   drule_all ctorDeployMemoryRunMemEntryCompositeSetupTheory.ctor_checked_emitted_endpoint >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  strip_tac >>
   conj_tac >- suspend "alloca_inv" >>
   conj_tac >- suspend "frontier" >>
   conj_tac >- suspend "allocas_from" >>

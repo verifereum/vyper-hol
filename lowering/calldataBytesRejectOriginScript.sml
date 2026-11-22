@@ -80,8 +80,14 @@ Proof
     simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`, Abbr `i4`,
       mk_inst_def, is_terminator_def] >>
   `run_inst_seq [i0;i1;i2;i3;i4] initial = Abort Revert_abort raw` by metis_tac[] >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post v. [i0;i1;i2;i3;i4] = pre ++ i::post /\
+      run_inst_seq pre initial = OK v ==> dalloca_no_wrap i v)` by
+    (rpt strip_tac >>
+     `MEM i [i0;i1;i2;i3;i4]` by metis_tac[MEM_APPEND, MEM] >>
+     fs[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`, Abbr `i4`, mk_inst_def]) >>
   drule_all run_inst_seq_abort_origin_ptr_uniform >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  strip_tac >>
   qexistsl [`raw with vs_inst_idx := j`, `H`, `u`] >>
   conj_tac >- simp[venom_state_component_equality] >>
   simp[] >> metis_tac[]

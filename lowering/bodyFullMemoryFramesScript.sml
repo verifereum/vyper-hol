@@ -337,7 +337,10 @@ Resume body_full_alloc_buffer_path[path]:
     mp_tac emitted_origin_ptr_path >>
   simp[Abbr `inst`,mk_inst_def,is_terminator_def,run_inst_seq_def,
     run_inst_seq_mem_ok_def,inst_mem_below_frontier_def,inst_dload_in_section_def,
-    source_memory_write_ranges_def,source_memory_read_ranges_def]
+    source_memory_write_ranges_def,source_memory_read_ranges_def] >>
+  disch_then irule >> rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+  qpat_x_assum `[_] = _ ++ _` (mp_tac o SYM) >>
+  simp[APPEND_EQ_SING] >> strip_tac >> simp[Abbr `inst`,mk_inst_def]
 QED
 
 Resume body_full_alloc_buffer_path[state]:

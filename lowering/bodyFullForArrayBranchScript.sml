@@ -413,7 +413,7 @@ Proof
       (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
          (qspec_then `storage_trace_horizon em.storage_trace` (drule_then strip_assume_tac)) >>
        drule_all_then ACCEPT_TAC bodyFullSharedTheory.return_buf_sep_locals_kept) >>
-    `!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_no_wrap inst t` by
+    `!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_fmp_headroom inst t` by
       (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
          metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
        qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==>
@@ -423,9 +423,9 @@ Proof
        disch_then (fn path =>
          qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0`
            (fn phi =>
-             qpat_assum `!fn inst t. frag_reachable ctx func s0 fn inst t ==> dalloca_no_wrap inst t`
+             qpat_assum `!fn inst t. frag_reachable ctx func s0 fn inst t ==> dalloca_fmp_headroom inst t`
                (fn nowrap => ACCEPT_TAC (MATCH_MP
-                 bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+                 bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
                  (LIST_CONJ [path,phi,nowrap])))))) >>
     mp_tac (Q.INST [`c` |-> `cenv`,`sty` |-> `typ`,`fty` |-> `typ`,
       `loop_body` |-> `body'`,`sa0` |-> `sa`,`shadow_sa0` |-> `shadow_sa`,
@@ -553,7 +553,7 @@ Theorem for_array_expr_cut_frag_full:
        stmt_state_rel H ctx func cenv cx es s0 /\ storage_well_formed_on cx es (FST H) /\
        ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
      (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-     (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_no_wrap inst t) /\
+     (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_fmp_headroom inst t) /\
      return_buf_frame d cenv se u /\ return_buf_sep d cenv em u /\
      alloca_frame cenv es sa s0 cenv em u /\
      gas_admissible

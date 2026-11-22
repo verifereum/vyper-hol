@@ -227,6 +227,14 @@ Proof
      [mk_inst id ALLOCA [Lit (n2w region_size)] [dst];
       mk_inst (id+1) MSTORE [Var dst; Var src] []]` by
     simp[mk_inst_def, is_terminator_def] >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post z.
+      [mk_inst id ALLOCA [Lit (n2w region_size)] [dst];
+       mk_inst (id+1) MSTORE [Var dst; Var src] []] = pre ++ i::post /\
+      run_inst_seq pre s = OK z ==> dalloca_no_wrap i z)` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `_ = pre ++ i::post` (mp_tac o Q.AP_TERM `MEM i`) >>
+     simp[listTheory.MEM_APPEND] >> strip_tac >> simp[mk_inst_def]) >>
   metis_tac[emitted_origin_ptr_path]
 QED
 
@@ -492,7 +500,7 @@ Proof
       cs.cs_current_insts = st.cs_current_insts ++ code /\
       run_inst_seq code s = OK us /\ run_inst_seq_mem_ok code s /\
       EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
-                 ~is_terminator i.inst_opcode) code /\
+                 ~is_terminator i.inst_opcode /\ i.inst_opcode <> DALLOCA) code /\
       (!D k. inst_seq_ptr D lo ctx func PG G tn code
         (s with vs_inst_idx := k) J qt) /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp us /\
@@ -535,7 +543,13 @@ Proof
     (qpat_x_assum `!D k. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
        (qspecl_then [`D`, `s.vs_inst_idx`] mp_tac) >> simp[]) >>
   mp_tac (Q.SPECL [`code`, `st`, `st'`, `s`, `t`, `G`, `tn`, `J`, `qt`]
-    bodyFullUnwrapRunTheory.emitted_origin_ptr_path) >> simp[]
+    bodyFullUnwrapRunTheory.emitted_origin_ptr_path) >> simp[] >>
+  (impl_tac >-
+    (conj_tac
+     >- fs[listTheory.EVERY_MEM] >>
+     rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     fs[listTheory.EVERY_MEM, listTheory.MEM_APPEND])) >>
+  simp[]
 QED
 
 Resume materialize_params_full[memory]:

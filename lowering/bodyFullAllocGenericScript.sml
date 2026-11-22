@@ -259,5 +259,13 @@ Proof
      (emitted_insts sa sb)` by gvs[listTheory.EVERY_MEM] >>
   `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
     simp[bytes_copy_insts_def, mk_inst_def] >>
+  `(ctx_has_dalloca ctx ==>
+     !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+       run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `MEM i (emitted_insts sa sb)` by simp[listTheory.MEM_APPEND] >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY (\i. _ /\ _ /\ _ /\ _ /\ _) _` mp_tac >>
+     simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
   drule_all run_inst_seq_gas_origin_ptr_path >> simp[]
 QED

@@ -732,7 +732,7 @@ Theorem annassign_full_rhs_from_entry:
     (!x cap. old.ce_return_buf = SOME (PtrVar (Var x) cap) ==>
       not_fresh_at sa x) /\
     return_buf_frame d old sa s0 /\ alloca_history func s0 /\
-    (!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_no_wrap inst z) /\
+    (!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_fmp_headroom inst z) /\
     storage_trace_domain cx st0 es.storage_trace /\
     gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -1100,7 +1100,7 @@ Theorem annassign_full_alloc_rhs_prefix:
       not_fresh_at sa x) /\
     return_buf_frame d old sa s0 /\ alloca_history func s0 /\
     (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
-    (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+    (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z) /\
     storage_trace_domain cx st0 es.storage_trace /\
     gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -1196,12 +1196,12 @@ Proof
   drule_all annassign_full_alloc_entry >>
   disch_then (qspecl_then [`PG`,`gas_explicit_sites ctx shadow_ctx`]
     (qx_choosel_then [`w`,`entry`,`Ga`,`tna`] strip_assume_tac)) >>
-  `!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_fmp_headroom inst z` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK entry,Ga,tna)`
        (qspec_then `ARB` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn phi =>
        qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> _` (fn safe =>
-       ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+       ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
          (LIST_CONJ [path,phi,safe]))))))) >>
   drule_all annassign_full_rhs_from_entry >> strip_tac >>
   qexistsl_tac [`w`,`entry`,`Ga`,`tna`] >> asm_rewrite_tac[] >>

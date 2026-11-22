@@ -66,11 +66,8 @@ Proof
   drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
   qabbrev_tac `sn = s with vs_inst_idx := LENGTH sa.cs_current_insts` >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp sn` by
-    (strip_tac >>
-     qpat_assum `ctx_has_dalloca ctx` (fn mode =>
-       qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
-         (fn bound => mp_tac (MP bound mode))) >>
-     simp[Abbr `sn`, allocas_below_fmp_def]) >>
+    (simp[Abbr `sn`, allocas_below_fmp_def] >>
+     fs[allocas_below_fmp_def]) >>
   qabbrev_tac `un = u with vs_inst_idx := LENGTH sa.cs_current_insts` >>
   `isPREFIX (emitted_insts sa sb) (DROP sn.vs_inst_idx bb.bb_instructions)` by
     simp[Abbr `sn`, IS_PREFIX_APPEND] >>
@@ -103,9 +100,19 @@ Proof
      conj_tac >- (irule below_frontier_no_ranges >> gvs[]) >>
      irule inst_dload_in_section_other >> gvs[]) >>
   `lookup_block sn.vs_current_bb func.fn_blocks = SOME bb` by simp[Abbr `sn`] >>
+  `(ctx_has_dalloca ctx ==> !pre i post v.
+      emitted_insts sa sb = pre ++ i::post /\ run_inst_seq pre sn = OK v ==>
+      unitTransformDefs$dalloca_no_wrap i v)` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts sa sb)` by fs[MEM_APPEND] >>
+     drule_all bop_scalar_seq_outputs >> strip_tac >> gvs[]) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (sn,G,tn) []
-      (OK (un with vs_inst_idx := LENGTH sb.cs_current_insts),Gf,tnf) /\ allocas_from lo un` by
-    (rpt gen_tac >> metis_tac[run_inst_seq_origin_ptr_lift]) >>
+      (OK (un with vs_inst_idx := sn.vs_inst_idx + LENGTH (emitted_insts sa sb)),Gf,tnf) /\
+      allocas_from lo un` by
+    (rpt gen_tac >>
+     match_mp_tac (Q.INST [`code` |-> `emitted_insts sa sb`, `bb` |-> `bb`]
+       run_inst_seq_origin_ptr_lift) >>
+     asm_rewrite_tac[]) >>
   qexistsl_tac [`Gf`, `tnf`] >>
   fs[Abbr `sn`, Abbr `un`, FORALL_AND_THM, lookup_var_def, op_taint_def, allocas_from_def] >>
   metis_tac[]

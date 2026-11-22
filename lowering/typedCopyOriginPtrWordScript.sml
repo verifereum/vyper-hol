@@ -164,6 +164,12 @@ Proof
      fs[fragExecTheory.fn_has_code_def, exprLoweringPropsTheory.same_blocks_def] >>
      gvs[rich_listTheory.IS_PREFIX_APPEND] >>
      simp[listTheory.DROP_APPEND]) >>
+  `!pre i post u'. [ld;st] = pre ++ i::post /\
+      run_inst_seq pre s = OK u' ==> unitTransformDefs$dalloca_no_wrap i u'` by
+    (rpt strip_tac >>
+     `MEM i [ld;st]` by metis_tac[listTheory.MEM_APPEND, listTheory.MEM] >>
+     gvs[Abbr `ld`, Abbr `st`, venomInstTheory.mk_inst_def,
+         memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   `gas_origin_ptr_path
     (<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>,
       lo,explicit,ctx,func,PG) (s,G,tn) []

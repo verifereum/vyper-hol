@@ -32,7 +32,8 @@ Definition expr_map_sim_full_def:
       return_buf_frame d cenv sa s0 /\
       alloca_history func s0 /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==>
+                  dalloca_fmp_headroom inst s) /\
       (!H. valid_horizon cx st0 H es.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es s0 /\
         storage_well_formed_on cx es (FST H) /\
@@ -101,7 +102,8 @@ Definition expr_sim_full_def:
       return_buf_frame d cenv sa s0 /\
       alloca_history func s0 /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==>
+                  dalloca_fmp_headroom inst s) /\
       (!H. valid_horizon cx st0 H es.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es s0 /\
         storage_well_formed_on cx es (FST H) /\
@@ -153,7 +155,8 @@ Definition expr_vv_sim_full_def:
       return_buf_frame d cenv sa s0 /\
       alloca_history func s0 /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==>
+                  dalloca_fmp_headroom inst s) /\
       (!H. valid_horizon cx st0 H es.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es s0 /\
         storage_well_formed_on cx es (FST H) /\
@@ -236,7 +239,8 @@ Definition stmt_frag_full_def:
       return_buf_sep d cenv es s0 /\
       alloca_history func s0 /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==>
+                  dalloca_fmp_headroom inst s) /\
       (!H. valid_horizon cx st0 H es.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es s0 /\
         storage_well_formed_on cx es (FST H) /\

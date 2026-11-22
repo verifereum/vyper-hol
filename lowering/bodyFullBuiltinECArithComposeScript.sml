@@ -371,7 +371,7 @@ Resume ec_arith_vv_from_tail_full[first_success]:
     qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)` (fn path =>
       qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
       qpat_assum `!fn i v. frag_reachable ctx func s0 fn i v ==> _`
-        (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+        (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
          CONJ path o CONJ no_phi))))) >> strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ (mid,t,G1,tn1) childQ2 childR2` >>
   irule gas_outcome_full_bind_all >> rpt conj_tac

@@ -62,7 +62,7 @@ Theorem extcall_request_head_halt_outcome:
   MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -185,11 +185,11 @@ Theorem extcall_request_head_outcome:
     (\H res ee gt r. expr_exit res r)
 Proof
   strip_tac >>
-  `!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z` by
     (rpt strip_tac >> drule frag_reachable_members >> disch_then drule >>
      strip_tac >>
      fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
-        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+        unitTransformDefsTheory.dalloca_fmp_headroom_def] >> metis_tac[]) >>
   irule (Q.INST [`Q'` |-> `Q`,
                   `R` |-> `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
                     (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)`]
