@@ -23,10 +23,16 @@ Definition body_expr_full_ok_mods_def[nocompute]:
         cenv cx ty e es /\
       expr_vv_sim_full_mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty e es) /\
-    (!a t n elems.
-      e = Builtin a (MakeArray t n) elems /\
-      builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
-      body_exprs_full_ok_mods mods exps cx elems) /\
+    ((!a t n elems.
+       e = Builtin a (MakeArray t n) elems /\
+       builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+       body_exprs_full_ok_mods mods exps cx elems) /\
+     (!t c a b.
+       e = IfExp t c a b ==>
+       body_expr_full_ok_mods mods exps cx c /\
+       ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
+        body_expr_full_ok_mods mods exps cx a /\
+        body_expr_full_ok_mods mods exps cx b))) /\
     (!ann e1 e2 DF lo d PG src tops ctx shadow_ctx func shadow_func cenv env ty es.
       e = Subscript ann e1 e2 /\
       contract_inv mods exps ctx cenv cx /\
@@ -157,6 +163,22 @@ End
 
 Theorem body_exprs_full_ok_mods_def =
   CONJUNCT2 body_expr_full_ok_mods_def;
+
+(* A conditional's test is ok, and its arms are when the test evaluates. *)
+Theorem body_ifexp_children_full_ok_mods:
+  !mods exps cx t c a b.
+    body_expr_full_ok_mods mods exps cx (IfExp t c a b) ==>
+    body_expr_full_ok_mods mods exps cx c /\
+    ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
+     body_expr_full_ok_mods mods exps cx a /\
+     body_expr_full_ok_mods mods exps cx b)
+Proof
+  rpt gen_tac >>
+  disch_then
+    (mp_tac o CONJUNCT2 o CONJUNCT1 o CONJUNCT2 o
+      ONCE_REWRITE_RULE [body_expr_full_ok_mods_def]) >>
+  simp[]
+QED
 
 Theorem contract_inv_singleton_pins[local]:
   contract_inv [(NONE,tops)] [] ctx cenv cx ==>

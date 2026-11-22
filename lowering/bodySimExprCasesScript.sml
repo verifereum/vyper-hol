@@ -65,6 +65,10 @@ Theorem body_expr_ok_of_case:
     (!ann obj field. e = Attribute ann obj field ==> body_expr_ok cx obj) /\
     (!ann nsid fields. e = StructLit ann nsid fields ==>
        body_exprs_ok cx (MAP SND fields)) /\
+    (!t c a b. e = IfExp t c a b ==>
+       body_expr_ok cx c /\
+       ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
+        body_expr_ok cx a /\ body_expr_ok cx b)) /\
     (!tops ctx func cenv.
        body_inv tops ctx cenv cx ==>
        expr_sim_case F ctx func cenv cx e /\
