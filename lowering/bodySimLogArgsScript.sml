@@ -85,7 +85,8 @@ Proof
   >~ [`FLOOKUP _ p`]
   >- (Cases_on `FST p = NONE`
       >| [ALL_TAC,
-          PairCases_on `p` >> Cases_on `p0` >>
+          PairCases_on `p` >> Cases_on `p0` >> gvs[] >>
+          Cases_on `(SOME x,p1) IN removed` >>
           gvs[type_env_qualified_lookup, FLOOKUP_DRESTRICT] >>
           Cases_on `FLOOKUP large (SOME x,p1)` >> gvs[] >>
           Cases_on `x'` >> gvs[] >> res_tac >> gvs[]] >>
