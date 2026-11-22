@@ -76,22 +76,21 @@ Proof
 QED
 
 Theorem gas_shadow_compiles_compile_external_jobs:
-  !jobs. gas_shadow_compiles (compile_external_jobs jobs)
+  !sd jobs. gas_shadow_compiles (compile_external_jobs jobs)
     (compile_external_jobs (MAP (\job. case job of
       ExternalLegacyJob package => ExternalLegacyJob (gas_shadow_external_package package)
     | ExternalCommonJob common kwvars => ExternalCommonJob
-        (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+        (common with <| ec_env := gas_shadow_env sd common.ec_env;
+                       ec_body := MAP gas_shadow_stmt common.ec_body |>)
         (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) kwvars)) jobs))
 Proof
-  Induct >> simp[compile_external_jobs_def, gas_shadow_compiles_return] >>
+  rpt gen_tac >> Induct_on `jobs` >> simp[compile_external_jobs_def, gas_shadow_compiles_return] >>
   Cases_on `h`
   >- (simp[compile_external_jobs_def, comp_ignore_bind_def] >>
       match_mp_tac gas_shadow_compiles_bind >> conj_tac
       >- (qspec_then `[p]` mp_tac gas_shadow_compiles_compile_external_fn_bodies >>
           simp[]) >> simp[]) >>
-  (* A common job shadows its body and keyword expressions, not ec_env. *)
   simp[compile_external_jobs_def, comp_ignore_bind_def,
        gas_shadow_compiles_bind, gas_shadow_compiles_new_block,
-       REWRITE_RULE [gasShadowCompileBaseTheory.gas_shadow_env_F]
-         (Q.INST [`sd` |-> `F`] gas_shadow_compiles_compile_common_function_body)]
+       gas_shadow_compiles_compile_common_function_body]
 QED
