@@ -107,10 +107,10 @@ Proof
   fs[allocas_below_fmp_def, raw_variant_def, gas_variant_def, venom_state_component_equality]
 QED
 
-(* Replay constructor execution at the same FMP chosen for the raw
-   gas and memory proofs. The constructor-free entry uses the FMP
-   transport for a unit without dynamic allocations. *)
-Theorem deploy_unit_execution_correct_selected_raw_fmp:
+(* Fix the shadow context before selecting a raw variant. Constructor
+   replay uses the supplied memory facts for that variant; the constructor-free
+   entry uses the FMP transport for a unit without dynamic allocations. *)
+Theorem deploy_selected_certificate_from_variant_memory:
   !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es fmp.
     fin IN accepted_finalizers /\
     fin rpolicy prog = SOME prog' /\
@@ -124,7 +124,10 @@ Theorem deploy_unit_execution_correct_selected_raw_fmp:
     imm_len tops + unit_alloca_budget dunit.cu_context +
       32 * ctx_dload_count dunit.cu_context <= w2n fmp ==>
     ?shadow_ctx. !vs.
-      raw_variant fmp vs (opt_deploy_entry_state_own prog prog' cplan tops es) ==>
+      raw_variant fmp vs (opt_deploy_entry_state_own prog prog' cplan tops es) /\
+      (ctx_has_dalloca dunit.cu_context ==> !fn inst s.
+        raw_reachable vs dunit.cu_context fn inst s ==>
+        dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp) ==>
       ?marks. deploy_unit_execution_correct_with shadow_ctx marks
         tops runtime_bc am tx dunit vs
 Proof
@@ -171,19 +174,42 @@ Proof
   pop_assum strip_assume_tac >>
   `ctx_has_dalloca dunit.cu_context ==>
     !fn inst st. raw_reachable vs dunit.cu_context fn inst st ==> dalloca_no_wrap inst st` by
-    (strip_tac >>
-     `deploy_dalloca_form_occurs expr_raw_shape_root tops` by
-       metis_tac[deploy_unit_no_dalloca_static] >>
-     qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
-       `dunit`, `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`,
-       `opt_deploy_entry_state_own prog prog' cplan tops es`, `vs`, `fmp`]
-       mp_tac deploy_entry_raw_no_wrap >>
-     impl_tac >- fs[deploy_source_ok_def] >> metis_tac[]) >>
+    metis_tac[] >>
   `ctx_has_dalloca dunit.cu_context ==>
     imm_len tops + unit_alloca_budget dunit.cu_context <= w2n vs.vs_initial_fmp /\
     w2n vs.vs_initial_fmp < 2 ** 254` by
     (strip_tac >> fs[] >> decide_tac) >>
   drule_all deploy_ctor_body_joint_raw_with >> simp[]
+QED
+
+(* Legacy callers obtain variant memory through the dynamic-memory route. *)
+Theorem deploy_unit_execution_correct_selected_raw_fmp:
+  !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es fmp.
+    fin IN accepted_finalizers /\
+    fin rpolicy prog = SOME prog' /\
+    deploy_phases policy tops (assemble prog, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    deploy_source_ok tops am tx /\
+    LENGTH (call_trace es) < 2 ** 64 /\
+    w2n (opt_deploy_entry_state_own prog prog' cplan tops es).vs_initial_fmp <= w2n fmp /\
+    w2n fmp < 2 ** 254 /\
+    imm_len tops + unit_alloca_budget dunit.cu_context +
+      32 * ctx_dload_count dunit.cu_context <= w2n fmp ==>
+    ?shadow_ctx. !vs.
+      raw_variant fmp vs (opt_deploy_entry_state_own prog prog' cplan tops es) ==>
+      ?marks. deploy_unit_execution_correct_with shadow_ctx marks
+        tops runtime_bc am tx dunit vs
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all deploy_selected_certificate_from_variant_memory >>
+  disch_then (qx_choose_then `shadow_ctx` assume_tac) >>
+  qexists_tac `shadow_ctx` >> rpt strip_tac >> first_x_assum irule >>
+  simp[] >> strip_tac >>
+  `deploy_dalloca_form_occurs expr_raw_shape_root tops` by
+    metis_tac[deploy_unit_no_dalloca_static] >>
+  `deploy_typing_ok tops am tx` by fs[deploy_source_ok_def] >>
+  metis_tac[deploy_entry_raw_no_wrap]
 QED
 
 (* Raw-pointer safety and gas-mask boundary used inside the deploy gas link. *)
