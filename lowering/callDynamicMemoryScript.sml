@@ -57,8 +57,10 @@ Proof
     metis_tac[raw_variant_initial_venom_state_rel] >>
   `~vi.vs_halted` by fs[initial_venom_state_rel_def] >>
   `vi.vs_initial_fmp = fmp /\ vi.vs_fmp = fmp` by
-    fs[raw_variant_def, gas_variant_def,
-       venomStateTheory.venom_state_component_equality] >>
+    (qpat_assum `raw_variant fmp vi vs0`
+       (mp_tac o AP_TERM ``\st:venom_state. (st.vs_initial_fmp, st.vs_fmp)``
+               o REWRITE_RULE [raw_variant_def, gas_variant_def]) >>
+     simp[] >> metis_tac[]) >>
   `blueprint_create_root =
      (\e. ?ty b s r ks es d.
        e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d)` by
@@ -91,7 +93,8 @@ Proof
   qspecl_then [`tops`, `rp`, `unit`, `am.layouts`, `tx.target`, `art`]
     mp_tac lower_vyper_runtime_unit_blueprint_raw_fmp >>
   (impl_tac >- (asm_rewrite_tac[] >> metis_tac[])) >>
-  disch_then (qspecl_then [`am`, `tx`, `vi`] mp_tac) >> simp[]
+  disch_then (qspecl_then [`am`, `tx`, `vi`] mp_tac) >>
+  (impl_tac >- asm_rewrite_tac[]) >> simp[]
 QED
 
 Theorem call_state_rel_calldata_bound:

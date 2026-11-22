@@ -194,9 +194,15 @@ Proof
        entry_venom_state_def, init_venom_state_def, deploy_state_rel_def] >>
   `~vi.vs_halted /\ vi.vs_accounts = vs.vs_accounts /\
     vi.vs_fmp = fmp /\ vi.vs_initial_fmp = fmp` by
-    fs[raw_variant_def, gas_variant_def,
-       venomStateTheory.venom_state_component_equality] >>
-  metis_tac[lower_vyper_deploy_unit_raw_headroom]
+    (qpat_assum `raw_variant _ _ _`
+       (mp_tac o REWRITE_RULE [raw_variant_def, gas_variant_def]) >>
+     disch_then (mp_tac o AP_TERM
+       ``\s:venom_state. (s.vs_halted, s.vs_accounts, s.vs_fmp, s.vs_initial_fmp)``) >>
+     simp[] >> metis_tac[]) >>
+  `vi.vs_accounts = accounts_after_transfer tx am.accounts /\
+    vi.vs_fmp = vi.vs_initial_fmp /\ w2n vi.vs_initial_fmp < 2 ** 254` by
+    asm_rewrite_tac[] >>
+  match_mp_tac lower_vyper_deploy_unit_raw_headroom >> metis_tac[]
 QED
 
 (* A constructor or packaged internal uses one of the three dynamic forms. *)
@@ -232,25 +238,31 @@ Proof
   `vi.vs_call_ctx.cc_calldata = []` by
     gvs[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
         entry_venom_state_def, deploy_state_rel_def] >>
+  `LENGTH vi.vs_outcomes < 2 ** 64 /\
+    LENGTH vi.vs_call_ctx.cc_calldata < 2 ** 64` by fs[LENGTH_MAP] >>
   Cases_on `deploy_dalloca_form_occurs
       (\e. ?ty b s r ks es d.
         e = Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d) tops`
   >- (qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`, `dunit`,
          `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`, `vs`, `vi`, `fmp`]
        mp_tac lower_vyper_deploy_unit_raw_fmp_create_blueprint >>
-     simp[LENGTH_MAP, EVAL ``LENGTH ([]:word8 list) < 2 ** 64``]) >>
+      asm_rewrite_tac[]) >>
   `IS_SOME (SND (SND (SND (classify_functions tops))))` by
     fs[deploy_dalloca_form_occurs_def] >>
-  `~vi.vs_halted /\ vi.vs_initial_fmp = fmp /\ vi.vs_fmp = fmp` by
-    fs[raw_variant_def, gas_variant_def, venomStateTheory.venom_state_component_equality,
-       opt_deploy_entry_state_own_def, opt_entry_state_own_def,
+  `~vs.vs_halted` by
+    fs[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
        entry_venom_state_def, init_venom_state_def] >>
+  `~vi.vs_halted /\ vi.vs_initial_fmp = fmp /\ vi.vs_fmp = fmp` by
+    (qpat_assum `raw_variant _ _ _`
+       (mp_tac o AP_TERM ``\st:venom_state. (st.vs_halted, st.vs_initial_fmp, st.vs_fmp)``
+               o REWRITE_RULE [raw_variant_def, gas_variant_def]) >>
+     simp[] >> metis_tac[]) >>
   qspecl_then [`policy`, `tops`, `runtime_bc`, `rpolicy`, `dunit`,
          `dout`, `prog`, `prog'`, `cplan`, `am`, `tx`, `es`, `vs`, `vi`, `fmp`]
        mp_tac deploy_raw_fmp_without_blueprint >>
-  impl_tac >- simp[LENGTH_MAP, EVAL ``LENGTH ([]:word8 list) < 2 ** 64``] >>
+  impl_tac >- asm_rewrite_tac[] >>
   strip_tac >> rpt strip_tac >>
   match_mp_tac (Q.INST [`ctx` |-> `dunit.cu_context`, `fn` |-> `fn`,
       `vs0` |-> `vi`, `i` |-> `inst`] raw_reachable_dalloca_headroom_from_peak) >>
-  simp[EVAL ``LENGTH ([]:word8 list) < 2 ** 64``] >> metis_tac[]
+  asm_rewrite_tac[] >> metis_tac[]
 QED
