@@ -126,7 +126,8 @@ Theorem gas_shadow_compiles_compile_group_entries:
   !entries mid common kwvars off.
   gas_shadow_compiles (compile_group_entries mid entries common kwvars off)
     (compile_group_entries mid entries
-      (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+      (common with <| ec_env := gas_shadow_env sd common.ec_env;
+                     ec_body := MAP gas_shadow_stmt common.ec_body |>)
       (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) kwvars) off)
 Proof
   Induct >> rpt gen_tac
@@ -187,7 +188,12 @@ Proof
     (compile_group_entries mid entries
       (common with ec_body := MAP gas_shadow_stmt common.ec_body)
       (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) q) off)` by
-    simp[gas_shadow_compiles_compile_group_entries] >>
+    (`(common with <| ec_env := gas_shadow_env F common.ec_env;
+                     ec_body := MAP gas_shadow_stmt common.ec_body |>) =
+      (common with ec_body := MAP gas_shadow_stmt common.ec_body)` by
+       simp[external_common_component_equality] >>
+     pop_assum (pure_once_rewrite_tac o single o SYM) >>
+     irule gas_shadow_compiles_compile_group_entries) >>
   qpat_x_assum `gas_shadow_compiles _ _` mp_tac >>
   rewrite_tac[gas_shadow_compiles_def] >> disch_then drule_all >> strip_tac >>
   first_x_assum (qspecl_then [`mid`,

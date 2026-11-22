@@ -73,7 +73,7 @@ QED
 Theorem gas_shadow_compiles_init_kwargs:
   !xs ce off k hi.
     gas_shadow_compiles (compile_init_kwargs ce xs off k hi)
-      (compile_init_kwargs ce
+      (compile_init_kwargs (gas_shadow_env sd ce)
         (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) xs) off k hi)
 Proof
   Induct >> rpt gen_tac
@@ -92,8 +92,9 @@ Proof
       simp[gas_shadow_compiles_bind, gas_shadow_compiles_abi_decode_to_buf]) >>
   simp[comp_ignore_bind_def] >>
   ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- metis_tac[gas_shadow_compile_expr,
-               Q.INST [`sh` |-> `T`] gas_shadow_compiles_lower_value] >>
+  >- (irule (SIMP_RULE (srw_ss()) []
+                (Q.INST [`sh` |-> `T`] gas_shadow_compiles_lower_value_env)) >>
+      simp[gas_shadow_compile_expr_env]) >>
   gen_tac >>
   ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
   >- (rpt IF_CASES_TAC >>
@@ -104,7 +105,7 @@ QED
 
 Theorem gas_shadow_compiles_entry_point_kwargs:
   gas_shadow_compiles (compile_entry_point_kwargs ce xs off k lbl)
-    (compile_entry_point_kwargs ce
+    (compile_entry_point_kwargs (gas_shadow_env sd ce)
       (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) xs) off k lbl)
 Proof
   simp[compile_entry_point_kwargs_def, comp_ignore_bind_def,
