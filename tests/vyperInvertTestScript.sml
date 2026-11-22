@@ -41,6 +41,26 @@ Proof
   EVAL_TAC
 QED
 
+(* A flag annotation names only the flag, so it resolves to the current
+   module's flag of that name.  An IfExp or a BinOp annotated with a flag
+   takes the flag of its translated operands instead, which may be an imported
+   flag; other annotations are kept. *)
+Theorem flag_ifexp_binop_frontend_test:
+  (translate_type (expr_type_ctx ctx) ty = FlagT local /\
+   expr_type (translate_expr_with_policy resolve ctx a) = FlagT imported ==>
+   expr_type (translate_expr_with_policy resolve ctx (JE_IfExp c a b ty)) =
+     FlagT imported /\
+   expr_type (translate_expr_with_policy resolve ctx (JE_BinOp a op b ty)) =
+     FlagT imported) /\
+  (translate_type (expr_type_ctx ctx) ty = BaseT (UintT 256) ==>
+   expr_type (translate_expr_with_policy resolve ctx (JE_IfExp c a b ty)) =
+     BaseT (UintT 256) /\
+   expr_type (translate_expr_with_policy resolve ctx (JE_BinOp a op b ty)) =
+     BaseT (UintT 256))
+Proof
+  rw[] >> simp[Once translate_expr_with_policy_def, expr_type_def]
+QED
+
 (* Both supported directions and representative narrow-width rejections. *)
 Theorem invert_checker_positive_test:
   well_typed_builtin_app (BaseT (UintT 256)) Not [BaseT (UintT 256)] /\
