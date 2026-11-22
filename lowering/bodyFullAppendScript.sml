@@ -5164,7 +5164,14 @@ Resume body_append_nested_frag_full[resolve_pointer]:
   `place_ptr_rel cenv cx u (PlaceR p) addr (SOME loc)
         (Type (ArrayT elem (Dynamic cap)))` by
     (Cases_on `p` >> fs[place_ptr_rel_def] >>
-     metis_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def]) >>
+     rename1 `FLOOKUP cenv.ce_vars nm = SOME (PtrVar (Var pv) psz)` >>
+     `not_fresh_at sp pv` by
+       (qpat_x_assum `local_ptrs_reserved cenv sp` mp_tac >>
+        rewrite_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
+        strip_tac >> qpat_x_assum `!n1 n2 p sz1 sz2. _` drule >>
+        disch_then (qspecl_then [`nm`,`psz`] strip_assume_tac)) >>
+     qpat_x_assum `!x y. not_fresh_at sp x /\ _ ==> lookup_var x u = SOME y`
+       irule >> simp[]) >>
   `op_taint trhs (Var x) = {}` by
     fs[bodyFullTargetDefsTheory.target_ptr_ok_def,ghost_kept_at_def] >>
   `target_ptr_ok cenv (PlaceR p)
