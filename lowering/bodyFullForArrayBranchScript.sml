@@ -295,10 +295,11 @@ Proof
     (drule_then strip_assume_tac vyperTypeSystemTheory.type_stmt_for_array_bound >>
      simp[bound_length_def]) >>
   `!nid. e = TopLevelName (expr_type e) nid ==> FST nid = NONE` by
-    (drule bodyFullForFactsTheory.type_stmt_for_projection >>
-     simp[vyperTypeSystemTheory.well_typed_iterator_def] >> strip_tac >>
+    (drule_then strip_assume_tac bodyFullForFactsTheory.type_stmt_for_projection >>
+     qpat_assum `well_typed_iterator env typ (Array e)`
+       (assume_tac o CONJUNCT1 o REWRITE_RULE [vyperTypeSystemTheory.well_typed_iterator_def]) >>
      rpt strip_tac >> PairCases_on `nid` >>
-     `well_typed_expr env (TopLevelName (expr_type e) (nid0,nid1))` by
+     `well_typed_expr env (TopLevelName (ArrayT typ bd) (nid0,nid1))` by
        (qpat_assum `e = TopLevelName _ _` (fn th => REWRITE_TAC [GSYM th]) >>
         first_assum ACCEPT_TAC) >>
      drule_all_then ACCEPT_TAC bodyTypedTargetScopeTheory.body_inv_toplevel_read_main) >>
