@@ -143,9 +143,12 @@ Resume method_id_runtime_joint_outcome_from_suffix[child_run]:
     simp[cj 5 hash_suffix_appends] >>
   drule_all hash_unary_suffix_cut >> strip_tac >>
   `gas_shadow_state sm ss` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type e`, `e` |-> `e`]
-      gas_shadow_stmt_lower_value) >> rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
+    (`x = x /\ gas_shadow_state sm ss` suffices_by simp[] >>
+     irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ e sa = (x,sm)` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _`
+       (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
   `fn_has_code shadow_sa ss shadow_func` by
     (`cs_extends shadow_sa ss` by metis_tac[cj 2 compile_expr_grows] >>
      `cs_extends ss shadow_sb` by metis_tac[fragExecTheory.cs_appends_def] >>
@@ -302,12 +305,14 @@ Resume method_id_runtime_sim_full_from_suffix[value_run]:
          gvs[as_stack_val_def, as_ptr_val_def, comp_bind_def,
              unwrap_value_def, comp_return_def, expr_type_def, is_word_type_def, contextTheory.mk_ptr_def]) >>
       qpat_x_assum `op = op'` SUBST_ALL_TAC >>
-      `?sx ss. lower_value compile_expr cenv (expr_type e)
+      `?sx ss. lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
          (gas_shadow_expr e) shadow_sa = (sx,ss)` by metis_tac[pairTheory.PAIR] >>
       `sx = x /\ gas_shadow_state sm ss` by
-        (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type e`, `e` |-> `e`]
-          gas_shadow_stmt_lower_value) >> rewrite_tac[gas_shadow_compiles_def] >>
-         disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
+        (irule bodyFullSharedTheory.gas_shadow_step >>
+         qpat_assum `lower_value _ _ _ e sa = (x,sm)` (irule_at Any) >>
+         qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _`
+           (irule_at Any) >>
+         simp[] >> irule gas_shadow_stmt_lower_value_env) >>
       qpat_x_assum `sx = x` SUBST_ALL_TAC >>
       `?sop ssb. compile_method_id_runtime (expr_type e) x fixed ss = (sop,ssb)` by
         metis_tac[pairTheory.PAIR] >>
@@ -346,12 +351,14 @@ Resume method_id_runtime_sim_full_from_suffix[vv_run]:
      Cases_on `fixed` >>
      gvs[as_stack_val_def, as_ptr_val_def, comp_bind_def, comp_return_def]) >>
   qpat_x_assum `vv = _` SUBST_ALL_TAC >>
-  `?sx ss. lower_value compile_expr cenv (expr_type e)
+  `?sx ss. lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
      (gas_shadow_expr e) shadow_sa = (sx,ss)` by metis_tac[pairTheory.PAIR] >>
   `sx = x /\ gas_shadow_state sm ss` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type e`, `e` |-> `e`]
-      gas_shadow_stmt_lower_value) >> rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ e sa = (x,sm)` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _`
+       (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
   qpat_x_assum `sx = x` SUBST_ALL_TAC >>
   `?sop ssb. compile_method_id_runtime (expr_type e) x fixed ss = (sop,ssb)` by
     metis_tac[pairTheory.PAIR] >>
