@@ -75,15 +75,19 @@ Theorem body_assign_local_memory_rhs_frontier:
        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   strip_tac >>
-  qpat_x_assum `lower_value compile_expr cenv _ (gas_shadow_expr e) _ = _` mp_tac >>
+  qpat_x_assum `lower_value compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
   simp[lower_value_def, comp_bind_def] >>
-  Cases_on `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
-  rename1 `_ = (vv',shadow_sV)` >> simp[] >> strip_tac >>
+  Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  rename1 `_ = (vv',shadow_sV)` >>
+  simp[gasShadowCompileBaseTheory.unwrap_value_gas_shadow_env] >> strip_tac >>
   `vv' = vv /\ gas_shadow_state sV shadow_sV` by
-    (qspecl_then [`cenv`,`expr_type e`,`e`,`T`] mp_tac
-       (cj 1 gasShadowCompileTheory.gas_shadow_compile_expr) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+    (`gas_shadow_compiles (compile_expr cenv (expr_type e) e)
+       (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
+       irule (cj 1 gasShadowCompileTheory.gas_shadow_compile_expr_env |> SPEC_ALL |>
+              Q.INST [`shadow` |-> `T`] |> REWRITE_RULE [COND_CLAUSES]) >>
+     qpat_x_assum `gas_shadow_compiles _ _`
+       (qspecl_then [`sa`,`shadow_sa`] mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
+     simp[]) >>
   gvs[] >>
   qpat_assum `compile_expr cenv _ e sa = _`
     (strip_assume_tac o MATCH_MP exprSimUnwrapTheory.compile_expr_extends) >>
