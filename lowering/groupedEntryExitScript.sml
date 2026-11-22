@@ -61,6 +61,28 @@ Proof
   simp[]
 QED
 
+(* The value check itself has a concrete exit on the selected prefix. *)
+Theorem grouped_entry_value_reject_path:
+  compile_entry_checks m F opened = ((),checked) /\
+  fn_has_code opened checked fn /\ opened.cs_current_insts = [] /\
+  ~block_is_terminated opened /\ fresh_vars_wrt opened t /\
+  ~t.vs_halted /\ t.vs_current_bb = opened.cs_current_bb /\
+  t.vs_inst_idx = 0 /\ allocas_from 0 t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+  t.vs_call_ctx.cc_callvalue <> 0w /\
+  (!D explicit. gas_origin_ptr_path (D,0,explicit,ctx,fn,[])
+    (s,FEMPTY,entry_taint) [] (OK t,G,tn)) ==>
+  ?u J tz. !D explicit. gas_origin_ptr_path (D,0,explicit,ctx,fn,[])
+    (s,FEMPTY,entry_taint) [] (Abort Revert_abort u,J,tz)
+Proof
+  strip_tac >>
+  drule_all nonpayable_check_joint_reject >>
+  disch_then (qspecl_then [`tn`, `[]`, `G`] mp_tac) >>
+  disch_then (qx_choosel_then [`u`,`J`,`tz`] strip_assume_tac) >>
+  qexistsl_tac [`u`,`J`,`tz`] >>
+  metis_tac[gas_origin_ptr_path_append, APPEND]
+QED
+
 Theorem grouped_entry_value_rejected:
   source_deployment_rel tops am tx /\
   vyperInterpreter$lookup_function NONE tx.function_name External tops =
@@ -90,8 +112,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all external_value_reject_trace >>
   disch_then (qspec_then `SOME vs.vs_outcomes` assume_tac) >>
-  drule_all nonpayable_check_joint_reject >>
-  disch_then (qspecl_then [`tn`, `[]`, `G`] mp_tac) >>
+  drule_all grouped_entry_value_reject_path >>
   disch_then (qx_choosel_then [`u`,`J`,`tz`] strip_assume_tac) >>
   irule (SIMP_RULE (srw_ss()) [gas_explicit_def] (Q.INST [`marks` |-> `[]`]
     grouped_entry_matched_exit)) >>
