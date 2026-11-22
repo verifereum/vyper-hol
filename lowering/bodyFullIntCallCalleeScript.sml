@@ -2389,7 +2389,8 @@ Proof
       qpat_assum `linked_body_calls_resolved _ cx`
         (ACCEPT_TAC o SIMP_RULE (srw_ss()) [bodyCallSupportTheory.linked_body_calls_resolved_def])) >>
   conj_tac >- (rpt strip_tac >> res_tac) >>
-  conj_tac >> first_assum ACCEPT_TAC
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >> res_tac
 QED
 
 Theorem intcall_callee_body_metadata[local]:
@@ -2666,7 +2667,8 @@ Proof
   `qualified_stmts_decls_ok body_ce.ce_modules ss_comp` by
     (`body_ce.ce_modules = [(NONE,tops)]` by
        (qpat_assum `body_inv tops _ body_ce _`
-         (ACCEPT_TAC o MATCH_MP contract_inv_cenv_modules o MATCH_MP body_inv_contract)) >>
+         (ACCEPT_TAC o MATCH_MP contract_inv_cenv_modules o
+          MATCH_MP bodySimTheory.body_inv_contract)) >>
      drule_all (SIMP_RULE (srw_ss())
        [constSubstModsTheory.consts_env_mods_singleton,
         constSubstModsTheory.subst_consts_mods_singleton]

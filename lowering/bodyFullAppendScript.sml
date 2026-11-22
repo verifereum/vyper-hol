@@ -6084,7 +6084,9 @@ Resume body_append_storage_word_frag_full[compose]:
     goal_assum (drule_at Any) >> fs[]) >>
   conj_tac >- metis_tac[gasExemptCertTheory.gas_exempt_cert_error_place] >>
   conj_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _`
+    (fn th => qpat_assum `nid0 = NONE`
+      (fn src => mp_tac (PURE_REWRITE_RULE [src] th))) >>
   disch_then (fn th =>
     irule_at (Pos last) gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
     irule_at (Pos hd) th) >>
@@ -6101,7 +6103,6 @@ Resume body_append_storage_word_frag_full[after_root]:
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   disj1_tac >> qexists_tac `place` >> conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_x_assum `!tail. INL place = res /\ _` kall_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> res = INL place /\ _` kall_tac >>
   qpat_x_assum `res = INL place` kall_tac >>
   qpat_x_assum `t = s0` SUBST_ALL_TAC >>
@@ -6511,7 +6512,9 @@ Resume body_append_storage_aggregate_frag_full[compose]:
     goal_assum (drule_at Any) >> fs[]) >>
   conj_tac >- metis_tac[gasExemptCertTheory.gas_exempt_cert_error_place] >>
   conj_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _`
+    (fn th => qpat_assum `nid0 = NONE`
+      (fn src => mp_tac (PURE_REWRITE_RULE [src] th))) >>
   disch_then (fn th =>
     irule_at (Pos last) gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
     irule_at (Pos hd) th) >>
@@ -6528,7 +6531,6 @@ Resume body_append_storage_aggregate_frag_full[after_root]:
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   disj1_tac >> qexists_tac `place` >> conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_x_assum `!tail. INL place = res /\ _` kall_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> res = INL place /\ _` kall_tac >>
   qpat_x_assum `res = INL place` kall_tac >>
   qpat_x_assum `t = s0` SUBST_ALL_TAC >>
