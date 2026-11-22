@@ -76,7 +76,10 @@ Proof
   conj_tac >- simp[Abbr `u`] >>
   conj_tac
   >- (gen_tac >> irule emitted_origin_ptr_path >> simp[] >>
-      qexistsl_tac [`[i]`,`sa`] >> simp[]) >>
+      qexistsl_tac [`[i]`,`sa`] >> simp[] >>
+      rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+      qpat_x_assum `[_] = _ ++ _` (mp_tac o SYM) >>
+      simp[APPEND_EQ_SING, Abbr `i`, mk_inst_def]) >>
   simp[Abbr `u`, lookup_var_update_var, lookup_var_def, update_var_def,
        FLOOKUP_UPDATE] >>
   conj_tac

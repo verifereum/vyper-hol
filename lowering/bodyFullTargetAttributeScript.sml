@@ -162,7 +162,11 @@ Resume target_add_suffix_full[parts]:
   qspecl_then [`DF H`, `[inst]`, `sm`, `sb`, `t`, `u0`, `G`, `tn`,
                `step_prov PG G inst u0`, `step_taint inst t u0 tn`]
     mp_tac (Q.GEN `D` emitted_origin_ptr_path) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  impl_tac
+  >- (simp[] >> rpt strip_tac >>
+      `MEM i [inst]` by metis_tac[MEM_APPEND, MEM] >>
+      gvs[Abbr `inst`, mk_inst_def, dalloca_no_wrap_non_dalloca]) >>
+  strip_tac >>
   qspecl_then [`[inst]`, `sm`, `sb`, `t`, `u0`] mp_tac emitted_alloca_history >>
   (impl_tac >- fs[EVERY_DEF]) >> strip_tac >>
   drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) target_post_add >>

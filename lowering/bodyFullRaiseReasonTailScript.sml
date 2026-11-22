@@ -93,8 +93,18 @@ Proof
         (revert_reason_copy j u (Var ("%" ++ toString (v+2))) (Var src))` by
         simp[revert_reason_copy_def, mk_inst_def, is_terminator_def] >>
       first_assum (qspec_then `D` assume_tac) >> fs[] >>
+      qabbrev_tac `code = revert_reason_copy j u
+        (Var (STRING #"%" (toString (v+2)))) (Var src)` >>
+      `EVERY (\i. i.inst_opcode <> DALLOCA) code` by
+        simp[Abbr `code`, revert_reason_copy_def, mk_inst_def] >>
+      `(ctx_has_dalloca ctx ==>
+        !pre i post u'. code = pre ++ i::post /\ run_inst_seq pre s = OK u' ==>
+          unitTransformDefs$dalloca_no_wrap i u')` by
+        (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+         qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+         simp[EVERY_APPEND]) >>
       drule_all run_inst_seq_gas_origin_ptr_path >>
-      simp[revert_reason_copy_def, mk_inst_def]) >>
+      simp[Abbr `code`, revert_reason_copy_def, mk_inst_def]) >>
   `mload (w2n b) t = n2w L` by
     (irule revert_reason_copy_mload >> simp[ADD_COMM] >>
      goal_assum (drule_at (Pat `run_inst_seq _ _ = _`)) >>
@@ -190,6 +200,7 @@ Proof
   `LENGTH pre = 29 /\
    EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
      ~is_terminator i.inst_opcode) pre /\
+   EVERY (\i. i.inst_opcode <> DALLOCA) pre /\
    last.inst_opcode = REVERT` by
     simp[Abbr `pre`, Abbr `last`, reason_tail_def, mk_inst_def, is_terminator_def] >>
   `run_inst_seq (reason_tail j u v op) s = Abort Revert_abort z` by
@@ -217,11 +228,18 @@ Proof
      simp[] >> metis_tac[]) >>
   qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ [last] _ _ _` mp_tac >>
   simp[inst_seq_ptr_def] >> strip_tac >> gvs[] >>
-  rename1 `inst_seq_ptr D lo ctx func PG G tn pre s Gf tnf` >>
+  qmatch_asmsub_abbrev_tac `TAKE 29 (_ ++ [_])` >>
+  rename1 `inst_seq_ptr D lo ctx func PG G tn code s Gf tnf` >>
+  `(ctx_has_dalloca ctx ==>
+    !front i post u'. code = front ++ i::post /\ run_inst_seq front s = OK u' ==>
+      unitTransformDefs$dalloca_no_wrap i u')` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+     simp[EVERY_APPEND]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (OK (t with vs_inst_idx := s.vs_inst_idx+29),Gf,tnf)` by
     (drule_all run_inst_seq_gas_origin_ptr_path >>
-     `FILTER (\i. i.inst_opcode = GAS) pre = []` by
+     `FILTER (\i. i.inst_opcode = GAS) code = []` by
        (simp[listTheory.FILTER_EQ_NIL] >> fs[EVERY_MEM]) >> simp[]) >>
   irule gas_origin_ptr_path_trans >>
   goal_assum (drule_at Any) >>

@@ -625,7 +625,11 @@ Proof
        (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),Gf,tnf)` by
-    (irule emitted_origin_ptr_path >> metis_tac[]) >>
+    (irule emitted_origin_ptr_path >> simp[] >>
+     qexistsl [`emitted_insts sa sb`,`sa`] >> simp[] >>
+     rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     drule copy_ctor_load_shape >> simp[listTheory.EVERY_APPEND] >>
+     strip_tac >> gvs[]) >>
   qexistsl [`Gf`,`tnf`,`t`] >> simp[immutable_copy_read_def] >>
   drule gas_origin_ptr_path_dead_mono >> simp[Abbr `D`]
 QED

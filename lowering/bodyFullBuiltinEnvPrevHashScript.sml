@@ -62,14 +62,23 @@ Proof
    ghost_inv_at (DF H) lo d cenv cx es G' tn'
      (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by metis_tac[] >>
   conj_tac
-  >- (drule_at (Pat `run_inst_seq _ s0 = OK t`) run_inst_seq_gas_origin_ptr_path >>
-      disch_then (qspecl_then [`lo`, `gas_explicit_sites ctx shadow_ctx`, `PG`, `DF H`, `G0`, `tn0`, `G'`, `tn'`, `ctx`, `func`, `bb`] mp_tac) >>
-      impl_tac >- (simp[IS_PREFIX_APPEND] >> fs[EVERY_MEM]) >>
+  >- (`isPREFIX (emitted_insts sa sb) (DROP s0.vs_inst_idx bb.bb_instructions)` by
+        simp[IS_PREFIX_APPEND] >>
+      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+         (emitted_insts sa sb)` by fs[EVERY_MEM] >>
+      `(ctx_has_dalloca ctx ==>
+        !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+          run_inst_seq pre s0 = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+        (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+         qpat_assum `EVERY (\i. _ /\ _ /\ _ /\
+           (i.inst_opcode = NUMBER \/ i.inst_opcode = SUB \/ i.inst_opcode = BLOCKHASH) /\ _) _`
+           mp_tac >> simp[EVERY_APPEND] >> rpt strip_tac >> gvs[]) >>
       `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
         (simp[FILTER_EQ_NIL, EVERY_MEM] >> rpt strip_tac >>
-         fs[EVERY_MEM] >>
-         qpat_x_assum `!i. MEM i (emitted_insts sa sb) ==> _`
-           (qspec_then `i` mp_tac) >> simp[]) >> simp[]) >>
+         qpat_assum `EVERY (\i. _ /\ _ /\ _ /\ (_ \/ _) /\ _) _`
+           (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+         disch_then (qspec_then `i` mp_tac) >> simp[]) >>
+      drule_all run_inst_seq_gas_origin_ptr_path >> simp[]) >>
   `call_ctx_rel cx.txn s0.vs_call_ctx s0.vs_tx_ctx s0.vs_block_ctx` by
     metis_tac[stmt_state_rel_state_rel, state_rel_call_ctx_rel] >>
   drule call_ctx_rel_prevhash >> strip_tac >>

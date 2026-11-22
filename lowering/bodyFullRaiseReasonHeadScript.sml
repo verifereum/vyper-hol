@@ -76,6 +76,13 @@ Proof
        simp[reason_head_def, revert_reason_prefix_def, mk_inst_def, is_terminator_def] >>
      qpat_assum `reason_head _ _ _ = _`
        (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+     `EVERY (\i. i.inst_opcode <> DALLOCA) (revert_reason_prefix id v M)` by
+       simp[revert_reason_prefix_def, mk_inst_def] >>
+     `(ctx_has_dalloca ctx ==>
+       !pre i post u. revert_reason_prefix id v M = pre ++ i::post /\
+         run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+       (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+        fs[EVERY_APPEND]) >>
      first_assum (qspec_then `D` assume_tac) >>
      drule_all run_inst_seq_gas_origin_ptr_path >>
      simp[revert_reason_prefix_def, mk_inst_def]) >>

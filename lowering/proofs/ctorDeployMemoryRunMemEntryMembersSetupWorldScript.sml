@@ -58,8 +58,16 @@ Proof
     (emitted_insts st st')` by fs[EVERY_CONJ] >>
   drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
   `actual.vs_allocas = initial.vs_allocas` by fs[abi_decoder_address_frame_def] >>
-  drule_all ctor_checked_emitted_endpoint >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st st' = pre ++ i::post /\
+      run_inst_seq pre initial = OK u ==> dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts st st')` by simp[MEM_APPEND] >>
+     qpat_assum `EVERY (\e. abi_decoder_reentry_opcode e.inst_opcode) _`
+       (qspec_then `i` mp_tac o REWRITE_RULE[EVERY_MEM]) >>
+     simp[abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def] >>
+     rpt strip_tac >> gvs[]) >>
+  drule_all (Q.INST [`ctx` |-> `ctx`] ctor_checked_emitted_endpoint) >> strip_tac >>
   qexists `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   gvs[abi_decoder_address_frame_def, abi_encoder_registered_effect_def,
       fresh_vars_wrt_def, eval_op_inst_idx]
@@ -144,8 +152,16 @@ Proof
     (emitted_insts st st')` by fs[EVERY_CONJ] >>
   drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
   `t.vs_allocas = initial.vs_allocas` by fs[abi_decoder_address_frame_def] >>
-  drule_all ctor_checked_emitted_endpoint >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st st' = pre ++ i::post /\
+      run_inst_seq pre initial = OK u ==> dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts st st')` by simp[MEM_APPEND] >>
+     qpat_assum `EVERY (\e. abi_decoder_reentry_opcode e.inst_opcode) _`
+       (qspec_then `i` mp_tac o REWRITE_RULE[EVERY_MEM]) >>
+     simp[abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def] >>
+     rpt strip_tac >> gvs[]) >>
+  drule_all (Q.INST [`ctx` |-> `ctx`] ctor_checked_emitted_endpoint) >> strip_tac >>
   qexists `t with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   gvs[abi_decoder_address_frame_def, abi_encoder_registered_effect_def,
       fresh_vars_wrt_def, eval_op_inst_idx]
