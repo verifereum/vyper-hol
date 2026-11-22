@@ -3,7 +3,7 @@
 Theory dallocaCreateGeometry
 Ancestors
   builtinCreate context exprLoweringProps emitHelper emitHelperProps compileEnv
-  loweringStateRelDefs dallocaBounds
+  loweringStateRelDefs dallocaBounds blueprintDallocaEmissionSlices
   venomExecSemantics venomInst venomState list rich_list words finite_map
 
 (* Project away memory before simplifying an execution's repeated states. *)
@@ -241,7 +241,10 @@ Proof
   drule create_blueprint_dalloca_chunk_parts >> strip_tac >>
   `i = alloc` by gvs[] >>
   qexistsl_tac [`bb`, `chunk`, `sum`, `middle`, `effect`, `suffix`] >>
-  fs[DROP_APPEND]
+  simp[] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, APPEND] >>
+  pure_once_rewrite_tac[DROP_APPEND] >>
+  simp[DROP_LENGTH_TOO_LONG]
 QED
 
 Theorem compile_create_blueprint_dalloca_chunk:
@@ -284,30 +287,34 @@ Theorem create_blueprint_dalloca_chunk_geometry:
 Proof
   strip_tac >> drule (iffLR create_blueprint_dalloca_chunk_def) >>
   strip_tac >>
-  `alloc.inst_operands = [size'] /\
-   alloc :: middle = emitted_insts sm sc /\
-   [effect] = emitted_insts sc sd /\
-   (case salt of NONE => effect.inst_opcode = CREATE /\
-       effect.inst_operands = [value; alloc_ptr; size']
-    | SOME salt_op => effect.inst_opcode = CREATE2 /\
-       effect.inst_operands = [value; alloc_ptr; size'; salt_op])` by
-    (Cases_on `salt` >> Cases_on `args_len = Lit 0w` >>
-     gvs[compile_alloc_dynamic_def, compile_copy_memory_dynamic_def,
-         emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
-         comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
-     full_simp_tac pure_ss
-       [emitted_insts_def, GSYM APPEND_ASSOC, APPEND, DROP_LENGTH_APPEND] >>
-     gvs[DROP_APPEND, DROP_LENGTH_TOO_LONG, DROP_LENGTH_APPEND, mk_inst_def]) >>
+  SUBGOAL_THEN ``?body. sc.cs_current_insts = sn.cs_current_insts ++ body``
+    assume_tac
+  >- (drule emit_void_extends >> strip_tac >>
+     Cases_on `args_len = Lit 0w`
+     >- (fs[] >> goal_assum (drule_at Any)) >>
+     qpat_x_assum `if _ then _ else _` mp_tac >>
+     simp[compile_copy_memory_dynamic_def] >> strip_tac >>
+     qpat_assum `emit_op ADD [alloc_ptr;code] se = _`
+       (strip_assume_tac o MATCH_MP emit_op_extends) >>
+     qpat_assum `emit_void MCOPY _ _ = _`
+       (strip_assume_tac o MATCH_MP emit_void_extends) >>
+     qexists_tac `emitted_insts sn se ++ emitted_insts se sx ++
+                  emitted_insts sx sc` >>
+     pure_asm_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >> REFL_TAC) >>
+  `emitted_insts sa sd = sum :: alloc :: (middle ++ [effect])` by
+    metis_tac[] >>
+  drule_all blueprint_dalloca_emission_slices >> strip_tac >>
   `run_inst_seq (emitted_insts sm sc) pre = OK ready` by metis_tac[] >>
-  drule create_blueprint_allocation_geometry >>
-  disch_then (qspecl_then [`alloc_ptr`, `sn`, `target`, `offset`, `se`,
-                            `sc`, `args_ptr`, `pre`, `ready`] mp_tac) >>
-  impl_tac >- asm_rewrite_tac[] >> strip_tac >>
+  drule_all create_blueprint_allocation_geometry >> strip_tac >>
   `run_inst_seq (emitted_insts sc sd) ready = OK after` by
     (qpat_assum `[effect] = _` (fn th => REWRITE_TAC [GSYM th]) >>
-     Cases_on `salt` >> fs[run_inst_seq_def, is_terminator_def]) >>
+     simp[run_inst_seq_def]) >>
   drule_all create_emit_completed_bound >> strip_tac >>
-  `w2n sz <= 65536` by metis_tac[venomLayoutTheory.ceil32_ge] >>
+  `sz' = sz` by fs[] >>
+  `w2n sz <= 65536` by
+    (irule arithmeticTheory.LESS_EQ_TRANS >>
+     qexists_tac `venomLayout$ceil32 (w2n sz)` >>
+     fs[venomLayoutTheory.ceil32_ge]) >>
   qexistsl_tac [`size'`, `sz`] >>
   Cases_on `salt` >> fs[] >>
   qpat_x_assum `step_inst_base effect ready = OK after` mp_tac >>
