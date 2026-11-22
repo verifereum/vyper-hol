@@ -100,6 +100,23 @@ Proof
   metis_tac[]
 QED
 
+Theorem raw_reachable_dalloca_headroom_from_peak:
+  ~vs0.vs_halted /\ vs0.vs_fmp = vs0.vs_initial_fmp /\
+  w2n vs0.vs_initial_fmp < 2 ** 254 /\
+  LENGTH vs0.vs_call_ctx.cc_calldata < 2 ** 64 /\
+  raw_reachable vs0 ctx fn i s /\
+  (i.inst_opcode = DALLOCA ==>
+    w2n s.vs_fmp <= w2n vs0.vs_initial_fmp + 2 ** 64 * 2 ** 64) ==>
+  dalloca_fmp_headroom i s
+Proof
+  simp[dalloca_fmp_headroom_def] >> strip_tac >> strip_tac >>
+  drule_all (Q.INST [`fmp` |-> `vs0.vs_initial_fmp`] raw_started_state) >>
+  strip_tac >> drule lower_budget_path_charge_facts >> simp[] >> strip_tac >>
+  `LENGTH s.vs_call_ctx.cc_calldata < 2 ** 64` by metis_tac[] >>
+  drule dalloca_calldata_size_bound >>
+  simp[MAX_DEF, wordsTheory.dimword_def, dimindex_256] >> decide_tac
+QED
+
 (* A recorder prefix can include one larger, unpaired reservation at its
    end. The current-site condition excludes one immediately before another
    DALLOCA, so only completed, outcome-charged allocations contribute there. *)
