@@ -1127,13 +1127,15 @@ Proof
   >~ [`compile_builtin_dispatch_body _ _ _ _ NamedConst _`]
   >- (qspecl_then [`args`, `sh`] (qx_choose_then `selected` assume_tac)
         gas_shadow_HD_alternative >>
+      Cases_on `is_word_type ret_ty` >>
       CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
-      simp[compile_builtin_dispatch_body_def, as_ptr_val_def,
+      simp[compile_builtin_dispatch_body_def, as_stack_val_def, as_ptr_val_def,
            GSYM comp_return_def, comp_bind_uncurry] >>
       CONV_TAC (DEPTH_CONV ETA_CONV) >>
       match_mp_tac gas_shadow_compiles_bind >>
-      simp[gas_shadow_compiles_return] >>
-      irule gas_shadow_compiles_lower_value_env >> simp[])
+      (conj_tac
+       >- (irule gas_shadow_compiles_lower_value_env >> simp[])
+       >> simp[gas_shadow_compiles_return]))
   >~ [`compile_builtin_dispatch_body _ _ _ _ (BoolChain _ _) _`]
   >- (qspecl_then [`args`, `sh`] (qx_choose_then `selected` assume_tac)
         gas_shadow_HD_alternative >>
