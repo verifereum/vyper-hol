@@ -885,7 +885,7 @@ Theorem tuple_place_nested_dynamic_borrow_target_frame:
       EXISTS (supported_expr_exists expr_effect_root) (target_indices bt) /\
       type_place_target env bt = SOME (Type ty) /\
       compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
-      compile_get_target_ptr compile_expr cenv (gas_shadow_target bt)
+      compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (gas_shadow_target bt)
         shadow_sa = (r, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -6161,7 +6161,7 @@ Theorem body_assign_tuple_nested_immutable_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
       (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
   cheat
