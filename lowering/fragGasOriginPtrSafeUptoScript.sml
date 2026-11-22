@@ -691,8 +691,15 @@ Proof
   strip_tac
   >- (drule_all revert_forward_at_opcode >> strip_tac >>
       simp[inst_mem_ok_in_fn_def] >> metis_tac[]) >>
+  `inst.inst_opcode = DALLOCA ==> ctx_has_dalloca ctx` by
+    (strip_tac >> simp[ctx_has_dalloca_def, EXISTS_MEM] >>
+     qexists_tac `fn` >> simp[] >> qexists_tac `inst` >>
+     simp[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
+     qexists_tac `bb` >> conj_tac
+     >- metis_tac[lookup_block_MEM] >>
+     fs[get_instruction_def] >> metis_tac[EL_MEM]) >>
   gvs[Once mem_safe_step_def, inst_mem_ok_in_fn_def] >>
-  metis_tac[inst_mem_below_frontier_frontiers]
+  metis_tac[inst_mem_below_frontier_frontiers, dalloca_no_wrap_non_dalloca]
 QED
 
 Theorem invoke_mem_facts[local]:
@@ -813,7 +820,8 @@ Proof
   `!stk PG G tn fn inst s.
      frame_reachable vs ctx stk PG G tn fn inst s /\ gas_cut k vs s ==>
      (!fuel. ptr_inst_ok D lo fuel ctx fn G tn inst s) /\
-     inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s` by
+     inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s /\
+     dalloca_no_wrap inst s` by
     (simp[Abbr `k`] >> metis_tac[gas_origin_ptr_focus_frame_facts]) >>
   `ptr_discipline_upto lo k ctx vs` by
     (simp[ptr_discipline_upto_def] >> conj_tac >- metis_tac[] >>
@@ -824,7 +832,8 @@ Proof
      first_x_assum drule_all >> strip_tac >>
      first_x_assum (qspec_then `fuel` mp_tac) >> simp[ptr_inst_ok_def]) >>
   `!fn inst s. raw_reachable vs ctx fn inst s /\ gas_cut k vs s ==>
-     inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s` by
+     inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s /\
+     dalloca_no_wrap inst s` by
     (rpt gen_tac >> strip_tac >> drule ptr_raw_reachable_frame >>
      strip_tac >> first_x_assum drule_all >> simp[]) >>
   `!fn inst s. raw_reachable vs ctx fn inst s /\ gas_cut k vs s ==>
@@ -836,24 +845,18 @@ Proof
      simp[mem_inv_raw_reachable, dload_headroom_ok_def] >>
      rpt strip_tac >> res_tac >> decide_tac) >>
   `!fn inst s. raw_reachable vs ctx fn inst s /\ gas_cut k vs s ==>
-     dalloca_no_wrap inst s /\
      w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
     (rpt gen_tac >> strip_tac >>
      Cases_on `ctx_has_dalloca ctx`
-     >- (conj_tac >- metis_tac[] >>
-         drule ptr_raw_reachable_frame >> strip_tac >>
-         qpat_x_assum `!stk PG G tn fn inst s.
+     >- (drule ptr_raw_reachable_frame >> strip_tac >>
+         qpat_assum `!stk PG G tn fn inst s.
             _ ==> (!fuel. ptr_inst_ok _ _ fuel _ _ _ _ _ _) /\ _`
-           (qspecl_then [`stk`, `PG`, `G`, `tn`, `fn`, `inst`, `s`] mp_tac) >>
-         simp[] >> disch_then (qspec_then `0` mp_tac o CONJUNCT1) >>
+           (drule_all_then (qspec_then `0` mp_tac o CONJUNCT1)) >>
          simp[ptr_inst_ok_def, allocas_below_fmp_def]) >>
      `EVERY pre_fmp_ops ctx.ctx_functions` by
        fs[o1PassContractTheory.fmp_free_ctx_def, EVERY_MEM] >>
      drule raw_reachable_fmp_fixed >> simp[] >> strip_tac >>
-     drule raw_reachable_initial_fmp >> strip_tac >> simp[] >>
-     simp[dalloca_no_wrap_def] >> strip_tac >>
-     drule ptr_raw_reachable_frame >> strip_tac >>
-     metis_tac[frame_reachable_dalloca]) >>
+     drule raw_reachable_initial_fmp >> strip_tac >> simp[]) >>
   rw[o1_safe_upto_def, o1_ptr_safe_upto_def, raw_mem_ok_def] >> metis_tac[]
 QED
 
