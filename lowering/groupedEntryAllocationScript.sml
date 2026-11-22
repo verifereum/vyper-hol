@@ -68,10 +68,13 @@ Theorem grouped_keyword_allocations_distinct:
       ?n. sa.cs_next_var <= n /\ op = Var (STRING #"%" (toString n))
 Proof
   Induct >- simp[compile_create_kwarg_allocas_def, comp_return_def] >>
-  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  qx_gen_tac `spec` >> PairCases_on `spec` >>
+  qx_genl_tac [`ce`,`sa`,`vars`,`sb`] >>
+  rename1 `compile_create_kwarg_allocas _ ((spec_name,spec_ty,spec_expr)::_) _ = _` >>
   simp[compile_create_kwarg_allocas_def, comp_bind_def, comp_return_def] >>
-  Cases_on `compile_alloc_buffer (type_memory_bytes ce h1) sa` >>
-  Cases_on `compile_create_kwarg_allocas ce specs r` >>
+  Cases_on `compile_alloc_buffer (type_memory_bytes ce spec_ty) sa` >>
+  rename1 `compile_alloc_buffer (type_memory_bytes ce spec_ty) sa = (buf,mid)` >>
+  Cases_on `compile_create_kwarg_allocas ce specs mid` >>
   disch_then (map_every assume_tac o CONJUNCTS) >> gvs[] >>
   drule abi_builtin_alloc_buffer_shape >>
   disch_then (strip_assume_tac o MATCH_MP emitted_insts_emit_op o cj 2) >>
@@ -110,20 +113,22 @@ Theorem grouped_keyword_allocation_slots:
       LIST_REL (^keyword_allocation ce st s G tn fn) vars slots
 Proof
   Induct >- simp[] >>
-  qx_gen_tac `arg` >> PairCases_on `arg` >> Cases_on `tvs` >- simp[] >>
+  qx_gen_tac `arg` >> PairCases_on `arg` >> qx_gen_tac `tvs` >>
+  Cases_on `tvs` >- simp[] >>
+  rename1 `LIST_REL _ ((arg_name,arg_op,arg_ty,arg_expr)::_) (head_tv::tail_tvs)` >>
   simp_tac (srw_ss()) [listTheory.LIST_REL_def] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_assum `!name op ty e. _`
-    (qspecl_then [`arg0`,`arg1`,`arg2`,`arg3`] mp_tac) >>
+    (qspecl_then [`arg_name`,`arg_op`,`arg_ty`,`arg_expr`] mp_tac) >>
   impl_tac >- simp[] >>
   disch_then (qx_choosel_then [`id`,`q`,`b`] strip_assume_tac) >>
-  first_x_assum (qspec_then `t` mp_tac) >>
+  first_x_assum (qspec_then `tail_tvs` mp_tac) >>
   impl_tac
   >- (asm_rewrite_tac[] >> rpt gen_tac >> strip_tac >>
       qpat_assum `!name op ty e. _`
         (qspecl_then [`name`,`op`,`ty`,`e`] mp_tac) >> simp[]) >>
   disch_then (qx_choose_then `slots` strip_assume_tac) >>
-  gvs[] >> qexists_tac `(id,q,b,h)::slots` >> simp[] >>
+  gvs[] >> qexists_tac `(id,q,b,head_tv)::slots` >> simp[] >>
   simp[MEM_MAP, MEM_EL] >> rpt strip_tac >>
   qpat_assum `LIST_REL _ _ slots` (strip_assume_tac o REWRITE_RULE [LIST_REL_EL_EQN]) >>
   rename1 `i < LENGTH slots` >>
@@ -138,7 +143,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS o SIMP_RULE (srw_ss()) []) >>
   `j = id` by fs[] >>
   `p = q` by
-    (mp_tac (Q.SPECL [`fn`,`mk_inst id ALLOCA [Lit (n2w (type_memory_size h))] [q]`,
+    (mp_tac (Q.SPECL [`fn`,`mk_inst id ALLOCA [Lit (n2w (type_memory_size head_tv))] [q]`,
         `mk_inst j ALLOCA [Lit (n2w (type_memory_size tv))] [p]`] fn_inst_ids_distinct_inj) >>
      impl_tac
      >- (conj_tac >- first_assum ACCEPT_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
