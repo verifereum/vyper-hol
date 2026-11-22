@@ -169,50 +169,6 @@ QED
 
 Finalise compile_group_entries_selected_origin_with_frame
 
-Theorem compile_group_entries_selected_origin:
-  !entries mid common vars off sa sb fn m s ctx PG G tn lo.
-    compile_group_entries mid entries common vars off sa = ((),sb) /\
-    fn_has_code sa sb fn /\
-    EVERY (\(_,name,_,_). ~internal_label_ok name) entries /\
-    (!name bb. lookup_block name fn.fn_blocks = SOME bb ==>
-      phi_prefix_length bb.bb_instructions = 0) /\
-    fresh_vars_wrt sa s /\ ~s.vs_halted /\
-    s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    eval_operand mid s = SOME m /\ op_taint tn mid = {} /\
-    allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
-    !sel lbl mincd k.
-      FIND (\(n,_,_,_). m = n2w n) entries = SOME (sel,lbl,mincd,k) ==>
-      ?checks init done t G' tn'.
-        checks.cs_current_bb = lbl /\ checks.cs_current_insts = [] /\
-        sa.cs_next_id <= checks.cs_next_id /\
-        sa.cs_next_var < checks.cs_next_var /\
-        compile_entry_checks mincd common.ec_payable checks = ((),init) /\
-        fn_has_code checks init fn /\
-        compile_entry_point_kwargs common.ec_env vars off k common.ec_common_label init =
-          ((),done) /\ fn_has_code init done fn /\
-        (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
-          (s,G,tn) [] (OK t,G',tn')) /\
-        vars_pc_only s t /\ t.vs_current_bb = lbl /\ t.vs_inst_idx = 0 /\
-        fresh_vars_wrt checks t /\
-        tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
-        tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
-        (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
-          FLOOKUP G' p = FLOOKUP G p /\ op_taint tn' (Var p) = op_taint tn (Var p)) /\
-        (!D. (!fuel. ptr_safe_blocks D lo fuel ctx fn PG G' tn' t) ==>
-          !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
-Proof
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  mp_tac (Q.SPECL [`entries`,`mid`,`common`,`vars`,`off`,`sa`,`sb`,`fn`,
-      `m`,`s`,`ctx`,`PG`,`G`,`tn`,`lo`]
-    compile_group_entries_selected_origin_with_frame) >>
-  asm_rewrite_tac[] >>
-  disch_then (qspecl_then [`sel`,`lbl`,`mincd`,`k`] mp_tac) >>
-  asm_rewrite_tac[] >>
-  disch_then (qx_choosel_then [`checks`,`init`,`done`,`t`,`G'`,`tn'`]
-    strip_assume_tac) >>
-  qexistsl_tac [`checks`,`init`,`done`,`t`,`G'`,`tn'`] >> asm_rewrite_tac[]
-QED
-
 Theorem compile_group_entries_missed_origin:
   !entries mid common vars off sa sb fn m s ctx PG G tn lo.
     compile_group_entries mid entries common vars off sa = ((),sb) /\

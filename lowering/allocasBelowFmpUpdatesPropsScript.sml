@@ -2,6 +2,14 @@ Theory allocasBelowFmpUpdatesProps
 Ancestors
   ptrDiscipline venomState
 
+Theorem allocas_below_fmp_fields:
+  t.vs_allocas = s.vs_allocas /\ t.vs_initial_fmp = s.vs_initial_fmp /\
+  t.vs_fmp = s.vs_fmp ==>
+  (allocas_below_fmp t <=> allocas_below_fmp s)
+Proof
+  strip_tac >> simp[allocas_below_fmp_def]
+QED
+
 (* Scratch updates leave the allocation table and both FMPs unchanged. *)
 Theorem allocas_below_fmp_updates:
   (allocas_below_fmp (update_var x w s) <=> allocas_below_fmp s) /\

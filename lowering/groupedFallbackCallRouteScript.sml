@@ -98,7 +98,10 @@ Proof
   pure_rewrite_tac[EVERY_MEM] >> qx_gen_tac `grp` >> strip_tac >>
   qpat_x_assum `!e. MEM e groups ==> _` (drule_then mp_tac) >>
   qpat_x_assum `!e. MEM e groups ==> _` (drule_then mp_tac) >>
-  Cases_on `grp` >> TRY (PairCases_on `p0`) >> simp[]
+  Cases_on `grp`
+  >- (rename1 `MEM (ExternalSingle selector package) groups` >>
+      PairCases_on `selector` >> simp[]) >>
+  simp[]
 QED
 
 (* Use the passing-checks interface with an empty check interval to reach
