@@ -95,7 +95,11 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all source_typing_ok_runtime_ready >> strip_tac >>
   drule source_typing_ok_external_names_distinct >> strip_tac >>
-  Cases_on `classify_functions tops` >> PairCases_on `r` >> fs[] >>
+  Cases_on `classify_functions tops` >>
+  rename1 `classify_functions tops = functions` >>
+  PairCases_on `functions` >>
+  rename1 `classify_functions tops = (externals,internals,fallback,constructor)` >>
+  fs[] >>
   drule_all lower_grouped_runtime_pair >>
   disch_then (qx_choosel_then [`groups`,`ips`,`fall`,`shunit`,`fn`,`bb`]
     (map_every assume_tac o CONJUNCTS)) >>
@@ -111,9 +115,9 @@ QED
 Resume grouped_default_call_route[selector]:
   `4 <= LENGTH ^cd` by decide_tac >>
   qabbrev_tac `groups = MAP (package_external_group tops rpolicy.rpol_target T
-    (K global_nonreentrant_slot)) q` >>
+    (K global_nonreentrant_slot)) externals` >>
   `groups = MAP (package_external_group tops rpolicy.rpol_target T
-    (K global_nonreentrant_slot)) q` by simp[Abbr `groups`] >>
+    (K global_nonreentrant_slot)) externals` by simp[Abbr `groups`] >>
   drule_all grouped_selected_default_entry_shape >>
   disch_then (qspecl_then [`T`,`rpolicy.rpol_target`,`K global_nonreentrant_slot`]
     (qx_choosel_then [`pre`,`post`,`prefix`,`k`,`common`,`entries`,`specs`,`off`]
@@ -130,7 +134,7 @@ Resume grouped_default_call_route[selector]:
      irule (INST_TYPE [alpha |-> ``:160 word``] checked_grouped_package_keyword_widths) >>
      conj_tac >- (qexistsl_tac [`rpolicy`,`unit`] >> first_assum ACCEPT_TAC) >>
      conj_tac >- (qexistsl_tac [`tx.target`,`art`,`am.layouts`] >> first_assum ACCEPT_TAC) >>
-     qexistsl_tac [`r2`,`r1`,`r0`] >> first_assum ACCEPT_TAC) >>
+     qexistsl_tac [`constructor`,`fallback`,`internals`] >> first_assum ACCEPT_TAC) >>
   qpat_assum `EVERY _ groups` (fn th =>
     qpat_assum `groups = pre ++ _` (fn eq =>
       strip_assume_tac (SIMP_RULE (srw_ss()) [eq,EVERY_APPEND] th))) >>
@@ -697,16 +701,17 @@ Resume grouped_default_call_route[slot_finish]:
 QED
 
 Resume grouped_default_call_route[source_finish]:
-  `EVERY external_defaults_no_sha256 q` by
+  `EVERY external_defaults_no_sha256 externals` by
     (map_every (fn pat => qpat_assum pat mp_tac)
        [`lower_vyper_runtime_unit tops rpolicy = SOME unit`,
-        `classify_functions tops = (q,_,_,_)`, `EXISTS external_has_defaults q`] >>
+        `classify_functions tops = (externals,_,_,_)`,
+        `EXISTS external_has_defaults externals`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rw[] >>
      gvs[lower_vyper_runtime_unit_def,AllCaseEqs()]) >>
   `no_sha256_exprs dflts` by
     (qpat_assum `MEM (mut,nr,^rr,tx.function_name,args,^ds,ret,^ss) (FST (classify_functions tops))` mp_tac >>
      qpat_assum `classify_functions tops = _` (fn th => simp_tac bool_ss [th,FST]) >>
-     qpat_assum `EVERY external_defaults_no_sha256 q`
+     qpat_assum `EVERY external_defaults_no_sha256 externals`
        (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      metis_tac[external_defaults_no_sha256_def,cj 3 source_no_sha256_after_const_substitution]) >>

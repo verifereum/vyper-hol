@@ -265,9 +265,10 @@ QED
 
 val _ = augment_srw_ss [rewrites [exit_result_outcomes_update]];
 
-Theorem gas_origin_edge_outcomes_update:
-  EVERY (\i. ~MEM i.inst_opcode
-    [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]) (fn_insts fn) /\
+Theorem gas_origin_edge_outcomes_update_at[local]:
+  (!bb i. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME i ==> ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]) /\
   gas_origin_edge memory explicit ctx fn s marks r ==>
   gas_origin_edge memory explicit ctx fn (s with vs_outcomes := os) marks
     (map_result_state (\t. t with vs_outcomes := os) r)
@@ -277,8 +278,7 @@ Proof
   rename1 `step_inst fl _ ins s = mid` >>
   `~MEM ins.inst_opcode
     [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]` by
-    (imp_res_tac EVERY_fn_lookup_block >> imp_res_tac EVERY_get_instruction >>
-     fs[]) >>
+    metis_tac[] >>
   `step_inst fl ctx ins (s with vs_outcomes := os) =
     map_result_state (\t. t with vs_outcomes := os) mid` by
     simp[step_inst_outcomes_update] >>
@@ -296,6 +296,17 @@ Proof
       simp[gas_events_step_outcomes_update, jump_to_def, map_result_state_def] >>
       metis_tac[]) >>
   qexists_tac `fl` >> simp[gas_events_step_outcomes_update]
+QED
+
+Theorem gas_origin_edge_outcomes_update:
+  EVERY (\i. ~MEM i.inst_opcode
+    [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]) (fn_insts fn) /\
+  gas_origin_edge memory explicit ctx fn s marks r ==>
+  gas_origin_edge memory explicit ctx fn (s with vs_outcomes := os) marks
+    (map_result_state (\t. t with vs_outcomes := os) r)
+Proof
+  strip_tac >> irule gas_origin_edge_outcomes_update_at >> asm_rewrite_tac[] >> rpt strip_tac >>
+  imp_res_tac EVERY_fn_lookup_block >> imp_res_tac EVERY_get_instruction >> fs[]
 QED
 
 Theorem gas_origin_path_outcomes_update:
@@ -321,9 +332,10 @@ Proof
   metis_tac[cj 3 gas_origin_path_rules, exit_result_outcomes_update]
 QED
 
-Theorem gas_path_ptr_edge_outcomes_update:
-  EVERY (\i. ~MEM i.inst_opcode
-    [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]) (fn_insts fn) /\
+Theorem gas_path_ptr_edge_outcomes_update_at[local]:
+  (!bb i. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME i ==> ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]) /\
   gas_path_ptr_edge D lo ctx fn PG G tn s n G' tn' r ==>
   gas_path_ptr_edge D lo ctx fn PG G tn (s with vs_outcomes := os) n G' tn'
     (map_result_state (\t. t with vs_outcomes := os) r)
@@ -333,8 +345,7 @@ Proof
   rename1 `step_inst fl _ ins s = mid` >>
   `~MEM ins.inst_opcode
     [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]` by
-    (imp_res_tac EVERY_fn_lookup_block >> imp_res_tac EVERY_get_instruction >>
-     fs[]) >>
+    metis_tac[] >>
   `step_inst fl ctx ins (s with vs_outcomes := os) =
     map_result_state (\t. t with vs_outcomes := os) mid` by
     simp[step_inst_outcomes_update] >>
@@ -354,6 +365,31 @@ Proof
   qexists_tac `fl` >> simp[]
 QED
 
+Theorem gas_path_ptr_edge_outcomes_update:
+  EVERY (\i. ~MEM i.inst_opcode
+    [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]) (fn_insts fn) /\
+  gas_path_ptr_edge D lo ctx fn PG G tn s n G' tn' r ==>
+  gas_path_ptr_edge D lo ctx fn PG G tn (s with vs_outcomes := os) n G' tn'
+    (map_result_state (\t. t with vs_outcomes := os) r)
+Proof
+  strip_tac >> irule gas_path_ptr_edge_outcomes_update_at >> asm_rewrite_tac[] >> rpt strip_tac >>
+  imp_res_tac EVERY_fn_lookup_block >> imp_res_tac EVERY_get_instruction >> fs[]
+QED
+
+Theorem gas_origin_ptr_edge_outcomes_update_at:
+  (!bb i. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME i ==> ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]) /\
+  gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) marks (r,G',tn') ==>
+  gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG)
+    (s with vs_outcomes := os,G,tn) marks
+    (map_result_state (\t. t with vs_outcomes := os) r,G',tn')
+Proof
+  simp[gas_origin_ptr_edge_def] >> strip_tac >>
+  conj_tac >- metis_tac[SRULE [] gas_origin_edge_outcomes_update_at] >>
+  metis_tac[SRULE [] gas_path_ptr_edge_outcomes_update_at]
+QED
+
 Theorem gas_origin_ptr_edge_outcomes_update:
   EVERY (\i. ~MEM i.inst_opcode
     [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]) (fn_insts fn) /\
@@ -362,9 +398,8 @@ Theorem gas_origin_ptr_edge_outcomes_update:
     (s with vs_outcomes := os,G,tn) marks
     (map_result_state (\t. t with vs_outcomes := os) r,G',tn')
 Proof
-  simp[gas_origin_ptr_edge_def] >> strip_tac >>
-  conj_tac >- metis_tac[SRULE [] gas_origin_edge_outcomes_update] >>
-  metis_tac[SRULE [] gas_path_ptr_edge_outcomes_update]
+  strip_tac >> irule gas_origin_ptr_edge_outcomes_update_at >> asm_rewrite_tac[] >> rpt strip_tac >>
+  imp_res_tac EVERY_fn_lookup_block >> imp_res_tac EVERY_get_instruction >> fs[]
 QED
 
 Theorem gas_origin_ptr_path_outcomes_update:

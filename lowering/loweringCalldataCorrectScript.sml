@@ -1,15 +1,22 @@
 (* S1 and S3 for arbitrary calldata, with joint entry-run certificates. *)
 Theory loweringCalldataCorrect
 Ancestors
-  e2eDefs vyperLoweringCorrect loweringMemCorrect sourceUnitExecution
-  sourceUnitExitSafe ptrDiscipline vyperCalldata
-  dispatchedCallAssembly dispatchedSelectedEndpoint gasShadowRunLowering
-  loweringShapeProps calldataNoneEntryController calldataNoneDecoder acceptedContextPhi
-  entryJointRevertExit compileVyper fragGasOriginPtr entryDispatchPtr
+  e2eDefs vyperLoweringCorrect loweringMemCorrect sourceUnitExecution sourceUnitExitSafe
+  ptrDiscipline vyperCalldata dispatchedCallAssembly dispatchedSelectedEndpoint
+  gasShadowRunLowering loweringShapeProps calldataNoneEntryController calldataNoneDecoder
+  acceptedContextPhi entryJointRevertExit compileVyper fragGasOriginPtr entryDispatchPtr
   loweringRuntimeCorrect supportedProgram entryDispatchProps publicGetterProps
-  vyperTypeContractContext nonreentrantEntryEquiv vyperReadOnlySyntax
-  vyperTypeContractGetter vyperTypeContract list
+  vyperTypeContractContext nonreentrantEntryEquiv vyperReadOnlySyntax vyperTypeContractGetter
+  vyperTypeContract list fragGasPathPtr pred_set venomInst venomState
   callDynamicMemory[qualified,ignore_grammar] o1PassContract lowerDloadDefs
+  callRejectMemory[ignore_grammar] bodyPtrDefs contextRawReachable venomExecProofs
+  selectedAcceptedFold compileEnv vyperContext vyperCompiler finite_map rich_list words
+  vyperInterpreter[qualified,ignore_grammar] constSubst[qualified,ignore_grammar] pair
+  arithmetic relation vyperAST vyperTypeBuiltins groupedRejectDispatch
+  groupedRejectOmittedArguments groupedRejectReplay venomExecSemantics allocaFrontierBound
+  moduleLowering vyperStorageFootprint
+
+val _ = Parse.hide "tops";
 
 (* The call a contract makes of raw calldata: the external entry it
    dispatches to and the arguments it decodes (vyperCalldata), including the
@@ -240,7 +247,6 @@ Proof
   metis_tac[]
 QED
 
-(* GATE_ADMISSION: held, external defaults on the reject path *)
 Theorem grouped_runtime_unit_reject_origin:
   !tops rpolicy unit am tx vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -269,7 +275,79 @@ Theorem grouped_runtime_unit_reject_origin:
                     vs_inst_idx := 0|>,FEMPTY,entry_taint)
         marks (Abort Revert_abort s,G',tn'))
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac (Q.SPECL [`tops`,`rpolicy`,`unit`,`am`,`tx`,`vs`]
+    row22_reject_from_dispatch_callback) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then irule >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac (Q.INST [`rp` |-> `rpolicy`] (SPEC_ALL row22_dispatch_callback_if_seed)) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then irule >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  (* Recover the model start from the actual selected and supplied prefix. *)
+  `selected_registration_frame vs entry_taint u tn` by
+    (qpat_assum `selected_registration_frame start _ a _` mp_tac >>
+     qpat_assum `selected_registration_frame a _ u _` mp_tac >>
+     qpat_assum `start = _` SUBST1_TAC >> rpt (pop_assum kall_tac) >>
+     simp[selected_registration_frame_def, venom_state_accfupds] >> metis_tac[]) >>
+  (Q.SUBGOAL_THEN `common.ec_payable \/ vs.vs_call_ctx.cc_callvalue = 0w` assume_tac >-
+    (qpat_assum `common.ec_payable \/ _` mp_tac >>
+     qpat_assum `start = _` SUBST1_TAC >> simp[NoAsms, venom_state_accfupds])) >>
+  `gas_origin_ptr_path (ARB,0,EMPTY,unit.cu_context,fn,[])
+     (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
+      FEMPTY,entry_taint) [] (OK u,G,tn)` by
+    (qpat_assum `start = _` (SUBST1_TAC o SYM) >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ (start,_,_) [] (OK a,Ga,ta)`
+       (qspecl_then [`ARB`,`EMPTY`]
+         (irule o REWRITE_RULE [APPEND] o MATCH_MP gas_origin_ptr_path_append)) >>
+     simp[NoAsms] >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ (a,Ga,ta) [] (OK u,G,tn)`
+       (qspecl_then [`ARB`,`EMPTY`] ACCEPT_TAC)) >>
+  `!bb. MEM bb fn.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (`ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+       (drule lower_vyper_runtime_unit_context_entry >>
+        disch_then (mp_tac o MATCH_MP lowering_context_ok_bridge o CONJUNCT1) >>
+        simp[NoAsms, EVERY_MEM, fn_labels_def] >> metis_tac[lookup_function_MEM]) >>
+     metis_tac[MEM_lookup_block]) >>
+  `(ctx_has_dalloca unit.cu_context ==> allocas_below_fmp u /\
+     unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+     w2n vs.vs_initial_fmp < 2 ** 254)` by
+    (strip_tac >> qpat_assum `ctx_has_dalloca _ ==> allocas_below_fmp u /\ _` drule >>
+     qpat_assum `ctx_has_dalloca _ ==> vs.vs_fmp = _ /\ _` drule >> simp[]) >>
+  mp_tac (Q.INST [`rp` |-> `rpolicy`, `ds` |-> `defaults`, `fbody` |-> `stmts`,
+    `ce` |-> `common.ec_env`, `ctx` |-> `unit.cu_context`, `shfn` |-> `shadow_fn`,
+    `sa` |-> `residual`, `supplied` |-> `TAKE k slots`, `slots` |-> `DROP k slots`,
+    `site` |-> `ARB`, `D` |-> `ARB`, `explicit` |-> `EMPTY`] row22_omitted_model_inputs) >>
+  (impl_tac >- (simp_tac bool_ss [] >> rpt (first_assum (ACCEPT_TAC o BETA_RULE) ORELSE conj_tac))) >>
+  disch_then (qx_choosel_then [`art`,`es`,`init_cx`,`init_env`,`seed`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  qpat_x_assum `init_cx = _` SUBST_ALL_TAC >>
+  qpat_x_assum `init_env = _` SUBST_ALL_TAC >>
+  qpat_x_assum `seed = _` SUBST_ALL_TAC >>
+  (* The seed uses the omitted slots and preserves the supplied slots. *)
+  qabbrev_tac `kept = MAP (\((aid,p,base,tv),v). (aid,p,base,tv,v)) (ZIP (TAKE k slots,vals))` >>
+  `MAP FST kept = TAKE k (MAP FST slots)` by
+    (`LENGTH (TAKE k slots) = LENGTH vals` by
+       (qpat_assum `LIST_REL _ (TAKE k slots) vals` (ACCEPT_TAC o MATCH_MP LIST_REL_LENGTH)) >>
+     simp[Abbr `kept`, GSYM MAP_TAKE, LIST_EQ_REWRITE, LENGTH_ZIP, EL_MAP, EL_ZIP] >>
+     rpt strip_tac >> qabbrev_tac `slot = EL x (TAKE k slots)` >> PairCases_on `slot` >> simp[]) >>
+  `ALL_DISTINCT (MAP FST (DROP k slots) ++ MAP FST kept)` by
+    (simp[MAP_DROP] >>
+     qpat_assum `ALL_DISTINCT (MAP FST slots)` mp_tac >>
+     CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [GSYM (Q.SPECL [`k`,`MAP FST slots`] TAKE_DROP)])) >>
+     simp[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts (tx with function_name := name) NONE` >>
+  qabbrev_tac `env = artifact_env art [(NONE,tops)] NONE` >>
+  qpat_assum `compile_init_kwargs _ (DROP _ _) _ 0 _ residual = _`
+    (mp_then (Pos hd) (drule_at (Pat `check_contract F _ _ _ = SOME _`))
+      (BETA_RULE (Q.INST [`DF` |-> `\H. cx_dead H cx`] row22_omitted_seed_path))) >>
+  disch_then irule >>
+  rpt (first_assum (ACCEPT_TAC o BETA_RULE) ORELSE conj_tac) >>
+  qexistsl_tac [`cx`,`env`,`es`,`kept`,`shadow_residual`,`shadow_unit.cu_context`,
+    `shadow_cut`,`shadow_fn`,`DROP k slots`,`initial_state am []`,`tops`] >>
+  rpt (first_assum (ACCEPT_TAC o BETA_RULE) ORELSE conj_tac) >>
+  simp[dead_lo_ok_def]
 QED
 
 Theorem lower_vyper_runtime_unit_reverts:
@@ -321,8 +399,8 @@ QED
 
 (* S3 at the marks of S1's certificate (lower_vyper_runtime_unit_correct_dispatched_with),
    where the storage guards hold and the source call is not exempt: its exit
-   arm gives the memory-safe run from the entry and, at every valid horizon
-   of the source trace, the pointer-safe run at that horizon's dead set. *)
+   arm gives the memory-safe run from the entry and, at every valid horizon,
+   the pointer-safe run at that horizon's dead set. *)
 Theorem lower_vyper_runtime_unit_memory_ok_dispatched:
   !marks tops rpolicy unit am tx ret vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\

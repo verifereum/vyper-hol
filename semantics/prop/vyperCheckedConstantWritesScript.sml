@@ -34,6 +34,44 @@ Proof
   gvs[]
 QED
 
+Theorem checked_live_decl_constant_writes:
+  !layouts addr mods art src ts vis mut nr raw fn args dflts ret body sid nm.
+  check_contract T layouts addr mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\
+  function_live layouts addr mods (live_functions layouts addr mods) (src,fn) /\
+  MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts /\
+  declared_constant mods sid nm ==>
+  EVERY (expr_writes_ok (runtime_write_root (\s id. (s,id) <> (sid,nm)))) dflts /\
+  stmts_writes_ok (runtime_write_root (\s id. (s,id) <> (sid,nm))) body
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `MEM (FunctionDecl _ _ _ _ _ _ _ _ bod) ts` >>
+  `contract_namespaces_ok T mods` by metis_tac[check_contract_namespaces_ok] >>
+  `ALL_DISTINCT (MAP FST mods)` by gvs[contract_namespaces_ok_def] >>
+  `?ts'. ALOOKUP mods sid = SOME ts' /\
+     ?vis' e' ty' slot'.
+       MEM (VariableDecl vis' (Constant e') nm ty' slot') ts'` by
+    (gvs[declared_constant_def] >> metis_tac[ALOOKUP_ALL_DISTINCT_MEM]) >>
+  `!s id ty. FLOOKUP art.cta_bare_global_assignable (s,id) = SOME ty ==>
+      (s,id) <> (sid,nm)` by
+    (rpt gen_tac >> strip_tac >>
+     Cases_on `s = sid` >> gvs[] >>
+     drule_all checked_constant_write_roots >>
+     metis_tac[]) >>
+  `!s id vt. FLOOKUP art.cta_toplevel_vtypes (s,id) = SOME vt /\
+      FLOOKUP art.cta_bare_globals (s,id) = NONE ==>
+      (s,id) <> (sid,nm)` by
+    (rpt gen_tac >> strip_tac >>
+     Cases_on `s = sid` >> gvs[] >>
+     drule_all checked_constant_write_roots >>
+     metis_tac[]) >>
+  `check_function_body layouts addr mods art src vis mut nr args dflts ret bod` suffices_by
+    (strip_tac >> drule check_function_body_write_roots >>
+     disch_then irule >> metis_tac[]) >>
+  irule check_contract_live_deploy_function_body_MEM >>
+  metis_tac[]
+QED
+
 Theorem checked_function_constant_writes[local]:
   !layouts addr mods art src ts vis mut nr raw fn args dflts ret body.
   check_contract T layouts addr mods = SOME art /\

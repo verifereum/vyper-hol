@@ -7,6 +7,7 @@ import argparse
 import shutil
 import tempfile
 import unittest
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
 
@@ -115,14 +116,24 @@ class ExportProvenanceTests(unittest.TestCase):
         self.assertEqual(result["test"]["deps"], ["vyper-test-exports/functional/test_f.json/fixture"])
         self.assertEqual(portable["output"], trace["output"])
 
-    def test_edits_during_export_cannot_stamp_new_generator_identity(self) -> None:
-        output = self.repo / "new-exports"
+    def generate(self, output: Path, run_pytest: Callable[..., None]) -> None:
+        """Run `generate` against this repo, with `run_pytest` in place of pytest."""
         versions = dict(
             line.split("==")
             for line in (self.repo / "tests/semantics-test-constraints.txt").read_text().splitlines()
         )
         versions["vyper"] = self.exports.profile["vyper_version"]
         pin = (self.repo / "VYPER_PIN").read_text().strip()
+        args = argparse.Namespace(vyper_repo=self.repo, output=output, fixture=[], test=[])
+        with patch("vyper_test_exports.platform.python_version",
+                   return_value=self.exports.profile["python_version"]), \
+             patch("vyper_test_exports.importlib.metadata.version", side_effect=versions.__getitem__), \
+             patch("vyper_test_exports.subprocess.check_output", side_effect=[pin, ""]), \
+             patch("vyper_test_exports.subprocess.run", side_effect=run_pytest):
+            self.exports.generate(args)
+
+    def test_edits_during_export_cannot_stamp_new_generator_identity(self) -> None:
+        output = self.repo / "new-exports"
 
         def run_pytest(*args: object, **kwargs: object) -> None:
             output.mkdir()
@@ -130,15 +141,45 @@ class ExportProvenanceTests(unittest.TestCase):
             script = self.repo / "tools/vyper_test_exports.py"
             script.write_text(script.read_text() + "\n# edited during export\n")
 
-        args = argparse.Namespace(vyper_repo=self.repo, output=output, fixture=[], test=[])
-        with patch("vyper_test_exports.platform.python_version",
-                   return_value=self.exports.profile["python_version"]), \
-             patch("vyper_test_exports.importlib.metadata.version", side_effect=versions.__getitem__), \
-             patch("vyper_test_exports.subprocess.check_output", side_effect=[pin, ""]), \
-             patch("vyper_test_exports.subprocess.run", side_effect=run_pytest):
-            with self.assertRaisesRegex(ValueError, "generator inputs changed during export"):
-                self.exports.generate(args)
+        with self.assertRaisesRegex(ValueError, "generator inputs changed during export"):
+            self.generate(output, run_pytest)
         self.assertFalse(list(output.glob("*.provenance")))
+
+    def test_copied_regressions_are_packages_so_file_names_cannot_clash(self) -> None:
+        # pytest names a module outside a package by its file name, so a
+        # regression test named like an upstream one would abort collection.
+        output = self.repo / "new-exports"
+        (self.repo / "tests/vyper-regression/area/nested").mkdir(parents=True)
+        (self.repo / "tests/vyper-regression/area/nested/test_x.py").write_text("")
+        not_packages: list[Path] = []
+
+        def run_pytest(*args: object, **kwargs: object) -> None:
+            root = self.repo / "tests/functional/codegen/vyper_hol_regression"
+            directories = [root, *filter(Path.is_dir, root.rglob("*"))]
+            self.assertIn(root / "area/nested", directories)
+            not_packages.extend(d for d in directories if not (d / "__init__.py").is_file())
+            output.mkdir()
+            (output / "export.json").write_text("{}")
+
+        self.generate(output, run_pytest)
+        self.assertEqual(not_packages, [])
+
+    def test_regression_directories_that_cannot_be_packages_are_refused(self) -> None:
+        regressions = self.repo / "tests/vyper-regression"
+        for directory, module in (("hand-written", None), ("area", "area.py")):
+            with self.subTest(directory=directory):
+                (regressions / directory).mkdir()
+                if module:
+                    (regressions / module).write_text("")
+
+                def run_pytest(*args: object, **kwargs: object) -> None:
+                    self.fail("pytest ran on a tree it can't import")
+
+                with self.assertRaisesRegex(ValueError, f"tests/vyper-regression/{directory} must"):
+                    self.generate(self.repo / "new-exports", run_pytest)
+                (regressions / directory).rmdir()
+                if module:
+                    (regressions / module).unlink()
 
 
 if __name__ == "__main__":

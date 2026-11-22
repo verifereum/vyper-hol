@@ -1160,9 +1160,9 @@ Definition check_contract_def:
       then SOME art else NONE
 End
 
-(* Exports name allocated modules, and the combined deployed interface has
-   distinct selectors.  An external function is never an internal callee,
-   so it is live exactly when its module is allocated. *)
+(* Exports name external entries of allocated imports and share the main
+   module's namespace. The combined deployed interface has distinct selectors.
+   An external function is live exactly when its module is allocated. *)
 Definition exports_ok_def:
   exports_ok layouts addr mods exps <=>
     EVERY (\(fn,src).
@@ -1171,8 +1171,24 @@ Definition exports_ok_def:
              | SOME tls => module_allocated layouts addr (SOME src) tls) exps /\
     ALL_DISTINCT
       (MAP (\(name,tys). abi_method_id (type_env_all_modules mods) name tys)
-        (abi_deployed_signatures mods exps))
+        (abi_deployed_signatures mods exps)) /\
+    EVERY (\(name, src).
+      MEM (SOME src, name) (contract_keys external_name_keys_toplevel mods)) exps /\
+    ALL_DISTINCT (MAP FST exps) /\
+    EVERY (\(name, _).
+      ~MEM (NONE, name) (contract_keys self_member_keys_toplevel mods)) exps
 End
+
+Theorem exports_ok_names:
+  exports_ok layouts addr mods exps ==>
+  EVERY (\(name, src).
+    MEM (SOME src, name) (contract_keys external_name_keys_toplevel mods)) exps /\
+  ALL_DISTINCT (MAP FST exps) /\
+  EVERY (\(name, _).
+    ~MEM (NONE, name) (contract_keys self_member_keys_toplevel mods)) exps
+Proof
+  simp[exports_ok_def]
+QED
 
 (* Successful checking guarantees distinct member names for every
    actual struct declaration, including declarations in imported modules. *)

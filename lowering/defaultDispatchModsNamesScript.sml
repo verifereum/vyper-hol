@@ -33,7 +33,9 @@ Proof
      rename1 `MEM (NONE,tops) mods` >>
      simp[contract_keys_def,MEM_FLAT,MEM_MAP,EXISTS_PROD,PULL_EXISTS] >>
      map_every qexists_tac [`NONE`,`tops`,`top`] >> simp[]) >>
-  fs[source_typing_ok_mods_def,EVERY_MEM,pairTheory.FORALL_PROD] >> metis_tac[]
+  fs[source_typing_ok_mods_def] >>
+  drule_then strip_assume_tac exports_ok_names >>
+  fs[EVERY_MEM,pairTheory.FORALL_PROD] >> metis_tac[]
 QED
 
 Theorem exported_fn_name_list[local]:
@@ -103,7 +105,8 @@ Proof
   pop_assum SUBST1_TAC >> once_rewrite_tac[ALL_DISTINCT_APPEND] >>
   conj_tac
   >- (mp_tac (Q.SPEC `exps` exported_labels) >>
-      simp[] >> fs[source_typing_ok_mods_def]) >>
+      simp[] >> fs[source_typing_ok_mods_def] >>
+      metis_tac[exports_ok_names]) >>
   `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) (main_module mods)))` by
     (Cases_on `ALOOKUP mods NONE` >> simp[main_module_def] >>
      metis_tac[source_typing_ok_mods_external_names_distinct]) >>

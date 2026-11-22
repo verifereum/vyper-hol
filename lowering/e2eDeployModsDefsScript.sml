@@ -50,6 +50,7 @@ Definition deploy_typing_ok_mods_def:
     ?deploy_art runtime_art.
       check_contract T am.layouts tx.target mods = SOME deploy_art /\
       check_contract F am.layouts tx.target mods = SOME runtime_art /\
+      exports_ok am.layouts tx.target mods exps /\
       linked_state_ownership_ok am.layouts tx.target mods exps /\
       machine_well_typed am /\ call_tx_well_typed tx
 End
@@ -58,7 +59,8 @@ Theorem deploy_typing_ok_mods_singleton:
   deploy_typing_ok_mods [(NONE, tops)] [] am tx <=>
   deploy_typing_ok tops am tx
 Proof
-  simp[deploy_typing_ok_mods_def, deploy_typing_ok_def]
+  simp[deploy_typing_ok_mods_def, deploy_typing_ok_def] >>
+  metis_tac[check_contract_single_module_exports_ok]
 QED
 
 Definition deploy_storage_trace_mods_def:
