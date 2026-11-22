@@ -2,6 +2,8 @@
 Theory s1PrefixUnaryValueCompose
 Ancestors
   s1PrefixPreds bodyFullUnaryValueCompose s1PrefixDefs
+  s1PrefixCompose s1PrefixProps gasOutcomeFullCompose
+  vyperStorageFootprint vyperStorageTrace sum
 
 Theorem gas_outcome_prefix_unary_value:
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
@@ -38,5 +40,27 @@ Theorem gas_outcome_prefix_unary_value:
       cx st0 (bind (bind (eval_expr cx e) (read_result cx)) next)
       (es,s,G,tn)
 Proof
-  cheat
+  strip_tac >>
+  qpat_abbrev_tac `source = bind (eval_expr cx e) (read_result cx)` >>
+  qabbrev_tac `post = \H res ee HG tm t.
+    childQ H res ee HG tm t /\ ~t.vs_halted /\ ee.gas_obs = []` >>
+  `gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+     source (es,s,G,tn) post childR` by
+    (irule gas_outcome_full_post_source >>
+     qpat_assum `gas_outcome_full _ _ _ _ source _ childQ childR` (irule_at Any) >>
+     simp[Abbr `post`]) >>
+  qpat_assum `gas_outcome_full _ _ _ _ source _ post childR`
+    (mp_then Any irule gas_prefix_full_bind) >>
+  simp[] >> rpt conj_tac
+  >- (qx_genl_tac [`marks`,`v`,`mid`,`G1`,`tn1`,`t`] >> strip_tac >>
+      `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+         mid.storage_trace` by fs[storage_trace_domain_def] >>
+      fs[Abbr `post`] >>
+      qpat_assum `!marks mid HG tm t v. _ ==> gas_prefix_full _ _ _ _ _` irule >>
+      conj_tac >- (qexists_tac `marks` >> simp[]) >> metis_tac[])
+  >- metis_tac[ISR]
+  >- (simp[Abbr `source`] >> irule requests_outcomes_frame_bind_all >>
+      simp[evaluate_requests_outcomes_frame, requests_outcomes_frame_read_result]) >>
+  simp[Abbr `source`] >> irule storage_trace_frame_bind_all >>
+  simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]
 QED
