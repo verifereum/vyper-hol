@@ -536,8 +536,8 @@ Proof
        (simp[] >> strip_tac >>
         qpat_assum `ctx_has_dalloca unit.cu_context ==>
           unit_alloca_budget _ + 32 * ctx_dload_count _ <= w2n fmp /\ _`
-          (mp_tac o CONJUNCT1 o UNDISCH) >>
-        simp[arithmeticTheory.ADD_AC]) >>
+          (ACCEPT_TAC o ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM] o
+           CONJUNCT1 o UNDISCH)) >>
      simp[]) >>
   `mem_inv dload_offset_ok unit.cu_context vi` by
     (irule lower_vyper_runtime_unit_dload_offset_ok >> metis_tac[]) >>
