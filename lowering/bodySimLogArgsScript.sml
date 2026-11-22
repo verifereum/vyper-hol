@@ -1,6 +1,6 @@
 (* Shared event metadata and pure argument readiness for the Log cases. *)
 Theory bodySimLogArgs
-Ancestors bodyCallSupport
+Ancestors bodyCallSupport bodySingletonCallSupport
   allocLimits allocLimitsProps
   exprSimSource bodyExprPreFacts exprSimHypsDefs list bodySim stmtSimLog exprSimHyps
   bodyStorageCases bodyInvSplit bodyInvCodeProps bodyInvExecutionProps
@@ -308,9 +308,9 @@ Theorem log_arg_body_pre[local]:
     expr_body_pre cenv cx env e es
 Proof
   rpt strip_tac >>
-  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
-    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
-      int_calls_stmt_def, listTheory.EVERY_CONJ, GSYM expr_has_evm_run_def]) >>
+  `supported_expr tops e` by
+    simp[supported_expr_def, supported_effect_free_pure] >>
+  drule_all_then strip_assume_tac supported_singleton_expr_body_calls >>
   drule_then strip_assume_tac body_inv_main_support >>
   drule_then strip_assume_tac body_inv_main_code >>
   drule_then assume_tac body_inv_contract >>
