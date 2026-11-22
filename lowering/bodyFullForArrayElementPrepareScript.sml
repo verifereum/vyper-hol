@@ -592,7 +592,10 @@ Resume for_nonslot_array_element_prepare_full[at_copy]:
           body_inv_typed_calls_main) >>
         simp[vyperTypeCallGraphTheory.int_calls_expr_def]) >>
      qpat_x_assum `supported_iterator _ _ (Array _) _` mp_tac >>
-     simp[supportedStmtsTheory.supported_iterator_def, AllCaseEqs()]) >>
+     Cases_on `supported_function_decl tops fid Internal` >>
+     simp[supportedStmtsTheory.supported_iterator_def] >>
+     rename1 `supported_function_decl _ _ _ = SOME decl` >>
+     PairCases_on `decl` >> simp[]) >>
   `type_memory_bytes c fty = type_memory_size dtv` by
     ((drule_all exprSimHypsTheory.expr_sim_inv_memory_size >> simp[] >> (metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size]))) >>
   `stride = type_memory_size dtv` by

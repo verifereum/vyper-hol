@@ -127,7 +127,8 @@ Proof
   drule_then assume_tac contract_inv_module_codes >>
   qpat_x_assum `immutable_root cx t`
     (strip_assume_tac o REWRITE_RULE [immutable_root_def]) >>
-  `supported_place_root (main_module mods) (src,id)` by metis_tac[aug_place_supported_root] >>
+  `supported_place_root (main_module mods) (NONE,id)` by
+    metis_tac[aug_place_supported_root] >>
   gvs[] >>
   Cases_on `supported_variable_decl (main_module mods) (NONE,id)` >-
     (gvs[supportedExprFormsTheory.supported_place_root_def] >>
