@@ -641,7 +641,7 @@ Theorem runtime_selected_body_frag_full[local]:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmts_env cenv lctx ret_ty ss)
-      (stmts_env cenv lctx ret_ty (MAP gas_shadow_stmt ss))
+      (stmts_env (gas_shadow_env T cenv) lctx ret_ty (MAP gas_shadow_stmt ss))
       (eval_stmts cx ss) es
 Proof
   rpt gen_tac >> strip_tac >>

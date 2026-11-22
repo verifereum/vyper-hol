@@ -93,7 +93,7 @@ Theorem deploy_ctor_body_frag_full_plain_defaults[local]:
         (deploy_evaluation_context tops am tx) (LENGTH runtime_bc)
         (imm_len tops) nr nkey v ee r)
       cenv (stmts_env cenv NoLoop NoneT body)
-      (stmts_env cenv NoLoop NoneT (MAP gas_shadow_stmt body))
+      (stmts_env (gas_shadow_env T cenv) NoLoop NoneT (MAP gas_shadow_stmt body))
       (eval_stmts (deploy_evaluation_context tops am tx) body)
       (es0 with outcomes := SOME vs.vs_outcomes)
 Proof
@@ -218,7 +218,7 @@ Theorem deploy_ctor_body_frag_full:
         (deploy_evaluation_context tops am tx) (LENGTH runtime_bc)
         (imm_len tops) nr nkey v ee r)
       cenv (stmts_env cenv NoLoop NoneT body)
-      (stmts_env cenv NoLoop NoneT (MAP gas_shadow_stmt body))
+      (stmts_env (gas_shadow_env T cenv) NoLoop NoneT (MAP gas_shadow_stmt body))
       (eval_stmts (deploy_evaluation_context tops am tx) body)
       (es0 with outcomes := SOME vs.vs_outcomes)
 Proof

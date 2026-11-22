@@ -48,7 +48,7 @@ Theorem compile_for_storage_subplace_array_frag_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (For id typ (Array e) n body))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n body)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n body)))
       (eval_stmt cx (For id typ (Array e) n body)) es
 Proof
   rpt gen_tac >> DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
@@ -223,7 +223,7 @@ Theorem compile_for_immutable_subplace_array_frag_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (For id typ (Array e) n body))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n body)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n body)))
       (eval_stmt cx (For id typ (Array e) n body)) es
 Proof
   rpt gen_tac >> strip_tac >> irule for_array_expr_cut_frag_full >>
