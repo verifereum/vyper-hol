@@ -42,11 +42,11 @@ Theorem extcall_request_guarded_operand_prefix_address_owned_bundled:
   (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
      expr_body_pre cenv cx env e st) /\
   lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,sm) /\
-  lower_value compile_expr cenv (BaseT AddressT) (gas_shadow_expr addr)
+  lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT) (gas_shadow_expr addr)
     shadow_sa = (ao,shadow_sm) /\
   compile_ext_call_args compile_expr cenv kw_es
     (MAP (lowered_value_type cenv) xs) xs sm = (svs,sb) /\
-  compile_ext_call_args compile_expr cenv (MAP gas_shadow_expr kw_es)
+  compile_ext_call_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr kw_es)
     (MAP (lowered_value_type cenv) (MAP gas_shadow_expr xs))
     (MAP gas_shadow_expr xs) shadow_sm = (svs,shadow_sb) /\
   expr_sim_full_code (ctx,shadow_ctx,func,shadow_func)
@@ -274,11 +274,11 @@ Theorem extcall_request_guarded_operand_prefix_address_owned:
   (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
      expr_body_pre cenv cx env e st) /\
   lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,sm) /\
-  lower_value compile_expr cenv (BaseT AddressT) (gas_shadow_expr addr)
+  lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT) (gas_shadow_expr addr)
     shadow_sa = (ao,shadow_sm) /\
   compile_ext_call_args compile_expr cenv kw_es
     (MAP (lowered_value_type cenv) xs) xs sm = (svs,sb) /\
-  compile_ext_call_args compile_expr cenv (MAP gas_shadow_expr kw_es)
+  compile_ext_call_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr kw_es)
     (MAP (lowered_value_type cenv) (MAP gas_shadow_expr xs))
     (MAP gas_shadow_expr xs) shadow_sm = (svs,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sm shadow_sm /\

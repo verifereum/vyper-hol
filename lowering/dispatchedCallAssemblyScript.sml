@@ -69,7 +69,6 @@ Theorem dispatched_call_correct_from_selected_endpoint:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
-    ~internal_defaults_msg_gas tops /\
     runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
@@ -209,7 +208,7 @@ Theorem dispatched_nonreentrant_result[local]:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\
     ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
-    ~internal_defaults_msg_gas tops /\ source_typing_ok tops am tx /\
+    source_typing_ok tops am tx /\
   source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
   (ctx_has_dalloca unit.cu_context ==>
     unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
@@ -374,7 +373,6 @@ Triviality dispatched_call_readings_from_selected_endpoint:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
-    ~internal_defaults_msg_gas tops /\
     runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
@@ -424,7 +422,6 @@ Theorem dispatched_call_correct_with_readings:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
-    ~internal_defaults_msg_gas tops /\
     runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
@@ -469,7 +466,6 @@ Theorem dispatched_call_correct:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
-    ~internal_defaults_msg_gas tops /\
     runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
     source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\

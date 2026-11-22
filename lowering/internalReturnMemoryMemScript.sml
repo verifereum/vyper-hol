@@ -692,7 +692,7 @@ Theorem internal_return_memory_full_robust_taint:
         (!i. i < lo /\ i IN (SND gt).t_mem ==>
              imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i))) cenv
     (stmt_env cenv lctx ty (Return (SOME e)))
-    (stmt_env cenv lctx ty (Return (SOME (gas_shadow_expr e))))
+    (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -712,7 +712,7 @@ Proof
   qpat_assum `stmt_env _ _ _ (Return (SOME (gas_shadow_expr e))) shadow_sa = _`
     (mp_then Any mp_tac return_memory_compile_parts) >> simp[] >>
     disch_then drule_all >> strip_tac >>
-  rename1 `lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa =
+  rename1 `lower_value compile_expr _ ty (gas_shadow_expr e) shadow_sa =
              (shadow_op, shadow_sm)` >>
   rename1 `compile_return_unlock cenv shadow_sm = ((), shadow_su)` >>
   `type_memory_bytes cenv ty = type_memory_size tv` by
@@ -957,7 +957,7 @@ Theorem internal_return_memory_relayout_robust_taint:
         (!i. i < lo /\ i IN (SND gt).t_mem ==>
              imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i))) cenv
     (stmt_env cenv lctx ty (Return (SOME e)))
-    (stmt_env cenv lctx ty (Return (SOME (gas_shadow_expr e))))
+    (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -974,15 +974,17 @@ Proof
   qpat_assum `stmt_env _ _ _ (Return (SOME (gas_shadow_expr e))) shadow_sa = _`
     (mp_then Any mp_tac return_memory_compile_parts) >> simp[] >>
     disch_then drule_all >> strip_tac >>
-  rename1 `lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa =
+  rename1 `lower_value compile_expr _ ty (gas_shadow_expr e) shadow_sa =
              (shadow_op, shadow_sm)` >>
   rename1 `compile_return_unlock cenv shadow_sm = ((), shadow_su)` >>
   `type_memory_bytes cenv ty = type_memory_size tv` by
     metis_tac[expr_sim_inv_memory_size] >>
   `op = shadow_op /\ gas_shadow_state sm shadow_sm` by
-    (mp_tac gas_shadow_stmt_lower_value >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+    (`gas_shadow_compiles (lower_value compile_expr cenv ty e)
+        (lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e))` by
+       irule gas_shadow_stmt_lower_value_env >>
+     pop_assum mp_tac >> simp[gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
   qpat_x_assum `op = shadow_op` (SUBST_ALL_TAC o SYM) >>
   rpt (qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
@@ -1327,7 +1329,7 @@ Theorem internal_return_memory_full_robust:
         mem_agree_outside (SND gt).t_mem u.vs_memory mem ==>
         val_in_memory tv v (w2n bw) mem)) cenv
     (stmt_env cenv lctx ty (Return (SOME e)))
-    (stmt_env cenv lctx ty (Return (SOME (gas_shadow_expr e))))
+    (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1385,7 +1387,7 @@ Theorem internal_return_memory_full:
     (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx (\H v ee gt r. intret_mem_q H func ce cx tv bw v ee r) cenv
     (stmt_env cenv lctx ty (Return (SOME e)))
-    (stmt_env cenv lctx ty (Return (SOME (gas_shadow_expr e))))
+    (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
   rpt gen_tac >> strip_tac >>

@@ -29,13 +29,15 @@ val shadow_group = ``\group. case group of
   ExternalSingle selector package =>
     ExternalSingle selector (gas_shadow_external_package package)
 | ExternalDefaults common entries specs off =>
-    ExternalDefaults (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+    ExternalDefaults (common with <| ec_env := gas_shadow_env T common.ec_env;
+      ec_body := MAP gas_shadow_stmt common.ec_body |>)
       entries (MAP (\(n,ty,e). (n,ty,gas_shadow_expr e)) specs) off``;
 
 val shadow_job = ``\job. case job of
   ExternalLegacyJob package => ExternalLegacyJob (gas_shadow_external_package package)
 | ExternalCommonJob common kwvars => ExternalCommonJob
-    (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+    (common with <| ec_env := gas_shadow_env T common.ec_env;
+      ec_body := MAP gas_shadow_stmt common.ec_body |>)
     (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) kwvars)``;
 
 val start = ``vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>``;
@@ -62,7 +64,6 @@ Theorem grouped_default_call_route:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\
   EXISTS external_has_defaults (FST (classify_functions tops)) /\
-  ~internal_defaults_msg_gas tops /\
   runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
   initial_venom_state_rel tops am tx vs /\
@@ -478,7 +479,9 @@ Resume grouped_default_call_route[retained]:
              simp_tac (srw_ss()) [pre,opened,reg,body])))) >>
      rpt strip_tac >> first_assum ACCEPT_TAC) >>
   `cs_extends checks sb /\ cs_extends sb sd /\ cs_extends term entry /\ cs_extends sb entry` by
-    (conj_tac >- metis_tac[ci_mono_def,cs_extends_trans] >>
+    (conj_tac >-
+      (irule cs_extends_trans >> qexists_tac `si` >> conj_tac >>
+       first_assum (ACCEPT_TAC o cj 1 o PURE_REWRITE_RULE [ci_mono_def])) >>
      rpt conj_tac >>
      first_assum (ACCEPT_TAC o cj 1 o PURE_REWRITE_RULE [ci_mono_def])) >>
   `cs_extends done se /\ cs_extends sb done` by

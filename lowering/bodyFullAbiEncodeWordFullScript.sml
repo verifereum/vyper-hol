@@ -64,37 +64,43 @@ Proof
     (match_mp_tac (Q.SPECL [`sa`,`sm`,`final`,`func`] fn_has_code_split) >>
      qpat_assum `ci_mono sm final` (strip_assume_tac o PURE_REWRITE_RULE [ci_mono_def]) >>
      asm_rewrite_tac[]) >>
-  Cases_on `lower_value compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  Cases_on `lower_value compile_expr (gas_shadow_env T ce) (expr_type e)
+             (gas_shadow_expr e) shadow_sa` >>
   rename1 `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = (shop,shadow_sm)` >>
   `shop = op /\ gas_shadow_state sm shadow_sm` by
-    (mp_tac (Q.INST [`cenv` |-> `ce`, `ty` |-> `expr_type e`]
-      gas_shadow_stmt_lower_value) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
+    (`gas_shadow_compiles (lower_value compile_expr ce (expr_type e) e)
+        (lower_value compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e))`
+       by irule gas_shadow_stmt_lower_value_env >>
+     pop_assum (qspecl_then [`sa`, `shadow_sa`] mp_tac o
+                REWRITE_RULE [gas_shadow_compiles_def]) >> simp[]) >>
   qpat_x_assum `shop = op` SUBST_ALL_TAC >>
   `FST (compile_expr ce (expr_type e) e sa) =
-   FST (compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_sa)` by
-    (mp_tac (Q.SPECL [`ce`,`expr_type e`,`e`,`T`] (cj 1 gas_shadow_compile_expr)) >>
-     simp_tac bool_ss [gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >>
-     asm_rewrite_tac[] >> disch_then (ACCEPT_TAC o cj 1)) >>
+   FST (compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) shadow_sa)` by
+    (`gas_shadow_compiles (compile_expr ce (expr_type e) e)
+        (compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e))`
+       by irule gas_shadow_stmt_compile_expr_env >>
+     pop_assum (qspecl_then [`sa`, `shadow_sa`] mp_tac o
+                REWRITE_RULE [gas_shadow_compiles_def]) >> simp[]) >>
   `reason_result_shape (expr_type e) loc
-      (FST (compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_sa))` by
+      (FST (compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) shadow_sa))` by
     (qpat_assum `FST (compile_expr ce (expr_type e) e sa) = _` (fn th =>
        rewrite_tac[GSYM th]) >>
      first_assum ACCEPT_TAC) >>
   `abi_size_bound ce.ce_struct_fields (expr_type e) = 32` by metis_tac[] >>
-  `compile_expr ce cty (gas_shadow_expr (TypeBuiltin ann (AbiEncode F mid) ty [e])) shadow_sa =
+  `compile_expr (gas_shadow_env T ce) cty
+      (gas_shadow_expr (TypeBuiltin ann (AbiEncode F mid) ty [e])) shadow_sa =
       as_ptr_val ann LocMemory (lower_abi_encode meth 32 encode shadow_sm)` by
-    (mp_tac (Q.INST [`e` |-> `gas_shadow_expr e`, `sa` |-> `shadow_sa`,
-       `sm` |-> `shadow_sm`, `loc` |-> `loc`] compile_abi_encode_word_direct) >>
-     simp_tac (srw_ss()) [gasShadowTheory.gas_shadow_expr_def, gas_shadow_lowered_value_type,
-       gasShadowTheory.gas_shadow_expr_type, Abbr `meth`, Abbr `encode`] >>
+    (drule_all (SIMP_RULE (srw_ss())
+       [gasShadowTheory.gas_shadow_expr_type, gas_shadow_lowered_value_type]
+       (Q.INST [`ce` |-> `gas_shadow_env T ce`, `e` |-> `gas_shadow_expr e`]
+         compile_abi_encode_word_direct)) >>
+     disch_then (fn th => simp_tac (srw_ss())
+       [th, gasShadowTheory.gas_shadow_expr_def, Abbr `meth`, Abbr `encode`]) >>
      asm_rewrite_tac[]) >>
   `shadow_sb = SND (lower_abi_encode meth 32 encode shadow_sm)` by
-    (qpat_x_assum `compile_expr ce cty (gas_shadow_expr (TypeBuiltin _ _ _ _)) shadow_sa =
+    (qpat_x_assum `compile_expr _ cty (gas_shadow_expr (TypeBuiltin _ _ _ _)) shadow_sa =
         as_ptr_val _ _ _` (fn eq =>
-       qpat_assum `compile_expr ce cty (gas_shadow_expr (TypeBuiltin _ _ _ _)) shadow_sa = (_,shadow_sb)`
+       qpat_assum `compile_expr _ cty (gas_shadow_expr (TypeBuiltin _ _ _ _)) shadow_sa = (_,shadow_sb)`
          (mp_tac o PURE_REWRITE_RULE [eq])) >>
      Cases_on `lower_abi_encode meth 32 encode shadow_sm` >>
      simp_tac (srw_ss()) [as_ptr_val_def]) >>

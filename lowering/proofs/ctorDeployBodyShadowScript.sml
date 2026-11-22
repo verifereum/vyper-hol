@@ -8,7 +8,8 @@ Ancestors
   bodyFullShadowBodyInvLowering
   ctorDeployLoweringCode ctorDeployLoweringCodeShape ctorDeployLoweringDefs
   ctorDeployDefs ctorDeployEntryLabels
-  gasShadowDeployRunner gasShadowShape gasShadowCompileStmt
+  gasShadowDeployRegisterEnv
+  gasShadowDeployRunner gasShadowShape gasShadowCompileStmt gasShadowStmtEnv
   gasShadowInternal gasShadowUnitExtract gasShadowUnitGuards
   gasShadowModuleDefs gasShadowState gasShadowUnit gasShadow
   loweringShapeProps loweringShapeDefs fragExec immSectionDead
@@ -118,7 +119,7 @@ Theorem deploy_ctor_body_shadow:
       gas_shadow_context dunit.cu_context shadow_ctx /\
       gas_shadow_function func shadow_func /\
       MEM shadow_func shadow_ctx.ctx_functions /\
-      compile_stmts cenv NoLoop NoneT (MAP gas_shadow_stmt body) shadow_sa =
+      compile_stmts (gas_shadow_env T cenv) NoLoop NoneT (MAP gas_shadow_stmt body) shadow_sa =
         ((),shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       fn_has_code shadow_sa shadow_sb shadow_func
@@ -151,8 +152,8 @@ Proof
     mp_tac gas_shadow_run_deploy_lowering >>
   asm_rewrite_tac[] >>
   Cases_on `run_deploy_lowering T rpolicy runtime_bc (imm_len tops) pos_args
-    0 (MAP gas_shadow_internal_package ifns) cenv0 (MAP gas_shadow_stmt body)
-    pay nr nkey ut "__deploy"` >> simp[] >>
+    0 (MAP gas_shadow_internal_package ifns) (gas_shadow_env T cenv0)
+      (MAP gas_shadow_stmt body) pay nr nkey ut "__deploy"` >> simp[] >>
   rename1 `_ = SOME su` >> strip_tac >>
   `shadow_body_inv tops dunit.cu_context su.cu_context` by
     (qspecl_then [`tops`, `am`, `tx`, `rpolicy`, `runtime_bc`, `dunit`, `su`,
@@ -162,10 +163,31 @@ Proof
   `gas_shadow_context dunit.cu_context su.cu_context` by
     fs[gas_shadow_unit_def] >>
   qspecl_then [`rpolicy`, `runtime_bc`, `imm_len tops`, `pos_args`,
-    `MAP gas_shadow_internal_package ifns`, `cenv0`,
+    `MAP gas_shadow_internal_package ifns`, `gas_shadow_env T cenv0`,
     `MAP gas_shadow_stmt body`, `pay`, `nr`, `nkey`, `ut`, `su`, `nr`,
     `nkey`, `ut`] mp_tac run_deploy_lowering_ctor_trace >>
   simp[] >> strip_tac >>
+  `compile_register_constructor_args
+      (gas_shadow_env T cenv0 with
+         ce_imm_alloca := if imm_len tops > 0 then SOME imm else NONE)
+      pos_args 0 0 st1 = (gas_shadow_env T cenv1,st2)` by
+    (qpat_assum `compile_register_constructor_args _ _ _ _ _ = (cenv1,st2)` mp_tac >>
+     mp_tac (Q.SPECL [`pos_args`,
+       `cenv0 with ce_imm_alloca := if imm_len tops > 0 then SOME imm else NONE`,
+       `0`, `0`, `st1`]
+       (Q.INST [`sd` |-> `T`] compile_register_constructor_args_gas_shadow_env)) >>
+     simp[gasShadowCompileBaseTheory.gas_shadow_env_def] >>
+     strip_tac >>
+     qpat_x_assum `compile_register_constructor_args _ _ _ _ _ = (cenv1',st2')`
+       (fn th => map_every assume_tac
+         [Q.AP_TERM `FST` th, Q.AP_TERM `SND` th]) >>
+     simp[] >> gvs[gasShadowCompileBaseTheory.gas_shadow_env_def]) >>
+  `cenv1' = gas_shadow_env T cenv1 /\ st2' = st2` by
+    (qpat_assum `compile_register_constructor_args _ _ _ _ _ = (cenv1',st2')` mp_tac >>
+     disch_then (fn th => qpat_assum
+       `compile_register_constructor_args _ _ _ _ _ = (gas_shadow_env T cenv1,st2)`
+       (mp_tac o REWRITE_RULE [th])) >>
+     simp[] >> strip_tac >> gvs[]) >>
   gvs[] >>
   (* the shadow body run from the shared sa *)
   rename1 `compile_stmts _ NoLoop NoneT (MAP gas_shadow_stmt body) sa =
@@ -173,14 +195,30 @@ Proof
   rename1 `(if block_is_terminated tb then _ else _) tb = ((),tj)` >>
   rename1 `new_block exit_lbl tj = (_,t_exit)` >>
   `gas_shadow_state sb tb` by
-    (mp_tac (cj 2 gas_shadow_compile_stmt) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`cenv1 with ce_ctor_exit_label := SOME exit_lbl`,
-       `NoLoop`, `NoneT`, `body`, `sa`, `sa`] mp_tac) >>
-     simp[gas_shadow_state_refl]) >>
+    (rewrite_tac[stmtSimPropsTheory.compile_stmts_env] >>
+     qspecl_then [`body`, `cenv1 with ce_ctor_exit_label := SOME exit_lbl`,
+       `NoLoop`, `NoneT`] mp_tac
+       (Q.INST [`sd` |-> `T`] gas_shadow_stmts_env_env) >>
+     simp[gasShadowCompileStmtBaseTheory.gas_shadow_compiles_env_def] >>
+     disch_then (qspecl_then [`sa`, `sa`] mp_tac) >>
+     Cases_on `stmts_env (cenv1 with ce_ctor_exit_label := SOME exit_lbl)
+       NoLoop NoneT body sa` >>
+     Cases_on `stmts_env (gas_shadow_env T
+       (cenv1 with ce_ctor_exit_label := SOME exit_lbl)) NoLoop NoneT
+       (MAP gas_shadow_stmt body) sa` >>
+     `gas_shadow_env T cenv1 with ce_ctor_exit_label := SOME exit_lbl =
+        gas_shadow_env T (cenv1 with ce_ctor_exit_label := SOME exit_lbl)` by
+       rw[gasShadowCompileBaseTheory.gas_shadow_env_def,
+          compile_env_component_equality] >>
+     strip_tac >> gvs[gas_shadow_state_refl,
+       stmtSimPropsTheory.compile_stmts_env]) >>
+  `gas_shadow_env T cenv1 with ce_ctor_exit_label := SOME exit_lbl =
+     gas_shadow_env T (cenv1 with ce_ctor_exit_label := SOME exit_lbl)` by
+    rw[gasShadowCompileBaseTheory.gas_shadow_env_def,
+       compile_env_component_equality] >>
   rename1 `compile_constructor_epilogue _ _ _ _ = ((),t_final)` >>
   `compile_generate_deploy T (LENGTH runtime_bc) (imm_len tops) pos_args 0 []
-    cenv0 (MAP gas_shadow_stmt body) pay nr nkey ut
+    (gas_shadow_env T cenv0) (MAP gas_shadow_stmt body) pay nr nkey ut
       (initial_compile_state "__deploy") = ((),t_final)` by
     (PURE_REWRITE_TAC [compile_generate_deploy_def, COND_CLAUSES,
        ctor_code_cond_not, ctor_lock_flag_select] >>
@@ -211,5 +249,6 @@ Proof
      qexists_tac `su.cu_context.ctx_functions` >>
      fs[lowering_context_ok_def, ctx_fn_names_def, mk_raw_function_def]) >>
   qexistsl_tac [`su.cu_context`, `g`, `sa`, `tb`] >>
+  gvs[] >>
   simp[gas_shadow_state_refl]
 QED

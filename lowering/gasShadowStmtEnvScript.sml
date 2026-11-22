@@ -19,6 +19,19 @@ Proof
   ho_match_mp_tac gas_shadow_compiles_bind_env >> simp[gas_shadow_compile_stmt_env]
 QED
 
+Theorem gas_shadow_stmt_env_env:
+  !s ce lc ty.
+    gas_shadow_compiles_env sd (stmt_env ce lc ty s)
+      (stmt_env (gas_shadow_env sd ce) lc ty (gas_shadow_stmt s))
+Proof
+  rpt gen_tac >> simp[stmt_env_def] >>
+  ho_match_mp_tac gas_shadow_compiles_env_bind_env >> conj_tac
+  >- simp[gas_shadow_compiles_env_declare_stmt_local] >>
+  gen_tac >> simp[comp_ignore_bind_def] >>
+  ho_match_mp_tac gas_shadow_compiles_bind_env >>
+  simp[gas_shadow_compile_stmt_env, gas_shadow_compiles_env_return]
+QED
+
 Theorem gas_shadow_valued_return:
   (!s. stmt_valued_return (gas_shadow_stmt s) = stmt_valued_return s) /\
   (!ss. stmts_valued_return (MAP gas_shadow_stmt ss) = stmts_valued_return ss)

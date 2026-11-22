@@ -36,7 +36,7 @@ Definition for_nonslot_layout_def:
     (sbBody, sj, sb, shadow_sbCopy, shadow_sbBody) <=>
     expr_type e = ArrayT sty bd /\
     compile_expr c (expr_type e) e sa0 = (vv,sbExpr) /\
-    compile_expr c (expr_type e) (gas_shadow_expr e) shadow_sa0 =
+    compile_expr (gas_shadow_env T c) (expr_type e) (gas_shadow_expr e) shadow_sa0 =
       (vv,shadow_sbExpr) /\
     gas_shadow_state sa0 shadow_sa0 /\ gas_shadow_state sbExpr shadow_sbExpr /\
     fn_has_code sa0 sbExpr func /\ fn_has_code shadow_sa0 shadow_sbExpr shadow_func /\
@@ -82,7 +82,8 @@ Definition for_nonslot_layout_def:
       saCopy = ((),sbCopy) /\
     fn_has_code sa saCopy func /\ fn_has_code saCopy sbCopy func /\
     compile_stmts bc (InLoop exit incr) ret_ty loop_body sbCopy = ((),sbBody) /\
-    compile_stmts bc (InLoop exit incr) ret_ty (MAP gas_shadow_stmt loop_body)
+    compile_stmts (gas_shadow_env T bc) (InLoop exit incr) ret_ty
+      (MAP gas_shadow_stmt loop_body)
       shadow_sbCopy = ((),shadow_sbBody) /\
     gas_shadow_state sbCopy shadow_sbCopy /\ gas_shadow_state sbBody shadow_sbBody /\
     fn_has_code sbCopy sbBody func /\ fn_has_code shadow_sbCopy shadow_sbBody shadow_func /\
@@ -422,8 +423,8 @@ Theorem for_nonslot_array_body_invoke[local]:
   call_evaluation_safe cx (int_calls_stmts body) /\
   frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc ret_ty /\
   stmts_env bc (InLoop exit incr) ret_ty body sbCopy = (bc',sbBody) /\
-  stmts_env bc (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
-    shadow_sbCopy = (bc',shadow_sbBody) /\
+  stmts_env (gas_shadow_env T bc) (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
+    shadow_sbCopy = (gas_shadow_env T bc',shadow_sbBody) /\
   gas_shadow_state sbCopy shadow_sbCopy /\ gas_shadow_state sbBody shadow_sbBody /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -768,7 +769,7 @@ Theorem for_nonslot_array_layout_full_with_increment:
   expr_type e = ArrayT sty bd /\ c.ce_alloca_locals /\
   local_ptrs_reserved c sa0 /\ gas_shadow_state sa0 shadow_sa0 /\
   compile_stmt c lctx ret_ty (For id fty (Array e) n loop_body) sa0 = ((),sb) /\
-  compile_stmt c lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
+  compile_stmt (gas_shadow_env T c) lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
     shadow_sa0 = ((),shadow_sb) /\
   fn_has_code sa0 sb func /\ fn_has_code shadow_sa0 shadow_sb shadow_func ==>
   ?vv sbExpr shadow_sbExpr loc len_op saL bc saD saA xd capacity aidItem
@@ -785,19 +786,32 @@ Proof
   strip_tac >> drule_all nonslot_for_compiler_cuts >> strip_tac >>
   gvs[gasShadowTheory.gas_shadow_stmt_def,gasShadowTheory.gas_shadow_iterator_def] >>
   `expr_type (gas_shadow_expr e) = ArrayT sty bd` by simp[] >>
-  drule_all (Q.INST [`e` |-> `gas_shadow_expr e`,
-                    `loop_body` |-> `MAP gas_shadow_stmt loop_body`]
-                   nonslot_for_compiler_cuts) >> strip_tac >> gvs[] >>
-  nonslot_align_cut gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr >>
+  drule_all (SIMP_RULE (srw_ss()) []
+    (Q.INST [`c` |-> `gas_shadow_env T c`, `e` |-> `gas_shadow_expr e`,
+             `loop_body` |-> `MAP gas_shadow_stmt loop_body`]
+      nonslot_for_compiler_cuts)) >> strip_tac >> gvs[] >>
+  nonslot_align_cut gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr_env >>
   nonslot_align_cut nonslot_length_shadow >>
-  nonslot_align_cut gasShadowCompileStmtBaseTheory.gas_shadow_compiles_declare_local >>
+  `gas_shadow_env T bc = bc' /\ gas_shadow_state saD saD'` by
+    (mp_tac (Q.INST [`sd` |-> `T`, `cenv` |-> `c`, `ty` |-> `fty`]
+       gasShadowCompileStmtBaseTheory.gas_shadow_compiles_env_declare_local) >>
+     rewrite_tac[gasShadowCompileStmtBaseTheory.gas_shadow_compiles_env_def] >>
+     disch_then (qspecl_then [`saL`,`saL'`] (drule_then mp_tac)) >> simp[]) >>
+  (* Retain only the real lookup before simplifying the shadow projections. *)
+  qpat_x_assum `FLOOKUP bc'.ce_vars id = SOME _` kall_tac >>
+  qpat_x_assum `gas_shadow_env _ _ = bc'` (SUBST_ALL_TAC o SYM) >>
+  gvs[] >>
   nonslot_align_cut gasShadowCompileStmtBaseTheory.gas_shadow_compiles_emit_local_alloca >>
   nonslot_align_cut nonslot_control_shadow >>
   nonslot_align_cut gasShadowCompileContextTheory.gas_shadow_compiles_emit_op_same >>
   nonslot_align_cut nonslot_header_shadow >>
   nonslot_align_cut gasShadowCompileContextTheory.gas_shadow_compiles_emit_op_same >>
+  `saL'.cs_next_var = saL.cs_next_var` by fs[gas_shadow_state_def] >>
+  pop_assum (fn th =>
+    qpat_x_assum `compile_iter_elem_copy _ _ _ _ _ _ _ _ saCopy' = _`
+      (assume_tac o REWRITE_RULE [th])) >>
   nonslot_align_cut gasShadowCompileStmtOpsTheory.gas_shadow_compiles_iter_elem_copy >>
-  nonslot_align_cut (CONJUNCT2 gasShadowCompileStmtTheory.gas_shadow_compile_stmt) >>
+  nonslot_align_cut (CONJUNCT2 gasShadowCompileStmtTheory.gas_shadow_compile_stmt_env) >>
   `compile_alloc_buffer (type_memory_bytes c fty) saL =
    (<|buf_operand := Var (STRING #"%" (toString saL.cs_next_var));
       buf_size := type_memory_bytes c fty|>,saA)` by
@@ -1035,7 +1049,7 @@ Theorem for_nonslot_array_layout_full_with_done_age[local]:
   expr_type e = ArrayT sty bd /\ c.ce_alloca_locals /\
   local_ptrs_reserved c sa0 /\ gas_shadow_state sa0 shadow_sa0 /\
   compile_stmt c lctx ret_ty (For id fty (Array e) n loop_body) sa0 = ((),sb) /\
-  compile_stmt c lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
+  compile_stmt (gas_shadow_env T c) lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
     shadow_sa0 = ((),shadow_sb) /\
   fn_has_code sa0 sb func /\ fn_has_code shadow_sa0 shadow_sb shadow_func ==>
   ?vv sbExpr shadow_sbExpr loc len_op saL bc saD saA xd capacity aidItem
@@ -1055,7 +1069,7 @@ Theorem for_nonslot_array_layout_full:
   expr_type e = ArrayT sty bd /\ c.ce_alloca_locals /\
   local_ptrs_reserved c sa0 /\ gas_shadow_state sa0 shadow_sa0 /\
   compile_stmt c lctx ret_ty (For id fty (Array e) n loop_body) sa0 = ((),sb) /\
-  compile_stmt c lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
+  compile_stmt (gas_shadow_env T c) lctx ret_ty (gas_shadow_stmt (For id fty (Array e) n loop_body))
     shadow_sa0 = ((),shadow_sb) /\
   fn_has_code sa0 sb func /\ fn_has_code shadow_sa0 shadow_sb shadow_func ==>
   ?vv sbExpr shadow_sbExpr loc len_op saL bc saD saA xd capacity aidItem
@@ -2770,8 +2784,8 @@ Theorem for_nonslot_array_scoped_body_at[local]:
   call_evaluation_safe cx (int_calls_stmts body) /\
   frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc ret_ty /\
   stmts_env bc (InLoop exit incr) ret_ty body sbCopy = (bc',sbBody) /\
-  stmts_env bc (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
-    shadow_sbCopy = (bc',shadow_sbBody) /\
+  stmts_env (gas_shadow_env T bc) (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
+    shadow_sbCopy = (gas_shadow_env T bc',shadow_sbBody) /\
   gas_shadow_state sbCopy shadow_sbCopy /\ gas_shadow_state sbBody shadow_sbBody /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\

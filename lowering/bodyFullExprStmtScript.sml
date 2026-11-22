@@ -11,7 +11,7 @@ Ancestors
   stmtSimExpr stmtSimProps stmtSimDefs bodyMemoryDefs bodyPtrDefs
   exprSimDefs gasShadow gasShadowState loweringPosts exprLoweringProps
   stmtLowering compileEnv loweringStateRelDefs vyperInterpreter vyperState
-  vyperAST list
+  vyperAST list gasShadowCompileStmtHelpers
 
 (* Expr e is e followed by a source-only HashMapRef check: the marks, the
    target path and its endpoint stay the expression's. *)
@@ -29,7 +29,7 @@ Theorem compile_expr_stmt_frag_ok_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Expr e))
-      (stmt_env cenv lctx ty (Expr (gas_shadow_expr e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ty (Expr (gas_shadow_expr e)))
       (eval_stmt cx (Expr e)) es
 Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[stmt_frag_full_def] >>
@@ -42,15 +42,16 @@ Proof
   simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>
   Cases_on `compile_expr cenv (expr_type e) e sa` >>
-  Cases_on `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa` >>
   simp[] >> rpt strip_tac >> gvs[] >>
   rename1 `compile_expr _ _ e sa = (vv, sm)` >>
   rename1 `compile_expr _ _ (gas_shadow_expr e) shadow_sa = (svv, shadow_sm)` >>
   `svv = vv` by
-    (qpat_x_assum `gas_shadow_compiles _ _`
-       (qspecl_then [`sa`, `shadow_sa`] mp_tac o
-        REWRITE_RULE [gas_shadow_compiles_def]) >>
-     simp[]) >>
+    (`gas_shadow_compiles (compile_expr cenv (expr_type e) e)
+        (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))`
+       by irule gas_shadow_stmt_compile_expr_env >>
+     pop_assum (qspecl_then [`sa`, `shadow_sa`] mp_tac o
+       REWRITE_RULE [gas_shadow_compiles_def]) >> simp[]) >>
   pop_assum SUBST_ALL_TAC >>
   `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
     metis_tac[expr_stmt_admissible] >>

@@ -145,10 +145,10 @@ Theorem range_full_outer_env:
    cenv' = cenv /\
    compile_stmt cenv lctx ret_ty (For id typ (Range e1 e2) n body) sa =
      ((), sb)) /\
-  (stmt_env cenv lctx ret_ty
+  (stmt_env (gas_shadow_env T cenv) lctx ret_ty
      (gas_shadow_stmt (For id typ (Range e1 e2) n body)) ssa = (scenv', ssb) <=>
-   scenv' = cenv /\
-   compile_stmt cenv lctx ret_ty
+   scenv' = gas_shadow_env T cenv /\
+   compile_stmt (gas_shadow_env T cenv) lctx ret_ty
      (For id typ (Range (gas_shadow_expr e1) (gas_shadow_expr e2)) n
        (MAP gas_shadow_stmt body)) ssa = ((), ssb))
 Proof
@@ -266,14 +266,14 @@ Theorem range_full_compiler_geometry:
     stmt_env cenv lctx ty
       (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
         bound stmts) sa = (cenv', sb) /\
-    stmt_env cenv lctx ty
+    stmt_env (gas_shadow_env T cenv) lctx ty
       (gas_shadow_stmt
         (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
           bound stmts)) ssa = (scenv', ssb) /\
     cenv.ce_alloca_locals /\ fn_has_code sa sb func /\
     (!c lc s t. compile_stmts c lc ty stmts s = ((), t) ==> cs_extends s t) ==>
-    cenv' = cenv /\ scenv' = cenv /\
-    compile_stmt cenv lctx ty
+    cenv' = cenv /\ scenv' = gas_shadow_env T cenv /\
+    compile_stmt (gas_shadow_env T cenv) lctx ty
       (For id fty
         (Range (gas_shadow_expr (Literal a1 (IntL n1)))
                (gas_shadow_expr (Literal a2 (IntL n2))))
@@ -336,15 +336,15 @@ Theorem range_full_compiler_geometry:
   (!cenv lctx ty id fty e1 e2 bound stmts sa cenv' sb ssa scenv' ssb
        op1 s1 op2 st func.
     stmt_env cenv lctx ty (For id fty (Range e1 e2) bound stmts) sa = (cenv', sb) /\
-    stmt_env cenv lctx ty (gas_shadow_stmt (For id fty (Range e1 e2) bound stmts))
+    stmt_env (gas_shadow_env T cenv) lctx ty (gas_shadow_stmt (For id fty (Range e1 e2) bound stmts))
       ssa = (scenv', ssb) /\
     lower_value compile_expr cenv fty e1 sa = (op1, s1) /\
     lower_value compile_expr cenv fty e2 s1 = (op2, st) /\
     ~(?a1 n1 a2 n2. e1 = Literal a1 (IntL n1) /\ e2 = Literal a2 (IntL n2)) /\
     cenv.ce_alloca_locals /\ fn_has_code sa sb func /\
     (!c lc s t. compile_stmts c lc ty stmts s = ((), t) ==> cs_extends s t) ==>
-    cenv' = cenv /\ scenv' = cenv /\
-    compile_stmt cenv lctx ty
+    cenv' = cenv /\ scenv' = gas_shadow_env T cenv /\
+    compile_stmt (gas_shadow_env T cenv) lctx ty
       (For id fty (Range (gas_shadow_expr e1) (gas_shadow_expr e2)) bound
         (MAP gas_shadow_stmt stmts)) ssa = ((), ssb) /\
     ?p cv rv g1 z1 g2 z2 ev dv entry_lbl cond_lbl body_lbl incr_lbl exit_lbl
@@ -2182,18 +2182,19 @@ Theorem range_body_compiler_pair:
     gas_shadow_state sb0 shadow_sb0 ==>
     ?bc' shadow_sb1.
       stmts_env bc lctx ret_ty body sb0 = (bc',sb1) /\
-      stmts_env bc lctx ret_ty (MAP gas_shadow_stmt body) shadow_sb0 =
-        (bc',shadow_sb1) /\
-      compile_stmts bc lctx ret_ty (MAP gas_shadow_stmt body) shadow_sb0 =
+      stmts_env (gas_shadow_env T bc) lctx ret_ty (MAP gas_shadow_stmt body) shadow_sb0 =
+        (gas_shadow_env T bc',shadow_sb1) /\
+      compile_stmts (gas_shadow_env T bc) lctx ret_ty (MAP gas_shadow_stmt body) shadow_sb0 =
         ((),shadow_sb1) /\
       gas_shadow_state sb1 shadow_sb1
 Proof
   rpt gen_tac >> rewrite_tac[compile_stmts_env] >> strip_tac >>
-  qspecl_then [`body`, `bc`, `lctx`, `ret_ty`] mp_tac gas_shadow_stmts_env >>
-  simp[gas_shadow_compiles_def] >>
-  disch_then (qspecl_then [`sb0`, `shadow_sb0`] mp_tac) >>
+  qspecl_then [`body`, `bc`, `lctx`, `ret_ty`] mp_tac
+    (Q.INST [`sd` |-> `T`] gas_shadow_stmts_env_env) >>
+  simp[gasShadowCompileStmtBaseTheory.gas_shadow_compiles_env_def] >>
+  disch_then (qspecl_then [`sb0`, `shadow_sb0`] (drule_then mp_tac)) >>
   Cases_on `stmts_env bc lctx ret_ty body sb0` >>
-  Cases_on `stmts_env bc lctx ret_ty (MAP gas_shadow_stmt body) shadow_sb0` >>
+  Cases_on `stmts_env (gas_shadow_env T bc) lctx ret_ty (MAP gas_shadow_stmt body) shadow_sb0` >>
   gvs[]
 QED
 
@@ -2202,7 +2203,7 @@ Theorem range_body_pair_containment:
   !bc ret_ty body exit_lbl incr_lbl sb0 sb1 shadow_sb0 shadow_sb1
     shadow_sa shadow_sb func shadow_func.
     compile_stmts bc (InLoop exit_lbl incr_lbl) ret_ty body sb0 = ((),sb1) /\
-    compile_stmts bc (InLoop exit_lbl incr_lbl) ret_ty
+    compile_stmts (gas_shadow_env T bc) (InLoop exit_lbl incr_lbl) ret_ty
       (MAP gas_shadow_stmt body) shadow_sb0 = ((),shadow_sb1) /\
     gas_shadow_state sb0 shadow_sb0 /\
     fn_has_code sb0 sb1 func /\
@@ -2213,8 +2214,8 @@ Theorem range_body_pair_containment:
     ?body_cenv.
       stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty body sb0 =
         (body_cenv,sb1) /\
-      stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty
-        (MAP gas_shadow_stmt body) shadow_sb0 = (body_cenv,shadow_sb1) /\
+      stmts_env (gas_shadow_env T bc) (InLoop exit_lbl incr_lbl) ret_ty
+        (MAP gas_shadow_stmt body) shadow_sb0 = (gas_shadow_env T body_cenv,shadow_sb1) /\
       gas_shadow_state sb1 shadow_sb1 /\
       fn_has_code sb0 sb1 func /\
       fn_has_code shadow_sb0 shadow_sb1 shadow_func
@@ -2389,9 +2390,9 @@ Theorem range_full_body_entry:
       ret_ty /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
     stmt_env cenv lctx ret_ty (For id typ (Range e1 e2) bound body) sa =
     (cenv,sb) /\
-    stmt_env cenv lctx ret_ty
+    stmt_env (gas_shadow_env T cenv) lctx ret_ty
       (gas_shadow_stmt (For id typ (Range e1 e2) bound body)) shadow_sa =
-    (cenv,shadow_sb) /\ gas_shadow_state sa shadow_sa /\
+    (gas_shadow_env T cenv,shadow_sb) /\ gas_shadow_state sa shadow_sa /\
     gas_shadow_state sb shadow_sb /\ gas_shadow_context ctx shadow_ctx /\
     ctx_inst_ids_distinct ctx /\ gas_shadow_function func shadow_func /\
     MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
@@ -2427,7 +2428,7 @@ Theorem range_full_body_entry:
             [mk_inst st.cs_next_id ALLOCA
                [Lit (n2w (type_memory_bytes cenv typ))] [p];
              mk_inst (st.cs_next_id + 1) JMP [Label entry_lbl] []]|> /\
-      compile_stmt cenv lctx ret_ty
+      compile_stmt (gas_shadow_env T cenv) lctx ret_ty
         (For id typ (Range (gas_shadow_expr e1) (gas_shadow_expr e2)) bound
            (MAP gas_shadow_stmt body)) shadow_sa = ((),shadow_sb) /\
       (!a1 m1 a2 m2.
@@ -2506,8 +2507,8 @@ Theorem range_full_body_entry:
       sa.cs_next_var <= sb0.cs_next_var /\ cs_extends sa sb0 /\
       cs_extends shadow_sa shadow_sb0 /\ cs_extends shadow_sb1 shadow_sb /\
       stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty body sb0 = (body_cenv,sb1) /\
-      stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty (MAP gas_shadow_stmt body)
-        shadow_sb0 = (body_cenv,shadow_sb1) /\
+      stmts_env (gas_shadow_env T bc) (InLoop exit_lbl incr_lbl) ret_ty (MAP gas_shadow_stmt body)
+        shadow_sb0 = (gas_shadow_env T body_cenv,shadow_sb1) /\
       gas_shadow_state sb0 shadow_sb0 /\ gas_shadow_state sb1 shadow_sb1 /\
       fn_has_code sb0 sb1 func /\
       fn_has_code shadow_sb0 shadow_sb1 shadow_func /\
@@ -2826,22 +2827,23 @@ Resume range_full_body_entry[geometry]:
     (qpat_assum `stmt_env _ _ _ (For _ _ _ _ _) sa = _`
        (strip_assume_tac o SRULE [range_full_outer_env])) all_tac >>
   IF (fn g => fn ctxt => asm "literal_prefix" kall_tac g ctxt)
-    (Cases_on `declare_local cenv id typ shadow_sa` >>
+    (Cases_on `declare_local (gas_shadow_env T cenv) id typ shadow_sa` >>
      rename1 `declare_local _ _ _ shadow_sa = (sbc,ss1)`) all_tac >>
   IF (fn g => fn ctxt => asm "literal_prefix" kall_tac g ctxt)
     (qpat_assum `declare_local _ _ _ shadow_sa = _`
        (mp_then Any mp_tac declare_local_ptr) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >> disch_then strip_assume_tac) all_tac >>
+     (impl_tac >- simp[]) >> disch_then strip_assume_tac) all_tac >>
   IF (fn g => fn ctxt => asm "literal_prefix" kall_tac g ctxt)
-    (`sbc = bc` by
-       (mp_tac (SRULE [gas_shadow_compiles_def]
-          (Q.INST [`ty` |-> `typ`] gasShadowCompileStmtBaseTheory.gas_shadow_compiles_declare_local)) >>
+    (`sbc = gas_shadow_env T bc` by
+       (mp_tac (SRULE [gasShadowCompileStmtBaseTheory.gas_shadow_compiles_env_def]
+          (Q.INST [`ty` |-> `typ`, `sd` |-> `T`]
+             gasShadowCompileStmtBaseTheory.gas_shadow_compiles_env_declare_local)) >>
         disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[])) all_tac >>
   IF (fn g => fn ctxt => asm "literal_prefix" kall_tac g ctxt)
-    (qpat_x_assum `sbc = bc` SUBST_ALL_TAC >>
+    (qpat_x_assum `sbc = _` SUBST_ALL_TAC >>
      qpat_assum `declare_local _ _ _ sa = _`
        (mp_then Any mp_tac declare_local_ptr) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >> disch_then strip_assume_tac) all_tac >>
+     (impl_tac >- simp[]) >> disch_then strip_assume_tac) all_tac >>
   IF (fn g => fn ctxt => asm "literal_prefix" kall_tac g ctxt)
     (let
        fun prefix decls compile = qpat_assum compile
@@ -2856,7 +2858,7 @@ Resume range_full_body_entry[geometry]:
      in
        qpat_assum `declare_local _ _ _ shadow_sa = _` (fn decl =>
          qpat_assum `ss1 = _` (fn next =>
-         qpat_assum `FLOOKUP bc.ce_vars id = SOME (PtrVar (Var (STRING _ (toString shadow_sa.cs_next_var))) _)`
+         qpat_assum `FLOOKUP _.ce_vars id = SOME (PtrVar (Var (STRING _ (toString shadow_sa.cs_next_var))) _)`
            (fn binding => prefix [decl,next,binding] `compile_stmt _ _ _ _ shadow_sa = _`))) >>
        qpat_assum `declare_local _ _ _ sa = _` (fn decl =>
          qpat_assum `FLOOKUP bc.ce_vars id = SOME (PtrVar (Var (STRING _ (toString sa.cs_next_var))) _)`
@@ -2903,20 +2905,20 @@ Resume range_full_body_entry[geometry]:
                qspecl_then [s,t]
                  (strip_assume_tac o SRULE [left,right] o (fn th => MATCH_MP th related))
                  (REWRITE_RULE [gas_shadow_compiles_def]
-                   (Q.INST [`ty` |-> `typ`, `e` |-> expr]
-                     gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value)))))
+                   (Q.INST [`ty` |-> `typ`, `e` |-> expr, `sd` |-> `T`]
+                     gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env)))))
      in
-       namedCases_on `lower_value compile_expr cenv typ (gas_shadow_expr e1) shadow_sa`
+       namedCases_on `lower_value compile_expr (gas_shadow_env T cenv) typ (gas_shadow_expr e1) shadow_sa`
          ["shadow_op1 shadow_s1"] >>
        pair_edge `e1` `sa` `shadow_sa` `gas_shadow_state sa shadow_sa`
          `lower_value compile_expr cenv typ e1 sa = _`
-         `lower_value compile_expr cenv typ (gas_shadow_expr e1) shadow_sa = _` >>
+         `lower_value _ _ _ (gas_shadow_expr e1) shadow_sa = _` >>
        qpat_x_assum `op1 = shadow_op1` (SUBST_ALL_TAC o SYM) >>
-       namedCases_on `lower_value compile_expr cenv typ (gas_shadow_expr e2) shadow_s1`
+       namedCases_on `lower_value compile_expr (gas_shadow_env T cenv) typ (gas_shadow_expr e2) shadow_s1`
          ["shadow_op2 shadow_st"] >>
        pair_edge `e2` `s1` `shadow_s1` `gas_shadow_state s1 shadow_s1`
          `lower_value compile_expr cenv typ e2 s1 = _`
-         `lower_value compile_expr cenv typ (gas_shadow_expr e2) shadow_s1 = _` >>
+         `lower_value _ _ _ (gas_shadow_expr e2) shadow_s1 = _` >>
        qpat_x_assum `op2 = shadow_op2` (SUBST_ALL_TAC o SYM)
      end) all_tac >>
   IF (fn g => fn ctxt => asm "checked_prefix" kall_tac g ctxt)
@@ -2956,27 +2958,28 @@ Resume range_full_body_entry[geometry]:
        (qpat_assum `compile_stmt _ _ _ _ sa = ((),sb)` (SUBST1_TAC o SYM) >>
         sym_tac >> irule compile_stmt_for_range_checked >> gvs[])) all_tac >>
   IF (fn g => fn ctxt => asm "checked_prefix" kall_tac g ctxt)
-    (`for_range_checked_code cenv lctx ret_ty id typ bound (MAP gas_shadow_stmt body)
+    (`for_range_checked_code (gas_shadow_env T cenv) lctx ret_ty id typ bound (MAP gas_shadow_stmt body)
         op1 op2 shadow_st = ((),shadow_sb)` by
        (qpat_assum `compile_stmt _ _ _ _ shadow_sa = ((),shadow_sb)` (SUBST1_TAC o SYM) >>
         sym_tac >> irule compile_stmt_for_range_checked >> gvs[])) all_tac >>
   IF (fn g => fn ctxt => asm "checked_prefix" kall_tac g ctxt)
-    (Cases_on `declare_local cenv id typ shadow_st` >>
+    (Cases_on `declare_local (gas_shadow_env T cenv) id typ shadow_st` >>
      rename1 `declare_local _ _ _ shadow_st = (sbc,ss1)`) all_tac >>
   IF (fn g => fn ctxt => asm "checked_prefix" kall_tac g ctxt)
     (qpat_assum `declare_local _ _ _ shadow_st = _`
        (mp_then Any mp_tac declare_local_ptr) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >> disch_then strip_assume_tac) all_tac >>
+     (impl_tac >- simp[]) >> disch_then strip_assume_tac) all_tac >>
   IF (fn g => fn ctxt => asm "checked_prefix" kall_tac g ctxt)
-    (`sbc = bc` by
-       (mp_tac (SRULE [gas_shadow_compiles_def]
-          (Q.INST [`ty` |-> `typ`] gasShadowCompileStmtBaseTheory.gas_shadow_compiles_declare_local)) >>
+    (`sbc = gas_shadow_env T bc` by
+       (mp_tac (SRULE [gasShadowCompileStmtBaseTheory.gas_shadow_compiles_env_def]
+          (Q.INST [`ty` |-> `typ`, `sd` |-> `T`]
+             gasShadowCompileStmtBaseTheory.gas_shadow_compiles_env_declare_local)) >>
         disch_then (qspecl_then [`st`, `shadow_st`] mp_tac) >> simp[])) all_tac >>
   IF (fn g => fn ctxt => asm "checked_prefix" kall_tac g ctxt)
-    (qpat_x_assum `sbc = bc` SUBST_ALL_TAC >>
+    (qpat_x_assum `sbc = _` SUBST_ALL_TAC >>
      qpat_assum `declare_local _ _ _ st = _`
        (mp_then Any mp_tac declare_local_ptr) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >> disch_then strip_assume_tac) all_tac >>
+     (impl_tac >- simp[]) >> disch_then strip_assume_tac) all_tac >>
   IF (fn g => fn ctxt => asm "checked_prefix" kall_tac g ctxt)
     (`(if is_signed_type typ then emitHelper$emit_op SGT [op1;op2]
                              else emitHelper$emit_op GT [op1;op2]) =
@@ -3002,7 +3005,7 @@ Resume range_full_body_entry[geometry]:
          qpat_x_assum `declare_local _ _ _ shadow_st = _`
            (assume_tac o REWRITE_RULE [next])) >>
        prefix `declare_local _ _ _ shadow_st = _`
-         `FLOOKUP bc.ce_vars id = SOME (PtrVar (Var (STRING _ (toString shadow_st.cs_next_var))) _)`
+         `FLOOKUP _.ce_vars id = SOME (PtrVar (Var (STRING _ (toString shadow_st.cs_next_var))) _)`
          `for_range_checked_code _ _ _ _ _ _ _ _ _ shadow_st = _` >>
        prefix `declare_local _ _ _ st = _`
          `FLOOKUP bc.ce_vars id = SOME (PtrVar (Var (STRING _ (toString st.cs_next_var))) _)`
@@ -4414,9 +4417,9 @@ Theorem range_full_round:
        cenv ret_ty /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
      stmt_env cenv lctx ret_ty (For id typ (Range e1 e2) bound body) sa =
      (cenv,sb) /\
-     stmt_env cenv lctx ret_ty
+     stmt_env (gas_shadow_env T cenv) lctx ret_ty
        (gas_shadow_stmt (For id typ (Range e1 e2) bound body)) shadow_sa =
-     (cenv,shadow_sb) /\ gas_shadow_state sa shadow_sa /\
+     (gas_shadow_env T cenv,shadow_sb) /\ gas_shadow_state sa shadow_sa /\
      gas_shadow_state sb shadow_sb /\ gas_shadow_context ctx shadow_ctx /\
      ctx_inst_ids_distinct ctx /\ gas_shadow_function func shadow_func /\
      MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
@@ -4463,7 +4466,7 @@ Theorem range_full_round:
                 [Lit (n2w (type_memory_bytes cenv typ) :256 word)] [p];
               mk_inst (st.cs_next_id + (1 :num)) JMP [Label entry_lbl]
                 ([] :string list)]|> /\
-       compile_stmt cenv lctx ret_ty
+       compile_stmt (gas_shadow_env T cenv) lctx ret_ty
          (For id typ (Range (gas_shadow_expr e1) (gas_shadow_expr e2)) bound
             (MAP gas_shadow_stmt body)) shadow_sa = ((),shadow_sb) /\
        (!(a1 :type) (m1 :int) (a2 :type) (m2 :int).
@@ -4558,8 +4561,8 @@ Theorem range_full_round:
        cs_extends shadow_sa shadow_sb0 /\ cs_extends shadow_sb1 shadow_sb /\
        stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty body sb0 =
        (body_cenv,sb1) /\
-       stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty
-         (MAP gas_shadow_stmt body) shadow_sb0 = (body_cenv,shadow_sb1) /\
+       stmts_env (gas_shadow_env T bc) (InLoop exit_lbl incr_lbl) ret_ty
+         (MAP gas_shadow_stmt body) shadow_sb0 = (gas_shadow_env T body_cenv,shadow_sb1) /\
        gas_shadow_state sb0 shadow_sb0 /\ gas_shadow_state sb1 shadow_sb1 /\
        fn_has_code sb0 sb1 func /\
        fn_has_code shadow_sb0 shadow_sb1 shadow_func /\
@@ -5138,9 +5141,9 @@ Theorem range_full_round:
       ret_ty /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
     stmt_env cenv lctx ret_ty (For id typ (Range e1 e2) bound body) sa =
     (cenv,sb) /\
-    stmt_env cenv lctx ret_ty
+    stmt_env (gas_shadow_env T cenv) lctx ret_ty
       (gas_shadow_stmt (For id typ (Range e1 e2) bound body)) shadow_sa =
-    (cenv,shadow_sb) /\ gas_shadow_state sa shadow_sa /\
+    (gas_shadow_env T cenv,shadow_sb) /\ gas_shadow_state sa shadow_sa /\
     gas_shadow_state sb shadow_sb /\ gas_shadow_context ctx shadow_ctx /\
     ctx_inst_ids_distinct ctx /\ gas_shadow_function func shadow_func /\
     MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
@@ -5187,7 +5190,7 @@ Theorem range_full_round:
                [Lit (n2w (type_memory_bytes cenv typ) :256 word)] [p];
              mk_inst (st.cs_next_id + (1 :num)) JMP [Label entry_lbl]
                ([] :string list)]|> /\
-      compile_stmt cenv lctx ret_ty
+      compile_stmt (gas_shadow_env T cenv) lctx ret_ty
         (For id typ (Range (gas_shadow_expr e1) (gas_shadow_expr e2)) bound
            (MAP gas_shadow_stmt body)) shadow_sa = ((),shadow_sb) /\
       (!(a1 :type) (m1 :int) (a2 :type) (m2 :int).
@@ -5281,8 +5284,8 @@ Theorem range_full_round:
       sa.cs_next_var <= sb0.cs_next_var /\ cs_extends sa sb0 /\
       cs_extends shadow_sa shadow_sb0 /\ cs_extends shadow_sb1 shadow_sb /\
       stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty body sb0 = (body_cenv,sb1) /\
-      stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty (MAP gas_shadow_stmt body)
-        shadow_sb0 = (body_cenv,shadow_sb1) /\
+      stmts_env (gas_shadow_env T bc) (InLoop exit_lbl incr_lbl) ret_ty (MAP gas_shadow_stmt body)
+        shadow_sb0 = (gas_shadow_env T body_cenv,shadow_sb1) /\
       gas_shadow_state sb0 shadow_sb0 /\ gas_shadow_state sb1 shadow_sb1 /\
       fn_has_code sb0 sb1 func /\
       fn_has_code shadow_sb0 shadow_sb1 shadow_func /\
@@ -5606,7 +5609,8 @@ Proof
   `stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cx (InLoop exit_lbl incr_lbl) RetQ bc
      (stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty body)
-     (stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty (MAP gas_shadow_stmt body))
+     (stmts_env (gas_shadow_env T bc) (InLoop exit_lbl incr_lbl) ret_ty
+        (MAP gas_shadow_stmt body))
      (eval_stmts cx body) ep` by
     (qpat_x_assum `body_stmts_full_ok cx body`
       (irule o PURE_ONCE_REWRITE_RULE [body_stmts_full_ok_def]) >>
@@ -6482,7 +6486,7 @@ Theorem compile_for_range_frag_full:
  stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
    cx lctx RetQ cenv
    (stmt_env cenv lctx ret_ty (For id typ (Range e1 e2) n body))
-   (stmt_env cenv lctx ret_ty
+   (stmt_env (gas_shadow_env T cenv) lctx ret_ty
       (gas_shadow_stmt (For id typ (Range e1 e2) n body)))
    (eval_stmt cx (For id typ (Range e1 e2) n body)) es
 Proof
@@ -6533,26 +6537,27 @@ QED
 
 Resume compile_for_range_frag_full[checked]:
   let
-    fun shadow_edge expr start shadowStart related leftEq shadowRun out mid =
+    fun shadow_edge expr start shadowStart related leftEq shadowRun rightEq out mid =
       namedCases_on shadowRun [out ^ " " ^ mid] >>
       qpat_assum related (fn rel =>
         qpat_assum leftEq (fn left =>
-          qpat_assum (QUOTE "" :: shadowRun @ [QUOTE " = _"])
-            (fn right =>
-              qspecl_then [start,shadowStart]
-                (strip_assume_tac o SRULE [rel,left,right])
-                (REWRITE_RULE [gas_shadow_compiles_def]
-                  (Q.INST [`ty` |-> `typ`, `e` |-> expr]
-                    gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value)))))
+          qpat_assum rightEq (fn right =>
+            qspecl_then [start,shadowStart]
+              (strip_assume_tac o SRULE [rel,left,right])
+              (REWRITE_RULE [gas_shadow_compiles_def]
+                (Q.INST [`ty` |-> `typ`, `e` |-> expr, `sd` |-> `T`]
+                  gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env)))))
   in
     shadow_edge `e1` `sa` `shadow_sa` `gas_shadow_state sa shadow_sa`
       `lower_value compile_expr cenv typ e1 sa = _`
-      `lower_value compile_expr cenv typ (gas_shadow_expr e1) shadow_sa`
+      `lower_value compile_expr (gas_shadow_env T cenv) typ (gas_shadow_expr e1) shadow_sa`
+      `lower_value _ _ _ (gas_shadow_expr e1) shadow_sa = _`
       "shadow_op1" "shadow_s1" >>
     qpat_x_assum `op1 = shadow_op1` (SUBST_ALL_TAC o SYM) >>
     shadow_edge `e2` `s1` `shadow_s1` `gas_shadow_state s1 shadow_s1`
       `lower_value compile_expr cenv typ e2 s1 = _`
-      `lower_value compile_expr cenv typ (gas_shadow_expr e2) shadow_s1`
+      `lower_value compile_expr (gas_shadow_env T cenv) typ (gas_shadow_expr e2) shadow_s1`
+      `lower_value _ _ _ (gas_shadow_expr e2) shadow_s1 = _`
       "shadow_op2" "shadow_st" >>
     qpat_x_assum `op2 = shadow_op2` (SUBST_ALL_TAC o SYM)
   end >>
@@ -6575,7 +6580,7 @@ Resume compile_for_range_frag_full[checked]:
     (strip_tac >> qpat_x_assum `~(?a1 m1 a2 m2. e1 = _ /\ e2 = _)` mp_tac >>
      simp[NoAsms] >> qexistsl_tac [`a1`,`m1`,`a2`,`m2`] >>
      conj_tac >> first_x_assum irule >> first_assum ACCEPT_TAC) >>
-  `for_range_checked_code cenv lctx ret_ty id typ n (MAP gas_shadow_stmt body)
+  `for_range_checked_code (gas_shadow_env T cenv) lctx ret_ty id typ n (MAP gas_shadow_stmt body)
       op1 op2 shadow_st = ((),shadow_sb)` by
     (qpat_assum `compile_stmt _ _ _ _ shadow_sa = ((),shadow_sb)` (SUBST1_TAC o SYM) >>
      sym_tac >>
@@ -6594,7 +6599,8 @@ Resume compile_for_range_frag_full[checked]:
     (qpat_assum `for_range_checked_code _ _ _ _ _ _ _ _ _ shadow_st = _`
        (mp_then Any (qspecl_then [`shadow_sa`,`shadow_func`] mp_tac)
           for_range_checked_parts) >>
-     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     impl_tac
+     >- (conj_tac >- simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
      strip_tac >> first_assum ACCEPT_TAC) >>
   let
     fun split a b c fnm = qspecl_then [a,b,c,fnm] mp_tac fn_has_code_split >>

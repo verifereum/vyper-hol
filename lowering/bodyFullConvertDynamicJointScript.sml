@@ -100,15 +100,17 @@ Proof
   rename1 `lower_value compile_expr cenv (expr_type e) e sa = (x,sm)` >>
   simp[exprBopLoweringTheory.lower_value_child_call, SF ETA_ss, expr_type_def] >>
   strip_tac >>
-  `?shadow_sm. lower_value compile_expr cenv (expr_type e)
+  `?shadow_sm. lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
       (gas_shadow_expr e) shadow_sa = (x,shadow_sm) /\
       gas_shadow_state sm shadow_sm` by
-    (mp_tac (Q.INST [`ty` |-> `expr_type e`, `sh` |-> `T`]
-      (MATCH_MP gasShadowCompileHelpersTheory.gas_shadow_compiles_lower_value
-        (cj 1 gas_shadow_compile_expr))) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >>
-     simp[] >> metis_tac[pairTheory.PAIR]) >>
+    (`gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
+       (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+         (gas_shadow_expr e))` by
+       irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env >>
+     pop_assum (qspecl_then [`sa`,`shadow_sa`] mp_tac o
+                REWRITE_RULE [gas_shadow_compiles_def]) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sa` >> simp[]) >>
   `cs_extends sa sm /\ cs_extends shadow_sa shadow_sm` by
     metis_tac[compile_expr_grows] >>
   qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>

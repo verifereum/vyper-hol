@@ -40,7 +40,6 @@ Theorem deploy_ctor_body_frag_full_plain_defaults[local]:
    func mut source_body am_c es0 shadow_ctx shadow_func.
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
-    ~internal_defaults_msg_gas tops /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops (assemble prog') am tx es /\
     call_outcomes_ok am tx vs.vs_outcomes /\
@@ -57,7 +56,7 @@ Theorem deploy_ctor_body_frag_full_plain_defaults[local]:
         (deploy_evaluation_context tops am tx) (LENGTH runtime_bc)
         (imm_len tops) nr nkey v ee r)
       cenv (stmts_env cenv NoLoop NoneT body)
-      (stmts_env cenv NoLoop NoneT (MAP gas_shadow_stmt body))
+      (stmts_env (gas_shadow_env T cenv) NoLoop NoneT (MAP gas_shadow_stmt body))
       (eval_stmts (deploy_evaluation_context tops am tx) body)
       (es0 with outcomes := SOME vs.vs_outcomes)
 Proof
@@ -132,7 +131,7 @@ Theorem deploy_ctor_body_internal_constant_defaults:
    func mut source_body am_c es0 shadow_ctx shadow_func.
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
-    internal_defaults_const_names tops /\ ~internal_defaults_msg_gas tops /\
+    internal_defaults_const_names tops /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops (assemble prog') am tx es /\
     call_outcomes_ok am tx vs.vs_outcomes /\
@@ -150,7 +149,7 @@ Theorem deploy_ctor_body_internal_constant_defaults:
         (deploy_evaluation_context tops am tx) (LENGTH runtime_bc)
         (imm_len tops) nr nkey v ee r)
       cenv (stmts_env cenv NoLoop NoneT body)
-      (stmts_env cenv NoLoop NoneT (MAP gas_shadow_stmt body))
+      (stmts_env (gas_shadow_env T cenv) NoLoop NoneT (MAP gas_shadow_stmt body))
       (eval_stmts (deploy_evaluation_context tops am tx) body)
       (es0 with outcomes := SOME vs.vs_outcomes)
 Proof
@@ -163,7 +162,6 @@ Theorem deploy_ctor_body_frag_full:
    func mut source_body am_c es0 shadow_ctx shadow_func.
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
-    ~internal_defaults_msg_gas tops /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops (assemble prog') am tx es /\
     call_outcomes_ok am tx vs.vs_outcomes /\
@@ -181,7 +179,7 @@ Theorem deploy_ctor_body_frag_full:
         (deploy_evaluation_context tops am tx) (LENGTH runtime_bc)
         (imm_len tops) nr nkey v ee r)
       cenv (stmts_env cenv NoLoop NoneT body)
-      (stmts_env cenv NoLoop NoneT (MAP gas_shadow_stmt body))
+      (stmts_env (gas_shadow_env T cenv) NoLoop NoneT (MAP gas_shadow_stmt body))
       (eval_stmts (deploy_evaluation_context tops am tx) body)
       (es0 with outcomes := SOME vs.vs_outcomes)
 Proof
