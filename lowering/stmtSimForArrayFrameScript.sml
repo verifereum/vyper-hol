@@ -6,7 +6,7 @@ Ancestors
   supportedStmts vyperPlaceFrames supportedExprs vyperInterpreter vyperCallOutcomeFrame
   vyperStatePreservation supportedExprForms supportedExprTraverse
   vyperEvalExprPreservesScopesDom vyperPlaceResultTyping vyperTypeSystem vyperTypeEnvExtension vyperTypeArgFits vyperCreate vyperCreateFrame
-  vyperLocalAccessFrame
+  vyperLocalAccessFrame supportedTraverseFalse
 
 (* select_result, extend_place and lookup_global record a storage
    observation, so their end state is the start state with a longer
@@ -575,21 +575,6 @@ Resume eval_observation_frame_pred[Builtin]:
 QED
 
 Finalise eval_observation_frame_pred
-
-Theorem supported_exists_false[local]:
-  (!e. ~supported_expr_exists (\x. F) e) /\
-  (!t. ~supported_target_exists (\x. F) t) /\
-  (!es. ~supported_exprs_exists (\x. F) es)
-Proof
-  `(!p e. p = (\x. F) ==> ~supported_expr_exists p e) /\
-   (!p t. p = (\x. F) ==> ~supported_target_exists p t) /\
-   (!p es. p = (\x. F) ==> ~supported_exprs_exists p es) /\
-   (!p opt. p = (\x. F) ==> ~supported_opt_exists p opt) /\
-   (!p fields. p = (\x. F) ==> ~supported_fields_exists p fields)` by
-    (ho_match_mp_tac supported_expr_exists_ind >>
-     rw[supported_expr_exists_def]) >>
-  simp[]
-QED
 
 (* An observation of the state that reads only the scopes and the immutables
    is kept by evaluating an expression or a target whose pops go only
