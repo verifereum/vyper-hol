@@ -6,11 +6,11 @@ Ancestors
   groupedDefaultArguments groupedEntryCommon groupedEntryResources callRejectMemory[ignore_grammar]
   registrationRejectMetadata groupedKeywordDecode bodyMemBopRestWordPath
   decoderOriginAllocationFrame deployBodyReachability contextRawReachable contextCodegenRel
-  contextCodegenRelProps venomMemDefs exprLoweringProps allocaFrontierBound allocaFrontierRoom
+  contextCodegenRelProps venomMemDefs exprLoweringProps allocaFrontierBound
   selectedAcceptedFold abiDecoderCoherence compileEnv vyperContext vyperTypeABI vyperABIEntries
   vyperCompiler allocaHistory entryRejectCode emitHelperProps fragGasOriginPtrLoop fragFuel
   loweringStateRelDefs allocaBudgetProps finite_map rich_list words pair
-  arithmetic relation vyperAST allocasBelowFmpUpdatesProps allocaSiteResource
+  arithmetic relation vyperAST allocasBelowFmpUpdatesProps groupedRejectCutAllocationProps
 
 val _ = Parse.hide "tops";
 
