@@ -1284,25 +1284,8 @@ Resume intcall_args_defaults_scope_with_code_addr[builtin]:
       simp[get_accounts_def, lift_sum_def, bind_def, return_def] >>
       rpt gen_tac >> Cases_on `is_self_codesize blt es`
       >- (Cases_on `v'`
-          >- (simp[vyperContextTheory.is_self_codesize_def,
-                   vyperContextTheory.evaluate_self_codesize_def,
-                   bind_def, return_def, raise_def, get_accounts_def,
-                   lift_sum_def, precompile_call_success_def, check_def,
-                   assert_def, evaluation_state_component_equality] >>
-              rpt IF_CASES_TAC >> simp[bind_def, return_def, raise_def] >>
-              Cases_on `s.outcomes` >> simp[bind_def, return_def, raise_def] >>
-              TRY (Cases_on `x`) >> simp[bind_def, return_def, raise_def] >>
-              TRY (Cases_on `x'`) >> simp[bind_def, return_def, raise_def] >>
-              rpt IF_CASES_TAC >> simp[bind_def, return_def, raise_def] >>
-              simp[vyperCallOutcomeTheory.take_call_outcome_def,
-                   vyperCallOutcomeTheory.take_request_outcome_def,
-                   vyperCallOutcomeTheory.call_outcome_request_def] >>
-              rpt (pairarg_tac >> gs[]) >>
-              Cases_on `outcome.co_success` >>
-              simp[assert_def, return_def, raise_def,
-                   evaluation_state_component_equality])
-          >- (Cases_on `h` >> Cases_on `t''` >>
-              simp[vyperContextTheory.is_self_codesize_def,
+          >| [ALL_TAC, Cases_on `h` >> Cases_on `t''`] >>
+          (simp[vyperContextTheory.is_self_codesize_def,
                    vyperContextTheory.evaluate_self_codesize_def,
                    bind_def, return_def, raise_def, get_accounts_def,
                    lift_sum_def, precompile_call_success_def, check_def,

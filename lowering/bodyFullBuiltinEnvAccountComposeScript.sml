@@ -16,21 +16,6 @@ Ancestors
 Libs
   pairLib
 
-Theorem self_codesize_ptr_ok[local]:
-  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  step_inst_base (mk_inst id CODESIZE [] [out]) s = OK (update_var out w s) ==>
-  ptr_inst_ok D lo 0 ctx func G tn (mk_inst id CODESIZE [] [out]) s
-Proof
-  strip_tac >>
-  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
-       source_memory_write_ranges_def, source_memory_read_ranges_def] >>
-  simp[GSYM mk_inst_def, venomExecSemanticsTheory.step_inst_non_invoke] >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def,
-       venomExecSemanticsTheory.exec_read0_def,
-       update_var_def]
-QED
-
 Theorem self_codesize_full_path[local]:
   lower_value compile_expr cenv ty
       (Builtin (BaseT (UintT 256)) (Acc Codesize) [e1]) sa = (op,sb) /\
@@ -52,78 +37,21 @@ Theorem self_codesize_full_path[local]:
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,G',tn')
 Proof
-  strip_tac >>
-  `emit_op CODESIZE [] sa = (op,sb)` by
-    metis_tac[exprSimAccountsTheory.lower_value_self_codesize] >>
+  strip_tac >> fs[exprSimAccountsTheory.lower_value_self_codesize] >>
   drule emitted_insts_emit_op >> strip_tac >>
-  `sb.cs_current_bb = sa.cs_current_bb` by
-    gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
-        comp_ignore_bind_def, comp_return_def, emit_def] >>
-  drule_all fn_has_code_same_block >> strip_tac >>
-  `get_instruction bb (LENGTH sa.cs_current_insts) =
-    SOME (mk_inst sa.cs_next_id CODESIZE []
-      [STRING #"%" (toString sa.cs_next_var)])` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  qexistsl_tac [`update_var (STRING #"%" (toString sa.cs_next_var)) w s
-                  with vs_inst_idx := SUC s.vs_inst_idx`,
-                `step_prov PG G
-                  (mk_inst sa.cs_next_id CODESIZE []
-                    [STRING #"%" (toString sa.cs_next_var)])
-                  (update_var (STRING #"%" (toString sa.cs_next_var)) w s)`,
-                `step_taint
-                  (mk_inst sa.cs_next_id CODESIZE []
-                    [STRING #"%" (toString sa.cs_next_var)]) s
-                  (update_var (STRING #"%" (toString sa.cs_next_var)) w s) tn`] >>
-  simp[] >>
-  gen_tac >>
-  `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-     (OK (update_var (STRING #"%" (toString sa.cs_next_var)) w s
-          with vs_inst_idx := SUC s.vs_inst_idx),
-      step_prov PG G (mk_inst sa.cs_next_id CODESIZE []
-        [STRING #"%" (toString sa.cs_next_var)])
-        (update_var (STRING #"%" (toString sa.cs_next_var)) w s),
-      step_taint (mk_inst sa.cs_next_id CODESIZE []
-        [STRING #"%" (toString sa.cs_next_var)]) s
-        (update_var (STRING #"%" (toString sa.cs_next_var)) w s) tn)` by
-    (`step_inst_base (mk_inst sa.cs_next_id CODESIZE []
-         [STRING #"%" (toString sa.cs_next_var)]) s =
-         OK (update_var (STRING #"%" (toString sa.cs_next_var)) w s)` by
-       (qpat_x_assum `!out. step_inst_base _ _ = _`
-          (qspec_then `STRING #"%" (toString sa.cs_next_var)` mp_tac) >> simp[]) >>
-     `ptr_inst_ok D lo 0 ctx func G tn
-        (mk_inst sa.cs_next_id CODESIZE []
-          [STRING #"%" (toString sa.cs_next_var)]) s` by
-       (match_mp_tac (Q.INST [`id` |-> `sa.cs_next_id`,
-                              `out` |-> `STRING #"%" (toString sa.cs_next_var)`]
-                         self_codesize_ptr_ok) >>
-        metis_tac[]) >>
-     `inst_mem_below_frontier
-        (mk_inst sa.cs_next_id CODESIZE []
-          [STRING #"%" (toString sa.cs_next_var)]) s` by
-       simp[inst_mem_below_frontier_def,
-             source_memory_read_ranges_def, source_memory_write_ranges_def] >>
-     `inst_dload_in_section
-        (mk_inst sa.cs_next_id CODESIZE []
-          [STRING #"%" (toString sa.cs_next_var)]) s` by
-       simp[inst_dload_in_section_def] >>
-     mp_tac (Q.INST [`i` |-> `mk_inst sa.cs_next_id CODESIZE []
-                                  [STRING #"%" (toString sa.cs_next_var)]`,
-        `u` |-> `update_var (STRING #"%" (toString sa.cs_next_var)) w s`]
-        straight_line_origin_ptr_edge) >>
-     simp[mk_inst_def, is_terminator_def,
-          ptr_inst_ok_def, access_ok_def, taint_ok_def,
-          source_memory_write_ranges_def, source_memory_read_ranges_def,
-          inst_mem_below_frontier_def, inst_dload_in_section_def] >>
-     simp[GSYM mk_inst_def, venomExecSemanticsTheory.step_inst_non_invoke,
-          update_var_def]) >>
-  `~(update_var (STRING #"%" (toString sa.cs_next_var)) w s
-       with vs_inst_idx := SUC s.vs_inst_idx).vs_halted` by
-    simp[update_var_def] >>
-  drule (cj 1 gas_origin_ptr_path_rules) >> strip_tac >>
-  drule (cj 2 gas_origin_ptr_path_rules) >>
-  disch_then (qspec_then `[]` mp_tac) >> simp[] >>
-  disch_then irule >>
-  irule (cj 1 gas_origin_ptr_path_rules) >> simp[update_var_def]
+  simp[] >> gen_tac >>
+  mp_tac (Q.INST [`opc` |-> `CODESIZE`, `args` |-> `[]:operand list`,
+                  `a` |-> `sa`, `b` |-> `sb`, `w` |-> `w`,
+                  `D` |-> `D`, `lo` |-> `lo`, `ctx` |-> `ctx`,
+                  `func` |-> `func`, `PG` |-> `PG`, `G` |-> `G`,
+                  `tn` |-> `tn`, `s` |-> `s`, `explicit` |-> `explicit`]
+    typedCopyOriginPtrBaseTheory.typed_copy_origin_ptr_emit_op_path) >>
+  simp[is_terminator_def, inst_mem_below_frontier_def, inst_dload_in_section_def,
+       ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
+       source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+  simp[GSYM mk_inst_def, venomExecSemanticsTheory.step_inst_non_invoke,
+       update_var_def] >>
+  disch_then (qx_choose_then `out` strip_assume_tac) >> gvs[]
 QED
 
 Theorem self_codesize_sim_full[local]:
