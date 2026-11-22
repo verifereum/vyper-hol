@@ -498,8 +498,10 @@ Resume rb_compile_builtin_dispatch_body_for[namedconst]:
   BETA_TAC >>
   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value_for]) >>
   gen_tac >> strip_tac >>
-  rename1 `rb_operand_ok_for source_checks op` >> Cases_on `op` >>
-  simp[rb_step_for_def, as_ptr_val_def, rb_value_ok_for_def, rb_mk_ptr_for]
+  rename1 `rb_operand_ok_for source_checks op` >>
+  Cases_on `is_word_type ret_ty` >> Cases_on `op` >>
+  simp[rb_step_for_def, as_stack_val_def, as_ptr_val_def,
+       rb_value_ok_for_def, rb_mk_ptr_for, rb_operand_ok_for_def]
 QED
 
 Resume rb_compile_builtin_dispatch_body_for[boolchain]:
