@@ -5312,12 +5312,20 @@ Theorem create_dalloca_cut_bound[local]:
   w2n s.vs_fmp + venomLayout$ceil32 (w2n sz) < dimword (:256)
 Proof
   strip_tac >>
-  drule_all bodyFullIfExpReachTheory.body_inv_no_phi >> strip_tac >>
+  `!b. MEM b func.fn_blocks ==> phi_prefix_length b.bb_instructions = 0` by
+    (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+       qpat_assum `MEM func ctx.ctx_functions`
+         (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi o CONJ inv))) >>
   `frag_reachable ctx func s func inst s` by
     (irule contextRawReachableTheory.frag_reachable_start >>
      drule_all contextCodegenRelPropsTheory.lookup_instruction_active >> simp[]) >>
-  drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >>
-  disch_then (drule_then mp_tac) >>
+  `dalloca_fmp_headroom inst s` by
+    (qpat_assum `gas_origin_ptr_path _ _ _ (OK s,G,tn)`
+       (mp_then (Pat `gas_origin_ptr_path _ _ _ _`) mp_tac
+         bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom) >>
+     disch_then (qspecl_then [`func`,`inst`,`s`] mp_tac) >> simp[] >>
+     disch_then irule >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `dalloca_fmp_headroom inst s` mp_tac >>
   simp[dalloca_fmp_headroom_def,arithmeticTheory.MAX_DEF] >>
   rw[] >> decide_tac
 QED
