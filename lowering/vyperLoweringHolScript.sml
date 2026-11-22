@@ -56,6 +56,7 @@ Ancestors
   immutableLocationProps
   loweringShapeDefs
   loweringShapeProps
+  runtimeUnitShapeMods ctorDeployShapeMods
   ctorShapeProps ctorUnitShape
   intCallStep extCallOracleStep intCallLookup intCallCallee intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
   bodyFullShadowBodyInvLowering
