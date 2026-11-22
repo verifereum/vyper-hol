@@ -36,6 +36,7 @@ Proof
     (mp_tac o CONJUNCT1 o REWRITE_RULE [locals_kept_def]) >>
   disch_then irule >>
   qexistsl_tac [`b`, `n`, `sz`] >> simp[] >> rpt strip_tac >>
+  drule dynarray_len_untupled_imp_at >> strip_tac >>
   drule_all local_val_at_dynarray_apart >> simp[]
 QED
 

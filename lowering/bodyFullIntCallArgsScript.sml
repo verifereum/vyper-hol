@@ -9283,7 +9283,7 @@ Proof
      qpat_assum `!path ty. type_path_offset (cenv_without_defaults cenv name) ty path = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> ntac 2 disch_tac >>
      simp[wb_frame_def, locals_kept_def, loweringPostsTheory.popped_kept_def,
-          loweringPostsTheory.dynarray_len_at_def, cenv_without_defaults_def]) >>
+          loweringPostsTheory.dynarray_len_untupled_def, cenv_without_defaults_def]) >>
   `!G tn. ghost_kept_at lo (cenv_without_defaults cenv name) es0 sa G0 tn0 s0 G tn =
           ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn` by
     (qpat_assum `!sc s n b k. local_region (cenv_without_defaults cenv name) sc s n b k <=> _` mp_tac >>

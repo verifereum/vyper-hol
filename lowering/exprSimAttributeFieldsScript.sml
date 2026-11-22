@@ -270,8 +270,8 @@ Proof
   simp[type_path_offset_def]
 QED
 
-(* A dynamic array where local_path_at puts it in a local has its length
-   word exempt in locals_kept. *)
+(* A dynamic array where local_path_at puts it in a local has a length
+   word at that offset in the declared layout. *)
 Theorem local_path_at_dynarray_len_at:
   !cenv cx env es n k etv m.
     expr_sim_inv cenv cx env es /\

@@ -14,7 +14,7 @@ Theorem pop_path_wb_frame:
   !func cenv es es' s u id locbase sz k w sa entry updated hnew path arr etv n.
   local_ptrs_rel func cenv es.scopes s /\
   local_region cenv es.scopes s id locbase sz /\ k + 32 <= sz /\
-  dynarray_len_at cenv id k /\
+  dynarray_len_untupled cenv id k /\
   u.vs_memory = (mstore (locbase + k) w s).vs_memory /\
   u.vs_allocas = s.vs_allocas /\
   (!x v. not_fresh_at sa x /\ lookup_var x s = SOME v ==>

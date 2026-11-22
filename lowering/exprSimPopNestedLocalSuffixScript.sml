@@ -4,7 +4,7 @@ Ancestors
   venomState words arithmetic list exprSimHyps exprSimHypsDefs vyperTypeEnv
   exprSimPopNestedLocalPtrs exprSimWordArgs exprLoweringProps compileEnv loweringStateRelDefs
   loweringPosts localPtrsProps exprSimAttributeFields finite_map valueEncoding
-  exprSimVVFrame
+  exprSimVVFrame tuplePlaceGeometry
 
 Theorem memory_pop_result_address:
   vs <> [] /\ LENGTH vs < dimword (:256) /\
@@ -44,6 +44,33 @@ Proof
   goal_assum (drule_at Any) >> fs[expr_body_pre_def] >> metis_tac[]
 QED
 
+Theorem mutable_path_dynarray_len_untupled[local]:
+  expr_sim_inv cenv cx env es /\
+  cenv.ce_var_type id = SOME root_ty /\
+  evaluate_type (get_tenv cx) root_ty = SOME root_tv /\
+  mutable_place_path root_tv path /\
+  mem_path_offset root_tv path = SOME (k,ArrayTV etv (Dynamic n)) ==>
+  dynarray_len_untupled cenv id k
+Proof
+  strip_tac >>
+  `tuple_place_no_tuple_step root_tv path` by
+    metis_tac[tuple_place_mutable_path_barrier] >>
+  drule_all mem_path_offset_type >> strip_tac >>
+  `?et. pt = ArrayT et (Dynamic n)` by
+    (qpat_x_assum `evaluate_type _ pt = _` mp_tac >>
+     Cases_on `pt` >> simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
+  gvs[dynarray_len_untupled_def] >>
+  qexistsl_tac [`path`, `et`, `n`] >> simp[] >> rpt strip_tac >>
+  drule_all type_path_offset_mem >> strip_tac >>
+  `?tvs. ptv = TupleTV tvs` by
+    (qpat_x_assum `evaluate_type _ (TupleT _) = _` mp_tac >>
+     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs(), PULL_EXISTS] >>
+     rpt strip_tac >> qexists_tac `tvs` >> simp[]) >>
+  qpat_x_assum `tuple_place_no_tuple_step _ _`
+    (mp_tac o REWRITE_RULE [tuple_place_no_tuple_step_def]) >>
+  disch_then (qspecl_then [`pre`, `sb`, `rest`, `j`, `tvs`] mp_tac) >> simp[]
+QED
+
 Theorem pop_memory_live_suffix_post:
   expr_has_effect e /\
   expr_sim_inv cenv cx env es /\
@@ -70,6 +97,8 @@ Theorem pop_memory_live_suffix_post:
   type_memory_size entry.type <= sz /\
   mem_path_offset entry.type path = SOME (k,ArrayTV etv (Dynamic n)) /\
   local_path_at cenv cx id k (ArrayTV etv (Dynamic n)) /\
+  (?root_ty. cenv.ce_var_type id = SOME root_ty /\
+             evaluate_type (get_tenv cx) root_ty = SOME entry.type) /\
   evaluate_subscripts entry.type entry.value path = INL (ArrayV (DynArrayV vs)) /\
   vs <> [] /\
   assign_subscripts entry.type entry.value path
@@ -102,8 +131,8 @@ Proof
     (drule_all pop_path_local_ptrs_rel >> simp[]) >>
   `stmt_state_rel H ctx func cenv cx (mid with scopes := scopes') u` by
     (drule_all pop_path_stmt_state_rel >> simp[]) >>
-  `dynarray_len_at cenv id k` by
-    (drule_all local_path_at_dynarray_len_at >> simp[]) >>
+  `dynarray_len_untupled cenv id k` by
+    (irule mutable_path_dynarray_len_untupled >> metis_tac[]) >>
   `wb_frame cenv mid (mid with scopes := scopes') sm s u` by
     (qspecl_then [`func`, `cenv`, `mid`, `mid with scopes := scopes'`, `s`, `u`,
                   `id`, `w2n b`, `sz`, `k`, `n2w (LENGTH vs - 1)`, `sm`, `entry`,

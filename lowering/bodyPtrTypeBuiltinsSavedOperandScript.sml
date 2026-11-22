@@ -39,7 +39,8 @@ Proof
           qpat_x_assum `locals_kept _ _ _ _ _`
             (assume_tac o CONJUNCT1 o REWRITE_RULE [locals_kept_def]) >>
           first_x_assum irule >> qexistsl_tac [`b`, `n`, `sz`] >> simp[] >>
-          rpt strip_tac >> first_x_assum drule >> decide_tac) >>
+          rpt strip_tac >> drule exprSimPropsTheory.dynarray_len_untupled_imp_at >> disch_tac >>
+          qpat_x_assum `!k. dynarray_len_at _ _ k ==> _` drule >> decide_tac) >>
       rpt strip_tac >>
       qpat_x_assum `ghost_kept _ _ _ _ _ _ _ _` mp_tac >>
       simp[ghost_kept_def] >> strip_tac >>
