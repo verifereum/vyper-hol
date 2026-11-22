@@ -17,6 +17,7 @@ Theorem raw_call_prefix_prepared_full:
   gas ov op result s1 s2 s3 s4 s5 s6 s7 xs es s0 G0 tn0 k Q R.
  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
  body_exprs_full_ok cx (a::d::kws) /\
+ body_const_cells_agree [(NONE,tops)] cx env es /\
  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
  compile_expr cenv ty (Call ann (RawCallTarget flags) (a::d::kws) NONE) sa=(vv,sb) /\
  compile_expr cenv ty
@@ -303,6 +304,18 @@ Proof
                simp[cj 6 evaluate_storage_trace_frame]) >>
   qx_genl_tac [`gsA`,`av`,`esA`,`tA`,`GA`,`tnA`,`gsD`,`bs`,`esD`,`tD`,`GD`,`tnD`] >>
   strip_tac >>
+  `well_typed_expr env a /\ well_typed_expr env d` by
+    (qpat_assum `expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es`
+       (mp_tac o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     simp[vyperTypeSystemTheory.well_typed_expr_def]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env esA` by
+    (irule body_const_cells_agree_expr_read >>
+     qpat_assum `bind (eval_expr cx a) (read_result cx) _ = (INL av,esA)` (irule_at Any) >>
+     simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env esD` by
+    (irule body_const_cells_agree_expr_read >>
+     qpat_assum `bind (eval_expr cx d) (read_result cx) _ = (INL (BytesV bs),esD)` (irule_at Any) >>
+     simp[]) >>
   `valid_horizon cx st0 (storage_trace_horizon esD.storage_trace)
      esD.storage_trace` by
     (qpat_assum `storage_trace_domain cx st0 esD.storage_trace`

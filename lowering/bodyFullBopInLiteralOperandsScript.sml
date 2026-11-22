@@ -14,6 +14,7 @@ Ancestors
 Theorem bop_in_literal_operands_clean_full_halt:
   !args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
    ann bop e1 a t n elems base tv st0 es sa xs sb shadow_sa s0 G0 tn0.
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env
       (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) base /\
     (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
@@ -204,6 +205,12 @@ Proof
      pure_rewrite_tac[APPEND_NIL] >>
      qpat_x_assum `mid with gas_obs := [] = mid`
        (fn th => rewrite_tac[th])) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`well_typed_expr env h` by
+       qpat_assum `expr_body_pre _ cx env h _`
+         (ACCEPT_TAC o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     irule body_const_cells_agree_expr_read >>
+     goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >> simp[]) >>
   `expr_sim_inv cenv cx env mid /\ value_has_type tv v` by
     (`expr_body_pre cenv cx env h
         (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
@@ -244,7 +251,7 @@ Proof
      conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
      conj_tac >- (rpt strip_tac >>
        qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _` drule >>
-       simp[] >> metis_tac[expr_post_def]) >>
+       simp[expr_post_def]) >>
      conj_tac >-
        (qexistsl_tac [`shadow_func`, `shadow_s1`] >> asm_rewrite_tac[] >>
         rpt strip_tac >>
@@ -253,7 +260,6 @@ Proof
                   cj 2 compile_expr_grows]) >>
      conj_tac >- metis_tac[local_ptrs_reserved_next_var] >>
      conj_tac >- metis_tac[fn_has_code_mid, compileEnvTheory.cs_extends_refl] >>
-     conj_tac >- metis_tac[] >>
      conj_tac >-
        (irule return_buf_frame_frame >> goal_assum (drule_at Any) >>
         simp[] >> metis_tac[expr_post_def]) >>
@@ -340,6 +346,7 @@ QED
 Theorem bop_in_literal_operands_clean_full:
   !args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
    ann bop e1 a t n elems base tv st0 es sa xs sb shadow_sa s0 G0 tn0.
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env
       (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) base /\
     (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
@@ -398,6 +405,7 @@ QED
 Theorem bop_in_literal_operands_full:
   !args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
    ann bop e1 a t n elems base tv st0 es sa xs sb shadow_sa s0 G0 tn0.
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env
       (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) base /\
     (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\

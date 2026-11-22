@@ -251,6 +251,7 @@ Theorem compile_for_nonslot_array_frag_full:
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (For id typ (Array e) n body) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
@@ -513,6 +514,7 @@ Theorem for_array_expr_cut_frag_full:
   supported_stmt tops bindings (For id typ (Array e) n loop_body) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
       (For id typ (Array e) n loop_body) ==> occurs_abi_decode_target target tops) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\ locals_alloc_ok cenv env /\
   type_stmt env ret_ty (For id typ (Array e) n loop_body) = SOME env' /\
   ~supported_expr_exists (const_name_root cx) e /\
@@ -587,6 +589,5 @@ Proof
      qexistsl [`bd`,`ctx`,`id`,`loop_body`,`n`,`tops`,`typ`] >> simp[]) >>
   irule for_array_prepared_expr_cut_frag_full >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  conj_tac >- (qexists_tac `tops` >> simp[]) >>
-  qexistsl [`env`,`env'`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+  qexistsl [`env`,`env'`,`tops`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED

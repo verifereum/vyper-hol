@@ -15,6 +15,7 @@ Theorem raw_revert_body_full_from_value:
          (lower_value compile_expr cenv ty (gas_shadow_expr e))) /\
     body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Call ann RawRevert args dflt) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Call ann RawRevert args dflt) es) ==>

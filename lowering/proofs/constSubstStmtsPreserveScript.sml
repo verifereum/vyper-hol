@@ -7,6 +7,7 @@ Ancestors
   supportedExprForms supportedDecls vyperTypeContract vyperTypeCallGraph vyperAST
   exprSimHypsDefs exprLowering compileVyper vyperTypeSystem vyperTypeEnv
   vyperTypeContractContext vyperTypeContractStaticMaps vyperTypeEnvExtension
+  vyperTypeContractFunction
   placeTypingBuildProps constSubstMods finite_map list alist
 
 Theorem subst_consts_stmt_bindings:
@@ -1183,4 +1184,164 @@ Proof
      constSubstModsTheory.subst_consts_mods_singleton] >>
   metis_tac[checked_const_substituted_function_support,
             checked_const_substitution_const_name_free]
+QED
+
+Theorem constant_expr_no_msg_gas[local]:
+  (!e. constant_expr mods e ==>
+     ~supported_expr_exists expr_msg_gas_root e) /\
+  (!es. EVERY (constant_expr mods) es ==>
+     ~supported_exprs_exists expr_msg_gas_root es) /\
+  (!fs. EVERY (constant_expr mods) (MAP SND fs) ==>
+     ~supported_fields_exists expr_msg_gas_root fs)
+Proof
+  ho_match_mp_tac const_local_refs_ind >>
+  simp[constant_expr_def, supported_expr_exists_def, expr_msg_gas_root_def] >>
+  rpt strip_tac >>
+  rename1 `constant_builtin bt` >>
+  Cases_on `bt` >> gvs[constant_builtin_def, expr_msg_gas_root_def]
+QED
+
+Theorem subst_consts_expr_no_msg_gas[local]:
+  (!env e.
+    (!id r. ALOOKUP env id = SOME r ==> ~supported_expr_exists expr_msg_gas_root r) /\
+    ~supported_expr_exists expr_msg_gas_root e ==>
+    ~supported_expr_exists expr_msg_gas_root (subst_consts_expr env e)) /\
+  (!env t.
+    (!id r. ALOOKUP env id = SOME r ==> ~supported_expr_exists expr_msg_gas_root r) /\
+    ~supported_target_exists expr_msg_gas_root t ==>
+    ~supported_target_exists expr_msg_gas_root (subst_consts_btarget env t)) /\
+  (!env es.
+    (!id r. ALOOKUP env id = SOME r ==> ~supported_expr_exists expr_msg_gas_root r) /\
+    ~supported_exprs_exists expr_msg_gas_root es ==>
+    ~supported_exprs_exists expr_msg_gas_root (subst_consts_exprs env es)) /\
+  (!env opt.
+    (!id r. ALOOKUP env id = SOME r ==> ~supported_expr_exists expr_msg_gas_root r) /\
+    ~supported_opt_exists expr_msg_gas_root opt ==>
+    ~supported_opt_exists expr_msg_gas_root (subst_consts_opt env opt)) /\
+  (!env fs.
+    (!id r. ALOOKUP env id = SOME r ==> ~supported_expr_exists expr_msg_gas_root r) /\
+    ~supported_fields_exists expr_msg_gas_root fs ==>
+    ~supported_fields_exists expr_msg_gas_root (subst_consts_fields env fs))
+Proof
+  ho_match_mp_tac subst_consts_expr_ind >>
+  simp[subst_consts_expr_def, supported_expr_exists_def, expr_msg_gas_root_def] >>
+  rpt strip_tac >> gvs[]
+  >- (Cases_on `ns` >>
+      simp[subst_consts_expr_def, supported_expr_exists_def, expr_msg_gas_root_def] >>
+      Cases_on `ALOOKUP env id` >>
+      gvs[supported_expr_exists_def, expr_msg_gas_root_def] >> metis_tac[]) >>
+  TRY (rename1 `expr_msg_gas_root (Builtin _ bi _)` >>
+       Cases_on `bi` >> gvs[expr_msg_gas_root_def] >>
+       rename1 `expr_msg_gas_root (Builtin _ (Env eb) _)` >>
+       Cases_on `eb` >> gvs[expr_msg_gas_root_def]) >>
+  metis_tac[]
+QED
+
+Theorem module_consts_defaults_no_msg_gas:
+  check_contract mode layouts addr mods = SOME art /\
+  ALOOKUP mods NONE = SOME tops /\
+  constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
+  ~supported_exprs_exists expr_msg_gas_root ds ==>
+  ~supported_exprs_exists expr_msg_gas_root (subst_consts_exprs (module_consts_env tops []) ds)
+Proof
+  strip_tac >> irule (cj 3 subst_consts_expr_no_msg_gas) >> simp[] >>
+  rpt strip_tac >> metis_tac[cj 1 constant_expr_no_msg_gas, module_consts_env_constant_expr]
+QED
+
+Theorem checked_singleton_internal_function_body:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops ==>
+  check_function_body layouts addr [(NONE,tops)] art NONE Internal mut nr args dflts ret ss
+Proof
+  strip_tac >>
+  Cases_on `mode` >> fs[]
+  >- (irule check_contract_deploy_function_body_MEM >> simp[] >>
+      qexistsl_tac [`name`, `rr`] >> simp[]) >>
+  irule check_contract_runtime_function_body_MEM >> simp[] >>
+  qexistsl_tac [`name`, `rr`] >> simp[] >>
+  match_mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `in_deploy` |-> `F`,
+    `art` |-> `art`] check_contract_main_module_allocated) >>
+  simp[]
+QED
+
+Theorem checked_const_substituted_defaults:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+  constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A ==>
+  MAP expr_type (subst_consts_exprs (module_consts_env tops []) dflts) =
+    MAP expr_type dflts /\
+  (!k. int_calls_exprs (DROP k (subst_consts_exprs (module_consts_env tops []) dflts)) =
+    int_calls_exprs (DROP k dflts)) /\
+  ~supported_exprs_exists (const_name_root_mods [(NONE,tops)])
+    (subst_consts_exprs (module_consts_env tops []) dflts) /\
+  (!target. supported_exprs_exists (expr_abi_decode_target_root target)
+      (subst_consts_exprs (module_consts_env tops []) dflts) ==>
+    supported_exprs_exists (expr_abi_decode_target_root target) dflts)
+Proof
+  strip_tac >>
+  `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
+  `check_function_body layouts addr [(NONE,tops)] art NONE Internal mut nr args dflts ret ss` by
+    (drule_all_then ACCEPT_TAC checked_singleton_internal_function_body) >>
+  `!id r. ALOOKUP (module_consts_env tops []) id = SOME r ==>
+     constant_expr [(NONE,tops)] r /\ const_local_refs r = []` by
+    (rpt strip_tac >> drule_all_then strip_assume_tac checked_module_consts_env_replacement >> first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (irule const_subst_preserves_arg_types >>
+      irule (cj 4 const_subst_well_typed_annotations) >>
+      qexists_tac `defaults_env (function_entry_env art [(NONE,tops)] NONE Internal args)` >>
+      rpt conj_tac >> TRY (fs[check_function_body_def] >> NO_TAC) >>
+      irule checked_const_subst_typed_names >>
+      qexistsl_tac [`addr`, `art`, `layouts`, `mode`] >>
+      simp[defaults_env_def, function_entry_env_def, artifact_env_def,
+           FOLDL_extend_local_args_static]) >>
+  conj_tac
+  >- (simp[constSubstCorrectTheory.subst_consts_exprs_map, GSYM listTheory.MAP_DROP] >>
+      rewrite_tac[GSYM constSubstCorrectTheory.subst_consts_exprs_map] >>
+      irule (cj 3 subst_consts_expr_int_calls) >>
+      metis_tac[constant_expr_no_internal_calls]) >>
+  conj_tac
+  >- (irule (cj 3 subst_consts_expr_const_name_free) >>
+      simp[] >> metis_tac[closed_constant_no_const_name]) >>
+  gen_tac >> spose_not_then strip_assume_tac >>
+  `~supported_exprs_exists (expr_abi_decode_target_root target)
+     (subst_consts_exprs (module_consts_env tops []) dflts)` by
+    (irule (cj 3 subst_consts_expr_abi_decode_target) >>
+     metis_tac[constant_expr_no_abi_decode]) >>
+  fs[]
+QED
+
+Theorem checked_const_substituted_defaults_typed:
+  check_contract cx.in_deploy cx.layouts cx.txn.target [(NONE,tops)] = SOME art /\
+  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+  env_context_consistent env cx /\
+  frame_maps env art /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops ==>
+  well_typed_exprs (defaults_env (env with current_src := NONE))
+    (subst_consts_exprs (module_consts_env tops []) dflts)
+Proof
+  strip_tac >>
+  `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
+  `check_function_body cx.layouts cx.txn.target [(NONE,tops)] art NONE Internal mut nr
+      args dflts ret ss` by
+    (drule_all_then ACCEPT_TAC checked_singleton_internal_function_body) >>
+  qabbrev_tac `entry = function_entry_env art [(NONE,tops)] NONE Internal args` >>
+  `static_maps_transfer_env entry (entry with
+    <|toplevel_vtypes := env.toplevel_vtypes; flag_members := env.flag_members|>)` by
+    (simp[Abbr `entry`] >>
+     irule vyperTypeContractFunctionTheory.function_entry_env_static_maps_transfer >>
+     fs[frame_maps_def] >> qexists_tac `cx` >> simp[]) >>
+  `well_typed_exprs (defaults_env entry)
+    (subst_consts_exprs (module_consts_env tops []) dflts)` by
+    fs[check_function_body_def, Abbr `entry`, constSubstModsTheory.consts_env_mods_singleton,
+       constSubstModsTheory.subst_consts_mods_singleton] >>
+  qpat_assum `well_typed_exprs (defaults_env entry) _`
+    (mp_then Any mp_tac (cj 4 well_typed_static_maps_transfer)) >>
+  disch_then (qspec_then `defaults_env (env with current_src := NONE)` mp_tac) >>
+  simp[defaults_env_def] >>
+  qpat_assum `static_maps_transfer_env _ _`
+    (strip_assume_tac o REWRITE_RULE [vyperTypeContractFunctionTheory.static_maps_transfer_env_def]) >>
+  fs[Abbr `entry`, function_entry_env_def, artifact_env_def,
+     FOLDL_extend_local_args_static, vyperTypeInvariantsTheory.env_context_consistent_def,
+     vyperContextTheory.get_tenv_def] >>
+  disch_then irule >> fs[frame_maps_def]
 QED

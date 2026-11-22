@@ -11,7 +11,7 @@ Ancestors
   gasShadowCompileHelpers gasShadowCompileStmtHelpers
   entryReachBodyFirstEmissionExprSupport entryReachBodyFirstEmissionExpr
   externalEntryShape gasShadowState gasShadowCompileConvert
-  evalNoHalt exprSimDefs gasOutcomeFull
+  evalNoHalt exprSimDefs gasOutcomeFull bodyFullPreds list
   bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
 Libs
   pairLib
@@ -132,6 +132,7 @@ QED
 Theorem extcall_request_full:
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env
     (Call ann (ExtCall stat skip (fname,ats,rt) opts) args dr) es /\
   (!st target mid n. eval_exprs cx (TAKE 1 args) st = (INL target,mid) /\
@@ -342,6 +343,24 @@ Proof
   `!e st. MEM e kw_es /\ expr_sim_inv cenv cx env st ==>
      expr_body_pre cenv cx env e st` by
     (simp[Abbr `kw_es`] >> metis_tac[rich_listTheory.MEM_DROP_IMP]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (irule body_const_cells_agree_exprs >>
+     qpat_assum `eval_exprs cx [addr] (es with gas_obs := obs1) = _` (irule_at Any) >>
+     simp[vyperTypeSystemTheory.well_typed_expr_def] >>
+     qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _`
+       (mp_tac o REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def,
+         cj 13 vyperTypeSystemTheory.well_typed_expr_def]) >>
+     simp[vyperTypeSystemTheory.well_typed_expr_def]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env ee` by
+    (irule body_const_cells_agree_exprs >>
+     qpat_assum `eval_exprs cx xs (mid with gas_obs := obs2) = _` (irule_at Any) >>
+     simp[constSubstCorrectTheory.frame_well_typed_exprs_every, EVERY_MEM] >>
+     rpt strip_tac >>
+     qpat_assum `!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==> _`
+       (qspecl_then [`e`,`mid`] mp_tac) >>
+     (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then (ACCEPT_TAC o cj 2 o
+       REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def])) >>
   `MAP expr_type kw_es = MAP (ext_call_kw_type rt) opts` by
     gvs[Abbr `kw_es`] >>
   `ci_mono sa s1 /\ ci_mono s1 s2` by

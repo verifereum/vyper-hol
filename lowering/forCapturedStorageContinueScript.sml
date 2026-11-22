@@ -40,6 +40,7 @@ Theorem for_captured_storage_continue_full:
   (!H. dead_lo_ok H (DF H) lo c cx) /\
   (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_no_wrap inst t) /\
   ce_locals_declared c env /\ locals_alloc_ok c env /\ expr_body_pre c cx env e es /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_type e = ArrayT typ bd /\ bound_length bd <= n /\
   evaluate_type (get_tenv cx) typ = SOME tyv /\
   storage_trace_domain cx st0 em.storage_trace /\
@@ -90,6 +91,12 @@ Proof
        qpat_assum `!tail. eval_expr cx e _ = _` (qspec_then `[]` mp_tac) >>
        simp[NoAsms,Abbr `start`,eq])) >>
   `expr_body_pre c cx env e start` by simp[Abbr `start`] >>
+  `body_const_cells_agree [(NONE,tops)] cx env em` by
+    (irule body_const_cells_agree_expr >>
+     qpat_assum `eval_expr cx e start = _`
+       (irule_at (Pat `eval_expr _ _ _ = _`)) >>
+     drule_then (assume_tac o cj 2) exprBodyPrePropsTheory.expr_body_pre_static_facts >>
+     simp[Abbr `start`]) >>
   suspend "capture"
 QED
 
@@ -220,7 +227,8 @@ Resume for_captured_storage_continue_full[rounds]:
     for_captured_storage_live (DF,lo,d,ctx,func,cx,c,id,env,typ,loop_body)
       (start,sa,s0,G0,tn0) (em,se,bop,tr,slot,tyv,bd,vs,len)
       (lvo,idx,cond) (p,dst,nb,sd) (H,k,rs,ee,GG,tt,s)` >>
-  qabbrev_tac `Inv = \H rs ee GG tt s. (?k. Live H k rs ee GG tt s) /\
+  qabbrev_tac `Inv = \H rs ee GG tt s.
+    body_const_cells_agree [(NONE,tops)] cx env ee /\ (?k. Live H k rs ee GG tt s) /\
     (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u)` >>
   qabbrev_tac `Done = \H ee GG tt t.
     for_array_loop_post (DF,lo,d,ctx,func) c cx lctx
@@ -460,6 +468,7 @@ Resume for_captured_storage_continue_full[induct]:
         qpat_assum `!H. valid_horizon _ _ H em.storage_trace ==> _ /\ for_captured_storage_live _ _ _ _ _ _`
           (qspec_then `H` (drule_then strip_assume_tac)) >>
         simp[NoAsms,Abbr `Inv`] >>
+        conj_tac >- first_assum ACCEPT_TAC >>
         conj_tac >- (qexists `0` >> simp[NoAsms,Abbr `Live`] >> first_assum ACCEPT_TAC) >>
         qpat_assum `gas_origin_ptr_path _ (u,Gu,tu) [] (OK z,G,tn)`
           (mp_then (Pos hd) mp_tac gas_origin_ptr_path_dalloca_no_wrap) >>
@@ -481,22 +490,31 @@ Resume for_captured_storage_continue_full[cons]:
   conj_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   `!H. valid_horizon cx st0 H ei.storage_trace ==> ?k. Live H k (a::rs) ei g tt s` by
     (qx_gen_tac `H` >> disch_tac >> qpat_assum `!H. valid_horizon _ _ H ei.storage_trace ==> Inv _ _ _ _ _ _`
-       (qspec_then `H` (drule_then mp_tac)) >> simp[NoAsms,Abbr `Inv`]) >>
+       (qspec_then `H` (drule_then mp_tac)) >> simp[NoAsms,Abbr `Inv`] >> strip_tac >> first_assum ACCEPT_TAC) >>
+  `body_const_cells_agree [(NONE,tops)] cx env ei` by
+    (qpat_assum `!H. valid_horizon _ _ H ei.storage_trace ==> Inv _ _ _ _ _ _`
+       (qspec_then `storage_trace_horizon ei.storage_trace` mp_tac) >>
+     qpat_assum `storage_trace_domain cx st0 ei.storage_trace`
+       (fn th => simp[NoAsms,Abbr `Inv`,REWRITE_RULE [storage_trace_domain_def] th]) >>
+     disch_then (ACCEPT_TAC o cj 1)) >>
   `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u` by
     (qpat_assum `!H. valid_horizon _ _ H ei.storage_trace ==> Inv _ _ _ _ _ _`
        (qspec_then `storage_trace_horizon ei.storage_trace` mp_tac) >>
      qpat_assum `storage_trace_domain cx st0 ei.storage_trace`
        (fn th => simp[NoAsms,Abbr `Inv`,REWRITE_RULE [storage_trace_domain_def] th]) >>
-     disch_then (ACCEPT_TAC o CONJUNCT2)) >>
+     disch_then (ACCEPT_TAC o cj 3)) >>
   irule gas_outcome_full_post_path >>
   qexists `\H res ee GG tn t. ee.gas_obs = [] /\ ~t.vs_halted /\
-    ?b. res = INL b /\ (b ==> Done H ee GG tn t) /\ (~b ==> ?j. Live H j rs ee GG tn t)` >>
+    ?b. res = INL b /\ (b ==> Done H ee GG tn t) /\ (~b ==> body_const_cells_agree [(NONE,tops)] cx env ee /\ ?j. Live H j rs ee GG tn t)` >>
   BETA_TAC >> conj_tac >-
     (rpt gen_tac >> strip_tac >>
      rpt (conj_tac >- first_assum ACCEPT_TAC) >> rename1 `_ = INL b` >> qexists `b` >>
      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
      disch_tac >> simp[NoAsms,Abbr `Inv`] >>
-     conj_tac >- (qpat_assum `~b ==> ?j. Live _ _ _ _ _ _ _` irule >> first_assum ACCEPT_TAC) >>
+     qpat_assum `~b ==> body_const_cells_agree _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- (qpat_assum `Live H _ rs ee _ _ _` (irule_at Any)) >>
      qpat_assum `gas_origin_ptr_path _ (s,g,tt) _ (OK _,_,_)`
        (mp_then (Pos hd) mp_tac gas_origin_ptr_path_dalloca_no_wrap) >> asm_rewrite_tac[]) >>
   suspend "cons_stages"
@@ -521,6 +539,11 @@ Resume for_captured_storage_continue_full[cons_stages]:
      pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `!H. valid_horizon _ _ H ei.storage_trace ==> Live _ _ _ _ _ _ _` mp_tac >>
   simp[NoAsms,Abbr `Live`,Abbr `Done`,Abbr `Round`,Abbr `Exit`] >> disch_tac >>
+  qpat_assum `cx_tops cx = tops` (fn th =>
+    qpat_assum `body_const_cells_agree [(NONE,tops)] cx env ei`
+      (assume_tac o PURE_REWRITE_RULE [GSYM th])) >>
+  qpat_assum `cx_tops cx = tops` (fn th =>
+    pure_rewrite_tac [GSYM th]) >>
   irule for_captured_storage_round_from_head >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac >- (qexists `len - SUC (LENGTH rs)` >> first_assum ACCEPT_TAC) >>

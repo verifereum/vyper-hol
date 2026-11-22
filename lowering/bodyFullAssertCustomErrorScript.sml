@@ -24,6 +24,7 @@ Theorem compile_assert_custom_frag_full_from_raise:
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Assert e (AssertCustomError err)) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assert e (AssertCustomError err)) = SOME env' /\
@@ -192,6 +193,12 @@ Resume compile_assert_custom_frag_full_from_raise[false]:
     (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
                                   gas_outcome_full_zero_prefix)) >>
   drule_all assert_custom_false_source_ready >> strip_tac >>
+  `body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])` by
+    (irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx e) (read_result cx) _ = _`
+       (qspec_then `[]` (irule_at Any)) >>
+     imp_res_tac exprBodyPrePropsTheory.expr_body_pre_static_facts >>
+     simp[]) >>
   `stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
      cx lctx RetQ cenv
      (stmt_env cenv lctx ret_ty (Raise (RaiseCustomError err)))
