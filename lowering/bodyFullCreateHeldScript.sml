@@ -5489,7 +5489,7 @@ Resume create_copy_prepared_path[allocate]:
    2 ** 255 + 2 ** 64` by
     (qspecl_then [`LENGTH code + 32`,`1024`] mp_tac
        (GEN_ALL dallocaBoundsTheory.ceil32_le_multiple) >>
-     simp[wordsTheory.w2n_n2w,wordsTheory.dimword_def,wordsTheory.dimindex_256] >>
+     simp[wordsTheory.w2n_n2w,wordsTheory.dimword_def] >>
      decide_tac) >>
   drule_all (Q.INST [`s` |-> `pre`, `inst` |-> `alloc_inst`,
     `sz` |-> `n2w (LENGTH code + 32):bytes32`] create_dalloca_cut_bound) >>
