@@ -2,8 +2,9 @@
 Theory linkedOutputLayout
 Ancestors
   e2eModsDefs e2eDefs e2eEntry e2eProducers compileUnit vyperCompiler
-  deploySymSrcData immutableCodeLayout asmOptEncodingLayout asmOptimizer
-  asmWf asmSem codegenEncodingWf codegenAsmStaticWf codegen
+  deploySymSrcData runtimeSymSrcData immutableCodeLayout asmOptEncodingLayout asmOptimizer
+  asmWf asmSem asmSymSem asmDataEnv asmFinalizerPrefixStatic spillWordBounds
+  codegenEncodingWf codegenAsmStaticWf codegen
   fnPlanPlaceRevertPostamble
   lowerDloadDefs venomLayout symbolResolve
   vfmExecutionProp vfmState finite_map list rich_list words
@@ -66,4 +67,62 @@ Proof
   simp[lower_vyper_deploy_unit_mods_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[bool_case_eq] >> strip_tac >>
   drule_then ACCEPT_TAC run_deploy_lowering_data
+QED
+
+Theorem lower_vyper_runtime_unit_data_empty_mods:
+  lower_vyper_runtime_unit_mods mods exps rpolicy = SOME unit ==>
+  unit.cu_data_segment = []
+Proof
+  simp[lower_vyper_runtime_unit_mods_def] >>
+  pairarg_tac >> simp[bool_case_eq] >> strip_tac >> gvs[]
+  >- (drule_then ACCEPT_TAC run_grouped_lowering_data_empty) >>
+  drule_then ACCEPT_TAC run_lowering_data_empty
+QED
+
+Theorem finalized_codegen_code_end:
+  fin IN accepted_finalizers /\
+  codegen_assembly rpolicy unit = SOME prog /\ asm_static_wf prog /\
+  fin rpolicy prog = SOME prog' ==>
+  FLOOKUP (lo_reloc prog prog') "code_end" = SOME (LENGTH (assemble prog')) /\
+  LENGTH (assemble prog') < 65536
+Proof
+  strip_tac >>
+  drule codegen_assembly_success_shape >> strip_tac >>
+  `?prefix. prog = prefix ++ [AsmDataHeader "code_end"]` by
+    metis_tac[APPEND_ASSOC] >>
+  `asm_static_wf prog' /\ FILTER is_data_inst prog' = FILTER is_data_inst prog` by
+    (drule_all finalizer_prefix_static >> simp[]) >>
+  `?n. EVERY (\i. ~is_data_inst i) (TAKE n prog') /\
+       EVERY is_data_inst (DROP n prog')` by
+    (irule asm_data_split >> fs[asm_static_wf_def]) >>
+  `FILTER is_data_inst (TAKE n prog') = []` by simp[FILTER_EQ_NIL] >>
+  `FILTER is_data_inst (DROP n prog') = DROP n prog'` by simp[FILTER_EQ_ID] >>
+  `FILTER is_data_inst prog' = DROP n prog'` by
+    (`FILTER is_data_inst (TAKE n prog' ++ DROP n prog') = DROP n prog'` by
+       (PURE_REWRITE_TAC [FILTER_APPEND] >> asm_rewrite_tac[APPEND]) >>
+     fs[]) >>
+  `DROP n prog' = FILTER is_data_inst prefix ++ [AsmDataHeader "code_end"]` by
+    fs[FILTER_APPEND, is_data_inst_def] >>
+  `?head. prog' = head ++ [AsmDataHeader "code_end"]` by
+    (qexists_tac `TAKE n prog' ++ FILTER is_data_inst prefix` >>
+     qpat_assum `DROP n prog' = _`
+       (fn th => PURE_REWRITE_TAC [GSYM APPEND_ASSOC, GSYM th, TAKE_DROP]) >> REFL_TAC) >>
+  `asm_encoding_wf prog'` by fs[asm_static_wf_def] >>
+  `FLOOKUP (SND (compute_label_offsets prog')) "code_end" =
+     SOME (LENGTH (assemble prog'))` by
+    (irule immutable_code_end_length >> asm_rewrite_tac[] >>
+     qexists_tac `head` >> simp[]) >>
+  `~MEM (AsmLabel "code_end") prog` by
+    (drule codegen_assembly_symbols >> simp[] >> metis_tac[MEM_APPEND, MEM]) >>
+  conj_tac
+  >- (qpat_assum `~MEM (AsmLabel "code_end") prog` (fn absent =>
+        qpat_assum `FLOOKUP (SND (compute_label_offsets prog')) _ = _` (fn offset =>
+          simp_tac (srw_ss()) [lo_reloc_def, FLOOKUP_FUNION, FLOOKUP_DRESTRICT,
+            absent, offset]))) >>
+  Cases_on `compute_label_offsets prog'` >>
+  fs[asm_encoding_wf_def, symbol_size_def] >>
+  qpat_assum `!lbl off. FLOOKUP _ lbl = SOME off ==> _`
+    (qspecl_then [`"code_end"`, `LENGTH (assemble prog')`] mp_tac) >>
+  simp[] >> disch_then (mp_tac o MATCH_MP (Q.SPEC `2` encode_num_bytes_length_bound)) >>
+  simp[EVAL ``256 ** 2 : num``]
 QED
