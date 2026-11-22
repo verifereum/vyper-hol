@@ -214,4 +214,3 @@
 5 vyperTest_functional_syntax_test_address_code
 5 vyperTest_functional_syntax_test_logging
 5 vyperTest_functional_syntax_test_codehash
-5 vyperTest_functional_syntax_test_code_size

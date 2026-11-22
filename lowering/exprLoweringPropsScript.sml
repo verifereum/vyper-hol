@@ -2301,15 +2301,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem ci_mono_emit_codesize_if[local]:
-  ∀ b sa op.
-    ci_mono sa
-      (SND (if b then emit_op CODESIZE [] sa
-             else emit_op EXTCODESIZE [op] sa))
-Proof
-  rpt gen_tac >> Cases_on `b` >> simp[ci_mono_emit_op]
-QED
-
 Theorem ci_mono_compile_acc_cfn[local]:
   ∀ cfn cenv addr_e item sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
