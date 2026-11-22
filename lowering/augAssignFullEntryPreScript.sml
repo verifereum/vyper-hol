@@ -95,7 +95,8 @@ Proof
     >- (qexists_tac `bindings` >> conj_tac
         >- (qexists_tac `pt` >> simp[]) >>
         rpt strip_tac >> res_tac >> fs[optionTheory.IS_SOME_EXISTS]) >>
-    metis_tac[call_evaluation_safe_append_left]) >>
+    qpat_assum `call_evaluation_safe cx (int_calls_target t ++ int_calls_expr e)`
+      (ACCEPT_TAC o MATCH_MP call_evaluation_safe_append_left)) >>
   Cases_on `t` >> gvs[target_indices_pre_def]
 QED
 
