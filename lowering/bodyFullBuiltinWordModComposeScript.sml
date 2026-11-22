@@ -151,24 +151,36 @@ Proof
          asm_rewrite_tac[] >> strip_tac >>
          mp_tac (Q.SPECL [`s2`, `s3`, `sb`, `func`] fn_has_code_split) >>
          asm_rewrite_tac[] >> strip_tac >> asm_rewrite_tac[]) >>
-      `?sh1. lower_value compile_expr cenv ty (gas_shadow_expr e1) shadow_sa = (x,sh1) /\
-        gas_shadow_state s1 sh1` by
-        (Cases_on `lower_value compile_expr cenv ty (gas_shadow_expr e1) shadow_sa` >>
-         mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `ty`, `e` |-> `e1`] gas_shadow_stmt_lower_value) >>
-         simp[gas_shadow_compiles_def] >>
-         disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
-      `?sh2. lower_value compile_expr cenv ty (gas_shadow_expr e2) sh1 = (y,sh2) /\
-        gas_shadow_state s2 sh2` by
-        (Cases_on `lower_value compile_expr cenv ty (gas_shadow_expr e2) sh1` >>
-         mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `ty`, `e` |-> `e2`] gas_shadow_stmt_lower_value) >>
-         simp[gas_shadow_compiles_def] >>
-         disch_then (qspecl_then [`s1`, `sh1`] mp_tac) >> simp[]) >>
-      `?sh3. lower_value compile_expr cenv ty (gas_shadow_expr e3) sh2 = (z,sh3) /\
-        gas_shadow_state s3 sh3` by
-        (Cases_on `lower_value compile_expr cenv ty (gas_shadow_expr e3) sh2` >>
-         mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `ty`, `e` |-> `e3`] gas_shadow_stmt_lower_value) >>
-         simp[gas_shadow_compiles_def] >>
-         disch_then (qspecl_then [`s2`, `sh2`] mp_tac) >> simp[]) >>
+      `?sh1. lower_value compile_expr (gas_shadow_env T cenv) ty
+                (gas_shadow_expr e1) shadow_sa = (x,sh1) /\
+             gas_shadow_state s1 sh1` by
+        (`gas_shadow_compiles (lower_value compile_expr cenv ty e1)
+           (lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1))`
+           by irule gas_shadow_stmt_lower_value_env >>
+         Cases_on `lower_value compile_expr (gas_shadow_env T cenv) ty
+                     (gas_shadow_expr e1) shadow_sa` >>
+         fs[gas_shadow_compiles_def] >>
+         first_x_assum (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
+      `?sh2. lower_value compile_expr (gas_shadow_env T cenv) ty
+                (gas_shadow_expr e2) sh1 = (y,sh2) /\
+             gas_shadow_state s2 sh2` by
+        (`gas_shadow_compiles (lower_value compile_expr cenv ty e2)
+           (lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e2))`
+           by irule gas_shadow_stmt_lower_value_env >>
+         Cases_on `lower_value compile_expr (gas_shadow_env T cenv) ty
+                     (gas_shadow_expr e2) sh1` >>
+         fs[gas_shadow_compiles_def] >>
+         first_x_assum (qspecl_then [`s1`, `sh1`] mp_tac) >> simp[]) >>
+      `?sh3. lower_value compile_expr (gas_shadow_env T cenv) ty
+                (gas_shadow_expr e3) sh2 = (z,sh3) /\
+             gas_shadow_state s3 sh3` by
+        (`gas_shadow_compiles (lower_value compile_expr cenv ty e3)
+           (lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e3))`
+           by irule gas_shadow_stmt_lower_value_env >>
+         Cases_on `lower_value compile_expr (gas_shadow_env T cenv) ty
+                     (gas_shadow_expr e3) sh2` >>
+         fs[gas_shadow_compiles_def] >>
+         first_x_assum (qspecl_then [`s2`, `sh2`] mp_tac) >> simp[]) >>
       `cs_extends shadow_sa sh1 /\ cs_extends sh1 sh2 /\ cs_extends sh2 sh3` by
         (rpt conj_tac
          >- (qpat_assum `lower_value _ _ _ (gas_shadow_expr e1) shadow_sa = _`
