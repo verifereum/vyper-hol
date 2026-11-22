@@ -86,6 +86,25 @@ Proof
   rpt (BasicProvers.TOP_CASE_TAC >> gvs[exec_create_abort_iff, Once exec_create_def])
 QED
 
+(* On a selected terminal run, an oversized primitive either causes an
+   execution error or is itself the final visit and causes exceptional halt.
+   This is independent of the dispatcher and of the shape of the call. *)
+Theorem raw_reached_oversized_create_terminal:
+  EVERY wf_function ctx.ctx_functions /\
+  (!err. run_context fuel ctx vi <> Error err) /\
+  raw_reachable vi ctx fn i s /\ ~inst_create_size_ok i s ==>
+  ?p d pre.
+    trace_context fuel ctx vi = pre ++ [((p,d,i.inst_id),fn,i,s)] /\
+    run_context fuel ctx vi = Abort ExHalt_abort (halt_state (set_returndata [] s))
+Proof
+  strip_tac >> drule_all reached_on_selected_prefix >> strip_tac >>
+  `MEM ((p,d,i.inst_id),fn,i,s) (trace_context fuel ctx vi)` by simp[] >>
+  drule oversized_create_stops >> strip_tac
+  >- (drule_all reject_context_primitive_error >> simp[]) >>
+  drule_all native_trace_context_primitive_abort >>
+  metis_tac[]
+QED
+
 Theorem reject_raw_create_size:
   !tops rpolicy unit am tx vs vi fmp.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
