@@ -241,7 +241,7 @@ Theorem lower_vyper_runtime_unit_blueprint_raw_fmp:
       outcomes_accounts_typed (SOME vi.vs_outcomes) /\
       LENGTH vi.vs_call_ctx.cc_calldata < 2 ** 64 ==>
       !fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
-        dalloca_fmp_headroom inst s
+        dalloca_fmp_headroom inst s)
 Proof
   metis_tac[lower_vyper_runtime_unit_raw_headroom]
 QED

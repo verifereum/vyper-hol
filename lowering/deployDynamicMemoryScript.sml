@@ -6,7 +6,7 @@ Ancestors
   compileVyper supportedStmtTraverse supportedExprTraverse vyperAST
   contextRawReachable unitTransformDefs unitShapeDefs lowerDloadDefs
   venomInst venomState venomLayout exprSimHypsDefs fmpLowerSequenceExec
-  loweringShapeSource callRawVariant e2eEntry callTrace words list
+  loweringShapeSource callRawVariant o1PassContract e2eEntry callTrace words list
 
 val _ = Parse.hide "tops";
 val _ = Parse.hide "body";
