@@ -143,17 +143,22 @@ Proof
        (GEN_ALL gasShadowCompilePureTheory.gas_shadow_is_self_code) >>
      pure_rewrite_tac[gasShadowTheory.gas_shadow_expr_def,gasShadowTheory.gas_shadow_builtin_def,MAP] >> simp[]) >>
   gvs[] >>
-  `local_ptrs_reserved cenv shadow_sa` by
-    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
-     qexists_tac `sa` >> fs[gasShadowStateTheory.gas_shadow_state_def]) >>
+  `local_ptrs_reserved (gas_shadow_env T cenv) shadow_sa` by
+    (`local_ptrs_reserved cenv shadow_sa` by
+       (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+        qexists_tac `sa` >> fs[gasShadowStateTheory.gas_shadow_state_def]) >>
+     qpat_assum `local_ptrs_reserved cenv shadow_sa` mp_tac >>
+     pure_rewrite_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def,
+       gasShadowCompileBaseTheory.gas_shadow_env_fields] >>
+     disch_then ACCEPT_TAC) >>
   qpat_assum `as_ptr_val _ _ (compile_slice_extcode _ _ _ _ _) = (_,shadow_sb)`
     (mp_then Any mp_tac exprSimSliceExtcodeContextTheory.slice_extcode_pipeline_context) >>
   disch_then drule_all >> strip_tac >>
   `start_op' = start_op /\ gas_shadow_state st1 st1'` by
-    (qpat_x_assum `tail_run :- _` kall_tac >>
-     qpat_x_assum `child_run :- _` kall_tac >>
-     metis_tac[gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value,
-       gasShadowStateTheory.gas_shadow_compiles_def,pairTheory.FST,pairTheory.SND]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr start) _ = _` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ start _ = _` (irule_at Any) >>
+     simp[] >> irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env) >>
   gvs[] >>
   rev_drule slice_extcode_actions >> disch_then (fn th => rewrite_tac[th]) >>
   `expr_body_pre cenv cx env start es` by
@@ -230,10 +235,10 @@ Proof
      drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
      disch_then (qspecl_then [`len`,`mid`] mp_tac) >> fs[]) >>
   `len_op' = len_op /\ gas_shadow_state st2 st2'` by
-    (qpat_x_assum `tail_run :- _` kall_tac >>
-     qpat_x_assum `child_run :- _` kall_tac >>
-     metis_tac[gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value,
-       gasShadowStateTheory.gas_shadow_compiles_def,pairTheory.FST,pairTheory.SND]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr len) _ = _` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ len _ = _` (irule_at Any) >>
+     simp[] >> irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env) >>
   gvs[] >>
   `sa.cs_next_var <= st1.cs_next_var` by fs[exprLoweringPropsTheory.ci_mono_def] >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st1 x` by
@@ -336,9 +341,10 @@ Proof
      qpat_x_assum `child_run :- _` kall_tac >>
      metis_tac[slice_code_address_body_pre]) >>
   `addr_op' = addr_op /\ gas_shadow_state st3 st3'` by
-    (qpat_x_assum `tail_run :- _` kall_tac >> qpat_x_assum `child_run :- _` kall_tac >>
-     metis_tac[gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value,
-       gasShadowStateTheory.gas_shadow_compiles_def,pairTheory.FST,pairTheory.SND]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr addr) _ = _` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ addr _ = _` (irule_at Any) >>
+     simp[] >> irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env) >>
   gvs[] >>
   `st1.cs_next_var <= st2.cs_next_var` by fs[exprLoweringPropsTheory.ci_mono_def] >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st2 x` by
