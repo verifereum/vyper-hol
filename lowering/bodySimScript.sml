@@ -606,7 +606,7 @@ Proof
   disch_then
     (mp_tac o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o
       CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ok_def]) >>
-  simp[]
+  simp[] >> metis_tac[]
 QED
 
 (* Only a top-level name and a subscript name a mapping. *)
