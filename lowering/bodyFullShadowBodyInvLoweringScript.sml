@@ -300,7 +300,8 @@ Proof
     run_endS = SOME (rawS,dataS)` >>
   `gas_shadow_state start startS` by
     (mp_tac (Q.SPECL [`T`, `LENGTH (bc : word8 list)`, `imm_len tops`, `args`, `0`, `[]`, `ce`,
-       `ctor_body`, `pay`, `nr`, `key`, `trans`] gas_shadow_compile_generate_deploy) >>
+       `ctor_body`, `pay`, `nr`, `key`, `trans`]
+       (Q.INST [`sd` |-> `T`] gas_shadow_compile_generate_deploy)) >>
      simp[gas_shadow_compiles_def] >>
      disch_then (qspecl_then [`initial_compile_state "__deploy"`,
        `initial_compile_state "__deploy"`] mp_tac) >> simp[gas_shadow_state_refl]) >>
