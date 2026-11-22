@@ -2,6 +2,7 @@
 Theory s1PrefixExtCallRequestPackingContinuation
 Ancestors
   s1PrefixPreds bodyFullExtCallRequestPackingContinuation s1PrefixDefs
+  s1PrefixCompose bodyFullExtCallPackingReady exprSimExtCallCase vyperStorageTrace
 
 Theorem extcall_request_packing_continuation_prefix:
   (\addr value gas buf off len.
@@ -272,5 +273,28 @@ Theorem extcall_request_packing_continuation_prefix:
     cx st0 (eval_ext_call cx stat skip (fname,ats,rt) opts (v::(vs ++ kws)))
     (ke,zg,Gg,tng)
 Proof
-  cheat
+  BETA_TAC >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qpat_x_assum `?calldata t Gf tf. _`
+    (qx_choosel_then [`calldata`,`t`,`Gf`,`tf`]
+      (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
+  `!gw' g. eval_operand gas t = SOME gw' /\
+     OPTION_BIND (ext_call_kwarg EKGas opts kws) dest_NumV = SOME g ==>
+     g = w2n gw'` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!g. OPTION_BIND _ _ = SOME g ==> _` drule >>
+     disch_then SUBST1_TAC >>
+     qpat_assum `eval_operand gas t = SOME gw` (fn th =>
+       qpat_assum `eval_operand gas t = SOME gw'` (mp_tac o PURE_REWRITE_RULE [th])) >>
+     simp[NoAsms]) >>
+  irule gas_prefix_full_zero_prefix_guarded >>
+  conj_tac >- MATCH_ACCEPT_TAC storage_trace_frame_ext_call >>
+  conj_tac
+  >- (irule extcall_packing_observed_domain >>
+      qhdtm_assum `extcall_request_ready`
+        (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [extcall_request_ready_def])) >>
+  qexistsl [`Gf`,`t`,`tf`] >>
+  conj_tac >- (rpt strip_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  first_assum irule >>
+  rpt (goal_assum (drule_at Any)) >> simp[]
 QED
