@@ -3,7 +3,7 @@ Ancestors
   compileEnv ASCIInumbers string rich_list list pair option
 
 Theorem decimal_has_no_dot[local]:
-  ~MEM #"." (toString n)
+  ~MEM #"." (toString (n:num))
 Proof
   `~isDigit #"."` by EVAL_TAC >>
   mp_tac (Q.SPEC `n` EVERY_isDigit_num_to_dec_string) >>
@@ -13,8 +13,8 @@ Proof
 QED
 
 Theorem decimal_dot_prefix[local]:
-  FST (SPLITP (\c. c = #".") (toString n ++ #"." :: name)) =
-  toString n
+  FST (SPLITP (\c. c = #".") (toString (n:num) ++ #"." :: name)) =
+  toString (n:num)
 Proof
   simp[SPLITP_APPEND, EXISTS_MEM, decimal_has_no_dot, SPLITP]
 QED
