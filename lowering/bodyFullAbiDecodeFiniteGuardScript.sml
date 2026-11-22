@@ -103,6 +103,14 @@ Proof
       i.inst_opcode <> GAS) (emitted_insts sa sb)` by
     metis_tac[bop_scalar_seq_opcodes] >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by metis_tac[bodyFullAbiDecodeClampMemoryTheory.abi_decode_scalar_seq_mem_ok] >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts sa sb)` by simp[listTheory.MEM_APPEND] >>
+     drule_all bop_scalar_seq_outputs >>
+     Cases_on `i.inst_opcode = DALLOCA` >> simp[]) >>
   drule_all abi_decode_emitted_abort_origin_ptr_path >>
   disch_then (qspec_then `explicit` strip_assume_tac) >>
   qexistsl_tac [`j`, `G'`, `tn'`] >> gen_tac >>

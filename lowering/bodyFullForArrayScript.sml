@@ -409,7 +409,7 @@ Theorem for_array_expr_prefix_full:
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
   return_buf_frame d c sa s /\ alloca_history func s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  (!fn inst t. frag_reachable ctx func s fn inst t ==> dalloca_no_wrap inst t) /\
+  (!fn inst t. frag_reachable ctx func s fn inst t ==> dalloca_fmp_headroom inst t) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func c cx es s /\
     storage_well_formed_on cx es (FST H) /\
@@ -1374,6 +1374,8 @@ Resume for_memory_bulk_element_joint_frame[path]:
          eval_operand_def] >>
   `inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
    inst.inst_opcode <> GAS` by simp[Abbr `inst`, venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
+  `ctx_has_dalloca ctx ==> dalloca_no_wrap inst s` by
+    simp[Abbr `inst`, venomInstTheory.mk_inst_def] >>
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
   `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>
   `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G,tf)` by
@@ -1562,6 +1564,16 @@ Resume for_memory_word_element_joint_frame[path]:
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
    isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
      (asm_rewrite_tac[] >> (metis_tac[])) >>
+  `(ctx_has_dalloca ctx ==> !pre i post z.
+      emitted_insts sa sb = pre ++ i::post /\ run_inst_seq pre s = OK z ==>
+      dalloca_no_wrap i z)` by
+    (rpt strip_tac >>
+     `MEM i (emitted_insts sa sb)` by simp[MEM_APPEND] >>
+     qpat_assum `emitted_insts sa sb = [ld;st]`
+       (fn th => qpat_x_assum `MEM i (emitted_insts sa sb)`
+         (mp_tac o REWRITE_RULE [th, MEM])) >>
+     disch_then DISJ_CASES_TAC >>
+     simp[Abbr `ld`, Abbr `st`, venomInstTheory.mk_inst_def]) >>
   drule_all fragGasSeqPtrTheory.run_inst_seq_gas_origin_ptr_path >>
   disch_then (qspec_then `explicit` mp_tac) >>
   qpat_assum `MAP _ (FILTER _ _) = []` (rewrite_tac o single) >>
@@ -2004,7 +2016,7 @@ Theorem for_nonslot_array_prefix_full:
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
   return_buf_frame d c sa s /\ alloca_history func s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  (!fn inst t. frag_reachable ctx func s fn inst t ==> dalloca_no_wrap inst t) /\
+  (!fn inst t. frag_reachable ctx func s fn inst t ==> dalloca_fmp_headroom inst t) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func c cx es s /\
     storage_well_formed_on cx es (FST H) /\

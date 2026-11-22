@@ -903,10 +903,14 @@ Resume typed_dynarray_prefix_cont[run]:
   `LENGTH code = 7 /\
    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code` by
     simp[mk_inst_def, is_terminator_def] >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) code` by simp[mk_inst_def] >>
   qpat_x_assum `code = _` kall_tac >>
   `mem_cont_sim ctx fn s (q with vs_inst_idx := LENGTH sm.cs_current_insts)` by
     (irule typed_bytes_child_seq_cont >> simp[] >> qexists_tac `sa` >>
-     simp[IS_PREFIX_APPEND]) >>
+     simp[IS_PREFIX_APPEND] >> rpt strip_tac >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) code` mp_tac >>
+     simp[EVERY_APPEND]) >>
   suspend "finish"
 QED
 Resume typed_dynarray_prefix_cont[finish]:

@@ -121,6 +121,27 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+Theorem row22_real_cut_empty_oracle_headroom:
+  lower_vyper_runtime_unit tops rp = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
+  calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
+  (ctx_has_dalloca unit.cu_context ==>
+    unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254) /\
+  gas_origin_ptr_path (D,0,explicit,unit.cu_context,fn,[])
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
+      FEMPTY,entry_taint) marks (OK cut,G,tn) ==>
+  !callee inst s. frag_reachable unit.cu_context fn (cut with vs_outcomes := []) callee inst s ==>
+    dalloca_fmp_headroom inst s
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  mp_tac (Q.INST [`prefix` |-> `[]`, `tail` |-> `cut.vs_outcomes`, `u` |-> `unit`]
+    grouped_reject_cut_fragment_no_dalloca) >>
+  simp[unitTransformDefsTheory.dalloca_fmp_headroom_def] >> metis_tac[]
+QED
+
 Triviality row22_reject_cut_fmp:
   lower_vyper_runtime_unit ts rp = SOME unit /\
   supported_program ts /\ source_typing_ok ts am tx /\ source_deployment_rel ts am tx /\

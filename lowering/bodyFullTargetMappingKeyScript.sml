@@ -151,12 +151,20 @@ Proof
   `sb.cs_current_bb = sa.cs_current_bb /\
    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
    EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
-              ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+              ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
+   EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
     (Cases_on `is_bytestring_type kt` >> gvs[]
      >- (drule (cj 1 (REWRITE_RULE [DISJ_IMP_THM] mapping_suffix_shape)) >>
-         gvs[same_blocks_def, EVERY_MEM]) >>
+         strip_tac >> conj_tac >- fs[same_blocks_def] >>
+         drule map_key_shape >> strip_tac >> simp[mk_inst_def, is_terminator_def]) >>
      simp[emitted_insts_def]) >>
-  conj_tac >- (irule emitted_origin_ptr_path >> metis_tac[]) >>
+  conj_tac
+  >- (irule emitted_origin_ptr_path >> conj_tac >- simp[] >>
+      qexistsl_tac [`emitted_insts sa sb`, `sa`] >> simp[] >>
+      rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+      qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+      qpat_x_assum `emitted_insts sa sb = _`
+        (fn th => pure_rewrite_tac[th, EVERY_APPEND, EVERY_DEF]) >> simp[]) >>
   conj_tac
   >- (simp[stmt_state_rel_inst_idx] >> irule hash_readonly_state_rel >>
       goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>

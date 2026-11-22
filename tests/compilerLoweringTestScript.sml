@@ -126,17 +126,7 @@ Proof
   ACCEPT_TAC (EQT_ELIM sha256_folded_default_eval)
 QED
 
-(* ===== Blueprint refusals ===== *)
-
-(* create_from_blueprint sizes its DALLOCA from the blueprint's code size
-   and the length word of its dynamic constructor arguments or raw_args
-   buffer.  The lowering refuses a unit that can read such a length word
-   unvalidated (it declares a dynamic storage or transient variable, or a
-   hashmap with a dynamic value) and passes dynamic arguments to a
-   blueprint, a folded literal code_offset in (2**255, 2**256 - 2**32),
-   and a call whose arguments could take the allocation to 2**64 bytes.
-   Each refused unit has a neighbour that differs only in what the guard
-   looks at and still lowers. *)
+(* ===== Blueprint lowering ===== *)
 
 (* create_from_blueprint(t, *ctor, code_offset=offset, raw_args=raw) *)
 Definition blueprint_fixture_call_def:
@@ -211,36 +201,35 @@ End
 
 (* A dynamic storage, transient or hashmap-value variable with a dynamic
    constructor argument or raw_args. *)
-val blueprint_dynamic_rejected_eval = LIST_CONJ (map EVAL [
-  ``lower_vyper_runtime_unit
+val blueprint_dynamic_lowers_eval = EVAL
+  ``IS_SOME (lower_vyper_runtime_unit
       (blueprint_runtime_program [blueprint_storage_bytes] 10
-         (blueprint_fixture_call F 3 [blueprint_bytes_arg 10])) rpolicy``,
-  ``lower_vyper_runtime_unit
+         (blueprint_fixture_call F 3 [blueprint_bytes_arg 10])) blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_runtime_unit
       (blueprint_runtime_program [blueprint_storage_bytes] 10
-         (blueprint_fixture_call T 3 [blueprint_bytes_arg 10])) rpolicy``,
-  ``lower_vyper_runtime_unit
+         (blueprint_fixture_call T 3 [blueprint_bytes_arg 10])) blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_runtime_unit
       (blueprint_runtime_program [blueprint_transient_bytes] 10
-         (blueprint_fixture_call F 3 [blueprint_bytes_arg 10])) rpolicy``,
-  ``lower_vyper_runtime_unit
+         (blueprint_fixture_call F 3 [blueprint_bytes_arg 10])) blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_runtime_unit
       (blueprint_runtime_program [blueprint_hashmap_bytes] 10
-         (blueprint_fixture_call T 3 [blueprint_bytes_arg 10])) rpolicy``])
+         (blueprint_fixture_call T 3 [blueprint_bytes_arg 10])) blueprint_fixture_policy)``
 
-Theorem blueprint_dynamic_rejected:
-  !rpolicy.
-    lower_vyper_runtime_unit
+Theorem blueprint_dynamic_lowers:
+  IS_SOME (lower_vyper_runtime_unit
       (blueprint_runtime_program [blueprint_storage_bytes] 10
-         (blueprint_fixture_call F 3 [blueprint_bytes_arg 10])) rpolicy = NONE /\
-    lower_vyper_runtime_unit
+         (blueprint_fixture_call F 3 [blueprint_bytes_arg 10])) blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_runtime_unit
       (blueprint_runtime_program [blueprint_storage_bytes] 10
-         (blueprint_fixture_call T 3 [blueprint_bytes_arg 10])) rpolicy = NONE /\
-    lower_vyper_runtime_unit
+         (blueprint_fixture_call T 3 [blueprint_bytes_arg 10])) blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_runtime_unit
       (blueprint_runtime_program [blueprint_transient_bytes] 10
-         (blueprint_fixture_call F 3 [blueprint_bytes_arg 10])) rpolicy = NONE /\
-    lower_vyper_runtime_unit
+         (blueprint_fixture_call F 3 [blueprint_bytes_arg 10])) blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_runtime_unit
       (blueprint_runtime_program [blueprint_hashmap_bytes] 10
-         (blueprint_fixture_call T 3 [blueprint_bytes_arg 10])) rpolicy = NONE
+         (blueprint_fixture_call T 3 [blueprint_bytes_arg 10])) blueprint_fixture_policy)
 Proof
-  gen_tac >> ACCEPT_TAC blueprint_dynamic_rejected_eval
+  ACCEPT_TAC (EQT_ELIM blueprint_dynamic_lowers_eval)
 QED
 
 (* The same storage variable with a static argument, and the same dynamic
@@ -276,22 +265,20 @@ Proof
   ACCEPT_TAC (EQT_ELIM blueprint_dynamic_neighbours_eval)
 QED
 
-(* A folded literal code_offset of 2**255 + 1 passes the signed size check
-   with a size above 2**32; an offset of 0 lowers. *)
-val blueprint_offset_rejected_eval =
-  EVAL ``lower_vyper_runtime_unit
-           (blueprint_runtime_program [] 10
-              (blueprint_fixture_call F (2 ** 255 + 1) [blueprint_uint_arg]))
-           rpolicy``
-
-Theorem blueprint_offset_rejected:
-  !rpolicy.
-    lower_vyper_runtime_unit
+(* Both a large literal code_offset and zero lower to the runtime check. *)
+val blueprint_offset_lowers_eval = EVAL
+  ``IS_SOME (lower_vyper_runtime_unit
       (blueprint_runtime_program [] 10
          (blueprint_fixture_call F (2 ** 255 + 1) [blueprint_uint_arg]))
-      rpolicy = NONE
+      blueprint_fixture_policy)``
+
+Theorem blueprint_offset_lowers:
+  IS_SOME (lower_vyper_runtime_unit
+      (blueprint_runtime_program [] 10
+         (blueprint_fixture_call F (2 ** 255 + 1) [blueprint_uint_arg]))
+      blueprint_fixture_policy)
 Proof
-  gen_tac >> ACCEPT_TAC blueprint_offset_rejected_eval
+  ACCEPT_TAC (EQT_ELIM blueprint_offset_lowers_eval)
 QED
 
 val blueprint_offset_zero_eval =
@@ -309,23 +296,20 @@ Proof
   ACCEPT_TAC (EQT_ELIM blueprint_offset_zero_eval)
 QED
 
-(* A raw_args buffer of Bytes[2**64 - 2**32]: with a code size of up to
-   24576 + 2**32 the allocation can reach 2**64 bytes.  Bytes[2**64 - 2**33]
-   keeps it below and lowers. *)
-val blueprint_args_bound_rejected_eval =
-  EVAL ``lower_vyper_runtime_unit
-           (blueprint_runtime_program [] (2 ** 64 - 2 ** 32)
-              (blueprint_fixture_call T 3
-                 [blueprint_bytes_arg (2 ** 64 - 2 ** 32)])) rpolicy``
-
-Theorem blueprint_args_bound_rejected:
-  !rpolicy.
-    lower_vyper_runtime_unit
+(* Raw arguments with bounds on either side of the old allocation cap. *)
+val blueprint_args_bound_lowers_eval = EVAL
+  ``IS_SOME (lower_vyper_runtime_unit
       (blueprint_runtime_program [] (2 ** 64 - 2 ** 32)
          (blueprint_fixture_call T 3
-            [blueprint_bytes_arg (2 ** 64 - 2 ** 32)])) rpolicy = NONE
+            [blueprint_bytes_arg (2 ** 64 - 2 ** 32)])) blueprint_fixture_policy)``
+
+Theorem blueprint_args_bound_lowers:
+  IS_SOME (lower_vyper_runtime_unit
+      (blueprint_runtime_program [] (2 ** 64 - 2 ** 32)
+         (blueprint_fixture_call T 3
+            [blueprint_bytes_arg (2 ** 64 - 2 ** 32)])) blueprint_fixture_policy)
 Proof
-  gen_tac >> ACCEPT_TAC blueprint_args_bound_rejected_eval
+  ACCEPT_TAC (EQT_ELIM blueprint_args_bound_lowers_eval)
 QED
 
 val blueprint_args_bound_neighbour_eval =
@@ -345,39 +329,38 @@ Proof
   ACCEPT_TAC (EQT_ELIM blueprint_args_bound_neighbour_eval)
 QED
 
-(* The deploy lowering refuses the same calls in a constructor. *)
-val blueprint_deploy_rejected_eval = LIST_CONJ (map EVAL [
-  ``lower_vyper_deploy_unit
+(* The same call forms lower in a constructor. *)
+val blueprint_deploy_lowers_eval = EVAL
+  ``IS_SOME (lower_vyper_deploy_unit
       (blueprint_deploy_program [blueprint_storage_bytes] 10
          (blueprint_fixture_call F 3 [blueprint_bytes_arg 10]))
-      rpolicy rbytes``,
-  ``lower_vyper_deploy_unit
+      blueprint_fixture_policy []) /\
+  IS_SOME (lower_vyper_deploy_unit
       (blueprint_deploy_program [] 10
          (blueprint_fixture_call F (2 ** 255 + 1) [blueprint_uint_arg]))
-      rpolicy rbytes``,
-  ``lower_vyper_deploy_unit
+      blueprint_fixture_policy []) /\
+  IS_SOME (lower_vyper_deploy_unit
       (blueprint_deploy_program [] (2 ** 64 - 2 ** 32)
          (blueprint_fixture_call T 3
             [blueprint_bytes_arg (2 ** 64 - 2 ** 32)]))
-      rpolicy rbytes``])
+      blueprint_fixture_policy [])``
 
-Theorem blueprint_deploy_rejected:
-  !rpolicy rbytes.
-    lower_vyper_deploy_unit
+Theorem blueprint_deploy_lowers:
+  IS_SOME (lower_vyper_deploy_unit
       (blueprint_deploy_program [blueprint_storage_bytes] 10
          (blueprint_fixture_call F 3 [blueprint_bytes_arg 10]))
-      rpolicy rbytes = NONE /\
-    lower_vyper_deploy_unit
+      blueprint_fixture_policy []) /\
+  IS_SOME (lower_vyper_deploy_unit
       (blueprint_deploy_program [] 10
          (blueprint_fixture_call F (2 ** 255 + 1) [blueprint_uint_arg]))
-      rpolicy rbytes = NONE /\
-    lower_vyper_deploy_unit
+      blueprint_fixture_policy []) /\
+  IS_SOME (lower_vyper_deploy_unit
       (blueprint_deploy_program [] (2 ** 64 - 2 ** 32)
          (blueprint_fixture_call T 3
             [blueprint_bytes_arg (2 ** 64 - 2 ** 32)]))
-      rpolicy rbytes = NONE
+      blueprint_fixture_policy [])
 Proof
-  rpt gen_tac >> ACCEPT_TAC blueprint_deploy_rejected_eval
+  ACCEPT_TAC (EQT_ELIM blueprint_deploy_lowers_eval)
 QED
 
 val blueprint_deploy_neighbours_eval = EVAL
@@ -413,31 +396,28 @@ Proof
   ACCEPT_TAC (EQT_ELIM blueprint_deploy_neighbours_eval)
 QED
 
-(* The linked lowering looks at every module's declarations: a dynamic
-   storage variable in an imported module refuses the main module's
-   blueprint call. *)
-val blueprint_mods_rejected_eval = LIST_CONJ (map EVAL [
-  ``lower_vyper_runtime_unit_mods
+(* A blueprint call in the main module with dynamic storage in an import. *)
+val blueprint_mods_lowers_eval = EVAL
+  ``IS_SOME (lower_vyper_runtime_unit_mods
       [(NONE, blueprint_runtime_program [] 10
                 (blueprint_fixture_call F 3 [blueprint_bytes_arg 10]));
-       (SOME 1, [blueprint_storage_bytes])] [] rpolicy``,
-  ``lower_vyper_deploy_unit_mods
+       (SOME 1, [blueprint_storage_bytes])] [] blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_deploy_unit_mods
       [(NONE, blueprint_deploy_program [] 10
                 (blueprint_fixture_call F 3 [blueprint_bytes_arg 10]));
-       (SOME 1, [blueprint_storage_bytes])] [] rpolicy rbytes``])
+       (SOME 1, [blueprint_storage_bytes])] [] blueprint_fixture_policy [])``
 
-Theorem blueprint_mods_rejected:
-  !rpolicy rbytes.
-    lower_vyper_runtime_unit_mods
+Theorem blueprint_mods_lowers:
+  IS_SOME (lower_vyper_runtime_unit_mods
       [(NONE, blueprint_runtime_program [] 10
                 (blueprint_fixture_call F 3 [blueprint_bytes_arg 10]));
-       (SOME 1, [blueprint_storage_bytes])] [] rpolicy = NONE /\
-    lower_vyper_deploy_unit_mods
+       (SOME 1, [blueprint_storage_bytes])] [] blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_deploy_unit_mods
       [(NONE, blueprint_deploy_program [] 10
                 (blueprint_fixture_call F 3 [blueprint_bytes_arg 10]));
-       (SOME 1, [blueprint_storage_bytes])] [] rpolicy rbytes = NONE
+       (SOME 1, [blueprint_storage_bytes])] [] blueprint_fixture_policy [])
 Proof
-  rpt gen_tac >> ACCEPT_TAC blueprint_mods_rejected_eval
+  ACCEPT_TAC (EQT_ELIM blueprint_mods_lowers_eval)
 QED
 
 val blueprint_mods_neighbours_eval = EVAL

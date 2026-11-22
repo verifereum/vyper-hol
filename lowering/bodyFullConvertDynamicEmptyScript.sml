@@ -147,6 +147,15 @@ Resume bytes_word_empty_convert_origin_path[path]:
     (irule convert_dynamic_scalar_mem_ok >> simp[] >>
      goal_assum (drule_at (Pat `compile_type_convert _ _ _ = _`)) >>
      qexists_tac `a` >> simp[] >> metis_tac[]) >>
+  `(ctx_has_dalloca ctx ==>
+      !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `MEM i (emitted_insts sa sb)` by simp[] >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_assum `dynamic_writes_fresh sa _`
+       (mp_tac o Q.SPEC `i` o REWRITE_RULE [dynamic_writes_fresh_def, EVERY_MEM]) >>
+     Cases_on `i.inst_opcode = DALLOCA` >> simp[freshWritesTheory.fresh_write_op_def]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
     (OK (sf with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)),H,th)` by
     (gen_tac >>

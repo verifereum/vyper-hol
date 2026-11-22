@@ -120,6 +120,11 @@ Proof
   gen_tac >> irule (cj 1 run_inst_seq_origin_ptr_lift) >>
   simp[] >>
   conj_tac
+  >- (disch_tac >> rpt gen_tac >> strip_tac >>
+      irule dalloca_no_wrap_non_dalloca >>
+      qpat_x_assum `EVERY _ (emitted_insts sm sb)` mp_tac >>
+      simp[EVERY_APPEND] >> strip_tac >> gvs[]) >>
+  conj_tac
   >- (qpat_x_assum `EVERY _ _` mp_tac >>
       simp[EVERY_MEM] >> strip_tac >> rpt strip_tac >>
       first_x_assum drule >> strip_tac >> gvs[is_terminator_def]) >>

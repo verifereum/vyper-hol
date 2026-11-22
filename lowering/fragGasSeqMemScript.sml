@@ -11,6 +11,7 @@ Theorem straight_line_mem_edge:
   get_instruction bb s.vs_inst_idx = SOME i /\
   i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
   inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  (ctx_has_dalloca ctx ==> dalloca_no_wrap i s) /\
   step_inst_base i s = OK u ==>
   gas_path_mem_edge ctx func s (if i.inst_opcode = GAS then 1 else 0)
     (OK (u with vs_inst_idx := SUC s.vs_inst_idx))
@@ -30,6 +31,9 @@ Theorem run_inst_seq_gas_path_mem:
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
     run_inst_seq_mem_ok code s /\
+    (ctx_has_dalloca ctx ==>
+      !pre i post u. code = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+        dalloca_no_wrap i u) /\
     run_inst_seq code s = OK t ==>
     gas_path_mem ctx func s
       (LENGTH (FILTER (\i. i.inst_opcode = GAS) code))
@@ -55,14 +59,37 @@ Proof
   `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
     metis_tac[step_preserves_halted, step_preserves_control_flow] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
+  `(ctx_has_dalloca ctx ==> dalloca_no_wrap h s)` by
+    (disch_tac >>
+     qpat_assum `ctx_has_dalloca ctx ==> _` (mp_tac o UNDISCH) >>
+     disch_then (qspecl_then [`[]`, `h`, `code`, `s`] mp_tac) >>
+     simp[exprLoweringPropsTheory.run_inst_seq_def]) >>
   `gas_path_mem_edge ctx func s (if h.inst_opcode = GAS then 1 else 0)
      (OK (u with vs_inst_idx := SUC s.vs_inst_idx))` by
     (irule straight_line_mem_edge >> metis_tac[]) >>
-  first_x_assum (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
-  disch_then (qspec_then `t with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
-  simp[run_inst_seq_inst_idx, instIdxIndepTheory.exec_result_map_def] >>
-  disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
-  simp[] >>
+  `(ctx_has_dalloca ctx ==>
+      !pre i post v. code = pre ++ i::post /\
+        run_inst_seq pre (u with vs_inst_idx := SUC s.vs_inst_idx) = OK v ==>
+        dalloca_no_wrap i v)` by
+    (disch_tac >> rpt gen_tac >> strip_tac >>
+     `EVERY (\i. ~is_terminator i.inst_opcode) pre` by fs[EVERY_APPEND] >>
+     qpat_x_assum `run_inst_seq pre _ = OK v` mp_tac >>
+     simp[run_inst_seq_inst_idx] >>
+     Cases_on `run_inst_seq pre u` >> simp[instIdxIndepTheory.exec_result_map_def] >>
+     disch_then (SUBST1_TAC o SYM) >>
+     rename1 `run_inst_seq pre u = OK w` >>
+     qpat_assum `ctx_has_dalloca ctx ==> !pre i post v. _` (mp_tac o UNDISCH) >>
+     disch_then (qspecl_then [`h::pre`, `i`, `post`, `w`] mp_tac) >>
+     simp[exprLoweringPropsTheory.run_inst_seq_def,
+          unitTransformDefsTheory.dalloca_no_wrap_def,
+          instIdxIndepTheory.eval_op_inst_idx]) >>
+  first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
+                              `t with vs_inst_idx := SUC s.vs_inst_idx`,
+                              `ctx`, `func`, `bb`] mp_tac) >>
+  (impl_tac >-
+    (qpat_assum `ctx_has_dalloca ctx ==> !pre i post v.
+                  code = _ /\ _ ==> _` mp_tac >>
+     simp[run_inst_seq_inst_idx, instIdxIndepTheory.exec_result_map_def])) >>
   strip_tac >>
   Cases_on `h.inst_opcode = GAS` >> gvs[] >>
   drule (cj 2 gas_path_mem_rules) >>

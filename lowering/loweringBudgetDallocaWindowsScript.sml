@@ -480,13 +480,13 @@ Definition lower_history_window_def:
   lower_history_window h q a <=> ^lower_history_window_quote h q a
 End
 
-Theorem lower_history_pairs_from_windows:
+Theorem lower_history_pairs_before_allocation:
   (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
-    ^lower_history_window_quote h q a) /\
-  (!i op sz. active_inst q.bp_fn i q.bp_state /\ i.inst_opcode = DALLOCA /\
-     i.inst_operands = [op] /\ eval_operand op q.bp_state = SOME sz ==>
-     w2n sz <= 2 ** 255 + 2 ** 64) ==>
-  ?pair. lower_history_pairs h pair /\ lower_history_current h pair q /\
+    ^lower_history_window_quote h q a) ==>
+  ?pair. lower_history_pairs h pair /\
+    (!i. active_inst q.bp_fn i q.bp_state /\ i.inst_opcode = DALLOCA ==>
+      !a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
+        pair a < LENGTH h) /\
     (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
       ?fn ai pre op sz post. lower_alloc_record h a fn ai pre op sz post)
 Proof
@@ -505,7 +505,7 @@ Proof
      `a = b \/ a < b \/ b < a` by decide_tac >>
      metis_tac[]) >>
   qexists_tac `pair` >>
-  REWRITE_TAC [lower_history_pairs_def, lower_history_current_def] >>
+  REWRITE_TAC [lower_history_pairs_def] >>
   rpt conj_tac >> rpt strip_tac
   >- metis_tac[LESS_OR_EQ]
   >- metis_tac[]
@@ -522,9 +522,33 @@ Proof
       simp[] >>
       qpat_x_assum `?f f' f'' f''' f''''. !j. _` strip_assume_tac >>
       rpt strip_tac >> first_x_assum drule_all >> strip_tac >> metis_tac[])
-  >- metis_tac[]
   >- metis_tac[LESS_OR_EQ] >>
   metis_tac[]
+QED
+
+Theorem lower_history_pairs_from_windows:
+  (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
+    ^lower_history_window_quote h q a) /\
+  (!i op sz. active_inst q.bp_fn i q.bp_state /\ i.inst_opcode = DALLOCA /\
+     i.inst_operands = [op] /\ eval_operand op q.bp_state = SOME sz ==>
+     w2n sz <= 2 ** 255 + 2 ** 64) ==>
+  ?pair. lower_history_pairs h pair /\ lower_history_current h pair q /\
+    (!a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
+      ?fn ai pre op sz post. lower_alloc_record h a fn ai pre op sz post)
+Proof
+  BETA_TAC >> strip_tac >>
+  dxrule_then strip_assume_tac (BETA_RULE lower_history_pairs_before_allocation) >>
+  qexists_tac `pair` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  rewrite_tac[lower_history_current_def] >>
+  qx_gen_tac `i` >> strip_tac >>
+  conj_tac
+  >- (map_every qx_gen_tac [`op`, `sz`] >> strip_tac >>
+      qpat_assum `!i op sz. _ ==> w2n sz <= _`
+        (qspecl_then [`i`, `op`, `sz`] mp_tac) >> simp[]) >>
+  qpat_assum `!i. _ ==> !a. _ ==> pair a < LENGTH h`
+    (qspec_then `i` mp_tac) >> simp[]
 QED
 
 Theorem lower_history_pairs_from_recorded_windows:

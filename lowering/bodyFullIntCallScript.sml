@@ -223,7 +223,7 @@ val args_input = Term `
       fn_has_code shadow_sa shadow_sb shadow_func /\
       fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
       (!H. dead_lo_ok H (DF H) lo cenv cx) /\
       (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
@@ -286,7 +286,7 @@ val callee_input = Term `
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
     MEM func ctx.ctx_functions /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
     (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!H. valid_horizon cx st0 H es1.storage_trace ==>
@@ -396,7 +396,7 @@ Theorem intcall_callee_premise[local]:
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
     MEM func ctx.ctx_functions /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
     (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!H. valid_horizon cx st0 H es1.storage_trace ==>

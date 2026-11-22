@@ -443,7 +443,12 @@ Proof
      disch_then (qspecl_then [`ctx`, `fn`,
        `<|bb_label := u2s_label a 2; bb_instructions := u2s_body a (Var p) n|>`] mp_tac) >>
      simp[u2s_body_def, u2s_inst_def, mk_inst_def, is_terminator_def] >>
-     metis_tac[]) >>
+     impl_tac
+     >- (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+         qpat_x_assum `_ = pre ++ [i] ++ post`
+           (mp_tac o Q.AP_TERM `EVERY (\j. j.inst_opcode <> DALLOCA)`) >>
+         simp[EVERY_APPEND]) >>
+     simp[]) >>
   `allocas_from lo t` by
     (fs[allocas_from_def, u2s_safe_def, u2s_frame_def] >>
      ntac 2 (qpat_x_assum `_ = sr` (mp_tac o Q.AP_TERM `\z. z.vs_allocas`)) >>
@@ -728,7 +733,13 @@ Proof
      disch_then (qspecl_then [`G`, `tn`, `G'`, `tn'`] mp_tac) >>
      disch_then (qspecl_then [`ctx`, `fn`,
        `<|bb_label := u2s_label a 3; bb_instructions := u2s_zero a (Var p) n|>`] mp_tac) >>
-     simp[u2s_zero_def, u2s_inst_def, mk_inst_def, is_terminator_def] >> metis_tac[]) >>
+     simp[u2s_zero_def, u2s_inst_def, mk_inst_def, is_terminator_def] >>
+     impl_tac
+     >- (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+         qpat_x_assum `_ = pre ++ [i] ++ post`
+           (mp_tac o Q.AP_TERM `EVERY (\j. j.inst_opcode <> DALLOCA)`) >>
+         simp[EVERY_APPEND]) >>
+     simp[]) >>
   `allocas_from lo t` by
     (fs[allocas_from_def, u2s_safe_def, u2s_frame_def] >>
      ntac 2 (qpat_x_assum `_ = sr` (mp_tac o Q.AP_TERM `\z. z.vs_allocas`)) >>
@@ -910,7 +921,13 @@ Proof
      disch_then (qspecl_then [`G`, `tn`, `G'`, `tn'`] mp_tac) >>
      disch_then (qspecl_then [`ctx`, `fn`,
        `<|bb_label := u2s_label a 4; bb_instructions := u2s_final a (Var p) n|>`] mp_tac) >>
-     simp[u2s_final_def, u2s_inst_def, mk_inst_def, is_terminator_def] >> metis_tac[]) >>
+     simp[u2s_final_def, u2s_inst_def, mk_inst_def, is_terminator_def] >>
+     impl_tac
+     >- (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+         qpat_x_assum `_ = pre ++ [i] ++ post`
+           (mp_tac o Q.AP_TERM `EVERY (\j. j.inst_opcode <> DALLOCA)`) >>
+         simp[EVERY_APPEND]) >>
+     simp[]) >>
   `allocas_from lo t` by
     (fs[allocas_from_def, u2s_safe_def, u2s_frame_def] >>
      ntac 2 (qpat_x_assum `_ = sr` (mp_tac o Q.AP_TERM `\z. z.vs_allocas`)) >>

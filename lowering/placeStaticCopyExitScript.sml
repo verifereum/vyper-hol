@@ -201,10 +201,15 @@ Resume place_static_copy_op_exit_mem[init]:
   `lookup_block s0.vs_current_bb func.fn_blocks = SOME bb0` by simp[] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
       [mk_inst id0 ASSIGN [Lit 0w] [cv]]` by simp[mk_inst_def, is_terminator_def] >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+     !pre i post u. [mk_inst id0 ASSIGN [Lit 0w] [cv]] = pre ++ i::post /\
+       run_inst_seq pre s0 = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >>
+     `MEM i [mk_inst id0 ASSIGN [Lit 0w] [cv]]` by metis_tac[MEM_APPEND, MEM] >>
+     gvs[mk_inst_def, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   simp[gas_marked_path_def, Abbr `a`] >>
   drule_all run_inst_seq_gas_path_mem >>
-  disch_then (qspec_then `ctx` mp_tac) >>
-  simp[mk_inst_def, is_terminator_def]
+  simp[mk_inst_def]
 QED
 
 Resume place_static_copy_op_exit_mem[jump]:
@@ -262,10 +267,15 @@ Resume place_static_copy_op_exit_mem[test]:
     simp[Abbr `r`, Abbr `a`, jump_to_def, update_var_def] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
       [mk_inst idh EQ [Var cv;cnt] [tv]]` by simp[mk_inst_def, is_terminator_def] >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+     !pre i post u. [mk_inst idh EQ [Var cv;cnt] [tv]] = pre ++ i::post /\
+       run_inst_seq pre r = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >>
+     `MEM i [mk_inst idh EQ [Var cv;cnt] [tv]]` by metis_tac[MEM_APPEND, MEM] >>
+     gvs[mk_inst_def, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   simp[gas_marked_path_def, Abbr `t`] >>
   drule_all run_inst_seq_gas_path_mem >>
-  disch_then (qspec_then `ctx` mp_tac) >>
-  simp[mk_inst_def, is_terminator_def]
+  simp[mk_inst_def]
 QED
 
 Resume place_static_copy_op_exit_mem[branch]:
@@ -338,8 +348,13 @@ Resume place_static_copy_op_exit_mem[body]:
     simp[Abbr `q`, Abbr `t`, Abbr `r`, Abbr `a`, jump_to_def, update_var_def] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code` by
     simp[Abbr `code`, mk_inst_def, is_terminator_def] >>
+  `ptrDiscipline$ctx_has_dalloca ctx ==>
+     !pre i post u. code = pre ++ i::post /\
+       run_inst_seq pre q = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >>
+     `MEM i code` by metis_tac[MEM_APPEND, MEM] >>
+     fs[Abbr `code`, mk_inst_def, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   drule_all run_inst_seq_gas_path_mem >>
-  disch_then (qspec_then `ctx` mp_tac) >>
   simp[Abbr `code`, mk_inst_def] >> strip_tac >>
   qabbrev_tac `endpoint = u1 with vs_inst_idx := 4` >>
   `?z. gas_marked_path T ctx func endpoint 0 z /\ exit_result z /\

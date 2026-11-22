@@ -239,6 +239,11 @@ Resume abi_decode_caller_prefix_joint[origin]:
   pop_assum (fn th => once_rewrite_tac[th]) >>
   irule emitted_origin_ptr_path >> simp[] >>
   qexistsl_tac [`emitted_insts st sb`, `st`] >>
+  `!i v. MEM i (emitted_insts st sb) ==> dalloca_no_wrap i v` by
+    (simp[] >> rpt strip_tac >> gvs[Abbr `il`, Abbr `ia`, mk_inst_def,
+                                   unitTransformDefsTheory.dalloca_no_wrap_def]) >>
+  `!pre i post v. emitted_insts st sb = pre ++ i::post ==> dalloca_no_wrap i v` by
+    (rpt strip_tac >> first_x_assum irule >> simp[]) >>
   simp[Abbr `il`, Abbr `ia`, mk_inst_def, is_terminator_def]
 QED
 

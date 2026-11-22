@@ -259,12 +259,12 @@ Resume compile_assert_reason_frag_full_from_raise[entry]:
        (qspec_then `H0` assume_tac) >>
      metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append, APPEND_NIL]) >>
   `!fn inst s. frag_reachable ctx func (jump_to entry.cs_current_bb t) fn inst s ==>
-      dalloca_no_wrap inst s` by
+      dalloca_fmp_headroom inst s` by
     (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK (jump_to _ t),G1,tn1)`
        (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
        qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _`
-         (fn safe => ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+         (fn safe => ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
            (LIST_CONJ [path,no_phi,safe])))))) >>
   qunabbrev_tac `H0` >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp (jump_to entry.cs_current_bb t)` by

@@ -175,13 +175,20 @@ Proof
      simp[transient_lock_code_def, mk_inst_def,
           inst_mem_below_frontier_def, inst_dload_in_section_def,
           source_memory_read_ranges_def, source_memory_write_ranges_def]) >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+      transient_lock_code nkey iv sa = (pre ++ [i]) ++ post /\
+      run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) (transient_lock_code nkey iv sa)` by
+       (Cases_on `iv` >> simp[transient_lock_code_def, mk_inst_def]) >>
+     fs[EVERY_MEM] >> metis_tac[MEM_APPEND, MEM, dalloca_no_wrap_non_dalloca]) >>
   qexistsl_tac [`G'`, `tn'`] >> simp[] >> conj_tac
   >- (rpt gen_tac >>
       mp_tac (Q.INST [`lo` |-> `0`, `PG` |-> `[]`]
         (Q.SPECL [`transient_lock_code nkey iv sa`, `s`, `u`,
         `G`, `tn`, `G'`, `tn'`, `ctx`, `func`, `bb`]
         run_inst_seq_gas_origin_ptr_path)) >>
-      simp[] >>
+      (impl_tac >- (qpat_assum `ctx_has_dalloca ctx ==> !pre i post u. _` mp_tac >>
+                    simp[])) >>
       `FILTER (\i. i.inst_opcode = GAS) (transient_lock_code nkey iv sa) = []` by
         (Cases_on `iv` >> simp[transient_lock_code_def, mk_inst_def]) >>
       simp[]) >>
@@ -590,12 +597,20 @@ Proof
      simp[transient_lock_code_def, mk_inst_def,
        inst_mem_below_frontier_def, inst_dload_in_section_def,
        source_memory_read_ranges_def, source_memory_write_ranges_def]) >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+      transient_lock_code nkey (mut = View) sa = (pre ++ [i]) ++ post /\
+      run_inst_seq pre s_reg = OK u ==> dalloca_no_wrap i u)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA)
+        (transient_lock_code nkey (mut = View) sa)` by
+       (Cases_on `mut = View` >> simp[transient_lock_code_def, mk_inst_def]) >>
+     fs[EVERY_MEM] >> metis_tac[MEM_APPEND, MEM, dalloca_no_wrap_non_dalloca]) >>
   mp_tac (Q.INST [`D` |-> `ARB:dead`, `lo` |-> `0`,
     `explicit` |-> `{}`, `PG` |-> `[]`]
     (Q.SPECL [`transient_lock_code nkey (mut = View) sa`, `s_reg`, `t`,
        `a`, `G_reg`, `tn_reg`, `G'`, `tn'`, `ctx`, `func`, `bb`]
        sha_zero_origin_abort)) >>
-  (impl_tac >- simp[]) >>
+  (impl_tac >- (qpat_assum `ctx_has_dalloca ctx ==> !pre i post u. _` mp_tac >>
+                simp[])) >>
   disch_then (qx_choose_then `j` assume_tac) >>
   `!D explicit. gas_origin_ptr_path (D,0,explicit,ctx,func,[])
     (s_reg,G_reg,tn_reg) [] (Abort a (t with vs_inst_idx := j),G',tn')` by
@@ -603,7 +618,9 @@ Proof
      mp_tac (Q.INST [`lo` |-> `0`, `PG` |-> `[]`]
        (Q.SPECL [`transient_lock_code nkey (mut = View) sa`, `s_reg`, `t`,
          `a`, `G_reg`, `tn_reg`, `G'`, `tn'`, `ctx`, `func`, `bb`]
-         sha_zero_origin_abort)) >> simp[] >>
+         sha_zero_origin_abort)) >>
+     (impl_tac >- (qpat_assum `ctx_has_dalloca ctx ==> !pre i post u. _` mp_tac >>
+                   simp[])) >>
      disch_then (qx_choose_then `k` assume_tac) >>
      `(t with vs_inst_idx := k) = (t with vs_inst_idx := j)` by
        (irule sha_origin_abort_endpoint_unique >>

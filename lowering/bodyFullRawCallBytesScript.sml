@@ -283,7 +283,17 @@ Resume raw_call_bytes_success_full_path[path]:
       (FILTER (\i. i.inst_opcode = GAS) code))
     (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code),Gf,tf)`
     suffices_by simp[mk_inst_def] >>
+  `(ctx_has_dalloca ctx ==>
+     !pre i post u. code = pre ++ i::post /\
+       run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) code` by simp[mk_inst_def] >>
+     rpt strip_tac >>
+     `MEM i code` by simp[] >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_assum `EVERY _ code` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     disch_then drule >> simp[]) >>
   irule run_inst_seq_gas_origin_ptr_path >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- simp[mk_inst_def, is_terminator_def] >>

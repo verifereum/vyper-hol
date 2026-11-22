@@ -13,7 +13,7 @@
  *)
 Theory bodyFullLogSuffix
 Ancestors
-  logTopicsRunPtr rawLogPtrInst stmtSimLogEmit stmtSimLogSuffixCode
+  logTopicsRunPtr logTopicsNonDalloca rawLogPtrInst stmtSimLogEmit stmtSimLogSuffixCode
   stmtSimLogTopics stmtLogEmitMemory stmtLogTopicsMemory
   fragGasOriginPtrLoop fragGasOriginPtr instSeqPtrLo fragGasSeqPtr
   bodyFullGhostFrame bodyPtrDefs logInstSeqPtr ptrDiscipline ptrSafeRun
@@ -96,7 +96,13 @@ Proof
        (irule inst_seq_ptr_zero_to_lo >> simp[] >> qexists_tac `D` >> simp[]) >>
      irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >> simp[] >>
      qexists_tac `sm` >> simp[] >>
-     drule log_topics_opcode_shape >> simp[]) >>
+     drule log_topics_opcode_shape >> simp[] >>
+     drule log_topics_emitted_non_dalloca >> strip_tac >>
+     rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `emitted_insts _ _ = _ ++ _` (fn code =>
+       qpat_assum `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts _ _)`
+         (mp_tac o PURE_REWRITE_RULE [code])) >>
+     simp[EVERY_APPEND]) >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH sb.cs_current_insts`,
                 `Gf`, `tnf`] >>
   simp[venom_state_component_equality, stmt_state_rel_inst_idx] >>
@@ -327,6 +333,15 @@ Proof
     (qpat_assum `emitted_insts sa sb = [inst]` (fn code =>
        qpat_assum `inst.inst_opcode = LOG` (fn opcode =>
          simp_tac (srw_ss()) [code, opcode, is_terminator_def]))) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by simp[] >>
+     rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `emitted_insts _ _ = _ ++ _` (fn code =>
+       qpat_assum `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts _ _)`
+         (mp_tac o PURE_REWRITE_RULE [code])) >>
+     simp[EVERY_APPEND]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),G,tn)` suffices_by
     (qpat_assum `t = s with vs_logs := _`

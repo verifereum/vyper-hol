@@ -34,7 +34,7 @@ Theorem raw_call_forced_args_full:
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   return_buf_frame dframe cenv sa s0 /\ alloca_history func s0 /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s0 /\
     storage_well_formed_on cx es (FST H) /\
@@ -52,7 +52,7 @@ Theorem raw_call_forced_args_full:
     body_const_cells_agree [(NONE,tops)] cx env esD /\
     body_exprs_full_ok cx kws /\ expr_sim_inv cenv cx env esD /\
     storage_trace_domain cx st0 esD.storage_trace /\
-    (!fn inst s. frag_reachable ctx func tD fn inst s ==> dalloca_no_wrap inst s) /\
+    (!fn inst s. frag_reachable ctx func tD fn inst s ==> dalloca_fmp_headroom inst s) /\
     (!H. valid_horizon cx st0 H esD.storage_trace ==>
       expr_post H ctx func cenv cx a es sa s1 s0 esA av addr tA /\
       expr_store_bound cx (post_value_type cenv a) av addr tA /\
@@ -138,7 +138,7 @@ Proof
   qx_genl_tac [`marksA`,`resA`,`esA`,`GA`,`tnA`,`tA`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon esA.storage_trace)
      esA.storage_trace` by fs[storage_trace_domain_def] >>
-  `!fn inst s. frag_reachable ctx func tA fn inst s ==> dalloca_no_wrap inst s` by
+  `!fn inst s. frag_reachable ctx func tA fn inst s ==> dalloca_fmp_headroom inst s` by
     (qpat_assum `!H. valid_horizon _ _ H esA.storage_trace ==>
        gas_origin_ptr_path _ (s0,G0,tn0) marksA (OK tA,GA,tnA)`
        (qspec_then `storage_trace_horizon esA.storage_trace` mp_tac) >>
@@ -146,7 +146,7 @@ Proof
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn phi =>
        qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _`
          (ACCEPT_TAC o (fn nowrap =>
-           MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+           MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
              (LIST_CONJ [path, phi, nowrap])))))) >>
   qpat_assum `!H. valid_horizon _ _ H esA.storage_trace ==> _ _ esA GA tnA tA`
     (qspec_then `storage_trace_horizon esA.storage_trace` mp_tac) >>
@@ -227,7 +227,7 @@ Proof
   qx_genl_tac [`marksD`,`resD`,`esD`,`GD`,`tnD`,`tD`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon esD.storage_trace)
      esD.storage_trace` by fs[storage_trace_domain_def] >>
-  `!fn inst s. frag_reachable ctx func tD fn inst s ==> dalloca_no_wrap inst s` by
+  `!fn inst s. frag_reachable ctx func tD fn inst s ==> dalloca_fmp_headroom inst s` by
     (qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==>
        gas_origin_ptr_path _ (tA,GA,tnA) marksD (OK tD,GD,tnD)`
        (qspec_then `storage_trace_horizon esD.storage_trace` mp_tac) >>
@@ -235,7 +235,7 @@ Proof
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn phi =>
        qpat_assum `!fn inst s. frag_reachable ctx func tA fn inst s ==> _`
          (ACCEPT_TAC o (fn nowrap =>
-           MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+           MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
              (LIST_CONJ [path, phi, nowrap])))))) >>
   qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==> _ _ esD GD tnD tD`
     (qspec_then `storage_trace_horizon esD.storage_trace` mp_tac) >>

@@ -86,10 +86,16 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
                ~is_terminator i.inst_opcode) [inst]` by
     (Cases_on `tr` >> simp[Abbr `inst`, mk_inst_def, is_terminator_def]) >>
+  `inst.inst_opcode <> DALLOCA` by
+    (Cases_on `tr` >> simp[Abbr `inst`, mk_inst_def]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
       (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts),G,tn')` by
     (irule emitted_origin_ptr_path >> simp[] >>
-     qexistsl_tac [`[inst]`, `sa`] >> simp[]) >>
+     qexistsl_tac [`[inst]`, `sa`] >> simp[] >>
+     rpt strip_tac >>
+     qpat_x_assum `[inst] = _` mp_tac >>
+     simp[APPEND_EQ_CONS, dalloca_no_wrap_non_dalloca] >>
+     strip_tac >> gvs[dalloca_no_wrap_non_dalloca]) >>
   `alloca_history func (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule emitted_alloca_history >> simp[] >>
      qexistsl_tac [`[inst]`, `s`, `sa`] >> simp[] >>

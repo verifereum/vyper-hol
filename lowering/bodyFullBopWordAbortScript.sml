@@ -9,7 +9,7 @@ Ancestors
 
 Theorem bop_word_scalar_memory_free[local]:
   !code R A B. bop_scalar_seq R A code B ==>
-    EVERY (\i. i.inst_opcode <> ALLOCA /\
+    EVERY (\i. i.inst_opcode <> ALLOCA /\ i.inst_opcode <> DALLOCA /\
       !s. inst_mem_below_frontier i s /\ inst_dload_in_section i s) code
 Proof
   Induct >> simp[Once bop_scalar_seq_def] >> rpt strip_tac >>
@@ -61,8 +61,16 @@ Proof
     (drule run_inst_seq_append >>
      disch_then (qspec_then `[mk_inst id opc [op] []]` mp_tac) >>
      simp[run_inst_seq_def]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+     !pre i post u. prefix ++ [mk_inst id opc [op] []] = pre ++ i::post /\
+       run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `MEM i (prefix ++ [mk_inst id opc [op] []])` by
+       metis_tac[MEM_APPEND, MEM] >>
+     irule dalloca_no_wrap_non_dalloca >>
+     drule_all bop_word_scalar_memory_free >> fs[EVERY_MEM]) >>
   drule_all run_inst_seq_origin_ptr_abort_lift >>
-  disch_then (qspecl_then [`explicit`, `ctx`, `PG`] strip_assume_tac) >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`j`, `G'`, `tn'`] >> simp[] >> gen_tac >>
   irule gas_origin_ptr_path_from_no_dead >>
   first_x_assum irule >> simp[]

@@ -790,11 +790,7 @@ Definition lower_vyper_runtime_unit_mods_def:
        EVERY (no_neg_exp_expr o SND) (consts_env_mods mods) ∧
        EVERY (no_neg_exp_fn o SND)
          (ext_fns ++ int_fns ++
-          (case fb_fn of NONE => [] | SOME sf => [sf])) ∧
-       blueprint_unit_raw_fmp_ok (make_struct_fields_map_mods mods)
-         (FLAT (MAP SND mods))
-         (MAP SND (ext_fns ++ int_fns ++
-                   (case fb_fn of NONE => [] | SOME sf => [sf])))
+          (case fb_fn of NONE => [] | SOME sf => [sf]))
     then
       if EXISTS (external_has_defaults o SND) ext_fns then
         if EVERY (external_defaults_no_sha256 o SND) ext_fns then
@@ -836,9 +832,6 @@ Definition lower_vyper_deploy_unit_mods_def:
        ¬EVERY (no_neg_exp_expr o SND) (consts_env_mods mods) ∨
        ¬EVERY (no_neg_exp_fn o SND)
           (int_fns ++ (case ctor_fn of NONE => [] | SOME f => [(NONE, f)])) ∨
-       ¬blueprint_unit_raw_fmp_ok sft (FLAT (MAP SND mods))
-          (MAP SND (int_fns ++
-                    (case ctor_fn of NONE => [] | SOME f => [(NONE, f)]))) ∨
        ¬ctor_named_init ctor_fn
     then NONE else
     let (ctor_cenv, ctor_args, ctor_payable, ctor_nr, ctor_nkey,

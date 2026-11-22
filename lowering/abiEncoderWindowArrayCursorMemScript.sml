@@ -105,6 +105,7 @@ Theorem window_array_finish_mem_checks[local]:
   eval_operand pp s = SOME (n2w slot) /\ slot < dimword (:256) /\
   slot+32 <= s.vs_alloca_next /\ eval_operand size_op s = SOME w /\
   (!x. pp = Var x \/ size_op = Var x ==> not_fresh_at st x) ==>
+  EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st en) /\
   run_inst_seq_mem_ok (emitted_insts st en) s
 Proof
   simp_tac bool_ss [abi_encode_array_finish_def, comp_bind_def,
@@ -121,6 +122,9 @@ Proof
     (emitted_insts c1 c2 ++ (emitted_insts c2 c3 ++ emitted_insts c3 en))` by
     metis_tac[emitted_insts_append, inst_extends_def, inst_extends_trans] >>
   qpat_x_assum `emitted_insts st en = _` (fn th => pure_rewrite_tac [th]) >>
+  conj_tac
+  >- (imp_res_tac emitted_insts_emit_op >> imp_res_tac emitted_insts_emit_void >>
+      simp[mk_inst_def]) >>
   match_mp_tac run_inst_seq_mem_ok_append >> conj_tac
   >- (qpat_assum `emit_op MLOAD [pp] st = _` (mp_then Any mp_tac emit_mload_mem_ok) >>
       disch_then irule >> simp[]) >>
@@ -170,8 +174,12 @@ Proof
   `slot+32 <= s.vs_alloca_next` by
     (irule alloca_region_below_frontier >>
      fs[alloca_inv_def] >> goal_assum (drule_at Any) >> simp[]) >>
-  `run_inst_seq_mem_ok (emitted_insts st en) s` by
-    metis_tac[window_array_finish_mem_checks] >>
+  drule_all window_array_finish_mem_checks >> strip_tac >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+     !pre i post u. emitted_insts st en = pre ++ i::post /\
+       run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM, MEM_APPEND]) >>
   drule_all window_array_parent_finish_seq >> strip_tac >>
   `raw.vs_allocas = s.vs_allocas /\ raw.vs_alloca_next = s.vs_alloca_next /\
    raw.vs_halted = s.vs_halted /\ raw.vs_current_bb = s.vs_current_bb` by

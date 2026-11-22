@@ -81,6 +81,13 @@ Proof
     (drule_all suffix_final_ghost >> metis_tac[]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      [gi;ci;ai]` by simp[mk_inst_def, is_terminator_def] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. [gi;ci;ai] = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     `MEM i [gi;ci;ai]` by
+       (qpat_assum `[gi;ci;ai] = _` (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+     fs[MEM] >> gvs[mk_inst_def]) >>
   drule_all run_inst_seq_gas_origin_ptr_path >>
   disch_then (qspec_then `explicit` mp_tac) >>
   simp[mk_inst_def, is_terminator_def]

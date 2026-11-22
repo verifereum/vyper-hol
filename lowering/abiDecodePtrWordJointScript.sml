@@ -390,7 +390,24 @@ Proof
   `LENGTH sb.cs_current_insts = s.vs_inst_idx + LENGTH (emitted_insts sa sb)` by simp[] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
                i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts sa sb)` by simp[] >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (pre ++ (cl ++ post))` by
+    (simp[EVERY_APPEND] >> conj_tac >-
+       (qpat_assum `emit_op ADD _ _ = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+        qpat_assum `emit_op MLOAD _ _ = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+        simp[Abbr `pre`, mk_inst_def]) >>
+     conj_tac >-
+       (simp[Abbr `cl`] >> drule calldata_clamp_instructions >> rpt strip_tac >>
+        gvs[mk_inst_def] >> Cases_on `signed` >> gvs[]) >>
+     drule emitted_insts_emit_void >> strip_tac >> simp[Abbr `post`, mk_inst_def]) >>
+  `(ctx_has_dalloca ctx ==>
+    !px i sx u'. pre ++ (cl ++ post) = px ++ i::sx /\
+      run_inst_seq px s = OK u' ==> dalloca_no_wrap i u')` by
+    (strip_tac >> rpt gen_tac >>
+     disch_then (CONJUNCTS_THEN2
+       (fn eq => qpat_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _`
+         (mp_tac o ONCE_REWRITE_RULE [eq])) kall_tac) >>
+     simp[EVERY_APPEND, dalloca_no_wrap_non_dalloca]) >>
   rpt gen_tac >>
   qpat_assum `LENGTH sb.cs_current_insts = _` (once_rewrite_tac o single) >>
-  irule (cj 1 run_inst_seq_origin_ptr_lift) >> gvs[]
+  irule (cj 1 run_inst_seq_origin_ptr_lift) >> gvs[] >> first_assum ACCEPT_TAC
 QED

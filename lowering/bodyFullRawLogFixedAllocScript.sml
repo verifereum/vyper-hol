@@ -102,9 +102,11 @@ Resume raw_log_fixed_alloc_full[path]:
      gvs[step_inst_base_opcode_eqs, mk_inst_def,
        exec_alloca_def, AllCaseEqs(), update_var_def]) >>
   `inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
-   inst_mem_below_frontier inst s /\ inst_dload_in_section inst s` by
+   inst_mem_below_frontier inst s /\ inst_dload_in_section inst s /\
+   (ctx_has_dalloca ctx ==> dalloca_no_wrap inst s)` by
     simp[Abbr `inst`, mk_inst_def, is_terminator_def,
       unitTransformDefsTheory.inst_mem_below_frontier_def,
+      unitTransformDefsTheory.dalloca_no_wrap_def,
       memSafeRunTheory.inst_dload_in_section_def,
       codegenRelTheory.source_memory_write_ranges_def,
       contextCodegenRelTheory.source_memory_read_ranges_def] >>

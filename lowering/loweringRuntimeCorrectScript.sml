@@ -569,7 +569,7 @@ fun runtime_entry_allocas_tac endpoint =
     (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   simp[];
 
-Theorem runtime_body_reached_dalloca_no_wrap[local]:
+Theorem runtime_body_reached_dalloca_headroom[local]:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   unit.cu_context.ctx_entry = SOME "__entry" /\
   lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
@@ -579,9 +579,9 @@ Theorem runtime_body_reached_dalloca_no_wrap[local]:
                 vs_inst_idx := 0|>) n (OK s0) /\
   (ctx_has_dalloca unit.cu_context ==>
     !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-      dalloca_no_wrap inst s) ==>
+      dalloca_fmp_headroom inst s) ==>
   !fn inst s. frag_reachable unit.cu_context func s0 fn inst s ==>
-    dalloca_no_wrap inst s
+    dalloca_fmp_headroom inst s
 Proof
   strip_tac >>
   Cases_on `ctx_has_dalloca unit.cu_context`
@@ -614,16 +614,16 @@ Proof
   drule_then drule frag_reachable_members >> strip_tac >>
   `inst.inst_opcode <> DALLOCA` by
     (fs[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
-  simp[dalloca_no_wrap_def]
+  simp[dalloca_fmp_headroom_def]
 QED
 
-val runtime_reached_no_wrap_tac =
+val runtime_reached_headroom_tac =
   `!fn inst s. frag_reachable unit.cu_context func s0 fn inst s ==>
-     dalloca_no_wrap inst s` by (
+     dalloca_fmp_headroom inst s` by (
   mp_tac (Q.INST
     [`tops` |-> `tops`, `rpolicy` |-> `rpolicy`, `unit` |-> `unit`,
      `func` |-> `func`, `vs` |-> `vs`, `s0` |-> `s0`, `n` |-> `0:num`]
-    runtime_body_reached_dalloca_no_wrap) >>
+    runtime_body_reached_dalloca_headroom) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then ACCEPT_TAC);
 
@@ -977,7 +977,7 @@ Theorem runtime_body_endpoint_correct:
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     (ctx_has_dalloca unit.cu_context ==>
       !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-        dalloca_no_wrap inst s) /\
+        dalloca_fmp_headroom inst s) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut,nr,args,dflts,ret,fbody) /\
     runtime_body_endpoint tops rpolicy unit am tx vs es0 mut nr args dflts ret
@@ -1171,9 +1171,9 @@ Proof
   `gas_path unit.cu_context func entry (LENGTH marks0) (OK s_b)` by
     (drule_then (ACCEPT_TAC o CONJUNCT1) fragGasPathMemTheory.gas_path_mem_exec) >>
   `!fn inst s. frag_reachable unit.cu_context func s_b fn inst s ==>
-       dalloca_no_wrap inst s` by
+       dalloca_fmp_headroom inst s` by
     (mp_tac (Q.INST [`s0` |-> `s_b`, `n` |-> `LENGTH (marks0:bool list)`]
-      (SPEC_ALL runtime_body_reached_dalloca_no_wrap)) >>
+      (SPEC_ALL runtime_body_reached_dalloca_headroom)) >>
      impl_tac >- (fs[Abbr `entry`] >> metis_tac[]) >>
      disch_then ACCEPT_TAC) >>
   `expr_sim_inv cenv cx env_t es_lock` by
@@ -1248,7 +1248,7 @@ Proof
   impl_tac
   >- (`cenv.ce_return_buf = NONE` by fs[return_buf_frame_def] >>
       qpat_assum `!fn inst s. frag_reachable unit.cu_context func s_b fn inst s ==>
-          dalloca_no_wrap inst s`
+          dalloca_fmp_headroom inst s`
         (fn nowrap =>
           simp[dead_lo_ok_def, ret_pc_ok_def, return_buf_sep_def, gas_admissible_def, nowrap]) >>
       rpt strip_tac >> asm_simp_tac std_ss []
@@ -1262,7 +1262,7 @@ Proof
           disch_then (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp
                              o CONJUNCT1) >> simp[])
       >- (qpat_assum `!fn inst s. frag_reachable unit.cu_context func s_b fn inst s ==>
-             dalloca_no_wrap inst s`
+             dalloca_fmp_headroom inst s`
             (fn nowrap => first_assum (ACCEPT_TAC o MATCH_MP nowrap)))
       >> qpat_assum `!H. valid_horizon _ _ H es_lock.storage_trace ==> _`
            drule >> simp[]) >>
@@ -1519,7 +1519,7 @@ Theorem runtime_body_grouped_default_readings:
           w2n vs.vs_initial_fmp < 2 ** 254) /\
         (ctx_has_dalloca unit.cu_context ==>
           !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-            dalloca_no_wrap inst s) /\
+            dalloca_fmp_headroom inst s) /\
         (valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret \/
          (calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
             SOME (tx.function_name,tx.args) /\
@@ -1575,7 +1575,7 @@ Theorem runtime_body_joint_from_start_with_readings:
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     (ctx_has_dalloca unit.cu_context ==>
       !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-        dalloca_no_wrap inst s) /\
+        dalloca_fmp_headroom inst s) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -1617,7 +1617,7 @@ Theorem runtime_body_joint_from_start_with_shadow:
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     (ctx_has_dalloca unit.cu_context ==>
       !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-        dalloca_no_wrap inst s) /\
+        dalloca_fmp_headroom inst s) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -1647,7 +1647,7 @@ Theorem runtime_body_joint_from_start:
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     (ctx_has_dalloca unit.cu_context ==>
       !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-        dalloca_no_wrap inst s) /\
+        dalloca_fmp_headroom inst s) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -1740,7 +1740,7 @@ Theorem lower_vyper_runtime_unit_body_joint_with_shadow:
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     (ctx_has_dalloca unit.cu_context ==>
       !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-        dalloca_no_wrap inst s) /\
+        dalloca_fmp_headroom inst s) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -1774,7 +1774,7 @@ Theorem lower_vyper_runtime_unit_body_joint:
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     (ctx_has_dalloca unit.cu_context ==>
       !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-        dalloca_no_wrap inst s) /\
+        dalloca_fmp_headroom inst s) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -1878,7 +1878,7 @@ Theorem lower_vyper_runtime_unit_correct_readings_available:
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     (ctx_has_dalloca unit.cu_context ==>
       !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-        dalloca_no_wrap inst s) ==>
+        dalloca_fmp_headroom inst s) ==>
     ?marks.
       source_unit_execution_correct_at marks tops ret am tx unit vs /\
       ((?tail.
@@ -1920,7 +1920,7 @@ Theorem lower_vyper_runtime_unit_correct:
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     (ctx_has_dalloca unit.cu_context ==>
       !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-        dalloca_no_wrap inst s) ==>
+        dalloca_fmp_headroom inst s) ==>
     source_unit_execution_correct tops ret am tx unit vs
 Proof
   rpt strip_tac >>
@@ -1952,7 +1952,7 @@ Theorem lower_vyper_runtime_unit_run_bounded:
       outcomes_accounts_typed (SOME vs.vs_outcomes) /\
       (ctx_has_dalloca unit.cu_context ==>
         !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-          dalloca_no_wrap inst s) /\
+          dalloca_fmp_headroom inst s) /\
       (!marks.
          call_storage_ok am tx vs.vs_outcomes
            (gas_explicit marks vs.vs_gas_readings)) /\

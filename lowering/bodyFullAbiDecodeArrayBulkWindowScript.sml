@@ -130,6 +130,10 @@ Proof
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     (simp[run_inst_seq_mem_ok_last] >>
      irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u'. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u' ==> dalloca_no_wrap i u')` by
+    simp[APPEND_EQ_CONS, mk_inst_def, memSafeRunTheory.dalloca_no_wrap_non_dalloca] >>
   `inst_seq_ptr <|d_stor := K (K {}); d_trans := K (K {});
       d_imm := K {}; d_ret := K {}|> lo ctx fn PG G tn
       (emitted_insts sa sb) s H tm` by

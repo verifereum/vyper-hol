@@ -76,8 +76,19 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
     i.inst_opcode <> GAS) [i0;i1;i2;i3]` by
     simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`, mk_inst_def, is_terminator_def] >>
+  `(ctx_has_dalloca ctx ==>
+      !pre i post v. [i0;i1;i2;i3] = pre ++ i::post /\
+        run_inst_seq pre s = OK v ==> dalloca_no_wrap i v)` by
+    (rpt strip_tac >>
+     `MEM i [i0;i1;i2;i3]` by
+       (qpat_assum `[i0;i1;i2;i3] = pre ++ i::post` (SUBST1_TAC) >>
+        simp[MEM_APPEND]) >>
+     pop_assum mp_tac >>
+     simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`,
+       mk_inst_def, dalloca_no_wrap_def] >>
+     strip_tac >> simp[]) >>
   drule_all run_inst_seq_abort_origin_ptr_uniform >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  disch_then strip_assume_tac >>
   qexistsl [`raw with vs_inst_idx := j`, `H`, `u`] >>
   conj_tac >- simp[venom_state_component_equality] >>
   simp[] >> metis_tac[]

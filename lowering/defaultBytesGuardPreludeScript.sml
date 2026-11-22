@@ -203,8 +203,17 @@ Proof
     (irule ctor_arithmetic_tail_mem_ok >> simp[mk_inst_def]) >>
   `raw.vs_allocas = s.vs_allocas /\ raw.vs_current_bb = s.vs_current_bb` by
     simp[Abbr `raw`, update_var_def] >>
-  drule_all ctor_checked_arg_sequence_reach >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post z. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK z ==> unitTransformDefs$dalloca_no_wrap i z)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+       simp[mk_inst_def] >>
+     rpt strip_tac >>
+     `MEM i (emitted_insts sa sb)` by metis_tac[MEM_SPLIT] >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     fs[EVERY_MEM]) >>
+  drule_all (Q.INST [`ctx` |-> `ctx`] ctor_checked_arg_sequence_reach) >>
+  strip_tac >>
   qexistsl [`raw with vs_inst_idx := LENGTH sb.cs_current_insts`,`H`,`u`] >>
   pure_rewrite_tac[CONJ_ASSOC] >>
   reverse conj_tac >- suspend "pullback" >>
@@ -229,6 +238,8 @@ QED
 Resume default_bytes_guard_prelude[origin]:
   rpt gen_tac >> irule emitted_origin_ptr_path >>
   simp[] >> qexists `sa` >> simp[EVERY_CONJ, is_terminator_def] >>
+  conj_tac
+  >- (qpat_assum `ctx_has_dalloca ctx ==> !pre i post z. _` mp_tac >> simp[]) >>
   irule inst_seq_ptr_lower_bound_transport >>
   simp[mk_inst_def] >> qexists `0` >>
   qpat_x_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` (qspec_then `D` mp_tac) >>

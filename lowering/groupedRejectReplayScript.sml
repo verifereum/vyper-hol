@@ -51,7 +51,7 @@ Theorem row22_omitted_seed_path:
   expr_sim_inv (ce with ce_vars := FEMPTY) cx env es /\
   body_const_cells_agree [(NONE,tops)] cx env es /\
   alloca_history fn s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  (!f inst u. frag_reachable ctx fn s f inst u ==> dalloca_no_wrap inst u) /\
+  (!f inst u. frag_reachable ctx fn s f inst u ==> dalloca_fmp_headroom inst u) /\
   ~s.vs_halted /\ at_point sa s /\
   check_contract F layouts addr [(NONE,src_tops)] = SOME art /\
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,src_tops)] /\

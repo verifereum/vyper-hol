@@ -57,7 +57,7 @@ Theorem for_array_prepared_expr_cut_frag_full:
        stmt_state_rel H ctx func cenv cx es s0 /\ storage_well_formed_on cx es (FST H) /\
        ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
      (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-     (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_no_wrap inst t) /\
+     (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_fmp_headroom inst t) /\
      return_buf_frame d cenv se u /\ return_buf_sep d cenv em u /\
      alloca_frame cenv es sa s0 cenv em u /\
      gas_admissible
@@ -155,8 +155,8 @@ Resume for_array_prepared_expr_cut_frag_full[normal]:
     (qspec_then `H0` (drule_then assume_tac)) >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     (drule body_inv_no_phi >> disch_then (qspec_then `func` mp_tac) >> simp[]) >>
-  `!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_no_wrap inst t` by
-    (rpt gen_tac >> strip_tac >> irule gas_origin_ptr_path_dalloca_no_wrap >>
+  `!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_fmp_headroom inst t` by
+    (rpt gen_tac >> strip_tac >> irule gas_origin_ptr_path_dalloca_fmp_headroom >>
      goal_assum (drule_at (Pat `gas_origin_ptr_path _ _ _ _`)) >>
      qexists_tac `fn` >> simp[] >> first_assum ACCEPT_TAC) >>
   `!bw cap. d = SOME (bw,cap) ==> allocas_from (w2n bw + cap) u` by

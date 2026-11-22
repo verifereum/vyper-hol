@@ -234,10 +234,17 @@ Proof
      fs[inst_extends_def,emitted_insts_def] >>
      disch_then (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
   drule ctorDeployMemoryRunPtrPrefixLoopSetupTheory.prefix_loop_guard_outputs >> simp[mk_inst_def] >> disch_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+    simp[mk_inst_def] >>
+  `ctx_has_dalloca ctx ==> !pre i post u.
+     emitted_insts st st' = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+     unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >> fs[EVERY_APPEND, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   `checked ==> gas_path_mem ctx func s 0
      (OK (raw with vs_inst_idx := LENGTH st'.cs_current_insts)) /\
      alloca_history func (raw with vs_inst_idx := LENGTH st'.cs_current_insts)` by
     (strip_tac >>
+     qpat_assum `checked ==> _` (drule_then strip_assume_tac) >>
      `run_inst_seq_mem_ok (emitted_insts st st') s` by
        (irule ctor_checked_array_prefix_mem_ok >> metis_tac[]) >>
      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
@@ -245,7 +252,8 @@ Proof
        simp[mk_inst_def, is_terminator_def] >>
      `raw.vs_allocas = s.vs_allocas /\ raw.vs_current_bb = s.vs_current_bb` by
        simp[Abbr `raw`, update_var_def] >>
-     metis_tac[ctor_checked_emitted_endpoint]) >>
+     drule_all (Q.INST [`ctx` |-> `ctx`, `t` |-> `raw`] ctor_checked_emitted_endpoint) >>
+     strip_tac >> simp[]) >>
   qmatch_asmsub_abbrev_tac `ptr_safe_run Ddead lo _ ctx func PG H qt _` >>
   `checked ==> !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
      (OK (raw with vs_inst_idx := LENGTH st'.cs_current_insts),H,qt)` by
@@ -260,7 +268,9 @@ Proof
           `fn` |-> `func`, `a` |-> `n2w sb`, `ys` |-> `[]`, `G'` |-> `H`, `tn'` |-> `qt`]
           ctorDeployMemoryRunPtrPrefixCopyRunTheory.prefix_copy_count_success_ptr) >>
         simp[LET_THM, fragGasSeqPtrTheory.inst_seq_ptr_def, Abbr `H`, Abbr `qt`]) >>
-     irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >> simp[] >> qexists_tac `st` >> asm_rewrite_tac[]) >>
+     irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     qexists_tac `st` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `raw.vs_fmp = s.vs_fmp /\ raw.vs_initial_fmp = s.vs_initial_fmp` by
     simp[Abbr `raw`,update_var_def] >>
   qexistsl [`raw with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`] >>
@@ -439,14 +449,24 @@ Proof
        simp[mk_inst_def,is_terminator_def] >>
      `alloca_history func s` by metis_tac[] >>
      `t.vs_current_bb = s.vs_current_bb` by metis_tac[] >>
-     drule_all ctor_checked_emitted_endpoint >>
-     disch_then (qspec_then `ctx` strip_assume_tac) >>
+     `ctx_has_dalloca ctx ==> !pre i post u.
+        emitted_insts st st' = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+        unitTransformDefs$dalloca_no_wrap i u` by
+       (`EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+          simp[mk_inst_def] >>
+        rpt strip_tac >> fs[EVERY_APPEND, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
+     drule_all (Q.INST [`ctx` |-> `ctx`, `t` |-> `t`] ctor_checked_emitted_endpoint) >>
+     strip_tac >>
      rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
        i.inst_opcode <> GAS) (emitted_insts st st')` by
        simp[mk_inst_def,is_terminator_def] >>
-     rpt strip_tac >>
-     irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >> simp[] >> qexists_tac `st` >> asm_rewrite_tac[]) >>
+     qx_gen_tac `Dchecked` >> gen_tac >>
+     qpat_assum `!K. inst_seq_ptr K lo ctx func PG G tn _ s H qt`
+       (qspec_then `Dchecked` assume_tac) >>
+     irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     qexists_tac `st` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`] >>
   asm_simp_tac bool_ss [] >>
   conj_tac >-
@@ -608,8 +628,18 @@ Proof
      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
        i.inst_opcode <> GAS) (emitted_insts st st')` by
        simp[mk_inst_def,is_terminator_def] >>
-     rpt strip_tac >>
-     irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >> simp[] >> qexists_tac `st` >> asm_rewrite_tac[]) >>
+     `ctx_has_dalloca ctx ==> !pre i post u.
+        emitted_insts st st' = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+        unitTransformDefs$dalloca_no_wrap i u` by
+       (`EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+          simp[mk_inst_def] >>
+        rpt strip_tac >> fs[EVERY_APPEND, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
+     qx_gen_tac `Dchecked` >> gen_tac >>
+     qpat_assum `!K. inst_seq_ptr K lo ctx func PG G tn _ s H qt`
+       (qspec_then `Dchecked` assume_tac) >>
+     irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     qexists_tac `st` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
     t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp` by
     (strip_tac >>

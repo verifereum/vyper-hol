@@ -93,7 +93,7 @@ Theorem grouped_omitted_initializers:
       ghost_inv_at (DF H) 0 NONE (ce with ce_vars := FEMPTY) cx es G tn s) /\
     expr_sim_inv (ce with ce_vars := FEMPTY) cx env es /\
     alloca_history fn s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-    (!f inst u. frag_reachable ctx fn s f inst u ==> dalloca_no_wrap inst u) /\
+    (!f inst u. frag_reachable ctx fn s f inst u ==> dalloca_fmp_headroom inst u) /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     gas_outcome_full (DF,0,gas_explicit_sites ctx shadow_ctx,ctx,fn,PG)
@@ -187,11 +187,11 @@ Resume grouped_omitted_initializers[cons]:
     fs[storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
     (drule_then strip_assume_tac) >>
-  `!f inst u. frag_reachable ctx fn tail_state f inst u ==> dalloca_no_wrap inst u` by
+  `!f inst u. frag_reachable ctx fn tail_state f inst u ==> dalloca_fmp_headroom inst u` by
     (qpat_assum `gas_origin_ptr_path _ _ marks (OK tail_state,_,_)` (fn path =>
        qpat_assum `!bb. MEM bb fn.fn_blocks ==> _` (fn no_phi =>
        qpat_assum `!f inst u. frag_reachable ctx fn s f inst u ==> _` (fn bounds =>
-         ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+         ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
            (LIST_CONJ [path,no_phi,bounds])))))) >>
   `EVERY (^allocated_slot last tail_state G1 tn1) t` by
     (qpat_assum `EVERY _ t` mp_tac >>

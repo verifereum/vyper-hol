@@ -37,7 +37,8 @@ Theorem emit_op_path_mem:
   !ctx func cenv cx es opc args sa op sb s0 w.
     emit_op opc args sa = (op, sb) /\ local_ptrs_reserved cenv sa /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    opc <> INVOKE /\ opc <> GAS /\ opc <> ALLOCA /\ ~is_terminator opc /\
+    opc <> INVOKE /\ opc <> GAS /\ opc <> ALLOCA /\ opc <> DALLOCA /\
+    ~is_terminator opc /\
     stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
     ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
@@ -383,6 +384,10 @@ Theorem straight_path_mem:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   run_inst_seq_mem_ok (emitted_insts sa sb) s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. (emitted_insts sa sb) = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   gas_path_mem ctx func s 0
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
@@ -480,9 +485,15 @@ Proof
   `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
       ~is_terminator i.inst_opcode) (emitted_insts sm mid)` by
     simp[mk_inst_def, is_terminator_def] >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sm mid)` by
+    simp[mk_inst_def] >>
   qspecl_then [`sm`, `mid`, `func`, `s`, `t`, `ctx`] mp_tac
     (Q.GENL [`sa`, `sb`, `func`, `s`, `t`, `ctx`] straight_path_mem) >>
-  impl_tac >- simp[] >> strip_tac >>
+  impl_tac >-
+    (simp[] >> rpt strip_tac >>
+     qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+     simp[EVERY_APPEND, dalloca_no_wrap_non_dalloca]) >>
+  strip_tac >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH mid.cs_current_insts`, `w`] >>
   simp[] >> Cases_on `src` >>
   gvs[stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def,
@@ -613,9 +624,17 @@ Proof
       ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
     (qpat_x_assum `emitted_insts sa sb = [_; _]` SUBST1_TAC >>
      rw[mk_inst_def, is_terminator_def]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+      !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts sa sb)` by
+       (qpat_x_assum `emitted_insts sa sb = pre ++ i::post` SUBST1_TAC >>
+        simp[MEM_APPEND]) >>
+     gvs[mk_inst_def] >> rw[]) >>
   qspecl_then [`sa`, `sb`, `func`, `s`, `t`, `ctx`] mp_tac
     (Q.GENL [`sa`, `sb`, `func`, `s`, `t`, `ctx`] straight_path_mem) >>
-  impl_tac >- gvs[] >> strip_tac >>
+  impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> strip_tac >>
   qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   gvs[copy_prefix_idx]
 QED
@@ -1002,17 +1021,27 @@ Proof
   drule_all copy_runtime_run >> strip_tac >>
   qpat_x_assum `copy_runtime_frame _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [copy_runtime_frame_def]) >>
+  `emitted_insts sa sb = is` by
+    (qpat_x_assum `sb.cs_current_insts = _ ++ is` mp_tac >>
+     qpat_x_assum `sb.cs_current_insts = _ ++ emitted_insts _ _`
+       SUBST1_TAC >> simp[]) >>
   `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
       ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
-    (`emitted_insts sa sb = is` by
-       (qpat_x_assum `sb.cs_current_insts = _ ++ is` mp_tac >>
-        qpat_x_assum `sb.cs_current_insts = _ ++ emitted_insts _ _`
-          SUBST1_TAC >> simp[]) >>
-     pop_assum SUBST1_TAC >> fs[EVERY_MEM] >> rpt strip_tac >>
+    (fs[EVERY_MEM] >> rpt strip_tac >>
      first_x_assum drule >> strip_tac >> gvs[is_terminator_def]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+      !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     `MEM i is` by
+       (qpat_x_assum `emitted_insts sa sb = is` (SUBST1_TAC o SYM) >>
+        qpat_x_assum `emitted_insts sa sb = pre ++ i::post` SUBST1_TAC >>
+        simp[MEM_APPEND]) >>
+     qpat_x_assum `EVERY (\j. MEM j.inst_opcode _) is`
+       (drule o REWRITE_RULE [EVERY_MEM]) >> simp[] >> strip_tac >> simp[]) >>
   qspecl_then [`sa`, `sb`, `func`, `s`, `s'`, `ctx`] mp_tac
     (Q.GENL [`sa`, `sb`, `func`, `s`, `t`, `ctx`] straight_path_mem) >>
-  impl_tac >- simp[] >> strip_tac >>
+  impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> strip_tac >>
   qexists_tac `s' with vs_inst_idx := LENGTH sb.cs_current_insts` >> simp[]
 QED
 
@@ -1189,17 +1218,21 @@ Proof
   drule_all copy_ctor_run >> strip_tac >>
   qpat_x_assum `copy_runtime_frame _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [copy_runtime_frame_def]) >>
+  `emitted_insts sa sb = is` by
+    (qpat_x_assum `sb.cs_current_insts = _ ++ is` mp_tac >>
+     qpat_x_assum `sb.cs_current_insts = _ ++ emitted_insts _ _`
+       SUBST1_TAC >> simp[]) >>
   `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
       ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
-    (`emitted_insts sa sb = is` by
-       (qpat_x_assum `sb.cs_current_insts = _ ++ is` mp_tac >>
-        qpat_x_assum `sb.cs_current_insts = _ ++ emitted_insts _ _`
-          SUBST1_TAC >> simp[]) >>
-     pop_assum SUBST1_TAC >> fs[EVERY_MEM] >> rpt strip_tac >>
+    (fs[EVERY_MEM] >> rpt strip_tac >>
      first_x_assum drule >> strip_tac >> gvs[is_terminator_def]) >>
   qspecl_then [`sa`, `sb`, `func`, `s`, `zz`, `ctx`] mp_tac
     (Q.GENL [`sa`, `sb`, `func`, `s`, `t`, `ctx`] straight_path_mem) >>
-  impl_tac >- simp[] >> strip_tac >>
+  impl_tac
+  >- (simp[] >> rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+      qpat_x_assum `EVERY (\i. MEM i.inst_opcode [ADD; ILOAD; MSTORE]) _` mp_tac >>
+      simp[EVERY_APPEND] >> strip_tac >> gvs[]) >>
+  strip_tac >>
   qexists_tac `zz with vs_inst_idx := LENGTH sb.cs_current_insts` >> simp[]
 QED
 

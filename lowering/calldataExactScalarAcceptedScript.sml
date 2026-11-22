@@ -146,10 +146,18 @@ Proof
     simp[abiDecoderContractTheory.abi_decode_source_opcode_def] >>
   drule_all abiDecoderClampedWordTheory.abi_decoder_clamped_word_shape >> strip_tac >>
   drule calldataWordLeafTheory.calldata_word_opcodes >> strip_tac >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+      emitted_insts st last = pre ++ i::post /\ run_inst_seq pre initial = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     Cases_on `i.inst_opcode = DALLOCA` >> simp[] >>
+     qpat_assum `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) _` mp_tac >>
+     simp[EVERY_APPEND, abi_decoder_reentry_opcode_def]) >>
   `frag_exec_mem ctx st last (\s. s = initial) (\v. v = s') (\r. F)` by
     (irule safeSequenceTheory.frag_exec_mem_run_inst_seq >>
      rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
        gen_tac >> BETA_TAC >> disch_then SUBST1_TAC >> conj_tac
+       >- first_assum ACCEPT_TAC >> conj_tac
        >- (ho_match_mp_tac (GEN_ALL calldata_word_prefix_live) >>
            qexistsl_tac [`src`,`p`,`Var child`,`d`,`cl`] >>
            rpt conj_tac >> first_assum ACCEPT_TAC) >>

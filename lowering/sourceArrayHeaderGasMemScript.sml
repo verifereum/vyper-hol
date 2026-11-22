@@ -40,6 +40,12 @@ Proof
     `<|bb_label := hdr; bb_instructions := abi_decode_header_insts id ip src
         CALLDATALOAD iv cv cmp done body_lbl exit_lbl|>`] mp_tac) >>
   simp[abi_decode_header_insts_def, mk_inst_def, is_terminator_def] >>
+  (impl_tac >-
+    (rpt strip_tac >> rename1 `dalloca_no_wrap j u` >>
+     irule dalloca_no_wrap_non_dalloca >>
+     `EVERY (\k. k.inst_opcode <> DALLOCA) ((pre ++ [j]) ++ post)` by
+       (qpat_assum `_ = (pre ++ [j]) ++ post` (SUBST1_TAC o SYM) >> simp[]) >>
+     fs[EVERY_APPEND])) >>
   strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_path_mem ctx fn s 0 (OK h)` >>
   `gas_path_mem_edge ctx fn h 0

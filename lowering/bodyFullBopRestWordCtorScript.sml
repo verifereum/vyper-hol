@@ -703,9 +703,16 @@ Proof
   conj_tac
   >- (`LENGTH code = 2+delta+width /\
        EVERY (\ins. ins.inst_opcode <> INVOKE /\ ~is_terminator ins.inst_opcode) code /\
-       FILTER (\ins. ins.inst_opcode = GAS) code = []` by
+       FILTER (\ins. ins.inst_opcode = GAS) code = [] /\
+       EVERY (\ins. ins.inst_opcode <> DALLOCA) code` by
         (Cases_on `imm` >> Cases_on `0 < skip` >>
          simp[Abbr `code`, mk_inst_def, is_terminator_def]) >>
+      `(ctx_has_dalloca ctx ==>
+        !pre ins post v. code = pre ++ ins::post /\
+          run_inst_seq pre s = OK v ==> dalloca_no_wrap ins v)` by
+        (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+         qpat_x_assum `EVERY (\ins. ins.inst_opcode <> DALLOCA) code` mp_tac >>
+         simp[EVERY_APPEND]) >>
       `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by
         (conj_tac >- simp[] >>
@@ -813,9 +820,16 @@ Proof
   conj_tac
   >- (`LENGTH code = 2+delta+width /\
        EVERY (\ins. ins.inst_opcode <> INVOKE /\ ~is_terminator ins.inst_opcode) code /\
-       FILTER (\ins. ins.inst_opcode = GAS) code = []` by
+       FILTER (\ins. ins.inst_opcode = GAS) code = [] /\
+       EVERY (\ins. ins.inst_opcode <> DALLOCA) code` by
         (Cases_on `imm` >> Cases_on `0 < skip` >>
          simp[Abbr `code`, mk_inst_def, is_terminator_def]) >>
+      `(ctx_has_dalloca ctx ==>
+        !pre ins post v. code = pre ++ ins::post /\
+          run_inst_seq pre s = OK v ==> dalloca_no_wrap ins v)` by
+        (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+         qpat_x_assum `EVERY (\ins. ins.inst_opcode <> DALLOCA) code` mp_tac >>
+         simp[EVERY_APPEND]) >>
       `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by
         (conj_tac >- simp[] >>

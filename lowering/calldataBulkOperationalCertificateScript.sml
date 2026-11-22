@@ -1,7 +1,7 @@
 (* Operational framing of the given successful finite bulk decoder run. *)
 Theory calldataBulkOperationalCertificate
 Ancestors
-  calldataBulkLive calldataFiniteTransport calldataBulkLeaf abiDecoderBulk
+  calldataBulkLive calldataBulkNoWrap calldataFiniteTransport calldataBulkLeaf abiDecoderBulk
   abiDecoderReservation abiDecoderContract abiEncoder
   entryReachBodyExactArrayLoop ctorAbiActualAlloc
   safeSequence fragExecMem emitHelper exprLoweringProps compileEnv loweringStateRelDefs
@@ -112,6 +112,9 @@ Proof
   `frag_exec_mem ctx st last (\u. u = s)
     (\u. u = t with vs_inst_idx := LENGTH last.cs_current_insts) (K F)` by
     (irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >>
+     conj_tac
+     >- (drule_all calldata_bulk_non_dalloca >> strip_tac >>
+         rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >> fs[]) >>
      pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
      ho_match_mp_tac (GEN_ALL calldata_bulk_live_prefix_safe) >>
      qexistsl [`src`,`p`,`mem_sz`,`maxn`,`ei`,`dst`,`d`,`abi_sz`] >> simp[]) >>

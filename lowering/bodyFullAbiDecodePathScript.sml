@@ -14,6 +14,10 @@ Theorem abi_decode_emitted_abort_origin_ptr_path:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
              i.inst_opcode <> GAS) (emitted_insts st st') /\
   run_inst_seq_mem_ok (emitted_insts st st') s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. (emitted_insts st st') = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
   inst_seq_ptr D lo ctx func PG G tn (emitted_insts st st') s Gf tnf /\
   run_inst_seq (emitted_insts st st') s = Abort a t ==>
   ?j. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s,G,tn) []
@@ -31,5 +35,9 @@ Proof
     (qpat_x_assum `isPREFIX st'.cs_current_insts _` mp_tac >>
      simp[IS_PREFIX_APPEND] >> strip_tac >> simp[IS_PREFIX_APPEND] >>
      rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> metis_tac[]) >>
-  metis_tac[run_inst_seq_abort_origin_ptr_uniform]
+  qpat_x_assum `emitted_insts st st' = code` (SUBST_ALL_TAC o SYM) >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+  drule_all_then (qx_choose_then `j` assume_tac)
+    run_inst_seq_abort_origin_ptr_uniform >>
+  qexists_tac `j` >> first_x_assum irule >> simp[]
 QED

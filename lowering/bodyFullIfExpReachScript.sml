@@ -237,12 +237,12 @@ Proof
   metis_tac[body_inv_contract, body_inv_no_phi_mods]
 QED
 
-Theorem gas_origin_ptr_path_dalloca_no_wrap:
+Theorem gas_origin_ptr_path_dalloca_fmp_headroom:
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
     (s0,G0,tn0) marks (OK s1,G1,tn1) /\
   (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) ==>
-  !fn inst s. frag_reachable ctx func s1 fn inst s ==> dalloca_no_wrap inst s
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) ==>
+  !fn inst s. frag_reachable ctx func s1 fn inst s ==> dalloca_fmp_headroom inst s
 Proof
   strip_tac >> drule gas_origin_ptr_path_erase >> strip_tac >>
   `!i. active_inst func i s1 ==> frag_reachable ctx func s0 func i s1` by

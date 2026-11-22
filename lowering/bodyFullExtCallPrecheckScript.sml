@@ -43,6 +43,7 @@ Proof
   `step_inst_base i s = OK u` by simp[Abbr `i`, Abbr `u`, slice_extcodesize_step] >>
   `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
    inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+   (ctx_has_dalloca ctx ==> dalloca_no_wrap i s) /\
    ptr_inst_ok D lo 0 ctx func G tn i s` by
     simp[Abbr `i`, mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
          inst_dload_in_section_def, ptr_inst_ok_def, step_inst_non_invoke,
@@ -72,7 +73,8 @@ Theorem precheck_assert_path[local]:
 Proof
   strip_tac >> qabbrev_tac `i = mk_inst id ASSERT [op] []` >>
   `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-   inst_mem_below_frontier i s /\ inst_dload_in_section i s` by
+   inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+   (ctx_has_dalloca ctx ==> dalloca_no_wrap i s)` by
     simp[Abbr `i`, mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
          inst_dload_in_section_def, source_memory_read_ranges_def, source_memory_write_ranges_def] >>
   Cases_on `w = 0w` >> gvs[]

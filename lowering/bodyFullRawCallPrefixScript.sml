@@ -47,7 +47,7 @@ Theorem raw_call_prefix_prepared_full:
  (!x sz. cenv.ce_return_pc=SOME(PtrVar(Var x) sz) ==> not_fresh_at sa x) /\
  return_buf_frame dframe cenv sa s0 /\ alloca_history func s0 /\
  (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
- (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+ (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
  (!H. valid_horizon cx st0 H es.storage_trace ==>
    stmt_state_rel H ctx func cenv cx es s0 /\
    storage_well_formed_on cx es (FST H) /\
@@ -441,13 +441,13 @@ Proof
      rpt strip_tac >> metis_tac[loweringShapeDefsTheory.not_fresh_at_mono,arithmeticTheory.LESS_EQ_TRANS]) >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[body_inv_no_phi] >>
-  `!fn inst u. frag_reachable ctx func t4 fn inst u ==> dalloca_no_wrap inst u` by
+  `!fn inst u. frag_reachable ctx func t4 fn inst u ==> dalloca_fmp_headroom inst u` by
     (qpat_assum `!D. gas_origin_ptr_path _ (tD,GD,tnD) [] (OK t4,G4,tn4)`
        (qspec_then `DF (storage_trace_horizon esD.storage_trace)` (fn path =>
         qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn phi =>
         qpat_assum `!fn inst s. frag_reachable ctx func tD fn inst s ==> _`
           (ACCEPT_TAC o (fn nowrap =>
-            MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+            MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
               (LIST_CONJ [path, phi, nowrap]))))))) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t4` by
     (qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==>

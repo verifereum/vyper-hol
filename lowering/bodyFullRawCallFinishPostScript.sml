@@ -807,8 +807,8 @@ Proof
   simp_tac (srw_ss()) [Abbr `bs`]
 QED
 
-(* None of the instructions in the tuple suffix observes GAS. *)
-Theorem raw_call_positive_tuple_no_gas[local]:
+(* The tuple suffix neither observes GAS nor uses a dynamic allocation. *)
+Theorem raw_call_positive_tuple_opcode_shape[local]:
   (if n > 0 then
        do z <- emit_op RETURNDATASIZE [];
           cmp <- emit_op LT [z;Lit (n2w n)];
@@ -820,7 +820,8 @@ Theorem raw_call_positive_tuple_no_gas[local]:
           emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))];
           return buf.buf_operand od
      else return ok) sa = (result,sb) /\ 0 < n ==>
-  FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []
+  FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = [] /\
+  EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)
 Proof
   strip_tac >> drule_all raw_call_nonrevert_suffix_code >> strip_tac >>
   qpat_x_assum `(if _ then _ else _) _ = _` kall_tac >>
@@ -908,7 +909,7 @@ Proof
   drule_all raw_call_positive_tuple_ghosts >>
   disch_then (qspecl_then [`dep`,`PG`]
     (qx_choose_then `Gf` (qx_choose_then `tnf` strip_assume_tac))) >>
-  drule_all raw_call_positive_tuple_no_gas >> strip_tac >>
+  drule_all raw_call_positive_tuple_opcode_shape >> strip_tac >>
   drule_all raw_call_nonrevert_suffix_code >> strip_tac >>
   qabbrev_tac `code = emitted_insts sa sb` >>
   `sb.cs_current_insts = sa.cs_current_insts ++ code` by
@@ -941,6 +942,13 @@ Proof
   >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
   >- (rpt gen_tac >>
+      `(ptrDiscipline$ctx_has_dalloca ctx ==>
+        !pre i post u. code = pre ++ i::post /\
+          run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+        (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+         qpat_assum `EVERY (\i. i.inst_opcode <> DALLOCA) code` mp_tac >>
+         qpat_assum `code = _ ++ _` (pure_once_rewrite_tac o single) >>
+         simp_tac (srw_ss()) [EVERY_APPEND]) >>
       qpat_assum `!D. inst_seq_ptr D _ _ _ _ _ _ _ _ _ _`
         (qspec_then `D` assume_tac) >>
       drule_all fragGasSeqPtrTheory.run_inst_seq_gas_origin_ptr_path >>

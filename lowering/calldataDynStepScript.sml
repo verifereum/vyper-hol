@@ -375,11 +375,26 @@ Theorem calldata_element_setup_frag_mem:
     (K F)
 Proof
   strip_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+    (qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     Cases_on `dec_info_needs_offset di` >>
+     asm_simp_tac bool_ss [abi_decode_array_element_setup_def,
+       abi_decode_indexed_address_def, compile_abi_decode_dyn_elem_ptr_def,
+       compile_abi_dec_addr_def, compile_abi_decode_range_check_def,
+       comp_bind_def, comp_return_def, comp_ignore_bind_def,
+       emit_op_def, fresh_var_def, fresh_id_def, emit_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+     gvs[emitted_insts_def, mk_inst_def] >>
+     pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+     simp_tac bool_ss [DROP_LENGTH_APPEND, APPEND] >> simp[]) >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_array_element_setup_shape >> strip_tac >>
   drule_all calldata_element_setup_reentry >> strip_tac >>
   drule calldata_element_setup_opcodes >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> fs[inst_extends_def] >> conj_tac
+  >- (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+      qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >> simp[]) >>
+  conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_element_setup_prefix_safe) >>
       goal_assum (drule_at Any) >> metis_tac[]) >>

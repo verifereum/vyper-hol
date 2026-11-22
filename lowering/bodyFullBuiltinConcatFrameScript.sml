@@ -527,7 +527,10 @@ Proof
       (OK (raw with vs_inst_idx := LENGTH sb.cs_current_insts),Gf,tn')` by
     (gen_tac >> irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
      simp[] >> qexistsl [`emitted_insts sa sb`, `sa`] >>
-     gvs[venomInstTheory.is_terminator_def, venomInstTheory.mk_inst_def]) >>
+     gvs[venomInstTheory.is_terminator_def, venomInstTheory.mk_inst_def] >>
+     rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     Cases_on `pre` >- gvs[] >>
+     rename1 `run_inst_seq (_::ps) s = OK u` >> Cases_on `ps` >> gvs[]) >>
   `alloca_inv s` by
     (qpat_assum `stmt_state_rel H0 ctx func cenv cx es s`
       (strip_assume_tac o MATCH_MP stmt_state_rel_local_ptrs_alloca) >>

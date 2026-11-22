@@ -176,7 +176,7 @@ Theorem raw_log_fixed_data_full_from_endpoints:
     fn_has_code sa sd func /\ fn_has_code sd sm func /\
     fn_has_code shadow_sa shadow_sd shadow_func /\ fn_has_code shadow_sd shadow_sm shadow_func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    (!fn inst t. frag_reachable ctx func s0 fn inst t ==> dalloca_no_wrap inst t) /\
+    (!fn inst t. frag_reachable ctx func s0 fn inst t ==> dalloca_fmp_headroom inst t) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
     !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
@@ -301,16 +301,16 @@ Proof
   `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
     (qpat_assum `stmt_state_rel _ _ _ _ _ es u`
        (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
-  `!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_no_wrap inst t` by
+  `!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_fmp_headroom inst t` by
     (Cases_on `ctx_has_dalloca ctx`
      >- (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by fs[] >>
          qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) [] (OK u,Gu,tnu)` (fn path =>
            qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
            qpat_assum `!fn inst t. frag_reachable ctx func s0 fn inst t ==> _` (fn safe =>
-             ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+             ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
                (LIST_CONJ [path,no_phi,safe])))))) >>
      rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     simp[unitTransformDefsTheory.dalloca_no_wrap_def] >> strip_tac >>
+     simp[unitTransformDefsTheory.dalloca_fmp_headroom_def] >> strip_tac >>
      `ctx_has_dalloca ctx` by
        (simp_tac bool_ss [ctx_has_dalloca_def, EXISTS_MEM] >>
         qexists_tac `fn` >> conj_tac >- first_assum ACCEPT_TAC >>

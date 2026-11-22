@@ -74,3 +74,31 @@ Proof
   impl_tac >- (asm_rewrite_tac[] >> metis_tac[active_inst_dalloca_windows]) >>
   simp[]
 QED
+
+Theorem lower_vyper_runtime_unit_raw_headroom:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+  initial_venom_state_rel tops am tx vi /\
+  vi.vs_fmp = vi.vs_initial_fmp /\ w2n vi.vs_initial_fmp < 2 ** 254 /\
+  LENGTH vi.vs_outcomes < 2 ** 64 /\
+  outcomes_accounts_typed (SOME vi.vs_outcomes) /\
+  LENGTH vi.vs_call_ctx.cc_calldata < 2 ** 64 ==>
+  !fn i s. raw_reachable vi unit.cu_context fn i s ==> dalloca_fmp_headroom i s
+Proof
+  strip_tac >>
+  `lowering_context_ok unit.cu_context` by
+    metis_tac[lower_vyper_runtime_unit_context_entry] >>
+  `account_code_lengths_ok vi.vs_accounts /\ ~vi.vs_halted` by
+    (fs[source_typing_ok_def, initial_venom_state_rel_def] >>
+     metis_tac[initial_account_codes_after_transfer]) >>
+  mp_tac (Q.INST [`source_tops` |-> `tops`, `policy` |-> `rpolicy`,
+    `window` |-> `\chunk k. raw_call_dalloca_chunk chunk k \/
+       create_copy_dalloca_chunk chunk k \/ create_blueprint_dalloca_chunk chunk k`]
+    lower_vyper_runtime_unit_dalloca_windows_for) >>
+  (impl_tac >- (strip_tac >> metis_tac[])) >> strip_tac >>
+  `!fn. MEM fn unit.cu_context.ctx_functions ==> ALL_DISTINCT (fn_labels fn)` by
+    fs[lowering_context_ok_def, EVERY_MEM] >>
+  mp_tac (Q.INST [`ctx` |-> `unit.cu_context`] raw_headroom_from_dalloca_windows) >>
+  impl_tac >- (asm_rewrite_tac[] >> metis_tac[active_inst_dalloca_windows_with_blueprint]) >>
+  simp[]
+QED
