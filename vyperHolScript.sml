@@ -57,6 +57,8 @@ Ancestors
      bytes, widened returns *)
   actualDecoderPackaging actualRegistrationCode actualEntryAllocationFrame
   allocaHistoryFragment ctorRegisterArgs
+  entryPtrSeamRegisterMods[qualified,ignore_grammar]
+  ctorDeployMemoryRunPtrPrefixEntrySemanticMods[qualified,ignore_grammar]
   nonreentrantEntry nonreentrantSource nonreentrantExit
   builtinBytesMemory concatMemory exprSimConvertFromBytes
   stmtSimReturnWiden
