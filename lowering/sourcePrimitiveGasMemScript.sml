@@ -13,7 +13,7 @@ Theorem source_primitive_accesses[local]:
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) di sa = ((),sb) /\
   ((?clamp. di = DecPrimWord clamp /\ sz = 32) \/
    (?n. di = DecBytestring n /\ sz = abi_decode_bytes_copy_size n)) ==>
-  EVERY (\i. ~is_alloca_op i.inst_opcode /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode /\ i.inst_opcode <> DALLOCA /\
     i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES /\ i.inst_opcode <> GAS /\
     (!s. (\x. inst_mem_below_frontier i x) s \/
       (?id v outs. i = mk_inst id MSTORE [dst;v] outs /\ sz = 32) \/
@@ -111,5 +111,11 @@ Proof
   drule_all fn_has_code_code >> strip_tac >>
   `lookup_block r.vs_current_bb fn.fn_blocks = SOME bb /\
    isPREFIX (emitted_insts sa sb) (DROP r.vs_inst_idx bb.bb_instructions)` by simp[] >>
+  `ctx_has_dalloca ctx ==> !pre i post u.
+     emitted_insts sa sb = pre ++ i::post /\ run_inst_seq pre r = OK u ==>
+     dalloca_no_wrap i u` by
+    (qpat_x_assum `EVERY (\i. ~is_alloca_op i.inst_opcode /\ _) _` mp_tac >>
+     simp[EVERY_MEM] >>
+     metis_tac[MEM_APPEND, MEM, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   drule_all run_inst_seq_gas_path_mem >> simp[]
 QED

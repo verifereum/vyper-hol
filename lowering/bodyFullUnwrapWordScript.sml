@@ -286,7 +286,9 @@ Proof
   qspecl_then [`[inst]`, `sb`, `sc`, `s`, `u`, `G`, `tn`, `Gf`, `tnf`]
     mp_tac (Q.INST [`D` |-> D0_Q] emitted_origin_ptr_path) >>
   impl_tac
-  >- simp[Abbr `inst`, mk_inst_def, is_terminator_def] >>
+  >- (simp[Abbr `inst`, mk_inst_def, is_terminator_def] >>
+      rpt strip_tac >> Cases_on `pre` >>
+      gvs[mk_inst_def, dalloca_no_wrap_non_dalloca]) >>
   strip_tac >>
   `alloca_inv s` by
     (qpat_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -466,7 +468,8 @@ Proof
     mp_tac (Q.INST [`D` |-> D0_Q] emitted_origin_ptr_path) >>
   impl_tac
   >- (simp[Abbr `inst`, mk_inst_def] >> Cases_on `tr` >>
-      simp[is_terminator_def]) >>
+      simp[is_terminator_def] >> rpt strip_tac >> Cases_on `pre` >>
+      gvs[mk_inst_def, dalloca_no_wrap_non_dalloca]) >>
   strip_tac >>
   `alloca_inv s` by
     (qpat_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -665,7 +668,8 @@ Proof
     fs[copy_runtime_frame_def] >>
   `sc.cs_current_bb = sb.cs_current_bb /\
    EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
-              ~is_terminator i.inst_opcode) (emitted_insts sb sc)` by
+              ~is_terminator i.inst_opcode) (emitted_insts sb sc) /\
+   EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sb sc)` by
     (qpat_x_assum `compile_imm_load_word T _ _ _ = _` mp_tac >>
      rpt (pop_assum kall_tac) >>
      Cases_on `cenv.ce_imm_alloca` >> strip_tac
@@ -708,7 +712,11 @@ Proof
     (first_x_assum irule >> simp[] >> metis_tac[]) >>
   qspecl_then [`emitted_insts sb sc`, `sb`, `sc`, `s`, `u`, `G`, `tn`,
                `Gf`, `tnf`] mp_tac (Q.INST [`D` |-> D0_Q] emitted_origin_ptr_path) >>
-  impl_tac >- fs[] >> strip_tac >>
+  impl_tac
+  >- (fs[] >> rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+      qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+      simp[EVERY_APPEND]) >>
+  strip_tac >>
   `alloca_inv s` by
     (qpat_assum `stmt_state_rel H0 _ _ _ _ _ s`
        (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def]) >>
@@ -816,7 +824,9 @@ Resume unwrap_code_word_origin_ptr[runtime]:
   qspecl_then [`[inst]`, `sb`, `sc`, `s`, `u`, `G`, `tn`, `Gf`, `tnf`]
     mp_tac (Q.INST [`D` |-> D0_Q] emitted_origin_ptr_path) >>
   impl_tac
-  >- simp[Abbr `inst`, mk_inst_def, is_terminator_def] >>
+  >- (simp[Abbr `inst`, mk_inst_def, is_terminator_def] >>
+      rpt strip_tac >> Cases_on `pre` >>
+      gvs[mk_inst_def, dalloca_no_wrap_non_dalloca]) >>
   strip_tac >>
   `alloca_inv s` by
     (qpat_assum `stmt_state_rel H0 _ _ _ _ _ s`

@@ -2,6 +2,7 @@
 Theory calldataMembers
 Ancestors
   valueEncodingDefs loweringStateRelDefs calldataChildFrame valueEncodingProps abiDecoderReentry calldataDynOwned safeSequence fragExecMem abiDecoderMemberBound abiDecoderReservation
+  calldataMemberAddressCheck
   abiDecoderBytesBound abiDecoderGuards abiDecoderRange calldataWordLeaf abiDecoderClampedWord
   abiDecoderAppend fragExec abiDecoderFrameCompose
   abiDecoderComposition abiDecoderContract abiEncoder emitHelperProps
@@ -98,7 +99,8 @@ Theorem calldata_member_address_frag_mem:
       (!op w. eval_operand op initial = SOME w ==> eval_operand op t = SOME w))
     (K F)
 Proof
-  strip_tac >> drule calldata_member_address_shape >> strip_tac >>
+  strip_tac >> drule calldata_member_address_non_dalloca >> strip_tac >>
+  drule calldata_member_address_shape >> strip_tac >>
   drule_all calldata_member_address_sequence >> strip_tac >>
   `t.vs_allocas = initial.vs_allocas /\ t.vs_alloca_next = initial.vs_alloca_next` by
     (irule abi_decode_sequence_allocation_frame >>
@@ -106,7 +108,7 @@ Proof
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >>
   fs[inst_extends_def, fresh_vars_wrt_def,
      instIdxIndepTheory.eval_op_inst_idx, EVERY_MEM] >>
-  rpt strip_tac >> first_x_assum drule >> simp[]
+  rpt strip_tac >> first_x_assum drule >> simp[memSafeRunTheory.dalloca_no_wrap_non_dalloca]
 QED
 
 Theorem calldata_members_cons_split[local]:
@@ -468,11 +470,12 @@ Theorem calldata_member_address_repeat_frag_mem:
       (!op. abi_decoder_operand_live st.cs_next_var op ==>
         eval_operand op t = eval_operand op initial)) (K F)
 Proof
-  strip_tac >> drule calldata_member_address_shape >> strip_tac >>
+  strip_tac >> drule calldata_member_address_non_dalloca >> strip_tac >>
+  drule calldata_member_address_shape >> strip_tac >>
   drule_all calldata_member_address_repeat >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >>
   fs[inst_extends_def, instIdxIndepTheory.eval_op_inst_idx, EVERY_MEM] >>
-  rpt strip_tac >> first_x_assum drule >> simp[]
+  rpt strip_tac >> first_x_assum drule >> simp[memSafeRunTheory.dalloca_no_wrap_non_dalloca]
 QED
 
 (* A completed member is protected by its containing output allocation,

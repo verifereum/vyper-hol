@@ -152,6 +152,21 @@ Proof
   disch_then (qspecl_then [`fn`,`PG`] strip_assume_tac) >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     (irule convert_bytestring_cast_mem_ok >> metis_tac[]) >>
+  `EVERY (\ins. ins.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+    (qpat_x_assum `compile_type_convert _ _ _ = _` mp_tac >>
+     Cases_on `n < i` >>
+     simp[compile_type_convert_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+       fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
+     simp[emitted_insts_def] >>
+     CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def]) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre ins post u. emitted_insts sa sb = pre ++ ins::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap ins u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY (\ins. ins.inst_opcode <> DALLOCA) _` mp_tac >>
+     simp[EVERY_APPEND]) >>
   `EVERY (\ins. ins.inst_opcode <> INVOKE /\ ~is_terminator ins.inst_opcode /\
       ins.inst_opcode <> GAS) (emitted_insts sa sb)` by fs[EVERY_MEM] >>
   `!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s H th` by
@@ -186,8 +201,7 @@ QED
 
 Resume convert_cast_origin_path[abort]:
   strip_tac >> drule_all convert_cast_abort_run >> strip_tac >>
-  drule_all run_inst_seq_abort_origin_ptr_uniform >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all run_inst_seq_abort_origin_ptr_uniform >> strip_tac >>
   qexistsl [`tt with vs_inst_idx := j`,`H`,`th`] >> metis_tac[]
 QED
 

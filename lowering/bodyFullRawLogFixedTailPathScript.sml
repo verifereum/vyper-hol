@@ -115,9 +115,8 @@ Proof
     (drule_at (Pat `step_inst _ _ j _ = _`) step_preserves_control_flow >> simp[]) >>
   `i.inst_opcode <> INVOKE /\ j.inst_opcode <> INVOKE` by
     simp[Abbr `i`, Abbr `j`, mk_inst_def] >>
-  `(ctx_has_dalloca ctx ==> unitTransformDefs$dalloca_no_wrap i s) /\
-   (ctx_has_dalloca ctx ==>
-    unitTransformDefs$dalloca_no_wrap j (t with vs_inst_idx := SUC s.vs_inst_idx))` by
+  `(ctx_has_dalloca ctx ==> dalloca_no_wrap i s) /\
+   (ctx_has_dalloca ctx ==> dalloca_no_wrap j (t with vs_inst_idx := SUC s.vs_inst_idx))` by
     simp[Abbr `i`, Abbr `j`, mk_inst_def, memSafeRunTheory.dalloca_no_wrap_non_dalloca] >>
   `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
      (OK (t with vs_inst_idx := SUC s.vs_inst_idx),step_prov PG G i t,step_taint i s t tn)` by
@@ -434,10 +433,9 @@ Proof
   `~t1.vs_halted /\ t1.vs_current_bb = s.vs_current_bb /\
    t1.vs_inst_idx = SUC s.vs_inst_idx` by
     simp[Abbr `t1`, Abbr `t`, mstore_def] >>
-  `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode` by
-    simp[Abbr `i`, mk_inst_def, is_terminator_def] >>
-  `(ctx_has_dalloca ctx ==> unitTransformDefs$dalloca_no_wrap i s)` by
-    simp[Abbr `i`, mk_inst_def, memSafeRunTheory.dalloca_no_wrap_non_dalloca] >>
+  `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+   (ctx_has_dalloca ctx ==> dalloca_no_wrap i s)` by
+    simp[Abbr `i`, mk_inst_def, is_terminator_def, memSafeRunTheory.dalloca_no_wrap_non_dalloca] >>
   `gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
      (OK t1,step_prov PG G i t,tf)` by
     (simp[Abbr `t1`, Abbr `tf`] >>
@@ -452,7 +450,7 @@ Proof
      >- (rewrite_tac[fragGasOriginTheory.gas_origin_edge_def] >> conj_tac >- simp[] >>
          qexistsl [`0`, `bb`, `j`, `Abort ExHalt_abort (halt_state (set_returndata [] t1))`] >>
          simp[gasEventsTheory.gas_events_step_def, memSafeRunTheory.mem_safe_step_non_invoke, exit_result_def,
-              Abbr `j`, mk_inst_def] >>
+              Abbr `j`, mk_inst_def, memSafeRunTheory.dalloca_no_wrap_non_dalloca] >>
          gvs[mk_inst_def]) >>
      rewrite_tac[fragGasPathPtrTheory.gas_path_ptr_edge_def] >> simp[] >> qexists `0` >>
      simp[gasCountTheory.gas_count_step_def, ptr_safe_step_def] >>

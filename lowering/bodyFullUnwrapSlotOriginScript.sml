@@ -147,14 +147,17 @@ Proof
     [mk_inst id load [src] [out]; mk_inst (id+1) MSTORE [Var root;Var out] []]` by
     (qpat_x_assum `load = SLOAD \/ load = TLOAD` strip_assume_tac >>
      simp[mk_inst_def, is_terminator_def]) >>
-  `(ctx_has_dalloca ctx ==>
-    !pre i post u.
-      [mk_inst id load [src] [out]; mk_inst (id+1) MSTORE [Var root;Var out] []] =
-        pre ++ i::post /\ run_inst_seq pre s = OK u ==>
-      unitTransformDefs$dalloca_no_wrap i u)` by
-    (qpat_assum `load = SLOAD \/ load = TLOAD` strip_assume_tac >>
-     simp[listTheory.APPEND_EQ_CONS, mk_inst_def] >> rpt strip_tac >>
-     gvs[listTheory.APPEND_EQ_CONS, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
+  `ctx_has_dalloca ctx ==> !pre i post u.
+    [mk_inst id load [src] [out]; mk_inst (id+1) MSTORE [Var root;Var out] []] =
+      pre ++ i::post /\ run_inst_seq pre s = OK u ==> dalloca_no_wrap i u` by
+    (rpt strip_tac >>
+     `MEM i [mk_inst id load [src] [out]; mk_inst (id+1) MSTORE [Var root;Var out] []]` by
+       (qpat_assum `_ = pre ++ i::post` (fn th => pure_once_rewrite_tac[th]) >>
+        simp[listTheory.MEM_APPEND]) >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `MEM i _` mp_tac >> simp[] >> strip_tac >>
+     qpat_x_assum `load = SLOAD \/ load = TLOAD` strip_assume_tac >>
+     gvs[mk_inst_def]) >>
   drule_all emitted_origin_ptr_path >>
   disch_then (qspec_then `explicit` assume_tac) >>
   qexistsl [`Gf`, `tnf`, `t with vs_inst_idx := LENGTH sb.cs_current_insts`] >>

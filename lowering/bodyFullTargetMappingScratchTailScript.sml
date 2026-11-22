@@ -127,15 +127,14 @@ Resume mapping_scratch_tail_full_run[memory]:
   irule mstore_mem_bytes_at_disjoint >> decide_tac
 QED
 Resume mapping_scratch_tail_full_run[path]:
+  `!i u. MEM i code ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     gvs[mk_inst_def]) >>
+  `!pre i post u. code = pre ++ i::post ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (metis_tac[MEM_APPEND, MEM]) >>
   irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
   simp[] >> qexistsl_tac [`code`, `sa`] >> simp[] >>
-  simp[mk_inst_def, is_terminator_def] >>
-  conj_tac >-
-    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
-     `EVERY (\j. j.inst_opcode <> DALLOCA) ((pre ++ [i]) ++ post)` by
-       (qpat_assum `_ = (pre ++ [i]) ++ post`
-          (fn th => pure_once_rewrite_tac[GSYM th]) >> simp[]) >>
-     fs[EVERY_APPEND]) >>
+  conj_tac >- simp[mk_inst_def, is_terminator_def] >>
   conj_tac >- suspend "memchecks" >>
   simp[Abbr `HG`, Abbr `tm`] >>
   irule fragGasCopyLoopTheory.inst_seq_ptr_lower_bound_transport >>
