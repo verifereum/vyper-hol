@@ -1,7 +1,8 @@
 (* Request-prefix companion to augAssignFullBindStages. *)
 Theory s1PrefixAugAssignBindStages
 Ancestors
-  s1PrefixPreds augAssignFullBindStages s1PrefixDefs
+  s1PrefixPreds augAssignFullBindStages s1PrefixDefs s1PrefixCompose s1PrefixProps
+  vyperStorageTrace stmtSimAugAssign stmtSimAugAssignPlaceMemory vyperStorageBackend vyperState list sum
 
 Theorem augassign_target_bind_prefix:
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
@@ -33,7 +34,19 @@ Theorem augassign_target_bind_prefix:
               ptv bop cur rhs)) (write_place cx p))))))
     (es,s,G,tn)
 Proof
-  cheat
+  strip_tac >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _`
+    (mp_then Any irule gas_prefix_full_bind) >>
+  BETA_TAC >>
+  simp[evaluate_storage_trace_frame, evaluate_requests_outcomes_frame] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac >- (rpt strip_tac >> simp[]) >>
+  gen_tac >> irule storage_trace_frame_bind_all >>
+  simp[storage_trace_frame_read_place] >> gen_tac >>
+  irule storage_trace_frame_bind_all >>
+  simp[storage_trace_frame_place_type] >> gen_tac >>
+  irule storage_trace_frame_bind_all >>
+  simp[augassign_rhs_trace_frame, aug_place_store_trace_frame]
 QED
 
 Theorem augassign_rhs_bind_prefix:
@@ -50,5 +63,31 @@ Theorem augassign_rhs_bind_prefix:
         ptv bop cur rhs)) (write_place cx p)))
     (es,s,G,tn)
 Proof
-  cheat
+  strip_tac >>
+  drule_then irule gas_prefix_full_bind_no_outcome >>
+  simp[augassign_rhs_trace_frame, aug_place_store_trace_frame,
+       requests_outcomes_frame_bind_all, requests_outcomes_frame_read_result,
+       evaluate_requests_outcomes_frame] >>
+  conj_tac >- (rpt strip_tac >> gvs[sumTheory.ISR]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >>
+  reverse (Cases_on `evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+                                    ptv bop cur v`) >>
+  simp[bind_def, lift_sum_def, return_def, raise_def]
+  >- (rpt strip_tac >> gvs[]) >>
+  Cases_on `p`
+  >- (rename1 `write_place _ (StoragePlace tr _ _) _ _ = _ ==> _` >>
+      Cases_on `tr` >>
+      simp[write_place_def, write_storage_slot_eq, set_storage_def] >>
+      rpt strip_tac >> gvs[AllCaseEqs()]) >>
+  simp[write_place_def, bind_def, ignore_bind_def, get_scopes_def,
+       set_scopes_def, lift_option_type_def, lift_sum_def, type_check_def,
+       assert_def, return_def, raise_def, get_immutables_def,
+       set_immutable_def, get_address_immutables_def, set_address_immutables_def,
+       vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  qpat_assum `find_containing_scope _ _ = SOME _` mp_tac >>
+  rename1 `find_containing_scope _ _ = SOME parts` >> PairCases_on `parts` >>
+  gvs[bind_def, ignore_bind_def, set_scopes_def, lift_sum_def, assert_def,
+      return_def, raise_def, vyperMiscTheory.sum_CASE_rator, AllCaseEqs()]
 QED
