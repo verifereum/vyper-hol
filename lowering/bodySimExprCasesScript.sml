@@ -99,7 +99,9 @@ Theorem body_ifexp_case:
     body_expr_ok cx e1 ==>
     body_expr_ok cx (IfExp v5 e1 e2 e3)
 Proof
-  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> simp[] >>
+  conj_tac >- (strip_tac >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
   Cases_on `!e. (e = e2 \/ e = e3) ==>
     (int_calls_expr e = [] \/
      same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
