@@ -95,9 +95,10 @@ Proof
     `window` |-> `\chunk k. raw_call_dalloca_chunk chunk k \/
        create_copy_dalloca_chunk chunk k \/ create_blueprint_dalloca_chunk chunk k`]
     lower_vyper_runtime_unit_dalloca_windows_for) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (strip_tac >> metis_tac[])) >> strip_tac >>
   `!fn. MEM fn unit.cu_context.ctx_functions ==> ALL_DISTINCT (fn_labels fn)` by
     fs[lowering_context_ok_def, EVERY_MEM] >>
-  irule raw_headroom_from_dalloca_windows >>
-  simp[] >> metis_tac[active_inst_dalloca_windows_with_blueprint]
+  mp_tac (Q.INST [`ctx` |-> `unit.cu_context`] raw_headroom_from_dalloca_windows) >>
+  impl_tac >- (asm_rewrite_tac[] >> metis_tac[active_inst_dalloca_windows_with_blueprint]) >>
+  simp[]
 QED
