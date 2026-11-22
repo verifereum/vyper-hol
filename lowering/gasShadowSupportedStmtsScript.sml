@@ -118,11 +118,9 @@ Proof
       `(!t nm. arr <> Name t nm) /\
        (!t nm. arr <> TopLevelName t nm)` by metis_tac[] >>
       asm_simp_tac bool_ss [supported_non_name_array_iterator] >>
-      strip_tac >>
-      conj_tac >- metis_tac[] >>
-      conj_tac
+      strip_tac >> conj_tac
       >- (rpt gen_tac >> strip_tac >> Cases_on `arr` >>
-          gvs[gas_shadow_expr_def]) >>
+          gvs[gas_shadow_expr_def] >> res_tac) >>
       simp[] >> metis_tac[]) >>
   qpat_x_assum `!tops e. supported_expr _ _ ==> _` kall_tac >>
   rpt gen_tac >> rename1 `Range a b` >>
