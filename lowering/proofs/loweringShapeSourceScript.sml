@@ -136,7 +136,7 @@ Theorem well_typed_expr_raw_shape_mode[local]:
 Proof
   ho_match_mp_tac well_typed_expr_ind >> rpt conj_tac >> rpt gen_tac >>
   rpt strip_tac >>
-  gvs[well_typed_expr_def, supported_expr_exists_def, expr_shape_root_mode_def,
+  gvs[well_typed_expr_def, supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def,
       expr_raw_shape_root_mode_def, expr_raw_shape_root_def, AllCaseEqs()] >>
   rpt (qpat_x_assum `_ \/ _` strip_assume_tac) >>
   res_tac >> imp_res_tac well_typed_builtin_app_arity >>
@@ -148,12 +148,12 @@ Theorem fold_const_builtin_shape_mode[local]:
   ~supported_expr_exists (expr_shape_root_mode static) (fold_const_builtin ty bi es)
 Proof
   strip_tac >> Cases_on `bi` >>
-  gvs[fold_const_builtin_def, supported_expr_exists_def, expr_shape_root_mode_def] >>
-  Cases_on `es` >> gvs[supported_expr_exists_def, expr_shape_root_mode_def] >>
-  Cases_on `t` >> gvs[supported_expr_exists_def, expr_shape_root_mode_def] >>
-  Cases_on `h` >> gvs[supported_expr_exists_def, expr_shape_root_mode_def] >>
+  gvs[fold_const_builtin_def, supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def] >>
+  Cases_on `es` >> gvs[supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def] >>
+  Cases_on `t` >> gvs[supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def] >>
+  Cases_on `h` >> gvs[supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def] >>
   rename1 `Literal aty l` >> Cases_on `l` >>
-  gvs[supported_expr_exists_def, expr_shape_root_mode_def]
+  gvs[supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def]
 QED
 
 Theorem fold_const_shape_mode[local]:
@@ -173,9 +173,9 @@ Proof
   >~ [`fold_const_expr (Builtin ty bi es)`]
   >- (simp[fold_const_expr_def] >> strip_tac >> strip_tac >>
       irule fold_const_builtin_shape_mode >>
-      gvs[supported_expr_exists_def, expr_shape_root_mode_def,
+      gvs[supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def,
           fold_const_collection_metadata]) >>
-  simp[fold_const_expr_def, supported_expr_exists_def, expr_shape_root_mode_def,
+  simp[fold_const_expr_def, supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def,
        fold_const_collection_metadata] >> metis_tac[]
 QED
 
@@ -506,8 +506,7 @@ Proof
   simp[]
 QED
 
-(* With DALLOCA permitted, the raw source guard has no excluded roots.
-   The typed shape guard still requires well-formed operand lists. *)
+(* With DALLOCA permitted, the raw source guard has no excluded roots. *)
 Theorem dynamic_raw_expr_shape:
   (!p e. (p = expr_raw_shape_root_mode F) ==> ~supported_expr_exists p e) /\
   (!p t. (p = expr_raw_shape_root_mode F) ==> ~supported_target_exists p t) /\

@@ -52,45 +52,16 @@ Ancestors
   deployBodyReachability contextRawReachable contextCodegenRel unitTransformDefs
   venomInst venomState ptrDiscipline list
   vyperEvalReadingErrors unitExecutionComposeResult vyperCalldata supportedProgram
+  groupedEntryExit groupedSelectedDefault groupedRegisteredBody groupedRuntimeEndpoint
+  groupedRuntimeBodyCode groupedEntryCut groupedDefaultCode groupedDefaultBinding
+  groupedDefaultSubstitution groupedDefaultArguments groupedDefaultState
+  groupedDefaultSource groupedDefaultSyntax groupedKeywordInitialize groupedEntryCommon
+  groupedEntryAllocation groupedDefaultOutcome groupedDefaultPre
+  registrationRejectMetadata rejectPrefixSourceShape entryRejectAllocationIds
+  defaultDispatchFacts groupedCanonicalCallRoute groupedDefaultCallRoute
+  groupedFallbackCallRoute groupedLegacyCallRoute
 
 val _ = Parse.hide "body";
-
-(* GATE_ADMISSION: held, grouped external defaults; owner: constant-substitution lane *)
-Theorem runtime_body_grouped_default_readings:
-  !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    EXISTS external_has_defaults (FST (classify_functions tops)) /\
-    ~internal_defaults_msg_gas tops ==>
-    ?shadow_unit.
-      gas_shadow_unit unit shadow_unit /\
-      !am tx ret vs.
-        source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
-        initial_venom_state_rel tops am tx vs /\
-        outcomes_accounts_typed (SOME vs.vs_outcomes) /\
-        (ctx_has_dalloca unit.cu_context ==>
-          unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
-          w2n vs.vs_initial_fmp < 2 ** 254) /\
-        (ctx_has_dalloca unit.cu_context ==>
-          !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-            dalloca_no_wrap inst s) /\
-        (valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret \/
-         (calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
-            SOME (tx.function_name,tx.args) /\
-          ?mut nr args dflts fbody.
-            lookup_function NONE tx.function_name External tops =
-              SOME (mut,nr,args,dflts,ret,fbody))) ==>
-        ?marks.
-          source_unit_execution_correct_with shadow_unit.cu_context marks
-            tops ret am tx unit vs /\
-          ((?tail. call_storage_ok am tx vs.vs_outcomes
-             (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
-           !tail. FST (call_external (SOME vs.vs_outcomes)
-             (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
-             INR (Error (RuntimeError "msg.gas: no gas reading")))
-Proof
-  cheat
-QED
 
 (* GATE_ADMISSION: held, msg.gas in internal defaults; owner: constant-substitution lane *)
 Theorem runtime_body_internal_default_gas_readings:
@@ -1568,6 +1539,68 @@ Proof
   qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
     (qspec_then `unread` (strip_assume_tac o MATCH_MP call_external_trace_result)) >>
   simp[]
+QED
+
+Theorem runtime_body_grouped_default_readings:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    ~internal_defaults_msg_gas tops ==>
+    ?shadow_unit.
+      gas_shadow_unit unit shadow_unit /\
+      !am tx ret vs.
+        source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+        initial_venom_state_rel tops am tx vs /\
+        outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+        (ctx_has_dalloca unit.cu_context ==>
+          unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+          w2n vs.vs_initial_fmp < 2 ** 254) /\
+        (ctx_has_dalloca unit.cu_context ==>
+          !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+            dalloca_no_wrap inst s) /\
+        (valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret \/
+         (calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
+            SOME (tx.function_name,tx.args) /\
+          ?mut nr args dflts fbody.
+            lookup_function NONE tx.function_name External tops =
+              SOME (mut,nr,args,dflts,ret,fbody))) ==>
+        ?marks.
+          source_unit_execution_correct_with shadow_unit.cu_context marks
+            tops ret am tx unit vs /\
+          ((?tail. call_storage_ok am tx vs.vs_outcomes
+             (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
+           !tail. FST (call_external (SOME vs.vs_outcomes)
+             (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
+             INR (Error (RuntimeError "msg.gas: no gas reading")))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      gas_shadow_unit unit shadow_unit` by
+    (Cases_on `classify_functions tops` >> PairCases_on `r` >>
+     drule_all runtime_gas_shadow_unit_exists >> simp[]) >>
+  qexists_tac `shadow_unit` >> conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >>
+  let
+    fun route th =
+      drule_all th >>
+      disch_then (DISJ_CASES_THEN2 strip_assume_tac ACCEPT_TAC) >>
+      drule_all runtime_body_endpoint_correct >>
+      disch_then (qx_choosel_then [`su`,`marks`] (map_every assume_tac o CONJUNCTS)) >>
+      `su = shadow_unit` by metis_tac[optionTheory.SOME_11] >>
+      qexists_tac `marks` >> fs[]
+  in
+    strip_tac
+    >- (qpat_assum `valid_vyper_call _ _ _ _`
+          (strip_assume_tac o REWRITE_RULE [e2eDefsTheory.valid_vyper_call_def]) >>
+        route grouped_canonical_call_route) >>
+    drule default_dispatch_raw_cases >>
+    disch_then (DISJ_CASES_THEN2 (map_every assume_tac o CONJUNCTS) strip_assume_tac)
+    >- route grouped_fallback_call_route >>
+    Cases_on `dflts = []`
+    >- (qpat_x_assum `dflts = []` SUBST_ALL_TAC >> route grouped_legacy_call_route) >>
+    route grouped_default_call_route
+  end
 QED
 
 Theorem runtime_body_joint_from_start_with_readings:

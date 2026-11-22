@@ -3,7 +3,7 @@ Theory rejectPrefixSourceShape
 Ancestors
   compileVyper vyperCompiler compileEnv moduleLowering loweringShapeDefs constSubst loweringShapeSource runtimePeakMemoryArity
   groupedEntryPackage loweringShapeProps loweringShapeRules vyperTypeContract vyperTypeContractContext
-  vyperTypeSystem vyperAST constSubstCorrect publicGetterProps
+  vyperTypeSystem vyperAST constSubstCorrect runtimeConstantSubstitutionProps publicGetterProps
   ctorCallFreeRules ctorCallFreeExpr whitelistCheckerConsts
   loweringGroupedOpcodes loweringRuntimeOpcodes venomInst
   supportedExprTraverse supportedStmtTraverse list rich_list pair option alist
@@ -40,33 +40,6 @@ Proof
   metis_tac[constant_expr_has_no_call]
 QED
 
-Theorem subst_const_runtime_constant[local]:
-  (!id r. ALOOKUP env id = SOME r ==> constant_expr mods r) ==>
-  !ms e. ms = mods /\ runtime_constant_expr ms e ==>
-    runtime_constant_expr ms (subst_consts_expr env e)
-Proof
-  strip_tac >>
-  `!src id ty. (declared_constant mods src id \/ declared_immutable mods src id) ==>
-    runtime_constant_expr mods (subst_consts_expr env (TopLevelName ty (src,id)))` by
-    (rpt gen_tac >> Cases_on `src` >>
-     simp[subst_consts_expr_def, runtime_constant_expr_def] >>
-     Cases_on `ALOOKUP env id` >> simp[runtime_constant_expr_def] >>
-     metis_tac[constant_expr_runtime_constant]) >>
-  `!e. bool_literal_expr e ==> bool_literal_expr (subst_consts_expr env e)` by
-    (Cases >> simp[bool_literal_expr_def, subst_consts_expr_def]) >>
-  `!es. EVERY (constant_expr mods) es ==>
-    EVERY (constant_expr mods) (subst_consts_exprs env es)` by
-    metis_tac[subst_consts_constant_expr] >>
-  ho_match_mp_tac runtime_constant_expr_ind >>
-  simp[runtime_constant_expr_def] >> rpt strip_tac >> gvs[] >>
-  TRY (qpat_assum `!src id ty. _` irule >> simp[] >> NO_TAC) >>
-  simp[subst_consts_expr_def, runtime_constant_expr_def,
-    subst_consts_fields_maps] >>
-  fs[subst_consts_exprs_map, EVERY_MAP, combinTheory.o_DEF, EVERY_MEM] >>
-  rpt strip_tac >> gvs[MEM_MAP] >> res_tac >> fs[] >>
-  metis_tac[]
-QED
-
 Theorem checked_substituted_defaults_call_free[local]:
   check_contract F layouts addr [(NONE,tops)] = SOME art /\
   MEM (FunctionDecl vis mut nr rr name args defaults ret body) tops /\ vis <> Deploy ==>
@@ -89,9 +62,7 @@ Proof
   simp[subst_consts_exprs_map, EVERY_MAP, EVERY_MEM, combinTheory.o_DEF] >>
   rpt strip_tac >> fs[MEM_MAP] >>
   `runtime_constant_expr [(NONE,tops)] (subst_consts_expr (module_consts_env tops []) y)` by
-    (qpat_assum `!id r. ALOOKUP _ id = SOME r ==> _`
-       (mp_tac o MATCH_MP (Q.INST [`mods` |-> `[(NONE,tops)]`] subst_const_runtime_constant)) >>
-     disch_then (qspecl_then [`[(NONE,tops)]`,`y`] mp_tac) >> fs[EVERY_MEM]) >>
+    (irule subst_const_runtime_constant >> metis_tac[EVERY_MEM]) >>
   metis_tac[runtime_constant_expr_has_no_call]
 QED
 

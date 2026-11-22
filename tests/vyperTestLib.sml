@@ -109,11 +109,7 @@ val excluded_test_names = [
      stays excluded *)
   "test_json_abi_bytes_slice",
   (* Out-of-gas test - we don't model gas *)
-  "test_ecrecover_oog_handling",
-  (* The JSON frontend translates `self.codesize` as a storage variable, not
-     as the size of the executing code that Vyper reads with CODESIZE
-     (https://github.com/verifereum/vyper-hol/issues/1542). *)
-  "test_self_codesize_in_constructor"
+  "test_ecrecover_oog_handling"
 ]
 
 fun glob_match pat str =

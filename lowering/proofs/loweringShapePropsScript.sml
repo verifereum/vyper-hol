@@ -35,7 +35,7 @@ Ancestors
   list rich_list loweringShapeDefs loweringShapeRules compileEnv loweringStateRelDefs context
   emitHelper exprLowering stmtLowering moduleLowering vyperCompiler
   compileVyper constSubst vyperGetter abiEncoder supportedProgram supportedNames
-  supportedStmtTraverse supportedExprTraverse supportedTargets unitShapeDefs venomInst vyperAST
+  supportedStmtTraverse supportedExprTraverse supportedTraverseFalse supportedTargets unitShapeDefs venomInst vyperAST
   ptrOkCheck ptrDiscipline pointerConfinedProps pred_set
 
 (* ===== Side conditions ===== *)
@@ -76,22 +76,16 @@ Definition expr_shape_root_def:
                        LENGTH es < type_builtin_arity tb)
 End
 
+(* Dynamic shape also covers unchecked expressions. A recursive call past
+   its size bound emits INVALID through the existing expression callbacks. *)
 Definition expr_shape_root_mode_def:
-  expr_shape_root_mode static e <=>
-    (static /\ ((?ty flags es d. e = Call ty (RawCallCalldataTarget flags) es d) \/
-    (?ty salted rof order es d.
-       e = Call ty (CreateTarget CreateCopyOf salted rof order) es d) \/
-    (?ty blueprint salted rof order es d.
-       e = Call ty (CreateTarget (CreateFromBlueprint blueprint) salted rof order) es d))) \/
-    (?ty bi es. e = Builtin ty bi es /\ LENGTH es < builtin_arity bi) \/
-    (?ty tb target es. e = TypeBuiltin ty tb target es /\
-                       LENGTH es < type_builtin_arity tb)
+  expr_shape_root_mode static e <=> static /\ expr_shape_root e
 End
 
 Theorem expr_shape_root_mode_static:
   expr_shape_root_mode T = expr_shape_root
 Proof
-  simp[FUN_EQ_THM, pairTheory.FORALL_PROD, expr_shape_root_mode_def, expr_shape_root_def, DISJ_ASSOC]
+  simp[FUN_EQ_THM, expr_shape_root_mode_def]
 QED
 
 (* Constant inlining retains constructor arities and introduces only the
@@ -130,11 +124,11 @@ Theorem subst_consts_expr_shape_mode:
     ~supported_fields_exists (expr_shape_root_mode static) (subst_consts_fields env fs))
 Proof
   ho_match_mp_tac subst_consts_expr_ind >>
-  simp[subst_consts_expr_def, supported_expr_exists_def, expr_shape_root_mode_def] >>
+  simp[subst_consts_expr_def, supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def] >>
   rpt strip_tac >> gvs[]
   >- (Cases_on `ns` >> simp[subst_consts_expr_def, supported_expr_exists_def,
-        expr_shape_root_mode_def] >> Cases_on `ALOOKUP env id` >>
-        gvs[supported_expr_exists_def, expr_shape_root_mode_def] >> metis_tac[])
+        expr_shape_root_mode_def, expr_shape_root_def] >> Cases_on `ALOOKUP env id` >>
+        gvs[supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def] >> metis_tac[])
   >> metis_tac[]
 QED
 
@@ -214,7 +208,7 @@ Proof
   disch_tac >> disch_tac >>
   simp[Once build_getter_def] >>
   Cases_on `is_ArrayT vt` >>
-  gvs[supported_expr_exists_def, expr_shape_root_mode_def] >>
+  gvs[supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def] >>
   pairarg_tac >> gvs[] >>
   metis_tac[pairTheory.SND]
 QED
@@ -3790,34 +3784,45 @@ Proof
 QED
 
 Theorem expr_shape_list_el[local]:
-  ~supported_exprs_exists p es /\ n < LENGTH es ==>
-  ~supported_expr_exists p (EL n es)
+  ~supported_exprs_exists (expr_shape_root_mode static) es /\
+  (static ==> n < LENGTH es) ==>
+  ~supported_expr_exists (expr_shape_root_mode static) (EL n es)
 Proof
+  `expr_shape_root_mode F = (\e. F)` by
+    simp[FUN_EQ_THM, expr_shape_root_mode_def] >>
+  Cases_on `static` >>
+  simp[expr_shape_root_mode_static, supported_exists_false] >>
   strip_tac >> irule expr_shape_list_member >>
   qexists_tac `es` >> simp[EL_MEM]
 QED
 
 Theorem expr_shape_list_hd[local]:
-  ~supported_exprs_exists p es /\ 0 < LENGTH es ==>
-  ~supported_expr_exists p (HD es)
+  ~supported_exprs_exists (expr_shape_root_mode static) es /\
+  (static ==> 0 < LENGTH es) ==>
+  ~supported_expr_exists (expr_shape_root_mode static) (HD es)
 Proof
-  Cases_on `es` >> simp[supported_expr_exists_def]
+  mp_tac (Q.INST [`n` |-> `0`] expr_shape_list_el) >>
+  simp[listTheory.EL]
 QED
 
 Theorem expr_shape_builtin_mode[local]:
   ~supported_expr_exists (expr_shape_root_mode static) (Builtin ann bi es) <=>
-  builtin_arity bi <= LENGTH es /\
+  (static ==> builtin_arity bi <= LENGTH es) /\
   ~supported_exprs_exists (expr_shape_root_mode static) es
 Proof
-  simp[supported_expr_exists_def, expr_shape_root_mode_def, arithmeticTheory.NOT_LESS, CONJ_ASSOC]
+  Cases_on `static` >>
+  simp[supported_expr_exists_def, expr_shape_root_mode_def,
+       expr_shape_root_def, arithmeticTheory.NOT_LESS, CONJ_ASSOC]
 QED
 
 Theorem expr_shape_type_builtin_mode[local]:
   ~supported_expr_exists (expr_shape_root_mode static) (TypeBuiltin ann tb target es) <=>
-  type_builtin_arity tb <= LENGTH es /\
+  (static ==> type_builtin_arity tb <= LENGTH es) /\
   ~supported_exprs_exists (expr_shape_root_mode static) es
 Proof
-  simp[supported_expr_exists_def, expr_shape_root_mode_def, arithmeticTheory.NOT_LESS]
+  Cases_on `static` >>
+  simp[supported_expr_exists_def, expr_shape_root_mode_def,
+       expr_shape_root_def, arithmeticTheory.NOT_LESS]
 QED
 
 Theorem expr_shape_extcode_addr:
@@ -3888,12 +3893,12 @@ QED
 Theorem builtin_child_callback_shape_mode[local]:
   (!ce rt t bi args internal.
      list_size expr_size args + cenv_defaults_size ce < bound /\
-     builtin_arity bi <= LENGTH args /\
+     (static ==> builtin_arity bi <= LENGTH args) /\
      ~supported_exprs_exists (expr_shape_root_mode static) args ==>
      shape_mode_step static internal compiler_label (\st. cenv_shape_mode_ok static st ce)
        (f ce rt t bi args) (\v st. value_shape_ok st v)) ==>
   !ce rt t bi args internal.
-    builtin_arity bi <= LENGTH args /\
+    (static ==> builtin_arity bi <= LENGTH args) /\
     ~supported_exprs_exists (expr_shape_root_mode static) args ==>
     shape_mode_step static internal compiler_label (\st. cenv_shape_mode_ok static st ce)
       (builtin_child_callback bound f ce rt t bi args)
@@ -3915,12 +3920,12 @@ QED
 Theorem type_child_callback_shape_mode[local]:
   (!ce vt t tb rt args internal.
      list_size expr_size args + cenv_defaults_size ce < bound /\
-     type_builtin_arity tb <= LENGTH args /\
+     (static ==> type_builtin_arity tb <= LENGTH args) /\
      ~supported_exprs_exists (expr_shape_root_mode static) args ==>
      shape_mode_step static internal compiler_label (\st. cenv_shape_mode_ok static st ce)
        (f ce vt t tb rt args) (\v st. value_shape_ok st v)) ==>
   !ce vt t tb rt args internal.
-    type_builtin_arity tb <= LENGTH args /\
+    (static ==> type_builtin_arity tb <= LENGTH args) /\
     ~supported_exprs_exists (expr_shape_root_mode static) args ==>
     shape_mode_step static internal compiler_label (\st. cenv_shape_mode_ok static st ce)
       (type_child_callback bound f ce vt t tb rt args)
@@ -8622,7 +8627,7 @@ QED
 
 fun shape_dispatch_unary_start_tac arity_def body_def =
   `~supported_expr_exists (expr_shape_root_mode static) (HD args)` by
-    (irule expr_shape_list_hd >> simp[] >> gvs[arity_def]) >>
+    (irule expr_shape_list_hd >> Cases_on `static` >> gvs[arity_def]) >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[body_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
   irule shape_step_uncurry_mode >>
@@ -8645,9 +8650,9 @@ fun shape_dispatch_lower_tac frame name tidy =
 
 fun shape_dispatch_binary_start_tac arity_def body_def =
   `~supported_expr_exists (expr_shape_root_mode static) (HD args)` by
-    (irule expr_shape_list_hd >> gvs[arity_def]) >>
+    (irule expr_shape_list_hd >> Cases_on `static` >> gvs[arity_def]) >>
   `~supported_expr_exists (expr_shape_root_mode static) (EL 1 args)` by
-    (irule expr_shape_list_el >> gvs[arity_def]) >>
+    (irule expr_shape_list_el >> Cases_on `static` >> gvs[arity_def]) >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[body_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
   assume_tac (Q.SPEC `cenv` cenv_shape_ok_stable_mode) >>
@@ -8663,7 +8668,7 @@ val shape_dispatch_binary_prefix_tac =
 
 fun shape_dispatch_modular_tac rule =
   `~supported_expr_exists (expr_shape_root_mode static) (EL 2 args)` by
-    (irule expr_shape_list_el >> gvs[builtin_arity_def]) >>
+    (irule expr_shape_list_el >> Cases_on `static` >> gvs[builtin_arity_def]) >>
   shape_dispatch_binary_prefix_tac >>
   qabbrev_tac `BFrame = \st. AFrame st /\ plain_operand st vb` >>
   `shape_mode_stable static BFrame` by
@@ -8706,7 +8711,7 @@ Theorem compile_type_builtin_dispatch_body_shape_mode:
   (!ce t child. ~supported_expr_exists (expr_shape_root_mode static) child ==>
      shape_mode_step static internal compiler_label (\st. cenv_shape_mode_ok static st ce)
        (cfn ce t child) (\v st. value_shape_ok st v)) /\
-  type_builtin_arity tb <= LENGTH args /\
+  (static ==> type_builtin_arity tb <= LENGTH args) /\
   ~supported_exprs_exists (expr_shape_root_mode static) args ==>
   shape_mode_step static internal compiler_label (\st. cenv_shape_mode_ok static st cenv)
     (compile_type_builtin_dispatch_body cfn cenv vv_ty ty tb ret_ty args)
@@ -8762,9 +8767,9 @@ Resume compile_type_builtin_dispatch_body_shape_mode[empty]:
 QED
 Resume compile_type_builtin_dispatch_body_shape_mode[extract]:
   `~supported_expr_exists (expr_shape_root_mode static) (HD args)` by
-    (irule expr_shape_list_hd >> gvs[type_builtin_arity_def]) >>
+    (irule expr_shape_list_hd >> Cases_on `static` >> gvs[type_builtin_arity_def]) >>
   `~supported_expr_exists (expr_shape_root_mode static) (EL 1 args)` by
-    (irule expr_shape_list_el >> gvs[type_builtin_arity_def]) >>
+    (irule expr_shape_list_el >> Cases_on `static` >> gvs[type_builtin_arity_def]) >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_type_builtin_dispatch_body_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
   assume_tac (Q.SPEC `cenv` cenv_shape_ok_stable_mode) >>
@@ -8814,7 +8819,7 @@ Resume compile_type_builtin_dispatch_body_shape_mode[encode]:
 QED
 Resume compile_type_builtin_dispatch_body_shape_mode[decode]:
   `~supported_expr_exists (expr_shape_root_mode static) (HD args)` by
-    (irule expr_shape_list_hd >> gvs[type_builtin_arity_def]) >>
+    (irule expr_shape_list_hd >> Cases_on `static` >> gvs[type_builtin_arity_def]) >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_type_builtin_dispatch_body_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
   shape_dispatch_raw_unwrap_tac >> irule shape_step_as_memory_val_mode >>
@@ -8877,7 +8882,7 @@ QED
 local
 val shape_dispatch_len_tac =
   `~supported_expr_exists (expr_shape_root_mode static) (HD args)` by
-    (irule expr_shape_list_hd >> gvs[builtin_arity_def]) >>
+    (irule expr_shape_list_hd >> Cases_on `static` >> gvs[builtin_arity_def]) >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
@@ -8896,9 +8901,9 @@ val shape_dispatch_len_tac =
 ;
 val shape_dispatch_ecrecover_tac =
   `~supported_expr_exists (expr_shape_root_mode static) (EL 2 args)` by
-    (irule expr_shape_list_el >> gvs[builtin_arity_def]) >>
+    (irule expr_shape_list_el >> Cases_on `static` >> gvs[builtin_arity_def]) >>
   `~supported_expr_exists (expr_shape_root_mode static) (EL 3 args)` by
-    (irule expr_shape_list_el >> gvs[builtin_arity_def]) >>
+    (irule expr_shape_list_el >> Cases_on `static` >> gvs[builtin_arity_def]) >>
   shape_dispatch_binary_prefix_tac >>
   qabbrev_tac `BFrame = \st. AFrame st /\ plain_operand st vb` >>
   `shape_mode_stable static BFrame` by
@@ -8975,9 +8980,9 @@ val shape_dispatch_concat_tac =
 ;
 val shape_dispatch_ecadd_tac =
   `~supported_expr_exists (expr_shape_root_mode static) (HD args)` by
-    (irule expr_shape_list_hd >> gvs[builtin_arity_def]) >>
+    (irule expr_shape_list_hd >> Cases_on `static` >> gvs[builtin_arity_def]) >>
   `~supported_expr_exists (expr_shape_root_mode static) (EL 1 args)` by
-    (irule expr_shape_list_el >> gvs[builtin_arity_def]) >>
+    (irule expr_shape_list_el >> Cases_on `static` >> gvs[builtin_arity_def]) >>
   assume_tac (Q.SPEC `cenv` cenv_shape_ok_stable_mode) >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
@@ -8992,9 +8997,9 @@ val shape_dispatch_ecadd_tac =
 ;
 val shape_dispatch_ecmul_tac =
   `~supported_expr_exists (expr_shape_root_mode static) (HD args)` by
-    (irule expr_shape_list_hd >> gvs[builtin_arity_def]) >>
+    (irule expr_shape_list_hd >> Cases_on `static` >> gvs[builtin_arity_def]) >>
   `~supported_expr_exists (expr_shape_root_mode static) (EL 1 args)` by
-    (irule expr_shape_list_el >> gvs[builtin_arity_def]) >>
+    (irule expr_shape_list_el >> Cases_on `static` >> gvs[builtin_arity_def]) >>
   assume_tac (Q.SPEC `cenv` cenv_shape_ok_stable_mode) >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
@@ -9026,9 +9031,9 @@ val shape_dispatch_bytescompare_tac =
     REWRITE_TAC[arithmeticTheory.ONE, listTheory.EL] >>
   gvs[] >> (
   `~supported_expr_exists (expr_shape_root_mode static) (HD args)` by
-    (irule expr_shape_list_hd >> gvs[builtin_arity_def]) >>
+    (irule expr_shape_list_hd >> Cases_on `static` >> gvs[builtin_arity_def]) >>
   `~supported_expr_exists (expr_shape_root_mode static) (EL 1 args)` by
-    (irule expr_shape_list_el >> gvs[builtin_arity_def]) >>
+    (irule expr_shape_list_el >> Cases_on `static` >> gvs[builtin_arity_def]) >>
   assume_tac (Q.SPEC `cenv` cenv_shape_ok_stable_mode) >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
@@ -9053,9 +9058,11 @@ val shape_dispatch_bytescompare_tac =
 ;
 val dispatch_member_variable_tac = (
   `~supported_expr_exists (expr_shape_root_mode static) (HD args)` by
-    (irule expr_shape_list_hd >> gvs[builtin_arity_def]) >>
+    (irule expr_shape_list_hd >> Cases_on `static` >> gvs[builtin_arity_def]) >>
   `~supported_expr_exists (expr_shape_root_mode static) (HD (TL args))` by
-    (irule expr_shape_list_hd >> Cases_on `args` >> gvs[builtin_arity_def, supported_expr_exists_def]) >>
+    (mp_tac (Q.INST [`n` |-> `1`, `es` |-> `args`] expr_shape_list_el) >>
+     PURE_REWRITE_TAC[arithmeticTheory.ONE, listTheory.EL] >>
+     Cases_on `static` >> gvs[builtin_arity_def]) >>
   assume_tac (Q.SPEC `cenv` cenv_shape_ok_stable_mode) >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
@@ -9079,9 +9086,11 @@ val dispatch_member_variable_tac = (
 ;
 val dispatch_member_literal_tac =
   `~supported_expr_exists (expr_shape_root_mode static) (HD args)` by
-    (irule expr_shape_list_hd >> gvs[builtin_arity_def]) >>
+    (irule expr_shape_list_hd >> Cases_on `static` >> gvs[builtin_arity_def]) >>
   `~supported_expr_exists (expr_shape_root_mode static) (HD (TL args))` by
-    (irule expr_shape_list_hd >> Cases_on `args` >> gvs[builtin_arity_def, supported_expr_exists_def]) >>
+    (mp_tac (Q.INST [`n` |-> `1`, `es` |-> `args`] expr_shape_list_el) >>
+     PURE_REWRITE_TAC[arithmeticTheory.ONE, listTheory.EL] >>
+     Cases_on `static` >> gvs[builtin_arity_def]) >>
   `~supported_exprs_exists (expr_shape_root_mode static) elems` by gvs[expr_shape_builtin_mode] >>
   assume_tac (Q.SPEC `cenv` cenv_shape_ok_stable_mode) >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
@@ -9189,7 +9198,7 @@ Theorem compile_builtin_dispatch_body_shape_mode[local]:
   (!ce t child. ~supported_expr_exists (expr_shape_root_mode static) child ==>
      shape_mode_step static internal compiler_label (\st. cenv_shape_mode_ok static st ce)
        (cfn ce t child) (\v st. value_shape_ok st v)) /\
-  builtin_arity bi <= LENGTH args /\
+  (static ==> builtin_arity bi <= LENGTH args) /\
   ~supported_exprs_exists (expr_shape_root_mode static) args ==>
   shape_mode_step static internal compiler_label (\st. cenv_shape_mode_ok static st cenv)
     (compile_builtin_dispatch_body cfn cenv ret_ty ty bi args)
@@ -9281,7 +9290,7 @@ Resume compile_builtin_dispatch_body_shape_mode[blobhash]:
 QED
 Resume compile_builtin_dispatch_body_shape_mode[methodid]:
   `~supported_expr_exists (expr_shape_root_mode static) (HD args)` by
-    (irule expr_shape_list_hd >> simp[] >> gvs[builtin_arity_def]) >>
+    (irule expr_shape_list_hd >> Cases_on `static` >> gvs[builtin_arity_def]) >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def] >>
   Cases_on `method_id_literal (HD args)` >> simp[] >> CONV_TAC (DEPTH_CONV ETA_CONV)
@@ -9303,7 +9312,7 @@ Resume compile_builtin_dispatch_body_shape_mode[calldataslice]:
 QED
 Resume compile_builtin_dispatch_body_shape_mode[acc]:
   `~supported_expr_exists (expr_shape_root_mode static) (HD args)` by
-    (irule expr_shape_list_hd >> gvs[builtin_arity_def]) >>
+    (irule expr_shape_list_hd >> Cases_on `static` >> gvs[builtin_arity_def]) >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
   irule shape_step_as_stack_val_mode >> shape_under_tac compile_acc_shape_mode `\st. T` >> simp[shape_mode_stable_def]
@@ -9354,11 +9363,11 @@ Resume compile_builtin_dispatch_body_shape_mode[bop]:
 QED
 Resume compile_builtin_dispatch_body_shape_mode[slice]:
   `~supported_expr_exists (expr_shape_root_mode static) (HD args)` by
-    (irule expr_shape_list_hd >> gvs[builtin_arity_def]) >>
+    (irule expr_shape_list_hd >> Cases_on `static` >> gvs[builtin_arity_def]) >>
   `~supported_expr_exists (expr_shape_root_mode static) (EL 1 args)` by
-    (irule expr_shape_list_el >> gvs[builtin_arity_def]) >>
+    (irule expr_shape_list_el >> Cases_on `static` >> gvs[builtin_arity_def]) >>
   `~supported_expr_exists (expr_shape_root_mode static) (EL 2 args)` by
-    (irule expr_shape_list_el >> gvs[builtin_arity_def]) >>
+    (irule expr_shape_list_el >> Cases_on `static` >> gvs[builtin_arity_def]) >>
   assume_tac (Q.SPEC `cenv` cenv_shape_ok_stable_mode) >>
   Cases_on `is_self_code (HD args)` >- dispatch_slice_code_tac >>
   Cases_on `is_extcode (HD args)` >- dispatch_slice_extcode_tac >>
@@ -10866,11 +10875,11 @@ Theorem compile_expr_body_shape_mode:
   (!ce t child. ~supported_expr_exists (expr_shape_root_mode static) child ==>
      shape_mode_step static internal compiler_label (\st. cenv_shape_mode_ok static st ce)
        (cfn ce t child) (\v st. value_shape_ok st v)) /\
-  (!ce ret t bi es. builtin_arity bi <= LENGTH es /\
+  (!ce ret t bi es. (static ==> builtin_arity bi <= LENGTH es) /\
      ~supported_exprs_exists (expr_shape_root_mode static) es ==>
      shape_mode_step static internal compiler_label (\st. cenv_shape_mode_ok static st ce)
        (bfn ce ret t bi es) (\v st. value_shape_ok st v)) /\
-  (!ce vv t tb ret es. type_builtin_arity tb <= LENGTH es /\
+  (!ce vv t tb ret es. (static ==> type_builtin_arity tb <= LENGTH es) /\
      ~supported_exprs_exists (expr_shape_root_mode static) es ==>
      shape_mode_step static internal compiler_label (\st. cenv_shape_mode_ok static st ce)
        (tfn ce vv t tb ret es) (\v st. value_shape_ok st v)) /\
@@ -10890,7 +10899,7 @@ Proof
       irule compile_name_vv_shape_mode)
   >~ [`compile_expr_body _ _ _ _ _ (IfExp ann c t e)`]
   >- (irule compile_ifexp_shape_mode >>
-      gvs[supported_expr_exists_def, expr_shape_root_mode_def])
+      gvs[supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def])
   >~ [`compile_expr_body _ _ _ _ _ (Builtin ann bi es)`]
   >- suspend "builtin"
   >~ [`compile_expr_body _ _ _ _ _ (TypeBuiltin ann tb ret es)`]
@@ -10916,17 +10925,17 @@ QED
 Resume compile_expr_body_shape_mode[subscript]:
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_expr_body_def, expr_type_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  irule compile_subscript_shape_mode >> gvs[supported_expr_exists_def, expr_shape_root_mode_def]
+  irule compile_subscript_shape_mode >> gvs[supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def]
 QED
 
 Resume compile_expr_body_shape_mode[attribute]:
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_expr_body_def, expr_type_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  irule compile_attribute_shape_mode >> gvs[supported_expr_exists_def, expr_shape_root_mode_def]
+  irule compile_attribute_shape_mode >> gvs[supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def]
 QED
 
 Resume compile_expr_body_shape_mode[struct]:
-  gvs[supported_expr_exists_def, expr_shape_root_mode_def] >>
+  gvs[supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def] >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_expr_body_def, expr_type_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
   irule shape_step_uncurry_mode >>
@@ -10969,7 +10978,7 @@ QED
 Resume compile_expr_body_shape_mode[call]:
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_expr_body_def, expr_type_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  gvs[supported_expr_exists_def, expr_shape_root_mode_def] >>
+  gvs[supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def] >>
   namedCases_on `target` ["callee", "is_static skip sig opts", "has_gas", "flags",
     "calldata_flags", "", "", "", "kind salted rof order"] >> gvs[] >>
   FIRST [
@@ -11029,12 +11038,12 @@ Theorem compile_expr_shape_pointwise_mode[local]:
     compile_expr ce ty e st = (v,st') /\ cenv_shape_mode_ok static st ce /\ shape_state st ==>
     shape_mode_extends static internal compiler_label st st' /\ shape_state st' /\ value_shape_ok st' v) /\
   (!ce rt ty bi args st. !internal v st'.
-    builtin_arity bi <= LENGTH args /\
+    (static ==> builtin_arity bi <= LENGTH args) /\
     ~supported_exprs_exists (expr_shape_root_mode static) args /\
     compile_builtin_dispatch ce rt ty bi args st = (v,st') /\ cenv_shape_mode_ok static st ce /\ shape_state st ==>
     shape_mode_extends static internal compiler_label st st' /\ shape_state st' /\ value_shape_ok st' v) /\
   (!ce vt ty tb rt args st. !internal v st'.
-    type_builtin_arity tb <= LENGTH args /\ ~supported_exprs_exists (expr_shape_root_mode static) args /\
+    (static ==> type_builtin_arity tb <= LENGTH args) /\ ~supported_exprs_exists (expr_shape_root_mode static) args /\
     compile_type_builtin_dispatch ce vt ty tb rt args st = (v,st') /\ cenv_shape_mode_ok static st ce /\ shape_state st ==>
     shape_mode_extends static internal compiler_label st st' /\ shape_state st' /\ value_shape_ok st' v)
 Proof
@@ -11084,13 +11093,13 @@ Theorem compile_expr_shape_mode:
      shape_mode_step static internal compiler_label (\st. cenv_shape_mode_ok static st cenv)
        (compile_expr cenv ty e) (\v st. value_shape_ok st v)) /\
   (!cenv ret_ty ty bi args internal.
-     builtin_arity bi <= LENGTH args /\
+     (static ==> builtin_arity bi <= LENGTH args) /\
      ~supported_exprs_exists (expr_shape_root_mode static) args ==>
      shape_mode_step static internal compiler_label (\st. cenv_shape_mode_ok static st cenv)
        (compile_builtin_dispatch cenv ret_ty ty bi args)
        (\v st. value_shape_ok st v)) /\
   (!cenv vv_ty ty tb ret_ty args internal.
-     type_builtin_arity tb <= LENGTH args /\
+     (static ==> type_builtin_arity tb <= LENGTH args) /\
      ~supported_exprs_exists (expr_shape_root_mode static) args ==>
      shape_mode_step static internal compiler_label (\st. cenv_shape_mode_ok static st cenv)
        (compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty args)
@@ -15706,10 +15715,10 @@ Proof
   rpt gen_tac >>
   Cases_on `v` >> simp[public_getter_def] >>
   rpt CASE_TAC >> gvs[] >> strip_tac >> gvs[] >>
-  simp[supported_stmt_expr_exists_def, supported_expr_exists_def, expr_shape_root_mode_def] >>
+  simp[supported_stmt_expr_exists_def, supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def] >>
   pairarg_tac >> gvs[] >>
   drule getter_body_shape_mode >>
-  simp[supported_expr_exists_def, expr_shape_root_mode_def]
+  simp[supported_expr_exists_def, expr_shape_root_mode_def, expr_shape_root_def]
 QED
 
 
@@ -17440,9 +17449,8 @@ Theorem compile_expr_shape:
        (compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty args)
        (\v st. value_shape_ok st v))
 Proof
-  ACCEPT_TAC (PURE_REWRITE_RULE
-    [shape_mode_step_static, expr_shape_root_mode_static, cenv_shape_mode_ok_static]
-    (Q.INST [`static` |-> `T`] compile_expr_shape_mode))
+  mp_tac (Q.INST [`static` |-> `T`] compile_expr_shape_mode) >>
+  simp[shape_mode_step_static, expr_shape_root_mode_static, cenv_shape_mode_ok_static]
 QED
 
 Theorem compile_store_immutable_bytestring_shape:

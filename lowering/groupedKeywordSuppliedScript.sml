@@ -8,9 +8,9 @@ Ancestors
   moduleLoweringProps fragGasOriginPtr appendStorageGhostPtr fragExec
   ptrDiscipline ptrSafeRun bodyPtrDefs loweringStateRelDefs valueEncoding vyperCalldata
   venomState emitHelperProps exprLoweringProps loweringShapeDefs compileEnv
-  finite_map words arithmetic pair robustCopyTransportPtr venomMemDefs
+  finite_map words arithmetic pair robustCopyTransportPtr venomMemDefs venomInstIdsProps
 
-Theorem grouped_keyword_decode_supplied:
+Theorem grouped_keyword_decode_supplied_with_frame:
   0 < k /\
   compile_init_kwargs ce ((name,Var dst,ty,e)::vars) (4+off) k hi sa = ((),sb) /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
@@ -32,7 +32,14 @@ Theorem grouped_keyword_decode_supplied:
     s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?first last t G' tn' sc.
+  ?src mid first last t G' tn' sc.
+    compile_getelemptr_abi (Lit 4w) (is_abi_dynamic ce.ce_struct_fields ty)
+      (4+off-4) CALLDATALOAD (Lit 0w) (Lit 0w) sa = (src,mid) /\
+    (if is_abi_dynamic ce.ce_struct_fields ty then
+       compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) mid = ((),first)
+     else first = mid) /\
+    compile_abi_decode_to_buf (Var dst) src CALLDATALOAD (Lit 0w) (Lit 0w)
+      (type_to_abi_dec_info ce.ce_struct_fields ce ty) first = ((),last) /\
     compile_init_kwargs ce vars
       (4+off+abi_embedded_static_size ce.ce_struct_fields ty)
       (k - 1) hi last = ((),sb) /\
@@ -48,6 +55,12 @@ Theorem grouped_keyword_decode_supplied:
     s.vs_alloca_next <= t.vs_alloca_next /\
     (!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < last.cs_next_id) /\
     (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==> FLOOKUP t.vs_allocas id = SOME entry) /\
+    ((!inst w b n. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+       inst.inst_operands = [Lit w] /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n) ==>
+       n = w2n w) ==>
+     !inst w b n. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+       inst.inst_operands = [Lit w] /\ FLOOKUP t.vs_allocas inst.inst_id = SOME (b,n) ==>
+       n = w2n w) /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
       t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp) /\
     value_has_type tv x /\ val_wf tv x /\ ptr_covers G' tn' dst t (type_memory_size tv) /\
@@ -205,8 +218,8 @@ Proof
     (qpat_assum `w2n (n2w srcpos : bytes32) = srcpos` (pure_once_rewrite_tac o single) >>
      qpat_assum `ready.vs_call_ctx = s.vs_call_ctx` (pure_once_rewrite_tac o single) >>
      first_assum ACCEPT_TAC) >>
-  drule selected_argument_decoder_accepts >>
-  simp_tac bool_ss [selected_decoder_accepts_def] >>
+  drule_then (mp_tac o CONV_RULE (REWR_CONV selected_decoder_accepts_def))
+    selected_argument_decoder_accepts >>
   disch_then (qspecl_then [`first`,`last`,`last`,`ctx`,`fn`,`site`,`src`,
     `dst`,`ready`,`n2w srcpos`,`d`,`oid`,`d`,`type_memory_size tv`,
     `Gr`,`tr`,`lo`,`PG`,`x`] mp_tac) >>
@@ -220,7 +233,7 @@ Proof
   suspend "finish"
 QED
 
-Resume grouped_keyword_decode_supplied[finish]:
+Resume grouped_keyword_decode_supplied_with_frame[finish]:
   qpat_assum `vars_pc_only addr ready`
     (strip_assume_tac o SIMP_RULE (srw_ss())
        [vars_pc_only_def, venom_state_component_equality]) >>
@@ -312,9 +325,148 @@ Resume grouped_keyword_decode_supplied[finish]:
          qpat_assum `!label bb. lookup_block label _ = _ ==> _`
            (qspecl_then [`lbl`,`bb`] (drule_then ACCEPT_TAC))) >>
      qexistsl_tac [`G'`,`K F`,`t`,`tn'`] >> asm_rewrite_tac[]) >>
-  qexistsl_tac [`first`,`last`,`t`,`G'`,`tn'`,`sc`] >>
+  `(!inst w b n. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+       inst.inst_operands = [Lit w] /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n) ==>
+       n = w2n w) ==>
+     !inst w b n. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+       inst.inst_operands = [Lit w] /\ FLOOKUP t.vs_allocas inst.inst_id = SOME (b,n) ==>
+       n = w2n w` by
+    (strip_tac >> rpt gen_tac >> strip_tac >>
+     Cases_on `inst.inst_id < first.cs_next_id \/ last.cs_next_id <= inst.inst_id`
+     >- (qpat_assum `!id. id < first.cs_next_id \/ _ ==> _`
+           (qspec_then `inst.inst_id` (drule_then assume_tac)) >>
+         `FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n)` by
+           metis_tac[] >>
+         MAP_EVERY (fn pat => qpat_assum pat mp_tac)
+           [`!i w b n. MEM i (fn_insts fn) /\ _ /\ _ /\
+               FLOOKUP s.vs_allocas i.inst_id = _ ==> _`,
+            `MEM inst (fn_insts fn)`,`inst.inst_opcode = ALLOCA`,
+            `inst.inst_operands = [Lit w]`,`FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n)`] >>
+         POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+     `first.cs_next_id <= inst.inst_id /\ inst.inst_id < last.cs_next_id` by decide_tac >>
+     qpat_assum `!id q k. first.cs_next_id <= id /\ id < last.cs_next_id /\
+         FLOOKUP t.vs_allocas id = SOME (q,k) ==> _`
+       (qspecl_then [`inst.inst_id`,`b`,`n`] mp_tac) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     strip_tac >>
+     rename1 `witness.inst_id = inst.inst_id` >>
+     `witness = inst` by metis_tac[venomInstIdsPropsTheory.fn_inst_ids_distinct_inj] >>
+     MAP_EVERY (fn pat => qpat_assum pat mp_tac)
+       [`n = 32`,`inst.inst_operands = [Lit w]`,`witness.inst_operands = [Lit 32w]`,
+        `witness = inst`] >>
+     POP_ASSUM_LIST (K all_tac) >> simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]) >>
+  qexistsl_tac [`src`,`mid`,`first`,`last`,`t`,`G'`,`tn'`,`sc`] >>
+  asm_rewrite_tac[] >>
+  qpat_assum `dyn = tv_abi_dynamic tv` (pure_once_rewrite_tac o single o GSYM) >>
   asm_rewrite_tac[]
 QED
-Finalise grouped_keyword_decode_supplied
 
 (* The decoder's scratch allocations are newer than every completed owner. *)
+Finalise grouped_keyword_decode_supplied_with_frame
+
+Theorem grouped_keyword_decode_supplied:
+  0 < k /\
+  compile_init_kwargs ce ((name,Var dst,ty,e)::vars) (4+off) k hi sa = ((),sb) /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+  (!label bb. lookup_block label fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
+  is_abi_dynamic ce.ce_struct_fields ty = tv_abi_dynamic tv /\
+  4+off < dimword (:256) /\
+  calldata_decode_args s.vs_call_ctx.cc_calldata (tv::tvs) off = SOME (x::xs) /\
+  fresh_vars_wrt sa s /\ not_fresh_at sa dst /\
+  lookup_var dst s = SOME (n2w d) /\ ptr_covers G tn dst s (type_memory_size tv) /\
+  FLOOKUP s.vs_allocas oid = SOME (d,type_memory_size tv) /\
+  d+type_memory_size tv < dimword (:256) /\
+  (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==> id < sa.cs_next_id) /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+  unit_alloca_budget ctx < dimword (:256) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?first last t G' tn' sc.
+    compile_init_kwargs ce vars
+      (4+off+abi_embedded_static_size ce.ce_struct_fields ty)
+      (k - 1) hi last = ((),sb) /\
+    fn_has_code last sb fn /\
+    calldata_decode_args s.vs_call_ctx.cc_calldata tvs (off+tv_abi_size tv) = SOME xs /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,G',tn')) /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    fresh_vars_wrt last t /\ ~t.vs_halted /\
+    t.vs_current_bb = last.cs_current_bb /\ t.vs_inst_idx = LENGTH last.cs_current_insts /\
+    alloca_inv t /\ alloca_frontier_inv ctx fn site t /\ allocas_from lo t /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    (!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < last.cs_next_id) /\
+    (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==> FLOOKUP t.vs_allocas id = SOME entry) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+      t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp) /\
+    value_has_type tv x /\ val_wf tv x /\ ptr_covers G' tn' dst t (type_memory_size tv) /\
+    val_in_memory tv x d t.vs_memory /\
+    (!mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==> val_in_memory tv x d mem) /\
+    abi_decode_footprint_frame ((d,type_memory_size tv)::sc) s t /\
+    (!b n. MEM (b,n) sc ==> ?id. first.cs_next_id <= id /\ id < last.cs_next_id /\
+      FLOOKUP t.vs_allocas id = SOME (b,n)) /\
+    sa.cs_next_id <= first.cs_next_id /\
+    (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP G' p = FLOOKUP G p /\ op_taint tn' (Var p) = op_taint tn (Var p)) /\
+    tn'.t_mem SUBSET tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\
+    t.vs_code = s.vs_code /\ t.vs_accounts = s.vs_accounts /\
+    t.vs_transient = s.vs_transient /\ t.vs_logs = s.vs_logs /\
+    t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_gas_readings = s.vs_gas_readings /\ t.vs_initial_fmp = s.vs_initial_fmp
+Proof
+  strip_tac >> drule_all grouped_keyword_decode_supplied_with_frame >>
+  disch_then (qspec_then `PG` (qx_choosel_then [`src`,`mid`,`first`,`last`,`t`,`G'`,`tn'`,`sc`] strip_assume_tac)) >>
+  qexistsl_tac [`first`,`last`,`t`,`G'`,`tn'`,`sc`] >> asm_rewrite_tac[]
+QED
+
+
+Theorem grouped_keyword_decode_owner_frame:
+  alloca_inv t /\
+  FLOOKUP t.vs_allocas oid = SOME (b,n) /\
+  FLOOKUP t.vs_allocas did = SOME (d,sz) /\ oid <> did /\
+  (!q k. MEM (q,k) scratch ==> ?id. oid < id /\
+    FLOOKUP t.vs_allocas id = SOME (q,k)) /\
+  abi_decode_footprint_frame ((d,sz)::scratch) s t /\
+  tn'.t_mem SUBSET tn.t_mem /\ val_wf tv v /\ val_footprint tv v <= n /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory tv v b mem) ==>
+  !mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==> val_in_memory tv v b mem
+Proof
+  strip_tac >>
+  qpat_assum `alloca_inv t`
+    (strip_assume_tac o REWRITE_RULE [alloca_inv_def, allocas_non_overlapping_def]) >>
+  `!id q k. oid <> id /\ FLOOKUP t.vs_allocas id = SOME (q,k) ==>
+    b + val_footprint tv v <= q \/ q + k <= b` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!a1 a2 b1 sz1 b2 sz2. _`
+       (qspecl_then [`oid`,`id`,`b`,`n`,`q`,`k`]
+         (fn th => mp_tac (MATCH_MP th
+           (LIST_CONJ [ASSUME ``oid <> (id:num)``,
+             ASSUME ``FLOOKUP t.vs_allocas oid = SOME (b,n)``,
+             ASSUME ``FLOOKUP t.vs_allocas id = SOME (q,k)``])))) >>
+     qpat_assum `val_footprint tv v <= n` mp_tac >> decide_tac) >>
+  `abi_footprint_disjoint b (val_footprint tv v) ((d,sz)::scratch)` by
+    (simp_tac bool_ss [abi_footprint_disjoint_def, listTheory.MEM, pairTheory.PAIR_EQ] >>
+     rpt gen_tac >> disch_then (DISJ_CASES_THEN strip_assume_tac)
+     >- (gvs[] >> metis_tac[ADD_COMM]) >>
+     qpat_assum `!q k. MEM (q,k) scratch ==> _`
+       (qspecl_then [`d'`,`sz'`] (drule_then strip_assume_tac)) >>
+     `oid <> id` by decide_tac >> metis_tac[ADD_COMM]) >>
+  `mem_bytes_at b (val_footprint tv v) t.vs_memory =
+    mem_bytes_at b (val_footprint tv v) s.vs_memory` by
+    (qpat_assum `abi_decode_footprint_frame _ s t`
+       (strip_assume_tac o REWRITE_RULE [abi_decode_footprint_frame_def]) >>
+     first_x_assum irule >> first_assum ACCEPT_TAC) >>
+  mp_tac (Q.INST [`p` |-> `b`,`oldmem` |-> `s.vs_memory`,
+    `newmem` |-> `t.vs_memory`,`oldtaint` |-> `tn.t_mem`,
+    `newtaint` |-> `tn'.t_mem`] (SPEC_ALL calldata_member_robust_window_frame)) >>
+  asm_rewrite_tac[]
+QED

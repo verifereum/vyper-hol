@@ -75,3 +75,38 @@ Proof
   simp[external_entry_bound_def, initial_state_def] >>
   strip_tac >> fs[initial_state_def, evaluation_state_component_equality]
 QED
+
+Theorem external_entry_bound_from_default_evaluation:
+  send_call_value mut
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [FEMPTY] with <| outcomes := SOME os; requests := [] |>) =
+    (INL (), s1) /\
+  s1.scopes = [FEMPTY] /\
+  eval_exprs (initial_evaluation_context am.sources am.layouts tx NONE)
+    (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts)
+    (s1 with gas_obs := observations) =
+    (INL values, s2 with gas_obs := tail) /\
+  bind_arguments (type_env tops) args (tx.args ++ values) = SOME env ==>
+  external_entry_bound tops am tx os (observations) mut args dflts
+    (s2 with <| scopes := [env]; gas_obs := tail |>)
+Proof
+  strip_tac >>
+  drule send_call_value_with_gas_obs >> strip_tac >>
+  qpat_assum `!gs. send_call_value _ _ _ = _`
+    (qspec_then `observations` assume_tac) >>
+  simp_tac (srw_ss()) [external_entry_bound_def] >>
+  qexistsl_tac [`s1 with gas_obs := observations`, `values`,
+    `s2 with <|scopes := [FEMPTY]; gas_obs := tail|>`, `env`] >>
+  `(s1 with gas_obs := observations) with scopes := [FEMPTY] =
+    s1 with gas_obs := observations` by
+    simp[evaluation_state_component_equality] >>
+  conj_tac
+  >- (`initial_state am [FEMPTY] with
+        <|outcomes := SOME os; requests := []; gas_obs := observations|> =
+       initial_state am [FEMPTY] with
+        <|gas_obs := observations; outcomes := SOME os; requests := []|>` by
+        simp[evaluation_state_component_equality] >>
+      asm_rewrite_tac[]) >>
+  PURE_REWRITE_TAC[eval_external_defaults_run] >>
+  asm_simp_tac (srw_ss()) [LET_THM, evaluation_state_component_equality]
+QED

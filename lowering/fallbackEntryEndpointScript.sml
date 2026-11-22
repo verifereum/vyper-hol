@@ -183,7 +183,7 @@ Proof
   gvs[] >> qexistsl [`G`,`tn`] >> simp[]
 QED
 
-Theorem fallback_empty_environment[local]:
+Theorem fallback_empty_environment:
   set_fallback_package_target target
     (package_fallback_fn tops T (K global_nonreentrant_slot)
       (SOME (mut,nr,rr,"__default__",[],([] : expr list),ret,fbody))) =
