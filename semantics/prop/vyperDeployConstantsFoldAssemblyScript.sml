@@ -130,6 +130,33 @@ Proof
   gvs[preserves_immutables_dom_def, initial_state_def, abstract_machine_from_state_def]
 QED
 
+Theorem deploy_call_framed_constant_slot:
+  cx.in_deploy /\
+  call_external_function orc gobs am cx nr mut ts mods args dflts vals bdy ret =
+    (INL v,am_out,rqs) /\
+  evaluate_all_constants cx am cx.txn.target mods = SOME am_c /\
+  ALOOKUP am_c.immutables cx.txn.target = SOME last /\
+  (!sid nm. declared_constant mods sid nm ==>
+    (!st r st'. eval_exprs cx
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) st = (r,st') ==>
+      lookup_immutable cx st' sid nm = lookup_immutable cx st sid nm) /\
+    (!st r st'. eval_stmts cx bdy st = (r,st') ==>
+      lookup_immutable cx st' sid nm = lookup_immutable cx st sid nm)) ==>
+  ?dst. ALOOKUP am_out.immutables cx.txn.target = SOME dst /\
+    !sid nm. declared_constant mods sid nm ==>
+      FLOOKUP (get_source_immutables sid dst) nm =
+      FLOOKUP (get_source_immutables sid last) nm
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all call_external_function_deploy_immutables_address >>
+  disch_then (qspec_then `cx.txn.target` mp_tac) >> simp[] >> strip_tac >>
+  Cases_on `ALOOKUP am_out.immutables cx.txn.target` >> gvs[] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!sid nm. declared_constant mods sid nm ==> _` drule >> strip_tac >>
+  drule_all call_external_function_protected_lookup >>
+  simp[lookup_immutable_def, initial_state_def]
+QED
+
 Theorem load_contract_constants_fold_from_frames:
   (!R K cx es.
     (!sid nm. R sid nm ==> ~K sid nm) /\
