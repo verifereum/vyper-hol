@@ -50,7 +50,8 @@ QED
 Theorem raw_log_fixed_continuation_shadow:
   gas_shadow_compiles (compile_alloc_buffer 32) (compile_alloc_buffer 32) /\
   gas_shadow_compiles (lower_value compile_expr cenv (expr_type data) data)
-    (lower_value compile_expr cenv (expr_type data) (gas_shadow_expr data)) /\
+    (lower_value compile_expr (gas_shadow_env shadow_defaults cenv)
+      (expr_type data) (gas_shadow_expr data)) /\
   gas_shadow_state sm shadow_sm /\
   compile_alloc_buffer 32 sm = (buf, sa) /\
   lower_value compile_expr cenv (expr_type data) data sa = (value, sb) /\
@@ -59,7 +60,8 @@ Theorem raw_log_fixed_continuation_shadow:
     [Lit 32w; buf.buf_operand]) [] sc = ((), sd) ==>
   ?shadow_sa shadow_sb shadow_sc shadow_sd.
     compile_alloc_buffer 32 shadow_sm = (buf, shadow_sa) /\
-    lower_value compile_expr cenv (expr_type data) (gas_shadow_expr data)
+    lower_value compile_expr (gas_shadow_env shadow_defaults cenv)
+      (expr_type data) (gas_shadow_expr data)
       shadow_sa = (value, shadow_sb) /\
     emit_void MSTORE [buf.buf_operand; value] shadow_sb = ((), shadow_sc) /\
     emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++
@@ -75,8 +77,8 @@ Proof
        (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
      disch_then (qspecl_then [`sm`, `shadow_sm`] mp_tac) >> simp[]) >>
   gvs[] >>
-  Cases_on `lower_value compile_expr cenv (expr_type data)
-    (gas_shadow_expr data) shadow_sa` >>
+  Cases_on `lower_value compile_expr (gas_shadow_env shadow_defaults cenv)
+    (expr_type data) (gas_shadow_expr data) shadow_sa` >>
   rename1 `lower_value _ _ _ (gas_shadow_expr data) shadow_sa =
     (svalue, shadow_sb)` >>
   `svalue = value /\ gas_shadow_state sb shadow_sb` by
