@@ -527,17 +527,18 @@ Proof
     mp_tac source_unit_exit_safe_runs >>
   impl_tac >- simp[] >> strip_tac >>
   `w2n vi.vs_initial_fmp <= w2n vi.vs_fmp` by simp[] >>
+  `ctx_has_dalloca unit.cu_context ==>
+    32 * ctx_dload_count unit.cu_context + unit_alloca_budget unit.cu_context <= w2n fmp` by
+    (disch_tac >>
+     qpat_assum `ctx_has_dalloca unit.cu_context ==> _ <= w2n fmp /\ w2n fmp < 2 ** 254`
+       (ACCEPT_TAC o ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM] o
+        CONJUNCT1 o UNDISCH)) >>
   `raw_unit_memory_ok unit.cu_context vi /\ ptr_discipline 0 unit.cu_context vi` by
     (mp_tac (Q.INST [`rp` |-> `rpolicy`, `vs` |-> `vi`, `tx` |-> `td`,
           `D` |-> `cx_dead (H : (bool # bytes32 # type_value) list # num list)
             (initial_evaluation_context am.sources am.layouts td NONE)`]
         e2eCorrectnessTheory.selected_raw_memory) >>
-     impl_tac >-
-       (simp[] >> strip_tac >>
-        qpat_assum `ctx_has_dalloca unit.cu_context ==>
-          unit_alloca_budget _ + 32 * ctx_dload_count _ <= w2n fmp /\ _`
-          (ACCEPT_TAC o ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM] o
-           CONJUNCT1 o UNDISCH)) >>
+     impl_tac >- simp[] >>
      simp[]) >>
   `mem_inv dload_offset_ok unit.cu_context vi` by
     (irule lower_vyper_runtime_unit_dload_offset_ok >> metis_tac[]) >>
