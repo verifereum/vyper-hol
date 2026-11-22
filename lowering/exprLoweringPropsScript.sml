@@ -4853,9 +4853,11 @@ Proof
        ci_mono_builtin_environment, ci_mono_builtin_hash, ci_mono_builtin_bop,
        ci_mono_builtin_ec, ci_mono_builtin_concat, ci_mono_builtin_makearray,
        ci_mono_builtin_slice]
-  >- (simp[compile_builtin_dispatch_body_def, LET_THM] >>
-      irule ci_mono_uncurry >> simp[ci_mono_as_ptr_val, ci_mono_refl,
-                                    ci_mono_lower_value_cfn]) >>
+  >- (Cases_on `is_word_type ret_ty` >>
+      simp[compile_builtin_dispatch_body_def, LET_THM] >>
+      irule ci_mono_uncurry >>
+      simp[ci_mono_as_stack_val, ci_mono_as_ptr_val, ci_mono_refl,
+           ci_mono_lower_value_cfn]) >>
   simp[compile_builtin_dispatch_body_def, LET_THM] >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_fresh_var, ci_mono_fresh_label, ci_mono_new_block,
