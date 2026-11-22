@@ -1482,7 +1482,7 @@ Proof
     call_certificate_raw_entry_boundary >>
   simp[] >> disch_then (qspec_then `rpolicy` irule) >>
   simp[] >> rpt conj_tac
-  >- (qexists_tac `rpolicy` >> simp[])
+  >- (qexists_tac `rpolicy` >> simp[]) >>
   metis_tac[ADD_COMM]
 QED
 
