@@ -21,6 +21,7 @@ Ancestors
   (* property statements and proofs *)
   dallocaBlueprintArgs
   dallocaCreateCopy dallocaCreateGeometry
+  createExprSizeExit
   rawCallCalldataPeakMemory
   runtimePeakMemoryBound
   loweringRuntimeAllocationHistory loweringRuntimeRawVariantHistory
