@@ -241,11 +241,7 @@ Proof
   drule create_blueprint_dalloca_chunk_parts >> strip_tac >>
   `i = alloc` by gvs[] >>
   qexistsl_tac [`bb`, `chunk`, `sum`, `middle`, `effect`, `suffix`] >>
-  simp[] >>
-  `bb.bb_instructions = (prefix ++ [sum]) ++ (i :: middle) ++ effect :: suffix`
-    by fs[APPEND_ASSOC] >>
-  `LENGTH prefix + 1 = LENGTH (prefix ++ [sum])` by simp[] >>
-  fs[DROP_LENGTH_APPEND]
+  fs[DROP_APPEND]
 QED
 
 Theorem compile_create_blueprint_dalloca_chunk:
