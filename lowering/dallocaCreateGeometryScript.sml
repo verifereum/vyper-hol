@@ -225,6 +225,29 @@ Proof
   simp[mk_inst_def, is_terminator_def, DROP_LENGTH_APPEND]
 QED
 
+Theorem create_blueprint_dalloca_window_parts:
+  create_blueprint_dalloca_window fn i s ==>
+  ?bb chunk sum middle effect suffix.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    create_blueprint_dalloca_chunk chunk 1 /\
+    chunk = sum :: i :: (middle ++ [effect]) /\
+    i.inst_opcode = DALLOCA /\ MEM effect.inst_opcode [CREATE; CREATE2] /\
+    DROP s.vs_inst_idx bb.bb_instructions = (i :: middle) ++ effect :: suffix /\
+    EVERY (\j. ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
+               ~MEM j.inst_opcode [DALLOCA; CALL; STATICCALL; DELEGATECALL;
+                                   CREATE; CREATE2]) middle
+Proof
+  rewrite_tac[create_blueprint_dalloca_window_def] >> strip_tac >>
+  drule create_blueprint_dalloca_chunk_parts >> strip_tac >>
+  `i = alloc` by gvs[] >>
+  qexistsl_tac [`bb`, `chunk`, `sum`, `middle`, `effect`, `suffix`] >>
+  simp[] >>
+  `bb.bb_instructions = (prefix ++ [sum]) ++ (i :: middle) ++ effect :: suffix`
+    by fs[APPEND_ASSOC] >>
+  `LENGTH prefix + 1 = LENGTH (prefix ++ [sum])` by simp[] >>
+  fs[DROP_LENGTH_APPEND]
+QED
+
 Theorem compile_create_blueprint_dalloca_chunk:
   compile_create_blueprint_append target value salt offset code args_ptr
     args_len rof sa = (result,sb) ==>
