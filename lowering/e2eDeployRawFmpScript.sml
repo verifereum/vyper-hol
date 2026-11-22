@@ -212,9 +212,10 @@ Proof
     imm_len tops + unit_alloca_budget dunit.cu_context <= w2n vs.vs_initial_fmp /\
     w2n vs.vs_initial_fmp < 2 ** 254` by
     (strip_tac >> fs[] >> decide_tac) >>
+  rename1 `compile_stmts _ _ _ (MAP gas_shadow_stmt stmts) _ = _` >>
   drule_all deploy_ctor_plain_defaults_shadow_env >> strip_tac >>
   `compile_stmts (gas_shadow_env T cenv) NoLoop NoneT
-     (MAP gas_shadow_stmt body) shadow_sa = ((),shadow_sb)` by simp[] >>
+     (MAP gas_shadow_stmt stmts) shadow_sa = ((),shadow_sb)` by simp[] >>
   drule_all deploy_ctor_body_joint_raw_with >> simp[]
 QED
 
