@@ -27,6 +27,8 @@ val linked_witness_headers = EQT_ELIM (eval_linked_fixture
 val linked_witness_main_support = EQT_ELIM (eval_linked_fixture
   ``supported_program (main_module linked_witness_mods) /\
     supported_program_deploy (main_module linked_witness_mods)``)
+val linked_witness_struct_fields = eval_linked_fixture
+  ``make_struct_fields_map_mods linked_witness_mods``
 
 Theorem linked_witness_imported_constructor:
   ?tops. ALOOKUP linked_witness_mods (SOME 2) = SOME tops /\
@@ -91,14 +93,14 @@ Proof
       [] NoneT [] T with ce_target := p.rpol_target` >>
   qexistsl [`unit.cu_context`, `ce`] >>
   `acyclic_struct_metadata ce.ce_struct_fields` by
-    (simp[Abbr `ce`, build_compile_env_unit_def] >>
-     CONV_TAC (RAND_CONV EVAL) >> simp[acyclic_struct_metadata_def]) >>
+    simp[Abbr `ce`, build_compile_env_unit_def, pairTheory.ELIM_UNCURRY,
+         linked_witness_struct_fields, acyclic_struct_metadata_def] >>
   `immutable_section_layout_mods linked_witness_mods ce` by
     (irule unit_module_locations_immutable_layout >>
      simp[Abbr `ce`, build_compile_env_unit_def, linked_witness_distinct_modules] >>
      metis_tac[]) >>
   simp[contract_inv_def, cenv_module_pins_mods_def, Abbr `ce`,
-       build_compile_env_unit_def, get_tenv_def, LET_THM,
+       build_compile_env_unit_def, get_tenv_def, pairTheory.ELIM_UNCURRY, LET_THM,
        linked_witness_distinct_modules, GSYM contract_keys_def] >>
   rpt conj_tac
   >- (rpt strip_tac >>
