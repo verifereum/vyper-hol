@@ -35,11 +35,12 @@ Theorem as_wei_value_lower_pair:
   expr_type e = BaseT (UintT k) /\
   gas_shadow_state sa sha /\
   lower_value compile_expr cenv ty (Builtin ann (AsWeiValue dn) [e]) sa = (op,sb) /\
-  lower_value compile_expr cenv ty
+  lower_value compile_expr (gas_shadow_env T cenv) ty
     (gas_shadow_expr (Builtin ann (AsWeiValue dn) [e])) sha = (op,shb) ==>
   ?x s1 sh1.
     lower_value compile_expr cenv (expr_type e) e sa = (x,s1) /\
-    lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) sha = (x,sh1) /\
+    lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+      (gas_shadow_expr e) sha = (x,sh1) /\
     gas_shadow_state s1 sh1 /\
     compile_as_wei_value_int x (denomination_multiplier dn) F s1 = (op,sb) /\
     compile_as_wei_value_int x (denomination_multiplier dn) F sh1 = (op,shb)
@@ -51,9 +52,11 @@ Proof
   qpat_x_assum `lower_value _ _ _ (gas_shadow_expr _) _ = _` mp_tac >>
   simp[gas_shadow_expr_def, gas_shadow_builtin_def] >> strip_tac >>
   drule_all lower_value_as_wei_value >> strip_tac >>
-  mp_tac (Q.INST [`ty` |-> `expr_type e`] gas_shadow_stmt_lower_value) >>
-  simp[gas_shadow_compiles_def] >>
-  disch_then (qspecl_then [`sa`, `sha`] mp_tac) >>
+  `gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
+     (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e))` by irule gas_shadow_stmt_lower_value_env >>
+  qpat_x_assum `gas_shadow_compiles _ _`
+    (qspecl_then [`sa`, `sha`] mp_tac o REWRITE_RULE[gas_shadow_compiles_def]) >>
   simp[] >> strip_tac >>
   gvs[] >> metis_tac[]
 QED

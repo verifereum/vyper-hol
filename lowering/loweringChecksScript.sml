@@ -16,6 +16,8 @@ Ancestors
   evalCompilerRange evalCompilerAllocationBudget evalCompilerInternalImmutables
   evalAssignmentOrderChecks evalCompilerSourceShape evalCompilerPopSubscriptOverlap
   evalCompilerSiblingScopeTypes
+  (* Linked runtime dispatch and entry proofs. *)
+  defaultDispatchMods dispatchedCallAssemblyMods
   (* exact Python parity for every retained raw-system and creation fixture *)
   evalCompilerRawSystem evalCompilerCreateBuiltins
   (* branch_opt's output checker on a sample of the parity fixtures'
