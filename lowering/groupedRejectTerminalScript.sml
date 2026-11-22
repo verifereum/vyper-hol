@@ -79,7 +79,7 @@ Proof
   disch_then (ACCEPT_TAC o MATCH_MP gas_path_ptr_edge_erase o CONJUNCT2)
 QED
 
-Theorem entry_exit_edge_empty_revert[local]:
+Theorem entry_exit_edge_empty_revert:
   gas_path_edge ctx fn s n r /\ exit_result r /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
