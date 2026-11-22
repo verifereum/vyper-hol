@@ -261,7 +261,7 @@ Theorem compile_assert_frag_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Assert e ak))
-      (stmt_env cenv lctx ty (Assert (gas_shadow_expr e) ak))
+      (stmt_env (gas_shadow_env T cenv) lctx ty (Assert (gas_shadow_expr e) ak))
       (eval_stmt cx (Assert e ak)) es
 Proof
   rpt gen_tac >>
