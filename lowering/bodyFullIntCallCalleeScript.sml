@@ -14,7 +14,7 @@ Ancestors bodyFullShadowBodyInv sourceUnitExecution[qualified,ignore_grammar] lo
   bodyFullIntCallDefs bodyFullIntCallByteFrame bodyFullPreds
   constSubst constSubstStmtsPreserve bodyFullIntCallCheckedBody
   vyperTypeContractFunction bodySimFull[qualified]
-  bodyInvSplit bodyInvCodeProps bodyInvExecutionProps bodyInvMetadataProps
+  bodyInvSplit bodyCallSupport[qualified,ignore_grammar] bodyInvCodeProps bodyInvExecutionProps bodyInvMetadataProps
   bodyInvIntCallPinsProps contractInvContextProps
   moduleVariableKeyProps compileUnit bodyFullPostsMods[qualified,ignore_grammar]
   bodyQualifiedStmtSupport linkedConstAnnotations constSubstMods[qualified]
@@ -2383,6 +2383,7 @@ Proof
   gvs[immutable_section_layout_mods_def] >>
   conj_tac >- (rpt strip_tac >> res_tac) >>
   conj_tac >- (qexistsl [`policy`, `unit`] >> simp[]) >>
+  conj_tac >- fs[bodyCallSupportTheory.linked_body_calls_resolved_def] >>
   conj_tac >- (rpt strip_tac >> res_tac) >>
   conj_tac >> first_assum ACCEPT_TAC
 QED
