@@ -7,7 +7,7 @@ Theorem for_nonslot_array_round_prefix_contracts:
   for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
     (sa0,vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL)
     (bc,saD,saA,xd,capacity,aidItem)
-    (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
+    (entry,cond_label,bod,incr,exit,idx,invalid,valid,done_var,next_var)
     (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
     (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\
   body_const_cells_agree [(NONE,tops)] cx env es0 /\
