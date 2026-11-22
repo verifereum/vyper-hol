@@ -204,7 +204,16 @@ Definition contract_namespaces_ok_def:
     ALL_DISTINCT (contract_keys external_name_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys self_member_keys_toplevel mods) /\
     EVERY (\(src,tls).
-      ALL_DISTINCT (abi_external_method_ids (type_env_all_modules mods) tls)) mods
+      ALL_DISTINCT (abi_external_method_ids (type_env_all_modules mods) tls)) mods /\
+    EVERY (\(_,tls). EVERY (\tl. ~MEM #"." (case tl of
+        FunctionDecl _ _ _ _ name _ _ _ _ => name
+      | VariableDecl _ _ name _ _ => name
+      | HashMapDecl _ _ name _ _ _ => name
+      | StructDecl name _ => name
+      | EventDecl name _ => name
+      | ErrorDecl name _ => name
+      | FlagDecl name _ => name
+      | InterfaceDecl name _ => name)) tls) mods
 End
 
 Definition custom_error_resolved_def:
