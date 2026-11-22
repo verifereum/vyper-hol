@@ -210,20 +210,14 @@ Proof
   rename1 `attribute_type _ bty fld = SOME fty` >>
   drule compile_get_target_ptr_attr >> strip_tac >> gvs[] >>
   `gas_shadow_compiles (compile_get_target_ptr compile_expr cenv bt)
-     (compile_get_target_ptr compile_expr cenv (gas_shadow_target bt))` by
-    (mp_tac (MATCH_MP gas_shadow_compiles_get_target_ptr
-               (CONJUNCT1 gas_shadow_compile_expr)) >>
-     disch_then (qspecl_then [`bt`, `cenv`, `T`] mp_tac) >> simp[]) >>
+     (compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+       (gas_shadow_target bt))` by irule gas_shadow_stmt_get_target_ptr_env >>
   qpat_x_assum `compile_get_target_ptr _ _ (gas_shadow_target _) _ = _`
     (strip_assume_tac o MATCH_MP compile_get_target_ptr_attr o
      SIMP_RULE std_ss [gas_shadow_expr_def]) >>
   rename1 `compile_get_target_ptr _ _ (gas_shadow_target bt) shadow_sa =
              (srb, shadow_sm)` >>
-  qspecl_then [`compile_get_target_ptr compile_expr cenv bt`,
-               `compile_get_target_ptr compile_expr cenv (gas_shadow_target bt)`,
-               `sa`, `shadow_sa`, `rb`, `sm`, `srb`, `shadow_sm`] mp_tac
-    (Q.GENL [`f`, `g`, `s`, `t`, `x`, `s'`, `y`, `t'`] gas_shadow_step) >>
-  (impl_tac >- simp[]) >> strip_tac >> gvs[] >>
+  drule_all gas_shadow_step >> strip_tac >> gvs[] >>
   `ci_mono sa sm /\ ci_mono shadow_sa shadow_sm` by
     metis_tac[ci_mono_compile_get_target_ptr, SND] >>
   `ci_mono sm sb /\ ci_mono shadow_sm shadow_sb` by
@@ -513,11 +507,10 @@ Proof
      SIMP_RULE std_ss [gas_shadow_expr_def]) >>
   rename1 `compile_get_target_ptr _ _ (gas_shadow_target bt) shadow_sa =
              (srb,shadow_sm)` >>
-  `rb = srb /\ gas_shadow_state sm shadow_sm` by
-    (mp_tac (Q.INST [`bt` |-> `bt`] gas_shadow_stmt_get_target_ptr) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
-  gvs[] >>
+  `gas_shadow_compiles (compile_get_target_ptr compile_expr cenv bt)
+     (compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+       (gas_shadow_target bt))` by irule gas_shadow_stmt_get_target_ptr_env >>
+  drule_all gas_shadow_step >> strip_tac >> gvs[] >>
   `ci_mono sa sm /\ ci_mono shadow_sa shadow_sm` by
     metis_tac[ci_mono_compile_get_target_ptr,SND] >>
   `ci_mono sm sb /\ ci_mono shadow_sm shadow_sb` by
