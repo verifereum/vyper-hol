@@ -315,12 +315,6 @@ Proof
      PERM_order_deploy_internals]
 QED
 
-Theorem body_inv_selected_internal_code_mods =
-  bodyFullShadowInternalRunTheory.body_inv_selected_internal_code_mods
-
-Theorem body_inv_selected_internal_code =
-  bodyFullShadowInternalRunTheory.body_inv_selected_internal_code
-
 (* Two modules can declare the same internal name and lower to distinct labels. *)
 Theorem two_module_unit_lowers[local]:
   mods = [(NONE,[FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]]);
