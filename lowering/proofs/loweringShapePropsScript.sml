@@ -16182,7 +16182,8 @@ Proof
         match_mp_tac (Q.SPECL [`descs`, `segs`, `insts`, `fn`] internal_fns_ok_mode) >>
         gvs[Abbr `ifns`, Abbr `insts`, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
         conj_tac >- metis_tac[] >>
-        metis_tac[rets_scoped_segments_mode]) >>
+        match_mp_tac (Q.SPECL [`descs`, `segs`, `entry`] rets_scoped_segments_mode) >>
+        simp[]) >>
   `entry_fn_no_ret (mk_raw_function entry_label entry)`
     by (simp[contextCodegenRelTheory.entry_fn_no_ret_def,
              mk_raw_function_fields, EVERY_MEM] >>

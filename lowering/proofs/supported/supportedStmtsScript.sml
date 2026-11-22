@@ -159,10 +159,13 @@ Definition supported_iterator_def:
           supported_constant_type tops nid = SOME (ArrayT elem bd))
      | TopLevelName _ _ => F
      | _ => supported_expr tops e /\
-            (!t fid args drv. e = Call t (IntCall fid) args drv /\ FST fid = NONE ==>
-               ?m nr rr ps ds b.
-                 supported_function_decl tops fid Internal =
-                   SOME (m,nr,rr,ps,ds,t,b)) /\
+            (case e of
+               Call t (IntCall fid) _ _ =>
+                 FST fid <> NONE \/
+                 (case supported_function_decl tops fid Internal of
+                    SOME (_,_,_,_,_,ret,_) => ret = t
+                  | NONE => F)
+             | _ => T) /\
             ?bd. expr_type e = ArrayT ty bd /\ bound_length bd <= n)
 End
 
