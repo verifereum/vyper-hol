@@ -4,17 +4,19 @@ Ancestors
   gasShadowModuleOps gasShadowInternal gasShadowRuntimeOps gasShadowModuleDefs gasShadowCompileStmt
   gasShadowCompileStmtBase gasShadowCompileStmtOps gasShadowCompileContext
   gasShadowState gasShadow moduleLowering compileEnv emitHelper stmtLowering list
+  gasShadowRuntimeRegisterEnv gasShadowRuntimeKwargEnv
 
 Theorem gas_shadow_compiles_compile_guarded_body:
   gas_shadow_compiles (compile_guarded_body ce nr key trans view stmts ret)
-    (compile_guarded_body ce nr key trans view (MAP gas_shadow_stmt stmts) ret)
+    (compile_guarded_body (gas_shadow_env sd ce) nr key trans view
+      (MAP gas_shadow_stmt stmts) ret)
 Proof
   rewrite_tac[compile_guarded_body_def, comp_ignore_bind_def] >>
   match_mp_tac gas_shadow_compiles_bind >> conj_tac
   >- (Cases_on `nr` >> simp[gas_shadow_compiles_nonreentrant_lock,
                             gas_shadow_compiles_return]) >>
   gen_tac >> BETA_TAC >> match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- simp[CONJUNCT2 gas_shadow_compile_stmt] >>
+  >- simp[gas_shadow_compile_stmt_env] >>
   gen_tac >> BETA_TAC >>
   ho_match_mp_tac gas_shadow_compiles_get_terminated >> gen_tac >>
   Cases_on `b` >> Cases_on `nr` >> Cases_on `ret` >>
@@ -25,17 +27,19 @@ QED
 Theorem gas_shadow_compiles_compile_external_function_body:
   gas_shadow_compiles
     (compile_external_function_body ce args nr key trans view stmts ret)
-    (compile_external_function_body ce args nr key trans view
+    (compile_external_function_body (gas_shadow_env sd ce) args nr key trans view
       (MAP gas_shadow_stmt stmts) ret)
 Proof
-  simp[compile_external_function_body_def, gas_shadow_compiles_bind,
-       gas_shadow_compiles_compile_register_positional_args,
+  rewrite_tac[compile_external_function_body_def] >>
+  irule gas_shadow_compiles_env_bind >> qexists `sd` >>
+  simp[gas_shadow_compiles_env_register_positional_args,
        gas_shadow_compiles_compile_guarded_body]
 QED
 
 Theorem gas_shadow_compiles_compile_fallback_body:
   gas_shadow_compiles (compile_fallback_body ce pay nr key trans view stmts ret)
-    (compile_fallback_body ce pay nr key trans view (MAP gas_shadow_stmt stmts) ret)
+    (compile_fallback_body (gas_shadow_env sd ce) pay nr key trans view
+      (MAP gas_shadow_stmt stmts) ret)
 Proof
   Cases_on `pay` >>
   simp[compile_fallback_body_def, comp_ignore_bind_def,
@@ -60,12 +64,14 @@ QED
 Theorem gas_shadow_compiles_compile_common_function_body:
   gas_shadow_compiles
     (compile_common_function_body ce args kwvars nr key trans view stmts ret)
-    (compile_common_function_body ce args
+    (compile_common_function_body (gas_shadow_env sd ce) args
       (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) kwvars)
       nr key trans view (MAP gas_shadow_stmt stmts) ret)
 Proof
   simp[compile_common_function_body_def, gas_shadow_compile_register_kwarg_vars,
-       gas_shadow_compiles_bind, gas_shadow_compiles_compile_register_positional_args,
+       compile_register_kwarg_vars_gas_shadow_env] >>
+  irule gas_shadow_compiles_env_bind >> qexists `sd` >>
+  simp[gas_shadow_compiles_env_register_positional_args,
        gas_shadow_compiles_compile_guarded_body]
 QED
 
@@ -83,7 +89,9 @@ Proof
       match_mp_tac gas_shadow_compiles_bind >> conj_tac
       >- (qspec_then `[p]` mp_tac gas_shadow_compiles_compile_external_fn_bodies >>
           simp[]) >> simp[]) >>
+  (* A common job shadows its body and keyword expressions, not ec_env. *)
   simp[compile_external_jobs_def, comp_ignore_bind_def,
        gas_shadow_compiles_bind, gas_shadow_compiles_new_block,
-       gas_shadow_compiles_compile_common_function_body]
+       REWRITE_RULE [gasShadowCompileBaseTheory.gas_shadow_env_F]
+         (Q.INST [`sd` |-> `F`] gas_shadow_compiles_compile_common_function_body)]
 QED
