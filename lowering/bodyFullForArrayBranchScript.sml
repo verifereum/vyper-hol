@@ -317,8 +317,11 @@ Proof
      fs[compileUnitTheory.main_module_def, alistTheory.ALOOKUP_def,
         GSYM exprSimHypsDefsTheory.const_name_root_mods_singleton] >>
      strip_tac >> rpt gen_tac >> strip_tac >>
-     qpat_assum `!nid. _ ==> FST nid = NONE /\ _`
-       (qspec_then `nid` (drule_then strip_assume_tac)) >>
+     `FST nid = NONE` by
+       (qpat_assum `!nid. e = TopLevelName (expr_type e) nid ==> FST nid = NONE`
+          (qspec_then `nid` mp_tac) >> simp[]) >>
+     qpat_assum `!nid. _ ==> IS_SOME (supported_immutable_type tops (NONE,SND nid))`
+       (qspec_then `nid` mp_tac) >>
      PairCases_on `nid` >> gvs[]) >>
   mp_tac (Q.INST [`c` |-> `cenv`,`sty` |-> `typ`,`fty` |-> `typ`,
       `loop_body` |-> `body'`,`sa0` |-> `sa`,`shadow_sa0` |-> `shadow_sa`]
