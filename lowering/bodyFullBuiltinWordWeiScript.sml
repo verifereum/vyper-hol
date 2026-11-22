@@ -46,7 +46,22 @@ Proof
      fs[body_expr_full_ok_def] >> metis_tac[]) >>
   conj_asm1_tac
   >- (rw[expr_sim_full_def] >>
-      drule_all as_wei_value_lower_pair >> strip_tac >>
+      qpat_assum `lower_value _ _ _ (Builtin _ _ _) sa = _`
+        (mp_then Any mp_tac lower_value_as_wei_value) >> simp[] >> strip_tac >>
+      qpat_x_assum `lower_value _ _ _ (gas_shadow_expr _) _ = _` mp_tac >>
+      simp[Once gasShadowTheory.gas_shadow_expr_def, gasShadowTheory.gas_shadow_builtin_def] >>
+      disch_then (mp_then Any mp_tac lower_value_as_wei_value) >>
+      simp[gasShadowTheory.gas_shadow_expr_type] >> strip_tac >>
+      rename1 `lower_value _ _ _ e sa = (x,s1)` >>
+      rename1 `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = (y,sh1)` >>
+      `gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
+         (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+           (gas_shadow_expr e))` by irule gas_shadow_stmt_lower_value_env >>
+      `x = y /\ gas_shadow_state s1 sh1` by
+        (qpat_x_assum `gas_shadow_compiles _ _`
+           (mp_tac o REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]) >>
+         disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
+      qpat_x_assum `x = y` (SUBST_ALL_TAC o SYM) >>
       `cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var` by
         (qpat_assum `lower_value _ _ _ e sa = _`
            (mp_then Any mp_tac expr_body_pre_lower_value_word_shape) >>
@@ -61,8 +76,9 @@ Proof
       `fn_has_code shadow_sa sh1 shadow_func` by metis_tac[fn_has_code_split] >>
       `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
         metis_tac[expr_body_pre_gas_admissible] >>
-      qpat_x_assum `expr_sim_full _ _ _ _ e es`
-        (drule_all o REWRITE_RULE [expr_sim_full_def]) >>
+      qpat_assum `expr_type e = _` (fn ety =>
+        qpat_x_assum `expr_sim_full _ _ _ _ e es`
+          (drule_all o REWRITE_RULE [expr_sim_full_def, ety])) >>
       strip_tac >>
       qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
       rewrite_tac[as_wei_value_source_bind] >>
