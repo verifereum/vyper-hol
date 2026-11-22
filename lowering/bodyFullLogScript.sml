@@ -122,13 +122,14 @@ QED
 Theorem log_full_snapshot_cuts[local]:
   cenv.ce_event_info (nsid_to_string id) = SOME (hash,declared,flags) /\
   compile_stmt cenv lctx ret (Log id args) sa = ((),sb) /\
-  compile_stmt cenv lctx ret (Log id (MAP gas_shadow_expr args)) shadow_sa = ((),shadow_sb) /\
+  compile_stmt (gas_shadow_env T cenv) lctx ret
+    (Log id (MAP gas_shadow_expr args)) shadow_sa = ((),shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ fn_has_code sa sb func /\
   fn_has_code shadow_sa shadow_sb shadow_func ==>
   ?saved sm shadow_sm.
     compile_ext_call_args compile_expr cenv [] (MAP (lowered_value_type cenv) args)
       args sa = (saved,sm) /\
-    compile_ext_call_args compile_expr cenv []
+    compile_ext_call_args compile_expr (gas_shadow_env T cenv) []
       (MAP (lowered_value_type cenv) (MAP gas_shadow_expr args))
       (MAP gas_shadow_expr args) shadow_sa = (saved,shadow_sm) /\
     gas_shadow_state sm shadow_sm /\
@@ -138,17 +139,19 @@ Proof
   strip_tac >>
   Cases_on `compile_ext_call_args compile_expr cenv []
     (MAP (lowered_value_type cenv) args) args sa` >> rename1 `_ = (saved,sm)` >>
-  Cases_on `compile_ext_call_args compile_expr cenv []
+  Cases_on `compile_ext_call_args compile_expr (gas_shadow_env T cenv) []
     (MAP (lowered_value_type cenv) (MAP gas_shadow_expr args))
     (MAP gas_shadow_expr args) shadow_sa` >> rename1 `_ = (shadow_saved,shadow_sm)` >>
-  qspecl_then [`sa`,`shadow_sa`] mp_tac
-    (REWRITE_RULE [gas_shadow_compiles_def] gas_shadow_log_snapshots) >>
+  drule (REWRITE_RULE [gas_shadow_compiles_def]
+    (Q.INST [`sd` |-> `T`] gas_shadow_log_snapshots_env)) >>
+  disch_then (qspecl_then [`cenv`,`args`] mp_tac) >>
   simp[] >> strip_tac >> gvs[] >>
-  mp_tac (Q.INST [`ty` |-> `ret`, `sf` |-> `sb`, `fn` |-> `func`]
-    (SPEC_ALL compile_log_stmt_snapshot_code)) >> simp[] >> strip_tac >>
-  mp_tac (Q.INST [`args` |-> `MAP gas_shadow_expr args`, `sa` |-> `shadow_sa`,
-      `sm` |-> `shadow_sm`, `ty` |-> `ret`, `sf` |-> `shadow_sb`, `fn` |-> `shadow_func`]
-    (SPEC_ALL compile_log_stmt_snapshot_code)) >> simp[]
+  drule_all_then strip_assume_tac compile_log_stmt_snapshot_code >>
+  drule_all_then strip_assume_tac
+    (SIMP_RULE (srw_ss()) []
+      (Q.INST [`cenv` |-> `gas_shadow_env T cenv`]
+        (SPEC_ALL compile_log_stmt_snapshot_code))) >>
+  simp[]
 QED
 
 Theorem log_full_physical_source_encoding[local]:
@@ -941,7 +944,7 @@ Theorem compile_log_frag_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Log id args))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Log id args)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Log id args)))
       (eval_stmt cx (Log id args)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -982,9 +985,9 @@ Proof
      simp[stmt_env_def, declare_stmt_local_def, comp_bind_def,
           comp_ignore_bind_def, comp_return_def] >>
      rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[]) >>
-  `compile_stmt cenv lctx ret_ty (Log id (MAP gas_shadow_expr args)) shadow_sa =
-     ((),shadow_sb)` by
-    (qpat_x_assum `stmt_env cenv lctx ret_ty (gas_shadow_stmt (Log id args)) _ = _` mp_tac >>
+  `compile_stmt (gas_shadow_env T cenv) lctx ret_ty
+     (Log id (MAP gas_shadow_expr args)) shadow_sa = ((),shadow_sb)` by
+    (qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt (Log id args)) _ = _` mp_tac >>
      simp[stmt_env_def, declare_stmt_local_def, gas_shadow_stmt_def,
           comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
      rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[]) >>
@@ -1696,7 +1699,7 @@ Theorem body_log_aggregate_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Log id args))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Log id args)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Log id args)))
       (eval_stmt cx (Log id args)) es
 Proof
   rpt gen_tac >> strip_tac >>
