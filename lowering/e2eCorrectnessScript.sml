@@ -862,7 +862,7 @@ QED
 
 (* The S3 memory facts of the raw unit from the entry's memory- and
    pointer-safe runs, through the loweringMemCorrect bridges. *)
-Theorem selected_raw_memory[local]:
+Theorem selected_raw_memory:
   lower_vyper_runtime_unit tops rp = SOME unit /\
   (ctx_has_dalloca unit.cu_context ==>
     unit_alloca_budget unit.cu_context +

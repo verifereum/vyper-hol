@@ -23,7 +23,6 @@ Ancestors
   ownSymSrcUnit gasFocusOptLabelFlow[qualified,ignore_grammar] codegenSymOwnRel ctorDeployRawEntryFacts
   e2eDeployDefs e2eDefs ctorDeployDefs deployUnitExecution deployUnitExitSafe
   ctorDeployMemoryFrontier ctorDeployImmBudget ctorDeployInitcode
-  deployDynamicMemory loweringShapeSource[qualified]
   ctorDeployEntry ctorDeployShape ctorDeployDefsReach ctorDeployDead
   ctorDeployLoweringSource
   ctorDeployFrame compileVyper codegen e2eProducers e2eComposition e2eEntry
@@ -179,12 +178,11 @@ QED
 
 (* The bridges at the deployment entry: the S4 memory facts of vs from its
    memory-safe and pointer-safe runs from "__deploy". *)
-Theorem deploy_selected_memory_from_no_wrap:
+Theorem deploy_selected_memory_from_checked:
   deploy_phases policy tops (deploy_bc, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
   vs.vs_alloca_next = imm_len tops /\
-  (!f inst s. raw_reachable vs dunit.cu_context f inst s ==>
-     dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp) /\
+  ctx_has_dalloca dunit.cu_context /\
   (ctx_has_dalloca dunit.cu_context ==>
      imm_len tops + unit_alloca_budget dunit.cu_context +
        32 * ctx_dload_count dunit.cu_context <= w2n vs.vs_initial_fmp) /\
@@ -212,15 +210,19 @@ Proof
   drule deploy_imm_alloca_budget_ok >> strip_tac >>
   `imm_len tops + unit_alloca_budget dunit.cu_context < dimword (:256)` by
     decide_tac >>
-  rpt conj_tac
+  `ptr_discipline (imm_len tops) dunit.cu_context vs /\
+   taint_within D dunit.cu_context vs` by
+    (match_mp_tac (Q.SPECL [`D`, `imm_len tops`, `dunit.cu_context`,
+        `"__deploy"`, `func`, `"__deploy"`, `vs`] lowered_unit_ptr_taint) >>
+     simp[]) >>
+  `!f inst s. raw_reachable vs dunit.cu_context f inst s ==>
+      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+    (match_mp_tac (Q.SPECL [`imm_len tops`, `dunit.cu_context`,
+        `"__deploy"`, `func`, `"__deploy"`, `vs`] lowered_unit_checked_dalloca_facts) >>
+     simp[]) >>
+  simp[] >> rpt conj_tac
   >- (qspecl_then [`imm_len tops`, `dunit.cu_context`, `"__deploy"`, `func`,
                    `"__deploy"`, `vs`] mp_tac lowered_unit_raw_memory_ok_from_no_wrap >>
-      impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> simp[])
-  >- (qspecl_then [`D`, `imm_len tops`, `dunit.cu_context`, `"__deploy"`,
-                   `func`, `"__deploy"`, `vs`] mp_tac lowered_unit_ptr_taint >>
-      impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> simp[])
-  >- (qspecl_then [`D`, `imm_len tops`, `dunit.cu_context`, `"__deploy"`,
-                   `func`, `"__deploy"`, `vs`] mp_tac lowered_unit_ptr_taint >>
       impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> simp[])
   >- (qspecl_then [`dunit.cu_context`, `"__deploy"`, `func`, `"__deploy"`,
                    `vs`] mp_tac lowered_unit_dload_offset_ok >>
@@ -410,24 +412,13 @@ Proof
    taint_within (deploy_dead H tops runtime_bc am txp) dunit.cu_context vs /\
    mem_inv dload_offset_ok dunit.cu_context vs /\
    mem_inv dload_headroom_ok dunit.cu_context vs` by
-    (Cases_on `deploy_dalloca_form_occurs loweringShapeSource$expr_raw_shape_root tops`
-     >- (`txp = tx` by metis_tac[deploy_own_txp_identity] >>
-         `deploy_typing_ok tops am tx` by fs[deploy_source_ok_def] >>
-         `!fn inst s. raw_reachable vs dunit.cu_context fn inst s ==>
-           dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
-           (qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `rpolicy`,
-                        `dunit`, `dout`, `prog`, `prog'`, `cplan`,
-                        `am`, `tx`, `es`, `vs_out`, `vs`, `fmp`]
-             mp_tac deploy_entry_raw_no_wrap >>
-            impl_tac >- simp[] >> disch_then ACCEPT_TAC) >>
-         irule deploy_selected_memory_from_no_wrap >>
+    (Cases_on `ctx_has_dalloca dunit.cu_context`
+     >- (irule deploy_selected_memory_from_checked >>
          rpt conj_tac >>
          TRY (first_assum ACCEPT_TAC) >>
          TRY (qexistsl_tac [`cplan`, `assemble prog`, `dout`, `policy`,
                              `prog`, `rpolicy`, `runtime_bc`] >> simp[]) >>
          gvs[]) >>
-     `~ctx_has_dalloca dunit.cu_context` by
-       metis_tac[deploy_unit_no_dalloca_static] >>
      metis_tac[deploy_selected_memory]) >>
   `ctx_sim (deploy_dead H tops runtime_bc am txp) dunit.cu_context
      dout.po_unit.cu_context vs vs_out /\
