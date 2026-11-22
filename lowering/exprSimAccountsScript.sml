@@ -50,7 +50,7 @@ Libs
 
 (* ===== The fragment ===== *)
 
-Theorem lower_value_self_codesize[local]:
+Theorem lower_value_self_codesize:
   !cenv ty ann e1 sa.
     is_self_addr e1 ==>
     lower_value compile_expr cenv ty
@@ -117,7 +117,7 @@ Proof
        vyperStateTheory.raise_def, vyperStateTheory.read_result_def]
 QED
 
-Theorem self_codesize_source_bind_all_tails[local]:
+Theorem self_codesize_source_bind_all_tails:
   !cx e1 es tail. is_self_addr e1 ==>
     bind (eval_expr cx
       (Builtin (BaseT (UintT 256)) (Acc Codesize)
