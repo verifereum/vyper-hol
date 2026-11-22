@@ -94,7 +94,8 @@ Proof
   qexistsl [`unit.cu_context`, `ce`] >>
   `acyclic_struct_metadata ce.ce_struct_fields` by
     simp[Abbr `ce`, build_compile_env_unit_def, pairTheory.ELIM_UNCURRY,
-         linked_witness_struct_fields, acyclic_struct_metadata_def] >>
+         linked_witness_struct_fields, acyclic_struct_metadata_def,
+         finite_mapTheory.FEVERY_FEMPTY] >>
   `immutable_section_layout_mods linked_witness_mods ce` by
     (irule unit_module_locations_immutable_layout >>
      simp[Abbr `ce`, build_compile_env_unit_def, linked_witness_distinct_modules] >>
