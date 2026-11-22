@@ -241,29 +241,6 @@ Proof
   simp[] >> rw[get_struct_fields_def]
 QED
 
-Theorem unqualified_struct_metadata_delete[local,simp]:
-  unqualified_struct_metadata sf ==> unqualified_struct_metadata (sf \\ name)
-Proof
-  simp[unqualified_struct_metadata_def, FEVERY_ALL_FLOOKUP, FORALL_PROD,
-       DOMSUB_FLOOKUP_THM] >> metis_tac[]
-QED
-
-Theorem unqualified_struct_metadata_lookup[local]:
-  unqualified_struct_metadata sf ==> !name.
-  EVERY (supported_type_namespace o FST o SND) (get_struct_fields sf name)
-Proof
-  strip_tac >> gen_tac >>
-  fs[unqualified_struct_metadata_def, FEVERY_ALL_FLOOKUP, FORALL_PROD,
-     get_struct_fields_def] >>
-  Cases_on `FLOOKUP sf name` >> gvs[] >> res_tac
-QED
-
-Triviality supported_types_namespace_mem:
-  !ts. supported_types_namespace ts ==> !t. MEM t ts ==> supported_type_namespace t
-Proof
-  Induct >> simp[supported_type_namespace_def] >> metis_tac[]
-QED
-
 Theorem nested_type_rank_metadata_invariant:
   !sf ty sub fuel tops.
     struct_metadata_types_match tops sf /\
@@ -287,7 +264,7 @@ Proof
            supported_word_type_def, supported_string_type_def] >> strip_tac >>
       fs[type_rank_def, supported_type_namespace_def] >>
       `EVERY supported_type_namespace tys` by
-        (simp[EVERY_MEM] >> metis_tac[supported_types_namespace_mem]) >>
+        (drule supported_types_namespace_every >> simp[]) >>
       AP_TERM_TAC >> irule MAP_CONG >> simp[] >> rpt strip_tac >>
       first_x_assum irule >> simp[] >>
       conj_tac >- (fs[EVERY_MEM] >> res_tac) >>
@@ -370,9 +347,7 @@ Proof
   qexistsl_tac [`fuel`, `tops`] >> simp[]
 QED
 
-(* Producer for the actual builder. The two source premises are checkable:
-   namespace uniqueness and the supported declaration whitelist. No premise
-   assumes anything about a compile_env, ranks, or termination. *)
+(* The builder uses unique declarations with supported, unqualified field types. *)
 Theorem make_struct_fields_map_acyclic:
   struct_args_unique tops /\ supported_declaration_headers tops /\
   (!name fields. MEM (StructDecl name fields) tops ==>
@@ -382,14 +357,15 @@ Proof
   strip_tac >> irule nested_copy_metadata_acyclic >>
   conj_tac
   >- (simp[unqualified_struct_metadata_def, make_struct_fields_map_def] >>
-      irule built_struct_fields_every >> simp[FEVERY_FEMPTY]) >>
+      irule built_struct_fields_every >> simp[FEVERY_FEMPTY] >>
+      first_assum ACCEPT_TAC) >>
   qexistsl_tac [`LENGTH tops`, `tops`] >>
   simp[make_struct_fields_map_types_match] >>
   simp[make_struct_fields_map_def] >> irule built_struct_fields_every >>
   simp[FEVERY_FEMPTY] >> rpt strip_tac >>
   fs[supported_declaration_headers_def, EVERY_MEM] >>
-  first_x_assum drule >>
-  simp[supported_declaration_header_def, supported_place_type_def, EVERY_MEM]
+  res_tac >>
+  fs[supported_declaration_header_def, supported_place_type_def, EVERY_MEM]
 QED
 
 (* Regression: forward references, arrays of tuples, and non-word fields
@@ -402,7 +378,8 @@ Theorem make_nested_struct_fields_acyclic_probe:
      StructDecl "Inner"
        [("values", ArrayT (BaseT (BytesT (Dynamic 64))) (Dynamic 3))]])
 Proof
-  irule make_struct_fields_map_acyclic >> EVAL_TAC >> rw[] >> gvs[]
+  irule make_struct_fields_map_acyclic >> EVAL_TAC >> rw[] >>
+  gvs[supported_type_namespace_def, supported_main_nsid_def]
 QED
 
 Theorem build_compile_env_struct_metadata_acyclic:
@@ -413,5 +390,5 @@ Theorem build_compile_env_struct_metadata_acyclic:
     (build_compile_env tops vis mut name args ret stmts use_transient).ce_struct_fields
 Proof
   simp[build_compile_env_ce_struct_fields] >> strip_tac >>
-  irule make_struct_fields_map_acyclic >> simp[]
+  drule_all make_struct_fields_map_acyclic >> simp[]
 QED

@@ -42,6 +42,7 @@ Ancestors
   vyperTypeCallGraph vyperTypeCallStackSoundness immutableRelation
   immutableLocationProps exprSimMapDefs supportedNameRoot
   supportedExprForms supportedDecls
+  bodyQualifiedStmtSupport
 Libs
   monadsyntax
 
@@ -403,7 +404,8 @@ Definition stmt_exprs_ok_def:
     alloc_limits_stmt cenv s /\
     (stmt_valued_return s /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
        return_buffer_ok cenv) /\
-    ~supported_stmt_expr_exists (const_name_root_mods cenv.ce_modules) s
+    ~supported_stmt_expr_exists (const_name_root_mods cenv.ce_modules) s /\
+    qualified_stmt_decls_ok cenv.ce_modules s
 End
 
 Theorem body_inv_const_name_roots:

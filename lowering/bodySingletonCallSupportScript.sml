@@ -37,11 +37,18 @@ Theorem body_inv_typed_target_calls_main:
   EVERY (\c. FST c = NONE) (int_calls_target t)
 Proof
   strip_tac >>
-  drule_then assume_tac body_inv_qualified_module_absent >>
   drule_then assume_tac (cj 3 well_typed_int_calls_fn_sigs) >>
-  fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def,
-     EVERY_MEM, FORALL_PROD, fn_sigs_consistent_def, GSYM FLOOKUP_DEF] >>
-  rpt strip_tac >> Cases_on `p_1` >> fs[] >> metis_tac[optionTheory.NOT_SOME_NONE]
+  `fn_sigs_consistent env.fn_sigs cx` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  rw[EVERY_MEM, FORALL_PROD] >>
+  rename1 `MEM (src,name) (int_calls_target t)` >>
+  Cases_on `src` >> simp[] >>
+  qpat_assum `EVERY _ (int_calls_target t)`
+    (drule_then strip_assume_tac o SIMP_RULE bool_ss
+      [EVERY_MEM, GSYM FLOOKUP_DEF, optionTheory.IS_SOME_EXISTS]) >>
+  qpat_x_assum `fn_sigs_consistent _ _`
+    (drule_then strip_assume_tac o REWRITE_RULE [fn_sigs_consistent_def]) >>
+  drule_then assume_tac body_inv_qualified_module_absent >> gvs[]
 QED
 
 Theorem body_inv_expr_pre_calls:
