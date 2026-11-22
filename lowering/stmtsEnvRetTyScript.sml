@@ -43,14 +43,12 @@ QED
 (* A supported body without a valued return compiles the same at every
    return type. *)
 
-Theorem stmts_env_ret_ty:
-  !ss tops bindings ctx cenv cx lctx ty ty'.
-    supported_stmts tops bindings ss /\ body_inv tops ctx cenv cx /\
-    ~stmts_valued_return ss ==>
+Theorem stmts_env_ret_ty_no_valued_return:
+  !ss tops bindings cenv lctx ty ty'.
+    supported_stmts tops bindings ss /\ ~stmts_valued_return ss ==>
     stmts_env cenv lctx ty ss = stmts_env cenv lctx ty' ss
 Proof
   rpt strip_tac >>
-  qpat_x_assum `body_inv _ _ _ _` kall_tac >>
   pop_assum mp_tac >> pop_assum mp_tac >>
   qid_spec_tac `cenv` >> Induct_on `ss` >> simp[stmts_env_def] >>
   rpt strip_tac >> simp[FUN_EQ_THM] >> qx_gen_tac `cs0` >>
@@ -62,3 +60,13 @@ Proof
   simp[]
 QED
 
+Theorem stmts_env_ret_ty:
+  !ss tops bindings ctx cenv cx lctx ty ty'.
+    supported_stmts tops bindings ss /\ body_inv tops ctx cenv cx /\
+    ~stmts_valued_return ss ==>
+    stmts_env cenv lctx ty ss = stmts_env cenv lctx ty' ss
+Proof
+  rpt strip_tac >>
+  irule stmts_env_ret_ty_no_valued_return >> simp[] >>
+  qexistsl_tac [`bindings`, `tops`] >> simp[]
+QED
