@@ -9,7 +9,7 @@ Ancestors
   guardRequestCutIdentity loweringMemCorrect fnFrameRequestPrefixOpt fnFrameSymbolicPrefix
   jointRequestCut frameJointTransition asmOptimizer
   codegenSymRel codegenEntrySim e2eOptEntry e2eProducers e2eEntry e2eDefs
-  e2eRequestCutDefs runtimeSymSrcUnit o1LabelFlowCompose o1PassLift
+  e2eRequestCutDefs runtimeSymSrcPackageTransport[qualified] o1LabelFlowCompose o1PassLift
   asmOptNonemptyFinalizer contextCodegenRel unitMemInv staticAbortDefs
   ctxLookupAgree stepWriteFootprintBase frameJointTrace
   frameOriginReachable frameOriginHistory

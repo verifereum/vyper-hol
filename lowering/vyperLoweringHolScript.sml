@@ -14,6 +14,7 @@ Ancestors
   dispatchedEntryValueRevert
   e2eLifecycle e2eTransactionWorld
   e2eCodeFrame ownSymSrcUnit
+  runtimeSymSrcDynarrayAppend runtimeSymSrcModuleArgPreservation runtimeSymSrcRuntimeBoundary runtimeSymSrcStatements
   (* definitions *)
   moduleLowering compileUnit
   (* property statements and proofs *)

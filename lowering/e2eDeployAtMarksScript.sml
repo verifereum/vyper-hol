@@ -29,7 +29,7 @@ Ancestors
   ctorDeployFrame compileVyper codegen e2eProducers e2eComposition e2eEntry
   o1PipelineCorrect o1PipelineCompose o1PassContract codegenCorrectness passSimulationDefs
   lowerDloadDefs gasSummary vyperStorageFootprint
-  deploySymSrcUnit codegenAsmOpt codegenSymRel codegenEntryRel asmFrameRel
+  deploySymSrcGeneratorFrame[qualified] runtimeSymSrcPackageTransport[qualified] codegenAsmOpt codegenSymRel codegenEntryRel asmFrameRel
   compilePhasesProps asmOptimizer contextCodegenRel contextRawReachable
   contextPlanLayoutProps asmDataSuffixProps frameRel codegenRel
   loweringStateRelDefs vyperArith callTrace memSafeRun frameObsStep

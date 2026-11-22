@@ -229,7 +229,7 @@ through any pass. Only the code-end-pointer use clause needs transport.
   `cfg_split_replacement_not_code_end` (`o1LabelFlowCfgSplitPreservation`).
   Package these in the own-code counterpart of `o1LabelFlowLateContracts`.
 - Conditional composition: own-code counterpart of `o1LabelFlowCompose`.
-- Source units (`runtimeSymSrcUnit`, `deploySymSrcUnit`): derive own-flow
+- Source units (`ownSymSrcUnit`): derive own-flow
   directly from `label_flow_own_ok_from_code_end_use`, source shape, and
   `code_end_var_absent`.
 
