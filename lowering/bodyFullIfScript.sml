@@ -192,7 +192,7 @@ Proof
   simp[]
 QED
 
-Theorem compile_if_layout_shadow_ids_env[local]:
+Theorem compile_if_layout_shadow_ids_env:
   !sd cenv lctx ty c ss1 ss2 c' ss1' ss2' sa sb ta tb func sfunc.
   compile_stmt cenv lctx ty (If c ss1 ss2) sa = ((), sb) /\
   compile_stmt (gas_shadow_env sd cenv) lctx ty (If c' ss1' ss2') ta = ((), tb) /\
@@ -379,7 +379,7 @@ QED
 
 (* ----- The selected branch ----- *)
 
-Theorem if_full_condition_bool[local]:
+Theorem if_full_condition_bool:
   gas_admissible (eval_stmt cx (If c ss1 ss2)) (stmt_res_ok lctx) es /\
   (!tail. bind (eval_expr cx c) (read_result cx)
      (es with gas_obs := xs ++ tail) = (INL v, mid with gas_obs := tail)) ==>
@@ -397,7 +397,7 @@ Proof
   pure_once_rewrite_tac[bind_def] >> simp[raise_def]
 QED
 
-Theorem if_next_selected[local]:
+Theorem if_next_selected:
   (if BoolV b = BoolV T then
      ignore_bind push_scope (finally (eval_stmts cx ss1) pop_scope)
    else if BoolV b = BoolV F then
@@ -412,7 +412,7 @@ QED
 
 (* ----- The If fragment ----- *)
 
-Theorem stmt_env_if[local]:
+Theorem stmt_env_if:
   stmt_env cenv lctx ty (If c ss1 ss2) st = (cenv', st') <=>
   cenv' = cenv /\ compile_stmt cenv lctx ty (If c ss1 ss2) st = ((), st')
 Proof
