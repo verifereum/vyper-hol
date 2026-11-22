@@ -155,7 +155,7 @@ Theorem linked_witness_entry_support:
     supported_linked_callee cx.in_deploy callee call)
     (function_int_calls dflts ss)
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all_then (qspec_then `src` strip_assume_tac) linked_witness_contract_inv >>
   `check_function_body_in_mode cx.in_deploy vis` by
     metis_tac[check_function_body_in_mode_def] >>
@@ -183,8 +183,8 @@ Proof
   >- fs[check_function_body_def, LET_THM, optionTheory.IS_SOME_EXISTS]
   >- (`calls_follow_call_graph (contract_call_edges linked_witness_mods)
           (src,name) (int_calls_stmts ss)` by
-        (rw[calls_follow_call_graph_def, EVERY_MEM, call_edge_rel_def] >>
-         irule contract_call_edges_function >>
+        (simp[NoAsms, calls_follow_call_graph_def, EVERY_MEM, call_edge_rel_def] >>
+         rpt strip_tac >> irule contract_call_edges_function >>
          qexistsl [`args`, `ss`, `dflts`, `mut`, `nr`, `raw`, `ret`, `tops`, `vis`] >>
          simp[function_int_calls_def]) >>
       `cx = cx with stk := [(src,name)]` by
