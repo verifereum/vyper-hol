@@ -206,21 +206,23 @@ Proof
   rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule raw_call_calldata_compile >> strip_tac >>
-  `?h1. lower_value compile_expr cenv (BaseT AddressT) (gas_shadow_expr a)
-       shadow_sa = (addr,h1) /\ gas_shadow_state s1 h1` by
-    (mp_tac (Q.INST [`ty` |-> `BaseT AddressT`, `e` |-> `a`]
-       gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
+  `?h1. lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT)
+       (gas_shadow_expr a) shadow_sa = (addr,h1) /\ gas_shadow_state s1 h1` by
+    (`gas_shadow_compiles (lower_value compile_expr cenv (BaseT AddressT) a)
+        (lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT)
+          (gas_shadow_expr a))` by irule gas_shadow_stmt_lower_value_env >>
+     pop_assum (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
      disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[] >>
      metis_tac[pairTheory.PAIR]) >>
-  `?h2. compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws
+  `?h2. compile_ext_call_kwargs compile_expr (gas_shadow_env T cenv) NoneT flags.rcf_kws
        (MAP gas_shadow_expr kws) h1 = ((vo,go,ignored),h2) /\ gas_shadow_state s2 h2` by
     (`gas_shadow_compiles
        (compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws kws)
-       (compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws (MAP gas_shadow_expr kws))` by
-        (irule (REWRITE_RULE [gasShadowCompileBaseTheory.gas_shadow_env_F] (Q.INST [`sd` |-> `F`,`sh` |-> `T`]
+       (compile_ext_call_kwargs compile_expr (gas_shadow_env T cenv) NoneT flags.rcf_kws
+          (MAP gas_shadow_expr kws))` by
+        (irule (SIMP_RULE (srw_ss()) [] (Q.INST [`sd` |-> `T`,`sh` |-> `T`]
           gas_shadow_compiles_ext_call_kwargs_env)) >>
-         simp[cj 1 gasShadowCompileTheory.gas_shadow_compile_expr]) >>
+         simp[cj 1 gas_shadow_compile_expr_env]) >>
      qpat_assum `gas_shadow_compiles _ _` (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
      disch_then (qspecl_then [`s1`, `h1`] mp_tac) >> simp[] >> metis_tac[pairTheory.PAIR]) >>
   `?h3. (case go of SOME g => (g,h2) | NONE => emit_op GAS [] h2) = (gas,h3) /\
@@ -237,22 +239,26 @@ Proof
       raw_call_kwargs_word_args) >> simp[] >> strip_tac >>
   `lower_word_args cenv expr_type (a::kws) sa = (addr::xs,s2)` by
     simp[lower_word_args_cons, raw_call_calldata_word_args] >>
-  `?ys. lower_word_args cenv expr_type (MAP gas_shadow_expr (a::kws)) shadow_sa =
-       (addr::ys,h2)` by
-    (mp_tac (Q.SPECL [`flags.rcf_kws`,`MAP gas_shadow_expr kws`,`h1`,`vo`,`go`,
-         `ignored`,`h2`] raw_call_kwargs_word_args) >>
+  `?ys. lower_word_args (gas_shadow_env T cenv) expr_type
+          (MAP gas_shadow_expr (a::kws)) shadow_sa = (addr::ys,h2)` by
+    (qpat_assum `compile_ext_call_kwargs _ _ _ _ (MAP gas_shadow_expr kws) h1 = _`
+       (mp_then (Pat `compile_ext_call_kwargs _ _ _ _ _ _ = _`) mp_tac
+         raw_call_kwargs_word_args) >>
      simp[] >> disch_then (qx_choose_then `ys` (map_every assume_tac o CONJUNCTS)) >>
      `EVERY (\e. expr_type e = BaseT (UintT 256)) (MAP gas_shadow_expr kws)` by
        simp[EVERY_MAP,combinTheory.o_DEF,gas_shadow_expr_type] >>
      qexists_tac `ys` >> simp[lower_word_args_cons,raw_call_calldata_word_args,gas_shadow_expr_type]) >>
-  `lower_word_args cenv expr_type (MAP gas_shadow_expr (a::kws)) shadow_sa =
-      (addr::xs,h2)` by
-    (mp_tac (Q.INST [`tyf` |-> `expr_type`] gas_shadow_compiles_lower_word_args) >>
-     simp_tac (srw_ss()) [gas_shadow_expr_type,gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`a::kws`,`sa`,`shadow_sa`] mp_tac) >>
-     simp[] >> strip_tac >>
-     qpat_assum `lower_word_args _ _ (MAP gas_shadow_expr (a::kws)) shadow_sa = _`
-       (ACCEPT_TAC o REWRITE_RULE [listTheory.MAP])) >>
+  `lower_word_args (gas_shadow_env T cenv) expr_type
+       (MAP gas_shadow_expr (a::kws)) shadow_sa = (addr::xs,h2)` by
+    (`gas_shadow_compiles (lower_word_args cenv expr_type (a::kws))
+       (lower_word_args (gas_shadow_env T cenv) expr_type
+         (MAP gas_shadow_expr (a::kws)))` by
+       (irule gas_shadow_compiles_lower_word_args >> simp[gas_shadow_expr_type]) >>
+     pop_assum (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
+     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >>
+     qpat_x_assum `lower_word_args _ _ (MAP gas_shadow_expr (a::kws)) _ = _`
+       (assume_tac o REWRITE_RULE [MAP]) >>
+     simp[]) >>
   `wb_args_shape cenv expr_type (a::kws)` by
     (rewrite_tac[wb_args_shape_def] >> rpt gen_tac >>
      disch_then (map_every assume_tac o CONJUNCTS) >>
