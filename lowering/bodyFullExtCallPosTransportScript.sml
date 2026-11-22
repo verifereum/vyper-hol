@@ -10,7 +10,7 @@ Ancestors
   immutableRelation vyperTypeInvariants structFieldsProps
   ctorDeployDeadSectionRel ctorDeployDeadSectionFrame immSectionDead
   gasContext valueEncodingProps abiCanonicalHeadSize bodyFullOperandSnapshot
-  bodyFullAbiEncodeBorrowed context
+  bodyFullAbiEncodeBorrowed bodyFullMaterializedOperandEndpointProps context
   bodyInvCodeProps bodyFullShadowBodyInv immutableRegionFrameProps
 
 Theorem extcall_saved_physical_store_bound:
@@ -282,38 +282,7 @@ Theorem extcall_request_materialized_endpoint:
     ee (Value v) saved u /\
   ptr_buf_ok cenv e (Var x) G2 u
 Proof
-  strip_tac >>
-  mp_tac (Q.INST [`copy` |-> `T`, `vv` |-> `input`, `p` |-> `x`,
-    `sa` |-> `a`, `sm` |-> `ss`, `es` |-> `mid`, `s` |-> `t`,
-    `t` |-> `u`, `G` |-> `G1`, `tn` |-> `tn1`,
-    `G'` |-> `G2`, `tn'` |-> `tn2`] compile_snapshot_vv_materialized_frame) >>
-  impl_tac
-  >- (simp[] >> rpt strip_tac >>
-      qpat_assum `!n b len. local_region cenv mid.scopes t n b len ==> _`
-        (qspecl_then [`n`,`b`,`len`] (drule_then strip_assume_tac)) >>
-      decide_tac) >>
-  simp[] >> strip_tac >>
-  `val_in_memory tv v (w2n w) u.vs_memory` by
-    (irule val_in_memory_footprint_agree >> simp[] >>
-     qexists_tac `t.vs_memory` >> simp[] >>
-     qpat_assum `mem_bytes_at (w2n w) sz u.vs_memory = _`
-       (mp_tac o MATCH_MP (cj 1 mem_bytes_at_agree_window) o SYM) >>
-     disch_then (qspecl_then [`w2n w`,`val_footprint tv v`] mp_tac) >> simp[]) >>
-  `ptr_buf_ok cenv e (Var x) G2 u` by
-    (irule ptr_buf_ok_frame >> qexistsl_tac [`G1`,`t`] >>
-     simp[venomStateTheory.eval_operand_def]) >>
-  qpat_x_assum `saved = _` SUBST_ALL_TAC >>
-  simp[vv_holds_def, vv_at_def, ptr_vv_ok_def, vv_store_bound_def,
-       mk_ptr_def, read_result_def, return_def, venomStateTheory.eval_operand_def] >>
-  rpt conj_tac
-  >- (disj1_tac >> qexistsl_tac [`aid`,`w2n w`,`sz`] >> simp[] >>
-      rpt strip_tac >>
-      qpat_assum `!n b len. local_region cenv ee.scopes u n b len ==> _`
-        (drule_then assume_tac) >>
-      qpat_assum `!n b len. local_region cenv mid.scopes t n b len ==> _`
-        (drule_then strip_assume_tac) >> decide_tac) >>
-  gvs[ptr_val_ok_def] >> rpt strip_tac >>
-  TRY (drule exprSimPropsTheory.val_store_size_le) >> decide_tac
+  strip_tac >> drule_all materialized_operand_endpoint >> simp[]
 QED
 
 (* Slot agreement uses the new state's storage relation, not equality of
