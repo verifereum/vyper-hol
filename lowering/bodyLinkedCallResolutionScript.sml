@@ -35,7 +35,7 @@ Proof
     (qpat_assum `fn_sigs_consistent _ _` mp_tac >>
      simp_tac bool_ss [fn_sigs_consistent_def] >>
      disch_then (qspecl_then [`SOME x`,`name`,`sig`] mp_tac) >>
-     simp[]) >>
+     simp[] >> strip_tac >> goal_assum drule) >>
   `!ts. mods <> [(NONE,ts)]` by (rpt strip_tac >> gvs[ALOOKUP_def]) >>
   `context_function_live cx (SOME x,name)` by
     (qpat_assum `fn_sigs_live _ _` mp_tac >>
