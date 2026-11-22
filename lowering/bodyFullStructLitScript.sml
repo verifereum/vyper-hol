@@ -591,12 +591,15 @@ Proof
   rename1 `compile_store_memory ce op dst fty (lowered_value_type ce e) su = (uu,ss)` >>
   qpat_x_assum `compile_struct_lit _ _ _ ((fname,e)::_) _ _ _ = _` mp_tac >>
   simp[Once exprLoweringTheory.compile_struct_lit_def, comp_ignore_bind_def, comp_bind_def] >> strip_tac >>
-  `?shadow_sm. compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_si =
-      (vv,shadow_sm) /\ gas_shadow_state sm shadow_sm` by
-    (mp_tac (cj 1 gas_shadow_compile_expr |> Q.SPECL [`ce`, `expr_type e`, `e`, `T`]) >>
+  `?shadow_sm. compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e)
+      shadow_si = (vv,shadow_sm) /\ gas_shadow_state sm shadow_sm` by
+    (mp_tac (cj 1 gas_shadow_compile_expr_env |> Q.INST [`sd` |-> `T`] |>
+       Q.SPECL [`ce`, `expr_type e`, `e`, `T`]) >>
      simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`si`, `shadow_si`] mp_tac) >> simp[] >>
-     Cases_on `compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_si` >> gvs[]) >>
+     qpat_x_assum `gas_shadow_state sb shadow_sb` kall_tac >>
+     disch_then drule >> simp[] >>
+     Cases_on `compile_expr (gas_shadow_env T ce) (expr_type e)
+       (gas_shadow_expr e) shadow_si` >> simp[]) >>
   `?shadow_sn. emit_op ADD [Var root; Lit(n2w off)] shadow_sm =
       (dst,shadow_sn) /\ gas_shadow_state sn shadow_sn` by
     (mp_tac (gasShadowCompileContextTheory.gas_shadow_compiles_emit_op_same |>
@@ -640,8 +643,9 @@ Proof
      mp_tac (Q.SPECL [`ADD`, `[Var root; Lit(n2w off)]`, `shadow_sm`] ci_mono_emit_op) >>
      mp_tac (Q.SPECL [`ce`, `op`, `dst`, `fty`, `lowered_value_type ce e`, `shadow_su`]
        ci_mono_compile_store_memory) >>
-     mp_tac (Q.SPECL [`compile_expr`, `ce`, `StructT nsid`, `MAP (I ## gas_shadow_expr) fs`,
-       `Var root`, `off + type_memory_bytes ce fty`, `shadow_ss`] ci_mono_compile_struct_lit_cfn) >>
+     mp_tac (Q.SPECL [`compile_expr`, `gas_shadow_env T ce`, `StructT nsid`,
+       `MAP (I ## gas_shadow_expr) fs`, `Var root`,
+       `off + type_memory_bytes ce fty`, `shadow_ss`] ci_mono_compile_struct_lit_cfn) >>
      simp[ci_mono_def] >>
      (impl_tac >- (rpt gen_tac >> Cases_on `compile_expr cenv' ty' e' sa'` >>
        drule (cj 1 compile_expr_grows) >> simp[])) >> simp[]) >>
@@ -1606,7 +1610,7 @@ Proof
      simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
      disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[] >>
      Cases_on `compile_alloc_buffer (type_memory_size_list tvs) shadow_sa` >> gvs[]) >>
-  `compile_struct_lit compile_expr cenv (StructT (src_id_opt,id))
+  `compile_struct_lit compile_expr (gas_shadow_env T cenv) (StructT (src_id_opt,id))
      (MAP (I ## gas_shadow_expr) kes) (Var q) 0 shadow_sm = (u,shadow_sb)` by
     (qpat_assum `compile_expr _ _ (gas_shadow_expr _) _ = _`
        (strip_assume_tac o MATCH_MP compile_struct_literal_inv o
@@ -1615,7 +1619,7 @@ Proof
   `fn_has_code shadow_sm shadow_sb shadow_func` by
     (drule compile_alloc_buffer_extends >> strip_tac >>
      `cs_extends shadow_sm shadow_sb` by
-       (mp_tac (Q.SPECL [`compile_expr`, `cenv`, `StructT (src_id_opt,id)`,
+       (mp_tac (Q.SPECL [`compile_expr`, `gas_shadow_env T cenv`, `StructT (src_id_opt,id)`,
           `MAP (I ## gas_shadow_expr) kes`, `Var q`, `0`, `shadow_sm`]
           ci_mono_compile_struct_lit_cfn) >> simp[ci_mono_def] >>
         (impl_tac >- (rpt gen_tac >> Cases_on `compile_expr cenv' ty' e' sa'` >>
