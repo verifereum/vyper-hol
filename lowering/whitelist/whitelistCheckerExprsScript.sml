@@ -713,8 +713,10 @@ Proof
   >~ [`supported_pure_expr _ (Call _ (IntCall _) _ _)`]
   >- (rpt strip_tac >> gvs[well_typed_expr_def,  expr_type_def, supported_pure_expr_def, every_pure_eta,
         supported_pure_exprs_every] >>
-      res_tac >> fs[] >> drule_all checker_intcall_agg >>
-      drule_all checker_env_fn_sig_internal >> gvs[])
+      res_tac >> fs[] >>
+      drule_all_then assume_tac checker_intcall_agg >>
+      drule_all_then assume_tac checker_env_fn_sig_internal >>
+      Cases_on `src_id_opt` >> gvs[])
   >~ [`supported_pure_expr _ (Call _ (ExtCall _ _ _ _) _ _)`]
   >- (rpt strip_tac >> gvs[well_typed_expr_def,  expr_type_def, supported_pure_expr_def, every_pure_eta,
         supported_pure_exprs_every] >>
