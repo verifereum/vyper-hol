@@ -7,6 +7,7 @@ Ancestors
   vyperContext vyperCallOutcomeFrame vyperEvalFrame vyperMachineFrame
   vyperScopePreservation vyperCreateFrame vyperLookupStorage vyperMisc
   whitelistForIterImmFrame bodyStorageCases rich_list
+  vyperGuardedTargetBind
 Libs evalWalkLib
 
 (* A loop's initial calls generate a set closed under callable bodies and
@@ -142,23 +143,9 @@ val array_mutations = ``\(addr:address). !cx target s pl t.
     (!v. state_rel_frame ^array_relation (append_place cx pl v)) /\
     state_rel_frame ^array_relation (pop_place cx pl)``;
 
-Theorem guarded_array_target_bind[local]:
-  state_rel_frame ^array_relation (eval_target_place cx target) /\
-  (!s pl t. eval_target_place cx target s = (INL pl,t) /\
-            ^array_cell s /\ ^array_cell t ==>
-            state_rel_frame ^array_relation (next pl)) ==>
-  state_rel_frame ^array_relation (bind (eval_target_place cx target) next)
-Proof
-  simp[array_frame_result, bind_def] >> rpt strip_tac >>
-  Cases_on `eval_target_place cx target st` >>
-  rename1 `eval_target_place cx target st = (answer,mid)` >>
-  Cases_on `answer` >> gvs[] >>
-  qpat_assum `!st res st'. eval_target_place cx target st = _ ==> _`
-    (drule_then drule) >> strip_tac
-  >- (qpat_x_assum `!s pl t. eval_target_place _ _ _ = _ /\ _ ==> _`
-        drule >> simp[] >> disch_then (drule_all_then ACCEPT_TAC)) >>
-  first_assum ACCEPT_TAC
-QED
+val array_target_bind = BETA_RULE
+  (INST [``P : evaluation_state -> bool`` |-> array_cell]
+    state_rel_frame_eval_target_bind);
 
 val array_net =
   let
@@ -203,7 +190,7 @@ val ARRAY_TARGET =
   qpat_assum `!cx target s pl t. _ /\ _ /\ eval_target_place cx target s = _ /\ _ ==> _`
     (drule_at_then (Pat `eval_target_place _ _ _ = _`) mp_tac) >>
   simp[] >> strip_tac;
-val ARRAY_STEP = IF (MATCH_MP_TAC guarded_array_target_bind) ARRAY_TARGET
+val ARRAY_STEP = IF (MATCH_MP_TAC array_target_bind) ARRAY_TARGET
   (evalWalkLib.STEP
     {net = array_net, at = RAND_CONV,
      unfolds = [switch_BoolV_def, ignore_bind_def, check_not_static_def,
