@@ -164,12 +164,15 @@ Definition contract_inv_def[nocompute]:
        (src = NONE \/ MEM (src,name) (linked_live_functions mods exps)) ==>
        function_mutability_ok mods vis mut nr dflts ss /\
        (nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot) /\
-       (cx.in_deploy /\ vis = Deploy ==> EVERY (supported_value_type tops o SND) args) /\
-       ((src = NONE \/ context_function_live cx (src,name)) ==>
-          supported_declaration_body tops
-            (FunctionDecl vis mut nr rr name args dflts ret ss) /\
-          (cx.in_deploy ==> supported_deploy_declaration tops
-            (FunctionDecl vis mut nr rr name args dflts ret ss)))) /\
+       (cx.in_deploy /\ vis = Deploy ==> EVERY (supported_value_type tops o SND) args)) /\
+    (!src tops vis mut nr rr name args dflts ret ss.
+       ALOOKUP mods src = SOME tops /\
+       MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\
+       (src = NONE \/ context_function_live cx (src,name)) ==>
+       supported_declaration_body tops
+         (FunctionDecl vis mut nr rr name args dflts ret ss) /\
+       (cx.in_deploy ==> supported_deploy_declaration tops
+         (FunctionDecl vis mut nr rr name args dflts ret ss))) /\
     immutable_section_layout_mods mods cenv
 End
 

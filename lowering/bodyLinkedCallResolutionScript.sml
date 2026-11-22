@@ -27,19 +27,26 @@ Proof
   `?sig. FLOOKUP env.fn_sigs (SOME x,name) = SOME sig` by
     (res_tac >> gvs[FLOOKUP_DEF]) >>
   pop_assum strip_assume_tac >>
-  `?tops. ALOOKUP mods (SOME x) = SOME tops` by
-    (fs[fn_sigs_consistent_def] >> res_tac >> gvs[]) >>
   `!ts. mods <> [(NONE,ts)]` by
-    (rpt strip_tac >> gvs[ALOOKUP_def]) >>
+    (rpt strip_tac >> gvs[FLOOKUP_DEF, fn_sigs_consistent_def, ALOOKUP_def]) >>
   `context_function_live cx (SOME x,name)` by
     fs[fn_sigs_live_def] >>
-  fs[linked_fn_sigs_declared_def] >>
-  res_tac >> gvs[] >>
-  simp[source_body_call_supported_def, supported_linked_callee_def] >>
-  fs[contract_inv_def] >> res_tac >> simp[] >>
+  qpat_x_assum `linked_fn_sigs_declared _ _ _` mp_tac >>
+  simp[linked_fn_sigs_declared_def] >>
+  disch_then (qspecl_then [`SOME x`, `name`, `sig`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `supported_module_headers tops /\
+    supported_declaration_body tops
+      (FunctionDecl vis mut nr raw name args dflts sig.ret_ty ss) /\
+    (cx.in_deploy ==> supported_deploy_declaration tops
+      (FunctionDecl vis mut nr raw name args dflts sig.ret_ty ss))` by
+    (fs[contract_inv_def] >> res_tac >> simp[]) >>
+  simp[source_body_call_supported_def] >>
+  qexists_tac `tops` >> simp[] >>
   conj_tac
-  >- (Cases_on `vis` >> gvs[include_fn_sig_def] >>
-      metis_tac[supported_function_decl_exists]) >>
+  >- (simp[supported_linked_callee_def] >>
+      drule_then assume_tac supported_function_decl_exists >>
+      Cases_on `vis` >> fs[include_fn_sig_def]) >>
   qexistsl [`vis`, `raw`] >> simp[]
 QED
 

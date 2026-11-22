@@ -11,12 +11,15 @@ Theorem typed_toplevel_lookup_module:
    IS_SOME (FLOOKUP env.toplevel_vtypes (src,id))) ==>
   ?tops. get_module_code cx src = SOME tops
 Proof
-  strip_tac >>
-  Cases_on `FLOOKUP env.bare_globals (src,id)`
-  >- (gvs[IS_SOME_EXISTS] >> Cases_on `x` >>
-      metis_tac[env_consistent_toplevel_storage_static,
-                env_consistent_toplevel_hashmap_static]) >>
-  drule_all_then strip_assume_tac env_consistent_bare_global_find_NONE >> simp[]
+  strip_tac
+  >- (fs[IS_SOME_EXISTS] >>
+      drule_all_then strip_assume_tac env_consistent_bare_global_find_NONE >>
+      simp[]) >>
+  fs[IS_SOME_EXISTS] >>
+  rename1 `FLOOKUP env.toplevel_vtypes (src,id) = SOME vt` >>
+  Cases_on `vt` >>
+  metis_tac[env_consistent_toplevel_storage_static,
+            env_consistent_toplevel_hashmap_static]
 QED
 
 Theorem typed_toplevel_target_module:
