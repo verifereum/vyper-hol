@@ -257,7 +257,9 @@ Theorem lowered_unit_checked_dalloca_facts:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all lowered_unit_entry_facts >> strip_tac >>
-  drule_all mem_safe_blocks_raw_dalloca_no_wrap >> strip_tac >>
+  qspecl_then [`ctx`, `vs`, `name`, `fn`, `lbl`] mp_tac
+    mem_safe_blocks_raw_dalloca_no_wrap >>
+  (impl_tac >- gvs[]) >> strip_tac >>
   rpt gen_tac >> strip_tac >> conj_tac >- metis_tac[] >>
   drule ptr_raw_reachable_frame >> strip_tac >>
   fs[ptr_discipline_def, allocas_below_fmp_def] >> metis_tac[]
