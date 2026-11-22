@@ -16,6 +16,10 @@ Theorem sha_gas_head_origin_abort:
       ~is_terminator i.inst_opcode) code /\
     (fn.fn_name,id) NOTIN explicit /\
     run_inst_seq_mem_ok (mk_inst id GAS [] [gv]::code) s /\
+    (ptrDiscipline$ctx_has_dalloca ctx ==>
+      !pre i post u. (mk_inst id GAS [] [gv]::code) = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==>
+        unitTransformDefs$dalloca_no_wrap i u) /\
     inst_seq_ptr D lo ctx fn PG G tn (mk_inst id GAS [] [gv]::code) s G' tn' /\
     run_inst_seq (mk_inst id GAS [] [gv]::code) s = Abort a t ==>
     ?j. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [F]
@@ -63,6 +67,10 @@ Theorem sha_one_prefix_gas_abort:
     ~is_terminator i.inst_opcode) code /\
   (fn.fn_name,id) NOTIN explicit /\ step_inst_base h s = OK u /\
   run_inst_seq_mem_ok (h::mk_inst id GAS [] [gv]::code) s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. (h::mk_inst id GAS [] [gv]::code) = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
   inst_seq_ptr D lo ctx fn PG G tn (h::mk_inst id GAS [] [gv]::code) s G' tn' /\
   run_inst_seq (h::mk_inst id GAS [] [gv]::code) s = Abort a t ==>
   ?j. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [F]

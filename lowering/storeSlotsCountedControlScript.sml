@@ -12,7 +12,12 @@ Theorem store_slots_prefix_jump_mem[local]:
   s.vs_inst_idx + LENGTH prefix = k /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) prefix /\
   EVERY (\i. i.inst_opcode <> GAS) prefix /\
-  run_inst_seq_mem_ok prefix s /\ run_inst_seq prefix s = OK u /\
+  run_inst_seq_mem_ok prefix s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. prefix = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
+  run_inst_seq prefix s = OK u /\
   (term.inst_opcode = JMP \/ term.inst_opcode = JNZ) /\
   step_inst_base term (u with vs_inst_idx := k) =
     OK (jump_to lbl (u with vs_inst_idx := k)) ==>

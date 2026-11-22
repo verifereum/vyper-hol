@@ -246,6 +246,10 @@ Theorem array_abort_joint_run[local]:
     EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
                  ~is_terminator ins.inst_opcode) code /\
     run_inst_seq_mem_ok code s /\
+    (ptrDiscipline$ctx_has_dalloca ctx ==>
+      !pre i post u. code = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==>
+        unitTransformDefs$dalloca_no_wrap i u) /\
     inst_seq_ptr D lo ctx func PG G tn code s G' tn' /\
     run_inst_seq code s = Abort a t ==>
     ?j. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []

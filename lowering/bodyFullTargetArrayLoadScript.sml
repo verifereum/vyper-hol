@@ -22,7 +22,7 @@ QED
 Theorem array_length_emit_joint:
   emit_op opc [bop] sa = (p,sb) /\
   fn_has_code sa sb func /\
-  opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc /\
+  opc <> INVOKE /\ opc <> GAS /\ opc <> DALLOCA /\ ~is_terminator opc /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!out. step_inst_base (mk_inst sa.cs_next_id opc [bop] [out]) s =

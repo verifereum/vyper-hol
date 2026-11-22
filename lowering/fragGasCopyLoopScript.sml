@@ -67,7 +67,12 @@ Theorem run_inst_seq_origin_ptr_lift:
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
              i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) code /\
-  run_inst_seq_mem_ok code s /\ allocas_from lo s /\
+  run_inst_seq_mem_ok code s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. code = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
+  allocas_from lo s /\
   inst_seq_ptr D 0 ctx func PG G tn code s G' tn' /\
   run_inst_seq code s = OK t ==>
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
@@ -101,7 +106,12 @@ Theorem run_inst_seq_abort_origin_ptr_uniform:
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
       i.inst_opcode <> GAS) code /\
-    run_inst_seq_mem_ok code s /\ run_inst_seq code s = Abort a t ==>
+    run_inst_seq_mem_ok code s /\
+    (ptrDiscipline$ctx_has_dalloca ctx ==>
+      !pre i post u. code = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==>
+        unitTransformDefs$dalloca_no_wrap i u) /\
+    run_inst_seq code s = Abort a t ==>
     ?j. !D lo explicit PG G tn HG th.
       inst_seq_ptr D lo ctx func PG G tn code s HG th ==>
       gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
@@ -153,7 +163,12 @@ Theorem run_inst_seq_origin_ptr_abort_lift:
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
              i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) code /\
-  run_inst_seq_mem_ok code s /\ allocas_from lo s /\
+  run_inst_seq_mem_ok code s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. code = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
+  allocas_from lo s /\
   run_inst_seq code s = Abort a t ==>
   ?j. !D G tn G' tn'.
     inst_seq_ptr D 0 ctx func PG G tn code s G' tn' ==>

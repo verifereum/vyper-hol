@@ -107,7 +107,7 @@ Theorem prefix_register_address_emit_origin:
   emit_op opc ops st = (out,middle) /\ fn_has_code st middle fn /\
   ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  opc <> INVOKE /\ ~is_terminator opc /\ opc <> GAS /\
+  opc <> INVOKE /\ ~is_terminator opc /\ opc <> GAS /\ opc <> DALLOCA /\
   inst_mem_below_frontier
     (mk_inst st.cs_next_id opc ops [STRING #"%" (toString st.cs_next_var)]) s /\
   inst_dload_in_section

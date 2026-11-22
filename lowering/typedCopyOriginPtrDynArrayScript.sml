@@ -9,7 +9,7 @@ Ancestors
 (* A single checked emitted instruction, with its concrete ghosts. *)
 Theorem typed_copy_emit_inst_origin_ptr_path:
   emit_inst opc args outs sa = ((),sb) /\ fn_has_code sa sb func /\
-  opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc /\
+  opc <> INVOKE /\ opc <> GAS /\ opc <> DALLOCA /\ ~is_terminator opc /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   inst_mem_below_frontier (mk_inst sa.cs_next_id opc args outs) s /\

@@ -148,6 +148,7 @@ Theorem decoder_indexed_origin_step:
   ~is_terminator i.inst_opcode /\
   inst_mem_below_frontier i (s with vs_inst_idx := n) /\
   inst_dload_in_section i (s with vs_inst_idx := n) /\
+  (ctx_has_dalloca ctx ==> dalloca_no_wrap i (s with vs_inst_idx := n)) /\
   ptr_inst_ok D lo 0 ctx fn G tn i (s with vs_inst_idx := n) /\
   step_inst_base i s = OK t ==>
   gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)

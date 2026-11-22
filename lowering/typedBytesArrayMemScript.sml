@@ -64,6 +64,10 @@ Theorem typed_bytes_child_seq_cont:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts sa sb) /\
   run_inst_seq_mem_ok (emitted_insts sa sb) s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. (emitted_insts sa sb) = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
   run_inst_seq (emitted_insts sa sb) s = OK q /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
