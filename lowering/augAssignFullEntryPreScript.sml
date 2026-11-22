@@ -1,6 +1,6 @@
 (* Source-side preconditions for finite-horizon AugAssign composition. *)
 Theory augAssignFullEntryPre
-Ancestors vyperTypeEnv compileEnv targetPlaceSimCasesBase
+Ancestors bodySingletonCallSupport vyperTypeEnv compileEnv targetPlaceSimCasesBase
   bodyAugPlaceTarget bodyExprPreFacts bodyStorageCases stmtSimAugAssignPlace stmtSimAugAssignPlaceMemory
   bodySim exprSimHypsDefs targetPlaceSim targetPlaceLive gasContext
   supportedStmts supportedTargets supportedExprTraverse supportedStmtTraverse
@@ -79,6 +79,7 @@ Proof
       fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
     `EVERY (\e. ~is_extcode e) (target_indices t)` by
       metis_tac[alloc_limits_target_indices_not_extcode] >>
+    drule_all_then assume_tac body_inv_typed_target_calls_main >>
     mp_tac (Q.SPECL [`tops`, `bindings`, `t`] supported_target_info_main_calls) >>
     simp[] >> strip_tac >>
     `~supported_target_exists (const_name_root cx) t` by
@@ -88,7 +89,7 @@ Proof
     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
         alloc_limits_stmt_def, int_calls_stmt_def] >>
     simp[optionTheory.IS_SOME_EXISTS] >>
-    metis_tac[call_evaluation_safe_append_left]) >>
+    fs[EVERY_MEM] >> metis_tac[call_evaluation_safe_append_left]) >>
   Cases_on `t` >> gvs[target_indices_pre_def]
 QED
 

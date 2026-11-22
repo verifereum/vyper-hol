@@ -74,7 +74,7 @@ Proof
   drule_then strip_assume_tac append_typing_target >>
   `supported_expr tops e` by
     fs[Once supported_stmt_def, supportedExprsTheory.supported_expr_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_all_then strip_assume_tac bodySingletonCallSupportTheory.supported_singleton_expr_body_calls >>
   drule_then assume_tac supported_stmt_body_safe >>
   drule_all body_inv_stmt_const_name_free >>
   simp[supported_stmt_expr_exists_def] >> strip_tac >>

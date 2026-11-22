@@ -17,7 +17,7 @@ Ancestors immutableBytestringPath bodyImmutableStoreMemory[qualified,ignore_gram
   bodyFullPreds bodySimFull bodyFullShared gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
-  bodyFullAssignAttrStorage bodyExprPreFacts bodyStorageMetadata
+  bodyFullAssignAttrStorage bodyExprPreFacts bodyStorageMetadata bodyTypedTargetScope
   bodyInvCodeProps bodyInvExecutionProps bodyInvMetadataProps bodyInvIntCallPinsProps
   bodyInvSplit contractInvContextProps exprBodyPreProps exprBodyPreCallSafetyProps
   compileUnit linkedStorageMetadataProps stmtExprAllocationPreProps
@@ -2133,9 +2133,11 @@ Proof
   rename1 `supported_storage_field_write tops (src,id) fld` >>
   `well_typed_expr env e /\ expr_type e = fty` by
     (gvs[type_stmt_def, atarget_accepts_def] >> metis_tac[type_widens_to_word]) >>
+  `src = NONE` by metis_tac[body_inv_toplevel_target_main,
+    type_place_target_AttributeTarget, optionTheory.IS_SOME_EXISTS] >>
   `src = NONE /\ find_var_decl_by_name id tops <> NONE /\
    ?vis mut sid slot. MEM (VariableDecl vis mut id (StructT sid) slot) tops` by
-    (drule supported_storage_field_write_decl >> simp[]) >>
+    (drule_all supported_storage_field_write_decl >> simp[]) >>
   gvs[] >>
   drule_then strip_assume_tac body_inv_main_support >>
   drule_then assume_tac body_inv_contract >>
@@ -4414,6 +4416,7 @@ Proof
      simp[cj 7 evaluate_storage_trace_frame]) >>
   `valid_horizon cx es H es1.storage_trace` by fs[valid_horizon_def] >>
   drule_all body_assign_rhs_storage_live >> strip_tac >>
+  drule_then assume_tac body_inv_qualified_module_absent >>
   drule_all target_walk_source_frame >> strip_tac >>
   drule_all target_walk_scopes >> strip_tac >>
   `ee = es1 with <|gas_obs := ee.gas_obs; outcomes := ee.outcomes;
@@ -4452,6 +4455,9 @@ Theorem body_assign_immutable_supported[local]:
     supported_immutable_type tops nsid = SOME ity
 Proof
   strip_tac >> gvs[] >>
+  `FST nsid = NONE` by
+    (PairCases_on `nsid` >> fs[target_root_def] >>
+     metis_tac[body_inv_immutable_target_main, target_root_def]) >>
   `~supported_scalar_target tops nsid` by
     metis_tac[augAssignFullTargetRoutesTheory.augassign_scalar_target_route] >>
   fs[Once supported_stmt_def, supported_assignment_def,

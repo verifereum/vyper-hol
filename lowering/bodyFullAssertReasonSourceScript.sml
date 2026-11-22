@@ -143,5 +143,6 @@ Proof
      supported_stmt_expr_exists_def] >>
   `supported_expr tops e` by
     (fs[supported_stmt_assert_reason] >> simp[supportedExprsTheory.supported_expr_def]) >>
-  metis_tac[supported_expr_body_calls]
+  metis_tac[bodySingletonCallSupportTheory.body_inv_typed_calls_main,
+            expr_body_pre_mods_well_typed]
 QED

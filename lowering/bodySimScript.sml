@@ -255,9 +255,13 @@ Proof
        build_flag_info_mods_singleton, lookup_custom_error_args_mods_singleton] >>
   eq_tac >> strip_tac >> simp[]
   >- (fs[cenv_module_pins_def] >> metis_tac[]) >>
+  conj_tac >- metis_tac[bodyCallSupportTheory.supported_program_module_headers] >>
   rpt conj_tac
   >- (qexistsl [`rpolicy`, `unit`] >> simp[])
-  >- (rpt strip_tac >> gvs[] >> res_tac) >>
+  >- (rpt strip_tac >> gvs[] >>
+      imp_res_tac supported_program_declaration >>
+      gvs[supported_program_deploy_def, EVERY_MEM, supported_deploy_declaration_def] >>
+      res_tac >> gvs[]) >>
   irule singleton_immutable_section_layout >>
   simp[cenv_module_pins_def, type_env_def]
 QED
@@ -347,8 +351,9 @@ Theorem body_inv_const_name_not_root:
   (!ty. ~supported_storage_value tops nsid ty) /\
   supported_immutable_type tops nsid = NONE
 Proof
+  Cases_on `nsid` >>
   metis_tac[body_inv_contract, body_inv_module, body_inv_main_module,
-    cx_const_name_split_def, body_inv_const_name_not_root_mods]
+    cx_const_name_def, cx_const_name_split_def, body_inv_const_name_not_root_mods]
 QED
 
 (* The compile env's modules are the source's, the main module alone, whose

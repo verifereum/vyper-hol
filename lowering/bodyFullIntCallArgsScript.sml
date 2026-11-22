@@ -6,7 +6,7 @@
  *   intcall_args_full
  *)
 Theory bodyFullIntCallArgs
-Ancestors bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragGasPath compileVyper[qualified,ignore_grammar] pair[qualified,ignore_grammar] vyperStorageBackend[qualified,ignore_grammar] vyperStorageFootprint[qualified,ignore_grammar] freshWrites[qualified,ignore_grammar] bodyFullAllocaFresh[qualified,ignore_grammar] bodyIntCallSource[qualified,ignore_grammar] bodySim[qualified,ignore_grammar] supportedProgram[qualified,ignore_grammar] supportedNames[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar]
+Ancestors bodyCallSupport bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragGasPath compileVyper[qualified,ignore_grammar] pair[qualified,ignore_grammar] vyperStorageBackend[qualified,ignore_grammar] vyperStorageFootprint[qualified,ignore_grammar] freshWrites[qualified,ignore_grammar] bodyFullAllocaFresh[qualified,ignore_grammar] bodyIntCallSource[qualified,ignore_grammar] bodySim[qualified,ignore_grammar] supportedProgram[qualified,ignore_grammar] supportedNames[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar]
   compileExprAllocaFresh[qualified,ignore_grammar]
   compilerInstructionSuffix[qualified,ignore_grammar]
   abiEncoderProps[qualified,ignore_grammar]
@@ -2070,7 +2070,7 @@ Proof
      >- metis_tac[logArgumentTypeEvalTheory.consistent_variable_type_well_formed] >>
      gvs[vyperTypeInvariantsTheory.env_consistent_def,
          vyperTypeInvariantsTheory.env_context_consistent_def]) >>
-  drule_then strip_assume_tac bodyExprPreFactsTheory.supported_expr_body_calls >>
+  drule_all_then strip_assume_tac bodySingletonCallSupportTheory.supported_singleton_expr_body_calls >>
   `~supported_expr_exists
       (const_name_root (cx with stk updated_by CONS (NONE,name))) e` by
     (`cx_tops (cx with stk updated_by CONS (NONE,name)) = cx_tops cx` by
@@ -2122,7 +2122,8 @@ Proof
      `FST call = NONE` by res_tac >>
      `(NONE,SND call) = call` by (Cases_on `call` >> fs[]) >>
      simp[] >> res_tac) >>
-  fs[expr_body_pre_split_def, expr_body_pre_mods_def, GSYM const_name_root_mods_singleton,
+  fs[expr_body_pre_split_def, expr_body_pre_mods_def, GSYM source_body_calls_main,
+     GSYM const_name_root_mods_singleton,
      vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
      finite_mapTheory.FUNION_FEMPTY_2]
 QED

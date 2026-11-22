@@ -230,7 +230,8 @@ Proof
   `~supported_expr_exists (const_name_root cx) e` by
     (drule_all body_inv_stmt_const_name_free >> simp[supported_stmt_expr_exists_def]) >>
   `cx_tops cx = tops` by metis_tac[cx_tops_module, body_inv_def] >>
-  drule supported_expr_body_calls >> strip_tac >>
+  `well_typed_expr env e` by fs[type_stmt_assert_custom] >>
+  drule_all_then strip_assume_tac bodySingletonCallSupportTheory.supported_singleton_expr_body_calls >>
   `alloc_limits_expr cenv e` by fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
   `~is_extcode e` by metis_tac[allocLimitsPropsTheory.alloc_limits_expr_not_extcode] >>
   irule stmt_expr_body_pre >>

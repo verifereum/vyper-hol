@@ -121,12 +121,10 @@ Proof
   drule_then assume_tac bodyMainModulePropsTheory.contract_inv_main_module >>
   drule_then assume_tac bodyInvMetadataPropsTheory.contract_inv_type_env >>
   `~expr_has_evm_run e /\
-    EVERY (\call. ?tops. get_module_code cx (FST call) = SOME tops /\
-                        supported_program tops /\
-                        IS_SOME (supported_function_decl tops (NONE,SND call) Internal))
-      (int_calls_expr e)` by
+    EVERY (bodyCallSupportTheory.source_body_call_supported cx) (int_calls_expr e)` by
     (Cases_on `supported_expr (main_module mods) e`
-     >- drule_all_then ACCEPT_TAC supported_expr_body_calls_mods >>
+     >- (`well_typed_expr env e` by fs[vyperTypeSystemTheory.well_typed_iterator_def] >>
+         drule_all_then ACCEPT_TAC supported_expr_body_calls_mods) >>
      Cases_on `e` >>
      gvs[supported_iterator_def, vyperTypeCallGraphTheory.int_calls_expr_def,
          supportedExprTraverseTheory.expr_has_evm_run_thm]) >>
