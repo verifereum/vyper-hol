@@ -11,7 +11,7 @@ Theory bodyFullRaiseReason
 Ancestors
   bodyFullShadowBodyInv
   stateRelProj
-  bodyFullRaiseReasonLiteral bodyFullRaiseReasonNonliteral
+  bodyFullRaiseReasonLiteralAction bodyFullRaiseReasonNonliteral
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
 
@@ -41,7 +41,9 @@ Theorem compile_raise_reason_frag_full:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `?ml str. e = Literal (BaseT (StringT ml)) (StringL str)`
-  >- (gvs[] >> irule compile_raise_reason_literal_frag_full >>
-      metis_tac[]) >>
+  >- (gvs[] >> irule compile_raise_reason_literal_frag_full_action >>
+      asm_rewrite_tac[] >> conj_tac
+      >- (qexistsl_tac [`bindings`,`tops`] >> asm_rewrite_tac[]) >>
+      qexistsl_tac [`env`,`env'`] >> asm_rewrite_tac[]) >>
   irule compile_raise_reason_nonliteral_frag_full >> metis_tac[]
 QED
