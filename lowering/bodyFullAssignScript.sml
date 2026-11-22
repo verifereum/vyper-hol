@@ -7572,8 +7572,11 @@ Proof
               IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t)` by
     (mp_tac (Q.SPECL [`tops`, `bindings`, `t`]
         bodyStorageCasesTheory.supported_target_info_main_calls) >>
+     `IS_SOME (type_place_target env t)` by simp[] >>
+     drule_all_then assume_tac body_inv_typed_target_calls_main >>
      Cases_on `t` >>
-     gvs[supported_target_def, supported_expr_exists_def, int_calls_expr_def]) >>
+     gvs[supported_target_def, supported_expr_exists_def, int_calls_expr_def,
+         EVERY_MEM] >> metis_tac[]) >>
   drule_all body_assign_empty_target_no_const >> strip_tac >>
   `cx_tops cx = tops` by drule_then (ACCEPT_TAC o cj 2) body_inv_main_code >>
   drule_then strip_assume_tac body_inv_main_support >>
