@@ -98,11 +98,16 @@ Proof
     (emitted_insts st mid)` by (fs[EVERY_MEM] >> metis_tac[]) >>
   `run_inst_seq_mem_ok (emitted_insts st mid) initial` by
     (irule run_inst_seq_mem_ok_every >> fs[EVERY_MEM] >> metis_tac[]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st mid = pre ++ i::post /\
+      run_inst_seq pre initial = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (drule calldataMemberAddressCheckTheory.calldata_member_address_non_dalloca >>
+     simp[EVERY_MEM] >> rpt strip_tac >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >> gvs[]) >>
   mp_tac (Q.INST [`s` |-> `initial`, `ready` |-> `mid`,
     `P` |-> `\s:venom_state. T`] (SPEC_ALL successful_sequence_endpoint)) >>
-  asm_simp_tac (srw_ss()) [] >> strip_tac >>
+  asm_rewrite_tac[] >> simp_tac bool_ss [LET_THM] >> strip_tac >>
   qexists_tac `t with vs_inst_idx := LENGTH mid.cs_current_insts` >>
-  asm_simp_tac (srw_ss()) [eval_op_inst_idx, fresh_vars_wrt_def] >>
-  qpat_x_assum `LET _ _` (strip_assume_tac o SIMP_RULE (srw_ss()) [LET_THM]) >>
-  fs[fresh_vars_wrt_def]
+  fs[eval_op_inst_idx, fresh_vars_wrt_def]
 QED
