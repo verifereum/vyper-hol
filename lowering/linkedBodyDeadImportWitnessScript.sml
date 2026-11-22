@@ -93,7 +93,10 @@ Proof
         (simp[Abbr `mods`] >> EVAL_TAC) >> simp[])
   >- (simp[Abbr `mods`] >> rpt strip_tac >>
       Cases_on `src = NONE` >> gvs[ALOOKUP_def] >>
-      Cases_on `src = SOME 1` >> gvs[ALOOKUP_def] >> EVAL_TAC) >>
+      Cases_on `src = SOME 1` >> gvs[ALOOKUP_def] >> EVAL_TAC)
+  >- (simp[Abbr `mods`] >> rpt strip_tac >>
+      Cases_on `src = NONE` >> gvs[ALOOKUP_def] >>
+      Cases_on `src = SOME 1` >> gvs[ALOOKUP_def]) >>
   unabbrev_all_tac >>
   irule dead_import_immutable_layout >> simp[]
 QED

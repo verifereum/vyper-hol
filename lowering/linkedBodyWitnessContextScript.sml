@@ -3,7 +3,8 @@ Theory linkedBodyWitnessContext
 Ancestors
   e2eModsWitness e2eDeployModsDefs e2eModsDefs e2eDefs e2eWitnessCompute
   vyperTypeContract vyperTypeContractContext vyperContext vyperInterpreter
-  vyperAST alist list
+  bodySim bodyQualifiedStmtSupport exprSimHypsDefs compileUnit constSubst
+  vyperAST context alist list
 Libs computeLib finite_mapLib intReduce
 
 val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset
@@ -22,17 +23,22 @@ val fixture_load = EVAL
   ``load_contract (SOME []) [] linked_witness_initial_machine
        linked_witness_deploy_tx linked_witness_mods linked_witness_exports``
 
-val runtime_layouts = SIMP_CONV (srw_ss())
-  [linked_witness_am_call_def, next_source_machine_def,
-   linked_witness_am_deploy_post_def, fixture_load]
-  ``linked_witness_am_call.layouts``
+val runtime_fields = map
+  (SIMP_CONV (srw_ss())
+    [linked_witness_am_call_def, next_source_machine_def,
+     linked_witness_am_deploy_post_def, fixture_load])
+  [``linked_witness_am_call.layouts``,
+   ``linked_witness_am_call.sources``,
+   ``linked_witness_am_call.exports``]
 
 val entry_context_simps =
   [deploy_evaluation_context_mods_def, initial_evaluation_context_def,
    linked_witness_initial_machine_def, linked_witness_deploy_tx_def,
    linked_witness_call_tx_def, e2eWitnessComputeTheory.p23_deploy_tx_def,
    e2eWitnessComputeTheory.p23_call_tx_def,
-   empty_call_txn_def, runtime_layouts, initial_machine_state_def]
+   empty_call_txn_def, initial_machine_state_def,
+   lookup_nonreentrant_slot_def, global_nonreentrant_slot_def, ALOOKUP_def] @
+  runtime_fields
 
 Theorem linked_witness_constructor_context:
   (^constructor_context).in_deploy /\
@@ -80,4 +86,49 @@ Proof
   disj1_tac >>
   simp[linked_witness_mods_def, ALOOKUP_def, module_allocated_def,
        toplevel_allocated_def, lookup_var_slot_in_layouts_def]
+QED
+
+fun fixture_entry src fname =
+  let
+    val lookup = EVAL ``ALOOKUP linked_witness_mods ^src``
+    val tops = optionSyntax.dest_some (rhs (concl lookup))
+    fun matching_decl decl =
+      case strip_comb decl of
+        (head, [_, _, _, _, name, _, _, _, _]) =>
+          same_const head ``FunctionDecl`` andalso aconv name fname
+      | _ => false
+    val decl = valOf (List.find matching_decl (#1 (listSyntax.dest_list tops)))
+    val (_, [vis, mut, _, _, name, args, _, ret, body]) = strip_comb decl
+    val env = ``build_compile_env_unit linked_witness_mods ^src
+      ^vis ^mut ^name ^args ^ret ^body T``
+  in (lookup, tops, decl, env, body) end
+
+val (constructor_lookup, constructor_tops, constructor_decl,
+     constructor_env, constructor_body) =
+  fixture_entry ``NONE : num option`` ``"__init__"``
+val (external_lookup, external_tops, external_decl,
+     external_env, external_body) =
+  fixture_entry ``SOME 2`` ``"locked_get_x"``
+
+val () = computeLib.add_funs
+  [const_name_root_mods_def, cx_const_name_mods_def, qualified_stmt_decls_ok_def]
+
+Theorem linked_witness_constructor_body_checks:
+  ALOOKUP linked_witness_mods NONE = SOME ^constructor_tops /\
+  MEM ^constructor_decl ^constructor_tops /\
+  subst_consts_stmts_mods (consts_env_mods linked_witness_mods)
+    ^constructor_body = ^constructor_body /\
+  stmts_exprs_ok ^constructor_env ^constructor_body
+Proof
+  simp[constructor_lookup] >> EVAL_TAC
+QED
+
+Theorem linked_witness_external_body_checks:
+  ALOOKUP linked_witness_mods (SOME 2) = SOME ^external_tops /\
+  MEM ^external_decl ^external_tops /\
+  subst_consts_stmts_mods (consts_env_mods linked_witness_mods)
+    ^external_body = ^external_body /\
+  stmts_exprs_ok ^external_env ^external_body
+Proof
+  simp[external_lookup] >> EVAL_TAC
 QED

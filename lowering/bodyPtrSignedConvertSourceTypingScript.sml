@@ -18,9 +18,9 @@ Proof
   drule_then strip_assume_tac expr_body_pre_static_facts >>
   gvs[well_typed_expr_def] >>
   `cenv.ce_func_return_type (nsid_to_string (id0,id1)) = sig.ret_ty` by
-    (qpat_assum `expr_sim_inv _ _ _ _` mp_tac >>
-     simp[expr_sim_inv_split_def] >>
-     metis_tac[expr_sim_inv_mods_return_type]) >>
+    (`expr_sim_inv_mods [(NONE,cx_tops cx)] cenv cx env es` by
+       fs[expr_sim_inv_split_def] >>
+     drule_all expr_sim_inv_mods_return_type >> simp[]) >>
   fs[lowered_value_type_def] >>
   metis_tac[type_widens_to_def, compileEnvTheory.arg_type_fits_bytestring_source]
 QED
