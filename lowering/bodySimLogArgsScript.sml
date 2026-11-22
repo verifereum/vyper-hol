@@ -88,7 +88,7 @@ Proof
           PairCases_on `p` >> Cases_on `p0` >>
           gvs[type_env_qualified_lookup, FLOOKUP_DRESTRICT] >>
           Cases_on `FLOOKUP large (SOME x,p1)` >> gvs[] >>
-          Cases_on `x'` >> gvs[]] >>
+          Cases_on `x'` >> gvs[] >> res_tac >> gvs[]] >>
       Cases_on `supported_struct_fields tops p` >> gvs[] >>
       rename1 `supported_struct_fields tops p = SOME fields` >>
       drule supported_struct_fields_type_env >> strip_tac >>
