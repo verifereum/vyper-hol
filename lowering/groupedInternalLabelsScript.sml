@@ -392,7 +392,7 @@ Theorem compile_group_entry_shadow_states:
   compile_entry_checks mincd common.ec_payable checks = ((),init) /\
   compile_entry_checks mincd common.ec_payable shchecks = ((),shinit) /\
   compile_entry_point_kwargs common.ec_env vars off k common.ec_common_label init = ((),done) /\
-  compile_entry_point_kwargs common.ec_env
+  compile_entry_point_kwargs (gas_shadow_env T common.ec_env)
     (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars) off k common.ec_common_label shinit =
     ((),shdone) /\
   new_block next done = (done.cs_current_bb,st) /\
@@ -415,10 +415,13 @@ Proof
      disch_then (qspecl_then [`checks`,`shchecks`] mp_tac) >>
      asm_rewrite_tac[FST,SND]) >>
   `gas_shadow_state done shdone` by
-    (mp_tac (Q.INST [`ce` |-> `common.ec_env`,`xs` |-> `vars`,
-      `off` |-> `off`,`k` |-> `k`,`lbl` |-> `common.ec_common_label`]
-      (SPEC_ALL gas_shadow_compiles_entry_point_kwargs)) >>
-     simp_tac bool_ss [gas_shadow_compiles_def] >>
+    (`gas_shadow_compiles
+        (compile_entry_point_kwargs common.ec_env vars off k common.ec_common_label)
+        (compile_entry_point_kwargs (gas_shadow_env T common.ec_env)
+          (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars)
+          off k common.ec_common_label)` by
+       irule gas_shadow_compiles_entry_point_kwargs >>
+     pop_assum mp_tac >> simp_tac bool_ss [gas_shadow_compiles_def] >>
      disch_then (qspecl_then [`init`,`shinit`] mp_tac) >>
      asm_rewrite_tac[FST,SND]) >>
   qpat_x_assum `next = shnext` SUBST_ALL_TAC >>
@@ -437,16 +440,19 @@ Theorem compile_group_entry_shadow_layout:
   new_block next done = (done.cs_current_bb,st) /\
   gas_shadow_state sa sha /\
   compile_group_entries mid ((sel,lbl,mincd,k)::entries)
-    (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+    (common with <| ec_env := gas_shadow_env T common.ec_env;
+                   ec_body := MAP gas_shadow_stmt common.ec_body |>)
     (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars) off sha = ((),shb) /\
   fn_has_code sha shb shfn /\
   EVERY (\(_,name,_,_). ~internal_label_ok name) entries ==>
   ?shst shinit shdone.
     compile_group_entries mid entries
-      (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+      (common with <| ec_env := gas_shadow_env T common.ec_env;
+                   ec_body := MAP gas_shadow_stmt common.ec_body |>)
       (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars) off shst = ((),shb) /\
     fn_has_code shst shb shfn /\ gas_shadow_state st shst /\
-    compile_entry_point_kwargs common.ec_env (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars)
+    compile_entry_point_kwargs (gas_shadow_env T common.ec_env)
+      (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) vars)
       off k common.ec_common_label shinit = ((),shdone) /\
     fn_has_code shinit shdone shfn /\ gas_shadow_state init shinit
 Proof
