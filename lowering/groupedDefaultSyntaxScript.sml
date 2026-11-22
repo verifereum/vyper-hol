@@ -1,39 +1,9 @@
 Theory groupedDefaultSyntax
 Ancestors
   constSubstCorrect constSubst constSubstMods loweringShapeSource whitelistCheckerConsts
+  runtimeConstantSubstitutionProps
   whitelistCheckerDecls vyperTypeExternalDefaults vyperTypeContract
   vyperTypeInvariants vyperAST list alist option
-
-Theorem bool_literal_default_substitution[local]:
-  bool_literal_expr e ==> bool_literal_expr (subst_consts_expr E e)
-Proof
-  Cases_on `e` >> simp[bool_literal_expr_def, subst_consts_expr_def]
-QED
-
-Theorem runtime_constant_substitution[local]:
-  (!E e. runtime_constant_expr mods e /\
-    (!id r. ALOOKUP E id = SOME r ==> constant_expr mods r) ==>
-    runtime_constant_expr mods (subst_consts_expr E e)) /\
-  (!E t. subst_consts_btarget E t = subst_consts_btarget E t) /\
-  (!E es. EVERY (runtime_constant_expr mods) es /\
-    (!id r. ALOOKUP E id = SOME r ==> constant_expr mods r) ==>
-    EVERY (runtime_constant_expr mods) (subst_consts_exprs E es)) /\
-  (!E opt. subst_consts_opt E opt = subst_consts_opt E opt) /\
-  (!E fs. EVERY (runtime_constant_expr mods) (MAP SND fs) /\
-    (!id r. ALOOKUP E id = SOME r ==> constant_expr mods r) ==>
-    EVERY (runtime_constant_expr mods) (MAP SND (subst_consts_fields E fs)))
-Proof
-  ho_match_mp_tac subst_consts_expr_ind >>
-  simp[runtime_constant_expr_def,subst_consts_expr_def] >>
-  rpt strip_tac >> gvs[]
-  >- (Cases_on `ns` >> gvs[subst_consts_expr_def,runtime_constant_expr_def] >>
-      Cases_on `ALOOKUP E id` >> gvs[runtime_constant_expr_def] >>
-      metis_tac[constant_expr_runtime_constant])
-  >- (Cases_on `ns` >> gvs[subst_consts_expr_def,runtime_constant_expr_def] >>
-      Cases_on `ALOOKUP E id` >> gvs[runtime_constant_expr_def] >>
-      metis_tac[constant_expr_runtime_constant]) >>
-  metis_tac[bool_literal_default_substitution, subst_consts_constant_expr]
-QED
 
 Theorem grouped_checked_default_syntax:
   check_contract F layouts addr [(NONE,tops)] = SOME art /\
@@ -62,7 +32,9 @@ Proof
        (SPEC_ALL checked_module_consts_env_replacement_constant)) >>
      simp[]) >>
   asm_rewrite_tac[] >>
-  drule_all (cj 3 runtime_constant_substitution) >> simp[]
+  fs[subst_consts_exprs_map, EVERY_MAP, combinTheory.o_DEF, EVERY_MEM] >>
+  simp[MEM_MAP] >>
+  metis_tac[subst_const_runtime_constant]
 QED
 
 Theorem grouped_keyword_initializer_specs:
