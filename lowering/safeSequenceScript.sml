@@ -180,7 +180,10 @@ Proof
      (emitted_insts st st') /\
    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts st st')` by fs[EVERY_MEM] >>
-  simp[] >> rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
-  simp[] >> irule run_inst_seq_mem_ok_of_prefix_safe >> rw[] >>
-  first_x_assum irule >> qexistsl_tac [`post`, `pre`] >> simp[]
+  simp[] >> gen_tac >> disch_tac >>
+  qpat_x_assum `!s. P s ==> _` drule >>
+  disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+  conj_tac
+  >- (irule run_inst_seq_mem_ok_of_prefix_safe >> asm_rewrite_tac[]) >>
+  gvs[]
 QED
