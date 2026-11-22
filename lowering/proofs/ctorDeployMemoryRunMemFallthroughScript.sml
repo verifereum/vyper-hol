@@ -237,7 +237,7 @@ Proof
       gvs[epilogue_return_not_OK] >>
       simp[mem_safe_run_def, Once mem_safe_block_def, Once exec_block_def,
            step_inst_non_invoke, mem_safe_step_non_invoke] >>
-      fs[mk_inst_def]) >>
+      fs[mk_inst_def, dalloca_no_wrap_def]) >>
   rpt gen_tac >> simp[] >> strip_tac >>
   `?rest. DROP s.vs_inst_idx bb.bb_instructions = h::rest /\
     isPREFIX (pre ++ [mk_inst id RETURN [dst;szop] []]) rest` by
@@ -278,8 +278,9 @@ Proof
   drule compile_constructor_epilogue_terminal_shape >> strip_tac >>
   irule mem_safe_run_return_seq >>
   qexistsl_tac [`bb`, `dst`, `id`, `pre`, `szop`] >> simp[] >>
-  conj_tac >- (fs[listTheory.EVERY_MEM] >>
-               metis_tac[immutable_deploy_prefix_opcodes, listTheory.MEM]) >>
+  conj_tac >- (fs[listTheory.EVERY_MEM] >> gen_tac >> disch_tac >>
+               first_x_assum drule >>
+               simp[listTheory.MEM] >> strip_tac >> simp[is_terminator_def]) >>
   gvs[]
 QED
 

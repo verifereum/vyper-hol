@@ -41,8 +41,7 @@ Proof
     (simp[FILTER_EQ_NIL, EVERY_MEM] >> fs[EVERY_MEM]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
   conj_tac
-  >- (drule_all run_inst_seq_gas_path_mem >>
-      disch_then (qspec_then `ctx` mp_tac) >> simp[]) >>
+  >- (drule_all run_inst_seq_gas_path_mem >> simp[]) >>
   strip_tac >> irule ctor_sequence_history_advance >>
   qexistsl [`bb`,`code`,`s`] >> fs[EVERY_MEM]
 QED
@@ -148,7 +147,8 @@ Proof
     (irule prepare_sequence_checked >> simp[update_var_def] >>
      qexistsl [`emitted_insts st last`,`st`] >>
      drule emitted_insts_emit_op >> drule prefix_register_address_emit_shape >>
-     gvs[mk_inst_def, is_terminator_def, update_var_def]) >>
+     gvs[APPEND_EQ_CONS, mk_inst_def, is_terminator_def, update_var_def,
+         dalloca_no_wrap_def]) >>
   `!D' explicit.
      gas_origin_ptr_path (D', lo, explicit, ctx, func, PG) (initial, G, tn) []
        (OK ((update_var (STRING #"%" (toString st.cs_next_var)) w initial)
@@ -300,7 +300,8 @@ Proof
           source_memory_read_ranges_def, source_memory_write_ranges_def, mk_inst_def]) >>
      drule_all emit_void_ASSERT_ok >>
      drule emitted_insts_emit_void >>
-     gvs[emit_void_assert_inst, mk_inst_def, is_terminator_def]) >>
+     gvs[APPEND_EQ_CONS, emit_void_assert_inst, mk_inst_def, is_terminator_def,
+         dalloca_no_wrap_def]) >>
   `gas_path_mem ctx func initial 0
       (OK (s2 with vs_inst_idx := LENGTH last.cs_current_insts))` by
     metis_tac[gas_path_mem_then, ADD] >>

@@ -35,7 +35,7 @@ Proof
   strip_tac >>
   `gas_path_mem_edge ctx fn s 0 (OK (u with vs_inst_idx := SUC s.vs_inst_idx))` by
     (irule for_range_straight_line_mem_edge >> simp[] >>
-     qexistsl_tac [`bb`, `i`, `u`] >> simp[]) >>
+     qexistsl_tac [`bb`, `i`, `u`] >> simp[unitTransformDefsTheory.dalloca_no_wrap_def]) >>
   conj_tac
   >- (drule (cj 2 gas_path_mem_rules) >>
       disch_then (qspec_then `0` mp_tac) >> simp[cj 1 gas_path_mem_rules]) >>

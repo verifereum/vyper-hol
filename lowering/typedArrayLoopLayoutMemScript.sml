@@ -262,5 +262,6 @@ Proof
         cs_current_insts := []|>`,
       `sb` |-> `ARB with <|cs_blocks := []; cs_current_bb := s.vs_current_bb;
         cs_current_insts := code|>`] (SPEC_ALL typed_bytes_child_seq_cont))) >>
-  simp[] >> metis_tac[]
+  simp[] >> pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, APPEND] >>
+  first_assum ACCEPT_TAC
 QED

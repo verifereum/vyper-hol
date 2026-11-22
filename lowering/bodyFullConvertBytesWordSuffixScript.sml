@@ -284,6 +284,22 @@ Proof
         (OK (sf with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)),H,th)` by
         (gen_tac >>
          `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s H th` by metis_tac[] >>
+         `ctx_has_dalloca ctx ==>
+            !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+              run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+           (rpt strip_tac >>
+            `MEM i (emitted_insts sa sb)` by
+              (qpat_assum `emitted_insts sa sb = pre ++ i::post`
+                (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+            irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+            qpat_assum `dynamic_writes_fresh sa (emitted_insts sa sb)`
+              (fn th => mp_tac (REWRITE_RULE [dynamic_writes_fresh_def, EVERY_MEM,
+                freshWritesTheory.fresh_write_op_def] th)) >>
+            strip_tac >>
+            qpat_assum `!e. MEM e (emitted_insts sa sb) ==> _`
+              (qspecl_then [`i`] assume_tac) >>
+            qpat_assum `MEM i (emitted_insts sa sb) ==> _`
+              (drule_then strip_assume_tac) >> fs[MEM]) >>
          drule_all run_inst_seq_gas_origin_ptr_path >> simp[]) >>
       qexistsl_tac [`sf with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)`,`H`,`th`] >>
       simp[eval_operand_def, lookup_var_def] >>
@@ -322,8 +338,24 @@ Proof
   drule dynamic_writes_fresh_path_opcodes >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
     i.inst_opcode <> GAS) (emitted_insts sa sb)` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >>
+     `MEM i (emitted_insts sa sb)` by
+       (qpat_assum `emitted_insts sa sb = pre ++ i::post`
+         (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_assum `dynamic_writes_fresh sa (emitted_insts sa sb)`
+       (fn th => mp_tac (REWRITE_RULE [dynamic_writes_fresh_def, EVERY_MEM,
+         freshWritesTheory.fresh_write_op_def] th)) >>
+     strip_tac >>
+     qpat_assum `!e. MEM e (emitted_insts sa sb) ==> _`
+       (qspecl_then [`i`] assume_tac) >>
+     qpat_assum `MEM i (emitted_insts sa sb) ==> _`
+       (drule_then strip_assume_tac) >> fs[MEM]) >>
   drule_all run_inst_seq_abort_origin_ptr_uniform >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  disch_then strip_assume_tac >>
   qexistsl_tac [`Revert_abort`,`sf with vs_inst_idx := j`,`H`,`th`] >>
   metis_tac[]
 QED

@@ -305,6 +305,13 @@ Proof
      simp[IS_PREFIX_APPEND] >> strip_tac >>
      simp[IS_PREFIX_APPEND] >>
      rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> metis_tac[]) >>
+  `!pre i post u. code = pre ++ i::post ==>
+      unitTransformDefs$dalloca_no_wrap i u` by
+    (drule_all abi_decoder_bytes_reentry_code >> strip_tac >>
+     rpt strip_tac >>
+     Cases_on `i.inst_opcode = DALLOCA` >> simp[] >>
+     qpat_x_assum `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) _` mp_tac >>
+     simp[EVERY_APPEND, abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
   `gas_path_mem ctx func s
      (LENGTH (FILTER (\i. i.inst_opcode = GAS) code))
      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code))` by

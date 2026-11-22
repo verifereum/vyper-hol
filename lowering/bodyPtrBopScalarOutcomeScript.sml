@@ -230,10 +230,18 @@ Resume bop_scalar_suffix_outcome_ptr[abort]:
        (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
      disch_then drule >> simp[] >> strip_tac >>
      simp[below_frontier_no_ranges, memSafeRunTheory.inst_dload_in_section_other]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post v. prefix ++ [mk_inst id opc [needle] []] = pre ++ i::post /\
+      run_inst_seq pre s = OK v ==> unitTransformDefs$dalloca_no_wrap i v)` by
+    (rpt strip_tac >>
+     `MEM i (prefix ++ [mk_inst id opc [needle] []])` by metis_tac[MEM_APPEND, MEM] >>
+     qpat_assum `EVERY (\i. MEM i.inst_opcode _) _`
+       (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     disch_then drule >> Cases_on `i.inst_opcode` >>
+     simp[unitTransformDefsTheory.dalloca_no_wrap_def]) >>
   `allocas_from 0 s` by simp[allocas_from_def] >>
   drule_all run_inst_seq_origin_ptr_abort_lift >>
-  disch_then (qspecl_then [`{}`, `ctx`, `PG`]
-    (qx_choose_then `j` assume_tac)) >>
+  disch_then (qspecl_then [`{}`, `PG`] (qx_choose_then `j` assume_tac)) >>
   drule bop_scalar_seq_assert_abort_checked >>
   disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then drule >>

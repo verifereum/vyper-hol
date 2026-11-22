@@ -6,7 +6,7 @@ Ancestors
   bodyPtrHashBuiltinsShaTail bodyPtrHashBuiltinsShaTailSteps fragExecMem memSafeRun gasEvents
   venomExecProofs venomExecSemantics venomState venomInstProofs venomInst
   instIdxIndep fragExec exprLoweringProps fragGasSeqMem fragGasSeqAbort
-  ptrDiscipline list rich_list arithmetic
+  ptrDiscipline checkedPrefixCursor list rich_list arithmetic
   fragGasOriginPtrExec fragGasPath vyperStorageTrace vyperStorageFootprint
 
 Theorem sha_setup_cannot_abort[local]:
@@ -69,12 +69,24 @@ Proof
      >- (irule sha_setup_nonterminators >> simp[]) >>
      qpat_assum `EVERY _ code` mp_tac >> rpt (pop_assum kall_tac) >>
      simp[EVERY_MEM] >> metis_tac[]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post r. (prefix ++ mk_inst id GAS [] [gv]::code) = pre ++ i::post /\
+      run_inst_seq pre (u with vs_inst_idx := SUC s.vs_inst_idx) = OK r ==>
+      unitTransformDefs$dalloca_no_wrap i r)` by
+    (match_mp_tac (GEN_ALL checked_prefix_tail_cursor) >>
+     qexistsl_tac [`s`, `h`] >>
+     qpat_assum `ptrDiscipline$ctx_has_dalloca ctx ==> !pre i post r. _` mp_tac >>
+     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, APPEND] >> simp[]) >>
   first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
     `t with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
   simp[run_inst_seq_inst_idx, exec_result_map_def] >>
   disch_then (qspecl_then [`a`, `step_prov PG G h u`,
     `step_taint h s u tn`, `G'`, `tn'`, `ctx`, `fn`, `bb`, `code`, `id`, `gv`] mp_tac) >>
   simp[run_inst_seq_inst_idx, exec_result_map_def] >>
+  (impl_tac >-
+    (qpat_assum `ptrDiscipline$ctx_has_dalloca ctx ==> !pre i post r.
+       _ /\ run_inst_seq pre (u with vs_inst_idx := SUC s.vs_inst_idx) = OK r ==> _`
+       mp_tac >> pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[])) >>
   strip_tac >> qexists_tac `j` >>
   `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
     (OK (u with vs_inst_idx := SUC s.vs_inst_idx),

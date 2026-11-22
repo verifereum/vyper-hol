@@ -1,6 +1,6 @@
 (* Installed nonpayable dispatch rejection, independent of source selection. *)
 Theory dispatchedValuePrefix
-Ancestors entryPrefixPtr fragGasOrigin fragGasPathMem gasCount memSafeRun
+Ancestors entryPrefixPtr fragGasOrigin fragGasPathMem fragGasSeqMem gasCount memSafeRun
   instMemFrontier unitTransformDefs contextCodegenRel codegenRel entryValueRevertPtr entryDispatchPtr moduleLoweringProps moduleLowering
   compileEnv loweringStateRelDefs emitHelper fragExec ptrSafeRun ptrDiscipline
   venomExecSemantics venomInst venomState list finite_map words
@@ -42,10 +42,10 @@ Theorem scalar_edge_mem[local]:
   gas_path_mem_edge ctx fn s 0
     (OK (t with vs_inst_idx := SUC s.vs_inst_idx))
 Proof
-  strip_tac >> simp[gas_path_mem_edge_def] >>
-  qexists_tac `0` >>
-  simp[step_inst_non_invoke, gas_count_step_def, mem_safe_step_non_invoke] >>
-  metis_tac[]
+  strip_tac >>
+  `(ctx_has_dalloca ctx ==> dalloca_no_wrap inst s)` by
+    simp[dalloca_no_wrap_non_dalloca] >>
+  drule_all straight_line_mem_edge >> simp[]
 QED
 
 
@@ -63,7 +63,7 @@ Proof
        eval_operand_def, gas_count_step_def, mem_safe_step_non_invoke,
        inst_mem_below_frontier_def, inst_dload_in_section_def,
        source_memory_write_ranges_def, source_memory_read_ranges_def,
-       exit_result_def]
+       dalloca_no_wrap_def, exit_result_def]
 QED
 
 Theorem value_check_origin_mem[local]:

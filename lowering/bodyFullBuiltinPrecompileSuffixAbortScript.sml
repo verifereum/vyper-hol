@@ -67,6 +67,13 @@ Proof
     metis_tac[IS_PREFIX_APPEND, APPEND] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) [gi;ci]` by
     simp[mk_inst_def, is_terminator_def] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. [gi;ci] = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     `MEM i [gi;ci]` by
+       (qpat_assum `[gi;ci] = _` (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+     fs[MEM] >> gvs[mk_inst_def]) >>
   `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [F]
       (OK (v with vs_inst_idx := s.vs_inst_idx + 2),G2,tn2)` by
     (drule_all run_inst_seq_gas_origin_ptr_path >>
@@ -134,6 +141,7 @@ Resume precompile_suffix_abort_full_family[assert_origin]:
   gvs[step_inst_non_invoke, ptr_safe_step_def, gas_count_step_def,
       gas_events_step_def, mk_inst_def, exit_result_def,
       mem_safe_step_non_invoke, inst_mem_below_frontier_def,
+      unitTransformDefsTheory.dalloca_no_wrap_def,
       inst_dload_in_section_def, source_memory_read_ranges_def,
       source_memory_write_ranges_def, memory_range_of_operands_def]
 QED
@@ -194,9 +202,10 @@ Proof
       step_prov PG G gi u, step_taint gi s u tn)` by
     (`gi.inst_opcode <> INVOKE /\ ~is_terminator gi.inst_opcode /\
       inst_mem_below_frontier gi s /\ inst_dload_in_section gi s /\
+      (ctx_has_dalloca ctx ==> dalloca_no_wrap gi s) /\
       ptr_inst_ok (DF H) lo 0 ctx func G tn gi s` by
        gvs[run_inst_seq_mem_ok_def, inst_seq_ptr_def, mk_inst_def,
-         is_terminator_def] >>
+         is_terminator_def, unitTransformDefsTheory.dalloca_no_wrap_def] >>
      drule_all straight_line_origin_ptr_edge >>
      disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >>
      simp[mk_inst_def]) >>
@@ -224,7 +233,8 @@ Proof
      conj_tac >> qexists_tac `0` >>
      gvs[run_inst_seq_mem_ok_def, Abbr `w`, step_inst_non_invoke,
        ptr_safe_step_def, gas_count_step_def, gas_events_step_def,
-       mk_inst_def, exit_result_def, mem_safe_step_non_invoke]) >>
+       mk_inst_def, exit_result_def, mem_safe_step_non_invoke,
+       unitTransformDefsTheory.dalloca_no_wrap_def]) >>
   drule (cj 2 gas_origin_ptr_path_rules) >> simp[] >>
   disch_then irule >> gvs[]
 QED
