@@ -1116,18 +1116,20 @@ Proof
      Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
      qexists `rr` >> irule lower_vyper_runtime_unit_allocs_ok >>
      metis_tac[]) >>
-  `cenv.ce_modules = [(NONE,tops)]` by
-    (qpat_assum `body_inv tops _ cenv _`
-      (ACCEPT_TAC o MATCH_MP contract_inv_cenv_modules o MATCH_MP body_inv_contract)) >>
   `~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules)
      (subst_consts_stmts (module_consts_env tops []) fbody)` by
-    (simp[] >>
+    (qpat_assum `body_inv tops _ cenv _`
+       (fn inv => REWRITE_TAC
+         [MATCH_MP contract_inv_cenv_modules (MATCH_MP body_inv_contract inv)]) >>
      irule (INST_TYPE [alpha |-> ``:160 word``]
        checked_const_substitution_const_name_free) >>
      metis_tac[]) >>
   `qualified_stmts_decls_ok cenv.ce_modules
      (subst_consts_stmts (module_consts_env tops []) fbody)` by
-    (drule lookup_function_External_cases >> strip_tac
+    (qpat_assum `body_inv tops _ cenv _`
+       (fn inv => REWRITE_TAC
+         [MATCH_MP contract_inv_cenv_modules (MATCH_MP body_inv_contract inv)]) >>
+     drule lookup_function_External_cases >> strip_tac
      >- (`module_allocated am.layouts tx.target NONE tops` by
            (drule check_contract_main_module_allocated >> simp[]) >>
          `check_function_body am.layouts tx.target [(NONE,tops)] art NONE

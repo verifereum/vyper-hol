@@ -205,8 +205,10 @@ Proof
   imp_res_tac call_evaluation_safe_append_left >>
   imp_res_tac call_evaluation_safe_append_right >>
   gvs[supported_stmt_expr_exists_def, supported_iterator_exists_def] >>
-  `supported_type_namespace typ` by
-    (Cases_on `typ` >> gvs[is_int_type_def, supported_type_namespace_def]) >>
+  `supported_type_namespace (expr_type e1)` by
+    (qpat_assum `is_int_type (expr_type e1)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `expr_type e1` >>
+     simp[is_int_type_def, supported_type_namespace_def]) >>
   metis_tac[call_evaluation_safe_append_left]
 QED
 
