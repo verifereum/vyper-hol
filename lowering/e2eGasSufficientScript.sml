@@ -535,6 +535,7 @@ Proof
         CONJUNCT1 o UNDISCH)) >>
   `raw_unit_memory_ok unit.cu_context vi /\ ptr_discipline 0 unit.cu_context vi` by
     (mp_tac (Q.INST [`rp` |-> `rpolicy`, `vs` |-> `vi`, `tx` |-> `td`,
+          `fn` |-> `func`,
           `D` |-> `cx_dead (H : (bool # bytes32 # type_value) list # num list)
             (initial_evaluation_context am.sources am.layouts td NONE)`]
         e2eCorrectnessTheory.selected_raw_memory) >>
