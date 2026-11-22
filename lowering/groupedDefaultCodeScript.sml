@@ -89,18 +89,13 @@ Proof
   disch_then (qx_choosel_then [`shadow_src`,`shadow_mid`,`shadow_first`,`shadow_last`]
     strip_assume_tac) >>
   `shadow_src = src /\ gas_shadow_state mid shadow_mid` by
-    (gvs[pairTheory.FST, pairTheory.SND,
-       Q.SPECL [`sa`,`sha`]
-         (REWRITE_RULE [gas_shadow_compiles_def]
-           (Q.INST [`src` |-> `Lit 4w`,`dyn` |-> `is_abi_dynamic ce.ce_struct_fields ty`,
-              `off` |-> `off-4`,`opc` |-> `CALLDATALOAD`,`base_op` |-> `Lit 0w`,
-              `hi` |-> `Lit 0w`] gas_shadow_compiles_getelemptr_abi))] >>
-     metis_tac[pairTheory.FST, pairTheory.SND,
-       Q.SPECL [`sa`,`sha`]
-         (REWRITE_RULE [gas_shadow_compiles_def]
-           (Q.INST [`src` |-> `Lit 4w`,`dyn` |-> `is_abi_dynamic ce.ce_struct_fields ty`,
-              `off` |-> `off-4`,`opc` |-> `CALLDATALOAD`,`base_op` |-> `Lit 0w`,
-              `hi` |-> `Lit 0w`] gas_shadow_compiles_getelemptr_abi))]) >>
+    (gs[gas_shadow_env_fields] >>
+     drule_then (qspecl_then [`ty`, `off`, `ce`] mp_tac)
+       (REWRITE_RULE [gas_shadow_compiles_def]
+         (Q.INST [`src` |-> `Lit 4w`, `dyn` |-> `is_abi_dynamic ce.ce_struct_fields ty`,
+            `off` |-> `off - 4`, `opc` |-> `CALLDATALOAD`, `base_op` |-> `Lit 0w`,
+            `hi` |-> `Lit 0w`] gas_shadow_compiles_getelemptr_abi)) >>
+     simp[]) >>
   qpat_x_assum `shadow_src = src` SUBST_ALL_TAC >>
   `gas_shadow_state first shadow_first` by
     (Cases_on `is_abi_dynamic ce.ce_struct_fields ty` >> gvs[] >>
@@ -113,17 +108,14 @@ Proof
        (qspecl_then [`mid`,`shadow_mid`] mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
      asm_rewrite_tac[pairTheory.FST,pairTheory.SND]) >>
   `gas_shadow_state last shadow_last` by
-    (mp_tac (Q.SPECL [`first`,`shadow_first`]
-       (REWRITE_RULE [gas_shadow_compiles_def]
-         (Q.INST [`opc` |-> `CALLDATALOAD`,`base_op` |-> `Lit 0w`,
-           `hi` |-> `Lit 0w`,`info` |-> `type_to_abi_dec_info ce.ce_struct_fields ce ty`]
-           gas_shadow_compiles_abi_decode_to_buf))) >>
-     simp[] >>
-     gvs[Q.SPECL [`first`,`shadow_first`]
-       (REWRITE_RULE [gas_shadow_compiles_def]
-         (Q.INST [`opc` |-> `CALLDATALOAD`,`base_op` |-> `Lit 0w`,
-           `hi` |-> `Lit 0w`,`info` |-> `type_to_abi_dec_info ce.ce_struct_fields ce ty`]
-           gas_shadow_compiles_abi_decode_to_buf))]) >>
+    (gs[gas_shadow_env_fields] >>
+     qpat_assum `gas_shadow_state first shadow_first`
+       (mp_then Any (qspecl_then [`ty`, `src`, `dst`, `ce`] mp_tac)
+         (REWRITE_RULE [gas_shadow_compiles_def]
+           (Q.INST [`opc` |-> `CALLDATALOAD`, `base_op` |-> `Lit 0w`,
+              `hi` |-> `Lit 0w`, `info` |-> `type_to_abi_dec_info ce.ce_struct_fields ce ty`]
+              gas_shadow_compiles_abi_decode_to_buf))) >>
+     simp[]) >>
   `ci_mono sa mid` by
     (qpat_assum `compile_getelemptr_abi _ _ _ _ _ _ sa = _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
