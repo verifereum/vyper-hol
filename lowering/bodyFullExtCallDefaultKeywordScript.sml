@@ -195,13 +195,15 @@ QED
 
 Resume extcall_operand_materialized_full[child]:
   `gas_shadow_state sm shadow_sm` by
-    (mp_tac (Q.SPECL [`cenv`,`expr_type e`,`e`,`T`]
-       (cj 1 gasShadowCompileTheory.gas_shadow_compile_expr)) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+    (`gas_shadow_compiles (compile_expr cenv (expr_type e) e)
+        (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
+       irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr_env >>
+     qpat_x_assum `gas_shadow_compiles _ _`
+       (qspecl_then [`sa`,`shadow_sa`] mp_tac o
+        REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]) >> simp[]) >>
   `ci_mono shadow_sa shadow_sm` by
-    (mp_tac (Q.SPECL [`cenv`,`expr_type e`,`gas_shadow_expr e`,`shadow_sa`]
-       (cj 1 ci_mono_compile_expr_sa)) >> simp[gasShadowTheory.gas_shadow_expr_type]) >>
+    (qspecl_then [`gas_shadow_env T cenv`,`expr_type e`,`gas_shadow_expr e`,`shadow_sa`]
+       mp_tac (cj 1 ci_mono_compile_expr_sa) >> simp[]) >>
   `ci_mono shadow_sm shadow_sb` by
     (mp_tac (Q.SPECL [`cenv`,`lowered_value_type cenv e`,`vv`,`shadow_sm`]
        ci_mono_compile_materialize_vv) >> simp[]) >>
@@ -649,13 +651,16 @@ Proof
   strip_tac >>
   Cases_on `compile_expr cenv (expr_type e) e sa` >>
   rename1 `compile_expr cenv (expr_type e) e sa = (vv,sm)` >>
-  Cases_on `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e)
+    (gas_shadow_expr e) shadow_sa` >>
   rename1 `compile_expr _ _ (gas_shadow_expr e) shadow_sa = (sv,shadow_sm)` >>
   `sv = vv` by
-    (mp_tac (Q.SPECL [`cenv`,`expr_type e`,`e`,`T`]
-       (cj 1 gas_shadow_compile_expr)) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+    (`gas_shadow_compiles (compile_expr cenv (expr_type e) e)
+        (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
+       irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr_env >>
+     qpat_x_assum `gas_shadow_compiles _ _`
+       (qspecl_then [`sa`,`shadow_sa`] mp_tac o
+        REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]) >> simp[]) >>
   Cases_on `compile_materialize_vv cenv (lowered_value_type cenv e) vv sm` >>
   Cases_on `compile_materialize_vv cenv (lowered_value_type cenv e) vv shadow_sm` >>
   gvs[compile_ext_call_kwarg_def, comp_bind_def, comp_return_def] >>
