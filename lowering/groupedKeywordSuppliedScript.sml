@@ -310,10 +310,16 @@ Resume grouped_keyword_decode_supplied_with_frame[finish]:
      disch_then irule >> first_assum ACCEPT_TAC) >>
   `!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < last.cs_next_id` by
     (rpt gen_tac >> strip_tac >> CCONTR_TAC >>
+     `last.cs_next_id <= id` by decide_tac >>
      qpat_assum `!id. id < first.cs_next_id \/ _ ==> _` (qspec_then `id` mp_tac) >>
-     simp[NOT_LESS] >> strip_tac >>
+     impl_tac >- (disj2_tac >> first_assum ACCEPT_TAC) >>
+     disch_tac >>
+     `FLOOKUP ready.vs_allocas id = SOME entry` by
+       (qpat_assum `FLOOKUP t.vs_allocas id = FLOOKUP ready.vs_allocas id`
+          (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
      qpat_assum `!id entry. FLOOKUP ready.vs_allocas id = SOME entry ==> _`
-       (qspecl_then [`id`,`entry`] mp_tac) >> simp[] >> decide_tac) >>
+       (qspecl_then [`id`,`entry`] (drule_then assume_tac)) >>
+     decide_tac) >>
   `s.vs_alloca_next <= t.vs_alloca_next` by
     (qpat_assum `ready.vs_alloca_next = s.vs_alloca_next`
        (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
