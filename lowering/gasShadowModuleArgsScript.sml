@@ -3,6 +3,7 @@ Theory gasShadowModuleArgs
 Ancestors
   gasShadowModuleOps gasShadowCompileAbi gasShadowCompileContext gasShadowState
   moduleLowering compileEnv gasShadowCompile gasShadowCompileHelpers
+  gasShadowDeployRegisterEnv
 
 Theorem gas_shadow_compiles_decode_args:
   !args ce off opc hi base.
