@@ -114,6 +114,9 @@ Proof
       qpat_x_assum `!j. j < _ ==> _` (qspec_then `SUC j` mp_tac) >>
       simp[ADD_CLAUSES]) >>
   simp[ADD_CLAUSES] >> strip_tac >>
+  `(ctx_has_dalloca ctx ==> dalloca_no_wrap h ((u 0) with vs_inst_idx := k))` by
+    (qpat_x_assum `ctx_has_dalloca ctx ==> dalloca_no_wrap h (u 0)` mp_tac >>
+     simp[dalloca_no_wrap_def, instIdxIndepTheory.eval_op_inst_idx]) >>
   `gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
      ((u 0) with vs_inst_idx := k, g 0, q 0) []
      (OK ((u 1) with vs_inst_idx := SUC k), g 1, q 1)` by
@@ -283,7 +286,7 @@ Proof
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
   mp_tac (Q.SPECL [`code`, `s`, `t`, `G`, `tn`, `H`, `qt`, `ctx`, `func`, `bb`]
     run_inst_seq_gas_origin_ptr_path) >>
-  simp[]
+  simp[] >> metis_tac[]
 QED
 
 (* A non-INVOKE terminator that lands on jump_to keeps the ghost, as in
@@ -301,6 +304,8 @@ Theorem jump_origin_ptr_path:
 Proof
   strip_tac >>
   `step_inst 0 ctx i s = OK (jump_to lbl s)` by simp[step_inst_non_invoke] >>
+  `dalloca_no_wrap i s` by
+    (simp[dalloca_no_wrap_def] >> metis_tac[is_terminator_def]) >>
   `gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG) (s, G, tn) []
      (OK (jump_to lbl s), G, tn)` by
     (PURE_REWRITE_TAC[gas_origin_ptr_edge_def] >> conj_tac
