@@ -13,7 +13,8 @@ Theorem store_slots_emitted_seq_path_mem:
   same_blocks sa sb /\ fn_has_code sa sb func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+  EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> DALLOCA /\
+             ~is_terminator i.inst_opcode)
     (emitted_insts sa sb) /\
   LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb)) = 0 /\
   run_inst_seq_mem_ok (emitted_insts sa sb) s /\
@@ -39,7 +40,7 @@ QED
 
 Theorem store_slots_emit_op_path_mem:
   emit_op opc args sa = (op,sb) /\ fn_has_code sa sb func /\
-  opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc /\
+  opc <> INVOKE /\ opc <> GAS /\ opc <> DALLOCA /\ ~is_terminator opc /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!out. inst_mem_below_frontier (mk_inst sa.cs_next_id opc args [out]) s /\

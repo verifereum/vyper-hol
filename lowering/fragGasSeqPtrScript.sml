@@ -337,6 +337,10 @@ Theorem run_inst_seq_gas_origin_ptr_path:
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
     run_inst_seq_mem_ok code s /\
+    (ptrDiscipline$ctx_has_dalloca ctx ==>
+      !pre i post u. code = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==>
+        unitTransformDefs$dalloca_no_wrap i u) /\
     inst_seq_ptr D lo ctx func PG G tn code s G' tn' /\
     run_inst_seq code s = OK t ==>
     gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn)
@@ -438,6 +442,10 @@ Theorem sha_zero_origin_abort:
     EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
       ~is_terminator i.inst_opcode) code /\
     run_inst_seq_mem_ok code s /\
+    (ptrDiscipline$ctx_has_dalloca ctx ==>
+      !pre i post u. code = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==>
+        unitTransformDefs$dalloca_no_wrap i u) /\
     inst_seq_ptr D lo ctx fn PG G tn code s G' tn' /\
     run_inst_seq code s = Abort a t ==>
     ?j. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []

@@ -78,6 +78,10 @@ Theorem run_inst_seq_abort_zero_path_mem:
     EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
                ~is_terminator i.inst_opcode) code /\
     run_inst_seq_mem_ok code s /\
+    (ptrDiscipline$ctx_has_dalloca ctx ==>
+      !pre i post u. code = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==>
+        unitTransformDefs$dalloca_no_wrap i u) /\
     run_inst_seq code s = Abort a t ==>
     ?j. gas_marked_path T ctx func s 0
       (Abort a (t with vs_inst_idx := j))

@@ -10,6 +10,10 @@ Theorem sequence_all_fuel_pullback[local]:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st ready) /\
   run_inst_seq_mem_ok (emitted_insts st ready) s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st ready = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
   run_inst_seq (emitted_insts st ready) s = OK t /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ((!fuel. mem_safe_run fuel ctx fn
@@ -38,6 +42,10 @@ Theorem successful_sequence_endpoint:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st ready) /\
   run_inst_seq_mem_ok (emitted_insts st ready) s /\
+  (ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st ready = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u) /\
   run_inst_seq (emitted_insts st ready) s = OK t /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\

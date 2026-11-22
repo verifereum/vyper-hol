@@ -766,6 +766,7 @@ Theorem run_inst_seq_revert_path_mem:
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+               i.inst_opcode <> DALLOCA /\
                (is_terminator i.inst_opcode ==> i.inst_opcode = REVERT)) code /\
     run_inst_seq_mem_ok code s /\
     run_inst_seq code s = Abort a t ==>
