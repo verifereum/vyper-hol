@@ -9415,7 +9415,14 @@ Resume blueprint_raw_args_cut[copy_store]:
      `evaluate_type (get_tenv cx) (expr_type e) = SOME atv` by
        (drule expr_body_pre_env_type_defs >> simp[] >> metis_tac[]) >>
      drule_all exprSimHypsTheory.expr_body_pre_copy_ok >> strip_tac >>
-     rw[loweringPostsTheory.post_value_type_bytestring,is_bytestring_type_def] >>
+     `post_value_type cenv e = expr_type e` by
+       simp[loweringPostsTheory.post_value_type_bytestring,is_bytestring_type_def] >>
+     qpat_assum `evaluate_type (get_tenv cx) (expr_type e) = SOME atv` mp_tac >>
+     qpat_assum `value_has_type atv v` mp_tac >>
+     qpat_assum `type_memory_size atv < 2 ** 64` mp_tac >>
+     qpat_assum `post_value_type cenv e = expr_type e` mp_tac >>
+     qpat_assum `atv = BaseTV (BytesT (Dynamic cap))` mp_tac >>
+     POP_ASSUM_LIST kall_tac >> rpt strip_tac >>
      Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def,valueEncodingTheory.type_memory_size_def] >>
      mp_tac (Q.SPEC `cap` abiBuiltinAllocationTheory.abi_builtin_word_size_capacity) >> decide_tac) >>
   qpat_x_assum `v = BytesV _` SUBST_ALL_TAC >>
