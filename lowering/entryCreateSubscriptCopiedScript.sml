@@ -38,7 +38,9 @@ Theorem copied_subscript_base_site:
     expr_vv_sim_full_pre (DF,lo,d,ctx,shctx,PG,func,shfunc) ce cx ty obj es
       (st0,sa,sm,sha,shm,bvv,s0,G0,tn0)
 Proof
-  strip_tac >> drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  strip_tac >>
+  `expr_body_pre ce cx env obj es` by
+    metis_tac[expr_body_pre_array_subscript_base,copies_subscript_base_not_array_slot_base] >>
   simp[] >>
   fs[expr_vv_sim_full_pre_def] >> drule_all copied_array_cuts >> strip_tac >>
   `cs_extends sm sb /\ cs_extends sc sb /\
