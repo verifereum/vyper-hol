@@ -7529,7 +7529,7 @@ QED
 Theorem body_assign_empty_target_widths[local]:
   !t. alloc_limits_target cenv t /\
       ~supported_target_exists
-        (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t ==>
+        (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ (array_slot_base cenv e \/ alloc_limits_expr cenv e))) t ==>
       byte_widths_target t
 Proof
   recInduct base_assignment_target_induct >>
@@ -11702,7 +11702,8 @@ Theorem body_assign_function_mutability_mods[local]:
   contract_inv mods exps ctx cenv cx ==>
   !src tops vis mut nr rr fn args dflts ret body.
     ALOOKUP mods src = SOME tops /\
-    MEM (FunctionDecl vis mut nr rr fn args dflts ret body) tops ==>
+    MEM (FunctionDecl vis mut nr rr fn args dflts ret body) tops /\
+    (src = NONE \/ MEM (src,fn) (linked_live_functions mods exps)) ==>
     function_mutability_ok mods vis mut nr dflts body
 Proof
   simp[contract_inv_def] >> rpt strip_tac >> res_tac

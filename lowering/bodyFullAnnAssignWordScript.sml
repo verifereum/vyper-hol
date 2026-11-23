@@ -589,16 +589,8 @@ Proof
   `fn_has_code r' shadow_sf shadow_func` by
     fs[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def] >>
   `local_ptrs_reserved (gas_shadow_env T cenv) shadow_sa` by
-    (`sa.cs_next_var = shadow_sa.cs_next_var` by
-       (qpat_assum `gas_shadow_state sa shadow_sa`
-          (strip_assume_tac o REWRITE_RULE [gasShadowStateTheory.gas_shadow_state_def]) >>
-        first_assum ACCEPT_TAC) >>
-     `local_ptrs_reserved cenv shadow_sa` by
-       (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-     qpat_assum `local_ptrs_reserved cenv shadow_sa` mp_tac >>
-     pure_rewrite_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def,
-       gasShadowCompileBaseTheory.gas_shadow_env_fields] >>
-     disch_then ACCEPT_TAC) >>
+    (irule bodyFullSharedTheory.local_ptrs_reserved_gas_shadow >>
+     qexists_tac `sa` >> conj_tac >> first_assum ACCEPT_TAC) >>
   `local_ptrs_reserved (gas_shadow_env T cenv') r'` by
     (drule_at (Pat `declare_local _ _ _ shadow_sa = _`) declare_local_reserved >>
      disch_then irule >> first_assum ACCEPT_TAC) >>
