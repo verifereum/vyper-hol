@@ -1251,11 +1251,12 @@ QED
 
 Resume compiler_builtin_var[namedconst]:
   simp[compile_builtin_dispatch_body_def, LET_THM] >>
-  pairarg_tac >> gvs[as_ptr_val_def, contextTheory.vv_operand_def,
-                    contextTheory.mk_ptr_def] >>
-  rpt strip_tac >> gvs[] >>
-  rename1 `lower_value _ _ _ _ _ = (op,sb)` >>
-  Cases_on `op` >> gvs[contextTheory.vv_operand_def] >> metis_tac[]
+  pairarg_tac >> gvs[] >>
+  rename1 `lower_value _ _ _ _ _ = (op,s1)` >>
+  Cases_on `is_word_type rt` >> Cases_on `op` >>
+  gvs[as_stack_val_def, as_ptr_val_def, contextTheory.vv_operand_def,
+      contextTheory.mk_ptr_def] >>
+  rpt strip_tac >> gvs[contextTheory.vv_operand_def] >> metis_tac[]
 QED
 
 Resume compiler_builtin_var[boolchain]:

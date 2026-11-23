@@ -3230,7 +3230,7 @@ Proof
       simp[compile_builtin_dispatch_body_def, LET_THM] >>
       ho_match_mp_tac first_emission_pair_let >> conj_tac
       >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
-      rw[as_ptr_val_def, cs_extends_refl])
+      rw[as_stack_val_def, as_ptr_val_def, cs_extends_refl])
   >~ [`BoolChain d n`]
   >- (pop_assum mp_tac >> map_every qid_spec_tac [`b`, `x`, `a`] >>
       simp[compile_builtin_dispatch_body_def, LET_THM] >>

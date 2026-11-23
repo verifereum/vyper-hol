@@ -387,8 +387,12 @@ Proof
   >~ [`Len`] >- metis_tac[word_builtin_len]
   >~ [`MethodId`] >- metis_tac[word_builtin_method_id]
   >~ [`NamedConst`] >-
-    (gvs[compile_builtin_dispatch_body_def, LET_THM] >>
-     pairarg_tac >> gvs[as_ptr_val_def, word_result_ok_def])
+    (gvs[well_typed_expr_def, well_typed_builtin_app_def] >>
+     gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+     pairarg_tac >> gvs[as_stack_val_def, word_result_ok_def] >>
+     rename1 `lower_value _ _ _ _ _ = (op0,_)` >>
+     `safe_operand sb op0` by metis_tac[] >>
+     Cases_on `op0` >> gvs[safe_operand_def])
   >~ [`BoolChain _ _`] >-
     (`!es d r exit_lbl s u s'.
          (!e st op st'. MEM e es /\
