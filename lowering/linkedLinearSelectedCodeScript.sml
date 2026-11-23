@@ -22,6 +22,7 @@ Theorem linked_linear_selected_registration_code:
         (build_selectors (type_env_all_modules mods) (MAP SND exts)))
       fl ds = ((),de) /\
     fn_has_code ds de fn /\ cs_extends de opened /\
+    de.cs_next_var <= opened.cs_next_var /\
     ds.cs_current_bb = "__entry" /\ ds.cs_current_insts = [] /\ ds.cs_next_var = 0 /\
     opened.cs_current_bb = lbl /\ opened.cs_current_insts = [] /\
     ~block_is_terminated opened /\
@@ -30,6 +31,7 @@ Theorem linked_linear_selected_registration_code:
     compile_guarded_body registered_env nr key tr view body_code rt registered = ((),last) /\
     fn_has_code opened checked fn /\ fn_has_code checked registered fn /\
     fn_has_code registered last fn /\ cs_extends opened checked /\ cs_extends checked registered
+
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all (SIMP_RULE pure_ss [LET_THM] default_unit_linear_run) >>
