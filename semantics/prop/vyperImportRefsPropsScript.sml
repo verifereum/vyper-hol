@@ -4,6 +4,14 @@ Ancestors
   vyperAST vyperContext vyperInterpreter vyperABIEntries
   constSubstMods constSubst list alist pair
 
+Theorem check_contract_main_module_present:
+  check_contract deploy layouts addr mods = SOME art ==>
+  IS_SOME (ALOOKUP mods NONE)
+Proof
+  strip_tac >> drule check_contract_namespaces_ok >>
+  simp[contract_namespaces_ok_def]
+QED
+
 Theorem check_contract_imported_toplevel_refs_ok:
   check_contract deploy layouts addr mods = SOME art /\ MEM (SOME src,tls) mods ==>
   EVERY imported_toplevel_refs_ok tls

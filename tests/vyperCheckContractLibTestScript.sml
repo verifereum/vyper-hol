@@ -2203,6 +2203,27 @@ val () = check_accepts "qualified internal call in import" false
   empty_layouts (import_call_modules ``SOME 1``)
 val () = check_rejects empty_layouts (import_call_modules ``NONE : num option``)
 
+(* Linked units must have a main entry, even when all storage and code
+   belong to imports. *)
+val () = let
+  val layouts =
+    ``[(^zero_address,
+        ([((SOME 1,"s"),1)] : storage_layout, [] : storage_layout))]``
+  val imports =
+    ``[(SOME 1,
+         [VariableDecl Private Storage "s" ^u256 (SOME 1);
+          FunctionDecl External Nonpayable F F "entry" [] [] ^u256
+            [Return (SOME (Literal ^u256 (IntL 101)))]]);
+       (SOME 2,[VariableDecl Private Storage "s" ^u256 NONE])]
+      : (num option # toplevel list) list``
+  val with_main = ``(NONE, []) :: ^imports``
+in
+  check_rejects_in ``F`` layouts imports;
+  check_rejects_in ``T`` layouts imports;
+  check_accepts "imports with empty main (runtime)" false layouts with_main;
+  check_accepts "imports with empty main (deploy)" true layouts with_main
+end
+
 val () = cv_auto_trans contract_namespaces_ok_def;
 
 Theorem cross_visibility_self_member_clash_cv:

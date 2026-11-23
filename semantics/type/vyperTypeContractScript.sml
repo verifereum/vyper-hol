@@ -194,6 +194,7 @@ End
 
 Definition contract_namespaces_ok_def:
   contract_namespaces_ok in_deploy mods <=>
+    IS_SOME (ALOOKUP mods NONE) /\
     ALL_DISTINCT (MAP FST mods) /\
     ALL_DISTINCT (contract_keys (fn_sig_keys_toplevel in_deploy) mods) /\
     ALL_DISTINCT (contract_keys toplevel_vtype_keys_toplevel mods) /\
