@@ -1946,6 +1946,8 @@ Proof
     (simp[FUN_EQ_THM] >> metis_tac[allocLimitsPropsTheory.lowered_value_type_struct_fields]) >>
   `type_alloc_ok updated = type_alloc_ok original` by
     simp[FUN_EQ_THM, allocLimitsTheory.type_alloc_ok_def] >>
+  `array_slot_base updated = array_slot_base original` by
+    metis_tac[allocLimitsPropsTheory.array_slot_base_frame] >>
   gvs[allocLimitsTheory.alloc_limits_expr_def, allocLimitsTheory.type_alloc_ok_def,
        exprLoweringTheory.copies_subscript_base_def,
        supportedExprTraverseTheory.supported_expr_exists_def, constSubstCorrectTheory.base_target_root_def] >>
