@@ -62,9 +62,10 @@ Proof
   >- (disj1_tac >>
       simp[linked_witness_mods_def, ALOOKUP_def, module_allocated_def,
            toplevel_allocated_def, lookup_var_slot_in_layouts_def])
-  >- (simp[GSYM optionTheory.IS_SOME_EXISTS] >>
-      qpat_assum `SOME _ = check_contract T _ _ linked_witness_mods`
-        (fn checked => simp[NoAsms, SIMP_RULE (srw_ss()) entry_context_simps (SYM checked)]))
+  >- (qpat_assum `SOME _ = check_contract T _ _ linked_witness_mods`
+        (fn checked =>
+          exists_tac (optionSyntax.dest_some (lhs (concl checked))) >>
+          ACCEPT_TAC (SIMP_RULE (srw_ss()) entry_context_simps checked)))
 QED
 
 Theorem linked_witness_external_context:
@@ -90,9 +91,10 @@ Proof
   >- (disj1_tac >>
       simp[linked_witness_mods_def, ALOOKUP_def, module_allocated_def,
            toplevel_allocated_def, lookup_var_slot_in_layouts_def])
-  >- (simp[GSYM optionTheory.IS_SOME_EXISTS] >>
-      qpat_assum `SOME _ = check_contract F _ _ linked_witness_mods`
-        (fn checked => simp[NoAsms, SIMP_RULE (srw_ss()) entry_context_simps (SYM checked)]))
+  >- (qpat_assum `SOME _ = check_contract F _ _ linked_witness_mods`
+        (fn checked =>
+          exists_tac (optionSyntax.dest_some (lhs (concl checked))) >>
+          ACCEPT_TAC (SIMP_RULE (srw_ss()) entry_context_simps checked)))
 QED
 
 fun fixture_entry src fname =
