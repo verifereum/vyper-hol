@@ -308,8 +308,11 @@ Proof
        vyperTypeSystemTheory.type_builtin_result_ok_def,
        vyperTypeCallGraphTheory.int_calls_expr_def,
        is_bytestring_type_def] >>
-  rpt strip_tac >> gvs[vyperTypeSystemTheory.well_typed_literal_def,
-    vyperTypeSystemTheory.arg_type_fits_def, vyperValueTheory.compatible_bound_def]
+  rpt strip_tac >>
+  rpt (qpat_x_assum `well_typed_builtin_app _ NamedConst _` mp_tac >>
+       simp[vyperTypeSystemTheory.well_typed_builtin_app_def] >> strip_tac) >>
+  gvs[vyperTypeSystemTheory.well_typed_literal_def,
+      vyperTypeSystemTheory.arg_type_fits_def, vyperValueTheory.compatible_bound_def]
   >~ [`concat_buffer_type ty _`]
   >- (disj2_tac >> irule ifexp_concat_lowered_fits >> goal_assum drule) >>
   `!xs. well_typed_exprs env xs ==>
@@ -415,8 +418,11 @@ Proof
        vyperTypeSystemTheory.type_builtin_result_ok_def,
        vyperTypeCallGraphTheory.int_calls_expr_def,
        is_bytestring_type_def] >>
-  rpt strip_tac >> gvs[vyperTypeSystemTheory.well_typed_literal_def,
-    vyperTypeSystemTheory.arg_type_fits_def, vyperValueTheory.compatible_bound_def]
+  rpt strip_tac >>
+  rpt (qpat_x_assum `well_typed_builtin_app _ NamedConst _` mp_tac >>
+       simp[vyperTypeSystemTheory.well_typed_builtin_app_def] >> strip_tac) >>
+  gvs[vyperTypeSystemTheory.well_typed_literal_def,
+      vyperTypeSystemTheory.arg_type_fits_def, vyperValueTheory.compatible_bound_def]
   >~ [`concat_buffer_type ty _`]
   >- (disj2_tac >> irule ifexp_concat_lowered_fits >> goal_assum drule) >>
   `!xs. well_typed_exprs env xs ==>
