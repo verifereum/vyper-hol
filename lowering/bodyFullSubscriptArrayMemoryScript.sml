@@ -35,6 +35,20 @@ Proof
        loweringShapeRulesTheory.emit_op_eq] >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
+Theorem fixed_memory_bounds_mono[local]:
+  array_bounds_check idx (Lit (n2w n)) sgn sa = ((),sc) ==> ci_mono sa sc
+Proof
+  simp[array_bounds_check_def, comp_bind_def] >>
+  pairarg_tac >> gvs[] >> strip_tac >>
+  rename1 `array_bounds_valid _ _ _ sa = (valid,sv)` >>
+  `ci_mono sa sv` by
+    (qpat_x_assum `array_bounds_valid _ _ _ _ = _` mp_tac >>
+     Cases_on `sgn` >> simp[array_bounds_valid_def, comp_bind_def, comp_return_def] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+     metis_tac[ci_mono_emit_op, pairTheory.SND, ci_mono_trans]) >>
+  metis_tac[ci_mono_emit_void, pairTheory.SND, ci_mono_trans]
+QED
+
 (* One uniform endpoint for fixed-literal bounds checking followed by address
    arithmetic. The final ADD retains the captured base's provenance. *)
 Theorem fixed_memory_selector_joint_ok:
@@ -78,17 +92,7 @@ Theorem fixed_memory_selector_joint_ok:
             (OK sf,Gf,tnf)))
 Proof
   strip_tac >>
-  `ci_mono sa sc` by
-    (qpat_x_assum `array_bounds_check _ _ _ _ = _` mp_tac >>
-     simp[array_bounds_check_def, comp_bind_def] >>
-     pairarg_tac >> gvs[] >> strip_tac >>
-     rename1 `array_bounds_valid _ _ _ sa = (valid,sv)` >>
-     `ci_mono sa sv` by
-       (qpat_x_assum `array_bounds_valid _ _ _ _ = _` mp_tac >>
-        Cases_on `sgn` >> simp[array_bounds_valid_def, comp_bind_def, comp_return_def] >>
-        rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-        metis_tac[ci_mono_emit_op, pairTheory.SND, ci_mono_trans]) >>
-     metis_tac[ci_mono_emit_void, pairTheory.SND, ci_mono_trans]) >>
+  drule_then assume_tac fixed_memory_bounds_mono >>
   `ci_mono sc sm /\ ci_mono sm sb` by metis_tac[ci_mono_emit_op, pairTheory.SND] >>
   `fn_has_code sa sc func /\ fn_has_code sc sb func` by
     metis_tac[fn_has_code_split, ci_mono_def, cs_extends_trans] >>
@@ -897,20 +901,8 @@ Resume subscript_array_framed_memory_full[rejected_selection]:
   qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _`
     (mp_then Any mp_tac fixed_memory_selector_layout) >>
   disch_then (qx_choosel_then [`cs'`,`s_mul`,`off`,`out`] strip_assume_tac) >> gvs[] >>
-  `ci_mono st2 cs'` by
-    (qpat_x_assum `array_bounds_check _ _ _ _ = _`
-       (SUBST1_TAC o SYM o PURE_REWRITE_RULE [pairTheory.SND] o Q.AP_TERM `SND`) >>
-     simp[exprSimArrayIndexTheory.array_bounds_check_def,
-          exprSimArrayIndexTheory.array_bounds_valid_def] >>
-     rpt (FIRST [irule ci_mono_bind >> conj_tac,
-                 gen_tac >> BETA_TAC, irule ci_mono_emit_op,
-                 irule ci_mono_emit_void, irule ci_mono_comp_return, IF_CASES_TAC])) >>
-  `ci_mono cs' sb` by
-    (qpat_x_assum `array_elem_ptr _ _ _ _ _ _ = _`
-       (SUBST1_TAC o SYM o PURE_REWRITE_RULE [pairTheory.SND] o Q.AP_TERM `SND`) >>
-     simp[exprSimArrayIndexTheory.array_elem_ptr_def] >>
-     rpt (FIRST [irule ci_mono_bind >> conj_tac,
-                 gen_tac >> BETA_TAC, irule ci_mono_emit_op, irule ci_mono_comp_return])) >>
+  drule_then assume_tac fixed_memory_bounds_mono >>
+  `ci_mono cs' sb` by metis_tac[ci_mono_emit_op, pairTheory.SND, ci_mono_trans] >>
   `fn_has_code st2 cs' func` by metis_tac[fn_has_code_split, ci_mono_def] >>
   `op_taint tni iop = {} /\ op_prov Gi iop = NONE` by fs[ptr_val_ok_def] >>
   `eval_operand (Lit (n2w n)) it = SOME (n2w n) /\
