@@ -877,6 +877,8 @@ Proof
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     drule_then ACCEPT_TAC body_inv_main_support >>
   `cx_tops cx = tops` by (drule_then (ACCEPT_TAC o CONJUNCT2) body_inv_main_code) >>
+  `alloc_limits_expr cenv e` by
+    gvs[stmt_exprs_ok_flat, alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_expr_def] >>
   `expr_body_pre cenv cx env e es` by
     (irule (Q.SPECL [`cenv`, `cx`, `env`, `e`, `es`, `[]`]
               stmt_expr_body_pre) >>
