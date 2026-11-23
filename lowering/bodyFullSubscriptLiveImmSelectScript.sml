@@ -1149,7 +1149,9 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
   `stmt_state_rel H0 ctx func cenv cx fin s` by fs[expr_post_def] >>
   `expr_body_pre cenv cx env obj (es with gas_obs := bgs)` by
-    (drule_all expr_body_pre_array_subscript_base >> simp[]) >>
+    (simp[] >> irule expr_body_pre_array_subscript_base_eval >>
+     qpat_assum `eval_expr cx obj _ = (INL _,_)` (irule_at Any) >> simp[] >>
+     metis_tac[]) >>
   `expr_body_pre cenv cx env idx mid` by
     (`expr_body_pre cenv cx env (Subscript et obj idx) (es with gas_obs := bgs)` by simp[] >>
      drule_all expr_body_pre_array_subscript_index_after_base >> simp[]) >>
