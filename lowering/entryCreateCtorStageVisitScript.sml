@@ -63,6 +63,26 @@ Proof
   simp[eval_exprs_cons_action,bind_assoc,bind_return]
 QED
 
+(* The observed suffix after a row supplies the exit fetch required by the
+   snapshot replay theorem. It may be a pending caller visit, so no OK
+   execution of that instruction, or of a later dispatch, is required. *)
+Theorem create_ctor_row_exit_fetch[local]:
+  create_interior_visit a b E ctx fn (p,d,k) t (before,hit,after) ==>
+  ?i. create_operand_fetch a b fn t i /\
+      ctor_segment_fetch fn t = SOME i /\ a.cs_next_id <= i.inst_id
+Proof
+  simp_tac bool_ss [create_interior_visit_def,LET_THM] >>
+  disch_then (CONJUNCTS_THEN2 (K ALL_TAC) (CONJUNCTS_THEN2 (K ALL_TAC)
+    (REPEAT_TCL CHOOSE_THEN (CONJUNCTS_THEN2 mp_tac
+      (CONJUNCTS_THEN2 assume_tac (K ALL_TAC)))))) >>
+  simp[Once RTC_CASES1] >> strip_tac
+  >- (gvs[] >> fs[create_operand_fetch_def,ctor_segment_fetch_def,frag_ids_def]) >>
+  qmatch_asmsub_rename_tac `create_operand_native_step _ _ _ _ _ _ _ endpoint` >>
+  PairCases_on `endpoint` >>
+  fs[create_operand_native_step_def,create_operand_fetch_def,
+     ctor_segment_fetch_def,frag_ids_def] >> metis_tac[]
+QED
+
 (* No mark or opcode from the unevaluated suffix is fed back into the
    completed row. Conversely, an interior left hit consumes no row replay. *)
 Theorem create_ctor_row_visit[local]:
@@ -71,8 +91,8 @@ Theorem create_ctor_row_visit[local]:
   create_cut_code {} m b /\ fn_has_code m b fn /\
   ~s.vs_halted /\ (!v. storage_trace_frame (next v)) /\
   create_operand_cut a m E ctx fn tops cx st0 source (es,s) /\
-  (!front t H tail r mid.
-    create_operand_at m t /\
+  (!front t j H tail r mid.
+    create_operand_at m t /\ ctor_segment_fetch fn t = SOME j /\ m.cs_next_id <= j.inst_id /\
     create_expr_prefix a m E ctx fn s (create_cut_marks E front) t /\
     source (es with gas_obs :=
       gas_explicit (create_cut_marks E front) s.vs_gas_readings ++ tail) = (r,mid) /\
@@ -86,10 +106,11 @@ Proof
   simp[create_operand_cut_def] >> rpt gen_tac >> strip_tac >>
   drule_all create_interior_visit_first_exit >> strip_tac
   >- (irule create_cut_bind_left >> simp[] >> fs[create_operand_cut_def] >> metis_tac[]) >>
+  drule_then strip_assume_tac create_ctor_row_exit_fetch >>
   qpat_x_assum `before = front ++ back` SUBST_ALL_TAC >>
   irule create_ctor_completed_row_right >> simp[] >>
   first_assum (irule_at Any) >> simp[] >> rpt gen_tac >> strip_tac >>
-  qpat_assum `!front t H tail r mid. _` (drule_all_then strip_assume_tac)
+  qpat_assum `!front t j H tail r mid. _` (drule_all_then strip_assume_tac)
   >- (disj1_tac >> first_assum ACCEPT_TAC) >>
   disj2_tac >> qexists_tac `v` >> fs[create_operand_cut_def] >> metis_tac[]
 QED
@@ -123,12 +144,12 @@ Theorem create_ctor_rows_visit[local]:
         (ext_call_arg_value (lowered_value_type ce e) v) d = (sv,h) ==>
       ~u.vs_halted /\ create_operand_cut c h E ctx fn tops cx st0
          (bind (eval_expr cx e) (read_result cx)) (p,u)) /\
-    (!e rest c d h v sv p u front t H tail r mid.
+    (!e rest c d h v sv p u front t j H tail r mid.
       Eligible e /\ P c p u /\ fn_has_code c h fn /\
       compile_expr ce (expr_type e) e c = (v,d) /\
       compile_snapshot_vv ce (exprs_can_mutate ce rest)
         (ext_call_arg_value (lowered_value_type ce e) v) d = (sv,h) /\
-      create_operand_at h t /\
+      create_operand_at h t /\ ctor_segment_fetch fn t = SOME j /\ h.cs_next_id <= j.inst_id /\
       create_expr_prefix c h E ctx fn u (create_cut_marks E front) t /\
       bind (eval_expr cx e) (read_result cx)
         (p with gas_obs := gas_explicit (create_cut_marks E front) u.vs_gas_readings ++ tail) = (r,mid) /\
@@ -161,29 +182,9 @@ Proof
   rewrite_tac[ctor_source_cons] >> irule create_ctor_row_visit >>
   first_assum (irule_at Any) >> simp[storage_trace_frame_bind_all,evaluate_storage_trace_frame] >>
   qexists_tac `ce` >> simp[] >> rpt gen_tac >> strip_tac >>
-  qpat_assum `!e rest c d h v sv p u front t H tail r mid. _` (drule_all_then strip_assume_tac)
+  qpat_assum `!e rest c d h v sv p u front t j H tail r mid. _` (drule_all_then strip_assume_tac)
   >- (disj1_tac >> first_assum ACCEPT_TAC) >>
   disj2_tac >> qexists_tac `vv` >> simp[] >>
   qpat_assum `!a' vals' m' es' s'' next'. _` irule >>
   first_assum (irule_at Any) >> simp[] >> conj_tac >> first_assum ACCEPT_TAC
-QED
-
-(* The observed suffix after a row supplies the exit fetch required by the
-   snapshot replay theorem. It may be a pending caller visit, so no OK
-   execution of that instruction, or of a later dispatch, is required. *)
-Theorem create_ctor_row_exit_fetch[local]:
-  create_interior_visit a b E ctx fn (p,d,k) t (before,hit,after) ==>
-  ?i. create_operand_fetch a b fn t i /\
-      ctor_segment_fetch fn t = SOME i /\ a.cs_next_id <= i.inst_id
-Proof
-  simp_tac bool_ss [create_interior_visit_def,LET_THM] >>
-  disch_then (CONJUNCTS_THEN2 (K ALL_TAC) (CONJUNCTS_THEN2 (K ALL_TAC)
-    (REPEAT_TCL CHOOSE_THEN (CONJUNCTS_THEN2 mp_tac
-      (CONJUNCTS_THEN2 assume_tac (K ALL_TAC)))))) >>
-  simp[Once RTC_CASES1] >> strip_tac
-  >- (gvs[] >> fs[create_operand_fetch_def,ctor_segment_fetch_def,frag_ids_def]) >>
-  qmatch_asmsub_rename_tac `create_operand_native_step _ _ _ _ _ _ _ endpoint` >>
-  PairCases_on `endpoint` >>
-  fs[create_operand_native_step_def,create_operand_fetch_def,
-     ctor_segment_fetch_def,frag_ids_def] >> metis_tac[]
 QED
