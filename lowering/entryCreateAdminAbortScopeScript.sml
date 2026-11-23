@@ -4,7 +4,7 @@ Ancestors
   entryCreateFocusSpec entryCreatePathScope entryCreateCompletedCut
   createSizePrefixReplay createMarkedPath fragExec fragGasOrigin
   exprLoweringProps venomExecSemantics venomInstProps venomState venomInst
-  list arithmetic relation
+  instIdxIndep list arithmetic relation
 
 Theorem admin_abort_successor[local]:
   lookup_block s.vs_current_bb f.fn_blocks = SOME bb /\
@@ -15,7 +15,12 @@ Theorem admin_abort_successor[local]:
       v.vs_current_bb = s.vs_current_bb /\ ~v.vs_halted
 Proof
   rw[gas_origin_edge_def] >> gvs[step_inst_non_invoke, exit_result_def] >>
-  metis_tac[step_preserves_control_flow, step_inst_non_invoke, exec_result_distinct]
+  FIRST
+    [qpat_x_assum `OK _ = step_inst_base _ _` (assume_tac o SYM) >>
+       gvs[exit_result_def],
+     qmatch_asmsub_rename_tac `step_inst_base i s = OK v` >>
+       `step_inst 0 C i s = OK v` by simp[step_inst_non_invoke] >>
+       drule_all step_preserves_control_flow >> simp[]]
 QED
 
 Theorem admin_abort_selected_step[local]:
@@ -27,7 +32,9 @@ Theorem admin_abort_selected_step[local]:
 Proof
   strip_tac >>
   `s.vs_inst_idx <> LENGTH b.cs_current_insts` by decide_tac >>
-  `gas_origin_edge F E C f s left (OK t)` by fs[gas_origin_edge_def] >>
+  `gas_origin_edge F E C f s left (OK t)` by
+    (qpat_x_assum `gas_origin_edge T _ _ _ _ _ _` mp_tac >>
+     simp[gas_origin_edge_def] >> metis_tac[]) >>
   simp[create_expr_prefix_marked] >> irule RTC_SINGLE >>
   simp[create_marked_edge_def, create_prefix_step_def] >> metis_tac[]
 QED
@@ -70,8 +77,8 @@ Proof
           (raw with vs_inst_idx := SUC s.vs_inst_idx)` by
         fs[run_inst_seq_def, run_inst_seq_inst_idx, exec_result_map_def] >>
       `create_operand_full_scope a b E C f t right (Abort Revert_abort q)` by
-        (first_x_assum irule >> qexistsl_tac [`bb`, `raw with vs_inst_idx := SUC s.vs_inst_idx`] >>
-         simp[ADD_CLAUSES] >> rpt strip_tac >>
+        (first_x_assum irule >> simp[ADD_CLAUSES] >>
+         rpt strip_tac >>
          qpat_assum `!j. _ ==> get_instruction bb _ = _`
            (qspec_then `SUC j` (mp_tac o SIMP_RULE (srw_ss()) [ADD_CLAUSES])) >>
          simp[ADD_CLAUSES]) >>
@@ -94,5 +101,6 @@ Proof
   strip_tac >> drule_all fn_has_code_same_block >> strip_tac >>
   fs[create_operand_at_def] >>
   irule admin_sequence_abort_run >>
-  first_assum (irule_at Any) >> qexists_tac `bb` >> simp[] >> fs[EVERY_MEM]
+  first_assum (irule_at Any) >> qexistsl_tac [`raw`, `emitted_insts a b`, `bb`] >>
+  simp[ADD_COMM] >> fs[EVERY_MEM]
 QED
