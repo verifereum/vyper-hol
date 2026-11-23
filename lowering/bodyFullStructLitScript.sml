@@ -493,9 +493,11 @@ Proof
   simp[GSYM arithmeticTheory.ADD_ASSOC]
 QED
 
-(* Generate a supplier law from its ordinary contract, adding the observation
-   inside the endpoint existential.  Quantification is local to the supplier;
-   the context and installed function are shared by the field continuation. *)
+(* Derive each law from its ordinary supplier contract, adding the
+   observation inside the endpoint existential.  The read can also observe
+   its source input (for a cut at read_result); the aggregate law is used only
+   after the word, zero-layout and bytes branches have been dispatched.
+   The installed function, context and explicit GAS sites are fixed here. *)
 local
   val field_obs = ``field_obs : compile_state -> compile_state -> venom_state ->
                              venom_state -> bool``
@@ -505,22 +507,34 @@ local
       SOME v => v
     | NONE => raise Fail ("missing StructLit supplier argument: " ^ name)
 in
-  fun structlit_observed_supplier start stop entry exit th =
+  fun structlit_observed_supplier fixed extra start stop entry exit aggregate th =
     let
       val (pre, post) = dest_imp (concl (SPEC_ALL th))
       val (witnesses, core) = strip_exists post
       val args = free_vars (mk_imp (pre,post))
       val varying = List.filter
-        (fn v => not (List.exists (fn n => fst (dest_var v) = n) ["ctx", "func"])) args
-      val seen = list_mk_comb (field_obs, map (fn n => lookup n args) [start,stop,entry]
-                                       @ [lookup exit witnesses])
+        (fn v => not (List.exists (fn n => fst (dest_var v) = n) ("ctx" :: "func" :: fixed))) args
+      val extras = map (fn n => lookup n args) extra
+      val obs = if null extras then field_obs else
+        mk_var ("field_read_obs", foldr (fn (v,ty) => type_of v --> ty) (type_of field_obs) extras)
+      val seen = list_mk_comb (obs, extras @ map (fn n => lookup n args) [start,stop,entry]
+                                          @ [lookup exit witnesses])
+      val guard = if aggregate then
+        let val dty = lookup "dty" args and stv = lookup "stv" args in
+          ``~is_bytestring_type ^dty /\ 0 < type_memory_size ^stv``
+        end
+        else if null extras then ``T`` else
+        let val sm = lookup "sm" args and sb = lookup start args in
+          ``?root off out. emit_op ADD [Var root; Lit (n2w off)] ^sm = (Var out,^sb)``
+        end
     in
-      list_mk_forall (varying, mk_imp (pre, list_mk_exists (witnesses,mk_conj (seen,core))))
+      list_mk_forall (varying, mk_imp (mk_conj (pre,guard),
+        list_mk_exists (witnesses,mk_conj (seen,core))))
     end
 end;
 
 val structlit_add_observed_law =
-  structlit_observed_supplier "sm" "sn" "s" "t" structlit_child_add_full;
+  structlit_observed_supplier [] [] "sm" "sn" "s" "t" false structlit_child_add_full;
 
 Definition structlit_add_observed_def:
   structlit_add_observed field_obs ctx func <=> ^structlit_add_observed_law
@@ -531,6 +545,79 @@ Theorem structlit_add_observed_trivial[local]:
 Proof
   simp_tac pure_ss [structlit_add_observed_def, AND_CLAUSES] >> rpt gen_tac >>
   MATCH_ACCEPT_TAC structlit_child_add_full
+QED
+
+val structlit_read_observed_law =
+  structlit_observed_supplier ["explicit"] ["cx", "st0", "tv", "ee"] "sb" "sc" "s" "z" false
+    bodyFullUnwrapTheory.unwrap_value_origin_ptr;
+val structlit_word_store_observed_law =
+  structlit_observed_supplier ["explicit"] [] "sa" "sb" "s" "t" false
+    logStoreDataOriginPtrTheory.compile_store_memory_word_origin_ptr_path;
+val structlit_zero_store_observed_law =
+  structlit_observed_supplier ["explicit"] [] "sa" "sb" "s" "t" false
+    structlit_zero_physical_store_path;
+val structlit_bytes_store_observed_law =
+  structlit_observed_supplier ["explicit"] [] "sa" "sb" "s" "u" false
+    structlit_bytes_store_origin_ptr_path;
+val structlit_aggregate_store_observed_law =
+  structlit_observed_supplier ["explicit"] [] "sa" "sb" "s" "t" true
+    logStoreDataOriginPtrTheory.compile_store_memory_origin_ptr_path;
+
+Definition structlit_read_observed_def:
+  structlit_read_observed field_read_obs ctx func explicit <=> ^structlit_read_observed_law
+End
+
+Definition structlit_word_store_observed_def:
+  structlit_word_store_observed field_obs ctx func explicit <=> ^structlit_word_store_observed_law
+End
+
+Definition structlit_zero_store_observed_def:
+  structlit_zero_store_observed field_obs ctx func explicit <=> ^structlit_zero_store_observed_law
+End
+
+Definition structlit_bytes_store_observed_def:
+  structlit_bytes_store_observed field_obs ctx func explicit <=> ^structlit_bytes_store_observed_law
+End
+
+Definition structlit_aggregate_store_observed_def:
+  structlit_aggregate_store_observed field_obs ctx func explicit <=> ^structlit_aggregate_store_observed_law
+End
+
+Theorem structlit_read_observed_trivial[local]:
+  structlit_read_observed (\_ _ _ _ _ _ _ _. T) ctx func explicit
+Proof
+  simp_tac pure_ss [structlit_read_observed_def, AND_CLAUSES] >> rpt gen_tac >>
+  disch_then (mp_tac o CONJUNCT1) >>
+  MATCH_ACCEPT_TAC bodyFullUnwrapTheory.unwrap_value_origin_ptr
+QED
+
+Theorem structlit_word_store_observed_trivial[local]:
+  structlit_word_store_observed (\_ _ _ _. T) ctx func explicit
+Proof
+  simp_tac pure_ss [structlit_word_store_observed_def, AND_CLAUSES] >> rpt gen_tac >>
+  MATCH_ACCEPT_TAC logStoreDataOriginPtrTheory.compile_store_memory_word_origin_ptr_path
+QED
+
+Theorem structlit_zero_store_observed_trivial[local]:
+  structlit_zero_store_observed (\_ _ _ _. T) ctx func explicit
+Proof
+  simp_tac pure_ss [structlit_zero_store_observed_def, AND_CLAUSES] >> rpt gen_tac >>
+  MATCH_ACCEPT_TAC structlit_zero_physical_store_path
+QED
+
+Theorem structlit_bytes_store_observed_trivial[local]:
+  structlit_bytes_store_observed (\_ _ _ _. T) ctx func explicit
+Proof
+  simp_tac pure_ss [structlit_bytes_store_observed_def, AND_CLAUSES] >> rpt gen_tac >>
+  MATCH_ACCEPT_TAC structlit_bytes_store_origin_ptr_path
+QED
+
+Theorem structlit_aggregate_store_observed_trivial[local]:
+  structlit_aggregate_store_observed (\_ _ _ _. T) ctx func explicit
+Proof
+  simp_tac pure_ss [structlit_aggregate_store_observed_def, AND_CLAUSES] >> rpt gen_tac >>
+  disch_then (mp_tac o CONJUNCT1) >>
+  MATCH_ACCEPT_TAC logStoreDataOriginPtrTheory.compile_store_memory_origin_ptr_path
 QED
 
 Theorem structlit_field_normal_continuation_observed:
@@ -557,7 +644,12 @@ Theorem structlit_field_normal_continuation_observed:
     EVERY (\(tv,v,p,k). addr <= p /\ p+k <= addr+off) cells /\
     literal_prefix_ok cells tn s /\
     (pure ==> pure_frame ce func ees fr sf s)) ==>
-  structlit_add_observed field_obs ctx func ==>
+  structlit_add_observed field_obs ctx func /\
+  structlit_read_observed field_read_obs ctx func (gas_explicit_sites ctx shadow_ctx) /\
+  structlit_word_store_observed field_obs ctx func (gas_explicit_sites ctx shadow_ctx) /\
+  structlit_zero_store_observed field_obs ctx func (gas_explicit_sites ctx shadow_ctx) /\
+  structlit_bytes_store_observed field_obs ctx func (gas_explicit_sites ctx shadow_ctx) /\
+  structlit_aggregate_store_observed field_obs ctx func (gas_explicit_sites ctx shadow_ctx) ==>
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   emit_op ADD [Var root; Lit(n2w off)] sm = (dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
@@ -594,7 +686,8 @@ Theorem structlit_field_normal_continuation_observed:
     gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (s0,G0,tn0) marks (OK t,G1,tn1)) ==>
   ?v t' G' tn' z G'' tn'' u G2 tn2.
-    field_obs sm sn t t' /\
+    field_obs sm sn t t' /\ field_read_obs cx st0 tv mid sn su t' z /\
+    field_obs su ss z u /\
     read_result cx tv mid = (INL v,mid) /\ value_has_type ftv v /\
     type_memory_bytes ce fty = type_memory_size ftv /\
     local_ptrs_reserved ce ss /\
@@ -622,7 +715,7 @@ Theorem structlit_field_normal_continuation_observed:
 Proof
   PURE_REWRITE_TAC [expr_sim_full_endpoint_def, GSYM CONJ_ASSOC] >>
   gen_tac >> disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
-  disch_tac >> strip_tac >>
+  strip_tac >> strip_tac >>
   `inv' (storage_trace_horizon es.storage_trace) es si G0 tn0 s0 cells off` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> inv' _ _ _ _ _ _ _ _`
        (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
@@ -737,8 +830,9 @@ Proof
           vyperTypeInvariantsTheory.env_context_consistent_def] >>
         strip_tac >> first_assum ACCEPT_TAC) >>
      simp[]) >>
-  qpat_assum `compile_expr ce (expr_type e) e si = (vv,sm)`
-    (mp_then Any mp_tac bodyFullUnwrapTheory.unwrap_value_origin_ptr) >>
+  qpat_x_assum `structlit_read_observed field_read_obs ctx func (gas_explicit_sites ctx shadow_ctx)`
+    (fn law => qpat_assum `compile_expr ce (expr_type e) e si = (vv,sm)`
+      (mp_then Any mp_tac (REWRITE_RULE [structlit_read_observed_def] law))) >>
   disch_then (fn th => qpat_assum `unwrap_value ce vv sn = (op,su)`
     (mp_then (Pat `unwrap_value _ _ _ = _`) mp_tac th)) >>
   disch_then (fn th => qpat_assum `vv_store_bound _ _ _ mid tv vv t'`
@@ -748,8 +842,12 @@ Proof
   disch_then (drule_at (Pat `storage_trace_domain _ _ _`)) >>
   disch_then (fn th => qpat_assum `evaluate_type _ (post_value_type ce e) = SOME tv'`
     (mp_then (Pat `evaluate_type _ _ = SOME _`) mp_tac th)) >>
-  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `d`, `ctx`, `PG`, `DF`] mp_tac) >>
-  (impl_tac >- (simp[] >> strip_tac >>
+  disch_then (mp_tac o Q.INST
+    [`explicit` |-> `gas_explicit_sites ctx shadow_ctx`, `d` |-> `d`,
+     `PG` |-> `PG`, `DF` |-> `DF`] o SPEC_ALL) >>
+  (impl_tac >- (simp[] >> reverse conj_tac >-
+    (qexistsl_tac [`root`, `off`, `STRING #"%" (toString sm.cs_next_var)`] >> simp[]) >>
+    strip_tac >>
     qpat_assum `ce.ce_is_ctor /\ vv_location vv = SOME LocCode ==> _` mp_tac >>
     (impl_tac >- simp[]) >> strip_tac >> qexists_tac `val` >> simp[] >>
     metis_tac[])) >> strip_tac >>
@@ -852,6 +950,7 @@ Proof
     (qpat_assum `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func ce cx mid z`
        (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `?u G2 tn2.
+     field_obs su ss z u /\
      (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
        (z,G'',tn'') [] (OK u,G2,tn2)) /\
      val_wf ftv v /\
@@ -913,8 +1012,9 @@ Proof
          disch_then (mp_then Any mp_tac
            (cj 2 fragGasOriginPtrTheory.gas_origin_ptr_path_projections)) >>
          disch_then (mp_then Any ACCEPT_TAC fragGasSeqPtrTheory.gas_path_ptr_ok_not_halted)) >>
-      qpat_assum `compile_store_memory ce op _ fty _ su = ((),ss)`
-        (mp_then Any mp_tac logStoreDataOriginPtrTheory.compile_store_memory_word_origin_ptr_path) >>
+      qpat_x_assum `structlit_word_store_observed field_obs ctx func (gas_explicit_sites ctx shadow_ctx)`
+        (fn law => qpat_assum `compile_store_memory ce op _ fty _ su = ((),ss)`
+          (mp_then Any mp_tac (REWRITE_RULE [structlit_word_store_observed_def] law))) >>
       disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
       disch_then (drule_at (Pat `evaluate_type _ _ = SOME _`)) >>
       disch_then (drule_at (Pat `lookup_var _ _ = SOME _`)) >>
@@ -971,8 +1071,9 @@ Proof
          disch_then (mp_then Any mp_tac
            (cj 2 fragGasOriginPtrTheory.gas_origin_ptr_path_projections) o CONJUNCT1) >>
          metis_tac[fragGasSeqPtrTheory.gas_path_ptr_ok_not_halted]) >>
-      qpat_assum `compile_store_memory ce op _ fty _ su = ((),ss)`
-        (mp_then Any mp_tac structlit_zero_physical_store_path) >>
+      qpat_x_assum `structlit_zero_store_observed field_obs ctx func (gas_explicit_sites ctx shadow_ctx)`
+        (fn law => qpat_assum `compile_store_memory ce op _ fty _ su = ((),ss)`
+          (mp_then Any mp_tac (REWRITE_RULE [structlit_zero_store_observed_def] law))) >>
       disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
       disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
       disch_then (drule_at (Pat `evaluate_type _ _ = SOME _`)) >>
@@ -1064,9 +1165,11 @@ Proof
   Cases_on `is_bytestring_type fty`
   >- (`is_bytestring_type (lowered_value_type ce e)` by
         metis_tac[typedMemoryCopyTheory.typed_copy_bytestring_source] >>
-      qpat_assum `op = Var src` (fn eq =>
-        qpat_assum `compile_store_memory ce op _ fty _ su = ((),ss)`
-          (mp_then Any mp_tac structlit_bytes_store_origin_ptr_path o PURE_REWRITE_RULE [eq])) >>
+      qpat_x_assum `structlit_bytes_store_observed field_obs ctx func (gas_explicit_sites ctx shadow_ctx)`
+        (fn law => qpat_assum `op = Var src` (fn eq =>
+          qpat_assum `compile_store_memory ce op _ fty _ su = ((),ss)`
+            (mp_then Any mp_tac (REWRITE_RULE [structlit_bytes_store_observed_def] law) o
+             PURE_REWRITE_RULE [eq]))) >>
       disch_then (drule_at (Pat `evaluate_type _ _ = SOME _`)) >>
       disch_then (drule_at (Pat `lookup_var src z = SOME sw`)) >>
       disch_then (mp_tac o Q.INST
@@ -1113,10 +1216,11 @@ Proof
       (drule_then strip_assume_tac) >>
     decide_tac)) >>
   strip_tac >>
-  qpat_assum `op = Var src` (fn eq =>
-    qpat_assum `compile_store_memory ce op _ fty _ su = ((),ss)`
-      (mp_then Any mp_tac logStoreDataOriginPtrTheory.compile_store_memory_origin_ptr_path o
-       PURE_REWRITE_RULE [eq])) >>
+  qpat_x_assum `structlit_aggregate_store_observed field_obs ctx func (gas_explicit_sites ctx shadow_ctx)`
+    (fn law => qpat_assum `op = Var src` (fn eq =>
+      qpat_assum `compile_store_memory ce op _ fty _ su = ((),ss)`
+        (mp_then Any mp_tac (REWRITE_RULE [structlit_aggregate_store_observed_def] law) o
+         PURE_REWRITE_RULE [eq]))) >>
   disch_then (drule_at (Pat `evaluate_type _ _ = SOME _`)) >>
   disch_then (drule_at (Pat `lookup_var src z = SOME sw`)) >>
   disch_then (mp_tac o Q.INST
@@ -1533,8 +1637,12 @@ Proof
   gvs[] >>
   qspec_then `inv'` mp_tac
     (PURE_REWRITE_RULE [expr_sim_full_endpoint_def, GSYM CONJ_ASSOC]
-      (Q.INST [`field_obs` |-> `\_ _ _ _. T`] structlit_field_normal_continuation_observed) |>
-       SIMP_RULE pure_ss [structlit_add_observed_trivial, AND_CLAUSES]) >>
+      (Q.INST [`field_obs` |-> `\_ _ _ _. T`, `field_read_obs` |-> `\_ _ _ _ _ _ _ _. T`]
+        structlit_field_normal_continuation_observed) |>
+       SIMP_RULE pure_ss [structlit_add_observed_trivial, structlit_read_observed_trivial,
+         structlit_word_store_observed_trivial, structlit_zero_store_observed_trivial,
+         structlit_bytes_store_observed_trivial, structlit_aggregate_store_observed_trivial,
+         AND_CLAUSES]) >>
   disch_then (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `emit_op ADD _ _ = _`)) >>
   disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
