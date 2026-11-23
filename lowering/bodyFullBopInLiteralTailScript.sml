@@ -2,7 +2,7 @@ Theory bodyFullBopInLiteralTail
 Ancestors
   bodyFullHashKeccakFixed
   bodyPtrBopInLiteralTyped bodyPtrBopInScalarTransport bodyPtrBopInLiteralRun
-  fragGasCopyLoop fragGasSeqPtr gasOutcomeFullCompose bodySimFull
+  fragGasCopyLoop fragGasCopySeqLiftProps fragGasSeqPtr gasOutcomeFullCompose bodySimFull
   varsExt freshWrites instIdxIndep fragExecMem instMemFrontier memSafeRun
   exprSimWordArgs exprSimProps exprSimMemDefs exprLoweringProps
   bodyPtrSignedConvertSourceFrame bodyFullUnwrapRun allocaHistoryFragment
