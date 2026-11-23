@@ -317,6 +317,7 @@ Proof
      >- (rename1 `subscript_vtype (Type ty) _ = _` >>
          Cases_on `ty` >> gvs[subscript_vtype_def, AllCaseEqs()]) >>
      gvs[subscript_vtype_def, AllCaseEqs()]) >>
+  drule_then assume_tac allocLimitsPropsTheory.type_place_hashmap_not_array_slot_base >>
   gvs[expr_map_pre_def, byte_widths_expr_def, alloc_limits_expr_def,
       int_calls_expr_def, expr_has_evm_run_thm, EVERY_APPEND,
       Once supported_expr_exists_def] >>
@@ -375,10 +376,13 @@ Proof
   gvs[expr_body_pre_split_def, expr_body_pre_mods_def, Once well_typed_expr_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
       expr_has_evm_run_thm, EVERY_APPEND]
-  >- (drule_all place_type_well_typed_on_defined >> simp[]) >>
+  >>
+  (* the value-typed base contradicts the map place type, slot base or not *)
+  TRY (drule_all place_type_well_typed_on_defined >> simp[] >> NO_TAC) >>
   drule_all place_type_checked_place_on_defined >> strip_tac >>
   rename1 `type_place_expr env obj = SOME bty` >>
   Cases_on `bty` >> gvs[value_type_place_def] >>
+  drule_then assume_tac allocLimitsPropsTheory.type_place_hashmap_not_array_slot_base >> gvs[] >>
   simp[expr_map_pre_split_def, expr_map_pre_mods_def] >>
   gvs[supported_expr_exists_def] >>
   metis_tac[call_evaluation_safe_append_left]
