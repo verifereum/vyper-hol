@@ -2,6 +2,7 @@
 Theory boolChainCountedControl
 Ancestors
   exprSimDefs exprSimSource exprSimWordArgs exprSimSliceCompose exprSimMemDefs
+  exprSimIfExpWidenedRoot
   boolChainWordPost boolChainSource boolChainCodeLayout gasOutcomeSourceCong stmtSimProps
   placeTypedCopyPath fragGasSeqAbort exprSimUint2Str emitHelperProps
   fragGasMode fragGasPath gasSummary gasOutcome vyperStorageTrace
@@ -103,21 +104,8 @@ Proof
   qabbrev_tac `m = update_var rv (val_to_w256 (BoolV b)) u` >>
   qabbrev_tac `z = jump_to xl m` >>
   `gas_marked_path F ctx func u 0 (OK z)` by
-    (`?bb. lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
-       get_instruction bb u.vs_inst_idx = SOME (mk_inst sd.cs_next_id ASSIGN [src] [rv])` by
-       metis_tac[place_copy_emit_instruction] >>
-     drule_at (Pat `get_instruction _ _ = _`) gas_marked_path_step >>
-     simp[] >> disch_then irule >> simp[is_terminator_def] >>
-     conj_tac >- metis_tac[] >>
-     qexists_tac `m` >> conj_tac >- simp[Abbr `m`, u2s_step_assign] >>
-     drule emit_inst_extends >> strip_tac >>
-     simp[gas_marked_path_def, Abbr `z`] >>
-     `jump_to xl m = jump_to xl (m with vs_inst_idx := SUC (LENGTH sd.cs_current_insts))`
-       by simp[jump_to_def] >>
-     pop_assum SUBST1_TAC >> irule emit_jump_zero_path >>
-     simp[Abbr `m`, update_var_def] >> qexistsl_tac [`sy`,`sz`] >>
-     qpat_assum `emit_inst ASSIGN _ _ _ = _` (mp_then Any mp_tac emit_inst_extends) >>
-     simp[arithmeticTheory.ADD1]) >>
+    (drule_all exprSimIfExpWidenedRootTheory.assign_join_path >>
+     simp[Abbr `z`, Abbr `m`, jump_to_def]) >>
   simp[gas_outcome_def, gas_summary_at_def] >>
   qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`INL (BoolV b)`, `ee`, `OK z`] >>

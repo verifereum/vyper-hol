@@ -25,7 +25,8 @@ Ancestors
   vyperAST vyperState vyperValue vyperInterpreter vyperStorageTrace
   vyperStorageFootprint gasSummary stmtSimDeclCompose fragGasMode fragGasPath
   stmtSimProps emitHelperProps exprLoweringProps compileEnv venomState venomInst
-  vyperTypeCallGraph finite_map loweringSlice valueEncoding boolChainSource exprSimMemDefs loweringShapeDefs
+  vyperTypeCallGraph finite_map loweringSlice valueEncoding boolChainSource
+  boolChainWrapperRead exprSimMemDefs loweringShapeDefs
 
 (* Each operand simulates, a later one where the one before evaluates. *)
 Definition bool_chain_case_def:
@@ -209,15 +210,9 @@ Proof
   rpt gen_tac >> strip_tac >> conj_asm1_tac
   >- (
     simp[expr_sim_case_def, expr_sim_def, int_calls_expr_def] >> rpt strip_tac >>
-    drule_then strip_assume_tac bool_chain_wrapper_action >> gvs[] >>
-    qabbrev_tac `root = Builtin (BaseT BoolT) (BoolChain is_and n) [e]` >>
-    `!gs. bind (eval_expr cx root) (read_result cx) (es with gas_obs := gs) =
-          bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs)` by
-      (gen_tac >> simp[Abbr `root`] >>
-       Cases_on `bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs)` >>
-       rename1 `bind (eval_expr cx e) _ _ = (res,ee)` >> Cases_on `res` >>
-       fs[bind_def, return_def, read_result_def]) >>
-    simp[Abbr `root`] >>
+    drule_then assume_tac bool_chain_wrapper_read_action >>
+    drule_then strip_assume_tac bool_chain_wrapper_action >>
+    qpat_x_assum `!gs. eval_expr _ (Builtin _ _ _) _ = _` kall_tac >> gvs[] >>
     Cases_on `compile_expr cenv ty (Builtin (BaseT BoolT) (BoolChain is_and n) [e]) sa` >>
     drule_then strip_assume_tac bool_chain_root_layout >>
     gvs[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def] >>
