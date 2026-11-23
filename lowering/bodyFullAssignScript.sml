@@ -7529,7 +7529,7 @@ QED
 Theorem body_assign_empty_target_widths[local]:
   !t. alloc_limits_target cenv t /\
       ~supported_target_exists
-        (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t ==>
+        (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ (array_slot_base cenv e \/ alloc_limits_expr cenv e))) t ==>
       byte_widths_target t
 Proof
   recInduct base_assignment_target_induct >>
