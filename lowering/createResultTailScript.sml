@@ -1,15 +1,15 @@
 Theory createResultTail
 Ancestors
   builtinCreate emitHelper context compileEnv exprLoweringProps
-  externalEntryShape loweringShapeRules
+  externalEntryShape loweringShapeRules emitHelperProps
   fragExec fragGasOrigin createSizeEdgePC venomInst venomState venomExecSemantics
   list rich_list pair arithmetic relation createMarkedPath
 
-Theorem create_result_check_layout:
+Theorem create_result_check_layout_distinct:
   compile_check_create_result created T sd = (result,sb) /\
   fn_has_code sd sb func ==>
   ?cb fb fail j.
-    sb.cs_current_insts = [] /\
+    sb.cs_current_insts = [] /\ fail <> sb.cs_current_bb /\
     lookup_block sd.cs_current_bb func.fn_blocks = SOME cb /\
     cb.bb_instructions = sd.cs_current_insts ++ [j] /\
     j.inst_opcode = JNZ /\
@@ -27,7 +27,24 @@ Proof
   `SUC (SUC (LENGTH sd.cs_blocks)) - (LENGTH sd.cs_blocks + 2) = 0`
     by decide_tac >>
   simp[DISJ_IMP_THM, FORALL_AND_THM] >> strip_tac >>
-  rpt (goal_assum $ drule_at Any) >> simp[]
+  rpt (goal_assum $ drule_at Any) >> simp[] >>
+  strip_tac >> drule fresh_label_output_inj >> simp[]
+QED
+
+Theorem create_result_check_layout:
+  compile_check_create_result created T sd = (result,sb) /\
+  fn_has_code sd sb func ==>
+  ?cb fb fail j.
+    sb.cs_current_insts = [] /\
+    lookup_block sd.cs_current_bb func.fn_blocks = SOME cb /\
+    cb.bb_instructions = sd.cs_current_insts ++ [j] /\
+    j.inst_opcode = JNZ /\
+    j.inst_operands = [created; Label sb.cs_current_bb; Label fail] /\
+    lookup_block fail func.fn_blocks = SOME fb /\
+    MAP (\i. i.inst_opcode) fb.bb_instructions =
+      [RETURNDATASIZE;ALLOCA;RETURNDATACOPY;REVERT]
+Proof
+  metis_tac[create_result_check_layout_distinct]
 QED
 
 Theorem create_result_tail_branch:
