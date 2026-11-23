@@ -1,7 +1,7 @@
 (* Full-body induction predicates for a linked contract and its active module. *)
 Theory bodyFullPredsMods
 Ancestors
-  bodyFullPreds bodyFullPostsMods bodyFullShadowBodyInv bodyInvSplit bodySim
+  bodyCallSupport bodyFullPreds bodyFullPostsMods bodyFullShadowBodyInv bodyInvSplit bodySim
   exprSimHypsDefs exprSimMapDefs supportedStmts supportedProgram
   supportedExprTraverse allocLimits allocLimitsProps[qualified] placeTypingProps
   compileEnv exprLowering
@@ -198,13 +198,12 @@ QED
 
 Theorem int_calls_expr_main_singleton[local]:
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-  EVERY (\c. ?ts. get_module_code cx (FST c) = SOME ts /\
-                 supported_program ts /\
-                 IS_SOME (supported_function_decl ts (NONE,SND c) Internal))
+  EVERY (source_body_call_supported cx)
     (int_calls_expr e) ==>
   EVERY (\c. FST c = NONE) (int_calls_expr e)
 Proof
-  simp[EVERY_MEM, FORALL_PROD, get_module_code_def, ALOOKUP_def] >>
+  simp[EVERY_MEM, FORALL_PROD, source_body_call_supported_def,
+       get_module_code_def, ALOOKUP_def] >>
   rpt strip_tac >> res_tac >> gvs[AllCaseEqs()]
 QED
 
@@ -214,7 +213,7 @@ fun expr_pre_mods_singleton_tac split_def mods_def =
   simp[split_def] >>
   qpat_assum `ALOOKUP cx.sources _ = _`
     (assume_tac o MATCH_MP int_calls_expr_main_singleton) >>
-  simp[mods_def, expr_sim_inv_mods_singleton,
+  simp[mods_def, expr_sim_inv_mods_singleton, source_body_calls_main,
        type_env_def, type_env_all_modules_def, FUNION_FEMPTY_2,
        SF CONJ_ss] >>
   metis_tac[];
