@@ -118,7 +118,8 @@ Proof
   simp[structlit_eval_exprs_cons, bind_def] >> metis_tac[]
 QED
 
-Theorem structlit_alloc_init_full[local]:
+(* Keep the base run of the allocator with its chosen endpoint and ghosts. *)
+Theorem structlit_alloc_init_full:
   compile_alloc_buffer n sa = (ba,sm) /\ fn_has_code sa sm func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   n < dimword(:256) /\
@@ -133,8 +134,10 @@ Theorem structlit_alloc_init_full[local]:
   return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?q w t G tn.
+  ?q w t G tn raw.
     ba.buf_operand = Var q /\
+    run_inst_seq (emitted_insts sa sm) s0 = OK raw /\
+    t = raw with vs_inst_idx := LENGTH sm.cs_current_insts /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s0,G0,tn0) [] (OK t,G,tn)) /\
     (!H. valid_horizon cx st0 H es.storage_trace ==>
@@ -174,8 +177,12 @@ Proof
     (qpat_assum `stmt_state_rel _ ctx func cenv cx es s0`
        (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
      simp[]) >>
-  drule_all (INST_TYPE [``:'b`` |-> ``:256``] alloc_buffer_origin_ptr_path) >>
+  drule_all (INST_TYPE [``:'b`` |-> ``:256``] alloc_buffer_origin_ptr_path_with_raw_endpoint) >>
   disch_then (qspecl_then [`tn0`, `explicit`, `PG`, `G0`] strip_assume_tac) >>
+  qpat_x_assum `t = r with vs_inst_idx := _`
+    (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
+  qpat_x_assum `G' = step_prov _ _ _ r` kall_tac >>
+  qpat_x_assum `tn' = step_taint _ _ r _` kall_tac >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es t /\
     storage_well_formed_on cx es (FST H) /\
@@ -237,8 +244,11 @@ Proof
        (irule exprSimPropsTheory.local_region_frame_fwd >>
         qexistsl_tac [`s0`, `sa`, `es.scopes`] >> simp[] >> metis_tac[]) >>
      qpat_x_assum `!name p k. local_region _ _ t _ _ _ ==> _` drule >> simp[]) >>
-  qexistsl_tac [`q`, `w`, `t`, `G'`, `tn'`] >> simp[] >>
-  metis_tac[arithmeticTheory.ADD_COMM]
+  qexistsl_tac [`q`, `w`, `t`, `G'`, `tn'`, `r`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- simp[Abbr `t`] >>
+  simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem structlit_store_inv_step[local]:
@@ -1614,6 +1624,8 @@ Proof
      gvs[storage_trace_domain_def]) >>
   drule_all structlit_alloc_init_full >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
+  qpat_x_assum `t = raw with vs_inst_idx := _` kall_tac >>
+  qpat_x_assum `run_inst_seq _ _ = OK raw` kall_tac >>
   `?shadow_sm. compile_alloc_buffer (type_memory_size_list tvs) shadow_sa = (ba,shadow_sm) /\
       gas_shadow_state sm shadow_sm` by
     (mp_tac (Q.SPEC `type_memory_size_list tvs`
