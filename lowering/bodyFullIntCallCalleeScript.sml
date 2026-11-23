@@ -1176,7 +1176,6 @@ Theorem intcall_lowering_suffix[local]:
       NoLoop (case rt of SOME ty => ty | NONE => BaseT BoolT) ss a = (ce',b) /\
     cs_extends entry a /\ fn_has_code entry final callee ==>
     cs_extends a final /\ fn_has_code a b callee /\ fn_has_code b final callee /\
-    cs_extends a b /\ cs_extends b final /\
     (if block_is_terminated b then ((),b)
      else comp_ignore_bind
        (if nr then compile_nonreentrant_unlock key trans view else comp_return ())
@@ -4106,85 +4105,7 @@ End
 
 (* Keep the callbacks opaque during the shared preparation proof. Each
    branch opens only its own elimination rule. *)
-Definition intcall_callee_selected_callbacks_with_def:
-  intcall_callee_selected_callbacks_with K P (DF,lo,ctx,shadow_ctx,callee)
-    (tops,cx,st0,name,mut,nr,ret,ss,es1) (entered,G,tn,arg_ops) <=>
-      (~storage_trace_domain cx st0 es1.storage_trace ==> P) /\
-      (!key. nr /\ cx.nonreentrant_slot = SOME key /\
-        ~storage_trace_domain cx st0 (es1.storage_trace ++ [StorageLock key]) ==> P) /\
-      (!ce params has_rb ctor ilen rt entry prologue a at_pro Gpro tnpro msg ee ab u j Gl tnl.
-        intcall_callee_prologue_route callee ce params has_rb ctor ilen rt
-          (entry,prologue) (entered,at_pro) /\
-        (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
-           MAP (op_prov G) arg_ops) (entered,FEMPTY,tn with t_var := FEMPTY)
-           [] (OK at_pro,Gpro,tnpro)) /\
-        nr /\ compile_nonreentrant_lock global_nonreentrant_slot T (is_view_mut mut) prologue = ((),a) /\
-        fn_has_code prologue a callee /\
-        lock_if_nr cx nr (is_view_mut mut) es1 = (INR (Error (RuntimeError msg)),ee) /\
-        run_inst_seq (emitted_insts prologue a) at_pro = Abort ab u /\
-        (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
-           MAP (op_prov G) arg_ops) (entered,FEMPTY,tn with t_var := FEMPTY)
-           [] (Abort ab (u with vs_inst_idx := j),Gl,tnl)) ==> P) /\
-      (!ce params has_rb ctor ilen rt entry prologue at_pro Gpro tnpro
-        a b aS bS final sf body_ce body_out ss_comp dret RetQ locked at_body Gl tnl.
-        let pushed = cx with stk updated_by CONS (NONE,name);
-            body_ty = case rt of NONE => BaseT BoolT | SOME ty => ty
-        in
-        intcall_callee_prologue_route callee ce params has_rb ctor ilen rt
-          (entry,prologue) (entered,at_pro) /\
-        (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
-           MAP (op_prov G) arg_ops) (entered,FEMPTY,tn with t_var := FEMPTY)
-           [] (OK at_pro,Gpro,tnpro)) /\
-        (if nr then compile_nonreentrant_lock global_nonreentrant_slot T (is_view_mut mut)
-         else comp_return ()) prologue = ((),a) /\
-        fn_has_code prologue a callee /\ fn_has_code b final callee /\
-        (?rpc. (if block_is_terminated b then ((),b)
-          else comp_ignore_bind
-            (if nr then compile_nonreentrant_unlock global_nonreentrant_slot T (mut = View)
-             else comp_return ())
-            (case rt of NONE => emit_inst RET [rpc] [] | SOME _ => emit_inst INVALID [] []) b) =
-          ((),final)) /\
-        (?u. run_inst_seq (emitted_insts prologue a) at_pro = OK u /\
-             at_body = u with vs_inst_idx := LENGTH a.cs_current_insts) /\
-        (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
-           MAP (op_prov G) arg_ops) (entered,FEMPTY,tn with t_var := FEMPTY)
-           [] (OK at_body,Gl,tnl)) /\
-        (!gs. lock_if_nr cx nr (is_view_mut mut) (es1 with gas_obs := gs) =
-              (INL (),locked with gas_obs := gs)) /\
-        (!K tr. valid_horizon pushed st0 K tr <=> valid_horizon cx st0 K tr) /\
-        (!K. valid_horizon cx st0 K locked.storage_trace ==> valid_horizon cx st0 K es1.storage_trace) /\
-        at_body.vs_gas_readings = entered.vs_gas_readings /\
-        ss_comp = subst_consts_stmts (module_consts_env tops []) ss /\
-        intcall_callee_body_inputs tops ctx pushed body_ce ret rt ss locked /\
-        frame_ret_ok_full (DF,lo,dret,ctx,shadow_ctx,MAP (op_prov G) arg_ops,callee,sf)
-          pushed RetQ body_ce ret /\
-        stmts_env body_ce NoLoop body_ty ss_comp a = (body_out,b) /\
-        stmts_env (gas_shadow_env T body_ce) NoLoop body_ty (MAP gas_shadow_stmt ss_comp) aS =
-          (gas_shadow_env T body_out,bS) /\
-        gas_shadow_state a aS /\ gas_shadow_state b bS /\
-        gas_shadow_function callee sf /\ MEM callee ctx.ctx_functions /\
-        MEM sf shadow_ctx.ctx_functions /\ fn_has_code a b callee /\ fn_has_code aS bS sf /\
-        (!K. dead_lo_ok K (DF K) lo body_ce pushed) /\
-        fn_inst_ids_distinct callee /\ local_ptrs_reserved body_ce a /\ ret_pc_ok body_ce a at_body /\
-        (!x sz. body_ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
-        ~block_is_terminated a /\ gas_admissible (eval_stmts pushed ss) (stmt_res_ok NoLoop) locked /\
-        return_buf_frame dret body_ce a at_body /\ return_buf_sep dret body_ce locked at_body /\
-        alloca_history callee at_body /\ (ctx_has_dalloca ctx ==> allocas_below_fmp at_body) /\
-        (!fn inst s. frag_reachable ctx callee at_body fn inst s ==> dalloca_fmp_headroom inst s) /\
-        (!K. valid_horizon pushed st0 K locked.storage_trace ==>
-          stmt_state_rel K ctx callee body_ce pushed locked at_body /\
-          storage_well_formed_on pushed locked (FST K) /\
-          ghost_inv_at (DF K) lo dret body_ce pushed locked Gl tnl at_body) /\
-        ~at_body.vs_halted /\ at_body.vs_current_bb = a.cs_current_bb /\
-        at_body.vs_inst_idx = LENGTH a.cs_current_insts /\ K a b ==> P)
-End
-
-Definition intcall_callee_selected_callbacks_plain_def:
-  intcall_callee_selected_callbacks P static source run <=>
-    intcall_callee_selected_callbacks_with (\a b. T) P static source run
-End
-
-Theorem intcall_callee_selected_callbacks_def:
+Definition intcall_callee_selected_callbacks_def:
   intcall_callee_selected_callbacks P (DF,lo,ctx,shadow_ctx,callee)
     (tops,cx,st0,name,mut,nr,ret,ss,es1) (entered,G,tn,arg_ops) <=>
       (~storage_trace_domain cx st0 es1.storage_trace ==> P) /\
@@ -4255,21 +4176,17 @@ Theorem intcall_callee_selected_callbacks_def:
           ghost_inv_at (DF K) lo dret body_ce pushed locked Gl tnl at_body) /\
         ~at_body.vs_halted /\ at_body.vs_current_bb = a.cs_current_bb /\
         at_body.vs_inst_idx = LENGTH a.cs_current_insts ==> P)
-Proof
-  simp[intcall_callee_selected_callbacks_plain_def, intcall_callee_selected_callbacks_with_def]
-QED
+End
 
 (* Early domain failures, an executed lock abort and a successful body
    landing are separate exits from preparation. The ordinary full outcome
    below is retained as a projection, not a second proof of preparation. *)
-Theorem intcall_callee_selected_landing_with:
-  !L body_layout P DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
+Theorem intcall_callee_selected_landing:
+  !P DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
    G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn callee entered rc
    rbs pvs dflts.
     body_inv tops ctx cenv cx /\
-    shadow_body_inv_with L tops ctx shadow_ctx /\
-    (!entry a b final. cs_extends entry a /\ cs_extends a b /\
-       cs_extends b final /\ L entry final ==> body_layout a b) /\
+    shadow_body_inv tops ctx shadow_ctx /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
@@ -4296,7 +4213,7 @@ Theorem intcall_callee_selected_landing_with:
       get_instruction bb t.vs_inst_idx = SOME inst /\
       decode_invoke inst = SOME (lbl,arg_ops) /\
       eval_operands arg_ops t = SOME argv ==>
-      intcall_callee_selected_callbacks_with body_layout P (DF,lo,ctx,shadow_ctx,callee)
+      intcall_callee_selected_callbacks P (DF,lo,ctx,shadow_ctx,callee)
         (tops,cx,st0,name,mut,nr,ret,ss,es1) (entered,G,tn,arg_ops) ==>
       P /\ gas_outcome_full
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
@@ -4310,11 +4227,10 @@ Theorem intcall_callee_selected_landing_with:
              sa.cs_next_id sb.cs_next_id t tn res ee gt r)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> disch_tac >>
-  drule_then assume_tac bodyFullShadowBodyInvTheory.shadow_body_inv_with_forget >>
   reverse (Cases_on `storage_trace_domain cx st0 es1.storage_trace`)
   >- (conj_tac >-
-        (qhdtm_assum `intcall_callee_selected_callbacks_with`
-           (irule o cj 1 o REWRITE_RULE [intcall_callee_selected_callbacks_with_def]) >>
+        (qhdtm_assum `intcall_callee_selected_callbacks`
+           (irule o cj 1 o REWRITE_RULE [intcall_callee_selected_callbacks_def]) >>
          first_assum ACCEPT_TAC) >>
       irule intcall_callee_bad_entry >> simp[] >>
       qexistsl_tac [`func`, `t`] >> fs[]) >>
@@ -4345,7 +4261,7 @@ Proof
      qpat_assum `lbl = internal_fn_label _ _ _ _`
        (fn th => ONCE_REWRITE_TAC [SYM th]) >>
      first_assum ACCEPT_TAC) >>
-  drule_all bodyFullShadowBodyInvTheory.shadow_body_inv_callee_code_with >>
+  drule_all bodyFullShadowBodyInvTheory.shadow_body_inv_callee_code >>
   strip_tac >>
   qpat_x_assum `compiled_ss = subst_consts_stmts _ _` (assume_tac o SYM) >>
   qpat_x_assum `set_internal_package_target _ (package_internal_fn _ _ _ _ _ (subst_consts_fn _ _)) = _`
@@ -4427,7 +4343,6 @@ Proof
      >- (qexists_tac `prologue` >> asm_rewrite_tac []) >>
      qexists_tac `prologueS` >> asm_rewrite_tac []) >>
   `cs_extends a final /\ fn_has_code a b callee /\ fn_has_code b final callee /\
-   cs_extends a b /\ cs_extends b final /\
    (if block_is_terminated b then ((),b)
     else comp_ignore_bind
       (if nr' then compile_nonreentrant_unlock key trans view else comp_return ())
@@ -4438,9 +4353,6 @@ Proof
        `entry_info1`, `entry_info2`, `prologue`, `a`, `body_out`, `b`,
        `callee`] mp_tac intcall_lowering_suffix >>
      fs[Abbr `lock`, Abbr `body_ce`, Abbr `body_ty`]) >>
-  `body_layout a b` by
-    (qpat_assum `!entry a b final. _ ==> body_layout a b` irule >>
-     simp[] >> qexistsl_tac [`entry`, `final`] >> simp[]) >>
   `gas_shadow_env T body_ce = (gas_shadow_env T entry_info0) with
      <|ce_imm_alloca := entry_info2; ce_alloca_locals := T|>` by
     simp[Abbr `body_ce`, gasShadowCompileBaseTheory.gas_shadow_env_def] >>
@@ -5475,8 +5387,8 @@ Proof
   Cases_on `nr /\ ~storage_trace_domain cx st0 (es1.storage_trace ++ [StorageLock key])`
   >- (qpat_assum `nr /\ ~_` strip_assume_tac >>
       conj_tac >-
-        (qhdtm_assum `intcall_callee_selected_callbacks_with`
-           (qspec_then `key` mp_tac o cj 2 o REWRITE_RULE [intcall_callee_selected_callbacks_with_def]) >>
+        (qhdtm_assum `intcall_callee_selected_callbacks`
+           (qspec_then `key` mp_tac o cj 2 o REWRITE_RULE [intcall_callee_selected_callbacks_def]) >>
          (impl_tac >-
             (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
              qpat_assum `nr ==> _ /\ cx.nonreentrant_slot = SOME key`
@@ -5595,8 +5507,8 @@ Proof
          qexistsl_tac [`Gpro`,`at_pro`,`tnpro`] >>
          conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
       conj_tac >-
-        (qhdtm_assum `intcall_callee_selected_callbacks_with`
-           (irule o cj 3 o REWRITE_RULE [intcall_callee_selected_callbacks_with_def]) >>
+        (qhdtm_assum `intcall_callee_selected_callbacks`
+           (irule o cj 3 o REWRITE_RULE [intcall_callee_selected_callbacks_def]) >>
          conj_tac >- first_assum ACCEPT_TAC >>
          conj_tac >- (qexistsl_tac [`ee`,`msg`] >> first_assum ACCEPT_TAC) >>
          qexistsl_tac [`Gl`,`Gpro`,`a`,`ab`,`at_pro`,`ce`,`ctor`,`entry`,`has_rb`,
@@ -6237,9 +6149,9 @@ Proof
      simp[NoAsms] >> first_assum ACCEPT_TAC) >>
   strip_tac >>
   conj_tac >-
-    (qhdtm_assum `intcall_callee_selected_callbacks_with`
+    (qhdtm_assum `intcall_callee_selected_callbacks`
        (irule o SIMP_RULE bool_ss [LET_THM,pairTheory.UNCURRY_DEF] o cj 4 o
-        REWRITE_RULE [intcall_callee_selected_callbacks_with_def]) >>
+        REWRITE_RULE [intcall_callee_selected_callbacks_def]) >>
      qpat_assum `Abbrev (pushed = _)`
        (pure_rewrite_tac o single o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
      conj_tac >- first_assum ACCEPT_TAC >>
@@ -6657,57 +6569,6 @@ Proof
       qexists_tac `H` >>
       conj_tac >- (disch_tac >> first_assum irule >> first_assum ACCEPT_TAC) >>
       first_assum ACCEPT_TAC)
-QED
-
-Theorem intcall_callee_selected_landing:
-  !P DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
-   G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn callee entered rc
-   rbs pvs dflts.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,nr,args,dflts,ret,ss) /\
-    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-    LENGTH args - LENGTH dflts <= LENGTH es /\
-    LENGTH es <= LENGTH args /\
-    ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
-         (subst_consts_stmts (module_consts_env tops []) ss)) /\
-    gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
-    MEM func ctx.ctx_functions /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
-    (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
-    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-    (!H. valid_horizon cx st0 H es1.storage_trace ==>
-       intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
-         sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
-         G tn) /\
-    body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
-    gas_invoke_entry (ctx,func) t callee entered /\
-    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
-    !bb inst lbl arg_ops argv.
-      lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
-      get_instruction bb t.vs_inst_idx = SOME inst /\
-      decode_invoke inst = SOME (lbl,arg_ops) /\
-      eval_operands arg_ops t = SOME argv ==>
-      intcall_callee_selected_callbacks P (DF,lo,ctx,shadow_ctx,callee)
-        (tops,cx,st0,name,mut,nr,ret,ss,es1) (entered,G,tn,arg_ops) ==>
-      P /\ gas_outcome_full
-        (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
-         MAP (op_prov G) arg_ops)
-        (cx_tops cx) cx st0 (intcall_callee_src cx name mut nr ss)
-        (es1, entered, FEMPTY, tn with t_var := FEMPTY)
-        (\H res ee G' tn' t'. F)
-        (\H res ee gt r.
-           intcall_callee_exit_full (DF, lo) H func cenv cx mut nr rtv rc
-             (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
-             sa.cs_next_id sb.cs_next_id t tn res ee gt r)
-Proof
-  pure_rewrite_tac[intcall_callee_selected_callbacks_plain_def] >>
-  MATCH_ACCEPT_TAC
-    (SIMP_RULE bool_ss [bodyFullShadowBodyInvTheory.shadow_body_inv_with_plain]
-      (Q.SPECL [`\a b. T`, `\a b. T`] intcall_callee_selected_landing_with))
 QED
 
 Theorem intcall_callee_full:

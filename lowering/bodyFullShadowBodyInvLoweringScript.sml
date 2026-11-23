@@ -40,17 +40,10 @@ Theorem shadow_body_inv_from_internal_runs[local]:
   gas_shadow_state start startS /\
   EVERY (\bb. ~internal_label_ok bb.bb_label) (all_blocks start) /\
   EVERY (\bb. ~internal_label_ok bb.bb_label) (all_blocks startS) ==>
-  shadow_body_inv_with (\a b. ALL_DISTINCT (b.cs_current_bb :: MAP (\bb. bb.bb_label) (emitted_blocks a b)))
-    tops unit.cu_context shadow_unit.cu_context
+  shadow_body_inv tops unit.cu_context shadow_unit.cu_context
 Proof
   strip_tac >>
-  simp[shadow_body_inv_with_def, shadow_body_inv_mods_with_def,
-       ALOOKUP_def, optionTheory.FORALL_OPTION, nsid_to_string_def,
-       build_func_ids_mods_singleton, lower_vyper_runtime_unit_mods_singleton,
-       lower_vyper_deploy_unit_mods_singleton, package_internal_fn_unit_singleton,
-       imm_len_mods_singleton, immSectionDeadTheory.imm_len_def,
-       consts_env_mods_singleton, subst_consts_fn_mods_singleton,
-       subst_consts_mods_singleton] >> rpt gen_tac >> strip_tac >>
+  simp[shadow_body_inv_def] >> rpt gen_tac >> strip_tac >>
   rename1 `lookup_function (internal_fn_label _ fname _ mode) _ = SOME callee` >>
   `mode = is_ctor` by
     (mp_tac (Q.INST [`target` |-> `rp.rpol_target`,
@@ -108,7 +101,7 @@ Proof
   mp_tac (Q.INST [`pkg` |-> `(label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,compiled_ss,rt)`,
     `nr` |-> `nr'`, `ss` |-> `compiled_ss`, `ctx` |-> `raw`, `sctx` |-> `rawS`,
     `sdata` |-> `dataS`, `sips` |-> `MAP gas_shadow_internal_package ips`]
-    (REWRITE_RULE [GSYM APPEND_ASSOC, APPEND] selected_internal_shadow_layout)) >>
+    (REWRITE_RULE [GSYM APPEND_ASSOC, APPEND] selected_internal_shadow_code)) >>
   impl_tac >-
     (fs[lowering_context_ok_def, ctx_fn_names_def, fn_labels_def,
         ctx_inst_ids_distinct_def, EVERY_MEM] >>
@@ -120,12 +113,11 @@ Proof
   metis_tac[]
 QED
 
-Theorem runtime_grouped_shadow_body_layout_fixed[local]:
+Theorem runtime_grouped_shadow_body_inv_fixed[local]:
   EXISTS external_has_defaults (FST (classify_functions tops)) /\
   lower_vyper_runtime_unit tops rp = SOME unit /\
   runtime_gas_shadow_unit tops rp = SOME shadow_unit ==>
-  shadow_body_inv_with (\a b. ALL_DISTINCT (b.cs_current_bb :: MAP (\bb. bb.bb_label) (emitted_blocks a b)))
-    tops unit.cu_context shadow_unit.cu_context
+  shadow_body_inv tops unit.cu_context shadow_unit.cu_context
 Proof
   strip_tac >>
   Cases_on `classify_functions tops` >>
@@ -181,20 +173,19 @@ Proof
   fs[Abbr `ips`, PERM_order_runtime_internals, gas_shadow_unit_def]
 QED
 
-Theorem runtime_shadow_body_layout:
+Theorem runtime_shadow_body_inv:
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
   supported_program tops /\
   lower_vyper_runtime_unit tops rp = SOME unit /\
   runtime_gas_shadow_unit tops rp = SOME shadow_unit ==>
-  shadow_body_inv_with (\a b. ALL_DISTINCT (b.cs_current_bb :: MAP (\bb. bb.bb_label) (emitted_blocks a b)))
-    tops unit.cu_context shadow_unit.cu_context
+  shadow_body_inv tops unit.cu_context shadow_unit.cu_context
 Proof
   strip_tac >>
   Cases_on `classify_functions tops` >>
   rename1 `classify_functions tops = packages` >> PairCases_on `packages` >>
   rename1 `classify_functions tops = (exts,ints,fb,ctor_src)` >>
   Cases_on `EXISTS external_has_defaults exts`
-  >- (irule runtime_grouped_shadow_body_layout_fixed >> simp[] >> metis_tac[]) >>
+  >- (irule runtime_grouped_shadow_body_inv_fixed >> simp[] >> metis_tac[]) >>
   `~EXISTS external_has_defaults (FST (classify_functions tops))` by
     (qpat_assum `classify_functions tops = _`
        (fn classify => PURE_REWRITE_TAC [classify, pairTheory.FST]) >>
@@ -253,12 +244,11 @@ Proof
   simp[Abbr `ips`, PERM_order_runtime_internals]
 QED
 
-Theorem runtime_grouped_shadow_body_layout:
+Theorem runtime_grouped_shadow_body_inv:
   EXISTS external_has_defaults (FST (classify_functions tops)) /\
   lower_vyper_runtime_unit tops rp = SOME unit ==>
   ?shadow_unit. gas_shadow_unit unit shadow_unit /\
-    shadow_body_inv_with (\a b. ALL_DISTINCT (b.cs_current_bb :: MAP (\bb. bb.bb_label) (emitted_blocks a b)))
-    tops unit.cu_context shadow_unit.cu_context
+    shadow_body_inv tops unit.cu_context shadow_unit.cu_context
 Proof
   strip_tac >>
   Cases_on `classify_functions tops` >>
@@ -267,11 +257,11 @@ Proof
   qexists_tac `shadow_unit` >> asm_rewrite_tac[] >>
   mp_tac (Q.INST [`tops` |-> `tops`, `rp` |-> `rp`, `unit` |-> `unit`,
                   `shadow_unit` |-> `shadow_unit`]
-    runtime_grouped_shadow_body_layout_fixed) >>
+    runtime_grouped_shadow_body_inv_fixed) >>
   fs[]
 QED
 
-Theorem deploy_shadow_body_layout:
+Theorem deploy_shadow_body_inv:
   !tops am tx rp bc unit shadow_unit exts ints fb cf ce args pay nr key trans ctor_body ret.
     deploy_source_ok tops am tx /\ lower_vyper_deploy_unit tops rp bc = SOME unit /\
     classify_functions tops = (exts,ints,fb,SOME cf) /\
@@ -286,8 +276,7 @@ Theorem deploy_shadow_body_layout:
           (order_internals (deploy_internal_order (SOME cf) ints) ints)))
       (gas_shadow_env T ce) (MAP gas_shadow_stmt ctor_body) pay nr key trans "__deploy" =
       SOME shadow_unit ==>
-    shadow_body_inv_with (\a b. ALL_DISTINCT (b.cs_current_bb :: MAP (\bb. bb.bb_label) (emitted_blocks a b)))
-    tops unit.cu_context shadow_unit.cu_context
+    shadow_body_inv tops unit.cu_context shadow_unit.cu_context
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `srcs = order_internals (deploy_internal_order (SOME cf) ints) ints` >>
@@ -325,46 +314,6 @@ Proof
     shadow_body_inv_from_internal_runs) >>
   fs[deploy_source_ok_def, install_immutable_reservation_def, Abbr `srcs`,
      PERM_order_deploy_internals]
-QED
-
-Theorem runtime_shadow_body_inv:
-  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
-  supported_program tops /\
-  lower_vyper_runtime_unit tops rp = SOME unit /\
-  runtime_gas_shadow_unit tops rp = SOME shadow_unit ==>
-  shadow_body_inv tops unit.cu_context shadow_unit.cu_context
-Proof
-  metis_tac[runtime_shadow_body_layout, shadow_body_inv_with_forget]
-QED
-
-Theorem runtime_grouped_shadow_body_inv:
-  EXISTS external_has_defaults (FST (classify_functions tops)) /\
-  lower_vyper_runtime_unit tops rp = SOME unit ==>
-  ?shadow_unit. gas_shadow_unit unit shadow_unit /\
-    shadow_body_inv tops unit.cu_context shadow_unit.cu_context
-Proof
-  metis_tac[runtime_grouped_shadow_body_layout, shadow_body_inv_with_forget]
-QED
-
-Theorem deploy_shadow_body_inv:
-  !tops am tx rp bc unit shadow_unit exts ints fb cf ce args pay nr key trans ctor_body ret.
-    deploy_source_ok tops am tx /\ lower_vyper_deploy_unit tops rp bc = SOME unit /\
-    classify_functions tops = (exts,ints,fb,SOME cf) /\
-    set_constructor_package_target rp.rpol_target
-      (package_constructor tops T (K global_nonreentrant_slot) cf) =
-      (ce,args,pay,nr,key,trans,ctor_body,ret) /\
-    run_deploy_lowering T rp bc (imm_len tops) args 0
-      (MAP gas_shadow_internal_package
-        (MAP (set_internal_package_target rp.rpol_target o
-          package_internal_fn tops T (K global_nonreentrant_slot) T
-            (imm_len tops))
-          (order_internals (deploy_internal_order (SOME cf) ints) ints)))
-      (gas_shadow_env T ce) (MAP gas_shadow_stmt ctor_body) pay nr key trans "__deploy" =
-      SOME shadow_unit ==>
-    shadow_body_inv tops unit.cu_context shadow_unit.cu_context
-Proof
-  rpt gen_tac >> strip_tac >> drule_all deploy_shadow_body_layout >>
-  disch_then (irule o MATCH_MP shadow_body_inv_with_forget)
 QED
 
 (* Two modules can declare the same internal name and lower to distinct labels. *)
