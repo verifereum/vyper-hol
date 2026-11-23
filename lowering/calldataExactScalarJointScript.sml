@@ -2,7 +2,7 @@
 Theory calldataExactScalarJoint
 Ancestors
   calldataScalarSourceExact calldataWordPtr calldataClampPtr
-  entryHaltMem fragGasCopyLoop fragGasSeqPtr fragGasOriginPtr
+  entryHaltMem fragGasCopyLoop fragGasCopySeqLiftProps fragGasSeqPtr fragGasOriginPtr
   emitHelperProps exprLoweringProps ptrDiscipline fragExec fragExecMem
   venomExecSemantics venomState venomInst finite_map list pred_set arithmetic
 
