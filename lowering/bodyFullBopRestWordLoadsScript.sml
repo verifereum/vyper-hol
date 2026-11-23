@@ -4,6 +4,7 @@ Ancestors
   bodyPtrBopInLoopContract bodyPtrBopInLoopLayout bodyPtrBopInBoundedAddress bodyPtrBopInBoundedLayout
   augAssignPtrScalarRun typedCopyOriginPtrBase typedCopyLoopHeaderPtr typedCopyPtr instSeqComposePtr
   augAssignPtrScalarCertificate fragGasCopyLoop fragGasSeqPtr fragGasOriginPtr
+  fragGasCopySeqLiftProps
   fragExecMem instMemFrontier memSafeRun ptrSafeRun ptrDiscipline
   stmtAppendStorageRunPtr exprLoweringProps venomExecSemantics venomInst
   entryReachBodyFirstEmissionSupport exprSimBopRestWordLoadPath exprLowering compileEnv fragExec

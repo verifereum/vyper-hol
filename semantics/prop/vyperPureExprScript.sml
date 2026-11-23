@@ -277,7 +277,17 @@ Theorem case_eval_exprs_cons[local]:
 Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
   imp_res_tac read_result_state >> gvs[] >>
-  metis_tac[trace_state_trans]
+  qpat_assum `!s r t. eval_expr cx e s = (r,t) ==> _`
+    (drule_then assume_tac) >>
+  rename1 `eval_expr cx e start = (INL value,mid)` >>
+  rename1 `read_result cx value mid = (INL read_value,mid)` >>
+  rename1 `eval_exprs cx es mid = (result,finish)` >>
+  `finish = mid with storage_trace := finish.storage_trace` by
+    (first_x_assum (qspecl_then
+       [`start`,`value`,`mid`,`mid`,`read_value`,`mid`] mp_tac) >>
+     simp[] >>
+     disch_then (qspecl_then [`mid`,`result`,`finish`] mp_tac) >> simp[]) >>
+  irule trace_state_trans >> qexists_tac `mid` >> simp[]
 QED
 
 (* ------------------------------------------------------------------------
