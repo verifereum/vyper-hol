@@ -10,21 +10,72 @@ Ancestors
   exprLoweringProps exprLowering loweringPosts compileEnv vyperTyping
   vyperInterpreter vyperContext vyperState vyperAST vyperTypeSystem
   stmtSimProps gasExemptCert vyperStorageTrace vyperStorageFootprint
+  exprSimFullBundleProps bodyFullEmptyLeafData
 
-Theorem keccak_vv_sim_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann e es.
+Definition keccak_value_action_def:
+  keccak_value_action cx ty v (es:evaluation_state) =
+    ((case builtin_result cx es.accounts (BaseT (BytesT (Fixed 32)))
+        Keccak256 [ty] [v] of INL w => INL (Value w) | INR exc => INR exc),es)
+End
+
+Theorem keccak_eval_expr_action:
+  eval_expr cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e]) =
+    bind (bind (eval_expr cx e) (read_result cx)) (keccak_value_action cx (expr_type e))
+Proof
+  `eval_expr cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e]) =
+    bind (bind (eval_expr cx e) (read_result cx))
+      (\v st. ((case builtin_result cx st.accounts (BaseT (BytesT (Fixed 32)))
+                     Keccak256 [expr_type e] [v] of INL w => INL (Value w) | INR exc => INR exc),st))` by
+    (irule eval_expr_unary_builtin_action >>
+     simp[vyperContextTheory.builtin_args_length_ok_def, is_self_codesize_def]) >>
+  pop_assum SUBST1_TAC >> AP_TERM_TAC >> simp[FUN_EQ_THM, keccak_value_action_def]
+QED
+
+(* One pure suffix run, with the compiler shape and the state before
+   its cursor is advanced.  Both wrappers use this same run and ghosts. *)
+Theorem keccak_vv_observed:
+  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann e es
+   st0 sa sb shadow_sa shadow_sb vv s0 G0 tn0.
     expr_body_pre cenv cx env (Builtin ann Keccak256 [e]) es /\
-    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx (expr_type e) e es ==>
-    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    expr_vv_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann Keccak256 [e]) es
+      (st0,sa,sb,shadow_sa,shadow_sb,vv,s0,G0,tn0) ==>
+    ?sm shadow_sm x.
+      expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+        cenv cx (expr_type e) e es (st0,sa,sm,shadow_sa,shadow_sm,x,s0,G0,tn0) /\
+      expr_body_pre cenv cx env e es /\
+      cs_extends sa sm /\ cs_extends sm sb /\ fn_has_code sm sb func /\
+      eval_expr cx (Builtin ann Keccak256 [e]) =
+        bind (bind (eval_expr cx e) (read_result cx)) (keccak_value_action cx (expr_type e)) /\
+      (!marks res mid G1 tn1 s.
+         (!tail. bind (eval_expr cx e) (read_result cx)
+                   (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+                 (res,mid with gas_obs := tail)) /\
+         storage_trace_domain cx st0 mid.storage_trace /\
+         (!H. valid_horizon cx st0 H mid.storage_trace ==>
+              expr_sim_full_post (DF,lo,d,ctx,func) cenv cx e (es,sa,sm,s0,x,G0,tn0)
+                H res mid G1 tn1 s /\ ~s.vs_halted /\ mid.gas_obs = []) ==>
+         ?v q m u Gf tnf ans.
+           res = INL v /\
+           (compile_keccak256_bytes x sm = (q,sb) \/
+            compile_keccak256_bytesm x m sm = (q,sb)) /\
+           run_inst_seq (emitted_insts sm sb) s = OK u /\
+           (!tail. keccak_value_action cx (expr_type e) v (mid with gas_obs := tail) =
+                   (ans,mid with gas_obs := tail)) /\
+           (!H. valid_horizon cx st0 H mid.storage_trace ==>
+                gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+                  (s,G1,tn1) []
+                  (OK (u with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb)),Gf,tnf) /\
+                expr_vv_sim_full_post (DF,lo,d,ctx,func) cenv cx (Builtin ann Keccak256 [e])
+                  (es,sa,sb,s0,vv,G0,tn0) H ans (mid with gas_obs := []) Gf tnf
+                  (u with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb))))
 Proof
   rpt gen_tac >> strip_tac >>
   `is_bytes_or_string_type (expr_type e) /\ ann = BaseT (BytesT (Fixed 32))` by
     (irule (SRULE [] (Q.INST [`b` |-> `Keccak256`,
        `ts` |-> `[expr_type e]`] hash_builtin_types)) >>
      gvs[expr_body_pre_def, well_typed_expr_def]) >>
-  gvs[] >> simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  gvs[expr_vv_sim_full_hypotheses_def, expr_sim_full_code_def] >>
   qpat_x_assum `compile_expr cenv ty (Builtin _ _ _) sa = _` mp_tac >>
   simp[compile_hash_singleton] >> pairarg_tac >> strip_tac >>
   gvs[] >>
@@ -71,56 +122,26 @@ Proof
      gvs[expr_body_pre_def]) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     metis_tac[expr_body_pre_gas_admissible] >>
-  qpat_x_assum `expr_sim_full _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
-  disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`,
-    `v`, `s0`, `G0`, `tn0`] mp_tac) >>
-  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ baseQ baseR` >>
-  `eval_expr cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e]) =
-   bind (bind (eval_expr cx e) (read_result cx))
-     (\v es. ((case builtin_result cx es.accounts (BaseT (BytesT (Fixed 32)))
-       Keccak256 [expr_type e] [v] of INL w => INL (Value w) | INR exc => INR exc),es))` by
-    (irule eval_expr_unary_builtin_action >>
-     simp[vyperContextTheory.builtin_args_length_ok_def, is_self_codesize_def]) >>
-  asm_rewrite_tac[] >> irule gas_outcome_full_bind_all >>
-  `!res : value + exception. !r.
-     (?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r) <=> expr_exit res r` by
-    (Cases >> simp[expr_exit_INR_type]) >>
-  simp[] >> rpt conj_tac
-  >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >>
-      qexistsl_tac [`mid`, `t`, `v'`] >> fs[])
-  >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[])
-  >~ [`storage_trace_frame (bind _ _)`]
-  >- simp[storage_trace_frame_bind, evaluate_storage_trace_frame,
-          storage_trace_frame_read_result]
-  >- simp[storage_trace_frame_def] >>
-  qexists_tac `\H res ee G tn t. baseQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = []` >>
+  `fn_has_code sm sb func` by metis_tac[fn_has_code_split] >>
+  qexistsl_tac [`sm`, `shadow_sm`, `v`] >>
   conj_tac
-  >- suspend "hashed" >>
-  irule gas_outcome_full_post_source >>
-  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
-  conj_tac >- (simp[Abbr `baseR`] >> rpt strip_tac >> Cases_on `res` >>
-    gvs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
-    metis_tac[expr_exit_INR_type]) >>
-  simp[Abbr `baseQ`, Abbr `baseR`] >>
-  rpt strip_tac >> Cases_on `res` >>
-  gvs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
-  metis_tac[expr_exit_INR_type]
+  >- (simp[expr_sim_full_hypotheses_def, expr_sim_full_code_def] >> first_assum ACCEPT_TAC) >>
+  simp[] >> conj_tac
+  >- simp[keccak_eval_expr_action] >>
+  suspend "hashed"
 QED
 
-Resume keccak_vv_sim_full[hashed]:
+Resume keccak_vv_observed[hashed]:
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `s`] >>
   strip_tac >> fs[] >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
     gvs[storage_trace_domain_def] >>
-  `baseQ (storage_trace_horizon mid.storage_trace) res mid G1 tn1 s` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==> baseQ H _ _ _ _ _ /\ _`
+  `expr_sim_full_post (DF,lo,d,ctx,func) cenv cx e (es,sa,sm,s0,v,G0,tn0)
+     (storage_trace_horizon mid.storage_trace) res mid G1 tn1 s` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_sim_full_post _ _ _ _ _ H _ _ _ _ _ /\ _`
        (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
-  qpat_x_assum `baseQ _ _ _ _ _ _` mp_tac >>
-  simp[Abbr `baseQ`, NoAsms] >> strip_tac >> gvs[] >>
+  qpat_x_assum `expr_sim_full_post _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_sim_full_post_def, expr_sim_full_endpoint_def, NoAsms] >> strip_tac >> gvs[] >>
   `~s.vs_halted /\ mid.gas_obs = []` by metis_tac[] >>
   `bind (eval_expr cx e) (read_result cx)
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) = (INL v',mid)` by
@@ -149,7 +170,7 @@ Resume keccak_vv_sim_full[hashed]:
   suspend "dynamic"
 QED
 
-Resume keccak_vv_sim_full[string]:
+Resume keccak_vv_observed[string]:
   gvs[is_bytestring_type_def, as_stack_val_def] >>
   Cases_on `v'` >> gvs[vyperTypingTheory.value_has_type_def] >>
   `expr_post (storage_trace_horizon mid.storage_trace) ctx func cenv cx e es sa sm s0 mid
@@ -196,9 +217,7 @@ Resume keccak_vv_sim_full[string]:
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x)` by
     metis_tac[loweringStateRelDefsTheory.not_fresh_at_def, arithmeticTheory.LE_TRANS] >>
   `allocas_from lo s /\ lo <= s.vs_alloca_next` by
-    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\ ghost_inv_at _ _ _ _ _ mid G1 tn1 s`
-      (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-     (impl_tac >- simp[]) >> strip_tac >> fs[ghost_inv_at_def]) >>
+    fs[ghost_inv_at_def] >>
   `b + 32 + LENGTH (MAP (n2w o ORD) s' : word8 list) <= b' + sz' /\
    LENGTH (MAP (n2w o ORD) s' : word8 list) < dimword (:256) /\
    (!i. b <= i /\ i < b + 32 + LENGTH (MAP (n2w o ORD) s' : word8 list) ==>
@@ -211,19 +230,21 @@ Resume keccak_vv_sim_full[string]:
   drule_all (SRULE [eval_operand_def] hash_bytes_keccak_joint_run) >>
   disch_then (qspecl_then [`PG`, `cx`, `mid`, `d`,
     `gas_explicit_sites ctx shadow_ctx`] strip_assume_tac) >>
-  irule gas_outcome_full_pure >>
-  reverse conj_tac >- simp[] >>
-  qexistsl_tac [`Gf`, `mid`,
-    `INL (Value (BytesV (Keccak_256_w64 (MAP (n2w o ORD) s'))))`,
-    `t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm r)`, `tnf`] >>
-  conj_tac >- simp[exprSimWordArgsTheory.builtin_result_def,
+  qexistsl_tac [`q`, `0`, `t`, `Gf`, `tnf`,
+    `INL (Value (BytesV (Keccak_256_w64 (MAP (n2w o ORD) s'))))`] >>
+  simp[] >>
+  conj_tac >- simp[keccak_value_action_def, exprSimWordArgsTheory.builtin_result_def,
     vyperContextTheory.evaluate_builtin_def] >>
-  rpt strip_tac >>
+  simp[expr_vv_sim_full_post_def, expr_sim_full_endpoint_def] >> rpt strip_tac >>
   `mid with gas_obs := [] = mid` by
     (qpat_assum `mid.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
   simp[] >>
   `expr_post H ctx func cenv cx e es sa sm s0 mid (StringV s') (Var p) s /\
-   ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 s` by metis_tac[] >>
+   ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 s` by
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> expr_sim_full_post _ _ _ _ _ H _ _ _ _ _`
+       (qspec_then `H` mp_tac) >>
+     simp[expr_sim_full_post_def, expr_sim_full_endpoint_def, NoAsms] >>
+     strip_tac >> gvs[]) >>
   `vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
     es sa r s0 mid (Value (BytesV (Keccak_256_w64 (MAP (n2w o ORD) s'))))
     (StackValue (BaseT (BytesT (Fixed 32))) q) t` by
@@ -255,10 +276,12 @@ Resume keccak_vv_sim_full[string]:
      drule_all hash_ghost_kept_wb_trans >> simp[]) >>
   gvs[] >>
   `stmt_state_rel H ctx func cenv cx mid t` by metis_tac[] >>
-  drule stmt_state_rel_allocas_below_fmp >> simp[]
+  drule stmt_state_rel_allocas_below_fmp >>
+  gvs[vyperASTTheory.expr_type_def, compileEnvTheory.is_word_type_def,
+      contextTheory.vv_location_def]
 QED
 
-Resume keccak_vv_sim_full[fixed]:
+Resume keccak_vv_observed[fixed]:
   rename1 `expr_type e = BaseT (BytesT (Fixed m))` >>
   `evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Fixed m)))` by
     (qpat_assum `expr_body_pre cenv cx env e es`
@@ -298,9 +321,7 @@ Resume keccak_vv_sim_full[fixed]:
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x)` by
     metis_tac[loweringStateRelDefsTheory.not_fresh_at_def, arithmeticTheory.LE_TRANS] >>
   `allocas_from lo s /\ lo <= s.vs_alloca_next` by
-    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\ ghost_inv_at _ _ _ _ _ mid G1 tn1 s`
-      (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-     (impl_tac >- simp[]) >> strip_tac >> fs[ghost_inv_at_def]) >>
+    fs[ghost_inv_at_def] >>
   `sn.cs_current_bb = sm.cs_current_bb /\
    sn.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sn` by
     metis_tac[keccak_suffix_shape, same_blocks_def] >>
@@ -315,16 +336,20 @@ Resume keccak_vv_sim_full[fixed]:
   drule_all (Q.INST [`PG` |-> `PG`, `G` |-> `G1`, `d` |-> `d`,
     `explicit` |-> `gas_explicit_sites ctx shadow_ctx`] hash_fixed_keccak_joint_run) >>
   disch_then (qspecl_then [`shadow_ctx`, `d`, `PG`, `G1`] strip_assume_tac) >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
-  qexistsl_tac [`Gf`, `mid`, `INL (Value (BytesV (Keccak_256_w64 bs)))`,
-    `u with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sn)`, `tnf`] >>
-  conj_tac >- simp[exprSimWordArgsTheory.builtin_result_def,
+  qexistsl_tac [`op`, `LENGTH bs`, `u`, `Gf`, `tnf`,
+    `INL (Value (BytesV (Keccak_256_w64 bs)))`] >>
+  simp[] >>
+  conj_tac >- simp[keccak_value_action_def, exprSimWordArgsTheory.builtin_result_def,
     vyperContextTheory.evaluate_builtin_def] >>
-  rpt strip_tac >>
+  simp[expr_vv_sim_full_post_def, expr_sim_full_endpoint_def] >> rpt strip_tac >>
   `mid with gas_obs := [] = mid` by
     (qpat_assum `mid.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >> simp[] >>
   `expr_post H ctx func cenv cx e es sa sm s0 mid (BytesV bs) v s /\
-   ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 s` by metis_tac[] >>
+   ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 s` by
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> expr_sim_full_post _ _ _ _ _ H _ _ _ _ _`
+       (qspec_then `H` mp_tac) >>
+     simp[expr_sim_full_post_def, expr_sim_full_endpoint_def, NoAsms] >>
+     strip_tac >> gvs[]) >>
   `vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
     es sa sn s0 mid (Value (BytesV (Keccak_256_w64 bs)))
     (StackValue (BaseT (BytesT (Fixed 32))) op) u` by
@@ -357,10 +382,12 @@ Resume keccak_vv_sim_full[fixed]:
   gvs[vyperStateTheory.read_result_def, vyperStateTheory.return_def,
     ghost_inv_at_inst_idx] >>
   `stmt_state_rel H ctx func cenv cx mid u` by metis_tac[] >>
-  drule stmt_state_rel_allocas_below_fmp >> simp[]
+  drule stmt_state_rel_allocas_below_fmp >>
+  gvs[vyperASTTheory.expr_type_def, compileEnvTheory.is_word_type_def,
+      contextTheory.vv_location_def]
 QED
 
-Resume keccak_vv_sim_full[dynamic]:
+Resume keccak_vv_observed[dynamic]:
   rename1 `expr_type e = BaseT (BytesT (Dynamic cap))` >>
   gvs[is_bytestring_type_def, as_stack_val_def] >>
   Cases_on `v'` >> gvs[vyperTypingTheory.value_has_type_def] >>
@@ -409,9 +436,7 @@ Resume keccak_vv_sim_full[dynamic]:
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x)` by
     metis_tac[loweringStateRelDefsTheory.not_fresh_at_def, arithmeticTheory.LE_TRANS] >>
   `allocas_from lo s /\ lo <= s.vs_alloca_next` by
-    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\ ghost_inv_at _ _ _ _ _ mid G1 tn1 s`
-      (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-     (impl_tac >- simp[]) >> strip_tac >> fs[ghost_inv_at_def]) >>
+    fs[ghost_inv_at_def] >>
   `b + 32 + LENGTH bs <= b' + sz' /\
    LENGTH bs < dimword (:256) /\
    (!i. b <= i /\ i < b + 32 + LENGTH bs ==>
@@ -424,19 +449,20 @@ Resume keccak_vv_sim_full[dynamic]:
   drule_all (SRULE [eval_operand_def] hash_bytes_keccak_joint_run) >>
   disch_then (qspecl_then [`PG`, `cx`, `mid`, `d`,
     `gas_explicit_sites ctx shadow_ctx`] strip_assume_tac) >>
-  irule gas_outcome_full_pure >>
-  reverse conj_tac >- simp[] >>
-  qexistsl_tac [`Gf`, `mid`,
-    `INL (Value (BytesV (Keccak_256_w64 bs)))`,
-    `t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm r)`, `tnf`] >>
-  conj_tac >- simp[exprSimWordArgsTheory.builtin_result_def,
+  qexistsl_tac [`q`, `0`, `t`, `Gf`, `tnf`, `INL (Value (BytesV (Keccak_256_w64 bs)))`] >>
+  simp[] >>
+  conj_tac >- simp[keccak_value_action_def, exprSimWordArgsTheory.builtin_result_def,
     vyperContextTheory.evaluate_builtin_def] >>
-  rpt strip_tac >>
+  simp[expr_vv_sim_full_post_def, expr_sim_full_endpoint_def] >> rpt strip_tac >>
   `mid with gas_obs := [] = mid` by
     (qpat_assum `mid.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
   simp[] >>
   `expr_post H ctx func cenv cx e es sa sm s0 mid (BytesV bs) (Var p) s /\
-   ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 s` by metis_tac[] >>
+   ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 s` by
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> expr_sim_full_post _ _ _ _ _ H _ _ _ _ _`
+       (qspec_then `H` mp_tac) >>
+     simp[expr_sim_full_post_def, expr_sim_full_endpoint_def, NoAsms] >>
+     strip_tac >> gvs[]) >>
   `vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
     es sa r s0 mid (Value (BytesV (Keccak_256_w64 bs)))
     (StackValue (BaseT (BytesT (Fixed 32))) q) t` by
@@ -468,7 +494,57 @@ Resume keccak_vv_sim_full[dynamic]:
      drule_all hash_ghost_kept_wb_trans >> simp[]) >>
   gvs[] >>
   `stmt_state_rel H ctx func cenv cx mid t` by metis_tac[] >>
-  drule stmt_state_rel_allocas_below_fmp >> simp[]
+  drule stmt_state_rel_allocas_below_fmp >>
+  gvs[vyperASTTheory.expr_type_def, compileEnvTheory.is_word_type_def,
+      contextTheory.vv_location_def]
 QED
 
-Finalise keccak_vv_sim_full
+Finalise keccak_vv_observed
+
+Theorem keccak_vv_sim_full:
+  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann e es.
+    expr_body_pre cenv cx env (Builtin ann Keccak256 [e]) es /\
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx (expr_type e) e es ==>
+    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin ann Keccak256 [e]) es
+Proof
+  simp[expr_vv_sim_full_via_bundle] >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule_all keccak_vv_observed >> strip_tac >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_sim_full_via_bundle]) >>
+  disch_then drule >> strip_tac >>
+  asm_rewrite_tac[] >> irule gas_outcome_full_bind_all >>
+  `!res : value + exception. !r.
+     (?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r) <=> expr_exit res r` by
+    (Cases >> simp[expr_exit_INR_type]) >>
+  simp[] >> rpt conj_tac
+  >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >>
+      qexistsl_tac [`mid`, `t`, `v`] >> fs[])
+  >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[])
+  >~ [`storage_trace_frame (bind _ _)`]
+  >- simp[storage_trace_frame_bind, evaluate_storage_trace_frame,
+          storage_trace_frame_read_result]
+  >- simp[storage_trace_frame_def, keccak_value_action_def] >>
+  qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ baseQ baseR` >>
+  qexists_tac `\H res ee G tn t. baseQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = []` >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_assum `!marks res mid G1 tn1 s. _ /\ _ /\ _ ==> _`
+        (qspecl_then [`marks`,`res`,`mid`,`G1`,`tn1`,`t`] mp_tac) >>
+      impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
+      disj1_tac >> qexists_tac `v` >> simp[] >>
+      irule gas_outcome_full_pure >>
+      (reverse conj_tac >- metis_tac[storage_trace_domain_def]) >>
+      qexistsl_tac [`Gf`,`mid`,`ans`,
+        `u with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sm sb)`,`tnf`] >> simp[]) >>
+  irule gas_outcome_full_post_source >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[Abbr `baseQ`, Abbr `baseR`] >>
+  rpt strip_tac >> Cases_on `res` >>
+  gvs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
+  metis_tac[expr_exit_INR_type]
+QED
