@@ -100,7 +100,8 @@ Definition supported_nested_type_def:
     | ArrayT elem (Dynamic n) => supported_nested_type leaf fuel tops elem
     | TupleT tys => ~NULL tys /\ EVERY (supported_nested_type leaf fuel tops) tys
     | StructT id =>
-        (if fuel = 0 then F
+        (FST id <> NONE \/
+         if fuel = 0 then F
         else case supported_struct_fields tops id of
            NONE => F
          | SOME fields =>

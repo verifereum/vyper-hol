@@ -10,7 +10,7 @@ Ancestors
   loweringPosts exprSimMemDefs exprSimDefs vyperAST vyperValue valueEncoding
   compileEnv abiEncoderProps slotCopyExecution entryCreatePathScope
 
-Triviality ifexp_jump_edge:
+Theorem ifexp_jump_edge:
   create_operand_fetch a b f s i /\ ~s.vs_halted /\
   (i.inst_opcode = JNZ \/ i.inst_opcode = JMP) /\
   step_inst_base i s = OK (jump_to lbl s) ==>
@@ -23,7 +23,7 @@ Proof
   metis_tac[]
 QED
 
-Triviality ifexp_jump_native_endpoint:
+Theorem ifexp_jump_native_endpoint:
   create_operand_fetch a b f s i /\
   (i.inst_opcode = JNZ \/ i.inst_opcode = JMP) /\
   step_inst_base i s = OK (jump_to lbl s) /\
@@ -99,7 +99,7 @@ Proof
   Cases_on `sel` >> simp[mk_inst_def]
 QED
 
-Triviality ifexp_assign_edge:
+Theorem ifexp_assign_edge:
   create_operand_fetch a b f s (mk_inst id ASSIGN [op] [rv]) /\
   ~s.vs_halted /\ eval_operand op s = SOME w ==>
   create_prefix_step a b E C f s []
