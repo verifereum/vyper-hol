@@ -110,7 +110,7 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem checked_linked_const_annotation:
+Triviality checked_linked_const_annotation:
   check_contract dep layouts addr mods = SOME art /\
   env.bare_globals = art.cta_bare_globals /\
   env.toplevel_vtypes = art.cta_toplevel_vtypes /\

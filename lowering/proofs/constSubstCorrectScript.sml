@@ -3331,7 +3331,7 @@ Proof
   simp[constant_roots_provenance_def, MEM_APPEND] >> metis_tac[]
 QED
 
-Theorem constant_expr_read_accesses_aux[local]:
+Theorem constant_expr_read_accesses_aux:
   (!e. constant_expr mods e /\ no_sha256_expr e ==>
     int_calls_expr e = [] /\
     EVERY (\a. ?r. a = vyperSubscriptOverlap$ReadAcc r)
@@ -5074,7 +5074,7 @@ Proof
   metis_tac[exhausted_outcomes_result, cj 5 eval_outcomes_suffix_mutual]
 QED
 
-Theorem constant_expr_exhausted_no_sha256[local]:
+Theorem constant_expr_exhausted_no_sha256:
   (!e. constant_expr mods e ==>
     !cx st pv st'. st.outcomes = SOME [] /\
       eval_expr cx e st = (INL pv,st') ==> no_sha256_expr e) /\
@@ -5135,7 +5135,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem const_results_related_capture[local]:
+Theorem const_results_related_capture:
   const_results_related roots cx ty p q /\ const_cells_agree roots st /\
   (c = d \/ ?v. const_result_at roots cx ty p v /\
                  const_result_at roots cx ty q v) ==>
@@ -5327,7 +5327,7 @@ Proof
   simp[overlap_constant_decl_MEM] >> metis_tac[]
 QED
 
-Theorem constant_expr_nonconstant_reads[local]:
+Theorem constant_expr_nonconstant_reads:
   ALL_DISTINCT (MAP FST mods) ==>
   ((!e. constant_expr mods e ==>
     vyperSubscriptOverlap$nonconstant_reads mods
@@ -5497,7 +5497,7 @@ Proof
   metis_tac[closed_constant_no_local_place]
 QED
 
-Theorem changed_subscript_capture_spine[local]:
+Theorem changed_subscript_capture_spine:
   expr_type a' = expr_type a /\
   vyperSubscriptOverlap$nonconstant_reads mods
     (vyperSubscriptOverlap$expr_accesses mods a') =
@@ -5555,7 +5555,7 @@ Proof
   metis_tac[const_result_at_select]
 QED
 
-Theorem value_or_const_subscript_success[local]:
+Theorem value_or_const_subscript_success:
   ((?v. p = Value v) \/ (?v. const_result_at roots cx ct p v)) /\
   const_cells_agree roots st /\ subscript_type_ok ct ie ty /\
   vyperTypeExprResult$subscript_index_matches ct ie idx /\
@@ -5574,7 +5574,7 @@ Proof
   metis_tac[value_or_const_select_success]
 QED
 
-Theorem value_or_const_attribute_success[local]:
+Theorem value_or_const_attribute_success:
   ((?v. p = Value v) \/ (?v. const_result_at roots cx ct p v)) /\
   const_cells_agree roots st /\
   attribute_type (get_tenv cx) ct id = SOME ty /\
