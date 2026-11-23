@@ -54,6 +54,36 @@ Proof
   simp[] >> metis_tac[internal_fn_label_mode]
 QED
 
+(* A label the extracted context resolves belongs to a packaged source
+   function, whose id is the label's. *)
+Theorem packaged_internal_source_id:
+  ips = MAP (set_internal_package_target target o
+    package_internal_fn tops T (K global_nonreentrant_slot) is_ctor cap)
+      (srcs : (function_mutability # bool # bool # string #
+        (string # type) list # expr list # type # stmt list) list) /\
+  name = (if is_ctor then "__deploy" else "__entry") /\
+  extract_context_with_internals name ips run_end = SOME (raw,data) /\
+  lookup_function (internal_fn_label id fname tys mode) raw.ctx_functions =
+    SOME callee ==>
+  ?src. MEM src srcs /\ id = build_func_ids 0 tops (FST (SND (SND (SND src))))
+Proof
+  strip_tac >>
+  `MEM (internal_fn_label id fname tys mode)
+    (name :: MAP FST (internal_fn_descriptors ips))` by
+    metis_tac[venomInstTheory.lookup_function_mem, extract_context_internal_names] >>
+  qpat_x_assum `MEM _ (_::_)` mp_tac >>
+  simp[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
+       internal_fn_descriptors_MAP_package_internal_fn, MEM_MAP,
+       pairTheory.EXISTS_PROD] >>
+  strip_tac
+  >- (Cases_on `is_ctor` >> fs[internal_fn_label_def]) >>
+  qpat_x_assum `_ = source_internal_fn_descriptor _ _ _`
+    (mp_tac o Q.AP_TERM `FST`) >>
+  simp[] >> strip_tac >>
+  drule internal_fn_label_id_11 >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem extract_context_internal_code_by_labels:
   extract_context_with_internals name packages final = SOME (ctx,data) /\
   ALL_DISTINCT (MAP (\f. f.fn_name) ctx.ctx_functions) /\
@@ -151,7 +181,8 @@ Proof
 QED
 
 Theorem order_internals_unit_mem[local]:
-  MEM (src,f) (order_internals_unit names fs) <=> MEM (src,f) fs
+  MEM (src,f) (order_internals_unit names fs) <=>
+  MEM (src,f) fs /\ MEM (nsid_to_string (src,fn_decl_name f)) names
 Proof
   rw[order_internals_unit_def, MEM_FLAT, MEM_MAP, MEM_FILTER, PULL_EXISTS] >>
   metis_tac[]
@@ -283,10 +314,19 @@ Proof
   simp[compile_internal_fn_bodies_def, comp_return_def]
 QED
 
+(* The lowering packages only the reachable internal functions.  The lookup
+   premise says this one's label resolves in the unit, so some packaged
+   function has the same id (internal_fn_label_id_11), hence the same key
+   (build_func_ids_mods_11); that key is reachable, and the function itself
+   is classified (classified_unit_internal_member), so it is packaged too. *)
 Theorem selected_unit_internal_run:
   contract_inv mods exps ctx cenv cx /\
   module_body_inv mods src tops cenv cx /\
-  MEM (FunctionDecl Internal mut nr rr fname args dflts ret ss) tops ==>
+  MEM (FunctionDecl Internal mut nr rr fname args dflts ret ss) tops /\
+  lookup_function
+    (internal_fn_label (build_func_ids_mods 0 mods (nsid_to_string (src,fname)))
+      (nsid_to_string (src,fname)) (MAP SND args) cx.in_deploy)
+    ctx.ctx_functions = SOME callee ==>
   ?ips start final name raw data.
     MEM (set_internal_package_target cenv.ce_target
       (package_internal_fn_unit mods T (K global_nonreentrant_slot) cx.in_deploy

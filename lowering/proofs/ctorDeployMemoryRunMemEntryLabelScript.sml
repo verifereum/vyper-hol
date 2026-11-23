@@ -58,10 +58,11 @@ Proof
   Cases_on `ctor_fn` >> gvs[internal_fn_descriptors_def] >>
   rename1 `classify_functions tops = (exts, ints, fb, SOME cf)` >>
   qmatch_goalsub_abbrev_tac `internal_fn_descriptors packages` >>
+  drule_all deploy_order_internals_ok >> strip_tac >>
   qspecl_then [`tops`, `rpolicy.rpol_target`, `T`, `K global_nonreentrant_slot`,
     `T`, `imm_len tops`, `order_internals (deploy_internal_order (SOME cf) ints) ints`,
     `packages`] mp_tac deploy_internal_package_labels >>
-  simp[Abbr `packages`, PERM_order_deploy_internals, GSYM immSectionDeadTheory.imm_len_def]
+  simp[Abbr `packages`, GSYM immSectionDeadTheory.imm_len_def]
 QED
 
 Theorem ctor_checked_run_member_entry_label[local]:

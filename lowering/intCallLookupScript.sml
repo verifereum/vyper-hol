@@ -153,6 +153,57 @@ Proof
   simp[mk_internal_function_metadata]
 QED
 
+(* Conversely, a name the lowered unit resolves is its entry or one of its
+   internal functions. *)
+Theorem run_lowering_lookup_name[local]:
+  !selectors external_fns internal_fns fallback_fn rpolicy bucket_count
+   fn_metadata_bytes dense_buckets entry_info entry_label unit name callee.
+    run_lowering selectors external_fns internal_fns fallback_fn rpolicy
+      bucket_count fn_metadata_bytes dense_buckets entry_info entry_label =
+      SOME unit /\
+    lookup_function name unit.cu_context.ctx_functions = SOME callee ==>
+    name = entry_label \/
+    MEM name (MAP FST (internal_fn_descriptors internal_fns))
+Proof
+  rpt gen_tac >>
+  simp[run_lowering_def, extract_context_with_internals_def, AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  gvs[AllCaseEqs(), mk_venom_context_def] >>
+  drule package_internal_blocks_metadata >> strip_tac >>
+  drule descriptor_names_fn_names >> strip_tac >>
+  drule venomInstTheory.lookup_function_mem >> gvs[mk_raw_function_def]
+QED
+
+Theorem run_grouped_lowering_lookup_name[local]:
+  !groups internal_fns fallback_fn rpolicy entry_label unit name callee.
+    run_grouped_lowering groups internal_fns fallback_fn rpolicy entry_label =
+      SOME unit /\
+    lookup_function name unit.cu_context.ctx_functions = SOME callee ==>
+    name = entry_label \/
+    MEM name (MAP FST (internal_fn_descriptors internal_fns))
+Proof
+  rpt gen_tac >>
+  simp[run_grouped_lowering_def, extract_context_with_internals_def,
+       AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  gvs[AllCaseEqs(), mk_venom_context_def] >>
+  drule package_internal_blocks_metadata >> strip_tac >>
+  drule descriptor_names_fn_names >> strip_tac >>
+  drule venomInstTheory.lookup_function_mem >> gvs[mk_raw_function_def]
+QED
+
+(* A source function's label carries its id. *)
+Theorem source_descriptor_label_id[local]:
+  !tops srcs id fname tys mode.
+    MEM (internal_fn_label id fname tys mode)
+      (MAP FST (MAP (source_internal_fn_descriptor tops F) srcs)) ==>
+    ?src. MEM src srcs /\ id = build_func_ids 0 tops (FST (SND (SND (SND src))))
+Proof
+  simp[MEM_MAP, PULL_EXISTS, pairTheory.FORALL_PROD] >> rpt strip_tac >>
+  drule internal_fn_label_id_11 >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem run_lowering_descriptors_distinct:
   !selectors external_fns internal_fns fallback_fn rpolicy bucket_count
    fn_metadata_bytes dense_buckets entry_info entry_label unit.
@@ -242,9 +293,12 @@ QED
 (* The same for a source internal function of a lowered runtime unit, at
    the label package_internal_fn gives it. *)
 Theorem lower_vyper_runtime_unit_internal_lookup:
-  !tops rpolicy unit mut nr rr name args dflts ret stmts.
+  !tops rpolicy unit mut nr rr name args dflts ret stmts callee.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    MEM (FunctionDecl Internal mut nr rr name args dflts ret stmts) tops ==>
+    MEM (FunctionDecl Internal mut nr rr name args dflts ret stmts) tops /\
+    lookup_function
+      (internal_fn_label (build_func_ids 0 tops name) name (MAP SND args) F)
+      unit.cu_context.ctx_functions = SOME callee ==>
     ?fbs.
       lookup_function
         (internal_fn_label (build_func_ids 0 tops name) name (MAP SND args) F)
@@ -272,6 +326,28 @@ Proof
      simp[constSubstTheory.subst_consts_fn_def] >>
      disch_then kall_tac >>
      qexistsl_tac [`dflts`, `stmts`] >> simp[]) >>
+  `MEM name (runtime_internal_order tops ints)` by
+    (`MEM (internal_fn_label (build_func_ids 0 tops name) name (MAP SND args) F)
+        (MAP FST (MAP (source_internal_fn_descriptor tops F)
+           (order_internals (runtime_internal_order tops ints) ints)))` by
+       (`internal_fn_label (build_func_ids 0 tops name) name (MAP SND args) F <>
+         "__entry"` by simp[internal_fn_label_def] >>
+        Cases_on `EXISTS external_has_defaults exts` >> gvs[]
+        >- (drule_all run_grouped_lowering_lookup_name >>
+            simp[GSYM MAP_MAP_o,
+                 internal_fn_descriptors_set_internal_package_target,
+                 internal_fn_descriptors_MAP_package_internal_fn]) >>
+        drule_all run_lowering_lookup_name >>
+        simp[GSYM MAP_MAP_o,
+             internal_fn_descriptors_set_internal_package_target,
+             internal_fn_descriptors_MAP_package_internal_fn]) >>
+     drule source_descriptor_label_id >> strip_tac >>
+     PairCases_on `src` >> gvs[] >>
+     `src3 = name` suffices_by (rw[] >> fs[]) >>
+     `MEM (src0,src1,src2,src3,src4,src5,src6,src7)
+        (FST (SND (classify_functions tops)))` by gs[] >>
+     gvs[MEM_classify_internal] >>
+     metis_tac[build_func_ids_11, vyperASTTheory.function_visibility_distinct]) >>
   `MEM (source_internal_fn_descriptor tops F
           (mut,nr,rr,name,args,dflts,ret,stmts))
        (internal_fn_descriptors
@@ -283,7 +359,7 @@ Proof
             internal_fn_descriptors_MAP_package_internal_fn, MEM_MAP] >>
     qexists_tac `subst_consts_fn (module_consts_env tops [])
       (mut,nr,rr,name,args,dflts,ret,stmts)` >>
-    simp[constSubstTheory.subst_consts_fn_def, source_internal_fn_descriptor_def]) >>
+    gs[constSubstTheory.subst_consts_fn_def, source_internal_fn_descriptor_def]) >>
   Cases_on `source_internal_fn_descriptor tops F
               (mut,nr,rr,name,args,dflts,ret,stmts)` >>
   rename1 `_ = (lbl, rest)` >> PairCases_on `rest` >>

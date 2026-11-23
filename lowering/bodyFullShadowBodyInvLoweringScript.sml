@@ -22,7 +22,9 @@ Theorem shadow_body_inv_from_internal_runs[local]:
   (if is_ctor then lower_vyper_deploy_unit tops rp bc = SOME unit
    else lower_vyper_runtime_unit tops rp = SOME unit) /\
   name = (if is_ctor then "__deploy" else "__entry") /\
-  PERM srcs (FST (SND (classify_functions tops))) /\
+  (!x. MEM x srcs ==> MEM x (FST (SND (classify_functions tops)))) /\
+  (!x y. MEM x (FST (SND (classify_functions tops))) /\ MEM y srcs /\
+         FST (SND (SND (SND x))) = FST (SND (SND (SND y))) ==> MEM x srcs) /\
   ips = MAP (set_internal_package_target rp.rpol_target o
     package_internal_fn tops T (K global_nonreentrant_slot) is_ctor
       (if is_ctor then imm_len tops else 0)) srcs /\
@@ -51,11 +53,25 @@ Proof
   qpat_x_assum `mode = is_ctor` SUBST_ALL_TAC >>
   qabbrev_tac `src = subst_consts_fn (module_consts_env tops [])
     (mut,nr,rr,fname,args,dflts,ret,ss)` >>
-  `MEM src srcs` by
-    (qpat_assum `PERM srcs _` (mp_tac o MATCH_MP PERM_MEM_EQ) >>
-     disch_then (qspec_then `src` SUBST1_TAC) >>
-     simp[Abbr `src`, subst_consts_fn_def, MEM_classify_internal] >>
+  `MEM src (FST (SND (classify_functions tops)))` by
+    (simp[Abbr `src`, subst_consts_fn_def, MEM_classify_internal] >>
      qexistsl [`dflts`, `ss`] >> simp[]) >>
+  `MEM src srcs` by
+    (mp_tac (Q.INST [`target` |-> `rp.rpol_target`,
+       `cap` |-> `if is_ctor then imm_len tops else 0`,
+       `id` |-> `build_func_ids 0 tops fname`,
+       `tys` |-> `MAP SND (args : (string # type) list)`, `mode` |-> `is_ctor`]
+       packaged_internal_source_id) >>
+     impl_tac >- fs[] >> strip_tac >>
+     rename1 `MEM other srcs` >> PairCases_on `other` >>
+     `MEM (other0,other1,other2,other3,other4,other5,other6,other7)
+        (FST (SND (classify_functions tops)))` by metis_tac[] >>
+     qpat_x_assum `MEM _ (FST (SND (classify_functions tops)))`
+       (strip_assume_tac o REWRITE_RULE [MEM_classify_internal]) >>
+     `fname = other3` by
+       (irule build_func_ids_11 >> fs[] >> metis_tac[]) >>
+     first_x_assum irule >> simp[Abbr `src`, subst_consts_fn_def] >>
+     goal_assum (drule_at Any) >> simp[]) >>
   `EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips)` by
     simp[package_internal_labels] >>
   `ALL_DISTINCT (MAP FST (internal_fn_descriptors ips))` by
@@ -169,7 +185,7 @@ Proof
     `rawS` |-> `shadow_unit.cu_context`, `dataS` |-> `shadow_data`,
     `srcs` |-> `order_internals (runtime_internal_order tops ints) ints`]
     shadow_body_inv_from_internal_runs) >>
-  fs[Abbr `ips`, PERM_order_runtime_internals, gas_shadow_unit_def]
+  fs[Abbr `ips`, gas_shadow_unit_def] >> metis_tac[]
 QED
 
 Theorem runtime_shadow_body_inv:
@@ -240,7 +256,7 @@ Proof
     `rawS` |-> `shadow_unit.cu_context`, `dataS` |-> `shadow_data`,
     `srcs` |-> `order_internals (runtime_internal_order tops ints) ints`]
     shadow_body_inv_from_internal_runs) >>
-  simp[Abbr `ips`, PERM_order_runtime_internals]
+  fs[Abbr `ips`] >> metis_tac[]
 QED
 
 Theorem runtime_grouped_shadow_body_inv:
@@ -311,8 +327,8 @@ Proof
      simp[optionTheory.OPTREL_def, gas_shadow_unit_def]) >>
   mp_tac (Q.INST [`is_ctor` |-> `T`, `name` |-> `"__deploy"`]
     shadow_body_inv_from_internal_runs) >>
-  fs[deploy_source_ok_def, install_immutable_reservation_def, Abbr `srcs`,
-     PERM_order_deploy_internals]
+  fs[deploy_source_ok_def, install_immutable_reservation_def, Abbr `srcs`] >>
+  metis_tac[]
 QED
 
 (* Two modules can declare the same internal name and lower to distinct labels. *)

@@ -1816,6 +1816,29 @@ Proof
   simp[deploy_internal_order_def, reach_internals_distinct]
 QED
 
+Theorem ALL_DISTINCT_MAP_FILTER[local]:
+  !f P l. ALL_DISTINCT (MAP f l) ==> ALL_DISTINCT (MAP f (FILTER P l))
+Proof
+  ntac 2 gen_tac >> Induct >> rw[listTheory.MEM_MAP, listTheory.MEM_FILTER] >> metis_tac[]
+QED
+
+(* Selecting from functions with distinct keys keeps the keys distinct. *)
+Theorem ALL_DISTINCT_order_runtime_internals:
+  !f tops ints. ALL_DISTINCT (MAP f ints) ==>
+    ALL_DISTINCT (MAP f (order_internals (runtime_internal_order tops ints) ints))
+Proof
+  metis_tac[PERM_order_runtime_internals, sortingTheory.PERM_MAP,
+            sortingTheory.ALL_DISTINCT_PERM, ALL_DISTINCT_MAP_FILTER]
+QED
+
+Theorem ALL_DISTINCT_order_deploy_internals:
+  !f ctor ints. ALL_DISTINCT (MAP f ints) ==>
+    ALL_DISTINCT (MAP f (order_internals (deploy_internal_order ctor ints) ints))
+Proof
+  metis_tac[PERM_order_deploy_internals, sortingTheory.PERM_MAP,
+            sortingTheory.ALL_DISTINCT_PERM, ALL_DISTINCT_MAP_FILTER]
+QED
+
 (* ===== Policy-driven complete-unit lowering ===== *)
 
 (* Package runtime metadata from source, but keep the raw lowering result atomic.
