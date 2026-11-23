@@ -9,6 +9,11 @@ Ancestors
   createSizeCutCode stmtLoweringMono localPtrsProps venomInst venomExecSemantics
   venomRunBounded createSizeCutRegion createSizePrefixReplay entryCreateOperandReplay
   bodySim fragGasOrigin relation pred_set list rich_list pair arithmetic
+  createSizeOperandCode createSizeConcreteSnapshots createSizeLocationCode
+  createSizeEncodeCode createSizeFixedPreparation createSizeCtorCutSpine
+  createSizeDispatch fragFuel s1PrefixDefs exprLowering entryCreateBodyCut
+  dftGasFromListTraceDefs createExprSizeExitDefs gasExplicitSites
+  gasSummary vyperInterpreter vyperStorageFootprint words vfmConstants
 
 Theorem create_result_check_admin[local]:
   compile_check_create_result created rof sd = (result,sb) /\
@@ -178,4 +183,175 @@ Proof
                rpt (goal_assum (drule_at Any)) >> simp[]) >>
   `~create_operand_at sb u` by fs[create_operand_fetch_def] >>
   metis_tac[create_fetch_in_band]
+QED
+
+Theorem create_call_actual_itinerary[local]:
+  compile_create_call compile_expr ce ck salted rof args sa = (result,sb) ==>
+  (emit_inst INVALID [] [] sa = ((),sb) /\ result = Lit 0w) \/
+  ?cuts value salt buf len sc sd created.
+    create_call_itinerary ce ck salted args sa cuts value salt buf len /\
+    create_itinerary_code sa cuts sc /\
+    create_size_dispatch_tail rof sc sd created buf len value salt result sb
+Proof
+  strip_tac >> irule create_call_itinerary_run >> simp[] >> reverse conj_tac
+  >- (simp[create_itinerary_suppliers_def, create_operand_cut_code,
+          create_vv_snapshot_cut_code, create_unwrap_cut_code,
+          create_encode_values_cut_code, cj 1 create_fixed_preparation_intervals,
+          cj 4 create_fixed_preparation_intervals, cj 5 create_fixed_preparation_intervals] >>
+      rpt gen_tac >> rewrite_tac[compile_alloc_buffer_def] >>
+      irule create_cut_code_bind >>
+      conj_tac >- (irule create_cut_code_emit_op >> simp[create_cut_targets_def]) >>
+      simp[]) >>
+  rw[create_itinerary_rows_supplier_def, create_itinerary_ctor_rows_def] >>
+  irule create_ctor_cut_spine >> first_assum ACCEPT_TAC
+QED
+
+Theorem create_invalid_visit_safe[local]:
+  emit_inst INVALID [] [] sa = ((),sb) /\ fn_has_code sa sb fn /\
+  fn_inst_ids_distinct fn /\
+  create_interior_visit sa sb explicit ctx fn (p,d,k) s (before,hit,after) ==>
+  create_body_cut explicit tops cx st0 source (es,s) (before,hit)
+Proof
+  strip_tac >>
+  `!u i. create_operand_fetch sa sb fn u i ==> i.inst_opcode = INVALID` by
+    (rw[create_operand_fetch_def] >>
+     irule (BETA_RULE (Q.INST [`P` |-> `\i. i.inst_opcode = INVALID`]
+       added_insts_function_property)) >>
+     qexistsl_tac [`fn`,`sa`,`sb`] >>
+     drule added_insts_emit_inst >> strip_tac >>
+     fs[ci_mono_def,mk_inst_def,frag_ids_def] >>
+     metis_tac[lookup_block_get_instruction_fn_insts]) >>
+  drule create_interior_visit_cases >> disch_then (DISJ_CASES_THEN strip_assume_tac)
+  >- (res_tac >> gvs[create_body_cut_def,inst_create_size_ok_def]) >>
+  res_tac >> gvs[]
+QED
+
+Theorem create_itinerary_closed_band[local]:
+  !cuts a b. create_itinerary_code a cuts b ==> create_cut_code {} a b
+Proof
+  Induct
+  >- simp[create_itinerary_code_def] >>
+  simp[create_itinerary_code_def] >> metis_tac[create_cut_code_join]
+QED
+
+(* The right-band visit either has no size to check or is the actual emit.
+   Preserve the original native trace and the marks of its entire prefix. *)
+Theorem create_emit_visit_cases[local]:
+  create_itinerary_code sa cuts sc /\
+  emit_op opc ops sc = (created,sd) /\ MEM opc [CREATE;CREATE2] /\
+  compile_check_create_result created rof sd = (result,sb) /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+  body_inv tops ctx ce cx /\ MEM fn ctx.ctx_functions /\
+  create_interior_visit sa sb explicit ctx fn (p,d,k) s0 (before,hit,after) ==>
+  create_interior_visit sa sc explicit ctx fn (p,d,k) s0 (before,hit,after) \/
+  (case hit of (_,_,i,t) => inst_create_size_ok i t) \/
+  ?dc s bb inst.
+    hit = ((p,dc,inst.inst_id),fn,inst,s) /\
+    create_expr_prefix sa sb explicit ctx fn s0 (create_cut_marks explicit before) s /\
+    ~create_operand_at sb s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\ inst.inst_id IN frag_ids sa sb /\
+    (!j. MEM j (fn_insts fn) /\ j.inst_id IN frag_ids sa sb /\
+         MEM j.inst_opcode [CREATE;CREATE2] ==> j.inst_id <= inst.inst_id)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_then (assume_tac o cj 4) create_itinerary_code_relations >>
+  drule_then assume_tac create_itinerary_closed_band >>
+  drule_all create_dispatch_owned_band >>
+  disch_then (qx_choosel_then [`dispatch`,`db`] strip_assume_tac) >>
+  `create_cut_code {} sc sd` by
+    (`(!l. MEM l (create_cut_targets opc ops) ==> l IN {})` by fs[create_cut_targets_def] >>
+     drule create_cut_code_emit_op >> disch_then (qspec_then `sc` mp_tac) >> simp[]) >>
+  `create_cut_code {} sd sb` by metis_tac[create_result_check_cut_code,SND] >>
+  `create_cut_code {} sc sb` by metis_tac[create_cut_code_join] >>
+  `fn_has_code sa sc fn /\ fn_has_code sc sb fn` by
+    metis_tac[create_cut_code_def,fn_has_code_split] >>
+  drule_all create_interior_visit_bands >>
+  disch_then (DISJ_CASES_THEN2 (fn th => disj1_tac >> ACCEPT_TAC th)
+    (qx_choosel_then [`dc`,`kc`,`s`,`left`,`inst`] (map_every assume_tac o CONJUNCTS))) >>
+  disj2_tac >>
+  qpat_x_assum `create_operand_fetch sc sb fn s inst`
+    (qx_choosel_then [] strip_assume_tac o REWRITE_RULE [create_operand_fetch_def]) >>
+  `MEM inst (fn_insts fn)` by metis_tac[lookup_block_get_instruction_fn_insts] >>
+  `~(inst.inst_id IN frag_ids sa sc)` by (fs[frag_ids_def] >> decide_tac) >>
+  `inst.inst_id IN frag_ids sa sb` by (fs[frag_ids_def,ci_mono_def] >> decide_tac) >>
+  `inst.inst_opcode <> INVOKE` by (CCONTR_TAC >> gvs[] >> res_tac >> gvs[]) >>
+  qpat_x_assum `MEM opc [CREATE;CREATE2]` kall_tac >>
+  qpat_x_assum `let visit = _ in _`
+    (strip_assume_tac o REWRITE_RULE [LET_THM]) >>
+  gvs[trace_step_noninvoke] >>
+  Cases_on `MEM inst.inst_opcode [CREATE;CREATE2]`
+  >- (disj2_tac >> `inst = dispatch` by metis_tac[MEM] >>
+      rpt (goal_assum (drule_at Any)) >> gvs[] >>
+      rpt strip_tac >> res_tac >> fs[frag_ids_def] >> decide_tac) >>
+  disj1_tac >> fs[inst_create_size_ok_def]
+QED
+
+(* Both callbacks concern this invocation. In particular, the operand
+   callback sees the original visit even if it is inside a pending callee. *)
+Theorem create_root_visit_of_predispatch_owner:
+  let e = Call ann (CreateTarget ck salted rof ks) args opt in
+  let explicit = gas_explicit_sites ctx shctx in
+  body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shctx /\
+  expr_body_pre ce cx env e es /\ body_const_cells_agree [(NONE,tops)] cx env es /\
+  expr_vv_sim_full_pre (DF,lo,d,ctx,shctx,PG,fn,shfn) ce cx ty e es
+    (st0,sa,sb,sha,shb,vv,s0,G0,tn0) /\
+  create_interior_visit sa sb explicit ctx fn (p,depth,fuel) s0 (before,hit,after) /\
+  (!result cuts value salt buf len sc sd created.
+    compile_create_call compile_expr ce ck salted rof args sa = (result,sb) /\
+    create_call_itinerary ce ck salted args sa cuts value salt buf len /\
+    create_itinerary_code sa cuts sc /\
+    create_size_dispatch_tail rof sc sd created buf len value salt result sb /\
+    create_interior_visit sa sc explicit ctx fn (p,depth,fuel) s0 (before,hit,after) ==>
+    create_body_cut explicit tops cx st0 (eval_expr cx e) (es,s0) (before,hit)) /\
+  (!H marks s bb inst value off sz salt w tail res ee.
+    create_expr_prefix sa sb explicit ctx fn s0 marks s /\
+    (s.vs_current_bb <> sb.cs_current_bb \/
+     s.vs_inst_idx <> LENGTH sb.cs_current_insts) /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\ inst.inst_id IN frag_ids sa sb /\
+    (!j. MEM j (fn_insts fn) /\ j.inst_id IN frag_ids sa sb /\
+         MEM j.inst_opcode [CREATE;CREATE2] ==> j.inst_id <= inst.inst_id) /\
+    ((inst.inst_opcode = CREATE /\ inst.inst_operands = [value;off;sz]) \/
+     (inst.inst_opcode = CREATE2 /\ inst.inst_operands = [value;off;sz;salt])) /\
+    eval_operand sz s = SOME w /\ 2 * max_code_size < w2n w /\
+    eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+      (res,ee) /\ valid_horizon cx st0 H ee.storage_trace ==>
+    create_cut_failure tops res) ==>
+  create_body_cut explicit tops cx st0 (eval_expr cx e) (es,s0) (before,hit)
+Proof
+  simp_tac bool_ss [LET_THM] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `expr_vv_sim_full_pre _ _ _ _ _ _ _`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE[expr_vv_sim_full_pre_def]) >>
+  qpat_x_assum `compile_expr ce ty (Call _ _ _ _) sa = _` mp_tac >>
+  rewrite_tac[compile_expr_call,compile_call_def] >>
+  Cases_on `compile_create_call compile_expr ce ck salted rof args sa` >>
+  simp[as_stack_val_def] >> strip_tac >> gvs[] >>
+  rename1 `compile_create_call compile_expr ce ck salted rof args sa = (result,sb)` >>
+  drule create_call_actual_itinerary >> disch_then (DISJ_CASES_THEN strip_assume_tac)
+  >- (irule create_invalid_visit_safe >> rpt (goal_assum (drule_at Any))) >>
+  `create_interior_visit sa sc (gas_explicit_sites ctx shctx) ctx fn
+      (p,depth,fuel) s0 (before,hit,after) \/
+   (case hit of (_,_,i,t) => inst_create_size_ok i t) \/
+    ?dc s bb inst.
+      hit = ((p,dc,inst.inst_id),fn,inst,s) /\
+      create_expr_prefix sa sb (gas_explicit_sites ctx shctx) ctx fn s0
+        (create_cut_marks (gas_explicit_sites ctx shctx) before) s /\
+      ~create_operand_at sb s /\
+      lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb s.vs_inst_idx = SOME inst /\ inst.inst_id IN frag_ids sa sb /\
+      (!j. MEM j (fn_insts fn) /\ j.inst_id IN frag_ids sa sb /\
+           MEM j.inst_opcode [CREATE;CREATE2] ==> j.inst_id <= inst.inst_id)` by
+    (qpat_assum `create_size_dispatch_tail _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE[create_size_dispatch_tail_def]) >>
+     Cases_on `salt` >> full_simp_tac bool_ss [optionTheory.option_case_def] >>
+     irule create_emit_visit_cases >> simp[] >> rpt conj_tac >>
+     TRY (goal_assum (drule_at Any) >> NO_TAC) >> metis_tac[])
+  >- (first_x_assum irule >> rpt (goal_assum (drule_at Any)))
+  >- (simp[create_body_cut_def] >> PairCases_on `hit` >> fs[]) >>
+  simp[create_body_cut_def,inst_create_size_ok_def,NOT_LESS_EQUAL] >>
+  rpt strip_tac >>
+  qpat_assum `!H marks s bb inst value off sz salt w tail res ee. _` irule >>
+  rpt (goal_assum (drule_at Any)) >> fs[create_operand_at_def] >> metis_tac[]
 QED
