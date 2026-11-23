@@ -10,6 +10,7 @@
  *)
 Theory bodyFullCreateHeld
 Ancestors
+  bodySingletonCallSupport
   blueprintLiteralOffsetProps[qualified,ignore_grammar]
   bodyFullForArrayRound[qualified,ignore_grammar]
   abiDecodeValidFiniteLoop[qualified,ignore_grammar]
@@ -35,6 +36,7 @@ Ancestors
   bodyPtrMakeArrayEmission[qualified] bodyPtrEnvBuiltinsEdges[qualified]
   ptrDisciplineEmptyTaint[qualified]
   fragGasOriginPtrLoop[qualified] fragGasOriginPtr[qualified] fragExec[qualified]
+  fragGasOrigin[qualified] fragGasPathPtr[qualified]
   bodyFullAbiEncodeSetupTail[qualified] bodyFullAllocaFresh[qualified]
   bodyMemEcArithTransfers[qualified] bodyFullBuiltinECArithTransfers[qualified]
   stmtReasonLitFragMemory[qualified] bodyFullHashKeccakFixed[qualified]
@@ -1463,7 +1465,7 @@ Proof
 QED
 
 (* A pre-consumption exit still checks the same instruction's input window. *)
-Theorem create_preconsume_abort_path[local]:
+Theorem create_preconsume_abort_edge[local]:
   ((inst.inst_opcode = CREATE /\ inst.inst_operands = [amount;bufop;len]) \/
    (inst.inst_opcode = CREATE2 /\ inst.inst_operands = [amount;bufop;len;salt] /\
     (?sw. eval_operand salt s = SOME sw))) /\
@@ -1479,7 +1481,7 @@ Theorem create_preconsume_abort_path[local]:
   stor_taint_ok_at D tn s /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\ step_inst_base inst s = Abort ab u ==>
-  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (Abort ab u,G,tn)
+  gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (Abort ab u,G,tn)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `source_memory_read_ranges inst s = [(w2n off,w2n sz)] /\
@@ -1504,13 +1506,412 @@ Proof
     (qpat_assum `_ \/ _` strip_assume_tac >> Cases_on `sz = 0w` >>
      simp[mem_safe_step_non_invoke, inst_mem_below_frontier_def,
           inst_mem_below_frontiers_def, wordsTheory.w2n_eq_0] >> metis_tac[]) >>
-  irule fragGasEmitCtrlTheory.exit_inst_origin_ptr >> simp[fragExecTheory.exit_result_def] >>
-  simp[step_inst_non_invoke, mem_safe_step_non_invoke, gasEventsTheory.gas_events_step_def,
-       gasCountTheory.gas_count_step_def]
+  `ptr_safe_step D lo 0 ctx func PG G tn inst s` by simp[ptr_safe_step_def] >>
+  simp[fragGasOriginPtrTheory.gas_origin_ptr_edge_def,
+       fragGasOriginTheory.gas_origin_edge_def, fragGasPathPtrTheory.gas_path_ptr_edge_def] >>
+  conj_tac >> qexists_tac `0` >>
+  simp[step_inst_non_invoke, gasEventsTheory.gas_events_step_def,
+       gasCountTheory.gas_count_step_def,fragExecTheory.exit_result_def] >>
+  metis_tac[]
+QED
+
+(* Keep the branch's exact path witness while it is still available.  P
+   certifies the endpoint of that witness, independently of the horizon. *)
+Definition create_dispatch_prepared_outcome_def:
+  create_dispatch_prepared_outcome (DF,lo,explicit,ctx,func,PG) cx st0
+    source (es,s,G,tn) Q R P <=>
+    ?res ee r G' tn'. P r /\
+      (!tail. source (es with gas_obs := tail) = (res,ee with gas_obs := tail)) /\
+      !H. valid_horizon cx st0 H ee.storage_trace ==>
+        gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (r,G',tn') /\
+        ((?t. r = OK t /\ Q H res (ee with gas_obs := []) G' tn' t) \/
+         (exit_result r /\ R H res (ee with gas_obs := []) (G',tn') r))
+End
+
+Theorem create_dispatch_witness_exit[local]:
+  P r /\ (!tail. source (es with gas_obs := tail) = (res,ee with gas_obs := tail)) /\
+  exit_result r /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (r,G',tn') /\
+    R H res (ee with gas_obs := []) (G',tn') r) ==>
+  create_dispatch_prepared_outcome (DF,lo,explicit,ctx,func,PG) cx st0
+    source (es,s,G,tn) Q R P
+Proof
+  rw[create_dispatch_prepared_outcome_def] >>
+  qexistsl_tac [`res`,`ee`,`r`,`G'`,`tn'`] >> simp[]
+QED
+
+Theorem create_dispatch_witness_normal[local]:
+  P (OK t) /\ (!tail. source (es with gas_obs := tail) = (res,ee with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn') /\
+    Q H res (ee with gas_obs := []) G' tn' t) ==>
+  create_dispatch_prepared_outcome (DF,lo,explicit,ctx,func,PG) cx st0
+    source (es,s,G,tn) Q R P
+Proof
+  rw[create_dispatch_prepared_outcome_def] >>
+  qexistsl_tac [`res`,`ee`,`OK t`,`G'`,`tn'`] >> simp[]
 QED
 
 (* The post-validation dispatch depends only on the prepared initcode
    window, not on the builtin that produced it. *)
+Theorem create_dispatch_outcome_witness:
+  compile_create_dispatch codep len amount sop rof sm = (result,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sm x) /\
+  (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sm x) /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts /\ alloca_history func s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  s0.vs_alloca_next <= s.vs_alloca_next /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ee s /\ storage_well_formed_on cx ee (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx ee G tn s) /\
+  wb_frame cenv es ee sa s0 s /\ ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+  outcomes_accounts_typed ee.outcomes /\
+  eval_operand codep s = SOME pv /\ eval_operand len s = SOME sz /\
+  (sz <> 0w ==> ?p. codep = Var p /\ ptr_covers G tn p s (w2n sz)) /\
+  (sz <> 0w ==> w2n pv + w2n sz <= s.vs_alloca_next \/
+    (ctx_has_dalloca ctx /\ w2n s.vs_initial_fmp <= w2n pv /\
+     w2n pv + w2n sz <= w2n s.vs_fmp)) /\
+  read_memory (w2n pv) (w2n sz) s = initcode /\
+  (!i. w2n pv <= i /\ i < w2n pv + w2n sz ==> i NOTIN tn.t_mem) /\
+  op_taint tn codep = {} /\ op_taint tn len = {} /\
+  eval_operand amount s = SOME aw /\ op_taint tn amount = {} /\
+  (case sop of NONE => sw = NONE | SOME op =>
+     ?w. sw = SOME w /\ eval_operand op s = SOME w /\ op_taint tn op = {}) /\
+  post_value_type cenv e = BaseT AddressT /\ expr_has_effect e /\
+  (!tail. source (ee with gas_obs := tail) =
+    if w2n sz > 2 * max_code_size then
+      (INR (Error (RuntimeError "create initcode too large")),ee with gas_obs := tail)
+    else
+      bind (ignore_bind (check_not_static cx)
+        (create_oracle_result sw (w2n aw) initcode rof))
+        (read_result cx) (ee with gas_obs := tail)) /\
+  (!r. exit_result r /\ gas_origin_edge T explicit ctx func s [] r ==> P r) /\
+  (!mid out u w r.
+     compile_check_create_result (Var out) rof mid = (result,sb) /\
+     fn_has_code mid sb func /\
+     u.vs_current_bb = mid.cs_current_bb /\ u.vs_inst_idx = LENGTH mid.cs_current_insts /\
+     u.vs_inst_idx = SUC s.vs_inst_idx /\
+     ~u.vs_halted /\ eval_operand (Var out) u = SOME w /\
+     gas_origin_edge T explicit ctx func s [] (OK u) /\
+     (if rof /\ w = 0w then exit_result r /\ gas_origin_path T explicit ctx func u [] r
+      else r = OK (if rof then jump_to sb.cs_current_bb u else u)) ==> P r) ==>
+  create_dispatch_prepared_outcome (DF,lo,explicit,ctx,func,PG) cx st0 source (ee,s,G,tn)
+    (\H res ee' G' tn' t. ?v. res = INL v /\
+      expr_post H ctx func cenv cx e es sa sb s0 ee' v result t /\
+      expr_store_bound cx (BaseT AddressT) v result t /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx ee' G' tn' t /\
+      ptr_val_ok cx (BaseT AddressT) v result G' tn' t /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn')
+    (\H res ee' gt r. expr_exit res r /\ halt_exit H cx ee' res r /\
+       (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z)) P
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all create_dispatch_code >> strip_tac >>
+  qabbrev_tac `inst = mk_inst sm.cs_next_id (if IS_SOME sop then CREATE2 else CREATE)
+    ([amount;codep;len] ++ (case sop of NONE => [] | SOME p => [p])) [out]` >>
+  suspend "dispatch_shape"
+QED
+
+Resume create_dispatch_outcome_witness[dispatch_shape]:
+  `inst.inst_outputs = [out] /\ EVERY (\op. op_taint tn op = {}) inst.inst_operands` by
+    (Cases_on `sop` >> gvs[Abbr `inst`,mk_inst_def]) >>
+  Q.SUBGOAL_THEN
+   `((inst.inst_opcode = CREATE /\ inst.inst_operands = [amount;codep;len]) \/
+    (inst.inst_opcode = CREATE2 /\ inst.inst_operands = [amount;codep;len;THE sop] /\
+       ?w. eval_operand (THE sop) s = SOME w))` ASSUME_TAC
+  >- (Cases_on `sop` >> gvs[Abbr `inst`,mk_inst_def]) >>
+  `step_inst_base inst s =
+    if s.vs_call_ctx.cc_static then Abort ExHalt_abort (halt_state (set_returndata [] s))
+    else exec_create inst s aw pv sz sw` by
+    (Cases_on `sop` >> gvs[Abbr `inst`,mk_inst_def,step_inst_base_def,eval_operands_def]) >>
+  `ee.outcomes = SOME s.vs_outcomes /\ s.vs_call_ctx.cc_static = cx.txn.is_static` by
+    (`valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace`
+       by fs[storage_trace_domain_def] >>
+     qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >>
+     fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def]) >>
+  Cases_on `w2n sz > 2 * max_code_size \/ cx.txn.is_static \/ s.vs_outcomes = []`
+  >- suspend "preconsume" >>
+  `w2n sz <= 2 * max_code_size /\ ~cx.txn.is_static /\ s.vs_outcomes <> []` by
+    (gvs[] >> decide_tac) >>
+  Cases_on `s.vs_outcomes` >> gns[] >>
+  suspend "consume"
+QED
+
+Resume create_dispatch_outcome_witness[preconsume]:
+  `step_inst_base inst s = Abort ExHalt_abort (halt_state (set_returndata [] s))` by
+    (Cases_on `cx.txn.is_static` >> gvs[exec_create_abort_iff]) >>
+  qabbrev_tac `msg = if w2n sz > 2 * max_code_size then "create initcode too large"
+    else if cx.txn.is_static then "write in static context" else "take_create_outcome"` >>
+  `!tail. source (ee with gas_obs := tail) =
+    (INR (Error (RuntimeError msg)),ee with gas_obs := tail)` by
+    (gen_tac >> qpat_assum `!tail. source _ = _` (fn th => rewrite_tac[th]) >>
+     Cases_on `w2n sz > 2 * max_code_size` >> simp[Abbr `msg`] >>
+     Cases_on `cx.txn.is_static` >> fs[bind_def,ignore_bind_def,
+       create_oracle_result_def,take_create_outcome_exhausted]) >>
+  qabbrev_tac `r = Abort ExHalt_abort (halt_state (set_returndata [] s))` >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (r,G,tn)` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _` (drule_then strip_assume_tac) >>
+     `allocas_from lo s /\ stor_taint_ok_at (DF H) tn s` by fs[ghost_inv_at_def] >>
+     simp[Abbr `r`] >> drule_all create_preconsume_abort_edge >> simp[]) >>
+  `exit_result r` by simp[Abbr `r`,fragExecTheory.exit_result_def] >>
+  `P r` by
+    (qpat_assum `!r. exit_result r /\ gas_origin_edge _ _ _ _ _ _ r ==> P r` irule >> simp[] >>
+     qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_edge _ _ _ _`
+       (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+     fs[storage_trace_domain_def,fragGasOriginPtrTheory.gas_origin_ptr_edge_def]) >>
+  irule create_dispatch_witness_exit >>
+  qexistsl [`G`,`ee`,`r`,`INR (Error (RuntimeError msg))`,`tn`] >> simp[] >>
+  gen_tac >> disch_tac >> conj_tac
+  >- (irule (cj 3 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >> simp[]) >>
+  simp[Abbr `r`,exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def]
+QED
+
+Resume create_dispatch_outcome_witness[consume]:
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ee s /\ storage_well_formed_on cx ee (FST H)` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >> simp[]) >>
+  `outcomes_accounts_typed ee.outcomes` by simp[] >>
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`value` |-> `w2n w`, `salt` |-> `sw`] create_paired_adoption)) >>
+  disch_then (qspecl_then [`aw`,`sw`,`rof`]
+    (qx_choose_then `ef` (qx_choose_then `adopted` (map_every assume_tac o CONJUNCTS)))) >>
+  rename1 `ee.outcomes = SOME (oc::rest)` >>
+  qabbrev_tac `addr = if oc.co_success then oc.co_created else 0w` >>
+  qabbrev_tac `raw = update_var out (w2w addr) adopted` >>
+  `step_inst_base inst s = OK raw` by simp[Abbr `raw`] >>
+  qabbrev_tac `u = raw with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `Gu = step_prov PG G inst raw` >>
+  qabbrev_tac `tu = step_taint inst s raw tn` >>
+  `raw = update_var out (w2w addr) adopted` by simp[Abbr `raw`] >>
+  `ghost_kept_at lo cenv ee sm G tn s G tn` by simp[wordArgsPtrTheory.ghost_kept_at_refl] >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+   get_instruction bb s.vs_inst_idx = SOME inst` by simp[] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,Gu,tu) /\
+    ghost_inv_at (DF H) lo d cenv cx ef Gu tu u /\
+    ghost_kept_at lo cenv es sa G0 tn0 s0 Gu tu /\
+    lookup_var out u = SOME (w2w addr) /\ FLOOKUP Gu out = NONE /\
+    op_taint tu (Var out) = {}` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _ /\ _`
+       (drule_then strip_assume_tac) >>
+     drule_all create_consumed_origin_ghost >>
+     disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >>
+     simp_tac bool_ss [LET_THM] >>
+     map_every (fn q => qpat_assum q (fn th =>
+       once_rewrite_tac [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]))
+       [`Abbrev (u = _)`,`Abbrev (Gu = _)`,`Abbrev (tu = _)`] >>
+     disch_then (map_every assume_tac o CONJUNCTS) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     irule bodyFullUnwrapRunTheory.ghost_kept_at_clean_suffix >>
+     qpat_assum `ghost_kept_at lo cenv es sa G0 tn0 s0 G tn` (irule_at Any) >>
+     simp[] >> rpt strip_tac >>
+     `not_fresh_at sm x` by metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
+     `x <> out` by metis_tac[] >> simp[]) >>
+  suspend "result_check"
+QED
+
+Resume create_dispatch_outcome_witness[result_check]:
+  `adopted.vs_current_bb = s.vs_current_bb /\ adopted.vs_vars = s.vs_vars /\
+   adopted.vs_alloca_next = s.vs_alloca_next /\ adopted.vs_allocas = s.vs_allocas /\
+   adopted.vs_initial_fmp = s.vs_initial_fmp /\ adopted.vs_fmp = s.vs_fmp /\
+   adopted.vs_memory = s.vs_memory /\ adopted.vs_halted = s.vs_halted` by
+    (qpat_assum `adopted = _` (fn th => once_rewrite_tac[th]) >> simp[NoAsms]) >>
+  qpat_x_assum `adopted = _` kall_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    (qpat_assum `storage_trace_domain _ _ _` (mp_tac o REWRITE_RULE [storage_trace_domain_def]) >>
+     disch_then ACCEPT_TAC) >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_edge _ _ _ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> stmt_state_rel _ _ _ _ _ ee s /\ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  `u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = SUC s.vs_inst_idx /\
+   u.vs_alloca_next = s.vs_alloca_next /\ u.vs_allocas = s.vs_allocas /\
+   u.vs_initial_fmp = s.vs_initial_fmp /\ u.vs_fmp = s.vs_fmp /\
+   u.vs_memory = s.vs_memory /\ u.vs_returndata = oc.co_returnData /\ ~u.vs_halted` by
+    (map_every (fn q => qpat_assum q (fn th =>
+       once_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]))
+       [`Abbrev (u = _)`,`Abbrev (raw = _)`] >>
+     simp[NoAsms,update_var_def] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qpat_assum `adopted.vs_halted = _` (fn th => once_rewrite_tac[th]) >>
+     first_assum ACCEPT_TAC) >>
+  `allocas_from lo u /\ lo <= u.vs_alloca_next` by
+    (qpat_assum `ghost_inv_at _ _ _ _ _ ef Gu tu u` mp_tac >>
+     simp[NoAsms,ghost_inv_at_def]) >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+   (ctx_has_dalloca ctx ==> u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp)` by
+    (conj_tac
+     >- (simp[allocas_below_fmp_def] >>
+         qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+           (ACCEPT_TAC o REWRITE_RULE[allocas_below_fmp_def])) >>
+     `pending_alloca_size func u = pending_alloca_size func s` by simp[pending_alloca_size_def] >>
+     simp[] >> strip_tac >>
+     drule stateRelProjTheory.stmt_state_rel_fmp_room >>
+     simp[fmp_room_def] >> decide_tac) >>
+  `eval_operand (Var out) u = SOME (w2w addr)` by simp[eval_operand_def] >>
+  `u.vs_current_bb = mid.cs_current_bb /\ u.vs_inst_idx = LENGTH mid.cs_current_insts` by simp[] >>
+  `(rof /\ (w2w addr:bytes32) = 0w ==>
+     lo <= u.vs_alloca_next /\ LENGTH u.vs_returndata < dimword (:256) /\
+     (ctx_has_dalloca ctx ==> u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp))`
+    by (strip_tac >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+        qpat_assum `u.vs_returndata = _` (fn th => once_rewrite_tac[th]) >>
+        first_assum ACCEPT_TAC) >>
+  `((w2w addr:bytes32) = 0w) = (addr = 0w)` by
+    simp[wordsTheory.w2w_eq_n2w] >>
+  `gas_origin_edge T explicit ctx func s [] (OK u)` by
+    (qpat_assum `gas_origin_ptr_edge _ (s,G,tn) [] _` mp_tac >>
+     simp[NoAsms,fragGasOriginPtrTheory.gas_origin_ptr_edge_def]) >>
+  drule_all create_check_result_path >>
+  disch_then (qspecl_then [`explicit`,`PG`,`Gu`] mp_tac) >>
+  Cases_on `rof /\ addr = 0w` >> simp_tac bool_ss [] >> simp[]
+  >- suspend "forward" >>
+  suspend "land"
+QED
+
+Resume create_dispatch_outcome_witness[forward]:
+  strip_tac >>
+  `!tail. source (ee with gas_obs := tail) =
+    (INR (Error (RevertData oc.co_returnData)),ef with gas_obs := tail)` by
+    (gen_tac >> qpat_assum `!tail. source _ = _` (fn th => once_rewrite_tac[th]) >>
+     simp[bind_def,ignore_bind_def,check_not_static_def,check_def,assert_def,return_def] >>
+     qpat_x_assum `rof /\ addr = 0w` strip_assume_tac >>
+     qpat_assum `!tail. create_oracle_result _ _ _ _ _ = _`
+       (qspec_then `tail` (fn th =>
+          qpat_assum `rof:bool` (fn hr => qpat_assum `addr = 0w` (fn hz =>
+            once_rewrite_tac [REWRITE_RULE [hr,hz] th])))) >>
+     simp[NoAsms]) >>
+  `gas_origin_path T explicit ctx func u [] (Abort Revert_abort t)` by
+    (qpat_assum `!D. gas_origin_ptr_path _ (u,Gu,tu) [] _`
+       (qspec_then `DF (storage_trace_horizon ee.storage_trace)` mp_tac) >>
+     metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_projections]) >>
+  `P (Abort Revert_abort t)` by
+    (qpat_assum `!mid out u w r. _ ==> P r`
+       (qspecl_then [`mid`,`out`,`u`,`w2w addr`,`Abort Revert_abort t`] mp_tac) >>
+     simp[fragExecTheory.exit_result_def]) >>
+  irule create_dispatch_witness_exit >>
+  qexistsl [`Gf`,`ef`,`Abort Revert_abort t`,`INR (Error (RevertData oc.co_returnData))`,`tf`] >>
+  simp[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def,
+       IgnAsm `ef.storage_trace = _`] >>
+  gen_tac >> disch_tac >>
+  qpat_assum `!H. valid_horizon _ _ H ef.storage_trace ==> _` (drule_then strip_assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_edge _ _ _ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  irule (REWRITE_RULE [listTheory.APPEND]
+    (Q.INST [`left` |-> `[]`,`right` |-> `[]`]
+      (SPEC_ALL (cj 2 fragGasOriginPtrTheory.gas_origin_ptr_path_rules)))) >>
+  goal_assum (drule_at Any) >> first_assum MATCH_ACCEPT_TAC
+QED
+
+Resume create_dispatch_outcome_witness[land]:
+  qmatch_goalsub_abbrev_tac `eval_operand result z = _` >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!tail. source (ee with gas_obs := tail) = (INL (AddressV addr),ef with gas_obs := tail)` by
+    (gen_tac >> qpat_assum `!tail. source _ = _` (fn th => once_rewrite_tac[th]) >>
+     simp[bind_def,ignore_bind_def,check_not_static_def,check_def,assert_def,return_def] >>
+     `~(addr = 0w /\ rof)` by metis_tac[] >>
+     qpat_assum `!tail. create_oracle_result _ _ _ _ _ = _`
+       (qspec_then `tail` (fn th => qpat_assum `~(addr = 0w /\ rof)` (fn h =>
+          once_rewrite_tac [REWRITE_RULE [h] th]))) >> simp[read_result_def,return_def]) >>
+  `P (OK z)` by
+    (qpat_assum `!mid out u w r. _ ==> P r`
+       (qspecl_then [`mid`,`out`,`u`,`w2w addr`,`OK z`] mp_tac) >>
+     simp[Abbr `z`]) >>
+  irule create_dispatch_witness_normal >>
+  qexistsl [`Gu`,`ef`,`INL (AddressV addr)`,`z`,`tu`] >>
+  simp[IgnAsm `ef.storage_trace = _`] >>
+  gen_tac >> disch_tac >>
+  qpat_assum `!H. valid_horizon _ _ H ef.storage_trace ==> _` (drule_then strip_assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_edge _ _ _ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  conj_tac
+  >- (irule (REWRITE_RULE [listTheory.APPEND]
+        (Q.INST [`left` |-> `[]`,`right` |-> `[]`]
+          (SPEC_ALL (cj 2 fragGasOriginPtrTheory.gas_origin_ptr_path_rules)))) >>
+      goal_assum (drule_at Any) >> first_assum MATCH_ACCEPT_TAC) >>
+  `alloca_history func u` by
+    (`alloca_inv s` by
+       (qpat_assum `stmt_state_rel _ ctx func cenv cx ee s` mp_tac >>
+        simp[NoAsms,stmt_state_rel_def]) >>
+     `~is_terminator inst.inst_opcode` by
+       (qpat_assum `_ \/ _` strip_assume_tac >> simp[is_terminator_def]) >>
+     drule_all allocaHistoryTheory.alloca_history_base_step >>
+     qpat_assum `Abbrev (u = _)` (fn th =>
+       once_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
+     qpat_assum `~is_terminator inst.inst_opcode` (fn th => rewrite_tac [th])) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- suspend "expr_post"
+  >- simp[exprSimMemDefsTheory.expr_store_bound_word,is_word_type_def]
+  >- (Cases_on `rof` >> simp[Abbr `z`] >>
+      irule allocaHistoryTheory.alloca_history_jump >>
+      simp[jump_to_def] >> qexists `u` >> simp[])
+  >- (Cases_on `rof` >> simp[Abbr `z`,allocas_below_fmp_def,jump_to_def] >>
+      qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+        (ACCEPT_TAC o REWRITE_RULE [allocas_below_fmp_def]))
+  >- simp[Abbr `z`,jump_to_def,COND_RAND,COND_RATOR]
+  >- (Cases_on `rof` >> simp[Abbr `z`,fragGasEmitCtrlTheory.ghost_inv_at_jump_to] >>
+      qpat_assum `ghost_inv_at (DF H) lo d cenv cx ef Gu tu u` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> simp[ghost_inv_at_def] >> metis_tac[]) >>
+  irule ptr_val_ok_word >> simp[is_word_type_def,op_prov_def]
+QED
+
+Resume create_dispatch_outcome_witness[expr_post]:
+  (* The optional jump changes only control; restore the expression frame
+     using the same adopted state and the fresh address output. *)
+  `stmt_state_rel H ctx func cenv cx ef adopted` by
+    (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> request_agree _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
+  `not_local_ptr cenv ef.scopes out` by (irule exprSimOperandsTheory.fresh_not_local_ptr >>
+    goal_assum (drule_at Any) >> simp[]) >>
+  `stmt_state_rel H ctx func cenv cx ef raw` by
+    (qpat_assum `raw = _` (fn th => once_rewrite_tac [th]) >>
+     irule stmt_state_rel_update_var >> simp[]) >>
+  `stmt_state_rel H ctx func cenv cx (ef with gas_obs := []) z` by
+    (map_every (fn q => qpat_assum q (fn th =>
+       once_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]))
+       [`Abbrev (z = _)`,`Abbrev (u = _)`] >>
+     Cases_on `rof` >>
+     rewrite_tac[stmt_state_rel_jump_to,stmt_state_rel_inst_idx,
+                 stmt_state_rel_start_gas_obs] >> first_assum ACCEPT_TAC) >>
+  `storage_well_formed_on cx (ef with gas_obs := []) (FST H)` by
+    (irule (iffRL storage_well_formed_on_backends) >> qexists `ef` >> simp[]) >>
+  `z.vs_allocas = s.vs_allocas /\ z.vs_memory = s.vs_memory` by
+    (Cases_on `rof` >> simp[Abbr `z`,jump_to_def]) >>
+  `!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s` by
+    (rpt strip_tac >>
+     `not_fresh_at sm x` by metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
+     `x <> out` by metis_tac[] >>
+     map_every (fn q => qpat_assum q (fn th =>
+       once_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]))
+       [`Abbrev (z = _)`,`Abbrev (u = _)`,`Abbrev (raw = _)`] >>
+     map_every (fn q => qpat_assum q mp_tac) [`x <> out`,`adopted.vs_vars = s.vs_vars`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `rof` >>
+     simp[lookup_var_def,update_var_def,jump_to_def,finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `eval_operand (Var out) z = SOME (w2w addr)` by
+    (qpat_assum `result = Var out` (fn th => once_rewrite_tac [GSYM th]) >>
+     first_assum ACCEPT_TAC) >>
+  qpat_x_assum `wb_frame cenv es ee sa s0 s` mp_tac >>
+  simp[loweringPostsTheory.expr_post_def,loweringPostsTheory.wb_frame_def,
+       loweringPostsTheory.expr_val_rel_def,loweringPostsTheory.expr_val_at_def,
+       loweringPostsTheory.expr_val_own_def,is_word_type_def,
+       vyperValueTheory.evaluate_type_def,convertScalarBytesTheory.scalar_typed_address_word,
+       loweringPostsTheory.locals_kept_def,loweringPostsTheory.popped_kept_def] >>
+  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+Finalise create_dispatch_outcome_witness
+
 Theorem create_dispatch_outcome_full:
   compile_create_dispatch codep len amount sop rof sm = (result,sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
@@ -1560,277 +1961,16 @@ Theorem create_dispatch_outcome_full:
        (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all create_dispatch_code >> strip_tac >>
-  qabbrev_tac `inst = mk_inst sm.cs_next_id (if IS_SOME sop then CREATE2 else CREATE)
-    ([amount;codep;len] ++ (case sop of NONE => [] | SOME p => [p])) [out]` >>
-  suspend "dispatch_shape"
+  drule_all (SIMP_RULE (srw_ss()) []
+    (Q.INST [`P` |-> `\r. T`] create_dispatch_outcome_witness)) >>
+  disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >>
+  simp[NoAsms,create_dispatch_prepared_outcome_def] >> strip_tac >>
+  rename1 `!tail. source (ee with gas_obs := tail) = (res,ef with gas_obs := tail)` >>
+  Cases_on `storage_trace_domain cx st0 ef.storage_trace`
+  >- (simp[gas_outcome_full_def] >> qexists_tac `[]` >> simp[] >>
+      disj2_tac >> disj1_tac >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  irule gasOutcomeFullComposeTheory.gas_outcome_full_bad_nil >> simp[]
 QED
-
-Resume create_dispatch_outcome_full[dispatch_shape]:
-  `inst.inst_outputs = [out] /\ EVERY (\op. op_taint tn op = {}) inst.inst_operands` by
-    (Cases_on `sop` >> gvs[Abbr `inst`,mk_inst_def]) >>
-  Q.SUBGOAL_THEN
-   `((inst.inst_opcode = CREATE /\ inst.inst_operands = [amount;codep;len]) \/
-    (inst.inst_opcode = CREATE2 /\ inst.inst_operands = [amount;codep;len;THE sop] /\
-       ?w. eval_operand (THE sop) s = SOME w))` ASSUME_TAC
-  >- (Cases_on `sop` >> gvs[Abbr `inst`,mk_inst_def]) >>
-  `step_inst_base inst s =
-    if s.vs_call_ctx.cc_static then Abort ExHalt_abort (halt_state (set_returndata [] s))
-    else exec_create inst s aw pv sz sw` by
-    (Cases_on `sop` >> gvs[Abbr `inst`,mk_inst_def,step_inst_base_def,eval_operands_def]) >>
-  `ee.outcomes = SOME s.vs_outcomes /\ s.vs_call_ctx.cc_static = cx.txn.is_static` by
-    (`valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace`
-       by fs[storage_trace_domain_def] >>
-     first_assum (drule_then strip_assume_tac) >>
-     fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def]) >>
-  Cases_on `w2n sz > 2 * max_code_size \/ cx.txn.is_static \/ s.vs_outcomes = []`
-  >- suspend "preconsume" >>
-  `w2n sz <= 2 * max_code_size /\ ~cx.txn.is_static /\ s.vs_outcomes <> []` by
-    (gvs[] >> decide_tac) >>
-  Cases_on `s.vs_outcomes` >> gns[] >>
-  suspend "consume"
-QED
-
-Resume create_dispatch_outcome_full[preconsume]:
-  `step_inst_base inst s = Abort ExHalt_abort (halt_state (set_returndata [] s))` by
-    (Cases_on `cx.txn.is_static` >> gvs[exec_create_abort_iff]) >>
-  qabbrev_tac `msg = if w2n sz > 2 * max_code_size then "create initcode too large"
-    else if cx.txn.is_static then "write in static context" else "take_create_outcome"` >>
-  `!tail. source (ee with gas_obs := tail) =
-    (INR (Error (RuntimeError msg)),ee with gas_obs := tail)` by
-    (gen_tac >> qpat_assum `!tail. source _ = _` (fn th => rewrite_tac[th]) >>
-     Cases_on `w2n sz > 2 * max_code_size` >> simp[Abbr `msg`] >>
-     Cases_on `cx.txn.is_static` >> fs[bind_def,ignore_bind_def,
-       create_oracle_result_def,take_create_outcome_exhausted]) >>
-  irule gasOutcomeFullComposeTheory.gas_outcome_full_exit >> simp[] >>
-  qexistsl [`G`,`ee`,`Abort ExHalt_abort (halt_state (set_returndata [] s))`,
-            `INR (Error (RuntimeError msg))`,`tn`] >>
-  simp[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def] >>
-  gen_tac >> disch_tac >>
-  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _` (drule_then strip_assume_tac) >>
-  `allocas_from lo s /\ stor_taint_ok_at (DF H) tn s` by fs[ghost_inv_at_def] >>
-  drule_all create_preconsume_abort_path >> simp[]
-QED
-
-Resume create_dispatch_outcome_full[consume]:
-  `!H. valid_horizon cx st0 H ee.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx ee s /\ storage_well_formed_on cx ee (FST H)` by
-    (gen_tac >> disch_tac >> first_assum (drule_then strip_assume_tac) >> simp[]) >>
-  `outcomes_accounts_typed ee.outcomes` by simp[] >>
-  drule_all (SIMP_RULE bool_ss [] (Q.INST [`value` |-> `w2n w`, `salt` |-> `sw`] create_paired_adoption)) >>
-  disch_then (qspecl_then [`aw`,`sw`,`rof`]
-    (qx_choose_then `ef` (qx_choose_then `adopted` (map_every assume_tac o CONJUNCTS)))) >>
-  rename1 `ee.outcomes = SOME (oc::rest)` >>
-  qabbrev_tac `addr = if oc.co_success then oc.co_created else 0w` >>
-  qabbrev_tac `raw = update_var out (w2w addr) adopted` >>
-  `step_inst_base inst s = OK raw` by simp[Abbr `raw`] >>
-  qabbrev_tac `u = raw with vs_inst_idx := SUC s.vs_inst_idx` >>
-  qabbrev_tac `Gu = step_prov PG G inst raw` >>
-  qabbrev_tac `tu = step_taint inst s raw tn` >>
-  `raw = update_var out (w2w addr) adopted` by simp[Abbr `raw`] >>
-  `ghost_kept_at lo cenv ee sm G tn s G tn` by simp[wordArgsPtrTheory.ghost_kept_at_refl] >>
-  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-   get_instruction bb s.vs_inst_idx = SOME inst` by simp[] >>
-  `!H. valid_horizon cx st0 H ee.storage_trace ==>
-    gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,Gu,tu) /\
-    ghost_inv_at (DF H) lo d cenv cx ef Gu tu u /\
-    ghost_kept_at lo cenv es sa G0 tn0 s0 Gu tu /\
-    lookup_var out u = SOME (w2w addr) /\ FLOOKUP Gu out = NONE /\
-    op_taint tu (Var out) = {}` by
-    (gen_tac >> disch_tac >>
-     qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _ /\ _`
-       (drule_then strip_assume_tac) >>
-     drule_all create_consumed_origin_ghost >>
-     disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >>
-     simp_tac bool_ss [LET_THM] >>
-     map_every (fn q => qpat_assum q (fn th =>
-       once_rewrite_tac [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]))
-       [`Abbrev (u = _)`,`Abbrev (Gu = _)`,`Abbrev (tu = _)`] >>
-     disch_then (map_every assume_tac o CONJUNCTS) >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     irule bodyFullUnwrapRunTheory.ghost_kept_at_clean_suffix >>
-     qpat_assum `ghost_kept_at lo cenv es sa G0 tn0 s0 G tn` (irule_at Any) >>
-     simp[] >> rpt strip_tac >>
-     `not_fresh_at sm x` by metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
-     `x <> out` by metis_tac[] >> simp[]) >>
-  suspend "result_check"
-QED
-
-Resume create_dispatch_outcome_full[result_check]:
-  `adopted.vs_current_bb = s.vs_current_bb /\ adopted.vs_vars = s.vs_vars /\
-   adopted.vs_alloca_next = s.vs_alloca_next /\ adopted.vs_allocas = s.vs_allocas /\
-   adopted.vs_initial_fmp = s.vs_initial_fmp /\ adopted.vs_fmp = s.vs_fmp /\
-   adopted.vs_memory = s.vs_memory /\ adopted.vs_halted = s.vs_halted` by
-    (qpat_assum `adopted = _` (fn th => once_rewrite_tac[th]) >> simp[NoAsms]) >>
-  qpat_x_assum `adopted = _` kall_tac >>
-  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
-    (qpat_assum `storage_trace_domain _ _ _` (mp_tac o REWRITE_RULE [storage_trace_domain_def]) >>
-     disch_then ACCEPT_TAC) >>
-  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_edge _ _ _ _ /\ _`
-    (drule_then strip_assume_tac) >>
-  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> stmt_state_rel _ _ _ _ _ ee s /\ _ /\ _`
-    (drule_then strip_assume_tac) >>
-  `u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = SUC s.vs_inst_idx /\
-   u.vs_alloca_next = s.vs_alloca_next /\ u.vs_allocas = s.vs_allocas /\
-   u.vs_initial_fmp = s.vs_initial_fmp /\ u.vs_fmp = s.vs_fmp /\
-   u.vs_memory = s.vs_memory /\ u.vs_returndata = oc.co_returnData /\ ~u.vs_halted` by
-    (map_every (fn q => qpat_assum q (fn th =>
-       once_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]))
-       [`Abbrev (u = _)`,`Abbrev (raw = _)`] >>
-     simp[NoAsms,update_var_def] >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     qpat_assum `adopted.vs_halted = _` (fn th => once_rewrite_tac[th]) >>
-     first_assum ACCEPT_TAC) >>
-  `allocas_from lo u /\ lo <= u.vs_alloca_next` by
-    (qpat_assum `ghost_inv_at _ _ _ _ _ ef Gu tu u` mp_tac >>
-     simp[NoAsms,ghost_inv_at_def]) >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
-   (ctx_has_dalloca ctx ==> u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp)` by
-    (conj_tac
-     >- (simp[allocas_below_fmp_def] >>
-         qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
-           (ACCEPT_TAC o REWRITE_RULE[allocas_below_fmp_def])) >>
-     `pending_alloca_size func u = pending_alloca_size func s` by simp[pending_alloca_size_def] >>
-     simp[] >> strip_tac >>
-     drule stateRelProjTheory.stmt_state_rel_fmp_room >>
-     simp[fmp_room_def] >> decide_tac) >>
-  `eval_operand (Var out) u = SOME (w2w addr)` by simp[eval_operand_def] >>
-  `u.vs_current_bb = mid.cs_current_bb /\ u.vs_inst_idx = LENGTH mid.cs_current_insts` by simp[] >>
-  `(rof /\ (w2w addr:bytes32) = 0w ==>
-     lo <= u.vs_alloca_next /\ LENGTH u.vs_returndata < dimword (:256) /\
-     (ctx_has_dalloca ctx ==> u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp))`
-    by (strip_tac >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-        qpat_assum `u.vs_returndata = _` (fn th => once_rewrite_tac[th]) >>
-        first_assum ACCEPT_TAC) >>
-  `((w2w addr:bytes32) = 0w) = (addr = 0w)` by
-    simp[wordsTheory.w2w_eq_n2w] >>
-  drule_all create_check_result_path >>
-  disch_then (qspecl_then [`explicit`,`PG`,`Gu`] mp_tac) >>
-  Cases_on `rof /\ addr = 0w` >> simp_tac bool_ss [] >> simp[]
-  >- suspend "forward" >>
-  suspend "land"
-QED
-
-Resume create_dispatch_outcome_full[forward]:
-  strip_tac >>
-  `!tail. source (ee with gas_obs := tail) =
-    (INR (Error (RevertData oc.co_returnData)),ef with gas_obs := tail)` by
-    (gen_tac >> qpat_assum `!tail. source _ = _` (fn th => once_rewrite_tac[th]) >>
-     simp[bind_def,ignore_bind_def,check_not_static_def,check_def,assert_def,return_def] >>
-     qpat_x_assum `rof /\ addr = 0w` strip_assume_tac >>
-     qpat_assum `!tail. create_oracle_result _ _ _ _ _ = _`
-       (qspec_then `tail` (fn th =>
-          qpat_assum `rof:bool` (fn hr => qpat_assum `addr = 0w` (fn hz =>
-            once_rewrite_tac [REWRITE_RULE [hr,hz] th])))) >>
-     simp[NoAsms]) >>
-  irule gasOutcomeFullComposeTheory.gas_outcome_full_exit >>
-  reverse conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl [`Gf`,`ef`,`Abort Revert_abort t`,`INR (Error (RevertData oc.co_returnData))`,`tf`] >>
-  simp[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def,
-       IgnAsm `ef.storage_trace = _`] >>
-  gen_tac >> disch_tac >>
-  qpat_assum `!H. valid_horizon _ _ H ef.storage_trace ==> _` (drule_then strip_assume_tac) >>
-  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_edge _ _ _ _ /\ _`
-    (drule_then strip_assume_tac) >>
-  irule (REWRITE_RULE [listTheory.APPEND]
-    (Q.INST [`left` |-> `[]`,`right` |-> `[]`]
-      (SPEC_ALL (cj 2 fragGasOriginPtrTheory.gas_origin_ptr_path_rules)))) >>
-  goal_assum (drule_at Any) >> first_assum MATCH_ACCEPT_TAC
-QED
-
-Resume create_dispatch_outcome_full[land]:
-  qmatch_goalsub_abbrev_tac `eval_operand result z = _` >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `!tail. source (ee with gas_obs := tail) = (INL (AddressV addr),ef with gas_obs := tail)` by
-    (gen_tac >> qpat_assum `!tail. source _ = _` (fn th => once_rewrite_tac[th]) >>
-     simp[bind_def,ignore_bind_def,check_not_static_def,check_def,assert_def,return_def] >>
-     `~(addr = 0w /\ rof)` by metis_tac[] >>
-     qpat_assum `!tail. create_oracle_result _ _ _ _ _ = _`
-       (qspec_then `tail` (fn th => qpat_assum `~(addr = 0w /\ rof)` (fn h =>
-          once_rewrite_tac [REWRITE_RULE [h] th]))) >> simp[read_result_def,return_def]) >>
-  irule gasOutcomeFullComposeTheory.gas_outcome_full_pure >>
-  reverse conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl [`Gu`,`ef`,`INL (AddressV addr)`,`z`,`tu`] >>
-  simp[IgnAsm `ef.storage_trace = _`] >>
-  gen_tac >> disch_tac >>
-  qpat_assum `!H. valid_horizon _ _ H ef.storage_trace ==> _` (drule_then strip_assume_tac) >>
-  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_edge _ _ _ _ /\ _`
-    (drule_then strip_assume_tac) >>
-  conj_tac
-  >- (irule (REWRITE_RULE [listTheory.APPEND]
-        (Q.INST [`left` |-> `[]`,`right` |-> `[]`]
-          (SPEC_ALL (cj 2 fragGasOriginPtrTheory.gas_origin_ptr_path_rules)))) >>
-      goal_assum (drule_at Any) >> first_assum MATCH_ACCEPT_TAC) >>
-  `alloca_history func u` by
-    (`alloca_inv s` by
-       (qpat_assum `stmt_state_rel _ ctx func cenv cx ee s` mp_tac >>
-        simp[NoAsms,stmt_state_rel_def]) >>
-     `~is_terminator inst.inst_opcode` by
-       (qpat_assum `_ \/ _` strip_assume_tac >> simp[is_terminator_def]) >>
-     drule_all allocaHistoryTheory.alloca_history_base_step >>
-     qpat_assum `Abbrev (u = _)` (fn th =>
-       once_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
-     qpat_assum `~is_terminator inst.inst_opcode` (fn th => rewrite_tac [th])) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- suspend "expr_post"
-  >- simp[exprSimMemDefsTheory.expr_store_bound_word,is_word_type_def]
-  >- (Cases_on `rof` >> simp[Abbr `z`] >>
-      irule allocaHistoryTheory.alloca_history_jump >>
-      simp[jump_to_def] >> qexists `u` >> simp[])
-  >- (Cases_on `rof` >> simp[Abbr `z`,allocas_below_fmp_def,jump_to_def] >>
-      qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
-        (ACCEPT_TAC o REWRITE_RULE [allocas_below_fmp_def]))
-  >- simp[Abbr `z`,jump_to_def,COND_RAND,COND_RATOR]
-  >- (Cases_on `rof` >> simp[Abbr `z`,fragGasEmitCtrlTheory.ghost_inv_at_jump_to] >>
-      qpat_assum `ghost_inv_at (DF H) lo d cenv cx ef Gu tu u` mp_tac >>
-      POP_ASSUM_LIST (K ALL_TAC) >> simp[ghost_inv_at_def] >> metis_tac[]) >>
-  irule ptr_val_ok_word >> simp[is_word_type_def,op_prov_def]
-QED
-
-Resume create_dispatch_outcome_full[expr_post]:
-  (* The optional jump changes only control; restore the expression frame
-     using the same adopted state and the fresh address output. *)
-  `stmt_state_rel H ctx func cenv cx ef adopted` by
-    (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> request_agree _ _ _ _ /\ _`
-       (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
-  `not_local_ptr cenv ef.scopes out` by (irule exprSimOperandsTheory.fresh_not_local_ptr >>
-    goal_assum (drule_at Any) >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx ef raw` by
-    (qpat_assum `raw = _` (fn th => once_rewrite_tac [th]) >>
-     irule stmt_state_rel_update_var >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx (ef with gas_obs := []) z` by
-    (map_every (fn q => qpat_assum q (fn th =>
-       once_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]))
-       [`Abbrev (z = _)`,`Abbrev (u = _)`] >>
-     Cases_on `rof` >>
-     rewrite_tac[stmt_state_rel_jump_to,stmt_state_rel_inst_idx,
-                 stmt_state_rel_start_gas_obs] >> first_assum ACCEPT_TAC) >>
-  `storage_well_formed_on cx (ef with gas_obs := []) (FST H)` by
-    (irule (iffRL storage_well_formed_on_backends) >> qexists `ef` >> simp[]) >>
-  `z.vs_allocas = s.vs_allocas /\ z.vs_memory = s.vs_memory` by
-    (Cases_on `rof` >> simp[Abbr `z`,jump_to_def]) >>
-  `!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s` by
-    (rpt strip_tac >>
-     `not_fresh_at sm x` by metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
-     `x <> out` by metis_tac[] >>
-     map_every (fn q => qpat_assum q (fn th =>
-       once_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]))
-       [`Abbrev (z = _)`,`Abbrev (u = _)`,`Abbrev (raw = _)`] >>
-     map_every (fn q => qpat_assum q mp_tac) [`x <> out`,`adopted.vs_vars = s.vs_vars`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `rof` >>
-     simp[lookup_var_def,update_var_def,jump_to_def,finite_mapTheory.FLOOKUP_UPDATE]) >>
-  `eval_operand (Var out) z = SOME (w2w addr)` by
-    (qpat_assum `result = Var out` (fn th => once_rewrite_tac [GSYM th]) >>
-     first_assum ACCEPT_TAC) >>
-  qpat_x_assum `wb_frame cenv es ee sa s0 s` mp_tac >>
-  simp[loweringPostsTheory.expr_post_def,loweringPostsTheory.wb_frame_def,
-       loweringPostsTheory.expr_val_rel_def,loweringPostsTheory.expr_val_at_def,
-       loweringPostsTheory.expr_val_own_def,is_word_type_def,
-       vyperValueTheory.evaluate_type_def,convertScalarBytesTheory.scalar_typed_address_word,
-       loweringPostsTheory.locals_kept_def,loweringPostsTheory.popped_kept_def] >>
-  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-Finalise create_dispatch_outcome_full
 
 (* In oracle mode, a well-decoded proxy has no source-code or size
    validation branch between its operands and the shared create action. *)
@@ -4454,16 +4594,8 @@ Resume create_ctor_rows_outcome[rows_frame]:
         `expr_body_pre cenv cx env e' mid` by
           (qpat_assum `!e' st. MEM e' (e::xs) /\ _ ==> _`
              (qspecl_then [`e'`,`mid`] mp_tac) >> simp[]) >>
-        qpat_assum `expr_body_pre cenv cx env e' mid`
-          (strip_assume_tac o REWRITE_RULE [expr_body_pre_split_def]) >>
-        `FST c = NONE` by
-          (qpat_assum `EVERY (\c. FST c = NONE) (int_calls_expr e')`
-             (mp_tac o Q.SPEC `c` o REWRITE_RULE [EVERY_MEM]) >> simp[]) >>
-        `(NONE,SND c) = c` by (Cases_on `c` >> fs[]) >>
-        `get_module_code cx NONE = SOME tops` by
-          (drule bodyInvCodePropsTheory.body_inv_main_code >> simp[]) >>
-        drule expr_body_pre_mods_int_calls >>
-        simp[EVERY_MEM] >> disch_then (qspec_then `c` mp_tac) >> simp[]) >>
+        drule_all_then assume_tac body_inv_expr_pre_calls >>
+        fs[EVERY_MEM] >> res_tac) >>
      `~exprs_can_mutate cenv xs` by fs[Abbr `copy`] >>
      drule_all targetPureWalkSourceTheory.nonmutating_exprs_source_frame >>
      simp[vyperMachineFrameTheory.machine_frame_def] >> strip_tac >> gen_tac >>
@@ -4520,8 +4652,13 @@ Resume create_ctor_rows_outcome[rows_pack]:
      `lookup_var x u = SOME w` by
        (qpat_assum `!x w. not_fresh_at ss x /\ lookup_var x t = SOME w ==> _`
          (qspecl_then [`x`,`w`] mp_tac) >> simp[]) >>
+     `!n b sz. local_region cenv ee.scopes u n b sz ==>
+        regions_disjoint (w2n w) (type_memory_size tv) b sz` by
+       (qpat_assum `!n b sz. local_region cenv mid.scopes t n b sz <=> _`
+          (fn eq => qpat_assum `!n b sz. local_region cenv mid.scopes t n b sz ==> _`
+            (ACCEPT_TAC o REWRITE_RULE [eq]))) >>
      qexistsl [`x`,`w`,`tv`] >> simp[venomStateTheory.eval_operand_def] >>
-     metis_tac[]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `(cenv.ce_is_ctor /\ vv_location sv = SOME LocCode ==>
       !rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rt /\
         eval_operand (vv_operand sv) u = SOME w ==>
@@ -10639,13 +10776,11 @@ Resume create_blueprint_expr_full_ok[ctor_raw]:
       (int_calls_exprs (amount::(salts ++ [offset])))` by
     (qpat_assum `if s then (?salt. _) else salts = []` mp_tac >> Cases_on `s` >>
      simp[NoAsms] >> strip_tac >> qpat_x_assum `salts = _` SUBST_ALL_TAC >>
-     qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _`
-       (strip_assume_tac o REWRITE_RULE [expr_body_pre_split_def]) >>
-     drule_then mp_tac expr_body_pre_mods_int_calls >>
-     qpat_x_assum `EVERY (\c. FST c = NONE) (int_calls_expr (Call _ _ _ _))` mp_tac >>
-     simp[NoAsms,int_calls_expr_def,EVERY_APPEND,EVERY_MEM] >>
-     qpat_assum `get_module_code cx NONE = SOME tops` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[pairTheory.PAIR,optionTheory.SOME_11]) >>
+     qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` (fn pre =>
+       qpat_assum `body_inv _ _ _ _` (fn inv =>
+         mp_tac (MATCH_MP body_inv_expr_pre_calls (CONJ inv pre)))) >>
+     simp[NoAsms,int_calls_expr_def,EVERY_APPEND] >>
+     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `compile_create_blueprint_args _ _ T _ (MAP gas_shadow_expr [e]) _ = _`
     (assume_tac o CONV_RULE (LAND_CONV (RATOR_CONV (RAND_CONV (SIMP_CONV bool_ss [MAP]))))) >>
   ho_match_mp_tac (GEN_ALL blueprint_raw_args_cut) >>

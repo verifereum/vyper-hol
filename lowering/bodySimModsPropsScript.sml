@@ -91,14 +91,11 @@ QED
 
 Theorem body_inv_const_name_not_root_mods:
   contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
-  cx_const_name_mods mods nsid ==>
-  (!ty. ~supported_storage_value (main_module mods) nsid ty) /\
-  supported_immutable_type (main_module mods) nsid = NONE
+  cx_const_name_mods mods (NONE,id) ==>
+  (!ty. ~supported_storage_value (main_module mods) (NONE,id) ty) /\
+  supported_immutable_type (main_module mods) (NONE,id) = NONE
 Proof
-  PairCases_on `nsid` >> Cases_on `nsid0` >> strip_tac
-  >- metis_tac[body_inv_const_name_decl_mods, supported_constant_decl_not_root] >>
-  simp[supported_storage_value_def,
-       supported_immutable_type_def, supported_lookup_other_module]
+  metis_tac[body_inv_const_name_decl_mods, supported_constant_decl_not_root]
 QED
 
 Theorem body_inv_immutable_section_layout_mods:

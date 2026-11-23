@@ -855,8 +855,10 @@ Proof
      qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
        (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `expr_body_pre cenv cx env len start_mid` by
-    (drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
-     disch_then (qspecl_then [`len`,`start_mid`] mp_tac) >> fs[]) >>
+    (qpat_assum `expr_sim_inv cenv cx env (start_mid with gas_obs := [])`
+       (ASSUME_TAC o REWRITE_RULE [exprSimHypsDefsTheory.expr_sim_inv_gas_obs]) >>
+     drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
+     disch_then (qspecl_then [`len`,`start_mid`] mp_tac) >> simp[]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty len start_mid` by
     (`body_expr_full_ok cx len` by fs[body_exprs_full_ok_def] >>
@@ -2099,8 +2101,10 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
      qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
        (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `expr_body_pre cenv cx env len start_mid` by
-    (drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
-     disch_then (qspecl_then [`len`,`start_mid`] mp_tac) >> fs[]) >>
+    (qpat_assum `expr_sim_inv cenv cx env (start_mid with gas_obs := [])`
+       (ASSUME_TAC o REWRITE_RULE [exprSimHypsDefsTheory.expr_sim_inv_gas_obs]) >>
+     drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
+     disch_then (qspecl_then [`len`,`start_mid`] mp_tac) >> simp[]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty len start_mid` by
     (`body_expr_full_ok cx len` by fs[body_exprs_full_ok_def] >>
