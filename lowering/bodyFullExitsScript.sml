@@ -1,7 +1,8 @@
 (*
  * The exits of the full body induction (bodySimFullMain) that compile to
- * no operand of their own, over the finite-horizon joint judgment: break,
- * continue, bare and unreachable raise, and the unreachable assertion.
+ * no operand of their own, over the finite-horizon joint judgment: the
+ * abort and assertion target paths, and the bare and unreachable assertion
+ * (break, continue and bare and unreachable raise are in bodyFullExitActions).
  * Each target path is one zero-GAS jump, abort, or the condition's joint
  * path followed by them; the target endpoint is fixed before the horizon,
  * and the posts are read at every horizon valid for the final trace.
@@ -9,9 +10,7 @@
  * TOP-LEVEL:
  *   compile_raise_abort_path, compile_assert_cond_path
  *     -- the exit fragments' target paths
- *   compile_loop_jump_frag_full -- break and continue
- *   compile_raise_frag_full     -- bare and unreachable raise
- *   compile_assert_frag_full    -- bare and unreachable assertion
+ *   compile_assert_frag_full -- bare and unreachable assertion
  *)
 Theory bodyFullExits
 Ancestors
@@ -23,7 +22,7 @@ Ancestors
   emitHelper emitHelperProps exprLoweringProps stmtLowering exprLowering
   compileEnv allocaHistory vyperStorageFootprint vyperStorageTrace
   vyperInterpreter vyperState vyperValue venomExecSemantics venomInst
-  venomState list bodyFullExitActions
+  venomState list
 Libs
   monadsyntax
 
@@ -106,34 +105,6 @@ Proof
      fs[allocas_from_def, jump_to_def, allocas_below_fmp_def] >> metis_tac[]) >>
   qexists_tac `u` >> fs[Abbr `opc`] >>
   metis_tac[gas_origin_ptr_path_append, APPEND_NIL])
-QED
-
-(* ===== Break and continue ===== *)
-
-Theorem compile_loop_jump_frag_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty st es.
-    (st = Break \/ st = Continue) ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ty st) (stmt_env cenv lctx ty st)
-      (eval_stmt cx st) es
-Proof
-  rpt gen_tac >> disch_tac >> irule compile_loop_jump_frag_full_action >>
-  first_assum ACCEPT_TAC
-QED
-
-(* ===== Raise with no reason ===== *)
-
-Theorem compile_raise_frag_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty rk es.
-    (rk = RaiseBare \/ rk = RaiseUnreachable) ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (Raise rk)) (stmt_env cenv lctx ty (Raise rk))
-      (eval_stmt cx (Raise rk)) es
-Proof
-  rpt gen_tac >> disch_tac >> irule compile_raise_frag_full_action >>
-  first_assum ACCEPT_TAC
 QED
 
 (* ===== Assertion with no reason ===== *)

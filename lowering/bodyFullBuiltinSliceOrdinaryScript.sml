@@ -463,9 +463,8 @@ Proof
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
      qexists_tac `sa` >> fs[gasShadowStateTheory.gas_shadow_state_def]) >>
   `local_ptrs_reserved (gas_shadow_env T cenv) shadow_sa` by
-    (pure_rewrite_tac[local_ptrs_reserved_def,
-       gasShadowCompileBaseTheory.gas_shadow_env_fields] >>
-     pure_rewrite_tac[GSYM local_ptrs_reserved_def] >> first_assum ACCEPT_TAC) >>
+    (irule bodyFullSharedTheory.local_ptrs_reserved_gas_shadow >>
+     qexists_tac `sa` >> conj_tac >> first_assum ACCEPT_TAC) >>
   `ci_mono shadow_s1 shadow_sc` by
     (qspecl_then [`src_op`,`shadow_s1`] mp_tac
        exprLoweringPropsTheory.ci_mono_compile_bytestring_src >> simp[]) >>
@@ -1649,9 +1648,8 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
      qexists_tac `sa` >> fs[gasShadowStateTheory.gas_shadow_state_def]) >>
   `local_ptrs_reserved (gas_shadow_env T cenv) shadow_sa` by
-    (pure_rewrite_tac[local_ptrs_reserved_def,
-       gasShadowCompileBaseTheory.gas_shadow_env_fields] >>
-     pure_rewrite_tac[GSYM local_ptrs_reserved_def] >> first_assum ACCEPT_TAC) >>
+    (irule bodyFullSharedTheory.local_ptrs_reserved_gas_shadow >>
+     qexists_tac `sa` >> conj_tac >> first_assum ACCEPT_TAC) >>
   `ci_mono shadow_s1 shadow_sc` by
     (irule exprSimSliceOrdinaryContextTheory.slice_fixed_capture_ci_mono >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
