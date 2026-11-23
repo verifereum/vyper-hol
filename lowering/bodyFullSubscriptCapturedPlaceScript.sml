@@ -163,7 +163,8 @@ Theorem subscript_captured_pop_transport:
 Proof
   strip_tac >>
   fs[extract32_expr_post_start_gas_obs] >>
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  `expr_body_pre ce cx env obj es` by
+    metis_tac[expr_body_pre_array_subscript_base, base_from_pop_not_array_slot_base] >>
   drule_all_then assume_tac expr_body_pre_array_subscript_index_after_base >>
   drule_all_then strip_assume_tac expr_body_pre_place_metadata >>
   `?ir. eval_expr cx idx (mid with gas_obs := gs) = (INL ir,fin)` by
@@ -680,7 +681,7 @@ Proof
      disch_then (qspecl_then [`iw`,`is_signed_type (expr_type idx)`] mp_tac) >> simp[]) >>
   `value_has_type (ArrayTV etv (Fixed n)) v` by
     (`expr_body_pre ce cx env obj es` by
-       (drule_all_then assume_tac expr_body_pre_array_subscript_base >> simp[]) >>
+       metis_tac[expr_body_pre_array_subscript_base, base_from_pop_not_array_slot_base] >>
      qpat_assum `expr_body_pre _ _ _ obj _`
        (mp_then Any mp_tac expr_body_pre_runtime_typed) >>
      simp[] >> metis_tac[]) >>
