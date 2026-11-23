@@ -14,7 +14,7 @@ Ancestors bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragG
   bodyInvIntCallPinsProps
   bodyIntCallSeams bodyFullPreds bodySimFull bodyFullUnwrap
   constSubst constSubstStmtsPreserve
-  gasOutcomeFull bodyPtrDefs gasShadow gasShadowShape gasContext exprSimHypsDefs
+  gasOutcomeFull gasExemptScope[qualified,ignore_grammar] bodyPtrDefs gasShadow gasShadowShape gasContext exprSimHypsDefs
   exprSimIfExpWidenedAdapter exprSimSliceCompose
   loweringPosts exprSimVVFrame valueEncodingProofs bodyPtrBytestringBuiltinsWindowGhost
   exprReasonOperand haltExitProj typedMemoryCopy
@@ -8103,33 +8103,8 @@ Proof
   qexistsl_tac [`err`,`ee`,`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`finish'`] >>
   reverse conj_tac
   >- (qexists_tac `H` >> fs[]) >>
-  qabbrev_tac `enter = \src:evaluation_state.
-    (if src with gas_obs := [] = es with gas_obs := [] then
-       (INL T,src with scopes := scopes)
-     else (INL F,src)) : bool evaluation_result` >>
-  qabbrev_tac `rest = \b:bool.
-    ignore_bind (if b then scoped else source) (return ())` >>
-  `vyperState$bind enter rest = ignore_bind source (return ())` by
-    (simp[FUN_EQ_THM,Abbr `enter`,Abbr `rest`,bind_def] >>
-     gen_tac >> IF_CASES_TAC >> simp[] >>
-     `x = es with gas_obs := x.gas_obs` by
-       fs[evaluation_state_component_equality] >>
-     qpat_assum `x = es with gas_obs := x.gas_obs` (fn th => once_rewrite_tac[th]) >>
-     qpat_assum `!obs. source _ = scoped _`
-       (qspec_then `x.gas_obs` mp_tac) >>
-     simp[ignore_bind_def,bind_def,evaluation_state_component_equality]) >>
-  `gas_marked_exec T (ctx,fn) enter (es,s) [] (INL T)
-       (es with scopes := scopes) (OK s)` by
-    (simp[gasSummaryTheory.gas_marked_exec_def,gasSummaryTheory.gas_explicit_def,Abbr `enter`,
-          evaluation_state_component_equality] >>
-     irule fragGasModeTheory.gas_marked_path_from_mem >>
-     simp[cj 1 fragGasPathMemTheory.gas_path_mem_rules]) >>
-  `gas_exempt_cert T tops (ctx,fn) (rest T)
-     ((es with scopes := scopes) with gas_obs := [],s)
-     marks (err,ee) (leaf,finish')` by
-    (simp[Abbr `rest`] >>
-     drule gasExemptCertTheory.gas_exempt_cert_start_gas_obs >> simp[]) >>
-  drule_all gasExemptCertTheory.gas_exempt_cert_bind_bool >> simp[]
+  irule gasExemptScopeTheory.gas_exempt_cert_source_scope >> simp[] >>
+  qexistsl_tac [`scoped`,`scopes`] >> simp[]
 QED
 
 Theorem args_rest_outcome[local]:
