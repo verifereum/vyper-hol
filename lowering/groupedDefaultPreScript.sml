@@ -44,3 +44,25 @@ Proof
     (irule (cj 1 no_internal_call_int_calls) >> simp[]) >>
   simp[expr_body_pre_def]
 QED
+
+Theorem runtime_constant_expr_body_pre_mods:
+  runtime_constant_expr mods e /\ expr_sim_inv_mods mods ce cx env es /\
+  well_typed_expr env e /\ byte_widths_expr e /\ alloc_limits_expr ce e /\
+  call_evaluation_safe cx [] /\
+  ~supported_expr_exists (const_name_root_mods mods) e /\
+  ~supported_expr_exists (unallocated_bare_global_root ce env) e /\
+  get_tenv cx = type_env_all_modules mods ==>
+  expr_body_pre_mods mods ce cx env e es
+Proof
+  strip_tac >>
+  `!target. ~supported_expr_exists expr_internal_call_root e /\
+    ~supported_expr_exists (expr_abi_decode_target_root target) e /\ ~expr_has_evm_run e` by
+    (gen_tac >> qpat_assum `runtime_constant_expr mods e`
+       (fn th => mp_tac (MATCH_MP (Q.SPECL [`^body_call_root`,`e`]
+         (cj 1 runtime_constant_no_call_root)) (CONJ (REFL body_call_root) th))) >>
+     simp_tac (srw_ss()) [supported_expr_exists_disj, expr_has_evm_run_def] >>
+     CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
+  `int_calls_expr e = []` by
+    (irule (cj 1 no_internal_call_int_calls) >> simp[]) >>
+  simp[expr_body_pre_mods_def]
+QED

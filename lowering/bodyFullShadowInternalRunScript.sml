@@ -20,7 +20,7 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
-Theorem internal_fn_label_mode[local]:
+Theorem internal_fn_label_mode:
   internal_fn_label id fname tys mode = internal_fn_label id' fname' tys' mode' ==>
   mode = mode'
 Proof
@@ -149,14 +149,14 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem order_internals_unit_mem[local]:
+Theorem order_internals_unit_mem:
   MEM (src,f) (order_internals_unit names fs) <=> MEM (src,f) fs
 Proof
   rw[order_internals_unit_def, MEM_FLAT, MEM_MAP, MEM_FILTER, PULL_EXISTS] >>
   metis_tac[]
 QED
 
-Theorem classified_unit_internal_member[local]:
+Theorem classified_unit_internal_member:
   ALOOKUP mods src = SOME tops /\
   MEM (FunctionDecl Internal mut nr rr fname args dflts ret ss) tops ==>
   MEM (src,subst_consts_fn_mods (consts_env_mods mods) (mut,nr,rr,fname,args,dflts,ret,ss))
@@ -169,7 +169,7 @@ Proof
   metis_tac[ALOOKUP_MEM, unit_internal_fns_member]
 QED
 
-Theorem unit_package_internal_labels[local]:
+Theorem unit_package_internal_labels:
   EVERY (\d. internal_label_ok (FST d))
     (internal_fn_descriptors
       (MAP (set_internal_package_target target o
