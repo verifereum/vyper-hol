@@ -189,3 +189,127 @@ Proof
      fs[ci_mono_def] >> drule_all not_fresh_at_mono >> simp[]) >>
   fs[ghost_kept_at_def, target_ptr_ok_def] >> metis_tac[]
 QED
+
+(* Carry just the final typed entry through the recursive target walk.
+   The index can change this entry when the saved prefix is fixed-shape. *)
+Theorem write_memory_base_live[local]:
+  !bt cenv cx env st s t id path entry root vt tv.
+    expr_sim_inv_mods mods cenv cx env st /\ alloc_limits_target cenv bt /\
+    type_place_target env bt = SOME vt /\
+    eval_base_place cx bt s = (INL (PlaceR (MemoryPlace id path)),t) /\
+    lookup_scopes id t.scopes = SOME entry /\
+    cenv.ce_var_type id = SOME root /\
+    evaluate_type (get_tenv cx) root = SOME entry.type /\
+    well_formed_type_value entry.type /\ value_has_type entry.type entry.value /\
+    subscripts_type entry.type path = SOME tv ==>
+    ?a. evaluate_subscripts entry.type entry.value path = INL a
+Proof
+  recInduct base_assignment_target_induct >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, get_scopes_def, ignore_bind_def,
+           type_check_def, assert_def, check_def, return_def, raise_def, AllCaseEqs()] >>
+      strip_tac >> gvs[evaluate_subscripts_def])
+  >- (rpt strip_tac >> drule target_base_memory_root_ptr >> simp[target_root_def])
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      drule extend_place_memory_origin >> strip_tac >> gvs[] >>
+      drule aug_place_extend_name_memory >> strip_tac >> gvs[] >>
+      drule vyperPlaceFramesTheory.extend_place_PlaceR_state >> strip_tac >> gvs[] >>
+      gvs[vyperPlaceStatePreservationTheory.subscripts_type_append, AllCaseEqs(),
+          type_place_target_SubscriptTarget, alloc_limits_expr_def] >>
+      rename1 `eval_base_place cx bt s = (INL (PlaceR (MemoryPlace id pref)),at_base)` >>
+      `?a. evaluate_subscripts entry.type entry.value pref = INL a` by
+        (Cases_on `target_through_dynarray cenv bt`
+         >- (drule_then assume_tac target_base_memory_root_ptr >>
+             drule target_root_local_nonconstant_read >>
+             disch_then (qspec_then `cenv.ce_modules` assume_tac) >>
+             drule_all target_subscript_overlap_unwritten >> strip_tac >>
+             drule_then assume_tac read_result_state >> gvs[expr_accesses_def] >>
+             drule_all eval_expr_unwritten_local >> strip_tac >>
+             `lookup_scopes id at_base.scopes = SOME entry` by
+               (qpat_assum `_ = lookup_scopes id at_base.scopes`
+                  (fn th => pure_once_rewrite_tac[GSYM th]) >> first_assum ACCEPT_TAC) >>
+             first_x_assum drule_all >> simp[]) >>
+         drule_all write_memory_path_fit >> strip_tac >>
+         `fixed_shape_path entry.type pref` by simp[] >>
+         irule fixed_shape_path_live >> simp[]) >>
+      drule_all extend_place_memory_live >> simp[]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  drule extend_place_memory_origin >> strip_tac >> gvs[] >>
+  drule aug_place_extend_name_memory >> strip_tac >> gvs[] >>
+  drule vyperPlaceFramesTheory.extend_place_PlaceR_state >> strip_tac >> gvs[] >>
+  gvs[vyperPlaceStatePreservationTheory.subscripts_type_append, AllCaseEqs(),
+      type_place_target_AttributeTarget, alloc_limits_expr_def] >>
+  first_x_assum drule_all >> strip_tac >>
+  drule_all extend_place_memory_live >> simp[]
+QED
+
+Theorem write_array_memory_current_mods:
+  write_array_reached_mods
+    ((DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func),
+     (mods,exps,cenv,cx,env,bt,e,et,bd,vt),
+     (st0,es,sa,s0,G0,tn0),
+     (sm,sn,sb,shadow_sa,shadow_sb,rb,iop,r),
+     (base_gas,mid1,PlaceR (MemoryPlace id path),t1,G1,tn1),
+     (index_gas,mid2,v,t2,G2,tn2)) /\
+  valid_horizon cx st0 H mid2.storage_trace /\
+  eval_operand (FST rb) t1 = SOME b ==>
+  local_ptrs_reserved cenv sn /\ stmt_state_rel H ctx func cenv cx mid2 t2 /\
+  FST (SND rb) = SOME LocMemory /\ SND (SND rb) = SOME (ValPT (ArrayT et bd)) /\
+  place_ptr_rel cenv cx t2 (PlaceR (MemoryPlace id path)) b
+    (SOME LocMemory) (Type (ArrayT et bd)) /\
+  (!p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) ==>
+    not_fresh_at sn p /\ op_prov G1 (FST rb) = FLOOKUP G2 p) /\
+  ?entry etv av.
+    lookup_scopes id mid2.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL (ArrayV av) /\
+    subscripts_type entry.type path = SOME (ArrayTV etv bd) /\
+    evaluate_type (get_tenv cx) et = SOME etv /\
+    evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
+    value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
+    value_has_type (ArrayTV etv bd) (ArrayV av) /\
+    well_formed_type_value (ArrayTV etv bd)
+Proof
+  strip_tac >> drule_all_then strip_assume_tac write_array_reached_posts_mods >>
+  qhdtm_x_assum `write_array_reached_mods`
+    (strip_assume_tac o REWRITE_RULE [write_array_reached_mods_def]) >>
+  `local_ptrs_reserved cenv sa` by fs[write_target_entry_mods_def] >>
+  drule_all_then strip_assume_tac write_memory_retained_ptr >> simp[] >>
+  qpat_assum `place_ptr_rel _ _ t2 _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [place_ptr_rel_def]) >>
+  drule_then strip_assume_tac mem_path_offset_sound >>
+  `alloc_limits_target cenv bt` by fs[alloc_limits_expr_def] >>
+  `?entry. lookup_scopes id mid1.scopes = SOME entry` by
+    (qpat_x_assum `place_readable _ _ _` mp_tac >>
+     simp[place_readable_def, read_place_def, get_scopes_def, bind_def,
+          lift_option_type_def, lift_sum_def, return_def, raise_def] >>
+     Cases_on `lookup_scopes id mid1.scopes` >> simp[return_def, raise_def]) >>
+  `entry.type = tv0 /\ value_has_type tv0 entry.value /\ well_formed_type_value tv0` by
+    (qpat_assum `expr_sim_inv_mods _ _ _ _ mid1`
+       (mp_then Any (qspecl_then [`t0`,`id`,`entry`] mp_tac) write_memory_scope_type) >>
+     simp[] >> metis_tac[]) >>
+  `?a. evaluate_subscripts entry.type entry.value path = INL a` by
+    (irule write_memory_base_live >>
+     qpat_assum `eval_base_place _ _ _ = _` (irule_at Any) >>
+     qpat_assum `expr_sim_inv_mods _ _ _ _ es` (irule_at Any) >>
+     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  `?entry' a'. lookup_scopes id mid2.scopes = SOME entry' /\
+    entry'.type = tv0 /\ value_has_type tv0 entry'.value /\
+    well_formed_type_value tv0 /\ evaluate_subscripts tv0 entry'.value path = INL a'` by
+    (irule write_memory_live_after_index >>
+     qpat_assum `bind (eval_expr _ _) (read_result _) _ = _` (irule_at Any) >>
+     qpat_assum `eval_base_place _ _ _ = _` (irule_at Any) >>
+     qpat_assum `expr_sim_inv_mods _ _ _ _ mid1` (irule_at Any) >>
+     qpat_assum `type_place_target _ bt = _` (irule_at Any) >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]) >>
+  `?etv. evaluate_type (get_tenv cx) et = SOME etv /\ tv = ArrayTV etv bd` by
+    gvs[Once evaluate_type_def, AllCaseEqs()] >> gvs[] >>
+  `value_has_type (ArrayTV etv bd) a'` by
+    (irule evaluate_subscripts_type >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  Cases_on `a'` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  drule_all subscripts_type_well_formed >> simp[] >> metis_tac[]
+QED
