@@ -1,12 +1,12 @@
 (* Physical nonword copy, with a separate endpoint for the optional snapshot. *)
 Theory bodyLocalTypedCopyPathMods
 Ancestors
-  arithmetic assignTuplePtrCopyLen bodyFullMemoryStage bodyFullMemoryStore
-  bodyFullPathHistory bodyMemBopRestWordPath bodyMemoryDefs bodyPtrDefs
-  compileEnv exprLoweringProps finite_map fragExec fragGasOriginPtr fragGasMode
-  fragGasOrigin fragGasOriginPtrLoop freshWrites loweringPosts loweringStateRelDefs ptrDiscipline
-  reasonCopySourcePtr stateRelProj stmtLowering stmtSimDefs typedCopyOriginPtrBase
-  typedMemoryCopy venomMemDefs venomState words
+  arithmetic assignTuplePtrCopyLen bodyFullMemoryStore bodyFullPathHistory bodyFullPostsMods
+  bodyLocalSnapshotPhysicalMods bodyLocalSnapshotResourcesMods bodyMemoryDefs
+  bodyPtrDefs compileEnv exprLoweringProps finite_map fragExec fragGasOriginPtr
+  fragGasOriginPtrLoop freshWrites loweringPosts loweringStateRelDefs ptrDiscipline
+  reasonCopySourcePtr stateRelProj stmtLowering stmtSimDefs typedMemoryCopy
+  typedCopyOriginPtrBase venomMemDefs venomState words
 Libs
   monadsyntax
 
@@ -62,6 +62,16 @@ Theorem local_typed_copy_path_mods:
       stmt_state_rel H ctx func ce cx mid s ==> stmt_state_rel H ctx func ce cx mid u) /\
     (!D d. ghost_inv_at D lo d ce cx mid G tn s ==>
       ghost_inv_at D lo d ce cx mid Gu tu u) /\
+    (immutable_frame_mods func ce cx mid s ==> immutable_frame_mods func ce cx mid u) /\
+    (!D d. ghost_inv_at_mods D lo d ce cx mid G tn s ==>
+      ghost_inv_at_mods D lo d ce cx mid Gu tu u) /\
+    u.vs_data_section = s.vs_data_section /\
+    LENGTH s.vs_memory <= LENGTH u.vs_memory /\
+    mem_bytes_at 0 lo u.vs_memory = mem_bytes_at 0 lo s.vs_memory /\
+    (!i. i < lo ==> (i IN tu.t_mem <=> i IN tn.t_mem)) /\
+    tu.t_stor = tn.t_stor /\ tu.t_trans = tn.t_trans /\ tu.t_imm = tn.t_imm /\
+    (!aid off len. FLOOKUP u.vs_allocas aid = SOME (off,len) ==>
+      FLOOKUP s.vs_allocas aid = SOME (off,len) \/ s.vs_alloca_next <= off) /\
     alloca_frame ce mid sa s ce mid u /\
     (!aid off len i.
       FLOOKUP s.vs_allocas aid = SOME (off,len) /\ aid < sa.cs_next_id /\
@@ -102,8 +112,10 @@ Proof
 QED
 
 Resume local_typed_copy_path_mods[direct]:
-  mp_tac (Q.INST [`tenv` |-> `get_tenv cx`, `cenv` |-> `ce`, `sb` |-> `sf`]
-    (SPEC_ALL body_full_memory_store_path)) >>
+  markerLib.RESUME_TAC >>
+  mp_tac (Q.INST [`tenv` |-> `get_tenv cx`, `cenv` |-> `ce`, `sb` |-> `sf`,
+    `sw` |-> `sw:bytes32`, `dw` |-> `dw:bytes32`, `lo` |-> `lo:num`,
+    `explicit` |-> `explicit`, `PG` |-> `PG`] (SPEC_ALL body_full_memory_store_path)) >>
   (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   `alloca_history func t` by
     (qpat_assum `!D. gas_origin_ptr_path _ _ _ _`
@@ -117,12 +129,14 @@ Resume local_typed_copy_path_mods[direct]:
 QED
 
 Resume local_typed_copy_path_mods[direct_low]:
+  markerLib.RESUME_TAC >>
   qhdtm_assum `typed_copy_state_frame`
     (strip_assume_tac o REWRITE_RULE [typed_copy_state_frame_def,typed_copy_frame_def]) >>
   first_x_assum irule >> simp[]
 QED
 
 Resume local_typed_copy_path_mods[staged]:
+  markerLib.RESUME_TAC >>
   qpat_x_assum `loc = SOME LocMemory ==> _` drule >>
   disch_then (fn th => assume_tac (CONJUNCT1 th) >> assume_tac (CONJUNCT2 th)) >>
   qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
@@ -137,40 +151,52 @@ Resume local_typed_copy_path_mods[staged]:
   `fn_has_code sa sb func /\ fn_has_code sb sc func /\ fn_has_code sc sf func` by
     (fs[ci_mono_def] >> metis_tac[fn_has_code_split,cs_extends_trans]) >>
   mp_tac (Q.INST [`cenv` |-> `ce`,`es` |-> `mid`,`tv` |-> `stv`,
-    `n` |-> `type_memory_size stv`,`sm` |-> `sb`,`sb` |-> `sc`]
-    (SPEC_ALL (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
-      body_full_memory_stage_frame_path))) >>
+    `n` |-> `type_memory_size stv`,`sm` |-> `sb`,`sb` |-> `sc`,
+    `sw` |-> `sw:bytes32`, `lo` |-> `lo:num`, `explicit` |-> `explicit`, `PG` |-> `PG`]
+    (SPEC_ALL local_snapshot_physical_mods)) >>
   (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qx_choosel_then [`u`,`root`,`b0`,`Gu`,`tu`] strip_assume_tac) >>
-  suspend "staged_store"
+  suspend "stage_resources"
+QED
+
+Resume local_typed_copy_path_mods[stage_resources]:
+  markerLib.RESUME_TAC >>
+  `LENGTH s.vs_memory <= LENGTH u.vs_memory` by fs[typed_copy_frame_def] >>
+  `!name a len. local_region ce mid.scopes s name a len ==>
+      regions_disjoint b0 (type_memory_size stv) a len` by
+    (rpt strip_tac >>
+     qpat_assum `!name a len. local_region ce mid.scopes u name a len ==> _`
+       (qspecl_then [`name`,`a`,`len`] mp_tac) >> simp[]) >>
+  mp_tac (Q.INST [`b` |-> `b0`, `n` |-> `type_memory_size stv`,
+    `inst` |-> `mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_size stv))] [root]`]
+    (SPEC_ALL (INST_TYPE [alpha |-> ``:256``] local_snapshot_resources_mods))) >>
+  (impl_tac >-
+    (simp[venomInstTheory.mk_inst_def] >> rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+      (gen_tac >> strip_tac >>
+       qpat_assum `!x. not_fresh_at sa x ==> _ /\ _ /\ _ /\ _`
+         (qspec_then `x` mp_tac) >> simp[])])) >>
+  strip_tac >> suspend "staged_store"
 QED
 
 Resume local_typed_copy_path_mods[staged_store]:
+  markerLib.RESUME_TAC >>
   `ci_mono sa sc` by metis_tac[ci_mono_trans] >>
   `sa.cs_next_id <= sc.cs_next_id /\ sa.cs_next_var <= sc.cs_next_var` by
     (qpat_assum `ci_mono sa sc` (strip_assume_tac o REWRITE_RULE [ci_mono_def]) >> simp[]) >>
   `local_ptrs_reserved ce sc` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  `!name a len. local_region ce mid.scopes u name a len <=>
-    local_region ce mid.scopes s name a len` by
-    (rw[local_region_def] >> metis_tac[local_ptrs_reserved_def]) >>
   `lookup_var xd u = SOME dw /\ not_fresh_at sc xd` by metis_tac[] >>
   `ptr_covers Gu tu xd u cap /\ ptr_covers Gu tu xd u (type_memory_size dtv)` by
     metis_tac[ptr_covers_lookup_frame] >>
   `b0 < dimword (:256)` by decide_tac >>
   `w2n ((n2w b0):bytes32) = b0` by simp[] >>
   `compile_store_memory ce (Var root) (Var xd) dty sty sc = ((),sf)` by fs[] >>
-  `s.vs_alloca_next <= u.vs_alloca_next` by
-    (qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`
-       (qspec_then `cx_dead H0 cx` mp_tac) >>
-     disch_then (strip_assume_tac o MATCH_MP gas_origin_ptr_path_projections) >>
-     drule gas_origin_path_erase >> strip_tac >> drule gas_marked_path_exec >>
-     strip_tac >> drule rest_word_path_frontier >> simp[]) >>
   `b0 + type_memory_size stv <= w2n dw \/
    w2n dw + type_memory_size dtv <= b0` by suspend "snapshot_separation" >>
   mp_tac (Q.INST [`tenv` |-> `get_tenv cx`,`cenv` |-> `ce`,`xs` |-> `root`,
     `sa` |-> `sc`,`sb` |-> `sf`,`s` |-> `u`,`G` |-> `Gu`,`tn` |-> `tu`,
-    `sw` |-> `(n2w b0):bytes32`] (SPEC_ALL body_full_memory_store_path)) >>
+    `sw` |-> `(n2w b0):bytes32`, `dw` |-> `dw:bytes32`, `lo` |-> `lo:num`,
+    `explicit` |-> `explicit`, `PG` |-> `PG`] (SPEC_ALL body_full_memory_store_path)) >>
   (impl_tac >-
     (qpat_assum `w2n (n2w b0 : bytes32) = b0` (fn th => pure_rewrite_tac[th]) >>
      simp[] >> rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, decide_tac])) >>
@@ -178,30 +204,29 @@ Resume local_typed_copy_path_mods[staged_store]:
 QED
 
 Resume local_typed_copy_path_mods[snapshot_separation]:
-  first_x_assum (CHOOSE_THEN (CHOOSE_THEN strip_assume_tac)) >>
-  rename1 `w2n dw + type_memory_size dtv <= dstbase + len` >>
+  markerLib.RESUME_TAC >>
+  qpat_x_assum `?b len. b <= w2n dw /\ _`
+    (qx_choosel_then [`dstbase`,`len`] strip_assume_tac) >>
   `regions_disjoint b0 (type_memory_size stv) dstbase len` by
     (FIRST
-       [qpat_assum `local_region ce mid.scopes s _ dstbase len` mp_tac >>
-        qpat_assum `!name a len. local_region ce mid.scopes u name a len ==> _` mp_tac >>
-        simp[] >> metis_tac[],
-        `stmt_state_rel H0 ctx func ce cx mid u` by simp[] >>
-        `alloca_inv u` by metis_tac[stmt_state_rel_local_ptrs_alloca] >>
-        `FLOOKUP u.vs_allocas aid = SOME (dstbase,len)` by simp[] >>
-        `sa.cs_next_id <> aid` by decide_tac >>
-        qpat_x_assum `alloca_inv u`
-          (strip_assume_tac o REWRITE_RULE [alloca_inv_def,allocas_non_overlapping_def]) >>
-        qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _`
-          (qspecl_then [`sa.cs_next_id`,`aid`,`b0`,`type_memory_size stv`,`dstbase`,`len`] mp_tac) >>
-        simp[loweringStateRelDefsTheory.regions_disjoint_def]]) >>
+       [qpat_assum `!name a len. local_region ce mid.scopes s name a len ==> _`
+          (qspecl_then [`name`,`dstbase`,`len`] mp_tac) >> simp[] >> NO_TAC,
+        qpat_assum `!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = _ ==> _`
+          (qspecl_then [`aid`,`dstbase`,`len`] mp_tac) >> simp[]]) >>
   qpat_x_assum `regions_disjoint _ _ _ _` mp_tac >>
   simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Resume local_typed_copy_path_mods[store_post]:
+  markerLib.RESUME_TAC >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
     (s,G,tn) [] (OK t,Gf,tf)` by
-    (gen_tac >> irule gas_origin_ptr_path_trans >> qexistsl_tac [`Gu`,`u`,`tu`] >> simp[]) >>
+    (gen_tac >> irule gas_origin_ptr_path_trans >> qexistsl_tac [`Gu`,`u`,`tu`] >>
+     conj_tac
+     >- (qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) [] (OK u,Gu,tu)`
+           (qspec_then `D` ACCEPT_TAC)) >>
+     qpat_assum `!D. gas_origin_ptr_path _ (u,Gu,tu) [] (OK t,Gf,tf)`
+       (qspec_then `D` ACCEPT_TAC)) >>
   `alloca_history func t` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ (OK t,Gf,tf)`
        (qspec_then `cx_dead H0 cx` assume_tac) >>
@@ -212,8 +237,14 @@ Resume local_typed_copy_path_mods[store_post]:
     (qhdtm_assum `typed_copy_state_frame`
        (strip_assume_tac o REWRITE_RULE [typed_copy_state_frame_def,typed_copy_frame_def]) >>
      first_x_assum irule >> simp[]) >>
-  qexistsl_tac [`u`,`sc`,`Gu`,`tu`,`t`,`Gf`,`tf`] >>
-  simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC
+  `!i. i < lo ==> (i IN tf.t_mem <=> i IN tu.t_mem)` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!i. ~(w2n dw <= i /\ _) ==> (i IN tf.t_mem <=> i IN tu.t_mem)`
+       (qspec_then `i` mp_tac) >>
+     `i < w2n dw` by decide_tac >> simp[]) >>
+  qexistsl_tac [`u`,`sc`,`Gu`,`tu`,`t`,`Gf`,`tf`] >> simp[] >>
+  qpat_assum `!aid off len i. FLOOKUP s.vs_allocas aid = _ /\ _ ==> i IN tn.t_mem`
+    mp_tac >> simp[]
 QED
 
 Finalise local_typed_copy_path_mods
