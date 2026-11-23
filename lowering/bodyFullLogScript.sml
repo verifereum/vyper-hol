@@ -971,7 +971,7 @@ Proof
   `~supported_exprs_exists (const_name_root cx) args` by
     (drule_all body_inv_stmt_const_name_free >> simp[supported_stmt_expr_exists_def]) >>
   `~supported_exprs_exists
-      (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
+      (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ (array_slot_base cenv e \/ alloc_limits_expr cenv e))) args /\
    call_evaluation_safe cx (int_calls_exprs args) /\
    (!target. supported_exprs_exists (expr_abi_decode_target_root target) args ==>
       occurs_abi_decode_target target tops)` by
