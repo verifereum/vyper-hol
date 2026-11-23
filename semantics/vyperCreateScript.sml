@@ -14,11 +14,12 @@
 
 Theory vyperCreate
 Ancestors
-  arithmetic byte combin integer list option pair rich_list words
+  alist arithmetic byte combin integer list option pair rich_list words
   contractABI sptree vfmTypes vfmConstants vfmState vfmContext
   vfmExecution[ignore_grammar] vyperAST vyperABI vyperMisc vyperValue
   vyperContext vyperState vyperEvmBoundary vyperRuntimeAccounts
-  extCallOracle[ignore_grammar] vyperCallOutcome[ignore_grammar] constSubst vyperOriginFold
+  extCallOracle[ignore_grammar] vyperCallOutcome[ignore_grammar]
+  constSubst constSubstMods vyperOriginFold
 Libs
   cv_transLib wordsLib monadsyntax
 
@@ -344,11 +345,25 @@ Definition blueprint_literal_offset_def:
     case DROP (if has_salt then 3 else 2) es of
       [] => F
     | e::_ =>
-        let env = case get_module_code cx NONE of
-                    SOME tops => module_consts_env tops []
+        let env = case ALOOKUP cx.sources cx.txn.target of
+                    SOME mods => consts_env_mods mods
                   | NONE => [] in
-        is_int_literal (origin_fold_value (subst_consts_expr env e))
+        is_int_literal (origin_fold_value (subst_consts_expr_mods env e))
 End
+
+Theorem blueprint_literal_offset_singleton:
+  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+  blueprint_literal_offset cx has_salt es =
+    case DROP (if has_salt then 3 else 2) es of
+      [] => F
+    | e::_ =>
+        is_int_literal
+          (origin_fold_value (subst_consts_expr (module_consts_env tops []) e))
+Proof
+  simp[blueprint_literal_offset_def, consts_env_mods_singleton] >>
+  Cases_on `DROP (if has_salt then 3 else 2) es` >>
+  simp[subst_consts_mods_singleton]
+QED
 
 Definition blueprint_prefix_size_def:
   blueprint_prefix_size has_salt literal_offset vs accounts =

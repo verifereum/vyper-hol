@@ -234,7 +234,10 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_assum `!H. P H ==> _` (qspec_then `Hw` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  drule_all_then assume_tac exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base >>
+  `expr_body_pre cenv cx env obj es` by
+    (irule exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base_eval >>
+     qpat_assum `eval_expr cx obj _ = (INL _,_)` (irule_at Any) >> simp[] >>
+     metis_tac[]) >>
   drule_all_then assume_tac exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_index_after_base >>
   drule_all_then strip_assume_tac exprSimSourceTheory.expr_body_pre_runtime_typed >>
   `value_has_type tvt iv` by metis_tac[] >>

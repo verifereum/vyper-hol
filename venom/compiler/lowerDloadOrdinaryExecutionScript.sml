@@ -143,7 +143,7 @@ Proof
   `ld_owned_value E (ld_op_prov AG b) (ld_op_prov AH b)
       {} (op_taint un b) x''' x'` by metis_tac[ld_owned_operand_value] >>
   simp[Once step_inst_non_invoke] >>
-  simp[Once step_inst_base_def] >>
+  simp[step_inst_base_opcode_eqs] >>
   simp[exec_pure2_def] >>
   `!ps pt Mt u v. ld_owned_value E ps pt {} Mt u v ==> Mt = {}` by
     (qx_gen_tac `ps` >> Cases_on `ps`
