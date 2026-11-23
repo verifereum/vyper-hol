@@ -4,8 +4,9 @@ Ancestors
   bodyFullExtCallSlotWrite bodyFullExtCallDefaultBytesStore bodyDeclMemoryCore
   annassignRelayoutSource exprSimMemDefs exprSimProps loweringPosts exprLowering context typedMemoryCopy
   bodyPtrDefs fragGasOriginPtr compileEnv valueCopyBytes vyperTyping venomState arithmetic
+  exprLoweringProps
 
-Theorem grouped_keyword_store_value:
+val keyword_store_inputs = ``
   (if is_word_type ty then emit_void MSTORE [Var dst;src]
    else if is_bytestring_type ty then compile_store_bytestring src (Var dst)
    else emit_void MCOPY [Var dst;src;Lit (n2w (type_memory_bytes ce ty))])
@@ -20,10 +21,11 @@ Theorem grouped_keyword_store_value:
   w2n b + type_memory_size tv <= s.vs_alloca_next /\
   fn_has_code sa sb fn /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t Gf tf.
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts``;
+
+val keyword_store_post = ``
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,Gf,tf)) /\
-    (!m. mem_agree_outside tf.t_mem t.vs_memory m ==> val_in_memory tv v (w2n b) m) /\
+    (!m. mem_agree_outside tf.t_mem t.vs_memory m ==> val_in_memory tv v (w2n (b:256 word)) m) /\
     typed_copy_state_frame sa (w2n b) (type_memory_size tv) s t /\
     (!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G x /\
       op_taint tf (Var x) = op_taint tn (Var x)) /\
@@ -31,7 +33,13 @@ Theorem grouped_keyword_store_value:
          (i IN tf.t_mem <=> i IN tn.t_mem)) /\
     tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_current_bb = s.vs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted``;
+
+Theorem grouped_keyword_store_value_exact:
+  ^keyword_store_inputs ==>
+  ?t Gf tf.
+    run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
+    ^keyword_store_post
 Proof
   strip_tac >>
   qpat_assum `expr_val_rel cx ty v src s`
@@ -39,10 +47,10 @@ Proof
   qpat_assum `ptr_val_ok cx ty v src G tn s`
     (strip_assume_tac o REWRITE_RULE[ptr_val_ok_def]) >>
   Cases_on `is_word_type ty`
-  >- (irule extcall_tuple_slot_write >>
-      asm_rewrite_tac[] >> qexistsl_tac [`ce`,`cx`,`dst`,`src`,`ty`] >>
+  >- (`~is_bytestring_type ty` by metis_tac[eventTopicValuePropsTheory.bytestring_type_not_word] >>
       `type_memory_size tv = 32` by metis_tac[word_tv_memory_size] >>
-      fs[]) >>
+      mp_tac (SPEC_ALL extcall_tuple_slot_write_scalar_exact) >>
+      impl_tac >- fs[] >> simp[]) >>
   rename1 `eval_operand src s = SOME a` >>
   `(!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n a) m) /\
    (val_footprint tv v <> 0 ==>
@@ -64,18 +72,17 @@ Proof
   >> suspend "flat"
 QED
 
-Resume grouped_keyword_store_value[flat]:
+Resume grouped_keyword_store_value_exact[flat]:
   `val_store_size tv v = type_memory_size tv /\ val_footprint tv v = type_memory_size tv` by
     metis_tac[val_store_size_non_bytestring, nonbytes_evaluated_val_footprint] >>
-  irule extcall_tuple_slot_write >>
-  asm_rewrite_tac[] >> qexistsl_tac [`ce`,`cx`,`dst`,`src`,`ty`] >>
-  asm_rewrite_tac[] >> simp[] >>
-  Cases_on `type_memory_size tv = 0`
-  >- fs[ptr_covers_def] >>
-  gvs[]
+  mp_tac (SPEC_ALL extcall_tuple_slot_write_scalar_exact) >>
+  impl_tac >-
+    (asm_rewrite_tac[] >> simp[] >> Cases_on `type_memory_size tv = 0`
+     >- fs[ptr_covers_def] >> gvs[]) >>
+  simp[]
 QED
 
-Resume grouped_keyword_store_value[bytes]:
+Resume grouped_keyword_store_value_exact[bytes]:
   `val_footprint tv v <> 0 /\ val_store_size tv v <> 0` by
     (drule_all bytestring_type_value >> strip_tac >> Cases_on `v` >>
      gvs[value_has_type_def, val_footprint_def, val_store_size_def]) >>
@@ -88,7 +95,7 @@ Resume grouped_keyword_store_value[bytes]:
   mp_tac (Q.INST [`rt` |-> `ty`,`sty` |-> `ty`,`stv` |-> `tv`,
     `src` |-> `x`,`sw` |-> `a`,`dw` |-> `b`,`func` |-> `fn`,
     `v` |-> `v`,`lo` |-> `lo`,`ctx` |-> `ctx`,`G` |-> `G`,`tn` |-> `tn`]
-    bytestring_store_extent_joint) >>
+    bytestring_store_extent_joint_exact) >>
   impl_tac >- asm_rewrite_tac[] >>
   strip_tac >>
   qexistsl_tac [`u`,`Gf`,`tm`] >> asm_rewrite_tac[] >>
@@ -103,4 +110,13 @@ Resume grouped_keyword_store_value[bytes]:
     (qspec_then `i` mp_tac) >> impl_tac >- decide_tac >> disch_then ACCEPT_TAC
 QED
 
-Finalise grouped_keyword_store_value
+Finalise grouped_keyword_store_value_exact
+
+Theorem grouped_keyword_store_value:
+  ^keyword_store_inputs ==> ?t Gf tf. ^keyword_store_post
+Proof
+  disch_tac >> mp_tac (SPEC_ALL grouped_keyword_store_value_exact) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (qx_choosel_then [`t`,`Gf`,`tf`] (assume_tac o CONJUNCT2)) >>
+  qexistsl_tac [`t`,`Gf`,`tf`] >> first_assum ACCEPT_TAC
+QED
