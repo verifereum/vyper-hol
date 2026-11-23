@@ -678,7 +678,7 @@ Proof
 QED
 
 (* Fragments of the compiled guarded body entered after registration. *)
-Theorem guarded_body_code_from_registration:
+Theorem guarded_body_intervals_from_registration:
   compile_guarded_body cenv nr nkey ut iv stmts rt sa = ((),st') /\
   fn_has_code sa st' func ==>
   ?sl se. (if nr then compile_nonreentrant_lock nkey ut iv
@@ -687,7 +687,8 @@ Theorem guarded_body_code_from_registration:
             (case rt of SOME ty => ty | NONE => BaseT BoolT) stmts sl =
               ((),se) /\
           fn_has_code sa sl func /\ fn_has_code sl se func /\
-          fn_has_code se st' func
+          fn_has_code se st' func /\
+          cs_extends sa sl /\ cs_extends sl se /\ cs_extends se st'
 Proof
   strip_tac >>
   Cases_on `(if nr then compile_nonreentrant_lock nkey ut iv
@@ -724,4 +725,19 @@ Proof
   qexistsl_tac [`sl`, `se`] >> simp[] >>
   `cs_extends sl st'` by metis_tac[cs_extends_trans] >>
   metis_tac[fn_has_code_split]
+QED
+
+Theorem guarded_body_code_from_registration:
+  compile_guarded_body cenv nr nkey ut iv stmts rt sa = ((),st') /\
+  fn_has_code sa st' func ==>
+  ?sl se. (if nr then compile_nonreentrant_lock nkey ut iv
+           else comp_return ()) sa = ((),sl) /\
+          compile_stmts cenv NoLoop
+            (case rt of SOME ty => ty | NONE => BaseT BoolT) stmts sl =
+              ((),se) /\
+          fn_has_code sa sl func /\ fn_has_code sl se func /\
+          fn_has_code se st' func
+Proof
+  strip_tac >> drule_all_then strip_assume_tac guarded_body_intervals_from_registration >>
+  qexistsl_tac [`sl`,`se`] >> simp[]
 QED
