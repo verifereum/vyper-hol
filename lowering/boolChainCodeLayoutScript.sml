@@ -112,10 +112,17 @@ Proof
   imp_res_tac fresh_label_props >> gvs[]
 QED
 
-Theorem bool_chain_test_layout:
+Theorem bool_chain_test_layout_alloc:
   compile_bool_chain_ops compile_expr cenv d rv xl (e::h::hs) sa = ((),sb) ==>
   ?op sc sj sn ls ln ss sd se st.
     lower_value compile_expr cenv (BaseT BoolT) e sa = (op,sc) /\
+    (if d then
+       comp_bind (fresh_label "and_next") (\ln.
+         comp_bind (fresh_label "and_false") (\ls. comp_return (ln,ls)))
+     else
+       comp_bind (fresh_label "or_true") (\ls.
+         comp_bind (fresh_label "or_next") (\ln. comp_return (ln,ls)))) sc =
+      ((ln,ls),sj) /\
     emit_inst JNZ [op; Label (if d then ln else ls); Label (if d then ls else ln)]
       [] sj = ((),sn) /\
     new_block ls sn = (sn.cs_current_bb,ss) /\
@@ -140,7 +147,8 @@ Proof
   simp[Once compile_bool_chain_ops_def, comp_ignore_bind_def] >>
   simp[Once comp_bind_def] >> pairarg_tac >> simp[] >>
   simp[Once comp_bind_def] >> pairarg_tac >> simp[] >>
-  Cases_on `lbls` >> gvs[] >> simp[comp_bind_def] >>
+  rename1 `(if d then _ else _) _ = (label_pair,_)` >>
+  Cases_on `label_pair` >> gvs[] >> simp[comp_bind_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
   rename1 `lower_value _ _ _ _ sa = (op,sc)` >>
   rename1 `emit_inst JNZ _ [] sj = (_,sn)` >>
@@ -182,6 +190,42 @@ Proof
      rpt conj_tac >> irule fn_has_code_mid >> simp[] >>
      qexistsl_tac [`sb`, `sa`] >> simp[cs_extends_refl]) >>
   imp_res_tac new_block_props >>
-  qexistsl_tac [`sj`, `sn`, `ss`, `sd`, `se`, `st`] >>
+  qexistsl_tac [`sn`, `ss`, `sd`, `se`, `st`] >>
   Cases_on `d` >> gvs[]
+QED
+
+Theorem bool_chain_test_layout:
+  compile_bool_chain_ops compile_expr cenv d rv xl (e::h::hs) sa = ((),sb) ==>
+  ?op sc sj sn ls ln ss sd se st.
+    lower_value compile_expr cenv (BaseT BoolT) e sa = (op,sc) /\
+    emit_inst JNZ [op; Label (if d then ln else ls); Label (if d then ls else ln)]
+      [] sj = ((),sn) /\
+    new_block ls sn = (sn.cs_current_bb,ss) /\
+    emit_inst ASSIGN [Lit (if d then 0w else 1w)] [rv] ss = ((),sd) /\
+    emit_inst JMP [Label xl] [] sd = ((),se) /\
+    new_block ln se = (se.cs_current_bb,st) /\
+    compile_bool_chain_ops compile_expr cenv d rv xl (h::hs) st = ((),sb) /\
+    sj.cs_current_bb = sc.cs_current_bb /\
+    sj.cs_current_insts = sc.cs_current_insts /\
+    sj.cs_blocks = sc.cs_blocks /\
+    sj.cs_next_id = sc.cs_next_id /\ sj.cs_next_var = sc.cs_next_var /\
+    ss.cs_current_bb = ls /\ ss.cs_current_insts = [] /\
+    st.cs_current_bb = ln /\ st.cs_current_insts = [] /\
+    ci_mono sa sc /\ ci_mono sc sj /\ ci_mono sj sn /\
+    ci_mono sn ss /\ ci_mono ss sd /\ ci_mono sd se /\
+    ci_mono se st /\ ci_mono st sb /\
+    (!fn. fn_has_code sa sb fn ==>
+       fn_has_code sa sc fn /\ fn_has_code sj sn fn /\
+       fn_has_code sn ss fn /\ fn_has_code ss sd fn /\
+       fn_has_code sd se fn /\ fn_has_code se st fn /\ fn_has_code st sb fn)
+Proof
+  strip_tac >> drule_then strip_assume_tac bool_chain_test_layout_alloc >>
+  rename1 `lower_value _ _ _ _ sa = (op,sc)` >>
+  rename1 `emit_inst JNZ _ [] sj = (_,sn)` >>
+  rename1 `new_block ls sn = (_,ss)` >>
+  rename1 `emit_inst ASSIGN [_] [rv] ss = (_,sd)` >>
+  rename1 `emit_inst JMP [Label xl] [] sd = (_,se)` >>
+  rename1 `new_block ln se = (_,st)` >>
+  qexistsl_tac [`op`, `sc`, `sj`, `sn`, `ls`, `ln`, `ss`, `sd`, `se`, `st`] >>
+  simp[]
 QED

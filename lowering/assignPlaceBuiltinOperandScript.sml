@@ -1,6 +1,6 @@
 Theory assignPlaceBuiltinOperand
 Ancestors
-  exprReasonOperand exprLowering context
+  exprReasonOperand exprLowering context namedConstDispatchResult
 
 Theorem assign_place_builtin_pointer_not_label:
   compile_builtin_dispatch_body f cenv vt ty bi args sa =
@@ -22,11 +22,7 @@ Proof
        gvs[compile_builtin_dispatch_body_def, oneline as_stack_val_def,
            AllCaseEqs()])
     >~ [`NamedConst`] >-
-      (gvs[compile_builtin_dispatch_body_def, LET_THM] >>
-       pairarg_tac >> gvs[] >>
-       rename1 `lower_value _ _ _ _ _ = (opnd,_)` >>
-       Cases_on `is_word_type vt` >> Cases_on `opnd` >>
-       gvs[as_stack_val_def, as_ptr_val_def, mk_ptr_def])
+      (drule named_const_dispatch_not_label >> simp[vv_operand_def])
     >~ [`BoolChain _ _`] >-
       (gvs[compile_builtin_dispatch_body_def, LET_THM] >>
        rpt (pairarg_tac >> gvs[]))
