@@ -635,7 +635,16 @@ Proof
   >~ [`compile_builtin_dispatch_body _ _ _ _ (Acc item) _ _ = _`] >-
     (drule_all abi_image_builtin_acc_label >> strip_tac >> gvs[])
   >~ [`compile_builtin_dispatch_body _ _ _ _ (AsWeiValue denom) _ _ = _`] >-
-    (drule_all abi_image_builtin_wei_label >> strip_tac >> gvs[]) >>
+    (drule_all abi_image_builtin_wei_label >> strip_tac >> gvs[])
+  >~ [`compile_builtin_dispatch_body _ _ _ _ NamedConst _ _ = _`] >-
+    (gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+     pairarg_tac >> gvs[] >>
+     rename1 `lower_value _ _ _ _ _ = (opnd,_)` >>
+     Cases_on `is_word_type vt` >> Cases_on `opnd` >>
+     gvs[as_stack_val_def, as_ptr_val_def, vv_operand_def, mk_ptr_def])
+  >~ [`compile_builtin_dispatch_body _ _ _ _ (BoolChain _ _) _ _ = _`] >-
+    (gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[vv_operand_def])) >>
   metis_tac[abi_image_builtin_scalar_not_label, abi_image_builtin_hash_not_label,
             abi_image_builtin_len_not_label, abi_image_builtin_bop_not_label,
             abi_image_builtin_fresh_not_label, abi_image_builtin_makearray_not_label,

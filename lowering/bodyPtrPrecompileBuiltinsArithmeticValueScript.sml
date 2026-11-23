@@ -101,7 +101,13 @@ Proof
   strip_tac >>
   `lowered_value_type cenv (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) bt args) =
    ArrayT (BaseT (UintT 256)) (Fixed 2)` by
-    (Cases_on `bt` >> fs[lowered_value_type_def, expr_type_def]) >>
+    (Cases_on `bt` >> fs[lowered_value_type_def, expr_type_def] >>
+     namedCases_on `args` ["", "arg rest"] >>
+     fs[lowered_value_type_def, expr_type_def] >>
+     Cases_on `rest` >> Cases_on `arg` >>
+     fs[lowered_value_type_def, expr_type_def] >>
+     rename1 `lowered_value_type _ (Builtin _ NamedConst (Literal _ lit :: _)) = _` >>
+     Cases_on `lit` >> fs[lowered_value_type_def, expr_type_def]) >>
   simp[type_memory_bytes_def, type_slot_size_def]
 QED
 

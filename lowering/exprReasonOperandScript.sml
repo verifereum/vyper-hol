@@ -871,7 +871,16 @@ Proof
   >~ [`MakeArray et bd`] >- metis_tac[reason_builtin_makearray]
   >~ [`MethodId`] >- metis_tac[reason_builtin_method_id]
   >~ [`Acc item`] >- suspend "acc"
-  >~ [`AsWeiValue denom`] >- suspend "wei" >>
+  >~ [`AsWeiValue denom`] >- suspend "wei"
+  >~ [`NamedConst`] >-
+    (gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+     pairarg_tac >> gvs[] >>
+     rename1 `lower_value _ _ _ _ _ = (opnd,_)` >>
+     Cases_on `is_word_type vt` >> Cases_on `opnd` >>
+     gvs[as_stack_val_def, as_ptr_val_def, mk_ptr_def, reason_result_shape_def])
+  >~ [`BoolChain _ _`] >-
+    (gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[reason_result_shape_def])) >>
   metis_tac[reason_builtin_scalar, reason_builtin_hash, reason_builtin_fresh]
 QED
 

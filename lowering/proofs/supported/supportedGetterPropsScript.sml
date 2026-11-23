@@ -244,6 +244,9 @@ Theorem array_constant_supported_place[local]:
   expr_type e = ArrayT ty bd ==>
   supported_place_expr tops e /\ supported_place_type tops (ArrayT ty bd)
 Proof
+  map_every qid_spec_tac [`bd`, `ty`, `env`] >>
+  completeInduct_on `expr_size e` >>
+  rpt gen_tac >> disch_tac >> rpt gen_tac >>
   Cases_on `e` >>
   all_tac >>~- ([`constant_expr _ (TopLevelName _ p)`],
     PairCases_on `p` >> Cases_on `p0` >>
@@ -259,8 +262,14 @@ Proof
         Cases_on `op` >>
         gvs[constant_binop_def, well_typed_binop_def, is_numeric_type_def,
             is_int_type_def, is_flag_type_def, is_bool_type_def]) >>
-      Cases_on `o'` >> Cases_on `b'` >>
-      gvs[well_typed_builtin_app_def]) >>
+      all_tac >>~- ([`well_typed_builtin_app _ (MakeArray _ _) _`],
+        Cases_on `o'` >> Cases_on `b'` >> gvs[well_typed_builtin_app_def]) >>
+      rename1 `const_local_exprs [arg] = []` >>
+      qpat_x_assum `!m. _` (qspec_then `expr_size arg` mp_tac) >>
+      (impl_tac >- decide_tac) >>
+      disch_then (qspec_then `arg` mp_tac) >> simp[] >>
+      disch_then (qspecl_then [`env`, `ty`, `bd`] mp_tac) >>
+      gvs[const_local_refs_def, well_typed_expr_def, supported_pure_expr_def]) >>
   Cases_on `t0` >> Cases_on `l` >>
   gvs[constant_type_builtin_def, type_builtin_result_ok_def,
       well_typed_type_builtin_args_def, supported_type_builtin_form_def,
