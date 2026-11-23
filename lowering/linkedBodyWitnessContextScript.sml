@@ -84,7 +84,7 @@ Theorem linked_witness_external_context:
 Proof
   mp_tac linked_witness_call_premises >>
   simp[source_typing_ok_mods_def, call_state_rel_mods_def, source_deployment_rel_mods_def] >>
-  rpt strip_tac >>
+  rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
   simp[initial_evaluation_context_def, find_function_module_def] >>
   simp entry_context_simps >>
   simp[context_function_live_def, function_live_def, linked_witness_exports_def]
