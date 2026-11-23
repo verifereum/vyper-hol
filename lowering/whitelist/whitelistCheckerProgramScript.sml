@@ -66,6 +66,8 @@ Proof
   >- (Cases >> simp[supported_function_header_names_def] >> strip_tac >>
       drule_all check_contract_function_header_bindings >> simp[])
   >- metis_tac[check_contract_selectors_distinct]
+  >- (drule check_contract_namespaces_ok >>
+      simp[contract_namespaces_ok_def, EVERY_MEM])
 QED
 
 (* The binding conjuncts of supported_function_body for a runtime
