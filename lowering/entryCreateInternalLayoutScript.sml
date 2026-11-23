@@ -5,6 +5,14 @@ Ancestors
   bodyInvSplit bodyPtrDefs gasStorage gasContext vyperInterpreter
   compileEnv venomInst venomExecSemantics finite_map
 
+Theorem create_layout_restriction[local]:
+  !entry a b final.
+    cs_extends entry a /\ cs_extends a b /\ cs_extends b final /\
+    create_layout entry final ==> create_layout a b
+Proof
+  rpt gen_tac >> MATCH_ACCEPT_TAC create_layout_subinterval
+QED
+
 (* The success continuation sees layout at the actual body compile cursors.
    Entry-domain and lock-abort continuations are unchanged. *)
 Theorem selected_internal_body_layout_at:
@@ -52,7 +60,7 @@ Theorem selected_internal_body_layout_at:
              (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
              sa.cs_next_id sb.cs_next_id t tn res ee gt r)
 Proof
-  qspecl_then [`create_layout`, `create_layout`] mp_tac
-    intcall_callee_selected_landing_with >>
-  simp_tac bool_ss [GEN_ALL create_layout_subinterval]
+  qspecl_then [`create_layout`, `create_layout`]
+    (MATCH_ACCEPT_TAC o SIMP_RULE bool_ss [EQT_INTRO create_layout_restriction])
+    intcall_callee_selected_landing_with
 QED
