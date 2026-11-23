@@ -27,7 +27,7 @@ Ancestors exprSimWordArgs[qualified,ignore_grammar] vyperLookup[qualified,ignore
   vyperStorageTrace vyperStorageFootprint
   fragGasPathMem exprPtrUnwrapCondition bodyMemoryDefs
   gasCount gasEvents stmtSimProps gasShadowStmtEnv gasShadowState
-  augAssignPtrScalarRun fragGasCopyLoop
+  augAssignPtrScalarRun fragGasCopyLoop fragGasCopySeqLiftProps
   vyperEvalPreservesScopes[qualified,ignore_grammar]
   stmtSimForArrayLoop[qualified,ignore_grammar]
   bodyFullShared[qualified,ignore_grammar]
