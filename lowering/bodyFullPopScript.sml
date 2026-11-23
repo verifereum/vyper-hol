@@ -1070,7 +1070,10 @@ Proof
   qexistsl_tac [`u`,`G'`,`tn'`] >> simp[] >> metis_tac[]
 QED
 
-Theorem pop_full_storage_checked_run[local]:
+(* The slot write and the final address computation belong to the same
+   successful run. The base runner does not advance the instruction index;
+   the installed path below reindexes that very endpoint. *)
+Theorem pop_slot_checked_selected:
   ALL_DISTINCT [x0;x1;x2;x3;x4;x5;x6] /\
   (!q. hdr = Var q ==> ~MEM q [x0;x1;x2;x3;x4;x5;x6]) /\
   eval_operand hdr s = SOME slot /\ op_prov G hdr = NONE /\ op_taint tn hdr = {} /\
@@ -1081,13 +1084,28 @@ Theorem pop_full_storage_checked_run[local]:
     run_inst_seq (nested_pop_suffix hdr tr id esz x0 x1 x2 x3 x4 x5 x6) s = OK u /\
     (!D. inst_seq_ptr D lo ctx fn PG G tn
       (nested_pop_suffix hdr tr id esz x0 x1 x2 x3 x4 x5 x6) s G' tn') /\
-    op_prov G' (Var x6) = NONE /\ op_taint tn' (Var x6) = {} /\
-    tn'.t_mem = tn.t_mem /\
-    tn'.t_stor = (if tr then tn.t_stor else key_update tn.t_stor slot {}) /\
-    tn'.t_trans = (if tr then key_update tn.t_trans slot {} else tn.t_trans) /\
-    tn'.t_imm = tn.t_imm /\
-    (!q. ~MEM q [x0;x1;x2;x3;x4;x5;x6] ==>
-      FLOOKUP G' q = FLOOKUP G q /\ op_taint tn' (Var q) = op_taint tn (Var q))
+    (op_prov G' (Var x6) = NONE /\ op_taint tn' (Var x6) = {} /\
+     tn'.t_mem = tn.t_mem /\
+     tn'.t_stor = (if tr then tn.t_stor else key_update tn.t_stor slot {}) /\
+     tn'.t_trans = (if tr then key_update tn.t_trans slot {} else tn.t_trans) /\
+     tn'.t_imm = tn.t_imm /\
+     (!q. ~MEM q [x0;x1;x2;x3;x4;x5;x6] ==>
+       FLOOKUP G' q = FLOOKUP G q /\ op_taint tn' (Var q) = op_taint tn (Var q))) /\
+    (?pre post.
+      run_inst_seq (TAKE 5 (nested_pop_suffix hdr tr id esz x0 x1 x2 x3 x4 x5 x6)) s = OK pre /\
+      step_inst_base (mk_inst (id+5) (if tr then TSTORE else SSTORE) [hdr;Var x3] [])
+        pre = OK post /\
+      post = (if tr then tstore slot (tload slot s - 1w) pre
+              else sstore slot (sload slot s - 1w) pre) /\
+      run_inst_seq (DROP 6 (nested_pop_suffix hdr tr id esz x0 x1 x2 x3 x4 x5 x6))
+        post = OK u) /\
+    (!bb. ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      isPREFIX (nested_pop_suffix hdr tr id esz x0 x1 x2 x3 x4 x5 x6)
+        (DROP s.vs_inst_idx bb.bb_instructions) ==>
+      (!j. j < 9 ==> get_instruction bb (s.vs_inst_idx + j) =
+        SOME (EL j (nested_pop_suffix hdr tr id esz x0 x1 x2 x3 x4 x5 x6))) /\
+      (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+        (OK (u with vs_inst_idx := s.vs_inst_idx + 9),G',tn')))
 Proof
   strip_tac >>
   mp_tac (Q.INST [`out` |-> `x0`] (SPEC_ALL pop_full_storage_load)) >>
@@ -1185,20 +1203,67 @@ Proof
      (s1 with vs_inst_idx := k) G3 tn3` by metis_tac[inst_seq_ptr_uniform_append] >>
   `!D k. inst_seq_ptr D lo ctx fn PG G tn (load ++ (chunk ++ (store ++ tail)))
      (s with vs_inst_idx := k) G3 tn3` by metis_tac[inst_seq_ptr_uniform_append] >>
+  qmatch_goalsub_abbrev_tac `run_inst_seq code s` >>
+  `run_inst_seq code s = OK u` by
+    (qpat_assum `code = _` (fn th => PURE_REWRITE_TAC [th]) >>
+     map_every (fn pat => qpat_assum pat
+       (fn th => PURE_REWRITE_TAC [MATCH_MP (SPEC_ALL run_inst_seq_append) th]))
+       [`run_inst_seq load s = OK s1`, `run_inst_seq chunk s1 = OK s2`,
+        `run_inst_seq store s2 = OK s3`] >>
+     first_assum ACCEPT_TAC) >>
+  `!D. inst_seq_ptr D lo ctx fn PG G tn code s G3 tn3` by
+    (gen_tac >> qpat_assum `code = _` (fn th => PURE_REWRITE_TAC [th]) >>
+     `(s with vs_inst_idx := s.vs_inst_idx) = s` by
+       simp[venom_state_component_equality] >>
+     qpat_assum `(s with vs_inst_idx := s.vs_inst_idx) = s`
+       (fn cursor_eq =>
+         qpat_assum `!D k. inst_seq_ptr D lo ctx fn PG G tn
+           (load ++ (chunk ++ (store ++ tail))) _ G3 tn3`
+           (qspecl_then [`D`,`s.vs_inst_idx`]
+             (ACCEPT_TAC o PURE_REWRITE_RULE [cursor_eq])))) >>
   qexistsl_tac [`u`,`G3`,`tn3`] >>
-  conj_tac >- metis_tac[run_inst_seq_append] >>
-  conj_tac >- (gen_tac >>
-    qpat_assum `nested_pop_suffix _ _ _ _ _ _ _ _ _ _ _ = _`
-      (fn th => PURE_REWRITE_TAC [th]) >>
-    `(s with vs_inst_idx := s.vs_inst_idx) = s` by
-      simp[venom_state_component_equality] >>
-    qpat_assum `(s with vs_inst_idx := s.vs_inst_idx) = s`
-      (fn cursor_eq =>
-        qpat_assum `!D k. inst_seq_ptr D lo ctx fn PG G tn
-          (load ++ (chunk ++ (store ++ tail))) _ G3 tn3`
-          (qspecl_then [`D`,`s.vs_inst_idx`]
-            (ACCEPT_TAC o REWRITE_RULE [cursor_eq])))) >>
-  Cases_on `tr` >> gvs[Abbr `tm`,op_taint_def] >> metis_tac[]
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (Cases_on `tr` >> gvs[Abbr `tm`,op_taint_def] >> metis_tac[]) >>
+  conj_tac >- (
+    qexistsl_tac [`s2`,`s3`] >>
+    `run_inst_seq (load ++ chunk) s = OK s2` by
+      (qpat_assum `run_inst_seq load s = OK s1`
+         (fn th => PURE_REWRITE_TAC [MATCH_MP (SPEC_ALL run_inst_seq_append) th]) >>
+       first_assum ACCEPT_TAC) >>
+    `TAKE 5 code = load ++ chunk /\ DROP 6 code = tail` by
+      simp[Abbr `code`,Abbr `load`,Abbr `chunk`,Abbr `store`,Abbr `tail`,
+        nested_pop_suffix_def,arithmeticTheory.ADD_ASSOC] >>
+    simp[] >> Cases_on `tr` >> simp[Abbr `s3`,Abbr `lenw`]) >>
+  rpt strip_tac
+  >- (`LENGTH code = 9` by simp[NoAsms,Abbr `code`,nested_pop_suffix_def] >>
+      `LENGTH code <= LENGTH (DROP s.vs_inst_idx bb.bb_instructions)` by
+        (drule rich_listTheory.IS_PREFIX_LENGTH >> simp[NoAsms]) >>
+      `j + s.vs_inst_idx < LENGTH bb.bb_instructions` by (fs[] >> decide_tac) >>
+      `EL j (DROP s.vs_inst_idx bb.bb_instructions) =
+        EL (j + s.vs_inst_idx) bb.bb_instructions` by
+        (irule listTheory.EL_DROP >> first_assum ACCEPT_TAC) >>
+      `EL j code = EL j (DROP s.vs_inst_idx bb.bb_instructions)` by
+        (irule rich_listTheory.is_prefix_el >>
+         rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE decide_tac)) >>
+      simp[get_instruction_def,arithmeticTheory.ADD_COMM]) >>
+  `run_inst_seq_mem_ok code s` by
+    (irule run_inst_seq_mem_ok_every >> Cases_on `tr` >>
+     simp[NoAsms,Abbr `code`,nested_pop_suffix_def,mk_inst_def,inst_dload_in_section_def] >>
+     rpt conj_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code` by
+    (Cases_on `tr` >> simp[NoAsms,Abbr `code`,nested_pop_suffix_def,mk_inst_def,is_terminator_def]) >>
+  `(ctx_has_dalloca ctx ==> !pre i post st.
+      code = pre ++ i::post /\ run_inst_seq pre s = OK st ==> dalloca_no_wrap i st)` by
+    (rpt strip_tac >>
+     qpat_x_assum `code = pre ++ i::post` (mp_tac o Q.AP_TERM `MEM i`) >>
+     Cases_on `tr` >> simp[NoAsms,Abbr `code`,nested_pop_suffix_def] >>
+     disch_then (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC) >>
+     simp[dalloca_no_wrap_def,mk_inst_def]) >>
+  qpat_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `D` assume_tac) >>
+  drule_all run_inst_seq_gas_origin_ptr_path >>
+  Cases_on `tr` >> simp[NoAsms,Abbr `code`,nested_pop_suffix_def,mk_inst_def]
 QED
 
 Theorem pop_full_storage_empty_path[local]:
@@ -2439,7 +2504,7 @@ Resume pop_vv_full_of_target[storage_positive]:
   `(if tr then tload slot t else sload slot t) <> 0w` by metis_tac[] >>
   mp_tac (Q.INST [`s` |-> `t`, `G` |-> `G1`, `tn` |-> `tn1`,
     `hdr` |-> `rb0`, `id` |-> `sm.cs_next_id`, `esz` |-> `type_slot_size etv`,
-    `fn` |-> `func`] (SPEC_ALL pop_full_storage_checked_run)) >>
+    `fn` |-> `func`] (SPEC_ALL pop_slot_checked_selected)) >>
   (impl_tac >- simp[]) >>
   disch_then (qx_choosel_then [`u`,`G'`,`tn'`] strip_assume_tac) >>
   drule_all nested_pop_suffix_run >>
@@ -2519,32 +2584,9 @@ Resume pop_vv_full_of_target[storage_positive]:
   `!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     (t,G1,tn1) [] (OK (u with vs_inst_idx := t.vs_inst_idx+9),G',tn')` by
     (gen_tac >> drule_all fn_has_code_code >> strip_tac >>
-     `lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
-      isPREFIX (nested_pop_suffix rb0 tr sm.cs_next_id (type_slot_size etv)
-        x0 x1 x2 x3 x4 x5 x6) (DROP t.vs_inst_idx bb.bb_instructions)` by simp[] >>
-     `run_inst_seq_mem_ok
-       (nested_pop_suffix rb0 tr sm.cs_next_id (type_slot_size etv)
-         x0 x1 x2 x3 x4 x5 x6) t` by
-       (irule run_inst_seq_mem_ok_every >> Cases_on `tr` >>
-        simp[nested_pop_suffix_def,mk_inst_def,inst_dload_in_section_def] >>
-        rpt conj_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
-     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-       (nested_pop_suffix rb0 tr sm.cs_next_id (type_slot_size etv)
-         x0 x1 x2 x3 x4 x5 x6)` by
-       (Cases_on `tr` >> simp[nested_pop_suffix_def,mk_inst_def,is_terminator_def]) >>
-     `(ctx_has_dalloca ctx ==> !pre i post u.
-         nested_pop_suffix rb0 tr sm.cs_next_id (type_slot_size etv)
-           x0 x1 x2 x3 x4 x5 x6 = pre ++ i::post /\
-         run_inst_seq pre t = OK u ==> dalloca_no_wrap i u)` by
-       (rpt strip_tac >>
-        qpat_x_assum `_ = _ ++ i::_` (mp_tac o Q.AP_TERM `MEM i`) >>
-        Cases_on `tr` >> simp[nested_pop_suffix_def] >>
-        disch_then (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC) >>
-        simp[dalloca_no_wrap_def,mk_inst_def]) >>
-     qpat_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
-       (qspec_then `D` assume_tac) >>
-     drule_all run_inst_seq_gas_origin_ptr_path >>
-     Cases_on `tr` >> simp[nested_pop_suffix_def,mk_inst_def]) >>
+     qpat_assum `!bb. ~t.vs_halted /\ lookup_block _ _ = SOME bb /\ _ ==> _`
+       (qspec_then `bb` mp_tac) >>
+     (impl_tac >- simp[]) >> simp[]) >>
   irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G'`,`fin`,`INL result`,`u with vs_inst_idx := t.vs_inst_idx+9`,`tn'`] >>
   PURE_REWRITE_TAC [slot_loc_def] >>
