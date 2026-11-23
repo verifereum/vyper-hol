@@ -54,16 +54,6 @@ Proof
   qpat_x_assum `!j. j < n ==> _` drule >> metis_tac[ci_mono_trans]
 QED
 
-(* Positional success is independent of the unused exception tag type. *)
-Theorem ctor_rows_post_INL[local]:
-  extcall_positional_post p DF lo d ctx func ce cx env kw xs svs
-    sa sb es s g h H (INL vs : value list + 'a) ee G tn t <=>
-  extcall_positional_post p DF lo d ctx func ce cx env kw xs svs
-    sa sb es s g h H (INL vs : value list + exception) ee G tn t
-Proof
-  simp[extcall_positional_post_def]
-QED
-
 (* Boundary recursion only needs a successful singleton at the next cut.
    The public theorem below obtains it in the scalar and retained cases. *)
 Theorem ctor_rows_fold[local]:
@@ -145,7 +135,7 @@ Proof
   >- (qexists_tac `tops` >> simp[] >> irule int_calls_exprs_DROP_EVERY >> simp[])
   >- (qexistsl_tac [`g1`,`C (SUC i)`,`E (SUC i)`,
         `(E (SUC i)).gas_obs`,`(E (LENGTH args)).gas_obs`,`st0`,`St (SUC i)`,`h1`] >>
-      simp[ctor_rows_post_INL] >> rpt conj_tac
+      simp[extcall_positional_post_INL] >> rpt conj_tac
       >- (qpat_assum `!i g h. J i g h ==> _`
             (qspecl_then [`i`,`g`,`h`] (drule_then ACCEPT_TAC)))
       >> `i <= LENGTH args` by decide_tac >> simp[])
