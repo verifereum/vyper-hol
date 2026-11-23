@@ -2,6 +2,7 @@
 Theory groupedDefaultCallRoute
 Ancestors
   groupedRuntimeBodyCode groupedEntryPackage groupedEntryResources groupedSelectedDefault
+  entryCreateGroupedLayout
   groupedDefaultValueRejection groupedEntryExit groupedDefaultPassingExecution groupedDefaultBoundEntry
   groupedDefaultGuardedStart groupedDefaultCutTransport groupedEntryCut entryRejectCode
   fragGasPathPtr fragGasPath fragFuelRuntimeBody fragFuelRuntimePackage fragFuelCtx fragFuel fragFuelUnit
@@ -80,6 +81,13 @@ fun route_handler statement =
       (free_vars statement), statement);
 val init_handler = route_handler
   ``^pass_inputs ==> ^route_exit \/ ^initializer_done``;
+val init_layout = ``cs_extends si sb /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks sb)) /\
+  ?term. emit_inst JMP [Label common.ec_common_label] [] sb = ((),term) /\
+    fn_has_code sb term fn``;
+val init_binders = fst (strip_forall init_handler);
+val init_handler_with_layout = list_mk_forall (init_binders,
+  ``^pass_inputs ==> ^init_layout ==> ^route_exit \/ ^initializer_done``);
 
 (* Specialize the callback's bound variables using the same named aliases
    as the original initializer application; the entry cursor s stays free. *)
@@ -92,7 +100,7 @@ val init_arguments =
       case List.find (fn (name,_) => name = fst (dest_var v)) aliases of
         SOME (_, actual) => actual
       | NONE => [ANTIQUOTE v];
-  in map argument (fst (strip_forall init_handler)) end;
+  in map argument (fst (strip_forall init_handler_with_layout)) end;
 
 val route_inputs = ``
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -120,8 +128,8 @@ val selected_endpoint = ``
   ?es. runtime_body_endpoint tops rpolicy unit am tx vs es mut nr args dflts ret
     (subst_consts_stmts (module_consts_env tops []) fbody)``;
 
-Theorem grouped_default_route_elim:
-  ^route_inputs ==> ^reject_handler ==> ^init_handler ==>
+Theorem grouped_default_route_elim_with_init_layout:
+  ^route_inputs ==> ^reject_handler ==> ^init_handler_with_layout ==>
   ^selected_endpoint \/ ^route_exit
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -138,7 +146,7 @@ Proof
   disch_then (qx_choosel_then [`groups`,`ips`,`fall`,`shunit`,`fn`,`bb`]
     (map_every assume_tac o CONJUNCTS)) >>
   `shunit = shadow_unit` by fs[] >> gvs[] >>
-  drule_all grouped_shadow_entry_dispatch >>
+  drule_all grouped_shadow_entry_dispatch_with_layout >>
   disch_then (qx_choosel_then
     [`shunit`,`shfn`,`sf`,`fall_lbl`,`jobs`,`sd`,`shd`,`sx`,`shx`,`sn`,`shn`,`se`,`she`]
     (map_every assume_tac o CONJUNCTS)) >>
@@ -146,7 +154,7 @@ Proof
   suspend "selector"
 QED
 
-Resume grouped_default_route_elim[selector]:
+Resume grouped_default_route_elim_with_init_layout[selector]:
   `4 <= LENGTH ^cd` by decide_tac >>
   qabbrev_tac `groups = MAP (package_external_group tops rpolicy.rpol_target T
     (K global_nonreentrant_slot)) externals` >>
@@ -204,12 +212,12 @@ Resume grouped_default_route_elim[selector]:
   >> suspend "reject"
 QED
 
-Resume grouped_default_route_elim[reject]:
+Resume grouped_default_route_elim_with_init_layout[reject]:
   disj2_tac >>
   asm "on_value_reject" (drule_all o MATCH_MP selected_value_cases) >> simp[]
 QED
 
-Resume grouped_default_route_elim[accept]:
+Resume grouped_default_route_elim_with_init_layout[accept]:
   `send_call_value mut ^cx ^src = (INL (),ev)` by
     (qpat_assum `send_call_value _ _ _ = (INL _,_)` mp_tac >> simp_tac (srw_ss()) []) >>
   (Q_TAC (fn tm => SUBGOAL_THEN tm ASSUME_TAC) `common.ec_payable \/ vs.vs_call_ctx.cc_callvalue = 0w`
@@ -234,7 +242,7 @@ Resume grouped_default_route_elim[accept]:
   suspend "package"
 QED
 
-Resume grouped_default_route_elim[package]:
+Resume grouped_default_route_elim_with_init_layout[package]:
   Cases_on `^no_defaults_pkg` >>
   rename1 `set_external_package_target _ _ = (_,rest)` >> PairCases_on `rest` >>
   rename1 `set_external_package_target _ _ = (lbl,ce0,pa,fullcd,pay,guarded,key,ut,view,ss',rt)` >>
@@ -257,7 +265,7 @@ Resume grouped_default_route_elim[package]:
   suspend "decoder"
 QED
 
-Resume grouped_default_route_elim[decoder]:
+Resume grouped_default_route_elim_with_init_layout[decoder]:
   `LENGTH tvs = LENGTH args` by
     (qpat_assum `OPT_MMAP _ _ = SOME tvs` (mp_tac o MATCH_MP OPT_MMAP_LENGTH) >> simp_tac (srw_ss()) []) >>
   `!i. i < LENGTH args ==>
@@ -285,7 +293,7 @@ Resume grouped_default_route_elim[decoder]:
   suspend "start"
 QED
 
-Resume grouped_default_route_elim[start]:
+Resume grouped_default_route_elim_with_init_layout[start]:
   qabbrev_tac `s = ^start` >>
   `s = ^start` by simp[Abbr `s`] >>
   `s.vs_call_ctx = vs.vs_call_ctx` by
@@ -319,7 +327,7 @@ Resume grouped_default_route_elim[start]:
   suspend "source_state"
 QED
 
-Resume grouped_default_route_elim[source_state]:
+Resume grouped_default_route_elim_with_init_layout[source_state]:
   drule_all (REWRITE_RULE [] (Q.INST [`cx` |-> `^cx`]
     (SPEC_ALL grouped_default_empty_source_frame))) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -336,7 +344,7 @@ Resume grouped_default_route_elim[source_state]:
   suspend "passing_resources"
 QED
 
-Resume grouped_default_route_elim[passing_resources]:
+Resume grouped_default_route_elim_with_init_layout[passing_resources]:
   drule (cj 1 registration_runtime_acceptance) >> disch_then assume_tac >>
   drule (cj 1 lowering_context_ok_static_integrity) >> disch_then assume_tac >>
   `ALL_DISTINCT (fn_labels fn)` by
@@ -361,7 +369,7 @@ Resume grouped_default_route_elim[passing_resources]:
   suspend "alloca"
 QED
 
-Resume grouped_default_route_elim[alloca]:
+Resume grouped_default_route_elim_with_init_layout[alloca]:
   `s.vs_inst_idx = 0` by
     (qpat_assum `s = _` SUBST1_TAC >> simp_tac (srw_ss()) []) >>
   `alloca_history fn s` by (irule alloca_history_empty >> asm_rewrite_tac[]) >>
@@ -390,7 +398,7 @@ Resume grouped_default_route_elim[alloca]:
   suspend "guarded_state"
 QED
 
-Resume grouped_default_route_elim[guarded_state]:
+Resume grouped_default_route_elim_with_init_layout[guarded_state]:
   `(^cx).txn = tx` by simp_tac (srw_ss()) [initial_evaluation_context_def] >>
   `(^c0).ce_vars = FEMPTY /\ ~(^c0).ce_is_ctor /\ (^c0).ce_imm_alloca = NONE /\
    (^c0).ce_return_buf = NONE /\ (^ce).ce_return_pc = NONE` by
@@ -425,7 +433,7 @@ Resume grouped_default_route_elim[guarded_state]:
   suspend "run_init"
 QED
 
-Resume grouped_default_route_elim[run_init]:
+Resume grouped_default_route_elim_with_init_layout[run_init]:
   `LENGTH ^ds = LENGTH dflts` by simp[subst_consts_exprs_map] >>
   `MEM (prefix,k) (abi_entries args ^ds)` by
     (qpat_assum `MEM (prefix,k) (abi_entries args dflts)` mp_tac >>
@@ -434,6 +442,8 @@ Resume grouped_default_route_elim[run_init]:
     (qpat_assum `s = _` (fn eq => simp_tac bool_ss [GSYM eq]) >> first_assum ACCEPT_TAC) >>
   asm "on_initializer" (qspecl_then init_arguments mp_tac) >>
   impl_tac >- suspend "init_pre" >>
+  impl_tac >- (drule_all_then strip_assume_tac selected_initializer_layout_at >>
+    asm_rewrite_tac[] >> qexists_tac `term` >> asm_rewrite_tac[]) >>
   disch_then (DISJ_CASES_THEN2
     (fn th => disj2_tac >> ACCEPT_TAC th)
     (qx_choosel_then [`slots`,`last`,`t`,`J`,`tz`,`marks`,`values`,`ee`,`u`,`Gu`,`tu`]
@@ -441,7 +451,7 @@ Resume grouped_default_route_elim[run_init]:
   suspend "normal"
 QED
 
-Resume grouped_default_route_elim[init_pre]:
+Resume grouped_default_route_elim_with_init_layout[init_pre]:
   qpat_assum `MEM (mut,nr,^rr,tx.function_name,args,^ds,ret,^ss)
     (FST (classify_functions tops))` (fn mem_th =>
     qpat_assum `classify_functions tops = _`
@@ -456,7 +466,7 @@ Resume grouped_default_route_elim[init_pre]:
     mp_tac >> simp[AC CONJ_ASSOC CONJ_COMM]
 QED
 
-Resume grouped_default_route_elim[normal]:
+Resume grouped_default_route_elim_with_init_layout[normal]:
   disj1_tac >>
   qpat_assum `MEM (ExternalCommonJob common vars) jobs`
     (qx_choosel_then [`jpre`,`jpost`] assume_tac o REWRITE_RULE [MEM_SPLIT]) >>
@@ -473,41 +483,7 @@ Resume grouped_default_route_elim[normal]:
   suspend "retained"
 QED
 
-Resume grouped_default_route_elim[retained]:
-  `ALL_DISTINCT (MAP (\b. b.bb_label) (all_blocks se))` by
-    (drule_all run_grouped_lowering_dispatch_code >>
-     qpat_assum `compile_group_dispatch_linear groups _ sf = _` (fn dispatch =>
-       qpat_assum `compile_external_jobs (_ ++ _) sd = _` (fn jobs =>
-         qpat_assum `new_block sn.cs_current_bb sx = _` (fn opened =>
-           qpat_assum `(case _ of NONE => _ | SOME _ => _) sn = _` (fn body =>
-             qpat_assum `(_,sf) = fresh_label "fallback" _` (fn start =>
-               simp_tac (srw_ss()) [SYM start,dispatch,jobs,opened,body]))))) >>
-     disch_then (qx_choosel_then [`jobs2`,`sd2`,`sx2`,`sn2`,`se2`]
-       (map_every assume_tac o CONJUNCTS)) >>
-     `jobs2 = jpre ++ ExternalCommonJob common vars::jpost /\ sd2 = sd` by
-       (qpat_x_assum `compile_group_dispatch_linear groups sn2.cs_current_bb sf = _` mp_tac >>
-        qpat_assum `sn2.cs_current_bb = sn.cs_current_bb` (pure_rewrite_tac o single) >>
-        qpat_assum `compile_group_dispatch_linear groups sn.cs_current_bb sf = _`
-          (fn th => simp_tac bool_ss [th,pairTheory.PAIR_EQ,EQ_SYM_EQ])) >>
-     pop_assum (map_every assume_tac o CONJUNCTS) >>
-     `sx2 = sx` by
-       (qpat_assum `compile_external_jobs _ sd2 = ((),sx2)` mp_tac >>
-        qpat_assum `jobs2 = _` (pure_rewrite_tac o single) >>
-        qpat_assum `sd2 = sd` (pure_rewrite_tac o single) >>
-        qpat_assum `compile_external_jobs (_ ++ _) sd = ((),sx)`
-          (fn th => simp_tac bool_ss [th,pairTheory.PAIR_EQ,EQ_SYM_EQ])) >>
-     `sn2 = sn` by
-       (qpat_assum `new_block sn2.cs_current_bb sx2 = _` mp_tac >>
-        qpat_assum `sn2.cs_current_bb = sn.cs_current_bb` (pure_rewrite_tac o single) >>
-        qpat_assum `sx2 = sx` (pure_rewrite_tac o single) >>
-        qpat_assum `new_block sn.cs_current_bb sx = _`
-          (fn th => simp_tac bool_ss [th,pairTheory.PAIR_EQ,EQ_SYM_EQ])) >>
-     `se2 = se` by
-       (qpat_assum `(case _ of NONE => _ | SOME _ => _) sn2 = ((),se2)` mp_tac >>
-        qpat_assum `sn2 = sn` (pure_rewrite_tac o single) >>
-        qpat_assum `(case _ of NONE => _ | SOME _ => _) sn = ((),se)`
-          (fn th => simp_tac bool_ss [th,pairTheory.PAIR_EQ,EQ_SYM_EQ])) >>
-     qpat_x_assum `se2 = se` SUBST_ALL_TAC >> first_assum ACCEPT_TAC) >>
+Resume grouped_default_route_elim_with_init_layout[retained]:
   `cs_extends done sx` by
     (drule_all compile_external_common_job_interval >>
      qpat_assum `compile_external_jobs jpre sd = _` (fn pre =>
@@ -533,15 +509,11 @@ Resume grouped_default_route_elim[retained]:
   `fn_has_code entry done fn` by
     (irule fn_has_code_retained_interval >> conj_tac >- first_assum ACCEPT_TAC >>
      qexists_tac `se` >> conj_tac >> first_assum ACCEPT_TAC) >>
-  `ALL_DISTINCT (MAP (\b. b.bb_label) (all_blocks done))` by
-    (qpat_assum `cs_extends done se` (fn ext =>
-       qpat_assum `ALL_DISTINCT (MAP (\b. b.bb_label) (all_blocks se))`
-         (mp_tac o PURE_REWRITE_RULE [MATCH_MP (SPEC_ALL externalEntryShapeTheory.cs_extends_labels) ext])) >>
-     simp_tac bool_ss [ALL_DISTINCT_APPEND]) >>
+  drule_all_then strip_assume_tac selected_grouped_body_layout_at >>
   suspend "cut_path"
 QED
 
-Resume grouped_default_route_elim[cut_path]:
+Resume grouped_default_route_elim_with_init_layout[cut_path]:
   `ee.storage_trace = []` by
     (qpat_assum `(ee with gas_obs := []) = _`
        (mp_tac o AP_TERM ``evaluation_state_storage_trace``) >>
@@ -588,7 +560,7 @@ Resume grouped_default_route_elim[cut_path]:
   suspend "cut_bounds"
 QED
 
-Resume grouped_default_route_elim[cut_bounds]:
+Resume grouped_default_route_elim_with_init_layout[cut_bounds]:
   qpat_assum `ci_mono sd entry` (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [ci_mono_def]) >>
   `groups = MAP (package_external_group tops rpolicy.rpol_target T
     (K global_nonreentrant_slot)) (FST (classify_functions tops))` by
@@ -634,7 +606,7 @@ Resume grouped_default_route_elim[cut_bounds]:
   suspend "bounds_finish"
 QED
 
-Resume grouped_default_route_elim[bounds_finish]:
+Resume grouped_default_route_elim_with_init_layout[bounds_finish]:
   qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ (t,J,tz) marks _ /\ _`
     (qspec_then `^empty_h` (drule_then (map_every assume_tac o CONJUNCTS))) >>
   `at_point sb u` by
@@ -671,7 +643,7 @@ Resume grouped_default_route_elim[bounds_finish]:
   suspend "decode_finish"
 QED
 
-Resume grouped_default_route_elim[decode_finish]:
+Resume grouped_default_route_elim_with_init_layout[decode_finish]:
   `EVERY cd_cast_domain tvs` by
     (qpat_assum `OPT_MMAP (evaluate_type _) (MAP SND args) = SOME tvs`
        (ACCEPT_TAC o MATCH_MP evaluate_types_cd_cast_domain)) >>
@@ -712,7 +684,7 @@ Resume grouped_default_route_elim[decode_finish]:
   suspend "slot_finish"
 QED
 
-Resume grouped_default_route_elim[slot_finish]:
+Resume grouped_default_route_elim_with_init_layout[slot_finish]:
   qpat_assum `ci_mono sb entry` (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [ci_mono_def]) >>
   `ALL_DISTINCT (MAP (\(_,op,_,_). op) vars)` by
     (qpat_assum `compile_create_kwarg_allocas ^ce specs _ = (vars,_)`
@@ -740,7 +712,7 @@ Resume grouped_default_route_elim[slot_finish]:
   suspend "source_finish"
 QED
 
-Resume grouped_default_route_elim[source_finish]:
+Resume grouped_default_route_elim_with_init_layout[source_finish]:
   `EVERY external_defaults_no_sha256 externals` by
     (map_every (fn pat => qpat_assum pat mp_tac)
        [`lower_vyper_runtime_unit tops rpolicy = SOME unit`,
@@ -769,7 +741,7 @@ Resume grouped_default_route_elim[source_finish]:
   suspend "enter"
 QED
 
-Resume grouped_default_route_elim[enter]:
+Resume grouped_default_route_elim_with_init_layout[enter]:
   `!H. valid_horizon ^cx (initial_state am []) H ee.storage_trace ==>
     gas_origin_ptr_path (cx_dead H ^cx,0,^explicit,^ctx,fn,[]) (s,FEMPTY,entry_taint) marks (OK u,Gu,tu) /\
     stmt_state_rel H ^ctx fn ^c0 ^cx (ee with gas_obs := []) u /\
@@ -796,7 +768,21 @@ Resume grouped_default_route_elim[enter]:
   qpat_assum `u.vs_call_ctx = vs.vs_call_ctx` SUBST1_TAC >> first_assum ACCEPT_TAC
 QED
 
-Finalise grouped_default_route_elim
+Finalise grouped_default_route_elim_with_init_layout
+
+Theorem grouped_default_route_elim:
+  ^route_inputs ==> ^reject_handler ==> ^init_handler ==>
+  ^selected_endpoint \/ ^route_exit
+Proof
+  disch_then (assume_tac o MATCH_MP grouped_default_route_elim_with_init_layout) >>
+  disch_tac >> disch_tac >>
+  qpat_x_assum `^reject_handler ==> _` (drule_then irule) >>
+  let val names = map (fn v => [ANTIQUOTE v]) init_binders in
+    map_every qx_gen_tac names >> disch_tac >> disch_tac >>
+    qpat_assum `^init_handler` (qspecl_then names mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC
+  end
+QED
 
 Theorem grouped_default_call_route:
   ^route_inputs ==>
