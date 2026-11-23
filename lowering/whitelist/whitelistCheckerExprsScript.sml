@@ -356,7 +356,8 @@ QED
 
 Theorem well_typed_builtin_supported_form:
   well_typed_builtin_app ty blt (MAP expr_type es) /\
-  (!s b. blt = MakeArray s b ==> assignable_type (type_env tops) ty) ==>
+  (!s b. blt = MakeArray s b ==> assignable_type (type_env tops) ty) /\
+  (blt = NamedConst ==> checker_agg_ok tops ty) ==>
   supported_builtin_form tops ty blt es /\ checker_agg_ok tops ty
 Proof
   strip_tac >>
@@ -576,6 +577,7 @@ QED
 Theorem checker_builtin_pure[local]:
   checker_env_ok tops env /\ well_typed_builtin_app ty blt (MAP expr_type es) /\
   (!s b. blt = MakeArray s b ==> assignable_type env.type_defs ty) /\
+  (blt = NamedConst ==> checker_agg_ok tops ty) /\
   EVERY (supported_pure_expr tops) es ==>
   supported_pure_expr tops (Builtin ty blt es) /\ checker_agg_ok tops ty
 Proof
