@@ -117,7 +117,10 @@ Proof
 QED
 
 
-Theorem abi_encode_saved_restore_row_pure:
+Theorem abi_encode_saved_restore_row_side_core:
+  saved_restore_copy_laws ctx func explicit su sb P /\
+  (!a u. ~u.vs_halted /\ u.vs_current_bb = a.cs_current_bb /\
+    u.vs_inst_idx = LENGTH a.cs_current_insts ==> P a a u u) /\
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
@@ -158,6 +161,7 @@ Theorem abi_encode_saved_restore_row_pure:
   pbase+dst_offset+LENGTH (FLAT (abi_tuple_heads hl 0 (TAKE i ats) (TAKE i avs))) <= pbase+capacity /\
   pbase+dst_offset+hl+LENGTH (FLAT (abi_tuple_tails (TAKE i ats) (TAKE i avs))) <= pbase+capacity ==>
   ?z Gz tz.
+    P su sb u z /\
     (pure_frame ce func ee su u z /\ wb_frame ce ee ee su u z) /\
     abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
       shared pbase capacity root dst dst_offset prefix sb z Gz tz /\
@@ -177,7 +181,7 @@ Proof
   qpat_assum `abi_encode_saved_state _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [abi_encode_saved_state_def]) >>
   `sm.cs_next_var <= su.cs_next_var /\ sm.cs_next_id <= su.cs_next_id` by decide_tac >>
-  mp_tac (Q.INST [`front` |-> `se`] extcall_direct_restore_saved_pure) >>
+  mp_tac (Q.INST [`front` |-> `se`] extcall_direct_restore_saved_from_side) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`z`,`Gz`,`tz`] strip_assume_tac) >>
   `abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
@@ -198,6 +202,17 @@ Proof
   qpat_assum `ty = _` (fn th => PURE_ONCE_REWRITE_TAC [GSYM th]) >>
   first_assum ACCEPT_TAC
 QED
+
+local
+  val unobserved = SIMP_RULE bool_ss [bodyFullExtCallDelayedSlotTheory.saved_restore_copy_laws_true]
+    (Q.INST [`P` |-> `\a b u z. T`] abi_encode_saved_restore_row_side_core)
+in
+Theorem abi_encode_saved_restore_row_pure:
+  ^(concl unobserved)
+Proof
+  ACCEPT_TAC unobserved
+QED
+end
 
 Theorem abi_encode_saved_restore_row =
   pureFrameLib.drop_frame abi_encode_saved_restore_row_pure

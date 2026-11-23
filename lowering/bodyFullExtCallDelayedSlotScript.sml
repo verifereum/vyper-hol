@@ -124,7 +124,45 @@ Proof
   metis_tac[]
 QED
 
-Theorem extcall_slot_nonmemory_unwrap_pure[local]:
+(* A supplier has the existing physical-copy contract and adds P at that
+   very same normal endpoint.  Form the signatures from the pure replay
+   contracts so the frame and horizon clauses are kept single-sourced. *)
+local
+  fun with_side th =
+    let
+      val (pre, post) = boolSyntax.dest_imp (concl (SPEC_ALL th))
+      val (ws, body) = boolSyntax.strip_exists post
+      fun arg name = List.find (fn v => #1 (dest_var v) = name) (free_vars pre)
+      val pred = ``P:compile_state -> compile_state -> venom_state -> venom_state -> bool``
+      val side = list_mk_comb (pred, List.map (valOf o arg) ["su", "sb", "t"] @ [hd ws])
+      val result = boolSyntax.mk_imp (pre,
+        boolSyntax.list_mk_exists (ws, boolSyntax.mk_conj (side, body)))
+      val fixed = pred :: List.map (valOf o arg) ["ctx", "fn", "su", "sb"] @
+        List.filter (fn v => #1 (dest_var v) = "explicit") (free_vars result)
+    in boolSyntax.list_mk_forall
+         (List.filter (fn v => not (List.exists (aconv v) fixed)) (free_vars result), result)
+    end
+in
+  val slot_copy_side = with_side extcall_saved_slot_copy_replay_pure
+  val runtime_copy_side = with_side extcall_saved_runtime_copy_replay_pure
+  val ctor_copy_side = with_side extcall_saved_ctor_copy_replay_pure
+end
+
+Definition saved_restore_copy_laws_def:
+  saved_restore_copy_laws ctx fn explicit su sb P <=> ^slot_copy_side /\ ^runtime_copy_side /\ ^ctor_copy_side
+End
+
+Theorem saved_restore_copy_laws_true:
+  saved_restore_copy_laws ctx fn explicit su sb (\a b u z. T)
+Proof
+  simp_tac bool_ss [saved_restore_copy_laws_def] >>
+  conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC extcall_saved_slot_copy_replay_pure) >>
+  conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC extcall_saved_runtime_copy_replay_pure) >>
+  rpt gen_tac >> MATCH_ACCEPT_TAC extcall_saved_ctor_copy_replay_pure
+QED
+
+Theorem extcall_slot_nonmemory_unwrap_from_side[local]:
+  saved_restore_copy_laws ctx fn explicit su sb P /\
   lowered_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\ p.ptr_location <> LocMemory /\
   compile_expr ce (expr_type e) e si = (LocatedValue (expr_type e) p,sm) /\
@@ -156,6 +194,7 @@ Theorem extcall_slot_nonmemory_unwrap_pure[local]:
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) ==>
   ?z G' tn'.
+    P su sb t z /\
     pure_frame ce fn ee su t z /\
     gas_origin_ptr_path
       (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,
@@ -194,14 +233,17 @@ Proof
       simp[exprSimUnwrapTheory.vv_post_calldata]) >>
   Cases_on `p.ptr_location = LocCode`
   >- (Cases_on `ce.ce_is_ctor`
-      >- (irule extcall_saved_ctor_copy_replay_pure >> simp[] >>
-          qexistsl [`p`,`si`,`sm`] >> fs[]) >>
-      irule extcall_saved_runtime_copy_replay_pure >> simp[] >>
-      qexistsl [`p`,`si`,`sm`] >> simp[]) >>
+      >- (qpat_x_assum `saved_restore_copy_laws ctx fn explicit su sb P`
+            (irule o cj 3 o REWRITE_RULE [saved_restore_copy_laws_def]) >>
+          simp[] >> qexistsl [`p`,`si`,`sm`] >> fs[]) >>
+      qpat_x_assum `saved_restore_copy_laws ctx fn explicit su sb P`
+        (irule o cj 2 o REWRITE_RULE [saved_restore_copy_laws_def]) >>
+      simp[] >> qexistsl [`p`,`si`,`sm`] >> simp[]) >>
   `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient` by
     (Cases_on `p.ptr_location` >> fs[]) >>
-  irule extcall_saved_slot_copy_replay_pure >> simp[] >>
-  qexistsl [`p`,`si`,`sm`] >> simp[]
+  qpat_x_assum `saved_restore_copy_laws ctx fn explicit su sb P`
+    (irule o cj 1 o REWRITE_RULE [saved_restore_copy_laws_def]) >>
+  simp[] >> qexistsl [`p`,`si`,`sm`] >> simp[]
 QED
 
 (* At the ADD cut, only the fresh output variable and instruction index
@@ -292,7 +334,10 @@ QED
 
 (* The unwrap returns a store input at a single physical endpoint.  The
    retained interval [si,sm) is used only for a non-memory saved value. *)
-Theorem extcall_slot_unwrap_pure:
+Theorem extcall_slot_unwrap_from_side:
+  saved_restore_copy_laws ctx fn explicit su sb P /\
+  (!a u. ~u.vs_halted /\ u.vs_current_bb = a.cs_current_bb /\
+    u.vs_inst_idx = LENGTH a.cs_current_insts ==> P a a u u) /\
   ty = lowered_value_type ce e /\
   ((?tag op0. saved = StackValue tag op0) \/
    (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location = LocMemory) \/
@@ -329,6 +374,7 @@ Theorem extcall_slot_unwrap_pure:
   alloca_history fn t /\ ~t.vs_halted /\ t.vs_current_bb = su.cs_current_bb /\
   t.vs_inst_idx = LENGTH su.cs_current_insts ==>
   ?z G' tn'.
+    P su sb t z /\
     pure_frame ce fn ee su t z /\
     gas_origin_ptr_path
       (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,
@@ -372,11 +418,22 @@ Proof
   qpat_x_assum `ty = expr_type e` SUBST_ALL_TAC >>
   qpat_x_assum `expr_type e = lowered_value_type ce e` (assume_tac o SYM) >>
   simp[] >>
-  irule (SIMP_RULE (boss_ss()) [] extcall_slot_nonmemory_unwrap_pure) >>
+  irule (SIMP_RULE (boss_ss()) [] extcall_slot_nonmemory_unwrap_from_side) >>
   `type_memory_size rt < 18446744073709551616` by fs[] >>
   simp[] >> qexistsl [`p`,`raw`,`si`,`sm`] >>
   fs[contextTheory.vv_operand_def, contextTheory.vv_location_def]
 QED
+
+local
+  val unobserved = SIMP_RULE bool_ss [saved_restore_copy_laws_true]
+    (Q.INST [`P` |-> `\a b u z. T`] extcall_slot_unwrap_from_side)
+in
+Theorem extcall_slot_unwrap_pure:
+  ^(concl unobserved)
+Proof
+  ACCEPT_TAC unobserved
+QED
+end
 
 Theorem extcall_slot_unwrap =
   pureFrameLib.drop_frame extcall_slot_unwrap_pure

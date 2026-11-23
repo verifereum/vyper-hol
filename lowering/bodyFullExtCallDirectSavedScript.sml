@@ -75,7 +75,10 @@ QED
 
 (* Keep Stage 1's saved value and provenance through the encoder's own
    cursor and address arithmetic, then materialize at the actual unwrap. *)
-Theorem extcall_direct_restore_saved_pure:
+Theorem extcall_direct_restore_saved_from_side:
+  saved_restore_copy_laws ctx func explicit su sb P /\
+  (!a u. ~u.vs_halted /\ u.vs_current_bb = a.cs_current_bb /\
+    u.vs_inst_idx = LENGTH a.cs_current_insts ==> P a a u u) /\
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
@@ -113,6 +116,7 @@ Theorem extcall_direct_restore_saved_pure:
   alloca_history func u /\ ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
   u.vs_inst_idx = LENGTH su.cs_current_insts ==>
   ?z Gz tz.
+    P su sb u z /\
     pure_frame ce func ee su u z /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
       stmt_state_rel H ctx func ce cx ee z /\ storage_well_formed_on cx ee (FST H) /\
@@ -201,13 +205,24 @@ Proof
        POP_ASSUM_LIST (K ALL_TAC) >> NO_TAC) >>
      disch_then (qspecl_then [`tv`,`w`] mp_tac) >> asm_rewrite_tac[]) >>
   mp_tac (Q.INST [`fn` |-> `func`, `rt` |-> `tv`, `t` |-> `u`,
-    `G` |-> `Gu`, `tn` |-> `tu`] extcall_direct_saved_unwrap_pure) >>
+    `G` |-> `Gu`, `tn` |-> `tu`] extcall_direct_saved_unwrap_from_side) >>
   impl_tac >- (asm_rewrite_tac[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`z`,`Gz`,`tz`] strip_assume_tac) >>
   qexistsl_tac [`z`,`Gz`,`tz`] >>
   asm_rewrite_tac[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   metis_tac[]
 QED
+
+local
+  val unobserved = SIMP_RULE bool_ss [bodyFullExtCallDelayedSlotTheory.saved_restore_copy_laws_true]
+    (Q.INST [`P` |-> `\a b u z. T`] extcall_direct_restore_saved_from_side)
+in
+Theorem extcall_direct_restore_saved_pure:
+  ^(concl unobserved)
+Proof
+  ACCEPT_TAC unobserved
+QED
+end
 
 Theorem extcall_direct_restore_saved =
   pureFrameLib.drop_frame extcall_direct_restore_saved_pure

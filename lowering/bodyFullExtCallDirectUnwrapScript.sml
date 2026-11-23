@@ -9,7 +9,10 @@ Libs pureFrameLib
 
 (* The row consumes the original saved value. A code-free unwrap retains
    its source allocation interval, while a copy owns its new interval. *)
-Theorem extcall_direct_saved_unwrap_pure:
+Theorem extcall_direct_saved_unwrap_from_side:
+  saved_restore_copy_laws ctx fn explicit su sb P /\
+  (!a u. ~u.vs_halted /\ u.vs_current_bb = a.cs_current_bb /\
+    u.vs_inst_idx = LENGTH a.cs_current_insts ==> P a a u u) /\
   ty = lowered_value_type ce e /\
   ((?tag op0. saved = StackValue tag op0) \/
    (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location = LocMemory) \/
@@ -48,6 +51,7 @@ Theorem extcall_direct_saved_unwrap_pure:
   alloca_history fn t /\ ~t.vs_halted /\ t.vs_current_bb = su.cs_current_bb /\
   t.vs_inst_idx = LENGTH su.cs_current_insts ==>
   ?z G' tn'.
+    P su sb t z /\
     pure_frame ce fn ee su t z /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG) (t,G,tn) [] (OK z,G',tn') /\
@@ -71,8 +75,8 @@ Theorem extcall_direct_saved_unwrap_pure:
        expr_val_at ce cx ty su sb ee v src z))
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all extcall_slot_unwrap_pure >>
-  disch_then (qspecl_then [`explicit`,`PG`]
+  drule_all extcall_slot_unwrap_from_side >>
+  disch_then (qspec_then `PG`
     (qx_choosel_then [`z`,`G'`,`tn'`] strip_assume_tac)) >>
   `!x. src = Var x ==> not_fresh_at sb x` by
     (qpat_assum `unwrap_value ce saved su = (src,sb)` mp_tac >>
@@ -91,6 +95,17 @@ Proof
      metis_tac[]) >>
   qexistsl_tac [`z`,`G'`,`tn'`] >> asm_rewrite_tac[]
 QED
+
+local
+  val unobserved = SIMP_RULE bool_ss [saved_restore_copy_laws_true]
+    (Q.INST [`P` |-> `\a b u z. T`] extcall_direct_saved_unwrap_from_side)
+in
+Theorem extcall_direct_saved_unwrap_pure:
+  ^(concl unobserved)
+Proof
+  ACCEPT_TAC unobserved
+QED
+end
 
 Theorem extcall_direct_saved_unwrap =
   pureFrameLib.drop_frame extcall_direct_saved_unwrap_pure
