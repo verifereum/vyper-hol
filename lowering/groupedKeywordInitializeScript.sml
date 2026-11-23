@@ -21,7 +21,7 @@ val initialized_slot = ``\sa s G tn (aid,p,base,tv,v).
   ^allocated_slot sa s G tn (aid,p,base,tv) /\ value_has_type tv v /\
   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory tv v base mem)``;
 
-Theorem grouped_initializer_slot_kept[local]:
+Theorem grouped_initializer_slot_kept:
   ci_mono sa sb /\
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
      FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -45,7 +45,7 @@ val grouped_initializer_slot_tac = fn row =>
       `tz` |-> `tn1`, `slot` |-> row] (SPEC_ALL grouped_initializer_slot_kept))) >>
   asm_rewrite_tac[];
 
-Theorem grouped_initializer_head_exit[local]:
+Theorem grouped_initializer_head_exit:
   (\H (res:value + exception) ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
     (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)) =
   (\H res ee gt r. ?ex. res = INR ex /\ expr_exit (INR ex:value list + exception) r /\
