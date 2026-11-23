@@ -1,5 +1,6 @@
 Theory createSizeExitRaw
 Ancestors
+  bodySingletonCallSupport[qualified,ignore_grammar]
   exprSimFullBundleProps fragExec gasExplicitSites s1PrefixDefs venomExecSemantics venomInst
   venomState vyperCreate vyperState relation list words pair bodyFullIfExpReach
   builtinCreate arithmetic createSizeDispatch exprLowering vfmConstants externalEntryShape
@@ -347,24 +348,16 @@ Resume create_size_exit_raw[row_monotonic]:
 QED
 
 Resume create_size_exit_raw[raw_calls]:
-  qpat_assum `expr_body_pre cenv cx env (Call _ _ _ _) es`
-    (mp_tac o REWRITE_RULE [expr_body_pre_split_def]) >>
-  strip_tac >> drule expr_body_pre_mods_int_calls >> strip_tac >>
-  drule body_inv_main_code >> strip_tac >>
+  drule_all_then assume_tac bodySingletonCallSupportTheory.body_inv_expr_pre_calls >>
   simp[EVERY_MEM] >> qx_gen_tac `call` >> disch_tac >>
   `MEM call (int_calls_expr (Call ann (CreateTarget RawCreate hs rof ks) (be::av::rest) df))` by
     (`!ys zs. int_calls_exprs (ys ++ zs) = int_calls_exprs ys ++ int_calls_exprs zs` by
        (POP_ASSUM_LIST (K ALL_TAC) >> Induct >> simp[int_calls_expr_def]) >>
      qpat_assum `xs ++ _ = rest` (SUBST1_TAC o SYM) >>
      simp[int_calls_expr_def]) >>
-  qpat_assum `EVERY (\c. FST c = NONE) _`
-    (qspec_then `call` mp_tac o REWRITE_RULE[EVERY_MEM]) >>
-  qpat_assum `EVERY (\c. ?tops. _) _`
-    (qspec_then `call` mp_tac o REWRITE_RULE[EVERY_MEM]) >>
-  Cases_on `call` >> simp[] >> rpt strip_tac >>
-  qpat_x_assum `get_module_code cx q = SOME tops'` mp_tac >>
-  pure_asm_rewrite_tac [] >> simp_tac (srw_ss()) [] >>
-  disch_then SUBST1_TAC >> first_assum ACCEPT_TAC
+  qpat_assum `EVERY _ (int_calls_expr (Call _ _ _ _))`
+    (qspec_then `call` mp_tac o SIMP_RULE bool_ss [EVERY_MEM]) >>
+  simp[]
 QED
 
 Resume create_size_exit_raw[raw_capacity]:
