@@ -11,7 +11,7 @@ Theory bodyFullRaiseReason
 Ancestors
   bodyFullShadowBodyInv
   stateRelProj
-  bodyFullRaiseReasonLiteralAction bodyFullRaiseReasonLiteral bodyFullRaiseReasonNonliteral
+  bodyFullRaiseReasonLiteralAction bodyFullRaiseReasonNonliteral
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
 

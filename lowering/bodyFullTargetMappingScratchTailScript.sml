@@ -3,7 +3,7 @@
 Theory bodyFullTargetMappingScratchTail
 Ancestors
   bodyPtrPopTargetSimMapScratchRun bodyFullUnwrapSlotPost bodyFullUnwrapRun
-  bodyFullAllocGeneric fragGasCopyLoop fragExecMem instMemFrontier
+  bodyFullAllocGeneric fragGasCopyLoop fragGasCopySeqLiftProps fragExecMem instMemFrontier
   valueEncodingProps exprSimMapKey exprSimPrecompiles exprSimHash fragExec exprLoweringProps vyperStorage
   bodyPtrDefs ptrDiscipline venomState venomExecSemantics venomInst
   words finite_map pred_set list
@@ -137,7 +137,7 @@ Resume mapping_scratch_tail_full_run[path]:
   conj_tac >- simp[mk_inst_def, is_terminator_def] >>
   conj_tac >- suspend "memchecks" >>
   simp[Abbr `HG`, Abbr `tm`] >>
-  irule fragGasCopyLoopTheory.inst_seq_ptr_lower_bound_transport >>
+  irule fragGasCopySeqLiftPropsTheory.inst_seq_ptr_lower_bound_transport >>
   simp[mk_inst_def] >> qexists_tac `0` >> simp[] >>
   gvs[ALL_DISTINCT] >>
   irule (SRULE [mk_inst_def] map_scratch_store_hash_checked) >> simp[]
