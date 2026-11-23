@@ -44,7 +44,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   `supported_string_reason tops e` by
     gvs[supported_stmt_raise_reason, supported_raise_reason_def] >>
-  drule_then strip_assume_tac supported_string_reason_body_calls >>
+  `well_typed_expr env e` by fs[type_stmt_raise_reason] >>
+  drule_all_then assume_tac bodySingletonCallSupportTheory.body_inv_typed_calls_main >>
+  drule_all_then strip_assume_tac supported_string_reason_body_calls >>
   drule_then strip_assume_tac body_inv_main_code >>
   drule_then assume_tac body_inv_contract >>
   drule_then assume_tac body_inv_module >>
