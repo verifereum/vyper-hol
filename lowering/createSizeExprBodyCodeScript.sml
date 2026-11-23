@@ -310,3 +310,170 @@ Resume create_expr_body_cut_code[ifexp]:
 QED
 
 Finalise create_expr_body_cut_code
+
+Theorem pair_result_snd[local]:
+  p = (x,b) ==> SND p = b
+Proof
+  simp[]
+QED
+
+val result_snd_tac = first_assum (fn th =>
+  CHANGED_TAC (CONV_TAC (RAND_CONV (REWR_CONV (GSYM (MATCH_MP pair_result_snd th))))));
+
+Theorem ifexp_selected_closed_suffixes:
+  create_cut_code {} st sc /\
+  emit_inst JNZ [cond; Label l; Label r] [] sc = (u,b) /\
+  new_block l b = (x,se) /\
+  create_cut_code {} se sea /\
+  emit_inst ASSIGN [then_op] [result_var] sea = (v,sx) /\
+  emit_inst JMP [Label j] [] sx = (w,sj) /\
+  new_block r sj = (y,fe) /\
+  create_cut_code {} fe fea /\
+  emit_inst ASSIGN [else_op] [result_var] fea = (p,fg) /\
+  emit_inst JMP [Label j] [] fg = (q,fh) /\
+  new_block j fh = (z,st') ==>
+  create_cut_code {} st sc /\
+  create_cut_code {} sc st' /\
+  create_cut_code {} se sea /\
+  create_cut_code {} se st' /\
+  create_cut_code {} sea sx /\
+  create_cut_code {} sea st' /\
+  create_cut_code {} sx st'
+Proof
+  rpt strip_tac >>
+  `create_cut_code {l;r;j} sc b /\
+   create_cut_code {l;r;j} sx sj /\
+   create_cut_code {l;r;j} fea fg /\
+   create_cut_code {l;r;j} fg fh` by
+    (rpt conj_tac >> result_snd_tac >>
+     match_mp_tac create_cut_code_emit_inst >> simp[create_cut_targets_def] >> metis_tac[added_labels_trans]) >>
+  `create_cut_code {l;r;j} b se /\
+   create_cut_code {l;r;j} sj fe /\
+   create_cut_code {l;r;j} fh st'` by
+    (rpt conj_tac >> metis_tac[create_cut_code_new_block, SND]) >>
+  `create_cut_code {l;r;j} se sea /\
+   create_cut_code {l;r;j} fe fea` by
+    (rpt conj_tac >> irule create_cut_code_weaken >> qexists_tac `{}` >> simp[]) >>
+  `create_cut_code {l;r;j} sea sx` by
+    (result_snd_tac >> match_mp_tac create_cut_code_emit_inst >> simp[create_cut_targets_def]) >>
+  `create_cut_code {l;r;j} sc st'` by
+    metis_tac[create_cut_code_join] >>
+  `create_cut_code {l;r;j} se st' /\
+   create_cut_code {l;r;j} sea st' /\
+   create_cut_code {l;r;j} sx st'` by
+    metis_tac[create_cut_code_join] >>
+  `create_cut_code {l;r;j} st sc` by
+    (irule create_cut_code_weaken >> qexists_tac `{}` >> simp[]) >>
+  `create_cut_code {l;r;j} st st'` by
+    metis_tac[create_cut_code_join] >>
+  `added_labels b se = [l]` by
+    first_assum (fn th => ACCEPT_TAC (MATCH_MP added_labels_new_block th)) >>
+  `added_labels sj fe = [r]` by
+    first_assum (fn th => ACCEPT_TAC (MATCH_MP added_labels_new_block th)) >>
+  `added_labels fh st' = [j]` by
+    first_assum (fn th => ACCEPT_TAC (MATCH_MP added_labels_new_block th)) >>
+  `cs_extends sc b /\ cs_extends b se /\ cs_extends se sea /\
+   cs_extends sea sx /\ cs_extends sx sj /\ cs_extends sj fe /\
+   cs_extends fe fea /\ cs_extends fea fg /\ cs_extends fg fh /\
+   cs_extends fh st'` by
+    (fs[create_cut_code_def] >> metis_tac[cs_extends_trans]) >>
+  `cs_extends sc se` by
+    (irule cs_extends_trans >> qexists_tac `b` >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  `cs_extends se sx` by
+    (irule cs_extends_trans >> qexists_tac `sea` >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  `cs_extends sx fe` by
+    (irule cs_extends_trans >> qexists_tac `sj` >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  `cs_extends fg st'` by
+    (irule cs_extends_trans >> qexists_tac `fh` >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  `cs_extends se st' /\ cs_extends sx st'` by
+    (fs[create_cut_code_def] >> metis_tac[added_labels_trans]) >>
+  `cs_extends sc sx` by
+    (irule cs_extends_trans >> qexists_tac `se` >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  `cs_extends sj fea` by
+    (irule cs_extends_trans >> qexists_tac `fe` >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  `cs_extends sj fg` by
+    (irule cs_extends_trans >> qexists_tac `fea` >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  `cs_extends sx fg` by
+    (irule cs_extends_trans >> qexists_tac `sj` >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  `cs_extends sc fg` by
+    (irule cs_extends_trans >> qexists_tac `sx` >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  `cs_extends fea st'` by
+    (irule cs_extends_trans >> qexists_tac `fg` >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  `cs_extends fe st'` by
+    (irule cs_extends_trans >> qexists_tac `fea` >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  `added_labels sc se = added_labels sc b ++ added_labels b se` by
+    metis_tac[added_labels_trans] >>
+  `MEM l (added_labels sc se)` by
+    metis_tac[MEM_APPEND, MEM] >>
+  `added_labels sc st' = added_labels sc se ++ added_labels se st'` by
+    metis_tac[added_labels_trans] >>
+  `MEM l (added_labels sc st')` by
+    metis_tac[MEM_APPEND, MEM] >>
+  `added_labels sx fe = added_labels sx sj ++ added_labels sj fe` by
+    metis_tac[added_labels_trans] >>
+  `MEM r (added_labels sx fe)` by
+    metis_tac[MEM_APPEND, MEM] >>
+  `added_labels sx st' = added_labels sx fe ++ added_labels fe st'` by
+    (irule added_labels_trans >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  `MEM r (added_labels sx st')` by
+    metis_tac[MEM_APPEND, MEM] >>
+  `added_labels sc sx = added_labels sc se ++ added_labels se sx` by
+    metis_tac[added_labels_trans] >>
+  `added_labels sc st' = added_labels sc sx ++ added_labels sx st'` by
+    metis_tac[added_labels_trans] >>
+  `MEM r (added_labels sc st')` by
+    metis_tac[MEM_APPEND, MEM] >>
+  `cs_extends sx fg` by metis_tac[cs_extends_trans] >>
+  `added_labels fg st' = added_labels fg fh ++ added_labels fh st'` by
+    metis_tac[added_labels_trans] >>
+  `MEM j (added_labels fg st')` by
+    metis_tac[MEM_APPEND, MEM] >>
+  `added_labels sc fg = added_labels sc sx ++ added_labels sx fg` by
+    metis_tac[added_labels_trans] >>
+  `added_labels sc st' = added_labels sc fg ++ added_labels fg st'` by
+    metis_tac[added_labels_trans] >>
+  `MEM j (added_labels sc st')` by
+    metis_tac[MEM_APPEND, MEM] >>
+  `added_labels sx fg = added_labels sx sj ++ added_labels sj fg` by
+    metis_tac[added_labels_trans] >>
+  `added_labels sx st' = added_labels sx fg ++ added_labels fg st'` by
+    metis_tac[added_labels_trans] >>
+  `MEM j (added_labels sx st')` by
+    metis_tac[MEM_APPEND, MEM] >>
+  `added_labels sea st' = added_labels sea sx ++ added_labels sx st'` by
+    metis_tac[added_labels_trans] >>
+  `MEM r (added_labels sea st') /\ MEM j (added_labels sea st')` by
+    (rpt conj_tac >> metis_tac[MEM_APPEND, MEM]) >>
+  `cs_extends sea st'` by
+    (fs[create_cut_code_def] >> metis_tac[]) >>
+  `added_labels se st' = added_labels se sea ++ added_labels sea st'` by
+    (irule added_labels_trans >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  `MEM r (added_labels se st') /\ MEM j (added_labels se st')` by
+    (rpt conj_tac >> metis_tac[MEM_APPEND, MEM]) >>
+  `create_cut_code {} sc st'` by
+    (irule create_cut_code_close >> qexists_tac `{l;r;j}` >> simp[]) >>
+  `create_cut_code {} sea sx` by
+    (result_snd_tac >> match_mp_tac create_cut_code_emit_inst >> simp[create_cut_targets_def]) >>
+  `create_cut_code {r;j} sea sx` by
+    (result_snd_tac >> match_mp_tac create_cut_code_emit_inst >> simp[create_cut_targets_def]) >>
+  `create_cut_code {r;j} sx sj` by
+    (result_snd_tac >> match_mp_tac create_cut_code_emit_inst >> simp[create_cut_targets_def] >> metis_tac[]) >>
+  `create_cut_code {r;j} fea fg` by
+    (result_snd_tac >> match_mp_tac create_cut_code_emit_inst >> simp[create_cut_targets_def]) >>
+  `create_cut_code {r;j} fg fh` by
+    (result_snd_tac >> match_mp_tac create_cut_code_emit_inst >> simp[create_cut_targets_def] >> metis_tac[]) >>
+  `create_cut_code {r;j} se sea /\ create_cut_code {r;j} fe fea` by
+    (rpt conj_tac >> irule create_cut_code_weaken >> qexists_tac `{}` >> simp[]) >>
+  `create_cut_code {r;j} sj fe /\ create_cut_code {r;j} fh st'` by
+    (rpt conj_tac >> metis_tac[create_cut_code_new_block, SND]) >>
+  `create_cut_code {r;j} se st'` by metis_tac[create_cut_code_join] >>
+  `create_cut_code {r;j} sea st'` by metis_tac[create_cut_code_join] >>
+  `create_cut_code {r;j} sx st'` by metis_tac[create_cut_code_join] >>
+  `create_cut_code {} se st'` by
+    (irule create_cut_code_close >> qexists_tac `{r;j}` >> simp[]) >>
+  `create_cut_code {} sea st'` by
+    (irule create_cut_code_close >> qexists_tac `{r;j}` >> simp[]) >>
+  `create_cut_code {} sx st'` by
+    (irule create_cut_code_close >> qexists_tac `{r;j}` >> simp[]) >>
+  rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
+QED
