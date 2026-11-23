@@ -511,11 +511,12 @@ Theorem body_stmts_sim_full_mods:
     (!target. supported_stmts_expr_exists
        (expr_abi_decode_target_root target) ss ==>
        EXISTS (occurs_abi_decode_target target o SND) mods) /\
-    body_const_cells_agree mods cx env es /\
+    body_const_cells_agree_mods mods cx env es /\
     expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmts env ret_ty ss = SOME env' /\
     stmts_exprs_ok cenv ss /\
+    ~supported_stmts_expr_exists (unallocated_bare_global_root cenv env) ss /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>
@@ -527,9 +528,7 @@ Theorem body_stmts_sim_full_mods:
 Proof
   rpt gen_tac >> strip_tac >>
   `ALOOKUP cx.sources cx.txn.target = SOME mods` by
-    (qpat_assum `body_const_cells_agree _ _ _ _`
-       (strip_assume_tac o REWRITE_RULE [body_const_cells_agree_def]) >>
-     first_assum ACCEPT_TAC) >>
+    drule_then ACCEPT_TAC body_const_cells_agree_mods_sources >>
   `body_stmts_full_ok_mods mods exps cx ss` by
     (irule (cj 2 (Q.SPECL [`mods`, `exps`] body_sim_full_mutual_mods)) >>
      asm_rewrite_tac[]) >>
