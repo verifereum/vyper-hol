@@ -734,9 +734,12 @@ Resume return_selected_valued_frag_full_core[buffered_shared_entry]:
   impl_tac >- simp[] >>
   disch_then (qx_choosel_then [`unlocked`,`unlock_tn`] strip_assume_tac) >>
   `?prepared_es. unlock_if_nr cx nr (is_view_mut mut) mid = (INL (),prepared_es)` by
-    (Cases_on `nr` >> Cases_on `mut = View` >>
-     fs[unlock_if_nr_def,vyperStateTheory.return_def,
-       nonreentrantEquivTheory.release_nonreentrant_lock_execution]) >>
+    (POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `nr /\ ~is_view_mut mut`
+     >- (Cases_on `cx.nonreentrant_slot` >>
+         simp[unlock_if_nr_def,vyperStateTheory.return_def,
+              nonreentrantEquivTheory.release_nonreentrant_lock_execution]) >>
+     simp[unlock_if_nr_def,vyperStateTheory.return_def]) >>
   pop_assum strip_assume_tac >>
   `stmt_state_rel (storage_trace_horizon mid.storage_trace)
      ctx func ce cx prepared_es unlocked` by
