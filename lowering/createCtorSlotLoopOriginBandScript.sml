@@ -3,6 +3,7 @@
 Theory createCtorSlotLoopOriginBand
 Ancestors
   createCtorStraightBand createCtorSegmentArrival fragGasStorageCopyBodyProps fragGasStorageCopyHeaderProps fragGasCopyLoop fragGasOriginPtrLoop
+  fragGasCopySeqLiftProps
   exprSimPtrTopLevelStorageCopy exprSimStorageCopy bodyStorageCopyMemory
   fragGasSeqPtrContext fragGasSeqPtr fragGasSeqAbort fragGasOriginPtr instMemFrontier
   exprLoweringProps ptrDisciplineTaintProps memLocDefs
@@ -189,51 +190,23 @@ Theorem slot_body_origin_band[local]:
     ~r.vs_halted /\ r.vs_current_bb = hdr /\ r.vs_inst_idx = 0
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >> rpt gen_tac >>
-  qabbrev_tac `code =
-      [mk_inst id ADD [src;Var cv] [sv];
-       mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
-       mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
-       mk_inst (id+3) ADD [Var dst;Var mv] [dv];
-       mk_inst (id+4) MSTORE [Var dv;Var vv] [];
-       mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
-       mk_inst (id+6) ASSIGN [Var nv] [cv]]` >>
-  RULE_ASSUM_TAC (REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  drule_all storage_copy_body_ptr_run >>
-  disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
-  qabbrev_tac `bb = <|bb_label := s.vs_current_bb;
-                       bb_instructions := code ++ [mk_inst (id+7) JMP [Label hdr] []]|>` >>
-  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by
-    (simp[Abbr `bb`] >> fs[]) >>
-  `isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by simp[Abbr `bb`] >>
-  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-     (OK (r with vs_inst_idx := s.vs_inst_idx + LENGTH code),Gf,tnf) /\
-   allocas_from lo r` by
-    (irule run_inst_seq_origin_ptr_lift >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     qexists_tac `bb` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  qabbrev_tac `t = r with vs_inst_idx := s.vs_inst_idx + LENGTH code` >>
-  `~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = 7 /\
-   allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
-    (simp[Abbr `t`] >> gvs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
-  `get_instruction bb t.vs_inst_idx = SOME (mk_inst (id+7) JMP [Label hdr] [])` by
-    (simp[Abbr `bb`, get_instruction_def] >> fs[]) >>
-  qexistsl_tac [`jump_to hdr t`, `Gf`, `tnf`] >>
-  conj_tac
-  >- (slot_origin_continue `gas_origin_ptr_path _ (s,G,tn) [] (OK t,Gf,tnf)` >>
-      irule jmp_origin_ptr_path >> simp[] >> qexists_tac `id+7` >>
-      simp[Abbr `bb`, get_instruction_def]) >>
-  conj_tac
-  >- (irule RTC_TRANS >> qexists_tac `t` >> conj_tac
-      >- (qpat_assum `Abbrev (t = _)`
-            (pure_rewrite_tac o single o REWRITE_RULE[markerTheory.Abbrev_def]) >>
-          irule (Q.SPEC `code` ctor_straight_band_run) >>
-          rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-          TRY (qexists_tac `bb` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-          qpat_x_assum `code = _` SUBST1_TAC >>
-          Cases_on `loc = LocStorage` >> simp[mk_inst_def, is_terminator_def] >> decide_tac) >>
-      irule slot_jmp_band >> simp[] >> qexists_tac `id+7` >>
-      simp[Abbr `bb`, get_instruction_def] >> decide_tac) >>
-  gvs[Abbr `t`, jump_to_def, allocas_from_def, allocas_below_fmp_def] >> metis_tac[]
+  drule_at (Pat `lookup_block _ _ = SOME <|bb_label := _; bb_instructions := _|>`)
+    storage_copy_body_origin_path >>
+  disch_then drule_all >>
+  disch_then (qspecl_then [`D`, `explicit`, `PG`]
+    (qx_choosel_then [`r`, `G1`, `tn1`] strip_assume_tac)) >>
+  qexistsl_tac [`r`, `G1`, `tn1`] >> simp[] >>
+  rename1 `run_inst_seq code s = OK u` >>
+  rename1 `r = jump_to hdr t` >>
+  `EVERY (\i. loId <= i.inst_id /\ i.inst_id < hiId) code` by
+    (fs[EVERY_MEM] >> rpt strip_tac >> res_tac >> decide_tac) >>
+  irule RTC_TRANS >> qexists_tac `t` >> conj_tac
+  >- (qpat_assum `t = u with vs_inst_idx := _` (pure_rewrite_tac o single) >>
+      MATCH_MP_TAC (Q.SPECL [`code`, `s`, `u`, `bb`, `func`, `loId`, `hiId`]
+        ctor_straight_band_run) >> simp[]) >>
+  `loId <= id+7` by decide_tac >>
+  mp_tac (Q.INST [`s` |-> `t`, `lbl` |-> `hdr`, `id` |-> `id+7`]
+    slot_jmp_band) >> asm_rewrite_tac[ADD_CLAUSES]
 QED
 
 Theorem ctor_slot_loop_origin_band:

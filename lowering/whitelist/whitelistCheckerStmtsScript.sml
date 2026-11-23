@@ -11,7 +11,7 @@ Theory whitelistCheckerStmts
 Ancestors
   list pred_set finite_map alist pair vyperAST vyperValue vyperContext vyperTypeSystem
   vyperTypeCallGraph vyperEventArgCompat vyperTypeEnvExtension constSubst
-  vyperTypeContract
+  vyperTypeContract checkedTypeNamespace
   supportedTypes supportedDecls supportedExprForms supportedExprs
   supportedTargets supportedStmtTraverse supportedStmts
   whitelistCheckerDecls whitelistCheckerExprs supportedGetterProps
@@ -103,13 +103,13 @@ Theorem supported_place_root_target_info[local]:
   supported_place_root tops id ==>
   IS_SOME (supported_target_info tops bindings (TopLevelNameTarget id))
 Proof
-  simp[supported_place_root_def, supported_target_info_def] >>
+  Cases_on `FST id = NONE` >> simp[supported_place_root_def, supported_target_info_def] >>
   Cases_on `supported_variable_decl tops id` >> simp[]
   >- (Cases_on `supported_hashmap_decl tops id` >> simp[] >>
-      rename1 `SOME hm` >> PairCases_on `hm` >> simp[]) >>
-  rename1 `SOME vd` >> PairCases_on `vd` >> simp[] >>
+      rename1 `supported_hashmap_decl tops id = SOME hm` >> PairCases_on `hm` >> simp[]) >>
+  rename1 `supported_variable_decl tops id = SOME vd` >> PairCases_on `vd` >> simp[] >>
   Cases_on `supported_hashmap_decl tops id` >> simp[] >>
-  rename1 `SOME hm` >> PairCases_on `hm` >> simp[]
+  rename1 `supported_hashmap_decl tops id = SOME hm` >> PairCases_on `hm` >> simp[]
 QED
 
 Theorem checker_toplevel_target_root[local]:
@@ -267,12 +267,6 @@ Proof
   rw[type_env_for_module_def, FLOOKUP_UPDATE] >> res_tac >> gvs[]
 QED
 
-Theorem supported_types_namespace_every[local]:
-  !ts. supported_types_namespace ts <=> EVERY supported_type_namespace ts
-Proof
-  Induct >> simp[supported_type_namespace_def]
-QED
-
 Theorem assignable_type_namespace[local]:
   !tenv ty. assignable_type tenv ty ==>
     (!id x. FLOOKUP tenv id = SOME x ==> FST id = NONE) ==>
@@ -339,7 +333,7 @@ Proof
          gvs[well_typed_expr_def, bound_length_def] >>
          metis_tac[checker_env_bare_toplevel, checker_env_ok_def,
                    checker_vtype_ok_def, optionTheory.IS_SOME_DEF]) >>
-  rw[] >> gvs[call_result_expr_def]
+  Cases_on `c` >> gvs[call_result_expr_def]
 QED
 
 Theorem type_stmt_for_head_supported[local]:
@@ -376,6 +370,12 @@ QED
 
 (* ===== Statements ===== *)
 
+Triviality checker_custom_error_supported:
+  custom_error_resolved [(NONE,tops)] err ==> supported_custom_error tops err
+Proof
+  Cases_on `err` >> simp[supported_custom_error_def]
+QED
+
 Theorem type_stmt_leaf_supported[local]:
   checker_env_ok tops env /\ checker_stmt_env_ok tops env /\
   FDOM env.var_types SUBSET set (MAP FST bindings) /\
@@ -396,15 +396,16 @@ Proof
   >~ [`Assert _ r`]
   >- (Cases_on `r` >>
       gvs[type_stmt_def, supported_stmt_def, AllCaseEqs(),
-          supported_assert_reason_def, custom_errors_stmt_ok_def,
-          well_typed_custom_error_def] >>
-      metis_tac[checker_pure, checker_pures, checker_string_reason])
+          supported_assert_reason_def,
+          custom_errors_stmt_ok_def, well_typed_custom_error_def] >>
+      metis_tac[checker_pure, checker_pures, checker_string_reason,
+                checker_custom_error_supported])
   >~ [`Raise r`]
   >- (Cases_on `r` >>
       gvs[type_stmt_def, supported_stmt_def, AllCaseEqs(),
-          supported_raise_reason_def, custom_errors_stmt_ok_def,
-          well_typed_custom_error_def] >>
-      metis_tac[checker_pures, checker_string_reason])
+          supported_raise_reason_def,
+          custom_errors_stmt_ok_def, well_typed_custom_error_def] >>
+      metis_tac[checker_pures, checker_string_reason, checker_custom_error_supported])
   >~ [`Return r`]
   >- (Cases_on `r` >> gvs[type_stmt_def, supported_stmt_def, AllCaseEqs()] >>
       metis_tac[checker_supported_expr])
