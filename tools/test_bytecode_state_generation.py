@@ -36,6 +36,7 @@ class GeneratedStateIntegrationTests(unittest.TestCase):
             "generated": generated, "constructor_args": list(constructor_args),
             "deployment_value": deployment_value, "calls": calls,
             "calls_per_case": calls_per_case,
+            "python_hash_seed": "0",
         }
         config_path = directory / "case.json"
         config_path.write_text(json.dumps(config))
@@ -43,6 +44,7 @@ class GeneratedStateIntegrationTests(unittest.TestCase):
             [sys.executable, str(ROOT / "tools/bytecode_state_fuzz.py"),
              "--_reference-worker", str(config_path)],
             capture_output=True, text=True, timeout=120,
+            env={**os.environ, "PYTHONHASHSEED": "0"},
         )
         self.assertTrue((directory / "reference.json").is_file(), result.stdout + result.stderr)
         response = json.loads((directory / "reference.json").read_text())

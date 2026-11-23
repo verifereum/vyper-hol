@@ -3,6 +3,14 @@
 
 The compiler checkout must be clean and match VYPER_PIN. This is independent of
 bytecode parity: the reference is unmodified Vyper executing in pinned py-evm.
+
+Use --source FILE --calls PLAN for an explicit scenario, or --replay-case
+CASE/case.json to rerun its saved source and calls with the recorded import
+directory, compiler settings and Python hash seed. External imports must remain
+unchanged; traces.json remains the canonical exact native replay input.
+Public runs launch the compiler worker with PYTHONHASHSEED=0 and retain
+python_hash_seed in case.json and reference provenance. Saved-case replay honors
+that seed, defaulting to 0 for older artifacts without the metadata.
 """
 from __future__ import annotations
 
@@ -10,6 +18,7 @@ import argparse
 from collections import Counter
 import hashlib
 import json
+import os
 from pathlib import Path
 import random
 import re
@@ -168,6 +177,7 @@ def reference_worker(config_path: Path) -> int:
     run = None
     try:
         response["provenance"] = verify_vyper(Path(config["vyper"]), ROOT)
+        response["provenance"]["python_hash_seed"] = os.environ.get("PYTHONHASHSEED", "random")
         run = ReferenceRun(
             (directory / "source.vy").read_text(), name=config["name"],
             source_dir=Path(config["source_dir"]),
@@ -177,14 +187,18 @@ def reference_worker(config_path: Path) -> int:
         )
         calls = config["calls"]
         if calls is None:
-            calls = plan_calls(run.abi, config["seed"], config["calls_per_case"],
-                               run.addresses, generated=config.get("generated", False))
+            calls = ([] if run.contract is None else
+                     plan_calls(run.abi, config["seed"], config["calls_per_case"],
+                                run.addresses, generated=config.get("generated", False)))
         write_json(directory / "calls.json", {
             "constructor_args": config.get("constructor_args", []),
             "deployment_value": config.get("deployment_value", 0), "calls": calls,
         })
-        for call in calls:
-            run.call(call)
+        # A failed deployment is an observed outcome, not a reference failure.
+        # Keep any explicit plan as evidence, but compare only its constructor.
+        if run.contract is not None:
+            for call in calls:
+                run.call(call)
         response["status"] = "passed"
     except CompilerRejected as error:
         response.update(status="compiler-rejected", error=str(error))
@@ -235,6 +249,7 @@ def replay(binary: Path, traces: Path, timeout: float) -> dict:
 
 
 def run_case(directory: Path, config: dict, args, binary_digest: str) -> dict:
+    config = {**config, "python_hash_seed": config.get("python_hash_seed", "0")}
     write_json(directory / "case.json", config)
     report = {"schema_version": 1, "name": config["name"], "seed": config["seed"],
               "settings": {key: config[key] for key in ("optimize", "experimental_codegen")},
@@ -244,6 +259,7 @@ def run_case(directory: Path, config: dict, args, binary_digest: str) -> dict:
             [sys.executable, str(Path(__file__).resolve()),
              "--_reference-worker", str(directory / "case.json")],
             capture_output=True, text=True, timeout=args.reference_timeout,
+            env={**os.environ, "PYTHONHASHSEED": str(config["python_hash_seed"])},
         )
         (directory / "reference.stdout").write_text(result.stdout)
         (directory / "reference.stderr").write_text(result.stderr)
@@ -267,7 +283,7 @@ def run_case(directory: Path, config: dict, args, binary_digest: str) -> dict:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--_reference-worker", type=Path, help=argparse.SUPPRESS)
-    parser.add_argument("--vyper", type=Path, default=ROOT / "vyper-ref",
+    parser.add_argument("--vyper", type=Path,
                         help="clean compiler checkout matching VYPER_PIN")
     parser.add_argument("--runner", type=Path, default=RUNNER)
     parser.add_argument("--out", type=Path, help="new output directory (never overwrites a run)")
@@ -281,6 +297,8 @@ def main(argv=None) -> int:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--smoke", action="store_true", help="exercise storage, transient state, logs and rollback")
     mode.add_argument("--source", type=Path, help="explicit Vyper source instead of generated programs")
+    mode.add_argument("--replay-case", type=Path,
+                      help="rerun saved case.json with sibling source.vy/calls.json and recorded settings")
     parser.add_argument("--calls", type=Path, help="JSON scenario for --source")
     args = parser.parse_args(argv)
     if args._reference_worker:
@@ -292,21 +310,28 @@ def main(argv=None) -> int:
     if bool(args.source) != bool(args.calls):
         parser.error("--source and --calls must be supplied together")
     args.runner = args.runner.resolve()
-    args.vyper = args.vyper.resolve()
+    saved = None
     if not args.runner.is_file():
         parser.error(f"native runner missing: {args.runner}; run tools/emit_run_test.py first")
     try:
-        scenario = load_scenario(args.calls) if args.calls else {}
-        source = args.source.read_text() if args.source else SMOKE_SOURCE if args.smoke else None
+        if args.replay_case:
+            case_path = args.replay_case.resolve()
+            saved = json.loads(case_path.read_text())
+            scenario = load_scenario(case_path.parent / "calls.json")
+            source = (case_path.parent / "source.vy").read_text()
+        else:
+            scenario = load_scenario(args.calls) if args.calls else {}
+            source = args.source.read_text() if args.source else SMOKE_SOURCE if args.smoke else None
+        args.vyper = (args.vyper or Path(saved["vyper"] if saved else ROOT / "vyper-ref")).resolve()
         with args.runner.open("rb") as stream:
             binary_digest = hashlib.file_digest(stream, "sha256").hexdigest()
         args.out = args.out.resolve()
         args.out.mkdir(parents=True, exist_ok=False)
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, KeyError, TypeError) as error:
         parser.error(str(error))
     counts = Counter()
     checkpoints = 0
-    count = 1 if args.source or args.smoke else args.count
+    count = 1 if args.source or args.smoke or args.replay_case else args.count
     for index in range(count):
         seed = f"{args.seed}:{index}"
         name = f"state_{index:06d}"
@@ -327,6 +352,14 @@ def main(argv=None) -> int:
                 "deployment_value": scenario.get("deployment_value", 0),
             }),
         }
+        if saved is not None:
+            config = {
+                **saved, "vyper": str(args.vyper),
+                "calls": scenario["calls"],
+                "constructor_args": scenario.get("constructor_args", saved.get("constructor_args", [])),
+                "deployment_value": scenario.get("deployment_value", saved.get("deployment_value", 0)),
+                "python_hash_seed": saved.get("python_hash_seed", "0"),
+            }
         report = run_case(directory, config, args, binary_digest)
         counts[report["status"]] += 1
         checkpoints += report["checkpoints"]

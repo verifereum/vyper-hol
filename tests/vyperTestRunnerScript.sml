@@ -684,6 +684,88 @@ End
 
 val () = cv_auto_trans make_create_block_def;
 
+(* Keep VFM's CREATE admission, intrinsic gas, nonce, fee accounting and
+   deletion processing, but retain the transient state that run_transaction's
+   result omits.  The pinned py-evm direct CREATE helper neither clears existing
+   transient slots nor discards successful initcode writes.  Seed both the live
+   and saved rollback states so nested calls and failed creates see the same
+   pre-deployment transient world. *)
+Definition raw_create_transaction_def:
+  raw_create_transaction chainId blockHashes blk accounts tStorage tx =
+    case run_create (Collect empty_domain) F chainId blockHashes blk accounts tx of
+    | NONE => NONE
+    | SOME (INL (tr, accounts)) => SOME (tr, accounts, tStorage)
+    | SOME (INR (acc, s, precomp)) =>
+        if IS_SOME precomp then NONE else
+        let s = s with <|
+          rollback updated_by (λrb. rb with tStorage := tStorage);
+          contexts updated_by
+            (MAP (λ(c, rb). (c, rb with tStorage := tStorage))) |> in
+        case vfmExecution$run s of
+        | SOME (INR result, s') =>
+            let (tr, accounts) = post_transaction_accounting blk tx result acc s' in
+            SOME (tr, accounts,
+                  if IS_NONE result then s'.rollback.tStorage else tStorage)
+        | _ => NONE
+End
+
+val () = cv_auto_trans raw_create_transaction_def;
+
+Theorem raw_create_initial_transient[local]:
+  initial_state dom static chainId blockHashes blk accounts tx = SOME s ⇒
+  s.rollback.tStorage = empty_transient_storage ∧
+  MAP (λ(c, rb). (c, rb with tStorage := empty_transient_storage)) s.contexts =
+    s.contexts
+Proof
+  simp[initial_state_def] >>
+  Cases_on `pre_transaction_updates accounts
+    (base_fee_per_blob_gas blk.excessBlobGas) tx` >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  gvs[AllCaseEqs()] >> strip_tac >>
+  gvs[initial_rollback_def]
+QED
+
+Theorem raw_create_empty_transient_state[local]:
+  tx.to = NONE ∧
+  run_create dom static chainId blockHashes blk accounts tx =
+    SOME (INR (acc, s, precomp)) ⇒
+  precomp = NONE ∧
+  s with <|
+    rollback updated_by (λrb. rb with tStorage := empty_transient_storage);
+    contexts updated_by
+      (MAP (λ(c, rb). (c, rb with tStorage := empty_transient_storage))) |> = s
+Proof
+  strip_tac >> fs[run_create_def] >>
+  Cases_on `initial_state dom static chainId blockHashes blk accounts tx` >>
+  gvs[] >>
+  drule raw_create_initial_transient >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  simp[execution_state_component_equality, rollback_state_component_equality]
+QED
+
+(* With ordinary transaction-start transient storage, projecting away the
+   retained transient result is exactly VFM's transaction executor. *)
+Theorem raw_create_transaction_empty_transient:
+  tx.to = NONE ⇒
+  OPTION_MAP (λ(tr, accounts, tStorage). (tr, accounts))
+    (raw_create_transaction chainId blockHashes blk accounts
+                            empty_transient_storage tx) =
+  run_transaction (Collect empty_domain) F chainId blockHashes blk accounts tx
+Proof
+  strip_tac >>
+  Cases_on `run_create (Collect empty_domain) F chainId blockHashes blk accounts tx` >>
+  simp[raw_create_transaction_def, run_transaction_def] >>
+  rename1 `run_create _ _ _ _ _ _ _ = SOME creation` >>
+  Cases_on `creation` >> gvs[]
+  >- (rename1 `run_create _ _ _ _ _ _ _ = SOME (INL terminal)` >>
+      PairCases_on `terminal` >> simp[]) >>
+  rename1 `run_create _ _ _ _ _ _ _ = SOME (INR pending)` >>
+  PairCases_on `pending` >>
+  drule_all raw_create_empty_transient_state >> strip_tac >>
+  gvs[] >>
+  rpt (FIRST [pairarg_tac, CASE_TAC] >> gvs[])
+QED
+
 Definition run_raw_deployment_def:
   run_raw_deployment am (dt: raw_deployment_trace) =
     let sender = lookup_account dt.deployer am.accounts in
@@ -702,10 +784,10 @@ Definition run_raw_deployment_def:
     else if dt.expectedAddress <> 0w /\ expected <> dt.expectedAddress then
       INR (Error $ RuntimeError "raw deployment address mismatch")
     else
-      case vfmExecution$run_transaction (Collect empty_domain) F dt.chainId
-                                        dt.blockHashes blk am.accounts tx of
+      case raw_create_transaction dt.chainId dt.blockHashes blk
+                                  am.accounts am.tStorage tx of
       | NONE => INR (Error $ RuntimeError "raw deployment run failed")
-      | SOME (tr, accounts) =>
+      | SOME (tr, accounts, tStorage) =>
           let success = IS_NONE tr.result in
           if success <> dt.expectedSuccess then
             INR (Error $ RuntimeError "raw deployment success mismatch")
@@ -716,6 +798,7 @@ Definition run_raw_deployment_def:
                | SOME bc => code <> bc
             then INR (Error $ RuntimeError "raw deployment bytecode mismatch")
             else INL (am with <| accounts := accounts;
+                                 tStorage := tStorage;
                                  logs updated_by (λls. ls ++ tr.logs) |>)
           else INL (increment_account_nonce dt.deployer am)
 End

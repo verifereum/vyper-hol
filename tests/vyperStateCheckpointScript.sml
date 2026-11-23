@@ -1,7 +1,7 @@
 Theory vyperStateCheckpoint
 Ancestors
   vyperInterpreter vyperInterpreterCV vyperState vfmState vfmContext vfmCompute vfmTypes sptree
-  cv cv_type cv_std ASCIInumbers
+  jsonToVyperExpr jsonToVyperExprCV cv cv_type cv_std ASCIInumbers
 Libs
   cv_transLib cv_typeLib wordsLib
 
@@ -87,25 +87,6 @@ Definition checkpoint_transient_def:
 End
 val () = cv_auto_trans checkpoint_transient_def;
 
-Definition checkpoint_nibble_def:
-  checkpoint_nibble n =
-    if n = 0 then #"0" else if n = 1 then #"1" else
-    if n = 2 then #"2" else if n = 3 then #"3" else
-    if n = 4 then #"4" else if n = 5 then #"5" else
-    if n = 6 then #"6" else if n = 7 then #"7" else
-    if n = 8 then #"8" else if n = 9 then #"9" else
-    if n = 10 then #"a" else if n = 11 then #"b" else
-    if n = 12 then #"c" else if n = 13 then #"d" else
-    if n = 14 then #"e" else #"f"
-End
-val () = cv_auto_trans checkpoint_nibble_def;
-
-Definition checkpoint_hex_def:
-  checkpoint_hex (bs:byte list) = FLAT (MAP (λb.
-    [checkpoint_nibble (w2n b DIV 16);
-     checkpoint_nibble (w2n b MOD 16)]) bs)
-End
-val () = cv_auto_trans checkpoint_hex_def;
 
 (* Typed cells retain the original byte/topic lists.  Rendering is confined to
    the first mismatch; successful checkpoints never format state values. *)
@@ -237,7 +218,7 @@ Definition checkpoint_value_string_def:
   checkpoint_value_string AbsentValue = "absent" ∧
   checkpoint_value_string PresentValue = "present" ∧
   checkpoint_value_string (NumberValue n) = num_to_dec_string n ∧
-  checkpoint_value_string (BytesValue bs) = checkpoint_hex bs ∧
+  checkpoint_value_string (BytesValue bs) = FLAT (MAP origin_hex_byte bs) ∧
   checkpoint_value_string (TopicsValue topics) =
     FLAT (MAP (λw. num_to_dec_string (w2n w) ++ ",") topics) ∧
   checkpoint_value_string (TextValue s) = s

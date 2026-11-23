@@ -1,0 +1,613 @@
+{
+  "test_checkpoint_raw_init_transient": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {
+        "trace_type": "set_balance",
+        "address": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+        "value": 100
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "602a60015d600b6011600039600b6000f360015c60005260206000f3",
+        "calldata": null,
+        "value": 0,
+        "source_code": null,
+        "annotated_ast": null,
+        "solc_json": null,
+        "compiler_settings": null,
+        "storage_layout": null,
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "1ca02b1ffb0b51536f67c1cf72813e96e92466a34a9c48e95fb6fe44288e0dc6"
+            }
+          }
+        },
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "runtime_bytecode": "60015c60005260206000f3",
+        "deployment_succeeded": true,
+        "deployer_nonce": 0
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 100,
+            "nonce": 1,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "60015c60005260206000f3",
+            "storage": []
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 42
+          }
+        ],
+        "logs": []
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "602060006000600073ed4efeaed8057c619a6d7aacc0459874eaf3c16661fffffa5060005160025d600b6034600039600b6000f360025c60005260206000f3",
+        "calldata": null,
+        "value": 0,
+        "source_code": null,
+        "annotated_ast": null,
+        "solc_json": null,
+        "compiler_settings": null,
+        "storage_layout": null,
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "1ca02b1ffb0b51536f67c1cf72813e96e92466a34a9c48e95fb6fe44288e0dc6"
+            }
+          }
+        },
+        "deployed_address": "0x86bA2C4c8A9Af3008a6262B02cC0FF76746BE098",
+        "runtime_bytecode": "60025c60005260206000f3",
+        "deployment_succeeded": true,
+        "deployer_nonce": 1
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0x86ba2c4c8a9af3008a6262b02cc0ff76746be098",
+            "balance": 0,
+            "nonce": 1,
+            "code": "60025c60005260206000f3",
+            "storage": []
+          },
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 100,
+            "nonce": 2,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "60015c60005260206000f3",
+            "storage": []
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0x86ba2c4c8a9af3008a6262b02cc0ff76746be098",
+            "slot": 2,
+            "value": 42
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 42
+          }
+        ],
+        "logs": []
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "606360035d60006000fd",
+        "calldata": null,
+        "value": 0,
+        "source_code": null,
+        "annotated_ast": null,
+        "solc_json": null,
+        "compiler_settings": null,
+        "storage_layout": null,
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "1ca02b1ffb0b51536f67c1cf72813e96e92466a34a9c48e95fb6fe44288e0dc6"
+            }
+          }
+        },
+        "deployed_address": "0x0000000000000000000000000000000000000000",
+        "runtime_bytecode": "",
+        "deployment_succeeded": false,
+        "deployer_nonce": 2
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0x86ba2c4c8a9af3008a6262b02cc0ff76746be098",
+            "balance": 0,
+            "nonce": 1,
+            "code": "60025c60005260206000f3",
+            "storage": []
+          },
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 100,
+            "nonce": 3,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "60015c60005260206000f3",
+            "storage": []
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0x86ba2c4c8a9af3008a6262b02cc0ff76746be098",
+            "slot": 2,
+            "value": 42
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 42
+          }
+        ],
+        "logs": []
+      },
+      {
+        "trace_type": "call",
+        "output": "000000000000000000000000000000000000000000000000000000000000002a",
+        "call_succeeded": true,
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "1ca02b1ffb0b51536f67c1cf72813e96e92466a34a9c48e95fb6fe44288e0dc6"
+            }
+          }
+        },
+        "call_args": {
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "calldata": "",
+          "value": 0,
+          "is_modifying": true
+        },
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": null
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "call",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0x86ba2c4c8a9af3008a6262b02cc0ff76746be098",
+            "balance": 0,
+            "nonce": 1,
+            "code": "60025c60005260206000f3",
+            "storage": []
+          },
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 100,
+            "nonce": 3,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "60015c60005260206000f3",
+            "storage": []
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0x86ba2c4c8a9af3008a6262b02cc0ff76746be098",
+            "slot": 2,
+            "value": 42
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 42
+          }
+        ],
+        "logs": []
+      },
+      {
+        "trace_type": "call",
+        "output": "000000000000000000000000000000000000000000000000000000000000002a",
+        "call_succeeded": true,
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "1ca02b1ffb0b51536f67c1cf72813e96e92466a34a9c48e95fb6fe44288e0dc6"
+            }
+          }
+        },
+        "call_args": {
+          "to": "0x86bA2C4c8A9Af3008a6262B02cC0FF76746BE098",
+          "calldata": "",
+          "value": 0,
+          "is_modifying": true
+        },
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": null
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "call",
+        "call_index": 1,
+        "accounts": [
+          {
+            "address": "0x86ba2c4c8a9af3008a6262b02cc0ff76746be098",
+            "balance": 0,
+            "nonce": 1,
+            "code": "60025c60005260206000f3",
+            "storage": []
+          },
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 100,
+            "nonce": 3,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "60015c60005260206000f3",
+            "storage": []
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0x86ba2c4c8a9af3008a6262b02cc0ff76746be098",
+            "slot": 2,
+            "value": 42
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 42
+          }
+        ],
+        "logs": []
+      },
+      {
+        "trace_type": "clear_transient_storage"
+      },
+      {
+        "trace_type": "call",
+        "output": "0000000000000000000000000000000000000000000000000000000000000000",
+        "call_succeeded": true,
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "1ca02b1ffb0b51536f67c1cf72813e96e92466a34a9c48e95fb6fe44288e0dc6"
+            }
+          }
+        },
+        "call_args": {
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "calldata": "",
+          "value": 0,
+          "is_modifying": true
+        },
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": null
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "call",
+        "call_index": 2,
+        "accounts": [
+          {
+            "address": "0x86ba2c4c8a9af3008a6262b02cc0ff76746be098",
+            "balance": 0,
+            "nonce": 1,
+            "code": "60025c60005260206000f3",
+            "storage": []
+          },
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 100,
+            "nonce": 3,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "60015c60005260206000f3",
+            "storage": []
+          }
+        ],
+        "transient_storage": [],
+        "logs": []
+      },
+      {
+        "trace_type": "call",
+        "output": "0000000000000000000000000000000000000000000000000000000000000000",
+        "call_succeeded": true,
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "1ca02b1ffb0b51536f67c1cf72813e96e92466a34a9c48e95fb6fe44288e0dc6"
+            }
+          }
+        },
+        "call_args": {
+          "to": "0x86bA2C4c8A9Af3008a6262B02cC0FF76746BE098",
+          "calldata": "",
+          "value": 0,
+          "is_modifying": true
+        },
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": null
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "call",
+        "call_index": 3,
+        "accounts": [
+          {
+            "address": "0x86ba2c4c8a9af3008a6262b02cc0ff76746be098",
+            "balance": 0,
+            "nonce": 1,
+            "code": "60025c60005260206000f3",
+            "storage": []
+          },
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 100,
+            "nonce": 3,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "60015c60005260206000f3",
+            "storage": []
+          }
+        ],
+        "transient_storage": [],
+        "logs": []
+      }
+    ]
+  },
+  "test_checkpoint_raw_init_transient_mismatch": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {
+        "trace_type": "set_balance",
+        "address": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+        "value": 100
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "602a60015d600b6011600039600b6000f360015c60005260206000f3",
+        "calldata": null,
+        "value": 0,
+        "source_code": null,
+        "annotated_ast": null,
+        "solc_json": null,
+        "compiler_settings": null,
+        "storage_layout": null,
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "1ca02b1ffb0b51536f67c1cf72813e96e92466a34a9c48e95fb6fe44288e0dc6"
+            }
+          }
+        },
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "runtime_bytecode": "60015c60005260206000f3",
+        "deployment_succeeded": true,
+        "deployer_nonce": 0
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 100,
+            "nonce": 1,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "60015c60005260206000f3",
+            "storage": []
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 43
+          }
+        ],
+        "logs": []
+      }
+    ]
+  }
+}

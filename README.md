@@ -165,7 +165,7 @@ With `holbuild` v0.14.59 or newer, MLton, and Python 3 on `PATH`:
 ```
 
 The demo builds `tests/.emit/run-test` and compares exact native/HOL encoded
-inputs and results for twenty-six cases across four fixtures, plus a passing
+inputs and results for twenty-eight cases across five fixtures, plus a passing
 stdin trace. The fixtures include intentional output, revert, deployment-nonce,
 address, checkpoint, dispatch, and unexpected-internal-error mismatches.
 Real py-evm captures cover a source deployment
@@ -204,6 +204,13 @@ control changes only the final expected persistent-storage value. The latter
 uses the same snapshot/export adapter for real EVM message calls. Replay treats
 calls as messages inside the fixture transaction: no sender nonce increment,
 and empty calldata still executes a raw-deployed target's fallback.
+
+`checkpoint_raw_init_transient.json` captures initcode TSTORE, a second
+constructor reading it through a nested call, failed-constructor rollback, and
+reads before/after an explicit transient clear. Its negative control changes
+the first expected transient value. Raw deployment preserves these slots until
+an explicit reset. Corrected message-call routing and raw-deployment transient
+threading affect existing traces too, not only traces containing checkpoints.
 
 ```bash
 # Build only; add --smoke for native/HOL parity checks:
@@ -283,6 +290,8 @@ temporary memory, and transaction sender-nonce increments are not modeled:
 calls use the upstream message helpers. Out-of-gas remains an operational failure,
 not a semantic comparison. `--smoke` exercises persistent/transient writes,
 logs, clearing, and rollback.
+If a deployment fails, its requested call plan is retained but not executed;
+the failed deployment and its rollback checkpoint still reach native comparison.
 
 For explicit local-coercion or other stateful scenarios, supply `--source case.vy`
 and `--calls calls.json`. The calls file is an object such as:
@@ -305,10 +314,27 @@ Source imports resolve relative to the original source file's directory.
 
 Each new output directory retains source, call plans, complete traces, compiler/
 backend provenance, native-binary SHA-256, and process diagnostics. Existing runs
-are never overwritten. Replay a saved `traces.json` directly with `run-test`, or
-re-execute its `source.vy` and `calls.json` through `--source`/`--calls` with the
-saved compiler settings. Reference execution and native replay have separate
-per-case timeouts (`--reference-timeout` and `--timeout`).
+are never overwritten. Public workers use `PYTHONHASHSEED=0`; `case.json` and
+reference provenance record the actual seed.
+
+`traces.json` is the canonical exact replay input for `run-test`, including the
+recorded execution environment. To recompile and execute a saved source case:
+
+```bash
+python tools/bytecode_state_fuzz.py \
+  --replay-case /tmp/vyper-state-campaign/state_000000/case.json \
+  --out /tmp/vyper-state-replay
+```
+
+This restores sibling `source.vy`/`calls.json`, the recorded import directory,
+compiler settings, constructor/endowment and hash seed. Imported modules must
+remain available and unchanged; they are not copied into the archive. A fresh
+reference chain can have different block hashes, so source re-execution is not
+exact environment replay. Older artifacts without seed metadata default to zero,
+which cannot recover an originally unrecorded random seed. `--vyper` can override
+the recorded checkout with another clean checkout at the same pin. Reference
+execution and native replay retain separate per-case timeouts
+(`--reference-timeout` and `--timeout`).
 
 Exit status is **0** for agreement with at least one executed comparison, **1**
 for semantic mismatches, and **2** for operational errors/timeouts or no executed
