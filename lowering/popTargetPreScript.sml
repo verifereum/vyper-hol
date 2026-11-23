@@ -15,7 +15,7 @@ Ancestors
   vyperAST vyperTypeSystem vyperTypeEnv vyperTypeCallGraph
   vyperTypeCallStackSoundness vyperTypeInvariants vyperTypeAssignContext
   supportedExprTraverse supportedProgram allocLimits list exprBodyPreProps
-  targetPlaceLive supportedExprs
+  targetPlaceLive supportedExprs bodyCallSupport
 
 Theorem target_indices_pre_of_body_mods:
   !bt vt mods cenv cx env.
@@ -25,10 +25,7 @@ Theorem target_indices_pre_of_body_mods:
     ~supported_target_exists expr_evm_run_root bt /\
     ~supported_target_exists (const_name_root_mods mods) bt /\
     ~supported_target_exists (unallocated_bare_global_root cenv env) bt /\
-    EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
-                      supported_program tops /\
-                      IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
-          (int_calls_target bt) /\
+    EVERY (source_body_call_supported cx) (int_calls_target bt) /\
     (!target. supported_target_exists (expr_abi_decode_target_root target) bt ==>
               EXISTS (occurs_abi_decode_target target o SND) mods) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
@@ -78,7 +75,7 @@ Proof
   recInduct base_assignment_target_induct >>
   rw[target_indices_pre_def, target_indices_def, alloc_limits_expr_def,
      int_calls_expr_def] >>
-  fs[expr_body_pre_split_def, expr_body_pre_mods_def,
+  fs[expr_body_pre_split_def, expr_body_pre_mods_def, GSYM source_body_calls_main,
      vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
      finite_mapTheory.FUNION_FEMPTY_2] >>
   metis_tac[]
@@ -115,7 +112,7 @@ Proof
   simp[supported_expr_exists_def, unallocated_bare_global_root_def] >>
   strip_tac >>
   irule target_indices_pre_of_body_mods >>
-  fs[expr_sim_inv_split_def, const_name_root_mods_singleton,
+  fs[expr_sim_inv_split_def, const_name_root_mods_singleton, GSYM source_body_calls_main,
      vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
      finite_mapTheory.FUNION_FEMPTY_2] >>
   metis_tac[]
