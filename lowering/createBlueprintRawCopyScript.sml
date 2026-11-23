@@ -187,9 +187,20 @@ QED
 Resume create_blueprint_raw_copy_at_cut[store_inputs]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   pure_rewrite_tac[GSYM loweringStateRelDefsTheory.regions_disjoint_def] >>
-  TRY (first_assum ACCEPT_TAC) >>
-  fs[Abbr `HP`,Abbr `m`] >>
-  rpt strip_tac >> first_assum MATCH_ACCEPT_TAC
+  TRY (first_assum ACCEPT_TAC)
+  >- (qpat_assum `src = Var q` (SUBST1_TAC o SYM) >>
+      qpat_assum `buf.buf_operand = Var p` (SUBST1_TAC o SYM) >>
+      first_assum ACCEPT_TAC)
+  >- simp[Abbr `N`]
+  >- simp[]
+  >- simp[Abbr `m`]
+  >- (qpat_assum `m = val_store_size (BaseTV (BytesT (Dynamic kq))) _` SUBST1_TAC >>
+      qpat_assum `N = type_memory_size _` SUBST1_TAC >>
+      first_assum ACCEPT_TAC)
+  >- simp[]
+  >- simp[]
+  >- simp[Abbr `HP`]
+  >- (simp[Abbr `HP`] >> rpt strip_tac >> first_assum MATCH_ACCEPT_TAC)
 QED
 
 Resume create_blueprint_raw_copy_at_cut[arrival]:
