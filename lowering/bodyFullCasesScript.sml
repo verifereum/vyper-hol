@@ -22,7 +22,8 @@ Ancestors bodyFullIntCall bodyFullIntCallArgs bodyFullIntCallCallee bodyIntCallS
   bodyFullExtCallReturn abiDecodeValidJoint abiDecodeRejectJoint gasOutcomeFull
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
   bodyFullBuiltinEnv
-  bodyFullMakeArray
+  bodyFullMakeArray bodyFullNamedConst bodyFullUnaryBuiltin
+  bodyFullBoolChainOperands bodyFullBoolChain
   bodyFullBuiltinConcat bodyFullBuiltinSlice bodyFullBuiltinCalldataSlice
   bodyFullBuiltinUint2Str
   bodyFullBuiltinECRecover bodyFullBuiltinECArithCompose
@@ -514,6 +515,14 @@ Proof
   `builtin_args_length_ok bt (LENGTH es) /\ bt <> Len ==>
    body_exprs_full_ok cx es` by
     metis_tac[type_check_def, assert_def] >>
+  Cases_on `bt = NamedConst`
+  >- (gvs[] >> irule unary_builtin_expr_full_ok >>
+      gvs[builtin_args_length_ok_def, named_const_expr_full_ok]) >>
+  Cases_on `?is_and n. bt = BoolChain is_and n`
+  >- (gvs[] >> irule unary_builtin_expr_full_ok >>
+      gvs[builtin_args_length_ok_def] >> rpt strip_tac >>
+      irule bool_chain_expr_full_ok >>
+      irule body_expr_full_ok_bool_chain_operands >> assumption) >>
   Cases_on `bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i) \/ (?i. bt = Acc i) \/
              bt = BlockHash \/ bt = BlobHash \/ bt = MethodId`
   >- (irule env_builtin_expr_full_ok >> rpt conj_tac >> gvs[] >>
