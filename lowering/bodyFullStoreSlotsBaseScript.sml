@@ -7,7 +7,7 @@ Ancestors arithmetic[qualified,ignore_grammar]
   typedCopyOriginPtrDynArray bodyPtrSignedConvertScalarOps bytestringCopyExecution
   fragGasSeqPtr fragGasOriginPtr fragExecMem venomExecSemantics
   venomState venomInst ptrDiscipline memSafeRun
-  instMemFrontier fragExec fragGasCopyLoop fragGasSeq exprLoweringProps
+  instMemFrontier fragExec fragGasCopyLoop fragGasCopySeqLiftProps fragGasSeq exprLoweringProps
 Libs
   stepInstBaseLib
 
