@@ -2,8 +2,9 @@
 Theory entryCreateBuiltinBufferCases
 Ancestors
   entryCreateEffectFocus entryCreateAdminSequence
-  createSizeCutCode abiEncoderProps exprSimHash builtinHashing context
-  emitHelper emitHelperProps compileEnv exprLoweringProps fragExec
+  createSizeCutCode abiEncoderProps exprSimAbiGasBridge exprSimHash builtinHashing context
+  emitHelper emitHelperProps compileEnv exprLoweringProps exprLowering fragExec
+  vyperAST vyperTypeSystem
   entryCreateFocusSpec entryCreatePathScope entryCreateCompletedCut
   createSizePrefixReplay createMarkedPath fragGasOrigin fragGasSeqAbort gasEvents
   venomState venomInst venomInstProps venomExecSemantics venomExecProofs instIdxIndep
@@ -227,4 +228,53 @@ Proof
   irule buffer_sequence_abort_scope >>
   qpat_assum `run_inst_seq _ _ = Abort _ _` (irule_at Any) >>
   qexists_tac `bb` >> simp[]
+QED
+
+Theorem create_hash_suffix_code:
+  (compile_keccak256_bytes x a = (op,b) \/
+   compile_keccak256_bytesm x m a = (op,b) \/
+   compile_sha256_bytes x a = (op,b) \/
+   compile_sha256_bytesm x m a = (op,b)) ==>
+  create_cut_code {} a b
+Proof
+  strip_tac >>
+  gvs[compile_keccak256_bytes_def, compile_keccak256_bytesm_def,
+      compile_sha256_bytes_def, compile_sha256_bytesm_def,
+      contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
+      fresh_var_def, emit_def] >>
+  simp[create_cut_code_def, frag_code_def, emitted_insts_def, emitted_blocks_def,
+       cs_extends_same_block] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  (conj_tac >- (irule cs_extends_same_block >> simp[IS_PREFIX_APPEND])) >>
+  rpt strip_tac >> gvs[mk_inst_def, frag_ids_def, create_cut_targets_def]
+QED
+
+Theorem create_hash_compile_layout:
+  (bt = Keccak256 \/ bt = Sha256) /\
+  well_typed_expr env (Builtin ann bt [e]) /\
+  compile_expr ce ty (Builtin ann bt [e]) a = (vv,b) ==>
+  ?x m op mid.
+    lower_value compile_expr ce (expr_type e) e a = (x,mid) /\
+    vv = StackValue (BaseT (BytesT (Fixed 32))) op /\
+    (compile_keccak256_bytes x mid = (op,b) \/
+     compile_keccak256_bytesm x m mid = (op,b) \/
+     compile_sha256_bytes x mid = (op,b) \/
+     compile_sha256_bytesm x m mid = (op,b)) /\
+    cs_extends a mid /\ create_cut_code {} mid b
+Proof
+  rpt (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >>
+  `is_bytes_or_string_type (expr_type e) /\ ann = BaseT (BytesT (Fixed 32))` by
+    (mp_tac (Q.INST [`b` |-> `bt`,`ts` |-> `[expr_type e]`,`ty` |-> `ann`] hash_builtin_types) >>
+     Cases_on `bt` >> gvs[well_typed_expr_def]) >>
+  Cases_on `lower_value compile_expr ce (expr_type e) e a` >>
+  rename1 `lower_value compile_expr ce (expr_type e) e a = (x,mid)` >>
+  `cs_extends a mid` by (drule (cj 2 compile_expr_grows) >> simp[]) >>
+  Cases_on `bt = Keccak256` >> gvs[compile_hash_singleton] >>
+  Cases_on `expr_type e` >> gvs[is_bytes_or_string_type_def] >>
+  Cases_on `b'` >> gvs[is_bytes_or_string_type_def, is_bytestring_type_def] >>
+  TRY (Cases_on `b''` >> gvs[is_bytestring_type_def]) >>
+  strip_tac >> qmatch_asmsub_abbrev_tac `as_stack_val _ action` >>
+  Cases_on `action` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
+  metis_tac[create_hash_suffix_code]
 QED
