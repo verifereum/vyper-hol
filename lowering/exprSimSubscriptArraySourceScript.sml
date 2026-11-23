@@ -8,6 +8,7 @@ Ancestors
   vyperTypeCallGraph vyperTypeCallStackSoundness
   vyperBareGlobalName vyperStoragePlaceProvenance vyperCallFrame vyperCreateFrame
   integer option pair list rich_list finite_map exprSimAttributeFields
+  exprSimTopLevelProps
 
 Theorem read_result_nonstorage_frame:
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
@@ -476,10 +477,13 @@ Proof
   first_x_assum drule >> simp[well_formed_vtype_def]
 QED
 
-Theorem expr_body_pre_array_subscript_base:
+(* The parent subscript's precondition types its array base and keeps the
+   invariant, whatever the base's own allocation bound. *)
+Theorem expr_body_pre_array_subscript_base_typed:
   expr_body_pre cenv cx env (Subscript ann obj idx) s /\
   expr_type obj = ArrayT et bd ==>
-  expr_body_pre cenv cx env obj s
+  well_typed_expr env obj /\ expr_sim_inv cenv cx env s /\
+  call_evaluation_safe cx (int_calls_expr obj)
 Proof
   strip_tac >>
   `well_typed_expr env obj` by
@@ -494,15 +498,111 @@ Proof
      >- (qexists_tac `ArrayT et bd` >> simp[]) >>
      qexists_tac `cx` >>
      gvs[expr_sim_inv_def, env_consistent_def]) >>
+  gvs[expr_body_pre_def, int_calls_expr_def] >>
+  drule call_evaluation_safe_append_left >> simp[]
+QED
+
+(* What the base's simulation consumes from its own precondition, from the
+   parent's alone. *)
+Theorem expr_body_pre_array_subscript_base_admissible:
+  expr_body_pre cenv cx env (Subscript ann obj idx) s /\
+  expr_type obj = ArrayT et bd ==>
+  gas_admissible (eval_expr cx obj) expr_vv_res_ok s /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type obj))
+Proof
+  strip_tac >>
+  drule_all_then strip_assume_tac expr_body_pre_array_subscript_base_typed >>
+  reverse conj_tac >- metis_tac[exprSimHypsTheory.expr_sim_inv_type_evaluates] >>
+  rw[gasContextTheory.gas_admissible_def] >>
+  `expr_sim_inv cenv cx env (s with gas_obs := gs)` by simp[] >>
+  drule_all expr_sim_inv_eval_result >> strip_tac >>
+  Cases_on `res` >> gvs[exprSimDefsTheory.expr_vv_res_ok_def]
+  >- (rename1 `eval_result_typed _ tv _` >> Cases_on `tv` >>
+      gvs[eval_result_typed_def]) >>
+  drule (cj 1 vyperExprNoControlTheory.eval_expr_no_control) >>
+  rename1 `INR exc` >> Cases_on `exc` >>
+  gvs[vyperExprNoControlTheory.no_control_exc_def,
+      vyperTypeExprSoundnessTheory.no_type_error_result_def]
+  >~ [`Error err`] >- (Cases_on `err` >> gvs[])
+QED
+
+Theorem copies_subscript_base_not_array_slot_base:
+  copies_subscript_base cenv e idx ==> ~array_slot_base cenv e
+Proof
+  Cases_on `e` >>
+  simp[array_slot_base_def, exprLoweringTheory.copies_subscript_base_def,
+       vyperSubscriptOverlapTheory.subscript_overlap_def, base_through_dynarray_def]
+QED
+
+Theorem base_from_pop_not_array_slot_base:
+  base_from_pop e ==> ~array_slot_base cenv e
+Proof
+  Cases_on `e` >> simp[base_from_pop_def, array_slot_base_def]
+QED
+
+(* A storage or transient array base carries no allocation bound of its
+   own (array_slot_base in alloc_limits_expr), so its precondition follows
+   only off that case or when its type is bounded anyway. *)
+Theorem expr_body_pre_array_subscript_base:
+  expr_body_pre cenv cx env (Subscript ann obj idx) s /\
+  expr_type obj = ArrayT et bd /\
+  (~array_slot_base cenv obj \/ type_alloc_ok cenv (expr_type obj)) ==>
+  expr_body_pre cenv cx env obj s
+Proof
+  strip_tac >>
+  drule_all_then strip_assume_tac expr_body_pre_array_subscript_base_typed >>
+  `alloc_limits_expr cenv obj` by
+    (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+     simp[expr_body_pre_def, alloc_limits_expr_def] >> strip_tac >>
+     Cases_on `array_slot_base cenv obj` >> gvs[] >>
+     Cases_on `obj` >> gvs[array_slot_base_def, alloc_limits_expr_def, expr_type_def]) >>
   gvs[expr_body_pre_def, byte_widths_expr_def, alloc_limits_expr_def,
       int_calls_expr_def, expr_has_evm_run_thm, EVERY_APPEND] >>
-  rpt conj_tac
-  >- (drule call_evaluation_safe_append_left >> simp[]) >>
   rpt strip_tac >>
   TRY (qpat_x_assum `!target. supported_expr_exists _ (Subscript _ _ _) ==> _`
          (qspec_then `target` irule) >>
        simp[supported_expr_exists_def] >> NO_TAC) >>
   gvs[supported_expr_exists_def]
+QED
+
+Theorem expr_body_pre_array_subscript_slot_base:
+  expr_body_pre cenv cx env (Subscript ann obj idx) s /\
+  array_slot_base cenv obj ==>
+  ~const_name_root cx obj
+Proof
+  Cases_on `obj` >> simp[array_slot_base_def] >> strip_tac >>
+  gvs[expr_body_pre_def, supported_expr_exists_def]
+QED
+
+(* A base that evaluates to anything but a storage place, or compiles to a
+   memory or code pointer, is not a storage or transient array variable. *)
+Theorem expr_body_pre_array_subscript_base_eval:
+  expr_body_pre cenv cx env (Subscript ann obj idx) s /\
+  expr_type obj = ArrayT et bd /\
+  eval_expr cx obj s' = (INL r,t) /\
+  (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) ==>
+  expr_body_pre cenv cx env obj s
+Proof
+  strip_tac >>
+  `~array_slot_base cenv obj` suffices_by
+    metis_tac[expr_body_pre_array_subscript_base] >>
+  strip_tac >>
+  drule_all_then strip_assume_tac expr_body_pre_array_subscript_base_typed >>
+  drule_all_then assume_tac expr_body_pre_array_subscript_slot_base >>
+  drule_all array_slot_base_eval_storage >> metis_tac[]
+QED
+
+Theorem expr_body_pre_array_subscript_base_located:
+  expr_body_pre cenv cx env (Subscript ann obj idx) s /\
+  expr_type obj = ArrayT et bd /\
+  (vv_location (FST (compile_expr cenv ty obj st)) = SOME LocMemory \/
+   vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode) ==>
+  expr_body_pre cenv cx env obj s
+Proof
+  strip_tac >>
+  `~array_slot_base cenv obj` suffices_by
+    metis_tac[expr_body_pre_array_subscript_base] >>
+  metis_tac[array_slot_base_compile_location]
 QED
 
 Theorem expr_body_pre_subscript_index:
@@ -512,10 +612,11 @@ Proof
   strip_tac >>
   `well_typed_expr env idx` by
     (gvs[expr_body_pre_def, Once well_typed_expr_def]) >>
+  `call_evaluation_safe cx (int_calls_expr idx)` by
+    (gvs[expr_body_pre_def, int_calls_expr_def] >>
+     drule call_evaluation_safe_append_right >> simp[]) >>
   gvs[expr_body_pre_def, byte_widths_expr_def, alloc_limits_expr_def,
       int_calls_expr_def, expr_has_evm_run_thm, EVERY_APPEND] >>
-  conj_tac
-  >- (drule call_evaluation_safe_append_right >> simp[]) >>
   rpt strip_tac >>
   TRY (qpat_x_assum `!target. supported_expr_exists _ (Subscript _ _ _) ==> _`
          (qspec_then `target` irule) >>
@@ -530,8 +631,8 @@ Theorem expr_body_pre_array_subscript_index_after_base:
   expr_body_pre cenv cx env idx t
 Proof
   strip_tac >>
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  drule_all_then strip_assume_tac expr_body_pre_array_subscript_base_typed >>
   drule_then assume_tac expr_body_pre_subscript_index >>
-  drule_all expr_body_pre_eval_result >> strip_tac >>
+  drule_all expr_sim_inv_eval_result >> strip_tac >>
   gvs[expr_body_pre_def]
 QED
