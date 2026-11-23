@@ -130,8 +130,7 @@ Theorem contract_inv_linked_unit[local]:
      else lower_vyper_runtime_unit_mods mods exps rp = SOME unit) /\
     ctx = unit.cu_context /\ cenv.ce_target = rp.rpol_target /\
     (cx.in_deploy ==> IS_SOME (FST (SND (SND (SND (classify_functions_unit mods exps)))))) /\
-    IS_SOME (ALOOKUP mods NONE) /\
-    EVERY (supported_program o SND) mods
+    IS_SOME (ALOOKUP mods NONE)
 Proof
   rw[contract_inv_def] >> metis_tac[]
 QED
