@@ -2,8 +2,7 @@
 Theory typedBytesArrayLoopMem
 Ancestors
   typedArrayLoopLayoutMem typedBytesArrayMem typedArrayLoopControlMem
-  memContinuation fragExec fragExecMem instMemFrontier memSafeRun[qualified,ignore_grammar]
-  exprSimAggregateEncoding valueEncoding valueEncodingDefs valueEncodingProps
+  memContinuation fragExec fragExecMem instMemFrontier exprSimAggregateEncoding valueEncoding valueEncodingDefs valueEncodingProps
   venomState venomInst venomExecSemantics compileEnv loweringStateRelDefs exprLoweringProps emitHelperProps
   vyperValue vyperTyping words arithmetic list rich_list vfmConstants
 
@@ -189,15 +188,8 @@ Proof
      drule typed_bytes_array_loop_blocks >> simp_tac bool_ss [LET_THM] >> strip_tac >>
      `LENGTH code = 4` by simp[Abbr `code`] >>
      qpat_x_assum `LENGTH code = 4` (fn th => once_rewrite_tac [GSYM th]) >>
-     `EVERY (\j. j.inst_opcode <> DALLOCA /\ j.inst_opcode <> INVOKE /\
-                ~is_terminator j.inst_opcode) code` by
-       simp[Abbr `code`, mk_inst_def, is_terminator_def] >>
-     irule typed_array_prefix_cont >> simp[is_terminator_def] >> conj_tac
-     >- (rpt strip_tac >>
-         irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
-         rename1 `j.inst_opcode <> DALLOCA` >>
-         `MEM j code` by simp[] >> fs[EVERY_MEM]) >>
-     conj_tac >- simp[Abbr `code`, mk_inst_def, is_terminator_def] >>
+     irule typed_array_prefix_cont >> simp[] >> conj_tac
+     >- simp[Abbr `code`, mk_inst_def, is_terminator_def] >>
      qexists_tac `HD sb.cs_blocks` >>
      fs[Abbr `code`, Abbr `ctr`, Abbr `so`, Abbr `dso`, Abbr `sp`, Abbr `dp`]) >>
   qexists_tac `q with vs_inst_idx := 4` >>
