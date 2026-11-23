@@ -59,8 +59,36 @@ Proof
   simp[regions_disjoint_def] >> metis_tac[]
 QED
 
+(* The raw instruction list at the selected allocation/copy endpoint. *)
+Theorem unwrap_code_copy_endpoint_run[local]:
+  compile_alloc_buffer nb sb = (buf,mid) /\ buf.buf_operand = Var root /\
+  compile_imm_copy_to_memory ctor imm src buf.buf_operand n 0 mid = ((),sc) /\
+  step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
+  copy_runtime_frame mid (u with vs_inst_idx := SUC s.vs_inst_idx) sc z ==>
+  ?raw. run_inst_seq (emitted_insts sb sc) s = OK raw /\
+        (z with vs_inst_idx := LENGTH sc.cs_current_insts) =
+        (raw with vs_inst_idx := LENGTH sc.cs_current_insts)
+Proof
+  strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts mid sc)` by
+    (Cases_on `ctor` >> fs[] >>
+     FIRST [drule code_ctor_copy_insts, drule code_copy_insts] >> strip_tac >>
+     fs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, EVERY_MEM] >>
+     rpt strip_tac >> res_tac >> gvs[is_terminator_def]) >>
+  drule unwrap_alloc_generated_code >> strip_tac >> gvs[] >>
+  fs[copy_runtime_frame_def] >>
+  `emitted_insts sb sc = emitted_insts sb mid ++ emitted_insts mid sc` by
+    (irule emitted_insts_append >> simp[]) >>
+  simp[run_inst_seq_def] >>
+  qpat_x_assum `run_inst_seq _ (_ with vs_inst_idx := _) = _` mp_tac >>
+  drule run_inst_seq_inst_idx >> disch_then (fn th => rewrite_tac[th]) >>
+  Cases_on `run_inst_seq (emitted_insts mid sc) u` >>
+  simp[instIdxIndepTheory.exec_result_map_def] >>
+  disch_then (SUBST1_TAC o SYM) >> simp[]
+QED
+
 (* Runtime data-section branch. *)
-Theorem unwrap_code_copy_runtime_origin_ptr:
+Theorem unwrap_code_copy_runtime_origin_run:
   ~cenv.ce_is_ctor /\
   vv = LocatedValue t p /\ p.ptr_location = LocCode /\ ~is_word_type t /\
   compile_expr cenv ty e sa = (vv,sm) /\
@@ -102,6 +130,8 @@ Theorem unwrap_code_copy_runtime_origin_ptr:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
   ?v z G' tn'.
+    (?raw. run_inst_seq (emitted_insts sb sc) s = OK raw /\
+           z = raw with vs_inst_idx := LENGTH sc.cs_current_insts) /\
     read_result cx tv ee = (INL v, ee) /\
     vv_own cenv cx (post_value_type cenv e) sb sc ee (Value v)
       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z /\
@@ -285,6 +315,11 @@ Proof
      qpat_assum `FLOOKUP z.vs_allocas sb.cs_next_id = SOME _` (irule_at Any) >>
      gvs[lookup_var_def] >> metis_tac[]) >>
   qexistsl [`z with vs_inst_idx := LENGTH cs''.cs_current_insts`, `HG`, `tf`] >>
+  conj_tac >-
+    (qpat_assum `allocst = _` (fn th =>
+       qpat_assum `copy_runtime_frame mid allocst _ z`
+         (assume_tac o REWRITE_RULE[th])) >>
+     drule_all unwrap_code_copy_endpoint_run >> simp[]) >>
   simp[] >>
   conj_tac >-
     (rpt strip_tac >> irule gas_origin_ptr_path_from_no_dead >> first_assum ACCEPT_TAC) >>
@@ -336,7 +371,7 @@ Proof
 QED
 
 (* Constructor immutable-memory branch, with a single execution endpoint. *)
-Theorem unwrap_code_copy_ctor_origin_ptr:
+Theorem unwrap_code_copy_ctor_origin_run:
   cenv.ce_is_ctor /\
   vv = LocatedValue t p /\ p.ptr_location = LocCode /\ ~is_word_type t /\
   compile_expr cenv ty e sa = (vv,sm) /\
@@ -378,6 +413,8 @@ Theorem unwrap_code_copy_ctor_origin_ptr:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
   ?v z G' tn'.
+    (?raw. run_inst_seq (emitted_insts sb sc) s = OK raw /\
+           z = raw with vs_inst_idx := LENGTH sc.cs_current_insts) /\
     read_result cx tv ee = (INL v, ee) /\
     vv_own cenv cx (post_value_type cenv e) sb sc ee (Value v)
       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z /\
@@ -613,6 +650,11 @@ Proof
      qpat_assum `FLOOKUP z.vs_allocas sb.cs_next_id = SOME _` (irule_at Any) >>
      gvs[lookup_var_def] >> metis_tac[]) >>
   qexistsl [`z with vs_inst_idx := LENGTH cs''.cs_current_insts`, `HG`, `tf`] >>
+  conj_tac >-
+    (qpat_assum `allocst = _` (fn th =>
+       qpat_assum `copy_runtime_frame mid allocst _ z`
+         (assume_tac o REWRITE_RULE[th])) >>
+     drule_all unwrap_code_copy_endpoint_run >> simp[]) >>
   simp[] >>
   conj_tac >-
     (gen_tac >> disch_tac >>
@@ -646,6 +688,177 @@ Proof
   conj_tac >-
     (rpt strip_tac >> gvs[eval_operand_def, lookup_var_def] >> decide_tac) >>
   simp[lookup_var_def] >> metis_tac[lookup_var_def]
+QED
+
+(* Keep the legacy projections of the endpoint witnesses. *)
+Theorem unwrap_code_copy_runtime_origin_ptr:
+  ~cenv.ce_is_ctor /\
+  vv = LocatedValue t p /\ p.ptr_location = LocCode /\ ~is_word_type t /\
+  compile_expr cenv ty e sa = (vv,sm) /\
+  sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
+  unwrap_value cenv vv sb = (op,sc) /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
+    ~is_word_type (post_value_type cenv e) ==>
+    type_memory_bytes cenv (post_value_type cenv e) = type_memory_size rt /\
+    type_memory_size rt < 2**64) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rty /\
+  (!v. read_result cx tv ee = (INL v,ee) ==> value_has_type rty v) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
+     ghost_inv_at (DF H) lo d cenv cx ee G tn s) /\
+  vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee tv vv s /\
+  alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  ptr_vv_ok cx (post_value_type cenv e) tv vv ee G tn s /\
+  (!t op0. vv = StackValue t op0 /\ ~is_word_type (post_value_type cenv e) ==>
+    ptr_buf_ok cenv e op0 G s) /\
+  (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
+    ptr_buf_ok cenv e p.ptr_operand G s) /\
+  (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+   ?val. read_result cx tv ee = (INL val, ee) /\
+         !rt w. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
+                eval_operand (vv_operand vv) s = SOME w ==>
+                w2n w + type_memory_size rt <= lo /\
+                (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+                       val_in_memory rt val (w2n w) mem)) /\
+  ghost_kept_at lo cenv es sa Gi ti s0 G tn /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
+  ?v z G' tn'.
+    read_result cx tv ee = (INL v, ee) /\
+    vv_own cenv cx (post_value_type cenv e) sb sc ee (Value v)
+      (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+         (s, G, tn) [] (OK z, G', tn') /\
+       expr_post H ctx func cenv cx e es sa sc s0 ee v op z /\
+       ghost_inv_at (DF H) lo d cenv cx ee G' tn' z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sa sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sa sm ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z \/
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    expr_store_bound cx (post_value_type cenv e) v op z /\
+    z.vs_current_bb = sc.cs_current_bb /\
+    z.vs_inst_idx = LENGTH sc.cs_current_insts /\
+    alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
+    s0.vs_alloca_next <= z.vs_alloca_next /\
+    ptr_val_ok cx (post_value_type cenv e) v op G' tn' z /\
+    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G' z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     !rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rt /\
+            eval_operand op z = SOME w ==>
+            type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= z.vs_alloca_next) /\
+    ghost_kept_at lo cenv es sa Gi ti s0 G' tn' /\
+    (!x. not_fresh_at sb x ==>
+         lookup_var x z = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+         op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    wb_frame cenv ee ee sb s z /\
+    ghost_kept_at lo cenv ee sb G tn s G' tn'
+Proof
+  strip_tac >> drule_all unwrap_code_copy_runtime_origin_run >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`readval`,`endstate`,`endG`,`endtn`] strip_assume_tac)) >>
+  qexistsl [`readval`,`endstate`,`endG`,`endtn`] >> simp[]
+QED
+
+Theorem unwrap_code_copy_ctor_origin_ptr:
+  cenv.ce_is_ctor /\
+  vv = LocatedValue t p /\ p.ptr_location = LocCode /\ ~is_word_type t /\
+  compile_expr cenv ty e sa = (vv,sm) /\
+  sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
+  unwrap_value cenv vv sb = (op,sc) /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
+    ~is_word_type (post_value_type cenv e) ==>
+    type_memory_bytes cenv (post_value_type cenv e) = type_memory_size rt /\
+    type_memory_size rt < 2**64) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rty /\
+  (!v. read_result cx tv ee = (INL v,ee) ==> value_has_type rty v) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
+     ghost_inv_at (DF H) lo d cenv cx ee G tn s) /\
+  vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee tv vv s /\
+  alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  ptr_vv_ok cx (post_value_type cenv e) tv vv ee G tn s /\
+  (!t op0. vv = StackValue t op0 /\ ~is_word_type (post_value_type cenv e) ==>
+    ptr_buf_ok cenv e op0 G s) /\
+  (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
+    ptr_buf_ok cenv e p.ptr_operand G s) /\
+  (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+   ?val. read_result cx tv ee = (INL val, ee) /\
+         !rt w. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
+                eval_operand (vv_operand vv) s = SOME w ==>
+                w2n w + type_memory_size rt <= lo /\
+                (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+                       val_in_memory rt val (w2n w) mem)) /\
+  ghost_kept_at lo cenv es sa Gi ti s0 G tn /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
+  ?v z G' tn'.
+    read_result cx tv ee = (INL v, ee) /\
+    vv_own cenv cx (post_value_type cenv e) sb sc ee (Value v)
+      (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+         (s, G, tn) [] (OK z, G', tn') /\
+       expr_post H ctx func cenv cx e es sa sc s0 ee v op z /\
+       ghost_inv_at (DF H) lo d cenv cx ee G' tn' z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sa sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     vv_at cenv cx (post_value_type cenv e) sa sm ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z \/
+     vv_at cenv cx (post_value_type cenv e) sb sc ee tv
+       (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
+    expr_store_bound cx (post_value_type cenv e) v op z /\
+    z.vs_current_bb = sc.cs_current_bb /\
+    z.vs_inst_idx = LENGTH sc.cs_current_insts /\
+    alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
+    s0.vs_alloca_next <= z.vs_alloca_next /\
+    ptr_val_ok cx (post_value_type cenv e) v op G' tn' z /\
+    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G' z) /\
+    (~is_word_type (post_value_type cenv e) ==>
+     !rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rt /\
+            eval_operand op z = SOME w ==>
+            type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= z.vs_alloca_next) /\
+    ghost_kept_at lo cenv es sa Gi ti s0 G' tn' /\
+    (!x. not_fresh_at sb x ==>
+         lookup_var x z = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+         op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    wb_frame cenv ee ee sb s z /\
+    ghost_kept_at lo cenv ee sb G tn s G' tn'
+Proof
+  strip_tac >> drule_all unwrap_code_copy_ctor_origin_run >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`readval`,`endstate`,`endG`,`endtn`] strip_assume_tac)) >>
+  qexistsl [`readval`,`endstate`,`endG`,`endtn`] >> simp[]
 QED
 
 (* An immutable aggregate is copied into a fresh buffer. *)
