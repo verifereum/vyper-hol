@@ -655,6 +655,13 @@ Proof
        (simp[immutable_base_zero_def] >> simp[Abbr `t`]) >>
      qpat_x_assum `stmt_state_rel _ _ _ _ _ ee s`
        (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def,state_rel_def]) >>
+     map_every (fn q => qpat_x_assum q kall_tac)
+       [`consume_create_outcome rq' s = _`, `adopt_call_outcome rq oc taken = _`,
+        `!tail. create_oracle_result salt value code rof (ee with gas_obs := tail) = _`,
+        `ee'.storage_trace = _`,
+        `!H. valid_horizon cx st0 H ee'.storage_trace ==> _`,
+        `!H. valid_horizon cx st0 H ee.storage_trace ==> _`,
+        `state_rel H func cenv cx ee s`] >>
      Cases_on `oc.co_success` >>
      fs[stmt_state_rel_def, state_rel_def, Abbr `ee'`, Abbr `taken`, Abbr `t`,
         local_ptrs_rel_def, local_region_def, local_backed_def, lookup_var_def,
@@ -4268,7 +4275,10 @@ Resume create_ctor_rows_outcome[cons]:
     (qspecl_then [`compile_expr`,`cenv`,`xs`,`ss`] mp_tac ci_mono_compile_create_ctor_args >>
      qspecl_then [`compile_expr`,`gas_shadow_env T cenv`,`MAP gas_shadow_expr xs`,`shs`]
        mp_tac ci_mono_compile_create_ctor_args >> simp[cj 1 compile_expr_ci_mono]) >>
-  `ci_mono sa ss /\ ci_mono shadow_sa shs` by metis_tac[ci_mono_trans] >>
+  `ci_mono sa ss /\ ci_mono shadow_sa shs` by
+    (conj_tac
+     >- (irule ci_mono_trans >> qexists_tac `sm` >> asm_rewrite_tac[]) >>
+     irule ci_mono_trans >> qexists_tac `shm` >> asm_rewrite_tac[]) >>
   `fn_has_code sa ss func /\ fn_has_code ss sc func` by
     (qspecl_then [`sa`,`ss`,`sc`,`func`] mp_tac fragExecTheory.fn_has_code_split >> fs[ci_mono_def]) >>
   `fn_has_code shadow_sa shs shadow_func /\ fn_has_code shs shc shadow_func` by
@@ -7244,7 +7254,8 @@ Resume create_copy_expr_full_ok[salt_finish]:
      qpat_assum `!H. valid_horizon _ _ H ew.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
        (drule_then strip_assume_tac) >> fs[loweringPostsTheory.expr_post_def]) >>
   `accounts_well_typed ew.accounts /\ outcomes_accounts_typed ew.outcomes` by
-    fs[expr_sim_inv_def] >>
+    (qpat_assum `expr_sim_inv _ _ _ ew`
+       (mp_tac o REWRITE_RULE [expr_sim_inv_def]) >> simp[]) >>
   `IS_SOME ew.outcomes` by
     (qpat_assum `!H. valid_horizon _ _ H ew.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
        (drule_then strip_assume_tac) >> fs[stmt_state_rel_def,state_rel_def]) >>
@@ -9404,7 +9415,14 @@ Resume blueprint_raw_args_cut[copy_store]:
      `evaluate_type (get_tenv cx) (expr_type e) = SOME atv` by
        (drule expr_body_pre_env_type_defs >> simp[] >> metis_tac[]) >>
      drule_all exprSimHypsTheory.expr_body_pre_copy_ok >> strip_tac >>
-     rw[loweringPostsTheory.post_value_type_bytestring,is_bytestring_type_def] >>
+     `post_value_type cenv e = expr_type e` by
+       simp[loweringPostsTheory.post_value_type_bytestring,is_bytestring_type_def] >>
+     qpat_assum `evaluate_type (get_tenv cx) (expr_type e) = SOME atv` mp_tac >>
+     qpat_assum `value_has_type atv v` mp_tac >>
+     qpat_assum `type_memory_size atv < 2 ** 64` mp_tac >>
+     qpat_assum `post_value_type cenv e = expr_type e` mp_tac >>
+     qpat_assum `atv = BaseTV (BytesT (Dynamic cap))` mp_tac >>
+     POP_ASSUM_LIST kall_tac >> rpt strip_tac >>
      Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def,valueEncodingTheory.type_memory_size_def] >>
      mp_tac (Q.SPEC `cap` abiBuiltinAllocationTheory.abi_builtin_word_size_capacity) >> decide_tac) >>
   qpat_x_assum `v = BytesV _` SUBST_ALL_TAC >>
@@ -13179,7 +13197,8 @@ Resume raw_create_bytecode_cut[copy_code]:
        qspec_then `T` mp_tac th >> qspec_then `F` mp_tac th) >>
      qpat_assum `p.ptr_location <> LocMemory` mp_tac >>
      qpat_assum `p.ptr_location <> LocCalldata` mp_tac >>
-     Cases_on `p.ptr_location` >> fs[loweringPostsTheory.slot_loc_def]) >>
+     POP_ASSUM_LIST kall_tac >>
+     Cases_on `p.ptr_location` >> simp[loweringPostsTheory.slot_loc_def]) >>
   Cases_on `vv` >>
   qpat_x_assum `vv_location _ = SOME LocCode`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [vv_location_def]) >>
