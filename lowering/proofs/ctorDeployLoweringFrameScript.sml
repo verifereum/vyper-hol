@@ -3,6 +3,7 @@
 Theory ctorDeployLoweringFrame
 Ancestors
   bodySimStmtFacts
+  bodyQualifiedStmtSupport linkedConstAnnotations constSubstMods
   immSectionDead
   ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract bodySim e2eDefs callTrace
   ctorDeployDefs immSectionDead e2eDeployDefs e2eEntry
@@ -1192,7 +1193,8 @@ Theorem deploy_frame_typed_allocated_stmts_exprs_ok:
      well_formed_vtype env.type_defs vt) /\
   type_stmts env ret ss = SOME env' /\
   alloc_limits_stmts cenv ss /\ ~cenv.ce_is_external /\
-  ~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) ss ==>
+  ~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) ss /\
+  qualified_stmts_decls_ok cenv.ce_modules ss ==>
   stmts_exprs_ok cenv ss
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1221,7 +1223,8 @@ Theorem deploy_ctor_typed_allocation_frame:
   (!n ty. FLOOKUP env.var_types n = SOME ty ==>
      ?id. MEM (id,ty) args /\ n = id) /\
   type_stmts env NoneT stmts = SOME env' /\
-  ~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) stmts ==>
+  ~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) stmts /\
+  qualified_stmts_decls_ok cenv.ce_modules stmts ==>
   stmts_exprs_ok cenv stmts /\ locals_alloc_ok cenv env
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1486,6 +1489,20 @@ Proof
      FIRST [first_assum ACCEPT_TAC,
        simp[deploy_evaluation_context_def, initial_evaluation_context_def]]) >>
   qpat_x_assum `env_t = function_entry_env _ _ _ _ _` kall_tac >>
+  `qualified_stmts_decls_ok cenv.ce_modules compiled_body` by
+    (`cenv.ce_modules = [(NONE,tops)]` by fs[body_inv_def, cenv_module_pins_def] >>
+     simp[] >>
+     drule lookup_function_Deploy_SOME_cases >> strip_tac
+     >- fs[subst_consts_stmt_def] >>
+     `check_function_body am.layouts tx.target [(NONE,tops)] deploy_art NONE
+        Deploy mut nr args [] NoneT source_body` by
+       (irule check_contract_deploy_function_body_MEM >> simp[] >>
+        qpat_assum `~nr` (SUBST_ALL_TAC o EQF_INTRO) >>
+        qexistsl [`"__init__"`, `raw`] >> simp[]) >>
+     drule_all (SIMP_RULE (srw_ss())
+       [consts_env_mods_singleton, subst_consts_mods_singleton]
+       (Q.INST [`mods` |-> `[(NONE,tops)]`]
+         checked_qualified_body_decl_resolution)) >> simp[]) >>
   `~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) compiled_body` by
     (`cenv.ce_modules = [(NONE,tops)]` by fs[body_inv_def, cenv_module_pins_def] >>
      simp[] >>
