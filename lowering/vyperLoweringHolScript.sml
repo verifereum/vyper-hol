@@ -69,6 +69,7 @@ Ancestors
   vyperLoweringCorrect
   rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem
   loweringMemCorrect
+  linkedUnitMemory
   asmSymBridge
   asmSymBridgeOwn
   asmDataEnv
